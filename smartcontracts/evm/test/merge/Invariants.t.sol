@@ -7,9 +7,7 @@ import {UAMetaTxBase} from "../../src/metatx/UAMetaTxBase.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
-import {MandateWallet} from "../../src/wallet/MandateWallet.sol";
 import {SmartKeyAccount} from "../../src/account/SmartKeyAccount.sol";
-import {HederaMandateWallet} from "../../src/hedera/HederaMandateWallet.sol";
 import {MergeBase, IMergedT1} from "./MergedEntry.t.sol";
 
 /// A contract on the UA path that is no token: one allowlisted op that records who it sees inside the self-call.
@@ -301,23 +299,18 @@ contract MergeInvariantsTest is MergeBase {
         assertEq(ret, abi.encodeWithSelector(IUALedger.UALedgerOff.selector));
     }
 
-    // ----- the wallets keep their address surface, byte for byte (MD-1) -----
+    // ----- `SmartKeyAccount` keeps its address surface, byte for byte (MD-1; Q6: the mandate wallets merged in T3b) -----
 
-    /// keccak256 of the deployed code without its CBOR metadata tail, each deployed at a fixed address (the immutables
-    /// hold `address(this)`), recorded at `ref/pre-ua-mtx-merge` (9a4b8c5a).
+    /// keccak256 of the deployed code without its CBOR metadata tail, deployed at a fixed address (the immutables hold
+    /// `address(this)`), recorded at `ref/pre-ua-mtx-merge` (9a4b8c5a). ua-mtx-merge T3b: the `MandateWallet` and
+    /// `HederaMandateWallet` rows left (Q6 builds them in the merged form; `MandateWalletMerged.t.sol`).
     function test_walletsByteIdentical() public {
         bytes32 uid = keccak256("wallet-uid");
-        address owner = address(0x0A11);
-        (address a, address b, address c) = (address(0xA001), address(0xA002), address(0xA003));
-        deployCodeTo("MandateWallet.sol:MandateWallet", abi.encode(owner, uid), a);
+        address b = address(0xA002);
         deployCodeTo("SmartKeyAccount.sol:SmartKeyAccount", abi.encode(uid), b);
-        deployCodeTo("HederaMandateWallet.sol:HederaMandateWallet", abi.encode(owner, uid), c);
-        assertEq(_codeHash(a), 0x3891f1227a9f42cb932e076f955736e6d5a4d6f30e86b228c869d9d8daa2d8bc, "MandateWallet");
         assertEq(_codeHash(b), 0xd201866a71d652a5d6bb0a15bc64efa1cdedec3cf92ffe02e2441c67f48a5876, "SmartKeyAccount");
-        assertEq(_codeHash(c), 0x60d837c90e04adb3e29960ad6d0212d26aa05628cc68a86535925fe94b12a1e4, "HederaMandateWallet");
-        // the artifacts `deployCodeTo` reads are these contracts' (compiled into this test)
-        assertGt(type(MandateWallet).creationCode.length + type(SmartKeyAccount).creationCode.length
-            + type(HederaMandateWallet).creationCode.length, 0);
+        // the artifact `deployCodeTo` reads is this contract's (compiled into this test)
+        assertGt(type(SmartKeyAccount).creationCode.length, 0);
     }
 
     function _codeHash(address a) internal view returns (bytes32) {

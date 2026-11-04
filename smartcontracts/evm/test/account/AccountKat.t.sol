@@ -10,9 +10,12 @@ import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {MandateWallet} from "../../src/wallet/MandateWallet.sol";
 import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
+import {IUARegistry} from "../../src/ua/IUARegistry.sol";
+import {uaDigest, UA_PAY_UNDER_MANDATE, UA_DELEGATE_REVOKE} from "../wallet/MandateWalletMerged.t.sol";
 
-/// Shared writer of the account-side `MetaTransaction` KATs (metatx.md §15: the `MandateWallet` and `SmartKeyAccount`
-/// vectors are `MetaTransaction` vectors in their own domains), chain 7622 with its real `chain_uid`.
+/// Shared writer of the account-side KATs (metatx.md §15: the `SmartKeyAccount` vector is a `MetaTransaction` vector in
+/// its own domain; the `MandateWallet` one, since ua-mtx-merge T3b, its `UA<Op>` structs), chain 7622 with its real
+/// `chain_uid`.
 /// `WRITE_KAT=true forge test --match-path test/account/AccountKat.t.sol` rewrites them; clientkeys reads them.
 abstract contract MtxKatBase is Test {
     using MetaTxLib for MetaTxLib.MetaTransaction;
@@ -93,45 +96,106 @@ contract SmartKeyAccountKatTest is MtxKatBase {
     }
 }
 
-/// `mandate_pay_kat.json` and `mandate_revoke_kat.json`: the delegate's `payUnderMandate(…, epoch 1)` on its derived pay lane and
-/// its epoch-bound `revoke(token, 1)` on the derived revoke lane, as `mtxPayUnderMandate` / `mtxRevoke` build them
-/// (mode 0, no fee); both really execute.
+/// `mandate_kat.json` (ua-mtx-merge T3b, Q6; the address `mandate_pay_kat.json` / `mandate_revoke_kat.json` are in
+/// `test/vectors/legacy/ua-mtx-merge/`): the delegate's `mtxPayUnderMandate` (struct `UAPayUnderMandate`) on its pay lane
+/// `mandatePayLane(entryRef)` and its `mtxDelegateRevoke` (`UADelegateRevoke`, epoch 1) on `mandateRevokeLane(token, 1)`,
+/// nonce 0, mode 0, no fee, the unbound `relayer` / `feeRecipient` 0; an EOA signer (its id zero-padded); both really
+/// execute. `WRITE_KAT=true` rewrites it.
 contract MandateWalletKatTest is MtxKatBase {
     uint256 internal constant OWNER_PK = 0x0A11CE;
     uint256 internal constant DELEGATE_PK = 0xDE1E;
     address internal constant PAYEE = address(0x4EE);
+    string internal constant PATH = "./test/vectors/mandate_kat.json";
+
+    function _entry(string memory k, string memory typeString, MetaTxLib.UAEnvelope memory e, bytes memory args,
+        bytes32 digest, bytes memory sig, bytes memory cd) internal returns (string memory)
+    {
+        bytes32 sh = keccak256(bytes.concat(abi.encode(keccak256(bytes(typeString)), e.from), args,
+            abi.encode(e.batch, e.nonce, e.validUntil, e.mode, address(0), e.fee, address(0))));
+        vm.serializeString(k, "type_string", typeString);
+        vm.serializeString(k, "type_hash", vm.toString(keccak256(bytes(typeString))));
+        vm.serializeString(k, "from", vm.toString(e.from));
+        vm.serializeString(k, "args", vm.toString(args));
+        vm.serializeString(k, "batch", vm.toString(e.batch));
+        vm.serializeString(k, "nonce", vm.toString(e.nonce));
+        vm.serializeString(k, "valid_until", vm.toString(e.validUntil));
+        vm.serializeString(k, "mode", vm.toString(uint256(e.mode)));
+        vm.serializeString(k, "relayer", vm.toString(e.relayer));
+        vm.serializeString(k, "fee", vm.toString(e.fee));
+        vm.serializeString(k, "fee_recipient", vm.toString(e.feeRecipient));
+        vm.serializeString(k, "struct_hash", vm.toString(sh));
+        vm.serializeString(k, "digest", vm.toString(digest));
+        vm.serializeString(k, "calldata", vm.toString(cd));
+        return vm.serializeString(k, "signature", vm.toString(sig));
+    }
+
+    NormalToken internal tok;
+    MandateWallet internal w;
 
     function test_mandateWalletKat() public {
         vm.chainId(7622);
         vm.warp(1_800_000_000);
-        NormalToken tok =
-            NormalToken(Clones.clone(address(new NormalToken(1, plainEnv(address(this), address(0), UID, address(0), false), ""))));
+        tok = NormalToken(Clones.clone(address(new NormalToken(1, plainEnv(address(this), address(0), UID, address(0), false), ""))));
         tok.initialize(address(this), 1, abi.encode(normalInit("Points", "PTS", 6, 0, address(this), address(this))));
-        MandateWallet w = new MandateWallet(vm.addr(OWNER_PK), UID);
+        w = new MandateWallet(MetaTxLib.pad(vm.addr(OWNER_PK)), UID, address(0), false);
         tok.mint(address(w), 1_000e6);
         vm.startPrank(vm.addr(OWNER_PK));
-        w.setMandate(address(tok), vm.addr(DELEGATE_PK), 100e6, 250e6, 1 days, 1_900_000_000);
-        w.setPayee(address(tok), PAYEE, true);
+        w.setMandate(address(tok), MetaTxLib.pad(vm.addr(DELEGATE_PK)), 100e6, 250e6, 1 days, 1_900_000_000);
+        w.setPayee(address(tok), MetaTxLib.pad(PAYEE), true);
         vm.stopPrank();
-
-        bytes32 ref = keccak256("scaas.kat.entryRef");
-        MetaTxLib.MetaTransaction memory m;
-        m.from = vm.addr(DELEGATE_PK);
-        m.data = abi.encodeCall(MandateWallet.payUnderMandate, (address(tok), PAYEE, 12_345_678, ref, uint64(1)));
-        m.batch = w.mandatePayLane(ref);
-        m.validUntil = 1_800_000_300;
-        bytes32 digest = w.mtxDigest(m);
-        bytes memory sig = _ecdsa(DELEGATE_PK, digest);
-        w.mtxPayUnderMandate(address(tok), PAYEE, 12_345_678, ref, 1, m.validUntil, sig);
+        (string memory pay, bytes32 payDigest) = _pay();
         assertEq(tok.balanceOf(PAYEE), 12_345_678);
-        _kat("pay", "./test/vectors/mandate_pay_kat.json", "SCaaS MandateWallet", address(w), m, digest, sig);
-
-        m.data = abi.encodeWithSignature("revoke(address,uint64)", address(tok), uint64(1));
-        m.batch = w.mandateRevokeLane(address(tok), 1);
-        digest = w.mtxDigest(m);
-        sig = _ecdsa(DELEGATE_PK, digest);
-        w.mtxRevoke(address(tok), 1, m.validUntil, sig);
+        (string memory rev, bytes32 revDigest) = _revoke();
         assertEq(w.epoch(address(tok)), 2);
-        _kat("revoke", "./test/vectors/mandate_revoke_kat.json", "SCaaS MandateWallet", address(w), m, digest, sig);
+
+        vm.serializeString("kat", "domain_name", "SCaaS MandateWallet");
+        vm.serializeString("kat", "domain_version", "1");
+        vm.serializeString("kat", "chain_id", "7622");
+        vm.serializeString("kat", "verifying_contract", vm.toString(address(w)));
+        vm.serializeString("kat", "salt", vm.toString(UID));
+        vm.serializeString("kat", "domain_separator", vm.toString(_domainSep("SCaaS MandateWallet", address(w))));
+        vm.serializeString("kat", "signer", vm.toString(vm.addr(DELEGATE_PK)));
+        vm.serializeString("kat", "pay", pay);
+        string memory out = vm.serializeString("kat", "revoke", rev);
+        if (vm.envOr("WRITE_KAT", false)) vm.writeJson(out, PATH);
+        string memory onDisk = vm.readFile(PATH);
+        assertEq(vm.parseJsonAddress(onDisk, ".verifying_contract"), address(w));
+        assertEq(vm.parseJsonBytes32(onDisk, ".pay.digest"), payDigest);
+        assertEq(vm.parseJsonBytes32(onDisk, ".revoke.digest"), revDigest);
+        assertEq(vm.parseJsonBytes(onDisk, ".pay.calldata"), vm.parseJsonBytes(pay, ".calldata"));
+        assertEq(vm.parseJsonBytes(onDisk, ".revoke.calldata"), vm.parseJsonBytes(rev, ".calldata"));
+        assertEq(vm.parseJsonBytes(onDisk, ".revoke.signature"), vm.parseJsonBytes(rev, ".signature"));
+        assertEq(vm.parseJsonUint(onDisk, ".pay.batch"), w.mandatePayLane(keccak256("scaas.kat.entryRef")));
+        assertEq(vm.parseJsonUint(onDisk, ".revoke.batch"), w.mandateRevokeLane(address(tok), 1));
+    }
+
+    /// The delegate's pay on its pay lane, nonce 0, executed.
+    function _pay() internal returns (string memory, bytes32 digest) {
+        bytes32 ref = keccak256("scaas.kat.entryRef");
+        MetaTxLib.UAEnvelope memory e = MetaTxLib.UAEnvelope(MetaTxLib.pad(vm.addr(DELEGATE_PK)), w.mandatePayLane(ref), 0,
+            1_800_000_300, 0, address(0), 0, address(0));
+        bytes memory args = abi.encode(address(tok), MetaTxLib.pad(PAYEE), uint256(12_345_678), ref, uint64(1));
+        digest = uaDigest(address(w), UA_PAY_UNDER_MANDATE, e, args);
+        IUARegistry.UASig memory a;
+        a.signature = _ecdsa(DELEGATE_PK, digest);
+        bytes memory cd = abi.encodeCall(MandateWallet.mtxPayUnderMandate,
+            (e, address(tok), MetaTxLib.pad(PAYEE), 12_345_678, ref, 1, a));
+        (bool ok, bytes memory ret) = address(w).call(cd);
+        assertTrue(ok, string(ret));
+        return (_entry("pay", UA_PAY_UNDER_MANDATE, e, args, digest, a.signature, cd), digest);
+    }
+
+    /// The delegate's epoch-1 revoke on its revoke lane, nonce 0, executed.
+    function _revoke() internal returns (string memory, bytes32 digest) {
+        MetaTxLib.UAEnvelope memory e = MetaTxLib.UAEnvelope(MetaTxLib.pad(vm.addr(DELEGATE_PK)),
+            w.mandateRevokeLane(address(tok), 1), 0, 1_800_000_300, 0, address(0), 0, address(0));
+        bytes memory args = abi.encode(address(tok), uint64(1));
+        digest = uaDigest(address(w), UA_DELEGATE_REVOKE, e, args);
+        IUARegistry.UASig memory a;
+        a.signature = _ecdsa(DELEGATE_PK, digest);
+        bytes memory cd = abi.encodeCall(MandateWallet.mtxDelegateRevoke, (e, address(tok), 1, a));
+        (bool ok, bytes memory ret) = address(w).call(cd);
+        assertTrue(ok, string(ret));
+        return (_entry("revoke", UA_DELEGATE_REVOKE, e, args, digest, a.signature, cd), digest);
     }
 }

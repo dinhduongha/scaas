@@ -215,9 +215,12 @@ contract TypedOpsTest is UALedgerBase {
         assertEq(ret.length, 0, "no such function");
         assertEq(tok.mtxNonce(MetaTxLib.pad(e.from), lane), 0, "the signed lane, untouched");
 
-        MandateWallet wallet = new MandateWallet(e.from, chainUidA);
-        _run(op, address(wallet), built);
-        assertEq(wallet.mtxNonce(e.from, lane), 1);
+        // ua-mtx-merge T3b (Q6), meaning: nor does a mandate wallet (its cancel is `mtxCancelNonce` on ids); the row runs
+        // on the account only (MD-7: its `on` narrows to `SmartKeyAccount`, T11)
+        MandateWallet wallet = new MandateWallet(MetaTxLib.pad(e.from), chainUidA, address(0), false);
+        (ok, ret) = address(wallet).call(built);
+        assertFalse(ok, "no wallet entry");
+        assertEq(ret.length, 0, "no such function");
 
         // on an account `from` is not the account: an outside signer cancels its own lane there (`bytes sig`)
         SmartKeyAccount acct = SmartKeyAccount(payable(new SmartKeyAccountFactory(chainUidA).deploy(
@@ -395,87 +398,60 @@ contract TypedOpsTest is UALedgerBase {
         return AccountSig(0, new bytes32[](0), _sigOf(op, "account"));
     }
 
-    /// A wallet under a mandate on the row's `token` for `delegate_`, its epoch the row's.
-    function _rowMandate(string memory op, address delegate_, uint256 cap) internal returns (MandateWallet w) {
-        address token = _addr(op, "token");
-        w = new MandateWallet(address(0xA11), chainUidA);
-        vm.prank(w.owner());
-        w.setMandate(token, delegate_, uint128(cap), uint128(cap), 1 days, uint64(block.timestamp + 1 days));
-        stdstore.target(address(w)).sig("epoch(address)").with_key(token).checked_write(_uint(op, "epoch"));
+    /// ua-mtx-merge T3b (Q6), meaning: the six address wallet rows (`SetMandate`, `SetPayee`, `RevokeMandate`,
+    /// `PayUnderMandate`, `DelegateRevoke`, `Execute` on `wallet`) find no entry on the merged wallets, whose entries take
+    /// `UAEnvelope` + `UASig` over `UA<Op>` (MD-7: T11 retires these rows and adds the six `UA<Op>` rows; the merged
+    /// entries run in `test/wallet/{MandateWalletMerged,MandateWallet,NamedWallets}.t.sol`).
+    function _walletRowHasNoEntry(string memory op, address c, bytes memory built) internal {
+        rowHasNoEntry(j, op, "wallet", c, built);
+        assertEq(MandateWallet(payable(c)).mtxNonce(MetaTxLib.pad(_addr(op, "from")), rowEnvelope(j, op).batch), 0);
     }
 
-    function test_typedOpsVectors_SetMandate() public {
+    function _newWallet(string memory op) internal returns (MandateWallet) {
+        return new MandateWallet(MetaTxLib.pad(_addr(op, "from")), chainUidA, address(0), false);
+    }
+
+    string internal constant ENV_T = "(address,uint256,uint256,uint256,uint32,address,uint256,address)";
+
+    function test_typedOpsVectors_SetMandateRowHasNoWalletEntry() public {
         string memory op = "SetMandate";
-        MetaTxLib.Envelope memory e = rowEnvelope(j, op);
-        address token = _addr(op, "token");
-        MandateWallet w = new MandateWallet(e.from, chainUidA);
-        bytes memory built = abi.encodeCall(MandateWallet.mtxSetMandate, (e, token, _addr(op, "delegate"),
-            uint128(_uint(op, "maxPerPayment")), uint128(_uint(op, "maxPerPeriod")), uint64(_uint(op, "periodSeconds")),
-            uint64(_uint(op, "expiry")), _sigOf(op, "wallet")));
-        runRow(j, op, "wallet", address(w), built);
-        (address d,,,,,,) = w.mandates(token);
-        assertEq(d, _addr(op, "delegate"));
-        assertEq(w.epoch(token), 1);
-        assertEq(w.mtxNonce(e.from, e.batch), 1);
+        _walletRowHasNoEntry(op, address(_newWallet(op)), abi.encodeWithSignature(
+            string.concat("mtxSetMandate", "(", ENV_T, ",address,address,uint128,uint128,uint64,uint64,bytes)"),
+            rowEnvelope(j, op), _addr(op, "token"), _addr(op, "delegate"), uint128(_uint(op, "maxPerPayment")),
+            uint128(_uint(op, "maxPerPeriod")), uint64(_uint(op, "periodSeconds")), uint64(_uint(op, "expiry")),
+            _sigOf(op, "wallet")));
     }
 
-    function _setPayeeRow(MandateWallet w) internal {
+    function _setPayeeCall() internal view returns (bytes memory) {
         string memory op = "SetPayee";
-        MetaTxLib.Envelope memory e = rowEnvelope(j, op);
-        address token = _addr(op, "token");
-        address payee = _addr(op, "payee");
-        runRow(j, op, "wallet", address(w), abi.encodeCall(MandateWallet.mtxSetPayee,
-            (e, token, payee, vm.parseJsonBool(j, msgField(op, "allowed")), _sigOf(op, "wallet"))));
-        assertTrue(w.payeeAllowed(token, payee));
-        assertEq(w.mtxNonce(e.from, e.batch), 1);
-    }
-
-    function test_typedOpsVectors_SetPayee() public {
-        _setPayeeRow(new MandateWallet(signer, chainUidA));
-    }
-
-    function test_typedOpsVectors_RevokeMandate() public {
-        string memory op = "RevokeMandate";
-        MetaTxLib.Envelope memory e = rowEnvelope(j, op);
-        address token = _addr(op, "token");
-        MandateWallet w = new MandateWallet(e.from, chainUidA);
-        vm.prank(e.from);
-        w.setMandate(token, address(0xD), 1, 1, 1 days, uint64(block.timestamp + 1 days));
-        runRow(j, op, "wallet", address(w), abi.encodeCall(MandateWallet.mtxRevokeMandate, (e, token, _sigOf(op, "wallet"))));
-        (address d,,,,,,) = w.mandates(token);
-        assertEq(d, address(0));
-        assertEq(w.epoch(token), 2);
-    }
-
-    function test_typedOpsVectors_PayUnderMandate() public {
-        string memory op = "PayUnderMandate";
-        MetaTxLib.Envelope memory e = rowEnvelope(j, op);
-        address token = _addr(op, "token");
-        address payee = _addr(op, "payee");
-        uint256 amount = _uint(op, "amount");
-        bytes32 ref = _b32(op, "entryRef");
-        MandateWallet w = _rowMandate(op, e.from, amount);
-        _tokenAt(token).transfer(address(w), amount);
-        vm.prank(w.owner());
-        w.setPayee(token, payee, true);
-        bytes memory built = abi.encodeWithSignature(_abiOf(op, "wallet"), e, token, payee, amount, ref, uint64(_uint(op, "epoch")),
+        return abi.encodeWithSignature(string.concat("mtxSetPayee(", ENV_T, ",address,address,bool,bytes)"),
+            rowEnvelope(j, op), _addr(op, "token"), _addr(op, "payee"), vm.parseJsonBool(j, msgField(op, "allowed")),
             _sigOf(op, "wallet"));
-        runRow(j, op, "wallet", address(w), built);
-        assertEq(NormalToken(token).balanceOf(payee), amount);
-        assertTrue(w.refUsed(ref));
-        assertEq(w.mtxNonce(e.from, e.batch), 1);
     }
 
-    function test_typedOpsVectors_DelegateRevoke() public {
+    function test_typedOpsVectors_SetPayeeRowHasNoWalletEntry() public {
+        _walletRowHasNoEntry("SetPayee", address(_newWallet("SetPayee")), _setPayeeCall());
+    }
+
+    function test_typedOpsVectors_RevokeMandateRowHasNoWalletEntry() public {
+        string memory op = "RevokeMandate";
+        _walletRowHasNoEntry(op, address(_newWallet(op)), abi.encodeWithSignature(
+            string.concat("mtxRevokeMandate(", ENV_T, ",address,bytes)"), rowEnvelope(j, op), _addr(op, "token"),
+            _sigOf(op, "wallet")));
+    }
+
+    function test_typedOpsVectors_PayUnderMandateRowHasNoWalletEntry() public {
+        string memory op = "PayUnderMandate";
+        _walletRowHasNoEntry(op, address(_newWallet(op)), abi.encodeWithSignature(_abiOf(op, "wallet"), rowEnvelope(j, op),
+            _addr(op, "token"), _addr(op, "payee"), _uint(op, "amount"), _b32(op, "entryRef"), uint64(_uint(op, "epoch")),
+            _sigOf(op, "wallet")));
+    }
+
+    function test_typedOpsVectors_DelegateRevokeRowHasNoWalletEntry() public {
         string memory op = "DelegateRevoke";
-        MetaTxLib.Envelope memory e = rowEnvelope(j, op);
-        address token = _addr(op, "token");
-        uint64 epoch_ = uint64(_uint(op, "epoch"));
-        MandateWallet w = _rowMandate(op, e.from, 1);
-        runRow(j, op, "wallet", address(w), abi.encodeCall(MandateWallet.mtxDelegateRevoke, (e, token, epoch_, _sigOf(op, "wallet"))));
-        (address d,,,,,,) = w.mandates(token);
-        assertEq(d, address(0));
-        assertEq(w.epoch(token), epoch_ + 1);
+        _walletRowHasNoEntry(op, address(_newWallet(op)), abi.encodeWithSignature(
+            string.concat("mtxDelegateRevoke(", ENV_T, ",address,uint64,bytes)"), rowEnvelope(j, op), _addr(op, "token"),
+            uint64(_uint(op, "epoch")), _sigOf(op, "wallet")));
     }
 
     function _executeRow(address c, string memory kind, bytes memory built) internal {
@@ -491,16 +467,16 @@ contract TypedOpsTest is UALedgerBase {
             _uint("Execute", "value"), vm.parseJsonBytes(j, msgField("Execute", "data")), _sigOf("Execute", "wallet"));
     }
 
-    function test_typedOpsVectors_ExecuteWallet() public {
-        MandateWallet w = new MandateWallet(signer, chainUidA);
-        _executeRow(address(w), "wallet", _walletExecuteCall());
-        assertEq(w.mtxNonce(signer, 7), 1);
+    function test_typedOpsVectors_ExecuteRowHasNoWalletEntry() public {
+        _walletRowHasNoEntry("Execute", address(_newWallet("Execute")), _walletExecuteCall());
     }
 
-    /// The Hedera wallet takes the rows' ECDSA signatures on the EVM path (a 64-byte one: `NamedHederaMandateTest`).
-    function test_typedOpsVectors_HederaWallet() public {
-        _setPayeeRow(new HederaMandateWallet(signer, chainUidA));
-        _executeRow(address(new HederaMandateWallet(signer, chainUidA)), "wallet", _walletExecuteCall());
+    /// The Hedera wallet likewise (its merged entries: `MandateWalletMerged.t.sol`, `NamedHederaMandateTest`).
+    function test_typedOpsVectors_HederaWalletRowsHaveNoEntry() public {
+        bytes32 id = MetaTxLib.pad(_addr("SetPayee", "from"));
+        _walletRowHasNoEntry("SetPayee", address(new HederaMandateWallet(id, chainUidA, address(0))), _setPayeeCall());
+        id = MetaTxLib.pad(_addr("Execute", "from"));
+        _walletRowHasNoEntry("Execute", address(new HederaMandateWallet(id, chainUidA, address(0))), _walletExecuteCall());
     }
 
     /// The account of the row's key at the row's `from`: an account signs as itself (CTR-ACC-10), and the row's signature is

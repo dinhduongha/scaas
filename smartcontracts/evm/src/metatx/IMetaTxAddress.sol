@@ -3,9 +3,9 @@ pragma solidity ^0.8.24;
 
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 
-/// @title The address generic entries (ua-mtx-merge MD-1): the wallets only (`MetaTxAddressBase`); tokens and the router
-///        take ids on the same names (`UAMetaTxBase`). Beside `IMetaTx`, not derived from it: the core is the wallets'
-///        `MetaTxBase`'s, so their sources need no new override list.
+/// @title The address generic entries (ua-mtx-merge MD-1): `SmartKeyAccount` only (`MetaTxAddressBase`); tokens, the
+///        router and the mandate wallets (T3b, Q6) take ids on the same names (`UAMetaTxBase`). Beside `IMetaTx`, not
+///        derived from it: the core is the account's `MetaTxBase`'s, so its source needs no new override list.
 interface IMetaTxAddress {
     function mtxNonce(address from, uint256 batch) external view returns (uint256);
     function mtxDigest(MetaTxLib.MetaTransaction calldata m) external view returns (bytes32);

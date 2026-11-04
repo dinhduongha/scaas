@@ -9,14 +9,14 @@ import {MtxPipelineLib} from "./MtxPipelineLib.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
 
 /// @title The UA-signed call path on `MetaTxBase` (owner ruling 2026-11-01), for tokens and for contracts that are not.
-/// @notice The one signed generic path of tokens and the router (ua-mtx-merge, CTR-MTX-30): `mtxExecute`, `mtxBatch`,
+/// @notice The one signed generic path of tokens, the router and the mandate wallets (ua-mtx-merge, CTR-MTX-30; Q6): `mtxExecute`, `mtxBatch`,
 ///         `mtxCancelNonce` on `bytes32` ids through `MtxPipelineLib` (CTR-MTX-17 on an id, CTR-UA-26). A native id signs
 ///         with its own key in `auth.signature` and reads `_mtxRule` (B); a derived UA is authorized by the registry and
 ///         reads `_uaAllowed` only, since inside the self-call it is `UA_POOL`; a registry is needed only for a derived
 ///         side (C). A contract without a ledger runs at fee mode `NONE` (`supportedModes()`), still relayable;
 ///         `ERC20MetaTx` overrides `_uaChargeFee` with its UA ledger. An op body reads `_subject()`. The address path
-///         (`executeMetaTransaction`, R3) takes the same `Ctx` signature rule. The wallets have no registry and keep the
-///         address entries (`MetaTxAddressBase`).
+///         (`executeMetaTransaction`, R3) takes the same `Ctx` signature rule. `SmartKeyAccount` keeps the address entries
+///         (`MetaTxAddressBase`).
 abstract contract UAMetaTxBase is MetaTxBase {
     /// @custom:storage-location erc7201:scaas.ua.ledger
     /// @dev `balance` is the UA ledger's (`ERC20MetaTx`). `cancelUsed` served the unordered `uaCancelNonce`

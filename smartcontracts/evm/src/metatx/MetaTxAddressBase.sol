@@ -7,10 +7,11 @@ import {IMetaTxAddress} from "./IMetaTxAddress.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {MtxPipelineLib} from "./MtxPipelineLib.sol";
 
-/// @title The address generic path of `MetaTxBase` (ua-mtx-merge MD-1, R26): inherited by `WalletExecute` only, so the
-///        wallets keep `mtxNonce`, `mtxDigest`, `mtxExecute`, `mtxBatch` and `mtxCancelNonce` with `address from`. The
-///        bodies are `MetaTxBase`'s as they stood at `ref/pre-ua-mtx-merge`, unchanged. Tokens and the router have the
-///        `bytes32` set (`UAMetaTxBase`) and keep only `executeMetaTransaction` of this path (R3).
+/// @title The address generic path of `MetaTxBase` (ua-mtx-merge MD-1, R26): inherited by `WalletExecute` only, so
+///        `SmartKeyAccount` keeps `mtxNonce`, `mtxDigest`, `mtxExecute`, `mtxBatch` and `mtxCancelNonce` with `address
+///        from`. The bodies are `MetaTxBase`'s as they stood at `ref/pre-ua-mtx-merge`, unchanged. Tokens and the router
+///        have the `bytes32` set (`UAMetaTxBase`) and keep only `executeMetaTransaction` of this path (R3); the mandate
+///        wallets (T3b, Q6) have the `bytes32` set and refuse `executeMetaTransaction`.
 abstract contract MetaTxAddressBase is MetaTxBase, IMetaTxAddress {
     bytes32 private constant _CANCEL_NONCE_TYPEHASH = keccak256(
         "CancelNonce(address from,uint256 lane,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"

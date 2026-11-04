@@ -3,29 +3,37 @@ pragma solidity ^0.8.24;
 
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
-import {WalletExecute} from "./WalletExecute.sol";
+import {UAMetaTxBase} from "../metatx/UAMetaTxBase.sol";
 import {IMetaTx} from "../metatx/IMetaTx.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {IERC20Payment} from "../metatx/IERC20Payment.sol";
+import {IMetaTokenV2} from "../metatx/IMetaTokenV2.sol";
 import {FeeMode} from "../common/FeePolicy.sol";
+import {IUARegistry} from "../ua/IUARegistry.sol";
+import {UAKinds} from "../ua/UAKinds.sol";
 
-/// @title The wallet of ONE payer with limited delegated payment (CTR-ACC-06, CTR-ACC-07), on `MetaTxBase`.
+/// @title The wallet of ONE payer with limited delegated payment (CTR-ACC-06, CTR-ACC-07, CTR-ACC-12), on `UAMetaTxBase`.
 /// @notice The payer (`owner`) keeps its key; a delegate (the platform's custody key, or an agent key) may pay only
 ///         within the mandate the owner set per token, every limit checked here on chain: per payment, per period,
 ///         approved payees, an expiry, and an `entryRef` that pays once per wallet. No allowance: the funds sit in the
-///         wallet, which pays by `IERC20Payment.payWithFee` as `msg.sender`, so `PaymentSettled` carries `entryRef`
-///         as a manual payment does. Every signed action is a `MetaTransaction` self-call (domain `("SCaaS
-///         MandateWallet", "1", chainId, wallet, chain_uid)`, fee mode `NONE`): the delegate signs
-///         `payUnderMandate(…, epoch)` and `revoke(token, epoch)`; the owner signs `setMandate`, `setPayee`,
-///         `revoke(token)` and `execute`. `mtxPayUnderMandate`, `mtxRevoke` and `mtxExecuteAsOwner` are the named builders of that
-///         `MetaTransaction` and derive their lanes. Each signed action also has a named typed entry (TS-D14) over its own struct:
-///         `mtxSetMandate`, `mtxSetPayee`, `mtxRevokeMandate`, `mtxExecute`; for the delegate `mtxPayUnderMandate` and
-///         `mtxDelegateRevoke`, whose `batch` is the signer's: a signature cannot move lanes, `batch` is signed, and `refUsed` and
-///         `epoch` stop a new signature by the delegate for the same payment or revoke.
-///         ERC-1271 answers for the owner (ECDSA), so the owner also pays by hand with `from = wallet`.
-contract MandateWallet is WalletExecute, IERC1271 {
+///         wallet, which pays by `payWithFee` (a native payee) or `payWithFeeToUA` (a derived one, CTR-UA-28) as
+///         `msg.sender`, so the payment event carries `entryRef` as a manual payment does.
+///         Ids are `bytes32` (ua-mtx-merge Q6, spec §2.7): `owner`, the delegate and the payees, a native address
+///         zero-padded or a derived UA. Every authority check compares `_subject()` with the stored id, never
+///         `_msgSender()` (`UA_POOL` for a derived subject). One signed entry per operation, in the domain
+///         `("SCaaS MandateWallet", "1", chainId, wallet, chain_uid)`, fee mode `NONE`, each over its `UA<Op>` struct:
+///         the owner's `mtxSetMandate`, `mtxSetPayee`, `mtxRevokeMandate`, `mtxExecute`; the delegate's
+///         `mtxPayUnderMandate` and `mtxDelegateRevoke`, whose `batch` is the signer's (the node puts them on
+///         `mandatePayLane(entryRef)` / `mandateRevokeLane(token, epoch)` at nonce 0): a signature cannot move lanes,
+///         `batch` is signed, and `refUsed` and `epoch` stop a new signature by the delegate for the same payment or
+///         revoke. From `UAMetaTxBase`: the generic `mtxExecute` / `mtxBatch` and the ordered `mtxCancelNonce` on ids.
+///         A native signer signs with its own key (no registry call); a derived one through `UARegistry`
+///         (`UALedgerOff` at registry 0). `executeMetaTransaction` refuses every call (MD-11 (b)).
+///         ERC-1271 answers for a native owner (ECDSA), so it also pays by hand with `from = wallet`; a derived owner
+///         gets no answer and acts through `mtxExecute`.
+contract MandateWallet is UAMetaTxBase, IERC1271 {
     struct Mandate {
-        address delegate;      // 0 = none or revoked
+        bytes32 delegate;      // 0 = none or revoked
         uint64 expiry;         // unix seconds
         uint64 periodSeconds;
         uint64 periodStart;
@@ -34,24 +42,24 @@ contract MandateWallet is WalletExecute, IERC1271 {
         uint128 spentInPeriod;
     }
 
-    address public immutable owner;
+    bytes32 public immutable owner;
     mapping(address token => Mandate) public mandates;
-    mapping(address token => mapping(address payee => bool)) public payeeAllowed;
+    mapping(address token => mapping(bytes32 payee => bool)) public payeeAllowed;
     mapping(bytes32 entryRef => bool) public refUsed;
     /// @notice Bumped by every `setMandate` and every revoke (CTR-ACC-07): a delegate's signed pay and revoke name it.
     mapping(address token => uint64) public epoch;
 
-    event MandateSet(address indexed token, address indexed delegate, uint256 maxPerPayment,
+    event MandateSet(address indexed token, bytes32 indexed delegate, uint256 maxPerPayment,
                      uint256 maxPerPeriod, uint256 periodSeconds, uint256 expiry);
-    event MandateRevoked(address indexed token, address indexed by);
-    event PayeeSet(address indexed token, address indexed payee, bool allowed);
-    event PaidUnderMandate(address indexed token, address indexed payee, uint256 amount, bytes32 indexed entryRef);
+    event MandateRevoked(address indexed token, bytes32 indexed by);
+    event PayeeSet(address indexed token, bytes32 indexed payee, bool allowed);
+    event PaidUnderMandate(address indexed token, bytes32 indexed payee, uint256 amount, bytes32 indexed entryRef);
 
     error NotOwner();
     error NotDelegate();
     error NoMandate();
     error MandateExpired();
-    error PayeeNotAllowed(address payee);
+    error PayeeNotAllowed(bytes32 payee);
     error OverPaymentCap(uint256 amount, uint256 cap);
     error OverPeriodCap(uint256 wouldSpend, uint256 cap);
     error RefAlreadyPaid(bytes32 entryRef);
@@ -62,13 +70,17 @@ contract MandateWallet is WalletExecute, IERC1271 {
     error PayFailed();
 
     modifier onlyOwner() {
-        if (_msgSender() != owner) revert NotOwner();
+        if (_subject() != owner) revert NotOwner();
         _;
     }
 
     /// @param chainUid_ the chain's `chain_uid` from its profile (CTR-GEN-05); the node checks `chainUid()` before relaying.
-    constructor(address owner_, bytes32 chainUid_) WalletExecute("SCaaS MandateWallet", chainUid_) {
-        if (owner_ == address(0)) revert ZeroOwner();
+    /// @param registry_ the chain's UA registry, needed only when a side is derived (0: `UALedgerOff` for a derived id).
+    /// @param hedera_   HIP-632 for a 64-byte signature from an account without code (`HederaMandateWallet`).
+    constructor(bytes32 owner_, bytes32 chainUid_, address registry_, bool hedera_)
+        UAMetaTxBase("SCaaS MandateWallet", chainUid_, registry_, address(0), hedera_)
+    {
+        if (owner_ == 0) revert ZeroOwner();
         owner = owner_;
     }
 
@@ -76,10 +88,10 @@ contract MandateWallet is WalletExecute, IERC1271 {
 
     // ------------------------------------------------------------------ owner
 
-    function setMandate(address token, address delegate, uint128 maxPerPayment, uint128 maxPerPeriod,
+    function setMandate(address token, bytes32 delegate, uint128 maxPerPayment, uint128 maxPerPeriod,
                         uint64 periodSeconds, uint64 expiry) external nonReentrant onlyOwner {
         // periodSeconds == 0 would reset the period cap at every payment.
-        if (delegate == address(0) || periodSeconds == 0 || maxPerPayment == 0
+        if (delegate == 0 || periodSeconds == 0 || maxPerPayment == 0
             || maxPerPayment > maxPerPeriod) revert BadMandate();
         // Same delegate and period length: the running period and what it spent carry over, so an edit (a new expiry,
         // new caps) never grants a fresh period budget; a new delegate or period length (or a revoke first) restarts it.
@@ -91,7 +103,7 @@ contract MandateWallet is WalletExecute, IERC1271 {
         emit MandateSet(token, delegate, maxPerPayment, maxPerPeriod, periodSeconds, expiry);
     }
 
-    function setPayee(address token, address payee, bool allowed) external nonReentrant onlyOwner {
+    function setPayee(address token, bytes32 payee, bool allowed) external nonReentrant onlyOwner {
         payeeAllowed[token][payee] = allowed;
         emit PayeeSet(token, payee, allowed);
     }
@@ -111,17 +123,17 @@ contract MandateWallet is WalletExecute, IERC1271 {
 
     // ------------------------------------------------------------------ delegate
 
-    /// @notice The delegate's payment: `_msgSender()` is the mandate's delegate, `epoch_` the current epoch (so a revoke,
+    /// @notice The delegate's payment: `_subject()` is the mandate's delegate, `epoch_` the current epoch (so a revoke,
     ///         or any `setMandate`, voids every pay signed before it, also when the same delegate is set again), the
     ///         mandate is live, the payee approved, `0 < amount ≤ maxPerPayment`, the period total `≤ maxPerPeriod`,
     ///         `entryRef` unused. Periods are fixed windows of `periodSeconds` on the grid of `periodStart` (CTR-ACC-06):
     ///         at most `2 · maxPerPeriod` across one boundary, at boundaries the owner can compute.
-    function payUnderMandate(address token, address payee, uint256 amount, bytes32 entryRef, uint64 epoch_)
+    function payUnderMandate(address token, bytes32 payee, uint256 amount, bytes32 entryRef, uint64 epoch_)
         external nonReentrant
     {
         Mandate storage md = mandates[token];
-        if (md.delegate == address(0)) revert NoMandate();
-        if (_msgSender() != md.delegate) revert NotDelegate();
+        if (md.delegate == 0) revert NoMandate();
+        if (_subject() != md.delegate) revert NotDelegate();
         if (epoch_ != epoch[token]) revert StaleEpoch(epoch[token], epoch_);
         if (block.timestamp > md.expiry) revert MandateExpired();
         if (!payeeAllowed[token][payee]) revert PayeeNotAllowed(payee);
@@ -136,7 +148,10 @@ contract MandateWallet is WalletExecute, IERC1271 {
         if (spent > md.maxPerPeriod) revert OverPeriodCap(spent, md.maxPerPeriod);
         md.spentInPeriod = uint128(spent);
         refUsed[entryRef] = true;
-        if (!IERC20Payment(token).payWithFee(payee, amount, FeeMode.NONE, 0, address(0), entryRef)) revert PayFailed();
+        bool paid = UAKinds.inNativeSpace(payee)
+            ? IERC20Payment(token).payWithFee(address(uint160(uint256(payee))), amount, FeeMode.NONE, 0, address(0), entryRef)
+            : IMetaTokenV2(token).payWithFeeToUA(payee, amount, FeeMode.NONE, 0, address(0), entryRef);
+        if (!paid) revert PayFailed();
         emit PaidUnderMandate(token, payee, amount, entryRef);
     }
 
@@ -144,79 +159,59 @@ contract MandateWallet is WalletExecute, IERC1271 {
     ///         revoke signature cannot delete a mandate the owner re-established (CTR-ACC-07).
     function revoke(address token, uint64 epoch_) external nonReentrant {
         Mandate storage md = mandates[token];
-        if (md.delegate == address(0)) revert NoMandate();
-        if (_msgSender() != md.delegate) revert NotDelegate();
+        if (md.delegate == 0) revert NoMandate();
+        if (_subject() != md.delegate) revert NotDelegate();
         if (epoch_ != epoch[token]) revert StaleEpoch(epoch[token], epoch_);
         _revoke(token);
     }
 
-    // ------------------------------------------------------------------ named builders (CTR-MTX-21)
+    // ------------------------------------------------------------------ one signed entry per operation (Q6)
 
-    /// @notice `MetaTransaction{from: delegate, data: payUnderMandate(…, epoch), batch: mandatePayLane(entryRef),
-    ///         nonce: 0}`.
-    function mtxPayUnderMandate(address token, address payee, uint256 amount, bytes32 entryRef, uint64 epoch_,
-                                uint256 validUntil, bytes calldata sig) external nonReentrant {
-        _named(_delegateOf(token),
-            abi.encodeCall(MandateWallet.payUnderMandate, (token, payee, amount, entryRef, epoch_)),
-            mandatePayLane(entryRef), 0, validUntil, sig);
-    }
-
-    /// @notice `MetaTransaction{from: delegate, data: revoke(token, epoch), batch: mandateRevokeLane(token, epoch), nonce: 0}`.
-    function mtxRevoke(address token, uint64 epoch_, uint256 validUntil, bytes calldata sig) external nonReentrant {
-        _named(_delegateOf(token), abi.encodeWithSelector(_REVOKE_SIGNED, token, epoch_),
-            mandateRevokeLane(token, epoch_), 0, validUntil, sig);
-    }
-
-    /// @notice `MetaTransaction{from: owner, data, batch: 0, nonce}`.
-    function mtxExecuteAsOwner(bytes calldata data, uint256 nonce, uint256 validUntil, bytes calldata sig)
+    /// @notice The owner's signed `setMandate`: struct `UASetMandate`, submitted by anyone.
+    function mtxSetMandate(MetaTxLib.UAEnvelope calldata e, address token, bytes32 delegate, uint128 maxPerPayment,
+        uint128 maxPerPeriod, uint64 periodSeconds, uint64 expiry, IUARegistry.UASig calldata auth)
         external nonReentrant returns (bytes memory)
     {
-        return _named(owner, data, 0, nonce, validUntil, sig);
+        return _namedUA(_UA_SET_MANDATE_TYPEHASH, MandateWallet.setMandate.selector, e,
+            abi.encode(token, delegate, maxPerPayment, maxPerPeriod, periodSeconds, expiry), auth);
     }
 
-    /// @notice The owner's signed `setMandate` (TS-D14): struct `SetMandate`, submitted by anyone.
-    function mtxSetMandate(MetaTxLib.Envelope calldata e, address token, address delegate, uint128 maxPerPayment,
-        uint128 maxPerPeriod, uint64 periodSeconds, uint64 expiry, bytes calldata sig)
+    /// @notice The owner's signed `setPayee`: struct `UASetPayee`.
+    function mtxSetPayee(MetaTxLib.UAEnvelope calldata e, address token, bytes32 payee, bool allowed,
+        IUARegistry.UASig calldata auth) external nonReentrant returns (bytes memory)
+    {
+        return _namedUA(_UA_SET_PAYEE_TYPEHASH, MandateWallet.setPayee.selector, e, abi.encode(token, payee, allowed), auth);
+    }
+
+    /// @notice The owner's signed `revoke(token)`: struct `UARevokeMandate`.
+    function mtxRevokeMandate(MetaTxLib.UAEnvelope calldata e, address token, IUARegistry.UASig calldata auth)
         external nonReentrant returns (bytes memory)
     {
-        return _named(_SET_MANDATE_TYPEHASH, MandateWallet.setMandate.selector, e,
-            abi.encode(token, delegate, maxPerPayment, maxPerPeriod, periodSeconds, expiry), sig);
+        return _namedUA(_UA_REVOKE_MANDATE_TYPEHASH, _REVOKE_OWNER, e, abi.encode(token), auth);
     }
 
-    /// @notice The owner's signed `setPayee` (TS-D14): struct `SetPayee`.
-    function mtxSetPayee(MetaTxLib.Envelope calldata e, address token, address payee, bool allowed, bytes calldata sig)
-        external nonReentrant returns (bytes memory)
+    /// @notice The delegate's signed `payUnderMandate`: struct `UAPayUnderMandate`, bound to `epoch_` (CTR-ACC-07).
+    function mtxPayUnderMandate(MetaTxLib.UAEnvelope calldata e, address token, bytes32 payee, uint256 amount,
+        bytes32 entryRef, uint64 epoch_, IUARegistry.UASig calldata auth) external nonReentrant returns (bytes memory)
     {
-        return _named(_SET_PAYEE_TYPEHASH, MandateWallet.setPayee.selector, e, abi.encode(token, payee, allowed), sig);
+        return _namedUA(_UA_PAY_UNDER_MANDATE_TYPEHASH, MandateWallet.payUnderMandate.selector, e,
+            abi.encode(token, payee, amount, entryRef, epoch_), auth);
     }
 
-    /// @notice The owner's signed `revoke(token)` (TS-D14): struct `RevokeMandate`.
-    function mtxRevokeMandate(MetaTxLib.Envelope calldata e, address token, bytes calldata sig)
-        external nonReentrant returns (bytes memory)
+    /// @notice The delegate's signed `revoke(token, epoch)`: struct `UADelegateRevoke`, bound to `epoch_` (CTR-ACC-07).
+    function mtxDelegateRevoke(MetaTxLib.UAEnvelope calldata e, address token, uint64 epoch_,
+        IUARegistry.UASig calldata auth) external nonReentrant returns (bytes memory)
     {
-        return _named(_REVOKE_MANDATE_TYPEHASH, _REVOKE_OWNER, e, abi.encode(token), sig);
+        return _namedUA(_UA_DELEGATE_REVOKE_TYPEHASH, _REVOKE_SIGNED, e, abi.encode(token, epoch_), auth);
     }
 
-    /// @notice The delegate's signed `payUnderMandate` (TS-D14): struct `PayUnderMandate`, bound to `epoch_` (CTR-ACC-07).
-    function mtxPayUnderMandate(MetaTxLib.Envelope calldata e, address token, address payee, uint256 amount, bytes32 entryRef,
-        uint64 epoch_, bytes calldata sig) external nonReentrant returns (bytes memory)
+    /// @notice The owner's signed `execute`: struct `UAExecute`, `data` signed as its hash; the wallet shows target and
+    ///         value, `data` stays hex.
+    function mtxExecute(MetaTxLib.UAEnvelope calldata e, address target, uint256 value, bytes calldata data,
+        IUARegistry.UASig calldata auth) external nonReentrant returns (bytes memory)
     {
-        return _named(_PAY_UNDER_MANDATE_TYPEHASH, MandateWallet.payUnderMandate.selector, e,
-            abi.encode(token, payee, amount, entryRef, epoch_), sig);
-    }
-
-    /// @notice The delegate's signed `revoke(token, epoch)` (TS-D14): struct `DelegateRevoke`, bound to `epoch_` (CTR-ACC-07).
-    function mtxDelegateRevoke(MetaTxLib.Envelope calldata e, address token, uint64 epoch_, bytes calldata sig)
-        external nonReentrant returns (bytes memory)
-    {
-        return _named(_DELEGATE_REVOKE_TYPEHASH, _REVOKE_SIGNED, e, abi.encode(token, epoch_), sig);
-    }
-
-    /// @notice The owner's signed `execute` (TS-D14): struct `Execute`; the wallet shows target and value, `data` stays hex.
-    function mtxExecute(MetaTxLib.Envelope calldata e, address target, uint256 value, bytes calldata data, bytes calldata sig)
-        external nonReentrant returns (bytes memory)
-    {
-        return _namedExecute(e, target, value, data, sig);
+        return _namedCallUA(_UA_EXECUTE_TYPEHASH, e, abi.encode(target, value, keccak256(data)),
+            abi.encodeCall(MandateWallet.execute, (target, value, data)), auth);
     }
 
     // ------------------------------------------------------------------ views
@@ -230,9 +225,12 @@ contract MandateWallet is WalletExecute, IERC1271 {
     }
 
     /// @inheritdoc IERC1271
+    /// @dev A native owner: ECDSA by its address. A derived owner has no ERC-1271 answer (CTR-ACC-12).
     function isValidSignature(bytes32 hash, bytes calldata sig) external view returns (bytes4) {
+        if (!UAKinds.inNativeSpace(owner)) return bytes4(0xffffffff);
         (address rec, ECDSA.RecoverError err,) = ECDSA.tryRecover(hash, sig);
-        return err == ECDSA.RecoverError.NoError && rec == owner ? IERC1271.isValidSignature.selector : bytes4(0xffffffff);
+        return err == ECDSA.RecoverError.NoError && rec == address(uint160(uint256(owner)))
+            ? IERC1271.isValidSignature.selector : bytes4(0xffffffff);
     }
 
     /// @notice The allowlist (CTR-MTX-19): the base `cancelNonce`, the delegate's two, the owner's four; fee `NONE` only.
@@ -254,22 +252,26 @@ contract MandateWallet is WalletExecute, IERC1271 {
 
     bytes4 private constant _REVOKE_OWNER = bytes4(keccak256("revoke(address)"));
     bytes4 private constant _REVOKE_SIGNED = bytes4(keccak256("revoke(address,uint64)"));
-    bytes32 private constant _SET_MANDATE_TYPEHASH = keccak256(
-        "SetMandate(address from,address token,address delegate,uint128 maxPerPayment,uint128 maxPerPeriod,uint64 periodSeconds,uint64 expiry,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+    bytes32 private constant _UA_SET_MANDATE_TYPEHASH = keccak256(
+        "UASetMandate(bytes32 from,address token,bytes32 delegate,uint128 maxPerPayment,uint128 maxPerPeriod,uint64 periodSeconds,uint64 expiry,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
     );
-    bytes32 private constant _SET_PAYEE_TYPEHASH = keccak256(
-        "SetPayee(address from,address token,address payee,bool allowed,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+    bytes32 private constant _UA_SET_PAYEE_TYPEHASH = keccak256(
+        "UASetPayee(bytes32 from,address token,bytes32 payee,bool allowed,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
     );
-    bytes32 private constant _REVOKE_MANDATE_TYPEHASH = keccak256(
-        "RevokeMandate(address from,address token,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+    bytes32 private constant _UA_REVOKE_MANDATE_TYPEHASH = keccak256(
+        "UARevokeMandate(bytes32 from,address token,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
     );
-    bytes32 private constant _PAY_UNDER_MANDATE_TYPEHASH = keccak256(
-        "PayUnderMandate(address from,address token,address payee,uint256 amount,bytes32 entryRef,uint64 epoch,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+    bytes32 private constant _UA_PAY_UNDER_MANDATE_TYPEHASH = keccak256(
+        "UAPayUnderMandate(bytes32 from,address token,bytes32 payee,uint256 amount,bytes32 entryRef,uint64 epoch,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
     );
-    bytes32 private constant _DELEGATE_REVOKE_TYPEHASH = keccak256(
-        "DelegateRevoke(address from,address token,uint64 epoch,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+    bytes32 private constant _UA_DELEGATE_REVOKE_TYPEHASH = keccak256(
+        "UADelegateRevoke(bytes32 from,address token,uint64 epoch,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+    );
+    bytes32 private constant _UA_EXECUTE_TYPEHASH = keccak256(
+        "UAExecute(bytes32 from,address target,uint256 value,bytes data,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
     );
 
+    /// @dev A native subject reads `_mtxRule` (B): the six wallet operations and the base `cancelNonce`.
     function _mtxRule(bytes4 sel) internal view override returns (MtxRule memory) {
         if (sel == MandateWallet.payUnderMandate.selector) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 164);
         if (sel == _REVOKE_SIGNED) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 68);
@@ -280,26 +282,22 @@ contract MandateWallet is WalletExecute, IERC1271 {
         return super._mtxRule(sel);
     }
 
-    function _delegateOf(address token) private view returns (address d) {
-        d = mandates[token].delegate;
-        if (d == address(0)) revert NoMandate();
+    /// @dev A derived subject reads this list only (B): the six wallet operations; `cancelNonce` is not on it (its body
+    ///      refuses `UA_POOL`; a derived id cancels through `mtxCancelNonce`).
+    function _uaAllowed(bytes4 sel) internal pure override returns (bool) {
+        return sel == MandateWallet.payUnderMandate.selector || sel == _REVOKE_SIGNED
+            || sel == MandateWallet.setMandate.selector || sel == MandateWallet.setPayee.selector
+            || sel == _REVOKE_OWNER || sel == MandateWallet.execute.selector;
     }
 
-    /// @dev The named builders' struct: no relayer or fee binding (mode 0, fee 0), run through the base pipeline.
-    function _named(address from, bytes memory data, uint256 batch, uint256 nonce, uint256 validUntil,
-                    bytes calldata sig) internal returns (bytes memory) {
-        MetaTxLib.MetaTransaction memory m;
-        m.from = from;
-        m.data = data;
-        m.batch = batch;
-        m.nonce = nonce;
-        m.validUntil = validUntil;
-        return _execute(m, sig);
+    /// @dev `executeMetaTransaction` refuses every call (MD-11 (b)): the EIP-1776 alias is the token's exception (R3).
+    function _execute(MetaTxLib.MetaTransaction memory m, bytes calldata) internal pure override returns (bytes memory) {
+        revert MtxSelectorNotAllowed(bytes4(m.data));
     }
 
     function _revoke(address token) private {
         delete mandates[token];
         ++epoch[token];
-        emit MandateRevoked(token, _msgSender());
+        emit MandateRevoked(token, _subject());
     }
 }

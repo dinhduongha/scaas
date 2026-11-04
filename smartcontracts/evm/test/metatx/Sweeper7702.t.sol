@@ -74,8 +74,8 @@ contract Sweeper7702Test is MandateFixture {
         _swept(address(v), abi.encodeCall(IMetaTx.cancelNonce, (0)));
         _swept(address(wt), abi.encodeWithSignature("unwrap(uint256,address)", 100, attacker));
         _swept(address(w), abi.encodeCall(MandateWallet.execute, (address(t), 0, abi.encodeCall(IERC20.transfer, (attacker, 10_000)))));
-        _swept(address(w), abi.encodeCall(MandateWallet.setMandate, (address(t), attacker, 10_000, 10_000, 1 days, uint64(block.timestamp + 1 days))));
-        _swept(address(w), abi.encodeCall(MandateWallet.setPayee, (address(t), attacker, true)));
+        _swept(address(w), abi.encodeCall(MandateWallet.setMandate, (address(t), _id(attacker), 10_000, 10_000, 1 days, uint64(block.timestamp + 1 days))));
+        _swept(address(w), abi.encodeCall(MandateWallet.setPayee, (address(t), _id(attacker), true)));
         assertEq(v.balanceOf(owner), 1_000);
         assertEq(v.owner(), tokenOwner);
         assertEq(wt.balanceOf(owner), 100);
@@ -90,13 +90,13 @@ contract Sweeper7702Test is MandateFixture {
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         vm.prank(relayer);
         v.mtxExecuteTransfer(x, s);
-        bytes memory data = abi.encodeCall(MandateWallet.setPayee, (address(t), attacker, true));
-        MetaTxLib.MetaTransaction memory m;
-        (m.from, m.data, m.validUntil) = (owner, data, block.timestamp + 300);
-        bytes memory sig = _sig(0xA77AC, w.mtxDigest(m));
+        // ua-mtx-merge T3b: the owner's call is the wallet's generic `mtxExecute` on ids (the flat builder is in legacy)
+        MetaTxLib.UAMetaTransaction memory m =
+            _gen(_id(owner), abi.encodeCall(MandateWallet.setPayee, (address(t), _id(attacker), true)), 0, 0);
+        IUARegistry.UASig memory a = _ua(0xA77AC, w.mtxDigest(m));
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         vm.prank(relayer);
-        w.mtxExecuteAsOwner(data, 0, m.validUntil, sig);
+        w.mtxExecute(m, a);
         // the victim's own key still moves its tokens, relayed (fee 0), while the delegation stands
         x.to = MetaTxLib.pad(stranger);
         _xfer(OWNER_PK, address(v), x);

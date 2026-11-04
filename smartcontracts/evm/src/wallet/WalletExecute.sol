@@ -5,7 +5,8 @@ import {MetaTxAddressBase} from "../metatx/MetaTxAddressBase.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {MtxPipelineLib} from "../metatx/MtxPipelineLib.sol";
 
-/// @title The named `Execute` entry of `MandateWallet` and `SmartKeyAccount` (TS-D14).
+/// @title The named `Execute` entry of `SmartKeyAccount` (TS-D14; the mandate wallets' is `UAExecute` on
+///        `UAMetaTxBase` since ua-mtx-merge T3b, Q6).
 /// @dev `Execute` is the one wallet op with a dynamic argument: its struct hashes `data`, its self-call carries it, so it
 ///      cannot take `MetaTxBase._named`, whose `args` are both. It runs the same pipeline, `_run`, over its own struct.
 abstract contract WalletExecute is MetaTxAddressBase {

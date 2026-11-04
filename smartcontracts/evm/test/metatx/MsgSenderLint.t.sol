@@ -13,7 +13,8 @@ import {Test} from "forge-std/Test.sol";
 contract MsgSenderLintTest is Test {
     // ua-mtx-merge MD-6: + MetaTxAddressBase (the address bodies moved out of MetaTxBase), MtxRelayFee, the PQZ token files,
     // ZetherWrappedLib; `PqzLayer` and `SCaaSDex` read `this.` on purpose (pinned in `test_noExternalSelfCalls`)
-    string[24] internal FILES = ["src/metatx/MetaTxAddressBase.sol", "src/metatx/MtxRelayFee.sol", "src/pqz/NormalPqzToken.sol",
+    // ua-mtx-merge T3b (MD-6's way): + the mandate wallets, on `UAMetaTxBase` (Q6)
+    string[26] internal FILES = ["src/wallet/MandateWallet.sol", "src/hedera/HederaMandateWallet.sol", "src/metatx/MetaTxAddressBase.sol", "src/metatx/MtxRelayFee.sol", "src/pqz/NormalPqzToken.sol",
         "src/pqz/WrappedPqzToken.sol", "src/pqz/PqzWrappedLib.sol", "src/zether/ZetherWrappedLib.sol", "src/metatx/MetaTxBase.sol", "src/metatx/UAMetaTxBase.sol", "src/metatx/MtxPipelineLib.sol", "src/metatx/ERC20MetaTx.sol", "src/metatx/MetaTokenBase.sol",
         "src/metatx/NormalToken.sol", "src/metatx/WrappedToken.sol", "src/metatx/WrappedLib.sol",
         "src/governance/GovernanceLib.sol", "src/hedera/HederaLib.sol", "src/trade/TradeLib.sol", "src/zether/ZetherLayer.sol",
@@ -107,6 +108,9 @@ contract MsgSenderLintTest is Test {
         assertEq(_count("src/governance/GovernanceRouterBase.sol", "msg.sender", false), 3,
             "GovernanceRouterBase: subject()'s target compare, the event relayer x2 (mtx, ua)");
         assertEq(_count("src/governance/GovernanceRouter.sol", "msg.sender", false), 0, "GovernanceRouter");
+        // ua-mtx-merge T3b (Q6): every authority check reads `_subject()` (CTR-ACC-12), none `msg.sender`
+        assertEq(_count("src/wallet/MandateWallet.sol", "msg.sender", false), 0, "MandateWallet");
+        assertEq(_count("src/hedera/HederaMandateWallet.sol", "msg.sender", false), 0, "HederaMandateWallet");
     }
 
     /// CTR-MTX-18: an external self-call (`this.f(…)`) inside an allowlisted body would let a guarded callee consume

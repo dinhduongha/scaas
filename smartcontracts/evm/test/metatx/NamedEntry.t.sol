@@ -503,33 +503,36 @@ contract NamedShieldZetherTest is ZetherFixture {
     }
 }
 
+/// typed-signing C0 on the mandate wallet; ua-mtx-merge T3b (Q6), meaning: `mtxSetMandate` takes `UAEnvelope` + `UASig`
+/// over `UASetMandate` (ids `bytes32`), and the address `SetMandate` row of `typed_ops.json` has no wallet entry (MD-7:
+/// T11 regenerates the rows).
 contract NamedMandateTest is MandateFixture {
-    function _walletSig(address d2, uint64 expiry, uint256 validUntil) internal view returns (bytes memory) {
+    function _walletSig(bytes32 d2, uint64 expiry, uint256 validUntil) internal view returns (IUARegistry.UASig memory a_) {
         string memory tail = eJson(3, 0, validUntil, 0, 0);
-        string memory message = string.concat('"from":', a(owner), ',"token":', a(address(t)), ',"delegate":', a(d2),
+        string memory message = string.concat('"from":', h(_id(owner)), ',"token":', a(address(t)), ',"delegate":', h(d2),
             ',"maxPerPayment":', n(7), ',"maxPerPeriod":', n(9), ',"periodSeconds":', n(1 days), ',"expiry":', n(expiry), ',', tail);
-        return _sig(OWNER_PK, walletDigest(address(w), "SetMandate",
-            '{"name":"from","type":"address"},{"name":"token","type":"address"},{"name":"delegate","type":"address"},{"name":"maxPerPayment","type":"uint128"},'
+        a_.signature = _sig(OWNER_PK, walletDigest(address(w), "UASetMandate",
+            '{"name":"from","type":"bytes32"},{"name":"token","type":"address"},{"name":"delegate","type":"bytes32"},{"name":"maxPerPayment","type":"uint128"},'
             '{"name":"maxPerPeriod","type":"uint128"},{"name":"periodSeconds","type":"uint64"},{"name":"expiry","type":"uint64"}', message));
     }
 
     function test_c0_setMandateTyped() public {
-        address d2 = address(0xD2);
+        bytes32 d2 = _id(address(0xD2));
         uint64 expiry = uint64(block.timestamp + 60 days);
-        MetaTxLib.Envelope memory e;
-        e.from = owner;
+        MetaTxLib.UAEnvelope memory e;
+        e.from = _id(owner);
         e.batch = 3;
         e.validUntil = block.timestamp + 300;
-        bytes memory sig = _walletSig(d2, expiry, e.validUntil);
+        IUARegistry.UASig memory sig = _walletSig(d2, expiry, e.validUntil);
         uint64 before = w.epoch(address(t));
         vm.prank(stranger); // a relayer: the signature is the authority
         w.mtxSetMandate(e, address(t), d2, 7, 9, 1 days, expiry, sig);
-        (address delegate_,,,, uint128 perPayment, uint128 perPeriod,) = w.mandates(address(t));
+        (bytes32 delegate_,,,, uint128 perPayment, uint128 perPeriod,) = w.mandates(address(t));
         assertEq(delegate_, d2);
         assertEq(perPayment, 7);
         assertEq(perPeriod, 9);
         assertEq(w.epoch(address(t)), before + 1);
-        assertEq(w.mtxNonce(owner, 3), 1);
+        assertEq(w.mtxNonce(_id(owner), 3), 1);
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
         w.mtxSetMandate(e, address(t), d2, 7, 9, 1 days, expiry, sig);
 
@@ -542,34 +545,30 @@ contract NamedMandateTest is MandateFixture {
         // somebody else's signature: the op's `onlyOwner` reads the signer
         e.mode = 0;
         e.nonce = 0;
-        e.from = delegate;
+        e.from = _id(delegate);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         w.mtxSetMandate(e, address(t), d2, 7, 9, 1 days, expiry, sig);
     }
 
-    function _rowCall(string memory j, MetaTxLib.Envelope memory e, bytes memory sig) internal pure returns (bytes memory) {
-        return abi.encodeCall(MandateWallet.mtxSetMandate, (e, VM.parseJsonAddress(j, msgField("SetMandate", "token")),
-            VM.parseJsonAddress(j, msgField("SetMandate", "delegate")), uint128(VM.parseJsonUint(j, msgField("SetMandate", "maxPerPayment"))),
-            uint128(VM.parseJsonUint(j, msgField("SetMandate", "maxPerPeriod"))), uint64(VM.parseJsonUint(j, msgField("SetMandate", "periodSeconds"))),
-            uint64(VM.parseJsonUint(j, msgField("SetMandate", "expiry"))), sig));
-    }
-
-    /// C1: the `SetMandate` row on a wallet of the row's key.
-    function test_c1_setMandateRow() public {
+    /// C1: the address `SetMandate` row (`Envelope`, `bytes sig`) finds no function on a wallet of the row's key.
+    function test_c1_setMandateRowHasNoWalletEntry() public {
         string memory j = VM.readFile(TYPED_OPS);
         checkRow(j, "SetMandate", "wallet");
         MetaTxLib.Envelope memory e = rowEnvelope(j, "SetMandate");
-        assertEq(_rowCall(j, e, VM.parseJsonBytes(j, domainField("SetMandate", "wallet", "signature"))),
-            VM.parseJsonBytes(j, domainField("SetMandate", "wallet", "calldata")));
-        MandateWallet mine = new MandateWallet(e.from, UID_);
-        bytes memory data = _rowCall(j, e, onChain(j, "SetMandate", address(mine)));
+        bytes memory cd = VM.parseJsonBytes(j, domainField("SetMandate", "wallet", "calldata"));
+        assertEq(abi.encodeWithSignature(
+            "mtxSetMandate((address,uint256,uint256,uint256,uint32,address,uint256,address),address,address,uint128,uint128,uint64,uint64,bytes)",
+            e, VM.parseJsonAddress(j, msgField("SetMandate", "token")), VM.parseJsonAddress(j, msgField("SetMandate", "delegate")),
+            uint128(VM.parseJsonUint(j, msgField("SetMandate", "maxPerPayment"))),
+            uint128(VM.parseJsonUint(j, msgField("SetMandate", "maxPerPeriod"))),
+            uint64(VM.parseJsonUint(j, msgField("SetMandate", "periodSeconds"))),
+            uint64(VM.parseJsonUint(j, msgField("SetMandate", "expiry"))),
+            VM.parseJsonBytes(j, domainField("SetMandate", "wallet", "signature"))), cd);
+        MandateWallet mine = new MandateWallet(_id(e.from), UID_, address(0), false);
         vm.prank(e.relayer);
-        (bool ok, bytes memory ret) = address(mine).call(data);
-        assertTrue(ok, string(ret));
-        (address d2,,,, uint128 perPayment, uint128 perPeriod,) = mine.mandates(VM.parseJsonAddress(j, msgField("SetMandate", "token")));
-        assertEq(d2, VM.parseJsonAddress(j, msgField("SetMandate", "delegate")));
-        assertEq(perPayment, VM.parseJsonUint(j, msgField("SetMandate", "maxPerPayment")));
-        assertEq(perPeriod, VM.parseJsonUint(j, msgField("SetMandate", "maxPerPeriod")));
-        assertEq(mine.mtxNonce(e.from, e.batch), 1);
+        (bool ok, bytes memory ret) = address(mine).call(cd);
+        assertFalse(ok, "a retired entry runs");
+        assertEq(ret.length, 0, "no such function");
+        assertEq(mine.mtxNonce(_id(e.from), e.batch), 0);
     }
 }

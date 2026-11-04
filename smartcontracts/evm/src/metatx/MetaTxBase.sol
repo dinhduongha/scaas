@@ -11,8 +11,9 @@ import {MtxPipelineLib} from "./MtxPipelineLib.sol";
 
 /// @title The generic meta-transaction core of every SCaaS contract (CTR-MTX-22; ua-mtx-merge MD-1).
 /// @notice The subject signs a `MetaTransaction` (CTR-MTX-15) whose `data` is one call of one of THIS contract's
-///         allowlisted functions; anyone submits it through `executeMetaTransaction` (and, on the wallets,
-///         `MetaTxAddressBase`'s `mtxExecute`; on tokens and the router the `mtx*` entries take ids, `UAMetaTxBase`), and
+///         allowlisted functions; anyone submits it through `executeMetaTransaction` (and, on `SmartKeyAccount`,
+///         `MetaTxAddressBase`'s `mtxExecute`; on tokens, the router and the mandate wallets the `mtx*` entries take ids,
+///         `UAMetaTxBase`), and
 ///         the contract runs it on itself
 ///         (CTR-MTX-16, CTR-MTX-17). The signer travels in a transient slot and one ticket admits exactly one
 ///         self-call (CTR-MTX-18). The allowlist is fixed per implementation (CTR-MTX-19): an implementation
