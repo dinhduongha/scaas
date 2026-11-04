@@ -60,7 +60,7 @@ Nói ra để còn kiểm chứng được. Mỗi cái kèm hệ quả nếu sai
 | A8 | Không cần đội vận hành | Relay-pool giữ khoá ký, có SLA khác Odoo, cần on-call 24/7 (§07.14 Q10) | P18 + câu hỏi 16 |
 | A9 | Audit thay được cho giới hạn on-chain | §12.8: "mọi hệ thống bị hack đều đã từng được audit"; thiếu `WithdrawLimiter` là phân bổ sai ngân sách | P20, gate trước mọi đồng tiền thật |
 | A10 | Ba use case dùng chung một custody | §07.12b: loyalty + end-user chạy được ở cấu hình C **~$107/tháng**; B2B cần A/B **$2.9k–9.75k/tháng** | Thứ tự use case đổi theo chi phí, xem câu hỏi 3 |
-| A11 | `dms_blockchain` chỉ `depends: ['base','mail']` | §11.5 yêu cầu `bamboo_idempotency` (addon **đã tồn tại** tại `/home/dockers/odoo19/addons/bamboo_idempotency`) — mâu thuẫn với §10.2 | Chốt trong P04 DoD; bài test standalone phải cài kèm nó |
+| A11 | `dms_blockchain` chỉ `depends: ['base','mail']` | §11.5 yêu cầu `bamboo_idempotency` (addon **đã tồn tại** tại `~dockers/odoo19/addons/bamboo_idempotency`) — mâu thuẫn với §10.2 | Chốt trong P04 DoD; bài test standalone phải cài kèm nó |
 
 #### 16.0.3. Nguyên tắc sắp xếp
 

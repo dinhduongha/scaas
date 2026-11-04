@@ -31,7 +31,7 @@ addons path so every DMS module comes from this branch:
 ```bash
 WT=/mnt/custom-addons/bamboo-dms/.claude/worktrees/agent-a3bf35411cfe793e9
 AP=$(docker exec odoo19-server-1 sh -c "grep '^addons_path' /etc/odoo/odoo.conf | cut -d= -f2 | tr -d ' '")
-source /home/dockers/odoo19/.env
+source ~dockers/odoo19/.env
 docker exec -i -e PGPASSWORD="$DB_PASSWORD" odoo19-db-1 psql -U odoo -d postgres -c 'DROP DATABASE IF EXISTS "dms_test_chain" WITH (FORCE);'
 docker exec odoo19-server-1 odoo -c /etc/odoo/odoo.conf --logfile=/dev/stdout --db_host=db --db_port=5432 \
   --addons-path="$WT,$AP" --http-port=8920 --gevent-port=8921 -d dms_test_chain \
@@ -203,10 +203,10 @@ PORT="${CHAIN_TEST_PORT:-8920}"
 [ "$DB" = odoo19 ] || [ "$DB" = dms_test ] && { echo "refusing $DB"; exit 1; }
 [ "$PORT" = 8899 ] && { echo "refusing port 8899"; exit 1; }
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-WT="/mnt/custom-addons/bamboo-dms/${HERE#/home/dockers/odoo19/custom-addons/bamboo-dms/}"
-[ "$HERE" = /home/dockers/odoo19/custom-addons/bamboo-dms ] && WT=/mnt/custom-addons/bamboo-dms
+WT="/mnt/custom-addons/bamboo-dms/${HERE#~dockers/odoo19/custom-addons/bamboo-dms/}"
+[ "$HERE" = ~dockers/odoo19/custom-addons/bamboo-dms ] && WT=/mnt/custom-addons/bamboo-dms
 AP="$(docker exec odoo19-server-1 sh -c "grep '^addons_path' /etc/odoo/odoo.conf | cut -d= -f2 | tr -d ' '")"
-: "${DB_PASSWORD:?source /home/dockers/odoo19/.env}"
+: "${DB_PASSWORD:?source ~dockers/odoo19/.env}"
 if [ -z "$TAGS" ]; then for m in ${MODULES//,/ }; do TAGS="${TAGS:+$TAGS,}/$m"; done; fi
 docker exec -i -e PGPASSWORD="$DB_PASSWORD" odoo19-db-1 psql -q -U odoo -d postgres \
   -c "DROP DATABASE IF EXISTS \"$DB\" WITH (FORCE);"
@@ -225,7 +225,7 @@ exit "$rc"
 
 - [ ] **Step 2: Run to verify it fails**
 
-Run: `source /home/dockers/odoo19/.env && scripts/chain-odoo-test.sh dms_blockchain`
+Run: `source ~dockers/odoo19/.env && scripts/chain-odoo-test.sh dms_blockchain`
 Expected: `ImportError`/`ModuleNotFoundError` for `..lib.eip712` (or 'dms_blockchain' not installable).
 
 - [ ] **Step 3: Implement**
@@ -504,7 +504,7 @@ def lane_batch(entry_ref):
 
 - [ ] **Step 4: Run to verify it passes**
 
-Run: `source /home/dockers/odoo19/.env && scripts/chain-odoo-test.sh dms_blockchain`
+Run: `source ~dockers/odoo19/.env && scripts/chain-odoo-test.sh dms_blockchain`
 Expected: `odoo.tests.result: 0 failed, 0 error(s) of 10 tests`.
 
 - [ ] **Step 5: Commit**
@@ -648,7 +648,7 @@ class TestModels(ChainCase):
 
 - [ ] **Step 2: Run to verify it fails**
 
-Run: `source /home/dockers/odoo19/.env && scripts/chain-odoo-test.sh dms_blockchain`
+Run: `source ~dockers/odoo19/.env && scripts/chain-odoo-test.sh dms_blockchain`
 Expected: errors — `blockchain.chain` unknown model / `group_blockchain_relay_worker` external id not found.
 
 - [ ] **Step 3: Implement**
@@ -1161,7 +1161,7 @@ Manifest `data`: `['security/blockchain_security.xml', 'security/ir.model.access
 
 - [ ] **Step 4: Run to verify it passes**
 
-Run: `source /home/dockers/odoo19/.env && scripts/chain-odoo-test.sh dms_blockchain`
+Run: `source ~dockers/odoo19/.env && scripts/chain-odoo-test.sh dms_blockchain`
 Expected: `0 failed, 0 error(s)`.
 
 - [ ] **Step 5: Commit**
@@ -1286,7 +1286,7 @@ class TestRelayJob(ChainCase):
 
 - [ ] **Step 2: Run to verify it fails**
 
-Run: `source /home/dockers/odoo19/.env && scripts/chain-odoo-test.sh dms_blockchain`
+Run: `source ~dockers/odoo19/.env && scripts/chain-odoo-test.sh dms_blockchain`
 Expected: errors — `relay_poll` / `_mark_executed` missing.
 
 - [ ] **Step 3: Implement** — replace `blockchain_relay_job.py`:
@@ -1496,7 +1496,7 @@ with `<button name="action_requeue" type="object" string="Requeue" groups="dms_b
 
 - [ ] **Step 4: Run to verify it passes**
 
-Run: `source /home/dockers/odoo19/.env && scripts/chain-odoo-test.sh dms_blockchain`
+Run: `source ~dockers/odoo19/.env && scripts/chain-odoo-test.sh dms_blockchain`
 Expected: `0 failed, 0 error(s)`.
 
 - [ ] **Step 5: Commit**
@@ -1588,7 +1588,7 @@ class TestIngest(ChainCase):
 
 - [ ] **Step 2: Run to verify it fails**
 
-Run: `source /home/dockers/odoo19/.env && scripts/chain-odoo-test.sh dms_blockchain`
+Run: `source ~dockers/odoo19/.env && scripts/chain-odoo-test.sh dms_blockchain`
 Expected: `KeyError: 'blockchain.chain.event'`.
 
 - [ ] **Step 3: Implement** — `blockchain_chain_event.py`:
@@ -1722,7 +1722,7 @@ Security: rule `rule_chain_event_company` with domain `['|', ('company_id', '=',
 
 - [ ] **Step 4: Run to verify it passes**
 
-Run: `source /home/dockers/odoo19/.env && scripts/chain-odoo-test.sh dms_blockchain`
+Run: `source ~dockers/odoo19/.env && scripts/chain-odoo-test.sh dms_blockchain`
 Expected: `0 failed, 0 error(s)`.
 
 - [ ] **Step 5: Commit**
@@ -1902,7 +1902,7 @@ class TestPaymentRequest(ChainCase):
 
 - [ ] **Step 2: Run to verify it fails**
 
-Run: `source /home/dockers/odoo19/.env && scripts/chain-odoo-test.sh dms_blockchain`
+Run: `source ~dockers/odoo19/.env && scripts/chain-odoo-test.sh dms_blockchain`
 Expected: `AttributeError: _open_request`.
 
 - [ ] **Step 3: Implement** — replace `blockchain_payment_request.py`:
@@ -2116,7 +2116,7 @@ Cron (append to `ir_cron.xml`): `cron_expire_payment_request`, model `blockchain
 
 - [ ] **Step 4: Run to verify it passes**
 
-Run: `source /home/dockers/odoo19/.env && scripts/chain-odoo-test.sh dms_blockchain`
+Run: `source ~dockers/odoo19/.env && scripts/chain-odoo-test.sh dms_blockchain`
 Expected: `0 failed, 0 error(s)`.
 
 - [ ] **Step 5: Commit**
@@ -2203,7 +2203,7 @@ class TestJson2(HttpCase):
         self.assertEqual(res.status_code, 403, res.text)
 ```
 
-- [ ] **Step 2: Run** — `source /home/dockers/odoo19/.env && scripts/chain-odoo-test.sh dms_blockchain`
+- [ ] **Step 2: Run** — `source ~dockers/odoo19/.env && scripts/chain-odoo-test.sh dms_blockchain`
 Expected: PASS (if `res.users.apikeys._generate` needs an expiration for non-admins, pass `fields.Datetime.now() + timedelta(days=1)`; if json2 returns 401/422 the test text says why — fix the call shape, not the assertion).
 
 - [ ] **Step 3: Commit**
@@ -2302,7 +2302,7 @@ class TestChainProvider(ChainCase):
 
 - [ ] **Step 2: Run to verify it fails**
 
-Run: `source /home/dockers/odoo19/.env && scripts/chain-odoo-test.sh dms_blockchain,dms_blockchain_payment /dms_blockchain_payment`
+Run: `source ~dockers/odoo19/.env && scripts/chain-odoo-test.sh dms_blockchain,dms_blockchain_payment /dms_blockchain_payment`
 Expected: error — module `dms_blockchain_payment` not found.
 
 - [ ] **Step 3: Implement**
@@ -2540,7 +2540,7 @@ class BlockchainPaymentRequest(models.Model):
 
 - [ ] **Step 4: Run to verify it passes**
 
-Run: `source /home/dockers/odoo19/.env && scripts/chain-odoo-test.sh dms_blockchain,dms_blockchain_payment`
+Run: `source ~dockers/odoo19/.env && scripts/chain-odoo-test.sh dms_blockchain,dms_blockchain_payment`
 Expected: both suites `0 failed, 0 error(s)`.
 
 - [ ] **Step 5: Commit**

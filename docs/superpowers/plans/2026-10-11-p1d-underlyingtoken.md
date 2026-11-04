@@ -25,7 +25,7 @@ OpenZeppelin Contracts 5.2.0, forge-std 1.16.2; `scaas-node` e2e (Rust, `cargo t
 
 ## Global Constraints
 
-- Paths relative to `/home/ha/work/ainative/scaas`; forge runs in `smartcontracts/evm` of the worktree
+- Paths relative to `<repo>`; forge runs in `smartcontracts/evm` of the worktree
   `.claude/worktrees/p1d` (branch `p1d-underlying`), created by the controller with `lib/` copied.
 - **Heavy commands only through `scripts/capped`, one at a time machine-wide**:
   `timeout 900 scripts/capped bash -c 'cd smartcontracts/evm && forge test …'`. `rtk` rewrites git/grep output: use

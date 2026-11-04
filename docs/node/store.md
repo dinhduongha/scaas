@@ -60,7 +60,7 @@ as [NODE-STO-04](#NODE-STO-04). Multi-node HA on a shared database is **not** in
   (new epoch) before resuming, and replays `plan()` from the store.
 - PostgreSQL: refuse to start when the server answers `SHOW pool_mode` (PgBouncer) or when `pg_backend_pid()` of the
   lock connection changes between two pings. A connection pooler must not sit between the node and its database.
-  <!-- example:odoo -->The reference ERP stack runs PgBouncer (`/home/dockers/odoo19/pgbouncer`) for its own database;
+  <!-- example:odoo -->The reference ERP stack runs PgBouncer (`~dockers/odoo19/pgbouncer`) for its own database;
   it must not sit in front of the node store.<!-- /example -->
 
 ```mermaid

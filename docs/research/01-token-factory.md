@@ -988,7 +988,7 @@ Gas per tx là một con số. Con số quyết định là **bao nhiêu giao d�
 | Celo (L2) | ~30M | ~1 s | 15 | 3,7 tx/s |
 | Nethermind private 9000, gas limit 16,7M | 16,7M | 5 s | 8 | **xem dưới** |
 
-**Dòng cuối đã đo, không còn là giả định.** Chain private ở `/home/dockers/mba-chain-nethermind` có `gasLimit = 0x1000000` = 16.777.216, Clique period 5s, một signer. Đó là con số thật, và nó **không** phải "200M gas limit, 2s" như bản nháp giả định cho một Besu QBFT tưởng tượng. Với 16,7M thì một block chứa tối đa 8 Zether tx, y hệt Gnosis.
+**Dòng cuối đã đo, không còn là giả định.** Chain private ở `~dockers/mba-chain-nethermind` có `gasLimit = 0x1000000` = 16.777.216, Clique period 5s, một signer. Đó là con số thật, và nó **không** phải "200M gas limit, 2s" như bản nháp giả định cho một Besu QBFT tưởng tượng. Với 16,7M thì một block chứa tối đa 8 Zether tx, y hệt Gnosis.
 
 Nâng gasLimit trên Clique làm được bằng signer vote, **không cần reset chain** — khác với đổi genesis (`TRAPS.md`). Nên con số này là một tham số vận hành, không phải một trần cứng.
 
@@ -1266,7 +1266,7 @@ Ba hệ quả điều hướng kế hoạch:
 
 ### 1.16. Chain profile ở tầng token — private chain là chain nào
 
-Bản trước viết mục này quanh một stack giả định: **Hyperledger Besu + QBFT**, 4 validator, gasLimit 200M, block 2s. **Chain private thật thì khác, và nó đã tồn tại, đang chạy** — `/home/dockers/mba-chain-nethermind`. Bảng dưới là tham số thật, không phải đề xuất:
+Bản trước viết mục này quanh một stack giả định: **Hyperledger Besu + QBFT**, 4 validator, gasLimit 200M, block 2s. **Chain private thật thì khác, và nó đã tồn tại, đang chạy** — `~dockers/mba-chain-nethermind`. Bảng dưới là tham số thật, không phải đề xuất:
 
 | Tham số | Giá trị thật (đã đo) | Vì sao token design quan tâm |
 |---|---|---|

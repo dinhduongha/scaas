@@ -134,11 +134,11 @@ sections in conflict, the problem, and the proposed fix.
 
 **Fix:** Set `default='private'` in §06.0.2 to match the canonical model in §10.4.2 (and locked decision #5, private-first), and remove the duplicate field declaration from §06 entirely — it should reference §10.4.2, not re-declare.
 
-### contradiction-22 [contradiction] 01 (§1.14 `smartcontracts/` at repo root), 10 (§10.2) vs 06 (§06.0 `/home/dockers/odoo19/smartcontracts/`), 07 (§07.12.4), 14 (§14.1 `/home/dockers/odoo19/smartcontracts/`)
+### contradiction-22 [contradiction] 01 (§1.14 `smartcontracts/` at repo root), 10 (§10.2) vs 06 (§06.0 `~dockers/odoo19/smartcontracts/`), 07 (§07.12.4), 14 (§14.1 `~dockers/odoo19/smartcontracts/`)
 
-**Problem:** Locked decision #9 puts `smartcontracts/` at repo root, but two different repo roots are used. §01.14 and §10.2 place it under the addons repo (`custom-addons/bamboo-dms/`), while §06.0, §07.12.4 and §14.1 give absolute paths under `/home/dockers/odoo19/` alongside `relay-pool/` and `confidential-signer/`. §14.14 then defines a CI job `odoo-chain` that lives in the addon repo and mounts `smartcontracts/devnet/docker-compose.ci.yml` as a sidecar, and §14 notes the two trees will likely become two repos. The CI wiring, the `fs_permissions` path in §14.2's `foundry.toml` (`../testvectors`), and the ABI-drift gate (§14.12b, Odoo reads `evm/abi/*.json`) all depend on which root is real.
+**Problem:** Locked decision #9 puts `smartcontracts/` at repo root, but two different repo roots are used. §01.14 and §10.2 place it under the addons repo (`custom-addons/bamboo-dms/`), while §06.0, §07.12.4 and §14.1 give absolute paths under `~dockers/odoo19/` alongside `relay-pool/` and `confidential-signer/`. §14.14 then defines a CI job `odoo-chain` that lives in the addon repo and mounts `smartcontracts/devnet/docker-compose.ci.yml` as a sidecar, and §14 notes the two trees will likely become two repos. The CI wiring, the `fs_permissions` path in §14.2's `foundry.toml` (`../testvectors`), and the ABI-drift gate (§14.12b, Odoo reads `evm/abi/*.json`) all depend on which root is real.
 
-**Fix:** State one layout: recommend §14.1's (`/home/dockers/odoo19/{smartcontracts,relay-pool,confidential-signer}` as siblings of the Odoo addons dir), correct §01.14 and §10.2 to match, and make the ABI-drift gate's relative path explicit so it survives the eventual repo split.
+**Fix:** State one layout: recommend §14.1's (`~dockers/odoo19/{smartcontracts,relay-pool,confidential-signer}` as siblings of the Odoo addons dir), correct §01.14 and §10.2 to match, and make the ABI-drift gate's relative path explicit so it survives the eventual repo split.
 
 
 ## Lens: completeness (25 issues)
@@ -469,7 +469,7 @@ sections in conflict, the problem, and the proposed fix.
 
 ### odoo-conventions-5 [wrong] 15-settlement-layer.md §15.2.4 (line 359)
 
-**Problem:** `bamboo_uuid = fields.Uuid(index=True)` — `Uuid` is not a field class in `odoo.fields`. It is defined in `/home/dockers/odoo19/addons/bamboo_idempotency/models/fields.py:7` as a subclass of `fields.Char`. Written as shown, the module raises `AttributeError: module 'odoo.fields' has no attribute 'Uuid'` at import. It is also redundant: `bamboo_idempotency/models/base.py:94` already installs `bamboo_uuid` on every model via `_inherit = 'base'`.
+**Problem:** `bamboo_uuid = fields.Uuid(index=True)` — `Uuid` is not a field class in `odoo.fields`. It is defined in `~dockers/odoo19/addons/bamboo_idempotency/models/fields.py:7` as a subclass of `fields.Char`. Written as shown, the module raises `AttributeError: module 'odoo.fields' has no attribute 'Uuid'` at import. It is also redundant: `bamboo_idempotency/models/base.py:94` already installs `bamboo_uuid` on every model via `_inherit = 'base'`.
 
 **Fix:** Delete the line. Add one sentence: the column arrives from `bamboo_idempotency`; do not redeclare it. Keep §11.5's warning that `_bamboo_uuid_enforced()` must be verified with `SELECT indexname FROM pg_indexes WHERE indexname='blockchain_relay_job_bamboo_uuid_uniq';` because `bamboo_create_idempotent` raises `UserError` (not a silent degrade) when the partial index is missing.
 
@@ -511,7 +511,7 @@ sections in conflict, the problem, and the proposed fix.
 
 ### odoo-conventions-12 [wrong] 03-zether-crypto.md §3.9.3 and 15-settlement-layer.md §15.3.1 vs 10-odoo-addon-design.md §10.4.0(3)
 
-**Problem:** §3.9.3 states 'Odoo 19 không có API cho partial unique index, nên làm bằng `init()`' and uses `tools.create_index(..., unique=True, where="state = 'final'")`. §15.3.1 likewise builds its `(origin_model, origin_id)` index in `init()`. Both are wrong: `models.Index` and `models.UniqueIndex` exist (verified — classes `Constraint`, `Index`, `UniqueIndex` in `/home/dockers/odoo-src-19/odoo/orm/table_objects.py`), which is exactly what §10.4.0(3) says and what §10.4.5 uses for `_one_open_lane`. An index created in `init()` is not tracked by the TableObject machinery: it is never dropped and recreated when its `where` clause changes, so a later narrowing of the predicate leaves the old index in place and the constraint silently means something different from what the code says.
+**Problem:** §3.9.3 states 'Odoo 19 không có API cho partial unique index, nên làm bằng `init()`' and uses `tools.create_index(..., unique=True, where="state = 'final'")`. §15.3.1 likewise builds its `(origin_model, origin_id)` index in `init()`. Both are wrong: `models.Index` and `models.UniqueIndex` exist (verified — classes `Constraint`, `Index`, `UniqueIndex` in `~dockers/odoo-src-19/odoo/orm/table_objects.py`), which is exactly what §10.4.0(3) says and what §10.4.5 uses for `_one_open_lane`. An index created in `init()` is not tracked by the TableObject machinery: it is never dropped and recreated when its `where` clause changes, so a later narrowing of the predicate leaves the old index in place and the constraint silently means something different from what the code says.
 
 **Fix:** Replace both with declarative TableObjects: in §3.9.3, `_final_nonce_uniq = models.UniqueIndex("(token_id, from_account_id, zether_nonce) WHERE state = 'final'", '...')`; in §15.3.1, `_origin_idx = models.Index('(origin_model, origin_id)')` and delete the `init()` override. Correct the sentence in §3.9.3 — as written it will be copied into every future section that needs a partial index.
 

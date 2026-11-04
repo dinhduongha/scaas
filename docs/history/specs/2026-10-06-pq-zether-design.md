@@ -40,7 +40,7 @@ Sources read: [Zether design](2026-10-03-zether-design.md) (byte-exact classical
 `blockchain-research/02-account-registry.md` §2.6 (FALCON/PQ, HNDL), `docs/SCaaS.md` §6.8, §8, §9,
 `smartcontracts/evm/src/zether/*`, [spec F](2026-10-06-universal-account-design.md) (UA, R290–R318), `zether-prover/src/*`, `clientkeys/src/zether.js`, `scaas-node` (`submit.rs`,
 `gateway.rs`, `node.example.toml`), parent `TRAPS.md` "Private chain (Nethermind, chainId 9000)" (heading predates the move to 7622) and
-`/home/dockers/mba-chain-nethermind/README-chainspec.md`, `smartcontracts/evm/src/chains/private7622/README.md`.
+`~dockers/mba-chain-nethermind/README-chainspec.md`, `smartcontracts/evm/src/chains/private7622/README.md`.
 External sources in §18. Rev 1.4 also read `smartcontracts/evm/src/zether/ZetherToken.sol`, `ZetherMetaTx.sol`,
 `metatx/IERC20MetaTx.sol`, `metatx/MetaTxCore.sol` (v2), `common/MetaTxLib.sol`, `common/FeePolicy.sol`, classical
 spec §10 (RS2-5–RS2-7), F §5.3 (v3), MESH §1.2/R70 and NI §5 (job kinds, R321).
@@ -1597,4 +1597,4 @@ Counts: 6 findings, 6 applied, 2 of them modified (H3, L1); 0 rejected; plus 1 o
 - Nethermind plugin precedent: <https://github.com/NethermindEth/nethermind-arbitrum>
 - Repo: `2026-10-03-zether-design.md`, `2026-10-05-zether-limits.md`, `2026-10-05-zether-consensys-max.md`,
   `blockchain-research/02-account-registry.md` §2.6, `03-zether-crypto.md` §3.1.3/U7, parent `TRAPS.md` private-chain
-  section, `/home/dockers/mba-chain-nethermind/README-chainspec.md`.
+  section, `~dockers/mba-chain-nethermind/README-chainspec.md`.

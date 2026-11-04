@@ -1767,7 +1767,7 @@ the same logical schema (§4) and the same semantics as R88. Multi-node HA on a 
 - The lock connection is pinged every ≤ 2 s; a failed ping stops leasing and submission at once, re-takes the lock
   (new epoch) before resuming, and replays `plan()` from the store.
 - PostgreSQL: refuse to start when the server answers `SHOW pool_mode` (PgBouncer) or when `pg_backend_pid()` of the
-  lock connection changes between two pings. The Odoo stack's PgBouncer (`/home/dockers/odoo19/pgbouncer`) must not
+  lock connection changes between two pings. The Odoo stack's PgBouncer (`~dockers/odoo19/pgbouncer`) must not
   sit between the node and its database.
 
 ### A1.2 Transactions and outcomes
