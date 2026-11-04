@@ -27,6 +27,9 @@ contract DeployHarness is DeployBase {
 
     function chainCodeLimit() external view returns (uint256) { return _chainCodeLimit(); }
 
+    /// `DEPLOY_WRAPPED` for the next `deploy`.
+    function setWrapped(bool w) external { deployWrapped = w; }
+
     function deploy(bytes32 uid_, bool zether, address ska) external returns (OpenFactory f, string memory json) {
         return deploy(uid_, zether, ska, false);
     }

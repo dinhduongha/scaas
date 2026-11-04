@@ -17,6 +17,7 @@ import {ZetherLib} from "../src/zether/ZetherLib.sol";
 import {ZetherWrappedLib} from "../src/zether/ZetherWrappedLib.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {NormalToken} from "../src/metatx/NormalToken.sol";
+import {WrappedToken} from "../src/metatx/WrappedToken.sol";
 import {SCaaSDex} from "../src/dex/SCaaSDex.sol";
 import {UARegistry} from "../src/ua/UARegistry.sol";
 import {IUARegistry} from "../src/ua/IUARegistry.sol";
@@ -68,6 +69,9 @@ abstract contract DeployBase is Script {
     /// @notice `DEPLOY_ZETHER` env (default false): also deploy the Zether stack (`_deployZether`, any chain
     ///         but Hedera; owner ruling 2026-10-31).
     bool internal deployZether;
+    /// @notice `DEPLOY_WRAPPED` env (default false): also deploy the `WRAPPED` release (`_deployWrapped`, GD-12; CTR-GOV-19:
+    ///         every kind runs on the SCaaS testnet).
+    bool internal deployWrapped;
     /// @notice `OpenFactory.noticePeriod` (plan 5g-Z2; owner ruling 2026-10-20): `NOTICE_PERIOD` env. Safe by default:
     ///         every chain not in `_isTestChain` is a mainnet (22776, Hedera 295, Ethereum, BSC, an unknown chain), with
     ///         default and floor 3 days; 7622 defaults to 10 minutes, the other test / dev chains to 0. At most 30 days
@@ -96,9 +100,10 @@ abstract contract DeployBase is Script {
     ///         regular gas, which EIP-7825 caps at `TX_REGULAR_GAS_CAP` (2^24): the transaction needs
     ///         `runtime x 1,530 + 2^24` and may not exceed the block gas limit. Runtime sizes are `size-baseline.json`'s
     ///         (the contracts over the EIP-170 limit; any other is priced at `EIP170_LIMIT`).
-    ///         `NormalToken` 37,228 B = 73.7 M, `UARegistry` 28,429 B = 60.3 M, `UARegistryLib` 32,667 B = 66.8 M,
-    ///         `WrappedZetherToken` 62,169 B = 111.9 M, `WrappedPqzToken` 63,423 B = 113.8 M (the figures move with the
-    ///         baseline).
+    ///         `NormalToken` 40,853 B = 79.3 M, `WrappedToken` 52,297 B = 96.8 M, `NormalZetherToken` 50,547 B = 94.1 M,
+    ///         `WrappedZetherToken` 62,472 B = 112.4 M, `NormalPqzToken` 56,191 B = 102.7 M, `WrappedPqzToken` 72,160 B =
+    ///         127.2 M, `SCaaSDex` 33,574 B = 68.1 M, `UARegistry` 29,429 B = 61.8 M, `UARegistryLib` 35,946 B = 71.8 M: each
+    ///         fits a 200 M block (the figures move with the baseline; `GovDeploy.t.sol` reads it).
     uint256 internal constant STATE_GAS_PER_BYTE = 1530;
     uint256 internal constant TX_REGULAR_GAS_CAP = 1 << 24;
     uint256 internal constant EIP170_LIMIT = 24_576;
@@ -158,6 +163,7 @@ abstract contract DeployBase is Script {
     function _setup() internal {
         salt = vm.envOr("DEPLOY_SALT", keccak256("scaas.deploy.v1"));
         deployZether = vm.envOr("DEPLOY_ZETHER", false);
+        deployWrapped = vm.envOr("DEPLOY_WRAPPED", false);
         noticePeriod = _checkedNotice(block.chainid, vm.envOr("NOTICE_PERIOD", _defaultNotice(block.chainid)));
         uid = _chainUid();
         require(CREATE2_FACTORY.code.length != 0,
@@ -208,9 +214,9 @@ abstract contract DeployBase is Script {
     ///         and the `SCaaSDex` release, each version 1; otherwise the registrar publishes and deploys them later from
     ///         the same init code. Writes `token_factory`, `implementation_normal`, `dex_implementation`, `ua_registry`,
     ///         `ua_registry_lib`,
-    ///         `mtx_relay_fee`, `mtx_relay_executor`, `governance_router`, `chain_uid` into the JSON object `"deploy"`; with `DEPLOY_ZETHER` also the Zether stack (`_deployZether`,
-    ///         not on Hedera). NORMAL and `WRAPPED` both exceed EIP-170 (the UA ledger): deploy with
-    ///         `--code-size-limit 65536` (deploy.sh); `WRAPPED` is still not deployed here (owner: wait for Glamsterdam).
+    ///         `mtx_relay_fee`, `mtx_relay_executor`, `governance_router`, `chain_uid` into the JSON object `"deploy"`; with
+    ///         `DEPLOY_WRAPPED` also the `WRAPPED` release (`_deployWrapped`, GD-12), with `DEPLOY_ZETHER` the Zether stack
+    ///         (`_deployZether`, not on Hedera). NORMAL and `WRAPPED` both exceed EIP-170 (the UA ledger).
     ///         Each release is refused first when its runtime exceeds the chain's declared `CHAIN_CODE_LIMIT`
     ///         (`_checkCodeFits`, CTR-GOV-19, GD-4).
     function _deployTokenFactory(address registrar, bool register, address smartKeyAccountImpl, bool isHedera)
@@ -247,8 +253,24 @@ abstract contract DeployBase is Script {
             _gate(dexImpl);
             vm.serializeAddress("deploy", "dex_implementation", dexImpl);
         }
+        if (deployWrapped && register) _deployWrapped(f, address(reg), smartKeyAccountImpl, isHedera);
         if (deployZether) _deployZether(f, register, smartKeyAccountImpl, address(reg));
         vm.serializeBytes32("deploy", "chain_uid", uid);
+    }
+
+    /// @notice GD-12 (CTR-GOV-19: every kind runs on the SCaaS testnet), in the form of `_deployZether`: env version 1 of
+    ///         `WRAPPED` (the UA registry, the `SmartKeyAccount` implementation, Hedera, the link closure with `WrappedLib`, the
+    ///         router), the release, version 1, refused first by `_requireReleaseGas`; the kind is on from the factory's start.
+    ///         JSON `implementation_wrapped`. The release is above EIP-170: `CHAIN_CODE_LIMIT` must hold it.
+    function _deployWrapped(OpenFactory f, address reg, address smartKeyAccountImpl, bool isHedera) internal {
+        address[] memory libs = new address[](5);
+        (libs[0], libs[1], libs[2], libs[3], libs[4]) =
+            (address(GovernanceLib), address(HederaLib), address(TradeLib), address(MtxPipelineLib), address(WrappedLib));
+        f.publishEnv(IOpenFactory.TokenKind.WRAPPED, 1, _env(f, reg, smartKeyAccountImpl, isHedera, new address[](0), libs));
+        _requireReleaseGas("WrappedToken");
+        address w = f.deployImplementation(IOpenFactory.TokenKind.WRAPPED, 1, 1, type(WrappedToken).creationCode, "");
+        _gate(w);
+        vm.serializeAddress("deploy", "implementation_wrapped", w);
     }
 
     /// @notice `MtxRelayFee` (CTR-MTX-27) by CREATE2, the same address on every chain (no constructor argument, no

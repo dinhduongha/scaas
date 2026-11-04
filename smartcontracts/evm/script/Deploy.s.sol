@@ -12,6 +12,9 @@ import {DeployBase} from "./DeployBase.sol";
 ///      DEPLOY_SALT (tuỳ chọn; mặc định keccak256("scaas.deploy.v1"); chạy lại trên cùng chain cần salt mới),
 ///      CHAIN_UID (genesis hash, chain-uids.json; tuỳ chọn; phải bằng hash block 0 của RPC, mặc định chính hash đó).
 ///      DEPLOY_ZETHER (tuỳ chọn, true/false; mọi chain trừ Hedera; cần cờ forge trong deploy.sh, docs/networks/evm.md).
+///      DEPLOY_WRAPPED (optional, true/false): the `WRAPPED` release too (GD-12). CHAIN_CODE_LIMIT (optional, default
+///      65,536, EIP-7954): the chain's declared code limit; a release above it is refused by name before anything is sent
+///      (CTR-GOV-19, GD-4); the SCaaS testnet after the next reset: 131,072 (`maxCodeSize` `0x20000`).
 /// Ghi `deployments/<chainid>.json` (token factory, implementations, the DEX implementation, the SmartKeyAccount
 /// factory, `chain_uid`, the demo tokens) để seed client (`blockchain.token`) và config node; a DEX is a clone from
 /// `OpenFactory.createDex` (CTR-DEX-24). The v1 line (`OpenFactoryV1`, `MetaToken`, `MetaTxDex`, `SCaaSDexV1`) is in

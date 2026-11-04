@@ -16,7 +16,7 @@ ZETHER_CROSS_N=10 # test/zether/ZetherProverCross.t.sol: 10 tests, none skipped
 FORGE_DIRS="ua zether pqz governance v2"
 SETS="n2048-kmax1024 n2304-kmax4096 n2560-kmax16384 n2816-kmax65536"
 # cargo-scaas-node is the whole node suite: 6 GB, alone (AGENTS.md "Machine"): CAPPED_MEM=6G with nothing else heavy running
-STEPS="build forge-ua forge-zether forge-pqz forge-governance forge-v2 forge-rest forge-isolate sizes zether-cross clientkeys vectors-check cargo-zether-prover cargo-scaas-node node-e2e-anvil ua-rs ua-py ua-go ua-cs ua-c ua-cxx ua-dart ua-dart-frb ua-qt docs named-tests summary"
+STEPS="build forge-ua forge-zether forge-pqz forge-governance forge-v2 forge-rest forge-isolate sizes zether-cross clientkeys vectors-check cargo-zether-prover cargo-scaas-node node-e2e-anvil ua-rs ua-py ua-go ua-cs ua-c ua-cxx ua-dart ua-dart-frb ua-qt chainspec-check zether-e2e node-e2e-hedera docs named-tests summary"
 if [ "$1" = "--only" ]; then
   case $2 in
     at-set-*|summary) for s in $SETS; do
@@ -31,6 +31,9 @@ extra_step() {
     forge-rest) cd smartcontracts/evm && ../../scripts/capped forge test --no-match-path "test/{${FORGE_DIRS// /,}}/**" ;;
     forge-*) cd smartcontracts/evm && ../../scripts/capped forge test --match-path "test/${1#forge-}/**" ;;
     at-set-*) scripts/capped smartcontracts/evm/script/pqz/at-set.sh "${1#at-set-}" test ;;
+    chainspec-check) python3 -I pqz-core/nethermind/chain/patch-chainspec.py --check ;; # T16: the next reset's chainspec
+    zether-e2e) PORT=18545 scripts/capped scripts/e2e-zether.sh ;;
+    node-e2e-hedera) cd scaas-node && ../scripts/capped cargo test -j2 --test e2e_hedera -- --ignored --test-threads=1 ;;
     *) echo "unknown step $1"; return 2 ;;
   esac
 }
@@ -359,6 +362,11 @@ ua-cxx|ctest|governance_bits_rows
 ua-dart|dart|governance bits rows
 ua-dart-frb|dart|governance bits rows
 ua-qt|qt|test_governance_bits_rows
+forge|forge|test_deployWrappedPath
+forge|forge|test_routerDeployedAndGated
+forge|forge|test_wrappedReleaseIsGated
+forge|forge|test_everyKindsReleaseFitsTwoHundredMillion
+forge|forge|test_releaseGasPerKind
 NAMES
 )
 . "$(dirname "$0")/2026-10-27-metatx-split-gates.sh"

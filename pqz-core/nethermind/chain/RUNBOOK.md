@@ -5,7 +5,7 @@ This runbook is the step-by-step procedure for switching on the PQZ and ML-DSA p
 owner, or the controller session the owner has allowed to back up, reset and deploy the SCaaS testnet (owner decision
 2026-10-15). Every step was first rehearsed on a throwaway **copy** of the SCaaS testnet, then run on the real chain.
 
-**Status (all executed):**
+**Status (all executed but the last row, prepared only):**
 
 | Procedure | Date | Log |
 |---|---|---|
@@ -18,6 +18,7 @@ owner, or the controller session the owner has allowed to back up, reset and dep
 | [Image 2.2.0-pqz5: the R0 review fix part b ids](#image-220-pqz5-on-the-scaas-testnet-executed-2026-10-26) — reset (path B, no backup) onto the part b library (`n2304-kmax4096`, PQZL v5 / PQZH v3) with provisional rows | 2026-10-26 | `../runs/2026-10-26-pqz5-live.txt` |
 | [Node split: sealer + rpc](#node-split-sealer--rpc-owner-2026-10-31) — the single node split into a key-holding `sealer` (no port, internal network) and a key-less archive `rpc` (public RPC, sentry for external nodes); Blockscout on `rpc` | 2026-10-31 | `../runs/2026-10-31-pqz6-live.txt` § S |
 | [Zether on the SCaaS testnet](#zether-on-the-scaas-testnet-executed-2026-10-31) — the whole contract stack again with a new CREATE2 salt and `DEPLOY_ZETHER=1` beside the phase C set (no reset), the Zether e2e, Blockscout verification | 2026-10-31 | `smartcontracts/evm/runs/2026-10-31-zether-testnet-*-7622.txt` |
+| [Code size 128 KiB: the next reset](#code-size-128-kib-on-the-scaas-testnet-the-next-reset-prepared-2026-11-04-not-executed) — **prepared, not executed**: `maxCodeSize` `0x20000`, EIP-7954 left out (CTR-GOV-19); the reset is the controller's | — | `../runs/2026-11-03-code-size-probe.txt` |
 
 The commands below are the ones that were executed. Steps marked *live only* ran on the SCaaS testnet itself; everything else
 ran on the copy. Plan: [P6f](../../../docs/superpowers/plans/2026-10-14-p6f-precompiles.md) Tasks 7, 8, 10; spec:
@@ -656,6 +657,46 @@ pass a new `DEPLOY_SALT`): (1) `deploy.sh evm` with `DEPLOY_ZETHER=1` as in step
 (600 s on 7622) after the releases; (3) `scripts/e2e-zether.sh` with `RPC` and `PRIVATE_KEY` as in step 4 (UAs already
 registered are skipped; a new run makes new tokens: `E2E_SALT` defaults from the block number); (4)
 `verify-blockscout.sh`.
+
+## Code size 128 KiB on the SCaaS testnet: the next reset (prepared 2026-11-04, NOT executed)
+
+*Live only, when the controller runs it.* Owner 2026-11-03 ([CTR-GOV-19](../../../docs/decisions.md)): the SCaaS testnet
+leaves EIP-7954 out and keeps every other Amsterdam EIP, so that every token kind, `WrappedPqzToken` (72,160 B) included,
+runs at a higher `maxCodeSize` (governance plan T16; NET-EVM-06's Change, governance spec §12.10). **Nothing here has run on
+the live chain:** this section and `patch-chainspec.py --testnet-reset` are the inputs; the reset, its date and its go are
+the controller's. 22776 is the owner's and is never touched (`--testnet-reset` refuses every chain but 7622).
+
+**What changes** (`python3 -I patch-chainspec.py <genesis.json> <engine-pqz.json> <genesis timestamp> <out> --testnet-reset`,
+self-check `--check`): `params.maxCodeSize` `0x20000` (131,072 B), `maxCodeSizeTransition` 0, and
+`eip7954TransitionTimestamp` removed; the other ten Amsterdam keys of the 2026-10-21 section (EIP-2780, 7708, 7778, 7928,
+7976, 7981, 8024, 8037, 8038, 8246) stay at 1, and the script refuses any other change of `params` ("unexpected diff").
+`genesis.gasLimit` is already `0xbebc200`; `engine.Pqz` is the run's engine file. No header field moves, so the genesis hash,
+and with it `chainUid`, is expected to stay `0xf1f491ab…3164` [inference: params are not in the header; confirm on a
+throwaway copy first, as on 2026-10-22]. It is a reset all the same: every block is replayed under the new rules from a
+fresh data dir, both nodes of the [node split](#node-split-sealer--rpc-owner-2026-10-31), and everything deployed is gone.
+The 2026-10-21 section's EIP list stays as the record of that run.
+
+**Limits on this route**, measured on throwaway copies, stock `nethermind/nethermind:2.2.0` and `scaas/nethermind-pqz:2.2.0-pqz6`
+alike (`../runs/2026-11-03-code-size-probe.txt`, arms C and D; the live directory never read):
+
+| Item | Measured |
+|---|---|
+| Code | 131,072 B deploys; 131,073 B is status 0 (gasUsed 2^24); 65,537 B and 119,800 B deploy at a 200 M block |
+| Init code | limit 262,144 B (2 x `maxCodeSize`): 262,145 B "max initcode size exceeded"; 262,144 B is refused by the calldata floor (16,801,216 > 2^24), so about 261,768 B is the largest init that fits [est.]; the largest `.init` row of `size-baseline.json` is 74,825 B (`WrappedPqzToken`) |
+| With EIP-7954 active (today) | 65,536 B whatever `maxCodeSize` says; init 131,073 B refused |
+| 200 M block | the deploy gate needs `runtime x 1,530 + 2^24`: 119,753 B is the largest runtime it admits at 200 M, below `maxCodeSize`; 131,072 B needs about 200.8 M of gas (arm D, a 300 M block) |
+
+**Deploy after the reset:** `CHAIN_CODE_LIMIT=131072 DEPLOY_ZETHER=1 DEPLOY_WRAPPED=1 CHAIN_UID=<genesis hash> NOTICE_PERIOD=600
+PRIVATE_KEY=<registrar> scripts/capped smartcontracts/scripts/deploy.sh evm <rpc>`, then the PQZ kinds by
+`smartcontracts/evm/script/pqz/e2e.py`. Every release fits a 200 M block (`smartcontracts/evm/runs/2026-11-03-governance-deploy-gas.txt`,
+`test/governance/GovDeploy.t.sol`). Without `CHAIN_CODE_LIMIT` the deploy refuses a release above 65,536 B by name before
+anything is sent (GD-4).
+
+**Checks** (as the 2026-10-22 section, plus): `e2e.py codesize --rpc <rpc> --key <test key 0x…04> --sizes 65537:ok,119800:ok
+--gas 199900000` (arm C's rows: 65,537 B deploys once EIP-7954 is out); `eth_getCode` of every release of the deploy JSON
+non-empty; the node's `governance_routers` set to the deploy JSON's `governance_router`.
+
+**Rollback:** as the 2026-10-22 section: stop both nodes, put the `genesis.json` backup back, swap the data dirs back, start.
 
 ## 7622 node layout and access (owner 2026-10-31)
 

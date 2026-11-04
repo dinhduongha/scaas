@@ -1,0 +1,24 @@
+# governance T16: every kind's release against a 200 M block (CTR-GOV-19, NET-EVM-06; spec S0, S8, §12.10). forge 1.8.5, solc via
+# foundry.toml, default profile, isolate = true, the default PQZ set. Forge gas is deterministic: no calibration, no chain.
+#   cd smartcontracts/evm && ../../scripts/capped forge test --match-path test/governance/GovDeploy.t.sol -vv
+# Two figures per kind:
+# - the deploy gate's need, `runtime x 1,530 + 2^24` from size-baseline.json (DeployBase._releaseGasNeed; the formula a deploy is
+#   refused by, before anything is sent): test_everyKindsReleaseFitsTwoHundredMillion;
+# - forge's EIP-8037 figures of the creation as one transaction (Create2Probe, as ZetherDeploy.t.sol F185): regular = the frame's
+#   gasTotalUsed x 64/63, state = gasStateUsed (code deposit 1,530 per byte and the new account), x1.05 = deploy.sh's
+#   --gas-estimate-multiplier 105: test_releaseGasPerKind. The factory's deployImplementation adds its own frame and a slot or two.
+# A kind fits when regular x1.05 < 2^24 (EIP-7825) and total x1.05 <= 200,000,000 (EIP-8037: tx.gas must fit the block).
+#
+# kind | runtime B | init B | gate need | regular | state | total | total x1.05 | 200 M block
+NormalToken | 40,853 | 43,899 | 79,282,306 | 2,876,196 | 62,786,610 | 65,662,806 | 68,945,946 | fits
+WrappedToken | 52,297 | 55,414 | 96,791,626 | 3,625,179 | 80,295,930 | 83,921,109 | 88,117,164 | fits
+NormalZetherToken | 50,547 | 55,106 | 94,114,126 | 3,606,454 | 77,618,430 | 81,224,884 | 85,286,128 | fits
+WrappedZetherToken | 62,472 | 67,169 | 112,359,376 | 4,390,806 | 95,863,680 | 100,254,486 | 105,267,210 | fits
+NormalPqzToken | 56,191 | 59,900 | 102,749,446 | 3,916,450 | 86,253,750 | 90,170,200 | 94,678,710 | fits
+WrappedPqzToken | 72,160 | 76,009 | 127,182,016 | 4,965,026 | 110,686,320 | 115,651,346 | 121,433,913 | fits
+SCaaSDex | 33,574 | 35,928 | 68,145,436 | 2,358,150 | 51,649,740 | 54,007,890 | 56,708,284 | fits
+GovernanceRouter | 20,073 | 21,126 | (no gate: under EIP-170) | 1,396,955 | 30,895,290 | 32,292,245 | 33,906,857 | fits
+#
+# Read from the rows: every release fits a 200 M block by both figures; WrappedPqzToken is the only one above 65,536 B, so it needs
+# CHAIN_CODE_LIMIT=131072 and a chain without EIP-7954 (the SCaaS testnet after the RUNBOOK's next reset); the deploy gate's need is
+# the higher figure in every row (it charges the 2^24 regular cap whole). The largest runtime the gate admits at 200 M is 119,753 B.
