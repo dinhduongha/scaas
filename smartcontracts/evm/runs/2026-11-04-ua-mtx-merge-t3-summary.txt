@@ -1,0 +1,24 @@
+# ua-mtx-merge T3 gate summary (full output in git-ignored .log files, not committed)
+# T3: the token kinds' own pairs (mtxBurn, mtxUnwrap, mtxUnwrapLeg, mtxUnwrapToUA, mtxWrapOrder) on the UA structs (plan T3).
+# The round's gate runner (T21) is not built yet: each command ran directly through scripts/capped.
+# Base: 9fa00bdb (T2). T3 commits: ebe339a5 (legacy copies), f8510412 (the build), 49603963 (one test control by signature).
+step | commit | rc | counts
+t3-red-merge | ebe339a5 + test/merge/KindPairs.t.sol | 1 | 1 passed 10 failed (forge, FOUNDRY_TEST=test/merge, KindPairs.t on the T2 tree; the pass is test_noTwinWrapsStayAddress, a guard of what does not move)
+t3-katwrite | f8510412 (worktree) | 0 | DexKatTest 2 passed with WRITE_KAT=true (dex_order_kat.json, MD-8: only the token / DEX addresses, domains, digests and calldata moved)
+t3-touched | f8510412 (worktree, before the repairs below) | 1 | 267 passed 3 failed, 27 suites (the interface-id pin red at 0, test_c0_gasNamedVsGeneric and test_c1_unwrapRow repaired by hand)
+t3-pin-interface-ids | f8510412 (worktree) | 1 then 0 | test_kindPairInterfaceIdsArePinned red at 0x00000000, then IWrappedToken 0xd69c2cd0 -> 0xa84f2937, ITradeToken 0x0b4d9a5c (unchanged; XOR of its 17 selectors)
+t3-forge-first | f8510412 (worktree) | 1 | 2522 passed 1 failed 14 skipped, 216 suites (UATrade.t test_ledgerOff_everyUATradeFunction: a native seller at registry 0, repaired by hand)
+t3-forge-full | f8510412 (worktree, size-baseline.json not yet ratcheted) | 0 | 2523 passed 0 failed 14 skipped, 216 suites (forge, default set n2304-kmax4096)
+t3-forge-isolate | f8510412 | 0 | 22 passed 0 failed (forge --isolate UAGas, UARegistryGroups)
+t3-size-gate | f8510412 | 0 | 0 errors, 89 contracts, above 65536 B: none; baseline ratcheted down (t3-sizes); size_gate --self-test ok
+t3-baseline-readers | f8510412 | 1 then 0 | 70 passed after GovDeploy.t's code-limit control 46,803 -> 45,139 (ZetherDeploy, PqzWrapped, HederaV2, Factory, UADeploy, CodeCeiling unchanged)
+t3-merge | 49603963 | 0 | KindPairs 11 passed; test/merge 63 (Invariants 16, MergedEntry 19, TransferGroup 17, KindPairs 11)
+t3-clientkeys-evm | f8510412 | 0 | 23 passed 0 failed (node --test test/evm.test.js; reads the regenerated dex_order_kat.json)
+t3-docs-check | f8510412 | 0 | 0 errors, 5 warnings, 16 notes (docs_check check); test_docs_check ok
+t3-mutants | 49603963 | 1 each | 4 of 4 killed against test/merge (runs/2026-11-04-ua-mtx-merge-t3-mutants.txt); the first run, at f8510412, left no-twin-wrap-on-ua-envelope a COMPILE ERROR (the control called mtxWrap typed), fixed by 49603963
+t3-govgas | 574896a0 -> f8510412 | 0 | GovGas rows (-vv): mtxTransfer NormalToken 88,684 -> 88,662, WrappedToken 88,652 -> 88,706, WrappedPqzToken 88,673 -> 88,639, WrappedZetherToken 88,657 -> 88,657; plain transfer 0 / +33 / +66 / -44; createToken 1,444,765 -> 1,444,699; mint 54,645 -> 54,601
+t3-named-vs-generic | f8510412 | 0 | warm lane: mtxUnwrap (UASig) 154,930; mtxExecute(unwrap) 154,301; executeMetaTransaction(unwrap) 152,164 (bound: named < merged generic + 2,000)
+t3-sizes | 9fa00bdb -> f8510412 | 0 | NormalToken 35,289 -> 34,590; WrappedToken 46,804 -> 45,140; NormalZetherToken 45,444 -> 45,264; WrappedZetherToken 57,215 -> 55,613 (init 60,814 -> 59,212); NormalPqzToken 51,229 -> 51,049 (init 53,875 -> 53,695); WrappedPqzToken 62,468 -> 60,861 (init 65,124 -> 63,514); WrappedLib 16,761; SCaaSDex 33,725 unchanged; wallets unchanged (test_walletsByteIdentical)
+#
+# Not run in T3: the other three PQZ sets (T5 runs them); the scaas-node suite (no node file changed). t3-forge-full ran before
+# the baseline ratchet and the GovDeploy control; t3-baseline-readers re-ran every reader of size-baseline.json after them.
