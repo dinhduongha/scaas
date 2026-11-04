@@ -579,7 +579,7 @@ fn ua8_kind_name_table() {
         assert_eq!(c.kind_name(&kind), soroban_sdk::String::from_str(&env, r["name"].as_str().unwrap()));
         known.push(kind);
     }
-    assert_eq!(known.len(), 32);
+    assert_eq!(known.len(), 33); // + mldsa87 (CTR-UA-39), named though not enabled
     for kind in (0..0x0200).chain([0x1_0120, u32::MAX]).filter(|k| !known.contains(k)) {
         assert_eq!(err(c.try_kind_name(&kind)), Error::KindUnknown, "{kind:#x}");
     }

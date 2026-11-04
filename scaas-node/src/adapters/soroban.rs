@@ -2213,6 +2213,17 @@ mod tests {
         Ok(alloy::hex::decode(s)?)
     }
 
+    /// U8S-D8's `Chain` kinds are the Soroban registry's own register gate (`ua-registry` `register_record`), both directions;
+    /// `mldsa87` (0x0134, CTR-UA-39 Q5) stays out until its Soroban round, so its records fail closed through `check_*`.
+    #[test]
+    fn chain_kind_is_the_registry_gate_without_mldsa87() {
+        let registry = [0x0100, 0x0101, 0x0102, 0x0108, MSIG, 0x0130, 0x0131];
+        for kind in 0x0001..=0x0150u16 {
+            assert_eq!(chain_kind(kind), registry.contains(&kind), "{kind:#06x}");
+        }
+        assert!(!chain_kind(0x0134));
+    }
+
     fn op(payload: Value, sig: &str) -> Value {
         json!({"payload": payload, "from": FROM, "signature": sig, "contract": CONTRACT, "valid_until": 1_800_000_300u64, "extra": {}})
     }
