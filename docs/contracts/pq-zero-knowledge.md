@@ -647,10 +647,12 @@ are drawn from.
 
 <a id="authorization"></a>
 <a id="CTR-PQZ-12"></a>**CTR-PQZ-12** — **Only a PQ signing UA carries a PQZ key; it authorizes every spend** (owner). The holders are
-a registered single-key `mldsa65` / `mldsa44` UA (`fndsa512` where the registry enables it, FIPS 206), or a UA `msig`
+a registered single-key `mldsa65` / `mldsa44` / `mldsa87` UA (`mldsa87` where a precompile enables it, owner 2026-11-04,
+[CTR-UA-39](accounts.md#CTR-UA-39); `fndsa512` and `fndsa1024` where the registry enables them, the Falcon round-3 specification, owner 2026-11-04 for
+`fndsa1024`, [CTR-UA-40](accounts.md#CTR-UA-40)), or a UA `msig`
 whose non-PQ members' total weight is **below** its threshold — so no classical-only subset can authorize. That `msig`
 rule is the hybrid (e.g. `mldsa65` w 1 + `p256` w 1, threshold 2) and the t-of-n ML-DSA form; the weight is summed over
-members whose kind is not 0x0130–0x0133 and that are not an `msig` PQ-eligible itself: a forger of every classical key cannot reach such an inner's threshold, so a classical-dominant inner counts its whole outer weight as classical ([CTR-UA-38](accounts.md#CTR-UA-38)) (`slhdsa128s` counts as PQ weight in an `msig` but is not a direct holder: a
+members whose kind is not 0x0130–0x0135 and that are not an `msig` PQ-eligible itself: a forger of every classical key cannot reach such an inner's threshold, so a classical-dominant inner counts its whole outer weight as classical ([CTR-UA-38](accounts.md#CTR-UA-38)) (`slhdsa128s` counts as PQ weight in an `msig` but is not a direct holder: a
 7,856-byte signature and a ≈ 1.4 M gas cap on every spend). Every other kind — classical signers, `slhdsa128s`, Zether,
 a classical-dominant `msig` — reverts `UAPqzHolder`. **Authorization bound (review2 C0-5, controller proposal, owner may
 override):** an `msig` holder must also be usable — `register` reverts `UAPqzHolder` unless its worst-case authorization
@@ -1889,7 +1891,10 @@ directories → the one directory `smartcontracts/vectors/pqz/` (P6e D9).
 <a id="CTR-PQZ-10"></a>**CTR-PQZ-10** — **On-chain verification is a native precompile on the SCaaS testnet**: `PQZ` at
 `0x000000000000000000000000000000005caa0f01` (first input byte = op) — one precompile for both proof systems, PQZL and PQZH (Ligero), dispatched on the statement's `proofSystemId` (owner 2026-10-14) — and the ML-DSA precompiles
 `MLDSA44` at `0x000000000000000000000000000000005caa0012` and `MLDSA65` at `0x000000000000000000000000000000005caa0013`
-(EIP-8355's layout, empty context; [§9.2](#92-precompiles-mldsa44-and-mldsa65)). These are the 32-bit form (owner
+(EIP-8355's layout, empty context; [§9.2](#92-precompiles-mldsa44-and-mldsa65)), and `MLDSA87` at
+`0x000000000000000000000000000000005caa0014` from the first schedule that carries the optional `mldsa87Gas` (owner 2026-11-04,
+[CTR-UA-39](accounts.md#CTR-UA-39); plugin BUILT on branch `mldsa87`, price **provisional** ≈ 102,000 until a calibration run the
+owner allows; the roll-out to the SCaaS testnet is the owner's step). These are the 32-bit form (owner
 2026-10-21, spec `superpowers/specs/2026-10-20-pqz-state-redesign.md` §12 item 9; built in the node plugin and the
 scripts in plan 5h Task 8d part 1, the contracts in part 2); they replace P6f D3's `0x5caa500000000000000000000000000000000f01` / `…0012` /
 `…0013`, which the SCaaS testnet served until image `2.2.0-pqz4` replaced `2.2.0-pqz3` on 2026-10-25 (with provisional schedule rows until plan 5h Task 9). The addresses lie above `0xffff`
@@ -2087,7 +2092,10 @@ computes the self-test at node start-up, so every call in a block is a cache hit
 (P6f D6, amended from "cold p99": priced cold it would be 39.0 M gas, above EIP-7825's per-transaction cap).
 Contracts call it once at construction. Gas does not protect `eth_call`, which costs the caller nothing on any chain,
 so CPU spam through the RPC is bounded by the follower's rate limits, for every op, not only op 6. `MLDSA44` /
-`MLDSA65`: `max(EIP-8355 BASE, calibrated) + 6·⌈max(0, L − PK − SIG) / 32⌉`.
+`MLDSA65`: `max(EIP-8355 BASE, calibrated) + 6·⌈max(0, L − PK − SIG) / 32⌉`. `MLDSA87` (CTR-UA-39): the same form, base 13,500,
+`pk` 2,592 B, `sig` 4,627 B; `mldsa87Gas` optional per schedule (a schedule without it leaves the address inactive), its value
+**provisional** (≈ 102,000, `MlDsa.Provisional87Gas`, `add-schedule.py --mldsa87`), not calibrated; the start-up known-answer set
+covers the three levels.
 
 **Measured (P6f Task 6, 2026-10-15, one run, owner):** inside the built image on the chain host (AMD Ryzen 5 7235HS,
 `--cpus 4`, `pqz1` library `12495e8b…7d87`), through `PqzPrecompile.Run` (the P/Invoke hop included); 1,000 calls per

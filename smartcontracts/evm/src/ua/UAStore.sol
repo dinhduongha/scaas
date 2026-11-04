@@ -90,13 +90,15 @@ library UAStore {
 
     // ----- kinds -----
 
+    /// PQ weight in an `msig` (CTR-PQZ-12): 0x0130–0x0135, `mldsa87` and `fndsa1024` since owner 2026-11-04 (CTR-UA-39 / -40 Q3).
+    /// Not the registry's config slot map (`UARegistry._slot`).
     function isPq(uint16 kind) internal pure returns (bool) {
-        return kind >= UAKinds.MLDSA44 && kind <= UAKinds.SLHDSA128S;
+        return kind >= UAKinds.MLDSA44 && kind <= UAKinds.FNDSA1024;
     }
 
     /// Length of the stored `vk` of a stored kind (CTR-UA-17), 0 otherwise: `Q` / `Y` SEC1 compressed (secp256k1) or
     /// EIP-196 uncompressed (bn254), the first bytes of the key data; Zether `Y` (128) and the PQ `pk` (ML-DSA
-    /// 1,312 / 1,952, FN-DSA 897, SLH-DSA 32), the whole key data. (The PQZ key has its own pointer, `pqzKey`.) The
+    /// 1,312 / 1,952 / 2,592, FN-DSA 897 / 1,793, SLH-DSA 32), the whole key data. (The PQZ key has its own pointer, `pqzKey`.) The
     /// rest of the key data is in the registration blob (`reg`), so `keyData` is stored once (UA8-D7).
     function vkLength(uint16 kind) internal pure returns (uint256) {
         if (kind == UAKinds.MUSIG2_SECP256K1 || kind == UAKinds.FROST_SECP256K1) return 33;
@@ -106,6 +108,8 @@ library UAStore {
         if (kind == UAKinds.MLDSA65) return 1952;
         if (kind == UAKinds.FNDSA512) return 897;
         if (kind == UAKinds.SLHDSA128S) return 32;
+        if (kind == UAKinds.MLDSA87) return 2592;
+        if (kind == UAKinds.FNDSA1024) return 1793;
         return 0;
     }
 

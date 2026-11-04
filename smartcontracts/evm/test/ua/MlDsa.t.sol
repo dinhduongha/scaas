@@ -6,10 +6,15 @@ import {PqUA} from "../../src/ua/PqUA.sol";
 import {Shake} from "../../src/ua/Shake.sol";
 import {MlDsa, UAMldsaVerifier} from "../../src/ua/MlDsa.sol";
 
+/// FIPS 204 Table 1, ML-DSA-87, written out here (the test's own copy of `MlDsa.params87()`).
+function p87() pure returns (MlDsa.Params memory) {
+    return MlDsa.Params(8, 7, 60, 120, 1 << 19, (MlDsa.Q - 1) / 32, 75, 64, 20, 4, 2592, 4627);
+}
+
 contract MlHarness {
     function verify(uint256 level, bytes calldata pk, bytes calldata mprime, bytes calldata sig) external pure returns (bool) {
         Shake.reserve();
-        return MlDsa.verify(level == 44 ? MlDsa.params44() : MlDsa.params65(), pk, mprime, sig);
+        return MlDsa.verify(level == 44 ? MlDsa.params44() : level == 65 ? MlDsa.params65() : p87(), pk, mprime, sig);
     }
 
     function verifyExpanded(uint256 level, bytes calldata ek, bytes calldata mprime, bytes calldata sig)
@@ -43,6 +48,18 @@ function eip8355(bytes calldata input) pure returns (bool ok) {
         ok = MlDsa.verify(MlDsa.params44(), input[0:1312], abi.encodePacked(bytes2(0), input[3732:]), input[1312:3732]);
     } else if (input.length >= 5261) {
         ok = MlDsa.verify(MlDsa.params65(), input[0:1952], abi.encodePacked(bytes2(0), input[5261:]), input[1952:5261]);
+    }
+}
+
+/// `VERIFY_MLDSA87` in the EIP-8355 layout (`pk ‖ sig ‖ msg`): the stand-in for `0x14` / the SCaaS testnet's `0x…5caa0014`.
+function eip8355_87(bytes calldata input) pure returns (bool ok) {
+    Shake.reserve();
+    if (input.length >= 7219) ok = MlDsa.verify(p87(), input[0:2592], abi.encodePacked(bytes2(0), input[7219:]), input[2592:7219]);
+}
+
+contract Eip8355Emulator87 {
+    fallback(bytes calldata input) external returns (bytes memory) {
+        return abi.encode(eip8355_87(input) ? 1 : 0);
     }
 }
 
@@ -156,14 +173,15 @@ contract MlDsaTest is PqVectors {
     }
 
     function test_acvp_mldsa() public {
-        vm.pauseGasMetering(); // 60 full verifications: correctness only
+        vm.pauseGasMetering(); // 90 full verifications: correctness only
         string memory ext = _ext();
         MlHarness h = new MlHarness();
         uint256 n = _cases(ext, "acvp_mldsa");
-        assertEq(n, 60);
+        assertEq(n, 90); // 30 per level; ML-DSA-87 since CTR-UA-39 (tgId 5 pure, tgId 12 internal)
         for (uint256 i; i < n; ++i) {
             string memory c = _case("acvp_mldsa", i);
-            uint256 level = keccak256(bytes(vm.parseJsonString(ext, string.concat(c, ".set")))) == keccak256("ML-DSA-44") ? 44 : 65;
+            bytes32 set = keccak256(bytes(vm.parseJsonString(ext, string.concat(c, ".set"))));
+            uint256 level = set == keccak256("ML-DSA-44") ? 44 : set == keccak256("ML-DSA-65") ? 65 : 87;
             bool got = h.verify(level, _b(ext, string.concat(c, ".pk")), _b(ext, string.concat(c, ".mprime")),
                 _b(ext, string.concat(c, ".sig")));
             assertEq(got, vm.parseJsonBool(ext, string.concat(c, ".valid")), vm.parseJsonString(ext, string.concat(c, ".reason")));
@@ -298,6 +316,57 @@ contract MlDsaTest is PqVectors {
             sig = _degenerate(h, P, tr, mprime, _hintsUpTo(P, P.omega + 1));
             assertFalse(h.verifyExpanded(i == 0 ? 44 : 65, ek, mprime, sig), "hint count > omega");
         }
+    }
+
+    /// CTR-UA-39: `mldsa87` through an EIP-8355 precompile (the emulator at the SCaaS testnet's address): the pq_kat.json row
+    /// and each mutation with noble's verdict (the c~ second-word flip among them), and the library's own parameters.
+    function test_kat_mldsa87() public {
+        vm.pauseGasMetering(); // each emulated precompile call is a full Solidity verify
+        string memory kat = _kat();
+        address pc = 0x000000000000000000000000000000005caA0014; // the SCaaS testnet's MLDSA87
+        vm.etch(pc, address(new Eip8355Emulator87()).code);
+        UAMldsaVerifier v = new UAMldsaVerifier(
+            PqUA.MLDSA87, pc, _k(kat, "mldsa87", "eip8355_probe_valid"), _k(kat, "mldsa87", "eip8355_probe_invalid"));
+        assertEq(v.PRECOMPILE(), pc);
+        _uaVector("mldsa87", address(v), PqUA.MLDSA87);
+        assertEq(abi.encode(MlDsa.params87()), abi.encode(p87()));
+    }
+
+    function deploy87(address pc, bytes calldata valid, bytes calldata invalid) external returns (address) {
+        return address(new UAMldsaVerifier(PqUA.MLDSA87, pc, valid, invalid));
+    }
+
+    /// CTR-UA-39 Q1: no verifier for `mldsa87` without a precompile that answers the probe (none, one that says 1 to everything,
+    /// a probe of another level), so the deploy profile cannot enable it; it has no expanded-key cache.
+    function test_mldsa87_needsPrecompile() public {
+        vm.pauseGasMetering();
+        string memory kat = _kat();
+        bytes memory valid = _k(kat, "mldsa87", "eip8355_probe_valid");
+        bytes memory invalid = _k(kat, "mldsa87", "eip8355_probe_invalid");
+        address pc = address(0x14);
+        bytes4 no = bytes4(keccak256("UAMldsaNoPrecompile()"));
+        // each through an external call: an expected revert of a verifier CREATE made by the test itself ended the test as a pass
+        // here (Foundry 1.8.5; an `assertTrue(false)` after the first one passed), so nothing after it ran
+        vm.expectRevert(no);
+        this.deploy87(address(0), "", "");
+        vm.expectRevert(no); // empty account
+        this.deploy87(pc, valid, invalid);
+        vm.etch(pc, address(new AlwaysOne()).code);
+        vm.expectRevert(no);
+        this.deploy87(pc, valid, invalid);
+        vm.etch(pc, address(new Eip8355Emulator()).code); // 44 / 65 only
+        vm.expectRevert(no);
+        this.deploy87(pc, _k(kat, "mldsa65", "eip8355_probe_valid"), _k(kat, "mldsa65", "eip8355_probe_invalid"));
+        vm.etch(pc, address(new Eip8355Emulator87()).code);
+        UAMldsaVerifier v = new UAMldsaVerifier(PqUA.MLDSA87, pc, valid, invalid);
+        assertEq(v.PRECOMPILE(), pc);
+        assertEq(v.expandedKeyParts(), 0, "no cache");
+        bytes memory pk = _k(kat, "mldsa87", "pk");
+        vm.expectRevert(abi.encodeWithSelector(UAMldsaVerifier.UAMldsaPart.selector, 0));
+        v.expandedKeyPart(pk, 0);
+        assertFalse(v.verifyCached("", bytes32(_k(kat, "mldsa87", "ua_msg")), _k(kat, "mldsa87", "sig")));
+        // the 44 / 65 verifiers keep their Solidity path without a precompile
+        assertEq(new UAMldsaVerifier(PqUA.MLDSA65, address(0), "", "").PRECOMPILE(), address(0));
     }
 
     /// The precompile path checks the lengths before calling; the probe needs this level's exact split and a non-reverting

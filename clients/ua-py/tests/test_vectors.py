@@ -291,6 +291,10 @@ class Vectors(unittest.TestCase):
             msigs += r['kind'] == 0x0120
             n += 1
         self.assertEqual((n, with_pqz, msigs), (len(P['registrations']), 8, 6))
+        # mldsa87 (CTR-UA-39), fndsa1024 (CTR-UA-40): holders, each read here and in the record tests: a registration with its KEM
+        # register key, KEM records v1-v3, PQZ key records at the four sets
+        for k in (0x0134, 0x0135):
+            self.assertEqual([sum(r['kind'] == k for r in P[s]) for s in ('registrations', 'kemRecords', 'pqzKeyRecords')], [1, 3, 4], hex(k))
 
     def test_kem_record(self):
         for r in P['kemRecords']:
@@ -610,7 +614,7 @@ class TypedRegistryArgs(unittest.TestCase):
             self.assertEqual(args, row['kemCommit']['register'], row['name'])
             self.assertEqual(fill, row['kemCommit']['fill'], row['name'])
             commits += 1
-        self.assertEqual(commits, 9)
+        self.assertEqual(commits, 11)  # + mldsa87, fndsa1024
         for k in P['kemRecords']:
             self.assertEqual(ua.set_kem_key_args(b(k['ua']), k['version'], b(k['kemPk']), record_sig(k)), k['args'], k['id'])
         for r in P['pqzKeyRecords']:

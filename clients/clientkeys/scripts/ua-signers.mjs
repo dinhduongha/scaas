@@ -131,7 +131,7 @@ export const PQ_MNEMONIC = 'bench hurt jump file august wise shallow faculty imp
 export const pqSeedBytes = seedFromWords(PQ_MNEMONIC);
 // Test vectors only: this fixed Falcon sampler stream repeats across messages; never copy it into a production signer.
 export const pqFixed = (n) => shake256(utf8ToBytes('scaas p6a falcon randomness'), { dkLen: n });
-export const pqOpts = (name) => (name === 'fndsa512' ? { random: pqFixed } : { extraEntropy: false });
+export const pqOpts = (name) => (name.startsWith('fndsa') ? { random: pqFixed } : { extraEntropy: false });
 /** Signs a 32-byte ua_msg the kind's way: pq_msg with the empty context (ML-DSA, SLH-DSA), ua_msg itself (Falcon). */
 export const pqSignMsg = (name, sk, uaMsg, opts = pqOpts(name)) =>
   PQ_KINDS[name].alg.sign(PQ_KINDS[name].pq ? pqMessage(name, uaMsg) : uaMsg, sk, opts);

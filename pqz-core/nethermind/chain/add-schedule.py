@@ -12,6 +12,8 @@ pqzl, pqzh (the ids of the library's set: PQZ_SET, default n2304-kmax4096, from 
 gen_set.py's) or a hex prefix of the proofSystemId; --selftest also takes selftestGas from the calibration file (every
 other price stays). Refuses a calibration file with other than one schedule, one that lacks a row of the replaced ops
 / id that the last schedule has (that shape would become a miss), and a duplicate row (review W-F, 2026-10-19).
+--mldsa87 (CTR-UA-39, owner 2026-11-04) also sets the optional key mldsa87Gas, which activates MLDSA87 at 0x...5caa0014 from
+that schedule on, to PROVISIONAL_MLDSA87_GAS: the spec's ESTIMATE, not calibrated; the calibration run waits for the owner's word.
 add-schedule.py --check runs the self-check. Run with python3 -I."""
 import copy
 import json
@@ -24,6 +26,9 @@ SET = os.environ.get("PQZ_SET", "n2304-kmax4096")
 _SJ = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../params/sets", SET, "set.json")))
 IDS = {k: "0x" + _SJ[f"{k}_id"] for k in ("pqzl", "pqzh") if f"{k}_id" in _SJ}  # review R4-C3: the set's ids, not v3 / v1
 KEY = lambda r: (r["op"], r["id"].lower(), r["stmtLen"], r.get("legs"), r.get("auditorOn"))
+# PROVISIONAL (CTR-UA-39 Q4): ML-DSA-87 by the ML-DSA-65 ratio, 68,000 at EIP-8355's 9,000 -> about 102,000 at its 13,500;
+# the plugin's MlDsa.Provisional87Gas. Never "calibrated": replace it with the Calibrate figure when the owner allows the run.
+PROVISIONAL_MLDSA87_GAS = 102_000
 
 
 def main(src, cal, ts, out, *flags):
@@ -65,6 +70,8 @@ def main(src, cal, ts, out, *flags):
         sys.exit(f"duplicate rows: {sorted({k for k in keys if keys.count(k) > 1}, key=str)}")
     if "--selftest" in flags:
         s["selftestGas"] = cs["selftestGas"]
+    if "--mldsa87" in flags:
+        s["mldsa87Gas"] = PROVISIONAL_MLDSA87_GAS
     g2 = copy.deepcopy(g)
     g2["engine"]["Pqz"]["schedules"].append(s)
     rest = lambda x: {k: v for k, v in x.items() if k != "engine"} | {"engine": {k: v for k, v in x["engine"].items() if k != "Pqz"}}
@@ -73,7 +80,8 @@ def main(src, cal, ts, out, *flags):
     json.dump(g2, open(out, "w"), indent=1)
     print(f"{out}: schedule {len(sch)} added at {t} = {hex(t)}: {len(s['pqz'])} rows ({len(new_rows)} new of ops {sorted(ops)}"
           f"{'' if idp == '0x' else f' id {idp[:10]}…'}), "
-          f"selftest {s['selftestGas']}, mldsa44 {s['mldsa44Gas']}, mldsa65 {s['mldsa65Gas']}")
+          f"selftest {s['selftestGas']}, mldsa44 {s['mldsa44Gas']}, mldsa65 {s['mldsa65Gas']}"
+          + (f", mldsa87 {s['mldsa87Gas']} (PROVISIONAL, not calibrated)" if "mldsa87Gas" in s else ""))
     for r in new_rows:
         shape = f" M {r.get('legs')} auditorOn {r.get('auditorOn')}" if r["op"] == 7 else ""
         was = old.get(KEY(r))
@@ -99,6 +107,9 @@ def check():
         assert g["engine"]["Pqz"]["schedules"][1]["selftestGas"] == 4, g
         g = main(src, cal, str(int(time.time()) + 900), out, "--ops", "1", "--id", "pqzl", "--selftest")
         assert g["engine"]["Pqz"]["schedules"][1]["selftestGas"] == 3, g
+        assert "mldsa87Gas" not in g["engine"]["Pqz"]["schedules"][1], g
+        g = main(src, cal, str(int(time.time()) + 900), out, "--ops", "1", "--mldsa87")
+        assert g["engine"]["Pqz"]["schedules"][1]["mldsa87Gas"] == PROVISIONAL_MLDSA87_GAS == 102_000, g
         for bad in (["--id", "pqzq"], ["--ops", "2"]):
             try:
                 main(src, cal, str(int(time.time()) + 900), out, *bad)

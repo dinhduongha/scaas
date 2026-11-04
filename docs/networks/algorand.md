@@ -124,6 +124,12 @@ recovery: the guardian (checked before the signature; none = the zero holder) si
 (fail fast: keep a slot free). `add_origin` is idempotent; an msig refuses a repeated signing key; a LogicSig- or
 msig-rekeyed address can add keys natively but not remove them (NEAR parity). BUILT.
 
+**Kinds staged on the EVM (PLANNED here).** `key_info` accepts `ed25519`, `secp256k1`, `webauthn-p256` and `msig` only, so every
+other kind is refused by code ("key kind not accepted"): `mldsa87` (0x0134, [CTR-UA-39](../contracts/accounts.md#CTR-UA-39)) and
+`fndsa1024` (0x0135, [CTR-UA-40](../contracts/accounts.md#CTR-UA-40)) among them, until their `ua-algorand` round. The AVM opcode
+`falcon_verify` is **deterministic** Falcon-1024 (a fixed salt, the header's high bit set) and cannot verify `fndsa1024`'s
+randomized round-3 signatures; a `fndsa1024-det` kind stays not proposed (owner 2026-10-29).
+
 <a id="NET-ALG-09"></a>**NET-ALG-09** — **An msig has at most 3 members.** An `msig` member is EVM only until `ua-algorand`: the member kind is refused here ([CTR-UA-38](../contracts/accounts.md#msig-staging)). `MSIG_MAX_MEMBERS` is bound by the 2,048 B of
 app-call arguments, not by budget: with a Chrome-shaped `clientDataJSON` (286 B: a 64 B origin and Chrome's extra
 member) a passkey member costs 493 B, so 3 members take 1,823 B and 4 take 2,316 B (a 134 B `clientDataJSON` would

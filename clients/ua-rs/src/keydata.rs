@@ -158,9 +158,10 @@ fn msig(d: &[u8], hedera_native: bool) -> Result<()> {
 }
 
 /// `0x09 ‖ 512 × 14-bit h_i` (big-endian bit packing), each `h_i < 12289`.
-fn fndsa(d: &[u8]) -> Result<()> {
-    need(d[0] == 0x09, "header")?;
-    for i in 0..512 {
+/// `head ‖ n × 14-bit h_i`, each `< q`: `0x09`, n = 512 (fndsa512); `0x0A`, n = 1,024 (fndsa1024). The length is checked first.
+fn fndsa(d: &[u8], head: u8, n: usize) -> Result<()> {
+    need(d[0] == head, "header")?;
+    for i in 0..n {
         let mut v = 0u32;
         for j in 0..14 {
             let k = i * 14 + j;
@@ -198,7 +199,8 @@ pub fn validate_key_data(kind: u16, d: &[u8], hedera_native: bool) -> Result<()>
         0x0112 => musig2(d, bn_g1, 64),
         0x0113 => frost(d, bn_g1, 64, &BN_R),
         0x0120 => msig(d, hedera_native),
-        0x0132 => fndsa(d),
-        _ => Ok(()), // mldsa44/65, slhdsa128s: the length is the whole check
+        0x0132 => fndsa(d, 0x09, 512),
+        0x0135 => fndsa(d, 0x0a, 1024),
+        _ => Ok(()), // mldsa44/65/87, slhdsa128s: the length is the whole check
     }
 }

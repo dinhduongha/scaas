@@ -7,7 +7,7 @@ using Nethermind.Evm.CodeAnalysis;
 
 namespace Nethermind.Pqz;
 
-/// <summary>P6f D1: the Ethereum table plus PQZ, ML-DSA-44, ML-DSA-65 (the Taiko pattern). Whether a call reaches them
+/// <summary>P6f D1: the Ethereum table plus PQZ, ML-DSA-44, ML-DSA-65, ML-DSA-87 (the Taiko pattern). Whether a call reaches them
 /// is decided by the release spec's precompile set (<see cref="PqzReleaseSpec"/>).</summary>
 public class PqzPrecompileProvider : IPrecompileProvider
 {
@@ -17,6 +17,7 @@ public class PqzPrecompileProvider : IPrecompileProvider
         [PqzAddresses.Pqz] = new(PqzPrecompile.Instance),
         [PqzAddresses.MlDsa44] = new(MlDsa44Precompile.Instance),
         [PqzAddresses.MlDsa65] = new(MlDsa65Precompile.Instance),
+        [PqzAddresses.MlDsa87] = new(MlDsa87Precompile.Instance),
     }.ToFrozenDictionary();
 
     public FrozenDictionary<AddressAsKey, CodeInfo> GetPrecompiles() => Table;

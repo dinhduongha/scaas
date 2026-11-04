@@ -536,7 +536,8 @@ const m3Out = {
 };
 
 // --- pq_signatures.json (P6c): the PQ kinds on context A; stored kinds, so every auth carries an empty keyData ---
-const PQ_OTHER = { mldsa44: 'mldsa65', mldsa65: 'mldsa44', fndsa512: 'slhdsa128s', slhdsa128s: 'fndsa512' };
+const PQ_OTHER = { mldsa44: 'mldsa65', mldsa65: 'mldsa44', fndsa512: 'slhdsa128s', slhdsa128s: 'fndsa512', mldsa87: 'mldsa65',
+  fndsa1024: 'fndsa512' };
 // UA-6: a PQ signer registers its PQZ key in the same call; UA-8: its pop is over registrationDigest = typed(UARegistration{
 // UAPortableRecord{ua, kind, h, UAKemRecord{ua, 0, 0, 0}}, pqzPopHash}) with h = keyHash(0x0142, pqzKey) != 0 (the same key as ua-vectors.mjs) and the hash of the R_REG proof
 // (portable.json's n2048-kmax1024 filler). `popPqz` rows: the digest and message move with h, so a pop for no key does not carry over.
@@ -544,7 +545,7 @@ const PQZ_SET = 'n2048-kmax1024';
 const PQZ_KEY = pqzKeyOf(PQZ_SET);
 const PQZ_POP = pqzPopOf(PQZ_SET);
 const PQZ_ATTRS = { pqzKey: PQZ_KEY, pqzPop: PQZ_POP };
-const PQZ_HOLDERS = new Set(['mldsa44', 'mldsa65', 'fndsa512']);
+const PQZ_HOLDERS = new Set(['mldsa44', 'mldsa65', 'fndsa512', 'mldsa87', 'fndsa1024']); // CTR-UA-39 / -40 Q2
 const pqAuth = (sig) => hex(abiEncode(['bytes', 'bytes'], [new Uint8Array(0), sig]));
 const pqRows = Object.keys(PQ_KINDS).map((name) => {
   const { kind } = PQ_KINDS[name];

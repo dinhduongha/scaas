@@ -117,6 +117,22 @@
       "kemRecordHash": "0x10746c675112c587d7f6aae9e974307e0855e3de83371236a3f0e4495f2cfcc5",
       "portableRecordDigest": "0x62b3302c017141fde1c99b3a8779bb72aa2018b6f941eb7b35d2e9d8cad713c7",
       "pqzRegMessage": "0xb34be72070a81c1f684050a3768abaee6848d457b940581c2ebcc874e8554918"
+    },
+    {
+      "kind": 308,
+      "ua": "0x879137d7d47ce400f6479dd0b1a4bfe96c982520500ac5ac70211cac6485063b",
+      "pqzKeyHash": "0x472c8d1c5505504332835aeb8c6cf8233d2d8b79fe6cf1107b89a57c021b99de",
+      "kemRecordHash": "0xa26040b682dbbbc2007509c33e4fe7726556618c54b713e98578210df48ee98c",
+      "portableRecordDigest": "0x3f7bb0f6d780d765f59980802fd7596b844154c4a9367f7a0fc8d0e62ef73bcb",
+      "pqzRegMessage": "0xfc60d7c6e288b977b588ad7a96732a6f0ebe9fc7046425346b5448552dce20d7"
+    },
+    {
+      "kind": 309,
+      "ua": "0xcf5a5a9054ce00ed6ac6c491bbecebff261dada5cee5c05dfe5e31caba097b98",
+      "pqzKeyHash": "0x472c8d1c5505504332835aeb8c6cf8233d2d8b79fe6cf1107b89a57c021b99de",
+      "kemRecordHash": "0x9abf86e7e0dad4f562ec3392f91b72727ef05ec0100ae87fe9538e9cda2b4ce9",
+      "portableRecordDigest": "0x80c4ab39df1d68dad3f5dd5cc1251e728471960c4413bb668608f196a854bf1c",
+      "pqzRegMessage": "0xb163d824bb666b52ad3ca0c0bf8561926b4c363071f99fba7a9c30e40dcddb72"
     }
   ],
   "pqzMsig": [
@@ -168,6 +184,34 @@
       "ua": "0x6c2863f6e3fa44d69cb8cbc2f48d0296c60a088811f6c20cae1e544cabd458a4",
       "eligible": true,
       "portableRecordDigest": "0x80d1a73d2e593c665e1428b1f745a9eb05ad3fed9cc47046184bedb17fcf12c0"
+    },
+    {
+      "reason": "mldsa87 counts as PQ weight (CTR-UA-39 Q3)",
+      "keyData": "0x000200020134879137d7d47ce400f6479dd0b1a4bfe96c982520500ac5ac70211cac6485063b00010101b99f05b3007d0b9e1f2e1b01b42aa8eb2d866429925796ec3330a3bed7e5e04c0001",
+      "ua": "0xd1c58346d5c2973e1ac9b6c4c7662adc11cb04f8e1660984f0d3a6294dccb8e9",
+      "eligible": true,
+      "portableRecordDigest": "0xf4622a7bba9113bc82f3a3b6e673cabe12afc68cacfbc825fefec9734ab80f9f"
+    },
+    {
+      "reason": "mldsa87 + classical at equal weight",
+      "keyData": "0x000100020134879137d7d47ce400f6479dd0b1a4bfe96c982520500ac5ac70211cac6485063b00010101b99f05b3007d0b9e1f2e1b01b42aa8eb2d866429925796ec3330a3bed7e5e04c0001",
+      "ua": "0x3cd8e4beefc579a3743b531d7ae479d96164b21e11c03987d1c6b52e8567a45e",
+      "eligible": false,
+      "portableRecordDigest": "0xaabe2765515c50a02e4b0c7357ec893028da1b629dc0574391ccfcfd1f0ed232"
+    },
+    {
+      "reason": "fndsa1024 counts as PQ weight (CTR-UA-40 Q3)",
+      "keyData": "0x000200020101b99f05b3007d0b9e1f2e1b01b42aa8eb2d866429925796ec3330a3bed7e5e04c00010135cf5a5a9054ce00ed6ac6c491bbecebff261dada5cee5c05dfe5e31caba097b980001",
+      "ua": "0x63e21790566d8556a00e687204af91acb9b0d48299d4ceedb0eed9a09c045428",
+      "eligible": true,
+      "portableRecordDigest": "0x8b3d1279cce93197abf50ec2cc498ab4547490fd2529549b7b1d9d116e83acd1"
+    },
+    {
+      "reason": "fndsa1024 + classical at equal weight",
+      "keyData": "0x000100020101b99f05b3007d0b9e1f2e1b01b42aa8eb2d866429925796ec3330a3bed7e5e04c00010135cf5a5a9054ce00ed6ac6c491bbecebff261dada5cee5c05dfe5e31caba097b980001",
+      "ua": "0x35d4ed411c1db4bc2d4e4bf644c2f9c41e27bfa5a5144dda79bdc41cae002a12",
+      "eligible": false,
+      "portableRecordDigest": "0xd1cec4cd9a8e962825cdacdc361ff29b47907591df157acedd94601f4b567b36"
     }
   ],
   "uaAuth": [

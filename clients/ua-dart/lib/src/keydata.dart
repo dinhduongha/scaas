@@ -262,9 +262,10 @@ void _msig(Uint8List d, bool hederaNative) {
   _need(threshold >= 1 && threshold <= total, 'threshold');
 }
 
-void _fndsa(Uint8List d) {
-  _need(d[0] == 0x09, 'header');
-  for (var i = 0; i < 512; i++) {
+/// head ‖ n × 14-bit h_i, each < q: 0x09, n = 512 (fndsa512); 0x0A, n = 1,024 (fndsa1024).
+void _fndsa(Uint8List d, int head, int n) {
+  _need(d[0] == head, 'header');
+  for (var i = 0; i < n; i++) {
     var v = 0;
     for (var j = 0; j < 14; j++) {
       final k = i * 14 + j;
@@ -312,8 +313,10 @@ void validateKeyData(int kind, Object? keyData, {bool hederaNative = false}) {
     case 0x0120:
       _msig(d, hederaNative);
     case 0x0132:
-      _fndsa(d);
+      _fndsa(d, 0x09, 512);
+    case 0x0135:
+      _fndsa(d, 0x0a, 1024);
     default:
-      break; // mldsa44/65, slhdsa128s, pqz-mlwe: the length is the whole check
+      break; // mldsa44/65/87, slhdsa128s, pqz-mlwe: the length is the whole check
   }
 }

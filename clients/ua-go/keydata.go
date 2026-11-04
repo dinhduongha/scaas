@@ -267,12 +267,12 @@ func msig(d []byte, hederaNative bool) error {
 	return need(threshold >= 1 && threshold <= total, "threshold")
 }
 
-// fndsa: 0x09 ‖ 512 × 14-bit h_i (big-endian bit packing), each < 12289.
-func fndsa(d []byte) error {
-	if d[0] != 0x09 {
+// fndsa: head ‖ n × 14-bit h_i (big-endian bit packing), each < 12289: 0x09, n = 512 (fndsa512); 0x0A, n = 1,024 (fndsa1024).
+func fndsa(d []byte, head byte, n int) error {
+	if d[0] != head {
 		return keyDataErr("header")
 	}
-	for i := 0; i < 512; i++ {
+	for i := 0; i < n; i++ {
 		v := 0
 		for j := 0; j < 14; j++ {
 			k := i*14 + j
@@ -330,7 +330,9 @@ func ValidateKeyData(kind uint16, d []byte, hederaNative bool) error {
 	case 0x0120:
 		return msig(d, hederaNative)
 	case 0x0132:
-		return fndsa(d)
+		return fndsa(d, 0x09, 512)
+	case 0x0135:
+		return fndsa(d, 0x0a, 1024)
 	}
-	return nil // mldsa44/65, slhdsa128s, pqz-mlwe: the length is the whole check
+	return nil // mldsa44/65/87, slhdsa128s, pqz-mlwe: the length is the whole check
 }

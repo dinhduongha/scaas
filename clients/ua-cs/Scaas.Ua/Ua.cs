@@ -55,6 +55,8 @@ public static partial class UA
         new(0x0133, "slhdsa128s", false, [32], "slhdsa128s"),
         new(0x0141, "zether-bls12381", false, [128], "bls12381-g1"),
         new(0x0108, "secp256k1", false, [64], "secp256k1"), // 2026-10-17, appended as in kinds.json
+        new(0x0134, "mldsa87", false, [2592], "mldsa87"), // CTR-UA-39, 2026-11-04, appended as in kinds.json
+        new(0x0135, "fndsa1024", false, [1793], "fndsa1024"), // CTR-UA-40, 2026-11-04, appended as in kinds.json
     ];
 
     /// <summary>Schemes are not kinds (UA-6 U14): 0x0142 is the PQZ key attribute of a PQ holder; it keeps its tag and keyHash group.</summary>
@@ -62,7 +64,7 @@ public static partial class UA
 
     public static readonly string[] Groups =
         ["p256", "ed25519", "secp256k1", "bn254-g1", "bls12381-g1", "bls12381-g2", "bn254-g2", "mldsa44", "mldsa65",
-         "fndsa512", "slhdsa128s", "pqz-mlwe"];
+         "fndsa512", "slhdsa128s", "mldsa87", "fndsa1024", "pqz-mlwe"];
 
     public static readonly string[] Purposes =
         ["pop", "metatx", "metatx-cancel", "member", "zether-auth", "zether-owner", "keyop", "receiver-fee", "vp",
@@ -99,13 +101,14 @@ public static partial class UA
         return k.Native ? throw new UAException("UAKindNotDerived", k.Name) : k;
     }
 
-    static bool SingleSigning(ushort k) => k is (>= 0x0100 and <= 0x0108) or (>= 0x0110 and <= 0x0113) or (>= 0x0130 and <= 0x0133);
+    static bool SingleSigning(ushort k) => k is (>= 0x0100 and <= 0x0108) or (>= 0x0110 and <= 0x0113) or (>= 0x0130 and <= 0x0135);
     public static bool IsNative(ushort kind) => Array.Exists(Kinds, k => k.Number == kind && k.Native);
     public static bool IsZether(ushort kind) => kind == 0x0141;
     public static bool IsSigning(ushort kind) => kind == 0x0120 || kind == 0x0141 || SingleSigning(kind);
 
-    /// <summary>Kinds that may hold a PQZ key attribute: mldsa44, mldsa65, fndsa512 (an msig per <see cref="MsigPqzEligible"/>).</summary>
-    public static bool IsPqzHolder(ushort kind) => kind is >= 0x0130 and <= 0x0132;
+    /// <summary>Kinds that may hold a PQZ key attribute: mldsa44, mldsa65, fndsa512, mldsa87, fndsa1024 (CTR-UA-39 / -40; an msig per
+    /// <see cref="MsigPqzEligible"/>).</summary>
+    public static bool IsPqzHolder(ushort kind) => kind is (>= 0x0130 and <= 0x0132) or 0x0134 or 0x0135;
     /// <summary>An msig too, one level down: a record that holds one is refused as a member by the registry.</summary>
     public static bool IsMember(ushort kind, bool hederaNative = false) =>
         SingleSigning(kind) || kind is 0x0120 or 0x0001 or 0x0002 || (hederaNative && kind == 0x0003);
@@ -349,7 +352,7 @@ public static partial class UA
     }
 
     /// <summary>True when the classical members of an msig weigh less than its threshold (CTR-PQZ-12): a member is PQ if its kind is in
-    /// 0x0130-0x0133, or it is an msig that is PQ-eligible itself. <paramref name="inner"/>: an msig member's key data by its id, the record's;
+    /// 0x0130-0x0135, or it is an msig that is PQ-eligible itself. <paramref name="inner"/>: an msig member's key data by its id, the record's;
     /// none, or an inner that holds an msig (two levels only), is UAMemberUnknown: the key data alone does not show it.</summary>
     public static bool MsigPqzEligible(byte[] keyData, Func<byte[], byte[]?>? inner = null)
     {
@@ -361,7 +364,7 @@ public static partial class UA
             var k = (d[o] << 8) | d[o + 1];
             var pq = k == 0x0120
                 ? MsigPqzEligible(inner?.Invoke(d[(o + 2)..(o + 34)]) ?? throw new UAException("UAMemberUnknown", "0x" + Convert.ToHexStringLower(d[(o + 2)..(o + 34)])))
-                : k is >= 0x0130 and <= 0x0133;
+                : k is >= 0x0130 and <= 0x0135;
             if (!pq) classical += (d[o + 34] << 8) | d[o + 35];
         }
         return classical < ((d[0] << 8) | d[1]);

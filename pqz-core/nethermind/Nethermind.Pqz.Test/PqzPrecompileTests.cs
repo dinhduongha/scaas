@@ -14,10 +14,11 @@ namespace Nethermind.Pqz.Test;
 /// (D6), the status mapping (D4).</summary>
 public class PqzPrecompileTests
 {
-    public static PqzSchedule Schedule(JsonArray? rows = null)
+    public static PqzSchedule Schedule(JsonArray? rows = null, long? mldsa87Gas = null)
     {
         JsonObject s = SpecTests.Schedule(1);
         if (rows is not null) s["pqz"] = rows;
+        if (mldsa87Gas is { } g) s["mldsa87Gas"] = g;
         PqzSchedule p = new EthereumJsonSerializer().Deserialize<PqzSchedule>(s.ToJsonString())!;
         p.Validate();
         return p;

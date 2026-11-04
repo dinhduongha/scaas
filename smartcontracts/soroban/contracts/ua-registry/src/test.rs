@@ -426,9 +426,18 @@ fn register_disabled_kind_refused() {
     let relayer = Address::generate(&env);
     let c = deploy(&env, &[relayer.clone()]);
     let (d, none) = (b(&env, &[1; 32]), Bytes::new(&env));
-    for kind in [0x0001, 0x0011, 0x0012, 0x0109, 0x0114, 0x0134, 0x0140, 0x0142, 0x0143] {
+    // 0x0134 mldsa87, 0x0135 fndsa1024: EVM first (CTR-UA-39 / -40), refused here until their Soroban round; 0x0136 is no kind
+    for kind in [0x0001, 0x0011, 0x0012, 0x0109, 0x0114, 0x0134, 0x0135, 0x0136, 0x0140, 0x0142, 0x0143] {
         for r in [None, Some(relayer.clone())] {
             assert_eq!(err(c.try_register(&kind, &d, &no_attrs(&env), &none, &none, &r)), Error::KindDisabled, "{kind:#x}");
+        }
+    }
+    // their portable.json rows, which every language reads (the digests: `portable_digests_match_portable_json`, the record
+    // tests): the same refusal for the valid registration, with or without a relayer
+    for name in ["mldsa87", "fndsa1024"] {
+        let row = portable(&env, name);
+        for r in [None, Some(relayer.clone())] {
+            assert_eq!(err(row.tried_by(&c, &r)), Error::KindDisabled, "{name}");
         }
     }
 }
@@ -561,6 +570,12 @@ fn msig_member_unknown_refused() {
     assert_eq!(err(c.try_register_msig(&m.s, &no_attrs(&env), &pop, &Bytes::new(&env), &None)), Error::MemberUnknown);
     let m = msig(&env, 1, &[(0x0100, pua.to_array(), 1)]);
     assert_eq!(err(c.try_register_msig(&m.s, &no_attrs(&env), &pop, &Bytes::new(&env), &None)), Error::MemberUnknown);
+    // mldsa87 (0x0134, CTR-UA-39 Q5): no member kind on Soroban until its round, so the layout refuses it
+    let m = msig(&env, 1, &[(0x0134, [0x77; 32], 1)]);
+    assert_eq!(err(c.try_register_msig(&m.s, &no_attrs(&env), &pop, &Bytes::new(&env), &None)), Error::KeyData);
+    // fndsa1024 (0x0135, CTR-UA-40) the same
+    let m = msig(&env, 1, &[(0x0135, [0x77; 32], 1)]);
+    assert_eq!(err(c.try_register_msig(&m.s, &no_attrs(&env), &pop, &Bytes::new(&env), &None)), Error::KeyData);
 }
 
 /// A 2-of-3 `msig` of an in-test ed25519 key, an in-test P-256 key and `mldsa65#1`: classical-dominant, an empty `pop`.

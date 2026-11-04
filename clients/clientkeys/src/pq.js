@@ -1,11 +1,13 @@
-// Post-quantum UA kinds (accounts.md CTR-UA-23, signers-clientkeys.md "PQ seeds"): mldsa44 / mldsa65 (FIPS 204),
-// fndsa512 (Falcon-512, round 3, padded signatures: EIP-8052's 666 bytes), slhdsa128s (FIPS 205 SLH-DSA-SHA2-128s).
+// Post-quantum UA kinds (accounts.md CTR-UA-23, signers-clientkeys.md "PQ seeds"): mldsa44 / mldsa65 / mldsa87 (FIPS 204; mldsa87
+// CTR-UA-39),
+// fndsa512 / fndsa1024 (Falcon-512 / -1024, round 3, padded signatures: EIP-8052's 666 bytes / 1,280 bytes; fndsa1024 CTR-UA-40),
+// slhdsa128s (FIPS 205 SLH-DSA-SHA2-128s).
 // Keys come from the BIP-39 seed by HKDF; ML-DSA and SLH-DSA sign pq_msg = keccak256(TAG(kind) ‖ ua_msg) with the empty
 // context, Falcon signs ua_msg (the 32-byte message of EIP-8052). There is no "sign this digest" entry: signUA takes the
 // purpose tag and the operation digest and builds ua_msg itself (CTR-UA-10 layer 1).
-import { ml_dsa44, ml_dsa65 } from '@noble/post-quantum/ml-dsa.js';
+import { ml_dsa44, ml_dsa65, ml_dsa87 } from '@noble/post-quantum/ml-dsa.js';
 import { slh_dsa_sha2_128s } from '@noble/post-quantum/slh-dsa.js';
-import { falcon512padded } from '@noble/post-quantum/falcon.js';
+import { falcon512padded, falcon1024padded } from '@noble/post-quantum/falcon.js';
 import { hkdf } from '@noble/hashes/hkdf.js';
 import { shake128, shake256 } from '@noble/hashes/sha3.js';
 import { keccak_256, sha256, concatBytes, utf8ToBytes } from './bytes.js';
@@ -16,6 +18,8 @@ export const PQ_KINDS = {
   mldsa65: { kind: 0x0131, tag: 'scaas.ua.mldsa65.v1', alg: ml_dsa65, seedLen: 32, pq: true },
   fndsa512: { kind: 0x0132, tag: 'scaas.ua.fndsa512.v1', alg: falcon512padded, seedLen: 48, pq: false },
   slhdsa128s: { kind: 0x0133, tag: 'scaas.ua.slhdsa128s.v1', alg: slh_dsa_sha2_128s, seedLen: 48, pq: true },
+  mldsa87: { kind: 0x0134, tag: 'scaas.ua.mldsa87.v1', alg: ml_dsa87, seedLen: 32, pq: true },
+  fndsa1024: { kind: 0x0135, tag: 'scaas.ua.fndsa1024.v1', alg: falcon1024padded, seedLen: 48, pq: false },
 };
 
 const MSG_TAG = keccak_256(utf8ToBytes('scaas.ua.msg.v1'));

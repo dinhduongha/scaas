@@ -197,6 +197,7 @@ Nethermind plugin `Nethermind.Pqz` ([nethermind/README.md](nethermind/README.md)
 | `PQZ` (ops 1–7, both systems) | `0x000000000000000000000000000000005caa0f01` | per (op, `proofSystemId`, statement length) row: 1,721,000–4,634,000 + 3 per input word; the multi-recipient transfer (op 7) per (`proofSystemId`, M, auditorOn): 3,158,000–6,242,000; `OP_SELFTEST` 1,721,000; an input without a row pays the smallest row and gets `…00` without calling `pqz-ffi` |
 | `MLDSA44` (EIP-8355 layout) | `0x000000000000000000000000000000005caa0012` | 49,000 + 6 per message word |
 | `MLDSA65` (EIP-8355 layout) | `0x000000000000000000000000000000005caa0013` | 68,000 + 6 per message word |
+| `MLDSA87` (EIP-8355 layout; CTR-UA-39, plugin built, not on the SCaaS testnet yet) | `0x000000000000000000000000000000005caa0014` | `mldsa87Gas`, **provisional** ≈ 102,000 (not calibrated) + 6 per message word; inactive under a schedule without the key |
 
 The `PQZ` rows are provisional: the retired calibration's row of the same rank × 1.3, because the new sets' larger n
 and q verify more slowly (`nethermind/chain/engine-pqz-provisional-n2304.json`, log

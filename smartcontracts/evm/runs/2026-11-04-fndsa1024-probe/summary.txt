@@ -1,0 +1,20 @@
+Falcon-1024 probe, 2026-11-04 (research; spec docs/superpowers/specs/2026-11-04-fndsa1024.md, note docs/research/fndsa1024-evm-gas.md)
+Base: mldsa87 78a4a86e. Foundry 1.8.5, solc 0.8.37, evm amsterdam, isolate = true (foundry.toml). Full output: forge.log beside this file (git-ignored).
+Source: NIST round-3 Falcon submission Falcon-Round3.zip (sha256 fd58f045...5362f44), member KAT/falcon1024-KAT.rsp (sha256 036a0bf5...28acb20d).
+
+step | commit | rc | counts
+extract.py (NIST round-3 Falcon-1024 KAT, padded rebuild) | 78a4a86e | 0 | 100 rows; 10 kept (count 0-9); compressed s2 1224-1240 B; count 82 (1240 B) has no 1,280 B padded form
+noble1024.mjs (@noble/post-quantum 0.7.1: NIST sm via falcon1024.attached.open + padded via falcon1024padded.verify; UA row) | 78a4a86e | 0 | 10/10 agree on both forms; ua1024.json written; 6/6 mutations refused
+forge test, probe config (Fndsa1024ProbeTest) | 78a4a86e | 0 | 4 passed, 0 failed
+
+Evidence (gas of the call, valid UA row, |ua_msg| = 32 B, unless stated):
+fndsa1024 verify (valid, round-3 key) 4728382
+fndsa1024 verify least working gas (round-3 key, +-1000) 4725205
+fndsa1024 verify (valid, NTT key in calldata) 3967725
+fndsa1024 verify least working gas (NTT key, +-1000) 3964333
+NTT key SSTORE2 write (2,048 B) gasTotalUsed 150424 | state gas (EIP-8037) 3318570
+KAT count 0-9 (|msg| 33-330 B): raw 4787553-4932967, ntt-key 4026918-4172332
+reference: fndsa512 verify (valid, built UAFndsaVerifier), same run 2266899
+66 % of 12,000,000 / of 10,500,000: 7920000 / 6930000 (fndsa1024 round-3 key, UA row: 39 % of 12 M, 45 % of 10.5 M; KAT max 4.93 M: 41 % / 47 %; passes both)
+refused in every KAT case: set padding bit, header 0x2A (NIST API), header 0x39 (Falcon-512), 1,281-byte sig, pk header 0x09, message flip
+zeta table: 1945^brv10(k) mod 12289, k = 0..1023 (test_zetaTable_falcon1024); its first 512 entries equal FnDsa.sol's Falcon-512 table

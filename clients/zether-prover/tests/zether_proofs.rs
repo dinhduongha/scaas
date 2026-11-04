@@ -867,6 +867,8 @@ fn v2_vectors_refused() {
 #[test]
 fn ua_execute_adds_the_signer_kinds_verify_cap() {
     assert_eq!((ua_signer_gas("ecdsa"), ua_signer_gas("fndsa512"), ua_signer_gas("mldsa65"), ua_signer_gas("nope")), (Some(0), Some(2_500_000), Some(5_950_000), None));
+    assert_eq!(ua_signer_gas("mldsa87"), Some(250_000), "CTR-UA-39: the precompile path's cap (provisional)");
+    assert_eq!(ua_signer_gas("fndsa1024"), Some(5_250_000), "CTR-UA-40: the pure-Solidity cap (provisional)");
     type C = Bls12381;
     let f = fx::<C>();
     let rs = (0..7).map(|i| (key::<C>(10 + i).y, 1)).collect::<Vec<_>>();

@@ -341,9 +341,11 @@ library UARegistryLib {
         record = UAKinds.portableRecordHash(ua, kind, h, kh);
     }
 
-    /// A PQZ / KEM holder (UA-6 U3, UA8-D12): `mldsa44`, `mldsa65`, `fndsa512`, a PQ-eligible `msig`.
+    /// A PQZ / KEM holder (UA-6 U3, UA8-D12): `mldsa44`, `mldsa65`, `fndsa512`, `mldsa87` (CTR-UA-39 Q2), `fndsa1024` (CTR-UA-40 Q2),
+    /// a PQ-eligible `msig`.
     function _holder(uint16 kind, bytes memory d) private view returns (bool) {
-        return kind == UAKinds.MLDSA44 || kind == UAKinds.MLDSA65 || kind == UAKinds.FNDSA512
+        return kind == UAKinds.MLDSA44 || kind == UAKinds.MLDSA65 || kind == UAKinds.FNDSA512 || kind == UAKinds.MLDSA87
+            || kind == UAKinds.FNDSA1024
             || (kind == UAKinds.MSIG && _pqEligible(d));
     }
 
@@ -379,7 +381,7 @@ library UARegistryLib {
         return UAKinds.keyHashOf(UAKinds.PQZ_MLWE, pqzKey);
     }
 
-    /// An `msig` whose members of kinds outside 0x0130–0x0133 weigh less than its threshold (CTR-PQZ-12): it may hold
+    /// An `msig` whose members of kinds outside 0x0130–0x0135 weigh less than its threshold (CTR-PQZ-12): it may hold
     /// a PQZ key and registers with an m-of-n PoP (U5). An `msig` member counts as PQ iff it is PQ-eligible itself: a forger of every
     /// classical key cannot reach its threshold.
     function _pqEligible(bytes memory d) private view returns (bool) {
@@ -797,6 +799,8 @@ library UARegistryLib {
         if (kind == UAKinds.MLDSA65) return 3_309;
         if (kind == UAKinds.FNDSA512) return 666;
         if (kind == UAKinds.SLHDSA128S) return 7_856;
+        if (kind == UAKinds.MLDSA87) return 4_627;
+        if (kind == UAKinds.FNDSA1024) return 1_280;
         return 1_024;
     }
 
