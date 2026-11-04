@@ -1,5 +1,5 @@
 $ cargo test -j2 --release --offline --no-fail-fast --features c-oracle,test-hooks,bench -- --nocapture
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-fs3/pqz-core/pqzl/rust)
+   Compiling pqzl v0.1.0 (<repo>/pqz-core/pqzl/rust)
     Finished `release` profile [optimized + debuginfo] target(s) in 1.99s
      Running unittests src/lib.rs (target/release/deps/pqzl-c300d6b3343b572c)
 

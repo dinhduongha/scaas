@@ -1,4 +1,4 @@
-C2a /home/dockers/mba-chain-nethermind/genesis.json: accounts += 0x4e59b44847b379578588920cA78FbF26c0B4956C (CREATE2 deployer, 69 B runtime code, nonce 1, balance 0); accounts now 7
+C2a ~dockers/mba-chain-nethermind/genesis.json: accounts += 0x4e59b44847b379578588920cA78FbF26c0B4956C (CREATE2 deployer, 69 B runtime code, nonce 1, balance 0); accounts now 7
 10a11,15
 >   "0x4e59b44847b379578588920cA78FbF26c0B4956C": {
 >    "balance": "0",
@@ -7,12 +7,12 @@ C2a /home/dockers/mba-chain-nethermind/genesis.json: accounts += 0x4e59b44847b37
 >   },
 == C2 2026-10-30T23:22:09Z chain/engine-pqz.json = runs/2026-10-31-fs3-t13-rows-one-baseline-engine-pqz.json (option b)
 258f25d4e3cfd2dbdc4d78517db47a8e00ce42dee6e5d0d9810549bb85e63e0a  pqz-core/nethermind/chain/engine-pqz.json
-/home/ha/work/ainative/scaas/scratchpad/fs3-t13/genesis.pqz6.json: engine.Pqz replaced (first timestamp 0 = 0x0, 1 schedule(s), 26 rows); diff: 27 added lines, 27 removed; params changed: none; genesis header changed: none
+<repo>/scratchpad/fs3-t13/genesis.pqz6.json: engine.Pqz replaced (first timestamp 0 = 0x0, 1 schedule(s), 26 rows); diff: 27 added lines, 27 removed; params changed: none; genesis header changed: none
 rc=0
 7702 in output: 0
 == C3 2026-10-30T23:22:33Z install
 accounts 7 deployer code len 140
-4fd51bbd652cbb135a67fc167ac12cd89586d61b0ef39b130ea84c0d5e2db584  /home/dockers/mba-chain-nethermind/genesis.json
+4fd51bbd652cbb135a67fc167ac12cd89586d61b0ef39b130ea84c0d5e2db584  ~dockers/mba-chain-nethermind/genesis.json
 [ok] Files are identical
 total 16
 drwxr-xr-x    4 root     root          4096 Oct 30 23:22 .
@@ -24,7 +24,7 @@ drwxr-xr-x   17 root     root          4096 Oct 21 01:47 nethermind_data.pre-200
 ---
 >     image: scaas/nethermind-pqz:2.2.0-pqz6
 == C4 2026-10-30T23:22:52Z start by hand
-time="2026-10-31T06:22:52+07:00" level=warning msg="/home/dockers/mba-chain-nethermind/docker-compose.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion"
+time="2026-10-31T06:22:52+07:00" level=warning msg="~dockers/mba-chain-nethermind/docker-compose.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion"
  Container mba_chain_node_nethermind Recreate 
  Container mba_chain_node_nethermind Recreated 
  Container mba_chain_node_nethermind Starting 
@@ -57,23 +57,23 @@ ok    eth_chainId = 0x1dc6
 ok    genesis hash 0xf1f491abec46eb7c1784b7fc75a0174171b41831530e510c46b7178c02d63164 = 0xf1f491abec46eb7c1784b7fc75a0174171b41831530e510c46b7178c02d63164
 ok    OP_SELFTEST eth_call = d6c01fbc…f68d (got 0xd6c01fbcda…)
 Traceback (most recent call last):
-  File "/home/ha/work/ainative/scaas/.claude/worktrees/fs3-t13-rollout/pqz-core/nethermind/chain/e2e.py", line 565, in <module>
+  File "<repo>/pqz-core/nethermind/chain/e2e.py", line 565, in <module>
     main()
-  File "/home/ha/work/ainative/scaas/.claude/worktrees/fs3-t13-rollout/pqz-core/nethermind/chain/e2e.py", line 558, in main
+  File "<repo>/pqz-core/nethermind/chain/e2e.py", line 558, in main
     {"head": cmd_head, "before": cmd_before, "probe": cmd_probe, "stock": cmd_stock, "e2e": cmd_e2e,
-  File "/home/ha/work/ainative/scaas/.claude/worktrees/fs3-t13-rollout/pqz-core/nethermind/chain/e2e.py", line 275, in cmd_probe
+  File "<repo>/pqz-core/nethermind/chain/e2e.py", line 275, in cmd_probe
     oh = overhead()
          ^^^^^^^^^^
-  File "/home/ha/work/ainative/scaas/.claude/worktrees/fs3-t13-rollout/pqz-core/nethermind/chain/e2e.py", line 242, in overhead
+  File "<repo>/pqz-core/nethermind/chain/e2e.py", line 242, in overhead
     word, used, rlen = call_probe("0x0000000000000000000000000000000000000004", (5).to_bytes(32, "big"))
                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ha/work/ainative/scaas/.claude/worktrees/fs3-t13-rollout/pqz-core/nethermind/chain/e2e.py", line 232, in call_probe
+  File "<repo>/pqz-core/nethermind/chain/e2e.py", line 232, in call_probe
     _, deployed = artifact("PqzPrecompileProbe.sol", "PqzPrecompileProbe")
                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ha/work/ainative/scaas/.claude/worktrees/fs3-t13-rollout/pqz-core/nethermind/chain/e2e.py", line 99, in artifact
+  File "<repo>/pqz-core/nethermind/chain/e2e.py", line 99, in artifact
     j = json.load(open(os.path.join(ROOT, "smartcontracts/evm/out", path, name + ".json")))
                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-FileNotFoundError: [Errno 2] No such file or directory: '/home/ha/work/ainative/scaas/.claude/worktrees/fs3-t13-rollout/smartcontracts/evm/out/PqzPrecompileProbe.sol/PqzPrecompileProbe.json'
+FileNotFoundError: [Errno 2] No such file or directory: '<repo>/smartcontracts/evm/out/PqzPrecompileProbe.sol/PqzPrecompileProbe.json'
 rc=1
 == C5 probe 2026-10-30T23:25:32Z
 head rules: Amsterdam (EIP-7928 header field present)
@@ -1494,7 +1494,7 @@ open: CPU cost; a INDEXER_COIN_BALANCES_CONCURRENCY / _BATCH_SIZE cap only slows
 
 == R4 2026-10-31T01:31Z owner ruling: one-off cleanup of unfetched coin balances (remedy 2; archive at the node split later)
 dry run of the delete script with expected=-1: BEGIN / ROLLBACK, 'rolled back: 1734 rows matched, backup has -1' (count unchanged)
-$ python3 -I pqz-core/nethermind/chain/blockscout-code-backfill.py --prune-coin-balances http://127.0.0.1:8545 /home/dockers/mba-chain-nethermind/address_coin_balances-unfetched-bak-20261031-0831.csv
+$ python3 -I pqz-core/nethermind/chain/blockscout-code-backfill.py --prune-coin-balances http://127.0.0.1:8545 ~dockers/mba-chain-nethermind/address_coin_balances-unfetched-bak-20261031-0831.csv
 tip 1508, cutoff 1444: 1734 unfetched rows backed up to …/address_coin_balances-unfetched-bak-20261031-0831.csv
 BEGIN / COMMIT / deleted 1734
 backup: 1735 lines (header + 1734), sha256 5b8a72caf7fb57ad2ee3e89e050691f84cf0ad1045d2c64afc5053b97df7afeb
@@ -1521,7 +1521,7 @@ mba_chain_node_nethermind n 140 peak cpu 8.5 mem 479 | 2nd half cpu med 1.9 max 
 balance: /api/v2/addresses/0x1efF47bc…A718 4999999999999047705783999978991 = cast balance; UI :8558/address/… 200
 
 == S (node split) 2026-10-31 (owner ruling: sealer + rpc in the same docker-compose.yml; rpc archive; sentry for external peers)
-Stack L=/home/dockers/mba-chain-nethermind. Backups: docker-compose.yml / config.json / jsonrpc.filter / genesis.json .bak-pre-split-20261031-0844;
+Stack L=~dockers/mba-chain-nethermind. Backups: docker-compose.yml / config.json / jsonrpc.filter / genesis.json .bak-pre-split-20261031-0844;
 config.rpc.json.bak-pre-onedialer-20261031-0919, .bak-pre-onlystatic-20261031-0921, .bak-onlystatic-noStatic-…; config.json.bak-pre-acceptnotsynced-…;
 docker-compose.yml.bak-pre-sealer1g-…; config.json / config.rpc.json .bak-pre-maxtx2m-…; data copy data/nethermind_data.pre-split-20261031 (211 files).
 Config names checked against the image (nethermind --help): Pruning.Mode, FlatDb.Enabled, Network.StaticPeers / OnlyStaticPeers /

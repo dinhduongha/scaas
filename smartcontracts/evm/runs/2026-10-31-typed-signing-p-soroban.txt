@@ -1,7 +1,7 @@
 # soroban at commit 00d2558f
 == test soroban
-   Compiling scaas-token v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/smartcontracts/soroban/contracts/token)
-   Compiling scaas-ua-registry v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/smartcontracts/soroban/contracts/ua-registry)
+   Compiling scaas-token v0.1.0 (<repo>/smartcontracts/soroban/contracts/token)
+   Compiling scaas-ua-registry v0.1.0 (<repo>/smartcontracts/soroban/contracts/ua-registry)
 warning: use of deprecated method `soroban_sdk::ledger::Ledger::protocol_version`: Protocol version won't be available in the future
   --> contracts/token/src/test.rs:50:40
    |

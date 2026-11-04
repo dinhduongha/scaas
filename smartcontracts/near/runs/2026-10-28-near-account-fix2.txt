@@ -20,7 +20,7 @@ Modification timestamps of:
 • Skipped running wasm-opt as final target exists and is newer than wasm produced by cargo
 
 ✓ Contract successfully built! (in CARGO_NEAR_BUILD_ENVIRONMENT=host)
-     -                Binary: /home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/near/scaas_near_spike_p256/scaas_near_spike_p256.wasm
+     -                Binary: <repo>/smartcontracts/near/target/near/scaas_near_spike_p256/scaas_near_spike_p256.wasm
      -                  Size: 84.5 KB (84479 bytes)
      - SHA-256 checksum hex : 68cc9f34bfeae7c2f71d628645ec09cba96e2267bbce59d5364662a990a8ac36
      - SHA-256 checksum bs58: 846NR2d2rrLVyGFVFeMffvDfgoKUSFRb2xQvdFkq4URb
@@ -45,7 +45,7 @@ Modification timestamps of:
 • Skipped running wasm-opt as final target exists and is newer than wasm produced by cargo
 
 ✓ Contract successfully built! (in CARGO_NEAR_BUILD_ENVIRONMENT=host)
-     -                Binary: /home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/near/scaas_near_test_receiver/scaas_near_test_receiver.wasm
+     -                Binary: <repo>/smartcontracts/near/target/near/scaas_near_test_receiver/scaas_near_test_receiver.wasm
      -                  Size: 84.6 KB (84631 bytes)
      - SHA-256 checksum hex : e5b40e085ce6c09b48b95b7e4a6437b4f9083d87fbd8f2cc6d58602c544a9844
      - SHA-256 checksum bs58: GTfc3TVQgTG6cH4s1FkMqFrhfqNiNimnz3Lv5wQ7o8ps
@@ -70,7 +70,7 @@ Modification timestamps of:
 • Skipped running wasm-opt as final target exists and is newer than wasm produced by cargo
 
 ✓ Contract successfully built! (in CARGO_NEAR_BUILD_ENVIRONMENT=host)
-     -                Binary: /home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/near/scaas_near_token/scaas_near_token.wasm
+     -                Binary: <repo>/smartcontracts/near/target/near/scaas_near_token/scaas_near_token.wasm
      -                  Size: 321.7 KB (321737 bytes)
      - SHA-256 checksum hex : d76dffc27787f543b531a0d4163a7d6834798dec9a6e864c52bcd0d0288aadcc
      - SHA-256 checksum bs58: FVwwSwbPGKtASyxuZhPhXqQpkjrekdfPprY3verpyEgK

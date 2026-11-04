@@ -1,5 +1,5 @@
 # ct spike-b: HEAD 14f24c29cb2f6f281caa94c4a6cf07589e3f5354, diff sha256 e3b0c44298fc1c14, valgrind-3.22.0, rels 4095, nprove 1, set n2304-kmax4096,spike-b
-   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8c-spike/pqz-core/pqzh/ligero)
+   Compiling pqzh-ligero v0.1.0 (<repo>/pqz-core/pqzh/ligero)
     Finished `release` profile [optimized + debuginfo] target(s) in 5.71s
 rustc 1.97.1 (8bab26f4f 2026-07-14)
 {"rel": "R_REG", "run": 0, "prove": "Ok(203790)", "verify": true, "fnv": "79b3730b"}

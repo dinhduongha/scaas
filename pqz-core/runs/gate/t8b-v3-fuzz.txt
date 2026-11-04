@@ -1,10 +1,10 @@
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust)
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/ffi)
-   Compiling pqz-fuzz v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/fuzz)
+   Compiling pqzl v0.1.0 (<repo>/pqz-core/pqzl/rust)
+   Compiling pqz-ffi v0.1.0 (<repo>/pqz-core/ffi)
+   Compiling pqz-fuzz v0.1.0 (<repo>/pqz-core/fuzz)
     Finished `release` profile [optimized + debuginfo] target(s) in 4.40s
--rwxrwxr-x 1 ha ha 14832960 Oct 22 00:58 /home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/build/fuzz/codec
--rwxrwxr-x 1 ha ha 14832960 Oct 22 00:58 /home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/build/fuzz/mutate
--rwxrwxr-x 1 ha ha 14833400 Oct 22 00:58 /home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/build/fuzz/precompile
+-rwxrwxr-x 1 ha ha 14832960 Oct 22 00:58 <repo>/pqz-core/build/fuzz/codec
+-rwxrwxr-x 1 ha ha 14832960 Oct 22 00:58 <repo>/pqz-core/build/fuzz/mutate
+-rwxrwxr-x 1 ha ha 14833400 Oct 22 00:58 <repo>/pqz-core/build/fuzz/precompile
 pqz-fuzz init (precompile): 44 honest inputs valid, self-test ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205, PQZL core: Rust
 Done 12334 runs in 61 second(s)
 stat::number_of_executed_units: 12334

@@ -1,6 +1,6 @@
 # verify-only build (no prove, no test-hooks): libpqz_ffi.so, and the C core archive if build.rs compiled one
 $ cargo build --release --offline --no-default-features --features pqzl-rust,set-n2560-kmax16384
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/ffi)
+   Compiling pqz-ffi v0.1.0 (<repo>/pqz-core/ffi)
     Finished `release` profile [optimized + debuginfo] target(s) in 0.87s
 [rc=0]
 test hooks in the production cdylib (must be 0): 0
@@ -18,9 +18,9 @@ generic-array v0.14.7
 generic-array v0.14.7 (*)
 inout v0.1.4
 keccak v0.1.6
-pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/ffi)
-pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust)
-pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/stmt)
+pqz-ffi v0.1.0 (<repo>/pqz-core/ffi)
+pqzl v0.1.0 (<repo>/pqz-core/pqzl/rust)
+pqz-stmt v0.1.0 (<repo>/pqz-core/stmt)
 sha3 v0.10.8
 sha3 v0.10.8 (*)
 typenum v1.20.1
@@ -110,16 +110,16 @@ symbols /gmp|mpfr|hexl/i: 0
 strings /gmp|mpfr|hexl/i: 0
 libm-style imports: 0
 # C smoke test against pqz_ffi.h
-$ clang -std=c11 -Wall -Wextra -o /home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/ffi/target/run/c_abi tests/c_abi.c -Ltarget/release -lpqz_ffi -Wl,-rpath,/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/ffi/target/release
+$ clang -std=c11 -Wall -Wextra -o <repo>/pqz-core/ffi/target/run/c_abi tests/c_abi.c -Ltarget/release -lpqz_ffi -Wl,-rpath,<repo>/pqz-core/ffi/target/release
 [rc=0]
-$ /home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/ffi/target/run/c_abi
+$ <repo>/pqz-core/ffi/target/run/c_abi
 c_abi: selftest 57c36100818414c03a4440130aa4c17ef0d2257749238d78b22ce4ff721b9ea4
 c_abi: ok (0 failures)
 [rc=0]
 # clippy (the crate's toolchain 1.97.1; +stable 1.90 refuses pqzl's rust-version): no float arithmetic in the crate
 $ cargo clippy --release --offline --no-default-features --features pqzl-rust,set-n2560-kmax16384 --features prove,test-hooks --lib -- -D clippy::float_arithmetic
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/ffi)
-    Checking pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/stmt)
-    Checking pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust)
+   Compiling pqz-ffi v0.1.0 (<repo>/pqz-core/ffi)
+    Checking pqz-stmt v0.1.0 (<repo>/pqz-core/stmt)
+    Checking pqzl v0.1.0 (<repo>/pqz-core/pqzl/rust)
     Finished `release` profile [optimized + debuginfo] target(s) in 1.36s
 [rc=0]

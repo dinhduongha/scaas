@@ -6,10 +6,10 @@ INFO: Running with entropic power schedule (0xFF, 100).
 INFO: Seed: 1981987824
 INFO: Loaded 1 modules   (25591 inline 8-bit counters): 25591 [0x556ba423c648, 0x556ba4242a3f), 
 INFO: Loaded 1 PC tables (25591 PCs): 25591 [0x556ba4242a40,0x556ba42a69b0), 
-INFO:      221 files found in /home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/build/fuzz/work/mutate
+INFO:      221 files found in <repo>/pqz-core/build/fuzz/work/mutate
 INFO:      103 files found in corpus/mutate
 INFO:        0 files found in regress/mutate
-INFO:       96 files found in /home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/build/fuzz/seeds/mutate
+INFO:       96 files found in <repo>/pqz-core/build/fuzz/seeds/mutate
 INFO: seed corpus: files: 420 min: 1b max: 11b total: 1888b rss: 242Mb
 #421	INITED cov: 1547 ft: 2517 corp: 105/537b exec/s: 84 rss: 485Mb
 #431	NEW    cov: 1547 ft: 2519 corp: 106/541b lim: 13 exec/s: 86 rss: 493Mb L: 4/10 MS: 5 InsertRepeatedBytes-ChangeByte-EraseBytes-ChangeBit-EraseBytes-
@@ -24,8 +24,8 @@ INFO: seed corpus: files: 420 min: 1b max: 11b total: 1888b rss: 242Mb
 	NEW_FUNC[1/43]: 0x556ba3ed4280 in <pqz_ffi::pqzl::on_worker<core::option::Option<i32>, pqz_ffi::pqzl::with_core<i32, pqz_ffi::pqzl::verify_generic::{closure#0}>::{closure#1}>::{closure#1} as core::ops::function::FnOnce<()>>::call_once::{shim:vtable#0} /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library/core/src/ops/function.rs:250
 	NEW_FUNC[2/43]: 0x556ba3ed54e0 in <pqz_ffi::pqzl::on_worker<core::option::Option<()>, pqz_ffi::pqzl::with_core<(), pqz_ffi::pqzl::reinit::{closure#1}>::{closure#1}>::{closure#1} as core::ops::function::FnOnce<()>>::call_once::{shim:vtable#0} /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library/core/src/ops/function.rs:250
 #594	NEW    cov: 1791 ft: 2974 corp: 114/603b lim: 13 exec/s: 6 rss: 578Mb L: 3/13 MS: 4 ChangeBit-CrossOver-ChangeASCIIInt-ChangeByte-
-	NEW_FUNC[1/5]: 0x556ba3f180f8 in aes_tables /home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/ffi/../src/pqz_sv.c:481
-	NEW_FUNC[2/5]: 0x556ba3f183b8 in lz_mat /home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/ffi/../src/pqz_sv.c:875
+	NEW_FUNC[1/5]: 0x556ba3f180f8 in aes_tables <repo>/pqz-core/ffi/../src/pqz_sv.c:481
+	NEW_FUNC[2/5]: 0x556ba3f183b8 in lz_mat <repo>/pqz-core/ffi/../src/pqz_sv.c:875
 #595	NEW    cov: 1879 ft: 3098 corp: 115/613b lim: 13 exec/s: 6 rss: 578Mb L: 10/13 MS: 1 ChangeBinInt-
 #603	NEW    cov: 1884 ft: 3176 corp: 116/622b lim: 13 exec/s: 6 rss: 578Mb L: 9/13 MS: 3 InsertByte-ChangeBinInt-ChangeBinInt-
 #609	NEW    cov: 1884 ft: 3178 corp: 117/628b lim: 13 exec/s: 6 rss: 578Mb L: 6/13 MS: 1 ShuffleBytes-
@@ -41,7 +41,7 @@ INFO: seed corpus: files: 420 min: 1b max: 11b total: 1888b rss: 242Mb
 #878	NEW    cov: 1895 ft: 3261 corp: 127/708b lim: 13 exec/s: 8 rss: 578Mb L: 7/13 MS: 1 CrossOver-
 #1024	pulse  cov: 1895 ft: 3261 corp: 127/708b lim: 13 exec/s: 9 rss: 578Mb
 #1039	NEW    cov: 1895 ft: 3263 corp: 128/718b lim: 13 exec/s: 9 rss: 578Mb L: 10/13 MS: 1 CrossOver-
-	NEW_FUNC[1/1]: 0x556ba3eff678 in polymat_get_elem /home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/build/fuzz/target/x86_64-unknown-linux-gnu/release/build/pqz-ffi-56388c7d0e8db918/out/include/lazer.h:3864
+	NEW_FUNC[1/1]: 0x556ba3eff678 in polymat_get_elem <repo>/pqz-core/build/fuzz/target/x86_64-unknown-linux-gnu/release/build/pqz-ffi-56388c7d0e8db918/out/include/lazer.h:3864
 #1115	NEW    cov: 1913 ft: 3338 corp: 129/725b lim: 13 exec/s: 10 rss: 578Mb L: 7/13 MS: 1 InsertByte-
 #1116	NEW    cov: 1913 ft: 3355 corp: 130/733b lim: 13 exec/s: 10 rss: 578Mb L: 8/13 MS: 1 ChangeBinInt-
 #1125	REDUCE cov: 1913 ft: 3355 corp: 130/732b lim: 13 exec/s: 10 rss: 578Mb L: 6/13 MS: 4 ChangeBinInt-ShuffleBytes-CopyPart-EraseBytes-
@@ -81,8 +81,8 @@ INFO: seed corpus: files: 420 min: 1b max: 11b total: 1888b rss: 242Mb
 #1952	NEW    cov: 1931 ft: 3453 corp: 161/963b lim: 13 exec/s: 16 rss: 591Mb L: 9/13 MS: 4 ChangeByte-EraseBytes-CrossOver-CrossOver-
 #2000	NEW    cov: 1931 ft: 3463 corp: 162/976b lim: 13 exec/s: 16 rss: 591Mb L: 13/13 MS: 3 ChangeByte-CopyPart-CMP- DE: "\000@"-
 #2005	NEW    cov: 1931 ft: 3465 corp: 163/983b lim: 13 exec/s: 16 rss: 591Mb L: 7/13 MS: 5 ChangeByte-ChangeBit-InsertByte-ShuffleBytes-ChangeASCIIInt-
-	NEW_FUNC[1/113]: 0x556ba3ef30d8 in unlink_blk /home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/ffi/../src/pqz_arena.c:95
-	NEW_FUNC[2/113]: 0x556ba3ef3bf8 in push /home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/ffi/../src/pqz_arena.c:84
+	NEW_FUNC[1/113]: 0x556ba3ef30d8 in unlink_blk <repo>/pqz-core/ffi/../src/pqz_arena.c:95
+	NEW_FUNC[2/113]: 0x556ba3ef3bf8 in push <repo>/pqz-core/ffi/../src/pqz_arena.c:84
 #2032	NEW    cov: 3063 ft: 4747 corp: 164/989b lim: 13 exec/s: 15 rss: 757Mb L: 6/13 MS: 2 PersAutoDict-InsertByte- DE: "\000@"-
 #2033	NEW    cov: 3063 ft: 4750 corp: 165/992b lim: 13 exec/s: 15 rss: 757Mb L: 3/13 MS: 1 ChangeByte-
 #2048	pulse  cov: 3063 ft: 4750 corp: 165/992b lim: 13 exec/s: 16 rss: 757Mb
@@ -136,7 +136,7 @@ INFO: seed corpus: files: 420 min: 1b max: 11b total: 1888b rss: 242Mb
 #5018	NEW    cov: 3084 ft: 4926 corp: 208/1344b lim: 16 exec/s: 26 rss: 765Mb L: 10/15 MS: 1 PersAutoDict- DE: "\000\000\000\001"-
 #5113	NEW    cov: 3084 ft: 4928 corp: 209/1356b lim: 16 exec/s: 26 rss: 765Mb L: 12/15 MS: 5 ChangeBinInt-CrossOver-CopyPart-CrossOver-InsertRepeatedBytes-
 #5361	NEW    cov: 3084 ft: 4930 corp: 210/1368b lim: 16 exec/s: 26 rss: 765Mb L: 12/15 MS: 3 ChangeByte-InsertRepeatedBytes-ChangeByte-
-	NEW_FUNC[1/1]: 0x556ba3f0b578 in parse_disc /home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/ffi/../src/pqz_rel.c:699
+	NEW_FUNC[1/1]: 0x556ba3f0b578 in parse_disc <repo>/pqz-core/ffi/../src/pqz_rel.c:699
 #5394	NEW    cov: 3093 ft: 4963 corp: 211/1375b lim: 16 exec/s: 26 rss: 765Mb L: 7/15 MS: 3 EraseBytes-InsertRepeatedBytes-ShuffleBytes-
 #5527	NEW    cov: 3093 ft: 4965 corp: 212/1391b lim: 16 exec/s: 27 rss: 765Mb L: 16/16 MS: 3 ChangeBinInt-CopyPart-ChangeByte-
 #5703	NEW    cov: 3093 ft: 4966 corp: 213/1399b lim: 16 exec/s: 27 rss: 765Mb L: 8/16 MS: 1 ChangeBit-
@@ -146,10 +146,10 @@ INFO: seed corpus: files: 420 min: 1b max: 11b total: 1888b rss: 242Mb
 #5979	NEW    cov: 3094 ft: 4985 corp: 216/1433b lim: 16 exec/s: 28 rss: 765Mb L: 12/16 MS: 1 InsertRepeatedBytes-
 #6408	NEW    cov: 3094 ft: 4986 corp: 217/1452b lim: 20 exec/s: 29 rss: 765Mb L: 19/19 MS: 4 ShuffleBytes-InsertByte-InsertRepeatedBytes-CopyPart-
 	NEW_FUNC[1/16]: 0x556ba3ed3b30 in <pqz_ffi::pqzl::on_worker<core::option::Option<i32>, pqz_ffi::pqzl::with_core<i32, pqz_ffi::pqzl::test_mutate::{closure#0}>::{closure#1}>::{closure#1} as core::ops::function::FnOnce<()>>::call_once::{shim:vtable#0} /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library/core/src/ops/function.rs:250
-	NEW_FUNC[2/16]: 0x556ba3ed6b70 in pqz_ffi::pqzl::test_mutate /home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/ffi/src/pqzl.rs:253
+	NEW_FUNC[2/16]: 0x556ba3ed6b70 in pqz_ffi::pqzl::test_mutate <repo>/pqz-core/ffi/src/pqzl.rs:253
 #6543	NEW    cov: 3193 ft: 5114 corp: 218/1471b lim: 20 exec/s: 29 rss: 765Mb L: 19/19 MS: 5 ShuffleBytes-ChangeBit-InsertByte-ShuffleBytes-InsertRepeatedBytes-
 #6588	NEW    cov: 3202 ft: 5182 corp: 219/1491b lim: 20 exec/s: 29 rss: 765Mb L: 20/20 MS: 5 CMP-ShuffleBytes-PersAutoDict-ChangeBit-CopyPart- DE: "\001?"-"\001\000\000\000"-
-	NEW_FUNC[1/1]: 0x556ba3f02228 in mut_swap /home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/ffi/../src/pqz_rel.c:1351
+	NEW_FUNC[1/1]: 0x556ba3f02228 in mut_swap <repo>/pqz-core/ffi/../src/pqz_rel.c:1351
 #6648	NEW    cov: 3209 ft: 5205 corp: 220/1510b lim: 20 exec/s: 29 rss: 765Mb L: 19/20 MS: 5 CMP-ShuffleBytes-ChangeBit-InsertRepeatedBytes-InsertByte- DE: "\000\000\000@"-
 #6659	NEW    cov: 3213 ft: 5217 corp: 221/1530b lim: 20 exec/s: 29 rss: 765Mb L: 20/20 MS: 1 CrossOver-
 #6661	NEW    cov: 3213 ft: 5221 corp: 222/1537b lim: 20 exec/s: 29 rss: 765Mb L: 7/20 MS: 2 InsertByte-CopyPart-
@@ -161,7 +161,7 @@ INFO: seed corpus: files: 420 min: 1b max: 11b total: 1888b rss: 242Mb
 #7037	REDUCE cov: 3224 ft: 5563 corp: 225/1570b lim: 20 exec/s: 30 rss: 765Mb L: 11/20 MS: 3 CrossOver-ChangeByte-EraseBytes-
 #7103	NEW    cov: 3224 ft: 5569 corp: 226/1580b lim: 20 exec/s: 30 rss: 765Mb L: 10/20 MS: 1 PersAutoDict- DE: "\377\377"-
 #7152	NEW    cov: 3224 ft: 5573 corp: 227/1600b lim: 20 exec/s: 30 rss: 765Mb L: 20/20 MS: 4 InsertRepeatedBytes-ShuffleBytes-InsertByte-CopyPart-
-	NEW_FUNC[1/1]: 0x556ba3f022d8 in int_get_i64 /home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/build/fuzz/target/x86_64-unknown-linux-gnu/release/build/pqz-ffi-56388c7d0e8db918/out/include/lazer.h:2399
+	NEW_FUNC[1/1]: 0x556ba3f022d8 in int_get_i64 <repo>/pqz-core/build/fuzz/target/x86_64-unknown-linux-gnu/release/build/pqz-ffi-56388c7d0e8db918/out/include/lazer.h:2399
 #7159	NEW    cov: 3227 ft: 5578 corp: 228/1620b lim: 20 exec/s: 30 rss: 765Mb L: 20/20 MS: 2 ChangeBinInt-InsertRepeatedBytes-
 #7171	REDUCE cov: 3228 ft: 5579 corp: 229/1640b lim: 20 exec/s: 30 rss: 765Mb L: 20/20 MS: 2 CrossOver-InsertRepeatedBytes-
 #7242	NEW    cov: 3231 ft: 5590 corp: 230/1659b lim: 20 exec/s: 30 rss: 765Mb L: 19/20 MS: 1 InsertRepeatedBytes-
@@ -402,7 +402,7 @@ INFO: seed corpus: files: 420 min: 1b max: 11b total: 1888b rss: 242Mb
 #23960	NEW    cov: 3291 ft: 6676 corp: 422/5021b lim: 32 exec/s: 33 rss: 788Mb L: 16/32 MS: 3 ChangeByte-CMP-ChangeBinInt- DE: "\000\000\000\000\000\000\000\001"-
 #23969	NEW    cov: 3291 ft: 6677 corp: 423/5044b lim: 32 exec/s: 33 rss: 788Mb L: 23/32 MS: 4 ChangeBit-ChangeBinInt-CopyPart-ShuffleBytes-
 Slowest unit: 21 s:
-artifact_prefix='/home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/build/fuzz/crash-mutate-'; Test unit written to /home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/build/fuzz/crash-mutate-slow-unit-b96783e846b03fd6a6fa25621a7c7ee68b4c71a8
+artifact_prefix='<repo>/pqz-core/build/fuzz/crash-mutate-'; Test unit written to <repo>/pqz-core/build/fuzz/crash-mutate-slow-unit-b96783e846b03fd6a6fa25621a7c7ee68b4c71a8
 Base64: AVF4AAQAaQAAAAAAAAgg9/8AAAAAAABLy8vLyzQSJg==
 #24118	NEW    cov: 3291 ft: 6683 corp: 424/5075b lim: 32 exec/s: 32 rss: 788Mb L: 31/32 MS: 4 ChangeASCIIInt-ChangeBit-PersAutoDict-ChangeByte- DE: "\000\000\000\000\000\000\010 "-
 #24165	NEW    cov: 3291 ft: 6684 corp: 425/5098b lim: 32 exec/s: 31 rss: 788Mb L: 23/32 MS: 2 CMP-ChangeByte- DE: "\001\007"-

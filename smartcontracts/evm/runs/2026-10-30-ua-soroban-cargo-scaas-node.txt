@@ -1,7 +1,7 @@
 # cargo-scaas-node at commit 2964af35
-    Checking scaas-node v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/soroban-4b/scaas-node)
+    Checking scaas-node v0.1.0 (<repo>/scaas-node)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 6.61s
-   Compiling scaas-node v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/soroban-4b/scaas-node)
+   Compiling scaas-node v0.1.0 (<repo>/scaas-node)
     Finished `test` profile [unoptimized + debuginfo] target(s) in 20.70s
      Running unittests src/lib.rs (target/debug/deps/scaas_node-7ea8f2ba056438ed)
 

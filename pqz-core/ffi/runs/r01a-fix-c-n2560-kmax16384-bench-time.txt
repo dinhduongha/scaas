@@ -1,4 +1,4 @@
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi)
+   Compiling pqz-ffi v0.1.0 (<repo>/pqz-core/ffi)
     Finished `release` profile [optimized + debuginfo] target(s) in 2.31s
      Running `target/n2560-kmax16384-c/release/examples/ffi_bench 200`
 	Command being timed: "cargo run --release --offline --no-default-features --features pqzl-c,set-n2560-kmax16384 --features prove,test-hooks --example ffi_bench 200"

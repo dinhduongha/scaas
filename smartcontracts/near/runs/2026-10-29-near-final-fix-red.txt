@@ -1,5 +1,5 @@
 # near final-fix RED at commit be63179a + uncommitted tests (contracts unchanged but the two DEX constants)
-   Compiling scaas-near-integration v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/integration)
+   Compiling scaas-near-integration v0.1.0 (<repo>/smartcontracts/near/integration)
     Finished `test` profile [unoptimized + debuginfo] target(s) in 3.48s
      Running tests/dex.rs (target/debug/deps/dex-b86fb624492a65c3)
 
@@ -55,7 +55,7 @@ test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 11 filtered out;
 error: test failed, to rerun pass `-p scaas-near-integration --test account`
 rc=101
 # rerun lane_bound_order_settles_through_router (assertion on the failed DEX receipt, the relay tx itself succeeds)
-   Compiling scaas-near-integration v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/integration)
+   Compiling scaas-near-integration v0.1.0 (<repo>/smartcontracts/near/integration)
     Finished `test` profile [unoptimized + debuginfo] target(s) in 1.99s
      Running tests/dex.rs (target/debug/deps/dex-b86fb624492a65c3)
 

@@ -1,5 +1,5 @@
     Blocking waiting for file lock on package cache
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8b-fix/pqz-core/pqzl/rust)
+   Compiling pqzl v0.1.0 (<repo>/pqz-core/pqzl/rust)
     Finished `release` profile [optimized + debuginfo] target(s) in 1.63s
      Running tests/memory.rs (target/n2816-kmax65536-fix/release/deps/memory-2dd7b91b6bb7791c)
 

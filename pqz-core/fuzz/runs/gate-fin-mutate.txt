@@ -5,10 +5,10 @@ INFO: Running with entropic power schedule (0xFF, 100).
 INFO: Seed: 2075787039
 INFO: Loaded 1 modules   (25717 inline 8-bit counters): 25717 [0x5f5b864dfce8, 0x5f5b864e615d), 
 INFO: Loaded 1 PC tables (25717 PCs): 25717 [0x5f5b864e6160,0x5f5b8654a8b0), 
-INFO:        0 files found in /home/ha/work/ainative/scaas/.claude/worktrees/fs3-t12/pqz-core/build/fuzz-n2304-kmax4096/work/mutate
+INFO:        0 files found in <repo>/pqz-core/build/fuzz-n2304-kmax4096/work/mutate
 INFO:      483 files found in corpus/mutate
 INFO:        0 files found in regress/mutate
-INFO:      204 files found in /home/ha/work/ainative/scaas/.claude/worktrees/fs3-t12/pqz-core/build/fuzz-n2304-kmax4096/seeds/mutate
+INFO:      204 files found in <repo>/pqz-core/build/fuzz-n2304-kmax4096/seeds/mutate
 INFO: seed corpus: files: 687 min: 1b max: 147b total: 9484b rss: 514Mb
 #512	pulse  cov: 2023 ft: 3404 corp: 177/1490b exec/s: 42 rss: 712Mb
 #688	INITED cov: 2318 ft: 4113 corp: 218/2758b exec/s: 32 rss: 712Mb
@@ -26,7 +26,7 @@ INFO: seed corpus: files: 687 min: 1b max: 147b total: 9484b rss: 514Mb
 #935	NEW    cov: 2319 ft: 4143 corp: 230/3284b lim: 137 exec/s: 34 rss: 712Mb L: 10/130 MS: 3 ChangeByte-ChangeBinInt-ChangeByte-
 #947	NEW    cov: 2319 ft: 4145 corp: 231/3319b lim: 137 exec/s: 35 rss: 712Mb L: 35/130 MS: 2 CrossOver-InsertRepeatedBytes-
 	NEW_FUNC[1/163]: 0x5f5b86220560 in core::ptr::drop_glue::<pqzl::coder::ProofParts> /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library/core/src/ptr/mod.rs:825
-	NEW_FUNC[2/163]: 0x5f5b86223ec0 in pqzl::rand::urandom::polyvec_urandom::<[pqzl::arith::poly::Poly]> /home/ha/work/ainative/scaas/.claude/worktrees/fs3-t12/pqz-core/pqzl/rust/src/rand/urandom.rs:146
+	NEW_FUNC[2/163]: 0x5f5b86223ec0 in pqzl::rand::urandom::polyvec_urandom::<[pqzl::arith::poly::Poly]> <repo>/pqz-core/pqzl/rust/src/rand/urandom.rs:146
 #959	NEW    cov: 3202 ft: 5187 corp: 232/3394b lim: 137 exec/s: 23 rss: 847Mb L: 75/130 MS: 2 InsertRepeatedBytes-ChangeBit-
 #979	NEW    cov: 3202 ft: 5188 corp: 233/3522b lim: 137 exec/s: 24 rss: 847Mb L: 128/130 MS: 5 InsertByte-ShuffleBytes-CopyPart-ShuffleBytes-InsertRepeatedBytes-
 #1015	NEW    cov: 3202 ft: 5189 corp: 234/3529b lim: 137 exec/s: 24 rss: 847Mb L: 7/130 MS: 1 EraseBytes-
@@ -106,4 +106,4 @@ MERGE-OUTER: consumed 0Mb (514Mb rss) to parse the control file
 MERGE-OUTER: 242 new files with 5199 new features added; 3186 new coverage edges
 pqz-fuzz summary (mutate): 0 inputs checked, 0 decoded (0 op 7), 0 valid (= unmodified honest; mutate skips those), 0 differential SV = generic (0 op 7), 0 PQZL proof re-encodings equal, PQZL core: Rust
 [merge rc=0]
-corpus/mutate: 242 inputs (/home/ha/work/ainative/scaas/.claude/worktrees/fs3-t12/pqz-core/build/fuzz-n2304-kmax4096/corpus/mutate), 4111 B (merged set 242 inputs, 4111 B)
+corpus/mutate: 242 inputs (<repo>/pqz-core/build/fuzz-n2304-kmax4096/corpus/mutate), 4111 B (merged set 242 inputs, 4111 B)

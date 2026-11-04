@@ -4,10 +4,10 @@ $ cargo test --release --offline --lib
    Compiling typenum v1.20.1
    Compiling keccak v0.1.6
    Compiling cpufeatures v0.2.17
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/pqzl/rust)
+   Compiling pqzl v0.1.0 (<repo>/pqz-core/pqzl/rust)
    Compiling cfg-if v1.0.5
-   Compiling pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/stmt)
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi)
+   Compiling pqz-stmt v0.1.0 (<repo>/pqz-core/stmt)
+   Compiling pqz-ffi v0.1.0 (<repo>/pqz-core/ffi)
    Compiling generic-array v0.14.7
    Compiling crypto-common v0.1.7
    Compiling block-buffer v0.10.4
@@ -16,7 +16,7 @@ $ cargo test --release --offline --lib
    Compiling digest v0.10.7
    Compiling sha3 v0.10.8
    Compiling aes v0.8.4
-   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/pqzh/ligero)
+   Compiling pqzh-ligero v0.1.0 (<repo>/pqz-core/pqzh/ligero)
     Finished `release` profile [optimized + debuginfo] target(s) in 8.65s
      Running unittests src/lib.rs (target/r01b/release/deps/pqz_ffi-18ac3607cb013d1e)
 
@@ -28,14 +28,14 @@ test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 [rc=0]
 $ cargo test --release --offline --features prove,test-hooks -- --test-threads 4
    Compiling subtle v2.6.1
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/pqzl/rust)
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi)
+   Compiling pqzl v0.1.0 (<repo>/pqz-core/pqzl/rust)
+   Compiling pqz-ffi v0.1.0 (<repo>/pqz-core/ffi)
    Compiling digest v0.10.7
    Compiling sha3 v0.10.8
    Compiling hmac v0.12.1
    Compiling sha2 v0.10.9
    Compiling hkdf v0.12.4
-   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/pqzh/ligero)
+   Compiling pqzh-ligero v0.1.0 (<repo>/pqz-core/pqzh/ligero)
     Finished `release` profile [optimized + debuginfo] target(s) in 15.14s
      Running unittests src/lib.rs (target/r01b/release/deps/pqz_ffi-bc06f11901d72468)
 
@@ -102,11 +102,11 @@ $ cargo build --release --offline --no-default-features --features pqzl-c,set-n2
    Compiling find-msvc-tools v0.1.14
    Compiling shlex v2.0.1
    Compiling cc v1.8.0
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi)
+   Compiling pqz-ffi v0.1.0 (<repo>/pqz-core/ffi)
     Finished `release` profile [optimized + debuginfo] target(s) in 15.29s
 [rc=0]
 $ cargo test --release --offline --no-default-features --features pqzl-c,set-n2304-kmax4096,prove,test-hooks --test ffi header_matches
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi)
+   Compiling pqz-ffi v0.1.0 (<repo>/pqz-core/ffi)
     Finished `release` profile [optimized + debuginfo] target(s) in 21.76s
      Running tests/ffi.rs (target/r01b/release/deps/ffi-2d64756ceb6d2254)
 

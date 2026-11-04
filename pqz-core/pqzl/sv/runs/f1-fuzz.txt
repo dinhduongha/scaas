@@ -6,8 +6,8 @@ INFO:        0 files found in build/sv-san/corpus
 INFO: A corpus is not provided, starting from an empty corpus
 #2	INITED cov: 1949 ft: 1950 corp: 1/1b exec/s: 2 rss: 354Mb
 #4	pulse  cov: 1949 ft: 1950 corp: 1/1b lim: 4 exec/s: 1 rss: 355Mb
-	NEW_FUNC[1/13]: 0x5856fd0b8478 in int_set_i64 /home/ha/work/ainative/scaas/.claude/worktrees/sv/pqz-core/build/include/lazer.h:2386
-	NEW_FUNC[2/13]: 0x5856fd0cf348 in int_absgt /home/ha/work/ainative/scaas/.claude/worktrees/sv/pqz-core/build/include/lazer.h:2497
+	NEW_FUNC[1/13]: 0x5856fd0b8478 in int_set_i64 <repo>/pqz-core/build/include/lazer.h:2386
+	NEW_FUNC[2/13]: 0x5856fd0cf348 in int_absgt <repo>/pqz-core/build/include/lazer.h:2497
 #7	NEW    cov: 2191 ft: 2883 corp: 2/2b lim: 4 exec/s: 0 rss: 356Mb L: 1/1 MS: 5 ShuffleBytes-ChangeBit-CrossOver-CrossOver-ChangeByte-
 #8	pulse  cov: 2191 ft: 2883 corp: 2/2b lim: 4 exec/s: 0 rss: 356Mb
 #10	NEW    cov: 2201 ft: 2971 corp: 3/4b lim: 4 exec/s: 0 rss: 356Mb L: 2/2 MS: 3 CrossOver-ChangeBinInt-InsertByte-

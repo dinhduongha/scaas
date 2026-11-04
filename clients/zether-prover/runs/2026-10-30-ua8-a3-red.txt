@@ -77,7 +77,7 @@
    Compiling hex v0.4.3
    Compiling ecdsa v0.16.9
    Compiling k256 v0.13.4
-   Compiling zether-prover v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/zether-prover)
+   Compiling zether-prover v0.1.0 (<repo>/clients/zether-prover)
    Compiling bs58 v0.5.1
    Compiling pbkdf2 v0.12.2
    Compiling ripemd v0.1.3

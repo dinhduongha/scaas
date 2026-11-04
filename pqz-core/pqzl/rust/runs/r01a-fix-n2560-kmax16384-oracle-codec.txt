@@ -11,7 +11,7 @@
    Compiling cipher v0.4.4
    Compiling digest v0.10.7
    Compiling keccak v0.1.6
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/pqzl/rust)
+   Compiling pqzl v0.1.0 (<repo>/pqz-core/pqzl/rust)
    Compiling cpufeatures v0.2.17
    Compiling cfg-if v1.0.5
    Compiling aes v0.8.4
@@ -31,7 +31,7 @@ warning: unused import: `std::path::PathBuf`
 
 warning: `pqzl` (test "oracle_codec") generated 1 warning (run `cargo fix --test "oracle_codec" -p pqzl` to apply 1 suggestion)
     Finished `release` profile [optimized + debuginfo] target(s) in 26.32s
-     Running tests/oracle_codec.rs (/tmp/claude-1000/-home-ha-work-ainative-scaas/42ffd63a-3cbe-4f3e-85ee-dd4ecfe74ea0/scratchpad/tgt-chal-n2560-kmax16384/release/deps/oracle_codec-1d6f3bb274bdcb12)
+     Running tests/oracle_codec.rs (<scratch>/tgt-chal-n2560-kmax16384/release/deps/oracle_codec-1d6f3bb274bdcb12)
 
 running 5 tests
 test challenge_resample_kat ... ok

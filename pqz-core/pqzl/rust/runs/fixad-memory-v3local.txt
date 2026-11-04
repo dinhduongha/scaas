@@ -1,5 +1,5 @@
 # fixad LOCAL check (tests/memory.rs patched in the working tree only, not committed): rows() re-proves each row with Ctx::prove (v3) in place of the v2 vector proof, so exhaustion_is_error / peak_per_op run on honest v3 proofs until Task 5 regenerates the vectors. Command: scripts/capped sh -c "cd pqz-core/pqzl/rust && cargo test -j2 --release --offline --features c-oracle,test-hooks,bench --test memory -- --nocapture"
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-fs3-fixad/pqz-core/pqzl/rust)
+   Compiling pqzl v0.1.0 (<repo>/pqz-core/pqzl/rust)
     Finished `release` profile [optimized + debuginfo] target(s) in 1.45s
      Running tests/memory.rs (target/release/deps/memory-c0a5b20e04d04255)
 

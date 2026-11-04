@@ -20,7 +20,7 @@ Modification timestamps of:
 • Skipped running wasm-opt as final target exists and is newer than wasm produced by cargo
 
 ✓ Contract successfully built! (in CARGO_NEAR_BUILD_ENVIRONMENT=host)
-     -                Binary: /home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/near/scaas_near_dex/scaas_near_dex.wasm
+     -                Binary: <repo>/smartcontracts/near/target/near/scaas_near_dex/scaas_near_dex.wasm
      -                  Size: 145.0 KB (145037 bytes)
      - SHA-256 checksum hex : d2c6958d59f915c87b63b4925cb4b14c80f32b41eaf6d234c5a4c6f6010d0324
      - SHA-256 checksum bs58: FBnFEW2TC7QFHaZpAEEFU9jsBmcFngZRxnij4kXA656T
@@ -47,7 +47,7 @@ Modification timestamps of:
 • done
 
 ✓ Contract successfully built! (in CARGO_NEAR_BUILD_ENVIRONMENT=host)
-     -                Binary: /home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/near/scaas_near_spike_p256/scaas_near_spike_p256.wasm
+     -                Binary: <repo>/smartcontracts/near/target/near/scaas_near_spike_p256/scaas_near_spike_p256.wasm
      -                  Size: 84.5 KB (84487 bytes)
      - SHA-256 checksum hex : e03e8eb54b787607dd4f3863cb8b5ed2b3c275c4e5a1d507f7e25f4a48ba9492
      - SHA-256 checksum bs58: G6Mej3GrPyjrsHyDU9Yu2oerCcBKghtb4YLuEwafAxws
@@ -74,7 +74,7 @@ Modification timestamps of:
 • done
 
 ✓ Contract successfully built! (in CARGO_NEAR_BUILD_ENVIRONMENT=host)
-     -                Binary: /home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/near/scaas_near_test_receiver/scaas_near_test_receiver.wasm
+     -                Binary: <repo>/smartcontracts/near/target/near/scaas_near_test_receiver/scaas_near_test_receiver.wasm
      -                  Size: 84.6 KB (84631 bytes)
      - SHA-256 checksum hex : e5b40e085ce6c09b48b95b7e4a6437b4f9083d87fbd8f2cc6d58602c544a9844
      - SHA-256 checksum bs58: GTfc3TVQgTG6cH4s1FkMqFrhfqNiNimnz3Lv5wQ7o8ps
@@ -99,7 +99,7 @@ Modification timestamps of:
 • Skipped running wasm-opt as final target exists and is newer than wasm produced by cargo
 
 ✓ Contract successfully built! (in CARGO_NEAR_BUILD_ENVIRONMENT=host)
-     -                Binary: /home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/near/scaas_near_token/scaas_near_token.wasm
+     -                Binary: <repo>/smartcontracts/near/target/near/scaas_near_token/scaas_near_token.wasm
      -                  Size: 441.8 KB (441762 bytes)
      - SHA-256 checksum hex : 75dbdee02e036e3d3b84d05ed20a5655a8e0e2dc918b15e464c7c8110ab193ea
      - SHA-256 checksum bs58: 8w5A1VX3RqbdZGeWeSv49uSVVZ7hnH7ynXD7io93bDkD

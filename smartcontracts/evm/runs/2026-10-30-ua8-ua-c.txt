@@ -92,11 +92,11 @@
     Checking memchr v2.8.3
    Compiling cbindgen v0.28.0
     Checking tempfile v3.27.0
-    Checking scaas-ua v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/no7702/clients/ua-rs)
+    Checking scaas-ua v0.1.0 (<repo>/clients/ua-rs)
     Checking toml v0.8.23
     Checking log v0.4.34
     Checking heck v0.4.1
-    Checking scaas-ua-c v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/no7702/clients/ua-c)
+    Checking scaas-ua-c v0.1.0 (<repo>/clients/ua-c)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 28.29s
    Compiling proc-macro2 v1.0.107
    Compiling quote v1.0.47
@@ -162,8 +162,8 @@
    Compiling ark-ec v0.5.0
    Compiling ark-bls12-381 v0.5.0
    Compiling ark-bn254 v0.5.0
-   Compiling scaas-ua v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/no7702/clients/ua-rs)
-   Compiling scaas-ua-c v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/no7702/clients/ua-c)
+   Compiling scaas-ua v0.1.0 (<repo>/clients/ua-rs)
+   Compiling scaas-ua-c v0.1.0 (<repo>/clients/ua-c)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 19.31s
    Compiling unicode-ident v1.0.27
    Compiling once_cell v1.21.4
@@ -232,9 +232,9 @@
    Compiling k256 v0.13.4
    Compiling heck v0.4.1
    Compiling log v0.4.34
-   Compiling scaas-ua v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/no7702/clients/ua-rs)
+   Compiling scaas-ua v0.1.0 (<repo>/clients/ua-rs)
    Compiling cbindgen v0.28.0
-   Compiling scaas-ua-c v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/no7702/clients/ua-c)
+   Compiling scaas-ua-c v0.1.0 (<repo>/clients/ua-c)
     Finished `test` profile [unoptimized + debuginfo] target(s) in 28.42s
      Running unittests src/lib.rs (target/debug/deps/scaas_ua_c-cf375da713f1aef2)
 

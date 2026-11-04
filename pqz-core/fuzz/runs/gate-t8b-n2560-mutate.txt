@@ -5,16 +5,16 @@ INFO: Running with entropic power schedule (0xFF, 100).
 INFO: Seed: 2670390715
 INFO: Loaded 1 modules   (17510 inline 8-bit counters): 17510 [0x639b9703c198, 0x639b970405fe), 
 INFO: Loaded 1 PC tables (17510 PCs): 17510 [0x639b97040600,0x639b97084c60), 
-INFO:        0 files found in /home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/build/fuzz/work/mutate
+INFO:        0 files found in <repo>/pqz-core/build/fuzz/work/mutate
 INFO:      483 files found in corpus/mutate
 INFO:        0 files found in regress/mutate
-INFO:       92 files found in /home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/build/fuzz/seeds/mutate
+INFO:       92 files found in <repo>/pqz-core/build/fuzz/seeds/mutate
 INFO: seed corpus: files: 575 min: 1b max: 147b total: 9260b rss: 432Mb
 #256	pulse  cov: 1361 ft: 1998 corp: 99/493b exec/s: 23 rss: 607Mb
 #512	pulse  cov: 2648 ft: 3930 corp: 183/1896b exec/s: 12 rss: 810Mb
 #576	INITED cov: 2648 ft: 3938 corp: 189/2326b exec/s: 12 rss: 810Mb
-	NEW_FUNC[1/9]: 0x639b96e42cb0 in <pqzl::arith::int::Int>::mul /home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust/src/arith/int.rs:289
-	NEW_FUNC[2/9]: 0x639b96e432e0 in <pqzl::arith::int::Int>::sgn /home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust/src/arith/int.rs:131
+	NEW_FUNC[1/9]: 0x639b96e42cb0 in <pqzl::arith::int::Int>::mul <repo>/pqz-core/pqzl/rust/src/arith/int.rs:289
+	NEW_FUNC[2/9]: 0x639b96e432e0 in <pqzl::arith::int::Int>::sgn <repo>/pqz-core/pqzl/rust/src/arith/int.rs:131
 #614	NEW    cov: 2692 ft: 4308 corp: 190/2449b lim: 142 exec/s: 5 rss: 810Mb L: 123/142 MS: 3 ChangeByte-CMP-InsertRepeatedBytes- DE: "A\000\000\000\000\000\000\000"-
 #614	DONE   cov: 2692 ft: 4308 corp: 190/2449b lim: 142 exec/s: 5 rss: 810Mb
 ###### Recommended dictionary. ######

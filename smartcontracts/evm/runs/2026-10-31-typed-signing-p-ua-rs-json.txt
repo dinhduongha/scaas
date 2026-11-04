@@ -1,7 +1,7 @@
 # ua-rs-json at commit 80f45c56
-    Checking scaas-ua v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-rs)
+    Checking scaas-ua v0.1.0 (<repo>/clients/ua-rs)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.23s
-   Compiling scaas-ua v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-rs)
+   Compiling scaas-ua v0.1.0 (<repo>/clients/ua-rs)
     Finished `test` profile [unoptimized + debuginfo] target(s) in 3.28s
      Running unittests src/lib.rs (target/debug/deps/scaas_ua-30dcfeb20d2b2260)
 

@@ -148,11 +148,11 @@
    Compiling bytes-lit v0.0.5
    Compiling visibility v0.1.1
    Compiling soroban-ledger-snapshot v26.1.1
-   Compiling scaas-token v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/soroban/contracts/token)
-   Compiling scaas-mandate v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/soroban/contracts/mandate)
-   Compiling scaas-dex v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/soroban/contracts/dex)
-   Compiling scaas-relay-fee v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/soroban/contracts/relay-fee)
-   Compiling scaas-smart-key-account v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/soroban/contracts/smart-key-account)
+   Compiling scaas-token v0.1.0 (<repo>/smartcontracts/soroban/contracts/token)
+   Compiling scaas-mandate v0.1.0 (<repo>/smartcontracts/soroban/contracts/mandate)
+   Compiling scaas-dex v0.1.0 (<repo>/smartcontracts/soroban/contracts/dex)
+   Compiling scaas-relay-fee v0.1.0 (<repo>/smartcontracts/soroban/contracts/relay-fee)
+   Compiling scaas-smart-key-account v0.1.0 (<repo>/smartcontracts/soroban/contracts/smart-key-account)
     Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 16s
      Running unittests src/lib.rs (target/debug/deps/scaas_dex-dfb6714ca5930530)
 

@@ -1,5 +1,5 @@
 # ct probe-reg: HEAD b1c4de5d970df2dc601850b88ff8467258ad9a3f, diff sha256 e96911560d9458c1, valgrind-3.22.0, rels 1, nprove 1
-   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/rev2-pqzh/pqz-core/pqzh/ligero)
+   Compiling pqzh-ligero v0.1.0 (<repo>/pqz-core/pqzh/ligero)
     Finished `release` profile [optimized + debuginfo] target(s) in 3.63s
 rustc 1.97.1 (8bab26f4f 2026-07-14)
 {"rel": "R_REG", "run": 0, "prove": "Ok(187098)", "verify": true, "fnv": "0ecf451a"}

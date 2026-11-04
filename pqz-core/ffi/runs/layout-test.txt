@@ -4,15 +4,15 @@ $ cargo test --release --offline --lib
    Compiling find-msvc-tools v0.1.14
    Compiling shlex v2.0.1
    Compiling keccak v0.1.6
-   Compiling pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/layout/pqz-core/stmt)
+   Compiling pqz-stmt v0.1.0 (<repo>/pqz-core/stmt)
    Compiling cc v1.8.0
    Compiling generic-array v0.14.7
    Compiling crypto-common v0.1.7
    Compiling block-buffer v0.10.4
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/layout/pqz-core/ffi)
+   Compiling pqz-ffi v0.1.0 (<repo>/pqz-core/ffi)
    Compiling digest v0.10.7
    Compiling sha3 v0.10.8
-   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/layout/pqz-core/pqzh/ligero)
+   Compiling pqzh-ligero v0.1.0 (<repo>/pqz-core/pqzh/ligero)
     Finished `release` profile [optimized + debuginfo] target(s) in 11.91s
      Running unittests src/lib.rs (target/release/deps/pqz_ffi-fb60be6c3223c0e1)
 
@@ -25,13 +25,13 @@ $ cargo test --release --offline --features prove,test-hooks -- --nocapture --te
    Compiling subtle v2.6.1
    Compiling cpufeatures v0.2.17
    Compiling cfg-if v1.0.5
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/layout/pqz-core/ffi)
+   Compiling pqz-ffi v0.1.0 (<repo>/pqz-core/ffi)
    Compiling digest v0.10.7
    Compiling hmac v0.12.1
    Compiling sha3 v0.10.8
    Compiling sha2 v0.10.9
    Compiling hkdf v0.12.4
-   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/layout/pqz-core/pqzh/ligero)
+   Compiling pqzh-ligero v0.1.0 (<repo>/pqz-core/pqzh/ligero)
     Finished `release` profile [optimized + debuginfo] target(s) in 15.97s
      Running unittests src/lib.rs (target/release/deps/pqz_ffi-0ba85e68d89fb1e8)
 

@@ -25,7 +25,7 @@ KILLED       D9 leg in one settle                 no_partial_fill  | panicked at
     """T8 mutation spot-checks: for each guard, remove it (exact replace, count 1), rebuild the crate's wasm (or run the
     unit test), run the named test, expect FAIL, restore the file from an in-memory copy. Run inside scripts/capped."""
     import subprocess, sys, pathlib
-    NEAR = pathlib.Path('/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near')
+    NEAR = pathlib.Path('<repo>/smartcontracts/near')
     DEX, TOK = 'dex/src/lib.rs', 'token/src/trade.rs'
     M = [
         ('D1 order relayer (CTR-DEX-09)', DEX, 'if order.relayer.as_ref().is_some_and(|r| r != caller) {', 'if false {', 'it', 'order_relayer_mismatch_refused'),

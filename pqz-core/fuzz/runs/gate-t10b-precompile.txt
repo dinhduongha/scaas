@@ -6,10 +6,10 @@ INFO: Running with entropic power schedule (0xFF, 100).
 INFO: Seed: 2303271220
 INFO: Loaded 1 modules   (26838 inline 8-bit counters): 26838 [0x5c8b86f05230, 0x5c8b86f0bb06), 
 INFO: Loaded 1 PC tables (26838 PCs): 26838 [0x5c8b86f0bb08,0x5c8b86f74868), 
-INFO:        0 files found in /home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust/pqz-core/build/fuzz/work/precompile
+INFO:        0 files found in <repo>/pqz-core/build/fuzz/work/precompile
 INFO:       12 files found in corpus/precompile
 INFO:        0 files found in regress/precompile
-INFO:      776 files found in /home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust/pqz-core/build/fuzz/seeds/precompile
+INFO:      776 files found in <repo>/pqz-core/build/fuzz/seeds/precompile
 INFO: seed corpus: files: 788 min: 1b max: 393217b total: 163923076b rss: 482Mb
 #256	pulse  cov: 1404 ft: 2108 corp: 89/5987Kb exec/s: 64 rss: 553Mb
 #512	pulse  cov: 2178 ft: 3581 corp: 139/15508Kb exec/s: 64 rss: 747Mb

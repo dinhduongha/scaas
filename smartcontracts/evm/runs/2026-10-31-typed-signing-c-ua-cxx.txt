@@ -1,13 +1,13 @@
 # ua-cxx at commit ca2d7b41
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.07s
--- Using the multi-header code from /home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-cxx/build/_deps/json-src/include/
+-- Using the multi-header code from <repo>/clients/ua-cxx/build/_deps/json-src/include/
 -- Configuring done (0.3s)
 -- Generating done (0.0s)
--- Build files have been written to: /home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-cxx/build
+-- Build files have been written to: <repo>/clients/ua-cxx/build
 [0/2] Re-checking globbed directories...
 ninja: no work to do.
-Internal ctest changing into directory: /home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-cxx/build
-Test project /home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-cxx/build
+Internal ctest changing into directory: <repo>/clients/ua-cxx/build
+Test project <repo>/clients/ua-cxx/build
       Start  1: table_groups_purposes_constants
  1/14 Test  #1: table_groups_purposes_constants ......   Passed    0.01 sec
       Start  2: valid_rows

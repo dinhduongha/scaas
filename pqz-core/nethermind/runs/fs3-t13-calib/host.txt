@@ -20,10 +20,10 @@ MiB Swap:  32768.0 total,  30844.2 free,   1923.8 used.  12254.4 avail Mem
 dbx-dbx-1 t8y2/dbx Up 6 hours
 redis-redis-1 bitnami/redis:7.4 Up 6 hours
 timescaledb-timescaledb-1 72d494dcc49e Up 6 hours
-/home/ha/.cache/r3-locks/heavy: free
-/home/ha/.cache/r3-locks/heavy.2: free
-/home/ha/.cache/r3-locks/heavy.3: free
-/home/ha/.cache/r3-locks/heavy.4: free
+~/.cache/r3-locks/heavy: free
+~/.cache/r3-locks/heavy.2: free
+~/.cache/r3-locks/heavy.3: free
+~/.cache/r3-locks/heavy.4: free
 
 ## after run 1 rows, 2026-10-30T17:10:34Z: STOPPED (memory)
 4.84 2.88 1.72
@@ -42,10 +42,10 @@ Swap:          32767        4207       28560
 dbx-dbx-1 t8y2/dbx Up 9 hours
 redis-redis-1 bitnami/redis:7.4 Up 9 hours
 timescaledb-timescaledb-1 72d494dcc49e Up 9 hours
-/home/ha/.cache/r3-locks/heavy: free
-/home/ha/.cache/r3-locks/heavy.2: free
-/home/ha/.cache/r3-locks/heavy.3: free
-/home/ha/.cache/r3-locks/heavy.4: free
+~/.cache/r3-locks/heavy: free
+~/.cache/r3-locks/heavy.2: free
+~/.cache/r3-locks/heavy.3: free
+~/.cache/r3-locks/heavy.4: free
 ## run1 k0-1 2026-10-30T19:58:18Z before 0.74 0.46 0.27
   after 19:58:49 0.98 0.55 0.31 rc=0
 ## run1 k2-3 2026-10-30T19:58:52Z before 0.98 0.55 0.31

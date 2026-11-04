@@ -8,7 +8,7 @@ $ python3 -I corpus.py bin/corpus.jsonl
 corpus bin/corpus.jsonl: 414 inputs {'honest': 16, 'negative': 373, 'flip': 16, 'fee0': 8, 'selftest': 1}
 [rc=0]
 
-$ docker build -f Dockerfile --progress plain --target ffi-export -o bin/ffi-out /home/ha/work/ainative/scaas/.claude/worktrees/p6f
+$ docker build -f Dockerfile --progress plain --target ffi-export -o bin/ffi-out <repo>
 #0 building with "default" instance using docker driver
 
 #1 [internal] load build definition from Dockerfile
@@ -76,7 +76,7 @@ $ docker build -f Dockerfile --progress plain --target ffi-export -o bin/ffi-out
 [rc=0]
 
 libpqz_ffi.so sha256 12495e8b9cdcf95b932761bae8843e499ee7b4bdd2b240869ed461fc7a257d87
-$ docker build -f Dockerfile --progress plain --target node --build-arg COMMIT=9c6558e5e29daf755ec772d6fb7b31e6c97840df --build-arg FFI_SHA256=12495e8b9cdcf95b932761bae8843e499ee7b4bdd2b240869ed461fc7a257d87 -t scaas/nethermind-pqz:1.39.0-pqz1 /home/ha/work/ainative/scaas/.claude/worktrees/p6f
+$ docker build -f Dockerfile --progress plain --target node --build-arg COMMIT=9c6558e5e29daf755ec772d6fb7b31e6c97840df --build-arg FFI_SHA256=12495e8b9cdcf95b932761bae8843e499ee7b4bdd2b240869ed461fc7a257d87 -t scaas/nethermind-pqz:1.39.0-pqz1 <repo>
 #0 building with "default" instance using docker driver
 
 #1 [internal] load build definition from Dockerfile
@@ -188,7 +188,7 @@ $ docker build -f Dockerfile --progress plain --target node --build-arg COMMIT=9
 #34 DONE 0.0s
 [rc=0]
 
-$ docker build -f Dockerfile --progress plain --target calib --build-arg COMMIT=9c6558e5e29daf755ec772d6fb7b31e6c97840df --build-arg FFI_SHA256=12495e8b9cdcf95b932761bae8843e499ee7b4bdd2b240869ed461fc7a257d87 -t scaas/nethermind-pqz:1.39.0-pqz1-calib /home/ha/work/ainative/scaas/.claude/worktrees/p6f
+$ docker build -f Dockerfile --progress plain --target calib --build-arg COMMIT=9c6558e5e29daf755ec772d6fb7b31e6c97840df --build-arg FFI_SHA256=12495e8b9cdcf95b932761bae8843e499ee7b4bdd2b240869ed461fc7a257d87 -t scaas/nethermind-pqz:1.39.0-pqz1-calib <repo>
 #0 building with "default" instance using docker driver
 
 #1 [internal] load build definition from Dockerfile

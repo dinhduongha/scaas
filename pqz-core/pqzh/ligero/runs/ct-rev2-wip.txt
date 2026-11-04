@@ -1,5 +1,5 @@
 # ct rev2-wip: HEAD b1c4de5d970df2dc601850b88ff8467258ad9a3f, diff sha256 efa8102bd5763e4b, valgrind-3.22.0, rels 4095, nprove 1
-   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/rev2-pqzh/pqz-core/pqzh/ligero)
+   Compiling pqzh-ligero v0.1.0 (<repo>/pqz-core/pqzh/ligero)
     Finished `release` profile [optimized + debuginfo] target(s) in 3.42s
 rustc 1.97.1 (8bab26f4f 2026-07-14)
 {"rel": "R_REG", "run": 0, "prove": "Ok(187098)", "verify": true, "fnv": "0ecf451a"}
@@ -60,7 +60,7 @@ rustc 1.97.1 (8bab26f4f 2026-07-14)
 ==212768==    by 0x1915E6: catch_unwind<isize, std::rt::lang_start_internal::{closure_env#0}> (panicking.rs:544)
 ==212768==    by 0x1915E6: catch_unwind<std::rt::lang_start_internal::{closure_env#0}, isize> (panic.rs:359)
 ==212768==    by 0x1915E6: std::rt::lang_start_internal (rt.rs:171)
-==212768==    by 0x127D6B: main (in /home/ha/work/ainative/scaas/.claude/worktrees/rev2-pqzh/pqz-core/pqzh/ligero/target/release/ct)
+==212768==    by 0x127D6B: main (in <repo>/pqz-core/pqzh/ligero/target/release/ct)
 ==212768== 
 ==212768== Conditional jump or move depends on uninitialised value(s)
 ==212768==    at 0x14500C: UnknownInlinedFun (ring.rs:89)
@@ -99,7 +99,7 @@ rustc 1.97.1 (8bab26f4f 2026-07-14)
 ==212768==    by 0x1915E6: catch_unwind<isize, std::rt::lang_start_internal::{closure_env#0}> (panicking.rs:544)
 ==212768==    by 0x1915E6: catch_unwind<std::rt::lang_start_internal::{closure_env#0}, isize> (panic.rs:359)
 ==212768==    by 0x1915E6: std::rt::lang_start_internal (rt.rs:171)
-==212768==    by 0x127D6B: main (in /home/ha/work/ainative/scaas/.claude/worktrees/rev2-pqzh/pqz-core/pqzh/ligero/target/release/ct)
+==212768==    by 0x127D6B: main (in <repo>/pqz-core/pqzh/ligero/target/release/ct)
 ==212768== 
 ==212768== Conditional jump or move depends on uninitialised value(s)
 ==212768==    at 0x144FEF: UnknownInlinedFun (fq.rs:132)
@@ -140,7 +140,7 @@ rustc 1.97.1 (8bab26f4f 2026-07-14)
 ==212768==    by 0x1915E6: catch_unwind<isize, std::rt::lang_start_internal::{closure_env#0}> (panicking.rs:544)
 ==212768==    by 0x1915E6: catch_unwind<std::rt::lang_start_internal::{closure_env#0}, isize> (panic.rs:359)
 ==212768==    by 0x1915E6: std::rt::lang_start_internal (rt.rs:171)
-==212768==    by 0x127D6B: main (in /home/ha/work/ainative/scaas/.claude/worktrees/rev2-pqzh/pqz-core/pqzh/ligero/target/release/ct)
+==212768==    by 0x127D6B: main (in <repo>/pqz-core/pqzh/ligero/target/release/ct)
 ==212768== 
 ==212768== Conditional jump or move depends on uninitialised value(s)
 ==212768==    at 0x14500C: UnknownInlinedFun (ring.rs:89)
@@ -179,7 +179,7 @@ rustc 1.97.1 (8bab26f4f 2026-07-14)
 ==212768==    by 0x1915E6: catch_unwind<isize, std::rt::lang_start_internal::{closure_env#0}> (panicking.rs:544)
 ==212768==    by 0x1915E6: catch_unwind<std::rt::lang_start_internal::{closure_env#0}, isize> (panic.rs:359)
 ==212768==    by 0x1915E6: std::rt::lang_start_internal (rt.rs:171)
-==212768==    by 0x127D6B: main (in /home/ha/work/ainative/scaas/.claude/worktrees/rev2-pqzh/pqz-core/pqzh/ligero/target/release/ct)
+==212768==    by 0x127D6B: main (in <repo>/pqz-core/pqzh/ligero/target/release/ct)
 ==212768== 
 ==212768== Conditional jump or move depends on uninitialised value(s)
 ==212768==    at 0x1459AA: UnknownInlinedFun (fq.rs:132)
@@ -210,7 +210,7 @@ rustc 1.97.1 (8bab26f4f 2026-07-14)
 ==212768==    by 0x1915E6: catch_unwind<isize, std::rt::lang_start_internal::{closure_env#0}> (panicking.rs:544)
 ==212768==    by 0x1915E6: catch_unwind<std::rt::lang_start_internal::{closure_env#0}, isize> (panic.rs:359)
 ==212768==    by 0x1915E6: std::rt::lang_start_internal (rt.rs:171)
-==212768==    by 0x127D6B: main (in /home/ha/work/ainative/scaas/.claude/worktrees/rev2-pqzh/pqz-core/pqzh/ligero/target/release/ct)
+==212768==    by 0x127D6B: main (in <repo>/pqz-core/pqzh/ligero/target/release/ct)
 ==212768== 
 ==212768== Conditional jump or move depends on uninitialised value(s)
 ==212768==    at 0x1459C8: UnknownInlinedFun (ring.rs:89)
@@ -239,7 +239,7 @@ rustc 1.97.1 (8bab26f4f 2026-07-14)
 ==212768==    by 0x1915E6: catch_unwind<isize, std::rt::lang_start_internal::{closure_env#0}> (panicking.rs:544)
 ==212768==    by 0x1915E6: catch_unwind<std::rt::lang_start_internal::{closure_env#0}, isize> (panic.rs:359)
 ==212768==    by 0x1915E6: std::rt::lang_start_internal (rt.rs:171)
-==212768==    by 0x127D6B: main (in /home/ha/work/ainative/scaas/.claude/worktrees/rev2-pqzh/pqz-core/pqzh/ligero/target/release/ct)
+==212768==    by 0x127D6B: main (in <repo>/pqz-core/pqzh/ligero/target/release/ct)
 ==212768== 
 ==212768== 
 ==212768== HEAP SUMMARY:

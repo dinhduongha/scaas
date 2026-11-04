@@ -40,7 +40,7 @@
 2026-10-14T09:21:50.534242Z  INFO verify_batch:verify constraints{air_idx=2}: p3_batch_stark::verifier: close time.busy=40.4µs time.idle=220ns
 2026-10-14T09:21:50.534258Z  INFO verify_batch:verify constraints{air_idx=3}: p3_batch_stark::verifier: close time.busy=10.2µs time.idle=161ns
 2026-10-14T09:21:50.534263Z  INFO verify_batch: p3_batch_stark::verifier: close time.busy=37.2ms time.idle=642ns
-	Command being timed: "/home/ha/work/ainative/scaas/.claude/worktrees/whirrev/pqz-core/pqzh/runs/wr-probe/../../target/release/wr-probe tx"
+	Command being timed: "<repo>/pqz-core/pqzh/runs/wr-probe/../../target/release/wr-probe tx"
 	User time (seconds): 202.08
 	System time (seconds): 3.77
 	Percent of CPU this job got: 99%

@@ -3,20 +3,20 @@
    Compiling shlex v2.0.1
    Compiling find-msvc-tools v0.1.14
    Compiling keccak v0.1.6
-   Compiling pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/op7tok/pqz-core/stmt)
+   Compiling pqz-stmt v0.1.0 (<repo>/pqz-core/stmt)
    Compiling cc v1.8.0
    Compiling generic-array v0.14.7
    Compiling block-buffer v0.10.4
    Compiling crypto-common v0.1.7
    Compiling digest v0.10.7
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/op7tok/pqz-core/ffi)
+   Compiling pqz-ffi v0.1.0 (<repo>/pqz-core/ffi)
    Compiling sha3 v0.10.8
-   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/op7tok/pqz-core/pqzh/ligero)
-   Compiling pqz-fuzz v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/op7tok/pqz-core/fuzz)
+   Compiling pqzh-ligero v0.1.0 (<repo>/pqz-core/pqzh/ligero)
+   Compiling pqz-fuzz v0.1.0 (<repo>/pqz-core/fuzz)
     Finished `release` profile [optimized + debuginfo] target(s) in 22.21s
--rwxrwxr-x 1 ha ha 15789208 Oct 17 15:39 /home/ha/work/ainative/scaas/.claude/worktrees/op7tok/pqz-core/build/fuzz/codec
--rwxrwxr-x 1 ha ha 15789216 Oct 17 15:39 /home/ha/work/ainative/scaas/.claude/worktrees/op7tok/pqz-core/build/fuzz/mutate
--rwxrwxr-x 1 ha ha 15793744 Oct 17 15:39 /home/ha/work/ainative/scaas/.claude/worktrees/op7tok/pqz-core/build/fuzz/precompile
+-rwxrwxr-x 1 ha ha 15789208 Oct 17 15:39 <repo>/pqz-core/build/fuzz/codec
+-rwxrwxr-x 1 ha ha 15789216 Oct 17 15:39 <repo>/pqz-core/build/fuzz/mutate
+-rwxrwxr-x 1 ha ha 15793744 Oct 17 15:39 <repo>/pqz-core/build/fuzz/precompile
 pqz-fuzz init (precompile): 44 honest inputs valid, self-test ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205, verify-only arena 512 MiB, arena used 265693696 B, peak 268240256 B
 Done 6524 runs in 117 second(s)
 stat::number_of_executed_units: 6524

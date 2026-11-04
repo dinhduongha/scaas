@@ -1,5 +1,5 @@
 # ct rust-final: 0dc869d + uncommitted changes, valgrind-3.22.0, rels 127, nprove 1
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-fs3-ct/pqz-core/pqzl/rust)
+   Compiling pqzl v0.1.0 (<repo>/pqz-core/pqzl/rust)
     Finished `release` profile [optimized + debuginfo] target(s) in 8.53s
 rustc 1.90.0 (1159e78c4 2025-09-14)
 {"rel": "R_REG", "run": 0, "prove": "Ok(())", "verify": true, "fnv": "563d42ff"}

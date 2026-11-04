@@ -6,10 +6,10 @@ INFO: Running with entropic power schedule (0xFF, 100).
 INFO: Seed: 2193689794
 INFO: Loaded 1 modules   (26829 inline 8-bit counters): 26829 [0x60c24eb5c490, 0x60c24eb62d5d), 
 INFO: Loaded 1 PC tables (26829 PCs): 26829 [0x60c24eb62d60,0x60c24ebcba30), 
-INFO:      156 files found in /home/ha/work/ainative/scaas/.claude/worktrees/s5/pqz-core/build/fuzz/work/mutate
+INFO:      156 files found in <repo>/pqz-core/build/fuzz/work/mutate
 INFO:      324 files found in corpus/mutate
 INFO:        0 files found in regress/mutate
-INFO:      176 files found in /home/ha/work/ainative/scaas/.claude/worktrees/s5/pqz-core/build/fuzz/seeds/mutate
+INFO:      176 files found in <repo>/pqz-core/build/fuzz/seeds/mutate
 INFO: seed corpus: files: 656 min: 1b max: 130b total: 10472b rss: 481Mb
 #512	pulse  cov: 1901 ft: 3760 corp: 234/2390b exec/s: 51 rss: 694Mb
 #657	INITED cov: 2454 ft: 4766 corp: 309/5472b exec/s: 32 rss: 694Mb
@@ -19,8 +19,8 @@ INFO: seed corpus: files: 656 min: 1b max: 130b total: 10472b rss: 481Mb
 #693	NEW    cov: 2454 ft: 4792 corp: 312/5520b lim: 130 exec/s: 33 rss: 694Mb L: 17/130 MS: 3 CrossOver-ChangeBinInt-InsertByte-
 #753	REDUCE cov: 2454 ft: 4792 corp: 312/5519b lim: 130 exec/s: 32 rss: 694Mb L: 19/130 MS: 5 ChangeBinInt-CrossOver-CMP-CopyPart-EraseBytes- DE: "\001\000\000-"-
 #779	NEW    cov: 2454 ft: 4794 corp: 313/5525b lim: 130 exec/s: 33 rss: 694Mb L: 6/130 MS: 1 ChangeByte-
-	NEW_FUNC[1/92]: 0x60c24e806e48 in polymat_get_elem /home/ha/work/ainative/scaas/.claude/worktrees/s5/pqz-core/build/fuzz/target/x86_64-unknown-linux-gnu/release/build/pqz-ffi-99d6f5e1d9fbf513/out/include/lazer.h:3864
-	NEW_FUNC[2/92]: 0x60c24e9210a8 in polyvec_set /home/ha/work/ainative/scaas/.claude/worktrees/s5/pqz-core/build/fuzz/target/x86_64-unknown-linux-gnu/release/build/pqz-ffi-99d6f5e1d9fbf513/out/include/lazer.h:3668
+	NEW_FUNC[1/92]: 0x60c24e806e48 in polymat_get_elem <repo>/pqz-core/build/fuzz/target/x86_64-unknown-linux-gnu/release/build/pqz-ffi-99d6f5e1d9fbf513/out/include/lazer.h:3864
+	NEW_FUNC[2/92]: 0x60c24e9210a8 in polyvec_set <repo>/pqz-core/build/fuzz/target/x86_64-unknown-linux-gnu/release/build/pqz-ffi-99d6f5e1d9fbf513/out/include/lazer.h:3668
 #870	NEW    cov: 3410 ft: 5957 corp: 314/5542b lim: 130 exec/s: 7 rss: 694Mb L: 17/130 MS: 1 ChangeBit-
 #923	NEW    cov: 3410 ft: 5959 corp: 315/5548b lim: 130 exec/s: 7 rss: 694Mb L: 6/130 MS: 3 ChangeBit-ChangeByte-ShuffleBytes-
 #924	NEW    cov: 3410 ft: 5960 corp: 316/5582b lim: 130 exec/s: 7 rss: 694Mb L: 34/130 MS: 1 InsertRepeatedBytes-
@@ -32,7 +32,7 @@ INFO: seed corpus: files: 656 min: 1b max: 130b total: 10472b rss: 481Mb
 #1029	NEW    cov: 3410 ft: 5973 corp: 320/5626b lim: 130 exec/s: 7 rss: 694Mb L: 6/130 MS: 2 EraseBytes-PersAutoDict- DE: "\001\000\000-"-
 #1070	NEW    cov: 3410 ft: 5974 corp: 321/5648b lim: 130 exec/s: 8 rss: 694Mb L: 22/130 MS: 1 ShuffleBytes-
 #1141	NEW    cov: 3410 ft: 5975 corp: 322/5657b lim: 130 exec/s: 8 rss: 694Mb L: 9/130 MS: 1 PersAutoDict- DE: "\001\000\000-"-
-	NEW_FUNC[1/1]: 0x60c24e815748 in parse_disc /home/ha/work/ainative/scaas/.claude/worktrees/s5/pqz-core/ffi/../src/pqz_rel.c:830
+	NEW_FUNC[1/1]: 0x60c24e815748 in parse_disc <repo>/pqz-core/ffi/../src/pqz_rel.c:830
 #1220	NEW    cov: 3420 ft: 6366 corp: 323/5667b lim: 130 exec/s: 8 rss: 694Mb L: 10/130 MS: 4 PersAutoDict-ChangeBinInt-ShuffleBytes-ShuffleBytes- DE: "\377\377\377\377\377\377\011$"-
 #1221	NEW    cov: 3420 ft: 6371 corp: 324/5690b lim: 130 exec/s: 8 rss: 694Mb L: 23/130 MS: 1 ChangeByte-
 #1227	NEW    cov: 3420 ft: 6372 corp: 325/5695b lim: 130 exec/s: 8 rss: 694Mb L: 5/130 MS: 1 ChangeBit-

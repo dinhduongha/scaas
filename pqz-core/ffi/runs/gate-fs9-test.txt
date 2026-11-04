@@ -1,6 +1,6 @@
 # PQZL backend: the default feature (cargo flags: none)
 $ cargo test --release --offline --lib
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/pqz-core/ffi)
+   Compiling pqz-ffi v0.1.0 (<repo>/pqz-core/ffi)
     Finished `release` profile [optimized + debuginfo] target(s) in 1.05s
      Running unittests src/lib.rs (target/release/deps/pqz_ffi-6880cc3b61a37b25)
 
