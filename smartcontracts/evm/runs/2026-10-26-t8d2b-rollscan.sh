@@ -1,6 +1,6 @@
 #!/bin/sh
 # ROLL_MAX scan (plan 5h Task 8d part 2b): each set built with ROLL_MAX = 192 (its PqzSet.sol, uncommitted, restored).
-W=/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d2b
+W=$(/usr/bin/git -C "$(dirname "$0")" rev-parse --show-toplevel) || exit 2
 cd $W
 for s in n2048-kmax1024 n2304-kmax4096 n2560-kmax16384 n2816-kmax65536; do
   f=pqz-core/params/sets/$s/PqzSet.sol

@@ -1,4 +1,4 @@
-   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/pqz-core/pqzh/ligero)
+   Compiling pqzh-ligero v0.1.0 (<repo>/pqz-core/pqzh/ligero)
     Finished `release` profile [optimized + debuginfo] target(s) in 3.00s
      Running unittests src/lib.rs (target/release/deps/pqzh_ligero-38396d2cf052c3a0)
 
@@ -39,13 +39,13 @@ warning: target filters `bins`, `examples` specified, but no targets matched; th
     Finished `release` profile [optimized + debuginfo] target(s) in 0.01s
     Checking typenum v1.20.1
     Checking keccak v0.1.6
-    Checking pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/pqz-core/stmt)
+    Checking pqz-stmt v0.1.0 (<repo>/pqz-core/stmt)
     Checking generic-array v0.14.7
     Checking block-buffer v0.10.4
     Checking crypto-common v0.1.7
     Checking digest v0.10.7
     Checking sha3 v0.10.8
-    Checking pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/pqz-core/pqzh/ligero)
+    Checking pqzh-ligero v0.1.0 (<repo>/pqz-core/pqzh/ligero)
 warning: very complex type used. Consider factoring parts into `type` definitions
    --> src/cs.rs:165:34
     |

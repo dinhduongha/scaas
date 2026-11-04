@@ -1,11 +1,11 @@
 # T15 RED at commit a89df505 (pre-T15 contracts + the T15 tests: test_relayfee.py, conftest.py, test_dex.py)
 == build algorand
 wrote artifacts.json
-ImportError while loading conftest '/tmp/claude-1000/-home-ha-work-ainative-scaas/7b777ca4-c4b0-490e-9266-d55ae8d02d4a/scratchpad/red/smartcontracts/algorand/tests/conftest.py'.
+ImportError while loading conftest '<scratch>/red/smartcontracts/algorand/tests/conftest.py'.
 tests/conftest.py:339: in <module>
     EXEC_PREFIX = open(os.path.join(OUT, 'Executor.prefix.bin'), 'rb').read()
                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-E   FileNotFoundError: [Errno 2] No such file or directory: '/tmp/claude-1000/-home-ha-work-ainative-scaas/7b777ca4-c4b0-490e-9266-d55ae8d02d4a/scratchpad/red/smartcontracts/algorand/out/Executor.prefix.bin'
+E   FileNotFoundError: [Errno 2] No such file or directory: '<scratch>/red/smartcontracts/algorand/out/Executor.prefix.bin'
 rc=4
 # T15 RED at commit a89df505 (T15 executor + router, pre-T15 dex.py (no router app id): the DEX relay rule missing)
 == build algorand
@@ -36,7 +36,7 @@ ____________________ ERROR at setup of test_figures_pinned _____________________
 E   algosdk.error.AtomicTransactionComposerError: number of method arguments do not match the method signature
 =================================== FAILURES ===================================
 E   algosdk.error.AtomicTransactionComposerError: number of method arguments do not match the method signature
-/tmp/claude-1000/-home-ha-work-ainative-scaas/7b777ca4-c4b0-490e-9266-d55ae8d02d4a/scratchpad/red/smartcontracts/algorand/.venv/lib/python3.12/site-packages/algosdk/atomic_transaction_composer.py:562: algosdk.error.AtomicTransactionComposerError: number of method arguments do not match the method signature
+<scratch>/red/smartcontracts/algorand/.venv/lib/python3.12/site-packages/algosdk/atomic_transaction_composer.py:562: algosdk.error.AtomicTransactionComposerError: number of method arguments do not match the method signature
 =========================== short test summary info ============================
 FAILED tests/test_relayfee.py::test_dex_bound_order_via_router - algosdk.erro...
 ERROR tests/test_dex.py::test_settle_both_legs_atomic - algosdk.error.AtomicT...

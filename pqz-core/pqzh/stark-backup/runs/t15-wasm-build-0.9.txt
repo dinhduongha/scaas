@@ -61,6 +61,6 @@
    Compiling p3-bus v0.9.0-rc.1
    Compiling p3-whir v0.9.0-rc.1
    Compiling p3-multi-stark v0.9.0-rc.1
-   Compiling pqzh v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzhnext/pqz-core/pqzh)
-   Compiling pqzh-wasm v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzhnext/pqz-core/pqzh/wasm)
+   Compiling pqzh v0.1.0 (<repo>/pqz-core/pqzh)
+   Compiling pqzh-wasm v0.1.0 (<repo>/pqz-core/pqzh/wasm)
     Finished `release` profile [optimized] target(s) in 1m 00s

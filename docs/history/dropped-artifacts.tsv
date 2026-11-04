@@ -166,7 +166,7 @@ Origin::Odoo	obsolete	client-specific origin dropped; current Origin is node/sub
  numeric for EVM/Hedera, 	extraction-artifact	node/gateway.md#NODE-GW-05
  txs and bumped hashes); lost on restart (samples lost, never wrong). — No new 	extraction-artifact	node/ops.md#NODE-OPS-07
  slot is ever read; (4) (rev 1.4) escrow 	extraction-artifact	contracts/pq-zether.md#vectors
-/home/dockers/mba-chain-nethermind/README-chainspec.md	internal-path	local chainspec README; the private-chain profile is contracts/pq-zether.md#constraints
+~dockers/mba-chain-nethermind/README-chainspec.md	internal-path	local chainspec README; the private-chain profile is contracts/pq-zether.md#constraints
 TRAPS.md	internal-path	repo traps file
 ). — Classical §8.9 used counter-only derivation; reusing 	extraction-artifact	contracts/pq-zether.md#CTR-PQZ-19
  (§5 prefix; 	extraction-artifact	contracts/pq-zether.md#register-the-ua-registry

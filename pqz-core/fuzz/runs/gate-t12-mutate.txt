@@ -5,16 +5,16 @@ INFO: Running with entropic power schedule (0xFF, 100).
 INFO: Seed: 1061323962
 INFO: Loaded 1 modules   (23413 inline 8-bit counters): 23413 [0x5d6c5f463340, 0x5d6c5f468eb5), 
 INFO: Loaded 1 PC tables (23413 PCs): 23413 [0x5d6c5f468eb8,0x5d6c5f4c4608), 
-INFO:        0 files found in /home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust-t12prep/pqz-core/build/fuzz/work/mutate
+INFO:        0 files found in <repo>/pqz-core/build/fuzz/work/mutate
 INFO:      462 files found in corpus/mutate
 INFO:        0 files found in regress/mutate
-INFO:      176 files found in /home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust-t12prep/pqz-core/build/fuzz/seeds/mutate
+INFO:      176 files found in <repo>/pqz-core/build/fuzz/seeds/mutate
 INFO: seed corpus: files: 638 min: 1b max: 146b total: 8142b rss: 528Mb
 #512	pulse  cov: 1980 ft: 3893 corp: 264/2193b exec/s: 34 rss: 749Mb
 #639	INITED cov: 2279 ft: 4399 corp: 310/4011b exec/s: 29 rss: 749Mb
 #790	NEW    cov: 2279 ft: 4405 corp: 311/4018b lim: 152 exec/s: 31 rss: 749Mb L: 7/145 MS: 1 EraseBytes-
 	NEW_FUNC[1/165]: 0x5d6c5f1c14e0 in core::ptr::drop_glue::<pqzl::coder::ProofParts> /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library/core/src/ptr/mod.rs:825
-	NEW_FUNC[2/165]: 0x5d6c5f1c1a50 in pqzl::arith::polymat::auto::<pqzl::arith::polymat::PolyMat, pqzl::arith::polymat::PolyMat> /home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust-t12prep/pqz-core/pqzl/rust/src/arith/polymat.rs:159
+	NEW_FUNC[2/165]: 0x5d6c5f1c1a50 in pqzl::arith::polymat::auto::<pqzl::arith::polymat::PolyMat, pqzl::arith::polymat::PolyMat> <repo>/pqz-core/pqzl/rust/src/arith/polymat.rs:159
 #942	NEW    cov: 3158 ft: 5457 corp: 312/4024b lim: 152 exec/s: 7 rss: 821Mb L: 6/145 MS: 2 CopyPart-CrossOver-
 #942	DONE   cov: 3158 ft: 5457 corp: 312/4024b lim: 152 exec/s: 7 rss: 821Mb
 Done 942 runs in 122 second(s)

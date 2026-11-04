@@ -376,37 +376,37 @@
   "native-generic.jsonl": {
    "fails": 0,
    "mismatches": 0,
-   "file": "/home/ha/work/ainative/scaas/.claude/worktrees/artifact2/pqz-core/artifact/runs/art2-host-quick/native-generic.jsonl"
+   "file": "<repo>/pqz-core/artifact/runs/art2-host-quick/native-generic.jsonl"
   },
   "wasm-generic.jsonl": {
    "fails": 0,
    "mismatches": 0,
-   "file": "/home/ha/work/ainative/scaas/.claude/worktrees/artifact2/pqz-core/artifact/runs/art2-host-quick/wasm-generic.jsonl"
+   "file": "<repo>/pqz-core/artifact/runs/art2-host-quick/wasm-generic.jsonl"
   },
   "native-fast.jsonl": {
    "fails": 0,
    "mismatches": 0,
-   "file": "/home/ha/work/ainative/scaas/.claude/worktrees/artifact2/pqz-core/artifact/runs/art2-host-quick/native-fast.jsonl"
+   "file": "<repo>/pqz-core/artifact/runs/art2-host-quick/native-fast.jsonl"
   },
   "x86v3-fast.jsonl": {
    "fails": 0,
    "mismatches": 0,
-   "file": "/home/ha/work/ainative/scaas/.claude/worktrees/artifact2/pqz-core/artifact/runs/art2-host-quick/x86v3-fast.jsonl"
+   "file": "<repo>/pqz-core/artifact/runs/art2-host-quick/x86v3-fast.jsonl"
   },
   "wasm-fast.jsonl": {
    "fails": 0,
    "mismatches": 0,
-   "file": "/home/ha/work/ainative/scaas/.claude/worktrees/artifact2/pqz-core/artifact/runs/art2-host-quick/wasm-fast.jsonl"
+   "file": "<repo>/pqz-core/artifact/runs/art2-host-quick/wasm-fast.jsonl"
   },
   "wasm-both.jsonl": {
    "fails": 0,
    "mismatches": 0,
-   "file": "/home/ha/work/ainative/scaas/.claude/worktrees/artifact2/pqz-core/artifact/runs/art2-host-quick/wasm-both.jsonl"
+   "file": "<repo>/pqz-core/artifact/runs/art2-host-quick/wasm-both.jsonl"
   },
   "alone-wasm-nosv.jsonl": {
    "fails": 0,
    "mismatches": 0,
-   "file": "/home/ha/work/ainative/scaas/.claude/worktrees/artifact2/pqz-core/artifact/runs/art2-host-quick/alone-wasm-nosv.jsonl"
+   "file": "<repo>/pqz-core/artifact/runs/art2-host-quick/alone-wasm-nosv.jsonl"
   }
  },
  "pqzh": {
@@ -723,7 +723,7 @@
      "R_TX",
      "R_TX0"
     ],
-    "file": "/home/ha/work/ainative/scaas/.claude/worktrees/artifact2/pqz-core/artifact/runs/art2-host-quick/pqzh-native.jsonl"
+    "file": "<repo>/pqz-core/artifact/runs/art2-host-quick/pqzh-native.jsonl"
    },
    "pqzh-wasm.jsonl": {
     "fails": 0,
@@ -735,7 +735,7 @@
      "R_TX",
      "R_TX0"
     ],
-    "file": "/home/ha/work/ainative/scaas/.claude/worktrees/artifact2/pqz-core/artifact/runs/art2-host-quick/pqzh-wasm.jsonl"
+    "file": "<repo>/pqz-core/artifact/runs/art2-host-quick/pqzh-wasm.jsonl"
    }
   }
  },

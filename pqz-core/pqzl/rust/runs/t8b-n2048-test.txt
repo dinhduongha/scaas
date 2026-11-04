@@ -10,7 +10,7 @@
    Compiling cipher v0.4.4
    Compiling digest v0.10.7
    Compiling keccak v0.1.6
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust)
+   Compiling pqzl v0.1.0 (<repo>/pqz-core/pqzl/rust)
    Compiling cpufeatures v0.2.17
    Compiling cfg-if v1.0.5
    Compiling aes v0.8.4

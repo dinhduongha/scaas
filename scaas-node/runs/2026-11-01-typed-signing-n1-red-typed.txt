@@ -1,4 +1,4 @@
-   Compiling scaas-node v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/scaas-node)
+   Compiling scaas-node v0.1.0 (<repo>/scaas-node)
 warning: unused variable: `row`
    --> src/typed.rs:613:17
     |

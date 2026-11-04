@@ -1,6 +1,6 @@
 # P6f T7 path A (transition timestamp) on the copy, 2026-10-15T13:19:12Z, commit 7a0fe0b, image sha256:c53359a69bfae32a48412940fa98c744d06f55ab3e8da41e0b5ac82d2e8bea4f
 $ copy.sh patch pqz-core/nethermind/chain/engine-pqz.json 1792070952   # T = start + 10 min
-/home/ha/work/ainative/scaas/.claude/worktrees/p6f/scratchpad/p6f-copy/genesis.pqz.json: engine.Pqz added (first timestamp 1792070952 = 0x6ad0d528, 1 schedule(s), 12 rows); diff: 84 added lines, 0 removed
+<repo>/scratchpad/p6f-copy/genesis.pqz.json: engine.Pqz added (first timestamp 1792070952 = 0x6ad0d528, 1 schedule(s), 12 rows); diff: 84 added lines, 0 removed
 $ copy.sh up scaas/nethermind-pqz:1.39.0-pqz1 genesis.pqz.json
  Container pqzcopy-rpc Started 
 ## step 1: PQZ-START (signer):

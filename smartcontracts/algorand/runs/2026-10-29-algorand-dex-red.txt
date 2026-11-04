@@ -3,7 +3,7 @@
 wrote artifacts.json
     self.spec = json.load(open(os.path.join(OUT, name + '.arc56.json')))
                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-E   FileNotFoundError: [Errno 2] No such file or directory: '/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/algorand/out/Dex.arc56.json'
+E   FileNotFoundError: [Errno 2] No such file or directory: '<repo>/smartcontracts/algorand/out/Dex.arc56.json'
 ____________________ ERROR at setup of test_figures_pinned _____________________
 tests/test_dex.py:154: in dex
     return deploy_dex(dispenser)
@@ -20,7 +20,7 @@ tests/conftest.py:167: in spec
 tests/conftest.py:142: in __init__
     self.spec = json.load(open(os.path.join(OUT, name + '.arc56.json')))
                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-E   FileNotFoundError: [Errno 2] No such file or directory: '/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/algorand/out/Dex.arc56.json'
+E   FileNotFoundError: [Errno 2] No such file or directory: '<repo>/smartcontracts/algorand/out/Dex.arc56.json'
 =================================== FAILURES ===================================
 _______________________________ test_dex_vectors _______________________________
 tests/test_vectors.py:129: in test_dex_vectors

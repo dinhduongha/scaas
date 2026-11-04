@@ -1,6 +1,6 @@
 set n2304-kmax4096, vectors ../../smartcontracts/vectors/pqz/n2304-kmax4096; PQZL backend: the default feature (cargo flags: --no-default-features --features pqzl-rust,set-n2304-kmax4096)
 pqz-vectors --check: 15 files, 9129185 B: ok
-	Command being timed: "/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8b-fix/pqz-core/ffi/target/n2304-kmax4096/release/pqz-vectors --check"
+	Command being timed: "<repo>/pqz-core/ffi/target/n2304-kmax4096/release/pqz-vectors --check"
 pqz_kat: ok
 58472 KB
 tamper: 177 / 177 caught: ok

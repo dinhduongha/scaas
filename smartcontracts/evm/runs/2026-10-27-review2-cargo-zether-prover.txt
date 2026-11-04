@@ -1,5 +1,5 @@
 # cargo-zether-prover at commit 444767c9
-   Compiling zether-prover v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/review2-fix/clients/zether-prover)
+   Compiling zether-prover v0.1.0 (<repo>/clients/zether-prover)
 warning: unused import: `self`
  --> tests/recover.rs:6:26
   |

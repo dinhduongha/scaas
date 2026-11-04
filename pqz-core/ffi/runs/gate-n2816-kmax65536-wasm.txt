@@ -3,10 +3,10 @@ $ cargo build --release --offline --no-default-features --features pqzl-rust,set
    Compiling version_check v0.9.5
    Compiling typenum v1.20.1
    Compiling cfg-if v1.0.5
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/pqzl/rust)
+   Compiling pqzl v0.1.0 (<repo>/pqz-core/pqzl/rust)
    Compiling keccak v0.1.6
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi)
-   Compiling pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/stmt)
+   Compiling pqz-ffi v0.1.0 (<repo>/pqz-core/ffi)
+   Compiling pqz-stmt v0.1.0 (<repo>/pqz-core/stmt)
    Compiling generic-array v0.14.7
    Compiling crypto-common v0.1.7
    Compiling inout v0.1.4
@@ -18,15 +18,15 @@ $ cargo build --release --offline --no-default-features --features pqzl-rust,set
     Finished `release` profile [optimized + debuginfo] target(s) in 7.71s
 [rc=0]
 $ cargo build --release --offline --no-default-features --features pqzl-rust,set-n2816-kmax65536 --target wasm32-unknown-unknown
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi)
-   Compiling pqz-ffi-wasm v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/wasm)
+   Compiling pqz-ffi v0.1.0 (<repo>/pqz-core/ffi)
+   Compiling pqz-ffi-wasm v0.1.0 (<repo>/pqz-core/ffi/wasm)
     Finished `release` profile [optimized] target(s) in 1.47s
 [rc=0]
-$ sha256sum /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/target/n2816-kmax65536-wasm/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm
-510a74a1abb3b38b59cbafac94eccd83ecfb110e5def0bec373b33ad6ad50afe  /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/target/n2816-kmax65536-wasm/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm
+$ sha256sum <repo>/pqz-core/ffi/target/n2816-kmax65536-wasm/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm
+510a74a1abb3b38b59cbafac94eccd83ecfb110e5def0bec373b33ad6ad50afe  <repo>/pqz-core/ffi/target/n2816-kmax65536-wasm/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm
 [rc=0]
 wasm bytes 575630
-$ llvm-nm-18 --undefined-only /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/target/n2816-kmax65536-wasm/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm (imports)
+$ llvm-nm-18 --undefined-only <repo>/pqz-core/ffi/target/n2816-kmax65536-wasm/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm (imports)
 strings /gmp|mpfr|hexl/i: 0
 node rc=0
 wasm run 72954 ms, memory 240386048 B

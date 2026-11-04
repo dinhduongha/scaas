@@ -268,7 +268,7 @@ gas), không có nửa kia.
 ## 7. Phát hiện từ code thật của user
 
 Nguồn: `custom-addons/zether-dev/packages/protocol/contracts`,
-`/home/ha/work/blockchain/metatx`, `Grok3_Meta.txt`.
+`~/work/blockchain/metatx`, `Grok3_Meta.txt`.
 User đã nói: *"Interface có thể chưa đúng"* → được phép thiết kế lại.
 
 **Chặn build:**
@@ -888,7 +888,7 @@ mà addon không có thẩm quyền thực hiện.
 
 ## 16. Chain đích đầu tiên là PRIVATE, không phải Gnosis
 
-`/home/dockers/mba-chain-nethermind` — Nethermind, hiện chưa chạy.
+`~dockers/mba-chain-nethermind` — Nethermind, hiện chưa chạy.
 
 | | |
 |---|---|

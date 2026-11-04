@@ -1,7 +1,7 @@
 $ sh -c cd .. && ./build.sh native > /dev/null
-$ sh -c clang -std=gnu11 -O2 -I../src -o /home/ha/work/ainative/scaas/.claude/worktrees/s4/pqz-core/ffi/target/lh2/dump_setup ../pqzh/xcheck/dump_setup.c ../build/native/libpqz.a && /home/ha/work/ainative/scaas/.claude/worktrees/s4/pqz-core/ffi/target/lh2/dump_setup /home/ha/work/ainative/scaas/.claude/worktrees/s4/pqz-core/ffi/target/lh2/c txm
-$ sh -c cd ../pqzh/ligero && cargo run -j2 --release --offline --quiet --example dump_setup -- /home/ha/work/ainative/scaas/.claude/worktrees/s4/pqz-core/ffi/target/lh2/ligero
-$ cargo run -j2 --release --offline --quiet --features prove --example lh2 -- /home/ha/work/ainative/scaas/.claude/worktrees/s4/pqz-core/ffi/target/lh2/c /home/ha/work/ainative/scaas/.claude/worktrees/s4/pqz-core/ffi/target/lh2/ligero /home/ha/work/ainative/scaas/.claude/worktrees/s4/pqz-core/ffi/target/lh2/out
+$ sh -c clang -std=gnu11 -O2 -I../src -o <repo>/pqz-core/ffi/target/lh2/dump_setup ../pqzh/xcheck/dump_setup.c ../build/native/libpqz.a && <repo>/pqz-core/ffi/target/lh2/dump_setup <repo>/pqz-core/ffi/target/lh2/c txm
+$ sh -c cd ../pqzh/ligero && cargo run -j2 --release --offline --quiet --example dump_setup -- <repo>/pqz-core/ffi/target/lh2/ligero
+$ cargo run -j2 --release --offline --quiet --features prove --example lh2 -- <repo>/pqz-core/ffi/target/lh2/c <repo>/pqz-core/ffi/target/lh2/ligero <repo>/pqz-core/ffi/target/lh2/out
 {"src": "c", "stmt": "txm1", "id": "pqzl", "stmt_bytes": 83072, "parse_encode_equal": true, "proof_bytes": 42766, "valid": true, "generic": true, "recipientsHash_flip_rejected": true, "ok": true}
 {"src": "c", "stmt": "txm1", "id": "pqzh", "stmt_bytes": 83072, "parse_encode_equal": true, "proof_bytes": 232750, "valid": true, "generic": null, "recipientsHash_flip_rejected": true, "ok": true}
 {"src": "c", "stmt": "txm1_0", "id": "pqzl", "stmt_bytes": 66560, "parse_encode_equal": true, "proof_bytes": 42422, "valid": true, "generic": true, "recipientsHash_flip_rejected": true, "ok": true}
@@ -53,7 +53,7 @@ $ cargo run -j2 --release --offline --quiet --features prove --example lh2 -- /h
 {"src": "ligero", "stmt": "txm4_two", "id": "pqzl", "stmt_bytes": 132992, "parse_encode_equal": true, "proof_bytes": 45270, "valid": true, "generic": true, "recipientsHash_flip_rejected": true, "ok": true}
 {"src": "ligero", "stmt": "txm4_two", "id": "pqzh", "stmt_bytes": 132992, "parse_encode_equal": true, "proof_bytes": 233220, "valid": true, "generic": null, "recipientsHash_flip_rejected": true, "ok": true}
 {"lh2": "ok", "cases": 50, "fails": 0}
-$ python3 -I ../pqzh/xcheck/kat_multi.py /home/ha/work/ainative/scaas/.claude/worktrees/s4/pqz-core/ffi/target/lh2/out
+$ python3 -I ../pqzh/xcheck/kat_multi.py <repo>/pqz-core/ffi/target/lh2/out
 txm1_0_stmt 66560 B wit 12384 B M=1 auditorOn=0 legs [123456] fee 0 balance 1000000 ok
 txm1_stmt 83072 B wit 12416 B M=1 auditorOn=1 legs [123456] fee 7 balance 1000000 ok
 txm2_0_stmt 83072 B wit 12432 B M=2 auditorOn=0 legs [0, 123456] fee 0 balance 1000000 ok

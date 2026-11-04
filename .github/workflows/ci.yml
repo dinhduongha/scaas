@@ -15,7 +15,7 @@
 #   contract-cosmos:   test.sh cosmos (cargo test; Rust 1.99.0)
 #   contract-ton:      test.sh ton (npm ci; npm test = tact build + jest; Node 26.8.1)
 #   scaas-node:    cargo test; cargo clippy --all-targets -- -D warnings; cargo test --test e2e -- --ignored
-#   docs:          python3 scripts/test_docs_check.py; python3 scripts/docs_check.py check; ... facts check
+#   docs:          python3 scripts/test_docs_check.py; python3 scripts/docs_check.py check; ... facts check; ... paths
 #   clients/clientkeys:    npm ci --ignore-scripts; npm test
 #   clients/zether-prover: cargo test; ./wasm-smoke.sh (wasm32 build + wasm-bindgen + node smoke); zether-cli against the tokens (ZetherProverCross)
 #   clients/ua-rs:         cargo test; cargo clippy --all-targets -- -D warnings; the same with --features signers (groups.json signers + regeneration), --features json (the JSON shim the wrappers call) and --features pq (the off-chain verifier's PQ kinds, ua8::check_*)
@@ -346,6 +346,8 @@ jobs:
         run: python3 scripts/docs_check.py check
       - name: fact ledger
         run: python3 scripts/docs_check.py facts check
+      - name: no machine paths in tracked files
+        run: python3 scripts/docs_check.py paths
 
   clientkeys:
     needs: changes

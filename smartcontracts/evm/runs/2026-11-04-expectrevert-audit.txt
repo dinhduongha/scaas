@@ -1,0 +1,52 @@
+# 2026-11-04-expectrevert-audit: `dynamic_test_linking = false` (Foundry 1.8.5 default on turned `new <src contract>` in a
+# test into `vm.deployCode`, whose constructor revert after `vm.expectRevert` ended the test frame and passed); code at eabc63b9
+step | commit | rc | counts
+probes before (dtl on, 6 rounds, one assertTrue(false) after one site per test per round) | 4c72332d | - | 45 probes: 31 HOLE (test passed past the probe), 14 OK (2 contract in the test file, 12 kept native by the preprocessor)
+probes after (default config = dtl off, same rounds) | eabc63b9 | 1 (expected) | 45/45 reached: every test FAILs at its own probe (rounds 24, 6, 6, 5, 3, 1); files restored
+forge ExpectRevertLint.t.sol | eabc63b9 | 0 | 3 passed 0 failed
+lint canary positive control (FOUNDRY_DYNAMIC_TEST_LINKING=true, sparse, separate out) | eabc63b9 | 1 (expected) | 1 failed: "probe frame must revert with the tail's reason" (trace: VM::deployCode)
+lint shape positive control (Factory.t.sol:105 as vm.deployCode, restored) | eabc63b9 | 1 (expected) | 1 failed: "test/v2/Factory.t.sol: 1 != 0"
+forge (default set n2304-kmax4096) | eabc63b9 | 0 | 2119 passed 0 failed 14 skipped (2116 before + 3 lint tests)
+forge-isolate test/ua/{UAGas,UARegistryGroups}.t.sol | eabc63b9 | 0 | 22 passed 0 failed
+at-set n2048-kmax1024 test/{ua,pqz}/* | eabc63b9 | 0 | 776 passed 0 failed 1 skipped
+at-set n2560-kmax16384 test/{ua,pqz}/* | eabc63b9 | 0 | 772 passed 0 failed 5 skipped
+at-set n2816-kmax65536 test/{ua,pqz}/* | eabc63b9 | 0 | 767 passed 0 failed 10 skipped (PQZH-only tests; HAS_PQZH false)
+UAPqzVerifier tails (test_constructorProbes / test_constructorPins) probed, all four sets | eabc63b9 | 1 (expected) | 4 x 2 FAIL at "TAIL:probes" / "TAIL:pins": reached at every set, HAS_PQZH branch included
+sizes size_gate.py | eabc63b9 | 0 | 0 errors, 84 contracts
+docs docs_check.py check | eabc63b9 | 0 | 0 errors 5 warnings
+gas pins | eabc63b9 | - | none moved (no pin test failed)
+
+# The 31 HOLE sites in 14 tests, from the dtl-on round logs (the audit note's totals said 32 / 15; its table agrees with 31). Line = the
+# expectRevert line; "never ran" = not executed before the fix (17 sites), "loop" = first iteration only, "checked" = first
+# site or last statement.
+# test/account/SmartKeyAccount.t.sol:847  test_implementationDependsOnChainUid  checked
+# test/pqz/UAPqzVerifier.t.sol:24  test_constructorProbes  checked
+# test/pqz/UAPqzVerifier.t.sol:30  test_constructorProbes  never ran
+# test/pqz/UAPqzVerifier.t.sol:32  test_constructorProbes  never ran
+# test/pqz/UAPqzVerifier.t.sol:36  test_constructorProbes  never ran
+# test/pqz/UAPqzVerifier.t.sol:39  test_constructorProbes  never ran
+# test/pqz/UAPqzVerifier.t.sol:73  test_constructorPins  checked
+# test/pqz/UAPqzVerifier.t.sol:76  test_constructorPins  never ran
+# test/pqz/UAPqzVerifier.t.sol:83  test_constructorPins  never ran
+# test/pqz/UAPqzVerifier.t.sol:86  test_constructorPins  never ran
+# test/ua/MlDsa.t.sol:222  test_refusesOtherKinds  checked
+# test/ua/UARegistry.t.sol:363  test_T_REG_4_gen2Constructor  loop
+# test/ua/UARegistry.t.sol:366  test_T_REG_4_gen2Constructor  never ran
+# test/ua/UARegistry.t.sol:370  test_T_REG_4_gen2Constructor  never ran
+# test/ua/UARegistry.t.sol:374  test_T_REG_4_gen2Constructor  never ran
+# test/ua/UARegistry.t.sol:983  test_constructorSmartKeyNoCode  checked
+# test/ua/UARegistry.t.sol:992  test_constructorDesignatorRefused  checked
+# test/ua/UARegistry.t.sol:996  test_constructorDesignatorRefused  never ran
+# test/ua/UARegistry.t.sol:1002  test_constructorDesignatorRefused  never ran
+# test/ua/UARegistry.t.sol:1031  test_T_CHAIN  checked
+# test/ua/UARegistry.t.sol:1110  test_constructorConfig  loop
+# test/ua/UARegistry.t.sol:1114  test_constructorConfig  never ran
+# test/ua/UARegistry.t.sol:1117  test_constructorConfig  never ran
+# test/ua/UARegistry.t.sol:1120  test_constructorConfig  never ran
+# test/ua/UARegistry.t.sol:1125  test_constructorConfig  never ran
+# test/ua/UARegistry.t.sol:1127  test_constructorConfig  never ran
+# test/ua/UARegistryNested.t.sol:932  test_newGen2OverOldGen1  checked
+# test/ua/UARegistryPq.t.sol:78  test_pqSlots  loop
+# test/v2/Factory.t.sol:104  test_constructor_refusesZeroChainUid  checked
+# test/v2/Factory.t.sol:242  test_noticePeriod  checked
+# test/wallet/MandateWallet.t.sol:423  test_mandate_parameters_are_validated  checked

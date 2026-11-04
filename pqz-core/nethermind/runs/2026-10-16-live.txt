@@ -2,11 +2,11 @@
 ## 0. preconditions
 image: sha256:c53359a69bfae32a48412940fa98c744d06f55ab3e8da41e0b5ac82d2e8bea4f (= the gate's c53359a69bfa)
 live container: exited exit=130 finished=2026-10-11T23:04:10.776696994Z
-## 1. backup -> /home/dockers/mba-chain-nethermind-backups/pqz-20261016-004736
+## 1. backup -> ~dockers/mba-chain-nethermind-backups/pqz-20261016-004736
 copied
 ### verify
-data/nethermind_data: backup identical, 135 files (manifest /home/dockers/mba-chain-nethermind-backups/pqz-20261016-004736.live-nethermind_data.sha256)
-keystore: backup identical, 5 files (manifest /home/dockers/mba-chain-nethermind-backups/pqz-20261016-004736.live-keystore.sha256)
+data/nethermind_data: backup identical, 135 files (manifest ~dockers/mba-chain-nethermind-backups/pqz-20261016-004736.live-nethermind_data.sha256)
+keystore: backup identical, 5 files (manifest ~dockers/mba-chain-nethermind-backups/pqz-20261016-004736.live-keystore.sha256)
 68768cd014a5e007778fef0d6861c46cc9334095f4c7e10de6a8eddd0aa8b981  backup:genesis.json
 d6368bf3da3b431a1cabb8684a7445ac992eb0357b23286580b019c6a4fed244  backup:config.json
 30c09ef93306ab8dec6a0a10044ac72163efc541ecd5eb347e01510e99a9a388  backup:docker-compose.yml
@@ -28,7 +28,7 @@ genesis.json: OK
 config.json: OK
 docker-compose.yml: OK
 password.txt: OK
-/home/dockers/mba-chain-nethermind/genesis.json: engine.Pqz added (first timestamp 0 = 0x0, 1 schedule(s), 12 rows); diff: 87 added lines, 1 removed; params changed: eip4895TransitionTimestamp None -> 1, maxCodeSizeTransition 6432 -> 0, maximumExtraDataSize None -> 0xffff
+~dockers/mba-chain-nethermind/genesis.json: engine.Pqz added (first timestamp 0 = 0x0, 1 schedule(s), 12 rows); diff: 87 added lines, 1 removed; params changed: eip4895TransitionTimestamp None -> 1, maxCodeSizeTransition 6432 -> 0, maximumExtraDataSize None -> 0xffff
 ### diff config.json
 40,41c40
 <     "Enabled": true,
@@ -76,7 +76,7 @@ drwxrwxr-x    5 1000     1000          4096 Oct 15 22:40 ..
 drwxr-xr-x    2 root     root          4096 Oct 15 22:41 nethermind_data
 drwxr-xr-x   15 root     root          4096 Oct 21  2025 nethermind_data.bak-20260831-090830
 ## 3. start 2026-10-15T22:41:23Z
-time="2026-10-16T05:41:23+07:00" level=warning msg="/home/dockers/mba-chain-nethermind/docker-compose.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion"
+time="2026-10-16T05:41:23+07:00" level=warning msg="~dockers/mba-chain-nethermind/docker-compose.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion"
  Container mba_chain_node_nethermind Recreate 
  Container mba_chain_node_nethermind Recreated 
  Container mba_chain_node_nethermind Starting 
@@ -90,23 +90,23 @@ ok    eth_chainId = 0x1dc6
 ok    genesis hash 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464 = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464
 ok    OP_SELFTEST eth_call = ed910a2c…d205 (got 0xed910a2cf4…)
 Traceback (most recent call last):
-  File "/home/ha/work/ainative/scaas/pqz-core/nethermind/chain/e2e.py", line 439, in <module>
+  File "<repo>/pqz-core/nethermind/chain/e2e.py", line 439, in <module>
     main()
-  File "/home/ha/work/ainative/scaas/pqz-core/nethermind/chain/e2e.py", line 432, in main
+  File "<repo>/pqz-core/nethermind/chain/e2e.py", line 432, in main
     {"head": cmd_head, "before": cmd_before, "probe": cmd_probe, "stock": cmd_stock, "e2e": cmd_e2e,
-  File "/home/ha/work/ainative/scaas/pqz-core/nethermind/chain/e2e.py", line 215, in cmd_probe
+  File "<repo>/pqz-core/nethermind/chain/e2e.py", line 215, in cmd_probe
     oh = overhead()
          ^^^^^^^^^^
-  File "/home/ha/work/ainative/scaas/pqz-core/nethermind/chain/e2e.py", line 182, in overhead
+  File "<repo>/pqz-core/nethermind/chain/e2e.py", line 182, in overhead
     word, used, rlen = call_probe("0x0000000000000000000000000000000000000004", (5).to_bytes(32, "big"))
                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ha/work/ainative/scaas/pqz-core/nethermind/chain/e2e.py", line 173, in call_probe
+  File "<repo>/pqz-core/nethermind/chain/e2e.py", line 173, in call_probe
     _, deployed = artifact("PqzPrecompileProbe.sol", "PqzPrecompileProbe")
                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ha/work/ainative/scaas/pqz-core/nethermind/chain/e2e.py", line 87, in artifact
+  File "<repo>/pqz-core/nethermind/chain/e2e.py", line 87, in artifact
     j = json.load(open(os.path.join(ROOT, "smartcontracts/evm/out", path, name + ".json")))
                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-FileNotFoundError: [Errno 2] No such file or directory: '/home/ha/work/ainative/scaas/smartcontracts/evm/out/PqzPrecompileProbe.sol/PqzPrecompileProbe.json'
+FileNotFoundError: [Errno 2] No such file or directory: '<repo>/smartcontracts/evm/out/PqzPrecompileProbe.sol/PqzPrecompileProbe.json'
 probe exit 1
 PQZ-START sha256=12495e8b9cdcf95b932761bae8843e499ee7b4bdd2b240869ed461fc7a257d87 selftest=ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205 addresses=PQZ:0x5caa500000000000000000000000000000000f01,MLDSA44:0x5caa500000000000000000000000000000000012,MLDSA65:0x5caa500000000000000000000000000000000013 schedules=[{ts 0, rows 12 [op1/0a47a768/83072=4225000, op1/0a47a768/66560=4021000, op1/2e07e6ed/83072=5409000, op1/2e07e6ed/66560=5223000, op2/0a47a768/50048=3738000, op2/2e07e6ed/50048=3723000, op3/0a47a768/16480=3322000, op3/2e07e6ed/16480=2695000, op4/0a47a768/33184=3283000, op4/2e07e6ed/33184=2601000, op5/0a47a768/33184=2881000, op5/2e07e6ed/33184=2567000], selftest 2567000, mldsa44 49000, mldsa65 68000}]
 15 Oct 22:41:28 | PQZ-START sha256=12495e8b9cdcf95b932761bae8843e499ee7b4bdd2b240869ed461fc7a257d87 selftest=ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205 addresses=PQZ:0x5caa500000000000000000000000000000000f01,MLDSA44:0x5caa500000000000000000000000000000000012,MLDSA65:0x5caa500000000000000000000000000000000013 schedules=[{ts 0, rows 12 [op1/0a47a768/83072=4225000, op1/0a47a768/66560=4021000, op1/2e07e6ed/83072=5409000, op1/2e07e6ed/66560=5223000, op2/0a47a768/50048=3738000, op2/2e07e6ed/50048=3723000, op3/0a47a768/16480=3322000, op3/2e07e6ed/16480=2695000, op4/0a47a768/33184=3283000, op4/2e07e6ed/33184=2601000, op5/0a47a768/33184=2881000, op5/2e07e6ed/33184=2567000], selftest 2567000, mldsa44 49000, mldsa65 68000}] 
@@ -116,17 +116,17 @@ ok    genesis hash 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d6551932
 ok    OP_SELFTEST eth_call = ed910a2c…d205 (got 0xed910a2cf4…)
 probe overhead (identity precompile) = 22 gas
 Traceback (most recent call last):
-  File "/home/ha/work/ainative/scaas/pqz-core/nethermind/chain/e2e.py", line 439, in <module>
+  File "<repo>/pqz-core/nethermind/chain/e2e.py", line 439, in <module>
     main()
-  File "/home/ha/work/ainative/scaas/pqz-core/nethermind/chain/e2e.py", line 432, in main
+  File "<repo>/pqz-core/nethermind/chain/e2e.py", line 432, in main
     {"head": cmd_head, "before": cmd_before, "probe": cmd_probe, "stock": cmd_stock, "e2e": cmd_e2e,
-  File "/home/ha/work/ainative/scaas/pqz-core/nethermind/chain/e2e.py", line 217, in cmd_probe
+  File "<repo>/pqz-core/nethermind/chain/e2e.py", line 217, in cmd_probe
     rows = [r for r in corpus() if r["kind"] in ("honest", "flip", "fee0", "selftest")]
                        ^^^^^^^^
-  File "/home/ha/work/ainative/scaas/pqz-core/nethermind/chain/e2e.py", line 105, in corpus
+  File "<repo>/pqz-core/nethermind/chain/e2e.py", line 105, in corpus
     with open(os.path.join(ROOT, "pqz-core/nethermind/bin/corpus.jsonl")) as f:
          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-FileNotFoundError: [Errno 2] No such file or directory: '/home/ha/work/ainative/scaas/pqz-core/nethermind/bin/corpus.jsonl'
+FileNotFoundError: [Errno 2] No such file or directory: '<repo>/pqz-core/nethermind/bin/corpus.jsonl'
 probe exit 1
 ### probes (rerun with bin/corpus.jsonl from the p6f worktree, sha256 e81b7695563b1f10…) 2026-10-15T22:43:30Z
 ok    eth_chainId = 0x1dc6
@@ -247,17 +247,17 @@ probe exit 0
 ### e2e (key = 0x…05, address 0xe11BA2b4…882d, funded in genesis; the well-known test key 5) 2026-10-15T22:44:00Z
 sender 0xe1ab8145f7e55dc933d51a18c793f901a3a0b276 nonce 0
 Traceback (most recent call last):
-  File "/home/ha/work/ainative/scaas/pqz-core/nethermind/chain/e2e.py", line 439, in <module>
+  File "<repo>/pqz-core/nethermind/chain/e2e.py", line 439, in <module>
     main()
-  File "/home/ha/work/ainative/scaas/pqz-core/nethermind/chain/e2e.py", line 432, in main
+  File "<repo>/pqz-core/nethermind/chain/e2e.py", line 432, in main
     {"head": cmd_head, "before": cmd_before, "probe": cmd_probe, "stock": cmd_stock, "e2e": cmd_e2e,
-  File "/home/ha/work/ainative/scaas/pqz-core/nethermind/chain/e2e.py", line 302, in cmd_e2e
+  File "<repo>/pqz-core/nethermind/chain/e2e.py", line 302, in cmd_e2e
     r = receipt(s.send(None, "0x" + code, 2_000_000))
                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ha/work/ainative/scaas/pqz-core/nethermind/chain/e2e.py", line 279, in send
+  File "<repo>/pqz-core/nethermind/chain/e2e.py", line 279, in send
     return rpc("eth_sendRawTransaction", ["0x" + raw.hex()])
            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ha/work/ainative/scaas/pqz-core/nethermind/chain/e2e.py", line 73, in rpc
+  File "<repo>/pqz-core/nethermind/chain/e2e.py", line 73, in rpc
     raise RuntimeError(f"{method}: {r['error']}")
 RuntimeError: eth_sendRawTransaction: {'code': -32000, 'message': 'InsufficientFunds, Balance is zero, cannot pay gas'}
 e2e exit 1

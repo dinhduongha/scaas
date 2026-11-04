@@ -5,10 +5,10 @@ INFO: Running with entropic power schedule (0xFF, 100).
 INFO: Seed: 2417876080
 INFO: Loaded 1 modules   (25713 inline 8-bit counters): 25713 [0x6550120afcb8, 0x6550120b6129), 
 INFO: Loaded 1 PC tables (25713 PCs): 25713 [0x6550120b6130,0x65501211a840), 
-INFO:        0 files found in /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/build/fuzz-n2304-kmax4096/work/mutate
+INFO:        0 files found in <repo>/pqz-core/build/fuzz-n2304-kmax4096/work/mutate
 INFO:      483 files found in corpus/mutate
 INFO:        0 files found in regress/mutate
-INFO:      204 files found in /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/build/fuzz-n2304-kmax4096/seeds/mutate
+INFO:      204 files found in <repo>/pqz-core/build/fuzz-n2304-kmax4096/seeds/mutate
 INFO: seed corpus: files: 687 min: 1b max: 147b total: 9484b rss: 514Mb
 #512	pulse  cov: 2031 ft: 3587 corp: 172/1421b exec/s: 32 rss: 695Mb
 #688	INITED cov: 2326 ft: 4162 corp: 216/2775b exec/s: 25 rss: 695Mb
@@ -98,4 +98,4 @@ MERGE-OUTER: consumed 0Mb (514Mb rss) to parse the control file
 MERGE-OUTER: 244 new files with 4244 new features added; 2338 new coverage edges
 pqz-fuzz summary (mutate): 0 inputs checked, 0 decoded (0 op 7), 0 valid (= unmodified honest; mutate skips those), 0 differential SV = generic (0 op 7), 0 PQZL proof re-encodings equal, PQZL core: Rust
 [merge rc=0]
-corpus/mutate: 244 inputs (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/build/fuzz-n2304-kmax4096/corpus/mutate), 3717 B (merged set 244 inputs, 3717 B)
+corpus/mutate: 244 inputs (<repo>/pqz-core/build/fuzz-n2304-kmax4096/corpus/mutate), 3717 B (merged set 244 inputs, 3717 B)

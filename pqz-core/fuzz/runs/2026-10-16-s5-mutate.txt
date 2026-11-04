@@ -6,10 +6,10 @@ INFO: Running with entropic power schedule (0xFF, 100).
 INFO: Seed: 2771688034
 INFO: Loaded 1 modules   (26829 inline 8-bit counters): 26829 [0x57fe549ab490, 0x57fe549b1d5d), 
 INFO: Loaded 1 PC tables (26829 PCs): 26829 [0x57fe549b1d60,0x57fe54a1aa30), 
-INFO:      250 files found in /home/ha/work/ainative/scaas/.claude/worktrees/s5/pqz-core/build/fuzz/work/mutate
+INFO:      250 files found in <repo>/pqz-core/build/fuzz/work/mutate
 INFO:      350 files found in corpus/mutate
 INFO:        0 files found in regress/mutate
-INFO:      176 files found in /home/ha/work/ainative/scaas/.claude/worktrees/s5/pqz-core/build/fuzz/seeds/mutate
+INFO:      176 files found in <repo>/pqz-core/build/fuzz/seeds/mutate
 INFO: seed corpus: files: 776 min: 1b max: 130b total: 15026b rss: 482Mb
 #512	pulse  cov: 1894 ft: 3728 corp: 216/1888b exec/s: 56 rss: 720Mb
 #777	INITED cov: 2263 ft: 4607 corp: 346/6925b exec/s: 32 rss: 720Mb
@@ -19,7 +19,7 @@ INFO: seed corpus: files: 776 min: 1b max: 130b total: 15026b rss: 482Mb
 #1024	pulse  cov: 2264 ft: 4614 corp: 348/7008b lim: 137 exec/s: 34 rss: 720Mb
 #1028	NEW    cov: 2264 ft: 4627 corp: 349/7018b lim: 137 exec/s: 33 rss: 720Mb L: 10/130 MS: 3 ShuffleBytes-ShuffleBytes-CopyPart-
 #1164	REDUCE cov: 2264 ft: 4627 corp: 349/7017b lim: 137 exec/s: 33 rss: 720Mb L: 6/130 MS: 1 EraseBytes-
-	NEW_FUNC[1/1]: 0x57fe54848078 in _cmp_spolyvec /home/ha/work/ainative/scaas/.claude/worktrees/s5/pqz-core/ffi/../lazer/spolyvec.c:13
+	NEW_FUNC[1/1]: 0x57fe54848078 in _cmp_spolyvec <repo>/pqz-core/ffi/../lazer/spolyvec.c:13
 #1174	NEW    cov: 2274 ft: 4672 corp: 350/7038b lim: 137 exec/s: 9 rss: 720Mb L: 21/130 MS: 5 InsertByte-CrossOver-CopyPart-InsertByte-CopyPart-
 #1175	NEW    cov: 2274 ft: 4674 corp: 351/7062b lim: 137 exec/s: 9 rss: 720Mb L: 24/130 MS: 1 ChangeByte-
 #1188	NEW    cov: 2274 ft: 4677 corp: 352/7067b lim: 137 exec/s: 9 rss: 720Mb L: 5/130 MS: 3 ChangeBinInt-ChangeBit-ShuffleBytes-
@@ -32,7 +32,7 @@ INFO: seed corpus: files: 776 min: 1b max: 130b total: 15026b rss: 482Mb
 #1311	NEW    cov: 2274 ft: 4693 corp: 358/7211b lim: 137 exec/s: 9 rss: 720Mb L: 63/130 MS: 1 CopyPart-
 #1374	NEW    cov: 2278 ft: 4704 corp: 359/7221b lim: 137 exec/s: 10 rss: 720Mb L: 10/130 MS: 3 ChangeBit-InsertByte-CrossOver-
 #1375	NEW    cov: 2278 ft: 4731 corp: 360/7231b lim: 137 exec/s: 10 rss: 720Mb L: 10/130 MS: 1 CMP- DE: "\002\000\000\000"-
-	NEW_FUNC[1/1]: 0x57fe54664748 in parse_disc /home/ha/work/ainative/scaas/.claude/worktrees/s5/pqz-core/ffi/../src/pqz_rel.c:830
+	NEW_FUNC[1/1]: 0x57fe54664748 in parse_disc <repo>/pqz-core/ffi/../src/pqz_rel.c:830
 #1574	NEW    cov: 2287 ft: 4808 corp: 361/7234b lim: 137 exec/s: 11 rss: 720Mb L: 3/130 MS: 4 ChangeBit-ShuffleBytes-EraseBytes-InsertByte-
 #1585	NEW    cov: 2287 ft: 4810 corp: 362/7297b lim: 137 exec/s: 11 rss: 720Mb L: 63/130 MS: 1 ShuffleBytes-
 #1602	NEW    cov: 2287 ft: 4811 corp: 363/7368b lim: 137 exec/s: 11 rss: 720Mb L: 71/130 MS: 2 PersAutoDict-EraseBytes- DE: "\002\000\000\000"-
@@ -50,10 +50,10 @@ INFO: seed corpus: files: 776 min: 1b max: 130b total: 15026b rss: 482Mb
 #2459	NEW    cov: 2288 ft: 4829 corp: 370/7659b lim: 137 exec/s: 14 rss: 720Mb L: 21/137 MS: 4 CopyPart-InsertByte-CrossOver-InsertByte-
 #2496	REDUCE cov: 2288 ft: 4829 corp: 370/7635b lim: 137 exec/s: 14 rss: 720Mb L: 50/137 MS: 2 ShuffleBytes-EraseBytes-
 Slowest unit: 11 s:
-artifact_prefix='/home/ha/work/ainative/scaas/.claude/worktrees/s5/pqz-core/build/fuzz/crash-mutate-'; Test unit written to /home/ha/work/ainative/scaas/.claude/worktrees/s5/pqz-core/build/fuzz/crash-mutate-slow-unit-2a11dcbc493e509d14785e02186f6abca1bcd548
+artifact_prefix='<repo>/pqz-core/build/fuzz/crash-mutate-'; Test unit written to <repo>/pqz-core/build/fuzz/crash-mutate-slow-unit-2a11dcbc493e509d14785e02186f6abca1bcd548
 Base64: z1AGAP///////////////////////////////////////////////////////////////////////////////////////////////////////////2A=
-	NEW_FUNC[1/112]: 0x57fe54647668 in unlink_blk /home/ha/work/ainative/scaas/.claude/worktrees/s5/pqz-core/ffi/../src/pqz_arena.c:95
-	NEW_FUNC[2/112]: 0x57fe54648188 in push /home/ha/work/ainative/scaas/.claude/worktrees/s5/pqz-core/ffi/../src/pqz_arena.c:84
+	NEW_FUNC[1/112]: 0x57fe54647668 in unlink_blk <repo>/pqz-core/ffi/../src/pqz_arena.c:95
+	NEW_FUNC[2/112]: 0x57fe54648188 in push <repo>/pqz-core/ffi/../src/pqz_arena.c:84
 #2651	NEW    cov: 3427 ft: 6110 corp: 371/7721b lim: 137 exec/s: 14 rss: 952Mb L: 86/137 MS: 5 ShuffleBytes-ChangeByte-ChangeBinInt-InsertRepeatedBytes-CopyPart-
 #2652	NEW    cov: 3427 ft: 6111 corp: 372/7740b lim: 137 exec/s: 14 rss: 952Mb L: 19/137 MS: 1 ChangeByte-
 #2653	NEW    cov: 3427 ft: 6112 corp: 373/7746b lim: 137 exec/s: 14 rss: 952Mb L: 6/137 MS: 1 ChangeBit-
@@ -529,7 +529,7 @@ Base64: z1AGAP//////////////////////////////////////////////////////////////////
 #84514	REDUCE cov: 3504 ft: 7981 corp: 544/11960b lim: 207 exec/s: 26 rss: 952Mb L: 6/143 MS: 1 EraseBytes-
 #84577	NEW    cov: 3504 ft: 7983 corp: 545/11998b lim: 207 exec/s: 26 rss: 952Mb L: 38/143 MS: 3 CopyPart-ChangeBit-CopyPart-
 Slowest unit: 15 s:
-artifact_prefix='/home/ha/work/ainative/scaas/.claude/worktrees/s5/pqz-core/build/fuzz/crash-mutate-'; Test unit written to /home/ha/work/ainative/scaas/.claude/worktrees/s5/pqz-core/build/fuzz/crash-mutate-slow-unit-eca42bbf76a14cc51824bb640dd6d46f0d55a5ef
+artifact_prefix='<repo>/pqz-core/build/fuzz/crash-mutate-'; Test unit written to <repo>/pqz-core/build/fuzz/crash-mutate-slow-unit-eca42bbf76a14cc51824bb640dd6d46f0d55a5ef
 Base64: egVdACtAAAUA+QAQOv34AKUAAAAAAANkAHoR
 #84901	NEW    cov: 3504 ft: 8100 corp: 546/12025b lim: 207 exec/s: 26 rss: 1048Mb L: 27/143 MS: 4 EraseBytes-ShuffleBytes-ChangeBit-ChangeBinInt-
 #85158	REDUCE cov: 3504 ft: 8100 corp: 546/12022b lim: 207 exec/s: 26 rss: 1048Mb L: 6/143 MS: 2 ChangeBit-EraseBytes-

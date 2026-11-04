@@ -67,7 +67,7 @@
    Compiling bip39 v2.2.2
    Compiling sha2 v0.10.9
    Compiling hex v0.4.3
-   Compiling zether-prover v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/no7702/clients/zether-prover)
+   Compiling zether-prover v0.1.0 (<repo>/clients/zether-prover)
     Finished `release` profile [optimized] target(s) in 38.74s
 bls12381: proveTransfer 657 ms in wasm
 wasm smoke: 9 checks passed

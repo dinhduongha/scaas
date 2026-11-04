@@ -1,9 +1,9 @@
 # build.sh near + cargo test -p scaas-near-integration --test dex (Task 8 RED: types only, no entries) at commit e6986995 + the Task 8 tests
-   Compiling scaas-near-common v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/common)
-   Compiling scaas-near-token v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/token)
-   Compiling scaas-near-dex v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/dex)
-   Compiling scaas-near-spike-p256 v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/spike-p256)
-   Compiling scaas-near-integration v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/integration)
+   Compiling scaas-near-common v0.1.0 (<repo>/smartcontracts/near/common)
+   Compiling scaas-near-token v0.1.0 (<repo>/smartcontracts/near/token)
+   Compiling scaas-near-dex v0.1.0 (<repo>/smartcontracts/near/dex)
+   Compiling scaas-near-spike-p256 v0.1.0 (<repo>/smartcontracts/near/spike-p256)
+   Compiling scaas-near-integration v0.1.0 (<repo>/smartcontracts/near/integration)
     Finished `test` profile [unoptimized + debuginfo] target(s) in 7.05s
      Running tests/dex.rs (target/debug/deps/dex-a6c004a01597429e)
 

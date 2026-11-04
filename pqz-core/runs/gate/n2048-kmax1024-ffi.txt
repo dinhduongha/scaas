@@ -32,7 +32,7 @@ test verify_only_arena ... ok
 test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 76.23s
 test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 C core in this build: none (feature pqzl-c off, pqzl-rust on: build.rs compiles no C)
-$ readelf -d /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/target/n2048-kmax1024/release/libpqz_ffi.so | grep NEEDED
+$ readelf -d <repo>/pqz-core/ffi/target/n2048-kmax1024/release/libpqz_ffi.so | grep NEEDED
  0x0000000000000001 (NEEDED)             Shared library: [libgcc_s.so.1]
  0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
  0x0000000000000001 (NEEDED)             Shared library: [ld-linux-x86-64.so.2]
@@ -42,14 +42,14 @@ libm-style imports: 0
 c_abi: selftest 37c45f201c3f7a8f4dd3c84df85176f85f574d31a0209435761b1056519bfa9d
 c_abi: ok (0 failures)
 # wasm32: the verify-only lib, then the prove harness (wasm/) and the digest diff against native
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/pqzl/rust)
-   Compiling pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/stmt)
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi)
-   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/pqzh/ligero)
-$ sha256sum /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/target/n2048-kmax1024-wasm/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm
-75dcdfbfb2f40bb0fa7b83f3c8af00160fdb0a20da4239e7041ec33382019955  /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/target/n2048-kmax1024-wasm/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm
+   Compiling pqzl v0.1.0 (<repo>/pqz-core/pqzl/rust)
+   Compiling pqz-stmt v0.1.0 (<repo>/pqz-core/stmt)
+   Compiling pqz-ffi v0.1.0 (<repo>/pqz-core/ffi)
+   Compiling pqzh-ligero v0.1.0 (<repo>/pqz-core/pqzh/ligero)
+$ sha256sum <repo>/pqz-core/ffi/target/n2048-kmax1024-wasm/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm
+75dcdfbfb2f40bb0fa7b83f3c8af00160fdb0a20da4239e7041ec33382019955  <repo>/pqz-core/ffi/target/n2048-kmax1024-wasm/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm
 wasm bytes 952046
-$ llvm-nm-18 --undefined-only /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/target/n2048-kmax1024-wasm/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm (imports)
+$ llvm-nm-18 --undefined-only <repo>/pqz-core/ffi/target/n2048-kmax1024-wasm/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm (imports)
 wasm run 70330 ms, memory 170262528 B
 native = wasm32: 29 lines equal
 {"sys": "PQZH", "form": "TransferMulti2_0", "m": 2, "auditor": false, "stmt_bytes": 83072, "input_bytes": 314685, "proof_bound": 235470, "worst_input_bytes": 318547, "prove_ms": 979, "proof_bytes": 231608, "direct": {"n": 200, "p50_ms": 12.040, "p99_ms": 20.120, "max_ms": 27.717}, "rust": {"n": 200, "p50_ms": 11.082, "p99_ms": 14.788, "max_ms": 15.388}, "c_abi": {"n": 200, "p50_ms": 11.971, "p99_ms": 19.999, "max_ms": 26.412}, "adversarial": {"n": 200, "p50_ms": 0.763, "p99_ms": 1.252, "max_ms": 1.258}, "decode": {"n": 200, "p50_ms": 0.005, "p99_ms": 0.009, "max_ms": 0.018}}

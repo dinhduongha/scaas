@@ -1,20 +1,20 @@
 # verify-only build (no prove, no test-hooks): libpqz_ffi.so, and the C core archive if build.rs compiled one
 $ cargo build --release --offline --no-default-features --features pqzl-c,set-n2560-kmax16384
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi)
+   Compiling pqz-ffi v0.1.0 (<repo>/pqz-core/ffi)
     Finished `release` profile [optimized + debuginfo] target(s) in 1.50s
 [rc=0]
 test hooks in the production cdylib (must be 0): 0
-$ ../pqzl/check_symbols.sh /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/target/n2560-kmax16384-c/release/build/pqz-ffi-49bdcd1fe89bf1e6/out/libpqz.a
+$ ../pqzl/check_symbols.sh <repo>/pqz-core/ffi/target/n2560-kmax16384-c/release/build/pqz-ffi-49bdcd1fe89bf1e6/out/libpqz.a
 symbols ok: only memcpy memset __stack_chk_fail __stack_pointer outside the library objects, no test hook
 [rc=0]
-$ sha256sum /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/target/n2560-kmax16384-c/release/libpqz_ffi.so
-9ee8cb7289c3088ddd4f9ca70a7b66a8f4b1769744cfdf7c2d3f6a889a6280e1  /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/target/n2560-kmax16384-c/release/libpqz_ffi.so
+$ sha256sum <repo>/pqz-core/ffi/target/n2560-kmax16384-c/release/libpqz_ffi.so
+9ee8cb7289c3088ddd4f9ca70a7b66a8f4b1769744cfdf7c2d3f6a889a6280e1  <repo>/pqz-core/ffi/target/n2560-kmax16384-c/release/libpqz_ffi.so
 [rc=0]
-$ readelf -d /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/target/n2560-kmax16384-c/release/libpqz_ffi.so | grep NEEDED
+$ readelf -d <repo>/pqz-core/ffi/target/n2560-kmax16384-c/release/libpqz_ffi.so | grep NEEDED
  0x0000000000000001 (NEEDED)             Shared library: [libgcc_s.so.1]
  0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
  0x0000000000000001 (NEEDED)             Shared library: [ld-linux-x86-64.so.2]
-$ nm -D --undefined-only /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/target/n2560-kmax16384-c/release/libpqz_ffi.so
+$ nm -D --undefined-only <repo>/pqz-core/ffi/target/n2560-kmax16384-c/release/libpqz_ffi.so
                  U abort@GLIBC_2.2.5
                  U bcmp@GLIBC_2.2.5
                  U calloc@GLIBC_2.2.5
@@ -86,7 +86,7 @@ $ nm -D --undefined-only /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/
                  U write@GLIBC_2.2.5
                  U writev@GLIBC_2.2.5
                  U __xpg_strerror_r@GLIBC_2.3.4
-$ nm -D --defined-only /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/target/n2560-kmax16384-c/release/libpqz_ffi.so | grep ' T '
+$ nm -D --defined-only <repo>/pqz-core/ffi/target/n2560-kmax16384-c/release/libpqz_ffi.so | grep ' T '
 0000000000071110 T pqz_max_input
 0000000000071120 T pqz_precompile
 # GMP / MPFR / HEXL names or strings (glic/absence.sh's pattern), libm and float imports
@@ -94,9 +94,9 @@ symbols /gmp|mpfr|hexl/i: 0
 strings /gmp|mpfr|hexl/i: 0
 libm-style imports: 0
 # C smoke test against pqz_ffi.h
-$ clang -std=c11 -Wall -Wextra -DPQZ_SET_MAX_INPUT=524288 -o /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/target/n2560-kmax16384-c/run/c_abi tests/c_abi.c -L/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/target/n2560-kmax16384-c/release -lpqz_ffi -Wl,-rpath,/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/target/n2560-kmax16384-c/release
+$ clang -std=c11 -Wall -Wextra -DPQZ_SET_MAX_INPUT=524288 -o <repo>/pqz-core/ffi/target/n2560-kmax16384-c/run/c_abi tests/c_abi.c -L<repo>/pqz-core/ffi/target/n2560-kmax16384-c/release -lpqz_ffi -Wl,-rpath,<repo>/pqz-core/ffi/target/n2560-kmax16384-c/release
 [rc=0]
-$ /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/target/n2560-kmax16384-c/run/c_abi
+$ <repo>/pqz-core/ffi/target/n2560-kmax16384-c/run/c_abi
 c_abi: selftest fb14244dbd6a4ca4c44f673ef878937d2437f164246260ef45f427a9f98de1cb
 c_abi: ok (0 failures)
 [rc=0]

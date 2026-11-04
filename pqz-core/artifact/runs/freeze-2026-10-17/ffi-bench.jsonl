@@ -1,4 +1,4 @@
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/pqz-core/ffi)
+   Compiling pqz-ffi v0.1.0 (<repo>/pqz-core/ffi)
     Finished `release` profile [optimized + debuginfo] target(s) in 1.85s
      Running `target/release/examples/ffi_bench 200`
 {"sys": "PQZL", "form": "Transfer", "proof_bytes": 42759, "direct": {"n": 200, "p50_ms": 8.257, "p99_ms": 12.230, "max_ms": 15.974}, "rust": {"n": 200, "p50_ms": 8.360, "p99_ms": 10.966, "max_ms": 14.802}, "c_abi": {"n": 200, "p50_ms": 8.221, "p99_ms": 10.159, "max_ms": 10.559}, "adversarial": {"n": 200, "p50_ms": 8.541, "p99_ms": 11.831, "max_ms": 13.732}, "decode": {"n": 200, "p50_ms": 0.003, "p99_ms": 0.006, "max_ms": 0.011}}

@@ -1,4 +1,4 @@
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8b-fix/pqz-core/pqzl/rust)
+   Compiling pqzl v0.1.0 (<repo>/pqz-core/pqzl/rust)
 warning: unused import: `std::path::PathBuf`
  --> tests/oracle_codec.rs:9:5
   |

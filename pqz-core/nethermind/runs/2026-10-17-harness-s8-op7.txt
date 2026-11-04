@@ -1,6 +1,6 @@
 # P6f harness (s8-op7), 2026-10-17T00:59:00Z, image nethermind/nethermind:1.39.0@sha256:8af90a30989c16cb15e087bd250c623c98585e490a25950a75642460d497eae6, commit b8d95cd
 runtime .NET 10.0.9, Ubuntu 26.04 LTS, MLDsa.IsSupported=True
-harness: ffi /home/ha/work/ainative/scaas/.claude/worktrees/s8/pqz-core/ffi/target/release/libpqz_ffi.so sha256 d87f3ea5e3a557e0f0906ba57abcc3bac5085387e67c1ec03dffa8cd8d0a57b7; corpus 775 PQZ inputs (43 valid), 38 ML-DSA inputs (7 valid); 8 threads (1 MiB stacks) + 1 GC-pressure thread; 60 min; seed 7622
+harness: ffi <repo>/pqz-core/ffi/target/release/libpqz_ffi.so sha256 d87f3ea5e3a557e0f0906ba57abcc3bac5085387e67c1ec03dffa8cd8d0a57b7; corpus 775 PQZ inputs (43 valid), 38 ML-DSA inputs (7 valid); 8 threads (1 MiB stacks) + 1 GC-pressure thread; 60 min; seed 7622
 elapsed 60.0 min; inputs 4577772 (1272/s); per thread [575425, 571318, 571689, 568710, 571602, 573157, 573365, 572506]
   mldsa44 01 unedited-valid            9096
   mldsa44 gen bitflips                 57245

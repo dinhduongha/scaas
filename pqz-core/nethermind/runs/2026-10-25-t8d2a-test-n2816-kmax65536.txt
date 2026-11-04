@@ -1,18 +1,18 @@
 # P6f tests in Ubuntu 26.04.1 LTS, OpenSSL 3.5.5 27 Jan 2026 (Library: OpenSSL 3.5.5 27 Jan 2026), SDK 10.0.402, 2026-10-25T00:56:13Z
 An issue was encountered verifying workloads. For more information, run "dotnet workload update".
   Determining projects to restore...
-  Restored /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d2a/pqz-core/nethermind/Nethermind.Pqz/Nethermind.Pqz.csproj (in 69 ms).
-  Restored /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d2a/pqz-core/nethermind/Harness/Harness.csproj (in 69 ms).
-  Restored /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d2a/pqz-core/nethermind/Nethermind.Pqz.Test/Nethermind.Pqz.Test.csproj (in 1.59 sec).
-  Nethermind.Pqz -> /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d2a/pqz-core/nethermind/Nethermind.Pqz/bin/Release/net10.0/Nethermind.Pqz.dll
-  Harness -> /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d2a/pqz-core/nethermind/Harness/bin/Release/net10.0/Harness.dll
-  Nethermind.Pqz.Test -> /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d2a/pqz-core/nethermind/Nethermind.Pqz.Test/bin/Release/net10.0/Nethermind.Pqz.Test.dll
-Test run for /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d2a/pqz-core/nethermind/Nethermind.Pqz.Test/bin/Release/net10.0/Nethermind.Pqz.Test.dll (.NETCoreApp,Version=v10.0)
+  Restored <repo>/pqz-core/nethermind/Nethermind.Pqz/Nethermind.Pqz.csproj (in 69 ms).
+  Restored <repo>/pqz-core/nethermind/Harness/Harness.csproj (in 69 ms).
+  Restored <repo>/pqz-core/nethermind/Nethermind.Pqz.Test/Nethermind.Pqz.Test.csproj (in 1.59 sec).
+  Nethermind.Pqz -> <repo>/pqz-core/nethermind/Nethermind.Pqz/bin/Release/net10.0/Nethermind.Pqz.dll
+  Harness -> <repo>/pqz-core/nethermind/Harness/bin/Release/net10.0/Harness.dll
+  Nethermind.Pqz.Test -> <repo>/pqz-core/nethermind/Nethermind.Pqz.Test/bin/Release/net10.0/Nethermind.Pqz.Test.dll
+Test run for <repo>/pqz-core/nethermind/Nethermind.Pqz.Test/bin/Release/net10.0/Nethermind.Pqz.Test.dll (.NETCoreApp,Version=v10.0)
 A total of 1 test files matched the specified pattern.
 NUnit Adapter 5.0.0.0: Test execution started
-Running all tests in /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d2a/pqz-core/nethermind/Nethermind.Pqz.Test/bin/Release/net10.0/Nethermind.Pqz.Test.dll
+Running all tests in <repo>/pqz-core/nethermind/Nethermind.Pqz.Test/bin/Release/net10.0/Nethermind.Pqz.Test.dll
    NUnit3TestExecutor discovered 46 of 46 NUnit test cases using Current Discovery mode, Non-Explicit run
-libpqz_ffi.so: /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d2a/pqz-core/ffi/target/neth-n2816-kmax65536/release/libpqz_ffi.so sha256 5ca077ea596ee8174332ad8365b23c0c651bee8d1589bbdd9013224884bcc172
+libpqz_ffi.so: <repo>/pqz-core/ffi/target/neth-n2816-kmax65536/release/libpqz_ffi.so sha256 5ca077ea596ee8174332ad8365b23c0c651bee8d1589bbdd9013224884bcc172
 Nethermind.Pqz.dll references: Autofac, Nethermind.Api, Nethermind.Blockchain, Nethermind.Core, Nethermind.Evm, Nethermind.Init, Nethermind.Logging, Nethermind.Specs, System.Collections, System.Collections.Immutable, System.Console, System.Linq, System.Runtime, System.Runtime.InteropServices, System.Security.Cryptography, System.Text.Json, System.Threading
 ACVP ML-DSA sigVer: external 30 (of them 2 with the empty context also through the precompile), internal via VerifyMu 30, skipped 0: []
 MLDsa.IsSupported=True runtime=10.0.13 os=Ubuntu 26.04.1 LTS

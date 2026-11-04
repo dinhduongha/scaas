@@ -1,6 +1,6 @@
 #!/bin/sh
 # P6f D10 (as adapted, see README §Copy): the throwaway copy of chain 7622 under $COPY (default <repo>/scratchpad/
-# p6f-copy, git-ignored). The live directory /home/dockers/mba-chain-nethermind is never read here: the copy is a
+# p6f-copy, git-ignored). The live directory ~dockers/mba-chain-nethermind is never read here: the copy is a
 # replica — the live chainspec's parameters (Nethermind.Pqz.Test/chainspecs/genesis-7622.json, the live params,
 # engine and genesis header) with a throwaway signer key, whose history the stock image produces first.
 #   copy.sh init                       fresh key, password, genesis.stock.json, configs; empty data dirs

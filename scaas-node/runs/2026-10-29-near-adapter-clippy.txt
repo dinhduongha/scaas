@@ -282,6 +282,6 @@
    Compiling sqlx-macros-core v0.8.6
    Compiling sqlx-macros v0.8.6
     Checking sqlx v0.8.6
-    Checking scaas-node v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/scaas-node)
+    Checking scaas-node v0.1.0 (<repo>/scaas-node)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 41.19s
 rc=0

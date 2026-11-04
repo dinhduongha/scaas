@@ -1,6 +1,6 @@
-   Compiling pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/pqz-core/stmt)
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/pqz-core/ffi)
-   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/pqz-core/pqzh/ligero)
+   Compiling pqz-stmt v0.1.0 (<repo>/pqz-core/stmt)
+   Compiling pqz-ffi v0.1.0 (<repo>/pqz-core/ffi)
+   Compiling pqzh-ligero v0.1.0 (<repo>/pqz-core/pqzh/ligero)
     Finished `release` profile [optimized + debuginfo] target(s) in 19.50s
      Running unittests src/lib.rs (target/release/deps/pqz_ffi-e37830120302f32d)
 

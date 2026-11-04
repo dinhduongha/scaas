@@ -57,12 +57,12 @@ mutation probe **39/39** killed.
 
 ## Global Constraints
 
-- Paths relative to `/home/ha/work/ainative/scaas`; worktree `.claude/worktrees/p5` on branch `p5-node-abi` from `main`.
+- Paths relative to `<repo>`; worktree `.claude/worktrees/p5` on branch `p5-node-abi` from `main`.
   forge in `smartcontracts/evm` of the worktree: `lib/` is not tracked — `mkdir lib`, copy
-  `smartcontracts/evm/lib/forge-std` into it, symlink `lib/openzeppelin-contracts → /home/ha/work/blockchain/openzeppelin-contracts`.
+  `smartcontracts/evm/lib/forge-std` into it, symlink `lib/openzeppelin-contracts → ~/work/blockchain/openzeppelin-contracts`.
   clientkeys: symlink `node_modules` from the main checkout (never `git add` it). Heavy commands (cargo, forge, anvil,
   npm) only through `scripts/capped`, one at a time. `/usr/bin/grep`; in worktrees a hook blocks bare `git`: use
-  `/usr/bin/git`. Rust: `CARGO_TARGET_DIR=/home/ha/work/ainative/scaas/scaas-node/target` for the node.
+  `/usr/bin/git`. Rust: `CARGO_TARGET_DIR=<repo>/scaas-node/target` for the node.
 - Gates: `forge build` then `forge test` in `smartcontracts/evm`; size gate `forge build src --sizes --json >
   /tmp/sizes.json; python3 scripts/size_gate.py /tmp/sizes.json smartcontracts/evm/size-baseline.json`; in `scaas-node`
   `cargo test --lib`, `cargo test --test mesh_vectors --test fuzz`, `cargo clippy --all-targets -- -D warnings`,
@@ -7196,8 +7196,8 @@ refusals on a real chain (a `call` job `transfer` on the token, a meta-tx to an 
   import sys
 
   NODE = sys.argv[1]
-  CAPPED = '/home/ha/work/ainative/scaas/scripts/capped'
-  ENV = dict(os.environ, CARGO_TARGET_DIR='/home/ha/work/ainative/scaas/scaas-node/target')
+  CAPPED = '<repo>/scripts/capped'
+  ENV = dict(os.environ, CARGO_TARGET_DIR='<repo>/scaas-node/target')
 
   M = [
       # guard.rs: call table and target rules (PAY-FIX2, NODE-JOB-01/-19, NODE-GW-07)

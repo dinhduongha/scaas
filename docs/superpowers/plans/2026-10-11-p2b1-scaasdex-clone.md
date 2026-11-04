@@ -23,7 +23,7 @@ are P2b-2; the exchange path is P2c.
 
 ## Global Constraints
 
-- Paths relative to `/home/ha/work/ainative/scaas`; forge in `smartcontracts/evm` of worktree `.claude/worktrees/p2b`
+- Paths relative to `<repo>`; forge in `smartcontracts/evm` of worktree `.claude/worktrees/p2b`
   (branch `p2b-dex`). Heavy commands only through `scripts/capped`, one at a time. `/usr/bin/grep`, `rtk proxy git diff`.
 - Namespace `scaas.dex` = `0xb144ea5327f344ea7e3b34dd1898f534c8ce28f9f54d0d89a1b78f8fcf7dac00`.
 - `PPM = 1_000_000`; `dexFee = ⌈receiveFill·fee/10⁶⌉` once per order per settlement on its aggregate receive;

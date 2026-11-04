@@ -1,4 +1,4 @@
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d2a/pqz-core/ffi)
+   Compiling pqz-ffi v0.1.0 (<repo>/pqz-core/ffi)
     Finished `release` profile [optimized + debuginfo] target(s) in 8.91s
      Running unittests src/lib.rs (target/n2560-kmax16384/release/deps/pqz_ffi-487ef755736db589)
 

@@ -14,7 +14,7 @@ set -eu
 HERE=$(cd "$(dirname "$0")" && pwd)
 N=$(cd "$HERE/.." && pwd)
 C=$N/chain
-L=/home/dockers/mba-chain-nethermind
+L=${SCAAS_TESTNET_DIR:?set SCAAS_TESTNET_DIR to the SCaaS testnet stack directory}
 IMG=scaas/nethermind-pqz:2.2.0-pqz3
 G=0xa17faef497fa29ec90603969dad0176ea18fd1cc2eaf0f9f4fa2dacc9c952ac2  # predicted (throwaway run with the live genesis)
 KEY=0x0000000000000000000000000000000000000000000000000000000000000004 # test key 0x…04, funded in genesis

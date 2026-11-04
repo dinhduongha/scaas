@@ -9,7 +9,7 @@
     Checking digest v0.10.7
     Checking keccak v0.1.6
     Checking sha3 v0.10.8
-    Checking pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/anonh/pqz-core/stmt)
-    Checking pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/anonh/pqz-core/pqzh/ligero)
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/anonh/pqz-core/ffi)
+    Checking pqz-stmt v0.1.0 (<repo>/pqz-core/stmt)
+    Checking pqzh-ligero v0.1.0 (<repo>/pqz-core/pqzh/ligero)
+   Compiling pqz-ffi v0.1.0 (<repo>/pqz-core/ffi)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 13.72s

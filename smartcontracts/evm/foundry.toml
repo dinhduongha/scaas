@@ -17,6 +17,11 @@ isolate = true
 # 2^33 (Foundry's default is 2^30): the heavy vector tests (Ligero, FN-DSA, FROST, PQZ) run many isolated calls, each paying
 # its cold accesses again, at Amsterdam's prices; 2^30 left four of them out of gas (Task F185).
 gas_limit = 8_589_934_592
+# `new C(...)` of a src contract in a test stays a real CREATE. Foundry 1.8.5 turns dynamic test linking on by default: it
+# rewrites such a `new` into `vm.deployCode`, whose constructor revert after `vm.expectRevert` ends the test frame itself
+# and passes as the expected revert, so nothing after it runs (audit 2026-11-04: 31 sites in 14 tests; reproducer and
+# canary `test/ExpectRevertLint.t.sol`, which also refuses an explicit `vm.deployCode` after `expectRevert`).
+dynamic_test_linking = false
 optimizer = true
 optimizer_runs = 200
 via_ir = false
@@ -37,6 +42,7 @@ fs_permissions = [
   { access = "read-write", path = "../vectors/metatx" },
   { access = "read", path = "./size-baseline.json" },
   { access = "read", path = "./broadcast" }, # script/ZetherE2E.s.sol gasSplit (the e2e broadcast)
+  { access = "read", path = "./test" }, # test/ExpectRevertLint.t.sol scans the tests
 ]
 
 [invariant]
@@ -49,7 +55,7 @@ fail_on_revert = true
 # Nethermind bỏ qua im lặng, nên chain chạy pre-London — không PUSH0, không TSTORE,
 # không EIP-2537. Đã sửa chainspec và đo lại: PUSH0/TLOAD/MCOPY/BASEFEE/CLZ đều sống,
 # cả 7 precompile BLS12-381 trả đúng số byte, base fee dính 0 nên gas vẫn miễn phí.
-# Chi tiết: /home/dockers/mba-chain-nethermind/README-chainspec.md
+# Chi tiết: ~dockers/mba-chain-nethermind/README-chainspec.md
 [profile.scaas-testnet]
 evm_version = "amsterdam"
 

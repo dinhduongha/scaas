@@ -43,7 +43,7 @@ wrote selftest.json 2303 B
 wrote worstcase_noise.json 6202533 B
 wrote fee0.json 1263454 B
 pqz-vectors: 15 files, 16035356 B
-	Command being timed: "/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/target/n2816-kmax65536/release/pqz-vectors"
+	Command being timed: "<repo>/pqz-core/ffi/target/n2816-kmax65536/release/pqz-vectors"
 	User time (seconds): 347.24
 	System time (seconds): 3.59
 	Percent of CPU this job got: 95%

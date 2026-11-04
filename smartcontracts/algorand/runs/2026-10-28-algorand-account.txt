@@ -6,7 +6,7 @@
 [33mwarning: [0mcannot determine package root for contracts/token.py[0m
 [33mwarning: [0mcannot determine package root for contracts/common.py[0m
 [33mwarning: [0mcannot determine package root for contracts/account.py[0m
-[32minfo: [0musing python search path: ['/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/algorand/.venv/lib/python3.12/site-packages'][0m
+[32minfo: [0musing python search path: ['<repo>/smartcontracts/algorand/.venv/lib/python3.12/site-packages'][0m
 [32minfo: [0mWriting out/Token.arc56.json[0m
 [32minfo: [0mWriting out/Token.approval.bin[0m
 [32minfo: [0mWriting out/Token.clear.bin[0m

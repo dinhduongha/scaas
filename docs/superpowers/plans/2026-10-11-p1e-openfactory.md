@@ -25,7 +25,7 @@ the v1/v2 lines; put them in the backup) and size is optimised later.
 
 ## Global Constraints
 
-- Paths relative to `/home/ha/work/ainative/scaas`; forge runs in `smartcontracts/evm` of the worktree
+- Paths relative to `<repo>`; forge runs in `smartcontracts/evm` of the worktree
   `.claude/worktrees/p1e` (branch `p1e-factory`), created by the controller with `lib/` copied.
 - **Heavy commands only through `scripts/capped`, one at a time machine-wide** (`timeout 900 scripts/capped bash -c
   'cd smartcontracts/evm && forge test …'`; cargo with `timeout 1800` and `CARGO_BUILD_JOBS=4`). Use `/usr/bin/grep`,

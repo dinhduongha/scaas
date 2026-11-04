@@ -196,7 +196,7 @@ test at test/ua8.test.js:67:1
   -   }
     }
   
-      at TestContext.<anonymous> (file:///home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/clientkeys/test/ua8.test.js:68:10)
+      at TestContext.<anonymous> (file://<repo>/clients/clientkeys/test/ua8.test.js:68:10)
       at Test.runInAsyncScope (node:async_hooks:226:14)
       at Test.run (node:internal/test_runner/test:1402:25)
       at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
@@ -214,7 +214,7 @@ test at test/ua8.test.js:67:1
 test at test/ua8.test.js:150:1
 ✖ holder refusals (7.499499ms)
   AssertionError [ERR_ASSERTION]: kemPk omitted = empty
-      at TestContext.<anonymous> (file:///home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/clientkeys/test/ua8.test.js:169:10)
+      at TestContext.<anonymous> (file://<repo>/clients/clientkeys/test/ua8.test.js:169:10)
       at Test.runInAsyncScope (node:async_hooks:226:14)
       at Test.run (node:internal/test_runner/test:1402:25)
       at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
@@ -224,14 +224,14 @@ test at test/ua8.test.js:150:1
     generatedMessage: false,
     code: 'ERR_ASSERTION',
     actual: Error: UAKeyData: type
-        at fail (file:///home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/clientkeys/src/ua.js:22:40)
-        at bytes (file:///home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/clientkeys/src/ua.js:25:90)
-        at kemRecordDigest (file:///home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/clientkeys/src/ua.js:192:14)
-        at Module.holderPopMessage (file:///home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/clientkeys/src/ua.js:224:34)
-        at file:///home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/clientkeys/test/ua8.test.js:169:26
+        at fail (file://<repo>/clients/clientkeys/src/ua.js:22:40)
+        at bytes (file://<repo>/clients/clientkeys/src/ua.js:25:90)
+        at kemRecordDigest (file://<repo>/clients/clientkeys/src/ua.js:192:14)
+        at Module.holderPopMessage (file://<repo>/clients/clientkeys/src/ua.js:224:34)
+        at file://<repo>/clients/clientkeys/test/ua8.test.js:169:26
         at getActual (node:assert:580:5)
         at strict.throws (node:assert:728:24)
-        at TestContext.<anonymous> (file:///home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/clientkeys/test/ua8.test.js:169:10)
+        at TestContext.<anonymous> (file://<repo>/clients/clientkeys/test/ua8.test.js:169:10)
         at Test.runInAsyncScope (node:async_hooks:226:14)
         at Test.run (node:internal/test_runner/test:1402:25),
     operator: 'throws',
@@ -241,7 +241,7 @@ test at test/ua8.test.js:150:1
 test at test/ua8.test.js:250:1
 ✖ pqz key record: signed, portable, write-once, only for a registration without a PQZ key (setPqzKey) (0.473592ms)
   TypeError: Cannot read properties of undefined (reading 'map')
-      at TestContext.<anonymous> (file:///home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/clientkeys/test/ua8.test.js:251:48)
+      at TestContext.<anonymous> (file://<repo>/clients/clientkeys/test/ua8.test.js:251:48)
       at Test.runInAsyncScope (node:async_hooks:226:14)
       at Test.run (node:internal/test_runner/test:1402:25)
       at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
@@ -252,7 +252,7 @@ test at test/ua8.test.js:250:1
 test at test/ua8.test.js:285:1
 ✖ C7 scope: personal_sign only for the portable records of code-less native msig members (0.279146ms)
   TypeError: ua.isPortablePurpose is not a function
-      at TestContext.<anonymous> (file:///home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/clientkeys/test/ua8.test.js:286:77)
+      at TestContext.<anonymous> (file://<repo>/clients/clientkeys/test/ua8.test.js:286:77)
       at Test.runInAsyncScope (node:async_hooks:226:14)
       at Test.run (node:internal/test_runner/test:1402:25)
       at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
@@ -263,7 +263,7 @@ test at test/ua8.test.js:285:1
 test at test/zether.test.js:66:1
 ✖ the Zether PoP is portable (UA-8 P1): no chain field, over registrationDigest(portablePopDigest(UA, 0, 0), 0) (48.748525ms)
   AssertionError [ERR_ASSERTION]: Missing expected exception.
-      at TestContext.<anonymous> (file:///home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/clientkeys/test/zether.test.js:80:14)
+      at TestContext.<anonymous> (file://<repo>/clients/clientkeys/test/zether.test.js:80:14)
       at Test.runInAsyncScope (node:async_hooks:226:14)
       at Test.run (node:internal/test_runner/test:1402:25)
       at Test.processPendingSubtests (node:internal/test_runner/test:974:18)

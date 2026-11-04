@@ -834,7 +834,7 @@ $ diff docker-compose.yml.bak-1.39.0-20261021 docker-compose.yml
 <     image: scaas/nethermind-pqz:1.39.0-pqz2
 ---
 >     image: scaas/nethermind-pqz:2.2.0-pqz3
-$ docker run --rm --memory 256m -v /home/dockers/mba-chain-nethermind/data:/d alpine:3 sh -c mv /d/nethermind_data /d/nethermind_data.pre-2.2.0-20261021 && mkdir /d/nethermind_data && ls -la /d
+$ docker run --rm --memory 256m -v ~dockers/mba-chain-nethermind/data:/d alpine:3 sh -c mv /d/nethermind_data /d/nethermind_data.pre-2.2.0-20261021 && mkdir /d/nethermind_data && ls -la /d
 total 16
 drwxr-xr-x    4 root     root          4096 Oct 21 01:47 .
 drwxr-xr-x    1 root     root          4096 Oct 21 01:47 ..
@@ -842,7 +842,7 @@ drwxr-xr-x    2 root     root          4096 Oct 21 01:47 nethermind_data
 drwxr-xr-x   15 root     root          4096 Oct 15 22:41 nethermind_data.pre-2.2.0-20261021
 [rc=0]
 $ docker compose up -d blockchain-node
-time="2026-10-21T08:47:48+07:00" level=warning msg="/home/dockers/mba-chain-nethermind/docker-compose.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion"
+time="2026-10-21T08:47:48+07:00" level=warning msg="~dockers/mba-chain-nethermind/docker-compose.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion"
  Container mba_chain_node_nethermind Recreate 
  Container mba_chain_node_nethermind Recreated 
  Container mba_chain_node_nethermind Starting 
@@ -955,10 +955,10 @@ config.json.bak-1.39.0-20261021 → config.json
 +  51 }
 -  52 }
 $ docker compose stop -t 120 blockchain-node && docker compose up -d blockchain-node
-time="2026-10-21T08:53:18+07:00" level=warning msg="/home/dockers/mba-chain-nethermind/docker-compose.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion"
+time="2026-10-21T08:53:18+07:00" level=warning msg="~dockers/mba-chain-nethermind/docker-compose.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion"
  Container mba_chain_node_nethermind Stopping 
  Container mba_chain_node_nethermind Stopped 
-time="2026-10-21T08:53:18+07:00" level=warning msg="/home/dockers/mba-chain-nethermind/docker-compose.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion"
+time="2026-10-21T08:53:18+07:00" level=warning msg="~dockers/mba-chain-nethermind/docker-compose.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion"
  Container mba_chain_node_nethermind Recreate 
  Container mba_chain_node_nethermind Recreated 
  Container mba_chain_node_nethermind Starting 
@@ -967,7 +967,7 @@ time="2026-10-21T08:53:18+07:00" level=warning msg="/home/dockers/mba-chain-neth
 PQZ-START sha256=16dd99ce77d05a9bea9f54142979bc21511240aeff6d4442d784470a428c9caf selftest=ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205 addresses=PQZ:0x5caa500000000000000000000000000000000f01,MLDSA44:0x5caa500000000000000000000000000000000012,MLDSA65:0x5caa500000000000000000000000000000000013 schedules=[{ts 0, rows 12 [op1/0a47a768/83072=4225000, op1/0a47a768/66560=4021000, op
 21 Oct 01:53:23 | PQZ-START sha256=16dd99ce77d05a9bea9f54142979bc21511240aeff6d4442d784470a428c9caf selftest=ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205 addresses=PQZ:0x5caa500000000000000000000000000000000f01,MLDSA44:0x5caa500000000000000000000000000000000012,MLDSA65:0x5caa500000000000000000000000000000000013 schedules=[{ts 0, rows 12 [op1/0a47a768/83072=4225000, op1/0a47a768
 # check 2026-10-21T01:55:18Z
-$ /home/ha/work/ainative/scaas/.claude/worktrees/nethermind-2.2/pqz-core/nethermind/chain/watch.sh mba_chain_node_nethermind http://127.0.0.1:8545 2h
+$ <repo>/pqz-core/nethermind/chain/watch.sh mba_chain_node_nethermind http://127.0.0.1:8545 2h
 head 88 age 3s gasLimit 18,281,873 gasUsed 0 hash 0xd86df54e639204f827272c116c1e3f805ac39e3503d30d55f5a40ee1ba78dac4
 container mba_chain_node_nethermind: running exit=0 started=2026-10-21T01:53:19.000858947Z restarts=0
 PQZ-START since 2h: 2
@@ -975,14 +975,14 @@ PQZ-INPUT-PANIC since 2h: 0
 PQZ-NODE-FAULT since 2h: 0
 PQZ-REFUSE since 2h: 0
 [rc=0]
-$ python3 -I /home/ha/work/ainative/scaas/.claude/worktrees/nethermind-2.2/pqz-core/nethermind/chain/e2e.py head --rpc http://127.0.0.1:8545
+$ python3 -I <repo>/pqz-core/nethermind/chain/e2e.py head --rpc http://127.0.0.1:8545
 head 88 0xd86df54e639204f827272c116c1e3f805ac39e3503d30d55f5a40ee1ba78dac4 gasLimit 18281873 gasUsed 0 ts 1792547715
 head: all checks passed
 [rc=0]
-$ python3 -I -c import json; json.dump(json.load(open('/home/dockers/mba-chain-nethermind/genesis.json'))['engine']['Pqz'], open('/home/ha/work/ainative/scaas/.claude/worktrees/nethermind-2.2/pqz-core/nethermind/runs/2026-10-21-testnet-engine-pqz.json', 'w'), indent=2)
+$ python3 -I -c import json; json.dump(json.load(open('~dockers/mba-chain-nethermind/genesis.json'))['engine']['Pqz'], open('<repo>/pqz-core/nethermind/runs/2026-10-21-testnet-engine-pqz.json', 'w'), indent=2)
 [rc=0]
-$ cmp /home/ha/work/ainative/scaas/.claude/worktrees/nethermind-2.2/pqz-core/nethermind/runs/2026-10-21-testnet-engine-pqz.json /home/ha/work/ainative/scaas/.claude/worktrees/nethermind-2.2/pqz-core/nethermind/chain/engine-pqz.json
-/home/ha/work/ainative/scaas/.claude/worktrees/nethermind-2.2/pqz-core/nethermind/runs/2026-10-21-testnet-engine-pqz.json /home/ha/work/ainative/scaas/.claude/worktrees/nethermind-2.2/pqz-core/nethermind/chain/engine-pqz.json differ: byte 473, line 20
+$ cmp <repo>/pqz-core/nethermind/runs/2026-10-21-testnet-engine-pqz.json <repo>/pqz-core/nethermind/chain/engine-pqz.json
+<repo>/pqz-core/nethermind/runs/2026-10-21-testnet-engine-pqz.json <repo>/pqz-core/nethermind/chain/engine-pqz.json differ: byte 473, line 20
 
 # the check step stopped at cmp: the live engine.Pqz has the PQZL v2 id 0x2e07e6ed… (the reviewed library 16dd99ce = pqz3, built from 1adbd563), chain/engine-pqz.json on main has the v3 id 0x8079d65b… (pqzl-fs3 Task 5, library not reviewed yet). The probe and e2e run with the live rows and the corpus of the library's commit:
 $ python3 -I bin/ffi-src/pqz-core/nethermind/corpus.py bin/corpus-ffi-1adbd563.jsonl

@@ -140,18 +140,18 @@
    Compiling cosmwasm-schema-derive v3.0.10
    Compiling thiserror-impl v2.0.21
    Compiling cosmwasm-schema v3.0.10
-   Compiling scaas-metaop v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/cosmos/metaop)
+   Compiling scaas-metaop v0.1.0 (<repo>/smartcontracts/cosmos/metaop)
    Compiling cw-storage-plus v3.0.1
    Compiling prost-derive v0.14.4
    Compiling bytes v1.12.1
-   Compiling scaas-mandate v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/cosmos/mandate)
-   Compiling scaas-dex v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/cosmos/dex)
-   Compiling scaas-token v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/cosmos/token)
-   Compiling scaas-relayexec v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/cosmos/relayexec)
-   Compiling scaas-relayfee v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/cosmos/relayfee)
+   Compiling scaas-mandate v0.1.0 (<repo>/smartcontracts/cosmos/mandate)
+   Compiling scaas-dex v0.1.0 (<repo>/smartcontracts/cosmos/dex)
+   Compiling scaas-token v0.1.0 (<repo>/smartcontracts/cosmos/token)
+   Compiling scaas-relayexec v0.1.0 (<repo>/smartcontracts/cosmos/relayexec)
+   Compiling scaas-relayfee v0.1.0 (<repo>/smartcontracts/cosmos/relayfee)
    Compiling prost v0.14.4
    Compiling cw-utils v3.0.0
-   Compiling scaas-cosmos-tests v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/cosmos/tests)
+   Compiling scaas-cosmos-tests v0.1.0 (<repo>/smartcontracts/cosmos/tests)
    Compiling cw-multi-test v3.0.1
     Finished `test` profile [unoptimized + debuginfo] target(s) in 39.06s
      Running unittests src/lib.rs (target/debug/deps/scaas_cosmos_tests-c0f5411783e632de)
