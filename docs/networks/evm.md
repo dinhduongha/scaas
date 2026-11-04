@@ -276,7 +276,10 @@ Solidity on the registry's expanded-key cache: an ML-DSA UA's cache parts (`cach
 ≤ 13.5 M gas) come before its `register` ([accounts.md §1.9](../contracts/accounts.md#verifiers)). `mldsa87` (0x0134) only where
 an ML-DSA-87 precompile answers its EIP-8355 probe (`0x14`, or the SCaaS testnet's `0x…5caa0014`): elsewhere it has no verifier and
 is not registrable ([CTR-UA-39](../contracts/accounts.md#CTR-UA-39); BUILT on branch `mldsa87`; the cap 250,000 is a provisional
-estimate).
+estimate). `fndsa1024` (0x0135) on every chain whose budget holds its cap 5,250,000 at ≤ 66 % (every EVM budget ≥ 7,954,546;
+pure Solidity, no precompile; [CTR-UA-40](../contracts/accounts.md#CTR-UA-40); BUILT on branch `mldsa87`; the cap is provisional until
+T-GAS). The other families refuse `0x0135` until their own round; Algorand's `falcon_verify` is deterministic Falcon-1024 (a fixed
+salt) and cannot verify this kind's randomized round-3 signatures.
 
 It writes
 `deployments/<chainid>.json` (`token_factory`, `implementation_normal`, `dex_implementation`, `ua_registry`, `chain_uid`, `smart_key_account_factory`,

@@ -648,10 +648,11 @@ are drawn from.
 <a id="authorization"></a>
 <a id="CTR-PQZ-12"></a>**CTR-PQZ-12** — **Only a PQ signing UA carries a PQZ key; it authorizes every spend** (owner). The holders are
 a registered single-key `mldsa65` / `mldsa44` / `mldsa87` UA (`mldsa87` where a precompile enables it, owner 2026-11-04,
-[CTR-UA-39](accounts.md#CTR-UA-39); `fndsa512` where the registry enables it, FIPS 206), or a UA `msig`
+[CTR-UA-39](accounts.md#CTR-UA-39); `fndsa512` and `fndsa1024` where the registry enables them, the Falcon round-3 specification, owner 2026-11-04 for
+`fndsa1024`, [CTR-UA-40](accounts.md#CTR-UA-40)), or a UA `msig`
 whose non-PQ members' total weight is **below** its threshold — so no classical-only subset can authorize. That `msig`
 rule is the hybrid (e.g. `mldsa65` w 1 + `p256` w 1, threshold 2) and the t-of-n ML-DSA form; the weight is summed over
-members whose kind is not 0x0130–0x0134 and that are not an `msig` PQ-eligible itself: a forger of every classical key cannot reach such an inner's threshold, so a classical-dominant inner counts its whole outer weight as classical ([CTR-UA-38](accounts.md#CTR-UA-38)) (`slhdsa128s` counts as PQ weight in an `msig` but is not a direct holder: a
+members whose kind is not 0x0130–0x0135 and that are not an `msig` PQ-eligible itself: a forger of every classical key cannot reach such an inner's threshold, so a classical-dominant inner counts its whole outer weight as classical ([CTR-UA-38](accounts.md#CTR-UA-38)) (`slhdsa128s` counts as PQ weight in an `msig` but is not a direct holder: a
 7,856-byte signature and a ≈ 1.4 M gas cap on every spend). Every other kind — classical signers, `slhdsa128s`, Zether,
 a classical-dominant `msig` — reverts `UAPqzHolder`. **Authorization bound (review2 C0-5, controller proposal, owner may
 override):** an `msig` holder must also be usable — `register` reverts `UAPqzHolder` unless its worst-case authorization

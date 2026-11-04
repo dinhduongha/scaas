@@ -1,6 +1,6 @@
 fndsa1024 mutants (plan 2026-11-04-fndsa1024, Tasks 3-5): one change each at 5bc256bb, forge at the default set (n2304-kmax4096; M9 at n2048-kmax1024, the PQZH set), source restored after each.
 mutant | change | killed by
-M1 dispatch | UAFndsaVerifier constructor: _LOGN = 10 for every kind | test_kat_fndsa512: FAIL valid signature; test_malformed_fndsa: FAIL; test_fndsaVerifier_kind: FAIL
+M1 dispatch | UAFndsaVerifier constructor: _LOGN = 10 for every kind | test_kat_fndsa512: FAIL valid signature; test_malformed_fndsa: FAIL (run before the deployVerifier fix)
 M2 dispatch | UAFndsaVerifier constructor: _LOGN = 9 for every kind | test_kat_fndsa1024: FAIL valid signature; test_malformed_fndsa1024: FAIL; test_fndsaVerifier_kind: FAIL the other size
 M3 cap | DeployBase CAP_FNDSA1024 5,250,000 -> 5,250,001 | test_devChain, test_otherChains, test_probeFailureDisables: FAIL 5250001 != 5250000
 M4 isPq range | UAStore.isPq to 0x0134 again | test_fndsa1024Kind: FAIL; test_register_msigHolderBoundary_fndsa1024: FAIL UAPqzHolder

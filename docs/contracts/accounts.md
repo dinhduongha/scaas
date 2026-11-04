@@ -470,7 +470,7 @@ transactions do"; scope every family, owner 2026-10-29; details are controller c
   contract would tie it to one chain's limit). The record is the same; only the key is not stored yet. **Client rule:** after `register`, or
   on `UAAlreadyRegistered`, read `registrationOf`; when `attrs.kemPkHash != 0` and `kemKeyAt(ua, 0)` is empty, send
   `setKemKey(ua, 0, key, UASig())` (clientkeys `kemRepair`, ua-rs `kem_repair`).
-- **Holders.** Only PQ signers: `mldsa44`, `mldsa65`, `fndsa512`, `mldsa87` ([CTR-UA-39](#CTR-UA-39)), or an `msig` whose non-PQ weight (members outside `0x0130`–`0x0134`)
+- **Holders.** Only PQ signers: `mldsa44`, `mldsa65`, `fndsa512`, `mldsa87` ([CTR-UA-39](#CTR-UA-39)), `fndsa1024` ([CTR-UA-40](#CTR-UA-40)), or an `msig` whose non-PQ weight (members outside `0x0130`–`0x0135`)
   is below its threshold (`slhdsa128s` is not a direct holder); other kinds revert `UAKemHolder`. The `msig` PQZ debit gas bound
   ([CTR-PQZ-12](pq-zero-knowledge.md#CTR-PQZ-12)) applies to the PQZ key only, not to the KEM record.
 - **No revocation** (what has been on chain stays public forever and cannot be withdrawn; if an old secret key may have leaked,
@@ -754,6 +754,7 @@ Derived kinds (registered; `d` = key data):
 | `0x0132` | `fndsa512` | `pk` (897: `0x09 ‖ h`) | `fndsa512` | Falcon-512 (specification v1.2, NIST third-round; EIP-8052 SHAKE256 hash-to-point) over `ua_msg`, padded sig 666 B | `UAFndsaVerifier` (BUILT, P6a), pure Solidity (EIP-8052 has no addresses); `pk` from `keyPtr` | every EVM chain; deployed as 0x0130 |
 | `0x0133` | `slhdsa128s` | `pk` (32) | `slhdsa128s` | SLH-DSA-SHA2-128s (FIPS 205) sign(`pq_msg`, empty ctx), sig 7,856 B | `UASlhdsaVerifier` (BUILT, P6a), pure Solidity on SHA-256 `0x02` (no EIP proposes an SLH-DSA precompile); `pk` from `keyPtr` | EVM; the P6 gas gate passed ([CTR-UA-23](#CTR-UA-23)); deployed as 0x0130 |
 | `0x0134` | `mldsa87` | `pk` (2592) | `mldsa87` | ML-DSA-87 sign(`pq_msg`, empty ctx) ([CTR-UA-23](#CTR-UA-23)), sig 4,627 B | `UAMldsaVerifier(0x0134, …)` (BUILT, branch `mldsa87`): an EIP-8355 precompile only, probed at `0x14` and the SCaaS testnet's `MLDSA87` `0x000000000000000000000000000000005caa0014`; no precompile ⇒ no verifier, the kind disabled (its Solidity verify fails the 66 % rule, [CTR-UA-39](#CTR-UA-39)); no expanded-key cache; `pk` from `keyPtr` | EVM chains with an ML-DSA-87 precompile → other families in their rounds |
+| `0x0135` | `fndsa1024` | `pk` (1793: `0x0A ‖ h`) | `fndsa1024` | Falcon-1024 (round-3 specification v1.2; SHAKE256 hash-to-point) over `ua_msg`, padded sig 1,280 B ([CTR-UA-40](#CTR-UA-40)) | `UAFndsaVerifier(0x0135)` (BUILT, branch `mldsa87`), pure Solidity (measured 4.73 M; no EIP defines a Falcon-1024 precompile); `pk` from `keyPtr`; no cache | every EVM chain → other families in their rounds |
 | `0x0140` | *reserved* (was `zether-bn254`; legacy since UA-6, in `smartcontracts/evm/legacy/ua6/`, [CTR-ZTH-32](zether.md#CTR-ZTH-32)) | — | — | — | — | — |
 | `0x0141` | `zether-bls12381` | `Y` (128) | `bls12381-g1` | scaas Schnorr by `x` under the **Zether** Schnorr tag (`SCAAS-ZETHER-SCHNORR-V1`) on `ua_msg` | `ZetherSchnorrBls12381Verifier` (EIP-2537) | EVM (EIP-2537 chains) |
 
@@ -792,7 +793,7 @@ still need a new UA.
 | Set | Members | Enforced at |
 |---|---|---|
 | ZETHER | `0x0141` | the confidential account of the Zether tokens (`kindOf` in `ZetherLib`); also in SIGNING |
-| SIGNING | every derived kind: single-key `0x0100`–`0x0108`, `0x0110`–`0x0113`, `0x0130`–`0x0134`, `0x0141`, and the structure `0x0120` | `requireAuthorized` (native or SIGNING); v3 `from`/`to` (native or registered SIGNING, else `UAKindNotAccepted(kind)`) |
+| SIGNING | every derived kind: single-key `0x0100`–`0x0108`, `0x0110`–`0x0113`, `0x0130`–`0x0135`, `0x0141`, and the structure `0x0120` | `requireAuthorized` (native or SIGNING); v3 `from`/`to` (native or registered SIGNING, else `UAKindNotAccepted(kind)`) |
 | MEMBER | SIGNING single-key kinds except `0x0141` (a hot Zether key stays out of `msig`s), plus `msig`, one level down ([CTR-UA-38](#CTR-UA-38)), plus the native kinds the chain profile can verify, all with `id >> 160 == 0` — on EVM `0x0001`–`0x0002`; `0x0003` **only** in a Hedera-profile registry (constructor immutable `hederaNative`, HIP-632) | `msig` members (`UAMemberUnknown`); no other family's native kind, no `hedera-native` outside Hedera and no `msig` that holds an `msig` is ever an EVM member |
 
 #### <a id="musig2-and-frost-what-the-registry-checks"></a>1.6.1 MuSig2 and FROST: what the registry checks
@@ -867,7 +868,7 @@ chains: 12 M ≈ 70 % of 16,777,216; Hedera, 15 M cap: 10.5 M), a constructor im
 **Each kind's verify cap is measured per chain** (worst-case accepting and rejecting input, test T-GAS) and set as a
 constructor immutable `verifyCap[kind]`, also published: e.g. `mldsa65` ≈ 236 k with the SCaaS testnet precompile (`verify` through `UAMldsaVerifier`, P6f copy), the
 measured Solidity worst case elsewhere. Measured (P6a, `test/ua/PqGas.t.sol`): ML-DSA-44 / -65 11.4 / 18.9 M on the FIPS 204 key, 4.1 / 5.8 M on a stored EIP-8051 expanded key (owner 2026-10-12: the registry stores the FIPS 204 pk; the expanded key is an optional cache it derives itself with `expandKey(pk)`, never one from a caller),
-FN-DSA-512 2.3 M, SLH-DSA 0.79 M (worst case 1.32 M); ed25519 0.17 M (measured, UA-2b: worst 171 k, cap 210 k). Gen-1 caps without a precompile (P6c, `DeployBase`): `mldsa44` 4,250,000 / `mldsa65` 5,950,000 on the cached expanded key (measured `verifyCached` 4.11 / 5.80 M), `fndsa512` 2,500,000, `slhdsa128s` 1,400,000 — each ≤ 50 % of 12 M. An enabled PQ kind's measured cap must stay ≤ 66 % of the
+FN-DSA-512 2.3 M, SLH-DSA 0.79 M (worst case 1.32 M); ed25519 0.17 M (measured, UA-2b: worst 171 k, cap 210 k). Gen-1 caps without a precompile (P6c, `DeployBase`): `mldsa44` 4,250,000 / `mldsa65` 5,950,000 on the cached expanded key (measured `verifyCached` 4.11 / 5.80 M), `fndsa512` 2,500,000, `slhdsa128s` 1,400,000 — each ≤ 50 % of 12 M; `fndsa1024` 5,250,000 (43.75 % of 12 M, 50 % of Hedera's 10.5 M; **provisional** until T-GAS, [CTR-UA-40](#CTR-UA-40)). An enabled PQ kind's measured cap must stay ≤ 66 % of the
 budget (owner ruling 2026-10-31; was ~50 % on public chains; at 66 % a kind is ~46 % of the per-transaction gas), so a later gas repricing cannot push it over after funds are held. **If a measured verifier exceeds that bound
 on a chain, the kind is disabled there (verifier address 0: not registrable), never "registrable but unusable"**: a
 registrable but unusable kind can *receive* and then never spend, locking funds. **`slhdsa128s`** (0x0133, SLH-DSA-SHA2-128s, FIPS 205; owner 2026-10-11, SPECIFIED (P6)) is the hash-based backup if lattice assumptions fall, in line with the Ethereum Foundation's hash-based direction: no EIP proposes an SLH-DSA precompile, so it verifies in pure Solidity on the SHA-256 precompile `0x02` (it probes nothing), and it is **enabled on public chains only after P6 measures its verification gas against the chain's per-transaction cap and `UA_VERIFY_BUDGET`** — measured in P6a: 1.32 M at the worst case any input can force (510 WOTS+ steps on each of the 7 layers), 0.79 M for a valid signature, ≤ 13 % of every chain's budget, so the gate passes and enabling it is a registry deploy parameter. The PQ verifiers are home-written and unaudited and carry the label **UNAUDITED**; an audit is not a deploy gate (owner ruling 2026-10-31): a PQ kind is enabled wherever the budget rule above passes; without an EIP-8355 precompile or a stored expanded key ML-DSA is over budget there, so `slhdsa128s` and `fndsa512` are the practical kinds.
@@ -885,11 +886,15 @@ verifier outside `forge script`, as `mldsa65`'s, P6g D15). Where enabled it is a
 ([CTR-PQZ-12](pq-zero-knowledge.md#CTR-PQZ-12)). EVM first: every other family refuses `0x0134` until its own round.
 
 <a id="CTR-UA-40"></a>**CTR-UA-40** — **`fndsa1024` (0x0135), Falcon-1024 (round-3 specification v1.2, NIST level V), is enabled
-on every EVM chain in pure Solidity** (owner 2026-11-04; [decisions.md](../decisions.md)). SPECIFIED. Key data `pk` (1,793 B) =
+on every EVM chain in pure Solidity** (owner 2026-11-04; [decisions.md](../decisions.md)). BUILT on the EVM (branch `mldsa87`);
+other families PLANNED. Key data `pk` (1,793 B) =
 `0x0A ‖ h` (1,024 × 14-bit big-endian coefficients, each `< q`); padded signature 1,280 B = `0x3A ‖ salt (40) ‖ compressed s2`,
 zero-padded, over the 32-byte `ua_msg` with SHAKE256 hash-to-point, accept iff `‖s1‖² + ‖s2‖² ≤ 70,265,242`, as `fndsa512` at
 n = 1,024. The measured verify (4.73 M; 4.93 M at the largest NIST KAT) passes the 66 % rule on 12 M and on Hedera's 10.5 M; cap
-5,250,000, **provisional** until T-GAS measures it. No NTT-key cache, no SCaaS testnet precompile. It is a PQZ / KEM holder
+5,250,000, **provisional** until T-GAS measures it. No NTT-key cache, no SCaaS testnet precompile. As built: one verifier code for
+both Falcon sizes, `UAFndsaVerifier(kind)` (`0x0132` or `0x0135`, any other kind reverts `UAFndsaKind`), the library `Falcon` at
+`logn` 9 / 10 with one 2,048-byte zeta table whose first 512 entries are Falcon-512's; `DeployBase` configures it through
+`_pqKindFits` (every budget ≥ 7,954,546). It is a PQZ / KEM holder
 ([CTR-UA-16](#CTR-UA-16)) and PQ weight in an `msig` ([CTR-PQZ-12](pq-zero-knowledge.md#CTR-PQZ-12)); config slot 20. A final
 FIPS 206 (FN-DSA) that differs from the round-3 specification is a new kind version, never a silent change. EVM first: every other family refuses
 `0x0135` until its own round.
@@ -1031,7 +1036,7 @@ token derives the receiver UA from `Y` in the payload with one keccak and no loo
 supplied in `register(kind, keyData, attrs, pop, pqzPop)` as `attrs.pqzKey` with its proof hash `attrs.pqzPopHash`, which the
 signer's PoP covers; the `R_REG` proof over the portable digest ([CTR-UA-07](#CTR-UA-07)) is **optional** in the call
 (owner 2026-10-25, UA-8 P8). Holders: single-key `mldsa44`, `mldsa65`, `fndsa512`, `mldsa87` (owner 2026-11-04,
-[CTR-UA-39](#CTR-UA-39)), and an `msig` whose members of kinds other than `0x0130`–`0x0134` weigh less than its threshold ([CTR-PQZ-12](pq-zero-knowledge.md#CTR-PQZ-12));
+[CTR-UA-39](#CTR-UA-39)), `fndsa1024` (owner 2026-11-04, [CTR-UA-40](#CTR-UA-40)), and an `msig` whose members of kinds other than `0x0130`–`0x0135` weigh less than its threshold ([CTR-PQZ-12](pq-zero-knowledge.md#CTR-PQZ-12));
 every other kind, `slhdsa128s` and Zether included, reverts `UAPqzHolder`. An `msig` holder whose worst-case authorization plus `PqzSet.PQZ_DEBIT_MIN_GAS` (the cheapest PQZL debit, full relayed transaction) and the authorization's own calldata exceeds 2^24 (EIP-7825) reverts `UAPqzHolder` too, so that no holder is registrable but unable to spend ([CTR-PQZ-12](pq-zero-knowledge.md#CTR-PQZ-12), review2 C0-5). A PQ-eligible `msig` always registers with
 its m-of-n `pop` (a squatter could otherwise fix it without a key forever). The PQZ key is not in the id, and it never changes
 once set: **at most one PQZ key per UA per chain, written once** — with one exception, a key this chain can never prove (below). A PQ signer registered without one may add it later by
@@ -2104,6 +2109,7 @@ member handed to gen 1 — it includes reading the member's key bytes from its r
 | `mldsa44` | 2 420 sig | EIP-8355-class precompile / 11.4 M Solidity on the FIPS 204 key; on the cached expanded key `verifyCached` 4.11 M (measured P6c; `requireAuthorized` of the vector row 4,117,867) | ~7 k (one part pointer, no `pk` read) | 4,250,000 (P6c); ≈ 20 k with a precompile |
 | `mldsa65` | 3 309 sig | 9 k-class precompile / 18.9 M Solidity on the FIPS 204 key; cached 5.80 M (measured P6c; `requireAuthorized` 5,811,372) | ~8 k (as `mldsa44`) | 5,950,000 (P6c); 200,000 on chain 7622's precompile (P6g; `requireAuthorized` measured 301,776 incl. the transaction's intrinsic and calldata) |
 | `mldsa87` | 4 627 sig | precompile only ([CTR-UA-39](#CTR-UA-39)); Solidity would be 31.9 M on the FIPS 204 key, 8.64 M cached (measured, research `mldsa87-evm-gas.md`), over 66 % of the budget: disabled without a precompile | as `mldsa65` (no cache) | 250,000 on a precompile, **provisional estimate** (T-GAS on a chain) |
+| `fndsa1024` | 1 280 sig | 4.73 M Solidity on the UA row, 4.79–4.93 M on the NIST KAT messages (measured, research `fndsa1024-evm-gas.md`; [CTR-UA-40](#CTR-UA-40)) | as `fndsa512` (no cache) | 5,250,000, **provisional** until T-GAS |
 | `fndsa512` | 666 sig | 2.27–2.35 M Solidity (measured; the hash-to-point and the signature length vary with the message; `requireAuthorized` 2,343,443) | ~5 k + EXTCODECOPY ~1.5 k | 2,500,000 (P6c) |
 | `slhdsa128s` | 7 856 sig | 0.79–0.81 M valid (measured; WOTS+ steps vary with the message), 1.32 M worst; `requireAuthorized` 808,298 | ~5 k + EXTCODECOPY ~2.6 k | 1,400,000 (P6c) |
 | `zether-*` | — (proof path); owner op `R ‖ z` | unchanged ([zether.md](zether.md#gas-measured)); owner op 58.7 k BLS12-381, cold (measured, `UARegistryZether.t.sol --isolate`; re-measured in UA-6 through `requireAuthorized`) | ~5 k (`kindOf`) | 50 k / 70 k (as `schnorr-*`) |
