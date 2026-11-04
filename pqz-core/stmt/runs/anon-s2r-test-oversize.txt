@@ -1,4 +1,4 @@
-   Compiling pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/anons/pqz-core/stmt)
+   Compiling pqz-stmt v0.1.0 (<repo>/pqz-core/stmt)
     Finished `release` profile [optimized] target(s) in 0.89s
      Running unittests src/lib.rs (target/release/deps/pqz_stmt-8e42870e9d7e3c7b)
 

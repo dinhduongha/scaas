@@ -1,5 +1,5 @@
 # scaas-node cargo test -j2 (whole crate) at commit 23c8530a + T16 work tree
-   Compiling scaas-node v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/scaas-node)
+   Compiling scaas-node v0.1.0 (<repo>/scaas-node)
     Finished `test` profile [unoptimized + debuginfo] target(s) in 36.92s
      Running unittests src/lib.rs (target/debug/deps/scaas_node-dbe39b21340e8e02)
 

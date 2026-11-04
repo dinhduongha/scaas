@@ -10,34 +10,34 @@ INFO: Running with entropic power schedule (0xFF, 100).
 INFO: Seed: 3566535510
 INFO: Loaded 1 modules   (26829 inline 8-bit counters): 26829 [0x5dd5f1379490, 0x5dd5f137fd5d), 
 INFO: Loaded 1 PC tables (26829 PCs): 26829 [0x5dd5f137fd60,0x5dd5f13e8a30), 
-INFO:        0 files found in /tmp/claude-1000/-home-ha-work-ainative-scaas/cb650392-4068-4a69-9fa8-22874463defa/scratchpad/s5/oldlim/c
-INFO:      176 files found in /home/ha/work/ainative/scaas/.claude/worktrees/s5/pqz-core/build/fuzz/seeds/mutate
+INFO:        0 files found in <scratch>/s5/oldlim/c
+INFO:      176 files found in <repo>/pqz-core/build/fuzz/seeds/mutate
 INFO: seed corpus: files: 176 min: 2b max: 2b total: 352b rss: 481Mb
 #177	INITED cov: 12 ft: 12 corp: 4/8b exec/s: 0 rss: 523Mb
 	NEW_FUNC[1/167]: 0x5dd5f0ed2940 in <alloc::raw_vec::RawVecInner<_>>::reserve::do_reserve_and_handle::<alloc::alloc::Global> /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library/alloc/src/raw_vec/mod.rs:661
-	NEW_FUNC[2/167]: 0x5dd5f0feb4a0 in pqz_fuzz::arena_check /home/ha/work/ainative/scaas/.claude/worktrees/s5/pqz-core/fuzz/src/lib.rs:94
+	NEW_FUNC[2/167]: 0x5dd5f0feb4a0 in pqz_fuzz::arena_check <repo>/pqz-core/fuzz/src/lib.rs:94
 #183	NEW    cov: 587 ft: 587 corp: 5/12b lim: 4 exec/s: 1 rss: 529Mb L: 4/4 MS: 1 CrossOver-
 	NEW_FUNC[1/52]: 0x5dd5f0ff38a0 in <pqz_ffi::pqzl::on_worker<core::option::Option<i32>, pqz_ffi::pqzl::with_core<i32, pqz_ffi::pqzl::verify_fast::{closure#0}>::{closure#1}>::{closure#1} as core::ops::function::FnOnce<()>>::call_once::{shim:vtable#0} /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library/core/src/ops/function.rs:250
-	NEW_FUNC[2/52]: 0x5dd5f0ff70a0 in pqz_ffi::pqzl::verify_fast /home/ha/work/ainative/scaas/.claude/worktrees/s5/pqz-core/ffi/src/pqzl.rs:243
+	NEW_FUNC[2/52]: 0x5dd5f0ff70a0 in pqz_ffi::pqzl::verify_fast <repo>/pqz-core/ffi/src/pqzl.rs:243
 #185	NEW    cov: 862 ft: 951 corp: 6/16b lim: 4 exec/s: 1 rss: 530Mb L: 4/4 MS: 2 CrossOver-CrossOver-
 #186	NEW    cov: 863 ft: 952 corp: 7/17b lim: 4 exec/s: 1 rss: 530Mb L: 1/4 MS: 1 EraseBytes-
 #187	NEW    cov: 868 ft: 1006 corp: 8/20b lim: 4 exec/s: 1 rss: 533Mb L: 3/4 MS: 1 EraseBytes-
 	NEW_FUNC[1/11]: 0x5dd5f1081aa0 in <alloc::raw_vec::RawVec<[(usize, i64, i64); 2]> as core::ops::drop::Drop>::drop /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library/alloc/src/raw_vec/mod.rs:422
-	NEW_FUNC[2/11]: 0x5dd5f1091370 in <pqz_stmt::Multi>::u /home/ha/work/ainative/scaas/.claude/worktrees/s5/pqz-core/stmt/src/lib.rs:663
+	NEW_FUNC[2/11]: 0x5dd5f1091370 in <pqz_stmt::Multi>::u <repo>/pqz-core/stmt/src/lib.rs:663
 #188	NEW    cov: 915 ft: 1100 corp: 9/24b lim: 4 exec/s: 1 rss: 536Mb L: 4/4 MS: 1 ChangeByte-
 #192	NEW    cov: 917 ft: 1149 corp: 10/28b lim: 4 exec/s: 2 rss: 546Mb L: 4/4 MS: 4 ShuffleBytes-EraseBytes-CrossOver-ChangeByte-
-	NEW_FUNC[1/1]: 0x5dd5f1091610 in <pqz_stmt::Multi>::v_a /home/ha/work/ainative/scaas/.claude/worktrees/s5/pqz-core/stmt/src/lib.rs:669
+	NEW_FUNC[1/1]: 0x5dd5f1091610 in <pqz_stmt::Multi>::v_a <repo>/pqz-core/stmt/src/lib.rs:669
 #198	NEW    cov: 934 ft: 1211 corp: 11/32b lim: 4 exec/s: 2 rss: 551Mb L: 4/4 MS: 1 CrossOver-
 #200	NEW    cov: 953 ft: 1259 corp: 12/36b lim: 4 exec/s: 2 rss: 552Mb L: 4/4 MS: 2 EraseBytes-CrossOver-
 #203	NEW    cov: 953 ft: 1260 corp: 13/40b lim: 4 exec/s: 2 rss: 561Mb L: 4/4 MS: 3 ShuffleBytes-EraseBytes-InsertByte-
-	NEW_FUNC[1/1]: 0x5dd5f108f330 in pqz_stmt::word_at /home/ha/work/ainative/scaas/.claude/worktrees/s5/pqz-core/stmt/src/lib.rs:259
+	NEW_FUNC[1/1]: 0x5dd5f108f330 in pqz_stmt::word_at <repo>/pqz-core/stmt/src/lib.rs:259
 #210	NEW    cov: 967 ft: 1348 corp: 14/44b lim: 4 exec/s: 2 rss: 568Mb L: 4/4 MS: 2 ChangeByte-ChangeBinInt-
 #211	NEW    cov: 967 ft: 1350 corp: 15/48b lim: 4 exec/s: 2 rss: 569Mb L: 4/4 MS: 1 CrossOver-
 	NEW_FUNC[1/2]: 0x5dd5f1013f50 in <alloc::boxed::Box<std::sync::mpmc::list::Block<alloc::boxed::Box<dyn core::ops::function::FnOnce<(), Output = ()> + core::marker::Send>>>>::new_zeroed_in /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library/alloc/src/boxed.rs:642
 	NEW_FUNC[2/2]: 0x5dd5f1013f90 in <alloc::boxed::Box<std::sync::mpmc::list::Block<bool>>>::new_zeroed_in /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library/alloc/src/boxed.rs:642
 #212	NEW    cov: 983 ft: 1389 corp: 16/52b lim: 4 exec/s: 2 rss: 569Mb L: 4/4 MS: 1 CrossOver-
 	NEW_FUNC[1/4]: 0x5dd5f1063c50 in core::ptr::drop_glue::<pqzh_ligero::cs::Disc> /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library/core/src/ptr/mod.rs:825
-	NEW_FUNC[2/4]: 0x5dd5f1090060 in <pqz_stmt::Disclose>::amount /home/ha/work/ainative/scaas/.claude/worktrees/s5/pqz-core/stmt/src/lib.rs:390
+	NEW_FUNC[2/4]: 0x5dd5f1090060 in <pqz_stmt::Disclose>::amount <repo>/pqz-core/stmt/src/lib.rs:390
 #226	NEW    cov: 1009 ft: 1439 corp: 17/55b lim: 4 exec/s: 2 rss: 597Mb L: 3/4 MS: 4 ChangeBit-ChangeBit-CrossOver-InsertByte-
 #227	NEW    cov: 1016 ft: 1477 corp: 18/58b lim: 4 exec/s: 2 rss: 599Mb L: 3/4 MS: 1 ChangeBit-
 #233	NEW    cov: 1019 ft: 1481 corp: 19/61b lim: 4 exec/s: 2 rss: 600Mb L: 3/4 MS: 1 CopyPart-
@@ -66,7 +66,7 @@ INFO: seed corpus: files: 176 min: 2b max: 2b total: 352b rss: 481Mb
 #350	NEW    cov: 1060 ft: 1617 corp: 41/136b lim: 4 exec/s: 3 rss: 649Mb L: 4/4 MS: 4 ShuffleBytes-ShuffleBytes-CrossOver-ChangeByte-
 #353	NEW    cov: 1061 ft: 1641 corp: 42/140b lim: 4 exec/s: 3 rss: 652Mb L: 4/4 MS: 3 ShuffleBytes-ShuffleBytes-CopyPart-
 #355	NEW    cov: 1066 ft: 1654 corp: 43/144b lim: 4 exec/s: 3 rss: 653Mb L: 4/4 MS: 2 ChangeBit-ChangeBit-
-	NEW_FUNC[1/1]: 0x5dd5f1092750 in <pqz_stmt::Debit>::amount /home/ha/work/ainative/scaas/.claude/worktrees/s5/pqz-core/stmt/src/lib.rs:377
+	NEW_FUNC[1/1]: 0x5dd5f1092750 in <pqz_stmt::Debit>::amount <repo>/pqz-core/stmt/src/lib.rs:377
 #359	NEW    cov: 1075 ft: 1678 corp: 44/148b lim: 4 exec/s: 3 rss: 657Mb L: 4/4 MS: 4 ShuffleBytes-CopyPart-CrossOver-ChangeBit-
 #360	NEW    cov: 1075 ft: 1681 corp: 45/151b lim: 4 exec/s: 3 rss: 657Mb L: 3/4 MS: 1 ChangeByte-
 #389	NEW    cov: 1079 ft: 1694 corp: 46/155b lim: 4 exec/s: 3 rss: 683Mb L: 4/4 MS: 4 CrossOver-ChangeBinInt-ShuffleBytes-ChangeBinInt-
@@ -96,28 +96,28 @@ INFO: seed corpus: files: 176 min: 2b max: 2b total: 352b rss: 481Mb
 ==103214== ERROR: libFuzzer: out-of-memory (malloc(1073741824))
    To change the out-of-memory limit use -rss_limit_mb=<N>
 
-    #0 0x5dd5f0fb6f65 in __sanitizer_print_stack_trace (/home/ha/work/ainative/scaas/.claude/worktrees/s5/pqz-core/build/fuzz/mutate+0x1fff65) (BuildId: 6a631104c70a447f0916fb2d8ddaedf5a9ba7331)
-    #1 0x5dd5f0f10a7c in fuzzer::PrintStackTrace() (/home/ha/work/ainative/scaas/.claude/worktrees/s5/pqz-core/build/fuzz/mutate+0x159a7c) (BuildId: 6a631104c70a447f0916fb2d8ddaedf5a9ba7331)
-    #2 0x5dd5f0ef5915 in fuzzer::Fuzzer::HandleMalloc(unsigned long) (/home/ha/work/ainative/scaas/.claude/worktrees/s5/pqz-core/build/fuzz/mutate+0x13e915) (BuildId: 6a631104c70a447f0916fb2d8ddaedf5a9ba7331)
-    #3 0x5dd5f0ef581f in fuzzer::MallocHook(void const volatile*, unsigned long) (/home/ha/work/ainative/scaas/.claude/worktrees/s5/pqz-core/build/fuzz/mutate+0x13e81f) (BuildId: 6a631104c70a447f0916fb2d8ddaedf5a9ba7331)
-    #4 0x5dd5f0fbe826 in __sanitizer::RunMallocHooks(void*, unsigned long) (/home/ha/work/ainative/scaas/.claude/worktrees/s5/pqz-core/build/fuzz/mutate+0x207826) (BuildId: 6a631104c70a447f0916fb2d8ddaedf5a9ba7331)
-    #5 0x5dd5f0f14062 in __asan::Allocator::Allocate(unsigned long, unsigned long, __sanitizer::BufferedStackTrace*, __asan::AllocType, bool) (/home/ha/work/ainative/scaas/.claude/worktrees/s5/pqz-core/build/fuzz/mutate+0x15d062) (BuildId: 6a631104c70a447f0916fb2d8ddaedf5a9ba7331)
-    #6 0x5dd5f0f13997 in __asan::asan_malloc(unsigned long, __sanitizer::BufferedStackTrace*) (/home/ha/work/ainative/scaas/.claude/worktrees/s5/pqz-core/build/fuzz/mutate+0x15c997) (BuildId: 6a631104c70a447f0916fb2d8ddaedf5a9ba7331)
-    #7 0x5dd5f0fac263 in malloc (/home/ha/work/ainative/scaas/.claude/worktrees/s5/pqz-core/build/fuzz/mutate+0x1f5263) (BuildId: 6a631104c70a447f0916fb2d8ddaedf5a9ba7331)
+    #0 0x5dd5f0fb6f65 in __sanitizer_print_stack_trace (<repo>/pqz-core/build/fuzz/mutate+0x1fff65) (BuildId: 6a631104c70a447f0916fb2d8ddaedf5a9ba7331)
+    #1 0x5dd5f0f10a7c in fuzzer::PrintStackTrace() (<repo>/pqz-core/build/fuzz/mutate+0x159a7c) (BuildId: 6a631104c70a447f0916fb2d8ddaedf5a9ba7331)
+    #2 0x5dd5f0ef5915 in fuzzer::Fuzzer::HandleMalloc(unsigned long) (<repo>/pqz-core/build/fuzz/mutate+0x13e915) (BuildId: 6a631104c70a447f0916fb2d8ddaedf5a9ba7331)
+    #3 0x5dd5f0ef581f in fuzzer::MallocHook(void const volatile*, unsigned long) (<repo>/pqz-core/build/fuzz/mutate+0x13e81f) (BuildId: 6a631104c70a447f0916fb2d8ddaedf5a9ba7331)
+    #4 0x5dd5f0fbe826 in __sanitizer::RunMallocHooks(void*, unsigned long) (<repo>/pqz-core/build/fuzz/mutate+0x207826) (BuildId: 6a631104c70a447f0916fb2d8ddaedf5a9ba7331)
+    #5 0x5dd5f0f14062 in __asan::Allocator::Allocate(unsigned long, unsigned long, __sanitizer::BufferedStackTrace*, __asan::AllocType, bool) (<repo>/pqz-core/build/fuzz/mutate+0x15d062) (BuildId: 6a631104c70a447f0916fb2d8ddaedf5a9ba7331)
+    #6 0x5dd5f0f13997 in __asan::asan_malloc(unsigned long, __sanitizer::BufferedStackTrace*) (<repo>/pqz-core/build/fuzz/mutate+0x15c997) (BuildId: 6a631104c70a447f0916fb2d8ddaedf5a9ba7331)
+    #7 0x5dd5f0fac263 in malloc (<repo>/pqz-core/build/fuzz/mutate+0x1f5263) (BuildId: 6a631104c70a447f0916fb2d8ddaedf5a9ba7331)
     #8 0x5dd5f0ed37c9 in <alloc::raw_vec::RawVecInner>::finish_grow /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library/alloc/src/raw_vec/mod.rs
     #9 0x5dd5f0ffe9d3 in <alloc::raw_vec::RawVecInner>::grow_exact /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library/alloc/src/raw_vec/mod.rs:800:33
     #10 0x5dd5f0ffe9d3 in <alloc::raw_vec::RawVecInner>::try_reserve_exact /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library/alloc/src/raw_vec/mod.rs:728:22
     #11 0x5dd5f0ff3d6c in <alloc::raw_vec::RawVec<u128>>::try_reserve_exact /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library/alloc/src/raw_vec/mod.rs:384:29
     #12 0x5dd5f0ff3d6c in <alloc::vec::Vec<u128>>::try_reserve_exact /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library/alloc/src/vec/mod.rs:1581:18
-    #13 0x5dd5f0ff3d6c in pqz_ffi::pqzl::with_core::<i32, pqz_ffi::pqzl::verify_generic::{closure#0}>::{closure#1} /home/ha/work/ainative/scaas/.claude/worktrees/s5/pqz-core/ffi/src/pqzl.rs:193:19
-    #14 0x5dd5f0ff3d6c in pqz_ffi::pqzl::on_worker::<core::option::Option<i32>, pqz_ffi::pqzl::with_core<i32, pqz_ffi::pqzl::verify_generic::{closure#0}>::{closure#1}>::{closure#1} /home/ha/work/ainative/scaas/.claude/worktrees/s5/pqz-core/ffi/src/pqzl.rs:156:69
+    #13 0x5dd5f0ff3d6c in pqz_ffi::pqzl::with_core::<i32, pqz_ffi::pqzl::verify_generic::{closure#0}>::{closure#1} <repo>/pqz-core/ffi/src/pqzl.rs:193:19
+    #14 0x5dd5f0ff3d6c in pqz_ffi::pqzl::on_worker::<core::option::Option<i32>, pqz_ffi::pqzl::with_core<i32, pqz_ffi::pqzl::verify_generic::{closure#0}>::{closure#1}>::{closure#1} <repo>/pqz-core/ffi/src/pqzl.rs:156:69
     #15 0x5dd5f0ff3d6c in <pqz_ffi::pqzl::on_worker<core::option::Option<i32>, pqz_ffi::pqzl::with_core<i32, pqz_ffi::pqzl::verify_generic::{closure#0}>::{closure#1}>::{closure#1} as core::ops::function::FnOnce<()>>::call_once::{shim:vtable#0} /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library/core/src/ops/function.rs:250:5
     #16 0x5dd5f1014f65 in <alloc::boxed::Box<dyn core::ops::function::FnOnce<(), Output = ()> + core::marker::Send> as core::ops::function::FnOnce<()>>::call_once /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library/alloc/src/boxed.rs:2275:9
     #17 0x5dd5f1003dd3 in <core::panic::unwind_safe::AssertUnwindSafe<alloc::boxed::Box<dyn core::ops::function::FnOnce<(), Output = ()> + core::marker::Send>> as core::ops::function::FnOnce<()>>::call_once /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library/core/src/panic/unwind_safe.rs:275:9
     #18 0x5dd5f1003dd3 in std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<alloc::boxed::Box<dyn core::ops::function::FnOnce<(), Output = ()> + core::marker::Send>>, ()> /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library/std/src/panicking.rs:581:40
     #19 0x5dd5f1003dd3 in std::panicking::catch_unwind::<(), core::panic::unwind_safe::AssertUnwindSafe<alloc::boxed::Box<dyn core::ops::function::FnOnce<(), Output = ()> + core::marker::Send>>> /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library/std/src/panicking.rs:544:19
     #20 0x5dd5f1003dd3 in std::panic::catch_unwind::<core::panic::unwind_safe::AssertUnwindSafe<alloc::boxed::Box<dyn core::ops::function::FnOnce<(), Output = ()> + core::marker::Send>>, ()> /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library/std/src/panic.rs:359:14
-    #21 0x5dd5f1003dd3 in pqz_ffi::pqzl::on_worker::<core::option::Option<()>, pqz_ffi::pqzl::with_core<(), pqz_ffi::pqzl::reinit::{closure#1}>::{closure#1}>::{closure#0} /home/ha/work/ainative/scaas/.claude/worktrees/s5/pqz-core/ffi/src/pqzl.rs:146:32
+    #21 0x5dd5f1003dd3 in pqz_ffi::pqzl::on_worker::<core::option::Option<()>, pqz_ffi::pqzl::with_core<(), pqz_ffi::pqzl::reinit::{closure#1}>::{closure#1}>::{closure#0} <repo>/pqz-core/ffi/src/pqzl.rs:146:32
     #22 0x5dd5f1003dd3 in std::sys::backtrace::__rust_begin_short_backtrace::<pqz_ffi::pqzl::on_worker<core::option::Option<()>, pqz_ffi::pqzl::with_core<(), pqz_ffi::pqzl::reinit::{closure#1}>::{closure#1}>::{closure#0}, ()> /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library/std/src/sys/backtrace.rs:166:18
     #23 0x5dd5f1135397 in std::thread::lifecycle::spawn_unchecked::<pqz_ffi::pqzl::on_worker<core::option::Option<()>, pqz_ffi::pqzl::with_core<(), pqz_ffi::pqzl::reinit::{closure#1}>::{closure#1}>::{closure#0}, ()>::{closure#1}::{closure#0} /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library/std/src/thread/lifecycle.rs:70:13
     #24 0x5dd5f1135397 in <core::panic::unwind_safe::AssertUnwindSafe<std::thread::lifecycle::spawn_unchecked<pqz_ffi::pqzl::on_worker<core::option::Option<()>, pqz_ffi::pqzl::with_core<(), pqz_ffi::pqzl::reinit::{closure#1}>::{closure#1}>::{closure#0}, ()>::{closure#1}::{closure#0}> as core::ops::function::FnOnce<()>>::call_once /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library/core/src/panic/unwind_safe.rs:275:9
@@ -135,6 +135,6 @@ INFO: seed corpus: files: 176 min: 2b max: 2b total: 352b rss: 481Mb
 MS: 4 CrossOver-ShuffleBytes-ChangeBinInt-CopyPart-; base unit: d4cb68f0c717eebd6e9568bf3199b0b5329d20c5
 0x4,0x0,0x6b,0x8e,
 \004\000k\216
-artifact_prefix='/tmp/claude-1000/-home-ha-work-ainative-scaas/cb650392-4068-4a69-9fa8-22874463defa/scratchpad/s5/oldlim/crash-'; Test unit written to /tmp/claude-1000/-home-ha-work-ainative-scaas/cb650392-4068-4a69-9fa8-22874463defa/scratchpad/s5/oldlim/crash-oom-ba3ed3e5ad8edc30b20ab1a51161b9b95c77bf08
+artifact_prefix='<scratch>/s5/oldlim/crash-'; Test unit written to <scratch>/s5/oldlim/crash-oom-ba3ed3e5ad8edc30b20ab1a51161b9b95c77bf08
 Base64: BABrjg==
 SUMMARY: libFuzzer: out-of-memory

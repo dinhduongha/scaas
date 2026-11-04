@@ -2,7 +2,7 @@
 $ docker inspect state
 exited exit 130
 $ patch-chainspec.py genesis.json engine-pqz-provisional-n2304.json 0x0 --testnet-reset
-/home/ha/work/ainative/scaas/scratchpad/pqz4-live/genesis.pqz4.json: engine.Pqz replaced (first timestamp 0 = 0x0, 1 schedule(s), 26 rows); diff: 171 added lines, 251 removed; params changed: none; genesis header changed: none
+<repo>/scratchpad/pqz4-live/genesis.pqz4.json: engine.Pqz replaced (first timestamp 0 = 0x0, 1 schedule(s), 26 rows); diff: 171 added lines, 251 removed; params changed: none; genesis header changed: none
 $ install genesis.json (engine.Pqz = the provisional n2304 schedule), compose image 2.2.0-pqz3 -> 2.2.0-pqz4
 1 matches in 1 files:
 

@@ -1,4 +1,4 @@
-   Compiling pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/stmt)
+   Compiling pqz-stmt v0.1.0 (<repo>/pqz-core/stmt)
     Finished `release` profile [optimized] target(s) in 2.44s
      Running unittests src/lib.rs (target/n2048-kmax1024/release/deps/pqz_stmt-73b2f32bbca7c6f9)
 
@@ -32,8 +32,8 @@ running 0 tests
 
 test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-   Compiling pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/stmt)
-   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/pqzh/ligero)
+   Compiling pqz-stmt v0.1.0 (<repo>/pqz-core/stmt)
+   Compiling pqzh-ligero v0.1.0 (<repo>/pqz-core/pqzh/ligero)
     Finished `release` profile [optimized + debuginfo] target(s) in 9.90s
      Running unittests src/lib.rs (target/n2048-kmax1024/release/deps/pqzh_ligero-61dfca5b40fcf930)
 

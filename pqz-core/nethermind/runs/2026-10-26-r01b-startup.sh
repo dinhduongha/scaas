@@ -1,5 +1,5 @@
 # r01b start-up runs: the script as run from scratchpad/startup/ (git-ignored; record only). Inputs made there:
-#   genesis-live.json = /home/dockers/mba-chain-nethermind/genesis.json (the SCaaS testnet, engine.Pqz with the plan 5h Task 8d ids)
+#   genesis-live.json = ~dockers/mba-chain-nethermind/genesis.json (the SCaaS testnet, engine.Pqz with the plan 5h Task 8d ids)
 #   genesis-new.json = the same with engine.Pqz.schedules = chain/engine-pqz-provisional-n2304.json's
 #   genesis-later-foreign.json = genesis-new.json + a schedule at 0xf4865700 (2100-01-01), its first row's id 0x00..01
 #   config.json = {Init: ChainSpecPath /x/genesis.json, BaseDbPath /nethermind/r01b_db, DiscoveryEnabled false, PeerManagerEnabled false}, JsonRpc, Mining, Merge off

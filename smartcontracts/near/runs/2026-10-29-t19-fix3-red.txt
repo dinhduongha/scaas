@@ -15,7 +15,7 @@ help: use `let _ = ...` to ignore the resulting value
 
 warning: `scaas-near-integration` (test "relay_router") generated 1 warning
     Finished `test` profile [unoptimized + debuginfo] target(s) in 4.70s
-     Running tests/dex.rs (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/debug/deps/dex-b86fb624492a65c3)
+     Running tests/dex.rs (<repo>/smartcontracts/near/target/debug/deps/dex-b86fb624492a65c3)
 
 running 2 tests
 test settle_msig_leg_gas_limit ... ok
@@ -36,7 +36,7 @@ failures:
 test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 14 filtered out; finished in 12.07s
 
 error: test failed, to rerun pass `-p scaas-near-integration --test dex`
-     Running tests/relay_router.rs (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/debug/deps/relay_router-e10e18e86f2ded48)
+     Running tests/relay_router.rs (<repo>/smartcontracts/near/target/debug/deps/relay_router-e10e18e86f2ded48)
 
 running 1 test
 test gas_pins_hold ... FAILED

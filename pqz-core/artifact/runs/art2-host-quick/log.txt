@@ -20,4 +20,4 @@
 == 04:27:13 vectors: pqz_kat.py --check (independent Python)
 == 04:27:39 vectors: wasm32 replay (every proof proved again by pqz-ffi in wasm32: byte-equal, valid)
 == 04:28:17 tables and comparison
-== 04:28:17 done: /home/ha/work/ainative/scaas/.claude/worktrees/artifact2/pqz-core/artifact/runs/art2-host-quick
+== 04:28:17 done: <repo>/pqz-core/artifact/runs/art2-host-quick

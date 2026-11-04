@@ -347,7 +347,7 @@ node, and neither the code backfill nor the coin-balance cleanup is needed. Cont
 binaries.soliditylang.org, never Blockscout's hosted service) backs the backend, and
 `smartcontracts/evm/script/verify-blockscout.sh` verifies every `Deploy.s.sol` contract after each reset or deploy;
 upstream v1.11.1 rejects `evmVersion` `amsterdam` (NET-EVM-06), so the live stack uses a locally patched verifier
-image (built outside the repo, `/home/dockers/mba-chain-nethermind/sc-verifier/`), temporary until upstream supports
+image (built outside the repo, `~dockers/mba-chain-nethermind/sc-verifier/`), temporary until upstream supports
 Amsterdam (owner ruling 2026-10-31 option (a)): the 31 `Deploy.s.sol` contracts and the PQZ e2e contracts verified, full match; the e2e tokens are EIP-1167 clones Blockscout links to their verified implementations (RUNBOOK § Contract verification).
 
 <a id="NET-EVM-10"></a>**NET-EVM-10** — **The SCaaS testnet runs two nodes: a `sealer` and a public `rpc`** (owner

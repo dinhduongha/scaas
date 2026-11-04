@@ -1,7 +1,7 @@
 # fs3 Task 13 + plan 5h Task 9: SCaaS testnet (7622) roll-out with gas re-calibration. Commands of phases B and C
 # (phase A, 2026-10-30: image 2.2.0-pqz6 + calib image built, rows script prepared; report
 # .superpowers/sdd/2026-10-30-fs3-t13/phase-a-report.md). Every command from the work tree
-#   W=/home/ha/work/ainative/scaas/.claude/worktrees/fs3-t13-rollout ; cd $W
+#   W=<repo> ; cd $W
 # Rules: heavy commands via scripts/capped (never wrapped in timeout), Docker with --memory, foreground, no polling
 # loops, never git stash. A command longer than the shell tool's 10-minute limit is moved to the background by the
 # harness, which notifies when it ends: wait for that notice, do not poll and do not start a second copy.
@@ -55,7 +55,7 @@ grep -n "wasm" pqz-core/artifact/runs/fs3-t13-docker-multi/results-multi.md | he
 # B6. Host state after: repeat B0 into $D-fs3-t13-host.txt (>>), then report to the controller (rows, WARNs, timings).
 
 ########## PHASE C: roll-out (host need not be quiet) ##########
-L=/home/dockers/mba-chain-nethermind
+L=~dockers/mba-chain-nethermind
 TS=$(date +%Y%m%d-%H%M)
 G=0xa17faef497fa29ec90603969dad0176ea18fd1cc2eaf0f9f4fa2dacc9c952ac2   # genesis hash expected unchanged (params-only edits)
 K4=0x0000000000000000000000000000000000000000000000000000000000000004  # test key 0x…04 (= 0x1eff47bc…a718), funded in genesis
@@ -74,7 +74,7 @@ docker run --rm --memory 256m -v $L:/l alpine:3 sh -c "set -e; B=/l/backup-pqz5-
 
 # C2. Chainspec: ONLY from $L/genesis.json (7702 off; never a scratchpad genesis copy)
 grep -c 7702 $L/genesis.json                              # must print 0
-S=/home/ha/work/ainative/scaas/scratchpad/fs3-t13; mkdir -p $S
+S=<repo>/scratchpad/fs3-t13; mkdir -p $S
 python3 -I pqz-core/nethermind/chain/patch-chainspec.py $L/genesis.json pqz-core/nethermind/chain/engine-pqz.json 0x0 \
   $S/genesis.pqz6.json --testnet-reset                    # expect: engine.Pqz replaced, params changed: none, genesis header changed: none
 grep -c 7702 $S/genesis.pqz6.json                         # must print 0

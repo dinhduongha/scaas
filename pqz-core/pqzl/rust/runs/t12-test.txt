@@ -12,7 +12,7 @@ $ cargo test -j2 --release --offline --features c-oracle,test-hooks,bench -- --n
    Compiling digest v0.10.7
    Compiling cpufeatures v0.2.17
    Compiling keccak v0.1.6
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust-t12prep/pqz-core/pqzl/rust)
+   Compiling pqzl v0.1.0 (<repo>/pqz-core/pqzl/rust)
    Compiling cfg-if v1.0.5
    Compiling aes v0.8.4
    Compiling sha3 v0.10.8
@@ -1156,7 +1156,7 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 [rc=0]
 # arithmetic KAT: kat_dump vs the upstream LaZer golden file
 $ cargo build -j2 --release --offline --features test-hooks --bin kat_dump
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust-t12prep/pqz-core/pqzl/rust)
+   Compiling pqzl v0.1.0 (<repo>/pqz-core/pqzl/rust)
     Finished `release` profile [optimized + debuginfo] target(s) in 4.82s
 [rc=0]
 $ python3 -I ../kat/check.py ../kat/lazer-3330e48.json target/kat-rust.json
@@ -1164,7 +1164,7 @@ $ python3 -I ../kat/check.py ../kat/lazer-3330e48.json target/kat-rust.json
 [rc=0]
 # keys KAT: keys_kat (pqzl/test/pqz_keys_kat.c's JSON lines) vs the independent Python check
 $ cargo build -j2 --release --offline --features test-hooks --bin keys_kat
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust-t12prep/pqz-core/pqzl/rust)
+   Compiling pqzl v0.1.0 (<repo>/pqz-core/pqzl/rust)
     Finished `release` profile [optimized + debuginfo] target(s) in 0.62s
 [rc=0]
 $ sh -c ./target/release/keys_kat 1000 > target/keys-rust.jsonl
@@ -1192,7 +1192,7 @@ to_rust.py --check: 15 files, equal
 [rc=0]
 # prover: bench proofs_fnv = the C core's (tx0c-fnv-native: 5 5 63; l3a-native-fast: 2 2 16320, the op 7 shapes)
 $ cargo build -j2 --release --offline --features bench --bin bench
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust-t12prep/pqz-core/pqzl/rust)
+   Compiling pqzl v0.1.0 (<repo>/pqz-core/pqzl/rust)
     Finished `release` profile [optimized + debuginfo] target(s) in 5.60s
 [rc=0]
 $ sh -c ./target/release/bench 5 5 63 > runs/t12-bench-63.jsonl
@@ -1218,7 +1218,7 @@ $ sh -c cd wasm && cargo build -j2 --release --offline --target wasm32-unknown-u
    Compiling typenum v1.20.1
    Compiling generic-array v0.14.7
    Compiling keccak v0.1.6
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust-t12prep/pqz-core/pqzl/rust)
+   Compiling pqzl v0.1.0 (<repo>/pqz-core/pqzl/rust)
    Compiling cfg-if v1.0.5
    Compiling crypto-common v0.1.7
    Compiling inout v0.1.4
@@ -1227,7 +1227,7 @@ $ sh -c cd wasm && cargo build -j2 --release --offline --target wasm32-unknown-u
    Compiling digest v0.10.7
    Compiling sha3 v0.10.8
    Compiling aes v0.8.4
-   Compiling pqzl-wasm v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust-t12prep/pqz-core/pqzl/rust/wasm)
+   Compiling pqzl-wasm v0.1.0 (<repo>/pqz-core/pqzl/rust/wasm)
     Finished `release` profile [optimized] target(s) in 6.66s
 [rc=0]
 $ sh -c node wasm/run_wasm.mjs 3 1 63 > runs/t12-wasm-63.jsonl

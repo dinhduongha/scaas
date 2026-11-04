@@ -1,8 +1,8 @@
 # relay_fee_wrappers RED at commit 194fe8e7 (tests only; token wasm without the wrappers)
-   Compiling scaas-near-token v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/token)
-   Compiling scaas-near-dex v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/dex)
-   Compiling scaas-near-spike-p256 v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/spike-p256)
-   Compiling scaas-near-integration v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/integration)
+   Compiling scaas-near-token v0.1.0 (<repo>/smartcontracts/near/token)
+   Compiling scaas-near-dex v0.1.0 (<repo>/smartcontracts/near/dex)
+   Compiling scaas-near-spike-p256 v0.1.0 (<repo>/smartcontracts/near/spike-p256)
+   Compiling scaas-near-integration v0.1.0 (<repo>/smartcontracts/near/integration)
 warning: unused `near_workspaces::result::ExecutionFinalResult` that must be used
    --> integration/tests/relay_fee_wrappers.rs:186:5
     |

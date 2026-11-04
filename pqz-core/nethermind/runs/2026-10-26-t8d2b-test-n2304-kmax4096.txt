@@ -2,15 +2,15 @@
 An issue was encountered verifying workloads. For more information, run "dotnet workload update".
   Determining projects to restore...
   All projects are up-to-date for restore.
-  Nethermind.Pqz -> /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d2b/pqz-core/nethermind/Nethermind.Pqz/bin/Release/net10.0/Nethermind.Pqz.dll
-  Harness -> /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d2b/pqz-core/nethermind/Harness/bin/Release/net10.0/Harness.dll
-  Nethermind.Pqz.Test -> /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d2b/pqz-core/nethermind/Nethermind.Pqz.Test/bin/Release/net10.0/Nethermind.Pqz.Test.dll
-Test run for /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d2b/pqz-core/nethermind/Nethermind.Pqz.Test/bin/Release/net10.0/Nethermind.Pqz.Test.dll (.NETCoreApp,Version=v10.0)
+  Nethermind.Pqz -> <repo>/pqz-core/nethermind/Nethermind.Pqz/bin/Release/net10.0/Nethermind.Pqz.dll
+  Harness -> <repo>/pqz-core/nethermind/Harness/bin/Release/net10.0/Harness.dll
+  Nethermind.Pqz.Test -> <repo>/pqz-core/nethermind/Nethermind.Pqz.Test/bin/Release/net10.0/Nethermind.Pqz.Test.dll
+Test run for <repo>/pqz-core/nethermind/Nethermind.Pqz.Test/bin/Release/net10.0/Nethermind.Pqz.Test.dll (.NETCoreApp,Version=v10.0)
 A total of 1 test files matched the specified pattern.
 NUnit Adapter 5.0.0.0: Test execution started
-Running all tests in /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d2b/pqz-core/nethermind/Nethermind.Pqz.Test/bin/Release/net10.0/Nethermind.Pqz.Test.dll
+Running all tests in <repo>/pqz-core/nethermind/Nethermind.Pqz.Test/bin/Release/net10.0/Nethermind.Pqz.Test.dll
    NUnit3TestExecutor discovered 51 of 51 NUnit test cases using Current Discovery mode, Non-Explicit run
-libpqz_ffi.so: /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d2b/pqz-core/ffi/target/release/libpqz_ffi.so sha256 1227a47b1361668badb8d7b657fc53b7f4e488c47e084843740d5def44537069
+libpqz_ffi.so: <repo>/pqz-core/ffi/target/release/libpqz_ffi.so sha256 1227a47b1361668badb8d7b657fc53b7f4e488c47e084843740d5def44537069
 Nethermind.Pqz.dll references: Autofac, Nethermind.Api, Nethermind.Blockchain, Nethermind.Core, Nethermind.Evm, Nethermind.Init, Nethermind.Logging, Nethermind.Specs, System.Collections, System.Collections.Immutable, System.Console, System.Linq, System.Memory, System.Runtime, System.Runtime.InteropServices, System.Security.Cryptography, System.Text.Json, System.Threading
 ACVP ML-DSA sigVer: external 30 (of them 2 with the empty context also through the precompile), internal via VerifyMu 30, skipped 0: []
   Passed Plugin_references_only_base_image_assemblies_and_the_framework [12 ms]
@@ -31,7 +31,7 @@ corpus through PqzPrecompile.Run: fee0/1 8, flip/0 30, honest/1 43, negative/0 7
   Passed Every_corpus_input_gives_its_expected_output [1 s]
   Passed Gas_is_the_row_plus_the_length_term_and_never_depends_on_validity [15 ms]
 panic child: exit 0; stdout: panic child: before 01 during 0000000000000000000000000000000000000000000000000000000000000000 (PQZ-INPUT-PANIC 1) after 01
-panic child: ok; stderr: thread 'pqz-core' (182) panicked at /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d2b/pqz-core/ffi/src/pqzl/rust.rs:78:17:
+panic child: ok; stderr: thread 'pqz-core' (182) panicked at <repo>/pqz-core/ffi/src/pqzl/rust.rs:78:17:
 pqz-ffi test hook TEST_PANIC
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 PQZ-INPUT-PANIC keccak=0x48900acb375361a7c64022aec4749ed4fe64daa8f99509c261b7cce1559bc8e1 len=139979: a caught panic in the decoder / verifier (input-caused): …00

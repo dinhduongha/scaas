@@ -13,7 +13,7 @@ exit 2
 HERE=$(cd "$(dirname "$0")" && pwd)
 N=$(cd "$HERE/.." && pwd)
 C=$N/chain
-L=/home/dockers/mba-chain-nethermind
+L=${SCAAS_TESTNET_DIR:?set SCAAS_TESTNET_DIR to the SCaaS testnet stack directory}
 G=0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464
 KEY=0x0000000000000000000000000000000000000000000000000000000000000004   # test key 0x…04, funded in genesis
 LOG=$HERE/2026-10-19-rust-live.txt
@@ -22,7 +22,7 @@ count() { echo "$1 rc=$2 ($(grep -c '^ok' "$3") ok, $(grep -c '^FAIL' "$3") FAIL
 exec >> "$LOG" 2>&1
 case ${1:?before or after} in
 before)
-  TS=$(date +%Y%m%d-%H%M%S); B=/home/dockers/mba-chain-nethermind-backups/rust-$TS
+  TS=$(date +%Y%m%d-%H%M%S); B=$L-backups/rust-$TS
   A="docker run --rm --memory 512m -v $L:/l -v $(dirname "$B"):/b alpine:3"
   echo "# Rust PQZL roll-out on chain 7622 (path A: a third engine.Pqz schedule, image pqz2 -> pqz3, data kept), $(date -u +%FT%TZ), commit $(git -C "$N" rev-parse --short HEAD)"
   echo "## 0. before"

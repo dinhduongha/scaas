@@ -6,16 +6,16 @@ INFO: Running with entropic power schedule (0xFF, 100).
 INFO: Seed: 1037922753
 INFO: Loaded 1 modules   (26829 inline 8-bit counters): 26829 [0x6267b60fc490, 0x6267b6102d5d), 
 INFO: Loaded 1 PC tables (26829 PCs): 26829 [0x6267b6102d60,0x6267b616ba30), 
-INFO:        0 files found in /home/ha/work/ainative/scaas/.claude/worktrees/op7tok/pqz-core/build/fuzz/work/mutate
+INFO:        0 files found in <repo>/pqz-core/build/fuzz/work/mutate
 INFO:      421 files found in corpus/mutate
 INFO:        0 files found in regress/mutate
-INFO:      176 files found in /home/ha/work/ainative/scaas/.claude/worktrees/op7tok/pqz-core/build/fuzz/seeds/mutate
+INFO:      176 files found in <repo>/pqz-core/build/fuzz/seeds/mutate
 INFO: seed corpus: files: 597 min: 1b max: 130b total: 7092b rss: 482Mb
 #512	pulse  cov: 1930 ft: 4044 corp: 326/3356b exec/s: 51 rss: 718Mb
 #598	INITED cov: 3414 ft: 6013 corp: 404/6130b exec/s: 27 rss: 723Mb
 #679	NEW    cov: 3414 ft: 6014 corp: 405/6148b lim: 130 exec/s: 29 rss: 723Mb L: 18/130 MS: 1 InsertRepeatedBytes-
 #750	NEW    cov: 3414 ft: 6015 corp: 406/6167b lim: 130 exec/s: 30 rss: 723Mb L: 19/130 MS: 1 ChangeBinInt-
-	NEW_FUNC[1/1]: 0x6267b5da6e48 in polymat_get_elem /home/ha/work/ainative/scaas/.claude/worktrees/op7tok/pqz-core/build/fuzz/target/x86_64-unknown-linux-gnu/release/build/pqz-ffi-52403c674b4db8b5/out/include/lazer.h:3864
+	NEW_FUNC[1/1]: 0x6267b5da6e48 in polymat_get_elem <repo>/pqz-core/build/fuzz/target/x86_64-unknown-linux-gnu/release/build/pqz-ffi-52403c674b4db8b5/out/include/lazer.h:3864
 #876	NEW    cov: 3437 ft: 6393 corp: 407/6190b lim: 130 exec/s: 7 rss: 723Mb L: 23/130 MS: 1 EraseBytes-
 #876	DONE   cov: 3437 ft: 6393 corp: 407/6190b lim: 130 exec/s: 7 rss: 723Mb
 Done 876 runs in 125 second(s)

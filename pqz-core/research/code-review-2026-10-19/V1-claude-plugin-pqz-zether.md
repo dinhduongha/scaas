@@ -1,6 +1,6 @@
 # V1: Claude, part 1 of 3: Nethermind PQZ plugin, `src/pqz/`, `src/zether/`
 
-Static reading only, tree `/home/ha/work/ainative/scaas/.claude/worktrees/rev3` at `7aab1fe` (detached). Paths below
+Static reading only, tree `<repo>` at `7aab1fe` (detached). Paths below
 are relative to that tree. No build, no tests, no chain.
 
 Summary: **no P0 or P1 found.** Two P2 findings. The first is T-lead, the controller's lead, now confirmed. Five P3 findings.

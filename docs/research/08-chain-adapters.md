@@ -184,7 +184,7 @@ Cron gọi đúng một dòng (bẫy §5.4 CLAUDE.md — eval context của `ir.
 Bản nháp chốt "9 method, không hơn". Con số đó sai theo hướng nguy hiểm: nó ép ba chức năng vận hành bắt buộc ra ngoài interface, nơi chúng sẽ được viết lại khác nhau cho từng chain. **[SỬA]** Mỗi method thêm vào dưới đây tương ứng một sự cố cụ thể mà thiếu nó sẽ gặp.
 
 ```python
-# /home/dockers/odoo19/relay-pool/adapters/base.py
+# ~dockers/odoo19/relay-pool/adapters/base.py
 from typing import Protocol, AsyncIterator, Optional, Literal
 from dataclasses import dataclass
 from enum import Enum

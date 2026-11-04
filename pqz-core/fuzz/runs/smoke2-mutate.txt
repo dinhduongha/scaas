@@ -1,15 +1,15 @@
 # fuzz mutate, 180 s, 2026-10-14T21:44:29+07:00, commit 072bec1, Ubuntu clang version 18.1.3 (1ubuntu1), rustc 1.97.1 (8bab26f4f 2026-07-14)
-pqz-fuzz: proved the 16 honest inputs in 52.8 s, cached in /home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/build/fuzz/honest.bin
+pqz-fuzz: proved the 16 honest inputs in 52.8 s, cached in <repo>/pqz-core/build/fuzz/honest.bin
 pqz-fuzz: arena peak 94615600 B (bound 100663296 B)
 pqz-fuzz init (mutate): 16 honest inputs valid, self-test ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205, verify-only arena 144 MiB, arena used 93498368 B, peak 94615600 B
 INFO: Running with entropic power schedule (0xFF, 100).
 INFO: Seed: 1024976190
 INFO: Loaded 1 modules   (27142 inline 8-bit counters): 27142 [0x64b9a85ec488, 0x64b9a85f2e8e), 
 INFO: Loaded 1 PC tables (27142 PCs): 27142 [0x64b9a85f2e90,0x64b9a865cef0), 
-INFO:       79 files found in /home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/build/fuzz/work/mutate
+INFO:       79 files found in <repo>/pqz-core/build/fuzz/work/mutate
 INFO:       64 files found in corpus/mutate
 INFO:        0 files found in regress/mutate
-INFO:       64 files found in /home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/build/fuzz/seeds/mutate
+INFO:       64 files found in <repo>/pqz-core/build/fuzz/seeds/mutate
 INFO: seed corpus: files: 207 min: 1b max: 6b total: 634b rss: 813Mb
 pqz-fuzz: arena peak 95133248 B (bound 100663296 B)
 pqz-fuzz: arena peak 95169680 B (bound 100663296 B)
@@ -34,8 +34,8 @@ pqz-fuzz: arena peak 95169680 B (bound 100663296 B)
 	NEW_FUNC[1/35]: 0x64b9a8272800 in <pqz_ffi::pqzl::on_worker<core::option::Option<i32>, pqz_ffi::pqzl::with_core<i32, pqz_ffi::pqzl::verify_generic::{closure#0}>::{closure#1}>::{closure#1} as core::ops::function::FnOnce<()>>::call_once::{shim:vtable#0} /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library/core/src/ops/function.rs:250
 	NEW_FUNC[2/35]: 0x64b9a8273e10 in <pqz_ffi::pqzl::on_worker<core::option::Option<()>, pqz_ffi::pqzl::with_core<(), pqz_ffi::pqzl::reinit::{closure#1}>::{closure#1}>::{closure#1} as core::ops::function::FnOnce<()>>::call_once::{shim:vtable#0} /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library/core/src/ops/function.rs:250
 #542	NEW    cov: 1710 ft: 2726 corp: 74/306b lim: 8 exec/s: 5 rss: 813Mb L: 3/8 MS: 1 ChangeBit-
-	NEW_FUNC[1/5]: 0x64b9a82c00b8 in aes_tables /home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/ffi/../src/pqz_sv.c:481
-	NEW_FUNC[2/5]: 0x64b9a82c0378 in lz_mat /home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/ffi/../src/pqz_sv.c:875
+	NEW_FUNC[1/5]: 0x64b9a82c00b8 in aes_tables <repo>/pqz-core/ffi/../src/pqz_sv.c:481
+	NEW_FUNC[2/5]: 0x64b9a82c0378 in lz_mat <repo>/pqz-core/ffi/../src/pqz_sv.c:875
 #547	NEW    cov: 1798 ft: 2887 corp: 75/309b lim: 8 exec/s: 5 rss: 813Mb L: 3/8 MS: 5 ChangeByte-InsertByte-CrossOver-ChangeBinInt-EraseBytes-
 #548	NEW    cov: 1803 ft: 2944 corp: 76/317b lim: 8 exec/s: 5 rss: 813Mb L: 8/8 MS: 1 InsertRepeatedBytes-
 #554	NEW    cov: 1807 ft: 2959 corp: 77/323b lim: 8 exec/s: 5 rss: 813Mb L: 6/8 MS: 1 EraseBytes-
@@ -58,8 +58,8 @@ pqz-fuzz: arena peak 95169680 B (bound 100663296 B)
 #885	NEW    cov: 1821 ft: 3047 corp: 94/427b lim: 8 exec/s: 8 rss: 813Mb L: 6/8 MS: 4 CrossOver-PersAutoDict-EraseBytes-PersAutoDict- DE: "\3770"-"\3770"-
 #988	NEW    cov: 1822 ft: 3048 corp: 95/435b lim: 8 exec/s: 9 rss: 813Mb L: 8/8 MS: 3 ChangeBit-CopyPart-PersAutoDict- DE: "\000\000"-
 #990	NEW    cov: 1822 ft: 3050 corp: 96/442b lim: 8 exec/s: 9 rss: 813Mb L: 7/8 MS: 2 ChangeBit-InsertByte-
-	NEW_FUNC[1/9]: 0x64b9a829eb38 in int_set_i64 /home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/build/fuzz/target/x86_64-unknown-linux-gnu/release/build/pqz-ffi-f69cd1781515556e/out/include/lazer.h:2391
-	NEW_FUNC[2/9]: 0x64b9a82a7f28 in cval /home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/ffi/../src/pqz_rel.c:522
+	NEW_FUNC[1/9]: 0x64b9a829eb38 in int_set_i64 <repo>/pqz-core/build/fuzz/target/x86_64-unknown-linux-gnu/release/build/pqz-ffi-f69cd1781515556e/out/include/lazer.h:2391
+	NEW_FUNC[2/9]: 0x64b9a82a7f28 in cval <repo>/pqz-core/ffi/../src/pqz_rel.c:522
 #996	NEW    cov: 1887 ft: 3165 corp: 97/445b lim: 8 exec/s: 9 rss: 813Mb L: 3/8 MS: 1 ShuffleBytes-
 #1005	NEW    cov: 1888 ft: 3166 corp: 98/451b lim: 8 exec/s: 9 rss: 813Mb L: 6/8 MS: 4 ChangeBit-ChangeByte-InsertByte-CrossOver-
 #1016	NEW    cov: 1888 ft: 3170 corp: 99/457b lim: 8 exec/s: 9 rss: 813Mb L: 6/8 MS: 1 CopyPart-
@@ -84,7 +84,7 @@ pqz-fuzz: arena peak 95169680 B (bound 100663296 B)
 #1273	NEW    cov: 1898 ft: 3238 corp: 113/541b lim: 8 exec/s: 11 rss: 813Mb L: 6/8 MS: 2 ShuffleBytes-CrossOver-
 #1279	NEW    cov: 1898 ft: 3250 corp: 114/547b lim: 8 exec/s: 11 rss: 813Mb L: 6/8 MS: 1 ShuffleBytes-
 #1490	NEW    cov: 1898 ft: 3251 corp: 115/554b lim: 8 exec/s: 13 rss: 813Mb L: 7/8 MS: 1 PersAutoDict- DE: "\000\000"-
-	NEW_FUNC[1/1]: 0x64b9a82b3538 in parse_disc /home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/ffi/../src/pqz_rel.c:699
+	NEW_FUNC[1/1]: 0x64b9a82b3538 in parse_disc <repo>/pqz-core/ffi/../src/pqz_rel.c:699
 #1492	NEW    cov: 1907 ft: 3303 corp: 116/559b lim: 8 exec/s: 13 rss: 813Mb L: 5/8 MS: 2 ChangeBinInt-ChangeBinInt-
 #1493	NEW    cov: 1907 ft: 3304 corp: 117/565b lim: 8 exec/s: 13 rss: 813Mb L: 6/8 MS: 1 InsertByte-
 #1494	NEW    cov: 1907 ft: 3305 corp: 118/571b lim: 8 exec/s: 13 rss: 813Mb L: 6/8 MS: 1 CrossOver-
@@ -118,8 +118,8 @@ pqz-fuzz: arena peak 95169680 B (bound 100663296 B)
 #2633	NEW    cov: 1935 ft: 3470 corp: 144/740b lim: 8 exec/s: 19 rss: 813Mb L: 8/8 MS: 1 ChangeBit-
 #2684	REDUCE cov: 1935 ft: 3470 corp: 144/739b lim: 8 exec/s: 20 rss: 813Mb L: 6/8 MS: 1 EraseBytes-
 #2693	REDUCE cov: 1935 ft: 3485 corp: 145/745b lim: 8 exec/s: 20 rss: 813Mb L: 6/8 MS: 4 CrossOver-CrossOver-ChangeByte-ChangeBit-
-	NEW_FUNC[1/113]: 0x64b9a829b098 in unlink_blk /home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/ffi/../src/pqz_arena.c:95
-	NEW_FUNC[2/113]: 0x64b9a829bbb8 in push /home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/ffi/../src/pqz_arena.c:84
+	NEW_FUNC[1/113]: 0x64b9a829b098 in unlink_blk <repo>/pqz-core/ffi/../src/pqz_arena.c:95
+	NEW_FUNC[2/113]: 0x64b9a829bbb8 in push <repo>/pqz-core/ffi/../src/pqz_arena.c:84
 #2820	NEW    cov: 3067 ft: 4743 corp: 146/751b lim: 8 exec/s: 20 rss: 855Mb L: 6/8 MS: 2 ShuffleBytes-ChangeByte-
 #2829	NEW    cov: 3068 ft: 4744 corp: 147/759b lim: 8 exec/s: 20 rss: 855Mb L: 8/8 MS: 4 CopyPart-InsertRepeatedBytes-ShuffleBytes-InsertByte-
 #2840	REDUCE cov: 3068 ft: 4745 corp: 148/765b lim: 8 exec/s: 20 rss: 855Mb L: 6/8 MS: 1 CrossOver-

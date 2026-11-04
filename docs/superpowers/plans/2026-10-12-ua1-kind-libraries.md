@@ -42,9 +42,9 @@ names, fixes the call, and reports it.
 
 ## Global Constraints
 
-- Paths relative to `/home/ha/work/ainative/scaas`; worktree `.claude/worktrees/ua1` on branch `ua1-kinds` from `main`.
+- Paths relative to `<repo>`; worktree `.claude/worktrees/ua1` on branch `ua1-kinds` from `main`.
   forge in `smartcontracts/evm` of the worktree: `lib/` is not tracked — `mkdir lib`, copy `smartcontracts/evm/lib/forge-std`
-  into it, symlink `lib/openzeppelin-contracts → /home/ha/work/blockchain/openzeppelin-contracts`. clientkeys: copy (not
+  into it, symlink `lib/openzeppelin-contracts → ~/work/blockchain/openzeppelin-contracts`. clientkeys: copy (not
   symlink) `node_modules` from the main checkout (never `git add` it). Heavy commands (forge, npm, cargo, go, dotnet) only
   through `scripts/capped`, one at a time. In worktrees a hook blocks bare `git`: use `/usr/bin/git`; use `/usr/bin/grep`.
 - Gates: `forge build` then `forge test` in `smartcontracts/evm`; size gate `forge build src --sizes --json > /tmp/sizes.json;

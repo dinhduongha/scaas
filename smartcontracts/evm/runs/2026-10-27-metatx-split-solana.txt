@@ -149,10 +149,10 @@
    Compiling spl-token-interface v2.0.0
    Compiling spl-associated-token-account-interface v2.0.0
    Compiling solana-keccak-hasher v3.1.0
-   Compiling relay_target v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/solana/programs/relay_target)
-   Compiling cpi_wrapper v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/solana/programs/cpi_wrapper)
+   Compiling relay_target v0.1.0 (<repo>/smartcontracts/solana/programs/relay_target)
+   Compiling cpi_wrapper v0.1.0 (<repo>/smartcontracts/solana/programs/cpi_wrapper)
    Compiling anchor-spl v1.2.0
-   Compiling scaas v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/solana/programs/scaas)
+   Compiling scaas v0.1.0 (<repo>/smartcontracts/solana/programs/scaas)
     Finished `release` profile [optimized] target(s) in 48.62s
    Compiling proc-macro2 v1.0.107
    Compiling quote v1.0.47
@@ -551,9 +551,9 @@
    Compiling ansi_term v0.12.1
    Compiling solana-native-token v3.0.0
    Compiling p256 v0.13.2
-   Compiling scaas v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/solana/programs/scaas)
-   Compiling relay_target v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/solana/programs/relay_target)
-   Compiling cpi_wrapper v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/solana/programs/cpi_wrapper)
+   Compiling scaas v0.1.0 (<repo>/smartcontracts/solana/programs/scaas)
+   Compiling relay_target v0.1.0 (<repo>/smartcontracts/solana/programs/relay_target)
+   Compiling cpi_wrapper v0.1.0 (<repo>/smartcontracts/solana/programs/cpi_wrapper)
    Compiling solana-secp256r1-program v3.0.0
    Compiling agave-precompiles v4.3.0
    Compiling litesvm v0.17.0

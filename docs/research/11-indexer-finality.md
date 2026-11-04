@@ -444,7 +444,7 @@ blockchain.chain.effect  (hieu ung nghiep vu, ap dung DUNG MOT LAN, khoa theo RE
 
 Một chi tiết dễ sai: khoá effect là `(caip2, ref)`, **không** gồm `token` hay `amount`. Nếu cùng một `ref` xuất hiện hai lần trên chain với số tiền khác nhau, đó không phải hai effect — đó là một **sự cố** (relayer nộp hai lần với cùng `ref`, hoặc contract cho phép reuse `ref`). Xử lý: effect thứ hai bị từ chối bởi UNIQUE, và indexer ghi một `blockchain.ref.collision` + activity. Nếu ta cho `amount` vào khoá thì sự cố này biến thành hai bút toán im lặng. **Khoá hẹp lại là an toàn hơn.**
 
-**Tầng 3 — dùng `bamboo_idempotency` đúng cách.** Addon đã có sẵn (`/home/dockers/odoo19/addons/bamboo_idempotency/`) và cho mọi model một cột `bamboo_uuid` kiểu **`uuid` native của PostgreSQL** với **UNIQUE index từng phần** (`WHERE bamboo_uuid IS NOT NULL`, tên `<table>_bamboo_uuid_uniq`), cộng `bamboo_create_idempotent(vals, uuid)` trả `{'id': int, 'created': bool}`.
+**Tầng 3 — dùng `bamboo_idempotency` đúng cách.** Addon đã có sẵn (`~dockers/odoo19/addons/bamboo_idempotency/`) và cho mọi model một cột `bamboo_uuid` kiểu **`uuid` native của PostgreSQL** với **UNIQUE index từng phần** (`WHERE bamboo_uuid IS NOT NULL`, tên `<table>_bamboo_uuid_uniq`), cộng `bamboo_create_idempotent(vals, uuid)` trả `{'id': int, 'created': bool}`.
 
 ```python
 res = self.env['blockchain.chain.effect'].bamboo_create_idempotent(vals, effect_uuid)

@@ -57,12 +57,12 @@ Every block below was applied to a scratch worktree from `main` and run green: f
 
 ## Global Constraints
 
-- Paths relative to `/home/ha/work/ainative/scaas`; forge in `smartcontracts/evm` of the worktree
+- Paths relative to `<repo>`; forge in `smartcontracts/evm` of the worktree
   `.claude/worktrees/p3b` (branch `p3b-zether-modes` from `main`; `lib/` is not tracked: `mkdir lib`, copy
   `smartcontracts/evm/lib/forge-std` into it and symlink `lib/openzeppelin-contracts →
-  /home/ha/work/blockchain/openzeppelin-contracts`, as in the main checkout).
+  ~/work/blockchain/openzeppelin-contracts`, as in the main checkout).
   Heavy commands only through `scripts/capped`, one at a time. `/usr/bin/grep`; in a worktree bare `git` is blocked:
-  `/usr/bin/git`. Rust: `CARGO_TARGET_DIR=/home/ha/work/ainative/scaas/clients/zether-prover/target` (and
+  `/usr/bin/git`. Rust: `CARGO_TARGET_DIR=<repo>/clients/zether-prover/target` (and
   `…/scaas-node/target` for the node) reuse the main checkout's caches; `wasm-smoke.sh` builds in the crate's own
   `target/` (it reads the wasm from there), so run it without `CARGO_TARGET_DIR`.
 - **Zether is UNAUDITED — NOT FOR PRODUCTION FUNDS**; dev chains only (`ZetherSafety`: 31337, 1337).
@@ -1372,8 +1372,8 @@ fn modes_in_the_request() {
 
 ```bash
 cd clients/zether-prover
-CARGO_TARGET_DIR=/home/ha/work/ainative/scaas/clients/zether-prover/target \
-  /home/ha/work/ainative/scaas/scripts/capped cargo run --release --bin zether-cli vectors vectors
+CARGO_TARGET_DIR=<repo>/clients/zether-prover/target \
+  <repo>/scripts/capped cargo run --release --bin zether-cli vectors vectors
 ```
 
   Changes `burn_*`, `disclosure_*`, `transcript_s3`, `transfer_*`, `transfer_multi_*`, `transfer_multi_noaud_*`,
@@ -3423,7 +3423,7 @@ for f in clients/zether-prover/vectors/*.json; do b=$(basename "$f")
 dev-chain registry it already deploys).
 
 - [ ] **Step 1: e2e** — `forge build` (full), then in `scaas-node`
-  (`CARGO_TARGET_DIR=/home/ha/work/ainative/scaas/scaas-node/target`): `cargo test --test e2e -- --ignored
+  (`CARGO_TARGET_DIR=<repo>/scaas-node/target`): `cargo test --test e2e -- --ignored
   --test-threads=1` → 4 passed; `cargo test --test e2e_hedera -- --ignored` → 1 passed (no node change: the node reads
   nothing of Zether; the e2e chains are not dev chains).
 
@@ -3436,7 +3436,7 @@ dev-chain registry it already deploys).
 
 ```python
 import os, subprocess, sys
-R='/home/ha/work/ainative/scaas/.claude/worktrees/p3b'
+R='<repo>'
 W=R+'/smartcontracts/evm'
 P=R+'/clients/zether-prover'
 L=W+'/src/zether/ZetherLib.sol'
@@ -3498,7 +3498,7 @@ muts=[
  ('R6 salt not drawn', RZ, '        rng.fill_bytes(&mut salt);\n        let s = derive_s', '        let s = derive_s', 'cargo'),
 ]
 sel=sys.argv[1:]
-env=dict(os.environ, CARGO_TARGET_DIR='/home/ha/work/ainative/scaas/clients/zether-prover/target')
+env=dict(os.environ, CARGO_TARGET_DIR='<repo>/clients/zether-prover/target')
 for name,f,a,b,path in muts:
     if sel and name.split()[0] not in sel: continue
     src=open(f).read(); assert src.count(a)==1,(name, src.count(a))

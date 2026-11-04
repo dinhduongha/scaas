@@ -6,10 +6,10 @@ INFO: Running with entropic power schedule (0xFF, 100).
 INFO: Seed: 3841460413
 INFO: Loaded 1 modules   (38975 inline 8-bit counters): 38975 [0x63ec0833b8e0, 0x63ec0834511f), 
 INFO: Loaded 1 PC tables (38975 PCs): 38975 [0x63ec08345120,0x63ec083dd510), 
-INFO:       16 files found in /home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust/pqz-core/build/fuzz/work/mutate
+INFO:       16 files found in <repo>/pqz-core/build/fuzz/work/mutate
 INFO:      421 files found in corpus/mutate
 INFO:        0 files found in regress/mutate
-INFO:      176 files found in /home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust/pqz-core/build/fuzz/seeds/mutate
+INFO:      176 files found in <repo>/pqz-core/build/fuzz/seeds/mutate
 INFO: seed corpus: files: 613 min: 1b max: 130b total: 7627b rss: 792Mb
 #512	pulse  cov: 3049 ft: 6204 corp: 315/3117b exec/s: 23 rss: 991Mb
 #614	INITED cov: 3338 ft: 6670 corp: 390/5975b exec/s: 19 rss: 991Mb
@@ -58,7 +58,7 @@ INFO: seed corpus: files: 613 min: 1b max: 130b total: 7627b rss: 792Mb
 #3399	NEW    cov: 3359 ft: 6840 corp: 425/6988b lim: 130 exec/s: 13 rss: 991Mb L: 19/130 MS: 2 PersAutoDict-PersAutoDict- DE: "\001\000\000\000\000\000\000\014"-"\001\000\000\000\000\000\000\030"-
 #3410	NEW    cov: 3359 ft: 6841 corp: 426/7007b lim: 130 exec/s: 13 rss: 991Mb L: 19/130 MS: 1 ShuffleBytes-
 	NEW_FUNC[1/167]: 0x63ec07f523f0 in core::ptr::drop_glue::<pqzl::coder::ProofParts> /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library/core/src/ptr/mod.rs:825
-	NEW_FUNC[2/167]: 0x63ec07f52960 in pqzl::arith::polymat::auto::<pqzl::arith::polymat::PolyMat, pqzl::arith::polymat::PolyMat> /home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust/pqz-core/pqzl/rust/src/arith/polymat.rs:159
+	NEW_FUNC[2/167]: 0x63ec07f52960 in pqzl::arith::polymat::auto::<pqzl::arith::polymat::PolyMat, pqzl::arith::polymat::PolyMat> <repo>/pqz-core/pqzl/rust/src/arith/polymat.rs:159
 #3535	NEW    cov: 4253 ft: 7864 corp: 427/7013b lim: 130 exec/s: 13 rss: 991Mb L: 6/130 MS: 5 CopyPart-ChangeBit-InsertByte-ShuffleBytes-CrossOver-
 #3571	NEW    cov: 4253 ft: 7866 corp: 428/7033b lim: 130 exec/s: 13 rss: 991Mb L: 20/130 MS: 1 ChangeBit-
 #3684	NEW    cov: 4257 ft: 7870 corp: 429/7110b lim: 130 exec/s: 13 rss: 991Mb L: 77/130 MS: 3 CopyPart-ShuffleBytes-CMP- DE: "\326\000\000@`iV*\234\326\025\353=\220l\261\223J\325lx\2140\"\215/\257|Q~3\326[J\003\300\210.\007\346\355\037\323\003\240\214\211\263\352\266\350B?\337\270\363\022\002\225\215\326\202\240a"-

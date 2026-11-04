@@ -5,10 +5,10 @@ INFO: Running with entropic power schedule (0xFF, 100).
 INFO: Seed: 3041671677
 INFO: Loaded 1 modules   (24562 inline 8-bit counters): 24562 [0x5ae6f5eca4a0, 0x5ae6f5ed0492), 
 INFO: Loaded 1 PC tables (24562 PCs): 24562 [0x5ae6f5ed0498,0x5ae6f5f303b8), 
-INFO:        4 files found in /home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/build/fuzz/work/codec
+INFO:        4 files found in <repo>/pqz-core/build/fuzz/work/codec
 INFO:      290 files found in corpus/codec
 INFO:        0 files found in regress/codec
-INFO:      220 files found in /home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/build/fuzz/seeds/codec
+INFO:      220 files found in <repo>/pqz-core/build/fuzz/seeds/codec
 INFO: seed corpus: files: 514 min: 1b max: 398b total: 5339b rss: 464Mb
 #512	pulse  cov: 705 ft: 1037 corp: 196/1270b exec/s: 170 rss: 589Mb
 #515	INITED cov: 705 ft: 1038 corp: 197/1605b exec/s: 171 rss: 590Mb

@@ -1,5 +1,5 @@
 # debug build (overflow checks): reprove_byte_equal, all 23 rows
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust/pqz-core/pqzl/rust)
+   Compiling pqzl v0.1.0 (<repo>/pqz-core/pqzl/rust)
     Finished `test` profile [unoptimized + debuginfo] target(s) in 4.30s
      Running tests/vectors.rs (target/debug/deps/vectors-a517364760ca3cd9)
 
@@ -16,7 +16,7 @@ test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; fini
    Compiling keccak v0.1.6
    Compiling cpufeatures v0.2.17
    Compiling cfg-if v1.0.5
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust/pqz-core/pqzl/rust)
+   Compiling pqzl v0.1.0 (<repo>/pqz-core/pqzl/rust)
    Compiling crypto-common v0.1.7
    Compiling inout v0.1.4
    Compiling block-buffer v0.10.4

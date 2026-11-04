@@ -58,9 +58,9 @@ of the call.
 
 ## Global Constraints
 
-- Paths relative to `/home/ha/work/ainative/scaas`; worktree `.claude/worktrees/p6a` on branch `p6a-pq-verifiers` from
+- Paths relative to `<repo>`; worktree `.claude/worktrees/p6a` on branch `p6a-pq-verifiers` from
   `main`. forge in `smartcontracts/evm` of the worktree: `lib/` is not tracked — `mkdir lib`, copy
-  `smartcontracts/evm/lib/forge-std` into it, symlink `lib/openzeppelin-contracts → /home/ha/work/blockchain/openzeppelin-contracts`.
+  `smartcontracts/evm/lib/forge-std` into it, symlink `lib/openzeppelin-contracts → ~/work/blockchain/openzeppelin-contracts`.
   clientkeys: **copy** (not symlink) `node_modules` from the main checkout, because Task 1 installs a package into it
   (never `git add` it). Heavy commands (forge, npm) only through `scripts/capped`, one at a time. `/usr/bin/grep`; in
   worktrees a hook blocks bare `git`: use `/usr/bin/git`.

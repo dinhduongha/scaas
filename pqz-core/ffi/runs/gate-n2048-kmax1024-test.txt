@@ -1,10 +1,10 @@
 # PQZL backend: the default feature (cargo flags: --no-default-features --features pqzl-rust,set-n2048-kmax1024)
 $ cargo test --release --offline --no-default-features --features pqzl-rust,set-n2048-kmax1024 --lib
    Compiling digest v0.10.7
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi)
+   Compiling pqz-ffi v0.1.0 (<repo>/pqz-core/ffi)
    Compiling sha3 v0.10.8
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/pqzl/rust)
-   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/pqzh/ligero)
+   Compiling pqzl v0.1.0 (<repo>/pqz-core/pqzl/rust)
+   Compiling pqzh-ligero v0.1.0 (<repo>/pqz-core/pqzh/ligero)
     Finished `release` profile [optimized + debuginfo] target(s) in 9.80s
      Running unittests src/lib.rs (target/n2048-kmax1024/release/deps/pqz_ffi-77f63334e7750284)
 

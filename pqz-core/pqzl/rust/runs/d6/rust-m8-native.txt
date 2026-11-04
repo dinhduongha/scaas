@@ -1,4 +1,4 @@
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust-t12prep/pqz-core/pqzl/rust)
+   Compiling pqzl v0.1.0 (<repo>/pqz-core/pqzl/rust)
     Finished `release` profile [optimized + debuginfo] target(s) in 6.47s
      Running tests/vectors.rs (target/release/deps/vectors-44916446e6bd4b5c)
 

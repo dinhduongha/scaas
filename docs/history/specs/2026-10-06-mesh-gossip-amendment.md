@@ -1036,7 +1036,7 @@ P2b lands first it already compiles `aws-lc-rs`, which only moves the long build
 | UD | §23.6, §23.3 `mesh` | "gossip + pull" |
 | §05 | §5.1, §5.0 | libp2p built (R112); private profile = bus, PQ (R114) |
 | §05 | §5.2 | `scaas-intent/1.2` |
-| SRS (owner WIP, `/home/ha/work/ainative/SRS/ai/ai-enterprise-blockchain-architecture.md`) | §5.1 diagram "Topic: /metatx/v1"; rule 1 "metaTxDigest + simulate before gossip"; rule 3 "private ⇒ mesh off, single hub" | for the owner to reconcile: topics per chain (§5.1); simulation is on the submit path, gossip runs a bounded nonce/balance freshness read (R118); private ⇒ never on gossip, admitted peers over the PQ bus (not a single hub) |
+| SRS (owner WIP, `~/work/ainative/SRS/ai/ai-enterprise-blockchain-architecture.md`) | §5.1 diagram "Topic: /metatx/v1"; rule 1 "metaTxDigest + simulate before gossip"; rule 3 "private ⇒ mesh off, single hub" | for the owner to reconcile: topics per chain (§5.1); simulation is on the submit path, gossip runs a bounded nonce/balance freshness read (R118); private ⇒ never on gossip, admitted peers over the PQ bus (not a single hub) |
 
 ---
 

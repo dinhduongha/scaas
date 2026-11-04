@@ -367,11 +367,11 @@ PY
 ## C4. Bố cục repo
 
 Locked #9 đặt `smartcontracts/` ở gốc repo. Gốc repo của một deployment là
-`/home/dockers/odoo19`, không phải thư mục addons — ba trong năm cây dưới đây
+`~dockers/odoo19`, không phải thư mục addons — ba trong năm cây dưới đây
 **không phải addon** và không thể nằm dưới `custom-addons/`.
 
 ```
-/home/dockers/odoo19/
+~dockers/odoo19/
 ├── custom-addons/bamboo-dms/     # 4 addon Odoo (§C3)
 ├── smartcontracts/               # §14.1 — cây chuẩn tắc, Foundry + Rust + KAT
 ├── relay-pool/                   # §06, §08  — Python asyncio
@@ -384,7 +384,7 @@ Locked #9 đặt `smartcontracts/` ở gốc repo. Gốc repo của một deploy
 `smartcontracts/`; nó là bản chuẩn tắc.
 
 **Đường dẫn trong CI phải qua biến, không hard-code**, vì hai cây sẽ tách thành
-hai repo: `SMARTCONTRACTS_DIR` (mặc định `/home/dockers/odoo19/smartcontracts`).
+hai repo: `SMARTCONTRACTS_DIR` (mặc định `~dockers/odoo19/smartcontracts`).
 ABI-drift gate (§14.12b) đọc `${SMARTCONTRACTS_DIR}/evm/abi/*.json`;
 `fs_permissions` trong `foundry.toml` giữ đường dẫn tương đối trong cây
 `smartcontracts/`.

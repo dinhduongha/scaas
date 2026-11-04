@@ -6,10 +6,10 @@ INFO: Running with entropic power schedule (0xFF, 100).
 INFO: Seed: 247793593
 INFO: Loaded 1 modules   (40649 inline 8-bit counters): 40649 [0x62cf8a0a3c60, 0x62cf8a0adb29), 
 INFO: Loaded 1 PC tables (40649 PCs): 40649 [0x62cf8a0adb30,0x62cf8a14c7c0), 
-INFO:        0 files found in /home/ha/work/ainative/scaas/pqz-core/build/fuzz/work/mutate
+INFO:        0 files found in <repo>/pqz-core/build/fuzz/work/mutate
 INFO:      462 files found in corpus/mutate
 INFO:        0 files found in regress/mutate
-INFO:      176 files found in /home/ha/work/ainative/scaas/pqz-core/build/fuzz/seeds/mutate
+INFO:      176 files found in <repo>/pqz-core/build/fuzz/seeds/mutate
 INFO: seed corpus: files: 638 min: 1b max: 146b total: 8142b rss: 730Mb
 #256	pulse  cov: 2622 ft: 4129 corp: 70/259b exec/s: 85 rss: 822Mb
 #512	pulse  cov: 3048 ft: 6027 corp: 275/2548b exec/s: 13 rss: 851Mb
@@ -43,7 +43,7 @@ INFO: seed corpus: files: 638 min: 1b max: 146b total: 8142b rss: 730Mb
 #1254	NEW    cov: 3324 ft: 6551 corp: 364/5297b lim: 130 exec/s: 13 rss: 851Mb L: 19/130 MS: 1 ChangeByte-
 #1279	NEW    cov: 3324 ft: 6552 corp: 365/5352b lim: 130 exec/s: 13 rss: 851Mb L: 55/130 MS: 5 PersAutoDict-ChangeBit-CMP-ChangeBit-InsertRepeatedBytes- DE: "\377\026"-"\001\000\000\002\000\000\000\000"-
 #1290	NEW    cov: 3324 ft: 6553 corp: 366/5379b lim: 130 exec/s: 13 rss: 851Mb L: 27/130 MS: 1 PersAutoDict- DE: "\001\000\000\002\000\000\000\000"-
-	NEW_FUNC[1/1]: 0x62cf89ee6eb0 in pqzl::rel::parse_disc /home/ha/work/ainative/scaas/pqz-core/pqzl/rust/src/rel.rs:580
+	NEW_FUNC[1/1]: 0x62cf89ee6eb0 in pqzl::rel::parse_disc <repo>/pqz-core/pqzl/rust/src/rel.rs:580
 #1295	NEW    cov: 3343 ft: 6618 corp: 367/5394b lim: 130 exec/s: 13 rss: 851Mb L: 15/130 MS: 5 InsertByte-CopyPart-EraseBytes-ChangeBit-InsertByte-
 #1331	NEW    cov: 3343 ft: 6619 corp: 368/5491b lim: 130 exec/s: 13 rss: 851Mb L: 97/130 MS: 1 InsertRepeatedBytes-
 #1365	NEW    cov: 3343 ft: 6620 corp: 369/5548b lim: 130 exec/s: 13 rss: 851Mb L: 57/130 MS: 4 CopyPart-InsertRepeatedBytes-CopyPart-EraseBytes-
@@ -112,7 +112,7 @@ INFO: seed corpus: files: 638 min: 1b max: 146b total: 8142b rss: 730Mb
 #3413	NEW    cov: 4249 ft: 7767 corp: 424/8242b lim: 130 exec/s: 11 rss: 1056Mb L: 91/130 MS: 5 ChangeBinInt-InsertByte-PersAutoDict-InsertRepeatedBytes-CrossOver- DE: "\007\000\001\305\200ohw:L\224\257:Dj\"n\364?oT\003\326\240\013\225\336DaI\364\204\314\002rk\220\200y\326[^\\\025\3430\367\346\\\207Wv\337\301\260\366\311<\355\220\300E\3508"-
 #3426	NEW    cov: 4249 ft: 7768 corp: 425/8285b lim: 130 exec/s: 11 rss: 1056Mb L: 43/130 MS: 3 ShuffleBytes-CrossOver-EraseBytes-
 #3475	NEW    cov: 4249 ft: 7770 corp: 426/8412b lim: 130 exec/s: 11 rss: 1056Mb L: 127/130 MS: 4 CopyPart-PersAutoDict-ChangeBinInt-CopyPart- DE: "\377\026"-
-	NEW_FUNC[1/1]: 0x62cf89cc68b0 in <pqzl::arith::int::Int>::addsqr /home/ha/work/ainative/scaas/pqz-core/pqzl/rust/src/arith/int.rs:311
+	NEW_FUNC[1/1]: 0x62cf89cc68b0 in <pqzl::arith::int::Int>::addsqr <repo>/pqz-core/pqzl/rust/src/arith/int.rs:311
 #3482	NEW    cov: 4251 ft: 7934 corp: 427/8522b lim: 130 exec/s: 10 rss: 1056Mb L: 110/130 MS: 2 InsertRepeatedBytes-InsertRepeatedBytes-
 #3583	NEW    cov: 4251 ft: 7935 corp: 428/8547b lim: 130 exec/s: 10 rss: 1056Mb L: 25/130 MS: 1 CrossOver-
 #3613	NEW    cov: 4251 ft: 7936 corp: 429/8555b lim: 130 exec/s: 10 rss: 1056Mb L: 8/130 MS: 5 ShuffleBytes-ChangeByte-ShuffleBytes-EraseBytes-CopyPart-
@@ -159,7 +159,7 @@ INFO: seed corpus: files: 638 min: 1b max: 146b total: 8142b rss: 730Mb
 #7182	NEW    cov: 4260 ft: 8094 corp: 456/9501b lim: 130 exec/s: 11 rss: 1056Mb L: 39/130 MS: 5 CopyPart-ShuffleBytes-CopyPart-ChangeByte-InsertByte-
 #7221	REDUCE cov: 4260 ft: 8094 corp: 456/9497b lim: 130 exec/s: 11 rss: 1056Mb L: 11/130 MS: 4 PersAutoDict-ShuffleBytes-CMP-EraseBytes- DE: "\000\000\000\017"-"\001\014"-
 #7274	NEW    cov: 4260 ft: 8097 corp: 457/9503b lim: 130 exec/s: 11 rss: 1056Mb L: 6/130 MS: 3 CopyPart-PersAutoDict-CMP- DE: "\000\001"-"\003\000"-
-	NEW_FUNC[1/1]: 0x62cf89cc8fd0 in pqzl::arith::int::int_modq /home/ha/work/ainative/scaas/pqz-core/pqzl/rust/src/arith/int.rs:379
+	NEW_FUNC[1/1]: 0x62cf89cc8fd0 in pqzl::arith::int::int_modq <repo>/pqz-core/pqzl/rust/src/arith/int.rs:379
 #7613	NEW    cov: 4276 ft: 8301 corp: 458/9573b lim: 130 exec/s: 11 rss: 1056Mb L: 70/130 MS: 4 ChangeBit-ChangeByte-ChangeByte-PersAutoDict- DE: "\007\000\001\305\200ohw:L\224\257:Dj\"n\364?oT\003\326\240\013\225\336DaI\364\204\314\002rk\220\200y\326[^\\\025\3430\367\346\\\207Wv\337\301\260\366\311<\355\220\300E\3508"-
 #7691	REDUCE cov: 4276 ft: 8301 corp: 458/9563b lim: 130 exec/s: 11 rss: 1056Mb L: 19/130 MS: 3 ChangeBit-ChangeBinInt-CrossOver-
 #7719	REDUCE cov: 4276 ft: 8301 corp: 458/9559b lim: 130 exec/s: 11 rss: 1056Mb L: 26/130 MS: 3 PersAutoDict-InsertByte-EraseBytes- DE: "\000\000\000\000\000\000\000\000"-

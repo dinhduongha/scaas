@@ -1,6 +1,6 @@
 $ cargo test -j2 --release --offline --no-fail-fast --features c-oracle,test-hooks,bench -- --nocapture
    Compiling typenum v1.20.1
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/rev2-small-fixes/pqz-core/pqzl/rust)
+   Compiling pqzl v0.1.0 (<repo>/pqz-core/pqzl/rust)
    Compiling cfg-if v1.0.5
    Compiling keccak v0.1.6
    Compiling generic-array v0.14.7

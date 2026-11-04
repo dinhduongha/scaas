@@ -23,7 +23,7 @@ TODO.md §00 P2 notes (D1: `mtxWrap` and `NativeNotGasless` come with P2).
 
 ## Global Constraints
 
-- Paths relative to `/home/ha/work/ainative/scaas`; forge in `smartcontracts/evm` of the worktree `.claude/worktrees/p2a`
+- Paths relative to `<repo>`; forge in `smartcontracts/evm` of the worktree `.claude/worktrees/p2a`
   (branch `p2a-trade`), created by the controller with `lib/` copied.
 - **Heavy commands only through `scripts/capped`, one at a time** (`timeout 900 scripts/capped bash -c 'cd smartcontracts/evm
   && forge …'`). `/usr/bin/grep`, `rtk proxy git diff`. `forge build --sizes` exits non-zero by design (EIP-170 over-size

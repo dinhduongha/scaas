@@ -1,5 +1,5 @@
 # ua-rs at commit 80f45c56
-   Compiling scaas-ua v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/typed-signing/clients/ua-rs)
+   Compiling scaas-ua v0.1.0 (<repo>/clients/ua-rs)
     Finished `test` profile [unoptimized + debuginfo] target(s) in 1.47s
      Running unittests src/lib.rs (target/debug/deps/scaas_ua-e94670f462f34927)
 

@@ -23,4 +23,4 @@
 == 09:56:16 vectors: wasm32 replay (every proof proved again by pqz-ffi in wasm32: byte-equal, valid)
 == 09:57:20 vectors: tamper.py (each checker catches changed leaves)
 == 09:59:07 tables and comparison
-== 09:59:07 done: /home/ha/work/ainative/scaas/pqz-core/pqz-core/artifact/runs/freeze-2026-10-17
+== 09:59:07 done: <repo>/pqz-core/pqz-core/artifact/runs/freeze-2026-10-17

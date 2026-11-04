@@ -1,6 +1,6 @@
 # algorand adapter T20 RED (discovery_simulate_has_the_budget_the_group_can_gain against the T17 build loop) at commit 870caf05
 # ../scripts/capped cargo test -j2 --lib adapters::algorand::tests::discovery_simulate_has_the_budget_the_group_can_gain
-   Compiling scaas-node v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/scaas-node)
+   Compiling scaas-node v0.1.0 (<repo>/scaas-node)
     Finished `test` profile [unoptimized + debuginfo] target(s) in 15.68s
      Running unittests src/lib.rs (target/debug/deps/scaas_node-7ea8f2ba056438ed)
 

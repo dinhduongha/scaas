@@ -1,6 +1,6 @@
 # N: PQZL C core, security review round 2 (Claude, static, read-only), 2026-10-19
 
-Tree: `/home/ha/work/ainative/scaas/.claude/worktrees/rev2` at `e9cabd1` (PQZL v3 merged: `361a86b`). Every reference below
+Tree: `<repo>` at `e9cabd1` (PQZL v3 merged: `361a86b`). Every reference below
 is relative to that tree. I built nothing, ran nothing, fuzzed nothing and timed nothing.
 
 Scope: `pqz-core/pqzl/src/` (`pqz_rel.c`, `pqz_sv.c`, `pqz_keys.c`, `pqz_arena.c`, `pqz_rt.h`, `pqz_mpn.h`, `pqz_fixexp.h`,

@@ -1,4 +1,4 @@
-   Compiling pqzh v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzhnext/pqz-core/pqzh)
+   Compiling pqzh v0.1.0 (<repo>/pqz-core/pqzh)
     Finished `release` profile [optimized + debuginfo] target(s) in 1.52s
      Running unittests src/lib.rs (target/release/deps/pqzh-43281adb432b2ad3)
 

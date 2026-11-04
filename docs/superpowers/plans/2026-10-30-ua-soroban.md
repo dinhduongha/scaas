@@ -203,7 +203,7 @@ Names: Part B's "factory crate" is `ua-registry`; its entries `UA` / `KEY` / `PQ
 
 ## Setup (before T0)
 
-- [ ] `git -C /home/ha/work/ainative/scaas worktree add -b ua-soroban /home/ha/work/ainative/scaas/.claude/worktrees/ua-soroban main`;
+- [ ] `git -C <repo> worktree add -b ua-soroban <repo> main`;
   check `git log main --oneline | grep -m1 'token-family rename'` (S18 precondition; merged as `1a68427a`) and
   `ls smartcontracts/vectors/ua/portable.json` (UA-8 Part A on `main`).
 

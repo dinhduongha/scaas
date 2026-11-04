@@ -31,9 +31,9 @@ to a scratch worktree from `main` and run green (full suite 910, Dex 36, DexOuts
 
 ## Global Constraints
 
-- Paths relative to `/home/ha/work/ainative/scaas`; forge in `smartcontracts/evm` of worktree `.claude/worktrees/p2b2`
+- Paths relative to `<repo>`; forge in `smartcontracts/evm` of worktree `.claude/worktrees/p2b2`
   (branch `p2b2-dex` from `main`; `lib/` is not tracked: copy `smartcontracts/evm/lib/forge-std` and symlink
-  `lib/openzeppelin-contracts → /home/ha/work/blockchain/openzeppelin-contracts` as in the main checkout). Heavy commands
+  `lib/openzeppelin-contracts → ~/work/blockchain/openzeppelin-contracts` as in the main checkout). Heavy commands
   only through `scripts/capped`, one at a time. `/usr/bin/grep`, `rtk proxy git diff`.
 - `scaas.dex` = `0xb144ea5327f344ea7e3b34dd1898f534c8ce28f9f54d0d89a1b78f8fcf7dac00` (one field appended: `puller`);
   `scaas.trade` = `0x2c9c6bfc4d8563261a812845f5cbef41fd06d0e8f173455fd0e077ab420e2f00` (the DEX's own copy, through
@@ -1335,13 +1335,13 @@ contract DexOutsideTest is Test {
     /tmp/sizes.json size-baseline.json` → `0 error(s)`.
   - e2e: `forge build` (full), then in `scaas-node`: `cargo test --test e2e -- --ignored --test-threads=1` → 4 passed;
     `cargo test --test e2e_hedera -- --ignored` → 1 passed. (A fresh worktree may reuse the main checkout's build cache
-    with `CARGO_TARGET_DIR=/home/ha/work/ainative/scaas/scaas-node/target`.)
+    with `CARGO_TARGET_DIR=<repo>/scaas-node/target`.)
   - **Mutation probe** (not committed; save as a scratch file and run with `scripts/capped python3 <file>`): every mutant
     must be `KILLED`. Validated: 20/20 killed.
 
 ```python
 import subprocess, sys, shutil
-W='/home/ha/work/ainative/scaas/.claude/worktrees/p2b2/smartcontracts/evm'
+W='<repo>/smartcontracts/evm'
 D=W+'/src/dex/SCaaSDex.sol'
 L=W+'/src/trade/TradeLib.sol'
 P=W+'/src/dex/DexPuller.sol'

@@ -1,5 +1,5 @@
      Locking 1 package to latest compatible version
-      Adding pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ligero/pqz-core/pqzh/ligero)
+      Adding pqzh-ligero v0.1.0 (<repo>/pqz-core/pqzh/ligero)
    Compiling proc-macro2 v1.0.107
    Compiling unicode-ident v1.0.27
    Compiling quote v1.0.47
@@ -72,7 +72,7 @@
    Compiling p3-bus v0.9.0-rc.1
    Compiling p3-whir v0.9.0-rc.1
    Compiling p3-multi-stark v0.9.0-rc.1
-   Compiling pqzh v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ligero/pqz-core/pqzh)
-   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ligero/pqz-core/pqzh/ligero)
-   Compiling pqzh-ligero-wasm v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ligero/pqz-core/pqzh/ligero/wasm)
+   Compiling pqzh v0.1.0 (<repo>/pqz-core/pqzh)
+   Compiling pqzh-ligero v0.1.0 (<repo>/pqz-core/pqzh/ligero)
+   Compiling pqzh-ligero-wasm v0.1.0 (<repo>/pqz-core/pqzh/ligero/wasm)
     Finished `release` profile [optimized] target(s) in 54.52s

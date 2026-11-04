@@ -99,16 +99,16 @@ ok   reject: op 7: op 7 statement under op 1: opTag does not belong to op
 ok   reject: op 7: op 1 statement under op 7: opTag does not belong to op
 ok   op 7 at 93,312 B: the M / auditorOn words pick (1, on) or (2, off)
 Traceback (most recent call last):
-  File "/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/ffi/../../smartcontracts/vectors/pqz/pqz_kat.py", line 1736, in <module>
+  File "<repo>/pqz-core/ffi/../../smartcontracts/vectors/pqz/pqz_kat.py", line 1736, in <module>
     sys.exit(main(sys.argv[1:]))
              ^^^^^^^^^^^^^^^^^^
-  File "/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/ffi/../../smartcontracts/vectors/pqz/pqz_kat.py", line 1721, in main
+  File "<repo>/pqz-core/ffi/../../smartcontracts/vectors/pqz/pqz_kat.py", line 1721, in main
     bad = selftest(log)
           ^^^^^^^^^^^^^
-  File "/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/ffi/../../smartcontracts/vectors/pqz/pqz_kat.py", line 781, in selftest
+  File "<repo>/pqz-core/ffi/../../smartcontracts/vectors/pqz/pqz_kat.py", line 781, in selftest
     ctrs = [keygen_sample(bytes([i]) * 32, bs=ls, be=le)[2] for i in range(4)]
             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/ffi/../../smartcontracts/vectors/pqz/pqz_kat.py", line 264, in keygen_sample
+  File "<repo>/pqz-core/ffi/../../smartcontracts/vectors/pqz/pqz_kat.py", line 264, in keygen_sample
     raise ValueError("KeyGen: counter 64 reached")
 ValueError: KeyGen: counter 64 reached
 Command exited with non-zero status 1

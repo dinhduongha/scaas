@@ -1,4 +1,4 @@
-   Compiling scaas-ua v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/ua-rs)
+   Compiling scaas-ua v0.1.0 (<repo>/clients/ua-rs)
     Finished `test` profile [unoptimized + debuginfo] target(s) in 0.25s
      Running unittests src/lib.rs (target/debug/deps/scaas_ua-7e1156df1164ba41)
 

@@ -1,5 +1,5 @@
 $ cargo test -j2 --release --offline --features c-oracle,test-hooks -- --nocapture
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust/pqz-core/pqzl/rust)
+   Compiling pqzl v0.1.0 (<repo>/pqz-core/pqzl/rust)
     Finished `release` profile [optimized + debuginfo] target(s) in 15.99s
      Running unittests src/lib.rs (target/release/deps/pqzl-c88fecd5aeb2394a)
 
@@ -88,7 +88,7 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 [rc=0]
 # arithmetic KAT: kat_dump vs the upstream LaZer golden file
 $ cargo build -j2 --release --offline --bin kat_dump
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust/pqz-core/pqzl/rust)
+   Compiling pqzl v0.1.0 (<repo>/pqz-core/pqzl/rust)
     Finished `release` profile [optimized + debuginfo] target(s) in 1.23s
 [rc=0]
 $ python3 -I ../kat/check.py ../kat/lazer-3330e48.json target/kat-rust.json
@@ -96,7 +96,7 @@ $ python3 -I ../kat/check.py ../kat/lazer-3330e48.json target/kat-rust.json
 [rc=0]
 # keys KAT: keys_kat (pqzl/test/pqz_keys_kat.c's JSON lines) vs the independent Python check
 $ cargo build -j2 --release --offline --bin keys_kat
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust/pqz-core/pqzl/rust)
+   Compiling pqzl v0.1.0 (<repo>/pqz-core/pqzl/rust)
     Finished `release` profile [optimized + debuginfo] target(s) in 0.48s
 [rc=0]
 $ sh -c ./target/release/keys_kat 1000 > target/keys-rust.jsonl

@@ -1,4 +1,4 @@
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea3/pqz-core/ffi)
+   Compiling pqz-ffi v0.1.0 (<repo>/pqz-core/ffi)
     Finished `release` profile [optimized + debuginfo] target(s) in 0.90s
      Running `target/release/examples/ffi_bench 200`
 	Command being timed: "cargo run --release --offline --features prove --example ffi_bench 200"
