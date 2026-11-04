@@ -478,19 +478,20 @@ contract MandateWalletTest is MandateFixture {
         w.mtxExecuteAsOwner(m.data, 1, vu, sig);
     }
 
-    /// The owner still pays by hand from the wallet: a `MetaTransfer` with `from = wallet`, ERC-1271 by the owner.
+    /// The owner still pays by hand from the wallet: a `UAMetaTransfer` with `from = pad(wallet)` (ua-mtx-merge T2: the
+    /// token's one typed struct), ERC-1271 by the owner.
     function test_owner_still_pays_manually_through_meta_tx() public {
         bytes32 ref = keccak256("manual");
-        MetaTxLib.MetaTransfer memory x = _tr(address(w), npp, 50, ref, t.payLane(ref), RR);
+        MetaTxLib.UAMetaTransfer memory x = _tr(address(w), npp, 50, ref, t.payLane(ref), RR);
         bytes memory sig = _sig(OWNER_PK, t.mtxTransferDigest(x));
         vm.prank(relayer);
-        t.mtxExecuteTransfer(x, sig);
+        t.mtxExecuteTransfer(x, _nativeSig(sig));
         assertEq(t.balanceOf(npp), 50);
         x = _tr(address(w), npp, 50, keccak256("d"), 1, RR);
         sig = _sig(DELEGATE_PK, t.mtxTransferDigest(x));
         vm.prank(relayer);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
-        t.mtxExecuteTransfer(x, sig);
+        t.mtxExecuteTransfer(x, _nativeSig(sig));
     }
 
     /// The delegated path never uses an allowance: no `approve` / `transferFrom` / `permit` / `increaseAllowance`
@@ -673,14 +674,14 @@ contract HederaMandateWalletTest is MandateFixture {
         hw.mtxExecuteAsOwnerRaw(m.data, 0, m.validUntil, sig);
     }
 
-    /// ERC-1271 runs under STATICCALL, where HIP-632 halts: a `MetaTransfer` with `from = wallet` and the ED25519
+    /// ERC-1271 runs under STATICCALL, where HIP-632 halts: a `UAMetaTransfer` with `from = pad(wallet)` and the ED25519
     /// owner's signature fails, as specified.
     function test_ed25519OwnerCannotSignAs1271() public {
-        MetaTxLib.MetaTransfer memory x = _tr(address(hw), npp, 5, keccak256("1271"), 3, RR);
+        MetaTxLib.UAMetaTransfer memory x = _tr(address(hw), npp, 5, keccak256("1271"), 3, RR);
         bytes memory sig = _ed(t.mtxTransferDigest(x));
         vm.prank(relayer);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
-        t.mtxExecuteTransfer(x, sig);
+        t.mtxExecuteTransfer(x, _nativeSig(sig));
     }
 
     function test_delegatePaysUnderMandateSetByEd25519Owner() public {

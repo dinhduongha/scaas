@@ -8,6 +8,7 @@ import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
 import {IUALedger} from "../../src/metatx/IUALedger.sol";
+import {IMetaTokenV2} from "../../src/metatx/IMetaTokenV2.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
@@ -23,11 +24,13 @@ import {ZetherFixture} from "../zether/helpers/ZetherFixture.sol";
 import {ZetherKeys} from "../zether/helpers/ZetherKeys.sol";
 import {PqzFixture} from "../pqz/helpers/PqzFixture.sol";
 
-/// @notice "+0" (CTR-GOV-11, spec §10.2, B-33): on every kind, `transfer`, `mtxTransfer` (both on `_transfer`),
-///         `transferToUA` (native → UA) and `uaExecuteTransfer` (UA → UA, the `_uaMove` branch that skips
-///         `ERC20._update`) read and write exactly the token slots pinned in `test/vectors/plus_zero_slots.json`, recorded
-///         at `2a864638`, before any governance code. Not a range around a root: a mapping read lands at a hash.
-///         Written against ABI strings, literal bits and fixtures present on both sides, so the same file runs there.
+/// @notice "+0" (CTR-GOV-11, spec §10.2, B-33): on every kind, `transfer`, `mtxTransfer`, `transferToUA`
+///         (native → UA) and `mtxExecuteTransfer` (UA → UA, the `_uaMove` branch that skips `ERC20._update`) read and
+///         write exactly the token slots pinned in `test/vectors/plus_zero_slots.json`, recorded at `2a864638`, before
+///         any governance code. Not a range around a root: a mapping read lands at a hash. ua-mtx-merge T2: the rows
+///         re-target the merged entries (an EOA's `mtxTransfer` is today's `uaTransfer` body, through `_uaMove`; the
+///         `uaExecuteTransfer_*` rows run `mtxExecuteTransfer`); the pin file and its row names do not move (slots, not ABI).
+///         Written against fixtures present on both sides.
 ///         `PLUS_ZERO_WRITE=true` records the pin; run it with `-j1`, each row merges into the one file.
 abstract contract PlusZeroRows is Test {
     uint256 internal constant PZ_PK = 0xA11CE;
@@ -49,7 +52,7 @@ abstract contract PlusZeroRows is Test {
         _pzCall(t, PZ_RELAYER, _pzMtx(t, 0), "prime mtxTransfer");
         _pzCall(t, s, abi.encodeWithSignature("transferToUA(bytes32,uint256)", a, 10), "prime transferToUA a");
         _pzCall(t, s, abi.encodeWithSignature("transferToUA(bytes32,uint256)", b, 1), "prime transferToUA b");
-        _pzCall(t, PZ_RELAYER, _pzUa(t, a, b), "prime uaExecuteTransfer");
+        _pzCall(t, PZ_RELAYER, _pzUa(t, a, b), "prime mtxExecuteTransfer");
     }
 
     function _pzCall(address t, address sender, bytes memory cd, string memory label) internal {
@@ -62,21 +65,22 @@ abstract contract PlusZeroRows is Test {
     }
 
     function _pzMtx(address t, uint256 nonce) internal view returns (bytes memory) {
-        MetaTxLib.MetaTransfer memory x = MetaTxLib.MetaTransfer({from: _pzSigner(), to: PZ_TO, value: 1, entryRef: 0,
-            batch: PZ_LANE, nonce: nonce, validUntil: block.timestamp + 600, mode: 0, relayer: address(0), fee: 0,
-            feeRecipient: address(0)});
+        MetaTxLib.UAMetaTransfer memory x = MetaTxLib.UAMetaTransfer({from: MetaTxLib.pad(_pzSigner()),
+            to: MetaTxLib.pad(PZ_TO), value: 1, entryRef: 0, batch: PZ_LANE, nonce: nonce,
+            validUntil: block.timestamp + 600, mode: 0, relayer: address(0), fee: 0, feeRecipient: address(0)});
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(PZ_PK, IERC20MetaTx(t).mtxTransferDigest(x));
-        return abi.encodeWithSignature(
-            "mtxTransfer(address,address,uint256,uint256,uint256,uint256,uint32,address,bytes)",
-            x.from, x.to, x.value, x.batch, x.nonce, x.validUntil, x.mode, x.relayer, abi.encodePacked(r, s, v));
+        IUARegistry.UASig memory a;
+        a.signature = abi.encodePacked(r, s, v);
+        return abi.encodeCall(IMetaTokenV2.mtxTransfer,
+            (x.from, x.to, x.value, x.batch, x.nonce, x.validUntil, x.mode, x.relayer, a));
     }
 
     function _pzUa(address t, bytes32 from, bytes32 to) internal view returns (bytes memory) {
         MetaTxLib.UAMetaTransfer memory x = MetaTxLib.UAMetaTransfer({from: from, to: to, value: 1, entryRef: 0,
             batch: PZ_LANE, nonce: NormalToken(t).mtxNonce(from, PZ_LANE), validUntil: block.timestamp + 600, mode: 0,
             relayer: address(0), fee: 0, feeRecipient: address(0)});
-        IUARegistry.UASig memory sig = UACall.auth(from, _pzAuth(from, NormalToken(t).uaTransferDigest(x)));
-        return abi.encodeCall(IUALedger.uaExecuteTransfer, (x, sig));
+        IUARegistry.UASig memory sig = UACall.auth(from, _pzAuth(from, NormalToken(t).mtxTransferDigest(x)));
+        return abi.encodeCall(IERC20MetaTx.mtxExecuteTransfer, (x, sig));
     }
 
     // ------------------------------------------------------------------ the four rows

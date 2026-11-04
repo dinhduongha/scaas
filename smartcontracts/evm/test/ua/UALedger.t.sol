@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {OrderJson} from "../helpers/OrderJson.sol";
+import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {domainOf, h, n} from "../metatx/NamedEntry.t.sol";
 import {UACall} from "./UACall.sol";
 import {Vm} from "forge-std/Vm.sol";
@@ -74,7 +75,7 @@ contract UALedgerTest is UALedgerBase {
         _fund(uaP, 1_000);
         MetaTxLib.UAMetaTransfer memory t = _t(uaP, _pad(bob), 500);
         (t.mode, t.fee, t.feeRecipient) = (RR | RF | FIX, 5, FEE_TO);
-        bytes32 digest = tok.uaTransferDigest(t);
+        bytes32 digest = tok.mtxTransferDigest(t);
         vm.expectEmit(address(tok));
         emit IERC20.Transfer(POOL, FEE_TO, 5);
         vm.expectEmit(address(tok));
@@ -104,10 +105,10 @@ contract UALedgerTest is UALedgerBase {
         assertEq(uaTransfers, 0);
         assertEq(tok.balanceOf(bob), 70);
         t = _t(_pad(alice), uaP, 30);
-        bytes memory wrapped = _ecdsa(ALICE_PK, lreg.uaAuthDigest(_pad(alice), UAKinds.PURPOSE_METATX, tok.uaTransferDigest(t)));
+        bytes memory wrapped = _ecdsa(ALICE_PK, lreg.uaAuthDigest(_pad(alice), UAKinds.PURPOSE_METATX, tok.mtxTransferDigest(t)));
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         vm.prank(RELAYER);
-        tok.uaExecuteTransfer(t, UACall.auth(t.from, wrapped));
+        tok.mtxExecuteTransfer(t, UACall.auth(t.from, wrapped));
         vm.expectEmit(address(tok));
         emit IUALedger.UAPaymentSettled(_pad(alice), uaP, 30, 0, RELAYER, keccak256("invoice-2"));
         t.entryRef = keccak256("invoice-2");
@@ -119,33 +120,35 @@ contract UALedgerTest is UALedgerBase {
         _fund(uaP, 100);
         MetaTxLib.UAMetaTransfer memory t = _t(uaP, _pad(bob), 10);
         bytes memory wrongPurpose =
-            _auth(lreg, UAKinds.P256, _key(UAKinds.P256), UAKinds.PURPOSE_MEMBER, tok.uaTransferDigest(t));
+            _auth(lreg, UAKinds.P256, _key(UAKinds.P256), UAKinds.PURPOSE_MEMBER, tok.mtxTransferDigest(t));
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, uaP));
         vm.prank(RELAYER);
-        tok.uaExecuteTransfer(t, UACall.auth(t.from, wrongPurpose));
+        tok.mtxExecuteTransfer(t, UACall.auth(t.from, wrongPurpose));
         bytes32 stranger = keccak256("not registered");
         t = _t(stranger, _pad(bob), 0);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, stranger));
         vm.prank(RELAYER);
-        tok.uaExecuteTransfer(t, UACall.auth(t.from, abi.encode(bytes(""), bytes(""))));
+        tok.mtxExecuteTransfer(t, UACall.auth(t.from, abi.encode(bytes(""), bytes(""))));
     }
 
     // ----- T-V3-1: one nonce map for both paths -----
 
+    /// ua-mtx-merge T2, meaning: the address `MetaTransfer` path left the token; the address side of the one nonce map
+    /// is now `executeMetaTransaction` (R3: `MetaTransaction`, alice's own key), on the same lane as the typed transfer.
     function test_T_V3_1_sharedNonceMap() public {
-        MetaTxLib.MetaTransfer memory v2 = MetaTxLib.MetaTransfer({
-            from: alice, to: bob, value: 1, entryRef: 0, batch: 1, nonce: 0, validUntil: block.timestamp + 300,
-            mode: RR, relayer: RELAYER, fee: 0, feeRecipient: address(0)
+        MetaTxLib.MetaTransaction memory v2 = MetaTxLib.MetaTransaction({
+            from: alice, data: abi.encodeCall(IMetaTx.cancelNonce, (9)), batch: 1, nonce: 0,
+            validUntil: block.timestamp + 300, mode: RR, relayer: RELAYER, fee: 0, feeRecipient: address(0)
         });
         MetaTxLib.UAMetaTransfer memory v3 = _t(_pad(alice), _pad(bob), 1);
         bytes memory a3 = _authT(address(tok), v3);
-        bytes memory a2 = _ecdsa(ALICE_PK, tok.mtxTransferDigest(v2));
+        bytes memory a2 = _ecdsa(ALICE_PK, MtxDigest.metaTx(address(tok), v2));
         vm.prank(RELAYER);
-        tok.mtxExecuteTransfer(v2, a2);
+        tok.executeMetaTransaction(v2, a2);
         assertEq(tok.mtxNonce(_pad(alice), 1), 1);
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
         vm.prank(RELAYER);
-        tok.uaExecuteTransfer(v3, UACall.auth(v3.from, a3));
+        tok.mtxExecuteTransfer(v3, UACall.auth(v3.from, a3));
         v3.nonce = 1;
         _xfer(v3);
         assertEq(tok.mtxNonce(MetaTxLib.pad(alice), 1), 2);
@@ -201,7 +204,7 @@ contract UALedgerTest is UALedgerBase {
         bytes memory a = _authT(address(tok), t);
         vm.expectRevert(IERC20MetaTx.FeeRecipientIsPayee.selector);
         vm.prank(bob);
-        tok.uaExecuteTransfer(t, UACall.auth(t.from, a));
+        tok.mtxExecuteTransfer(t, UACall.auth(t.from, a));
     }
 
     /// D19: no UA-ledger fee reaches `SHIELD_POOL`: the transfer fee, and the self-call fee of `uaExecute` (`_uaMove`
@@ -275,7 +278,7 @@ contract UALedgerTest is UALedgerBase {
         MetaTxLib.UAMetaTransfer memory t = _t(_pad(POOL), _pad(bob), 1);
         vm.expectRevert(IUALedger.UAPoolNotPayable.selector);
         vm.prank(RELAYER);
-        tok.uaExecuteTransfer(t, UACall.auth(t.from, new bytes(65)));
+        tok.mtxExecuteTransfer(t, UACall.auth(t.from, new bytes(65)));
     }
 
     /// ua-mtx-merge T1 (Q2), meaning: a native id's signed cancel was refused (`UAKindNotAccepted`); the ordered
@@ -409,15 +412,15 @@ contract UALedgerTest is UALedgerBase {
         (as_[0], as_[1]) = (_authT(address(tok), ts[0]), _authT(address(tok), ts[1]));
         vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.MetaTxInsufficientForFee.selector, 60, 40));
         vm.prank(RELAYER);
-        tok.uaBatchTransfer(ts, UACall.auths(ts, as_));
+        tok.mtxBatchTransfer(ts, UACall.auths(ts, as_));
         ts[1].value = 40;
         as_[1] = _authT(address(tok), ts[1]);
         vm.prank(RELAYER);
-        tok.uaBatchTransfer(ts, UACall.auths(ts, as_));
+        tok.mtxBatchTransfer(ts, UACall.auths(ts, as_));
         assertEq(tok.balanceOfUA(uaB), 60);
         assertEq(tok.balanceOf(bob), 40);
         vm.expectRevert(IMetaTx.MtxBatchEmpty.selector);
-        tok.uaBatchTransfer(new MetaTxLib.UAMetaTransfer[](0), new IUARegistry.UASig[](0));
+        tok.mtxBatchTransfer(new MetaTxLib.UAMetaTransfer[](0), new IUARegistry.UASig[](0));
         vm.expectRevert(IMetaTx.MtxBatchLengthMismatch.selector);
         tok.mtxBatch(new MetaTxLib.UAMetaTransaction[](1), new IUARegistry.UASig[](0));
     }
@@ -432,24 +435,26 @@ contract UALedgerTest is UALedgerBase {
         MetaTxLib.UAMetaTransfer memory t = _t(_pad(alice), uaP, 5);
         _xfer(t); // alice's own key
         t = _t(_pad(alice), uaP, 5);
-        bytes memory bySession = _ecdsa(BOB_PK, tok.uaTransferDigest(t));
+        bytes memory bySession = _ecdsa(BOB_PK, tok.mtxTransferDigest(t));
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector); // the delegate's isValidSignature is never asked (D1)
         vm.prank(RELAYER);
-        tok.uaExecuteTransfer(t, UACall.auth(t.from, bySession));
+        tok.mtxExecuteTransfer(t, UACall.auth(t.from, bySession));
         assertEq(tok.balanceOfUA(uaP), 5);
-        MetaTxLib.MetaTransfer memory v2 = MetaTxLib.MetaTransfer({
-            from: alice, to: bob, value: 1, entryRef: 0, batch: 1, nonce: 1, validUntil: block.timestamp + 300,
-            mode: RR, relayer: RELAYER, fee: 0, feeRecipient: address(0)
+        // ua-mtx-merge T2, meaning: the address side is `executeMetaTransaction` (R3), the typed address path having
+        // left; its op is an allowlisted `burn(1)` of alice's own balance (CTR-MTX-19), not a transfer to bob
+        MetaTxLib.MetaTransaction memory v2 = MetaTxLib.MetaTransaction({
+            from: alice, data: abi.encodeCall(NormalToken.burn, (1)), batch: 1, nonce: 1,
+            validUntil: block.timestamp + 300, mode: RR, relayer: RELAYER, fee: 0, feeRecipient: address(0)
         });
-        bytes memory v2Session = _ecdsa(BOB_PK, tok.mtxTransferDigest(v2));
+        bytes memory v2Session = _ecdsa(BOB_PK, MtxDigest.metaTx(address(tok), v2));
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector); // nor on the address path
         vm.prank(RELAYER);
-        tok.mtxExecuteTransfer(v2, v2Session);
-        v2Session = _ecdsa(ALICE_PK, tok.mtxTransferDigest(v2));
-        uint256 before = tok.balanceOf(bob);
+        tok.executeMetaTransaction(v2, v2Session);
+        v2Session = _ecdsa(ALICE_PK, MtxDigest.metaTx(address(tok), v2));
+        uint256 before = tok.balanceOf(alice);
         vm.prank(RELAYER);
-        tok.mtxExecuteTransfer(v2, v2Session); // alice's own key on the address path
-        assertEq(tok.balanceOf(bob), before + 1);
+        tok.executeMetaTransaction(v2, v2Session); // alice's own key on the address path
+        assertEq(tok.balanceOf(alice), before - 1);
     }
 
     // ----- registry binding (CTR-UA-19) -----
@@ -467,15 +472,15 @@ contract UALedgerTest is UALedgerBase {
         // registry, and a derived side is `UALedgerOff` by name
         MetaTxLib.UAMetaTransfer memory t = _t(_pad(alice), _pad(bob), 1);
         t.nonce = 0;
-        IUARegistry.UASig memory sig = UACall.auth(t.from, _ecdsa(ALICE_PK, off.uaTransferDigest(t)));
+        IUARegistry.UASig memory sig = UACall.auth(t.from, _ecdsa(ALICE_PK, off.mtxTransferDigest(t)));
         vm.prank(RELAYER);
-        off.uaExecuteTransfer(t, sig);
+        off.mtxExecuteTransfer(t, sig);
         assertEq(off.balanceOf(bob), 1);
         t = _t(uaP, _pad(bob), 1);
         t.nonce = 0;
         vm.expectRevert(IUALedger.UALedgerOff.selector);
         vm.prank(RELAYER);
-        off.uaExecuteTransfer(t, UACall.auth(t.from, ""));
+        off.mtxExecuteTransfer(t, UACall.auth(t.from, ""));
     }
 
     function test_initialize_registryChainUid() public {
@@ -491,7 +496,7 @@ contract UALedgerTest is UALedgerBase {
         bytes32 domain = keccak256(abi.encode(
             keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"),
             keccak256("SCaaS MetaToken"), keccak256("1"), block.chainid, address(tok), chainUidA));
-        assertEq(tok.uaTransferDigest(t), keccak256(abi.encodePacked(hex"1901", domain, MetaTxLib.hashStruct(t))));
+        assertEq(tok.mtxTransferDigest(t), keccak256(abi.encodePacked(hex"1901", domain, MetaTxLib.hashStruct(t))));
         MetaTxLib.UAMetaTransaction memory m = _m(address(tok), uaP, hex"01020304");
         assertEq(tok.mtxDigest(m), keccak256(abi.encodePacked(hex"1901", domain, MetaTxLib.hashStruct(m))));
     }

@@ -11,6 +11,7 @@ import {MockERC20, FeeOnTransferERC20} from "../helpers/Mocks.sol";
 import {SlashableERC20, RateAdminForwarder} from "./helpers/V2Mocks.sol";
 import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
 import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
+import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 
 /// @notice Handler cho `WrappedToken` ba chân (thường / phí-chuyển / chịu sốc âm), tỉ lệ điều chỉnh được,
@@ -197,9 +198,10 @@ contract WrapperHandler is Test {
         }
     }
 
-    function _sign(uint256 pk, MetaTxLib.MetaTransfer memory x) internal view returns (bytes memory) {
+    /// The native signer's `UASig` over `x` (ua-mtx-merge T2: the token's one typed struct, `UAMetaTransfer`).
+    function _sign(uint256 pk, MetaTxLib.UAMetaTransfer memory x) internal view returns (IUARegistry.UASig memory a) {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, t.mtxTransferDigest(x));
-        return abi.encodePacked(r, s, v);
+        a.signature = abi.encodePacked(r, s, v);
     }
 
     function addReserve(uint256 leg, uint256 amount) external tracked(false) {
@@ -236,12 +238,12 @@ contract WrapperHandler is Test {
     function transferMeta(uint256 from, uint256 to, uint256 frac, uint256 feePpm) external tracked(false) {
         uint256 pk = pks[from % 3];
         address f = vm.addr(pk);
-        MetaTxLib.MetaTransfer memory x = MetaTxLib.MetaTransfer({
-            from: f, to: actor(to), value: bound(frac, 0, t.balanceOf(f) / 2), entryRef: 0, batch: ++seq, nonce: 0,
+        MetaTxLib.UAMetaTransfer memory x = MetaTxLib.UAMetaTransfer({
+            from: MetaTxLib.pad(f), to: MetaTxLib.pad(actor(to)), value: bound(frac, 0, t.balanceOf(f) / 2), entryRef: 0, batch: ++seq, nonce: 0,
             validUntil: block.timestamp + 1, mode: MetaTxLib.MODE_FEE_PERCENT | MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT,
             relayer: address(0), fee: bound(feePpm, 0, 10_000), feeRecipient: feeTaker
         });
-        bytes memory sig = _sign(pk, x);
+        IUARegistry.UASig memory sig = _sign(pk, x);
         vm.prank(relayer);
         try t.mtxExecuteTransfer(x, sig) {} catch (bytes memory err) {
             _expect(err, new bytes4[](0));

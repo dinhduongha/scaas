@@ -1,15 +1,13 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-import {MetaTxLib} from "../common/MetaTxLib.sol";
-import {IUARegistry} from "../ua/IUARegistry.sol";
-
 /// @title The UA ledger of every SCaaS token (accounts.md CTR-UA-18, CTR-UA-19, CTR-UA-26): balances of derived UAs by
 ///        `bytes32` id, shown to ERC-20 observers as the one holder `UA_POOL`, and the `ua*` meta-transactions whose
 ///        `from` (and `to`) is a native id (address zero-padded) or a registered SIGNING UA.
 /// @notice Reported by ERC-165 only while `registry()` is not 0 (a derived side then reverts `UALedgerOff`). The generic
-///         signed entries on ids (`mtxExecute`, `mtxBatch`, `mtxCancelNonce`, `UAMetaTxBase`) and their views
-///         (`IUALedgerViews`) are not here: they run for a native id with no registry (ua-mtx-merge C, R9).
+///         signed entries on ids (`mtxExecute`, `mtxBatch`, `mtxCancelNonce`, `UAMetaTxBase`), their views
+///         (`IUALedgerViews`) and the typed path (`mtxExecuteTransfer`, `mtxBatchTransfer`, `mtxTransferDigest`,
+///         `mtxRelayFee`, `IERC20MetaTx`) are not here: they run for a native id with no registry (ua-mtx-merge C, R9).
 interface IUALedger {
     /// @notice Every movement with a derived side (a burn under a UA has `to = 0`).
     event UATransfer(bytes32 indexed from, bytes32 indexed to, uint256 value);
@@ -37,14 +35,6 @@ interface IUALedger {
 
     function registry() external view returns (address);
     function balanceOfUA(bytes32 ua) external view returns (uint256);
-    function uaTransferDigest(MetaTxLib.UAMetaTransfer calldata t) external view returns (bytes32);
 
     function transferToUA(bytes32 to, uint256 amount) external returns (bool);
-    function uaExecuteTransfer(MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata auth)
-        external returns (bool);
-    function uaBatchTransfer(MetaTxLib.UAMetaTransfer[] calldata ts, IUARegistry.UASig[] calldata auths)
-        external returns (bool);
-    /// @notice `mtxRelayFee` on ids: `from` signed `UARelayFee{…, relayer}` under `metatx`.
-    function uaRelayFee(bytes32 from, address target, bytes32 callDataHash, bytes32 payee, uint256 value,
-        uint256 validUntil, IUARegistry.UASig calldata auth) external;
 }

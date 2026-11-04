@@ -11,6 +11,7 @@ import {V2Fixture, UID_, normalInit} from "../v2/helpers/V2Fixture.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IERC20Payment} from "../../src/metatx/IERC20Payment.sol";
+import {IUALedger} from "../../src/metatx/IUALedger.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {SmartKeyAccount, SubjectKey, KeyKind} from "../../src/account/SmartKeyAccount.sol";
 import {SmartKeyAccountFactory} from "../../src/account/SmartKeyAccountFactory.sol";
@@ -377,21 +378,22 @@ contract SmartKeyAccountTest is WebAuthnSoft {
 
     // ------------------------------------------------------------------ token payments (new tree)
 
-    function _payment(address from, bytes32 ref) internal view returns (MetaTxLib.MetaTransfer memory x, bytes32 d) {
+    function _payment(address from, bytes32 ref) internal view returns (MetaTxLib.UAMetaTransfer memory x, bytes32 d) {
         x = _tr(from, shop, 400, ref, uint256(ref), RR);
         d = t.mtxTransferDigest(x);
     }
 
-    function _payWith(MetaTxLib.MetaTransfer memory x, bytes memory sig) internal {
+    function _payWith(MetaTxLib.UAMetaTransfer memory x, bytes memory sig) internal {
         vm.prank(relayer);
-        t.mtxExecuteTransfer(x, sig);
+        t.mtxExecuteTransfer(x, _nativeSig(sig));
     }
 
     function test_token_pay_signed_with_passkey() public {
-        (MetaTxLib.MetaTransfer memory x, bytes32 d) = _payment(address(acct), keccak256("r1"));
+        (MetaTxLib.UAMetaTransfer memory x, bytes32 d) = _payment(address(acct), keccak256("r1"));
         bytes memory sig = _pk(0, PASSKEY, d);
         vm.expectEmit(true, true, true, true, address(t));
-        emit IERC20Payment.PaymentSettled(address(acct), shop, 400, 0, relayer, keccak256("r1"));
+        // ua-mtx-merge T2 (R18, R20), meaning: the merged typed path emits `UAPaymentSettled` for a native payer too
+        emit IUALedger.UAPaymentSettled(MetaTxLib.pad(address(acct)), MetaTxLib.pad(shop), 400, 0, relayer, keccak256("r1"));
         _payWith(x, sig);
         assertEq(t.balanceOf(shop), 400);
     }
@@ -399,9 +401,9 @@ contract SmartKeyAccountTest is WebAuthnSoft {
     function test_second_key_then_pay_with_each() public {
         _ownerCall(abi.encodeCall(SmartKeyAccount.addKey, (_seedKey(SEED))), 0, PASSKEY, true);
         assertEq(acct.keyCount(), 2);
-        (MetaTxLib.MetaTransfer memory x1, bytes32 d1) = _payment(address(acct), keccak256("seed"));
+        (MetaTxLib.UAMetaTransfer memory x1, bytes32 d1) = _payment(address(acct), keccak256("seed"));
         _payWith(x1, _ecdsa(1, SEED, d1));
-        (MetaTxLib.MetaTransfer memory x2, bytes32 d2) = _payment(address(acct), keccak256("passkey"));
+        (MetaTxLib.UAMetaTransfer memory x2, bytes32 d2) = _payment(address(acct), keccak256("passkey"));
         _payWith(x2, _pk(0, PASSKEY, d2));
         assertEq(t.balanceOf(shop), 800);
     }
@@ -409,7 +411,7 @@ contract SmartKeyAccountTest is WebAuthnSoft {
     function test_seed_first_account_pays() public {
         SmartKeyAccount a = SmartKeyAccount(payable(fac.deploy(_seedKey(SEED), address(0))));
         t.mint(address(a), 500);
-        (MetaTxLib.MetaTransfer memory x, bytes32 d) = _payment(address(a), keccak256("s1"));
+        (MetaTxLib.UAMetaTransfer memory x, bytes32 d) = _payment(address(a), keccak256("s1"));
         _payWith(x, _ecdsa(0, SEED, d));
         assertEq(t.balanceOf(shop), 400);
     }
@@ -418,21 +420,21 @@ contract SmartKeyAccountTest is WebAuthnSoft {
         SmartKeyAccount b = SmartKeyAccount(payable(fac.deploy(_passkey(PASSKEY), address(0))));
         t.mint(address(b), 1000);
         (, bytes32 dA) = _payment(address(acct), keccak256("x"));
-        (MetaTxLib.MetaTransfer memory xB,) = _payment(address(b), keccak256("x"));
+        (MetaTxLib.UAMetaTransfer memory xB,) = _payment(address(b), keccak256("x"));
         bytes memory sig = _pk(0, PASSKEY, dA);
         vm.prank(relayer);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
-        t.mtxExecuteTransfer(xB, sig);
+        t.mtxExecuteTransfer(xB, _nativeSig(sig));
     }
 
     function test_removed_key_cannot_pay() public {
         _ownerCall(abi.encodeCall(SmartKeyAccount.addKey, (_seedKey(SEED))), 0, PASSKEY, true);
         _ownerCall(abi.encodeCall(SmartKeyAccount.removeKey, (0)), 1, SEED, false);
-        (MetaTxLib.MetaTransfer memory x, bytes32 d) = _payment(address(acct), keccak256("gone"));
+        (MetaTxLib.UAMetaTransfer memory x, bytes32 d) = _payment(address(acct), keccak256("gone"));
         bytes memory sig = _pk(0, PASSKEY, d);
         vm.prank(relayer);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
-        t.mtxExecuteTransfer(x, sig);
+        t.mtxExecuteTransfer(x, _nativeSig(sig));
     }
 
     /// CTR-ACC-05: the token computes the 400k cap codehash from `SMART_KEY_ACCOUNT_IMPL` (pinned on the token side by

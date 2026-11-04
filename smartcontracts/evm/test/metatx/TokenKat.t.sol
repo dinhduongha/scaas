@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-import {IMetaTxAddress} from "../../src/metatx/IMetaTxAddress.sol";
-import {MtxDigest} from "../helpers/MtxDigest.sol";
+import {UAMetaTxBase} from "../../src/metatx/UAMetaTxBase.sol";
+import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {Test} from "forge-std/Test.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
@@ -12,14 +12,17 @@ import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
 
-/// KATs of the two structs on a real token (metatx.md "One rule, four places"): `metatx_kat.json` (v3
-/// `MetaTransaction`, `cancelNonce(42)`) and `metatransfer_kat.json` (`MetaTransfer`, a payment on its pay lane
-/// with a bound FIXED fee), both in the token domain "SCaaS MetaToken" of a `NormalToken` clone on chain
-/// 7622 with its real `chain_uid`, each with the relayed `calldata` (`mtxExecute` / `mtxExecuteTransfer`) that scaas-node
-/// and clientkeys must encode byte for byte. `WRITE_KAT=true forge test --match-contract TokenKatTest` rewrites them.
+/// KATs of the two signed structs of a token's relayed path on a real token (metatx.md "One rule, four places"; ua-mtx-merge
+/// T2: the UA structs, signed by an EOA with its own key, ids padded): `metatx_kat.json` (`UAMetaTransaction`,
+/// `cancelNonce(42)`, through the merged `mtxExecute`) and `metatransfer_kat.json` (`UAMetaTransfer`, a payment on its pay
+/// lane with a bound FIXED fee, through the merged `mtxExecuteTransfer`), both in the token domain "SCaaS MetaToken" of a
+/// `NormalToken` clone on chain 7622 with its real `chain_uid`, each with the relayed `calldata` that scaas-node and
+/// clientkeys must encode byte for byte (`auth` = `UASig{signature}`). The address `MetaTransaction` / `MetaTransfer`
+/// vectors these replaced are in `test/vectors/legacy/ua-mtx-merge/`. `WRITE_KAT=true forge test --match-contract
+/// TokenKatTest` rewrites them.
 contract TokenKatTest is Test {
-    using MetaTxLib for MetaTxLib.MetaTransaction;
-    using MetaTxLib for MetaTxLib.MetaTransfer;
+    using MetaTxLib for MetaTxLib.UAMetaTransaction;
+    using MetaTxLib for MetaTxLib.UAMetaTransfer;
 
     bytes32 internal constant UID = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464;
     uint256 internal constant ALICE_PK = 0xA11CE;
@@ -42,9 +45,10 @@ contract TokenKatTest is Test {
             keccak256("SCaaS MetaToken"), keccak256("1"), uint256(7622), address(tok), UID));
     }
 
-    function _sign(bytes32 digest) internal pure returns (bytes memory) {
+    /// The EOA's `UASig`: its own ECDSA signature only (R17).
+    function _sign(bytes32 digest) internal pure returns (IUARegistry.UASig memory a) {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, digest);
-        return abi.encodePacked(r, s, v);
+        a.signature = abi.encodePacked(r, s, v);
     }
 
     function _common(string memory k, bytes32 domainSep) internal {
@@ -71,28 +75,22 @@ contract TokenKatTest is Test {
     }
 
     function test_metaTxKat() public {
-        MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction({
-            from: vm.addr(ALICE_PK), data: abi.encodeCall(IMetaTx.cancelNonce, (42)),
+        MetaTxLib.UAMetaTransaction memory m = MetaTxLib.UAMetaTransaction({
+            from: MetaTxLib.pad(vm.addr(ALICE_PK)), data: abi.encodeCall(IMetaTx.cancelNonce, (42)),
             batch: 7, nonce: 0, validUntil: 1_800_000_300, mode: MetaTxLib.MODE_RESTRICT_RELAYER,
             relayer: RELAYER, fee: 0, feeRecipient: address(0xFEE)       // flag off: hashed as 0
         });
         bytes32 structHash = m.hashStruct();
         bytes32 domainSep = _domainSep();
         bytes32 digest = keccak256(abi.encodePacked(hex"1901", domainSep, structHash));
-        assertEq(digest, MtxDigest.metaTx(address(tok), m));
-        bytes memory sig = _sign(digest);
-        // ua-mtx-merge T1, meaning: the vector's calldata is the address `mtxExecute`, which left tokens (MD-1; T2 moves
-        // this KAT to legacy): that selector finds no entry; the same struct and signature execute through
-        // `executeMetaTransaction` (R3: one struct, one domain)
-        bytes memory data = abi.encodeCall(IMetaTxAddress.mtxExecute, (m, sig));
+        assertEq(digest, tok.mtxDigest(m));
+        IUARegistry.UASig memory a = _sign(digest);
+        bytes memory data = abi.encodeCall(UAMetaTxBase.mtxExecute, (m, a));
         vm.prank(RELAYER);
-        (bool ok, bytes memory ret) = address(tok).call(data);
-        assertFalse(ok, "no address mtxExecute on a token");
-        assertEq(ret.length, 0);
-        vm.prank(RELAYER);
-        (ok,) = address(tok).call(abi.encodeCall(IMetaTx.executeMetaTransaction, (m, sig)));
+        (bool ok,) = address(tok).call(data);
         assertTrue(ok);
-        assertEq(tok.mtxNonce(MetaTxLib.pad(m.from), 7), 1);
+        assertEq(tok.mtxNonce(m.from, 7), 1);
+        assertEq(tok.mtxNonce(m.from, 42), 1, "the native subject bumped its own lane 42 (B: `_mtxRule`)");
 
         string memory k = "tx";
         _common(k, domainSep);
@@ -105,20 +103,20 @@ contract TokenKatTest is Test {
         vm.serializeString(k, "relayer", vm.toString(m.relayer));
         vm.serializeString(k, "fee", vm.toString(m.fee));
         vm.serializeString(k, "fee_recipient", vm.toString(m.feeRecipient));
-        vm.serializeString(k, "type_hash", vm.toString(MetaTxLib.METATX_TYPEHASH));
+        vm.serializeString(k, "type_hash", vm.toString(MetaTxLib.UAMETATX_TYPEHASH));
         vm.serializeString(k, "struct_hash", vm.toString(structHash));
         vm.serializeString(k, "digest", vm.toString(digest));
         vm.serializeString(k, "calldata", vm.toString(data));
-        string memory out = vm.serializeString(k, "signature", vm.toString(sig));
+        string memory out = vm.serializeString(k, "signature", vm.toString(a.signature));
         if (vm.envOr("WRITE_KAT", false)) vm.writeJson(out, OUT_TX);
-        _check(OUT_TX, MetaTxLib.METATX_TYPEHASH, structHash, digest, sig, data);
+        _check(OUT_TX, MetaTxLib.UAMETATX_TYPEHASH, structHash, digest, a.signature, data);
     }
 
     function test_metaTransferKat() public {
         bytes32 ref = keccak256("scaas.kat.entryRef");
-        MetaTxLib.MetaTransfer memory t = MetaTxLib.MetaTransfer({
-            from: vm.addr(ALICE_PK), to: address(0x5409), value: 100e6, entryRef: ref, batch: tok.payLane(ref),
-            nonce: 0, validUntil: 1_800_000_300,
+        MetaTxLib.UAMetaTransfer memory t = MetaTxLib.UAMetaTransfer({
+            from: MetaTxLib.pad(vm.addr(ALICE_PK)), to: MetaTxLib.pad(address(0x5409)), value: 100e6, entryRef: ref,
+            batch: tok.payLane(ref), nonce: 0, validUntil: 1_800_000_300,
             mode: MetaTxLib.MODE_RESTRICT_RELAYER | MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT | MetaTxLib.MODE_FEE_FIXED,
             relayer: RELAYER, fee: 1e5, feeRecipient: address(0xFEE)
         });
@@ -126,8 +124,8 @@ contract TokenKatTest is Test {
         bytes32 domainSep = _domainSep();
         bytes32 digest = keccak256(abi.encodePacked(hex"1901", domainSep, structHash));
         assertEq(digest, tok.mtxTransferDigest(t));
-        bytes memory sig = _sign(digest);
-        bytes memory data = abi.encodeCall(IERC20MetaTx.mtxExecuteTransfer, (t, sig));
+        IUARegistry.UASig memory a = _sign(digest);
+        bytes memory data = abi.encodeCall(IERC20MetaTx.mtxExecuteTransfer, (t, a));
         vm.prank(RELAYER);
         (bool ok,) = address(tok).call(data);
         assertTrue(ok);
@@ -147,12 +145,12 @@ contract TokenKatTest is Test {
         vm.serializeString(k, "relayer", vm.toString(t.relayer));
         vm.serializeString(k, "fee", vm.toString(t.fee));
         vm.serializeString(k, "fee_recipient", vm.toString(t.feeRecipient));
-        vm.serializeString(k, "type_hash", vm.toString(MetaTxLib.METATRANSFER_TYPEHASH));
+        vm.serializeString(k, "type_hash", vm.toString(MetaTxLib.UAMETATRANSFER_TYPEHASH));
         vm.serializeString(k, "struct_hash", vm.toString(structHash));
         vm.serializeString(k, "digest", vm.toString(digest));
         vm.serializeString(k, "calldata", vm.toString(data));
-        string memory out = vm.serializeString(k, "signature", vm.toString(sig));
+        string memory out = vm.serializeString(k, "signature", vm.toString(a.signature));
         if (vm.envOr("WRITE_KAT", false)) vm.writeJson(out, OUT_TRANSFER);
-        _check(OUT_TRANSFER, MetaTxLib.METATRANSFER_TYPEHASH, structHash, digest, sig, data);
+        _check(OUT_TRANSFER, MetaTxLib.UAMETATRANSFER_TYPEHASH, structHash, digest, a.signature, data);
     }
 }

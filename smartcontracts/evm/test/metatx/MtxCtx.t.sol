@@ -13,6 +13,7 @@ import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
 import {IUALedger} from "../../src/metatx/IUALedger.sol";
+import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {SigCheck} from "../../src/common/SigCheck.sol";
 import {HederaLib} from "../../src/hedera/HederaLib.sol";
@@ -106,9 +107,9 @@ contract MtxCtxTest is PqzRegistryBase {
         m = MetaTxLib.UAMetaTransaction(from, data, batch, 0, block.timestamp + 300, mode, RELAYER, fee, address(0));
     }
 
-    function _tr(address from, address to, uint256 batch) internal view returns (MetaTxLib.MetaTransfer memory) {
-        return MetaTxLib.MetaTransfer(from, to, 1_000, bytes32(0), batch, 0, block.timestamp + 300,
-            RR | MetaTxLib.MODE_FEE_FIXED, RELAYER, 5, address(0));
+    /// A native transfer on the one typed struct (ua-mtx-merge T2: `UAMetaTransfer`, ids padded).
+    function _tr(address from, address to, uint256 batch) internal view returns (MetaTxLib.UAMetaTransfer memory) {
+        return _ut(MetaTxLib.pad(from), MetaTxLib.pad(to), batch);
     }
 
     function _ut(bytes32 from, bytes32 to, uint256 batch) internal view returns (MetaTxLib.UAMetaTransfer memory) {
@@ -263,9 +264,10 @@ contract MtxCtxTest is PqzRegistryBase {
 
     function _checkCtx(address t, string memory kind) internal {
         // the typed path (an expired transfer: the library runs and refuses it) and the generic path hand one Ctx
+        IUARegistry.UASig memory none;
         MtxPipelineLib.Ctx memory c = _ctxOf(t, abi.encodeCall(IERC20MetaTx.mtxExecuteTransfer,
-            (MetaTxLib.MetaTransfer(address(0), address(0), 0, 0, 0, 0, 0, 0, address(0), 0, address(0)), "")),
-            MtxPipelineLib.preTransfer.selector);
+            (MetaTxLib.UAMetaTransfer(0, 0, 0, 0, 0, 0, 0, 0, address(0), 0, address(0)), none)),
+            MtxPipelineLib.preTransferUA.selector);
         MtxPipelineLib.Ctx memory c2 = _ctxOf(t, abi.encodeCall(IMetaTx.executeMetaTransaction,
             (MetaTxLib.MetaTransaction(address(0), "", 0, 0, 0, 0, address(0), 0, address(0)), "")),
             MtxPipelineLib.preCall.selector);
@@ -295,14 +297,20 @@ contract MtxCtxTest is PqzRegistryBase {
 
     // ------------------------------------------------------------------ R2: the four digest views against the vectors
 
-    /// `mtxDigest`, `mtxTransferDigest` (metatx_kat.json, metatransfer_kat.json), `uaDigest`, `uaTransferDigest`
-    /// (clientkeys' metatx3.json: every `call`, `burn` and `transfer` row) and `mtxDigest` of a Zether kind (the
-    /// zether-prover's envelope.json), each on a clone etched at the vector's token address on the vector's chain.
+    /// The address `MetaTransaction` digest (the legacy metatx_kat.json: still `executeMetaTransaction`'s struct, R3),
+    /// `mtxDigest`, `mtxTransferDigest` (metatx_kat.json, metatransfer_kat.json: the UA structs since ua-mtx-merge T2),
+    /// `mtxDigest`, `mtxTransferDigest` (clientkeys' metatx3.json: every `call`, `burn` and `transfer` row) and the
+    /// address digest of a Zether kind (the zether-prover's envelope.json), each on a clone etched at the vector's
+    /// token address on the vector's chain.
     function test_digestViewsEqualKats() public {
-        // metatx_kat.json / metatransfer_kat.json: a `NORMAL` clone, chain 7622
-        string memory j = vm.readFile("test/vectors/metatx_kat.json");
+        // legacy metatx_kat.json: the address `MetaTransaction` (a client computes it, MtxDigest), a `NORMAL` clone, 7622
+        string memory j = vm.readFile("test/vectors/legacy/ua-mtx-merge/metatx_kat.json");
         address at = _etchNormal(vm.parseJsonAddress(j, ".verifying_contract"), vm.parseJsonBytes32(j, ".salt"), 7622);
-        assertEq(MtxDigest.metaTx(at, _katTx(j)), vm.parseJsonBytes32(j, ".digest"), "metatx_kat");
+        assertEq(MtxDigest.metaTx(at, _katTx(j)), vm.parseJsonBytes32(j, ".digest"), "legacy metatx_kat");
+        // metatx_kat.json / metatransfer_kat.json (ua-mtx-merge T2): the token's own views
+        j = vm.readFile("test/vectors/metatx_kat.json");
+        at = _etchNormal(vm.parseJsonAddress(j, ".verifying_contract"), vm.parseJsonBytes32(j, ".salt"), 7622);
+        assertEq(MetaTokenBase(at).mtxDigest(_katUaTx(j)), vm.parseJsonBytes32(j, ".digest"), "metatx_kat");
         j = vm.readFile("test/vectors/metatransfer_kat.json");
         assertEq(vm.parseJsonAddress(j, ".verifying_contract"), at);
         assertEq(MetaTokenBase(at).mtxTransferDigest(_katTransfer(j)), vm.parseJsonBytes32(j, ".digest"), "metatransfer_kat");
@@ -341,9 +349,23 @@ contract MtxCtxTest is PqzRegistryBase {
         m.feeRecipient = vm.parseJsonAddress(j, ".fee_recipient");
     }
 
-    function _katTransfer(string memory j) internal pure returns (MetaTxLib.MetaTransfer memory t) {
-        t.from = vm.parseJsonAddress(j, ".from");
-        t.to = vm.parseJsonAddress(j, ".to");
+    /// metatx_kat.json since ua-mtx-merge T2: a `UAMetaTransaction`, `from` an id.
+    function _katUaTx(string memory j) internal pure returns (MetaTxLib.UAMetaTransaction memory m) {
+        m.from = vm.parseJsonBytes32(j, ".from");
+        m.data = vm.parseJsonBytes(j, ".data");
+        m.batch = _u(j, ".batch");
+        m.nonce = _u(j, ".nonce");
+        m.validUntil = _u(j, ".valid_until");
+        m.mode = uint32(_u(j, ".mode"));
+        m.relayer = vm.parseJsonAddress(j, ".relayer");
+        m.fee = _u(j, ".fee");
+        m.feeRecipient = vm.parseJsonAddress(j, ".fee_recipient");
+    }
+
+    /// metatransfer_kat.json since ua-mtx-merge T2: a `UAMetaTransfer`, `from` and `to` ids.
+    function _katTransfer(string memory j) internal pure returns (MetaTxLib.UAMetaTransfer memory t) {
+        t.from = vm.parseJsonBytes32(j, ".from");
+        t.to = vm.parseJsonBytes32(j, ".to");
         t.value = _u(j, ".value");
         t.entryRef = vm.parseJsonBytes32(j, ".entry_ref");
         t.batch = _u(j, ".batch");
@@ -367,12 +389,12 @@ contract MtxCtxTest is PqzRegistryBase {
         m.feeRecipient = vm.parseJsonAddress(j, ".meta.feeRecipient");
     }
 
-    /// Every row of `list` (`.call[` / `.burn[`: `uaDigest`; `.transfer[`: `uaTransferDigest`) against its digest.
+    /// Every row of `list` (`.call[` / `.burn[`: `uaDigest`; `.transfer[`: `mtxTransferDigest`) against its digest.
     function _uaRows(string memory j, address at, string memory list, bool transfer) internal view returns (uint256 n) {
         for (; vm.keyExistsJson(j, string.concat(list, vm.toString(n), "]")); ++n) {
             string memory r = string.concat(list, vm.toString(n), "].");
             string memory p = string.concat(r, "typedData.message.");
-            bytes32 got = transfer ? MetaTokenBase(at).uaTransferDigest(_ut3(j, p)) : MetaTokenBase(at).mtxDigest(_um3(j, p));
+            bytes32 got = transfer ? MetaTokenBase(at).mtxTransferDigest(_ut3(j, p)) : MetaTokenBase(at).mtxDigest(_um3(j, p));
             assertEq(got, vm.parseJsonBytes32(j, string.concat(r, "digest")), string.concat("metatx3 ", list));
         }
     }
@@ -437,12 +459,13 @@ contract MtxCtxTest is PqzRegistryBase {
         _checkWrites(abi.encodeCall(UAMetaTxBase.mtxExecute, (um, UACall.auth(um.from, _mlAuth()))), "uaExecute",
             _set(_nonceSlot(u, 12), _uaSlot(u), _balSlot(MetaTxLib.UA_POOL), _supplySlot(), relayer, 5));
         // mtxExecuteTransfer: alice -> BOB 100, fee 5
-        MetaTxLib.MetaTransfer memory t = _tr(alice, BOB, 13);
-        _checkWrites(abi.encodeCall(IERC20MetaTx.mtxExecuteTransfer, (t, _ecdsa(ALICE_PK, tok.mtxTransferDigest(t)))),
+        MetaTxLib.UAMetaTransfer memory t = _tr(alice, BOB, 13);
+        _checkWrites(abi.encodeCall(IERC20MetaTx.mtxExecuteTransfer,
+            (t, UACall.auth(t.from, _ecdsa(ALICE_PK, tok.mtxTransferDigest(t))))),
             "mtxExecuteTransfer", _set(_nonceSlot(MetaTxLib.pad(alice), 13), _balSlot(alice), _balSlot(BOB), relayer, 0, 4));
-        // uaExecuteTransfer: u -> BOB 100, fee 5
+        // mtxExecuteTransfer: u -> BOB 100, fee 5
         MetaTxLib.UAMetaTransfer memory ut = _ut(u, MetaTxLib.pad(BOB), 14);
-        _checkWrites(abi.encodeCall(IUALedger.uaExecuteTransfer, (ut, UACall.auth(ut.from, _mlAuth()))), "uaExecuteTransfer",
+        _checkWrites(abi.encodeCall(IERC20MetaTx.mtxExecuteTransfer, (ut, UACall.auth(ut.from, _mlAuth()))), "mtxExecuteTransfer",
             _set(_nonceSlot(u, 14), _uaSlot(u), _balSlot(MetaTxLib.UA_POOL), _balSlot(BOB), relayer, 5));
     }
 
@@ -527,16 +550,17 @@ contract MtxCtxTest is PqzRegistryBase {
 
     /// R12: on an `IS_HEDERA` token the HIP-632 branch is the library's copy (token -> MtxPipelineLib -> HederaLib, both
     /// DELEGATECALL) and the system contract still sees the token as its caller, by CALL (the mock halts in a static
-    /// frame), on the generic, typed and UA paths.
+    /// frame), on the generic, typed and UA paths. ua-mtx-merge T2, meaning: the typed path is one, `preTransferUA`; its
+    /// two rows are now both native ids on it (lanes 2 and 3).
     function test_hedera_hip632CallerIsToken() public {
         address t = address(htok);
         MetaTxLib.MetaTransaction memory m = _mt(hed, abi.encodeCall(IMetaTx.cancelNonce, (9)), 1, RR, 0);
         _hip632(t, abi.encodeCall(IMetaTx.executeMetaTransaction, (m, _ed(MtxDigest.metaTx(address(htok), m)))), MtxPipelineLib.preCall.selector);
-        MetaTxLib.MetaTransfer memory x = _tr(hed, BOB, 2);
-        _hip632(t, abi.encodeCall(IERC20MetaTx.mtxExecuteTransfer, (x, _ed(htok.mtxTransferDigest(x)))),
-            MtxPipelineLib.preTransfer.selector);
+        MetaTxLib.UAMetaTransfer memory x = _tr(hed, BOB, 2);
+        _hip632(t, abi.encodeCall(IERC20MetaTx.mtxExecuteTransfer, (x, UACall.auth(x.from, _ed(htok.mtxTransferDigest(x))))),
+            MtxPipelineLib.preTransferUA.selector);
         MetaTxLib.UAMetaTransfer memory y = _ut(MetaTxLib.pad(hed), MetaTxLib.pad(BOB), 3);
-        _hip632(t, abi.encodeCall(IUALedger.uaExecuteTransfer, (y, UACall.auth(y.from, _ed(htok.uaTransferDigest(y))))),
+        _hip632(t, abi.encodeCall(IERC20MetaTx.mtxExecuteTransfer, (y, UACall.auth(y.from, _ed(htok.mtxTransferDigest(y))))),
             MtxPipelineLib.preTransferUA.selector);
         assertEq(htok.balanceOf(BOB), 2_000);
         assertEq(htok.mtxNonce(MetaTxLib.pad(hed), 1) + htok.mtxNonce(MetaTxLib.pad(hed), 2) + htok.mtxNonce(MetaTxLib.pad(hed), 3), 3);

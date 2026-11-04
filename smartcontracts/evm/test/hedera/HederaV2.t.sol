@@ -7,6 +7,7 @@ import {Test} from "forge-std/Test.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
+import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
@@ -68,11 +69,18 @@ contract HederaV2Test is Test {
         return abi.encodePacked(r, vs);
     }
 
+    /// A native id's `UASig`: its own (here 64-byte HIP-632 ed25519) signature only (R17).
+    function _n(bytes memory sig) internal pure returns (IUARegistry.UASig memory u) {
+        u.signature = sig;
+    }
+
+    /// ua-mtx-merge T2: the token's one typed struct, `UAMetaTransfer`; the Hedera account long-zero, padded.
     function _tr(address to, uint256 value, bytes32 ref, uint256 batch)
-        internal view returns (MetaTxLib.MetaTransfer memory)
+        internal view returns (MetaTxLib.UAMetaTransfer memory)
     {
-        return MetaTxLib.MetaTransfer({from: alice, to: to, value: value, entryRef: ref, batch: batch, nonce: 0,
-            validUntil: block.timestamp + 300, mode: RR, relayer: relayer, fee: 0, feeRecipient: address(0)});
+        return MetaTxLib.UAMetaTransfer({from: MetaTxLib.pad(alice), to: MetaTxLib.pad(to), value: value, entryRef: ref,
+            batch: batch, nonce: 0, validUntil: block.timestamp + 300, mode: RR, relayer: relayer, fee: 0,
+            feeRecipient: address(0)});
     }
 
     function _single(address u) internal returns (address) {
@@ -102,14 +110,14 @@ contract HederaV2Test is Test {
     function test_tier1NativeAccountPays() public {
         vm.prank(alice);
         address t = f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("Points", "PTS", 0, 1000, alice, address(0))), "n");
-        MetaTxLib.MetaTransfer memory x = _tr(shop, 250, 0, 1);
+        MetaTxLib.UAMetaTransfer memory x = _tr(shop, 250, 0, 1);
         bytes memory sig = _edSign(IERC20MetaTx(t).mtxTransferDigest(x));
         vm.prank(relayer);
-        IERC20MetaTx(t).mtxExecuteTransfer(x, sig);
+        IERC20MetaTx(t).mtxExecuteTransfer(x, _n(sig));
         assertEq(IERC20MetaTx(t).balanceOf(shop), 250);
     }
 
-    /// HIP-632 payee: a native Hedera account co-signs the `ReceiverFee` (64-byte ed25519) for an EVM payer's payment.
+    /// HIP-632 payee: a native Hedera account co-signs the `UAReceiverFee` (64-byte ed25519) for an EVM payer's payment.
     function test_tier1NativeAccountPayeeCoSignsReceiverFee() public {
         vm.prank(alice);
         address t = f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("Points", "PTS", 0, 1000, alice, address(0))), "n");
@@ -119,16 +127,16 @@ contract HederaV2Test is Test {
         vm.prank(alice);
         IERC20MetaTx(t).transfer(payer, 500);
         bytes32 ref = keccak256("request-1");
-        MetaTxLib.MetaTransfer memory x = MetaTxLib.MetaTransfer({from: payer, to: alice, value: 200, entryRef: ref,
-            batch: IMetaTokenV2(t).payLane(ref), nonce: 0, validUntil: block.timestamp + 300, mode: RR,
-            relayer: relayer, fee: 0, feeRecipient: address(0)});
+        MetaTxLib.UAMetaTransfer memory x = MetaTxLib.UAMetaTransfer({from: MetaTxLib.pad(payer),
+            to: MetaTxLib.pad(alice), value: 200, entryRef: ref, batch: IMetaTokenV2(t).payLane(ref), nonce: 0,
+            validUntil: block.timestamp + 300, mode: RR, relayer: relayer, fee: 0, feeRecipient: address(0)});
         bytes32 d = IERC20MetaTx(t).mtxTransferDigest(x);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(payerPk, d);
         bytes memory payerSig = abi.encodePacked(r, s, v);
         bytes memory payeeSig = _edSign(IMetaTokenV2(t).receiverFeeDigest(x, 30, feeTo, block.timestamp));
         uint256 aliceBefore = IERC20MetaTx(t).balanceOf(alice);
         vm.prank(relayer);
-        IMetaTokenV2(t).mtxPayReceiverFee(x, payerSig, 30, feeTo, block.timestamp, payeeSig);
+        IMetaTokenV2(t).mtxPayReceiverFee(x, _n(payerSig), 30, feeTo, block.timestamp, _n(payeeSig));
         assertEq(IERC20MetaTx(t).balanceOf(payer), 300);
         assertEq(IERC20MetaTx(t).balanceOf(alice), aliceBefore + 200 - 30);
         assertEq(IERC20MetaTx(t).balanceOf(feeTo), 30);
@@ -165,21 +173,21 @@ contract HederaV2Test is Test {
         WrappedToken(t).wrap(address(usdt), 10e6);
         vm.stopPrank();
         bytes32 payId = keccak256("inv");
-        MetaTxLib.MetaTransfer memory x = _tr(shop, 3e6, payId, WrappedToken(t).payLane(payId));
+        MetaTxLib.UAMetaTransfer memory x = _tr(shop, 3e6, payId, WrappedToken(t).payLane(payId));
         bytes memory sig = _edSign(IERC20MetaTx(t).mtxTransferDigest(x));
         vm.prank(relayer);
-        WrappedToken(t).mtxPay(alice, shop, 3e6, payId, x.validUntil, RR, relayer, 0, address(0), sig);
+        WrappedToken(t).mtxPay(x.from, x.to, 3e6, payId, x.validUntil, RR, relayer, 0, address(0), _n(sig));
         assertEq(IERC20MetaTx(t).balanceOf(shop), 3e6);
     }
 
     function test_otherKeyIsRejected() public {
         address t = _single(address(plain));
         _wrapFor(t, plain, alice, 10);
-        MetaTxLib.MetaTransfer memory x = _tr(shop, 1, 0, 1);
+        MetaTxLib.UAMetaTransfer memory x = _tr(shop, 1, 0, 1);
         (bytes32 r, bytes32 vs) = vm.signCompact(0xBAD, IERC20MetaTx(t).mtxTransferDigest(x));
         vm.prank(relayer);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
-        IERC20MetaTx(t).mtxExecuteTransfer(x, abi.encodePacked(r, vs));
+        IERC20MetaTx(t).mtxExecuteTransfer(x, _n(abi.encodePacked(r, vs)));
     }
 
     // ------------------------------------------------------------------ UA-5a on Hedera (CTR-UA-28, R5a-14)
@@ -239,12 +247,12 @@ contract HederaV2Test is Test {
         MetaTxLib.UAMetaTransfer memory x = MetaTxLib.UAMetaTransfer({from: bytes32(uint256(uint160(payer))),
             to: bytes32(uint256(uint160(alice))), value: 200, entryRef: ref, batch: IMetaTokenV2(t).payLane(ref), nonce: 0,
             validUntil: block.timestamp + 300, mode: RR, relayer: relayer, fee: 0, feeRecipient: address(0)});
-        bytes32 d = IUALedger(t).uaTransferDigest(x);
+        bytes32 d = IERC20MetaTx(t).mtxTransferDigest(x);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(payerPk, d);
-        bytes memory payeeSig = _edSign(IMetaTokenV2(t).uaReceiverFeeDigest(x, 30, feeTo, block.timestamp));
+        bytes memory payeeSig = _edSign(IMetaTokenV2(t).receiverFeeDigest(x, 30, feeTo, block.timestamp));
         uint256 aliceBefore = IERC20MetaTx(t).balanceOf(alice);
         vm.prank(relayer);
-        IMetaTokenV2(t).uaPayReceiverFee(x, UACall.auth(x.from, abi.encodePacked(r, s, v)), 30, feeTo, block.timestamp, UACall.auth(x.to, payeeSig));
+        IMetaTokenV2(t).mtxPayReceiverFee(x, UACall.auth(x.from, abi.encodePacked(r, s, v)), 30, feeTo, block.timestamp, UACall.auth(x.to, payeeSig));
         assertEq(IERC20MetaTx(t).balanceOf(payer), 300);
         assertEq(IERC20MetaTx(t).balanceOf(alice), aliceBefore + 200 - 30);
         assertEq(IERC20MetaTx(t).balanceOf(feeTo), 30);

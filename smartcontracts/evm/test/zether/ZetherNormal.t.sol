@@ -708,9 +708,9 @@ abstract contract ZetherNormalSuite is ZetherFixture {
             validUntil: block.timestamp + 300, mode: MetaTxLib.MODE_RESTRICT_RELAYER, relayer: relayer, fee: 0,
             feeRecipient: address(0)
         });
-        bytes memory auth = _uaAuth(alice, UAKinds.PURPOSE_METATX, tok.uaTransferDigest(t));
+        bytes memory auth = _uaAuth(alice, UAKinds.PURPOSE_METATX, tok.mtxTransferDigest(t));
         vm.prank(relayer);
-        tok.uaExecuteTransfer(t, UACall.auth(t.from, auth));
+        tok.mtxExecuteTransfer(t, UACall.auth(t.from, auth));
         assertEq(tok.balanceOfUA(b), 10 * SCALE);
         MetaTxLib.UAMetaTransaction memory m = MetaTxLib.UAMetaTransaction({
             from: a, data: abi.encodeCall(IConfidentialToken.mtxShield, (ZetherTypes.UA.unwrap(alice.ua), 40)), batch: 1, nonce: tok.mtxNonce(a, 1),

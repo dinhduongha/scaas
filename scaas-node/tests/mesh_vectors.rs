@@ -63,8 +63,9 @@ fn read(path: &str) -> Value {
     serde_json::from_str(&std::fs::read_to_string(path).expect(path)).expect("json")
 }
 
+/// ua-mtx-merge T2: the address `MetaTransfer` KAT, in the vectors' legacy place (T16 moves the mesh body to the UA structs).
 fn kat() -> Value {
-    read(concat!(env!("CARGO_MANIFEST_DIR"), "/../smartcontracts/evm/test/vectors/metatransfer_kat.json"))
+    read(concat!(env!("CARGO_MANIFEST_DIR"), "/../smartcontracts/evm/test/vectors/legacy/ua-mtx-merge/metatransfer_kat.json"))
 }
 
 fn ton_vectors() -> Value {

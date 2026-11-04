@@ -62,6 +62,11 @@ abstract contract KindRig is Test {
 
     Tk[] internal tks;
 
+    /// One token and its actors (`test/merge/TransferGroup.t`: the derived UA `uaD` of the rig's registry).
+    function tkAt(uint256 i) external view returns (Tk memory) {
+        return tks[i];
+    }
+
     function setup() external view returns (string[] memory kinds, address[] memory toks, bytes32[] memory doms) {
         kinds = new string[](tks.length);
         toks = new address[](tks.length);

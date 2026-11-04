@@ -21,6 +21,7 @@ import {TradeLib} from "../../src/trade/TradeLib.sol";
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
 import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
+import {LegacyMetaTransfer} from "../helpers/LegacyMetaTransfer.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
@@ -112,6 +113,31 @@ abstract contract OrderRows is Test {
         assertTrue(ok, vm.toString(ret));
     }
 
+    /// ua-mtx-merge T2: a `UA…` row whose entry took the `mtx` name. The row (until T11 regenerates it) still holds the
+    /// `ua*` selector: `built` is that calldata; the same arguments run under `sel` (the body is the same, R1).
+    function _runRenamed(string memory op, address c, address signedIn, address sender, bytes memory built, bytes4 sel)
+        private
+    {
+        checkRow(j, op, _kind());
+        bytes memory cd = vm.parseJsonBytes(j, domainField(op, _kind(), "calldata"));
+        assertEq(keccak256(built), keccak256(cd), "the row: the ua* calldata");
+        swap(cd, vm.parseJsonBytes(j, domainField(op, _kind(), "signature")), onChain(j, op, signedIn));
+        for (uint256 k; k < 4; ++k) cd[k] = sel[k];
+        vm.prank(sender);
+        (bool ok, bytes memory ret) = c.call(cd);
+        assertTrue(ok, vm.toString(ret));
+    }
+
+    /// ua-mtx-merge T2: the row of a retired address entry: its own calldata finds no function on `c`.
+    function _rowHasNoEntry(string memory op, address c, bytes memory built) private {
+        checkRow(j, op, _kind());
+        bytes memory cd = vm.parseJsonBytes(j, domainField(op, _kind(), "calldata"));
+        assertEq(keccak256(built), keccak256(cd), "the row: the old calldata");
+        (bool ok, bytes memory ret) = c.call(cd);
+        assertFalse(ok);
+        assertEq(ret.length, 0, "no such function");
+    }
+
     /// The contract at `from` also at the address a row names.
     function _at(address from, address to) private {
         vm.etch(to, from.code);
@@ -189,7 +215,9 @@ abstract contract OrderRows is Test {
         return (vm.parseJsonAddress(j, _f(op, "target")), vm.parseJsonBytes32(j, _f(op, "callDataHash")));
     }
 
-    function test_typedOpsVectors_RelayFeeRow() public {
+    /// ua-mtx-merge T2 (R28), meaning: the address `mtxRelayFee` / `RelayFee` left the token; the row (until T11
+    /// retires it, MD-7) finds no entry. The relay fee is `UARelayFee`'s row, below.
+    function test_typedOpsVectors_RelayFeeRowHasNoEntry() public {
         j = vm.readFile(TYPED_OPS);
         NormalToken t = _normalKind();
         address from = vm.parseJsonAddress(j, _f("RelayFee", "from"));
@@ -197,9 +225,10 @@ abstract contract OrderRows is Test {
         address payee = vm.parseJsonAddress(j, _f("RelayFee", "payee"));
         uint256 value = _u(_f("RelayFee", "value"));
         (address tgt, bytes32 cdh) = _callOf("RelayFee");
-        bytes memory built = abi.encodeCall(IERC20MetaTx.mtxRelayFee, (from, tgt, cdh, payee, value, _u(_f("RelayFee", "validUntil")), _sigOf("RelayFee")));
-        _run("RelayFee", address(t), address(t), vm.parseJsonAddress(j, _f("RelayFee", "relayer")), built);
-        assertEq(t.balanceOf(payee), value);
+        _rowHasNoEntry("RelayFee", address(t), abi.encodeWithSignature(
+            "mtxRelayFee(address,address,bytes32,address,uint256,uint256,bytes)",
+            from, tgt, cdh, payee, value, _u(_f("RelayFee", "validUntil")), _sigOf("RelayFee")));
+        assertEq(t.balanceOf(payee), 0);
     }
 
     function test_typedOpsVectors_UARelayFeeRow() public {
@@ -210,8 +239,10 @@ abstract contract OrderRows is Test {
         bytes32 payee = vm.parseJsonBytes32(j, _f("UARelayFee", "payee"));
         uint256 value = _u(_f("UARelayFee", "value"));
         (address tgt, bytes32 cdh) = _callOf("UARelayFee");
-        bytes memory built = abi.encodeCall(IUALedger.uaRelayFee, (from, tgt, cdh, payee, value, _u(_f("UARelayFee", "validUntil")), _uaSig("UARelayFee")));
-        _run("UARelayFee", address(t), address(t), vm.parseJsonAddress(j, _f("UARelayFee", "relayer")), built);
+        bytes memory built = abi.encodeWithSignature("uaRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+            from, tgt, cdh, payee, value, _u(_f("UARelayFee", "validUntil")), _uaSig("UARelayFee"));
+        _runRenamed("UARelayFee", address(t), address(t), vm.parseJsonAddress(j, _f("UARelayFee", "relayer")), built,
+            IERC20MetaTx.mtxRelayFee.selector);
         assertEq(t.balanceOf(address(uint160(uint256(payee)))), value);
     }
 
@@ -228,12 +259,15 @@ abstract contract OrderRows is Test {
     }
 
     /// The row's two signatures, the payer's and the payee's, re-made under `t`'s domain; the payee a wallet of the row's key.
+    /// ua-mtx-merge T2: the row holds the `ua*` selector (until T11); the call runs under the merged one.
     function _receiverFee(string memory op, NormalToken t, MetaTxLib.UAMetaTransfer memory x, bytes32 paymentDigest, bytes memory built) private {
         checkRow(j, op, _kind());
         bytes memory cd = vm.parseJsonBytes(j, domainField(op, _kind(), "calldata"));
         assertEq(keccak256(built), keccak256(cd), "calldata");
         swap(cd, vm.parseJsonBytes(j, domainField(op, _kind(), "extra.payerSig")), ecdsa(rowKey(j), paymentDigest));
         swap(cd, _sigOf(op), onChain(j, op, address(t)));
+        bytes4 sel = IMetaTokenV2.mtxPayReceiverFee.selector;
+        for (uint256 k; k < 4; ++k) cd[k] = sel[k];
         deployCodeTo("WalletMocks.sol:Mock1271Wallet", abi.encode(vm.parseJsonAddress(j, ".key.address")), address(uint160(uint256(x.to))));
         t.mint(address(uint160(uint256(x.from))), FUNDS * 100);
         vm.prank(x.relayer);
@@ -241,19 +275,21 @@ abstract contract OrderRows is Test {
         assertTrue(ok, vm.toString(ret));
     }
 
-    function test_typedOpsVectors_ReceiverFeeRow() public {
+    /// ua-mtx-merge T2 (R21), meaning: the address `mtxPayReceiverFee` / `ReceiverFee` left the token; the row (until
+    /// T11 retires it, MD-7) finds no entry. Receiver-pays is `UAReceiverFee`'s row, below.
+    function test_typedOpsVectors_ReceiverFeeRowHasNoEntry() public {
         j = vm.readFile(TYPED_OPS);
         string memory op = "ReceiverFee";
         NormalToken t = _normalKind();
         MetaTxLib.UAMetaTransfer memory u = _payment(op);
-        MetaTxLib.MetaTransfer memory x = MetaTxLib.MetaTransfer(address(uint160(uint256(u.from))), address(uint160(uint256(u.to))), u.value,
-            u.entryRef, u.batch, 0, u.validUntil, u.mode, u.relayer, 0, address(0));
-        uint256 fee = _u(_f(op, "fee"));
+        LegacyMetaTransfer.MetaTransfer memory x = LegacyMetaTransfer.MetaTransfer(address(uint160(uint256(u.from))),
+            address(uint160(uint256(u.to))), u.value, u.entryRef, u.batch, 0, u.validUntil, u.mode, u.relayer, 0, address(0));
         address feeTo = vm.parseJsonAddress(j, _f(op, "feeRecipient"));
-        bytes memory built = abi.encodeCall(MetaTokenBase.mtxPayReceiverFee, (x, vm.parseJsonBytes(j, domainField(op, _kind(), "extra.payerSig")),
-            fee, feeTo, _u(_f(op, "validUntil")), _sigOf(op)));
-        _receiverFee(op, t, u, t.mtxTransferDigest(x), built);
-        assertEq(t.balanceOf(feeTo), fee);
+        _rowHasNoEntry(op, address(t), abi.encodeWithSignature(
+            "mtxPayReceiverFee((address,address,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes,uint256,address,uint256,bytes)",
+            x, vm.parseJsonBytes(j, domainField(op, _kind(), "extra.payerSig")), _u(_f(op, "fee")), feeTo,
+            _u(_f(op, "validUntil")), _sigOf(op)));
+        assertEq(t.balanceOf(feeTo), 0);
     }
 
     function test_typedOpsVectors_UAReceiverFeeRow() public {
@@ -265,8 +301,10 @@ abstract contract OrderRows is Test {
         payer.signature = vm.parseJsonBytes(j, domainField(op, _kind(), "extra.payerSig"));
         uint256 fee = _u(_f(op, "fee"));
         address feeTo = vm.parseJsonAddress(j, _f(op, "feeRecipient"));
-        bytes memory built = abi.encodeCall(MetaTokenBase.uaPayReceiverFee, (x, payer, fee, feeTo, _u(_f(op, "validUntil")), _uaSig(op)));
-        _receiverFee(op, t, x, t.uaTransferDigest(x), built);
+        bytes memory built = abi.encodeWithSignature(
+            "uaPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+            x, payer, fee, feeTo, _u(_f(op, "validUntil")), _uaSig(op));
+        _receiverFee(op, t, x, t.mtxTransferDigest(x), built);
         assertEq(t.balanceOf(feeTo), fee);
     }
 
@@ -345,8 +383,8 @@ contract OrderRowsTokenTest is OrderRows, UALedgerBase {
     function test_c6EntriesNotAllowlisted() public {
         bytes4[13] memory sels = [ITradeToken.mtxTrade.selector, ITradeToken.uaTrade.selector, ITradeToken.mtxCancelOrder.selector,
             ITradeToken.uaCancelOrder.selector, ITradeToken.mtxInvalidateNonces.selector, ITradeToken.uaInvalidateNonces.selector,
-            IERC20MetaTx.mtxRelayFee.selector, IUALedger.uaRelayFee.selector, IMetaTokenV2.mtxPayReceiverFee.selector,
-            IMetaTokenV2.uaPayReceiverFee.selector, IWrappedToken.mtxWrapOrder.selector, IWrappedToken.uaWrapOrder.selector,
+            IERC20MetaTx.mtxRelayFee.selector, IERC20MetaTx.mtxRelayFee.selector, IMetaTokenV2.mtxPayReceiverFee.selector,
+            IMetaTokenV2.mtxPayReceiverFee.selector, IWrappedToken.mtxWrapOrder.selector, IWrappedToken.uaWrapOrder.selector,
             UAMetaTxBase.mtxCancelNonce.selector];
         bytes32 me = _pad(alice);
         for (uint256 i; i < sels.length; ++i) {

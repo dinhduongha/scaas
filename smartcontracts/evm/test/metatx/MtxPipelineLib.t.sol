@@ -9,6 +9,7 @@ import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
 import {IUALedger} from "../../src/metatx/IUALedger.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
+import {LegacyMetaTransfer} from "../helpers/LegacyMetaTransfer.sol";
 import {FeePolicy} from "../../src/common/FeePolicy.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
@@ -22,11 +23,13 @@ contract PipeHarness {
         return ua ? MtxPipelineLib.preCallUA(c, e, f, UACall.auth(e.from, auth)) : MtxPipelineLib.preCall(c, e, f, auth);
     }
 
-    function preTransfer(MtxPipelineLib.Ctx calldata c, MetaTxLib.UAMetaTransfer calldata t, bool ua, uint256 have,
+    /// ua-mtx-merge T2: one typed path, `preTransferUA`; the address `preTransfer` is in legacy/ua-mtx-merge/. The
+    /// second argument named the path; a native id's `bytes` are now its `UASig.signature` (R17), a derived id's the
+    /// `abi.encode(keyData, signature)` blob as before.
+    function preTransfer(MtxPipelineLib.Ctx calldata c, MetaTxLib.UAMetaTransfer calldata t, bool, uint256 have,
         bytes calldata auth) external returns (MtxPipelineLib.Out memory)
     {
-        return ua ? MtxPipelineLib.preTransferUA(c, t, 0, have, UACall.auth(t.from, auth))
-            : MtxPipelineLib.preTransfer(c, t, 0, have, auth);
+        return MtxPipelineLib.preTransferUA(c, t, 0, have, UACall.auth(t.from, auth));
     }
 
     function callDigest(bytes32 ds, bytes32 typehash, MtxPipelineLib.Envelope calldata e)
@@ -35,8 +38,8 @@ contract PipeHarness {
         return MtxPipelineLib.callDigest(ds, typehash, e);
     }
 
-    function transferDigest(bytes32 ds, bool ua, MetaTxLib.UAMetaTransfer calldata t) external pure returns (bytes32) {
-        return MtxPipelineLib.transferDigest(ds, ua, t);
+    function transferDigest(bytes32 ds, MetaTxLib.UAMetaTransfer calldata t) external pure returns (bytes32) {
+        return MtxPipelineLib.transferDigest(ds, t);
     }
 
     function nonce(bytes32 from, uint256 batch) external view returns (uint256) {
@@ -153,7 +156,7 @@ contract MtxPipelineLibTest is Test {
     }
 
     function _tauth(MetaTxLib.UAMetaTransfer memory t) internal view returns (bytes memory) {
-        return abi.encode(bytes(""), abi.encode(UAKinds.PURPOSE_METATX, h.transferDigest(DS, true, t)));
+        return abi.encode(bytes(""), abi.encode(UAKinds.PURPOSE_METATX, h.transferDigest(DS, t)));
     }
 
     function _xfer(bytes32 from, bytes32 to) internal view returns (MetaTxLib.UAMetaTransfer memory) {
@@ -380,7 +383,8 @@ contract MtxPipelineLibTest is Test {
     function test_preTransfer_matchesTodayOrder() public {
         MtxPipelineLib.Ctx memory c = _ctx();
 
-        // address path (padded ids)
+        // a native id (ua-mtx-merge T2, meaning: was the address path with padded ids; the same order on the one typed
+        // path, the native signing `UAMetaTransfer` with its own key)
         MetaTxLib.UAMetaTransfer memory t = _xfer(MetaTxLib.pad(alice), bytes32(0));
         t.mode |= MetaTxLib.MODE_RESTRICT_RELAYER;
         t.relayer = bob; // envelope
@@ -394,28 +398,28 @@ contract MtxPipelineLibTest is Test {
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         h.preTransfer(c, t, false, 0, bad);
 
-        bytes memory sig = _sig(ALICE_PK, h.transferDigest(DS, false, t));
+        bytes memory sig = _sig(ALICE_PK, h.transferDigest(DS, t));
         vm.expectRevert(IERC20MetaTx.PayToZero.selector);
         h.preTransfer(c, t, false, 0, sig);
 
         t.to = MetaTxLib.pad(bob);
-        sig = _sig(ALICE_PK, h.transferDigest(DS, false, t));
+        sig = _sig(ALICE_PK, h.transferDigest(DS, t));
         vm.expectRevert(abi.encodeWithSelector(FeePolicy.FeeExceedsCap.selector, 1000, 1));
         h.preTransfer(c, t, false, 0, sig);
 
         t.fee = 1;
         t.feeRecipient = bob;
-        sig = _sig(ALICE_PK, h.transferDigest(DS, false, t));
+        sig = _sig(ALICE_PK, h.transferDigest(DS, t));
         vm.expectRevert(IERC20MetaTx.FeeRecipientIsPayee.selector);
         h.preTransfer(c, t, false, 0, sig);
 
         t.feeRecipient = address(0);
-        sig = _sig(ALICE_PK, h.transferDigest(DS, false, t));
+        sig = _sig(ALICE_PK, h.transferDigest(DS, t));
         vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.MetaTxInsufficientForFee.selector, 101, 100));
         h.preTransfer(c, t, false, 100, sig);
 
         MtxPipelineLib.Out memory o = h.preTransfer(c, t, false, 101, sig);
-        assertEq(o.digest, h.transferDigest(DS, false, t));
+        assertEq(o.digest, h.transferDigest(DS, t));
         assertEq(o.fee, 1);
         assertEq(o.feeTo, address(this));
         assertEq(h.nonce(t.from, t.batch), 1);
@@ -465,7 +469,7 @@ contract MtxPipelineLibTest is Test {
         h.preTransfer(c, u, true, 0, auth);
 
         o = h.preTransfer(c, u, true, 101, auth);
-        assertEq(o.digest, h.transferDigest(DS, true, u));
+        assertEq(o.digest, h.transferDigest(DS, u));
         assertEq(o.fee, 1);
         assertEq(h.nonce(UA, u.batch), 1);
     }
@@ -487,9 +491,10 @@ contract MtxPipelineLibTest is Test {
         (bool ok, bytes memory ret) = lib.call(abi.encodeWithSelector(MtxPipelineLib.preCall.selector, c, e, f, false, sig));
         assertFalse(ok);
         assertEq(ret.length, 0, "preCall: the guard's empty revert");
-        (ok, ret) = lib.call(abi.encodeWithSelector(MtxPipelineLib.preTransfer.selector, c, t, bytes32(0), 101, tauth));
+        (ok, ret) = lib.call(abi.encodeWithSelector(MtxPipelineLib.preTransferUA.selector, c, t, bytes32(0), 101,
+            UACall.auth(t.from, tauth)));
         assertFalse(ok);
-        assertEq(ret.length, 0, "preTransfer: the guard's empty revert");
+        assertEq(ret.length, 0, "preTransferUA: the guard's empty revert");
 
         // the same arguments pass by DELEGATECALL, so the guard is what refused them
         h.preCall(c, e, f, false, sig);
@@ -502,6 +507,8 @@ contract MtxPipelineLibTest is Test {
 
     /// The address path takes `from` as a native id only: a derived id whose low 160 bits are a signer's address is not
     ///      that signer (no truncation), on `preCall` and `preTransfer`, even with that signer's valid signature.
+    ///      ua-mtx-merge T2, meaning: the typed transfer has no address path left; on the one typed path the forged id
+    ///      is a derived id, so the registry answers for it and refuses the signer's ECDSA (no truncation either).
     function test_addressPath_refusesDerivedFrom() public {
         bytes32 forged = bytes32(uint256(uint160(alice)) | (uint256(1) << 200));
         assertFalse(UAKinds.inNativeSpace(forged));
@@ -510,18 +517,21 @@ contract MtxPipelineLibTest is Test {
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         h.preCall(_ctx(), e, _facts(), false, sig);
         MetaTxLib.UAMetaTransfer memory t = _xfer(forged, MetaTxLib.pad(bob));
-        bytes memory tsig = _sig(ALICE_PK, h.transferDigest(DS, false, t));
-        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
+        bytes memory tsig = _sig(ALICE_PK, h.transferDigest(DS, t));
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, forged));
         h.preTransfer(_ctx(), t, false, 101, tsig);
         // the same signer, padded: both pass
         e.from = MetaTxLib.pad(alice);
         h.preCall(_ctx(), e, _facts(), false, _signCall(e));
         t.from = MetaTxLib.pad(alice);
-        h.preTransfer(_ctx(), t, false, 101, _sig(ALICE_PK, h.transferDigest(DS, false, t)));
+        h.preTransfer(_ctx(), t, false, 101, _sig(ALICE_PK, h.transferDigest(DS, t)));
     }
 
-    /// R2: `callDigest` / `transferDigest` equal `MetaTxLib` hashing of the same struct, for both typehashes each.
-    function test_digestsEqualMetaTxLib(MetaTxLib.MetaTransaction memory m, MetaTxLib.MetaTransfer memory t, bytes32 ua)
+    /// R2: `callDigest` / `transferDigest` equal `MetaTxLib` hashing of the same struct, for both typehashes of
+    /// `callDigest`. ua-mtx-merge T2, meaning: `transferDigest` has one typehash, `UAMetaTransfer`; the digest of a
+    /// native transfer is never the retired address `MetaTransfer`'s (invariant 3).
+    function test_digestsEqualMetaTxLib(MetaTxLib.MetaTransaction memory m, LegacyMetaTransfer.MetaTransfer memory t,
+        bytes32 ua)
         public view
     {
         MtxPipelineLib.Envelope memory e = MtxPipelineLib.Envelope(MetaTxLib.pad(m.from), keccak256(m.data), m.batch,
@@ -537,9 +547,10 @@ contract MtxPipelineLibTest is Test {
 
         MetaTxLib.UAMetaTransfer memory ut = MetaTxLib.UAMetaTransfer(MetaTxLib.pad(t.from), MetaTxLib.pad(t.to),
             t.value, t.entryRef, t.batch, t.nonce, t.validUntil, t.mode, t.relayer, t.fee, t.feeRecipient);
-        assertEq(h.transferDigest(DS, false, ut), MessageHashUtils.toTypedDataHash(DS, MetaTxLib.hashStruct(t)));
+        assertEq(h.transferDigest(DS, ut), MessageHashUtils.toTypedDataHash(DS, MetaTxLib.hashStruct(ut)));
+        assertTrue(h.transferDigest(DS, ut) != MessageHashUtils.toTypedDataHash(DS, LegacyMetaTransfer.hashStruct(t)));
 
         ut.from = ua;
-        assertEq(h.transferDigest(DS, true, ut), MessageHashUtils.toTypedDataHash(DS, MetaTxLib.hashStruct(ut)));
+        assertEq(h.transferDigest(DS, ut), MessageHashUtils.toTypedDataHash(DS, MetaTxLib.hashStruct(ut)));
     }
 }

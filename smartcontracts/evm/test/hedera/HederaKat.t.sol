@@ -6,9 +6,14 @@ import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
+import {LegacyMetaTransfer} from "../helpers/LegacyMetaTransfer.sol";
+import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
 
+/// ua-mtx-merge T2: the address `MetaTransfer` has no token entry (R46); its digest here comes from the test copy
+/// (`LegacyMetaTransfer`) in the token's domain, so the vector's bytes do not move. T8 (R42) moves `MetaOp` v1 to
+/// `UAMetaTransfer` and regenerates the vector.
 /// The Hedera vector (NET-HED-03, CTR-TOK-23): a payment `MetaTransfer` of the Hedera account 0.0.1234567 (long-zero
 /// `from`) on an `IS_HEDERA` `NormalToken` clone on chain 296, in the salted token domain. Forge writes every
 /// struct field, the struct hash and the digest (`WRITE_KAT=true forge test --match-contract HederaKatTest`); it
@@ -16,7 +21,7 @@ import {plainEnv} from "../helpers/Catalogue.sol";
 /// signature over the digest (the bytes HIP-632's `isAuthorizedRaw` checks); scaas-node (`adapters::hedera` tests)
 /// verifies both. The v1 vector is in `legacy/p5/`.
 contract HederaKatTest is Test {
-    using MetaTxLib for MetaTxLib.MetaTransfer;
+    using LegacyMetaTransfer for LegacyMetaTransfer.MetaTransfer;
 
     bytes32 internal constant UID = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464;
     address internal constant NATIVE = address(uint160(1_234_567)); // 0.0.1234567
@@ -28,12 +33,12 @@ contract HederaKatTest is Test {
             NormalToken(Clones.clone(address(new NormalToken(1, plainEnv(address(this), address(0), UID, address(0), true), ""))));
         tok.initialize(address(this), 1, abi.encode(normalInit("HBUSD", "HBUSD", 6, 0, address(this), address(0))));
         bytes32 ref = bytes32(uint256(0x42));
-        MetaTxLib.MetaTransfer memory t = MetaTxLib.MetaTransfer({
+        LegacyMetaTransfer.MetaTransfer memory t = LegacyMetaTransfer.MetaTransfer({
             from: NATIVE, to: address(0x5409), value: 250_000_000, entryRef: ref, batch: tok.payLane(ref), nonce: 0,
             validUntil: 1_800_000_300, mode: MetaTxLib.MODE_RESTRICT_RELAYER, relayer: address(0xBEEF), fee: 0,
             feeRecipient: address(0)
         });
-        bytes32 digest = tok.mtxTransferDigest(t);
+        bytes32 digest = MtxDigest.typed(address(tok), t.hashStruct());
         string memory k = "hedera";
         vm.serializeString(k, "chain_id", "296");
         vm.serializeString(k, "hedera_account", "0.0.1234567");

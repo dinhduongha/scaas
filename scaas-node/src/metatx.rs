@@ -564,9 +564,11 @@ mod tests {
     }
 
     /// Byte-identical with forge (`TokenKat.t.sol`): struct hash, digest and the relayed `mtxExecute` calldata.
+    /// ua-mtx-merge T2: the address KATs are in the vectors' legacy place (the token takes the UA structs; T14 moves
+    /// the node's token jobs to them).
     #[test]
     fn call_digest_and_calldata_match_forge_kat() {
-        let k = kat("metatx_kat.json");
+        let k = kat("legacy/ua-mtx-merge/metatx_kat.json");
         let s = |f: &str| k[f].as_str().expect(f).to_string();
         let wire = json!({"from": s("from"), "data": s("data"), "batch": s("batch"), "nonce": s("nonce"),
             "validUntil": s("valid_until"), "mode": s("mode").parse::<u32>().unwrap(), "relayer": s("relayer"),
@@ -581,7 +583,7 @@ mod tests {
 
     #[test]
     fn transfer_digest_and_calldata_match_forge_kat() {
-        let k = kat("metatransfer_kat.json");
+        let k = kat("legacy/ua-mtx-merge/metatransfer_kat.json");
         let s = |f: &str| k[f].as_str().expect(f).to_string();
         let wire = json!({"from": s("from"), "to": s("to"), "value": s("value"), "entryRef": s("entry_ref"),
             "batch": s("batch"), "nonce": s("nonce"), "validUntil": s("valid_until"),

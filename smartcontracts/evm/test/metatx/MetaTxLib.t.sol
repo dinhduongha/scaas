@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
+import {LegacyMetaTransfer} from "../helpers/LegacyMetaTransfer.sol";
 
 /// CTR-MTX-15: the generic `MetaTransaction` and its pinned typehash; canonical zeroing; `data` hashed.
 contract MetaTxLibTest is Test {
@@ -70,13 +71,15 @@ contract MetaTxLibTest is Test {
         assertTrue(_h(f, address(1), address(3)) != _h(f, address(1), address(4)));
     }
 
+    /// ua-mtx-merge T2 (R46): `MetaTransfer` left `MetaTxLib` for legacy/ua-mtx-merge/; the pin stays, on the test copy
+    /// that signs the retired form (`LegacyMetaTransfer`).
     function test_metaTransferTypehashIsPinned() public pure {
         assertEq(
-            MetaTxLib.METATRANSFER_TYPEHASH,
+            LegacyMetaTransfer.TYPEHASH,
             0xe76cb6dc9ab3eb734c6dc32ec8732764c97cf48f22aed55d73690e01d518086e
         );
         assertEq(
-            MetaTxLib.METATRANSFER_TYPEHASH,
+            LegacyMetaTransfer.TYPEHASH,
             keccak256("MetaTransfer(address from,address to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)")
         );
     }

@@ -284,7 +284,6 @@ contract AllowlistTest is Test {
             _refused(t, abi.encodeWithSelector(IERC20MetaTx.mtxBatchTransfer.selector));
             _refused(t, abi.encodeWithSelector(MetaTokenBase.mtxPayReceiverFee.selector));
             _refused(t, abi.encodeWithSelector(MetaTokenBase.payWithFeeToUA.selector));
-            _refused(t, abi.encodeWithSelector(MetaTokenBase.uaPayReceiverFee.selector));
         }
         _refused(address(none), abi.encodeCall(NormalToken.mint, (alice, 1)));
         _refused(address(none), abi.encodeCall(NormalToken.mintToUA, (UA, 1)));

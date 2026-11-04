@@ -125,7 +125,7 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
     }
 
     /// @dev Step 1 on the shared lane space (CTR-MTX-15, CTR-UA-26): the common envelope of every signed struct
-    ///      (`MetaTransaction`, `MetaTransfer` and the UA ledger's two), `from` as an id. Not virtual: one lane, one
+    ///      (`MetaTransaction`, `UAMetaTransaction`, `UAMetaTransfer`), `from` as an id. Not virtual: one lane, one
     ///      nonce sequence.
     function _checkEnvelope(
         bytes32 from, uint256 batch, uint256 nonce, uint256 validUntil, uint32 mode, address relayer

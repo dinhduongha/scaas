@@ -15,9 +15,12 @@ import { abiEncode, hex, fromHex, keccak_256, utf8ToBytes } from '../src/bytes.j
 
 const vectors = new URL('../../../smartcontracts/evm/test/vectors/', import.meta.url);
 const read = (f) => JSON.parse(readFileSync(new URL(f, vectors)));
+// ua-mtx-merge T2: the token's KATs of the address `MetaTransaction` / `MetaTransfer` moved to the legacy place (the
+// files of the same name now hold the UA structs); these builders are the address forms until T11 moves them.
+const legacyKat = (f) => read(`legacy/ua-mtx-merge/${f}`);
 
 test('MetaTransfer payment = forge KAT (TokenKat.t.sol, metatransfer_kat.json)', () => {
-  const k = read('metatransfer_kat.json');   // mode 35: relayer and fee recipient bound, FIXED fee
+  const k = legacyKat('metatransfer_kat.json');   // mode 35: relayer and fee recipient bound, FIXED fee
   const td = metaTransferTypedData({ name: k.domain_name, contract: k.verifying_contract, chainId: k.chain_id, chainUid: k.salt,
     message: { from: k.from, to: k.to, value: k.value, entryRef: k.entry_ref, batch: k.batch, nonce: k.nonce,
       validUntil: k.valid_until, mode: Number(k.mode), relayer: k.relayer, fee: k.fee, feeRecipient: k.fee_recipient } });
@@ -99,7 +102,7 @@ test('MandateWallet pay and revoke = forge KATs (mandate_pay_kat.json, mandate_r
 });
 
 test('metaTxTypedData zeroes relayer / feeRecipient by mode, as the contract hashes them = metatx_kat.json', () => {
-  const k = read('metatx_kat.json');   // mode 1: relayer bound, feeRecipient 0xFEE given but not bound
+  const k = legacyKat('metatx_kat.json');   // mode 1: relayer bound, feeRecipient 0xFEE given but not bound
   const msg = { from: k.from, data: k.data, batch: k.batch, nonce: k.nonce, validUntil: k.valid_until, mode: Number(k.mode),
     relayer: k.relayer, fee: k.fee, feeRecipient: k.fee_recipient };
   const td = metaTxTypedData({ name: k.domain_name, contract: k.verifying_contract, chainId: k.chain_id, chainUid: k.salt,
@@ -273,7 +276,7 @@ function serverPayment(over = {}, dom = {}, tok = TOKEN) {
 }
 
 test('payment lane = payLane(entryRef) of the forge KAT; the KAT payment passes with its fee named', () => {
-  const k = read('metatransfer_kat.json');   // mode 35: FIXED fee 100000 to 0xFEE, relayer 0xbEEF bound
+  const k = legacyKat('metatransfer_kat.json');   // mode 35: FIXED fee 100000 to 0xFEE, relayer 0xbEEF bound
   assert.equal(payLane(k.entry_ref).toString(), k.batch);
   const td = metaTransferTypedData({ name: k.domain_name, contract: k.verifying_contract, chainId: 7622, chainUid: k.salt,
     message: { from: k.from, to: k.to, value: k.value, entryRef: k.entry_ref, batch: k.batch, nonce: k.nonce,
@@ -345,7 +348,7 @@ test('payment: only the payment the user was shown (payee, token, reference, amo
 });
 
 test('self-call: exactly the call the client built, on its contract, with the fee the user allows (CLI-SGN-34)', () => {
-  const k = read('metatx_kat.json');   // cancelNonce(42), relayer bound, fee mode NONE
+  const k = legacyKat('metatx_kat.json');   // cancelNonce(42), relayer bound, fee mode NONE
   const allowlist = [{ selector: '0xcfdd7aea', name: 'cancelNonce', feeClass: 1 }];
   const want = { account: k.from, chainId: 7622, chainUid: k.salt, allowlist, call: { contract: k.verifying_contract, data: k.data },
     now: NOW };
@@ -550,7 +553,7 @@ test('UA-5a: ReceiverFee typed data and the receivers\' calldata (`cast calldata
     '0x' + 'cd'.repeat(32))), '0x18c3a777' + 'ab'.repeat(32) + W(100000000n) + W(2n) + W(100000n) + W(0xfeen)
     + 'cd'.repeat(32));
   // checkCall decodes the two allowlisted receivers; payWithFeeToUA is never signed as a call (as payWithFee)
-  const k = read('metatx_kat.json');
+  const k = legacyKat('metatx_kat.json');
   const allowlist = [{ selector: '0x1b0237ad', name: 'wrapToUA', feeClass: 1 },
     { selector: '0xe4a9f766', name: 'unwrapToUA', feeClass: 2, amountArg: 1 },
     { selector: '0x18c3a777', name: 'payWithFeeToUA', feeClass: 1 }];

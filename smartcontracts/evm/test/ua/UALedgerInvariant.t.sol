@@ -15,14 +15,14 @@ import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {FeeMode} from "../../src/common/FeePolicy.sol";
 import {UALedgerBase} from "./UALedgerBase.sol";
 
-/// Random mixes of native moves, mints, burns, `transferToUA`, the UA transfer entries (`uaExecuteTransfer`, the named
-/// `uaTransfer` / `uaTransferWithFee`, `uaBatchTransfer`; any side native or derived, with or without a fee) on the NORMAL
+/// Random mixes of native moves, mints, burns, `transferToUA`, the UA transfer entries (`mtxExecuteTransfer`, the named
+/// `mtxTransfer` / `mtxTransferWithFee`, `mtxBatchTransfer`; any side native or derived, with or without a fee) on the NORMAL
 /// clone and on the 1:1 WRAPPED clone `wrp`, plus wrap, wrap→UA and the burn under a derived UA (`unwrap` through
 /// `uaExecute` or the named `uaUnwrap`, optionally with a fee after the self-call), and the `UA_POOL` `transferFrom` refusal.
 /// UA-5a (CTR-UA-28, CTR-UA-26, CTR-MTX-05): `wrapToUA` on `wrp` and on the native-leg `wrpN`, `mintToUA`,
 /// `payWithFeeToUA`, `burn` under a derived UA, wraps of the ledger-leg `wrpL` (leg `tok` at 3/2, wrapped by this
 /// handler, a contract; `wrap` or `wrapToUA`), `unwrapToUA` from `wrpL` (direct by a native, or under `uaExecute` by a
-/// UA), `uaPayReceiverFee`. On `wrpL` the handler checks minted ⌊a·n/d⌋, out ⌊w·d/n⌋, burned ⌈out·n/d⌉ and the reserve
+/// UA), `mtxPayReceiverFee`. On `wrpL` the handler checks minted ⌊a·n/d⌋, out ⌊w·d/n⌋, burned ⌈out·n/d⌉ and the reserve
 /// against the balances per call.
 /// After every call the handler replays the tokens' `Transfer` logs per native holder and `UATransfer` logs per
 /// derived id, and checks `UATransfer` is emitted exactly for the moves with a derived side.
@@ -296,7 +296,7 @@ contract UALedgerHandler is Test {
 
     /// Receiver-pays on `tok`: payer and payee index 0–2 a native, 3–4 a UA (distinct); the payee pays `fee` (1 … value)
     /// to `FEE_TO` out of the payment.
-    function uaPayReceiverFee(uint256 payer, uint256 payee, uint256 amount, uint256 fee) external {
+    function mtxPayReceiverFee(uint256 payer, uint256 payee, uint256 amount, uint256 fee) external {
         (payer, payee) = (payer % 5, payee % 5);
         if (payer == payee) return;
         bytes32 p = _id(payer);
@@ -310,12 +310,12 @@ contract UALedgerHandler is Test {
             validUntil: block.timestamp + 300, mode: MetaTxLib.MODE_RESTRICT_RELAYER, relayer: RELAYER, fee: 0,
             feeRecipient: address(0)
         });
-        bytes32 d = tok.uaTransferDigest(x);
+        bytes32 d = tok.mtxTransferDigest(x);
         bytes memory payerAuth = _auth(payer, d);
         bytes memory payeeAuth = _sign(payee, UAKinds.PURPOSE_RECEIVER_FEE,
-            tok.uaReceiverFeeDigest(x, fee, FEE_TO, block.timestamp));
+            tok.receiverFeeDigest(x, fee, FEE_TO, block.timestamp));
         vm.prank(RELAYER);
-        tok.uaPayReceiverFee(x, UACall.auth(x.from, payerAuth), fee, FEE_TO, block.timestamp, UACall.auth(x.to, payeeAuth));
+        tok.mtxPayReceiverFee(x, UACall.auth(x.from, payerAuth), fee, FEE_TO, block.timestamp, UACall.auth(x.to, payeeAuth));
         bool pUA = payer > 2;
         bool qUA = payee > 2;
         // the payment (UATransfer iff a derived side, Transfer iff a native side), then the fee from the payee to FEE_TO
@@ -325,8 +325,8 @@ contract UALedgerHandler is Test {
     // ----- ops: UA transfers on either token -----
 
     /// `from`/`to` index 0–2 a native holder, 3–4 a UA; `withFee` adds a FIXED fee to `FEE_TO` (1 % cap). `seed` picks
-    /// the token (NORMAL or `wrp`) and the entry (`uaExecuteTransfer`, the named form, `uaBatchTransfer`).
-    function uaTransfer(uint256 from, uint256 to, uint256 amount, bool withFee, uint256 seed) external {
+    /// the token (NORMAL or `wrp`) and the entry (`mtxExecuteTransfer`, the named form, `mtxBatchTransfer`).
+    function mtxTransfer(uint256 from, uint256 to, uint256 amount, bool withFee, uint256 seed) external {
         MetaTokenBase t_ = seed % 2 == 0 ? tok : wrp;
         bytes32 f = _id(from % 5);
         bytes32 t = _id(to % 5);
@@ -343,7 +343,7 @@ contract UALedgerHandler is Test {
         } else {
             fee = 0;
         }
-        bytes memory auth = _auth(from % 5, t_.uaTransferDigest(x));
+        bytes memory auth = _auth(from % 5, t_.mtxTransferDigest(x));
         vm.prank(RELAYER);
         _submit(t_, x, auth, (seed / 2) % 3);
         bool fromUA = from % 5 > 2;
@@ -367,18 +367,18 @@ contract UALedgerHandler is Test {
 
     function _submit(MetaTokenBase t_, MetaTxLib.UAMetaTransfer memory x, bytes memory auth, uint256 entry) internal {
         if (entry == 1 && x.fee == 0) {
-            t_.uaTransfer(x.from, x.to, x.value, x.batch, x.nonce, x.validUntil, x.mode, x.relayer, UACall.auth(x.from, auth));
+            t_.mtxTransfer(x.from, x.to, x.value, x.batch, x.nonce, x.validUntil, x.mode, x.relayer, UACall.auth(x.from, auth));
         } else if (entry == 1) {
-            t_.uaTransferWithFee(
+            t_.mtxTransferWithFee(
                 x.from, x.to, x.value, x.batch, x.nonce, x.validUntil, x.mode, x.relayer, x.fee, x.feeRecipient, UACall.auth(x.from, auth)
             );
         } else if (entry == 2) {
             MetaTxLib.UAMetaTransfer[] memory xs = new MetaTxLib.UAMetaTransfer[](1);
             bytes[] memory as_ = new bytes[](1);
             (xs[0], as_[0]) = (x, auth);
-            t_.uaBatchTransfer(xs, UACall.auths(xs, as_));
+            t_.mtxBatchTransfer(xs, UACall.auths(xs, as_));
         } else {
-            t_.uaExecuteTransfer(x, UACall.auth(x.from, auth));
+            t_.mtxExecuteTransfer(x, UACall.auth(x.from, auth));
         }
     }
 

@@ -72,9 +72,10 @@ contract GovDeployTest is Test {
             " needed to deploy the WrappedToken release (NET-EVM-06)")));
         h.deploy(ZUID, false, ska);
         h.limitBlockGas(0);
-        // ua-mtx-merge T1: `size-baseline.json`'s WrappedToken row 52,297 -> 51,436 B, so the control moves with it
-        h.limitCode(51_435);
-        vm.expectRevert(bytes("WrappedToken runtime 51436 B > chain code limit 51435 B (CHAIN_CODE_LIMIT, CTR-GOV-19)"));
+        // ua-mtx-merge T1: `size-baseline.json`'s WrappedToken row 52,297 -> 51,436 B, so the control moves with it;
+        // T2: 51,436 -> 46,804 B
+        h.limitCode(46_803);
+        vm.expectRevert(bytes("WrappedToken runtime 46804 B > chain code limit 46803 B (CHAIN_CODE_LIMIT, CTR-GOV-19)"));
         h.deploy(ZUID, false, ska);
     }
 

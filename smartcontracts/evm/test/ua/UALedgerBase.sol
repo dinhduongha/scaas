@@ -133,7 +133,7 @@ abstract contract UALedgerBase is UARegistryBase {
     }
 
     function _authT(address token, MetaTxLib.UAMetaTransfer memory t) internal view returns (bytes memory) {
-        return _authFor(t.from, NormalToken(token).uaTransferDigest(t));
+        return _authFor(t.from, NormalToken(token).mtxTransferDigest(t));
     }
 
     function _authM(address token, MetaTxLib.UAMetaTransaction memory m) internal view returns (bytes memory) {
@@ -143,14 +143,14 @@ abstract contract UALedgerBase is UARegistryBase {
     function _xfer(MetaTxLib.UAMetaTransfer memory t) internal {
         bytes memory a = _authT(address(tok), t);
         vm.prank(RELAYER);
-        tok.uaExecuteTransfer(t, UACall.auth(t.from, a));
+        tok.mtxExecuteTransfer(t, UACall.auth(t.from, a));
     }
 
     function _xferReverts(MetaTxLib.UAMetaTransfer memory t, bytes memory err) internal {
         bytes memory a = _authT(address(tok), t);
         vm.expectRevert(err);
         vm.prank(RELAYER);
-        tok.uaExecuteTransfer(t, UACall.auth(t.from, a));
+        tok.mtxExecuteTransfer(t, UACall.auth(t.from, a));
     }
 
     /// `amount` of alice's native balance into `ua`.

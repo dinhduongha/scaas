@@ -5,6 +5,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {MandateFixture} from "../wallet/MandateWallet.t.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {SigCheck} from "../../src/common/SigCheck.sol";
+import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {FeeMode} from "../../src/common/FeePolicy.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
@@ -84,8 +85,8 @@ contract Sweeper7702Test is MandateFixture {
 
     /// D1: the sweeper's ERC-1271 "yes" is never asked for a designator; the attacker's signature is just wrong.
     function test_sweeper_signaturesRefused() public {
-        MetaTxLib.MetaTransfer memory x = _tr(owner, attacker, 1_000, 0, 0, RR);
-        bytes memory s = _signTr(0xA77AC, address(v), x);
+        MetaTxLib.UAMetaTransfer memory x = _tr(owner, attacker, 1_000, 0, 0, RR);
+        IUARegistry.UASig memory s = _signTr(0xA77AC, address(v), x);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         vm.prank(relayer);
         v.mtxExecuteTransfer(x, s);
@@ -97,7 +98,7 @@ contract Sweeper7702Test is MandateFixture {
         vm.prank(relayer);
         w.mtxExecuteAsOwner(data, 0, m.validUntil, sig);
         // the victim's own key still moves its tokens, relayed (fee 0), while the delegation stands
-        x.to = stranger;
+        x.to = MetaTxLib.pad(stranger);
         _xfer(OWNER_PK, address(v), x);
         assertEq(v.balanceOf(stranger), 1_000);
     }
@@ -119,8 +120,8 @@ contract Sweeper7702Test is MandateFixture {
     function test_boundRelayerDelegatedRefused() public {
         vm.etch(owner, "");
         vm.etch(relayer, abi.encodePacked(hex"ef0100", address(sweeper)));
-        MetaTxLib.MetaTransfer memory x = _tr(owner, stranger, 10, 0, 0, RR);
-        bytes memory s = _signTr(OWNER_PK, address(v), x);
+        MetaTxLib.UAMetaTransfer memory x = _tr(owner, stranger, 10, 0, 0, RR);
+        IUARegistry.UASig memory s = _signTr(OWNER_PK, address(v), x);
         vm.expectRevert(abi.encodeWithSelector(SigCheck.CallerDelegated.selector, relayer));
         vm.prank(relayer);
         v.mtxExecuteTransfer(x, s);

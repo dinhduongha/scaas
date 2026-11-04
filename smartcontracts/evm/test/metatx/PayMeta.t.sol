@@ -16,12 +16,13 @@ import {TokenStore} from "../../src/metatx/TokenStore.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IRig, PlainRig, PqzRig, ZetherRig} from "./helpers/KindRigs.sol";
 
-/// @notice CTR-MTX-26 (metatx split T7, spec §6.1, R11): `mtxPayMeta` / `uaPayMeta` are `mtxPay` / `uaPay` with
-///         `payId = metaPayId(salt, meta)` — the same digest, lane `payLane(payId)`, nonce 0 — and emit
-///         `PaymentMeta(payId, meta)` before `PaymentSettled`. Run on a clone of every token kind (the parity rigs:
-///         `NORMAL`, `WRAPPED`, `NORMAL` with the ledger off, both PQZ and both Zether kinds; the signer of every rig is
-///         `0xA11CE`). `test_payMetaVectors` writes (`PAYMETA_WRITE=1`) or checks `../vectors/metatx/paymeta.json`, the
-///         vectors every other family and `clientkeys` read.
+/// @notice CTR-MTX-26 (metatx split T7, spec §6.1, R11): `mtxPayMeta` is `mtxPay` with `payId = metaPayId(salt, meta)`
+///         — the same digest, lane `payLane(payId)`, nonce 0 — and emits `PaymentMeta(payId, meta)` before
+///         `UAPaymentSettled`. ua-mtx-merge T2: one form (today's `uaPayMeta` under the `mtx` name, the signer `0xA11CE`
+///         an EOA signing `UAMetaTransfer` with its own key); the address form is in legacy/ua-mtx-merge/. Run on a clone
+///         of every token kind (the parity rigs: `NORMAL`, `WRAPPED`, `NORMAL` with the ledger off, both PQZ and both
+///         Zether kinds). `test_payMetaVectors` writes (`PAYMETA_WRITE=1`) or checks `../vectors/metatx/paymeta.json`,
+///         the vectors every other family and `clientkeys` read.
 contract PayMetaTest is Test {
     uint256 internal constant PK = 0xA11CE;
     address internal constant REL = address(0x7E1A);
@@ -76,24 +77,14 @@ contract PayMetaTest is Test {
         return keccak256(abi.encodePacked("scaas.pay.meta", salt, keccak256(meta)));
     }
 
-    function _tr(address t, bytes32 payId) internal view returns (MetaTxLib.MetaTransfer memory) {
-        return MetaTxLib.MetaTransfer(signer, PAYEE, AMOUNT, payId, MetaTokenBase(t).payLane(payId), 0,
-            block.timestamp + 300, MODE, REL, FEE, FEE_TO);
-    }
-
     function _ut(address t, bytes32 payId) internal view returns (MetaTxLib.UAMetaTransfer memory) {
         return MetaTxLib.UAMetaTransfer(MetaTxLib.pad(signer), MetaTxLib.pad(PAYEE), AMOUNT, payId,
             MetaTokenBase(t).payLane(payId), 0, block.timestamp + 300, MODE, REL, FEE, FEE_TO);
     }
 
-    function _payMeta(address t, bytes32 salt, bytes memory meta, uint256 vu, bytes memory sig) internal {
-        vm.prank(REL);
-        MetaTokenBase(t).mtxPayMeta(signer, PAYEE, AMOUNT, salt, meta, vu, MODE, REL, FEE, FEE_TO, sig);
-    }
-
     function _uaPayMeta(address t, bytes32 salt, bytes memory meta, uint256 vu, bytes memory auth) internal {
         vm.prank(REL);
-        MetaTokenBase(t).uaPayMeta(MetaTxLib.pad(signer), MetaTxLib.pad(PAYEE), AMOUNT, salt, meta, vu, MODE, REL,
+        MetaTokenBase(t).mtxPayMeta(MetaTxLib.pad(signer), MetaTxLib.pad(PAYEE), AMOUNT, salt, meta, vu, MODE, REL,
             FEE, FEE_TO, UACall.auth(MetaTxLib.pad(signer), auth));
     }
 
@@ -139,16 +130,18 @@ contract PayMetaTest is Test {
     function _settles(uint256 i) internal {
         address t = toks[i];
         (bytes32 salt, bytes memory meta) = _meta(i);
-        MetaTxLib.MetaTransfer memory x = _tr(t, _payId(salt, meta));
+        MetaTxLib.UAMetaTransfer memory x = _ut(t, _payId(salt, meta));
         assertEq(MetaTokenBase(t).metaPayId(salt, meta), x.entryRef, kinds[i]);
         bytes32 d = MetaTokenBase(t).mtxTransferDigest(x);
         uint256 snap = vm.snapshotState();
         vm.prank(REL);
-        MetaTokenBase(t).mtxPay(signer, PAYEE, AMOUNT, x.entryRef, x.validUntil, MODE, REL, FEE, FEE_TO, _ecdsa(d));
+        MetaTokenBase(t).mtxPay(x.from, x.to, AMOUNT, x.entryRef, x.validUntil, MODE, REL, FEE, FEE_TO,
+            UACall.auth(x.from, _ecdsa(d)));
         vm.revertToState(snap);
         vm.recordLogs();
-        _payMeta(t, salt, meta, x.validUntil, _ecdsa(d));
-        _checkLogs(t, x.entryRef, meta, false, x.batch, d, i);
+        _uaPayMeta(t, salt, meta, x.validUntil, _ecdsa(d));
+        // ua-mtx-merge T2 (R18), meaning: every kind, the ledger off too, emits the `UA…` events (was the address ones)
+        _checkLogs(t, x.entryRef, meta, true, x.batch, d, i);
         assertEq(MetaTokenBase(t).mtxNonce(MetaTxLib.pad(signer), x.batch), 1, kinds[i]);
         assertEq(MetaTokenBase(t).balanceOf(PAYEE), AMOUNT, kinds[i]);
         assertEq(MetaTokenBase(t).balanceOf(FEE_TO), FEE, kinds[i]);
@@ -168,10 +161,10 @@ contract PayMetaTest is Test {
         address t = toks[i];
         (bytes32 salt, bytes memory meta) = _meta(100 + i);
         MetaTxLib.UAMetaTransfer memory x = _ut(t, _payId(salt, meta));
-        bytes32 d = MetaTokenBase(t).uaTransferDigest(x);
+        bytes32 d = MetaTokenBase(t).mtxTransferDigest(x);
         uint256 snap = vm.snapshotState();
         vm.prank(REL);
-        MetaTokenBase(t).uaPay(x.from, x.to, AMOUNT, x.entryRef, x.validUntil, MODE, REL, FEE, FEE_TO, UACall.auth(x.from, _ecdsa(d)));
+        MetaTokenBase(t).mtxPay(x.from, x.to, AMOUNT, x.entryRef, x.validUntil, MODE, REL, FEE, FEE_TO, UACall.auth(x.from, _ecdsa(d)));
         vm.revertToState(snap);
         vm.recordLogs();
         _uaPayMeta(t, salt, meta, x.validUntil, _ecdsa(d));
@@ -195,43 +188,48 @@ contract PayMetaTest is Test {
         address t = toks[i];
         (bytes32 salt, bytes memory meta) = _meta(200 + i);
         uint256 vu = block.timestamp + 300;
-        bytes memory bad = _ecdsa(MetaTokenBase(t).mtxTransferDigest(_tr(t, _payId(salt, OTHER))));
+        bytes32 s_ = MetaTxLib.pad(signer);
+        bytes memory bad = _ecdsa(MetaTokenBase(t).mtxTransferDigest(_ut(t, _payId(salt, OTHER))));
         vm.prank(REL);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
-        MetaTokenBase(t).mtxPayMeta(signer, PAYEE, AMOUNT, salt, meta, vu, MODE, REL, FEE, FEE_TO, bad);
-        bytes memory sig = _ecdsa(MetaTokenBase(t).mtxTransferDigest(_tr(t, _payId(salt, meta))));
+        MetaTokenBase(t).mtxPayMeta(s_, MetaTxLib.pad(PAYEE), AMOUNT, salt, meta, vu, MODE, REL, FEE, FEE_TO,
+            UACall.auth(s_, bad));
+        bytes memory sig = _ecdsa(MetaTokenBase(t).mtxTransferDigest(_ut(t, _payId(salt, meta))));
         // the valid signature with another salt: another payId
         vm.prank(REL);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
-        MetaTokenBase(t).mtxPayMeta(signer, PAYEE, AMOUNT, ~salt, meta, vu, MODE, REL, FEE, FEE_TO, sig);
-        _payMeta(t, salt, meta, vu, sig);
+        MetaTokenBase(t).mtxPayMeta(s_, MetaTxLib.pad(PAYEE), AMOUNT, ~salt, meta, vu, MODE, REL, FEE, FEE_TO,
+            UACall.auth(s_, sig));
+        _uaPayMeta(t, salt, meta, vu, sig);
         vm.prank(REL);
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
-        MetaTokenBase(t).mtxPayMeta(signer, PAYEE, AMOUNT, salt, meta, vu, MODE, REL, FEE, FEE_TO, sig);
+        MetaTokenBase(t).mtxPayMeta(s_, MetaTxLib.pad(PAYEE), AMOUNT, salt, meta, vu, MODE, REL, FEE, FEE_TO,
+            UACall.auth(s_, sig));
         // nor through plain `mtxPay`: one lane
         vm.prank(REL);
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
-        MetaTokenBase(t).mtxPay(signer, PAYEE, AMOUNT, _payId(salt, meta), vu, MODE, REL, FEE, FEE_TO, sig);
+        MetaTokenBase(t).mtxPay(s_, MetaTxLib.pad(PAYEE), AMOUNT, _payId(salt, meta), vu, MODE, REL, FEE, FEE_TO,
+            UACall.auth(s_, sig));
     }
 
     function _uaMismatch(uint256 i) internal {
         address t = toks[i];
         (bytes32 salt, bytes memory meta) = _meta(300 + i);
         uint256 vu = block.timestamp + 300;
-        bytes memory bad = _ecdsa(MetaTokenBase(t).uaTransferDigest(_ut(t, _payId(salt, OTHER))));
+        bytes memory bad = _ecdsa(MetaTokenBase(t).mtxTransferDigest(_ut(t, _payId(salt, OTHER))));
         vm.prank(REL);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
-        MetaTokenBase(t).uaPayMeta(MetaTxLib.pad(signer), MetaTxLib.pad(PAYEE), AMOUNT, salt, meta, vu, MODE, REL,
+        MetaTokenBase(t).mtxPayMeta(MetaTxLib.pad(signer), MetaTxLib.pad(PAYEE), AMOUNT, salt, meta, vu, MODE, REL,
             FEE, FEE_TO, UACall.auth(MetaTxLib.pad(signer), bad));
-        bytes memory auth = _ecdsa(MetaTokenBase(t).uaTransferDigest(_ut(t, _payId(salt, meta))));
+        bytes memory auth = _ecdsa(MetaTokenBase(t).mtxTransferDigest(_ut(t, _payId(salt, meta))));
         vm.prank(REL);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
-        MetaTokenBase(t).uaPayMeta(MetaTxLib.pad(signer), MetaTxLib.pad(PAYEE), AMOUNT, ~salt, meta, vu, MODE, REL,
+        MetaTokenBase(t).mtxPayMeta(MetaTxLib.pad(signer), MetaTxLib.pad(PAYEE), AMOUNT, ~salt, meta, vu, MODE, REL,
             FEE, FEE_TO, UACall.auth(MetaTxLib.pad(signer), auth));
         _uaPayMeta(t, salt, meta, vu, auth);
         vm.prank(REL);
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
-        MetaTokenBase(t).uaPayMeta(MetaTxLib.pad(signer), MetaTxLib.pad(PAYEE), AMOUNT, salt, meta, vu, MODE, REL,
+        MetaTokenBase(t).mtxPayMeta(MetaTxLib.pad(signer), MetaTxLib.pad(PAYEE), AMOUNT, salt, meta, vu, MODE, REL,
             FEE, FEE_TO, UACall.auth(MetaTxLib.pad(signer), auth));
     }
 
@@ -245,9 +243,7 @@ contract PayMetaTest is Test {
             (bytes32 salt, bytes memory meta) = _meta(400 + i);
             bytes memory err = abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, GovernanceBits.PAYABLE);
             vm.expectRevert(err);
-            MetaTokenBase(t).mtxPayMeta(signer, PAYEE, AMOUNT, salt, meta, block.timestamp + 1, MODE, REL, FEE, FEE_TO, "");
-            vm.expectRevert(err);
-            MetaTokenBase(t).uaPayMeta(MetaTxLib.pad(signer), MetaTxLib.pad(PAYEE), AMOUNT, salt, meta,
+            MetaTokenBase(t).mtxPayMeta(MetaTxLib.pad(signer), MetaTxLib.pad(PAYEE), AMOUNT, salt, meta,
                 block.timestamp + 1, MODE, REL, FEE, FEE_TO, UACall.auth(MetaTxLib.pad(signer), ""));
         }
     }

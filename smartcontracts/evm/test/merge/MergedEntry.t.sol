@@ -6,6 +6,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IUALedger} from "../../src/metatx/IUALedger.sol";
+import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
@@ -124,13 +125,13 @@ abstract contract MergeBase is UALedgerBase {
     }
 
     function _xferCd(MetaTxLib.UAMetaTransfer memory x, IUARegistry.UASig memory a) internal pure returns (bytes memory) {
-        return abi.encodeCall(IUALedger.uaExecuteTransfer, (x, a));
+        return abi.encodeCall(IERC20MetaTx.mtxExecuteTransfer, (x, a));
     }
 }
 
 /// The merge spike's suite (docs/research/governance/prototype/merge-entries.md §4, T0's `test/merge`), ported to T1:
 /// the generic entry and the cancel are the merged `mtxExecute` / `mtxCancelNonce`; a typed transfer runs the merged
-/// body under its T1 name `uaExecuteTransfer` (T2 renames it). B: a native id signs with its own key and reads
+/// body under its merged name `mtxExecuteTransfer` (T2). B: a native id signs with its own key and reads
 /// `_mtxRule`; C: a registry only for a derived side.
 contract MergedEntryTest is MergeBase {
     function test_eoaToEoa() public {
@@ -336,26 +337,22 @@ contract MergedEntryTest is MergeBase {
     }
 
     /// CTR-GOV-11 (no new read): the merged typed transfer of a native id touches exactly the slots of the address
-    /// path's `mtxExecuteTransfer` for the same transfer (one nonce map, natives padded).
+    /// path's `mtxExecuteTransfer` for the same transfer (one nonce map, natives padded). ua-mtx-merge T2, meaning: the
+    /// address path left the token; its slots for this transfer (alice's and bob's balance, the nonce of lane
+    /// `(pad(alice), 1)`), recorded on it at the base (`6cdf0758`), are the pin.
     function test_slotsOfMergedTransferEqualAddressPath() public {
-        uint256 snap = vm.snapshotState();
         MetaTxLib.UAMetaTransfer memory x = _xfer(_pad(alice), _pad(bob), 1, 0);
         bytes memory cd = _xferCd(x, _sig(ALICE_PK, _xferDigest(address(tok), x)));
         vm.record();
         (bool ok,) = _relay(address(tok), cd);
         assertTrue(ok, "merged");
         (bytes32[] memory r1, bytes32[] memory w1) = vm.accesses(address(tok));
-        vm.revertToState(snap);
-
-        MetaTxLib.MetaTransfer memory a = MetaTxLib.MetaTransfer({from: alice, to: bob, value: 1, entryRef: 0, batch: 1,
-            nonce: 0, validUntil: block.timestamp + 600, mode: 0, relayer: address(0), fee: 0, feeRecipient: address(0)});
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, _dig(address(tok), MetaTxLib.hashStruct(a)));
-        vm.record();
-        vm.prank(RELAYER);
-        tok.mtxExecuteTransfer(a, abi.encodePacked(r, s, v));
-        (bytes32[] memory r2, bytes32[] memory w2) = vm.accesses(address(tok));
-        assertEq(_sorted(r1), _sorted(r2), "reads");
-        assertEq(_sorted(w1), _sorted(w2), "writes");
+        bytes32[] memory addressPath = new bytes32[](3);
+        addressPath[0] = 0x3e51255cb1bb00175ac5829aeae2de3038ee9661d1f2e130f759cb14952986b4;
+        addressPath[1] = 0x950250a79e3b9137c3c756dfa8d78e0f7e6d9001071d50ef0991bfb17dbda752;
+        addressPath[2] = 0xc5751e02acbc50610d5b3010ffb7baf66e6d701d3dd4d0f94758ac96870d70ad;
+        assertEq(_sorted(r1), addressPath, "reads");
+        assertEq(_sorted(w1), addressPath, "writes");
     }
 
     /// The distinct slots of `a`, ascending.
