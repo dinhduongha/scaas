@@ -63,6 +63,16 @@ CAP_ML, CAP_PQZ, BUDGET = 200_000, 4_500_000, 12_000_000
 FAILS, LOG = [], []
 RPC = None
 SPLIT = False  # --split: force the register + storePqzPop path
+# DeployBase's deterministic CREATE2 deployer (forge-std CREATE2_FACTORY, NET-EVM-05) and salt (`DEPLOY_SALT` env, default
+# keccak256("scaas.deploy.v1")): the GovernanceRouter goes the same way (governance spec §3.1)
+CREATE2_DEPLOYER = "0x4e59b44847b379578588920ca78fbf26c0b4956c"
+DEPLOY_SALT = bytes.fromhex(os.environ["DEPLOY_SALT"].removeprefix("0x")) if os.environ.get("DEPLOY_SALT") \
+    else keccak256(b"scaas.deploy.v1")
+
+
+def create2_address(deployer, salt, init):
+    """EIP-1014: keccak256(0xff ‖ deployer ‖ salt ‖ keccak256(init))[12:]."""
+    return "0x" + keccak256(b"\xff" + bytes.fromhex(deployer[2:]) + salt + keccak256(init))[12:].hex()
 
 
 def pack(b):
@@ -531,6 +541,20 @@ class Deployer:
         self.closure[name] = libs
         return bytes.fromhex(code), libs
 
+    def deploy2(self, name, args, label):
+        """As `DeployBase` deploys with `new X{salt}`: through `CREATE2_DEPLOYER` with `DEPLOY_SALT`, so the address
+        depends on the init code (with its arguments) and the salt only; code already at it is reused."""
+        if rpc("eth_getCode", [CREATE2_DEPLOYER, "latest"]) in ("0x", None):
+            raise RuntimeError(f"no deterministic CREATE2 deployer at {CREATE2_DEPLOYER} (runbook NET-EVM-05)")
+        code, _ = self.linked(name)
+        init = code + args
+        a = create2_address(CREATE2_DEPLOYER, DEPLOY_SALT, init)
+        if rpc("eth_getCode", [a, "latest"]) == "0x":
+            self.s.send(CREATE2_DEPLOYER, DEPLOY_SALT + init, f"deploy {name} (CREATE2)")
+        check(rpc("eth_getCode", [a, "latest"]) != "0x", f"{name} at {a} (CREATE2, salt {DEPLOY_SALT.hex()[:8]}…)")
+        self.addr[label] = a
+        return a
+
     def deploy(self, name, args, src=None, label=None):
         code, _ = self.linked(name, src)
         r = self.s.send(None, code + args, label or f"deploy {name}")
@@ -850,6 +874,9 @@ def self_test():
     portable.json's rows at pqz_kat's set — R_REG / PoP / KEM / PQZ-key messages from clientkeys, `registrationArgs`
     (full and hash-commit forms), the `register` / `registerMsig` / `setKemKey` / `setPqzKey` calldata (selector pins, length =
     clientkeys `registryCalldataLength`), the `kemKeyOf` decoder; `named_rows`; `abi_check`."""
+    for dep, want in ((bytes(20).hex(), "4d1a2e2bb4f88f0250f26ffff098b0b30b26bf38"),
+                      ("deadbeef" + "00" * 16, "b928f69bb1d91cd65274e3c79d8986362984fda3")):  # EIP-1014 examples 0, 1
+        check(create2_address("0x" + dep, bytes(32), b"\x00") == "0x" + want, f"create2_address: EIP-1014 row 0x{dep[:8]}… = 0x{want[:8]}…")
     P = json.load(open(os.path.join(ROOT, "smartcontracts/vectors/ua/portable.json")))
     r = next(x for x in P["registrations"] if x["name"] == f"mldsa65/{K.SET}")
     ua, at = hb(r["ua"]), {k: hb(v) for k, v in r["attrs"].items()}
@@ -973,9 +1000,11 @@ def run(kd, kr, ke):
     reg = D.deploy("UARegistry", encs(["w", "w", "w", "w", "w", "w", ("a", ("t", ["w", "w", "w"]))],
                                       [uid, 0, 0, BUDGET, 0, 1, kinds]), label="UARegistry gen 1")
     REG[0] = reg
-    # plan T11 (CTR-GOV-15 Change): the chain's GovernanceRouter (chain_uid, registry, SmartKeyAccount implementation 0,
-    # Hedera false), before every release: each env names it as govRouter
-    router = D.deploy("GovernanceRouter", encs(["w", "w", "w", "w"], [uid, reg, 0, 0]), label="GovernanceRouter")
+    # plan T11 (CTR-GOV-15 Change): a GovernanceRouter (chain_uid, registry, SmartKeyAccount implementation 0, Hedera false)
+    # before every release, each env naming it as govRouter. By CREATE2 as DeployBase (governance spec §3.1); on this run's
+    # own registry (it carries the pqz-mlwe kind, the deploy JSON's has none), so it is not the deploy JSON's router: the
+    # node lists both in `governance_routers` (RUNBOOK); JSON key `governance_router` of deployments/7622-pqz.json
+    router = D.deploy2("GovernanceRouter", encs(["w", "w", "w", "w"], [uid, reg, 0, 0]), label="governance_router")
     # plan 5g-Z2: the factory (notice period 0 here) deploys every release itself: env version 1 of each kind
     # (factory, chain_uid, registry, SmartKeyAccount implementation 0, Hedera false, deps, the linked libraries with
     # their code hashes, the GovernanceRouter above (the PQZ kinds link the four PqzStateLib / PqzTransferLib / PqzBurnLib / PqzViewLib, plan 5h D14,

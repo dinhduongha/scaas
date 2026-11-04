@@ -694,7 +694,8 @@ anything is sent (GD-4).
 
 **Checks** (as the 2026-10-22 section, plus): `e2e.py codesize --rpc <rpc> --key <test key 0x…04> --sizes 65537:ok,119800:ok
 --gas 199900000` (arm C's rows: 65,537 B deploys once EIP-7954 is out); `eth_getCode` of every release of the deploy JSON
-non-empty; the node's `governance_routers` set to the deploy JSON's `governance_router`.
+non-empty; the node's `governance_routers` set to the deploy JSON's `governance_router` and, once `script/pqz/e2e.py` has run, the
+`governance_router` of `smartcontracts/evm/deployments/7622-pqz.json` (the PQZ stack's router on its own registry, by CREATE2 as well).
 
 **Rollback:** as the 2026-10-22 section: stop both nodes, put the `genesis.json` backup back, swap the data dirs back, start.
 

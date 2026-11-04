@@ -312,7 +312,7 @@ transfer reads no governance slot (CTR-GOV-11, pinned on every kind).
 |---|---|
 | `GovernanceBase` | abstract, inherited by every governed contract: the `IGovernance` ABI as one-line wrappers, the masks per kind (`_validBits`, `_roleBits`, `_contractOnlyBits`, `_scalarBits`, `_scopeBits`), `_govSubject()`, the immutable `GOV_ROUTER`; `use(bit, holder, scalar)` (`GovernanceUse`) guards every power |
 | `GovernanceLib` | external library, DELEGATECALL, one body: `init`, `grantRole`, `setGrant`, `cancelGrant`, `revokeRole`, `renounceRole`, `disableFeature`, the ownership entries, `useLimited`, rescue; storage `erc7201:scaas.governance` |
-| `GovernanceRouter` | one per chain, CREATE2, no owner, no state, holds nothing: 19 ops as typed `mtx<Op>` (a native signer) and `ua<Op>` (any registered UA kind), fee mode `NONE`, relayable at fee 0; no generic path (`mtxSelectors()` empty) |
+| `GovernanceRouter` | one per chain and UA registry, CREATE2 (the PQZ e2e stack's own registry has its own), no owner, no state, holds nothing: 19 ops as typed `mtx<Op>` (a native signer) and `ua<Op>` (any registered UA kind), fee mode `NONE`, relayable at fee 0; no generic path (`mtxSelectors()` empty) |
 | `UARegistry` | verifies a UA's authorization for the router (`requireAuthorized`, `PURPOSE_METATX`): a PQ key, an `msig` up to its accepted threshold, every registered kind |
 
 ```mermaid

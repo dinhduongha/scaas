@@ -662,7 +662,8 @@ Its generic entries (`mtxExecute`, `mtxBatch`, `executeMetaTransaction`, `uaExec
 and are no rows. `gov_router` joins `ALL` (`CancelNonce`) and `UACancelNonce`'s contracts; no factory row exists and a
 router job carries no generation: the router is deployed once per chain with the release set (`DeployBase`, deploy JSON
 `governance_router`). A lane stays no holder: it relays what the subject signed. No existing job's shape changes.
-Operators: set `governance_routers` to the deploy JSON's `governance_router`; unset, a router job is `CALL_TARGET_REFUSED`.
+Operators: set `governance_routers` to the deploy JSON's `governance_router`, plus the router of any other release set on the chain
+(the PQZ e2e stack's `governance_router` in `deployments/7622-pqz.json`); unset, a router job is `CALL_TARGET_REFUSED`.
 
 | Selector | Target rule | Typical producer |
 |---|---|---|
