@@ -358,8 +358,10 @@ contract KindPairsTest is UALedgerBase {
         und.approve(address(wOff), 10);
         uint256 w0 = wOff.balanceOf(alice);
         bytes memory sig = _ecdsa(ALICE_PK, MtxDigest.typed(address(wOff), h));
-        vm.prank(ANY);
-        wOff.mtxWrap(e, 10, sig);
+        vm.prank(ANY); // by its signature, so the file compiles whatever form the token's interface declares
+        (bool ok, bytes memory ret) = address(wOff).call(abi.encodeWithSignature(
+            string.concat("mtxWrap(", ENV, ",uint256,bytes)"), e, uint256(10), sig));
+        assertTrue(ok, string(ret));
         assertEq(wOff.balanceOf(alice), w0 + 10);
     }
 
