@@ -672,8 +672,8 @@ self-check `--check`): `params.maxCodeSize` `0x20000` (131,072 B), `maxCodeSizeT
 7976, 7981, 8024, 8037, 8038, 8246) stay at 1, and the script refuses any other change of `params` ("unexpected diff").
 `genesis.gasLimit` is already `0xbebc200`; `engine.Pqz` is the run's engine file. No header field moves, so the genesis hash,
 and with it `chainUid`, is expected to stay `0xf1f491ab…3164` [inference: params are not in the header; confirm on a
-throwaway copy first, as on 2026-10-22]. It is a reset all the same: every block is replayed under the new rules from a
-fresh data dir, both nodes of the [node split](#node-split-sealer--rpc-owner-2026-10-31), and everything deployed is gone.
+throwaway copy first, as on 2026-10-22]. It is a reset all the same: the chain starts again from its genesis with a
+fresh data dir on both nodes of the [node split](#node-split-sealer--rpc-owner-2026-10-31), and everything deployed is gone.
 The 2026-10-21 section's EIP list stays as the record of that run.
 
 **Limits on this route**, measured on throwaway copies, stock `nethermind/nethermind:2.2.0` and `scaas/nethermind-pqz:2.2.0-pqz6`
