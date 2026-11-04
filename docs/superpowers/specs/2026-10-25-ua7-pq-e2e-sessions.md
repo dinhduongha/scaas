@@ -48,7 +48,7 @@ is missing, extra and needed for sessions, metadata, chat features, security, an
 | C6b the signature stored in state | its hash in state, its bytes in the event; ciphertext and header in state (§7.2) | D11 |
 | C7 Matrix event content in the clear, no signature | the signed record inside an envelope; one event type `net.scaas.pqchat.v1` (§7.1) | D7, D10 |
 | C7 the room id "may be stored in the session as a public field" | never in the clear on chain: inside `sealedInfo` (§4.2) | D10 |
-| C8 "no forward secrecy beyond C4" | FS and PCS bounded by the KEM key version; KEM rotation with secret deletion (P5) | D6 |
+| C8 "no forward secrecy beyond C4" | FS and PCS bounded by the KEM key version; rotation is the UA owner's choice, PqChat may suggest it (P5); a per-sender ratchet and epoch rekeys | D6 (changed 2026-11-04) |
 | — | `msig` expansion (P13), devices (P6), calls (§10), ordering per transport (§8), metadata hygiene (§9), FIPS 203 §7.2 check (P14) | D5, D8–D10, D12, D13 |
 | C10 unlinkable mode | unchanged: research (§13) | D10 |
 
@@ -106,18 +106,20 @@ never on the FIPS 204 key (18.9 M for ML-DSA-65 is above the EIP-7825 regular ca
    of the KEM secret exists, by CTR-UA-32);
 5. checks the key before every encapsulation (P14).
 
-**P5 — KEM key rotation with secret deletion** (D6). KEM secret keys are **random**, never derived from a long-lived seed
-(a seed would regenerate a deleted key and void the deletion). Each UA's client:
+**P5 — KEM key rotation: the UA owner's choice** (D6 as changed by the owner 2026-11-04). The KEM key is the UA's general
+key in `UARegistry` (CTR-UA-32), used for more than chat, so PqChat sets **no rotation schedule** and requires none. A new
+version is registered (`setKemKey`) when, and only when, the UA's owner chooses. A PqChat client always wraps to each
+member's **highest stored version** (P4 item 1), rekeys when a member's highest version rises (P10), and **may suggest** a
+rotation (for example after a device loss), never require one. Whether an old secret is deleted is also the owner's choice;
+a deletion means something only if the secret cannot be regenerated (not derived from a seed the owner keeps).
 
-1. registers a new KEM version (`setKemKey`, CTR-UA-32) on a schedule (every 30 days, O6; at once after a device loss or a
-   suspected leak) and on every chain where it chats;
-2. rekeys, or asks a member to rekey, every session it is in, so the next epoch wraps to the new version;
-3. deletes the old secret once every session has a complete epoch on the new version and a grace period has passed
-   (7 days, O6, for late records). Epoch keys and chain keys are deleted as §6.3 says.
-
-What this gives: an adversary who obtains a KEM secret reads the epochs wrapped to that version only; **forward secrecy and
-post-compromise security are bounded by the version's lifetime**. History older than a deleted secret is readable only from
-a device's local store or an explicit backup (§14 O5). An MLS group or an off-chain ratchet for 1:1 is the later step (D6),
+**What it costs, plainly.** A leaked KEM secret opens every wrap ever made to that version: the epoch keys, and so the
+history, of every session that used that version, for as long as the version was used, from the chain, forever. The per-sender
+ratchet (§6.3) and epoch rekeys do not protect against that leak, because the wraps stay on chain and re-serve the epoch keys
+to whoever holds the secret; they protect against the loss of a device's message and chain keys after deletion. Forward
+secrecy and post-compromise security are therefore bounded by how long the owner keeps a version, which PqChat does not
+control. History is kept on the device and, opt-in, in an epoch-key backup (§14 O5).
+An MLS group or an off-chain ratchet for 1:1 is the later step (D6),
 not in this version.
 
 **P6 — Devices** (D9). One KEM key and one signing key per UA, shared by its devices; every device has a **device id**
@@ -301,7 +303,7 @@ counter   = i, from 0 in each epoch, per (sender, device)
 
 A sender deletes `ck_i` and `mk_i` once used; a receiver deletes `mk_i` after decryption and keeps skipped message keys
 for at most 2,000 messages per chain (O6). `K` stays recoverable from the chain while the KEM secret exists; the
-bound on forward secrecy is the KEM rotation of P5. A sender stops using an epoch once the home chain shows a complete
+bound on forward secrecy is the lifetime of the KEM version, the UA owner's choice (P5). A sender stops using an epoch once the home chain shows a complete
 child of it.
 
 ### 6.4 Message encryption
@@ -489,7 +491,8 @@ for 1:1 (D6): later. Per-device KEM keys (D9): later.
 
 ## 14. Open items: the owner's answers
 
-Version 2 left seven items and the round name to the owner, each with a proposal. **Owner 2026-11-04: all as proposed**
+Version 2 left seven items and the round name to the owner, each with a proposal.
+**Owner 2026-11-04: all as proposed**, except O6's KEM rotation, withdrawn the same day
 (recorded in a Change on [CTR-CHAT-01](../../decisions.md#CTR-CHAT-01)):
 
 1. **O1 — Portable signature check.** `requireAuthorized` verifies the chain-bound `UAAuth` digest; `PqChat` records are
@@ -508,9 +511,13 @@ Version 2 left seven items and the round name to the owner, each with a proposal
    continue.
 5. **O5 — History backup.** **Answer:** an opt-in export of epoch keys, encrypted to a backup key the user holds; it re-opens
    forward secrecy for what it holds, and the client says so when the user turns it on.
-6. **O6 — Numbers.** **Answer, as proposed:** KEM rotation every 30 days, with a 7-day grace before the old secret is
-   deleted (P5); at most 2,000 skipped message keys per chain (§6.3); at most 8 `parents` (P19); padding buckets 256,
-   1,024, 4,096 and 16,384 B, then multiples of 16,384 B (§6.5); SFrame `E = 4` (P22).
+6. **O6 — Numbers.** **Answer, as proposed**, except the KEM rotation: at most 2,000 skipped message keys per chain
+   (§6.3); at most 8 `parents` (P19); padding buckets 256, 1,024, 4,096 and 16,384 B, then multiples of 16,384 B (§6.5);
+   SFrame `E = 4` (P22). **Change (owner 2026-11-04): no forced KEM rotation.** O6 as first answered also set a KEM
+   rotation every 30 days with a 7-day grace before deleting the old secret. The owner withdrew it: the KEM key is the UA's
+   general key, used for other things than chat, and a PqChat schedule would affect those uses. Rotation is the UA owner's
+   choice; clients wrap to the highest stored version and may suggest a rotation, never require one (P5). The cost is in
+   P5: a leaked KEM secret opens the history of every session that used that version, for as long as it was used.
 7. **O7 — First contact.** **Answer:** a signed contact card — UA id, Matrix user id, current KEM version — exchanged out of
    band (QR code, link); no on-chain field.
 8. **Round name.** **Answer:** every family after EVM takes `PqChat` in its own round, named `pqchat-<family>`.
@@ -534,9 +541,9 @@ Version 2 left seven items and the round name to the owner, each with a proposal
 **Decisions of 2026-11-04** (owner, all as the study recommended; [CTR-CHAT-01](../../decisions.md#CTR-CHAT-01)):
 D1 Matrix primary, chain fallback, P2P for 1:1 calls, the node relays only; D2 control plane always on chain, messages on
 chain by choice; D3 `epoch = parent + 1`, one child per parent, first landed on the home chain wins; D4 admins change
-membership, self-leave and plain rekeys open to all; D5 consent in clients now, the public link stays until C10; D6 KEM
-rotation with secret deletion plus a per-sender ratchet now, MLS or an off-chain ratchet later for 1:1; D7 a PQ signature
-inside every message; D8 an `msig` expands into its accepted members, two levels, messages written by a member UA; D9 a
+membership, self-leave and plain rekeys open to all; D5 consent in clients now, the public link stays until C10; D6 a
+per-sender ratchet and epoch rekeys now, KEM rotation the UA owner's choice (changed 2026-11-04: first "KEM rotation with
+secret deletion"), MLS or an off-chain ratchet later for 1:1; D7 a PQ signature inside every message; D8 an `msig` expands into its accepted members, two levels, messages written by a member UA; D9 a
 shared key with a device id plus device linking now, per-device keys later; D10 metadata hygiene now (no Matrix room id on
 chain, padding buckets, relayer submission, encrypted receipts), C10 later; D11 an on-chain message's signature as a hash in
 state with the bytes in the event, the ciphertext in state; D12 WebRTC 1:1 and MatrixRTC on a LiveKit SFU for groups, the
@@ -547,9 +554,10 @@ node no TURN or SFU; D13 group call keys from `K ‖ callSecret` wrapped per par
 UASig)` in the registry generation of branch `mldsa87` (or the next one if that has merged); O2 a plain rekey may take the
 child slot first, the griefer pays, the admin rekeys again; O3 a lost home chain means a new session on another chain, no
 in-protocol move; O4 the last admin leaving freezes membership, rekeys and messages continue; O5 an opt-in export of epoch
-keys encrypted to a user-held backup key; O6 KEM rotation 30 days with a 7-day grace, 2,000 skipped keys, at most 8 parents,
-the padding buckets, SFrame `E = 4`; O7 a signed contact card exchanged out of band, no on-chain field; family rounds
-named `pqchat-<family>`.
+keys encrypted to a user-held backup key; O6 2,000 skipped keys, at most 8 parents, the padding buckets, SFrame `E = 4`,
+and **no forced KEM rotation** (changed the same day: the 30-day rotation with a 7-day grace was withdrawn; rotation is the
+UA owner's choice, P5); O7 a signed contact card exchanged out of band, no on-chain field; family rounds named
+`pqchat-<family>`.
 
 ## 16. Work
 
