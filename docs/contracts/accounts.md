@@ -1695,7 +1695,7 @@ ERC-1271 is `isValidSignature(typedDigest, sig)`. The chain-bound rule is unchan
 **A designator direct caller is refused** (`SigCheck.CallerDelegated(address caller)`) wherever the caller is authority:
 `MetaTxBase._msgSender()` (so every token, `MandateWallet` and `SmartKeyAccount` entry that reads the direct caller: `transfer`,
 `approve`, `payWithFee*`, `transferToUA`, `wrap` / `unwrap`, `mtxShield`, `cancelNonce`, the owner and role functions), the
-`SmartKeyAccount` guardian (`initiateRecovery`, now through `_msgSender()`), the DEX admin (`SCaaSDex._onlyAdmin`), the
+`SmartKeyAccount` guardian (`initiateRecovery`, now through `_msgSender()`), the DEX owner and holders (`SCaaSDex._caller()`), the
 `OpenFactory` registrar, and the bound relayer of a `MODE_RESTRICT_RELAYER` envelope (`MtxPipelineLib`). The pipeline's step-5
 ticket (self-call) is unchanged. **While an account is delegated it cannot call SCaaS contracts directly.** It still acts
 through relayed `mtx*` / `ua*` signed with its own key (the fee may be 0), or it first clears its delegation (a type-4

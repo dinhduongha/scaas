@@ -625,8 +625,9 @@ table.** A lane signs a job as `msg.sender`. The node builds a job's call from a
 only if the target meets the rule of the contract kind the op names: a token entry on a registered token, a wallet's or account's
 entry **never** on a registered token (any kind) or the token factory, and the rows below; `call` jobs carry no native value. Lane keys never hold
 a role on any contract ([NODE-GEN-01](README.md#NODE-GEN-01), owner 2026-10-07): a role-restricted call reaches its
-target only through a Safe of the role holders (the `Safe.execTransaction` row, [NODE-JOB-19](#NODE-JOB-19)), and the
-lane only relays an `execTransaction` the role holders already signed. The rule of contract kind `gov_router`
+target only through the role holders' own contract (the `Safe.execTransaction` and `SmartKeyAccount` rows) or, for a governed
+contract's owner and power operations, through the chain's `GovernanceRouter` ([NODE-JOB-19](#NODE-JOB-19)), and the
+lane only relays what the role holders already signed. The rule of contract kind `gov_router`
 (`guard.rs` `Rule::GovRouter`): the target is one of the chain's `governance_routers` and its `chainUid()` equals
 `chain.chain_uid`; a router is no target of any other kind's row, and an empty list refuses every router job.
 
@@ -638,7 +639,7 @@ income into an arbitrary transaction. The client side keeps its outbox rows
 immutable after creation ([INT-ERP-05](../integration.md#INT-ERP-05)).
 
 <a id="NODE-JOB-19"></a>**NODE-JOB-19** — **Rows for permissionless and self-authenticating calls; role holders call
-through their own contract.** Besides the account, mandate, DEX and UA rows, the table has rows only for
+through their own contract or the chain's `GovernanceRouter`.** Besides the account, mandate, DEX and UA rows, the table has rows only for
 permissionless or self-authenticating selectors on registered targets: tender `commitBid` (carries the signed deposit
 intent), `revealBid`, `withdrawDeposit`, `settleTender` (anyone after the award window); vesting `release` and
 distribution `claim`, `claimMany`; `ExchangeOffer.exchange` legs.
@@ -646,14 +647,16 @@ distribution `claim`, `claimMany`; `ExchangeOffer.exchange` legs.
 Every **role-restricted** call (`createTender`,
 `cancelTender`, `disqualifyWinner`, bond release/claim, issuer and compliance interventions, `attest`, factory
 `create*`, a token's `mint`, rate administration and guardian calls) goes through the role holder's own contract —
-`SmartKeyAccount.mtxExecuteAsOwner`, or `Safe.execTransaction` on a registered role-holder contract — so a lane is never
-`msg.sender` of a privileged call; no token allowlist carries a role function, so the token gateway is no second path
+`SmartKeyAccount.mtxExecuteAsOwner`, or `Safe.execTransaction` on a registered role-holder contract — or, for the owner's
+and a holder's operations and the powers of a governed token or DEX, through the chain's `GovernanceRouter` (below), so a
+lane is never `msg.sender` of a privileged call; no token allowlist carries a role function, so the token gateway is no second path
 ([NODE-JOB-20](#NODE-JOB-20)). The factory stays excluded (a lane would become token creator/admin). A target that
 signs with a chain-bound EIP-712 domain (subject account, mandate wallet, DEX) qualifies only while its `chainUid()`
 equals `chain.chain_uid` ([NODE-GW-07](gateway.md#NODE-GW-07)); a mismatch ⇒ `403 CALL_TARGET_REFUSED`.
 
 **Governance through the router** (BUILT on branch `governance`, plan T15, `efa7f54f`; governance spec §12.7). A
-`GovernanceRouter` is a registered contract kind `gov_router`: its 38 typed `mtx<Op>` and `ua<Op>` entries (the owner's and a
+`GovernanceRouter` is the contract kind `gov_router` of the typed table, named by config `governance_routers` (no
+`chain_contract` row): its 38 typed `mtx<Op>` and `ua<Op>` entries (the owner's and a
 holder's operations and the token and DEX powers, `target` a named field) are rows of the table, relayed at fee 0, target one
 of the chain's routers (config `governance_routers`, a list: a second router is a config row), `chainUid()` equal to
 `chain.chain_uid`. The rule runs on the direct path and on the inner target of `MtxRelayFee.relayCall` and `uaRelayCall`,

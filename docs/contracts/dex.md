@@ -434,7 +434,7 @@ the decoded fields; a shape other than 0 or 1 reverts `LegShapeUnknown(shape)`; 
 `tokenKind == SCaaS` and `IUALedger(token).registry() ≠ 0`; a derived destination is checked by the receive token's own
 `transferToUA` at the payout, so an unregistered one fails that settlement as `MatchFailed`); `test/ua/UADex.t.sol`,
 `UADexInvariant.t.sol` (conservation with UA handlers, 0 reverts), `UATradeVectors.t.sol`; the P2b suites keep
-address-shaped legs through `test/helpers/DexLegs.sol`. `SCaaSDex` is 26,967 B of runtime (measured after the DEX round's final review fixes), recorded in `size-baseline.json` (ceiling 65,536 B).
+address-shaped legs through `test/helpers/DexLegs.sol`. `SCaaSDex`'s runtime size is its `size-baseline.json` row (a ratchet; ceiling 131,072 B, [CTR-GOV-19](../decisions.md#ctr-gov-19--build-first-on-the-scaas-testnet-at-a-higher-code-size-ceiling-reduce-later)).
 
 Measured (forge, osaka; one taker × one maker, `mtxSettle` execution gas): shape 0 × 0 354,530; shape 1 × 1 with
 padded native ids 351,582; a derived taker × a native maker with the real verifiers 386,507 (`p256`), 387,276
@@ -708,9 +708,9 @@ assumes gas price 0 or a chain's own block limit — the bound is EIP-7825 per t
 (none had the floor, none has an exchange path; 1 × N follows with the `OrderRouter`). *Deployment*: redeploy, no migration
 (all chains are test-only): a new `TradeLib` means new token releases (a release pins the library's code hash) and a
 new `SCaaSDex` a new DEX release; tokens made before keep the 50 % floor until redeployed. *Code size*: no
-micro-optimisation and no `via_ir` (it would move every CREATE2-derived vector); `SCaaSDex` is **26,967 B** of runtime
-and has a `size-baseline.json` entry at that size (a ratchet; the six token kinds' entries moved +0.7–0.8 KB with the
-new token functions), ceiling 65,536 B.
+micro-optimisation and no `via_ir` (it would move every CREATE2-derived vector); `SCaaSDex` has a `size-baseline.json`
+entry, its current runtime size (a ratchet; the six token kinds' entries moved +0.7–0.8 KB with the new token
+functions of that round), ceiling 131,072 B ([CTR-GOV-19](../decisions.md#ctr-gov-19--build-first-on-the-scaas-testnet-at-a-higher-code-size-ceiling-reduce-later)).
 
 Why: the owner wanted the hybrid in the contract, not only as an `mtxExchange` plan (research §8.1): the contract
 computes each maker's price as `mtxSettle` does, so a submitter cannot choose the makers' floors, and the whole surplus
