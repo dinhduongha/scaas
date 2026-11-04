@@ -5,7 +5,7 @@ use zether_prover::api::call;
 
 /// Rows of the vector the Zether prover does not build, each with its reason: another contract kind's domain (the row has no
 /// `zether` domain), so a Zether key never signs it. Any other row without a `zether` domain fails the test.
-const NOT_ZETHER: [&str; 27] = [
+const NOT_ZETHER: [&str; 65] = [
     // the token kind's own (non-Zether) accounts: UA prepare is a NormalToken / WrappedToken entry
     "PrepareAcc", "UAPrepareAcc",
     // MandateWallet / SmartKeyAccount: signed by their owners' keys, not by a Zether key
@@ -17,6 +17,14 @@ const NOT_ZETHER: [&str; 27] = [
     "UAPqzUnshieldUnwrap", "PqzAuth",
     // the DEX's domain
     "CancelDexOrder",
+    // the GovernanceRouter's domain (governance spec §3.2): the closed table, each op and its UA twin; signed by an owner's or
+    // holder's key through the router, never by a Zether key
+    "GrantRole", "UAGrantRole", "RevokeRole", "UARevokeRole", "SetGrant", "UASetGrant", "CancelGrant", "UACancelGrant",
+    "DisableFeature", "UADisableFeature", "TransferOwnership", "UATransferOwnership", "AcceptOwnership", "UAAcceptOwnership",
+    "RenounceOwnership", "UARenounceOwnership", "RenounceRole", "UARenounceRole", "Mint", "UAMint", "MintToUA", "UAMintToUA",
+    "DisableWrap", "UADisableWrap", "ProposeRate", "UAProposeRate", "CancelRate", "UACancelRate", "ExecuteRate", "UAExecuteRate",
+    "SetMarket", "UASetMarket", "SetExchangeTarget", "UASetExchangeTarget", "SetListedOnly", "UASetListedOnly", "SetFeeSplit",
+    "UASetFeeSplit",
 ];
 
 fn vector() -> Value {
