@@ -20,8 +20,9 @@ fn b32(v: &Value) -> [u8; 32] {
 fn arr<'a>(v: &'a Value, k: &str) -> &'a Vec<Value> {
     v[k].as_array().unwrap()
 }
-const KINDS: [(&str, u16); 5] =
-    [("mldsa44", 0x0130), ("mldsa65", 0x0131), ("fndsa512", 0x0132), ("slhdsa128s", 0x0133), ("mldsa87", 0x0134)];
+const KINDS: [(&str, u16); 6] = [
+    ("mldsa44", 0x0130), ("mldsa65", 0x0131), ("fndsa512", 0x0132), ("slhdsa128s", 0x0133), ("mldsa87", 0x0134), ("fndsa1024", 0x0135),
+];
 
 #[test]
 fn pq_kat_verifies() {
@@ -42,8 +43,8 @@ fn pq_kat_verifies() {
             mutations += 1;
         }
     }
-    assert_eq!(mutations, 39); // + mldsa87's 9 (CTR-UA-39)
-    println!("5 kinds, {mutations} mutations refused");
+    assert_eq!(mutations, 45); // + mldsa87's 9 (CTR-UA-39), fndsa1024's 6 (CTR-UA-40)
+    println!("6 kinds, {mutations} mutations refused");
 }
 
 /// `kind` of a parameter-set name or, for the EIP rows, of the key's length.
@@ -80,7 +81,12 @@ fn pq_external_verifies() {
     for c in arr(&v["falcon_kat"], "cases") {
         one(0x0132, &bytes(&c["pk"]), &bytes(&c["msg"]), &bytes(&c["sig"]), c["valid"].as_bool().unwrap(), &format!("falcon {}", c["count"]));
     }
-    assert_eq!((good, bad), (43, 97), "accepted, refused: every row with a key"); // + ACVP ML-DSA-87: 6 / 24
+    for c in arr(&v["falcon1024_kat"], "cases") {
+        let what = format!("falcon1024 {}", c["count"]);
+        one(0x0135, &bytes(&c["pk"]), &bytes(&c["msg"]), &bytes(&c["sig"]), c["valid"].as_bool().unwrap(), &what);
+    }
+    // + ACVP ML-DSA-87: 6 / 24; + the NIST round-3 Falcon-1024 KATs: 10 / 0
+    assert_eq!((good, bad), (53, 97), "accepted, refused: every row with a key");
     println!("{good} accepted, {bad} refused");
 }
 
@@ -105,14 +111,14 @@ fn pq_signatures_verify() {
             no += 1;
         }
     }
-    assert_eq!((ok, no), (26, 42)); // + mldsa87: 5 / 9
+    assert_eq!((ok, no), (31, 50)); // + mldsa87: 5 / 9; + fndsa1024: 5 / 8
     println!("{ok} accepted, {no} refused");
 }
 
 /// Only the PQ kinds: the positive control is every row above.
 #[test]
 fn pq_other_kinds_refused() {
-    assert!(!pq::verify(0x0135, &[0; 32], &[0; 32], &[0; 64]), "not a PQ kind");
+    assert!(!pq::verify(0x0136, &[0; 32], &[0; 32], &[0; 64]), "not a PQ kind");
     assert!(!pq::verify(0x0120, &[0; 32], &[0; 32], &[0; 64]), "not a PQ kind");
 }
 
@@ -131,5 +137,28 @@ fn mldsa87_kind_holder_and_weight() {
     let d = scaas_ua::encode_msig(2, &[(0x0101, [0x11; 32], 1), (0x0134, [0x22; 32], 1)]);
     assert_eq!(scaas_ua::msig_pqz_eligible(&d), Ok(true));
     let d = scaas_ua::encode_msig(1, &[(0x0101, [0x11; 32], 1), (0x0134, [0x22; 32], 1)]);
+    assert_eq!(scaas_ua::msig_pqz_eligible(&d), Ok(false));
+}
+
+/// CTR-UA-40: `fndsa1024` (0x0135) in the table (1,793 B, group `fndsa1024`, header `0x0A` and every `h_i < q`), a PQZ holder (Q2)
+/// and PQ weight in an `msig` (Q3); it verifies its pq_kat.json row over `ua_msg` itself and refuses a Falcon-512 signature length.
+#[test]
+fn fndsa1024_kind_holder_and_weight() {
+    let k = scaas_ua::kind_info(0x0135).unwrap();
+    assert_eq!((k.name, k.lengths, k.group), ("fndsa1024", &[1793usize][..], Some("fndsa1024")));
+    assert!(scaas_ua::is_signing(0x0135) && scaas_ua::is_pqz_holder(0x0135) && !scaas_ua::is_pqz_holder(0x0136));
+    let v = load("pq_kat.json");
+    let r = &v["kinds"]["fndsa1024"];
+    let (pk, msg, sig) = (bytes(&r["pk"]), b32(&r["ua_msg"]), bytes(&r["sig"]));
+    assert_eq!(pq::signed_message(0x0135, &msg), msg.to_vec(), "Falcon signs ua_msg");
+    assert!(pq::verify(0x0135, &pk, &msg, &sig));
+    assert!(!pq::verify(0x0132, &pk, &msg, &sig) && !pq::verify(0x0135, &pk, &msg, &sig[..666]));
+    assert_eq!(scaas_ua::validate_key_data(0x0135, &pk, false), Ok(()));
+    let mut bad = pk.clone();
+    bad[0] = 0x09;
+    assert_eq!(scaas_ua::validate_key_data(0x0135, &bad, false), Err(scaas_ua::UAError::KeyData("header")));
+    let d = scaas_ua::encode_msig(2, &[(0x0101, [0x11; 32], 1), (0x0135, [0x22; 32], 1)]);
+    assert_eq!(scaas_ua::msig_pqz_eligible(&d), Ok(true));
+    let d = scaas_ua::encode_msig(1, &[(0x0101, [0x11; 32], 1), (0x0135, [0x22; 32], 1)]);
     assert_eq!(scaas_ua::msig_pqz_eligible(&d), Ok(false));
 }

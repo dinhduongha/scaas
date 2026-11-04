@@ -36,7 +36,7 @@ pub const SCAAS_UA_ERR_ARGUMENT: ScaasUaStatus = 8;
 pub const SCAAS_UA_ERR_BUFFER: ScaasUaStatus = 9;
 /// "UAInternal": a caught panic (a bug).
 pub const SCAAS_UA_ERR_INTERNAL: ScaasUaStatus = 10;
-/// "UAPqzHolder": a PQZ key given for a kind that may not hold one (only 0x0130-0x0132, 0x0134 and a PQ-eligible msig may).
+/// "UAPqzHolder": a PQZ key given for a kind that may not hold one (only 0x0130-0x0132, 0x0134, 0x0135 and a PQ-eligible msig may).
 pub const SCAAS_UA_ERR_PQZ_HOLDER: ScaasUaStatus = 11;
 /// "UAKemHolder": a KEM record given for a kind that may not hold one.
 pub const SCAAS_UA_ERR_KEM_HOLDER: ScaasUaStatus = 12;
@@ -303,13 +303,13 @@ pub extern "C" fn scaas_ua_is_member(kind: u16, hedera_native: bool) -> bool {
     safe(false, || ua::is_member(kind, hedera_native))
 }
 
-/// Whether `kind` may hold a PQZ key attribute (mldsa44, mldsa65, fndsa512, mldsa87).
+/// Whether `kind` may hold a PQZ key attribute (mldsa44, mldsa65, fndsa512, mldsa87, fndsa1024).
 #[no_mangle]
 pub extern "C" fn scaas_ua_is_pqz_holder(kind: u16) -> bool {
     safe(false, || ua::is_pqz_holder(kind))
 }
 
-/// `*out = true` iff the `msig` key data is PQ-eligible: its members outside 0x0130-0x0134 weigh less than the threshold. An `msig`
+/// `*out = true` iff the `msig` key data is PQ-eligible: its members outside 0x0130-0x0135 weigh less than the threshold. An `msig`
 /// member is `SCAAS_UA_ERR_MEMBER_UNKNOWN` here: `scaas_ua_msig_pqz_eligible_with` reads its record.
 #[no_mangle]
 pub extern "C" fn scaas_ua_msig_pqz_eligible(key_data: *const u8, key_data_len: usize, out: *mut bool) -> ScaasUaStatus {
