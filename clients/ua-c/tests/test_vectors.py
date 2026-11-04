@@ -402,6 +402,9 @@ class Vectors(unittest.TestCase):
                 n += 1
         self.assertEqual(n, len(PV['registrations']))
         self.assertTrue(with_pqz and msigs)
+        # mldsa87 (CTR-UA-39), fndsa1024 (CTR-UA-40): holders, read here and in the record tests
+        for k in (0x0134, 0x0135):
+            self.assertEqual([sum(r['kind'] == k for r in PV[s]) for s in ('registrations', 'kemRecords', 'pqzKeyRecords')], [1, 3, 4], hex(k))
 
     def test_kem_record(self):
         for r in PV['kemRecords']:
@@ -653,11 +656,11 @@ class Vectors(unittest.TestCase):
         self.assertEqual(code_of(lambda: text(L.registration_args, None)), 'UAArgument')
 
     def test_set_key_args(self):
-        self.assertEqual(len(PV['kemRecords']), 9)
+        self.assertEqual(len(PV['kemRecords']), 15)  # + v1-v3 of mldsa87, fndsa1024 (CTR-UA-39 / -40)
         for k in PV['kemRecords']:
             i = {'ua': k['ua'], 'version': k['version'], 'kemPk': k['kemPk'], 'sig': record_sig(k)}
             self.assertEqual(json.loads(text(L.set_kem_key_args, json.dumps(i).encode())), k['args'], k['id'])
-        self.assertEqual(len(PV['pqzKeyRecords']), 8)
+        self.assertEqual(len(PV['pqzKeyRecords']), 16)  # + mldsa87, fndsa1024 at the four sets
         for r in PV['pqzKeyRecords']:
             i = {'ua': r['ua'], 'pqzKey': r['pqzKey'], 'pqzPopHash': r['pqzPopHash'], 'sig': record_sig(r)}
             self.assertEqual(json.loads(text(L.set_pqz_key_args, json.dumps(i).encode())), r['args'], r['name'])

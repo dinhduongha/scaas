@@ -96,20 +96,20 @@ fn registration_args_rows() {
             commits += 1;
         }
     }
-    assert_eq!(commits, 9);
+    assert_eq!(commits, 11); // + mldsa87, fndsa1024
 }
 
 #[test]
 fn set_key_args_rows() {
     let p = portable();
     let kem = p["kemRecords"].as_array().unwrap();
-    assert_eq!(kem.len(), 9);
+    assert_eq!(kem.len(), 15);
     for k in kem {
         let i = json!({ "ua": k["ua"], "version": k["version"], "kemPk": k["kemPk"], "sig": record_sig(k) });
         assert_eq!(out(set_kem_key_args_json(&i.to_string())), k["args"], "{}", k["id"]);
     }
     let pqz = p["pqzKeyRecords"].as_array().unwrap();
-    assert_eq!(pqz.len(), 8);
+    assert_eq!(pqz.len(), 16);
     for r in pqz {
         let i = json!({ "ua": r["ua"], "pqzKey": r["pqzKey"], "pqzPopHash": r["pqzPopHash"], "sig": record_sig(r) });
         assert_eq!(out(set_pqz_key_args_json(&i.to_string())), r["args"], "{}", r["name"]);

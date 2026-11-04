@@ -235,7 +235,7 @@ fn portable_rows_typed() {
         assert_eq!(hx(&pqz_key_digest(&ua, &h)), r["pqzKeyDigest"], "{}", r["name"]);
         n += 1;
     }
-    assert_eq!(n, 25 + 9 + 8);
+    assert_eq!(n, 27 + 15 + 16); // + mldsa87, fndsa1024 (CTR-UA-39 / -40): a registration, KEM v1-v3, PQZ key records at four sets each
 }
 
 #[test]
@@ -274,7 +274,13 @@ fn portable_vectors() {
         msigs += (kind == 0x0120) as usize;
         n += 1;
     }
-    assert_eq!((n, with_pqz, msigs, reg_msgs), (25, 8, 6, 8));
+    assert_eq!((n, with_pqz, msigs, reg_msgs), (27, 8, 6, 8));
+    // mldsa87 (CTR-UA-39), fndsa1024 (CTR-UA-40): holders, read here and in the record tests: a registration with its KEM register
+    // key, KEM records v1-v3, PQZ key records at the four sets
+    for k in [0x0134, 0x0135] {
+        let got = ["registrations", "kemRecords", "pqzKeyRecords"].map(|s| arr(&p, s).iter().filter(|r| num(&r["kind"]) == k).count());
+        assert_eq!(got, [1, 3, 4], "{k:#x}");
+    }
     println!("{n} registrations, {with_pqz} with a PQZ key, {msigs} msig");
 }
 
@@ -292,7 +298,7 @@ fn kem_record_vectors() {
             assert_eq!(hx(&member_digest(&ua, &m)), r["memberDigest"], "{}", r["id"]);
         }
     }
-    assert_eq!(arr(&p, "kemRecords").len(), 9);
+    assert_eq!(arr(&p, "kemRecords").len(), 15);
     let ua = [1u8; 32];
     let kem = |scheme: u8, n: usize| [vec![scheme], vec![0u8; n - 1]].concat(); // scheme byte ‖ zeros, n bytes in all
     assert_eq!(kem_record_digest(&ua, 0, &kem(1, 1601)), Err(UAError::KemVersion));
@@ -348,7 +354,7 @@ fn pqz_key_record_vectors() {
         let h = b32(&r["pqzPopHash"]);
         assert_eq!(pqz_key_record_message(kind, &ua, &kd, &key, None, Some(&h), true), Err(UAError::PqzKeySet), "{}", r["name"]);
     }
-    assert_eq!(arr(&p, "pqzKeyRecords").len(), 8);
+    assert_eq!(arr(&p, "pqzKeyRecords").len(), 16);
 }
 
 #[test]
@@ -703,7 +709,7 @@ fn registration_args_typed() {
         assert_eq!(fill_json(c.kem_fill.as_ref().unwrap()), row["kemCommit"]["fill"], "{name}");
         commits += 1;
     }
-    assert_eq!(commits, 9);
+    assert_eq!(commits, 11); // + mldsa87, fndsa1024
     for k in arr(&p, "kemRecords") {
         let sig = bytes(&k["sig"]);
         let s = if num(&k["kind"]) == 0x0120 { UASig { members: member_sigs(&sig), ..Default::default() } } else {
@@ -924,7 +930,7 @@ fn check_registration_vectors() {
         }
         n += 1;
     }
-    assert_eq!((n, commits), (25, 9));
+    assert_eq!((n, commits), (27, 11));
     println!("{n} registrations, {commits} hash commits, {flips} flipped signatures refused");
 }
 
@@ -960,8 +966,8 @@ fn check_kem_record_vectors() {
     // compare this is `KemHolder`, which a signature mismatch could not hide
     let got = check_kem_record(0x0133, &bytes(&s["keyData"]), &[9; 32], 1, &pk, &[0; 7856], &keys(&p));
     assert_eq!(got, Err(UAError::Unauthorized), "not the key data's id");
-    assert_eq!(flips, 3 * 6 + 3 * 2 * 3, "3 per signature: 6 single keys, 3 msig of 2 slots");
-    println!("9 KEM records, {flips} flipped signatures refused");
+    assert_eq!(flips, 3 * 12 + 3 * 2 * 3, "3 per signature: 12 single keys, 3 msig of 2 slots");
+    println!("15 KEM records, {flips} flipped signatures refused");
 }
 
 #[cfg(feature = "pq")]
@@ -994,7 +1000,7 @@ fn check_pqz_key_record_vectors() {
     let at = |ua: &[u8; 32]| check_pqz_key_record(0x0133, &bytes(&s["keyData"]), ua, &bytes(&k["pqzKey"]), &b32(&k["pqzPopHash"]), &[0; 7856], &keys(&p));
     assert_eq!(at(&b32(&s["ua"])), Err(UAError::PqzHolder(0x0133)));
     assert_eq!(at(&[9; 32]), Err(UAError::Unauthorized), "not the key data's id");
-    println!("8 PQZ key records, {flips} flipped signatures refused");
+    println!("16 PQZ key records, {flips} flipped signatures refused");
 }
 
 /// Every `negatives[]` row, by its exact error (Rust and clientkeys `verify*` take the same rows). What a stateless check

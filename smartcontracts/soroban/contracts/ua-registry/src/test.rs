@@ -432,6 +432,14 @@ fn register_disabled_kind_refused() {
             assert_eq!(err(c.try_register(&kind, &d, &no_attrs(&env), &none, &none, &r)), Error::KindDisabled, "{kind:#x}");
         }
     }
+    // their portable.json rows, which every language reads (the digests: `portable_digests_match_portable_json`, the record
+    // tests): the same refusal for the valid registration, with or without a relayer
+    for name in ["mldsa87", "fndsa1024"] {
+        let row = portable(&env, name);
+        for r in [None, Some(relayer.clone())] {
+            assert_eq!(err(row.tried_by(&c, &r)), Error::KindDisabled, "{name}");
+        }
+    }
 }
 
 /// T3's `register_attrs_refused_4b` under the UA-8 rule: PQZ / KEM attributes register on a holder; on a non-holder, and a

@@ -29,6 +29,7 @@ import {
     ZetherSchnorrBls12381Verifier
 } from "../../src/ua/verifiers/PairingVerifiers.sol";
 import {UARegistryBase, MockWallet} from "./UARegistryBase.sol";
+import {Eip8355Allowed} from "./UARegistryPq.t.sol";
 import {AcceptAll, BurnAll} from "./UAGas.t.sol";
 import {PqzCore} from "../../src/pqz/PqzCore.sol";
 import {IPqzToken} from "../../src/pqz/IPqzToken.sol";
@@ -102,7 +103,8 @@ contract ChunkHarness {
 /// PQZ proof (`storePqzPop`) and the later PQZ key (`setPqzKey`), on smartcontracts/vectors/ua/portable.json.
 /// Real verifiers for every kind except `mldsa65`, which runs on its precompile path with the precompile mocked per
 /// exact input (`pk ‖ sig ‖ pq_msg` of each vector signature: any other byte is refused), so a PQ-eligible `msig` of two
-/// `mldsa65` members fits the PQZ holder bound; the `0x0142` slot is empty (PQZ keys unproven) unless a test sets the
+/// `mldsa65` members fits the PQZ holder bound, and `mldsa87`, on a stand-in EIP-8355 precompile that answers the vectors' exact inputs
+/// (CTR-UA-39: no verifier without one); the `0x0142` slot is empty (PQZ keys unproven) unless a test sets the
 /// stand-in, which accepts exactly the row's `R_REG` message.
 contract UARegistryUA8Test is UARegistryBase {
     struct Row {
@@ -137,6 +139,8 @@ contract UARegistryUA8Test is UARegistryBase {
     uint64 internal constant CAP_MLDSA44 = 4_250_000;
     uint64 internal constant CAP_FNDSA = 2_500_000;
     uint64 internal constant CAP_SLHDSA = 1_400_000;
+    uint64 internal constant CAP_MLDSA87 = 250_000; // CTR-UA-39: the precompile path, provisional
+    uint64 internal constant CAP_FNDSA1024 = 5_250_000; // CTR-UA-40, provisional
     // the row indexes of portable.json `registrations` (asserted by name where used)
     uint256 internal constant P256_ROW = 1;
     uint256 internal constant SECP_ROW = 4;
@@ -144,10 +148,13 @@ contract UARegistryUA8Test is UARegistryBase {
     uint256 internal constant FNDSA_ROW = 17;
     uint256 internal constant SLH_ROW = 18;
     uint256 internal constant MSIG_NATIVE_ROW = 24;
+    uint256 internal constant ML87_ROW = 25; // the level-V holders after every older row (CTR-UA-39 / -40)
+    uint256 internal constant FNDSA1024_ROW = 26;
 
     bytes32 internal chainUidB;
     UARegistry.KindConfig[] internal vcfg; // the vector verifiers, deployed once per test
     address internal rreg; // the 0x0142 stand-in
+    Eip8355Allowed internal ml87; // the `mldsa87` precompile stand-in
 
     function setUp() public override {
         super.setUp();
@@ -283,13 +290,15 @@ contract UARegistryUA8Test is UARegistryBase {
 
     function _rows() internal view returns (Row[] memory rows) {
         rows = this.loadRows();
-        assertEq(rows.length, 25, "registrations");
+        assertEq(rows.length, 27, "registrations");
         assertEq(rows[P256_ROW].name, "p256");
         assertEq(rows[SECP_ROW].name, "secp256k1");
         assertEq(rows[ML65_1].name, "mldsa65#1");
         assertEq(rows[FNDSA_ROW].name, "fndsa512");
         assertEq(rows[SLH_ROW].name, "slhdsa128s");
         assertEq(rows[MSIG_NATIVE_ROW].name, "msig-pq-native");
+        assertEq(rows[ML87_ROW].name, "mldsa87");
+        assertEq(rows[FNDSA1024_ROW].name, "fndsa1024");
     }
 
     function _find(Row[] memory rows, string memory name) internal pure returns (Row memory) {
@@ -331,6 +340,13 @@ contract UARegistryUA8Test is UARegistryBase {
         vcfg.push(UARegistry.KindConfig(0x0131, address(m65), 100_000));
         vcfg.push(UARegistry.KindConfig(0x0132, address(new UAFndsaVerifier(0x0132)), CAP_FNDSA));
         vcfg.push(UARegistry.KindConfig(0x0133, address(new UASlhdsaVerifier()), CAP_SLHDSA));
+        string memory kat = vm.readFile("../vectors/ua/pq_kat.json");
+        bytes memory probe = vm.parseJsonBytes(kat, ".kinds.mldsa87.eip8355_probe_valid");
+        ml87 = new Eip8355Allowed();
+        ml87.allow(keccak256(probe));
+        vcfg.push(UARegistry.KindConfig(0x0134, address(new UAMldsaVerifier(
+            0x0134, address(ml87), probe, vm.parseJsonBytes(kat, ".kinds.mldsa87.eip8355_probe_invalid"))), CAP_MLDSA87));
+        vcfg.push(UARegistry.KindConfig(0x0135, address(new UAFndsaVerifier(0x0135)), CAP_FNDSA1024));
         rreg = makeAddr("rreg");
         vm.etch(rreg, hex"00"); // STOP: any input the test did not allow returns nothing (refused)
     }
@@ -367,12 +383,18 @@ contract UARegistryUA8Test is UARegistryBase {
         vm.mockCall(ML65, abi.encodePacked(pk, sig, pq), abi.encode(uint256(1)));
     }
 
-    /// Every `mldsa65` signature of the rows: the signer's `pop`, and each `mldsa65` member's signature inside an
+    /// The `mldsa87` stand-in accepts `pk ‖ sig ‖ pq_msg` (EIP-8355's input) of this one signature.
+    function _allowMl87(bytes memory pk, bytes32 uaMsg, bytes memory sig) internal {
+        ml87.allow(keccak256(abi.encodePacked(pk, sig, PqUA.pqMessage(PqUA.tag(UAKinds.MLDSA87), uaMsg))));
+    }
+
+    /// Every `mldsa65` / `mldsa87` signature of the rows: the signer's `pop`, and each `mldsa65` member's signature inside an
     /// `msig` pop (under `member`, over `memberDigest(ua, popMessage)`).
     function _allowAll(Row[] memory rows) internal {
         for (uint256 i; i < rows.length; ++i) {
             Row memory r = rows[i];
             if (r.kind == UAKinds.MLDSA65) _allowMl65(r.keyData, r.popMessage, r.pop);
+            if (r.kind == UAKinds.MLDSA87) _allowMl87(r.keyData, r.popMessage, r.pop);
             if (r.kind != UAKinds.MSIG || r.pop.length == 0) continue;
             _allowMembers(rows, r.keyData, UAKinds.memberDigest(r.ua, r.popMessage), r.pop);
         }
@@ -536,7 +558,7 @@ contract UARegistryUA8Test is UARegistryBase {
         vm.chainId(7622);
         uint256 nb = _registerAll(b, rows);
         vm.chainId(31337);
-        assertEq(na, 19, "17 set-free rows + 2 of this set");
+        assertEq(na, 21, "19 set-free rows + 2 of this set");
         assertEq(nb, na);
         for (uint256 i; i < rows.length; ++i) {
             if (a.kindOf(rows[i].ua) == 0) continue;
@@ -632,7 +654,7 @@ contract UARegistryUA8Test is UARegistryBase {
             }
             vm.revertToState(snap);
         }
-        assertEq(n, 25, "every row");
+        assertEq(n, 27, "every row");
     }
 
     /// P3: a kind whose slot is empty in the target registry is refused like any registration of a disabled kind.
@@ -1349,7 +1371,7 @@ contract UARegistryUA8Test is UARegistryBase {
 
     function _keyRecs() internal view returns (KeyRec[] memory recs) {
         recs = this.loadKeyRecs();
-        assertEq(recs.length, 8, "pqzKeyRecords: fndsa512 and msig-pq-native at four sets");
+        assertEq(recs.length, 16, "pqzKeyRecords: fndsa512, msig-pq-native, mldsa87 and fndsa1024 at four sets");
     }
 
     function _keyRec(KeyRec[] memory ks, string memory name) internal pure returns (KeyRec memory) {
@@ -1641,8 +1663,9 @@ contract UARegistryUA8Test is UARegistryBase {
         _checkedEq(g2p, m.ua, 1, 1, m.kemPk.length != 0 ? 1 : 0);
     }
 
-    /// `msig` key records: each `mldsa65` member's signature over the record's `memberDigest`.
+    /// `msig` key records: each `mldsa65` member's signature over the record's `memberDigest`; an `mldsa87` record's signature.
     function _allowRecord(Row[] memory rows, Row memory base, KeyRec memory k) internal {
+        if (k.kind == UAKinds.MLDSA87) _allowMl87(base.keyData, k.message, k.sig);
         if (k.kind == UAKinds.MSIG) _allowMembers(rows, base.keyData, UAKinds.memberDigest(k.ua, k.message), k.sig);
     }
 
@@ -2201,7 +2224,7 @@ contract UARegistryUA8Test is UARegistryBase {
 
     function _kemRecs() internal view returns (KemRec[] memory recs) {
         recs = this.loadKemRecs();
-        assertEq(recs.length, 9, "kemRecords: v1-v3 of mldsa65, fndsa512, msig-pq");
+        assertEq(recs.length, 15, "kemRecords: v1-v3 of mldsa65, fndsa512, msig-pq, mldsa87, fndsa1024");
         for (uint256 i; i < recs.length; ++i) {
             KemRec memory k = recs[i];
             assertEq(k.digest, UAKinds.kemRecordDigest(k.ua, k.version, k.kemPk), k.id);
@@ -2216,18 +2239,19 @@ contract UARegistryUA8Test is UARegistryBase {
         revert(string.concat("no KEM record ", id));
     }
 
-    /// The registration row of a KEM record's UA (this build's set for `mldsa65` / `msig-pq`; v1 is its initial record).
+    /// The registration row of a KEM record's UA (this build's set for `mldsa65` / `msig-pq`, the set-free row otherwise).
     function _kemBase(Row[] memory rows, KemRec memory k) internal pure returns (Row memory) {
-        return _eq(k.name, "fndsa512") ? _find(rows, "fndsa512") : _find(rows, string.concat(k.name, "/", _setName()));
+        return _eq(k.name, "mldsa65") || _eq(k.name, "msig-pq") ? _find(rows, string.concat(k.name, "/", _setName())) : _find(rows, k.name);
     }
 
-    /// The mocked `mldsa65` precompile accepts the record's signature (`msig`: each `mldsa65` member's, under `member`).
+    /// The mocked `mldsa65` / `mldsa87` precompile accepts the record's signature (`msig`: each `mldsa65` member's, under `member`).
     function _allowKem(Row[] memory rows, Row memory base, KemRec memory k) internal {
         if (k.kind == UAKinds.MLDSA65) _allowMl65(base.keyData, k.message, k.sig);
+        if (k.kind == UAKinds.MLDSA87) _allowMl87(base.keyData, k.message, k.sig);
         if (k.kind == UAKinds.MSIG) _allowMembers(rows, base.keyData, UAKinds.memberDigest(k.ua, k.message), k.sig);
     }
 
-    /// The three KEM holders (msig members first) and every KEM record's signature allowed.
+    /// The five KEM holders (msig members first) and every KEM record's signature allowed.
     function _kemSetup(UARegistry r, Row[] memory rows, KemRec[] memory ks) internal {
         _allowAll(rows);
         _members(r, rows);
@@ -2321,7 +2345,7 @@ contract UARegistryUA8Test is UARegistryBase {
             }
         }
         vm.chainId(31337);
-        assertEq(written, 18, "v1, v2 and v3 of three UAs on two registries");
+        assertEq(written, 30, "v1, v2 and v3 of five UAs on two registries");
         for (uint256 i; i < ks.length; ++i) {
             (IUARegistry.KemKey memory pa, bytes memory sa) = a.kemKeyAt(ks[i].ua, ks[i].version);
             (IUARegistry.KemKey memory pb, bytes memory sb) = b.kemKeyAt(ks[i].ua, ks[i].version);
@@ -2621,8 +2645,8 @@ contract UARegistryUA8Test is UARegistryBase {
         KemRec[] memory ks = _kemRecs();
         UARegistry a = _regA(false);
         _kemSetup(a, rows, ks);
-        string[3] memory ids = [string("fndsa512/v2"), "mldsa65/v2", "msig-pq/v2"];
-        for (uint256 i; i < 3; ++i) {
+        string[5] memory ids = [string("fndsa512/v2"), "mldsa65/v2", "msig-pq/v2", "mldsa87/v2", "fndsa1024/v2"];
+        for (uint256 i; i < 5; ++i) {
             KemRec memory k = _kemRec(ks, ids[i]);
             vm.recordLogs();
             vm.expectEmit(true, true, false, true, address(a));
@@ -2909,7 +2933,7 @@ contract UARegistryUA8Test is UARegistryBase {
             assertEq(a[i].fillVersion, 0, x.name);
             ++commits;
         }
-        assertEq(commits, 9, "fndsa512, mldsa65 and msig-pq at four sets");
+        assertEq(commits, 11, "fndsa512, mldsa65 and msig-pq at four sets, mldsa87, fndsa1024");
     }
 
     /// The KEM holder rows of this build: fndsa512, mldsa65/<set>, msig-pq/<set> (members registered).
@@ -3372,6 +3396,9 @@ contract UARegistryUA8Test is UARegistryBase {
                 Row memory x = rows[i];
                 bool here = bytes(x.set).length == 0 || _eq(x.set, _setName());
                 if (!here || (x.kind == UAKinds.MSIG) != (pass == 1)) continue;
+                // mldsa87 / fndsa1024 (CTR-UA-39 / -40): no pin yet; their gas figures are T-GAS's, which waits for the owner's word
+                // (no gas calibration without asking). Their rows register in test_ua8_everyKindFromVectors and the copy tests.
+                if (x.kind == UAKinds.MLDSA87 || x.kind == UAKinds.FNDSA1024) continue;
                 if (x.kind == UAKinds.MLDSA44 && r.expandedKeyOf(x.ua)[0] == address(0)) {
                     r.cacheExpandedKey(UAKinds.MLDSA44, x.keyData, 0);
                 }

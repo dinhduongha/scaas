@@ -433,7 +433,7 @@ contract UAKindsTest is Test {
         vm.pauseGasMetering(); // a 2.5 MB JSON string per cheatcode call; correctness test, not a gas test
         string memory j = _p();
         uint256 n = _count(j, "registrations");
-        assertEq(n, 25);
+        assertEq(n, 27); // + mldsa87, fndsa1024 (CTR-UA-39 / -40)
         uint256 pqzRows;
         for (uint256 i; i < n; ++i) {
             string memory r = _row("registrations", i);
@@ -464,7 +464,7 @@ contract UAKindsTest is Test {
         vm.pauseGasMetering(); // a 2.5 MB JSON string per cheatcode call; correctness test, not a gas test
         string memory j = _p();
         uint256 n = _count(j, "registrations");
-        assertEq(n, 25);
+        assertEq(n, 27); // + mldsa87, fndsa1024 (CTR-UA-39 / -40)
         for (uint256 i; i < n; ++i) {
             string memory r = _row("registrations", i);
             string memory name_ = vm.parseJsonString(j, string.concat(r, ".name"));
@@ -493,7 +493,7 @@ contract UAKindsTest is Test {
         vm.pauseGasMetering(); // a 2.5 MB JSON string per cheatcode call; correctness test, not a gas test
         string memory j = _p();
         uint256 n = _count(j, "kemRecords");
-        assertEq(n, 9);
+        assertEq(n, 15);
         for (uint256 i; i < n; ++i) {
             string memory r = _row("kemRecords", i);
             string memory id = vm.parseJsonString(j, string.concat(r, ".id"));
@@ -519,7 +519,7 @@ contract UAKindsTest is Test {
         vm.pauseGasMetering(); // a 2.5 MB JSON string per cheatcode call; correctness test, not a gas test
         string memory j = _p();
         uint256 n = _count(j, "pqzKeyRecords");
-        assertEq(n, 8);
+        assertEq(n, 16);
         for (uint256 i; i < n; ++i) {
             string memory r = _row("pqzKeyRecords", i);
             string memory name_ = vm.parseJsonString(j, string.concat(r, ".name"));

@@ -136,6 +136,9 @@ TestCase {
             }
         }
         verify(withPqz > 0)
+        // mldsa87 (CTR-UA-39), fndsa1024 (CTR-UA-40): holders, read above and in test_set_key_args
+        for (const k of [0x0134, 0x0135])
+            compare(["registrations", "kemRecords", "pqzKeyRecords"].map(s => pp[s].filter(r => r.kind === k).length), [1, 3, 4], k)
         // hash-only proof path agrees with the proof bytes
         for (const r of pp.registrations) {
             const a = r.attrs
@@ -705,13 +708,13 @@ TestCase {
 
     function test_set_key_args() {
         const pp = vectors.load("portable.json")
-        compare(pp.kemRecords.length, 9)
+        compare(pp.kemRecords.length, 15)  // + v1-v3 of mldsa87, fndsa1024
         for (const k of pp.kemRecords) {
             const o = UaKinds.setKemKeyArgs(JSON.stringify({ ua: k.ua, version: k.version, kemPk: k.kemPk, sig: recordSig(k) }))
             compare(UaKinds.lastError, "", k.id)
             compare(JSON.parse(o), k.args, k.id)
         }
-        compare(pp.pqzKeyRecords.length, 8)
+        compare(pp.pqzKeyRecords.length, 16)  // + mldsa87, fndsa1024 at the four sets
         for (const r of pp.pqzKeyRecords) {
             const o = UaKinds.setPqzKeyArgs(JSON.stringify({ ua: r.ua, pqzKey: r.pqzKey, pqzPopHash: r.pqzPopHash, sig: recordSig(r) }))
             compare(UaKinds.lastError, "", r.name)

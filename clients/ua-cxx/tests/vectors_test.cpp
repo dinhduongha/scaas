@@ -267,6 +267,14 @@ static void portable() {
         ++n;
     }
     CHECK(n == int(p["registrations"].size()) && withPqz && msigs, "registration counts");
+    // mldsa87 (CTR-UA-39), fndsa1024 (CTR-UA-40): holders, read here and in kem_record / pqz_key_record: a registration with its KEM
+    // register key, KEM records v1-v3, PQZ key records at the four sets
+    for (int k : {0x0134, 0x0135}) {
+        std::vector<int> got;
+        for (const char* s : {"registrations", "kemRecords", "pqzKeyRecords"})
+            got.push_back(int(std::count_if(p[s].begin(), p[s].end(), [&](const json& r) { return kind(r["kind"]) == k; })));
+        CHECK(got == std::vector<int>({1, 3, 4}), "level-V rows");
+    }
 }
 
 static void kem_record() {
@@ -724,12 +732,12 @@ static json recordSig(const json& r) {
 
 static void set_key_args() {
     json p = load("portable.json");
-    CHECK(p["kemRecords"].size() == 9, "kemRecords");
+    CHECK(p["kemRecords"].size() == 15, "kemRecords"); // + v1-v3 of mldsa87, fndsa1024
     for (auto& k : p["kemRecords"]) {
         json i = {{"ua", k["ua"]}, {"version", k["version"]}, {"kemPk", k["kemPk"]}, {"sig", recordSig(k)}};
         CHECK(json::parse(setKemKeyArgs(i.dump())) == k["args"], k["id"].get<std::string>());
     }
-    CHECK(p["pqzKeyRecords"].size() == 8, "pqzKeyRecords");
+    CHECK(p["pqzKeyRecords"].size() == 16, "pqzKeyRecords"); // + mldsa87, fndsa1024 at the four sets
     for (auto& r : p["pqzKeyRecords"]) {
         json i = {{"ua", r["ua"]}, {"pqzKey", r["pqzKey"]}, {"pqzPopHash", r["pqzPopHash"]}, {"sig", recordSig(r)}};
         CHECK(json::parse(setPqzKeyArgs(i.dump())) == r["args"], r["name"].get<std::string>());
