@@ -102,6 +102,7 @@ pub fn kind_name(env: &Env, kind: u32) -> String {
         0x0132 => "fndsa512",
         0x0133 => "slhdsa128s",
         0x0134 => "mldsa87", // CTR-UA-39: named here, refused by `register` until the Soroban round
+        0x0135 => "fndsa1024", // CTR-UA-40: the same
         0x0141 => "zether-bls12381",
         0x0142 => "pqz-mlwe",
         _ => panic_with_error!(env, Error::KindUnknown),

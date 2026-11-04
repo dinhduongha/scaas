@@ -145,16 +145,18 @@ fn ua_of_matches_kinds_json_valid_rows() {
         }
     }
     assert!(n >= 10);
-    // every other kind of kinds.json is refused on NEAR: mldsa87 (0x0134, CTR-UA-39 Q5) among them, until its NEAR round
-    let mut other = 0;
+    // every other kind of kinds.json is refused on NEAR: mldsa87 (0x0134, CTR-UA-39 Q5) and fndsa1024 (0x0135, CTR-UA-40) among
+    // them, until their NEAR round
+    let mut other = [0u32; 2];
     for r in k["valid"].as_array().unwrap() {
         let kind = r["kind"].as_u64().unwrap() as u16;
         if ![ua::KIND_WEBAUTHN_P256, ua::KIND_ED25519, ua::KIND_SECP256K1, ua::KIND_MSIG].contains(&kind) {
             assert!(KeyRecord { kind, key_data: hx(&r["keyData"]) }.validate().is_err(), "{r}");
-            other += u32::from(kind == 0x0134);
+            other[0] += u32::from(kind == 0x0134);
+            other[1] += u32::from(kind == 0x0135);
         }
     }
-    assert_eq!(other, 1, "the mldsa87 row of kinds.json");
+    assert_eq!(other, [1, 1], "the mldsa87 row and the fndsa1024 row of kinds.json");
     // every invalid msig row of kinds.json is refused on NEAR too
     for r in k["invalid"].as_array().unwrap() {
         if r["kind"] == 0x0120 {
