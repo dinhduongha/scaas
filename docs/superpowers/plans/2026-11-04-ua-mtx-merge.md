@@ -3,7 +3,7 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or
 > superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status (2026-11-04):** plan, not executed. Nothing is built from it; this commit writes no code, contract, test or vector.
+**Status (2026-11-04):** plan, not executed; its decisions MD-1 to MD-10 accepted by the owner 2026-11-04. Nothing is built from it; this commit writes no code, contract, test or vector.
 
 **Spec:** [`2026-11-04-ua-mtx-merge.md`](../specs/2026-11-04-ua-mtx-merge.md), **accepted by the owner 2026-11-04** (Q1–Q7, §10);
 rules R1–R47 (§5), invariants 1–7 (§8), measurement (§9). **Ruling:** [CTR-MTX-30](../../decisions.md#CTR-MTX-30) and its five Change
@@ -80,6 +80,8 @@ rustc 1.90); Node `node --test` (`clients/clientkeys`); `zether-prover`; `ua-rs`
   only, no absolute paths.
 
 ## Plan decisions (MD-*; controller calls, owner may override; recorded in `decisions.md` by T19)
+
+**Owner 2026-11-04: MD-1 to MD-10 accepted as written** ("theo khuyên"), including MD-10 (the mesh refuses a derived `from` by name until a ruling on how a peer checks a derived `UASig`) and MD-5 (the cancel's signed purpose moves to the named-op purpose).
 
 - **MD-1 Where `executeMetaTransaction` lives.** Spec §2.5 keeps it in the `MetaTxBase` core "on tokens"; R26 puts "the address
   generic path (wallets, and `executeMetaTransaction` on tokens per R3)" in `MetaTxAddressBase`. If tokens inherited
