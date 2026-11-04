@@ -293,7 +293,7 @@ contract UAKindsTest is Test {
 
     /// P6a's PqUA keeps its own tags (ruling U8): they must equal the table's.
     function test_pqTagsMatchPqUA() public pure {
-        for (uint16 k = UAKinds.MLDSA44; k <= 0x0134; ++k) assertEq(UAKinds.tag(k), PqUA.tag(k));
+        for (uint16 k = UAKinds.MLDSA44; k <= 0x0135; ++k) assertEq(UAKinds.tag(k), PqUA.tag(k));
     }
 
     /// CTR-UA-39: `mldsa87` (0x0134), tag `scaas.ua.mldsa87.v1`, group `mldsa87`, key data the FIPS 204 `pk` of 2,592 B (the
@@ -305,15 +305,58 @@ contract UAKindsTest is Test {
         assertEq(UAKinds.groupName(k), "mldsa87");
         assertTrue(UAKinds.isSigning(k) && UAKinds.isDerived(k) && UAKinds.isMember(k, false) && UAKinds.isMember(k, true));
         assertFalse(UAKinds.isNative(k) || UAKinds.isZether(k));
-        assertTrue(UAStore.isPq(k) && UAStore.isPq(0x0130) && !UAStore.isPq(0x0135) && !UAStore.isPq(0x012f));
+        assertTrue(UAStore.isPq(k) && UAStore.isPq(0x0130) && !UAStore.isPq(0x0136) && !UAStore.isPq(0x012f));
         assertEq(UAStore.vkLength(k), 2592);
         this.validate(k, new bytes(2592));
         for (uint256 n = 2591; n <= 2593; n += 2) {
             vm.expectRevert(abi.encodeWithSelector(UAKinds.UAKeyData.selector, k));
             this.validate(k, new bytes(n));
         }
-        vm.expectRevert(abi.encodeWithSelector(UAKinds.UAKindUnknown.selector, uint16(0x0135)));
-        this.validate(0x0135, new bytes(2592));
+        vm.expectRevert(abi.encodeWithSelector(UAKinds.UAKindUnknown.selector, uint16(0x0136)));
+        this.validate(0x0136, new bytes(2592));
+    }
+
+    /// CTR-UA-40: `fndsa1024` (0x0135), tag `scaas.ua.fndsa1024.v1`, group `fndsa1024`, key data `0x0A ‖ h` of 1,793 B with every
+    /// 14-bit `h_i < q` (header, length and range are the whole check, as `fndsa512`'s at n = 512); SIGNING and MEMBER; PQ weight
+    /// (`UAStore.isPq`, owner Q3); stored.
+    function test_fndsa1024Kind() public {
+        uint16 k = 0x0135;
+        assertEq(UAKinds.name(k), "fndsa1024");
+        assertEq(UAKinds.tag(k), keccak256("scaas.ua.fndsa1024.v1"));
+        assertEq(UAKinds.groupName(k), "fndsa1024");
+        assertTrue(UAKinds.isSigning(k) && UAKinds.isDerived(k) && UAKinds.isMember(k, false) && UAKinds.isMember(k, true));
+        assertFalse(UAKinds.isNative(k) || UAKinds.isZether(k));
+        assertTrue(UAStore.isPq(k) && !UAStore.isPq(0x0136));
+        assertEq(UAStore.vkLength(k), 1793);
+        bytes memory d = new bytes(1793);
+        d[0] = 0x0a;
+        for (uint256 i = 1; i < 1793; i += 2) d[i] = 0x55; // h_i < q throughout
+        this.validate(k, d);
+        // the last coefficient h_1023 = (d[1791] & 0x3f) << 8 | d[1792] (bits 14322..14335 of h)
+        (d[1791], d[1792]) = (0x3f, 0xff); // 16383 >= q
+        vm.expectRevert(abi.encodeWithSelector(UAKinds.UAKeyData.selector, k));
+        this.validate(k, d);
+        (d[1791], d[1792]) = (0x30, 0x00); // 12288 = q - 1: in range
+        this.validate(k, d);
+        d[1792] = 0x01; // 12289 = q
+        vm.expectRevert(abi.encodeWithSelector(UAKinds.UAKeyData.selector, k));
+        this.validate(k, d);
+        d[1792] = 0x00;
+        d[0] = 0x09; // the Falcon-512 header
+        vm.expectRevert(abi.encodeWithSelector(UAKinds.UAKeyData.selector, k));
+        this.validate(k, d);
+        for (uint256 n = 1792; n <= 1794; n += 2) {
+            bytes memory e = new bytes(n);
+            e[0] = 0x0a;
+            vm.expectRevert(abi.encodeWithSelector(UAKinds.UAKeyData.selector, k));
+            this.validate(k, e);
+        }
+        bytes memory f = new bytes(897); // fndsa512 keeps its header
+        f[0] = 0x0a;
+        vm.expectRevert(abi.encodeWithSelector(UAKinds.UAKeyData.selector, uint16(0x0132)));
+        this.validate(0x0132, f);
+        f[0] = 0x09;
+        this.validate(0x0132, f);
     }
 
     function validate(uint16 kind, bytes memory d) external view {

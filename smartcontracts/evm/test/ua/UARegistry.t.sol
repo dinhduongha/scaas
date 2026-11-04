@@ -1104,7 +1104,7 @@ contract UARegistryTest is UARegistryBase {
 
     function test_constructorConfig() public {
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](1);
-        uint16[6] memory refused = [0x0001, 0x00ff, 0x0109, 0x0114, 0x0120, 0x0135];
+        uint16[6] memory refused = [0x0001, 0x00ff, 0x0109, 0x0114, 0x0120, 0x0136];
         for (uint256 i; i < refused.length; ++i) {
             c[0] = UARegistry.KindConfig(refused[i], address(mock), 50_000);
             vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, refused[i]));

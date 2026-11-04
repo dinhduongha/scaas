@@ -517,7 +517,7 @@ valid.push(row(0x0134, ml87));
 bad(0x0134, new Uint8Array(0), 'empty');
 bad(0x0134, ml87.subarray(0, ml87.length - 1), 'one byte short');
 bad(0x0134, concatBytes(ml87, Uint8Array.of(0)), 'one byte long');
-bad(0x0135, ml87, 'no kind 0x0135', { error: 'UAKindUnknown' });
+bad(0x0136, ml87, 'no kind 0x0136', { error: 'UAKindUnknown' });
 const memberTag = ua.purposeTag('member');
 const uaAuth = [['A', 1], ['A', 2], ['B', 1], ['C', 1], ['E', 1]].map(([context, generation]) => {
   const domain = { generation, ...contexts[context] };

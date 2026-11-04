@@ -296,27 +296,29 @@ contract UARegistryLibMsigTest is UARegistryBase {
 
     /// `requireAuthorized` at `159d267e`, the last commit where the differential against the pre-split registry compiled (its `after`
     /// column; `register` state gas in `_stateBefore`). `0`: not a row. Re-pinned on `mldsa87` (CTR-UA-39, kind 0x0134: `vkLength`'s
-    /// and `_slot`'s extra arm, the immutable `_CFG12`), old -> new in its commit: 0x0100-0x0107 +84, 0x0108 +116, 0x0141 +86.
+    /// and `_slot`'s extra arm, the immutable `_CFG12`), old -> new in its commit: 0x0100-0x0107 +84, 0x0108 +116, 0x0141 +86. Re-pinned
+    /// for `fndsa1024` (CTR-UA-40, kind 0x0135: `vkLength`'s and `_slot`'s arm, `_CFG20`, `_cfg`'s slot-19/20 branch), old -> new in its
+    /// commit.
     function _before(uint256 kind) internal pure returns (uint256) {
-        if (kind == 256) return 17010;
-        if (kind == 257) return 17037;
-        if (kind == 258) return 17056;
-        if (kind == 259) return 17113;
-        if (kind == 260) return 17204;
-        if (kind == 261) return 17358;
-        if (kind == 262) return 17587;
-        if (kind == 263) return 17473;
-        if (kind == 264) return 17473;
-        if (kind == 272) return 19531;
-        if (kind == 273) return 19588;
-        if (kind == 274) return 19666;
-        if (kind == 275) return 19711;
-        if (kind == 304) return 23257;
-        if (kind == 305) return 23915;
-        if (kind == 306) return 20870;
-        if (kind == 307) return 20159;
-        if (kind == 308) return 22194; // mldsa87 (CTR-UA-39), added on its branch (mock verifier)
-        if (kind == 321) return 19629;
+        if (kind == 256) return 17045;
+        if (kind == 257) return 17072;
+        if (kind == 258) return 17091;
+        if (kind == 259) return 17148;
+        if (kind == 260) return 17239;
+        if (kind == 261) return 17393;
+        if (kind == 262) return 17622;
+        if (kind == 263) return 17508;
+        if (kind == 264) return 17563;
+        if (kind == 272) return 19557;
+        if (kind == 273) return 19614;
+        if (kind == 274) return 19692;
+        if (kind == 275) return 19737;
+        if (kind == 304) return 23347;
+        if (kind == 305) return 24005;
+        if (kind == 306) return 20960;
+        if (kind == 307) return 20249;
+        if (kind == 308) return 22197; // mldsa87 (CTR-UA-39), added on its branch (mock verifier)
+        if (kind == 321) return 19661;
         return 0;
     }
 
@@ -370,8 +372,8 @@ contract UARegistryLibMsigTest is UARegistryBase {
         bytes memory ds = _msigKey(2, m);
         bytes32 mu = UARegistry(at).registerMsig(UACall.structure(ds), _none(), new IUARegistry.MemberSig[](0), "");
         uint256 used = vm.lastCallGas().gasTotalUsed;
-        emit log_string(string.concat("GAS|registerMsig regular|143320|", vm.toString(used)));
-        assertLe(used, 143320 + SLACK, "registerMsig");
+        emit log_string(string.concat("GAS|registerMsig regular|143284|", vm.toString(used)));
+        assertLe(used, 143284 + SLACK, "registerMsig");
         UARegistry(at).acceptMembership(mu, _acceptEoaSig(ds, ALICE));
         UARegistry(at).acceptMembership(mu, _acceptKeySig(ds, 0x0101, _key(0x0101)));
         bytes32 md = _memberDigest(mu, UAKinds.PURPOSE_METATX, DIGEST);
@@ -379,7 +381,7 @@ contract UARegistryLibMsigTest is UARegistryBase {
         sm.members = new IUARegistry.MemberSig[](2);
         sm.members[_indexOf(ds, alice)] = _member(ds, alice, _ecdsa(ALICE, UARegistry(at).uaAuthDigest(alice, UAKinds.PURPOSE_MEMBER, md)));
         sm.members[_indexOf(ds, p)] = _member(ds, p, _sig(_key(0x0101), UAKinds.uaMessage(0x0101, UAKinds.PURPOSE_MEMBER, md)));
-        _meter(at, mu, sm, "requireAuthorized msig 2-of-2", 52150, SLACK + 2 * MEMBER_LIST_GAS);
+        _meter(at, mu, sm, "requireAuthorized msig 2-of-2", 52185, SLACK + 2 * MEMBER_LIST_GAS);
     }
 
     /// `requireAuthorized`, every kind and native, stays within +64 of the recorded figures (a code layout's change of JUMPDEST order); an
@@ -393,10 +395,10 @@ contract UARegistryLibMsigTest is UARegistryBase {
         IUARegistry.UASig memory e;
         bytes32 alice = _pad(vm.addr(ALICE));
         e.signature = _ecdsa(ALICE, UARegistry(at).uaAuthDigest(alice, UAKinds.PURPOSE_METATX, DIGEST));
-        _meter(at, alice, e, "requireAuthorized native eoa", 12426, SLACK);
+        _meter(at, alice, e, "requireAuthorized native eoa", 12449, SLACK);
         MockWallet w = new MockWallet(vm.addr(ALICE), 0, 0, at);
         e.signature = _ecdsa(ALICE, UARegistry(at).uaAuthDigest(_pad(address(w)), UAKinds.PURPOSE_METATX, DIGEST));
-        _meter(at, _pad(address(w)), e, "requireAuthorized native 1271", 14239, SLACK);
+        _meter(at, _pad(address(w)), e, "requireAuthorized native 1271", 14262, SLACK);
         _msigRow(at);
     }
 

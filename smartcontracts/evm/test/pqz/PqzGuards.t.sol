@@ -91,15 +91,15 @@ contract PqzGuardsTest is PqzFixture {
         vm.skip(!PqzSet.PQZH_VALUE);
         PqzLayer h = _pqzh("pqzh");
         _fund(h, alice, 1000);
-        uint16[4] memory ks = [UAKinds.MLDSA44, UAKinds.MLDSA65, UAKinds.FNDSA512, UAKinds.MLDSA87]; // mldsa87: CTR-UA-39 Q2
-        for (uint256 i; i < 4; ++i) {
+        uint16[5] memory ks = [UAKinds.MLDSA44, UAKinds.MLDSA65, UAKinds.FNDSA512, UAKinds.MLDSA87, UAKinds.FNDSA1024]; // CTR-UA-39 / -40 Q2
+        for (uint256 i; i < 5; ++i) {
             _kind(bob, ks[i]);
             _public(h, address(this), SCALE);
             h.mtxShield(bob, 1);
             _mirrorTrivial(h, bob, 1);
             _transfer(h, alice, bob, bytes32(0), 10 + i, true);
         }
-        assertEq(h.pqzAccount(bob).pendingCount, 8, "four shields and four credits");
+        assertEq(h.pqzAccount(bob).pendingCount, 10, "five shields and five credits");
     }
 
     // ------------------------------------------------------------------ C2-3: a zero auditor

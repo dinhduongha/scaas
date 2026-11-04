@@ -39,6 +39,7 @@ library UAKinds {
     uint16 internal constant FNDSA512 = 0x0132;
     uint16 internal constant SLHDSA128S = 0x0133;
     uint16 internal constant MLDSA87 = 0x0134; // CTR-UA-39: enabled only where a precompile verifies it
+    uint16 internal constant FNDSA1024 = 0x0135; // CTR-UA-40: Falcon-1024 (round 3), pure Solidity
     uint16 internal constant ZETHER_BLS12381 = 0x0141;
     /// @notice A scheme id since UA-6, not a kind: the PQZ key attribute of a PQ signing UA (its tag for `R_REG`'s
     ///         `uaMessage`, its keyHash group `pqz-mlwe`, the registry slot of its verifier and the `0x0142` list).
@@ -132,7 +133,7 @@ library UAKinds {
 
     function _singleSigning(uint16 kind) private pure returns (bool) {
         return (kind >= WEBAUTHN_P256 && kind <= SECP256K1) || (kind >= MUSIG2_SECP256K1 && kind <= FROST_BN254)
-            || (kind >= MLDSA44 && kind <= MLDSA87);
+            || (kind >= MLDSA44 && kind <= FNDSA1024);
     }
 
     function isSigning(uint16 kind) internal pure returns (bool) {
@@ -182,6 +183,7 @@ library UAKinds {
         if (kind == 0x0132) return "fndsa512";
         if (kind == 0x0133) return "slhdsa128s";
         if (kind == 0x0134) return "mldsa87";
+        if (kind == 0x0135) return "fndsa1024";
         if (kind == 0x0141) return "zether-bls12381";
         if (kind == 0x0142) return "pqz-mlwe";
         revert UAKindUnknown(kind);
@@ -215,7 +217,7 @@ library UAKinds {
         if (kind == BLS12381_MINSIG) return "bls12381-g2";
         if (kind == BLS_BN254_MINSIG) return "bn254-g2";
         if (kind == MSIG) return "";
-        return name(kind); // mldsa44, mldsa65, fndsa512, slhdsa128s, mldsa87, the scheme pqz-mlwe: the group is the name
+        return name(kind); // mldsa44, mldsa65, fndsa512, slhdsa128s, mldsa87, fndsa1024, the scheme pqz-mlwe: the group is the name
     }
 
     function groupTag(string memory group) internal pure returns (bytes32) {
@@ -423,7 +425,8 @@ library UAKinds {
         else if (kind == MUSIG2_BN254) ok = _musig2(d, 64);
         else if (kind == FROST_BN254) ok = _frost(d, 64);
         else if (kind == MSIG) ok = _msig(d, hederaNative);
-        else if (kind == FNDSA512) ok = _fndsa(d);
+        else if (kind == FNDSA512) ok = _fndsa(d, 0x09, 512);
+        else if (kind == FNDSA1024) ok = _fndsa(d, 0x0a, 1024);
         else ok = true; // mldsa44/65/87, slhdsa128s: the length is the whole check
         if (!ok) revert UAKeyData(kind);
     }
@@ -438,6 +441,7 @@ library UAKinds {
         if (kind == MLDSA65) return 1952;
         if (kind == FNDSA512) return 897;
         if (kind == MLDSA87) return 2592;
+        if (kind == FNDSA1024) return 1793;
         return 0; // MuSig2, FROST, msig: variable
     }
 
@@ -612,10 +616,11 @@ library UAKinds {
         return threshold != 0 && threshold <= total;
     }
 
-    /// `0x09 ‖ 512 × 14-bit h_i`, each `< 12289` (the decoding of `Falcon512._decodePk`, over memory).
-    function _fndsa(bytes memory d) private pure returns (bool) {
-        if (uint8(d[0]) != 0x09) return false;
-        for (uint256 i; i < 512; ++i) {
+    /// `head ‖ n × 14-bit h_i`, each `< 12289`: `0x09`, n = 512 (`fndsa512`) or `0x0A`, n = 1,024 (`fndsa1024`); the decoding of
+    /// `Falcon._decodePk`, over memory. The caller has checked the length.
+    function _fndsa(bytes memory d, uint8 head, uint256 n) private pure returns (bool) {
+        if (uint8(d[0]) != head) return false;
+        for (uint256 i; i < n; ++i) {
             uint256 bit = i * 14;
             uint256 h = (_word(d, 1 + (bit >> 3)) >> (242 - (bit & 7))) & 0x3fff;
             if (h >= 12289) return false;

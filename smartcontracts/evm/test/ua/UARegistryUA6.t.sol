@@ -29,11 +29,11 @@ contract UARegistryUA6Test is UARegistryBase {
     function setUp() public override {
         super.setUp();
         UARegistry.KindConfig[] memory base = _cfgs(address(mock));
-        UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](base.length + 8);
+        UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](base.length + 9);
         for (uint256 i; i < base.length; ++i) c[i] = base[i];
-        uint16[7] memory pq = [uint16(0x0108), 0x0130, 0x0131, 0x0132, 0x0133, 0x0134, 0x0142];
-        for (uint256 i; i < 7; ++i) c[base.length + i] = UARegistry.KindConfig(pq[i], address(mock), i == 0 ? 50_000 : PQ_CAP);
-        c[base.length + 7] =
+        uint16[8] memory pq = [uint16(0x0108), 0x0130, 0x0131, 0x0132, 0x0133, 0x0134, 0x0135, 0x0142];
+        for (uint256 i; i < 8; ++i) c[base.length + i] = UARegistry.KindConfig(pq[i], address(mock), i == 0 ? 50_000 : PQ_CAP);
+        c[base.length + 8] =
             UARegistry.KindConfig(UAKinds.ZETHER_BLS12381, address(new ZetherSchnorrBls12381Verifier()), 70_000);
         r = _deploy(REG_U, chainUidA, address(0), false, BUDGET, address(0), true, c);
         mlKey = _pk(0x0131, 100);
@@ -46,14 +46,14 @@ contract UARegistryUA6Test is UARegistryBase {
 
     function _pk(uint16 kind, uint256 salt) internal pure returns (bytes memory pk) {
         uint256 len = kind == 0x0130 ? 1312 : kind == 0x0131 ? 1952 : kind == 0x0132 ? 897 : kind == 0x0133 ? 32
-            : kind == 0x0134 ? 2592 : 16384;
+            : kind == 0x0134 ? 2592 : kind == 0x0135 ? 1793 : 16384;
         pk = new bytes(len);
         for (uint256 i; i < len; i += 32) {
             bytes32 w = keccak256(abi.encode(kind, salt, i));
             for (uint256 j; j < 32 && i + j < len; ++j) pk[i + j] = w[j];
         }
-        if (kind == 0x0132) {
-            pk[0] = 0x09;
+        if (kind == 0x0132 || kind == 0x0135) {
+            pk[0] = kind == 0x0132 ? bytes1(0x09) : bytes1(0x0a);
             for (uint256 i = 1; i < len; ++i) pk[i] = 0; // every h_i = 0 < q
         }
     }
@@ -142,8 +142,8 @@ contract UARegistryUA6Test is UARegistryBase {
     /// `h` is claimed, the event carries the attributes and `checkedPqzPop = CHAIN`, the UA is in its kind's list and in
     /// the `0x0142` list.
     function test_UA6_holderWithKey() public {
-        uint16[4] memory ks = [uint16(0x0130), 0x0131, 0x0132, 0x0134]; // 0x0134 mldsa87: a holder (CTR-UA-39 Q2)
-        for (uint256 i; i < 4; ++i) {
+        uint16[5] memory ks = [uint16(0x0130), 0x0131, 0x0132, 0x0134, 0x0135]; // mldsa87, fndsa1024: holders (CTR-UA-39 / -40 Q2)
+        for (uint256 i; i < 5; ++i) {
             bytes memory pk = _pk(ks[i], i);
             bytes memory pqzKey = _pk(0x0142, i);
             vm.recordLogs();
