@@ -7,3 +7,4 @@ m2 removing a second key: eip7976TransitionTimestamp popped too | --check: "unex
 m3 the reset guard dropped for 22776 (the chainId check off) | --check: AssertionError "reset of chain 22776" | 1
 m4 _requireReleaseGas skipped for one kind: the WRAPPED release's gate removed from _deployWrapped | test_wrappedReleaseIsGated ("next call did not revert as expected") | 1
 m5 a release gate at the wrong key of the baseline: _deployWrapped gated as "NormalToken" | test_wrappedReleaseIsGated ("next call did not revert as expected") | 1
+m6 the WRAPPED env's libraries out of the link closure's order (TradeLib before HederaLib) | test_deployWrappedPath ("link closure"; before this commit the assertion compared pinned(e) with e itself and passed) | 1

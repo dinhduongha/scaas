@@ -19,7 +19,7 @@ import {WrappedPqzToken} from "../../src/pqz/WrappedPqzToken.sol";
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
 import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
 import {TradeLib} from "../../src/trade/TradeLib.sol";
-import {plainEnv, pinned} from "../helpers/Catalogue.sol";
+import {plainEnv, pinned, closureLibs} from "../helpers/Catalogue.sol";
 import {ZUID} from "../zether/helpers/ZetherFixture.sol";
 import {ZetherDisclosure} from "../../src/zether/ZetherDisclosure.sol";
 import {
@@ -49,8 +49,8 @@ contract GovDeployTest is Test {
         assertEq(WrappedToken(w).chainUid(), ZUID, "gated");
         assertTrue(f.kindEnabled(IOpenFactory.TokenKind.WRAPPED), "the kind is on from the factory's start");
         IFactoryToken.Env memory e = f.envOf(IOpenFactory.TokenKind.WRAPPED, 1);
-        IFactoryToken.Env memory want = pinned(e, IOpenFactory.TokenKind.WRAPPED);
-        assertEq(keccak256(abi.encode(e.libs, e.libCodeHashes)), keccak256(abi.encode(want.libs, want.libCodeHashes)), "link closure");
+        assertEq(keccak256(abi.encode(e.libs)), keccak256(abi.encode(closureLibs(IOpenFactory.TokenKind.WRAPPED))), "link closure");
+        for (uint256 i; i < e.libs.length; ++i) assertEq(e.libCodeHashes[i], e.libs[i].codehash, "pinned");
         assertEq(e.registry, vm.parseJsonAddress(json, ".ua_registry"));
         assertEq(e.govRouter, vm.parseJsonAddress(json, ".governance_router"));
         assertEq(GovernanceBase(w).GOV_ROUTER(), e.govRouter);
