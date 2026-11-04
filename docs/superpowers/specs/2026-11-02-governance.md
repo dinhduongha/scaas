@@ -874,7 +874,7 @@ The first row that matches decides.
 | `asset == address(this)` | refused, `RescueAssetInvalid(asset)`: `_update` refuses `to == this`, and a pool row is the token's own ledger | |
 | `address(0)`, every kind | native balance less a native leg's reserve | sent by value, not `safeTransfer`; refused to a designator `rescueTo`, as `payOut` |
 | `NORMAL*`, any other | whole balance | none to prove |
-| `WRAPPED*`, a leg | `balanceOf − reserve` | first `balanceOf ≥ reserve`, else `ReserveShortfall(asset, balanceOf, reserve)`, never a panic on the subtraction; the same after the transfer |
+| `WRAPPED*`, a leg | `balanceOf − reserve` | first `balanceOf ≥ reserve`, else `ReserveShortfall(asset, balanceOf, reserve)`, never a panic on the subtraction; the same after the transfer; and every other leg's balance unchanged across the call, ≤ 8 reads, else `RescueTouchedLeg(leg)`: two legs over one ledger (a double-entry token) each read the shared balance, so one leg's surplus would hold the other's reserve (review 2026-11-04 M-1) |
 | `WRAPPED*`, foreign | whole balance | every leg's balance unchanged across the call, ≤ 8 reads, else `RescueTouchedLeg(leg)`: this catches an alias of a leg without trapping a rescue behind a short leg (A16) |
 
 `safeTransfer` for ERC-20; `Rescued`. Refund of a stray's owner is off chain. The wizard refuses rebasing legs. A token answers `IRescuable` by `supportsInterface` while bit 17 is set.

@@ -45,10 +45,16 @@ contract AliasOf {
         main = m;
     }
 
+    function decimals() external pure returns (uint8) { return 6; }
     function balanceOf(address a) external view returns (uint256) { return main.balanceOf(a); }
 
     function transfer(address to, uint256 v) external returns (bool) {
         main.aliasMove(msg.sender, to, v);
+        return true;
+    }
+
+    function transferFrom(address from, address to, uint256 v) external returns (bool) {
+        main.aliasMove(from, to, v); // test only: no allowance
         return true;
     }
 }
@@ -195,6 +201,50 @@ contract GovRescueTest is Test {
         vm.expectRevert(abi.encodeWithSelector(IRescuable.RescueTouchedLeg.selector, address(m)));
         _rescue(address(w), a);
         assertEq(m.balanceOf(address(w)), 100);
+    }
+
+    /// Review 2026-11-04 M-1: two legs over one ledger (a double-entry token, legs A and a front of A) each read the shared
+    /// balance, so one leg's `balance − reserve` holds the other's reserve. The rescue of either leg moves the other leg's
+    /// balance and is refused (`RescueTouchedLeg`), as the foreign row refuses an alias (A16).
+    function test_rescueOfALegSharingALedgerWithAnotherLegRefused() public {
+        MainLeg m = new MainLeg();
+        address b = m.alias_();
+        address[] memory legs = new address[](2);
+        (legs[0], legs[1]) = (address(m), b);
+        WrappedToken w = _wrapped(legs, TO);
+        m.mint(BOB, 150);
+        vm.startPrank(BOB);
+        m.approve(address(w), 100);
+        w.wrap(address(m), 100);
+        w.wrap(b, 50);
+        vm.stopPrank();
+        assertEq(_reserve(w, address(m)) + _reserve(w, b), 150);
+        assertEq(m.balanceOf(address(w)), 150);
+        vm.expectRevert(abi.encodeWithSelector(IRescuable.RescueTouchedLeg.selector, b));
+        _rescue(address(w), address(m));
+        vm.expectRevert(abi.encodeWithSelector(IRescuable.RescueTouchedLeg.selector, address(m)));
+        _rescue(address(w), b);
+        assertEq(m.balanceOf(TO), 0);
+        assertEq(m.balanceOf(address(w)), 150, "every reserve still held");
+    }
+
+    /// Positive control of M-1: a leg's surplus goes while the other legs (the native one included) stay untouched.
+    function test_rescueLegSurplusBesideOtherLegs() public {
+        MockERC20 eur = new MockERC20("EUR", "EUR", 6);
+        address[] memory legs = new address[](3);
+        (legs[0], legs[1], legs[2]) = (address(0), address(usd), address(eur));
+        WrappedToken w = _wrapped(legs, TO);
+        _wrapUsd(w, 100);
+        vm.deal(BOB, 1 ether);
+        vm.prank(BOB);
+        w.wrap{value: 1 ether}(address(0), 1 ether);
+        eur.mint(address(w), 40);
+        usd.mint(address(w), 30);
+        _rescue(address(w), address(usd));
+        assertEq(usd.balanceOf(TO), 30);
+        assertEq(usd.balanceOf(address(w)), 100);
+        assertEq(eur.balanceOf(address(w)), 40);
+        assertEq(address(w).balance, 1 ether);
     }
 
     /// A16: a leg short of its reserve does not trap the rescue of a foreign token.

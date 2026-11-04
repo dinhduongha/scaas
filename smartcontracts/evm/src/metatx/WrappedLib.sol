@@ -387,13 +387,17 @@ library WrappedLib {
     // ------------------------------------------------------------------ rescue (CTR-GOV-06, spec §6.2)
 
     /// @notice `WRAPPED*`: a leg (the native one included) pays only `balance − reserve`, checked before and after the
-    ///         transfer (`ReserveShortfall`, never a panic); a foreign asset its whole balance, every leg's balance unchanged
-    ///         across the call (`RescueTouchedLeg`: an alias of a leg, A16), so a short leg traps no foreign rescue. The
-    ///         caller's guard is the token's `nonReentrant`.
+    ///         transfer (`ReserveShortfall`, never a panic); a foreign asset its whole balance. Either way every other leg's
+    ///         balance is unchanged across the call (`RescueTouchedLeg`, at most `MAX_LEGS` reads): a foreign alias of a leg
+    ///         (A16), or a second leg over the same ledger, whose reserve the first leg's surplus would hold (review
+    ///         2026-11-04 M-1); a short leg traps no other rescue. The caller's guard is the token's `nonReentrant`.
     function rescue(address asset) public {
         address to = GovernanceLib.rescueOpen(asset);
         WrappedStorage storage s = $();
-        uint256 x = s.legIndex[asset];
+        uint256 x = s.legIndex[asset]; // the leg's index + 1, 0 for a foreign asset
+        uint256 n = s.legCount;
+        uint256[] memory before = new uint256[](n);
+        for (uint256 i; i < n; ++i) if (i + 1 != x) before[i] = _balance(s.legs[i].token);
         uint256 amount;
         if (x != 0) {
             uint256 r = s.legs[x - 1].reserve;
@@ -404,15 +408,12 @@ library WrappedLib {
             bal = _balance(asset);
             if (bal < r) revert IWrappedToken.ReserveShortfall(asset, bal, r);
         } else {
-            uint256 n = s.legCount;
-            uint256[] memory before = new uint256[](n);
-            for (uint256 i; i < n; ++i) before[i] = _balance(s.legs[i].token);
             amount = _balance(asset);
             GovernanceLib.rescueSend(asset, to, amount);
-            for (uint256 i; i < n; ++i) {
-                address leg = s.legs[i].token;
-                if (_balance(leg) != before[i]) revert IRescuable.RescueTouchedLeg(leg);
-            }
+        }
+        for (uint256 i; i < n; ++i) {
+            address leg = s.legs[i].token;
+            if (i + 1 != x && _balance(leg) != before[i]) revert IRescuable.RescueTouchedLeg(leg);
         }
         emit IRescuable.Rescued(asset, to, amount);
     }
