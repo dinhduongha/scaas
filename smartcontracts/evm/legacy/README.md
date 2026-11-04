@@ -131,3 +131,18 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
 - `governance/`: `AdminLib.sol` and `ITokenAdmin.sol` as they stood at `main` (`db9f9d86`), before `GovernanceLib` /
   `IGovernance` replaced them (CTR-GOV-01, governance T3), and `RequireRole.sol.txt`, the prototype's
   `GovernanceLib.requireRole`, removed by spec G14 (B-31: it skipped a limited holder's grant). Not built.
+- `ua-mtx-merge/`: the files the `ua*` / `mtx*` merge round rewrites, copied whole as they stood at local tag
+  `ref/pre-ua-mtx-merge` (`9a4b8c5a`, spec `docs/superpowers/specs/2026-11-04-ua-mtx-merge.md`, CTR-MTX-30, plan MD-4).
+  T1 (the generic path): `src/metatx/{MetaTxBase,UAMetaTxBase,MtxPipelineLib,IMetaTx,IUALedger,ERC20MetaTx}.sol`,
+  `src/ua/UAKinds.sol`, `src/governance/GovernanceRouterBase.sol`, `src/zether/ZetherLayer.sol`, `src/pqz/PqzLayer.sol`:
+  the generic `uaExecute` / `uaBatch` with `bytes auth`, the `bytes auth` `_namedUA` overload and `uaShield`'s
+  `bytes auth`, `MtxPipelineLib`'s `bytes` `_authorize` and `UAKinds.uaAuthCall` (R47), the unordered
+  `uaCancelNonce` / `uaCancelDigest` and their `UACancelNonce(bytes32 ua,uint256 batch,uint256 validUntil)` (Q2; the
+  `cancelUsed` slot stays in `UALedgerStorage`), the registry guard on every `ua*` (C), the `_uaAllowed` check for a
+  native id (B), and the address `mtxNonce` / `mtxDigest` / `mtxExecute` / `mtxBatch` / `mtxCancelNonce` on tokens and
+  the router (now `MetaTxAddressBase`, the wallets only, MD-1). Tests: `test/metatx/MetaTxParity.t.sol` with
+  `test/vectors/legacy/ua-mtx-merge/metatx-parity.json` (the metatx split's replay, recorded on the pre-split code; its
+  seven token rigs live on in `test/metatx/helpers/KindRigs.sol`), `test/ua/UARegistryNested.t.sol` (its two
+  `uaAuthCall` tests), and `test/ua/UALedger.t.sol`, `test/metatx/{TypedOps,TradeTyped}.t.sol` as they stood before
+  their cancel tests and rows changed meaning (the unordered cancel, the address cancel on tokens and the router).
+  Not built.
