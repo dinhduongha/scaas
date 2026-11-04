@@ -86,8 +86,10 @@ contract FnDsaTest is PqVectors {
         assertEq(v1024.KIND(), PqUA.FNDSA1024);
         uint16[4] memory others = [uint16(0x0131), 0x0133, 0x0134, 0x0136];
         for (uint256 i; i < 4; ++i) {
+            // through an external call: an expected revert of a CREATE made by the test itself ends the test as a pass (Foundry
+            // 1.8.5), so nothing after it would run
             vm.expectRevert(abi.encodeWithSelector(UAFndsaVerifier.UAFndsaKind.selector, others[i]));
-            new UAFndsaVerifier(others[i]);
+            this.deployVerifier(others[i]);
         }
         string[2] memory names = ["fndsa512", "fndsa1024"];
         UAFndsaVerifier[2] memory vs = [v512, v1024];
@@ -121,6 +123,10 @@ contract FnDsaTest is PqVectors {
         }
         assertEq(negZeros, 9); // cases 0–6, 8, 9 have a zero coefficient
         assertGt(unusedBits, 0);
+    }
+
+    function deployVerifier(uint16 kind) external returns (address) {
+        return address(new UAFndsaVerifier(kind));
     }
 
     /// CTR-UA-40: the NIST round-3 Falcon-1024 KATs (falcon1024-KAT.rsp of Falcon-Round3.zip, both SHA-256 pinned by

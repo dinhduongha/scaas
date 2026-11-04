@@ -332,6 +332,10 @@ contract MlDsaTest is PqVectors {
         assertEq(abi.encode(MlDsa.params87()), abi.encode(p87()));
     }
 
+    function deploy87(address pc, bytes calldata valid, bytes calldata invalid) external returns (address) {
+        return address(new UAMldsaVerifier(PqUA.MLDSA87, pc, valid, invalid));
+    }
+
     /// CTR-UA-39 Q1: no verifier for `mldsa87` without a precompile that answers the probe (none, one that says 1 to everything,
     /// a probe of another level), so the deploy profile cannot enable it; it has no expanded-key cache.
     function test_mldsa87_needsPrecompile() public {
@@ -341,16 +345,18 @@ contract MlDsaTest is PqVectors {
         bytes memory invalid = _k(kat, "mldsa87", "eip8355_probe_invalid");
         address pc = address(0x14);
         bytes4 no = bytes4(keccak256("UAMldsaNoPrecompile()"));
+        // each through an external call: an expected revert of a verifier CREATE made by the test itself ended the test as a pass
+        // here (Foundry 1.8.5; an `assertTrue(false)` after the first one passed), so nothing after it ran
         vm.expectRevert(no);
-        new UAMldsaVerifier(PqUA.MLDSA87, address(0), "", "");
+        this.deploy87(address(0), "", "");
         vm.expectRevert(no); // empty account
-        new UAMldsaVerifier(PqUA.MLDSA87, pc, valid, invalid);
+        this.deploy87(pc, valid, invalid);
         vm.etch(pc, address(new AlwaysOne()).code);
         vm.expectRevert(no);
-        new UAMldsaVerifier(PqUA.MLDSA87, pc, valid, invalid);
+        this.deploy87(pc, valid, invalid);
         vm.etch(pc, address(new Eip8355Emulator()).code); // 44 / 65 only
         vm.expectRevert(no);
-        new UAMldsaVerifier(PqUA.MLDSA87, pc, _k(kat, "mldsa65", "eip8355_probe_valid"), _k(kat, "mldsa65", "eip8355_probe_invalid"));
+        this.deploy87(pc, _k(kat, "mldsa65", "eip8355_probe_valid"), _k(kat, "mldsa65", "eip8355_probe_invalid"));
         vm.etch(pc, address(new Eip8355Emulator87()).code);
         UAMldsaVerifier v = new UAMldsaVerifier(PqUA.MLDSA87, pc, valid, invalid);
         assertEq(v.PRECOMPILE(), pc);
