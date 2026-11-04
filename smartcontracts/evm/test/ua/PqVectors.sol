@@ -47,7 +47,8 @@ abstract contract PqVectors is Test {
         assertEq(keccak256(abi.encodePacked(tag, pk)), bytes32(_k(kat, name, "ua")), "UA id");
         bytes32 uaMsg = PqUA.uaMessage(tag, bytes32(_b(kat, ".purpose_tag")), bytes32(_b(kat, ".digest")));
         assertEq(uaMsg, bytes32(_k(kat, name, "ua_msg")), "ua_msg");
-        bytes32 signed = kind == PqUA.FNDSA512 ? uaMsg : PqUA.pqMessage(tag, uaMsg);
+        bool falcon = kind == PqUA.FNDSA512 || kind == PqUA.FNDSA1024;
+        bytes32 signed = falcon ? uaMsg : PqUA.pqMessage(tag, uaMsg);
         assertEq(signed, bytes32(_k(kat, name, "signed_message")), "signed message");
         assertTrue(IVerify(verifier).verify(pk, uaMsg, _k(kat, name, "sig")), "valid signature");
         assertTrue(IVerify(verifier).verifyPop(pk, uaMsg, _k(kat, name, "sig")), "verifyPop = verify (P6c)");
@@ -60,7 +61,7 @@ abstract contract PqVectors is Test {
             assertEq(got, vm.parseJsonBool(kat, string.concat(m, ".valid")), vm.parseJsonString(kat, string.concat(m, ".what")));
         }
         // + 2 non-empty-context signatures for ML-DSA, SLH-DSA; + the c~ second-word flip for ML-DSA-87
-        assertEq(n, kind == PqUA.FNDSA512 ? 6 : kind == PqUA.MLDSA87 ? 9 : 8, "mutations");
+        assertEq(n, falcon ? 6 : kind == PqUA.MLDSA87 ? 9 : 8, "mutations");
     }
 
     /// `t` (n entries of `width` bytes, big-endian) is `root^brv(k) mod q`, and root^n = −1 (a primitive 2n-th root).

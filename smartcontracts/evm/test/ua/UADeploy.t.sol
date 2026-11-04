@@ -98,6 +98,10 @@ contract UADeployTest is Test {
             assertEq(reg.verifyCap(k), on ? caps[k - UAKinds.MLDSA44] : 0);
             assertLe(uint256(reg.verifyCap(k)) * 100, uint256(reg.verifyBudget()) * 66);
         }
+        // fndsa1024 (CTR-UA-40): pure Solidity wherever its cap fits, the provisional 5,250,000
+        assertEq(reg.kindEnabled(UAKinds.FNDSA1024), on, "fndsa1024");
+        assertEq(reg.verifyCap(UAKinds.FNDSA1024), on ? 5_250_000 : 0);
+        assertLe(uint256(reg.verifyCap(UAKinds.FNDSA1024)) * 100, uint256(reg.verifyBudget()) * 66);
     }
 
     /// Owner ruling 2026-10-31: no chain-id lock for any kind. Chain 7622, the mainnet 22776, the e2e's 31901 and an
@@ -133,6 +137,8 @@ contract UADeployTest is Test {
         assertTrue(h.pqKindFits(6_930_000, 10_500_000));
         assertFalse(h.pqKindFits(6_930_001, 10_500_000));
         assertTrue(h.pqKindFits(5_950_000, 10_500_000), "mldsa65 on Hedera");
+        assertTrue(h.pqKindFits(5_250_000, 7_954_546), "fndsa1024: the least budget that holds it");
+        assertFalse(h.pqKindFits(5_250_000, 7_954_545));
     }
 
     /// A chain whose precompiles fail the probe gets none of the kinds that need them (never registrable but unusable).

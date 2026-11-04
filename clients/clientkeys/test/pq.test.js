@@ -39,7 +39,7 @@ for (const name of Object.keys(PQ_KINDS)) {
 
   test(`${name}: deterministic signature = vector; verifies; tampering fails`, () => {
     const kp = pqKeygen(seed, name, V.account, V.index);
-    const opts = name === 'fndsa512'
+    const opts = name.startsWith('fndsa')
       ? { random: (n) => shake256(utf8ToBytes('scaas p6a falcon randomness'), { dkLen: n }) }
       : { extraEntropy: false };
     const sig = signUA(name, kp.secretKey, purpose, digest, opts);
@@ -117,4 +117,34 @@ test('mldsa87 (CTR-UA-39): kind 0x0134, a 2,592 B key, a holder, PQ weight; pq_k
   const sort = (ms) => [...ms].sort((a, b) => Buffer.compare(Buffer.from(a.id), Buffer.from(b.id)));
   assert.equal(ua.msigPqzEligible(ua.encodeMsig(2, sort([m(0x0101, 1), m(0x0134, 1)]))), true, 'PQ weight (Q3)');
   assert.equal(ua.msigPqzEligible(ua.encodeMsig(1, sort([m(0x0101, 1), m(0x0134, 1)]))), false);
+});
+
+test('fndsa1024 (CTR-UA-40): kind 0x0135, a 1,793 B 0x0A key, a holder, PQ weight; pq_kat.json row from the seed; the NIST round-3 KATs', async () => {
+  const ua = await import('../src/ua.js');
+  const { falcon1024padded } = await import('@noble/post-quantum/falcon.js');
+  const ext = JSON.parse(readFileSync(new URL('../../../smartcontracts/vectors/ua/pq_external.json', import.meta.url), 'utf8'));
+  assert.equal(PQ_KINDS.fndsa1024.kind, 0x0135);
+  assert.equal(PQ_KINDS.fndsa1024.tag, 'scaas.ua.fndsa1024.v1');
+  assert.equal(PQ_KINDS.fndsa1024.pq, false, 'Falcon signs ua_msg');
+  assert.deepEqual([ua.kindInfo(0x0135).name, ua.kindInfo(0x0135).lengths, ua.kindInfo(0x0135).group], ['fndsa1024', [1793], 'fndsa1024']);
+  assert.ok(ua.isSigningKind(0x0135) && ua.isMemberKind(0x0135, false) && ua.isPqzHolder(0x0135) && !ua.isPqzHolder(0x0136));
+  assert.equal(pqSeed(seed, 'fndsa1024', 0, 0).length, 48);
+  const k = V.kinds.fndsa1024;
+  const kp = pqKeygen(seed, 'fndsa1024', 0, 0);
+  assert.equal(hex(kp.publicKey), k.pk);
+  assert.equal(kp.publicKey[0], 0x0a);
+  assert.equal(fromHex(k.sig).length, 1280);
+  assert.ok(verifyUA('fndsa1024', kp.publicKey, purpose, digest, fromHex(k.sig)));
+  assert.ok(!verifyUA('fndsa512', kp.publicKey, purpose, digest, fromHex(k.sig)), 'the other size');
+  ua.validateKeyData(0x0135, kp.publicKey);
+  assert.throws(() => ua.validateKeyData(0x0135, Uint8Array.from([0x09, ...kp.publicKey.subarray(1)])), /UAKeyData/);
+  const m = (kind, w) => ({ kind, id: kind === 0x0135 ? fromHex(k.ua) : new Uint8Array(32).fill(kind & 0xff), weight: w });
+  const sort = (ms) => [...ms].sort((a, b) => Buffer.compare(Buffer.from(a.id), Buffer.from(b.id)));
+  assert.equal(ua.msigPqzEligible(ua.encodeMsig(2, sort([m(0x0101, 1), m(0x0135, 1)]))), true, 'PQ weight (Q3)');
+  assert.equal(ua.msigPqzEligible(ua.encodeMsig(1, sort([m(0x0101, 1), m(0x0135, 1)]))), false);
+  const kat = ext.falcon1024_kat;
+  assert.equal(kat.sha256, '036a0bf5260573cec44977284dfef756cd1143db9961b981bd1fb55828acb20d');
+  assert.deepEqual(kat.rows_over_1239, [82]);
+  assert.equal(kat.cases.length, 10);
+  for (const c of kat.cases) assert.ok(falcon1024padded.verify(fromHex(c.sig), fromHex(c.msg), fromHex(c.pk)), `count ${c.count}`);
 });

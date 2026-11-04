@@ -86,6 +86,10 @@ abstract contract DeployBase is Script {
     uint64 internal constant CAP_MLDSA65 = 5_950_000;
     uint64 internal constant CAP_FNDSA512 = 2_500_000;
     uint64 internal constant CAP_SLHDSA128S = 1_400_000;
+    /// @notice `fndsa1024` (CTR-UA-40, owner 2026-11-04): pure Solidity on every chain whose budget holds the cap at ≤ 66 % (every
+    ///         budget ≥ 7,954,546). PROVISIONAL until T-GAS: the largest NIST KAT verify measured (4,932,967) + 6.4 %, the margin of
+    ///         `fndsa512`'s cap (spec 2026-11-04-fndsa1024 F6).
+    uint64 internal constant CAP_FNDSA1024 = 5_250_000;
     /// @notice `mldsa87` (CTR-UA-39, owner 2026-11-04): enabled only through an ML-DSA-87 precompile in the EIP-8355 layout,
     ///         probed at `0x14` (EIP-8355) and then at the SCaaS testnet's `MLDSA87`; without one it gets no verifier (Q1: the
     ///         Solidity verify, ≈ 8.8 M on a cached key, fails the 66 % rule). The cap of the precompile path is a PROVISIONAL
@@ -307,10 +311,17 @@ abstract contract DeployBase is Script {
             );
         }
         if (_pqKindFits(CAP_FNDSA512, budget)) {
-            k[n++] = UARegistry.KindConfig(UAKinds.FNDSA512, address(new UAFndsaVerifier{salt: salt}()), CAP_FNDSA512);
+            k[n++] = UARegistry.KindConfig(
+                UAKinds.FNDSA512, address(new UAFndsaVerifier{salt: salt}(UAKinds.FNDSA512)), CAP_FNDSA512
+            );
         }
         if (_pqKindFits(CAP_SLHDSA128S, budget)) {
             k[n++] = UARegistry.KindConfig(UAKinds.SLHDSA128S, address(new UASlhdsaVerifier{salt: salt}()), CAP_SLHDSA128S);
+        }
+        if (_pqKindFits(CAP_FNDSA1024, budget)) {
+            k[n++] = UARegistry.KindConfig(
+                UAKinds.FNDSA1024, address(new UAFndsaVerifier{salt: salt}(UAKinds.FNDSA1024)), CAP_FNDSA1024
+            );
         }
         (address p87, bytes memory v87, bytes memory i87) = _mldsa87Precompile();
         if (p87 != address(0) && _pqKindFits(CAP_MLDSA87, budget)) {

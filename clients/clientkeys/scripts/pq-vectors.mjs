@@ -17,7 +17,7 @@ const seed = seedFromWords(M);
 const digest = keccak_256(utf8ToBytes('scaas p6a pq vector digest'));
 const purpose = purposeTag('pop');
 const fixed = (n) => shake256(utf8ToBytes('scaas p6a falcon randomness'), { dkLen: n });
-const opts = (name) => (name === 'fndsa512' ? { random: fixed } : { extraEntropy: false });
+const opts = (name) => (name.startsWith('fndsa') ? { random: fixed } : { extraEntropy: false });
 const flip = (b, i, bit = 1) => { const c = Uint8Array.from(b); c[i] ^= bit; return c; };
 
 const out = {

@@ -54,13 +54,14 @@ contract UARegistryPqTest is UARegistryBase {
         string memory kat = vm.readFile("../vectors/ua/pq_kat.json");
         bytes memory valid = vm.parseJsonBytes(kat, ".kinds.mldsa87.eip8355_probe_valid");
         ml87.allow(keccak256(valid));
-        c = new UARegistry.KindConfig[](6);
+        c = new UARegistry.KindConfig[](7);
+        c[6] = UARegistry.KindConfig(0x0135, address(new UAFndsaVerifier(0x0135)), 5_250_000); // CTR-UA-40, provisional cap
         c[5] = UARegistry.KindConfig(0x0134, address(new UAMldsaVerifier(
             0x0134, address(ml87), valid, vm.parseJsonBytes(kat, ".kinds.mldsa87.eip8355_probe_invalid"))), 250_000);
         c[0] = UARegistry.KindConfig(0x0101, address(new P256Verifier()), 400_000);
         c[1] = UARegistry.KindConfig(0x0130, address(new UAMldsaVerifier(0x0130, address(0), "", "")), CAP_MLDSA44);
         c[2] = UARegistry.KindConfig(0x0131, address(new UAMldsaVerifier(0x0131, address(0), "", "")), CAP_MLDSA65);
-        c[3] = UARegistry.KindConfig(0x0132, address(new UAFndsaVerifier()), CAP_FNDSA);
+        c[3] = UARegistry.KindConfig(0x0132, address(new UAFndsaVerifier(0x0132)), CAP_FNDSA);
         c[4] = UARegistry.KindConfig(0x0133, address(new UASlhdsaVerifier()), CAP_SLHDSA);
     }
 
@@ -251,9 +252,9 @@ contract UARegistryPqTest is UARegistryBase {
             negs += _pqNegatives(r, pj, i, ua);
             ++rows;
         }
-        assertEq(rows, 5, "PQ kinds");
-        assertEq(sigs, 10, "PQ sigs");
-        assertEq(negs, 42, "PQ negatives");
+        assertEq(rows, 6, "PQ kinds"); // + fndsa1024 (CTR-UA-40)
+        assertEq(sigs, 12, "PQ sigs");
+        assertEq(negs, 50, "PQ negatives");
     }
 
     /// PoP-side refusals, the ML-DSA cache (refused before it is complete), then `register` (logged).
@@ -313,7 +314,7 @@ contract UARegistryPqTest is UARegistryBase {
             vm.revertToState(snap);
             ++n;
         }
-        assertEq(n, 4, "holder kinds"); // mldsa87 since CTR-UA-39 Q2
+        assertEq(n, 5, "holder kinds"); // mldsa87, fndsa1024 since CTR-UA-39 / -40 Q2
     }
 
     function _pqzPopRow(UARegistry r, string memory pj, uint256 i) internal {

@@ -12,10 +12,10 @@
   "NormalPqzToken.init": 55669,
   "WrappedPqzToken": 63563,
   "WrappedPqzToken.init": 66200,
-  "UARegistry": 29568,
-  "UARegistryLib": 36028,
+  "UARegistry": 29710,
+  "UARegistryLib": 36164,
   "AdminLib": 3272,
   "PqzBurnLib": 10040,
-  "PqzTransferLib": 17652,
+  "PqzTransferLib": 17670,
   "SCaaSDex": 28089
 }

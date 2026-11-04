@@ -488,14 +488,18 @@ assert(new Set(pop.map((p) => p.registrationDigest)).size === pop.length, 'regis
 // mldsa87 (0x0134, CTR-UA-39, 2026-11-04): not in `key` (its rows are appended after every earlier row, so earlier positions are unchanged)
 const ml87 = pq('mldsa87');
 const id87 = ua.deriveUA(0x0134, ml87);
-const pqzReg = [[0x0130, null], [0x0131, kemH], [0x0132, null], [0x0134, null]].map(([kind, kem]) => {
-  const u = hex(kind === 0x0134 ? id87 : id(kind));
+// fndsa1024 (0x0135, CTR-UA-40, 2026-11-04): appended the same way
+const fn1024 = pq('fndsa1024');
+const id1024 = ua.deriveUA(0x0135, fn1024);
+const late = { [0x0134]: id87, [0x0135]: id1024 };
+const pqzReg = [[0x0130, null], [0x0131, kemH], [0x0132, null], [0x0134, null], [0x0135, null]].map(([kind, kem]) => {
+  const u = hex(late[kind] ?? id(kind));
   const kemRecordHash = kem ?? noKem(u);
   const d = ua.portableRecordDigest({ ua: u, kind, pqzKeyHash: pqzH, kemRecordHash });
   return { kind, ua: u, pqzKeyHash: pqzH, kemRecordHash, portableRecordDigest: hex(d), pqzRegMessage: hex(ua.uaMessage(0x0142, ua.POP_V2_TAG, d)) };
 });
 assert(new Set(pqzReg.map((p) => p.pqzRegMessage)).size === pqzReg.length, 'pqz_reg_message must separate holder and KEM record');
-// msig_pqz_eligible: the weight of members outside 0x0130-0x0134 must be below the threshold (CTR-PQZ-12)
+// msig_pqz_eligible: the weight of members outside 0x0130-0x0135 must be below the threshold (CTR-PQZ-12)
 const pqzMsig = [
   ['classical members outweigh the threshold', msigKey, false],
   ['one classical + one PQ member, threshold 2', ua.encodeMsig(2, sortM([mem(0x0101, id(0x0101)), mem(0x0130, id(0x0130))])), true],
@@ -506,6 +510,8 @@ const pqzMsig = [
   ['heavy PQ member, light classical', ua.encodeMsig(3, sortM([mem(0x0101, id(0x0101), 2), mem(0x0131, id(0x0131), 2)])), true],
   ['mldsa87 counts as PQ weight (CTR-UA-39 Q3)', ua.encodeMsig(2, sortM([mem(0x0101, id(0x0101)), mem(0x0134, id87)])), true],
   ['mldsa87 + classical at equal weight', ua.encodeMsig(1, sortM([mem(0x0101, id(0x0101)), mem(0x0134, id87)])), false],
+  ['fndsa1024 counts as PQ weight (CTR-UA-40 Q3)', ua.encodeMsig(2, sortM([mem(0x0101, id(0x0101)), mem(0x0135, id1024)])), true],
+  ['fndsa1024 + classical at equal weight', ua.encodeMsig(1, sortM([mem(0x0101, id(0x0101)), mem(0x0135, id1024)])), false],
 ].map(([reason, d, eligible]) => {
   assert(ua.msigPqzEligible(d) === eligible, reason);
   valid.push(row(0x0120, d));
@@ -517,6 +523,17 @@ valid.push(row(0x0134, ml87));
 bad(0x0134, new Uint8Array(0), 'empty');
 bad(0x0134, ml87.subarray(0, ml87.length - 1), 'one byte short');
 bad(0x0134, concatBytes(ml87, Uint8Array.of(0)), 'one byte long');
+valid.push(row(0x0135, fn1024));
+bad(0x0135, fn1024.subarray(0, fn1024.length - 1), 'one byte short', { why: 'length' });
+bad(0x0135, concatBytes(fn1024, Uint8Array.of(0)), 'one byte long', { why: 'length' });
+bad(0x0135, key.get(0x0132), 'a fndsa512 key', { why: 'length' });
+bad(0x0135, put(fn1024, 0, Uint8Array.of(0x09)), 'header 0x09', { why: 'header' });
+{ // h_1023 = q: the last 14 bits of the key
+  const f = Uint8Array.from(fn1024);
+  f[1791] = (f[1791] & 0xc0) | (12289 >> 8);
+  f[1792] = 12289 & 0xff;
+  bad(0x0135, f, 'h_1023 = q', { why: 'coefficient' });
+}
 bad(0x0136, ml87, 'no kind 0x0136', { error: 'UAKindUnknown' });
 const memberTag = ua.purposeTag('member');
 const uaAuth = [['A', 1], ['A', 2], ['B', 1], ['C', 1], ['E', 1]].map(([context, generation]) => {

@@ -329,7 +329,7 @@ contract UARegistryUA8Test is UARegistryBase {
         UAMldsaVerifier m65 = new UAMldsaVerifier(0x0131, ML65, valid, new bytes(ML65_LEN));
         assertEq(m65.PRECOMPILE(), ML65);
         vcfg.push(UARegistry.KindConfig(0x0131, address(m65), 100_000));
-        vcfg.push(UARegistry.KindConfig(0x0132, address(new UAFndsaVerifier()), CAP_FNDSA));
+        vcfg.push(UARegistry.KindConfig(0x0132, address(new UAFndsaVerifier(0x0132)), CAP_FNDSA));
         vcfg.push(UARegistry.KindConfig(0x0133, address(new UASlhdsaVerifier()), CAP_SLHDSA));
         rreg = makeAddr("rreg");
         vm.etch(rreg, hex"00"); // STOP: any input the test did not allow returns nothing (refused)
@@ -509,7 +509,7 @@ contract UARegistryUA8Test is UARegistryBase {
             uint16 kind = uint16(vm.parseJsonUint(j, string.concat(p, ".kind")));
             assertEq(a.kindName(kind), vm.parseJsonString(j, string.concat(p, ".name")));
         }
-        assertEq(n, 32); // + mldsa87 (CTR-UA-39)
+        assertEq(n, 33); // + mldsa87 (CTR-UA-39), fndsa1024 (CTR-UA-40)
         assertEq(a.kindName(uint16(vm.parseJsonUint(j, ".schemes[0].kind"))), vm.parseJsonString(j, ".schemes[0].name"));
         assertFalse(a.kindEnabled(0x0011));
         assertEq(a.kindName(0x0011), "stellar-account");
@@ -1772,7 +1772,7 @@ contract UARegistryUA8Test is UARegistryBase {
         c1[0] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, rreg, 1_000_000);
         UARegistry g1 = _deploy(address(0x5ceb8), chainUidA, address(0), false, BUDGET, address(0), true, c1);
         UARegistry.KindConfig[] memory c2 = new UARegistry.KindConfig[](1);
-        c2[0] = UARegistry.KindConfig(UAKinds.FNDSA512, address(new UAFndsaVerifier()), CAP_FNDSA);
+        c2[0] = UARegistry.KindConfig(UAKinds.FNDSA512, address(new UAFndsaVerifier(0x0132)), CAP_FNDSA);
         UARegistry g2 = _deploy(address(0x5ceb9), chainUidA, address(g1), false, BUDGET, address(0), true, c2);
         _reg(g2, rows[FNDSA_ROW]);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKindDisabled.selector, UAKinds.PQZ_MLWE));
@@ -3284,14 +3284,14 @@ contract UARegistryUA8Test is UARegistryBase {
         if (h == keccak256("register mldsa65#1")) return (387992, 9232020);
         if (h == keccak256("register mldsa65#2")) return (387992, 9134100);
         if (h == keccak256("register mldsa65/n2048-kmax1024")) return (3341208, 81220050);
-        if (h == keccak256("register fndsa512")) return (2740793, 6384690);
+        if (h == keccak256("register fndsa512")) return (2746717, 6384690);
         if (h == keccak256("register slhdsa128s")) return (1123293, 13246740);
         if (h == keccak256("register msig-classical")) return (166309, 1115370);
         if (h == keccak256("register msig-pq/n2048-kmax1024")) return (3468184, 73250280);
         if (h == keccak256("register msig-pq-native")) return (318705, 1262250);
         if (h == keccak256("setKemKey mldsa65/v2 n2048-kmax1024")) return (357272, 7991190);
         if (h == keccak256("popOf (the blob setKemKey decodes) mldsa65/v2 n2048-kmax1024")) return (15272, 0);
-        if (h == keccak256("setKemKey fndsa512/v2 n2048-kmax1024")) return (2510075, 3947400);
+        if (h == keccak256("setKemKey fndsa512/v2 n2048-kmax1024")) return (2515999, 3947400);
         if (h == keccak256("popOf (the blob setKemKey decodes) fndsa512/v2 n2048-kmax1024")) return (13333, 0);
         if (h == keccak256("setKemKey msig-pq/v2 n2048-kmax1024")) return (594840, 13797540);
         if (h == keccak256("popOf (the blob setKemKey decodes) msig-pq/v2 n2048-kmax1024")) return (12948, 0);
@@ -3311,7 +3311,7 @@ contract UARegistryUA8Test is UARegistryBase {
         if (h == keccak256("register msig-pq/n2304-kmax4096")) return (3740568, 79734420);
         if (h == keccak256("setKemKey mldsa65/v2 n2304-kmax4096")) return (357272, 7991190);
         if (h == keccak256("popOf (the blob setKemKey decodes) mldsa65/v2 n2304-kmax4096")) return (15272, 0);
-        if (h == keccak256("setKemKey fndsa512/v2 n2304-kmax4096")) return (2510075, 3947400);
+        if (h == keccak256("setKemKey fndsa512/v2 n2304-kmax4096")) return (2515999, 3947400);
         if (h == keccak256("popOf (the blob setKemKey decodes) fndsa512/v2 n2304-kmax4096")) return (13333, 0);
         if (h == keccak256("setKemKey msig-pq/v2 n2304-kmax4096")) return (594840, 13797540);
         if (h == keccak256("popOf (the blob setKemKey decodes) msig-pq/v2 n2304-kmax4096")) return (12948, 0);
@@ -3328,7 +3328,7 @@ contract UARegistryUA8Test is UARegistryBase {
         if (h == keccak256("register msig-pq/n2560-kmax16384")) return (4008856, 86169600);
         if (h == keccak256("setKemKey mldsa65/v2 n2560-kmax16384")) return (357272, 7991190);
         if (h == keccak256("popOf (the blob setKemKey decodes) mldsa65/v2 n2560-kmax16384")) return (15272, 0);
-        if (h == keccak256("setKemKey fndsa512/v2 n2560-kmax16384")) return (2510075, 3947400);
+        if (h == keccak256("setKemKey fndsa512/v2 n2560-kmax16384")) return (2515999, 3947400);
         if (h == keccak256("popOf (the blob setKemKey decodes) fndsa512/v2 n2560-kmax16384")) return (13333, 0);
         if (h == keccak256("setKemKey msig-pq/v2 n2560-kmax16384")) return (594840, 13797540);
         if (h == keccak256("popOf (the blob setKemKey decodes) msig-pq/v2 n2560-kmax16384")) return (12948, 0);
@@ -3345,7 +3345,7 @@ contract UARegistryUA8Test is UARegistryBase {
         if (h == keccak256("register msig-pq/n2816-kmax65536")) return (4328344, 94084290);
         if (h == keccak256("setKemKey mldsa65/v2 n2816-kmax65536")) return (357272, 7991190);
         if (h == keccak256("popOf (the blob setKemKey decodes) mldsa65/v2 n2816-kmax65536")) return (15272, 0);
-        if (h == keccak256("setKemKey fndsa512/v2 n2816-kmax65536")) return (2510075, 3947400);
+        if (h == keccak256("setKemKey fndsa512/v2 n2816-kmax65536")) return (2515999, 3947400);
         if (h == keccak256("popOf (the blob setKemKey decodes) fndsa512/v2 n2816-kmax65536")) return (13333, 0);
         if (h == keccak256("setKemKey msig-pq/v2 n2816-kmax65536")) return (594840, 13797540);
         if (h == keccak256("popOf (the blob setKemKey decodes) msig-pq/v2 n2816-kmax65536")) return (12948, 0);

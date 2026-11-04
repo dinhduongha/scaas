@@ -25,8 +25,21 @@ extra_step() { # this kind's own steps (the base runner calls it for a step it d
   esac
 }
 
-# "<step>|<form>|<name>": the tests this kind adds (forms: see the base runner); filled in as the tasks land
+# "<step>|<form>|<name>": the tests this kind adds, and the family refusal tests it extends (forms: see the base runner)
 NEW_TESTS=$(cat <<'NAMES'
+forge|forge|test_fndsa1024Kind
+forge|forge|test_fndsa1024Slot20
+forge|forge|test_register_msigHolderBoundary_fndsa1024
+forge|forge|test_kat_fndsa1024
+forge|forge|test_fndsaVerifier_kind
+forge|forge|test_falcon1024_nistKat
+forge|forge|test_malformed_fndsa1024
+clientkeys|node|fndsa1024 (CTR-UA-40): kind 0x0135, a 1,793 B 0x0A key, a holder, PQ weight; pq_kat.json row from the seed; the NIST round-3 KATs
+ua-rs-pq|cargo|fndsa1024_kind_holder_and_weight
+node-kinds|cargo|adapters::soroban::tests::chain_kind_is_the_registry_gate_without_fndsa1024
+soroban-registry|cargo|register_disabled_kind_refused
+soroban-registry|cargo|ua8_kind_name_table
+near-common|cargo|ua_of_matches_kinds_json_valid_rows
 NAMES
 )
 . "$(dirname "$0")/2026-10-27-metatx-split-gates.sh"

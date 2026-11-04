@@ -31,14 +31,15 @@ contract UAMetaTx3PqTest is UARegistryBase {
     function setUp() public override {
         super.setUp();
         string memory pj = _pj();
-        UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](5);
+        UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](6);
         c[0] = UARegistry.KindConfig(0x0130, address(new UAMldsaVerifier(0x0130, address(0), "", "")), 4_250_000);
         c[1] = UARegistry.KindConfig(0x0131, address(new UAMldsaVerifier(0x0131, address(0), "", "")), 5_950_000);
-        c[2] = UARegistry.KindConfig(0x0132, address(new UAFndsaVerifier()), 2_500_000);
+        c[2] = UARegistry.KindConfig(0x0132, address(new UAFndsaVerifier(0x0132)), 2_500_000);
         c[3] = UARegistry.KindConfig(0x0133, address(new UASlhdsaVerifier()), 1_400_000);
         c[4] = UARegistry.KindConfig(0x0134, _ml87(pj), 250_000); // CTR-UA-39: precompile only, the cap a provisional estimate
+        c[5] = UARegistry.KindConfig(0x0135, address(new UAFndsaVerifier(0x0135)), 5_250_000); // CTR-UA-40, provisional cap
         reg = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, c);
-        for (uint256 i; i < 5; ++i) {
+        for (uint256 i; i < 6; ++i) {
             string memory k = string.concat(".kinds[", vm.toString(i), "].");
             uint16 kind = uint16(vm.parseJsonUint(pj, string.concat(k, "kind")));
             bytes memory pk = vm.parseJsonBytes(pj, string.concat(k, "keyData"));
@@ -133,7 +134,7 @@ contract UAMetaTx3PqTest is UARegistryBase {
             reg.requireAuthorized(m.from, UAKinds.PURPOSE_METATX, digest, UACall.auth(m.from, vm.parseJsonBytes(pj, string.concat(r, "auth"))));
             ++n;
         }
-        assertEq(n, 5);
+        assertEq(n, 6); // + fndsa1024 (CTR-UA-40)
     }
 
     /// `UAMetaTransfer` rows: a payment with a FIXED fee from each PQ UA to a native payee, executed.
@@ -157,9 +158,9 @@ contract UAMetaTx3PqTest is UARegistryBase {
             assertEq(tok.balanceOfUA(t.from), 0);
             ++n;
         }
-        assertEq(n, 5);
-        assertEq(tok.balanceOf(address(0x5409)), 5 * 100_000_000);
-        assertEq(tok.balanceOf(address(0xFEE)), 5 * 100_000);
+        assertEq(n, 6); // + fndsa1024 (CTR-UA-40)
+        assertEq(tok.balanceOf(address(0x5409)), 6 * 100_000_000);
+        assertEq(tok.balanceOf(address(0xFEE)), 6 * 100_000);
         assertEq(tok.balanceOf(MetaTxLib.UA_POOL), 0);
     }
 
