@@ -335,6 +335,10 @@ forge|forge|test_routerRow_CancelNonce
 forge|forge|test_routerRow_UACancelNonce
 clientkeys|node|GovernanceRouter: 38 rows equal GovRouterTypehash.t.sol, target the first op word, fee mode NONE, the router domain only
 clientkeys|node|a router row refuses a field off GrantTerms, a value out of range, a string bool, another domain; target is signed
+forge|forge|test_everySelectorIsClassified
+forge|forge|test_strangerRevertsOnEveryGatedRow
+forge|forge|test_noGovernanceSelectorIsRelayable
+forge|forge|test_routerPublishesNoAllowList
 NAMES
 )
 . "$(dirname "$0")/2026-10-27-metatx-split-gates.sh"

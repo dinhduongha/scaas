@@ -549,7 +549,8 @@ caller calls the governed contract itself. **No `execute(bytes)`.**
 **No generic path (B-14).** The ops are on neither `_mtxRule` nor `_uaAllowed`: an entry passes the pipeline its own
 facts (fee class `ABSOLUTE`, no shape row) and never self-calls. `_execute` refuses (`MtxSelectorNotAllowed`), so
 `mtxExecute`, `executeMetaTransaction` and `mtxBatch` refuse every blob, `cancelNonce` included; `uaExecute` and `uaBatch`
-refuse the same. `cancelNonce`, `mtxCancelNonce` and `uaCancelNonce` stay.
+refuse the same. `cancelNonce`, `mtxCancelNonce` and `uaCancelNonce` stay. `mtxSelectors()` is empty: the generic path
+reaches nothing, so the router publishes no allow-list row, and the node's list for it equals that (plan T13, controller).
 
 **Another router.** Application bits 128-255 (CTR-GOV-10's Change) and the regulated powers (bits 5-7, 10, 21) are not in
 this closed table, and a closed table takes none later. A router for them is another child of `GovernanceRouterBase`
@@ -1229,7 +1230,7 @@ From v2 §6, adjusted by the findings. The enum moves up, because every later st
 | S5 | D5 | none | none | none | `WrappedLib` | wizard | none | CTR-GOV-05 Change |
 | S6 | hybrid | `scaas.underlying`: `capped`, `maxSupply`, `reserve` offset unmoved | none | none | wrapped kinds | `maxSupply`, disclosure | none: `maxSupply()` is a wallet's view, and the indexer reads no token parameter | §12.2, CTR-TOK-05 |
 | S7 | D6, `DexPuller` | `rescueTo` | none | `dex_order_kat.json` again | every kind, `SCaaSDex` | `rescueTo` | none | CTR-DEX-22 |
-| S8 | `GovernanceRouter`, `DeployBase` and `e2e.py` deploy it before the releases | `test/v2/layout/GovernanceRouter.json` (empty) | all new, pinned | `typed_ops.json` rows | new contract, 20,284 B, under EIP-170: no baseline row | `clientkeys` digests | §12.7 | §3 |
+| S8 | `GovernanceRouter`, `DeployBase` and `e2e.py` deploy it before the releases | `test/v2/layout/GovernanceRouter.json` (empty) | all new, pinned | `typed_ops.json` rows | new contract, 20,284 B at T11, 20,073 B with T13's empty `mtxSelectors()`, under EIP-170: no baseline row | `clientkeys` digests | §12.7 | §3 |
 | S9 | selector audit, "+0" pins | — | — | `governance_bits.json` | — | every client reads it | — | — |
 | S10 | node rows: contract kind `gov_router` in `typed.rs` `TYPED` (38 rows), `ALL`, `UACancelNonce`, `domain_name` → `"SCaaS GovernanceRouter"`; `GrantTerms` in `NESTED`; `guard.rs` `rule_of`, a target rule by address over the config's list of the chain's routers, on the direct and the relay path; `config.rs`; `abi.rs`; no factory row, no generation | — | — | `typed_ops_kat_every_entry` | — | — | yes | NODE-JOB-01, -19, -20 |
 | S11 | §12 applied, `docs/contracts/governance.md` | — | — | — | — | — | — | yes |

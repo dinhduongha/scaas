@@ -252,6 +252,11 @@ abstract contract GovernanceRouterBase is UAMetaTxBase, IGovernanceRouter {
         revert MtxSelectorNotAllowed(bytes4(0));
     }
 
+    /// @notice Empty: the generic path refuses every call (`_execute`, `uaExecute`, `uaBatch`), `cancelNonce` included, so
+    ///         the router publishes no allow-list row; its typed entries are no row either (governance spec §3.2). The
+    ///         node's list for the router equals this, both directions.
+    function mtxSelectors() public pure override returns (bytes4[] memory, uint8[] memory, uint8[] memory) {}
+
     // ------------------------------------------------------------------ the flow
 
     /// @dev An op whose struct words after `target` are the call's arguments.
