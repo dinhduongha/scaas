@@ -84,6 +84,7 @@ contract LayoutTest is V2Fixture {
         _pin("NormalPqzToken", "NormalPqzToken"); // the PQZ layer lives in `scaas.pqz`
         _pin("WrappedPqzToken", "WrappedPqzToken");
         _pin("SCaaSDex", "SCaaSDex"); // its state lives in `scaas.dex`
+        _pin("GovernanceRouter", "GovernanceRouter"); // no state of its own: nonces in `scaas.metatx`, the pair transient
     }
 
     /// One field of a namespace: its label, the keys of the mapping it sits in (0 = none; `k2` the inner key), the value

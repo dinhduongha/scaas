@@ -973,9 +973,12 @@ def run(kd, kr, ke):
     reg = D.deploy("UARegistry", encs(["w", "w", "w", "w", "w", "w", ("a", ("t", ["w", "w", "w"]))],
                                       [uid, 0, 0, BUDGET, 0, 1, kinds]), label="UARegistry gen 1")
     REG[0] = reg
+    # plan T11 (CTR-GOV-15 Change): the chain's GovernanceRouter (chain_uid, registry, SmartKeyAccount implementation 0,
+    # Hedera false), before every release: each env names it as govRouter
+    router = D.deploy("GovernanceRouter", encs(["w", "w", "w", "w"], [uid, reg, 0, 0]), label="GovernanceRouter")
     # plan 5g-Z2: the factory (notice period 0 here) deploys every release itself: env version 1 of each kind
     # (factory, chain_uid, registry, SmartKeyAccount implementation 0, Hedera false, deps, the linked libraries with
-    # their code hashes, no GovernanceRouter (the PQZ kinds link the four PqzStateLib / PqzTransferLib / PqzBurnLib / PqzViewLib, plan 5h D14,
+    # their code hashes, the GovernanceRouter above (the PQZ kinds link the four PqzStateLib / PqzTransferLib / PqzBurnLib / PqzViewLib, plan 5h D14,
     # each deployed once by D.lib; the PQZ kinds' one dependency is this run's UAPqzVerifier, CTR-ZTH-20), then the release
     # from the init code without arguments on env 1, named explicitly (owner 2026-10-20; the factory appends
     # envVersion, env, implArgs)
@@ -984,7 +987,7 @@ def run(kd, kr, ke):
         require_release_gas(name)
         code, libs = D.linked(name)
         hashes = [keccak256(bytes.fromhex(rpc("eth_getCode", [a, "latest"])[2:])) for a in libs]
-        env = [fac, uid, reg, 0, 0, [pqv] if kind else [], libs, hashes, 0]
+        env = [fac, uid, reg, 0, 0, [pqv] if kind else [], libs, hashes, router]
         sd.send(fac, cd(f"publishEnv(uint8,uint16,{ENV_S})", ["w", "w", ENV], kind, 1, env), f"publishEnv(kind {kind}, 1)")
         r = sd.send(fac, cd("deployImplementation(uint8,uint64,uint16,bytes,bytes)", ["w", "w", "w", "b", "b"],
                                kind, 1, 1, code, b""),

@@ -1,4 +1,4 @@
-# Governance: `GovernanceBase`, the grant record, the holder, the enum, hybrid underlying, the receiver check — design
+# Governance: `GovernanceBase`, the grant record, the router, the enum, hybrid underlying, the receiver check — design
 
 **Accepted by the owner, 2026-11-03.** The build starts after `msig-nested` reaches `main`.
 
@@ -35,8 +35,8 @@ family. Form: the DEX round spec and the `typed-signing` plan.
 | G14 | `use` leaves `GovernanceLib`, `requireRole` goes | B-26, B-31 | §1.3 |
 | G15 | `UA_POOL` and `SHIELD_POOL` are refused as owner | B-19 | §1.4 |
 | G16 | DEX: `admin` → `owner`, `LISTING`, `FEE_ROUTING`, guard on the four powers, `supportsInterface`; a handover needs `revokeRole` | CTR-GOV-01, B-13, B-31 | §2.3 |
-| G17 | `GovernanceHolder`: typed entries only, salt, generic path refused | gaps §1, B-14, B-20, CTR-GOV-15 | §3 |
-| G18 | Two-call rotation, no delay, `proposeOperator(0)` cancels, the disclosure says it once | CTR-GOV-15, B-21, B-22 | §3.4 |
+| G17 | `GovernanceHolder`: typed entries only, salt, generic path refused. **Since 2026-11-04 one `GovernanceRouter` per chain**, typed entries only, generic path refused (CTR-GOV-15 Change) | gaps §1, B-14, B-20, CTR-GOV-15 | §3 |
+| G18 | Two-call rotation, no delay, `proposeOperator(0)` cancels, the disclosure says it once. **Gone with the holder** (CTR-GOV-15 Change): no operator; who controls a power is the governed contract's rule | CTR-GOV-15, B-21, B-22 | §3.4 |
 | G19 | Relay rule: an owner or holder operation has no `mtx*` or `ua*` on the governed contract | gaps §2, B-29, B-30 | §3.6 |
 | G20 | Real enum members 0-13, off until published; placeholders 6 and 7 refused | CTR-GOV-16, B-03 | §4 |
 | G21 | Regulated confidential kinds: the five rules, mapped per path, Zether and PQZ apart | CTR-GOV-17, -13 | §4.3 |
@@ -62,8 +62,8 @@ family. Form: the DEX round spec and the `typed-signing` plan.
 | G36 | C1 stands, now the owner's: a hybrid's rate may fall with no `addReserve`, and the disclosure says so | CTR-GOV-12; agy I-4 rejected | §5.3, §5.5 |
 | G37 | `complianceRegistry()` is named apart from `registry()`, the UA registry | Codex 1 | §1.2, §1.8, §4.4 |
 | G38 | An ownership generation: A → B → A revives no pending | Codex 2, Claude M-4 | §1.4, §1.6 |
-| G39 | An operator generation, a signed word: A → B → A revives no envelope; two calls and zero delay stay | Codex 4, Claude M-4, CTR-GOV-15 | §3.1, §3.2, §3.4 |
-| G40 | `acceptOperator` is exempt from the operator check; its subject is the pending operator | Codex 3 | §3.1, §3.4 |
+| G39 | An operator generation, a signed word: A → B → A revives no envelope; two calls and zero delay stay. **Gone with the holder** (CTR-GOV-15 Change, §3.4) | Codex 4, Claude M-4, CTR-GOV-15 | §3.1, §3.2, §3.4 |
+| G40 | `acceptOperator` is exempt from the operator check; its subject is the pending operator. **Gone with the holder** | Codex 3 | §3.1, §3.4 |
 | G41 | The owner's revoke, the holder's own renounce and a narrowing delete the pending; a grantor's revoke does not; `cancelGrant` cancels one | agy C-3, Claude M-6, Fable M-1 | §1.5, §1.6 |
 | G42 | `0 → finite` is a narrowing on every bound, the window pair included | Codex 7, Claude M-5, agy I-2 | §1.6 |
 | G43 | `Counts` transitions complete, one test each | agy C-1, Claude M-7 | §1.7, §10.3 |
@@ -96,7 +96,7 @@ family. Form: the DEX round spec and the `typed-signing` plan.
 | C6 | The rules of §1 to §4 become one component doc, `docs/contracts/governance.md`, at build | The register's rows point at themselves today; "one rule, one place" wants a home, and README §3 keeps the list | Text moves between two files |
 | C7 | An expired root counts as live until it is revoked (§1.7). A Change to CTR-GOV-09, accepted by the owner 2026-11-03 | The owner asked for a definition. `Counts.roots` is a stored number and no holder list exists on chain, so an expiry cannot move it without a walk. It fails toward the protection: a renounce takes one more `revokeRole`, and a frozen account stays frozen until its own bound or the owner's revoke | An exact count needs a holder list or a stored latest expiry, a new release |
 | C8 | `cancelGrant(bit, account)` is the way to cancel a pending, where agy offered a revoke of a non-holder and Claude an overwrite | A confirm with other terms keeps its revert (CTR-GOV-04); a revoke would also bar the account or take the role; an entry says what it does. One more selector on every contract and one more holder op | One entry to drop before the build |
-| C9 | The operator generation is a named `uint64 generation`, a signed word of every holder struct, compared with the stored value before the self-call | Explicit parameters: a wallet shows it, the node builds it from a named field, and a stale envelope gets a named error, not a bad signature | Every holder typehash moves, before any is deployed |
+| C9 | **Gone with the holder (CTR-GOV-15 Change).** The operator generation is a named `uint64 generation`, a signed word of every holder struct, compared with the stored value before the self-call | Explicit parameters: a wallet shows it, the node builds it from a named field, and a stale envelope gets a named error, not a bad signature | Every holder typehash moves, before any is deployed |
 | C10 | `F` on the payer of a wrap applies when the destination is another id. A shield and, by the owner's word of 2026-11-03, a wrap-shield keep `F` on the payer whatever `toUA` is | agy C-2's route runs through `wrapToUA`; a wrap into one's own frozen balance is a credit, and credits are never refused (CTR-AS-05). The underlying is another asset, so a frozen account can still hand it to someone else: this closes the account's own route only. A wrap-shield into one's own id spends that same other asset, so it follows the wrap. A shield spends the locked public balance itself (`_poolMove`, `_toPool`), which CTR-GOV-17 locks | One condition in `_wrap`, the order entries and the wrap-shield entries, when built |
 | C11 | Under `PAUSE`: `rescue`, direct `addReserve` and `mtxPrepareAcc` stay open; every relayed op that stays open runs at fee `NONE` | `rescue` moves what the token does not owe, `addReserve` is "unchanged" in asset-suite §2.4, prepare is what a roll-over needs; a fee leg is a transfer (CTR-AS-06) | One line of a table of a kind not built |
 
@@ -411,7 +411,7 @@ A DEX handover (B-13): `transferOwnership` moves neither bit 11 nor 12, since th
 2. `kind()`, `features()`, `lockedFeatures()`: one sentence per set bit. `lockedFeatures` says the power exists for ever, the reverse of "locked" in most systems.
 3. `owner()`: 0 means nothing above can change. Else `grantDelay()`, `pendingOwner()`, and a warning when `lastProposedAt()` is within `2 × grantDelay`: read `GrantProposed` and `pendingGrant`, which says whether a pending is live.
 4. Per power bit: `holderCount(bit)` against the indexed `RoleGranted` / `RoleRevoked` list, then per holder `grantOf`. A delegable holder prints "can add unlimited leaves at once, sharing a remaining budget of N".
-5. A contract holder: a clone of a holder implementation prints "operator X" and `pendingOperator`; anything else prints "whole shape, mutable by its own rules". An operator that is itself a holder clone, a holder implementation or factory, or a token (`isToken`) prints "no controller: this operator cannot call", and a wallet never recurses to that operator's own operator (§3.1). Once, for every contract holder: **`grantDelay` delays an address, never who controls it** (CTR-GOV-15).
+5. A holder that is a native id with code prints "whole shape, mutable by its own rules"; a derived UA prints its kind from the registry, an `msig` its members, weights and threshold (CTR-UA-37: a new `msig` takes over by a grant, never by a change of members). Once, for every contract holder: **`grantDelay` delays an address, never who controls it** (CTR-GOV-15). The router is never a holder: it names the subject it authenticated, and only to the contract it calls (§3).
 6. Per leg of `underlyings()`: recurse on `isRegisteredToken`, others print "unknown issuer powers". A leg with bit 5, 7, 8 or 9 prints "its issuer can stop unwraps of this leg" (B-34). A registered leg never has 6 or 21.
 7. Bits 8 and 9, read apart: `complianceRegistry()`, never `registry()`, which is the UA registry; `requiredFlags()`, `deniedFlags()` and the compliance registry's controller, "X can change this list at once" (A13). A bit that is off prints that it can never come on: features only lose bits, so the issuer chose at creation. Both off prints "this token can never stop a receiver".
 8. A hybrid, `maxSupply() ≠ 0`: §5.5. `rescueTo()` when bit 17 is set.
@@ -494,91 +494,112 @@ Each is one direct entry under the contract's guard. None is on `mtxSelectors()`
 
 `createTokenUnregistered` is unchanged. No `mtx*` or `ua*` struct changes, so no existing typehash moves.
 
-## 3. `GovernanceHolder` — SPECIFIED
+## 3. `GovernanceRouter` — BUILT on branch `governance` (plan T11); node rows and clients SPECIFIED
+
+The per-operator `GovernanceHolder` this section first specified is replaced by one `GovernanceRouter` per chain
+(CTR-GOV-15 Change, owner 2026-11-04; [Change spec](2026-11-04-governance-ua-identity.md) §3). Every identity is a UA id
+(§1.4), so a derived UA or a PQ `msig` holds a power under its own id, and the router only authenticates it for one call.
 
 ### 3.1 Shape
 
-A `UAMetaTxBase` child, the base meant for contracts that are not tokens. The holder is an ordinary address to what it governs: the token sees `msg.sender == holder`, so every rule about `owner` and holders stands. A derived UA and a PQ `msig` have no other way in: `_msgSender()` is `UA_POOL` for every derived subject, and no ERC-1271 cap admits a PQ kind.
-
 | Part | Text |
 |---|---|
-| Shape | EIP-1167 clone by CREATE2, made by a per-chain `GovernanceHolderFactory` in the shape of `SmartKeyAccountFactory`: implementation built in the constructor, `predict`, permissionless `deploy`, a repeat `deploy` returns the address. Not a `TokenKind`. `OpenFactory` does not know it |
-| Salt | `keccak256(abi.encode(operator, salt))`. The operator is in the salt, or the first deployer would choose it (B-20). No other argument exists: CTR-GOV-15 removed `operatorDelay` |
-| Domain | `("SCaaS GovernanceHolder", "1", chainId, holder, chain_uid)` |
-| Immutables | the chain's UA registry, `chain_uid`, the `SmartKeyAccount` implementation, `IS_HEDERA`, `FACTORY`, the factory that built the implementation, `IMPL`, the implementation's own address, `CLONE_CODEHASH`, the code hash of its clones, computed as `_SMART_KEY_CLONE_CODEHASH` is: the hash the node reads by (§12.7) |
-| State | `operator`, `pendingOperator` (`bytes32`), `generation` (`uint64`), own ERC-7201 namespace `scaas.holder`, root `0x86d8592a976ab91a258d36c502084dc93b41b1785adce6f7419d9b3d4ee9be00`. `operator` written once by `initialize` and by `acceptOperator`; `generation` starts at 0 and only `acceptOperator` bumps it |
-| The check | every direct op but `acceptOperator` starts `if (_subject() != operator) revert NotOperator(_subject())`. `acceptOperator` is exempt: it requires `pendingOperator ≠ 0` and `_subject() == pendingOperator`, else `NotPendingOperator(_subject())`, on its direct, `mtx` and `ua` forms. A native operator may call directly; a derived one only through a signed entry |
-| Holds nothing | no `receive`, no balance, no allowance |
-| Fee | `supportedModes() == 0x03`, fee mode `NONE`. A relayer is paid, if at all, through `MtxRelayFee` |
-| Factory | `predict(bytes32 operator, bytes32 salt)`, `deploy(bytes32 operator, bytes32 salt)`, `IMPLEMENTATION()`, `chainUid()`, `HolderDeployed(address indexed holder, bytes32 indexed operator)`. `initialize(bytes32 operator)` by `FACTORY` only (`NotFactory()`), once (`AlreadyInitialized()`), in the same call |
-| Operator refused | 0 (`ZeroOperator()`); `pad(UA_POOL)`, `pad(SHIELD_POOL)`, `pad(FACTORY)`, `pad(IMPL)`, and a padded address whose code hash is `CLONE_CODEHASH`, which covers `pad(this)` (`OperatorInvalid(bytes32)`), at `initialize` and at `proposeOperator`. None can call a holder entry: §3.2's table is closed and reaches no holder selector. `proposeOperator(0)` is the cancel. **Passes, disclosed (§1.8 step 5):** a token, which has no such hash here; a clone of another release; a clone not yet deployed, whose address has no code. Such a holder is inert, which is self-inflicted. No rotation lands on one: `acceptOperator` needs the next operator's call |
-| Views, events, errors | `operator()`, `pendingOperator()`, `generation()`; `OperatorProposed(bytes32 indexed next)`, `OperatorChanged(bytes32 indexed previous, bytes32 indexed next)`; `NotOperator(bytes32 subject)`, `NotPendingOperator(bytes32 subject)`, `GenerationStale(uint64 signed, uint64 current)`, and those of the two rows above |
+| Contracts | `GovernanceRouterBase is UAMetaTxBase, IGovernanceRouter` (abstract: the flow, the generic path refused, the owner's and a holder's ops of `IGovernance`); `GovernanceRouter` (the powers of SCaaS's kinds and the DEX). `src/governance/` |
+| Deployment | one per chain, `new GovernanceRouter{salt}(chain_uid, registry, smartKeyAccountImpl, hedera)` by the deterministic CREATE2 deployer: one predictable address per chain. `DeployBase._deployGovRouter` deploys it after the UA registry and before every release (JSON `governance_router`); `script/pqz/e2e.py` the same. Not a release, not a `TokenKind`; `OpenFactory` does not know it |
+| Who points at it | every governed contract's `GOV_ROUTER` immutable, from its release's `Env.govRouter`; 0 = no router on that chain (§1.4) |
+| Domain | `("SCaaS GovernanceRouter", "1", chainId, router, chain_uid)` |
+| State | none of its own (`test/v2/layout/GovernanceRouter.json` is empty): the nonce map of `scaas.metatx`, `cancelUsed` of `scaas.ua.ledger`, and the transient pair `(subject, target)` in two slots, `keccak256("scaas.govrouter.subject")`, `keccak256("scaas.govrouter.target")` |
+| No owner | no owner, no operator, no rotation, no `generation`, no clone factory, no upgrade |
+| Holds nothing | no `receive`, no payable entry, no balance, no allowance |
+| Fee | `supportedModes() == 0x03`, fee mode `NONE`; any other mode reverts `MetaTxUnknownMode`. A relayer is paid, if at all, through `MtxRelayFee` |
+| `subject()` | `IGovernanceRouter.subject()`: the subject of the live call when `msg.sender` is the live target, else 0 (outside a call too) |
 
 ### 3.2 Entries
 
-Each op below has one direct entry, one `mtx<Op>(Envelope e, uint64 generation, …, bytes sig)` and one `ua<Op>(UAEnvelope e, uint64 generation, …, UASig auth)`, `target` the first parameter after `generation`. The structs are `<Op>` and `UA<Op>`: `from` first, `generation`, the op's parameters, then the seven envelope fields. **No `execute(bytes)`.**
-
-The signed entries refuse `generation ≠` the stored one (`GenerationStale`) before anything else, so the nonce stays unspent; the direct entry takes no generation, since it is checked at run time. `generation` is a struct word and no argument of the op, so words differ from call arguments on every entry: each goes through `_namedCall` / `_namedCallUA`, not `_named` / `_namedUA`. `_namedCall` lives only in `ERC20MetaTx`, which the holder is not, and `MetaTxBase._named` hashes its `args` as both; `GovernanceHolderBase` adds its own, one private helper on `_metaOf`, `_namedHash` and `_run`. `_namedCallUA` is already on `UAMetaTxBase`.
+Each op of the closed table is one `mtx<Op>(Envelope e, address target, <op params>, bytes sig)` (a native address
+signs: EOA, ERC-1271, HIP-632 on Hedera, `MtxPipelineLib`'s address rule) and one `ua<Op>(UAEnvelope e, address target,
+<op params>, UASig auth)` (any id the UA registry authorizes under `PURPOSE_METATX`: a native id as its native kind, a PQ
+key, an `msig`, every registered kind). The structs are `<Op>` and `UA<Op>`: `from` first, `target`, the op's parameters,
+then the seven envelope fields `batch, nonce, validUntil, mode, relayer, fee, feeRecipient`. No direct entry: a native
+caller calls the governed contract itself. **No `execute(bytes)`.**
 
 | Group | Op | Target call |
 |---|---|---|
-| Owner | `grantRole(address target, uint8 bit, address account)` | `IGovernance.grantRole` |
-| | `revokeRole(address target, uint8 bit, address account)` | `IGovernance.revokeRole` |
-| | `setGrant(address target, uint8 bit, address holder, GrantTerms terms)` | `IGovernance.setGrant`; `terms` a nested typed struct, its hash in the struct's words |
-| | `cancelGrant(address target, uint8 bit, address account)` | |
-| | `disableFeature(address target, uint8 bit)` | |
-| | `transferOwnership(address target, address newOwner)` | |
-| | `acceptOwnership(address target)` | |
-| | `renounceOwnership(address target)` | |
-| Holder of a bit | `renounceRole(address target, uint8 bit)` | |
-| Powers on tokens | `mint(address target, address to, uint256 amount)` | |
-| | `mintToUA(address target, bytes32 to, uint256 amount)` | |
-| | `disableWrap(address target, address leg, bytes32 reason)` | |
-| | `proposeRate(address target, address leg, uint96 num, uint96 den)` | |
-| | `cancelRate(address target)`, `executeRate(address target)` | |
-| Powers on the DEX | `setMarket(address target, address base, address quote, bool listed)` | |
-| | `setExchangeTarget(address target, address exchangeTarget, bool listed)` | |
-| | `setListedOnly(address target, bool on)` | |
-| | `setFeeSplit(address target, uint32 relayerSharePpm, address treasury)` | |
-| Its own | `proposeOperator(bytes32 next)`, `acceptOperator()` | §3.4 |
+| Owner (`GovernanceRouterBase`) | `grantRole(address target, uint8 bit, bytes32 account)` | `IGovernance.grantRole` |
+| | `revokeRole(address target, uint8 bit, bytes32 account)` | `IGovernance.revokeRole` |
+| | `setGrant(address target, uint8 bit, bytes32 holder, GrantTerms terms)` | `IGovernance.setGrant`; `terms` a nested typed struct, its `hashStruct` the struct word, the whole struct the call's argument |
+| | `cancelGrant(address target, uint8 bit, bytes32 account)` | `IGovernance.cancelGrant` |
+| | `disableFeature(address target, uint8 bit)` | `IGovernance.disableFeature` |
+| | `transferOwnership(address target, bytes32 newOwner)` | `IGovernance.transferOwnership` |
+| | `acceptOwnership(address target)` | `IGovernance.acceptOwnership` |
+| | `renounceOwnership(address target)` | `IGovernance.renounceOwnership` |
+| Holder of a bit (`GovernanceRouterBase`) | `renounceRole(address target, uint8 bit)` | `IGovernance.renounceRole` |
+| Powers on tokens (`GovernanceRouter`) | `mint(address target, address to, uint256 amount)` | `mint` |
+| | `mintToUA(address target, bytes32 to, uint256 amount)` | `mintToUA` |
+| | `disableWrap(address target, address leg, bytes32 reason)` | `disableWrap` |
+| | `proposeRate(address target, address leg, uint96 num, uint96 den)` | `proposeRate` |
+| | `cancelRate(address target)`, `executeRate(address target)` | `cancelRate`, `executeRate` |
+| Powers on the DEX (`GovernanceRouter`) | `setMarket(address target, address base, address quote, bool listed)` | `setMarket` |
+| | `setExchangeTarget(address target, address exchangeTarget, bool listed)` | `setExchangeTarget` |
+| | `setListedOnly(address target, bool on)` | `setListedOnly` |
+| | `setFeeSplit(address target, uint32 relayerSharePpm, address treasury)` | `setFeeSplit` |
 
-`GrantTerms` in the struct string: `SetGrant(address from,uint64 generation,address target,uint8 bit,address holder,GrantTerms terms,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)GrantTerms(uint128 min,uint128 max,uint128 total,uint128 perWindow,uint32 window,uint64 validUntil,uint32 maxUses,bool delegable,bytes32 scope)`. Every typehash is pinned by a `*TypehashIsPinned` test.
+19 ops, 38 entries, 38 structs. `GrantTerms` in the struct string: `SetGrant(address from,address target,uint8 bit,bytes32 holder,GrantTerms terms,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)GrantTerms(uint128 min,uint128 max,uint128 total,uint128 perWindow,uint32 window,uint64 validUntil,uint32 maxUses,bool delegable,bytes32 scope)`; `UASetGrant` the same with `bytes32 from`. Every typehash is `GovernanceRouterTypes.<OP>` and pinned by `test/governance/GovRouterTypehash.t.sol` (39 pins, `GrantTerms` included). A contract-only bit (`RATE_ADJUSTABLE`) is held only by a native id with code (§1.4), so its rate ops come from such a contract, signing `mtx<Op>` by ERC-1271 or `ua<Op>` as its native kind.
 
-Each op is on `_mtxRule` and `_uaAllowed`, because a named entry passes `_checkCall`. So `_execute` is overridden to refuse (`MtxSelectorNotAllowed`), and `uaExecute` and `uaBatch` too: otherwise `mtxExecute` reaches the same op under a `bytes data` signature, the path §3.6 rejects (B-14). `mtxBatch` and `executeMetaTransaction` fall with `_execute`. `mtxCancelNonce`, `uaCancelNonce` stay. Application bits 128-255 (CTR-GOV-10's Change, owner 2026-11-04): the application ships its own child of the same abstract base with one typed entry per bit; `GovernanceHolder` is a closed table.
+**No generic path (B-14).** The ops are on neither `_mtxRule` nor `_uaAllowed`: an entry passes the pipeline its own
+facts (fee class `ABSOLUTE`, no shape row) and never self-calls. `_execute` refuses (`MtxSelectorNotAllowed`), so
+`mtxExecute`, `executeMetaTransaction` and `mtxBatch` refuse every blob, `cancelNonce` included; `uaExecute` and `uaBatch`
+refuse the same. `cancelNonce`, `mtxCancelNonce` and `uaCancelNonce` stay.
 
-**The regulated powers take a second holder release.** The table has no entry for bits 5-7, 10 or 21, and a closed table takes none later. A derived or PQ issuer reaches them through a second release, a child of the same abstract base with its own `GovernanceHolderFactory` and one typed entry per power, published with the regulated kinds. These bits are contract-only, and a holder clone is a contract. Until then a regulated kind's issuer is a contract that takes no derived signer. The node's rule takes a set of factories (§12.7), so the second release is a config row. PLANNED.
+**Another router.** Application bits 128-255 (CTR-GOV-10's Change) and the regulated powers (bits 5-7, 10, 21) are not in
+this closed table, and a closed table takes none later. A router for them is another child of `GovernanceRouterBase`
+with one typed entry per power; it inherits the owner's and a holder's ops. It plugs in where a governed contract takes
+its router: an application contract passes it to `GovernanceBase(router)` in its own constructor; a factory release
+takes it from its `Env.govRouter`, which is published per kind and env version, so the regulated kinds' env names the
+second router while the plain kinds' envs keep this one. One governed contract has one `GOV_ROUTER`. Not built.
 
-### 3.3 How a derived UA and a PQ `msig` reach it
+### 3.3 The flow, and how a derived UA and a PQ `msig` reach a power
 
 ```mermaid
 sequenceDiagram
     participant R as relayer
-    participant H as GovernanceHolder
+    participant GR as GovernanceRouter
     participant P as MtxPipelineLib
     participant G as UARegistry
     participant T as token or DEX
-    R->>H: uaGrantRole(UAEnvelope, generation, target, bit, account, UASig)
-    Note over H: GenerationStale unless generation is the stored one
-    H->>P: preNamedUA(ctx, typehash, envelope, words, facts, auth)
-    P->>G: requireAuthorized(operator, PURPOSE_METATX, digest, auth)
+    R->>GR: uaGrantRole(UAEnvelope, target, bit, account, UASig)
+    Note over GR: lock (Reentrancy on re-entry)
+    GR->>P: preNamedUA(ctx, typehash, envelope, target ‖ words, facts, auth)
+    P->>G: requireAuthorized(subject, PURPOSE_METATX, digest, auth)
     Note over G: msig: each MemberSig of an accepted slot, by the member's kind, up to the threshold
     G-->>P: ok, or UAUnauthorized, or UAVerifyGas when starved
-    P-->>H: fee 0, nonce consumed
-    H->>H: self-call grantRole under the ticket, _subject() == operator
-    H->>T: grantRole(bit, account), msg.sender == holder
+    P-->>GR: fee 0, nonce consumed
+    Note over GR: TargetHasNoCode unless target has code; tstore (subject, target)
+    GR->>T: grantRole(bit, account), msg.sender == router
+    T->>GR: subject() → the subject (only to the live target)
+    Note over GR: tstore (0, 0), event, unlock; a revert of T reverts all, the nonce included
 ```
 
-Each member registers a single-key PQ UA; `registerMsig` registers the structure; each member calls `acceptMembership` (CTR-UA-37). Below the accepted threshold the `msig` authorizes nothing, so a holder naming it is inert, and a client reads `memberAccepted` first. The creator deploys the holder, or predicts its address, and names it `TokenConfig.owner`. A contract operator must be able to call the holder: one that cannot leaves it inert for good (§3.1). A counterfactual owner works; a contract-only bit needs code at the grant, so deploy the holder first. The holder never reads a member.
+The `mtx<Op>` path runs the same with `preNamed` and the address rule; its subject is the signer's native id. Each member
+registers a single-key PQ UA, `registerMsig` registers the structure, and each member accepts its slot (CTR-UA-37; a slot
+that signed the registration's `pop` is accepted). Below the accepted threshold the `msig` authorizes nothing. The creator
+names the UA as `TokenConfig.owner` or a role holder at creation, or an owner transfers to it; no deployment per issuer
+exists. The router never reads a member.
 
-### 3.4 Rotation, CTR-GOV-15
+### 3.4 Who controls a power, CTR-GOV-15
 
-`proposeOperator(next)` by the operator; `acceptOperator()` signed by `next`; `proposeOperator(0)` cancels; `pendingOperator()` is readable. Two calls, **no delay**, no window, no `operatorEta`. `acceptOperator` clears the pending, so a pending dies with the rotation, and a second `proposeOperator` overwrites the first. A stale pending stays until it is cancelled: a wallet shows a non-zero `pendingOperator`, which is what a compromised-then-recovered operator must look at. A rotation kills pre-signed envelopes for good: `acceptOperator` bumps `generation`, a signed word, so an envelope withheld through A → B → A stays stale though A is the operator again and its nonce was never spent (Codex 4). The run-time check alone (R-03) holds only while the rotation is not undone. No delay is added: two calls, zero delay, CTR-GOV-15. `mtxCancelNonce` and `uaCancelNonce` carry no generation: they only bump a nonce.
-
-A lost operator loses the holder and what it owns: no guardian, no recovery. A threshold below `n` is the mitigation. An `msig`'s members cannot change (CTR-UA-37), so rotating the operator is the way to change them.
+No operator exists, so nothing rotates behind a fixed address. Changing who controls a power is the governed contract's
+own rule: the owner grants or revokes the new UA (two calls when widening, §1.6), and ownership moves by
+`transferOwnership(bytes32)` and `acceptOwnership` signed by the new UA through the router. No delay is added (CTR-GOV-15).
+A signed envelope carries no generation: an envelope of a former owner or holder is refused by the target at run time
+(`NotOwner`, `MissingRole`), and its nonce stays unspent; a subject that wants an envelope dead before the hand-over
+cancels its lane (`mtxCancelNonce`, `uaCancelNonce`). An `msig`'s members cannot change (CTR-UA-37): a new `msig` takes over
+by the same calls. **`grantDelay` delays an address, never who controls it** stays true of a contract holder (a Safe, a
+`SmartKeyAccount`), which changes its signers by its own rules.
 
 ### 3.5 The gas it runs under, and what fails closed
 
-Three limits, in this order. **Registration:** `_membersWorst` refuses an `msig` whose worst minimal signing set does not fit `verifyBudget`, 12,000,000 on EIP-7825 chains and 10,500,000 on Hedera, so an `msig` that registers authorizes within the budget. **The transaction:** 2^24 = 16,777,216 regular gas; at the bound about 4.7 M is left for calldata, the pipeline and the target call, not measured [est.]. **No ERC-1271 cap:** the token sees a call, never a signature.
+Three limits, in this order. **Registration:** `_membersWorst` refuses an `msig` whose worst minimal signing set does not fit `verifyBudget`, 12,000,000 on EIP-7825 chains and 10,500,000 on Hedera, so an `msig` that registers authorizes within the budget. **The transaction:** 2^24 = 16,777,216 regular gas; at the bound about 4.7 M is left for calldata, the pipeline and the target call, not measured [est.]. **No ERC-1271 cap:** the governed contract sees a call, never a signature.
 
 | Member kind, no precompile | Signers at 12 M | Worst | At 10.5 M |
 |---|---|---|---|
@@ -591,25 +612,34 @@ Computed from `_membersWorst`, confirmed by the attack round (R-15). A threshold
 
 Two authorizations do not fit one transaction above 8.39 M: an `msig` at the bound cannot pay its relayer by its own `MtxRelayFee` signature (B-30: `mldsa44` c=2 17.3 M, `fndsa512` c=4 20.4 M, `slhdsa128s` c=8 23.2 M; `mldsa65` c=1 12.2 M fits). It relays at fee 0 or another account pays. A relayer can reorder across lanes, so **a wallet uses one lane per target**, `batch = uint256(uint160(target))`: on two lanes a relayer that lands `revokeRole` before `setGrant` leaves the holder holding. A withheld item blocks its own lane, and delay is all it gets (R-07).
 
-| Failure | Result |
-|---|---|
-| wrong subject, a replaced operator, on a direct call | `NotOperator` |
-| an envelope from before a rotation, A → B → A included | `GenerationStale`, nonce unspent |
-| `acceptOperator` by anyone but the pending operator | `NotPendingOperator` |
-| `msig` below accepted threshold, wrong member | the registry refuses (R-14) |
-| starved relayer | `UAVerifyGas`, no verdict, nonce unspent |
-| `target` re-enters, direct or under a live ticket | `Reentrancy` (R-04) |
-| `target` has no code, or reverts | the typed call reverts, with its data |
-| replay across holders, tokens, chains; a changed `target` | refused: `verifyingContract`, `chainId`, `chain_uid`, and `target` a signed word (R-02) |
-| the generic path | refused (§3.2) |
+| Failure | Result | Test (`test/governance/GovRouter.t.sol`) |
+|---|---|---|
+| wrong subject: a signer without the power | the target's own refusal (`NotOwner`, `MissingRole`), the whole call reverts, nonce unspent | `test_wrongSubjectRefusedNonceUnspent` |
+| another signer's signature | `MetaTxBadSignature` (`mtx`), `UAUnauthorized` (`ua`) | `test_wrongSignerRefused` |
+| an envelope of a former owner | `NotOwner` at run time, nonce unspent | `test_refuted_formerOwnersEnvelope` (R-03) |
+| `msig` below its threshold, or by a slot never accepted | the registry refuses, `UAUnauthorized` (R-14) | `test_msigBelowThresholdRefused`, `test_msigSlotNotAcceptedIsInert` |
+| starved relayer | `UAVerifyGas`, no verdict, nonce unspent | `test_starvedRelayerUAVerifyGasNonceUnspent` |
+| `target` re-enters the router, by a signed entry or `cancelNonce` | `Reentrancy` (R-04) | `test_refuted_targetReentersTheRouter` |
+| `target` has no code | `TargetHasNoCode(target)`, nonce unspent | `test_targetWithoutCodeRefused` |
+| `target` reverts | the call reverts with the target's data | `test_wrongSubjectRefusedNonceUnspent` |
+| replay across routers (same chain, another `chain_uid`), chains, targets | refused: `verifyingContract`, `chain_uid`, `chainId` in the domain, `target` a signed word (R-02) | `test_refuted_replayAcrossRoutersAndChains`, `test_refuted_relayerAltersTheTarget` |
+| other `GrantTerms` under a signature | refused: the terms' hash is a signed word | `test_nestedTermsRoundTrip` |
+| a fee mode other than `NONE` | `MetaTxUnknownMode` | `test_feeModeIsNone` |
+| the generic path | `MtxSelectorNotAllowed` on all five entries (B-14) | `test_fixed_theRoutersOpIsNotReachableAsABytesBlob` |
+| `subject()` asked by a non-target during a call, or after it in the same transaction | 0 | `test_subjectOnlyToTheLiveTarget`, `test_subjectClearedInTheSameTransaction` |
+
+Every op by both forms on a real `NormalToken`, `WrappedToken` and `SCaaSDex`: `test_eachOpByMtx`, `test_eachOpByUa`; a PQ
+`msig` that becomes owner, grants a PQ single key, which mints, and hands a token and the DEX over:
+`test_pqMsigOwnsGrantsMintsAndHandsOver`. The registry in these tests has the PQ kinds on the stand-in verifier of
+`UARegistryBase`: its kind caps, `msig` threshold and acceptance are real, the signature check is the stand-in's.
 
 ### 3.6 Relay rule
 
-> An owner or holder operation of a `GovernanceBase` contract has one direct entry and no `mtx*` or `ua*` twin on that contract, and is on neither of its allow-lists. Its relayed form lives once, in `GovernanceHolder`: a named typed `mtx<Op>` and `ua<Op>` per operation, fee mode `NONE`, relayable at fee 0. An owner that wants gasless administration is a holder; a creator names the holder as `owner` at creation, its address being predictable, so no first gas is needed.
+> An owner or holder operation of a `GovernanceBase` contract has one direct entry and no `mtx*` or `ua*` twin on that contract, and is on neither of its allow-lists. Its relayed form lives once per chain, in `GovernanceRouter`: a named typed `mtx<Op>` and `ua<Op>` per operation, fee mode `NONE`, relayable at fee 0. A creator names any UA, derived or native, as `owner`; no first gas is needed, since the router's entries are relayed.
 
-A `SmartKeyAccount` owner is relayable through its own `mtxExecute`, and that path carries a `bytes` blob, hex in a wallet; it stays because it exists, and a wallet says so (B-29). An EOA or a Safe that keeps the power directly pays its own gas. An EOA owner that did not name a holder at creation needs gas once, to transfer ownership to one.
+A `SmartKeyAccount` owner is relayable through its own `mtxExecute` too, and that path carries a `bytes` blob, hex in a wallet; it stays because it exists, and a wallet says so (B-29). An EOA or a Safe that keeps the power directly pays its own gas, or signs `mtx<Op>` / `ua<Op>` on the router as its native id.
 
-Why: a `ua*` twin on a token runs with `_msgSender() == UA_POOL`, and `owner` is an address. One named entry measures 287-301 B per kind [M], and `WrappedPqzToken` has no room for one. The generic path carries the most dangerous signature an owner makes as a blob. "Every state-changing `mtx*` is relayable" holds: no `mtx*` exists on the governed contract, and every one on the holder is relayable.
+Why: a `ua*` twin on a governed contract would verify signatures there; one named entry measures 287-301 B per kind [M], and `WrappedPqzToken` has no room for thirteen of them (Change spec §3, the refused alternative). The generic path carries the most dangerous signature an owner makes as a blob. "Every state-changing `mtx*` is relayable" holds: no `mtx*` exists on the governed contract, and every one on the router is relayable.
 
 ## 4. The kind enum and regulated kinds — SPECIFIED; regulated implementations PLANNED
 
@@ -992,7 +1022,7 @@ Replaces gov-inventory's line numbers, from code at `08e92597` and the rulings. 
 | Strays | — | — | next exchange submitter (CTR-DEX-20); `DexPuller`: `rescue` |
 | `MandateWallet` | `owner` immutable | constructor | owner, at once; delegate may revoke |
 | `SmartKeyAccount` | no owner | first key, guardian | self, at once; guardian recovery after 2 days |
-| `GovernanceHolder` | implementation | operator, salt | two calls, no delay; a completed rotation bumps `generation` |
+| `GovernanceRouter` | no owner, no state | constructor: `chain_uid`, registry | — ; anyone relays a signed op, the target decides |
 | `UARegistry` | constructor immutables, no owner | — | — ; anyone registers |
 | Tender, vesting, distribution, offer | no base | parties fixed per clone | their own rules, no bit (CTR-GOV-14) |
 
@@ -1021,9 +1051,9 @@ Every finding of the v2 attack round. "Accepted" says why.
 | B-17 | P3 | Fixed, §1.5: same `window` |
 | B-18 | P3 | Fixed, §1.5: compare, epoch on upgrade |
 | B-19 | P3 | Fixed, §1.4 |
-| B-20 | P1 | Fixed, §3.1: the operator is in the salt, and CTR-GOV-15 removed the delay it would choose |
-| B-21 | P1 | Fixed by CTR-GOV-15, §3.4: `proposeOperator` overwrites, `(0)` cancels, pending readable, it dies with the rotation; a completed rotation bumps `generation`. The window went with the delay; a stale pending is shown, not expired |
-| B-22 | P2 | Decided, CTR-GOV-15; §1.8 step 5 says it once |
+| B-20 | P1 | Fixed, §3.1: the operator is in the salt, and CTR-GOV-15 removed the delay it would choose. Since the router (CTR-GOV-15 Change) no salt names an operator: one router per chain, no clone |
+| B-21 | P1 | Fixed by CTR-GOV-15, §3.4: `proposeOperator` overwrites, `(0)` cancels, pending readable, it dies with the rotation; a completed rotation bumps `generation`. The window went with the delay; a stale pending is shown, not expired. Since the router: no rotation exists (§3.4) |
+| B-22 | P2 | Decided, CTR-GOV-15; §1.8 step 5 says it once. Since the router: no operator, a contract holder rotates by its own rules |
 | B-23 | P2 | Fixed, §6.3: TON, Solana, Cosmos, Aptos added. CTR-GOV-07 Change in §12.9 |
 | B-24 | P2 | Fixed, §6.3: four semantics, Sui two-step and burn, the renounce rule's mapping stated |
 | B-25 | P2 | Fixed, §6.3: persistent entries |
@@ -1118,7 +1148,7 @@ A negative test must be able to fail: positive control, one change at a time, a 
 
 ### 10.1 Selector audit (v1 §4)
 
-`test/governance/SelectorAudit.t.sol`, on the six kinds, `SCaaSDex`, `DexPuller`, `GovernanceHolder`. It reads each artifact's ABI, and every external that writes state is in a pinned JSON row with one class: `BIT(n)`, `OWNER`, `HOLDER_OWN`, `OWN_BALANCE`, `SIGNED`, `FACTORY`, `PERMISSIONLESS(reason)`. An unclassified or moved selector fails.
+`test/governance/SelectorAudit.t.sol`, on the six kinds, `SCaaSDex`, `DexPuller`, `GovernanceRouter`. It reads each artifact's ABI, and every external that writes state is in a pinned JSON row with one class: `BIT(n)`, `OWNER`, `HOLDER_OWN`, `OWN_BALANCE`, `SIGNED`, `FACTORY`, `PERMISSIONLESS(reason)`. An unclassified or moved selector fails.
 
 The sentence it pins: *no entry point moves, freezes or pauses a balance its caller does not own unless gated by a feature bit, and no feature bit exists outside the list.* For every `BIT` and `OWNER` row a stranger's call must revert with its named error. And no governance selector is in `mtxSelectors()` or `_uaAllowed` of a governed contract. Control: a mutant adding one ungated entry goes red.
 
@@ -1162,7 +1192,7 @@ Every `test_attack_*` of `GovAttackV2.t.sol` passes while its hole is open, so e
 | CTR-GOV-12 | each row of §5.2 at the cap and one over; unwrap to empty; `InsufficientReserve` after; units still transfer; `executeRate` on a hybrid short of supply; a rate fall with no `addReserve`; `RateDecreaseWithDisabledLeg` still refused on a hybrid; after `disableFeature(MINTABLE)` it stays a hybrid, wraps stay capped and the mint clause goes; a mint to the cap stops wraps; `addReserve` refused on a hybrid's disabled leg | a path without the cap; the cap lifted on wraps once bit 1 is off; `addReserve` open on a disabled leg; `c ≥ supply` kept on a capped token; dropped on an uncapped one |
 | CTR-GOV-12 | a non-hybrid wrap reads no new slot | `capped` removed |
 | CTR-GOV-06 | each row of §6.2, first match; alias leg; reentrant asset; rescue past a short leg; a leg with a shortfall names `ReserveShortfall`; the native asset on `NORMAL*`; `rescueTo` as `this` and each pool refused at `init` | post-check dropped; `nonReentrant` dropped |
-| CTR-GOV-15 | rotation, `(0)` cancels, a dead pending, an old operator's envelope; A → B → A leaves A's envelope `GenerationStale`, nonce unspent; `acceptOperator` by the pending operator on all three forms; pools, the factory, the implementation, the holder and another clone refused as operator; a token operator passes and is inert | accept without pending; `acceptOperator` under the operator check; `generation` unbumped; `generation` unsigned; the `CLONE_CODEHASH` compare dropped |
+| CTR-GOV-15 | the router (§3.5's table, `GovRouter.t.sol`): every op by both forms, a PQ `msig` that becomes owner and hands over, a former owner's envelope refused at run time, the lock, the pair, the generic path | `subject()` without the target compare; the lock dropped; the clear dropped; the generic path left open; `target` out of the signed words |
 | CTR-GOV-16 | every id decodes; 6, 7 refused; 8-13 off; a mock implementation of 8 publishes, enables and creates on the same factory | enum order swapped |
 | CTR-GOV-18 | `R` over bit 8 and bit 9 on and off against flags held and missing; each bit disabled alone; a lapsed denial; `ELIGIBLE_CONTRACT` against `deniedFlags`; `ALLOWLIST` refused on the four confidential kinds; no registry call with both off | formula drops a side; disabling one bit clears both |
 
@@ -1199,9 +1229,9 @@ From v2 §6, adjusted by the findings. The enum moves up, because every later st
 | S5 | D5 | none | none | none | `WrappedLib` | wizard | none | CTR-GOV-05 Change |
 | S6 | hybrid | `scaas.underlying`: `capped`, `maxSupply`, `reserve` offset unmoved | none | none | wrapped kinds | `maxSupply`, disclosure | none: `maxSupply()` is a wallet's view, and the indexer reads no token parameter | §12.2, CTR-TOK-05 |
 | S7 | D6, `DexPuller` | `rescueTo` | none | `dex_order_kat.json` again | every kind, `SCaaSDex` | `rescueTo` | none | CTR-DEX-22 |
-| S8 | `GovernanceHolder`, its factory, `DeployBase` | `test/v2/layout/` new row | all new, pinned | `typed_ops.json` rows | new entry, ratchet if over a limit | `clientkeys` digests | §12.7 | §3 |
+| S8 | `GovernanceRouter`, `DeployBase` and `e2e.py` deploy it before the releases | `test/v2/layout/GovernanceRouter.json` (empty) | all new, pinned | `typed_ops.json` rows | new contract, 20,284 B, under EIP-170: no baseline row | `clientkeys` digests | §12.7 | §3 |
 | S9 | selector audit, "+0" pins | — | — | `governance_bits.json` | — | every client reads it | — | — |
-| S10 | node rows: `"holder"` in `typed.rs` `TYPED`, `ALL`, `UACancelNonce`, `domain_name`; `GrantTerms` in `NESTED`; the factory's `deploy` in `PLAIN`; `guard.rs` `rule_of`, a target rule by clone code hash over a set of factories, on the direct and the relay path; `generation` in `args` of each holder row, read back at lease; `config.rs`; `abi.rs` | — | — | `typed_ops_kat_every_entry` | — | — | yes | NODE-JOB-01, -19, -20, the operator note on `generation` |
+| S10 | node rows: contract kind `gov_router` in `typed.rs` `TYPED` (38 rows), `ALL`, `UACancelNonce`, `domain_name` → `"SCaaS GovernanceRouter"`; `GrantTerms` in `NESTED`; `guard.rs` `rule_of`, a target rule by address over the config's list of the chain's routers, on the direct and the relay path; `config.rs`; `abi.rs`; no factory row, no generation | — | — | `typed_ops_kat_every_entry` | — | — | yes | NODE-JOB-01, -19, -20 |
 | S11 | §12 applied, `docs/contracts/governance.md` | — | — | — | — | — | — | yes |
 | S12 | D7 Soroban, after `ua8-soroban` merges, same freeze window | — | — | Soroban vectors | — | clients of `admin()` | Soroban rows if any | §6.3 |
 
@@ -1298,11 +1328,11 @@ Reserve invariants, each gaining "on a non-hybrid; a hybrid claims none (CTR-GOV
 
 ### 12.7 node, `docs/node/job-api.md`
 
-NODE-JOB-19 and NODE-JOB-20: "a role holder never calls one through a token" stays, and gains: "A `GovernanceHolder` is a registered contract kind `holder`: its `mtx*` and `ua*` entries are rows of the table, relayed at fee 0, target a clone of a holder implementation of this chain (by code hash, over the config's `holder_factories`, each read once by `IMPLEMENTATION()`), `chainUid()` equal to `chain.chain_uid`. The rule runs on the direct path and on the inner target of `MtxRelayFee.relayCall` and `uaRelayCall`. `GovernanceHolderFactory.deploy` is a row, target one of `holder_factories`, so a derived or PQ operator needs no first gas. Its generic entries are refused by the contract and are no rows." NODE-JOB-01 gains the rule of the kind. `typed.rs`: `holder` joins `ALL` and `UACancelNonce`'s contracts, `GrantTerms` joins `NESTED`, `deploy` joins `PLAIN`. A list, not one address, so the second holder release of §3.2 is a config row. A lane stays no holder: it relays what the operator signed. `generation` is a named `uint64` field in `args` of every `holder` job but `CancelNonce` and `UACancelNonce`, which carry none (§3.4); it is the holder's word, apart from `origin.generation`. The node builds the struct from that field, so a job without it is `422 BAD_PAYLOAD` at accept, as any missing field. Intake reads no chain, so at lease the holder rule reads `generation()`, uncached, and a job whose field differs is refused by name, `HOLDER_GENERATION_STALE`, before simulation: nothing is sent, and it never goes `dead` without that cause. The operator note says it: after a rotation a client re-signs at the current generation. No existing job's shape changes.
+NODE-JOB-19 and NODE-JOB-20: "a role holder never calls one through a token" stays, and gains: "A `GovernanceRouter` is a registered contract kind `gov_router`: its `mtx*` and `ua*` entries are rows of the table, relayed at fee 0, target one of the chain's routers (config `governance_routers`, a list: a second router of §3.2 is a config row), `chainUid()` equal to `chain.chain_uid`. The rule runs on the direct path and on the inner target of `MtxRelayFee.relayCall` and `uaRelayCall`. Its generic entries are refused by the contract and are no rows." NODE-JOB-01 gains the rule of the kind. `typed.rs`: `gov_router` joins `ALL` and `UACancelNonce`'s contracts, `GrantTerms` joins `NESTED`. A lane stays no holder: it relays what the subject signed. A router job carries no generation and no factory exists to deploy; the router is deployed once per chain with the release set (`DeployBase`, JSON `governance_router`). No existing job's shape changes.
 
 ### 12.8 metatx.md, code comments
 
-CTR-MTX-16, the sentence "no call **out** to another contract with the signer's calldata" gains: "A `GovernanceHolder` calls out, by typed entries only, with named parameters the signer signed, each to a `target` it names ([CTR-GOV-01](../decisions.md#ctr-gov-01--governancebase-on-every-token-kind-and-the-dex)); no generic forwarder exists, there as anywhere." CTR-MTX-19: a governance operation is no allow-list row on a governed contract. `MetaTxBase._msgSender`'s NatSpec and `SigCheck.CallerDelegated`: "it acts through a relayed, key-signed `mtx*`, or for an owner operation through a holder." The `_uaMove` note: `DENYLIST` beside `ALLOWLIST`, and `_poolMove` carries no hook.
+CTR-MTX-16, the sentence "no call **out** to another contract with the signer's calldata" gains: "A `GovernanceRouter` calls out, by typed entries only, with named parameters the signer signed, each to a `target` it names ([CTR-GOV-01](../decisions.md#ctr-gov-01--governancebase-on-every-token-kind-and-the-dex)); no generic forwarder exists, there as anywhere." CTR-MTX-19: a governance operation is no allow-list row on a governed contract. `MetaTxBase._msgSender`'s NatSpec and `SigCheck.CallerDelegated`: "it acts through a relayed, key-signed `mtx*`, or for an owner operation through the chain's `GovernanceRouter`." The `_uaMove` note: `DENYLIST` beside `ALLOWLIST`, and `_poolMove` carries no hook.
 
 ### 12.9 Register Change lines, on owner rulings
 

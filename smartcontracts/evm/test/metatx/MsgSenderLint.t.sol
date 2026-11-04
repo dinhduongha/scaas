@@ -7,14 +7,15 @@ import {Test} from "forge-std/Test.sol";
 /// are exactly: the reentrancy guard, `_msgSender()` and `_ticketSubject()` themselves (with `_msgSender()`'s EIP-7702
 /// designator refusal), the relayer binding (with its designator refusal), the
 /// default fee recipient and the event `relayer` (every pipeline, the UA ledger's two included), and the factory check
-/// in `initialize`. Lines whose first non-blank characters
+/// in `initialize`, the governance subject and the router's target compare. Lines whose first non-blank characters
 /// are `//` are skipped (block comments are not). A change here is deliberate: update the pin in the same commit and
 /// say why.
 contract MsgSenderLintTest is Test {
-    string[15] internal FILES = ["src/metatx/MetaTxBase.sol", "src/metatx/UAMetaTxBase.sol", "src/metatx/MtxPipelineLib.sol", "src/metatx/ERC20MetaTx.sol", "src/metatx/MetaTokenBase.sol",
+    string[18] internal FILES = ["src/metatx/MetaTxBase.sol", "src/metatx/UAMetaTxBase.sol", "src/metatx/MtxPipelineLib.sol", "src/metatx/ERC20MetaTx.sol", "src/metatx/MetaTokenBase.sol",
         "src/metatx/NormalToken.sol", "src/metatx/WrappedToken.sol", "src/metatx/WrappedLib.sol",
         "src/governance/GovernanceLib.sol", "src/hedera/HederaLib.sol", "src/trade/TradeLib.sol", "src/zether/ZetherLayer.sol",
-        "src/zether/ZetherLib.sol", "src/zether/NormalZetherToken.sol", "src/zether/WrappedZetherToken.sol"];
+        "src/zether/ZetherLib.sol", "src/zether/NormalZetherToken.sol", "src/zether/WrappedZetherToken.sol",
+        "src/governance/GovernanceBase.sol", "src/governance/GovernanceRouterBase.sol", "src/governance/GovernanceRouter.sol"];
 
     /// Occurrences of `pat` (not preceded by an identifier character); `exceptSelector` skips `pat<ident>.selector`.
     function _count(string memory path, bytes memory pat, bool exceptSelector) internal view returns (uint256 n) {
@@ -80,6 +81,13 @@ contract MsgSenderLintTest is Test {
         assertEq(_count("src/zether/ZetherLib.sol", "msg.sender", false), 0, "ZetherLib");
         assertEq(_count("src/zether/NormalZetherToken.sol", "msg.sender", false), 0, "NormalZetherToken");
         assertEq(_count("src/zether/WrappedZetherToken.sol", "msg.sender", false), 0, "WrappedZetherToken");
+        // governance T10b / T11 (CTR-GOV-01 and CTR-GOV-15 Changes): the subject of a governance check is the caller's native
+        // id, or, from the release's GOV_ROUTER, the UA the router names; the router names it only to its live target
+        assertEq(_count("src/governance/GovernanceBase.sol", "msg.sender", false), 2,
+            "GovernanceBase: _govSubject's router compare and the subject asked of it");
+        assertEq(_count("src/governance/GovernanceRouterBase.sol", "msg.sender", false), 3,
+            "GovernanceRouterBase: subject()'s target compare, the event relayer x2 (mtx, ua)");
+        assertEq(_count("src/governance/GovernanceRouter.sol", "msg.sender", false), 0, "GovernanceRouter");
     }
 
     /// CTR-MTX-18: an external self-call (`this.f(…)`) inside an allowlisted body would let a guarded callee consume

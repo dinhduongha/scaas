@@ -2,15 +2,12 @@
 pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
-import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
 import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
-import {UAMetaTxBase} from "../../src/metatx/UAMetaTxBase.sol";
-import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
 import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
@@ -44,57 +41,6 @@ contract BranchApp is GovernanceBase {
     function approve(bytes32 branch, uint128 principal) external {
         require(GovernanceUse.use(APPROVE, _govSubject(), principal) == branch, "branch");
         approved[branch] += principal;
-    }
-}
-
-/// The smallest `GovernanceHolder` of permission-model-gaps.md §1.2-§1.3: one op, its direct entry, its named twin, on the real
-/// `UAMetaTxBase`. A sketch for the attack round, not a design.
-contract HolderSketch is UAMetaTxBase {
-    error NotOperator(bytes32 subject);
-
-    bytes32 internal constant MINT_TYPEHASH = keccak256(
-        "HolderMint(address from,address target,address to,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
-    );
-
-    bytes32 public operator;
-
-    constructor(bytes32 uid) UAMetaTxBase("SCaaS Holder", uid, address(0), address(0), false) {}
-
-    function setOperator(bytes32 next) external {
-        require(operator == 0 || _subject() == operator, "operator");
-        operator = next;
-    }
-
-    function mint(address target, address to, uint256 amount) external nonReentrant {
-        if (_subject() != operator) revert NotOperator(_subject());
-        NormalToken(target).mint(to, amount);
-    }
-
-    function mtxMint(MetaTxLib.Envelope calldata e, address target, address to, uint256 amount, bytes calldata sig)
-        external nonReentrant returns (bytes memory)
-    {
-        return _named(MINT_TYPEHASH, this.mint.selector, e, abi.encode(target, to, amount), sig);
-    }
-
-    function _mtxRule(bytes4 sel) internal view override returns (MtxRule memory) {
-        if (sel == this.mint.selector) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 100);
-        return super._mtxRule(sel);
-    }
-}
-
-/// A target named in a signed op that calls the holder back while the holder runs.
-contract EvilTarget {
-    HolderSketch public holder;
-    address public good;
-    address public to;
-    bytes4 public failure;
-
-    constructor(HolderSketch h, address good_, address to_) {
-        (holder, good, to) = (h, good_, to_);
-    }
-
-    function mint(address, uint256) external {
-        try holder.mint(good, to, 1) {} catch (bytes memory e) { failure = bytes4(e); }
     }
 }
 
@@ -536,132 +482,10 @@ contract GovAttackV2Test is Test {
 
     // ------------------------------------------------------------------ the holder sketch (B-14, refuted R-*)
 
-    function _holder(address operator_) internal returns (HolderSketch h) {
-        h = HolderSketch(payable(Clones.clone(address(new HolderSketch(UID)))));
-        h.setOperator(MetaTxLib.pad(operator_));
-    }
-
-    function _meta(address from, bytes memory data, uint256 nonce) internal view returns (MetaTxLib.MetaTransaction memory m) {
-        m = MetaTxLib.MetaTransaction(from, data, 0, nonce, block.timestamp + 1 hours, 0, address(0), 0, address(0));
-    }
-
-    function _env(address from, uint256 nonce) internal view returns (MetaTxLib.Envelope memory) {
-        return MetaTxLib.Envelope(from, 0, nonce, block.timestamp + 1 hours, 0, address(0), 0, address(0));
-    }
-
-    function _domain(HolderSketch h) internal view returns (bytes32) {
-        (, string memory name, string memory version, uint256 chainId, address verifying, bytes32 salt,) = h.eip712Domain();
-        return keccak256(abi.encode(
-            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"),
-            keccak256(bytes(name)), keccak256(bytes(version)), chainId, verifying, salt));
-    }
-
-    function _namedSig(HolderSketch h, uint256 pk, MetaTxLib.Envelope memory e, address target, address to, uint256 v)
-        internal view returns (bytes memory)
-    {
-        bytes32 structHash = keccak256(bytes.concat(
-            abi.encode(
-                keccak256("HolderMint(address from,address target,address to,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
-                MetaTxLib.pad(e.from), target, to, v),
-            abi.encode(e.batch, e.nonce, e.validUntil, e.mode, address(0), e.fee, address(0))));
-        (uint8 r, bytes32 a, bytes32 b) = vm.sign(pk, keccak256(abi.encodePacked("\x19\x01", _domain(h), structHash)));
-        return abi.encodePacked(a, b, r);
-    }
-
-    function _signMeta(HolderSketch h, uint256 pk, MetaTxLib.MetaTransaction memory m) internal view returns (bytes memory) {
-        (uint8 r, bytes32 a, bytes32 b) = vm.sign(pk, h.mtxDigest(m));
-        return abi.encodePacked(a, b, r);
-    }
-
-    /// B-14: a named entry passes `_checkCall`, so its op must be on `_mtxRule`, so the generic `mtxExecute` reaches the same op
-    /// under a `bytes data` signature: the path §2 of the gaps note refuses for "the most dangerous signature an owner makes".
-    function test_attack_theHoldersOpIsReachableAsABytesBlob() public {
-        (address op, uint256 pk) = makeAddrAndKey("operator");
-        HolderSketch h = _holder(op);
-        vm.prank(OWNER);
-        t.grantRole(MINT, nid(address(h)));
-
-        MetaTxLib.Envelope memory e = _env(op, 0); // positive control: the named path
-        h.mtxMint(e, address(t), TO, 1, _namedSig(h, pk, e, address(t), TO, 1));
-        assertEq(t.balanceOf(TO), 1);
-
-        MetaTxLib.MetaTransaction memory m = _meta(op, abi.encodeCall(HolderSketch.mint, (address(t), TO, 2)), 1);
-        h.mtxExecute(m, _signMeta(h, pk, m)); // no named field in what the wallet signed
-        assertEq(t.balanceOf(TO), 3);
-    }
-
-    /// R-02: the same signature on a second clone of the same operator fails: `verifyingContract` is the clone.
-    function test_refuted_replayAcrossHolders() public {
-        (address op, uint256 pk) = makeAddrAndKey("operator");
-        (HolderSketch h1, HolderSketch h2) = (_holder(op), _holder(op));
-        vm.startPrank(OWNER);
-        t.grantRole(MINT, nid(address(h1)));
-        t.grantRole(MINT, nid(address(h2)));
-        vm.stopPrank();
-        MetaTxLib.Envelope memory e = _env(op, 0);
-        bytes memory sig = _namedSig(h1, pk, e, address(t), TO, 1);
-        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
-        h2.mtxMint(e, address(t), TO, 1, sig);
-        h1.mtxMint(e, address(t), TO, 1, sig); // positive control
-        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
-        h1.mtxMint(e, address(t), TO, 1, sig); // and once only
-    }
-
-    /// R-02: `target` is signed: a relayer cannot move a signed op to another token.
-    function test_refuted_relayerAltersTheTarget() public {
-        (address op, uint256 pk) = makeAddrAndKey("operator");
-        HolderSketch h = _holder(op);
-        NormalToken other = _token("o", 0, OWNER);
-        vm.startPrank(OWNER);
-        t.grantRole(MINT, nid(address(h)));
-        other.grantRole(MINT, nid(address(h)));
-        vm.stopPrank();
-        MetaTxLib.Envelope memory e = _env(op, 0);
-        bytes memory sig = _namedSig(h, pk, e, address(t), TO, 1);
-        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
-        h.mtxMint(e, address(other), TO, 1, sig);
-        h.mtxMint(e, address(t), TO, 1, sig); // positive control
-    }
-
-    /// R-03: an envelope of the replaced operator dies with the rotation, and a stranger's fails the operator check.
-    function test_refuted_replacedOperatorsEnvelope() public {
-        (address op, uint256 pk) = makeAddrAndKey("operator");
-        (address stranger, uint256 spk) = makeAddrAndKey("stranger");
-        HolderSketch h = _holder(op);
-        vm.prank(OWNER);
-        t.grantRole(MINT, nid(address(h)));
-
-        MetaTxLib.Envelope memory s = _env(stranger, 0);
-        bytes memory bad = _namedSig(h, spk, s, address(t), TO, 1);
-        vm.expectRevert(abi.encodeWithSelector(HolderSketch.NotOperator.selector, MetaTxLib.pad(stranger)));
-        h.mtxMint(s, address(t), TO, 1, bad);
-
-        MetaTxLib.Envelope memory e = _env(op, 0);
-        bytes memory sig = _namedSig(h, pk, e, address(t), TO, 1);
-        vm.prank(op);
-        h.setOperator(MetaTxLib.pad(OWNER));
-        vm.expectRevert(abi.encodeWithSelector(HolderSketch.NotOperator.selector, MetaTxLib.pad(op)));
-        h.mtxMint(e, address(t), TO, 1, sig);
-    }
-
-    /// R-04: a malicious `target` cannot re-enter the holder, direct or under a ticket. The one guard of `MetaTxBase` holds.
-    function test_refuted_targetReentersTheHolder() public {
-        (address op, uint256 pk) = makeAddrAndKey("operator");
-        HolderSketch h = _holder(op);
-        vm.prank(OWNER);
-        t.grantRole(MINT, nid(address(h)));
-        EvilTarget evil = new EvilTarget(h, address(t), address(0xBAD));
-
-        vm.prank(op);
-        h.mint(address(evil), TO, 1);
-        assertEq(evil.failure(), IMetaTx.Reentrancy.selector);
-        assertEq(t.balanceOf(address(0xBAD)), 0);
-
-        MetaTxLib.Envelope memory e = _env(op, 0);
-        h.mtxMint(e, address(evil), TO, 1, _namedSig(h, pk, e, address(evil), TO, 1));
-        assertEq(evil.failure(), IMetaTx.Reentrancy.selector);
-        assertEq(t.balanceOf(address(0xBAD)), 0);
-    }
+    // The sketch gave way to the real `GovernanceRouter` (plan T11, CTR-GOV-15 Change): B-14 is
+    // `test_fixed_theRoutersOpIsNotReachableAsABytesBlob`, R-02 `test_refuted_replayAcrossRoutersAndChains` and
+    // `test_refuted_relayerAltersTheTarget`, R-03 `test_refuted_formerOwnersEnvelope`, R-04
+    // `test_refuted_targetReentersTheRouter`, in `GovRouter.t.sol`.
 
     // ------------------------------------------------------------------ smaller holes (B-15 to B-19)
 

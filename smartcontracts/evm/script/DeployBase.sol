@@ -7,6 +7,7 @@ import {IOpenFactory} from "../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../src/factory/IFactoryToken.sol";
 import {GovernanceLib} from "../src/governance/GovernanceLib.sol";
 import {GovernanceBits} from "../src/governance/GovernanceBits.sol";
+import {GovernanceRouter} from "../src/governance/GovernanceRouter.sol";
 import {TokenStore} from "../src/metatx/TokenStore.sol";
 import {WrappedLib} from "../src/metatx/WrappedLib.sol";
 import {MtxPipelineLib} from "../src/metatx/MtxPipelineLib.sol";
@@ -72,6 +73,8 @@ abstract contract DeployBase is Script {
     ///         default and floor 3 days; 7622 defaults to 10 minutes, the other test / dev chains to 0. At most 30 days
     ///         (`MAX_NOTICE_PERIOD`, the factory's).
     uint64 internal noticePeriod;
+    /// @notice This chain's `GovernanceRouter` (`_deployGovRouter`), every release's `Env.govRouter`; 0 until deployed.
+    address internal govRouter;
 
     /// @notice `UA_VERIFY_BUDGET = min(12 M, ⌊0.7 × the chain's per-transaction gas cap⌋)` (CTR-UA-23): EIP-7825
     ///         chains (16,777,216) 12 M, Hedera (15 M) 10.5 M.
@@ -205,7 +208,7 @@ abstract contract DeployBase is Script {
     ///         and the `SCaaSDex` release, each version 1; otherwise the registrar publishes and deploys them later from
     ///         the same init code. Writes `token_factory`, `implementation_normal`, `dex_implementation`, `ua_registry`,
     ///         `ua_registry_lib`,
-    ///         `mtx_relay_fee`, `mtx_relay_executor`, `chain_uid` into the JSON object `"deploy"`; with `DEPLOY_ZETHER` also the Zether stack (`_deployZether`,
+    ///         `mtx_relay_fee`, `mtx_relay_executor`, `governance_router`, `chain_uid` into the JSON object `"deploy"`; with `DEPLOY_ZETHER` also the Zether stack (`_deployZether`,
     ///         not on Hedera). NORMAL and `WRAPPED` both exceed EIP-170 (the UA ledger): deploy with
     ///         `--code-size-limit 65536` (deploy.sh); `WRAPPED` is still not deployed here (owner: wait for Glamsterdam).
     ///         Each release is refused first when its runtime exceeds the chain's declared `CHAIN_CODE_LIMIT`
@@ -220,6 +223,7 @@ abstract contract DeployBase is Script {
         }
         f = new OpenFactory{salt: salt}(registrar, uid, noticePeriod);
         UARegistry reg = _deployUARegistry(smartKeyAccountImpl, isHedera);
+        _deployGovRouter(address(reg), smartKeyAccountImpl, isHedera); // before every release: its address is in the env
         _deployRelayFee();
         _gate(address(f));
         vm.serializeAddress("deploy", "token_factory", address(f));
@@ -258,14 +262,24 @@ abstract contract DeployBase is Script {
         vm.serializeAddress("deploy", "mtx_relay_executor", ex);
     }
 
-    /// @notice A release environment of this chain's factory `f` (plan 5g-Z2), each library's current code hash. No
-    ///         `GovernanceRouter` is deployed yet (plan task T11): `govRouter` 0, no router on this chain.
+    /// @notice The chain's `GovernanceRouter` (CTR-GOV-15 Change, owner 2026-11-04; plan T11) by CREATE2: no owner, no
+    ///         state, `chain_uid` and the UA registry in its constructor, so one predictable address per chain. Deployed
+    ///         before the releases, whose `Env.govRouter` names it. JSON `governance_router`. **UNAUDITED.**
+    function _deployGovRouter(address reg, address smartKeyAccountImpl, bool isHedera) internal {
+        GovernanceRouter r = new GovernanceRouter{salt: salt}(uid, reg, smartKeyAccountImpl, isHedera);
+        _gate(address(r));
+        govRouter = address(r);
+        vm.serializeAddress("deploy", "governance_router", govRouter);
+    }
+
+    /// @notice A release environment of this chain's factory `f` (plan 5g-Z2), each library's current code hash, and the
+    ///         chain's `GovernanceRouter` (`govRouter`, deployed first by `_deployTokenFactory`).
     function _env(OpenFactory f, address reg, address ska, bool hedera, address[] memory deps, address[] memory libs)
         internal view returns (IFactoryToken.Env memory e)
     {
         bytes32[] memory h = new bytes32[](libs.length);
         for (uint256 i; i < libs.length; ++i) h[i] = libs[i].codehash;
-        e = IFactoryToken.Env(address(f), uid, reg, ska, hedera, deps, libs, h, address(0));
+        e = IFactoryToken.Env(address(f), uid, reg, ska, hedera, deps, libs, h, govRouter);
     }
 
     /// @notice UA registry generation 1 (accounts.md §1.8, CTR-UA-22) on every chain, with per-chain enablement (§1.9):
