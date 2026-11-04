@@ -224,7 +224,7 @@ fn portable_digests_match_portable_json() {
             s3 += 1;
         }
     }
-    assert_eq!(all, 25);
+    assert_eq!(all, 27); // + mldsa87, fndsa1024 (CTR-UA-39 / -40): their digests, not their `ua_message` (KindDisabled here)
     assert!(s3 >= 7 + 6, "single-key S3 rows and the msig rows");
 }
 

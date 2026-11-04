@@ -750,7 +750,11 @@ fn ua8_kem_from_vectors() {
         assert_eq!(c.registration_of(&r.ua), before, "{name}");
     }
     assert_eq!(seen, 6);
-    assert_eq!(rows.iter().filter(|x| kind_of(&x["kind"]) == 0x0132).count() + seen, rows.len());
+    // the rest: fndsa512's (relayer-checked) and mldsa87's / fndsa1024's, whose UAs never register here (`KindDisabled`:
+    // register_disabled_kind_refused, on their portable.json rows)
+    let other = |k: u32| rows.iter().filter(|x| kind_of(&x["kind"]) == k).count();
+    assert_eq!((other(0x0134), other(0x0135)), (3, 3));
+    assert_eq!(other(0x0132) + other(0x0134) + other(0x0135) + seen, rows.len());
 }
 
 /// `set_kem_key(ua, 0, …)` fills the `register` commit once: no signature (the `pop` signed it), open to anyone, the key
@@ -909,7 +913,10 @@ fn ua8_set_pqz_key_from_vectors() {
         seen += 1;
     }
     assert_eq!(seen, 4);
-    assert_eq!(rows.iter().filter(|x| kind_of(&x["kind"]) == 0x0132).count() + seen, rows.len());
+    // the rest: fndsa512's and mldsa87's / fndsa1024's (never registered here, as in ua8_kem_from_vectors)
+    let other = |k: u32| rows.iter().filter(|x| kind_of(&x["kind"]) == k).count();
+    assert_eq!((other(0x0134), other(0x0135)), (4, 4));
+    assert_eq!(other(0x0132) + other(0x0134) + other(0x0135) + seen, rows.len());
 }
 
 /// U8S-D6: without a verifier nothing is ever replaced, a key of another set neither; a `register` key counts.
