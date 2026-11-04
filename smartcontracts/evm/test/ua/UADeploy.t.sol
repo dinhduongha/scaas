@@ -67,6 +67,28 @@ contract UADeployTest is Test {
         assertEq(reg.verifyCap(UAKinds.ZETHER_BLS12381), 70_000);
         assertFalse(reg.kindEnabled(UAKinds.PQZ_MLWE));
         _pq(reg, true);
+        assertFalse(reg.kindEnabled(0x0134), "mldsa87: no precompile here (CTR-UA-39 Q1)");
+    }
+
+    /// CTR-UA-39: `mldsa87` is enabled exactly where a candidate answers its EIP-8355 probe (`0x14`, then the SCaaS testnet's
+    /// `0x…5caa0014`), with the precompile path's cap; a candidate that answers 1 to everything does not count.
+    function test_mldsa87OnlyWithAPrecompile() public {
+        string memory kat = vm.readFile("../vectors/ua/pq_kat.json");
+        bytes memory valid = vm.parseJsonBytes(kat, ".kinds.mldsa87.eip8355_probe_valid");
+        bytes memory invalid = vm.parseJsonBytes(kat, ".kinds.mldsa87.eip8355_probe_invalid");
+        address[2] memory at = [address(0x14), 0x000000000000000000000000000000005caA0014];
+        for (uint256 i; i < 2; ++i) {
+            vm.mockCall(at[i], valid, abi.encode(uint256(1)));
+            vm.mockCall(at[i], invalid, abi.encode(uint256(0)));
+            IUARegistry reg = _registry(31337, i == 1);
+            assertTrue(reg.kindEnabled(0x0134));
+            assertEq(reg.verifyCap(0x0134), 250_000, "the precompile path's cap (provisional)");
+            vm.clearMockedCalls();
+        }
+        vm.mockCall(at[1], bytes(""), abi.encode(uint256(1))); // the word 1 to every input
+        assertFalse(_registry(31337, false).kindEnabled(0x0134));
+        vm.clearMockedCalls();
+        assertFalse(_registry(7622, false).kindEnabled(0x0134), "no precompile in this EVM");
     }
 
     /// P6c: the PQ signing kinds with the gen-1 caps on every chain whose budget holds them at ≤ 66 % (owner rulings
@@ -78,6 +100,10 @@ contract UADeployTest is Test {
             assertEq(reg.verifyCap(k), on ? caps[k - UAKinds.MLDSA44] : 0);
             assertLe(uint256(reg.verifyCap(k)) * 100, uint256(reg.verifyBudget()) * 66);
         }
+        // fndsa1024 (CTR-UA-40): pure Solidity wherever its cap fits, the provisional 5,250,000
+        assertEq(reg.kindEnabled(UAKinds.FNDSA1024), on, "fndsa1024");
+        assertEq(reg.verifyCap(UAKinds.FNDSA1024), on ? 5_250_000 : 0);
+        assertLe(uint256(reg.verifyCap(UAKinds.FNDSA1024)) * 100, uint256(reg.verifyBudget()) * 66);
     }
 
     /// Owner ruling 2026-10-31: no chain-id lock for any kind. Chain 7622, the mainnet 22776, the e2e's 31901 and an
@@ -113,6 +139,8 @@ contract UADeployTest is Test {
         assertTrue(h.pqKindFits(6_930_000, 10_500_000));
         assertFalse(h.pqKindFits(6_930_001, 10_500_000));
         assertTrue(h.pqKindFits(5_950_000, 10_500_000), "mldsa65 on Hedera");
+        assertTrue(h.pqKindFits(5_250_000, 7_954_546), "fndsa1024: the least budget that holds it");
+        assertFalse(h.pqKindFits(5_250_000, 7_954_545));
     }
 
     /// A chain whose precompiles fail the probe gets none of the kinds that need them (never registrable but unusable).

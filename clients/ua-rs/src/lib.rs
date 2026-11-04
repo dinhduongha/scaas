@@ -140,6 +140,8 @@ pub const KINDS: &[Kind] = &[
     derived(0x0133, "slhdsa128s", &[32], Some("slhdsa128s")),
     derived(0x0141, "zether-bls12381", &[128], Some("bls12381-g1")),
     derived(0x0108, "secp256k1", &[64], Some("secp256k1")), // 2026-10-17, appended as in kinds.json
+    derived(0x0134, "mldsa87", &[2592], Some("mldsa87")),   // CTR-UA-39, 2026-11-04, appended as in kinds.json
+    derived(0x0135, "fndsa1024", &[1793], Some("fndsa1024")), // CTR-UA-40, 2026-11-04, appended as in kinds.json
 ];
 
 /// Schemes are not kinds (UA-6 U14): 0x0142 is the PQZ key attribute of a PQ holder; it keeps its tag and keyHash group.
@@ -151,7 +153,7 @@ pub const PQZ_SCHEME: u16 = 0x0142;
 
 pub const GROUPS: &[&str] = &[
     "p256", "ed25519", "secp256k1", "bn254-g1", "bls12381-g1", "bls12381-g2", "bn254-g2", "mldsa44", "mldsa65", "fndsa512",
-    "slhdsa128s", "pqz-mlwe",
+    "slhdsa128s", "mldsa87", "fndsa1024", "pqz-mlwe",
 ];
 
 pub const PURPOSES: &[&str] = &[
@@ -218,7 +220,7 @@ fn derived_kind(kind: u16) -> Result<&'static Kind> {
 }
 
 fn single_signing(kind: u16) -> bool {
-    matches!(kind, 0x0100..=0x0108 | 0x0110..=0x0113 | 0x0130..=0x0133)
+    matches!(kind, 0x0100..=0x0108 | 0x0110..=0x0113 | 0x0130..=0x0135)
 }
 pub fn is_native(kind: u16) -> bool {
     KINDS.iter().any(|k| k.kind == kind && k.native)
@@ -229,16 +231,17 @@ pub fn is_zether(kind: u16) -> bool {
 pub fn is_signing(kind: u16) -> bool {
     kind == 0x0120 || kind == 0x0141 || single_signing(kind)
 }
-/// Kinds that may hold a PQZ key attribute: mldsa44, mldsa65, fndsa512 (an `msig` per [`msig_pqz_eligible`]).
+/// Kinds that may hold a PQZ key attribute: mldsa44, mldsa65, fndsa512, mldsa87, fndsa1024 (CTR-UA-39 / -40; an `msig` per
+/// [`msig_pqz_eligible`]).
 pub fn is_pqz_holder(kind: u16) -> bool {
-    matches!(kind, 0x0130..=0x0132)
+    matches!(kind, 0x0130..=0x0132 | 0x0134 | 0x0135)
 }
 /// An `msig` whose classical members weigh less than its threshold (CTR-PQZ-12). The key data alone does not show an `msig` member,
 /// so one is `MemberUnknown` here: [`msig_pqz_eligible_with`] reads its record.
 pub fn msig_pqz_eligible(key_data: &[u8]) -> Result<bool> {
     msig_pqz_eligible_with(key_data, &|_| None)
 }
-/// `msig_pqz_eligible` with `inner`, an `msig` member's key data by its id: a member is PQ if its kind is in 0x0130-0x0133, or it is an
+/// `msig_pqz_eligible` with `inner`, an `msig` member's key data by its id: a member is PQ if its kind is in 0x0130-0x0135, or it is an
 /// `msig` that is PQ-eligible itself; none, or an `inner` that holds an `msig` (two levels only), is `MemberUnknown`.
 pub fn msig_pqz_eligible_with(key_data: &[u8], inner: &dyn Fn([u8; 32]) -> Option<Vec<u8>>) -> Result<bool> {
     let u16_at = |o: usize| key_data.get(o..o + 2).map(|s| u16::from_be_bytes([s[0], s[1]]) as usize);
@@ -251,7 +254,7 @@ pub fn msig_pqz_eligible_with(key_data: &[u8], inner: &dyn Fn([u8; 32]) -> Optio
     for i in 0..count {
         let o = 4 + 36 * i;
         let kind = u16_at(o).ok_or_else(bad)?;
-        let pq = (0x0130..=0x0133).contains(&kind) || (kind == 0x0120 && {
+        let pq = (0x0130..=0x0135).contains(&kind) || (kind == 0x0120 && {
             let id: [u8; 32] = key_data[o + 2..o + 34].try_into().expect("32 bytes");
             msig_pqz_eligible(&inner(id).ok_or(UAError::MemberUnknown)?)?
         });

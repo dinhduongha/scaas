@@ -50,6 +50,8 @@ const kinds = <Kind>[
   Kind(0x0133, 'slhdsa128s', false, [32], 'slhdsa128s'),
   Kind(0x0141, 'zether-bls12381', false, [128], 'bls12381-g1'),
   Kind(0x0108, 'secp256k1', false, [64], 'secp256k1'), // 2026-10-17, appended as in kinds.json
+  Kind(0x0134, 'mldsa87', false, [2592], 'mldsa87'), // CTR-UA-39, 2026-11-04, appended as in kinds.json
+  Kind(0x0135, 'fndsa1024', false, [1793], 'fndsa1024'), // CTR-UA-40, 2026-11-04, appended as in kinds.json
 ];
 
 /// Schemes are not kinds (UA-6 U14): 0x0142 is the PQZ key attribute of a PQ holder; it keeps its tag and keyHash group.
@@ -59,7 +61,7 @@ const schemes = <Kind>[Kind(0x0142, 'pqz-mlwe', false, pqzKeyLengths, 'pqz-mlwe'
 
 const groups = <String>[
   'p256', 'ed25519', 'secp256k1', 'bn254-g1', 'bls12381-g1', 'bls12381-g2', 'bn254-g2', 'mldsa44', 'mldsa65',
-  'fndsa512', 'slhdsa128s', 'pqz-mlwe',
+  'fndsa512', 'slhdsa128s', 'mldsa87', 'fndsa1024', 'pqz-mlwe',
 ];
 
 const purposes = <String>[
@@ -85,13 +87,14 @@ Kind kindInfo(int kind) {
   throw UAError('UAKindUnknown', '0x${kind.toRadixString(16).padLeft(4, '0')}');
 }
 
-bool _single(int k) => (k >= 0x0100 && k <= 0x0108) || (k >= 0x0110 && k <= 0x0113) || (k >= 0x0130 && k <= 0x0133);
+bool _single(int k) => (k >= 0x0100 && k <= 0x0108) || (k >= 0x0110 && k <= 0x0113) || (k >= 0x0130 && k <= 0x0135);
 bool isNative(int kind) => kinds.any((k) => k.number == kind && k.native);
 bool isZether(int kind) => kind == 0x0141;
 bool isSigning(int kind) => kind == 0x0120 || kind == 0x0141 || _single(kind);
 
-/// Kinds that may hold a PQZ key attribute: mldsa44, mldsa65, fndsa512 (an msig per [msigPqzEligible]).
-bool isPqzHolder(int kind) => kind >= 0x0130 && kind <= 0x0132;
+/// Kinds that may hold a PQZ key attribute: mldsa44, mldsa65, fndsa512, mldsa87, fndsa1024 (CTR-UA-39 / -40; an msig per
+/// [msigPqzEligible]).
+bool isPqzHolder(int kind) => (kind >= 0x0130 && kind <= 0x0132) || kind == 0x0134 || kind == 0x0135;
 /// An msig too, one level down: a record that holds one is refused as a member by the registry.
 bool isMember(int kind, [bool hederaNative = false]) =>
     _single(kind) || kind == 0x0120 || kind == 0x0001 || kind == 0x0002 || (hederaNative && kind == 0x0003);

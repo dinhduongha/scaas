@@ -581,6 +581,18 @@ option (b), the CREATE2 deployer in the genesis alloc, Blockscout on with caps, 
 Rollback (to pqz5, the old chain): stop the stack, put `backup-pqz5-20261031-0621/{genesis.json,config.json,
 docker-compose.yml}` back, replace `data/nethermind_data` with the backup's copy (alpine `cp -a`), start the node.
 
+## `MLDSA87` on the SCaaS testnet (PLANNED: the owner's step; CTR-UA-39, owner 2026-11-04)
+
+The plugin of branch `mldsa87` adds `MLDSA87` at `0x000000000000000000000000000000005caa0014` (EIP-8355 layout, ML-DSA-87). The
+schedule key `mldsa87Gas` is optional: the live chainspec's schedules have none, so the new image runs the chain as before and the
+address stays inactive until a schedule carries the key. Its value is **PROVISIONAL**: about 102,000, the spec's estimate by the
+ML-DSA-65 ratio (68,000 at EIP-8355's 9,000), never a calibrated figure; the `Calibrate` run that fixes it waits for the owner's
+word. Steps, none run yet: build the image (`build-image.sh`, locally, never pushed); roll it out as image `2.2.0-pqz6` was; add a
+schedule with `add-schedule.py <chainspec> <calib-engine-pqz.json> <timestamp> <out> --mldsa87` (a copy of the last schedule plus
+`mldsa87Gas` = `PROVISIONAL_MLDSA87_GAS`; it prints "PROVISIONAL, not calibrated"); after the timestamp, deploy a
+`UAMldsaVerifier(0x0134, 0x…5caa0014, probe valid, probe invalid)` outside `forge script` (P6g D15) and a registry generation that
+enables `0x0134` with the T-GAS cap measured then. Replace the value when the calibration runs.
+
 ## Zether on the SCaaS testnet (executed 2026-10-31)
 
 *Live only;* branch `zether-testnet` (controller decision, option B: the owner allowed the controller to redeploy on the

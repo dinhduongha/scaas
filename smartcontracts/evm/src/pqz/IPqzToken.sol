@@ -95,8 +95,8 @@ interface IPqzToken is IConfidentialToken {
     /// @notice `init` with the PQZH proof system at a set without PQZH value tokens (`PqzSet.PQZH_VALUE`): no debit of
     ///         such a token fits one transaction (C2-1; owner 2026-10-27, C0-2).
     error PqzhValueUnsupported();
-    /// @notice A PQZH value token refuses a holder that is not a single-key `mldsa44` / `mldsa65` / `fndsa512` UA on
-    ///         every entry that creates its pending entry (shield, op 1 and op 7 legs; owner 2026-10-27, C0-2).
+    /// @notice A PQZH value token refuses a holder that is not a single-key `mldsa44` / `mldsa65` / `fndsa512` / `mldsa87` /
+    ///         `fndsa1024` UA on every entry that creates its pending entry (shield, op 1 and op 7 legs; owner 2026-10-27, C0-2).
     error PqzhHolderKind(bytes32 ua, uint16 kind);
     error BadDisclosureMode(uint8 mode);
     error BadAuditorMode(uint8 mode);

@@ -1,0 +1,22 @@
+ML-DSA-87 probe, 2026-11-04 (research; spec docs/superpowers/specs/2026-11-04-mldsa87.md, note docs/research/mldsa87-evm-gas.md)
+Base: main 4c72332d. Foundry 1.8.5, solc 0.8.37, evm amsterdam, isolate = true (foundry.toml). Full output: forge*.log beside this file (git-ignored).
+
+step | commit | rc | counts
+extract.py (ACVP ML-DSA-87 sigVer, pinned file sha256 47cdd631...ba55437) | 4c72332d | 0 | 30 cases, 6 valid (tgId 5 pure external, tgId 12 internal)
+noble87.mjs (@noble/post-quantum 0.7.1 re-check + UA row) | 4c72332d | 0 | 30/30 agree; ua87.json written
+forge test, probe config (Mldsa87ProbeTest) | 4c72332d | 0 | 3 passed, 0 failed
+forge test PqGas.t.sol test_gas_mldsa* (reference 44/65) | 4c72332d | 0 | 2 passed, 0 failed
+forge test UARegistryPq.t.sol test_vectors_pq* (reference cache, registry) | 4c72332d | 0 | 2 passed, 0 failed
+
+Evidence (gas of the call, valid UA row, |M'| = 34 B, unless stated):
+mldsa87 verify (valid, FIPS 204 key) 31914727
+mldsa87 verify (valid, expanded key in calldata) 8651358
+mldsa87 verifyCached (valid) 8643140
+mldsa87 verifyCached least working gas (cold pointers, +-1000) 8763152
+mldsa87 part 0 bytes 21504 | expandedKeyPart gas 8920697 | cache tx gasTotalUsed 9032348 | state gas (EIP-8037) 33184170
+mldsa87 part 1 bytes 21504 | expandedKeyPart gas 8993893 | cache tx gasTotalUsed 9032215 | state gas (EIP-8037) 33184170
+mldsa87 part 2 bytes 22592 | expandedKeyPart gas 9490313 | cache tx gasTotalUsed 9511464 | state gas (EIP-8037) 34848810
+ACVP valid tc 63/67/70/168/178/180 (|M'| 7242/5107/2785/6392/7292/6828): raw 35668816/34610740/33335213/35242180/35744217/35459726, expanded 12305342/11248386/9971811/11879473/12381322/12096852
+ACVP shortest M' (tc 171 invalid, |M'| 1): raw 31915045, expanded 8552938; early rejects (hint/z decode) 27015-38570
+calibration: harness mldsa65 part 0/1 gasTotalUsed 6473341/9063648, state 23783850/33282090; registry cacheExpandedKey mldsa65 6483456/9073913, state 23783850/33282090
+reference: mldsa44/65 verify FIPS key 11380337/18897368, expanded 4093867/5771287; verifyCached 4119323/5815139; least working cap 4180577/5902586

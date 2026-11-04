@@ -277,6 +277,12 @@ void main() {
     }
     expect(n, regs.length);
     expect(withPqz > 0 && msigs > 0, isTrue);
+    // mldsa87 (CTR-UA-39), fndsa1024 (CTR-UA-40): holders, read here and in the record tests: a registration with its KEM register
+    // key, KEM records v1-v3, PQZ key records at the four sets
+    for (final k in [0x0134, 0x0135]) {
+      expect([for (final s in ['registrations', 'kemRecords', 'pqzKeyRecords']) rows(pv, s).where((r) => r['kind'] == k).length],
+          [1, 3, 4], reason: '$k');
+    }
   });
 
   test('kem record', () {
@@ -724,12 +730,12 @@ void main() {
 
   test('set key args', () {
     final kems = rows(pv, 'kemRecords'), pqz = rows(pv, 'pqzKeyRecords');
-    expect(kems, hasLength(9));
+    expect(kems, hasLength(15)); // + v1-v3 of mldsa87, fndsa1024
     for (final k in kems) {
       final i = {'ua': k['ua'], 'version': k['version'], 'kemPk': k['kemPk'], 'sig': recordSig(k)};
       expect(jsonDecode(setKemKeyArgs(input: jsonEncode(i))), k['args'], reason: k['id']);
     }
-    expect(pqz, hasLength(8));
+    expect(pqz, hasLength(16)); // + mldsa87, fndsa1024 at the four sets
     for (final r in pqz) {
       final i = {'ua': r['ua'], 'pqzKey': r['pqzKey'], 'pqzPopHash': r['pqzPopHash'], 'sig': recordSig(r)};
       expect(jsonDecode(setPqzKeyArgs(input: jsonEncode(i))), r['args'], reason: r['name']);

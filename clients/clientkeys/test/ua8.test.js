@@ -223,7 +223,8 @@ test('registration digest covers the proof hash', () => {
 });
 
 test('kem record digest matches the hand-built words', () => {
-  assert.deepEqual([...new Set(P.kemRecords.map((k) => k.name))], ['mldsa65', 'fndsa512', 'msig-pq']);
+  // mldsa87 (CTR-UA-39 Q2), fndsa1024 (CTR-UA-40 Q2): holders, fndsa512's rows each
+  assert.deepEqual([...new Set(P.kemRecords.map((k) => k.name))], ['mldsa65', 'fndsa512', 'msig-pq', 'mldsa87', 'fndsa1024']);
   for (const k of P.kemRecords) {
     const sh = kemHand(k.ua, k.version, B(k.kemPk)[0], hex(keccak_256(B(k.kemPk))));
     assert.equal(hex(sh), k.structHash, `${k.name} v${k.version}`);
@@ -236,7 +237,7 @@ test('kem record digest matches the hand-built words', () => {
     assert.equal(B(k.kemPk).length, 1601);
     assert.equal(B(k.kemPk)[0], ua.KEM_SCHEME.mlkem1024X25519, 'scheme byte');
   }
-  for (const name of ['mldsa65', 'fndsa512', 'msig-pq']) {
+  for (const name of ['mldsa65', 'fndsa512', 'msig-pq', 'mldsa87', 'fndsa1024']) {
     const ks = P.kemRecords.filter((k) => k.name === name);
     assert.deepEqual(ks.map((k) => k.version), [1, 2, 3], name);
     assert.equal(new Set(ks.map((k) => k.kemPk)).size, 3, `${name}: a key per version`);
@@ -390,8 +391,8 @@ test('holder refusals', () => {
 });
 
 test('pqz key record: signed, portable, write-once, only for a registration without a PQZ key (setPqzKey)', () => {
-  assert.deepEqual([...new Set(P.pqzKeyRecords.map((r) => r.name.split('/')[0]))], ['fndsa512', 'msig-pq-native']);
-  for (const base of ['fndsa512', 'msig-pq-native']) {
+  assert.deepEqual([...new Set(P.pqzKeyRecords.map((r) => r.name.split('/')[0]))], ['fndsa512', 'msig-pq-native', 'mldsa87', 'fndsa1024']);
+  for (const base of ['fndsa512', 'msig-pq-native', 'mldsa87', 'fndsa1024']) {
     assert.deepEqual(P.pqzKeyRecords.filter((r) => r.name.startsWith(`${base}/`)).map((r) => r.set), SETS, base);
   }
   for (const r of P.pqzKeyRecords) {
@@ -519,7 +520,7 @@ test('personal_sign of md is refused by the reference verifier', () => {
 test('every portable pop verifies', () => {
   const kinds = P.registrations.map((r) => r.kindName);
   for (const k of ['webauthn-p256', 'p256', 'ed25519', 'bip340', 'secp256k1', 'schnorr-bn254', 'schnorr-bls12381', 'bls12381-minsig',
-    'bls-bn254-minsig', 'zether-bls12381', 'mldsa44', 'mldsa65', 'fndsa512', 'slhdsa128s', 'msig']) assert.ok(kinds.includes(k), k);
+    'bls-bn254-minsig', 'zether-bls12381', 'mldsa44', 'mldsa65', 'fndsa512', 'slhdsa128s', 'msig', 'mldsa87', 'fndsa1024']) assert.ok(kinds.includes(k), k);
   let natives = 0;
   for (const r of P.registrations) {
     if (r.kind !== 0x0120) {
@@ -773,7 +774,7 @@ const pqzRow = (k, over = {}) => ({ ua: k.ua, pqzKey: k.pqzKey, pqzPopHash: k.pq
 
 test('verifyRegistration accepts every row and refuses every negative', () => {
   const [n, commits] = [P.registrations.length, P.registrations.filter((r) => r.kemCommit).length];
-  assert.deepEqual([n, commits], [25, 9]);
+  assert.deepEqual([n, commits], [27, 11]); // + mldsa87, fndsa1024 (CTR-UA-39 / -40)
   for (const r of P.registrations) {
     verifyRegistration(r, keysOf);
     verifyRegistration({ ...r, pqzPop: '0x' }, keysOf); // the proof bytes are optional
@@ -854,7 +855,7 @@ test('verifyKemRecord accepts every row and refuses a flipped byte', () => {
     refuses(() => verifyKemRecord(kemRow(k, { kemPk: '0x' }), keysOf), 'UAKemKeyLength', k.id);
     refuses(() => verifyKemRecord(kemRow(k, { kemPk: flipAt(k.kemPk, 0).replace(/^0x00/, '0x02') }), keysOf), 'UAKemScheme', k.id);
   }
-  assert.equal(flips, 3 * 6 + 3 * 2 * 3);
+  assert.equal(flips, 3 * 12 + 3 * 2 * 3); // 3 per signature: 12 single keys, 3 msig of 2 slots
   const s = row('slhdsa128s');
   refuses(() => verifyKemRecord(kemRow(P.kemRecords[0], { ua: s.ua, sig: s.pop }), keysOf), 'UAKemHolder', 'a valid signature cannot reach the signature check');
   // one field off: the record's `ua` is not the id of the key read. Key K must not sign for a victim's `ua`; a non-holder key, so
@@ -956,7 +957,7 @@ test('verifyRegistration refuses every kinds.json invalid key by its error; vali
   const go = (r) => () => verifyRegistration({ kind: r.kind, keyData: r.keyData, attrs: none, pop: `0x${'00'.repeat(64)}`, pqzPop: '0x' }, () => undefined);
   for (const r of K.invalid) refuses(go(r), r.error, JSON.stringify(r).slice(0, 120));
   for (const r of K.valid.filter((x) => x.kind !== 0x0120 && !(x.kind >= 0x0110 && x.kind <= 0x0113))) refuses(go(r), 'UAPoP', r.keyData.slice(0, 40));
-  assert.equal(K.invalid.length, 198);
+  assert.equal(K.invalid.length, 207);
 });
 
 test('the group kinds have no verifier here: refused, never accepted (C14; ua-rs checks them)', () => {

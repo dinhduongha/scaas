@@ -238,10 +238,11 @@ public static partial class UA
         Need(threshold >= 1 && threshold <= total, "threshold");
     }
 
-    static void Fndsa(ReadOnlySpan<byte> d)
+    /// <summary>head ‖ n × 14-bit h_i, each &lt; q: 0x09, n = 512 (fndsa512); 0x0A, n = 1,024 (fndsa1024).</summary>
+    static void Fndsa(ReadOnlySpan<byte> d, byte head, int n)
     {
-        Need(d[0] == 0x09, "header");
-        for (var i = 0; i < 512; i++)
+        Need(d[0] == head, "header");
+        for (var i = 0; i < n; i++)
         {
             var v = 0;
             for (var j = 0; j < 14; j++)
@@ -276,8 +277,9 @@ public static partial class UA
             case 0x0112: Musig2(d, BnG1, 64); break;
             case 0x0113: Frost(d, BnG1, 64, BnR); break;
             case 0x0120: Msig(d, hederaNative); break;
-            case 0x0132: Fndsa(d); break;
-            default: break; // mldsa44/65, slhdsa128s, pqz-mlwe: the length is the whole check
+            case 0x0132: Fndsa(d, 0x09, 512); break;
+            case 0x0135: Fndsa(d, 0x0a, 1024); break;
+            default: break; // mldsa44/65/87, slhdsa128s, pqz-mlwe: the length is the whole check
         }
     }
 }

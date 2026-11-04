@@ -10,4 +10,6 @@ public static class PqzAddresses
     public static readonly Address Pqz = new("0x000000000000000000000000000000005caa0f01");
     public static readonly Address MlDsa44 = new("0x000000000000000000000000000000005caa0012");
     public static readonly Address MlDsa65 = new("0x000000000000000000000000000000005caa0013");
+    /// <summary>CTR-UA-39 (owner 2026-11-04): EIP-8355's ML-DSA-87 in the same form.</summary>
+    public static readonly Address MlDsa87 = new("0x000000000000000000000000000000005caa0014");
 }

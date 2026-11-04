@@ -34,7 +34,7 @@ import tempfile
 import time
 
 ADDR = ["000000000000000000000000000000005caa0f01", "000000000000000000000000000000005caa0012",
-        "000000000000000000000000000000005caa0013"]
+        "000000000000000000000000000000005caa0013", "000000000000000000000000000000005caa0014"]  # 0014: MLDSA87, CTR-UA-39
 RESET = {"eip4895TransitionTimestamp": 1, "maximumExtraDataSize": "0xffff", "maxCodeSizeTransition": 0, "maxCodeSize": "0x20000"}
 RESET_REMOVE = "eip7954TransitionTimestamp"  # the one key a reset removes (CTR-GOV-19): EIP-7954 caps the code at 65,536 B
 TESTNET = 7622  # the only chain --testnet-reset may touch (owner 2026-10-15; 22776 is the future mainnet)

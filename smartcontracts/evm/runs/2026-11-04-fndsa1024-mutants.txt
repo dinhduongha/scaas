@@ -1,0 +1,18 @@
+fndsa1024 mutants (plan 2026-11-04-fndsa1024, Tasks 3-5): one change each at 5bc256bb, forge at the default set (n2304-kmax4096; M9 at n2048-kmax1024, the PQZH set), source restored after each.
+mutant | change | killed by
+M1 dispatch | UAFndsaVerifier constructor: _LOGN = 10 for every kind | test_kat_fndsa512: FAIL valid signature; test_malformed_fndsa: FAIL (run before the deployVerifier fix)
+M2 dispatch | UAFndsaVerifier constructor: _LOGN = 9 for every kind | test_kat_fndsa1024: FAIL valid signature; test_malformed_fndsa1024: FAIL; test_fndsaVerifier_kind: FAIL the other size
+M3 cap | DeployBase CAP_FNDSA1024 5,250,000 -> 5,250,001 | test_devChain, test_otherChains, test_probeFailureDisables: FAIL 5250001 != 5250000
+M4 isPq range | UAStore.isPq to 0x0134 again | test_fndsa1024Kind: FAIL; test_register_msigHolderBoundary_fndsa1024: FAIL UAPqzHolder
+M5 holder list | UARegistryLib._holder without FNDSA1024 | test_UA6_holderWithKey: FAIL UAPqzHolder; test_vectors_pqzPop: FAIL UAPqzHolder != UAPoP
+M6 slot 20 | UARegistry._slot without the 0x0135 -> 20 row (falls to isPq: slot 19 = secp256k1) | test_fndsa1024Slot20: FAIL (constructor UAConfig)
+M7 padded length | Falcon.verify: sig.length < padded length instead of != | test_malformed_fndsa1024: FAIL 1,281 B; test_malformed_fndsa: FAIL
+M8 msig bytes | UARegistryLib._sigBytes without the 1,280 row | test_register_msigHolderBoundary_fndsa1024: FAIL (lo + 1 admitted)
+M9 PQZH holder | PqzCore._creditKey without FNDSA1024 | test_pqzhValue_singleKeyHolders (n2048-kmax1024): FAIL PqzhHolderKind(.., 309)
+M10 key header | UAKinds._fndsa(d, 0x09, 1024) for 0x0135 | test_fndsa1024Kind: FAIL UAKeyData(309); test_validRows, test_invalidRows: FAIL
+Not killable by the current tests: DeployBase's _pqKindFits gate for 0x0135 replaced by true (every chain profile in UADeploy.t has a budget >= 10.5 M,
+above the 7,954,546 the cap needs); the threshold itself is pinned by test_pqKindThreshold66 (7,954,546 holds 5.25 M, 7,954,545 does not).
+Found while running M2: an expected revert of a verifier CREATE made by the test contract itself ended the test as a pass (Foundry 1.8.5), so the
+rest of test_fndsaVerifier_kind did not run (M2 survived it); the refusals now go through an external call (deployVerifier) and M2 kills it.
+The same in MlDsa.t test_mldsa87_needsPrecompile (an assertTrue(false) after its first expected revert passed; fixed the same way, deploy87,
+now reaches its end) and in UAPqzVerifier.t (an assertTrue(false) at the end of the constructor-probe test passed; NOT changed here, owner).

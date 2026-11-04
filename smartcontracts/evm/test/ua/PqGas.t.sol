@@ -87,11 +87,14 @@ contract PqGasTest is Test {
         uint256 g1 = gasleft();
         p.run(11);
         uint256 perm = ((g1 - gasleft()) - (g0 - g1)) / 10;
-        uint256 fn = _one(_kat(), "fndsa512", address(new UAFndsaVerifier()));
+        uint256 fn = _one(_kat(), "fndsa512", address(new UAFndsaVerifier(PqUA.FNDSA512)));
+        uint256 fn1024 = _one(_kat(), "fndsa1024", address(new UAFndsaVerifier(PqUA.FNDSA1024)));
         console2.log("keccak-f[1600] permutation", perm);
         console2.log("fndsa512 verify (valid)", fn);
+        console2.log("fndsa1024 verify (valid)", fn1024);
         assertLt(perm, 73_000);
         assertLt(fn, 2_500_000);
+        assertLt(fn1024, 5_250_000, "fndsa1024 under its provisional cap (CTR-UA-40)");
     }
 
     function _expanded(string memory kat, string memory name, uint256 level) internal returns (uint256 used) {

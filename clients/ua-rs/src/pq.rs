@@ -1,18 +1,19 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! Feature `pq`: the PQ kinds' verifiers for the off-chain check (`ua8::check_*`, UA8-D24, C14), independent of the JS
-//! generator (noble): `ml-dsa`, `slh-dsa`, `pqcrypto-falcon` (PQClean `falcon-padded-512`). ML-DSA and SLH-DSA verify `pq_msg =
+//! generator (noble): `ml-dsa`, `slh-dsa`, `pqcrypto-falcon` (PQClean `falcon-padded-512` / `-1024`). ML-DSA and SLH-DSA verify `pq_msg =
 //! keccak256(TAG(kind) ‖ ua_msg)` with the empty context, Falcon `ua_msg` itself (CTR-UA-23). A kind whose crate disagrees
 //! with a KAT row loses its arm in [`verify_raw`], so it is refused (C14). Signatures and keys are untrusted: anything
 //! malformed is `false`, never a panic. UNAUDITED.
 use crate::{keccak, tag};
-use ml_dsa::{EncodedVerifyingKey, MlDsa44, MlDsa65, MlDsaParams};
+use ml_dsa::{EncodedVerifyingKey, MlDsa44, MlDsa65, MlDsa87, MlDsaParams};
 
 pub const FNDSA512_SIG_LENGTH: usize = 666;
+pub const FNDSA1024_SIG_LENGTH: usize = 1280;
 
 /// What the scheme signs: `pq_msg = keccak256(TAG(kind) ‖ ua_msg)` (ML-DSA, SLH-DSA), `ua_msg` (Falcon).
 pub fn signed_message(kind: u16, ua_msg: &[u8; 32]) -> Vec<u8> {
     match tag(kind) {
-        Ok(t) if kind != 0x0132 => keccak(&[&t, ua_msg]).to_vec(),
+        Ok(t) if kind != 0x0132 && kind != 0x0135 => keccak(&[&t, ua_msg]).to_vec(),
         _ => ua_msg.to_vec(),
     }
 }
@@ -21,7 +22,7 @@ pub fn signed_message(kind: u16, ua_msg: &[u8; 32]) -> Vec<u8> {
 pub fn verify(kind: u16, key: &[u8], ua_msg: &[u8; 32], sig: &[u8]) -> bool {
     let m = signed_message(kind, ua_msg);
     match kind {
-        0x0132 => verify_raw(kind, key, &m, sig),
+        0x0132 | 0x0135 => verify_raw(kind, key, &m, sig),
         _ => verify_raw(kind, key, &[&[0, 0], &m[..]].concat(), sig), // M' = 0x00 ‖ ctx length 0 ‖ m
     }
 }
@@ -34,6 +35,8 @@ pub fn verify_raw(kind: u16, key: &[u8], m: &[u8], sig: &[u8]) -> bool {
         0x0131 => mldsa::<MlDsa65>(key, m, sig),
         0x0132 => fndsa512(key, m, sig),
         0x0133 => slhdsa128s(key, m, sig),
+        0x0134 => mldsa::<MlDsa87>(key, m, sig),
+        0x0135 => fndsa1024(key, m, sig),
         _ => false,
     }
 }
@@ -54,6 +57,17 @@ fn fndsa512(key: &[u8], m: &[u8], sig: &[u8]) -> bool {
     use pqcrypto_falcon::falconpadded512 as falcon;
     use pqcrypto_traits::sign::{DetachedSignature, PublicKey};
     if sig.len() != FNDSA512_SIG_LENGTH {
+        return false;
+    }
+    let (Ok(k), Ok(s)) = (falcon::PublicKey::from_bytes(key), falcon::DetachedSignature::from_bytes(sig)) else { return false };
+    falcon::verify_detached_signature(&s, m, &k).is_ok()
+}
+
+/// Exactly the padded length (1,280 B, reference `FALCON_SIG_PADDED_SIZE(10)`), as [`fndsa512`]'s.
+fn fndsa1024(key: &[u8], m: &[u8], sig: &[u8]) -> bool {
+    use pqcrypto_falcon::falconpadded1024 as falcon;
+    use pqcrypto_traits::sign::{DetachedSignature, PublicKey};
+    if sig.len() != FNDSA1024_SIG_LENGTH {
         return false;
     }
     let (Ok(k), Ok(s)) = (falcon::PublicKey::from_bytes(key), falcon::DetachedSignature::from_bytes(sig)) else { return false };

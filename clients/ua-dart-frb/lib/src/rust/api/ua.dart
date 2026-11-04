@@ -88,7 +88,7 @@ bool isZether({required PlatformInt64 kind}) =>
 bool isPqzHolder({required PlatformInt64 kind}) =>
     ScaasUa.instance.api.crateApiUaIsPqzHolder(kind: kind);
 
-/// An `msig` whose members of kinds outside 0x0130-0x0133 weigh less than its threshold (`UAKeyData` on malformed data); an `msig`
+/// An `msig` whose members of kinds outside 0x0130-0x0135 weigh less than its threshold (`UAKeyData` on malformed data); an `msig`
 /// member is `UAMemberUnknown` here, [`msig_pqz_eligible_with`] reads its record.
 bool msigPqzEligible({required List<int> keyData}) =>
     ScaasUa.instance.api.crateApiUaMsigPqzEligible(keyData: keyData);

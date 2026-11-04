@@ -4,11 +4,16 @@
 // also checked here with @noble/post-quantum, so the file only holds vectors that two implementations (noble and the
 // Solidity verifiers) must agree on.
 //   node scripts/pq-external.mjs <download dir>
+// falcon1024-KAT.rsp (fndsa1024, CTR-UA-40) is the member Falcon/falcon-round3/KAT/falcon1024-KAT.rsp of the NIST round-3
+// package Falcon-Round3.zip (SHA-256 fd58f045...5362f44), taken out with the stdlib and no other code, the zip untrusted:
+//   python3 -I -c 'import hashlib,sys,zipfile; b=open(sys.argv[1],"rb").read(); assert hashlib.sha256(b).hexdigest()==sys.argv[3]
+//     z=zipfile.ZipFile(sys.argv[1]); open(sys.argv[2],"wb").write(z.read("Falcon/falcon-round3/KAT/falcon1024-KAT.rsp"))' \
+//     Falcon-Round3.zip <download dir>/falcon1024-KAT.rsp fd58f0454f6bfb4713734e60b2d2d75d96fbae62d5180fceeef1039df5362f44
 import { readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { ml_dsa44, ml_dsa65 } from '@noble/post-quantum/ml-dsa.js';
+import { ml_dsa44, ml_dsa65, ml_dsa87 } from '@noble/post-quantum/ml-dsa.js';
 import { slh_dsa_sha2_128s } from '@noble/post-quantum/slh-dsa.js';
-import { falcon512padded } from '@noble/post-quantum/falcon.js';
+import { falcon512padded, falcon1024, falcon1024padded } from '@noble/post-quantum/falcon.js';
 
 const dir = process.argv[2];
 if (!dir) throw new Error('usage: node scripts/pq-external.mjs <download dir>');
@@ -20,6 +25,7 @@ const PIN = {
   'test-vectors.json': '2029f73ffa8f514b4a105e6c93522d55bbbe0370c3ed5644773a88c1a91aeabd',
   'kat_FALCONCORE_512.rsp': 'c79c1dd457a92760ef30bbd63f1783aa634b9817acd2c1f1c3885c0c668b15ad',
   'kat_HASHTOPOINT_512.rsp': '05b0ac54f4b329b9a778c826a81cb4184ce4c03b637607383b435efaf2899fcb',
+  'falcon1024-KAT.rsp': '036a0bf5260573cec44977284dfef756cd1143db9961b981bd1fb55828acb20d',
 };
 const raw = (f) => {
   const b = readFileSync(`${dir}/${f}`);
@@ -33,7 +39,7 @@ const rsp = (f) => raw(f).toString('utf8').split('count = ').slice(1)
   .map((r) => Object.fromEntries([...r.matchAll(/^(\w+) ?= ?(.*)$/gm)].map((m) => [m[1], m[2].trim()])));
 const ACVP = 'https://raw.githubusercontent.com/usnistgov/ACVP-Server/975de31eb83d87039ec88934fdc47d8c312b892d/gen-val/json-files/';
 const EIPS = 'https://raw.githubusercontent.com/ethereum/EIPs/3aea9f3673a684dddfcc17c0d1f74d484e20e6ac/assets/';
-const ALG = { 'ML-DSA-44': ml_dsa44, 'ML-DSA-65': ml_dsa65, 'SLH-DSA-SHA2-128s': slh_dsa_sha2_128s };
+const ALG = { 'ML-DSA-44': ml_dsa44, 'ML-DSA-65': ml_dsa65, 'ML-DSA-87': ml_dsa87, 'SLH-DSA-SHA2-128s': slh_dsa_sha2_128s };
 
 /** ACVP sigVer, pure (external) and internal groups: `mprime` is the formatted message M' the core verifies. */
 function acvp(file, sets) {
@@ -97,13 +103,42 @@ function falcon(coreFile, h2pFile, n) {
   return { sources: [EIPS + 'eip-8052/' + coreFile, EIPS + 'eip-8052/' + h2pFile], sha256: [sha(coreFile), sha(h2pFile)], cases };
 }
 
+// Falcon-1024 NIST round-3 KATs (`falcon1024-KAT.rsp`: sm = u16 sig_len ‖ nonce (40) ‖ msg ‖ 0x2A ‖ compressed), rebuilt as padded
+// signatures 0x3A ‖ nonce ‖ compressed ‖ zeros (1,280 bytes); the first `n` rows whose compressed s2 fits 1,239 bytes (a longer one,
+// such as count 82, has no padded form: its signer signs again). noble checks the NIST form and the padded one.
+function falcon1024Kat(file, n) {
+  const all = rsp(file);
+  if (all.length !== 100) throw new Error('falcon1024 KAT: 100 rows');
+  const cases = [];
+  const over = [];
+  for (const [count, r] of all.entries()) {
+    const pk = h(r.pk), msg = h(r.msg), sm = h(r.sm), mlen = +r.mlen, len = (sm[0] << 8) | sm[1];
+    const nonce = sm.slice(2, 42), body = sm.slice(42 + mlen);
+    if (pk.length !== 1793 || pk[0] !== 0x0a || msg.length !== mlen || Buffer.compare(sm.slice(42, 42 + mlen), msg) !== 0
+      || body.length !== len || body[0] !== 0x2a || +r.smlen !== sm.length) throw new Error(`falcon1024 KAT format, count ${count}`);
+    const opened = falcon1024.attached.open(sm, pk);
+    if (Buffer.compare(opened, msg) !== 0) throw new Error(`falcon1024 KAT fails in noble (NIST form), count ${count}`);
+    const comp = body.slice(1);
+    if (comp.length > 1239) { over.push(count); continue; }
+    if (cases.length === n) continue;
+    const sig = new Uint8Array(1280);
+    sig[0] = 0x3a; sig.set(nonce, 1); sig.set(comp, 41);
+    if (!falcon1024padded.verify(sig, msg, pk)) throw new Error(`falcon1024 KAT fails in noble (padded), count ${count}`);
+    cases.push({ count, pk: x(pk), msg: x(msg), sig: x(sig), valid: true });
+  }
+  const zip = 'https://csrc.nist.gov/CSRC/media/Projects/post-quantum-cryptography/documents/round-3/submissions/Falcon-Round3.zip';
+  return { source: `${zip} (member Falcon/falcon-round3/KAT/${file})`,
+    sha256_zip: 'fd58f0454f6bfb4713734e60b2d2d75d96fbae62d5180fceeef1039df5362f44', sha256: sha(file), rows_over_1239: over, cases };
+}
+
 const out = {
   note: 'Imported by clients/clientkeys/scripts/pq-external.mjs; every entry re-checked with @noble/post-quantum 0.7.1.',
-  acvp_mldsa: acvp('ML-DSA-sigVer-FIPS204/internalProjection.json', ['ML-DSA-44', 'ML-DSA-65']),
+  acvp_mldsa: acvp('ML-DSA-sigVer-FIPS204/internalProjection.json', ['ML-DSA-44', 'ML-DSA-65', 'ML-DSA-87']),
   acvp_slhdsa: acvp('SLH-DSA-sigVer-FIPS205/internalProjection.json', ['SLH-DSA-SHA2-128s']),
   eip8051_nist_kat: eip8051('mldsa_nist.rsp', 10),
   eip8355: eip8355('test-vectors.json'),
   falcon_kat: falcon('kat_FALCONCORE_512.rsp', 'kat_HASHTOPOINT_512.rsp', 10),
+  falcon1024_kat: falcon1024Kat('falcon1024-KAT.rsp', 10),
 };
 writeFileSync(new URL('../../../smartcontracts/vectors/ua/pq_external.json', import.meta.url), JSON.stringify(out, null, 1) + '\n');
 for (const [k, v] of Object.entries(out)) if (v.cases) console.log(k, v.cases.length, 'cases,', v.cases.filter((c) => c.valid).length, 'valid');

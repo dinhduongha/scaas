@@ -55,6 +55,7 @@ was the literal 393,216 of `n2048-kmax1024`).
 | `0x000000000000000000000000000000005caa0f01` | `PQZ` | a proof of either proof system (PQZL or PQZH), through `pqz-ffi`'s C function `pqz_precompile` (P/Invoke into `libpqz_ffi.so`) | the active schedule's row `(op, id, stmtLen)` — the multi-recipient transfer (op 7) also `(M, auditorOn)` from header words 320 / 448 — + 3·⌈len/32⌉; a miss = the smallest row (and `…00`, no FFI call); op 6 = `selftestGas` |
 | `0x000000000000000000000000000000005caa0012` | `MLDSA44` | an ML-DSA-44 signature; EIP-8355 input layout `pk ‖ sig ‖ msg`, empty context; .NET 10 `MLDsa` (OpenSSL 3.5 of the base image); never reverts: a short input or a `CryptographicException` from .NET is `…00` (review W-R) | `mldsa44Gas` (≥ 6,500; calibrated 49,000) + 6·⌈max(0, L − 3,732)/32⌉ |
 | `0x000000000000000000000000000000005caa0013` | `MLDSA65` | the same for ML-DSA-65 | `mldsa65Gas` (≥ 9,000; calibrated 68,000) + 6·⌈max(0, L − 5,261)/32⌉ |
+| `0x000000000000000000000000000000005caa0014` | `MLDSA87` | the same for ML-DSA-87 (CTR-UA-39, owner 2026-11-04); active only under a schedule that carries `mldsa87Gas` | `mldsa87Gas` (optional per schedule, ≥ 13,500; **PROVISIONAL ≈ 102,000**, `MlDsa.Provisional87Gas`, not calibrated: the run waits for the owner) + 6·⌈max(0, L − 7,219)/32⌉ |
 
 How to read the gas column: `id` is the statement's `proofSystemId`, `stmtLen` its length in bytes and `len` the
 length of the whole input, so `PQZ` adds 3 gas per 32-byte input word to the row price. For ML-DSA, `L` is the input

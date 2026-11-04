@@ -414,6 +414,12 @@ void main() {
       n++;
     }
     expect([n, withPqz, msigs], [regs.length, 8, 6]);
+    // mldsa87 (CTR-UA-39), fndsa1024 (CTR-UA-40): holders, read here and in the record tests: a registration with its KEM register
+    // key, KEM records v1-v3, PQZ key records at the four sets
+    for (final k in [0x0134, 0x0135]) {
+      expect([for (final s in ['registrations', 'kemRecords', 'pqzKeyRecords']) (p[s] as List).where((r) => r['kind'] == k).length],
+          [1, 3, 4], reason: '$k');
+    }
   });
 
   test('kem record', () {
@@ -593,7 +599,7 @@ void main() {
       expect(fill2, c['fill'], reason: name);
       commits++;
     }
-    expect(commits, 9);
+    expect(commits, 11); // + mldsa87, fndsa1024
     for (final k in (p['kemRecords'] as List).cast<Map>()) {
       expect(setKemKeyArgs(_b(k['ua']), k['version'] as int, _b(k['kemPk']), recordSig(k)), k['args'], reason: k['id'] as String);
     }

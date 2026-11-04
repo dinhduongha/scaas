@@ -538,6 +538,21 @@ func TestPortable(t *testing.T) {
 	if n != len(rows(p, "registrations")) || withPqz != 8 || msigs != 6 {
 		t.Fatalf("counts %d %d %d", n, withPqz, msigs)
 	}
+	// mldsa87 (CTR-UA-39), fndsa1024 (CTR-UA-40): holders, read here and in the record tests: a registration with its KEM
+	// register key, KEM records v1-v3, PQZ key records at the four sets
+	for _, k := range []uint16{0x0134, 0x0135} {
+		var got [3]int
+		for i, s := range []string{"registrations", "kemRecords", "pqzKeyRecords"} {
+			for _, r := range rows(p, s) {
+				if kind(r["kind"]) == k {
+					got[i]++
+				}
+			}
+		}
+		if got != [3]int{1, 3, 4} {
+			t.Fatalf("%#x rows %v", k, got)
+		}
+	}
 }
 
 func TestMembershipRows(t *testing.T) {
@@ -892,7 +907,7 @@ func TestRegistrationArgsTyped(t *testing.T) {
 		sameJSON(t, name, fill, c["fill"])
 		commits++
 	}
-	if commits != 9 {
+	if commits != 11 { // + mldsa87, fndsa1024
 		t.Fatal(commits)
 	}
 	for _, k := range rows(p, "kemRecords") {

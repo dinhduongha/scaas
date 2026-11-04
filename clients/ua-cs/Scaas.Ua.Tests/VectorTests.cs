@@ -400,6 +400,11 @@ public class VectorTests
             n++;
         }
         Assert.Equal((p.GetProperty("registrations").GetArrayLength(), 8, 6), (n, withPqz, msigs));
+        // mldsa87 (CTR-UA-39), fndsa1024 (CTR-UA-40): holders, read here and in the record tests: a registration with its KEM
+        // register key, KEM records v1-v3, PQZ key records at the four sets
+        foreach (var k in new[] { 0x0134, 0x0135 })
+            Assert.Equal(new[] { 1, 3, 4 }, new[] { "registrations", "kemRecords", "pqzKeyRecords" }
+                .Select(s => p.GetProperty(s).EnumerateArray().Count(r => r.GetProperty("kind").GetInt32() == k)).ToArray());
     }
 
     [Fact]
@@ -821,7 +826,7 @@ public class VectorTests
             SameJson(fill!, c.GetProperty("fill"));
             commits++;
         }
-        Assert.Equal(9, commits);
+        Assert.Equal(11, commits); // + mldsa87, fndsa1024
         foreach (var k in p.GetProperty("kemRecords").EnumerateArray())
             SameJson(UA.NewSetKemKeyArgs(B(k.GetProperty("ua")), k.GetProperty("version").GetUInt64(), B(k.GetProperty("kemPk")), RecordSig(k)), k.GetProperty("args"));
         foreach (var r in p.GetProperty("pqzKeyRecords").EnumerateArray())

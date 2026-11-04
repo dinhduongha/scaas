@@ -6,7 +6,7 @@ import {PqUA} from "./PqUA.sol";
 import {Shake} from "./Shake.sol";
 import {PqNtt} from "./PqNtt.sol";
 
-/// @title ML-DSA-44 / ML-DSA-65 verification (FIPS 204 Algorithm 8 `ML-DSA.Verify_internal`).
+/// @title ML-DSA-44 / ML-DSA-65 / ML-DSA-87 verification (FIPS 204 Algorithm 8 `ML-DSA.Verify_internal`).
 /// @notice Two key forms, one core: the FIPS 204 public key `ρ ‖ t1` (EIP-8355's encoding; `Â = ExpandA(ρ)`,
 ///         `tr = H(pk, 64)` and `NTT(t1·2^d)` computed per call) and the EIP-8051 expanded key
 ///         `Â ‖ tr ‖ NTT(t1·2^d)` (coefficients u32 big-endian, `Â` row-major, the FIPS 64-byte `tr`: the layout of
@@ -39,6 +39,12 @@ library MlDsa {
 
     function params65() internal pure returns (Params memory) {
         return Params(6, 5, 49, 196, 1 << 19, (Q - 1) / 32, 55, 48, 20, 4, 1952, 3309);
+    }
+
+    /// FIPS 204 Table 1, ML-DSA-87: k 8, l 7, η 2, τ 60, β 120, γ1 2^19, γ2 (q − 1)/32, ω 75, λ 256 ⇒ c~ 64 B. The UA kind
+    /// `mldsa87` verifies through a precompile only (CTR-UA-39); these parameters serve the emulator tests and any later use.
+    function params87() internal pure returns (Params memory) {
+        return Params(8, 7, 60, 120, 1 << 19, (Q - 1) / 32, 75, 64, 20, 4, 2592, 4627);
     }
 
     /// Length of the EIP-8051-style expanded key: `Â` (k·l polynomials) ‖ tr (64) ‖ NTT(t1·2^d) (k polynomials).
@@ -202,7 +208,7 @@ library MlDsa {
         return true;
     }
 
-    /// The first `ct.length` (32 or 48) bytes at `buf` equal `ct`.
+    /// The first `ct.length` (32, 48 or 64) bytes at `buf` equal `ct`.
     function _sameCt(uint256 buf, bytes calldata ct) private pure returns (bool same) {
         assembly ("memory-safe") {
             same := eq(mload(buf), calldataload(ct.offset))
@@ -210,6 +216,7 @@ library MlDsa {
                 let hi := not(sub(shl(128, 1), 1))
                 same := and(same, eq(and(mload(add(buf, 32)), hi), and(calldataload(add(ct.offset, 32)), hi)))
             }
+            if eq(ct.length, 64) { same := and(same, eq(mload(add(buf, 32)), calldataload(add(ct.offset, 32)))) }
         }
     }
 
@@ -442,11 +449,13 @@ library MlDsa {
     }
 }
 
-/// @title `mldsa44` / `mldsa65` UA verifier (accounts.md CTR-UA-23, kinds 0x0130 / 0x0131): FIPS 204 ML-DSA over
-///        `pq_msg` with the empty context, on the FIPS 204 public key (`keyData`). An EIP-8355 precompile is used when
-///        the constructor's probe of `candidate` passes (`pk ‖ sig ‖ pq_msg` ⇒ exactly the word 1, a flipped
-///        signature ⇒ exactly 0), else pure Solidity. Without a precompile the UA registry verifies on the EIP-8051
-///        expanded key it derived itself and stored in parts (`expandedKeyPart`, `verifyCached`; P6c). **UNAUDITED.**
+/// @title `mldsa44` / `mldsa65` / `mldsa87` UA verifier (accounts.md CTR-UA-23, CTR-UA-39, kinds 0x0130 / 0x0131 / 0x0134): FIPS 204
+///        ML-DSA over `pq_msg` with the empty context, on the FIPS 204 public key (`keyData`). An EIP-8355 precompile is used
+///        when the constructor's probe of `candidate` passes (`pk ‖ sig ‖ pq_msg` ⇒ exactly the word 1, a flipped
+///        signature ⇒ exactly 0), else pure Solidity. Without a precompile the UA registry verifies ML-DSA-44 / -65 on the
+///        EIP-8051 expanded key it derived itself and stored in parts (`expandedKeyPart`, `verifyCached`; P6c).
+///        `mldsa87` exists only with a precompile (CTR-UA-39 Q1: its Solidity cost fails the 66 % rule): without one the
+///        constructor reverts `UAMldsaNoPrecompile`, so the kind gets no verifier there; it has no cache parts. **UNAUDITED.**
 contract UAMldsaVerifier is IUAPopVerifier {
     uint16 public immutable KIND;
     bytes32 public immutable KIND_TAG;
@@ -454,17 +463,20 @@ contract UAMldsaVerifier is IUAPopVerifier {
 
     error UAMldsaKind(uint16 kind);
     error UAMldsaPart(uint256 part);
+    error UAMldsaNoPrecompile();
 
     /// @param probeValid an input `pk ‖ sig ‖ msg` in the EIP-8355 layout that verifies; `probeInvalid` one that does not.
     ///        Both must be exactly `pkLen + sigLen + 32` bytes of this level (the split `verify` sends), else pure Solidity.
     constructor(uint16 kind_, address candidate, bytes memory probeValid, bytes memory probeInvalid) {
-        if (kind_ != PqUA.MLDSA44 && kind_ != PqUA.MLDSA65) revert UAMldsaKind(kind_);
+        if (kind_ != PqUA.MLDSA44 && kind_ != PqUA.MLDSA65 && kind_ != PqUA.MLDSA87) revert UAMldsaKind(kind_);
         KIND = kind_;
         KIND_TAG = PqUA.tag(kind_);
-        MlDsa.Params memory P = kind_ == PqUA.MLDSA44 ? MlDsa.params44() : MlDsa.params65();
+        MlDsa.Params memory P = _params(kind_);
         uint256 len = P.pkLen + P.sigLen + 32;
         bool exact = probeValid.length == len && probeInvalid.length == len;
-        PRECOMPILE = exact && PqUA.probe(candidate, probeValid, probeInvalid) ? candidate : address(0);
+        address pc = exact && PqUA.probe(candidate, probeValid, probeInvalid) ? candidate : address(0);
+        if (pc == address(0) && kind_ == PqUA.MLDSA87) revert UAMldsaNoPrecompile();
+        PRECOMPILE = pc;
     }
 
     function verify(bytes calldata keyData, bytes32 message, bytes calldata sig) public view returns (bool) {
@@ -488,9 +500,9 @@ contract UAMldsaVerifier is IUAPopVerifier {
     }
 
     /// Number of parts the registry stores the expanded key in: one under EIP-170 for ML-DSA-44 (20,544 B), two for
-    /// ML-DSA-65 (36,928 B: `Â` rows 0–2, then rows 3–5 ‖ tr ‖ t̂1).
+    /// ML-DSA-65 (36,928 B: `Â` rows 0–2, then rows 3–5 ‖ tr ‖ t̂1), none for ML-DSA-87 (no cache, CTR-UA-39 Q1).
     function expandedKeyParts() public view returns (uint256) {
-        return KIND == PqUA.MLDSA44 ? 1 : 2;
+        return KIND == PqUA.MLDSA44 ? 1 : KIND == PqUA.MLDSA65 ? 2 : 0;
     }
 
     /// Part `part` of `expandedKey(pk)`; the parts in order concatenate to it. Reverts `UAMldsaPart` past the last.
@@ -534,6 +546,10 @@ contract UAMldsaVerifier is IUAPopVerifier {
     }
 
     function _params() private view returns (MlDsa.Params memory) {
-        return KIND == PqUA.MLDSA44 ? MlDsa.params44() : MlDsa.params65();
+        return _params(KIND);
+    }
+
+    function _params(uint16 kind) private pure returns (MlDsa.Params memory) {
+        return kind == PqUA.MLDSA44 ? MlDsa.params44() : kind == PqUA.MLDSA65 ? MlDsa.params65() : MlDsa.params87();
     }
 }

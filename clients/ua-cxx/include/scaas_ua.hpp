@@ -81,8 +81,8 @@ void validateKeyData(uint16_t kind, const Bytes& keyData, bool hederaNative);
 bool inNativeSpace(const Bytes& id);
 bool isNative(uint16_t kind);
 bool isZether(uint16_t kind);
-bool isPqzHolder(uint16_t kind);  // 0x0130-0x0132 may hold a PQZ key
-bool msigPqzEligible(const Bytes& keyData);  // msig members outside 0x0130-0x0133 weigh less than the threshold; an msig member: UAMemberUnknown
+bool isPqzHolder(uint16_t kind);  // 0x0130-0x0132, 0x0134 and 0x0135 may hold a PQZ key
+bool msigPqzEligible(const Bytes& keyData);  // msig members outside 0x0130-0x0135 weigh less than the threshold; an msig member: UAMemberUnknown
 // The With forms take inner, the msig members' structures: {id: keyData} JSON as registrationArgs' inner ("" = none; over 65,536 bytes,
 // more than 16 entries or key data over 580 bytes is UAArgument). An msig member counts as PQ iff it is PQ-eligible itself, read from its
 // entry; a member without an entry, or an entry that holds an msig (two levels only), is UAMemberUnknown.

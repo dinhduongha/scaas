@@ -827,6 +827,10 @@ pub fn ua_signer_gas(kind: &str) -> Option<u64> {
         // accounts.md verify-cap table (gen-1 caps, no precompile), same estimate label:
         "mldsa44" => Some(4_250_000),
         "slhdsa128s" => Some(1_400_000),
+        // CTR-UA-39: precompile only; the cap of the precompile path, a PROVISIONAL estimate (spec 2026-11-04-mldsa87 §4)
+        "mldsa87" => Some(250_000),
+        // CTR-UA-40: pure Solidity on every EVM chain; cap 5,250,000, PROVISIONAL until T-GAS (spec 2026-11-04-fndsa1024 F6)
+        "fndsa1024" => Some(5_250_000),
         "ed25519" => Some(210_000),
         "p256" | "webauthn-p256" => Some(400_000),
         _ => None,

@@ -13,6 +13,8 @@ library PqUA {
     uint16 internal constant MLDSA65 = 0x0131;
     uint16 internal constant FNDSA512 = 0x0132;
     uint16 internal constant SLHDSA128S = 0x0133;
+    uint16 internal constant MLDSA87 = 0x0134;
+    uint16 internal constant FNDSA1024 = 0x0135;
 
     bytes32 internal constant MSG_TAG = keccak256("scaas.ua.msg.v1");
 
@@ -24,6 +26,8 @@ library PqUA {
         if (kind == MLDSA65) return keccak256("scaas.ua.mldsa65.v1");
         if (kind == FNDSA512) return keccak256("scaas.ua.fndsa512.v1");
         if (kind == SLHDSA128S) return keccak256("scaas.ua.slhdsa128s.v1");
+        if (kind == MLDSA87) return keccak256("scaas.ua.mldsa87.v1");
+        if (kind == FNDSA1024) return keccak256("scaas.ua.fndsa1024.v1");
         revert PqUAUnknownKind(kind);
     }
 

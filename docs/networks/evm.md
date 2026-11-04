@@ -236,8 +236,8 @@ sizes, `runs/2026-10-31-fs3-t13-pqz-7622-public-rpc.txt`) gave `UARegistry` 58.1
 | `WRAPPED_PQZ` (`WrappedPqzToken`) | 72,160 B | 76,009 B | **127.2 M** | 4.97 M | 110.69 M | 115.65 M | **121.4 M** | fits; above 65,536 B: needs `CHAIN_CODE_LIMIT=131072` and a chain without EIP-7954 |
 | the DEX (`SCaaSDex`) | 33,574 B | 35,928 B | 68.1 M | 2.36 M | 51.65 M | 54.01 M | 56.7 M | fits |
 | `GovernanceRouter` (one per chain and UA registry, not a release) | 20,073 B | 21,126 B | none (under EIP-170) | 1.40 M | 30.90 M | 32.29 M | 33.9 M | fits |
-| `UARegistry` (split) | 29,429 B | | 61.8 M | | | | | |
-| `UARegistryLib` (linked library of the registry) | 35,946 B | | **71.8 M** | | | | | |
+| `UARegistry` (split; with `mldsa87` / `fndsa1024`, merge of main 9c760b4a) | 29,710 B | | 62.2 M | | | | | |
+| `UARegistryLib` (linked library of the registry; likewise) | 36,192 B | | **72.2 M** | | | | | |
 
 "Deploy gate need" is the formula `runtime × 1,530 + 2^24` applied to `size-baseline.json` (`DeployBase._releaseGasNeed`,
 arithmetic, not a measurement); it is the higher figure in every row, since it charges the 2^24 regular cap whole. The
@@ -249,7 +249,7 @@ whole transactions, at the sizes of the split) gave `UARegistry` 46.5 M and `UAR
 by `NormalToken`'s 79.3 M, the full stack by `WrappedPqzToken`'s 127.2 M gate. **The gate over-refuses:** it reserves all of
 2^24 for regular gas, but a deployment's regular gas is far below it (at most 4.97 M in the table), so a chain whose block limit
 sits between the two refuses a stack that would deploy. The formula is the owner's and stays; this sentence records the margin. A
-chain with an Ethereum-like 60 M block holds no kind at all: the `UARegistryLib` gate (71.8 M) and `NormalToken`'s (79.3 M)
+chain with an Ethereum-like 60 M block holds no kind at all: the `UARegistryLib` gate (72.2 M) and `NormalToken`'s (79.3 M)
 refuse, and nothing is sent. Such a chain needs a raised block gas limit (no gas price or limit is assumed: the check below reads
 the chain's actual value).
 
@@ -297,7 +297,13 @@ Since UA-3 it also deploys the UA registry generation 1 with its verifiers on ev
 12 M, Hedera 10.5 M): the EIP-2537 kinds and `bls-bn254-minsig` only where `script/UAPrecompileProbe.sol`, asked
 through an `eth_call` with no `to` (the node's own precompiles), passes (the Zether kind `zether-bls12381` among them, on every chain but Hedera); no chain-id lock for any kind (owner ruling 2026-10-31); the PQ signing kinds (P6c, unaudited) wherever the kind's cap is ≤ 66 % of the budget (owner ruling 2026-10-31; all four at 12 M and on Hedera's 10.5 M), ML-DSA in
 Solidity on the registry's expanded-key cache: an ML-DSA UA's cache parts (`cacheExpandedKey`, one transaction each,
-≤ 13.5 M gas) come before its `register` ([accounts.md §1.9](../contracts/accounts.md#verifiers)).
+≤ 13.5 M gas) come before its `register` ([accounts.md §1.9](../contracts/accounts.md#verifiers)). `mldsa87` (0x0134) only where
+an ML-DSA-87 precompile answers its EIP-8355 probe (`0x14`, or the SCaaS testnet's `0x…5caa0014`): elsewhere it has no verifier and
+is not registrable ([CTR-UA-39](../contracts/accounts.md#CTR-UA-39); BUILT on branch `mldsa87`; the cap 250,000 is a provisional
+estimate). `fndsa1024` (0x0135) on every chain whose budget holds its cap 5,250,000 at ≤ 66 % (every EVM budget ≥ 7,954,546;
+pure Solidity, no precompile; [CTR-UA-40](../contracts/accounts.md#CTR-UA-40); BUILT on branch `mldsa87`; the cap is provisional until
+T-GAS). The other families refuse `0x0135` until their own round; Algorand's `falcon_verify` is deterministic Falcon-1024 (a fixed
+salt) and cannot verify this kind's randomized round-3 signatures.
 
 It writes
 `deployments/<chainid>.json` (`token_factory`, `implementation_normal`, `implementation_wrapped` (with `DEPLOY_WRAPPED`), `dex_implementation`, `ua_registry`, `governance_router`, `chain_uid`, `smart_key_account_factory`,

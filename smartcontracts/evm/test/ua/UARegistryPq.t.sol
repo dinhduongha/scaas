@@ -7,6 +7,7 @@ import {IUAKindVerifier, IUAPopVerifier} from "../../src/ua/IUAVerifier.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {UAMldsaVerifier} from "../../src/ua/MlDsa.sol";
+import {PqUA} from "../../src/ua/PqUA.sol";
 import {UAFndsaVerifier} from "../../src/ua/FnDsa.sol";
 import {UASlhdsaVerifier} from "../../src/ua/SlhDsa.sol";
 import {P256Verifier} from "../../src/ua/verifiers/P256Verifier.sol";
@@ -33,31 +34,54 @@ contract UARegistryPqTest is UARegistryBase {
 
     // ----- configuration -----
 
+    /// The `mldsa87` precompile of these tests (CTR-UA-39: no verifier without one): it answers 1 to the inputs a test allows,
+    /// each a real signature of the vectors (noble's verdict; the Solidity verdict on the same rows is `MlDsa.t`'s emulator).
+    Eip8355Allowed internal ml87;
+
+    /// Allows the `mldsa87` row `i`'s valid inputs `pk ‖ sig ‖ pq_msg`: `pop`, `popPqz`, the two `sigs`.
+    function _allow87(string memory pj, uint256 i) internal {
+        bytes memory pk = vm.parseJsonBytes(pj, _row(i, "keyData"));
+        string[4] memory f = ["pop", "popPqz", "sigs[0]", "sigs[1]"];
+        for (uint256 j; j < 4; ++j) {
+            bytes32 m = vm.parseJsonBytes32(pj, _row(i, string.concat(f[j], ".message")));
+            ml87.allow(keccak256(abi.encodePacked(pk, vm.parseJsonBytes(pj, _row(i, string.concat(f[j], ".sig"))),
+                PqUA.pqMessage(PqUA.tag(0x0134), m))));
+        }
+    }
+
     function _realPq() internal returns (UARegistry.KindConfig[] memory c) {
-        c = new UARegistry.KindConfig[](5);
+        if (address(ml87) == address(0)) ml87 = new Eip8355Allowed();
+        string memory kat = vm.readFile("../vectors/ua/pq_kat.json");
+        bytes memory valid = vm.parseJsonBytes(kat, ".kinds.mldsa87.eip8355_probe_valid");
+        ml87.allow(keccak256(valid));
+        c = new UARegistry.KindConfig[](7);
+        c[6] = UARegistry.KindConfig(0x0135, address(new UAFndsaVerifier(0x0135)), 5_250_000); // CTR-UA-40, provisional cap
+        c[5] = UARegistry.KindConfig(0x0134, address(new UAMldsaVerifier(
+            0x0134, address(ml87), valid, vm.parseJsonBytes(kat, ".kinds.mldsa87.eip8355_probe_invalid"))), 250_000);
         c[0] = UARegistry.KindConfig(0x0101, address(new P256Verifier()), 400_000);
         c[1] = UARegistry.KindConfig(0x0130, address(new UAMldsaVerifier(0x0130, address(0), "", "")), CAP_MLDSA44);
         c[2] = UARegistry.KindConfig(0x0131, address(new UAMldsaVerifier(0x0131, address(0), "", "")), CAP_MLDSA65);
-        c[3] = UARegistry.KindConfig(0x0132, address(new UAFndsaVerifier()), CAP_FNDSA);
+        c[3] = UARegistry.KindConfig(0x0132, address(new UAFndsaVerifier(0x0132)), CAP_FNDSA);
         c[4] = UARegistry.KindConfig(0x0133, address(new UASlhdsaVerifier()), CAP_SLHDSA);
     }
 
-    /// Mock verifiers for 0x0101, the four PQ kinds and the PQZ key verifier 0x0142, PQ caps `pqCap`.
+    /// Mock verifiers for 0x0101, the six PQ kinds and the PQZ key verifier 0x0142, PQ caps `pqCap`.
     function _mockPq(address v, uint64 pqCap) internal pure returns (UARegistry.KindConfig[] memory c) {
-        uint16[6] memory ks = [uint16(0x0101), 0x0130, 0x0131, 0x0132, 0x0133, 0x0142];
-        c = new UARegistry.KindConfig[](6);
-        for (uint256 i; i < 6; ++i) c[i] = UARegistry.KindConfig(ks[i], v, i == 0 ? 400_000 : pqCap);
+        uint16[8] memory ks = [uint16(0x0101), 0x0130, 0x0131, 0x0132, 0x0133, 0x0134, 0x0135, 0x0142];
+        c = new UARegistry.KindConfig[](8);
+        for (uint256 i; i < 8; ++i) c[i] = UARegistry.KindConfig(ks[i], v, i == 0 ? 400_000 : pqCap);
     }
 
     function _pk(uint16 kind, uint256 salt) internal pure returns (bytes memory pk) {
-        uint256 len = kind == 0x0130 ? 1312 : kind == 0x0131 ? 1952 : kind == 0x0132 ? 897 : kind == 0x0133 ? 32 : 16384;
+        uint256 len = kind == 0x0130 ? 1312 : kind == 0x0131 ? 1952 : kind == 0x0132 ? 897 : kind == 0x0133 ? 32
+            : kind == 0x0134 ? 2592 : kind == 0x0135 ? 1793 : 16384;
         pk = new bytes(len);
         for (uint256 i; i < len; i += 32) {
             bytes32 w = keccak256(abi.encode(kind, salt, i));
             for (uint256 j; j < 32 && i + j < len; ++j) pk[i + j] = w[j];
         }
-        if (kind == 0x0132) {
-            pk[0] = 0x09;
+        if (kind == 0x0132 || kind == 0x0135) {
+            pk[0] = kind == 0x0132 ? bytes1(0x09) : bytes1(0x0a);
             for (uint256 i = 1; i < len; ++i) pk[i] = 0; // every h_i = 0 < q
         }
     }
@@ -66,13 +90,13 @@ contract UARegistryPqTest is UARegistryBase {
     /// table.
     function test_pqSlots() public {
         UARegistry r = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, _mockPq(address(mock), 1_000_000));
-        uint16[5] memory on = [uint16(0x0130), 0x0131, 0x0132, 0x0133, 0x0142];
-        for (uint256 i; i < 5; ++i) {
+        uint16[7] memory on = [uint16(0x0130), 0x0131, 0x0132, 0x0133, 0x0134, 0x0135, 0x0142];
+        for (uint256 i; i < 7; ++i) {
             assertTrue(r.kindEnabled(on[i]));
             assertEq(r.verifyCap(on[i]), 1_000_000);
         }
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](1);
-        uint16[4] memory refused = [uint16(0x012f), 0x0134, 0x0143, 0x0150];
+        uint16[4] memory refused = [uint16(0x012f), 0x0136, 0x0143, 0x0150];
         for (uint256 i; i < 4; ++i) {
             c[0] = UARegistry.KindConfig(refused[i], address(mock), 50_000);
             vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, refused[i]));
@@ -83,8 +107,8 @@ contract UARegistryPqTest is UARegistryBase {
     /// CTR-UA-17: PQ keys are stored (`keyPtr` = SSTORE2(pk), `keyOf`); `auth` carries the signature only.
     function test_pqStored() public {
         UARegistry r = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, _mockPq(address(mock), 1_000_000));
-        uint16[4] memory ks = [uint16(0x0130), 0x0131, 0x0132, 0x0133];
-        for (uint256 i; i < 4; ++i) {
+        uint16[6] memory ks = [uint16(0x0130), 0x0131, 0x0132, 0x0133, 0x0134, 0x0135];
+        for (uint256 i; i < 6; ++i) {
             bytes memory pk = _pk(ks[i], 1);
             bytes32 ua = _register(r, ks[i], pk);
             (IUARegistry.Record memory rec,) = r.recordOf(ua);
@@ -100,14 +124,56 @@ contract UARegistryPqTest is UARegistryBase {
         }
     }
 
+    /// CTR-UA-39 (owner Q3): `mldsa87` has config slot 12 of its own, apart from `isPq`'s range; its cap and the PQZ key
+    /// verifier's (0x0142, slot 18, where `kind − 0x0130 + 14` would have put it) are two values, each once.
+    function test_mldsa87Slot12() public {
+        UARegistry.KindConfig[] memory c = _mockPq(address(mock), 1_000_000);
+        c[5].cap = 250_000; // 0x0134
+        UARegistry r = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, c);
+        assertEq(r.verifyCap(0x0134), 250_000);
+        assertEq(r.verifyCap(0x0142), 1_000_000);
+        assertEq(r.verifyCap(0x0141), 0, "slot 13, not configured");
+        UARegistry.KindConfig[] memory two = new UARegistry.KindConfig[](2);
+        (two[0], two[1]) = (UARegistry.KindConfig(0x0134, address(mock), 250_000), UARegistry.KindConfig(0x0134, address(mock), 1));
+        vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, uint16(0x0134)));
+        new UARegistry(chainUidA, address(0), false, BUDGET, address(0), true, two);
+        // without a verifier for it (no precompile, CTR-UA-39 Q1): not registrable
+        UARegistry off = _deploy(address(0x5ca5), chainUidA, address(0), false, BUDGET, address(0), true, _cfgs(address(mock)));
+        assertFalse(off.kindEnabled(0x0134));
+        bytes memory pk = _pk(0x0134, 2);
+        _registerReverts(off, 0x0134, pk, abi.encodeWithSelector(IUARegistry.UAKindDisabled.selector, uint16(0x0134)));
+    }
+
+    /// CTR-UA-40 (owner Q3): `fndsa1024` has config slot 20 of its own, mapped before `isPq`: `kind − 0x0130 + 14` would have
+    /// put it in slot 19, `secp256k1`'s. Its cap and `secp256k1`'s are two values, each once; a second `0x0135` is refused.
+    function test_fndsa1024Slot20() public {
+        UARegistry.KindConfig[] memory m = _mockPq(address(mock), 1_000_000);
+        UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](m.length + 1);
+        for (uint256 i; i < m.length; ++i) c[i] = m[i];
+        c[6].cap = 5_250_000; // 0x0135
+        c[m.length] = UARegistry.KindConfig(UAKinds.SECP256K1, address(mock), 50_000);
+        UARegistry r = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, c);
+        assertEq(r.verifyCap(0x0135), 5_250_000);
+        assertEq(r.verifyCap(UAKinds.SECP256K1), 50_000);
+        assertEq(r.verifyCap(0x0134), 1_000_000);
+        UARegistry.KindConfig[] memory two = new UARegistry.KindConfig[](2);
+        (two[0], two[1]) = (UARegistry.KindConfig(0x0135, address(mock), 5_250_000), UARegistry.KindConfig(0x0135, address(mock), 1));
+        vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, uint16(0x0135)));
+        new UARegistry(chainUidA, address(0), false, BUDGET, address(0), true, two);
+        // without a verifier for it: not registrable
+        UARegistry off = _deploy(address(0x5ca5), chainUidA, address(0), false, BUDGET, address(0), true, _cfgs(address(mock)));
+        assertFalse(off.kindEnabled(0x0135));
+        _registerReverts(off, 0x0135, _pk(0x0135, 2), abi.encodeWithSelector(IUARegistry.UAKindDisabled.selector, uint16(0x0135)));
+    }
+
     /// The cache's refusals: other kinds, a disabled kind, a part past the last, a verifier with a precompile; a wrong
     /// key length.
     function test_cacheRefusals() public {
         UARegistry.KindConfig[] memory c = _realPq();
         UARegistry r = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, c);
         bytes memory pk44 = _pk(0x0130, 1);
-        uint16[3] memory others = [uint16(0x0132), 0x0133, 0x0101];
-        for (uint256 i; i < 3; ++i) {
+        uint16[5] memory others = [uint16(0x0132), 0x0133, 0x0134, 0x0135, 0x0101]; // 0x0134, 0x0135: no cache (CTR-UA-39 Q1, -40 Q4)
+        for (uint256 i; i < 5; ++i) {
             vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyCache.selector, others[i]));
             r.cacheExpandedKey(others[i], pk44, 0);
         }
@@ -180,14 +246,15 @@ contract UARegistryPqTest is UARegistryBase {
         uint256 sigs;
         uint256 negs;
         for (uint256 i; vm.keyExistsJson(pj, string.concat(".kinds[", vm.toString(i), "]")); ++i) {
+            if (vm.parseJsonUint(pj, _row(i, "kind")) == 0x0134) _allow87(pj, i);
             bytes32 ua = _pqRegister(r, pj, i);
             sigs += _pqSigs(r, pj, i, ua);
             negs += _pqNegatives(r, pj, i, ua);
             ++rows;
         }
-        assertEq(rows, 4, "PQ kinds");
-        assertEq(sigs, 8, "PQ sigs");
-        assertEq(negs, 33, "PQ negatives");
+        assertEq(rows, 6, "PQ kinds"); // + fndsa1024 (CTR-UA-40)
+        assertEq(sigs, 12, "PQ sigs");
+        assertEq(negs, 50, "PQ negatives");
     }
 
     /// PoP-side refusals, the ML-DSA cache (refused before it is complete), then `register` (logged).
@@ -241,12 +308,13 @@ contract UARegistryPqTest is UARegistryBase {
         uint256 n;
         for (uint256 i; vm.keyExistsJson(pj, string.concat(".kinds[", vm.toString(i), "]")); ++i) {
             if (!vm.keyExistsJson(pj, _row(i, "popPqz"))) continue;
+            if (vm.parseJsonUint(pj, _row(i, "kind")) == 0x0134) _allow87(pj, i);
             uint256 snap = vm.snapshotState(); // the vectors share one PQZ key: one holder per state
             _pqzPopRow(r, pj, i);
             vm.revertToState(snap);
             ++n;
         }
-        assertEq(n, 3, "holder kinds");
+        assertEq(n, 5, "holder kinds"); // mldsa87, fndsa1024 since CTR-UA-39 / -40 Q2
     }
 
     function _pqzPopRow(UARegistry r, string memory pj, uint256 i) internal {
@@ -541,5 +609,18 @@ contract PrecompileStub {
 
     fallback(bytes calldata input) external returns (bytes memory) {
         return abi.encode(keccak256(input) == good ? uint256(1) : uint256(0));
+    }
+}
+
+/// A stand-in precompile that answers the 32-byte word 1 to the inputs it was told, else 0 (EIP-8355's output form).
+contract Eip8355Allowed {
+    mapping(bytes32 => bool) public ok;
+
+    function allow(bytes32 h) external {
+        ok[h] = true;
+    }
+
+    fallback(bytes calldata input) external returns (bytes memory) {
+        return abi.encode(ok[keccak256(input)] ? uint256(1) : uint256(0));
     }
 }

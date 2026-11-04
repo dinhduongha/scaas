@@ -67,7 +67,9 @@ var Kinds = []Kind{
 	{0x0132, "fndsa512", false, []int{897}, "fndsa512"},
 	{0x0133, "slhdsa128s", false, []int{32}, "slhdsa128s"},
 	{0x0141, "zether-bls12381", false, []int{128}, "bls12381-g1"},
-	{0x0108, "secp256k1", false, []int{64}, "secp256k1"}, // 2026-10-17, appended as in kinds.json
+	{0x0108, "secp256k1", false, []int{64}, "secp256k1"},   // 2026-10-17, appended as in kinds.json
+	{0x0134, "mldsa87", false, []int{2592}, "mldsa87"},     // CTR-UA-39, 2026-11-04, appended as in kinds.json
+	{0x0135, "fndsa1024", false, []int{1793}, "fndsa1024"}, // CTR-UA-40, 2026-11-04, appended as in kinds.json
 }
 
 // Schemes are not kinds (UA-6 U14): 0x0142 is the PQZ key attribute of a PQ holder; it keeps its tag and keyHash group.
@@ -77,7 +79,7 @@ var Schemes = []Kind{{0x0142, "pqz-mlwe", false, PqzKeyLengths, "pqz-mlwe"}}
 var PqzKeyLengths = []int{16384, 18432, 20480, 22528}
 
 var Groups = []string{"p256", "ed25519", "secp256k1", "bn254-g1", "bls12381-g1", "bls12381-g2", "bn254-g2", "mldsa44",
-	"mldsa65", "fndsa512", "slhdsa128s", "pqz-mlwe"}
+	"mldsa65", "fndsa512", "slhdsa128s", "mldsa87", "fndsa1024", "pqz-mlwe"}
 
 var Purposes = []string{"pop", "metatx", "metatx-cancel", "member", "zether-auth", "zether-owner", "keyop",
 	"receiver-fee", "vp", "vc-anchor", "trade", "kem", "pqz-key", "membership"}
@@ -148,15 +150,18 @@ func tagged(kind uint16) (*Kind, error) {
 }
 
 func singleSigning(k uint16) bool {
-	return (k >= 0x0100 && k <= 0x0108) || (k >= 0x0110 && k <= 0x0113) || (k >= 0x0130 && k <= 0x0133)
+	return (k >= 0x0100 && k <= 0x0108) || (k >= 0x0110 && k <= 0x0113) || (k >= 0x0130 && k <= 0x0135)
 }
 
 func IsNative(kind uint16) bool  { k, err := KindInfo(kind); return err == nil && k.Native }
 func IsZether(kind uint16) bool  { return kind == 0x0141 }
 func IsSigning(kind uint16) bool { return kind == 0x0120 || kind == 0x0141 || singleSigning(kind) }
 
-// IsPqzHolder: kinds that may hold a PQZ key attribute, mldsa44, mldsa65, fndsa512 (an msig per MsigPqzEligible).
-func IsPqzHolder(kind uint16) bool { return kind >= 0x0130 && kind <= 0x0132 }
+// IsPqzHolder: kinds that may hold a PQZ key attribute, mldsa44, mldsa65, fndsa512, mldsa87, fndsa1024 (CTR-UA-39 / -40; an msig per
+// MsigPqzEligible).
+func IsPqzHolder(kind uint16) bool {
+	return (kind >= 0x0130 && kind <= 0x0132) || kind == 0x0134 || kind == 0x0135
+}
 
 // IsMember: an msig too, one level down; a record that holds one is refused as a member by the registry.
 func IsMember(kind uint16, hederaNative bool) bool {
@@ -693,7 +698,7 @@ type Inner func(id [32]byte) []byte
 // msig member, so one is UAMemberUnknown here: MsigPqzEligibleWith reads its record.
 func MsigPqzEligible(keyData []byte) (bool, error) { return MsigPqzEligibleWith(keyData, nil) }
 
-// MsigPqzEligibleWith: a member is PQ if its kind is in 0x0130-0x0133, or it is an msig that is PQ-eligible itself; no answer from inner,
+// MsigPqzEligibleWith: a member is PQ if its kind is in 0x0130-0x0135, or it is an msig that is PQ-eligible itself; no answer from inner,
 // or an inner that holds an msig (two levels only), is UAMemberUnknown.
 func MsigPqzEligibleWith(keyData []byte, inner Inner) (bool, error) {
 	d := keyData
@@ -703,7 +708,7 @@ func MsigPqzEligibleWith(keyData []byte, inner Inner) (bool, error) {
 	classical := 0
 	for o := 4; o < len(d); o += 36 {
 		k := int(d[o])<<8 | int(d[o+1])
-		pq := k >= 0x0130 && k <= 0x0133
+		pq := k >= 0x0130 && k <= 0x0135
 		if k == 0x0120 {
 			var kd []byte
 			if inner != nil {

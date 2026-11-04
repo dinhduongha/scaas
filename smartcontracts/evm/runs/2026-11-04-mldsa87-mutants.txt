@@ -1,0 +1,12 @@
+mldsa87 mutants (plan 2026-11-04-mldsa87, Tasks 3-4): one change each, forge at the default set (n2304-kmax4096), source restored after each.
+mutant | change | killed by
+M1 precompile address | DeployBase MLDSA87_SCAAS_TESTNET 0x...5caa0014 -> 0x...5caa0013 | test_mldsa87OnlyWithAPrecompile: FAIL assertion failed
+M2 disabled without precompile | UAMldsaVerifier constructor: revert only if pc == address(1) | test_mldsa87_needsPrecompile: FAIL (no UAMldsaNoPrecompile)
+M3 isPq range | UAStore.isPq to 0x0133 again | test_mldsa87Kind: FAIL assertion; test_register_msigHolderBoundary_mldsa87: FAIL UAPqzHolder
+M4 holder list | UARegistryLib._holder without MLDSA87 | test_UA6_holderWithKey: FAIL UAPqzHolder; test_vectors_pqzPop: FAIL UAPqzHolder != UAPoP
+M5 config slot | UARegistry._slot without the 0x0134 -> 12 row | test_mldsa87Slot12, test_pqSlots: FAIL (constructor UAConfig, slot 18 taken)
+M6 msig bytes | UARegistryLib._sigBytes without the 4,627 row | test_register_msigHolderBoundary_mldsa87: FAIL (lo + 1 admitted)
+Red before the change (each new test against the code before it): T3 tests FAIL UAKindUnknown(308) / UAConfig / PqzhHolderKind;
+test_mldsa87_needsPrecompile FAIL (old verifier accepts 0x0134 without a precompile); test_mldsa87OnlyWithAPrecompile FAIL (old DeployBase).
+Not killable by a vector: the 64-byte c~ compare in MlDsa._sameCt (the old 32-byte compare also refuses the pq_kat c~ second-word flip,
+because SampleInBall reads all 64 bytes); kept as FIPS 204 states it, verified by the emulator and the 30 ACVP ML-DSA-87 cases.

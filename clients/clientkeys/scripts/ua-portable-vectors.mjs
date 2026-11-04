@@ -31,7 +31,7 @@ const MEMBER = ua.purposeTag('member');
 const { contexts } = JSON.parse(readFileSync(join(OUT, 'structures.json'), 'utf8'));
 // each UA's own filler PQZ key (one UA per proven PQZ key); mldsa65's at n2048-kmax1024 is kinds.json's `pqzKey`
 const PQZ_LABEL = { mldsa65: '', 'msig-pq': ' msig-pq', fndsa512: ' fndsa512', 'msig-pq-native': ' msig-pq-native',
-  'msig-nested-native': ' msig-nested-native' };
+  'msig-nested-native': ' msig-nested-native', mldsa87: ' mldsa87', fndsa1024: ' fndsa1024' };
 
 // --- signers: { name, kind, keyData, ua, sign(msg32, opts) } ---
 const signer = (name, kind, keyData, sign) => ({ name, kind, keyData, ua: ua.deriveUA(kind, keyData), sign });
@@ -70,13 +70,17 @@ const ml = pq('mldsa65');
 const fn = pq('fndsa512');
 const ml1 = pq('mldsa65', 1);
 const ml2 = pq('mldsa65', 2);
+// the level-V holders (CTR-UA-39 / -40 Q2), after every older row so no row index moves: fndsa512's rows each (a KEM register key,
+// KEM records v1-v3, PQZ key records at every set)
+const LEVEL5 = [pq('mldsa87'), pq('fndsa1024')];
 const classicalMsig = (() => { // signatures.json's msig: native(1), p256(1), bls-bn254-minsig(1), schnorr-bn254(2); threshold 3
   const c = (n) => classical(n);
   return msig('msig-classical', 3, [[native, 1], [c('p256'), 1], [c('bls-bn254-minsig'), 1], [c('schnorr-bn254'), 2]]);
 })();
 const pqMsig = msig('msig-pq', 2, [[ml1, 1], [ml2, 1]]);
 const nativeMsig = msig('msig-pq-native', 2, [[native, 1], [ml1, 1]]);
-const KEM = { mldsa65: kemKeys('mldsa65'), fndsa512: kemKeys('fndsa512'), 'msig-pq': kemKeys('msig-pq') };
+const KEM = { mldsa65: kemKeys('mldsa65'), fndsa512: kemKeys('fndsa512'), 'msig-pq': kemKeys('msig-pq'), mldsa87: kemKeys('mldsa87'),
+  fndsa1024: kemKeys('fndsa1024') };
 
 /** Owner 2026-11-03: what `memberSigHashOf(ua, index)` holds after an `msig` registers `pop`: per slot, keccak256 of its `sig`, or of an
  *  `msig` member's `abi.encode(InnerSig[])`, the bytes of its `UAMemberSig`; `popOf` is keccak256(pop) itself. */
@@ -122,6 +126,7 @@ const registrations = [
   registration(classicalMsig),
   ...SETS.map((set) => registration(pqMsig, { set, kem: true })),
   registration(nativeMsig),
+  ...LEVEL5.map((s) => registration(s, { kem: true })),
 ];
 
 // --- KEM records: setKemKey versions 1-3 of each KEM holder (version 0 is its register key), signed over uaMessage(kind, kem,
@@ -139,7 +144,7 @@ const kemRecord = (s, name) => (kemPk, i) => {
     sig: hex(sig), typedData: ua.portableTypedData('UAKemRecord', ua.kemRecordStruct(record)),
     args: { ua: hex(s.ua), version, kem: ua.kemKeyOf(kemPk), sig: ua.uaSig(list ? { members: list } : { signature: sig }) } };
 };
-const kemRecords = [[ml, 'mldsa65'], [fn, 'fndsa512'], [pqMsig, 'msig-pq']].flatMap(([s, name]) => KEM[name].slice(1).map(kemRecord(s, name)));
+const kemRecords = [[ml, 'mldsa65'], [fn, 'fndsa512'], [pqMsig, 'msig-pq'], ...LEVEL5.map((s) => [s, s.name])].flatMap(([s, name]) => KEM[name].slice(1).map(kemRecord(s, name)));
 
 // --- PQZ key records (setPqzKey, ruling A1-I1): a holder registered without a PQZ key attaches one later, at every set ---
 const pqzKeyRecord = (s, set, signerOf = s) => {
@@ -154,7 +159,7 @@ const pqzKeyRecord = (s, set, signerOf = s) => {
     typedData: m.typedData,
     args: { ua: reg.ua, pqzKey: hex(pqzKey), pqzPopHash: hex(m.pqzPopHash), sig: ua.uaSig(list ? { members: list } : { signature: sig }) } };
 };
-const pqzKeyRecords = [fn, nativeMsig].flatMap((s) => SETS.map((set) => pqzKeyRecord(s, set)));
+const pqzKeyRecords = [fn, nativeMsig, ...LEVEL5].flatMap((s) => SETS.map((set) => pqzKeyRecord(s, set)));
 // --- acceptMembership(ua, MemberSig{index, [], sig}) (CTR-UA-37): each member of two structures; digest = typed(UAMembership{ua,
 // member}), a native member over it, a derived member over uaMessage(memberKind, member, memberDigest) ---
 const membership = (s, m) => {
