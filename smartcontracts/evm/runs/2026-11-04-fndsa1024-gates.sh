@@ -7,11 +7,12 @@
 # Step <s> writes runs/2026-11-04-fndsa1024-<s>.log (git-ignored); the `summary` step writes the committed -summary.txt.
 # First line "# <s> at commit <sha>", last line "rc=<n>". A step is skipped when its log ends rc=0 at the current commit and the tree is clean.
 # A fresh worktree needs the git-ignored inputs as real directories: smartcontracts/evm/lib, clients/clientkeys/node_modules.
-# Not here: the scaas-node suite (6 GB alone, the coordinator runs it); node-kinds builds the node and runs the kind tests only.
+# Not here: the scaas-node suite (6 GB alone, the coordinator runs it); node-kinds builds the node and runs the kind tests only, node-dex-kat
+# the four lib tests that read test/vectors/dex_order_kat.json.
 P=2026-11-04-fndsa1024
 LOGEXT=log # step logs are git-ignored (*.log); only <P>-summary.txt is committed (owner 2026-11-02)
-STEPS="forge-n2304-kmax4096 atset-n2048-kmax1024 atset-n2560-kmax16384 atset-n2816-kmax65536 forge-isolate sizes docs vectors-check clientkeys ua-rs ua-rs-pq ua-rs-signers ua-rs-json ua-py ua-go ua-cs ua-c ua-cxx ua-dart ua-dart-frb ua-qt cargo-zether-prover soroban-registry near-common node-kinds named-tests summary"
-FAMILIES="ua-rs ua-rs-pq ua-rs-signers ua-rs-json ua-py ua-go ua-cs ua-c ua-cxx ua-dart ua-dart-frb ua-qt soroban-registry near-common node-kinds"
+STEPS="forge-n2304-kmax4096 atset-n2048-kmax1024 atset-n2560-kmax16384 atset-n2816-kmax65536 forge-isolate sizes docs vectors-check clientkeys ua-rs ua-rs-pq ua-rs-signers ua-rs-json ua-py ua-go ua-cs ua-c ua-cxx ua-dart ua-dart-frb ua-qt cargo-zether-prover soroban-registry near-common node-kinds node-dex-kat named-tests summary"
+FAMILIES="ua-rs ua-rs-pq ua-rs-signers ua-rs-json ua-py ua-go ua-cs ua-c ua-cxx ua-dart ua-dart-frb ua-qt soroban-registry near-common node-kinds node-dex-kat"
 
 extra_step() { # this kind's own steps (the base runner calls it for a step it does not know)
   case $1 in
@@ -21,6 +22,9 @@ extra_step() { # this kind's own steps (the base runner calls it for a step it d
     soroban-registry) CARGO_BUILD_JOBS=2 scripts/capped sh -c 'cd smartcontracts/soroban && cargo test -j2 -p scaas-ua-registry' ;;
     near-common) CARGO_BUILD_JOBS=2 scripts/capped sh -c 'cd smartcontracts/near && cargo test -j2 -p scaas-near-common' ;;
     node-kinds) cd scaas-node && ../scripts/capped sh -c 'cargo build -j2 && cargo test -j2 --lib chain_kind' ;;
+    # the node's readers of test/vectors/dex_order_kat.json, rewritten in T3 (the registry's code moved): not the whole suite
+    node-dex-kat) cd scaas-node && ../scripts/capped cargo test -j2 --lib -- invalidate_digests_match_the_vectors \
+        call_op_round_trips_a_plain_entry kat_hashes_and_calldata_match_forge the_plain_rows_are_pinned ;;
     *) echo "unknown step $1"; return 2 ;;
   esac
 }
