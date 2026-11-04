@@ -5,7 +5,7 @@
 //! with a KAT row loses its arm in [`verify_raw`], so it is refused (C14). Signatures and keys are untrusted: anything
 //! malformed is `false`, never a panic. UNAUDITED.
 use crate::{keccak, tag};
-use ml_dsa::{EncodedVerifyingKey, MlDsa44, MlDsa65, MlDsaParams};
+use ml_dsa::{EncodedVerifyingKey, MlDsa44, MlDsa65, MlDsa87, MlDsaParams};
 
 pub const FNDSA512_SIG_LENGTH: usize = 666;
 
@@ -34,6 +34,7 @@ pub fn verify_raw(kind: u16, key: &[u8], m: &[u8], sig: &[u8]) -> bool {
         0x0131 => mldsa::<MlDsa65>(key, m, sig),
         0x0132 => fndsa512(key, m, sig),
         0x0133 => slhdsa128s(key, m, sig),
+        0x0134 => mldsa::<MlDsa87>(key, m, sig),
         _ => false,
     }
 }

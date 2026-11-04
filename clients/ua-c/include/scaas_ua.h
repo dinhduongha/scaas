@@ -138,7 +138,7 @@ typedef struct {
 #define SCAAS_UA_ERR_INTERNAL 10
 
 /**
- * "UAPqzHolder": a PQZ key given for a kind that may not hold one (only 0x0130-0x0132 and a PQ-eligible msig may).
+ * "UAPqzHolder": a PQZ key given for a kind that may not hold one (only 0x0130-0x0132, 0x0134 and a PQ-eligible msig may).
  */
 #define SCAAS_UA_ERR_PQZ_HOLDER 11
 
@@ -236,12 +236,12 @@ bool scaas_ua_is_signing(uint16_t kind);
 bool scaas_ua_is_member(uint16_t kind, bool hedera_native);
 
 /**
- * Whether `kind` may hold a PQZ key attribute (mldsa44, mldsa65, fndsa512).
+ * Whether `kind` may hold a PQZ key attribute (mldsa44, mldsa65, fndsa512, mldsa87).
  */
 bool scaas_ua_is_pqz_holder(uint16_t kind);
 
 /**
- * `*out = true` iff the `msig` key data is PQ-eligible: its members outside 0x0130-0x0133 weigh less than the threshold. An `msig`
+ * `*out = true` iff the `msig` key data is PQ-eligible: its members outside 0x0130-0x0134 weigh less than the threshold. An `msig`
  * member is `SCAAS_UA_ERR_MEMBER_UNKNOWN` here: `scaas_ua_msig_pqz_eligible_with` reads its record.
  */
 ScaasUaStatus scaas_ua_msig_pqz_eligible(const uint8_t *key_data,

@@ -199,6 +199,6 @@ pub fn validate_key_data(kind: u16, d: &[u8], hedera_native: bool) -> Result<()>
         0x0113 => frost(d, bn_g1, 64, &BN_R),
         0x0120 => msig(d, hedera_native),
         0x0132 => fndsa(d),
-        _ => Ok(()), // mldsa44/65, slhdsa128s: the length is the whole check
+        _ => Ok(()), // mldsa44/65/87, slhdsa128s: the length is the whole check
     }
 }

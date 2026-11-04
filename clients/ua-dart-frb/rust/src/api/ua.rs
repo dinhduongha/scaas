@@ -147,7 +147,7 @@ pub fn is_zether(kind: i64) -> bool {
 pub fn is_pqz_holder(kind: i64) -> bool {
     k(kind).is_ok_and(scaas_ua::is_pqz_holder)
 }
-/// An `msig` whose members of kinds outside 0x0130-0x0133 weigh less than its threshold (`UAKeyData` on malformed data); an `msig`
+/// An `msig` whose members of kinds outside 0x0130-0x0134 weigh less than its threshold (`UAKeyData` on malformed data); an `msig`
 /// member is `UAMemberUnknown` here, [`msig_pqz_eligible_with`] reads its record.
 #[frb(sync)]
 pub fn msig_pqz_eligible(key_data: Vec<u8>) -> R<bool> {

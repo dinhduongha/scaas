@@ -20,7 +20,8 @@ fn b32(v: &Value) -> [u8; 32] {
 fn arr<'a>(v: &'a Value, k: &str) -> &'a Vec<Value> {
     v[k].as_array().unwrap()
 }
-const KINDS: [(&str, u16); 4] = [("mldsa44", 0x0130), ("mldsa65", 0x0131), ("fndsa512", 0x0132), ("slhdsa128s", 0x0133)];
+const KINDS: [(&str, u16); 5] =
+    [("mldsa44", 0x0130), ("mldsa65", 0x0131), ("fndsa512", 0x0132), ("slhdsa128s", 0x0133), ("mldsa87", 0x0134)];
 
 #[test]
 fn pq_kat_verifies() {
@@ -41,8 +42,8 @@ fn pq_kat_verifies() {
             mutations += 1;
         }
     }
-    assert_eq!(mutations, 30);
-    println!("4 kinds, {mutations} mutations refused");
+    assert_eq!(mutations, 39); // + mldsa87's 9 (CTR-UA-39)
+    println!("5 kinds, {mutations} mutations refused");
 }
 
 /// `kind` of a parameter-set name or, for the EIP rows, of the key's length.
@@ -50,6 +51,7 @@ fn kind_of(c: &Value) -> u16 {
     match c["set"].as_str() {
         Some("ML-DSA-44") => 0x0130,
         Some("ML-DSA-65") => 0x0131,
+        Some("ML-DSA-87") => 0x0134,
         Some("SLH-DSA-SHA2-128s") => 0x0133,
         Some(s) => panic!("{s}"),
         None => match bytes(&c["pk"]).len() {
@@ -78,7 +80,7 @@ fn pq_external_verifies() {
     for c in arr(&v["falcon_kat"], "cases") {
         one(0x0132, &bytes(&c["pk"]), &bytes(&c["msg"]), &bytes(&c["sig"]), c["valid"].as_bool().unwrap(), &format!("falcon {}", c["count"]));
     }
-    assert_eq!((good, bad), (37, 73), "accepted, refused: every row with a key");
+    assert_eq!((good, bad), (43, 97), "accepted, refused: every row with a key"); // + ACVP ML-DSA-87: 6 / 24
     println!("{good} accepted, {bad} refused");
 }
 
@@ -103,13 +105,31 @@ fn pq_signatures_verify() {
             no += 1;
         }
     }
-    assert_eq!((ok, no), (21, 33));
+    assert_eq!((ok, no), (26, 42)); // + mldsa87: 5 / 9
     println!("{ok} accepted, {no} refused");
 }
 
 /// Only the PQ kinds: the positive control is every row above.
 #[test]
 fn pq_other_kinds_refused() {
-    assert!(!pq::verify(0x0134, &[0; 32], &[0; 32], &[0; 64]), "not a PQ kind");
+    assert!(!pq::verify(0x0135, &[0; 32], &[0; 32], &[0; 64]), "not a PQ kind");
     assert!(!pq::verify(0x0120, &[0; 32], &[0; 32], &[0; 64]), "not a PQ kind");
+}
+
+/// CTR-UA-39: `mldsa87` (0x0134) in the table (2,592 B, group `mldsa87`), a PQZ holder (Q2) and PQ weight in an `msig` (Q3); the
+/// verifier takes the pq_kat.json row (the KAT test above) and no other kind's.
+#[test]
+fn mldsa87_kind_holder_and_weight() {
+    let k = scaas_ua::kind_info(0x0134).unwrap();
+    assert_eq!((k.name, k.lengths, k.group), ("mldsa87", &[2592usize][..], Some("mldsa87")));
+    assert!(scaas_ua::is_signing(0x0134) && scaas_ua::is_pqz_holder(0x0134) && !scaas_ua::is_pqz_holder(0x0133));
+    let v = load("pq_kat.json");
+    let r = &v["kinds"]["mldsa87"];
+    let (pk, msg, sig) = (bytes(&r["pk"]), b32(&r["ua_msg"]), bytes(&r["sig"]));
+    assert!(pq::verify(0x0134, &pk, &msg, &sig));
+    assert!(!pq::verify(0x0131, &pk, &msg, &sig) && !pq::verify(0x0135, &pk, &msg, &sig));
+    let d = scaas_ua::encode_msig(2, &[(0x0101, [0x11; 32], 1), (0x0134, [0x22; 32], 1)]);
+    assert_eq!(scaas_ua::msig_pqz_eligible(&d), Ok(true));
+    let d = scaas_ua::encode_msig(1, &[(0x0101, [0x11; 32], 1), (0x0134, [0x22; 32], 1)]);
+    assert_eq!(scaas_ua::msig_pqz_eligible(&d), Ok(false));
 }

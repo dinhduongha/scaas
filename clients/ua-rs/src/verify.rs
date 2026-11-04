@@ -41,7 +41,7 @@ pub fn verify(kind: u16, key_data: &[u8], message: &[u8; 32], sig: &[u8], pop: b
         0x0108 => key_data.len() == 64 && native_ecdsa(keccak(&[key_data])[12..].try_into().unwrap(), message, sig),
         0x0110..=0x0113 => crate::groups::verify(kind, key_data, message, sig, pop),
         #[cfg(feature = "pq")]
-        0x0130..=0x0133 => crate::pq::verify(kind, key_data, message, sig),
+        0x0130..=0x0134 => crate::pq::verify(kind, key_data, message, sig),
         _ => false,
     }
 }
