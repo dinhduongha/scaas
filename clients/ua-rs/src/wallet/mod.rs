@@ -9,7 +9,8 @@
 //! scaas Schnorr, BLS with roles, the MuSig2 / FROST sessions, every arkworks secret multiplication by
 //! `scaas_ct::secret_mul`); `uasig`, T3d: the `UASig` builder and the minimal `msig` sets over `&dyn Signer` (T4: native keys
 //! and members by typed data); `eip712`, `policy`, T4: the faithful EIP-712 hasher, the SCaaS builders' canonical step, the
-//! `Expect` policy of [`NativeKey::sign_typed`]; the vault with T9. Randomness: `rand_core` 0.6 `OsRng` inside; no call takes an
+//! `Expect` policy of [`NativeKey::sign_typed`]; `tx`, T5: [`NativeKey::sign_transaction`], EVM types 0-3 (no type 4); the vault
+//! with T9. Randomness: `rand_core` 0.6 `OsRng` inside; no call takes an
 //! RNG. UNAUDITED.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing, clippy::disallowed_methods)]
 
@@ -34,12 +35,14 @@ pub mod sign;
 mod sign;
 mod signer;
 mod store;
+mod tx;
 mod uasig;
 
 pub use eip712::{scaas_typed_data, TypedData};
 pub use pairing::{FrostSession, Musig2Session};
 pub use policy::{AllowAnyTypedData, AllowRow, Expect, Invalidate, SubjectKey};
 pub use signer::{AllowRawDigest, KeyRef, SigRole, SignRequest, Signer};
+pub use tx::{AccessListItem, EvmTx, SignedTx};
 pub use uasig::{membership_sig, msig_sig, ua_sig, Slot};
 
 use crate::UAError;
