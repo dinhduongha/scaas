@@ -20,6 +20,8 @@ import {IUALedger} from "../../src/metatx/IUALedger.sol";
 import {MockERC20, StubUARegistry} from "../helpers/Mocks.sol";
 import {normalInit, wrappedInit, Rate} from "../v2/helpers/V2Fixture.sol";
 import {MockHederaAccountService, MockHts} from "./HederaMocks.sol";
+import {Mock1271Wallet} from "../helpers/WalletMocks.sol";
+import {UAMetaTxBase} from "../../src/metatx/UAMetaTxBase.sol";
 import {plainEnv, Catalogue} from "../helpers/Catalogue.sol";
 
 /// T5: con Hedera của ba tầng (TW2 §11, R144) — HIP-632 trên mỗi tầng, associate lúc init, kiểm phí HTS fail-closed.
@@ -188,6 +190,86 @@ contract HederaV2Test is Test {
         vm.prank(relayer);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         IERC20MetaTx(t).mtxExecuteTransfer(x, _n(abi.encodePacked(r, vs)));
+    }
+
+    // ------------------------------------------------------------------ ua-mtx-merge T8 (R42): the merged entries
+
+    function _points() internal returns (address t) {
+        vm.prank(alice);
+        t = f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("Points", "PTS", 0, 1000, alice, address(0))), "n");
+        assertEq(IUALedger(t).registry(), address(0), "version 1: no registry");
+    }
+
+    /// `executeMetaTransaction` (the token's address path, R3) of `cancelNonce(42)` on lane 7 by `from`.
+    function _cancelMeta(address from) internal view returns (MetaTxLib.MetaTransaction memory) {
+        return MetaTxLib.MetaTransaction({from: from, data: abi.encodeCall(IMetaTx.cancelNonce, (42)), batch: 7, nonce: 0,
+            validUntil: block.timestamp + 300, mode: RR, relayer: relayer, fee: 0, feeRecipient: address(0)});
+    }
+
+    /// R42: an ED25519 account 0.0.1234567 relays its own `UAMetaTransfer`, `from` its long-zero EVM address zero-padded,
+    /// at fee 0 with no registry: HIP-632 is asked about that account over the merged entry's digest.
+    function test_hederaEd25519EoaMtxTransfer() public {
+        address t = _points();
+        MetaTxLib.UAMetaTransfer memory x = _tr(shop, 250, 0, 1);
+        assertEq(x.from, bytes32(uint256(1_234_567)), "from: the long-zero address, zero-padded");
+        bytes32 d = IERC20MetaTx(t).mtxTransferDigest(x);
+        bytes memory sig = _edSign(d);
+        vm.expectCall(HAS, abi.encodeWithSelector(bytes4(0xb2a31da4), alice, abi.encodePacked(d), sig));
+        vm.prank(relayer);
+        IERC20MetaTx(t).mtxExecuteTransfer(x, _n(sig));
+        assertEq(IERC20MetaTx(t).balanceOf(shop), 250);
+        assertEq(IERC20MetaTx(t).balanceOf(alice), 750);
+    }
+
+    /// R42: an ECDSA account signs with the key of its EVM alias (65 bytes), `from` the alias zero-padded; the EVM path
+    /// takes it and HIP-632 is never asked, on the merged entry and on the address path alike.
+    function test_hederaEcdsaAliasMtxTransfer() public {
+        address t = _points();
+        uint256 pk = 0xEC0A;
+        address ec = vm.addr(pk);
+        assertTrue(uint160(ec) >> 64 != 0, "an alias, not a long-zero address");
+        vm.prank(alice);
+        IERC20MetaTx(t).transfer(ec, 500);
+        MetaTxLib.UAMetaTransfer memory x = _tr(shop, 200, 0, 1);
+        x.from = MetaTxLib.pad(ec);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, IERC20MetaTx(t).mtxTransferDigest(x));
+        vm.expectCall(HAS, bytes(""), 0);
+        vm.prank(relayer);
+        IERC20MetaTx(t).mtxExecuteTransfer(x, _n(abi.encodePacked(r, s, v)));
+        assertEq(IERC20MetaTx(t).balanceOf(shop), 200);
+        MetaTxLib.MetaTransaction memory m = _cancelMeta(ec);
+        (v, r, s) = vm.sign(pk, MtxDigest.metaTx(t, m));
+        vm.prank(relayer);
+        IMetaTx(t).executeMetaTransaction(m, abi.encodePacked(r, s, v));
+        assertEq(UAMetaTxBase(t).mtxNonce(MetaTxLib.pad(ec), 42), 1, "the address path ran its cancelNonce");
+    }
+
+    /// HIP-632 only for an account without code: a contract whose address has an ED25519 key at the precompile is
+    /// refused a 64-byte signature by that key (HIP-632 is never asked), on the merged entry and on the address path; its
+    /// ERC-1271 answer is the positive control.
+    function test_hip632RefusedForAContract() public {
+        address t = _points();
+        uint256 ownerPk = 0xC0DE;
+        Mock1271Wallet cw = new Mock1271Wallet(vm.addr(ownerPk));
+        MockHederaAccountService(HAS).setEdKey(address(cw), vm.addr(ALICE_KEY));
+        vm.prank(alice);
+        IERC20MetaTx(t).transfer(address(cw), 500);
+        MetaTxLib.UAMetaTransfer memory x = _tr(shop, 200, 0, 1);
+        x.from = MetaTxLib.pad(address(cw));
+        bytes32 d = IERC20MetaTx(t).mtxTransferDigest(x);
+        vm.expectCall(HAS, bytes(""), 0);
+        vm.prank(relayer);
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
+        IERC20MetaTx(t).mtxExecuteTransfer(x, _n(_edSign(d)));
+        MetaTxLib.MetaTransaction memory m = _cancelMeta(address(cw));
+        bytes memory edSig = _edSign(MtxDigest.metaTx(t, m));
+        vm.prank(relayer);
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
+        IMetaTx(t).executeMetaTransaction(m, edSig);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPk, d);
+        vm.prank(relayer);
+        IERC20MetaTx(t).mtxExecuteTransfer(x, _n(abi.encodePacked(r, s, v)));
+        assertEq(IERC20MetaTx(t).balanceOf(shop), 200, "positive control: its ERC-1271");
     }
 
     // ------------------------------------------------------------------ UA-5a on Hedera (CTR-UA-28, R5a-14)

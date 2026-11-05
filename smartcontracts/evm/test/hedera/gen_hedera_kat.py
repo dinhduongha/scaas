@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Add the ed25519 fields to `test/vectors/hedera_kat.json` (the Hedera vector, NET-HED-03).
 
-    WRITE_KAT=true forge test --match-contract HederaKatTest   # writes the struct, digest (salted MetaTransfer)
+    WRITE_KAT=true forge test --match-contract HederaKatTest --match-test 'test_hederaKat\(\)'
+                                                                # writes the struct, digest (salted UAMetaTransfer, R42)
     python3 test/hedera/gen_hedera_kat.py                       # from smartcontracts/evm/: signs that digest
 
 RFC 8032 ed25519 over the 32 digest bytes (exactly what HIP-632 `isAuthorizedRaw` checks), key from a fixed seed.
