@@ -1,0 +1,31 @@
+# 2026-11-05 ua-rs-sign T2: ua-rs wallet core and derivation (plan T2, MD-5, MD-6; spec §4, §8.2, §9.1, §9.3). UNAUDITED.
+# All commands in clients/ua-rs through scripts/capped, -j2, --locked; full logs git-ignored (target/t2/<step>.log).
+step | commit | rc | counts
+red: cargo test --test wallet_keys (tests/wallet_keys.rs alone) | 68c585e4 | 101 | does not compile: error[E0432] unresolved import `scaas_ua::wallet`
+green: cargo test --features vectors --test wallet_keys | b3e051a5 | 0 | 22 passed, 0 failed
+clippy --all-targets -D warnings (default = wallet + zether + pqz + pqz-set-n2304-kmax4096) | b3e051a5 | 0 | 0 warnings
+clippy --no-default-features | b3e051a5 | 0 | 0 warnings
+clippy --no-default-features --features signers | b3e051a5 | 0 | 0 warnings
+clippy --no-default-features --features json | b3e051a5 | 0 | 0 warnings
+clippy --no-default-features --features pq | b3e051a5 | 0 | 0 warnings
+clippy --features vectors | b3e051a5 | 0 | 0 warnings
+test (default) | b3e051a5 | 0 | 14 suites, 92 passed, 0 failed
+test --no-default-features (the former default cell) | b3e051a5 | 0 | 10 suites, 50 passed, 0 failed
+test --no-default-features --features signers --test groups | b3e051a5 | 0 | 8 passed
+test --no-default-features --features json --test json | b3e051a5 | 0 | 5 passed
+test --no-default-features --features pq --test pq --test ua8 | b3e051a5 | 0 | 32 passed
+test --features vectors | b3e051a5 | 0 | 14 suites, 104 passed, 0 failed
+cargo deny --all-features check (cargo-deny 0.20.2) | b3e051a5 | 1 | advisories FAILED on 4 (RUSTSEC-2026-0387 crypto-bigint 0.5.5: T3a; RUSTSEC-2026-0162/0163/0165 pqcrypto-*: T3b); RUSTSEC-2024-0436 paste ignored (owner); bans, licenses, sources ok
+build wasm32-unknown-unknown --no-default-features | b3e051a5 | 0 | ok
+build wasm32-unknown-unknown --no-default-features --features signers | b3e051a5 | 0 | ok
+build wasm32-unknown-unknown --no-default-features --features json | b3e051a5 | 0 | ok
+build wasm32-unknown-unknown --no-default-features --features wallet | b3e051a5 | 101 | getrandom 0.2 (js) builds; stops at pqcrypto-internals C: 'stdlib.h' not found (Falcon C, T3b; as T0)
+cargo tree --locked in scaas-node, ua-c, ua-cxx, ua-qt, ua-dart-frb/rust (default-features = false) | b3e051a5 | 0 | 5 of 5, Cargo.lock unchanged
+cargo tree -i secp256k1-sys --all-features --target all | b3e051a5 | 0 | not in the build graph (a lock-only entry of bip32's optional secp256k1-ffi)
+mutants: 2026-11-05-ua-rs-sign-t2-mutants.py | b3e051a5 | 0 | 19 killed, 0 survived, 0 not loaded (2026-11-05-ua-rs-sign-t2-mutants.txt)
+docs_check check / paths | b3e051a5 | 0 | 0 errors 5 warnings (existing) / 0 machine paths
+# keys.json: ua rows 216 (184 byte-equal keyData + ua; the 32 Falcon rows refused KindUnavailable until T3b vendors PQClean's
+# seeded keygen), native rows 74 (publicKey; `address` not checked: NativeKey::address is T3a's), refusals 19 (Argument),
+# mnemonics 4 + normalization 2 (entropy, seed). Published: BIP-32 vector 1 (m, m/0'/1/2'/2/1000000000), SLIP-10 ed25519 vector 1,
+# nist256p1 vector 1 + derivation retry (m/28578'/33941, non-hardened) + seed retry: the retry branches run; EIP-2333 4 cases;
+# zether-prover r33_keys.json (uses 7 and 8) equal.

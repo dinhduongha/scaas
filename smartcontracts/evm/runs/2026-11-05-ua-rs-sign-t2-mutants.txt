@@ -1,0 +1,22 @@
+# ua-rs-sign T2 mutants (plan T2 + the store and SLIP-10 retries): one change each on a clean tree at b3e051a5, suite = cargo test -j2 --locked --features vectors --test wallet_keys (clients/ua-rs), source restored byte for byte after each.
+verdict | mutant | file | rc | failed tests
+killed   | M1 hardened bit dropped (UA tree index step) | src/wallet/derive.rs | rc=101 | 6 failed: keys_json_ua_rows, lock_revokes_every_handle_and_keeps_the_wallet_locked, normalization_rows_nfkd, vectors::handle_holds_no_secret_bytes, vectors::lock_wipes_an
+killed   | M2 HKDF salt / info order swapped (PQ seed) | src/wallet/derive.rs | rc=101 | 2 failed: keys_json_ua_rows, vectors::hkdf_pq_seed_is_the_ml_dsa_key
+killed   | M3 account / index swapped (UA tree) | src/wallet/derive.rs | rc=101 | 1 failed: keys_json_ua_rows
+killed   | M4 u32 little-endian (PQ seed info) | src/wallet/derive.rs | rc=101 | 2 failed: keys_json_ua_rows, vectors::hkdf_pq_seed_is_the_ml_dsa_key
+killed   | M5 non-hardened ed25519 step accepted | src/wallet/derive.rs | rc=101 | 1 failed: vectors::slip10_published_vectors
+killed   | M6 wrong kindNo (kind + 1) | src/wallet/derive.rs | rc=101 | 1 failed: keys_json_ua_rows
+killed   | M7 TAG(kind) for utf8(tag) in the HKDF info | src/wallet/derive.rs | rc=101 | 2 failed: keys_json_ua_rows, vectors::hkdf_pq_seed_is_the_ml_dsa_key
+killed   | M8 account >= 2^31 accepted | src/wallet/derive.rs | rc=101 | 1 failed: keys_json_refusals_are_argument
+killed   | M9 NFKD dropped (mnemonic) | src/wallet/mod.rs | rc=101 | 2 failed: normalization_rows_nfkd, vectors::keys_json_mnemonic_rows_entropy_and_seed
+killed   | M10 depth bound removed | src/wallet/bounded.rs | rc=101 | 1 failed: bounded_json_refuses_depth_9
+killed   | M11 index 1 accepted for an EIP-2333 kind | src/wallet/derive.rs | rc=101 | 2 failed: index_1_refused_for_eip2333_kinds, keys_json_refusals_are_argument
+killed   | M12 imported entropy padded to 32 bytes | src/wallet/mod.rs | rc=101 | 5 failed: keys_json_native_rows, keys_json_ua_rows, vectors::keys_json_mnemonic_rows_entropy_and_seed, vectors::mnemonic_is_not_cloned_and_dropped_after_from_mnemonic, ve
+killed   | M13 a key's bytes copied into its handle | src/wallet/store.rs | rc=101 | 1 failed: vectors::handle_holds_no_secret_bytes
+killed   | M14 lock() does not raise the generation | src/wallet/store.rs | rc=101 | 1 failed: vectors::lock_wipes_and_revokes_unlock_never_revives
+killed   | M15 generation check skipped in Handle::with | src/wallet/store.rs | rc=101 | 1 failed: vectors::lock_wipes_and_revokes_unlock_never_revives
+killed   | M16 dropping the wallet does not lock it | src/wallet/mod.rs | rc=101 | 1 failed: vectors::wallet_dropped_with_children_retained
+killed   | M17 nist256p1 child retry over the wrong bytes | src/wallet/derive.rs | rc=101 | 1 failed: vectors::slip10_published_vectors
+killed   | M18 nist256p1 seed retry dropped | src/wallet/derive.rs | rc=101 | 1 failed: vectors::slip10_published_vectors
+killed   | M19 lower case dropped (mnemonic) | src/wallet/mod.rs | rc=101 | 1 failed: normalization_rows_nfkd
+mutants M1-M19 of 19, survived or not loaded: 0
