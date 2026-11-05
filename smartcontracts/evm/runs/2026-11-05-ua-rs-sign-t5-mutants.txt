@@ -1,0 +1,19 @@
+# 2026-11-05 ua-rs-sign T5 mutants: python3 -I smartcontracts/evm/runs/2026-11-05-ua-rs-sign-t5-mutants.py (from the worktree root, run as 1 7 and 8 14), on the tree committed as 6315fcbe;
+# suites (in clients/ua-rs): scripts/capped cargo test -j2 --locked --features vectors --test wallet_tx; M1: the same with --doc wallet::tx (the doc tests of src/wallet/tx.rs).
+# One mutant per run, every file restored byte for byte; the failed-test list is the first failing test binary's (cargo stops there). UNAUDITED.
+killed   | M1 type-4 variant added (EIP-7702) | src/wallet/tx.rs | rc=101 | 2 failed: src/wallet/tx.rs - wallet::tx (line 12), src/wallet/tx.rs - wallet::tx (line 23)
+killed   | M2 chainId dropped from the legacy sighash | src/wallet/tx.rs | rc=101 | 4 failed: chain_separation_tx_rows, eip155_published_row, legacy_without_chain_id_refused, sign_json_tx_rows_per_type
+killed   | M3 legacy v without EIP-155 (27 + yParity) | src/wallet/tx.rs | rc=101 | 4 failed: chain_separation_tx_rows, eip155_published_row, legacy_without_chain_id_refused, sign_json_tx_rows_per_type
+killed   | M4 typed envelope yParity as v (27 + yParity) | src/wallet/tx.rs | rc=101 | 2 failed: chain_separation_tx_rows, sign_json_tx_rows_per_type
+killed   | M5 type byte dropped from a typed envelope | src/wallet/tx.rs | rc=101 | 2 failed: chain_separation_tx_rows, sign_json_tx_rows_per_type
+killed   | M6 integers not minimal (leading zero bytes kept) | src/wallet/tx.rs | rc=101 | 4 failed: chain_separation_tx_rows, eip155_published_row, legacy_without_chain_id_refused, sign_json_tx_rows_per_type
+killed   | M7 access list entry as [storageKeys, address] | src/wallet/tx.rs | rc=101 | 1 failed: sign_json_tx_rows_per_type
+mutants M1-M7 of 14, survived or not loaded: 0
+killed   | M8 type 3: maxFeePerBlobGas left out | src/wallet/tx.rs | rc=101 | 1 failed: sign_json_tx_rows_per_type
+killed   | M9 chain id 0 accepted | src/wallet/tx.rs | rc=101 | 2 failed: legacy_without_chain_id_refused, sign_json_tx_refusals
+killed   | M10 type 3 without a blob hash accepted | src/wallet/tx.rs | rc=101 | 2 failed: blob_tx_without_hashes_refused_when_built, sign_json_tx_refusals
+killed   | M11 a field of another type accepted | src/wallet/tx.rs | rc=101 | 1 failed: sign_json_tx_refusals
+killed   | M12 an integer as hex accepted | src/wallet/tx.rs | rc=101 | 1 failed: sign_json_tx_refusals
+killed   | M13 nonce / gasLimit / chainId past 2^64 truncated | src/wallet/tx.rs | rc=101 | 1 failed: sign_json_tx_refusals
+killed   | M14 tx JSON cap one past 16 KiB | src/wallet/tx.rs | rc=101 | 1 failed: tx_json_capped_at_16_kib
+mutants M8-M14 of 14, survived or not loaded: 0
