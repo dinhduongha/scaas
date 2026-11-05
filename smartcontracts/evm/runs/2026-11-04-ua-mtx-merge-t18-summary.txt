@@ -1,0 +1,52 @@
+# ua-mtx-merge T18 gate summary (full output in git-ignored .log files, not committed)
+# T18: Hedera adapter and e2e (plan T18, R42, R18, R43 / R44, Q2, Q6, MD-11; CTR-MTX-30): the Hedera MetaOp v1 is the token's
+# UAMetaTransfer (the adapter's vector reader on T8's hedera_kat.json); the anvil e2e on ua_metatx jobs (UAMetaTransfer / named
+# UA<Op> on bytes32 ids, auth a UASig), the receipts checked for the UA events only (R18).
+# Toolchain: rustc / cargo 1.97.1 (the root rust-toolchain.toml); the shared node target directory of the main checkout
+# (CARGO_TARGET_DIR), scripts/capped, cargo -j2; the whole suite at CAPPED_MEM=6G; anvil and forge 1.8.5 in PATH,
+# each e2e test its own anvil (killed on drop); zether-cli rebuilt from clients/zether-prover (release) for the Zether e2e.
+# Base: 14a9c629 (T14-T17 done). T18 commits: f72c344e (legacy copies, MD-4), 95461b45 (the build), this one (harness,
+# mutants, summary).
+step | commit | rc | counts
+t18-base-e2e | 14a9c629 | 101 | e2e 0 passed 8 failed: address metatx jobs dead OP_KIND_MISMATCH (outbox_payment, evm_adapter, a_peer_landing), /v1/metatx 400 OP_KIND_MISMATCH (dex book), a TradeOrder for a SCaaS leg not booked (dex_fill: status null), signed_op BAD_PAYLOAD "takes its signature as auth" (router, ua_pay_meta), plain rows 18 != 22
+t18-base-e2e-hedera | 14a9c629 | 101 | e2e_hedera 0 passed 1 failed: the address MetaTransfer job dead (OP_KIND_MISMATCH) where queued was expected
+t18-red-kat | f72c344e + the new test | 101 | lib hedera_kat_is_ua_meta_transfer red: the address reader (Mtx::from_wire) refuses T8's KAT "not an address: 0x0000...0012d687"; green on UaMtx (type hash, struct hash with 0xFEE as 0, digest, ed25519, from = long-zero padded = addresses::canonical("hedera", "0.0.1234567"))
+t18-cargo-test | 95461b45 | 0 | 634 passed 0 failed 63 ignored (lib 629, fuzz 4, mesh_vectors 1; every e2e_* ignored); ignored 56 -> 63 (+7 new e2e)
+t18-clippy | 95461b45 | 0 | cargo clippy --all-targets -- -D warnings: no warning
+t18-e2e | 95461b45 | 0 | cargo test --test e2e -- --ignored --test-threads=1: 15 passed 0 failed (8 moved onto the merged entries, 7 new); no anvil left
+t18-e2e-hedera | 95461b45 | 0 | cargo test --test e2e_hedera -- --ignored: 1 passed 0 failed (hedera_ed25519_eoa_relayed); no anvil left
+t18-docs | 95461b45 | 0 | docs_check check 0 errors, 5 warnings, 16 notes; paths 0; test_docs_check ok
+t18-mutants | this commit's harness on 95461b45 | 101 each | 5 of 5 killed, none a compile error (runs/2026-11-04-ua-mtx-merge-t18-mutants.txt): hedera-from-padded-as-ecdsa, payment-settled-asserted-on-merged-path, wallet-call-on-mtx-execute-as-owner-raw (the plan's three), registry-gate-dropped-on-transfer, unbound-zero-rule-dropped
+#
+# New e2e (ignored, anvil): eoa_mtx_transfer_relayed_at_fee_zero_registry_zero, eoa_mtx_transfer_to_a_ua,
+# derived_mtx_transfer_relayed, ordered_cancel_relayed, gateway_doors_end_to_end, relayed_zether_proof_under_the_ua_tag,
+# mandate_payment_relayed_by_an_eoa_delegate; lib: hedera_kat_is_ua_meta_transfer. Renamed (meaning changed, listed in
+# 95461b45): kat_digest_and_ed25519_signature -> hedera_kat_is_ua_meta_transfer, hedera_native_account_pays_through_two_lanes_
+# and_never_locks_itself -> hedera_ed25519_eoa_relayed, dex_order_book_settles_partial_fills_persists_and_cancels ->
+# dex_order_with_a_ua_trade_order_leg, router_op_relayed_at_fee_zero_on_anvil -> router_op_signed_by_an_eoa.
+# Red first: the base runs above (0 of 8, 0 of 1) and the KAT reader; the seven new e2e passed on their first run (they
+# exercise node code T14-T17 built, no node source changed here): guards, each with a mutant above or a refusal it asserts.
+#
+# Pins, old -> new: none moved (no contract, vector, typehash, selector, layout, gas or size file touched). The adapter's KAT
+# path: smartcontracts/evm/test/vectors/legacy/ua-mtx-merge/hedera_kat.json -> test/vectors/hedera_kat.json (T8's, digest
+# 0xbf0599f5...).
+#
+# Not run in T18: relayed_pqz_proof_under_the_ua_tag is not built: anvil has no PQZ precompile and no deploy script deploys
+# a PQZ release (script/pqz/e2e.py waits for a chain with the precompile); scripts/e2e-zether.sh (plan T18 does not list it;
+# the node's relay of a Zether proof is the new e2e); a real Hedera network (the e2e_hedera stand-in: anvil chain 298 with
+# MockHederaAccountService at 0x16a); the other three PQZ sets; pqz-core gate.
+#
+# Conflicts with the plan / spec:
+#   Plan step 1 lists relayed_pqz_proof_under_the_ua_tag: not buildable locally (above).
+#   Plan step 1 lists hedera_kat_is_ua_meta_transfer among the ignored e2e: it is a lib test of the adapter's reader (no chain).
+#   Mutants 1 and 2 of the plan are test-side (the node computes no Hedera from and asserts no event): applied to the e2e
+#   helpers; two node mutants added that the e2e must catch on a chain.
+#   ordered_cancel_relayed pins the node's outcomes: the cancelled transfer `consumed` (error "unknown", R80), a cancel one
+#   nonce ahead `dead` MetaTxBadNonce (the simulation's revert with the subject nonce behind it; nothing was sent).
+#
+# Stale, owned by later tasks: docs/networks/hedera.md §2 Payload ("MetaOp v1 is the token's MetaTransfer") and NET-HED-15
+# ("a MandateWallet owned by an ED25519 account pays through mtxExecuteAsOwnerRaw"), job-api.md / submit-lanes.md (the outcomes
+# above), the e2e list in docs/node (T19); operator note (T19): a client returns a SCaaS order row's auth in dex_book_load /
+# dex_sync and keeps a ua_metatx job's kind (the fake client of tests/e2e.rs does both since 95461b45); T21's NEW_TESTS take the
+# renamed and new names. metatx.rs keeps Mtx and its address KAT readers: SmartKeyAccount, executeMetaTransaction, the guard,
+# the client decoder, the mesh and tests/fuzz.rs still use them (tests/e2e*.rs and adapters/hedera.rs no longer do).
