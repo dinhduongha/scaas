@@ -352,7 +352,7 @@ contract SelectorAuditPlainTest is SelectorAuditRows, UALedgerBase {
         assertTrue(_uaProbe(address(nt), NormalToken.burn.selector) != IUALedger.MetaTxUnknownOp.selector);
     }
 
-    /// The router's generic path refuses every call (`_execute`, `uaExecute`, `uaBatch`), `cancelNonce` included, so it
+    /// The router's generic path refuses every call (`_execute`, `mtxExecute`, `mtxBatch`), `cancelNonce` included, so it
     /// publishes no allow-list row: what it lists is what is reachable, and the node's list equals it (T15).
     function test_routerPublishesNoAllowList() public view {
         (bytes4[] memory s, uint8[] memory f, uint8[] memory a) = router.mtxSelectors();

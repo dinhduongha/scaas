@@ -71,10 +71,10 @@ contract ProbeTarget {
 /// `GovernanceRouter` (CTR-GOV-15 Change, owner 2026-11-04; spec `2026-11-04-governance-ua-identity.md` §3; governance spec
 /// §3.2, §3.5 as adapted; plan T11). The real registry with PQ kinds (`mldsa44` single keys and an `msig` of three, 2-of-3) on
 /// the stand-in verifier of `UARegistryBase`: the registry's paths (kind caps, `msig` threshold and acceptance) are real, the
-/// signature check is the stand-in's. Every op of the closed table by both signed forms on a real `NormalToken`,
-/// `WrappedToken` and `SCaaSDex` whose `GOV_ROUTER` is the router; every row of the failure table; the lock, the pair, the
-/// generic path.
-contract GovRouterTest is UARegistryBase {
+/// signature check is the stand-in's. Every op of the closed table on its one signed entry (ua-mtx-merge T7), native and
+/// derived, on a real `NormalToken`, `WrappedToken` and `SCaaSDex` whose `GOV_ROUTER` is the router; every row of the
+/// failure table; the lock, the pair, the generic path. The fixture (state, setUp, signing) is shared with `test/merge/RouterPairs.t.sol`.
+abstract contract GovRouterFixture is UARegistryBase {
     uint8 constant MINT = GovernanceBits.MINTABLE;
     uint8 constant RATE = GovernanceBits.RATE_ADJUSTABLE;
     uint8 constant WRAPOFF = GovernanceBits.WRAP_DISABLEABLE;
@@ -113,8 +113,7 @@ contract GovRouterTest is UARegistryBase {
     struct Row {
         string name;
         string params;
-        bytes4 mtx;
-        bytes4 ua;
+        bytes4 sel;
     }
 
     Row[19] internal rows;
@@ -188,30 +187,30 @@ contract GovRouterTest is UARegistryBase {
     }
 
     function _rows() internal {
-        rows[GRANT_ROLE] = Row("GrantRole", ",uint8 bit,bytes32 account", router.mtxGrantRole.selector, router.uaGrantRole.selector);
-        rows[REVOKE_ROLE] = Row("RevokeRole", ",uint8 bit,bytes32 account", router.mtxRevokeRole.selector, router.uaRevokeRole.selector);
-        rows[SET_GRANT] = Row("SetGrant", ",uint8 bit,bytes32 holder,GrantTerms terms", router.mtxSetGrant.selector, router.uaSetGrant.selector);
-        rows[CANCEL_GRANT] = Row("CancelGrant", ",uint8 bit,bytes32 account", router.mtxCancelGrant.selector, router.uaCancelGrant.selector);
-        rows[DISABLE_FEATURE] = Row("DisableFeature", ",uint8 bit", router.mtxDisableFeature.selector, router.uaDisableFeature.selector);
+        rows[GRANT_ROLE] = Row("GrantRole", ",uint8 bit,bytes32 account", router.mtxGrantRole.selector);
+        rows[REVOKE_ROLE] = Row("RevokeRole", ",uint8 bit,bytes32 account", router.mtxRevokeRole.selector);
+        rows[SET_GRANT] = Row("SetGrant", ",uint8 bit,bytes32 holder,GrantTerms terms", router.mtxSetGrant.selector);
+        rows[CANCEL_GRANT] = Row("CancelGrant", ",uint8 bit,bytes32 account", router.mtxCancelGrant.selector);
+        rows[DISABLE_FEATURE] = Row("DisableFeature", ",uint8 bit", router.mtxDisableFeature.selector);
         rows[TRANSFER_OWNERSHIP] =
-            Row("TransferOwnership", ",bytes32 newOwner", router.mtxTransferOwnership.selector, router.uaTransferOwnership.selector);
-        rows[ACCEPT_OWNERSHIP] = Row("AcceptOwnership", "", router.mtxAcceptOwnership.selector, router.uaAcceptOwnership.selector);
-        rows[RENOUNCE_OWNERSHIP] = Row("RenounceOwnership", "", router.mtxRenounceOwnership.selector, router.uaRenounceOwnership.selector);
-        rows[RENOUNCE_ROLE] = Row("RenounceRole", ",uint8 bit", router.mtxRenounceRole.selector, router.uaRenounceRole.selector);
-        rows[OP_MINT] = Row("Mint", ",address to,uint256 amount", router.mtxMint.selector, router.uaMint.selector);
-        rows[MINT_TO_UA] = Row("MintToUA", ",bytes32 to,uint256 amount", router.mtxMintToUA.selector, router.uaMintToUA.selector);
-        rows[DISABLE_WRAP] = Row("DisableWrap", ",address leg,bytes32 reason", router.mtxDisableWrap.selector, router.uaDisableWrap.selector);
+            Row("TransferOwnership", ",bytes32 newOwner", router.mtxTransferOwnership.selector);
+        rows[ACCEPT_OWNERSHIP] = Row("AcceptOwnership", "", router.mtxAcceptOwnership.selector);
+        rows[RENOUNCE_OWNERSHIP] = Row("RenounceOwnership", "", router.mtxRenounceOwnership.selector);
+        rows[RENOUNCE_ROLE] = Row("RenounceRole", ",uint8 bit", router.mtxRenounceRole.selector);
+        rows[OP_MINT] = Row("Mint", ",address to,uint256 amount", router.mtxMint.selector);
+        rows[MINT_TO_UA] = Row("MintToUA", ",bytes32 to,uint256 amount", router.mtxMintToUA.selector);
+        rows[DISABLE_WRAP] = Row("DisableWrap", ",address leg,bytes32 reason", router.mtxDisableWrap.selector);
         rows[PROPOSE_RATE] =
-            Row("ProposeRate", ",address leg,uint96 num,uint96 den", router.mtxProposeRate.selector, router.uaProposeRate.selector);
-        rows[CANCEL_RATE] = Row("CancelRate", "", router.mtxCancelRate.selector, router.uaCancelRate.selector);
-        rows[EXECUTE_RATE] = Row("ExecuteRate", "", router.mtxExecuteRate.selector, router.uaExecuteRate.selector);
+            Row("ProposeRate", ",address leg,uint96 num,uint96 den", router.mtxProposeRate.selector);
+        rows[CANCEL_RATE] = Row("CancelRate", "", router.mtxCancelRate.selector);
+        rows[EXECUTE_RATE] = Row("ExecuteRate", "", router.mtxExecuteRate.selector);
         rows[SET_MARKET] =
-            Row("SetMarket", ",address base,address quote,bool listed", router.mtxSetMarket.selector, router.uaSetMarket.selector);
+            Row("SetMarket", ",address base,address quote,bool listed", router.mtxSetMarket.selector);
         rows[SET_EXCHANGE_TARGET] = Row("SetExchangeTarget", ",address exchangeTarget,bool listed",
-            router.mtxSetExchangeTarget.selector, router.uaSetExchangeTarget.selector);
-        rows[SET_LISTED_ONLY] = Row("SetListedOnly", ",bool on", router.mtxSetListedOnly.selector, router.uaSetListedOnly.selector);
+            router.mtxSetExchangeTarget.selector);
+        rows[SET_LISTED_ONLY] = Row("SetListedOnly", ",bool on", router.mtxSetListedOnly.selector);
         rows[SET_FEE_SPLIT] =
-            Row("SetFeeSplit", ",uint32 relayerSharePpm,address treasury", router.mtxSetFeeSplit.selector, router.uaSetFeeSplit.selector);
+            Row("SetFeeSplit", ",uint32 relayerSharePpm,address treasury", router.mtxSetFeeSplit.selector);
     }
 
     // ------------------------------------------------------------------ governed contracts
@@ -264,9 +263,8 @@ contract GovRouterTest is UARegistryBase {
             keccak256(bytes(name)), keccak256(bytes(version)), chainId, verifying, salt));
     }
 
-    function _typehash(uint256 op, bool ua) internal view returns (bytes32) {
-        string memory s = string.concat(ua ? "UA" : "", rows[op].name, ua ? "(bytes32 from" : "(address from",
-            ",address target", rows[op].params, TAIL);
+    function _typehash(uint256 op) internal view returns (bytes32) {
+        string memory s = string.concat("UA", rows[op].name, "(bytes32 from", ",address target", rows[op].params, TAIL);
         if (op == SET_GRANT) s = string.concat(s, TERMS);
         return keccak256(bytes(s));
     }
@@ -275,11 +273,11 @@ contract GovRouterTest is UARegistryBase {
         return MetaTxLib.UAEnvelope(from, batch, r.mtxNonce(from, batch), block.timestamp + 1 hours, 0, address(0), 0, address(0));
     }
 
-    /// The digest `from` signs: the struct `<Op>` / `UA<Op>` over `target` and `words` (the op's own words) in `r`'s domain.
-    function _digest(GovernanceRouter r, uint256 op, bool ua, MetaTxLib.UAEnvelope memory e, address target,
+    /// The digest `from` signs: the struct `UA<Op>` over `target` and `words` (the op's own words) in `r`'s domain.
+    function _digest(GovernanceRouter r, uint256 op, MetaTxLib.UAEnvelope memory e, address target,
         bytes memory words) internal view returns (bytes32)
     {
-        bytes32 h = keccak256(bytes.concat(abi.encode(_typehash(op, ua), e.from, target), words,
+        bytes32 h = keccak256(bytes.concat(abi.encode(_typehash(op), e.from, target), words,
             abi.encode(e.batch, e.nonce, e.validUntil, e.mode, address(0), e.fee, address(0))));
         return keccak256(abi.encodePacked("\x19\x01", _domain(r), h));
     }
@@ -303,12 +301,12 @@ contract GovRouterTest is UARegistryBase {
         else a.signature = _ecdsa(id, digest);
     }
 
-    /// The calldata of `mtx<Op>` / `ua<Op>`: the envelope, `target`, the op's ABI words `args`, then the signature.
-    function _calldata(uint256 op, bool ua, MetaTxLib.UAEnvelope memory e, address target, bytes memory args,
+    /// The calldata of `mtx<Op>`: the envelope, `target`, the op's ABI words `args`, then the signature.
+    function _calldata(uint256 op, MetaTxLib.UAEnvelope memory e, address target, bytes memory args,
         bytes memory sigTail) internal view returns (bytes memory)
     {
         bytes memory head = bytes.concat(abi.encode(e), abi.encode(target), args);
-        return bytes.concat(ua ? rows[op].ua : rows[op].mtx, head, abi.encode(head.length + 32), sigTail);
+        return bytes.concat(rows[op].sel, head, abi.encode(head.length + 32), sigTail);
     }
 
     /// `abi.encode(x)` of one dynamic value without its leading offset word.
@@ -318,22 +316,22 @@ contract GovRouterTest is UARegistryBase {
     }
 
     /// The signed call of `op` by `from` on `r`: `args` the call's ABI words, `words` the struct's (equal but for `SetGrant`).
-    function _signed(GovernanceRouter r, uint256 op, bool ua, bytes32 from, uint256 batch, address target, bytes memory args,
+    function _signed(GovernanceRouter r, uint256 op, bytes32 from, uint256 batch, address target, bytes memory args,
         bytes memory words) internal view returns (bytes memory)
     {
-        return _signedAt(r, op, ua, _envelope(r, from, batch), target, args, words);
+        return _signedAt(r, op, _envelope(r, from, batch), target, args, words);
     }
 
     /// `_signed` over a given envelope.
-    function _signedAt(GovernanceRouter r, uint256 op, bool ua, MetaTxLib.UAEnvelope memory e, address target,
+    function _signedAt(GovernanceRouter r, uint256 op, MetaTxLib.UAEnvelope memory e, address target,
         bytes memory args, bytes memory words) internal view returns (bytes memory)
     {
-        bytes32 d = _digest(r, op, ua, e, target, words);
-        return _calldata(op, ua, e, target, args, ua ? _tail(abi.encode(_auth(e.from, d))) : _tail(abi.encode(_ecdsa(e.from, d))));
+        bytes32 d = _digest(r, op, e, target, words);
+        return _calldata(op, e, target, args, _tail(abi.encode(_auth(e.from, d))));
     }
 
-    function _op(uint256 op, bool ua, bytes32 from, address target, bytes memory args) internal view returns (bytes memory) {
-        return _signed(router, op, ua, from, 0, target, args, args);
+    function _op(uint256 op, bytes32 from, address target, bytes memory args) internal view returns (bytes memory) {
+        return _signed(router, op, from, 0, target, args, args);
     }
 
     function _setGrantArgs(uint8 bit, bytes32 holder, IGovernance.GrantTerms memory t)
@@ -353,85 +351,102 @@ contract GovRouterTest is UARegistryBase {
         if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
     }
 
-    function _do(uint256 op, bool ua, bytes32 from, address target, bytes memory args) internal {
-        _run(_op(op, ua, from, target, args));
+    function _do(uint256 op, bytes32 from, address target, bytes memory args) internal {
+        _run(_op(op, from, target, args));
     }
 
-    // ------------------------------------------------------------------ every op, both forms
+    /// Slot `idx` of `msigData` signs `(purpose, digest)` for the `msig` `ua`.
+    function _slot(bytes32 ua, bytes32 purpose, bytes32 digest, uint16 idx)
+        internal view returns (IUARegistry.MemberSig memory)
+    {
+        bytes32 md = _memberDigest(ua, purpose, digest);
+        for (uint256 j; j < 3; ++j) {
+            if (_indexOf(msigData, UAKinds.uaOf(ML44, mkeys[j])) != idx) continue;
+            return IUARegistry.MemberSig(idx, new IUARegistry.InnerSig[](0),
+                _sig(mkeys[j], UAKinds.uaMessage(ML44, UAKinds.PURPOSE_MEMBER, md)));
+        }
+        revert("slot");
+    }
+}
+
+contract GovRouterTest is GovRouterFixture {
+    // ------------------------------------------------------------------ every op, native and derived
 
     /// The 19 ops of the closed table, in an order where each one's effect is read on a real token, wrapped token and DEX.
     /// `s` owns all three and is the guardian; `w` (a native id with code) is the rate admin; `y` takes the token over.
-    function _everyOp(bool ua, bytes32 s, bytes32 y, bytes32 w) internal {
+    function _everyOp(bytes32 s, bytes32 y, bytes32 w) internal {
         NormalToken t = _normal(s, s, 1 hours);
-        _tokenOps(ua, s, y, t);
-        _wrappedOps(ua, s, w, _wrapped(s, s, w));
-        _dexOps(ua, s, address(t), _dex(s));
+        _tokenOps(s, y, t);
+        _wrappedOps(s, w, _wrapped(s, s, w));
+        _dexOps(s, address(t), _dex(s));
     }
 
-    function _tokenOps(bool ua, bytes32 s, bytes32 y, NormalToken t) internal {
-        _do(OP_MINT, ua, s, address(t), abi.encode(BOB, uint256(5)));
+    function _tokenOps(bytes32 s, bytes32 y, NormalToken t) internal {
+        _do(OP_MINT, s, address(t), abi.encode(BOB, uint256(5)));
         assertEq(t.balanceOf(BOB), 5, "Mint");
-        _do(MINT_TO_UA, ua, s, address(t), abi.encode(pq, uint256(3)));
+        _do(MINT_TO_UA, s, address(t), abi.encode(pq, uint256(3)));
         assertEq(t.balanceOfUA(pq), 3, "MintToUA");
         (bytes memory a, bytes memory wd) = _setGrantArgs(MINT, s, _limited(100));
-        _run(_signed(router, SET_GRANT, ua, s, 0, address(t), a, wd));
+        _run(_signed(router, SET_GRANT, s, 0, address(t), a, wd));
         assertEq(t.grantOf(MINT, s).total, 100, "SetGrant: a narrowing applies at once");
-        _do(GRANT_ROLE, ua, s, address(t), abi.encode(MINT, y));
+        _do(GRANT_ROLE, s, address(t), abi.encode(MINT, y));
         (uint64 eta,,, bool live) = t.pendingGrant(MINT, y);
         assertTrue(eta != 0 && live, "GrantRole: proposed under the delay");
-        _do(CANCEL_GRANT, ua, s, address(t), abi.encode(MINT, y));
+        _do(CANCEL_GRANT, s, address(t), abi.encode(MINT, y));
         (eta,,,) = t.pendingGrant(MINT, y);
         assertEq(eta, 0, "CancelGrant");
-        _do(REVOKE_ROLE, ua, s, address(t), abi.encode(MINT, y));
+        _do(REVOKE_ROLE, s, address(t), abi.encode(MINT, y));
         assertTrue(t.grantOf(MINT, y).barred, "RevokeRole: the owner's revoke bars");
-        _do(RENOUNCE_ROLE, ua, s, address(t), abi.encode(MINT));
+        _do(RENOUNCE_ROLE, s, address(t), abi.encode(MINT));
         assertFalse(t.hasRole(MINT, s), "RenounceRole");
-        _do(DISABLE_FEATURE, ua, s, address(t), abi.encode(MINT));
+        _do(DISABLE_FEATURE, s, address(t), abi.encode(MINT));
         assertEq(t.features() & (uint256(1) << MINT), 0, "DisableFeature");
-        _do(TRANSFER_OWNERSHIP, ua, s, address(t), abi.encode(y));
+        _do(TRANSFER_OWNERSHIP, s, address(t), abi.encode(y));
         assertEq(t.pendingOwner(), y, "TransferOwnership");
-        _do(ACCEPT_OWNERSHIP, ua, y, address(t), "");
+        _do(ACCEPT_OWNERSHIP, y, address(t), "");
         assertEq(t.owner(), y, "AcceptOwnership");
-        _do(RENOUNCE_OWNERSHIP, ua, y, address(t), "");
+        _do(RENOUNCE_OWNERSHIP, y, address(t), "");
         assertEq(t.owner(), bytes32(0), "RenounceOwnership");
     }
 
-    function _wrappedOps(bool ua, bytes32 s, bytes32 w, WrappedToken wt) internal {
-        _do(PROPOSE_RATE, ua, w, address(wt), abi.encode(address(usd), uint96(101), uint96(100)));
+    function _wrappedOps(bytes32 s, bytes32 w, WrappedToken wt) internal {
+        _do(PROPOSE_RATE, w, address(wt), abi.encode(address(usd), uint96(101), uint96(100)));
         (, uint96 num,, uint64 reta) = wt.pendingRate();
         assertTrue(num == 101 && reta != 0, "ProposeRate");
-        _do(CANCEL_RATE, ua, w, address(wt), "");
+        _do(CANCEL_RATE, w, address(wt), "");
         (,,, reta) = wt.pendingRate();
         assertEq(reta, 0, "CancelRate");
-        _do(PROPOSE_RATE, ua, w, address(wt), abi.encode(address(usd), uint96(101), uint96(100)));
+        _do(PROPOSE_RATE, w, address(wt), abi.encode(address(usd), uint96(101), uint96(100)));
         vm.warp(block.timestamp + 2 days);
-        _do(EXECUTE_RATE, ua, w, address(wt), "");
+        _do(EXECUTE_RATE, w, address(wt), "");
         (num,,,,) = wt.legOf(address(usd));
         assertEq(num, 101, "ExecuteRate");
-        _do(DISABLE_WRAP, ua, s, address(wt), abi.encode(address(usd), bytes32("r")));
+        _do(DISABLE_WRAP, s, address(wt), abi.encode(address(usd), bytes32("r")));
         (,,,, bool on) = wt.legOf(address(usd));
         assertFalse(on, "DisableWrap");
     }
 
-    function _dexOps(bool ua, bytes32 s, address quote, SCaaSDex d) internal {
-        _do(SET_MARKET, ua, s, address(d), abi.encode(address(usd), quote, true));
+    function _dexOps(bytes32 s, address quote, SCaaSDex d) internal {
+        _do(SET_MARKET, s, address(d), abi.encode(address(usd), quote, true));
         assertTrue(d.marketListed(address(usd), quote), "SetMarket");
-        _do(SET_EXCHANGE_TARGET, ua, s, address(d), abi.encode(address(0xE7), true));
+        _do(SET_EXCHANGE_TARGET, s, address(d), abi.encode(address(0xE7), true));
         assertTrue(d.exchangeTarget(address(0xE7)), "SetExchangeTarget");
-        _do(SET_LISTED_ONLY, ua, s, address(d), abi.encode(true));
+        _do(SET_LISTED_ONLY, s, address(d), abi.encode(true));
         assertTrue(d.listedOnly(), "SetListedOnly");
-        _do(SET_FEE_SPLIT, ua, s, address(d), abi.encode(uint32(500_000), TREASURY));
+        _do(SET_FEE_SPLIT, s, address(d), abi.encode(uint32(500_000), TREASURY));
         assertEq(d.relayerSharePpm(), 500_000, "SetFeeSplit");
     }
 
-    /// `mtx<Op>`: native addresses sign (an EOA owner, an EOA taking over, a contract wallet by ERC-1271).
-    function test_eachOpByMtx() public {
-        _everyOp(false, eoa, next, wallet);
+    /// Native ids on the merged `mtx<Op>` (ua-mtx-merge T7, meaning: was the address `mtx<Op>` form): an EOA owner, an EOA
+    /// taking over, a contract wallet by ERC-1271, each over `UA<Op>` with its own key.
+    function test_eachOpByNative() public {
+        _everyOp(eoa, next, wallet);
     }
 
-    /// `ua<Op>`: a PQ single key owns, a PQ `msig` takes over, the contract wallet signs as its native kind.
-    function test_eachOpByUa() public {
-        _everyOp(true, pq, msig, wallet);
+    /// Derived ids on the merged `mtx<Op>` (was `ua<Op>`): a PQ single key owns, a PQ `msig` takes over, the contract wallet
+    /// signs as its native kind.
+    function test_eachOpByDerived() public {
+        _everyOp(pq, msig, wallet);
     }
 
     /// A PQ `msig` becomes owner of a token and of the DEX, grants a PQ single key, which mints; the `msig` hands both over
@@ -443,25 +458,25 @@ contract GovRouterTest is UARegistryBase {
         SCaaSDex d = _dex(msig);
         vm.prank(creator);
         t.transferOwnership(msig);
-        _do(ACCEPT_OWNERSHIP, true, msig, address(t), "");
+        _do(ACCEPT_OWNERSHIP, msig, address(t), "");
         assertEq(t.owner(), msig, "the msig became owner through the router");
-        _do(GRANT_ROLE, true, msig, address(t), abi.encode(MINT, pq));
-        _do(OP_MINT, true, pq, address(t), abi.encode(BOB, uint256(9)));
+        _do(GRANT_ROLE, msig, address(t), abi.encode(MINT, pq));
+        _do(OP_MINT, pq, address(t), abi.encode(BOB, uint256(9)));
         assertEq(t.balanceOf(BOB), 9);
-        _do(TRANSFER_OWNERSHIP, true, msig, address(t), abi.encode(pq));
-        _do(ACCEPT_OWNERSHIP, true, pq, address(t), "");
+        _do(TRANSFER_OWNERSHIP, msig, address(t), abi.encode(pq));
+        _do(ACCEPT_OWNERSHIP, pq, address(t), "");
         assertEq(t.owner(), pq);
 
-        _do(SET_MARKET, true, msig, address(d), abi.encode(address(usd), address(t), true));
-        _do(TRANSFER_OWNERSHIP, true, msig, address(d), abi.encode(pq));
-        _do(ACCEPT_OWNERSHIP, true, pq, address(d), "");
+        _do(SET_MARKET, msig, address(d), abi.encode(address(usd), address(t), true));
+        _do(TRANSFER_OWNERSHIP, msig, address(d), abi.encode(pq));
+        _do(ACCEPT_OWNERSHIP, pq, address(d), "");
         assertEq(d.owner(), pq);
-        _do(GRANT_ROLE, true, pq, address(d), abi.encode(LISTING, pq));
-        _do(REVOKE_ROLE, true, pq, address(d), abi.encode(LISTING, msig));
-        bytes memory cd = _op(SET_LISTED_ONLY, true, msig, address(d), abi.encode(true));
+        _do(GRANT_ROLE, pq, address(d), abi.encode(LISTING, pq));
+        _do(REVOKE_ROLE, pq, address(d), abi.encode(LISTING, msig));
+        bytes memory cd = _op(SET_LISTED_ONLY, msig, address(d), abi.encode(true));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, LISTING, msig));
         _run(cd);
-        _do(SET_LISTED_ONLY, true, pq, address(d), abi.encode(true));
+        _do(SET_LISTED_ONLY, pq, address(d), abi.encode(true));
         assertTrue(d.listedOnly());
     }
 
@@ -471,14 +486,14 @@ contract GovRouterTest is UARegistryBase {
         IGovernance.GrantTerms memory g = IGovernance.GrantTerms(2, 50, 1000, 100, 1 days, uint64(block.timestamp + 30 days),
             7, true, bytes32(0));
         (bytes memory a, bytes memory w) = _setGrantArgs(MINT, msig, g);
-        _run(_signed(router, SET_GRANT, true, pq, 0, address(t), a, w));
+        _run(_signed(router, SET_GRANT, pq, 0, address(t), a, w));
         IGovernance.Grant memory r = t.grantOf(MINT, msig);
         assertEq(abi.encode(r.min, r.max, r.total, r.perWindow, r.window, r.validUntil, r.maxUses, r.delegable, r.scope),
             abi.encode(g.min, g.max, g.total, g.perWindow, g.window, g.validUntil, g.maxUses, g.delegable, g.scope));
         // the terms are signed: other terms under a signature over these are refused
         g.total = 1001;
         (bytes memory a2,) = _setGrantArgs(MINT, msig, g);
-        bytes memory forged = _signed(router, SET_GRANT, true, pq, 0, address(t), a2, w);
+        bytes memory forged = _signed(router, SET_GRANT, pq, 0, address(t), a2, w);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, pq));
         _run(forged);
     }
@@ -488,31 +503,31 @@ contract GovRouterTest is UARegistryBase {
     /// A subject without the power: the target refuses with its own error, the whole call reverts, the nonce is unspent.
     function test_wrongSubjectRefusedNonceUnspent() public {
         NormalToken t = _normal(pq, pq, 0);
-        bytes memory cd = _op(OP_MINT, true, msig, address(t), abi.encode(BOB, uint256(1)));
+        bytes memory cd = _op(OP_MINT, msig, address(t), abi.encode(BOB, uint256(1)));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, MINT, msig));
         _run(cd);
-        cd = _op(GRANT_ROLE, false, stranger, address(t), abi.encode(MINT, stranger));
+        cd = _op(GRANT_ROLE, stranger, address(t), abi.encode(MINT, stranger));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.NotOwner.selector, stranger));
         _run(cd);
         assertEq(router.mtxNonce(msig, 0), 0);
         assertEq(router.mtxNonce(stranger, 0), 0);
-        _do(OP_MINT, true, pq, address(t), abi.encode(BOB, uint256(1))); // positive control
+        _do(OP_MINT, pq, address(t), abi.encode(BOB, uint256(1))); // positive control
         assertEq(router.mtxNonce(pq, 0), 1);
     }
 
-    /// Another signer's signature: refused before anything runs, on both forms.
+    /// Another signer's signature: refused before anything runs, for a native and a derived signer.
     function test_wrongSignerRefused() public {
         NormalToken t = _normal(eoa, eoa, 0);
         MetaTxLib.UAEnvelope memory e = _envelope(router, eoa, 0);
         bytes memory args = abi.encode(BOB, uint256(1));
-        bytes32 d = _digest(router, OP_MINT, false, e, address(t), args);
+        bytes32 d = _digest(router, OP_MINT, e, address(t), args);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
-        _run(_calldata(OP_MINT, false, e, address(t), args, _tail(abi.encode(_ecdsa(stranger, d)))));
+        _run(_calldata(OP_MINT, e, address(t), args, _tail(abi.encode(_auth(stranger, d)))));
         e = _envelope(router, pq, 0);
-        d = _digest(router, OP_MINT, true, e, address(t), args);
+        d = _digest(router, OP_MINT, e, address(t), args);
         IUARegistry.UASig memory a;
         a.signature = _sig(mkeys[0], UAKinds.uaMessage(ML44, UAKinds.PURPOSE_METATX, d)); // another key's
-        bytes memory cd = _calldata(OP_MINT, true, e, address(t), args, _tail(abi.encode(a)));
+        bytes memory cd = _calldata(OP_MINT, e, address(t), args, _tail(abi.encode(a)));
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, pq));
         _run(cd);
     }
@@ -520,7 +535,7 @@ contract GovRouterTest is UARegistryBase {
     /// A relayer that starves the PQ verify gets `UAVerifyGas`, no verdict, and the nonce stays unspent.
     function test_starvedRelayerUAVerifyGasNonceUnspent() public {
         NormalToken t = _normal(pq, pq, 0);
-        bytes memory cd = _op(OP_MINT, true, pq, address(t), abi.encode(BOB, uint256(1)));
+        bytes memory cd = _op(OP_MINT, pq, address(t), abi.encode(BOB, uint256(1)));
         (bool ok, bytes memory ret) = address(router).call{gas: 3_000_000}(cd);
         assertFalse(ok);
         assertEq(bytes4(ret), UAKinds.UAVerifyGas.selector);
@@ -534,14 +549,14 @@ contract GovRouterTest is UARegistryBase {
         NormalToken t = _normal(msig, 0, 0);
         MetaTxLib.UAEnvelope memory e = _envelope(router, msig, 0);
         bytes memory args = abi.encode(MINT, pq);
-        bytes32 d = _digest(router, GRANT_ROLE, true, e, address(t), args);
+        bytes32 d = _digest(router, GRANT_ROLE, e, address(t), args);
         IUARegistry.UASig memory a;
         a.members = _memberSigs(msig, UAKinds.PURPOSE_METATX, d, 1);
-        bytes memory cd = _calldata(GRANT_ROLE, true, e, address(t), args, _tail(abi.encode(a)));
+        bytes memory cd = _calldata(GRANT_ROLE, e, address(t), args, _tail(abi.encode(a)));
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, msig));
         _run(cd);
         assertEq(router.mtxNonce(msig, 0), 0);
-        _do(GRANT_ROLE, true, msig, address(t), args); // positive control: 2 of 3
+        _do(GRANT_ROLE, msig, address(t), args); // positive control: 2 of 3
         assertTrue(t.hasRole(MINT, pq));
     }
 
@@ -557,42 +572,29 @@ contract GovRouterTest is UARegistryBase {
         NormalToken t = _normal(m2, 0, 0);
         MetaTxLib.UAEnvelope memory e = _envelope(router, m2, 0);
         bytes memory args = abi.encode(MINT, pq);
-        bytes32 dg = _digest(router, GRANT_ROLE, true, e, address(t), args);
+        bytes32 dg = _digest(router, GRANT_ROLE, e, address(t), args);
         IUARegistry.UASig memory a;
         a.members = new IUARegistry.MemberSig[](1);
         a.members[0] = _slot(m2, UAKinds.PURPOSE_METATX, dg, 1); // slot 1 never accepted
-        bytes memory cd = _calldata(GRANT_ROLE, true, e, address(t), args, _tail(abi.encode(a)));
+        bytes memory cd = _calldata(GRANT_ROLE, e, address(t), args, _tail(abi.encode(a)));
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, m2));
         _run(cd);
         a.members[0] = _slot(m2, UAKinds.PURPOSE_METATX, dg, 0); // positive control: the accepted slot
         msigData = saved;
-        _run(_calldata(GRANT_ROLE, true, e, address(t), args, _tail(abi.encode(a))));
+        _run(_calldata(GRANT_ROLE, e, address(t), args, _tail(abi.encode(a))));
         assertTrue(t.hasRole(MINT, pq));
-    }
-
-    /// Slot `idx` of `msigData` signs `(purpose, digest)` for the `msig` `ua`.
-    function _slot(bytes32 ua, bytes32 purpose, bytes32 digest, uint16 idx)
-        internal view returns (IUARegistry.MemberSig memory)
-    {
-        bytes32 md = _memberDigest(ua, purpose, digest);
-        for (uint256 j; j < 3; ++j) {
-            if (_indexOf(msigData, UAKinds.uaOf(ML44, mkeys[j])) != idx) continue;
-            return IUARegistry.MemberSig(idx, new IUARegistry.InnerSig[](0),
-                _sig(mkeys[j], UAKinds.uaMessage(ML44, UAKinds.PURPOSE_MEMBER, md)));
-        }
-        revert("slot");
     }
 
     /// R-04 on the real router: the target re-enters the router while the router calls it: `Reentrancy`, through a signed entry and `cancelNonce`.
     function test_refuted_targetReentersTheRouter() public {
         ProbeTarget p = new ProbeTarget(router);
         NormalToken t = _normal(pq, pq, 0);
-        p.arm(_signed(router, OP_MINT, true, pq, 1, address(t), abi.encode(BOB, uint256(1)), abi.encode(BOB, uint256(1))));
-        _do(SET_LISTED_ONLY, true, pq, address(p), abi.encode(true));
+        p.arm(_signed(router, OP_MINT, pq, 1, address(t), abi.encode(BOB, uint256(1)), abi.encode(BOB, uint256(1))));
+        _do(SET_LISTED_ONLY, pq, address(p), abi.encode(true));
         assertEq(bytes4(p.failure()), IMetaTx.Reentrancy.selector);
         assertEq(t.balanceOf(BOB), 0);
         p.arm(abi.encodeCall(IMetaTx.cancelNonce, (0)));
-        _do(SET_LISTED_ONLY, true, pq, address(p), abi.encode(true));
+        _do(SET_LISTED_ONLY, pq, address(p), abi.encode(true));
         assertEq(bytes4(p.failure()), IMetaTx.Reentrancy.selector);
     }
 
@@ -600,10 +602,10 @@ contract GovRouterTest is UARegistryBase {
     /// An envelope the owner signed before it handed the token over is refused by the token once the hand-over completes.
     function test_refuted_formerOwnersEnvelope() public {
         NormalToken t = _normal(eoa, 0, 0);
-        bytes memory late = _signed(router, GRANT_ROLE, false, eoa, 1, address(t), abi.encode(MINT, stranger),
+        bytes memory late = _signed(router, GRANT_ROLE, eoa, 1, address(t), abi.encode(MINT, stranger),
             abi.encode(MINT, stranger));
-        _do(TRANSFER_OWNERSHIP, false, eoa, address(t), abi.encode(next));
-        _do(ACCEPT_OWNERSHIP, false, next, address(t), "");
+        _do(TRANSFER_OWNERSHIP, eoa, address(t), abi.encode(next));
+        _do(ACCEPT_OWNERSHIP, next, address(t), "");
         vm.expectRevert(abi.encodeWithSelector(IGovernance.NotOwner.selector, eoa));
         _run(late);
         assertEq(router.mtxNonce(eoa, 1), 0, "the nonce stays unspent: the target's refusal reverts the call");
@@ -611,7 +613,7 @@ contract GovRouterTest is UARegistryBase {
 
     /// A target without code: refused by name, nonce unspent (a call to it would succeed and do nothing).
     function test_targetWithoutCodeRefused() public {
-        bytes memory cd = _op(SET_LISTED_ONLY, true, pq, address(0xC0DE), abi.encode(true));
+        bytes memory cd = _op(SET_LISTED_ONLY, pq, address(0xC0DE), abi.encode(true));
         vm.expectRevert(abi.encodeWithSelector(GovernanceRouterBase.TargetHasNoCode.selector, address(0xC0DE)));
         _run(cd);
         assertEq(router.mtxNonce(pq, 0), 0);
@@ -623,17 +625,17 @@ contract GovRouterTest is UARegistryBase {
         NormalToken b = _normal(pq, pq, 0);
         bytes memory args = abi.encode(BOB, uint256(1));
         MetaTxLib.UAEnvelope memory e = _envelope(router, pq, 0);
-        bytes32 d = _digest(router, OP_MINT, true, e, address(a), args);
+        bytes32 d = _digest(router, OP_MINT, e, address(a), args);
         bytes memory tail = _tail(abi.encode(_auth(pq, d)));
-        bytes memory cd = _calldata(OP_MINT, true, e, address(b), args, tail);
+        bytes memory cd = _calldata(OP_MINT, e, address(b), args, tail);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, pq));
         _run(cd);
         e = _envelope(router, eoa, 0);
-        d = _digest(router, OP_MINT, false, e, address(a), args);
-        cd = _calldata(OP_MINT, false, e, address(b), args, _tail(abi.encode(_ecdsa(eoa, d))));
+        d = _digest(router, OP_MINT, e, address(a), args);
+        cd = _calldata(OP_MINT, e, address(b), args, _tail(abi.encode(_auth(eoa, d))));
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         _run(cd);
-        _run(_calldata(OP_MINT, true, _envelope(router, pq, 0), address(a), args, tail)); // positive control
+        _run(_calldata(OP_MINT, _envelope(router, pq, 0), address(a), args, tail)); // positive control
         assertEq(a.balanceOf(BOB), 1);
     }
 
@@ -643,7 +645,7 @@ contract GovRouterTest is UARegistryBase {
         GovernanceRouter other = new GovernanceRouter(chainUidA, PREG, address(0), false);
         GovernanceRouter otherUid = new GovernanceRouter(keccak256("another chain"), PREG, address(0), false);
         NormalToken t = _normal(pq, pq, 0);
-        bytes memory cd = _op(OP_MINT, true, pq, address(t), abi.encode(BOB, uint256(1)));
+        bytes memory cd = _op(OP_MINT, pq, address(t), abi.encode(BOB, uint256(1)));
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, pq));
         _runOn(other, cd);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, pq));
@@ -666,7 +668,7 @@ contract GovRouterTest is UARegistryBase {
         e.mode = MetaTxLib.MODE_FEE_FIXED;
         e.fee = 1;
         bytes memory args = abi.encode(BOB, uint256(1));
-        bytes memory cd = _signedAt(router, OP_MINT, true, e, address(t), args, args);
+        bytes memory cd = _signedAt(router, OP_MINT, e, address(t), args, args);
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxUnknownMode.selector, e.mode));
         _run(cd);
         assertEq(router.supportedModes(), MetaTxLib.MODE_RESTRICT_RELAYER | MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT);
@@ -721,7 +723,7 @@ contract GovRouterTest is UARegistryBase {
     /// the named op's purpose `metatx`, MD-5.)
     function test_cancelNonceStays() public {
         NormalToken t = _normal(pq, pq, 0);
-        bytes memory cd = _op(OP_MINT, true, pq, address(t), abi.encode(BOB, uint256(1)));
+        bytes memory cd = _op(OP_MINT, pq, address(t), abi.encode(BOB, uint256(1)));
         MetaTxLib.UAEnvelope memory e = MetaTxLib.UAEnvelope(pq, 5, 0, block.timestamp + 1 hours, 0, address(0), 0, address(0));
         bytes32 d = MtxDigest.typed(address(router), keccak256(abi.encode(MetaTxLib.UA_CANCEL_NONCE_TYPEHASH, e.from, uint256(0),
             e.batch, e.nonce, e.validUntil, e.mode, address(0), e.fee, address(0))));
@@ -741,19 +743,19 @@ contract GovRouterTest is UARegistryBase {
     /// During the call the target reads the signer; a bystander reads 0 at the same moment; outside a call, 0.
     function test_subjectOnlyToTheLiveTarget() public {
         ProbeTarget p = new ProbeTarget(router);
-        _do(SET_LISTED_ONLY, true, msig, address(p), abi.encode(true));
+        _do(SET_LISTED_ONLY, msig, address(p), abi.encode(true));
         assertEq(p.seen(), msig);
         assertEq(p.seenByOther(), bytes32(0), "a non-target reads 0 during a live call");
         vm.prank(address(p));
         assertEq(router.subject(), bytes32(0), "the target reads 0 outside a call");
-        _do(SET_LISTED_ONLY, false, eoa, address(p), abi.encode(true));
-        assertEq(p.seen(), eoa, "the mtx form's subject is the native id");
+        _do(SET_LISTED_ONLY, eoa, address(p), abi.encode(true));
+        assertEq(p.seen(), eoa, "a native signer's subject is its native id");
     }
 
     /// The pair is cleared when the call returns: the target asks again in the same transaction and reads 0.
     function test_subjectClearedInTheSameTransaction() public {
         ProbeTarget p = new ProbeTarget(router);
-        bytes memory cd = _op(SET_LISTED_ONLY, true, pq, address(p), abi.encode(true));
+        bytes memory cd = _op(SET_LISTED_ONLY, pq, address(p), abi.encode(true));
         p.relayThenRead(cd);
         assertEq(p.seen(), pq);
         assertEq(p.seenAfter(), bytes32(0));

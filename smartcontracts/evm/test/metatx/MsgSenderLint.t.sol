@@ -107,8 +107,8 @@ contract MsgSenderLintTest is Test {
         // id, or, from the release's GOV_ROUTER, the UA the router names; the router names it only to its live target
         assertEq(_count("src/governance/GovernanceBase.sol", "msg.sender", false), 2,
             "GovernanceBase: _govSubject's router compare and the subject asked of it");
-        assertEq(_count("src/governance/GovernanceRouterBase.sol", "msg.sender", false), 3,
-            "GovernanceRouterBase: subject()'s target compare, the event relayer x2 (mtx, ua)");
+        assertEq(_count("src/governance/GovernanceRouterBase.sol", "msg.sender", false), 2,
+            "GovernanceRouterBase: subject()'s target compare, the event relayer (ua-mtx-merge T7: 3 -> 2, _mtxCall to legacy)");
         assertEq(_count("src/governance/GovernanceRouter.sol", "msg.sender", false), 0, "GovernanceRouter");
         // ua-mtx-merge T3b (Q6): every authority check reads `_subject()` (CTR-ACC-12), none `msg.sender`
         assertEq(_count("src/wallet/MandateWallet.sol", "msg.sender", false), 0, "MandateWallet");

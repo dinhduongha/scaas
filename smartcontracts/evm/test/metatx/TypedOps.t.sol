@@ -1083,8 +1083,8 @@ contract ConfidentialRowsZetherTest is ConfidentialRows, ZetherFixture {
 /// governance T12 (spec §3.2; CTR-GOV-15 Change): every `GovernanceRouter` row of `typed_ops.json` runs verbatim on a real
 /// router deployed at the row's `verifyingContract` (context A: chain id 31337, `chain_uid` A), so the row's own signature
 /// is the router's: no re-signing. Each op's `target` is a real `NormalToken`, `WrappedToken` or `SCaaSDex` cloned at the
-/// row's `target`, `GOV_ROUTER` the router, and the op's effect is read there. Both forms of an op from one snapshot: they
-/// share the subject (the key's native id) and its lane.
+/// row's `target`, `GOV_ROUTER` the router, and the op's effect is read there. ua-mtx-merge T7: the `UA<Op>` row runs on the
+/// merged `mtx<Op>` (the key's native id signs `UA<Op>` with its own key); the address `<Op>` row finds no entry.
 contract TypedOpsRouterTest is UALedgerBase {
     string internal constant K = "gov_router";
     uint8 internal constant MINT = GovernanceBits.MINTABLE;
@@ -1136,10 +1136,20 @@ contract TypedOpsRouterTest is UALedgerBase {
         return uint8(_uint(op, "bit"));
     }
 
-    /// The row's calldata, as clientkeys built it, from the row's relayer; its lane's nonce spent.
+    /// The row's calldata, as clientkeys built it, from the row's relayer; its lane's nonce spent. ua-mtx-merge T7 (R14):
+    /// a `UA<Op>` row holds the `ua<Op>` selector until T11 regenerates it; the same arguments run under the merged
+    /// `mtx<Op>` (the `ua<Op>` body took the name), the row's own signature unchanged.
     function _row(string memory op) internal {
         checkRow(j, op, K);
         bytes memory cd = vm.parseJsonBytes(j, domainField(op, K, "calldata"));
+        string memory abiSig = vm.parseJsonString(j, domainField(op, K, "abi"));
+        bytes memory ab = bytes(abiSig);
+        require(ab[0] == "u" && ab[1] == "a", "a ua<Op> row");
+        bytes memory rest = new bytes(ab.length - 2);
+        for (uint256 k; k < rest.length; ++k) rest[k] = ab[k + 2];
+        bytes4 sel = bytes4(keccak256(bytes.concat("mtx", rest)));
+        require(bytes4(cd) == bytes4(keccak256(ab)), "the row: the ua<Op> calldata");
+        for (uint256 k; k < 4; ++k) cd[k] = sel[k];
         vm.prank(_addr(op, "relayer"));
         (bool ok, bytes memory ret) = router.call(cd);
         if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
@@ -1183,16 +1193,25 @@ contract TypedOpsRouterTest is UALedgerBase {
         d.initialize(address(this), 1, abi.encode(ISCaaSDex.DexConfig(me, 0, address(0x7EA5), false, 0, address(0))));
     }
 
-    function _forms(string memory op) internal pure returns (string[2] memory) {
-        return [op, string.concat("UA", op)];
+    /// ua-mtx-merge T7, meaning: one form per op, the `UA<Op>` row on the merged entry (was both the address `<Op>` row and
+    /// the `UA<Op>` row); the address rows find no entry (`test_routerRow_addressRowsHaveNoEntry`; MD-7: T11 retires them).
+    function _forms(string memory op) internal pure returns (string[1] memory) {
+        return [string.concat("UA", op)];
+    }
+
+    function test_routerRow_addressRowsHaveNoEntry() public {
+        string[19] memory ops = ["GrantRole", "RevokeRole", "SetGrant", "CancelGrant", "DisableFeature", "TransferOwnership",
+            "AcceptOwnership", "RenounceOwnership", "RenounceRole", "Mint", "MintToUA", "DisableWrap", "ProposeRate",
+            "CancelRate", "ExecuteRate", "SetMarket", "SetExchangeTarget", "SetListedOnly", "SetFeeSplit"];
+        for (uint256 i; i < ops.length; ++i) _noEntry(ops[i], me, _uint(ops[i], "batch"));
     }
 
     // ------------------------------------------------------------------ the owner and a holder
 
     function test_routerRow_GrantRole() public {
-        string[2] memory f = _forms("GrantRole");
+        string[1] memory f = _forms("GrantRole");
         uint256 s = vm.snapshotState();
-        for (uint256 i; i < 2; ++i) {
+        for (uint256 i; i < f.length; ++i) {
             vm.revertToState(s);
             NormalToken t = _normalAt(f[i], me, 0, 0);
             _row(f[i]);
@@ -1201,9 +1220,9 @@ contract TypedOpsRouterTest is UALedgerBase {
     }
 
     function test_routerRow_RevokeRole() public {
-        string[2] memory f = _forms("RevokeRole");
+        string[1] memory f = _forms("RevokeRole");
         uint256 s = vm.snapshotState();
-        for (uint256 i; i < 2; ++i) {
+        for (uint256 i; i < f.length; ++i) {
             vm.revertToState(s);
             NormalToken t = _normalAt(f[i], me, 0, 0);
             vm.prank(signer);
@@ -1216,9 +1235,9 @@ contract TypedOpsRouterTest is UALedgerBase {
 
     /// The nested `terms` arrive whole: every field of the stored grant is the row's.
     function test_routerRow_SetGrant() public {
-        string[2] memory f = _forms("SetGrant");
+        string[1] memory f = _forms("SetGrant");
         uint256 s = vm.snapshotState();
-        for (uint256 i; i < 2; ++i) {
+        for (uint256 i; i < f.length; ++i) {
             vm.revertToState(s);
             NormalToken t = _normalAt(f[i], me, 0, 0);
             _row(f[i]);
@@ -1232,9 +1251,9 @@ contract TypedOpsRouterTest is UALedgerBase {
     }
 
     function test_routerRow_CancelGrant() public {
-        string[2] memory f = _forms("CancelGrant");
+        string[1] memory f = _forms("CancelGrant");
         uint256 s = vm.snapshotState();
-        for (uint256 i; i < 2; ++i) {
+        for (uint256 i; i < f.length; ++i) {
             vm.revertToState(s);
             NormalToken t = _normalAt(f[i], me, 0, 1 hours);
             vm.prank(signer);
@@ -1248,9 +1267,9 @@ contract TypedOpsRouterTest is UALedgerBase {
     }
 
     function test_routerRow_DisableFeature() public {
-        string[2] memory f = _forms("DisableFeature");
+        string[1] memory f = _forms("DisableFeature");
         uint256 s = vm.snapshotState();
-        for (uint256 i; i < 2; ++i) {
+        for (uint256 i; i < f.length; ++i) {
             vm.revertToState(s);
             NormalToken t = _normalAt(f[i], me, 0, 0);
             _row(f[i]);
@@ -1259,9 +1278,9 @@ contract TypedOpsRouterTest is UALedgerBase {
     }
 
     function test_routerRow_TransferOwnership() public {
-        string[2] memory f = _forms("TransferOwnership");
+        string[1] memory f = _forms("TransferOwnership");
         uint256 s = vm.snapshotState();
-        for (uint256 i; i < 2; ++i) {
+        for (uint256 i; i < f.length; ++i) {
             vm.revertToState(s);
             NormalToken t = _normalAt(f[i], me, 0, 0);
             _row(f[i]);
@@ -1270,9 +1289,9 @@ contract TypedOpsRouterTest is UALedgerBase {
     }
 
     function test_routerRow_AcceptOwnership() public {
-        string[2] memory f = _forms("AcceptOwnership");
+        string[1] memory f = _forms("AcceptOwnership");
         uint256 s = vm.snapshotState();
-        for (uint256 i; i < 2; ++i) {
+        for (uint256 i; i < f.length; ++i) {
             vm.revertToState(s);
             NormalToken t = _normalAt(f[i], bytes32(uint256(uint160(address(this)))), 0, 0);
             t.transferOwnership(me);
@@ -1282,9 +1301,9 @@ contract TypedOpsRouterTest is UALedgerBase {
     }
 
     function test_routerRow_RenounceOwnership() public {
-        string[2] memory f = _forms("RenounceOwnership");
+        string[1] memory f = _forms("RenounceOwnership");
         uint256 s = vm.snapshotState();
-        for (uint256 i; i < 2; ++i) {
+        for (uint256 i; i < f.length; ++i) {
             vm.revertToState(s);
             NormalToken t = _normalAt(f[i], me, 0, 0);
             _row(f[i]);
@@ -1293,9 +1312,9 @@ contract TypedOpsRouterTest is UALedgerBase {
     }
 
     function test_routerRow_RenounceRole() public {
-        string[2] memory f = _forms("RenounceRole");
+        string[1] memory f = _forms("RenounceRole");
         uint256 s = vm.snapshotState();
-        for (uint256 i; i < 2; ++i) {
+        for (uint256 i; i < f.length; ++i) {
             vm.revertToState(s);
             NormalToken t = _normalAt(f[i], me, me, 0);
             _row(f[i]);
@@ -1306,9 +1325,9 @@ contract TypedOpsRouterTest is UALedgerBase {
     // ------------------------------------------------------------------ the powers on the token kinds
 
     function test_routerRow_Mint() public {
-        string[2] memory f = _forms("Mint");
+        string[1] memory f = _forms("Mint");
         uint256 s = vm.snapshotState();
-        for (uint256 i; i < 2; ++i) {
+        for (uint256 i; i < f.length; ++i) {
             vm.revertToState(s);
             NormalToken t = _normalAt(f[i], me, me, 0);
             _row(f[i]);
@@ -1317,9 +1336,9 @@ contract TypedOpsRouterTest is UALedgerBase {
     }
 
     function test_routerRow_MintToUA() public {
-        string[2] memory f = _forms("MintToUA");
+        string[1] memory f = _forms("MintToUA");
         uint256 s = vm.snapshotState();
-        for (uint256 i; i < 2; ++i) {
+        for (uint256 i; i < f.length; ++i) {
             vm.revertToState(s);
             NormalToken t = _normalAt(f[i], me, me, 0);
             vm.mockCall(REG_L, abi.encodeCall(IUARegistry.kindOf, (_b32(f[i], "to"))), abi.encode(UAKinds.P256));
@@ -1329,9 +1348,9 @@ contract TypedOpsRouterTest is UALedgerBase {
     }
 
     function test_routerRow_DisableWrap() public {
-        string[2] memory f = _forms("DisableWrap");
+        string[1] memory f = _forms("DisableWrap");
         uint256 s = vm.snapshotState();
-        for (uint256 i; i < 2; ++i) {
+        for (uint256 i; i < f.length; ++i) {
             vm.revertToState(s);
             WrappedToken w = _wrappedAt(f[i], _addr(f[i], "leg"));
             _row(f[i]);
@@ -1341,9 +1360,9 @@ contract TypedOpsRouterTest is UALedgerBase {
     }
 
     function test_routerRow_ProposeRate() public {
-        string[2] memory f = _forms("ProposeRate");
+        string[1] memory f = _forms("ProposeRate");
         uint256 s = vm.snapshotState();
-        for (uint256 i; i < 2; ++i) {
+        for (uint256 i; i < f.length; ++i) {
             vm.revertToState(s);
             WrappedToken w = _wrappedAt(f[i], _addr(f[i], "leg"));
             _row(f[i]);
@@ -1354,9 +1373,9 @@ contract TypedOpsRouterTest is UALedgerBase {
     }
 
     function test_routerRow_CancelRate() public {
-        string[2] memory f = _forms("CancelRate");
+        string[1] memory f = _forms("CancelRate");
         uint256 s = vm.snapshotState();
-        for (uint256 i; i < 2; ++i) {
+        for (uint256 i; i < f.length; ++i) {
             vm.revertToState(s);
             address leg = address(new MockERC20("Leg", "LEG", 6));
             WrappedToken w = _wrappedAt(f[i], leg);
@@ -1370,9 +1389,9 @@ contract TypedOpsRouterTest is UALedgerBase {
 
     /// Proposed `rateDelay` before the rows' deadline, executed at it.
     function test_routerRow_ExecuteRate() public {
-        string[2] memory f = _forms("ExecuteRate");
+        string[1] memory f = _forms("ExecuteRate");
         uint256 s = vm.snapshotState();
-        for (uint256 i; i < 2; ++i) {
+        for (uint256 i; i < f.length; ++i) {
             vm.revertToState(s);
             address leg = address(new MockERC20("Leg", "LEG", 6));
             WrappedToken w = _wrappedAt(f[i], leg);
@@ -1389,9 +1408,9 @@ contract TypedOpsRouterTest is UALedgerBase {
     // ------------------------------------------------------------------ the powers on the DEX
 
     function test_routerRow_SetMarket() public {
-        string[2] memory f = _forms("SetMarket");
+        string[1] memory f = _forms("SetMarket");
         uint256 s = vm.snapshotState();
-        for (uint256 i; i < 2; ++i) {
+        for (uint256 i; i < f.length; ++i) {
             vm.revertToState(s);
             SCaaSDex d = _dexAt(f[i]);
             _row(f[i]);
@@ -1400,9 +1419,9 @@ contract TypedOpsRouterTest is UALedgerBase {
     }
 
     function test_routerRow_SetExchangeTarget() public {
-        string[2] memory f = _forms("SetExchangeTarget");
+        string[1] memory f = _forms("SetExchangeTarget");
         uint256 s = vm.snapshotState();
-        for (uint256 i; i < 2; ++i) {
+        for (uint256 i; i < f.length; ++i) {
             vm.revertToState(s);
             SCaaSDex d = _dexAt(f[i]);
             _row(f[i]);
@@ -1411,9 +1430,9 @@ contract TypedOpsRouterTest is UALedgerBase {
     }
 
     function test_routerRow_SetListedOnly() public {
-        string[2] memory f = _forms("SetListedOnly");
+        string[1] memory f = _forms("SetListedOnly");
         uint256 s = vm.snapshotState();
-        for (uint256 i; i < 2; ++i) {
+        for (uint256 i; i < f.length; ++i) {
             vm.revertToState(s);
             SCaaSDex d = _dexAt(f[i]);
             _row(f[i]);
@@ -1422,9 +1441,9 @@ contract TypedOpsRouterTest is UALedgerBase {
     }
 
     function test_routerRow_SetFeeSplit() public {
-        string[2] memory f = _forms("SetFeeSplit");
+        string[1] memory f = _forms("SetFeeSplit");
         uint256 s = vm.snapshotState();
-        for (uint256 i; i < 2; ++i) {
+        for (uint256 i; i < f.length; ++i) {
             vm.revertToState(s);
             SCaaSDex d = _dexAt(f[i]);
             _row(f[i]);
