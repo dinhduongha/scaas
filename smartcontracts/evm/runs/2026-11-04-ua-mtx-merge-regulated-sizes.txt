@@ -51,3 +51,26 @@
 # its estimate (1.3 %), kind 13 at the top of its estimate; none is more than 50 % over. Kind 13 has 3,287 B left for T29 (the
 # bounded call, the code pin, canReceive), T32 and group 3e (+2.3 to +4.0 K, pay-meta-tax §6.4): T29 / T31 re-measure it
 # first and reduce lever by lever at or above 64,512 B.
+#
+# ua-mtx-merge T29 (the receiver check: the bounded hasFlags STATICCALL with its cap, the starvation check and the named
+# failures, canReceive with two bounded calls, REGISTRY_CODEHASH from implArgs and its getter, the registry written at init;
+# the new ComplianceRegistry). Kind 13 measured first. Same method.
+| Release | base kind B | T28 B | T29 B | delta vs T28 | init B | stop line 64,512 B |
+|---|---:|---:|---:|---:|---:|---|
+| `NormalRegulatedToken` (8) | `NormalToken` 32,945 | 37,163 | 38,257 | +1,094 | 40,674 | under by 26,255 |
+| `WrappedRegulatedToken` (9) | `WrappedToken` 43,552 | 47,847 | 48,938 | +1,091 | 51,362 | under by 15,574 |
+| `WrappedPqzRegulatedToken` (13) | `WrappedPqzToken` 56,721 | 61,225 | 62,285 | +1,060 | 65,088 | under by 2,227 |
+| `RegulatedLib` | - | 7,193 | 7,275 | +82 | 7,327 | - |
+| `ComplianceRegistry` (new, a plain deploy) | - | - | 2,462 | | 2,652 | - |
+# Stop rule: kind 13 measured after T29 at 62,285 B, under 64,512 B: no lever, no _above64KiB row. The six plain kinds and
+# GovernanceRouter unchanged. Deploy gas (GovDeploy test_releaseGasPerKind -vv; the registry is a plain CREATE, no factory frame):
+| Release | runtime B | regular | state | (r + s) x 1.05 | asked (+ 0.37 M frame) | §6.2 estimate | 60 M | 70 M | regular x 1.05 < 2^24 | SCaaS testnet need (<= 200 M) |
+|---|---:|---:|---:|---:|---:|---|---|---|---|---:|
+| `NormalRegulatedToken (8)` | 38,257 | 2,724,319 | 58,814,730 | 64.62 M | 64.99 M | 59.7-62.2 M | no | yes | yes | 75.31 M |
+| `WrappedRegulatedToken (9)` | 48,938 | 3,423,370 | 75,156,660 | 82.51 M | 82.88 M | 77.4-80.0 M | no | no | yes | 91.65 M |
+| `WrappedPqzRegulatedToken (13)` | 62,285 | 4,336,713 | 95,577,570 | 104.91 M | 105.28 M | 100.6-103.5 M | no | no | yes | 112.07 M |
+| `ComplianceRegistry` | 2,462 | 196,502 | 4,048,380 | 4.46 M | 4.46 M (no frame) | 3-5 K / 5-8.5 M | yes | yes | yes | 20.54 M |
+# Reading: kinds 8, 9, 13 grow by about 1.1 K each (the same RegulatedBase code); kind 8 is 2.8 M (4.5 %), kind 9 2.9 M (3.6 %)
+# and kind 13 1.8 M (1.7 %) over the top of their estimates, none more than 50 % over; the registry is under its estimate.
+# Kind 13 has 2,227 B left for T31 (the PQZ sites), T32 (operatorTransfer) and group 3e (+2.3 to +4.0 K, pay-meta-tax §6.4):
+# T31 / T32 / T33 re-measure it first and reduce lever by lever at or above 64,512 B.

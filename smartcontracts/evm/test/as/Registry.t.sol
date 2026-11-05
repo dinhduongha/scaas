@@ -211,14 +211,21 @@ contract RegistryTest is RegFixture {
         }
     }
 
-    /// A disabled list stops its check (the mirror, Codex 3): `disableFeature(ALLOWLIST)` and then `(DENYLIST)` (one call:
-    /// not delayed bits); with both off the token makes no registry call.
+    /// A disabled list stops its check (the mirror, Codex 3): after `disableFeature(ALLOWLIST)` an unattested receiver
+    /// passes (its `requiredFlags` are no longer read) and `DENYLIST` still refuses; after `(DENYLIST)` (one call each: not
+    /// delayed bits) the token makes no registry call.
     function test_disabledListStopsChecking() public {
         for (uint256 i; i < 2; ++i) {
             _clearBob();
             address t = _listed(i, KYC, SANCTIONED, bytes32(i));
-            _attest(nid(bob), SANCTIONED, MAX);
+            bytes memory ne = abi.encodeWithSelector(IRegulatedToken.NotEligible.selector, nid(bob), uint8(0));
+            vm.prank(alice);
+            vm.expectRevert(ne);
+            IERC20(t).transfer(bob, 1); // the control: unattested, refused by ALLOWLIST
             _disable(t, GovernanceBits.ALLOWLIST);
+            vm.prank(alice);
+            IERC20(t).transfer(bob, 1); // ALLOWLIST off: requiredFlags no longer read
+            _attest(nid(bob), SANCTIONED, MAX);
             vm.prank(alice);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.NotEligible.selector, nid(bob), uint8(0)));
             IERC20(t).transfer(bob, 1);
