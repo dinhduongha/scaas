@@ -29,6 +29,9 @@ pub mod musig2;
 pub mod frost;
 #[cfg(feature = "wallet")]
 pub mod wallet;
+/// Test-only (feature `vectors`): the ladder's record of `secret_mul` (the structural test, spec §12).
+#[cfg(feature = "vectors")]
+pub use scaas_ct;
 
 /// An error whose [`UAError::code`] every implementation and the vector files share.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

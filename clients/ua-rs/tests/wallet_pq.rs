@@ -131,7 +131,7 @@ fn locked_wallet_pq_handles_sign_nothing() {
 
 /// The both-ways fixture (spec §11): every row is the pq_kat wallet's key and request, and its signature verifies here;
 /// the JS side verifies the same rows (`npm test`). Randomized kinds only: Falcon, hedged ML-DSA, randomized SLH-DSA, BIP-340
-/// with an OS `aux`.
+/// and scaas Schnorr (T3c) with an OS `aux`.
 #[test]
 fn rs_signatures_json_rows() {
     let f = load("rs_signatures.json");
@@ -147,8 +147,8 @@ fn rs_signatures_json_rows() {
         assert!(scaas_ua::verify::verify(kind, &key.key_data(), &ua_msg, &bytes(&r["signature"]), pop), "{r}");
         kinds.insert(kind);
     }
-    assert_eq!(kinds.into_iter().collect::<Vec<_>>(), [0x0103, 0x0130, 0x0131, 0x0132, 0x0133, 0x0134, 0x0135]);
-    assert_eq!(arr(&f, "rows").len(), 14);
+    assert_eq!(kinds.into_iter().collect::<Vec<_>>(), [0x0103, 0x0104, 0x0105, 0x0130, 0x0131, 0x0132, 0x0133, 0x0134, 0x0135]);
+    assert_eq!(arr(&f, "rows").len(), 18);
 }
 
 #[cfg(feature = "vectors")]
@@ -269,8 +269,8 @@ mod vectors {
     }
 
     /// Writes rs_signatures.json (MD-7): release signatures (`sign_ua`, OS randomness) of the `sign.json` `verify` rows of the
-    /// randomized kinds this task signs (`0x0103` and the PQ kinds; the scaas Schnorr kinds come with T3c). A row that is still the same request and still verifies is kept, so a second run leaves the file
-    /// unchanged. `cargo test --features vectors --test wallet_pq -- --ignored regenerate`
+    /// randomized kinds: `0x0103`, the scaas Schnorr kinds `0x0104` / `0x0105` (T3c) and the PQ kinds. A row that is still the
+    /// same request and still verifies is kept, so a second run leaves the file unchanged. `cargo test --features vectors --test wallet_pq -- --ignored regenerate`
     #[test]
     #[ignore]
     fn regenerate() {
@@ -278,7 +278,9 @@ mod vectors {
         let old = std::fs::read_to_string(path("rs_signatures.json")).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok());
         let w = wallet("pq_kat");
         let mut rows = Vec::new();
-        let signed_here = |r: &&Value| r["compare"] == "verify" && (kind_of(&r["kind"]) == 0x0103 || PQ.contains(&kind_of(&r["kind"])));
+        let signed_here = |r: &&Value| {
+            r["compare"] == "verify" && (matches!(kind_of(&r["kind"]), 0x0103..=0x0105) || PQ.contains(&kind_of(&r["kind"])))
+        };
         for r in arr(&s, "ua").iter().filter(signed_here) {
             let kind = kind_of(&r["kind"]);
             let key = w.ua_key(kind, r["account"].as_u64().unwrap() as u32, r["index"].as_u64().unwrap() as u32).unwrap();
@@ -307,9 +309,9 @@ mod vectors {
         }
         let out = serde_json::json!({
             "note": "Written by clients/ua-rs (tests/wallet_pq.rs, `cargo test --features vectors --test wallet_pq -- --ignored \
-                     regenerate`; ua-rs-sign T3b, MD-7); never edit by hand. Release signatures of ua-rs (`UaKey::sign_ua`, OS \
-                     randomness: hedged ML-DSA, randomized SLH-DSA, Falcon-padded, BIP-340 with an OS aux) over the requests of \
-                     the sign.json `compare: verify` rows of the pq_kat wallet; read and verified by clientkeys \
+                     regenerate`; ua-rs-sign T3b, T3c, MD-7); never edit by hand. Release signatures of ua-rs (`UaKey::sign_ua`, \
+                     OS randomness: hedged ML-DSA, randomized SLH-DSA, Falcon-padded, BIP-340 and scaas Schnorr with an OS aux) \
+                     over the requests of the sign.json `compare: verify` rows of the pq_kat wallet; read and verified by clientkeys \
                      (test/ua-wallet.test.js), so a bug shared by one crate's signer and verifier cannot pass. A re-run keeps \
                      every row that is still the same request and still verifies.",
             "rows": rows,

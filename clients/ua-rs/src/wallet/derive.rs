@@ -5,11 +5,10 @@
 //! utf8(tag) ‖ be32(account) ‖ be32(index))`. The UA tree is `m/22776'/0'/<account>'/<kindNo>'/<i>'`; the EIP-2333 UA paths
 //! `m/254/0/<account>/<kindNo>` (salt `SCAAS-UA-BN254-v1`) and `m/12381/0/<account>/<kindNo>` have no index level: index 0
 //! only. `account`, `index` and `coinType` are below 2^31 (`Argument`). Public only under feature `vectors` (each returns a
-//! secret). The pairing kinds' public keys use arkworks' variable-time multiplication until T3c's `secret_mul`; the PQ kinds'
-//! key pairs come from `pqsign`. UNAUDITED.
+//! secret). The pairing kinds' public keys come from `pairing` (`scaas_ct::secret_mul`, T3c), the PQ kinds' key pairs from
+//! `pqsign`. UNAUDITED.
 use super::{Error, Network, Result};
 use crate::kind_tag_string;
-use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{BigInteger, PrimeField};
 use hkdf::Hkdf;
 use hmac::{Hmac, Mac};
@@ -210,12 +209,6 @@ pub fn ua_secret(seed: &[u8], kind: u16, account: u32, index: u32) -> Result<Zer
     })
 }
 
-fn be<F: PrimeField>(f: &F, width: usize, out: &mut Vec<u8>) {
-    let b = f.into_bigint().to_bytes_be();
-    out.extend(std::iter::repeat_n(0, width.saturating_sub(b.len())));
-    out.extend_from_slice(&b);
-}
-
 fn tail(b: &[u8]) -> Result<Vec<u8>> {
     b.get(1..).map(<[u8]>::to_vec).ok_or(Error::Argument)
 }
@@ -236,43 +229,21 @@ fn secp_public(s: &[u8], compressed: bool) -> Result<Vec<u8>> {
 /// The key data of UA kind `kind` from its secret (accounts.md §1.6 forms; a MuSig2 participant: its individual key).
 /// `KindUnavailable` for Falcon on a build without it (wasm32).
 pub fn ua_key_data(kind: u16, s: &[u8]) -> Result<Vec<u8>> {
-    let mut out = Vec::new();
     match kind {
         0x0101 => {
             let sk = p256::SecretKey::from_slice(s).map_err(|_| Error::Argument)?;
-            out = tail(sk.public_key().to_sec1_point(false).as_bytes())?;
+            tail(sk.public_key().to_sec1_point(false).as_bytes())
         }
-        0x0102 => out = ed25519_public(s)?,
-        0x0103 => out = k256::schnorr::SigningKey::from_slice(s).map_err(|_| Error::Argument)?.verifying_key().to_bytes().to_vec(),
-        0x0108 => out = tail(&secp_public(s, false)?)?,
-        0x0110 => out = secp_public(s, true)?,
-        0x0104 | 0x0112 => {
-            let p = (ark_bn254::G1Affine::generator() * ark_bn254::Fr::from_be_bytes_mod_order(s)).into_affine();
-            be(&p.x, 32, &mut out);
-            be(&p.y, 32, &mut out);
-        }
-        0x0105 => {
-            let p = (ark_bls12_381::G1Affine::generator() * ark_bls12_381::Fr::from_be_bytes_mod_order(s)).into_affine();
-            be(&p.x, 64, &mut out);
-            be(&p.y, 64, &mut out);
-        }
-        0x0106 => {
-            let p = (ark_bls12_381::G2Affine::generator() * ark_bls12_381::Fr::from_be_bytes_mod_order(s)).into_affine();
-            for f in [&p.x.c0, &p.x.c1, &p.y.c0, &p.y.c1] {
-                be(f, 64, &mut out);
-            }
-        }
-        0x0107 => {
-            let p = (ark_bn254::G2Affine::generator() * ark_bn254::Fr::from_be_bytes_mod_order(s)).into_affine();
-            for f in [&p.x.c1, &p.x.c0, &p.y.c1, &p.y.c0] {
-                be(f, 32, &mut out);
-            }
-        }
+        0x0102 => ed25519_public(s),
+        0x0103 => Ok(k256::schnorr::SigningKey::from_slice(s).map_err(|_| Error::Argument)?.verifying_key().to_bytes().to_vec()),
+        0x0108 => tail(&secp_public(s, false)?),
+        0x0110 => secp_public(s, true),
+        // the pairing kinds and the musig2-bn254 participant: `scaas_ct::secret_mul` (T3c)
+        0x0104..=0x0107 | 0x0112 => super::pairing::key_data(kind, s),
         // Falcon: PQClean's seeded keygen (MD-8, equal to clientkeys' per T0), vendored
-        0x0130..=0x0135 => out = super::pqsign::keypair(kind, s)?.1,
-        _ => return Err(Error::Argument),
+        0x0130..=0x0135 => Ok(super::pqsign::keypair(kind, s)?.1),
+        _ => Err(Error::Argument),
     }
-    Ok(out)
 }
 
 /// What the store keeps for UA kind `kind` from its secret, and the key data: the secret itself, or for a PQ kind the key

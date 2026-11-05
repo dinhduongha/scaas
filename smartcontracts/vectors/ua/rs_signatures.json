@@ -1,5 +1,5 @@
 {
-  "note": "Written by clients/ua-rs (tests/wallet_pq.rs, `cargo test --features vectors --test wallet_pq -- --ignored regenerate`; ua-rs-sign T3b, MD-7); never edit by hand. Release signatures of ua-rs (`UaKey::sign_ua`, OS randomness: hedged ML-DSA, randomized SLH-DSA, Falcon-padded, BIP-340 with an OS aux) over the requests of the sign.json `compare: verify` rows of the pq_kat wallet; read and verified by clientkeys (test/ua-wallet.test.js), so a bug shared by one crate's signer and verifier cannot pass. A re-run keeps every row that is still the same request and still verifies.",
+  "note": "Written by clients/ua-rs (tests/wallet_pq.rs, `cargo test --features vectors --test wallet_pq -- --ignored regenerate`; ua-rs-sign T3b, T3c, MD-7); never edit by hand. Release signatures of ua-rs (`UaKey::sign_ua`, OS randomness: hedged ML-DSA, randomized SLH-DSA, Falcon-padded, BIP-340 and scaas Schnorr with an OS aux) over the requests of the sign.json `compare: verify` rows of the pq_kat wallet; read and verified by clientkeys (test/ua-wallet.test.js), so a bug shared by one crate's signer and verifier cannot pass. A re-run keeps every row that is still the same request and still verifies.",
   "rows": [
     {
       "kind": 259,
@@ -30,6 +30,66 @@
       "uaMsg": "0xebcc34ca80d4b84361930cbe98a92e41c4758255d633207308f2293a5272b2a0",
       "role": "pop",
       "signature": "0x96ee060b34c53cae2d267226ba8b4cff04cf6db7dec34e20e8ed8bc1864badc2278c78ba85d5ef009420c8a85cb3042c19809da56454f458300f36fd8c52e869"
+    },
+    {
+      "kind": 260,
+      "name": "schnorr-bn254",
+      "mnemonic": "pq_kat",
+      "account": 0,
+      "index": 0,
+      "keyData": "0x10e1ab0a69f27d3ea2b51006123ff35f31f6e67efedd51842a084ec6eed95a4607457807acd303307c67a417fb070fc9cb55c77ddc86d7c5389cac177165611c",
+      "purpose": "metatx",
+      "purposeVersion": 1,
+      "purposeTag": "0x659f1188c729a1ac7e7f664f5bdf6be9f45677d902d8cc3cf2c018ac7449c18f",
+      "digest": "0x5a66b3357e5f76dc43bd110885c382fc13e78b775e6a1f7eb042fa1f17ce205c",
+      "uaMsg": "0x7ac497c2bc910c117139046242afbc020b445a988deff1e7650d77c9217594a1",
+      "role": "authorization",
+      "signature": "0x1ac6d7378c0e4bda1eba4dc503bd1340e64ecd899014c9f487b994a1b795b5bf02aeb7a4fe5285a02901abdb1c5a63f35dddbdbd0dfe2bc01a066a2132b8d2062dec9d5b64c1781166b55db342e880c69b3c8743b6e1ab0b9699331a2a5234e3"
+    },
+    {
+      "kind": 260,
+      "name": "schnorr-bn254",
+      "mnemonic": "pq_kat",
+      "account": 0,
+      "index": 0,
+      "keyData": "0x10e1ab0a69f27d3ea2b51006123ff35f31f6e67efedd51842a084ec6eed95a4607457807acd303307c67a417fb070fc9cb55c77ddc86d7c5389cac177165611c",
+      "purpose": "pop",
+      "purposeVersion": 2,
+      "purposeTag": "0x0ffb2c52d2a16294393778508b3fff52351664d2c5bbe5deb3d3278f56281f93",
+      "digest": "0x5a66b3357e5f76dc43bd110885c382fc13e78b775e6a1f7eb042fa1f17ce205c",
+      "uaMsg": "0xf11ef4ede259fe22f058712e34e9598c3ad2f13f9815bcd7934013ccf9ad2529",
+      "role": "pop",
+      "signature": "0x1df3c801238c330b8ca1059845b3497b9db6d8c0a87fc7623cd4ce4624eaf3e703338fcee06d958872f23695d86c27397f68cd0c13ea92f585b74f6253f7f2df240c0c251e41ffa41449a8e5f1efe9e180c677516e5a43a5ee49c5c8cbd9dc55"
+    },
+    {
+      "kind": 261,
+      "name": "schnorr-bls12381",
+      "mnemonic": "pq_kat",
+      "account": 0,
+      "index": 0,
+      "keyData": "0x0000000000000000000000000000000003a4a1ef1f04acf989071a9254114d87c76be3ffca848cf97ed878edf5d622b36af4785c1b5a56ee7232cf2860cb2b22000000000000000000000000000000000833106d6a95d9dfd6711a125d8d1ebed138ff01acd04e06ea0533f501e6274e304772109f621ce3f705f73468bc7afc",
+      "purpose": "metatx",
+      "purposeVersion": 1,
+      "purposeTag": "0x659f1188c729a1ac7e7f664f5bdf6be9f45677d902d8cc3cf2c018ac7449c18f",
+      "digest": "0x5a66b3357e5f76dc43bd110885c382fc13e78b775e6a1f7eb042fa1f17ce205c",
+      "uaMsg": "0x245bab41d6cc4ac305819d954c77125d916e5186873ad562354340bc55665242",
+      "role": "authorization",
+      "signature": "0x000000000000000000000000000000001842e6a24736f726bac9c90f1a6c2a350819a5741578a2d9598be76d774b09548226d9cef9ee241889093657e7edb0cb00000000000000000000000000000000106e47e63e33a22934032645b0af593225e48d10d08645d19a072f43df8069411289f095a8b92570d29186b9d126ae4b3176eab3644ca0353ea04d3c1b69c3e2239bfed0c4585c7319374ded971551e8"
+    },
+    {
+      "kind": 261,
+      "name": "schnorr-bls12381",
+      "mnemonic": "pq_kat",
+      "account": 0,
+      "index": 0,
+      "keyData": "0x0000000000000000000000000000000003a4a1ef1f04acf989071a9254114d87c76be3ffca848cf97ed878edf5d622b36af4785c1b5a56ee7232cf2860cb2b22000000000000000000000000000000000833106d6a95d9dfd6711a125d8d1ebed138ff01acd04e06ea0533f501e6274e304772109f621ce3f705f73468bc7afc",
+      "purpose": "pop",
+      "purposeVersion": 2,
+      "purposeTag": "0x0ffb2c52d2a16294393778508b3fff52351664d2c5bbe5deb3d3278f56281f93",
+      "digest": "0x5a66b3357e5f76dc43bd110885c382fc13e78b775e6a1f7eb042fa1f17ce205c",
+      "uaMsg": "0x4ab1c8e91f4c9d1c362b77442d1caa511017fbd4c47a5d2db333a8066f39df11",
+      "role": "pop",
+      "signature": "0x0000000000000000000000000000000001f3b502dd2701a0658ecc51a7734f9ae9400871dc18a6d21fde59935a2aee9f471ef10edb2517e6eecf080c1b833d7a0000000000000000000000000000000016c20687266322636905a41f00228188430268f380b24fca52772ecab45e2906144ef1b15305c7b6e522f6e92d320b89509fbab9e92006cfe95e23a22da0f5bfe5a968169d458636bd4b370c963e7c41"
     },
     {
       "kind": 304,

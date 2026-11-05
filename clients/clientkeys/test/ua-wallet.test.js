@@ -462,10 +462,10 @@ test('sign.json external (T1c): RFC 6979 A.2.5 P-256 / SHA-256 and the named sec
   assert.ok(X.secp256k1.rows.filter((r) => hex(sha256(utf8ToBytes(r.description))) === '0x' + r.m).length >= 14);
 });
 
-// ua-rs-sign T3b (spec §11, MD-7): the both-ways fixture, written by ua-rs (tests/wallet_pq.rs, `--ignored regenerate`):
+// ua-rs-sign T3b, T3c (spec §11, MD-7): the both-ways fixture, written by ua-rs (tests/wallet_pq.rs, `--ignored regenerate`):
 // ua-rs's release signatures of the randomized kinds over the sign.json `verify` requests, verified here by noble, so a bug
 // shared by one crate's signer and verifier cannot pass.
-test('rs_signatures.json: ua-rs signatures (Falcon, hedged ML-DSA, randomized SLH-DSA, OS-aux BIP-340) verify here', () => {
+test('rs_signatures.json: ua-rs signatures (Falcon, hedged ML-DSA, randomized SLH-DSA, OS-aux BIP-340 and scaas Schnorr) verify here', () => {
   const RS = json('rs_signatures.json');
   assert.ok(RS, 'rs_signatures.json');
   assert.ok(RS.note.includes('never edit by hand'));
@@ -482,8 +482,8 @@ test('rs_signatures.json: ua-rs signatures (Falcon, hedged ML-DSA, randomized SL
     assert.ok(!kindVerifyAny(r.kind, r.keyData, r.uaMsg, hex(bad), pop), `${r.name} ${r.purpose} flipped`);
     kinds.add(r.kind);
   }
-  assert.deepEqual([...kinds].sort((a, b) => a - b), [0x0103, 0x0130, 0x0131, 0x0132, 0x0133, 0x0134, 0x0135]);
-  assert.equal(RS.rows.length, 14);
+  assert.deepEqual([...kinds].sort((a, b) => a - b), [0x0103, 0x0104, 0x0105, 0x0130, 0x0131, 0x0132, 0x0133, 0x0134, 0x0135]);
+  assert.equal(RS.rows.length, 18);
   const own = new Set(S.ua.map((r) => r.signature)); // signed by ua-rs, not copied from sign.json
   assert.ok(RS.rows.every((r) => !own.has(r.signature)));
 });

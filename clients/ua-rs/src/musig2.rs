@@ -4,7 +4,8 @@
 //! no x-only key or parity negation, challenge = the scaas Schnorr challenge, signature `R (64) ‖ s (32)` (verifies as
 //! `schnorr-bn254`). `L = hash_{KeyAgg list}(pk_1 ‖ … ‖ pk_n)` is the plain 32-byte tagged hash on both curves (it is a
 //! byte string, not a scalar). No tweaks (the registry has none). Feature `signers`: malformed input is an error, never a
-//! panic; not side-channel hardened (secret nonces are plain bytes). UNAUDITED.
+//! panic. Secret multiplications through [`Curve::secret_g`] (bn254: `scaas_ct::secret_mul`, spec §12); otherwise not
+//! side-channel hardened (secret nonces are plain bytes here; the wallet's session keeps them in its arena). UNAUDITED.
 use crate::keccak;
 use core::ops::{Add, Mul, Neg};
 use sha2::{Digest, Sha256};
@@ -56,6 +57,9 @@ pub trait Curve {
     fn agg_bytes(q: &Self::P) -> Vec<u8>;
     fn challenge(r: &Self::P, q: &Self::P, msg: &[u8]) -> Self::S;
     fn sig(r: &Self::P, s: &Self::S) -> Vec<u8>;
+    /// `s·G` for a secret `s` (a nonce or the signer's key): k256's constant-time multiplication on secp256k1,
+    /// `scaas_ct::secret_mul` on bn254 (spec §12; `Value` if the OS RNG fails).
+    fn secret_g(s: &Self::S) -> Result<Self::P, Error>;
 }
 
 /// BIP-327 over secp256k1.
@@ -120,6 +124,9 @@ impl Curve for Secp256k1 {
     fn sig(r: &Self::P, s: &Self::S) -> Vec<u8> {
         [&Self::ser(r)[1..], &Self::s_bytes(s)[..]].concat()
     }
+    fn secret_g(s: &Self::S) -> Result<Self::P, Error> {
+        Ok(Self::g() * *s)
+    }
 }
 
 /// `x ‖ y`, 32-byte big-endian each; the identity as 64 zero bytes.
@@ -148,11 +155,9 @@ pub fn bn_parse(b: &[u8]) -> Option<ark_bn254::G1Projective> {
     (!(x.is_zero() && y.is_zero()) && p.is_on_curve()).then(|| p.into())
 }
 
-/// The scaas Schnorr challenge `(keccak(s ‖ 2) · 2^256 + keccak(s ‖ 3)) mod r`, `s = keccak(tag ‖ m)`.
+/// The scaas Schnorr challenge `hashToScalar(keccak(tag ‖ m))` (`verify::hash_to_scalar`, the 512-bit map).
 pub fn bn_schnorr_challenge(m: &[u8]) -> ark_bn254::Fr {
-    use ark_ff::PrimeField;
-    let seed = keccak(&[crate::verify::SCHNORR_TAG, m]);
-    ark_bn254::Fr::from_be_bytes_mod_order(&[keccak(&[&seed, &[2]]), keccak(&[&seed, &[3]])].concat())
+    crate::verify::hash_to_scalar(&keccak(&[crate::verify::SCHNORR_TAG, m]))
 }
 
 impl Curve for Bn254 {
@@ -205,6 +210,9 @@ impl Curve for Bn254 {
     }
     fn sig(r: &Self::P, s: &Self::S) -> Vec<u8> {
         [bn_ser(r), Self::s_bytes(s).to_vec()].concat()
+    }
+    fn secret_g(s: &Self::S) -> Result<Self::P, Error> {
+        scaas_ct::secret_mul(Self::g(), s).map_err(|_| Error::Value("OS RNG"))
     }
 }
 
@@ -280,7 +288,7 @@ pub fn nonce_gen<C: Curve>(
     };
     let (k1, k2) = (k(0), k(1));
     let secnonce = [&C::s_bytes(&k1)[..], &C::s_bytes(&k2), pk].concat();
-    Ok((secnonce, [C::ser(&(C::g() * k1)), C::ser(&(C::g() * k2))].concat()))
+    Ok((secnonce, [C::ser(&C::secret_g(&k1)?), C::ser(&C::secret_g(&k2)?)].concat()))
 }
 
 /// A point or, for `PLEN` zero bytes, the identity (BIP-327 `cpoint_ext`).
@@ -336,7 +344,7 @@ pub fn sign<C: Curve>(secnonce: &[u8], sk: &[u8], aggnonce: &[u8], pks: &[Vec<u8
     let k2 = nonzero(C::s_parse(&secnonce[32..64])).ok_or(Error::Value("second secnonce value is out of range."))?;
     let (k1, k2) = if C::even(&r) { (k1, k2) } else { (-k1, -k2) };
     let d_ = nonzero(C::s_parse(sk)).ok_or(Error::Value("The secret key must be in the range 0 < sk < n."))?;
-    let pk = C::ser(&(C::g() * d_));
+    let pk = C::ser(&C::secret_g(&d_)?);
     if pk != secnonce[64..] {
         return Err(Error::Value("Public key does not match nonce_gen argument"));
     }

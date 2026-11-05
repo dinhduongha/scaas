@@ -14,6 +14,11 @@ yanked = "deny"
 ignore = [
     # owner 2026-11-05 (plan "Owner answers after T0"): `paste` 1.0.15 is a proc macro of ark-ff 0.5 (unmaintained)
     { id = "RUSTSEC-2024-0436", reason = "build-time only, not in the runtime" },
+    # owner 2026-11-05 (ua-rs-sign T3c, option (a)): `crypto-bigint` 0.5.5 (timing variability in constant-time operations)
+    # reaches the graph only through ZF `frost-secp256k1` =3.0.0 (k256 0.13.4 -> elliptic-curve 0.13.8 -> crypto-bigint
+    # 0.5.5), feature `signers`; that is ZF's latest release. Every other k256 / p256 use is on 0.14 (crypto-bigint 0.7, T3a).
+    # Remove this entry when ZF releases on k256 0.14.
+    { id = "RUSTSEC-2026-0387", reason = "only via ZF frost-secp256k1 =3.0.0 (k256 0.13.4, feature signers), ZF's latest release; remove when ZF releases on k256 0.14 (owner 2026-11-05)" },
 ]
 
 [licenses]

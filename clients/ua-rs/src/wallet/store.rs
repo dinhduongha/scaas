@@ -65,6 +65,10 @@ impl Arena {
         self.chunks.get(s.chunk).and_then(|c| c.0.get(s.start..s.start + s.len)).ok_or(Error::KeyRevoked)
     }
 
+    fn get_mut(&mut self, s: Slot) -> Result<&mut [u8]> {
+        self.chunks.get_mut(s.chunk).and_then(|c| c.0.get_mut(s.start..s.start + s.len)).ok_or(Error::KeyRevoked)
+    }
+
     pub(crate) fn entropy(&self) -> Result<&[u8]> {
         self.get(self.entropy)
     }
@@ -167,6 +171,35 @@ impl SecretStore {
 }
 
 impl Handle {
+    /// A second handle of the same secret (a session keeps its key's), for the crate only: handles are not `Clone`.
+    pub(crate) fn dup(&self) -> Handle {
+        Handle { store: self.store.clone(), generation: self.generation, slot: self.slot }
+    }
+
+    /// A one-use secret (a group session's secret nonce, spec §8.2) put into this handle's store, under the write lock:
+    /// `KeyRevoked` once the generation moved.
+    // ponytail: a taken slot is wiped, not reused; the arena grows by one nonce per session until `lock()`.
+    pub(crate) fn put(&self, bytes: &[u8]) -> Result<Handle> {
+        let mut g = self.store.write();
+        if g.generation != self.generation {
+            return Err(Error::KeyRevoked);
+        }
+        let slot = g.arena.as_mut().ok_or(Error::KeyRevoked)?.put(bytes)?;
+        Ok(Handle { store: self.store.clone(), generation: self.generation, slot })
+    }
+
+    /// The secret's bytes, wiped in the arena as they are read (under the write lock): a one-use secret's only read.
+    pub(crate) fn take(&self) -> Result<Zeroizing<Vec<u8>>> {
+        let mut g = self.store.write();
+        if g.generation != self.generation {
+            return Err(Error::KeyRevoked);
+        }
+        let s = g.arena.as_mut().ok_or(Error::KeyRevoked)?.get_mut(self.slot)?;
+        let out = Zeroizing::new(s.to_vec());
+        s.zeroize();
+        Ok(out)
+    }
+
     /// `f` over the secret's bytes, under the store's read guard: `KeyRevoked` once the store's generation moved.
     pub(crate) fn with<R>(&self, f: impl FnOnce(&[u8]) -> R) -> Result<R> {
         let g = self.store.read();

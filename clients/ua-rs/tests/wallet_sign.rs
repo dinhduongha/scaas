@@ -205,15 +205,12 @@ fn purpose_not_in_purposes_refused() {
     }
 }
 
-/// Kinds outside T3a / T3b: the pairing kinds come with T3c (`KindUnavailable`); a MuSig2 participant signs through its
-/// session (`Argument`). The PQ kinds: tests/wallet_pq.rs.
+/// Kinds outside T3a: a MuSig2 participant signs through its session (`Argument`). The PQ kinds: tests/wallet_pq.rs; the
+/// pairing kinds (T3c): tests/wallet_pairing.rs.
 #[test]
 fn other_kinds_not_signed_here() {
     let w = wallet("pq_kat");
     let (p, d) = (purpose_tag("metatx").unwrap(), [1u8; 32]);
-    for kind in [0x0104, 0x0105, 0x0106, 0x0107] {
-        assert_eq!(w.ua_key(kind, 0, 0).unwrap().sign_ua(&p, &d).err(), Some(Error::KindUnavailable), "{kind:#06x}");
-    }
     for kind in [0x0110, 0x0112] {
         assert_eq!(w.ua_key(kind, 0, 0).unwrap().sign_ua(&p, &d).err(), Some(Error::Argument), "{kind:#06x}");
     }
@@ -390,6 +387,6 @@ mod vectors {
         assert_eq!(sign_raw(0x0108, &sk, &[2u8; 31], None).err(), Some(Error::Argument));
         assert_eq!(sign_raw(0x0001, &sk, &[2u8; 33], None).err(), Some(Error::Argument));
         assert_eq!(sign_raw(0x0103, &sk, &[2u8; 32], None).err(), Some(Error::Argument)); // BIP-340 needs its aux here
-        assert_eq!(sign_raw(0x0104, &sk, &[2u8; 32], None).err(), Some(Error::KindUnavailable));
+        assert_eq!(sign_raw(0x0104, &sk, &[2u8; 32], None).err(), Some(Error::Argument)); // a pairing kind (T3c: pairing.rs)
     }
 }

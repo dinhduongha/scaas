@@ -25,6 +25,9 @@ frost-core = { version = "=3.0.0", default-features = false, optional = true }
 frost-secp256k1 = { version = "=3.0.0", default-features = false, optional = true }
 rand_core = { version = "0.6", optional = true }
 rand_chacha = { version = "=0.3.1", optional = true }
+# `secret_mul` (spec §12; owner 2026-11-05, option (c): a shared crate): every secret multiplication on arkworks curves in
+# this crate (the pairing kinds' keys and signatures, MuSig2-bn254 nonces, FROST-BN254 through its element newtype)
+scaas-ct = { path = "../scaas-ct", optional = true }
 # feature `json`: the registry's explicit arguments as JSON string calls (src/json.rs), for ua-c, ua-cxx, ua-qt, ua-dart-frb
 serde_json = { version = "=1.0.145", optional = true }
 # feature `pq`: the off-chain verifier's PQ kinds (src/pq.rs): the relayer's and the node's only check of what Soroban stores unverified.
@@ -63,8 +66,8 @@ pqz-set-n2048-kmax1024 = []
 pqz-set-n2304-kmax4096 = []
 pqz-set-n2560-kmax16384 = []
 pqz-set-n2816-kmax65536 = []
-vectors = ["wallet"]
-signers = ["dep:frost-core", "dep:frost-secp256k1", "dep:rand_core", "dep:rand_chacha"]
+vectors = ["wallet", "scaas-ct/vectors"]
+signers = ["dep:frost-core", "dep:frost-secp256k1", "dep:rand_core", "dep:rand_chacha", "dep:scaas-ct"]
 json = ["dep:serde_json"]
 pq = ["dep:ml-dsa", "dep:slh-dsa", "dep:cc"]
 
@@ -98,6 +101,10 @@ required-features = ["wallet"]
 
 [[test]]
 name = "wallet_pq"
+required-features = ["wallet"]
+
+[[test]]
+name = "wallet_pairing"
 required-features = ["wallet"]
 
 # arkworks subgroup checks crawl unoptimised

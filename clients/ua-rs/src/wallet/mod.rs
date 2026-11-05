@@ -5,16 +5,21 @@
 //! and a slot, no secret bytes. [`Wallet::lock`] waits for operations in flight, wipes the store and revokes every handle for
 //! good (`KeyRevoked`); dropping the wallet locks it, and a handle that outlives it stays valid memory that answers
 //! `KeyRevoked`. Signing: [`UaKey::sign_ua`], [`UaKey::sign_member`], the native keys' key proof and raw digest, all through
-//! the [`Signer`] trait (`sign`, `signer`; T3a: the classic curves; `pqsign`, T3b: ML-DSA, SLH-DSA, Falcon); the pairing
-//! kinds with T3c, `UASig` with T3d, the vault with T9. Randomness: `rand_core` 0.6 `OsRng` inside; no call takes an RNG.
-//! UNAUDITED.
-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
+//! the [`Signer`] trait (`sign`, `signer`; T3a: the classic curves; `pqsign`, T3b: ML-DSA, SLH-DSA, Falcon; `pairing`, T3c:
+//! scaas Schnorr, BLS with roles, the MuSig2 / FROST sessions, every arkworks secret multiplication by
+//! `scaas_ct::secret_mul`); `UASig` with T3d, the vault with T9. Randomness: `rand_core` 0.6 `OsRng` inside; no call takes
+//! an RNG. UNAUDITED.
+#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing, clippy::disallowed_methods)]
 
 pub mod bounded;
 #[cfg(feature = "vectors")]
 pub mod derive;
 #[cfg(not(feature = "vectors"))]
 pub(crate) mod derive;
+#[cfg(feature = "vectors")]
+pub mod pairing;
+#[cfg(not(feature = "vectors"))]
+mod pairing;
 #[cfg(feature = "vectors")]
 pub mod pqsign;
 #[cfg(not(feature = "vectors"))]
@@ -26,6 +31,7 @@ mod sign;
 mod signer;
 mod store;
 
+pub use pairing::{FrostSession, Musig2Session};
 pub use signer::{AllowRawDigest, KeyRef, SigRole, SignRequest, Signer};
 
 use crate::UAError;
@@ -46,7 +52,7 @@ pub enum Error {
     KeyRevoked,
     /// The call needs secrets and the wallet is locked.
     WalletLocked,
-    /// The kind exists but this build lacks it (Falcon on wasm32: no C; the pairing kinds' signers until T3c).
+    /// The kind exists but this build lacks it (Falcon on wasm32: no C).
     KindUnavailable,
     /// The OS random number generator failed.
     Rng,

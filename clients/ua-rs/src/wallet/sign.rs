@@ -5,10 +5,10 @@
 //! RFC 6979, low-s, `r ‖ s ‖ v` (v ∈ {27, 28}). Native keys: secp256k1 `r ‖ s ‖ v` or ed25519 over the key-proof digest or a
 //! raw digest behind [`AllowRawDigest`]. A UA key signs only the `ua_msg` it builds itself from a purpose of `PURPOSES` (or
 //! `pop` v2) and its own kind (CLI-SGN-29). Every operation reads its secret through `Handle::with`, under the store's read
-//! guard with the generation check (spec §8.2). The PQ kinds sign through `pqsign` (T3b); the pairing kinds come with T3c
-//! (`KindUnavailable`). UNAUDITED.
+//! guard with the generation check (spec §8.2). The PQ kinds sign through `pqsign` (T3b), the pairing kinds through
+//! `pairing` (T3c). UNAUDITED.
 use super::signer::{AllowRawDigest, KeyRef, SigRole, SignRequest, Signer};
-use super::{derive, pqsign, Error, NativeKey, Result, UaKey};
+use super::{derive, pairing, pqsign, Error, NativeKey, Result, UaKey};
 use crate::{keccak256, member_digest, purpose_tag, ua_message, ua8::pop_v2_tag, UAError, PURPOSES};
 use rand_core::{OsRng, RngCore};
 use sha2::{Digest, Sha256};
@@ -26,15 +26,14 @@ enum Scheme {
     Bip340,
 }
 
-/// The scheme of UA kind `kind`: `KindUnavailable` for the pairing kinds (T3c), `Argument` for a MuSig2 participant (it
-/// signs through its session), every kind with no key of its own and the PQ kinds (`pqsign`).
+/// The scheme of UA kind `kind`: `Argument` for a MuSig2 participant (it signs through its session), every kind with no key
+/// of its own, the PQ kinds (`pqsign`) and the pairing kinds (`pairing`).
 fn ua_scheme(kind: u16) -> Result<Scheme> {
     match kind {
         0x0101 => Ok(Scheme::P256),
         0x0102 => Ok(Scheme::Ed25519),
         0x0103 => Ok(Scheme::Bip340),
         0x0108 => Ok(Scheme::Secp256k1),
-        0x0104..=0x0107 => Err(Error::KindUnavailable),
         _ => Err(Error::Argument),
     }
 }
@@ -74,7 +73,7 @@ fn sign_scheme(scheme: Scheme, secret: &[u8], msg: &[u8], aux: Option<&[u8; 32]>
 }
 
 /// 32 bytes of the OS RNG (`rand_core` 0.6 `OsRng`).
-fn os_aux() -> Result<[u8; 32]> {
+pub(super) fn os_aux() -> Result<[u8; 32]> {
     let mut aux = [0u8; 32];
     OsRng.try_fill_bytes(&mut aux).map_err(|_| Error::Rng)?;
     Ok(aux)
@@ -107,14 +106,18 @@ impl UaKey {
     }
 
     /// The signature of `req` (a `UaMsg` of this key's kind); the randomness fixed only by the `vectors` entry points (BIP-340
-    /// `aux`, the PQ kinds' `rnd` / `opt_rand` / Falcon's 88 bytes), else from the OS RNG.
+    /// and scaas Schnorr `aux`, the PQ kinds' `rnd` / `opt_rand` / Falcon's 88 bytes), else from the OS RNG. The BLS kinds
+    /// sign under the domain of the request's role.
     fn sign_ua_msg(&self, req: &SignRequest, fixed: Option<&[u8]>) -> Result<Vec<u8>> {
-        let SignRequest::UaMsg { kind, ua_msg, .. } = req else { return Err(Error::Argument) };
+        let SignRequest::UaMsg { kind, ua_msg, role } = req else { return Err(Error::Argument) };
         if *kind != self.kind {
             return Err(Error::Argument);
         }
         if pqsign::is_pq(self.kind) {
             return self.secret.with(|s| pqsign::sign(self.kind, s, ua_msg, fixed))?;
+        }
+        if pairing::is_pairing(self.kind) {
+            return self.secret.with(|s| pairing::sign(self.kind, s, &self.key_data, ua_msg, *role, fixed))?;
         }
         let scheme = ua_scheme(self.kind)?;
         let aux = match (scheme, fixed) {
@@ -184,7 +187,7 @@ mod vectors {
     use super::*;
 
     impl UaKey {
-        /// `sign_ua` with fixed randomness: BIP-340 `aux` (32 B), ML-DSA `rnd` (32 B, zero = deterministic), SLH-DSA
+        /// `sign_ua` with fixed randomness: BIP-340 and scaas Schnorr `aux` (32 B), ML-DSA `rnd` (32 B, zero = deterministic), SLH-DSA
         /// `opt_rand` (16 B, `PK.seed` = deterministic), Falcon nonce ‖ sampler seed (88 B).
         pub fn vectors_sign_ua_fixed(&self, purpose: &[u8; 32], digest: &[u8; 32], fixed: &[u8]) -> Result<Vec<u8>> {
             self.sign_ua_msg(&self.ua_request(purpose, digest)?, Some(fixed))

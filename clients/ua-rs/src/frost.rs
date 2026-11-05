@@ -4,7 +4,8 @@
 //! 32-byte big-endian, `H1/H3/H4/H5/HDKG(m) = keccak256(cs ‖ label ‖ m ‖ 0x00) ‖ keccak256(cs ‖ label ‖ m ‖ 0x01) mod r`
 //! (labels `rho`, `nonce`, `msg`, `com`, `dkg`; `H4`/`H5` output that scalar's 32 bytes), `H2` = the scaas Schnorr
 //! challenge, so a signature verifies as `schnorr-bn254`. No `HID` (identifiers are the scalars 1..n). Plus
-//! [`dkg`] / [`Dkg::sign`]: every participant simulated in one process, for groups.json. Feature `signers`. UNAUDITED.
+//! [`dkg`] / [`Dkg::sign`]: every participant simulated in one process, for groups.json. The bn254 group's element is
+//! [`Bn254Element`], whose `* Scalar` is `scaas_ct::secret_mul` (spec §12). Feature `signers`. UNAUDITED.
 use crate::keccak;
 use crate::musig2::{bn_parse, bn_schnorr_challenge, bn_ser};
 use frost_core::keys::dkg::{part1, part2, part3, round1};
@@ -52,33 +53,61 @@ impl Field for Bn254ScalarField {
     }
 }
 
+/// A FROST-BN254 group element: arkworks' G1 point whose `* Scalar` is `scaas_ct::secret_mul` (spec §12, C-01). frost-core
+/// multiplies its nonces and signing shares by `G` through this operator and the operator cannot tell a secret scalar from a
+/// public one, so every multiplication is blinded (a public one only costs time); outputs are unchanged (groups.json).
+/// Panics only if the OS RNG fails: the operator cannot return an error.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Bn254Element(pub ark_bn254::G1Projective);
+
+impl core::ops::Add for Bn254Element {
+    type Output = Self;
+    fn add(self, o: Self) -> Self {
+        Self(self.0 + o.0)
+    }
+}
+
+impl core::ops::Sub for Bn254Element {
+    type Output = Self;
+    fn sub(self, o: Self) -> Self {
+        Self(self.0 - o.0)
+    }
+}
+
+impl core::ops::Mul<ark_bn254::Fr> for Bn254Element {
+    type Output = Self;
+    fn mul(self, s: ark_bn254::Fr) -> Self {
+        Self(scaas_ct::secret_mul(self.0, &s).expect("OS RNG"))
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Bn254Group;
 
 impl Group for Bn254Group {
     type Field = Bn254ScalarField;
-    type Element = ark_bn254::G1Projective;
+    type Element = Bn254Element;
     type Serialization = [u8; 64];
     fn cofactor() -> ark_bn254::Fr {
         ark_bn254::Fr::from(1u64)
     }
     fn identity() -> Self::Element {
-        ark_ff::Zero::zero()
+        Bn254Element(ark_ff::Zero::zero())
     }
     fn generator() -> Self::Element {
-        ark_ec::PrimeGroup::generator()
+        Bn254Element(ark_ec::PrimeGroup::generator())
     }
     fn serialize(e: &Self::Element) -> Result<Self::Serialization, GroupError> {
         if *e == Self::identity() {
             return Err(GroupError::InvalidIdentityElement);
         }
-        Ok(bn_ser(e).try_into().expect("64 bytes"))
+        Ok(bn_ser(&e.0).try_into().expect("64 bytes"))
     }
     fn deserialize(b: &Self::Serialization) -> Result<Self::Element, GroupError> {
         if b.iter().all(|x| *x == 0) {
             return Err(GroupError::InvalidIdentityElement);
         }
-        bn_parse(b).ok_or(GroupError::MalformedElement)
+        bn_parse(b).map(Bn254Element).ok_or(GroupError::MalformedElement)
     }
 }
 

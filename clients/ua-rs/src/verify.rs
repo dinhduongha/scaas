@@ -195,8 +195,14 @@ where
     (p.is_on_curve() && p.is_in_correct_subgroup_assuming_on_curve()).then_some(p)
 }
 
-/// scaas Schnorr: `R ‖ z`, `e = hashToScalar(keccak256(tag ‖ R ‖ Y ‖ m))` with hashToScalar(s) =
-/// `(keccak(s ‖ 0x02) · 2^256 + keccak(s ‖ 0x03)) mod r`; accept iff `z < r`, `R ≠ O`, `e ≠ 0`, `[z]G == R + [e]Y`.
+/// The scaas 512-bit map `hashToScalar(s) = (keccak(s ‖ 0x02) · 2^256 + keccak(s ‖ 0x03)) mod r` (accounts.md §1.9): the one
+/// copy, for the verifier's challenge and the signer's nonce and challenge alike (spec §3).
+pub fn hash_to_scalar<F: PrimeField>(s: &[u8; 32]) -> F {
+    F::from_be_bytes_mod_order(&[keccak(&[s, &[2]]), keccak(&[s, &[3]])].concat())
+}
+
+/// scaas Schnorr: `R ‖ z`, `e = hashToScalar(keccak256(tag ‖ R ‖ Y ‖ m))` ([`hash_to_scalar`]); accept iff `z < r`, `R ≠ O`,
+/// `e ≠ 0`, `[z]G == R + [e]Y`.
 pub(crate) fn schnorr<P: SWCurveConfig>(key_data: &[u8], message: &[u8; 32], sig: &[u8], w: usize) -> bool
 where
     P::BaseField: PrimeField,
@@ -213,8 +219,7 @@ where
     }
     let (rb, zb) = sig.split_at(2 * w);
     let (Some(r), Some(y), Some(z)) = (g1::<P>(rb, w), g1::<P>(key_data, w), fe::<P::ScalarField>(zb)) else { return false };
-    let seed = keccak(&[tag, rb, key_data, message]);
-    let e = P::ScalarField::from_be_bytes_mod_order(&[keccak(&[&seed, &[2]]), keccak(&[&seed, &[3]])].concat());
+    let e: P::ScalarField = hash_to_scalar(&keccak(&[tag, rb, key_data, message]));
     !e.is_zero() && Affine::<P>::generator() * z == r.into_group() + y * e
 }
 

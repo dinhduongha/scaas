@@ -1165,6 +1165,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
 
 [[package]]
+name = "scaas-ct"
+version = "0.1.0"
+dependencies = [
+ "ark-ec",
+ "ark-ff",
+ "getrandom",
+ "rand_core 0.6.4",
+ "subtle",
+ "zeroize",
+]
+
+[[package]]
 name = "scaas-ua"
 version = "0.1.0"
 dependencies = [
@@ -1191,6 +1203,7 @@ dependencies = [
  "rand_chacha",
  "rand_core 0.6.4",
  "ripemd",
+ "scaas-ct",
  "serde_json",
  "sha2 0.10.9",
  "sha3 0.10.9",
