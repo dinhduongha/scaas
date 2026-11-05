@@ -1,0 +1,72 @@
+# ua-mtx-merge T10: deploy gas of every release and library of the merged tree (plan T10 step 4; spec Q4, R40, §9 step 3)
+# Tree: a362634d (T10's build; no contract under src changed since T8 89ba70e0). Forge 1.8.5, Amsterdam (EIP-8037 as forge
+# measures it), default set n2304-kmax4096. A measurement of gas used (forge is deterministic), not a timing calibration.
+#
+# Table 1, T0's method and formula, for comparison with T0's M column (runs/2026-11-04-ua-mtx-merge/t0-M.txt):
+#   each release or library its own CREATE2 through a probe, one isolated transaction (runs/2026-11-04-ua-mtx-merge/t10/
+#   T10DeployGas.t.sol = T0's T0Deploy.t.sol plus HederaLib, the four PQZ libraries and UARegistryLib);
+#   regular = lastCallGas.gasTotalUsed x 64/63 (intrinsic and the EIP-7976 calldata floor included), state = EIP-8037's;
+#   asked = (regular + state) x 1.05; a token kind's asked + the frame deployImplementation adds (the NORMAL release
+#   through the factory minus through the probe, each run's own: T0 0.37 M, T10 0.37 M); "regular" shows the probe's.
+#   Fits = asked <= the limit (EIP-8037: a transaction is included only if regular + state fits; never a block's gas_used).
+#   Regenerate: runs/2026-11-04-ua-mtx-merge/t10_deploy_gas.sh <out dir>; python3 runs/2026-11-04-ua-mtx-merge/t10_deploy_gas.py <public log>
+#
+| Release | runtime B, T0 M -> T10 | regular | state | asked, T0 M -> T10 | 60 M | 70 M | regular x 1.05 < 2^24 |
+|---|---:|---:|---:|---:|---|---|---|
+| `NormalToken` | 32,098 -> 32,089 | 2,306,137 | 49,377,690 | 54.65 M -> 54.64 M | yes | yes | yes |
+| `WrappedToken` | 42,678 -> 42,669 | 2,998,946 | 65,565,090 | 72.37 M -> 72.36 M | no | no | yes |
+| `NormalZetherToken` | 40,552 -> 40,543 | 2,955,255 | 62,312,310 | 68.91 M -> 68.90 M | no | yes | yes |
+| `WrappedZetherToken` | 51,040 -> 51,031 | 3,645,984 | 78,358,950 | 86.49 M -> 86.47 M | no | no | yes |
+| `NormalPqzToken` | 46,393 -> 46,384 | 3,279,815 | 71,249,040 | 78.64 M -> 78.62 M | no | no | yes |
+| `WrappedPqzToken` | 56,232 -> 56,223 | 3,926,853 | 86,302,710 | 95.13 M -> 95.11 M | no | no | yes |
+| `SCaaSDex` | 33,345 -> 33,399 | 2,347,747 | 51,381,990 | 56.33 M -> 56.42 M | yes | yes | yes |
+| `GovernanceRouter` | 11,744 -> 11,748 | 853,942 | 18,158,040 | 19.96 M -> 19.96 M | yes | yes | yes |
+| `MtxRelayFee` | 2,488 -> 2,488 | 231,870 | 5,021,460 | 5.52 M -> 5.52 M | yes | yes | yes |
+| `UARegistryLib` | (not in T0) 36,192 | 2,378,955 | 55,557,360 | 60.83 M | no | yes | yes |
+| `MtxPipelineLib` | 10,024 -> 10,144 | 685,421 | 15,703,920 | 17.01 M -> 17.21 M | yes | yes | yes |
+| `WrappedLib` | 16,761 -> 16,859 | 1,122,328 | 25,977,870 | 28.29 M -> 28.46 M | yes | yes | yes |
+| `TradeLib` | 4,842 -> 4,842 | 340,057 | 7,591,860 | 8.33 M -> 8.33 M | yes | yes | yes |
+| `GovernanceLib` | 13,181 -> 13,181 | 883,069 | 20,350,530 | 22.30 M -> 22.30 M | yes | yes | yes |
+| `HederaLib` | (not in T0) 767 | 75,832 | 1,357,110 | 1.50 M | yes | yes | yes |
+| `ZetherLib` | 25,065 -> 25,065 | 1,654,938 | 38,533,050 | 42.20 M -> 42.20 M | yes | yes | yes |
+| `ZetherWrappedLib` | 11,244 -> 11,244 | 756,158 | 17,386,920 | 19.05 M -> 19.05 M | yes | yes | yes |
+| `PqzWrappedLib` | 4,947 -> 4,947 | 348,379 | 7,752,510 | 8.51 M -> 8.51 M | yes | yes | yes |
+| `PqzStateLib` | (not in T0) 8,354 | 568,913 | 12,965,220 | 14.21 M | yes | yes | yes |
+| `PqzTransferLib` | (not in T0) 17,697 | 1,176,421 | 27,260,010 | 29.86 M | yes | yes | yes |
+| `PqzBurnLib` | (not in T0) 10,074 | 681,260 | 15,596,820 | 17.09 M | yes | yes | yes |
+| `PqzViewLib` | (not in T0) 17,527 | 1,166,019 | 26,999,910 | 29.57 M | yes | yes | yes |
+| frame (`deployImplementation`, in each kind row) | | | | 0.37 M -> 0.37 M | | | |
+
+# Table 2, the public gate itself (DeployBase, RELEASE_GAS_GATE=public): deploy.sh evm with DEPLOY_ZETHER=1 DEPLOY_WRAPPED=1
+# on a local anvil (chain 31337, amsterdam, 200 M), each release transaction run once in the simulation on the fork:
+# regular = lastCallGas x 64/63 of the deployImplementation / deployDexImplementation call (the frame included) or of a
+# CREATE2 probe (UARegistry with its gen-1 kinds, UARegistryLib), state = EIP-8037's, asked = (regular + state) x 1.05;
+# the gate refuses by name unless asked <= block gas limit and regular x 1.05 < 2^24 (the script's "release gas |" lines).
+| Release (public gate, `forge script`) | regular | state | asked | 60 M | 70 M | regular x 1.05 < 2^24 |
+|---|---:|---:|---:|---|---|---|
+| `UARegistry` | 2,564,120 | 45,639,900 | 50.61 M | yes | yes | yes |
+| `UARegistryLib` | 2,376,874 | 55,557,360 | 60.83 M | no | yes | yes |
+| `NormalToken` | 2,264,527 | 49,769,370 | 54.64 M | yes | yes | yes |
+| `SCaaSDex` | 2,312,378 | 51,773,670 | 56.79 M | yes | yes | yes |
+| `WrappedToken` | 2,953,175 | 65,956,770 | 72.36 M | no | no | yes |
+| `NormalZetherToken` | 2,901,162 | 62,703,990 | 68.89 M | no | yes | yes |
+| `WrappedZetherToken` | 3,583,569 | 78,750,630 | 86.45 M | no | no | yes |
+
+
+# The gate on a local anvil (deploy.sh evm, default releases: UARegistry, UARegistryLib, NormalToken, SCaaSDex; nothing else):
+#   block gas limit | gate    | result
+#   60 M            | public  | refused by name: "block gas limit 60000000 < 60830945 asked by the UARegistryLib release (measured
+#                   |         | regular + state x 1.05, NET-EVM-06)"; deployer nonce 0 after (nothing sent)
+#   70 M            | public  | deployed, 36 transactions
+#   70 M            | testnet | refused by name: "block gas limit 70000000 < 72150976 needed to deploy the UARegistryLib release
+#                   |         | (NET-EVM-06)"; nonce 0
+#   70 M            | bogus   | refused: "RELEASE_GAS_GATE: testnet or public"; nonce 0
+#   200 M           | public  | DEPLOY_ZETHER=1 DEPLOY_WRAPPED=1: deployed, 49 transactions (table 2)
+#
+# Reading (no decision: Q3's lever choice and the 60 M target stay the owner's, T9 not started):
+# - Every regular x 1.05 is under 2^24 (largest: WrappedPqzToken 3.93 M).
+# - 60 M: NormalToken (54.64 M), SCaaSDex, UARegistry, GovernanceRouter, MtxRelayFee and every library but UARegistryLib fit;
+#   WrappedToken, both Zether kinds, both PQZ kinds and UARegistryLib (60.83 M, 36,192 B; not measured at T0) do not.
+#   A public 60 M deploy of even the default releases is refused at UARegistryLib (a finding for the owner beside T9).
+# - 70 M: also NormalZetherToken (68.90 M) and UARegistryLib; WrappedToken stays over (72.36 M), as at T0 (72.37 M).
+# - T0 M -> T10: within 0.2 M on every row (NatSpec and T1-T8's build vs T0's scratch M): no lever is in the tree.

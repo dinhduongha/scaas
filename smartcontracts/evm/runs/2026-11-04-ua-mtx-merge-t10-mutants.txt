@@ -1,0 +1,6 @@
+mutant | test that went red | rc
+public-gate-on-gas-used | test_publicGateUsesMeasuredReleaseGas | 1
+x105-dropped | test_publicGateUsesMeasuredReleaseGas | 1
+regular-check-dropped | test_publicGateRefusesRegularOver2pow24 | 1
+testnet-formula-changed | test_C5_1_releaseNeedsABlockGasLimit, test_everyKindsReleaseFitsTwoHundredMillion, test_publicGateMeasuresBothZetherReleases, test_publicGateUsesMeasuredReleaseGas, test_registryDeployGate, test_testnetGateFormulaUnchanged | 1
+public-gate-ignored | test_publicGateMeasuresBothZetherReleases, test_publicGateUsesMeasuredReleaseGas | 1
