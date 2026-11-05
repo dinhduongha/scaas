@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-// Generates smartcontracts/vectors/ua/keys.json and sign.json (ua-rs-sign T1a, spec §11, plan MD-7): the UA keys of src/uakey.js
+// Generates smartcontracts/vectors/ua/keys.json and sign.json (ua-rs-sign T1a), kem.json, seal.json and vault.json (T1b) (spec §11, plan MD-7): the UA keys of src/uakey.js
 // and the native keys of src/seed.js per mnemonic, kind, account and index, with the refusals; the UA signatures, member
 // signatures, BLS roles, the scaas Schnorr nonce-map rows, typed-data rows (generic hasher, canonical builders), the signing
 // policy (src/evm.js check*), EVM transactions of types 0-3 and the EIP-155 example, WebAuthn assertions, msig member sets and the
@@ -17,7 +17,7 @@ import { bn254 } from '@noble/curves/bn254.js';
 import { bls12_381 } from '@noble/curves/bls12-381.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { shake256 } from '@noble/hashes/sha3.js';
-import { hex, fromHex, keccak_256, utf8ToBytes, concatBytes, b64url, abiEncode } from '../src/bytes.js';
+import { hex, fromHex, keccak_256, utf8ToBytes, concatBytes, b64url, fromB64url, abiEncode } from '../src/bytes.js';
 import * as ua from '../src/ua.js';
 import * as evm from '../src/evm.js';
 import { verify } from '../src/ua-verify.js';
@@ -28,6 +28,12 @@ import {
   deriveUAKey, uaKeyPath, signUAVector, sigRole, webauthnChallenge, webauthnAssertion, msigMemberSigs,
 } from '../src/uakey.js';
 import { PQ_MNEMONIC } from './ua-signers.mjs';
+import { kemKeyOf, kemEncapsVector, ephemeralVector } from '../src/kem.js';
+import {
+  PURPOSE as SEAL_PURPOSE, MAX_PT, LINK_WINDOW, sealVector, open as openSealed, wireForm, fromWire, sealContainer, sealBackup, openContainer, openLink,
+  linkSessionVector, restoreBackup, encodeBackup,
+} from '../src/seal.js';
+import { createVault, rewrapPin, openSeedVault } from '../src/vault.js';
 
 const VECTORS = fileURLToPath(new URL('../../../smartcontracts/vectors/', import.meta.url));
 const OUT = process.argv[2] ?? join(VECTORS, 'ua');
@@ -605,8 +611,328 @@ const sign = {
   chainSeparation,
 };
 
+// ---------------------------------------------------------------------------------------------------- kem.json, seal.json, vault.json
+// ua-rs-sign T1b (spec §6, §8.1, §11): the UA KEM key, encapsulation and decapsulation with their checks, seal / open, the backup
+// and link containers with their acceptance and replay rows, the seed vault. Randomness: a SHAKE256 stream per label (t1b).
+const stream1b = (label, n) => shake256(utf8ToBytes(`scaas.ua-rs-sign.t1b.${label}`), { dkLen: n });
+const H = (b) => hex(b);
+const KEM_HOLDERS = [0x0130, 0x0131, 0x0132, 0x0134, 0x0135];
+const kemRows = [];
+for (const [mnemonic, kind, account, index, version] of [
+  ...KEM_HOLDERS.flatMap((kind) => [0, 1].map((version) => ['pq_kat', kind, 0, 0, version])),
+  ['pq_kat', 0x0130, 1, 0, 0], ['pq_kat', 0x0130, 0, 1, 0], ['pq_kat', 0x0130, 0, 0, '18446744073709551615'], ['twelve_words', 0x0130, 0, 0, 0]]) {
+  const key = keyOf(ref(mnemonic, kind, account, index));
+  const k = kemKeyOf(key, typeof version === 'string' ? BigInt(version) : version);
+  kemRows.push({ mnemonic, kind, account, index, ua: H(key.ua), version, kemPk: H(k.kemPk), kemPkHash: H(k.kemPkHash) });
+}
+must(new Set(kemRows.map((r) => r.kemPk)).size === kemRows.length, 'every (ua, version) its own KEM key');
+const kemOf = (row) => kemKeyOf(keyOf(row), typeof row.version === 'string' ? BigInt(row.version) : row.version);
+const R0 = kemRows[0]; // pq_kat mldsa44 account 0 index 0 version 0
+const K0 = kemOf(R0);
+const kemRefusals = [
+  ...[0x0101, 0x0102, 0x0103, 0x0104, 0x0105, 0x0106, 0x0107, 0x0108, 0x0133].map((kind) => ({ what: 'key', mnemonic: 'pq_kat', kind,
+    account: 0, index: 0, version: 0, error: 'KemHolder', reason: 'not a KEM holder (CTR-UA-32)' })),
+  { what: 'key', kind: 0x0120, ua: msigCases[0].ua, version: 0, error: 'KemHolder', reason: 'an msig has no KEM key (MD-11): seal to its accepted members' },
+  { what: 'key', mnemonic: 'pq_kat', kind: 0x0130, account: 0, index: 0, version: '18446744073709551616', error: 'Argument', reason: 'version ≥ 2^64' },
+];
+for (const x of kemRefusals) {
+  const e = refusedBy(() => (x.kind === 0x0120 ? kemKeyOf({ kind: 0x0120, ua: fromHex(x.ua) }, 0) : kemKeyOf(keyOf(x), BigInt(x.version))));
+  must(e?.code === x.error, `kem refusal ${x.kind}: ${e?.message}`);
+}
+const EPH = ephemeralVector(stream1b('ephemeral', 96));
+const encRows = [
+  { id: 'ua-key', recipient: { mnemonic: 'pq_kat', kind: 0x0130, account: 0, index: 0, version: 0 }, kemPk: R0.kemPk },
+  { id: 'ua-key-2', recipient: { mnemonic: 'pq_kat', kind: 0x0135, account: 0, index: 0, version: 1 }, kemPk: kemRows[9].kemPk },
+  { id: 'ephemeral', recipient: { ephemeralSeed: H(stream1b('ephemeral', 96)) }, kemPk: H(EPH.kemPk) },
+].map((r) => {
+  const [m, e] = [stream1b(`encaps.${r.id}.m`, 32), stream1b(`encaps.${r.id}.e`, 32)];
+  const out = kemEncapsVector(fromHex(r.kemPk), m, e);
+  const key = r.id === 'ephemeral' ? EPH : kemOf({ ...r.recipient });
+  must(H(key.decaps(out.mlkemCt, out.x25519Eph)) === H(out.ss), `${r.id}: decaps`);
+  return { ...r, m: H(m), e: H(e), mlkemCt: H(out.mlkemCt), x25519Eph: H(out.x25519Eph), ss: H(out.ss) };
+});
+must(kemRows[9].kind === 0x0135 && kemRows[9].version === 1, 'row 9');
+const pk0 = fromHex(R0.kemPk);
+const badModulus = pk0.slice(); badModulus[1] = 0xff; badModulus[2] |= 0x0f; // the first coefficient 4095 ≥ q
+const scheme2 = pk0.slice(); scheme2[0] = 2;
+const lowOrder = pk0.slice(); lowOrder.set(new Uint8Array(32), 1 + 1568); // pk_X = 0: ss_X = 0^32
+const encapsRefusals = [
+  ['modulus', badModulus, 'ek coefficient 4095 ≥ q (FIPS 203 §7.2)'],
+  ['length', pk0.subarray(0, 1600), 'kemPk of 1,600 bytes'],
+  ['scheme 2', scheme2, 'scheme 2 (ML-KEM-1024 + HQC + X25519) is reserved'],
+  ['all-zero ss_X', lowOrder, 'pk_X = 0 (small order): ss_X = 0^32'],
+].map(([id, kemPk, reason]) => {
+  const [m, e] = [stream1b('refuse.m', 32), stream1b('refuse.e', 32)];
+  must(refusedBy(() => kemEncapsVector(kemPk, m, e))?.code === 'KemCheck', `encaps refusal ${id}`);
+  return { id, kemPk: H(kemPk), m: H(m), e: H(e), error: 'KemCheck', reason };
+});
+const enc0 = encRows[0];
+const flipped = fromHex(enc0.mlkemCt); flipped[100] ^= 1;
+const decapsRows = [
+  { id: 'valid', mlkemCt: enc0.mlkemCt, x25519Eph: enc0.x25519Eph, ss: enc0.ss },
+  { id: 'flipped mlkemCt byte 100: implicit rejection, another ss', mlkemCt: H(flipped), x25519Eph: enc0.x25519Eph, ss: H(K0.decaps(flipped, fromHex(enc0.x25519Eph))) },
+  { id: 'short mlkemCt (1,567 bytes)', mlkemCt: H(fromHex(enc0.mlkemCt).subarray(0, 1567)), x25519Eph: enc0.x25519Eph, error: 'KemCheck' },
+  { id: 'x25519Eph of 31 bytes', mlkemCt: enc0.mlkemCt, x25519Eph: H(fromHex(enc0.x25519Eph).subarray(0, 31)), error: 'KemCheck' },
+  { id: 'small-order E = 0', mlkemCt: enc0.mlkemCt, x25519Eph: H(new Uint8Array(32)), error: 'KemCheck' },
+  { id: 'small-order E = 1', mlkemCt: enc0.mlkemCt, x25519Eph: H(concatBytes(Uint8Array.of(1), new Uint8Array(31))), error: 'KemCheck' },
+  { id: 'small-order E of order 8', mlkemCt: enc0.mlkemCt, x25519Eph: '0xe0eb7a7c3b41b8ae1656e3faf19fc46ada098deb9c32b1fd866205165f49b800', error: 'KemCheck' },
+].map((r) => {
+  const e = refusedBy(() => K0.decaps(fromHex(r.mlkemCt), fromHex(r.x25519Eph)));
+  must(r.error ? e?.code === r.error : !e && H(K0.decaps(fromHex(r.mlkemCt), fromHex(r.x25519Eph))) === r.ss, `decaps ${r.id}`);
+  return { key: { mnemonic: 'pq_kat', kind: 0x0130, account: 0, index: 0, version: 0 }, ...r };
+});
+must(decapsRows[1].ss !== enc0.ss, 'flipped ct gives another ss');
+const kem = {
+  note: 'Generated by clients/clientkeys/scripts/ua-wallet-vectors.mjs (ua-rs-sign T1b) from src/kem.js; never edit by hand. keys: '
+    + 'kemSeed = HKDF-SHA256(ikm = BIP-39 seed (keys.json), salt = "scaas.ua.kem.v1", info = "scaas.kem.1" ‖ ua ‖ be64 version, 96); '
+    + '(ek, dk) = ML-KEM-1024.KeyGen_internal(kemSeed[0:32], kemSeed[32:64]); sk_X = kemSeed[64:96], pk_X = X25519(sk_X, 9); '
+    + 'kemPk = 0x01 ‖ ek ‖ pk_X (1,601 B), kemPkHash = keccak256(kemPk). KEM holders only (mldsa44, mldsa65, fndsa512, mldsa87, '
+    + 'fndsa1024); an msig has no KEM key (MD-11). encaps: m (ML-KEM message) and e (X25519 ephemeral secret) given, E = X25519(e, 9), '
+    + 'ss = SHA3-256(ss_M ‖ ss_X ‖ E ‖ pk_X ‖ "scaas.kem.1"); ephemeral: the key from 96 given bytes laid out as kemSeed. Refusals '
+    + '(KemCheck): scheme ≠ 1, length ≠ 1,601, the ek modulus check, ss_X = 0^32; decaps: mlkemCt 1,568 B and x25519Eph 32 B, '
+    + 'ss_X = 0^32 refused, ML-KEM implicit rejection kept (a flipped byte: another ss, no error).',
+  keys: kemRows,
+  refusals: kemRefusals,
+  encaps: encRows,
+  encapsRefusals,
+  decaps: decapsRows,
+};
+
+// --- seal.json ---
+const R0_REF = { mnemonic: 'pq_kat', kind: 0x0130, account: 0, index: 0, version: 0 };
+const sealRow = async (id, kemPk, purpose, aad, pt, recipient = R0_REF) => {
+  const [m, e] = [stream1b(`seal.${id}.m`, 32), stream1b(`seal.${id}.e`, 32)];
+  const s = await sealVector(kemPk, purpose, aad, pt, { m, e });
+  return { id, recipient, kemPk: H(kemPk), purpose, aad: H(aad), pt: H(pt), m: H(m), e: H(e), mlkemCt: H(s.mlkemCt), x25519Eph: H(s.x25519Eph),
+    ciphertext: H(s.ciphertext), wire: H(wireForm(s)) };
+};
+const sealRows = [
+  await sealRow('backup', pk0, SEAL_PURPOSE.backup, stream1b('aad.backup', 40), stream1b('pt.backup', 77)),
+  await sealRow('link-ephemeral', EPH.kemPk, SEAL_PURPOSE.link, stream1b('aad.link', 17), stream1b('pt.link', 300), { ephemeralSeed: H(stream1b('ephemeral', 96)) }),
+  await sealRow('empty-pt-empty-aad', pk0, 'scaas/test/v1', new Uint8Array(0), new Uint8Array(0)),
+];
+for (const r of sealRows) {
+  const key = r.id === 'link-ephemeral' ? EPH : K0;
+  must(H(await openSealed(key, r.purpose, fromHex(r.aad), fromWire(fromHex(r.wire)))) === r.pt, `seal ${r.id} opens`);
+}
+const s0 = sealRows[0];
+const flip = (h, i) => { const b = fromHex(h); b[i] ^= 1; return H(b); };
+const sealRefusals = [
+  { id: 'wrong purpose', purpose: 'scaas/link/v1', error: 'SealOpen' },
+  { id: 'wrong aad', aad: flip(s0.aad, 0), error: 'SealOpen' },
+  { id: 'aad dropped', aad: '0x', error: 'SealOpen' },
+  { id: 'version 2', wire: H(concatBytes(Uint8Array.of(2), fromHex(s0.wire).subarray(1))), error: 'SealVersion' },
+  { id: 'scheme 2', wire: H(concatBytes(Uint8Array.of(1, 2), fromHex(s0.wire).subarray(2))), error: 'SealVersion' },
+  { id: 'flipped mlkemCt byte', wire: flip(s0.wire, 2 + 7), error: 'SealOpen' },
+  { id: 'flipped x25519Eph byte', wire: flip(s0.wire, 2 + 1568 + 3), error: 'SealOpen' },
+  { id: 'flipped ciphertext byte', wire: flip(s0.wire, 2 + 1568 + 32 + 5), error: 'SealOpen' },
+  { id: 'flipped tag byte', wire: flip(s0.wire, fromHex(s0.wire).length - 1), error: 'SealOpen' },
+  { id: 'opened with another KEM key (version 1)', key: { mnemonic: 'pq_kat', kind: 0x0130, account: 0, index: 0, version: 1 }, error: 'SealOpen' },
+];
+for (const x of sealRefusals) {
+  const key = x.key ? kemOf(x.key) : K0;
+  let e = null;
+  try { await openSealed(key, x.purpose ?? s0.purpose, fromHex(x.aad ?? s0.aad), fromWire(fromHex(x.wire ?? s0.wire))); } catch (err) { e = err; }
+  must(e?.code === x.error, `seal refusal ${x.id}: ${e?.message}`);
+}
+const sealArgRefusals = [];
+for (const [id, purpose, ptLength] of [['purpose with an upper-case letter', 'scaas/Backup/v1', 1], ['purpose of 65 bytes', 'a'.repeat(65), 1],
+  ['empty purpose', '', 1], ['pt over 1 MiB', SEAL_PURPOSE.backup, MAX_PT + 1]]) {
+  let e = null;
+  try { await sealVector(pk0, purpose, new Uint8Array(0), new Uint8Array(ptLength), { m: stream1b('x.m', 32), e: stream1b('x.e', 32) }); } catch (err) { e = err; }
+  must(e?.code === 'Argument', `seal argument ${id}`);
+  sealArgRefusals.push({ id, purpose, ptLength, error: 'Argument' });
+}
+must(H((await sealVector(pk0, SEAL_PURPOSE.backup, new Uint8Array(0), new Uint8Array(MAX_PT), { m: stream1b('x.m', 32), e: stream1b('x.e', 32) })).ciphertext).length === 2 + 2 * (MAX_PT + 16), '1 MiB ok');
+
+// containers: the wallet W (twelve_words) backs up to the recovery UA R (pq_kat mldsa44, KEM version 0) and links a new device
+const ref1b = (mnemonic, kind, account = 0, index = 0) => ({ mnemonic, kind, account, index });
+const W_ID = ref1b('twelve_words', 0x0102); // W's identity key (ed25519: deterministic)
+const wKey = keyOf(W_ID);
+const other = keyOf(ref1b('pq_kat', 0x0102)); // a different registered UA
+const W_ENTROPY = fromHex(MNEMONICS.find((m) => m.id === 'twelve_words').entropy);
+const manifestOf = (k, refRow) => ({ entries: [{ kind: refRow.kind, account: refRow.account, index: refRow.index, ua: H(k.ua) }] });
+const payloadOf = (generation, entropy = W_ENTROPY, k = wKey, refRow = W_ID) => ({ generation, entropy,
+  secrets: [{ label: 'native-import:evm:0', bytes: stream1b(`secret.${generation}`, 32) }], manifest: manifestOf(k, refRow) });
+const R_RECIPIENT = { ua: fromHex(R0.ua), version: 0 };
+const senderKeyOf = (k) => ({ kind: k.kind, keyData: H(k.keyData) });
+const fx = (label) => ({ m: stream1b(`${label}.m`, 32), e: stream1b(`${label}.e`, 32), sig: {} });
+const CREATED = NOW;
+const backupC = async (label, payload, sender = wKey, extra = {}) => sealBackup({ kemPk: pk0, recipient: R_RECIPIENT, sender, created: CREATED, payload, ...extra }, fx(label));
+const expectBackup = { purpose: SEAL_PURPOSE.backup, sender: { ua: H(wKey.ua) }, recipient: { ua: R0.ua, version: 0 } };
+const backup2 = await backupC('backup.g2', payloadOf(2));
+const backup1 = await backupC('backup.g1', payloadOf(1));
+const SESSION = { seed: stream1b('link.session', 96), shortCode: '48151623', start: NOW };
+const session = () => linkSessionVector(SESSION.seed, SESSION.shortCode, SESSION.start);
+const S0 = session();
+const linkPt = encodeBackup(payloadOf(2));
+const linkC = async (label, created, shortCode = SESSION.shortCode, sender = wKey) => sealContainer({ kemPk: S0.kemPk, purpose: SEAL_PURPOSE.link,
+  recipient: { kemPkHash: S0.kemKey.kemPkHash }, sender, created, pt: linkPt, shortCode }, fx(label));
+const link = await linkC('link', NOW + 60);
+const expectLink = { purpose: SEAL_PURPOSE.link, sender: { ua: H(wKey.ua) }, recipient: { kemPkHash: H(S0.kemKey.kemPkHash) } };
+const containerRows = [
+  { id: 'backup generation 2', container: backup2, expect: expectBackup, senderKey: senderKeyOf(wKey), opener: { kem: R0 },
+    pt: H(encodeBackup(payloadOf(2))), sender: W_ID, m: H(fx('backup.g2').m), e: H(fx('backup.g2').e) },
+  { id: 'link', container: link, expect: expectLink, senderKey: senderKeyOf(wKey), opener: { session: { seed: H(SESSION.seed), shortCode: SESSION.shortCode, start: SESSION.start } },
+    pt: H(linkPt), sender: W_ID, m: H(fx('link').m), e: H(fx('link').e) },
+];
+must(H(await openContainer(K0, backup2, expectBackup, senderKeyOf(wKey))) === containerRows[0].pt, 'backup opens');
+must(H(await openLink(session(), link, expectLink, senderKeyOf(wKey))) === containerRows[1].pt, 'link opens');
+
+// acceptance refusals, each from an otherwise valid container (C-03)
+const byOther = await backupC('backup.other', payloadOf(2, fromHex(MNEMONICS.find((m) => m.id === 'pq_kat').entropy), other, ref1b('pq_kat', 0x0102)), other);
+const notDeriving = await backupC('backup.foreign-entropy', { ...payloadOf(2), entropy: fromHex(MNEMONICS.find((m) => m.id === 'bip39_test').entropy) });
+const flipField = (c, path, i) => { const d = structuredClone(c); const o = path.slice(0, -1).reduce((a, k) => a[k], d); const k = path.at(-1);
+  const b = fromB64url(o[k]); b[i] ^= 1; o[k] = b64url(b); return d; };
+const opener1 = { kem: kemRows[1] }; // R's KEM key version 1
+const acceptance = [
+  { id: 'signed by a different registered UA', container: byOther, expect: expectBackup, senderKey: senderKeyOf(other), error: 'ContainerSender' },
+  { id: 'purpose not the expected one', container: backup2, expect: { ...expectBackup, purpose: SEAL_PURPOSE.link }, error: 'ContainerSender' },
+  { id: 'recipient not the expected one', container: backup2, expect: { ...expectBackup, recipient: { ua: R0.ua, version: 1 } }, opener: opener1, error: 'ContainerSender' },
+  { id: 'the expected recipient is not the opener\'s key', container: backup2, expect: expectBackup, opener: opener1, error: 'ContainerSender' },
+  { id: 'sender not in the approved set', container: backup2, expect: { ...expectBackup, sender: { set: [H(other.ua), H(keccak_256(utf8ToBytes('x')))] } }, error: 'ContainerSender' },
+  { id: 'sender in the approved set (accepted)', container: backup2, expect: { ...expectBackup, sender: { set: [H(other.ua), H(wKey.ua)] } }, error: null },
+  { id: 'sender key whose UA is not sender.ua', container: backup2, expect: expectBackup, senderKey: senderKeyOf(other), error: 'ContainerSender' },
+  { id: 'an msig sender key', container: backup2, expect: expectBackup, senderKey: { kind: 0x0120, keyData: msigCases[0].keyData }, error: 'ContainerSender' },
+  { id: 'flipped sender signature byte', container: flipField(backup2, ['sender', 'sig'], 3), expect: expectBackup, error: 'SealOpen' },
+  { id: 'created changed (aad)', container: { ...structuredClone(backup2), created: CREATED + 1 }, expect: expectBackup, error: 'SealOpen' },
+  { id: 'flipped ciphertext byte', container: flipField(backup2, ['sealed', 'ciphertext'], 0), expect: expectBackup, error: 'SealOpen' },
+  { id: 'container v 2', container: { ...structuredClone(backup2), v: 2 }, expect: expectBackup, error: 'SealVersion' },
+  { id: 'backup entropy that does not derive sender.ua', container: notDeriving, expect: expectBackup, restore: true, error: 'ContainerSender' },
+  { id: 'link: swapped short code', container: link, expect: expectLink, link: { shortCode: '48151624' }, error: 'SealOpen' },
+].map((x) => ({ senderKey: senderKeyOf(wKey), opener: { kem: R0 }, ...x }));
+const openerKey = (o) => (o.kem ? kemOf(o.kem) : null);
+for (const x of acceptance) {
+  let e = null;
+  try {
+    if (x.link) await openLink(linkSessionVector(SESSION.seed, x.link.shortCode, SESSION.start), x.container, x.expect, x.senderKey);
+    else if (x.restore) await restoreBackup(openerKey(x.opener), x.container, x.expect, x.senderKey);
+    else await openContainer(openerKey(x.opener), x.container, x.expect, x.senderKey);
+  } catch (err) { e = err; }
+  must(x.error ? e?.code === x.error : !e, `acceptance ${x.id}: ${e?.message}`);
+}
+// replay and rollback (C-11)
+const replay = [
+  { id: 'link created after the window', container: await linkC('link.late', NOW + LINK_WINDOW + 1), error: 'ContainerReplay' },
+  { id: 'link created before the session', container: await linkC('link.early', NOW - 1), error: 'ContainerReplay' },
+  { id: 'link created at the window\'s end (accepted)', container: await linkC('link.edge', NOW + LINK_WINDOW), error: null },
+].map((x) => ({ kind: 'link', expect: expectLink, senderKey: senderKeyOf(wKey), ...x }));
+for (const x of replay) {
+  let e = null;
+  try { await openLink(session(), x.container, x.expect, x.senderKey); } catch (err) { e = err; }
+  must(x.error ? e?.code === x.error : !e, `replay ${x.id}`);
+}
+{
+  const s = session();
+  await openLink(s, link, expectLink, senderKeyOf(wKey));
+  let e = null;
+  try { await openLink(s, link, expectLink, senderKeyOf(wKey)); } catch (err) { e = err; }
+  must(e?.code === 'ContainerReplay', 'second use of a session');
+}
+const rollback = [
+  { id: 'generation 1 over a wallet at generation 2', container: backup1, current: { ua: H(wKey.ua), generation: 2 }, error: 'BackupRollback' },
+  { id: 'generation 1 over generation 2 with allowRollback', container: backup1, current: { ua: H(wKey.ua), generation: 2 }, allowRollback: true, install: true },
+  { id: 'equal generation: no change', container: backup2, current: { ua: H(wKey.ua), generation: 2 }, install: false },
+  { id: 'generation 2 over generation 1', container: backup2, current: { ua: H(wKey.ua), generation: 1 }, install: true },
+  { id: 'generation 1 on a device without the wallet', container: backup1, current: null, install: true },
+  { id: 'generation 1 on a device holding another wallet', container: backup1, current: { ua: H(other.ua), generation: 9 }, install: true },
+].map((x) => ({ kind: 'backup', expect: expectBackup, senderKey: senderKeyOf(wKey), opener: { kem: R0 }, ...x }));
+for (const x of rollback) {
+  let e = null;
+  let r = null;
+  try { r = await restoreBackup(K0, x.container, x.expect, x.senderKey, { current: x.current, allowRollback: x.allowRollback }); } catch (err) { e = err; }
+  must(x.error ? e?.code === x.error : !e && r.install === x.install, `rollback ${x.id}: ${e?.message}`);
+}
+const sealOut = {
+  note: 'Generated by clients/clientkeys/scripts/ua-wallet-vectors.mjs (ua-rs-sign T1b) from src/seal.js; never edit by hand. seal: '
+    + 'key = HKDF-SHA256(ss, salt = empty, info = "scaas/seal/v1" ‖ u8 1 ‖ be16 len(purpose) ‖ purpose ‖ keccak256(kemPk), 32), '
+    + 'ciphertext = AES-256-GCM(key, nonce 0^96, pt, aad) (ct ‖ tag); m and e as kem.json encaps; wire = version ‖ scheme ‖ mlkemCt ‖ '
+    + 'x25519Eph ‖ ciphertext. KEM keys: kem.json keys rows (key refs) and the ephemeral key of kem.json encaps "ephemeral" / the link '
+    + 'session seed. Containers {v, purpose, recipient, sender: {ua, sig}, created, sealed} (bytes base64url): aad = u8 1 ‖ be16 '
+    + 'len(purpose) ‖ purpose ‖ recipientId (ua or kemPkHash) ‖ be64 version (0: ephemeral) ‖ senderUa ‖ be64 created [‖ '
+    + 'sha256(shortCode) for scaas/link/v1]; sender.sig = the sender UA key\'s signature over uaMessage(kind, keccak256('
+    + '"scaas.ua.purpose.seal.v1"), keccak256(aad ‖ wire)) (MD-10, role authorization). openContainer(kemKey, container, expect, '
+    + 'senderKey): purpose, recipient (expected and the opener\'s), sender expected or in the set, senderKey derives sender.ua, '
+    + 'then the signature and the seal; ContainerSender / SealOpen / SealVersion. Link: created in [start, start + 600 s], one use '
+    + '(ContainerReplay). Backup payload: JSON {v, generation, entropy, secrets, manifest: {entries: [{kind, account, index, ua}]}}; '
+    + 'restore: the entropy (BIP-39 passphrase empty) derives sender.ua at its manifest entry (else ContainerSender), an older '
+    + 'generation over the same wallet is BackupRollback unless allowRollback, an equal one installs nothing.',
+  seal: sealRows,
+  refusals: { base: 'backup', key: { mnemonic: 'pq_kat', kind: 0x0130, account: 0, index: 0, version: 0 }, rows: sealRefusals },
+  argumentRefusals: sealArgRefusals,
+  containers: containerRows,
+  acceptance,
+  replay: [...replay, ...rollback],
+};
+
+// --- vault.json: the seed vault (randomness: the platform RNG replaced by a stream per vault while it is sealed) ---
+const withStream = async (label, f) => {
+  let n = 0;
+  Object.defineProperty(globalThis.crypto, 'getRandomValues', { configurable: true, writable: true,
+    value: (a) => { new Uint8Array(a.buffer, a.byteOffset, a.byteLength).set(stream1b(`${label}.${n++}`, a.byteLength)); return a; } });
+  try { return await f(); } finally { delete globalThis.crypto.getRandomValues; }
+};
+const PIN = 'river-otter-7 ünï';
+const sealed = (label, secret, { N = 2 ** 15, pin = PIN, vlabel = 'seed', prf } = {}) => withStream(label, async () => {
+  const v = await createVault(secret, { label: vlabel, pin, prf });
+  return N === 2 ** 17 ? v : rewrapPin(v, pin, pin, { N, r: 8, p: 1, dkLen: 32 }, { policy: false });
+});
+const PQ_ENTROPY = fromHex(MNEMONICS.find((m) => m.id === 'pq_kat').entropy);
+const prf = { output: stream1b('prf.output', 32), credentialId: 'Y3JlZGVudGlhbC0x', salt: stream1b('prf.salt', 32) };
+const vaultRows = [
+  { id: 'seed N=2^15', vault: await sealed('v.n15', PQ_ENTROPY), unlock: { pin: PIN }, plaintext: H(PQ_ENTROPY) },
+  { id: 'seed N=2^16', vault: await sealed('v.n16', PQ_ENTROPY, { N: 2 ** 16 }), unlock: { pin: PIN }, plaintext: H(PQ_ENTROPY) },
+  { id: 'seed N=2^17', vault: await sealed('v.n17', PQ_ENTROPY, { N: 2 ** 17 }), unlock: { pin: PIN }, plaintext: H(PQ_ENTROPY) },
+  { id: 'twelve words (16-byte entropy)', vault: await sealed('v.twelve', W_ENTROPY), unlock: { pin: PIN }, plaintext: H(W_ENTROPY),
+    words: MNEMONICS.find((m) => m.id === 'twelve_words').words, uaKey: { ...W_ID, ua: H(wKey.ua) },
+    kemKey: { kind: 0x0130, account: 0, index: 0, version: 0, kemPkHash: kemRows.at(-1).kemPkHash } },
+  { id: 'passphrase in NFD opens a vault sealed in NFC (NFKC)', vault: await sealed('v.nfd', PQ_ENTROPY, { pin: NFC_PASS }),
+    unlock: { pin: NFC_PASS.normalize('NFD') }, plaintext: H(PQ_ENTROPY) },
+  { id: 'PRF envelope', vault: await sealed('v.prf', PQ_ENTROPY, { prf }), unlock: { prfOutput: H(prf.output) }, plaintext: H(PQ_ENTROPY) },
+];
+must(NFC_PASS !== NFC_PASS.normalize('NFD'), 'NFC differs from NFD');
+const unlockOf = (u) => (u.prfOutput ? { prfOutput: fromHex(u.prfOutput) } : u);
+for (const r of vaultRows) must(H(await openSeedVault(r.vault, unlockOf(r.unlock))) === r.plaintext, `vault ${r.id}`);
+const base = vaultRows[0].vault;
+const vaultRefusals = [
+  { id: 'wrong passphrase', vault: base, unlock: { pin: 'river-otter-8 ünï' }, error: 'VaultOpen' },
+  { id: 'altered AAD label (sealed as "seed-old", relabelled "seed")', vault: { ...(await sealed('v.relabel', PQ_ENTROPY, { vlabel: 'seed-old' })), label: 'seed' },
+    unlock: { pin: PIN }, error: 'VaultOpen' },
+  { id: 'N = 2^31', vault: { ...structuredClone(base), pin: { ...base.pin, N: 2 ** 31 } }, unlock: { pin: PIN }, error: 'VaultParams' },
+  { id: 'N = 3', vault: { ...structuredClone(base), pin: { ...base.pin, N: 3 } }, unlock: { pin: PIN }, error: 'VaultParams' },
+  { id: 'r = 16', vault: { ...structuredClone(base), pin: { ...base.pin, r: 16 } }, unlock: { pin: PIN }, error: 'VaultParams' },
+  { id: 'p = 2', vault: { ...structuredClone(base), pin: { ...base.pin, p: 2 } }, unlock: { pin: PIN }, error: 'VaultParams' },
+  { id: 'v: 2', vault: { ...structuredClone(base), v: 2 }, unlock: { pin: PIN }, error: 'VaultVersion' },
+  { id: 'v: 2 tombstone', vault: { v: 2, moved: 'browser-device-key' }, unlock: { pin: PIN }, error: 'VaultVersion' },
+  { id: 'seed payload of 31 bytes', vault: await sealed('v.31', stream1b('v.31.secret', 31)), unlock: { pin: PIN }, error: 'VaultOpen' },
+  { id: 'seed payload of 64 bytes (a BIP-39 seed, not entropy)', vault: await sealed('v.64', stream1b('v.64.secret', 64)), unlock: { pin: PIN }, error: 'VaultOpen' },
+  { id: 'label not seed', vault: await sealed('v.manifest', PQ_ENTROPY, { vlabel: 'manifest' }), unlock: { pin: PIN }, error: 'Argument' },
+];
+for (const x of vaultRefusals) {
+  let e = null;
+  try { await openSeedVault(x.vault, unlockOf(x.unlock)); } catch (err) { e = err; }
+  must(e?.code === x.error, `vault refusal ${x.id}: ${e?.message}`);
+}
+const vaultOut = {
+  note: 'Generated by clients/clientkeys/scripts/ua-wallet-vectors.mjs (ua-rs-sign T1b) from src/vault.js (vault v1, CLI-SGN-02, '
+    + 'unchanged format); never edit by hand. The seed vault holds the BIP-39 entropy at its own length (16-32 B, label "seed"); '
+    + 'openSeedVault refuses another length (VaultOpen) and another label (Argument). Passphrase NFKC before scrypt; envelopes '
+    + 'outside N ∈ {2^15, 2^16, 2^17}, r = 8, p = 1 are VaultParams before scrypt runs; v ≠ 1 (v 2 and its tombstone) is '
+    + 'VaultVersion, never a wrong passphrase. AAD label|data, label|pin, label|prf. The rows\' DEK, IVs and salts come from a '
+    + 'fixed stream; a real vault draws them from the platform RNG. twelve words: the entropy opens to the 12 words, the UA key '
+    + 'and the KEM key of keys.json / kem.json (mnemonic twelve_words).',
+  vaults: vaultRows,
+  refusals: vaultRefusals,
+};
+
 mkdirSync(OUT, { recursive: true });
 writeFileSync(join(OUT, 'keys.json'), JSON.stringify(keys, null, 1) + '\n');
 writeFileSync(join(OUT, 'sign.json'), JSON.stringify(sign, null, 1) + '\n');
+writeFileSync(join(OUT, 'kem.json'), JSON.stringify(kem, null, 1) + '\n');
+writeFileSync(join(OUT, 'seal.json'), JSON.stringify(sealOut, null, 1) + '\n');
+writeFileSync(join(OUT, 'vault.json'), JSON.stringify(vaultOut, null, 1) + '\n');
 console.log(`keys.json: ${uaRows.length} ua, ${nativeRows.length} native, ${keyRefusals.length} refusals; sign.json: ${uaSigRows.length} ua, `
   + `${memberRows.length} member, ${policy.length} policy, ${txRows.length} tx, ${msigCases.length} msig`);
+console.log(`kem.json: ${kemRows.length} keys, ${kemRefusals.length} key refusals, ${encRows.length} encaps, ${encapsRefusals.length} encaps refusals, `
+  + `${decapsRows.length} decaps; seal.json: ${sealRows.length} seal, ${sealRefusals.length + sealArgRefusals.length} refusals, ${containerRows.length} containers, `
+  + `${acceptance.length} acceptance, ${replay.length + rollback.length} replay; vault.json: ${vaultRows.length} vaults, ${vaultRefusals.length} refusals`);

@@ -20,6 +20,7 @@ import { slip10 } from './seed.js';
 import { eip2333 } from './zether.js';
 import { PQ_KINDS, pqKeygen, pqMessage } from './pq.js';
 import { hashToScalar, mapToG1Bn254, clientDataOk, webauthnOk, encodeMemberSigs, P256_N } from './ua-verify.js';
+import { kemPrk, kemKeyFromPrk, isKemHolder } from './kem.js';
 
 const fail = (code, reason) => { throw new ua.UAError(code, reason); };
 const HARD = 2 ** 31;
@@ -166,6 +167,7 @@ export function deriveUAKey(seed, { kind, account = 0, index = 0 } = {}) {
     keyData = PUBLIC[k](secret);
   }
   const id = PARTICIPANT.has(k) ? null : ua.deriveUA(k, keyData);
+  let prk = isKemHolder(k) ? kemPrk(seed) : null; // HKDF-Extract of this key's own seed: its KEM keys, nothing else (spec §6.1)
   const sign = (msg, role, rand) => signMsg(k, secret, keyData, msg, role, rand);
   const key = Object.freeze({
     kind: k, name: ua.kindInfo(k).name, account, index, derivation, path, keyData, ua: id,
@@ -174,7 +176,9 @@ export function deriveUAKey(seed, { kind, account = 0, index = 0 } = {}) {
     /** As an `msig` member: `uaMessage(kind, member, memberDigest(structureUa, structureUaMsg))`, role authorization. */
     signMember: (structureUa, structureUaMsg) =>
       sign(ua.uaMessage(k, MEMBER, ua.memberDigest(structureUa, structureUaMsg)), 'authorization', osRandom),
-    wipe: () => { if (secret instanceof Uint8Array) wipe(secret); secret = 0n; },
+    /** The UA KEM key of `version` (spec §6.1): from this key's own seed, KEM holders only (`KemHolder`). */
+    kemKey: (version) => (prk ? kemKeyFromPrk(prk, id, version) : fail('KemHolder', `${ua.kindInfo(k).name} holds no KEM key`)),
+    wipe: () => { if (secret instanceof Uint8Array) wipe(secret); secret = 0n; if (prk) wipe(prk); prk = null; },
   });
   SIGNERS.set(key, sign);
   return key;
@@ -182,14 +186,21 @@ export function deriveUAKey(seed, { kind, account = 0, index = 0 } = {}) {
 
 /** Test vectors only: `signUA` with fixed randomness — `aux` (32 B: bip340, scaas Schnorr), `rnd` (32 B: ML-DSA; zero = the
  *  deterministic variant), `optRand` (16 B, or null for PK.seed: SLH-DSA), `falconSeed` (the sampler stream's seed). */
+const fixedRand = (fixed) => ({
+  fixed: true,
+  aux: () => fixed.aux ?? fail('Argument', 'aux required'),
+  pq: (name) => (name.startsWith('fndsa') ? { random: (n) => shake256(fixed.falconSeed, { dkLen: n }) }
+    : name.startsWith('slh') ? { extraEntropy: fixed.optRand ?? false } : { extraEntropy: fixed.rnd ?? false }),
+});
 export function signUAVector(key, purposeTag, digest, fixed = {}) {
-  const rand = {
-    fixed: true,
-    aux: () => fixed.aux ?? fail('Argument', 'aux required'),
-    pq: (name) => (name.startsWith('fndsa') ? { random: (n) => shake256(fixed.falconSeed, { dkLen: n }) }
-      : name.startsWith('slh') ? { extraEntropy: fixed.optRand ?? false } : { extraEntropy: fixed.rnd ?? false }),
-  };
-  return SIGNERS.get(key)(ua.uaMessage(key.kind, purposeOf(purposeTag), digest), sigRole(purposeTag), rand);
+  return SIGNERS.get(key)(ua.uaMessage(key.kind, purposeOf(purposeTag), digest), sigRole(purposeTag), fixedRand(fixed));
+}
+
+/** The container builder's sender signature (seal.js only, MD-10): `uaMessage(kind, SEAL_TAG, digest)`, role authorization.
+ *  `fixed` (test vectors only): the randomness of `signUAVector`. */
+export function signContainer(key, digest, fixed) {
+  const sign = SIGNERS.get(key) ?? fail('Argument', 'not a UA key');
+  return sign(ua.uaMessage(key.kind, ua.SEAL_TAG, digest), 'authorization', fixed ? fixedRand(fixed) : osRandom);
 }
 
 /** The authenticator's challenge for a `webauthn-p256` UA: `ua_msg` (spec §5.6). */

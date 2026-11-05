@@ -1,0 +1,14 @@
+# 2026-11-05 ua-rs-sign T1b: clientkeys KEM key, seal / open, containers; kem.json, seal.json, vault.json (plan T1b, spec §6, §8.1, §11). UNAUDITED.
+step | commit | rc | counts
+red: node --test test/kem.test.js test/seal.test.js test/vault.test.js on fa07bebe's src with the new tests and vectors | fa07bebe | 1 | 21 tests, 14 failed (every new test), 7 passed (the existing vault tests)
+clientkeys npm test (before) | fa07bebe | 0 | 265 tests, 263 pass, 0 fail, 2 skipped
+clientkeys npm test (foundry 1.8.5 on PATH) | (this commit) | 0 | 279 tests, 277 pass, 0 fail, 2 skipped
+vectors-check: ua-wallet-vectors.mjs twice into scratch dirs, cmp with each other and the tree | (this commit) | 0 | keys, sign, kem, seal, vault identical; keys.json and sign.json unchanged
+vectors-check: every other generator (typed-ops, ua-portable, ua-sig, ua-vectors into scratch; pq-vectors in place + git status, soroban-ua-ops --check) | (this commit) | 0 | 12 files byte-identical, tree clean
+mutants: 2026-11-05-ua-rs-sign-t1b-mutants.py | (this commit) | 0 | 28 killed, 0 survived, 0 not loaded (2026-11-05-ua-rs-sign-t1b-mutants.txt)
+mutants (first run) | - | 1 | M15 msig guard redundant (removed), M28 open's version check shadowed by fromWire (test now opens named fields) -> both killed
+docs_check check / paths / test_docs_check | (this commit) | 0 | 0 errors 5 warnings / 0 machine paths / ok
+forge | - | not run | no file forge reads changed (kem, seal, vault.json are new; every existing vector byte-identical)
+# Rows: kem.json 14 keys, 11 key refusals (9 non-holder kinds, msig, version 2^64), 3 encaps, 4 encaps refusals, 7 decaps (1 valid,
+# 1 implicit rejection, 5 refused); seal.json 3 seal, 10 open refusals + 4 argument refusals, 2 containers (backup, link), 14 acceptance
+# (13 refused, 1 accepted control: sender in the approved set), 9 replay (3 link window, 6 backup generation); vault.json 6 vaults, 11 refusals.

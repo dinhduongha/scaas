@@ -171,6 +171,9 @@ export const purposeTag = (p, version = 1) => tagHash(purposeTagString(p, versio
 export const POP_TAG = purposeTag('pop');
 export const POP_V2_TAG = purposeTag('pop', 2);
 export const KEM_TAG = purposeTag('kem');
+/** The off-chain purpose of a sealed container's sender signature (MD-10, ua-rs-sign spec §6.3): never in `PURPOSES`, never in a
+ *  contract list; `UAKey.signUA` refuses it, only the container builder (seal.js) signs under it. */
+export const SEAL_TAG = tagHash('scaas.ua.purpose.seal.v1');
 /** A PQZ key attached after `register` (`setPqzKey`, ruling A1-I1): its purpose. */
 export const PQZ_KEY_TAG = purposeTag('pqz-key');
 /** A derived `msig` member's acceptance of its slot (`acceptMembership`, CTR-UA-37): its purpose. */
