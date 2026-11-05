@@ -683,7 +683,7 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
     (3) **hybrid underlying** — wrap (citizen brings a stablecoin) plus issuer mint under one `maxSupply`; reserve
     accounting needed (proposal: unbacked units not redeemable for the underlying; alternatives pro-rata or queue P15);
     PQZ / Zether minters never mint shielded value.
-- [ ] **SCaaS Chain 22776** (owner 2026-10-12): a new chain "SCaaS Chain", chain id 22776, beside the existing ones; SCaaS testnet and the UA key tree `m/7622'/…` stay unchanged. Ports in the 22776+ range (proposed RPC HTTP 22776, WS 22777, P2P 22778). Onboard like any chain: docs/networks/evm.md row, profile, finality gate, genesis/identity pin, deploy, node config. The chain itself (docker/chainspec) is run by the owner outside this repo.
+- [ ] **SCaaS Chain 22776** (owner 2026-10-12): a new chain "SCaaS Chain", chain id 22776, beside the existing ones; SCaaS testnet stays unchanged; the UA key tree moved to `m/22776'/…` (owner 2026-11-05). Ports in the 22776+ range (proposed RPC HTTP 22776, WS 22777, P2P 22778). Onboard like any chain: docs/networks/evm.md row, profile, finality gate, genesis/identity pin, deploy, node config. The chain itself (docker/chainspec) is run by the owner outside this repo.
 - [ ] **Template library** (owner 2026-10-12): every README use case (escrow with an arbiter, milestone service
   contracts, sale with delivery, leases, installment loans, subscriptions, revenue sharing, deposit with periodic
   withdrawal, provenance and family-tree registries) as an implementation deployed once per chain, instances by clone /

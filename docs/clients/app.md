@@ -324,7 +324,7 @@ other remote party. Why: display and bytes cannot diverge silently; one JS imple
 clientkeys grows to all families.
 
 <a id="signers"></a><a id="CLI-APP-06"></a>**CLI-APP-06** — **App signers: the clientkeys passkey; the seed vault (vault v2
-in the key worker); UA keys (`UAKey`, tree `m/7622'/0'/<account>'/<kindNo>'/<i>'`); extension wallets through clientkeys
+in the key worker); UA keys (`UAKey`, tree `m/22776'/0'/<account>'/<kindNo>'/<i>'`); extension wallets through clientkeys
 `wallets/<family>.js` and `wallets/evm.js` (`win` injected); a dev key in dev builds only.** The seed signer signs only the
 family envelopes of [CLI-SGN-22](signers-clientkeys.md#CLI-SGN-22) — Solana OCMS kind 1, **never** `solana-raw`, which is
 extension-only. Native keys keep their family paths; EVM `m/44'/60'/0'/0/i` is the EOA only
@@ -490,7 +490,7 @@ explain.
 | Offer | Made of | Families | Backup (switch on) |
 |---|---|---|---|
 | **Account** (default once UA lands) | `webauthn-p256` UA, registered gaslessly | EVM, Hedera (v3 tokens) | single-key ⇒ unsatisfiable ⇒ not offered; existing ⇒ exit only |
-| **Recoverable account** (option (b); interim default) | `SmartKeyAccount` (passkey and/or secp256k1 role key `m/7622'/0'/<account>'/2'/<i>'`, guardian) | EVM, Hedera | ≥ 2 distinct credentials or 1 + guardian |
+| **Recoverable account** (option (b); interim default) | `SmartKeyAccount` (passkey and/or secp256k1 role key `m/22776'/0'/<account>'/2'/<i>'`, guardian) | EVM, Hedera | ≥ 2 distinct credentials or 1 + guardian |
 | Subject accounts per family | Sui `Account<T>`, Aptos Account, Solana PDA, Soroban `C…`, GRAM jetton wallet | as the matrix | per family (Soroban/TON: ≥ 2 keys) |
 | **Approvers** (minimal) | `msig` UA over member UAs/EOAs; the app shows the id and registers it | EVM | `Σw − max(w) ≥ threshold` |
 | Native wallet | a seed-vault native key or an extension wallet | all | outside the predicate |
@@ -752,7 +752,7 @@ Unit (Vitest / `node --test`, no network):
 |---|---|
 | EVM encoders | `metatx_kat`, `metatransfer_kat`, `trade_kat`, `dex_order_kat` (relayed calldata too), `hedera_kat`, `wrap_rate_vectors`, `smart_key_account_create2`, `smart_key_account_kat`, `mandate_pay_kat`, `mandate_revoke_kat`, `webauthn_soft` |
 | Non-EVM encoders (clientkeys) | `mesh-envelope-v1.2.json` cross-language payloads (the TON cases of it; `smartcontracts/ton/vectors/ton-vectors.json` belongs to the TON suite, no clientkeys code reads it), `fam_*.json` per family, `sui_vectors.json`, the seed-signed vectors, `solana_derivation.json` |
-| UA (clientkeys) | `smartcontracts/vectors/ua/*`: ids, keyHash, `ua_msg`, PoP, `UAMetaTransaction` digests; `deriveUAKey` paths under `m/7622'` |
+| UA (clientkeys) | `smartcontracts/vectors/ua/*`: ids, keyHash, `ua_msg`, PoP, `UAMetaTransaction` digests; `deriveUAKey` paths under `m/22776'` |
 | Backup / vault | `backup_policy.json` plus the de-duplication and `msig` rows; `vault_v2_fixture.json` |
 | Zether | prover vectors through the WASM `nodejs` build; clientkeys `zether.test.js` |
 | Adapter contract suite | as above, including `decode ∘ signRequest ∘ buildTerms = id` |

@@ -77,11 +77,11 @@ test('keys.json rows equal deriveUAKey for every kind × account {0,1} × index 
   }
 });
 
-test('UA tree paths: m/7622\'/0\'/<account>\'/<kindNo>\'/<i>\', the EIP-2333 UA paths, never a native path', () => {
+test('UA tree paths: m/22776\'/0\'/<account>\'/<kindNo>\'/<i>\', the EIP-2333 UA paths, never a native path', () => {
   const r = (kind, account, index) => K.ua.find((x) => x.mnemonic === 'pq_kat' && x.kind === kind && x.account === account && x.index === index);
-  assert.equal(r(0x0101, 1, 1).path, "m/7622'/0'/1'/257'/1'");
-  assert.equal(r(0x0108, 0, 1).path, "m/7622'/0'/0'/264'/1'");
-  assert.equal(r(0x0110, 1, 0).path, "m/7622'/0'/1'/272'/0'");
+  assert.equal(r(0x0101, 1, 1).path, "m/22776'/0'/1'/257'/1'");
+  assert.equal(r(0x0108, 0, 1).path, "m/22776'/0'/0'/264'/1'");
+  assert.equal(r(0x0110, 1, 0).path, "m/22776'/0'/1'/272'/0'");
   assert.equal(r(0x0104, 1, 0).path, 'm/254/0/1/260');
   assert.equal(r(0x0106, 0, 0).path, 'm/12381/0/0/262');
   const natives = new Set(K.native.map((n) => n.path));

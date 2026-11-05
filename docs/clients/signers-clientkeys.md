@@ -695,10 +695,10 @@ offered; an app end-to-end test.
 | Use | Path | Curve / scheme |
 |---|---|---|
 | Native account keys | the family paths below: EVM `m/44'/60'/0'/0/i`, Solana `m/44'/501'/i'/0'`, … | family |
-| Every derived UA kind and every account-role key | `m/7622'/0'/<account>'/<kindNo>'/<i>'` | BIP-32 (secp256k1, P-256 via SLIP-10 nist256p1), SLIP-10 ed25519 |
-| `SmartKeyAccount` SECP256K1 key (role of `evm-contract`) | `m/7622'/0'/<account>'/2'/<i>'` | secp256k1 |
-| Non-native subject-account owner keys (Sui/Aptos/Solana/Soroban role keys) | `m/7622'/0'/<account>'/<native kindNo>'/<i>'`: Solana 16, **Soroban `C…` 18** (`soroban-contract` 0x0012 = 18, not `stellar-account` 0x0011 = 17; owner 2026-10-07), Aptos 19, Sui 20 | ed25519 |
-| `musig2-secp256k1` participant keys | `m/7622'/0'/<account>'/272'/<i>'` (kind 0x0110; never a `bip340` key); `musig2-bn254` as the bn254 row | secp256k1 |
+| Every derived UA kind and every account-role key | `m/22776'/0'/<account>'/<kindNo>'/<i>'` | BIP-32 (secp256k1, P-256 via SLIP-10 nist256p1), SLIP-10 ed25519 |
+| `SmartKeyAccount` SECP256K1 key (role of `evm-contract`) | `m/22776'/0'/<account>'/2'/<i>'` | secp256k1 |
+| Non-native subject-account owner keys (Sui/Aptos/Solana/Soroban role keys) | `m/22776'/0'/<account>'/<native kindNo>'/<i>'`: Solana 16, **Soroban `C…` 18** (`soroban-contract` 0x0012 = 18, not `stellar-account` 0x0011 = 17; owner 2026-10-07), Aptos 19, Sui 20 | ed25519 |
+| `musig2-secp256k1` participant keys | `m/22776'/0'/<account>'/272'/<i>'` (kind 0x0110; never a `bip340` key); `musig2-bn254` as the bn254 row | secp256k1 |
 | FROST shares | **not seed-derived**: DKG polynomial secrets are fresh randomness; the share is kept in the vault; a lost share is a lost participant | — |
 | `schnorr-bn254`, `musig2-bn254` keys from seed | EIP-2333-style `m/254/0/<account>/<kindNo>` (salt `"SCAAS-UA-BN254-v1"`) | bn254 |
 | Identity UA for credentials | its own `<account>'` in the UA tree, never the paying account's | per kind |
@@ -707,12 +707,12 @@ offered; an app end-to-end test.
 | PQ seeds | `ξ = HKDF-SHA256(ikm = BIP-39 seed, salt = "scaas.ua.pq.v1", info = kind_tag ‖ u32 account ‖ u32 i)` → FIPS 204 `KeyGen_internal(ξ)` (32 B) / Falcon-512 keygen from a 48-byte seed (implementation-specific: pinned to `@noble/post-quantum` 0.7.1 by the vectors); `mldsa87` (0x0134, [CTR-UA-39](../contracts/accounts.md#CTR-UA-39)) as `mldsa65` (32 B seed, `ml_dsa87`); `fndsa1024` (0x0135, [CTR-UA-40](../contracts/accounts.md#CTR-UA-40)) as `fndsa512` (48 B seed, `falcon1024padded`, 1,280 B signatures); `slhdsa128s`: output length 48 → `SK.seed ‖ SK.prf ‖ PK.seed` (16 B each) → FIPS 205 `slh_keygen_internal`. `signUA(kind, sk, purposeTag, digest)` signs `pq_msg = keccak256(TAG(kind) ‖ ua_msg)` with the empty FIPS 204/205 context (Falcon: `ua_msg`) ([CTR-UA-23](../contracts/accounts.md#CTR-UA-23)); BUILT (P6a): `src/pq.js` with the EIP-8051 expanded key `mldsaExpandedKey`, not in the portal bundle; registry vectors `pq_signatures.json` from `scripts/ua-sig-vectors.mjs` (P6c) | ML-DSA, FN-DSA, SLH-DSA |
 | Passkeys | one credential per `rpId`; the same credential on several chains is the same kind (`webauthn-p256` or a family's native passkey) — allowed, the challenges are domain-separated digests | P-256 |
 
-In general form the tree is `m/7622'/0'/<account>'/<kind>'/<i>'`. `7622'` is the SCaaS BIP-43 purpose for UA trees (owner); the coin level is `0'` because a UA id is chain-independent
+In general form the tree is `m/22776'/0'/<account>'/<kind>'/<i>'`. `22776'` is the SCaaS BIP-43 purpose for UA trees (owner; `7622'` until 2026-11-05, [CLI-SGN-30](#CLI-SGN-30)); the coin level is `0'` because a UA id is chain-independent
 (one derived key ⇒ the same UA on every chain). clientkeys API rules: `signTyped` / `signKeyProof` / `signDigest(key, digest, { allowRawDigest: true })` are for
 **native** keys only ([CLI-SGN-40](#CLI-SGN-40): a raw digest needs the opt-in); UA keys are `UAKey` objects from `deriveUAKey(seed, {kind, account, index})` whose only signing method is
 `signUA(purpose, digest)` (it builds `ua_msg` itself), so no raw signature over arbitrary 32 bytes ever comes from a UA key;
 `deriveUAKey` refuses a `kind` whose curve group equals a native path's curve **and** whose path would equal it (impossible
-with `7622'`, asserted in tests) and refuses the Zether `use` indices 7/8 for non-Zether kinds; `deriveConfKey` accepts only
+with `22776'`, asserted in tests) and refuses the Zether `use` indices 7/8 for non-Zether kinds; `deriveConfKey` accepts only
 `use` 7 and 8; MuSig2/FROST are `UAKey` session objects (`musig2.start/partial/aggregate`, `frost.dkg*/commit/sign/aggregate`)
 that only ever sign `ua_msg` (vectors BIP-327, RFC 9591 Appendix E.5, `frost.json`); a Zether `x` is never reused as an
 independent same-curve BLS key (it would make G1 DDH decidable and leak balances) — the BLS and Zether trees are disjoint
@@ -730,13 +730,13 @@ ECDSA and Schnorr over one secp256k1 key leak through nonce relations; a Schnorr
 decryption-adjacent oracle; untagged digests replay across protocols. Owner decision.
 
 <a id="CLI-SGN-30"></a>**CLI-SGN-30** — **The EVM seed path is the EOA only; every subject-account key that is not the
-native owner and every derived kind comes from the UA tree `m/7622'/0'/<account>'/<kindNo>'/<i>'`.** The role `kindNo` is
+native owner and every derived kind comes from the UA tree `m/22776'/0'/<account>'/<kindNo>'/<i>'`.** The role `kindNo` is
 the kind of the account the key serves: EVM/Hedera `SmartKeyAccount` 2, Solana 16, Soroban `SmartKeyAccount` `C…` 18
-(`soroban-contract`), Aptos 19, Sui 20. Owner decisions (one chain-independent tree under purpose `7622'`; Soroban
+(`soroban-contract`), Aptos 19, Sui 20. Owner decisions (one chain-independent tree under purpose `22776'`; Soroban
 `kindNo` 18). Existing dev accounts whose SECP256K1 key is the EOA key rotate at the UA migration.
 
 <a id="CLI-SGN-25"></a>**CLI-SGN-25** — **Every seed key added to a subject account is a role key; a backup seed key lives
-on paper only.** `deriveRoleKey(seed, {kindNo, account, i})` derives `m/7622'/0'/<account>'/<kindNo>'/<i>'` (all hardened;
+on paper only.** `deriveRoleKey(seed, {kindNo, account, i})` derives `m/22776'/0'/<account>'/<kindNo>'/<i>'` (all hardened;
 BIP-32 for secp256k1, SLIP-10 for ed25519) — plain derivation that `UAKey` later wraps without changing the path. The
 **native** path is used only for a native account and for the owner/first key of a Sui/Aptos/Solana account derived from
 the user's own native address; every other key added by a seed is a role key (backup, added device, a passkey-first
@@ -746,7 +746,7 @@ it on this device, and no scrypt runs, so low-memory phones can comply. Why: a b
 primary key is not a backup. Cost: one derivation per role; wallets show the role.
 
 <a id="CLI-SGN-07"></a>**CLI-SGN-07** — **New seed keys of subject accounts use the role path.** New `SECP256K1` keys
-registered by an ERP or clientkeys are derived on `m/7622'/0'/<account>'/2'/<i>'`, never the subject's EOA key; existing
+registered by an ERP or clientkeys are derived on `m/22776'/0'/<account>'/2'/<i>'`, never the subject's EOA key; existing
 dev keys stay until rotated. Tests: a clientkeys vector for the role path; the issuer refuses registering a key whose
 address equals the subject's own payer address (`payer_address`) on the same account.
 
@@ -762,7 +762,7 @@ above; a session-key mechanism would map to Universal Account key purposes. Stat
 
 | Family | `NETWORKS` key | Native path | Curve | Native address | Adds to a subject account | Seed signer signs | Status |
 |---|---|---|---|---|---|---|---|
-| EVM | `evm` | `m/44'/60'/0'/0/i` (EOA only) | secp256k1 | keccak address | role `m/7622'/0'/a'/2'/i'` (SECP256K1 key) | EIP-712 digest | native BUILT; role SPECIFIED |
+| EVM | `evm` | `m/44'/60'/0'/0/i` (EOA only) | secp256k1 | keccak address | role `m/22776'/0'/a'/2'/i'` (SECP256K1 key) | EIP-712 digest | native BUILT; role SPECIFIED |
 | Hedera ECDSA | `hedera_ecdsa` | `m/44'/3030'/0'/0/i` | secp256k1 | EVM alias | role `…/2'/i'` (HSCS `SmartKeyAccount`) | EIP-712 digest | as EVM |
 | Hedera ED25519 | `hedera_ed25519` | `m/44'/3030'/0'/0'/i'` | ed25519 | `0.0.N` | — | raw ed25519 over the EIP-712 digest (HIP-632) | BUILT |
 | Cosmos | `cosmos` | `m/44'/118'/0'/0/i` | secp256k1 | bech32 | — (no subject account) | ADR-036 doc | key BUILT; envelope SPECIFIED |

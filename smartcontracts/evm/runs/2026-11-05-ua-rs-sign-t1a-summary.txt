@@ -14,3 +14,7 @@ forge | - | not run | no file forge reads changed: keys.json and sign.json are n
 # Rows: keys.json 4 mnemonics, 2 normalization, 216 ua, 74 native, 19 refusals; sign.json 48 ua (30 bytes, 18 verify), 5 member,
 # 4 BLS wrong-DST refusals, 2 nonce-map, typed 3 generic / 5 refusals / 8 canon, 24 policy (10 accepted, 14 refused), tx 6 + EIP-155 + 12 refusals,
 # webauthn 4 accepted / 9 refused, msig 7 (3 signed, 4 refused).
+# Owner ruling 2026-11-05: UA tree purpose 7622' -> 22776' (keys.json: 80 of 216 ua rows moved; sign.json: 14 of 48 ua, 3 of 5 member, 7 of 7 msig rows moved; every other section unchanged).
+purpose 22776': ua-wallet-vectors.mjs twice into scratch dirs, cmp with each other and the committed files | (this commit) | 0 | keys.json, sign.json identical
+purpose 22776': clientkeys npm test | (this commit) | 0 | 264 tests, 262 pass, 0 fail, 2 skipped
+purpose 22776': mutants 1 17 (derivation and paths) | (this commit) | 0 | 17 killed, 0 survived, 0 not loaded

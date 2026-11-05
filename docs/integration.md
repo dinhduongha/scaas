@@ -797,7 +797,7 @@ the bid's own data. Either way the salt is unknown to anyone else until reveal, 
   a seed key by `ecrecover`; origin and rpId come from configuration, **never from the request host**.
   Under Universal Accounts it is **option (b)**: the optional smart account for subjects who want recovery without moving
   funds or one address across key changes ([CTR-ACC-09](contracts/accounts.md#CTR-ACC-09)); its seed keys come
-  from the role path `m/7622'/0'/<account>'/2'/<i>'`, never the EOA path
+  from the role path `m/22776'/0'/<account>'/2'/<i>'`, never the EOA path
   ([CLI-SGN-30](clients/signers-clientkeys.md#CLI-SGN-30)).
 - Non-EVM: open the subject's account object (`meta::open`/`open_passkey` on Sui/Aptos, `open`/`open_passkey` on
   Solana, custom account on Soroban). GRAM needs no open step and has no `BindKey` message: the first `SignedOp` carries
@@ -818,7 +818,7 @@ Stellar/Pi `G…`, Soroban `C…`, Aptos, Sui and Cosmos native accounts, GRAM w
 kind (passkey `webauthn-p256`, `p256`, `ed25519`, `bip340`, `secp256k1`, Schnorr/BLS, MuSig2/FROST, `msig`, ML-DSA/FN-DSA,
 `zether-*`, `pqz-mlwe`) registers once on each chain where it is used:
 
-1. The client derives the key for the kind on its own path (`m/7622'/0'/<account>'/<kindNo>'/<i>'`; Zether conf keys
+1. The client derives the key for the kind on its own path (`m/22776'/0'/<account>'/<kindNo>'/<i>'`; Zether conf keys
    keep `m/254|12381/<coin>/<account>/7`; passkeys are one credential per `rpId`), builds the normalised `keyData`,
    computes `ua = keccak256(keccak256("scaas.ua.<kind>.v1") ‖ keyData)` and checks `ua >> 160 ≠ 0`.
 2. It computes the portable PoP locally: the typed EIP-712 records `portableRecordDigest` and `registrationDigest` bind the UA, its PQZ key,

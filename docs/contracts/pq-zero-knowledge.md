@@ -682,12 +682,12 @@ PQZ key:     seed32 = HKDF-SHA256(ikm = BIP-39 seed, salt = "scaas.ua.pq.v1",
                                   info = "scaas.ua.pqz-mlwe.v1" ‖ u32(account) ‖ u32(i));   pk = KeyGen(seed32)
 ML-DSA auth: ξ = HKDF-SHA256(ikm = BIP-39 seed, salt = "scaas.ua.pq.v1",
                              info = "scaas.ua.mldsa65.v1" ‖ u32(account) ‖ u32(i));         FIPS 204 KeyGen_internal(ξ)
-hybrid member (p256 / bip340): the UA tree m/7622'/0'/<account>'/<kindNo>'/<i>'
+hybrid member (p256 / bip340): the UA tree m/22776'/0'/<account>'/<kindNo>'/<i>'
 ```
 
 Distinct tags in `info` give distinct keys per kind (one key = one purpose, [CLI-SGN-29](../clients/signers-clientkeys.md#CLI-SGN-29));
 no PQ seed equals a BIP-32/SLIP-10/EIP-2333 scalar of the same seed, and the classical Zether trees `…/7`, `…/8` are
-untouched. The PQ rule uses the same `account` and `i` indices as the `m/7622'/0'/<account>'/<kindNo>'/<i>'` paths,
+untouched. The PQ rule uses the same `account` and `i` indices as the `m/22776'/0'/<account>'/<kindNo>'/<i>'` paths,
 with the kind tag in `info` instead of a `kindNo'` level, because PQ seeds are not curve scalars.
 
 **Seed custody.** The BIP-39 seed lives only in the key worker, so `seed32` is derived there and nowhere else:

@@ -15,14 +15,14 @@ SUITE = [os.path.abspath("scripts/capped"), "node", "--test", "test/ua-wallet.te
 M = [
     # derivation (the T2 list, JS side)
     ("SLIP-10 hardened bit dropped", SEED, "+ (hard ? HARDENED : 0)) >>> 0;", "+ 0) >>> 0;"),
-    ("UA tree index level not hardened", UAKEY, "path: `m/7622'/0'/${account}'/${kind}'/${index}'`", "path: `m/7622'/0'/${account}'/${kind}'/${index}`"),
-    ("account / index swapped", UAKEY, "path: `m/7622'/0'/${account}'/${kind}'/${index}'`", "path: `m/7622'/0'/${index}'/${kind}'/${account}'`"),
+    ("UA tree index level not hardened", UAKEY, "path: `m/22776'/0'/${account}'/${kind}'/${index}'`", "path: `m/22776'/0'/${account}'/${kind}'/${index}`"),
+    ("account / index swapped", UAKEY, "path: `m/22776'/0'/${account}'/${kind}'/${index}'`", "path: `m/22776'/0'/${index}'/${kind}'/${account}'`"),
     ("SLIP-10 ser32 little-endian", SEED, "const ser = new Uint8Array([idx >>> 24, (idx >>> 16) & 255, (idx >>> 8) & 255, idx & 255]);",
      "const ser = new Uint8Array([idx & 255, (idx >>> 8) & 255, (idx >>> 16) & 255, idx >>> 24]);"),
     ("PQ HKDF u32 little-endian", PQ, "return new Uint8Array([v >>> 24, (v >>> 16) & 255, (v >>> 8) & 255, v & 255]);",
      "return new Uint8Array([v & 255, (v >>> 8) & 255, (v >>> 16) & 255, v >>> 24]);"),
     ("non-hardened ed25519 step accepted", SEED, "if (!hard && !c.n) throw new Error(`${curve} derivation is hardened-only: ${path}`);", ""),
-    ("wrong kindNo (hex digits)", UAKEY, "path: `m/7622'/0'/${account}'/${kind}'/${index}'`", "path: `m/7622'/0'/${account}'/${kind.toString(16)}'/${index}'`"),
+    ("wrong kindNo (hex digits)", UAKEY, "path: `m/22776'/0'/${account}'/${kind}'/${index}'`", "path: `m/22776'/0'/${account}'/${kind.toString(16)}'/${index}'`"),
     ("wrong kindNo on the EIP-2333 path", UAKEY, "eip: [c.root, 0, account, kind] };", "eip: [c.root, 0, account, kind & 0xff] };"),
     ("TAG(kind) for utf8(tag) in the HKDF info", PQ, "const info = concatBytes(utf8ToBytes(s.tag), ", "const info = concatBytes(keccak_256(utf8ToBytes(s.tag)), "),
     ("NFKD dropped", SEED, "return String(text).normalize('NFKD').trim()", "return String(text).trim()"),

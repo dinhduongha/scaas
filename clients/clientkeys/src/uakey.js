@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 // UNAUDITED. UA keys from the BIP-39 seed and their signers (ua-rs-sign spec §3–§5, signers-clientkeys §9, CLI-SGN-29/30): the
-// UA tree m/7622'/0'/<account>'/<kindNo>'/<i>' (BIP-32 secp256k1, SLIP-10 nist256p1 and ed25519, all hardened), the EIP-2333 UA
+// UA tree m/22776'/0'/<account>'/<kindNo>'/<i>' (BIP-32 secp256k1, SLIP-10 nist256p1 and ed25519, all hardened), the EIP-2333 UA
 // paths m/254/0/<account>/<kindNo> (salt SCAAS-UA-BN254-v1) and m/12381/0/<account>/<kindNo> (index 0 only), the PQ HKDF seeds
 // (pq.js). A `UAKey` signs only `ua_msg` it builds itself (`signUA(purposeTag, digest)`, `signMember`): no raw digest, no key
 // export. The scaas Schnorr nonce is k = hashToScalar(keccak256("scaas.ua.schnorr.nonce.v1" ‖ be32(sk) ‖ Y ‖ ua_msg ‖ aux)), the
@@ -68,7 +68,7 @@ export function uaKeyPath(kind, account = 0, index = 0) {
   range(account, 'account');
   range(index, 'index');
   const info = ua.kindInfo(kind);
-  if (TREE[kind]) return { derivation: TREE[kind], path: `m/7622'/0'/${account}'/${kind}'/${index}'` };
+  if (TREE[kind]) return { derivation: TREE[kind], path: `m/22776'/0'/${account}'/${kind}'/${index}'` };
   if (EIP2333[kind]) {
     if (index !== 0) fail('Argument', `${info.name} has no index level: index 0 only (several keys: several accounts)`);
     const c = EIP2333[kind];
