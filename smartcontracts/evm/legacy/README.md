@@ -222,3 +222,7 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   `roles.issuer` / `roles.compliance` and 5-9 as `FeatureNotBuilt` on the plain kinds, contract-only bits for a native id
   with code alone. Tests as they stood before their meaning changed: `test/governance/{GovRegulatedBits,GovDelay}.t.sol`,
   `test/metatx/GovernanceLib.t.sol` with `test/metatx/helpers/GovernanceLibHarness.sol`, `test/v2/Features.t.sol`. Not built.
+  T25 (regulated kinds: `TokenConfig.reg`, the init ripple; spec `2026-11-05-regulated-kinds.md` §2.4), as they stood at
+  `5981f2c4`: `src/factory/IFactoryToken.sol` with `TokenConfig` of fifteen fields (no `reg`, `ConfigFieldForOtherKind`
+  fields 1-5) and `src/pqz/PqzWrappedLib.sol` whose `init` passes the fixed `KIND_WRAPPED_PQZ` and `GovernanceBits.WRAPPED_*`
+  masks (`ZetherWrappedLib` as it stood before the round is the T4 copy). Not built.
