@@ -10,6 +10,8 @@ import {WrappedLib} from "../../src/metatx/WrappedLib.sol";
 import {MtxPipelineLib} from "../../src/metatx/MtxPipelineLib.sol";
 import {UAMetaTxBase} from "../../src/metatx/UAMetaTxBase.sol";
 import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
+import {RegulatedLib} from "../../src/regulated/RegulatedLib.sol";
+import {IRegulatedToken} from "../../src/regulated/IRegulatedToken.sol";
 
 library NamespaceProbeIds {
     bytes32 internal constant U = 0xcafe00000000000000000000000000000000000000000000000000000000a11a;
@@ -51,6 +53,12 @@ contract NamespaceProbe is UAMetaTxBase {
         _ua().balance[bytes32(uint256(0xa1))] = 0xa2;
         _ua().cancelUsed[bytes32(uint256(0xa3))] = true;
         MtxPipelineLib._mtxStorage().nonce[bytes32(uint256(0xb1))][2] = 0xb2;
+        // plan T28: `scaas.regulated` (regulated-kinds spec §2.3)
+        RegulatedLib.RegulatedStorage storage r = RegulatedLib.$();
+        (r.complianceRegistry, r.controls, r.pausedUntil) = (B, 0xc1, 0xc2);
+        (r.requiredFlags, r.deniedFlags, r.pauseCooldownUntil, r.termsHash) = (0xc3, 0xc4, 0xc5, bytes32(uint256(0xc6)));
+        r.freezes[U] = IRegulatedToken.FreezeState(0xc7, 0xc8, 0xc9, true, V);
+        r.orders[U] = IRegulatedToken.OrderRecord(V, U, 0xca, true, 0xcb, 0xcc);
     }
 }
 
@@ -162,6 +170,26 @@ contract LayoutTest is V2Fixture {
         f = new F[](1);
         f[0] = F("nonce[0xb1][2]", 0xb1, 2, 0xb2, 32);
         _ns(address(p), "metatx", "scaas.metatx", f);
+        f = new F[](17);
+        f[0] = F("complianceRegistry", 0, 0, b, 20);
+        f[1] = F("controls", 0, 0, 0xc1, 1);
+        f[2] = F("pausedUntil", 0, 0, 0xc2, 8);
+        f[3] = F("requiredFlags", 0, 0, 0xc3, 8);
+        f[4] = F("deniedFlags", 0, 0, 0xc4, 8);
+        f[5] = F("pauseCooldownUntil", 0, 0, 0xc5, 8);
+        f[6] = F("termsHash", 0, 0, 0xc6, 32);
+        f[7] = F("freezes[A].until", u, 0, 0xc7, 8);
+        f[8] = F("freezes[A].episodeStart", u, 0, 0xc8, 8);
+        f[9] = F("freezes[A].issuerCooldownUntil", u, 0, 0xc9, 8);
+        f[10] = F("freezes[A].recordBacked", u, 0, 1, 1);
+        f[11] = F("freezes[A].recordId", u, 0, v, 32);
+        f[12] = F("orders[A].subject", u, 0, v, 32);
+        f[13] = F("orders[A].beneficiary", u, 0, u, 32);
+        f[14] = F("orders[A].freezeUntil", u, 0, 0xca, 8);
+        f[15] = F("orders[A].revoked", u, 0, 1, 1);
+        f[16] = F("orders[A].maxAmount", u, 0, 0xcb, 32);
+        f = _more(f, F("orders[A].executed", u, 0, 0xcc, 32));
+        _ns(address(p), "regulated", "scaas.regulated", f);
     }
 
     function _more(F[] memory f, F memory x) internal pure returns (F[] memory g) {

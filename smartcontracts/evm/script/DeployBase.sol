@@ -19,6 +19,7 @@ import {ZetherWrappedLib} from "../src/zether/ZetherWrappedLib.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {NormalToken} from "../src/metatx/NormalToken.sol";
 import {WrappedToken} from "../src/metatx/WrappedToken.sol";
+import {NormalRegulatedToken} from "../src/regulated/NormalRegulatedToken.sol";
 import {WrappedRegulatedToken} from "../src/regulated/WrappedRegulatedToken.sol";
 import {RegulatedLib} from "../src/regulated/RegulatedLib.sol";
 import {SCaaSDex} from "../src/dex/SCaaSDex.sol";
@@ -87,7 +88,7 @@ abstract contract DeployBase is Script {
     ///         every kind runs on the SCaaS testnet).
     bool internal deployWrapped;
     /// @notice `DEPLOY_REGULATED` env (default false): also deploy the regulated releases (`_deployRegulated`, regulated-kinds
-    ///         spec §6.1); today kind 9's skeleton (plan T27).
+    ///         spec §6.1): kinds 8 and 9, enabled (plan T28).
     bool internal deployRegulated;
     /// @notice `OpenFactory.noticePeriod` (plan 5g-Z2; owner ruling 2026-10-20): `NOTICE_PERIOD` env. Safe by default:
     ///         every chain not in `_isTestChain` is a mainnet (22776, Hedera 295, Ethereum, BSC, an unknown chain), with
@@ -369,14 +370,24 @@ abstract contract DeployBase is Script {
         vm.serializeAddress("deploy", "implementation_wrapped", w);
     }
 
-    /// @notice Regulated-kinds spec §6.1, in the form of `_deployWrapped`: env version 1 of `WRAPPED_REGULATED` (9) with
-    ///         `RegulatedLib` added to `WRAPPED`'s link closure, the release, version 1, refused first by `_requireReleaseGas`.
-    ///         JSON `implementation_wrapped_regulated`. Plan T27: the skeleton, so the kind stays disabled (`createToken`
-    ///         refuses `KindDisabled`; its `init` would revert `RegulatedNotBuilt` anyway); T28 adds kind 8 and enables
-    ///         both. The confidential regulated kinds deploy with their stacks (10, 11 here under `DEPLOY_ZETHER`; 12, 13 by
-    ///         `script/pqz/e2e.py`).
+    /// @notice Regulated-kinds spec §6.1, in the form of `_deployWrapped`: env version 1 of `NORMAL_REGULATED` (8) and of
+    ///         `WRAPPED_REGULATED` (9), each its base kind's link closure with `RegulatedLib` added (which links only
+    ///         `GovernanceLib`, already in it), the releases, version 1, each refused first by `_requireReleaseGas`, then both
+    ///         kinds enabled (plan T28). JSON `implementation_normal_regulated`, `implementation_wrapped_regulated`. Hedera
+    ///         takes both (`IS_HEDERA` from the env). The confidential regulated kinds deploy with their stacks (10, 11 under
+    ///         `DEPLOY_ZETHER`; 12, 13 by `script/pqz/e2e.py`). Until T29 a token naming a compliance registry is refused at
+    ///         init (`RegulatedNotBuilt`).
     function _deployRegulated(OpenFactory f, address reg, address smartKeyAccountImpl, bool isHedera) internal {
-        address[] memory libs = new address[](6);
+        address[] memory libs = new address[](5);
+        (libs[0], libs[1], libs[2], libs[3], libs[4]) =
+            (address(GovernanceLib), address(HederaLib), address(TradeLib), address(MtxPipelineLib), address(RegulatedLib));
+        f.publishEnv(IOpenFactory.TokenKind.NORMAL_REGULATED, 1,
+            _env(f, reg, smartKeyAccountImpl, isHedera, new address[](0), libs));
+        address n = _release(f, IOpenFactory.TokenKind.NORMAL_REGULATED, "NormalRegulatedToken",
+            type(NormalRegulatedToken).creationCode);
+        _gate(n);
+        vm.serializeAddress("deploy", "implementation_normal_regulated", n);
+        libs = new address[](6);
         (libs[0], libs[1], libs[2], libs[3], libs[4], libs[5]) = (address(GovernanceLib), address(HederaLib),
             address(TradeLib), address(MtxPipelineLib), address(WrappedLib), address(RegulatedLib));
         f.publishEnv(IOpenFactory.TokenKind.WRAPPED_REGULATED, 1,
@@ -385,6 +396,8 @@ abstract contract DeployBase is Script {
             type(WrappedRegulatedToken).creationCode);
         _gate(w);
         vm.serializeAddress("deploy", "implementation_wrapped_regulated", w);
+        f.setKindEnabled(IOpenFactory.TokenKind.NORMAL_REGULATED, true);
+        f.setKindEnabled(IOpenFactory.TokenKind.WRAPPED_REGULATED, true);
     }
 
     /// @notice `MtxRelayFee` (CTR-MTX-27) by CREATE2, the same address on every chain (no constructor argument, no

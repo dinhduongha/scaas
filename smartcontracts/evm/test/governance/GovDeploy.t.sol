@@ -16,6 +16,7 @@ import {NormalZetherToken} from "../../src/zether/NormalZetherToken.sol";
 import {WrappedZetherToken} from "../../src/zether/WrappedZetherToken.sol";
 import {NormalPqzToken} from "../../src/pqz/NormalPqzToken.sol";
 import {WrappedPqzToken} from "../../src/pqz/WrappedPqzToken.sol";
+import {NormalRegulatedToken} from "../../src/regulated/NormalRegulatedToken.sol";
 import {WrappedRegulatedToken} from "../../src/regulated/WrappedRegulatedToken.sol";
 import {WrappedPqzRegulatedToken} from "../../src/regulated/WrappedPqzRegulatedToken.sol";
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
@@ -64,28 +65,35 @@ contract GovDeployTest is Test {
         assertEq(g.implementationOf(IOpenFactory.TokenKind.WRAPPED, 1), address(0), "no WRAPPED release");
     }
 
-    /// Plan T27 (regulated-kinds spec §6.1): `DEPLOY_REGULATED` deploys the `WRAPPED_REGULATED` release (version 1, env 1,
-    /// `WRAPPED`'s closure and `RegulatedLib` pinned, on the UA registry and the router), gated by `chainUid()`, JSON
-    /// `implementation_wrapped_regulated`, the kind left disabled (the skeleton); without it none.
+    /// Plan T27 (regulated-kinds spec §6.1): `DEPLOY_REGULATED` deploys the regulated releases (version 1, env 1, the base
+    /// kind's closure and `RegulatedLib` pinned, on the UA registry and the router), gated by `chainUid()`; plan T28: kind 8
+    /// beside 9 (JSON `implementation_normal_regulated`, `implementation_wrapped_regulated`), both kinds enabled; without it
+    /// none.
     function test_deployRegulatedPath() public {
         DeployHarness h = new DeployHarness();
         h.setRegulated(true);
         (OpenFactory f, string memory json) = h.deploy(ZUID, false, ska);
-        IOpenFactory.TokenKind k = IOpenFactory.TokenKind.WRAPPED_REGULATED;
-        address w = f.implementationOf(k, 1);
-        assertEq(WrappedRegulatedToken(payable(w)).kind(), 9, "the release");
-        assertEq(vm.parseJsonAddress(json, ".implementation_wrapped_regulated"), w);
-        assertEq(WrappedRegulatedToken(payable(w)).chainUid(), ZUID, "gated");
-        assertFalse(f.kindEnabled(k), "the skeleton stays disabled");
-        IFactoryToken.Env memory e = f.envOf(k, 1);
-        assertEq(keccak256(abi.encode(e.libs)), keccak256(abi.encode(closureLibs(k))), "link closure");
-        for (uint256 i; i < e.libs.length; ++i) assertEq(e.libCodeHashes[i], e.libs[i].codehash, "pinned");
-        assertEq(e.registry, vm.parseJsonAddress(json, ".ua_registry"));
-        assertEq(e.govRouter, vm.parseJsonAddress(json, ".governance_router"));
+        IOpenFactory.TokenKind[2] memory ks = [IOpenFactory.TokenKind.NORMAL_REGULATED, IOpenFactory.TokenKind.WRAPPED_REGULATED];
+        string[2] memory keys = [".implementation_normal_regulated", ".implementation_wrapped_regulated"];
+        for (uint256 i; i < 2; ++i) {
+            IOpenFactory.TokenKind k = ks[i];
+            address w = f.implementationOf(k, 1);
+            assertEq(WrappedRegulatedToken(payable(w)).kind(), 8 + i, "the release");
+            assertEq(vm.parseJsonAddress(json, keys[i]), w);
+            assertEq(WrappedRegulatedToken(payable(w)).chainUid(), ZUID, "gated");
+            assertTrue(f.kindEnabled(k), "enabled (T28)");
+            IFactoryToken.Env memory e = f.envOf(k, 1);
+            assertEq(keccak256(abi.encode(e.libs)), keccak256(abi.encode(closureLibs(k))), "link closure");
+            for (uint256 j; j < e.libs.length; ++j) assertEq(e.libCodeHashes[j], e.libs[j].codehash, "pinned");
+            assertEq(e.registry, vm.parseJsonAddress(json, ".ua_registry"));
+            assertEq(e.govRouter, vm.parseJsonAddress(json, ".governance_router"));
+        }
 
         DeployHarness plain = new DeployHarness();
         (OpenFactory g,) = plain.deploy(ZUID, false, ska);
-        assertEq(g.implementationOf(k, 1), address(0), "the default deploys no regulated release");
+        assertEq(g.implementationOf(ks[0], 1), address(0), "the default deploys no regulated release");
+        assertEq(g.implementationOf(ks[1], 1), address(0), "the default deploys no regulated release");
+        assertFalse(g.kindEnabled(ks[0]));
     }
 
     /// The `WRAPPED` release is gated as every release (NET-EVM-06, GD-4): one gas below its own need, by name, and nothing of
@@ -130,8 +138,8 @@ contract GovDeployTest is Test {
     /// release (the six kinds, the DEX); one gas below the need is refused by name (the control).
     function test_everyKindsReleaseFitsTwoHundredMillion() public {
         DeployHarness h = new DeployHarness();
-        string[9] memory kinds = ["NormalToken", "WrappedToken", "NormalZetherToken", "WrappedZetherToken", "NormalPqzToken",
-            "WrappedPqzToken", "SCaaSDex", "WrappedRegulatedToken", "WrappedPqzRegulatedToken"];
+        string[10] memory kinds = ["NormalToken", "WrappedToken", "NormalZetherToken", "WrappedZetherToken", "NormalPqzToken",
+            "WrappedPqzToken", "SCaaSDex", "NormalRegulatedToken", "WrappedRegulatedToken", "WrappedPqzRegulatedToken"];
         for (uint256 i; i < kinds.length; ++i) {
             uint256 need = h.gasNeed(kinds[i]);
             assertEq(need, vm.parseJsonUint(vm.readFile("./size-baseline.json"), string.concat(".", kinds[i])) * 1530 + TX_GAS_CAP,
@@ -153,9 +161,10 @@ contract GovDeployTest is Test {
         zdeps = [address(new ZetherTransferVerifierBls12381(ip)), address(new ZetherBurnVerifierBls12381(ip)), address(ip),
             address(new ZetherDisclosure())];
         Create2Probe probe = new Create2Probe();
-        string[10] memory names = ["NormalToken", "WrappedToken", "NormalZetherToken", "WrappedZetherToken", "NormalPqzToken",
-            "WrappedPqzToken", "SCaaSDex", "GovernanceRouter", "WrappedRegulatedToken", "WrappedPqzRegulatedToken"];
-        bytes[10] memory codes = [
+        string[11] memory names = ["NormalToken", "WrappedToken", "NormalZetherToken", "WrappedZetherToken", "NormalPqzToken",
+            "WrappedPqzToken", "SCaaSDex", "GovernanceRouter", "WrappedRegulatedToken", "WrappedPqzRegulatedToken",
+            "NormalRegulatedToken"];
+        bytes[11] memory codes = [
             _release(type(NormalToken).creationCode, IOpenFactory.TokenKind.NORMAL, router),
             _release(type(WrappedToken).creationCode, IOpenFactory.TokenKind.WRAPPED, router),
             _release(type(NormalZetherToken).creationCode, IOpenFactory.TokenKind.NORMAL_ZETHER, router),
@@ -165,7 +174,8 @@ contract GovDeployTest is Test {
             _dex(router),
             abi.encodePacked(type(GovernanceRouter).creationCode, abi.encode(ZUID, address(this), ska, false)),
             _release(type(WrappedRegulatedToken).creationCode, IOpenFactory.TokenKind.WRAPPED_REGULATED, router),
-            _release(type(WrappedPqzRegulatedToken).creationCode, IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, router)
+            _release(type(WrappedPqzRegulatedToken).creationCode, IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, router),
+            _release(type(NormalRegulatedToken).creationCode, IOpenFactory.TokenKind.NORMAL_REGULATED, router)
         ];
         for (uint256 i; i < codes.length; ++i) {
             address a = probe.deploy(codes[i], bytes32(i));

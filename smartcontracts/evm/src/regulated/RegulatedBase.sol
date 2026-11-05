@@ -6,15 +6,16 @@ import {GovernanceLib} from "../governance/GovernanceLib.sol";
 import {GovernanceBits} from "../governance/GovernanceBits.sol";
 import {IRegulatedToken} from "./IRegulatedToken.sol";
 import {RegulatedLib, RegulatedNotBuilt} from "./RegulatedLib.sol";
+import {MetaTxLib} from "../common/MetaTxLib.sol";
+import {MtxPipelineLib} from "../metatx/MtxPipelineLib.sol";
 
 /// @title The regulated layer of kinds 8-13 (CTR-GOV-03, regulated-kinds spec §2.1, §2.2, §3): abstract over `MetaTokenBase`,
 ///        it overrides the ledger and fee hooks, the masks it shares, `disableFeature`, `supportsInterface`, the init path,
 ///        and holds the checks `F`, `P`, `R` as internal functions; each control is a thin stub that `DELEGATECALL`s
 ///        `RegulatedLib` with `_govSubject()` as a word. Each kind lists its base kind first and this second.
-/// @notice **UNAUDITED.** Skeleton (plan T27): every hook seat and row of spec §3.2 is wired; the three checks, the mirror
-///         sync, the views and `RegulatedLib`'s bodies revert `RegulatedNotBuilt` until T28 / T29 / T32. Not yet built
-///         here: the pause-open set of the pre row (T28), the bounded registry call (T29), the `REGISTRY_CODEHASH`
-///         immutable (T29).
+/// @notice **UNAUDITED.** Plan T28: `F`, `P`, the pause-open set, the mirror sync, the views and FREEZE, RECORD, FORCE,
+///         PAUSE in `RegulatedLib`. Not yet built (they revert `RegulatedNotBuilt`): `R` with a list on and `canReceive`
+///         (T29: the bounded registry call, `REGISTRY_CODEHASH`), `operatorTransfer` (T32).
 abstract contract RegulatedBase is MetaTokenBase, IRegulatedToken {
     /// @dev The bits the regulated kinds add to their base kind's `_validBits()` (spec §2.1, bit 22 CTR-GOV-20): 5-10, 21,
     ///      22 on 8 and 9; without `ALLOWLIST` (8) on the confidential kinds 10-13 (CTR-GOV-17).
@@ -25,6 +26,13 @@ abstract contract RegulatedBase is MetaTokenBase, IRegulatedToken {
     uint256 internal constant REG_ROLES = GovernanceBits.REGULATED_ROLES | (1 << GovernanceBits.OPERATOR_TRANSFER);
     /// @dev Added to `_contractOnlyBits()`: 5, 6, 7, 10, 21; never 22.
     uint256 internal constant REG_CONTRACT_ONLY = GovernanceBits.REGULATED_ROLES;
+    /// @dev The pause-open set (spec §3.2, RK-7), by the inner selector: `unwrap(uint256,address,uint256)`,
+    ///      `unwrap(address,uint256,address,uint256)`, `unwrapToUA(address,uint256,bytes32,uint256)`, `burn(uint256)`. A kind
+    ///      that does not list one refuses it in `pre*` anyway.
+    bytes4 private constant SEL_UNWRAP_MIN = 0x3f069a43;
+    bytes4 private constant SEL_UNWRAP_LEG = 0xb5819a02;
+    bytes4 private constant SEL_UNWRAP_TO_UA = 0xe4a9f766;
+    bytes4 private constant SEL_BURN = 0x42966c68;
 
     /// @dev Base | 6, 21, 22: each power passes the amount it acts on (B-09).
     function _scalarBits() internal pure virtual override returns (uint256) {
@@ -39,7 +47,7 @@ abstract contract RegulatedBase is MetaTokenBase, IRegulatedToken {
 
     /// @dev `RegulatedLib.init` (spec §2.4) before the kind's own init, so before any mint.
     function _initRaw(bytes calldata initArgs) internal virtual override {
-        RegulatedLib.init(initArgs);
+        RegulatedLib.init(initArgs, _validBits());
         super._initRaw(initArgs);
     }
 
@@ -63,10 +71,13 @@ abstract contract RegulatedBase is MetaTokenBase, IRegulatedToken {
         RegulatedLib.unfreeze(account, ref, _govSubject());
     }
 
-    /// @notice The library checks the record and counts it; the token moves the public balance on `_poolMove` (no hook:
-    ///         the subject is frozen, CTR-GOV-08 Change).
+    /// @notice The library checks the record and counts it; the token checks the beneficiary as a receiver (`R`, a derived
+    ///         one registered SIGNING) and moves the public balance on `_poolMove` (no hook: the subject is frozen,
+    ///         CTR-GOV-08 Change).
     function forceTransfer(bytes32 recordId, uint256 amount) external nonReentrant {
         (bytes32 from, bytes32 to) = RegulatedLib.forceTransfer(recordId, amount, _govSubject());
+        _eligible(to);
+        MtxPipelineLib._checkTo(_REGISTRY, to);
         _poolMove(from, to, amount);
     }
 
@@ -96,18 +107,24 @@ abstract contract RegulatedBase is MetaTokenBase, IRegulatedToken {
 
     // ------------------------------------------------------------------ views
 
-    function regulatedConfig() external view returns (RegulatedConfig memory c) { _notBuilt(); return c; }
-    function freezeOf(bytes32) external view returns (FreezeState memory s) { _notBuilt(); return s; }
-    function isFrozen(bytes32 account) external view returns (bool) { return _frozen(account); }
+    function regulatedConfig() external view returns (RegulatedConfig memory) {
+        RegulatedLib.RegulatedStorage storage r = RegulatedLib.$();
+        return RegulatedConfig(r.complianceRegistry, r.controls, r.requiredFlags, r.deniedFlags, r.termsHash, r.pausedUntil,
+            r.pauseCooldownUntil);
+    }
+    function freezeOf(bytes32 account) external view returns (FreezeState memory) { return RegulatedLib.$().freezes[account]; }
+    function isFrozen(bytes32 account) external view returns (bool) { return RegulatedLib.frozen(account); }
     function canReceive(bytes32) external view returns (bool ok, uint8 reason) { _notBuilt(); return (ok, reason); }
-    function order(bytes32) external view returns (OrderRecord memory r) { _notBuilt(); return r; }
+    function order(bytes32 recordId) external view returns (OrderRecord memory) { return RegulatedLib.$().orders[recordId]; }
 
     // ------------------------------------------------------------------ the hooks (spec §2.2, the rows of §3.2)
 
-    /// @dev The pre row of the public kinds 8, 9, before `pre*` and any signature check (F-09): `P`, `F(from)`. The
-    ///      confidential kinds override it (fee-bearing only).
-    function _regPre(bytes32 from, bytes4, uint32) internal view virtual override {
-        _notPaused();
+    /// @dev The pre row of the public kinds 8, 9, before `pre*` and any signature check (F-09, RK-8): `P` unless the inner
+    ///      selector is in the pause-open set and the envelope is not fee-bearing (RK-7); `F(from)`. The confidential kinds
+    ///      override it (fee-bearing only, no open set).
+    function _regPre(bytes32 from, bytes4 sel, uint32 mode) internal view virtual override {
+        if (mode & MetaTxLib.MODE_FEE_MASK != MetaTxLib.MODE_FEE_NONE
+            || (sel != SEL_UNWRAP_MIN && sel != SEL_UNWRAP_LEG && sel != SEL_UNWRAP_TO_UA && sel != SEL_BURN)) _notPaused();
         _notFrozen(from);
     }
 
@@ -144,38 +161,29 @@ abstract contract RegulatedBase is MetaTokenBase, IRegulatedToken {
     // ------------------------------------------------------------------ the checks (spec §3.2)
 
     function _notPaused() internal view {
-        if (_paused()) revert TokenPaused(0);
+        if (RegulatedLib.paused()) revert TokenPaused(RegulatedLib.$().pausedUntil);
     }
 
     function _notFrozen(bytes32 a) internal view {
-        if (_frozen(a)) revert Frozen(a);
+        if (RegulatedLib.frozen(a)) revert Frozen(a);
     }
 
     function _feeRecipient(bytes32 a) internal view {
-        if (_frozen(a)) revert FeeRecipientFrozen(a);
+        if (RegulatedLib.frozen(a)) revert FeeRecipientFrozen(a);
         _eligible(a);
     }
 
-    /// @dev `P` (T28).
-    function _paused() internal view returns (bool) {
-        _notBuilt();
-        return false;
-    }
-
-    /// @dev `F(a)` (T28).
-    function _frozen(bytes32) internal view returns (bool) {
-        _notBuilt();
-        return false;
-    }
-
-    /// @dev `R(a)`, refused `NotEligible(a, 0)` (T29: the bounded `hasFlags` call; both lists off, no call).
+    /// @dev `R(a)`, refused `NotEligible(a, 0)`. Both lists off: no call (T28). A list on is T29's bounded `hasFlags` call;
+    ///      until then `init` refuses a registry, so this branch is unreachable and fails closed.
     function _eligible(bytes32) internal view {
-        _notBuilt();
+        if (RegulatedLib.$().controls & RegulatedLib.C_LISTS != 0) _notBuilt();
     }
 
-    /// @dev Clears `bit` in the mirror when it is one of 5-10 (T28).
-    function _regDisabled(uint8 bit) internal view {
-        if (bit >= GovernanceBits.FREEZE && bit <= GovernanceBits.RECORD) _notBuilt();
+    /// @dev Clears `bit` in the mirror when it is one of 5-10, once the disable applied (Codex 3, I12).
+    function _regDisabled(uint8 bit) internal {
+        if (bit >= GovernanceBits.FREEZE && bit <= GovernanceBits.RECORD) {
+            RegulatedLib.$().controls &= ~uint8(1 << (bit - GovernanceBits.FREEZE));
+        }
     }
 
     /// @dev `view` with a condition always true, as the bodies that replace it read storage (no mutability warning upstream).

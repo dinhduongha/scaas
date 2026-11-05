@@ -15,8 +15,8 @@ import {IMetaTx} from "../metatx/IMetaTx.sol";
 import {RegulatedBase} from "./RegulatedBase.sol";
 
 /// @title Kind `WRAPPED_REGULATED` (9, CTR-GOV-16, regulated-kinds spec §2.1): `WrappedToken` with the regulated layer.
-/// @notice **UNAUDITED.** Skeleton (plan T27): measured first with kind 13; creation reverts `RegulatedNotBuilt` until T28.
-///         The wrap payer and the wrap order reach the regulated hooks through `WrappedToken`'s seats.
+/// @notice **UNAUDITED.** Measured first with kind 13 (plan T27); FREEZE, RECORD, FORCE, PAUSE and the fee seats built
+///         (T28). The wrap payer and the wrap order reach the regulated hooks through `WrappedToken`'s seats.
 contract WrappedRegulatedToken is WrappedToken, RegulatedBase {
     constructor(uint16 envVersion, Env memory env, bytes memory implArgs) WrappedToken(envVersion, env, implArgs) {}
 

@@ -14,6 +14,7 @@ import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {IRegulatedToken} from "../../src/regulated/IRegulatedToken.sol";
 import {RegulatedNotBuilt} from "../../src/regulated/RegulatedLib.sol";
+import {IGovernance} from "../../src/governance/IGovernance.sol";
 import {WrappedRegulatedToken} from "../../src/regulated/WrappedRegulatedToken.sol";
 import {WrappedPqzRegulatedToken} from "../../src/regulated/WrappedPqzRegulatedToken.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
@@ -36,12 +37,12 @@ contract WrappedPqzRegulatedMasks is WrappedPqzRegulatedToken {
     }
 }
 
-/// Plan T27 (regulated-kinds spec §2.1, §2.2, §3.1, §3.2, §4.2; F-19): the skeleton of kinds 9 and 13, measured first. The
-/// releases pass the factory's `kind()` check; the masks are the base kind's plus the regulated bits (bit 8 not on 13, bit 22
-/// never contract-only); ERC-165 answers `IRegulatedToken` on 9 and 13 only; the init path reaches `RegulatedLib.init` before
-/// the kind's own init, so creation fails closed (`RegulatedNotBuilt`) until T28; the eight stubs and the five views revert
-/// the placeholder; every hook seat reaches `RegulatedBase` (the public pre row at any fee, the confidential one only
-/// fee-bearing). Each row has its plain-kind positive control.
+/// Plan T27 (regulated-kinds spec §2.1, §2.2, §3.1, §3.2, §4.2; F-19): kinds 9 and 13, measured first. The releases pass
+/// the factory's `kind()` check; the masks are the base kind's plus the regulated bits (bit 8 not on 13, bit 22 never
+/// contract-only); ERC-165 answers `IRegulatedToken` on 9 and 13 only; every hook seat reaches `RegulatedBase` (the public
+/// pre row at any fee, the confidential one only fee-bearing). Plan T28 replaced the skeleton's placeholders: both kinds
+/// create, the seats are shown by `P`, and only `operatorTransfer` (T32) and `canReceive` (T29) still revert the
+/// placeholder. Each row has its plain-kind positive control.
 contract RegulatedSkeletonTest is PqzFixture {
     WrappedRegulatedToken internal r9;
     WrappedPqzRegulatedToken internal r13;
@@ -121,53 +122,39 @@ contract RegulatedSkeletonTest is PqzFixture {
         c.legs[0] = IFactoryToken.Leg(address(new MockERC20("USD", "USD", 6)), 1, 1);
     }
 
-    /// The init path reaches `RegulatedLib.init` first (spec §2.4, before any mint): creation fails closed until T28. The
-    /// same config creates the base kind (the control).
-    function test_createRefusedUntilBuilt() public {
+    /// Plan T28: kinds 9 and 13 create (the init path through `RegulatedLib.init`, before the kind's own init and any
+    /// mint); bit 8 (`ALLOWLIST`) is outside kind 13's mask (CTR-GOV-17), refused first as `FeatureInvalidForKind(8)`, while
+    /// kind 9 takes it (here refused `RegulatedConfigInvalid`: no flags). The same config creates the base kinds.
+    function test_createKinds9And13() public {
         IFactoryToken.TokenConfig memory c = _wrappedCfg();
         IFactoryToken.ConfidentialConfig memory none;
         c.conf = none;
-        vm.expectRevert(RegulatedNotBuilt.selector);
-        factory.createToken(IOpenFactory.TokenKind.WRAPPED_REGULATED, 1, abi.encode(c), "r9");
+        assertEq(MetaTokenBase(factory.createToken(IOpenFactory.TokenKind.WRAPPED_REGULATED, 1, abi.encode(c), "r9")).kind(), 9);
         assertEq(MetaTokenBase(factory.createToken(IOpenFactory.TokenKind.WRAPPED, 1, abi.encode(c), "w1")).kind(), 1);
+        c.features |= 1 << 8;
+        c.reg.termsHash = keccak256("terms");
+        vm.expectRevert(IRegulatedToken.RegulatedConfigInvalid.selector);
+        factory.createToken(IOpenFactory.TokenKind.WRAPPED_REGULATED, 1, abi.encode(c), "r9b");
 
         c = _wrappedCfg();
-        vm.expectRevert(RegulatedNotBuilt.selector);
-        factory.createToken(IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, 1, abi.encode(c), "r13");
+        assertEq(MetaTokenBase(factory.createToken(IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, 1, abi.encode(c), "r13"))
+            .kind(), 13);
         assertEq(MetaTokenBase(factory.createToken(IOpenFactory.TokenKind.WRAPPED_PQZ, 1, abi.encode(c), "w5")).kind(), 5);
+        c.features |= 1 << 8;
+        c.reg.termsHash = keccak256("terms");
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, uint8(8)));
+        factory.createToken(IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, 1, abi.encode(c), "r13b");
     }
 
-    /// The eight controls and the five views (spec §3.1), at their final arity, revert the placeholder on both kinds.
-    function test_stubsAndViewsNotBuilt() public {
+    /// What T28 does not build revert the placeholder on both kinds: `operatorTransfer` (T32), `canReceive` (T29).
+    function test_notBuiltYet() public {
         address[2] memory ks = [address(r9), address(r13)];
         for (uint256 i; i < 2; ++i) {
             IRegulatedToken t = IRegulatedToken(ks[i]);
             vm.expectRevert(RegulatedNotBuilt.selector);
-            t.freeze(bytes32(uint256(1)), bytes32(uint256(2)), 0);
-            vm.expectRevert(RegulatedNotBuilt.selector);
-            t.unfreeze(bytes32(uint256(1)), bytes32(uint256(2)));
-            vm.expectRevert(RegulatedNotBuilt.selector);
-            t.forceTransfer(bytes32(uint256(3)), 1);
-            vm.expectRevert(RegulatedNotBuilt.selector);
-            t.pause(bytes32(uint256(2)), uint64(block.timestamp + 1));
-            vm.expectRevert(RegulatedNotBuilt.selector);
-            t.unpause(bytes32(uint256(2)));
-            vm.expectRevert(RegulatedNotBuilt.selector);
-            t.recordOrder(bytes32(uint256(4)), bytes32(uint256(5)), bytes32(uint256(1)), bytes32(uint256(6)), 1, 0);
-            vm.expectRevert(RegulatedNotBuilt.selector);
-            t.revokeOrder(bytes32(uint256(3)), bytes32(uint256(2)));
-            vm.expectRevert(RegulatedNotBuilt.selector);
             t.operatorTransfer(bytes32(uint256(1)), bytes32(uint256(6)), 1, bytes32(uint256(2)));
             vm.expectRevert(RegulatedNotBuilt.selector);
-            t.regulatedConfig();
-            vm.expectRevert(RegulatedNotBuilt.selector);
-            t.freezeOf(bytes32(uint256(1)));
-            vm.expectRevert(RegulatedNotBuilt.selector);
-            t.isFrozen(bytes32(uint256(1)));
-            vm.expectRevert(RegulatedNotBuilt.selector);
             t.canReceive(bytes32(uint256(1)));
-            vm.expectRevert(RegulatedNotBuilt.selector);
-            t.order(bytes32(uint256(3)));
         }
     }
 
@@ -184,26 +171,51 @@ contract RegulatedSkeletonTest is PqzFixture {
         return abi.encodeCall(ERC20MetaTx.mtxExecuteTransfer, (t, none));
     }
 
-    /// The ledger, payer and pre seats reach `RegulatedBase` on both kinds; on the base kinds the same calls never revert
-    /// the placeholder (`transfer(0)` and `approve` pass). The pre row: kind 9 at any fee mode, before any signature check;
-    /// kind 13 only when fee-bearing (U4: at fee `NONE` nothing is read, the call fails later in the pipeline).
+    /// `_wrappedCfg`, without the confidential config on a public kind (`ConfigFieldForOtherKind(4)` otherwise).
+    function _plainCfg(bool publicKind) internal returns (IFactoryToken.TokenConfig memory c) {
+        c = _wrappedCfg();
+        IFactoryToken.ConfidentialConfig memory none;
+        if (publicKind) c.conf = none;
+    }
+
+    /// A token of `kind` with `PAUSE` (bit 7) held by a contract issuer, paused for a day; the base kinds unpaused.
+    function _paused(IOpenFactory.TokenKind kind, bytes32 salt) internal returns (address t) {
+        IFactoryToken.TokenConfig memory c = _plainCfg(kind == IOpenFactory.TokenKind.WRAPPED_REGULATED);
+        address iss = address(new SkeletonIssuer());
+        c.features |= 1 << 7;
+        (c.owner, c.roles.issuer, c.reg.termsHash) = (bytes32(uint256(0xA11)), bytes32(uint256(uint160(iss))), keccak256("t"));
+        t = factory.createToken(kind, 1, abi.encode(c), salt);
+        vm.prank(iss);
+        IRegulatedToken(t).pause(bytes32(uint256(2)), uint64(block.timestamp + 1 days));
+    }
+
+    /// Every seat reaches `RegulatedBase` on both kinds (spec §2.2, §3.2), shown by `P` on a paused token: the ledger
+    /// (`transfer`), the payer (`approve`), the pre row (kind 9 at any fee mode; kind 13 only fee-bearing: at fee `NONE`
+    /// nothing is read, U4) and the PQZ shield payer (13). The base kinds, created alike, never revert `TokenPaused`.
     function test_hookSeatsWired() public {
-        address[4] memory ks = [address(r9), address(r13), address(w1), address(w5)];
+        address[4] memory ks = [_paused(IOpenFactory.TokenKind.WRAPPED_REGULATED, "p9"),
+            _paused(IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, "p13"),
+            factory.createToken(IOpenFactory.TokenKind.WRAPPED, 1, abi.encode(_plainCfg(true)), "b1"),
+            factory.createToken(IOpenFactory.TokenKind.WRAPPED_PQZ, 1, abi.encode(_wrappedCfg()), "b5")];
+        bytes4 P = IRegulatedToken.TokenPaused.selector;
         for (uint256 i; i < 4; ++i) {
             bool reg = i < 2;
             (bool ok, bytes4 err) = _call(ks[i], abi.encodeCall(IERC20.transfer, (address(0xB0B), 0))); // _regMove
-            assertTrue(reg ? !ok && err == RegulatedNotBuilt.selector : ok, "transfer");
+            assertTrue(reg ? !ok && err == P : ok, "transfer");
             (ok, err) = _call(ks[i], abi.encodeCall(IERC20.approve, (address(factory), 1))); // _regPayer
-            assertTrue(reg ? !ok && err == RegulatedNotBuilt.selector : ok, "approve");
+            assertTrue(reg ? !ok && err == P : ok, "approve");
             (ok, err) = _call(ks[i], _transfer(MetaTxLib.MODE_FEE_FIXED)); // _regPre, fee-bearing
-            assertTrue(!ok && (err == RegulatedNotBuilt.selector) == reg, "pre, fee-bearing");
+            assertTrue(!ok && (err == P) == reg, "pre, fee-bearing");
             (ok, err) = _call(ks[i], _transfer(0)); // _regPre, fee NONE
-            assertTrue(!ok && (err == RegulatedNotBuilt.selector) == (ks[i] == address(r9)), "pre, fee NONE");
+            assertTrue(!ok && (err == P) == (i == 0), "pre, fee NONE");
         }
         // the PQZ payer seat (mtxShield, direct): 13 reaches it, 5 fails elsewhere
-        (bool ok13, bytes4 e13) = _call(address(r13), abi.encodeWithSignature("mtxShield(bytes32,uint256)", alice, 1));
-        (bool ok5, bytes4 e5) = _call(address(w5), abi.encodeWithSignature("mtxShield(bytes32,uint256)", alice, 1));
-        assertTrue(!ok13 && e13 == RegulatedNotBuilt.selector, "13 shield payer");
-        assertTrue(!ok5 && e5 != RegulatedNotBuilt.selector, "5 shield");
+        (bool ok13, bytes4 e13) = _call(ks[1], abi.encodeWithSignature("mtxShield(bytes32,uint256)", alice, 1));
+        (bool ok5, bytes4 e5) = _call(ks[3], abi.encodeWithSignature("mtxShield(bytes32,uint256)", alice, 1));
+        assertTrue(!ok13 && e13 == P, "13 shield payer");
+        assertTrue(!ok5 && e5 != P, "5 shield");
     }
 }
+
+/// A contract issuer (bits 5-7 are contract-only); it acts through `vm.prank`.
+contract SkeletonIssuer {}

@@ -70,6 +70,10 @@ interface IRegulatedToken {
     error PauseTooLong(uint64 until);
     error PauseCooldown(uint64 until);
     error ForceTargetRefused(bytes32 account);
+    /// @notice `forceTransfer(…, 0)` (F-08); `operatorTransfer` takes it too (T32). Not in spec §3.1's list (plan T28).
+    error AmountZero();
+    /// @notice `unpause` while not paused (spec §3.4 "unpause: paused"). Not in spec §3.1's list (plan T28).
+    error NotPaused();
 
     /// @notice Bit 5, issuer (T1, T2, T4 of spec §3.3).
     function freeze(bytes32 account, bytes32 ref, bytes32 recordId) external;

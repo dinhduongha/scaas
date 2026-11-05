@@ -16,6 +16,7 @@ import {NormalZetherToken} from "../../src/zether/NormalZetherToken.sol";
 import {WrappedZetherToken} from "../../src/zether/WrappedZetherToken.sol";
 import {WrappedPqzToken} from "../../src/pqz/WrappedPqzToken.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
+import {IRegulatedToken} from "../../src/regulated/IRegulatedToken.sol";
 import {nid} from "../helpers/Ids.sol";
 import {Catalogue, pqzEnv} from "../helpers/Catalogue.sol";
 import {UID_, normalInit} from "../v2/helpers/V2Fixture.sol";
@@ -50,6 +51,8 @@ abstract contract RegRows is Test {
         c.reg = none;
         address t = f.createToken(kind, 1, abi.encode(c), "ok");
         assertEq(MetaTokenBase(t).kind(), uint8(kind));
+        // plan T28 (M-10): a plain kind 0-5 does not answer `IRegulatedToken`
+        assertFalse(MetaTokenBase(t).supportsInterface(type(IRegulatedToken).interfaceId), "IRegulatedToken on a plain kind");
     }
 
     /// The kind byte `init` wrote in `scaas.token` (creator 20 B, version 8 B, then kind).

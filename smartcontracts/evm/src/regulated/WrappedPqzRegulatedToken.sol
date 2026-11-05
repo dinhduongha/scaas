@@ -18,7 +18,7 @@ import {RegulatedBase} from "./RegulatedBase.sol";
 
 /// @title Kind `WRAPPED_PQZ_REGULATED` (13, CTR-GOV-16, CTR-GOV-17, regulated-kinds spec §2.1, §4.2): `WrappedPqzToken` with
 ///        the regulated layer; the tight one under the 64,512 B stop line (owner 2026-11-06).
-/// @notice **UNAUDITED.** Skeleton (plan T27): creation reverts `RegulatedNotBuilt` until T28. The PQZ seats
+/// @notice **UNAUDITED.** Measured first (plan T27); `RegulatedBase`'s controls built (T28). The PQZ seats
 ///         (`_regSender(fromUA)`, the `shieldIn` payer, the beneficiary, the unshield recipient) reach `RegulatedBase`'s
 ///         hooks through `PqzLayer` and `WrappedPqzToken`; the refresh and the roll-over take none (U1, U2). `ALLOWLIST` (8)
 ///         is outside the kind's mask (CTR-GOV-17).

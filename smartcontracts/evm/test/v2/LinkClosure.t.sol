@@ -108,10 +108,10 @@ contract LinkClosureTest is Test {
             f.envOf(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1));
         _assertEnvIsClosure("DeployBase DEX", "SCaaSDex", f.dexEnvOf(1));
 
-        // plan T27: the regulated kinds 9 and 13 (their base kind's closure and `RegulatedLib`)
+        // plan T27: the regulated kinds 9 and 13 (their base kind's closure and `RegulatedLib`); T28: kind 8
         string[14] memory impls = ["NormalToken", "WrappedToken", "NormalZetherToken",
-            "WrappedZetherToken", "NormalPqzToken", "WrappedPqzToken", "", "", "", "WrappedRegulatedToken", "", "", "",
-            "WrappedPqzRegulatedToken"];
+            "WrappedZetherToken", "NormalPqzToken", "WrappedPqzToken", "", "", "NormalRegulatedToken", "WrappedRegulatedToken",
+            "", "", "", "WrappedPqzRegulatedToken"];
         for (uint8 k; k < 14; ++k) {
             if (bytes(impls[k]).length == 0) continue;
             IFactoryToken.Env memory e;
@@ -155,8 +155,9 @@ contract LinkClosureTest is Test {
     /// R6: over every library of every closure, PUSH data skipped, from the start to the last `INVALID` (solc puts its
     /// trailing data and the CBOR metadata after it): no SELFDESTRUCT (0xff), no CALLCODE (0xf2); DELEGATECALL (0xf4)
     /// only in `MtxPipelineLib` (exactly 2, -> `HederaLib`), in `WrappedLib` (exactly 1, -> `GovernanceLib`, its own link
-    /// reference), in `ZetherWrappedLib` (exactly 2, -> `WrappedLib`, `ZetherLib`, its init: size lever 1, owner 2026-11-01)
-    /// and in `PqzWrappedLib` (exactly 2, -> `WrappedLib`, `PqzStateLib`, the same).
+    /// reference), in `ZetherWrappedLib` (exactly 2, -> `WrappedLib`, `ZetherLib`, its init: size lever 1, owner 2026-11-01),
+    /// in `PqzWrappedLib` (exactly 2, -> `WrappedLib`, `PqzStateLib`, the same) and in `RegulatedLib` (exactly 1, ->
+    /// `GovernanceLib.useLimited`, plan T28).
     function test_libraryOpcodes() public view {
         for (uint256 n; n < names.length; ++n) {
             string memory name = names[n];
@@ -165,9 +166,11 @@ contract LinkClosureTest is Test {
             assertFalse(destruct, string.concat(name, ": SELFDESTRUCT"));
             assertFalse(callcode, string.concat(name, ": CALLCODE"));
             bytes32 h = keccak256(bytes(name));
-            // WrappedLib: `GovernanceLib.init` and, since B-26, `GovernanceUse.use`'s one call to `useLimited` (1 -> 2)
+            // WrappedLib: `GovernanceLib.init` and, since B-26, `GovernanceUse.use`'s one call to `useLimited` (1 -> 2).
+            // RegulatedLib: plan T28's bodies inline `GovernanceUse.use`, whose one call to `GovernanceLib.useLimited` is
+            // its only DELEGATECALL (0 -> 1; its link reference, already in every regulated kind's closure)
             uint256 want = h == keccak256("MtxPipelineLib") || h == keccak256("ZetherWrappedLib") || h == keccak256("PqzWrappedLib")
-                || h == keccak256("WrappedLib") ? 2 : 0;
+                || h == keccak256("WrappedLib") ? 2 : h == keccak256("RegulatedLib") ? 1 : 0;
             assertEq(delegates, want, string.concat(name, ": DELEGATECALL count"));
         }
     }
