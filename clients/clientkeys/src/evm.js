@@ -418,7 +418,13 @@ function canonical(type, v, types) {
     if (b.length !== Number(fixed[1])) refuse(`a ${type} is ${fixed[1]} bytes`);
     return hex(b);
   }
-  const bits = Number(type.slice(4));
+  if (type === 'string') {
+    if (v !== undefined && typeof v !== 'string') refuse(`${v} is not a string`);
+    return v ?? '';
+  }
+  const uintN = /^uint(\d+)$/.exec(type);
+  if (!uintN) refuse(`${type} is not a supported field type`);
+  const bits = Number(uintN[1]);
   const numeric = typeof v !== 'object' && /^(0x[0-9a-fA-F]+|[0-9]+)$/.test(String(v));
   if (v != null && !numeric) refuse(`${v} is not a ${type}`);
   const n = BigInt(v ?? 0);
