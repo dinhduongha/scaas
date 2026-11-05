@@ -31,6 +31,14 @@ Fable P2 as rules or plan tasks; P3 as notes. **F-01 decided (owner 2026-11-05):
 contract for the contract-only bits 5–7, 10, 21, on every family
 ([CTR-AS-03 Change](../../decisions.md#ctr-as-03--issuer-and-compliance-roles-renouncing-relaxes)).
 
+**Owner 2026-11-05, the five calls of the revision, accepted:**
+1. The DEX relayer share is an ordinary credit: a frozen relayer still receives it; CTR-AS-05's "relayer fee" is read as the
+   token's own fee legs (§3.2, RK-6).
+2. A frozen payee cannot pay a receiver fee (`mtxPayReceiverFee` refuses); the payer uses `mtxPay` (§3.2).
+3. The pause-open set requires fee mode `NONE`: a percent fee that computes to zero stays paused (§3.2, RK-7).
+4. `mtxCancelNonce` goes through `_regPre` and `_regFeeTo` with no exception (§2.2, RK-8, F-18, F-32).
+5. The `ComplianceRegistry` admin lives in storage, written once by the constructor (§5).
+
 ## 1. Scope and non-goals — SPECIFIED
 
 **In scope (EVM, Hedera for kinds 8 and 9):**
