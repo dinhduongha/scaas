@@ -376,3 +376,59 @@ test('msig rows: minimal sets signed at both levels, non-minimal and unsorted se
     else assert.equal(hex(call()), m.memberSigs, m.case);
   }
 });
+
+test('chain separation (owner 2026-11-05): one message and one key on 7622 and 22776, other digests and signatures, no cross-chain verify', () => {
+  const C = S.chainSeparation;
+  assert.ok(C, 'sign.json chainSeparation');
+  const key = U.deriveUAKey(seeds()[C.key.mnemonic], { kind: C.key.kind, account: C.key.account, index: C.key.index });
+  const metatx = ua.purposeTag('metatx');
+  assert.deepEqual(C.typed.map((r) => r.chainId), [7622, 22776]);
+  for (const r of C.typed) {
+    assert.equal(Number(r.td.domain.chainId), r.chainId);
+    const digest = evm.hashTypedData(r.td);
+    assert.equal(hex(digest), r.digest);
+    assert.equal(hex(ua.uaMessage(key.kind, metatx, digest)), r.uaMsg);
+    assert.equal(hex(key.signUA(metatx, digest)), r.signature, 'deterministic 0x0108');
+    assert.ok(kindVerify(key.kind, hex(key.keyData), r.uaMsg, r.signature));
+  }
+  const [t1, t2] = C.typed;
+  assert.notEqual(t1.digest, t2.digest);
+  assert.notEqual(t1.signature, t2.signature);
+  // the two typed data differ in chainId alone
+  assert.deepEqual({ ...t1.td, domain: { ...t1.td.domain, chainId: 0 } }, { ...t2.td, domain: { ...t2.td.domain, chainId: 0 } });
+  const evmKey = seedjs.deriveKey(seeds()[C.key.mnemonic], 'evm', C.key.evm.index);
+  assert.equal(evmKey.address, C.key.evm.address);
+  const pub = B(evmKey.publicKey);
+  const txOk = (r, h) => secp256k1.verify(concatBytes(B(r.r), B(r.s)), B(h), pub, { prehash: false, lowS: true });
+  assert.deepEqual(C.tx.map((r) => [r.type, r.chainId]), [[0, 7622], [0, 22776], [2, 7622], [2, 22776]]);
+  for (const r of C.tx) {
+    assert.equal(r.tx.chainId, String(r.chainId));
+    assert.equal(hex(evm.evmTransaction(r.tx).sighash), r.sighash);
+    assert.equal(hex(seedjs.signTransaction(evmKey, r.tx).raw), r.raw);
+    assert.ok(txOk(r, r.sighash));
+  }
+  for (const type of [0, 2]) {
+    const [a, b] = C.tx.filter((r) => r.type === type);
+    assert.notEqual(a.sighash, b.sighash);
+    assert.notEqual(a.r + a.s, b.r + b.s);
+  }
+  assert.equal(C.refusals.length, 6);
+  for (const x of C.refusals) {
+    if (x.what === 'typed') {
+      const [p, q] = [C.typed.find((r) => r.chainId === x.signedFor), C.typed.find((r) => r.chainId === x.checkedAgainst)];
+      assert.ok(!kindVerify(key.kind, hex(key.keyData), q.uaMsg, p.signature), JSON.stringify(x));
+    } else {
+      const of = (c) => C.tx.find((r) => r.type === x.type && r.chainId === c);
+      assert.ok(!txOk(of(x.signedFor), of(x.checkedAgainst).sighash), JSON.stringify(x));
+    }
+  }
+  const [p] = C.portable;
+  assert.deepEqual(p.chains, [7622, 22776]);
+  assert.ok(!('chainId' in p.td.domain) && !('verifyingContract' in p.td.domain));
+  assert.deepEqual(p.td.domain, ua.PORTABLE_DOMAIN);
+  assert.equal(hex(evm.hashTypedData(p.td)), p.digest);
+  const m = ua.membershipMessage({ ua: B(p.td.message.ua), member: key.ua });
+  assert.equal(hex(m.digest), p.digest, 'the builder takes no chain: one digest for every chain');
+  assert.equal(hex(m.message), p.uaMsg);
+  assert.equal(hex(key.signMember(B(p.td.message.ua), m.message)), p.signature);
+});

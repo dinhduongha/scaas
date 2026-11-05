@@ -2,7 +2,8 @@
 // Generates smartcontracts/vectors/ua/keys.json and sign.json (ua-rs-sign T1a, spec §11, plan MD-7): the UA keys of src/uakey.js
 // and the native keys of src/seed.js per mnemonic, kind, account and index, with the refusals; the UA signatures, member
 // signatures, BLS roles, the scaas Schnorr nonce-map rows, typed-data rows (generic hasher, canonical builders), the signing
-// policy (src/evm.js check*), EVM transactions of types 0-3 and the EIP-155 example, WebAuthn assertions and msig member sets.
+// policy (src/evm.js check*), EVM transactions of types 0-3 and the EIP-155 example, WebAuthn assertions, msig member sets and the
+// chain-separation rows (7622 / 22776, owner 2026-11-05).
 // Randomness: a fixed SHAKE256 stream per label, so the files do not move between runs; a row with `compare: "verify"` is a
 // randomized signature (its randomness is not given), checked by verification only. test/ua-wallet.test.js reads every row
 // back; clients/ua-rs is held to them (T2-T6).
@@ -11,6 +12,7 @@ import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { p256 } from '@noble/curves/nist.js';
+import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { bn254 } from '@noble/curves/bn254.js';
 import { bls12_381 } from '@noble/curves/bls12-381.js';
 import { sha256 } from '@noble/hashes/sha2.js';
@@ -441,6 +443,58 @@ const txRefusals = [
   return { id, tx };
 });
 
+// --- chain separation (owner 2026-11-05): one message, one key, SCaaS testnet 7622 and SCaaS mainnet 22776 ---
+// A domain with chainId (a token's UAMetaTransfer) and an EIP-155 transaction differ per chain: other digests, other signatures,
+// and a signature for one chain does not verify against the other's digest. A portable record (domain without chainId) is the
+// same on both chains.
+const CHAINS = [7622, 22776];
+const sepKey = keyOf(ref('pq_kat', 0x0108));
+const METATX = ua.purposeTag('metatx');
+const sepTyped = CHAINS.map((chainId) => {
+  const td = JSON.parse(JSON.stringify(evm.uaMetaTransferTypedData({ ...domainOf, chainId, message: uaMeta })));
+  const digest = evm.hashTypedData(td);
+  const uaMsg = ua.uaMessage(0x0108, METATX, digest);
+  const signature = sepKey.signUA(METATX, digest);
+  must(verify(0x0108, hex(sepKey.keyData), hex(uaMsg), hex(signature)), `chain ${chainId}: typed verifies`);
+  return { chainId, td, digest: hex(digest), uaMsg: hex(uaMsg), signature: hex(signature) };
+});
+const sepTx = [txs[0], txs[3]].flatMap((base) => CHAINS.map((chainId) => {
+  const tx = { ...base, chainId: String(chainId) };
+  const t = evm.evmTransaction(tx);
+  const s = signTransaction(evmKey, tx);
+  return { type: tx.type, chainId, tx, sighash: hex(t.sighash), yParity: s.yParity, r: hex(s.r), s: hex(s.s),
+    ...(s.v !== undefined ? { v: s.v } : {}), raw: hex(s.raw) };
+}));
+const evmPub = fromHex(evmKey.publicKey);
+const txSigOk = (row, sighash) => secp256k1.verify(concatBytes(fromHex(row.r), fromHex(row.s)), fromHex(sighash), evmPub, { prehash: false, lowS: true });
+const sepRefusals = [];
+for (const [a, b] of [[0, 1], [1, 0]]) {
+  const [x, y] = [sepTyped[a], sepTyped[b]];
+  must(x.digest !== y.digest && x.signature !== y.signature, 'typed pair differs');
+  must(!verify(0x0108, hex(sepKey.keyData), y.uaMsg, x.signature), 'typed cross-chain refused');
+  sepRefusals.push({ what: 'typed', signedFor: x.chainId, checkedAgainst: y.chainId });
+}
+for (const type of [0, 2]) {
+  const [x, y] = sepTx.filter((r) => r.type === type);
+  must(x.sighash !== y.sighash && x.r + x.s !== y.r + y.s && txSigOk(x, x.sighash) && txSigOk(y, y.sighash), `tx type ${type} pair`);
+  for (const [p, q] of [[x, y], [y, x]]) {
+    must(!txSigOk(p, q.sighash), `tx type ${type} cross-chain refused`);
+    sepRefusals.push({ what: 'tx', type, signedFor: p.chainId, checkedAgainst: q.chainId });
+  }
+}
+const SEP_MSIG = keccak_256(utf8ToBytes('scaas.ua-rs-sign.chain-separation.msig'));
+const sepPortable = (() => {
+  const m = ua.membershipMessage({ ua: SEP_MSIG, member: sepKey.ua });
+  const digest = hex(evm.hashTypedData(m.typedData));
+  must(digest === hex(m.digest) && !('chainId' in m.typedData.domain), 'portable digest');
+  return { id: 'portable-membership', chains: CHAINS, td: m.typedData, digest, uaMsg: hex(m.message),
+    signature: hex(sepKey.signMember(SEP_MSIG, m.message)),
+    note: 'UAMembership in the portable domain (no chainId, no verifyingContract): one digest and one signature for every chain; '
+      + 'signed by the derived member 0x0108 as acceptMembership checks it (signMember over the structure\'s ua_msg)' };
+})();
+const chainSeparation = { key: { mnemonic: 'pq_kat', kind: 0x0108, account: 0, index: 0, evm: { network: 'evm', index: 0, address: evmKey.address } },
+  typed: sepTyped, tx: sepTx, refusals: sepRefusals, portable: [sepPortable] };
+
 // --- WebAuthn assertions (spec §5.6) ---
 const RP_ID = 'scaas.example';
 const ORIGIN = 'https://scaas.example';
@@ -534,7 +588,11 @@ const sign = {
     + 'typed: generic = the faithful EIP-712 hasher (missing field = zero, unknown field refused, int two\'s complement, T[k]); '
     + 'canon = the SCaaS builders, whose unbound relayer / feeRecipient hash as zero (nested too); policy = expectDigest(td, '
     + 'expect) over the check* functions. tx: evmTransaction types 0-3 (no type 4), signTransaction. webauthn: webauthnAssertion '
-    + 'against the expected challenge. msig: msigMemberSigs, minimal at both levels.',
+    + 'against the expected challenge. msig: msigMemberSigs, minimal at both levels. chainSeparation (owner 2026-11-05): one message and '
+    + 'one key on chain 7622 (SCaaS testnet) and 22776 (SCaaS mainnet): a UAMetaTransfer in a token domain with chainId (UA key 0x0108, '
+    + 'signUA metatx) and EIP-155 transactions of types 0 and 2 (the EVM key) give other digests and signatures per chain; refusals: a '
+    + 'signature for one chain does not verify against the other\'s digest; portable: a record in the portable domain (no chainId) '
+    + 'is one digest and one signature on both.',
   ua: uaSigRows,
   member: memberRows,
   refusals: signRefusals,
@@ -544,6 +602,7 @@ const sign = {
   tx: { rows: txRows, published: [eip155], refusals: txRefusals },
   webauthn: { accepted: webauthnAccepted, refusals: waRefusals },
   msig: msigCases,
+  chainSeparation,
 };
 
 mkdirSync(OUT, { recursive: true });

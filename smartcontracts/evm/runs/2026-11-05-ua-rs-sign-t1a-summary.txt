@@ -18,3 +18,7 @@ forge | - | not run | no file forge reads changed: keys.json and sign.json are n
 purpose 22776': ua-wallet-vectors.mjs twice into scratch dirs, cmp with each other and the committed files | (this commit) | 0 | keys.json, sign.json identical
 purpose 22776': clientkeys npm test | (this commit) | 0 | 264 tests, 262 pass, 0 fail, 2 skipped
 purpose 22776': mutants 1 17 (derivation and paths) | (this commit) | 0 | 17 killed, 0 survived, 0 not loaded
+# Owner ruling 2026-11-05: chain-separation rows in sign.json (chainSeparation: typed 2, tx 4, refusals 6, portable 1).
+chain separation red: node --test test/ua-wallet.test.js (tests only) | d3da6721 | 1 | 1 failed (the new test), 23 passed
+chain separation: ua-wallet-vectors.mjs twice into scratch dirs | (this commit) | 0 | keys.json, sign.json identical; keys.json unchanged
+chain separation: clientkeys npm test | (this commit) | 0 | 265 tests, 263 pass, 0 fail, 2 skipped
