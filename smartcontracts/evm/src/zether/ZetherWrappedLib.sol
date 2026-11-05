@@ -24,10 +24,8 @@ import {IUARegistry} from "../ua/IUARegistry.sol";
 library ZetherWrappedLib {
     uint8 private constant ABSOLUTE = MtxPipelineLib.FEE_CLASS_ABSOLUTE;
     uint8 private constant AMOUNT = MtxPipelineLib.FEE_CLASS_AMOUNT;
-    /// @dev Moved from `WrappedZetherToken` (CTR-ZTH-94), unchanged.
-    bytes32 private constant UNSHIELD_UNWRAP_TYPEHASH = keccak256(
-        "ZetherUnshieldUnwrap(address from,ZetherBurn args,Unwrap unwrap,bytes proof,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)G1(bytes32 x0,bytes32 x1,bytes32 y0,bytes32 y1)Unwrap(address underlying,bytes32 recipient,uint256 amount,uint256 minOut)ZetherBurn(uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes32 beneficiaryUA,G1 yFrom)"
-    );
+    /// @dev Moved from `WrappedZetherToken` (CTR-ZTH-94), unchanged; the address `ZetherUnshieldUnwrap` is in
+    ///      legacy/ua-mtx-merge/ (R35).
     bytes32 private constant UA_UNSHIELD_UNWRAP_TYPEHASH = keccak256(
         "UAZetherUnshieldUnwrap(bytes32 from,ZetherBurn args,Unwrap unwrap,bytes proof,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)G1(bytes32 x0,bytes32 x1,bytes32 y0,bytes32 y1)Unwrap(address underlying,bytes32 recipient,uint256 amount,uint256 minOut)ZetherBurn(uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes32 beneficiaryUA,G1 yFrom)"
     );
@@ -82,15 +80,8 @@ library ZetherWrappedLib {
         return ZetherLib.unshieldWith(b, proof, x.amount, x.recipient, env);
     }
 
-    /// @notice What the signed `mtxUnshieldUnwrap` signs and runs (as `ZetherLib.multiCall`): the `Unwrap` leg a nested
+    /// @notice What the signed `mtxUnshieldUnwrap` signs and runs (as `ZetherLib.uaMultiCall`): the `Unwrap` leg a nested
     ///         struct.
-    function unwrapCall(MetaTxLib.Envelope calldata, IZetherToken.ZetherBurn calldata b,
-        IConfidentialWrappedToken.Unwrap calldata x, bytes calldata proof, bytes calldata)
-        public pure returns (bytes32, bytes memory, bytes memory)
-    {
-        return (UNSHIELD_UNWRAP_TYPEHASH, _unwrapWords(b, x, proof), _unwrapOp(b, x, proof));
-    }
-
     function uaUnwrapCall(MetaTxLib.UAEnvelope calldata, IZetherToken.ZetherBurn calldata b,
         IConfidentialWrappedToken.Unwrap calldata x, bytes calldata proof, IUARegistry.UASig calldata)
         public pure returns (bytes32, bytes memory, bytes memory)

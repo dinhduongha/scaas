@@ -327,7 +327,7 @@ contract ZetherWrappedTest is ZetherFixture {
             mode: MetaTxLib.MODE_RESTRICT_RELAYER | MetaTxLib.MODE_FEE_FIXED, relayer: relayer, fee: 9,
             feeRecipient: address(0)
         });
-        (bytes memory pl, bytes memory pr) = _unwrapProof(10, 30, address(0xB0C), address(usd), 0, w.envelopeBinding(m));
+        (bytes memory pl, bytes memory pr) = _unwrapProof(10, 30, address(0xB0C), address(usd), 0, _addrBinding(ZetherLayer(address(w)), m));
         m.data = abi.encodeCall(IZetherWrappedToken.mtxUnshieldUnwrap, (_zBurn(pl, _none()), IConfidentialWrappedToken.Unwrap(address(usd), bytes32(uint256(uint160(address(0xB0C)))), 10, 0), pr));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(PAYER_PK, MtxDigest.metaTx(address(w), m));
         bytes memory sig = abi.encodePacked(r, s, v);
@@ -651,7 +651,7 @@ contract ZetherWrappedTest is ZetherFixture {
         for (uint256 i; i < s.length; ++i) {
             // the owner-signed pair has its own relayed tests (ZetherUA5c)
             if (s[i] == IZetherToken.mtxRollOverSigned.selector || s[i] == IZetherToken.mtxSetRollOverMode.selector) continue;
-            bytes memory data = _k3Call(s[i], bal, w.envelopeBinding(_envOf(300 + i)));
+            bytes memory data = _k3Call(s[i], bal, _addrBinding(ZetherLayer(address(w)), _envOf(300 + i)));
             uint256 sc = w.accountState(alice.ua).sendCounter;
             bool single = s[i] == bytes4(keccak256("wrap(uint256)")) || s[i] == bytes4(keccak256("unwrap(uint256,address,uint256)"));
             bytes memory err = single ? abi.encodeWithSelector(IWrappedToken.UnderlyingRequired.selector) : bytes("");
@@ -753,7 +753,7 @@ contract ZetherWrappedTest is ZetherFixture {
             from: b, data: "", batch: 1, nonce: 0, validUntil: block.timestamp + 300,
             mode: MetaTxLib.MODE_RESTRICT_RELAYER, relayer: relayer, fee: 0, feeRecipient: address(0)
         });
-        (bytes memory pl, bytes memory pr) = _uaUnwrapProof(w, 10, 30, bytes32(uint256(0xD00D)), address(usd), w.uaEnvelopeBinding(m));
+        (bytes memory pl, bytes memory pr) = _uaUnwrapProof(w, 10, 30, bytes32(uint256(0xD00D)), address(usd), w.envelopeBinding(m));
         m.data = abi.encodeCall(IZetherWrappedToken.mtxUnshieldUnwrap, (_zBurn(pl, _none()), IConfidentialWrappedToken.Unwrap(address(usd), bytes32(uint256(0xD00D)), 10, 0), pr));
         bytes memory au = _bobAuth(m);
         vm.prank(relayer);

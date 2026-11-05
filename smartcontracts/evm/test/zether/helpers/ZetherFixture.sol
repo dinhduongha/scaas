@@ -26,6 +26,7 @@ import {ZetherKeys} from "./ZetherKeys.sol";
 import {Catalogue, zetherEnv} from "../../helpers/Catalogue.sol";
 import {ZetherVerifierBase} from "../../../src/zether/ZetherVerifier.sol";
 import {IUARegistry} from "../../../src/ua/IUARegistry.sol";
+import {MetaTxLib} from "../../../src/common/MetaTxLib.sol";
 import {UACall} from "../../ua/UACall.sol";
 import {IConfidentialToken} from "../../../src/confidential/IConfidentialToken.sol";
 import {nid} from "../../helpers/Ids.sol";
@@ -504,6 +505,16 @@ abstract contract ZetherFixture is Test {
         pre = bytes.concat(pre, ver.g1MulBase(1), ver.g1MulBase(x), base);
         pre = bytes.concat(pre, ver.g1Add(ver.g1MulBase(amount), ver.g1Mul(base, x)));
         return ZetherTranscript.hashToScalar(keccak256(bytes.concat(pre, a1, a2)), ver.groupOrder());
+    }
+
+    /// @dev `executeMetaTransaction`'s binding (CTR-ZTH-06: `SCAAS-ZETHER-ENVELOPE-V1` over the address `MetaTransaction`),
+    ///      as a client computes it: the token has no view of it since ua-mtx-merge T4 (R35; its `envelopeBinding` is
+    ///      the UA one of the merged entries).
+    function _addrBinding(ZetherLayer t, MetaTxLib.MetaTransaction memory m) internal view returns (bytes32) {
+        (address r, address f) = MetaTxLib.canon(m);
+        return keccak256(bytes.concat(
+            abi.encode(keccak256("SCAAS-ZETHER-ENVELOPE-V1"), block.chainid, t.chainUid(), address(t), m.from, m.batch),
+            abi.encode(m.nonce, m.validUntil, m.mode, r, m.fee, f)));
     }
 
     function _none() internal pure returns (ZetherTypes.UA) {

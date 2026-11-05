@@ -118,18 +118,10 @@ contract WrappedZetherToken is WrappedToken, ZetherLayer, IZetherWrappedToken {
         WrappedLib.payOutTo(i, x.recipient, wrapped, x.minOut);
     }
 
-    /// @notice The signed form, the `Unwrap` leg a nested struct; `ZetherWrappedLib` builds the struct's words and the op's
-    ///         call from this call's own arguments (CTR-ZTH-94).
-    function mtxUnshieldUnwrap(MetaTxLib.Envelope calldata e, ZetherBurn calldata b, Unwrap calldata x, bytes calldata proof,
-        bytes calldata sig) external nonReentrant returns (bytes memory)
-    {
-        (b, x, proof);
-        (bytes32 th, bytes memory words, bytes memory data) =
-            _built(address(ZetherWrappedLib), ZetherWrappedLib.unwrapCall.selector, false);
-        return _namedCall(th, e, words, data, sig);
-    }
-
-    function uaUnshieldUnwrap(MetaTxLib.UAEnvelope calldata e, ZetherBurn calldata b, Unwrap calldata x, bytes calldata proof,
+    /// @notice The signed form over `UAZetherUnshieldUnwrap` (R35: native and derived ids), the `Unwrap` leg a nested
+    ///         struct; `ZetherWrappedLib` builds the struct's words and the op's call from this call's own arguments
+    ///         (CTR-ZTH-94).
+    function mtxUnshieldUnwrap(MetaTxLib.UAEnvelope calldata e, ZetherBurn calldata b, Unwrap calldata x, bytes calldata proof,
         IUARegistry.UASig calldata auth) external nonReentrant returns (bytes memory)
     {
         (b, x, proof);

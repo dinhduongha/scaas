@@ -145,12 +145,23 @@ abstract contract ZetherNamedBase is ZetherFixture {
         u.fee = fee;
     }
 
+    /// The address binding of `e` (`executeMetaTransaction`'s, CTR-ZTH-06), as a client computes it.
     function _bindingOf(ZetherLayer t, MetaTxLib.Envelope memory e) internal view returns (bytes32) {
-        return t.envelopeBinding(MetaTxLib.MetaTransaction(e.from, "", e.batch, e.nonce, e.validUntil, e.mode, e.relayer, e.fee, e.feeRecipient));
+        return _addrBinding(t, MetaTxLib.MetaTransaction(e.from, "", e.batch, e.nonce, e.validUntil, e.mode, e.relayer, e.fee, e.feeRecipient));
     }
 
     function _uaBindingOf(ZetherLayer t, MetaTxLib.UAEnvelope memory u) internal view returns (bytes32) {
-        return t.uaEnvelopeBinding(MetaTxLib.UAMetaTransaction(u.from, "", u.batch, u.nonce, u.validUntil, u.mode, u.relayer, u.fee, u.feeRecipient));
+        return t.envelopeBinding(MetaTxLib.UAMetaTransaction(u.from, "", u.batch, u.nonce, u.validUntil, u.mode, u.relayer, u.fee, u.feeRecipient));
+    }
+
+    /// ua-mtx-merge T4 (R35): the payer EOA's envelope on a merged entry, its id padded; it signs the entry's `UA*` struct
+    /// by its own key (`_eoa`), its proof bound to the UA tag.
+    function _nEnv(uint256 nonce, uint256 fee) internal view returns (MetaTxLib.UAEnvelope memory) {
+        return _uaEnv(MetaTxLib.pad(payer), nonce, fee);
+    }
+
+    function _eoa(bytes32 digest) internal pure returns (IUARegistry.UASig memory s) {
+        s.signature = ecdsa(PAYER_PK, digest);
     }
 
     /// The message's fields around the op's own, the op's first (`from`, op, `E`).
@@ -197,10 +208,10 @@ contract ZetherTypedTest is ZetherNamedBase {
 
     function test_zetherNamedShield() public {
         _public(tok, payer, 15 * SCALE);
-        MetaTxLib.Envelope memory e = _env(0, 2);
+        MetaTxLib.UAEnvelope memory e = _nEnv(0, 2);
         string memory op = string.concat('"toUA":', h(bId), ',"amount":', n(10));
-        bytes memory sig = ecdsa(PAYER_PK, typedDigest(address(tok), "Shield",
-            '{"name":"from","type":"address"},{"name":"toUA","type":"bytes32"},{"name":"amount","type":"uint256"}', '', _msg(payer, op, e)));
+        IUARegistry.UASig memory sig = _eoa(typedDigest(address(tok), "UAShield",
+            '{"name":"from","type":"bytes32"},{"name":"toUA","type":"bytes32"},{"name":"amount","type":"uint256"}', '', _msg(e.from, op, e)));
         uint256 before = tok.balanceOf(payer);
         vm.prank(relayer);
         tok.mtxShield(e, bId, 10, sig);
@@ -209,7 +220,7 @@ contract ZetherTypedTest is ZetherNamedBase {
         assertEq(tok.totalShielded(), 510);
         assertEq(tok.mtxNonce(MetaTxLib.pad(payer), LANE), 1);
 
-        // the UA twin, its auth an explicit `UASig` (ua-mtx-merge T1, R47; it kept `bytes auth` at C0)
+        // a derived id on the same entry, its auth an explicit `UASig` (ua-mtx-merge T1, R47; it kept `bytes auth` at C0)
         vm.prank(payer);
         tok.transferToUA(aId, 5 * SCALE);
         MetaTxLib.UAEnvelope memory u = _uaEnv(aId, 0, 1);
@@ -217,23 +228,25 @@ contract ZetherTypedTest is ZetherNamedBase {
             '{"name":"from","type":"bytes32"},{"name":"toUA","type":"bytes32"},{"name":"amount","type":"uint256"}', '',
             _msg(aId, string.concat('"toUA":', h(bId), ',"amount":', n(5)), u));
         vm.prank(relayer);
-        tok.uaShield(u, bId, 5, UACall.auth(u.from, abi.encode(bytes(""), _uaAuth(alice, d).signature)));
+        tok.mtxShield(u, bId, 5, UACall.auth(u.from, abi.encode(bytes(""), _uaAuth(alice, d).signature)));
         assertEq(tok.totalShielded(), 515);
         assertEq(tok.mtxNonce(aId, LANE), 1);
     }
 
     // ------------------------------------------------------------------ transfer, the three forms and their twins
 
-    function _singleSig(MetaTxLib.Envelope memory e, IZetherToken.ZetherSingle memory t, bytes memory proof) internal view returns (bytes memory) {
-        return ecdsa(PAYER_PK, typedDigest(address(tok), "ZetherTransferSingle", _fields(false, "ZetherSingle", '{"name":"proof","type":"bytes"}'),
-            string.concat(',', T_G1, ',', T_SINGLE), _msg(payer, _argsMsg(singleJson(t), proof), e)));
+    function _singleSig(MetaTxLib.UAEnvelope memory e, IZetherToken.ZetherSingle memory t, bytes memory proof)
+        internal view returns (IUARegistry.UASig memory)
+    {
+        return _eoa(typedDigest(address(tok), "UAZetherTransferSingle", _fields(true, "ZetherSingle", '{"name":"proof","type":"bytes"}'),
+            string.concat(',', T_G1, ',', T_SINGLE), _msg(e.from, _argsMsg(singleJson(t), proof), e)));
     }
 
     function test_zetherTransferTyped_single() public {
-        MetaTxLib.Envelope memory e = _env(0, 3);
-        Tx memory x = _proveTransfer(tok, alice, bob, 100, 500, carol.ua, _bindingOf(tok, e));
+        MetaTxLib.UAEnvelope memory e = _nEnv(0, 3);
+        Tx memory x = _proveTransfer(tok, alice, bob, 100, 500, carol.ua, _uaBindingOf(tok, e));
         IZetherToken.ZetherSingle memory t = _zSingle(x.payload, carol.ua);
-        bytes memory sig = _singleSig(e, t, x.proof);
+        IUARegistry.UASig memory sig = _singleSig(e, t, x.proof);
         vm.prank(relayer);
         bytes32 ref = tok.mtxConfidentialTransferSingle(e, t, x.proof, sig);
         assertEq(ref, _ref(tok, alice, 0));
@@ -252,7 +265,7 @@ contract ZetherTypedTest is ZetherNamedBase {
         bytes32 d = typedDigest(address(tok), "UAZetherTransferSingle", _fields(true, "ZetherSingle", '{"name":"proof","type":"bytes"}'),
             string.concat(',', T_G1, ',', T_SINGLE), _msg(aId, _argsMsg(singleJson(t), x.proof), u));
         vm.prank(relayer);
-        assertEq(tok.uaConfidentialTransferSingle(u, t, x.proof, _uaAuth(alice, d)), _ref(tok, alice, 0));
+        assertEq(tok.mtxConfidentialTransferSingle(u, t, x.proof, _uaAuth(alice, d)), _ref(tok, alice, 0));
         assertTrue(_holds(tok, bob, 100, false));
         assertEq(tok.mtxNonce(aId, LANE), 1);
     }
@@ -274,9 +287,9 @@ contract ZetherTypedTest is ZetherNamedBase {
     }
 
     function test_zetherTransferTyped_bundle() public {
-        MetaTxLib.Envelope memory e = _env(0, 3);
-        (IZetherToken.ZetherMulti memory t, Tx memory x) = _multiArgs(ZetherTypes.TransferMode.BUNDLE, carol.ua, _bindingOf(tok, e));
-        bytes memory sig = ecdsa(PAYER_PK, _multiDigest("ZetherTransfer", false, _msg(payer, _argsMsg(multiJson(t), x.proof), e)));
+        MetaTxLib.UAEnvelope memory e = _nEnv(0, 3);
+        (IZetherToken.ZetherMulti memory t, Tx memory x) = _multiArgs(ZetherTypes.TransferMode.BUNDLE, carol.ua, _uaBindingOf(tok, e));
+        IUARegistry.UASig memory sig = _eoa(_multiDigest("UAZetherTransfer", true, _msg(e.from, _argsMsg(multiJson(t), x.proof), e)));
         vm.prank(relayer);
         bytes32 ref = tok.mtxConfidentialTransfer(e, t, x.proof, sig);
         assertEq(ref, _ref(tok, alice, 0));
@@ -285,10 +298,10 @@ contract ZetherTypedTest is ZetherNamedBase {
     }
 
     function test_zetherTransferTyped_compact() public {
-        MetaTxLib.Envelope memory e = _env(0, 3);
-        (IZetherToken.ZetherMulti memory t, Tx memory x) = _multiArgs(ZetherTypes.TransferMode.HASH, carol.ua, _bindingOf(tok, e));
+        MetaTxLib.UAEnvelope memory e = _nEnv(0, 3);
+        (IZetherToken.ZetherMulti memory t, Tx memory x) = _multiArgs(ZetherTypes.TransferMode.HASH, carol.ua, _uaBindingOf(tok, e));
         assertEq(t.sealedMemo.length, 1 + 40 * 2);
-        bytes memory sig = ecdsa(PAYER_PK, _multiDigest("ZetherTransferCompact", false, _msg(payer, _argsMsg(multiJson(t), x.proof), e)));
+        IUARegistry.UASig memory sig = _eoa(_multiDigest("UAZetherTransferCompact", true, _msg(e.from, _argsMsg(multiJson(t), x.proof), e)));
         vm.prank(relayer);
         bytes32 ref = tok.mtxConfidentialTransferCompact(e, t, x.proof, sig);
         assertEq(tok.transferMemo(ref), _memo(2));
@@ -299,7 +312,7 @@ contract ZetherTypedTest is ZetherNamedBase {
         (IZetherToken.ZetherMulti memory t, Tx memory x) = _multiArgs(ZetherTypes.TransferMode.BUNDLE, _none(), _uaBindingOf(tok, u));
         bytes32 d = _multiDigest("UAZetherTransfer", true, _msg(aId, _argsMsg(multiJson(t), x.proof), u));
         vm.prank(relayer);
-        assertEq(tok.uaConfidentialTransfer(u, t, x.proof, _uaAuth(alice, d)), _ref(tok, alice, 0));
+        assertEq(tok.mtxConfidentialTransfer(u, t, x.proof, _uaAuth(alice, d)), _ref(tok, alice, 0));
         assertTrue(_holds(tok, bob, 40, false));
     }
 
@@ -308,15 +321,15 @@ contract ZetherTypedTest is ZetherNamedBase {
         (IZetherToken.ZetherMulti memory t, Tx memory x) = _multiArgs(ZetherTypes.TransferMode.HASH, _none(), _uaBindingOf(tok, u));
         bytes32 d = _multiDigest("UAZetherTransferCompact", true, _msg(aId, _argsMsg(multiJson(t), x.proof), u));
         vm.prank(relayer);
-        bytes32 ref = tok.uaConfidentialTransferCompact(u, t, x.proof, _uaAuth(alice, d));
+        bytes32 ref = tok.mtxConfidentialTransferCompact(u, t, x.proof, _uaAuth(alice, d));
         assertEq(tok.transferMemo(ref), _memo(2));
     }
 
     /// A signature over one field set fails on another: a changed point, the proof, a form's name.
     function test_zetherTypedTamperRefused() public {
-        MetaTxLib.Envelope memory e = _env(0, 3);
-        (IZetherToken.ZetherMulti memory t, Tx memory x) = _multiArgs(ZetherTypes.TransferMode.BUNDLE, carol.ua, _bindingOf(tok, e));
-        bytes memory sig = ecdsa(PAYER_PK, _multiDigest("ZetherTransfer", false, _msg(payer, _argsMsg(multiJson(t), x.proof), e)));
+        MetaTxLib.UAEnvelope memory e = _nEnv(0, 3);
+        (IZetherToken.ZetherMulti memory t, Tx memory x) = _multiArgs(ZetherTypes.TransferMode.BUNDLE, carol.ua, _uaBindingOf(tok, e));
+        IUARegistry.UASig memory sig = _eoa(_multiDigest("UAZetherTransfer", true, _msg(e.from, _argsMsg(multiJson(t), x.proof), e)));
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         tok.mtxConfidentialTransferCompact(e, t, x.proof, sig);
         t.legs[1].cAud.x0 = bytes32(uint256(t.legs[1].cAud.x0) ^ 1);
@@ -331,11 +344,11 @@ contract ZetherTypedTest is ZetherNamedBase {
 
     /// TS-D14: a confidential op is `ABSOLUTE` on the named entry as on the generic path.
     function test_zetherNamedFeeClass() public {
-        MetaTxLib.Envelope memory e = _env(0, 3);
+        MetaTxLib.UAEnvelope memory e = _nEnv(0, 3);
         e.mode = MetaTxLib.MODE_FEE_PERCENT;
-        Tx memory x = _proveTransfer(tok, alice, bob, 100, 500, _none(), _bindingOf(tok, e));
+        Tx memory x = _proveTransfer(tok, alice, bob, 100, 500, _none(), _uaBindingOf(tok, e));
         IZetherToken.ZetherSingle memory t = _zSingle(x.payload, _none());
-        bytes memory sig = _singleSig(e, t, x.proof);
+        IUARegistry.UASig memory sig = _singleSig(e, t, x.proof);
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxFeeClass.selector, IZetherToken.mtxConfidentialTransferSingle.selector, e.mode));
         tok.mtxConfidentialTransferSingle(e, t, x.proof, sig);
     }
@@ -343,8 +356,8 @@ contract ZetherTypedTest is ZetherNamedBase {
     /// TAG_RELAYED with the named entry's envelope: the statement names it, a proof lifted out fails, the same envelope
     /// through the generic path shares the lane.
     function test_zetherEnvelopeBindingNamed() public {
-        MetaTxLib.Envelope memory e = _env(0, 3);
-        bytes32 b = _bindingOf(tok, e);
+        MetaTxLib.UAEnvelope memory e = _nEnv(0, 3);
+        bytes32 b = _uaBindingOf(tok, e);
         Tx memory x = _proveTransfer(tok, alice, bob, 100, 500, _none(), b);
         IZetherToken.ZetherSingle memory t = _zSingle(x.payload, _none());
         bytes memory st = stm.transferStatementSingle(address(tok), t, b);
@@ -356,15 +369,15 @@ contract ZetherTypedTest is ZetherNamedBase {
         }
         assertEq(tag, keccak256("ZTX_V1_RELAYED"));
         assertEq(word, b);
-        bytes memory sig = _singleSig(e, t, x.proof);
+        IUARegistry.UASig memory sig = _singleSig(e, t, x.proof);
 
         // lifted out of the envelope, the proof is not a direct one
         vm.expectRevert(IZetherToken.ProofRejected.selector);
         tok.mtxConfidentialTransferSingle(t, x.proof);
 
         // nor one of another envelope: a fee changed by the relayer is another signature and another binding
-        MetaTxLib.Envelope memory e2 = _env(0, 4);
-        bytes memory sig2 = _singleSig(e2, t, x.proof);
+        MetaTxLib.UAEnvelope memory e2 = _nEnv(0, 4);
+        IUARegistry.UASig memory sig2 = _singleSig(e2, t, x.proof);
         vm.expectRevert(IZetherToken.ProofRejected.selector);
         tok.mtxConfidentialTransferSingle(e2, t, x.proof, sig2);
 
@@ -372,7 +385,7 @@ contract ZetherTypedTest is ZetherNamedBase {
         tok.mtxConfidentialTransferSingle(e, t, x.proof, sig);
 
         // the same lane as `mtxExecute`: nonce 0 is gone for the generic form of the same envelope
-        MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction(e.from, abi.encodeCall(IZetherToken.mtxConfidentialTransferSingle, (t, x.proof)),
+        MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction(payer, abi.encodeCall(IZetherToken.mtxConfidentialTransferSingle, (t, x.proof)),
             e.batch, e.nonce, e.validUntil, e.mode, e.relayer, e.fee, e.feeRecipient);
         bytes memory generic = ecdsa(PAYER_PK, MtxDigest.metaTx(address(tok), m));
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
@@ -392,13 +405,13 @@ contract ZetherTypedTest is ZetherNamedBase {
         assertTrue(_holds(tok, alice, 500 - 60 - FEE, true));
 
         // named: `amount` and `recipient` flat in the entry and in the struct
-        MetaTxLib.Envelope memory e = _env(0, 3);
+        MetaTxLib.UAEnvelope memory e = _nEnv(0, 3);
         uint256 bal = 500 - 60 - FEE;
-        (pl, pr) = _proveUnshield(tok, alice, 30, bal, to, _none(), _bindingOf(tok, e));
+        (pl, pr) = _proveUnshield(tok, alice, 30, bal, to, _none(), _uaBindingOf(tok, e));
         b = _zBurn(pl, _none());
         string memory op = string.concat('"args":', burnJson(b), ',"amount":', n(30), ',"recipient":', h(rcpt), ',"proof":', hexJson(pr));
-        string memory f = string.concat(F_FROM, ',{"name":"args","type":"ZetherBurn"},{"name":"amount","type":"uint256"},{"name":"recipient","type":"bytes32"},{"name":"proof","type":"bytes"}');
-        bytes memory sig = ecdsa(PAYER_PK, typedDigest(address(tok), "ZetherUnshield", f, string.concat(',', T_G1, ',', T_BURN), _msg(payer, op, e)));
+        string memory f = string.concat(F_UA, ',{"name":"args","type":"ZetherBurn"},{"name":"amount","type":"uint256"},{"name":"recipient","type":"bytes32"},{"name":"proof","type":"bytes"}');
+        IUARegistry.UASig memory sig = _eoa(typedDigest(address(tok), "UAZetherUnshield", f, string.concat(',', T_G1, ',', T_BURN), _msg(e.from, op, e)));
         // the amount is signed: the same signature on another amount fails
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         tok.mtxUnshield(e, b, 31, rcpt, pr, sig);
@@ -406,7 +419,7 @@ contract ZetherTypedTest is ZetherNamedBase {
         tok.mtxUnshield(e, b, 30, rcpt, pr, sig);
         assertEq(tok.balanceOf(to), 90 * SCALE);
 
-        // the UA twin
+        // a derived id on the same entry
         bal -= 30;
         MetaTxLib.UAEnvelope memory u = _uaEnv(aId, 0, 1);
         (pl, pr) = _proveUnshield(tok, alice, 10, bal, to, _none(), _uaBindingOf(tok, u));
@@ -415,7 +428,7 @@ contract ZetherTypedTest is ZetherNamedBase {
         f = string.concat(F_UA, ',{"name":"args","type":"ZetherBurn"},{"name":"amount","type":"uint256"},{"name":"recipient","type":"bytes32"},{"name":"proof","type":"bytes"}');
         bytes32 d = typedDigest(address(tok), "UAZetherUnshield", f, string.concat(',', T_G1, ',', T_BURN), _msg(aId, op, u));
         vm.prank(relayer);
-        tok.uaUnshield(u, b, 10, rcpt, pr, _uaAuth(alice, d));
+        tok.mtxUnshield(u, b, 10, rcpt, pr, _uaAuth(alice, d));
         assertEq(tok.balanceOf(to), 100 * SCALE);
     }
 
@@ -478,12 +491,12 @@ contract ZetherTypedTest is ZetherNamedBase {
         other.mtxSetRollOverMode(alice.ua, ZetherTypes.RollOverMode.OWNER_ONLY, until, s);
     }
 
-    /// The named entry: `SetRollOverMode` under the outer signer, the owner's signature beside it; and the twin.
+    /// The named entry: `UASetRollOverMode` under the outer signer (an EOA, then a derived id), the owner's signature beside it.
     function test_zetherNamedSetRollOverMode() public {
         uint64 until = uint64(block.number + 10);
-        MetaTxLib.Envelope memory e = _env(0, 2);
+        MetaTxLib.UAEnvelope memory e = _nEnv(0, 2);
         IUARegistry.UASig memory s = _ownerSig(alice, _modeDigest(aId, 1, 0, until));
-        bytes memory sig = ecdsa(PAYER_PK, typedDigest(address(tok), "SetRollOverMode", string.concat(F_FROM, F_MODE), '', _msg(payer, _modeMsg(1, until), e)));
+        IUARegistry.UASig memory sig = _eoa(typedDigest(address(tok), "UASetRollOverMode", string.concat(F_UA, F_MODE), '', _msg(e.from, _modeMsg(1, until), e)));
         vm.prank(relayer);
         tok.mtxSetRollOverMode(e, alice.ua, ZetherTypes.RollOverMode.OWNER_ONLY, until, s, sig);
         assertEq(uint8(tok.accountState(alice.ua).mode), 1);
@@ -493,7 +506,7 @@ contract ZetherTypedTest is ZetherNamedBase {
         s = _ownerSig(alice, _modeDigest(aId, 0, 1, until));
         bytes32 d = typedDigest(address(tok), "UASetRollOverMode", string.concat(F_UA, F_MODE), '', _msg(aId, _modeMsg(0, until), u));
         vm.prank(relayer);
-        tok.uaSetRollOverMode(u, alice.ua, ZetherTypes.RollOverMode.PUBLIC, until, s, _uaAuth(alice, d));
+        tok.mtxSetRollOverMode(u, alice.ua, ZetherTypes.RollOverMode.PUBLIC, until, s, _uaAuth(alice, d));
         assertEq(uint8(tok.accountState(alice.ua).mode), 0);
     }
 
@@ -518,9 +531,9 @@ contract ZetherTypedTest is ZetherNamedBase {
         _fund(tok, alice, 20);
         uint64 seq = tok.accountState(alice.ua).pendingSeq;
         uint64 acc = tok.accountState(alice.ua).accSeq;
-        MetaTxLib.Envelope memory e = _env(0, 2);
+        MetaTxLib.UAEnvelope memory e = _nEnv(0, 2);
         IUARegistry.UASig memory s = _ownerSig(alice, _rollOverDigest(aId, acc, seq, until));
-        bytes memory sig = _rollEntrySig(e, seq, until);
+        IUARegistry.UASig memory sig = _rollEntrySig(e, seq, until);
         vm.prank(relayer);
         tok.mtxRollOverSigned(e, alice.ua, seq, until, s, sig);
         assertEq(tok.accountState(alice.ua).accSeq, acc + 1);
@@ -535,25 +548,25 @@ contract ZetherTypedTest is ZetherNamedBase {
         IUARegistry.UASig memory s = _ownerSig(alice, _rollOverDigest(aId, acc, seq, until));
         IUARegistry.UASig memory au = _rollEntryAuth(u, seq, until);
         vm.prank(relayer);
-        tok.uaRollOverSigned(u, alice.ua, seq, until, s, au);
+        tok.mtxRollOverSigned(u, alice.ua, seq, until, s, au);
         assertEq(tok.accountState(alice.ua).accSeq, acc + 1);
     }
 
-    function _rollEntrySig(MetaTxLib.Envelope memory e, uint64 seq, uint64 until) internal view returns (bytes memory) {
-        return ecdsa(PAYER_PK, typedDigest(address(tok), "RollOverSigned", string.concat(F_FROM, F_ROLL), '', _msg(payer, _rollMsg(seq, until), e)));
+    function _rollEntrySig(MetaTxLib.UAEnvelope memory e, uint64 seq, uint64 until) internal view returns (IUARegistry.UASig memory) {
+        return _eoa(typedDigest(address(tok), "UARollOverSigned", string.concat(F_UA, F_ROLL), '', _msg(e.from, _rollMsg(seq, until), e)));
     }
 
     function _rollEntryAuth(MetaTxLib.UAEnvelope memory u, uint64 seq, uint64 until) internal view returns (IUARegistry.UASig memory) {
         return _uaAuth(alice, typedDigest(address(tok), "UARollOverSigned", string.concat(F_UA, F_ROLL), '', _msg(aId, _rollMsg(seq, until), u)));
     }
 
-    /// The anonymous roll-overs: `RollOver`, `RollOverBatch` and their twins.
+    /// The anonymous roll-overs: `UARollOver`, `UARollOverBatch`, by an EOA then a derived id (R35).
     function test_zetherNamedRollOver() public {
         _fund(tok, alice, 20);
-        MetaTxLib.Envelope memory e = _env(0, 2);
+        MetaTxLib.UAEnvelope memory e = _nEnv(0, 2);
         string memory op = string.concat('"ua":', h(aId), ',"n":', n(1));
         string memory f = ',{"name":"ua","type":"bytes32"},{"name":"n","type":"uint256"}';
-        bytes memory sig = ecdsa(PAYER_PK, typedDigest(address(tok), "RollOver", string.concat(F_FROM, f), '', _msg(payer, op, e)));
+        IUARegistry.UASig memory sig = _eoa(typedDigest(address(tok), "UARollOver", string.concat(F_UA, f), '', _msg(e.from, op, e)));
         uint64 acc = tok.accountState(alice.ua).accSeq;
         vm.prank(relayer);
         tok.mtxRollOver(e, aId, 1, sig);
@@ -563,7 +576,7 @@ contract ZetherTypedTest is ZetherNamedBase {
         MetaTxLib.UAEnvelope memory u = _uaEnv(aId, 0, 1);
         bytes32 d = typedDigest(address(tok), "UARollOver", string.concat(F_UA, f), '', _msg(aId, op, u));
         vm.prank(relayer);
-        tok.uaRollOver(u, aId, 1, _uaAuth(alice, d));
+        tok.mtxRollOver(u, aId, 1, _uaAuth(alice, d));
         assertEq(tok.accountState(alice.ua).accSeq, acc + 2);
     }
 
@@ -572,9 +585,9 @@ contract ZetherTypedTest is ZetherNamedBase {
         ZetherTypes.UA[] memory uas = new ZetherTypes.UA[](1);
         uas[0] = alice.ua;
         uint64 acc = tok.accountState(alice.ua).accSeq;
-        MetaTxLib.Envelope memory e = _env(0, 2);
+        MetaTxLib.UAEnvelope memory e = _nEnv(0, 2);
         string memory op = string.concat('"uas":[', h(aId), ']');
-        bytes memory sig = ecdsa(PAYER_PK, typedDigest(address(tok), "RollOverBatch", string.concat(F_FROM, ',{"name":"uas","type":"bytes32[]"}'), '', _msg(payer, op, e)));
+        IUARegistry.UASig memory sig = _eoa(typedDigest(address(tok), "UARollOverBatch", string.concat(F_UA, ',{"name":"uas","type":"bytes32[]"}'), '', _msg(e.from, op, e)));
         vm.prank(relayer);
         tok.mtxRollOverBatch(e, uas, sig);
         assertEq(tok.accountState(alice.ua).accSeq, acc + 1);
@@ -583,7 +596,7 @@ contract ZetherTypedTest is ZetherNamedBase {
         MetaTxLib.UAEnvelope memory u = _uaEnv(aId, 0, 1);
         bytes32 d = typedDigest(address(tok), "UARollOverBatch", string.concat(F_UA, ',{"name":"uas","type":"bytes32[]"}'), '', _msg(aId, op, u));
         vm.prank(relayer);
-        tok.uaRollOverBatch(u, uas, _uaAuth(alice, d));
+        tok.mtxRollOverBatch(u, uas, _uaAuth(alice, d));
         assertEq(tok.accountState(alice.ua).accSeq, acc + 2);
     }
 
@@ -715,11 +728,11 @@ contract ZetherTypedWrappedTest is ZetherNamedBase {
 
     function test_zetherNamedUnshieldUnwrap() public {
         _shielded();
-        MetaTxLib.Envelope memory e = _env(0, 2);
+        MetaTxLib.UAEnvelope memory e = _nEnv(0, 2);
         IConfidentialWrappedToken.Unwrap memory x = _unwrapOf(30);
-        (IZetherToken.ZetherBurn memory b, bytes memory pr) = _unwrapProof(x, 300, _bindingOf(tok, e));
-        bytes memory sig = ecdsa(PAYER_PK, typedDigest(address(w), "ZetherUnshieldUnwrap", _unwrapFields(F_FROM),
-            string.concat(',', T_G1, ',', T_UNWRAP, ',', T_BURN), _msg(payer, _unwrapMsg(b, x, pr), e)));
+        (IZetherToken.ZetherBurn memory b, bytes memory pr) = _unwrapProof(x, 300, _uaBindingOf(tok, e));
+        IUARegistry.UASig memory sig = _eoa(typedDigest(address(w), "UAZetherUnshieldUnwrap", _unwrapFields(F_UA),
+            string.concat(',', T_G1, ',', T_UNWRAP, ',', T_BURN), _msg(e.from, _unwrapMsg(b, x, pr), e)));
         vm.prank(relayer);
         w.mtxUnshieldUnwrap(e, b, x, pr, sig);
         assertEq(usd.balanceOf(address(0xB0C)), 30 * SCALE);
@@ -735,7 +748,7 @@ contract ZetherTypedWrappedTest is ZetherNamedBase {
         bytes32 d = typedDigest(address(w), "UAZetherUnshieldUnwrap", _unwrapFields(F_UA),
             string.concat(',', T_G1, ',', T_UNWRAP, ',', T_BURN), _msg(aId, _unwrapMsg(b, x, pr), u));
         vm.prank(relayer);
-        w.uaUnshieldUnwrap(u, b, x, pr, _uaAuth(alice, d));
+        w.mtxUnshieldUnwrap(u, b, x, pr, _uaAuth(alice, d));
         assertEq(usd.balanceOf(address(0xB0C)), 10 * SCALE);
     }
 }
@@ -905,9 +918,13 @@ contract ZetherTypedRowsTest is ZetherNamedBase {
     /// The row's calldata, the fields' call, and the row's own call under `c`'s domain passing the signature: the revert is
     /// the op's, `want`.
     function _reach(string memory op, address c, bytes memory built, bytes4 want) internal {
+        assertEq(built, j.readBytes(domainField(op, "zether", "calldata")), string.concat(op, ": calldata"));
+        _reachAs(op, c, built, want);
+    }
+
+    /// `_reach` of the row's call `cd` (its own, or under the merged name).
+    function _reachAs(string memory op, address c, bytes memory cd, bytes4 want) internal {
         checkRow(j, op, "zether");
-        bytes memory cd = j.readBytes(domainField(op, "zether", "calldata"));
-        assertEq(built, cd, string.concat(op, ": calldata"));
         bytes memory rowSig = _sig(op);
         bytes memory sig = onChain(j, op, c);
         for (uint256 i; i + 65 <= cd.length; ++i) {
@@ -928,6 +945,32 @@ contract ZetherTypedRowsTest is ZetherNamedBase {
         }
     }
 
+    /// ua-mtx-merge T4: a `UA…` row whose entry took the `mtx` name (R35). The row (until T11 regenerates it) holds the
+    /// `ua*` selector: `built` is that calldata; the same arguments run under the `mtx` name (the body is the same).
+    function _reachRenamed(string memory op, address c, bytes memory built, bytes4 want) internal {
+        bytes memory name = bytes(j.readString(domainField(op, "zether", "abi")));
+        assertEq(name[0], "u", op);
+        assertEq(name[1], "a", op);
+        bytes memory rest = new bytes(name.length - 2);
+        for (uint256 i; i < rest.length; ++i) rest[i] = name[i + 2];
+        bytes4 sel = bytes4(keccak256(bytes.concat("mtx", rest)));
+        assertEq(built, j.readBytes(domainField(op, "zether", "calldata")), string.concat(op, ": the ua* calldata"));
+        for (uint256 k; k < 4; ++k) built[k] = sel[k];
+        _reachAs(op, c, built, want);
+    }
+
+    /// ua-mtx-merge T4: the row of a retired address entry (R35): its own calldata finds no function on `c` (MD-7: T11
+    /// retires the row).
+    function _rowHasNoEntry(string memory op, address c, bytes memory built) internal {
+        checkRow(j, op, "zether");
+        bytes memory cd = j.readBytes(domainField(op, "zether", "calldata"));
+        assertEq(built, cd, string.concat(op, ": the old calldata"));
+        vm.prank(j.readAddress(_p(op, "relayer")));
+        (bool ok, bytes memory ret) = c.call(cd);
+        assertFalse(ok, string.concat(op, ": a retired entry runs"));
+        assertEq(ret.length, 0, string.concat(op, ": no function"));
+    }
+
     function _wrapped() internal returns (WrappedZetherToken w) {
         Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(), type(WrappedZetherToken).creationCode);
         IFactoryToken.TokenConfig memory c;
@@ -941,60 +984,59 @@ contract ZetherTypedRowsTest is ZetherNamedBase {
         w = WrappedZetherToken(payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, abi.encode(c), "zw")));
     }
 
-    function test_typedOpsVectors_ZetherTransferSingle() public {
+    function test_typedOpsVectors_ZetherTransferSingleRowHasNoEntry() public {
         string memory op = "ZetherTransferSingle";
         MetaTxLib.Envelope memory e = rowEnvelope(j, op);
-        _reach(op, address(tok), abi.encodeWithSignature(j.readString(domainField(op, "zether", "abi")), e, _single(op),
-            j.readBytes(_p(op, "proof")), _sig(op)), IZetherToken.AccountNotRegistered.selector);
+        _rowHasNoEntry(op, address(tok), abi.encodeWithSignature(j.readString(domainField(op, "zether", "abi")), e, _single(op),
+            j.readBytes(_p(op, "proof")), _sig(op)));
     }
 
     function test_typedOpsVectors_UAZetherTransferSingle() public {
         string memory op = "UAZetherTransferSingle";
-        _reach(op, address(tok), abi.encodeWithSignature(j.readString(domainField(op, "zether", "abi")), _uaE(op), _single(op),
+        _reachRenamed(op, address(tok), abi.encodeWithSignature(j.readString(domainField(op, "zether", "abi")), _uaE(op), _single(op),
             j.readBytes(_p(op, "proof")), _uaSigOf(op)), IZetherToken.AccountNotRegistered.selector);
     }
 
-    function test_typedOpsVectors_ZetherTransfer() public {
+    function test_typedOpsVectors_ZetherTransferRowsHaveNoEntry() public {
         for (uint256 k; k < 2; ++k) {
             string memory op = k == 0 ? "ZetherTransfer" : "ZetherTransferCompact";
-            _reach(op, address(tok), abi.encodeWithSignature(j.readString(domainField(op, "zether", "abi")), rowEnvelope(j, op), _multi(op),
-                j.readBytes(_p(op, "proof")), _sig(op)), IZetherToken.AccountNotRegistered.selector);
+            _rowHasNoEntry(op, address(tok), abi.encodeWithSignature(j.readString(domainField(op, "zether", "abi")), rowEnvelope(j, op), _multi(op),
+                j.readBytes(_p(op, "proof")), _sig(op)));
         }
     }
 
     function test_typedOpsVectors_UAZetherTransfer() public {
         for (uint256 k; k < 2; ++k) {
             string memory op = k == 0 ? "UAZetherTransfer" : "UAZetherTransferCompact";
-            _reach(op, address(tok), abi.encodeWithSignature(j.readString(domainField(op, "zether", "abi")), _uaE(op), _multi(op),
+            _reachRenamed(op, address(tok), abi.encodeWithSignature(j.readString(domainField(op, "zether", "abi")), _uaE(op), _multi(op),
                 j.readBytes(_p(op, "proof")), _uaSigOf(op)), IZetherToken.AccountNotRegistered.selector);
         }
     }
 
-    function test_typedOpsVectors_ZetherUnshield() public {
+    function test_typedOpsVectors_ZetherUnshieldRowHasNoEntry() public {
         string memory op = "ZetherUnshield";
-        _reach(op, address(tok), abi.encodeWithSignature(j.readString(domainField(op, "zether", "abi")), rowEnvelope(j, op), _burn(op),
-            j.readUint(_p(op, "amount")), j.readBytes32(_p(op, "recipient")), j.readBytes(_p(op, "proof")), _sig(op)),
-            IUALedger.UANotRegistered.selector);
+        _rowHasNoEntry(op, address(tok), abi.encodeWithSignature(j.readString(domainField(op, "zether", "abi")), rowEnvelope(j, op), _burn(op),
+            j.readUint(_p(op, "amount")), j.readBytes32(_p(op, "recipient")), j.readBytes(_p(op, "proof")), _sig(op)));
     }
 
     function test_typedOpsVectors_UAZetherUnshield() public {
         string memory op = "UAZetherUnshield";
-        _reach(op, address(tok), abi.encodeWithSignature(j.readString(domainField(op, "zether", "abi")), _uaE(op), _burn(op),
+        _reachRenamed(op, address(tok), abi.encodeWithSignature(j.readString(domainField(op, "zether", "abi")), _uaE(op), _burn(op),
             j.readUint(_p(op, "amount")), j.readBytes32(_p(op, "recipient")), j.readBytes(_p(op, "proof")), _uaSigOf(op)),
             IUALedger.UANotRegistered.selector);
     }
 
-    function test_typedOpsVectors_ZetherUnshieldUnwrap() public {
+    function test_typedOpsVectors_ZetherUnshieldUnwrapRowHasNoEntry() public {
         string memory op = "ZetherUnshieldUnwrap";
         WrappedZetherToken w = _wrapped();
-        _reach(op, address(w), abi.encodeWithSignature(j.readString(domainField(op, "zether", "abi")), rowEnvelope(j, op), _burn(op), _unwrap(op),
-            j.readBytes(_p(op, "proof")), _sig(op)), bytes4(keccak256("UnknownUnderlying(address)")));
+        _rowHasNoEntry(op, address(w), abi.encodeWithSignature(j.readString(domainField(op, "zether", "abi")), rowEnvelope(j, op), _burn(op), _unwrap(op),
+            j.readBytes(_p(op, "proof")), _sig(op)));
     }
 
     function test_typedOpsVectors_UAZetherUnshieldUnwrap() public {
         string memory op = "UAZetherUnshieldUnwrap";
         WrappedZetherToken w = _wrapped();
-        _reach(op, address(w), abi.encodeWithSignature(j.readString(domainField(op, "zether", "abi")), _uaE(op), _burn(op), _unwrap(op),
+        _reachRenamed(op, address(w), abi.encodeWithSignature(j.readString(domainField(op, "zether", "abi")), _uaE(op), _burn(op), _unwrap(op),
             j.readBytes(_p(op, "proof")), _uaSigOf(op)), bytes4(keccak256("UnknownUnderlying(address)")));
     }
 
@@ -1006,30 +1048,28 @@ contract ZetherTypedRowsTest is ZetherNamedBase {
             bytes4(keccak256("UnknownUnderlying(address)")));
     }
 
-    function test_typedOpsVectors_RollOverSigned() public {
+    function test_typedOpsVectors_RollOverSignedRowHasNoEntry() public {
         string memory op = "RollOverSigned";
-        _reach(op, address(tok), abi.encodeWithSignature(j.readString(domainField(op, "zether", "abi")), rowEnvelope(j, op), j.readBytes32(_p(op, "ua")),
-            uint64(j.readUint(_p(op, "expectedPendingSeq"))), uint64(j.readUint(_p(op, "validUntilBlock"))), _owner(op), _sig(op)),
-            IZetherToken.AccountNotRegistered.selector);
+        _rowHasNoEntry(op, address(tok), abi.encodeWithSignature(j.readString(domainField(op, "zether", "abi")), rowEnvelope(j, op), j.readBytes32(_p(op, "ua")),
+            uint64(j.readUint(_p(op, "expectedPendingSeq"))), uint64(j.readUint(_p(op, "validUntilBlock"))), _owner(op), _sig(op)));
     }
 
     function test_typedOpsVectors_UARollOverSigned() public {
         string memory op = "UARollOverSigned";
-        _reach(op, address(tok), abi.encodeWithSignature(j.readString(domainField(op, "zether", "abi")), _uaE(op), j.readBytes32(_p(op, "ua")),
+        _reachRenamed(op, address(tok), abi.encodeWithSignature(j.readString(domainField(op, "zether", "abi")), _uaE(op), j.readBytes32(_p(op, "ua")),
             uint64(j.readUint(_p(op, "expectedPendingSeq"))), uint64(j.readUint(_p(op, "validUntilBlock"))), _owner(op), _uaSigOf(op)),
             IZetherToken.AccountNotRegistered.selector);
     }
 
-    function test_typedOpsVectors_SetRollOverMode() public {
+    function test_typedOpsVectors_SetRollOverModeRowHasNoEntry() public {
         string memory op = "SetRollOverMode";
-        _reach(op, address(tok), abi.encodeWithSignature(j.readString(domainField(op, "zether", "abi")), rowEnvelope(j, op), j.readBytes32(_p(op, "ua")),
-            uint8(j.readUint(_p(op, "rollOverMode"))), uint64(j.readUint(_p(op, "validUntilBlock"))), _owner(op), _sig(op)),
-            IZetherToken.AccountNotRegistered.selector);
+        _rowHasNoEntry(op, address(tok), abi.encodeWithSignature(j.readString(domainField(op, "zether", "abi")), rowEnvelope(j, op), j.readBytes32(_p(op, "ua")),
+            uint8(j.readUint(_p(op, "rollOverMode"))), uint64(j.readUint(_p(op, "validUntilBlock"))), _owner(op), _sig(op)));
     }
 
     function test_typedOpsVectors_UASetRollOverMode() public {
         string memory op = "UASetRollOverMode";
-        _reach(op, address(tok), abi.encodeWithSignature(j.readString(domainField(op, "zether", "abi")), _uaE(op), j.readBytes32(_p(op, "ua")),
+        _reachRenamed(op, address(tok), abi.encodeWithSignature(j.readString(domainField(op, "zether", "abi")), _uaE(op), j.readBytes32(_p(op, "ua")),
             uint8(j.readUint(_p(op, "rollOverMode"))), uint64(j.readUint(_p(op, "validUntilBlock"))), _owner(op), _uaSigOf(op)),
             IZetherToken.AccountNotRegistered.selector);
     }
@@ -1097,17 +1137,17 @@ contract ZetherTypedRowsTest is ZetherNamedBase {
         assertEq(IConfidentialToken.mtxShield.selector, bytes4(0xe9385800));
     }
 
-    function test_typedOpsVectors_RollOver() public {
+    function test_typedOpsVectors_RollOverRowHasNoEntry() public {
         string memory op = "RollOver";
         _public(tok, j.readAddress(".key.address"), 1 << 40); // the outer fee
-        _reach(op, address(tok), abi.encodeWithSignature(j.readString(domainField(op, "zether", "abi")), rowEnvelope(j, op), j.readBytes32(_p(op, "ua")),
-            j.readUint(_p(op, "n")), _sig(op)), bytes4(0));
+        _rowHasNoEntry(op, address(tok), abi.encodeWithSignature(j.readString(domainField(op, "zether", "abi")), rowEnvelope(j, op), j.readBytes32(_p(op, "ua")),
+            j.readUint(_p(op, "n")), _sig(op)));
     }
 
     function test_typedOpsVectors_UARollOver() public {
         string memory op = "UARollOver";
         _public(tok, j.readAddress(".key.address"), 1 << 40);
-        _reach(op, address(tok), abi.encodeWithSignature(j.readString(domainField(op, "zether", "abi")), _uaE(op), j.readBytes32(_p(op, "ua")),
+        _reachRenamed(op, address(tok), abi.encodeWithSignature(j.readString(domainField(op, "zether", "abi")), _uaE(op), j.readBytes32(_p(op, "ua")),
             j.readUint(_p(op, "n")), _uaSigOf(op)), bytes4(0));
     }
 
@@ -1115,15 +1155,15 @@ contract ZetherTypedRowsTest is ZetherNamedBase {
         return j.readBytes32Array(_p(op, "uas"));
     }
 
-    function test_typedOpsVectors_RollOverBatch() public {
+    function test_typedOpsVectors_RollOverBatchRowHasNoEntry() public {
         string memory op = "RollOverBatch";
         _public(tok, j.readAddress(".key.address"), 1 << 40);
-        _reach(op, address(tok), abi.encodeWithSignature(j.readString(domainField(op, "zether", "abi")), rowEnvelope(j, op), _uas(op), _sig(op)), bytes4(0));
+        _rowHasNoEntry(op, address(tok), abi.encodeWithSignature(j.readString(domainField(op, "zether", "abi")), rowEnvelope(j, op), _uas(op), _sig(op)));
     }
 
     function test_typedOpsVectors_UARollOverBatch() public {
         string memory op = "UARollOverBatch";
         _public(tok, j.readAddress(".key.address"), 1 << 40);
-        _reach(op, address(tok), abi.encodeWithSignature(j.readString(domainField(op, "zether", "abi")), _uaE(op), _uas(op), _uaSigOf(op)), bytes4(0));
+        _reachRenamed(op, address(tok), abi.encodeWithSignature(j.readString(domainField(op, "zether", "abi")), _uaE(op), _uas(op), _uaSigOf(op)), bytes4(0));
     }
 }

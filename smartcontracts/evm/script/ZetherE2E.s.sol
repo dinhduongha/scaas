@@ -161,8 +161,15 @@ contract ZetherE2E is Script {
             MetaTxLib.MODE_RESTRICT_RELAYER | MetaTxLib.MODE_FEE_FIXED, me, RELAY_FEE, address(0));
     }
 
+    /// The address binding of `m` (CTR-ZTH-06), as a client computes it: since ua-mtx-merge T4 (R35) the token's
+    /// `envelopeBinding` view is the merged entries' UA binding. The named entries below are the prover's address
+    /// `namedCall` forms, which T4 retired: they run again once T12 moves `namedCall` to the merged entries.
     function _bindingOf(MetaTxLib.MetaTransaction memory m) internal view returns (string memory) {
-        return string.concat(",", _q("envelopeBinding", vm.toString(ZetherLayer(t).envelopeBinding(m))));
+        (address r, address f) = MetaTxLib.canon(m);
+        bytes32 b = keccak256(bytes.concat(
+            abi.encode(keccak256("SCAAS-ZETHER-ENVELOPE-V1"), block.chainid, dep.readBytes32(".chain_uid"), t, m.from, m.batch),
+            abi.encode(m.nonce, m.validUntil, m.mode, r, m.fee, f)));
+        return string.concat(",", _q("envelopeBinding", vm.toString(b)));
     }
 
     function _n(string memory k, uint256 v) internal pure returns (string memory) {

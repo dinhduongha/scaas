@@ -76,20 +76,21 @@ contract ZetherUA5cTest is ZetherFixture {
 
     // ------------------------------------------------------------------ (a) the UA envelope
 
-    /// The binding formula of CTR-ZTH-51, distinct from the address envelope's for the same fields.
+    /// The binding formula of CTR-ZTH-51, distinct from the address envelope's for the same fields. ua-mtx-merge T4: the
+    /// token's `envelopeBinding` view is this one (R35); the address binding is the client's (`_addrBinding`).
     function test_uaEnvelopeBinding_formula() public view {
         MetaTxLib.UAMetaTransaction memory m = _uam(bob, "");
-        assertEq(tok.uaEnvelopeBinding(m), keccak256(abi.encode(keccak256("SCAAS-ZETHER-UA-ENVELOPE-V1"), block.chainid,
+        assertEq(tok.envelopeBinding(m), keccak256(abi.encode(keccak256("SCAAS-ZETHER-UA-ENVELOPE-V1"), block.chainid,
             ZUID, address(tok), _id(bob), uint256(1), uint256(0), m.validUntil, RR | FIX, relayer, uint256(3), address(0))));
         MetaTxLib.MetaTransaction memory a = _mt("");
-        assertTrue(tok.uaEnvelopeBinding(m) != tok.envelopeBinding(a));
+        assertTrue(tok.envelopeBinding(m) != _addrBinding(tok, a));
     }
 
     /// A transfer proved for its UA envelope runs through `uaExecute`; the outer fee comes from the signer's UA
     /// balance; the statement carries `ZTX_V1_RELAYED` and the UA binding.
     function test_uaEnvelope_transferSingle() public {
         MetaTxLib.UAMetaTransaction memory m = _uam(bob, "");
-        bytes32 b = tok.uaEnvelopeBinding(m);
+        bytes32 b = tok.envelopeBinding(m);
         Tx memory t = _proveTransfer(tok, alice, carol, 100, 500, _none(), b);
         bytes memory st = stm.transferStatementSingle(address(tok), _zSingle(t.payload, _none()), b);
         assertEq(_word(st, 160), keccak256("ZTX_V1_RELAYED"));
@@ -107,7 +108,7 @@ contract ZetherUA5cTest is ZetherFixture {
     /// A proof bound to a UA envelope fails inside an address envelope with the same data, and as a direct call.
     function test_uaEnvelopeProof_liftedToTheAddressEnvelope_fails() public {
         MetaTxLib.UAMetaTransaction memory u = _uam(bob, "");
-        Tx memory t = _proveTransfer(tok, alice, carol, 100, 500, _none(), tok.uaEnvelopeBinding(u));
+        Tx memory t = _proveTransfer(tok, alice, carol, 100, 500, _none(), tok.envelopeBinding(u));
         MetaTxLib.MetaTransaction memory m = _mt(_single(t));
         bytes memory sig = _sign(m);
         vm.prank(relayer);
@@ -134,7 +135,7 @@ contract ZetherUA5cTest is ZetherFixture {
     /// A proof bound to an address envelope fails inside a UA envelope with the same data.
     function test_addressEnvelopeProof_liftedToTheUAEnvelope_fails() public {
         MetaTxLib.MetaTransaction memory m = _mt("");
-        Tx memory t = _proveTransfer(tok, alice, carol, 100, 500, _none(), tok.envelopeBinding(m));
+        Tx memory t = _proveTransfer(tok, alice, carol, 100, 500, _none(), _addrBinding(tok, m));
         MetaTxLib.UAMetaTransaction memory u = _uam(bob, _single(t));
         bytes memory auth = _uaAuth(bob, u);
         vm.prank(relayer);
@@ -166,14 +167,14 @@ contract ZetherUA5cTest is ZetherFixture {
         (to[0], to[1]) = (carol, bob);
         uint256[] memory vs = new uint256[](2);
         vs[0] = 50;
-        Tx memory t = _proveMulti(tok, alice, to, vs, 500, _none(), ZetherTypes.TransferMode.BUNDLE, tok.uaEnvelopeBinding(m));
+        Tx memory t = _proveMulti(tok, alice, to, vs, 500, _none(), ZetherTypes.TransferMode.BUNDLE, tok.envelopeBinding(m));
         m.data = abi.encodeCall(IZetherToken.mtxConfidentialTransfer, (_zMulti(t.payload, _none()), t.proof));
         bytes memory au = _uaAuth(bob, m);
         vm.prank(relayer);
         tok.mtxExecute(m, UACall.auth(m.from, au));
         assertTrue(_holds(tok, carol, 50, false));
         m = _uam(bob, "");
-        (bytes memory pl, bytes memory pr) = _proveUnshieldTo(tok, alice, 60, 450, _id(bob), _none(), tok.uaEnvelopeBinding(m));
+        (bytes memory pl, bytes memory pr) = _proveUnshieldTo(tok, alice, 60, 450, _id(bob), _none(), tok.envelopeBinding(m));
         m.data = abi.encodeCall(IZetherToken.mtxUnshield, (_zBurn(pl, _none()), 60, _id(bob), pr));
         uint256 pool = tok.balanceOf(SHIELD_POOL_);
         au = _uaAuth(bob, m);

@@ -9,7 +9,9 @@ import {IZetherToken} from "../../src/zether/IZetherToken.sol";
 import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
-import {TYPED_OPS, domainField, n, a} from "../metatx/NamedEntry.t.sol";
+import {n, a, h} from "../metatx/NamedEntry.t.sol";
+import {IUARegistry} from "../../src/ua/IUARegistry.sol";
+import {IZetherMergedT4} from "../merge/ZetherPairs.t.sol";
 import {T_G1, T_LEG, T_MULTI, typedDigest, multiJson, hexJson} from "./ZetherTyped.t.sol";
 
 /// @notice EIP-7825 (zether.md §19, CTR-ZTH-38, CTR-ZTH-34): under Amsterdam a transaction's REGULAR gas (intrinsic, the
@@ -64,36 +66,39 @@ abstract contract ZetherGasLimitSuite is ZetherFixture {
             validUntil: block.timestamp + 300, mode: MetaTxLib.MODE_RESTRICT_RELAYER | MetaTxLib.MODE_FEE_FIXED,
             relayer: relayer, fee: 3, feeRecipient: address(0)
         });
-        Tx memory u = _proveMulti(tok, alice, to, vs, 1_000_000, carol.ua, mode, tok.envelopeBinding(mt));
+        Tx memory u = _proveMulti(tok, alice, to, vs, 1_000_000, carol.ua, mode, _addrBinding(tok, mt));
         mt.data = abi.encodeWithSelector(_sel(mode), _zMulti(u.payload, carol.ua), u.proof);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(PAYER_PK, MtxDigest.metaTx(address(tok), mt));
         return abi.encodeCall(IMetaTx.executeMetaTransaction, (mt, abi.encodePacked(r, s, v)));
     }
 
     /// @dev The relayed cell through the signed entry (TS-D14): the same envelope and proof shape as `_build`, the struct's
-    ///      EIP-712 hashing on top (35 `G1` struct hashes at `M` = 8).
+    ///      EIP-712 hashing on top (35 `G1` struct hashes at `M` = 8). ua-mtx-merge T4, meaning: the merged entry over
+    ///      `UAZetherTransfer…` (R35), the EOA's id padded, its proof bound to the UA tag, its signature a `UASig`.
     function _buildNamed(uint256 m, ZetherTypes.TransferMode mode) internal view returns (bytes memory) {
         User[] memory to = new User[](m);
         for (uint256 j; j < m; ++j) to[j] = rs[j];
         uint256[] memory vs = new uint256[](m);
         vs[m / 2] = 1000;
-        MetaTxLib.Envelope memory e = MetaTxLib.Envelope(vm.addr(PAYER_PK), 1, tok.mtxNonce(MetaTxLib.pad(vm.addr(PAYER_PK)), 1), block.timestamp + 300,
+        MetaTxLib.UAEnvelope memory e = MetaTxLib.UAEnvelope(MetaTxLib.pad(vm.addr(PAYER_PK)), 1, tok.mtxNonce(MetaTxLib.pad(vm.addr(PAYER_PK)), 1), block.timestamp + 300,
             MetaTxLib.MODE_RESTRICT_RELAYER | MetaTxLib.MODE_FEE_FIXED, relayer, 3, address(0));
-        bytes32 b = tok.envelopeBinding(MetaTxLib.MetaTransaction(e.from, "", e.batch, e.nonce, e.validUntil, e.mode, e.relayer, e.fee, e.feeRecipient));
+        bytes32 b = tok.envelopeBinding(MetaTxLib.UAMetaTransaction(e.from, "", e.batch, e.nonce, e.validUntil, e.mode, e.relayer, e.fee, e.feeRecipient));
         Tx memory u = _proveMulti(tok, alice, to, vs, 1_000_000, carol.ua, mode, b);
         IZetherToken.ZetherMulti memory t = _zMulti(u.payload, carol.ua);
         bool compact = mode == ZetherTypes.TransferMode.HASH;
-        string memory primary = compact ? "ZetherTransferCompact" : "ZetherTransfer";
+        string memory primary = compact ? "UAZetherTransferCompact" : "UAZetherTransfer";
         bytes32 d = typedDigest(address(tok), primary,
-            '{"name":"from","type":"address"},{"name":"args","type":"ZetherMulti"},{"name":"proof","type":"bytes"}',
-            string.concat(',', T_G1, ',', T_LEG, ',', T_MULTI), string.concat('"from":', a(e.from), ',"args":', multiJson(t), ',"proof":',
+            '{"name":"from","type":"bytes32"},{"name":"args","type":"ZetherMulti"},{"name":"proof","type":"bytes"}',
+            string.concat(',', T_G1, ',', T_LEG, ',', T_MULTI), string.concat('"from":', h(e.from), ',"args":', multiJson(t), ',"proof":',
             hexJson(u.proof), _envelopeJson(e)));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(PAYER_PK, d);
-        string memory sig = vm.parseJsonString(vm.readFile(TYPED_OPS), domainField(primary, "zether", "abi"));
-        return abi.encodeWithSignature(sig, e, t, u.proof, abi.encodePacked(r, s, v));
+        IUARegistry.UASig memory auth;
+        auth.signature = abi.encodePacked(r, s, v);
+        return compact ? abi.encodeCall(IZetherMergedT4.mtxConfidentialTransferCompact, (e, t, u.proof, auth))
+            : abi.encodeCall(IZetherMergedT4.mtxConfidentialTransfer, (e, t, u.proof, auth));
     }
 
-    function _envelopeJson(MetaTxLib.Envelope memory e) internal pure returns (string memory) {
+    function _envelopeJson(MetaTxLib.UAEnvelope memory e) internal pure returns (string memory) {
         return string.concat(',"batch":', n(e.batch), ',"nonce":', n(e.nonce), ',"validUntil":', n(e.validUntil), ',"mode":', n(e.mode),
             ',"relayer":', a(e.relayer), ',"fee":', n(e.fee), ',"feeRecipient":', a(address(0)));
     }
@@ -186,7 +191,7 @@ abstract contract ZetherGasLimitSuite is ZetherFixture {
                     validUntil: block.timestamp + 300, mode: MetaTxLib.MODE_RESTRICT_RELAYER | MetaTxLib.MODE_FEE_FIXED,
                     relayer: relayer, fee: 3, feeRecipient: address(0)
                 });
-                Tx memory u = _proveTransfer(tok, alice, rs[0], 1000, 1_000_000, carol.ua, tok.envelopeBinding(mt));
+                Tx memory u = _proveTransfer(tok, alice, rs[0], 1000, 1_000_000, carol.ua, _addrBinding(tok, mt));
                 mt.data = abi.encodeCall(IZetherToken.mtxConfidentialTransferSingle, (_zSingle(u.payload, carol.ua), u.proof));
                 (uint8 v, bytes32 r, bytes32 s) = vm.sign(PAYER_PK, MtxDigest.metaTx(address(tok), mt));
                 cd = abi.encodeCall(IMetaTx.executeMetaTransaction, (mt, abi.encodePacked(r, s, v)));

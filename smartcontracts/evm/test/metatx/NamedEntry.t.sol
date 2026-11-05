@@ -449,21 +449,23 @@ contract NamedShieldZetherTest is ZetherFixture {
         vm.stopPrank();
     }
 
+    /// ua-mtx-merge T4, meaning (R35): the EOA signs `UAShield` (its id padded) on the merged `mtxShield`, as a derived id
+    /// does; the address `Shield` entry is in legacy/ua-mtx-merge/.
     function test_c0_shieldTyped() public {
         bytes32 to = ZetherTypes.UA.unwrap(bob.ua);
-        MetaTxLib.Envelope memory e;
-        e.from = signer;
+        MetaTxLib.UAEnvelope memory e;
+        e.from = MetaTxLib.pad(signer);
         e.validUntil = block.timestamp + 300;
-        bytes memory sig = ecdsa(PK, walletDigest(address(w), "Shield", SHIELD_FIELDS,
-            shieldJson(a(signer), to, 10, 0, 0, e.validUntil)));
+        bytes memory sig = ecdsa(PK, walletDigest(address(w), "UAShield", UA_SHIELD_FIELDS,
+            shieldJson(h(e.from), to, 10, 0, 0, e.validUntil)));
         vm.prank(relayer);
-        w.mtxShield(e, to, 10, sig);
+        w.mtxShield(e, to, 10, UACall.auth(e.from, sig));
         assertEq(w.balanceOf(signer), 90 * SCALE);
         assertEq(w.totalShielded(), 10);
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
-        w.mtxShield(e, to, 10, sig);
+        w.mtxShield(e, to, 10, UACall.auth(e.from, sig));
 
-        // the UA twin: a derived Zether UA signs `UAShield` under `metatx`; the registry verifies over the wallet digest
+        // a derived Zether UA signs `UAShield` under `metatx`; the registry verifies over the wallet digest
         bytes32 from = ZetherTypes.UA.unwrap(alice.ua);
         vm.prank(signer);
         w.transferToUA(from, 40 * SCALE);
@@ -473,14 +475,15 @@ contract NamedShieldZetherTest is ZetherFixture {
         bytes32 d = walletDigest(address(w), "UAShield", UA_SHIELD_FIELDS, shieldJson(h(from), to, 15, 0, 0, u.validUntil));
         bytes memory auth = abi.encode(bytes(""), ZetherKeys.schnorr(alice.x, reg.uaMessage(_zkind(), UAKinds.PURPOSE_METATX, d), bls));
         vm.prank(relayer);
-        w.uaShield(u, to, 15, UACall.auth(u.from, auth));
+        w.mtxShield(u, to, 15, UACall.auth(u.from, auth));
         assertEq(w.balanceOfUA(from), 25 * SCALE);
         assertEq(w.totalShielded(), 25);
         assertEq(w.mtxNonce(from, 0), 1);
     }
 
-    /// C1: the `Shield` row, its `toUA` is `bob`.
-    function test_c1_shieldRow() public {
+    /// C1: the `Shield` row, its `toUA` is `bob`. ua-mtx-merge T4, meaning (R35): the address `Shield` entry left the
+    /// Zether kinds, so the row's calldata finds no function there (the row stays for PQZ until T5; T11 retires it).
+    function test_c1_shieldRowHasNoZetherEntry() public {
         string memory j = VM.readFile(TYPED_OPS);
         checkRow(j, "Shield", "zether");
         MetaTxLib.Envelope memory e = rowEnvelope(j, "Shield");
@@ -495,11 +498,12 @@ contract NamedShieldZetherTest is ZetherFixture {
         usd.approve(address(w), 100 * SCALE);
         w.wrap(100 * SCALE);
         vm.stopPrank();
-        bytes memory sig = onChain(j, "Shield", address(w));
         vm.prank(e.relayer);
-        w.mtxShield(e, toUA, amount, sig);
-        assertEq(w.mtxNonce(MetaTxLib.pad(e.from), e.batch), 1);
-        assertEq(w.totalShielded(), amount);
+        (bool ok, bytes memory ret) = address(w).call(VM.parseJsonBytes(j, domainField("Shield", "zether", "calldata")));
+        assertFalse(ok, "a retired entry runs");
+        assertEq(ret.length, 0, "no function");
+        assertEq(w.mtxNonce(MetaTxLib.pad(e.from), e.batch), 0);
+        assertEq(w.totalShielded(), 0);
     }
 }
 
