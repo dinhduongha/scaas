@@ -247,3 +247,8 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   struct, builder, row or handler; `RegulatedNotBuilt` stays for T32. `RegulatedLib.init` gains a parameter (the release's
   `REGISTRY_CODEHASH`), each regulated kind's constructor passes `implArgs` to `RegulatedBase`. New:
   `src/regulated/{ComplianceRegistry,IComplianceRegistry}.sol`. As they stood before T29: `70d0b751`.
+  T30 (the regulated Zether kinds 10 and 11; spec `2026-11-05-regulated-kinds.md` §4.1, §4.3): no copy. It supersedes no
+  built body, typehash, struct, builder, row or handler: `ZetherLayer`'s `_regZetherSender` seat (T26) keeps its empty
+  body on kinds 2 and 3; `NormalZetherToken` and `WrappedZetherToken` only mark their overrides `virtual` (same
+  runtime size, the metadata hash moves); `DeployBase._deployZether` gains `_deployZetherRegulated`. New:
+  `src/regulated/{NormalZetherRegulatedToken,WrappedZetherRegulatedToken}.sol`. As they stood before T30: `b0727dfc`.
