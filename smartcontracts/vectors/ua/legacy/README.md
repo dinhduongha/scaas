@@ -28,3 +28,6 @@
 - typed-signing C6 (2026-11-01, TS-D19): `typed-signing/{metatx3,uatrade_kat}.json` as they stood before the nested structs:
   `ReceiverFee(bytes32 paymentDigest,…)` and `CancelOrder(bytes32 orderHash)`; the `metatx3` rows of `pq_signatures.json` moved
   with them.
+- ua-mtx-merge T11 (2026-11-05, plan MD-4, CTR-MTX-30): `ua-mtx-merge/{metatx3,uatrade_kat}.json` as they stood at local
+  tag `ref/pre-ua-mtx-merge`, their notes naming the `ua*` entries (`uaExecute`, `uaPayReceiverFee`, `uaTrade`, …). The
+  live files keep every row; only the notes name the merged `mtx*` entries.

@@ -1,0 +1,22 @@
+# legacy/ua-mtx-merge — reference only, not built
+
+The files as they stood at local tag `ref/pre-ua-mtx-merge` (owner: backup, not delete; plan MD-4), before T11 moved the
+EVM builders onto the merged entries (CTR-MTX-30: one signed entry per operation, `mtx<Op>(UAEnvelope, …, UASig)` over
+`UA<Op>`):
+
+- `src/evm.js`: the address twins of every merged entry and their builders (`burnTypedData` / `burnCalldata` … the six
+  `Pqz*`, five `Zether*`, `RollOverSigned`, `SetRollOverMode`, `RollOverBatch`, `ReceiverFee`, `RelayFee`, `WrapOrder`,
+  `CancelOrder`, `CancelWrapOrder`, the router's 19 address ops, the mandate wallets' five address ops and `Execute` on the
+  wallet), the `ua*` entry names (`uaBurn`, `uaShield` with `bytes auth`, `uaCancelNonce` over the unordered
+  `UACancelNonce(bytes32 ua,uint256 batch,uint256 validUntil)`, …), `metaTransferTypedData` and the address `checkPayment`,
+  `checkReceiverFee`'s `ReceiverFee` branch, `buildMtxPayMeta` (`mtxPay` / `mtxPayMeta` on addresses) and `buildUaPayMeta`
+  (`uaPay` / `uaPayMeta`), `buildRelayFee`'s address `RelayFee` and the router's `uaRelay`, `tradeOrderTypedData` /
+  `checkTradeOrder` / `checkCancel` on the token's address `TradeOrder`, `checkWrapOrder` on the address `WrapOrder`.
+- `src/zether.js`: the export list of the address Zether / PQZ builders.
+- `scripts/typed-ops-vectors.mjs`, `scripts/typed-ops-expected.mjs`: the generator and decoder of the 112-row
+  `typed_ops.json` (its copy: `smartcontracts/vectors/typed/legacy/ua-mtx-merge/typed_ops.json`).
+- `scripts/ua-sig-vectors.mjs`: the generator of `metatx3.json` / `uatrade_kat.json` with the `ua*` entry names in their
+  notes (copies: `smartcontracts/vectors/ua/legacy/ua-mtx-merge/`).
+- `test/{typed-ops,evm,relayfee,paymeta,ua-metatx3,seed}.test.js`: the tests whose meaning T11 changes.
+
+Not exported, not tested, not bundled.
