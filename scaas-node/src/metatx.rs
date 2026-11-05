@@ -112,7 +112,7 @@ pub(crate) fn uint(s: &str) -> Result<U256> {
     U256::from_str_radix(s, 10).map_err(|e| anyhow!("uint256 {s}: {e}"))
 }
 
-fn b32(s: &str) -> Result<B256> {
+pub(crate) fn b32(s: &str) -> Result<B256> {
     if s.len() != 66 || !s.starts_with("0x") {
         bail!("not a bytes32: {s}");
     }

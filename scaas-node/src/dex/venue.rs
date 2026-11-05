@@ -3,10 +3,13 @@
 //! - Persisted in the client over `/json/2` (RS5-2): every book change is ONE `dex_book_commit` (orders + trades +
 //!   jobs); only success replaces the book in memory; a failure reloads the book from the client (review D20).
 //! - Settlements go through the client outbox like every job: `mtxSettle` and the DEX-side cancels as `call` jobs to
-//!   the DEX, the token-side cancels as `metatx` jobs naming their `entry` (job-api.md, order and wrap entries).
+//!   the DEX, the token-side cancel and invalidation as `ua_metatx` jobs naming their `entry` (job-api.md, CTR-MTX-30).
 //! - Intake reads the order's state where it lives (NODE-DEX-15, dex.md §10): a SCaaS sell token keeps a
-//!   `TradeOrder`'s fill state and cancels (`tradeOrderDigest`, `pulled`, `minNonce`, `balanceOf`), the DEX keeps an
-//!   outside token's `DexOrder` (`dexOrderDigest`, `pulled`, `minNonce`, and `allowance(from, puller)`).
+//!   `UATradeOrder`'s fill state and cancels (`tradeOrderDigest`, `pulled`, `minNonce` by id, `balanceOf` or a derived
+//!   id's `balanceOfUA`), the DEX keeps an outside token's `DexOrder` (`dexOrderDigest`, `pulled`, `minNonce`, and
+//!   `allowance(from, puller)`).
+//! - A shape-1 order is authorized as the token's `authorize` does (ua-mtx-merge T17, R12): a native id by its own key
+//!   (`SigCheck`, `keyData` and `members` empty, R17), a derived id by the registry's `requireAuthorized` under `trade`.
 //! - The final-event watcher has its own cursor (RS5-8): a DEX failure never blocks payment finality.
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
@@ -24,10 +27,11 @@ use tokio::sync::Mutex;
 use tracing::{info, warn};
 
 use super::{
-    hex_bytes, hex_of, pair, Book, DexOrder, ISCaaSDex, MarketCfg, Placement, PlannedSettlement, Resting, Row,
-    TradeOrder, WireOrder, FLAG_IOC, KIND_OUTSIDE, KIND_SCAAS,
+    auth_of, hex_of, order_of, pair, trade_of, ua_sig_json, Auth, Book, DexOrder, ISCaaSDex, MarketCfg, Placement,
+    PlannedSettlement, Resting, Row, UATradeOrder, WireOrder, FLAG_IOC, KIND_OUTSIDE, KIND_SCAAS, PURPOSE_TRADE,
 };
-use crate::abi::{IToken, TradeFill};
+use crate::abi::{IMtxIds, IToken, IUALedger, IUARegistry, TradeFill};
+use crate::metatx::native;
 use crate::chain::{classify, is_contract, Chain, SimError};
 use crate::finality::{next_range, quorum_ok, safe_head, Mode};
 use crate::odoo::Odoo;
@@ -143,7 +147,7 @@ impl Commit {
         let row = Row::of(r);
         self.orders.push(json!({
             "market_id": market_id, "order_hash": row.order_hash, "sell_token": row.sell_token, "order": row.order,
-            "signature": row.signature, "remaining": row.remaining, "seq": row.seq, "state": state,
+            "signature": row.signature, "auth": row.auth, "remaining": row.remaining, "seq": row.seq, "state": state,
         }));
     }
 }
@@ -158,8 +162,9 @@ fn state_of(r: &Resting) -> &'static str {
     }
 }
 
-/// An on-chain cancel waiting for the next sync: `(market, sell token, its kind, order, CancelOrder signature)`.
-type PendingCancel = (i64, Address, u8, TradeOrder, Bytes, &'static str);
+/// An on-chain cancel waiting for the next sync: `(market, the order as it rested with the CANCEL's signature in `auth`, the
+/// sell token's contract kind)`; the shape says where it goes.
+type PendingCancel = (i64, Resting, &'static str);
 
 #[derive(Default)]
 struct CancelQueue {
@@ -167,12 +172,12 @@ struct CancelQueue {
     // `cancelled`) but not closed on chain; with RS5-9 only this relayer can settle it, so it is safe. Durable: keep
     // the cancel signature on the client's order row and flush from there.
     pending: Vec<PendingCancel>,
-    recent: HashMap<Address, Vec<u64>>,
+    recent: HashMap<B256, Vec<u64>>,
 }
 
 impl CancelQueue {
     /// May `from` cancel on chain once more this hour (and record it if so).
-    fn allow(&mut self, from: Address, at: u64) -> bool {
+    fn allow(&mut self, from: B256, at: u64) -> bool {
         let v = self.recent.entry(from).or_default();
         v.retain(|t| at < t + 3600);
         if v.len() >= ONCHAIN_CANCELS_PER_HOUR {
@@ -292,37 +297,59 @@ impl Venue {
         self.chain.primary().call(tx).await.map_err(|e| classify(&e))
     }
 
-    /// The order's hash where it is checked: the sell token (`TradeOrder`) or the DEX (`DexOrder`).
-    async fn order_hash(&self, sell: Address, o: &TradeOrder) -> Result<B256> {
+    /// The order's hash where it is checked: the sell token (`UATradeOrder`) or the DEX (`DexOrder`).
+    async fn order_hash(&self, sell: Address, o: &UATradeOrder) -> Result<B256> {
         match self.kind(sell) {
             KIND_SCAAS => view(&self.chain, sell, IToken::tradeOrderDigestCall { o: o.clone() }).await,
-            KIND_OUTSIDE => view(&self.chain, self.dex, ISCaaSDex::dexOrderDigestCall { sellToken: sell, o: o.clone() }).await,
+            KIND_OUTSIDE => view(&self.chain, self.dex, ISCaaSDex::dexOrderDigestCall { sellToken: sell, o: trade_of(o) }).await,
             _ => bail!("TOKEN_NOT_SERVED: {sell:#x} is not a side of a listed market"),
         }
     }
 
-    /// `amount − pulled` (0 when the lane's `minNonce` passed the order) and the signer's deliverable balance.
-    async fn on_chain(&self, sell: Address, h: B256, o: &TradeOrder) -> Result<OnChain> {
-        let outside = self.kind(sell) == KIND_OUTSIDE;
-        let state = if outside { self.dex } else { sell };
-        let (pulled, min) = if outside {
-            (view(&self.chain, state, ISCaaSDex::pulledCall { orderHash: h }).await?,
-             view(&self.chain, state, ISCaaSDex::minNonceCall { from: o.from, batch: o.batch }).await?)
+    /// `amount − pulled` (0 when the lane's `minNonce` passed the order) and the signer's deliverable balance: an address's
+    /// `balanceOf` (and, for an outside token, its allowance to the puller), a derived id's `balanceOfUA` on the token.
+    async fn on_chain(&self, sell: Address, h: B256, o: &UATradeOrder) -> Result<OnChain> {
+        let (pulled, min) = if self.kind(sell) == KIND_OUTSIDE {
+            let from = Address::from_word(o.from);
+            (view(&self.chain, self.dex, ISCaaSDex::pulledCall { orderHash: h }).await?,
+             view(&self.chain, self.dex, ISCaaSDex::minNonceCall { from, batch: o.batch }).await?)
         } else {
-            (view(&self.chain, state, IToken::pulledCall { orderHash: h }).await?,
-             view(&self.chain, state, IToken::minNonceCall { from: o.from, batch: o.batch }).await?)
+            (view(&self.chain, sell, IToken::pulledCall { orderHash: h }).await?,
+             view(&self.chain, sell, IToken::minNonceCall { from: o.from, batch: o.batch }).await?)
         };
         let remaining = if o.nonce < min { U256::ZERO } else { o.amount.saturating_sub(pulled) };
-        let mut fundable = view(&self.chain, sell, IToken::balanceOfCall { who: o.from }).await?;
-        if outside {
-            fundable = fundable.min(view(&self.chain, sell, IToken::allowanceCall { owner: o.from, spender: self.puller }).await?);
-        }
+        let fundable = match native(&o.from) {
+            None => view(&self.chain, sell, IUALedger::balanceOfUACall { ua: o.from }).await?,
+            Some(who) if self.kind(sell) == KIND_OUTSIDE => view(&self.chain, sell, IToken::balanceOfCall { who }).await?
+                .min(view(&self.chain, sell, IToken::allowanceCall { owner: who, spender: self.puller }).await?),
+            Some(who) => view(&self.chain, sell, IToken::balanceOfCall { who }).await?,
+        };
         Ok(OnChain { remaining, fundable })
     }
 
-    /// Where an order of `sell` is checked: the SCaaS sell token itself, or the DEX for an outside token.
-    fn verifier(&self, sell: Address) -> Address {
-        if self.kind(sell) == KIND_OUTSIDE { self.dex } else { sell }
+    /// The signer of `from` authorized `digest` as the contract that holds the order checks it: a shape-0 signature on the DEX
+    /// (`SigCheck`, CTR-UA-24); a shape-1 `UASig` as the token's `authorize` under the purpose `trade` — a native id by its own key
+    /// with `keyData` and `members` empty (R17), a derived one by the token's registry (`requireAuthorized`; none = refused,
+    /// `UALedgerOff`). `Err` = the RPC, never a verdict.
+    async fn authorized(&self, sell: Address, from: B256, digest: B256, auth: &Auth) -> Result<bool> {
+        let a = match auth {
+            Auth::Sig(sig) => return self.valid_sig(self.dex, Address::from_word(from), digest, sig).await,
+            Auth::Ua(a) => a,
+        };
+        if let Some(signer) = native(&from) {
+            let r17 = a.keyData.is_empty() && a.members.is_empty();
+            return Ok(r17 && signer != Address::ZERO && self.valid_sig(sell, signer, digest, &a.signature).await?);
+        }
+        let registry = view(&self.chain, sell, IUALedger::registryCall {}).await?;
+        if registry == Address::ZERO {
+            return Ok(false);
+        }
+        let call = IUARegistry::requireAuthorizedCall { ua: from, purposeTag: PURPOSE_TRADE, digest, auth: a.clone() };
+        match self.call(sell, registry, call.abi_encode()).await {
+            Ok(_) => Ok(true),
+            Err(SimError::Revert(_)) => Ok(false),
+            Err(SimError::Transport(e)) => Err(anyhow!("rpc: {e}")),
+        }
     }
 
     /// A resting order can still settle `r.remaining`: open on chain for that much, funded, signature valid.
@@ -330,7 +357,7 @@ impl Venue {
         let c = self.on_chain(r.sell, r.hash, &r.order).await?;
         Ok(c.remaining >= r.remaining
             && c.fundable >= r.remaining
-            && self.valid_sig(self.verifier(r.sell), r.order.from, r.hash, &r.sig).await?)
+            && self.authorized(r.sell, r.order.from, r.hash, &r.auth).await?)
     }
 
     /// Simulate `mtxSettle` from the lane: `Ok(ok per settlement)`; all failed ⇒ `NothingSettled` ⇒ all `false`. A
@@ -373,19 +400,23 @@ impl Venue {
     }
 
     /// Evidence when a failed settlement names no order (a SCaaS token reports a bad signature as
-    /// `MetaTxBadSignature()`, no hash): each SCaaS leg's own `mtxTrade(o, sig, fill)`, called alone as the DEX calls it.
+    /// `MetaTxBadSignature()`, no hash): each SCaaS leg's own `mtxTrade(o, auth, fill)`, called alone as the DEX calls it.
     /// A leg whose own pull reverts is at fault. Outside legs name their hash themselves (`BadSignature(h)`, `TradeLib`).
     /// Review T3 C1, N8: no leg is blamed without this evidence.
     async fn leg_faults(&self, p: &PlannedSettlement) -> std::result::Result<Vec<B256>, VenueError> {
-        let fee = |recv: U256, o: &TradeOrder| (recv * o.fee + U256::from(PPM - 1)) / U256::from(PPM);
+        let fee = |recv: U256, o: &UATradeOrder| (recv * o.fee + U256::from(PPM - 1)) / U256::from(PPM);
         let legs = p.makers.iter().map(|(m, x, y)| (m, *x, *y)).chain([(&p.taker, p.taker_fill, p.taker_receives())]);
         let mut out = vec![];
         for (r, sold, recv) in legs {
             if self.kind(r.sell) != KIND_SCAAS {
                 continue;
             }
+            let Auth::Ua(auth) = &r.auth else {
+                out.push(r.hash); // a SCaaS leg in shape 0: `LegShapeUnknown(0)` on chain
+                continue;
+            };
             let f = TradeFill { sellFill: sold, receiveFill: recv, dexFee: fee(recv, &r.order), submitter: self.relayer() };
-            let data = IToken::mtxTradeCall { o: r.order.clone(), sig: r.sig.clone(), f }.abi_encode();
+            let data = IToken::mtxTradeCall { o: r.order.clone(), auth: auth.clone(), f }.abi_encode();
             match self.call(self.dex, r.sell, data).await {
                 Ok(_) => {}
                 Err(SimError::Revert(_)) => out.push(r.hash),
@@ -424,16 +455,17 @@ impl Venue {
 
     // ------------------------------------------------------------------------------ intake
 
-    /// `POST /v1/dex/orders {chain, sellToken, order, signature}`: the order is a `TradeOrder` for a SCaaS sell token
-    /// and a `DexOrder` for an outside one, by the DEX's listing.
-    pub async fn place(&self, sell: Address, wire: &WireOrder, signature: &str) -> std::result::Result<PlaceReply, VenueError> {
-        let o = wire.to_sol().map_err(bad)?;
-        let sig = sig_bytes(signature)?;
-        if self.kind(sell) == 0 {
-            return Err(bad(format!("TOKEN_NOT_SERVED: {sell:#x} is not a side of a listed market")));
-        }
+    /// `POST /v1/dex/orders {chain, sellToken, order, auth | signature}`, by the DEX's listing (CTR-DEX-26): a SCaaS sell
+    /// token's order is a `UATradeOrder` (`from`, `destination` ids) with `auth` (a `UASig`), an outside token's a `TradeOrder`
+    /// (signed as a `DexOrder`) with `signature`; the other form is refused by name.
+    pub async fn place(&self, sell: Address, wire: &WireOrder, signature: Option<&str>, auth: Option<&Value>)
+        -> std::result::Result<PlaceReply, VenueError>
+    {
+        let kind = self.kind(sell);
+        let sig = auth_of(kind, signature, auth).map_err(bad)?;
+        let o = order_of(kind, wire).map_err(bad)?;
         let h = self.order_hash(sell, &o).await.map_err(down)?;
-        if !self.valid_sig(self.verifier(sell), o.from, h, &sig).await.map_err(down)? {
+        if !self.authorized(sell, o.from, h, &sig).await.map_err(down)? {
             return Err(bad("bad order signature"));
         }
         let c = self.on_chain(sell, h, &o).await.map_err(down)?;
@@ -518,7 +550,7 @@ impl Venue {
         let settlement: Vec<PlannedSettlement> = placed.settlement.iter().cloned().collect();
         self.add_settlements(&mut commit, &trial, &settlement);
         let filled_here = placed.settlement.as_ref().map(|s| s.taker_fill).unwrap_or_default();
-        let taker_after = Resting { hash: h, sell, order: o.clone(), sig: sig.clone(), remaining: rem - filled_here, seq: placed.seq };
+        let taker_after = Resting { hash: h, sell, order: o.clone(), auth: sig.clone(), remaining: rem - filled_here, seq: placed.seq };
         let taker_state = match (&placed.rested, placed.dropped.is_zero()) {
             (Some(_), _) => state_of(&taker_after),
             (None, true) => "filled",
@@ -608,19 +640,20 @@ impl Venue {
 
     // ------------------------------------------------------------------------------ cancel
 
-    /// Cancel one order with a `CancelOrder(orderHash)` signature (the sell token's domain, or the DEX's for an
-    /// outside token): out of the book NOW, then closed on chain at the next sync.
-    pub async fn cancel(&self, h: B256, signature: &str) -> std::result::Result<(), VenueError> {
-        let sig = sig_bytes(signature)?;
+    /// Cancel one order with its cancel signed in its own form: `CancelUAOrder` with `auth` in the sell token's domain (a SCaaS
+    /// order), `CancelDexOrder` with `signature` in the DEX's (an outside one); out of the book NOW, closed on chain at the
+    /// next sync.
+    pub async fn cancel(&self, h: B256, signature: Option<&str>, auth: Option<&Value>) -> std::result::Result<(), VenueError> {
         let mut book = self.book.lock().await;
         let r = book.get(h).cloned().ok_or_else(|| bad("order is not in the book"))?;
         let kind = self.kind(r.sell);
+        let sig = auth_of(kind, signature, auth).map_err(bad)?;
         let digest = match kind {
             KIND_SCAAS => view(&self.chain, r.sell, IToken::cancelOrderDigestCall { o: r.order.clone() }).await,
-            _ => view(&self.chain, self.dex, ISCaaSDex::cancelDexOrderDigestCall { sellToken: r.sell, o: r.order.clone() }).await,
+            _ => view(&self.chain, self.dex, ISCaaSDex::cancelDexOrderDigestCall { sellToken: r.sell, o: trade_of(&r.order) }).await,
         }
         .map_err(down)?;
-        if !self.valid_sig(self.verifier(r.sell), r.order.from, digest, &sig).await.map_err(down)? {
+        if !self.authorized(r.sell, r.order.from, digest, &sig).await.map_err(down)? {
             return Err(bad("bad cancel signature"));
         }
         // before the book moves: an order off the book with no way to close it on chain is the failure to avoid
@@ -633,33 +666,37 @@ impl Venue {
         self.commit_or_reload(&mut book, next, commit).await?;
         if let Ok(mut q) = self.cancels.lock() {
             if q.allow(r.order.from, now()) {
-                q.pending.push((market_id, r.sell, kind, r.order, sig, contract));
+                q.pending.push((market_id, Resting { auth: sig, ..r }, contract));
             }
         }
         Ok(())
     }
 
-    /// Cancel-all of a lane: `InvalidateNonces(from, batch, minNonce)` in the sell token's domain (its SCaaS orders)
-    /// or the DEX's (every outside-token order). Only while the signer has an open order there (gas spam).
-    pub async fn cancel_all(&self, sell: Address, from: Address, batch: U256, min: U256, signature: &str)
+    /// Cancel-all of a lane: `UAInvalidateNonces(from, batch, minNonce)` with `auth` in the sell token's domain (its SCaaS
+    /// orders; `from` an id) or `InvalidateNonces` with `signature` in the DEX's (every outside-token order; `from` an
+    /// address). Only while the signer has an open order there (gas spam).
+    pub async fn cancel_all(&self, sell: Address, from: &str, batch: U256, min: U256, signature: Option<&str>, auth: Option<&Value>)
         -> std::result::Result<usize, VenueError>
     {
-        let sig = sig_bytes(signature)?;
         let kind = self.kind(sell);
+        let sig = auth_of(kind, signature, auth).map_err(bad)?;
         let outside = kind == KIND_OUTSIDE;
+        let id = if outside { crate::metatx::addr(from).map(|a| a.into_word()) } else { crate::metatx::b32(from) }.map_err(bad)?;
         let in_scope = |s: Address| if outside { self.kind(s) == KIND_OUTSIDE } else { s == sell };
         let mut book = self.book.lock().await;
-        let open: Vec<Resting> = book.open_of(from).into_iter().filter(|r| r.order.batch == batch && in_scope(r.sell)).cloned().collect();
+        let open: Vec<Resting> = book.open_of(id).into_iter().filter(|r| r.order.batch == batch && in_scope(r.sell)).cloned().collect();
         let Some(first) = open.first() else { return Err(bad("no open order of this signer on that lane")) };
         let market_id = book.market_of(first.sell, first.order.receiveToken).map(|m| m.id).unwrap_or_default();
-        let (target, digest, call) = if outside {
-            (self.dex, view(&self.chain, self.dex, ISCaaSDex::invalidateNoncesDigestCall { from, batch, newMin: min }).await,
-             ISCaaSDex::mtxInvalidateNoncesCall { from, batch, newMin: min, sig: sig.clone() }.abi_encode())
-        } else {
-            (sell, view(&self.chain, sell, IToken::invalidateNoncesDigestCall { from, batch, newMin: min }).await,
-             IToken::mtxInvalidateNoncesCall { from, batch, newMin: min, sig: sig.clone() }.abi_encode())
+        let (target, digest, call) = match &sig {
+            Auth::Sig(s) => {
+                let from = Address::from_word(id);
+                (self.dex, view(&self.chain, self.dex, ISCaaSDex::invalidateNoncesDigestCall { from, batch, newMin: min }).await,
+                 ISCaaSDex::mtxInvalidateNoncesCall { from, batch, newMin: min, sig: s.clone() }.abi_encode())
+            }
+            Auth::Ua(a) => (sell, view(&self.chain, sell, IToken::invalidateNoncesDigestCall { from: id, batch, newMin: min }).await,
+                IMtxIds::mtxInvalidateNoncesCall { from: id, batch, newMin: min, auth: a.clone() }.abi_encode()),
         };
-        if !self.valid_sig(target, from, digest.map_err(down)?, &sig).await.map_err(down)? {
+        if !self.authorized(sell, id, digest.map_err(down)?, &sig).await.map_err(down)? {
             return Err(bad("bad invalidate signature"));
         }
         // already at or past `min` on chain (MinNonceNotIncreasing): the orders are closed, no job needed
@@ -670,15 +707,15 @@ impl Venue {
         };
         let contract = if outside { "dex" } else { self.contract_of(sell).await? };
         let mut next = book.clone();
-        let gone = next.drop_below(from, batch, min, &in_scope);
+        let gone = next.drop_below(id, batch, min, &in_scope);
         let mut commit = Commit::default();
         for r in &gone {
             commit.order(book.market_of(r.sell, r.order.receiveToken).map(|m| m.id).unwrap_or_default(), r, "cancelled");
         }
-        let allowed = self.cancels.lock().map(|mut q| q.allow(from, now())).unwrap_or(false);
+        let allowed = self.cancels.lock().map(|mut q| q.allow(id, now())).unwrap_or(false);
         if job_needed && allowed {
             let valid_until = (now() + CANCEL_JOB_SECS).to_string();
-            commit.jobs.push(json!({"kind": "metatx", "market_id": market_id, "op": invalidate_op(contract, target, from, batch, min, &sig, &valid_until)}));
+            commit.jobs.push(invalidate_job(market_id, contract, target, id, batch, min, &sig, &valid_until));
         }
         self.commit_or_reload(&mut book, next, commit).await?;
         Ok(gone.len())
@@ -762,19 +799,16 @@ impl Venue {
         res.map_err(|e| anyhow!("{e}"))
     }
 
-    /// C6-3: the encoded events of `logs` whose emitter may say them. Leg and failure events come from the DEX only;
-    /// cancel and invalidation from the DEX or a SCaaS token (the DEX holds outside tokens' orders, a SCaaS token its
-    /// own: `apply_events` checks which); `UANoncesInvalidated` from a SCaaS token only (the DEX never emits it). A
-    /// listed outside token is not a source of any of them.
+    /// C6-3: the encoded events of `logs` whose emitter may say them. A SCaaS token's order events (`UAOrderCancelled`,
+    /// `UANoncesInvalidated`, R18) from a SCaaS token only (`apply_events` keeps it to the orders it sells); every other
+    /// (leg, failure, an outside order's cancel and invalidation) from the DEX only. A listed outside token is not a
+    /// source of any of them.
     fn accepted(&self, logs: &[alloy::rpc::types::Log]) -> Vec<Value> {
         logs.iter()
             .filter(|l| {
                 let (a, Some(t)) = (l.address(), l.topic0()) else { return false };
-                let token = self.kind(a) == KIND_SCAAS;
-                if *t == IToken::UANoncesInvalidated::SIGNATURE_HASH {
-                    token
-                } else if *t == ISCaaSDex::OrderCancelled::SIGNATURE_HASH || *t == ISCaaSDex::NoncesInvalidated::SIGNATURE_HASH {
-                    a == self.dex || token
+                if *t == IToken::UAOrderCancelled::SIGNATURE_HASH || *t == IToken::UANoncesInvalidated::SIGNATURE_HASH {
+                    self.kind(a) == KIND_SCAAS
                 } else {
                     a == self.dex
                 }
@@ -796,7 +830,7 @@ impl Venue {
                     }
                 }
                 Some("OrderCancelled") => {
-                    // C6-3: the DEX cancels outside tokens' orders, a SCaaS token only the orders it sells
+                    // C6-3: the DEX cancels outside tokens' orders, a SCaaS token (`UAOrderCancelled`) only the orders it sells
                     let c = addr_of("contract").unwrap_or_default();
                     if let Ok(h) = e["order_hash"].as_str().unwrap_or_default().parse::<B256>() {
                         if book.get(h).is_some_and(|r| if c == self.dex { self.kind(r.sell) == KIND_OUTSIDE } else { r.sell == c }) {
@@ -804,22 +838,13 @@ impl Venue {
                         }
                     }
                 }
-                Some("UANoncesInvalidated") => {
-                    // C6-7: a shape-0 order's `from` is the id's low 20 bytes when the id is a zero-padded address
-                    let id = e["from"].as_str().unwrap_or_default().parse::<B256>().unwrap_or_default();
-                    if let (Ok(c), true, Ok(batch), Ok(min)) = (
-                        addr_of("contract"),
-                        id[..12].iter().all(|b| *b == 0),
-                        crate::metatx::uint(e["batch"].as_str().unwrap_or_default()),
-                        crate::metatx::uint(e["min_nonce"].as_str().unwrap_or_default()),
-                    ) {
-                        book.drop_below(Address::from_slice(&id[12..]), batch, min, &|s| s == c);
-                    }
-                }
                 Some("NoncesInvalidated") => {
+                    // the DEX's `from` is an address, a SCaaS token's (`UANoncesInvalidated`) an id: the book keys both as ids
+                    let f = e["from"].as_str().unwrap_or_default();
+                    let from = crate::metatx::b32(f).or_else(|_| crate::metatx::addr(f).map(|a| a.into_word()));
                     if let (Ok(c), Ok(from), Ok(batch), Ok(min)) = (
                         addr_of("contract"),
-                        addr_of("from"),
+                        from,
                         crate::metatx::uint(e["batch"].as_str().unwrap_or_default()),
                         crate::metatx::uint(e["min_nonce"].as_str().unwrap_or_default()),
                     ) {
@@ -860,6 +885,7 @@ impl Venue {
             ISCaaSDex::MatchFailed::SIGNATURE_HASH,
             ISCaaSDex::OrderCancelled::SIGNATURE_HASH,
             ISCaaSDex::NoncesInvalidated::SIGNATURE_HASH,
+            IToken::UAOrderCancelled::SIGNATURE_HASH,
             IToken::UANoncesInvalidated::SIGNATURE_HASH,
         ]);
         let logs = self.chain.primary().get_logs(&f).await?;
@@ -869,9 +895,7 @@ impl Venue {
                 "blockchain.dex.trade",
                 "dex_fill_ingest",
                 json!({"evm_chain_number": self.chain.number, "from_block": from, "to_block": to,
-                       "to_block_hash": format!("{hash:#x}"),
-                       // the client store knows the five original events; `UANoncesInvalidated` is the book's only
-                       "events": events.iter().filter(|e| e["event"] != "UANoncesInvalidated").collect::<Vec<_>>()}),
+                       "to_block_hash": format!("{hash:#x}"), "events": events}),
             )
             .await?;
         // The client closed the orders; the book in memory follows (review D13).
@@ -931,13 +955,14 @@ impl Venue {
         }))
     }
 
-    pub async fn orders_of(&self, from: Address) -> Vec<Value> {
+    /// `from` is an id: an address's orders of both shapes are under its zero-padded id.
+    pub async fn orders_of(&self, from: B256) -> Vec<Value> {
         let book = self.book.lock().await;
         book.open_of(from)
             .into_iter()
             .map(|r| {
                 json!({"order_hash": format!("{:#x}", r.hash), "sell_token": format!("{:#x}", r.sell),
-                       "order": WireOrder::from_sol(&r.order), "remaining": r.remaining.to_string(), "state": state_of(r)})
+                       "order": r.wire(), "remaining": r.remaining.to_string(), "state": state_of(r)})
             })
             .collect()
     }
@@ -1027,10 +1052,23 @@ fn by_market<T: Clone>(items: &[T], market: impl Fn(&T) -> i64) -> Vec<Vec<T>> {
     v.chunk_by(|a, b| market(a) == market(b)).map(<[T]>::to_vec).collect()
 }
 
-/// A `mtxInvalidateNonces` op (job-api.md) on a token or the DEX.
-fn invalidate_op(contract: &str, target: Address, from: Address, batch: U256, min: U256, sig: &[u8], valid_until: &str) -> Value {
-    json!({"entry": "mtxInvalidateNonces", "contract": contract, "token": format!("{target:#x}"), "validUntil": valid_until,
-           "args": {"from": format!("{from:#x}"), "batch": batch.to_string(), "minNonce": min.to_string()}, "signature": hex_of(sig)})
+/// A `mtxInvalidateNonces` job (job-api.md, R43): a token's on ids (`UAInvalidateNonces`, `auth`, a `ua_metatx` job), the
+/// DEX's on an address (`InvalidateNonces`, `signature`, a `metatx` job).
+#[allow(clippy::too_many_arguments)]
+fn invalidate_job(market_id: i64, contract: &str, target: Address, id: B256, batch: U256, min: U256, sig: &Auth, valid_until: &str) -> Value {
+    let mut op = json!({"entry": "mtxInvalidateNonces", "contract": contract, "token": format!("{target:#x}"), "validUntil": valid_until,
+                        "args": {"batch": batch.to_string(), "minNonce": min.to_string()}});
+    let kind = match sig {
+        Auth::Ua(a) => {
+            (op["args"]["from"], op["auth"]) = (json!(format!("{id:#x}")), ua_sig_json(a));
+            "ua_metatx"
+        }
+        Auth::Sig(s) => {
+            (op["args"]["from"], op["signature"]) = (json!(format!("{:#x}", Address::from_word(id))), json!(hex_of(s)));
+            "metatx"
+        }
+    };
+    json!({"kind": kind, "market_id": market_id, "op": op})
 }
 
 /// A plain DEX entry as its named op: the job carries fields, never bytes; a table row is what `abi_encode` just wrote.
@@ -1055,24 +1093,25 @@ fn settle_jobs(dex: Address, ss: &[PlannedSettlement]) -> Vec<Value> {
         .collect()
 }
 
-/// SCaaS-token orders: one `mtxCancelOrder` entry job each, on the sell token. Outside-token orders: one
-/// `mtxCancelOrders` call on the DEX per market, at most `CANCEL_BATCH` orders.
+/// SCaaS-token orders (shape 1): one `mtxCancelOrder` entry job each on the sell token, `CancelUAOrder` with its `auth`, a
+/// `ua_metatx` job (R43). Outside-token orders (shape 0): one `mtxCancelOrders` call on the DEX per market, at most
+/// `CANCEL_BATCH` orders.
 fn cancel_jobs(dex: Address, pending: &[PendingCancel]) -> Vec<Value> {
     let valid_until = (now() + CANCEL_JOB_SECS).to_string();
-    let mut jobs: Vec<Value> = pending
-        .iter()
-        .filter(|p| p.2 == KIND_SCAAS)
-        .map(|(m, sell, _, o, sig, contract)| {
-            json!({"kind": "metatx", "market_id": m, "op": {"entry": "mtxCancelOrder", "struct": "CancelOrder", "contract": contract,
-                   "token": format!("{sell:#x}"), "args": {"order": WireOrder::from_sol(o)}, "signature": hex_of(sig),
-                   "validUntil": valid_until}})
-        })
-        .collect();
-    let outside: Vec<PendingCancel> = pending.iter().filter(|p| p.2 != KIND_SCAAS).cloned().collect();
+    let mut jobs: Vec<Value> = vec![];
+    let mut outside: Vec<(i64, Address, UATradeOrder, Bytes)> = vec![];
+    for (m, r, contract) in pending {
+        match &r.auth {
+            Auth::Ua(a) => jobs.push(json!({"kind": "ua_metatx", "market_id": m, "op": {"entry": "mtxCancelOrder",
+                "struct": "CancelUAOrder", "contract": contract, "token": format!("{:#x}", r.sell),
+                "args": {"order": WireOrder::from_ua(&r.order)}, "auth": ua_sig_json(a), "validUntil": valid_until}})),
+            Auth::Sig(s) => outside.push((*m, r.sell, r.order.clone(), s.clone())),
+        }
+    }
     for m in by_market(&outside, |p| p.0) {
         for chunk in m.chunks(CANCEL_BATCH) {
-            let orders = chunk.iter().map(|(_, s, _, o, _, _)| DexOrder { sellToken: *s, order: o.clone() }).collect();
-            let sigs = chunk.iter().map(|p| p.4.clone()).collect();
+            let orders = chunk.iter().map(|(_, s, o, _)| DexOrder { sellToken: *s, order: trade_of(o) }).collect();
+            let sigs = chunk.iter().map(|p| p.3.clone()).collect();
             jobs.push(json!({
                 "kind": "cancel", "market_id": chunk[0].0, "target": format!("{dex:#x}"),
                 "op": dex_op(dex, &ISCaaSDex::mtxCancelOrdersCall { orders, sigs }.abi_encode(), &valid_until),
@@ -1081,14 +1120,6 @@ fn cancel_jobs(dex: Address, pending: &[PendingCancel]) -> Vec<Value> {
         }
     }
     jobs
-}
-
-fn sig_bytes(s: &str) -> std::result::Result<Bytes, VenueError> {
-    let b = hex_bytes(s).map_err(|_| bad("signature is not 0x-hex"))?;
-    if b.len() < 64 || b.len() > 4096 {
-        return Err(bad("signature length"));
-    }
-    Ok(b)
 }
 
 /// Readable DEX error (for `MatchFailed.reason` in the client); an EMPTY reason is the settlement's self-call
@@ -1148,6 +1179,13 @@ pub fn encode_event(log: &Log) -> Option<Value> {
         v["event"] = json!("OrderCancelled");
         v["order_hash"] = json!(format!("{:#x}", e.orderHash));
         v["from"] = json!(a(e.from));
+    } else if topic0 == IToken::UAOrderCancelled::SIGNATURE_HASH {
+        // a SCaaS order's cancel (R18), under the name the client knows; `from` is the id (32-byte hex), as the indexer
+        // sends a UA event (decisions.md, node-ua-jobs (9))
+        let e = log.log_decode::<IToken::UAOrderCancelled>().ok()?.inner.data;
+        v["event"] = json!("OrderCancelled");
+        v["order_hash"] = json!(format!("{:#x}", e.orderHash));
+        v["from"] = json!(format!("{:#x}", e.from));
     } else if topic0 == ISCaaSDex::NoncesInvalidated::SIGNATURE_HASH {
         let e = log.log_decode::<ISCaaSDex::NoncesInvalidated>().ok()?.inner.data;
         v["event"] = json!("NoncesInvalidated");
@@ -1155,9 +1193,9 @@ pub fn encode_event(log: &Log) -> Option<Value> {
         v["batch"] = json!(e.batch.to_string());
         v["min_nonce"] = json!(e.minNonce.to_string());
     } else if topic0 == IToken::UANoncesInvalidated::SIGNATURE_HASH {
-        // C6-7: `uaInvalidateNonces`; `from` is an id, a native address zero-padded
+        // a SCaaS token's lane floor (R18), as `OrderCancelled` above: `NoncesInvalidated` with the id
         let e = log.log_decode::<IToken::UANoncesInvalidated>().ok()?.inner.data;
-        v["event"] = json!("UANoncesInvalidated");
+        v["event"] = json!("NoncesInvalidated");
         v["from"] = json!(format!("{:#x}", e.from));
         v["batch"] = json!(e.batch.to_string());
         v["min_nonce"] = json!(e.minNonce.to_string());
@@ -1180,6 +1218,7 @@ mod tests {
     use super::*;
     use alloy::primitives::LogData;
     use alloy::sol_types::SolError;
+    use crate::abi::UASig;
 
     fn log_of(data: LogData) -> Log {
         Log {
@@ -1248,17 +1287,24 @@ mod tests {
         assert_eq!(encode_event(&log_of(ev.encode_log_data())).unwrap()["reason"], "out_of_gas");
         let reason = IToken::BelowMinFill { orderHash: B256::repeat_byte(5) }.abi_encode();
         assert!(revert_name(&reason).starts_with("BelowMinFill"));
+        // a SCaaS token's order events (R18) under the names the client knows, `from` the id
+        let ev = IToken::UAOrderCancelled { orderHash: B256::repeat_byte(7), from: B256::repeat_byte(8) };
+        let v = encode_event(&log_of(ev.encode_log_data())).unwrap();
+        assert_eq!((v["event"].as_str(), v["from"].clone()), (Some("OrderCancelled"), json!(format!("{:#x}", B256::repeat_byte(8)))));
+        let ev = IToken::UANoncesInvalidated { from: B256::repeat_byte(8), batch: U256::from(2), minNonce: U256::from(9) };
+        let v = encode_event(&log_of(ev.encode_log_data())).unwrap();
+        assert_eq!((v["event"].as_str(), v["from"].clone()), (Some("NoncesInvalidated"), json!(format!("{:#x}", B256::repeat_byte(8)))));
     }
 
     #[test]
     fn cancel_rate_limit_is_per_signer_and_per_hour() {
         let mut q = CancelQueue::default();
-        let m = Address::repeat_byte(1);
+        let m = B256::repeat_byte(1);
         for _ in 0..ONCHAIN_CANCELS_PER_HOUR {
             assert!(q.allow(m, 1000));
         }
         assert!(!q.allow(m, 1000));
-        assert!(q.allow(Address::repeat_byte(2), 1000));
+        assert!(q.allow(B256::repeat_byte(2), 1000));
         assert!(q.allow(m, 1000 + 3600));
     }
 
@@ -1266,8 +1312,8 @@ mod tests {
     const QUOTE: Address = Address::repeat_byte(0xbb);
 
     fn rest(from: u8, sell: Address, receive: Address) -> Resting {
-        let order = TradeOrder {
-            from: Address::repeat_byte(from),
+        let order = UATradeOrder {
+            from: Address::repeat_byte(from).into_word(),
             receiveToken: receive,
             amount: U256::from(1000),
             receiveAmount: U256::from(1000),
@@ -1275,13 +1321,13 @@ mod tests {
             fee: U256::ZERO,
             relayer: Address::ZERO,
             dex: Address::ZERO,
-            destination: Address::ZERO,
+            destination: B256::ZERO,
             flags: 0,
             batch: U256::ZERO,
             nonce: U256::ZERO,
             validUntil: U256::from(from),
         };
-        Resting { hash: B256::repeat_byte(from), sell, order, sig: Bytes::new(), remaining: U256::from(1000), seq: 0 }
+        Resting { hash: B256::repeat_byte(from), sell, order, auth: Auth::Ua(ua(Bytes::new())), remaining: U256::from(1000), seq: 0 }
     }
 
     fn settlement(market_id: i64, tag: u8, maker: Resting, taker: Resting, x: u64, y: u64) -> PlannedSettlement {
@@ -1314,15 +1360,24 @@ mod tests {
             jobs.iter().map(|j| (j["market_id"].as_i64().unwrap(), j["tags"].as_array().unwrap().len())).collect();
         assert_eq!(seen, vec![(1, 2), (2, 1)]);
         assert_eq!(jobs[0]["valid_until"], "1", "the earliest leg's deadline");
-        let c = |m: i64, from: u8, kind: u8| (m, BASE, kind, rest(from, BASE, QUOTE).order, Bytes::from_static(&[1]), "token");
-        let jobs = cancel_jobs(dex, &[c(1, 1, KIND_SCAAS), c(2, 2, KIND_OUTSIDE), c(1, 3, KIND_OUTSIDE)]);
+        // the shape says where a cancel goes: a SCaaS order (shape 1) to its token as `CancelUAOrder` on a `ua_metatx` job, an
+        // outside one (shape 0) to the DEX's `mtxCancelOrders`
+        let sig = Bytes::from(vec![0x11; 65]);
+        let c = |m: i64, from: u8, auth: Auth| (m, Resting { auth, ..rest(from, BASE, QUOTE) }, "token");
+        let jobs = cancel_jobs(dex, &[c(1, 1, Auth::Ua(ua(sig.clone()))), c(2, 2, Auth::Sig(sig.clone())), c(1, 3, Auth::Sig(sig.clone()))]);
         let kinds: Vec<(&str, i64)> = jobs.iter().map(|j| (j["kind"].as_str().unwrap(), j["market_id"].as_i64().unwrap())).collect();
-        assert_eq!(kinds, vec![("metatx", 1), ("cancel", 1), ("cancel", 2)]);
-        assert_eq!((jobs[0]["op"]["entry"].as_str(), jobs[0]["op"]["token"].as_str()), (Some("mtxCancelOrder"), Some(&*format!("{BASE:#x}"))));
+        assert_eq!(kinds, vec![("ua_metatx", 1), ("cancel", 1), ("cancel", 2)]);
+        let op = &jobs[0]["op"];
+        assert_eq!((op["entry"].as_str(), op["struct"].as_str(), op["token"].as_str()),
+            (Some("mtxCancelOrder"), Some("CancelUAOrder"), Some(&*format!("{BASE:#x}"))));
+        assert_eq!((op["args"]["order"]["from"].clone(), op["auth"]["signature"].clone()),
+            (json!(format!("{:#x}", Address::repeat_byte(1).into_word())), json!(hex_of(&sig))));
+        assert!(op.get("signature").is_none(), "no address form");
         assert_eq!(jobs[1]["target"], format!("{dex:#x}"));
         for j in &jobs {
             assert!(j.get("calldata").is_none(), "named fields, never hex");
-            crate::typed::Op::parse(&j["op"], None).unwrap_or_else(|e| panic!("{j}: {e:#}"));
+            let (_, ua) = crate::submit::work_of_op(None, &j["op"], None).unwrap_or_else(|e| panic!("{j}: {e:#}"));
+            assert_eq!(ua, j["kind"] == "ua_metatx", "R43: the job kind of the entry, {j}");
         }
     }
 
@@ -1335,8 +1390,8 @@ mod tests {
 
     const DEX: Address = Address::repeat_byte(0xd0);
 
-    /// A chain where each leg's fate is scripted by its order hash (`keccak(abi(order))`, as the fake token's
-    /// `tradeOrderDigest` answers). `mtxSettle` fails a settlement holding any failing leg; `settleOne` reverts as the
+    /// A chain where each leg's fate is scripted by its order hash (`keccak(abi(order))` of the `UATradeOrder`, as the fake
+    /// token's `tradeOrderDigest` answers; a shape-0 leg's `TradeOrder` has the same words). `mtxSettle` fails a settlement holding any failing leg; `settleOne` reverts as the
     /// first failing leg would; `mtxTrade` alone fails only for a bad signature.
     #[derive(Default)]
     struct World {
@@ -1362,13 +1417,22 @@ mod tests {
         wordy: HashSet<B256>,
         /// Tokens without `mtxTrade` (an outside token): every `mtxTrade` on them reverts.
         no_trade: HashSet<Address>,
-        /// `eth_getLogs` answers these (the watcher's final range is blocks 6..=10).
+        /// `eth_getLogs` answers these whose `topic0` the filter asks for (the watcher's final range is blocks 6..=10).
         logs: Vec<Value>,
+        /// The tokens' `registry()` (0 = none).
+        registry: Address,
+        /// The digests the registry's `requireAuthorized` accepts (any other reverts `UAUnauthorized`).
+        authorized: HashSet<B256>,
     }
     type W = Arc<std::sync::Mutex<World>>;
 
-    fn oh(o: &TradeOrder) -> B256 {
+    fn oh(o: &UATradeOrder) -> B256 {
         keccak256(o.abi_encode())
+    }
+
+    /// A native id's `UASig`: its signature only (R17).
+    fn ua(signature: Bytes) -> UASig {
+        UASig { keyData: Bytes::new(), signature, members: vec![] }
     }
 
     async fn fake_chain(w: World) -> (String, W) {
@@ -1388,38 +1452,56 @@ mod tests {
                 "eth_getBlockByNumber" => {
                     Ok(serde_json::from_str::<Value>(include_str!("../../tests/vectors/hedera_testnet.json")).unwrap()["block"].clone())
                 }
-                "eth_getLogs" => Ok(Value::Array(w.logs.clone())),
+                "eth_getLogs" => {
+                    let asked = p[0]["topics"][0].clone();
+                    let asked = asked.as_array().cloned().unwrap_or_else(|| vec![asked]);
+                    Ok(Value::Array(w.logs.iter().filter(|l| asked.contains(&l["topics"][0])).cloned().collect()))
+                }
                 "eth_call" => {
                     let input = alloy::hex::decode(&p[0]["input"].as_str().or(p[0]["data"].as_str()).unwrap()[2..]).unwrap();
                     let to: Address = p[0]["to"].as_str().unwrap().parse().unwrap();
                     let from: Address = p[0]["from"].as_str().map_or(Address::ZERO, |f| f.parse().unwrap());
                     let sel: [u8; 4] = input[..4].try_into().unwrap();
                     let word = |v: U256| hexs(&v.abi_encode());
-                    let fails = |w: &World, sell: Address, o: &TradeOrder| -> Option<Vec<u8>> {
+                    let fails = |w: &World, sell: Address, o: &UATradeOrder| -> Option<Vec<u8>> {
                         let h = if sell == BASE || sell == QUOTE { oh(o) } else { B256::ZERO };
                         if w.named.contains(&h) {
                             Some(IToken::BelowMinFill { orderHash: h }.abi_encode())
                         } else if w.bad_sig.contains(&h) || w.silent.contains(&h) {
                             Some(IToken::MetaTxBadSignature {}.abi_encode())
-                        } else if w.wordy.contains(&h) || w.unfunded.contains(&o.from) {
+                        } else if w.wordy.contains(&h) || w.unfunded.contains(&Address::from_word(o.from)) {
                             Some(IToken::MetaTxInsufficientForFee { needed: U256::from(1), available: U256::ZERO }.abi_encode())
                         } else {
                             None
                         }
                     };
-                    let legs = |s: &crate::abi::Settlement| -> Vec<(Address, TradeOrder)> {
+                    let legs = |s: &crate::abi::Settlement| -> Vec<(Address, UATradeOrder)> {
                         std::iter::once(&s.taker).chain(&s.makers).map(|l| {
-                            assert_eq!(l.shape, 0, "the venue sends shape-0 legs only (C5b-11)");
-                            (l.sellToken, l.order.clone())
+                            assert!(l.shape <= 1);
+                            (l.sellToken, if l.shape == 1 { l.uaOrder.clone() } else { super::super::canon(&l.order) })
                         }).collect()
                     };
                     if sel == IToken::tradeOrderDigestCall::SELECTOR {
                         Ok(hexs(oh(&IToken::tradeOrderDigestCall::abi_decode(&input).unwrap().o).as_slice()))
-                    } else if sel == IToken::pulledCall::SELECTOR || sel == IToken::minNonceCall::SELECTOR {
+                    } else if sel == IToken::pulledCall::SELECTOR || sel == IToken::minNonceCall::SELECTOR
+                        || sel == ISCaaSDex::minNonceCall::SELECTOR {
                         Ok(word(U256::ZERO))
                     } else if sel == IToken::balanceOfCall::SELECTOR {
                         let who = IToken::balanceOfCall::abi_decode(&input).unwrap().who;
                         Ok(word(if w.unfunded.contains(&who) { U256::ZERO } else { U256::from(10u64).pow(U256::from(30)) }))
+                    } else if sel == IUALedger::balanceOfUACall::SELECTOR || sel == IToken::allowanceCall::SELECTOR {
+                        Ok(word(U256::from(10u64).pow(U256::from(30))))
+                    } else if sel == IUALedger::registryCall::SELECTOR {
+                        Ok(hexs(&w.registry.abi_encode()))
+                    } else if sel == IUARegistry::requireAuthorizedCall::SELECTOR {
+                        let c = IUARegistry::requireAuthorizedCall::abi_decode(&input).unwrap();
+                        assert!((from == BASE || from == QUOTE) && c.purposeTag == PURPOSE_TRADE, "asked as the token, under trade");
+                        if w.authorized.contains(&c.digest) { Ok(hexs(&[])) } else { revert(IUALedger::UAUnauthorized { ua: c.ua }.abi_encode()) }
+                    } else if sel == IToken::invalidateNoncesDigestCall::SELECTOR {
+                        let c = IToken::invalidateNoncesDigestCall::abi_decode(&input).unwrap();
+                        Ok(hexs(keccak256((c.from, c.batch, c.newMin).abi_encode()).as_slice()))
+                    } else if sel == IMtxIds::mtxInvalidateNoncesCall::SELECTOR {
+                        Ok(hexs(&[]))
                     } else if sel == IToken::cancelOrderDigestCall::SELECTOR {
                         Ok(word(U256::from_be_bytes(oh(&IToken::cancelOrderDigestCall::abi_decode(&input).unwrap().o).0)))
                     } else if sel == IToken::eip712DomainCall::SELECTOR {
@@ -1483,10 +1565,10 @@ mod tests {
         PrivateKeySigner::from_bytes(&B256::repeat_byte(0x42)).unwrap()
     }
 
-    fn order(from: Address, receive: Address, amount: u64, receive_amount: u64, nonce: u64) -> TradeOrder {
-        TradeOrder {
-            from, receiveToken: receive, amount: U256::from(amount), receiveAmount: U256::from(receive_amount),
-            minFill: U256::ZERO, fee: U256::ZERO, relayer: relayer_key().address(), dex: DEX, destination: Address::ZERO,
+    fn order(from: Address, receive: Address, amount: u64, receive_amount: u64, nonce: u64) -> UATradeOrder {
+        UATradeOrder {
+            from: from.into_word(), receiveToken: receive, amount: U256::from(amount), receiveAmount: U256::from(receive_amount),
+            minFill: U256::ZERO, fee: U256::ZERO, relayer: relayer_key().address(), dex: DEX, destination: B256::ZERO,
             flags: 0, batch: U256::from(1), nonce: U256::from(nonce), validUntil: U256::from(now() + 300),
         }
     }
@@ -1496,7 +1578,7 @@ mod tests {
     }
 
     /// A venue on the fake chain whose book holds `makers` (asks, best first by price as inserted).
-    async fn venue(w: World, makers: Vec<(TradeOrder, Bytes)>) -> (Venue, W) {
+    async fn venue(w: World, makers: Vec<(UATradeOrder, Bytes)>) -> (Venue, W) {
         let (url, world) = fake_chain(w).await;
         let cfg = crate::config::ChainCfg { family: "evm".into(), evm_chain_number: 31337, rpc_urls: vec![url],
                                             chain_uid: Some(B256::repeat_byte(0x24)), ..Default::default() };
@@ -1504,7 +1586,7 @@ mod tests {
         let (relay, _) = crate::adapter::tests::fake_odoo(Default::default()).await;
         let mut book = Book::new(vec![market()]);
         for (i, (o, sig)) in makers.into_iter().enumerate() {
-            book.insert(Resting { hash: oh(&o), sell: BASE, remaining: o.amount, order: o, sig, seq: i as u64 + 1 });
+            book.insert(Resting { hash: oh(&o), sell: BASE, remaining: o.amount, order: o, auth: Auth::Ua(ua(sig)), seq: i as u64 + 1 });
         }
         book.next_seq = 100;
         let v = Venue { chain, relay, indexer: None, dex: DEX, puller: Address::repeat_byte(0x9),
@@ -1515,10 +1597,10 @@ mod tests {
 
     async fn take(v: &Venue, k: &PrivateKeySigner, quote: u64, base: u64, nonce: u64) -> std::result::Result<PlaceReply, VenueError> {
         let o = order(k.address(), BASE, quote, base, nonce);
-        v.place(QUOTE, &WireOrder::from_sol(&o), &hex_of(&sig_of(k, oh(&o)))).await
+        v.place(QUOTE, &WireOrder::from_ua(&o), None, Some(&ua_sig_json(&ua(sig_of(k, oh(&o)))))).await
     }
 
-    fn in_book(rows: &[Row], o: &TradeOrder) -> bool {
+    fn in_book(rows: &[Row], o: &UATradeOrder) -> bool {
         rows.iter().any(|r| r.order_hash == format!("{:#x}", oh(o)))
     }
 
@@ -1532,7 +1614,7 @@ mod tests {
     async fn ticker_ignores_the_min_fill_bucket() {
         let (m1, m2) = (PrivateKeySigner::random(), PrivateKeySigner::random());
         let normal = order(m1.address(), QUOTE, 10, 30, 1);
-        let big = TradeOrder { minFill: U256::from(5), ..order(m2.address(), QUOTE, 10, 20, 1) }; // better price, in the bucket
+        let big = UATradeOrder { minFill: U256::from(5), ..order(m2.address(), QUOTE, 10, 20, 1) }; // better price, in the bucket
         let (v, _) = venue(World::default(), vec![(normal.clone(), sig_of(&m1, oh(&normal))), (big.clone(), sig_of(&m2, oh(&big)))]).await;
         assert_eq!(v.ticker(1).await.unwrap()["best_ask"], "3");
         let d = v.depth(1, 5).await.unwrap();
@@ -1541,8 +1623,9 @@ mod tests {
         assert!(d["min_fill"]["bids"].as_array().unwrap().is_empty());
     }
 
-    /// C6-3: the watcher takes leg events only from the DEX, and cancel / invalidation only from the DEX or a SCaaS
-    /// token (a token only for the orders it sells); a hostile listed outside token's forged logs change nothing.
+    /// C6-3: the watcher takes leg events and an outside order's cancel and invalidation only from the DEX, a SCaaS order's
+    /// (`UAOrderCancelled`, `UANoncesInvalidated`, R18) only from a SCaaS token, and that token only for the orders it sells; a
+    /// hostile listed outside token's forged logs change nothing.
     #[tokio::test]
     async fn the_watcher_checks_who_emitted_the_log() {
         let evil = Address::repeat_byte(0xee);
@@ -1551,36 +1634,41 @@ mod tests {
         let h = oh(&ask);
         let (v, _) = venue(World::default(), vec![(ask.clone(), sig_of(&maker, h))]).await;
         let v = Venue { kinds: [(BASE, KIND_SCAAS), (QUOTE, KIND_SCAAS), (evil, KIND_OUTSIDE)].into_iter().collect(), ..v };
-        let leg = |sold: u64| ISCaaSDex::LegSettled { r#ref: B256::ZERO, orderHash: h, from: maker.address(),
-            destination: maker.address(), sold: U256::from(sold), received: U256::ZERO, dexFee: U256::ZERO,
+        let leg = |sold: u64| ISCaaSDex::UALegSettled { r#ref: B256::ZERO, orderHash: h, from: ask.from,
+            destination: ask.from, sold: U256::from(sold), received: U256::ZERO, dexFee: U256::ZERO,
             refund: U256::ZERO, relayerShare: U256::ZERO, treasuryShare: U256::ZERO }.encode_log_data();
         let cancel = ISCaaSDex::OrderCancelled { orderHash: h, from: maker.address() }.encode_log_data();
         let inv = ISCaaSDex::NoncesInvalidated { from: maker.address(), batch: U256::from(1), minNonce: U256::from(9) }.encode_log_data();
-        let ua = IToken::UANoncesInvalidated { from: maker.address().into_word(), batch: U256::from(1), minNonce: U256::from(9) }.encode_log_data();
+        let ua_cancel = IToken::UAOrderCancelled { orderHash: h, from: ask.from }.encode_log_data();
+        let ua_inv = IToken::UANoncesInvalidated { from: ask.from, batch: U256::from(1), minNonce: U256::from(9) }.encode_log_data();
         // forged: an outside token (listed, in `kinds`) and a stranger
         for who in [evil, Address::repeat_byte(0xdd)] {
-            for d in [leg(1), cancel.clone(), inv.clone(), ua.clone()] {
+            for d in [leg(1), cancel.clone(), inv.clone(), ua_cancel.clone(), ua_inv.clone()] {
                 assert!(v.accepted(&[log_at(who, d)]).is_empty(), "{who}");
             }
         }
-        // a SCaaS token is no source of a leg event; the DEX is no source of a UA invalidation
-        assert!(v.accepted(&[log_at(BASE, leg(1))]).is_empty());
-        assert!(v.accepted(&[log_at(DEX, ua.clone())]).is_empty());
-        for (who, d) in [(DEX, leg(1)), (DEX, cancel.clone()), (DEX, inv.clone()), (BASE, cancel.clone()), (BASE, inv.clone()), (BASE, ua.clone())] {
+        // a SCaaS token is no source of a leg event nor of the DEX's address events (no token emits them since T6, R18); the
+        // DEX is no source of a token's order events
+        for d in [leg(1), cancel.clone(), inv.clone()] {
+            assert!(v.accepted(&[log_at(BASE, d)]).is_empty());
+        }
+        for d in [ua_cancel.clone(), ua_inv.clone()] {
+            assert!(v.accepted(&[log_at(DEX, d)]).is_empty());
+        }
+        for (who, d) in [(DEX, leg(1)), (DEX, cancel.clone()), (DEX, inv.clone()), (BASE, ua_cancel.clone()), (BASE, ua_inv.clone())] {
             assert_eq!(v.accepted(&[log_at(who, d)]).len(), 1);
         }
-        // the order sells BASE: only BASE (its token) cancels it; QUOTE (another SCaaS token) cannot, nor can the DEX
-        // (it holds outside tokens' orders only)
+        // the order sells BASE: only BASE (its token) cancels it; QUOTE (another SCaaS token) cannot, nor can the DEX (it
+        // holds outside tokens' orders only)
         let mut book = v.book.lock().await;
-        for who in [QUOTE, DEX] {
-            v.apply_events(&mut book, &v.accepted(&[log_at(who, cancel.clone())]));
-            assert!(book.get(h).is_some(), "{who} does not sell it");
-        }
-        // C6-7: UANoncesInvalidated(pad(maker)) from its token drops the dead shape-0 order, nothing else
-        v.apply_events(&mut book, &v.accepted(&[log_at(QUOTE, ua.clone())]));
-        assert!(book.get(h).is_some(), "QUOTE does not sell it");
-        v.apply_events(&mut book, &v.accepted(&[log_at(BASE, ua)]));
-        assert!(book.get(h).is_none(), "BASE sells it");
+        v.apply_events(&mut book, &v.accepted(&[log_at(QUOTE, ua_cancel.clone()), log_at(DEX, cancel.clone()), log_at(QUOTE, ua_inv.clone()),
+            log_at(DEX, inv.clone())]));
+        assert!(book.get(h).is_some(), "neither QUOTE nor the DEX holds it");
+        let mut other = book.clone();
+        v.apply_events(&mut book, &v.accepted(&[log_at(BASE, ua_cancel)]));
+        assert!(book.get(h).is_none(), "BASE sells it: UAOrderCancelled");
+        v.apply_events(&mut other, &v.accepted(&[log_at(BASE, ua_inv)]));
+        assert!(other.get(h).is_none(), "BASE sells it: UANoncesInvalidated, its id's lane");
     }
 
     /// Review T3 C1: an ERC-1271 maker at the best price whose wallet answers anything but exactly the 32-byte magic
@@ -1642,9 +1730,9 @@ mod tests {
     async fn three_bad_makers_at_the_top_never_cause_an_endless_503() {
         let taker = PrivateKeySigner::random();
         let keys: Vec<PrivateKeySigner> = (0..4).map(|_| PrivateKeySigner::random()).collect();
-        let asks: Vec<TradeOrder> = [(10, 20), (10, 21), (10, 22), (40, 92)].iter().zip(&keys)
+        let asks: Vec<UATradeOrder> = [(10, 20), (10, 21), (10, 22), (40, 92)].iter().zip(&keys)
             .map(|((b, q), k)| order(k.address(), QUOTE, *b, *q, 1)).collect();
-        let makers: Vec<(TradeOrder, Bytes)> = asks.iter().zip(&keys).map(|(o, k)| (o.clone(), sig_of(k, oh(o)))).collect();
+        let makers: Vec<(UATradeOrder, Bytes)> = asks.iter().zip(&keys).map(|(o, k)| (o.clone(), sig_of(k, oh(o)))).collect();
         // (a) each named by its own revert, one per settlement, state healthy: the third round gives up with 503,
         //     yet all three are gone for the next taker
         let mut w = World::default();
@@ -1720,10 +1808,11 @@ mod tests {
         assert_eq!(reloaded.pending_of(oh(&ask)), U256::from(60));
         // the order handed in again (out of the book, e.g. cancelled here only) is credited only what is not pending
         let rest = v.book.lock().await.remove(oh(&ask)).unwrap();
-        let again = v.place(BASE, &WireOrder::from_sol(&ask), &hex_of(&rest.sig)).await.unwrap();
+        let Auth::Ua(auth) = &rest.auth else { panic!("a SCaaS order") };
+        let again = v.place(BASE, &WireOrder::from_ua(&ask), None, Some(&ua_sig_json(auth))).await.unwrap();
         assert_eq!((again.status, again.remaining.as_str()), ("resting", "40"));
         // the settlement dies: the client reports it failed; the maker gets its 60 back (nothing pending any more)
-        let row = Row::of(&Resting { hash: oh(&ask), sell: BASE, order: ask.clone(), sig: sig_of(&maker, oh(&ask)),
+        let row = Row::of(&Resting { hash: oh(&ask), sell: BASE, order: ask.clone(), auth: Auth::Ua(ua(sig_of(&maker, oh(&ask)))),
                                      remaining: U256::from(100), seq: 1 });
         let tag = r.fills[0]["tag"].clone();
         let (relay, _) = crate::adapter::tests::fake_odoo(crate::adapter::tests::Fake {
@@ -1737,17 +1826,18 @@ mod tests {
         assert_eq!((book.get(oh(&ask)).unwrap().remaining, book.pending_of(oh(&ask))), (U256::from(100), U256::ZERO));
     }
 
-    /// Review T3 I1 at the watcher: a mined `LegSettled` releases the order's pending fill, so its remainder (below the
-    /// minimum fill) closes at once, with no restart or reload.
+    /// Review T3 I1 at the watcher, a SCaaS leg (CTR-DEX-26, R18): its mined `UALegSettled` (never `LegSettled`, an outside
+    /// leg's) releases the order's pending fill, so its remainder (below the minimum fill) closes at once, with no restart or
+    /// reload; the watcher asks the chain for it.
     #[tokio::test]
-    async fn a_mined_leg_releases_its_pending_fill() {
+    async fn watcher_settles_on_ua_leg_settled() {
         let (maker, taker) = (PrivateKeySigner::random(), PrivateKeySigner::random());
         let ask = order(maker.address(), QUOTE, 100, 200, 1); // min 50 base
         let (v, world) = venue(World::default(), vec![(ask.clone(), sig_of(&maker, oh(&ask)))]).await;
         assert_eq!(take(&v, &taker, 120, 60, 1).await.unwrap().status, "filled");
         assert_eq!(v.book.lock().await.pending_of(oh(&ask)), U256::from(60));
-        let ev = ISCaaSDex::LegSettled { r#ref: B256::repeat_byte(1), orderHash: oh(&ask), from: maker.address(),
-            destination: maker.address(), sold: U256::from(60), received: U256::from(120), dexFee: U256::ZERO,
+        let ev = ISCaaSDex::UALegSettled { r#ref: B256::repeat_byte(1), orderHash: oh(&ask), from: ask.from,
+            destination: ask.from, sold: U256::from(60), received: U256::from(120), dexFee: U256::ZERO,
             refund: U256::ZERO, relayerShare: U256::ZERO, treasuryShare: U256::ZERO };
         world.lock().unwrap().logs.push(serde_json::to_value(log_at(DEX, ev.encode_log_data())).unwrap());
         let (idx, _) = crate::adapter::tests::fake_odoo(crate::adapter::tests::Fake { tokens: json!([]), ..Default::default() }).await;
@@ -1803,8 +1893,8 @@ mod tests {
     async fn outside_legs_are_blamed_only_on_their_own_evidence() {
         let (maker, taker) = (PrivateKeySigner::random(), PrivateKeySigner::random());
         let (ask, bid) = (order(maker.address(), QUOTE, 10, 20, 1), order(taker.address(), BASE, 20, 10, 1));
-        let leg = |o: &TradeOrder, sell: Address, k: &PrivateKeySigner| Resting { hash: oh(o), sell, order: o.clone(),
-            sig: sig_of(k, oh(o)), remaining: o.amount, seq: 1 };
+        let leg = |o: &UATradeOrder, sell: Address, k: &PrivateKeySigner| Resting { hash: oh(o), sell, order: o.clone(),
+            auth: if sell == BASE { Auth::Sig(sig_of(k, oh(o))) } else { Auth::Ua(ua(sig_of(k, oh(o)))) }, remaining: o.amount, seq: 1 };
         let s = PlannedSettlement { tag: B256::repeat_byte(1), market_id: 1, taker: leg(&bid, QUOTE, &taker),
             taker_fill: U256::from(20), makers: vec![(leg(&ask, BASE, &maker), U256::from(10), U256::from(20))] };
         let mut w = World::default();
@@ -1825,13 +1915,16 @@ mod tests {
         let made = || vec![(ask.clone(), sig.clone())];
         // the fake's cancelOrderDigest is the order hash, so `sig` is a valid cancel signature
         let (v, _) = venue(World::default(), made()).await;
-        let e = v.cancel(oh(&ask), &hex_of(&sig)).await.unwrap_err();
+        let auth = ua_sig_json(&ua(sig.clone()));
+        assert!(v.cancel(oh(&ask), Some(&hex_of(&sig)), None).await.unwrap_err().to_string().starts_with("LEG_SHAPE"),
+            "a SCaaS order's cancel is CancelUAOrder in auth");
+        let e = v.cancel(oh(&ask), None, Some(&auth)).await.unwrap_err();
         assert!(matches!(e, VenueError::Unavailable(_)), "an unreadable kind is unavailable, never a guess");
         assert!(in_book(&v.rows().await, &ask), "the order stays: nothing would close it on chain");
         assert!(v.cancels.lock().unwrap().pending.is_empty());
         for (name, want) in [("SCaaS MetaToken", "token"), ("SCaaS ZetherToken", "zether"), ("SCaaS PqzToken", "pqz")] {
             let (v, _) = venue(World { domain: Some(name), ..Default::default() }, made()).await;
-            v.cancel(oh(&ask), &hex_of(&sig)).await.unwrap();
+            v.cancel(oh(&ask), None, Some(&auth)).await.unwrap();
             assert!(!in_book(&v.rows().await, &ask));
             let q = v.cancels.lock().unwrap().pending.clone();
             let jobs = cancel_jobs(DEX, &q);
@@ -1854,6 +1947,98 @@ mod tests {
         let r = take(&v, &taker, 22, 10, 1).await.unwrap();
         assert_eq!((r.status, r.fills[0]["maker_hash"].as_str().unwrap()), ("filled", &*format!("{:#x}", oh(&good_ask))));
         assert!(!in_book(&v.rows().await, &sly_ask));
+    }
+
+    /// ua-mtx-merge T17 (spec §3.4, R12): an EOA's `UATradeOrder` (its address zero-padded, its key's signature alone in
+    /// `auth`) rests and takes; the settle job carries both SCaaS legs in shape 1 with their `UASig`s. The shape-0 form, a
+    /// native `auth` with `keyData` (R17) and another key's signature are refused, nothing written.
+    #[tokio::test]
+    async fn book_takes_a_ua_trade_order_from_an_eoa() {
+        let (maker, taker) = (PrivateKeySigner::random(), PrivateKeySigner::random());
+        let ask = order(maker.address(), QUOTE, 10, 20, 1);
+        let (v, _) = venue(World::default(), vec![(ask.clone(), sig_of(&maker, oh(&ask)))]).await;
+        let (relay, store) = crate::adapter::tests::fake_odoo(Default::default()).await;
+        let v = Venue { relay, ..v };
+        let bid = order(taker.address(), BASE, 20, 10, 1);
+        let sig = sig_of(&taker, oh(&bid));
+        let w = WireOrder::from_ua(&bid);
+        let refused = |e: VenueError| e.to_string();
+        assert!(refused(v.place(QUOTE, &w, Some(&hex_of(&sig)), None).await.unwrap_err()).starts_with("LEG_SHAPE"), "shape 0");
+        let addr_form = WireOrder::from_sol(&super::super::trade_of(&bid));
+        assert!(refused(v.place(QUOTE, &addr_form, None, Some(&ua_sig_json(&ua(sig.clone())))).await.unwrap_err()).contains("not a bytes32"));
+        let r17 = UASig { keyData: Bytes::from_static(&[1]), ..ua(sig.clone()) };
+        assert_eq!(refused(v.place(QUOTE, &w, None, Some(&ua_sig_json(&r17))).await.unwrap_err()), "bad order signature", "R17");
+        let other = ua(sig_of(&maker, oh(&bid)));
+        assert_eq!(refused(v.place(QUOTE, &w, None, Some(&ua_sig_json(&other))).await.unwrap_err()), "bad order signature");
+        assert!(store.lock().unwrap().commits.is_empty(), "nothing written on a refusal");
+        let r = v.place(QUOTE, &w, None, Some(&ua_sig_json(&ua(sig.clone())))).await.unwrap();
+        assert_eq!((r.status, r.fills[0]["maker_hash"].as_str().unwrap()), ("filled", &*format!("{:#x}", oh(&ask))));
+        let commit = store.lock().unwrap().commits[0].clone();
+        let job = commit["jobs"].as_array().unwrap().iter().find(|j| j["kind"] == "settle").unwrap().clone();
+        let (w8, _) = crate::submit::work_of_op(None, &job["op"], None).unwrap();
+        let c = ISCaaSDex::mtxSettleCall::abi_decode(&w8.data).unwrap();
+        assert_eq!((c.s[0].taker.shape, c.s[0].makers[0].shape), (1, 1));
+        assert_eq!((&c.s[0].taker.uaOrder, &c.s[0].taker.auth), (&bid, &ua(sig)));
+        assert_eq!(c.s[0].makers[0].uaOrder, ask);
+        // the rows the client stores carry the order as it came in: ids, and `auth` instead of `signature`
+        let taker_row = commit["orders"].as_array().unwrap().iter().find(|o| o["order_hash"] == json!(format!("{:#x}", oh(&bid)))).unwrap().clone();
+        assert_eq!((taker_row["order"]["from"].clone(), taker_row["signature"].clone()), (json!(format!("{:#x}", bid.from)), json!("")));
+        assert_eq!(super::super::ua_sig(&taker_row["auth"]).unwrap(), c.s[0].taker.auth);
+        assert_eq!(v.orders_of(ask.from).await.len(), 0, "the maker filled");
+    }
+
+    /// Cancel-all of a SCaaS lane (R12, R38): `UAInvalidateNonces` on the id, its `auth` checked as the token does, the lane's
+    /// orders out of the book, and one `ua_metatx` job of the token's `mtxInvalidateNonces(bytes32, …, UASig)`; the shape-0
+    /// form (an address `from`, or a `signature`) refused by name.
+    #[tokio::test]
+    async fn cancel_all_signs_the_ua_invalidate() {
+        let maker = PrivateKeySigner::random();
+        let (a1, a2) = (order(maker.address(), QUOTE, 10, 30, 1), order(maker.address(), QUOTE, 10, 40, 7));
+        let made = vec![(a1.clone(), sig_of(&maker, oh(&a1))), (a2.clone(), sig_of(&maker, oh(&a2)))];
+        let (v, _) = venue(World { domain: Some("SCaaS MetaToken"), ..Default::default() }, made).await;
+        let (relay, store) = crate::adapter::tests::fake_odoo(Default::default()).await;
+        let v = Venue { relay, ..v };
+        let id = format!("{:#x}", a1.from);
+        let digest = keccak256((a1.from, U256::from(1), U256::from(5)).abi_encode());
+        let auth = ua_sig_json(&ua(sig_of(&maker, digest)));
+        let err = |e: VenueError| e.to_string();
+        let sig = hex_of(&sig_of(&maker, digest));
+        assert!(err(v.cancel_all(BASE, &id, U256::from(1), U256::from(5), Some(&sig), None).await.unwrap_err()).starts_with("LEG_SHAPE"));
+        let addr = format!("{:#x}", maker.address());
+        assert!(err(v.cancel_all(BASE, &addr, U256::from(1), U256::from(5), None, Some(&auth)).await.unwrap_err()).contains("not a bytes32"));
+        let wrong = ua_sig_json(&ua(sig_of(&maker, B256::repeat_byte(9))));
+        assert_eq!(err(v.cancel_all(BASE, &id, U256::from(1), U256::from(5), None, Some(&wrong)).await.unwrap_err()), "bad invalidate signature");
+        assert_eq!(v.cancel_all(BASE, &id, U256::from(1), U256::from(5), None, Some(&auth)).await.unwrap(), 1, "nonce 1 < 5; nonce 7 stays");
+        let rows = v.rows().await;
+        assert!(!in_book(&rows, &a1) && in_book(&rows, &a2));
+        let jobs = store.lock().unwrap().commits[0]["jobs"].clone();
+        assert_eq!(jobs.as_array().unwrap().len(), 1);
+        assert_eq!((jobs[0]["kind"].as_str(), jobs[0]["op"]["args"]["from"].as_str()), (Some("ua_metatx"), Some(&*id)));
+        assert!(jobs[0]["op"].get("signature").is_none());
+        let (w8, is_ua) = crate::submit::work_of_op(None, &jobs[0]["op"], None).unwrap();
+        assert!(is_ua);
+        assert_eq!(w8.data[..4], crate::guard::SEL_TOKEN_INVALIDATE_NONCES);
+        let c = IMtxIds::mtxInvalidateNoncesCall::abi_decode(&w8.data).unwrap();
+        assert_eq!((c.from, c.batch, c.newMin, c.auth), (a1.from, U256::from(1), U256::from(5), ua(sig_of(&maker, digest))));
+    }
+
+    /// A derived seller (an id outside the native space) is authorized by the sell token's registry under `trade`, as the
+    /// token's `authorize` does: a registry that refuses, or none (`registry() == 0`, `UALedgerOff` on chain), is a bad
+    /// signature; its balance is its `balanceOfUA`.
+    #[tokio::test]
+    async fn a_derived_seller_is_authorized_by_its_registry() {
+        let from = B256::repeat_byte(0xa7);
+        let ask = UATradeOrder { from, ..order(Address::ZERO, QUOTE, 10, 20, 1) };
+        let auth = ua_sig_json(&UASig { keyData: Bytes::from_static(&[1, 2]), signature: Bytes::from_static(&[3; 64]), members: vec![] });
+        for (registry, ok, want) in [(Address::ZERO, true, false), (Address::repeat_byte(0x5c), false, false), (Address::repeat_byte(0x5c), true, true)] {
+            let mut w = World { registry, ..Default::default() };
+            if ok {
+                w.authorized.insert(oh(&ask));
+            }
+            let (v, _) = venue(w, vec![]).await;
+            let r = v.place(BASE, &WireOrder::from_ua(&ask), None, Some(&auth)).await;
+            assert_eq!(r.is_ok(), want, "{registry} {ok}: {:?}", r.err().map(|e| e.to_string()));
+        }
     }
 
     /// A failed fill hands back no more than the chain still has open after the book and the other planned fills.

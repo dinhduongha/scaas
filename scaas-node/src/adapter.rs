@@ -772,6 +772,8 @@ pub(crate) mod tests {
         pub claims: u32,
         /// `dex_sync`'s answer (Null = the generic reply).
         pub dex_sync: Value,
+        /// Every `dex_book_commit` body, in order.
+        pub commits: Vec<Value>,
     }
     pub(crate) type Shared = Arc<std::sync::Mutex<Fake>>;
 
@@ -802,6 +804,10 @@ pub(crate) mod tests {
                     serde_json::json!({"ok": true})
                 }
                 "dex_sync" if !o.dex_sync.is_null() => std::mem::take(&mut o.dex_sync),
+                "dex_book_commit" => {
+                    o.commits.push(b);
+                    serde_json::json!({"ok": true})
+                }
                 _ => {
                     o.ingests += 1;
                     serde_json::json!({"indexed_block": 5, "created": 0})

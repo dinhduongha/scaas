@@ -1,6 +1,6 @@
 //! ABI — copied from `smartcontracts/evm/src` (`IMetaTx`, `IERC20MetaTx`, `IERC20Payment`, `ITradeToken`, `MetaTxLib`,
 //! `ISCaaSDex`, `MandateWallet`, `IUARegistry`), never inferred: one wrong `indexed` is one wrong topic. Pinned by the forge KATs
-//! (`metatx_kat.json`, `metatransfer_kat.json`, `trade_kat.json`, `dex_order_kat.json`: digests and relayed calldata). The
+//! (`metatx_kat.json`, `metatransfer_kat.json`, `dex_order_kat.json`, `uatrade_kat.json`: digests and relayed calldata). The
 //! named typed entries are not here: they are data, `crate::typed`.
 // `sol!` builds a constructor per event; `LegSettled` / `UALegSettled` have ten fields.
 #![allow(clippy::too_many_arguments)]
@@ -99,8 +99,11 @@ sol! {
     #[derive(Debug, PartialEq, Eq)]
     struct Settlement { bytes32 ref; DexLeg taker; DexLeg[] makers; }
 
-    /// The nested cancels (typed-signing C6): the whole order is signed, in the sell token's domain or (`CancelDexOrder`) the DEX's.
-    struct CancelOrder { TradeOrder order; }
+    /// The nested cancels (typed-signing C6): the whole order is signed, a SCaaS token's `UATradeOrder` in its domain under the
+    /// UA purpose `trade` (`CancelUAOrder`, `UAInvalidateNonces`, R12), an outside token's `DexOrder` in the DEX's (`CancelDexOrder`,
+    /// `InvalidateNonces`). The token's address `CancelOrder` is in `legacy/ua-mtx-merge/abi.rs`.
+    struct CancelUAOrder { UATradeOrder order; }
+    struct UAInvalidateNonces { bytes32 from; uint256 batch; uint256 minNonce; }
     struct CancelDexOrder { DexOrder order; }
     struct InvalidateNonces { address from; uint256 batch; uint256 minNonce; }
 
@@ -160,8 +163,8 @@ sol! {
 
     /// Every SCaaS contract on `MetaTxBase` (`IMetaTx`) plus the address surface: `SmartKeyAccount`'s (`IMetaTxAddress`: `mtxNonce`,
     /// `mtxDigest`, `mtxExecute`), the events and errors. ua-mtx-merge: the token's address forms here (`MetaTransfer`, `mtxPayMeta`
-    /// on addresses, `TradeOrder`'s `mtxTrade` / `mtxCancelOrder` / `mtxInvalidateNonces` and views) are no token entry any more;
-    /// the gateway door, the mesh, the DEX venue and the Hedera adapter still read them until T15–T18 move them (`IMtxIds`).
+    /// on addresses) are no token entry any more; the gateway door, the mesh and the Hedera adapter still read them until T15, T16,
+    /// T18 move them (`IMtxIds`). The order side is `ITradeToken`'s on ids (T17, R12, R38): `UATradeOrder`, `UASig`, `minNonce` by id.
     #[derive(Debug)]
     interface IToken {
         function mtxNonce(address from, uint256 batch) external view returns (uint256);
@@ -179,19 +182,19 @@ sol! {
         function supportedModes() external view returns (uint32);
         function balanceOf(address who) external view returns (uint256);
         function transfer(address to, uint256 value) external returns (bool);
-        function mtxTrade(TradeOrder o, bytes sig, TradeFill f) external;
-        function mtxCancelOrder(TradeOrder o, bytes sig) external;
-        function mtxInvalidateNonces(address from, uint256 batch, uint256 newMin, bytes sig) external;
-        /// `ITradeToken.UANoncesInvalidated`: `uaInvalidateNonces`; `from` is the id (a native address zero-padded).
+        function mtxTrade(UATradeOrder o, UASig auth, TradeFill f) external;
+        function mtxCancelOrder(UATradeOrder o, UASig auth) external;
+        /// `ITradeToken`'s order events (R18): `from` is the id (a native address zero-padded).
+        event UAOrderCancelled(bytes32 indexed orderHash, bytes32 indexed from);
         event UANoncesInvalidated(bytes32 indexed from, uint256 indexed batch, uint256 minNonce);
         function allowance(address owner, address spender) external view returns (uint256);
-        function tradeOrderDigest(TradeOrder o) external view returns (bytes32);
-        function cancelOrderDigest(TradeOrder o) external view returns (bytes32);
+        function tradeOrderDigest(UATradeOrder o) external view returns (bytes32);
+        function cancelOrderDigest(UATradeOrder o) external view returns (bytes32);
         function eip712Domain() external view returns (bytes1 fields, string name, string version, uint256 chainId,
             address verifyingContract, bytes32 salt, uint256[] extensions);
-        function invalidateNoncesDigest(address from, uint256 batch, uint256 newMin) external view returns (bytes32);
+        function invalidateNoncesDigest(bytes32 from, uint256 batch, uint256 newMin) external view returns (bytes32);
         function pulled(bytes32 orderHash) external view returns (uint256);
-        function minNonce(address from, uint256 batch) external view returns (uint256);
+        function minNonce(bytes32 from, uint256 batch) external view returns (uint256);
         event MetaTransactionExecuted(address indexed from, address indexed relayer, uint256 indexed batch,
             uint256 nonce, bytes32 digest, address feeRecipient, uint256 fee);
         event PaymentSettled(address indexed from, address indexed to, uint256 amount, uint256 feeAmount,
@@ -320,6 +323,9 @@ sol! {
         function storePqzPop(bytes32 ua, bytes pqzPop) external;
         function setPqzKey(bytes32 ua, bytes pqzKey, bytes32 pqzPopHash, UASig sig) external;
         function acceptMembership(bytes32 ua, MemberSig memberSig) external;
+        /// A derived id's authorization under a purpose (CTR-UA-07): reverts `UAUnauthorized(ua)` when it is not one; the venue
+        /// asks it for a derived seller's order, as the token's `authorize` does.
+        function requireAuthorized(bytes32 ua, bytes32 purposeTag, bytes32 digest, UASig auth) external view;
     }
 
     /// `MandateWallet` errors (CTR-ACC-06/07, CTR-ACC-12 in the merged form: ids): a job's revert reason names them, so the

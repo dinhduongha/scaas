@@ -61,37 +61,48 @@ pub struct OpReq {
     pub op: Value,
 }
 
-/// `POST /v1/dex/orders`: the `TradeOrder` and its sell token (the token's domain signs a SCaaS order, the DEX's an
-/// outside one, NODE-DEX-15).
+/// `POST /v1/dex/orders`: the order and its sell token, in the leg's form (CTR-DEX-26, ua-mtx-merge T17): a SCaaS sell
+/// token's `UATradeOrder` (`from`, `destination` ids) with `auth` (a `UASig`, the token's domain, purpose `trade`); an
+/// outside token's `TradeOrder` with `signature` (a `DexOrder` in the DEX's domain).
 #[derive(Deserialize)]
 pub struct OrderReq {
     pub chain: u64,
     #[serde(rename = "sellToken")]
     pub sell_token: Address,
     pub order: WireOrder,
-    pub signature: String,
+    #[serde(default)]
+    pub signature: Option<String>,
+    #[serde(default)]
+    pub auth: Option<Value>,
 }
 
+/// `POST /v1/dex/cancel`: `CancelUAOrder` with `auth` (a SCaaS order) or `CancelDexOrder` with `signature` (an outside one).
 #[derive(Deserialize)]
 pub struct CancelReqBody {
     pub chain: u64,
     #[serde(rename = "orderHash")]
     pub order_hash: alloy::primitives::B256,
-    pub signature: String,
+    #[serde(default)]
+    pub signature: Option<String>,
+    #[serde(default)]
+    pub auth: Option<Value>,
 }
 
-/// `POST /v1/dex/cancel-all`: `InvalidateNonces(from, batch, minNonce)` in the sell token's domain (its SCaaS orders)
-/// or the DEX's (outside-token orders).
+/// `POST /v1/dex/cancel-all`: `UAInvalidateNonces(from, batch, minNonce)` with `auth` in the sell token's domain (its SCaaS
+/// orders, `from` an id) or `InvalidateNonces` with `signature` in the DEX's (outside-token orders, `from` an address).
 #[derive(Deserialize)]
 pub struct CancelAllReq {
     pub chain: u64,
     #[serde(rename = "sellToken")]
     pub sell_token: Address,
-    pub from: Address,
+    pub from: String,
     pub batch: String,
     #[serde(rename = "minNonce")]
     pub min_nonce: String,
-    pub signature: String,
+    #[serde(default)]
+    pub signature: Option<String>,
+    #[serde(default)]
+    pub auth: Option<Value>,
 }
 
 #[derive(Deserialize)]
@@ -101,8 +112,9 @@ pub struct MarketQuery {
     pub market: i64,
     #[serde(default)]
     pub levels: Option<usize>,
+    /// An id (32-byte hex) or an address (its zero-padded id: both shapes of its orders).
     #[serde(default)]
-    pub maker: Option<Address>,
+    pub maker: Option<String>,
 }
 
 type Reply = (StatusCode, Json<Value>);
@@ -273,7 +285,7 @@ async fn dex_place(State(s): State<AppState>, Json(r): Json<OrderReq>) -> Reply 
         Ok(v) => v,
         Err(e) => return e,
     };
-    match v.place(r.sell_token, &r.order, &r.signature).await {
+    match v.place(r.sell_token, &r.order, r.signature.as_deref(), r.auth.as_ref()).await {
         Ok(p) => (StatusCode::ACCEPTED, Json(serde_json::to_value(p).unwrap_or_default())),
         Err(e) => venue_err(e),
     }
@@ -284,7 +296,7 @@ async fn dex_cancel(State(s): State<AppState>, Json(r): Json<CancelReqBody>) -> 
         Ok(v) => v,
         Err(e) => return e,
     };
-    match v.cancel(r.order_hash, &r.signature).await {
+    match v.cancel(r.order_hash, r.signature.as_deref(), r.auth.as_ref()).await {
         Ok(()) => (StatusCode::ACCEPTED, Json(json!({"status": "cancelled"}))),
         Err(e) => venue_err(e),
     }
@@ -298,7 +310,7 @@ async fn dex_cancel_all(State(s): State<AppState>, Json(r): Json<CancelAllReq>) 
     let (Ok(batch), Ok(min)) = (crate::metatx::uint(&r.batch), crate::metatx::uint(&r.min_nonce)) else {
         return bad("batch and minNonce are decimal uint256");
     };
-    match v.cancel_all(r.sell_token, r.from, batch, min, &r.signature).await {
+    match v.cancel_all(r.sell_token, &r.from, batch, min, r.signature.as_deref(), r.auth.as_ref()).await {
         Ok(n) => (StatusCode::ACCEPTED, Json(json!({"status": "cancelled", "orders": n}))),
         Err(e) => venue_err(e),
     }
@@ -346,7 +358,10 @@ async fn dex_orders(State(s): State<AppState>, Query(q): Query<MarketQuery>) -> 
         Err(e) => return e,
     };
     let Some(maker) = q.maker else { return bad("maker is required") };
-    (StatusCode::OK, Json(json!({"orders": v.orders_of(maker).await})))
+    let Ok(id) = crate::metatx::b32(&maker).or_else(|_| crate::metatx::addr(&maker).map(|a| a.into_word())) else {
+        return bad("maker is an id (32-byte hex) or an address");
+    };
+    (StatusCode::OK, Json(json!({"orders": v.orders_of(id).await})))
 }
 
 #[cfg(test)]

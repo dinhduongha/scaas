@@ -29,7 +29,7 @@ use scaas_node::chain::Chain;
 use scaas_node::config::{ChainCfg, FinalityCfg, OdooCfg};
 use scaas_node::dex::venue::Venue;
 use scaas_node::abi::TradeOrder;
-use scaas_node::dex::{cancel_digest, dex_order_hash, domain, invalidate_digest, trade_order_hash, WireOrder};
+use scaas_node::dex::{cancel_digest, canon, dex_order_hash, domain, invalidate_digest, trade_order_hash, WireOrder};
 use scaas_node::gateway::{router, AppState, GwChain};
 use scaas_node::metatx::{Domain, Mtx, MODE_RESTRICT_RELAYER};
 use scaas_node::odoo::Odoo;
@@ -763,7 +763,7 @@ async fn dex_order_book_settles_partial_fills_persists_and_cancels() {
     assert_eq!((balance(&rpc, token_a, fee_wallet).await, balance(&rpc, token_a, thief).await), (U256::from(1_000u64), U256::ZERO));
 
     // SCaaS orders are signed in their sell token's salted domain: no allowance anywhere (CTR-TOK-01).
-    let hash = |sell: Address, o: &TradeOrder| trade_order_hash(&domain("SCaaS MetaToken", chain_id, sell, uid), o);
+    let hash = |sell: Address, o: &TradeOrder| trade_order_hash(&domain("SCaaS MetaToken", chain_id, sell, uid), &canon(o));
     let place = |sell: Address, o: TradeOrder, signer: &PrivateKeySigner| {
         let sig = sign_hash(signer, hash(sell, &o));
         post("/v1/dex/orders", json!({"chain": chain_id, "sellToken": sell, "order": WireOrder::from_sol(&o), "signature": sig}))
@@ -810,7 +810,7 @@ async fn dex_order_book_settles_partial_fills_persists_and_cancels() {
     //    `mtxCancelOrder` entry job).
     let td = domain("SCaaS MetaToken", chain_id, token_a, uid);
     let high_s = {
-        let s = alice.sign_hash_sync(&cancel_digest(&td, &ask)).unwrap();
+        let s = alice.sign_hash_sync(&cancel_digest(&td, &canon(&ask))).unwrap();
         let n = U256::from_str_radix("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141", 16).unwrap();
         let flipped = alloy::primitives::Signature::new(s.r(), n - s.s(), !s.v());
         format!("0x{}", alloy::hex::encode(flipped.as_bytes()))
@@ -819,7 +819,7 @@ async fn dex_order_book_settles_partial_fills_persists_and_cancels() {
     assert_eq!(st, 400);
     assert_eq!(venue.rows().await, before);
     let (st, body) = post("/v1/dex/cancel", json!({"chain": chain_id, "orderHash": format!("{ask_hash:#x}"),
-        "signature": sign_hash(&alice, cancel_digest(&td, &ask))})).await;
+        "signature": sign_hash(&alice, cancel_digest(&td, &canon(&ask)))})).await;
     assert_eq!(st, 202, "{body}");
     assert!(venue.rows().await.is_empty());
     venue.sync_once().await.unwrap();
@@ -900,7 +900,7 @@ async fn dex_order_book_settles_partial_fills_persists_and_cancels() {
     venue.sync_once().await.unwrap();
     drain(&mut s, &mut rx).await;
     let p = ProviderBuilder::new().connect_http(rpc.parse().unwrap());
-    let min = IToken::minNonceCall { from: alice.address(), batch: U256::from(1) }.abi_encode();
+    let min = IToken::minNonceCall { from: alice.address().into_word(), batch: U256::from(1) }.abi_encode();
     let out = p.call(TransactionRequest::default().to(token_a).input(min.into())).await.unwrap();
     assert_eq!(U256::abi_decode(&out).unwrap(), U256::from(21));
 
@@ -977,13 +977,13 @@ async fn dex_fill_below_half_settles_on_anvil() {
         async move { http.post("http://127.0.0.1:18653/v1/dex/orders").json(&body).send().await.unwrap().json::<Value>().await.unwrap() }
     };
     let place = |sell: Address, o: TradeOrder, signer: &PrivateKeySigner| {
-        let sig = sign_hash(signer, trade_order_hash(&domain("SCaaS MetaToken", chain_id, sell, uid), &o));
+        let sig = sign_hash(signer, trade_order_hash(&domain("SCaaS MetaToken", chain_id, sell, uid), &canon(&o)));
         post(json!({"chain": chain_id, "sellToken": sell, "order": WireOrder::from_sol(&o), "signature": sig}))
     };
 
     // ask: 1000 A for 2000 B, minFill 0 (order() default)
     let ask = order(&alice, token_b, 1_000, 2_000, 0, 1, lane, dex);
-    let ask_hash = format!("{:#x}", trade_order_hash(&domain("SCaaS MetaToken", chain_id, token_a, uid), &ask));
+    let ask_hash = format!("{:#x}", trade_order_hash(&domain("SCaaS MetaToken", chain_id, token_a, uid), &canon(&ask)));
     assert_eq!(place(token_a, ask, &alice).await["status"], "resting");
 
     // bid 200 A (400 B) is 20 % of the ask: it fills, the ask stays partial with 800 left
