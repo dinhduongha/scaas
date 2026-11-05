@@ -34,8 +34,20 @@ const u32 = (i) => new Uint8Array([i >>> 24, (i >>> 16) & 255, (i >>> 8) & 255, 
 
 /** EIP-2333 `HKDF_mod_r` with the curve's salt and `r`. */
 export function hkdfModR(curve, ikm, keyInfo = new Uint8Array(0)) {
-  const { Point, salt: s0 } = curveOf(curve);
-  const r = Point.Fn.ORDER;
+  const { Point, salt } = curveOf(curve);
+  return modR(Point.Fn.ORDER, salt, ikm, keyInfo);
+}
+
+/** EIP-2333 over a group of order `r` with the initial salt string `salt` (the UA paths of ua-rs-sign spec §4: BLS12-381 with
+ *  EIP-2333's own salt, bn254 with `SCAAS-UA-BN254-v1`): master from `seed`, then one child per entry of `path`. */
+export function eip2333(seed, path, { r, salt }) {
+  if (seed.length < 32) throw new Error('EIP-2333 seed must be at least 32 bytes');
+  let sk = modR(r, salt, seed);
+  for (const i of path) sk = modR(r, salt, lamportPk(sk, pathIndex(i)));
+  return sk;
+}
+
+function modR(r, s0, ikm, keyInfo = new Uint8Array(0)) {
   let salt = utf8ToBytes(s0);
   const ikm0 = concatBytes(ikm, new Uint8Array([0]));
   const info = concatBytes(keyInfo, new Uint8Array([0, L]));

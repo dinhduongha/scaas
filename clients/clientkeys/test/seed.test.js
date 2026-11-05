@@ -18,9 +18,10 @@ import { readFileSync } from 'node:fs';
 import { HDKey } from '@scure/bip32';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { ed25519 } from '@noble/curves/ed25519.js';
+import { p256 } from '@noble/curves/nist.js';
 import {
   entropyToWords, wordsToEntropy, seedFromWords, seedFromEntropy, slip10Ed25519, deriveKey, signDigest, signTyped, signKeyProof,
-  strkey, normalizeMnemonic, generateEntropy,
+  strkey, normalizeMnemonic, generateEntropy, slip10,
 } from '../src/seed.js';
 import { bytesToHex, concatBytes, fromHex, keccak_256 } from '../src/bytes.js';
 import { hashTypedData, keyProofMessage, metaTransferTypedData } from '../src/evm.js';
@@ -81,6 +82,40 @@ test('SLIP-10 ed25519 test vector 1 (published, slip-0010.md)', () => {
     assert.equal(bytesToHex(ed25519.getPublicKey(k.privateKey)), pub, path);
   }
   assert.throws(() => slip10Ed25519(seed, 'm/0'), /hardened-only/);
+});
+
+// ua-rs-sign T1a: the UA tree's P-256 keys (kind 0x0101). Source: satoshilabs/slips a00312491693714d9bc1b6e4cb5b2e356e6c511e
+// slip-0010.md (sha256 dbd5a324f2a6014bf78fc8cfa85833e4a16256a02283b93d648fccba18ed1ce7): "Test vector 1", "Test derivation
+// retry" and "Test seed retry" for nist256p1, their hardened steps (the UA tree has no other).
+test('SLIP-10 nist256p1: test vector 1, derivation retry, seed retry (published, slip-0010.md)', () => {
+  const v1 = fromHex('000102030405060708090a0b0c0d0e0f');
+  const cases = [
+    [v1, 'm', '612091aaa12e22dd2abef664f8a01a82cae99ad7441b7ef8110424915c268bc2',
+      'beeb672fe4621673f722f38529c07392fecaa61015c80c34f29ce8b41b3cb6ea', '0266874dc6ade47b3ecd096745ca09bcd29638dd52c2c12117b11ed3e458cfa9e8'],
+    [v1, "m/0'", '6939694369114c67917a182c59ddb8cafc3004e63ca5d3b84403ba8613debc0c',
+      '3460cea53e6a6bb5fb391eeef3237ffd8724bf0a40e94943c98b83825342ee11', '0384610f5ecffe8fda089363a41f56a5c7ffc1d81b59a612d0d649b2d22355590c'],
+    [v1, "m/28578'", '06f0db126f023755d0b8d86d4591718a5210dd8d024e3e14b6159d63f53aa669',
+      'e94c8ebe30c2250a14713212f6449b20f3329105ea15b652ca5bdfc68f6c65c2', '02519b5554a4872e8c9c1c847115363051ec43e93400e030ba3c36b52a3e70a5b7'],
+    [fromHex('a7305bc8df8d0951f0cb224c0e95d7707cbdf2c6ce7e8d481fec69c7ff5e9446'), 'm',
+      '3b8c18469a4634517d6d0b65448f8e6c62091b45540a1743c5846be55d47d88f',
+      '7762f9729fed06121fd13f326884c82f59aa95c57ac492ce8c9654e60efd130c', '0383619fadcde31063d8c5cb00dbfe1713f3e6fa169d8541a798752a1c1ca0cb20'],
+  ];
+  for (const [seed, path, priv, chain, pub] of cases) {
+    const k = slip10('nist256p1', seed, path);
+    assert.equal(bytesToHex(k.privateKey), priv, path);
+    assert.equal(bytesToHex(k.chainCode), chain, path);
+    assert.equal(bytesToHex(p256.getPublicKey(k.privateKey, true)), pub, path);
+  }
+  assert.throws(() => slip10('nist256p1', v1, 'm/0'), /hardened-only/);
+  assert.equal(bytesToHex(slip10('ed25519', v1, "m/0'").privateKey), bytesToHex(slip10Ed25519(v1, "m/0'").privateKey));
+});
+
+test('native index and coin type in [0, 2^31); solana m/44\'/501\'/i\'/0\' base58 address', () => {
+  const seed = seedFromWords('abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about');
+  // the widely published address of this phrase at m/44'/501'/0'/0' (solana-keygen `prompt://?key=0/0`); not re-run here
+  assert.equal(deriveKey(seed, 'solana', 0).address, 'HAgk14JpMQLgt6rVgv7cBQFJWFto5Dqxi472uT3DKpqk');
+  deriveKey(seed, 'evm', 2 ** 31 - 1); // positive control
+  for (const bad of [2 ** 31, -1, 1.5]) for (const net of ['evm', 'solana']) assert.throws(() => deriveKey(seed, net, bad), /index/);
 });
 
 test('SEP-0005 (published): seed, m/44\'/148\' key, Stellar G/S keys', () => {

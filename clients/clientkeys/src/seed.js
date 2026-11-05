@@ -6,14 +6,15 @@ import { wordlist } from '@scure/bip39/wordlists/english.js';
 import { HDKey } from '@scure/bip32';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { ed25519 } from '@noble/curves/ed25519.js';
+import { p256 } from '@noble/curves/nist.js';
 import { hmac } from '@noble/hashes/hmac.js';
 import { sha512, sha256 } from '@noble/hashes/sha2.js';
 import { blake2b } from '@noble/hashes/blake2.js';
 import { sha3_256 } from '@noble/hashes/sha3.js';
 import { ripemd160 } from '@noble/hashes/legacy.js';
-import { bech32, base32 } from '@scure/base';
+import { bech32, base32, base58 } from '@scure/base';
 import { concatBytes, utf8ToBytes, bytesToHex, hex, wipe } from './bytes.js';
-import { evmAddress, hashTypedData, keyProofMessage } from './evm.js';
+import { evmAddress, hashTypedData, keyProofMessage, evmTransaction, signedTransaction } from './evm.js';
 
 const HARDENED = 0x80000000;
 
@@ -27,6 +28,7 @@ export const NETWORKS = {
   stellar: { curve: 'ed25519', path: (i) => `m/44'/148'/${i}'` },
   ton: { curve: 'ed25519', path: (i) => `m/44'/607'/${i}'` },
   aptos: { curve: 'ed25519', path: (i) => `m/44'/637'/${i}'/0'/0'` },
+  solana: { curve: 'ed25519', path: (i) => `m/44'/501'/${i}'/0'` },
 };
 
 // ------------------------------------------------------------------ BIP-39
@@ -61,24 +63,44 @@ export function seedFromWords(text, passphrase = '') {
 
 // ------------------------------------------------------------------ derivation
 
-/** SLIP-10 for ed25519: hardened steps only. */
-export function slip10Ed25519(seed, path) {
+// SLIP-10 curves: the HMAC key of the master step and the group order (ed25519: none, every IL is a key).
+const SLIP10 = { ed25519: { key: 'ed25519 seed', n: null }, nist256p1: { key: 'Nist256p1 seed', n: p256.Point.Fn.ORDER } };
+const big = (b) => BigInt('0x' + (bytesToHex(b) || '0'));
+const b32 = (v) => { const o = new Uint8Array(32); for (let i = 31; i >= 0; i--, v >>= 8n) o[i] = Number(v & 255n); return o; };
+
+/** SLIP-10 for ed25519 and nist256p1 (P-256, the UA tree's 0x0101 keys): hardened steps only, with SLIP-10's retries for
+ *  nist256p1 (master: IL = 0 or ≥ n → I = HMAC(key, I); child: IL ≥ n or k = 0 → data = 0x01 ‖ IR ‖ ser32(i)). */
+export function slip10(curve, seed, path) {
+  const c = SLIP10[curve];
+  if (!c) throw new Error(`SLIP-10 curve ${curve} is not supported here`);
   const segs = path.split('/');
   if (segs.shift() !== 'm') throw new Error(`bad path ${path}`);
-  let I = hmac(sha512, utf8ToBytes('ed25519 seed'), seed);
+  const key = utf8ToBytes(c.key);
+  let I = hmac(sha512, key, seed);
+  while (c.n && (big(I.subarray(0, 32)) === 0n || big(I.subarray(0, 32)) >= c.n)) { const next = hmac(sha512, key, I); wipe(I); I = next; }
   for (const seg of segs) {
-    if (!seg.endsWith("'")) throw new Error(`ed25519 derivation is hardened-only: ${path}`);
+    if (!seg.endsWith("'")) throw new Error(`${curve} derivation is hardened-only: ${path}`);
     const idx = (Number(seg.slice(0, -1)) + HARDENED) >>> 0;
-    const data = concatBytes(new Uint8Array([0]), I.subarray(0, 32),
-                             new Uint8Array([idx >>> 24, (idx >>> 16) & 255, (idx >>> 8) & 255, idx & 255]));
-    const next = hmac(sha512, I.subarray(32), data);
-    wipe(I, data);
-    I = next;
+    const ser = new Uint8Array([idx >>> 24, (idx >>> 16) & 255, (idx >>> 8) & 255, idx & 255]);
+    let data = concatBytes(new Uint8Array([0]), I.subarray(0, 32), ser);
+    for (;;) {
+      const next = hmac(sha512, I.subarray(32), data);
+      wipe(data);
+      if (!c.n) { wipe(I); I = next; break; }
+      const il = big(next.subarray(0, 32));
+      const k = (il + big(I.subarray(0, 32))) % c.n;
+      if (il < c.n && k !== 0n) { wipe(I); I = concatBytes(b32(k), next.subarray(32)); wipe(next); break; }
+      data = concatBytes(new Uint8Array([1]), next.subarray(32), ser);
+      wipe(next);
+    }
   }
   const out = { privateKey: I.slice(0, 32), chainCode: I.slice(32) };
   wipe(I);
   return out;
 }
+
+/** SLIP-10 for ed25519: hardened steps only. */
+export const slip10Ed25519 = (seed, path) => slip10('ed25519', seed, path);
 
 function crc16xmodem(bytes) {
   let crc = 0;
@@ -115,6 +137,7 @@ function describe(network, curve, privateKey) {
   if (network === 'aptos') return { publicKey: pub, address: hex(sha3_256(concatBytes(pk, new Uint8Array([0])))) };
   if (network === 'stellar') return { publicKey: pub, address: strkey(6 << 3, pk) };
   if (network === 'hedera_ed25519') return { publicKey: pub, publicKeyDer: '302a300506032b6570032100' + pub };
+  if (network === 'solana') return { publicKey: pub, address: base58.encode(pk) };
   // TON: public key only. A W5R1 address needs the wallet code cell + BoC hashing — not shipped (recorded).
   return { publicKey: pub };
 }
@@ -124,6 +147,7 @@ function describe(network, curve, privateKey) {
 export function deriveKey(seed, network, i = 0, { coinType = null } = {}) {
   const net = NETWORKS[network];
   if (!net) throw new Error(`unknown network ${network}`);
+  if (!Number.isInteger(i) || i < 0 || i >= HARDENED) throw new Error(`bad index ${i}: need an integer in [0, 2^31)`);
   let path = net.path(i);
   if (coinType != null) {
     if (!Number.isInteger(coinType) || coinType < 0 || coinType >= HARDENED) throw new Error(`bad coin type ${coinType}`);
@@ -148,6 +172,18 @@ export function signTyped(key, td) {
   return sign(key, hashTypedData(td));
 }
 
+/** Sign an EVM transaction of type 0–3 (`evmTransaction`: named fields, `chainId` explicit, EIP-155 on type 0; type 4 /
+ *  EIP-7702 cannot be built, CLI-SGN-40) with a secp256k1 key: RFC 6979 (`extraEntropy: false`), low-s. Returns
+ *  {type, sighash, yParity, r, s, v (type 0: chainId·2 + 35 + yParity), raw (the signed envelope)}. */
+export function signTransaction(key, tx) {
+  if (key.curve !== 'secp256k1') throw new Error('Refusing to sign: an EVM transaction needs a secp256k1 key.');
+  const t = evmTransaction(tx);
+  const rec = secp256k1.sign(t.sighash, key.privateKey, { prehash: false, lowS: true, extraEntropy: false, format: 'recovered' });
+  const sig = { yParity: rec[0], r: rec.slice(1, 33), s: rec.slice(33, 65) };
+  return { type: t.type, sighash: t.sighash, ...sig, v: t.type === 0 ? Number(BigInt(t.fields.chainId) * 2n + 35n) + sig.yParity : undefined,
+    raw: signedTransaction(t, sig) };
+}
+
 /** Sign the key-possession proof for `challenge` (`keyProofMessage`, Odoo `key_proof_message`). */
 export function signKeyProof(key, challenge) {
   return sign(key, keyProofMessage(challenge));
@@ -166,7 +202,7 @@ export function signDigest(key, digest, { allowRawDigest = false } = {}) {
 
 function sign(key, digest) {
   if (key.curve === 'secp256k1') {
-    const rec = secp256k1.sign(digest, key.privateKey, { prehash: false, format: 'recovered' });
+    const rec = secp256k1.sign(digest, key.privateKey, { prehash: false, lowS: true, extraEntropy: false, format: 'recovered' });
     return concatBytes(rec.subarray(1), new Uint8Array([27 + rec[0]]));
   }
   return ed25519.sign(digest, key.privateKey);

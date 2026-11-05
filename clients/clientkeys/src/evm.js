@@ -18,12 +18,14 @@ export function evmAddress(uncompressed) {
 // ------------------------------------------------------------------ EIP-712 (structs, nested structs)
 
 const elementType = (t) => t.replace(/\[\]$/, '');
+/** The struct or atom under any array suffix: `T[]`, `T[k]`, `T[k][]` → `T`. */
+const baseType = (t) => t.replace(/(\[\d*\])+$/, '');
 
 /** EIP-712 `encodeType`: the primary type, then every struct it references, sorted by name. */
 export function encodeType(types, primary) {
   const deps = new Set();
   const walk = (t) => types[t].forEach((f) => {
-    const e = elementType(f.type);
+    const e = baseType(f.type);
     if (types[e] && e !== primary && !deps.has(e)) { deps.add(e); walk(e); }
   });
   walk(primary);
@@ -31,23 +33,42 @@ export function encodeType(types, primary) {
   return [primary, ...[...deps].sort()].map(one).join('');
 }
 
+/** EIP-712 `encodeData` of one value, faithful: the value supplied, never rewritten (no canonical zeroing here: that is a
+ *  step of the SCaaS builders, `opTypedData`, ua-rs-sign spec §5.3). A missing value is the type's zero value; `int<N>` is
+ *  two's complement; `T[k]` must hold k items. */
 function encodeValue(type, value, types) {
-  if (type.endsWith('[]')) return keccak_256(concatBytes(...value.map((v) => encodeValue(elementType(type), v, types))));
-  if (types && types[type]) return hashStruct(types, type, value);
-  if (type === 'string') return keccak_256(utf8ToBytes(String(value)));
-  if (type === 'bytes') return keccak_256(value instanceof Uint8Array ? value : fromHex(value));
-  if (type === 'address') return addressWord(value);
-  if (type === 'bool') return boolWord(value);
-  if (type === 'bytes32') return bytes32(value);
-  if (/^bytes\d+$/.test(type)) return abiEncode([type], [value]);
-  if (/^uint\d+$/.test(type)) return word(value);
+  const arr = /^(.*)\[(\d*)\]$/.exec(type);
+  if (arr) {
+    const items = value ?? (arr[2] === '' ? [] : Array(Number(arr[2])).fill(undefined));
+    if (!Array.isArray(items) || (arr[2] !== '' && items.length !== Number(arr[2]))) throw new Error(`EIP-712 ${type}: wrong length`);
+    return keccak_256(concatBytes(...items.map((v) => encodeValue(arr[1], v, types))));
+  }
+  if (types && types[type]) return hashStruct(types, type, value ?? {});
+  if (type === 'string') return keccak_256(utf8ToBytes(String(value ?? '')));
+  if (type === 'bytes') return keccak_256(value instanceof Uint8Array ? value : fromHex(value ?? '0x'));
+  if (type === 'address') return addressWord(value ?? '0x' + '00'.repeat(20));
+  if (type === 'bool') return boolWord(value ?? false);
+  if (type === 'bytes32') return bytes32(value ?? new Uint8Array(32));
+  if (/^bytes\d+$/.test(type)) return abiEncode([type], [value ?? new Uint8Array(Number(type.slice(5)))]);
+  if (/^uint\d+$/.test(type)) return word(value ?? 0);
+  const int = /^int(\d+)$/.exec(type);
+  if (int) {
+    const v = BigInt(value ?? 0);
+    const half = 1n << BigInt(Number(int[1]) - 1);
+    if (typeof value === 'string' && value.trim() === '') throw new Error('not a number: the empty string');
+    if (v < -half || v >= half) throw new Error(`${type} out of range`);
+    return word(v < 0n ? (1n << 256n) + v : v);
+  }
   throw new Error(`EIP-712 type ${type} is not supported here`);
 }
 
 export function hashStruct(types, primary, data) {
+  for (const k of Object.keys(data ?? {})) {
+    if (!types[primary].some((f) => f.name === k)) throw new Error(`EIP-712: ${k} is not a field of ${primary}`);
+  }
   return keccak_256(concatBytes(
     keccak_256(utf8ToBytes(encodeType(types, primary))),
-    ...types[primary].map((f) => encodeValue(f.type, data[f.name], types)),
+    ...types[primary].map((f) => encodeValue(f.type, data?.[f.name], types)),
   ));
 }
 
@@ -1127,3 +1148,118 @@ export const GOVERNANCE_BITS = Object.freeze([
   ['ARBITRATE', 'reserved'], ['CORRECT', 'reserved'], ['RESCUABLE', 'capability'], ['PUBLISH', 'power'], ['DEPRECATE', 'power'],
   ['ENABLE_KIND', 'power'], ['MODERATE', 'power'],
 ].map(([name, type], bit) => Object.freeze({ bit, name, type })));
+
+// ------------------------------------------------------------------ the signing policy in front of every typed signature
+
+/** One entry per `check*` (ua-rs-sign MD-9 `Expect`): `expectDigest(td, {check, ...inputs})` runs the check with the user's named
+ *  inputs and returns the digest it approved, or refuses. `Any` needs the marker `allowAnyTypedData: true` and returns the
+ *  standard EIP-712 digest of the values as supplied (no canonical step, spec §5.3): the general EVM wallet's opt-in. */
+const EXPECT = {
+  Payment: (td, x) => checkPayment(td, x).digest,
+  ReceiverFee: (td, x) => checkReceiverFee(td, x).digest,
+  PayMeta: (td, x) => checkPayMeta(td, x).digest,
+  Op: (td, x) => checkOp(td, x).digest,
+  Call: (td, x) => checkCall(td, x).digest,
+  OwnerCall: (td, x) => checkOwnerCall(td, x),
+  Cancel: (td, x) => checkCancel(td, x),
+  TradeOrder: (td, x) => checkTradeOrder(td, x).digest,
+  WrapOrder: (td, x) => checkWrapOrder(td, x).digest,
+  Any: (td, x) => (x.allowAnyTypedData === true ? digestOf(td) : refuse('Any needs allowAnyTypedData: true')),
+};
+export const EXPECT_CHECKS = Object.freeze(Object.keys(EXPECT));
+export function expectDigest(td, { check, ...inputs } = {}) {
+  if (!Object.hasOwn(EXPECT, check)) refuse(`no signing policy named ${check}`);
+  return EXPECT[check](td, inputs);
+}
+
+// ------------------------------------------------------------------ EVM transactions, types 0-3 (ua-rs-sign spec §5.5)
+
+/** RLP of a byte string or a (nested) list of them. */
+export function rlp(x) {
+  const head = (short, long, n) => {
+    if (n <= 55) return Uint8Array.of(short + n);
+    const len = minimal(BigInt(n));
+    return concatBytes(Uint8Array.of(long + len.length), len);
+  };
+  if (Array.isArray(x)) {
+    const body = concatBytes(...x.map(rlp));
+    return concatBytes(head(0xc0, 0xf7, body.length), body);
+  }
+  if (x.length === 1 && x[0] < 0x80) return x;
+  return concatBytes(head(0x80, 0xb7, x.length), x);
+}
+function minimal(v) {
+  if (v === 0n) return new Uint8Array(0);
+  const h = v.toString(16);
+  return fromHex(h.length % 2 ? '0' + h : h);
+}
+
+const TX_FIELDS = {
+  0: ['chainId', 'nonce', 'gasPrice', 'gasLimit', 'to', 'value', 'data'],
+  1: ['chainId', 'nonce', 'gasPrice', 'gasLimit', 'to', 'value', 'data', 'accessList'],
+  2: ['chainId', 'nonce', 'maxPriorityFeePerGas', 'maxFeePerGas', 'gasLimit', 'to', 'value', 'data', 'accessList'],
+  3: ['chainId', 'nonce', 'maxPriorityFeePerGas', 'maxFeePerGas', 'gasLimit', 'to', 'value', 'data', 'accessList', 'maxFeePerBlobGas',
+    'blobVersionedHashes'],
+};
+const U64 = new Set(['nonce', 'gasLimit']);
+function txUint(name, v) {
+  const s = typeof v === 'bigint' || typeof v === 'number' ? String(v) : v;
+  if (typeof s !== 'string' || !/^[0-9]+$/.test(s)) refuse(`the transaction's ${name} is not a decimal integer`);
+  const n = BigInt(s);
+  if (n >= 1n << (U64.has(name) ? 64n : 256n)) refuse(`the transaction's ${name} is out of range`);
+  return n;
+}
+function txBytes(name, v, len) {
+  let b;
+  try { b = v instanceof Uint8Array ? v : fromHex(v); } catch { refuse(`the transaction's ${name} is not hex`); }
+  if (len !== undefined && b.length !== len) refuse(`the transaction's ${name} is not ${len} bytes`);
+  return b;
+}
+
+/** An EVM transaction from named fields (EIP-2718 types 0 legacy with EIP-155, 1 EIP-2930, 2 EIP-1559, 3 EIP-4844 without the
+ *  sidecar): every field of the type required and no other, `chainId` explicit and non-zero, `to` null only for a create (not on
+ *  type 3), at least one blob hash on type 3. No type 4: an EIP-7702 authorization is never built (CLI-SGN-40). Integers are
+ *  decimal strings or numbers. Returns {type, fields, unsigned (the bytes hashed), sighash, list (the RLP items)}. */
+export function evmTransaction(tx) {
+  const type = tx && tx.type;
+  if (!Object.hasOwn(TX_FIELDS, String(type)) || !Number.isInteger(type)) refuse(`transaction type ${type} is not built here (0-3 only; never EIP-7702)`);
+  const names = TX_FIELDS[type];
+  for (const k of Object.keys(tx)) if (k !== 'type' && !names.includes(k)) refuse(`${k} is not a field of a type-${type} transaction`);
+  for (const k of names) if (!Object.hasOwn(tx, k)) refuse(`the transaction's ${k} is required`);
+  const chainId = txUint('chainId', tx.chainId);
+  if (chainId === 0n) refuse('the transaction has no chain id');
+  const item = (k) => {
+    const v = tx[k];
+    if (k === 'to') {
+      if (v === null && type !== 3) return new Uint8Array(0);
+      return txBytes('to', v, 20);
+    }
+    if (k === 'data') return txBytes('data', v);
+    if (k === 'accessList') {
+      if (!Array.isArray(v)) refuse('the access list is not a list');
+      return v.map((e) => {
+        if (!e || Object.keys(e).sort().join() !== 'address,storageKeys' || !Array.isArray(e.storageKeys)) refuse('malformed access list entry');
+        return [txBytes('access list address', e.address, 20), e.storageKeys.map((sk) => txBytes('storage key', sk, 32))];
+      });
+    }
+    if (k === 'blobVersionedHashes') {
+      if (!Array.isArray(v) || v.length === 0) refuse('a blob transaction names at least one blob hash');
+      return v.map((h) => txBytes('blob hash', h, 32));
+    }
+    return minimal(txUint(k, v));
+  };
+  const list = names.map(item);
+  const legacy = type === 0;
+  const body = legacy ? [...list.slice(1), minimal(chainId), new Uint8Array(0), new Uint8Array(0)] : list;
+  const unsigned = legacy ? rlp(body) : concatBytes(Uint8Array.of(type), rlp(body));
+  return { type, fields: { ...tx }, list, unsigned, sighash: keccak_256(unsigned) };
+}
+
+/** The signed envelope of `evmTransaction(tx)` and `{yParity, r, s}` (32-byte r, s): type 0 `rlp([…, v, r, s])` with
+ *  `v = chainId·2 + 35 + yParity`, else `type ‖ rlp([…, yParity, r, s])`. */
+export function signedTransaction(t, { yParity, r, s }) {
+  if (yParity !== 0 && yParity !== 1) throw new Error('yParity is 0 or 1');
+  const sig = [BigInt(hex(r)), BigInt(hex(s))].map(minimal);
+  if (t.type === 0) return rlp([...t.list.slice(1), minimal(BigInt(t.fields.chainId) * 2n + 35n + BigInt(yParity)), ...sig]);
+  return concatBytes(Uint8Array.of(t.type), rlp([...t.list, minimal(BigInt(yParity)), ...sig]));
+}
