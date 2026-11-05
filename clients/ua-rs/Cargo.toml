@@ -50,6 +50,10 @@ bs58 = { version = "=0.5.1", default-features = false, features = ["alloc"], opt
 blake2 = { version = "=0.10.6", default-features = false, optional = true }
 # ua-rs-sign T5: EVM transaction RLP (spec §5.5), pin of T0 (MIT OR Apache-2.0; pulls `bytes` 1.12.1, MIT)
 alloy-rlp = { version = "=0.3.17", default-features = false, optional = true }
+# ua-rs-sign T7: the UA KEM key (spec §6.1, §6.2), pin of T0: ML-KEM-1024 (FIPS 203), `zeroize`; `hazmat` only under `vectors`.
+# Its release encapsulation runs `m` from `rand_core` 0.6 `OsRng` (as the PQ signers), so ml-kem's `getrandom` (getrandom 0.4) is
+# not taken. X25519 is curve25519-dalek 4's clamped Montgomery ladder (a dependency already): no x25519-dalek.
+ml-kem = { version = "=0.3.4", default-features = false, features = ["zeroize"], optional = true }
 
 # wasm32-unknown-unknown: `rand_core` 0.6's `OsRng` through getrandom 0.2's JS backend (T0: features only, no --cfg)
 [target.'cfg(target_arch = "wasm32")'.dependencies]
@@ -61,14 +65,14 @@ getrandom = { version = "=0.2.17", features = ["js"], optional = true }
 # exactly one with `pqz` (T15 checks it). `vectors`: test-only entry points (secrets through hooks), never in a release build.
 default = ["wallet", "zether", "pqz", "pqz-set-n2304-kmax4096"]
 wallet = ["pq", "signers", "json", "dep:bip39", "dep:bip32", "dep:hkdf", "dep:hmac", "dep:zeroize", "dep:unicode-normalization",
-    "dep:ripemd", "dep:bs58", "dep:blake2", "dep:alloy-rlp", "rand_core/getrandom", "dep:getrandom", "ed25519-dalek/zeroize", "ml-dsa/zeroize", "slh-dsa/zeroize"]
+    "dep:ripemd", "dep:bs58", "dep:blake2", "dep:alloy-rlp", "dep:ml-kem", "rand_core/getrandom", "dep:getrandom", "ed25519-dalek/zeroize", "ml-dsa/zeroize", "slh-dsa/zeroize"]
 zether = ["wallet"]
 pqz = ["wallet"]
 pqz-set-n2048-kmax1024 = []
 pqz-set-n2304-kmax4096 = []
 pqz-set-n2560-kmax16384 = []
 pqz-set-n2816-kmax65536 = []
-vectors = ["wallet", "scaas-ct/vectors"]
+vectors = ["wallet", "scaas-ct/vectors", "ml-kem/hazmat"]
 signers = ["dep:frost-core", "dep:frost-secp256k1", "dep:rand_core", "dep:rand_chacha", "dep:scaas-ct"]
 json = ["dep:serde_json"]
 pq = ["dep:ml-dsa", "dep:slh-dsa", "dep:cc"]
@@ -127,4 +131,8 @@ required-features = ["wallet"]
 
 [[test]]
 name = "wallet_webauthn"
+required-features = ["wallet"]
+
+[[test]]
+name = "wallet_kem"
 required-features = ["wallet"]

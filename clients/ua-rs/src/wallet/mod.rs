@@ -10,7 +10,8 @@
 //! `scaas_ct::secret_mul`); `uasig`, T3d: the `UASig` builder and the minimal `msig` sets over `&dyn Signer` (T4: native keys
 //! and members by typed data); `eip712`, `policy`, T4: the faithful EIP-712 hasher, the SCaaS builders' canonical step, the
 //! `Expect` policy of [`NativeKey::sign_typed`]; `tx`, T5: [`NativeKey::sign_transaction`], EVM types 0-3 (no type 4); `webauthn`, T6:
-//! [`webauthn_challenge`] and [`webauthn_assertion`] (against the expected challenge, verified before return); the vault with T9. Randomness: `rand_core` 0.6 `OsRng` inside; no call takes an
+//! [`webauthn_challenge`] and [`webauthn_assertion`] (against the expected challenge, verified before return); `kem`, T7: the UA
+//! KEM key through its UA key's own store ([`UaKey::kem_key`]), [`kem_encaps`], [`KemKeyPair`]; the vault with T9. Randomness: `rand_core` 0.6 `OsRng` inside; no call takes an
 //! RNG. UNAUDITED.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing, clippy::disallowed_methods)]
 
@@ -18,6 +19,10 @@ pub mod bounded;
 #[cfg(feature = "vectors")]
 pub mod derive;
 mod eip712;
+#[cfg(feature = "vectors")]
+pub mod kem;
+#[cfg(not(feature = "vectors"))]
+mod kem;
 #[cfg(not(feature = "vectors"))]
 pub(crate) mod derive;
 #[cfg(feature = "vectors")]
@@ -40,6 +45,7 @@ mod uasig;
 mod webauthn;
 
 pub use eip712::{scaas_typed_data, TypedData};
+pub use kem::{is_kem_holder, kem_encaps, KemKeyPair};
 pub use pairing::{FrostSession, Musig2Session};
 pub use policy::{AllowAnyTypedData, AllowRow, Expect, Invalidate, SubjectKey};
 pub use signer::{AllowRawDigest, KeyRef, SigRole, SignRequest, Signer};
@@ -73,6 +79,11 @@ pub enum Error {
     PolicyRefused,
     /// A WebAuthn assertion that is not the chains' form for the expected challenge, or does not verify (spec §5.6).
     WebAuthnAssertion,
+    /// A KEM key asked of a kind that holds none (CTR-UA-32; an `msig` has none, MD-11; spec §6.1).
+    KemHolder,
+    /// A KEM input refused by its checks: `kemPk` scheme, length or modulus, a short ciphertext, an all-zero X25519 secret
+    /// (spec §6.2); the derived key's self-test (FIPS 203 §7.3).
+    KemCheck,
     Ua(UAError),
 }
 
@@ -86,6 +97,8 @@ impl Error {
             Error::Rng => "Rng",
             Error::PolicyRefused => "PolicyRefused",
             Error::WebAuthnAssertion => "WebAuthnAssertion",
+            Error::KemHolder => "KemHolder",
+            Error::KemCheck => "KemCheck",
             Error::Ua(e) => e.code(),
         }
     }
@@ -169,6 +182,8 @@ impl Network {
 pub(crate) enum KeyId {
     Ua(u16, u32, u32),
     Native(Network, u32, Option<u32>),
+    /// A UA's KEM key: its UA and the KEM record's version (spec §6.1).
+    Kem([u8; 32], u64),
 }
 
 /// A mnemonic as clientkeys `normalizeMnemonic` (NFKD, lower case, single spaces), at most 1 KiB and 24 words (spec §9.3),
@@ -350,6 +365,10 @@ mod vectors {
         /// Bytes written to the store's arena.
         pub fn vectors_arena_used(&self) -> Result<usize> {
             self.store.used()
+        }
+        /// The FIPS 203 §7.3 self-tests run in this wallet's current store.
+        pub fn vectors_kem_self_tests(&self) -> Result<usize> {
+            self.store.self_tests()
         }
         pub fn vectors_unlock(&self, words: &str, bip39_passphrase: &str) -> Result<()> {
             self.unlock_entropy(&entropy_of(parse_mnemonic(words)?)?, bip39_passphrase)

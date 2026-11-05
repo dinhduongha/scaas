@@ -8,7 +8,7 @@
 // the readers of secrets (`Handle::with`, the entropy for the vault) are the signers (T3a–T3d) and the vault (T9)
 #![cfg_attr(not(feature = "vectors"), allow(dead_code))]
 use super::{Error, KeyId, Result};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use zeroize::{Zeroize, Zeroizing};
 
@@ -34,12 +34,20 @@ pub(crate) struct Arena {
     entropy: Slot,
     seed: Slot,
     keys: HashMap<KeyId, (Slot, Vec<u8>)>, // a derived key: its slot and its public key data
+    tested: HashSet<KeyId>,                // the keys whose self-test ran in this store (a KEM key: FIPS 203 §7.3)
+    self_tests: usize,                     // self-tests run in this store
 }
 
 impl Arena {
-    fn new(entropy: &[u8], seed: &[u8; 64]) -> Result<Arena> {
+    /// An arena with no entropy and no seed (an ephemeral key's store).
+    fn empty() -> Arena {
         let empty = Slot { chunk: 0, start: 0, len: 0 };
-        let mut a = Arena { chunks: Vec::new(), used: 0, total: 0, entropy: empty, seed: empty, keys: HashMap::new() };
+        let (keys, tested) = (HashMap::new(), HashSet::new());
+        Arena { chunks: Vec::new(), used: 0, total: 0, entropy: empty, seed: empty, keys, tested, self_tests: 0 }
+    }
+
+    fn new(entropy: &[u8], seed: &[u8; 64]) -> Result<Arena> {
+        let mut a = Arena::empty();
         a.entropy = a.put(entropy)?;
         a.seed = a.put(seed)?;
         Ok(a)
@@ -141,6 +149,16 @@ impl SecretStore {
         let mut g = self.write();
         let generation = g.generation;
         let arena = g.arena.as_mut().ok_or(Error::WalletLocked)?;
+        self.key_in(arena, generation, id, derive)
+    }
+
+    fn key_in(
+        self: &Arc<Self>,
+        arena: &mut Arena,
+        generation: u64,
+        id: KeyId,
+        derive: impl FnOnce(&[u8; 64]) -> Result<(Zeroizing<Vec<u8>>, Vec<u8>)>,
+    ) -> Result<(Handle, Vec<u8>)> {
         let (slot, public) = match arena.keys.get(&id) {
             Some((slot, public)) => (*slot, public.clone()),
             None => {
@@ -152,6 +170,13 @@ impl SecretStore {
             }
         };
         Ok((Handle { store: self.clone(), generation, slot }, public))
+    }
+
+    /// A store of its own holding only `secret` (an ephemeral KEM key, spec §8.2), and the secret's handle.
+    pub(crate) fn single(secret: &[u8]) -> Result<Handle> {
+        let mut arena = Arena::empty();
+        let slot = arena.put(secret)?;
+        Ok(Handle { store: Arc::new(SecretStore(RwLock::new(Inner { generation: 0, arena: Some(arena) }))), generation: 0, slot })
     }
 
     /// `f` over the open arena under the read guard; `WalletLocked` while locked.
@@ -168,12 +193,48 @@ impl SecretStore {
     pub(crate) fn used(&self) -> Result<usize> {
         self.with_arena(|a| Ok(a.total))
     }
+
+    #[cfg(feature = "vectors")]
+    pub(crate) fn self_tests(&self) -> Result<usize> {
+        self.with_arena(|a| Ok(a.self_tests))
+    }
 }
 
 impl Handle {
     /// A second handle of the same secret (a session keeps its key's), for the crate only: handles are not `Clone`.
     pub(crate) fn dup(&self) -> Handle {
         Handle { store: self.store.clone(), generation: self.generation, slot: self.slot }
+    }
+
+    /// The handle of key `id` derived from this handle's own store's seed, as [`SecretStore::key`]: `KeyRevoked` once the
+    /// store's generation moved (a KEM key of a UA key, spec §6.1: no other wallet can be named).
+    pub(crate) fn derive(
+        &self,
+        id: KeyId,
+        derive: impl FnOnce(&[u8; 64]) -> Result<(Zeroizing<Vec<u8>>, Vec<u8>)>,
+    ) -> Result<(Handle, Vec<u8>)> {
+        let mut g = self.store.write();
+        if g.generation != self.generation {
+            return Err(Error::KeyRevoked);
+        }
+        let arena = g.arena.as_mut().ok_or(Error::KeyRevoked)?;
+        self.store.key_in(arena, self.generation, id, derive)
+    }
+
+    /// `test` over the secret once per store for key `id`, under the write lock; the record is the store's (wiped with its
+    /// arena). A failed test records nothing and is returned.
+    pub(crate) fn self_test(&self, id: KeyId, test: impl FnOnce(&[u8]) -> Result<()>) -> Result<()> {
+        let mut g = self.store.write();
+        if g.generation != self.generation {
+            return Err(Error::KeyRevoked);
+        }
+        let arena = g.arena.as_mut().ok_or(Error::KeyRevoked)?;
+        if !arena.tested.contains(&id) {
+            test(arena.get(self.slot)?)?;
+            arena.tested.insert(id);
+            arena.self_tests += 1;
+        }
+        Ok(())
     }
 
     /// A one-use secret (a group session's secret nonce, spec §8.2) put into this handle's store, under the write lock:
