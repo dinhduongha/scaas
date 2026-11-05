@@ -1,0 +1,19 @@
+mutant | tests that went red | rc
+clientkeys-high-bit-as-address | id_display.json: the generator reproduces it, every row holds, every kind has its row | 1
+ua-rs-high-bit-as-address | id_display_rows | 101
+ua-py-high-bit-as-address | test_id_display_rows | 1
+ua-go-high-bit-as-address | TestIDDisplayRows | 1
+ua-cs-high-bit-as-address | Scaas.Ua.Tests.VectorTests.IdDisplayRows | 1
+ua-dart-high-bit-as-address | test/vectors_test.dart: id_display.json rows | 1
+clientkeys-checksum-dropped | id_display.json: the generator reproduces it, every row holds, every kind has its row | 1
+ua-rs-checksum-dropped | id_display_rows | 101
+ua-py-checksum-dropped | test_id_display_rows | 1
+ua-go-checksum-dropped | TestIDDisplayRows | 1
+ua-cs-checksum-dropped | Scaas.Ua.Tests.VectorTests.IdDisplayRows | 1
+ua-dart-checksum-dropped | test/vectors_test.dart: id_display.json rows | 1
+clientkeys-table-off-by-one | id_display.json: the generator reproduces it, every row holds, every kind has its row; pq.js and ua.js agree on the PQ kinds; the generator reproduces kinds.json and structures.json byte for byte; valid rows derive, invalid rows fail with their code | 1
+ua-rs-table-off-by-one | id_display_rows | 101
+ua-py-table-off-by-one | test_id_display_rows; test_kem_record; test_messages; test_portable; test_registration_args_typed; test_table_groups_purposes_constants; test_valid_rows | 1
+ua-go-table-off-by-one | TestIDDisplayRows | 1
+ua-cs-table-off-by-one | Scaas.Ua.Tests.VectorTests.IdDisplayRows | 1
+ua-dart-table-off-by-one | test/vectors_test.dart: id_display.json rows | 1
