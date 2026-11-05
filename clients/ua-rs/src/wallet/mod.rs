@@ -5,8 +5,9 @@
 //! and a slot, no secret bytes. [`Wallet::lock`] waits for operations in flight, wipes the store and revokes every handle for
 //! good (`KeyRevoked`); dropping the wallet locks it, and a handle that outlives it stays valid memory that answers
 //! `KeyRevoked`. Signing: [`UaKey::sign_ua`], [`UaKey::sign_member`], the native keys' key proof and raw digest, all through
-//! the [`Signer`] trait (`sign`, `signer`; T3a: the classic curves); the other kinds with T3b–T3d, the vault with T9. Randomness: `rand_core` 0.6 `OsRng` inside; no call takes an
-//! RNG. UNAUDITED.
+//! the [`Signer`] trait (`sign`, `signer`; T3a: the classic curves; `pqsign`, T3b: ML-DSA, SLH-DSA, Falcon); the pairing
+//! kinds with T3c, `UASig` with T3d, the vault with T9. Randomness: `rand_core` 0.6 `OsRng` inside; no call takes an RNG.
+//! UNAUDITED.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
 
 pub mod bounded;
@@ -14,6 +15,10 @@ pub mod bounded;
 pub mod derive;
 #[cfg(not(feature = "vectors"))]
 pub(crate) mod derive;
+#[cfg(feature = "vectors")]
+pub mod pqsign;
+#[cfg(not(feature = "vectors"))]
+mod pqsign;
 #[cfg(feature = "vectors")]
 pub mod sign;
 #[cfg(not(feature = "vectors"))]
@@ -41,7 +46,7 @@ pub enum Error {
     KeyRevoked,
     /// The call needs secrets and the wallet is locked.
     WalletLocked,
-    /// The kind exists but this build lacks it (Falcon keys until T3b).
+    /// The kind exists but this build lacks it (Falcon on wasm32: no C; the pairing kinds' signers until T3c).
     KindUnavailable,
     /// The OS random number generator failed.
     Rng,
@@ -222,13 +227,11 @@ impl Wallet {
     }
 
     /// The UA key `kind` of `account` / `index` (spec §4): `Argument` for a value ≥ 2^31, index ≠ 0 on an EIP-2333 kind
-    /// (`0x0104`–`0x0107`, `0x0112`), or a kind not derived from the seed; `KindUnavailable` for Falcon until T3b;
-    /// `WalletLocked` while locked.
+    /// (`0x0104`–`0x0107`, `0x0112`), or a kind not derived from the seed; `KindUnavailable` for Falcon on a build without
+    /// it (wasm32); `WalletLocked` while locked.
     pub fn ua_key(&self, kind: u16, account: u32, index: u32) -> Result<UaKey> {
         let (secret, key_data) = self.store.key(KeyId::Ua(kind, account, index), |seed| {
-            let s = derive::ua_secret(seed, kind, account, index)?;
-            let key_data = derive::ua_key_data(kind, &s)?;
-            Ok((s, key_data))
+            derive::ua_key(kind, derive::ua_secret(seed, kind, account, index)?)
         })?;
         // a MuSig2 participant (0x0110, 0x0112) has no UA of its own: its group is the UA
         let ua = if matches!(kind, 0x0110 | 0x0112) { None } else { Some(crate::derive_ua(kind, &key_data, false)?) };

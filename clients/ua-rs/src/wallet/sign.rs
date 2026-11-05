@@ -5,9 +5,10 @@
 //! RFC 6979, low-s, `r ‖ s ‖ v` (v ∈ {27, 28}). Native keys: secp256k1 `r ‖ s ‖ v` or ed25519 over the key-proof digest or a
 //! raw digest behind [`AllowRawDigest`]. A UA key signs only the `ua_msg` it builds itself from a purpose of `PURPOSES` (or
 //! `pop` v2) and its own kind (CLI-SGN-29). Every operation reads its secret through `Handle::with`, under the store's read
-//! guard with the generation check (spec §8.2). The pairing and PQ kinds come with T3b / T3c (`KindUnavailable`). UNAUDITED.
+//! guard with the generation check (spec §8.2). The PQ kinds sign through `pqsign` (T3b); the pairing kinds come with T3c
+//! (`KindUnavailable`). UNAUDITED.
 use super::signer::{AllowRawDigest, KeyRef, SigRole, SignRequest, Signer};
-use super::{derive, Error, NativeKey, Result, UaKey};
+use super::{derive, pqsign, Error, NativeKey, Result, UaKey};
 use crate::{keccak256, member_digest, purpose_tag, ua_message, ua8::pop_v2_tag, UAError, PURPOSES};
 use rand_core::{OsRng, RngCore};
 use sha2::{Digest, Sha256};
@@ -25,15 +26,15 @@ enum Scheme {
     Bip340,
 }
 
-/// The scheme of UA kind `kind`: `KindUnavailable` for the kinds of T3b / T3c, `Argument` for a MuSig2 participant (it
-/// signs through its session) and every kind with no key of its own.
+/// The scheme of UA kind `kind`: `KindUnavailable` for the pairing kinds (T3c), `Argument` for a MuSig2 participant (it
+/// signs through its session), every kind with no key of its own and the PQ kinds (`pqsign`).
 fn ua_scheme(kind: u16) -> Result<Scheme> {
     match kind {
         0x0101 => Ok(Scheme::P256),
         0x0102 => Ok(Scheme::Ed25519),
         0x0103 => Ok(Scheme::Bip340),
         0x0108 => Ok(Scheme::Secp256k1),
-        0x0104..=0x0107 | 0x0130..=0x0135 => Err(Error::KindUnavailable),
+        0x0104..=0x0107 => Err(Error::KindUnavailable),
         _ => Err(Error::Argument),
     }
 }
@@ -105,16 +106,20 @@ impl UaKey {
         Ok(SignRequest::UaMsg { kind: self.kind, ua_msg, role: SigRole::Authorization })
     }
 
-    /// The signature of `req` (a `UaMsg` of this key's kind); `aux` fixed only by the `vectors` entry point.
-    fn sign_ua_msg(&self, req: &SignRequest, aux: Option<[u8; 32]>) -> Result<Vec<u8>> {
+    /// The signature of `req` (a `UaMsg` of this key's kind); the randomness fixed only by the `vectors` entry points (BIP-340
+    /// `aux`, the PQ kinds' `rnd` / `opt_rand` / Falcon's 88 bytes), else from the OS RNG.
+    fn sign_ua_msg(&self, req: &SignRequest, fixed: Option<&[u8]>) -> Result<Vec<u8>> {
         let SignRequest::UaMsg { kind, ua_msg, .. } = req else { return Err(Error::Argument) };
         if *kind != self.kind {
             return Err(Error::Argument);
         }
+        if pqsign::is_pq(self.kind) {
+            return self.secret.with(|s| pqsign::sign(self.kind, s, ua_msg, fixed))?;
+        }
         let scheme = ua_scheme(self.kind)?;
-        let aux = match (scheme, aux) {
+        let aux = match (scheme, fixed) {
             (Scheme::Bip340, None) => Some(os_aux()?),
-            (_, aux) => aux,
+            (_, f) => f.map(arr32).transpose()?.copied(),
         };
         self.secret.with(|s| sign_scheme(scheme, s, ua_msg, aux.as_ref()))?
     }
@@ -179,9 +184,15 @@ mod vectors {
     use super::*;
 
     impl UaKey {
-        /// `sign_ua` with a fixed BIP-340 `aux`.
-        pub fn vectors_sign_ua_aux(&self, purpose: &[u8; 32], digest: &[u8; 32], aux: &[u8; 32]) -> Result<Vec<u8>> {
-            self.sign_ua_msg(&self.ua_request(purpose, digest)?, Some(*aux))
+        /// `sign_ua` with fixed randomness: BIP-340 `aux` (32 B), ML-DSA `rnd` (32 B, zero = deterministic), SLH-DSA
+        /// `opt_rand` (16 B, `PK.seed` = deterministic), Falcon nonce ‖ sampler seed (88 B).
+        pub fn vectors_sign_ua_fixed(&self, purpose: &[u8; 32], digest: &[u8; 32], fixed: &[u8]) -> Result<Vec<u8>> {
+            self.sign_ua_msg(&self.ua_request(purpose, digest)?, Some(fixed))
+        }
+        /// A raw `ua_msg` of this key's kind with fixed randomness (pq_kat.json signs a `pop` v1 message `sign_ua` refuses).
+        pub fn vectors_sign_ua_msg(&self, ua_msg: &[u8; 32], fixed: &[u8]) -> Result<Vec<u8>> {
+            let req = SignRequest::UaMsg { kind: self.kind, ua_msg: *ua_msg, role: SigRole::Authorization };
+            self.sign_ua_msg(&req, Some(fixed))
         }
         /// The request `sign_ua` signs.
         pub fn vectors_request(&self, purpose: &[u8; 32], digest: &[u8; 32]) -> Result<SignRequest> {

@@ -5,7 +5,8 @@
 //! utf8(tag) ‖ be32(account) ‖ be32(index))`. The UA tree is `m/22776'/0'/<account>'/<kindNo>'/<i>'`; the EIP-2333 UA paths
 //! `m/254/0/<account>/<kindNo>` (salt `SCAAS-UA-BN254-v1`) and `m/12381/0/<account>/<kindNo>` have no index level: index 0
 //! only. `account`, `index` and `coinType` are below 2^31 (`Argument`). Public only under feature `vectors` (each returns a
-//! secret). The pairing kinds' public keys use arkworks' variable-time multiplication until T3c's `secret_mul`. UNAUDITED.
+//! secret). The pairing kinds' public keys use arkworks' variable-time multiplication until T3c's `secret_mul`; the PQ kinds'
+//! key pairs come from `pqsign`. UNAUDITED.
 use super::{Error, Network, Result};
 use crate::kind_tag_string;
 use ark_ec::{AffineRepr, CurveGroup};
@@ -232,19 +233,8 @@ fn secp_public(s: &[u8], compressed: bool) -> Result<Vec<u8>> {
     Ok(sk.public_key().to_sec1_point(compressed).as_bytes().to_vec())
 }
 
-fn mldsa<P: ml_dsa::MlDsaParams>(s: &[u8]) -> Result<Vec<u8>> {
-    use ml_dsa::Keypair;
-    let seed = Zeroizing::new(ml_dsa::Seed::try_from(s).map_err(|_| Error::Argument)?);
-    Ok(ml_dsa::SigningKey::<P>::from_seed(&seed).verifying_key().encode().to_vec())
-}
-
-fn slhdsa128s(s: &[u8]) -> Result<Vec<u8>> {
-    let part = |r: std::ops::Range<usize>| s.get(r).ok_or(Error::Argument);
-    let sk = slh_dsa::SigningKey::<slh_dsa::Sha2_128s>::slh_keygen_internal(part(0..16)?, part(16..32)?, part(32..48)?);
-    Ok(AsRef::<slh_dsa::VerifyingKey<_>>::as_ref(&sk).to_bytes().to_vec())
-}
-
 /// The key data of UA kind `kind` from its secret (accounts.md §1.6 forms; a MuSig2 participant: its individual key).
+/// `KindUnavailable` for Falcon on a build without it (wasm32).
 pub fn ua_key_data(kind: u16, s: &[u8]) -> Result<Vec<u8>> {
     let mut out = Vec::new();
     match kind {
@@ -278,15 +268,21 @@ pub fn ua_key_data(kind: u16, s: &[u8]) -> Result<Vec<u8>> {
                 be(f, 32, &mut out);
             }
         }
-        0x0130 => out = mldsa::<ml_dsa::MlDsa44>(s)?,
-        0x0131 => out = mldsa::<ml_dsa::MlDsa65>(s)?,
-        0x0134 => out = mldsa::<ml_dsa::MlDsa87>(s)?,
-        0x0133 => out = slhdsa128s(s)?,
-        // PQClean's seeded Falcon keygen (MD-8, equal to clientkeys' per T0) is vendored in T3b
-        0x0132 | 0x0135 => return Err(Error::KindUnavailable),
+        // Falcon: PQClean's seeded keygen (MD-8, equal to clientkeys' per T0), vendored
+        0x0130..=0x0135 => out = super::pqsign::keypair(kind, s)?.1,
         _ => return Err(Error::Argument),
     }
     Ok(out)
+}
+
+/// What the store keeps for UA kind `kind` from its secret, and the key data: the secret itself, or for a PQ kind the key
+/// its signer rebuilds per call (`pqsign::keypair`: one keygen per handle, not per signature).
+pub fn ua_key(kind: u16, s: Zeroizing<Vec<u8>>) -> Result<(Zeroizing<Vec<u8>>, Vec<u8>)> {
+    if super::pqsign::is_pq(kind) {
+        return super::pqsign::keypair(kind, &s);
+    }
+    let key_data = ua_key_data(kind, &s)?;
+    Ok((s, key_data))
 }
 
 /// The secret of `network`'s key `index` (clientkeys `deriveKey`): BIP-32 or SLIP-10 ed25519 at the network's SLIP-44 path,

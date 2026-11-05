@@ -26,6 +26,7 @@ fn wallet(k: &Value, id: &str) -> Wallet {
 }
 const FALCON: [u16; 2] = [0x0132, 0x0135];
 
+/// Every keys.json `ua` row, Falcon's 32 included (PQClean's seeded keygen, vendored in T3b, MD-8; equal to noble's, T0 Q1).
 #[test]
 fn keys_json_ua_rows() {
     let k = keys();
@@ -36,12 +37,7 @@ fn keys_json_ua_rows() {
         for r in arr(&k, "ua").iter().filter(|r| r["mnemonic"] == id) {
             let kind = r["kind"].as_u64().unwrap() as u16;
             let key = w.ua_key(kind, u32_of(&r["account"]), u32_of(&r["index"]));
-            if FALCON.contains(&kind) {
-                // Falcon key generation is PQClean's seeded keygen, vendored in T3b (MD-8); until then the kind is unavailable
-                assert_eq!(key.err(), Some(Error::KindUnavailable), "{r}");
-                falcon += 1;
-                continue;
-            }
+            falcon += usize::from(FALCON.contains(&kind));
             let key = key.unwrap_or_else(|e| panic!("{r}: {e}"));
             assert_eq!(hex::encode(key.key_data()), r["keyData"].as_str().unwrap().trim_start_matches("0x"), "{r}");
             assert_eq!(key.ua().map(|u| format!("0x{}", hex::encode(u))), r["ua"].as_str().map(str::to_owned), "{r}");
@@ -49,7 +45,7 @@ fn keys_json_ua_rows() {
             n += 1;
         }
     }
-    assert_eq!((n, falcon), (216 - 32, 32));
+    assert_eq!((n, falcon), (216, 32));
 }
 
 #[test]
@@ -253,7 +249,7 @@ mod vectors {
     #[test]
     fn handle_holds_no_secret_bytes() {
         let w = wallet(&keys(), "pq_kat");
-        for kind in [0x0101, 0x0102, 0x0103, 0x0104, 0x0106, 0x0108, 0x0110, 0x0131, 0x0133] {
+        for kind in [0x0101, 0x0102, 0x0103, 0x0104, 0x0106, 0x0108, 0x0110, 0x0131, 0x0132, 0x0133, 0x0135] {
             let key = w.ua_key(kind, 0, 0).unwrap();
             assert!(key.vectors_secret_in_arena().unwrap(), "{kind:#06x}");
             let secret = key.vectors_with_secret(|s| s.to_vec()).unwrap();

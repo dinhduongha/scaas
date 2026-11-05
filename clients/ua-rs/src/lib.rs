@@ -17,6 +17,8 @@ pub mod verify;
 pub mod ua8;
 #[cfg(feature = "pq")]
 pub mod pq;
+#[cfg(feature = "pq")]
+mod falcon;
 #[cfg(feature = "json")]
 pub mod json;
 pub use ua8::{holder_pop_message, pqz_reg_message};

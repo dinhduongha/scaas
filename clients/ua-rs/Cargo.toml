@@ -27,11 +27,11 @@ rand_core = { version = "0.6", optional = true }
 rand_chacha = { version = "=0.3.1", optional = true }
 # feature `json`: the registry's explicit arguments as JSON string calls (src/json.rs), for ua-c, ua-cxx, ua-qt, ua-dart-frb
 serde_json = { version = "=1.0.145", optional = true }
-# feature `pq`: the off-chain verifier's PQ kinds (src/pq.rs): the relayer's and the node's only check of what Soroban stores unverified
+# feature `pq`: the off-chain verifier's PQ kinds (src/pq.rs): the relayer's and the node's only check of what Soroban stores unverified.
+# Falcon (ua-rs-sign T3b, MD-8): PQClean vendored in vendor/pqclean-falcon-seeded, built by build.rs (`cc`); pqcrypto-falcon
+# =0.4.1 / pqcrypto-traits =0.3.5 (and pqcrypto-internals 0.2.11, getrandom 0.3.4) left the graph (RUSTSEC-2026-0162/-0163/-0165).
 ml-dsa = { version = "=0.1.1", default-features = false, features = ["alloc"], optional = true }
 slh-dsa = { version = "=0.2.0-rc.5", default-features = false, optional = true }
-pqcrypto-falcon = { version = "=0.4.1", default-features = false, optional = true }
-pqcrypto-traits = { version = "=0.3.5", default-features = false, optional = true }
 # feature `wallet` (ua-rs-sign T2): BIP-39, BIP-32, HKDF / HMAC (SLIP-10, EIP-2333, the PQ seeds), zeroize; pins of T0
 # (runs/2026-11-05-ua-rs-sign-t0.md)
 bip39 = { version = "=2.2.2", default-features = false, features = ["alloc", "zeroize"], optional = true }
@@ -66,7 +66,11 @@ pqz-set-n2816-kmax65536 = []
 vectors = ["wallet"]
 signers = ["dep:frost-core", "dep:frost-secp256k1", "dep:rand_core", "dep:rand_chacha"]
 json = ["dep:serde_json"]
-pq = ["dep:ml-dsa", "dep:slh-dsa", "dep:pqcrypto-falcon", "dep:pqcrypto-traits"]
+pq = ["dep:ml-dsa", "dep:slh-dsa", "dep:cc"]
+
+[build-dependencies]
+# feature `pq`: the vendored PQClean Falcon (build.rs); any 1.x, so a dependent keeps its own (ua-rs locks 1.10.0)
+cc = { version = "1", optional = true }
 
 [dev-dependencies]
 hex = "0.4"
@@ -90,6 +94,10 @@ required-features = ["wallet"]
 
 [[test]]
 name = "wallet_sign"
+required-features = ["wallet"]
+
+[[test]]
+name = "wallet_pq"
 required-features = ["wallet"]
 
 # arkworks subgroup checks crawl unoptimised

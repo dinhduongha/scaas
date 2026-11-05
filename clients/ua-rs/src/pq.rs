@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! Feature `pq`: the PQ kinds' verifiers for the off-chain check (`ua8::check_*`, UA8-D24, C14), independent of the JS
-//! generator (noble): `ml-dsa`, `slh-dsa`, `pqcrypto-falcon` (PQClean `falcon-padded-512` / `-1024`). ML-DSA and SLH-DSA verify `pq_msg =
-//! keccak256(TAG(kind) ‖ ua_msg)` with the empty context, Falcon `ua_msg` itself (CTR-UA-23). A kind whose crate disagrees
-//! with a KAT row loses its arm in [`verify_raw`], so it is refused (C14). Signatures and keys are untrusted: anything
-//! malformed is `false`, never a panic. UNAUDITED.
+//! generator (noble): `ml-dsa`, `slh-dsa`, PQClean `falcon-padded-512` / `-1024` (vendored, `src/falcon.rs`; none on wasm32,
+//! where a Falcon signature never verifies). ML-DSA and SLH-DSA verify `pq_msg = keccak256(TAG(kind) ‖ ua_msg)` with the empty
+//! context, Falcon `ua_msg` itself (CTR-UA-23). A kind whose crate disagrees with a KAT row loses its arm in [`verify_raw`], so
+//! it is refused (C14). Signatures and keys are untrusted: anything malformed is `false`, never a panic. UNAUDITED.
 use crate::{keccak, tag};
 use ml_dsa::{EncodedVerifyingKey, MlDsa44, MlDsa65, MlDsa87, MlDsaParams};
 
@@ -52,24 +52,12 @@ fn slhdsa128s(key: &[u8], m: &[u8], sig: &[u8]) -> bool {
     k.slh_verify_internal(&[m], &s).is_ok()
 }
 
-/// Exactly the padded length: PQClean's verifier also takes a shorter `sig` (EIP-8052 is 666 B).
+/// Exactly the padded length (666 B; PQClean alone also takes a shorter `sig`, EIP-8052 is 666 B) and a 897-byte key.
 fn fndsa512(key: &[u8], m: &[u8], sig: &[u8]) -> bool {
-    use pqcrypto_falcon::falconpadded512 as falcon;
-    use pqcrypto_traits::sign::{DetachedSignature, PublicKey};
-    if sig.len() != FNDSA512_SIG_LENGTH {
-        return false;
-    }
-    let (Ok(k), Ok(s)) = (falcon::PublicKey::from_bytes(key), falcon::DetachedSignature::from_bytes(sig)) else { return false };
-    falcon::verify_detached_signature(&s, m, &k).is_ok()
+    crate::falcon::verify(crate::falcon::FNDSA512, key, m, sig)
 }
 
-/// Exactly the padded length (1,280 B, reference `FALCON_SIG_PADDED_SIZE(10)`), as [`fndsa512`]'s.
+/// Exactly the padded length (1,280 B, reference `FALCON_SIG_PADDED_SIZE(10)`) and a 1,793-byte key, as [`fndsa512`]'s.
 fn fndsa1024(key: &[u8], m: &[u8], sig: &[u8]) -> bool {
-    use pqcrypto_falcon::falconpadded1024 as falcon;
-    use pqcrypto_traits::sign::{DetachedSignature, PublicKey};
-    if sig.len() != FNDSA1024_SIG_LENGTH {
-        return false;
-    }
-    let (Ok(k), Ok(s)) = (falcon::PublicKey::from_bytes(key), falcon::DetachedSignature::from_bytes(sig)) else { return false };
-    falcon::verify_detached_signature(&s, m, &k).is_ok()
+    crate::falcon::verify(crate::falcon::FNDSA1024, key, m, sig)
 }

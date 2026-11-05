@@ -81,7 +81,7 @@ fn sign_json_ua_rows() {
 
 #[cfg(feature = "vectors")]
 fn fixed_aux(key: &scaas_ua::wallet::UaKey, purpose: &[u8; 32], digest: &[u8; 32], aux: &[u8; 32], sig: &[u8]) {
-    assert_eq!(hex::encode(key.vectors_sign_ua_aux(purpose, digest, aux).unwrap()), hex::encode(sig));
+    assert_eq!(hex::encode(key.vectors_sign_ua_fixed(purpose, digest, aux).unwrap()), hex::encode(sig));
 }
 #[cfg(not(feature = "vectors"))]
 fn fixed_aux(_: &scaas_ua::wallet::UaKey, _: &[u8; 32], _: &[u8; 32], _: &[u8; 32], _: &[u8]) {}
@@ -205,13 +205,13 @@ fn purpose_not_in_purposes_refused() {
     }
 }
 
-/// Kinds outside T3a: the pairing and PQ kinds come with T3b / T3c (`KindUnavailable`); a MuSig2 participant signs through
-/// its session (`Argument`).
+/// Kinds outside T3a / T3b: the pairing kinds come with T3c (`KindUnavailable`); a MuSig2 participant signs through its
+/// session (`Argument`). The PQ kinds: tests/wallet_pq.rs.
 #[test]
 fn other_kinds_not_signed_here() {
     let w = wallet("pq_kat");
     let (p, d) = (purpose_tag("metatx").unwrap(), [1u8; 32]);
-    for kind in [0x0104, 0x0105, 0x0106, 0x0107, 0x0130, 0x0131, 0x0133, 0x0134] {
+    for kind in [0x0104, 0x0105, 0x0106, 0x0107] {
         assert_eq!(w.ua_key(kind, 0, 0).unwrap().sign_ua(&p, &d).err(), Some(Error::KindUnavailable), "{kind:#06x}");
     }
     for kind in [0x0110, 0x0112] {
@@ -279,9 +279,7 @@ mod vectors {
         let s = load("sign.json");
         let w = wallet("pq_kat");
         let mut n = 0;
-        // Falcon keys come with T3b (PQClean's seeded keygen, MD-8): `ua_key` is KindUnavailable until then
-        let falcon = |r: &&Value| matches!(r["kind"].as_u64(), Some(0x0132 | 0x0135));
-        for r in arr(&s, "ua").iter().filter(|r| !falcon(r)) {
+        for r in arr(&s, "ua") {
             let kind = r["kind"].as_u64().unwrap() as u16;
             let key = w.ua_key(kind, u32_of(&r["account"]), u32_of(&r["index"])).unwrap();
             let want = if r["role"] == "pop" { SigRole::Pop } else { SigRole::Authorization };
@@ -293,7 +291,7 @@ mod vectors {
             }
             n += 1;
         }
-        assert_eq!((n, arr(&s, "ua").iter().filter(falcon).count()), (arr(&s, "ua").len() - 4, 4));
+        assert_eq!(n, arr(&s, "ua").len()); // every kind, Falcon's 4 rows included (T3b)
         let key = w.ua_key(0x0106, 0, 0).unwrap();
         for p in PURPOSES {
             let want = if matches!(*p, "kem" | "pqz-key") { SigRole::Pop } else { SigRole::Authorization };
