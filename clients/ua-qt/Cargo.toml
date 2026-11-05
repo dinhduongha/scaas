@@ -2,7 +2,7 @@
 name = "scaas_ua_qt"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.90"
+rust-version = "1.97.1"
 publish = false
 description = "CXX-Qt QObject UaKinds (QML module Scaas.Ua) over scaas-ua. UNAUDITED."
 

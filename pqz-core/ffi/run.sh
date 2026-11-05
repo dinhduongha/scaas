@@ -67,7 +67,7 @@ ffi_native() {
   MI=$(python3 -I -c "import json, sys; print(json.load(open(sys.argv[1]))['max_input'])" "../params/sets/$S/set.json")
   OUT clang -std=c11 -Wall -Wextra -DPQZ_SET_MAX_INPUT="$MI" -o "$X/c_abi" tests/c_abi.c -L"$TD/release" -lpqz_ffi -Wl,-rpath,"$TD/release"
   OUT "$X/c_abi"
-  echo "# clippy (the crate's toolchain 1.97.1; +stable 1.90 refuses pqzl's rust-version): no float arithmetic in the crate"
+  echo "# clippy (the repository's toolchain, root rust-toolchain.toml): no float arithmetic in the crate"
   OUT cargo clippy --release --offline $BF --features prove,test-hooks --lib -- -D clippy::float_arithmetic
 } > "$L-native.txt" 2>&1
 }

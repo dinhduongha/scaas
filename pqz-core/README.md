@@ -576,7 +576,7 @@ The rejected backends' code and runs are kept in `pqzh/stark-backup/` as the rec
 
 ## 6. Build, test, run
 
-**Requirements:** clang / lld 18 (`wasm-ld-18`), node ≥ 26 for wasm32, Rust 1.97.1 (pinned per crate by
+**Requirements:** clang / lld 18 (`wasm-ld-18`), node ≥ 26 for wasm32, Rust 1.97.1 (pinned for the repository by the root
 `rust-toolchain.toml`), Python 3 (stdlib only, run with `-I`).
 
 > **Run every heavy step under `scripts/capped`**, the repository's machine lock (at most two heavy jobs at a time by

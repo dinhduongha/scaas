@@ -18,33 +18,35 @@ import subprocess
 
 # Each on-chain family: its own directory, the shared build/test scripts and the cross-language vectors.
 SC = ['smartcontracts/scripts/', 'smartcontracts/vectors/']
+# the root rust-toolchain.toml: the one Rust toolchain of every crate (ARCH-POS-12)
+RT = ['rust-toolchain.toml']
 JOBS = {
     'contract-evm': ['smartcontracts/evm/'] + SC + ['pqz-core/params/', 'scripts/size_gate.py', 'scripts/evm_libs.sh'],
-    'contract-soroban': ['smartcontracts/soroban/'] + SC,
-    'contract-solana': ['smartcontracts/solana/'] + SC,
-    'contract-near': ['smartcontracts/near/'] + SC,
+    'contract-soroban': ['smartcontracts/soroban/'] + SC + RT,
+    'contract-solana': ['smartcontracts/solana/'] + SC + RT,
+    'contract-near': ['smartcontracts/near/'] + SC + RT,
     'contract-algorand': ['smartcontracts/algorand/'] + SC,
     # smartcontracts/move/ holds only aptos/ and sui/, nothing shared; a shared file there gets its prefix in both
     'contract-aptos': ['smartcontracts/move/aptos/'] + SC,
     'contract-sui': ['smartcontracts/move/sui/'] + SC,
-    'contract-cosmos': ['smartcontracts/cosmos/'] + SC,
+    'contract-cosmos': ['smartcontracts/cosmos/'] + SC + RT,
     'contract-ton': ['smartcontracts/ton/'] + SC,
-    'node': ['scaas-node/', 'clients/ua-rs/', 'smartcontracts/'],
+    'node': ['scaas-node/', 'clients/ua-rs/', 'smartcontracts/'] + RT,
     'docs': [''],
     'clientkeys': ['clients/clientkeys/', 'smartcontracts/', 'scaas-node/src/'],
     # the directories the pqz job builds and tests (pqzl, ffi, stmt, pqzh/ligero, params, fuzz); pqz-core/nethermind/ (chain
     # scripts, the C# plugin), artifact/, glic/, research/, runs/ and the top-level gate scripts are run on the owner's machine
     'pqz': ['pqz-core/pqzl/', 'pqz-core/ffi/', 'pqz-core/stmt/', 'pqz-core/pqzh/', 'pqz-core/params/', 'pqz-core/fuzz/',
-            'smartcontracts/vectors/pqz/'],
-    'zether-prover': ['clients/zether-prover/', 'smartcontracts/evm/', 'smartcontracts/vectors/'],
-    'ua-rs': ['clients/ua-rs/', 'smartcontracts/'],
-    'ua-cxx': ['clients/ua-cxx/', 'clients/ua-rs/', 'smartcontracts/vectors/'],
-    'ua-c': ['clients/ua-c/', 'clients/ua-rs/', 'smartcontracts/vectors/'],
-    'ua-qt': ['clients/ua-qt/', 'clients/ua-rs/', 'smartcontracts/vectors/', 'smartcontracts/near/', 'smartcontracts/algorand/'],
+            'smartcontracts/vectors/pqz/'] + RT,
+    'zether-prover': ['clients/zether-prover/', 'smartcontracts/evm/', 'smartcontracts/vectors/'] + RT,
+    'ua-rs': ['clients/ua-rs/', 'smartcontracts/'] + RT,
+    'ua-cxx': ['clients/ua-cxx/', 'clients/ua-rs/', 'smartcontracts/vectors/'] + RT,
+    'ua-c': ['clients/ua-c/', 'clients/ua-rs/', 'smartcontracts/vectors/'] + RT,
+    'ua-qt': ['clients/ua-qt/', 'clients/ua-rs/', 'smartcontracts/vectors/', 'smartcontracts/near/', 'smartcontracts/algorand/'] + RT,
     'ua-py': ['clients/ua-py/', 'smartcontracts/vectors/'],
     'ua-go': ['clients/ua-go/', 'smartcontracts/vectors/', 'smartcontracts/evm/'],
     'ua-cs': ['clients/ua-cs/', 'smartcontracts/vectors/'],
-    'ua-dart-frb': ['clients/ua-dart-frb/', 'clients/ua-rs/', 'smartcontracts/vectors/'],
+    'ua-dart-frb': ['clients/ua-dart-frb/', 'clients/ua-rs/', 'smartcontracts/vectors/'] + RT,
     'ua-dart': ['clients/ua-dart/', 'smartcontracts/vectors/', 'smartcontracts/evm/'],
 }
 # ci-full-<group>: the jobs a label or a manual run forces on; ci-full: every job.
@@ -141,6 +143,9 @@ if __name__ == '__main__':
         assert needed([p]) == only_docs, p  # one-off scripts and probe data under runs/
     for p, js in RUNS_READ.items():  # a runs/ file a test reads starts exactly its readers (and docs)
         assert needed([p]) == {j: j == 'docs' or j in js for j in JOBS}, p
+    assert {j for j, r in needed(['rust-toolchain.toml']).items() if r} == {
+        'docs', 'contract-soroban', 'contract-solana', 'contract-near', 'contract-cosmos', 'node', 'pqz', 'zether-prover',
+        'ua-rs', 'ua-cxx', 'ua-c', 'ua-qt', 'ua-dart-frb'}
     assert needed(['smartcontracts/evm/foundry.txt'])['contract-evm']  # a .txt outside runs/ counts
     assert needed(['scaas-node/runs/a.txt', 'scaas-node/src/x.rs'])['node']
     assert needed(['smartcontracts/evm/runs/a.txt'], ['ci-full-contracts'])['contract-evm']  # a label still forces

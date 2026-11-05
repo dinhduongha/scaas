@@ -703,7 +703,7 @@ msg/s validated. The node runs small; the box runs one heavy job at a time.
 
 | Crate | Status | Use |
 |---|---|---|
-| `libp2p = { version = "=0.56.x", default-features = false, features = ["tokio", "quic", "tcp", "noise", "yamux", "dns", "gossipsub", "kad", "identify", "ping", "request-response", "json", "macros", "ed25519"] }` | **new** | swarm. `allow_block_list` and `connection_limits` behaviours from the facade. Verify the newest 0.56 patch and exact feature names when the build starts; MSRV ≤ our 1.90 |
+| `libp2p = { version = "=0.56.x", default-features = false, features = ["tokio", "quic", "tcp", "noise", "yamux", "dns", "gossipsub", "kad", "identify", "ping", "request-response", "json", "macros", "ed25519"] }` | **new** | swarm. `allow_block_list` and `connection_limits` behaviours from the facade. Verify the newest 0.56 patch and exact feature names when the build starts; MSRV ≤ our 1.97.1 |
 | `rustls` features `aws_lc_rs`, `prefer-post-quantum`, `std`, `logging` (no default features) | direct | [NODE-GSP-03](#NODE-GSP-03) |
 | `tokio-rustls` `default-features = false, features = ["aws_lc_rs"]` | direct | HTTPS bus |
 | `hyper-util` 0.1, `rustls-webpki` 0.103 | in lock; direct deps | serving axum over TLS (`TowerToHyperService`); SPKI extraction |
