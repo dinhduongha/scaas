@@ -345,8 +345,11 @@ The four app paths, app part only [E]:
 
 Reading [I]: (3) is last (licence and Matrix model). (1) B′ costs about what (4) D costs; the gain is Status's design,
 and the risk is reverse-engineering the Nim models the QML expects, so the stub run of §7 should size it before more
-work. (2) is the cheapest way to "assets and chat" if mobile comes first. **If desktop and Qt come first, (1) is the
-lead, with W3 for SCaaS assets and W1 only if swaps, collectibles and on-ramp are wanted; if mobile comes first, (2).**
+work. (2) is the cheapest way to "assets and chat" if Flutter is acceptable. **Owner note 2026-11-05: the Status app's
+Qt code base already builds for mobile (`mobile/`, Android and iOS), so (1) covers desktop and mobile from one Qt code
+base; the platform no longer picks between (1) and (2): the toolkit (Qt or Flutter) and the cost do. If Qt, (1) is the
+lead on both, with W3 for SCaaS assets and W1 only if swaps, collectibles and on-ramp are wanted; if Flutter, (2).** How
+mature the Qt mobile build is (store releases, device coverage) is to be checked by building it, not assumed.
 (4) stays the fallback when the stub run shows that the Status QML is tied to Nim models too tightly.
 
 Other points: use XMTP's libxmtp and Delta Chat core as models for the core's shape; calls last, after deciding P22's
@@ -355,7 +358,7 @@ frame format against LiveKit's own (§2).
 ## 10. Decisions for the owner
 
 1. **Path:** (1) Status fork, (2) wallet fork + chat, (3) chat-app fork + wallet, (4) own UI.
-2. **Platforms first:** desktop or mobile (it largely picks between (1) and (2)); then iOS, web.
+2. **Platforms first:** desktop or mobile, then iOS, web (with (1) one Qt code base serves both; the toolkit picks between (1) and (2)).
 3. **For a Status fork:** keep the cut (B′) or restore the Nim wallet (B / W0); wallet services W0, W1, W2 or W3; which
    Status screens to keep (Communities, Browser, Market …).
 4. **UI toolkit:** Qt (paths 1, 4-D; keeps owner answer 5) or Flutter (paths 2, 3, 4-C; changes it).
