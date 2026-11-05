@@ -463,6 +463,22 @@ impl UaMtx {
         ua_field!(self, validUntil)
     }
 
+    pub fn mode(&self) -> u32 {
+        ua_field!(self, mode)
+    }
+
+    pub fn relayer(&self) -> Address {
+        ua_field!(self, relayer)
+    }
+
+    pub fn fee(&self) -> U256 {
+        ua_field!(self, fee)
+    }
+
+    pub fn fee_recipient(&self) -> Address {
+        ua_field!(self, feeRecipient)
+    }
+
     fn unbound(&mut self, relayer: Option<Address>, fee_recipient: Option<Address>) {
         let mode = ua_field!(self, mode);
         let (r, f) = match self {
