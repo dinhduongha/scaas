@@ -22,3 +22,6 @@ What these copies hold and the live code no longer does:
   `MetaTransfer` on a token.
 - `gateway.rs` (T15): `POST /v1/metatx` building the address `mtxExecuteTransfer(MetaTransfer, bytes)` for a token, and
   `POST /v1/op` refusing every merged entry `FEATURE_UNSUPPORTED` (no `/v1/ua-metatx` door).
+- `mesh/` (T16): the mesh's EVM body on the address structs (`evm.meta_tx` = `MetaTransaction` / `MetaTransfer`, `signature`
+  as `bytes`, intent id the address digest, any contract) in `digest.rs`, `accept.rs`'s tests on that body, and
+  `mesh_vectors.rs` with its file `mesh-envelope-v1.2.json` (case 3a the address `metatransfer_kat.json`).
