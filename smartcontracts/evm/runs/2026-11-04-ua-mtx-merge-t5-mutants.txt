@@ -1,0 +1,5 @@
+mutant | test that went red | rc
+ua-tag-swapped-for-address-tag | test_pqzCiphertextInState, test_pqzEnvelopeBindingViewIsTheUATag, test_pqzFeeZero_everyMergedEntry, test_pqzMtxExecuteBindsUATag, test_pqzRelayedProofBindsUATag_derived, test_pqzRelayedProofBindsUATag_native, test_v3FeeUA | 11
+pqzcore-ua-tag-changed | test_pqzCiphertextInState, test_pqzEnvelopeBindingViewIsTheUATag, test_pqzFeeZero_everyMergedEntry, test_pqzMtxExecuteBindsUATag, test_pqzRelayedProofBindsUATag_derived, test_pqzRelayedProofBindsUATag_native, test_v3FeeUA | 11
+msg-sender-in-pqzstatelib-shield | test_pqzFeeZero_everyMergedEntry, test_pqzRelayedProofBindsUATag_derived | 10
+binding-over-address-from | test_pqzEnvelopeBindingViewIsTheUATag, test_pqzRelayedProofBindsUATag_derived, test_v3FeeUA | 11
