@@ -16,7 +16,7 @@
 #                            a chain at 24,576 refuses the deploy. CHAIN_CODE_LIMIT? (default 65,536, EIP-7954): the chain's
 #                            declared code limit, a release above it refused by name before anything is sent (CTR-GOV-19,
 #                            GD-4); the SCaaS testnet after the reset of pqz-core/nethermind/chain/RUNBOOK.md ("Code size
-#                            128 KiB"): 131072. DEPLOY_WRAPPED=1 adds the WRAPPED release (GD-12). Always --gas-estimate-multiplier 105: forge's default x1.30 on
+#                            128 KiB"): 131072. DEPLOY_WRAPPED=1 adds the WRAPPED release (GD-12); DEPLOY_REGULATED=1 the regulated releases (kind 9 today, disabled until built). Always --gas-estimate-multiplier 105: forge's default x1.30 on
 #                            the BLS inner-product verifier (~14 M, DEPLOY_ZETHER) exceeds the 2^24 per-transaction cap
 #                            (EIP-7825); the largest implementation, WrappedPqzToken (13,319,335 gas measured), is
 #                            deployed by script/pqz/e2e.py, not here. DEPLOY_ZETHER=1 (any chain but Hedera) adds the Zether

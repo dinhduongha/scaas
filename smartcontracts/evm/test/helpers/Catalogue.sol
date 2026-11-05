@@ -20,6 +20,7 @@ import {PqzBurnLib} from "../../src/pqz/PqzBurnLib.sol";
 import {PqzViewLib} from "../../src/pqz/PqzViewLib.sol";
 import {PqzWrappedLib} from "../../src/pqz/PqzWrappedLib.sol";
 import {UARegistryLib} from "../../src/ua/UARegistryLib.sol";
+import {RegulatedLib} from "../../src/regulated/RegulatedLib.sol";
 
 /// @notice A plain release environment (plan 5g-Z2): no dependencies, no pinned libraries.
 function plainEnv(address factory, address ska, bytes32 uid, address registry, bool hedera)
@@ -50,6 +51,13 @@ function pqzEnv(address factory, bytes32 uid, address registry, address verifier
 /// @notice The transitive link closure of `kind`'s implementation (metatx-split §4, R5), each library with its code
 ///         hash. Checked against the artifacts' `linkReferences` by `LinkClosure.t.sol`.
 function closureLibs(IOpenFactory.TokenKind kind) view returns (address[] memory l) {
+    if (uint8(kind) >= 8) { // a regulated kind 8-13: its base kind's closure and `RegulatedLib` (regulated-kinds spec §6.1)
+        address[] memory base = closureLibs(IOpenFactory.TokenKind(uint8(kind) - 8));
+        l = new address[](base.length + 1);
+        for (uint256 i; i < base.length; ++i) l[i] = base[i];
+        l[base.length] = address(RegulatedLib);
+        return l;
+    }
     bool und = kind == IOpenFactory.TokenKind.WRAPPED || kind == IOpenFactory.TokenKind.WRAPPED_ZETHER
         || kind == IOpenFactory.TokenKind.WRAPPED_PQZ;
     bool zth = kind == IOpenFactory.TokenKind.NORMAL_ZETHER || kind == IOpenFactory.TokenKind.WRAPPED_ZETHER;

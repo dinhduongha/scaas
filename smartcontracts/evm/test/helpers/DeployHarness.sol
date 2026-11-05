@@ -45,6 +45,9 @@ contract DeployHarness is DeployBase {
     /// `DEPLOY_WRAPPED` for the next `deploy`.
     function setWrapped(bool w) external { deployWrapped = w; }
 
+    /// `DEPLOY_REGULATED` for the next `deploy`.
+    function setRegulated(bool r) external { deployRegulated = r; }
+
     function deploy(bytes32 uid_, bool zether, address ska) external returns (OpenFactory f, string memory json) {
         return deploy(uid_, zether, ska, false);
     }

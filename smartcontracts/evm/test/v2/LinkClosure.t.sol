@@ -21,6 +21,7 @@ import {PqzBurnLib} from "../../src/pqz/PqzBurnLib.sol";
 import {PqzViewLib} from "../../src/pqz/PqzViewLib.sol";
 import {PqzWrappedLib} from "../../src/pqz/PqzWrappedLib.sol";
 import {UARegistryLib} from "../../src/ua/UARegistryLib.sol";
+import {RegulatedLib} from "../../src/regulated/RegulatedLib.sol";
 import {SmartKeyAccountFactory} from "../../src/account/SmartKeyAccountFactory.sol";
 import {ZUID} from "../zether/helpers/ZetherFixture.sol";
 import {closureLibs, registryClosureLibs} from "../helpers/Catalogue.sol";
@@ -32,7 +33,7 @@ contract LinkClosureTest is Test {
     IOpenFactory.TokenKind constant NORMAL = IOpenFactory.TokenKind.NORMAL;
     string[] internal names = [
         "GovernanceLib", "HederaLib", "TradeLib", "MtxPipelineLib", "WrappedLib", "ZetherLib", "ZetherWrappedLib",
-        "PqzStateLib", "PqzTransferLib", "PqzBurnLib", "PqzViewLib", "PqzWrappedLib", "UARegistryLib"
+        "PqzStateLib", "PqzTransferLib", "PqzBurnLib", "PqzViewLib", "PqzWrappedLib", "UARegistryLib", "RegulatedLib"
     ];
 
     function _addr(string memory n) internal pure returns (address a) {
@@ -50,6 +51,7 @@ contract LinkClosureTest is Test {
         if (h == keccak256("PqzViewLib")) return address(PqzViewLib);
         if (h == keccak256("PqzWrappedLib")) return address(PqzWrappedLib);
         if (h == keccak256("UARegistryLib")) return address(UARegistryLib);
+        if (h == keccak256("RegulatedLib")) return address(RegulatedLib);
         revert(string.concat("unknown library ", n));
     }
 
@@ -106,9 +108,12 @@ contract LinkClosureTest is Test {
             f.envOf(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1));
         _assertEnvIsClosure("DeployBase DEX", "SCaaSDex", f.dexEnvOf(1));
 
-        string[6] memory impls = ["NormalToken", "WrappedToken", "NormalZetherToken",
-            "WrappedZetherToken", "NormalPqzToken", "WrappedPqzToken"];
-        for (uint8 k; k < 6; ++k) {
+        // plan T27: the regulated kinds 9 and 13 (their base kind's closure and `RegulatedLib`)
+        string[14] memory impls = ["NormalToken", "WrappedToken", "NormalZetherToken",
+            "WrappedZetherToken", "NormalPqzToken", "WrappedPqzToken", "", "", "", "WrappedRegulatedToken", "", "", "",
+            "WrappedPqzRegulatedToken"];
+        for (uint8 k; k < 14; ++k) {
+            if (bytes(impls[k]).length == 0) continue;
             IFactoryToken.Env memory e;
             e.libs = closureLibs(IOpenFactory.TokenKind(k));
             e.libCodeHashes = new bytes32[](e.libs.length);

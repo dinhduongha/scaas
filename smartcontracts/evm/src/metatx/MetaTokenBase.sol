@@ -135,12 +135,12 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
     ///      kind: scalar bit 1, no scope.
     function _roleBits() internal pure virtual override returns (uint256) { return GovernanceBits.NORMAL_ROLES; }
     function _contractOnlyBits() internal pure virtual override returns (uint256) { return 0; }
-    function _scalarBits() internal pure override returns (uint256) { return GovernanceBits.TOKEN_SCALAR; }
+    function _scalarBits() internal pure virtual override returns (uint256) { return GovernanceBits.TOKEN_SCALAR; }
     function _scopeBits() internal pure override returns (uint256) { return 0; }
     function _uaRegistry() internal view override returns (address) { return _REGISTRY; }
 
     /// @notice ERC-165; `IERC20Payment` only while `PAYABLE` is set, `IRescuable` only while `RESCUABLE` is.
-    function supportsInterface(bytes4 id) external view virtual returns (bool) {
+    function supportsInterface(bytes4 id) public view virtual returns (bool) {
         return id == type(IERC165).interfaceId || id == type(IERC20).interfaceId || id == type(IMetaTx).interfaceId
             || id == type(IERC20MetaTx).interfaceId || id == type(IGovernance).interfaceId
             || (id == type(IERC20Payment).interfaceId && GovernanceLib.hasFeature(GovernanceBits.PAYABLE))
