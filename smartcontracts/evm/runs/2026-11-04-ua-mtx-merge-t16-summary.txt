@@ -1,0 +1,45 @@
+# ua-mtx-merge T16 gate summary (full output in git-ignored .log files, not committed)
+# T16: mesh evm.ua_meta_tx (plan T16, R45, Q7, Q6, MD-10, NODE-MESH-18; CTR-MTX-30): the EVM and Hedera token body and the
+# mandate wallets' body are the UA structs (ua_meta_tx on ids + auth, a UASig), scaas-intent/1.3, intent id the UA digest;
+# native subjects only with today's sig_kinds (eoa, erc1271), a derived from refused DERIVED_FROM_UNSUPPORTED, a native
+# UASig with keyData / members refused BAD_SIGNATURE (R17); the address body refused OP_KIND_MISMATCH for an address
+# MetaTransfer (any contract) and for any address body on a registered token; SmartKeyAccount's address MetaTransaction
+# body accepted as before.
+# Toolchain: rustc / cargo 1.97.1 (the root rust-toolchain.toml); the shared node target directory of the main checkout
+# (CARGO_TARGET_DIR), scripts/capped, cargo -j2; the whole suite at CAPPED_MEM=6G.
+# Base: 52e787b4 (ua-mtx-merge after T14, T17 and the T15 merge). T16 commits: 2ab52772 (legacy copies, MD-4), 8940c404
+# (the build; the vector file's rename v1.2 -> v1.3 landed in e7fe663e, a coordinator docs commit, content in 8940c404),
+# this one (harness, mutants, summary).
+step | commit | rc | counts
+t16-base-cargo-test | 52e787b4 | 0 | 628 passed 0 failed 56 ignored (lib 623, fuzz 4, mesh_vectors 1; every e2e_* ignored): the T15 + T17 merge is green
+t16-base-clippy | 52e787b4 | 0 | cargo clippy --all-targets -- -D warnings: no warning
+t16-red | 2ab52772 code + the new mesh tests (the submit_wire assertion, a new API, left out) | 101 | mesh:: 14 passed 6 failed: 5 of the 6 new tests red (a_token_address_body_is_refused_by_name None != OP_KIND_MISMATCH; a_derived_from_is_refused_by_name BAD_ENVELOPE != DERIVED_FROM_UNSUPPORTED; a_mandate_wallet_ua_body_accepted, intent_id_is_the_ua_digest, unbound_fields_carry_zero: the UA body BAD_ENVELOPE) + codes_and_outcomes_outside_the_vectors (now on the UA body); an_account_address_body_still_accepted green on the base (a keep: the account's address body was taken before; no mutant reaches it, it guards against an over-wide refusal)
+t16-mesh | 8940c404 | 0 | mesh:: 20 passed; mesh_vectors::vectors ok (53 cases)
+t16-regenerate | 8940c404 | 0 | cargo test --test mesh_vectors -- --ignored regenerate twice: byte-identical (sha256 c64d53ce...d4c3); 46 -> 53 cases, the 11 non-EVM cases byte-identical to the legacy file
+t16-cargo-test | 8940c404 | 0 | 634 passed 0 failed 56 ignored (lib 629, fuzz 4, mesh_vectors 1); lib 623 -> 629 (+6 new tests)
+t16-clippy | 8940c404 | 0 | cargo clippy --all-targets -- -D warnings: no warning
+t16-e2e | - | - | not run: plan T16 lists no e2e (no mesh e2e on anvil); tests/e2e.rs untouched
+t16-docs | 8940c404 | 0 | docs_check check 0 errors, 5 warnings, 16 notes; paths 0; test_docs_check ok
+t16-mutants | this commit's harness on 8940c404 | 101 each | 9 of 9 killed, none a compile error (runs/2026-11-04-ua-mtx-merge-t16-mutants.txt): intent-id-over-address-struct, unbound-zero-rule-dropped, old-body-accepted (the plan's three), token-address-call-accepted, address-transfer-on-any-contract-accepted, derived-from-accepted, r17-dropped, ua-body-under-1-2-accepted, submit-not-normalized
+#
+# Pins, old -> new: an EVM token / mandate-wallet mesh intent scaas-intent/1.2 (evm.meta_tx, signature) -> scaas-intent/1.3
+# (evm.ua_meta_tx, auth), per NODE-MESH-18 (open item 3); the vector file tests/vectors/mesh-envelope-v1.2.json ->
+# mesh-envelope-v1.3.json (top-level spec 1.2 -> 1.3; the old file in scaas-node/legacy/ua-mtx-merge/mesh/); case 03a's
+# intent id 0x42720219... (the address metatransfer_kat.json, now legacy) -> 0x423424d1... (the token's UAMetaTransfer KAT).
+#
+# Conflicts with the plan / spec:
+#   NODE-MESH-18 sketches evm.ua_meta_tx = {token, m, auth}. Built as the address body's twin: evm = {domain, struct,
+#   ua_meta_tx (the wire UA struct), auth (UASig JSON), sig_kind}; token is the envelope's contract (NODE-MESH-09), not
+#   repeated. sig_kind ua (NODE-MESH-18) not built: MD-10 refuses a derived from first. T19 writes the rule this way.
+#   The address MetaTransfer body is refused on every contract (no contract keeps the entry, R46), not only on a registered
+#   token; an address MetaTransaction is refused only on a registered token (the pure mesh cannot tell a mandate wallet's
+#   address from an account's: a mandate wallet's address body is left to the simulation).
+#
+# Stale, owned by later tasks: docs/node/mesh.md (NODE-MESH-08 intent id, -09 body and the 1.2 / 1.3 split, -16 status,
+# -18 body shape, §3.3 example, §3.6 file name and cases 1-32 + the new letters, the code table with OP_KIND_MISMATCH and
+# DERIVED_FROM_UNSUPPORTED), docs/clients/app.md and docs/node/job-api.md (mesh-envelope-v1.2.json named), job-api.md's
+# "Not built: mesh evm.ua_meta_tx" (T19); the operator note: mesh peers on the old EVM body get OP_KIND_MISMATCH, a derived
+# from DERIVED_FROM_UNSUPPORTED, the UA body needs scaas-intent/1.3 (T19). Hedera's hedera_ed25519 sig_kind stays
+# SPECIFIED (not built before or after). metatx.rs Mtx stays: SmartKeyAccount, executeMetaTransaction, guard.rs, odoo.rs,
+# adapters/hedera.rs's test, tests/{e2e,e2e_hedera,fuzz}.rs read it (T18 owns hedera / e2e); the address KAT readers in
+# metatx.rs tests stay for Mtx.
