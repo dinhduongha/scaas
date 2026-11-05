@@ -1,0 +1,35 @@
+# ua-mtx-merge T15 gate summary (full output in git-ignored .log files, not committed)
+# T15: gateway doors (plan T15, R44, Q7, Q6; CTR-MTX-30): POST /v1/op takes the merged named entries with auth a UASig;
+# POST /v1/ua-metatx built ({chain, token, contract?, struct?, m: UAMetaTransfer, auth: UASig}, the job API's ua_metatx struct
+# job: same normalization and hex refusals; the guard's R44 gate: registry() != 0 only for a derived from or to); POST
+# /v1/metatx refuses a registered token and a mandate wallet by name (OP_KIND_MISMATCH toward /v1/ua-metatx), no chain read.
+# No contract, vector, pin or doc changed.
+# Toolchain: rustc / cargo 1.97.1 (the root rust-toolchain.toml); the shared node target directory of the main checkout
+# (CARGO_TARGET_DIR), scripts/capped, cargo -j2; the whole suite at CAPPED_MEM=6G.
+# Base: 5d3de16e (ua-mtx-merge after T14). T15 commits: 84ace7f1 (legacy copy, MD-4), b65d729f (the doors), this one
+# (harness, mutants, summary).
+step | commit | rc | counts
+t15-red | 84ace7f1 code + the new tests | 101 | gateway:: 9 passed, 5 failed: the 5 new tests red (op_door_takes_a_merged_entry_with_uasig 400 FEATURE_UNSUPPORTED; ua_metatx_door_runs_an_eoa_at_registry_zero 404; ua_metatx_door_refuses_a_derived_side_at_registry_zero_by_name 404; metatx_door_refuses_a_token_by_name BAD_SIGNATURE, the address path ran; metatx_door_refuses_a_mandate_wallet_by_name "token not served")
+t15-gateway | b65d729f | 0 | gateway:: 13 passed
+t15-cargo-test | b65d729f | 101 | 620 passed, 2 failed, 56 ignored (lib 615/2, fuzz 4, mesh_vectors 1; every e2e_* ignored); red, owned by T17 (known since T14): dex::tests::kat_hashes_and_calldata_match_forge, dex::venue::tests::settle_jobs_are_one_per_market_and_cancels_go_where_the_order_lives
+t15-clippy | b65d729f | 0 | cargo clippy --all-targets -- -D warnings: no warning
+t15-e2e | - | - | not run: plan T15 lists no e2e; tests/e2e.rs compiles; its step 1 still posts an address MetaTransfer to /v1/metatx on a token (now 400 OP_KIND_MISMATCH): T18's (e2e jobs)
+t15-docs | b65d729f | 0 | docs_check check 0 errors, 5 warnings, 16 notes; paths 0; test_docs_check ok
+t15-mutants | this commit's harness on b65d729f | 101 each | 5 of 5 killed, none a compile error (runs/2026-11-04-ua-mtx-merge-t15-mutants.txt): metatx-token-refusal-dropped, registry-gate-on-all-native, auth-decoded-as-bytes, wallet-refusal-dropped, op-door-closed-to-merged
+#
+# Pins, old -> new: none (no selector, typehash, vector or KAT moved). Gateway tests 9 -> 13 (+5 new, -1 reversed).
+#
+# Conflicts with the plan:
+#   metatx_door_serves_a_smart_key_account (plan T15 Step 1, "still serves SmartKeyAccount"): not built. /v1/metatx never served
+#   a SmartKeyAccount: it took only a MetaTransfer on a registered token; SmartKeyAccount has no MetaTransfer entry, its generic
+#   mtxExecute(MetaTransaction, bytes) needs struct = call with hex data (HEX_DATA_REFUSED, explicit parameters), and its named
+#   entries are metatx op jobs of the job API, which door A does not take (NODE-GW-01, NODE-GW-03: "a wallet ... never door A").
+#   Built instead: the control in metatx_door_refuses_a_mandate_wallet_by_name (contract = account is "token not served", never
+#   the merged-entry refusal). A door for the account is the controller's call.
+#   /v1/ua-metatx takes UAMetaTransaction (plan, gateway.md's row): struct = call is refused HEX_DATA_REFUSED, as on the job API
+#   (work_from_job); the generic UAMetaTransaction is not relayable here with hex data; its operations are named entries on /v1/op.
+#   /v1/ua-metatx takes no salt / meta (mtxPayMeta): gateway.md's row lists none; the job API keeps it.
+#
+# Stale, owned by later tasks: gateway.md (status line, the /v1/op row's "a ua* entry is FEATURE_UNSUPPORTED", the /v1/metatx row,
+# the /v1/ua-metatx row's gate "features ∋ ua (v3: registry() != 0)" for every request) and job-api.md (T19); tests/e2e.rs step 1
+# on /v1/metatx (T18); gateway.rs's DEX routes on TradeOrder / the address InvalidateNonces (T17).

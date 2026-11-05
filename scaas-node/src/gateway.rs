@@ -17,8 +17,7 @@ use crate::breaker::Breaker;
 use crate::chain::{Chain, SimError};
 use crate::dex::venue::{Venue, VenueError};
 use crate::dex::WireOrder;
-use crate::metatx::Mtx;
-use crate::submit::{now, transfer_typed, work_of_op, MetaRef, Work};
+use crate::submit::{now, work_from_job, work_of_op, Work};
 
 #[derive(Clone)]
 pub struct GwChain {
@@ -40,10 +39,20 @@ pub struct AppState {
     pub chains: Arc<HashMap<u64, GwChain>>,
 }
 
-/// `POST /v1/metatx {chain, token, contract?, m, signature}`: a `MetaTransfer` (`contract`: its token kind, default `token`).
-/// `struct = call` is refused: a named entry goes to `POST /v1/op`.
+/// `POST /v1/metatx {chain, token, contract?, m, signature}`: an address `MetaTransfer`. No token and no mandate wallet has that
+/// entry left (CTR-MTX-30, Q6): refused by name, the rest of the body never read (legacy/ua-mtx-merge/gateway.rs built it).
 #[derive(Deserialize)]
 pub struct SignedReq {
+    pub chain: u64,
+    pub token: Address,
+    #[serde(default)]
+    pub contract: Option<String>,
+}
+
+/// `POST /v1/ua-metatx {chain, token, contract?, struct?, m, auth}` (R44, Q7): a `UAMetaTransfer` on ids, `auth` its `UASig`
+/// object; the job API's `ua_metatx` struct job with the same checks (`struct = call` and a `data` field refused by name).
+#[derive(Deserialize)]
+pub struct UaReq {
     pub chain: u64,
     pub token: Address,
     #[serde(default, rename = "struct")]
@@ -51,7 +60,7 @@ pub struct SignedReq {
     #[serde(default)]
     pub contract: Option<String>,
     pub m: Value,
-    pub signature: String,
+    pub auth: Value,
 }
 
 /// `POST /v1/op {chain, op}`: a named entry on a registered token, as explicit JSON (job-api.md); door A, nothing else.
@@ -127,6 +136,7 @@ pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/healthz", get(|| async { "ok" }))
         .route("/v1/metatx", post(post_metatx))
+        .route("/v1/ua-metatx", post(post_ua_metatx))
         .route("/v1/op", post(post_op))
         .merge(dex_routes())
         .layer(DefaultBodyLimit::max(64 * 1024))
@@ -175,21 +185,15 @@ async fn enqueue(c: &GwChain, w: Work, status: &str) -> Reply {
     (StatusCode::ACCEPTED, Json(json!({"status": status})))
 }
 
-/// The one place a transfer request becomes `Work`; R84 normalization here, before the simulation.
-fn work_of(r: SignedReq, fee_recipient: Option<Address>) -> Result<Work, Reply> {
-    if r.struct_.as_deref() == Some("call") {
-        return Err(bad(crate::typed::hex_refused("struct = call")));
-    }
-    if r.m.get("data").is_some() {
-        return Err(bad(crate::typed::hex_refused("m.data")));
-    }
-    let mut m = Mtx::from_wire(r.struct_.as_deref(), &r.m).map_err(bad)?;
-    m.normalize(fee_recipient);
-    let sig = sig_bytes(&r.signature)?;
-    let typed = transfer_typed(r.contract.as_deref(), r.token, m.struct_hash(), Some((m.from(), sig.clone()))).map_err(bad)?;
-    let valid_until = fresh(m.valid_until())?;
-    let meta = Some(MetaRef::of(r.token, &m, None));
-    Ok(Work { job_id: None, to: r.token, data: m.calldata(sig), valid_until, meta, entry: false, typed: Some(typed) })
+/// The one place a `/v1/ua-metatx` request becomes `Work`: the job path's `ua_metatx` struct job (R84 normalization, the hex
+/// refusals, `auth` decoded as `UASig`), before the simulation.
+fn ua_work_of(r: UaReq, fee_recipient: Option<Address>) -> Result<Work, Reply> {
+    let job = json!({"id": 0, "kind": "ua_metatx", "token": r.token, "struct": r.struct_, "contract": r.contract, "m": r.m, "auth": r.auth});
+    let job: crate::odoo::Job = serde_json::from_value(job).map_err(bad)?;
+    let mut w = work_from_job(&job, fee_recipient).map_err(|e| bad(format!("{e:#}")))?;
+    w.job_id = None;
+    fresh(U256::from(w.valid_until))?;
+    Ok(w)
 }
 
 fn fresh(valid_until: U256) -> Result<u64, Reply> {
@@ -218,11 +222,25 @@ async fn relay(c: &GwChain, mut w: Work) -> Reply {
 }
 
 async fn post_metatx(State(s): State<AppState>, Json(r): Json<SignedReq>) -> Reply {
+    let c = match open_chain(&s, r.chain) {
+        Ok(c) => c,
+        Err(e) => return e,
+    };
+    // R43 / R44 (CTR-MTX-30): the address `mtxExecuteTransfer(MetaTransfer, bytes)` is no token's and no mandate wallet's entry
+    if r.contract.as_deref() == Some("wallet") || c.tokens.read().map(|t| t.contains(&r.token)).unwrap_or(false) {
+        return bad("OP_KIND_MISMATCH: an address MetaTransfer names no token or mandate wallet entry since the merged entries: \
+            POST /v1/ua-metatx with m (UAMetaTransfer, from / to bytes32 ids) and auth (UASig), or a named entry to POST /v1/op");
+    }
+    bad("token not served by this relayer")
+}
+
+async fn post_ua_metatx(State(s): State<AppState>, Json(r): Json<UaReq>) -> Reply {
     let c = match chain_of(&s, r.chain, r.token) {
         Ok(c) => c,
         Err(e) => return e,
     };
-    match work_of(r, c.fee_recipient) {
+    // the UA ledger (`registry() ≠ 0`) only for a derived `from` or `to`: the guard's (R44, step 7a)
+    match ua_work_of(r, c.fee_recipient) {
         Ok(w) => relay(c, w).await,
         Err(e) => e,
     }
@@ -233,19 +251,16 @@ async fn post_op(State(s): State<AppState>, Json(r): Json<OpReq>) -> Reply {
         Ok(c) => c,
         Err(e) => return e,
     };
-    let (w, ua) = match work_of_op(None, &r.op, c.fee_recipient) {
+    let (w, _) = match work_of_op(None, &r.op, c.fee_recipient) {
         Ok(x) => x,
         Err(e) => return bad(format!("{e:#}")),
     };
-    // the old door, default closed: a registered token (NODE-GW-01, NODE-GW-03), and it had no UA path. A deploy, a registry
-    // write, a DEX settlement, a wallet, a relay fee or a `ua*` entry goes as a job of a namespace that has the grant
-    if ua {
-        return bad("FEATURE_UNSUPPORTED: a ua* entry is a ua_metatx job, not a gateway request");
-    }
+    // door A: a registered token (NODE-GW-01, NODE-GW-03), its merged entries (`auth` a `UASig`, R44) and the address ones left.
+    // A deploy, a registry write, a DEX settlement, a wallet, a relay fee or a router op goes as a job of a namespace with the grant
     if let Err(e) = chain_of(&s, r.chain, w.to) {
         return e;
     }
-    // the bound of `/v1/metatx`
+    // the bound of `/v1/metatx` on an address entry's `signature`
     if let Some(Err(e)) = r.op.get("signature").and_then(Value::as_str).map(sig_bytes) {
         return e;
     }
@@ -369,7 +384,8 @@ mod tests {
     use super::*;
     use axum::body::Body;
     use axum::http::Request;
-    use crate::metatx::{Domain, MetaTransfer, MODE_RESTRICT_FEE_RECIPIENT, MODE_RESTRICT_RELAYER};
+    use crate::abi::UAMetaTransfer;
+    use crate::metatx::{Domain, UaMtx, MODE_RESTRICT_FEE_RECIPIENT, MODE_RESTRICT_RELAYER};
     use alloy::primitives::B256;
     use alloy::signers::SignerSync;
     use tower::ServiceExt;
@@ -393,11 +409,11 @@ mod tests {
             guard: Arc::new(crate::guard::Guard::new(&cfg, Arc::new(RwLock::new(vec![token]))).unwrap()),
         };
         let app = router(AppState { chains: Arc::new([(7, gw)].into_iter().collect()) });
-        let body = json!({"chain": 7, "token": format!("{token:#x}"), "signature": "0x00", "m": {
-            "from": format!("{:#x}", Address::ZERO), "to": format!("{:#x}", Address::ZERO), "value": "1",
+        let body = json!({"chain": 7, "token": format!("{token:#x}"), "auth": {"keyData": "0x", "signature": "0x00", "members": []}, "m": {
+            "from": format!("{:#x}", B256::ZERO), "to": format!("{:#x}", B256::ZERO), "value": "1",
             "entryRef": format!("{:#x}", B256::ZERO), "batch": "0", "nonce": "0", "validUntil": "99999999999", "mode": 0,
             "relayer": format!("{:#x}", Address::ZERO), "fee": "0", "feeRecipient": format!("{:#x}", Address::ZERO)}});
-        let req = Request::builder().method("POST").uri("/v1/metatx").header("content-type", "application/json")
+        let req = Request::builder().method("POST").uri("/v1/ua-metatx").header("content-type", "application/json")
             .body(Body::from(body.to_string())).unwrap();
         let r = app.oneshot(req).await.unwrap();
         assert_eq!(r.status(), StatusCode::SERVICE_UNAVAILABLE);
@@ -428,11 +444,12 @@ mod tests {
             tx, tokens: tokens.clone(), dex: None, breaker: None, fee_recipient: None,
             guard: Arc::new(crate::guard::Guard::new(&cfg, tokens).unwrap()) };
         let app = router(AppState { chains: Arc::new([(7, gw)].into_iter().collect()) });
-        let body = json!({"chain": 7, "token": format!("{token:#x}"), "signature": format!("0x{}", "11".repeat(65)), "m": {
-            "from": format!("{:#x}", Address::repeat_byte(1)), "to": format!("{:#x}", Address::repeat_byte(2)), "value": "1",
+        let body = json!({"chain": 7, "token": format!("{token:#x}"), "auth": {"keyData": "0x", "signature": format!("0x{}", "11".repeat(65)),
+            "members": []}, "m": {
+            "from": format!("{:#x}", Address::repeat_byte(1).into_word()), "to": format!("{:#x}", Address::repeat_byte(2).into_word()), "value": "1",
             "entryRef": format!("{:#x}", B256::ZERO), "batch": "0", "nonce": "0", "validUntil": "99999999999", "mode": 0,
             "relayer": format!("{:#x}", Address::ZERO), "fee": "0", "feeRecipient": format!("{:#x}", Address::ZERO)}});
-        let req = Request::builder().method("POST").uri("/v1/metatx").header("content-type", "application/json")
+        let req = Request::builder().method("POST").uri("/v1/ua-metatx").header("content-type", "application/json")
             .body(Body::from(body.to_string())).unwrap();
         let r = app.oneshot(req).await.unwrap();
         assert_eq!(r.status(), StatusCode::BAD_REQUEST);
@@ -441,11 +458,11 @@ mod tests {
         assert!(rx.try_recv().is_err(), "nothing queued");
     }
 
-    /// A transfer request with a FIXED fee.
-    fn req(mode: u32) -> SignedReq {
-        let m = Mtx::Transfer(MetaTransfer {
-            from: Address::repeat_byte(0xab),
-            to: Address::repeat_byte(0x5e),
+    /// A `/v1/ua-metatx` request with a FIXED fee (ids).
+    fn req(mode: u32) -> UaReq {
+        let m = UaMtx::Transfer(UAMetaTransfer {
+            from: Address::repeat_byte(0xab).into_word(),
+            to: Address::repeat_byte(0x5e).into_word(),
             value: U256::from(1),
             entryRef: B256::ZERO,
             batch: U256::from(7),
@@ -457,16 +474,16 @@ mod tests {
             feeRecipient: Address::repeat_byte(0x77),
         });
         let (kind, wire) = m.to_wire();
-        SignedReq { chain: 7, token: Address::repeat_byte(0xcd), struct_: Some(kind.into()), contract: None, m: wire,
-                    signature: format!("0x{}", "11".repeat(65)) }
+        UaReq { chain: 7, token: Address::repeat_byte(0xcd), struct_: Some(kind.into()), contract: None, m: wire,
+                auth: json!({"keyData": "0x", "signature": format!("0x{}", "11".repeat(65)), "members": []}) }
     }
 
-    fn sent(w: &Work) -> Mtx {
-        Mtx::from_calldata(&w.data).unwrap().0
+    fn sent(w: &Work) -> UaMtx {
+        UaMtx::from_calldata(&w.data).unwrap().0
     }
 
-    fn wire(r: &SignedReq) -> Mtx {
-        Mtx::from_wire(r.struct_.as_deref(), &r.m).unwrap()
+    fn wire(r: &UaReq) -> UaMtx {
+        UaMtx::from_wire(r.struct_.as_deref(), &r.m).unwrap()
     }
 
     /// R84 (review C1): bit tắt ⇒ giá trị trên dây không được ký, ai cũng ghi đè được ⇒ không bao giờ gửi nó.
@@ -477,18 +494,19 @@ mod tests {
         let ours = Address::repeat_byte(0x99);
         let r = req(0x20);
         let signed = wire(&r);
-        let m = sent(&work_of(r, Some(ours)).unwrap());
-        assert_eq!((m.fee_recipient(), m.relayer()), (ours, Address::ZERO));
+        let m = sent(&ua_work_of(r, Some(ours)).unwrap());
+        let unbound = |m: &UaMtx| match m { UaMtx::Transfer(t) => (t.feeRecipient, t.relayer), UaMtx::Call(c) => (c.feeRecipient, c.relayer) };
+        assert_eq!(unbound(&m), (ours, Address::ZERO));
         assert_eq!(m.digest(&d), signed.digest(&d));
-        let m = sent(&work_of(req(0x20), None).unwrap());
-        assert_eq!((m.fee_recipient(), m.relayer()), (Address::ZERO, Address::ZERO), "unset ⇒ the contract pays msg.sender");
+        let m = sent(&ua_work_of(req(0x20), None).unwrap());
+        assert_eq!(unbound(&m), (Address::ZERO, Address::ZERO), "unset ⇒ the contract pays msg.sender");
     }
 
     #[test]
     fn bound_fields_are_untouched() {
         let r = req(MODE_RESTRICT_RELAYER | MODE_RESTRICT_FEE_RECIPIENT | 0x20);
         let signed = wire(&r);
-        assert_eq!(sent(&work_of(r, Some(Address::repeat_byte(0x99))).unwrap()), signed);
+        assert_eq!(sent(&ua_work_of(r, Some(Address::repeat_byte(0x99))).unwrap()), signed);
     }
 
     /// Expired at arrival (`validUntil <= now`): refused before any simulation.
@@ -496,58 +514,47 @@ mod tests {
     fn an_expired_request_is_refused() {
         let mut r = req(0x20);
         r.m["validUntil"] = json!(now().to_string());
-        assert_eq!(work_of(r, None).unwrap_err().1 .0["error"], "expired");
+        assert_eq!(ua_work_of(r, None).unwrap_err().1 .0["error"], "expired");
         let mut r = req(0x20);
         r.m["validUntil"] = json!((now() + 60).to_string());
-        assert!(work_of(r, None).is_ok());
+        assert!(ua_work_of(r, None).is_ok());
     }
 
     /// `struct` absent = `transfer`; `struct = call` and a `data` field are refused by name, a transfer passes.
     #[test]
     fn hex_data_is_refused_at_the_gateway() {
-        work_of(req(0x20), None).unwrap();
+        ua_work_of(req(0x20), None).unwrap();
         let mut r = req(0);
         r.struct_ = None;
-        assert!(work_of(r, None).is_ok());
+        assert!(ua_work_of(r, None).is_ok());
         let mut r = req(0);
         r.struct_ = Some("call".into());
-        assert!(work_of(r, None).unwrap_err().1 .0["error"].as_str().unwrap().starts_with("HEX_DATA_REFUSED"));
+        assert!(ua_work_of(r, None).unwrap_err().1 .0["error"].as_str().unwrap().starts_with("HEX_DATA_REFUSED"));
         let mut r = req(0);
         r.m["data"] = json!("0x1234");
-        assert!(work_of(r, None).unwrap_err().1 .0["error"].as_str().unwrap().starts_with("HEX_DATA_REFUSED"));
-    }
-
-    /// `Wrap` of the vector (an address entry: until T15 the door takes no merged entry) under a deadline the clock never reaches
-    /// (the vector's own runs out on 2027-01-15), signed again by the vector's key, so these tests do not expire. The vector's bytes
-    /// are `typed_ops_kat_every_entry`'s.
-    fn live_wrap(v: &Value) -> Value {
-        let d = &v["ops"]["Wrap"]["domains"]["token"]["domain"];
-        let mut op = crate::typed::testkit::op_of("Wrap", "token", v).unwrap();
-        op.as_object_mut().unwrap().remove("validUntil");
-        op["envelope"]["validUntil"] = json!("4000000000");
-        let chain: u64 = d["chainId"].as_str().unwrap().parse().unwrap();
-        let digest = crate::typed::Op::parse(&op, None).unwrap().typed.digest_on(chain, d["salt"].as_str().unwrap().parse().unwrap()).unwrap();
-        let key: alloy::signers::local::PrivateKeySigner = v["key"]["private"].as_str().unwrap().parse().unwrap();
-        op["signature"] = json!(format!("0x{}", alloy::hex::encode(key.sign_hash_sync(&digest).unwrap().as_bytes())));
-        op
+        assert!(ua_work_of(r, None).unwrap_err().1 .0["error"].as_str().unwrap().starts_with("HEX_DATA_REFUSED"));
     }
 
     const FACTORY: Address = Address::repeat_byte(0xf1);
     const REGISTRY: Address = Address::repeat_byte(0xf2);
     const DEX: Address = Address::repeat_byte(0xf3);
 
-    /// A chain for `POST /v1/op`: bound to `uid`, `code` = what `eth_getCode` answers; `(gateway, lane receiver, RPC methods)`.
+    /// A chain for the doors: bound to `uid`, its token's `registry()` 0 (the UA ledger off, R9), `code` = what `eth_getCode`
+    /// answers; `(gateway, lane receiver, RPC methods)`.
     async fn gateway(code: &'static str, tokens: Vec<Address>) -> (Router, mpsc::Receiver<Work>, Arc<Mutex<Vec<String>>>) {
         let log: Arc<Mutex<Vec<String>>> = Default::default();
         let l2 = log.clone();
         let uid = crate::typed::testkit::vectors()["ops"]["Wrap"]["domains"]["token"]["domain"]["salt"].clone();
+        let reg = format!("0x{}", alloy::hex::encode(<crate::abi::IUALedger::registryCall as alloy::sol_types::SolCall>::SELECTOR));
         let app = axum::Router::new().route("/", post(move |Json(r): Json<Value>| {
-            let (l2, uid) = (l2.clone(), uid.clone());
+            let (l2, uid, reg) = (l2.clone(), uid.clone(), reg.clone());
             async move {
                 let m = r["method"].as_str().unwrap().to_string();
                 l2.lock().unwrap().push(m.clone());
+                let input = r["params"][0]["input"].as_str().or(r["params"][0]["data"].as_str()).unwrap_or("0x").to_string();
                 Json(match m.as_str() {
                     "eth_getBlockByNumber" => json!({"jsonrpc": "2.0", "id": r["id"], "result": null}),
+                    "eth_call" if input.starts_with(&reg) => json!({"jsonrpc": "2.0", "id": r["id"], "result": format!("{:#x}", B256::ZERO)}),
                     "eth_call" => json!({"jsonrpc": "2.0", "id": r["id"], "result": uid}),
                     "eth_getCode" => json!({"jsonrpc": "2.0", "id": r["id"], "result": code}),
                     "eth_estimateGas" => json!({"jsonrpc": "2.0", "id": r["id"], "result": "0x5208"}),
@@ -572,12 +579,158 @@ mod tests {
     }
 
     async fn post_op_body(app: Router, chain: u64, op: &Value) -> (StatusCode, String) {
-        let body = json!({"chain": chain, "op": op});
-        let req = Request::builder().method("POST").uri("/v1/op").header("content-type", "application/json")
+        post_to(app, "/v1/op", &json!({"chain": chain, "op": op})).await
+    }
+
+    async fn post_to(app: Router, uri: &str, body: &Value) -> (StatusCode, String) {
+        let req = Request::builder().method("POST").uri(uri).header("content-type", "application/json")
             .body(Body::from(body.to_string())).unwrap();
         let r = app.oneshot(req).await.unwrap();
         let s = r.status();
         (s, String::from_utf8_lossy(&axum::body::to_bytes(r.into_body(), 4096).await.unwrap()).into_owned())
+    }
+
+    /// A vector row on `token` under a deadline the clock never reaches, signed again by the vector's key where the row carries
+    /// its signature (`signature`, or `auth.signature` of a merged entry's `UASig`), so these tests do not expire.
+    fn live(name: &str, v: &Value) -> Value {
+        let d = &v["ops"][name]["domains"]["token"]["domain"];
+        let mut op = crate::typed::testkit::op_of(name, "token", v).unwrap();
+        op.as_object_mut().unwrap().remove("validUntil");
+        op["envelope"]["validUntil"] = json!("4000000000");
+        let chain: u64 = d["chainId"].as_str().unwrap().parse().unwrap();
+        let digest = crate::typed::Op::parse(&op, None).unwrap().typed.digest_on(chain, d["salt"].as_str().unwrap().parse().unwrap()).unwrap();
+        let key: alloy::signers::local::PrivateKeySigner = v["key"]["private"].as_str().unwrap().parse().unwrap();
+        let sig = json!(format!("0x{}", alloy::hex::encode(key.sign_hash_sync(&digest).unwrap().as_bytes())));
+        if op.get("auth").is_some() { op["auth"]["signature"] = sig } else { op["signature"] = sig }
+        op
+    }
+
+    /// `(chain, token, uid, the vector's key)`: the token the doors' chain serves.
+    fn served() -> (u64, Address, B256, alloy::signers::local::PrivateKeySigner) {
+        let v = crate::typed::testkit::vectors();
+        let d = &v["ops"]["Wrap"]["domains"]["token"]["domain"];
+        (d["chainId"].as_str().unwrap().parse().unwrap(), d["verifyingContract"].as_str().unwrap().parse().unwrap(),
+         d["salt"].as_str().unwrap().parse().unwrap(), v["key"]["private"].as_str().unwrap().parse().unwrap())
+    }
+
+    /// A `POST /v1/ua-metatx` body: a `UAMetaTransfer` `from` → `to` (ids) on the served token, `auth` a native `UASig` signed by
+    /// the vector's key over the token's digest; a placeholder signature where `from` is not the key's.
+    fn ua_body(from: B256, to: B256) -> Value {
+        let (chain, token, uid, key) = served();
+        let z = format!("{:#x}", Address::ZERO);
+        let m = json!({"from": format!("{from:#x}"), "to": format!("{to:#x}"), "value": "1", "entryRef": format!("{:#x}", B256::ZERO),
+            "batch": "0", "nonce": "0", "validUntil": "4000000000", "mode": 0, "relayer": z, "fee": "0", "feeRecipient": z});
+        let mut sig = format!("0x{}", "11".repeat(65));
+        if from == key.address().into_word() {
+            let h = crate::metatx::UaMtx::from_wire(None, &m).unwrap().struct_hash();
+            let d = crate::submit::transfer_typed(None, token, h, None).unwrap().digest_on(chain, uid).unwrap();
+            sig = format!("0x{}", alloy::hex::encode(key.sign_hash_sync(&d).unwrap().as_bytes()));
+        }
+        json!({"chain": chain, "token": format!("{token:#x}"), "struct": "transfer", "m": m,
+               "auth": {"keyData": "0x", "signature": sig, "members": []}})
+    }
+
+    fn calls(log: &Arc<Mutex<Vec<String>>>, m: &str) -> usize {
+        log.lock().unwrap().iter().filter(|x| *x == m).count()
+    }
+
+    /// R44 / Q7 (reverses `ua_entries_stay_off_the_gateway_door`): `POST /v1/op` takes the merged named entries, `auth` the
+    /// `UASig` object, on a registered token whose `registry()` is 0 (all native, R9): queued, the calldata `Op::parse`'s (the
+    /// `UASig` tuple, never `bytes`), the digest the lane's.
+    #[tokio::test]
+    async fn op_door_takes_a_merged_entry_with_uasig() {
+        let v = crate::typed::testkit::vectors();
+        for name in ["UABurn", "UAUnwrap", "UACancelNonce"] {
+            let d = &v["ops"][name]["domains"]["token"]["domain"];
+            let token: Address = d["verifyingContract"].as_str().unwrap().parse().unwrap();
+            let (chain, uid): (u64, B256) = (d["chainId"].as_str().unwrap().parse().unwrap(), d["salt"].as_str().unwrap().parse().unwrap());
+            let op = live(name, &v);
+            assert!(op["auth"].is_object(), "{name}: a merged entry signs with a UASig");
+            let (app, mut rx, _) = gateway("0x", vec![token]).await;
+            let (st, body) = post_op_body(app, chain, &op).await;
+            assert_eq!(st, StatusCode::ACCEPTED, "{name}: {body}");
+            let w = rx.try_recv().unwrap();
+            let p = crate::typed::Op::parse(&op, None).unwrap();
+            assert!(p.row.ua(), "{name}");
+            assert_eq!(w.data, p.data, "{name}");
+            assert_eq!(w.digest(), p.typed.digest_on(chain, uid), "{name}: the digest reached the lane");
+            assert!(w.meta.is_some_and(|m| m.ua), "{name}: the lane reads the UA nonce and event");
+        }
+    }
+
+    /// R44, R9: `POST /v1/ua-metatx` relays an EOA's `UAMetaTransfer` to an EOA on a token whose `registry()` is 0: no registry
+    /// asked, `mtxExecuteTransfer(UAMetaTransfer, UASig)` queued with the signer's struct.
+    #[tokio::test]
+    async fn ua_metatx_door_runs_an_eoa_at_registry_zero() {
+        let (_, token, _, key) = served();
+        let (from, to) = (key.address().into_word(), Address::repeat_byte(0x5e).into_word());
+        let (app, mut rx, log) = gateway("0x", vec![token]).await;
+        let (st, body) = post_to(app, "/v1/ua-metatx", &ua_body(from, to)).await;
+        assert_eq!(st, StatusCode::ACCEPTED, "{body}");
+        let w = rx.try_recv().unwrap();
+        let (m, auth) = crate::metatx::UaMtx::from_calldata(&w.data).unwrap();
+        assert!(matches!(m, crate::metatx::UaMtx::Transfer(ref t) if t.from == from && t.to == to), "{m:?}");
+        assert!(auth.keyData.is_empty() && auth.members.is_empty() && auth.signature.len() == 65, "a native UASig");
+        assert_eq!(w.to, token);
+        assert!(w.meta.is_some_and(|r| r.ua && r.from == from) && w.digest().is_some());
+        assert_eq!(calls(&log, "eth_estimateGas"), 1, "simulated once");
+    }
+
+    /// R44: a derived `from` or `to` needs the UA ledger: at `registry() == 0` the door refuses it by name, zero simulations,
+    /// nothing queued.
+    #[tokio::test]
+    async fn ua_metatx_door_refuses_a_derived_side_at_registry_zero_by_name() {
+        let (_, token, _, key) = served();
+        let (native, derived) = (key.address().into_word(), B256::repeat_byte(0xaa));
+        for (from, to) in [(derived, native), (native, derived)] {
+            let (app, mut rx, log) = gateway("0x", vec![token]).await;
+            let (st, body) = post_to(app, "/v1/ua-metatx", &ua_body(from, to)).await;
+            assert_eq!(st, StatusCode::BAD_REQUEST, "{body}");
+            assert!(body.contains("FEATURE_UNSUPPORTED") && body.contains("registry() = 0"), "{body}");
+            assert!(rx.try_recv().is_err(), "nothing queued");
+            assert_eq!(calls(&log, "eth_estimateGas"), 0, "zero simulations");
+        }
+    }
+
+    /// The old `/v1/metatx` request (an address `MetaTransfer` on a registered token): no token has that entry left
+    /// (CTR-MTX-30), refused by name toward `/v1/ua-metatx`, before any chain read, nothing queued.
+    #[tokio::test]
+    async fn metatx_door_refuses_a_token_by_name() {
+        let (chain, token, _, _) = served();
+        let mut body = req_body(chain, token);
+        body["contract"] = json!("token");
+        let (app, mut rx, log) = gateway("0x", vec![token]).await;
+        let (st, b) = post_to(app, "/v1/metatx", &body).await;
+        assert_eq!(st, StatusCode::BAD_REQUEST, "{b}");
+        assert!(b.contains("OP_KIND_MISMATCH") && b.contains("/v1/ua-metatx"), "{b}");
+        assert!(rx.try_recv().is_err() && log.lock().unwrap().is_empty(), "no chain read, nothing queued");
+    }
+
+    /// Q6: a mandate wallet has no address entry left either: refused by name, no chain read. The control, one change: the same
+    /// body claiming a `SmartKeyAccount` is not a merged-entry refusal; this door serves no account (its named entries are
+    /// `metatx` op jobs of the job API, NODE-GW-03), so it is not served.
+    #[tokio::test]
+    async fn metatx_door_refuses_a_mandate_wallet_by_name() {
+        let (chain, token, _, _) = served();
+        let wallet = Address::repeat_byte(0x77);
+        for (contract, why) in [("wallet", "OP_KIND_MISMATCH"), ("account", "token not served")] {
+            let mut body = req_body(chain, wallet);
+            body["contract"] = json!(contract);
+            let (app, mut rx, log) = gateway("0x", vec![token]).await;
+            let (st, b) = post_to(app, "/v1/metatx", &body).await;
+            assert_eq!(st, StatusCode::BAD_REQUEST, "{contract}: {b}");
+            assert!(b.contains(why), "{contract}: {b}");
+            assert!(rx.try_recv().is_err() && log.lock().unwrap().is_empty(), "{contract}: no chain read");
+        }
+    }
+
+    /// The pre-merge `/v1/metatx` body: an address `MetaTransfer` with a placeholder signature.
+    fn req_body(chain: u64, token: Address) -> Value {
+        let z = format!("{:#x}", Address::ZERO);
+        json!({"chain": chain, "token": format!("{token:#x}"), "signature": format!("0x{}", "11".repeat(65)), "m": {
+            "from": format!("{:#x}", Address::repeat_byte(0xab)), "to": format!("{:#x}", Address::repeat_byte(0x5e)), "value": "1",
+            "entryRef": format!("{:#x}", B256::ZERO), "batch": "0", "nonce": "0", "validUntil": "4000000000", "mode": 0,
+            "relayer": z, "fee": "0", "feeRecipient": z}})
     }
 
     /// Door A is not the job API: every entry below would pass the guard on its configured target (the factory, the registry, the
@@ -609,10 +762,10 @@ mod tests {
             "args": {"from": z, "payee": z, "value": "1", "validUntil": until, "relayer": format!("{:#x}", Address::repeat_byte(0xf4))}});
         // a GovernanceRouter op (spec 2026-11-02-governance §12.7) is a job of a namespace with the grant, never a door-A request
         let governance = crate::typed::testkit::op_of("UAGrantRole", "gov_router", &v).unwrap();
-        // ua-mtx-merge T14: the relay fee and the router op are merged entries now, refused as such until T15 opens the door
-        let (served, merged) = ("token not served", "FEATURE_UNSUPPORTED");
+        // ua-mtx-merge T15: the door takes merged entries (R44), so the relay fee and the router op meet the token rule again
+        let served = "token not served";
         for (what, op, why) in [("deploy", deploy, served), ("register", register, served), ("mtxSettle", settle, served), ("a wallet", owner, served),
-            ("a relay fee", relay, merged), ("an unregistered contract", unregistered, served), ("a router op", governance, merged)] {
+            ("a relay fee", relay, served), ("an unregistered contract", unregistered, served), ("a router op", governance, served)] {
             let (app, mut rx, log) = gateway("0x", vec![token]).await;
             let (st, body) = post_op_body(app, chain, &op).await;
             assert_eq!(st, StatusCode::BAD_REQUEST, "{what}: {body}");
@@ -632,7 +785,7 @@ mod tests {
         assert!(log.lock().unwrap().is_empty());
         // the signature bound of `/v1/metatx`, one length each side of it; `the_gateway_checks_…` is the control at 65
         for n in [64, 2049] {
-            let mut op = live_wrap(&v);
+            let mut op = live("Wrap", &v);
             op["signature"] = json!(format!("0x{}", "ab".repeat(n)));
             let (app, mut rx, log) = gateway("0x", vec![token]).await;
             let (st, body) = post_op_body(app, chain, &op).await;
@@ -640,30 +793,6 @@ mod tests {
             assert!(body.contains("signature length"), "{n}: {body}");
             assert!(rx.try_recv().is_err() && log.lock().unwrap().is_empty(), "{n}");
         }
-    }
-
-    /// The old door had no UA path: a merged entry on a registered token is refused before the guard, zero simulations, nothing
-    /// queued, its signature never looked at (until T15 opens `/v1/op` to them); an address entry on the same token passes (the
-    /// control). No lane runs here: the test reads the channel once, nothing waits on a receipt.
-    #[tokio::test]
-    async fn ua_entries_stay_off_the_gateway_door() {
-        let v = crate::typed::testkit::vectors();
-        let d = &v["ops"]["Wrap"]["domains"]["token"]["domain"];
-        let token: Address = d["verifyingContract"].as_str().unwrap().parse().unwrap();
-        let chain: u64 = d["chainId"].as_str().unwrap().parse().unwrap();
-        for name in ["UAUnwrap", "UABurn", "UACancelNonce"] {
-            let op = crate::typed::testkit::op_of(name, "token", &v).unwrap();
-            let (app, mut rx, log) = gateway("0x", vec![token]).await;
-            let (st, body) = post_op_body(app, chain, &op).await;
-            assert_eq!(st, StatusCode::BAD_REQUEST, "{name}: {body}");
-            assert!(body.contains("FEATURE_UNSUPPORTED"), "{name}: {body}");
-            assert!(rx.try_recv().is_err(), "{name}: nothing queued");
-            assert!(log.lock().unwrap().is_empty(), "{name}: no chain read at all");
-        }
-        let (app, mut rx, _) = gateway("0x", vec![token]).await;
-        let (st, body) = post_op_body(app, chain, &live_wrap(&v)).await;
-        assert_eq!(st, StatusCode::ACCEPTED, "an address entry: {body}");
-        assert!(rx.try_recv().is_ok());
     }
 
     /// The pre-check: the positive control queues; one changed thing each: a signature of another op on an account
@@ -675,7 +804,7 @@ mod tests {
         let d = &v["ops"]["Wrap"]["domains"]["token"];
         let token: Address = d["domain"]["verifyingContract"].as_str().unwrap().parse().unwrap();
         let chain: u64 = d["domain"]["chainId"].as_str().unwrap().parse().unwrap();
-        let op = live_wrap(&v);
+        let op = live("Wrap", &v);
         let (app, mut rx, log) = gateway("0x", vec![token]).await;
         let (st, body) = post_op_body(app, chain, &op).await;
         assert_eq!(st, StatusCode::ACCEPTED, "{body}");

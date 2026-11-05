@@ -90,9 +90,9 @@ proptest! {
         use tower::ServiceExt;
         let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
         let app = scaas_node::gateway::router(scaas_node::gateway::AppState::default());
-        let shaped = json!({"chain": 1, "token": "0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd", "m": m, "signature": "0x00",
+        let shaped = json!({"chain": 1, "token": "0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd", "m": m, "signature": "0x00", "auth": v,
                             "struct": "call"});
-        for path in ["/v1/metatx", "/v1/dex/orders"] {
+        for path in ["/v1/metatx", "/v1/ua-metatx", "/v1/dex/orders"] {
             for body in [v.to_string(), shaped.to_string(), raw.clone()] {
                 let req = Request::builder().method("POST").uri(path)
                     .header("content-type", "application/json").body(Body::from(body)).unwrap();
