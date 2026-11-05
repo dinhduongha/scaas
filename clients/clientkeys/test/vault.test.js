@@ -89,3 +89,20 @@ test('backup: shown once, verify 3 random words, only then usable', () => {
   assert.equal(b.state, 'taken');
   assert.throws(() => b.take(), /Confirm/);
 });
+
+test('vault: open refuses an envelope outside N ∈ {2^15, 2^16, 2^17}, r = 8, p = 1 before scrypt runs (CLI-SGN-21)', async () => {
+  const s = secret();
+  const v = await createVault(s, { label: 'seed', pin: PASS });
+  for (const [N, r, p] of [[2 ** 14, 8, 1], [2 ** 20, 8, 1], [2 ** 30, 8, 1], [2 ** 17, 16, 1], [2 ** 17, 8, 2], [undefined, 8, 1]]) {
+    const bad = structuredClone(v);
+    Object.assign(bad.pin, { N, r, p });
+    const t0 = Date.now();
+    await assert.rejects(openVault(bad, { pin: PASS }), /Unsupported vault parameters/, `${N} ${r} ${p}`);
+    assert.ok(Date.now() - t0 < 200, `refused before scrypt: ${N} ${r} ${p}`);
+  }
+  // positive control: every allowed N still opens
+  for (const N of [2 ** 15, 2 ** 16]) {
+    const ok = await rewrapPin(v, PASS, PASS, { N, r: 8, p: 1, dkLen: 32 }, { policy: false });
+    assert.equal(bytesToHex(await openVault(ok, { pin: PASS })), bytesToHex(s));
+  }
+});
