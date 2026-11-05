@@ -31,3 +31,23 @@
 # 4,385 B under the stop line on the skeleton; still to come on its token side: the F / P / R bodies and the bounded call
 # (T28, T29), the pause-open set, REGISTRY_CODEHASH, the views' storage reads, and group 3e (pay-meta-tax §6.4: +2.3 to
 # +4.0 K on kind 13), so T31 / T33 / T37 / T40 re-measure it first and reduce lever by lever at or above 64,512 B.
+#
+# ua-mtx-merge T28 (the bodies of FREEZE, RECORD, FORCE, PAUSE, the fee seats, the pause-open set, the mirror, the views; kind 8
+# added). Still not in: the bounded registry call and REGISTRY_CODEHASH (T29), operatorTransfer (T32), group 3e. Same method.
+| Release | base kind B | T27 B | T28 B | delta vs base | init B | stop line 64,512 B |
+|---|---:|---:|---:|---:|---:|---|
+| `NormalRegulatedToken` (8) | `NormalToken` 32,945 | - | 37,163 | +4,218 | 39,476 | under by 27,349 |
+| `WrappedRegulatedToken` (9) | `WrappedToken` 43,552 | 46,754 | 47,847 | +4,295 | 50,167 | under by 16,665 |
+| `WrappedPqzRegulatedToken` (13) | `WrappedPqzToken` 56,721 | 60,127 | 61,225 | +4,504 | 63,922 | under by 3,287 |
+| `RegulatedLib` | - | 919 | 7,193 | | 7,245 | - |
+# Stop rule: kind 13 measured after T28 at 61,225 B, under 64,512 B: no lever, no _above64KiB row. The six plain kinds and
+# GovernanceRouter unchanged (NormalToken 32,945 ... WrappedPqzToken 56,721; router 11,771).
+| Release | runtime B | regular | state | (r + s) x 1.05 | asked (+ 0.37 M frame) | §6.2 estimate | 60 M | 70 M | regular x 1.05 < 2^24 | SCaaS testnet need (<= 200 M) |
+|---|---:|---:|---:|---:|---:|---|---|---|---|---:|
+| `NormalRegulatedToken (8)` | 37,163 | 2,643,179 | 57,140,910 | 62.77 M | 63.14 M | 59.7-62.2 M | no | yes | yes | 73.64 M |
+| `WrappedRegulatedToken (9)` | 47,847 | 3,342,230 | 73,487,430 | 80.67 M | 81.04 M | 77.4-80.0 M | no | no | yes | 89.98 M |
+| `WrappedPqzRegulatedToken (13)` | 61,225 | 4,259,734 | 93,955,770 | 103.13 M | 103.50 M | 100.6-103.5 M | no | no | yes | 110.45 M |
+# Reading: kind 8 is 0.9 M over the top of its estimate and misses 60 M (spec: "at the edge"), fits 70 M; kind 9 is 1.0 M over
+# its estimate (1.3 %), kind 13 at the top of its estimate; none is more than 50 % over. Kind 13 has 3,287 B left for T29 (the
+# bounded call, the code pin, canReceive), T32 and group 3e (+2.3 to +4.0 K, pay-meta-tax §6.4): T29 / T31 re-measure it
+# first and reduce lever by lever at or above 64,512 B.

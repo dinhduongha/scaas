@@ -1,0 +1,37 @@
+mutant | test that went red | rc
+unfreeze-keeps-recordid | test_revokeOrderEmitsAccountUnfrozen, test_unfreezeClearsRecordId | 1
+t4-no-until-check | test_T4_refusals | 1
+revoke-keeps-backed-freeze | test_revokeOrderEmitsAccountUnfrozen | 1
+force-roots-without-record-bit | test_recordDisabledEndsBackedFreezesStopsForce, test_recordLiveAndRole | 1
+k8-mirror-at-propose | test_codex3Freeze_8, test_codex3Pause_8, test_controlsEqualFeaturesMask | 1
+k9-mirror-at-propose | test_codex3Freeze_9, test_codex3Pause_9, test_controlsEqualFeaturesMask | 1
+k9-disable-not-composed | test_codex3Freeze_9, test_codex3Pause_9, test_controlsEqualFeaturesMask, test_recordDisabledEndsBackedFreezesStopsForce, test_revokeOrderRunsWithRecordDisabled | 1
+open-set-outer-selector | test_pauseOpenBurn_8, test_pauseOpenRefusedWithAFee, test_pauseOpenUnwrap_9, test_routerAndRelayFeeNewAddresses | 1
+burn-paused-at-fee-0 | test_pauseOpenBurn_8, test_pauseOpenRefusedWithAFee | 1
+paywithfee-no-feeto | test_payWithFeeFrozenFeeRecipient | 1
+wraporder-no-feeto | test_wrapOrderFrozenSubmitter | 1
+relayfee-no-feeto | test_relayFeeFrozenPayee | 1
+pre-after-pipeline | test_pauseClosedOnOtherSelectors, test_pauseOpenRefusedWithAFee, test_preRefusesFrozenBeforeSignature, test_routerAndRelayFeeNewAddresses | 1
+freeze-without-roots | test_freezeNeedsALiveRoot | 1
+pause-without-roots | test_pauseNeedsALiveRoot | 1
+record-backed-ignores-record-bit | test_recordDisabledEndsBackedFreezesStopsForce | 1
+freeze-span-off-by-one | test_T1_freeze, test_T2_extendWithinEpisode, test_T4_refusals | 1
+unfreeze-no-cooldown | test_T1_refusals, test_T5_unfreeze, test_revokeOrderEmitsAccountUnfrozen | 1
+t3-not-refused | test_T3_recordFrozenRefusesIssuerFreeze | 1
+freeze-target-this | test_freezeTargetsRefused, test_recordOrderRefusals | 1
+force-executed-not-accumulated | test_forceTransfer | 1
+force-beneficiary-frozen-passes | test_frozenBeneficiaryRefused | 1
+force-no-record-root | test_recordRootRequired | 1
+force-zero-accepted | test_forceZeroRefused | 1
+force-via-uamove | test_derivedSubjectAndBeneficiary, test_forceTransfer, test_forceZeroRefused, test_frozenBeneficiaryRefused, test_recordDisabledEndsBackedFreezesStopsForce, test_recordRootRequired, test_subjectNotFrozenRefused | 1
+pause-cooldown-dropped | test_pauseBounds | 1
+unwrap-paused | test_pauseOpenRefusedWithAFee, test_pauseOpenUnwrap_9 | 1
+fee-bearing-open | test_pauseOpenRefusedWithAFee | 1
+paused-until-zero | test_hederaPause_8And9, test_ledgerRowsUnderPause, test_pauseNeedsALiveRoot | 1
+cancelnonce-no-regpre | test_cancelNonceFrozenRefused_8, test_cancelNonceFrozenRefused_9, test_pauseClosedOnOtherSelectors, test_preRefusesFrozenBeforeSignature, test_routerAndRelayFeeNewAddresses | 1
+revoke-needs-use-when-disabled | test_revokeOrderRunsWithRecordDisabled | 1
+init-skips-regulatedlib | test_T1_freeze, test_T1_refusals, test_T3_recordFrozenRefusesIssuerFreeze, test_T4_recordFreeze, test_T4_refusals, test_T7_expiry, test_cancelNonceFeeLeg, test_cancelNonceFrozenRefused_8, test_cancelNonceFrozenRefused_9, test_codex3Freeze_8, test_codex3Freeze_9, test_codex3Pause_8, test_codex3Pause_9, test_controlsEqualFeaturesMask, test_createKinds9And13, test_createsKinds8And9, test_derivedSubjectAndBeneficiary, test_dexRelayerShareIsOrdinaryCredit, test_envelopeFeeLeg, test_forceTransfer, test_forceZeroRefused, test_freezeNeedsALiveRoot, test_freezeTargetsRefused, test_frozenBeneficiaryRefused, test_hederaFreeze_8And9, test_hederaPause_8And9, test_hookSeatsWired, test_ledgerRowsUnderPause, test_pauseClosedOnOtherSelectors, test_pauseNeedsALiveRoot, test_pauseOpenRefusedWithAFee, test_payReceiverFeeFrozen, test_payWithFeeFrozenFeeRecipient, test_preRefusesFrozenBeforeSignature, test_recordDisabledEndsBackedFreezesStopsForce, test_recordLiveAndRole, test_recordRootRequired, test_registryNotBuiltYet, test_regulatedConfigInvalid, test_relayFeeFrozenPayee, test_revokeOrderEmitsAccountUnfrozen, test_subjectNotFrozenRefused, test_unfreezeClearsRecordId, test_wrapOrderFrozenFromOtherDestination, test_wrapOrderFrozenSubmitter | 1
+k8-init-not-composed | test_T1_freeze, test_T1_refusals, test_T3_recordFrozenRefusesIssuerFreeze, test_T4_recordFreeze, test_T4_refusals, test_T7_expiry, test_cancelNonceFeeLeg, test_cancelNonceFrozenRefused_8, test_codex3Freeze_8, test_codex3Pause_8, test_controlsEqualFeaturesMask, test_createsKinds8And9, test_derivedSubjectAndBeneficiary, test_dexRelayerShareIsOrdinaryCredit, test_envelopeFeeLeg, test_forceTransfer, test_forceZeroRefused, test_freezeNeedsALiveRoot, test_freezeTargetsRefused, test_frozenBeneficiaryRefused, test_hederaFreeze_8And9, test_hederaPause_8And9, test_ledgerRowsUnderPause, test_pauseClosedOnOtherSelectors, test_pauseNeedsALiveRoot, test_pauseOpenRefusedWithAFee, test_payReceiverFeeFrozen, test_payWithFeeFrozenFeeRecipient, test_preRefusesFrozenBeforeSignature, test_recordDisabledEndsBackedFreezesStopsForce, test_recordLiveAndRole, test_recordRootRequired, test_registryNotBuiltYet, test_regulatedConfigInvalid, test_relayFeeFrozenPayee, test_revokeOrderEmitsAccountUnfrozen, test_subjectNotFrozenRefused, test_unfreezeClearsRecordId | 1
+k8-regmove-unwired | test_T1_freeze, test_dexRelayerShareIsOrdinaryCredit, test_forceTransfer, test_hederaFreeze_8And9, test_hederaPause_8And9, test_ledgerRowsUnderPause, test_pauseNeedsALiveRoot, test_payReceiverFeeFrozen | 1
+init-force-without-record | test_regulatedConfigInvalid | 1
+deploy-k8-disabled | test_deployRegulatedPath | 1
