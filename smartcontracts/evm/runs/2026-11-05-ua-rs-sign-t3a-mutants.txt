@@ -1,0 +1,25 @@
+# ua-rs-sign T3a mutants (plan T3a + the controller's additions + eight more): one change each on a clean tree at 82fbac3f (code as committed), suite = cargo test -j2 --locked --features vectors --test wallet_sign (clients/ua-rs), source restored byte for byte after each.
+verdict | mutant | file | rc | failed tests
+killed   | M1 low-s removed (P-256) | src/wallet/sign.rs | rc=101 | 2 failed: sign_json_member_rows, vectors::rfc6979_a25_p256
+killed   | M2 v offset 27 lost | src/wallet/sign.rs | rc=101 | 6 failed: chain_separation_rows, native_key_proof_and_raw_digest, sign_json_member_rows, sign_json_ua_rows, vectors::rfc6979_secp256k1_set, vectors::signatures_json_nativ
+killed   | M3 prehash added for 0x0108 | src/wallet/sign.rs | rc=101 | 7 failed: chain_separation_rows, native_key_proof_and_raw_digest, sign_json_member_rows, sign_json_ua_rows, vectors::rfc6979_secp256k1_set, vectors::sign_raw_refusals, ve
+killed   | M4 prehash removed for 0x0101 | src/wallet/sign.rs | rc=101 | 3 failed: sign_json_member_rows, sign_json_ua_rows, vectors::rfc6979_a25_p256
+killed   | M5 purpose tag v1 for pop v2 | src/wallet/sign.rs | rc=101 | 2 failed: sign_json_ua_rows, vectors::role_follows_the_registry_rule
+killed   | M6 another kind's TAG | src/wallet/sign.rs | rc=101 | 6 failed: bip340_release_aux_is_random, chain_separation_rows, locked_wallet_handles_sign_nothing, sign_json_ua_rows, vectors::kind_no_of_another_kind_refused, vectors::r
+killed   | M7 extraEntropy (hedged RFC 6979) on secp256k1 | src/wallet/sign.rs | rc=101 | 5 failed: chain_separation_rows, sign_json_member_rows, sign_json_ua_rows, vectors::rfc6979_secp256k1_set, vectors::signatures_json_native_ecdsa
+killed   | M8 extraEntropy (hedged RFC 6979) on P-256 | src/wallet/sign.rs | rc=101 | 3 failed: sign_json_member_rows, sign_json_ua_rows, vectors::rfc6979_a25_p256
+killed   | M9 BIP-340 release aux constant | src/wallet/sign.rs | rc=101 | 1 failed: bip340_release_aux_is_random
+killed   | M10 BIP-340 aux of the caller ignored | src/wallet/sign.rs | rc=101 | 3 failed: bip340_release_aux_is_random, sign_json_ua_rows, vectors::sign_raw_refusals
+killed   | M11 role ignored (always authorization) | src/wallet/sign.rs | rc=101 | 1 failed: vectors::role_follows_the_registry_rule
+killed   | M12 kem not a PoP role | src/wallet/sign.rs | rc=101 | 1 failed: vectors::role_follows_the_registry_rule
+killed   | M13 address checksum dropped (EIP-55) | src/wallet/derive.rs | rc=101 | 3 failed: chain_separation_rows, evm_address_is_checksummed, keys_json_native_addresses
+killed   | M14 bech32 checksum constant dropped | src/wallet/derive.rs | rc=101 | 1 failed: keys_json_native_addresses
+killed   | M15 StrKey crc big-endian | src/wallet/derive.rs | rc=101 | 1 failed: keys_json_native_addresses
+killed   | M16 Sui flag byte dropped | src/wallet/derive.rs | rc=101 | 1 failed: keys_json_native_addresses
+killed   | M17 purpose check skipped | src/wallet/sign.rs | rc=101 | 1 failed: purpose_not_in_purposes_refused
+killed   | M18 seal purpose accepted by sign_ua | src/wallet/sign.rs | rc=101 | 1 failed: purpose_not_in_purposes_refused
+killed   | M19 kind check of the request skipped | src/wallet/sign.rs | rc=101 | 1 failed: vectors::kind_no_of_another_kind_refused
+killed   | M20 member purpose wrong | src/wallet/sign.rs | rc=101 | 1 failed: sign_json_member_rows
+killed   | M21 key-proof prefix changed | src/wallet/sign.rs | rc=101 | 1 failed: native_key_proof_and_raw_digest
+killed   | M22 ed25519 native signed as secp256k1 | src/wallet/sign.rs | rc=101 | 1 failed: native_key_proof_and_raw_digest
+mutants M1-M22 of 22: 22 killed, 0 survived, 0 not loaded
