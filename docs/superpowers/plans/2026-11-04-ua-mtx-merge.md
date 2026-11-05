@@ -669,6 +669,9 @@ ED25519, alias for ECDSA) (R42).
 ### Task T9: the size lever(s) the owner picks (Q3)
 
 **Deferred (owner 2026-11-04): not part of the M round; the owner decides D (and L) after M's PR.** T10 and later tasks run without it.
+**Deprecated (owner 2026-11-05): no lever L or D is built.** The token releases keep their size; a public chain with
+EIP-8037 takes the releases whose release transaction fits its block (T10's deploy-gas summary, `RELEASE_GAS_GATE=public`);
+Sepolia (200 M) and the SCaaS testnet take all. The `UARegistryLib` ↔ `UARegistry` rebalance (3c) is separate and stays.
 
 **Depends on:** T8 **and the owner's Q3 answer** to T0's report. If the answer is "no lever", this task records that and ends.
 
