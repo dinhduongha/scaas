@@ -14,6 +14,9 @@ What these copies hold and the live code no longer does:
   every `ua*` row.
 - `abi.rs`: `IUALedger.uaExecute` (`bytes auth`), `uaExecuteTransfer`, `uaPayMeta`, `uaNonce`, `IMtxRelayFee.relay` on
   addresses beside `uaRelay`, `IMandateWallet.PayeeNotAllowed(address)`.
+- `dex.rs`, `dex/venue.rs` (T17): the book on `TradeOrder` legs only (shape 0 for a SCaaS sell token too), the token-side
+  `TradeOrder` hash and the address `CancelOrder`, the address `mtxCancelOrder` / `mtxInvalidateNonces` jobs on a token and
+  the token's address `OrderCancelled` / `NoncesInvalidated` read by the watcher.
 - `metatx.rs`: `UaMtx` relayed as `uaExecute` / `uaExecuteTransfer` / `uaPayMeta`.
 - `submit.rs`, `chain.rs`: the `ua` flag choosing `uaNonce` / `mtxNonce(address)`, the job decoder that relays an address
   `MetaTransfer` on a token.
