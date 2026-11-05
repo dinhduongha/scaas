@@ -32,7 +32,7 @@ import { readPinned } from './pinned.mjs';
 import { kemKeyOf, kemEncapsVector, ephemeralVector } from '../src/kem.js';
 import {
   PURPOSE as SEAL_PURPOSE, MAX_PT, LINK_WINDOW, sealVector, open as openSealed, wireForm, fromWire, sealContainer, sealBackup, openContainer, openLink,
-  linkSessionVector, restoreBackup, encodeBackup,
+  linkSessionVector, restoreBackup, encodeBackup, containerAad,
 } from '../src/seal.js';
 import { createVault, rewrapPin, openSeedVault } from '../src/vault.js';
 
@@ -794,7 +794,6 @@ const manifestOf = (k, refRow) => ({ entries: [{ kind: refRow.kind, account: ref
 const payloadOf = (generation, entropy = W_ENTROPY, k = wKey, refRow = W_ID) => ({ generation, entropy,
   secrets: [{ label: 'native-import:evm:0', bytes: stream1b(`secret.${generation}`, 32) }], manifest: manifestOf(k, refRow) });
 const R_RECIPIENT = { ua: fromHex(R0.ua), version: 0 };
-const senderKeyOf = (k) => ({ kind: k.kind, keyData: H(k.keyData) });
 const fx = (label) => ({ m: stream1b(`${label}.m`, 32), e: stream1b(`${label}.e`, 32), sig: {} });
 const CREATED = NOW;
 const backupC = async (label, payload, sender = wKey, extra = {}) => sealBackup({ kemPk: pk0, recipient: R_RECIPIENT, sender, created: CREATED, payload, ...extra }, fx(label));
@@ -809,14 +808,38 @@ const linkC = async (label, created, shortCode = SESSION.shortCode, sender = wKe
   recipient: { kemPkHash: S0.kemKey.kemPkHash }, sender, created, pt: linkPt, shortCode }, fx(label));
 const link = await linkC('link', NOW + 60);
 const expectLink = { purpose: SEAL_PURPOSE.link, sender: { ua: H(wKey.ua) }, recipient: { kemPkHash: H(S0.kemKey.kemPkHash) } };
+// msig senders (owner 2026-11-05: sender.auth is a full UASig): the flat {p256, ed25519} set and the nested inner {two of three} +
+// bls12381 set of sign.json msig, every member deterministic; the opener reads the member keys by id (`members`)
+const keyMap = (ms) => Object.fromEntries(ms.map((m) => [m.id, { kind: m.kind, keyData: m.key ? H(m.key.keyData) : innerMap[m.id] }]));
+const flatMembers = keyMap(flat);
+const nestedMembers = { ...keyMap(outer), ...keyMap(innerMs) };
+const lookup = (map) => (id) => map?.[id] ?? null;
+const msigRef = (id, kd, slots, inner) => ({ ua: H(id), keyData: H(kd), slots, ...(inner ? { inner } : {}) });
+const msigSender = (r) => ({ ua: fromHex(r.ua), keyData: fromHex(r.keyData), inner: (x) => r.inner?.[x],
+  slots: r.slots.map((s) => ({ index: s.index, key: s.key && keyOf(s.key), members: s.members?.map((m) => ({ index: m.index, key: keyOf(m.key) })) })) });
+const FLAT_SENDER = msigRef(flatUa, flatKd, [at(flat, 0x0101), at(flat, 0x0102)].sort().map((i) => slotOf(flat, i)));
+const NESTED_SENDER = msigRef(outerUa, outerKd, [0, 1].map((i) => (outer[i].kind === 0x0120
+  ? { index: i, members: [0, 1].map((j) => slotOf(innerMs, j)) } : slotOf(outer, i))), innerMap);
+const msigPt = stream1b('pt.msig', 64);
+const msigC = (label, r) => sealContainer({ kemPk: pk0, purpose: SEAL_PURPOSE.backup, recipient: R_RECIPIENT, sender: msigSender(r), created: CREATED,
+  pt: msigPt }, fx(label));
+const flatC = await msigC('msig.flat', FLAT_SENDER);
+const nestedC = await msigC('msig.nested', NESTED_SENDER);
+const expectOf = (id) => ({ purpose: SEAL_PURPOSE.backup, sender: { ua: H(id) }, recipient: { ua: R0.ua, version: 0 } });
 const containerRows = [
-  { id: 'backup generation 2', container: backup2, expect: expectBackup, senderKey: senderKeyOf(wKey), opener: { kem: R0 },
+  { id: 'backup generation 2', container: backup2, expect: expectBackup, opener: { kem: R0 },
     pt: H(encodeBackup(payloadOf(2))), sender: W_ID, m: H(fx('backup.g2').m), e: H(fx('backup.g2').e) },
-  { id: 'link', container: link, expect: expectLink, senderKey: senderKeyOf(wKey), opener: { session: { seed: H(SESSION.seed), shortCode: SESSION.shortCode, start: SESSION.start } },
+  { id: 'link', container: link, expect: expectLink, opener: { session: { seed: H(SESSION.seed), shortCode: SESSION.shortCode, start: SESSION.start } },
     pt: H(linkPt), sender: W_ID, m: H(fx('link').m), e: H(fx('link').e) },
+  { id: 'msig sender: flat {p256, ed25519}', container: flatC, expect: expectOf(flatUa), members: flatMembers, opener: { kem: R0 },
+    pt: H(msigPt), sender: { msig: FLAT_SENDER }, m: H(fx('msig.flat').m), e: H(fx('msig.flat').e) },
+  { id: 'msig sender: nested, inner {two of three} + bls12381', container: nestedC, expect: expectOf(outerUa), members: nestedMembers, opener: { kem: R0 },
+    pt: H(msigPt), sender: { msig: NESTED_SENDER }, m: H(fx('msig.nested').m), e: H(fx('msig.nested').e) },
 ];
-must(H(await openContainer(K0, backup2, expectBackup, senderKeyOf(wKey))) === containerRows[0].pt, 'backup opens');
-must(H(await openLink(session(), link, expectLink, senderKeyOf(wKey))) === containerRows[1].pt, 'link opens');
+must(H(await openContainer(K0, backup2, expectBackup)) === containerRows[0].pt, 'backup opens');
+must(H(await openLink(session(), link, expectLink)) === containerRows[1].pt, 'link opens');
+for (const r of containerRows.slice(2)) must(H(await openContainer(K0, r.container, r.expect, lookup(r.members))) === r.pt, `${r.id} opens`);
+must(nestedC.sender.auth.members.some((s) => s.members.length === 2), 'the nested sender signs through its inner msig');
 
 // acceptance refusals, each from an otherwise valid container (C-03)
 const byOther = await backupC('backup.other', payloadOf(2, fromHex(MNEMONICS.find((m) => m.id === 'pq_kat').entropy), other, ref1b('pq_kat', 0x0102)), other);
@@ -824,29 +847,53 @@ const notDeriving = await backupC('backup.foreign-entropy', { ...payloadOf(2), e
 const flipField = (c, path, i) => { const d = structuredClone(c); const o = path.slice(0, -1).reduce((a, k) => a[k], d); const k = path.at(-1);
   const b = fromB64url(o[k]); b[i] ^= 1; o[k] = b64url(b); return d; };
 const opener1 = { kem: kemRows[1] }; // R's KEM key version 1
+// forged msig member sets (the builder refuses them): each member signs as signMember does, over the container's own ua_msg
+const msigUaMsg = (c, id) => ua.uaMessage(0x0120, ua.SEAL_TAG, keccak_256(concatBytes(containerAad({ purpose: c.purpose, recipient: R_RECIPIENT,
+  senderUa: id, created: c.created }), wireForm({ version: 1, scheme: 1, mlkemCt: fromB64url(c.sealed.mlkemCt),
+  x25519Eph: fromB64url(c.sealed.x25519Eph), ciphertext: fromB64url(c.sealed.ciphertext) }))));
+const withAuth = (c, f) => { const d = structuredClone(c); f(d.sender.auth); return d; };
+const flatSlots = (idx) => idx.map((i) => ({ index: i, members: [], sig: b64url(flat[i].key.signMember(flatUa, msigUaMsg(flatC, flatUa))) }));
+must(JSON.stringify(flatSlots([at(flat, 0x0101), at(flat, 0x0102)].sort())) === JSON.stringify(flatC.sender.auth.members),
+  'positive control: the forging path rebuilds the builder\'s minimal set');
+const innerIdx = outer.findIndex((m) => m.kind === 0x0120);
+const innerMsg = ua.uaMessage(0x0120, ua.purposeTag('member'), ua.memberDigest(outerUa, msigUaMsg(nestedC, outerUa)));
+const nestedSlots = (idx) => nestedC.sender.auth.members.map((s) => (s.index !== innerIdx ? s : { index: s.index,
+  members: idx.map((j) => ({ index: j, sig: b64url(innerMs[j].key.signMember(innerUa, innerMsg)) })), sig: s.sig }));
+must(JSON.stringify(nestedSlots([0, 1])) === JSON.stringify(nestedC.sender.auth.members), 'positive control: the nested forging path');
+const msigRow = (c, id, members) => ({ container: c, expect: expectOf(id), members });
 const acceptance = [
-  { id: 'signed by a different registered UA', container: byOther, expect: expectBackup, senderKey: senderKeyOf(other), error: 'ContainerSender' },
+  { id: 'signed by a different registered UA', container: byOther, expect: expectBackup, error: 'ContainerSender' },
   { id: 'purpose not the expected one', container: backup2, expect: { ...expectBackup, purpose: SEAL_PURPOSE.link }, error: 'ContainerSender' },
   { id: 'recipient not the expected one', container: backup2, expect: { ...expectBackup, recipient: { ua: R0.ua, version: 1 } }, opener: opener1, error: 'ContainerSender' },
   { id: 'the expected recipient is not the opener\'s key', container: backup2, expect: expectBackup, opener: opener1, error: 'ContainerSender' },
   { id: 'sender not in the approved set', container: backup2, expect: { ...expectBackup, sender: { set: [H(other.ua), H(keccak_256(utf8ToBytes('x')))] } }, error: 'ContainerSender' },
   { id: 'sender in the approved set (accepted)', container: backup2, expect: { ...expectBackup, sender: { set: [H(other.ua), H(wKey.ua)] } }, error: null },
-  { id: 'sender key whose UA is not sender.ua', container: backup2, expect: expectBackup, senderKey: senderKeyOf(other), error: 'ContainerSender' },
-  { id: 'an msig sender key', container: backup2, expect: expectBackup, senderKey: { kind: 0x0120, keyData: msigCases[0].keyData }, error: 'ContainerSender' },
-  { id: 'flipped sender signature byte', container: flipField(backup2, ['sender', 'sig'], 3), expect: expectBackup, error: 'SealOpen' },
+  { id: 'sender key whose UA is not sender.ua', container: withAuth(backup2, (a) => { a.keyData = b64url(other.keyData); }), expect: expectBackup, error: 'ContainerSender' },
+  { id: 'flipped sender signature byte', container: flipField(backup2, ['sender', 'auth', 'signature'], 3), expect: expectBackup, error: 'SealOpen' },
+  { id: 'single-key UASig with members', container: withAuth(backup2, (a) => { a.members = [{ index: 0, members: [], sig: a.signature }]; }), expect: expectBackup, error: 'SealOpen' },
+  { id: 'msig sender: non-minimal member set (three of t = 2)', ...msigRow(withAuth(flatC, (a) => { a.members = flatSlots([0, 1, 2]); }), flatUa, flatMembers), error: 'SealOpen' },
+  { id: 'msig sender: below the threshold (one of t = 2)', ...msigRow(withAuth(flatC, (a) => { a.members = flatSlots([0]); }), flatUa, flatMembers), error: 'SealOpen' },
+  { id: 'msig sender: nested level-2 non-minimal (inner three of t = 2)', ...msigRow(withAuth(nestedC, (a) => { a.members = nestedSlots([0, 1, 2]); }), outerUa, nestedMembers), error: 'SealOpen' },
+  { id: 'msig sender: a signature of its own', ...msigRow(withAuth(flatC, (a) => { a.signature = a.members[0].sig; }), flatUa, flatMembers), error: 'SealOpen' },
+  { id: 'msig sender: flipped member signature byte', ...msigRow(flipField(flatC, ['sender', 'auth', 'members', 1, 'sig'], 3), flatUa, flatMembers), error: 'SealOpen' },
+  { id: 'msig sender: flipped inner member signature byte', ...msigRow(flipField(nestedC, ['sender', 'auth', 'members', innerIdx, 'members', 0, 'sig'], 3), outerUa, nestedMembers), error: 'SealOpen' },
+  { id: 'msig sender: keyData of another msig', ...msigRow(withAuth(flatC, (a) => { a.keyData = b64url(outerKd); }), flatUa, { ...flatMembers, ...nestedMembers }), error: 'ContainerSender' },
+  { id: 'msig sender: member keys unknown to the opener', ...msigRow(flatC, flatUa, {}), error: 'ContainerSender' },
+  { id: 'msig sender: a member key that does not derive its id', ...msigRow(flatC, flatUa, Object.fromEntries(Object.entries(flatMembers)
+    .map(([id, m], i) => [id, i === 0 ? { ...m, keyData: H(other.keyData) } : m]))), error: 'ContainerSender' },
   { id: 'created changed (aad)', container: { ...structuredClone(backup2), created: CREATED + 1 }, expect: expectBackup, error: 'SealOpen' },
   { id: 'flipped ciphertext byte', container: flipField(backup2, ['sealed', 'ciphertext'], 0), expect: expectBackup, error: 'SealOpen' },
   { id: 'container v 2', container: { ...structuredClone(backup2), v: 2 }, expect: expectBackup, error: 'SealVersion' },
   { id: 'backup entropy that does not derive sender.ua', container: notDeriving, expect: expectBackup, restore: true, error: 'ContainerSender' },
   { id: 'link: swapped short code', container: link, expect: expectLink, link: { shortCode: '48151624' }, error: 'SealOpen' },
-].map((x) => ({ senderKey: senderKeyOf(wKey), opener: { kem: R0 }, ...x }));
+].map((x) => ({ opener: { kem: R0 }, ...x }));
 const openerKey = (o) => (o.kem ? kemOf(o.kem) : null);
 for (const x of acceptance) {
   let e = null;
   try {
-    if (x.link) await openLink(linkSessionVector(SESSION.seed, x.link.shortCode, SESSION.start), x.container, x.expect, x.senderKey);
-    else if (x.restore) await restoreBackup(openerKey(x.opener), x.container, x.expect, x.senderKey);
-    else await openContainer(openerKey(x.opener), x.container, x.expect, x.senderKey);
+    if (x.link) await openLink(linkSessionVector(SESSION.seed, x.link.shortCode, SESSION.start), x.container, x.expect, lookup(x.members));
+    else if (x.restore) await restoreBackup(openerKey(x.opener), x.container, x.expect, lookup(x.members));
+    else await openContainer(openerKey(x.opener), x.container, x.expect, lookup(x.members));
   } catch (err) { e = err; }
   must(x.error ? e?.code === x.error : !e, `acceptance ${x.id}: ${e?.message}`);
 }
@@ -855,17 +902,17 @@ const replay = [
   { id: 'link created after the window', container: await linkC('link.late', NOW + LINK_WINDOW + 1), error: 'ContainerReplay' },
   { id: 'link created before the session', container: await linkC('link.early', NOW - 1), error: 'ContainerReplay' },
   { id: 'link created at the window\'s end (accepted)', container: await linkC('link.edge', NOW + LINK_WINDOW), error: null },
-].map((x) => ({ kind: 'link', expect: expectLink, senderKey: senderKeyOf(wKey), ...x }));
+].map((x) => ({ kind: 'link', expect: expectLink, ...x }));
 for (const x of replay) {
   let e = null;
-  try { await openLink(session(), x.container, x.expect, x.senderKey); } catch (err) { e = err; }
+  try { await openLink(session(), x.container, x.expect); } catch (err) { e = err; }
   must(x.error ? e?.code === x.error : !e, `replay ${x.id}`);
 }
 {
   const s = session();
-  await openLink(s, link, expectLink, senderKeyOf(wKey));
+  await openLink(s, link, expectLink);
   let e = null;
-  try { await openLink(s, link, expectLink, senderKeyOf(wKey)); } catch (err) { e = err; }
+  try { await openLink(s, link, expectLink); } catch (err) { e = err; }
   must(e?.code === 'ContainerReplay', 'second use of a session');
 }
 const rollback = [
@@ -875,11 +922,11 @@ const rollback = [
   { id: 'generation 2 over generation 1', container: backup2, current: { ua: H(wKey.ua), generation: 1 }, install: true },
   { id: 'generation 1 on a device without the wallet', container: backup1, current: null, install: true },
   { id: 'generation 1 on a device holding another wallet', container: backup1, current: { ua: H(other.ua), generation: 9 }, install: true },
-].map((x) => ({ kind: 'backup', expect: expectBackup, senderKey: senderKeyOf(wKey), opener: { kem: R0 }, ...x }));
+].map((x) => ({ kind: 'backup', expect: expectBackup, opener: { kem: R0 }, ...x }));
 for (const x of rollback) {
   let e = null;
   let r = null;
-  try { r = await restoreBackup(K0, x.container, x.expect, x.senderKey, { current: x.current, allowRollback: x.allowRollback }); } catch (err) { e = err; }
+  try { r = await restoreBackup(K0, x.container, x.expect, undefined, { current: x.current, allowRollback: x.allowRollback }); } catch (err) { e = err; }
   must(x.error ? e?.code === x.error : !e && r.install === x.install, `rollback ${x.id}: ${e?.message}`);
 }
 const sealOut = {
@@ -887,12 +934,15 @@ const sealOut = {
     + 'key = HKDF-SHA256(ss, salt = empty, info = "scaas/seal/v1" ‖ u8 1 ‖ be16 len(purpose) ‖ purpose ‖ keccak256(kemPk), 32), '
     + 'ciphertext = AES-256-GCM(key, nonce 0^96, pt, aad) (ct ‖ tag); m and e as kem.json encaps; wire = version ‖ scheme ‖ mlkemCt ‖ '
     + 'x25519Eph ‖ ciphertext. KEM keys: kem.json keys rows (key refs) and the ephemeral key of kem.json encaps "ephemeral" / the link '
-    + 'session seed. Containers {v, purpose, recipient, sender: {ua, sig}, created, sealed} (bytes base64url): aad = u8 1 ‖ be16 '
+    + 'session seed. Containers {v, purpose, recipient, sender: {ua, auth}, created, sealed} (bytes base64url): aad = u8 1 ‖ be16 '
     + 'len(purpose) ‖ purpose ‖ recipientId (ua or kemPkHash) ‖ be64 version (0: ephemeral) ‖ senderUa ‖ be64 created [‖ '
-    + 'sha256(shortCode) for scaas/link/v1]; sender.sig = the sender UA key\'s signature over uaMessage(kind, keccak256('
-    + '"scaas.ua.purpose.seal.v1"), keccak256(aad ‖ wire)) (MD-10, role authorization). openContainer(kemKey, container, expect, '
-    + 'senderKey): purpose, recipient (expected and the opener\'s), sender expected or in the set, senderKey derives sender.ua, '
-    + 'then the signature and the seal; ContainerSender / SealOpen / SealVersion. Link: created in [start, start + 600 s], one use '
+    + 'sha256(shortCode) for scaas/link/v1]; sender.auth = the sender\'s UASig {keyData, signature, members: [{index, members: '
+    + '[{index, sig}], sig}]} (owner 2026-11-05) over m0 = uaMessage(kind, keccak256("scaas.ua.purpose.seal.v1"), keccak256(aad ‖ '
+    + 'wire)) (MD-10, role authorization): a single key signs m0 itself (no members); an msig (no signature) in the minimal form at '
+    + 'both levels, a member over uaMessage(kind, member, memberDigest(senderUa, m0)), an inner msig\'s over innerDigest. '
+    + 'openContainer(kemKey, container, expect, members): purpose, recipient (expected and the opener\'s), sender expected or in '
+    + 'the set, auth.keyData derives sender.ua (msig, or one single-key kind), then the UASig (an msig\'s member keys from '
+    + 'members(id), re-derived) and the seal; ContainerSender / SealOpen / SealVersion. Link: created in [start, start + 600 s], one use '
     + '(ContainerReplay). Backup payload: JSON {v, generation, entropy, secrets, manifest: {entries: [{kind, account, index, ua}]}}; '
     + 'restore: the entropy (BIP-39 passphrase empty) derives sender.ua at its manifest entry (else ContainerSender), an older '
     + 'generation over the same wallet is BackupRollback unless allowRollback, an equal one installs nothing.',

@@ -24,6 +24,11 @@ const codeOf = async (p) => { try { await p(); return null; } catch (e) { return
 const keyFor = (row) => (row.recipient.ephemeralSeed ? KEM.ephemeralVector(B(row.recipient.ephemeralSeed)) : kemOf(row.recipient));
 const openerOf = (o) => (o.kem ? kemOf(o.kem) : null);
 const sessionOf = (s, shortCode = s.shortCode) => SL.linkSessionVector(B(s.seed), shortCode, s.start);
+// the opener's lookup of an msig sender's member keys by id (the row's `members`; never trusted, re-derived by openContainer)
+const lookup = (map) => (id) => map?.[id] ?? null;
+const senderOf = (r) => (r.sender.msig ? { ua: B(r.sender.msig.ua), keyData: B(r.sender.msig.keyData), inner: (x) => r.sender.msig.inner?.[x],
+  slots: r.sender.msig.slots.map((s) => ({ index: s.index, key: s.key && keyOf(s.key), members: s.members?.map((m) => ({ index: m.index, key: keyOf(m.key) })) })) }
+  : keyOf(r.sender));
 
 test('seal.json seal rows: fixed m and e per purpose (backup, link to an ephemeral key, empty pt and aad) reproduce and open', async () => {
   assert.ok(S, 'seal.json');
@@ -61,10 +66,10 @@ test('seal.json refusals: purpose, aad, version, scheme, a flipped byte in each 
   }
 });
 
-test('seal.json containers: backup and link reproduce byte for byte and open with the expected sender', async () => {
-  assert.equal(S.containers.length, 2);
+test('seal.json containers: backup, link and msig senders reproduce byte for byte and open with the expected sender', async () => {
+  assert.equal(S.containers.length, 4);
   for (const r of S.containers) {
-    const sender = keyOf(r.sender);
+    const sender = senderOf(r);
     const c = r.container;
     const kemPk = r.opener.kem ? kemOf(r.opener.kem).kemPk : sessionOf(r.opener.session).kemPk;
     const recipient = r.expect.recipient.kemPkHash ? { kemPkHash: B(r.expect.recipient.kemPkHash) } : { ua: B(r.expect.recipient.ua), version: r.expect.recipient.version };
@@ -72,9 +77,15 @@ test('seal.json containers: backup and link reproduce byte for byte and open wit
       shortCode: r.opener.session?.shortCode }, { m: B(r.m), e: B(r.e), sig: {} });
     assert.deepEqual(again, c, r.id);
     assert.equal(hex(sender.ua), hex(B(r.expect.sender.ua)));
-    if (r.opener.kem) assert.equal(hex(await SL.openContainer(openerOf(r.opener), c, r.expect, r.senderKey)), r.pt, r.id);
-    else assert.equal(hex(await SL.openLink(sessionOf(r.opener.session), c, r.expect, r.senderKey)), r.pt, r.id);
+    if (r.opener.kem) assert.equal(hex(await SL.openContainer(openerOf(r.opener), c, r.expect, lookup(r.members))), r.pt, r.id);
+    else assert.equal(hex(await SL.openLink(sessionOf(r.opener.session), c, r.expect, lookup(r.members))), r.pt, r.id);
   }
+  // sender.auth is a full UASig (owner 2026-11-05): a single key carries its key data and signature, an msig its members only
+  const [single, msig] = [S.containers[0].container.sender.auth, S.containers[2].container.sender.auth];
+  assert.deepEqual(Object.keys(single), ['keyData', 'signature', 'members']);
+  assert.deepEqual([single.members.length > 0, single.signature.length > 0], [false, true]);
+  assert.deepEqual([msig.members.length > 0, msig.signature.length > 0], [true, false]);
+  assert.ok(S.containers[3].container.sender.auth.members.some((m) => m.members.length > 0), 'a nested msig sender signs through its inner msig');
   // a link's aad ends with sha256(shortCode)
   const link = S.containers.find((r) => r.id === 'link');
   const aad = SL.containerAad({ purpose: link.container.purpose, recipient: { kemPkHash: B(link.expect.recipient.kemPkHash) },
@@ -82,34 +93,49 @@ test('seal.json containers: backup and link reproduce byte for byte and open wit
   assert.equal(aad.length, 1 + 2 + 13 + 32 + 8 + 32 + 8 + 32);
 });
 
+test('container builder: an msig sender signs only in the minimal form (UAPoP), a single key only as a UA key', async () => {
+  const r = S.containers[2];
+  const kemPk = kemOf(r.opener.kem).kemPk;
+  const args = (sender) => ({ kemPk, purpose: r.container.purpose, recipient: { ua: B(r.expect.recipient.ua), version: 0 }, sender,
+    created: r.container.created, pt: B(r.pt) });
+  const msig = senderOf(r);
+  const third = [0, 1, 2].find((i) => !msig.slots.some((s) => s.index === i));
+  const extra = { ...msig, slots: [0, 1, 2].map((i) => msig.slots.find((s) => s.index === i)
+    ?? { index: third, key: keyOf(r.sender.msig.slots[0].key) }) };
+  assert.equal(await codeOf(() => SL.sealContainer(args(extra))), 'UAPoP');
+  assert.equal(await codeOf(() => SL.sealContainer(args({ ua: msig.ua }))), 'Argument');
+});
+
 test('seal.json acceptance: each refusal from an otherwise valid container (C-03), before decapsulation where it says ContainerSender', async () => {
-  assert.equal(S.acceptance.length, 14);
+  assert.equal(S.acceptance.length, 23);
   for (const x of S.acceptance) {
     let got;
-    if (x.link) got = await codeOf(() => SL.openLink(sessionOf(S.containers[1].opener.session, x.link.shortCode), x.container, x.expect, x.senderKey));
-    else if (x.restore) got = await codeOf(() => SL.restoreBackup(openerOf(x.opener), x.container, x.expect, x.senderKey));
-    else got = await codeOf(() => SL.openContainer(openerOf(x.opener), x.container, x.expect, x.senderKey));
+    if (x.link) got = await codeOf(() => SL.openLink(sessionOf(S.containers[1].opener.session, x.link.shortCode), x.container, x.expect, lookup(x.members)));
+    else if (x.restore) got = await codeOf(() => SL.restoreBackup(openerOf(x.opener), x.container, x.expect, lookup(x.members)));
+    else got = await codeOf(() => SL.openContainer(openerOf(x.opener), x.container, x.expect, lookup(x.members)));
     assert.equal(got, x.error, x.id);
   }
   for (const id of ['signed by a different registered UA', 'purpose not the expected one', 'recipient not the expected one',
-    'sender key whose UA is not sender.ua', 'backup entropy that does not derive sender.ua', 'link: swapped short code']) {
+    'sender key whose UA is not sender.ua', 'backup entropy that does not derive sender.ua', 'link: swapped short code',
+    'single-key UASig with members', 'msig sender: non-minimal member set (three of t = 2)',
+    'msig sender: nested level-2 non-minimal (inner three of t = 2)', 'msig sender: member keys unknown to the opener']) {
     assert.ok(S.acceptance.some((x) => x.id === id), id);
   }
   // ContainerSender comes before decapsulation: a refused container never reaches the KEM key
   const x = S.acceptance.find((r) => r.id === 'purpose not the expected one');
   const spy = { ...openerOf(x.opener), decaps: () => { throw new Error('decapsulated'); } };
-  assert.equal(await codeOf(() => SL.openContainer(spy, x.container, x.expect, x.senderKey)), 'ContainerSender');
+  assert.equal(await codeOf(() => SL.openContainer(spy, x.container, x.expect)), 'ContainerSender');
 });
 
 test('seal.json replay and rollback (C-11): link window and one use, backup generation', async () => {
   const session = S.containers[1].opener.session;
   for (const x of S.replay) {
     if (x.kind === 'link') {
-      assert.equal(await codeOf(() => SL.openLink(sessionOf(session), x.container, x.expect, x.senderKey)), x.error, x.id);
+      assert.equal(await codeOf(() => SL.openLink(sessionOf(session), x.container, x.expect)), x.error, x.id);
     } else {
       let r = null;
       const got = await codeOf(async () => {
-        r = await SL.restoreBackup(openerOf(x.opener), x.container, x.expect, x.senderKey, { current: x.current, allowRollback: x.allowRollback });
+        r = await SL.restoreBackup(openerOf(x.opener), x.container, x.expect, undefined, { current: x.current, allowRollback: x.allowRollback });
       });
       assert.equal(got, x.error ?? null, x.id);
       if (!x.error) assert.equal(r.install, x.install, x.id);
@@ -117,8 +143,8 @@ test('seal.json replay and rollback (C-11): link window and one use, backup gene
   }
   const link = S.containers[1];
   const s = sessionOf(session);
-  await SL.openLink(s, link.container, link.expect, link.senderKey);
-  assert.equal(await codeOf(() => SL.openLink(s, link.container, link.expect, link.senderKey)), 'ContainerReplay', 'a session is one use');
+  await SL.openLink(s, link.container, link.expect);
+  assert.equal(await codeOf(() => SL.openLink(s, link.container, link.expect)), 'ContainerReplay', 'a session is one use');
   assert.equal(SL.LINK_WINDOW, 600);
 });
 
@@ -136,7 +162,7 @@ test('12-word wallet round trip (C-10): mnemonic, signing key and KEM key equal 
   assert.equal(hex(kemAfter.kemPkHash), row.kemKey.kemPkHash);
   // through a sealed backup: the container of seal.json restores the same entropy, so the same keys
   const c = S.containers.find((r) => r.id === 'backup generation 2');
-  const { install, payload } = await SL.restoreBackup(openerOf(c.opener), c.container, c.expect, c.senderKey);
+  const { install, payload } = await SL.restoreBackup(openerOf(c.opener), c.container, c.expect);
   assert.equal(install, true);
   assert.equal(hex(payload.entropy), hex(entropy));
   assert.equal(seedjs.entropyToWords(payload.entropy).join(' '), row.words);
@@ -146,7 +172,7 @@ test('12-word wallet round trip (C-10): mnemonic, signing key and KEM key equal 
   const R = kemOf(S.refusals.key);
   const sender = keyOf(c.sender);
   const fresh = await SL.sealBackup({ kemPk: R.kemPk, recipient: { ua: R.ua, version: 0 }, sender, created: c.container.created, payload });
-  const again = await SL.restoreBackup(R, fresh, c.expect, c.senderKey);
+  const again = await SL.restoreBackup(R, fresh, c.expect);
   assert.equal(hex(again.payload.entropy), hex(entropy));
   assert.notEqual(fresh.sealed.mlkemCt, c.container.sealed.mlkemCt, 'release seal draws fresh m and e');
 });

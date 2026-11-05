@@ -2,10 +2,10 @@
 // UNAUDITED. Seal / open to a UA KEM key and the sealed containers of backup and link (ua-rs-sign spec §6.3, C-03, C-11):
 //   key        = HKDF-SHA256(ss, salt = empty, info = "scaas/seal/v1" ‖ u8 scheme ‖ be16 len(purpose) ‖ purpose ‖ keccak256(kemPk), 32)
 //   ciphertext = AES-256-GCM(key, nonce = 0^96, pt, aad)       (every key encrypts once: m and e are fresh per seal)
-// A seal authenticates no sender and gives no replay protection. A container carries the sender's UA signature over
-// keccak256(aad ‖ wire form) under the off-chain purpose scaas.ua.purpose.seal.v1 (MD-10), and `openContainer` accepts it
-// only against what the opener expects (purpose, recipient, sender) and a sender key whose UA it recomputes, all before
-// decapsulation. `openLink` adds the session window (10 minutes, one use); `restoreBackup` adds the payload's
+// A seal authenticates no sender and gives no replay protection. A container carries the sender's `UASig` over
+// keccak256(aad ‖ wire form) under the off-chain purpose scaas.ua.purpose.seal.v1 (MD-10; owner 2026-11-05: a full UASig, so an
+// msig sender works), and `openContainer` accepts it only against what the opener expects (purpose, recipient, sender) and
+// key data whose UA it recomputes, all before decapsulation. `openLink` adds the session window (10 minutes, one use); `restoreBackup` adds the payload's
 // self-consistency and the backup generation. The JS reference of smartcontracts/vectors/ua/seal.json (T8, T9 in ua-rs).
 import { hkdf } from '@noble/hashes/hkdf.js';
 import { sha256 } from '@noble/hashes/sha2.js';
@@ -13,8 +13,7 @@ import { concatBytes, utf8ToBytes, keccak_256, b64url, fromB64url, fromHex, hex,
 import * as ua from './ua.js';
 import { kemEncaps, kemEncapsVector, generateEphemeral, ephemeralVector } from './kem.js';
 import { deriveUAKey, signContainer } from './uakey.js';
-import { verify as kindVerify } from './ua-verify.js';
-import { PQ_KINDS, pqMessage } from './pq.js';
+import { kindVerify, memberKeys } from './ua-verify.js';
 import { seedFromEntropy } from './seed.js';
 
 const fail = (code, reason) => { throw new ua.UAError(code, reason); };
@@ -127,36 +126,69 @@ const recipientJson = (r) => {
 };
 const recipientOfJson = (j) => (j?.kemPkHash !== undefined ? { kemPkHash: fromB64url(j.kemPkHash) } : { ua: fromB64url(j?.ua ?? ''), version: j?.version });
 
-/** A container `{v: 1, purpose, recipient, sender: {ua, sig}, created, sealed}` (named fields, base64url) of `pt` to `kemPk`,
- *  signed by the UA key `sender` (uakey.js). `recipient`: `{ ua, version }` of a UA's KEM key or `{ kemPkHash }` of an
- *  ephemeral one (checked against `kemPk`). `fixed` (test vectors only): `{ m, e, sig }`, `sig` the signer's randomness. */
+const sigJson = (x) => ({ index: x.index, members: (x.members ?? []).map((y) => ({ index: y.index, sig: b64url(y.sig) })), sig: b64url(x.sig) });
+const sigOfJson = (j, depth) => {
+  if (!Number.isInteger(j?.index) || j.index < 0 || j.index > 0xffff || !Array.isArray(j.members ?? [])) throw new Error('member');
+  if (depth === 2 && j.members?.length) throw new Error('a third level'); // two levels (CTR-UA-38)
+  return { index: j.index, members: (j.members ?? []).map((x) => sigOfJson(x, depth + 1)), sig: fromB64url(j.sig) };
+};
+
+/** A container `{v: 1, purpose, recipient, sender: {ua, auth}, created, sealed}` (named fields, base64url) of `pt` to `kemPk`;
+ *  `auth` the sender's `UASig {keyData, signature, members: [{index, members: [{index, sig}], sig}]}` (`signContainer`).
+ *  `sender`: a UA key (uakey.js) or an `msig` `{ ua, keyData, slots, inner }` (the minimal set, as `msigMemberSigs`).
+ *  `recipient`: `{ ua, version }` of a UA's KEM key or `{ kemPkHash }` of an ephemeral one (checked against `kemPk`).
+ *  `fixed` (test vectors only): `{ m, e, sig }`, `sig` the signer's randomness. */
 export async function sealContainer({ kemPk, purpose, recipient, sender, created, pt, shortCode }, fixed) {
-  if (!sender?.ua) fail('Argument', 'the sender is a UA key with a UA id');
+  if (!sender?.ua) fail('Argument', 'the sender is a UA key or an msig with a UA id');
   const r = recipientParts(recipient);
   if (r.form === 'kem' && !eq(r.id, keccak_256(kemPk))) fail('Argument', 'recipient.kemPkHash is not keccak256(kemPk)');
   const aad = containerAad({ purpose, recipient, senderUa: sender.ua, created, shortCode });
   const sealed = fixed ? await sealVector(kemPk, purpose, aad, pt, fixed) : await seal(kemPk, purpose, aad, pt);
-  const sig = signContainer(sender, keccak_256(concatBytes(aad, wireForm(sealed))), fixed?.sig);
-  return { v: 1, purpose, recipient: recipientJson(recipient), sender: { ua: b64url(sender.ua), sig: b64url(sig) }, created,
+  const auth = signContainer(sender, keccak_256(concatBytes(aad, wireForm(sealed))), fixed?.sig);
+  return { v: 1, purpose, recipient: recipientJson(recipient), created,
+    sender: { ua: b64url(sender.ua), auth: { keyData: b64url(auth.keyData), signature: b64url(auth.signature), members: auth.members.map(sigJson) } },
     sealed: { mlkemCt: b64url(sealed.mlkemCt), x25519Eph: b64url(sealed.x25519Eph), ciphertext: b64url(sealed.ciphertext) } };
 }
 
-function senderSigOk(kind, keyData, msg, sig) {
-  const name = Object.keys(PQ_KINDS).find((n) => PQ_KINDS[n].kind === kind);
-  if (name) {
-    try { return PQ_KINDS[name].alg.verify(sig, PQ_KINDS[name].pq ? pqMessage(name, msg) : msg, keyData); } catch { return false; }
-  }
-  return kindVerify(kind, hex(keyData), hex(msg), hex(sig));
+// The kinds whose key signs a container itself or as an msig member: the derived single keys clientkeys verifies. A native or
+// group key, a Zether key, an msig as a leaf: none.
+const SENDER_KINDS = [0x0100, 0x0101, 0x0102, 0x0103, 0x0104, 0x0105, 0x0106, 0x0107, 0x0108, 0x0130, 0x0131, 0x0132, 0x0133, 0x0134, 0x0135];
+const MEMBER = ua.purposeTag('member');
+const derives = (kind, keyData, id) => { try { return eq(ua.deriveUA(kind, keyData), id); } catch { return false; } };
+
+/** A leaf member's signature over `uaMessage(kind, member, md)`; no list below it. */
+const leafOk = (m, key, md, s) => SENDER_KINDS.includes(m.kind) && s.members.length === 0
+  && kindVerify(m.kind, key, ua.uaMessage(m.kind, MEMBER, md), s.sig, false);
+
+/** An `msig` sender's `members` over its `ua_msg` `m0` (owner 2026-11-05): the minimal set at both levels (`msigSigMinimal`); a
+ *  derived member over `memberDigest(senderUa, m0)`; an `msig` member with no `sig` of its own and its own non-empty list one level
+ *  down over `innerDigest(member, memberDigest(senderUa, m0))`. Member key data from `members(id)`, never trusted (`memberKeys`). */
+function msigOk(id, d, m0, slots, members) {
+  const keys = memberKeys(d, members);
+  if (!ua.msigSigMinimal(d, slots, (x) => members(x)?.keyData)) return false;
+  const all = ua.msigStructure(d).members;
+  const md = ua.memberDigest(id, m0);
+  return slots.every((s) => {
+    const m = all[s.index];
+    if (m.kind !== 0x0120) return leafOk(m, keys[s.index], md, s);
+    if (s.sig.length !== 0 || s.members.length === 0) return false;
+    const leaves = ua.msigStructure(keys[s.index]).members;
+    const inner = memberKeys(keys[s.index], members);
+    const imd = ua.innerDigest(fromHex(m.id), md);
+    return s.members.every((x) => leafOk(leaves[x.index], inner[x.index], imd, x));
+  });
 }
 
 const decode = (f) => { try { return f(); } catch { return fail('SealOpen', 'container fields'); } };
 
 /** The plaintext of a container, accepted only as `expect` says (spec §6.3, C-03), in order, each before decapsulation:
  *  the purpose; the recipient (the container's equals `expect.recipient`, and that is `kemKey`'s own); `sender.ua` is
- *  `expect.sender.ua` or in `expect.sender.set`; `senderKey` (`{ kind, keyData }`, a single-key kind) derives `sender.ua`;
- *  then the signature over the rebuilt aad and wire form, then the seal. A mismatch: `ContainerSender`; a bad signature or
- *  tag: `SealOpen`. `shortCode`: a link container's. No replay protection here (openLink, restoreBackup). */
-export async function openContainer(kemKey, c, expect, senderKey, { shortCode } = {}) {
+ *  `expect.sender.ua` or in `expect.sender.set`; `sender.auth.keyData` derives `sender.ua`, as an `msig` or as exactly one
+ *  single-key kind (`SENDER_KINDS`), recomputed here; then the `UASig` over the rebuilt aad and wire form (a single key: its
+ *  `signature`, no members; an `msig`: no `signature`, `msigOk`), then the seal. A mismatch: `ContainerSender`; a bad
+ *  signature, member set or tag: `SealOpen`. `members(id)` → `{ kind, keyData }`: an `msig` sender's member keys (re-derived;
+ *  an unknown member: `ContainerSender`). `shortCode`: a link container's. No replay protection here (openLink, restoreBackup). */
+export async function openContainer(kemKey, c, expect, members, { shortCode } = {}) {
   if (c?.v !== 1) fail('SealVersion', 'container v 1 only');
   const no = (why) => fail('ContainerSender', why);
   if (c.purpose !== expect?.purpose) no('purpose not the expected one');
@@ -168,16 +200,20 @@ export async function openContainer(kemKey, c, expect, senderKey, { shortCode } 
   const senderUa = decode(() => b32(fromB64url(c.sender.ua), 'sender.ua'));
   const allowed = expect.sender?.ua !== undefined ? [expect.sender.ua] : expect.sender?.set ?? [];
   if (!allowed.some((u) => eq(b32(u, 'expect.sender'), senderUa))) no('sender not the expected one');
-  const keyData = bytesOf(senderKey?.keyData ?? new Uint8Array(0), 'senderKey.keyData');
-  if (senderKey?.kind === 0x0120) no('an msig signs no container');
-  let derived;
-  try { derived = ua.deriveUA(senderKey?.kind, keyData); } catch { no('sender key data'); }
-  if (!eq(derived, senderUa)) no('the sender key does not derive sender.ua');
+  const auth = decode(() => ({ keyData: fromB64url(c.sender.auth.keyData), signature: fromB64url(c.sender.auth.signature),
+    members: (c.sender.auth.members ?? []).map((x) => sigOfJson(x, 1)) }));
+  const kind = [0x0120, ...SENDER_KINDS].find((k) => derives(k, auth.keyData, senderUa));
+  if (kind === undefined) no('auth.keyData does not derive sender.ua');
   const aad = containerAad({ purpose: c.purpose, recipient: recipientOfJson(c.recipient), senderUa, created: c.created, shortCode });
   const sealed = decode(() => ({ version: 1, scheme: 1, mlkemCt: fromB64url(c.sealed.mlkemCt), x25519Eph: fromB64url(c.sealed.x25519Eph),
     ciphertext: fromB64url(c.sealed.ciphertext) }));
-  const msg = ua.uaMessage(senderKey.kind, ua.SEAL_TAG, keccak_256(concatBytes(aad, wireForm(sealed))));
-  if (!senderSigOk(senderKey.kind, keyData, msg, decode(() => fromB64url(c.sender.sig)))) fail('SealOpen', 'sender signature');
+  const m0 = ua.uaMessage(kind, ua.SEAL_TAG, keccak_256(concatBytes(aad, wireForm(sealed))));
+  let ok;
+  if (kind !== 0x0120) ok = auth.members.length === 0 && kindVerify(kind, auth.keyData, m0, auth.signature, false);
+  else {
+    try { ok = auth.signature.length === 0 && msigOk(senderUa, auth.keyData, m0, auth.members, members ?? (() => null)); } catch { no('msig member keys'); }
+  }
+  if (!ok) fail('SealOpen', 'sender signature');
   return open(kemKey, c.purpose, aad, sealed);
 }
 
@@ -198,13 +234,13 @@ const newSession = (kemKey, shortCode, start) => ({ kemKey, kemPk: kemKey.kemPk,
 
 /** The plaintext of a link container to `session`: `created` in the window (else `ContainerReplay`), the acceptance of
  *  `openContainer`; on success the session is used up and its key wiped (a second call: `ContainerReplay`). */
-export async function openLink(session, c, expect, senderKey) {
+export async function openLink(session, c, expect, members) {
   if (session.used) fail('ContainerReplay', 'the session is used up');
   if (expect?.purpose !== PURPOSE.link) fail('Argument', 'a link session opens scaas/link/v1 only');
   if (!Number.isSafeInteger(c?.created) || c.created < session.start || c.created > session.end) {
     fail('ContainerReplay', 'created outside the session window');
   }
-  const pt = await openContainer(session.kemKey, c, expect, senderKey, { shortCode: session.shortCode });
+  const pt = await openContainer(session.kemKey, c, expect, members, { shortCode: session.shortCode });
   session.used = true;
   session.kemKey.wipe();
   return pt;
@@ -239,9 +275,9 @@ export const sealBackup = ({ kemPk, recipient, sender, created, payload }, fixed
  *  the manifest entry naming it (else `ContainerSender`); over a device that holds this wallet (`current = { ua, generation }`
  *  with `ua` = sender.ua) an older generation is `BackupRollback` unless `allowRollback`, an equal one changes nothing
  *  (`install: false`). Returns `{ install, payload }`. */
-export async function restoreBackup(kemKey, c, expect, senderKey, { current = null, allowRollback = false, bip39Passphrase = '' } = {}) {
+export async function restoreBackup(kemKey, c, expect, members, { current = null, allowRollback = false, bip39Passphrase = '' } = {}) {
   if (expect?.purpose !== PURPOSE.backup) fail('Argument', 'restore opens scaas/backup/v1 only');
-  const pt = await openContainer(kemKey, c, expect, senderKey);
+  const pt = await openContainer(kemKey, c, expect, members);
   const payload = decodeBackup(pt);
   wipe(pt);
   const senderUa = hex(fromB64url(c.sender.ua));

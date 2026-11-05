@@ -1,4 +1,4 @@
-# ua-rs-sign T1b mutants (plan T1b): one change each on a clean tree at fa07bebe + the T1b diff, suite = node --test test/kem.test.js test/seal.test.js test/vault.test.js (clients/clientkeys), source restored byte for byte after each.
+# ua-rs-sign T1b mutants (plan T1b): one change each on a clean tree, suite = node --test test/kem.test.js test/seal.test.js test/vault.test.js (clients/clientkeys), source restored byte for byte after each. Rerun 2026-11-05 at 68c585e4 + the container-sender diff (owner: sender.auth a full UASig): M21, M22 retargeted to the new check, M29-M34 added.
 # First run: M15 (KEM key derived for an msig: the msig guard in kemKeyOf) SURVIVED, the guard was redundant (no UA key of kind 0x0120 exists; the not-a-UA-key guard refuses it) -> guard removed, the mutant now drops the remaining guard; M28 (open accepts version 2) SURVIVED, the rows went through fromWire, which refuses first -> the test opens the named fields too.
 verdict | mutant | file | rc | failed tests: first
 killed   | M1 modulus check removed | src/kem.js | rc=1 | 1 failed: kem.json encaps refusals: modulus, length, scheme 2, all-zero ss_X
@@ -6,7 +6,7 @@ killed   | M2 all-zero ss_X accepted (encaps) | src/kem.js | rc=1 | 1 failed: ke
 killed   | M3 all-zero ss_X accepted (decaps) | src/kem.js | rc=1 | 1 failed: kem.json decaps: lengths and small-order E refused, a flipped mlkemCt byte gives another s
 killed   | M4 combiner E dropped | src/kem.js | rc=1 | 8 failed: 12-word wallet round trip
 killed   | M5 kemPkHash out of the seal info | src/seal.js | rc=1 | 6 failed: 12-word wallet round trip
-killed   | M6 short code out of the link aad | src/seal.js | rc=1 | 2 failed: seal.json containers: backup and link reproduce byte for byte and open with the expected s
+killed   | M6 short code out of the link aad | src/seal.js | rc=1 | 2 failed: seal.json containers: backup, link and msig senders reproduce byte for byte and open with 
 killed   | M7 NFKC dropped | src/vault.js | rc=1 | 1 failed: vault.json: seed vaults at N = 2^15, 2^16, 2^17, 12 words, NFC sealed / NFD opened
 killed   | M8 AAD label dropped | src/vault.js | rc=1 | 3 failed: 12-word wallet round trip
 killed   | M9 expected sender ignored | src/seal.js | rc=1 | 1 failed: seal.json acceptance: each refusal from an otherwise valid container
@@ -21,7 +21,7 @@ killed   | M17 purpose out of the seal info | src/seal.js | rc=1 | 6 failed: 12-
 killed   | M18 purpose check skipped | src/seal.js | rc=1 | 1 failed: seal.json acceptance: each refusal from an otherwise valid container
 killed   | M19 recipient expectation skipped | src/seal.js | rc=1 | 1 failed: seal.json acceptance: each refusal from an otherwise valid container
 killed   | M20 opener's own recipient not checked | src/seal.js | rc=1 | 1 failed: seal.json acceptance: each refusal from an otherwise valid container
-killed   | M21 derive_ua recomputation skipped | src/seal.js | rc=1 | 1 failed: seal.json acceptance: each refusal from an otherwise valid container
+killed   | M21 derive_ua recomputation skipped | src/seal.js | rc=1 | 4 failed: 12-word wallet round trip
 killed   | M22 container sender signature unchecked | src/seal.js | rc=1 | 1 failed: seal.json acceptance: each refusal from an otherwise valid container
 killed   | M23 link window not checked | src/seal.js | rc=1 | 1 failed: seal.json replay and rollback
 killed   | M24 link session not used up | src/seal.js | rc=1 | 1 failed: seal.json replay and rollback
@@ -29,4 +29,10 @@ killed   | M25 generation compare skipped | src/seal.js | rc=1 | 1 failed: seal.
 killed   | M26 seed payload length not checked | src/vault.js | rc=1 | 1 failed: vault.json refusals: wrong passphrase, altered AAD label, N = 2^31 / 3, r = 16, p = 2, v 2
 killed   | M27 v 2 reported as a wrong passphrase | src/vault.js | rc=1 | 1 failed: vault.json refusals: wrong passphrase, altered AAD label, N = 2^31 / 3, r = 16, p = 2, v 2
 killed   | M28 open: a seal version other than 1 accepted | src/seal.js | rc=1 | 1 failed: seal.json refusals: purpose, aad, version, scheme, a flipped byte in each field, another k
-mutants M1-M28 of 28, survived or not loaded: 0
+killed   | M29 msig sender: a non-minimal member set accepted | src/seal.js | rc=1 | 1 failed: seal.json acceptance: each refusal from an otherwise valid container
+killed   | M30 msig sender: minimal at level 1 only | src/seal.js | rc=1 | 1 failed: seal.json acceptance: each refusal from an otherwise valid container
+killed   | M31 single-key UASig with members accepted | src/seal.js | rc=1 | 1 failed: seal.json acceptance: each refusal from an otherwise valid container
+killed   | M32 msig UASig with a signature of its own accepted | src/seal.js | rc=1 | 1 failed: seal.json acceptance: each refusal from an otherwise valid container
+killed   | M33 msig member signature unchecked | src/seal.js | rc=1 | 1 failed: seal.json acceptance: each refusal from an otherwise valid container
+killed   | M34 inner msig members over the outer member digest | src/seal.js | rc=1 | 1 failed: seal.json containers: backup, link and msig senders reproduce byte for byte and open with 
+mutants M1-M34 of 34, survived or not loaded: 0

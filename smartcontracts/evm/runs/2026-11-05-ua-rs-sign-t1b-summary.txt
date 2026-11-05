@@ -12,3 +12,13 @@ forge | - | not run | no file forge reads changed (kem, seal, vault.json are new
 # Rows: kem.json 14 keys, 11 key refusals (9 non-holder kinds, msig, version 2^64), 3 encaps, 4 encaps refusals, 7 decaps (1 valid,
 # 1 implicit rejection, 5 refused); seal.json 3 seal, 10 open refusals + 4 argument refusals, 2 containers (backup, link), 14 acceptance
 # (13 refused, 1 accepted control: sender in the approved set), 9 replay (3 link window, 6 backup generation); vault.json 6 vaults, 11 refusals.
+# 2026-11-05 follow-up (owner: "theo khuyên cả sáu"): container sender.auth is a full UASig (single key or minimal msig); seal.json rows moved.
+step | commit | rc | counts
+red: node --test test/seal.test.js test/kem.test.js test/vault.test.js on 68c585e4's src with the new tests and seal.json | 68c585e4 | 1 | 22 tests, 5 failed (the 5 container tests, incl. the new builder test), 17 passed
+clientkeys npm test (foundry 1.8.5 on PATH) | (this commit) | 0 | 287 tests, 285 pass, 0 fail, 2 skipped (was 279 / 277: +1 builder test; seal.test.js is 7 tests)
+vectors-check: ua-wallet-vectors.mjs three times into scratch dirs, cmp with each other and the tree | (this commit) | 0 | seal.json moved; keys, sign, kem, vault byte-identical
+vectors-check: ua-sig and ua-vectors into scratch (7 files), ua-portable, typed-ops, pq-vectors in place + git status, soroban-ua-ops --check | (this commit) | 0 | every other vector file byte-identical, tree clean
+mutants: 2026-11-05-ua-rs-sign-t1b-mutants.py | (this commit) | 0 | 34 killed, 0 survived, 0 not loaded (M29-M34 new: msig non-minimal set, minimal at level 1 only, single-key UASig with members, msig own signature, member signature unchecked, inner digest)
+docs_check check / paths / test_docs_check | (this commit) | 0 | 0 errors 5 warnings / 0 machine paths / ok
+# seal.json: containers 2 -> 4 (+ msig flat {p256, ed25519}, + msig nested), acceptance 14 -> 23 (- "an msig sender key"; + 10 UASig rows),
+# replay 9 rows rewritten (sender.sig -> sender.auth); seal, refusals, argumentRefusals unchanged; the old containers' sealed bytes and signatures unchanged.

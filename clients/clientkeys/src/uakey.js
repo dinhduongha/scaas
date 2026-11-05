@@ -196,11 +196,17 @@ export function signUAVector(key, purposeTag, digest, fixed = {}) {
   return SIGNERS.get(key)(ua.uaMessage(key.kind, purposeOf(purposeTag), digest), sigRole(purposeTag), fixedRand(fixed));
 }
 
-/** The container builder's sender signature (seal.js only, MD-10): `uaMessage(kind, SEAL_TAG, digest)`, role authorization.
- *  `fixed` (test vectors only): the randomness of `signUAVector`. */
-export function signContainer(key, digest, fixed) {
-  const sign = SIGNERS.get(key) ?? fail('Argument', 'not a UA key');
-  return sign(ua.uaMessage(key.kind, ua.SEAL_TAG, digest), 'authorization', fixed ? fixedRand(fixed) : osRandom);
+/** The container builder's sender `UASig {keyData, signature, members}` (seal.js only, MD-10; owner 2026-11-05: a full `UASig`)
+ *  over `digest` under `SEAL_TAG`. A UA key: its key data and its signature over `uaMessage(kind, SEAL_TAG, digest)`, role
+ *  authorization, no members; `fixed` (test vectors only): the randomness of `signUAVector`. An `msig` `{ ua, keyData, slots,
+ *  inner }` (as `msigMemberSigs`): its key data, no signature, the minimal member set over `uaMessage(msig, SEAL_TAG, digest)`. */
+export function signContainer(sender, digest, fixed) {
+  if (sender?.slots) {
+    return { keyData: sender.keyData, signature: new Uint8Array(0), members: memberSlots(sender, ua.uaMessage(0x0120, ua.SEAL_TAG, digest)) };
+  }
+  const sign = SIGNERS.get(sender) ?? fail('Argument', 'not a UA key');
+  return { keyData: sender.keyData, signature: sign(ua.uaMessage(sender.kind, ua.SEAL_TAG, digest), 'authorization', fixed ? fixedRand(fixed) : osRandom),
+    members: [] };
 }
 
 /** The authenticator's challenge for a `webauthn-p256` UA: `ua_msg` (spec §5.6). */
@@ -224,21 +230,24 @@ export function webauthnAssertion({ keyData, expectedChallenge, authData, client
 /** `abi.encode(MemberSig[])` of an `msig` UA `ua` (key data `keyData`) over `(purposeTag, digest)`: `slots` are
  *  `[{index, key}]` for a derived member and `[{index, members: [{index, key}]}]` for an `msig` member (`inner(id)` gives its key
  *  data). A set that is not minimal at both levels (or not strictly increasing) is `UAPoP`, the registry's verdict. */
-export function msigMemberSigs({ ua: id, keyData, purposeTag, digest, slots, inner }) {
+export const msigMemberSigs = ({ ua: id, keyData, purposeTag, digest, slots, inner }) =>
+  encodeMemberSigs(memberSlots({ ua: id, keyData, slots, inner }, ua.uaMessage(0x0120, purposeOf(purposeTag), digest)));
+
+/** The `MemberSig[]` of an `msig` over its `ua_msg` `md` (`msigMemberSigs`, `signContainer`): minimal at both levels, else `UAPoP`. */
+function memberSlots({ ua: id, keyData, slots, inner }, md) {
   const list = slots.map((s) => ({ index: s.index, members: s.members?.map((m) => ({ index: m.index })) }));
   if (!ua.msigSigMinimal(keyData, list, inner)) fail('UAPoP', 'the member set is not minimal');
   const all = ua.msigStructure(keyData).members;
-  const md = ua.uaMessage(0x0120, purposeOf(purposeTag), digest);
   const own = (key, m, structure, msg) => {
     if (!key || key.kind !== m.kind || hex(key.ua) !== m.id) fail('Argument', 'the key is not the slot\'s member');
     return key.signMember(structure, msg);
   };
-  return encodeMemberSigs(slots.map((s) => {
+  return slots.map((s) => {
     const m = all[s.index];
     if (m.kind !== 0x0120) return { index: s.index, members: [], sig: own(s.key, m, id, md) };
     const innerMembers = ua.msigStructure(inner(m.id)).members;
     const msg = ua.uaMessage(0x0120, MEMBER, ua.memberDigest(id, md));
     return { index: s.index, sig: new Uint8Array(0),
       members: s.members.map((x) => ({ index: x.index, sig: own(x.key, innerMembers[x.index], fromHex(m.id), msg) })) };
-  }));
+  });
 }

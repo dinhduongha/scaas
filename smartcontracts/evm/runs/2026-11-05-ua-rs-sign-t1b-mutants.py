@@ -34,14 +34,23 @@ M = [
     ("purpose check skipped", SEAL, "if (c.purpose !== expect?.purpose) no('purpose not the expected one');", ""),
     ("recipient expectation skipped", SEAL, "if (got.form !== want.form || !eq(got.id, want.id) || got.version !== want.version) no(", "if (false) no("),
     ("opener's own recipient not checked", SEAL, "if (own.form !== want.form || !eq(own.id, want.id) || own.version !== want.version) no(", "if (false) no("),
-    ("derive_ua recomputation skipped", SEAL, "if (!eq(derived, senderUa)) no('the sender key does not derive sender.ua');", ""),
-    ("container sender signature unchecked", SEAL, "if (!senderSigOk(senderKey.kind, keyData, msg, decode(() => fromB64url(c.sender.sig)))) fail(", "if (false) fail("),
+    ("derive_ua recomputation skipped", SEAL, "find((k) => derives(k, auth.keyData, senderUa));",
+     "find((k) => derives(k, auth.keyData, ua.deriveUA(k, auth.keyData)));"),
+    ("container sender signature unchecked", SEAL, "if (!ok) fail('SealOpen', 'sender signature');", ""),
     ("link window not checked", SEAL, "if (!Number.isSafeInteger(c?.created) || c.created < session.start || c.created > session.end) {", "if (false) {"),
     ("link session not used up", SEAL, "  session.used = true;\n", ""),
     ("generation compare skipped", SEAL, "if (payload.generation < current.generation && allowRollback !== true) fail(", "if (false) fail("),
     ("seed payload length not checked", VAULT, "if (!SEED_LENGTHS.includes(entropy.length)) {", "if (false) {"),
     ("v 2 reported as a wrong passphrase", VAULT, "refuse('VaultVersion', 'Unknown vault version.');", "refuse('VaultOpen', 'Wrong PIN or the vault was altered.');"),
     ("open: a seal version other than 1 accepted", SEAL, "if (sealed?.version !== 1 || sealed?.scheme !== 1) fail('SealVersion',", "if (false) fail('SealVersion',"),
+    # owner 2026-11-05: the container sender is a full UASig (an msig sender in the minimal form)
+    ("msig sender: a non-minimal member set accepted", SEAL, "if (!ua.msigSigMinimal(d, slots, (x) => members(x)?.keyData)) return false;", ""),
+    ("msig sender: minimal at level 1 only", SEAL, "if (!ua.msigSigMinimal(d, slots, (x) => members(x)?.keyData)) return false;",
+     "if (!ua.msigSlotsMinimal(d, slots.map((s) => s.index))) return false;"),
+    ("single-key UASig with members accepted", SEAL, "ok = auth.members.length === 0 && kindVerify(", "ok = kindVerify("),
+    ("msig UASig with a signature of its own accepted", SEAL, "ok = auth.signature.length === 0 && msigOk(", "ok = msigOk("),
+    ("msig member signature unchecked", SEAL, "  && kindVerify(m.kind, key, ua.uaMessage(m.kind, MEMBER, md), s.sig, false);", ";"),
+    ("inner msig members over the outer member digest", SEAL, "const imd = ua.innerDigest(fromHex(m.id), md);", "const imd = md;"),
 ]
 bad = 0
 assert len({m[0] for m in M}) == len(M)
