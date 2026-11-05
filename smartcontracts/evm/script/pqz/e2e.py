@@ -882,9 +882,8 @@ def row_call(op, r, d):
 def named_rows():
     """Every named entry this script can send against its `typed_ops.json` row: the merged `mtx<entry>` (ua-mtx-merge R1,
     R47: the `UA` struct for every subject, `UASig auth`; `WrapShield` keeps its address `Envelope`, no twin) is in the built
-    ABI, its calldata is the row's past the selector (until T11 regenerates the rows under the merged names; `UAShield`'s
-    row still holds `bytes auth` until then), the digest of the struct `typed_digest` assembles from the same parameters,
-    and the typed `PqzAuth`."""
+    ABI, its calldata is the row's byte for byte (T11 regenerated the rows under the merged names, `UAShield` with `UASig`),
+    the digest of the struct `typed_digest` assembles from the same parameters, and the typed `PqzAuth`."""
     V = json.load(open(os.path.join(ROOT, "smartcontracts/vectors/typed/typed_ops.json")))
     methods, _ = abi_methods()
     rows = {op: r for op, r in V["ops"].items() if op in BUILT}
@@ -895,10 +894,7 @@ def named_rows():
         c, head = named_cd(op, e, p, sig), named_sig(op)
         check(head in methods and c[:4] == sel(head), f"{op}: {head[:60]}… in the ABI")
         row = hb(d["calldata"])
-        if op == "UAShield" and len(row) != len(c):
-            log(f"SKIP  {op}: the row's calldata holds uaShield's bytes auth (typed_ops.json before T11): not compared")
-        else:
-            check(c[4:] == row[4:], f"{op}: calldata {len(c):,} B = the row's past the selector (row {d['selector']})")
+        check(c == row, f"{op}: calldata {len(c):,} B = the row's (row {d['selector']})")
         check(typed_digest(op, (d["domain"]["verifyingContract"], d["domain"]["chainId"], hb(d["domain"]["salt"])), e, p) == hb(d["digest"]),
               f"{op}: typed digest = the row's")
     a = V["ops"]["PqzAuth"]

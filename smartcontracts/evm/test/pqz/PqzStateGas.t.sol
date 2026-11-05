@@ -705,14 +705,12 @@ contract PqzStatePinGasTest is PqzSlots {
         return abiOf[op];
     }
 
-    /// ua-mtx-merge T5 (R36): a `UA…` row (until T11 regenerates the rows) names the `ua*` entry; its body took the `mtx`
-    /// name.
+    /// ua-mtx-merge T11 (R36, MD-7): a `UA…` row names its merged `mtx` entry (T5 renamed the rows' `ua*` names here,
+    /// until the rows were regenerated).
     function _mtxName(string memory sig) internal pure returns (string memory) {
         bytes memory b = bytes(sig);
-        require(b[0] == "u" && b[1] == "a", "a ua* row");
-        bytes memory r = new bytes(b.length - 2);
-        for (uint256 i; i < r.length; ++i) r[i] = b[i + 2];
-        return string.concat("mtx", string(r));
+        require(b[0] == "m" && b[1] == "t" && b[2] == "x", "a merged mtx row");
+        return sig;
     }
 
     /// ua-mtx-merge T5, meaning (R36): the ECDSA envelope signer is a native id on the merged entry (`UAEnvelope`, its address

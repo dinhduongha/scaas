@@ -107,7 +107,7 @@ function uaExecuteDigest(address w, MetaTxLib.UAEnvelope memory e, address targe
 
 /// typed-signing C5 (TS-D14), ua-mtx-merge T3b (Q6): the one signed entry per operation of `MandateWallet`, over its
 /// `UA<Op>` struct, on the digest a wallet computes from the JSON it is handed (`from`, `payee` as `bytes32`); the rows
-/// of `typed_ops.json` run in `TypedOps.t.sol` (the address rows have no wallet entry until T11 regenerates them).
+/// of `typed_ops.json` run in `TypedOps.t.sol` (T11, MD-7: the six `UA<Op>` rows; the retired address rows have no wallet entry).
 contract NamedMandateEntriesTest is MandateFixture {
     function _env(address from, uint256 nonce) internal view returns (MetaTxLib.UAEnvelope memory) {
         return uaEnv(from, nonce, block.timestamp + 300);

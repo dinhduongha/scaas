@@ -7,7 +7,7 @@ import {stdJson} from "forge-std/StdJson.sol";
 import {PqzFixture} from "./helpers/PqzFixture.sol";
 import {PQZ_UID} from "./helpers/PqzRegistryBase.sol";
 import {PqzPackedRef} from "./helpers/PqzPackedRef.sol";
-import {VM, TYPED_OPS, n, a, h, eJson, ecdsa, checkRow, onChain, domainOf, rowEnvelope, rowEnvelope2, msgField, domainField}
+import {VM, TYPED_OPS, TYPED_OPS_LEGACY, n, a, h, eJson, ecdsa, checkRow, onChain, domainOf, rowEnvelope, rowEnvelope2, msgField, domainField}
     from "../metatx/NamedEntry.t.sol";
 import {typedDigest, hexJson} from "../zether/ZetherTyped.t.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
@@ -1024,18 +1024,13 @@ contract PqzTypedRowsTest is PqzNamedBase {
         assertEq(bytes4(ret), want, string.concat(op, ": the op's own check, the signature passed"));
     }
 
-    /// ua-mtx-merge T5: a `UA…` row whose entry took the `mtx` name (R36). The row (until T11 regenerates it) holds the
-    /// `ua*` selector: `built` is that calldata; the same arguments run under the `mtx` name (the body is the same).
+    /// ua-mtx-merge T11 (R36, MD-7): a `UA…` row names its merged `mtx` entry and runs verbatim (T5 ran the rows' `ua*`
+    /// calldata under the `mtx` name, until the rows were regenerated).
     function _reachRenamed(string memory op, address c, bytes memory built, bytes4 want) internal {
         checkRow(j, op, "pqz");
         bytes memory name = bytes(_head(op));
-        assertEq(name[0], "u", op);
-        assertEq(name[1], "a", op);
-        bytes memory rest = new bytes(name.length - 2);
-        for (uint256 i; i < rest.length; ++i) rest[i] = name[i + 2];
-        bytes4 sel = bytes4(keccak256(bytes.concat("mtx", rest)));
-        assertEq(built, j.readBytes(domainField(op, "pqz", "calldata")), string.concat(op, ": the ua* calldata"));
-        for (uint256 k; k < 4; ++k) built[k] = sel[k];
+        assertEq(abi.encodePacked(name[0], name[1], name[2]), bytes("mtx"), op);
+        assertEq(built, j.readBytes(domainField(op, "pqz", "calldata")), string.concat(op, ": the merged calldata"));
         _reachAs(op, c, built, want);
     }
 
@@ -1062,6 +1057,7 @@ contract PqzTypedRowsTest is PqzNamedBase {
     }
 
     function test_typedOpsVectors_PqzTransferSingleRowsHaveNoEntry() public {
+        j = vm.readFile(TYPED_OPS_LEGACY); // ua-mtx-merge T11 (MD-7): the row retired
         for (uint256 k; k < 2; ++k) {
             string memory op = k == 0 ? "PqzTransferSingle" : "PqzTransferSingleCompact";
             _noneOnBoth(op, abi.encodeWithSignature(_head(op), rowEnvelope(j, op), _single(op), _proofOf(op), _pa(op), _hint(op), _sig(op)));
@@ -1076,6 +1072,7 @@ contract PqzTypedRowsTest is PqzNamedBase {
     }
 
     function test_typedOpsVectors_PqzTransferRowsHaveNoEntry() public {
+        j = vm.readFile(TYPED_OPS_LEGACY); // ua-mtx-merge T11 (MD-7): the row retired
         for (uint256 k; k < 2; ++k) {
             string memory op = k == 0 ? "PqzTransfer" : "PqzTransferCompact";
             _noneOnBoth(op, abi.encodeWithSignature(_head(op), rowEnvelope(j, op), _multiOf(op), _proofOf(op), _pa(op), _hint(op), _sig(op)));
@@ -1090,6 +1087,7 @@ contract PqzTypedRowsTest is PqzNamedBase {
     }
 
     function test_typedOpsVectors_PqzUnshieldRowHasNoEntry() public {
+        j = vm.readFile(TYPED_OPS_LEGACY); // ua-mtx-merge T11 (MD-7): the row retired
         string memory op = "PqzUnshield";
         _noneOnBoth(op, abi.encodeWithSignature(_head(op), rowEnvelope(j, op), _burn(op), _payout(op), _proofOf(op), _pa(op), _hint(op), _sig(op)));
     }
@@ -1102,6 +1100,7 @@ contract PqzTypedRowsTest is PqzNamedBase {
     /// governance T9 (spec §5.4): the leg's quote runs before the burn, so the row's underlying, no leg of `w`, is the op's
     /// first own check (`UnknownUnderlying`; `BadPayload` before).
     function test_typedOpsVectors_PqzUnshieldUnwrapRowHasNoEntry() public {
+        j = vm.readFile(TYPED_OPS_LEGACY); // ua-mtx-merge T11 (MD-7): the row retired
         string memory op = "PqzUnshieldUnwrap";
         _rowHasNoEntry(op, address(w), abi.encodeWithSignature(_head(op), rowEnvelope(j, op), _burn(op), _unwrap(op), _proofOf(op), _pa(op), _hint(op), _sig(op)));
     }
@@ -1118,6 +1117,7 @@ contract PqzTypedRowsTest is PqzNamedBase {
     }
 
     function test_typedOpsVectors_RollOverRowHasNoEntry() public {
+        j = vm.readFile(TYPED_OPS_LEGACY); // ua-mtx-merge T11 (MD-7): the row retired
         string memory op = "RollOver";
         _noneOnBoth(op, abi.encodeWithSignature(_head(op), rowEnvelope(j, op), j.readBytes32(_p(op, "ua")), j.readUint(_p(op, "n")), _sig(op)));
     }
@@ -1128,6 +1128,7 @@ contract PqzTypedRowsTest is PqzNamedBase {
     }
 
     function test_typedOpsVectors_PrepareAccRowHasNoEntry() public {
+        j = vm.readFile(TYPED_OPS_LEGACY); // ua-mtx-merge T11 (MD-7): the row retired
         string memory op = "PrepareAcc";
         _noneOnBoth(op, abi.encodeWithSignature(_head(op), rowEnvelope(j, op), j.readBytes32(_p(op, "ua")), j.readUint(_p(op, "half")), _sig(op)));
     }

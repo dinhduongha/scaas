@@ -28,7 +28,9 @@ const NOT_ZETHER: [&str; 65] = [
 ];
 
 fn vector() -> Value {
-    let path = format!("{}/../../smartcontracts/vectors/typed/typed_ops.json", env!("CARGO_MANIFEST_DIR"));
+    // ua-mtx-merge T11: path only, the rows as they stood before the merged entries (MD-7); T12 moves the prover onto the
+    // regenerated smartcontracts/vectors/typed/typed_ops.json
+    let path = format!("{}/../../smartcontracts/vectors/typed/legacy/ua-mtx-merge/typed_ops.json", env!("CARGO_MANIFEST_DIR"));
     serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
 }
 

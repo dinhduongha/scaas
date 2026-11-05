@@ -961,7 +961,9 @@ pub mod testkit {
     use super::*;
 
     pub fn vectors() -> Value {
-        serde_json::from_str(include_str!("../../smartcontracts/vectors/typed/typed_ops.json")).unwrap()
+        // ua-mtx-merge T11: path only, the rows as they stood before the merged entries (MD-7); T14 moves the node's rows
+        // onto the regenerated smartcontracts/vectors/typed/typed_ops.json
+        serde_json::from_str(include_str!("../../smartcontracts/vectors/typed/legacy/ua-mtx-merge/typed_ops.json")).unwrap()
     }
 
     pub fn row_of(name: &str, contract: &str) -> &'static Row {

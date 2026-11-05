@@ -4,8 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-  metaPayId, payLane, encodeMeta, decodeMeta, buildMtxPayMeta, buildUaPayMeta, checkPayMeta, hashTypedData,
-  metaTransferTypedData, padId,
+  metaPayId, payLane, encodeMeta, decodeMeta, buildUaPayMeta, checkPayMeta, hashTypedData, uaMetaTransferTypedData, padId,
 } from '../src/evm.js';
 import { hex, fromHex, keccak_256, utf8ToBytes } from '../src/bytes.js';
 
@@ -20,8 +19,10 @@ const PAYEE = '0x' + '22'.repeat(20);
 const LANE = '0x' + '33'.repeat(20);
 const UID = '0x' + 'c1'.repeat(32);
 const NOW = 1_800_000_000;
-const base = { token: TOKEN, chainId: 7622, chainUid: UID, from: PAYER, to: PAYEE, amount: 1000n, validUntil: NOW + 600,
+// ua-mtx-merge T11 (R20): the payment is the token's `UAMetaTransfer` between ids on `mtxPay` / `mtxPayMeta` with `UASig`
+const base = { token: TOKEN, chainId: 7622, chainUid: UID, from: padId(PAYER), to: padId(PAYEE), amount: 1000n, validUntil: NOW + 600,
   mode: 1, relayer: LANE };
+const SIG = '(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])';
 
 test('paymeta vectors', () => {
   assert.equal(V.length, 6);
@@ -56,13 +57,11 @@ test('decodeMeta refuses a non-canonical envelope or an unknown schema', () => {
 test('refuses a payId that does not commit to meta', () => {
   const r = row('note_utf8');
   const other = row('empty_body').payId;
-  assert.throws(() => buildMtxPayMeta({ ...base, salt: r.salt, meta: r.meta, entryRef: other }), /does not commit/);
-  assert.throws(() => buildUaPayMeta({ ...base, from: padId(PAYER), to: padId(PAYEE), salt: r.salt, meta: r.meta,
-    entryRef: other }), /does not commit/);
+  assert.throws(() => buildUaPayMeta({ ...base, salt: r.salt, meta: r.meta, entryRef: other }), /does not commit/);
   // server typed data whose entryRef is another payId (a different meta, or the same meta with another salt)
-  const td = metaTransferTypedData({ contract: TOKEN, chainId: 7622, chainUid: UID, message: { from: PAYER, to: PAYEE,
+  const td = uaMetaTransferTypedData({ contract: TOKEN, chainId: 7622, chainUid: UID, message: { from: padId(PAYER), to: padId(PAYEE),
     value: 1000n, entryRef: other, batch: payLane(other), nonce: 0, validUntil: NOW + 600, mode: 1, relayer: LANE } });
-  const opts = { account: PAYER, chainId: 7622, chainUid: UID, amount: '1000', decimals: 0, payee: PAYEE,
+  const opts = { account: padId(PAYER), chainId: 7622, chainUid: UID, amount: '1000', decimals: 0, payee: padId(PAYEE),
     expectedToken: TOKEN, now: NOW, salt: r.salt, meta: r.meta };
   assert.throws(() => checkPayMeta(td, opts), /does not commit/);
   assert.throws(() => checkPayMeta(td, { ...opts, salt: row('empty_body').salt }), /does not commit/);
@@ -70,10 +69,10 @@ test('refuses a payId that does not commit to meta', () => {
 
 test('mtxPayMeta: the payment is mtxPay with payId = metaPayId(salt, meta), lane payLane, nonce 0', () => {
   const r = row('structured_reference');
-  const p = buildMtxPayMeta({ ...base, salt: r.salt, meta: r.meta, entryRef: r.payId });
+  const p = buildUaPayMeta({ ...base, salt: r.salt, meta: r.meta, entryRef: r.payId });
   assert.equal(p.payId, r.payId);
   assert.equal(p.lane, BigInt(r.payLane));
-  assert.equal(p.typedData.primaryType, 'MetaTransfer');
+  assert.equal(p.typedData.primaryType, 'UAMetaTransfer');
   assert.equal(p.typedData.message.entryRef, r.payId);
   assert.equal(p.typedData.message.batch, String(BigInt(r.payLane)));
   assert.equal(p.typedData.message.nonce, '0');
@@ -83,18 +82,18 @@ test('mtxPayMeta: the payment is mtxPay with payId = metaPayId(salt, meta), lane
   const sig = new Uint8Array(65).fill(7);
   const cd = p.calldata(sig);
   assert.equal(hex(cd.subarray(0, 4)),
-    sel('mtxPayMeta(address,address,uint256,bytes32,bytes,uint256,uint32,address,uint256,address,bytes)'));
+    sel(`mtxPayMeta(bytes32,bytes32,uint256,bytes32,bytes,uint256,uint32,address,uint256,address,${SIG})`));
   assert.equal(hex(cd.subarray(4 + 32 * 3, 4 + 32 * 4)), r.salt, 'salt is the 4th argument');
   // the off-chain variant: plain mtxPay with the same payId, the same digest; meta stays with the payee
-  const off = buildMtxPayMeta({ ...base, salt: r.salt, meta: r.meta, onChain: false });
+  const off = buildUaPayMeta({ ...base, salt: r.salt, meta: r.meta, onChain: false });
   assert.equal(hex(off.digest), hex(p.digest));
   const ocd = off.calldata(sig);
   assert.equal(hex(ocd.subarray(0, 4)),
-    sel('mtxPay(address,address,uint256,bytes32,uint256,uint32,address,uint256,address,bytes)'));
+    sel(`mtxPay(bytes32,bytes32,uint256,bytes32,uint256,uint32,address,uint256,address,${SIG})`));
   assert.equal(hex(ocd.subarray(4 + 32 * 3, 4 + 32 * 4)), r.payId);
 });
 
-test('uaPayMeta: UAMetaTransfer between ids, uaPayMeta / uaPay calldata', () => {
+test('a derived payer: UAMetaTransfer between ids on the same mtxPayMeta / mtxPay; the ua* names are legacy', () => {
   const r = row('note_utf8');
   const p = buildUaPayMeta({ ...base, from: padId(PAYER), to: padId(PAYEE), salt: r.salt, meta: r.meta });
   assert.equal(p.typedData.primaryType, 'UAMetaTransfer');
@@ -103,17 +102,18 @@ test('uaPayMeta: UAMetaTransfer between ids, uaPayMeta / uaPay calldata', () => 
   assert.equal(p.typedData.message.batch, String(BigInt(r.payLane)));
   const cd = p.calldata(new Uint8Array(3));
   assert.equal(hex(cd.subarray(0, 4)),
-    sel('uaPayMeta(bytes32,bytes32,uint256,bytes32,bytes,uint256,uint32,address,uint256,address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))'));
-  const off = buildUaPayMeta({ ...base, from: padId(PAYER), to: padId(PAYEE), salt: r.salt, meta: r.meta, onChain: false });
+    sel(`mtxPayMeta(bytes32,bytes32,uint256,bytes32,bytes,uint256,uint32,address,uint256,address,${SIG})`));
+  const off = buildUaPayMeta({ ...base, from: '0x' + 'ab'.repeat(32), to: padId(PAYEE), salt: r.salt, meta: r.meta, onChain: false });
   assert.equal(hex(off.calldata(new Uint8Array(3)).subarray(0, 4)),
-    sel('uaPay(bytes32,bytes32,uint256,bytes32,uint256,uint32,address,uint256,address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))'));
+    sel(`mtxPay(bytes32,bytes32,uint256,bytes32,uint256,uint32,address,uint256,address,${SIG})`));
+  assert.throws(() => buildUaPayMeta({ ...base, from: PAYER, salt: r.salt, meta: r.meta }), /Refusing to sign|32 bytes/);
 });
 
 test('checkPayMeta: server typed data for the committed payId passes and returns the decoded meta', () => {
   const r = row('note_utf8');
-  const td = metaTransferTypedData({ contract: TOKEN, chainId: 7622, chainUid: UID, message: { from: PAYER, to: PAYEE,
+  const td = uaMetaTransferTypedData({ contract: TOKEN, chainId: 7622, chainUid: UID, message: { from: padId(PAYER), to: padId(PAYEE),
     value: 1000n, entryRef: r.payId, batch: payLane(r.payId), nonce: 0, validUntil: NOW + 600, mode: 1, relayer: LANE } });
-  const got = checkPayMeta(td, { account: PAYER, chainId: 7622, chainUid: UID, amount: '1000', decimals: 0, payee: PAYEE,
+  const got = checkPayMeta(td, { account: padId(PAYER), chainId: 7622, chainUid: UID, amount: '1000', decimals: 0, payee: padId(PAYEE),
     expectedToken: TOKEN, now: NOW, salt: r.salt, meta: r.meta });
   assert.equal(got.entryRef, r.payId);
   assert.equal(got.schema, 1);

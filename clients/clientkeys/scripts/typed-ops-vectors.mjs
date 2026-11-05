@@ -5,14 +5,14 @@
 // fillers, keccak256 of the field's path: right types, not valid proofs, ciphertexts or lengths, since a typed digest
 // hashes `bytes` whatever their length. C2-C6 run these against the chain as NamedEntry.t.sol does (`structHash` under the
 // contract's own domain). The rows of the C0 entries and of C6's orders, cancels and receiver fees take values their
-// fixtures accept.
+// fixtures accept. ua-mtx-merge T11 (CTR-MTX-30, MD-7): one row per op, the merged `UA<Op>` on its `mtx<Op>` entry with
+// `UASig`; the address rows of merged ops are in vectors/typed/legacy/ua-mtx-merge/ (generator in clientkeys/legacy/).
 //   node scripts/typed-ops-vectors.mjs [outDir]
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { hex, fromHex, keccak_256, utf8ToBytes, concatBytes } from '../src/bytes.js';
-import { TYPED_OPS, OP_BUILDERS, hashStruct, hashTypedData, metaTransferTypedData, uaMetaTransferTypedData, padId, payLane,
-  buildRelayFee } from '../src/evm.js';
+import { TYPED_OPS, OP_BUILDERS, hashStruct, hashTypedData, uaMetaTransferTypedData, padId, payLane, buildRelayFee } from '../src/evm.js';
 import { confPublic, g1 } from '../src/zether.js';
 import { ecdsa, nativeSk, nativeAddr, nativeUa, be } from './ua-signers.mjs';
 
@@ -73,38 +73,30 @@ const order = (from, destination, dex = BUYS_ON) => ({ ...TERMS, from, receiveTo
 const wrapOrder = (from, destination) => ({ ...TERMS, from, wrappedToken: WRAPPER, minMinted: 1000, destination });
 const COMMIT_REVEAL = { sealedMemo: '0x' };  // a BUNDLE form carries no memo
 const ROW = {
-  Unwrap: { wrapped: 1000000, minOut: 990000, recipient: '0x0000000000000000000000000000000000000B0B' },
-  Shield: { toUA: ZETHER_UA, amount: 10 },
-  SetMandate: { token: '0x5ca00000000000000000000000000000000000b1', delegate: '0x00000000000000000000000000000000000000d2',
+  UAUnwrap: { wrapped: 1000000, minOut: 990000, recipient: '0x0000000000000000000000000000000000000B0B' },
+  UAShield: { toUA: ZETHER_UA, amount: 10 },
+  // the delegate a 32-byte id (Q6, CTR-ACC-12), the address of today's row zero-padded
+  UASetMandate: { token: '0x5ca00000000000000000000000000000000000b1', delegate: padId('0x00000000000000000000000000000000000000d2'),
     maxPerPayment: 7, maxPerPeriod: 9, periodSeconds: 86400, expiry: 1900000000 },
   AddKey: { kind: 2 },
   RotateKey: { kind: 2 },
-  SetRollOverMode: { rollOverMode: 1 },
+  UASetRollOverMode: { rollOverMode: 1 },
   ZetherSetRollOverMode: { mode: 1 },
   PqzAuth: { op: 1, chainId: contexts.A.chainId, token: CONTRACT.pqz, registry: contexts.A.registry, chainUid: contexts.A.chainUid },
-  ReceiverFee: { payment: pay(FROM, '0x0000000000000000000000000000000000005409'), fee: 300000, feeRecipient: FEE_TO, validUntil: 1800000060 },
   UAReceiverFee: { payment: pay(hex(nativeUa), padId('0x0000000000000000000000000000000000005409')), fee: 300000, feeRecipient: FEE_TO,
     validUntil: 1800000060 },
 };
-ROW.WrapOrder = wrapOrder(FROM, NONE);
 ROW.UAWrapOrder = wrapOrder(hex(nativeUa), NO_ID);
-ROW.CancelOrder = { order: order(FROM, NONE) };
 ROW.CancelUAOrder = { order: order(hex(nativeUa), NO_ID) };
-ROW.CancelWrapOrder = { order: ROW.WrapOrder };
 ROW.CancelUAWrapOrder = { order: ROW.UAWrapOrder };
 ROW.CancelDexOrder = { order: { sellToken: SELLS, order: order(FROM, NONE, CONTRACT.dex) } };
-ROW.UACancelNonce = { batch: 7, validUntil: VALID_UNTIL };
 // The router's rows (governance T12) take values a real token, wrapped token and DEX accept: bit 1 (`MINTABLE`), terms a
 // holder may get, a rate step inside 10 %. The rest are fillers.
-for (const n of ['GrantRole', 'RevokeRole', 'SetGrant', 'CancelGrant', 'DisableFeature', 'RenounceRole']) ROW[n] = { bit: 1 };
-ROW.SetGrant.terms = { min: 2, max: 50, total: 1000, perWindow: 100, window: 86400, validUntil: 1900000000, maxUses: 7, delegable: true,
+for (const n of ['GrantRole', 'RevokeRole', 'SetGrant', 'CancelGrant', 'DisableFeature', 'RenounceRole']) ROW[`UA${n}`] = { bit: 1 };
+ROW.UASetGrant.terms = { min: 2, max: 50, total: 1000, perWindow: 100, window: 86400, validUntil: 1900000000, maxUses: 7, delegable: true,
   scope: NO_ID };
-ROW.ProposeRate = { num: 101, den: 100 };
-for (const n of ['GrantRole', 'RevokeRole', 'SetGrant', 'CancelGrant', 'DisableFeature', 'RenounceRole', 'ProposeRate']) ROW[`UA${n}`] = ROW[n];
-ROW.UAShield = ROW.Shield;
-ROW.UAUnwrap = ROW.Unwrap;
-ROW.UASetRollOverMode = ROW.SetRollOverMode;
-for (const t of ['PqzTransferSingle', 'UAPqzTransferSingle']) ROW[t] = { args: COMMIT_REVEAL };
+ROW.UAProposeRate = { num: 101, den: 100 };
+ROW.UAPqzTransferSingle = { args: COMMIT_REVEAL };
 
 function sample(name, op) {
   const own = {};
@@ -130,10 +122,7 @@ function extraOf(name, td, at) {
   const base = name.replace(/^UA/, '');
   if (base.startsWith('Pqz') && base !== 'PqzAuth') return { pqzAuth: PQZ_AUTH };
   if (base === 'RollOverSigned' || base === 'SetRollOverMode') return { ownerSig: OWNER_SIG };
-  if (base === 'ReceiverFee') {
-    const build = name === 'ReceiverFee' ? metaTransferTypedData : uaMetaTransferTypedData;
-    return { payerSig: nativeSig(hashTypedData(build({ ...at, message: td.message.payment }))) };
-  }
+  if (base === 'ReceiverFee') return { payerSig: nativeSig(hashTypedData(uaMetaTransferTypedData({ ...at, message: td.message.payment }))) };
   return undefined;
 }
 
@@ -142,9 +131,8 @@ for (const [name, op] of Object.entries(TYPED_OPS)) {
   const lower = name.replace(/^UA/, 'ua').replace(/^[A-Z]/, (c) => c.toLowerCase());
   const row = { typeString: op.typeString, typehash: op.typehash, on: op.on, types: op.types, domains: {} };
   const message = sample(name, op);
-  const relay = name.endsWith('RelayFee') ? { token: CONTRACT.token, chainId: contexts.A.chainId, chainUid: contexts.A.chainUid, router: ROUTER,
-    executor: EXECUTOR, target: TARGET, from: name === 'RelayFee' ? FROM : hex(nativeUa), amount: 25, validUntil: VALID_UNTIL,
-    ua: name !== 'RelayFee' } : null;
+  const relay = name === 'UARelayFee' ? { token: CONTRACT.token, chainId: contexts.A.chainId, chainUid: contexts.A.chainUid, router: ROUTER,
+    executor: EXECUTOR, target: TARGET, from: hex(nativeUa), amount: 25, validUntil: VALID_UNTIL } : null;
   const callData = filler('relayed.call', 100);
   for (const dn of op.domains) {
     const kind = KIND[dn];
@@ -174,8 +162,11 @@ const out = {
     + 'typed-signing C1: one row per signed struct. `structHash` is domain-free; `domains.<kind>` per contract kind '
     + '(`token` SCaaS MetaToken, `zether` SCaaS ZetherToken, `pqz` SCaaS PqzToken, `wallet` SCaaS MandateWallet, `account` '
     + 'SCaaS SmartKeyAccount, `dex` SCaaS Dex, `gov_router` SCaaS GovernanceRouter) on context A of structures.json. `signature` is a native ECDSA over `digest` by '
-    + '`key`; `calldata` is the entry with it: `bytes`, `UASig{signature}` on `ua*`, `AccountSig{0, [], signature}` on the '
-    + 'account\'s own entries. Field values not set by the generator are fillers (keccak256 of the field path), not valid '
+    + '`key`; `calldata` is the entry with it: `UASig{signature}` (empty keyData and members) on every merged `mtx*` entry '
+    + '(`UA*` rows, ua-mtx-merge CTR-MTX-30: one signed entry per operation; the address rows of merged ops are in '
+    + 'vectors/typed/legacy/ua-mtx-merge/), `bytes` on the address entries left (the five wraps, `SmartKeyAccount`), '
+    + '`AccountSig{0, [], signature}` on the account\'s own entries. An unbound `relayer` / `feeRecipient` is 0 in the message, '
+    + 'as the contract hashes it. Field values not set by the generator are fillers (keccak256 of the field path), not valid '
     + 'proofs or ciphertexts. `extra`: what the entry takes unsigned.',
   version: 1, context: 'A', key: { private: hex(be(nativeSk, 32)), address: FROM, ua: hex(nativeUa) }, ops,
 };

@@ -35,8 +35,8 @@ import {UALedgerBase} from "../ua/UALedgerBase.sol";
 import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {PqzFixture} from "../pqz/helpers/PqzFixture.sol";
 import {ZetherFixture} from "../zether/helpers/ZetherFixture.sol";
-import {VM, TYPED_OPS, checkRow, onChain, domainOf, domainField, ecdsa, rowKey} from "./NamedEntry.t.sol";
-import {swap, tryRowAs} from "./TypedOps.t.sol";
+import {VM, TYPED_OPS, TYPED_OPS_LEGACY, checkRow, onChain, domainOf, domainField, ecdsa, rowKey, rowEnvelope2} from "./NamedEntry.t.sol";
+import {swap, tryRowAs, UA_CANCEL_NONCE} from "./TypedOps.t.sol";
 import {nid} from "../helpers/Ids.sol";
 
 /// The address `WrapOrder` (R39: in legacy/ua-mtx-merge/ after T3), kept here to encode its retired row.
@@ -61,11 +61,11 @@ struct LegacyWrapOrder {
 abstract contract OrderRows is Test {
     string internal j;
     uint256 internal constant FUNDS = 10_000_000;
-    /// The retired address cancel and the `ua*` name the rows hold (ua-mtx-merge T6; T11 regenerates the rows).
+    /// The retired address cancel (ua-mtx-merge T6) and the merged one the rows name (T11, MD-7).
     string internal constant OLD_CANCEL_ORDER =
         "mtxCancelOrder((address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),bytes)";
     string internal constant UA_CANCEL_ORDER =
-        "uaCancelOrder((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))";
+        "mtxCancelOrder((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))";
     address internal constant ANYONE = address(0x0BEE);
 
     function _kind() internal pure virtual returns (string memory);
@@ -134,16 +134,16 @@ abstract contract OrderRows is Test {
         assertTrue(ok, vm.toString(ret));
     }
 
-    /// ua-mtx-merge T2: a `UA…` row whose entry took the `mtx` name. The row (until T11 regenerates it) still holds the
-    /// `ua*` selector: `built` is that calldata; the same arguments run under `sel` (the body is the same, R1).
+    /// ua-mtx-merge T11 (MD-7): a `UA…` row names its merged entry `sel` and runs verbatim, the signature under the domain
+    /// it was signed in (T2-T7 ran the rows' `ua*` calldata under `sel`, until the rows were regenerated).
     function _runRenamed(string memory op, address c, address signedIn, address sender, bytes memory built, bytes4 sel)
         private
     {
         checkRow(j, op, _kind());
         bytes memory cd = vm.parseJsonBytes(j, domainField(op, _kind(), "calldata"));
-        assertEq(keccak256(built), keccak256(cd), "the row: the ua* calldata");
+        assertEq(bytes4(cd), sel, "the row names the merged mtx entry");
+        assertEq(keccak256(built), keccak256(cd), "the row: the merged calldata");
         swap(cd, vm.parseJsonBytes(j, domainField(op, _kind(), "signature")), onChain(j, op, signedIn));
-        for (uint256 k; k < 4; ++k) cd[k] = sel[k];
         vm.prank(sender);
         (bool ok, bytes memory ret) = c.call(cd);
         assertTrue(ok, vm.toString(ret));
@@ -178,7 +178,7 @@ abstract contract OrderRows is Test {
     /// ua-mtx-merge T3 (R39), meaning: the address `mtxWrapOrder` / `WrapOrder` left the wrapper; the row (until T11
     /// retires it, MD-7) finds no entry. The wrap order is `UAWrapOrder`'s row, below, under `mtxWrapOrder`.
     function test_typedOpsVectors_WrapOrderRowHasNoEntry() public {
-        j = vm.readFile(TYPED_OPS);
+        j = vm.readFile(TYPED_OPS_LEGACY); // T11 (MD-7): the row retired
         ITradeToken.UATradeOrder memory c = _wrapAt(_f("WrapOrder", ""));
         LegacyWrapOrder memory o = LegacyWrapOrder(address(uint160(uint256(c.from))), c.receiveToken, c.amount,
             c.receiveAmount, c.minFill, c.fee, c.relayer, address(uint160(uint256(c.destination))), c.flags, c.batch, c.nonce,
@@ -197,9 +197,8 @@ abstract contract OrderRows is Test {
             c.relayer, c.destination, c.flags, c.batch, c.nonce, c.validUntil);
         address signer = address(uint160(uint256(o.from)));
         (NormalToken u, WrappedToken w) = _wrapPair("UAWrapOrder", signer, o.wrappedToken, o.amount);
-        bytes memory built = abi.encodeWithSignature("uaWrapOrder(address,(bytes32,address,uint256,uint256,uint256,uint256,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-            address(u), o, _uaSig("UAWrapOrder"));
-        // ua-mtx-merge T3 (R39): the row holds the `uaWrapOrder` selector (until T11); it runs under `mtxWrapOrder`
+        bytes memory built = abi.encodeCall(IWrappedToken.mtxWrapOrder, (address(u), o, _uaSig("UAWrapOrder")));
+        // ua-mtx-merge T3 (R39) / T11: the row names `mtxWrapOrder`
         _runRenamed("UAWrapOrder", address(w), address(u), o.relayer, built, IWrappedToken.mtxWrapOrder.selector);
         assertEq(w.balanceOf(signer), 997);
         assertEq(u.pulled(u.tradeOrderDigest(DexLegs.asTrade(o))), o.amount);
@@ -208,14 +207,14 @@ abstract contract OrderRows is Test {
     /// ua-mtx-merge T6 (R12, R38), meaning: the address `mtxCancelOrder(TradeOrder, bytes)` left the token; the row
     /// (until T11 retires it, MD-7) finds no entry. The token's cancel is `CancelUAOrder`'s row, below.
     function test_typedOpsVectors_CancelOrderRowHasNoEntry() public {
-        j = vm.readFile(TYPED_OPS);
+        j = vm.readFile(TYPED_OPS_LEGACY); // T11 (MD-7): the row retired
         NormalToken t = _normalKind();
         ITradeToken.TradeOrder memory o = _native(_order("CancelOrder"));
         _rowHasNoEntry("CancelOrder", address(t), abi.encodeWithSignature(OLD_CANCEL_ORDER, o, _sigOf("CancelOrder")));
         assertEq(t.pulled(t.tradeOrderDigest(DexLegs.ua(o))), 0);
     }
 
-    /// ua-mtx-merge T6: the row holds the `uaCancelOrder` selector (until T11); it runs under the merged `mtxCancelOrder`.
+    /// ua-mtx-merge T6 / T11: the row names the merged `mtxCancelOrder`.
     function test_typedOpsVectors_CancelUAOrderRow() public {
         j = vm.readFile(TYPED_OPS);
         NormalToken t = _normalKind();
@@ -228,7 +227,7 @@ abstract contract OrderRows is Test {
     /// ua-mtx-merge T6, meaning: as `CancelOrder` for the address `CancelWrapOrder` (carried from T3: the address wrap
     /// forms leave the token with the address trade path).
     function test_typedOpsVectors_CancelWrapOrderRowHasNoEntry() public {
-        j = vm.readFile(TYPED_OPS);
+        j = vm.readFile(TYPED_OPS_LEGACY); // T11 (MD-7): the row retired
         NormalToken t = _normalKind();
         ITradeToken.TradeOrder memory o = _native(_wrapAt(_f("CancelWrapOrder", "order.")));
         _rowHasNoEntry("CancelWrapOrder", address(t), abi.encodeWithSignature(OLD_CANCEL_ORDER, o, _sigOf("CancelWrapOrder")));
@@ -251,7 +250,7 @@ abstract contract OrderRows is Test {
     /// ua-mtx-merge T2 (R28), meaning: the address `mtxRelayFee` / `RelayFee` left the token; the row (until T11
     /// retires it, MD-7) finds no entry. The relay fee is `UARelayFee`'s row, below.
     function test_typedOpsVectors_RelayFeeRowHasNoEntry() public {
-        j = vm.readFile(TYPED_OPS);
+        j = vm.readFile(TYPED_OPS_LEGACY); // T11 (MD-7): the row retired
         NormalToken t = _normalKind();
         address from = vm.parseJsonAddress(j, _f("RelayFee", "from"));
         t.mint(from, FUNDS);
@@ -272,8 +271,8 @@ abstract contract OrderRows is Test {
         bytes32 payee = vm.parseJsonBytes32(j, _f("UARelayFee", "payee"));
         uint256 value = _u(_f("UARelayFee", "value"));
         (address tgt, bytes32 cdh) = _callOf("UARelayFee");
-        bytes memory built = abi.encodeWithSignature("uaRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-            from, tgt, cdh, payee, value, _u(_f("UARelayFee", "validUntil")), _uaSig("UARelayFee"));
+        bytes memory built = abi.encodeCall(IERC20MetaTx.mtxRelayFee, (from, tgt, cdh, payee, value, _u(_f("UARelayFee", "validUntil")),
+            _uaSig("UARelayFee")));
         _runRenamed("UARelayFee", address(t), address(t), vm.parseJsonAddress(j, _f("UARelayFee", "relayer")), built,
             IERC20MetaTx.mtxRelayFee.selector);
         assertEq(t.balanceOf(address(uint160(uint256(payee)))), value);
@@ -292,15 +291,14 @@ abstract contract OrderRows is Test {
     }
 
     /// The row's two signatures, the payer's and the payee's, re-made under `t`'s domain; the payee a wallet of the row's key.
-    /// ua-mtx-merge T2: the row holds the `ua*` selector (until T11); the call runs under the merged one.
+    /// ua-mtx-merge T2 / T11: the row names the merged `mtxPayReceiverFee`.
     function _receiverFee(string memory op, NormalToken t, MetaTxLib.UAMetaTransfer memory x, bytes32 paymentDigest, bytes memory built) private {
         checkRow(j, op, _kind());
         bytes memory cd = vm.parseJsonBytes(j, domainField(op, _kind(), "calldata"));
         assertEq(keccak256(built), keccak256(cd), "calldata");
         swap(cd, vm.parseJsonBytes(j, domainField(op, _kind(), "extra.payerSig")), ecdsa(rowKey(j), paymentDigest));
         swap(cd, _sigOf(op), onChain(j, op, address(t)));
-        bytes4 sel = IMetaTokenV2.mtxPayReceiverFee.selector;
-        for (uint256 k; k < 4; ++k) cd[k] = sel[k];
+        assertEq(bytes4(cd), IMetaTokenV2.mtxPayReceiverFee.selector, "the row names the merged mtx entry");
         deployCodeTo("WalletMocks.sol:Mock1271Wallet", abi.encode(vm.parseJsonAddress(j, ".key.address")), address(uint160(uint256(x.to))));
         t.mint(address(uint160(uint256(x.from))), FUNDS * 100);
         vm.prank(x.relayer);
@@ -311,7 +309,7 @@ abstract contract OrderRows is Test {
     /// ua-mtx-merge T2 (R21), meaning: the address `mtxPayReceiverFee` / `ReceiverFee` left the token; the row (until
     /// T11 retires it, MD-7) finds no entry. Receiver-pays is `UAReceiverFee`'s row, below.
     function test_typedOpsVectors_ReceiverFeeRowHasNoEntry() public {
-        j = vm.readFile(TYPED_OPS);
+        j = vm.readFile(TYPED_OPS_LEGACY); // T11 (MD-7): the row retired
         string memory op = "ReceiverFee";
         NormalToken t = _normalKind();
         MetaTxLib.UAMetaTransfer memory u = _payment(op);
@@ -334,18 +332,16 @@ abstract contract OrderRows is Test {
         payer.signature = vm.parseJsonBytes(j, domainField(op, _kind(), "extra.payerSig"));
         uint256 fee = _u(_f(op, "fee"));
         address feeTo = vm.parseJsonAddress(j, _f(op, "feeRecipient"));
-        bytes memory built = abi.encodeWithSignature(
-            "uaPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-            x, payer, fee, feeTo, _u(_f(op, "validUntil")), _uaSig(op));
+        bytes memory built = abi.encodeCall(IMetaTokenV2.mtxPayReceiverFee, (x, payer, fee, feeTo, _u(_f(op, "validUntil")), _uaSig(op)));
         _receiverFee(op, t, x, t.mtxTransferDigest(x), built);
         assertEq(t.balanceOf(feeTo), fee);
     }
 
-    /// ua-mtx-merge T1, meaning: the row is the unordered `UACancelNonce(bytes32 ua,uint256 batch,uint256 validUntil)`
-    /// (`typed_ops.json` until T11 regenerates it, MD-7); its entry `uaCancelNonce` left the token (Q2), so the row's own
-    /// calldata finds no function and the lane stays. The ordered cancel is `test/merge`'s.
-    function test_typedOpsVectors_UACancelNonceRowHasNoEntry() public {
-        j = vm.readFile(TYPED_OPS);
+    /// ua-mtx-merge T1, meaning: the old row is the unordered `UACancelNonce(bytes32 ua,uint256 batch,uint256 validUntil)`;
+    /// its entry `uaCancelNonce` left the token (Q2), so the row's own calldata finds no function and the lane stays. T11
+    /// (MD-7): read from `TYPED_OPS_LEGACY`; the ordered cancel's row runs below.
+    function test_typedOpsVectors_UACancelNonceOldRowHasNoEntry() public {
+        j = vm.readFile(TYPED_OPS_LEGACY);
         string memory op = "UACancelNonce";
         NormalToken t = _normalKind();
         bytes32 ua = vm.parseJsonBytes32(j, _f(op, "ua"));
@@ -361,6 +357,22 @@ abstract contract OrderRows is Test {
         assertFalse(ok);
         assertEq(ret.length, 0, "no such function");
         assertEq(t.mtxNonce(ua, batch), 0);
+    }
+
+    /// T11 (Q2, MD-7): the ordered cancel's row, `UACancelNonce(bytes32 from,uint256 lane,E)` in this kind's domain, on the
+    /// merged `mtxCancelNonce`: the row's native id bumps its own lane, nonce-ordered, no registry.
+    function test_typedOpsVectors_UACancelNonceRow() public {
+        j = vm.readFile(TYPED_OPS);
+        string memory op = "UACancelNonce";
+        NormalToken t = _normalKind();
+        MetaTxLib.Envelope memory r = rowEnvelope2(j, op);
+        MetaTxLib.UAEnvelope memory e = MetaTxLib.UAEnvelope(vm.parseJsonBytes32(j, _f(op, "from")), r.batch, r.nonce, r.validUntil,
+            r.mode, r.relayer, r.fee, r.feeRecipient);
+        uint256 lane = _u(_f(op, "lane"));
+        _runRenamed(op, address(t), address(t), e.relayer, abi.encodeWithSignature(UA_CANCEL_NONCE, e, lane, _uaSig(op)),
+            bytes4(keccak256(bytes(UA_CANCEL_NONCE))));
+        assertEq(t.mtxNonce(e.from, lane), 1);
+        assertEq(t.mtxNonce(e.from, e.batch), 1);
     }
 }
 

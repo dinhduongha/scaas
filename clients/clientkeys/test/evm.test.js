@@ -5,29 +5,58 @@ import { secp256k1 } from '@noble/curves/secp256k1.js';
 import {
   hashTypedData, hashStruct, secpSubjectKey, accountSalt, predictAccount, accountSignature, merkleBatch, processProof,
   batchLeaf, evmAddress, passkeySubjectKey, addKeyCall, addKeyTypedData, executeTypedData, checkOwnerCall, checkPayment,
-  keyProofMessage, metaTxTypedData, metaTransferTypedData, checkCall, tradeOrderTypedData, uaTradeOrderTypedData, padId, cancelOrderTypedData, cancelDexOrderTypedData,
-  invalidateNoncesTypedData, uaInvalidateNoncesTypedData, checkTradeOrder, bidMinFill, bidMinBase, checkCancel, payLane, receiverFeeTypedData, wrapToUACall,
-  unwrapToUACall, payWithFeeToUACalldata, checkReceiverFee,
+  keyProofMessage, metaTxTypedData, uaMetaTxTypedData, uaMetaTransferTypedData, checkCall, tradeOrderTypedData, uaTradeOrderTypedData, padId,
+  cancelUAOrderTypedData, cancelDexOrderTypedData, invalidateNoncesTypedData, uaInvalidateNoncesTypedData, checkTradeOrder, bidMinFill,
+  bidMinBase, checkCancel, payLane, uaReceiverFeeTypedData, wrapToUACall, unwrapToUACall, payWithFeeToUACalldata, checkReceiverFee,
+  uaPayUnderMandateTypedData, uaPayUnderMandateCalldata, uaDelegateRevokeTypedData, uaDelegateRevokeCalldata, mtxExecuteCalldata,
+  mtxExecuteTransferCalldata, TYPED_OPS,
 } from '../src/evm.js';
-// What the wallets' generic `mtxExecute` still hashes: the forge KAT below pins these.
-import { ownerCallTypedData, checkOwnerCall as checkGenericOwnerCall } from '../legacy/typed-signing/evm-pre-named.js';
 import { abiEncode, hex, fromHex, keccak_256, utf8ToBytes } from '../src/bytes.js';
 
 const vectors = new URL('../../../smartcontracts/evm/test/vectors/', import.meta.url);
 const read = (f) => JSON.parse(readFileSync(new URL(f, vectors)));
-// ua-mtx-merge T2: the token's KATs of the address `MetaTransaction` / `MetaTransfer` moved to the legacy place (the
-// files of the same name now hold the UA structs); these builders are the address forms until T11 moves them.
+// ua-mtx-merge T2: the token's KATs of the address `MetaTransaction` / `MetaTransfer` moved to the legacy place; the files
+// of the same name hold the UA structs. T11: the clients build the UA ones; the address `MetaTransaction` stays for
+// `executeMetaTransaction` (R3) and `SmartKeyAccount`, so its KAT is read from the legacy place.
 const legacyKat = (f) => read(`legacy/ua-mtx-merge/${f}`);
+// What `SmartKeyAccount`'s generic `mtxExecute` hashes: its owner call as a `MetaTransaction` over `addKey(key)`. ua-mtx-merge
+// T11: built here from `metaTxTypedData`, as legacy/typed-signing/evm-pre-named.js did (that file imports the retired
+// `metaTransferTypedData` and no longer loads; it stays as it is, legacy).
+const ownerCallTypedData = ({ account, chainId, chainUid, data, nonce, validUntil }) => metaTxTypedData({ name: 'SCaaS SmartKeyAccount',
+  contract: account, chainId, chainUid, message: { from: account, data, nonce, validUntil } });
+const kTransfer = (k) => uaMetaTransferTypedData({ name: k.domain_name, contract: k.verifying_contract, chainId: k.chain_id, chainUid: k.salt,
+  message: { from: k.from, to: k.to, value: k.value, entryRef: k.entry_ref, batch: k.batch, nonce: k.nonce,
+    validUntil: k.valid_until, mode: Number(k.mode), relayer: k.relayer, fee: k.fee, feeRecipient: k.fee_recipient } });
 
-test('MetaTransfer payment = forge KAT (TokenKat.t.sol, metatransfer_kat.json)', () => {
-  const k = legacyKat('metatransfer_kat.json');   // mode 35: relayer and fee recipient bound, FIXED fee
-  const td = metaTransferTypedData({ name: k.domain_name, contract: k.verifying_contract, chainId: k.chain_id, chainUid: k.salt,
-    message: { from: k.from, to: k.to, value: k.value, entryRef: k.entry_ref, batch: k.batch, nonce: k.nonce,
-      validUntil: k.valid_until, mode: Number(k.mode), relayer: k.relayer, fee: k.fee, feeRecipient: k.fee_recipient } });
+test('UAMetaTransfer payment = forge KAT (TokenKat.t.sol, metatransfer_kat.json); mtxExecuteTransfer calldata with UASig', () => {
+  const k = read('metatransfer_kat.json');   // mode 35: relayer and fee recipient bound, FIXED fee; an EOA's padded id
+  const td = kTransfer(k);
   assert.equal(hex(hashTypedData(td)), k.digest);
-  const unbound = metaTransferTypedData({ name: k.domain_name, contract: k.verifying_contract, chainId: k.chain_id,
+  assert.equal(hex(hashStruct(td.types, 'UAMetaTransfer', td.message)), k.struct_hash);
+  assert.equal(hex(keccak_256(utf8ToBytes(`UAMetaTransfer(${td.types.UAMetaTransfer.map((f) => `${f.type} ${f.name}`).join(',')})`))), k.type_hash);
+  assert.equal(hex(mtxExecuteTransferCalldata(td, k.signature)), k.calldata);
+  const unbound = uaMetaTransferTypedData({ name: k.domain_name, contract: k.verifying_contract, chainId: k.chain_id,
     chainUid: k.salt, message: { ...td.message, mode: 0x20 } });
   assert.equal(unbound.message.feeRecipient, '0x' + '00'.repeat(20), 'unbound fields are hashed as 0');
+});
+
+test('UAMetaTransaction = forge KAT (metatx_kat.json): a non-zero unbound feeRecipient is hashed as 0; mtxExecute with UASig', () => {
+  const k = read('metatx_kat.json');   // mode 1: relayer bound, feeRecipient 0xFEE given but not bound
+  assert.notEqual(BigInt(k.fee_recipient), 0n);
+  const td = uaMetaTxTypedData({ name: k.domain_name, contract: k.verifying_contract, chainId: k.chain_id, chainUid: k.salt,
+    message: { from: k.from, data: k.data, batch: k.batch, nonce: k.nonce, validUntil: k.valid_until, mode: Number(k.mode),
+      relayer: k.relayer, fee: k.fee, feeRecipient: k.fee_recipient } });
+  assert.equal(td.message.feeRecipient, '0x' + '00'.repeat(20));
+  assert.equal(hex(hashTypedData(td)), k.digest);
+  assert.equal(hex(hashStruct(td.types, 'UAMetaTransaction', td.message)), k.struct_hash);
+  // the KAT's calldata carries the relayer's unbound 0xFEE (the contract hashes it as 0, pays `msg.sender`); the client's
+  // carries the canonical 0: the two differ in that one word only, and both run under the same signature
+  assert.equal(hex(mtxExecuteCalldata({ ...td, message: { ...td.message, feeRecipient: k.fee_recipient } }, k.signature)), k.calldata);
+  const mine = mtxExecuteCalldata(td, k.signature);
+  const theirs = fromHex(k.calldata);
+  const words = [];
+  for (let i = 4; i < theirs.length; i += 32) if (hex(mine.subarray(i, i + 32)) !== hex(theirs.subarray(i, i + 32))) words.push((i - 4) / 32);
+  assert.deepEqual(words, [10], 'm.feeRecipient: word 2 (m) + 8');
 });
 
 /** `abi.encode(TradeOrder)` (13 static words) as forge wrote it into the KATs. */
@@ -40,16 +69,12 @@ function decodeOrder(abi) {
     validUntil: num(12) };
 }
 
-// ua-mtx-merge T6 (R12): the token's address `TradeOrder` side and its KAT moved to the legacy place; the token signs
-// `UATradeOrder` (uatrade_kat.json, ua-trade.test.js). These builders are the address forms until T11 moves them.
-test('TradeOrder, CancelOrder, InvalidateNonces in the token domain = the legacy forge KAT (trade_kat.json)', () => {
+// ua-mtx-merge T6 / T11 (R12): the token's address `TradeOrder` side, its KAT (test/vectors/legacy/ua-mtx-merge/trade_kat.json)
+// and its builders are legacy; the token signs `UATradeOrder` (uatrade_kat.json, ua-trade.test.js).
+test('the token\'s address TradeOrder is refused by name; DexOrder stays for an outside token', () => {
   const k = legacyKat('trade_kat.json');
-  const o = decodeOrder(k.order_abi);
-  const td = tradeOrderTypedData({ token: k.verifying_contract, chainId: 7622, chainUid: k.salt, order: o });
-  assert.equal(hex(hashTypedData(td)), k.order_hash);
-  const at = { contract: k.verifying_contract, chainId: 7622, chainUid: k.salt };
-  assert.equal(hex(hashTypedData(cancelOrderTypedData({ ...at, name: 'SCaaS MetaToken', message: { order: o } }))), k.cancel_digest);
-  assert.equal(hex(hashTypedData(invalidateNoncesTypedData({ ...at, from: o.from, batch: 7, minNonce: 43 }))), k.invalidate_digest);
+  assert.throws(() => tradeOrderTypedData({ token: k.verifying_contract, chainId: 7622, chainUid: k.salt, order: decodeOrder(k.order_abi) }),
+    /Refusing to sign: a SCaaS sell token takes a UATradeOrder/);
 });
 
 test('DexOrder (nested TradeOrder) and the DEX cancels in the DEX domain = forge KAT (DexKat.t.sol, dex_order_kat.json)', () => {
@@ -74,8 +99,8 @@ test('SmartKeyAccount owner call = forge KAT (AccountKat.t.sol, smart_key_accoun
   const td = ownerCallTypedData({ account: k.verifying_contract, chainId: Number(k.chain_id), chainUid: k.salt,
     data: k.data, nonce: k.nonce, validUntil: k.valid_until });
   assert.equal(hex(hashTypedData(td)), k.digest);
-  assert.equal(hex(checkGenericOwnerCall(td, { account: k.verifying_contract, chainId: 7622, chainUid: k.salt,
-    newKey: secpSubjectKey('0x' + '77'.repeat(20)), now: 1_800_000_000 })), k.digest);
+  assert.equal(hex(hashTypedData(ownerCallTypedData({ account: k.verifying_contract, chainId: 7622, chainUid: k.salt,
+    data: addKeyCall(secpSubjectKey('0x' + '77'.repeat(20))), nonce: k.nonce, validUntil: k.valid_until }))), k.digest);
   // the account encoding of the seed key's ECDSA signature (key index 0, no batch proof)
   const sig = fromHex(k.signature).subarray(160, 225);
   assert.equal(hex(accountSignature(0, [], sig)), k.signature);
@@ -83,26 +108,42 @@ test('SmartKeyAccount owner call = forge KAT (AccountKat.t.sol, smart_key_accoun
   assert.equal(evmAddress(r.recoverPublicKey(fromHex(k.digest)).toBytes(false)), k.signer_key);
 });
 
-test('MandateWallet pay and revoke = forge KATs (mandate_pay_kat.json, mandate_revoke_kat.json)', () => {
-  for (const f of ['mandate_pay_kat.json', 'mandate_revoke_kat.json']) {
-    const k = legacyKat(f);
-    const td = metaTxTypedData({ name: k.domain_name, contract: k.verifying_contract, chainId: Number(k.chain_id),
-      chainUid: k.salt, message: { from: k.from, data: k.data, batch: k.batch, nonce: k.nonce, validUntil: k.valid_until } });
-    assert.equal(hex(hashTypedData(td)), k.digest, f);
+// ua-mtx-merge T3b / T11 (Q6, MD-11): the wallet's one signed entry per op over `UA<Op>`; the flat builders' KATs
+// (mandate_pay_kat.json, mandate_revoke_kat.json) are legacy.
+test('mandate_kat.json equals the builders (pay and delegate revoke): UAPayUnderMandate, UADelegateRevoke, UASig calldata', () => {
+  const kat = read('mandate_kat.json');
+  const build = { pay: [uaPayUnderMandateTypedData, uaPayUnderMandateCalldata, ['token', 'payee', 'amount', 'entryRef', 'epoch']],
+    revoke: [uaDelegateRevokeTypedData, uaDelegateRevokeCalldata, ['token', 'epoch']] };
+  for (const [row, [typed, calldata, own]] of Object.entries(build)) {
+    const k = kat[row];
+    const types = own.map((n) => TYPED_OPS[row === 'pay' ? 'UAPayUnderMandate' : 'UADelegateRevoke'].fields.find((f) => f.name === n).type);
+    const words = fromHex(k.args);
+    const args = Object.fromEntries(own.map((n, i) => {
+      const w = words.subarray(32 * i, 32 * i + 32);
+      return [n, types[i] === 'address' ? hex(w.subarray(12)) : types[i] === 'bytes32' ? hex(w) : BigInt(hex(w)).toString()];
+    }));
+    assert.equal(hex(abiEncode(types, own.map((n) => args[n]))), k.args, row);
+    const td = typed({ contract: kat.verifying_contract, chainId: kat.chain_id, chainUid: kat.salt, message: { from: k.from, ...args,
+      batch: k.batch, nonce: k.nonce, validUntil: k.valid_until, mode: Number(k.mode), relayer: k.relayer, fee: k.fee, feeRecipient: k.fee_recipient } });
+    assert.equal(td.domain.name, kat.domain_name);
+    assert.equal(hex(hashStruct(td.types, 'EIP712Domain', td.domain)), kat.domain_separator, row);
+    assert.equal(TYPED_OPS[td.primaryType].typeString, k.type_string, row);
+    assert.equal(TYPED_OPS[td.primaryType].typehash, k.type_hash, row);
+    assert.equal(hex(hashStruct(td.types, td.primaryType, td.message)), k.struct_hash, row);
+    assert.equal(hex(hashTypedData(td)), k.digest, row);
+    assert.equal(hex(calldata(td, k.signature)), k.calldata, row);
+    const r = secp256k1.Signature.fromBytes(fromHex(k.signature).subarray(0, 64), 'compact').addRecoveryBit(fromHex(k.signature)[64] - 27);
+    assert.equal(evmAddress(r.recoverPublicKey(fromHex(k.digest)).toBytes(false)).toLowerCase(), kat.signer.toLowerCase(), row);
+    assert.equal(k.from, padId(kat.signer).toLowerCase(), `${row}: the owner's address zero-padded`);
   }
   // the derived lanes: keccak256("scaas.mandate.pay" ‖ entryRef), keccak256("scaas.mandate.revoke" ‖ token ‖ uint64 epoch)
-  const pay = legacyKat('mandate_pay_kat.json');
-  const ref = fromHex(pay.data).subarray(100, 132);
-  // payUnderMandate(token, payee, amount, entryRef, epoch): the pay names the mandate epoch (1 here), so a revoke voids it
-  assert.equal(hex(fromHex(pay.data).subarray(0, 4)),
-    hex(keccak_256(utf8ToBytes('payUnderMandate(address,address,uint256,bytes32,uint64)')).subarray(0, 4)));
-  assert.equal(BigInt(hex(fromHex(pay.data).subarray(132, 164))), 1n);
-  assert.equal(BigInt(hex(keccak_256(new Uint8Array([...utf8ToBytes('scaas.mandate.pay'), ...ref])))), BigInt(pay.batch));
-  const rev = legacyKat('mandate_revoke_kat.json');
-  const token = fromHex(rev.data).subarray(16, 36);
+  const ref = fromHex(kat.pay.args).subarray(96, 128);
+  assert.equal(BigInt(hex(fromHex(kat.pay.args).subarray(128, 160))), 1n, 'the pay names the mandate epoch (1), so a revoke voids it');
+  assert.equal(BigInt(hex(keccak_256(new Uint8Array([...utf8ToBytes('scaas.mandate.pay'), ...ref])))), BigInt(kat.pay.batch));
+  const token = fromHex(kat.revoke.args).subarray(12, 32);
   const epoch = new Uint8Array(8); epoch[7] = 1;
   assert.equal(BigInt(hex(keccak_256(new Uint8Array([...utf8ToBytes('scaas.mandate.revoke'), ...token, ...epoch])))),
-    BigInt(rev.batch));
+    BigInt(kat.revoke.batch));
 });
 
 test('metaTxTypedData zeroes relayer / feeRecipient by mode, as the contract hashes them = metatx_kat.json', () => {
@@ -123,9 +164,10 @@ test('metaTxTypedData zeroes relayer / feeRecipient by mode, as the contract has
 });
 
 test('metaTxTypedData keeps chainId exact (number, decimal or hex string, BigInt) and needs a 32-byte chainUid', () => {
-  const k = legacyKat('mandate_pay_kat.json');
+  const k = legacyKat('metatx_kat.json');   // the address MetaTransaction of executeMetaTransaction (R3)
   const td = (chainId, chainUid = k.salt) => metaTxTypedData({ name: k.domain_name, contract: k.verifying_contract,
-    chainId, chainUid, message: { from: k.from, data: k.data, batch: k.batch, nonce: k.nonce, validUntil: k.valid_until } });
+    chainId, chainUid, message: { from: k.from, data: k.data, batch: k.batch, nonce: k.nonce, validUntil: k.valid_until,
+      mode: Number(k.mode), relayer: k.relayer, fee: k.fee, feeRecipient: k.fee_recipient } });
   for (const id of [7622, '7622', '0x1dc6', 7622n]) assert.equal(hex(hashTypedData(td(id))), k.digest, String(id));
   assert.equal(hex(hashTypedData(td(k.chain_id, fromHex(k.salt)))), k.digest);
   const big = (1n << 60n) + 1n;
@@ -269,10 +311,14 @@ const REF = '0x' + '09'.repeat(32);
 const ATK = '0x' + 'ee'.repeat(20);
 const PAYEE = '0x' + '5e'.repeat(20);
 const word = (n) => BigInt(n).toString(16).padStart(64, '0');
+// ua-mtx-merge T11 (R20, R46): a payment is the token's `UAMetaTransfer` between ids; an EOA's id is its address zero-padded
+const ACCOUNT_ID = padId(ACCOUNT);
+const PAYEE_ID = padId(PAYEE);
+const ATK_ID = padId(ATK);
 
-/** A payment `MetaTransfer` as a server issues it, in the token's salted domain, on the request's lane with nonce 0. */
+/** A payment `UAMetaTransfer` as a server issues it, in the token's salted domain, on the request's lane with nonce 0. */
 function serverPayment(over = {}, dom = {}, tok = TOKEN) {
-  const td = metaTransferTypedData({ contract: tok, chainId: 7622, chainUid: UID, message: { from: ACCOUNT, to: PAYEE,
+  const td = uaMetaTransferTypedData({ contract: tok, chainId: 7622, chainUid: UID, message: { from: ACCOUNT_ID, to: PAYEE_ID,
     value: '125000500000', entryRef: REF, batch: payLane(REF), nonce: '0', validUntil: String(NOW + 300), mode: 1,
     relayer: '0x' + '02'.repeat(20), ...over } });
   td.domain = { ...td.domain, ...dom };
@@ -280,11 +326,9 @@ function serverPayment(over = {}, dom = {}, tok = TOKEN) {
 }
 
 test('payment lane = payLane(entryRef) of the forge KAT; the KAT payment passes with its fee named', () => {
-  const k = legacyKat('metatransfer_kat.json');   // mode 35: FIXED fee 100000 to 0xFEE, relayer 0xbEEF bound
+  const k = read('metatransfer_kat.json');   // mode 35: FIXED fee 100000 to 0xFEE, relayer 0xbEEF bound
   assert.equal(payLane(k.entry_ref).toString(), k.batch);
-  const td = metaTransferTypedData({ name: k.domain_name, contract: k.verifying_contract, chainId: 7622, chainUid: k.salt,
-    message: { from: k.from, to: k.to, value: k.value, entryRef: k.entry_ref, batch: k.batch, nonce: k.nonce,
-      validUntil: k.valid_until, mode: Number(k.mode), relayer: k.relayer, fee: k.fee, feeRecipient: k.fee_recipient } });
+  const td = kTransfer(k);
   const want = { account: k.from, chainId: 7622, chainUid: k.salt, amount: '100', decimals: 6, payee: k.to,
     entryRef: k.entry_ref, expectedToken: k.verifying_contract, maxFee: '100000', feeRecipient: k.fee_recipient,
     relayer: k.relayer, now: NOW };
@@ -298,12 +342,12 @@ test('payment lane = payLane(entryRef) of the forge KAT; the KAT payment passes 
 });
 
 test('payment: only the payment the user was shown (payee, token, reference, amount, lane, fee), CLI-SGN-05/08', () => {
-  const intent = { account: ACCOUNT, chainId: 7622, chainUid: UID, amount: 125000.5, decimals: 6, payee: PAYEE, entryRef: REF,
+  const intent = { account: ACCOUNT_ID, chainId: 7622, chainUid: UID, amount: 125000.5, decimals: 6, payee: PAYEE_ID, entryRef: REF,
     expectedToken: TOKEN, now: NOW };
   const td = serverPayment();
   const ok = checkPayment(td, intent);
   assert.equal(hex(ok.digest), hex(hashTypedData(td)));
-  assert.deepEqual([ok.payee, ok.entryRef, ok.token, ok.fee, ok.feeMode], [PAYEE, REF, TOKEN, 0n, 0]);
+  assert.deepEqual([ok.payee, ok.entryRef, ok.token, ok.fee, ok.feeMode], [PAYEE_ID, REF, TOKEN, 0n, 0]);
   checkPayment(serverPayment({ value: '125000000000' }), { ...intent, amount: 125000 });
   checkPayment(serverPayment({ mode: 0, relayer: '0x' + '00'.repeat(20) }), intent);
   assert.equal(checkPayment(serverPayment({ mode: 0x20, fee: '1' }), { ...intent, maxFee: 1 }).fee, 1n);
@@ -312,7 +356,7 @@ test('payment: only the payment the user was shown (payee, token, reference, amo
   assert.equal(checkPayment(pct, { ...intent, maxFee: '1250005000' }).fee, 1250005000n);
   assert.throws(() => checkPayment(pct, { ...intent, maxFee: '1250004999' }), /the fee is above your limit/);
   const cases = [
-    [serverPayment({ to: ATK }), /the payee differs/],                               // hostile probe: payee swap
+    [serverPayment({ to: ATK_ID }), /the payee differs/],                            // hostile probe: payee swap
     [serverPayment({ batch: '8', nonce: '5' }), /signed once, on its request lane/],   // pay twice on a fresh lane
     [serverPayment({ batch: '8' }), /signed once/],
     [serverPayment({ nonce: '5' }), /signed once/],
@@ -327,12 +371,13 @@ test('payment: only the payment the user was shown (payee, token, reference, amo
     [serverPayment({ mode: 0x30 }), /unexpected fee mode/],
     [serverPayment({ mode: 0x04 }), /unexpected fee mode/],
     [serverPayment({ mode: '0x1' }), /the fee mode is not a number/],
-    [serverPayment({ from: '0x' + 'bd'.repeat(20) }), /unexpected payment fields/],
+    [serverPayment({ from: padId('0x' + 'bd'.repeat(20)) }), /unexpected payment fields/],
     [serverPayment({ validUntil: String(NOW) }), /deadline/],
     [serverPayment({ validUntil: String(NOW + 86401) }), /deadline/],
     [serverPayment({}, { chainId: '1' }), /unexpected payment fields/],
     [serverPayment({}, { salt: '0x' + '11'.repeat(32) }), /unexpected payment fields/],  // another chain_uid (CLI-SGN-33)
     [{ ...serverPayment(), primaryType: 'MetaTransaction' }, /this is not a payment/],    // the v1 struct
+    [{ ...serverPayment(), primaryType: 'MetaTransfer' }, /this is not a payment/],       // the address struct (R46, legacy)
     [serverOwnerCall(NEW_KEY), /this is not a payment/],
   ];
   const unsalted = serverPayment();
@@ -341,6 +386,8 @@ test('payment: only the payment the user was shown (payee, token, reference, amo
   cases.push([unsalted, /unexpected payment fields/]);
   for (const [i, [bad, why]] of cases.entries()) assert.throws(() => checkPayment(bad, intent), why, `case ${i}`);
   checkPayment(serverPayment({ validUntil: String(NOW + 86400) }), intent);
+  // the ids are the client's: an address where an id is signed is refused, never padded behind the user's back
+  assert.throws(() => checkPayment(td, { ...intent, account: ACCOUNT }), /Refusing to sign/);
   // the pins are required: a caller that forgets one gets a refusal, never an unpinned signature
   for (const f of ['payee', 'entryRef', 'expectedToken', 'amount']) {
     assert.throws(() => checkPayment(td, { ...intent, [f]: undefined }), /are required/, f);
@@ -414,17 +461,20 @@ test('trade order: exactly the order the client built, on a pinned DEX or wrappe
   const DEX2 = '0x' + 'df'.repeat(20);
   const WRAPPER = '0x' + 'aa'.repeat(20);
   const OUT = '0x' + '0c'.repeat(20);
+  // ua-mtx-merge T11 (R12): a SCaaS sell token's order is a `UATradeOrder` (ids); an outside token's a `DexOrder` (addresses)
+  const ZID = '0x' + '00'.repeat(32);
   const mine = { receiveToken: '0x' + 'bb'.repeat(20), amount: '1000', receiveAmount: '2000', minFill: '0', fee: '3000',
-    relayer: '0x' + '02'.repeat(20), dex: DEX, destination: '0x' + '00'.repeat(20), flags: 0, batch: '1' };
+    relayer: '0x' + '02'.repeat(20), dex: DEX, destination: ZID, flags: 0, batch: '1' };
   const server = (o = {}, { outside = false, sellToken, dom = {} } = {}) => {
-    const order = { ...mine, from: ACCOUNT, nonce: '1', validUntil: String(NOW + 600), ...o };
+    const order = { ...mine, ...(outside ? { from: ACCOUNT, destination: '0x' + '00'.repeat(20) } : { from: ACCOUNT_ID }), nonce: '1',
+      validUntil: String(NOW + 600), ...o };
     const td = outside
       ? tradeOrderTypedData({ dex: order.dex, sellToken: sellToken || OUT, chainId: 7622, chainUid: UID, order })
-      : tradeOrderTypedData({ token: sellToken || TOKEN, chainId: 7622, chainUid: UID, order });
+      : uaTradeOrderTypedData({ token: sellToken || TOKEN, chainId: 7622, chainUid: UID, order });
     td.domain = { ...td.domain, ...dom };
     return td;
   };
-  const want = { account: ACCOUNT, chainId: 7622, chainUid: UID, order: mine, sellToken: TOKEN, dexes: [DEX, DEX2], now: NOW };
+  const want = { account: ACCOUNT_ID, chainId: 7622, chainUid: UID, order: mine, sellToken: TOKEN, dexes: [DEX, DEX2], now: NOW };
   const ok = checkTradeOrder(server(), want);
   assert.deepEqual(ok.warnings, []);
   assert.equal(ok.minFill, 0n, 'the signed minFill (no protocol floor, CTR-DEX-14)');
@@ -434,9 +484,11 @@ test('trade order: exactly the order the client built, on a pinned DEX or wrappe
   const some = { ...mine, minFill: '300' };
   assert.equal(checkTradeOrder(server(some), { ...want, order: some }).minFill, 300n);
   checkTradeOrder(server(), { ...want, order: { ...mine, validUntil: String(NOW + 600) } });
-  const outsideWant = { ...want, outside: true, sellToken: OUT };
+  const outsideMine = { ...mine, destination: '0x' + '00'.repeat(20) };
+  const outsideWant = { ...want, account: ACCOUNT, order: outsideMine, outside: true, sellToken: OUT };
   checkTradeOrder(server({}, { outside: true }), outsideWant);
-  const away = { ...mine, destination: '0x' + '77'.repeat(20) };
+  assert.throws(() => checkTradeOrder(server(), { ...want, ua: false }), /a SCaaS sell token takes a UATradeOrder/);
+  const away = { ...mine, destination: '0x' + '77'.repeat(32) };
   assert.deepEqual(checkTradeOrder(server(away), { ...want, order: away }).warnings, ['someone else receives the proceeds']);
   const open = { ...mine, relayer: '0x' + '00'.repeat(20) };
   assert.deepEqual(checkTradeOrder(server(open), { ...want, order: open }).warnings,
@@ -453,8 +505,8 @@ test('trade order: exactly the order the client built, on a pinned DEX or wrappe
     server({ receiveAmount: '1' }), server({ receiveToken: ATK }), server({ amount: '1000000000' }),
     server({}, { sellToken: ATK }), server({ relayer: ATK }), server({ flags: 3 }), server({ flags: 4 }),
     server({ fee: '3001' }), server({ batch: '2' }), server({ minFill: '1' }), server({ dex: DEX2 }),
-    server({ destination: ATK }), server({ from: '0x' + 'bd'.repeat(20) }), server({}, { dom: { salt: '0x' + '11'.repeat(32) } }),
-    server({}, { outside: true }),                                       // a DexOrder where the client built a TradeOrder
+    server({ destination: ATK_ID }), server({ from: padId('0x' + 'bd'.repeat(20)) }), server({}, { dom: { salt: '0x' + '11'.repeat(32) } }),
+    server({}, { outside: true }),                                       // a DexOrder where the client built a UATradeOrder
   ];
   for (const [i, bad] of changed.entries()) assert.throws(() => checkTradeOrder(bad, want), NOT, `changed ${i}`);
   assert.throws(() => checkTradeOrder(server({ validUntil: String(NOW + 601) }),
@@ -469,11 +521,12 @@ test('trade order: exactly the order the client built, on a pinned DEX or wrappe
     [{ dex: '0x' + 'ee'.repeat(20) }, /DEX that is not on your chain profile/],
     [{ dex: WRAPPER, minFill: '1000' }, /DEX that is not on your chain profile/],    // not on the DEX list
     [{ dex: DEX, receiveToken: DEX }, /a wrap by signature is a WrapOrder/],         // the chain hashes it as one
-    [{ dex: WRAPPER, receiveToken: WRAPPER, minFill: '1000' }, /a wrap by signature is a WrapOrder/, { outside: true, sellToken: OUT }],
+    [{ dex: WRAPPER, receiveToken: WRAPPER, minFill: '1000', destination: '0x' + '00'.repeat(20) }, /a wrap by signature is a WrapOrder/,
+      { outside: true, sellToken: OUT, account: ACCOUNT }],
     [{ fee: '10001' }, /the fee is above 1 %/],
     [{ flags: 2 }, /unknown order flags/],                                           // ESCROW without IOC
     [{ flags: 8 }, /unknown order flags/],
-    [{ flags: 3 }, /unknown order flags/, { outside: true, sellToken: OUT }],        // ESCROW on an outside token (BadFlags)
+    [{ flags: 3, destination: '0x' + '00'.repeat(20) }, /unknown order flags/, { outside: true, sellToken: OUT, account: ACCOUNT }], // ESCROW outside (BadFlags)
     [{ flags: 'x' }, /the flags is not a number/],
     [{ minFill: '1001' }, /the amounts are malformed/],
     [{ amount: '0' }, /the amounts are malformed/],
@@ -489,29 +542,35 @@ test('trade order: exactly the order the client built, on a pinned DEX or wrappe
 });
 
 test('cancel: only the order the user holds or the lane the user chose, from the account, in the order\'s domain', () => {
-  const order = cancelOrderTypedData({ name: 'SCaaS MetaToken', contract: TOKEN, chainId: 7622, chainUid: UID, message: { order: { from: ACCOUNT,
+  const order = cancelUAOrderTypedData({ name: 'SCaaS MetaToken', contract: TOKEN, chainId: 7622, chainUid: UID, message: { order: { from: ACCOUNT_ID,
     receiveToken: ATK, amount: 1000, receiveAmount: 2000, dex: '0x' + 'de'.repeat(20), nonce: 5, validUntil: NOW + 600 } } }).message.order;
-  const want = { account: ACCOUNT, chainId: 7622, chainUid: UID, contract: TOKEN, order };
+  const want = { account: ACCOUNT_ID, chainId: 7622, chainUid: UID, contract: TOKEN, order, ua: true };
   const at = { name: 'SCaaS MetaToken', contract: TOKEN, chainId: 7622, chainUid: UID };
-  const td = cancelOrderTypedData({ ...at, message: { order } });
+  const td = cancelUAOrderTypedData({ ...at, message: { order } });
   assert.equal(hex(checkCancel(td, want)), hex(hashTypedData(td)));
   const inv = { batch: 7, minNonce: 43 };
-  const tdInv = invalidateNoncesTypedData({ ...at, ...inv, from: ACCOUNT });
+  const tdInv = uaInvalidateNoncesTypedData({ ...at, ...inv, from: ACCOUNT_ID });
   assert.equal(hex(checkCancel(tdInv, { ...want, order: undefined, invalidate: inv })), hex(hashTypedData(tdInv)));
-  const short = cancelOrderTypedData({ ...at, message: { order } });
+  const short = cancelUAOrderTypedData({ ...at, message: { order } });
   short.message.order.nonce = '6';
   for (const [i, bad] of [
-    cancelOrderTypedData({ ...at, message: { order: { ...order, nonce: 6 } } }),   // another order
-    cancelOrderTypedData({ ...at, contract: ATK, message: { order } }),
-    invalidateNoncesTypedData({ ...at, ...inv, from: ATK }),
+    cancelUAOrderTypedData({ ...at, message: { order: { ...order, nonce: 6 } } }),   // another order
+    cancelUAOrderTypedData({ ...at, contract: ATK, message: { order } }),
+    uaInvalidateNoncesTypedData({ ...at, ...inv, from: ATK_ID }),
     short,
+    { ...td, primaryType: 'CancelOrder' },                                          // the token's address cancel (legacy)
   ].entries()) assert.throws(() => checkCancel(bad, want), /Refusing to sign/, `case ${i}`);
-  assert.throws(() => checkCancel(td, { ...want, order: { ...order, from: ATK } }), /not your order/);
+  assert.throws(() => checkCancel(td, { ...want, order: { ...order, from: ATK_ID } }), /not your order/);
   assert.throws(() => checkCancel(td, { ...want, order: undefined }), /not your order/);
-  assert.throws(() => checkCancel(invalidateNoncesTypedData({ ...at, ...inv, minNonce: 44, from: ACCOUNT }),
+  assert.throws(() => checkCancel(uaInvalidateNoncesTypedData({ ...at, ...inv, minNonce: 44, from: ACCOUNT_ID }),
     { ...want, order: undefined, invalidate: inv }), /not the cancel you asked for/);
-  assert.throws(() => checkCancel(invalidateNoncesTypedData({ ...at, ...inv, from: ATK }),
+  assert.throws(() => checkCancel(uaInvalidateNoncesTypedData({ ...at, ...inv, from: ATK_ID }),
     { ...want, order: undefined, invalidate: inv }), /not the cancel you asked for/);
+  // the DEX's own lanes (an outside token's orders) keep the address `InvalidateNonces`
+  const dex = { name: 'SCaaS Dex', contract: '0x' + 'de'.repeat(20), chainId: 7622, chainUid: UID };
+  const dexInv = invalidateNoncesTypedData({ ...dex, ...inv, from: ACCOUNT });
+  assert.equal(hex(checkCancel(dexInv, { account: ACCOUNT, chainId: 7622, chainUid: UID, contract: dex.contract, invalidate: inv })),
+    hex(hashTypedData(dexInv)));
 });
 
 test('checkCancel: the UA invalidation resolves its builder', () => {
@@ -528,22 +587,22 @@ test('key proof message = keccak256("scaas-subject-key-proof-v1" ‖ challenge) 
   assert.equal(hex(keyProofMessage(new Uint8Array(32))), KEY_PROOF_ZERO);
 });
 
-test('UA-5a: ReceiverFee typed data and the receivers\' calldata (`cast calldata`, foundry 1.3.5); checkCall', () => {
-  // ReceiverPays.t.sol test_receiverFeeDigestIsPinned: the typehash and the salted domain of the token
+test('UA-5a: UAReceiverFee typed data and the receivers\' calldata (`cast calldata`, foundry 1.3.5); checkCall', () => {
+  // ReceiverPays.t.sol test_uaReceiverFeeDigestIsPinned: the typehash and the salted domain of the token
   const fields = (td) => td.types[td.primaryType].map((f) => `${f.type} ${f.name}`).join(',');
   const contract = '0x' + 'a1'.repeat(20);
   const ZERO_FEE_TO = '0x' + '00'.repeat(20);
   const chainUid = '0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464';
   const paymentDigest = hex(keccak_256(utf8ToBytes('payment')));
-  const td = receiverFeeTypedData({ name: 'SCaaS MetaToken', contract, chainId: 7622, chainUid, message: {
-    payment: { from: contract, to: contract, value: 1, entryRef: paymentDigest, batch: 0, nonce: 0, validUntil: 1, mode: 1,
+  const td = uaReceiverFeeTypedData({ name: 'SCaaS MetaToken', contract, chainId: 7622, chainUid, message: {
+    payment: { from: padId(contract), to: padId(contract), value: 1, entryRef: paymentDigest, batch: 0, nonce: 0, validUntil: 1, mode: 1,
       relayer: contract, fee: 0, feeRecipient: ZERO_FEE_TO },
     fee: 3000000, feeRecipient: '0x0000000000000000000000000000000000000fee', validUntil: 1800000060 } });
-  const typehash = '0x7c08a6ca283c642a92e66bc1b0a04aaf10abca26906244a63d8a5e3c28232305';
-  assert.equal(hex(keccak_256(utf8ToBytes(`ReceiverFee(${fields(td)})MetaTransfer(${td.types.MetaTransfer.map((f) => `${f.type} ${f.name}`).join(',')})`))), typehash);
+  const typehash = '0xb12d2a080dcf6d9edea1a63b0fd3a59ebffa656c929d21f676d1f1507c75021a';
+  assert.equal(hex(keccak_256(utf8ToBytes(`UAReceiverFee(${fields(td)})UAMetaTransfer(${td.types.UAMetaTransfer.map((f) => `${f.type} ${f.name}`).join(',')})`))), typehash);
   const ds = hashStruct(td.types, 'EIP712Domain', td.domain);
   const sh = keccak_256(abiEncode(['bytes32', 'bytes32', 'uint256', 'address', 'uint256'],
-    [typehash, hex(hashStruct(td.types, 'MetaTransfer', td.message.payment)), 3000000n,
+    [typehash, hex(hashStruct(td.types, 'UAMetaTransfer', td.message.payment)), 3000000n,
       '0x0000000000000000000000000000000000000fee', 1800000060n]));
   assert.equal(hex(hashTypedData(td)), hex(keccak_256(new Uint8Array([0x19, 0x01, ...ds, ...sh]))));
   // cast calldata "wrapToUA(address,uint256,bytes32)" 0x5ca0…b1 1000000 0xabab…ab (likewise below)
@@ -575,21 +634,21 @@ test('UA-5a: ReceiverFee typed data and the receivers\' calldata (`cast calldata
   assert.throws(() => run(hex(payWithFeeToUACalldata(TO, 1n, 0, 0n, '0x' + '00'.repeat(20), TO))), /never signed as a call/);
 });
 
-test('receiver-pays, address path: the payee co-signs ReceiverFee nesting only the payment it expects, within its own bounds', () => {
+test('receiver-pays: the payee co-signs UAReceiverFee nesting only the payment it expects, within its own bounds', () => {
   const FEE_TO = '0x' + '0f'.repeat(20);
   const payment = serverPayment();   // mode 1 (relayer bound), fee NONE, lane payLane(REF), nonce 0: CTR-MTX-06's shape
   const pd = hex(hashTypedData(payment));
   const rf = (over = {}, dom = {}, pay = {}) => {
-    const t = receiverFeeTypedData({ name: 'SCaaS MetaToken', contract: TOKEN, chainId: 7622, chainUid: UID, message: { payment: { ...payment.message, ...pay },
+    const t = uaReceiverFeeTypedData({ name: 'SCaaS MetaToken', contract: TOKEN, chainId: 7622, chainUid: UID, message: { payment: { ...payment.message, ...pay },
       fee: '3000000', feeRecipient: FEE_TO, validUntil: String(NOW + 60), ...over } });
     t.domain = { ...t.domain, ...dom };
     return t;
   };
-  const want = { payee: PAYEE, chainId: 7622, chainUid: UID, amount: '125000.5', decimals: 6, entryRef: REF,
+  const want = { payee: PAYEE_ID, chainId: 7622, chainUid: UID, amount: '125000.5', decimals: 6, entryRef: REF,
     expectedToken: TOKEN, maxFee: '3000000', feeRecipient: FEE_TO, now: NOW };
   const ok = checkReceiverFee(rf(), want);
   assert.equal(hex(ok.digest), hex(hashTypedData(rf())));
-  assert.deepEqual([hex(ok.paymentDigest), ok.payer, ok.fee, ok.feeRecipient], [pd, ACCOUNT, 3000000n, FEE_TO]);
+  assert.deepEqual([hex(ok.paymentDigest), ok.payer, ok.fee, ok.feeRecipient], [pd, ACCOUNT_ID, 3000000n, FEE_TO]);
   const no = (td, w, why) => assert.throws(() => checkReceiverFee(td, { ...want, ...w }), why);
   // the payee's own bounds on fee / feeRecipient / deadline
   no(rf(), { maxFee: '2999999' }, /the fee is above your limit/);
@@ -600,7 +659,7 @@ test('receiver-pays, address path: the payee co-signs ReceiverFee nesting only t
   no(rf({ validUntil: String(NOW + 86401) }), {}, /deadline is not near/);
   no(rf({ validUntil: String(NOW) }), {}, /deadline is not near/);
   // the nested payment against the one the payee expects
-  no(rf({}, {}, { to: ATK }), {}, /does not pay you/);
+  no(rf({}, {}, { to: ATK_ID }), {}, /does not pay you/);
   no(rf(), { amount: '125000.4' }, /the amount differs/);
   no(rf({ fee: '125000500001' }), { maxFee: '999999999999' }, /more than the payment/);
   no(rf(), { entryRef: '0x' + '0a'.repeat(32) }, /reference differs/);
@@ -610,6 +669,7 @@ test('receiver-pays, address path: the payee co-signs ReceiverFee nesting only t
   no(rf({}, { verifyingContract: ATK }), {}, /wrong token/);
   no(rf({}, { salt: '0x' + '11'.repeat(32) }), {}, /unexpected receiver fee fields/);
   no({ ...rf(), primaryType: 'MetaTransfer' }, {}, /not a receiver fee/);
+  no({ ...rf(), primaryType: 'ReceiverFee' }, {}, /not a receiver fee/);   // the address struct (legacy)
 });
 
 test('a bid\'s minFill from a base minimum and back (CLI-SGN-35)', () => {

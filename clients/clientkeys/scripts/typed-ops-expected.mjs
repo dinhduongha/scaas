@@ -38,18 +38,12 @@ const wrapTuple = (o) => [o.from, o.wrappedToken, o.amount, o.minMinted, o.minFi
 const asTrade = (o) => ({ ...o, receiveToken: o.wrappedToken, receiveAmount: o.minMinted, dex: o.wrappedToken });
 const transferTuple = (t) => [t.from, t.to, t.value, t.entryRef, t.batch, t.nonce, t.validUntil, t.mode, t.relayer, t.fee, t.feeRecipient];
 const OTHER = {
-  ReceiverFee: (m, s, d) => [transferTuple(m.payment), d.extra.payerSig, m.fee, m.feeRecipient, m.validUntil, s],
   UAReceiverFee: (m, s, d) => [transferTuple(m.payment), ['0x', d.extra.payerSig, []], m.fee, m.feeRecipient, m.validUntil, ['0x', s, []]],
-  RelayFee: (m, s) => [m.from, m.target, m.callDataHash, m.payee, m.value, m.validUntil, s],
   UARelayFee: (m, s) => [m.from, m.target, m.callDataHash, m.payee, m.value, m.validUntil, ['0x', s, []]],
-  WrapOrder: (m, s, d) => [d.domain.verifyingContract, wrapTuple(m), s],
   UAWrapOrder: (m, s, d) => [d.domain.verifyingContract, wrapTuple(m), ['0x', s, []]],
-  CancelOrder: (m, s) => [tradeTuple(m.order), s],
   CancelUAOrder: (m, s) => [tradeTuple(m.order), ['0x', s, []]],
-  CancelWrapOrder: (m, s) => [tradeTuple(asTrade(m.order)), s],
   CancelUAWrapOrder: (m, s) => [tradeTuple(asTrade(m.order)), ['0x', s, []]],
   CancelDexOrder: (m, s) => [[[m.order.sellToken, tradeTuple(m.order.order)]], [s]],
-  UACancelNonce: (m, s) => [m.ua, m.batch, m.validUntil, ['0x', s, []]],
   ZetherRollOver: (m, s) => [m.ua, m.expectedPendingSeq, m.validUntilBlock, ['0x', s, []]],
   ZetherSetRollOverMode: (m, s) => [m.ua, m.mode, m.validUntilBlock, ['0x', s, []]],
 };
@@ -63,7 +57,8 @@ export function expectedCall(name, r, d) {
   const ua = name !== base;
   const own = CONF[base] ? CONF[base](m, d.extra) : r.types[name].slice(1, -7).map((f) => m[f.name]);
   const account = ACCOUNT.has(name) || (name === 'Execute' && d.domain.name === 'SCaaS SmartKeyAccount');
-  const sig = account ? ['0', [], d.signature] : ua && name !== 'UAShield' ? ['0x', d.signature, []] : d.signature;
+  // ua-mtx-merge (R47): every merged entry takes `UASig`, `mtxShield` too; a native id's is `{0x, signature, []}` (R17)
+  const sig = account ? ['0', [], d.signature] : ua ? ['0x', d.signature, []] : d.signature;
   return [envelope(m), ...own, sig];
 }
 

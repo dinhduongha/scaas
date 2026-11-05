@@ -79,6 +79,9 @@ function ecdsa(uint256 pk, bytes32 digest) pure returns (bytes memory) {
 // ------------------------------------------------------------------ typed-signing C1: typed_ops.json on the C0 entries
 
 string constant TYPED_OPS = "../vectors/typed/typed_ops.json";
+// ua-mtx-merge T11 (MD-7): the rows as they stood before the merged entries; a retired row is read here to show it finds no
+// entry on its contract.
+string constant TYPED_OPS_LEGACY = "../vectors/typed/legacy/ua-mtx-merge/typed_ops.json";
 bytes32 constant SALTED_DOMAIN = keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)");
 
 function rowKey(string memory j) pure returns (uint256) {
@@ -270,8 +273,8 @@ contract NamedUnwrapTest is V2Fixture {
     }
 
     /// C1: the `UAUnwrap` row byte for byte on the C0 entry, and run under this token's domain. ua-mtx-merge T3, meaning:
-    /// the address `Unwrap` row has no entry (R23; MD-7: T11 retires it); the `UAUnwrap` row (until T11 regenerates it)
-    /// holds the `uaUnwrap` selector and runs under the merged `mtxUnwrap`.
+    /// the address `Unwrap` row has no entry (R23); T11 (MD-7): the `UAUnwrap` row names the merged `mtxUnwrap`, the
+    /// retired `Unwrap` row is read from `TYPED_OPS_LEGACY`.
     function test_c1_unwrapRow() public {
         string memory j = VM.readFile(TYPED_OPS);
         checkRow(j, "UAUnwrap", "token");
@@ -283,7 +286,7 @@ contract NamedUnwrapTest is V2Fixture {
         address recipient = VM.parseJsonAddress(j, msgField("UAUnwrap", "recipient"));
         uint256 minOut = VM.parseJsonUint(j, msgField("UAUnwrap", "minOut"));
         bytes memory cd = VM.parseJsonBytes(j, domainField("UAUnwrap", "token", "calldata"));
-        assertEq(abi.encodeWithSignature("uaUnwrap((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))", e, wrapped,
+        assertEq(abi.encodeWithSignature("mtxUnwrap((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))", e, wrapped,
             recipient, minOut, _native(VM.parseJsonBytes(j, domainField("UAUnwrap", "token", "signature")))), cd);
         usd.mint(from, 2 * wrapped);
         vm.startPrank(from);
@@ -297,7 +300,7 @@ contract NamedUnwrapTest is V2Fixture {
         assertEq(w.mtxNonce(e.from, e.batch), 1);
         assertEq(w.balanceOf(e.feeRecipient), wrapped * e.fee / 1_000_000, "the row's PERCENT fee");
         // the address `Unwrap` row: its own calldata finds no function
-        (bool ok, bytes memory ret) = address(w).call(VM.parseJsonBytes(j, domainField("Unwrap", "token", "calldata")));
+        (bool ok, bytes memory ret) = address(w).call(VM.parseJsonBytes(VM.readFile(TYPED_OPS_LEGACY), domainField("Unwrap", "token", "calldata")));
         assertFalse(ok);
         assertEq(ret.length, 0, "no such function");
     }
@@ -384,9 +387,9 @@ contract NamedShieldPqzTest is PqzFixture {
     }
 
     /// ua-mtx-merge T5, meaning (R36): the address `Shield` entry left the PQZ kinds, so the row's calldata finds no
-    /// function there (MD-7: T11 retires the row).
+    /// function there (MD-7: the row retired by T11, read from `TYPED_OPS_LEGACY`).
     function test_c1_shieldRowHasNoPqzEntry() public {
-        string memory j = VM.readFile(TYPED_OPS);
+        string memory j = VM.readFile(TYPED_OPS_LEGACY);
         checkRow(j, "Shield", "pqz");
         MetaTxLib.Envelope memory e = rowEnvelope(j, "Shield");
         bytes32 toUA = _rowHolder(j, "Shield", e.from);
@@ -409,13 +412,13 @@ contract NamedShieldPqzTest is PqzFixture {
             env.validUntil, env.mode, env.relayer, env.fee, env.feeRecipient);
         bytes32 toUA = _rowHolder(j, "UAShield", address(uint160(uint256(u.from))));
         uint256 amount = VM.parseJsonUint(j, msgField("UAShield", "amount"));
-        // ua-mtx-merge T1, meaning: the row is still the pre-R47 `bytes auth` form (T11 regenerates `typed_ops.json`);
-        // the entry takes the explicit `UASig`, so the same signature runs as `UASig{signature}`. T5, meaning (R36): the
-        // entry took the name `mtxShield`
+        // ua-mtx-merge T11, meaning (R47, MD-7): the row is the merged `mtxShield` with `UASig{signature}` (T1-T10: the
+        // pre-R47 `bytes auth` form under `uaShield`, the same signature)
+        IUARegistry.UASig memory rowSig;
+        rowSig.signature = VM.parseJsonBytes(j, domainField("UAShield", "pqz", "signature"));
         assertEq(abi.encodeWithSignature(
-            "uaShield((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint256,bytes)",
-            u, toUA, amount, VM.parseJsonBytes(j, domainField("UAShield", "pqz", "signature"))),
-            VM.parseJsonBytes(j, domainField("UAShield", "pqz", "calldata")), "the row: the pre-R47 `bytes auth` form");
+            "mtxShield((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+            u, toUA, amount, rowSig), VM.parseJsonBytes(j, domainField("UAShield", "pqz", "calldata")), "the row: mtxShield with UASig");
         bytes memory sig = onChain(j, "UAShield", address(w));
         vm.prank(u.relayer);
         w.mtxShield(u, toUA, amount, UACall.auth(u.from, sig));
@@ -484,9 +487,9 @@ contract NamedShieldZetherTest is ZetherFixture {
     }
 
     /// C1: the `Shield` row, its `toUA` is `bob`. ua-mtx-merge T4, meaning (R35): the address `Shield` entry left the
-    /// Zether kinds, so the row's calldata finds no function there (the row stays for PQZ until T5; T11 retires it).
+    /// Zether kinds, so the row's calldata finds no function there (T11: the row retired, read from `TYPED_OPS_LEGACY`).
     function test_c1_shieldRowHasNoZetherEntry() public {
-        string memory j = VM.readFile(TYPED_OPS);
+        string memory j = VM.readFile(TYPED_OPS_LEGACY);
         checkRow(j, "Shield", "zether");
         MetaTxLib.Envelope memory e = rowEnvelope(j, "Shield");
         bytes32 toUA = VM.parseJsonBytes32(j, msgField("Shield", "toUA"));
@@ -510,8 +513,8 @@ contract NamedShieldZetherTest is ZetherFixture {
 }
 
 /// typed-signing C0 on the mandate wallet; ua-mtx-merge T3b (Q6), meaning: `mtxSetMandate` takes `UAEnvelope` + `UASig`
-/// over `UASetMandate` (ids `bytes32`), and the address `SetMandate` row of `typed_ops.json` has no wallet entry (MD-7:
-/// T11 regenerates the rows).
+/// over `UASetMandate` (ids `bytes32`), and the address `SetMandate` row has no wallet entry (T11, MD-7: the row retired,
+/// read from `TYPED_OPS_LEGACY`; the `UASetMandate` row runs in `TypedOps.t.sol`).
 contract NamedMandateTest is MandateFixture {
     function _walletSig(bytes32 d2, uint64 expiry, uint256 validUntil) internal view returns (IUARegistry.UASig memory a_) {
         string memory tail = eJson(3, 0, validUntil, 0, 0);
@@ -558,7 +561,7 @@ contract NamedMandateTest is MandateFixture {
 
     /// C1: the address `SetMandate` row (`Envelope`, `bytes sig`) finds no function on a wallet of the row's key.
     function test_c1_setMandateRowHasNoWalletEntry() public {
-        string memory j = VM.readFile(TYPED_OPS);
+        string memory j = VM.readFile(TYPED_OPS_LEGACY);
         checkRow(j, "SetMandate", "wallet");
         MetaTxLib.Envelope memory e = rowEnvelope(j, "SetMandate");
         bytes memory cd = VM.parseJsonBytes(j, domainField("SetMandate", "wallet", "calldata"));

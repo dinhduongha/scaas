@@ -3,8 +3,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { relayRef, payLane, buildRelayFee, metaTxTypedData, hashTypedData, padId, mtxExecuteCalldata, unwrapTypedData,
-  unwrapCalldata, TYPED_OPS } from '../src/evm.js';
+import { relayRef, payLane, buildRelayFee, metaTxTypedData, uaMetaTxTypedData, hashTypedData, padId, mtxExecuteCalldata,
+  uaUnwrapTypedData, uaUnwrapCalldata, TYPED_OPS } from '../src/evm.js';
 import { hex, fromHex, keccak_256, utf8ToBytes } from '../src/bytes.js';
 
 const R = JSON.parse(readFileSync(new URL('../../../smartcontracts/vectors/metatx/relayref.json', import.meta.url)));
@@ -19,8 +19,10 @@ const PAYER = '0x' + '11'.repeat(20);
 const SIGNER = '0x' + '44'.repeat(20);
 const UID = '0x' + 'c1'.repeat(32);
 const NOW = 1_800_000_000;
+// ua-mtx-merge T11 (R21): the payment is `UARelayFee` between ids, the router's `relay(…, bytes32 from, bytes32 payee, …, UASig)`
 const base = { token: TOKEN, chainId: 7622, chainUid: UID, router: ROUTER, executor: EXECUTOR, target: TARGET,
-  from: PAYER, amount: 25n, validUntil: NOW + 300 };
+  from: padId(PAYER), amount: 25n, validUntil: NOW + 300 };
+const RELAY = `relay(address,bytes,address,bytes32,bytes32,uint256,uint256,${'(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])'})`;
 const inner = (mode, relayer) => metaTxTypedData({ name: 'SCaaS TestRegistry', contract: TARGET, chainId: 7622,
   chainUid: UID, message: { from: SIGNER, data: '0x12345678', nonce: 4, validUntil: NOW + 300, mode, relayer } });
 
@@ -45,31 +47,42 @@ test('buildRelayFee: open mode by default, one prompt with both intents, the rou
   assert.equal(p.ref, relayRef(7622, TARGET, callData));
   assert.equal(p.lane, payLane(p.ref));
   const m = p.typedData.message;
-  assert.equal(p.typedData.primaryType, 'RelayFee');
+  assert.equal(p.typedData.primaryType, 'UARelayFee');
   assert.deepEqual([m.from, m.target, m.callDataHash, m.payee, m.value, m.validUntil, m.relayer],
-    [PAYER, TARGET, hex(keccak_256(fromHex(callData))), ROUTER, '25', String(NOW + 300), ROUTER]);
+    [padId(PAYER), TARGET, hex(keccak_256(fromHex(callData))), padId(ROUTER), '25', String(NOW + 300), ROUTER]);
   assert.equal(hex(p.digest), hex(hashTypedData(p.typedData)));
   const cd = p.calldata(new Uint8Array(65));
-  assert.equal(hex(cd.subarray(0, 4)), sel('relay(address,bytes,address,address,address,uint256,uint256,bytes)'));
+  assert.equal(hex(cd.subarray(0, 4)), sel(RELAY));
   assert.equal(word(cd, 0), '0x' + '00'.repeat(12) + TARGET.slice(2));
   assert.equal(word(cd, 2), '0x' + '00'.repeat(12) + TOKEN.slice(2));
-  assert.equal(word(cd, 3), '0x' + '00'.repeat(12) + PAYER.slice(2), 'from');
-  assert.equal(word(cd, 4), '0x' + '00'.repeat(12) + ROUTER.slice(2), 'payee: open mode');
+  assert.equal(word(cd, 3), padId(PAYER), 'from, an id');
+  assert.equal(word(cd, 4), padId(ROUTER), 'payee: open mode, pad(router)');
 });
 
-test('buildRelayFee: an open inner envelope stays open; a bound payee; the UA path', () => {
+test('buildRelayFee: an open inner envelope stays open; a bound payee; a derived payer', () => {
   const open = buildRelayFee({ ...base, inner: inner(0, '0x' + '00'.repeat(20)) });
   assert.equal(open.call.message.relayer, '0x' + '00'.repeat(20));
-  const PAYEE = '0x' + '55'.repeat(20);
+  const PAYEE = padId('0x' + '55'.repeat(20));
   const bound = buildRelayFee({ ...base, payee: PAYEE }).payment('0x');
   assert.equal(bound.typedData.message.payee, PAYEE);
-  const ua = buildRelayFee({ ...base, from: padId(PAYER), ua: true });
-  assert.equal(ua.call, null);
-  const u = ua.payment('0x01');
+  const derived = buildRelayFee({ ...base, from: '0x' + 'ab'.repeat(32) });
+  assert.equal(derived.call, null);
+  const u = derived.payment('0x01');
   assert.equal(u.typedData.primaryType, 'UARelayFee');
-  assert.equal(u.typedData.message.payee, padId(ROUTER), 'open mode on the UA path: payee = pad(router)');
-  assert.equal(hex(u.calldata(new Uint8Array(2)).subarray(0, 4)),
-    sel('uaRelay(address,bytes,address,bytes32,bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))'));
+  assert.equal(u.typedData.message.payee, padId(ROUTER), 'open mode: payee = pad(router)');
+  assert.equal(hex(u.calldata(new Uint8Array(2)).subarray(0, 4)), sel(RELAY));
+  // an address where an id is signed is refused, never padded behind the user's back; the old router entry is gone
+  assert.throws(() => buildRelayFee({ ...base, from: PAYER }).payment('0x'), /Refusing to sign/);
+  assert.notEqual(sel(RELAY), sel(`uaRelay(address,bytes,address,bytes32,bytes32,uint256,uint256,${'(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])'})`));
+});
+
+test('mtxExecuteCalldata on a token: the UAMetaTransaction and a UASig (spec §2.3: one name, the struct by kind)', () => {
+  const td = uaMetaTxTypedData({ contract: TARGET, chainId: 7622, chainUid: UID, message: { from: padId(SIGNER), data: '0x12345678',
+    nonce: 4, validUntil: NOW + 300, mode: 1, relayer: EXECUTOR } });
+  const cd = mtxExecuteCalldata(td, new Uint8Array(65).fill(9));
+  assert.equal(hex(cd.subarray(0, 4)), sel(`mtxExecute((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address),${'(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])'})`));
+  assert.equal(word(cd, 2), padId(SIGNER));
+  assert.throws(() => mtxExecuteCalldata({ ...td, primaryType: 'UAMetaTransfer' }, new Uint8Array(65)), /Refusing to sign/);
 });
 
 test('mtxExecuteCalldata: the signed call the payment commits to', () => {
@@ -90,21 +103,21 @@ test('mtxExecuteCalldata: the signed call the payment commits to', () => {
 });
 
 test('a named entry as the relayed call: fee 0, relayer bound to the executor; the payment commits to its calldata', () => {
-  const td = unwrapTypedData({ name: 'SCaaS MetaToken', contract: TARGET, chainId: 7622, chainUid: UID, message: { from: SIGNER, wrapped: 7, recipient: SIGNER,
-    validUntil: NOW + 300, mode: 1 } });
+  const td = uaUnwrapTypedData({ name: 'SCaaS MetaToken', contract: TARGET, chainId: 7622, chainUid: UID, message: { from: padId(SIGNER), wrapped: 7,
+    recipient: SIGNER, validUntil: NOW + 300, mode: 1 } });
   const plan = buildRelayFee({ ...base, inner: td });
   assert.equal(plan.call.message.relayer, EXECUTOR);
-  assert.deepEqual([plan.prompt.call.op, plan.prompt.call.relayer], ['Unwrap', EXECUTOR]);
-  const cd = unwrapCalldata(plan.call, new Uint8Array(65));
-  assert.equal(hex(cd.subarray(0, 4)), sel(TYPED_OPS.Unwrap.call(plan.call, new Uint8Array(65)).abi));
+  assert.deepEqual([plan.prompt.call.op, plan.prompt.call.relayer], ['UAUnwrap', EXECUTOR]);
+  const cd = uaUnwrapCalldata(plan.call, new Uint8Array(65));
+  assert.equal(hex(cd.subarray(0, 4)), sel(TYPED_OPS.UAUnwrap.call(plan.call, new Uint8Array(65)).abi));
+  assert.ok(TYPED_OPS.UAUnwrap.call(plan.call, new Uint8Array(65)).abi.startsWith('mtxUnwrap('));
   const p = plan.payment(cd);
   assert.equal(p.typedData.message.callDataHash, hex(keccak_256(cd)));
   assert.equal(p.ref, relayRef(7622, TARGET, cd));
 });
 
 test('buildRelayFee refuses to pay the executor, an inner envelope bound elsewhere or on another contract', () => {
-  assert.throws(() => buildRelayFee({ ...base, payee: EXECUTOR }), /executor/);
-  assert.throws(() => buildRelayFee({ ...base, from: padId(PAYER), ua: true, payee: padId(EXECUTOR) }), /executor/);
+  assert.throws(() => buildRelayFee({ ...base, payee: padId(EXECUTOR) }), /executor/);
   assert.throws(() => buildRelayFee({ ...base, target: EXECUTOR }), /executor/);
   assert.throws(() => buildRelayFee({ ...base, inner: inner(1, '0x' + '99'.repeat(20)) }), /another relayer/);
   assert.throws(() => buildRelayFee({ ...base, target: TOKEN, inner: inner(1, EXECUTOR) }), /not on the target/);
@@ -117,8 +130,6 @@ test('buildRelayFee refuses an inner call on another chain or outliving its paym
     /another chain/);
   assert.throws(() => buildRelayFee({ ...base, validUntil: NOW + 299, inner: ok }), /outlives/);
   assert.equal(buildRelayFee({ ...base, validUntil: NOW + 300, inner: ok }).call.message.relayer, EXECUTOR);
-  assert.throws(() => buildRelayFee({ ...base, payee: '0x' + '00'.repeat(20) }), /zero address/);
-  assert.throws(() => buildRelayFee({ ...base, from: padId(PAYER), ua: true, payee: '0x' + '00'.repeat(32) }), /zero address/);
-  assert.throws(() => buildRelayFee({ ...base, payee: TOKEN }), /token itself/);
-  assert.throws(() => buildRelayFee({ ...base, from: padId(PAYER), ua: true, payee: padId(TOKEN) }), /token itself/);
+  assert.throws(() => buildRelayFee({ ...base, payee: '0x' + '00'.repeat(32) }), /zero address/);
+  assert.throws(() => buildRelayFee({ ...base, payee: padId(TOKEN) }), /token itself/);
 });

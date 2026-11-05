@@ -23,7 +23,7 @@ import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {PqzRegistryBase, PQZ_UID} from "../pqz/helpers/PqzRegistryBase.sol";
 import {GasBurner} from "../pqz/PqzStateGas.t.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
-import {TYPED_OPS, checkRow, onChain, domainField, msgField, domainJson, domainOf, h, n, a as a_} from "./NamedEntry.t.sol";
+import {TYPED_OPS, TYPED_OPS_LEGACY, checkRow, onChain, domainField, msgField, domainJson, domainOf, h, n, a as a_} from "./NamedEntry.t.sol";
 import {find} from "./TypedOps.t.sol";
 
 /// A token stand-in whose `mtxRelayFee` calls back into the router (the router does not check the token).
@@ -559,20 +559,22 @@ contract MtxRelayFeeTest is PqzRegistryBase {
 
     /// The router's calldata of the rows of `typed_ops.json` run at the rows' addresses: router, target, the payer funded.
     /// ua-mtx-merge T2, meaning: the `RelayFee` row's address `relay` has no entry left; the `UARelayFee` row's call is
-    /// `relay` on ids (the row still names it `uaRelay`, so its selector is replaced here; T11 regenerates the rows).
+    /// `relay` on ids. T11 (MD-7): the `UARelayFee` row names `relay` itself and runs verbatim; the retired `RelayFee` row is
+    /// read from `TYPED_OPS_LEGACY`.
     function test_relayFeeRows() public {
         string memory j = vm.readFile(TYPED_OPS);
-        address at = vm.parseJsonAddress(j, domainField("RelayFee", "token", "router"));
+        address at = vm.parseJsonAddress(j, domainField("UARelayFee", "token", "router"));
         deployCodeTo("MtxRelayFee.sol:MtxRelayFee", at);
-        address tgt = vm.parseJsonAddress(j, msgField("RelayFee", "target"));
+        address tgt = vm.parseJsonAddress(j, msgField("UARelayFee", "target"));
         vm.etch(tgt, hex"00");
         address payer = vm.parseJsonAddress(j, ".key.address");
         tok.mint(payer, 1_000);
-        _relayFeeRowHasNoEntry(j, at);
+        _relayFeeRowHasNoEntry(vm.readFile(TYPED_OPS_LEGACY), at);
         for (uint256 i = 1; i < 2; ++i) {
             string memory op = "UARelayFee";
             checkRow(j, op, "token");
-            bytes memory cd = _renamed(vm.parseJsonBytes(j, domainField(op, "token", "routerCalldata")));
+            bytes memory cd = vm.parseJsonBytes(j, domainField(op, "token", "routerCalldata"));
+            assertEq(bytes4(cd), MtxRelayFee.relay.selector, "the row names the router's relay on ids");
             bytes memory rowSig = vm.parseJsonBytes(j, domainField(op, "token", "signature"));
             assertEq(keccak256(vm.parseJsonBytes(j, domainField(op, "token", "relayedCall"))), vm.parseJsonBytes32(j, msgField(op, "callDataHash")));
             bytes memory sig = onChain(j, op, address(tok));
@@ -598,13 +600,6 @@ contract MtxRelayFeeTest is PqzRegistryBase {
         (bool ok, bytes memory ret) = at.call(vm.parseJsonBytes(j, domainField("RelayFee", "token", "routerCalldata")));
         assertFalse(ok, "the address relay has no entry");
         assertEq(ret.length, 0);
-    }
-
-    /// The row's `uaRelay` calldata under `relay`'s selector (the same arguments).
-    function _renamed(bytes memory cd) internal pure returns (bytes memory) {
-        bytes4 sel = MtxRelayFee.relay.selector;
-        for (uint256 k; k < 4; ++k) cd[k] = sel[k];
-        return cd;
     }
 
     /// A payment that fails after a successful target call rolls the call back (a wrong signature: the counter stays

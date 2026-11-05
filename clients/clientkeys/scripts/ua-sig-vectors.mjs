@@ -9,7 +9,7 @@
 // (typed data from src/evm.js, digest, the auth blob of the native key and of every derived kind above); Foundry
 // (test/ua/UAMetaTx3Vectors.t.sol) recomputes each digest on a token and verifies each auth with the real verifiers.
 // UA-5a (accounts.md CTR-UA-26/28, metatx.md CTR-MTX-05/06) appends the keys burn and unwrapToUA (UAMetaTransaction rows
-// of the newly UA-allowlisted calls) and receiverFee (uaPayReceiverFee: the payer's UAMetaTransfer, the payee's
+// of the newly UA-allowlisted calls) and receiverFee (mtxPayReceiverFee: the payer's UAMetaTransfer, the payee's
 // ReceiverFee co-signature, a derived payee under the purpose receiver-fee); the existing keys stay byte-identical.
 // UA-5b (dex.md CTR-DEX-25/26) writes uatrade_kat.json: UATradeOrder, the CancelUAOrder nesting it and
 // UAInvalidateNonces under the purpose trade, for the native key and every derived kind, plus three mldsa65 orders (one
@@ -526,10 +526,11 @@ const m3Out = {
   call: m3Rows(m3Call),
   transfer: m3Rows(m3Transfer),
   noteUA5a: 'UA-5a (accounts.md CTR-UA-26/28, metatx.md CTR-MTX-05/06): burn and unwrapToUA are UAMetaTransaction rows '
-    + 'as call (auth under metatx); receiverFee rows are uaPayReceiverFee(transfer, payerAuth, receiverFee.message.fee, '
+    + 'as call (auth under metatx); receiverFee rows are mtxPayReceiverFee(transfer, payerAuth, receiverFee.message.fee, '
     + 'feeRecipient, validUntil, payeeAuth): native payer x every derived payee, and p256 x bip340. A native payee signs '
     + 'receiverFeeDigest itself; a derived payee abi.encode(bytes keyData, bytes sig over ua_msg(kind, receiver-fee, '
-    + 'receiverFeeDigest)).',
+    + 'receiverFeeDigest)). ua-mtx-merge (CTR-MTX-30, R47): the rows are those of the merged entries mtxExecute, '
+    + 'mtxExecuteTransfer and mtxPayReceiverFee, which take each auth as UASig{keyData, sig, []} (a native id: empty keyData).',
   burn: m3Rows(m3Burn),
   unwrapToUA: m3Rows(m3UnwrapToUA),
   receiverFee: m3ReceiverFee,
@@ -634,7 +635,7 @@ const pqM3Rows = (build) => pqRows.map((r) => {
     structHash: hex(hashStruct(typedData.types, typedData.primaryType, typedData.message)), digest: hex(digest), auth: pqAuth(sig) };
 });
 // UA-5a: receiver-pays with an mldsa65 payer (index 0) and an mldsa65 payee (index 1, extraKeys[0]): two PQ verifies in
-// one uaPayReceiverFee, the per-transaction cap case (metatx.md the uaPayReceiverFee paragraph)
+// one mtxPayReceiverFee, the per-transaction cap case (metatx.md the receiver-fee paragraph)
 const pqSigner = (index) => ({ name: `mldsa65#${index}`, kp: pqKey('mldsa65', index) });
 const pqRfAuth = (s, purpose, d) => pqAuth(pqSignMsg('mldsa65', s.kp.secretKey, ua.uaMessage(0x0131, tag(purpose), d)));
 const pqRf = [pqSigner(0), pqSigner(1)].map((s) => ({ ...s, id: s.kp.ua }));

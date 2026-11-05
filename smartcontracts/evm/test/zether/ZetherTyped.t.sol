@@ -6,7 +6,7 @@ import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {stdJson} from "forge-std/StdJson.sol";
 import {ZetherFixture} from "./helpers/ZetherFixture.sol";
 import {ZetherKeys} from "./helpers/ZetherKeys.sol";
-import {VM, E_TYPES, TYPED_OPS, n, a, h, eJson, domainJson, ecdsa, checkRow, onChain, domainOf, rowEnvelope, rowEnvelope2, msgField, domainField}
+import {VM, E_TYPES, TYPED_OPS, TYPED_OPS_LEGACY, n, a, h, eJson, domainJson, ecdsa, checkRow, onChain, domainOf, rowEnvelope, rowEnvelope2, msgField, domainField}
     from "../metatx/NamedEntry.t.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {Catalogue} from "../helpers/Catalogue.sol";
@@ -945,17 +945,12 @@ contract ZetherTypedRowsTest is ZetherNamedBase {
         }
     }
 
-    /// ua-mtx-merge T4: a `UA…` row whose entry took the `mtx` name (R35). The row (until T11 regenerates it) holds the
-    /// `ua*` selector: `built` is that calldata; the same arguments run under the `mtx` name (the body is the same).
+    /// ua-mtx-merge T11 (R35, MD-7): a `UA…` row names its merged `mtx` entry and runs verbatim (T4 ran the rows' `ua*`
+    /// calldata under the `mtx` name, until the rows were regenerated).
     function _reachRenamed(string memory op, address c, bytes memory built, bytes4 want) internal {
         bytes memory name = bytes(j.readString(domainField(op, "zether", "abi")));
-        assertEq(name[0], "u", op);
-        assertEq(name[1], "a", op);
-        bytes memory rest = new bytes(name.length - 2);
-        for (uint256 i; i < rest.length; ++i) rest[i] = name[i + 2];
-        bytes4 sel = bytes4(keccak256(bytes.concat("mtx", rest)));
-        assertEq(built, j.readBytes(domainField(op, "zether", "calldata")), string.concat(op, ": the ua* calldata"));
-        for (uint256 k; k < 4; ++k) built[k] = sel[k];
+        assertEq(abi.encodePacked(name[0], name[1], name[2]), bytes("mtx"), op);
+        assertEq(built, j.readBytes(domainField(op, "zether", "calldata")), string.concat(op, ": the merged calldata"));
         _reachAs(op, c, built, want);
     }
 
@@ -985,6 +980,7 @@ contract ZetherTypedRowsTest is ZetherNamedBase {
     }
 
     function test_typedOpsVectors_ZetherTransferSingleRowHasNoEntry() public {
+        j = vm.readFile(TYPED_OPS_LEGACY); // ua-mtx-merge T11 (MD-7): the row retired
         string memory op = "ZetherTransferSingle";
         MetaTxLib.Envelope memory e = rowEnvelope(j, op);
         _rowHasNoEntry(op, address(tok), abi.encodeWithSignature(j.readString(domainField(op, "zether", "abi")), e, _single(op),
@@ -998,6 +994,7 @@ contract ZetherTypedRowsTest is ZetherNamedBase {
     }
 
     function test_typedOpsVectors_ZetherTransferRowsHaveNoEntry() public {
+        j = vm.readFile(TYPED_OPS_LEGACY); // ua-mtx-merge T11 (MD-7): the row retired
         for (uint256 k; k < 2; ++k) {
             string memory op = k == 0 ? "ZetherTransfer" : "ZetherTransferCompact";
             _rowHasNoEntry(op, address(tok), abi.encodeWithSignature(j.readString(domainField(op, "zether", "abi")), rowEnvelope(j, op), _multi(op),
@@ -1014,6 +1011,7 @@ contract ZetherTypedRowsTest is ZetherNamedBase {
     }
 
     function test_typedOpsVectors_ZetherUnshieldRowHasNoEntry() public {
+        j = vm.readFile(TYPED_OPS_LEGACY); // ua-mtx-merge T11 (MD-7): the row retired
         string memory op = "ZetherUnshield";
         _rowHasNoEntry(op, address(tok), abi.encodeWithSignature(j.readString(domainField(op, "zether", "abi")), rowEnvelope(j, op), _burn(op),
             j.readUint(_p(op, "amount")), j.readBytes32(_p(op, "recipient")), j.readBytes(_p(op, "proof")), _sig(op)));
@@ -1027,6 +1025,7 @@ contract ZetherTypedRowsTest is ZetherNamedBase {
     }
 
     function test_typedOpsVectors_ZetherUnshieldUnwrapRowHasNoEntry() public {
+        j = vm.readFile(TYPED_OPS_LEGACY); // ua-mtx-merge T11 (MD-7): the row retired
         string memory op = "ZetherUnshieldUnwrap";
         WrappedZetherToken w = _wrapped();
         _rowHasNoEntry(op, address(w), abi.encodeWithSignature(j.readString(domainField(op, "zether", "abi")), rowEnvelope(j, op), _burn(op), _unwrap(op),
@@ -1049,6 +1048,7 @@ contract ZetherTypedRowsTest is ZetherNamedBase {
     }
 
     function test_typedOpsVectors_RollOverSignedRowHasNoEntry() public {
+        j = vm.readFile(TYPED_OPS_LEGACY); // ua-mtx-merge T11 (MD-7): the row retired
         string memory op = "RollOverSigned";
         _rowHasNoEntry(op, address(tok), abi.encodeWithSignature(j.readString(domainField(op, "zether", "abi")), rowEnvelope(j, op), j.readBytes32(_p(op, "ua")),
             uint64(j.readUint(_p(op, "expectedPendingSeq"))), uint64(j.readUint(_p(op, "validUntilBlock"))), _owner(op), _sig(op)));
@@ -1062,6 +1062,7 @@ contract ZetherTypedRowsTest is ZetherNamedBase {
     }
 
     function test_typedOpsVectors_SetRollOverModeRowHasNoEntry() public {
+        j = vm.readFile(TYPED_OPS_LEGACY); // ua-mtx-merge T11 (MD-7): the row retired
         string memory op = "SetRollOverMode";
         _rowHasNoEntry(op, address(tok), abi.encodeWithSignature(j.readString(domainField(op, "zether", "abi")), rowEnvelope(j, op), j.readBytes32(_p(op, "ua")),
             uint8(j.readUint(_p(op, "rollOverMode"))), uint64(j.readUint(_p(op, "validUntilBlock"))), _owner(op), _sig(op)));
@@ -1138,6 +1139,7 @@ contract ZetherTypedRowsTest is ZetherNamedBase {
     }
 
     function test_typedOpsVectors_RollOverRowHasNoEntry() public {
+        j = vm.readFile(TYPED_OPS_LEGACY); // ua-mtx-merge T11 (MD-7): the row retired
         string memory op = "RollOver";
         _public(tok, j.readAddress(".key.address"), 1 << 40); // the outer fee
         _rowHasNoEntry(op, address(tok), abi.encodeWithSignature(j.readString(domainField(op, "zether", "abi")), rowEnvelope(j, op), j.readBytes32(_p(op, "ua")),
@@ -1156,6 +1158,7 @@ contract ZetherTypedRowsTest is ZetherNamedBase {
     }
 
     function test_typedOpsVectors_RollOverBatchRowHasNoEntry() public {
+        j = vm.readFile(TYPED_OPS_LEGACY); // ua-mtx-merge T11 (MD-7): the row retired
         string memory op = "RollOverBatch";
         _public(tok, j.readAddress(".key.address"), 1 << 40);
         _rowHasNoEntry(op, address(tok), abi.encodeWithSignature(j.readString(domainField(op, "zether", "abi")), rowEnvelope(j, op), _uas(op), _sig(op)));
