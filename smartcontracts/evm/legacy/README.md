@@ -178,3 +178,12 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   `ZetherWrappedLib.unwrapCall`), and the public address `envelopeBinding(MetaTransaction)` view; their `ua*` bodies took
   the `mtx*` names and `uaEnvelopeBinding` the name `envelopeBinding`. Tests as they stood before their meaning changed:
   `test/zether/{ZetherTyped,ZetherUA5c,ZetherRelay,ZetherProverCross,ZetherGasLimit}.t.sol`. Not built.
+  T5 (PQZ, R36): `src/pqz/{WrappedPqzToken,IPqzToken}.sol` (and `PqzLayer.sol`, `src/common/MetaTxLib.sol`, copied
+  earlier): the address signed entries `mtxShield`, `mtxConfidentialTransfer`, `mtxConfidentialTransferCompact`,
+  `mtxConfidentialTransferSingle`, `mtxConfidentialTransferSingleCompact`, `mtxUnshield`, `mtxUnshieldUnwrap`,
+  `mtxRollOver`, `mtxPrepareAcc` over `Envelope` + `bytes sig`, their typehashes (`PqzTransfer`, `PqzTransferCompact`,
+  `PqzTransferSingle`, `PqzTransferSingleCompact`, `PqzUnshield`, `PqzUnshieldUnwrap`, `RollOver`, `PrepareAcc`,
+  `MetaTxLib.SHIELD_TYPEHASH` (`Shield`)), and the public address `envelopeBinding(MetaTransaction)` view; their `ua*`
+  bodies took the `mtx*` names and `uaEnvelopeBinding` the name `envelopeBinding`. Tests as they stood before their
+  meaning changed: `test/pqz/{PqzTyped,PqzRelay,PqzPool}.t.sol` (and `test/metatx/NamedEntry.t.sol`, copied earlier).
+  Not built.
