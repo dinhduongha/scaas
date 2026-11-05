@@ -3,15 +3,17 @@
 //! CTR-UA-17 key data, CTR-UA-33 member slots, CTR-UA-37 acceptance), against smartcontracts/vectors/ua/{sign,portable,nested,
 //! pq_signatures}.json (written by clientkeys). Every set the builder returns is checked by the off-chain verifier of `ua8.rs`
 //! (the registry's rule); byte-equal where every leaf signs deterministically (ML-DSA through the `vectors` hook, rnd = 0, as the
-//! JS `extraEntropy: false`). Rows with a member that is no key of the vector wallet (a native member: T4; the fixed-seed classical
-//! keys of signatures.json) are counted apart. UNAUDITED.
+//! JS `extraEntropy: false`). T4: a native (`evm-eoa`) member signs typed data (the record's typed data in the portable purposes,
+//! `UAAuth` under the registry's domain elsewhere; R17: a native `UASig` is `{"", signature, []}`); the vector files' native member is
+//! the fixed key of typed_ops.json (no wallet key), signed here through a test `Signer` (the phase-2 external-key path). Rows with a
+//! member that is no key here (the fixed-seed classical keys of signatures.json) are counted apart. UNAUDITED.
 use scaas_ua::ua8::{
     check_authorization, check_kem_record_with, check_membership_with, check_pqz_key_record_with, check_registration_with,
     decode_member_sigs, encode_member_sigs, membership_digest, pop_v2_tag, InnerSig, KemKey, MemberSig, MsigStructure, UAAttrs, UASig,
 };
-use scaas_ua::verify::verify;
-use scaas_ua::wallet::{membership_sig, msig_sig, ua_sig, Error, KeyRef, SignRequest, Signer, Slot, UaKey, Wallet};
-use scaas_ua::{derive_ua, purpose_tag, ua_message, Domain, UAError};
+use scaas_ua::verify::{native_ecdsa, verify};
+use scaas_ua::wallet::{membership_sig, msig_sig, ua_sig, Error, KeyRef, Network, SignRequest, Signer, Slot, TypedData, UaKey, Wallet};
+use scaas_ua::{derive_ua, keccak256, purpose_tag, ua_auth_digest, ua_message, Domain, UAError};
 use serde_json::Value;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -49,7 +51,7 @@ type Record = (u16, Vec<u8>);
 
 /// The vector wallet's keys the msig rows use: p256, ed25519, secp256k1 (accounts 0, 1, indices 0-2), bls12381-minsig (accounts
 /// 0, 1), mldsa65 and fndsa512 (account 0, indices 0-2).
-struct Keys(Vec<UaKey>);
+struct Keys(Vec<UaKey>, Native);
 impl Keys {
     fn new(w: &Wallet) -> Keys {
         let mut keys = vec![];
@@ -64,10 +66,13 @@ impl Keys {
                 }
             }
         }
-        Keys(keys)
+        Keys(keys, Native::fixed())
     }
     fn get(&self, id: &[u8; 32]) -> Option<S<'_>> {
-        self.0.iter().find(|k| k.ua() == Some(*id)).map(S)
+        if *id == self.1.id() {
+            return Some(S::Native(&self.1));
+        }
+        self.0.iter().find(|k| k.ua() == Some(*id)).map(S::Ua)
     }
     /// `id` → `(kind, key data)` of every wallet key and every `msig` in `records`, the verifier's lookup.
     fn members(&self, records: &[(u16, Vec<u8>)]) -> impl Fn([u8; 32]) -> Option<(u16, Vec<u8>)> + '_ {
@@ -77,23 +82,90 @@ impl Keys {
     }
 }
 
-/// A wallet key as the builder sees it; with feature `vectors` ML-DSA signs with rnd = 0 (the JS rows' deterministic form).
-struct S<'a>(&'a UaKey);
-impl Signer for S<'_> {
-    fn key_ref(&self) -> KeyRef {
-        self.0.key_ref()
+/// The vector files' native member: the fixed secp256k1 key of typed_ops.json (structures.json context A), an EVM key outside the
+/// wallet, as a phase-2 external key: it signs the typed data a `SignRequest::Eip712` carries (RFC 6979, low-s, `r ‖ s ‖ v`).
+struct Native(k256::ecdsa::SigningKey);
+impl Native {
+    fn fixed() -> Native {
+        let t = serde_json::from_str::<Value>(
+            &std::fs::read_to_string(format!("{}/../../smartcontracts/vectors/typed/typed_ops.json", env!("CARGO_MANIFEST_DIR"))).unwrap(),
+        )
+        .unwrap();
+        Native(k256::ecdsa::SigningKey::from_slice(&bytes(&t["key"]["private"])).unwrap())
     }
-    fn sign_request(&self, req: &SignRequest) -> scaas_ua::wallet::Result<Vec<u8>> {
-        #[cfg(feature = "vectors")]
-        if let (SignRequest::UaMsg { ua_msg, .. }, 0x0130 | 0x0131 | 0x0134) = (req, self.0.kind()) {
-            return self.0.vectors_sign_ua_msg(ua_msg, &[0; 32]);
-        }
-        self.0.sign_request(req)
+    fn address(&self) -> [u8; 20] {
+        let p = self.0.verifying_key().to_sec1_point(false);
+        keccak256(&p.as_bytes()[1..])[12..].try_into().unwrap()
+    }
+    fn id(&self) -> [u8; 32] {
+        let mut id = [0; 32];
+        id[12..].copy_from_slice(&self.address());
+        id
     }
 }
-/// Every signature of a key of this kind is one byte string in this build.
+impl Signer for Native {
+    fn key_ref(&self) -> KeyRef {
+        let public_key = self.0.verifying_key().to_sec1_point(true).as_bytes().to_vec();
+        KeyRef::Native { network: Network::Evm, coin_type: None, address: Some(format!("0x{}", hex::encode(self.address()))), public_key }
+    }
+    fn sign_request(&self, req: &SignRequest) -> scaas_ua::wallet::Result<Vec<u8>> {
+        let SignRequest::Eip712 { domain_separator, struct_hash, typed_data, .. } = req else { return Err(Error::Argument) };
+        let d = keccak256(&[&[0x19, 0x01][..], domain_separator, struct_hash].concat());
+        assert_eq!(typed_data.digest().unwrap(), d, "the typed data shown is the one signed");
+        let (sig, rec) = self.0.sign_prehash_recoverable(&d);
+        Ok([&sig.to_bytes()[..], &[27 + rec.to_byte()]].concat())
+    }
+}
+
+/// A key as the builder sees it: a wallet key (with feature `vectors` ML-DSA signs with rnd = 0, the JS rows' deterministic form)
+/// or the native member.
+enum S<'a> {
+    Ua(&'a UaKey),
+    Native(&'a Native),
+}
+impl S<'_> {
+    fn kind(&self) -> u16 {
+        match self {
+            S::Ua(k) => k.kind(),
+            S::Native(_) => 0x0001,
+        }
+    }
+}
+impl Signer for S<'_> {
+    fn key_ref(&self) -> KeyRef {
+        match self {
+            S::Ua(k) => k.key_ref(),
+            S::Native(n) => n.key_ref(),
+        }
+    }
+    fn sign_request(&self, req: &SignRequest) -> scaas_ua::wallet::Result<Vec<u8>> {
+        let k = match self {
+            S::Native(n) => return n.sign_request(req),
+            S::Ua(k) => k,
+        };
+        #[cfg(feature = "vectors")]
+        if let (SignRequest::UaMsg { ua_msg, .. }, 0x0130 | 0x0131 | 0x0134) = (req, k.kind()) {
+            return k.vectors_sign_ua_msg(ua_msg, &[0; 32]);
+        }
+        k.sign_request(req)
+    }
+}
+/// Every signature of a key of this kind is one byte string in this build (native: RFC 6979).
 fn exact(kind: u16) -> bool {
-    matches!(kind, 0x0101 | 0x0102 | 0x0106 | 0x0108) || (cfg!(feature = "vectors") && matches!(kind, 0x0130 | 0x0131 | 0x0134))
+    matches!(kind, 0x0001 | 0x0101 | 0x0102 | 0x0106 | 0x0108) || (cfg!(feature = "vectors") && matches!(kind, 0x0130 | 0x0131 | 0x0134))
+}
+/// structures.json context A, generation 1: the registry domain of the vector files' `UAAuth` rows.
+fn context_a() -> Domain {
+    let s = serde_json::from_str::<Value>(
+        &std::fs::read_to_string(format!("{}/../../smartcontracts/vectors/ua/structures.json", env!("CARGO_MANIFEST_DIR"))).unwrap(),
+    )
+    .unwrap();
+    let a = &s["contexts"]["A"];
+    Domain { generation: 1, chain_id: a["chainId"].as_u64().unwrap(), registry: bytes(&a["registry"]).try_into().unwrap(),
+        chain_uid: b32(&a["chainUid"]) }
+}
+fn typed(v: &Value) -> TypedData {
+    TypedData::from_json(&serde_json::to_vec(v).unwrap()).unwrap()
 }
 
 /// A set's shape: per slot its index and, for an `msig` member, its leaves' indices.
@@ -143,7 +215,7 @@ fn slots<'a>(shape: &Shape, signers: &'a [Vec<S<'_>>]) -> Vec<Slot<'a>> {
         .collect()
 }
 fn all_exact(signers: &[Vec<S<'_>>]) -> bool {
-    signers.iter().flatten().all(|s| exact(s.0.kind()))
+    signers.iter().flatten().all(|s| exact(s.kind()))
 }
 /// Every slot index strictly increasing, at both levels.
 fn sorted(m: &[MemberSig]) -> bool {
@@ -183,7 +255,7 @@ fn sign_json_msig_rows() {
             .map(|s| (u16_of(&s["index"]), s["members"].as_array().map(|l| l.iter().map(|x| u16_of(&x["index"])).collect())))
             .collect();
         let signers = resolve(&keys, &kd, &inner, &shape).expect("every sign.json member is a vector wallet key");
-        let got = msig_sig(&kd, &inner, &b32(&r["purposeTag"]), &b32(&r["digest"]), &slots(&shape, &signers));
+        let got = msig_sig(&kd, &inner, &b32(&r["purposeTag"]), &b32(&r["digest"]), None, None, &slots(&shape, &signers));
         if r["refused"].is_string() {
             assert_eq!(r["refused"], "UAPoP");
             assert!(got == POP, "{}: {got:?}", r["case"]);
@@ -213,7 +285,7 @@ fn non_minimal_set_refused_at_level_2() {
     let (purpose, digest) = (b32(&r["purposeTag"]), b32(&r["digest"]));
     let run = |shape: Shape| {
         let signers = resolve(&keys, &kd, &inner, &shape).unwrap();
-        msig_sig(&kd, &inner, &purpose, &digest, &slots(&shape, &signers))
+        msig_sig(&kd, &inner, &purpose, &digest, None, None, &slots(&shape, &signers))
     };
     let msig_at = MsigStructure::from_key_data(&kd).unwrap().members.iter().position(|m| m.kind == 0x0120).unwrap() as u16;
     let other = 1 - msig_at;
@@ -244,7 +316,7 @@ fn slots_sorted() {
     let (purpose, digest) = (b32(&r["purposeTag"]), b32(&r["digest"]));
     let run = |shape: Shape| {
         let signers = resolve(&keys, &kd, &inner, &shape).unwrap();
-        msig_sig(&kd, &inner, &purpose, &digest, &slots(&shape, &signers))
+        msig_sig(&kd, &inner, &purpose, &digest, None, None, &slots(&shape, &signers))
     };
     let msig_at = MsigStructure::from_key_data(&kd).unwrap().members.iter().position(|m| m.kind == 0x0120).unwrap() as u16;
     let other = 1 - msig_at;
@@ -261,12 +333,12 @@ fn slots_sorted() {
     let kd = bytes(&r["keyData"]);
     let shape: Shape = arr(r, "slots").iter().map(|s| (u16_of(&s["index"]), None)).collect();
     let signers = resolve(&keys, &kd, &|_| None, &shape).unwrap();
-    let got = msig_sig(&kd, &|_| None, &b32(&r["purposeTag"]), &b32(&r["digest"]), &slots(&shape, &signers));
+    let got = msig_sig(&kd, &|_| None, &b32(&r["purposeTag"]), &b32(&r["digest"]), None, None, &slots(&shape, &signers));
     assert!(got == POP);
     let mut fixed = shape.clone();
     fixed.sort_by_key(|(i, _)| *i);
     let signers = resolve(&keys, &kd, &|_| None, &fixed).unwrap();
-    let got = msig_sig(&kd, &|_| None, &b32(&r["purposeTag"]), &b32(&r["digest"]), &slots(&fixed, &signers)).unwrap();
+    let got = msig_sig(&kd, &|_| None, &b32(&r["purposeTag"]), &b32(&r["digest"]), None, None, &slots(&fixed, &signers)).unwrap();
     assert!(sorted(&got.members) && got.members.iter().map(|m| m.index).eq(fixed.iter().map(|(i, _)| *i)));
 }
 
@@ -286,7 +358,8 @@ impl Tally {
 }
 fn check_rows(file: &Value, records: &[(u16, Vec<u8>)], keys: &Keys) -> Tally {
     let inner = inner_of(records);
-    let members = keys.members(records);
+    let everything = all_records(file);
+    let members = keys.members(&everything);
     let kd_of = |ua: &[u8; 32]| records.iter().find(|(_, d)| derive_ua(0x0120, d, false).ok() == Some(*ua)).map(|(_, d)| d.clone());
     let mut t = Tally { exact: 0, verified: 0, skipped: 0 };
     let mut rows: Vec<(&Value, &str)> = vec![];
@@ -311,14 +384,19 @@ fn check_rows(file: &Value, records: &[(u16, Vec<u8>)], keys: &Keys) -> Tally {
         };
         let shape = shape_of(&expected);
         let Some(signers) = resolve(keys, &kd, &inner, &shape) else {
+            eprintln!("skipped (a member is no key here, or a form a Slot cannot express): {name}");
             t.skipped += 1;
             continue;
         };
-        let got = msig_sig(&kd, &inner, &purpose, &digest, &slots(&shape, &signers));
+        // a native leaf: the record's typed data (portable purposes), `UAAuth` in context A (authorizations)
+        let record = (table != "authorizations").then(|| typed(&r["typedData"]));
+        let domain = context_a();
+        let got = msig_sig(&kd, &inner, &purpose, &digest, Some(&domain), record.as_ref(), &slots(&shape, &signers));
         if table == "authorizations" && r["valid"] == false {
-            // the two forms a `Slot` cannot express (a signature on an msig slot, a list on a signing slot) are built in their
-            // valid form; a set below a threshold is refused
-            if ["one-level-short", "inner-below-threshold"].contains(&r["name"].as_str().unwrap()) {
+            // a set below a threshold is refused; the forms a `Slot` cannot express (a signature on an msig slot, a list on a
+            // signing slot) and a content defect of a valid shape (one-level-short: the inner leaves over the outer digest) are
+            // built in their valid form
+            if r["name"] == "inner-below-threshold" {
                 assert!(got == POP, "{name}");
                 t.verified += 1;
             }
@@ -348,10 +426,7 @@ fn check_rows(file: &Value, records: &[(u16, Vec<u8>)], keys: &Keys) -> Tally {
             "pqzKeyRecords" => {
                 check_pqz_key_record_with(0x0120, &kd, &ua, &bytes(&r["pqzKey"]), &b32(&r["pqzPopHash"]), &blob, &members, acc)
             }
-            _ => {
-                let domain = Domain { generation: 1, chain_id: 0, registry: [0; 20], chain_uid: [0; 32] };
-                check_authorization(&kd, &ua, &purpose, &digest, &got.members, &domain, &members, acc)
-            }
+            _ => check_authorization(&kd, &ua, &purpose, &digest, &got.members, &domain, &members, acc),
         };
         t.add(exact, ok.is_ok(), &format!("{name}: {ok:?}"));
     }
@@ -368,6 +443,7 @@ fn check_rows(file: &Value, records: &[(u16, Vec<u8>)], keys: &Keys) -> Tally {
         };
         let shape = shape_of(std::slice::from_ref(&expected));
         let Some(signers) = resolve(keys, &kd, &inner, &shape) else {
+            eprintln!("skipped (a member is no key here): {name}");
             t.skipped += 1;
             continue;
         };
@@ -387,25 +463,34 @@ fn encode_one(m: &MemberSig) -> Vec<u8> {
     encode_member_sigs(std::slice::from_ref(m))
 }
 fn msig_records(file: &Value) -> Vec<(u16, Vec<u8>)> {
+    all_records(file).into_iter().filter(|(k, _)| *k == 0x0120).collect()
+}
+/// Every record a vector file registers (its fixed-seed classical members too: the verifier reads every member's key).
+fn all_records(file: &Value) -> Vec<(u16, Vec<u8>)> {
     ["registrations", "afterAcceptance"]
         .iter()
         .flat_map(|t| file[*t].as_array().map_or(&[][..], |a| a.as_slice()))
-        .filter(|r| r["kind"] == 0x0120)
-        .map(|r| (0x0120, bytes(&r["keyData"])))
+        .map(|r| (r["kind"].as_u64().unwrap() as u16, bytes(&r["keyData"])))
+        .filter(|(k, d)| derive_ua(*k, d, false).is_ok())
         .collect()
 }
 
-/// `portable.json`: `msig-pq` (two mldsa65 members) at every parameter set, its KEM records v1-v3, and the acceptance of the
-/// mldsa65 member of `msig-pq-native`. Rows with a native or a fixed-seed classical member are counted as skipped.
+/// `portable.json`: `msig-pq` (two mldsa65 members) at every parameter set and `msig-pq-native` (native + mldsa65, T4: the native
+/// member over the record's typed data), the KEM records v1-v3, the PQZ key records of `msig-pq-native` at every set, and the
+/// acceptances of `msig-pq-native`'s two members and of `msig-classical`'s native member: 15, byte for byte with feature `vectors`
+/// (the native leaf is RFC 6979 in every build). Skipped: the acceptances of `msig-classical`'s fixed-seed classical members
+/// (signatures.json's keys, no key here): 3.
 #[test]
 fn portable_json_msig_rows() {
     let p = load("portable.json");
     let w = wallet();
     let keys = Keys::new(&w);
     let t = check_rows(&p, &msig_records(&p), &keys);
-    assert_eq!((t.verified, t.skipped), (8, 10), "registrations 4, kemRecords 3, memberships 1");
-    assert_eq!(t.exact, if cfg!(feature = "vectors") { 8 } else { 0 });
+    assert_eq!((t.verified, t.skipped), (15, 3), "registrations 5, kemRecords 3, pqzKeyRecords 4, memberships 3");
+    assert_eq!(t.exact, if cfg!(feature = "vectors") { 15 } else { PORTABLE_EXACT_DEFAULT });
 }
+/// The rows whose every leaf is deterministic in a default build (ML-DSA hedged): the native acceptances.
+const PORTABLE_EXACT_DEFAULT: usize = 2;
 
 /// `nested.json`: the registrations, KEM / PQZ key records, authorizations and acceptances whose leaves are vector wallet keys
 /// (fndsa512 #0-#2: verified, Falcon is randomized; an inner `msig` slot by its own minimal list over `innerDigest`).
@@ -416,9 +501,12 @@ fn nested_json_msig_rows() {
     let keys = Keys::new(&w);
     let records = msig_records(&n);
     let t = check_rows(&n, &records, &keys);
-    // registrations msig-inner-pq, -inner-heavy, -nested-pq, -nested-heavy-inner, -nested-heavy-outer; kemRecords msig-nested-pq;
-    // memberships msig-nested-classical/0
-    assert_eq!((t.verified, t.exact, t.skipped), (7, 0, 17));
+    // registrations msig-inner-pq, -inner-native, -inner-native-2, -inner-heavy, -nested-pq, -nested-native, -nested-twice,
+    // -nested-heavy-inner, -nested-heavy-outer; kemRecords msig-nested-pq; pqzKeyRecords msig-nested-native at every set; the
+    // authorization two-levels (a native leaf over UAAuth in context A); memberships msig-nested-classical/0. Skipped (a fixed-seed
+    // classical member, or the list-on-signing-slot form a `Slot` cannot express): afterAcceptance msig-nested-after-acceptance,
+    // authorizations list-on-signing-slot, memberships msig-inner-classical/0, /1, msig-nested-classical/1.
+    assert_eq!((t.verified, t.exact, t.skipped), (17, 0, 5));
     // every slot's acceptance the wallet can sign (the file's rows are mostly native or fixed-seed classical): a signing slot, and an
     // `msig` slot by the first minimal subset of its own members (bit order), verified by `check_membership_with`
     let inner = inner_of(&records);
@@ -445,8 +533,10 @@ fn nested_json_msig_rows() {
     }
     assert_eq!((signing, nested), (NESTED_SIGNING, NESTED_MSIG));
 }
-const NESTED_SIGNING: usize = 12;
-const NESTED_MSIG: usize = 3;
+// T3d: 12 and 3; T4 adds the native member's slots (it signs `UAMembership` itself) and the `msig` slots whose first minimal subset
+// holds it: 14 and 6
+const NESTED_SIGNING: usize = 14;
+const NESTED_MSIG: usize = 6;
 
 /// `pq_signatures.json` `msig.treasury` (three mldsa65 members, t = 2, purpose metatx): both minimal pairs byte-equal (feature
 /// `vectors`) or verified; the set below the threshold refused.
@@ -464,7 +554,7 @@ fn pq_signatures_json_treasury() {
     for set in arr(t, "sets") {
         let shape: Shape = arr(set, "indices").iter().map(|i| (u16_of(i), None)).collect();
         let signers = resolve(&keys, &kd, &|_| None, &shape).unwrap();
-        let got = msig_sig(&kd, &|_| None, &purpose, &digest, &slots(&shape, &signers));
+        let got = msig_sig(&kd, &|_| None, &purpose, &digest, None, None, &slots(&shape, &signers));
         if set["valid"] == false {
             assert!(got == POP, "{}", set["name"]);
             continue;
@@ -498,7 +588,7 @@ fn single_key_uasig_forms() {
         (0x0131, pop_v2_tag(), false),
     ] {
         let key = w.ua_key(kind, 0, 0).unwrap();
-        let sig = ua_sig(&key, &purpose, &digest).unwrap();
+        let sig = ua_sig(&key, None, &purpose, &digest).unwrap();
         assert_eq!(sig.key_data.is_empty(), !carries, "{kind:#06x}");
         if carries {
             assert_eq!(sig.key_data, key.key_data());
@@ -508,15 +598,71 @@ fn single_key_uasig_forms() {
         assert!(verify(kind, &key.key_data(), &ua_message(kind, &purpose, &digest).unwrap(), &sig.signature, pop), "{kind:#06x}");
     }
     let key = w.ua_key(0x0101, 0, 0).unwrap();
-    assert_eq!(ua_sig(&key, &[9; 32], &digest).err(), Some(Error::Ua(UAError::PurposeUnknown)));
+    assert_eq!(ua_sig(&key, None, &[9; 32], &digest).err(), Some(Error::Ua(UAError::PurposeUnknown)));
 }
 
-/// A native key has no `UASig` here yet (its typed signature is T4's); R17's form, `keyData` and `members` empty, comes with it.
+/// R17: a native key's `UASig` is `{"", signature, []}`, its signature over `UAAuth(id, purpose, digest)` under the registry's domain
+/// (`requireAuthorized`, CTR-UA-24); with no domain, a portable purpose (a native id has no portable record of its own), an unknown
+/// purpose, or a key of an ed25519 network: refused.
 #[test]
-fn native_signer_refused_until_typed_signing() {
+fn native_ua_sig_r17() {
     let w = wallet();
-    let native = w.native_key(scaas_ua::wallet::Network::Evm, 0, None).unwrap();
-    assert_eq!(ua_sig(&native, &purpose_tag("metatx").unwrap(), &[1; 32]).err(), Some(Error::Argument));
+    let native = w.native_key(Network::Evm, 0, None).unwrap();
+    let address: [u8; 20] = hex::decode(native.address().unwrap().trim_start_matches("0x")).unwrap().try_into().unwrap();
+    let mut id = [0; 32];
+    id[12..].copy_from_slice(&address);
+    let (domain, metatx, digest) = (context_a(), purpose_tag("metatx").unwrap(), [1; 32]);
+    let sig = ua_sig(&native, Some(&domain), &metatx, &digest).unwrap();
+    assert!(sig.key_data.is_empty() && sig.members.is_empty());
+    assert!(native_ecdsa(&address, &ua_auth_digest(&domain, &id, &metatx, &digest), &sig.signature));
+    // another domain is another digest
+    let other = Domain { generation: 2, ..context_a() };
+    assert!(!native_ecdsa(&address, &ua_auth_digest(&other, &id, &metatx, &digest), &sig.signature));
+    assert_eq!(ua_sig(&native, None, &metatx, &digest).err(), Some(Error::Argument));
+    assert_eq!(ua_sig(&native, Some(&domain), &pop_v2_tag(), &digest).err(), Some(Error::Argument));
+    assert_eq!(ua_sig(&native, Some(&domain), &purpose_tag("membership").unwrap(), &digest).err(), Some(Error::Argument));
+    assert_eq!(ua_sig(&native, Some(&domain), &[9; 32], &digest).err(), Some(Error::Ua(UAError::PurposeUnknown)));
+    let sol = w.native_key(Network::Solana, 0, None).unwrap();
+    assert_eq!(ua_sig(&sol, Some(&domain), &metatx, &digest).err(), Some(Error::Argument));
+}
+
+/// A native slot needs what its purpose signs: the record's typed data, whose digest is the one signed and whose domain is the
+/// portable one, in the portable purposes; the registry's domain elsewhere. Missing or another record: `Argument`, nothing signed.
+#[test]
+fn native_slot_needs_its_typed_data() {
+    let p = serde_json::from_str::<Value>(
+        &std::fs::read_to_string(format!("{}/../../smartcontracts/vectors/ua/nested.json", env!("CARGO_MANIFEST_DIR"))).unwrap(),
+    )
+    .unwrap();
+    let w = wallet();
+    let keys = Keys::new(&w);
+    let records = msig_records(&p);
+    let inner = inner_of(&records);
+    let r = arr(&p, "authorizations").iter().find(|r| r["name"] == "two-levels").unwrap();
+    let ua = b32(&r["ua"]);
+    let kd = records.iter().find(|(_, d)| derive_ua(0x0120, d, false).unwrap() == ua).unwrap().1.clone();
+    let expected = sigs_of(&r["uaSig"]["members"]);
+    let shape = shape_of(&expected);
+    let signers = resolve(&keys, &kd, &inner, &shape).expect("the native leaf and the wallet keys");
+    let (purpose, digest) = (b32(&r["purposeTag"]), b32(&r["digest"]));
+    let domain = context_a();
+    let got = msig_sig(&kd, &inner, &purpose, &digest, Some(&domain), None, &slots(&shape, &signers)).unwrap();
+    let members = keys.members(&all_records(&p));
+    assert_eq!(check_authorization(&kd, &ua, &purpose, &digest, &got.members, &domain, &members, Some(&all_accepted)), Ok(()), "positive control");
+    // the native leaf (RFC 6979) byte for byte; the Falcon leaf is randomized
+    let leaf = |m: &[MemberSig]| m.iter().flat_map(|s| s.members.iter().map(|x| x.sig.clone())).find(|sig| sig.len() == 65).unwrap();
+    assert_eq!(hex::encode(leaf(&got.members)), hex::encode(leaf(&expected)));
+    assert_eq!(msig_sig(&kd, &inner, &purpose, &digest, None, None, &slots(&shape, &signers)).err(), Some(Error::Argument));
+    // a portable purpose: the record is required and must be the digest's
+    let reg = arr(&p, "registrations").iter().find(|x| x["ua"] == r["ua"]).unwrap();
+    let (rd, record) = (b32(&reg["registrationDigest"]), typed(&reg["typedData"]));
+    let pop = decode_member_sigs(&bytes(&reg["pop"])).unwrap();
+    let pshape = shape_of(&pop);
+    let psigners = resolve(&keys, &kd, &inner, &pshape).unwrap();
+    assert!(msig_sig(&kd, &inner, &pop_v2_tag(), &rd, None, Some(&record), &slots(&pshape, &psigners)).is_ok(), "positive control");
+    assert_eq!(msig_sig(&kd, &inner, &pop_v2_tag(), &rd, Some(&domain), None, &slots(&pshape, &psigners)).err(), Some(Error::Argument));
+    let other = typed(&arr(&p, "registrations").iter().find(|x| x["ua"] != r["ua"]).unwrap()["typedData"]);
+    assert_eq!(msig_sig(&kd, &inner, &pop_v2_tag(), &rd, None, Some(&other), &slots(&pshape, &psigners)).err(), Some(Error::Argument));
 }
 
 /// A slot's key must be that slot's member (its kind and its id), a signing slot must name a derived member and an `msig` slot an
@@ -542,7 +688,7 @@ fn slot_must_match_its_member() {
     };
     let signers = resolve(&keys, &kd, &inner, &shape).unwrap();
     let good = slots(&shape, &signers);
-    let run = |s: &[Slot]| msig_sig(&kd, &inner, &purpose, &digest, s);
+    let run = |s: &[Slot]| msig_sig(&kd, &inner, &purpose, &digest, None, None, s);
     assert!(run(&good).is_ok(), "positive control");
     let leaves = &signers[shape.iter().position(|(i, _)| *i == msig_at).unwrap()];
     let (leaf, bls) = (&leaves[0], &signers[shape.iter().position(|(i, _)| *i == other).unwrap()][0]);
@@ -571,11 +717,11 @@ fn slot_must_match_its_member() {
     assert!(run(&pair(inner_slot(), Slot::Member { index: other, key: bls }, first)).is_ok(), "positive control of the count");
     assert_eq!(signed(), 2);
     // the inner msig's key data unknown, or another msig's (`inner` is the caller's: never trusted)
-    assert_eq!(msig_sig(&kd, &|_| None, &purpose, &digest, &good).err(), Some(Error::Ua(UAError::MemberUnknown)));
+    assert_eq!(msig_sig(&kd, &|_| None, &purpose, &digest, None, None, &good).err(), Some(Error::Ua(UAError::MemberUnknown)));
     let flat = bytes(&arr(&s, "msig")[0]["keyData"]);
-    assert_eq!(msig_sig(&kd, &|_| Some(flat.clone()), &purpose, &digest, &good).err(), Some(Error::Ua(UAError::MemberUnknown)));
+    assert_eq!(msig_sig(&kd, &|_| Some(flat.clone()), &purpose, &digest, None, None, &good).err(), Some(Error::Ua(UAError::MemberUnknown)));
     // the purpose unknown
-    assert_eq!(msig_sig(&kd, &inner, &[9; 32], &digest, &good).err(), Some(Error::Ua(UAError::PurposeUnknown)));
+    assert_eq!(msig_sig(&kd, &inner, &[9; 32], &digest, None, None, &good).err(), Some(Error::Ua(UAError::PurposeUnknown)));
     // acceptance: the slot past the members
     assert_eq!(membership_sig(&kd, &inner, &Slot::Member { index: 9, key: bls }).err(), Some(Error::Argument));
 }

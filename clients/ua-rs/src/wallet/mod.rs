@@ -7,19 +7,23 @@
 //! `KeyRevoked`. Signing: [`UaKey::sign_ua`], [`UaKey::sign_member`], the native keys' key proof and raw digest, all through
 //! the [`Signer`] trait (`sign`, `signer`; T3a: the classic curves; `pqsign`, T3b: ML-DSA, SLH-DSA, Falcon; `pairing`, T3c:
 //! scaas Schnorr, BLS with roles, the MuSig2 / FROST sessions, every arkworks secret multiplication by
-//! `scaas_ct::secret_mul`); `uasig`, T3d: the `UASig` builder and the minimal `msig` sets over `&dyn Signer`; the vault with
-//! T9. Randomness: `rand_core` 0.6 `OsRng` inside; no call takes an RNG. UNAUDITED.
+//! `scaas_ct::secret_mul`); `uasig`, T3d: the `UASig` builder and the minimal `msig` sets over `&dyn Signer` (T4: native keys
+//! and members by typed data); `eip712`, `policy`, T4: the faithful EIP-712 hasher, the SCaaS builders' canonical step, the
+//! `Expect` policy of [`NativeKey::sign_typed`]; the vault with T9. Randomness: `rand_core` 0.6 `OsRng` inside; no call takes an
+//! RNG. UNAUDITED.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing, clippy::disallowed_methods)]
 
 pub mod bounded;
 #[cfg(feature = "vectors")]
 pub mod derive;
+mod eip712;
 #[cfg(not(feature = "vectors"))]
 pub(crate) mod derive;
 #[cfg(feature = "vectors")]
 pub mod pairing;
 #[cfg(not(feature = "vectors"))]
 mod pairing;
+mod policy;
 #[cfg(feature = "vectors")]
 pub mod pqsign;
 #[cfg(not(feature = "vectors"))]
@@ -32,7 +36,9 @@ mod signer;
 mod store;
 mod uasig;
 
+pub use eip712::{scaas_typed_data, TypedData};
 pub use pairing::{FrostSession, Musig2Session};
+pub use policy::{AllowAnyTypedData, AllowRow, Expect, Invalidate, SubjectKey};
 pub use signer::{AllowRawDigest, KeyRef, SigRole, SignRequest, Signer};
 pub use uasig::{membership_sig, msig_sig, ua_sig, Slot};
 
@@ -58,6 +64,8 @@ pub enum Error {
     KindUnavailable,
     /// The OS random number generator failed.
     Rng,
+    /// The signing policy refused the typed data: it is not what the `Expect` says the user confirmed (spec §5.4, MD-9).
+    PolicyRefused,
     Ua(UAError),
 }
 
@@ -69,6 +77,7 @@ impl Error {
             Error::WalletLocked => "WalletLocked",
             Error::KindUnavailable => "KindUnavailable",
             Error::Rng => "Rng",
+            Error::PolicyRefused => "PolicyRefused",
             Error::Ua(e) => e.code(),
         }
     }

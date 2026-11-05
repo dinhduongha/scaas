@@ -189,10 +189,17 @@ impl Signer for NativeKey {
             public_key: self.public_key.clone(),
         }
     }
+    /// A key proof, a raw digest, or (secp256k1 networks only) an EIP-712 digest, `r ‖ s ‖ v`.
     fn sign_request(&self, req: &SignRequest) -> Result<Vec<u8>> {
-        let (SignRequest::KeyProof { digest } | SignRequest::RawDigest { digest }) = req else { return Err(Error::Argument) };
         let scheme = if self.network.ed25519() { Scheme::Ed25519 } else { Scheme::Secp256k1 };
-        self.secret.with(|s| sign_scheme(scheme, s, digest, None))?
+        let digest = match req {
+            SignRequest::KeyProof { digest } | SignRequest::RawDigest { digest } => *digest,
+            SignRequest::Eip712 { domain_separator, struct_hash, .. } if scheme == Scheme::Secp256k1 => {
+                super::eip712::eip712_digest(domain_separator, struct_hash)
+            }
+            _ => return Err(Error::Argument),
+        };
+        self.secret.with(|s| sign_scheme(scheme, s, &digest, None))?
     }
 }
 

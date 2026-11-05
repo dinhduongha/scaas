@@ -4,8 +4,8 @@
 //! [`Signer::sign_request`]. Phase 2's external keys (enclave, keystore, Ledger, passkey) add an implementation, not a
 //! signature. The [`SigRole`] of a UA message is set by the builder from the registry's rule (`UARegistryLib._sigOk`): the
 //! portable purposes `pop` v2, `kem` and `pqz-key` → [`SigRole::Pop`], every other purpose and an `msig` member slot →
-//! [`SigRole::Authorization`]; no public call takes a role. T3a builds `UaMsg`, `KeyProof`, `RawDigest`; `Eip712`,
-//! `Transaction` and `WebAuthn` come with T4, T5, T6. UNAUDITED.
+//! [`SigRole::Authorization`]; no public call takes a role. T3a builds `UaMsg`, `KeyProof`, `RawDigest`; T4 `Eip712` (the
+//! policy's `sign_typed`, a native key's `UASig` and `msig` slot); `Transaction` and `WebAuthn` come with T5, T6. UNAUDITED.
 //!
 //! A request is read, never built, outside `ua-rs`:
 //! ```
@@ -43,6 +43,7 @@
 //!     let _ = key.sign_digest(&[0; 32]);
 //! }
 //! ```
+use super::eip712::TypedData;
 use super::{Network, Result};
 
 /// Which verifier entry a signature is for: `verify` ([`SigRole::Authorization`]) or `verifyPop` ([`SigRole::Pop`]); the
@@ -68,6 +69,11 @@ pub enum SignRequest {
     /// `ua_msg = uaMessage(kind, purpose, digest)` after the purpose and kind checks; `role` from the purpose.
     #[non_exhaustive]
     UaMsg { kind: u16, ua_msg: [u8; 32], role: SigRole },
+    /// `keccak256(0x1901 ‖ domain_separator ‖ struct_hash)`, the hashes of `typed_data`, the value shown to a clear-signing device:
+    /// on the checked path after the policy (a non-zero unbound `relayer` / `feeRecipient` refused, never zeroed), through `Any`
+    /// as supplied, a SCaaS builder's value as built; a native key's `UAAuth` or portable record (CTR-UA-07, CTR-UA-24).
+    #[non_exhaustive]
+    Eip712 { domain_separator: [u8; 32], struct_hash: [u8; 32], typed_data: Box<TypedData> },
     /// `keccak256("scaas-subject-key-proof-v1" ‖ challenge)`.
     #[non_exhaustive]
     KeyProof { digest: [u8; 32] },
