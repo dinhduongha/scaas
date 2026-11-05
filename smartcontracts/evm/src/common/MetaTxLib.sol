@@ -199,11 +199,8 @@ library MetaTxLib {
         address feeRecipient;
     }
 
-    /// @dev The struct of `mtxShield(Envelope, …)` on the Zether and PQZ kinds.
-    bytes32 internal constant SHIELD_TYPEHASH = keccak256(
-        "Shield(address from,bytes32 toUA,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
-    );
-
+    /// @dev The struct of the signed `mtxShield(UAEnvelope, …, UASig)` on the Zether and PQZ kinds (R35, R36); the address
+    ///      `Shield` struct is in legacy/ua-mtx-merge/.
     bytes32 internal constant UA_SHIELD_TYPEHASH = keccak256(
         "UAShield(bytes32 from,bytes32 toUA,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
     );

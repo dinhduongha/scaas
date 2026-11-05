@@ -696,9 +696,8 @@ contract PqzStatePinGasTest is PqzSlots {
             "PqzUnshield", "PqzUnshieldUnwrap"];
         for (uint256 i; i < ops.length; ++i) {
             string memory ua = string.concat("UA", ops[i]);
-            typehashOf[ops[i]] = vm.parseJsonBytes32(j, string.concat(".ops.", ops[i], ".typehash"));
-            abiOf[ops[i]] = vm.parseJsonString(j, string.concat(".ops.", ops[i], ".domains.pqz.abi"));
-            abiOf[ua] = vm.parseJsonString(j, string.concat(".ops.", ua, ".domains.pqz.abi"));
+            typehashOf[ua] = vm.parseJsonBytes32(j, string.concat(".ops.", ua, ".typehash"));
+            abiOf[ua] = _mtxName(vm.parseJsonString(j, string.concat(".ops.", ua, ".domains.pqz.abi")));
         }
     }
 
@@ -706,8 +705,20 @@ contract PqzStatePinGasTest is PqzSlots {
         return abiOf[op];
     }
 
-    function _envN() internal view returns (MetaTxLib.Envelope memory e) {
-        (e.from, e.validUntil, e.mode, e.fee) = (vm.addr(RKEY), block.timestamp + 1 hours, MetaTxLib.MODE_FEE_FIXED, 7);
+    /// ua-mtx-merge T5 (R36): a `UA…` row (until T11 regenerates the rows) names the `ua*` entry; its body took the `mtx`
+    /// name.
+    function _mtxName(string memory sig) internal pure returns (string memory) {
+        bytes memory b = bytes(sig);
+        require(b[0] == "u" && b[1] == "a", "a ua* row");
+        bytes memory r = new bytes(b.length - 2);
+        for (uint256 i; i < r.length; ++i) r[i] = b[i + 2];
+        return string.concat("mtx", string(r));
+    }
+
+    /// ua-mtx-merge T5, meaning (R36): the ECDSA envelope signer is a native id on the merged entry (`UAEnvelope`, its address
+    /// zero-padded; was the address `Envelope`).
+    function _envN() internal view returns (MetaTxLib.UAEnvelope memory u) {
+        (u.from, u.validUntil, u.mode, u.fee) = (MetaTxLib.pad(vm.addr(RKEY)), block.timestamp + 1 hours, MetaTxLib.MODE_FEE_FIXED, 7);
     }
 
     function _uaEnvN() internal view returns (MetaTxLib.UAEnvelope memory u) {
@@ -718,13 +729,14 @@ contract PqzStatePinGasTest is PqzSlots {
         a.signature = _proof(feeSigLen);
     }
 
-    /// The fee signer's real signature: an entry hashing anything else reverts. `words`: the struct's own after `from`.
-    function _signN(string memory op, address t, bytes memory words) internal view returns (bytes memory) {
-        MetaTxLib.Envelope memory e = _envN();
-        bytes32 sh = keccak256(bytes.concat(abi.encode(typehashOf[op], e.from), words,
+    /// The fee signer's real signature over the `UA…` struct of `op` (T5, R36): an entry hashing anything else reverts.
+    /// `words`: the struct's own after `from`.
+    function _signN(string memory op, address t, bytes memory words) internal view returns (IUARegistry.UASig memory a) {
+        MetaTxLib.UAEnvelope memory e = _envN();
+        bytes32 sh = keccak256(bytes.concat(abi.encode(typehashOf[string.concat("UA", op)], e.from), words,
             abi.encode(e.batch, e.nonce, e.validUntil, e.mode, address(0), e.fee, address(0))));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(RKEY, keccak256(abi.encodePacked(hex"1901", domainOf(t), sh)));
-        return abi.encodePacked(r, s, v);
+        a.signature = abi.encodePacked(r, s, v);
     }
 
     /// A row's memory back after it: 14 rows of 260 KB on two paths in one frame cost more than forge's per-test gas.
@@ -736,7 +748,7 @@ contract PqzStatePinGasTest is PqzSlots {
     }
 
     function _fits(string memory key, string memory what, address to, bytes memory data) internal {
-        uint256 g = _row("pqzh", key, string.concat(viaUA ? "ua* " : "mtx* ", what), to, data, false);
+        uint256 g = _row("pqzh", key, string.concat(viaUA ? "mldsa65 fee UA " : "EOA ", what), to, data, false);
         assertLt(g, TX_CAP, what);
     }
 
@@ -746,9 +758,9 @@ contract PqzStatePinGasTest is PqzSlots {
         if (compact) t.sealedMemo = _slice(_blob(1, 64), 0, 41);
         bytes memory proof = _pf("pqzh", key);
         string memory op = compact ? "PqzTransferSingleCompact" : "PqzTransferSingle";
-        bytes memory sig = _signN(op, address(tok), abi.encode(_hashT(t), keccak256(proof), keccak256("")));
+        IUARegistry.UASig memory sig = _signN(op, address(tok), abi.encode(_hashT(t), keccak256(proof), keccak256("")));
         bytes memory d = viaUA ? abi.encodeWithSignature(_abiOf(string.concat("UA", op)), _uaEnvN(), t, proof, _pqAuth(), bytes(""), _feeAuth())
-            : abi.encodeWithSignature(_abiOf(op), _envN(), t, proof, _pqAuth(), bytes(""), sig);
+            : abi.encodeWithSignature(_abiOf(string.concat("UA", op)), _envN(), t, proof, _pqAuth(), bytes(""), sig);
         _fits(key, string.concat(op, aud ? ", auditor" : ", no auditor"), address(tok), d);
     }
 
@@ -760,9 +772,9 @@ contract PqzStatePinGasTest is PqzSlots {
         if (compact) t.sealedMemo = _slice(_blob(2, 352), 0, 2 + 40 * m);
         bytes memory proof = _pf("pqzh", key);
         string memory op = compact ? "PqzTransferCompact" : "PqzTransfer";
-        bytes memory sig = _signN(op, address(tok), abi.encode(_hashM(t), keccak256(proof), keccak256("")));
+        IUARegistry.UASig memory sig = _signN(op, address(tok), abi.encode(_hashM(t), keccak256(proof), keccak256("")));
         bytes memory d = viaUA ? abi.encodeWithSignature(_abiOf(string.concat("UA", op)), _uaEnvN(), t, proof, _pqAuth(), bytes(""), _feeAuth())
-            : abi.encodeWithSignature(_abiOf(op), _envN(), t, proof, _pqAuth(), bytes(""), sig);
+            : abi.encodeWithSignature(_abiOf(string.concat("UA", op)), _envN(), t, proof, _pqAuth(), bytes(""), sig);
         _fits(key, string.concat(op, " M = ", vm.toString(m), aud ? ", auditor" : ", no auditor"), address(tok), d);
     }
 
@@ -774,9 +786,9 @@ contract PqzStatePinGasTest is PqzSlots {
         IPqzToken.PqzBurnArgs memory b = _nBurnArgs();
         IPqzToken.Payout memory p = IPqzToken.Payout(amount, to);
         bytes memory proof = _pf("pqzh", key);
-        bytes memory sig = _signN("PqzUnshield", address(tok), abi.encode(_hashB(b), amount, to, keccak256(proof), keccak256("")));
+        IUARegistry.UASig memory sig = _signN("PqzUnshield", address(tok), abi.encode(_hashB(b), amount, to, keccak256(proof), keccak256("")));
         bytes memory d = viaUA ? abi.encodeWithSignature(_abiOf("UAPqzUnshield"), _uaEnvN(), b, p, proof, _pqAuth(), bytes(""), _feeAuth())
-            : abi.encodeWithSignature(_abiOf("PqzUnshield"), _envN(), b, p, proof, _pqAuth(), bytes(""), sig);
+            : abi.encodeWithSignature(_abiOf("UAPqzUnshield"), _envN(), b, p, proof, _pqAuth(), bytes(""), sig);
         _fits(key, key, address(tok), d);
     }
 
@@ -786,9 +798,9 @@ contract PqzStatePinGasTest is PqzSlots {
         IConfidentialWrappedToken.Unwrap memory x = IConfidentialWrappedToken.Unwrap(w.underlying(), MetaTxLib.pad(address(0xD00D)), 1, 0);
         bytes memory proof = _pf("pqzh", "BURN");
         bytes32 xh = keccak256(abi.encode(keccak256("Unwrap(address underlying,bytes32 recipient,uint256 amount,uint256 minOut)"), x));
-        bytes memory sig = _signN("PqzUnshieldUnwrap", address(w), abi.encode(_hashB(b), xh, keccak256(proof), keccak256("")));
+        IUARegistry.UASig memory sig = _signN("PqzUnshieldUnwrap", address(w), abi.encode(_hashB(b), xh, keccak256(proof), keccak256("")));
         bytes memory d = viaUA ? abi.encodeWithSignature(_abiOf("UAPqzUnshieldUnwrap"), _uaEnvN(), b, x, proof, _pqAuth(), bytes(""), _feeAuth())
-            : abi.encodeWithSignature(_abiOf("PqzUnshieldUnwrap"), _envN(), b, x, proof, _pqAuth(), bytes(""), sig);
+            : abi.encodeWithSignature(_abiOf("UAPqzUnshieldUnwrap"), _envN(), b, x, proof, _pqAuth(), bytes(""), sig);
         _fits("BURN", "PqzUnshieldUnwrap", address(w), d);
     }
 

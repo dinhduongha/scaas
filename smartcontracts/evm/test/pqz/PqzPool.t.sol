@@ -206,7 +206,7 @@ contract PqzPoolTest is PqzFixture {
         bytes memory pl = _payload(0, 0, alice, bob, bytes32(0), _out(5, true), "");
         MetaTxLib.MetaTransaction memory m =
             _m(vm.addr(KEY), abi.encodeCall(IPqzToken.mtxConfidentialTransferSingle, (_ts(pl), hex"c0de", _pqAuth(), bytes(""))), 0);
-        bytes32 env = tok.envelopeBinding(m);
+        bytes32 env = _addrBinding(tok, m);
         bytes memory st = tok.transferSingleStatement(_ts(pl), env);
         assertEq(bytes32(_cut(st, 544, 32)), _relayed(env, ZetherTypes.TransferMode.BUNDLE), "mode folded in");
         _mockOp(1, 0);
@@ -283,7 +283,7 @@ contract PqzPoolWrappedTest is PqzFixture {
         m.from = vm.addr(KEY);
         m.data = abi.encodeCall(IPqzWrappedToken.mtxUnshieldUnwrap, (_bs(pl), x, hex"c0de", _pqAuth(), bytes("")));
         m.validUntil = block.timestamp + 1 hours;
-        bytes32 env = w.envelopeBinding(m);
+        bytes32 env = _addrBinding(PqzLayer(address(w)), m);
         bytes32 want = keccak256(abi.encode(env, w.unwrapBinding(address(usd), 7)));
         bytes memory st = w.unshieldUnwrapStatement(_bs(pl), x, env);
         assertEq(bytes32(_cut(st, 544, 32)), want, "envelope and leg / minOut folded");

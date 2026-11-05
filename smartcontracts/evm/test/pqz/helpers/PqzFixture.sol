@@ -287,6 +287,16 @@ abstract contract PqzFixture is PqzRegistryBase, PqzArgs {
         return keccak256(abi.encode(envelope, uint8(m)));
     }
 
+    /// @dev `executeMetaTransaction`'s binding (CTR-PQZ-21: `SCAAS-PQZ-ENVELOPE-V1` over the address `MetaTransaction`), as
+    ///      a client computes it: the token has no view of it since ua-mtx-merge T5 (R36; its `envelopeBinding` is the UA
+    ///      one of the merged entries).
+    function _addrBinding(PqzLayer t, MetaTxLib.MetaTransaction memory m) internal view returns (bytes32) {
+        (address r, address f) = MetaTxLib.canon(m);
+        return keccak256(bytes.concat(
+            abi.encode(keccak256("SCAAS-PQZ-ENVELOPE-V1"), block.chainid, t.chainUid(), address(t), m.from, m.batch),
+            abi.encode(m.nonce, m.validUntil, m.mode, r, m.fee, f)));
+    }
+
     function _cut(bytes memory b, uint256 off, uint256 len) internal pure returns (bytes memory) {
         return _slice(b, off, len);
     }

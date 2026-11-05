@@ -341,36 +341,34 @@ contract NamedShieldPqzTest is PqzFixture {
         vm.stopPrank();
     }
 
-    function _env(uint256 nonce) internal view returns (MetaTxLib.Envelope memory e) {
-        e.from = signer;
-        e.nonce = nonce;
-        e.validUntil = block.timestamp + 300;
-    }
-
+    /// ua-mtx-merge T5, meaning (R36): the EOA signs `UAShield` (its id padded) on the merged `mtxShield`, as a derived id
+    /// does; the address `Shield` entry is in legacy/ua-mtx-merge/.
     function test_c0_shieldTyped() public {
-        MetaTxLib.Envelope memory e = _env(0);
-        bytes memory sig = ecdsa(PK, walletDigest(address(w), "Shield", SHIELD_FIELDS,
-            shieldJson(a(signer), alice, 10, 0, 0, e.validUntil)));
+        MetaTxLib.UAEnvelope memory u;
+        u.from = MetaTxLib.pad(signer);
+        u.validUntil = block.timestamp + 300;
+        bytes memory sig = ecdsa(PK, walletDigest(address(w), "UAShield", UA_SHIELD_FIELDS,
+            shieldJson(h(u.from), alice, 10, 0, 0, u.validUntil)));
         vm.prank(relayer);
-        w.mtxShield(e, alice, 10, sig);
+        w.mtxShield(u, alice, 10, UACall.auth(u.from, sig));
         assertEq((w.pqzPending(alice, 0) >> 96) & type(uint64).max, 10, "a TRIVIAL entry");
         assertEq(w.balanceOf(signer), 90 * SCALE);
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
-        w.mtxShield(e, alice, 10, sig);
+        w.mtxShield(u, alice, 10, UACall.auth(u.from, sig));
 
-        // the UA twin: a native id signs `UAShield` itself, on the one nonce map
-        MetaTxLib.UAEnvelope memory u;
-        u.from = MetaTxLib.pad(signer);
-        u.nonce = 1;
-        u.validUntil = e.validUntil;
-        sig = ecdsa(PK, walletDigest(address(w), "UAShield", UA_SHIELD_FIELDS,
-            shieldJson(h(u.from), alice, 20, 0, 1, u.validUntil)));
+        // a derived `mldsa65` UA signs `UAShield` under `metatx` (its precompile mocked), from its UA-ledger balance
+        bytes32 from = _mldsaUA(9);
+        vm.prank(signer);
+        w.transferToUA(from, 40 * SCALE);
+        MetaTxLib.UAEnvelope memory d;
+        d.from = from;
+        d.validUntil = u.validUntil;
         vm.roll(block.number + 1); // a new pending entry, not the block's TRIVIAL one
         vm.prank(relayer);
-        w.uaShield(u, alice, 20, UACall.auth(u.from, sig));
+        w.mtxShield(d, alice, 20, UACall.auth(d.from, _mlAuth()));
         assertEq((w.pqzPending(alice, 1) >> 96) & type(uint64).max, 20);
-        assertEq(w.balanceOf(signer), 70 * SCALE);
-        assertEq(w.mtxNonce(u.from, 0), 2);
+        assertEq(w.balanceOfUA(from), 20 * SCALE);
+        assertEq(w.mtxNonce(from, 0), 1);
     }
 
     /// C1: the row's `toUA` is `ZetherFixture`'s; here the registry answers for it as for `alice`: the signature is what is pinned.
@@ -385,7 +383,9 @@ contract NamedShieldPqzTest is PqzFixture {
         vm.stopPrank();
     }
 
-    function test_c1_shieldRow() public {
+    /// ua-mtx-merge T5, meaning (R36): the address `Shield` entry left the PQZ kinds, so the row's calldata finds no
+    /// function there (MD-7: T11 retires the row).
+    function test_c1_shieldRowHasNoPqzEntry() public {
         string memory j = VM.readFile(TYPED_OPS);
         checkRow(j, "Shield", "pqz");
         MetaTxLib.Envelope memory e = rowEnvelope(j, "Shield");
@@ -393,11 +393,12 @@ contract NamedShieldPqzTest is PqzFixture {
         uint256 amount = VM.parseJsonUint(j, msgField("Shield", "amount"));
         assertEq(abi.encodeWithSignature("mtxShield((address,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint256,bytes)",
             e, toUA, amount, VM.parseJsonBytes(j, domainField("Shield", "pqz", "signature"))), VM.parseJsonBytes(j, domainField("Shield", "pqz", "calldata")));
-        bytes memory sig = onChain(j, "Shield", address(w));
         vm.prank(e.relayer);
-        w.mtxShield(e, toUA, amount, sig);
-        assertEq(w.mtxNonce(MetaTxLib.pad(e.from), e.batch), 1);
-        assertEq((w.pqzPending(toUA, 0) >> 96) & type(uint64).max, amount);
+        (bool ok, bytes memory ret) = address(w).call(VM.parseJsonBytes(j, domainField("Shield", "pqz", "calldata")));
+        assertFalse(ok, "a retired entry runs");
+        assertEq(ret.length, 0, "no function");
+        assertEq(w.mtxNonce(MetaTxLib.pad(e.from), e.batch), 0);
+        assertEq(w.totalShielded(), 0);
     }
 
     function test_c1_uaShieldRow() public {
@@ -409,14 +410,15 @@ contract NamedShieldPqzTest is PqzFixture {
         bytes32 toUA = _rowHolder(j, "UAShield", address(uint160(uint256(u.from))));
         uint256 amount = VM.parseJsonUint(j, msgField("UAShield", "amount"));
         // ua-mtx-merge T1, meaning: the row is still the pre-R47 `bytes auth` form (T11 regenerates `typed_ops.json`);
-        // `uaShield` now takes the explicit `UASig`, so the same signature runs as `UASig{signature}`
+        // the entry takes the explicit `UASig`, so the same signature runs as `UASig{signature}`. T5, meaning (R36): the
+        // entry took the name `mtxShield`
         assertEq(abi.encodeWithSignature(
             "uaShield((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint256,bytes)",
             u, toUA, amount, VM.parseJsonBytes(j, domainField("UAShield", "pqz", "signature"))),
             VM.parseJsonBytes(j, domainField("UAShield", "pqz", "calldata")), "the row: the pre-R47 `bytes auth` form");
         bytes memory sig = onChain(j, "UAShield", address(w));
         vm.prank(u.relayer);
-        w.uaShield(u, toUA, amount, UACall.auth(u.from, sig));
+        w.mtxShield(u, toUA, amount, UACall.auth(u.from, sig));
         assertEq(w.mtxNonce(u.from, u.batch), 1);
         assertEq((w.pqzPending(toUA, 0) >> 96) & type(uint64).max, amount);
     }

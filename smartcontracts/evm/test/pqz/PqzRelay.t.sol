@@ -60,7 +60,7 @@ contract PqzRelayTest is PqzFixture {
         bytes memory pl = _payload(1, 0, alice, bob, bytes32(0), out, "");
         bytes memory data = abi.encodeCall(IPqzToken.mtxConfidentialTransferSingle, (_ts(pl), hex"c0de", _pqAuth(), bytes("")));
         m = _m(data, 1, 0);
-        bytes32 b = tok.envelopeBinding(m);
+        bytes32 b = _addrBinding(tok, m); // the client formula (R36: no address view)
         assertTrue(b != 0);
         assertEq(b, keccak256(abi.encode(keccak256("SCAAS-PQZ-ENVELOPE-V1"), block.chainid, tok.chainUid(), address(tok),
             signer, uint256(0), uint256(1), m.validUntil, uint32(0), address(0), uint256(0), address(0))));
@@ -139,7 +139,7 @@ contract PqzRelayTest is PqzFixture {
         m.nonce = 1;
         m.mode = 0;
         m.fee = 0;
-        bytes32 b = tok.uaEnvelopeBinding(m);
+        bytes32 b = tok.envelopeBinding(m);
         assertEq(b, keccak256(abi.encode(keccak256("SCAAS-PQZ-UA-ENVELOPE-V1"), block.chainid, tok.chainUid(), address(tok),
             fee, uint256(0), uint256(1), m.validUntil, uint32(0), address(0), uint256(0), address(0))));
         bytes memory st = tok.transferSingleStatement(_ts(pl), b);

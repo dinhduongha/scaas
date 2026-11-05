@@ -8,7 +8,7 @@ import {IUARegistry} from "../ua/IUARegistry.sol";
 ///        §7.8, §9.4); the shared entry points and events are `IConfidentialToken`'s (plan 5h D20).
 /// @notice **UNAUDITED.** `bytes32` ids are signing UAs holding a PQZ key (UA-6 U7). The debits take explicit parameters
 ///         (TS-D17); `pqzAuth` is the holder's own signature over the typed `PqzAuth` of the statement (TS-D19), and the
-///         signed overloads and `ua*` twins are `PqzLayer`'s (TS-D14, TS-D16).
+///         signed overloads (`UAEnvelope`, `UASig`; R36) are `PqzLayer`'s (TS-D14, TS-D16).
 interface IPqzToken is IConfidentialToken {
     /// @notice The explicit parameters of op 1 (Appendix X.2): each `u`, `v` a ciphertext part of `PK` or `V` bytes in
     ///         64-bit lanes. `vAuditor` empty: auditor off. `sealedMemo` the memo after its clear salt, 41 bytes on
@@ -62,7 +62,7 @@ interface IPqzToken is IConfidentialToken {
         bytes vFrom;
     }
 
-    /// @notice `amount` and `recipient` of the signed `mtxUnshield` and `uaUnshield`: one calldata struct keeps those two
+    /// @notice `amount` and `recipient` of the signed `mtxUnshield`: one calldata struct keeps those two
     ///         within the legacy code generator's stack (evm-size-levers.md §7); the signed struct keeps both fields flat.
     struct Payout {
         uint256 amount;

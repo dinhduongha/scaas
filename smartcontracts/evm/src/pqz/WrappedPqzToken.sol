@@ -36,9 +36,6 @@ contract WrappedPqzToken is WrappedToken, PqzLayer, IPqzWrappedToken {
     bytes32 private constant WRAP_SHIELD_TYPEHASH = keccak256(
         "WrapShield(address from,address underlying,uint256 amountIn,bytes32 toUA,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
     );
-    bytes32 private constant UNSHIELD_UNWRAP_TYPEHASH = keccak256(
-        "PqzUnshieldUnwrap(address from,PqzBurnArgs args,Unwrap unwrap,bytes proof,bytes accHint,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)PqzBurnArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,bytes32 beneficiaryUA,bytes u,bytes vFrom)Unwrap(address underlying,bytes32 recipient,uint256 amount,uint256 minOut)"
-    );
     bytes32 private constant UA_UNSHIELD_UNWRAP_TYPEHASH = keccak256(
         "UAPqzUnshieldUnwrap(bytes32 from,PqzBurnArgs args,Unwrap unwrap,bytes proof,bytes accHint,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)PqzBurnArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,bytes32 beneficiaryUA,bytes u,bytes vFrom)Unwrap(address underlying,bytes32 recipient,uint256 amount,uint256 minOut)"
     );
@@ -118,15 +115,8 @@ contract WrappedPqzToken is WrappedToken, PqzLayer, IPqzWrappedToken {
         WrappedLib.payOutTo(i, x.recipient, wrapped, x.minOut);
     }
 
-    /// @notice The signed form, the `Unwrap` leg a nested struct.
-    function mtxUnshieldUnwrap(MetaTxLib.Envelope calldata e, PqzBurnArgs calldata b, Unwrap calldata x, bytes calldata proof,
-        IUARegistry.UASig calldata pqzAuth, bytes calldata accHint, bytes calldata sig) external nonReentrant returns (bytes memory)
-    {
-        (bytes memory words, bytes memory data) = _unwrapCall(b, x, proof, pqzAuth, accHint);
-        return _namedCall(UNSHIELD_UNWRAP_TYPEHASH, e, words, data, sig);
-    }
-
-    function uaUnshieldUnwrap(MetaTxLib.UAEnvelope calldata e, PqzBurnArgs calldata b, Unwrap calldata x, bytes calldata proof,
+    /// @notice The signed form over `UAPqzUnshieldUnwrap` (R36: native and derived ids), the `Unwrap` leg a nested struct.
+    function mtxUnshieldUnwrap(MetaTxLib.UAEnvelope calldata e, PqzBurnArgs calldata b, Unwrap calldata x, bytes calldata proof,
         IUARegistry.UASig calldata pqzAuth, bytes calldata accHint, IUARegistry.UASig calldata auth)
         external nonReentrant returns (bytes memory)
     {
