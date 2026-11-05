@@ -68,8 +68,9 @@ const SLIP10 = { ed25519: { key: 'ed25519 seed', n: null }, nist256p1: { key: 'N
 const big = (b) => BigInt('0x' + (bytesToHex(b) || '0'));
 const b32 = (v) => { const o = new Uint8Array(32); for (let i = 31; i >= 0; i--, v >>= 8n) o[i] = Number(v & 255n); return o; };
 
-/** SLIP-10 for ed25519 and nist256p1 (P-256, the UA tree's 0x0101 keys): hardened steps only, with SLIP-10's retries for
- *  nist256p1 (master: IL = 0 or ≥ n → I = HMAC(key, I); child: IL ≥ n or k = 0 → data = 0x01 ‖ IR ‖ ser32(i)). */
+/** SLIP-10 for ed25519 (hardened steps only) and nist256p1 (P-256, the UA tree's 0x0101 keys, which use hardened steps only;
+ *  a non-hardened step hashes the compressed public key, as SLIP-10 defines it), with SLIP-10's retries for nist256p1 (master:
+ *  IL = 0 or ≥ n → I = HMAC(key, I); child: IL ≥ n or k = 0 → data = 0x01 ‖ IR ‖ ser32(i)). */
 export function slip10(curve, seed, path) {
   const c = SLIP10[curve];
   if (!c) throw new Error(`SLIP-10 curve ${curve} is not supported here`);
@@ -79,10 +80,12 @@ export function slip10(curve, seed, path) {
   let I = hmac(sha512, key, seed);
   while (c.n && (big(I.subarray(0, 32)) === 0n || big(I.subarray(0, 32)) >= c.n)) { const next = hmac(sha512, key, I); wipe(I); I = next; }
   for (const seg of segs) {
-    if (!seg.endsWith("'")) throw new Error(`${curve} derivation is hardened-only: ${path}`);
-    const idx = (Number(seg.slice(0, -1)) + HARDENED) >>> 0;
+    const hard = seg.endsWith("'");
+    if (!hard && !c.n) throw new Error(`${curve} derivation is hardened-only: ${path}`);
+    if (!/^[0-9]+$/.test(hard ? seg.slice(0, -1) : seg) || Number(hard ? seg.slice(0, -1) : seg) >= HARDENED) throw new Error(`bad path ${path}`);
+    const idx = (Number(hard ? seg.slice(0, -1) : seg) + (hard ? HARDENED : 0)) >>> 0;
     const ser = new Uint8Array([idx >>> 24, (idx >>> 16) & 255, (idx >>> 8) & 255, idx & 255]);
-    let data = concatBytes(new Uint8Array([0]), I.subarray(0, 32), ser);
+    let data = hard ? concatBytes(new Uint8Array([0]), I.subarray(0, 32), ser) : concatBytes(p256.getPublicKey(I.slice(0, 32), true), ser);
     for (;;) {
       const next = hmac(sha512, I.subarray(32), data);
       wipe(data);

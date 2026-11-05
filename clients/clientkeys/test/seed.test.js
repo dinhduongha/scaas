@@ -86,7 +86,7 @@ test('SLIP-10 ed25519 test vector 1 (published, slip-0010.md)', () => {
 
 // ua-rs-sign T1a: the UA tree's P-256 keys (kind 0x0101). Source: satoshilabs/slips a00312491693714d9bc1b6e4cb5b2e356e6c511e
 // slip-0010.md (sha256 dbd5a324f2a6014bf78fc8cfa85833e4a16256a02283b93d648fccba18ed1ce7): "Test vector 1", "Test derivation
-// retry" and "Test seed retry" for nist256p1, their hardened steps (the UA tree has no other).
+// retry" and "Test seed retry" for nist256p1 (the UA tree takes hardened steps only; the retry vector's retry is a non-hardened step).
 test('SLIP-10 nist256p1: test vector 1, derivation retry, seed retry (published, slip-0010.md)', () => {
   const v1 = fromHex('000102030405060708090a0b0c0d0e0f');
   const cases = [
@@ -94,8 +94,14 @@ test('SLIP-10 nist256p1: test vector 1, derivation retry, seed retry (published,
       'beeb672fe4621673f722f38529c07392fecaa61015c80c34f29ce8b41b3cb6ea', '0266874dc6ade47b3ecd096745ca09bcd29638dd52c2c12117b11ed3e458cfa9e8'],
     [v1, "m/0'", '6939694369114c67917a182c59ddb8cafc3004e63ca5d3b84403ba8613debc0c',
       '3460cea53e6a6bb5fb391eeef3237ffd8724bf0a40e94943c98b83825342ee11', '0384610f5ecffe8fda089363a41f56a5c7ffc1d81b59a612d0d649b2d22355590c'],
+    [v1, "m/0'/1", '284e9d38d07d21e4e281b645089a94f4cf5a5a81369acf151a1c3a57f18b2129',
+      '4187afff1aafa8445010097fb99d23aee9f599450c7bd140b6826ac22ba21d0c', '03526c63f8d0b4bbbf9c80df553fe66742df4676b241dabefdef67733e070f6844'],
+    [v1, "m/0'/1/2'/2/1000000000", '21c4f269ef0a5fd1badf47eeacebeeaa3de22eb8e5b0adcd0f27dd99d34d0119',
+      'b9b7b82d326bb9cb5b5b121066feea4eb93d5241103c9e7a18aad40f1dde8059', '02216cd26d31147f72427a453c443ed2cde8a1e53c9cc44e5ddf739725413fe3f4'],
     [v1, "m/28578'", '06f0db126f023755d0b8d86d4591718a5210dd8d024e3e14b6159d63f53aa669',
       'e94c8ebe30c2250a14713212f6449b20f3329105ea15b652ca5bdfc68f6c65c2', '02519b5554a4872e8c9c1c847115363051ec43e93400e030ba3c36b52a3e70a5b7'],
+    [v1, "m/28578'/33941", '092154eed4af83e078ff9b84322015aefe5769e31270f62c3f66c33888335f3a', // the child retry (IL ≥ n)
+      '9e87fe95031f14736774cd82f25fd885065cb7c358c1edf813c72af535e83071', '0235bfee614c0d5b2cae260000bb1d0d84b270099ad790022c1ae0b2e782efe120'],
     [fromHex('a7305bc8df8d0951f0cb224c0e95d7707cbdf2c6ce7e8d481fec69c7ff5e9446'), 'm',
       '3b8c18469a4634517d6d0b65448f8e6c62091b45540a1743c5846be55d47d88f',
       '7762f9729fed06121fd13f326884c82f59aa95c57ac492ce8c9654e60efd130c', '0383619fadcde31063d8c5cb00dbfe1713f3e6fa169d8541a798752a1c1ca0cb20'],
@@ -106,7 +112,7 @@ test('SLIP-10 nist256p1: test vector 1, derivation retry, seed retry (published,
     assert.equal(bytesToHex(k.chainCode), chain, path);
     assert.equal(bytesToHex(p256.getPublicKey(k.privateKey, true)), pub, path);
   }
-  assert.throws(() => slip10('nist256p1', v1, 'm/0'), /hardened-only/);
+  for (const bad of ['m/x', "m/2147483648'", 'm/2147483648', "m/0''"]) assert.throws(() => slip10('nist256p1', v1, bad), /bad path/, bad);
   assert.equal(bytesToHex(slip10('ed25519', v1, "m/0'").privateKey), bytesToHex(slip10Ed25519(v1, "m/0'").privateKey));
 });
 
