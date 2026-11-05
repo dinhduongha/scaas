@@ -17,3 +17,5 @@ What these copies hold and the live code no longer does:
 - `metatx.rs`: `UaMtx` relayed as `uaExecute` / `uaExecuteTransfer` / `uaPayMeta`.
 - `submit.rs`, `chain.rs`: the `ua` flag choosing `uaNonce` / `mtxNonce(address)`, the job decoder that relays an address
   `MetaTransfer` on a token.
+- `gateway.rs` (T15): `POST /v1/metatx` building the address `mtxExecuteTransfer(MetaTransfer, bytes)` for a token, and
+  `POST /v1/op` refusing every merged entry `FEATURE_UNSUPPORTED` (no `/v1/ua-metatx` door).
