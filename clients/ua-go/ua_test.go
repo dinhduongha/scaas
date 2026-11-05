@@ -206,6 +206,36 @@ func TestNativesNativeSpaceCanonicalIDs(t *testing.T) {
 	}
 }
 
+// ua-mtx-merge spec §6, MD-9: every row of id_display.json, and a row for every kind of the table.
+func TestIDDisplayRows(t *testing.T) {
+	d := rows(load(t, "id_display.json"), "rows")
+	for _, r := range d {
+		got, err := IDDisplay(r["id"].(string), kind(r["kind"]))
+		if w, ok := r["display"].(obj); ok {
+			want, isAddr := w["address"]
+			if !isAddr {
+				want = w["urn"]
+			}
+			if err != nil || got != want {
+				t.Errorf("%v: got %q %v, want %v", r["name"], got, err, want)
+			}
+		} else if err == nil || code(err) != r["error"] {
+			t.Errorf("%v: got %q %v, want %v", r["name"], got, err, r["error"])
+		}
+	}
+	for _, k := range Kinds {
+		has := false
+		for _, r := range d {
+			w, _ := r["display"].(obj)
+			_, urn := w["urn"]
+			has = has || (kind(r["kind"]) == k.Number && ((k.Native && r["error"] == "UAKindNotDerived") || (!k.Native && urn)))
+		}
+		if !has {
+			t.Errorf("no row for %s", k.Name)
+		}
+	}
+}
+
 func TestMessages(t *testing.T) {
 	for _, r := range rows(load(t, "kinds.json"), "messages") {
 		p, _ := PurposeTagV(r["purpose"].(string), uint32(r["version"].(float64))) // each row carries its purpose `version` (A4-c1)

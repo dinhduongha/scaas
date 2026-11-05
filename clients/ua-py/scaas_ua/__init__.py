@@ -468,6 +468,28 @@ def canonical_id(text):
     return '0x' + (h[24:] if len(h) == 64 and h.startswith('0' * 24) else h)
 
 
+
+_ID32 = re.compile(r'0x([0-9a-fA-F]{64})')
+
+
+def id_display(id, kind=0):
+    """How a client shows a bytes32 id before the user signs (ua-mtx-merge spec §6, MD-9): the EIP-55 address of an id in the
+    native space (top 96 bits zero, CTR-UA-03), else the URN ``urn:scaas:ua:v1:<kind name>:<hex32>`` (NET-ALL-21) under ``kind``,
+    the id's registry kind (0 = none known: refused, never an address). ``id`` is ``0x`` + 64 hex digits."""
+    m = _ID32.fullmatch(id) if isinstance(id, str) else None
+    if not m:
+        raise UAError('UAIdFormat', repr(id))
+    h = m.group(1).lower()
+    if h.startswith('0' * 24):
+        a = h[24:]
+        d = keccak256(a.encode()).hex()
+        return '0x' + ''.join(c.upper() if int(d[i], 16) >= 8 else c for i, c in enumerate(a))
+    k = kind_info(kind)
+    if k[2]:
+        raise UAError('UAKindNotDerived', k[1])
+    return 'urn:scaas:ua:v1:%s:%s' % (k[1], h)
+
+
 def msig_pqz_eligible(key_data, inner=None):
     """True when the classical members of an msig weigh less than its threshold (CTR-PQZ-12): a member is PQ if its kind is in
     0x0130-0x0135, or it is an msig that is PQ-eligible itself. ``inner``: an msig member's key data by its 0x-hex id, the record's; none,

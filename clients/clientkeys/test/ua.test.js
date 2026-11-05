@@ -159,3 +159,24 @@ test('UA-6 vectors: schemes, holder flags, pqz_reg_message and msig eligibility 
   for (const r of S.pqzMsig) assert.equal(ua.msigPqzEligible(r.keyData), r.eligible, r.reason);
   assert.ok(S.pqzMsig.some((r) => r.eligible) && S.pqzMsig.some((r) => !r.eligible));
 });
+
+// ua-mtx-merge spec §6, MD-9: the bytes32 id display, one file for every language.
+const D = JSON.parse(readFileSync(new URL('id_display.json', dir)));
+test('id_display.json: the generator reproduces it, every row holds, every kind has its row', () => {
+  const out = mkdtempSync(join(tmpdir(), 'id-display-'));
+  try {
+    const r = spawnSync(process.execPath, [fileURLToPath(new URL('../scripts/id-display-vectors.mjs', import.meta.url)), out], { encoding: 'utf8' });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(readFileSync(join(out, 'id_display.json'), 'utf8'), readFileSync(new URL('id_display.json', dir), 'utf8'));
+  } finally {
+    rmSync(out, { recursive: true, force: true });
+  }
+  for (const r of D.rows) {
+    if (r.display) assert.deepEqual(ua.idDisplay(r.id, r.kind), r.display, r.name);
+    else assert.throws(() => ua.idDisplay(r.id, r.kind), (e) => e instanceof ua.UAError && e.code === r.error, r.name);
+  }
+  const urnKinds = new Set(D.rows.filter((r) => r.display?.urn).map((r) => r.kind));
+  const notDerived = new Set(D.rows.filter((r) => r.error === 'UAKindNotDerived').map((r) => r.kind));
+  for (const k of ua.KINDS) assert.ok((k.native ? notDerived : urnKinds).has(k.kind), `no row for ${k.name}`);
+  assert.ok(D.rows.some((r) => r.display?.address) && D.rows.some((r) => r.error === 'UAIdFormat'));
+});

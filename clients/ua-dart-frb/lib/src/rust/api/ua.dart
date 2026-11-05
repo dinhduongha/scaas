@@ -369,6 +369,11 @@ U8Array32 memberDigest({
 String canonicalId({required String text}) =>
     ScaasUa.instance.api.crateApiUaCanonicalId(text: text);
 
+/// ua-mtx-merge spec §6: how a client shows a bytes32 id before the user signs: the EIP-55 address of a native-space id, else
+/// `urn:scaas:ua:v1:<kind name>:<hex32>` under `kind`, the id's registry kind (0 = none known: UAKindUnknown). `id`: "0x" + 64 hex.
+String idDisplay({required String id, required PlatformInt64 kind}) =>
+    ScaasUa.instance.api.crateApiUaIdDisplay(id: id, kind: kind);
+
 /// The registry's explicit arguments of a registration, JSON in and out. `input`: `{kind, keyData, pqzKey, pqzPopHash, pqzPop, kemPk,
 /// pop, kemCommit, inner}` (bytes as "0x…" hex, an absent field is empty, an msig's `pop` is `[{index, members: [{index, sig}], sig}]`,
 /// `inner` `{id: keyData}` its msig members' structures, `kemCommit` true / false forces the KEM form; absent: the hash commit only when

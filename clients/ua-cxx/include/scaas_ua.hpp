@@ -146,6 +146,9 @@ Bytes uaAuthDomainSeparator(const Domain& d);
 Bytes uaAuthDigest(const Domain& d, const Bytes& ua, const Bytes& purposeTag, const Bytes& digest);
 Bytes memberDigest(const Bytes& structureUa, const Bytes& uaMsg);
 std::string canonicalId(const std::string& text);
+// How a client shows a bytes32 id before the user signs (ua-mtx-merge spec §6): the EIP-55 address of a native-space id, else the
+// URN urn:scaas:ua:v1:<kind name>:<hex32> under kind, the id's registry kind (0 = none known: UAKindUnknown). id: "0x" + 64 hex.
+std::string idDisplay(const std::string& id, uint16_t kind);
 Bytes encodeMsig(uint16_t threshold, const std::vector<Member>& members);
 // The registry's explicit arguments of a registration, JSON in and out. In: {kind, keyData, pqzKey, pqzPopHash, pqzPop, kemPk, pop,
 // kemCommit, inner}: bytes as "0x…" hex, an absent field is empty, an msig's pop is [{index, members: [{index, sig}], sig}], inner

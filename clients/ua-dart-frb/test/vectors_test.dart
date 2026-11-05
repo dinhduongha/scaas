@@ -135,6 +135,24 @@ void main() {
     }
   });
 
+  // ua-mtx-merge spec §6, MD-9: every row of id_display.json, and a row for every kind of the table.
+  test('id_display.json rows', () {
+    final d = rows(load('id_display.json'), 'rows');
+    for (final r in d) {
+      final w = r['display'] as Map?;
+      if (w != null) {
+        expect(idDisplay(id: r['id'], kind: r['kind']), w['address'] ?? w['urn'], reason: r['name']);
+      } else {
+        expect(errCode(() => idDisplay(id: r['id'], kind: r['kind'])), r['error'], reason: r['name']);
+      }
+    }
+    for (final t in rows(load('kinds.json'), 'kinds')) {
+      final info = kindInfo(kind: t['kind']);
+      bool want(Map r) => info.native ? r['error'] == 'UAKindNotDerived' : (r['display'] as Map?)?['urn'] != null;
+      expect(d.any((r) => r['kind'] == info.kind && want(r)), isTrue, reason: 'no row for ${info.name}');
+    }
+  });
+
   test('messages', () {
     for (final r in rows(load('kinds.json'), 'messages')) {
       final p = purposeTagV(purpose: r['purpose'], version: r['version']); // each row carries its purpose `version` (A4-c1)

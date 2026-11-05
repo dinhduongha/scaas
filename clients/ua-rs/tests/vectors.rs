@@ -212,3 +212,32 @@ fn governance_bits_rows() {
         }
     }
 }
+
+/// ua-mtx-merge spec §6, MD-9: every row of id_display.json, and a row for every kind of the table.
+#[test]
+fn id_display_rows() {
+    let d = load("id_display.json");
+    let rows = arr(&d, "rows");
+    for r in rows {
+        let got = id_display(r["id"].as_str().unwrap(), kind(&r["kind"]));
+        match r.get("display") {
+            Some(want) => {
+                let (k, field, text) = match got.unwrap() {
+                    IdDisplay::Native { address } => ("native", "address", address),
+                    IdDisplay::Derived { urn } => ("derived", "urn", urn),
+                };
+                assert_eq!(want["kind"], k, "{}", r["name"]);
+                assert_eq!(want[field], text, "{}", r["name"]);
+            }
+            None => assert_eq!(got.unwrap_err().code(), r["error"], "{}", r["name"]),
+        }
+    }
+    for k in KINDS {
+        let has = |f: &dyn Fn(&Value) -> bool| rows.iter().any(|r| kind(&r["kind"]) == k.kind && f(r));
+        if k.native {
+            assert!(has(&|r| r["error"] == "UAKindNotDerived"), "no row for {}", k.name);
+        } else {
+            assert!(has(&|r| r["display"]["urn"].is_string()), "no row for {}", k.name);
+        }
+    }
+}

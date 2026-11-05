@@ -391,6 +391,12 @@ pub fn member_digest(structure_ua: [u8; 32], ua_msg: [u8; 32]) -> [u8; 32] {
 pub fn canonical_id(text: String) -> R<String> {
     Ok(scaas_ua::canonical_id(&text)?)
 }
+/// ua-mtx-merge spec §6: how a client shows a bytes32 id before the user signs: the EIP-55 address of a native-space id, else
+/// `urn:scaas:ua:v1:<kind name>:<hex32>` under `kind`, the id's registry kind (0 = none known: UAKindUnknown). `id`: "0x" + 64 hex.
+#[frb(sync)]
+pub fn id_display(id: String, kind: i64) -> R<String> {
+    Ok(scaas_ua::id_display(&id, k(kind)?)?.text().to_owned())
+}
 /// The registry's explicit arguments of a registration, JSON in and out. `input`: `{kind, keyData, pqzKey, pqzPopHash, pqzPop, kemPk,
 /// pop, kemCommit, inner}` (bytes as "0x…" hex, an absent field is empty, an msig's `pop` is `[{index, members: [{index, sig}], sig}]`,
 /// `inner` `{id: keyData}` its msig members' structures, `kemCommit` true / false forces the KEM form; absent: the hash commit only when

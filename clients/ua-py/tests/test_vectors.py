@@ -9,6 +9,7 @@ VEC = pathlib.Path(__file__).resolve().parents[3] / 'smartcontracts' / 'vectors'
 K = json.loads((VEC / 'kinds.json').read_text())
 S = json.loads((VEC / 'structures.json').read_text())
 P = json.loads((VEC / 'portable.json').read_text())
+D = json.loads((VEC / 'id_display.json').read_text())
 
 
 def b(h):
@@ -129,6 +130,20 @@ class Vectors(unittest.TestCase):
                 with self.assertRaises(ua.UAError) as e:
                     ua.canonical_id(r['input'])
                 self.assertEqual(e.exception.code, r['error'])
+
+    def test_id_display_rows(self):
+        """ua-mtx-merge spec §6, MD-9: every row of id_display.json, and a row for every kind of the table."""
+        for r in D['rows']:
+            with self.subTest(r['name']):
+                if 'display' in r:
+                    self.assertEqual(ua.id_display(r['id'], r['kind']), r['display'].get('address') or r['display']['urn'])
+                else:
+                    with self.assertRaises(ua.UAError) as e:
+                        ua.id_display(r['id'], r['kind'])
+                    self.assertEqual(e.exception.code, r['error'])
+        for kind, name, native, _, _ in ua.KINDS:
+            want = (lambda r: r.get('error') == 'UAKindNotDerived') if native else (lambda r: 'urn' in r.get('display', {}))
+            self.assertTrue(any(r['kind'] == kind and want(r) for r in D['rows']), name)
 
     def test_messages(self):
         for r in K['messages']:  # each row carries its purpose `version` (A4-c1)
