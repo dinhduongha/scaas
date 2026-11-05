@@ -413,7 +413,7 @@ clients filter); **no custom fee** (HIP-991), so spam costs the spammer HBAR and
 id travels only inside `sealedInfo` (§4.2), never in the clear on chain, as the Matrix room id (D10). Per-epoch topics are
 not used.
 
-**P25 — Message and client checks.** The payload is `abi.encode(uint8 v, bytes8 hint, bytes env)` with `v`, `hint` and
+**P25 — Message and client checks.** (Payload inside the envelope: owner confirmed 2026-11-05.) The payload is `abi.encode(uint8 v, bytes8 hint, bytes env)` with `v`, `hint` and
 `env` exactly as P15 (`env` = the envelope over `abi.encode(PqChatMessage, UASig)`): the same signed record as on
 Matrix and on chain, with the **signature's full bytes** (HCS keeps no state, so there is no hash-in-state split as in
 §7.2). Receipts, edits, redactions, reactions and call keys are content types inside the envelope, as on Matrix; the
