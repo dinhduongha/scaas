@@ -20,7 +20,7 @@ is the node-owned store and job API (push), switched per chain and then removed 
 ## Build and test
 
 ```bash
-cargo build --release          # rustc 1.97.1 (root rust-toolchain.toml); alloy 1.6 held by Cargo.lock
+cargo build --release          # rustc 1.97.1 (root rust-toolchain.toml); alloy held at 1.6 by `~1.6` in Cargo.toml
 cargo test                     # unit
 cargo test --test e2e -- --ignored --nocapture   # needs anvil + forge on PATH
 ```
