@@ -68,7 +68,8 @@ fn sign_json_tx_rows_per_type() {
         types.insert(r["tx"]["type"].as_u64().unwrap());
     }
     assert_eq!(types.into_iter().collect::<Vec<_>>(), vec![0, 1, 2, 3]);
-    assert_eq!(rows.len(), 6);
+    assert_eq!(rows.len(), 7);
+    assert!(rows.iter().any(|r| r["tx"]["chainId"] == "18446744073709551615"), "a row at chainId 2^64 - 1");
 }
 
 /// The EIP-155 example (source and sha256 in the row): the signing data, the signing hash and, with the published key, the
@@ -109,12 +110,15 @@ fn eip155_published_row() {
 
 /// `sign.json` `tx.refusals`: each an otherwise valid transaction with one change (type 4 with and without its list, no
 /// `chainId`, chain id 0, a field of another type, no `to`, a type-3 create, no blob hash, nonce 2^64, value 2^256, a 19-byte
-/// `to`, a hex value): `Argument`, nothing signed.
+/// `to`, a hex value, chain id 2^64 on types 0 and 2 and 2^64 + 1 (not read mod 2^64)): `Argument`, nothing signed.
 #[test]
 fn sign_json_tx_refusals() {
     let v = load("ua/sign.json");
     let refusals = v["tx"]["refusals"].as_array().unwrap();
-    assert_eq!(refusals.len(), 12);
+    assert_eq!(refusals.len(), 15);
+    for id in ["chainId 2^64", "legacy chainId 2^64", "chainId 2^64 + 1"] {
+        assert!(refusals.iter().any(|r| r["id"] == id), "{id}");
+    }
     for r in refusals {
         assert_eq!(tx(&r["tx"]).err(), Some(Error::Argument), "{}", r["id"]);
     }

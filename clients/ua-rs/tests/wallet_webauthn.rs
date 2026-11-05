@@ -171,13 +171,14 @@ fn sign_json_accepted_rows() {
 }
 
 /// sign.json `webauthn.refusals`: wrong challenge with a self-consistent JSON, reordered JSON, `crossOrigin: true`, `r = 0`,
-/// `s = n`, `s = 0`, a flipped signature, no UV flag, another key: each `WebAuthnAssertion`.
+/// `s = n`, `s = 0`, a flipped signature, no UV flag, another key, a clientDataJSON that is not UTF-8 (clientkeys refuses it
+/// too): each `WebAuthnAssertion`.
 #[test]
 fn sign_json_refusals() {
     let v = load("sign.json");
     let rows = v["webauthn"]["refusals"].as_array().unwrap();
     let cases: Vec<&str> = rows.iter().map(|r| r["case"].as_str().unwrap()).collect();
-    for c in ["wrong-challenge", "reordered-json", "cross-origin-true", "r-zero", "s-n"] {
+    for c in ["wrong-challenge", "reordered-json", "cross-origin-true", "r-zero", "s-n", "client-data-not-utf8"] {
         assert!(cases.contains(&c), "{c}");
     }
     for r in rows {

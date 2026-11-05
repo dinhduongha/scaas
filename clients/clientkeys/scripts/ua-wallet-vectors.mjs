@@ -20,7 +20,7 @@ import { shake256 } from '@noble/hashes/sha3.js';
 import { hex, fromHex, keccak_256, utf8ToBytes, concatBytes, b64url, fromB64url, abiEncode } from '../src/bytes.js';
 import * as ua from '../src/ua.js';
 import * as evm from '../src/evm.js';
-import { verify } from '../src/ua-verify.js';
+import { verify, clientDataOk } from '../src/ua-verify.js';
 import { NETWORKS, wordsToEntropy, seedFromEntropy, seedFromWords, deriveKey, signTyped, signTransaction } from '../src/seed.js';
 import { eip2333 } from '../src/zether.js';
 import { PQ_KINDS, pqMessage } from '../src/pq.js';
@@ -398,6 +398,9 @@ const txs = [
   { type: 3, chainId: '7622', nonce: '4', maxPriorityFeePerGas: '1000000000', maxFeePerGas: '30000000000', gasLimit: '100000', to: TO,
     value: '0', data: '0x', accessList: [], maxFeePerBlobGas: '1000000000',
     blobVersionedHashes: [hex(concatBytes(Uint8Array.of(1), stream('tx.blob0', 31))), hex(concatBytes(Uint8Array.of(1), stream('tx.blob1', 31)))] },
+  // the largest chain id: ua-rs takes a u64 (alloy ChainId, EIP-2294), so does evmTransaction (parity, 2026-11-06)
+  { type: 2, chainId: '18446744073709551615', nonce: '5', maxPriorityFeePerGas: '0', maxFeePerGas: '1', gasLimit: '21000', to: TO, value: '0',
+    data: '0x', accessList: [] },
 ];
 const txRows = txs.map((tx) => {
   const t = evm.evmTransaction(tx);
@@ -481,6 +484,9 @@ const txRefusals = [
   ['value 2^256', { ...ok2, value: (1n << 256n).toString() }],
   ['to of 19 bytes', { ...ok2, to: '0x' + '35'.repeat(19) }],
   ['value as hex', { ...ok2, value: '0x10' }],
+  ['chainId 2^64', { ...ok2, chainId: (1n << 64n).toString() }],
+  ['legacy chainId 2^64', { ...txs[0], chainId: (1n << 64n).toString() }],
+  ['chainId 2^64 + 1', { ...ok2, chainId: ((1n << 64n) + 1n).toString() }], // a reader that wraps mod 2^64 would sign for chain 1
 ].map(([id, tx]) => {
   must(refusedBy(() => evm.evmTransaction(tx))?.message.startsWith('Refusing to sign'), id);
   return { id, tx };
@@ -552,7 +558,7 @@ const cdj = (challenge, { order: reordered = false, tail = '' } = {}) => utf8ToB
 const assertionOf = (digest, opts = {}, flags = 0x05) => {
   const expected = webauthnChallenge(waPurpose, digest);
   const ad = authData(flags);
-  const cd = cdj(opts.challenge ?? expected, opts);
+  const cd = opts.raw ? opts.raw(expected) : cdj(opts.challenge ?? expected, opts);
   const sig = p256.sign(sha256(concatBytes(ad, sha256(cd))), be(waSk, 32), { prehash: false, lowS: true, extraEntropy: false, format: 'compact' });
   return { keyData: hex(waKey), purposeTag: hex(waPurpose), digest: hex(digest), expectedChallenge: hex(expected), authData: hex(ad),
     clientDataJSON: hex(cd), r: hex(sig.subarray(0, 32)), s: hex(sig.subarray(32)) };
@@ -577,12 +583,18 @@ const waRefusals = [
   ['flipped-signature', { ...assertionOf(D1), r: hex(be(int(fromHex(assertionOf(D1).r)) ^ 1n, 32)) }],
   ['uv-flag-missing', assertionOf(D1, {}, 0x01)],
   ['another-key', { ...assertionOf(D1), keyData: hex(concatBytes(p256.getPublicKey(be(waSk + 1n, 32), false).subarray(1), sha256(utf8ToBytes(RP_ID)))) }],
+  // a 0xff in the origin: the chains' byte rule passes it (control below), the builder refuses (ua-rs parity, 2026-11-06)
+  ['client-data-not-utf8', assertionOf(D1, { raw: (ch) => concatBytes(cdj(ch).subarray(0, -2), Uint8Array.of(0xff), utf8ToBytes('"}')) })],
 ].map(([c, a]) => {
   const e = refusedBy(() => webauthnAssertion(Object.fromEntries(['keyData', 'expectedChallenge', 'authData', 'clientDataJSON', 'r', 's']
     .map((n) => [n, fromHex(a[n])]))));
   must(e?.code === 'WebAuthnAssertion', c);
   return { case: c, ...a, error: 'WebAuthnAssertion' };
 });
+{
+  const x = waRefusals.find((r) => r.case === 'client-data-not-utf8');
+  must(clientDataOk(fromHex(x.clientDataJSON), fromHex(x.expectedChallenge)), 'client-data-not-utf8: the chains\' byte rule passes it');
+}
 
 // --- msig member sets (minimal at both levels) ---
 const memberOf = (r) => { const k = keyOf(r); return { kind: r.kind, id: hex(k.ua), weight: 1, ref: r, key: k }; };
@@ -630,8 +642,8 @@ const sign = {
     + 'nonce: k = hashToScalar(keccak256("scaas.ua.schnorr.nonce.v1" ‖ be32(sk) ‖ Y ‖ ua_msg ‖ aux)), the 512-bit map (nonceMap). '
     + 'typed: generic = the faithful EIP-712 hasher (missing field = zero, unknown field refused, int two\'s complement, T[k]); '
     + 'canon = the SCaaS builders, whose unbound relayer / feeRecipient hash as zero (nested too); policy = expectDigest(td, '
-    + 'expect) over the check* functions. tx: evmTransaction types 0-3 (no type 4), signTransaction. webauthn: webauthnAssertion '
-    + 'against the expected challenge. msig: msigMemberSigs, minimal at both levels. chainSeparation (owner 2026-11-05): one message and '
+    + 'expect) over the check* functions. tx: evmTransaction types 0-3 (no type 4), chainId 1 … 2^64 − 1, signTransaction. webauthn: '
+    + 'webauthnAssertion against the expected challenge, clientDataJSON UTF-8. msig: msigMemberSigs, minimal at both levels. chainSeparation (owner 2026-11-05): one message and '
     + 'one key on chain 7622 (SCaaS testnet) and 22776 (SCaaS mainnet): a UAMetaTransfer in a token domain with chainId (UA key 0x0108, '
     + 'signUA metatx) and EIP-155 transactions of types 0 and 2 (the EVM key) give other digests and signatures per chain; refusals: a '
     + 'signature for one chain does not verify against the other\'s digest; portable: a record in the portable domain (no chainId) '

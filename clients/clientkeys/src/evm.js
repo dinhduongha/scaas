@@ -1207,7 +1207,7 @@ const TX_FIELDS = {
   3: ['chainId', 'nonce', 'maxPriorityFeePerGas', 'maxFeePerGas', 'gasLimit', 'to', 'value', 'data', 'accessList', 'maxFeePerBlobGas',
     'blobVersionedHashes'],
 };
-const U64 = new Set(['nonce', 'gasLimit']);
+const U64 = new Set(['chainId', 'nonce', 'gasLimit']); // chainId: ua-rs takes a u64 (alloy ChainId, EIP-2294)
 function txUint(name, v) {
   const s = typeof v === 'bigint' || typeof v === 'number' ? String(v) : v;
   if (typeof s !== 'string' || !/^[0-9]+$/.test(s)) refuse(`the transaction's ${name} is not a decimal integer`);
@@ -1223,9 +1223,10 @@ function txBytes(name, v, len) {
 }
 
 /** An EVM transaction from named fields (EIP-2718 types 0 legacy with EIP-155, 1 EIP-2930, 2 EIP-1559, 3 EIP-4844 without the
- *  sidecar): every field of the type required and no other, `chainId` explicit and non-zero, `to` null only for a create (not on
- *  type 3), at least one blob hash on type 3. No type 4: an EIP-7702 authorization is never built (CLI-SGN-40). Integers are
- *  decimal strings or numbers. Returns {type, fields, unsigned (the bytes hashed), sighash, list (the RLP items)}. */
+ *  sidecar): every field of the type required and no other, `chainId` explicit, non-zero and below 2^64 (EIP-2294), `to`
+ *  null only for a create (not on type 3), at least one blob hash on type 3. No type 4: an EIP-7702 authorization is never
+ *  built (CLI-SGN-40). Integers are decimal strings or numbers. Returns {type, fields, unsigned (the bytes hashed), sighash,
+ *  list (the RLP items)}. */
 export function evmTransaction(tx) {
   const type = tx && tx.type;
   if (!Object.hasOwn(TX_FIELDS, String(type)) || !Number.isInteger(type)) refuse(`transaction type ${type} is not built here (0-3 only; never EIP-7702)`);

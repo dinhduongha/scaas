@@ -11,9 +11,9 @@ import { bn254 } from '@noble/curves/bn254.js';
 import { bls12_381 } from '@noble/curves/bls12-381.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { dir } from './ua-vectors-dir.js';
-import { hex, fromHex, keccak_256, utf8ToBytes, concatBytes } from '../src/bytes.js';
+import { hex, fromHex, keccak_256, utf8ToBytes, concatBytes, abiEncode } from '../src/bytes.js';
 import * as ua from '../src/ua.js';
-import { verify as kindVerify } from '../src/ua-verify.js';
+import { verify as kindVerify, clientDataOk } from '../src/ua-verify.js';
 import { PQ_KINDS } from '../src/pq.js';
 import * as seedjs from '../src/seed.js';
 import * as evm from '../src/evm.js';
@@ -315,6 +315,19 @@ test('tx type 4 cannot be built', () => {
   for (const x of S.tx.refusals) assert.throws(() => evm.evmTransaction(x.tx), /Refusing to sign/, x.id);
 });
 
+test('tx chainId < 2^64 (ua-rs ChainId, EIP-2294): 2^64 and 2^64 + 1 refused, 2^64 - 1 signed', () => {
+  const ids = new Set(S.tx.refusals.map((x) => x.id));
+  for (const id of ['chainId 2^64', 'legacy chainId 2^64', 'chainId 2^64 + 1']) assert.ok(ids.has(id), id);
+  const max = S.tx.rows.find((r) => r.tx.chainId === '18446744073709551615');
+  assert.ok(max, 'a row at chainId 2^64 - 1');
+  evm.evmTransaction(max.tx); // positive control
+  for (const type of [0, 2]) {
+    const ok = S.tx.rows.find((r) => r.tx.type === type).tx;
+    assert.throws(() => evm.evmTransaction({ ...ok, chainId: (1n << 64n).toString() }), /chainId is out of range/, `type ${type}`);
+    assert.throws(() => evm.evmTransaction({ ...ok, chainId: ((1n << 256n) - 1n).toString() }), /chainId is out of range/, `type ${type}`);
+  }
+});
+
 test('EIP-155 published row', () => {
   const p = S.tx.published[0];
   assert.match(p.source, /eip-155\.md$/);
@@ -357,11 +370,24 @@ test('WebAuthn assertion: accepted rows, refusals (wrong challenge, reordered JS
     assert.ok(kindVerify(0x0100, x.keyData, x.expectedChallenge, x.assertion));
   }
   const cases = new Set(S.webauthn.refusals.map((x) => x.case));
-  for (const c of ['wrong-challenge', 'reordered-json', 'cross-origin-true', 'r-zero', 's-n']) assert.ok(cases.has(c), c);
+  for (const c of ['wrong-challenge', 'reordered-json', 'cross-origin-true', 'r-zero', 's-n', 'client-data-not-utf8']) assert.ok(cases.has(c), c);
   for (const x of S.webauthn.refusals) {
     assert.throws(() => U.webauthnAssertion({ keyData: B(x.keyData), expectedChallenge: B(x.expectedChallenge), authData: B(x.authData),
       clientDataJSON: B(x.clientDataJSON), r: B(x.r), s: B(x.s) }), (e) => e.code === 'WebAuthnAssertion', x.case);
   }
+});
+
+test('WebAuthn clientDataJSON that is not UTF-8 is refused by the builder, accepted by the chains\' byte rule (ua-rs parity)', () => {
+  const x = S.webauthn.refusals.find((r) => r.case === 'client-data-not-utf8');
+  const cd = B(x.clientDataJSON);
+  assert.throws(() => new TextDecoder('utf-8', { fatal: true }).decode(cd));
+  // control: the same bytes pass the chains' rule (the verifier is not changed) and are validly signed
+  assert.ok(clientDataOk(cd, B(x.expectedChallenge)));
+  const [n, s] = [p256.Point.Fn.ORDER, BigInt(x.s)];
+  const blob = abiEncode(['bytes', 'bytes', 'bytes32', 'bytes32'], [B(x.authData), cd, B(x.r), fromHex((s > n / 2n ? n - s : s).toString(16).padStart(64, '0'))]);
+  assert.ok(kindVerify(0x0100, x.keyData, x.expectedChallenge, hex(blob)));
+  assert.throws(() => U.webauthnAssertion({ keyData: B(x.keyData), expectedChallenge: B(x.expectedChallenge), authData: B(x.authData),
+    clientDataJSON: cd, r: B(x.r), s: B(x.s) }), (e) => e.code === 'WebAuthnAssertion' && /UTF-8/.test(e.message));
 });
 
 test('msig rows: minimal sets signed at both levels, non-minimal and unsorted sets refused', () => {

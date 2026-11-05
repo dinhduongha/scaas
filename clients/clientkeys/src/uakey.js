@@ -213,14 +213,15 @@ export function signContainer(sender, digest, fixed) {
 export const webauthnChallenge = (purposeTag, digest) => ua.uaMessage(0x0100, purposeOf(purposeTag), digest);
 
 /** The `webauthn-p256` signature `abi.encode(authData, clientDataJSON, r, s)` from an assertion, against the challenge the
- *  caller asked for (spec §5.6, C-07): 0 < r, s < n first, s made low, clientDataJSON kept as signed and accepted only by the
- *  chains' rule (`clientDataOk`: type, challenge = expected, origin, then `}` or `,"crossOrigin":false`), then the whole
- *  encoding verified before it is returned. Any failure: `WebAuthnAssertion`. */
+ *  caller asked for (spec §5.6, C-07): 0 < r, s < n first, s made low, clientDataJSON UTF-8 (as ua-rs; the chains' rule alone
+ *  does not ask it), kept as signed and accepted only by the chains' rule (`clientDataOk`: type, challenge = expected, origin,
+ *  then `}` or `,"crossOrigin":false`), then the whole encoding verified before it is returned. Any failure: `WebAuthnAssertion`. */
 export function webauthnAssertion({ keyData, expectedChallenge, authData, clientDataJSON, r, s }) {
   const no = (why) => fail('WebAuthnAssertion', why);
   if (keyData?.length !== 96 || expectedChallenge?.length !== 32 || r?.length !== 32 || s?.length !== 32) no('lengths');
   const [R, S] = [int(r), int(s)];
   if (!(R > 0n && R < P256_N && S > 0n && S < P256_N)) no('r or s out of range');
+  try { new TextDecoder('utf-8', { fatal: true }).decode(clientDataJSON); } catch { no('clientDataJSON is not UTF-8'); }
   if (!clientDataOk(clientDataJSON, expectedChallenge)) no('clientDataJSON is not the chains\' form for the expected challenge');
   const blob = abiEncode(['bytes', 'bytes', 'bytes32', 'bytes32'], [authData, clientDataJSON, r, be(S > P256_N / 2n ? P256_N - S : S, 32)]);
   if (!webauthnOk(keyData, expectedChallenge, blob)) no('the assertion does not verify');
