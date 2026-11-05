@@ -1,0 +1,13 @@
+# The one Rust toolchain of the repository (ARCH-POS-12, owner 2026-11-05). rustup takes the nearest rust-toolchain.toml,
+# so every crate builds with this one; no crate has its own file. Override for a local run with RUSTUP_TOOLCHAIN
+# (CI: the workflow's RUST_TOOLCHAIN). Why 1.97.1:
+# - NEAR: near-sdk 5.30 needs rustc >= 1.95, and cargo-near 0.22 caps rustc by near-sdk's minimum protocol version:
+#   going above 1.97.1 needs a NEAR wasm build check first (smartcontracts/scripts/build.sh near).
+# - Solana: the host tests need the Agave 4.3 crates (LiteSVM 0.17) => rustc >= 1.97.1. `cargo build-sbf` uses its own
+#   platform-tools rustc.
+# - Soroban: soroban-sdk 30 needs rustc >= 1.91; its contracts build for wasm32v1-none.
+# - PQZ: Plonky3 0.8.0 (pqzh) does not build on 1.90; pqz-core and clients/zether-prover build for wasm32-unknown-unknown,
+#   and so do the NEAR contracts.
+[toolchain]
+channel = "1.97.1"
+targets = ["wasm32-unknown-unknown", "wasm32v1-none"]

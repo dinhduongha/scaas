@@ -2,6 +2,7 @@
 # pqz_kat.py (pqzh/xcheck/kat_stmt.py, stmt/xcheck.py), the PQZH EVM fixtures (the Ligero crate's evm_fixtures test)
 *
 !pqz-core
+!rust-toolchain.toml
 !smartcontracts/vectors/pqz
 !smartcontracts/evm/test/vectors/pqzh-ligero
 pqz-core/build

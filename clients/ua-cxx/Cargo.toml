@@ -2,7 +2,7 @@
 name = "scaas-ua-cxx"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.90"
+rust-version = "1.97.1"
 publish = false
 description = "C++ (cxx) bridge over scaas-ua. UNAUDITED."
 

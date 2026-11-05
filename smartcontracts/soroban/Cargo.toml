@@ -4,7 +4,7 @@ members = ["contracts/*"]
 exclude = ["spike"]
 
 [workspace.package]
-rust-version = "1.91"
+rust-version = "1.97.1"
 
 [workspace.dependencies]
 soroban-sdk = "=30.0.0-rc.1"

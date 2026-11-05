@@ -15,7 +15,7 @@ when mainnet 22776 launches, which only the owner may touch.
 | `smartcontracts/evm/` | Tokens, UA registry, meta-tx, DEX, PQZ, Zether, factory, wallets | Foundry 1.8.5, solc 0.8.37, Amsterdam |
 | `smartcontracts/{soroban,solana,near,algorand,move,ton,cosmos}/` | The same functions per family | `smartcontracts/scripts/{build,test}.sh <family>` |
 | `smartcontracts/vectors/` | Cross-language known answers: the authority for bytes | generated, then checked |
-| `scaas-node/` | One Rust binary: submit lanes, indexer, gateway, mesh, adapters per family | rustc 1.90, alloy 1.6 |
+| `scaas-node/` | One Rust binary: submit lanes, indexer, gateway, mesh, adapters per family | rustc 1.97.1, alloy 1.6 |
 | `pqz-core/` | PQ proofs: `pqzl` (lattice; Rust production, C oracle), `pqzh` (Ligero), `stmt`, `ffi`, Nethermind plugin, `params/sets` | `pqz-core/gate.sh` |
 | `clients/` | `clientkeys` (JS reference), `ua-{rs,c,cxx,qt,cs,py,go,dart,dart-frb}`, `zether-prover` | one per language |
 | `docs/` | Rules by component, `decisions.md`, `research/`, `history/` | `scripts/docs_check.py` |
@@ -146,6 +146,8 @@ Oversized jobs get the terminal killed by `systemd-oomd`, and every agent with i
 - **Docker bypasses `capped`:** cap it with `--memory` and limit build jobs.
 - After `capped dotnet …`, run `dotnet build-server shutdown`: VBCSCompiler keeps the lock and later jobs wait silently.
 - Never wait with `until`, `sleep` loops or `pgrep -f`: such a loop matches itself and hangs. Leave no background shell or `anvil`.
+- Rust 1.97.1 from the root `rust-toolchain.toml` for every crate; override with `RUSTUP_TOOLCHAIN` (CI: `RUST_TOOLCHAIN`). NEAR is
+  capped by cargo-near, so going above 1.97.1 needs a NEAR check first (ARCH-POS-12).
 - A fresh worktree needs git-ignored inputs as real directories, not symlinks: `smartcontracts/evm/lib`, `clients/clientkeys/node_modules`,
   `smartcontracts/algorand/out`.
 

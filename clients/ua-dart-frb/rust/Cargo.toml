@@ -2,7 +2,7 @@
 name = "scaas_ua_frb"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.90"
+rust-version = "1.97.1"
 publish = false
 description = "flutter_rust_bridge v2 wrapper over scaas-ua. UNAUDITED."
 

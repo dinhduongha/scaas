@@ -5,14 +5,14 @@
 #                  forge test --isolate --match-path 'test/ua/{UAGas,UARegistryGroups}.t.sol' (cold gas); FOUNDRY_PROFILE=scaas-testnet forge build;
 #                  forge build src --sizes --json > /tmp/sizes.json; python3 ../../scripts/size_gate.py /tmp/sizes.json size-baseline.json
 #   contract-<family>: smartcontracts/scripts/test.sh <family> (unit and in-process tests; localnet e2e stays local), toolchains as local:
-#   contract-soroban:  test.sh soroban (cargo test; Rust 1.97.1)
-#   contract-solana:   test.sh solana (build.sh solana = cargo build-sbf, Agave 4.3.0 / platform-tools v1.57; cargo test on LiteSVM; Rust 1.97.1)
-#   contract-near:     test.sh near (check_no_authority.sh, cargo near build, cargo test: unit + near-sandbox; Rust 1.97.1, cargo-near 0.22.0)
+#   contract-soroban:  test.sh soroban (cargo test)
+#   contract-solana:   test.sh solana (build.sh solana = cargo build-sbf, Agave 4.3.0 / platform-tools v1.57; cargo test on LiteSVM)
+#   contract-near:     test.sh near (check_no_authority.sh, cargo near build, cargo test: unit + near-sandbox; cargo-near 0.22.0)
 #   contract-algorand: ALGORAND_ARTIFACTS_CHECK=1 smartcontracts/scripts/build.sh algorand; gen_vectors.py --check; scripts/test_deploy.py
 #                      (test.sh algorand without its last step: pytest on the localnet and the node e2e of both are local only, the gate runner)
 #   contract-aptos:    test.sh aptos (aptos move test --dev; check_entry_visibility.sh; aptos CLI 9.6.0)
 #   contract-sui:      test.sh sui (sui move test; sui CLI 1.81.0, testnet-v1.81.0)
-#   contract-cosmos:   test.sh cosmos (cargo test; Rust 1.99.0)
+#   contract-cosmos:   test.sh cosmos (cargo test)
 #   contract-ton:      test.sh ton (npm ci; npm test = tact build + jest; Node 26.8.1)
 #   scaas-node:    cargo test; cargo clippy --all-targets -- -D warnings; cargo test --test e2e -- --ignored
 #   docs:          python3 scripts/test_docs_check.py; python3 scripts/docs_check.py check; ... facts check; ... paths
@@ -30,6 +30,8 @@
 #   UA-8 portable registrations: smartcontracts/vectors/ua/portable.json is read by ua-rs, ua-py, ua-go, ua-cs, ua-c, ua-cxx, ua-qt, ua-dart, ua-dart-frb,
 #                  clientkeys and forge (UARegistryUA8.t.sol); the jobs above already run them, so no new job. The old chain-bound vectors are in
 #                  smartcontracts/vectors/ua/legacy/. The local closing gate: smartcontracts/evm/runs/2026-10-30-ua8-gates.sh (its logs are runs/2026-10-30-ua8-*.txt)
+# Rust: one toolchain for every job (ARCH-POS-12): env RUST_TOOLCHAIN (default 1.97.1 = the root rust-toolchain.toml; a manual
+#   run may set input rust_toolchain), installed by every dtolnay/rust-toolchain step and exported as RUSTUP_TOOLCHAIN.
 # Force a group on whatever the paths: (1) a pull-request label ci-full-contracts | ci-full-node | ci-full-clients | ci-full-pqz | ci-full;
 #   (2) Actions tab > scaas-ci > Run workflow, or `gh workflow run ci.yml -f full=ci-full-node --ref <branch>` (runs that group and docs only).
 name: scaas-ci
@@ -37,10 +39,10 @@ name: scaas-ci
 on:
   pull_request:
     types: [opened, synchronize, reopened, labeled] # labeled: a ci-full-* label reruns with that group on
-    paths: ['smartcontracts/**', 'scaas-node/**', 'clients/**', 'docs/**', 'scripts/docs_check.py', 'scripts/test_docs_check.py', 'scripts/size_gate.py', 'pqz-core/**', '.github/workflows/ci.yml', '.github/ci_changes.py']
+    paths: ['smartcontracts/**', 'scaas-node/**', 'clients/**', 'docs/**', 'scripts/docs_check.py', 'scripts/test_docs_check.py', 'scripts/size_gate.py', 'pqz-core/**', 'rust-toolchain.toml', '.github/workflows/ci.yml', '.github/ci_changes.py']
   push:
     branches: [main]
-    paths: ['smartcontracts/**', 'scaas-node/**', 'clients/**', 'docs/**', 'scripts/docs_check.py', 'scripts/test_docs_check.py', 'scripts/size_gate.py', 'pqz-core/**', '.github/workflows/ci.yml', '.github/ci_changes.py']
+    paths: ['smartcontracts/**', 'scaas-node/**', 'clients/**', 'docs/**', 'scripts/docs_check.py', 'scripts/test_docs_check.py', 'scripts/size_gate.py', 'pqz-core/**', 'rust-toolchain.toml', '.github/workflows/ci.yml', '.github/ci_changes.py']
   workflow_dispatch:
     inputs:
       full:
@@ -48,6 +50,16 @@ on:
         type: choice
         options: [ci-full, ci-full-contracts, ci-full-node, ci-full-clients, ci-full-pqz]
         default: ci-full
+      rust_toolchain:
+        description: the Rust toolchain of every job (ARCH-POS-12)
+        type: string
+        default: '1.97.1'
+
+# One Rust toolchain for every job (ARCH-POS-12): 1.97.1 = the root rust-toolchain.toml unless a manual run names another.
+# RUSTUP_TOOLCHAIN makes every cargo / rustc call use it (workflow env cannot read env, hence the expression twice).
+env:
+  RUST_TOOLCHAIN: ${{ inputs.rust_toolchain || '1.97.1' }}
+  RUSTUP_TOOLCHAIN: ${{ inputs.rust_toolchain || '1.97.1' }}
 
 jobs:
   # Which jobs this run needs (.github/ci_changes.py: a job runs when a path it reads changed, or when a ci-full-* label
@@ -138,7 +150,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.97.1 # smartcontracts/soroban/rust-toolchain.toml
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
           targets: wasm32v1-none
       - uses: Swatinem/rust-cache@v2
         with:
@@ -158,7 +170,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.97.1 # smartcontracts/solana/rust-toolchain.toml (host tests; cargo build-sbf brings its own rustc)
+          toolchain: ${{ env.RUST_TOOLCHAIN }} # host tests; cargo build-sbf brings its own rustc
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: smartcontracts/solana
@@ -187,7 +199,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.97.1 # smartcontracts/near/rust-toolchain.toml
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
@@ -275,7 +287,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.99.0 # smartcontracts/cosmos has no rust-toolchain.toml: the local default (rustup default), where its tests pass
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: smartcontracts/cosmos
@@ -306,8 +318,9 @@ jobs:
         working-directory: scaas-node
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
           components: clippy
       - uses: Swatinem/rust-cache@v2
         with:
@@ -383,6 +396,10 @@ jobs:
         working-directory: pqz-core
     steps:
       - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
@@ -421,8 +438,9 @@ jobs:
         working-directory: clients/zether-prover
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
@@ -456,8 +474,9 @@ jobs:
         working-directory: clients/ua-rs
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
           components: clippy
       - uses: Swatinem/rust-cache@v2
         with:
@@ -488,8 +507,9 @@ jobs:
         working-directory: clients/ua-cxx
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
           components: clippy
       - uses: Swatinem/rust-cache@v2
         with:
@@ -512,8 +532,9 @@ jobs:
         working-directory: clients/ua-c
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
           components: clippy
       - uses: Swatinem/rust-cache@v2
         with:
@@ -538,7 +559,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.90.0
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
       - uses: jurplel/install-qt-action@v4
         with:
           version: 6.8.2
@@ -615,7 +638,9 @@ jobs:
         working-directory: clients/ua-dart-frb
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: clients/ua-dart-frb/rust
