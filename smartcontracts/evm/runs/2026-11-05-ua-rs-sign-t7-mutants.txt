@@ -1,0 +1,24 @@
+# 2026-11-05 ua-rs-sign T7 mutants: python3 -I smartcontracts/evm/runs/2026-11-05-ua-rs-sign-t7-mutants.py (from the worktree root, run as 1 10 and 11 19), on the tree committed as 8c17754b;
+# suite (in clients/ua-rs): scripts/capped cargo test -j2 --locked --features vectors --test wallet_kem.
+# One mutant per run, every file restored byte for byte; the failed-test list is cut at 200 characters. UNAUDITED.
+killed   | M1 modulus check removed (every coefficient accepted) | src/wallet/kem.rs | rc=101 | 2 failed: vectors::acvp_mlkem_encap_decap, vectors::ek_modulus_check
+killed   | M2 all-zero ss_X accepted (encaps) | src/wallet/kem.rs | rc=101 | 2 failed: kem_json_encaps_refusals_release, vectors::kem_json_encaps_refusals
+killed   | M3 all-zero ss_X accepted (decaps) | src/wallet/kem.rs | rc=101 | 1 failed: kem_json_decaps
+killed   | M4 decaps length check removed (mlkem_ct zero-padded or cut to 1,568 bytes) | src/wallet/kem.rs | rc=101 | 1 failed: kem_json_decaps
+killed   | M5 combiner fields reordered (ss_X before ss_M) | src/wallet/kem.rs | rc=101 | 2 failed: kem_json_decaps, vectors::kem_json_encaps
+killed   | M6 combiner without E | src/wallet/kem.rs | rc=101 | 2 failed: kem_json_decaps, vectors::kem_json_encaps
+killed   | M7 label changed (scaas.kem.2) | src/wallet/kem.rs | rc=101 | 4 failed: kem_json_decaps, kem_json_keys, kem_key_of_wallet_a_handle_is_a_derivation_while_wallet_b_unlocked, vectors::kem_json_encaps
+killed   | M8 KEM key derived for an msig (0x0120 a holder) | src/wallet/kem.rs | rc=101 | 1 failed: kem_json_refusals
+killed   | M9 KEM version ignored | src/wallet/kem.rs | rc=101 | 2 failed: kem_json_keys, vectors::kem_json_encaps
+killed   | M10 self-test record process-wide instead of per store | src/wallet/store.rs | rc=101 | 1 failed: vectors::self_test_runs_once_per_store
+mutants M1-M10 of 19, survived or not loaded: 0
+killed   | M11 version little-endian (le64) | src/wallet/kem.rs | rc=101 | 2 failed: kem_json_keys, vectors::kem_json_encaps
+killed   | M12 ua left out of the HKDF info | src/wallet/kem.rs | rc=101 | 4 failed: kem_json_decaps, kem_json_keys, kem_key_of_wallet_a_handle_is_a_derivation_while_wallet_b_unlocked, vectors::kem_json_encaps
+killed   | M13 salt changed (scaas.ua.kem.v2) | src/wallet/kem.rs | rc=101 | 4 failed: kem_json_decaps, kem_json_keys, kem_key_of_wallet_a_handle_is_a_derivation_while_wallet_b_unlocked, vectors::kem_json_encaps
+killed   | M14 holder check removed (any kind with a UA) | src/wallet/kem.rs | rc=101 | 1 failed: kem_json_refusals
+killed   | M15 scheme byte not checked | src/wallet/kem.rs | rc=101 | 2 failed: kem_json_encaps_refusals_release, vectors::kem_json_encaps_refusals
+killed   | M16 kem_key on a revoked handle derives from the reopened store (generation checks of derive and self_test removed) | src/wallet/store.rs | rc=101 | 1 failed: kem_handles_revoked_by_lock
+killed   | M17 decapsulation-key check always true | src/wallet/kem.rs | rc=101 | 1 failed: vectors::acvp_mlkem_encap_decap
+killed   | M18 ephemeral key from a fixed seed (no OS randomness) | src/wallet/kem.rs | rc=101 | 1 failed: ephemeral_round_trip
+killed   | M19 pk_X of the combiner taken from E (decaps) | src/wallet/kem.rs | rc=101 | 5 failed: ephemeral_round_trip, kem_handles_revoked_by_lock, kem_json_decaps, release_encaps_round_trip, vectors::kem_json_encaps
+mutants M11-M19 of 19, survived or not loaded: 0
