@@ -204,3 +204,7 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   `SetExchangeTarget`, `SetListedOnly`, `SetFeeSplit`) and their 19 address typehashes; the `ua<Op>` bodies (`_uaCall`)
   took the `mtx<Op>` names. Tests as they stood before their meaning changed: `test/governance/{GovRouter,
   GovRouterTypehash}.t.sol` (and `test/metatx/TypedOps.t.sol`, copied earlier). Not built.
+  T8 (Hedera, R42): `test/hedera/{HederaKat.t.sol,gen_hedera_kat.py}` and the vector
+  `test/vectors/legacy/ua-mtx-merge/hedera_kat.json`: the Hedera `MetaOp` v1 as the token's address `MetaTransfer`
+  (`from` an `address`); the file of the same name now holds `UAMetaTransfer` with the long-zero `from` padded to
+  `bytes32`. Not built.
