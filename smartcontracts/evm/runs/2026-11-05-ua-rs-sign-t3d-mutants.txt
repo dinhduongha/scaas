@@ -1,0 +1,17 @@
+killed   | M1 minimal check skipped (level 1) | src/wallet/uasig.rs | rc=101 | 4 failed: non_minimal_set_refused_at_level_2, pq_signatures_json_treasury, sign_json_msig_rows, slots_sorted
+killed   | M2 minimal check skipped (level 2) | src/wallet/uasig.rs | rc=101 | 3 failed: non_minimal_set_refused_at_level_2, sign_json_msig_rows, slots_sorted
+killed   | M3 memberDigest over the wrong structure (level 1: the member's id, not the msig's) | src/wallet/uasig.rs | rc=101 | 4 failed: nested_json_msig_rows, portable_json_msig_rows, pq_signatures_json_treasury, sign_json_msig_rows
+killed   | M4 memberDigest over the wrong structure (level 2: the outer msig, not the inner) | src/wallet/uasig.rs | rc=101 | 2 failed: nested_json_msig_rows, sign_json_msig_rows
+killed   | M5 memberDigest over the wrong structure (level 2: the inner message without the outer memberDigest) | src/wallet/uasig.rs | rc=101 | 2 failed: nested_json_msig_rows, sign_json_msig_rows
+killed   | M6 slots unsorted (level 1: sorted before the check, emitted as given) | src/wallet/uasig.rs | rc=101 | 2 failed: sign_json_msig_rows, slots_sorted
+killed   | M7 slots unsorted (level 2: sorted before the check, emitted as given) | src/wallet/uasig.rs | rc=101 | 1 failed: slots_sorted
+killed   | M8 slots unsorted (emitted in reverse) | src/wallet/uasig.rs | rc=101 | 5 failed: nested_json_msig_rows, portable_json_msig_rows, pq_signatures_json_treasury, sign_json_msig_rows, slots_sorted
+killed   | M9 membership digest of (member, msig) | src/wallet/uasig.rs | rc=101 | 2 failed: nested_json_msig_rows, portable_json_msig_rows
+killed   | M10 acceptance under the purpose member | src/wallet/uasig.rs | rc=101 | 2 failed: nested_json_msig_rows, portable_json_msig_rows
+killed   | M11 slot key not checked against its member | src/wallet/uasig.rs | rc=101 | 1 failed: slot_must_match_its_member
+killed   | M12 inner key data not checked against the member id | src/wallet/uasig.rs | rc=101 | 1 failed: slot_must_match_its_member
+killed   | M13 each slot signed as it is checked (a refused set signs) | src/wallet/uasig.rs | rc=101 | 1 failed: slot_must_match_its_member
+killed   | M14 ua_sig keeps keyData for a stored kind | src/wallet/uasig.rs | rc=101 | 1 failed: single_key_uasig_forms
+killed   | M15 ua_sig keeps keyData for the portable purposes | src/wallet/uasig.rs | rc=101 | 1 failed: single_key_uasig_forms
+killed   | M16 ua_sig drops keyData for every kind | src/wallet/uasig.rs | rc=101 | 1 failed: single_key_uasig_forms
+mutants M1-M16 of 16, survived or not loaded: 0
