@@ -8,7 +8,8 @@ at ETH $2,261.87 and 0.31 gwei (both 2026-11-03).
 
 > Note (2026-11-05): the owner has since added a Hedera Consensus Service topic as the third transport, between Matrix
 > and the chain (spec §7.3, D14; [CTR-CHAT-01](../decisions.md#CTR-CHAT-01)). The picture shows it; the rest of this note
-> is as written on 2026-11-04.
+> is as written on 2026-11-04. The same day (D15) a session lists its stores (Matrix, HCS, chains through
+> `storeMessage`) inside `sealedInfo`, every message goes to each, and Matrix became optional (spec P27–P29).
 
 ## The picture
 
