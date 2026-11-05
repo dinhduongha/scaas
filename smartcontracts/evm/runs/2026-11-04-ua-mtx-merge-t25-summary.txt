@@ -1,0 +1,52 @@
+# ua-mtx-merge T25 gate summary (full output in git-ignored .log files, not committed)
+# T25: TokenConfig.reg (RegulatedParams: complianceRegistry, requiredFlags, deniedFlags, termsHash; regulated-kinds spec §2.4),
+# TokenStore KIND_*_REGULATED 8-13, requireRegOfKind (a plain kind 0-5 refuses a set `reg` with ConfigFieldForOtherKind(6)) on
+# every init path, ZetherWrappedLib.init / PqzWrappedLib.init / ZetherLib.initNormal on the token's kind id and masks, the
+# encoders (e2e.py, tests/e2e.rs; the Solidity encoders build a memory struct and need no edit).
+# Base: 5981f2c4 (T24 tip). T25 commits: 98e0626e (legacy copies, MD-4), 23eb0f37 (the build), this one (harness, mutants, summary).
+step | commit | rc | counts
+t25-baseline | 5981f2c4 | 0 | forge test (default set n2304-kmax4096): 224 suites, 2634 passed 0 failed 14 skipped (T24's GovDeploy fix under the whole suite)
+t25-red-build | 98e0626e + test/as/RegConfig.t.sol | 1 | compile error: IFactoryToken.RegulatedParams not found (RegConfig.t.sol:34)
+t25-red | 98e0626e + the struct, the constants, the virtual masks | 1 | RegConfig 1 passed 9 failed: test_plainKindRefusesReg_{0..5} (did not revert), test_wrapped{Zether,Pqz}InitTakesKindMasks (stored kind 3 != 11, 5 != 13), test_normalZetherInitTakesKind (2 != 10); test_regulatedKindIds passes by construction
+t25-e2epy-red | 98e0626e + the struct | 1 | e2e.py --self-test 1 failure: CFG, ENV = IFactoryToken.TokenConfig, Env (positive control on 5981f2c4: green)
+t25-green | worktree | 0 | RegConfig 10 passed 0 failed
+t25-forge-full | worktree before the pin moves | 1 | 227 suites, 2641 passed 3 failed 14 skipped: test_sizes, test_implementationSizes (NormalToken 32,776 > 32,498 baseline), test_dexKat (MD-8)
+t25-size-gate | 23eb0f37 | 0 | 0 errors, 89 contracts, above 65536 B: none; size-baseline.json moved (rows below); before the move: 10 errors, each a row below
+t25-dexkat | 23eb0f37 | 0 | DexKatTest with WRITE_KAT=true, then without: green; dex_order_kat.json regenerated (MD-8)
+t25-clientkeys-evm | 23eb0f37 | 0 | node --test test/evm.test.js test/governance-bits.test.js: 25 passed 0 failed (reads dex_order_kat.json)
+t25-node-kat | 23eb0f37 | 0 | cargo test --lib: dex kat_hashes_and_calldata_match_forge, guard the_plain_rows_are_pinned, typed call_op_round_trips_a_plain_entry, typed invalidate_digests_match_the_vectors: 4 passed
+t25-node-e2e-build | 23eb0f37 | 0 | cargo test --test e2e --no-run: compiles (tests/e2e.rs TokenConfig with RegulatedParams reg)
+t25-at-set-n2048-kmax1024 | 23eb0f37 | 0 | test/{ua,pqz,as}: 65 suites, 802 passed 0 failed 1 skipped
+t25-at-set-n2304-kmax4096 | 23eb0f37 | 0 | test/{ua,pqz,as}: 65 suites, 799 passed 0 failed 4 skipped
+t25-at-set-n2560-kmax16384 | 23eb0f37 | 0 | test/{ua,pqz,as}: 65 suites, 798 passed 0 failed 5 skipped
+t25-at-set-n2816-kmax65536 | 23eb0f37 | 0 | test/{ua,pqz,as}: 65 suites, 793 passed 0 failed 10 skipped; src/pqz/PqzSet.sol restored (git diff HEAD clean)
+t25-govdeploy | 23eb0f37 | 0 | GovDeploy 9 passed (test_wrappedReleaseIsGated control moved with the WrappedToken row)
+t25-forge-final | 23eb0f37 | 0 | forge test: 227 suites, 2644 passed 0 failed 14 skipped; PlusZero 24 passed (slots unchanged), Layout 3 passed (no namespace moved), RegConfig 10 passed
+t25-isolate | 23eb0f37 | 0 | 22 passed 0 failed (forge --isolate UAGas, UARegistryGroups)
+t25-e2epy | 23eb0f37 | 0 | e2e.py --self-test: 0 failures (CFG and ENV checked against the Solidity structs)
+t25-docs | 23eb0f37 | 0 | docs_check check 0 errors, 5 warnings, 16 notes; paths 0
+t25-mutants | 23eb0f37 | 1 each | 8 of 8 killed, none a compile error (runs/2026-11-04-ua-mtx-merge-t25-mutants.txt): the plan's two (reg-ignored-on-plain, pqz-fixed-masks), each requireRegOfKind call site alone (metatokenbase, zether-normal, zether-wrapped, pqz-wrapped), zether-fixed-masks, normal-zether-fixed-kind; src restored after each
+#
+# Pins, old -> new: size-baseline.json runtime B: NormalToken 32,498 -> 32,776; WrappedToken 42,985 -> 43,333; NormalZetherToken
+# 40,941 -> 40,963; WrappedZetherToken 51,342 -> 51,385 (init 54,962 -> 55,005); NormalPqzToken 46,740 -> 47,019 (init 49,407 ->
+# 49,686); WrappedPqzToken 56,464 -> 56,507 (init 59,131 -> 59,174); ZetherLib 25,065 -> 25,365; WrappedLib 16,905 -> 17,043 (not a
+# row). dex_order_kat.json (MD-8): dex 0x84BBDd914D5fE66198E5e10168D8D4AD534C506a -> 0x34b20A6E9cED308Ceb47A2Ac210e403480cE7358,
+# token 0xAf6538D16b03BfbDd5B42d6A1EF09153445989C2 -> 0xE6eE855B4C22fAc4235F6221818Ab156E438c9ce, the domain separator, order
+# hashes, digests, calldata. GovDeploy test_wrappedReleaseIsGated control 42,985 -> 43,333 B. No gas pin, typehash, selector,
+# storage slot or governance_bits.json row moved; no other KAT (TokenKat, AccountKat, HederaKat, TradeKat) moved.
+#
+# Not run in T25: scripts/e2e-zether.sh (ZetherE2E.s.sol unchanged: `reg` encodes zeroed from its memory struct); the whole node
+# suite (only tests/e2e.rs changed: compiled, and the four unit tests reading the regenerated KAT run); pqz-core gate (no core,
+# statement or set touched).
+#
+# Conflicts with the plan / spec:
+#   "the four masks": GovernanceLib.init reads three (valid, role, contract-only); the libraries take those and the kind id. The
+#   scalar and delayed-relax masks are read at use from the token's own overrides (_scalarBits, _delayedRelaxBits), never at init.
+#   ZetherLib.initNormal is a raw init decoder of the same class (fixed KIND_NORMAL_ZETHER) and is not in the plan's file list; it
+#   takes the kind id too (kind 10 needs it), with its own test and mutant.
+#   Encoders: DeployBase.sol, ZetherE2E.s.sol, Factory.t.sol, FactoryZether.t.sol build TokenConfig as a memory struct, so `reg`
+#   encodes zeroed without an edit; only e2e.py (positional) and tests/e2e.rs (alloy sol!) carry the field by hand.
+#   RegulatedLib.init(cfg.reg, ...) (spec §2.4) is not called: RegulatedLib comes with T27; a regulated kind id (>= 8) passes
+#   requireRegOfKind today and nothing reads `reg` yet.
+#   The four confidential kinds' kind(), _validBits(), _roleBits(), _contractOnlyBits() are now virtual (the regulated kinds and
+#   the masked test subclasses override them): no bytecode change of their own.
