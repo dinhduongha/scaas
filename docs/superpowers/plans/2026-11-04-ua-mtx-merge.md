@@ -3,7 +3,7 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or
 > superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status (2026-11-04):** plan, not executed; its decisions MD-1 to MD-10 accepted by the owner 2026-11-04. **Owner 2026-11-04 (after T0): build M first** (A + B + C with the router's pairs, Q2, R17, R47: tasks T1-T8 with T3b, T10-T23 without a lever), then a checkpoint: gates, the whole-branch review (Claude, Fable, Codex) and the PR of M into `main`. **T9 (levers D / L) is not started: the owner decides it after M.** M alone fits a 200 M block, not 70 M for `WrappedToken` (72.37 M asked, T0), so no public chain deploy before that decision. Nothing is built from it; this commit writes no code, contract, test or vector. **Owner 2026-11-04 (after T1): Q6 changed:** the mandate wallets are built in this round in the merged form (task T3b, MD-11); T1 is built.
+**Status (2026-11-04):** plan, not executed; its decisions MD-1 to MD-10 accepted by the owner 2026-11-04. **Owner 2026-11-04 (after T0): build M first** (A + B + C with the router's pairs, Q2, R17, R47: tasks T1-T8 with T3b, T10-T23 without a lever), then a checkpoint: gates, the whole-branch review (Claude, Fable, Codex) and the PR of M into `main`. **T9 (levers D / L) is not started: the owner decides it after M.** M alone fits a 200 M block, not 70 M for `WrappedToken` (72.37 M asked, T0), so no public chain deploy before that decision. Nothing is built from it; this commit writes no code, contract, test or vector. **Owner 2026-11-04 (after T1): Q6 changed:** the mandate wallets are built in this round in the merged form (task T3b, MD-11); T1 is built. **Owner 2026-11-05:** the six regulated kinds 8–13 are built in this branch as task group **T24–T36**, after T18 and before T19 ([spec](../specs/2026-11-05-regulated-kinds.md), revised after the Fable and Codex reviews; 19 agent-days); T19–T23 cover the group.
 
 **Spec:** [`2026-11-04-ua-mtx-merge.md`](../specs/2026-11-04-ua-mtx-merge.md), **accepted by the owner 2026-11-04** (Q1–Q7, §10);
 rules R1–R47 (§5), invariants 1–7 (§8), measurement (§9). **Ruling:** [CTR-MTX-30](../../decisions.md#CTR-MTX-30), its Q6 Change, and the Change
@@ -213,7 +213,8 @@ rustc 1.90); Node `node --test` (`clients/clientkeys`); `zether-prover`; `ua-rs`
 | Clients | T11 → T12; T11 → T13 | from T7 (ABI final; L and D change no ABI); **beside T8–T10**, `clients/` and `smartcontracts/vectors/` only; their forge cross-checks re-run after T10 |
 | Node | T14 → {T15 ∥ T16 ∥ T17} → T18 | T14 after T11; T15, T16, T17 beside each other (disjoint files); T18 after T10 and T15–T17 |
 | Wallets | T20 | after T11, owner-assisted, beside T14–T19; before reset 2 |
-| Docs | T19 | drafts beside T14–T18; lands after T18 (BUILT only with code and tests) |
+| Regulated | T24 → T25 → T26 → T27 → T28 → T29 → T30 → T31 → T32 → T33; T34 beside T33; T35 after T33, T34; T36 after T33, beside T34–T35 | after T18, before T19 (owner 2026-11-05); contracts sequential in this worktree; T27 measures kinds 9 and 13 before T28 fills the bodies |
+| Docs | T19 | drafts beside T14–T18 and T24–T36; lands after T36 (BUILT only with code and tests) |
 | Close | T21 → T22 → T23 | |
 | Next | TODO item 4 | SCaaS testnet reset 2 deploys the merged code (not this plan) |
 
@@ -902,9 +903,332 @@ watcher beside `LegSettled`; the `InvalidateNonces` row split per kind.
       `tests/e2e.rs`'s wallet call still on `mtxExecuteAsOwnerRaw`.
 - [ ] **Step 6:** Commit `ua-mtx-merge T18: Hedera adapter and e2e on the merged entries`.
 
+### Regulated kinds 8–13 (owner 2026-11-05): tasks T24–T36
+
+**Spec:** [`2026-11-05-regulated-kinds.md`](../specs/2026-11-05-regulated-kinds.md), revised after the Fable and Codex reviews
+(2026-11-05), Q1–Q8 and F-01 answered by the owner. **Place:** after T18, before T19; T19, T21, T22, T23 cover the group.
+**Order:** contracts T24 → T25 → T26 → T27 → T28 → T29 → T30 → T31 → T32 → T33, sequential in this worktree (shared
+`GovernanceLib`, `ERC20MetaTx`, `UAMetaTxBase`, the layers, `size-baseline.json`); T34 (`clients/`, `smartcontracts/vectors/`)
+beside T33 once T32 fixes the router ABI; T35 (node) after T33 and T34; T36 (invariants, mutants) after T33, beside T34–T35.
+**Estimate:** 19 agent-days (the draft's sketch: 13). Every contracts task ends with the whole `forge test` green at the default
+set and the size gate; a task touching a PQZ kind or `PqzLayer` also runs `script/pqz/at-set.sh <set> test --match-path
+'test/{ua,pqz,as/confidential}/*'` at the four sets `n2048-kmax1024`, `n2304-kmax4096`, `n2560-kmax16384`, `n2816-kmax65536`
+(one run per work tree, `PqzSet.sol` restored). Red first, positive control first, one change at a time; mutants one at a time on
+a clean tree, logged `mutant | test that went red | rc`; heavy runs through `scripts/capped`, foreground.
+
+### Task T24: `GovernanceLib`: the relaxation state machine, threshold holders, roles
+
+**Depends on:** T18. **Estimate:** 3 (draft 1.5: the state machine of spec §3.6 is new work, F-03, Codex 2, Codex 3).
+
+**Files:** `src/governance/{GovernanceLib,GovernanceBase,GovernanceBits,IGovernance}.sol`; the governed contracts' wrappers
+(`src/metatx/{MetaTokenBase,WrappedToken}.sol`, `src/dex/SCaaSDex.sol`: the new arguments); tests `test/governance/GovRelax.t.sol`
+(new), `test/governance/{GovDelay,GovGrant,GovAttackV2,GovRegulatedBits,GovIdentity,GovBitsVector}.t.sol` (re-pinned where the
+commitment or an argument moves), `test/v2/layout/` (the `PendingGrant` label), `smartcontracts/vectors/governance/governance_bits.json`.
+
+**Interfaces:**
+- `PendingGrant.termsHash` → `commit` (same slot): `keccak256(abi.encode(action, bit, account, argsHash))`, actions `GRANT 1`,
+  `SET 2`, `REVOKE 3`, `RENOUNCE 4`, `DISABLE 5`; `disableFeature` keys `account = 0`.
+- `_due(s, bit, account, caller, commit)`: a live pending with another commit `GrantTermsMismatch`; another proposer
+  `NotProposer(uint8 bit, bytes32 account, bytes32 proposer)` (new); before `eta` `GrantNotReady`; no live pending: propose,
+  emit `GrantProposed` or `RelaxProposed(uint8 indexed bit, bytes32 indexed account, uint8 action, bytes32 proposer, uint64 eta)` (new).
+- `revokeRole`, `renounceRole`, `disableFeature`, `setGrant` take the `delayedRelax` mask; on a masked bit with `grantDelay ≠ 0`
+  they propose, and the effect (`barred`, `_clear`, `features`) happens at confirm only; `_narrowing` returns false on a masked bit
+  for `validUntil ≠ 0 && validUntil < now + grantDelay`; the leaf path of `setGrant` takes the same delay for that edit.
+  `disableFeature(uint8, bytes32) returns (bool applied)`. `cancelGrant`: the owner or the pending's proposer.
+- `init`, `grantRole`, `setGrant`, `initHolder` take `address uaRegistry`; `_check` accepts a derived id on a contract-only bit in
+  `GovernanceBits.REGULATED_ROLES` (5, 6, 7, 10, 21, new) iff `IUARegistry(uaRegistry).kindOf(id) == UAKinds.MSIG` (F-01); refuses
+  `pad(address(this))` (`RoleAccountPool`, F-07).
+- `init` grants `roles.issuer` each set bit of 5–7 and `roles.compliance` bit 10 (the `RoleWithoutFeature` refusals of today go);
+  `RoleConflict(uint8 bit, bytes32 account)` (new) for one id holding 6 and 10 (init, `grantRole`, `setGrant`, a leaf); the
+  `FeatureNotBuilt` refusal lifted; `GovernanceBase._delayedRelaxBits()` virtual, 0 by default; the plain kinds stop passing
+  `| REGULATED`.
+
+- [ ] **Step 1: Failing tests** (`GovRelax.t.sol`, each with its positive control): `test_relaxRevokeTakesTwoCalls`,
+      `test_relaxRenounceTakesTwoCalls`, `test_relaxDisableTakesTwoCalls`, `test_relaxSetGrantShortValidUntilTakesTwoCalls`
+      (owner and leaf path), `test_proposeChangesNothing` (role acts, `features` and `barred` unchanged),
+      `test_grantThenRevokeExclude`, `test_revokeThenGrantExclude`, `test_ownerCannotConfirmHolderRenounce`,
+      `test_holderCannotConfirmOwnerRevoke`, `test_acceptOwnershipKillsPendingRelax`, `test_confirmAfterWindowProposesAgain`,
+      `test_cancelByProposer`, `test_disableReturnsAppliedOnlyAtConfirm`, `test_unmaskedBitsOneCallAsToday`,
+      `test_grantDelayZeroOneCall`, `test_msigIssuerGranted`, `test_singleKeyDerivedIssuerRefused`,
+      `test_msigRefusedForRateAdmin`, `test_selfRefusedAsHolder`, `test_roleConflictForceRecord_{init,grant,setGrant,leaf}`,
+      `test_initGrantsIssuerAndCompliance`, `test_plainKindsRefuseRegulatedAsInvalid`; `RelaxProposed` topics.
+- [ ] **Step 2:** FAIL. **Step 3: Implement.**
+- [ ] **Step 4:** PASS; the existing `Gov*` suites green (re-pinned rows named in the commit); whole `forge test`; size gate
+      (`GovernanceLib`, `SCaaSDex`, every token row old → new).
+- [ ] **Step 5: Mutants:** the proposer not compared; the action left out of `commit`; `barred` set at propose; `features` cleared
+      at propose; `ownerGeneration` not read; an `msig` accepted on `RATE_ADJUSTABLE`; any derived id accepted on bit 5;
+      `RoleConflict` skipped on the leaf path.
+- [ ] **Step 6:** Commit `ua-mtx-merge T24: GovernanceLib relaxation state machine, msig holders, issuer and compliance roles`.
+
+**Pins, old → new:** `GovernanceLib` size; layout label; `GovDelay` / `GovGrant` rows whose commitment moved; gas of
+`grantRole` / `setGrant` (`GovGas`). **Gates:** whole `forge test`, size gate.
+
+### Task T25: `TokenConfig.reg`, `TokenStore` 8–13, the init ripple
+
+**Depends on:** T24. **Estimate:** 1 (new: F-20 split out of the draft's T24).
+
+**Files:** `src/factory/IFactoryToken.sol` (`RegulatedParams`, `TokenConfig.reg`, `ConfigFieldForOtherKind` NatSpec field 6),
+`src/metatx/{TokenStore,MetaTokenBase,NormalToken,WrappedToken,WrappedLib}.sol` (constants `KIND_*_REGULATED` 8–13; a plain
+kind refuses a non-zero `reg` with `ConfigFieldForOtherKind(6)`), `src/zether/ZetherWrappedLib.sol`, `src/pqz/PqzWrappedLib.sol`
+(the kind id and the four masks from the token, no fixed `WRAPPED_*`), `script/DeployBase.sol`, `script/pqz/e2e.py`,
+`script/ZetherE2E.s.sol`, `test/v2/{Factory,FactoryZether}.t.sol`, `scaas-node/tests/e2e.rs`.
+
+**Interfaces:** `TokenConfig` gains `RegulatedParams reg` (spec §2.4); every `abi.encode(TokenConfig)` moves; no behaviour on
+kinds 0–5 beyond the refusal.
+
+- [ ] **Step 1: Failing tests:** `test_plainKindRefusesReg_{0..5}`, `test_wrappedZetherInitTakesKindMasks`,
+      `test_wrappedPqzInitTakesKindMasks`, `e2e.py --self-test` row for the new field.
+- [ ] **Step 2:** FAIL. **Step 3: Implement.** **Step 4:** PASS; whole `forge test`; the four sets (`PqzWrappedLib`); size gate;
+      `cargo test --test e2e --no-run` compiles.
+- [ ] **Step 5: Mutants:** `reg` ignored on a plain kind; `PqzWrappedLib` back on the fixed masks.
+- [ ] **Step 6:** Commit `ua-mtx-merge T25: TokenConfig.reg, kinds 8-13 constants, init with the kind's masks`.
+
+**Pins, old → new:** `Factory.t` encodings; sizes. **Gates:** whole `forge test`, four sets, size gate.
+
+### Task T26: the eight empty hooks; "+0" pinned in slots and gas
+
+**Depends on:** T25. **Estimate:** 1 (draft 0.5: eight hooks, more seats, the gas pin, F-10, F-35).
+
+**Files:** `src/metatx/{UAMetaTxBase,ERC20MetaTx,MetaTokenBase,WrappedToken}.sol`, `src/zether/ZetherLayer.sol`,
+`src/pqz/PqzLayer.sol`; `test/governance/PlusZero.t.sol` (every kind 0–5 and the router; slots and gas);
+`smartcontracts/vectors/governance/plus_zero_slots.json` (unchanged rows for 0–5).
+
+**Interfaces:** spec §2.2's eight hooks with empty bodies and raw arguments, at every seat of §2.2, §3.2, §4.1, §4.2: `_regPre`
+before every `pre*` (`_uaExecute`, `_namedCallUA`, `mtxCancelNonce`, `_execute`, `_namedCall`, `_uaExecuteTransfer`),
+`_regFeeTo` after it and in `payWithFee`, `payWithFeeToUA`, `mtxPayReceiverFee`, `mtxRelayFee`, `mtxWrapOrder`; `_regMove` in
+`_update` and `_uaMove`; `_regPayer`, `_regSender`, `_regName`, `_regReceiver`, `_regZetherSender` at the confidential, wrap and
+`approve` seats; `supportsInterface` made `virtual`. No storage, no ABI change.
+
+- [ ] **Step 1: Failing tests:** `test_plusZeroSlots_{kind}` and `test_plusZeroGas_{kind}` for kinds 0–5 and the router on the
+      four I0 entries (the gas rows fail first: the pin is written from the pre-change run, then moved old → new only if the
+      compiler moves it, with the figures in the commit); `test_hookSeatsCalled` (a test-only subclass overriding each hook with a
+      revert proves every seat of the spec's tables is reached, direct and relayed).
+- [ ] **Step 2:** FAIL (the seat test). **Step 3: Implement.** **Step 4:** PASS; whole `forge test`; the four sets; size gate.
+- [ ] **Step 5: Mutants:** `uaOf` evaluated at the Zether call site; a `features` read in the base `_regMove`; a seat dropped
+      (`mtxCancelNonce`, `mtxWrapOrder`, the `COMPACT` multi entry) — each turns `test_hookSeatsCalled` or a gas pin red.
+- [ ] **Step 6:** Commit `ua-mtx-merge T26: eight empty regulated hooks at every seat; +0 pinned in slots and gas`.
+
+**Pins, old → new:** gas of every kind's I0 entries and the router; sizes of every kind. **Gates:** whole `forge test`, four
+sets, size gate.
+
+### Task T27: measure first — kinds 9 and 13 on a skeleton
+
+**Depends on:** T26. **Estimate:** 1 (new: F-19).
+
+**Files:** `src/regulated/{RegulatedBase,RegulatedLib,IRegulatedToken,WrappedRegulatedToken,WrappedPqzRegulatedToken}.sol`
+(skeleton: every hook override wired, the eight stubs and the views at their final arity, bodies reverting with a placeholder
+error that T28 replaces), `script/DeployBase.sol` (the two releases), `size-baseline.json` (two rows, reason in
+`_comment`), `smartcontracts/evm/runs/<date>-ua-mtx-merge-regulated-sizes.txt` (summary, no absolute paths).
+
+- [ ] **Step 1:** Build the skeleton; `forge build src --sizes --json`; deploy gas of both releases by `DEPLOY_GAS` on the
+      method of spec §6.2.
+- [ ] **Step 2:** Report to the controller: runtime B and asked gas of kinds 9 and 13 against the §6.2 estimate; kind 13 against
+      65,536 B. If kind 13 crosses it, add the `_above64KiB` row here with the reason; if a figure runs over the estimate by more
+      than 50 %, stop for the controller before T28.
+- [ ] **Step 3:** whole `forge test`; the four sets; size gate.
+- [ ] **Step 4:** Commit `ua-mtx-merge T27: regulated skeleton, kinds 9 and 13 measured first`.
+
+**Pins:** two `size-baseline.json` rows (replaced by T33's final measurement). **Gates:** whole `forge test`, four sets, size gate.
+
+### Task T28: `RegulatedLib`, `RegulatedBase`, kinds 8 and 9 (Hedera included): FREEZE, RECORD, FORCE, PAUSE, the fee seats
+
+**Depends on:** T27. **Estimate:** 3 (draft 2: the transition table, RECORD disabled, the fee seats, the pause-open set, the
+cancel, the mirror sync).
+
+**Files:** `src/regulated/{RegulatedBase,RegulatedLib,IRegulatedToken,NormalRegulatedToken,WrappedRegulatedToken}.sol`;
+`test/as/{Freeze,Record,Force,Pause,FeeLegs,Mirror,RegulatedInit,RegulatedHedera}.t.sol`; `test/v2/layout/namespaces.json`
+(`scaas.regulated`); `script/DeployBase.sol` (kind 8 release; Hedera `IS_HEDERA` rows).
+
+**Interfaces:** spec §2.3 storage; §2.4 init checks; §3.1 entries (`nonReentrant`, `_govSubject()` passed as a word), views,
+errors, events; §3.2 rows; §3.3 transitions T1–T9; §3.4 pause; `disableFeature` override clearing the mirror only when
+`applied` (on kind 9 `override(WrappedToken, RegulatedBase)`); `supportsInterface` adds `IRegulatedToken`.
+
+- [ ] **Step 1: Failing tests** (positive control first): one test per transition cell T1–T9; `test_recordDisabledEndsBackedFreezesStopsForce`,
+      `test_revokeOrderRunsWithRecordDisabled`, `test_revokeOrderEmitsAccountUnfrozen`, `test_forceZeroRefused`,
+      `test_freezeTargetsRefused` (0, both pools, `this`); `test_preRefusesFrozenBeforeSignature` (a bad signature with a frozen
+      `from` reverts `Frozen`, not a signature error; per signer class); the pause-open set on the named, generic and address
+      paths (`unwrap` ×2, `unwrapToUA`, `burn` at fee mode `NONE` pass; each with a fee refused; `cancelNonce` refused);
+      `test_cancelNonceFrozenRefused_{8,9}`; the fee seats: `payWithFee`, `payWithFeeToUA`, `mtxPayReceiverFee` (frozen payee;
+      frozen fee recipient), `mtxRelayFee` (frozen payee), `mtxWrapOrder` (frozen submitter; frozen `o.from` with another
+      destination); `test_dexRelayerShareIsOrdinaryCredit`; the Codex 3 pins: a `disableFeature(FREEZE)` and `(PAUSE)` proposal,
+      cancellation, early confirm and expired confirm leave frozen accounts frozen and the pause on;
+      `test_controlsEqualFeaturesMask`; `test_supportsIRegulatedToken_{8,9}` and not on 0–5; Hedera: kinds 8, 9 freeze and pause
+      under `IS_HEDERA`.
+- [ ] **Step 2:** FAIL. **Step 3: Implement** (the skeleton's placeholders replaced).
+- [ ] **Step 4:** PASS; whole `forge test`; size gate (kinds 8, 9, `RegulatedLib`).
+- [ ] **Step 5: Mutants** (spec §9 rows FREEZE, Relaxation, FORCE, PAUSE, Fee legs): `recordId` not cleared on `unfreeze`; T4
+      without the `≥ until` check; `revokeOrder` not ending the backed freeze; `counts[10].roots` read without the `RECORD` bit;
+      the mirror cleared at propose; the wrapped override not composed; the open set on the outer selector; `burn` paused at fee 0;
+      `_regFeeTo` dropped from `payWithFee`, from `mtxWrapOrder`, from `mtxRelayFee`; `F(from)` moved after `pre*`.
+- [ ] **Step 6:** Commit `ua-mtx-merge T28: RegulatedLib and kinds 8, 9: freeze transitions, record, force, pause, fee seats`.
+
+**Pins, old → new:** layout `scaas.regulated` (new); sizes; `WrappedToken.disableFeature` composition. **Gates:** whole `forge
+test`, size gate.
+
+### Task T29: `ComplianceRegistry`, the bounded call, the code pin; `ALLOWLIST`, `DENYLIST`
+
+**Depends on:** T28. **Estimate:** 1.5 (draft 1: the bounded call, the codehash pin, the failure modes).
+
+**Files:** `src/regulated/{ComplianceRegistry,IComplianceRegistry}.sol` (admin in storage, written once by the constructor);
+`src/regulated/RegulatedBase.sol` (`_hasFlags`: gas cap `REGISTRY_GAS`, starvation check, 32-byte output, 0 or 1, named failure);
+`REGISTRY_CODEHASH` immutable from `implArgs`; `script/DeployBase.sol` (the hash in each regulated release's `implArgs`);
+`test/as/{Registry,Receiver,RegistryFailure}.t.sol`; `test/as/RegistryStubs.sol` (reverting, gas-burning, short-return,
+2-returning stubs, installed by `vm.etch`).
+
+**Interfaces:** spec §5; `REGISTRY_GAS` set to at least twice the canonical `hasFlags` measured cold, pinned in a test; the call
+budget of spec §5 asserted per path.
+
+- [ ] **Step 1: Failing tests:** the `R` truth table (both bits, `ELIGIBLE_CONTRACT` on each side, lapsed, `validUntil == now`
+      passes, disabled attester); `test_registryCodehashPinned` (another code refused `RegistryCodeMismatch`);
+      `test_registryFailureNeverEligible` (each stub: transfer, mint and a fee leg fail `RegistryUnavailable`; burn and unwrap pass);
+      `test_registryStarvedReverts`; `test_registryGasPinned`; `test_callBudgetPerPath`; `test_attesterDisableVoids`;
+      `test_eligibleContractAdminOnly`; `test_canReceiveReasons`.
+- [ ] **Step 2:** FAIL. **Step 3: Implement.** **Step 4:** PASS; whole `forge test`; size gate.
+- [ ] **Step 5: Mutants:** `ELIGIBLE_CONTRACT` ignored; a lapsed attestation passes; a disabled attester passes; a failed call
+      read as eligible; the gas cap removed; `ELIGIBLE_CONTRACT` passing `deniedFlags`; the codehash check skipped.
+- [ ] **Step 6:** Commit `ua-mtx-merge T29: ComplianceRegistry, bounded registry call, codehash pin, allowlist and denylist`.
+
+**Pins:** `REGISTRY_GAS`; registry runtime hash; sizes. **Gates:** whole `forge test`, size gate.
+
+### Task T30: Zether kinds 10 and 11
+
+**Depends on:** T29. **Estimate:** 1.
+
+**Files:** `src/regulated/{NormalZetherRegulatedToken,WrappedZetherRegulatedToken}.sol` (the layer hooks forwarded to
+`RegulatedBase`); `script/DeployBase.sol` (under `DEPLOY_ZETHER=1`); `test/as/confidential/Zether{Freeze,Pause,Receiver,Force}.t.sol`.
+
+**Interfaces:** spec §4.1, §4.3: `_regZetherSender(t.yFrom)` and `_regName` in each direct multi entry before `_multi`
+(`BUNDLE` and `COMPACT`) and in the single entry; unshield and unshield-unwrap at the top; shield and wrap-shield `_regPayer()`;
+roll-over untouched. `ZetherLib` unchanged.
+
+- [ ] **Step 1: Failing tests:** a frozen `yFrom` refused before the proof on `mtxConfidentialTransfer`, `…Compact`, `…Single`,
+      direct and signed (`< 200 k` plus the signer class); a frozen and a denied decoy succeed (I9); a frozen beneficiary refused;
+      the envelope subject never used as the sender; `PAUSE` stops shield, wrap-shield, transfers, unshield, unshield-unwrap, and
+      roll-over stays open; a not fee-bearing relayed op by a frozen envelope `from` passes, a fee-bearing one is refused;
+      `FORCE` and `MODERATE` leave `ZetherLib` state unchanged (state diff, I8).
+- [ ] **Step 2:** FAIL. **Step 3: Implement.** **Step 4:** PASS; whole `forge test`; `zether-cross`; size gate.
+- [ ] **Step 5: Mutants:** the multi check dropped from the `COMPACT` entry; the envelope subject used as the sender; a check
+      after the proof; `R` on a decoy leg; a Zether site hook in `PqzLayer`.
+- [ ] **Step 6:** Commit `ua-mtx-merge T30: regulated Zether kinds 10 and 11`.
+
+**Gates:** whole `forge test`, size gate.
+
+### Task T31: PQZ kinds 12 and 13, four sets
+
+**Depends on:** T30 (sequential in the worktree; Zether ≠ PQZ: separate task, tests and commit). **Estimate:** 1.5.
+
+**Files:** `src/regulated/{NormalPqzRegulatedToken,WrappedPqzRegulatedToken}.sol`; `script/pqz/e2e.py` (kinds 12, 13);
+`test/as/confidential/Pqz{Freeze,Pause,Receiver,Force,Refresh}.t.sol`.
+
+**Interfaces:** spec §4.2, §4.3: first in `_single` / `_multi` / `_burn`, before `_pullShieldIn`; the `shieldIn` payer by
+`_regPayer()`; the refresh (`amount = 0`) open under `FREEZE` and `PAUSE`; `R(recipient)` only when the amount is not 0.
+
+- [ ] **Step 1: Failing tests:** a frozen `fromUA` refused before the proof on the four transfer entries and unshield; a frozen
+      `shieldIn` payer refused; `test_refreshOpenUnderFreezeAndPause` (and its `shieldIn ≠ 0` variant refused under `P`);
+      unshield-unwrap refused under `P` on 13; prepare and roll-over open; `FORCE` and `MODERATE` leave `acc`, pending and
+      `totalShielded` unchanged (I8).
+- [ ] **Step 2:** FAIL. **Step 3: Implement.**
+- [ ] **Step 4:** PASS; whole `forge test`; `at-set.sh` at the four sets (`test/{ua,pqz,as/confidential}`); size gate (kind 13
+      against 65,536 B and T27's figure).
+- [ ] **Step 5: Mutants:** `shieldIn` payer unchecked; the check after `_pullShieldIn`; refresh refused under `FREEZE`; `R` asked
+      of a refresh's zero recipient.
+- [ ] **Step 6:** Commit `ua-mtx-merge T31: regulated PQZ kinds 12 and 13, four sets`.
+
+**Gates:** whole `forge test`, four sets, size gate.
+
+### Task T32: `MODERATE` (Q1), the eight router ops, `selector_audit.json`
+
+**Depends on:** T31 (sequential; the router ABI is final at its end). **Estimate:** 1.
+
+**Files:** `src/regulated/RegulatedBase.sol` (`moderatedTransfer`), `src/governance/{GovernanceRouterBase,IGovernanceRouter}.sol`
+(eight `mtx<Op>` over `UA<Op>`, fee mode `NONE`), `test/governance/{GovRouter,GovRouterTypehash,SelectorAudit}.t.sol`,
+`test/as/Moderate.t.sol`, `test/vectors/selector_audit.json`.
+
+- [ ] **Step 1: Failing tests:** `test_routerRow_<Op>` for the eight, a contract holder and an `msig` holder; eight `UA<Op>`
+      typehash pins; `moderatedTransfer` refusals (amount 0, `from == to`, pools, `this`, a native `from` with code, a non-SIGNING
+      derived `to`); a frozen `from` cannot be moderated past `F`; the eight direct entries classified as the existing powers.
+- [ ] **Step 2:** FAIL. **Step 3: Implement.** **Step 4:** PASS; whole `forge test`; size gate (router old → new).
+- [ ] **Step 5: Mutants:** moderated on `_poolMove`; `from` with code accepted; `target` out of a `UA<Op>` digest; a router row on
+      the token domain.
+- [ ] **Step 6:** Commit `ua-mtx-merge T32: MODERATE and the eight router control ops`.
+
+**Pins, old → new:** router typehashes (+8); `selector_audit.json`; router size and CREATE2 address. **Gates:** whole `forge
+test`, size gate.
+
+### Task T33: deploy — releases 8–13, the registry, sizes and deploy gas
+
+**Depends on:** T30, T31, T32. **Estimate:** 1.
+
+**Files:** `script/DeployBase.sol` (releases 8–13, `RegulatedLib` in `Env.libs` and `libCodeHashes`, `REGISTRY_CODEHASH` in
+`implArgs`), `smartcontracts/scripts/deploy.sh` (`DEPLOY_REGULATED=1`: the canonical registry with `COMPLIANCE_ADMIN`, the
+`ELIGIBLE_CONTRACT` attestations of `SCaaSDex` and `DexPuller`), `script/pqz/e2e.py`, `test/v2/LinkClosure.t.sol`,
+`test/governance/GovDeploy.t.sol`, `size-baseline.json` (six rows by measurement, T27's two replaced), `scaas-node/node.example.toml`
+(`compliance_registry`), `smartcontracts/evm/runs/<date>-ua-mtx-merge-regulated-deploy-gas.txt`.
+
+- [ ] **Step 1: Failing tests:** `test_regulatedReleasesPublished_{8..13}`, `test_linkClosureWithRegulatedLib`,
+      `test_registryDeployedAndDexAttested`, `e2e.py --self-test` rows for 12, 13.
+- [ ] **Step 2:** FAIL. **Step 3: Implement.** **Step 4:** PASS; whole `forge test`; the four sets; size gate (`--self-test`
+      first; `_above64KiB` printed); deploy gas of every regulated release against 60 M and 70 M (the TODO gap line per Q7).
+- [ ] **Step 5: Mutants:** `RegulatedLib` missing from `libCodeHashes`; the registry hash left out of `implArgs`.
+- [ ] **Step 6:** Commit `ua-mtx-merge T33: regulated releases 8-13, registry deploy, sizes and deploy gas`.
+
+**Pins, old → new:** six size rows; the deploy-gas summary. **Gates:** whole `forge test`, four sets, size gate.
+
+### Task T34: vectors and clients
+
+**Depends on:** T32 (ABI final); beside T33. **Estimate:** 1.
+
+**Files:** `smartcontracts/vectors/` (`typed_ops.json` +8 router rows by `typed-ops-vectors.mjs`; `governance_bits.json` bits
+5–10, 21 with the `msig` rule; new `governance/regulated_kat.json`: `recordId`, the `R` truth table, transitions T1–T9, the
+relaxation `commit` rows), the forge writer of `regulated_kat.json`, `clients/clientkeys` (builders and readers), `clients/ua-rs`
+(signs the eight ops from the table; its wrappers re-run).
+
+- [ ] **Step 1: Failing tests:** `clientkeys` digests of the eight `UA<Op>` with a non-zero unbound `relayer` / `feeRecipient`;
+      `regulated_kat.json` rows read by `clientkeys` and `ua-rs`; the `commit` of each action reproduced.
+- [ ] **Step 2:** FAIL. **Step 3: Implement**; generators write the vectors. **Step 4:** PASS; `node --test`; `ua-rs` and wrappers;
+      the generators re-run, `git diff --exit-code`.
+- [ ] **Step 5: Mutants:** `UAForceTransfer` field order swapped; `relayer` left non-zero in a canonical digest; a `commit` action
+      tag swapped.
+- [ ] **Step 6:** Commit `ua-mtx-merge T34: regulated vectors, clientkeys and ua-rs rows`.
+
+### Task T35: node rows, guard, errors, indexer, venue
+
+**Depends on:** T33, T34. **Estimate:** 1.5.
+
+**Files:** `scaas-node/src/{typed,guard,indexer,dex}.rs` and the error table; `scaas-node/tests/e2e.rs` (ignored, anvil).
+
+**Interfaces:** spec §7: kinds 8–13 on their base kind's rows, equality both directions per kind; 8 `gov_router` rows; named
+decode of the §3.1 errors and `NotProposer` as refusals, never `dead` while a tx may land; topics and alerts (`OrderRecorded`,
+`RelaxProposed`, `AccountFrozen`, `Paused`); the NODE-DEX-11 pre-check; a market with a regulated leg halts on `Paused` and
+reopens on `Unpaused` or at `pausedUntil`; `TokenPaused` never grief-scored.
+
+- [ ] **Step 1: Failing tests:** `regulated_kinds_rows_equal_contract_{8..13}` (both directions), `router_control_rows`,
+      `frozen_revert_is_refusal_not_dead`, `registry_unavailable_is_refusal`, `market_halts_on_paused_and_reopens`,
+      `token_paused_not_grief_scored`, `alert_on_relax_proposed`; e2e: `regulated_freeze_relayed_by_router`,
+      `regulated_transfer_refused_frozen`.
+- [ ] **Step 2:** FAIL. **Step 3: Implement.** **Step 4:** PASS; `CAPPED_MEM=6G ../scripts/capped cargo test` alone; clippy
+      `-D warnings`; `--test e2e -- --ignored --test-threads=1`. No `anvil` left.
+- [ ] **Step 5: Mutants:** a kind 8–13 row missing on one side; `Frozen` decoded as `dead`; the market not halted on `Paused`.
+- [ ] **Step 6:** Commit `ua-mtx-merge T35: node rows, errors, alerts and venue for regulated kinds`.
+
+### Task T36: invariant suite I1–I13 and the mutant harness
+
+**Depends on:** T33; beside T34, T35. **Estimate:** 1.5 (draft 1: I12, I13 and the reviews' mutants).
+
+**Files:** `test/as/invariant/Regulated{Handler,Invariants}.t.sol`; `smartcontracts/evm/runs/<date>-ua-mtx-merge-regulated/`
+(`mutants.py`, `README.md`, the summary `mutant | test that went red | rc`, no absolute paths).
+
+- [ ] **Step 1:** Handlers over every regulated entry, the relaxation calls and the ledger paths; invariants I1–I13 of spec §8.
+- [ ] **Step 2:** Run at the default set; PQZ handlers at the four sets.
+- [ ] **Step 3: Mutants:** every row of spec §9 not already killed in T24–T35 (the harness re-runs those too); a survivor is a
+      finding for its owning task.
+- [ ] **Step 4:** Commit `ua-mtx-merge T36: regulated invariants I1-I13 and the mutant harness, <n> kills`.
+
+**Gates:** whole `forge test`, four sets.
+
 ### Task T19: docs, decisions, operator note
 
-**Depends on:** T1–T18 for BUILT tags (drafts beside T14–T18).
+**Depends on:** T1–T18 and T24–T36 for BUILT tags (drafts beside T14–T18 and T24–T36).
 
 **Files, each rule rewritten once, linked elsewhere:**
 - `docs/contracts/metatx.md` (CTR-MTX-01, -05, -06, -09, -11, -12, -14, -15, -17, -18, -21, -22, -23, -24, -26, -27, -28, -29), `accounts.md`
@@ -923,6 +1247,10 @@ watcher beside `LegSettled`; the `InvalidateNonces` row split per kind.
 - `docs/decisions.md`: CTR-MTX-30 to BUILT with commits (its Q6 Change too); a Change line on every rule R1–R47 rewrote, with its
   commit; CTR-ACC-12 and CTR-UA-27 to BUILT; CTR-ACC-05 / CTR-ACC-06 for the flat builders (MD-11 (a)); MD-1 to MD-11;
   `normative:` of each moved rule pointing at its component doc; the size outcome (Q3) and, if a gap remains, the TODO line.
+- **Regulated kinds (T24–T36):** `asset-suite.md` §2 to BUILT (CTR-AS-02…09, -16, -17 with commits), `token-wrappers.md` (kinds
+  8–13, `TokenConfig.reg`), `zether.md` and `pq-zero-knowledge.md` (the confidential sites, apart), `docs/node/dex-venue.md` (the
+  pause halt); `docs/decisions.md`: CTR-GOV-03, -08, -09, -13, -16, -17, -18 to BUILT with commits, the CTR-AS-03 Change
+  (owner 2026-11-05) to BUILT, an entry per rule RK-1…RK-11 of the spec's §13; the operator note carries the spec's §3.6 runbook.
 - **Operator note** (in `docs/node/ops.md` and the release notes section of `job-api.md`): EVM clients of the address token forms move
   to `ua_metatx`; the gateway doors; the public DEX API takes `UATradeOrder` and the UA cancel forms; the mesh body; a derived cancel
   signs the named purpose (MD-5); mandate wallets: new ids, `ua_metatx` jobs, the flat builders gone (Q6, MD-11); an old shape is refused by name, never silently `dead`; new router and `MtxRelayFee` addresses.
@@ -957,17 +1285,18 @@ outside the repo).
 `LOGEXT=log`, `STEPS`, `FAMILIES`, `NEW_TESTS`, `extra_step`, then sources `2026-10-27-metatx-split-gates.sh`.
 
 **Interfaces:**
-- `P=<date>-ua-mtx-merge`; `FORGE_DIRS="ua zether pqz governance v2 metatx"`; `SETS="n2048-kmax1024 n2560-kmax16384 n2816-kmax65536"`.
-- `STEPS="build forge-ua forge-zether forge-pqz forge-governance forge-v2 forge-metatx forge-rest at-set-n2048-kmax1024
+- `P=<date>-ua-mtx-merge`; `FORGE_DIRS="ua zether pqz governance v2 metatx as"`; `SETS="n2048-kmax1024 n2560-kmax16384 n2816-kmax65536"`.
+- `STEPS="build forge-ua forge-zether forge-pqz forge-governance forge-v2 forge-metatx forge-as forge-rest at-set-n2048-kmax1024
   at-set-n2560-kmax16384 at-set-n2816-kmax65536 forge-isolate sizes zether-cross clientkeys vectors-check cargo-zether-prover
   ua-rs ua-c ua-cxx ua-qt ua-dart-frb ua-py ua-go ua-cs ua-dart cargo-scaas-node node-e2e-anvil node-e2e-hedera zether-e2e docs
   named-tests summary"`. The `forge-*` steps are the default set's whole suite (`forge-rest` covers `test/merge` and the rest);
-  `at-set-<set>` runs `script/pqz/at-set.sh <set> test --match-path 'test/{ua,pqz}/*'` (owner rule: the other three sets
-  `test/{ua,pqz}` only); `sizes` runs `size_gate.py --self-test` first and prints `_above64KiB`; `vectors-check` runs every
-  generator of T2, T6, T8, T11, T13 and `dex_order_kat.json`'s writer, then `git diff --exit-code`; `cargo-scaas-node` under
+  `forge-as` the regulated suite `test/as` (T24–T36); `at-set-<set>` runs `script/pqz/at-set.sh <set> test --match-path
+  'test/{ua,pqz,as/confidential}/*'` (owner rule: the other three sets
+  `test/{ua,pqz}` only, with `test/as/confidential` added for kinds 12, 13); `sizes` runs `size_gate.py --self-test` first and prints `_above64KiB`; `vectors-check` runs every
+  generator of T2, T6, T8, T11, T13, T34 (`regulated_kat.json`'s writer included) and `dex_order_kat.json`'s writer, then `git diff --exit-code`; `cargo-scaas-node` under
   `CAPPED_MEM=6G` alone (the whole node suite, clippy `-D warnings`); `docs` runs `test_docs_check.py`, `docs_check.py check`
   and `paths`.
-- `NEW_TESTS`: every test name of T1–T18 in its pass form (`forge|forge|…`, `cargo-scaas-node|cargo|…`, `node-e2e-anvil|cargo|…`,
+- `NEW_TESTS`: every test name of T1–T18 and T24–T36 in its pass form (`forge|forge|…`, `cargo-scaas-node|cargo|…`, `node-e2e-anvil|cargo|…`,
   `clientkeys|node|…`, one row per language of T13), written from the diff, not from this plan.
 
 - [ ] **Step 1:** Write the runner and the names.
@@ -983,7 +1312,7 @@ outside the repo).
 **Depends on:** T21.
 
 - [ ] **Step 1: Whole-branch review, Claude lenses** (superpowers:requesting-code-review) over `main..ua-mtx-merge`, readers given the
-      code and the spec, not this plan's conclusions: security (invariants 1–7, review focus 1–9), rules (each R row against its
+      code and the specs (the merge spec and the regulated-kinds spec, its invariants I0–I13), not this plan's conclusions: security (invariants 1–7, review focus 1–9), rules (each R row against its
       doc and the code), blast radius (every caller of a retired form: contracts, scripts, node, clients, docs), wallet display
       (§6 and T20's note). Same-class rule: a finding on one kind, family or language is checked on every other.
 - [ ] **Step 2: Fable, then Codex** on security, signatures and EIP-712 (spec §2, §5, §6, §8, the merged bodies, the node's digest
@@ -998,7 +1327,7 @@ outside the repo).
 **Depends on:** T22.
 
 - [ ] **Step 1: Report** to the controller: commits per task; T0's table and the owner's Q3 choice; sizes and deploy gas against
-      60 M and 70 M (old → new); whether `WrappedPqzToken` left `_above64KiB`; R41's figures; the gate summary; the review verdicts
+      60 M and 70 M (old → new); whether `WrappedPqzToken` left `_above64KiB`; the regulated releases 8–13 (sizes, deploy gas, the TODO gap line, Q7); R41's figures; the gate summary; the review verdicts
       and the fix wave; T20's findings; what stays open (the 60 M gap if any, recorded in TODO; MD-10).
 - [ ] **Step 2: The PR**, on the owner's go: `ua-mtx-merge` into `main` by PR (`main` is PR-only), carrying **the spec, CTR-MTX-30 and
       this plan with the build** (owner). Before the push: a secret scan of the outgoing diff (JSON and `runs/` included), the hits
