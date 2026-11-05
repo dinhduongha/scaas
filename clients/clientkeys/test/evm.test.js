@@ -81,20 +81,20 @@ test('SmartKeyAccount owner call = forge KAT (AccountKat.t.sol, smart_key_accoun
 
 test('MandateWallet pay and revoke = forge KATs (mandate_pay_kat.json, mandate_revoke_kat.json)', () => {
   for (const f of ['mandate_pay_kat.json', 'mandate_revoke_kat.json']) {
-    const k = read(f);
+    const k = legacyKat(f);
     const td = metaTxTypedData({ name: k.domain_name, contract: k.verifying_contract, chainId: Number(k.chain_id),
       chainUid: k.salt, message: { from: k.from, data: k.data, batch: k.batch, nonce: k.nonce, validUntil: k.valid_until } });
     assert.equal(hex(hashTypedData(td)), k.digest, f);
   }
   // the derived lanes: keccak256("scaas.mandate.pay" ‖ entryRef), keccak256("scaas.mandate.revoke" ‖ token ‖ uint64 epoch)
-  const pay = read('mandate_pay_kat.json');
+  const pay = legacyKat('mandate_pay_kat.json');
   const ref = fromHex(pay.data).subarray(100, 132);
   // payUnderMandate(token, payee, amount, entryRef, epoch): the pay names the mandate epoch (1 here), so a revoke voids it
   assert.equal(hex(fromHex(pay.data).subarray(0, 4)),
     hex(keccak_256(utf8ToBytes('payUnderMandate(address,address,uint256,bytes32,uint64)')).subarray(0, 4)));
   assert.equal(BigInt(hex(fromHex(pay.data).subarray(132, 164))), 1n);
   assert.equal(BigInt(hex(keccak_256(new Uint8Array([...utf8ToBytes('scaas.mandate.pay'), ...ref])))), BigInt(pay.batch));
-  const rev = read('mandate_revoke_kat.json');
+  const rev = legacyKat('mandate_revoke_kat.json');
   const token = fromHex(rev.data).subarray(16, 36);
   const epoch = new Uint8Array(8); epoch[7] = 1;
   assert.equal(BigInt(hex(keccak_256(new Uint8Array([...utf8ToBytes('scaas.mandate.revoke'), ...token, ...epoch])))),
@@ -119,7 +119,7 @@ test('metaTxTypedData zeroes relayer / feeRecipient by mode, as the contract has
 });
 
 test('metaTxTypedData keeps chainId exact (number, decimal or hex string, BigInt) and needs a 32-byte chainUid', () => {
-  const k = read('mandate_pay_kat.json');
+  const k = legacyKat('mandate_pay_kat.json');
   const td = (chainId, chainUid = k.salt) => metaTxTypedData({ name: k.domain_name, contract: k.verifying_contract,
     chainId, chainUid, message: { from: k.from, data: k.data, batch: k.batch, nonce: k.nonce, validUntil: k.valid_until } });
   for (const id of [7622, '7622', '0x1dc6', 7622n]) assert.equal(hex(hashTypedData(td(id))), k.digest, String(id));

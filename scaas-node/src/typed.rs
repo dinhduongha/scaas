@@ -1386,7 +1386,7 @@ mod tests {
     #[test]
     fn mandate_ops_run_on_their_own_lane_at_nonce_zero() {
         let kat = |f: &str| -> Value {
-            let p = format!("{}/../smartcontracts/evm/test/vectors/{f}", env!("CARGO_MANIFEST_DIR"));
+            let p = format!("{}/../smartcontracts/evm/test/vectors/legacy/ua-mtx-merge/{f}", env!("CARGO_MANIFEST_DIR"));
             serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap()
         };
         let word = |k: &Value, i: usize| hex(&k["data"])[4 + 32 * i..4 + 32 * (i + 1)].to_vec();
