@@ -226,3 +226,9 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   `5981f2c4`: `src/factory/IFactoryToken.sol` with `TokenConfig` of fifteen fields (no `reg`, `ConfigFieldForOtherKind`
   fields 1-5) and `src/pqz/PqzWrappedLib.sol` whose `init` passes the fixed `KIND_WRAPPED_PQZ` and `GovernanceBits.WRAPPED_*`
   masks (`ZetherWrappedLib` as it stood before the round is the T4 copy). Not built.
+  T26 (regulated kinds: the eight empty hooks at their seats; spec `2026-11-05-regulated-kinds.md` §2.2, §3.2, §4.1,
+  §4.2): no copy. It supersedes no body, typehash, struct, builder, row or handler: it adds calls of empty `internal view
+  virtual` hooks, makes `supportsInterface` `virtual` and names `_update`'s resolved sender in a local. Its eight files
+  (`src/metatx/{UAMetaTxBase,ERC20MetaTx,MetaTokenBase,WrappedToken}.sol`, `src/zether/{ZetherLayer,WrappedZetherToken}.sol`,
+  `src/pqz/{PqzLayer,WrappedPqzToken}.sol`) keep their pre-round copies above, not overwritten; as they stood before T26:
+  `d973a70d`.
