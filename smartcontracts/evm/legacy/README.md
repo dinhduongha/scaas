@@ -215,3 +215,10 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   over `MetaTransaction`, `mtxNonce(address,uint256)`, `envelopeBinding` / `mtxDigest` over `MetaTransaction`), the `ua*`
   twins (`uaExecute` with `bytes auth`, `uaNonce`, `uaEnvelopeBinding`, `uaDigest`, the `ua<Op>` named entries) and
   `uaShield`'s `bytes auth`. Not run.
+  T24 (regulated kinds: `GovernanceLib`'s relaxation state machine, `msig` holders, issuer and compliance roles; spec
+  `2026-11-05-regulated-kinds.md` §3.6, RK-1..3): `src/governance/{GovernanceLib,GovernanceBase,GovernanceBits,
+  IGovernance}.sol` with `PendingGrant.termsHash` (the terms' hash, 0 for a grant, no action and no proposer check),
+  `revokeRole` / `renounceRole` / `disableFeature` in one call on every bit, a void `disableFeature`, `init` refusing
+  `roles.issuer` / `roles.compliance` and 5-9 as `FeatureNotBuilt` on the plain kinds, contract-only bits for a native id
+  with code alone. Tests as they stood before their meaning changed: `test/governance/{GovRegulatedBits,GovDelay}.t.sol`,
+  `test/metatx/GovernanceLib.t.sol` with `test/metatx/helpers/GovernanceLibHarness.sol`, `test/v2/Features.t.sol`. Not built.

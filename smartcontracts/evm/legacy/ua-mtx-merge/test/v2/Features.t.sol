@@ -1,0 +1,286 @@
+// SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+pragma solidity ^0.8.24;
+
+import {MtxDigest} from "../helpers/MtxDigest.sol";
+import {Test} from "forge-std/Test.sol";
+import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
+import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
+import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
+import {IGovernance} from "../../src/governance/IGovernance.sol";
+import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
+import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
+import {IERC20Payment} from "../../src/metatx/IERC20Payment.sol";
+import {IUARegistry} from "../../src/ua/IUARegistry.sol";
+import {IUALedger} from "../../src/metatx/IUALedger.sol";
+import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
+import {FeeMode} from "../../src/common/FeePolicy.sol";
+import {MockHederaAccountService} from "../hedera/HederaMocks.sol";
+import {plainEnv} from "../helpers/Catalogue.sol";
+import {nid} from "../helpers/Ids.sol";
+
+/// Kind NORMAL on the flags and the owner model (CTR-TOK-21, CTR-TOK-22) and the Hedera branch (CTR-TOK-23).
+contract FeaturesTest is Test {
+    bytes32 internal constant UID = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464;
+    uint256 internal constant PK = 0xA11CE;
+    address internal alice = vm.addr(PK);
+    address internal ownerA = address(0x0A);
+    address internal minter = address(0x111);
+    address internal relayer = address(0xBEEF);
+    address internal shop = address(0x5409);
+    uint32 internal constant RR = MetaTxLib.MODE_RESTRICT_RELAYER;
+
+    uint256 internal constant PAYABLE = 1 << 0;
+    uint256 internal constant MINTABLE = 1 << 1;
+    uint256 internal constant BURNABLE = 1 << 2;
+
+    address internal impl;
+
+    function setUp() public {
+        vm.chainId(7622);
+        vm.warp(1_800_000_000);
+        impl = address(new NormalToken(1, plainEnv(address(this), address(0), UID, address(0), false), ""));
+    }
+
+    function _cfg(uint256 features, uint256 locked, address owner_, address minter_, uint256 supply)
+        internal view returns (IFactoryToken.TokenConfig memory c)
+    {
+        (c.name, c.symbol, c.decimals, c.features, c.lockedFeatures, c.owner) =
+            ("Points", "PTS", 6, features, locked, nid(owner_));
+        c.roles.minter = nid(minter_);
+        (c.initialSupply, c.initialHolder) = (supply, alice);
+    }
+
+    function _token(address implementation, IFactoryToken.TokenConfig memory cfg)
+        internal returns (NormalToken t)
+    {
+        t = NormalToken(Clones.clone(implementation));
+        t.initialize(address(this), 1, abi.encode(cfg));
+    }
+
+    function _sig(bytes32 d) internal pure returns (bytes memory) {
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(PK, d);
+        return abi.encodePacked(r, s, v);
+    }
+
+    // ------------------------------------------------------------------ init, provenance
+
+    function test_initWritesMetadataProvenanceAndFlags() public {
+        NormalToken t = _token(impl, _cfg(PAYABLE | MINTABLE | BURNABLE, MINTABLE, ownerA, minter, 1_000));
+        assertEq(t.name(), "Points");
+        assertEq(t.symbol(), "PTS");
+        assertEq(t.decimals(), 6);
+        assertEq(t.kind(), 0);
+        assertEq(t.creator(), address(this));
+        assertEq(t.version(), 1);
+        assertEq(t.features(), PAYABLE | MINTABLE | BURNABLE);
+        assertEq(t.lockedFeatures(), PAYABLE | MINTABLE | BURNABLE);
+        assertEq(t.owner(), nid(ownerA));
+        assertTrue(t.hasRole(1, nid(minter)));
+        assertEq(t.balanceOf(alice), 1_000);
+        assertFalse(t.IS_HEDERA());
+    }
+
+    function test_initRefusesFlagsOfAnotherKind() public {
+        NormalToken t = NormalToken(Clones.clone(impl));
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, uint8(3)));
+        t.initialize(address(this), 1, abi.encode(_cfg(1 << 3, 0, address(0), address(0), 0)));
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotBuilt.selector, uint8(7)));
+        t.initialize(address(this), 1, abi.encode(_cfg(1 << 7, 0, address(0), address(0), 0)));
+    }
+
+    // ------------------------------------------------------------------ MINTABLE, BURNABLE
+
+    function test_mint_needsTheFlagAndTheRole() public {
+        NormalToken t = _token(impl, _cfg(MINTABLE, 0, ownerA, minter, 0));
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, uint8(1), alice));
+        t.mint(alice, 1);
+        vm.prank(minter);
+        t.mint(alice, 5);
+        assertEq(t.balanceOf(alice), 5);
+        vm.prank(ownerA);
+        t.disableFeature(1);
+        vm.prank(minter);
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, uint8(1)));
+        t.mint(alice, 1);
+    }
+
+    function test_mint_withoutTheFlag_fixedSupply() public {
+        NormalToken t = _token(impl, _cfg(0, 0, address(0), address(0), 7));
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, uint8(1)));
+        t.mint(alice, 1);
+        assertEq(t.totalSupply(), 7);
+    }
+
+    function test_burn_onlyWithBurnable_directAndGasless() public {
+        NormalToken off = _token(impl, _cfg(0, 0, address(0), address(0), 100));
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, uint8(2)));
+        off.burn(1);
+        MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction({from: alice,
+            data: abi.encodeCall(NormalToken.burn, (1)), batch: 1, nonce: 0, validUntil: block.timestamp + 300,
+            mode: RR, relayer: relayer, fee: 0, feeRecipient: address(0)});
+        bytes memory s = _sig(MtxDigest.metaTx(address(off), m));
+        vm.prank(relayer);
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, uint8(2)));
+        off.executeMetaTransaction(m, s);
+        NormalToken on = _token(impl, _cfg(BURNABLE, 0, address(0), address(0), 100));
+        s = _sig(MtxDigest.metaTx(address(on), m));
+        vm.prank(relayer);
+        on.executeMetaTransaction(m, s);
+        assertEq(on.balanceOf(alice), 99);
+    }
+
+    // ------------------------------------------------------------------ PAYABLE
+
+    /// ua-mtx-merge T2: the one typed struct is `UAMetaTransfer` (alice padded, her own signature) and the merged path
+    /// emits `UAPaymentSettled` (R18, R20; meaning: was `PaymentSettled`); the gate is unchanged.
+    function test_payable_off_gatesThePayEntries_notMetaTransfer() public {
+        NormalToken t = _token(impl, _cfg(0, 0, address(0), address(0), 100));
+        bytes memory off = abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, uint8(0));
+        vm.prank(alice);
+        vm.expectRevert(off);
+        t.payWithFee(shop, 1, FeeMode.NONE, 0, address(0), bytes32("r"));
+        bytes32 ref = keccak256("r");
+        MetaTxLib.UAMetaTransfer memory x = MetaTxLib.UAMetaTransfer({from: MetaTxLib.pad(alice), to: MetaTxLib.pad(shop),
+            value: 10, entryRef: ref, batch: t.payLane(ref), nonce: 0, validUntil: block.timestamp + 300, mode: RR,
+            relayer: relayer, fee: 0, feeRecipient: address(0)});
+        IUARegistry.UASig memory s;
+        s.signature = _sig(t.mtxTransferDigest(x));
+        vm.prank(relayer);
+        vm.expectRevert(off);
+        t.mtxPay(x.from, x.to, 10, ref, x.validUntil, RR, relayer, 0, address(0), s);
+        vm.prank(relayer);
+        vm.expectRevert(off);
+        t.mtxPayReceiverFee(x, s, 1, address(0xFEE), block.timestamp, s);
+        vm.prank(relayer);
+        vm.expectEmit(address(t));
+        emit IUALedger.UAPaymentSettled(x.from, x.to, 10, 0, relayer, ref); // a typed payment is never gated
+        t.mtxExecuteTransfer(x, s);
+        assertEq(t.balanceOf(shop), 10);
+    }
+
+    function test_payable_on_payWithFeeWorks() public {
+        NormalToken t = _token(impl, _cfg(PAYABLE, 0, address(0), address(0), 100));
+        vm.prank(alice);
+        t.payWithFee(shop, 10, FeeMode.NONE, 0, address(0), bytes32("r"));
+        assertEq(t.balanceOf(shop), 10);
+    }
+
+    function test_supportsInterface_paymentOnlyWhenPayable() public {
+        NormalToken off = _token(impl, _cfg(0, 0, address(0), address(0), 0));
+        NormalToken on = _token(impl, _cfg(PAYABLE, 0, address(0), address(0), 0));
+        bytes4[4] memory always = [type(IERC165).interfaceId, type(IERC20).interfaceId, type(IMetaTx).interfaceId,
+            type(IERC20MetaTx).interfaceId];
+        for (uint256 i; i < 4; ++i) {
+            assertTrue(off.supportsInterface(always[i]));
+            assertTrue(on.supportsInterface(always[i]));
+        }
+        assertFalse(off.supportsInterface(type(IERC20Payment).interfaceId));
+        assertTrue(on.supportsInterface(type(IERC20Payment).interfaceId));
+        assertFalse(on.supportsInterface(0xffffffff));
+    }
+
+    // ------------------------------------------------------------------ owner through the token
+
+    function test_ownerAdministersThroughTheToken() public {
+        NormalToken t = _token(impl, _cfg(MINTABLE, MINTABLE, ownerA, address(0), 0)); // locked: the holder survives (CTR-GOV-02)
+        vm.prank(ownerA);
+        vm.expectEmit(address(t));
+        emit IGovernance.RoleGranted(1, nid(minter), nid(ownerA));
+        t.grantRole(1, nid(minter));
+        vm.prank(minter);
+        t.mint(alice, 3);
+        vm.prank(ownerA);
+        t.transferOwnership(nid(address(0x0B)));
+        vm.prank(address(0x0B));
+        t.acceptOwnership();
+        assertEq(t.owner(), nid(address(0x0B)));
+        vm.prank(address(0x0B));
+        t.renounceOwnership();
+        assertEq(t.owner(), bytes32(0));
+        vm.prank(minter);
+        t.mint(alice, 1);                                     // holders keep their role after the owner renounces
+        vm.prank(minter);
+        t.renounceRole(1);
+        vm.prank(minter);
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, uint8(1), minter));
+        t.mint(alice, 1);
+    }
+
+    function test_adminFunctionsAreNeverSelfCalls() public {
+        NormalToken t = _token(impl, _cfg(MINTABLE, 0, alice, address(0), 0));
+        bytes4[7] memory sels = [t.grantRole.selector, t.revokeRole.selector, t.renounceRole.selector,
+            t.disableFeature.selector, t.transferOwnership.selector, t.acceptOwnership.selector,
+            t.renounceOwnership.selector];
+        for (uint256 i; i < 7; ++i) {
+            MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction({from: alice,
+                data: abi.encodeWithSelector(sels[i]), batch: i, nonce: 0, validUntil: block.timestamp + 300,
+                mode: RR, relayer: relayer, fee: 0, feeRecipient: address(0)});
+            bytes memory s = _sig(MtxDigest.metaTx(address(t), m));
+            vm.prank(relayer);
+            vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, sels[i]));
+            t.executeMetaTransaction(m, s);
+        }
+    }
+
+    /// GovernanceLib writes `scaas.governance` only: the meta-tx lanes (`scaas.metatx`) and the ERC-20 slots stay put.
+    function test_adminWritesDoNotTouchOtherNamespaces() public {
+        NormalToken t = _token(impl, _cfg(MINTABLE, 0, ownerA, address(0), 100));
+        bytes32 lane = keccak256(abi.encode(uint256(1), keccak256(abi.encode(alice,
+            bytes32(0x06b01547c739946503c06c80685cc72ae2fec5074fd602f84cd2fa888722ac00)))));
+        bytes32 bal = keccak256(abi.encode(alice, uint256(0)));
+        vm.prank(alice);
+        t.cancelNonce(1);
+        bytes32 laneBefore = vm.load(address(t), lane);
+        bytes32 balBefore = vm.load(address(t), bal);
+        assertEq(uint256(laneBefore), 1);
+        assertEq(uint256(balBefore), 100);
+        vm.startPrank(ownerA);
+        t.grantRole(1, nid(minter));
+        t.disableFeature(1);
+        t.transferOwnership(nid(minter));
+        vm.stopPrank();
+        assertEq(vm.load(address(t), lane), laneBefore);
+        assertEq(vm.load(address(t), bal), balBefore);
+        assertEq(t.balanceOf(alice), 100);
+        // the admin state landed in `scaas.governance`: features word (MINTABLE disabled) and pendingOwner at slot + 3
+        bytes32 tok = 0x0a3a361961b35589cdb03530b6f9e23a4db6ca9a0dad5ddf5d7761c7fabc8700;
+        assertEq(uint256(vm.load(address(t), tok)), t.features());
+        assertEq(t.features(), 0);
+        assertEq(vm.load(address(t), bytes32(uint256(tok) + 3)), nid(minter)); // the whole word: a UA id
+        assertEq(t.pendingOwner(), nid(minter));
+    }
+
+    // ------------------------------------------------------------------ IS_HEDERA (CTR-TOK-23)
+
+    function test_isHedera_takesTheHip632Path_onlyWhenSet() public {
+        address has = address(0x16a);
+        vm.etch(has, type(MockHederaAccountService).runtimeCode);
+        uint256 edKey = 0xA11CE5;
+        address native = address(uint160(1_234_567));
+        MockHederaAccountService(has).setEdKey(native, vm.addr(edKey));
+        address hImpl = address(new NormalToken(1, plainEnv(address(this), address(0), UID, address(0), true), ""));
+        IFactoryToken.TokenConfig memory cfg;
+        (cfg.name, cfg.symbol, cfg.initialSupply, cfg.initialHolder) = ("P", "P", 100, native);
+        NormalToken h = _token(hImpl, cfg);
+        NormalToken e = _token(impl, cfg);
+        assertTrue(h.IS_HEDERA());
+        MetaTxLib.UAMetaTransfer memory x = MetaTxLib.UAMetaTransfer({from: MetaTxLib.pad(native),
+            to: MetaTxLib.pad(shop), value: 10, entryRef: 0, batch: 1, nonce: 0, validUntil: block.timestamp + 300,
+            mode: RR, relayer: relayer, fee: 0, feeRecipient: address(0)});
+        (bytes32 rr, bytes32 vs) = vm.signCompact(edKey, h.mtxTransferDigest(x));
+        IUARegistry.UASig memory s;
+        s.signature = abi.encodePacked(rr, vs);
+        vm.prank(relayer);
+        h.mtxExecuteTransfer(x, s);
+        assertEq(h.balanceOf(shop), 10);
+        (rr, vs) = vm.signCompact(edKey, e.mtxTransferDigest(x));
+        s.signature = abi.encodePacked(rr, vs);
+        vm.prank(relayer);
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
+        e.mtxExecuteTransfer(x, s);
+    }
+}
