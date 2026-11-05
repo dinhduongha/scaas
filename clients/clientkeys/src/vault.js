@@ -13,6 +13,7 @@ import { utf8ToBytes, b64url, fromB64url, wipe } from './bytes.js';
 
 export const SCRYPT = Object.freeze({ N: 2 ** 17, r: 8, p: 1, dkLen: 32 });
 const VERSION = 1;
+const PIN_N = Object.freeze([2 ** 15, 2 ** 16, 2 ** 17]); // CLI-SGN-21: the only N an envelope may carry
 const PRF_INFO = utf8ToBytes('scaas-clientkeys-vault-v1/prf');
 
 async function gcm(op, keyBytes, iv, data, aad) {
@@ -111,6 +112,8 @@ async function dekFrom(vault, { pin, prfOutput }) {
     try { return await open(kek, vault.prf, `${vault.label}|prf`); } finally { wipe(kek); }
   }
   const p = vault.pin;
+  // CLI-SGN-21: refuse a stored envelope outside the known parameters before scrypt runs (a crafted N would exhaust memory).
+  if (!PIN_N.includes(p?.N) || p.r !== 8 || p.p !== 1) throw new Error('Unsupported vault parameters.');
   const kek = await pinKey(pin, fromB64url(p.salt), { N: p.N, r: p.r, p: p.p, dkLen: 32 });
   try { return await open(kek, p, `${vault.label}|pin`); } finally { wipe(kek); }
 }
