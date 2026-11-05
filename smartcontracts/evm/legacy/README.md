@@ -241,3 +241,9 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   §3.1-§3.4): no copy. It replaces T27's placeholders (`RegulatedNotBuilt` bodies of a skeleton never deployed with value),
   not a built body, typehash, struct, builder, row or handler; `RegulatedNotBuilt` stays for T29 / T32. New:
   `src/regulated/NormalRegulatedToken.sol` and the `scaas.regulated` namespace. As they stood before T28: `59f18aae`.
+  T29 (the receiver check: `ComplianceRegistry`, the bounded registry call, the code pin; spec
+  `2026-11-05-regulated-kinds.md` §2.4, §5): no copy. It replaces T28's placeholders (`RegulatedBase._eligible` and
+  `canReceive` reverting `RegulatedNotBuilt`, `RegulatedLib.init` refusing any registry), not a built body, typehash,
+  struct, builder, row or handler; `RegulatedNotBuilt` stays for T32. `RegulatedLib.init` gains a parameter (the release's
+  `REGISTRY_CODEHASH`), each regulated kind's constructor passes `implArgs` to `RegulatedBase`. New:
+  `src/regulated/{ComplianceRegistry,IComplianceRegistry}.sol`. As they stood before T29: `70d0b751`.
