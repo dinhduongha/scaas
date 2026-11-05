@@ -187,3 +187,13 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   bodies took the `mtx*` names and `uaEnvelopeBinding` the name `envelopeBinding`. Tests as they stood before their
   meaning changed: `test/pqz/{PqzTyped,PqzRelay,PqzPool}.t.sol` (and `test/metatx/NamedEntry.t.sol`, copied earlier).
   Not built.
+  T6 (DEX, R12, R38): `src/trade/TradeLib.sol`, `src/dex/{SCaaSDex,ISCaaSDex}.sol` (and `src/metatx/ERC20MetaTx.sol`,
+  `src/trade/ITradeToken.sol`, copied earlier): the token's address `TradeOrder` side — `mtxTrade(TradeOrder, bytes,
+  TradeFill)`, `mtxCancelOrder(TradeOrder, bytes)`, `mtxInvalidateNonces(address, …, bytes)`, `restorePulled(TradeOrder,
+  …)`, `tradeOrderDigest` / `cancelOrderDigest(TradeOrder)`, `invalidateNoncesDigest(address, …)`, `minNonce(address, …)`
+  — and the typehashes only that side read (`CancelOrder`, `WrapOrder`, `CancelWrapOrder`), the `ua` flag of
+  `TradeLib.orderHash` / `cancelHash`, and the DEX's shape-0 SCaaS leg; the `ua*` trade bodies took the `mtx*` / plain
+  names. `TradeOrder`, `DexOrder`, `InvalidateNonces` stay for the DEX's outside legs. Tests as they stood before their
+  meaning changed: `test/v2/{Trade,Dex,DexHybrid,DexModes,DexExchange,UniswapExecutor}.t.sol`,
+  `test/ua/{UADex,UATrade}.t.sol`, `test/metatx/TradeKat.t.sol`, `test/helpers/DexLegs.sol` (its `wire` made shape-0
+  legs); the vectors `test/vectors/legacy/ua-mtx-merge/{trade_kat,dex_order_kat}.json`. Not built.
