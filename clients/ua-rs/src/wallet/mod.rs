@@ -7,8 +7,8 @@
 //! `KeyRevoked`. Signing: [`UaKey::sign_ua`], [`UaKey::sign_member`], the native keys' key proof and raw digest, all through
 //! the [`Signer`] trait (`sign`, `signer`; T3a: the classic curves; `pqsign`, T3b: ML-DSA, SLH-DSA, Falcon; `pairing`, T3c:
 //! scaas Schnorr, BLS with roles, the MuSig2 / FROST sessions, every arkworks secret multiplication by
-//! `scaas_ct::secret_mul`); `UASig` with T3d, the vault with T9. Randomness: `rand_core` 0.6 `OsRng` inside; no call takes
-//! an RNG. UNAUDITED.
+//! `scaas_ct::secret_mul`); `uasig`, T3d: the `UASig` builder and the minimal `msig` sets over `&dyn Signer`; the vault with
+//! T9. Randomness: `rand_core` 0.6 `OsRng` inside; no call takes an RNG. UNAUDITED.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing, clippy::disallowed_methods)]
 
 pub mod bounded;
@@ -30,9 +30,11 @@ pub mod sign;
 mod sign;
 mod signer;
 mod store;
+mod uasig;
 
 pub use pairing::{FrostSession, Musig2Session};
 pub use signer::{AllowRawDigest, KeyRef, SigRole, SignRequest, Signer};
+pub use uasig::{membership_sig, msig_sig, ua_sig, Slot};
 
 use crate::UAError;
 use rand_core::{OsRng, RngCore};

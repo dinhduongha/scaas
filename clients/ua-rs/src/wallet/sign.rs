@@ -89,20 +89,35 @@ fn role_of(purpose: &[u8; 32]) -> SigRole {
     }
 }
 
+/// `purpose` a tag of `PURPOSES` (v1) or `pop` v2, else `UAPurposeUnknown`.
+pub(super) fn check_purpose(purpose: &[u8; 32]) -> Result<()> {
+    let known = *purpose == pop_v2_tag() || PURPOSES.iter().any(|p| purpose_tag(p).is_ok_and(|t| t == *purpose));
+    if !known {
+        return Err(Error::Ua(UAError::PurposeUnknown));
+    }
+    Ok(())
+}
+
+/// The request of `sign_ua` for a key of `kind` (the `UASig` builder's too).
+pub(super) fn ua_request(kind: u16, purpose: &[u8; 32], digest: &[u8; 32]) -> Result<SignRequest> {
+    check_purpose(purpose)?;
+    Ok(SignRequest::UaMsg { kind, ua_msg: ua_message(kind, purpose, digest)?, role: role_of(purpose) })
+}
+
+/// The request of `sign_member` for a key of `kind` (the `msig` builder's too): always `Authorization`.
+pub(super) fn member_request(kind: u16, structure_ua: &[u8; 32], structure_ua_msg: &[u8; 32]) -> Result<SignRequest> {
+    let digest = member_digest(structure_ua, structure_ua_msg);
+    let ua_msg = ua_message(kind, &purpose_tag("member")?, &digest)?;
+    Ok(SignRequest::UaMsg { kind, ua_msg, role: SigRole::Authorization })
+}
+
 impl UaKey {
-    /// The request of `sign_ua`: `purpose` a tag of `PURPOSES` (v1) or `pop` v2, else `UAPurposeUnknown`.
     fn ua_request(&self, purpose: &[u8; 32], digest: &[u8; 32]) -> Result<SignRequest> {
-        let known = *purpose == pop_v2_tag() || PURPOSES.iter().any(|p| purpose_tag(p).is_ok_and(|t| t == *purpose));
-        if !known {
-            return Err(Error::Ua(UAError::PurposeUnknown));
-        }
-        Ok(SignRequest::UaMsg { kind: self.kind, ua_msg: ua_message(self.kind, purpose, digest)?, role: role_of(purpose) })
+        ua_request(self.kind, purpose, digest)
     }
 
     fn member_request(&self, structure_ua: &[u8; 32], structure_ua_msg: &[u8; 32]) -> Result<SignRequest> {
-        let digest = member_digest(structure_ua, structure_ua_msg);
-        let ua_msg = ua_message(self.kind, &purpose_tag("member")?, &digest)?;
-        Ok(SignRequest::UaMsg { kind: self.kind, ua_msg, role: SigRole::Authorization })
+        member_request(self.kind, structure_ua, structure_ua_msg)
     }
 
     /// The signature of `req` (a `UaMsg` of this key's kind); the randomness fixed only by the `vectors` entry points (BIP-340

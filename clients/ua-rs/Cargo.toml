@@ -107,6 +107,10 @@ required-features = ["wallet"]
 name = "wallet_pairing"
 required-features = ["wallet"]
 
+[[test]]
+name = "wallet_uasig"
+required-features = ["wallet"]
+
 # arkworks subgroup checks crawl unoptimised
 [profile.dev.package."*"]
 opt-level = 3
