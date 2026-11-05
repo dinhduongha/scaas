@@ -232,3 +232,8 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   (`src/metatx/{UAMetaTxBase,ERC20MetaTx,MetaTokenBase,WrappedToken}.sol`, `src/zether/{ZetherLayer,WrappedZetherToken}.sol`,
   `src/pqz/{PqzLayer,WrappedPqzToken}.sol`) keep their pre-round copies above, not overwritten; as they stood before T26:
   `d973a70d`.
+  T27 (regulated kinds: the skeleton of kinds 9 and 13, measured first; spec `2026-11-05-regulated-kinds.md` §2.1, §3.1,
+  §6.2): no copy. It adds `src/regulated/` and supersedes no body, typehash, struct, builder, row or handler: in the built
+  kinds it only marks `WrappedPqzToken`'s overrides and `MetaTokenBase._scalarBits` `virtual` and makes
+  `MetaTokenBase.supportsInterface` `public` (so a regulated kind can extend it with `super`); `DeployBase` gains a path.
+  The touched files keep their pre-round copies above; as they stood before T27: `a2325004`.
