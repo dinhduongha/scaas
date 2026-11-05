@@ -1,0 +1,30 @@
+# ua-mtx-merge T6 gate summary (full output in git-ignored .log files, not committed)
+# T6: DEX, SCaaS legs on UATradeOrder (plan T6, R9, R12, R18, R37, R38): the token's ua* trade entries and views under the
+# mtx* / plain names (UATradeOrder, bytes32 ids, UASig; native and derived ids); the token's address TradeOrder side and the
+# typehashes only it read (CancelOrder, WrapOrder, CancelWrapOrder) to legacy; a SCaaS DEX leg is shape 1 only, shape 0
+# stays for outside legs (DexOrder, LegSettled); the DEX asks a registry only for a derived seller (C). Carried from T3:
+# the merged cancel / invalidate need no registry for a native id; mtxWrapOrder over a leg with no mtxTrade is
+# UALegNotLedger again (no registry call for a native holder).
+# The round's gate runner (T21) is not built yet: each command ran directly through scripts/capped.
+# Base: 004c2f80 (T5). T6 commits: ab9f30b1 (legacy copies), 2f696301 (the build), this one (harness, mutants, summary).
+step | commit | rc | counts
+t6-red | 004c2f80 + test/merge/DexScaasLegs.t.sol | 1 | 10 failed 1 passed, 1 suite (the pass guards what does not move: test_outsideLegKeepsTradeOrder)
+t6-forge-first | 2f696301 (worktree, before the KAT regeneration and a TradeKat.t setUp fix) | 1 | 2576 passed 2 failed 14 skipped, 222 suites (test_dexKat: MD-8; TradeKat.t setUp: a registry address with no code, set to 0)
+t6-dex-kat | 2f696301 | 0 | dex_order_kat.json regenerated (WRITE_KAT): order ABIs equal after the token / DEX address swap; in settle, exchange, exchange_via, exchange_batch, hybrid, hybrid_via only the SCaaS taker leg moves (shape 0 -> 1, order words into uaOrder, signature into auth.signature over the UATradeOrder digest); cancel / invalidate calldata: DEX address and signatures only; every length equal; taker_order_hash = the UATradeOrder digest
+t6-forge-full | 2f696301 | 0 | 2578 passed 0 failed 14 skipped, 222 suites (forge, default set n2304-kmax4096)
+t6-forge-isolate | 2f696301 | 0 | 22 passed 0 failed (forge --isolate UAGas, UARegistryGroups)
+t6-size-gate | 2f696301 | 0 | 0 errors, 89 contracts, above 65536 B: none; baseline ratcheted down (t6-sizes); NormalPqzToken.init row removed (fits EIP-3860); size_gate --self-test ok
+t6-baseline-readers | 2f696301 | 1 then 0 | 74 passed after GovDeploy.t's code-limit control 45,139 -> 42,668 (ZetherDeploy, PqzWrapped, HederaV2, Factory, UADeploy, GovDeploy, CodeCeiling)
+t6-at-n2048-kmax1024 | 2f696301 | 0 | 791 passed 0 failed 1 skipped, 62 suites (at-set.sh test/{ua,pqz}); PqzSet.sol restored
+t6-at-n2560-kmax16384 | 2f696301 | 0 | 787 passed 0 failed 5 skipped, 62 suites; PqzSet.sol restored
+t6-at-n2816-kmax65536 | 2f696301 | 0 | 782 passed 0 failed 10 skipped, 62 suites; PqzSet.sol restored
+t6-sizes | 004c2f80 -> 2f696301 | 0 | NormalToken 34,590 -> 32,089; WrappedToken 45,140 -> 42,669; NormalZetherToken 43,011 -> 40,543; WrappedZetherToken 53,502 -> 51,031 (init 57,101 -> 54,630); NormalPqzToken 48,878 -> 46,384 (init 51,524 -> 49,030); WrappedPqzToken 58,698 -> 56,223 (init 61,351 -> 58,876); SCaaSDex 33,725 -> 33,399; TradeLib 4,842, WrappedLib 16,859 (not rows)
+t6-pins | 2f696301 | 0 | ITradeToken 0x0b4d9a5c -> 0xe393854e; ISCaaSDex unchanged; MsgSenderLint ERC20MetaTx 6 -> 4; typehashes: UATradeOrder / CancelUAOrder / UAInvalidateNonces / TradeOrder unchanged, CancelOrder / WrapOrder / CancelWrapOrder out of src; storage layout: none moved; LinkClosure green
+t6-dexgas | 004c2f80 -> 2f696301 | 0 | DexGas regular (base SCaaS legs shape 0, now shape 1): mtxSettle 1x1 317,431 -> 315,229; mtxExchange 296,451 -> 295,275; mtxExchangeBatch 306,656 -> 305,480 (overhead per plan 10,205 unchanged); mtxHybrid 1x1 412,294 -> 410,061, 1x2 489,797 -> 486,544; state gas unchanged; UADex test_gas_legShapes native 1x1 1,030,905 -> 1,028,624, p256 x native 1,073,550 -> 1,071,707
+t6-govgas | 004c2f80 -> 2f696301 | 0 | mtxTransfer NormalToken 88,662 -> 88,650, WrappedToken 88,706 -> 88,694, WrappedZetherToken 88,679 -> 88,679, WrappedPqzToken 88,738 -> 88,716; plain transfer +44 / +22 / +44 / +22; createToken 1,444,699 -> 1,444,677; mint 54,601 -> 54,623 (dispatch order; no pinned row moved)
+t6-clientkeys-evm | 2f696301 | 0 | 23 passed 0 failed (node --test test/evm.test.js; trade_kat.json from the legacy place, the DEX KAT's taker hash through uaTradeOrderTypedData)
+t6-docs-check | 2f696301 | 0 | 0 errors, 5 warnings, 16 notes (docs_check check); paths 0; test_docs_check ok
+t6-mutants | 2f696301 | 1 each | 8 of 8 killed against test/merge + the DEX and trade suites, none a compile error (runs/2026-11-04-ua-mtx-merge-t6-mutants.txt); test_dexKat goes red under every src mutant (the metadata hash moves the CREATE2 clones), never the only red
+#
+# Not run in T6: the scaas-node suite (three path-only edits to trade_kat.json's legacy place in test code; the node's DEX
+# and trade rows are T14 / T16); zether-prover (no prover file changed); pqz-core gate (no pqzl, pqzh, stmt, ffi or set file).
