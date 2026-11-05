@@ -5,32 +5,28 @@ use zether_prover::api::call;
 
 /// Rows of the vector the Zether prover does not build, each with its reason: another contract kind's domain (the row has no
 /// `zether` domain), so a Zether key never signs it. Any other row without a `zether` domain fails the test.
-const NOT_ZETHER: [&str; 65] = [
+const NOT_ZETHER: [&str; 41] = [
     // the token kind's own (non-Zether) accounts: UA prepare is a NormalToken / WrappedToken entry
-    "PrepareAcc", "UAPrepareAcc",
-    // MandateWallet / SmartKeyAccount: signed by their owners' keys, not by a Zether key
-    "SetMandate", "SetPayee", "RevokeMandate", "PayUnderMandate", "DelegateRevoke", "AddKey", "RemoveKey", "RotateKey", "SetGuardian",
-    "CancelRecovery", "Execute",
+    "UAPrepareAcc",
+    // SmartKeyAccount: signed by its owner's keys, not by a Zether key
+    "AddKey", "RemoveKey", "RotateKey", "SetGuardian", "CancelRecovery", "CancelNonce", "Execute",
+    // MandateWallet (Q6, MD-11): signed by its owner's or delegate's key, not by a Zether key
+    "UASetMandate", "UASetPayee", "UARevokeMandate", "UAPayUnderMandate", "UADelegateRevoke", "UAExecute",
     // PQZ tokens: no PQZ builder in this package (PqzAuth is built by clientkeys, e2e.py and the node)
-    "PqzTransferSingle", "UAPqzTransferSingle", "PqzTransferSingleCompact", "UAPqzTransferSingleCompact", "PqzTransfer",
-    "UAPqzTransfer", "PqzTransferCompact", "UAPqzTransferCompact", "PqzUnshield", "UAPqzUnshield", "PqzUnshieldUnwrap",
+    "UAPqzTransferSingle", "UAPqzTransferSingleCompact", "UAPqzTransfer", "UAPqzTransferCompact", "UAPqzUnshield",
     "UAPqzUnshieldUnwrap", "PqzAuth",
     // the DEX's domain
     "CancelDexOrder",
-    // the GovernanceRouter's domain (governance spec §3.2): the closed table, each op and its UA twin; signed by an owner's or
+    // the GovernanceRouter's domain (governance spec §3.2): the closed table on its merged entries; signed by an owner's or
     // holder's key through the router, never by a Zether key
-    "GrantRole", "UAGrantRole", "RevokeRole", "UARevokeRole", "SetGrant", "UASetGrant", "CancelGrant", "UACancelGrant",
-    "DisableFeature", "UADisableFeature", "TransferOwnership", "UATransferOwnership", "AcceptOwnership", "UAAcceptOwnership",
-    "RenounceOwnership", "UARenounceOwnership", "RenounceRole", "UARenounceRole", "Mint", "UAMint", "MintToUA", "UAMintToUA",
-    "DisableWrap", "UADisableWrap", "ProposeRate", "UAProposeRate", "CancelRate", "UACancelRate", "ExecuteRate", "UAExecuteRate",
-    "SetMarket", "UASetMarket", "SetExchangeTarget", "UASetExchangeTarget", "SetListedOnly", "UASetListedOnly", "SetFeeSplit",
-    "UASetFeeSplit",
+    "UAGrantRole", "UARevokeRole", "UASetGrant", "UACancelGrant", "UADisableFeature", "UATransferOwnership",
+    "UAAcceptOwnership", "UARenounceOwnership", "UARenounceRole", "UAMint", "UAMintToUA", "UADisableWrap", "UAProposeRate",
+    "UACancelRate", "UAExecuteRate", "UASetMarket", "UASetExchangeTarget", "UASetListedOnly", "UASetFeeSplit",
 ];
 
 fn vector() -> Value {
-    // ua-mtx-merge T11: path only, the rows as they stood before the merged entries (MD-7); T12 moves the prover onto the
-    // regenerated smartcontracts/vectors/typed/typed_ops.json
-    let path = format!("{}/../../smartcontracts/vectors/typed/legacy/ua-mtx-merge/typed_ops.json", env!("CARGO_MANIFEST_DIR"));
+    // ua-mtx-merge T12: the 68-row file of the merged entries (MD-7); the 112-row one and its test are in legacy/ua-mtx-merge/
+    let path = format!("{}/../../smartcontracts/vectors/typed/typed_ops.json", env!("CARGO_MANIFEST_DIR"));
     serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
 }
 
@@ -62,7 +58,7 @@ fn every_zether_row_digest_equals_the_vector() {
         assert_eq!(out["domainSeparator"], dom["domainSeparator"], "{op} domainSeparator");
         assert_eq!(out["digest"], dom["digest"], "{op} digest");
     }
-    assert_eq!(zether, 47, "the vector's Zether rows");
+    assert_eq!(zether, 27, "the vector's Zether rows");
     assert_eq!(zether + other.len(), ops.len());
     let mut want = NOT_ZETHER.to_vec();
     want.sort_unstable();
@@ -89,21 +85,21 @@ fn unbound_relayer_and_fee_recipient_hash_as_zero() {
         m[field] = json!(addr);
     };
 
-    // `Burn`'s mode 19 binds both: bit 1 relayer, bit 2 fee recipient
-    assert_eq!(digest("Burn", &|_| ()), v["ops"]["Burn"]["domains"]["zether"]["digest"], "the row itself");
+    // `UABurn`'s mode 19 binds both: bit 1 relayer, bit 2 fee recipient
+    assert_eq!(digest("UABurn", &|_| ()), v["ops"]["UABurn"]["domains"]["zether"]["digest"], "the row itself");
     for (field, mode) in [("relayer", 18u64), ("feeRecipient", 17)] {
-        let named = digest("Burn", &|m| set(m, mode, field, &other));
-        assert_eq!(named, digest("Burn", &|m| set(m, mode, field, &zero)), "{field} unbound hashes as 0");
+        let named = digest("UABurn", &|m| set(m, mode, field, &other));
+        assert_eq!(named, digest("UABurn", &|m| set(m, mode, field, &zero)), "{field} unbound hashes as 0");
         // the control: the same address bound moves the digest
-        let bound = digest("Burn", &|m| set(m, 19, field, &other));
-        assert_ne!(bound, digest("Burn", &|m| set(m, 19, field, &zero)), "{field} bound is hashed");
+        let bound = digest("UABurn", &|m| set(m, 19, field, &other));
+        assert_ne!(bound, digest("UABurn", &|m| set(m, 19, field, &zero)), "{field} bound is hashed");
     }
 
-    // a nested payment: `ReceiverFee`'s mode 1 binds the relayer only
-    let row = &v["ops"]["ReceiverFee"]["domains"]["zether"]["digest"];
-    assert_eq!(&digest("ReceiverFee", &|m| m["payment"]["feeRecipient"] = json!(other)), row, "nested fee recipient unbound");
-    let bound = digest("ReceiverFee", &|m| set(&mut m["payment"], 3, "feeRecipient", &other));
-    assert_ne!(bound, digest("ReceiverFee", &|m| set(&mut m["payment"], 3, "feeRecipient", &zero)), "nested, bound");
+    // a nested payment: `UAReceiverFee`'s mode 1 binds the relayer only
+    let row = &v["ops"]["UAReceiverFee"]["domains"]["zether"]["digest"];
+    assert_eq!(&digest("UAReceiverFee", &|m| m["payment"]["feeRecipient"] = json!(other)), row, "nested fee recipient unbound");
+    let bound = digest("UAReceiverFee", &|m| set(&mut m["payment"], 3, "feeRecipient", &other));
+    assert_ne!(bound, digest("UAReceiverFee", &|m| set(&mut m["payment"], 3, "feeRecipient", &zero)), "nested, bound");
 }
 
 #[test]
@@ -143,13 +139,13 @@ fn head(a: &Value) -> Vec<u8> {
 fn payload(op: &str, a: &Value) -> Vec<u8> {
     let mut p = head(a);
     match op {
-        "ZetherTransferSingle" => {
+        "UAZetherTransferSingle" => {
             p.extend(h(&a["salt"]));
             for k in ["yFrom", "yTo", "cOut", "dOut", "cDeb", "cAud"] {
                 p.extend(g1(&a[k]));
             }
         }
-        "ZetherTransfer" | "ZetherTransferCompact" => {
+        "UAZetherTransfer" | "UAZetherTransferCompact" => {
             let legs = a["legs"].as_array().unwrap();
             p.extend(h(&a["salt"]));
             p.extend(be32(&json!(legs.len())));
@@ -173,7 +169,27 @@ fn payload(op: &str, a: &Value) -> Vec<u8> {
     p
 }
 
-const NAMED: [&str; 5] = ["ZetherTransferSingle", "ZetherTransfer", "ZetherTransferCompact", "ZetherUnshield", "ZetherUnshieldUnwrap"];
+/// The merged entries a prover build is relayed through (R35): `mtx<Op>(UAEnvelope e, <op>, bytes proof, UASig auth)`.
+const NAMED: [&str; 5] = ["UAZetherTransferSingle", "UAZetherTransfer", "UAZetherTransferCompact", "UAZetherUnshield", "UAZetherUnshieldUnwrap"];
+
+/// The `namedCall` request of the vector's row `op`, `sig` as given.
+fn named_req(v: &Value, op: &str, sig: Value) -> Value {
+    let row = &v["ops"][op];
+    let m = &row["message"];
+    let env: Value = ["from", "batch", "nonce", "validUntil", "mode", "relayer", "fee", "feeRecipient"].iter().map(|k| (k.to_string(), m[k].clone())).collect::<serde_json::Map<_, _>>().into();
+    let mut r = merge(req(row), json!({"op": op, "env": env, "payload": format!("0x{}", hex::encode(payload(op, &m["args"]))),
+        "proof": m["proof"], "beneficiary": m["args"]["beneficiaryUA"], "sig": sig}));
+    for k in ["recipient", "amount", "unwrap"] {
+        if m.get(k).is_some() {
+            r[k] = m[k].clone();
+        }
+    }
+    r
+}
+
+fn named(r: &Value) -> Value {
+    serde_json::from_str(&call("namedCall", &r.to_string()).unwrap()).unwrap()
+}
 
 #[test]
 fn named_call_equals_the_vector_calldata() {
@@ -181,27 +197,70 @@ fn named_call_equals_the_vector_calldata() {
     for op in NAMED {
         let row = &v["ops"][op];
         let (m, dom) = (&row["message"], &row["domains"]["zether"]);
-        let a = &m["args"];
-        let env: Value = ["from", "batch", "nonce", "validUntil", "mode", "relayer", "fee", "feeRecipient"].iter().map(|k| (k.to_string(), m[k].clone())).collect::<serde_json::Map<_, _>>().into();
-        let mut r = merge(req(row), json!({"op": op, "env": env, "payload": format!("0x{}", hex::encode(payload(op, a))),
-            "proof": m["proof"], "beneficiary": a["beneficiaryUA"], "sig": dom["signature"]}));
-        for k in ["recipient", "amount", "unwrap"] {
-            if m.get(k).is_some() {
-                r[k] = m[k].clone();
-            }
-        }
-        let out: Value = serde_json::from_str(&call("namedCall", &r.to_string()).unwrap()).unwrap();
+        // a native id signs with its own key: `UASig{signature}`, as the vector's calldata carries it
+        let mut r = named_req(&v, op, dom["signature"].clone());
+        let out = named(&r);
         assert_eq!(out["digest"], dom["digest"], "{op} digest");
         assert_eq!(out["structHash"], row["structHash"], "{op} structHash");
         assert_eq!(out["calldata"], dom["calldata"], "{op} calldata");
         assert_eq!(out["message"]["args"], m["args"], "{op} args");
+        assert_eq!(out["message"]["from"], m["from"], "{op} from, the bytes32 id");
+        // the same signature as an explicit `UASig` object
+        assert_eq!(named(&named_req(&v, op, json!({"signature": dom["signature"]})))["calldata"], dom["calldata"], "{op} UASig object");
         // no signature yet: the digest only
         r.as_object_mut().unwrap().remove("sig");
-        let out: Value = serde_json::from_str(&call("namedCall", &r.to_string()).unwrap()).unwrap();
+        let out = named(&r);
         assert_eq!(out["digest"], dom["digest"]);
         assert!(out.get("calldata").is_none());
     }
-    // an op without a named builder is refused, its digest is still `typedDigest`'s
-    let r = json!({"op": "UABurn", "env": {}, "payload": "0x", "proof": "0x", "beneficiary": "0x"});
-    assert!(call("namedCall", &r.to_string()).is_err());
+    // an op without a named builder is refused, its digest is still `typedDigest`'s; so is a retired address op
+    for op in ["UABurn", "ZetherTransferSingle"] {
+        let r = json!({"op": op, "env": {}, "payload": "0x", "proof": "0x", "beneficiary": "0x"});
+        assert!(call("namedCall", &r.to_string()).is_err(), "{op}");
+    }
+}
+
+/// A derived subject (R35): `from` any `bytes32` id, signed by its own record's key through `requireAuthorized`; the digest is
+/// `typedDigest`'s over the same message, and differs from the native row's. `from` as a 20-byte address is refused.
+#[test]
+fn named_call_takes_a_derived_from() {
+    let v = vector();
+    let derived = format!("0x{}", "7a".repeat(32));
+    for op in NAMED {
+        let row = &v["ops"][op];
+        let mut r = named_req(&v, op, json!(null));
+        r["env"]["from"] = json!(derived);
+        let out = named(&r);
+        assert_eq!(out["message"]["from"], json!(derived));
+        let td: Value = serde_json::from_str(&call("typedDigest", &merge(req(row), json!({"op": op, "message": out["message"]})).to_string()).unwrap()).unwrap();
+        assert_eq!(out["digest"], td["digest"], "{op}");
+        assert_ne!(out["digest"], row["domains"]["zether"]["digest"], "{op}: from is signed");
+        r["env"]["from"] = json!(format!("0x{}", "aa".repeat(20)));
+        assert!(call("namedCall", &r.to_string()).unwrap_err().contains("`from` must be 32 bytes"), "{op}");
+    }
+}
+
+/// `UASig` (TS-D12) with `keyData` and `members`: the entry's last parameter, against `cast abi-encode` (tools/env_ref.sh,
+/// `ua_sig`); an empty one (no signature, no member) is refused, as no entry verifies it.
+#[test]
+fn named_call_encodes_a_full_ua_sig() {
+    let v = vector();
+    const CAST: &str = "0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000e00000000000000000000000000000000000000000000000000000000000000001aa000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002bbcc00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000018000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000060000000000000000000000000000000000000000000000000000000000000012000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000001dd00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000030000000000000000000000000000000000000000000000000000000000000060000000000000000000000000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001ee00000000000000000000000000000000000000000000000000000000000000";
+    let full = json!({"keyData": "0xaa", "signature": "0xbbcc", "members": [
+        {"index": 1, "members": [{"index": 2, "sig": "0xdd"}], "sig": "0x"}, {"index": 3, "members": [], "sig": "0xee"}]});
+    for op in NAMED {
+        let row = &v["ops"][op];
+        let want = h(&row["domains"]["zether"]["calldata"]);
+        // `UASig` is the last parameter: its head word is the last of the head, its encoding the tail's end
+        let got = h(&named(&named_req(&v, op, full.clone()))["calldata"]);
+        let cast = hex::decode(CAST).unwrap();
+        let (body, n) = (&cast[32..], cast.len() - 32);
+        assert_eq!(&got[got.len() - n..], body, "{op}: UASig tail");
+        // everything before it is the vector's calldata but the UASig's own encoding
+        // the vector's `UASig{"", 65-byte signature, []}`: 3 head words, 3 length words, the signature in 3 words
+        let vector_sig = 3 * 32 + 3 * 32 + 3 * 32;
+        assert_eq!(&got[..got.len() - n], &want[..want.len() - vector_sig], "{op}: every parameter before UASig");
+    }
+    let err = call("namedCall", &named_req(&v, NAMED[0], json!({"keyData": "0xaa"})).to_string()).unwrap_err();
+    assert!(err.contains("`sig` is required"), "{err}");
 }

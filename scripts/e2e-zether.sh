@@ -3,9 +3,9 @@
 #   run()   (broadcast) six `zether-bls12381` UAs registered with clientkeys PoPs (UA-8: portable, relayed by the
 #           deployer), a NORMAL_ZETHER token: shield, roll-over, a single transfer, a multi-recipient Compact M = 4 and a
 #           BUNDLE M = 2 transfer with decoys, roll-over, unshield, the disclosure view; three relayed proofs through the
-#           merged mtxExecute(UAMetaTransaction, UASig) (single, Compact M = 2, unshield; a payer EOA signs with its own key,
-#           the deployer submits; the UA binding computed in the script; the named merged entries SKIP until zether-cli's
-#           namedCall builds them, plan T12); a WRAPPED_ZETHER token over a
+#           merged mtxExecute(UAMetaTransaction, UASig) and three on the named merged entries (zether-cli namedCall, ua-mtx-merge
+#           T12) (single, Compact M = 2, unshield each; a payer EOA signs with its own key, the deployer submits; the UA binding
+#           computed in the script, checked against zether-cli uaEnvelope and the token's view); a WRAPPED_ZETHER token over a
 #           test ERC-20 (MockERC20): wrap-shield, roll-over; every step checked by decryption (zether-cli) in the simulation;
 #   check() (no broadcast) the final balances by decryption and the disclosure view against the chain;
 #   then one row per transaction of the broadcast: gasUsed from its receipt, calldata bytes; and gasSplit(): each call

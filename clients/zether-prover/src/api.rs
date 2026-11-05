@@ -25,7 +25,7 @@ use crate::elgamal::{
 
 /// Largest wasm table without `allowLargeTable` (2^24 entries, 256 MiB).
 const WASM_TABLE_BITS_DEFAULT_MAX: u32 = 24;
-use crate::envelope::{self, MetaTx};
+use crate::envelope::{self, MetaTx, UAMetaTx};
 use crate::typed;
 use crate::keys::{seed_from_mnemonic, ZetherKey};
 use crate::schnorr;
@@ -589,9 +589,27 @@ fn verify_json<C: ZCurve>(gens: &Gens<C>, v: &Value, burn: bool) -> R<Value> {
 }
 
 fn meta(v: &Value) -> R<MetaTx> {
-    let m = get(v, "meta")?;
+    let u = ua_meta(v, false)?;
     Ok(MetaTx {
-        from: fixed(m, "from")?,
+        from: u.from[12..].try_into().unwrap(),
+        data: u.data,
+        batch: u.batch,
+        nonce: u.nonce,
+        valid_until: u.valid_until,
+        mode: u.mode,
+        relayer: u.relayer,
+        fee: u.fee,
+        fee_recipient: u.fee_recipient,
+    })
+}
+
+/// `meta`: a `UAMetaTransaction` (`ua`: `from` the 32-byte id) or, for [`meta`], a `MetaTransaction` (`from` a 20-byte
+/// address, held here in the low bytes).
+fn ua_meta(v: &Value, ua: bool) -> R<UAMetaTx> {
+    let m = get(v, "meta")?;
+    let from = if ua { fixed::<32>(m, "from")? } else { abi::addr(&fixed::<20>(m, "from")?) };
+    Ok(UAMetaTx {
+        from,
         data: if m.get("data").is_some() { bytes(m, "data")? } else { vec![] },
         batch: fixed(m, "batch")?,
         nonce: num(m, "nonce")?,
@@ -699,11 +717,20 @@ fn by_curve<C: ZCurve>(cmd: &str, v: &Value, rng: &mut OsRng) -> R<Value> {
 pub fn call(cmd: &str, input: &str) -> R<String> {
     let v: Value = serde_json::from_str(input).map_err(e)?;
     let out = match cmd {
+        // `executeMetaTransaction`'s `MetaTransaction` (`from` an address): the address binding (CTR-ZTH-06) and its digest
         "envelope" => {
             let (chain, uid, token) = (num(&v, "chainId")?, fixed::<32>(&v, "chainUid")?, fixed::<20>(&v, "token")?);
             let m = meta(&v)?;
             json!({"binding": hx(&envelope::envelope_binding(chain, &uid, &token, &m)),
                    "digest": hx(&envelope::digest(chain, &uid, &token, &m))})
+        }
+        // ua-mtx-merge (R35, CTR-ZTH-51): a `UAMetaTransaction` (`from` the 32-byte id, native padded or derived): the binding
+        // of every merged entry and `mtxExecute` (the token's `envelopeBinding` view) and `mtxDigest(UAMetaTransaction)`
+        "uaEnvelope" => {
+            let (chain, uid, token) = (num(&v, "chainId")?, fixed::<32>(&v, "chainUid")?, fixed::<20>(&v, "token")?);
+            let m = ua_meta(&v, true)?;
+            json!({"binding": hx(&envelope::ua_envelope_binding(chain, &uid, &token, &m)),
+                   "digest": hx(&envelope::ua_digest(chain, &uid, &token, &m))})
         }
         // typed-signing C7: the typed digest of any Zether op (`typed::OPS`: transfers, unshield, roll-overs, owner ops, ...);
         // `ownerAuth` signs the owner ones, the subject's ECDSA / UA signature the rest. `message` is the struct, named fields.
@@ -711,8 +738,9 @@ pub fn call(cmd: &str, input: &str) -> R<String> {
             let op = get(&v, "op")?.as_str().ok_or("`op` must be a string")?;
             typed::typed_digest(op, num(&v, "chainId")?, &fixed::<32>(&v, "chainUid")?, &fixed::<20>(&v, "token")?, get(&v, "message")?)?
         }
-        // typed-signing C7: a prover build as a named relayed entry (`mtxConfidentialTransferSingle(Envelope, ZetherSingle, proof, sig)`, ...):
-        // the typed `message`, the `digest` the wallet signs and, with `sig`, the `calldata`. The generic `envelope` path stays.
+        // typed-signing C7, ua-mtx-merge T12: a prover build as a merged relayed entry (`mtxConfidentialTransferSingle(UAEnvelope,
+        // ZetherSingle, proof, UASig)`, ...): the typed `message`, the `digest` the subject signs and, with `sig`, the `calldata`.
+        // The generic `uaEnvelope` (`mtxExecute`) and `envelope` (`executeMetaTransaction`) paths stay.
         "namedCall" => typed::named_call(&v)?,
         _ => match get(&v, "curve")?.as_str() {
             #[cfg(feature = "bn254")]

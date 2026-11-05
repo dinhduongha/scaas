@@ -172,20 +172,26 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
         _settled(t, out, out.readBytes32(".entryRef"), ZetherTypes.TransferMode.HASH);
     }
 
-    // ------------------------------------------------------------------ typed-signing C7: the prover's `namedCall` settles
+    // ------------------------------------------------------------------ the prover's `namedCall` settles on the merged entries
 
-    function _envMt(address payer, ZetherLayer t) internal view returns (MetaTxLib.MetaTransaction memory) {
-        return MetaTxLib.MetaTransaction({
-            from: payer, data: "", batch: 7, nonce: t.mtxNonce(MetaTxLib.pad(payer), 7), validUntil: block.timestamp + 300,
-            mode: MetaTxLib.MODE_RESTRICT_RELAYER | MetaTxLib.MODE_FEE_FIXED, relayer: relayer, fee: 3, feeRecipient: address(0)
+    /// @dev The `UAEnvelope` fields of the next relayed op of `from` (the `data` filled by the caller).
+    function _envMt(bytes32 from, ZetherLayer t, uint32 mode, uint256 fee) internal view returns (MetaTxLib.UAMetaTransaction memory) {
+        return MetaTxLib.UAMetaTransaction({
+            from: from, data: "", batch: 7, nonce: t.mtxNonce(from, 7), validUntil: block.timestamp + 300, mode: mode,
+            relayer: relayer, fee: fee, feeRecipient: address(0)
         });
+    }
+
+    /// @dev The payer EOA's envelope: relayer bound, a fixed fee of 3.
+    function _payerMt(ZetherLayer t) internal view returns (MetaTxLib.UAMetaTransaction memory) {
+        return _envMt(MetaTxLib.pad(vm.addr(PAYER_PK)), t, MetaTxLib.MODE_RESTRICT_RELAYER | MetaTxLib.MODE_FEE_FIXED, 3);
     }
 
     function _n(string memory k, uint256 v) private pure returns (string memory) {
         return string.concat('"', k, '":"', vm.toString(v), '"');
     }
 
-    function _envJson(MetaTxLib.MetaTransaction memory m) private pure returns (string memory) {
+    function _envJson(MetaTxLib.UAMetaTransaction memory m) private pure returns (string memory) {
         return string.concat(
             '"env":{', _q("from", vm.toString(m.from)), ",", _n("batch", m.batch), ",", _n("nonce", m.nonce), ",", _n("validUntil", m.validUntil),
             ",", _n("mode", m.mode), ",", _q("relayer", vm.toString(m.relayer)), ",", _n("fee", m.fee), ",",
@@ -193,7 +199,22 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
         );
     }
 
-    function _namedReq(ZetherLayer t, string memory op, MetaTxLib.MetaTransaction memory m, string memory out, string memory extra)
+    /// @dev The prover's `uaEnvelope` of `m` (R35): its binding equals the token's `envelopeBinding` view and its digest the
+    ///      token's `mtxDigest`; returned as the `envelopeBinding` field of a prove request.
+    function _uaBinding(ZetherLayer t, MetaTxLib.UAMetaTransaction memory m) internal returns (string memory) {
+        string memory out = string.concat(
+            '{"chainId":', vm.toString(block.chainid), ",", _q("chainUid", vm.toString(t.chainUid())), ",", _q("token", vm.toString(address(t))),
+            ',"meta":{', _q("from", vm.toString(m.from)), ",", _q("data", vm.toString(m.data)), ",", _q("batch", vm.toString(bytes32(m.batch))));
+        out = string.concat(out, ',"nonce":', vm.toString(m.nonce), ',"validUntil":', vm.toString(m.validUntil), ',"mode":', vm.toString(m.mode), ",",
+            _q("relayer", vm.toString(m.relayer)), ',"fee":', vm.toString(m.fee));
+        out = _cli("uaEnvelope", string.concat(out, ",", _q("feeRecipient", vm.toString(m.feeRecipient)), "}}"));
+        bytes32 b = out.readBytes32(".binding");
+        assertEq(b, t.envelopeBinding(m), "the prover's UA binding is the token's envelopeBinding");
+        assertEq(out.readBytes32(".digest"), t.mtxDigest(m), "the prover's UAMetaTransaction digest is the token's mtxDigest");
+        return string.concat(",", _q("envelopeBinding", vm.toString(b)));
+    }
+
+    function _namedReq(ZetherLayer t, string memory op, MetaTxLib.UAMetaTransaction memory m, string memory out, string memory extra)
         private view returns (string memory)
     {
         string memory head = string.concat(
@@ -206,8 +227,9 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
         );
     }
 
-    /// @dev `namedCall` through the real binary: the digest it returns, signed by the payer's EOA here, then the entry's calldata.
-    function _named(ZetherLayer t, string memory op, MetaTxLib.MetaTransaction memory m, string memory out, string memory extra)
+    /// @dev `namedCall` through the real binary: the digest it returns, signed by the payer's EOA here (`sig` raw: `UASig{signature}`),
+    ///      then the merged entry's calldata.
+    function _named(ZetherLayer t, string memory op, MetaTxLib.UAMetaTransaction memory m, string memory out, string memory extra)
         internal returns (bytes memory)
     {
         string memory q = _namedReq(t, op, m, out, extra);
@@ -215,71 +237,98 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
         return _cli("namedCall", string.concat(q, ',"sig":"', vm.toString(abi.encodePacked(r, sg, v)), '"}')).readBytes(".calldata");
     }
 
-    /// @dev ua-mtx-merge T4, meaning: the prover's `namedCall` still builds the address entries (`Envelope` + `bytes sig`),
-    ///      which T4 retired (R35): its calldata finds no function and consumes nothing. T12 moves `namedCall` to the
-    ///      merged `UA*` entries and these three tests back to `_settleNamed`.
-    function _retired(ZetherLayer t, bytes memory cd, address payer) internal {
-        vm.prank(relayer);
-        (bool ok, bytes memory ret) = address(t).call(cd);
-        assertFalse(ok, "a retired address entry runs");
-        assertEq(ret.length, 0, "no function");
-        assertEq(t.mtxNonce(MetaTxLib.pad(payer), 7), 0, "nothing consumed");
-    }
-
-    /// @dev One changed byte in a signed field (the `validUntil` word of the envelope) is `MetaTxBadSignature`; the good call then settles.
-    function _settleNamed(ZetherLayer t, bytes memory cd, address payer) internal returns (bytes memory ret) {
-        bytes memory bad = cd;
-        bad = abi.encodePacked(cd);
+    /// @dev One changed byte in a signed field (the `validUntil` word of the envelope) is refused (`MetaTxBadSignature` for a native
+    ///      payer); the good call then settles, the nonce of `from` consumed.
+    function _settleNamed(ZetherLayer t, bytes memory cd, bytes32 from, bytes4 refusal) internal returns (bytes memory ret) {
+        bytes memory bad = abi.encodePacked(cd);
         bad[4 + 32 * 3 + 31] = bytes1(uint8(bad[4 + 32 * 3 + 31]) ^ 1);
         vm.prank(relayer);
-        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
-        address(t).call(bad);
-        assertEq(t.mtxNonce(MetaTxLib.pad(payer), 7), 0, "nothing consumed by the refusal");
+        if (refusal != bytes4(0)) vm.expectRevert(refusal);
+        (bool badOk,) = address(t).call(bad);
+        if (refusal == bytes4(0)) assertFalse(badOk, "a changed signed field is refused");
+        assertEq(t.mtxNonce(from, 7), 0, "nothing consumed by the refusal");
         vm.prank(relayer);
         bool ok;
         (ok, ret) = address(t).call(cd);
         assertTrue(ok, "the good call settles");
-        assertEq(t.mtxNonce(MetaTxLib.pad(payer), 7), 1, "nonce consumed");
+        assertEq(t.mtxNonce(from, 7), 1, "nonce consumed");
+    }
+
+    function _settlePayer(ZetherLayer t, bytes memory cd) internal returns (bytes memory ret) {
+        address payer = vm.addr(PAYER_PK);
+        ret = _settleNamed(t, cd, MetaTxLib.pad(payer), IMetaTx.MetaTxBadSignature.selector);
         assertEq(t.balanceOf(payer), 1000 - 3, "relay fee paid");
     }
 
-    /// @dev Relayed named `mtxConfidentialTransferCompact` (multi, commit-reveal) on a COMPACT token.
+    /// @dev ua-mtx-merge T12 (R35): the prover's UA binding and `UAMetaTransaction` digest equal the token's views for a native
+    ///      (padded) and a derived subject; the address binding of `executeMetaTransaction` is another word.
+    function test_uaEnvelopeEqualsTheToken() public {
+        ZetherLayer t = _token(0, 2, true, "u-env");
+        MetaTxLib.UAMetaTransaction memory m = _payerMt(t);
+        m.data = hex"deadbeef";
+        _uaBinding(t, m);
+        MetaTxLib.MetaTransaction memory a = MetaTxLib.MetaTransaction(vm.addr(PAYER_PK), m.data, m.batch, m.nonce, m.validUntil,
+            m.mode, m.relayer, m.fee, m.feeRecipient);
+        assertTrue(_addrBinding(t, a) != t.envelopeBinding(m), "the address tag is not the UA tag");
+        m = _envMt(ZetherTypes.UA.unwrap(alice.ua), t, 0, 0);
+        m.data = hex"beef";
+        _uaBinding(t, m);
+    }
+
+    /// @dev Relayed `mtxConfidentialTransferCompact(UAEnvelope, …, UASig)` (multi, commit-reveal) on a COMPACT token.
     function test_named_multi_relayed() public {
         ZetherLayer t = _token(1, 2, true, "n-multi");
-        address payer = vm.addr(PAYER_PK);
-        _public(t, payer, 1000);
-        MetaTxLib.MetaTransaction memory m = _envMt(payer, t);
-        string memory bd = vm.toString(_addrBinding(t, m));
+        _public(t, vm.addr(PAYER_PK), 1000);
+        MetaTxLib.UAMetaTransaction memory m = _payerMt(t);
         string memory out = _cli("proveTransferMulti", _req(t, "compact", "optional", false,
-            string.concat(",", _q("envelopeBinding", bd), ',"uaSigner":"ecdsa"', _recipients())));
-        _retired(t, _named(t, "ZetherTransfer", m, out, ""), payer);
+            string.concat(_uaBinding(t, m), ',"uaSigner":"ecdsa"', _recipients())));
+        bytes memory ret = _settlePayer(t, _named(t, "UAZetherTransferCompact", m, out, ""));
+        _settled(t, out, abi.decode(ret, (bytes32)), ZetherTypes.TransferMode.HASH);
     }
 
-    /// @dev Relayed named `mtxConfidentialTransferSingle` (BUNDLE / FULL): balances and the stored record.
+    /// @dev Relayed `mtxConfidentialTransferSingle(UAEnvelope, …, UASig)` (BUNDLE / FULL): balances and the stored record.
     function test_named_single_relayed() public {
         ZetherLayer t = _token(0, 1, true, "n-single");
-        address payer = vm.addr(PAYER_PK);
-        _public(t, payer, 1000);
-        MetaTxLib.MetaTransaction memory m = _envMt(payer, t);
-        string memory bd = vm.toString(_addrBinding(t, m));
+        _public(t, vm.addr(PAYER_PK), 1000);
+        MetaTxLib.UAMetaTransaction memory m = _payerMt(t);
         string memory out = _cli("proveTransfer", _req(t, "bundle", "full", true, string.concat(
-            ",", _q("envelopeBinding", bd), ',"uaSigner":"ecdsa",', _q("yTo", vm.toString(rs[0].y)),
-            ',"amount":1200')));
-        _retired(t, _named(t, "ZetherTransferSingle", m, out, ""), payer);
+            _uaBinding(t, m), ',"uaSigner":"ecdsa",', _q("yTo", vm.toString(rs[0].y)), ',"amount":1200')));
+        bytes32 ref = abi.decode(_settlePayer(t, _named(t, "UAZetherTransferSingle", m, out, "")), (bytes32));
+        assertEq(ref, out.readBytes32(".entryRef"), "entryRef");
+        assertEq(t.transferEntry(ref), out.readBytes(".record"), "single record");
+        assertTrue(_holds(t, rs[0], 1200, false), "recipient pending");
     }
 
-    /// @dev Relayed named `mtxUnshield`: the recipient is credited `amount * shieldScale` public units.
+    /// @dev Relayed `mtxUnshield(UAEnvelope, …, UASig)`: the recipient is credited `amount * shieldScale` public units.
     function test_named_unshield_relayed() public {
         ZetherLayer t = _token(0, 2, true, "n-unshield");
-        address payer = vm.addr(PAYER_PK);
         address to = address(0xAB1E);
-        _public(t, payer, 1000);
-        MetaTxLib.MetaTransaction memory m = _envMt(payer, t);
-        string memory bd = vm.toString(_addrBinding(t, m));
+        _public(t, vm.addr(PAYER_PK), 1000);
+        MetaTxLib.UAMetaTransaction memory m = _payerMt(t);
         string memory out = _cli("proveBurn", _req(t, "bundle", "optional", false, string.concat(
-            ",", _q("envelopeBinding", bd), ',"amount":100,', _q("recipient", vm.toString(to)))));
-        _retired(t, _named(t, "ZetherUnshield", m, out, string.concat(
-            ',"amount":100,', _q("recipient", vm.toString(bytes32(uint256(uint160(to))))))), payer);
+            _uaBinding(t, m), ',"amount":100,', _q("recipient", vm.toString(to)))));
+        _settlePayer(t, _named(t, "UAZetherUnshield", m, out, string.concat(
+            ',"amount":100,', _q("recipient", vm.toString(MetaTxLib.pad(to))))));
+        assertEq(t.balanceOf(to), 100 * SCALE, "recipient credited");
+    }
+
+    /// @dev A derived subject (R35): alice's Zether UA relays her own single transfer, fee 0, signed through the prover (`uaSig`,
+    ///      purpose `metatx`: the registry's `requireAuthorized` message), `sig` as the explicit `UASig` object.
+    function test_named_single_relayed_derived() public {
+        ZetherLayer t = _token(0, 1, true, "n-derived");
+        bytes32 a = ZetherTypes.UA.unwrap(alice.ua);
+        MetaTxLib.UAMetaTransaction memory m = _envMt(a, t, 0, 0);
+        string memory out = _cli("proveTransfer", _req(t, "bundle", "full", true, string.concat(
+            _uaBinding(t, m), ',"uaSigner":"ecdsa",', _q("yTo", vm.toString(rs[0].y)), ',"amount":1200')));
+        string memory q = _namedReq(t, "UAZetherTransferSingle", m, out, "");
+        bytes32 d = _cli("namedCall", string.concat(q, "}")).readBytes32(".digest");
+        string memory sig = _cli("uaSig", string.concat('{"curve":"bls12381","key":{', _q("x", vm.toString(bytes32(alice.x))), "},",
+            _q("purpose", "metatx"), ",", _q("digest", vm.toString(d)), "}")).readString(".sig");
+        bytes memory cd = _cli("namedCall", string.concat(q, ',"sig":{', _q("keyData", "0x"), ",", _q("signature", sig), ',"members":[]}}'))
+            .readBytes(".calldata");
+        bytes32 ref = abi.decode(_settleNamed(t, cd, a, bytes4(0)), (bytes32));
+        assertEq(ref, out.readBytes32(".entryRef"), "entryRef");
+        assertTrue(_holds(t, rs[0], 1200, false), "recipient pending");
     }
 
     /// @dev Typed-signing C3 review T3: the token's builder from the explicit struct against the prover, for every recipient count that

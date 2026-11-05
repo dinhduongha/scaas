@@ -1,6 +1,7 @@
 //! Typed EIP-712 digests of every Zether op a Zether key signs or relays (typed-signing C7, TS-D14 / TS-D17 / TS-D19): the
-//! struct of a named entry (`ZetherTransferSingle`, `ZetherUnshield`, `RollOver`, `ZetherRollOver`, ... and their `UA*` twins)
-//! hashed in the token's own domain ("SCaaS ZetherToken", "1", chainId, token, chainUid). `args` and `proof` enter the struct
+//! struct of a merged entry (`UAZetherTransferSingle`, `UAZetherUnshield`, `UARollOver`, ...; ua-mtx-merge CTR-MTX-30: one
+//! signed entry per operation, the address forms in legacy/ua-mtx-merge/), the wraps' address structs and the owner statements
+//! (`ZetherRollOver`, `ZetherSetRollOverMode`), hashed in the token's own domain ("SCaaS ZetherToken", "1", chainId, token, chainUid). `args` and `proof` enter the struct
 //! as the contract hashes them: a nested struct by its struct hash, `bytes` by its keccak.
 //!
 //! One table, [`OPS`]: every op's type string, nested types appended as `encodeType` has them. The hashing is generic over a
@@ -16,52 +17,32 @@ use std::collections::BTreeSet;
 type R<T> = Result<T, String>;
 
 /// Every typed op the Zether token kinds take (the rows of `typed_ops.json` with a `zether` domain).
-pub const OPS: [(&str, &str); 47] = [
-    ("CancelNonce", "CancelNonce(address from,uint256 lane,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
-    ("Burn", "Burn(address from,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
+pub const OPS: [(&str, &str); 27] = [
     ("UABurn", "UABurn(bytes32 from,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
     ("Wrap", "Wrap(address from,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
     ("WrapLeg", "WrapLeg(address from,address underlying,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
-    ("Unwrap", "Unwrap(address from,uint256 wrapped,address recipient,uint256 minOut,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
     ("UAUnwrap", "UAUnwrap(bytes32 from,uint256 wrapped,address recipient,uint256 minOut,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
-    ("UnwrapLeg", "UnwrapLeg(address from,address underlying,uint256 wrapped,address recipient,uint256 minOut,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
     ("UAUnwrapLeg", "UAUnwrapLeg(bytes32 from,address underlying,uint256 wrapped,address recipient,uint256 minOut,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
     ("AddReserve", "AddReserve(address from,address underlying,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
     ("WrapToUA", "WrapToUA(address from,address underlying,uint256 amount,bytes32 to,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
-    ("UnwrapToUA", "UnwrapToUA(address from,address underlying,uint256 wrapped,bytes32 to,uint256 minOut,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
     ("UAUnwrapToUA", "UAUnwrapToUA(bytes32 from,address underlying,uint256 wrapped,bytes32 to,uint256 minOut,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
-    ("Shield", "Shield(address from,bytes32 toUA,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
     ("UAShield", "UAShield(bytes32 from,bytes32 toUA,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
     ("WrapShield", "WrapShield(address from,address underlying,uint256 amountIn,bytes32 toUA,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
-    ("RollOver", "RollOver(address from,bytes32 ua,uint256 n,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
     ("UARollOver", "UARollOver(bytes32 from,bytes32 ua,uint256 n,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
-    ("ZetherTransferSingle", "ZetherTransferSingle(address from,ZetherSingle args,bytes proof,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)G1(bytes32 x0,bytes32 x1,bytes32 y0,bytes32 y1)ZetherSingle(uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes16 salt,bytes32 beneficiaryUA,G1 yFrom,G1 yTo,G1 cOut,G1 dOut,G1 cDeb,G1 cAud)"),
     ("UAZetherTransferSingle", "UAZetherTransferSingle(bytes32 from,ZetherSingle args,bytes proof,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)G1(bytes32 x0,bytes32 x1,bytes32 y0,bytes32 y1)ZetherSingle(uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes16 salt,bytes32 beneficiaryUA,G1 yFrom,G1 yTo,G1 cOut,G1 dOut,G1 cDeb,G1 cAud)"),
-    ("ZetherTransfer", "ZetherTransfer(address from,ZetherMulti args,bytes proof,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)G1(bytes32 x0,bytes32 x1,bytes32 y0,bytes32 y1)ZetherLeg(G1 yTo,G1 cOut,G1 cAud,G1 dAud)ZetherMulti(uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes16 salt,bytes32 beneficiaryUA,uint256 decoyFee,G1 yFrom,G1 dOut,G1 cDeb,ZetherLeg[] legs,bytes sealedMemo)"),
     ("UAZetherTransfer", "UAZetherTransfer(bytes32 from,ZetherMulti args,bytes proof,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)G1(bytes32 x0,bytes32 x1,bytes32 y0,bytes32 y1)ZetherLeg(G1 yTo,G1 cOut,G1 cAud,G1 dAud)ZetherMulti(uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes16 salt,bytes32 beneficiaryUA,uint256 decoyFee,G1 yFrom,G1 dOut,G1 cDeb,ZetherLeg[] legs,bytes sealedMemo)"),
-    ("ZetherTransferCompact", "ZetherTransferCompact(address from,ZetherMulti args,bytes proof,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)G1(bytes32 x0,bytes32 x1,bytes32 y0,bytes32 y1)ZetherLeg(G1 yTo,G1 cOut,G1 cAud,G1 dAud)ZetherMulti(uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes16 salt,bytes32 beneficiaryUA,uint256 decoyFee,G1 yFrom,G1 dOut,G1 cDeb,ZetherLeg[] legs,bytes sealedMemo)"),
     ("UAZetherTransferCompact", "UAZetherTransferCompact(bytes32 from,ZetherMulti args,bytes proof,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)G1(bytes32 x0,bytes32 x1,bytes32 y0,bytes32 y1)ZetherLeg(G1 yTo,G1 cOut,G1 cAud,G1 dAud)ZetherMulti(uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes16 salt,bytes32 beneficiaryUA,uint256 decoyFee,G1 yFrom,G1 dOut,G1 cDeb,ZetherLeg[] legs,bytes sealedMemo)"),
-    ("ZetherUnshield", "ZetherUnshield(address from,ZetherBurn args,uint256 amount,bytes32 recipient,bytes proof,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)G1(bytes32 x0,bytes32 x1,bytes32 y0,bytes32 y1)ZetherBurn(uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes32 beneficiaryUA,G1 yFrom)"),
     ("UAZetherUnshield", "UAZetherUnshield(bytes32 from,ZetherBurn args,uint256 amount,bytes32 recipient,bytes proof,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)G1(bytes32 x0,bytes32 x1,bytes32 y0,bytes32 y1)ZetherBurn(uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes32 beneficiaryUA,G1 yFrom)"),
-    ("ZetherUnshieldUnwrap", "ZetherUnshieldUnwrap(address from,ZetherBurn args,Unwrap unwrap,bytes proof,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)G1(bytes32 x0,bytes32 x1,bytes32 y0,bytes32 y1)Unwrap(address underlying,bytes32 recipient,uint256 amount,uint256 minOut)ZetherBurn(uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes32 beneficiaryUA,G1 yFrom)"),
     ("UAZetherUnshieldUnwrap", "UAZetherUnshieldUnwrap(bytes32 from,ZetherBurn args,Unwrap unwrap,bytes proof,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)G1(bytes32 x0,bytes32 x1,bytes32 y0,bytes32 y1)Unwrap(address underlying,bytes32 recipient,uint256 amount,uint256 minOut)ZetherBurn(uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes32 beneficiaryUA,G1 yFrom)"),
-    ("RollOverSigned", "RollOverSigned(address from,bytes32 ua,uint64 expectedPendingSeq,uint64 validUntilBlock,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
     ("UARollOverSigned", "UARollOverSigned(bytes32 from,bytes32 ua,uint64 expectedPendingSeq,uint64 validUntilBlock,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
-    ("SetRollOverMode", "SetRollOverMode(address from,bytes32 ua,uint8 rollOverMode,uint64 validUntilBlock,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
     ("UASetRollOverMode", "UASetRollOverMode(bytes32 from,bytes32 ua,uint8 rollOverMode,uint64 validUntilBlock,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
-    ("RollOverBatch", "RollOverBatch(address from,bytes32[] uas,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
     ("UARollOverBatch", "UARollOverBatch(bytes32 from,bytes32[] uas,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
-    ("ReceiverFee", "ReceiverFee(MetaTransfer payment,uint256 fee,address feeRecipient,uint256 validUntil)MetaTransfer(address from,address to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
     ("UAReceiverFee", "UAReceiverFee(UAMetaTransfer payment,uint256 fee,address feeRecipient,uint256 validUntil)UAMetaTransfer(bytes32 from,bytes32 to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
-    ("RelayFee", "RelayFee(address from,address target,bytes32 callDataHash,address payee,uint256 value,uint256 validUntil,address relayer)"),
     ("UARelayFee", "UARelayFee(bytes32 from,address target,bytes32 callDataHash,bytes32 payee,uint256 value,uint256 validUntil,address relayer)"),
-    ("WrapOrder", "WrapOrder(address from,address wrappedToken,uint256 amount,uint256 minMinted,uint256 minFill,uint256 fee,address relayer,address destination,uint8 flags,uint256 batch,uint256 nonce,uint256 validUntil)"),
     ("UAWrapOrder", "UAWrapOrder(bytes32 from,address wrappedToken,uint256 amount,uint256 minMinted,uint256 minFill,uint256 fee,address relayer,bytes32 destination,uint8 flags,uint256 batch,uint256 nonce,uint256 validUntil)"),
-    ("CancelOrder", "CancelOrder(TradeOrder order)TradeOrder(address from,address receiveToken,uint256 amount,uint256 receiveAmount,uint256 minFill,uint256 fee,address relayer,address dex,address destination,uint8 flags,uint256 batch,uint256 nonce,uint256 validUntil)"),
     ("CancelUAOrder", "CancelUAOrder(UATradeOrder order)UATradeOrder(bytes32 from,address receiveToken,uint256 amount,uint256 receiveAmount,uint256 minFill,uint256 fee,address relayer,address dex,bytes32 destination,uint8 flags,uint256 batch,uint256 nonce,uint256 validUntil)"),
-    ("CancelWrapOrder", "CancelWrapOrder(WrapOrder order)WrapOrder(address from,address wrappedToken,uint256 amount,uint256 minMinted,uint256 minFill,uint256 fee,address relayer,address destination,uint8 flags,uint256 batch,uint256 nonce,uint256 validUntil)"),
     ("CancelUAWrapOrder", "CancelUAWrapOrder(UAWrapOrder order)UAWrapOrder(bytes32 from,address wrappedToken,uint256 amount,uint256 minMinted,uint256 minFill,uint256 fee,address relayer,bytes32 destination,uint8 flags,uint256 batch,uint256 nonce,uint256 validUntil)"),
-    ("UACancelNonce", "UACancelNonce(bytes32 ua,uint256 batch,uint256 validUntil)"),
+    ("UACancelNonce", "UACancelNonce(bytes32 from,uint256 lane,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
     ("ZetherRollOver", "ZetherRollOver(bytes32 ua,uint64 accSeq,uint64 expectedPendingSeq,uint64 validUntilBlock)"),
     ("ZetherSetRollOverMode", "ZetherSetRollOverMode(bytes32 ua,uint8 mode,uint64 modeNonce,uint64 validUntilBlock)"),
 ];
@@ -212,11 +193,11 @@ pub fn typed_digest(op: &str, chain_id: u64, chain_uid: &[u8; 32], token: &[u8; 
 }
 
 // ---------------------------------------------------------------------------------------------
-// The named relayed entry of a prover build (TS-D14): the struct a wallet signs and the entry's calldata
+// The merged relayed entry of a prover build (TS-D14, R35): the struct a wallet signs and the entry's calldata
 // ---------------------------------------------------------------------------------------------
 
 use crate::abi::Tok;
-use crate::envelope;
+use crate::envelope::{self, InnerSig, MemberSig, UASig};
 
 fn hx(b: &[u8]) -> String {
     format!("0x{}", hex::encode(b))
@@ -303,39 +284,73 @@ fn num_word(v: &Value, k: &str) -> R<[u8; 32]> {
     }
 }
 
-/// A named relayed entry of a prover build: `op` is one of `ZetherTransferSingle`, `ZetherTransfer`, `ZetherTransferCompact`,
-/// `ZetherUnshield`, `ZetherUnshieldUnwrap`; `env` the signed fields `{from, batch, nonce, validUntil, mode, relayer, fee,
-/// feeRecipient}` (the same the build's `envelopeBinding` was taken over); `payload`, `proof`, `beneficiary` the build's; an unshield
-/// adds `recipient` (32-byte id) and `amount`, an unshield-unwrap `unwrap {underlying, recipient, amount, minOut}`. Returns the
-/// typed `message`, its digest (what the wallet signs) and, once `sig` is given, the entry's `calldata`.
+/// `sig` as the entry's `UASig`: a hex string is a native id's own signature (`UASig{signature}`); an object
+/// `{keyData?, signature?, members?: [{index, members: [{index, sig}], sig}]}` the explicit form (a derived or `msig` subject).
+/// An empty one is refused: no entry verifies it.
+fn ua_sig(v: &Value) -> R<UASig> {
+    let s = field(v, "sig")?;
+    if s.is_string() {
+        return Ok(UASig { signature: raw(v, "sig", None)?, ..Default::default() });
+    }
+    let opt = |o: &Value, k: &str| if o.get(k).is_some_and(|x| !x.is_null()) { raw(o, k, None) } else { Ok(vec![]) };
+    let index = |o: &Value| -> R<u16> {
+        field(o, "index")?.as_u64().and_then(|n| u16::try_from(n).ok()).ok_or_else(|| "`index` must be a uint16".to_string())
+    };
+    let list = |o: &Value| -> R<Vec<Value>> {
+        match o.get("members").filter(|x| !x.is_null()) {
+            None => Ok(vec![]),
+            Some(a) => a.as_array().cloned().ok_or_else(|| "`members` must be an array".to_string()),
+        }
+    };
+    let members = list(s)?
+        .iter()
+        .map(|m| {
+            let inner = list(m)?.iter().map(|i| Ok(InnerSig { index: index(i)?, sig: raw(i, "sig", None)? })).collect::<R<Vec<_>>>()?;
+            Ok(MemberSig { index: index(m)?, members: inner, sig: opt(m, "sig")? })
+        })
+        .collect::<R<Vec<_>>>()?;
+    let sig = UASig { key_data: opt(s, "keyData")?, signature: opt(s, "signature")?, members };
+    if sig.signature.is_empty() && sig.members.is_empty() {
+        return Err("`sig` is required: a signature or members".into());
+    }
+    Ok(sig)
+}
+
+/// A merged relayed entry of a prover build (R35): `op` is one of `UAZetherTransferSingle`, `UAZetherTransfer`,
+/// `UAZetherTransferCompact`, `UAZetherUnshield`, `UAZetherUnshieldUnwrap`; `env` the signed fields `{from, batch, nonce,
+/// validUntil, mode, relayer, fee, feeRecipient}` (the `UAEnvelope`, `from` the subject's 32-byte id: a padded native address or a
+/// derived UA; the same the build's `envelopeBinding` was taken over, `uaEnvelope`'s `binding`); `payload`, `proof`, `beneficiary`
+/// the build's; an unshield adds `recipient` (32-byte id) and `amount`, an unshield-unwrap `unwrap {underlying, recipient, amount,
+/// minOut}`. Returns the typed `message`, its digest (what the subject signs) and, once `sig` is given (see [`ua_sig`]), the entry's
+/// `calldata`, `UASig auth` last.
 pub fn named_call(v: &Value) -> R<Value> {
     let op = field(v, "op")?.as_str().ok_or("`op` must be a string")?;
     let env = field(v, "env")?;
     let (payload, proof, ben) = (raw(v, "payload", None)?, raw(v, "proof", None)?, word(v, "beneficiary", 32)?);
     let env_toks: Vec<Tok> = [
-        word(env, "from", 20)?, num_word(env, "batch")?, num_word(env, "nonce")?, num_word(env, "validUntil")?,
+        word(env, "from", 32)?, num_word(env, "batch")?, num_word(env, "nonce")?, num_word(env, "validUntil")?,
         num_word(env, "mode")?, word(env, "relayer", 20)?, num_word(env, "fee")?, word(env, "feeRecipient", 20)?,
     ]
     .map(Tok::Word)
     .into();
-    let sig = v.get("sig").filter(|x| !x.is_null()).map(|_| raw(v, "sig", None)).transpose()?;
+    let sig = v.get("sig").filter(|x| !x.is_null()).map(|_| ua_sig(v)).transpose()?;
     let lanes = json!({"batch": field(env, "batch")?, "nonce": field(env, "nonce")?, "validUntil": field(env, "validUntil")?,
         "mode": field(env, "mode")?, "relayer": field(env, "relayer")?, "fee": field(env, "fee")?, "feeRecipient": field(env, "feeRecipient")?});
     let (from, proof_h) = (field(env, "from")?, json!(hx(&proof)));
     let sg = sig.clone().unwrap_or_default();
     let (message, calldata) = match op {
-        "ZetherTransferSingle" => (
+        "UAZetherTransferSingle" => (
             json!({"from": from, "args": single_args(&payload, &ben)?, "proof": proof_h}),
             envelope::named_transfer_single_call(&env_toks, &payload, &proof, &ben, &sg),
         ),
-        "ZetherTransfer" | "ZetherTransferCompact" => {
-            let name = if op == "ZetherTransfer" { "mtxConfidentialTransfer" } else { "mtxConfidentialTransferCompact" };
+        "UAZetherTransfer" | "UAZetherTransferCompact" => {
+            let name = if op == "UAZetherTransfer" { "mtxConfidentialTransfer" } else { "mtxConfidentialTransferCompact" };
             (
                 json!({"from": from, "args": multi_args(&payload, &ben)?, "proof": proof_h}),
                 envelope::named_transfer_multi_call(name, &env_toks, &payload, &proof, &ben, &sg),
             )
         }
-        "ZetherUnshield" => {
+        "UAZetherUnshield" => {
             let (to, amount) = (word(v, "recipient", 32)?, num_word(v, "amount")?);
             let amt = abi::word_u64(&amount, 0).ok_or("`amount` must be a u64")?;
             (
@@ -343,7 +358,7 @@ pub fn named_call(v: &Value) -> R<Value> {
                 envelope::named_unshield_call(&env_toks, &payload, &proof, &ben, &to, amt, &sg),
             )
         }
-        "ZetherUnshieldUnwrap" => {
+        "UAZetherUnshieldUnwrap" => {
             let x = field(v, "unwrap")?;
             let w = [word(x, "underlying", 20)?, word(x, "recipient", 32)?, num_word(x, "amount")?, num_word(x, "minOut")?];
             (
@@ -351,7 +366,7 @@ pub fn named_call(v: &Value) -> R<Value> {
                 envelope::named_unshield_unwrap_call(&env_toks, &payload, &proof, &ben, w, &sg),
             )
         }
-        _ => return Err(format!("`{op}` has no named call builder (typedDigest takes any typed op)")),
+        _ => return Err(format!("`{op}` has no merged call builder (typedDigest takes any typed op)")),
     };
     let message = with(message, lanes);
     let d = typed_digest(op, num_u64(v, "chainId")?, &word20_32(v, "chainUid")?, &raw20(v, "token")?, &message)?;
