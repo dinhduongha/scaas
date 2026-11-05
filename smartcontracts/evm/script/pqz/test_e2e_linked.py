@@ -59,7 +59,9 @@ with tempfile.TemporaryDirectory() as root:
     assert s.data == bytes(1) + bytes.fromhex(D.libs["RegLib"][2:]) + bytes(0) + b"\xaa", s.data
 
 
-# `Signed`: what is signed is the digest of the entry's own struct, in the signer's shape; the relayer submits `named_cd`
+# `Signed`: what is signed is the digest of the entry's own struct; the relayer submits `named_cd`. ua-mtx-merge T10, meaning:
+# an EOA signs the merged entry's UA struct (`from` its address zero-padded) with its own key in `UASig.signature`, as a UA
+# does (R1, B); `mtxShield` takes a `UASig` (R47); only `WrapShield` (no twin) keeps the address `Envelope` and `bytes sig`
 class Echo:  # the "signature" is the message, so the test reads what was signed
     def ml_sign(self, lvl, seed, m):
         return m
@@ -81,10 +83,18 @@ TOK, R, PQ = "0x" + "ab" * 20, Relayer(), Echo()
 A = bytes(31) + b"\xaa"
 at = (TOK, 31337, bytes(32))
 sg = e2e.Signed(TOK, Eoa, PQ, R, 3)
-assert sg.binding == word and sg.e[2] == 5 and sg.e[4] == 0x20 and sg.e[6] == 3, sg.e
+assert sg.binding == word and sg.e[0] == e2e.pad(Eoa.addr) and sg.e[2] == 5 and sg.e[4] == 0x20 and sg.e[6] == 3, sg.e
 sg.send("Shield", [A, 7], "x")
-assert R.sent == e2e.named_cd("Shield", sg.e, [A, 7], e2e.ecdsa(1, e2e.typed_digest("Shield", at, sg.e, [A, 7])))
-assert e2e.Signed.spent[TOK, Eoa.addr] == 3
+d = e2e.typed_digest("UAShield", at, sg.e, [A, 7])
+assert R.sent == e2e.named_cd("UAShield", sg.e, [A, 7], [b"", e2e.ecdsa(1, d), []])
+assert R.sent[:4] == e2e.sel(f"mtxShield({e2e.UEVL_S},bytes32,uint256,{e2e.UASIG_S})")
+assert e2e.Signed.spent[TOK, e2e.pad(Eoa.addr)] == 3
+sg = e2e.Signed(TOK, Eoa, PQ, R, 0)
+sg.send("WrapShield", ["0x" + "cd" * 20, 9, A], "x")
+e = [Eoa.addr] + sg.e[1:]
+assert R.sent == e2e.named_cd("WrapShield", e, ["0x" + "cd" * 20, 9, A],
+                              e2e.ecdsa(1, e2e.typed_digest("WrapShield", at, e, ["0x" + "cd" * 20, 9, A])))
+assert R.sent[:4] == e2e.sel(f"mtxWrapShield({e2e.EVL_S},address,uint256,bytes32,bytes)")
 
 
 def ml(purpose, d):
@@ -97,9 +107,9 @@ assert sg.e[4] == 0, "no fee, no fee mode"
 sg.send("RollOver", [A, 1], "x")
 d = e2e.typed_digest("UARollOver", at, sg.e, [A, 1])
 assert R.sent == e2e.named_cd("UARollOver", sg.e, [A, 1], [b"", ml(e2e.P_METATX, d), []])
-sg.send("Shield", [A, 7], "x")  # `uaShield` keeps `bytes auth`
+sg.send("Shield", [A, 7], "x")  # `mtxShield` takes a `UASig` (R47)
 d = e2e.typed_digest("UAShield", at, sg.e, [A, 7])
-assert R.sent == e2e.named_cd("UAShield", sg.e, [A, 7], e2e.encs(["b", "b"], [b"", ml(e2e.P_METATX, d)]))
+assert R.sent == e2e.named_cd("UAShield", sg.e, [A, 7], [b"", ml(e2e.P_METATX, d), []])
 ms = e2e.UA(kind=e2e.MSIG, ua=bytes(31) + b"\x09", members=[m0, m1])
 sg = e2e.Signed(TOK, ms, PQ, R, 0)
 sg.send("RollOver", [A, 1], "x")

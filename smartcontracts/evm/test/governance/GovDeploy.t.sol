@@ -19,6 +19,7 @@ import {WrappedPqzToken} from "../../src/pqz/WrappedPqzToken.sol";
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
 import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
 import {TradeLib} from "../../src/trade/TradeLib.sol";
+import {MtxRelayFee} from "../../src/metatx/MtxRelayFee.sol";
 import {plainEnv, pinned, closureLibs} from "../helpers/Catalogue.sol";
 import {ZUID} from "../zether/helpers/ZetherFixture.sol";
 import {ZetherDisclosure} from "../../src/zether/ZetherDisclosure.sol";
@@ -150,6 +151,103 @@ contract GovDeployTest is Test {
             assertLt(regular * 105 / 100, TX_GAS_CAP, string.concat(names[i], ": regular gas over 2^24"));
             assertLe(total * 105 / 100, BLOCK, string.concat(names[i], ": over a 200 M block"));
         }
+    }
+
+    /// Q4 (CTR-MTX-30, R40), ua-mtx-merge T10: a chain that declares the public gate (`RELEASE_GAS_GATE=public`) gates each
+    /// release on its own transaction, measured: (regular x 64/63 + EIP-8037 state) x 1.05 within the block gas limit, not
+    /// `runtime x 1,530 + 2^24`. One gas below the first release's ask is refused by name before it is sent; at the largest
+    /// ask the deploy goes through, below every token release's testnet formula. (Here the releases are calls inside the
+    /// harness, so the figures leave out the intrinsic gas a real transaction adds; under `forge script` each is its own
+    /// transaction.)
+    function test_publicGateUsesMeasuredReleaseGas() public {
+        // the rule itself: (regular + state) x 1.05, never max(regular, state) (a block's gas_used, EIP-8037)
+        DeployHarness h = new DeployHarness();
+        h.checkMeasured("X", 1_000_000, 50_000_000, 53_550_000);
+        vm.expectRevert(bytes("block gas limit 53549999 < 53550000 asked by the X release (measured regular + state x 1.05, NET-EVM-06)"));
+        h.checkMeasured("X", 1_000_000, 50_000_000, 53_549_999);
+
+        h.setGate(2);
+        h.setWrapped(true);
+        h.limitBlockGas(type(uint64).max);
+        (OpenFactory f,) = h.deploy(ZUID, false, ska);
+        string[5] memory names = ["UARegistry", "UARegistryLib", "NormalToken", "SCaaSDex", "WrappedToken"];
+        uint256 most;
+        for (uint256 i; i < names.length; ++i) {
+            (uint256 regular, uint256 state) = h.measured(names[i]);
+            uint256 asked = (regular + state) * 105 / 100;
+            emit log(string.concat("PUBLIC GATE | ", names[i], " | regular ", vm.toString(regular), " | state ",
+                vm.toString(state), " | asked ", vm.toString(asked), " | testnet formula ", vm.toString(h.gasNeed(names[i]))));
+            assertGt(regular, 0, names[i]);
+            assertLt(asked, h.gasNeed(names[i]), string.concat(names[i], ": below the testnet formula"));
+            if (asked > most) most = asked;
+        }
+        (, uint256 st) = h.measured("NormalToken");
+        assertGe(st, f.implementationOf(IOpenFactory.TokenKind.NORMAL, 1).code.length * 1530, "the code deposit is in it");
+
+        (uint256 r0, uint256 s0) = h.measured("UARegistry");
+        uint256 first = (r0 + s0) * 105 / 100;
+        DeployHarness g = new DeployHarness();
+        g.setGate(2);
+        g.setWrapped(true);
+        g.limitBlockGas(first - 1);
+        vm.expectRevert(bytes(string.concat("block gas limit ", vm.toString(first - 1), " < ", vm.toString(first),
+            " asked by the UARegistry release (measured regular + state x 1.05, NET-EVM-06)")));
+        g.deploy(ZUID, false, ska);
+        g.limitBlockGas(most);
+        (OpenFactory gf,) = g.deploy(ZUID, false, ska);
+        assertTrue(gf.implementationOf(IOpenFactory.TokenKind.WRAPPED, 1).code.length != 0, "at the largest ask: deployed");
+        assertLt(most, h.gasNeed("WrappedToken"), "a limit at which the testnet gate refuses the WrappedToken release");
+    }
+
+    /// Q4: the public gate also refuses a release whose regular gas x 1.05 reaches 2^24 (EIP-7825), whatever the block
+    /// gas limit; one gas under passes.
+    function test_publicGateRefusesRegularOver2pow24() public {
+        DeployHarness h = new DeployHarness();
+        vm.expectRevert(bytes("X release: regular gas x 1.05 = 16777216 >= 2^24 (EIP-7825, NET-EVM-06)"));
+        h.checkMeasured("X", 15_978_301, 0, type(uint256).max);
+        h.checkMeasured("X", 15_978_300, 0, type(uint256).max);
+    }
+
+    /// Q4: the SCaaS testnet keeps the owner's formula, `runtime x 1,530 + 2^24`, and it is the default when nothing is
+    /// declared; it measures nothing and refuses by the formula, by name, before anything is sent.
+    function test_testnetGateFormulaUnchanged() public {
+        DeployHarness h = new DeployHarness();
+        assertFalse(h.publicGate(), "the default is the testnet gate");
+        h.setGate(1);
+        string memory base = vm.readFile("./size-baseline.json");
+        string[9] memory names = ["NormalToken", "WrappedToken", "NormalZetherToken", "WrappedZetherToken", "NormalPqzToken",
+            "WrappedPqzToken", "SCaaSDex", "UARegistry", "UARegistryLib"];
+        for (uint256 i; i < names.length; ++i) {
+            assertEq(h.gasNeed(names[i]), vm.parseJsonUint(base, string.concat(".", names[i])) * 1530 + TX_GAS_CAP, names[i]);
+        }
+        uint256 need = h.gasNeed("UARegistry");
+        h.limitBlockGas(need - 1);
+        vm.expectRevert(bytes(string.concat("block gas limit ", vm.toString(need - 1), " < ", vm.toString(need),
+            " needed to deploy the UARegistry release (NET-EVM-06)")));
+        h.deploy(ZUID, false, ska);
+        h.limitBlockGas(type(uint64).max);
+        h.deploy(ZUID, false, ska);
+        (uint256 regular, uint256 state) = h.measured("NormalToken");
+        assertEq(regular + state, 0, "nothing measured");
+    }
+
+    /// Plan T10 (T2 and T7 moved the bytecode): `MtxRelayFee` (no constructor argument: one address on every chain) and the
+    /// `GovernanceRouter` (here on the SCaaS testnet's reset-1 inputs: chain_uid, registry, `SmartKeyAccount`
+    /// implementation, not Hedera) at their deploy CREATE2 addresses (the deterministic deployer, the default
+    /// `DEPLOY_SALT`), not the reset-1 ones (`deployments/7622.json`, which `node.example.toml`'s `governance_routers`
+    /// names): a deploy of this tree lists the new ones.
+    function test_routerAndRelayFeeNewAddresses() public pure {
+        bytes32 deploySalt = keccak256("scaas.deploy.v1");
+        address deployer = 0x4e59b44847b379578588920cA78FbF26c0B4956C;
+        address rf = vm.computeCreate2Address(deploySalt, keccak256(type(MtxRelayFee).creationCode), deployer);
+        address router = vm.computeCreate2Address(deploySalt, keccak256(abi.encodePacked(type(GovernanceRouter).creationCode,
+            abi.encode(bytes32(0xf1f491abec46eb7c1784b7fc75a0174171b41831530e510c46b7178c02d63164),
+                address(0x838b5D28fbc07844a070818012A8a68980688C26), address(0x428C6e1Cad562Dc16b2bf19515B9b08dD0361e8f), false))),
+            deployer);
+        assertTrue(rf != 0xD5D8d5e1cD81f1E83C5B6c1a4Fd9AcfF02d89BB2, "not reset 1's MtxRelayFee");
+        assertTrue(router != 0xB64D2D5f27D2d5eA951409773343D856e41Fb8E0, "not reset 1's GovernanceRouter");
+        assertEq(rf, 0xaf843Ac33a5A73A2baf3E979F922Bd3c1feD6B43, "MtxRelayFee");
+        assertEq(router, 0x2AEfB2af419765600eC00a7D0CfC4dE30f2d3750, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append, `abi.encode(envVersion, env, implArgs)`: the env names the real Zether

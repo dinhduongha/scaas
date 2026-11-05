@@ -14,6 +14,7 @@ contract DeployHarness is DeployBase {
     bool internal forcedBnG2;
     uint256 internal gateLimit;
     uint256 internal codeLimit;
+    uint8 internal gate; // 0 = `RELEASE_GAS_GATE` (env, or its default), 1 = testnet, 2 = public
 
     function force(bool bls12381, bool bn254G2) external {
         (forced, forcedBls, forcedBnG2) = (true, bls12381, bn254G2);
@@ -26,6 +27,20 @@ contract DeployHarness is DeployBase {
     function limitCode(uint256 limit) external { codeLimit = limit; }
 
     function chainCodeLimit() external view returns (uint256) { return _chainCodeLimit(); }
+
+    /// Stands in for `RELEASE_GAS_GATE` (the process env is shared by parallel tests): 1 = `testnet`, 2 = `public`, 0 = the env.
+    function setGate(uint8 g) external { gate = g; }
+
+    function publicGate() external view returns (bool) { return _publicGate(); }
+
+    /// The public gate's figures of release `name` (`[regular, state]`; 0 when the testnet gate ran).
+    function measured(string calldata name) external view returns (uint256 regular, uint256 state) {
+        return (releaseGas[name][0], releaseGas[name][1]);
+    }
+
+    function checkMeasured(string calldata name, uint256 regular, uint256 state, uint256 limit) external pure {
+        _checkMeasuredGas(name, regular, state, limit);
+    }
 
     /// `DEPLOY_WRAPPED` for the next `deploy`.
     function setWrapped(bool w) external { deployWrapped = w; }
@@ -63,6 +78,10 @@ contract DeployHarness is DeployBase {
 
     function _blockGasLimit() internal view override returns (uint256) {
         return gateLimit == 0 ? super._blockGasLimit() : gateLimit;
+    }
+
+    function _publicGate() internal view override returns (bool) {
+        return gate == 0 ? super._publicGate() : gate == 2;
     }
 
     function _chainCodeLimit() internal view override returns (uint256) {

@@ -5,6 +5,7 @@ import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {UACall} from "../ua/UACall.sol";
 import {console2} from "forge-std/Test.sol";
 import {PqzFixture} from "./helpers/PqzFixture.sol";
+import {PQZ_UID} from "./helpers/PqzRegistryBase.sol";
 import {PqzLayer} from "../../src/pqz/PqzLayer.sol";
 import {PqzCore} from "../../src/pqz/PqzCore.sol";
 import {PqzCt} from "../../src/pqz/PqzCt.sol";
@@ -42,6 +43,21 @@ contract PqzRelayTest is PqzFixture {
     function _sig(MetaTxLib.MetaTransaction memory m) internal view returns (bytes memory) {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(KEY, MtxDigest.metaTx(address(tok), m));
         return abi.encodePacked(r, s, v);
+    }
+
+    /// ua-mtx-merge T10 (R36): the UA binding of an EOA's envelope (`from` its address zero-padded) as the token's own
+    /// `envelopeBinding` answers it, pinned for fixed inputs; `script/pqz/e2e.py --self-test` computes the same word
+    /// (`ua_binding`). The relayer is bound (mode bit 0), the fee recipient is not (bit 1 off: a non-zero value counts as 0).
+    function test_uaBindingOfAnEoaKat() public {
+        address at = address(0x5CAa01);
+        vm.etch(at, address(tok).code);
+        vm.chainId(7622);
+        MetaTxLib.UAMetaTransaction memory m = MetaTxLib.UAMetaTransaction(
+            MetaTxLib.pad(0x1111111111111111111111111111111111111111), hex"c0de", 3, 4, 5,
+            MetaTxLib.MODE_RESTRICT_RELAYER | MetaTxLib.MODE_FEE_FIXED, 0x2222222222222222222222222222222222222222, 6,
+            0x3333333333333333333333333333333333333333);
+        assertEq(PqzLayer(at).chainUid(), PQZ_UID);
+        assertEq(PqzLayer(at).envelopeBinding(m), 0x2bf9ed02f291a24e973d7013c788d50aae3bb9844c40c4c3ca5e9a37419abd33);
     }
 
     function test_v1BindingAndFee() public {

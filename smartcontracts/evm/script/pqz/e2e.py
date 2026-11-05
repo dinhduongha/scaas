@@ -11,9 +11,10 @@ rollover by count after mtxPrepareAcc, txFee / decoyFee to public balances, wall
 names and signatures are the `API` table below (the shared `mtx*` interface of Task 3b).
 
 typed-signing C8: `pqzAuth` is the typed `PqzAuth` of the statement (`K.auth_digest`, TS-D19) in a `UASig`; the signed forms are
-the named entries (`NAMED`: `Envelope` / `UAEnvelope` first, the op's explicit parameters, the entry's own typed struct from
-clientkeys, sections 5b and 6b), the generic `mtxExecute` / `uaExecute` of section 5 stay as the path of an op without one
-(TS-D14); `UARegistryLib` is linked and deployed with the registry; one PQZ holder is an msig (`registerMsig`, `UASig.members`).
+the named entries (`NAMED`: `UAEnvelope` first, the op's explicit parameters, the entry's own typed struct from clientkeys,
+sections 5b and 6b; ua-mtx-merge R1, R47: one merged `mtx<entry>` per op over the `UA` struct for every subject, an EOA by its
+own key in `UASig.signature`, `WrapShield` alone on an address `Envelope`), the generic `mtxExecute(UAMetaTransaction, UASig)`
+of section 5 stays as the path of an op without one (TS-D14); `UARegistryLib` is linked and deployed with the registry; one PQZ holder is an msig (`registerMsig`, `UASig.members`).
 It needs the `PQZ` and ML-DSA precompiles, so a chain run waits for the next reset; `--self-test` is what runs without one.
 
 Plan 5h Task 8d part 2: the parameter set is pqz_kat's (PQZ_SET, default n2304-kmax4096; the contracts must be built at
@@ -109,6 +110,11 @@ def hb(s):
 
 def kc(*parts):
     return keccak256(b"".join(p if isinstance(p, bytes) else p.encode() for p in parts))
+
+
+def pad(a):
+    """A native id: the address zero-padded to `bytes32` (`MetaTxLib.pad`)."""
+    return bytes(12) + bytes.fromhex(a[2:])
 
 
 P_METATX, P_ZAUTH, P_MEMBER = (kc(f"scaas.ua.purpose.{n}.v1") for n in ("metatx", "zether-auth", "member"))
@@ -319,13 +325,22 @@ NAMED = dict(
 )
 
 
+# The ops this script signs (ua-mtx-merge R1): each `UA` struct, for every subject, and `WrapShield` (no twin, Q2a: an address
+# `Envelope`, native only).
+BUILT = ["UA" + op for op in NAMED if op != "WrapShield"] + ["WrapShield"]
+
+
+def named_sig(op):
+    """The merged entry of `op`: `mtx<entry>(UAEnvelope, the op's parameters, UASig auth)` (R47: `mtxShield` too), or for
+    `WrapShield` `mtxWrapShield(Envelope, …, bytes sig)`."""
+    name, s, _, _ = NAMED[op.removeprefix("UA")]
+    return f"mtx{name}({UEVL_S},{s},{UASIG_S})" if op.startswith("UA") else f"mtx{name}({EVL_S},{s},bytes)"
+
+
 def named_cd(op, e, p, sig):
-    """The calldata of the named entry of `op`; `sig`: `bytes` on the address path and `uaShield`, else a `UASig`."""
-    ua = op.startswith("UA")
-    name, s, t, _ = NAMED[op.removeprefix("UA")]
-    raw = not ua or op == "UAShield"  # `uaShield` keeps `bytes auth` (owner table, 2026-11-01)
-    head = f"{'ua' if ua else 'mtx'}{name}({UEVL_S if ua else EVL_S},{s},{'bytes' if raw else UASIG_S})"
-    return cd(head, [EVL_T] + t + ["b" if raw else UASIG_T], e, *p, sig)
+    """The calldata of the named entry of `op` (`named_sig`); `sig` a `UASig`, `bytes` for `WrapShield`."""
+    t = NAMED[op.removeprefix("UA")][2]
+    return cd(named_sig(op), [EVL_T] + t + [UASIG_T if op.startswith("UA") else "b"], e, *p, sig)
 
 
 def js(v):
@@ -429,7 +444,6 @@ def dec_bytes(h, i=0):
 
 
 MTX = ("t", ["w", "b", "w", "w", "w", "w", "w", "w", "w"])
-MTX_S = "(address,bytes,uint256,uint256,uint256,uint32,address,uint256,address)"
 UMTX_S = "(bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address)"
 # IFactoryToken.TokenConfig: name, symbol, decimals, features, lockedFeatures, owner, roles, initialSupply, initialHolder, legs,
 # rate, conf, grantDelay, rescueTo, maxSupply; `owner` and the five `roles` are UA ids (bytes32, a native account's address
@@ -441,12 +455,28 @@ ENV = ("t", ["w", "w", "w", "w", "w", ("a", "w"), ("a", "w"), ("a", "w"), "w"])
 ENV_S = "(address,bytes32,address,address,bool,address[],address[],bytes32[],address)"
 
 
+def ua_binding(tok, at, m):
+    """CTR-PQZ-21, R36: the binding a relayed proof folds on the merged entries and `mtxExecute`, for every subject: tag
+    `SCAAS-PQZ-UA-ENVELOPE-V1`, `at` = (chainId, chainUid), the token, then the `UAMetaTransaction` `m` but `data`, `from` a
+    `bytes32` id (an EOA's address zero-padded), an unbound `relayer` / `feeRecipient` as 0 (`PqzLayer._uaEnvelopeBinding`)."""
+    who, _, batch, nonce, until, mode, rel, fee, frec = m
+    return keccak256(encs(["w"] * 12, [kc("SCAAS-PQZ-UA-ENVELOPE-V1"), at[0], at[1], tok, who, batch, nonce, until, mode,
+                                       rel if mode & 1 else ZERO, fee, frec if mode & 2 else ZERO]))
+
+
 # ------------------------------------------------------------------ release deploy gate (C5-1, NET-EVM-06)
 
 def require_release_gas(name):
     """A release is one CREATE2 whose code deposit is EIP-8037 state gas, 1,530 per byte of runtime (size-baseline.json;
     a contract under the EIP-170 limit is priced at 24,576 B), on top of the regular gas that EIP-7825 caps at 2^24.
-    Refuses before sending when the chain's actual block gas limit cannot hold it (as DeployBase._requireReleaseGas)."""
+    Refuses before sending when the chain's actual block gas limit cannot hold it (as DeployBase._requireReleaseGas): the
+    SCaaS testnet's gate (Q4 of CTR-MTX-30, R40). A public chain's gate (`RELEASE_GAS_GATE=public`) takes the release
+    transaction's regular and EIP-8037 state gas apart, which `eth_estimateGas` does not give: it is DeployBase's (a forge
+    script on the chain's fork), and this script refuses it by name."""
+    gate = os.environ.get("RELEASE_GAS_GATE", "testnet")
+    if gate != "testnet":
+        raise SystemExit(f"RELEASE_GAS_GATE={gate}: e2e.py runs the testnet gate only; a public chain deploys through "
+                         "DeployBase (deploy.sh evm with RELEASE_GAS_GATE=public)")
     with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "size-baseline.json")) as f:
         runtime = json.load(f).get(name, 24_576)
     need = runtime * 1530 + (1 << 24)
@@ -631,38 +661,35 @@ def ua_sig(pq, signer, purpose, digest):
     return [b"", b"", [[i, [], ml_sig(pq, m, P_MEMBER, md)[1]] for i, m in enumerate(signer.members)]]
 
 
-def ml_auth(pq, signer, purpose, digest):
-    """The `bytes auth` of the generic `uaExecute` (TS-D14) and `uaShield`: `abi.encode(bytes(""), sig)`."""
-    return encs(["b", "b"], ml_sig(pq, signer, purpose, digest)[:2])
-
-
 def ecdsa(key, m):
     r, s_, rec = sign(key, m)
     return r.to_bytes(32, "big") + s_.to_bytes(32, "big") + bytes([27 + rec])
 
 
 class Signed:
-    """One signed envelope on `tok`, relayed by `relayer`: an EOA `Sender` or a `UA` signs, the outer fee is FIXED (none at 0)
-    and goes to the relayer. `binding` is what a proof folds (D15), so build this before the proof; `send` signs the entry's
-    own struct and submits it. Each envelope takes one nonce, so one `Signed` per op."""
+    """One signed envelope on `tok`, relayed by `relayer`: an EOA `Sender` (its own key in `UASig.signature`, no registry call:
+    ua-mtx-merge R1, B) or a `UA` signs the merged entry's `UA` struct, `from` the id (an EOA's address zero-padded); the outer
+    fee is FIXED (none at 0) and goes to the relayer. `binding` is what a proof folds (D15, R36: the UA binding for every
+    subject), so build this before the proof; `send` signs the entry's own struct and submits it. One nonce space per id, so
+    `WrapShield` (an address `Envelope`) reads it the same way. Each envelope takes one nonce, so one `Signed` per op."""
     spent = {}  # (token, signer id) -> outer fees
 
     def __init__(self, tok, signer, pq, relayer, fee):
         self.tok, self.signer, self.pq, self.relayer, self.ua = tok, signer, pq, relayer, isinstance(signer, UA)
-        who = signer.ua if self.ua else signer.addr
-        n = cd("uaNonce(bytes32,uint256)", ["w", "w"], who, 0) if self.ua else cd("mtxNonce(address,uint256)", ["w", "w"], who, 0)
+        who = signer.ua if self.ua else pad(signer.addr)
+        n = cd("mtxNonce(bytes32,uint256)", ["w", "w"], who, 0)
         self.e = [who, 0, int(call(tok, n), 16), int(time.time()) + 3600, 0x20 if fee else 0, ZERO, fee, ZERO]
-        m = [who, b""] + self.e[1:]
-        self.binding = hb(call(tok, cd(f"uaEnvelopeBinding({UMTX_S})", [MTX], m) if self.ua else cd(f"envelopeBinding({MTX_S})", [MTX], m)))
+        self.binding = hb(call(tok, cd(f"envelopeBinding({UMTX_S})", [MTX], [who, b""] + self.e[1:])))
 
     def send(self, base, p, what):
-        op = "UA" + base if self.ua else base
-        d = typed_digest(op, (self.tok, CTX[0], CTX[1]), self.e, p)
-        if not self.ua:
+        op = base if base == "WrapShield" else "UA" + base
+        e = [self.signer.addr] + self.e[1:] if op == "WrapShield" else self.e
+        d = typed_digest(op, (self.tok, CTX[0], CTX[1]), e, p)
+        if op == "WrapShield":
             sig = ecdsa(self.signer.key, d)
         else:
-            sig = ml_auth(self.pq, self.signer, P_METATX, d) if op == "UAShield" else ua_sig(self.pq, self.signer, P_METATX, d)
-        r = self.relayer.send(self.tok, named_cd(op, self.e, p, sig), what)
+            sig = ua_sig(self.pq, self.signer, P_METATX, d) if self.ua else [b"", ecdsa(self.signer.key, d), []]
+        r = self.relayer.send(self.tok, named_cd(op, e, p, sig), what)
         k = (self.tok, self.e[0])
         Signed.spent[k] = Signed.spent.get(k, 0) + self.e[6]
         return r
@@ -794,9 +821,8 @@ def abi_ts(s):
     return out + [abi_t(s[at:])] if s else []
 
 
-def abi_check():
-    """Every signature this file hands to `cd`, its encoders, and the events it looks up, against the ABI in out/ (`forge build`
-    first). A signature built at run time is `named_cd`'s alone; `named_rows` checks that one."""
+def abi_methods():
+    """The methods and events of the contracts this file calls, from the ABI in out/ (`forge build` first)."""
     methods, events = {}, set()
     for src, name in (("UARegistry", "UARegistry"), ("OpenFactory", "OpenFactory"), ("NormalPqzToken", "NormalPqzToken"),
                       ("WrappedPqzToken", "WrappedPqzToken"), ("Mocks", "MockERC20"), ("MlDsa", "UAMldsaVerifier"),
@@ -804,6 +830,13 @@ def abi_check():
         j = json.load(open(os.path.join(EVM, "out", src + ".sol", name + ".json")))
         methods.update(j["methodIdentifiers"])
         events |= {f"{x['name']}({','.join(i['type'] for i in x['inputs'])})" for x in j["abi"] if x["type"] == "event"}
+    return methods, events
+
+
+def abi_check():
+    """Every signature this file hands to `cd`, its encoders, and the events it looks up, against the ABI in out/. A
+    signature built at run time is `named_cd`'s alone; `named_rows` checks that one."""
+    methods, events = abi_methods()
     seen, late = set(), []
     for c in ast.walk(ast.parse(open(os.path.abspath(__file__), encoding="utf-8").read())):
         if isinstance(c, ast.Call) and getattr(c.func, "id", "") == "cd":
@@ -815,7 +848,7 @@ def abi_check():
             seen.add(sig)
             check(sig in methods, f"ABI: {sig[:70]}")
             check(abi_ts(sig[sig.index("(") + 1:-1]) == ts, f"encoders of {sig[:70]}")
-    check(late == ["head"], f"ABI: {len(seen)} signatures; built at run time: {late}")
+    check(late == ["op"], f"ABI: {len(seen)} signatures; built at run time: {late}")
     check(all(x in events for k in ("ev_single", "ev_multi") for x in API[k]), "the transfer events are the built ones")
 
 
@@ -838,7 +871,7 @@ def row_call(op, r, d):
     own = ts[op]
     e = [pyv(f["type"], m[f["name"]], ts) for f in own[:1] + own[-7:]]
     sig = hb(d["signature"])
-    if op.startswith("UA") and op != "UAShield":
+    if op.startswith("UA"):
         sig = [b"", sig, []]
     if not base.startswith("Pqz"):
         return e, [pyv(f["type"], m[f["name"]], ts) for f in own[1:-7]], sig
@@ -847,17 +880,25 @@ def row_call(op, r, d):
 
 
 def named_rows():
-    """Every named entry this script can send against its `typed_ops.json` row: the calldata `named_cd` builds byte for byte
-    (this file's encoders, not clientkeys'), the digest of the struct `typed_digest` assembles from the same parameters, and the
-    typed `PqzAuth`."""
+    """Every named entry this script can send against its `typed_ops.json` row: the merged `mtx<entry>` (ua-mtx-merge R1,
+    R47: the `UA` struct for every subject, `UASig auth`; `WrapShield` keeps its address `Envelope`, no twin) is in the built
+    ABI, its calldata is the row's past the selector (until T11 regenerates the rows under the merged names; `UAShield`'s
+    row still holds `bytes auth` until then), the digest of the struct `typed_digest` assembles from the same parameters,
+    and the typed `PqzAuth`."""
     V = json.load(open(os.path.join(ROOT, "smartcontracts/vectors/typed/typed_ops.json")))
-    rows = {op: r for op, r in V["ops"].items() if op.removeprefix("UA") in NAMED}
-    check(len(rows) == 19, f"typed_ops.json: {len(rows)} rows with a builder here, want 19")
+    methods, _ = abi_methods()
+    rows = {op: r for op, r in V["ops"].items() if op in BUILT}
+    check(len(rows) == 10, f"typed_ops.json: {len(rows)} rows with a builder here, want 10")
     for op, r in rows.items():
         d = r["domains"]["pqz"]
         e, p, sig = row_call(op, r, d)
-        c = named_cd(op, e, p, sig)
-        check(c == hb(d["calldata"]), f"{op}: calldata {len(c):,} B = the row's, selector {d['selector']}")
+        c, head = named_cd(op, e, p, sig), named_sig(op)
+        check(head in methods and c[:4] == sel(head), f"{op}: {head[:60]}… in the ABI")
+        row = hb(d["calldata"])
+        if op == "UAShield" and len(row) != len(c):
+            log(f"SKIP  {op}: the row's calldata holds uaShield's bytes auth (typed_ops.json before T11): not compared")
+        else:
+            check(c[4:] == row[4:], f"{op}: calldata {len(c):,} B = the row's past the selector (row {d['selector']})")
         check(typed_digest(op, (d["domain"]["verifyingContract"], d["domain"]["chainId"], hb(d["domain"]["salt"])), e, p) == hb(d["digest"]),
               f"{op}: typed digest = the row's")
     a = V["ops"]["PqzAuth"]
@@ -919,6 +960,12 @@ def self_test():
     check(dict(g["args"], entry=g["entry"]) == m["args"], f"{m['name']}: registrationArgs = the row's args")
     data = register_msig_cd(g["args"])
     check(data[:4].hex() == "61947129" and len(data) == g["length"], f"{m['name']}: registerMsig calldata {len(data):,} B = registryCalldataLength, selector 0x61947129")
+    # ua-mtx-merge T10 (R36): the UA binding of an EOA's envelope (`from` its address zero-padded; the relayer bound, a non-zero
+    # fee recipient unbound and so 0) = the word test/pqz/PqzRelay.t.sol `test_uaBindingOfAnEoaKat` pins from the token's view
+    m = [pad("0x" + "11" * 20), b"\xc0\xde", 3, 4, 5, 0x21, "0x" + "22" * 20, 6, "0x" + "33" * 20]
+    kat = (7622, hb("0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464"))
+    check(ua_binding("0x" + "00" * 17 + "5caa01", kat, m) == hb("0x2bf9ed02f291a24e973d7013c788d50aae3bb9844c40c4c3ca5e9a37419abd33"),
+          "ua_binding of an EOA's envelope = PqzRelay's KAT (SCAAS-PQZ-UA-ENVELOPE-V1, from padded, unbound fee recipient 0)")
     named_rows()
     abi_check()
 
@@ -1263,31 +1310,33 @@ def run(kd, kr, ke):
     check_public(C1, "after the second op 7")
     restore(C1, "section 4b")
 
-    # -------------------------------------------------------------- 5. relayed (v1 address path, v3 UA path)
-    log("\n## 5. relayed transfers: v1 (ECDSA envelope signer pays a FIXED outer fee) and v3 (mldsa65 fee UA); the proof binds the mode (D15)")
+    # -------------------------------------------------------------- 5. relayed through the generic merged entry (R47)
+    log("\n## 5. relayed transfers through mtxExecute(UAMetaTransaction, UASig): an EOA (its own key, a FIXED outer fee, no "
+        "registry call) and an mldsa65 fee UA; the proof binds the envelope's UA binding (D15, R36)")
     sd.send(t1, cd("mint(address,uint256)", ["w", "w"], se.addr, 10 * SCALE), "pqUSD mint 10 public to the envelope signer")
-    nonce = int.from_bytes(words(call(t1, cd("mtxNonce(address,uint256)", ["w", "w"], se.addr, 0)))[0], "big")
-    m = [se.addr, b"", 0, nonce, int(time.time()) + 3600, 0x20, 0, 5 * SCALE, 0]
-    b1 = words(call(t1, cd(f"envelopeBinding({MTX_S})", [MTX], m)))[0]
+    nonce = int.from_bytes(words(call(t1, cd("mtxNonce(bytes32,uint256)", ["w", "w"], pad(se.addr), 0)))[0], "big")
+    m = [pad(se.addr), b"", 0, nonce, int(time.time()) + 3600, 0x20, 0, 5 * SCALE, 0]
+    b1 = words(call(t1, cd(f"envelopeBinding({UMTX_S})", [MTX], m)))[0]
+    check(b1 == ua_binding(t1, CTX, m), "envelopeBinding of the EOA's envelope = ua_binding (from zero-padded, R36)")
     _, data, _, _ = transfer(pq, sd, C1, bob, alice, b"\0" * 32, 20, True, "v1", binding=b1, send=False)
     m[1] = data
-    dg = words(call(t1, cd(f"mtxDigest({MTX_S})", [MTX], m)))[0]
-    r_, s_, rec = sign(se.key, dg)
-    sig = r_.to_bytes(32, "big") + s_.to_bytes(32, "big") + bytes([27 + rec])
-    sr.send(t1, cd(f"mtxExecute({MTX_S},bytes)", [MTX, "b"], m, sig), "mtxExecute(mtxConfidentialTransferSingle bob→alice 20), relayer pays gas")
+    dg = words(call(t1, cd(f"mtxDigest({UMTX_S})", [MTX], m)))[0]
+    sr.send(t1, cd(f"mtxExecute({UMTX_S},{UASIG_S})", [MTX, UASIG_T], m, [b"", ecdsa(se.key, dg), []]),
+            "mtxExecute(mtxConfidentialTransferSingle bob→alice 20), the EOA's UASig, relayer pays gas")
     C1.commit()
     fee_got = int.from_bytes(words(call(t1, cd("balanceOf(address)", ["w"], sr.addr)))[0], "big")
     check(fee_got == 5 * SCALE, f"relayer received the outer fee {fee_got:,}")
 
     sd.send(t1, cd("mintToUA(bytes32,uint256)", ["w", "w"], feeua.ua, 10 * SCALE), "pqUSD mintToUA(fee UA, 10)")
-    un = int.from_bytes(words(call(t1, cd("uaNonce(bytes32,uint256)", ["w", "w"], feeua.ua, 0)))[0], "big")
+    un = int.from_bytes(words(call(t1, cd("mtxNonce(bytes32,uint256)", ["w", "w"], feeua.ua, 0)))[0], "big")
     m = [feeua.ua, b"", 0, un, int(time.time()) + 3600, 0x20, 0, 2 * SCALE, 0]
-    b3 = words(call(t1, cd(f"uaEnvelopeBinding({UMTX_S})", [MTX], m)))[0]
+    b3 = words(call(t1, cd(f"envelopeBinding({UMTX_S})", [MTX], m)))[0]
+    check(b3 == ua_binding(t1, CTX, m), "envelopeBinding of the fee UA's envelope = ua_binding")
     _, data, _, _ = transfer(pq, sd, C1, alice, bob, b"\0" * 32, 10, True, "v3", binding=b3, send=False)
     m[1] = data
-    dg = words(call(t1, cd(f"uaDigest({UMTX_S})", [MTX], m)))[0]
-    sr.send(t1, cd(f"uaExecute({UMTX_S},bytes)", [MTX, "b"], m, ml_auth(pq, feeua, P_METATX, dg)),
-            "uaExecute(mtxConfidentialTransferSingle alice→bob 10), mldsa65 fee UA pays 2 outer")
+    dg = words(call(t1, cd(f"mtxDigest({UMTX_S})", [MTX], m)))[0]
+    sr.send(t1, cd(f"mtxExecute({UMTX_S},{UASIG_S})", [MTX, UASIG_T], m, ml_sig(pq, feeua, P_METATX, dg)),
+            "mtxExecute(mtxConfidentialTransferSingle alice→bob 10), mldsa65 fee UA pays 2 outer")
     C1.commit()
     left = int.from_bytes(words(call(t1, cd("balanceOfUA(bytes32)", ["w"], feeua.ua)))[0], "big")
     check(left == 8 * SCALE, f"fee UA public balance {left:,} after the outer fee")
@@ -1297,7 +1346,7 @@ def run(kd, kr, ke):
     restore(C1, "section 5")
 
     # -------------------------------------------------------------- 5b. the named signed entries (TS-D14)
-    log("\n## 5b. named relayed entries on pqUSD: the entry's own typed struct, ECDSA envelope, ML-DSA-65 envelope, msig envelope and pqzAuth")
+    log("\n## 5b. named relayed entries on pqUSD (the merged mtx<entry>, R1): the entry's own UA struct, an EOA's UASig, ML-DSA-65 and msig UASigs, and pqzAuth")
     for ua_, what in ((feeua, "fee UA"), (erin, "erin")):
         sd.send(t1, cd("mintToUA(bytes32,uint256)", ["w", "w"], ua_.ua, 20 * SCALE), f"pqUSD mintToUA({what}, 20)")
     sd.send(t1, cd("mint(address,uint256)", ["w", "w"], se.addr, 50 * SCALE), "pqUSD mint 50 public to the envelope signer")  # 5 left from section 5: 30 shielded, about 8 outer fees
@@ -1309,24 +1358,24 @@ def run(kd, kr, ke):
         C.set_next(bal=[(to, v)], total=v)
         C.commit()
 
-    signed_shield(C1, ad(), alice, 30, "signed mtxShield(alice, 30), ECDSA envelope")
-    signed_shield(C1, ud(), alice, 7, "uaShield(alice, 7), bytes auth, ML-DSA-65")
+    signed_shield(C1, ad(), alice, 30, "signed mtxShield(alice, 30), the EOA's UASig")
+    signed_shield(C1, ud(), alice, 7, "signed mtxShield(alice, 7), UASig, ML-DSA-65 (R47)")
     for u, sg, who in ((carol, ad, "signed mtxPrepareAcc / mtxRollOver"), (DEC[0], ud, "uaPrepareAcc / uaRollOver")):
         n = C1.state(u)["pendingCount"] - C1.state(u)["rolled"]
         rollover(sd, C1, u, n, who, signed=sg)
     xfer(bob, alice, ZERO32, 9, True, "named mtxConfidentialTransferSingle bob→alice 9", signed=ad())
-    xfer(alice, bob, ZERO32, 8, True, "named uaConfidentialTransferSingle alice→bob 8", signed=ud())
+    xfer(alice, bob, ZERO32, 8, True, "named mtxConfidentialTransferSingle alice→bob 8, ML-DSA-65", signed=ud())
     transfer_multi(pq, sd, C1, alice, [(bob, 6), (DEC[3], 0)], ZERO32, True, "named mtxConfidentialTransfer alice→[bob 6, decoy3 0]", signed=ad())
-    transfer_multi(pq, sd, C1, alice, [(bob, 5), (DEC[3], 0)], ZERO32, True, "named uaConfidentialTransfer alice→[bob 5, decoy3 0]", signed=ud())
+    transfer_multi(pq, sd, C1, alice, [(bob, 5), (DEC[3], 0)], ZERO32, True, "named mtxConfidentialTransfer alice→[bob 5, decoy3 0], ML-DSA-65", signed=ud())
     burn(pq, sd, C1, alice, 11, sd.addr, "named mtxUnshield alice 11 → deployer", signed=ad())
-    burn(pq, sd, C1, alice, 12, sd.addr, "named uaUnshield alice 12 → deployer", signed=ud())
+    burn(pq, sd, C1, alice, 12, sd.addr, "named mtxUnshield alice 12 → deployer, ML-DSA-65", signed=ud())
     sd.send(t1, cd(API["shield"], ["w", "w"], erin.ua, 50), "mtxShield(erin, 50)")
     C1.set_next(bal=[(erin, 50)], total=50)
     C1.commit()
     xfer(erin, bob, ZERO32, 4, True, "mtxConfidentialTransferSingle erin→bob 4, pqzAuth by the members")
-    transfer_multi(pq, sd, C1, erin, [(bob, 3), (DEC[4], 0)], ZERO32, True, "named uaConfidentialTransfer erin→[bob 3, decoy4 0], msig envelope and pqzAuth", signed=md())
+    transfer_multi(pq, sd, C1, erin, [(bob, 3), (DEC[4], 0)], ZERO32, True, "named mtxConfidentialTransfer erin→[bob 3, decoy4 0], msig envelope and pqzAuth", signed=md())
     se1, fee1 = (int.from_bytes(words(call(t1, c))[0], "big") for c in (cd("balanceOf(address)", ["w"], se.addr), cd("balanceOfUA(bytes32)", ["w"], feeua.ua)))
-    check(se0 - se1 == Signed.spent[t1, se.addr] + 30 * SCALE, f"envelope signer paid {se0 - se1:,}: its outer fees and its shield")
+    check(se0 - se1 == Signed.spent[t1, pad(se.addr)] + 30 * SCALE, f"envelope signer paid {se0 - se1:,}: its outer fees and its shield")
     check(fee0 - fee1 == Signed.spent[t1, feeua.ua] + 7 * SCALE, f"fee UA paid {fee0 - fee1:,}: its outer fees and its shield")
     check_public(C1, "after the named entries")
     restore(C1, "section 5b")
@@ -1359,9 +1408,9 @@ def run(kd, kr, ke):
     C2.set_next(bal=[(alice, 40)], total=40)
     C2.commit()
     transfer(pq, sd, C2, alice, bob, ZERO32, 9, False, "named mtxConfidentialTransferSingleCompact alice→bob 9", signed=sg(sd))
-    transfer_multi(pq, sd, C2, alice, [(bob, 5), (carol, 0)], ZERO32, False, "named uaConfidentialTransferCompact alice→[bob 5, carol 0]", signed=sg(feeua))
+    transfer_multi(pq, sd, C2, alice, [(bob, 5), (carol, 0)], ZERO32, False, "named mtxConfidentialTransferCompact alice→[bob 5, carol 0]", signed=sg(feeua))
     burn(pq, sd, C2, bob, 6, sd.addr, "named mtxUnshieldUnwrap bob 6 → deployer in tUSD", unwrap=(tusd, 6 * SCALE), signed=sg(sd))
-    burn(pq, sd, C2, bob, 7, sd.addr, "named uaUnshieldUnwrap bob 7 → deployer in tUSD", unwrap=(tusd, 7 * SCALE), signed=sg(feeua))
+    burn(pq, sd, C2, bob, 7, sd.addr, "named mtxUnshieldUnwrap bob 7 → deployer in tUSD", unwrap=(tusd, 7 * SCALE), signed=sg(feeua))
     check_public(C2, "after the named entries")
     restore(C2, "section 6b")
 

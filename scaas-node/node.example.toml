@@ -99,15 +99,19 @@ chain_uid = "0xf1f491abec46eb7c1784b7fc75a0174171b41831530e510c46b7178c02d63164"
 governance_routers = ["0xB64D2D5f27D2d5eA951409773343D856e41Fb8E0", "0xFeC9586a1639152bfAbC9F7946321F5aC9Dc6F52"]
                                                  # GovernanceRouter ("governance_router" in deployments/<id>.json): the only
                                                  # targets of gov_router jobs, direct or relayed (empty: refused); on 7622
-                                                 # since reset 1 (2026-11-04): deployments/7622.json's and 7622-pqz.json's
+                                                 # since reset 1 (2026-11-04): deployments/7622.json's and 7622-pqz.json's;
+                                                 # the ua*/mtx* merge moves the router's bytecode, so a deploy of it (reset 2)
+                                                 # lists new CREATE2 addresses here (GovDeploy.t.sol
+                                                 # test_routerAndRelayFeeNewAddresses)
 # fee_recipient = "0x..."                        # cold wallet for fees of gateway meta-txs that leave feeRecipient
                                                  # unbound (R84); never a lane key. Unset: the fee goes to the sending lane.
 # tokens = [{ address = "0x...", decimals = 6 }] # registered tokens, imported into the store (R95, MESH R86)
 # params = { relay_fee = { router = "0x...", min_amount = 1, min_wei_value = { "0x<token>" = "100000000000" } } }
-#                                                # MtxRelayFee ("mtx_relay_fee" in deployments/<id>.json); min_wei_value:
+#                                                # MtxRelayFee ("mtx_relay_fee" in deployments/<id>.json; one CREATE2
+#                                                # address on every chain, new with the ua*/mtx* merge); min_wei_value:
 #                                                # wei per token base unit (or "<wei>/<10^k>" per 10^k units), the floor
 #                                                # price a relay fee must reach the quote at (gas limit x 2 x first max fee
-#                                                # per gas); required for a UA payer (uaRelay). Rollups: l1_fee = "op-stack"
+#                                                # per gas); required for a UA payer (relay). Rollups: l1_fee = "op-stack"
 #                                                # adds GasPriceOracle.getL1Fee (Base, Celo)
 # profile = "private"                            # public | private (MESH R76); a private chain never gossips
 # gossip = false                                 # open-mesh gossip for this chain (public only)

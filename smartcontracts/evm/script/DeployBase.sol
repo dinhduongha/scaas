@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-import {Script} from "forge-std/Script.sol";
+import {Script, console} from "forge-std/Script.sol";
+import {Vm, VmSafe} from "forge-std/Vm.sol";
 import {OpenFactory} from "../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../src/factory/IFactoryToken.sol";
@@ -55,6 +56,16 @@ import {
 import {IZetherInnerProductVerifier} from "../src/zether/IZetherVerifier.sol";
 import {NormalZetherToken} from "../src/zether/NormalZetherToken.sol";
 import {WrappedZetherToken} from "../src/zether/WrappedZetherToken.sol";
+
+/// @notice The public-chain gate's probe (Q4): one CREATE2 of `code`, so a release that is not a call (the UA registry, its
+///         library) is measured as its own transaction. Deployed only inside the gate's snapshot, never sent.
+contract ReleaseProbe {
+    function deploy(bytes calldata code) external returns (address a) {
+        bytes memory c = code;
+        assembly ("memory-safe") { a := create2(0, add(c, 32), mload(c), 0) }
+        require(a != address(0), "ReleaseProbe: the creation reverted");
+    }
+}
 
 /// @title Shared deploy steps (CTR-GEN-05, CTR-GEN-06, NET-EVM-05): `chain_uid` from the RPC, the deterministic CREATE2
 ///        deployer, the UA registry with its verifiers, the token factory with its implementations, the `chainUid()` gate.
@@ -111,13 +122,17 @@ abstract contract DeployBase is Script {
 
     /// @notice C5-1, NET-EVM-06. A release is one CREATE2 of the whole implementation in the registrar's transaction.
     ///         Under EIP-8037 the code deposit is state gas, `STATE_GAS_PER_BYTE` per byte of runtime, on top of the
-    ///         regular gas, which EIP-7825 caps at `TX_REGULAR_GAS_CAP` (2^24): the transaction needs
-    ///         `runtime x 1,530 + 2^24` and may not exceed the block gas limit. Runtime sizes are `size-baseline.json`'s
-    ///         (the contracts over the EIP-170 limit; any other is priced at `EIP170_LIMIT`).
-    ///         `NormalToken` 40,853 B = 79.3 M, `WrappedToken` 52,297 B = 96.8 M, `NormalZetherToken` 50,547 B = 94.1 M,
-    ///         `WrappedZetherToken` 62,472 B = 112.4 M, `NormalPqzToken` 56,191 B = 102.7 M, `WrappedPqzToken` 72,160 B =
-    ///         127.2 M, `SCaaSDex` 33,574 B = 68.1 M, `UARegistry` 29,429 B = 61.8 M, `UARegistryLib` 35,946 B = 71.8 M: each
-    ///         fits a 200 M block (the figures move with the baseline; `GovDeploy.t.sol` reads it).
+    ///         regular gas, which EIP-7825 caps at `TX_REGULAR_GAS_CAP` (2^24). Two gates, chosen by the declared
+    ///         `RELEASE_GAS_GATE` (`_publicGate`; Q4 of CTR-MTX-30, R40), each refusing by name before anything is sent:
+    ///         the SCaaS testnet's (`testnet`, the default, the owner's formula): the transaction needs
+    ///         `runtime x 1,530 + 2^24` and may not exceed the block gas limit, runtime sizes from `size-baseline.json`
+    ///         (the contracts over the EIP-170 limit; any other is priced at `EIP170_LIMIT`). At ua-mtx-merge T10:
+    ///         `NormalToken` 32,089 B = 65.9 M, `WrappedToken` 42,669 B = 82.1 M, `NormalZetherToken` 40,543 B = 78.8 M,
+    ///         `WrappedZetherToken` 51,031 B = 94.9 M, `NormalPqzToken` 46,384 B = 87.7 M, `WrappedPqzToken` 56,223 B =
+    ///         102.8 M, `SCaaSDex` 33,399 B = 67.9 M, `UARegistry` 29,710 B = 62.2 M, `UARegistryLib` 36,192 B = 72.2 M:
+    ///         each fits a 200 M block (the figures move with the baseline; `GovDeploy.t.sol` reads it). A public chain's
+    ///         (`public`): the release transaction measured (`_measuredGas`), regular + state x 1.05 within the block
+    ///         gas limit and regular x 1.05 < 2^24 (`_checkMeasuredGas`).
     uint256 internal constant STATE_GAS_PER_BYTE = 1530;
     uint256 internal constant TX_REGULAR_GAS_CAP = 1 << 24;
     uint256 internal constant EIP170_LIMIT = 24_576;
@@ -166,11 +181,72 @@ abstract contract DeployBase is Script {
     /// @notice The block gas limit the deploy gate reads: the chain's actual `block.gaslimit`.
     function _blockGasLimit() internal view virtual returns (uint256) { return block.gaslimit; }
 
-    /// @notice Refuses before anything is sent when the release's runtime exceeds the chain's declared code limit, or
-    ///         the chain's block gas limit cannot hold it.
+    /// @notice The SCaaS testnet's gate: refuses before anything is sent when the release's runtime exceeds the chain's
+    ///         declared code limit, or the chain's block gas limit cannot hold `runtime x 1,530 + 2^24`.
     function _requireReleaseGas(string memory name) internal view {
         _checkCodeFits(name, _chainCodeLimit());
         _checkReleaseGas(name, _blockGasLimit());
+    }
+
+    /// @notice Q4 (CTR-MTX-30, R40): the gate is declared per deploy, never derived from a chain id (one rule on every
+    ///         chain): `RELEASE_GAS_GATE` env, `testnet` (default: the SCaaS testnet's formula, `_requireReleaseGas(name)`)
+    ///         or `public` (the measured release transaction). Any other value refuses.
+    function _publicGate() internal view virtual returns (bool) {
+        bytes32 g = keccak256(bytes(vm.envOr("RELEASE_GAS_GATE", string("testnet"))));
+        require(g == keccak256("testnet") || g == keccak256("public"), "RELEASE_GAS_GATE: testnet or public");
+        return g == keccak256("public");
+    }
+
+    /// @notice The gate of the release `name`, sent next as the call `to.call(data)` (`to` 0: a CREATE2 of the init code
+    ///         `data`): on `testnet` `_requireReleaseGas(name)`; on `public` the declared code limit, then the transaction
+    ///         measured and checked (`_checkMeasuredGas`), its figures kept in `releaseGas`.
+    function _requireReleaseGas(string memory name, address to, bytes memory data) internal {
+        if (!_publicGate()) return _requireReleaseGas(name);
+        _checkCodeFits(name, _chainCodeLimit());
+        (uint256 regular, uint256 state) = _measuredGas(to, data);
+        releaseGas[name] = [regular, state];
+        _checkMeasuredGas(name, regular, state, _blockGasLimit());
+    }
+
+    /// @notice The measured figures of each release the public gate passed: `[regular, state]`.
+    mapping(string => uint256[2]) internal releaseGas;
+
+    /// @notice The release transaction run once in a snapshot of this simulation (the RPC's fork under `forge script`,
+    ///         else the local EVM), from the sender that sends it next, then reverted; a broadcast is paused around it, so
+    ///         nothing of it is sent. Regular gas is forge's `lastCallGas` (the call is its own transaction under
+    ///         `isolate`, intrinsic and calldata included) x 64/63, the gas a CREATE2 frame keeps back
+    ///         (`GovDeploy.t.sol`'s method); state gas is EIP-8037's.
+    function _measuredGas(address to, bytes memory data) internal returns (uint256 regular, uint256 state) {
+        (VmSafe.CallerMode mode, address sender,) = vm.readCallers();
+        bool broadcasting = mode == VmSafe.CallerMode.RecurrentBroadcast;
+        if (broadcasting) vm.stopBroadcast();
+        else sender = address(this);
+        uint256 snap = vm.snapshotState();
+        if (to == address(0)) (to, data) = (address(new ReleaseProbe()), abi.encodeCall(ReleaseProbe.deploy, (data)));
+        vm.prank(sender);
+        (bool ok,) = to.call(data);
+        Vm.Gas memory g = vm.lastCallGas();
+        vm.revertToStateAndDelete(snap);
+        if (broadcasting) vm.startBroadcast(sender);
+        require(ok && g.gasStateUsed >= 0, "release gas: the measured run reverted");
+        return (g.gasTotalUsed * 64 / 63, uint256(int256(g.gasStateUsed)));
+    }
+
+    /// @notice The public-chain gate (Q4, R40): a release fits when `(regular + state) x 1.05` (the gas the deploy asks,
+    ///         `--gas-estimate-multiplier 105`; EIP-8037: a transaction is included only if regular + state fits, never by
+    ///         a block's `gas_used`) is within the chain's block gas limit, and `regular x 1.05 < 2^24` (EIP-7825).
+    function _checkMeasuredGas(string memory name, uint256 regular, uint256 state, uint256 limit) internal pure {
+        uint256 asked = (regular + state) * 105 / 100;
+        if (regular * 105 / 100 >= TX_REGULAR_GAS_CAP) {
+            revert(string.concat(name, " release: regular gas x 1.05 = ", vm.toString(regular * 105 / 100),
+                " >= 2^24 (EIP-7825, NET-EVM-06)"));
+        }
+        if (limit < asked) {
+            revert(string.concat("block gas limit ", vm.toString(limit), " < ", vm.toString(asked), " asked by the ", name,
+                " release (measured regular + state x 1.05, NET-EVM-06)"));
+        }
+        console.log(string.concat("release gas | ", name, " | regular ", vm.toString(regular), " | state ", vm.toString(state),
+            " | asked ", vm.toString(asked), " | block gas limit ", vm.toString(limit)));
     }
 
     /// @notice Call first in `run()`, before the broadcast.
@@ -254,16 +330,16 @@ abstract contract DeployBase is Script {
                 (address(GovernanceLib), address(HederaLib), address(TradeLib), address(MtxPipelineLib));
             f.publishEnv(IOpenFactory.TokenKind.NORMAL, 1,
                 _env(f, address(reg), smartKeyAccountImpl, isHedera, new address[](0), libs));
-            _requireReleaseGas("NormalToken");
-            address none = f.deployImplementation(IOpenFactory.TokenKind.NORMAL, 1, 1, type(NormalToken).creationCode, "");
+            address none = _release(f, IOpenFactory.TokenKind.NORMAL, "NormalToken", type(NormalToken).creationCode);
             _gate(none);
             vm.serializeAddress("deploy", "implementation_normal", none);
             // The DEX release (CTR-DEX-24): clones come from `createDex`; DEX version 1.
             address[] memory dexLibs = new address[](2);
             (dexLibs[0], dexLibs[1]) = (address(GovernanceLib), address(TradeLib));
             f.publishDexEnv(1, _env(f, address(0), smartKeyAccountImpl, isHedera, new address[](0), dexLibs));
-            _requireReleaseGas("SCaaSDex");
-            address dexImpl = f.deployDexImplementation(1, 1, type(SCaaSDex).creationCode, "");
+            bytes memory dexCode = type(SCaaSDex).creationCode;
+            _requireReleaseGas("SCaaSDex", address(f), abi.encodeCall(f.deployDexImplementation, (1, 1, dexCode, "")));
+            address dexImpl = f.deployDexImplementation(1, 1, dexCode, "");
             _gate(dexImpl);
             vm.serializeAddress("deploy", "dex_implementation", dexImpl);
         }
@@ -281,8 +357,7 @@ abstract contract DeployBase is Script {
         (libs[0], libs[1], libs[2], libs[3], libs[4]) =
             (address(GovernanceLib), address(HederaLib), address(TradeLib), address(MtxPipelineLib), address(WrappedLib));
         f.publishEnv(IOpenFactory.TokenKind.WRAPPED, 1, _env(f, reg, smartKeyAccountImpl, isHedera, new address[](0), libs));
-        _requireReleaseGas("WrappedToken");
-        address w = f.deployImplementation(IOpenFactory.TokenKind.WRAPPED, 1, 1, type(WrappedToken).creationCode, "");
+        address w = _release(f, IOpenFactory.TokenKind.WRAPPED, "WrappedToken", type(WrappedToken).creationCode);
         _gate(w);
         vm.serializeAddress("deploy", "implementation_wrapped", w);
     }
@@ -306,6 +381,14 @@ abstract contract DeployBase is Script {
         _gate(address(r));
         govRouter = address(r);
         vm.serializeAddress("deploy", "governance_router", govRouter);
+    }
+
+    /// @notice The factory's release of `kind`, version 1 on env 1, after its gate (`_requireReleaseGas`).
+    function _release(OpenFactory f, IOpenFactory.TokenKind kind, string memory name, bytes memory code)
+        internal returns (address)
+    {
+        _requireReleaseGas(name, address(f), abi.encodeCall(f.deployImplementation, (kind, 1, 1, code, "")));
+        return f.deployImplementation(kind, 1, 1, code, "");
     }
 
     /// @notice A release environment of this chain's factory `f` (plan 5g-Z2), each library's current code hash, and the
@@ -408,13 +491,20 @@ abstract contract DeployBase is Script {
         // `UARegistryLib` is linked like every library: forge deploys it by CREATE2 before the script's first transaction
         // (`create2_library_salt`), so its address, and through the code that embeds it the registry's, depend on the two
         // sources only. Its own transaction is a release like the registry's: the same gate.
-        _requireReleaseGas("UARegistry");
-        _requireReleaseGas("UARegistryLib");
+        _requireRegistryGas(isHedera, budget, smartKeyAccountImpl, k);
         reg = new UARegistry{salt: salt}(uid, address(0), isHedera, budget, smartKeyAccountImpl, true, k);
         _checkGen1Kinds(reg, bls, isHedera);
         _gate(address(reg));
         vm.serializeAddress("deploy", "ua_registry", address(reg));
         vm.serializeAddress("deploy", "ua_registry_lib", address(UARegistryLib));
+    }
+
+    /// @notice The gates of the registry's release and of `UARegistryLib`'s, each its own transaction (CREATE2 of the
+    ///         registry's init code with these arguments; the library's creation code).
+    function _requireRegistryGas(bool isHedera, uint64 budget, address ska, UARegistry.KindConfig[] memory k) internal {
+        _requireReleaseGas("UARegistry", address(0),
+            abi.encodePacked(type(UARegistry).creationCode, abi.encode(uid, address(0), isHedera, budget, ska, true, k)));
+        _requireReleaseGas("UARegistryLib", address(0), vm.getCode("UARegistryLib.sol:UARegistryLib"));
     }
 
     /// @notice The gen-1 kind gate (U8S-D9, owner ruling 2026-10-31, option (a)): every gen-1 deploy carries every kind the
@@ -490,12 +580,10 @@ abstract contract DeployBase is Script {
                 _env(f, reg, smartKeyAccountImpl, false, deps, _zetherLibs(false)));
             f.publishEnv(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1,
                 _env(f, reg, smartKeyAccountImpl, false, deps, _zetherLibs(true)));
-            _requireReleaseGas("NormalZetherToken");
-            _requireReleaseGas("WrappedZetherToken");
-            address none = f.deployImplementation(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, 1,
-                type(NormalZetherToken).creationCode, "");
-            address und = f.deployImplementation(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, 1,
-                type(WrappedZetherToken).creationCode, "");
+            address none = _release(f, IOpenFactory.TokenKind.NORMAL_ZETHER, "NormalZetherToken",
+                type(NormalZetherToken).creationCode);
+            address und = _release(f, IOpenFactory.TokenKind.WRAPPED_ZETHER, "WrappedZetherToken",
+                type(WrappedZetherToken).creationCode);
             _gate(none);
             _gate(und);
             vm.serializeAddress("deploy", "implementation_normal_zether_bls12381", none);

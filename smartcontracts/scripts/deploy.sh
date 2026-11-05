@@ -21,6 +21,12 @@
 #                            (EIP-7825); the largest implementation, WrappedPqzToken (13,319,335 gas measured), is
 #                            deployed by script/pqz/e2e.py, not here. DEPLOY_ZETHER=1 (any chain but Hedera) adds the Zether
 #                            stack. --slow always (one tx per block: anvil automine can strand a large tx).
+#                            RELEASE_GAS_GATE? (Q4 of CTR-MTX-30, NET-EVM-06; declared, never derived from a chain id):
+#                            testnet (default, the SCaaS testnet's gate: runtime x 1,530 + 2^24 within the block gas
+#                            limit) or public (a public chain: each release transaction, the UA registry and its library
+#                            run once in the simulation on the RPC's fork, (regular + state) x 1.05 within the block gas
+#                            limit and regular x 1.05 < 2^24, refused by name before anything is sent; the figures are the
+#                            script's "release gas |" log lines). Any other value refuses.
 #   hedera  <relay-url>      same, script/hedera/DeployHedera.s.sol --slow (writes deployments/hedera-<chainid>.json)
 #   aptos   <cli-profile>    aptos move deploy-object --address-name scaas; Move.toml upgrade_policy = "immutable"
 #                            (NET-APT-20, owner ruling 2026-10-28): check the package registry reports policy 2
