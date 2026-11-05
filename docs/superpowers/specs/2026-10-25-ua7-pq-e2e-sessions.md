@@ -521,17 +521,21 @@ the P15 envelope as an encrypted content type, sent as the same bytes as the HCS
 is left for later and not specified here; Waku became a store kind of its own (D17, P31).
 
 ```text
-rdvKey    = HKDF(K, "scaas/pqchat/v1/call-rendezvous" || sessionId || epochId)     32 B, the DHT key
+rdvKey    = HKDF(K, "scaas/pqchat/v1/call-rendezvous" || sessionId || epochId)     32 B
+rdvCid    = CIDv1(raw, sha2-256(rdvKey))                                            the public DHT's provider key
 k_peer    = HKDF(K, "scaas/pqchat/v1/call-peer" || sessionId || epochId)           32 B
-record    = nonce || AES-256-GCM-SIV(k_peer, nonce, pad(canonical JSON {"ua", "device", "peerId", "addrs"}))   nonce 96 bits, random
+hello     = nonce || AES-256-GCM-SIV(k_peer, nonce, pad(canonical JSON {"ua", "device", "peerId"}))   nonce 96 bits, random
 topic     = lowercase hex of rdvKey                                                 GossipSub topic of the session's group calls
 ```
 
-- **Rendezvous.** Only members hold `K`, so only members can compute `rdvKey`, find a session's call or open a record;
-  `rdvKey` changes with every epoch. A member's device online for calls publishes its encrypted provider record under
-  `rdvKey` in a Kademlia DHT (its libp2p peer id and addresses sealed under `k_peer`), republishes it while online, and
-  lets it expire when it goes offline. The record is not signed: the envelopes on the stream are (P15), so a forged
-  record leads only to a peer whose messages are dropped.
+- **Rendezvous** (owner 2026-11-05: the public DHT with ephemeral peer ids, no PqChat DHT of its own). Only members hold
+  `K`, so only members can compute `rdvKey` / `rdvCid` and find a session's call; both change with every epoch. A member's
+  device online for calls uses an **ephemeral libp2p peer id**: a fresh key pair per epoch, never reused and never linked
+  to the UA. It publishes a standard provider record (that peer id and its addresses, in the clear, as Kademlia does)
+  under `rdvCid` in the public Kademlia DHT, republishes it while online and lets it expire when it goes offline. After
+  connecting, peers exchange `hello` (sealed under `k_peer`) and then PQ-signed envelopes (P15): the UA behind a peer id
+  is known only inside that channel. A provider record is not signed by the UA; a forged one leads only to a peer whose
+  `hello` does not open or whose envelopes are dropped.
 - **Signalling.** 1:1: a direct libp2p stream between the two peers. Groups: the GossipSub topic `topic`, which members
   join while in a call.
 - **Connectivity.** Hole punching (DCUtR) first, circuit relay v2 as the fallback; transports a browser can use (WebRTC,
@@ -549,7 +553,7 @@ SPECIFIED (D17); nothing built.
 
 **P31 — Waku as a store** (D17). A session may list `{"kind": "waku", "contentTopic": <content topic>}` (§4.2); it is a
 message store and counts toward "at least one" (P27). The content topic is built from the epoch's 8-byte `hint` of P15,
-no second hint: `contentTopic = "/scaas-pqchat/1/" ‖ lowercase hex(hint) ‖ "/proto"`, so it changes with each epoch and
+no second hint: `contentTopic = "/scaas-pqchat/1/" ‖ lowercase hex(hint) ‖ "/abi"`, so it changes with each epoch and
 each epoch's `sealedInfo` carries its own; a client refuses an entry whose `contentTopic` differs from that value. The
 payload is the same bytes as the HCS payload of P25, `abi.encode(v, hint, env)`.
 
@@ -597,7 +601,7 @@ The same `messageId` on Matrix, HCS, Waku, libp2p, `postMessage` or `storeMessag
 | A blob store, anyone with a content id | the encrypted file's size and content id, upload time, the uploader's IP |
 | Anyone, from Hedera mirror nodes | for a session with a topic: the topic id, which links all of the session's messages (the cost of one topic per session); the creating and each submitting Hedera account; consensus time; payload size (bucketed); the 8-byte hint |
 | RPC providers, relayers | the IP of who reads or submits |
-| libp2p DHT nodes, bootstrap and circuit relays, call peers (P30) | the IP addresses and peer ids of members online for a call: network-level metadata, more than HCS or Matrix show; the `rdvKey` they publish under and its record's size and times. The `rdvKey` is unlinkable to the session without `K`, and records and signalling are encrypted |
+| libp2p DHT nodes, bootstrap and circuit relays, call peers (P30) | the IP addresses and ephemeral peer ids (per epoch, never the UA) of members online for a call: network-level metadata, more than HCS or Matrix show; the `rdvCid` they provide under and the records' times. `rdvCid` is unlinkable to the session without `K`; the UA behind a peer id travels only in the sealed `hello` and the signed envelopes |
 
 Rules: no store list, room id, HCS topic id or Matrix id on chain in the clear (`sealedInfo` only); padding buckets (§6.5); records
 HCS messages and stored messages submitted through a relayer rather than the author's own account; receipts and typing inside the envelope; Megolm as an outer layer where
@@ -798,7 +802,7 @@ call signalling (closed by D16 when it lists libp2p); a testnet store may lose i
 **D16** — libp2p carries call signalling (SDP, ICE candidates, call-key events, join and leave) peer to peer, one more
 transport beside Matrix (MatrixRTC) and HCS, as the P15 envelope, nothing new in the clear; no stored messages (a libp2p
 or Waku message store later, not specified). Rendezvous under a DHT key derived from the epoch key, `rdvKey`; members
-publish encrypted provider records under it in a Kademlia DHT; a direct stream for 1:1, a GossipSub topic named from
+publish encrypted provider records under it in a Kademlia DHT (amended the same day: standard provider records under `rdvCid` in the public DHT, ephemeral peer ids per epoch, the UA only inside the sealed `hello`, P30); a direct stream for 1:1, a GossipSub topic named from
 `rdvKey` for groups; it rotates with each epoch. Hole punching (DCUtR), circuit relay v2 as the fallback, browser
 transports (WebRTC, WebTransport). Bootstrap and relay nodes are run by anyone, never by `scaas-node`. A `{"kind":
 "libp2p"}` entry in the store list, signalling only, not counted as a message store; when listed, calls use it first.
@@ -810,7 +814,7 @@ mean a call rings only while the app is active or through a push the user brings
 
 **Decision of 2026-11-05** (owner; a Change on [CTR-CHAT-01](../../decisions.md#CTR-CHAT-01)): **D17** — Waku is a
 message store kind, `{"kind": "waku", "contentTopic": …}` in the store list, the content topic built from the epoch's
-`hint` (`/scaas-pqchat/1/<hex(hint)>/proto`), the payload the HCS payload's bytes; Relay for live delivery, Store for
+`hint` (`/scaas-pqchat/1/<hex(hint)>/abi`), the payload the HCS payload's bytes; Relay for live delivery, Store for
 history, Light Push and Filter for mobile, RLN where the network uses it; clients check as for HCS and dedupe by
 `messageId` (§7.6, P31). Why: a decentralised store with no server of ours and no fee. Cost: retention is the Store
 operators' (often days to weeks), not durable, so durable history goes to a chain store or HCS mirrors; the content topic
