@@ -1,0 +1,28 @@
+# 2026-11-05 ua-rs-sign T4 mutants: python3 -I smartcontracts/evm/runs/2026-11-05-ua-rs-sign-t4-mutants.py (from the worktree root), on the tree committed as d423f3ca;
+# suite: scripts/capped cargo test -j2 --locked --features vectors --test wallet_typed --test wallet_uasig (in clients/ua-rs). One mutant per run,
+# every file restored byte for byte; the failed-test list is the first failing test binary's (cargo stops there). UNAUDITED.
+killed   | M1 unbound relayer hashed (the builders keep it) | src/wallet/eip712.rs | rc=101 | 4 failed: checked_path_refuses_nonzero_unbound_relayer_and_fee_recipient, nested_metatransfer_zeroed, sign_json_canon_rows, sign_json_policy_rows
+killed   | M2 canon skipped on a nested struct | src/wallet/eip712.rs | rc=101 | 2 failed: nested_metatransfer_zeroed, sign_json_canon_rows
+killed   | M3 canon applied on Any (every request canonicalised) | src/wallet/eip712.rs | rc=101 | 3 failed: checked_path_refuses_nonzero_unbound_relayer_and_fee_recipient, sign_json_policy_rows, unrelated_order_through_any_is_signed_as_supplied
+killed   | M4 the checked path zeroes a non-zero unbound field instead of refusing it | src/wallet/eip712.rs, src/wallet/policy.rs | rc=101 | 2 failed: checked_path_refuses_nonzero_unbound_relayer_and_fee_recipient, sign_json_policy_rows
+killed   | M5 policy check skipped | src/wallet/policy.rs | rc=101 | 5 failed: checked_path_refuses_nonzero_unbound_relayer_and_fee_recipient, op_requires_the_whole_message, payment_lane_nonce_and_deadline, sign_json_policy_rows, unrelated
+killed   | M6 EIP712Domain field order changed (version before name) | src/wallet/eip712.rs | rc=101 | 13 failed: chain_separation_typed_digests, checked_path_refuses_nonzero_unbound_relayer_and_fee_recipient, eip712_domain_order, expect_bounds_and_forms, op_requires_the_wh
+killed   | M7 unknown field accepted (hashStruct) | src/wallet/eip712.rs | rc=101 | 2 failed: sign_json_typed_rows, unknown_field_refused
+killed   | M8 cyclic types accepted | src/wallet/eip712.rs | rc=101 | 1 failed: cyclic_types_refused
+killed   | M9 type reference depth unbounded | src/wallet/eip712.rs | rc=101 | 1 failed: typed_data_bounds
+killed   | M10 negative int as its magnitude (no two's complement) | src/wallet/eip712.rs | rc=101 | 2 failed: negative_int_two_complement, sign_json_typed_rows
+killed   | M11 fixed array length not checked | src/wallet/eip712.rs | rc=101 | 1 failed: sign_json_typed_rows
+killed   | M12 array cap one past 1,024 | src/wallet/eip712.rs | rc=101 | 1 failed: typed_data_bounds
+killed   | M13 uintN range not checked (256 bits only) | src/wallet/eip712.rs | rc=101 | 1 failed: negative_int_two_complement
+killed   | M14 canon: feeRecipient kept by the relayer bit | src/wallet/eip712.rs | rc=101 | 3 failed: checked_path_refuses_nonzero_unbound_relayer_and_fee_recipient, sign_json_canon_rows, sign_json_policy_rows
+killed   | M15 fee above the limit accepted | src/wallet/policy.rs | rc=101 | 1 failed: sign_json_policy_rows
+killed   | M16 deadline window unchecked | src/wallet/policy.rs | rc=101 | 1 failed: payment_lane_nonce_and_deadline
+killed   | M17 transfer / approve signed as a call | src/wallet/policy.rs | rc=101 | 1 failed: sign_json_policy_rows
+killed   | M18 requireWhole: a named relayer without its mode bit | src/wallet/policy.rs | rc=101 | 1 failed: op_requires_the_whole_message
+killed   | M19 Any without its marker | src/wallet/policy.rs | rc=101 | 3 failed: expect_bounds_and_forms, sign_json_policy_rows, unrelated_order_through_any_is_signed_as_supplied
+killed   | M20 R17: a native UASig carries key data | src/wallet/uasig.rs | rc=101 | 1 failed: native_ua_sig_r17
+killed   | M21 native leaf UAAuth under the outer purpose tag metatx | src/wallet/uasig.rs | rc=101 | 2 failed: native_slot_needs_its_typed_data, nested_json_msig_rows
+killed   | M22 native leaf UAAuth over the member's own id as the structure | src/wallet/uasig.rs | rc=101 | 2 failed: native_slot_needs_its_typed_data, nested_json_msig_rows
+killed   | M23 native record not checked against the digest | src/wallet/uasig.rs | rc=101 | 1 failed: native_slot_needs_its_typed_data
+killed   | M24 native UASig in a portable purpose | src/wallet/uasig.rs | rc=101 | 1 failed: native_ua_sig_r17
+mutants M1-M24 of 24: 24 killed, 0 survived, 0 not loaded
