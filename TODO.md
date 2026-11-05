@@ -733,7 +733,7 @@ stream definition (scope, gate, depends) in `docs/history/specs/` — section nu
 - [ ] Residual TON: a `final` from the indexer before the node's `mined` still flags `landed_elsewhere` (informational).
 - [ ] Queued research: none open beyond the specs above.
 - [ ] **scaas-node docker-compose** (owner 2026-10-12: after node streams P2 + P3 + P4 + P6): standalone, not tied to an
-  ERP's docker — multi-stage Dockerfile (Rust 1.90), `scaas-node` + one-shot `store-init`, store volume, `.env` for
+  ERP's docker — multi-stage Dockerfile (Rust 1.97.1), `scaas-node` + one-shot `store-init`, store volume, `.env` for
   secrets / chain RPC / chain_uid; default gateway-only config, a second sample with submit + indexer for an ERP by URL
   (legacy pull path until the push cutover). Full note in COMPLETED.md.
 

@@ -224,6 +224,23 @@ Zether, network pages and the node overview are accepted, and so is the overrun 
 (`python3 scripts/docs_check.py resolve <id>`).
 **Source.** [history/plans/2026-10-07-docs-reorg.md](history/plans/2026-10-07-docs-reorg.md) §8 (owner answers 2026-10-07).
 
+<a id="ARCH-POS-12"></a>
+### ARCH-POS-12 — One Rust toolchain for the repository
+- old: — · status: current · owner: yes · date: 2026-11-05 · normative: decisions.md#ARCH-POS-12 · superseded-by: —
+
+**Rule.** Every Rust crate builds with one Rust toolchain, today 1.97.1, named once: the `rust-toolchain.toml` at the
+repository root (targets `wasm32-unknown-unknown` and `wasm32v1-none`); no crate has its own toolchain file and no script
+names a toolchain. A local run overrides it with the standard `RUSTUP_TOOLCHAIN`; CI sets one workflow variable
+`RUST_TOOLCHAIN` (default 1.97.1, a manual run may choose another), which every job installs and exports as
+`RUSTUP_TOOLCHAIN`. Every package that declares a `rust-version` declares 1.97.1. Solana's `cargo build-sbf` keeps the
+platform-tools rustc it brings. A version above 1.97.1 needs a NEAR wasm build check first. The MSRV-aware resolver no
+longer holds alloy at 1.6, so its requirement does: `alloy = "~1.6"` (scaas-node, the only crate that declares alloy).
+**Why.** The owner asked to raise the version, keep one, and make it one shared variable with 1.97.1 as its default
+(2026-11-05). 1.97.1 is the floor of the Solana host tests (Agave 4.3 crates) and within the rustc cap that cargo-near
+0.22 sets from near-sdk's minimum protocol version; a newer version would split NEAR off.
+**Cost if wrong.** A crate that needs a newer compiler waits until NEAR's cap moves, or the repository moves together.
+**Source.** Owner rulings 2026-11-05 (toolchain; alloy held at `~1.6`).
+
 ### ARCH-POS-80 — EVM-only, META-only first scope
 - old: R1 · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: NET-ALL-02, CTR-ZTH-01, CTR-ZTH-18, CTR-ZTH-19, CTR-UA-02, CTR-UA-16, CTR-UA-22, INT-ERP-11, ARCH-POS-02
 

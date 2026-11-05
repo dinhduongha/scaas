@@ -36,7 +36,7 @@ python3 -I seeds.py "$B" > "$LOG" 2>&1 || { cat "$LOG"; exit 1; }
 H=$(sha256sum "$B/honest.bin" | cut -c1-64)
 [ "$(cat "$W.honest" 2>/dev/null)" = "$H" ] || { rm -rf "$W" && mkdir -p "$W" && echo "$H" > "$W.honest"; }
 {
-  echo "# fuzz $T (binary $X), $S s, $(date -Is), commit $(git rev-parse --short HEAD), $(clang-18 --version | head -1), $(rustc +1.97.1 --version)"
+  echo "# fuzz $T (binary $X), $S s, $(date -Is), commit $(git rev-parse --short HEAD), $(clang-18 --version | head -1), $(rustc --version)"
   "$B/$X" -max_total_time="$S" -max_len=$ML $LIM -timeout=120 -print_final_stats=1 \
     -artifact_prefix="$B/crash-$T-" "$W" "corpus/$T" "regress/$T" "$SEEDS"
   echo "[fuzz rc=$?]"

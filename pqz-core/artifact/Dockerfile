@@ -18,7 +18,7 @@ ARG NODE_SHA256=3e301118d7df53d563b7e96c1617545f26e2f76f9724be668d6cab65c15dda5d
 ARG LAZER_COMMIT=3330e487228f633eceb322807b13a596b516770f
 ARG RUSTUP_VERSION=1.29.1
 ARG RUSTUP_SHA256=dda7234360b7f578ca8b0ddcb80145646fa61a67c1720a5abc7051b35c9fcb71
-# = pqzh/rust-toolchain.toml (PQZH-Ligero, pqz-stmt): 1.97.1 + wasm32-unknown-unknown; clippy for the float lint
+# = the root rust-toolchain.toml (PQZH-Ligero, pqz-stmt): 1.97.1 + wasm32-unknown-unknown; clippy for the float lint
 ARG RUST_VERSION=1.97.1
 
 # clang 18 + lld 18 (wasm-ld-18): the measured toolchain (host: Ubuntu 24.04, clang 18.1.3); gcc 13, cmake, GMP /
