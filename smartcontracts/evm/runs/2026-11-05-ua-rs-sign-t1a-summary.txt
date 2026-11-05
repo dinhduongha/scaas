@@ -1,0 +1,16 @@
+# 2026-11-05 ua-rs-sign T1a: clientkeys UA tree, UA signers, keys.json and sign.json (plan T1a, spec §3-§5, §11). UNAUDITED.
+step | commit | rc | counts
+red: node --test test/ua-wallet.test.js test/seed.test.js (tests only) | a1ae975f | 1 | 24 failed, 0 passed (23 named ua-wallet tests; seed.test.js: no export slip10)
+clientkeys npm test (before) | a1ae975f | 0 | 239 tests, 237 pass, 0 fail, 2 skipped
+clientkeys npm test | bf10eb0f | 0 | 264 tests, 262 pass, 0 fail, 2 skipped
+vectors-check: ua-wallet-vectors.mjs twice into scratch dirs, cmp with each other and the committed files | bf10eb0f | 0 | keys.json, sign.json identical
+vectors-check: every other generator (typed-ops, ua-portable, ua-sig, ua-vectors into scratch; pq-vectors in place + git status, soroban-ua-ops --check) | bf10eb0f | 0 | 12 files byte-identical, tree clean
+EIP-155 source: UA_WALLET_DOWNLOADS=<dir with eip-155.md> node scripts/ua-wallet-vectors.mjs | bf10eb0f | 0 | sha256 3c208813..dcc9c, 5 quoted values found
+tx cross-check: cast decode-tx (foundry 1.8.5) of the 6 raw rows | 1aabd765 | 0 | 6/6 decode, signer = the row's address
+mutants: 2026-11-05-ua-rs-sign-t1a-mutants.py 1 43 | bf10eb0f | 0 | 43 killed, 0 survived, 0 not loaded (2026-11-05-ua-rs-sign-t1a-mutants.txt)
+mutants (first run) | 1aabd765 | 1 | M15 "SLIP-10 nist256p1 child retry dropped" survived -> fixed in bf10eb0f (non-hardened nist256p1 steps, retry vector)
+docs_check check / paths / test_docs_check | bf10eb0f | 0 | 0 errors 5 warnings / 0 machine paths / ok
+forge | - | not run | no file forge reads changed: keys.json and sign.json are new and read by no forge test; every existing vector byte-identical
+# Rows: keys.json 4 mnemonics, 2 normalization, 216 ua, 74 native, 19 refusals; sign.json 48 ua (30 bytes, 18 verify), 5 member,
+# 4 BLS wrong-DST refusals, 2 nonce-map, typed 3 generic / 5 refusals / 8 canon, 24 policy (10 accepted, 14 refused), tx 6 + EIP-155 + 12 refusals,
+# webauthn 4 accepted / 9 refused, msig 7 (3 signed, 4 refused).

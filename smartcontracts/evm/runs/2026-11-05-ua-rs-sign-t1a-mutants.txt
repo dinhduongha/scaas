@@ -1,0 +1,48 @@
+# ua-rs-sign T1a mutants (plan T1a): one change each on a clean tree at bf10eb0f, suite = node --test test/ua-wallet.test.js test/seed.test.js test/pq.test.js (clients/clientkeys), source restored byte for byte after each.
+# First run at 1aabd765: M15 (SLIP-10 nist256p1 child retry dropped) SURVIVED -> fixed in bf10eb0f (non-hardened nist256p1 steps reach the published retry vector).
+# Equivalent, not listed: extraEntropy option deleted (noble 2.4.0 defaults to false; the list sets it true instead); WebAuthn r/s range check removed (verify refuses r = 0 and s = n too).
+verdict | mutant | file | rc | failed tests: first
+killed   | M1 SLIP-10 hardened bit dropped | src/seed.js | rc=1 | 12 failed: 0x0101 and 0x0108 sign ua_msg
+killed   | M2 UA tree index level not hardened | src/uakey.js | rc=1 | 6 failed: 0x0101 and 0x0108 sign ua_msg
+killed   | M3 account / index swapped | src/uakey.js | rc=1 | 2 failed: keys.json rows equal deriveUAKey for every kind × account {0,1} × index {0,1}
+killed   | M4 SLIP-10 ser32 little-endian | src/seed.js | rc=1 | 12 failed: 0x0101 and 0x0108 sign ua_msg
+killed   | M5 PQ HKDF u32 little-endian | src/pq.js | rc=1 | 1 failed: keys.json rows equal deriveUAKey for every kind × account {0,1} × index {0,1}
+killed   | M6 non-hardened ed25519 step accepted | src/seed.js | rc=1 | 1 failed: SLIP-10 ed25519 test vector 1
+killed   | M7 wrong kindNo (hex digits) | src/uakey.js | rc=1 | 5 failed: 0x0101 and 0x0108 sign ua_msg
+killed   | M8 wrong kindNo on the EIP-2333 path | src/uakey.js | rc=1 | 4 failed: keys.json rows equal deriveUAKey for every kind × account {0,1} × index {0,1}
+killed   | M9 TAG(kind) for utf8(tag) in the HKDF info | src/pq.js | rc=1 | 16 failed: fndsa1024
+killed   | M10 NFKD dropped | src/seed.js | rc=1 | 1 failed: normalization rows: NFKD of the words and of the passphrase
+killed   | M11 account >= 2^31 accepted | src/uakey.js | rc=1 | 1 failed: account 2^31 refused
+killed   | M12 index 1 accepted for an EIP-2333 kind | src/uakey.js | rc=1 | 2 failed: account 2^31 refused
+killed   | M13 an index child appended to an EIP-2333 path | src/uakey.js | rc=1 | 4 failed: keys.json rows equal deriveUAKey for every kind × account {0,1} × index {0,1}
+killed   | M14 bn254 UA salt swapped for EIP-2333's | src/uakey.js | rc=1 | 3 failed: keys.json rows equal deriveUAKey for every kind × account {0,1} × index {0,1}
+killed   | M15 SLIP-10 nist256p1 child retry dropped | src/seed.js | rc=1 | 1 failed: SLIP-10 nist256p1: test vector 1, derivation retry, seed retry
+killed   | M16 SLIP-10 nist256p1 master retry dropped | src/seed.js | rc=1 | 1 failed: SLIP-10 nist256p1: test vector 1, derivation retry, seed retry
+killed   | M17 native index >= 2^31 accepted | src/seed.js | rc=1 | 1 failed: native index and coin type in [0, 2^31); solana m/44'/501'/i'/0' base58 address
+killed   | M18 extraEntropy true for 0x0101 (a default that changed) | src/uakey.js | rc=1 | 5 failed: 0x0101 and 0x0108 sign ua_msg
+killed   | M19 extraEntropy true for native typed signing | src/seed.js | rc=1 | 2 failed: signing: a raw digest is refused without the opt-in; signTyped / signKeyProof hash it them
+killed   | M20 low-s removed for 0x0108 | src/uakey.js | rc=1 | 3 failed: 0x0101 and 0x0108 sign ua_msg
+killed   | M21 prehash added for 0x0108 | src/uakey.js | rc=1 | 4 failed: 0x0101 and 0x0108 sign ua_msg
+killed   | M22 prehash removed for 0x0101 | src/uakey.js | rc=1 | 4 failed: 0x0101 and 0x0108 sign ua_msg
+killed   | M23 scaas Schnorr nonce reduced from 256 bits | src/uakey.js | rc=1 | 2 failed: nonce map is the 512-bit map
+killed   | M24 Y left out of the nonce | src/uakey.js | rc=1 | 2 failed: nonce map is the 512-bit map
+killed   | M25 BLS12-381 role ignored (always SIG) | src/uakey.js | rc=1 | 1 failed: sign.json ua rows: deterministic rows byte-equal, randomized rows verify, the role follows
+killed   | M26 BLS-bn254 role ignored (always SIG) | src/uakey.js | rc=1 | 1 failed: sign.json ua rows: deterministic rows byte-equal, randomized rows verify, the role follows
+killed   | M27 kem not a PoP role | src/uakey.js | rc=1 | 1 failed: sign.json ua rows: deterministic rows byte-equal, randomized rows verify, the role follows
+killed   | M28 purpose check skipped | src/uakey.js | rc=1 | 1 failed: a purpose not in PURPOSES is refused; a UA key has no raw-digest call
+killed   | M29 unbound relayer hashed (canon dropped on mode bit 1) | src/evm.js | rc=1 | 2 failed: policy rows: accepted and refused, from the check* functions
+killed   | M30 canon skipped on a nested struct | src/evm.js | rc=1 | 1 failed: unbound relayer / feeRecipient hashed as zero in every mode struct
+killed   | M31 canon applied in the generic hasher (unrelated Order) | src/evm.js | rc=1 | 4 failed: policy rows: accepted and refused, from the check* functions
+killed   | M32 unknown field accepted by the hasher | src/evm.js | rc=1 | 1 failed: typed rows with arrays and a negative int; missing field is zero, unknown field refused
+killed   | M33 int two's complement wrong | src/evm.js | rc=1 | 1 failed: typed rows with arrays and a negative int; missing field is zero, unknown field refused
+killed   | M34 policy check skipped (Payment) | src/evm.js | rc=1 | 1 failed: policy rows: accepted and refused, from the check* functions
+killed   | M35 Any without its marker | src/evm.js | rc=1 | 2 failed: policy rows: accepted and refused, from the check* functions
+killed   | M36 type-4 transaction built | src/evm.js | rc=1 | 1 failed: tx type 4 cannot be built
+killed   | M37 EIP-155 v offset lost | src/evm.js | rc=1 | 2 failed: EIP-155 published row
+killed   | M38 legacy sighash without the EIP-155 chainId | src/evm.js | rc=1 | 2 failed: EIP-155 published row
+killed   | M39 extraEntropy true for transactions | src/seed.js | rc=1 | 2 failed: EIP-155 published row
+killed   | M40 WebAuthn verify-before-return skipped | src/uakey.js | rc=1 | 1 failed: WebAuthn assertion: accepted rows, refusals
+killed   | M41 WebAuthn high-s kept | src/uakey.js | rc=1 | 1 failed: WebAuthn assertion: accepted rows, refusals
+killed   | M42 msig minimal check skipped | src/uakey.js | rc=1 | 1 failed: msig rows: minimal sets signed at both levels, non-minimal and unsorted sets refused
+killed   | M43 msig level-2 members sign the outer digest | src/uakey.js | rc=1 | 1 failed: msig rows: minimal sets signed at both levels, non-minimal and unsorted sets refused
+mutants M1-M43 of 43, survived or not loaded: 0
