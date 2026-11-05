@@ -21,6 +21,12 @@ spec [§1.2, §4.2–§4.4, §7.7](2026-11-02-governance.md); the merge spec's e
 writes `address`, this spec writes the `bytes32` id (CTR-AS-07's UA constraint, CTR-GOV-01's identity by UA); nothing else in
 those rules changes.
 
+
+**Owner answers (2026-11-05): Q1–Q8 all as recommended**, with Q7 read after T9's deprecation (no lever L or D is
+built): `WrappedRegulatedToken` and the confidential regulated releases that miss 60 / 70 M are accepted; they deploy on
+any chain whose block takes their release transaction (SCaaS testnet, Sepolia at 200 M), and the gap is recorded in TODO
+beside `WrappedToken`'s. Next: a Fable counter-review and a Codex security review of this draft.
+
 ## 1. Scope and non-goals — SPECIFIED
 
 **In scope (EVM, Hedera for kinds 8 and 9):**
