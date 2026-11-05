@@ -1,0 +1,23 @@
+killed   | M1 nonce reduced from 256 bits | src/wallet/pairing.rs | rc=101 | 2 failed: vectors::nonce_map_rows, vectors::sign_json_fixed_aux_rows
+killed   | M2 Y left out of the nonce | src/wallet/pairing.rs | rc=101 | 2 failed: vectors::nonce_map_rows, vectors::sign_json_fixed_aux_rows
+killed   | M3 secret_mul replaced by Projective * Fr (blinding erased) | scaas-ct/src/lib.rs | rc=101 | 6 failed: vectors::structural_bls_sign, vectors::structural_frost_bn254, vectors::structural_keygen_g1, vectors::structural_keygen_g2, vectors::structural_musig2_bn254, v
+killed   | M4 k' reduced mod r | scaas-ct/src/lib.rs | rc=101 | 6 failed: vectors::structural_bls_sign, vectors::structural_frost_bn254, vectors::structural_keygen_g1, vectors::structural_keygen_g2, vectors::structural_musig2_bn254, v
+killed   | M5 ladder width from the bit length of k' | scaas-ct/src/lib.rs | rc=101 | 6 failed: vectors::structural_bls_sign, vectors::structural_frost_bn254, vectors::structural_keygen_g1, vectors::structural_keygen_g2, vectors::structural_musig2_bn254, v
+killed   | M6 rho = 0 | scaas-ct/src/lib.rs | rc=101 | 6 failed: vectors::structural_bls_sign, vectors::structural_frost_bn254, vectors::structural_keygen_g1, vectors::structural_keygen_g2, vectors::structural_musig2_bn254, v
+killed   | M7 keygen G1 bypasses secret_mul | src/wallet/pairing.rs | rc=101 | 1 failed: vectors::structural_keygen_g1
+killed   | M8 keygen G2 bypasses secret_mul | src/wallet/pairing.rs | rc=101 | 1 failed: vectors::structural_keygen_g2
+killed   | M9 nonce point bypasses secret_mul | src/wallet/pairing.rs | rc=101 | 1 failed: vectors::structural_nonce_point
+killed   | M10 BLS sign bypasses secret_mul | src/wallet/pairing.rs | rc=101 | 1 failed: vectors::structural_bls_sign
+killed   | M11 MuSig2-bn254 bypasses secret_mul | src/musig2.rs | rc=101 | 1 failed: vectors::structural_musig2_bn254
+killed   | M12 FROST-BN254 bypasses secret_mul | src/frost.rs | rc=101 | 1 failed: vectors::structural_frost_bn254
+killed   | M13 BLS role ignored (always SIG) | src/wallet/pairing.rs | rc=101 | 3 failed: right_message_wrong_dst_refused, sign_json_pairing_rows, vectors::bls_pop_and_sig_through_the_trait
+killed   | M14 musig2-bn254 on the secp256k1 path | src/wallet/derive.rs | rc=101 | 2 failed: index_1_refused_for_eip2333_kinds, keys_json_ua_rows
+killed   | M15 masked swap swaps nothing | scaas-ct/src/lib.rs | rc=101 | 1 failed: groups_json_regenerates_byte_for_byte
+killed   | M16 rho the same every call | scaas-ct/src/lib.rs | rc=101 | 6 failed: vectors::structural_bls_sign, vectors::structural_frost_bn254, vectors::structural_keygen_g1, vectors::structural_keygen_g2, vectors::structural_musig2_bn254, v
+killed   | M17 MuSig2 session keeps its nonce (read, not spent) | src/wallet/pairing.rs | rc=101 | 1 failed: second_sign_on_a_session_errors
+killed   | M18 FROST session keeps its nonces | src/wallet/pairing.rs | rc=101 | 1 failed: frost_session_nonce_signs_once
+killed   | M19 MuSig2 session without its own key accepted | src/wallet/pairing.rs | rc=101 | 1 failed: second_sign_on_a_session_errors
+killed   | M20 Schnorr challenge without Y | src/wallet/pairing.rs | rc=101 | 4 failed: release_randomness_per_kind, sign_json_pairing_rows, vectors::nonce_map_rows, vectors::sign_json_fixed_aux_rows
+killed   | M21 Schnorr z = k - e*sk | src/wallet/pairing.rs | rc=101 | 4 failed: release_randomness_per_kind, sign_json_pairing_rows, vectors::nonce_map_rows, vectors::sign_json_fixed_aux_rows
+killed   | M22 BLS bn254 label of the other role | src/wallet/pairing.rs | rc=101 | 4 failed: release_randomness_per_kind, right_message_wrong_dst_refused, sign_json_pairing_rows, vectors::bls_pop_and_sig_through_the_trait
+mutants M1-M22 of 22, survived or not loaded: 0
