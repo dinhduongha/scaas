@@ -719,7 +719,7 @@ fn abi_list(items: Vec<Vec<u8>>) -> Vec<u8> {
     o.extend(items.concat());
     o
 }
-fn abi_bytes(o: &mut Vec<u8>, b: &[u8]) {
+pub(crate) fn abi_bytes(o: &mut Vec<u8>, b: &[u8]) {
     o.extend(word(b.len() as u64));
     o.extend(b);
     o.resize(o.len() + b.len().next_multiple_of(32) - b.len(), 0);

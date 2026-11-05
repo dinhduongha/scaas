@@ -98,17 +98,25 @@ pub(super) fn check_purpose(purpose: &[u8; 32]) -> Result<()> {
     Ok(())
 }
 
-/// The request of `sign_ua` for a key of `kind` (the `UASig` builder's too).
+/// The request of `sign_ua` for a key of `kind` (the `UASig` builder's too); `0x0100` (an authenticator) is asked
+/// `WebAuthn` with the same `ua_msg`.
 pub(super) fn ua_request(kind: u16, purpose: &[u8; 32], digest: &[u8; 32]) -> Result<SignRequest> {
     check_purpose(purpose)?;
-    Ok(SignRequest::UaMsg { kind, ua_msg: ua_message(kind, purpose, digest)?, role: role_of(purpose) })
+    Ok(request(kind, ua_message(kind, purpose, digest)?, role_of(purpose)))
+}
+
+fn request(kind: u16, ua_msg: [u8; 32], role: SigRole) -> SignRequest {
+    if kind == 0x0100 {
+        SignRequest::WebAuthn { challenge: ua_msg }
+    } else {
+        SignRequest::UaMsg { kind, ua_msg, role }
+    }
 }
 
 /// The request of `sign_member` for a key of `kind` (the `msig` builder's too): always `Authorization`.
 pub(super) fn member_request(kind: u16, structure_ua: &[u8; 32], structure_ua_msg: &[u8; 32]) -> Result<SignRequest> {
     let digest = member_digest(structure_ua, structure_ua_msg);
-    let ua_msg = ua_message(kind, &purpose_tag("member")?, &digest)?;
-    Ok(SignRequest::UaMsg { kind, ua_msg, role: SigRole::Authorization })
+    Ok(request(kind, ua_message(kind, &purpose_tag("member")?, &digest)?, SigRole::Authorization))
 }
 
 impl UaKey {

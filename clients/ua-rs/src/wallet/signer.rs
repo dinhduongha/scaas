@@ -5,8 +5,8 @@
 //! signature. The [`SigRole`] of a UA message is set by the builder from the registry's rule (`UARegistryLib._sigOk`): the
 //! portable purposes `pop` v2, `kem` and `pqz-key` → [`SigRole::Pop`], every other purpose and an `msig` member slot →
 //! [`SigRole::Authorization`]; no public call takes a role. T3a builds `UaMsg`, `KeyProof`, `RawDigest`; T4 `Eip712` (the
-//! policy's `sign_typed`, a native key's `UASig` and `msig` slot); T5 `Transaction` (`sign_transaction`); `WebAuthn` comes with
-//! T6. UNAUDITED.
+//! policy's `sign_typed`, a native key's `UASig` and `msig` slot); T5 `Transaction` (`sign_transaction`); T6 `WebAuthn` (a
+//! `0x0100` key's request from `sign_ua`'s and the `msig` builder's paths: the passkey of phase 2). UNAUDITED.
 //!
 //! A request is read, never built, outside `ua-rs`:
 //! ```
@@ -86,6 +86,10 @@ pub enum SignRequest {
     /// Only behind [`AllowRawDigest`].
     #[non_exhaustive]
     RawDigest { digest: [u8; 32] },
+    /// A `webauthn-p256` (`0x0100`) key's `ua_msg` in place of a `UaMsg` (the authenticator's challenge, spec §5.6, §9.4): the
+    /// response is the assertion encoding of [`super::webauthn_assertion`] against this challenge.
+    #[non_exhaustive]
+    WebAuthn { challenge: [u8; 32] },
 }
 
 /// The explicit opt-in of a raw-digest signature (CLI-SGN-40): for Merkle roots and family envelopes the caller built from a

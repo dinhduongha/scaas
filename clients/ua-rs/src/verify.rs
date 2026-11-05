@@ -117,7 +117,7 @@ fn base64url(data: &[u8]) -> String {
 
 /// `SmartKeyAccount._clientDataOk` without the origin comparison: the fixed prefix with type and challenge, any origin up
 /// to the next `"`, then `}` at the end, or `,"crossOrigin":false` followed by `}` at the end or by `,`.
-fn client_data_ok(cd: &[u8], challenge: &[u8; 32]) -> bool {
+pub(crate) fn client_data_ok(cd: &[u8], challenge: &[u8; 32]) -> bool {
     let prefix = format!("{{\"type\":\"webauthn.get\",\"challenge\":\"{}\",\"origin\":\"", base64url(challenge));
     let (p, n) = (prefix.len(), cd.len());
     if n < p + 2 || &cd[..p] != prefix.as_bytes() {

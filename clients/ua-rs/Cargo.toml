@@ -124,3 +124,7 @@ required-features = ["wallet"]
 [[test]]
 name = "wallet_tx"
 required-features = ["wallet"]
+
+[[test]]
+name = "wallet_webauthn"
+required-features = ["wallet"]
