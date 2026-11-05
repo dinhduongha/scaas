@@ -30,7 +30,8 @@ interface IUALedger {
     /// @notice The unordered `uaCancelNonce` only (legacy/ua-mtx-merge/); no built entry reverts with it.
     error UACancelUsed();
     error MetaTxUnknownOp(bytes4 selector);
-    /// @notice A leg or receive token that is not a SCaaS token with its UA ledger on (accounts.md CTR-UA-27).
+    /// @notice A leg or receive token that is not a SCaaS token with its UA ledger on (accounts.md CTR-UA-27); on
+    ///         `mtxWrapOrder`, also a leg with no `mtxTrade` for any holder.
     error UALegNotLedger(address token);
 
     function registry() external view returns (address);

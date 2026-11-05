@@ -181,7 +181,7 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
     }
 
     /// @notice Signature wrap of a SCaaS underlying by a `UAWrapOrder` (CTR-TOK-20, UA-5b; ua-mtx-merge R39: today's
-    ///         `uaWrapOrder` under this name): the underlying's `uaTrade` checks the holder (a derived id under purpose
+    ///         `uaWrapOrder` under this name): the underlying's `mtxTrade` checks the holder (a derived id under purpose
     ///         `trade`, a native id itself); `minted − fee` goes to `o.destination` (0 ⇒ `o.from`) — a derived id by
     ///         `_uaMint` (registered SIGNING), a native one by `_mint` — and `fee` to the submitter. Not allowlisted: a
     ///         direct read of the caller.

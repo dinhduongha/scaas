@@ -40,7 +40,7 @@ contract UAWrapTest is UALedgerBase {
     }
 
     function _a(ITradeToken.UAWrapOrder memory o) internal view returns (bytes memory) {
-        bytes32 h = tok.uaTradeOrderDigest(DexLegs.asTrade(o));
+        bytes32 h = tok.tradeOrderDigest(DexLegs.asTrade(o));
         if (o.from == _pad(alice)) return _ecdsa(ALICE_PK, h);
         if (o.from == uaZ) return _zAuth(UAKinds.PURPOSE_TRADE, h);
         uint16 kind = lreg.kindOf(o.from);
@@ -76,7 +76,7 @@ contract UAWrapTest is UALedgerBase {
         assertEq(reserve, 1000);
         // the order is closed: a replay pulls nothing
         _wrapReverts(wrpL, address(tok), o,
-            abi.encodeWithSelector(ITradeToken.OrderClosed.selector, tok.uaTradeOrderDigest(DexLegs.asTrade(o))));
+            abi.encodeWithSelector(ITradeToken.OrderClosed.selector, tok.tradeOrderDigest(DexLegs.asTrade(o))));
     }
 
     function test_rate_and_destinations() public {
@@ -132,15 +132,15 @@ contract UAWrapTest is UALedgerBase {
         // the underlying's checks: the signed minimum, the purpose
         o = _o(wrpL, uaP, 1000, 1001, 0);
         _wrapReverts(wrpL, address(tok), o,
-            abi.encodeWithSelector(ITradeToken.PriceLimit.selector, tok.uaTradeOrderDigest(DexLegs.asTrade(o))));
+            abi.encodeWithSelector(ITradeToken.PriceLimit.selector, tok.tradeOrderDigest(DexLegs.asTrade(o))));
         o = _o(wrpL, uaP, 1000, 1000, 0);
-        bytes memory meta = _auth(lreg, UAKinds.P256, _key(UAKinds.P256), UAKinds.PURPOSE_METATX, tok.uaTradeOrderDigest(DexLegs.asTrade(o)));
+        bytes memory meta = _auth(lreg, UAKinds.P256, _key(UAKinds.P256), UAKinds.PURPOSE_METATX, tok.tradeOrderDigest(DexLegs.asTrade(o)));
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, uaP));
         vm.prank(RELAYER);
         wrpL.mtxWrapOrder(address(tok), o, UACall.auth(o.from, meta));
         o.relayer = address(0xBAD);
         _wrapReverts(wrpL, address(tok), o,
-            abi.encodeWithSelector(ITradeToken.WrongRelayer.selector, tok.uaTradeOrderDigest(DexLegs.asTrade(o)), RELAYER));
+            abi.encodeWithSelector(ITradeToken.WrongRelayer.selector, tok.tradeOrderDigest(DexLegs.asTrade(o)), RELAYER));
     }
 
     /// A wrapper whose own ledger is off mints to a native destination, and refuses a derived one (`UALedgerOff`).

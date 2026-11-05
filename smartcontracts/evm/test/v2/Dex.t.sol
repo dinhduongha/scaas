@@ -93,7 +93,7 @@ contract DexTest is Test {
     function _leg(uint256 pk, NormalToken sell, ITradeToken.TradeOrder memory o, uint256 fill)
         internal view returns (DexLegs.Leg memory l)
     {
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, sell.tradeOrderDigest(o));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, sell.tradeOrderDigest(DexLegs.ua(o)));
         l = DexLegs.Leg(address(sell), o, abi.encodePacked(r, s, v), fill);
     }
 
@@ -132,7 +132,7 @@ contract DexTest is Test {
         assertEq(b.balanceOf(address(dex)), 0);
         uint256 legs;
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        for (uint256 i; i < logs.length; ++i) if (logs[i].topics[0] == ISCaaSDex.LegSettled.selector) ++legs;
+        for (uint256 i; i < logs.length; ++i) if (logs[i].topics[0] == ISCaaSDex.UALegSettled.selector) ++legs;
         assertEq(legs, 3);
     }
 
@@ -185,7 +185,7 @@ contract DexTest is Test {
         s.makers = new DexLegs.Leg[](1);
         s.makers[0] = _leg(BOB_PK, b, mo, 400);
         s.taker = _leg(ALICE_PK, a, _order(alice, b, 200, 400, 0), 200);
-        bytes32 h = b.tradeOrderDigest(mo);
+        bytes32 h = b.tradeOrderDigest(DexLegs.ua(mo));
         vm.prank(relayer);
         vm.expectRevert(ISCaaSDex.NothingSettled.selector);
         dex.mtxSettle(DexLegs.wire(_one(s)));
@@ -215,7 +215,7 @@ contract DexTest is Test {
         assertTrue(ok[0]);
         assertEq(b.balanceOf(alice), 100);
         assertEq(a.balanceOf(bob), 50);
-        assertEq(b.pulled(b.tradeOrderDigest(mo)), 100);
+        assertEq(b.pulled(b.tradeOrderDigest(DexLegs.ua(mo))), 100);
     }
 
     function test_settle_minFill_remainderClosesBelowMinFill() public {
@@ -235,7 +235,7 @@ contract DexTest is Test {
         bool[] memory ok = dex.mtxSettle(DexLegs.wire(ss));
         assertTrue(ok[0]);
         assertTrue(ok[1]);
-        assertEq(b.pulled(b.tradeOrderDigest(mo)), 1000);
+        assertEq(b.pulled(b.tradeOrderDigest(DexLegs.ua(mo))), 1000);
     }
 
     function test_settle_pathAOrderFilledInFiveSettlements() public {
@@ -252,7 +252,7 @@ contract DexTest is Test {
         vm.prank(relayer);
         bool[] memory ok = dex.mtxSettle(DexLegs.wire(ss));
         for (uint256 i; i < 5; ++i) assertTrue(ok[i]);
-        assertEq(b.pulled(b.tradeOrderDigest(mo)), 1000);
+        assertEq(b.pulled(b.tradeOrderDigest(DexLegs.ua(mo))), 1000);
         assertEq(a.balanceOf(bob), 500);
         assertEq(b.balanceOf(alice), 1000);
     }
@@ -282,7 +282,7 @@ contract DexTest is Test {
         _expectOne(s, abi.encodeWithSelector(ISCaaSDex.FillMismatch.selector, 1020, 1019));
         s = _book();
         s.makers[1] = s.makers[0];
-        _expectOne(s, abi.encodeWithSelector(ISCaaSDex.DuplicateOrder.selector, b.tradeOrderDigest(s.makers[0].o)));
+        _expectOne(s, abi.encodeWithSelector(ISCaaSDex.DuplicateOrder.selector, b.tradeOrderDigest(DexLegs.ua(s.makers[0].o))));
         s = _book();
         s.makers[0] = _leg(ALICE_PK, b, _order(alice, a, 1000, 500, 1_000), 1000);
         _expectOne(s, abi.encodeWithSelector(ISCaaSDex.SelfTrade.selector, bytes32(uint256(uint160(alice)))));
@@ -318,9 +318,9 @@ contract DexTest is Test {
 
     function test_legSettled_receivedIsNetOfTheFee_everyField() public {
         DexLegs.Settlement[] memory ss = _one(_book());
-        bytes32 hT = a.tradeOrderDigest(ss[0].taker.o);
-        bytes32 hB = b.tradeOrderDigest(ss[0].makers[0].o);
-        bytes32 hC = b.tradeOrderDigest(ss[0].makers[1].o);
+        bytes32 hT = a.tradeOrderDigest(DexLegs.ua(ss[0].taker.o));
+        bytes32 hB = b.tradeOrderDigest(DexLegs.ua(ss[0].makers[0].o));
+        bytes32 hC = b.tradeOrderDigest(DexLegs.ua(ss[0].makers[1].o));
         vm.recordLogs();
         vm.prank(relayer);
         dex.mtxSettle(DexLegs.wire(ss));
@@ -328,7 +328,7 @@ contract DexTest is Test {
         uint256 n;
         // taker, then the makers in order
         for (uint256 i; i < logs.length; ++i) {
-            if (logs[i].topics[0] != ISCaaSDex.LegSettled.selector) continue;
+            if (logs[i].topics[0] != ISCaaSDex.UALegSettled.selector) continue;
             if (n == 0) _checkLeg(logs[i], hT, alice, 1020, 2000, 6, 1);
             if (n == 1) _checkLeg(logs[i], hB, bob, 1000, 500, 1, 0);
             if (n == 2) _checkLeg(logs[i], hC, carol, 1000, 520, 1, 0);
@@ -363,7 +363,7 @@ contract DexTest is Test {
         ITradeToken.TradeOrder memory o = _order(alice, b, 500, 1050, 0); // wants 2.1 B per A, the maker gives 2
         o.flags = 3;
         s.taker = _leg(ALICE_PK, a, o, 500);
-        _expectOne(s, abi.encodeWithSelector(ISCaaSDex.PriceLimit.selector, a.tradeOrderDigest(o)));
+        _expectOne(s, abi.encodeWithSelector(ISCaaSDex.PriceLimit.selector, a.tradeOrderDigest(DexLegs.ua(o))));
     }
 
     /// SOL-02 (review W-S): an ESCROW taker's limit with a product past 2^256 is `PriceLimit`, not a panic.
@@ -375,7 +375,7 @@ contract DexTest is Test {
         ITradeToken.TradeOrder memory o = _order(alice, b, 500, 1 << 250, 0); // 500 · 2^250 > 2^256
         o.flags = 3;
         s.taker = _leg(ALICE_PK, a, o, 500);
-        _expectOne(s, abi.encodeWithSelector(ISCaaSDex.PriceLimit.selector, a.tradeOrderDigest(o)));
+        _expectOne(s, abi.encodeWithSelector(ISCaaSDex.PriceLimit.selector, a.tradeOrderDigest(DexLegs.ua(o))));
     }
 
     /// CHAIN-03 (review T2, 2026-10-19): a 1 % taker fee on 2^250 B, its signed bound (`TradeLib`) and the relayer
@@ -416,7 +416,7 @@ contract DexTest is Test {
         assertEq(b.balanceOf(address(dex)), 0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
-            if (logs[i].topics[0] != ISCaaSDex.LegSettled.selector || address(uint160(uint256(logs[i].topics[3]))) != alice) continue;
+            if (logs[i].topics[0] != ISCaaSDex.UALegSettled.selector || address(uint160(uint256(logs[i].topics[3]))) != alice) continue;
             (, uint256 sold,,, uint256 refund,,) = abi.decode(logs[i].data, (address, uint256, uint256, uint256, uint256, uint256, uint256));
             assertEq(sold, 1020);
             assertEq(refund, 180);
@@ -438,7 +438,7 @@ contract DexTest is Test {
         ITradeToken.TradeOrder memory mo = _order(bob, a, 1000, 500, 0);
         mo.minFill = 1000; // fill-or-kill
         DexLegs.Settlement memory s = _escrowMaker(mo, 600);
-        _expectOne(s, abi.encodeWithSelector(ISCaaSDex.BelowMinFill.selector, b.tradeOrderDigest(mo)));
+        _expectOne(s, abi.encodeWithSelector(ISCaaSDex.BelowMinFill.selector, b.tradeOrderDigest(DexLegs.ua(mo))));
     }
 
     function test_pathB_makerFeeIsAtTheSignedRate() public {
@@ -468,7 +468,7 @@ contract DexTest is Test {
         DexLegs.Settlement memory s = _book(); // the taker receives 2000 B for 1020 A
         ITradeToken.TradeOrder memory o = _order(alice, b, 1020, 2001, 3_000);
         s.taker = _leg(ALICE_PK, a, o, 1020);
-        _expectOne(s, abi.encodeWithSelector(ITradeToken.PriceLimit.selector, a.tradeOrderDigest(o)));
+        _expectOne(s, abi.encodeWithSelector(ITradeToken.PriceLimit.selector, a.tradeOrderDigest(DexLegs.ua(o))));
     }
 
     function test_pathA_takerExactlyAtItsLimit_settles() public {
@@ -488,7 +488,7 @@ contract DexTest is Test {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 seen;
         for (uint256 i; i < logs.length; ++i) {
-            if (logs[i].topics[0] != ITradeToken.TradeFilled.selector) continue;
+            if (logs[i].topics[0] != ITradeToken.UATradeFilled.selector) continue;
             (, uint256 rf, uint256 fee) = abi.decode(logs[i].data, (uint256, uint256, uint256));
             if (logs[i].emitter == address(a)) {
                 assertEq(rf, 2000); // the taker's gross receive and fee

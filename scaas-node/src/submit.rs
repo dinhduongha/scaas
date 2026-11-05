@@ -1330,7 +1330,7 @@ pub(crate) mod tests {
     /// The token's order entries as `metatx` jobs (job-api.md): byte-identical with the forge KAT's relayed calldata.
     #[test]
     fn entry_jobs_encode_as_the_token_reads_them() {
-        let p = format!("{}/../smartcontracts/evm/test/vectors/trade_kat.json", env!("CARGO_MANIFEST_DIR"));
+        let p = format!("{}/../smartcontracts/evm/test/vectors/legacy/ua-mtx-merge/trade_kat.json", env!("CARGO_MANIFEST_DIR"));
         let k: Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
         let s = |f: &str| k[f].as_str().unwrap_or_else(|| panic!("{f}")).to_string();
         let order = crate::abi::IToken::mtxCancelOrderCall::abi_decode(&alloy::hex::decode(&s("cancel_calldata")[2..]).unwrap()).unwrap();

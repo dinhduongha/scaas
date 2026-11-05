@@ -428,7 +428,7 @@ contract ZetherWrappedTest is ZetherFixture {
         (o.from, o.wrappedToken, o.amount, o.minMinted, o.minFill) =
             (MetaTxLib.pad(payer), address(z), 20 * SCALE, 20 * SCALE, 20 * SCALE);
         (o.batch, o.nonce, o.validUntil) = (7, 1, block.timestamp + 300);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(PAYER_PK, pts.uaTradeOrderDigest(DexLegs.asTrade(o)));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(PAYER_PK, pts.tradeOrderDigest(DexLegs.asTrade(o)));
         IUARegistry.UASig memory a;
         a.signature = abi.encodePacked(r, s, v);
         vm.prank(relayer);

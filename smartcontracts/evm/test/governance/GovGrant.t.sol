@@ -648,7 +648,7 @@ contract GovGrantTest is Test {
         ITradeToken.TradeOrder memory o = _tradeOrder(vm.addr(DAVE_PK), address(a), 2000, 1000, address(d));
         st.makers[0] = DexLegs.Leg(hk, o, _sign(DAVE_PK, d.dexOrderDigest(hk, o)), 2000);
         o = _tradeOrder(vm.addr(ALICE_PK), hk, 1000, 2000, address(d));
-        st.taker = DexLegs.Leg(address(a), o, _sign(ALICE_PK, a.tradeOrderDigest(o)), 1000);
+        st.taker = DexLegs.Leg(address(a), o, _sign(ALICE_PK, a.tradeOrderDigest(DexLegs.ua(o))), 1000);
     }
 
     function _sign(uint256 pk, bytes32 digest) internal pure returns (bytes memory) {

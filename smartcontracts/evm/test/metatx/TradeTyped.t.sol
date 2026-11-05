@@ -61,6 +61,11 @@ struct LegacyWrapOrder {
 abstract contract OrderRows is Test {
     string internal j;
     uint256 internal constant FUNDS = 10_000_000;
+    /// The retired address cancel and the `ua*` name the rows hold (ua-mtx-merge T6; T11 regenerates the rows).
+    string internal constant OLD_CANCEL_ORDER =
+        "mtxCancelOrder((address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),bytes)";
+    string internal constant UA_CANCEL_ORDER =
+        "uaCancelOrder((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))";
     address internal constant ANYONE = address(0x0BEE);
 
     function _kind() internal pure virtual returns (string memory);
@@ -197,39 +202,46 @@ abstract contract OrderRows is Test {
         // ua-mtx-merge T3 (R39): the row holds the `uaWrapOrder` selector (until T11); it runs under `mtxWrapOrder`
         _runRenamed("UAWrapOrder", address(w), address(u), o.relayer, built, IWrappedToken.mtxWrapOrder.selector);
         assertEq(w.balanceOf(signer), 997);
-        assertEq(u.pulled(u.uaTradeOrderDigest(DexLegs.asTrade(o))), o.amount);
+        assertEq(u.pulled(u.tradeOrderDigest(DexLegs.asTrade(o))), o.amount);
     }
 
-    function test_typedOpsVectors_CancelOrderRow() public {
+    /// ua-mtx-merge T6 (R12, R38), meaning: the address `mtxCancelOrder(TradeOrder, bytes)` left the token; the row
+    /// (until T11 retires it, MD-7) finds no entry. The token's cancel is `CancelUAOrder`'s row, below.
+    function test_typedOpsVectors_CancelOrderRowHasNoEntry() public {
         j = vm.readFile(TYPED_OPS);
         NormalToken t = _normalKind();
         ITradeToken.TradeOrder memory o = _native(_order("CancelOrder"));
-        _run("CancelOrder", address(t), address(t), ANYONE, abi.encodeCall(ITradeToken.mtxCancelOrder, (o, _sigOf("CancelOrder"))));
-        assertEq(t.pulled(t.tradeOrderDigest(o)), o.amount);
+        _rowHasNoEntry("CancelOrder", address(t), abi.encodeWithSignature(OLD_CANCEL_ORDER, o, _sigOf("CancelOrder")));
+        assertEq(t.pulled(t.tradeOrderDigest(DexLegs.ua(o))), 0);
     }
 
+    /// ua-mtx-merge T6: the row holds the `uaCancelOrder` selector (until T11); it runs under the merged `mtxCancelOrder`.
     function test_typedOpsVectors_CancelUAOrderRow() public {
         j = vm.readFile(TYPED_OPS);
         NormalToken t = _normalKind();
         ITradeToken.UATradeOrder memory o = _order("CancelUAOrder");
-        _run("CancelUAOrder", address(t), address(t), ANYONE, abi.encodeCall(ITradeToken.uaCancelOrder, (o, _uaSig("CancelUAOrder"))));
-        assertEq(t.pulled(t.uaTradeOrderDigest(o)), o.amount);
+        _runRenamed("CancelUAOrder", address(t), address(t), ANYONE,
+            abi.encodeWithSignature(UA_CANCEL_ORDER, o, _uaSig("CancelUAOrder")), ITradeToken.mtxCancelOrder.selector);
+        assertEq(t.pulled(t.tradeOrderDigest(o)), o.amount);
     }
 
-    function test_typedOpsVectors_CancelWrapOrderRow() public {
+    /// ua-mtx-merge T6, meaning: as `CancelOrder` for the address `CancelWrapOrder` (carried from T3: the address wrap
+    /// forms leave the token with the address trade path).
+    function test_typedOpsVectors_CancelWrapOrderRowHasNoEntry() public {
         j = vm.readFile(TYPED_OPS);
         NormalToken t = _normalKind();
         ITradeToken.TradeOrder memory o = _native(_wrapAt(_f("CancelWrapOrder", "order.")));
-        _run("CancelWrapOrder", address(t), address(t), ANYONE, abi.encodeCall(ITradeToken.mtxCancelOrder, (o, _sigOf("CancelWrapOrder"))));
-        assertEq(t.pulled(t.tradeOrderDigest(o)), o.amount);
+        _rowHasNoEntry("CancelWrapOrder", address(t), abi.encodeWithSignature(OLD_CANCEL_ORDER, o, _sigOf("CancelWrapOrder")));
+        assertEq(t.pulled(t.tradeOrderDigest(DexLegs.ua(o))), 0);
     }
 
     function test_typedOpsVectors_CancelUAWrapOrderRow() public {
         j = vm.readFile(TYPED_OPS);
         NormalToken t = _normalKind();
         ITradeToken.UATradeOrder memory o = _wrapAt(_f("CancelUAWrapOrder", "order."));
-        _run("CancelUAWrapOrder", address(t), address(t), ANYONE, abi.encodeCall(ITradeToken.uaCancelOrder, (o, _uaSig("CancelUAWrapOrder"))));
-        assertEq(t.pulled(t.uaTradeOrderDigest(o)), o.amount);
+        _runRenamed("CancelUAWrapOrder", address(t), address(t), ANYONE,
+            abi.encodeWithSignature(UA_CANCEL_ORDER, o, _uaSig("CancelUAWrapOrder")), ITradeToken.mtxCancelOrder.selector);
+        assertEq(t.pulled(t.tradeOrderDigest(o)), o.amount);
     }
 
     function _callOf(string memory op) private view returns (address, bytes32) {
@@ -402,8 +414,8 @@ contract OrderRowsTokenTest is OrderRows, UALedgerBase {
     /// on the merged `mtxExecute` a native signer reads `_mtxRule` (B): `MtxSelectorNotAllowed`, no longer `MetaTxUnknownOp`;
     /// the cancel listed is the merged `mtxCancelNonce`.)
     function test_c6EntriesNotAllowlisted() public {
-        bytes4[13] memory sels = [ITradeToken.mtxTrade.selector, ITradeToken.uaTrade.selector, ITradeToken.mtxCancelOrder.selector,
-            ITradeToken.uaCancelOrder.selector, ITradeToken.mtxInvalidateNonces.selector, ITradeToken.uaInvalidateNonces.selector,
+        bytes4[13] memory sels = [ITradeToken.mtxTrade.selector, ITradeToken.mtxTrade.selector, ITradeToken.mtxCancelOrder.selector,
+            ITradeToken.mtxCancelOrder.selector, ITradeToken.mtxInvalidateNonces.selector, ITradeToken.mtxInvalidateNonces.selector,
             IERC20MetaTx.mtxRelayFee.selector, IERC20MetaTx.mtxRelayFee.selector, IMetaTokenV2.mtxPayReceiverFee.selector,
             IMetaTokenV2.mtxPayReceiverFee.selector, IWrappedToken.mtxWrapOrder.selector, IWrappedToken.mtxWrapOrder.selector,
             UAMetaTxBase.mtxCancelNonce.selector];

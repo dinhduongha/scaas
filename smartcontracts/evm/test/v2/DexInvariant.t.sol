@@ -389,10 +389,10 @@ contract DexHandler is Test {
         (s.party, s.sell, s.o) = (p, sell, o);
         if (p >= 3 || (sell != usdc && (r >> 17) & 1 == 1)) {
             s.shape = 1;
-            s.h = ITradeToken(sell).uaTradeOrderDigest(o);
+            s.h = ITradeToken(sell).tradeOrderDigest(o);
         } else {
             ITradeToken.TradeOrder memory t = abi.decode(abi.encode(o), (ITradeToken.TradeOrder));
-            s.h = sell == usdc ? dex.dexOrderDigest(sell, t) : ITradeToken(sell).tradeOrderDigest(t);
+            s.h = sell == usdc ? dex.dexOrderDigest(sell, t) : ITradeToken(sell).tradeOrderDigest(DexLegs.ua(t));
             s.t = t;
         }
         s.sig = _sign(p, s.h);

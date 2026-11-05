@@ -5,7 +5,7 @@ import { secp256k1 } from '@noble/curves/secp256k1.js';
 import {
   hashTypedData, hashStruct, secpSubjectKey, accountSalt, predictAccount, accountSignature, merkleBatch, processProof,
   batchLeaf, evmAddress, passkeySubjectKey, addKeyCall, addKeyTypedData, executeTypedData, checkOwnerCall, checkPayment,
-  keyProofMessage, metaTxTypedData, metaTransferTypedData, checkCall, tradeOrderTypedData, cancelOrderTypedData, cancelDexOrderTypedData,
+  keyProofMessage, metaTxTypedData, metaTransferTypedData, checkCall, tradeOrderTypedData, uaTradeOrderTypedData, padId, cancelOrderTypedData, cancelDexOrderTypedData,
   invalidateNoncesTypedData, uaInvalidateNoncesTypedData, checkTradeOrder, bidMinFill, bidMinBase, checkCancel, payLane, receiverFeeTypedData, wrapToUACall,
   unwrapToUACall, payWithFeeToUACalldata, checkReceiverFee,
 } from '../src/evm.js';
@@ -40,8 +40,10 @@ function decodeOrder(abi) {
     validUntil: num(12) };
 }
 
-test('TradeOrder, CancelOrder, InvalidateNonces in the token domain = forge KAT (TradeKat.t.sol, trade_kat.json)', () => {
-  const k = read('trade_kat.json');
+// ua-mtx-merge T6 (R12): the token's address `TradeOrder` side and its KAT moved to the legacy place; the token signs
+// `UATradeOrder` (uatrade_kat.json, ua-trade.test.js). These builders are the address forms until T11 moves them.
+test('TradeOrder, CancelOrder, InvalidateNonces in the token domain = the legacy forge KAT (trade_kat.json)', () => {
+  const k = legacyKat('trade_kat.json');
   const o = decodeOrder(k.order_abi);
   const td = tradeOrderTypedData({ token: k.verifying_contract, chainId: 7622, chainUid: k.salt, order: o });
   assert.equal(hex(hashTypedData(td)), k.order_hash);
@@ -59,8 +61,10 @@ test('DexOrder (nested TradeOrder) and the DEX cancels in the DEX domain = forge
   const at = { name: 'SCaaS Dex', contract: k.dex, chainId: 7622, chainUid: k.salt };
   assert.equal(hex(hashTypedData(cancelDexOrderTypedData({ ...at, message: { order: { sellToken: k.outside_token, order: o } } }))), k.cancel_digest);
   assert.equal(hex(hashTypedData(invalidateNoncesTypedData({ ...at, from: o.from, batch: 1, minNonce: 5 }))), k.invalidate_digest);
+  // ua-mtx-merge T6 (R12): the SCaaS taker's leg is its `UATradeOrder` (the address zero-padded, the same 13 words)
   const t = decodeOrder(k.taker_order_abi);
-  assert.equal(hex(hashTypedData(tradeOrderTypedData({ token: k.token, chainId: 7622, chainUid: k.salt, order: t }))),
+  const ut = { ...t, from: padId(t.from), destination: padId(t.destination) };
+  assert.equal(hex(hashTypedData(uaTradeOrderTypedData({ token: k.token, chainId: 7622, chainUid: k.salt, order: ut }))),
     k.taker_order_hash);
 });
 

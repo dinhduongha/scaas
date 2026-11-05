@@ -75,7 +75,7 @@ contract DexGasTest is UADexBase {
         ITradeToken.TradeOrder memory o = _order(alice, address(B), 1000, 1800, nonce);
         p.ref = ref;
         p.legs = new ISCaaSDex.ExchangeLeg[](1);
-        p.legs[0] = DexLegs.xLeg(address(A), o, _natLeg(address(A), o, 1000).sig, 1000, 1800);
+        p.legs[0] = DexLegs.xLeg(address(A), o, _natSig(address(A), o), 1000, 1800);
     }
 
     /// Bound 1.5 x 0.60 M (one taker, one maker, one hop).

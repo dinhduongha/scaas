@@ -86,7 +86,7 @@ interface IWrappedToken {
         external returns (uint256 out, uint256 burned);
     /// @notice Wrap a SCaaS underlying by the holder's `UAWrapOrder` (CTR-TOK-20, UA-5b; R39): the order is the
     ///         underlying's `UATradeOrder` with `dex` = `receiveToken` = this token; a derived holder needs a ledger
-    ///         underlying (`UALegNotLedger`); `minted − fee` to `o.destination` (0 ⇒ `o.from`), a derived id into the UA
+    ///         underlying, and a leg with no `mtxTrade` is refused (`UALegNotLedger` both); `minted − fee` to `o.destination` (0 ⇒ `o.from`), a derived id into the UA
     ///         ledger; `fee` pays the submitter in minted units.
     function mtxWrapOrder(address underlying, ITradeToken.UAWrapOrder calldata o, IUARegistry.UASig calldata auth)
         external returns (uint256 minted);

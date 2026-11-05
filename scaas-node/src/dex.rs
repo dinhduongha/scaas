@@ -905,7 +905,7 @@ mod tests {
         let c = ISCaaSDex::mtxInvalidateNoncesCall::abi_decode(&inv).unwrap();
         assert_eq!((c.from, c.batch, c.newMin), (maker.from, U256::from(1), U256::from(5)));
         // the token-side order hash and cancel of trade_kat.json
-        let p = concat!(env!("CARGO_MANIFEST_DIR"), "/../smartcontracts/evm/test/vectors/trade_kat.json");
+        let p = concat!(env!("CARGO_MANIFEST_DIR"), "/../smartcontracts/evm/test/vectors/legacy/ua-mtx-merge/trade_kat.json");
         let k: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
         let o = TradeOrder::abi_decode(&hex_bytes(&word(&k, "order_abi")).unwrap()).unwrap();
         let td = domain("SCaaS MetaToken", 7622, Address::from_str(&word(&k, "verifying_contract")).unwrap(),

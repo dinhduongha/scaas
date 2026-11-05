@@ -148,12 +148,12 @@ contract GovHybridTest is UALedgerBase {
     function test_capHolds_mtxWrapOrder() public {
         WrappedToken w = _hybrid(address(tok), CAP);
         ITradeToken.UAWrapOrder memory o = _uaWrapOrder(w, CAP, 1);
-        bytes memory sig = _ecdsa(ALICE_PK, tok.uaTradeOrderDigest(DexLegs.asTrade(o)));
+        bytes memory sig = _ecdsa(ALICE_PK, tok.tradeOrderDigest(DexLegs.asTrade(o)));
         vm.prank(RELAYER);
         w.mtxWrapOrder(address(tok), o, UACall.auth(o.from, sig));
         assertEq(w.totalSupply(), CAP);
         o = _uaWrapOrder(w, 1, 2);
-        sig = _ecdsa(ALICE_PK, tok.uaTradeOrderDigest(DexLegs.asTrade(o)));
+        sig = _ecdsa(ALICE_PK, tok.tradeOrderDigest(DexLegs.asTrade(o)));
         vm.expectRevert(_over(CAP + 1));
         vm.prank(RELAYER);
         w.mtxWrapOrder(address(tok), o, UACall.auth(o.from, sig));

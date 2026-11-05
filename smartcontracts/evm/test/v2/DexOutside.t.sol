@@ -213,7 +213,7 @@ contract DexOutsideTest is Test {
     }
 
     function _taker(ITradeToken.TradeOrder memory t, uint256 fill) internal view returns (DexLegs.Leg memory) {
-        return DexLegs.Leg(address(a), t, _sig(ALICE_PK, a.tradeOrderDigest(t)), fill);
+        return DexLegs.Leg(address(a), t, _sig(ALICE_PK, a.tradeOrderDigest(DexLegs.ua(t))), fill);
     }
 
     function _one(DexLegs.Settlement memory s) internal pure returns (DexLegs.Settlement[] memory ss) {

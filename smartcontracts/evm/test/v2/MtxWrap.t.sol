@@ -15,7 +15,7 @@ import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 
-/// A leg whose `uaTrade` delivers `amount + skew` to `o.dex` (no signature, no checks): a lying underlying.
+/// A leg whose `mtxTrade` (ua-mtx-merge T6: the merged name) delivers `amount + skew` to `o.dex` (no signature, no checks): a lying underlying.
 contract SkewLeg {
     mapping(address => uint256) public balanceOf;
     int256 public skew;
@@ -26,7 +26,7 @@ contract SkewLeg {
 
     function setBalance(address a, uint256 v) external { balanceOf[a] = v; }
 
-    function uaTrade(ITradeToken.UATradeOrder calldata o, IUARegistry.UASig calldata, ITradeToken.TradeFill calldata)
+    function mtxTrade(ITradeToken.UATradeOrder calldata o, IUARegistry.UASig calldata, ITradeToken.TradeFill calldata)
         external
     {
         balanceOf[o.dex] = uint256(int256(balanceOf[o.dex] + o.amount) + skew);
@@ -62,7 +62,7 @@ contract MtxWrapTest is V2Fixture {
     }
 
     function _sig(ITradeToken.UAWrapOrder memory o) internal view returns (IUARegistry.UASig memory a) {
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, u.uaTradeOrderDigest(DexLegs.asTrade(o)));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, u.tradeOrderDigest(DexLegs.asTrade(o)));
         a.signature = abi.encodePacked(r, s, v);
     }
 
@@ -81,7 +81,7 @@ contract MtxWrapTest is V2Fixture {
         (,, uint256 reserve,,) = w.legOf(address(u));
         assertEq(reserve, 1000);
         assertEq(u.allowance(alice, address(w)), 0);
-        assertEq(u.pulled(u.uaTradeOrderDigest(DexLegs.asTrade(o))), 1000);
+        assertEq(u.pulled(u.tradeOrderDigest(DexLegs.asTrade(o))), 1000);
         assertGe(w.collateralValue(), w.totalSupply());
     }
 
@@ -130,7 +130,7 @@ contract MtxWrapTest is V2Fixture {
     function test_mtxWrapOrder_signedMinimumIsThePrice() public {
         ITradeToken.UAWrapOrder memory o = _order(1000, 3001, 0);
         IUARegistry.UASig memory sig = _sig(o);
-        bytes32 h = u.uaTradeOrderDigest(DexLegs.asTrade(o));
+        bytes32 h = u.tradeOrderDigest(DexLegs.asTrade(o));
         vm.prank(relayer);
         vm.expectRevert(abi.encodeWithSelector(ITradeToken.PriceLimit.selector, h));
         w.mtxWrapOrder(address(u), o, sig);
@@ -140,7 +140,7 @@ contract MtxWrapTest is V2Fixture {
         ITradeToken.UAWrapOrder memory o = _order(1000, 3000, 0);
         o.relayer = bob;
         IUARegistry.UASig memory sig = _sig(o);
-        bytes32 h = u.uaTradeOrderDigest(DexLegs.asTrade(o));
+        bytes32 h = u.tradeOrderDigest(DexLegs.asTrade(o));
         vm.prank(relayer);
         vm.expectRevert(abi.encodeWithSelector(ITradeToken.WrongRelayer.selector, h, relayer));
         w.mtxWrapOrder(address(u), o, sig);
@@ -230,7 +230,7 @@ contract MtxWrapTest is V2Fixture {
         ITradeToken.UAWrapOrder memory o = _order(1000, 3000, 0);
         o.flags = 3; // IOC | ESCROW: Path B wants a (amount, 0, 0) fill, the wrapper passes the price
         IUARegistry.UASig memory sig = _sig(o);
-        vm.expectRevert(abi.encodeWithSelector(ITradeToken.EscrowFillShape.selector, u.uaTradeOrderDigest(DexLegs.asTrade(o))));
+        vm.expectRevert(abi.encodeWithSelector(ITradeToken.EscrowFillShape.selector, u.tradeOrderDigest(DexLegs.asTrade(o))));
         w.mtxWrapOrder(address(u), o, sig);
     }
 

@@ -213,10 +213,12 @@ library WrappedLib {
     }
 
     /// @notice `mtxWrapOrder` (CTR-TOK-20, UA-5b, R39): the leg must accept a wrap (enabled, no pending change, no
-    ///         shortfall); the underlying's `uaTrade` takes the holder's `UAWrapOrder` as the `UATradeOrder` with
+    ///         shortfall); the underlying's `mtxTrade` takes the holder's `UAWrapOrder` as the `UATradeOrder` with
     ///         `dex == receiveToken == wrappedToken`: it checks the holder, that this token is the puller, the price
     ///         (`minMinted <= minted`), the relayer (`submitter`) and the fee bound, and moves `o.amount` here. A ledger
-    ///         is asked of the underlying (`IUALedger` by ERC-165, as `payOutToUA`) only for a derived holder (C).
+    ///         is asked of the underlying (`IUALedger` by ERC-165, as `payOutToUA`) only for a derived holder (C). A leg
+    ///         with no `mtxTrade` (an outside ERC-20) fails closed by name: a leg call that reverts without data is
+    ///         `UALegNotLedger` (ua-mtx-merge T6; a native holder asks no registry), any other revert is the leg's own.
     /// @return received the measured delta (must be `o.amount`)
     /// @return minted `⌊o.amount·num/den⌋`
     /// @return fee `⌈minted·o.fee/10⁶⌉`, the submitter's part of `minted`
@@ -229,7 +231,13 @@ library WrappedLib {
         }
         (minted, fee) = _sigQuote(L, o.amount, o.fee, supply);
         received = _sigBefore(L); // the balance before, in the return slot (stack)
-        ITradeToken(u).uaTrade(_order(o), auth, ITradeToken.TradeFill(o.amount, minted, fee, submitter));
+        try ITradeToken(u).mtxTrade(_order(o), auth, ITradeToken.TradeFill(o.amount, minted, fee, submitter)) {}
+        catch (bytes memory r) {
+            // ponytail: an empty revert is read as "no `mtxTrade`"; a leg that ran out of gas inside gets the same name
+            // (the submitter's simulation shows it); probe the leg's code if a finer verdict is ever needed
+            if (r.length == 0) revert IUALedger.UALegNotLedger(u);
+            assembly ("memory-safe") { revert(add(r, 0x20), mload(r)) }
+        }
         received = _sigReceived(L, received, o.amount);
     }
 

@@ -1458,7 +1458,7 @@ mod tests {
             assert_eq!(p.data.to_vec(), hex(data), "the bytes too");
             format!("{:#x}", p.typed.digest_on(chain, uid.parse().unwrap()).unwrap())
         };
-        let t = file("evm/test/vectors/trade_kat.json");
+        let t = file("evm/test/vectors/legacy/ua-mtx-merge/trade_kat.json");
         let chain = |k: &Value| k["chain_id"].as_str().unwrap().parse::<u64>().unwrap();
         assert_eq!(digest("token", t["verifying_contract"].as_str().unwrap(), chain(&t), t["salt"].as_str().unwrap(), &t["invalidate_calldata"]),
             t["invalidate_digest"].as_str().unwrap().to_lowercase());

@@ -77,7 +77,7 @@
    "error": ""
   },
   {
-   "sig": "mtxCancelOrder((address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),bytes)",
+   "sig": "mtxCancelOrder((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
@@ -92,7 +92,7 @@
    "error": ""
   },
   {
-   "sig": "mtxInvalidateNonces(address,uint256,uint256,bytes)",
+   "sig": "mtxInvalidateNonces(bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
@@ -117,7 +117,7 @@
    "error": ""
   },
   {
-   "sig": "mtxTrade((address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),bytes,(uint256,uint256,uint256,address))",
+   "sig": "mtxTrade((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(uint256,uint256,uint256,address))",
    "class": "SIGNED",
    "error": ""
   },
@@ -157,11 +157,6 @@
    "error": ""
   },
   {
-   "sig": "restorePulled((address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),uint256)",
-   "class": "SIGNED",
-   "error": "NotDex(address)"
-  },
-  {
    "sig": "restorePulled((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),uint256)",
    "class": "SIGNED",
    "error": "NotDex(address)"
@@ -194,21 +189,6 @@
   {
    "sig": "transferToUA(bytes32,uint256)",
    "class": "OWN_BALANCE",
-   "error": ""
-  },
-  {
-   "sig": "uaCancelOrder((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-   "class": "SIGNED",
-   "error": ""
-  },
-  {
-   "sig": "uaInvalidateNonces(bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-   "class": "SIGNED",
-   "error": ""
-  },
-  {
-   "sig": "uaTrade((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(uint256,uint256,uint256,address))",
-   "class": "SIGNED",
    "error": ""
   }
  ],
@@ -304,7 +284,7 @@
    "error": ""
   },
   {
-   "sig": "mtxCancelOrder((address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),bytes)",
+   "sig": "mtxCancelOrder((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
@@ -319,7 +299,7 @@
    "error": ""
   },
   {
-   "sig": "mtxInvalidateNonces(address,uint256,uint256,bytes)",
+   "sig": "mtxInvalidateNonces(bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
@@ -344,7 +324,7 @@
    "error": ""
   },
   {
-   "sig": "mtxTrade((address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),bytes,(uint256,uint256,uint256,address))",
+   "sig": "mtxTrade((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(uint256,uint256,uint256,address))",
    "class": "SIGNED",
    "error": ""
   },
@@ -424,11 +404,6 @@
    "error": ""
   },
   {
-   "sig": "restorePulled((address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),uint256)",
-   "class": "SIGNED",
-   "error": "NotDex(address)"
-  },
-  {
    "sig": "restorePulled((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),uint256)",
    "class": "SIGNED",
    "error": "NotDex(address)"
@@ -461,21 +436,6 @@
   {
    "sig": "transferToUA(bytes32,uint256)",
    "class": "OWN_BALANCE",
-   "error": ""
-  },
-  {
-   "sig": "uaCancelOrder((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-   "class": "SIGNED",
-   "error": ""
-  },
-  {
-   "sig": "uaInvalidateNonces(bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-   "class": "SIGNED",
-   "error": ""
-  },
-  {
-   "sig": "uaTrade((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(uint256,uint256,uint256,address))",
-   "class": "SIGNED",
    "error": ""
   },
   {
@@ -591,7 +551,7 @@
    "error": ""
   },
   {
-   "sig": "mtxCancelOrder((address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),bytes)",
+   "sig": "mtxCancelOrder((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
@@ -636,7 +596,7 @@
    "error": ""
   },
   {
-   "sig": "mtxInvalidateNonces(address,uint256,uint256,bytes)",
+   "sig": "mtxInvalidateNonces(bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
@@ -711,7 +671,7 @@
    "error": ""
   },
   {
-   "sig": "mtxTrade((address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),bytes,(uint256,uint256,uint256,address))",
+   "sig": "mtxTrade((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(uint256,uint256,uint256,address))",
    "class": "SIGNED",
    "error": ""
   },
@@ -761,11 +721,6 @@
    "error": ""
   },
   {
-   "sig": "restorePulled((address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),uint256)",
-   "class": "SIGNED",
-   "error": "NotDex(address)"
-  },
-  {
    "sig": "restorePulled((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),uint256)",
    "class": "SIGNED",
    "error": "NotDex(address)"
@@ -798,21 +753,6 @@
   {
    "sig": "transferToUA(bytes32,uint256)",
    "class": "OWN_BALANCE",
-   "error": ""
-  },
-  {
-   "sig": "uaCancelOrder((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-   "class": "SIGNED",
-   "error": ""
-  },
-  {
-   "sig": "uaInvalidateNonces(bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-   "class": "SIGNED",
-   "error": ""
-  },
-  {
-   "sig": "uaTrade((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(uint256,uint256,uint256,address))",
-   "class": "SIGNED",
    "error": ""
   }
  ],
@@ -908,7 +848,7 @@
    "error": ""
   },
   {
-   "sig": "mtxCancelOrder((address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),bytes)",
+   "sig": "mtxCancelOrder((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
@@ -953,7 +893,7 @@
    "error": ""
   },
   {
-   "sig": "mtxInvalidateNonces(address,uint256,uint256,bytes)",
+   "sig": "mtxInvalidateNonces(bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
@@ -1028,7 +968,7 @@
    "error": ""
   },
   {
-   "sig": "mtxTrade((address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),bytes,(uint256,uint256,uint256,address))",
+   "sig": "mtxTrade((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(uint256,uint256,uint256,address))",
    "class": "SIGNED",
    "error": ""
   },
@@ -1138,11 +1078,6 @@
    "error": ""
   },
   {
-   "sig": "restorePulled((address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),uint256)",
-   "class": "SIGNED",
-   "error": "NotDex(address)"
-  },
-  {
    "sig": "restorePulled((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),uint256)",
    "class": "SIGNED",
    "error": "NotDex(address)"
@@ -1175,21 +1110,6 @@
   {
    "sig": "transferToUA(bytes32,uint256)",
    "class": "OWN_BALANCE",
-   "error": ""
-  },
-  {
-   "sig": "uaCancelOrder((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-   "class": "SIGNED",
-   "error": ""
-  },
-  {
-   "sig": "uaInvalidateNonces(bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-   "class": "SIGNED",
-   "error": ""
-  },
-  {
-   "sig": "uaTrade((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(uint256,uint256,uint256,address))",
-   "class": "SIGNED",
    "error": ""
   },
   {
@@ -1305,7 +1225,7 @@
    "error": ""
   },
   {
-   "sig": "mtxCancelOrder((address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),bytes)",
+   "sig": "mtxCancelOrder((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
@@ -1360,7 +1280,7 @@
    "error": ""
   },
   {
-   "sig": "mtxInvalidateNonces(address,uint256,uint256,bytes)",
+   "sig": "mtxInvalidateNonces(bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
@@ -1415,7 +1335,7 @@
    "error": ""
   },
   {
-   "sig": "mtxTrade((address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),bytes,(uint256,uint256,uint256,address))",
+   "sig": "mtxTrade((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(uint256,uint256,uint256,address))",
    "class": "SIGNED",
    "error": ""
   },
@@ -1465,11 +1385,6 @@
    "error": ""
   },
   {
-   "sig": "restorePulled((address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),uint256)",
-   "class": "SIGNED",
-   "error": "NotDex(address)"
-  },
-  {
    "sig": "restorePulled((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),uint256)",
    "class": "SIGNED",
    "error": "NotDex(address)"
@@ -1502,21 +1417,6 @@
   {
    "sig": "transferToUA(bytes32,uint256)",
    "class": "OWN_BALANCE",
-   "error": ""
-  },
-  {
-   "sig": "uaCancelOrder((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-   "class": "SIGNED",
-   "error": ""
-  },
-  {
-   "sig": "uaInvalidateNonces(bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-   "class": "SIGNED",
-   "error": ""
-  },
-  {
-   "sig": "uaTrade((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(uint256,uint256,uint256,address))",
-   "class": "SIGNED",
    "error": ""
   }
  ],
@@ -1612,7 +1512,7 @@
    "error": ""
   },
   {
-   "sig": "mtxCancelOrder((address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),bytes)",
+   "sig": "mtxCancelOrder((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
@@ -1667,7 +1567,7 @@
    "error": ""
   },
   {
-   "sig": "mtxInvalidateNonces(address,uint256,uint256,bytes)",
+   "sig": "mtxInvalidateNonces(bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
@@ -1722,7 +1622,7 @@
    "error": ""
   },
   {
-   "sig": "mtxTrade((address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),bytes,(uint256,uint256,uint256,address))",
+   "sig": "mtxTrade((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(uint256,uint256,uint256,address))",
    "class": "SIGNED",
    "error": ""
   },
@@ -1832,11 +1732,6 @@
    "error": ""
   },
   {
-   "sig": "restorePulled((address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),uint256)",
-   "class": "SIGNED",
-   "error": "NotDex(address)"
-  },
-  {
    "sig": "restorePulled((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),uint256)",
    "class": "SIGNED",
    "error": "NotDex(address)"
@@ -1869,21 +1764,6 @@
   {
    "sig": "transferToUA(bytes32,uint256)",
    "class": "OWN_BALANCE",
-   "error": ""
-  },
-  {
-   "sig": "uaCancelOrder((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-   "class": "SIGNED",
-   "error": ""
-  },
-  {
-   "sig": "uaInvalidateNonces(bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-   "class": "SIGNED",
-   "error": ""
-  },
-  {
-   "sig": "uaTrade((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(uint256,uint256,uint256,address))",
-   "class": "SIGNED",
    "error": ""
   },
   {

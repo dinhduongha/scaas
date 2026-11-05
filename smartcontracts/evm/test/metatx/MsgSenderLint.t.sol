@@ -70,8 +70,10 @@ contract MsgSenderLintTest is Test {
         // MtxPipelineLib); the event of `_execute` came down from MetaTxBase in T3.
         // dex-round T4 (DX7): the two `restorePulled` overloads read their caller directly (`o.dex`), as `mtxTrade`.
         // ua-mtx-merge T2: 7 -> 6, the address `_executeTransfer` (its event relayer) left for legacy/ua-mtx-merge/
-        assertEq(_count("src/metatx/ERC20MetaTx.sol", "msg.sender", false), 6,
-            "ERC20MetaTx: event relayer x2 (_settle, _uaExecuteTransfer), mtxTrade and uaTrade caller (CTR-DEX-15, -25), restorePulled caller x2 (DX7)");
+        // ua-mtx-merge T6 (R12): 6 -> 4, the address `mtxTrade(TradeOrder, …)` and `restorePulled(TradeOrder, …)` left
+        // for legacy/ua-mtx-merge/ (the merged `mtxTrade` and the one `restorePulled` keep their direct caller reads)
+        assertEq(_count("src/metatx/ERC20MetaTx.sol", "msg.sender", false), 4,
+            "ERC20MetaTx: event relayer x2 (_settle, _uaExecuteTransfer), mtxTrade caller (CTR-DEX-15, -25), restorePulled caller (DX7)");
         // ua-mtx-merge T1 (Q2): 1 -> 2, the ordered `mtxCancelNonce` emits its own `UAMetaTransactionExecuted` (no self-call)
         assertEq(_count("src/metatx/UAMetaTxBase.sol", "msg.sender", false), 2,
             "UAMetaTxBase: event relayer (_uaSettle, mtxCancelNonce)");

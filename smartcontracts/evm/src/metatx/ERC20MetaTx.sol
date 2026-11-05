@@ -25,8 +25,9 @@ import {MtxPipelineLib} from "./MtxPipelineLib.sol";
 ///         native and derived ids, the address `MetaTransfer` path in legacy/ua-mtx-merge/) on the same lanes, the
 ///         allowance rule (CTR-TOK-01) and "no tokens at the token's own address" (CTR-MTX-18). Domain
 ///         `("SCaaS MetaToken", "1", chainId, clone, chain_uid)` for every kind (CTR-MTX-02). The sell side of a
-///         `TradeOrder` (CTR-DEX-15) through `TradeLib`. The UA ledger (CTR-UA-18/19/26): `bytes32` balances of derived
-///         UAs, shown as the holder `UA_POOL`, and the `ua*` pipelines on the same lanes. Every signature (the
+///         `UATradeOrder` (CTR-DEX-15, -25; T6: the token's only order form) through `TradeLib`. The UA ledger
+///         (CTR-UA-18/19/26): `bytes32` balances of derived UAs, shown as the holder `UA_POOL`, and the `ua*`
+///         pipelines on the same lanes. Every signature (the
 ///         relayed paths, trade, cancel, invalidate, receiver-fee) is checked in `MtxPipelineLib` (`requireSignature`
 ///         / `authorize`; a derived UA by the registry's `requireAuthorized`), never here (owner 2026-10-27).
 abstract contract ERC20MetaTx is ERC20, UAMetaTxBase, IERC20Payment, ITradeToken, IUALedger, IUALedgerViews {
@@ -75,28 +76,19 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBase, IERC20Payment, ITradeToken
     }
 
     // ------------------------------------------------------------------ trade orders (CTR-DEX-15, -25, -02)
+    // ua-mtx-merge T6 (R12, R38): one form, `UATradeOrder`, for every subject; the address `TradeOrder` entries and
+    // views (`mtxTrade(TradeOrder, bytes, …)`, `mtxCancelOrder(TradeOrder, bytes)`, `mtxInvalidateNonces(address, …)`,
+    // `restorePulled(TradeOrder, …)`, the address digests and `minNonce(address, …)`) are in legacy/ua-mtx-merge/.
 
-    function tradeOrderDigest(TradeOrder calldata o) public view returns (bytes32) {
-        return _hashTypedDataV4(TradeLib.orderHash(TradeLib.core(o), false));
+    function tradeOrderDigest(UATradeOrder calldata o) public view returns (bytes32) {
+        return _hashTypedDataV4(TradeLib.orderHash(o));
     }
 
-    function uaTradeOrderDigest(UATradeOrder calldata o) public view returns (bytes32) {
-        return _hashTypedDataV4(TradeLib.orderHash(o, true));
+    function cancelOrderDigest(UATradeOrder calldata o) public view returns (bytes32) {
+        return _hashTypedDataV4(TradeLib.cancelHash(o));
     }
 
-    function cancelOrderDigest(TradeOrder calldata o) public view returns (bytes32) {
-        return _hashTypedDataV4(TradeLib.cancelHash(TradeLib.core(o), false));
-    }
-
-    function cancelUAOrderDigest(UATradeOrder calldata o) public view returns (bytes32) {
-        return _hashTypedDataV4(TradeLib.cancelHash(o, true));
-    }
-
-    function invalidateNoncesDigest(address from, uint256 batch, uint256 newMin) public view returns (bytes32) {
-        return _hashTypedDataV4(keccak256(abi.encode(TradeLib.INVALIDATE_NONCES_TYPEHASH, from, batch, newMin)));
-    }
-
-    function uaInvalidateNoncesDigest(bytes32 from, uint256 batch, uint256 newMin) public view returns (bytes32) {
+    function invalidateNoncesDigest(bytes32 from, uint256 batch, uint256 newMin) public view returns (bytes32) {
         return _hashTypedDataV4(keccak256(abi.encode(TradeLib.UA_INVALIDATE_NONCES_TYPEHASH, from, batch, newMin)));
     }
 
@@ -104,32 +96,19 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBase, IERC20Payment, ITradeToken
         return TradeLib.$().pulled[orderHash];
     }
 
-    /// @notice One floor per id: `minNonce(a, b) == uaMinNonce(pad(a), b)`.
-    function minNonce(address from, uint256 batch) external view returns (uint256) {
-        return TradeLib.$().minNonce[TradeLib.pad(from)][batch];
-    }
-
-    function uaMinNonce(bytes32 from, uint256 batch) external view returns (uint256) {
+    /// @notice One floor per id (a native address zero-padded); a store apart from the meta-tx nonces.
+    function minNonce(bytes32 from, uint256 batch) external view returns (uint256) {
         return TradeLib.$().minNonce[from][batch];
     }
 
     /// @notice Only `o.dex` calls (a direct read of the caller, CTR-MTX-18); never allowlisted. Moves the fill from
-    ///         `o.from` to `o.dex` and nowhere else. The signature is checked once: a later fill of an order already
-    ///         pulled (`pulled[h] ≠ 0`, `h` binds every field) skips it (CTR-DEX-15 step 4).
-    function mtxTrade(TradeOrder calldata o, bytes calldata sig, TradeFill calldata f) external nonReentrant {
+    ///         `o.from` to `o.dex` and nowhere else; the UA rule under purpose `trade` (a native id signs `h` itself,
+    ///         no registry call); the fill moves through the UA ledger (a derived seller: `Transfer(UA_POOL, dex)` +
+    ///         `UATransfer`). A registry is needed only for a derived seller (C, R9: `authorize` refuses it
+    ///         `UALedgerOff` by name). The signature is checked once: a later fill of an order already pulled
+    ///         (`pulled[h] ≠ 0`, `h` binds every field) skips it (CTR-DEX-15 step 4).
+    function mtxTrade(UATradeOrder calldata o, IUARegistry.UASig calldata auth, TradeFill calldata f) external nonReentrant {
         bytes32 h = tradeOrderDigest(o);
-        UATradeOrder memory c = TradeLib.core(o);
-        TradeLib.precheck(c, f, h, msg.sender, address(this));
-        if (TradeLib.$().pulled[h] == 0) MtxPipelineLib.requireSignature(_mtxCtx(), o.from, h, sig);
-        _transfer(o.from, o.dex, TradeLib.record(c, f, h, false));
-    }
-
-    /// @notice CTR-DEX-25: `mtxTrade` for an id; the UA rule under purpose `trade` (a native id signs `h` itself); the
-    ///         fill moves through the UA ledger (a derived seller: `Transfer(UA_POOL, dex)` + `UATransfer`). A registry
-    ///         is needed only for a derived seller (C, R9: `authorize` refuses it `UALedgerOff` by name), so a native
-    ///         holder's wrap order (`WrappedToken.mtxWrapOrder`, R39) runs on a token with no registry.
-    function uaTrade(UATradeOrder calldata o, IUARegistry.UASig calldata auth, TradeFill calldata f) external nonReentrant {
-        bytes32 h = uaTradeOrderDigest(o);
         UATradeOrder memory c = o;
         TradeLib.precheck(c, f, h, msg.sender, address(this));
         if (TradeLib.$().pulled[h] == 0) MtxPipelineLib.authorize(_mtxCtx(), o.from, UAKinds.PURPOSE_TRADE, h, auth);
@@ -138,37 +117,20 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBase, IERC20Payment, ITradeToken
 
     /// @notice DX7: only `o.dex`, at most what it pulled for the order in this transaction (`TradeLib.restore`); a
     ///         direct read of the caller, never allowlisted.
-    function restorePulled(TradeOrder calldata o, uint256 amount) external nonReentrant {
-        TradeLib.restore(TradeLib.core(o), tradeOrderDigest(o), amount, msg.sender);
-    }
-
     function restorePulled(UATradeOrder calldata o, uint256 amount) external nonReentrant {
-        TradeLib.restore(o, uaTradeOrderDigest(o), amount, msg.sender);
+        TradeLib.restore(o, tradeOrderDigest(o), amount, msg.sender);
     }
 
-    /// @notice Cancel signatures never expire (CTR-DEX-02); anyone may submit one.
-    function mtxCancelOrder(TradeOrder calldata o, bytes calldata sig) external nonReentrant {
-        MtxPipelineLib.requireSignature(_mtxCtx(), o.from, cancelOrderDigest(o), sig);
-        TradeLib.cancel(tradeOrderDigest(o), o.amount, TradeLib.pad(o.from), false);
+    /// @notice Cancel signatures never expire (CTR-DEX-02); anyone may submit one. A native id needs no registry (C).
+    function mtxCancelOrder(UATradeOrder calldata o, IUARegistry.UASig calldata auth) external nonReentrant {
+        MtxPipelineLib.authorize(_mtxCtx(), o.from, UAKinds.PURPOSE_TRADE, cancelOrderDigest(o), auth);
+        TradeLib.cancel(tradeOrderDigest(o), o.amount, o.from, true);
     }
 
-    function uaCancelOrder(UATradeOrder calldata o, IUARegistry.UASig calldata auth) external nonReentrant {
-        _uaOn();
-        MtxPipelineLib.authorize(_mtxCtx(), o.from, UAKinds.PURPOSE_TRADE, cancelUAOrderDigest(o), auth);
-        TradeLib.cancel(uaTradeOrderDigest(o), o.amount, o.from, true);
-    }
-
-    function mtxInvalidateNonces(address from, uint256 batch, uint256 newMin, bytes calldata sig) external nonReentrant {
-        MtxPipelineLib.requireSignature(_mtxCtx(), from, invalidateNoncesDigest(from, batch, newMin), sig);
-        TradeLib.invalidate(TradeLib.pad(from), batch, newMin, false);
-    }
-
-    function uaInvalidateNonces(bytes32 from, uint256 batch, uint256 newMin, IUARegistry.UASig calldata auth)
+    function mtxInvalidateNonces(bytes32 from, uint256 batch, uint256 newMin, IUARegistry.UASig calldata auth)
         external nonReentrant
     {
-        _uaOn();
-        MtxPipelineLib.authorize(
-            _mtxCtx(), from, UAKinds.PURPOSE_TRADE, uaInvalidateNoncesDigest(from, batch, newMin), auth);
+        MtxPipelineLib.authorize(_mtxCtx(), from, UAKinds.PURPOSE_TRADE, invalidateNoncesDigest(from, batch, newMin), auth);
         TradeLib.invalidate(from, batch, newMin, true);
     }
 

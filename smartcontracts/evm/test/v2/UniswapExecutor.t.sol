@@ -288,7 +288,7 @@ contract UniswapExecutorTest is UADexBase {
         p.outsideFloor = 180;
         uint256 a0 = A.balanceOf(alice);
         vm.expectEmit(address(dex));
-        emit ISCaaSDex.ExchangeLegSettled("hy", A.tradeOrderDigest(t), alice, alice, 460, 980, 58, 3, 40, 828);
+        emit ISCaaSDex.UAExchangeLegSettled("hy", A.tradeOrderDigest(DexLegs.ua(t)), DexLegs.pad(alice), DexLegs.pad(alice), 460, 980, 58, 3, 40, 828);
         vm.prank(RELAYER);
         dex.mtxHybridVia(p, address(ex), _hops(_v3(address(A), address(B), 500)));
         assertEq(A.balanceOf(alice), a0 - 460);

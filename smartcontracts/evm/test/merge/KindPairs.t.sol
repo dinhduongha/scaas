@@ -207,7 +207,7 @@ contract KindPairsTest is UALedgerBase {
 
     /// The holder's `UASig` over the order in the underlying `u`'s domain: a native id signs it itself.
     function _oSig(address u, ITradeToken.UAWrapOrder memory o) internal view returns (IUARegistry.UASig memory a) {
-        a.signature = _ecdsa(ALICE_PK, NormalToken(u).uaTradeOrderDigest(DexLegs.asTrade(o)));
+        a.signature = _ecdsa(ALICE_PK, NormalToken(u).tradeOrderDigest(DexLegs.asTrade(o)));
     }
 
     function _wrapOrder(WrappedToken w, address u, ITradeToken.UAWrapOrder memory o) internal returns (uint256) {
@@ -390,9 +390,10 @@ contract KindPairsTest is UALedgerBase {
     /// `IWrappedToken` loses the address bodies and the `ua*` names of its pairs, its merged entries take the `mtx*` names;
     /// `ITradeToken` loses only the `WrapOrder` struct (no function names it), so its id does not move. Old -> new (red
     /// first at 0, then measured; the ITradeToken id XOR-ed from its 17 selectors): IWrappedToken 0xd69c2cd0 -> 0xa84f2937,
-    /// ITradeToken 0x0b4d9a5c (unchanged).
+    /// ITradeToken 0x0b4d9a5c (unchanged). ua-mtx-merge T6 (R12, R38): ITradeToken 0x0b4d9a5c -> 0xe393854e, its 9
+    /// selectors (the address `TradeOrder` entries and views out, the `ua*` ones under the `mtx` / plain names).
     function test_kindPairInterfaceIdsArePinned() public pure {
         assertEq(type(IWrappedToken).interfaceId, bytes4(0xa84f2937), "IWrappedToken");
-        assertEq(type(ITradeToken).interfaceId, bytes4(0x0b4d9a5c), "ITradeToken");
+        assertEq(type(ITradeToken).interfaceId, bytes4(0xe393854e), "ITradeToken");
     }
 }
