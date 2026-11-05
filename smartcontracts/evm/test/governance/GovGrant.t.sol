@@ -44,7 +44,7 @@ contract TopBandApp is GovernanceBase {
 
     constructor(address owner_) GovernanceBase(address(0)) {
         GovernanceLib.Roles memory none;
-        GovernanceLib.init(BITS, 0, nid(owner_), 0, address(0), none, BITS, BITS, 0);
+        GovernanceLib.init(BITS, 0, nid(owner_), 0, address(0), none, BITS, BITS, 0, address(0));
     }
 
     function _guardIn() internal pure override returns (bool) { return false; }

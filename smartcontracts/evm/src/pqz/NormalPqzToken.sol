@@ -46,7 +46,7 @@ contract NormalPqzToken is NormalToken, PqzLayer {
         _requireUnused(cfg, false, true, true, false);
         _setMetadata(cfg.name, cfg.symbol, cfg.decimals);
         GovernanceLib.init(cfg.features, cfg.lockedFeatures, cfg.owner, cfg.grantDelay, cfg.rescueTo, cfg.roles, _validBits(),
-            _roleBits(), _contractOnlyBits());
+            _roleBits(), _contractOnlyBits(), _REGISTRY);
         PqzStateLib.init(cfg.conf, _REGISTRY, PQZ_VERIFIER);
         if (cfg.initialSupply != 0) _mint(cfg.initialHolder, cfg.initialSupply);
     }

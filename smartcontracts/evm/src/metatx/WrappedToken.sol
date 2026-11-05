@@ -73,11 +73,11 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
     function _roleBits() internal pure virtual override returns (uint256) { return GovernanceBits.WRAPPED_ROLES; }
     function _contractOnlyBits() internal pure virtual override returns (uint256) { return GovernanceBits.WRAPPED_CONTRACT_ONLY; }
 
-    /// @dev 5-9 pass the kind's mask and reach `init`'s `FeatureNotBuilt` (GD-19); `validBits()` holds none of them.
+    /// @dev 5-9 are not in the kind's mask: `init` refuses each with `FeatureInvalidForKind` (regulated-kinds spec Q3).
     function _init(TokenConfig memory cfg) internal virtual override {
         _requireUnused(cfg, true, false, false, true);
-        WrappedLib.initToken(cfg, IS_HEDERA, TokenStore.KIND_WRAPPED, _validBits() | GovernanceBits.REGULATED, _roleBits(),
-            _contractOnlyBits());
+        WrappedLib.initToken(cfg, IS_HEDERA, TokenStore.KIND_WRAPPED, _validBits(), _roleBits(), _contractOnlyBits(),
+            _REGISTRY);
     }
 
     // ------------------------------------------------------------------ wrap / unwrap / reserve
@@ -261,10 +261,10 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
         WrappedLib.executeRate(_govSubject(), totalSupply());
     }
 
-    /// @notice `disableFeature(RATE_ADJUSTABLE)` also cancels a pending rate change (CTR-TOK-06).
+    /// @notice `disableFeature(RATE_ADJUSTABLE)` also cancels a pending rate change (CTR-TOK-06), once the disable applied.
     function disableFeature(uint8 bit) external virtual override nonReentrant {
-        GovernanceLib.disableFeature(bit, _govSubject());
-        if (bit == GovernanceBits.RATE_ADJUSTABLE) WrappedLib.dropPending();
+        bool applied = GovernanceLib.disableFeature(bit, _govSubject(), _delayedRelaxBits());
+        if (applied && bit == GovernanceBits.RATE_ADJUSTABLE) WrappedLib.dropPending();
     }
 
     // ------------------------------------------------------------------ allowlist (CTR-MTX-19)

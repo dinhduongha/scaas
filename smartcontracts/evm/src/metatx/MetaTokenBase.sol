@@ -136,6 +136,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
     function _contractOnlyBits() internal pure virtual override returns (uint256) { return 0; }
     function _scalarBits() internal pure override returns (uint256) { return GovernanceBits.TOKEN_SCALAR; }
     function _scopeBits() internal pure override returns (uint256) { return 0; }
+    function _uaRegistry() internal view override returns (address) { return _REGISTRY; }
 
     /// @notice ERC-165; `IERC20Payment` only while `PAYABLE` is set, `IRescuable` only while `RESCUABLE` is.
     function supportsInterface(bytes4 id) external view returns (bool) {

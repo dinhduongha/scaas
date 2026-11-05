@@ -1151,6 +1151,8 @@ roll-over untouched. `ZetherLib` unchanged.
 - [ ] **Step 5: Mutants:** moderated on `_poolMove`; `from` with code accepted; `target` out of a `UA<Op>` digest; a router row on
       the token domain.
 - [ ] **Step 6:** Commit `ua-mtx-merge T32: MODERATE and the eight router control ops`.
+      **Owner 2026-11-05 (CTR-GOV-20):** the transfer power is `operatorTransfer` on bit 22 `OPERATOR_TRANSFER` (any holder,
+      kinds 8–13 only, router op `mtxOperatorTransfer`), in place of `moderatedTransfer` on bit 21; bit 21 gets no body.
 
 **Pins, old → new:** router typehashes (+8); `selector_audit.json`; router size and CREATE2 address. **Gates:** whole `forge
 test`, size gate.

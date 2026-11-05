@@ -32,11 +32,11 @@ library ZetherWrappedLib {
 
     /// @notice The kind's init from the factory's raw `initArgs`: `initialSupply` and `initialHolder` empty, `legs`, the
     ///         rate and `conf` are checked by the two libraries. Never on Hedera (`ZetherLayer` refuses that env).
-    function init(bytes calldata initArgs, IZetherVerifier v) public {
+    function init(bytes calldata initArgs, IZetherVerifier v, address registry) public {
         IFactoryToken.TokenConfig memory cfg = abi.decode(initArgs, (IFactoryToken.TokenConfig));
         if (cfg.initialSupply != 0 || cfg.initialHolder != address(0)) revert IFactoryToken.ConfigFieldForOtherKind(1);
         WrappedLib.initToken(cfg, false, TokenStore.KIND_WRAPPED_ZETHER, GovernanceBits.WRAPPED_BITS,
-            GovernanceBits.WRAPPED_ROLES, GovernanceBits.WRAPPED_CONTRACT_ONLY);
+            GovernanceBits.WRAPPED_ROLES, GovernanceBits.WRAPPED_CONTRACT_ONLY, registry);
         ZetherLib.init(cfg.conf, v);
     }
 

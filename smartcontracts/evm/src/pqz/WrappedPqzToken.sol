@@ -159,8 +159,8 @@ contract WrappedPqzToken is WrappedToken, PqzLayer, IPqzWrappedToken {
 
     /// @notice As `WrappedToken` (also cancels a pending rate change, CTR-TOK-06); restated for the second base.
     function disableFeature(uint8 bit) external override(WrappedToken, GovernanceBase) nonReentrant {
-        GovernanceLib.disableFeature(bit, _govSubject());
-        if (bit == GovernanceBits.RATE_ADJUSTABLE) WrappedLib.dropPending();
+        bool applied = GovernanceLib.disableFeature(bit, _govSubject(), _delayedRelaxBits());
+        if (applied && bit == GovernanceBits.RATE_ADJUSTABLE) WrappedLib.dropPending();
     }
 
     /// @notice The collateral check of a rate change: `totalSupply()` (the shielded value sits in `SHIELD_POOL`, D19).

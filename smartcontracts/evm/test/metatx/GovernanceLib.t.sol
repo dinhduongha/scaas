@@ -62,11 +62,13 @@ contract GovernanceLibTest is Test {
         }
     }
 
-    function test_regulatedFlags_notBuiltOnPublicKinds_invalidOnConfidential() public {
-        for (uint8 b = 5; b < 9; ++b) {
-            vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotBuilt.selector, b));
+    /// ua-mtx-merge T24 (regulated-kinds spec Q3): every plain kind refuses 5-9 as invalid for the kind; before, `NORMAL`
+    /// and `WRAPPED` passed `| REGULATED` and reached `FeatureNotBuilt` (`test_regulatedFlags_notBuiltOnPublicKinds_invalidOnConfidential`).
+    function test_regulatedFlags_invalidOnEveryPlainKind() public {
+        for (uint8 b = 5; b <= 9; ++b) {
+            vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, b));
             h.init(TokenStore.KIND_NORMAL, 1 << b, 0, bytes32(0), none);
-            vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotBuilt.selector, b));
+            vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, b));
             h.init(TokenStore.KIND_WRAPPED, 1 << b, 0, bytes32(0), none);
             vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, b));
             h.init(TokenStore.KIND_NORMAL_ZETHER, 1 << b, 0, bytes32(0), none);
@@ -78,8 +80,8 @@ contract GovernanceLibTest is Test {
     function test_unknownBitsAndKinds_refused() public {
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, uint8(13)));
         h.init(TokenStore.KIND_NORMAL, 1 << 13, 0, bytes32(0), none); // bit 13 is never allocated (CTR-GOV-14)
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotBuilt.selector, uint8(9)));
-        h.init(TokenStore.KIND_NORMAL, 1 << 9, 0, bytes32(0), none); // DENYLIST, refused until built (CTR-GOV-18)
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, uint8(9)));
+        h.init(TokenStore.KIND_NORMAL, 1 << 9, 0, bytes32(0), none); // DENYLIST: a regulated kind's bit (CTR-GOV-18, T24)
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, uint8(0)));
         h.init(6, PAYABLE, 0, bytes32(0), none); // reserved *_ZETHER_PQZ kinds: nothing valid (P6g built 4, 5)
     }

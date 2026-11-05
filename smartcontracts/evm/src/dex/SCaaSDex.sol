@@ -168,10 +168,10 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient, Governan
         s.initialized = true;
         GovernanceLib.Roles memory none;
         GovernanceLib.init(GovernanceBits.DEX_BITS, 0, cfg.owner, cfg.grantDelay, address(0), none, GovernanceBits.DEX_BITS,
-            GovernanceBits.DEX_BITS, 0);
+            GovernanceBits.DEX_BITS, 0, address(0)); // no contract-only bit: no registry read
         if (cfg.owner != 0) { // the owner holds both bits from creation (B-27: `grantRole` would only propose)
-            GovernanceLib.initHolder(GovernanceBits.LISTING, cfg.owner, GovernanceBits.DEX_BITS, 0);
-            GovernanceLib.initHolder(GovernanceBits.FEE_ROUTING, cfg.owner, GovernanceBits.DEX_BITS, 0);
+            GovernanceLib.initHolder(GovernanceBits.LISTING, cfg.owner, GovernanceBits.DEX_BITS, 0, address(0));
+            GovernanceLib.initHolder(GovernanceBits.FEE_ROUTING, cfg.owner, GovernanceBits.DEX_BITS, 0, address(0));
         }
         s.listedOnly = cfg.listedOnly;
         address p = address(new DexPuller(cfg.rescueTo)); // the DEX itself rescues nothing (CTR-DEX-20, spec §6.2)

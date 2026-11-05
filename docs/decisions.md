@@ -1701,6 +1701,7 @@ Change (2026-11-03, owner): **CI tests every on-chain family, one job each, `con
 **Why.** A moderator without the refusals reaches tender deposits, vesting clones, wrapper reserves and pools; refusing a `from` with code leaves Safe-held balances out of reach, the lesser hole.
 **Cost if wrong.** Three normative sentences rewritten; bytes on the plain kinds later.
 **Change (owner 2026-11-03).** `forceTransfer` moves on an unhooked body with its own refusals of both pools and `this`: a hook would stop it on the frozen account it exists for. `moderatedTransfer` stays on the hooked path: "passes `FREEZE` and `ALLOWLIST`" above means it is subject to them, so a frozen `from` is refused, a paused token refuses it and the receiver check applies (`permission-model.md` F11). A review read the word as a bypass and the controller relayed that; corrected the same day.
+**Change (owner 2026-11-05).** The entry moves to bit 22. Old: bit 21 `MODERATE` carries `moderatedTransfer`, a contract-only holder moving units with no record. New: the transfer power, its entry and its refusals move unchanged to bit 22 `OPERATOR_TRANSFER` as `operatorTransfer` ([CTR-GOV-20](#ctr-gov-20--operator_transfer-bit-22-any-holder-the-regulated-kinds)), any holder; bit 21 keeps its name and its contract-only rule (CTR-AS-03, RK-1) and is re-scoped by the owner to "other hierarchical moderation", meaning TBD, no body built. Why: the loyalty / point-of-sale case needs the transfer power for any holder within a daily cap, which is not what a moderation bit means. Cost if wrong: bit 21's meaning stays open until the owner states it. Status: SPECIFIED (`superpowers/specs/2026-11-05-regulated-kinds.md` §3.4).
 **Source.** `research/governance/permission-model.md` §3, §6; `research/governance/permission-model-attack.md` A4.
 
 ### CTR-GOV-09 — Delayed relaxing and RECORD: later, with the asset suite
@@ -1816,6 +1817,15 @@ Both on means: known, and not denied. `ELIGIBLE_CONTRACT` satisfies `requiredFla
 **Why.** The precompile already needs a chain of that kind, and code size on it is the operator's setting, unlike on a public chain.
 **Cost if wrong.** Above 65,536 B every jump widens, about 4.7 KB at once (inferred), and deploy gas grows with the runtime. A customer chain has one more setting to change.
 **Source.** Owner 2026-11-03, two statements; `research/governance/prototype/RESULTS.md`; measured options on branch `token-core`.
+
+### CTR-GOV-20 — OPERATOR_TRANSFER: bit 22, any holder, the regulated kinds
+- old: — · status: current · owner: yes · date: 2026-11-05 · normative: decisions.md#CTR-GOV-20 · superseded-by: —
+
+**Rule.** Bit 22 `OPERATOR_TRANSFER` (power, scalar): a holder moves units out of an account to another with no record. One direct entry `operatorTransfer(bytes32 from, bytes32 to, uint256 amount, bytes32 ref)`, relayed through the `GovernanceRouter` as `mtxOperatorTransfer` (no `mtx` twin on the token); the CTR-GOV-08 refusals unchanged (0, `pad(UA_POOL)`, `pad(SHIELD_POOL)`, `pad(this)`, an unregistered or non-SIGNING derived `to`, a native `from` with code); public balances only (CTR-GOV-13). **Any holder**: an EOA, a single-key UA, an `msig` or a contract, never contract-only. Granted `WHOLE` (one or two operators) or `LIMITED` (`perWindow` over a 1-day `window`, `total`, `maxUses`, `validUntil`, `delegable` leaves). On the regulated kinds 8–13 only (owner correction, 2026-11-05): a plain kind refuses bit 22 as it refuses 5–9 (`FeatureInvalidForKind`), so the plain kinds take no byte and CTR-GOV-03's "+0" is untouched.
+**Status.** SPECIFIED. The constant `GovernanceBits.OPERATOR_TRANSFER` and the holder rule BUILT (ua-mtx-merge T24, `test/governance/GovRelax.t.sol`: an EOA and a single-key UA held `WHOLE` and `LIMITED`, refused past a daily cap; `GovRegulatedBits`: the plain kinds refuse bit 22); the entry, the router op, `governance_bits.json` and the client rows in plan T32 (in place of `moderatedTransfer`), the masks of 8–13 with the kinds.
+**Why.** Loyalty: each sales clerk (an EOA at the point of sale) moves a buyer's points or gives the store's points within a daily limit; a store manager grants the clerks. The transfer power of the draft's `moderatedTransfer` was contract-only on bit 21, which a clerk's key is not.
+**Cost if wrong.** A single key moves balances within its grant: bounded by the grant terms and the owner's revoke; a `WHOLE` holder is unbounded by design. A loyalty program on a plain kind must use a regulated kind for it.
+**Source.** Owner 2026-11-05 (relayed by the controller); `superpowers/specs/2026-11-05-regulated-kinds.md` §3.4; `research/governance/bit-table.md` row 22.
 
 ## 17. Contracts — Meta-transactions
 

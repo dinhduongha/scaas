@@ -66,6 +66,12 @@ abstract contract GovernanceBase is IGovernance {
     function _scalarBits() internal pure virtual returns (uint256);
     /// @dev Subset whose power reads `use`'s returned scope (B-10).
     function _scopeBits() internal pure virtual returns (uint256);
+    /// @dev Subset whose relaxation (revoke, renounce, disable, a `validUntil` cut) waits `grantDelay` (CTR-GOV-09,
+    ///      regulated-kinds spec §3.6): 5, 6, 7 on the regulated kinds 8-13; none elsewhere.
+    function _delayedRelaxBits() internal pure virtual returns (uint256) { return 0; }
+    /// @dev The UA registry a grant asks `kindOf` of a derived holder of a regulated contract-only bit (RK-1); 0 = none,
+    ///      so no derived id holds such a bit.
+    function _uaRegistry() internal view virtual returns (address) { return address(0); }
 
     /// @dev Whether `child` narrows `parent` for `bit`: equality unless the contract defines an order on its scopes.
     function _scopeNarrows(uint8, bytes32 parent, bytes32 child) internal view virtual returns (bool) {
@@ -94,13 +100,13 @@ abstract contract GovernanceBase is IGovernance {
     }
 
     function grantRole(uint8 bit, bytes32 account) external governed {
-        GovernanceLib.grantRole(bit, account, _govSubject(), _roleBits(), _contractOnlyBits());
+        GovernanceLib.grantRole(bit, account, _govSubject(), _roleBits(), _contractOnlyBits(), _uaRegistry());
     }
     /// @notice The owner sets any holder's grant, a widening in two calls (spec §1.6); a holder with a `delegable` grant sets
     ///         a narrower leaf at once. Spent is carried.
     function setGrant(uint8 bit, bytes32 holder, GrantTerms calldata terms) external governed {
-        (bool leaf, bytes32 parentScope) =
-            GovernanceLib.setGrant(bit, holder, terms, _govSubject(), _roleBits(), _contractOnlyBits(), _scalarBits(), _scopeBits());
+        (bool leaf, bytes32 parentScope) = GovernanceLib.setGrant(bit, holder, terms, _govSubject(), _roleBits(),
+            _contractOnlyBits(), _scalarBits(), _scopeBits(), _uaRegistry(), _delayedRelaxBits());
         if (leaf && !_scopeNarrows(bit, parentScope, terms.scope)) revert GrantNotNarrower(7);
     }
 
@@ -108,10 +114,14 @@ abstract contract GovernanceBase is IGovernance {
         GovernanceLib.cancelGrant(bit, account, _govSubject());
     }
     function revokeRole(uint8 bit, bytes32 account) external governed {
-        GovernanceLib.revokeRole(bit, account, _govSubject());
+        GovernanceLib.revokeRole(bit, account, _govSubject(), _delayedRelaxBits());
     }
-    function renounceRole(uint8 bit) external governed { GovernanceLib.renounceRole(bit, _govSubject()); }
-    function disableFeature(uint8 bit) external virtual governed { GovernanceLib.disableFeature(bit, _govSubject()); }
+    function renounceRole(uint8 bit) external governed {
+        GovernanceLib.renounceRole(bit, _govSubject(), _delayedRelaxBits());
+    }
+    function disableFeature(uint8 bit) external virtual governed {
+        GovernanceLib.disableFeature(bit, _govSubject(), _delayedRelaxBits());
+    }
     function transferOwnership(bytes32 newOwner) external governed {
         GovernanceLib.transferOwnership(newOwner, _govSubject());
     }

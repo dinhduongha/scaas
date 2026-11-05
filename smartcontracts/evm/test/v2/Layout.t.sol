@@ -133,7 +133,7 @@ contract LayoutTest is V2Fixture {
         f[14] = F("pending[1][A].eta", 1, u, 0x89, 8);
         f[15] = F("pending[1][A].generation", 1, u, 0x8a, 4);
         f[16] = F("pending[1][A].proposer", 1, u, v, 32);
-        f[17] = F("pending[1][A].termsHash", 1, u, 0x8b, 32);
+        f[17] = F("pending[1][A].commit", 1, u, 0x8b, 32);
         f[18] = F("rescueTo", 0, 0, b, 20);
         _ns(address(p), "governance", "scaas.governance", f);
         f = new F[](14);

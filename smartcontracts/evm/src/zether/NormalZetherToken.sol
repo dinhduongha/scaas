@@ -48,7 +48,8 @@ contract NormalZetherToken is NormalToken, ZetherLayer {
     function _initRaw(bytes calldata initArgs) internal override {
         (uint256 features_, uint256 locked, bytes32 owner_, uint64 delay, address rescueTo_, GovernanceLib.Roles memory roles) =
             ZetherLib.initNormal(initArgs);
-        GovernanceLib.init(features_, locked, owner_, delay, rescueTo_, roles, _validBits(), _roleBits(), _contractOnlyBits());
+        GovernanceLib.init(features_, locked, owner_, delay, rescueTo_, roles, _validBits(), _roleBits(), _contractOnlyBits(),
+            _REGISTRY);
         (address holder, uint256 supply) = ZetherLib.initNormalConf(initArgs, TRANSFER_VERIFIER);
         if (supply != 0) _mint(holder, supply);
     }

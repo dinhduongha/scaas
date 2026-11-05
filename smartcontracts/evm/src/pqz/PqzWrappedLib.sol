@@ -27,7 +27,7 @@ library PqzWrappedLib {
         IFactoryToken.TokenConfig memory cfg = abi.decode(initArgs, (IFactoryToken.TokenConfig));
         if (cfg.initialSupply != 0 || cfg.initialHolder != address(0)) revert IFactoryToken.ConfigFieldForOtherKind(1);
         WrappedLib.initToken(cfg, false, TokenStore.KIND_WRAPPED_PQZ, GovernanceBits.WRAPPED_BITS,
-            GovernanceBits.WRAPPED_ROLES, GovernanceBits.WRAPPED_CONTRACT_ONLY);
+            GovernanceBits.WRAPPED_ROLES, GovernanceBits.WRAPPED_CONTRACT_ONLY, registry);
         PqzStateLib.init(cfg.conf, registry, verifier);
     }
 

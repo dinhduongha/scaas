@@ -86,7 +86,8 @@ contract FeaturesTest is Test {
         NormalToken t = NormalToken(Clones.clone(impl));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, uint8(3)));
         t.initialize(address(this), 1, abi.encode(_cfg(1 << 3, 0, address(0), address(0), 0)));
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotBuilt.selector, uint8(7)));
+        // ua-mtx-merge T24 (regulated-kinds spec Q3): a plain kind refuses 5-9 as invalid, no longer `FeatureNotBuilt`
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, uint8(7)));
         t.initialize(address(this), 1, abi.encode(_cfg(1 << 7, 0, address(0), address(0), 0)));
     }
 

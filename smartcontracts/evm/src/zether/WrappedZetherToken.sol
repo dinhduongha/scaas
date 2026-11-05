@@ -72,7 +72,7 @@ contract WrappedZetherToken is WrappedToken, ZetherLayer, IZetherWrappedToken {
     function _init(TokenConfig memory) internal override(WrappedToken, MetaTokenBase) {}
 
     function _initRaw(bytes calldata initArgs) internal override {
-        ZetherWrappedLib.init(initArgs, TRANSFER_VERIFIER);
+        ZetherWrappedLib.init(initArgs, TRANSFER_VERIFIER, _REGISTRY);
     }
 
     // ------------------------------------------------------------------ wrap-shield / unshield-unwrap (CTR-ZTH-45)
@@ -137,8 +137,8 @@ contract WrappedZetherToken is WrappedToken, ZetherLayer, IZetherWrappedToken {
 
     /// @notice As `WrappedToken` (also cancels a pending rate change, CTR-TOK-06); restated for the second base.
     function disableFeature(uint8 bit) external override(WrappedToken, GovernanceBase) nonReentrant {
-        GovernanceLib.disableFeature(bit, _govSubject());
-        if (bit == GovernanceBits.RATE_ADJUSTABLE) WrappedLib.dropPending();
+        bool applied = GovernanceLib.disableFeature(bit, _govSubject(), _delayedRelaxBits());
+        if (applied && bit == GovernanceBits.RATE_ADJUSTABLE) WrappedLib.dropPending();
     }
 
     /// @notice The collateral check of a rate change counts the shielded value too.

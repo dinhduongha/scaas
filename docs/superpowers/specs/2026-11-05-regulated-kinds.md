@@ -39,6 +39,18 @@ contract for the contract-only bits 5–7, 10, 21, on every family
 4. `mtxCancelNonce` goes through `_regPre` and `_regFeeTo` with no exception (§2.2, RK-8, F-18, F-32).
 5. The `ComplianceRegistry` admin lives in storage, written once by the constructor (§5).
 
+**Owner 2026-11-05, bit 22 `OPERATOR_TRANSFER` ([CTR-GOV-20](../../decisions.md#ctr-gov-20--operator_transfer-bit-22-any-holder-the-regulated-kinds)).**
+The transfer power this text drafted as `moderatedTransfer` on bit 21 moves to a new bit 22 `OPERATOR_TRANSFER`, entry
+`operatorTransfer(bytes32 from, bytes32 to, uint256 amount, bytes32 ref)`, relayed as `mtxOperatorTransfer`, with the
+CTR-GOV-08 refusals unchanged and public balances only (CTR-GOV-13). **Any holder** (an EOA, a single-key UA, an `msig`, a
+contract), `WHOLE` or `LIMITED` (a daily `perWindow`, `total`, `maxUses`, `validUntil`, `delegable` leaves: the loyalty /
+point-of-sale case), on the **regulated kinds 8–13 only** (owner correction, same day): a plain kind refuses bit 22 as it
+refuses 5–9 (`FeatureInvalidForKind`), so the plain kinds take no byte and "+0" is untouched. Bit 21 `MODERATE` keeps its
+rules (contract-only, RK-1) and is re-scoped by the owner to "other hierarchical moderation", meaning TBD: no body is built
+for it. Wherever this text still says `moderatedTransfer`, `ModeratedTransfer`, `ModerateTargetRefused` or bit 21 for the
+transfer power, read `operatorTransfer` on bit 22 (T19 sweeps the text); the governance part is in T24, the entry and the
+router op in T32 (in place of `moderatedTransfer`).
+
 ## 1. Scope and non-goals — SPECIFIED
 
 **In scope (EVM, Hedera for kinds 8 and 9):**
@@ -46,7 +58,8 @@ contract for the contract-only bits 5–7, 10, 21, on every family
 | Item | Rule |
 |---|---|
 | Six implementations, ids 8–13 | one per kind, each the base kind's source plus the regulated hooks (§2) |
-| Controls `FREEZE` 5, `FORCE` 6, `PAUSE` 7, `ALLOWLIST` 8, `DENYLIST` 9, `RECORD` 10, `MODERATE` 21 | §3; bit 8 not on the confidential kinds; bit 21 per Q1 |
+| Controls `FREEZE` 5, `FORCE` 6, `PAUSE` 7, `ALLOWLIST` 8, `DENYLIST` 9, `RECORD` 10, `MODERATE` 21 | §3; bit 8 not on the confidential kinds; bit 21 re-scoped by the owner (2026-11-05), no body |
+| `OPERATOR_TRANSFER` 22 (CTR-GOV-20) | §3.4; kinds 8–13 only, any holder; entry in plan T32 |
 | `RegulatedLib` | external library, the control bodies, namespace `scaas.regulated` |
 | `ComplianceRegistry` | CTR-AS-07, keyed by `bytes32`, one pinned runtime (§5) |
 | `_delayedRelaxBits()` and the relaxation state machine | CTR-GOV-09, in `GovernanceLib` (§3.6) |
@@ -227,7 +240,7 @@ fee mode `NONE` as every router op, so relayable at fee 0. A contract holder sig
 | Unpause | `unpause(bytes32 ref)` | 7, issuer | `mtxUnpause`: `bytes32 ref` | `Unpaused(bytes32 indexed ref)` |
 | Record order | `recordOrder(bytes32 orderId, bytes32 documentHash, bytes32 subject, bytes32 beneficiary, uint256 maxAmount, uint64 freezeUntil)` | 10, compliance | `mtxRecordOrder`: the same six | `OrderRecorded(bytes32 indexed recordId, bytes32 indexed orderId, bytes32 indexed subject, bytes32 beneficiary, uint256 maxAmount, uint64 freezeUntil, bytes32 documentHash)` |
 | Revoke order | `revokeOrder(bytes32 recordId, bytes32 reasonRef)` | 10, compliance | `mtxRevokeOrder`: `bytes32 recordId, bytes32 reasonRef` | `OrderRevoked(bytes32 indexed recordId, bytes32 reasonRef)`, and `AccountUnfrozen(subject, reasonRef)` when it ends a freeze (M-08) |
-| Moderated transfer (Q1) | `moderatedTransfer(bytes32 from, bytes32 to, uint256 amount, bytes32 ref)` | 21, holder, scalar | `mtxModeratedTransfer`: the same four | `ModeratedTransfer(bytes32 indexed from, bytes32 indexed to, uint256 amount, bytes32 indexed ref)` |
+| Operator transfer (CTR-GOV-20) | `operatorTransfer(bytes32 from, bytes32 to, uint256 amount, bytes32 ref)` | 22, any holder, scalar | `mtxOperatorTransfer`: the same four | `OperatorTransfer(bytes32 indexed from, bytes32 indexed to, uint256 amount, bytes32 indexed ref)` |
 
 `recordId = keccak256(abi.encode(orderId, subject, beneficiary))`. Each stub `DELEGATECALL`s `RegulatedLib` (CTR-AS-02's
 shape, asset-suite §2.1); `forceTransfer` and `moderatedTransfer` move in the token (`_poolMove`, `_uaMove`), which the library
@@ -324,12 +337,20 @@ order of calls is: issuer-only `freeze` first (no record needed, ≤ 30 d), `rec
 transaction: a relayed `mtxFreeze` is visible to every relayer of an open node. The node's `OrderRecorded` alert serves wallets;
 it is not a mitigation.
 
-### 3.4 MODERATE (Q1), PAUSE, receiver check
+### 3.4 OPERATOR_TRANSFER (bit 22), PAUSE, receiver check
 
-- **`moderatedTransfer`** (CTR-GOV-08, -13): on `_uaMove`, hooked, so `P`, `F(from)` and `R(to)` apply; refuses `amount == 0`,
-  `from == to`, `pad(UA_POOL)`, `pad(SHIELD_POOL)`, `pad(this)` on either side, an unregistered or non-SIGNING derived `to`, and
-  a native `from` with code (`ModerateTargetRefused`); public balances only, on every kind; `ref ≠ 0`. Its scope is "any" (Q1);
-  the registry scope waits for the owner's meaning.
+- **`operatorTransfer`** (bit 22, CTR-GOV-20; the refusals of CTR-GOV-08, -13; was `moderatedTransfer` on bit 21): on
+  `_uaMove`, hooked, so `P`, `F(from)` and `R(to)` apply; refuses `amount == 0`, `from == to`, `pad(UA_POOL)`,
+  `pad(SHIELD_POOL)`, `pad(this)` on either side, an unregistered or non-SIGNING derived `to`, and a native `from` with code;
+  public balances only, on every regulated kind 8–13 (owner correction 2026-11-05: not on the plain kinds, which refuse bit
+  22 with `FeatureInvalidForKind`); `ref ≠ 0`. **Holder (owner 2026-11-05):** any id, not contract-only: an EOA, a single-key
+  UA, an `msig` or a contract; `WHOLE` for one or two operators, or `LIMITED` (`perWindow` over a 1-day `window`, `total`,
+  `maxUses`, `validUntil`; `delegable` for a store manager who grants the clerks as leaves). The grant terms and the owner's
+  revoke bound what one key moves. Built: the governance part in T24 (the constant, the holder rule, tests); the entry,
+  the router op, vectors and client rows in plan T32; bit 22 in the masks of 8–13 (`_validBits()`, `_roleBits()`,
+  `_scalarBits()`, never `_contractOnlyBits()`) with the kinds (§2.1).
+- **Bit 21 `MODERATE`** keeps its rules (contract-only, RK-1); the owner re-scopes it to "other hierarchical moderation"
+  (2026-11-05), meaning TBD; no body is built.
 - **`pause(ref, until)`** (CTR-AS-06): `ref ≠ 0`; `now < until ≤ now + 7 days` (`PauseTooLong`); `now ≥ pauseCooldownUntil`
   (`PauseCooldown`, which also refuses a pause while paused); `pauseCooldownUntil = until + 7 days`. `unpause`: paused;
   `pausedUntil = now`, `pauseCooldownUntil = now + 7 days`. Expiry is passive.
@@ -672,7 +693,7 @@ Each lands in `docs/decisions.md` in T19 with its commit; the CTR-AS-03 Change i
 
 | Id | Rule (one line) | Section |
 |---|---|---|
-| RK-1 | A threshold (`msig`) UA counts as a contract for bits 5–7, 10, 21, on every family (owner, CTR-AS-03 Change) | §2.1 |
+| RK-1 | A threshold (`msig`) UA counts as a contract for bits 5–7, 10, 21, on every family (owner, CTR-AS-03 Change); bit 22 `OPERATOR_TRANSFER` is not contract-only: any holder (owner 2026-11-05, CTR-GOV-20) | §2.1, §3.4 |
 | RK-2 | A relaxation on a masked bit is a pending keyed `(bit, account)` (`account = 0` for a disable) committing action, bit, account and arguments; confirm by the proposer only, in the window, in the same owner generation; one pending per key | §3.6 |
 | RK-3 | A relaxation proposal changes nothing: `barred`, `_clear`, `features` and the `controls` mirror change only at confirm | §2.2, §3.6 |
 | RK-4 | `until` never decreases except by `unfreeze` and `revokeOrder`; a record-backed freeze needs `freezeUntil > now` and `≥ until`; `unfreeze` clears `recordId` | §3.3 |

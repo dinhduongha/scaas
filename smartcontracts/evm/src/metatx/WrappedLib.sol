@@ -90,20 +90,23 @@ library WrappedLib {
     ///         flags/owner/roles of `kind` (`GovernanceLib.init` with the kind's masks, spec §1.2), the rate config, then
     ///         the legs in their given order (never changes).
     function initToken(IFactoryToken.TokenConfig memory c, bool isHedera, uint8 kind, uint256 valid, uint256 roleBits,
-        uint256 contractOnly) public
+        uint256 contractOnly, address uaRegistry) public
     {
         uint256 n = c.legs.length;
         if (n == 0 || n > MAX_LEGS) revert MetaTokenBase.UnderlyingCountInvalid(n);
-        TokenStore.TokenStorage storage t = TokenStore.$();
-        t.name = c.name;
-        t.symbol = c.symbol;
-        t.decimals = c.decimals;
-        t.kind = kind;
+        { // scoped: `init` below takes ten words (stack)
+            TokenStore.TokenStorage storage t = TokenStore.$();
+            t.name = c.name;
+            t.symbol = c.symbol;
+            t.decimals = c.decimals;
+            t.kind = kind;
+        }
         // spec §5.2: a hybrid is `maxSupply != 0`, and `MINTABLE` is set at creation iff it is one
-        bool capped = c.maxSupply != 0;
-        if (capped != (c.features & (uint256(1) << GovernanceBits.MINTABLE) != 0)) revert IWrappedToken.MaxSupplyInvalid();
+        if ((c.maxSupply != 0) != (c.features & (uint256(1) << GovernanceBits.MINTABLE) != 0)) {
+            revert IWrappedToken.MaxSupplyInvalid();
+        }
         GovernanceLib.init(c.features, c.lockedFeatures, c.owner, c.grantDelay, c.rescueTo, c.roles, valid, roleBits,
-            contractOnly);
+            contractOnly, uaRegistry);
         bool adjustable = GovernanceLib.hasFeature(GovernanceBits.RATE_ADJUSTABLE);
         WrappedStorage storage s = $();
         IFactoryToken.RateConfig memory rate = c.rate;
