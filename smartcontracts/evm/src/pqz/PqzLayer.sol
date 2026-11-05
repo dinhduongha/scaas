@@ -193,6 +193,7 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
     /// @notice Moves `amount · shieldScale` public units of the signer to `SHIELD_POOL` (D19) into a TRIVIAL entry of
     ///         `toUA` (plan 5h D18); free, into any holder (owner 2026-10-20).
     function mtxShield(bytes32 toUA, uint256 amount) external nonReentrant {
+        _regPayer();
         PqzStateLib.shield(toUA, amount, _msgSender(), _REGISTRY);
         _toPool(amount);
     }
@@ -274,6 +275,9 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
     function _single(PqzCore.Env memory e, PqzTransferArgs calldata t, bytes calldata proof, IUARegistry.UASig calldata pqzAuth,
         bytes calldata accHint) private returns (bytes32 r)
     {
+        _regSender(t.fromUA);
+        if (t.shieldIn != 0) _regPayer();
+        _regName(t.beneficiaryUA);
         _pullShieldIn(t.shieldIn);
         PqzCore.Paid memory f;
         (r, f) = PqzTransferLib.transfer(e, t, accHint, proof, pqzAuth);
@@ -285,6 +289,9 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
     function _multi(PqzCore.Env memory e, PqzMultiArgs calldata t, bytes calldata proof, IUARegistry.UASig calldata pqzAuth,
         bytes calldata accHint) private returns (bytes32 r)
     {
+        _regSender(t.fromUA);
+        if (t.shieldIn != 0) _regPayer();
+        _regName(t.beneficiaryUA);
         _pullShieldIn(t.shieldIn);
         PqzCore.Paid memory f;
         (r, f) = PqzTransferLib.transferMulti(e, t, accHint, proof, pqzAuth);
@@ -323,6 +330,7 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
     function mtxUnshield(PqzBurnArgs calldata b, uint256 amount, bytes32 recipient, bytes calldata proof,
         IUARegistry.UASig calldata pqzAuth, bytes calldata accHint) external nonReentrant
     {
+        if (amount != 0) _regReceiver(recipient);
         if (!UAKinds.inNativeSpace(recipient)) _requireDerivedReceiver(recipient);
         _burn(_envBurn(amount, recipient), b, proof, pqzAuth, accHint);
         _fromPool(recipient, amount);
@@ -348,6 +356,9 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
     function _burn(PqzCore.Env memory e, PqzBurnArgs calldata b, bytes calldata proof, IUARegistry.UASig calldata pqzAuth,
         bytes calldata accHint) internal
     {
+        if (e.amount != 0) _regSender(b.fromUA); // a refresh (amount 0) names no sender (spec §4.2)
+        if (b.shieldIn != 0) _regPayer();
+        _regName(b.beneficiaryUA);
         _pullShieldIn(b.shieldIn);
         PqzCore.Paid memory f = PqzBurnLib.unshield(e, b, accHint, proof, pqzAuth);
         _fromPool(f.ben, f.fee);

@@ -148,6 +148,7 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
     ///         `pending[toUA] += [amount]G`. The Zether key is the UA (CTR-UA-30): `toUA` must be registered as this
     ///         token's Zether kind. A derived UA signer pays from its UA-ledger balance.
     function mtxShield(bytes32 toUA, uint256 amount) external nonReentrant {
+        _regPayer();
         address m = _msgSender();
         ZetherLib.shield(ZetherTypes.UA.wrap(toUA), amount, _REGISTRY, m);
         _poolMove(m == MetaTxLib.UA_POOL ? _ticketSubject() : MetaTxLib.pad(m), MetaTxLib.pad(MetaTxLib.SHIELD_POOL),
@@ -167,16 +168,22 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
     ///         `ZetherLib`'s, which reads `t` and `proof` from this call's own arguments (CTR-ZTH-94).
     function mtxConfidentialTransfer(ZetherMulti calldata t, bytes calldata proof) external nonReentrant returns (bytes32) {
         proof;
+        _regZetherSender(t.yFrom);
+        _regName(t.beneficiaryUA);
         return _multi(t.beneficiaryUA, ZetherLib.defaultMode());
     }
 
     function mtxConfidentialTransferCompact(ZetherMulti calldata t, bytes calldata proof) external nonReentrant returns (bytes32) {
         proof;
+        _regZetherSender(t.yFrom);
+        _regName(t.beneficiaryUA);
         return _multi(t.beneficiaryUA, ZetherTypes.TransferMode.HASH);
     }
 
     function mtxConfidentialTransferSingle(ZetherSingle calldata t, bytes calldata proof) external nonReentrant returns (bytes32) {
         proof;
+        _regZetherSender(t.yFrom);
+        _regName(t.beneficiaryUA);
         (bytes32 ref, uint256 fee) = abi.decode(
             _lib(address(ZetherLib), ZetherLib.transferSingle.selector, abi.encode(_env())), (bytes32, uint256));
         _fromPool(ZetherTypes.UA.wrap(t.beneficiaryUA), fee);
@@ -213,6 +220,9 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
     ///         the UA ledger (CTR-ZTH-51); then the fee to the beneficiary. The proof part is `ZetherLib`'s (CTR-ZTH-94).
     function mtxUnshield(ZetherBurn calldata b, uint256 amount, bytes32 recipient, bytes calldata proof) external nonReentrant {
         proof;
+        _regZetherSender(b.yFrom);
+        _regName(b.beneficiaryUA);
+        if (amount != 0) _regReceiver(recipient);
         _requireRecipient(recipient);
         uint256 fee = abi.decode(_lib(address(ZetherLib), ZetherLib.unshield.selector, abi.encode(_env())), (uint256));
         _poolMove(MetaTxLib.pad(MetaTxLib.SHIELD_POOL), recipient, amount * ZetherLib.$().shieldScale);
@@ -424,6 +434,10 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
             || sel == IConfidentialToken.mtxRollOver.selector || sel == IZetherToken.mtxRollOverBatch.selector
             || sel == IZetherToken.mtxRollOverSigned.selector || sel == IZetherToken.mtxSetRollOverMode.selector;
     }
+
+    /// @notice Regulated hook (regulated-kinds spec §2.2, §4.1), empty here ("+0"): each direct Zether transfer and
+    ///         unshield entry, before `_multi` or the library; the raw `yFrom` (the override computes `ZetherLib.uaOf`).
+    function _regZetherSender(G1 calldata /* yFrom */) internal view virtual {}
 
     function _zetherBinding(MetaTxLib.MetaTransaction memory m) internal view returns (bytes32) {
         (address r, address f) = MetaTxLib.canon(m);

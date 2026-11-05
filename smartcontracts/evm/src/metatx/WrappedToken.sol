@@ -188,9 +188,11 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
     function mtxWrapOrder(address u, UAWrapOrder calldata o, IUARegistry.UASig calldata auth)
         external nonReentrant returns (uint256 minted)
     {
+        if (o.destination != 0 && o.destination != o.from) _regSender(o.from);
         uint256 received;
         uint256 fee;
         (received, minted, fee) = WrappedLib.wrapBySigUA(u, o, auth, msg.sender, totalSupply());
+        _regFeeTo(MetaTxLib.pad(msg.sender), fee);
         bytes32 to = o.destination == 0 ? o.from : o.destination;
         if (UAKinds.inNativeSpace(to)) _mint(address(uint160(uint256(to))), minted - fee);
         else _uaMint(to, minted - fee);
@@ -202,6 +204,7 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
     ///      as a move from 0, unchecked here: a caller passing a `to` must validate it first (`wrapToUA`:
     ///      `_requireDerivedReceiver`, which also refuses 0 as a native id).
     function _wrap(uint256 i, uint256 amount, bytes32 to) private returns (uint256 minted) {
+        if (to != 0) _regPayer();
         address account = _msgSender();
         (address u, uint256 received, uint256 m) = WrappedLib.wrap(i, amount, account, msg.value, totalSupply());
         minted = m;

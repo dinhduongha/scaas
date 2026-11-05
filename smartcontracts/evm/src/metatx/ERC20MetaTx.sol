@@ -141,6 +141,7 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBase, IERC20Payment, ITradeToken
     function _execute(MetaTxLib.MetaTransaction memory m, bytes calldata signature)
         internal override returns (bytes memory)
     {
+        _regPre(MetaTxLib.pad(m.from), bytes4(m.data), m.mode);
         return _settle(m, MtxPipelineLib.preCall(_mtxCtx(), _envelopeOf(m), _callFacts(m.data, false), signature));
     }
 
@@ -157,12 +158,14 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBase, IERC20Payment, ITradeToken
         internal returns (bytes memory)
     {
         MetaTxLib.MetaTransaction memory m = _metaOf(e, data);
+        _regPre(MetaTxLib.pad(m.from), bytes4(data), m.mode);
         return _settle(m, MtxPipelineLib.preNamed(
             _mtxCtx(), typehash, _envelopeOf(m, 0), words, _callFacts(m.data, false), sig));
     }
 
     /// @dev Steps 5-7 of the address path.
     function _settle(MetaTxLib.MetaTransaction memory m, MtxPipelineLib.Out memory o) private returns (bytes memory ret) {
+        _regFeeTo(MetaTxLib.pad(o.feeTo), o.fee);
         ret = _selfCall(MetaTxLib.pad(m.from), m.data, _envelopeBinding(m));                                 // 5
         if (o.fee != 0) _transfer(m.from, o.feeTo, o.fee);                                                    // 6
         emit MetaTransactionExecuted(m.from, msg.sender, m.batch, m.nonce, o.digest, o.feeTo, o.fee);         // 7
@@ -175,6 +178,7 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBase, IERC20Payment, ITradeToken
         address caller = _msgSender();
         if (!SigCheck.isContract(caller)) revert CallerNotContract(caller);
         if (!SigCheck.isContract(spender)) revert SpenderNotContract(spender);
+        _regPayer();
         return super.approve(spender, value);
     }
 
@@ -196,12 +200,15 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBase, IERC20Payment, ITradeToken
         if (to == address(this)) revert TransferToSelf();
         if (to == MetaTxLib.UA_POOL) revert UAPoolNotPayable();
         if (to == MetaTxLib.SHIELD_POOL || from == MetaTxLib.SHIELD_POOL) revert ShieldPoolNotPayable(); // D19
+        bytes32 f = MetaTxLib.pad(from);
         if (from == MetaTxLib.UA_POOL) {
             bytes32 ua = _ticketSubject();
             if (UAKinds.inNativeSpace(ua)) revert UAPoolNotPayable();
             _uaDebit(ua, value);
             emit UATransfer(ua, MetaTxLib.pad(to), value);
+            f = ua;
         }
+        _regMove(f, MetaTxLib.pad(to), value);
         super._update(from, to, value);
     }
 
@@ -250,7 +257,9 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBase, IERC20Payment, ITradeToken
     function _uaExecuteTransfer(MetaTxLib.UAMetaTransfer memory t, bytes32 signed, IUARegistry.UASig calldata auth)
         internal returns (bytes32)
     {
+        _regPre(t.from, 0, t.mode);
         MtxPipelineLib.Out memory o = MtxPipelineLib.preTransferUA(_mtxCtx(), t, signed, balanceOfUA(t.from), auth); // 1-4
+        _regFeeTo(MetaTxLib.pad(o.feeTo), o.fee);
         if (o.fee != 0) _uaMove(t.from, MetaTxLib.pad(o.feeTo), o.fee);                                // 5
         _uaMove(t.from, t.to, t.value);
         if (t.entryRef != 0) emit UAPaymentSettled(t.from, t.to, t.value, o.fee, o.feeTo, t.entryRef);
@@ -274,15 +283,15 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBase, IERC20Payment, ITradeToken
 
     /// @dev Every UA-ledger move: derived sides in `balance`, native sides (or `UA_POOL` for a derived side) through
     ///      the ERC-20 core, so `Transfer` is emitted iff a native balance changes and `UATransfer` iff a side is derived.
-    // ponytail: calls `ERC20._update` directly, skipping `_update`'s hooks and `_transfer`'s zero checks (callers
-    // exclude 0); when the REGULATED features (FREEZE / PAUSE / ALLOWLIST / DENYLIST, GovernanceLib) are built they must
-    // also hook here, including the UA->UA branch. `_poolMove` carries no hook (governance spec §4.3: it moves the fees
-    // and decoy fees that stay unchecked).
+    // ponytail: calls `ERC20._update` directly, skipping `_update` and `_transfer`'s zero checks (callers exclude 0);
+    // `_regMove` hooks here, the UA->UA branch included (regulated-kinds spec §2.2). `_poolMove` carries no hook
+    // (governance spec §4.3: it moves the fees and decoy fees that stay unchecked).
     function _uaMove(bytes32 from, bytes32 to, uint256 value) internal {
         // D19: no UA-ledger caller reaches `SHIELD_POOL` (its moves bypass `_update`); only `_poolMove` does.
         if (from == MetaTxLib.pad(MetaTxLib.SHIELD_POOL) || to == MetaTxLib.pad(MetaTxLib.SHIELD_POOL)) {
             revert ShieldPoolNotPayable();
         }
+        _regMove(from, to, value);
         _poolMove(from, to, value);
     }
 
@@ -310,4 +319,24 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBase, IERC20Payment, ITradeToken
     function _msgSender() internal view virtual override(Context, MetaTxBase) returns (address) {
         return MetaTxBase._msgSender();
     }
+
+    // ------------------------------------------------------------------ regulated hooks (regulated-kinds spec §2.2)
+    // Empty here (CTR-GOV-11, "+0"): only a regulated kind overrides them; raw arguments the caller holds (F-10).
+
+    /// @notice Every ledger move: `_update` (the sender resolved from `UA_POOL` to the ticket's UA) and `_uaMove`, the
+    ///         UA -> UA branch included; never `_poolMove`. A mint has `from` 0, a burn `to` 0.
+    function _regMove(bytes32 /* from */, bytes32 /* to */, uint256 /* value */) internal view virtual {}
+
+    /// @notice A payer that is not the moved balance's own call: `approve`, a wrap into another id, the confidential
+    ///         shields and wrap-shields, a PQZ `shieldIn`. The override resolves the payer itself.
+    function _regPayer() internal view virtual {}
+
+    /// @notice A named sender: `mtxWrapOrder`'s `o.from` when the destination is another id; PQZ `fromUA`.
+    function _regSender(bytes32 /* a */) internal view virtual {}
+
+    /// @notice A confidential op's public beneficiary.
+    function _regName(bytes32 /* beneficiary */) internal view virtual {}
+
+    /// @notice An unshield's public recipient, when the amount is not 0.
+    function _regReceiver(bytes32 /* recipient */) internal view virtual {}
 }

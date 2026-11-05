@@ -82,6 +82,7 @@ contract WrappedZetherToken is WrappedToken, ZetherLayer, IZetherWrappedToken {
     ///         (the leg's rate on the measured delta) as `minted / shieldScale` shielded units to `toUA`, minting `minted`
     ///         to `SHIELD_POOL`; `minted % shieldScale ≠ 0` ⇒ `AmountNotScaled` (the client sends an exact amount).
     function mtxWrapShield(address underlying, uint256 amountIn, bytes32 toUA) external payable nonReentrant {
+        _regPayer();
         address m = _msgSender();
         (,, uint256 minted) = WrappedLib.wrap(WrappedLib.indexOf(underlying), amountIn, m, msg.value, totalSupply());
         uint256 scale = ZetherLib.$().shieldScale;
@@ -105,6 +106,8 @@ contract WrappedZetherToken is WrappedToken, ZetherLayer, IZetherWrappedToken {
     ///         before the one outside call).
     function mtxUnshieldUnwrap(ZetherBurn calldata b, Unwrap calldata x, bytes calldata proof) external nonReentrant {
         proof;
+        _regZetherSender(b.yFrom);
+        _regName(b.beneficiaryUA);
         uint256 i = WrappedLib.indexOf(x.underlying);
         // a derived recipient: the leg's `transferToUA` checks it
         if (UAKinds.inNativeSpace(x.recipient)) _requirePayee(address(uint160(uint256(x.recipient))));

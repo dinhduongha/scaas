@@ -140,7 +140,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
     function _uaRegistry() internal view override returns (address) { return _REGISTRY; }
 
     /// @notice ERC-165; `IERC20Payment` only while `PAYABLE` is set, `IRescuable` only while `RESCUABLE` is.
-    function supportsInterface(bytes4 id) external view returns (bool) {
+    function supportsInterface(bytes4 id) external view virtual returns (bool) {
         return id == type(IERC165).interfaceId || id == type(IERC20).interfaceId || id == type(IMetaTx).interfaceId
             || id == type(IERC20MetaTx).interfaceId || id == type(IGovernance).interfaceId
             || (id == type(IERC20Payment).interfaceId && GovernanceLib.hasFeature(GovernanceBits.PAYABLE))
@@ -288,6 +288,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
         // early only: without it the fee's `_uaMove` reverts the whole call with the same `TransferToSelf`
         if (feeRecipient == address(this)) revert TransferToSelf();
         if (feeRecipient == MetaTxLib.UA_POOL) revert UAPoolNotPayable();
+        _regFeeTo(to, fee);
         bytes32 d = _uaExecuteTransfer(t, 0, payerAuth);
         MtxPipelineLib.authorize(_mtxCtx(), t.to, UAKinds.PURPOSE_RECEIVER_FEE,
             receiverFeeDigest(t, fee, feeRecipient, rfValidUntil), payeeAuth);
@@ -304,6 +305,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
     function mtxRelayFee(bytes32 from, address target, bytes32 callDataHash, bytes32 payee, uint256 value,
         uint256 validUntil, IUARegistry.UASig calldata auth) external nonReentrant
     {
+        _regFeeTo(payee, value);
         _uaExecuteTransfer(_uaPay(from, payee, value, _relayRef(target, callDataHash), validUntil,
             MetaTxLib.MODE_RESTRICT_RELAYER, msg.sender, 0, address(0)),
             _relayHash(from, target, callDataHash, payee, value, validUntil), auth);
@@ -339,6 +341,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
         address payer = _msgSender();
         uint256 feeAmount = FeePolicy.compute(feeMode, amount, fee);
         FeePolicy.validateRecipient(feeMode, feeRecipient);
+        _regFeeTo(MetaTxLib.pad(feeRecipient), feeAmount);
         if (feeAmount != 0) {
             if (feeRecipient == to) revert FeeRecipientIsPayee();
             _transfer(payer, feeRecipient, feeAmount);
@@ -358,6 +361,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
         bytes32 payer = MetaTxLib.pad(_msgSender());
         uint256 feeAmount = FeePolicy.compute(feeMode, amount, fee);
         FeePolicy.validateRecipient(feeMode, feeRecipient);
+        _regFeeTo(MetaTxLib.pad(feeRecipient), feeAmount);
         if (feeAmount != 0) _transfer(_msgSender(), feeRecipient, feeAmount);
         _uaMove(payer, to, amount);
         emit UAPaymentSettled(payer, to, amount, feeAmount, feeRecipient, entryRef);

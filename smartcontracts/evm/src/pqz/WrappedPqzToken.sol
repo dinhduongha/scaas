@@ -84,6 +84,7 @@ contract WrappedPqzToken is WrappedToken, PqzLayer, IPqzWrappedToken {
     ///         `shieldScale` (`AmountNotScaled`), is minted to `SHIELD_POOL` (D19) and becomes a TRIVIAL entry of
     ///         `minted / shieldScale` for `toUA`.
     function mtxWrapShield(address underlying, uint256 amountIn, bytes32 toUA) external payable nonReentrant {
+        _regPayer();
         address m = _msgSender();
         (,, uint256 minted) = WrappedLib.wrap(WrappedLib.indexOf(underlying), amountIn, m, msg.value, totalSupply());
         uint256 scale = PqzCore.$().shieldScale;
