@@ -1,0 +1,16 @@
+# 2026-11-05 ua-rs-sign T6 mutants: python3 -I smartcontracts/evm/runs/2026-11-05-ua-rs-sign-t6-mutants.py (from the worktree root, run as 1 6 and 7 11), on the tree committed as b84b8ba5;
+# suite (in clients/ua-rs): scripts/capped cargo test -j2 --locked --features vectors --test wallet_webauthn.
+# One mutant per run, every file restored byte for byte; the failed-test list is cut at 200 characters. UNAUDITED.
+killed   | M1 WebAuthn high-s accepted (no normalisation) | src/wallet/webauthn.rs | rc=101 | 4 failed: high_s_normalised, sign_json_accepted_rows, signatures_json_rows, wrong_type_refused
+killed   | M2 challenge compared without base64url (standard base64 alphabet) | src/verify.rs | rc=101 | 5 failed: challenge_from_the_json_is_never_the_reference, passkey_signs_through_the_uasig_builder, portable_json_pop_row, sign_json_accepted_rows, signatures_json_rows
+killed   | M3 challenge read from the JSON instead of expected_challenge | src/wallet/webauthn.rs | rc=101 | 3 failed: challenge_from_the_json_is_never_the_reference, sign_json_refusals, signatures_json_rows
+killed   | M4 a generic JSON parser in place of client_data_ok | src/verify.rs | rc=101 | 2 failed: sign_json_refusals, signatures_json_rows
+killed   | M5 verify-before-return skipped | src/wallet/webauthn.rs | rc=101 | 3 failed: assertion_for_another_key_refused, sign_json_refusals, signatures_json_rows
+killed   | M6 range check after normalisation (s reduced mod n and made low first) | src/wallet/webauthn.rs | rc=101 | 1 failed: s_out_of_range_refused_before_normalisation
+mutants M1-M6 of 11, survived or not loaded: 0
+killed   | M7 clientDataJSON UTF-8 check dropped | src/wallet/webauthn.rs | rc=101 | 1 failed: non_utf8_client_data_refused
+killed   | M8 a 0x0100 key asked UaMsg, not WebAuthn | src/wallet/sign.rs | rc=101 | 2 failed: passkey_signs_through_the_uasig_builder, webauthn_challenge_is_ua_msg
+killed   | M9 purpose check skipped (ua_request) | src/wallet/sign.rs | rc=101 | 1 failed: webauthn_challenge_is_ua_msg
+killed   | M10 clientDataJSON head offset without padding | src/wallet/webauthn.rs | rc=101 | 9 failed: assertion_for_another_key_refused, challenge_from_the_json_is_never_the_reference, high_s_normalised, passkey_signs_through_the_uasig_builder, portable_json_pop_row, s_out_of_range_refused_before_norm
+killed   | M11 r or s out of range refused as Argument | src/wallet/webauthn.rs | rc=101 | 2 failed: s_out_of_range_refused_before_normalisation, sign_json_refusals
+mutants M7-M11 of 11, survived or not loaded: 0
