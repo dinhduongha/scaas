@@ -10,7 +10,8 @@ at ETH $2,261.87 and 0.31 gwei (both 2026-11-03).
 > and the chain (spec §7.3, D14; [CTR-CHAT-01](../decisions.md#CTR-CHAT-01)). The picture shows it; the rest of this note
 > is as written on 2026-11-04. The same day (D15) a session lists its stores (Matrix, HCS, chains through
 > `storeMessage`) inside `sealedInfo`, every message goes to each, and Matrix became optional (spec P27–P29). Also the same
-> day (D16), libp2p carries call signalling peer to peer, rendezvous from the epoch key, no stored messages (spec P30).
+> day (D16), libp2p carries call signalling peer to peer, rendezvous from the epoch key, no stored messages (spec P30); and (D17) Waku became a message store with
+> retention by its operators, not durable (spec P31).
 
 ## The picture
 
