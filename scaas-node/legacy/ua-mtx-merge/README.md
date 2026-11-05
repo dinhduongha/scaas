@@ -25,3 +25,7 @@ What these copies hold and the live code no longer does:
 - `mesh/` (T16): the mesh's EVM body on the address structs (`evm.meta_tx` = `MetaTransaction` / `MetaTransfer`, `signature`
   as `bytes`, intent id the address digest, any contract) in `digest.rs`, `accept.rs`'s tests on that body, and
   `mesh_vectors.rs` with its file `mesh-envelope-v1.2.json` (case 3a the address `metatransfer_kat.json`).
+- `tests/e2e.rs`, `tests/e2e_hedera.rs`, `adapters/hedera.rs` (T18): the anvil e2e on the address forms (`metatx` jobs with an
+  address `MetaTransfer` / `MetaTransaction` and a `bytes` signature, `POST /v1/metatx` on a token, `TradeOrder` legs for a SCaaS
+  sell token, the address cancel / invalidate digests, the flat wallet rows, `PaymentSettled` asserted on every payment), and
+  the Hedera vector reader on the address `MetaTransfer` (`hedera_kat.json` before T8: 20-byte long-zero `from`, no `type_hash`).
