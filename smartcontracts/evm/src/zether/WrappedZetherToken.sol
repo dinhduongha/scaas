@@ -47,7 +47,7 @@ contract WrappedZetherToken is WrappedToken, ZetherLayer, IZetherWrappedToken {
     {}
 
     /// @dev The legs (`WrappedToken`), restated for the second base.
-    function underlyings() public view override(WrappedToken, MetaTokenBase) returns (address[] memory) {
+    function underlyings() public view virtual override(WrappedToken, MetaTokenBase) returns (address[] memory) {
         return super.underlyings();
     }
 
@@ -71,7 +71,7 @@ contract WrappedZetherToken is WrappedToken, ZetherLayer, IZetherWrappedToken {
     /// @dev Never reached: `_initRaw` is the kind's init.
     function _init(TokenConfig memory) internal override(WrappedToken, MetaTokenBase) {}
 
-    function _initRaw(bytes calldata initArgs) internal override {
+    function _initRaw(bytes calldata initArgs) internal virtual override {
         ZetherWrappedLib.init(initArgs, TRANSFER_VERIFIER, _REGISTRY, kind(), _validBits(), _roleBits(),
             _contractOnlyBits());
     }
@@ -135,12 +135,12 @@ contract WrappedZetherToken is WrappedToken, ZetherLayer, IZetherWrappedToken {
     }
 
     /// @notice As `WrappedToken` (spec §6.2); restated for the second base.
-    function rescue(address asset) external override(WrappedToken, MetaTokenBase) nonReentrant {
+    function rescue(address asset) external virtual override(WrappedToken, MetaTokenBase) nonReentrant {
         WrappedLib.rescue(asset);
     }
 
     /// @notice As `WrappedToken` (also cancels a pending rate change, CTR-TOK-06); restated for the second base.
-    function disableFeature(uint8 bit) external override(WrappedToken, GovernanceBase) nonReentrant {
+    function disableFeature(uint8 bit) external virtual override(WrappedToken, GovernanceBase) nonReentrant {
         bool applied = GovernanceLib.disableFeature(bit, _govSubject(), _delayedRelaxBits());
         if (applied && bit == GovernanceBits.RATE_ADJUSTABLE) WrappedLib.dropPending();
     }
@@ -152,18 +152,18 @@ contract WrappedZetherToken is WrappedToken, ZetherLayer, IZetherWrappedToken {
 
     // ------------------------------------------------------------------ the layer's hooks
 
-    function _domainName() internal pure override(ERC20MetaTx, ZetherLayer) returns (string memory) {
+    function _domainName() internal pure virtual override(ERC20MetaTx, ZetherLayer) returns (string memory) {
         return ZetherLayer._domainName();
     }
 
     function _envelopeBinding(MetaTxLib.MetaTransaction memory m)
-        internal view override(MetaTxBase, ZetherLayer) returns (bytes32)
+        internal view virtual override(MetaTxBase, ZetherLayer) returns (bytes32)
     {
         return ZetherLayer._envelopeBinding(m);
     }
 
     function _uaEnvelopeBinding(MetaTxLib.UAMetaTransaction memory m)
-        internal view override(UAMetaTxBase, ZetherLayer) returns (bytes32)
+        internal view virtual override(UAMetaTxBase, ZetherLayer) returns (bytes32)
     {
         return ZetherLayer._uaEnvelopeBinding(m);
     }
@@ -173,13 +173,13 @@ contract WrappedZetherToken is WrappedToken, ZetherLayer, IZetherWrappedToken {
     /// @notice `WrappedToken`'s first six, then the Zether ops and the two underlying paths, each `ABSOLUTE`, then
     ///         `WrappedToken`'s UA-5a two (`wrapToUA` `ABSOLUTE`, `unwrapToUA` `AMOUNT(1)`, CTR-UA-28).
     function mtxSelectors()
-        public pure override(WrappedToken, IMetaTx, MetaTxBase)
+        public pure virtual override(WrappedToken, IMetaTx, MetaTxBase)
         returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
     {
         return ZetherWrappedLib.selectors();
     }
 
-    function _mtxRule(bytes4 sel) internal view override(WrappedToken, MetaTxBase) returns (MtxRule memory) {
+    function _mtxRule(bytes4 sel) internal view virtual override(WrappedToken, MetaTxBase) returns (MtxRule memory) {
         if (_isZetherOp(sel) || sel == IZetherWrappedToken.mtxUnshieldUnwrap.selector) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 0);
         if (sel == IConfidentialWrappedToken.mtxWrapShield.selector) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 100);
         return WrappedToken._mtxRule(sel);
@@ -188,7 +188,7 @@ contract WrappedZetherToken is WrappedToken, ZetherLayer, IZetherWrappedToken {
     /// @notice `WrappedToken`'s UA allowlist, the Zether ops and `mtxUnshieldUnwrap` (CTR-ZTH-51, UA-5c, as
     ///         `NormalZetherToken`); not `mtxWrapShield` (a UA wrap-shields in two signed steps, `uaWrap` then
     ///         `mtxShield`).
-    function _uaAllowed(bytes4 sel) internal view override(WrappedToken, UAMetaTxBase) returns (bool) {
+    function _uaAllowed(bytes4 sel) internal view virtual override(WrappedToken, UAMetaTxBase) returns (bool) {
         return _isZetherOp(sel) || sel == IZetherWrappedToken.mtxUnshieldUnwrap.selector || WrappedToken._uaAllowed(sel);
     }
 }

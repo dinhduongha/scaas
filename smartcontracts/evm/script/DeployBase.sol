@@ -21,6 +21,8 @@ import {NormalToken} from "../src/metatx/NormalToken.sol";
 import {WrappedToken} from "../src/metatx/WrappedToken.sol";
 import {NormalRegulatedToken} from "../src/regulated/NormalRegulatedToken.sol";
 import {WrappedRegulatedToken} from "../src/regulated/WrappedRegulatedToken.sol";
+import {NormalZetherRegulatedToken} from "../src/regulated/NormalZetherRegulatedToken.sol";
+import {WrappedZetherRegulatedToken} from "../src/regulated/WrappedZetherRegulatedToken.sol";
 import {RegulatedLib} from "../src/regulated/RegulatedLib.sol";
 import {ComplianceRegistry} from "../src/regulated/ComplianceRegistry.sol";
 import {SCaaSDex} from "../src/dex/SCaaSDex.sol";
@@ -376,7 +378,7 @@ abstract contract DeployBase is Script {
     ///         `GovernanceLib`, already in it), the releases, version 1, each refused first by `_requireReleaseGas`, then both
     ///         kinds enabled (plan T28). JSON `implementation_normal_regulated`, `implementation_wrapped_regulated`. Hedera
     ///         takes both (`IS_HEDERA` from the env). The confidential regulated kinds deploy with their stacks (10, 11 under
-    ///         `DEPLOY_ZETHER`; 12, 13 by `script/pqz/e2e.py`). Each release's `implArgs` is `abi.encode(REGISTRY_CODEHASH)`,
+    ///         `DEPLOY_ZETHER`, `_deployZetherRegulated`; 12, 13 by `script/pqz/e2e.py`). Each release's `implArgs` is `abi.encode(REGISTRY_CODEHASH)`,
     ///         the canonical `ComplianceRegistry` runtime's code hash (spec §5, F-11; plan T29): a token naming a registry of
     ///         other code is refused at init. The registry's own deploy (`COMPLIANCE_ADMIN`) is `deploy.sh`'s (plan T33).
     function _deployRegulated(OpenFactory f, address reg, address smartKeyAccountImpl, bool isHedera) internal {
@@ -606,7 +608,8 @@ abstract contract DeployBase is Script {
     ///         burn verifiers on it (classical Zether is BLS12-381 only, CTR-ZTH-32; the bn254 steps are in
     ///         `legacy/ua6/`); when the deployer is the registrar, an env of `NORMAL_ZETHER` and `WRAPPED_ZETHER`
     ///         (version 1; `deps` = transfer, burn, inner-product verifier, disclosure, CTR-ZTH-20) and the two releases
-    ///         on it, then the kinds enabled. JSON `zether_registry` (= `ua_registry`), `zether_statements`,
+    ///         on it, then the kinds enabled, then the regulated Zether releases 10, 11 (`_deployZetherRegulated`, plan
+    ///         T30). JSON `zether_registry` (= `ua_registry`), `zether_statements`,
     ///         `zether_disclosure`, `zether_{inner_product_,,burn_}verifier_bls12381`,
     ///         `implementation_{normal,wrapped}_zether_bls12381`. **UNAUDITED.** The
     ///         implementations exceed EIP-170 and the BLS inner-product verifier takes ~14 M gas: anvil
@@ -638,10 +641,41 @@ abstract contract DeployBase is Script {
             vm.serializeAddress("deploy", "implementation_wrapped_zether_bls12381", und);
             f.setKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER, true);
             f.setKindEnabled(IOpenFactory.TokenKind.WRAPPED_ZETHER, true);
+            _deployZetherRegulated(f, reg, smartKeyAccountImpl, deps);
         }
         vm.serializeAddress("deploy", "zether_disclosure", dis);
         vm.serializeAddress("deploy", "zether_registry", reg); // = ua_registry
         vm.serializeAddress("deploy", "zether_statements", address(stm));
+    }
+
+    /// @notice Regulated-kinds spec §6.1 (plan T30): with the Zether stack, env version 1 of `NORMAL_ZETHER_REGULATED` (10)
+    ///         and `WRAPPED_ZETHER_REGULATED` (11), each its base kind's `deps` and link closure with `RegulatedLib` added,
+    ///         the releases, version 1, each refused first by `_requireReleaseGas`, `implArgs` the canonical
+    ///         `ComplianceRegistry` runtime's code hash (F-11), then both kinds enabled. JSON
+    ///         `implementation_{normal,wrapped}_zether_regulated_bls12381`. Never on Hedera (`ZetherLayer`).
+    function _deployZetherRegulated(OpenFactory f, address reg, address smartKeyAccountImpl, address[] memory deps) internal {
+        bytes memory implArgs = abi.encode(keccak256(type(ComplianceRegistry).runtimeCode));
+        f.publishEnv(IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, 1,
+            _env(f, reg, smartKeyAccountImpl, false, deps, _withRegulatedLib(_zetherLibs(false))));
+        f.publishEnv(IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, 1,
+            _env(f, reg, smartKeyAccountImpl, false, deps, _withRegulatedLib(_zetherLibs(true))));
+        address n = _release(f, IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, "NormalZetherRegulatedToken",
+            type(NormalZetherRegulatedToken).creationCode, implArgs);
+        address w = _release(f, IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, "WrappedZetherRegulatedToken",
+            type(WrappedZetherRegulatedToken).creationCode, implArgs);
+        _gate(n);
+        _gate(w);
+        vm.serializeAddress("deploy", "implementation_normal_zether_regulated_bls12381", n);
+        vm.serializeAddress("deploy", "implementation_wrapped_zether_regulated_bls12381", w);
+        f.setKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, true);
+        f.setKindEnabled(IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, true);
+    }
+
+    /// @notice `libs` and `RegulatedLib` last: a regulated kind's closure (it links only `GovernanceLib`, already in `libs`).
+    function _withRegulatedLib(address[] memory libs) internal pure returns (address[] memory l) {
+        l = new address[](libs.length + 1);
+        for (uint256 i; i < libs.length; ++i) l[i] = libs[i];
+        l[libs.length] = address(RegulatedLib);
     }
 
     /// @notice Two kind-`NORMAL` demo tokens from `f` (dev chains; only when the deployer is the registrar): 6 decimals,
