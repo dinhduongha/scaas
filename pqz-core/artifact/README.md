@@ -209,7 +209,7 @@ above. `--upstream` clones nothing either, since LaZer is in the image.
 You need:
 
 - x86-64 Linux, clang 18, `wasm-ld-18` (lld 18), node, python3, binutils (`strings`);
-- rustup with Rust 1.97.1 (`../pqzh/rust-toolchain.toml` and `../ffi/rust-toolchain.toml` select it), with
+- rustup with Rust 1.97.1 (the repository's `rust-toolchain.toml` selects it), with
   `wasm32-unknown-unknown` and clippy installed;
 - the crates in the cargo cache: run `cargo fetch --locked` once in each crate directory, because the runs are offline;
 - about 2 GB of free memory (see "Hardware and time" below);

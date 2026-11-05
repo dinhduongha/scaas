@@ -489,7 +489,7 @@ before the attempt — a marker present on the next load skips the re-wrap (no c
 same marker ([CLI-APP-24](app.md#CLI-APP-24)). On open, a pin envelope outside `N ∈ {2^15, 2^16, 2^17}, r = 8, p = 1` is
 refused (`dekFrom` bounds check). `SCRYPT = { N: 2^17, r: 8, p: 1, dkLen: 32 }`. Why: one number in code and docs, and no
 device locked out by its own upgrade. Cost: very low-memory phones use a paper backup or an extension wallet. BUILT
-(parameters and re-wrap); the failure, marker and bounds tests SPECIFIED.
+(parameters, re-wrap, and the open-time bounds check with its test, 2026-11-05); the failure and marker tests SPECIFIED.
 
 <a id="CLI-SGN-17"></a>**CLI-SGN-17** — **Vault v2 is an outer AES-256-GCM layer under a per-origin non-extractable device
 key, wrapped around the unchanged v1 vault.** The device key is WebCrypto `AES-GCM` 256, `extractable: false`, kept as a

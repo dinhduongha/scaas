@@ -50,7 +50,7 @@ case "${1:-}" in
   cli)
     bin="$STELLAR_CLI_ROOT/bin/stellar"
     if [ -x "$bin" ]; then echo "$bin"; exit 0; fi
-    echo "missing $bin; install: scripts/capped cargo +1.97.1 install --locked --git https://github.com/stellar/stellar-cli" \
+    echo "missing $bin; install (from the repository): scripts/capped cargo install --locked --git https://github.com/stellar/stellar-cli" \
       "--rev $STELLAR_CLI_REV stellar-cli --root $STELLAR_CLI_ROOT -j1" >&2; exit 1 ;;
   *) echo "usage: $0 up|down|wait|cli" >&2; exit 2 ;;
 esac

@@ -2,7 +2,7 @@
 name = "scaas-ua"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.90"
+rust-version = "1.97.1"
 publish = false
 description = "SCaaS Universal Account identity layer: kind table, ids, keyHash, ua_msg, popDigest, UAAuth, key-data validation. UNAUDITED."
 

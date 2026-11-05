@@ -140,7 +140,7 @@ the credentials filled in) and `signerAddress` (`G...` or `C...`). What is signe
 StellarAsset, Account }` — `Some(Executable::Account)` for classic `G...` accounts, `Some(Executable::Wasm(...))` or
 `Some(Executable::StellarAsset)` for contracts (`C...`), `None` if the address does not exist on chain;
 `Address::to_string(&self) -> String` returns the StrKey (`C...` for contracts, `G...` for accounts). Soroban SDK major version at the time of writing: **`28.0.0`** (protocol 22 /
-23+); the contracts build with soroban-sdk 26.1.1 and Rust 1.97.1 (`smartcontracts/soroban/rust-toolchain.toml`; the SDK needs ≥ 1.91).
+23+); the contracts build with soroban-sdk 26.1.1 and Rust 1.97.1 (the root `rust-toolchain.toml`, [ARCH-POS-12](../decisions.md#ARCH-POS-12); the SDK needs ≥ 1.91).
 
 **`SmartKeyAccount.__check_auth(signature_payload, Signature, contexts)`:**
 

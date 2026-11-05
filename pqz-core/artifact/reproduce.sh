@@ -247,7 +247,7 @@ for m in 1 2 4 8 16 32; do
     >> "$OUT/alone-wasm-nosv.jsonl" || true
 done
 
-# ---- PQZH (Ligero, Rust 1.97.1 = pqzh/rust-toolchain.toml), THE proven preset (Params::preset, --regime proven
+# ---- PQZH (Ligero, Rust 1.97.1 = the root rust-toolchain.toml), THE proven preset (Params::preset, --regime proven
 # --r431 1), all six forms (R_TX0 = op 1 by length)
 if [ $MODE = full ]; then
   LNP=5 LNV=1000 LNA=80 LWV=1000 LWA=4 FN=200 # = pqzh/ligero/runs/tx0.sh (gate-B method); pqz-ffi as ffi/run.sh

@@ -797,7 +797,7 @@ No `anchor` CLI (Anchor 1.0's `anchor test` uses Surfpool; we do not need it): `
 validator, low RAM). Versions (user space, no sudo): Agave **4.3.0** (`solana-release-x86_64-unknown-linux-gnu.tar.bz2`, sha256 `c97289a8…3611e8` matching the
 GitHub release digest) in `~/.local/share/solana/install/releases/4.3.0`; `cargo build-sbf` 4.3.0 + platform-tools **v1.57**
 (rustc 1.95 sbpf); **Anchor 1.2.0** (`anchor-lang`/`anchor-spl` crates); **LiteSVM 0.17.0** (`precompiles`), whose Agave 4.3
-crates need **rustc ≥ 1.97.1** for the host test (`smartcontracts/solana/rust-toolchain.toml`, this workspace only); LiteSVM
+crates need **rustc ≥ 1.97.1** for the host test (the root `rust-toolchain.toml`, the repository's one toolchain, [ARCH-POS-12](../decisions.md#ARCH-POS-12)); LiteSVM
 includes the secp256r1 precompile (`agave-precompiles` 4.3, feature `enable_secp256r1_precompile` on by default), so passkey
 tests (real vectors, high-S, origin, UV) run in LiteSVM. Builds are memory-heavy: `CARGO_BUILD_JOBS=2`, never in parallel
 with another heavy build. BUILT.

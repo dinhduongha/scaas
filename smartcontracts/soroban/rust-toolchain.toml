@@ -1,5 +1,0 @@
-# soroban-sdk 30 needs rustc >= 1.91; same toolchain as the PQZ crates and solana.
-[toolchain]
-channel = "1.97.1"
-profile = "minimal"
-targets = ["wasm32v1-none"]
