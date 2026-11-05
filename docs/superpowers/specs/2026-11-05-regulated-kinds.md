@@ -554,15 +554,19 @@ the 0.37 M factory frame; on T0's rows that is about **1,680 gas per runtime byt
 
 - **The tight one is `WrappedPqzRegulatedToken`:** under the 65,536 B jump-width cliff with 3.8–5.5 KB to spare on M after the
   revision's +0.5 KB (a Δ above ~9.3 KB crosses it and costs ~4.7 KB at once); it fits the SCaaS testnet (131,072 B, 200 M
-  block) on every estimate. PQZ kinds run only where the precompile is (CTR-GOV-19). If T27 shows kind 13 crossing 65,536 B, the
-  `_above64KiB` row is added there with the reason, not in T33.
+  block) on every estimate. PQZ kinds run only where the precompile is (CTR-GOV-19). **Change (owner 2026-11-06): reduce, never
+  `_above64KiB`.** Old: "If T27 shows kind 13 crossing 65,536 B, the `_above64KiB` row is added there with the reason, not in
+  T33." New: T27, T31 and T33 measure kind 13 first against the stop line **64,512 B**; a regulated kind at or above it is
+  reduced lever by lever (the levers and the checklist of the [pay-meta-tax spec §6.4](2026-11-05-pay-meta-tax.md), those that
+  apply to this code), re-measured after each, until it is under; back to the controller only when every lever is used; the
+  `_above64KiB` row is no fallback for any regulated kind.
 - **Public gates** (merge Q4, NET-EVM-06): public = measured (regular + state) × 1.05 ≤ the chain's limit and regular × 1.05
   < 2^24 (largest here ~4.5 M, all pass); the SCaaS testnet keeps `runtime × 1,530 + 2^24` ≤ 200 M (admits ≤ 119,753 B; all
   pass). At **60 M** only `RegulatedLib`, the registry and perhaps `NormalRegulatedToken` fit; at **70 M** add
   `NormalRegulatedToken`. `WrappedRegulatedToken` and the confidential regulated releases miss 70 M; accepted (Q7, owner
   2026-11-05), recorded in TODO beside `WrappedToken`'s gap.
-- `size-baseline.json` gains six rows by measurement (reason in `_comment`); `_above64KiB` stays empty on M if kind 13
-  lands under 65,536 B.
+- `size-baseline.json` gains six rows by measurement (reason in `_comment`); `_above64KiB` stays empty for kinds 8–13 (owner
+  2026-11-06: reduce instead).
 
 ## 7. Node, clients, vectors — SPECIFIED
 
@@ -661,7 +665,7 @@ gains `forge-as` and the regulated named tests; T22 reviews the group with the r
 
 | # | Risk | Mitigation |
 |---|---|---|
-| 1 | Real sizes 2–5 × the stand-in; kind 13 crosses 65,536 B | T27 measures kinds 9 and 13 first; one struct view; Q7 accepted |
+| 1 | Real sizes 2–5 × the stand-in; kind 13 crosses 65,536 B | T27 measures kinds 9 and 13 first; one struct view; at or above 64,512 B reduced lever by lever (owner 2026-11-06, §6.2); Q7 accepted |
 | 2 | Hooks in shared base sources move every kind's bytecode and gas pins | empty bodies, raw arguments; I0 slots and gas per kind; old → new in the commit |
 | 3 | A path missed: the address `_settle`, `approve`, the four wrap entries and `mtxWrapShield`, a direct confidential entry, a fee seat | same-class rule; §3.2 / §4 tables as test rows, direct and relayed each |
 | 4 | A hook placed in `_poolMove` checks decoy fees and names a decoy | mutant (I9) |
@@ -752,7 +756,7 @@ finding is rejected whole; one claim inside F-20 is (the encoder list).
 | F-14 | P2 | `OrderRecorded` names the subject before the freeze | applied as a rule: §3.3 ordering |
 | F-15 / M-05 | P2 | `payWithFee` moves the fee by `_transfer` (`R` only); `mtxWrapOrder` mints `fee` to `msg.sender`; `mtxPayReceiverFee`'s fee leg is `_uaMove(t.to, …)` | applied as a rule: `_regFeeTo` on every fee leg (§3.2), RK-6; decided: a frozen payee cannot pay a receiver fee |
 | F-16 | P2 | a paused leg stalls `mtxTrade` and DEX payouts | applied as a rule: §7 venue row; T35 |
-| F-19 | P2 | the stand-in measured 2 seats | plan task: T27 measures kinds 9 and 13 first; `_above64KiB` row there |
+| F-19 | P2 | the stand-in measured 2 seats | plan task: T27 measures kinds 9 and 13 first; Change (owner 2026-11-06): reduce under 64,512 B, never `_above64KiB` (§6.2) |
 | F-20 / M-07 | P2 | `ZetherWrappedLib.init`, `PqzWrappedLib.init` decode `TokenConfig` and pass fixed `WRAPPED_*` masks; NatSpec of `ConfigFieldForOtherKind` lists fields 1–5. **Partly rejected:** "the node's config builders and `clientkeys` encode it" does not hold: a search for `TokenConfig`, `initialHolder`, `createToken` in `clients/` and `scaas-node/` (legacy excluded) finds only `scaas-node/tests/e2e.rs` | applied as a rule (§2.4 ripple, with the real encoder list) and plan task T25; router address move in §6.1 |
 | F-23 / M-09 | P2 | `PqzLayer.mtxUnshield` with `amount = 0`, `recipient = 0` is the refresh | applied as a rule: §4.2, RK-11 |
 | F-28 | P2 | `mtxWrapOrder` has no `_wrap` call | applied as a rule: §3.2 wrap-order row |

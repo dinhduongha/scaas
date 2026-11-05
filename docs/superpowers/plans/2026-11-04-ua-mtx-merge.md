@@ -3,7 +3,7 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or
 > superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status (2026-11-04):** plan, not executed; its decisions MD-1 to MD-10 accepted by the owner 2026-11-04. **Owner 2026-11-04 (after T0): build M first** (A + B + C with the router's pairs, Q2, R17, R47: tasks T1-T8 with T3b, T10-T23 without a lever), then a checkpoint: gates, the whole-branch review (Claude, Fable, Codex) and the PR of M into `main`. **T9 (levers D / L) is not started: the owner decides it after M.** M alone fits a 200 M block, not 70 M for `WrappedToken` (72.37 M asked, T0), so no public chain deploy before that decision. Nothing is built from it; this commit writes no code, contract, test or vector. **Owner 2026-11-04 (after T1): Q6 changed:** the mandate wallets are built in this round in the merged form (task T3b, MD-11); T1 is built. **Owner 2026-11-05:** the six regulated kinds 8–13 are built in this branch as task group **T24–T36**, after T18 and before T19 ([spec](../specs/2026-11-05-regulated-kinds.md), revised after the Fable and Codex reviews; 19 agent-days); T19–T23 cover the group.
+**Status (2026-11-04):** plan, not executed; its decisions MD-1 to MD-10 accepted by the owner 2026-11-04. **Owner 2026-11-04 (after T0): build M first** (A + B + C with the router's pairs, Q2, R17, R47: tasks T1-T8 with T3b, T10-T23 without a lever), then a checkpoint: gates, the whole-branch review (Claude, Fable, Codex) and the PR of M into `main`. **T9 (levers D / L) is not started: the owner decides it after M.** M alone fits a 200 M block, not 70 M for `WrappedToken` (72.37 M asked, T0), so no public chain deploy before that decision. Nothing is built from it; this commit writes no code, contract, test or vector. **Owner 2026-11-04 (after T1): Q6 changed:** the mandate wallets are built in this round in the merged form (task T3b, MD-11); T1 is built. **Owner 2026-11-05:** the six regulated kinds 8–13 are built in this branch as task group **T24–T36**, after T18 and before T19 ([spec](../specs/2026-11-05-regulated-kinds.md), revised after the Fable and Codex reviews; 19 agent-days); T19–T23 cover the group. **Owner 2026-11-06:** group **3e** (payment metadata, free pay lanes, tax on the regulated kinds) is built as **T37–T43** after T36 and before 3c ([spec](../specs/2026-11-05-pay-meta-tax.md), approved 2026-11-06; 14.5 agent-days plus 0.5 on T19, 15 in all); T19–T23 cover it. Totals of the added groups: T24–T36 19, T37–T43 with T19's share 15, together 34 agent-days.
 
 **Spec:** [`2026-11-04-ua-mtx-merge.md`](../specs/2026-11-04-ua-mtx-merge.md), **accepted by the owner 2026-11-04** (Q1–Q7, §10);
 rules R1–R47 (§5), invariants 1–7 (§8), measurement (§9). **Ruling:** [CTR-MTX-30](../../decisions.md#CTR-MTX-30), its Q6 Change, and the Change
@@ -214,7 +214,8 @@ rustc 1.90); Node `node --test` (`clients/clientkeys`); `zether-prover`; `ua-rs`
 | Node | T14 → {T15 ∥ T16 ∥ T17} → T18 | T14 after T11; T15, T16, T17 beside each other (disjoint files); T18 after T10 and T15–T17 |
 | Wallets | T20 | after T11, owner-assisted, beside T14–T19; before reset 2 |
 | Regulated | T24 → T25 → T26 → T27 → T28 → T29 → T30 → T31 → T32 → T33; T34 beside T33; T35 after T33, T34; T36 after T33, beside T34–T35 | after T18, before T19 (owner 2026-11-05); contracts sequential in this worktree; T27 measures kinds 9 and 13 before T28 fills the bodies |
-| Docs | T19 | drafts beside T14–T18 and T24–T36; lands after T36 (BUILT only with code and tests) |
+| Pay meta, tax (3e) | T37 → T38 → T39 → T40; T41 after T40; T42 after T41; T43 after T40, beside T41–T42 | after T36, before 3c (owner 2026-11-06); contracts sequential in this worktree; T37 and T40 measure kind 13 first |
+| Docs | T19 | drafts beside T14–T18, T24–T36 and T37–T43; lands after T43 and 3c (BUILT only with code and tests) |
 | Close | T21 → T22 → T23 | |
 | Next | TODO item 4 | SCaaS testnet reset 2 deploys the merged code (not this plan) |
 
@@ -1022,9 +1023,11 @@ error that T28 replaces), `script/DeployBase.sol` (the two releases), `size-base
 
 - [ ] **Step 1:** Build the skeleton; `forge build src --sizes --json`; deploy gas of both releases by `DEPLOY_GAS` on the
       method of spec §6.2.
-- [ ] **Step 2:** Report to the controller: runtime B and asked gas of kinds 9 and 13 against the §6.2 estimate; kind 13 against
-      65,536 B. If kind 13 crosses it, add the `_above64KiB` row here with the reason; if a figure runs over the estimate by more
-      than 50 %, stop for the controller before T28.
+- [ ] **Step 2:** Report to the controller: runtime B and asked gas of kinds 9 and 13 against the §6.2 estimate. **Stop rule (owner
+      2026-11-06, the pay-meta-tax spec's O18 and §6.4):** kind 13 is measured first; at or above the stop line **64,512 B** it is
+      reduced lever by lever, the levers of the pay-meta-tax spec §6.4 that apply to the regulated code (thin stubs into `RegulatedLib`, bodies and events in `RegulatedLib`, one struct view, error consolidation), in order, each under that section's checklist, re-measured after each, until it is under; back to the controller only when every
+      lever is used. No `_above64KiB` row. A figure more than 50 % over the estimate is still reported to the controller before
+      T28.
 - [ ] **Step 3:** whole `forge test`; the four sets; size gate.
 - [ ] **Step 4:** Commit `ua-mtx-merge T27: regulated skeleton, kinds 9 and 13 measured first`.
 
@@ -1129,7 +1132,7 @@ roll-over untouched. `ZetherLib` unchanged.
       `totalShielded` unchanged (I8).
 - [ ] **Step 2:** FAIL. **Step 3: Implement.**
 - [ ] **Step 4:** PASS; whole `forge test`; `at-set.sh` at the four sets (`test/{ua,pqz,as/confidential}`); size gate (kind 13
-      against 65,536 B and T27's figure).
+      against the 64,512 B stop line and T27's figure; at or above it, reduce as T27's stop rule).
 - [ ] **Step 5: Mutants:** `shieldIn` payer unchecked; the check after `_pullShieldIn`; refresh refused under `FREEZE`; `R` asked
       of a refresh's zero recipient.
 - [ ] **Step 6:** Commit `ua-mtx-merge T31: regulated PQZ kinds 12 and 13, four sets`.
@@ -1170,7 +1173,8 @@ test`, size gate.
 - [ ] **Step 1: Failing tests:** `test_regulatedReleasesPublished_{8..13}`, `test_linkClosureWithRegulatedLib`,
       `test_registryDeployedAndDexAttested`, `e2e.py --self-test` rows for 12, 13.
 - [ ] **Step 2:** FAIL. **Step 3: Implement.** **Step 4:** PASS; whole `forge test`; the four sets; size gate (`--self-test`
-      first; `_above64KiB` printed); deploy gas of every regulated release against 60 M and 70 M (the TODO gap line per Q7).
+      first; `_above64KiB` printed and empty for 8–13); every regulated release under the 64,512 B stop line, else reduced as
+      T27's stop rule (owner 2026-11-06, no `_above64KiB` fallback); deploy gas of every regulated release against 60 M and 70 M (the TODO gap line per Q7).
 - [ ] **Step 5: Mutants:** `RegulatedLib` missing from `libCodeHashes`; the registry hash left out of `implArgs`.
 - [ ] **Step 6:** Commit `ua-mtx-merge T33: regulated releases 8-13, registry deploy, sizes and deploy gas`.
 
@@ -1228,9 +1232,226 @@ reopens on `Unpaused` or at `pausedUntil`; `TokenPaused` never grief-scored.
 
 **Gates:** whole `forge test`, four sets.
 
+### Payment metadata, free pay lanes, tax (group 3e, owner approved 2026-11-06): tasks T37–T43
+
+**Spec:** [`2026-11-05-pay-meta-tax.md`](../specs/2026-11-05-pay-meta-tax.md), revised after the Codex and Fable reviews
+([Codex](../../research/paytax-codex-review.md), [Fable](../../research/paytax-fable-review.md)); rulings O1–O17, every
+question answered (spec §11). **Place:** after T36, before 3c (`PqChat` and the registry generation); T19, T21, T22, T23 cover
+the group. **Order:** contracts T37 → T38 → T39 → T40, sequential in this worktree (shared `MetaTokenBase`, `ERC20MetaTx`,
+`RegulatedLib`, `size-baseline.json`); T41 (`clients/`, `smartcontracts/vectors/`) after T40 fixes the ABI; T42 (node) after T41;
+T43 (invariants, mutants) after T40, beside T41–T42. **Estimate:** 14.5 agent-days, plus 0.5 on T19 (15 in all). Every contracts
+task ends with the whole `forge test` green at the default set and the size gate; T37 and T40 also run `script/pqz/at-set.sh <set>
+test --match-path 'test/{ua,pqz,as/confidential}/*'` at the four sets (one run per work tree, `PqzSet.sol` restored). Red first,
+positive control first, one change at a time; mutants one at a time on a clean tree, logged `mutant | test that went red | rc`;
+heavy runs through `scripts/capped`, foreground. Legacy copies (MD-4) are the first commit of each task that replaces a body.
+
+### Task T37: pay entries with `PayMeta`, free pay lanes, the mandate wallets
+
+**Depends on:** T36. **Estimate:** 3.
+
+**Files:** `src/metatx/{MetaTokenBase,ERC20MetaTx,IMetaTokenV2,IERC20Payment}.sol`, `src/common/MetaTxLib.sol` (`PayMeta`),
+`src/wallet/MandateWallet.sol`, `src/hedera/HederaMandateWallet.sol`; `legacy/ua-mtx-merge/` (flat `mtxPay`, `mtxPayMeta`,
+`_uaPayMeta`, `_uaPay`, `metaPayId(bytes32,bytes)`, the old `PaymentMeta`, the six-argument `payWithFee` / `payWithFeeToUA`, the
+receiver-fee lane shape, the wallets' old pay entries); tests `test/metatx/{PayMeta,PayLanes}.t.sol` (new / rewritten),
+`test/metatx/MtxRelayFee.t.sol`, `test/wallet/{MandateWallet,MandateWalletMerged}.t.sol`, `test/hedera/{HederaV2,HederaKat}.t.sol`,
+every `test/` and `script/` caller of `mtxPay(`, `metaPayId`, `payWithFee`, `payLane`; `test/v2/MetaTxGasV2.t.sol`; the mandate KAT;
+`smartcontracts/vectors/metatx/paymeta.json` (regenerated; old copy to `smartcontracts/vectors/metatx/legacy/ua-mtx-merge/`) and its
+generator; `size-baseline.json`.
+
+**Interfaces:**
+- `struct PayMeta { bytes32 salt; string payNo; uint16 schema; bytes body; }`; `metaPayId(PayMeta) = keccak256(abi.encodePacked(
+  "scaas.pay.meta.v2", salt, keccak256(abi.encode(payNo, schema, body))))`; `_payMeta(entryRef, meta)`: `salt ≠ 0`, `schema == 0 ⇔
+  body empty` (`PayMetaShape`), `bytes(payNo).length ≤ 256` (`PayNoTooLong`), `entryRef == metaPayId(meta)` (`PayMetaMismatch`),
+  then `PaymentMeta(bytes32 indexed payId, string payNo, uint16 schema, bytes body)`.
+- `mtxPay(UAMetaTransfer t, UASig auth, PayMeta meta)`; `mtxPayReceiverFee(…, UASig payeeAuth, PayMeta meta)` without the
+  `payLane` / nonce-0 terms; `payWithFee(…, bytes32 entryRef, PayMeta meta)`; `payWithFeeToUA(…, bytes32 entryRef, PayMeta meta)`;
+  free `batch` / `nonce` on every pay entry; `payLane` kept as a view; `mtxExecuteTransfer` / `mtxBatchTransfer` unchanged (O12).
+- `MandateWallet` / `HederaMandateWallet`: the pay entries gain `PayMeta meta` last (unsigned, bound by `entryRef`); `refUsed`
+  unchanged.
+
+- [ ] **Step 1: Failing tests** (each with its positive control): `test_payMeta_saltZeroRefused`, `test_payMeta_schemaZeroWithBody`,
+      `test_payMeta_schemaWithEmptyBody`, `test_payMeta_payNo256Passes`, `test_payMeta_payNo257Refused`, `test_payMeta_otherPayNoMismatch`,
+      `test_payMeta_oldTagRefused`, `test_payMeta_emittedBeforeSettled`, `test_mtxPay_freeLane`, `test_mtxPay_payLaneConventionStillWorks`,
+      `test_mtxPay_twoPartialsSameRef`, `test_mtxPayMeta_selectorAbsent`, `test_payWithFee_entryRefZeroRefused`,
+      `test_payWithFeeToUA_metaMismatch`, `test_receiverFee_freeLane`, `test_receiverFee_coSignDeadAfterNonceUsed`,
+      `test_genericPath_landsWithoutPaymentMeta` (O12 pinned), `test_mandateWallet_payWithMeta`, `test_mandateWallet_metaMismatch`
+      (and the Hedera twin); `paymeta.json` rows read by the forge test.
+- [ ] **Step 2:** FAIL. **Step 3: Implement**, kind 13 first (one pay entry converted, size measured, then the rest).
+- [ ] **Step 4:** PASS; whole `forge test`; the four sets; size gate. **Stop rule (spec §6.4, O18):** kind 13 first, then every
+      kind; a kind at or above **64,512 B** is reduced by spec §6.4's levers in order (5 and 7 are the ones that touch T37's code),
+      one at a time, re-measured after each, until it is under; back to the controller only when every lever is applied. No
+      `_above64KiB` row.
+- [ ] **Step 5: Mutants:** `payNo` left out of the hash; the old tag; the salt-0 refusal dropped; the schema/body rule dropped;
+      `_payMeta` after the transfer; the 256-byte bound off by one; `PaymentMeta` skipped; `payLane` still enforced in receiver-fee;
+      the wallet passing an empty `PayMeta`.
+- [ ] **Step 6:** Commit `ua-mtx-merge T37: PayMeta on every pay entry, free pay lanes, mandate wallets`.
+
+**Pins, old → new:** `MetaTxGasV2` `mtxPay` rows (and every kind's pay entries if lever 5 is applied); `UA*` typehash pins unchanged (checked); ERC-165 ids of `IMetaTokenV2`,
+`IERC20Payment`; sizes of every kind and both wallets; mandate KAT; wallet CREATE2 addresses. **Gates:** whole `forge test`, four
+sets, size gate.
+
+### Task T38: relay fee on free lanes
+
+**Depends on:** T37. **Estimate:** 1.
+
+**Files:** `src/metatx/{MetaTokenBase,MtxRelayFee,IERC20MetaTx}.sol`, `script/DeployBase.sol`, `legacy/ua-mtx-merge/` (old
+`UA_RELAY_FEE_TYPEHASH`, `_relayHash`, the old `mtxRelayFee` and `relay`), `test/metatx/MtxRelayFee.t.sol`, the typehash pin test.
+
+**Interfaces:** `UARelayFee(bytes32 from,address target,bytes32 callDataHash,bytes32 payee,uint256 value,uint256 batch,uint256
+nonce,uint256 validUntil,address relayer)`; token `mtxRelayFee(…, uint256 batch, uint256 nonce, uint256 validUntil, UASig)`;
+`MtxRelayFee.relay(…, uint256 batch, uint256 nonce, uint256 validUntil, UASig)`, with a `RelayPay` struct only if the legacy
+decoder runs out of stack (measured here); `relayRef` unchanged; open mode unchanged on every kind (O14).
+
+- [ ] **Step 1: Failing tests:** `test_relayFee_staleNonce`, `test_relayFee_oldTypehashRefused`, `test_relayFee_dedicatedLane`,
+      `test_relayFee_twoSignaturesReplayableTargetPaysTwice`, `test_relayFee_guardedTargetSecondReverts`,
+      `test_relayFee_openModeFrozenSubmitterPaid` (O14's limitation pinned on a regulated kind), the typehash pin.
+- [ ] **Step 2:** FAIL. **Step 3: Implement.** **Step 4:** PASS; whole `forge test`; size gate.
+- [ ] **Step 5: Mutants:** `batch` or `nonce` left out of the hash; the router not passing `nonce`; `relayRef` changed.
+- [ ] **Step 6:** Commit `ua-mtx-merge T38: relay fee with batch and nonce`.
+
+**Pins, old → new:** `UARelayFee` typehash; `MtxRelayFee` and executor CREATE2 addresses; sizes. **Gates:** whole `forge test`,
+size gate.
+
+### Task T39: bit 23 `TAX`, `RegulatedLib` tax bodies, router ops
+
+**Depends on:** T38. **Estimate:** 1.5.
+
+**Files:** `src/governance/{GovernanceBits,GovernanceLib,GovernanceRouterBase,IGovernanceRouter}.sol`,
+`src/regulated/{RegulatedBase,RegulatedLib,IRegulatedToken}.sol` and the six kind contracts (masks, stubs, view),
+`src/factory/IFactoryToken.sol` (`RegulatedParams.taxRecipient`) and the `TokenConfig` ripple of the regulated spec §2.4
+(`ZetherWrappedLib`, `PqzWrappedLib`, `DeployBase`, `script/pqz/e2e.py`, `script/ZetherE2E.s.sol`, the factory tests,
+`scaas-node/tests/e2e.rs`); `test/as/Tax.t.sol` (new), `test/governance/{GovRouter,GovRouterTypehash,SelectorAudit,GovRegulatedBits}.t.sol`,
+`test/v2/layout/` (`scaas.regulated` +5, +6), `test/vectors/selector_audit.json`, `smartcontracts/vectors/governance/governance_bits.json`.
+
+**Interfaces:** `GovernanceBits.TAX = 23` in `ISSUER_BITS` and `_roleBits()` of 8–13, not in `_contractOnlyBits()`,
+`REGULATED_ROLES` or `_delayedRelaxBits()` (O9, O16); `init` grants `roles.issuer` bit 23 and accepts an issuer holding only 23;
+storage +5 `taxRecipient`, +6 `TaxRate { uint32 ratePpm; uint32 pendingPpm; uint64 eta; }`; `setTaxRate(uint32)` (≤ 10^6; a
+decrease at once, an increase pending `eta = now + IOpenFactory(FACTORY).noticePeriod()`, the period read in the token and passed
+to the library), `setTaxRecipient(bytes32)` (not 0, pools, the token; a derived id SIGNING; `!F`, `R` at set time), events
+`TaxRateSet`, `TaxRecipientSet`; view `taxConfig()`; router ops `mtxSetTaxRate`, `mtxSetTaxRecipient` over `UASetTaxRate`,
+`UASetTaxRecipient`, fee mode `NONE`.
+
+- [ ] **Step 1: Failing tests:** `test_taxBit_plainKindRefuses_{0..5}`, `test_taxBit_validOn_{8..13}`, `test_taxBit_eoaHolderGrantedAfterCreation`,
+      `test_taxBit_issuerOnlyBit23Init`, `test_taxRecipientZeroInitRefused_{11,13}`, `test_setTaxRate_decreaseImmediate`,
+      `test_setTaxRate_increaseNotBeforeEta`, `test_setTaxRate_increaseAtEta`, `test_setTaxRate_decreaseCancelsPending`,
+      `test_setTaxRate_noticeZeroImmediate`, `test_setTaxRecipient_{pool,token,unregistered,frozen,unattested}Refused`,
+      `test_setTaxRecipient_paddedNativeAccepted`, `test_routerRow_{SetTaxRate,SetTaxRecipient}` (EOA, `msig`, contract holders,
+      fee 0); two typehash pins; `RoleRevoked(23)` and `disableFeature(23)` immediate.
+- [ ] **Step 2:** FAIL. **Step 3: Implement.** **Step 4:** PASS; whole `forge test`; the four sets (`PqzWrappedLib`); size gate.
+- [ ] **Step 5: Mutants:** bit 23 accepted on a plain kind; in `_contractOnlyBits()`; missing from `ISSUER_BITS`; in
+      `_delayedRelaxBits()`; an increase effective before `eta`; a decrease delayed; the recipient set without the `R` check.
+- [ ] **Step 6:** Commit `ua-mtx-merge T39: bit 23 TAX, the tax rate and recipient, router ops`.
+
+**Pins, old → new:** layout of `scaas.regulated`; router typehashes (+2), router size and CREATE2 address; `selector_audit.json`;
+`governance_bits.json`; `Factory.t` encodings; sizes. **Gates:** whole `forge test`, four sets, size gate.
+
+### Task T40: `mtxPayWithTax` and `payWithTax` on kinds 8–13
+
+**Depends on:** T39. **Estimate:** 2.5.
+
+**Files:** `src/metatx/ERC20MetaTx.sol` (`_uaExecuteTransfer` gains `uint256 withheld, bytes32 withheldTo`; every caller passes
+`0, 0`), `src/regulated/{RegulatedBase,RegulatedLib}.sol` and the six kind contracts, `IRegulatedToken`; `test/as/Tax.t.sol`,
+`test/as/confidential/TaxConfidential.t.sol` (new), `test/governance/PlusZero.t.sol` (gas old → new), the `paytax.json` writer;
+`smartcontracts/vectors/metatx/paytax.json` (new); `size-baseline.json`; `runs/<date>-ua-mtx-merge-paytax-sizes.txt` (summary).
+
+**Interfaces:** `UAPayWithTax(UAMetaTransfer payment,uint8 taxMode,uint256 tax)`; `mtxPayWithTax(UAMetaTransfer t, uint8 taxMode,
+uint256 tax, UASig auth, PayMeta meta)` and `payWithTax(bytes32 to, uint256 amount, uint8 taxMode, uint256 tax, bytes32 entryRef,
+PayMeta meta)` (caller is the payer), both `PAYABLE` and `TAX` gated, steps of spec §5.3: `_payMeta`; mode 1 PERCENT (`tax ==
+floor(value × rate / 10^6)`, `TaxMismatch`) or 2 AMOUNT; `tax ≤ value`; `r ≠ to`; `_regFeeTo(r, tax)`; the split payer → payee
+`value − tax`, payer → `r` `tax` (O13), both on `_uaMove`; `UAPaymentSettled` gross; `PaymentTaxed(entryRef, payee, taxRecipient,
+from, taxMode, tax, digest)` even at 0.
+
+- [ ] **Step 1: Failing tests:** `test_payWithTax_percentExact`, `test_payWithTax_percentOffByOne_{up,down}`, `test_payWithTax_amountAsSigned`,
+      `test_payWithTax_taxAboveAmount`, `test_payWithTax_mode{0,3}`, `test_payWithTax_taxOff`, `test_payWithTax_recipientIsPayee`,
+      `test_payWithTax_recipientFrozen`, `test_payWithTax_recipientUnattested`, `test_payWithTax_frozenPayeePasses`,
+      `test_payWithTax_books` (J3, coinciding roles), `test_payWithTax_zeroTaxEmits`, `test_payWithTax_inFlightRateLowered`,
+      `test_payWithTax_inFlightIncreaseMatured`, `test_payWithTax_on_{10,11,12,13}`, `test_confidentialOps_noTaxLeg_{10,11,12,13}`
+      (shielded transfer and unshield with `TAX` set: no `PaymentTaxed`, no read of +5, +6), `test_directPayWithTax_{contractCaller,eoaCaller,frozenCaller,mismatchedMeta}`,
+      `test_directPayWithTax_notInMtxSelectors`; `UAPayWithTax` digest with a non-zero unbound `relayer` / `feeRecipient`;
+      `test_plusZeroGas_{kind}` re-pinned.
+- [ ] **Step 2:** FAIL. **Step 3: Implement**, kind 13 first (the entry, then the stubs, then the direct twin), then 8–12.
+- [ ] **Step 4:** PASS; whole `forge test`; the four sets; size gate and deploy gas of the six releases, the router and
+      `RegulatedLib` on the regulated spec's §6.2 method. **Stop rule (spec §6.4, O18):** kind 13 first; a kind at or above
+      **64,512 B** is reduced by spec §6.4's levers 1–8 in order, one at a time, size and whole `forge test` re-run after each,
+      until it is under; back to the controller only when every lever is applied (the `_above64KiB` row is not a fallback). A
+      deploy-gas figure more than 50 % over spec §6.4 is reported, without stopping.
+- [ ] **Step 5: Mutants:** PERCENT rounding up; `tax ≤ amount` dropped; the tax leg from the payee; the payee credited `amount`;
+      the recipient from calldata; `_regFeeTo` skipped; `PaymentTaxed` skipped at 0 or without `from`; `taxRecipient` hashed into
+      the struct; the confidential fee rule applied to PERCENT on 10–13; `payWithTax` taking the payer from an argument.
+- [ ] **Step 6:** Commit `ua-mtx-merge T40: mtxPayWithTax and payWithTax on kinds 8-13`.
+
+**Pins, old → new:** gas of every kind's I0 entries (the two internal arguments) and of the pay and tax entries for each lever
+applied; sizes of 0–13, the router, `RegulatedLib`, `MtxPipelineLib`; `LinkClosure` codehashes of each library a lever grows;
+deploy-gas summary. **Gates:** whole `forge test`, four sets, size gate.
+
+### Task T41: vectors and clients
+
+**Depends on:** T40. **Estimate:** 2.
+
+**Files:** `smartcontracts/vectors/` (`typed/typed_ops.json` by `typed-ops-vectors.mjs`: `UARelayFee` moves, `UAPayWithTax` per
+contract class, two router rows; `metatx/paytax.json` readers; `metatx/famvec.py`); `clients/clientkeys` (`buildPay`,
+`buildPayReceiverFee`, `buildPayWithTax`, `metaPayId` v2, `encodeMetaBody` / `decodeMetaBody`, `buildRelayFee` with `batch` /
+`nonce`, the clear-metadata warning once per payee per session, `payNo` text checks and the 256-byte bound); `clients/ua-rs` and
+its wrappers `ua-c`, `ua-cxx`, `ua-qt`, `ua-dart-frb`; `clients/zether-prover/src/typed.rs` (relay-fee builder); the ~35 non-EVM
+consumers of `paymeta.json` repointed to the legacy copy (8 node adapters' tests, 7 contract families' tests and generators,
+`clientkeys` `near` / `algorand` tests, `ua-qt` `tst_ua.qml`, `.github/ci_changes.py`, two older gate runners): paths only.
+
+- [ ] **Step 1: Failing tests:** `clientkeys` digests of `UAPayWithTax` and the new `UARelayFee` with a non-zero unbound `relayer` /
+      `feeRecipient`; `paymeta.json` v2 rows (256 accepted, 257 refused); `paytax.json` rows; the warning shown once per payee per
+      session; a `payNo` with a bidi override refused; `ua-rs` signs both structs.
+- [ ] **Step 2:** FAIL. **Step 3: Implement**; generators write the vectors. **Step 4:** PASS; `node --test`; `ua-rs` and wrappers;
+      `zether-prover`; every repointed non-EVM test still green on the legacy file; generators re-run, `git diff --exit-code`.
+- [ ] **Step 5: Mutants:** `UARelayFee` field order swapped; `relayer` left non-zero in a canonical digest; schema 2 encoded with
+      `invoiceNo`; the old tag in `metaPayId`.
+- [ ] **Step 6:** Commit `ua-mtx-merge T41: pay-meta and tax vectors, clientkeys and ua-rs rows`.
+
+### Task T42: node
+
+**Depends on:** T41. **Estimate:** 3.
+
+**Files:** `scaas-node/src/{typed,guard,submit,indexer,gateway,adapter}.rs`, `src/mesh/accept.rs`, the error table,
+`node.example.toml` (no new secret), `tests/e2e.rs` (ignored, anvil); `docs/node/` drafts for T19.
+
+**Interfaces:** spec §7.1: a pay job `{op: {entry: "mtxPay" | "mtxPayReceiverFee" | "mtxPayWithTax", token, args: {t, …, meta},
+auth}}` with `meta` named per schema (old hex form `HEX_ARGS_REFUSED`, `mtxPayMeta` `ENTRY_RETIRED`); pre-checks
+(`PAY_META_MISMATCH`, `PAY_NO_TOO_LONG` > 256 B, `PAY_META_TOO_LONG`, `TAX_MISMATCH` with `expected`); the `payLane` / nonce-0
+checks removed; a pay job sent only as its pay entry, never downgraded; `UAPayWithTax`: signer `payment.from`, outer digest as
+job id and execution match (receiver-fee behaviour unchanged); rows in `token`, `zether`, `pqz` × kinds 8–13, two router rows, the
+mandate rows; relay-fee `batch` / `nonce`; pricing counts `payNo + body`; indexer join of `PaymentTaxed` (spec §5.4) and the feed
+fields `tax`, `tax_mode`, `tax_recipient`, `net`, `withheld_by`; alerts on `TaxRateSet`, `TaxRecipientSet`, `FeatureDisabled(23)`,
+`RoleRevoked(23)`; gateway `/v1/op`; the mesh refuses a pay by name; non-EVM adapters on the old formula.
+
+- [ ] **Step 1: Failing tests:** `pay_job_named_meta_builds_body`, `pay_job_hex_meta_refused`, `pay_job_payno_257_refused`,
+      `pay_job_never_downgraded_on_retry`, `pay_job_free_lane_accepted`, `tax_job_signer_is_payer_distinct_payee`,
+      `tax_job_outer_digest_is_job_id`, `tax_job_landed_elsewhere_is_landed_not_superseded`, `receiver_fee_job_unchanged`,
+      `tax_mismatch_after_rate_change_refused_by_name`, `pay_tax_rows_equal_contract_{8..13}` (both directions, per class),
+      `router_tax_rows`, `indexer_joins_payment_taxed`, `mesh_refuses_pay`, `relay_fee_job_batch_nonce`; e2e: `pay_with_meta_on_anvil`,
+      `pay_with_tax_on_anvil`.
+- [ ] **Step 2:** FAIL. **Step 3: Implement.** **Step 4:** PASS; `CAPPED_MEM=6G ../scripts/capped cargo test` alone; clippy
+      `-D warnings`; `--test e2e -- --ignored --test-threads=1`. No `anvil` left.
+- [ ] **Step 5: Mutants:** the tax signer taken as `payment.to`; the inner digest as the tax job id; `PAY_META_MISMATCH` decoded as
+      `dead`; the node still checking `payLane`; a meta job downgraded to `mtxExecuteTransfer`.
+- [ ] **Step 6:** Commit `ua-mtx-merge T42: node pay-meta, tax and relay-fee jobs`.
+
+### Task T43: invariants J1–J8 and the mutant harness
+
+**Depends on:** T40; beside T41, T42. **Estimate:** 1.5.
+
+**Files:** `test/as/invariant/PayTax{Handler,Invariants}.t.sol`; `smartcontracts/evm/runs/<date>-ua-mtx-merge-paytax/`
+(`mutants.py`, `README.md`, the summary `mutant | test that went red | rc`, no absolute paths).
+
+- [ ] **Step 1:** Handlers over every pay entry, the relay fee, the two tax powers and the confidential entries of 10–13;
+      invariants J1–J8 of spec §13.
+- [ ] **Step 2:** Run at the default set; the PQZ handlers at the four sets.
+- [ ] **Step 3: Mutants:** every row of spec §14 not already killed in T37–T42 (the harness re-runs those too); a survivor is a
+      finding for its owning task.
+- [ ] **Step 4:** Commit `ua-mtx-merge T43: pay-meta and tax invariants J1-J8 and the mutant harness, <n> kills`.
+
+**Gates:** whole `forge test`, four sets.
+
 ### Task T19: docs, decisions, operator note
 
-**Depends on:** T1–T18 and T24–T36 for BUILT tags (drafts beside T14–T18 and T24–T36).
+**Depends on:** T1–T18, T24–T36 and T37–T43 for BUILT tags (drafts beside T14–T18, T24–T36 and T37–T43). **Estimate:** +0.5 for group 3e.
 
 **Files, each rule rewritten once, linked elsewhere:**
 - `docs/contracts/metatx.md` (CTR-MTX-01, -05, -06, -09, -11, -12, -14, -15, -17, -18, -21, -22, -23, -24, -26, -27, -28, -29), `accounts.md`
@@ -1253,6 +1474,11 @@ reopens on `Unpaused` or at `pausedUntil`; `TokenPaused` never grief-scored.
   8–13, `TokenConfig.reg`), `zether.md` and `pq-zero-knowledge.md` (the confidential sites, apart), `docs/node/dex-venue.md` (the
   pause halt); `docs/decisions.md`: CTR-GOV-03, -08, -09, -13, -16, -17, -18 to BUILT with commits, the CTR-AS-03 Change
   (owner 2026-11-05) to BUILT, an entry per rule RK-1…RK-11 of the spec's §13; the operator note carries the spec's §3.6 runbook.
+- **Pay meta and tax (T37–T43, +0.5):** the doc changes of the 3e spec §9 (`architecture.md` §10 and the four-condition test to a
+  recommendation; `metatx.md` CTR-MTX-01, -03, -04, -06, -09, -10, -11, -26, -27; `accounts.md`, `mandates.md`, `asset-suite.md`
+  §2, `integration.md` with the taxed reconciliation formula, `docs/node/`, `docs/clients/`); `decisions.md`: the Change lines of
+  the spec's §10 and its rules PT-1…PT-7 (CTR-MTX-31, the CTR-MTX-26 / -27 Changes, CTR-AS-18, CTR-AS-19, CTR-GOV-21,
+  ARCH-POS-13), ARCH-POS-04's wording; the operator note's pay, relay-fee and tax rows.
 - **Operator note** (in `docs/node/ops.md` and the release notes section of `job-api.md`): EVM clients of the address token forms move
   to `ua_metatx`; the gateway doors; the public DEX API takes `UATradeOrder` and the UA cancel forms; the mesh body; a derived cancel
   signs the named purpose (MD-5); mandate wallets: new ids, `ua_metatx` jobs, the flat builders gone (Q6, MD-11); an old shape is refused by name, never silently `dead`; new router and `MtxRelayFee` addresses.
@@ -1292,13 +1518,13 @@ outside the repo).
   at-set-n2560-kmax16384 at-set-n2816-kmax65536 forge-isolate sizes zether-cross clientkeys vectors-check cargo-zether-prover
   ua-rs ua-c ua-cxx ua-qt ua-dart-frb ua-py ua-go ua-cs ua-dart cargo-scaas-node node-e2e-anvil node-e2e-hedera zether-e2e docs
   named-tests summary"`. The `forge-*` steps are the default set's whole suite (`forge-rest` covers `test/merge` and the rest);
-  `forge-as` the regulated suite `test/as` (T24–T36); `at-set-<set>` runs `script/pqz/at-set.sh <set> test --match-path
+  `forge-as` the regulated suite `test/as` (T24–T36, T39, T40, T43); `at-set-<set>` runs `script/pqz/at-set.sh <set> test --match-path
   'test/{ua,pqz,as/confidential}/*'` (owner rule: the other three sets
   `test/{ua,pqz}` only, with `test/as/confidential` added for kinds 12, 13); `sizes` runs `size_gate.py --self-test` first and prints `_above64KiB`; `vectors-check` runs every
-  generator of T2, T6, T8, T11, T13, T34 (`regulated_kat.json`'s writer included) and `dex_order_kat.json`'s writer, then `git diff --exit-code`; `cargo-scaas-node` under
+  generator of T2, T6, T8, T11, T13, T34, T37, T40, T41 (`regulated_kat.json`'s, `paymeta.json`'s and `paytax.json`'s writers included) and `dex_order_kat.json`'s writer, then `git diff --exit-code`; `cargo-scaas-node` under
   `CAPPED_MEM=6G` alone (the whole node suite, clippy `-D warnings`); `docs` runs `test_docs_check.py`, `docs_check.py check`
   and `paths`.
-- `NEW_TESTS`: every test name of T1–T18 and T24–T36 in its pass form (`forge|forge|…`, `cargo-scaas-node|cargo|…`, `node-e2e-anvil|cargo|…`,
+- `NEW_TESTS`: every test name of T1–T18, T24–T36 and T37–T43 in its pass form (`forge|forge|…`, `cargo-scaas-node|cargo|…`, `node-e2e-anvil|cargo|…`,
   `clientkeys|node|…`, one row per language of T13), written from the diff, not from this plan.
 
 - [ ] **Step 1:** Write the runner and the names.
@@ -1314,7 +1540,7 @@ outside the repo).
 **Depends on:** T21.
 
 - [ ] **Step 1: Whole-branch review, Claude lenses** (superpowers:requesting-code-review) over `main..ua-mtx-merge`, readers given the
-      code and the specs (the merge spec and the regulated-kinds spec, its invariants I0–I13), not this plan's conclusions: security (invariants 1–7, review focus 1–9), rules (each R row against its
+      code and the specs (the merge spec, the regulated-kinds spec with its invariants I0–I13, and the pay-meta-tax spec with J1–J8), not this plan's conclusions: security (invariants 1–7, review focus 1–9), rules (each R row against its
       doc and the code), blast radius (every caller of a retired form: contracts, scripts, node, clients, docs), wallet display
       (§6 and T20's note). Same-class rule: a finding on one kind, family or language is checked on every other.
 - [ ] **Step 2: Fable, then Codex** on security, signatures and EIP-712 (spec §2, §5, §6, §8, the merged bodies, the node's digest
