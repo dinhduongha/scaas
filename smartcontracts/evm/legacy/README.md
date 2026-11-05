@@ -208,3 +208,10 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   `test/vectors/legacy/ua-mtx-merge/hedera_kat.json`: the Hedera `MetaOp` v1 as the token's address `MetaTransfer`
   (`from` an `address`); the file of the same name now holds `UAMetaTransfer` with the long-zero `from` padded to
   `bytes32`. Not built.
+  T10 (deploy and scripts, Q4, R40): `script/DeployBase.sol` with one deploy gate on every chain, `runtime x 1,530 + 2^24`
+  (now the SCaaS testnet's; a public chain declares the measured gate); `script/ZetherE2E.s.sol` with the relayed
+  section on the prover's address `namedCall` forms and the address `envelopeBinding(MetaTransaction)` view;
+  `script/pqz/e2e.py` and `script/pqz/test_e2e_linked.py` with the address named entries and generic path (`mtxExecute`
+  over `MetaTransaction`, `mtxNonce(address,uint256)`, `envelopeBinding` / `mtxDigest` over `MetaTransaction`), the `ua*`
+  twins (`uaExecute` with `bytes auth`, `uaNonce`, `uaEnvelopeBinding`, `uaDigest`, the `ua<Op>` named entries) and
+  `uaShield`'s `bytes auth`. Not run.
