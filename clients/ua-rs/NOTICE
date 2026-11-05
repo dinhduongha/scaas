@@ -1,0 +1,41 @@
+scaas-ua (clients/ua-rs) — third-party notices
+
+DRAFT (ua-rs-sign T0, 2026-11-05): the list below is the T0 inventory of the planned dependency graph (the T0 spike:
+scaas-ua with `pq`, `signers`, `json`, the new wallet crates and the `zether` / `pqz` facade crates). T19 completes it
+against the final Cargo.lock and appends the licence texts. Evidence: runs/2026-11-05-ua-rs-sign-t0.md.
+
+scaas-ua is part of SCaaS. Its own code is under the repository licence (../../LICENSE, Vegan Community License 1.0).
+A source or binary distribution of scaas-ua or of a library that bundles it (libscaas_ua_c, an app) must carry this
+file. Crates offered under "MIT OR Apache-2.0" (and the other dual / multiple licences of the graph) are used under
+their MIT or Apache-2.0 terms; their notices are carried by the crates themselves and are not repeated here.
+
+-------------------------------------------------------------------------------------------------------------------
+1. PQClean Falcon (C, compiled in: feature `pq` today through pqcrypto-falcon 0.4.1; MD-8: a vendored seeded build)
+-------------------------------------------------------------------------------------------------------------------
+  - crypto_sign/falcon-{512,1024,padded-512,padded-1024}/clean: MIT licence, "Copyright (c) 2017-2019 Falcon
+    Project", written by Thomas Pornin. Its LICENSE file also carries a statement about a patent; it is reproduced
+    with the licence text in full.
+  - common/fips202.c: based on public-domain implementations (its header).
+
+-------------------------------------------------------------------------------------------------------------------
+2. BSD-3-Clause crates (the copyright lines and the licence text must be carried)
+-------------------------------------------------------------------------------------------------------------------
+  - curve25519-dalek 4.1.3: Copyright (c) 2016-2021 isis agora lovecruft; Copyright (c) 2016-2021 Henry de Valence.
+  - ed25519-dalek 2.2.0: Copyright (c) 2017-2019 isis agora lovecruft.
+  - x25519-dalek 2.0.1: Copyright (c) 2017-2021 isis agora lovecruft; Copyright (c) 2019-2021 DebugSteven.
+  - subtle 2.6.1: Copyright (c) 2016-2017 Isis Agora Lovecruft, Henry de Valence; Copyright (c) 2016-2024 Isis
+    Agora Lovecruft.
+
+-------------------------------------------------------------------------------------------------------------------
+3. MIT-only crates compiled into the library (the copyright line and the permission notice must be carried)
+-------------------------------------------------------------------------------------------------------------------
+  - bytes 1.12.1: Copyright (c) 2018 Carl Lerche.
+  - slab 0.4.12: Copyright (c) 2019 Carl Lerche.
+  - generic-array 0.14.7: Copyright (c) 2015 Bartłomiej Kamiński.
+  - const-crc32-nostd 1.3.1: Copyright (c) 2022 Jonathan Strong.
+  - enum-ordinalize 4.4.2 (MIT; its derive crate, derive-getters and educe are build-time proc macros, not compiled in).
+
+-------------------------------------------------------------------------------------------------------------------
+4. CC0-1.0 crates (no notice required; listed for the inventory)
+-------------------------------------------------------------------------------------------------------------------
+  - bip39 2.2.2, bitcoin_hashes 0.14.101, hex-conservative 0.2.3.

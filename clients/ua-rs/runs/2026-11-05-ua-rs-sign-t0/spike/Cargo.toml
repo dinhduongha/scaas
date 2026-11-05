@@ -1,0 +1,44 @@
+# SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+# T0 spike (ua-rs-sign): the pins of plan T0 beside scaas-ua (pq, signers, json) and the two facade crates, for `cargo tree`,
+# `cargo deny`, `cargo audit` and compile-only cross-builds. Throwaway: T2 writes the real manifest.
+[package]
+name = "ua-rs-sign-t0-spike"
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.97.1"
+publish = false
+license = "LicenseRef-Vegan-Community-1.0"
+
+[workspace]
+
+# `pq` (scaas-ua's PQ verifiers: ml-dsa, slh-dsa and the PQClean Falcon C build) is a cell of its own: without it the
+# graph has no C, so a target without a C toolchain still compiles the rest.
+[features]
+default = ["pq"]
+pq = ["scaas-ua/pq"]
+
+[dependencies]
+scaas-ua = { path = "../../..", features = ["signers", "json"] }
+ml-kem = { version = "=0.3.4", features = ["zeroize", "getrandom"] }
+x25519-dalek = { version = "=2.0.1", default-features = false, features = ["static_secrets", "zeroize"] }
+aes-gcm = { version = "=0.10.3", default-features = false, features = ["aes", "alloc", "zeroize"] }
+aes-gcm-siv = { version = "=0.11.1", default-features = false, features = ["aes", "alloc"] }
+aes = "=0.8.4"
+hkdf = "=0.12.4"
+hmac = "0.12"
+sha2 = "=0.10.9"
+scrypt = { version = "=0.11.0", default-features = false }
+bip39 = { version = "=2.2.2", default-features = false, features = ["alloc", "zeroize"] }
+bip32 = { version = "=0.5.3", default-features = false, features = ["alloc", "secp256k1"] }
+zeroize = { version = "=1.8.2", features = ["zeroize_derive"] }
+alloy-rlp = { version = "=0.3.17", default-features = false }
+rand_core = { version = "0.6", features = ["getrandom"] }
+# facades (MD-5: on by default)
+zether-prover = { path = "../../../../zether-prover", default-features = false }
+pqz-ffi = { path = "../../../../../pqz-core/ffi", features = ["prove"] }
+
+# wasm32-unknown-unknown: the JS backend of each getrandom generation in the tree (0.2 `js`; 0.3 and 0.4 `wasm_js`)
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom02 = { package = "getrandom", version = "0.2", features = ["js"] }
+getrandom03 = { package = "getrandom", version = "0.3", features = ["wasm_js"] }
+getrandom04 = { package = "getrandom", version = "0.4", features = ["wasm_js"] }
