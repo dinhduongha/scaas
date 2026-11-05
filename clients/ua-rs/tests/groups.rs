@@ -146,7 +146,7 @@ impl MusigKind for Secp256k1 {
         Self::hash_s("scaas.ua.groups.v1/secret", &[label.as_bytes(), &(i as u32).to_be_bytes()])
     }
     fn single(d: &Self::S, msg: &[u8; 32]) -> Vec<u8> {
-        k256::schnorr::SigningKey::from_bytes(&Self::s_bytes(d)).unwrap().sign_raw(msg, &[0; 32]).unwrap().to_bytes().to_vec()
+        k256::schnorr::SigningKey::from_slice(&Self::s_bytes(d)).unwrap().sign_raw(msg, &[0; 32]).unwrap().to_bytes().to_vec()
     }
     fn hints(ka: &KeyAgg<Self>, pks: &[Vec<u8>]) -> Vec<u8> {
         pks.iter().flat_map(|pk| uncompressed(&(Self::parse(pk).unwrap() * ka.coef(pk)))).collect()
@@ -165,8 +165,8 @@ impl MusigKind for Bn254 {
     }
 }
 fn uncompressed(p: &k256::ProjectivePoint) -> Vec<u8> {
-    use k256::elliptic_curve::sec1::ToEncodedPoint;
-    p.to_affine().to_encoded_point(false).as_bytes()[1..].to_vec()
+    use k256::elliptic_curve::sec1::ToSec1Point;
+    p.to_affine().to_sec1_point(false).as_bytes()[1..].to_vec()
 }
 /// scaas Schnorr by `d`: `R = k·G`, `z = k + e·d`, deterministic `k`.
 fn schnorr_bn254(d: &ark_bn254::Fr, msg: &[u8; 32]) -> Vec<u8> {
@@ -265,16 +265,16 @@ fn musig_row<C: MusigKind>(label: &str, n: usize, role: &str, e: &Env) -> Value 
         if kind == MUSIG_SECP {
             let h = |i: usize| hints[64 * i..64 * i + 64].to_vec();
             let shift = |i: usize, neg: bool| {
-                let p = <k256::PublicKey as k256::elliptic_curve::sec1::FromEncodedPoint<k256::Secp256k1>>::from_encoded_point(
-                    &k256::EncodedPoint::from_bytes([&[4u8][..], &h(i)].concat()).unwrap(),
+                let p = <k256::PublicKey as k256::elliptic_curve::sec1::FromSec1Point<k256::Secp256k1>>::from_sec1_point(
+                    &k256::Sec1Point::from_bytes([&[4u8][..], &h(i)].concat()).unwrap(),
                 ).unwrap().to_projective();
                 let gp = k256::ProjectivePoint::GENERATOR;
                 uncompressed(&if neg { p - gp } else { p + gp })
             };
             let p1 = {
-                use k256::elliptic_curve::sec1::FromEncodedPoint;
-                let ep = k256::EncodedPoint::from_bytes(&g.pks[0]).unwrap();
-                uncompressed(&k256::ProjectivePoint::from(k256::AffinePoint::from_encoded_point(&ep).unwrap()))
+                use k256::elliptic_curve::sec1::FromSec1Point;
+                let ep = k256::Sec1Point::from_bytes(&g.pks[0]).unwrap();
+                uncompressed(&k256::ProjectivePoint::from(k256::AffinePoint::from_sec1_point(&ep).unwrap()))
             };
             let with = |i: usize, x: Vec<u8>| { let mut v = hints.clone(); v[64 * i..64 * i + 64].copy_from_slice(&x); v };
             negs.push(reg("bad-hint", &kd, &[sig.clone(), with(0, p1)].concat(), "UAPoP", "H_1 = P_1 (a valid point, not a_1·P_1; a_2 = 1 makes H_2 = P_2 correct)"));

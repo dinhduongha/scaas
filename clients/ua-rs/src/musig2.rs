@@ -82,7 +82,7 @@ impl Curve for Secp256k1 {
     }
     fn hash_s(tag: &str, parts: &[&[u8]]) -> Self::S {
         use k256::elliptic_curve::ops::Reduce;
-        <k256::Scalar as Reduce<k256::U256>>::reduce_bytes(&tagged(tag, parts).into())
+        <k256::Scalar as Reduce<k256::FieldBytes>>::reduce(&tagged(tag, parts).into())
     }
     fn s_bytes(s: &Self::S) -> [u8; 32] {
         s.to_bytes().into()
@@ -93,19 +93,19 @@ impl Curve for Secp256k1 {
         k256::Scalar::from_repr(b.into()).into()
     }
     fn ser(p: &Self::P) -> Vec<u8> {
-        use k256::elliptic_curve::sec1::ToEncodedPoint;
+        use k256::elliptic_curve::sec1::ToSec1Point;
         if *p == Self::inf() {
             return vec![0; 33];
         }
-        p.to_affine().to_encoded_point(true).as_bytes().to_vec()
+        p.to_affine().to_sec1_point(true).as_bytes().to_vec()
     }
     fn parse(b: &[u8]) -> Option<Self::P> {
-        use k256::elliptic_curve::sec1::FromEncodedPoint;
+        use k256::elliptic_curve::sec1::FromSec1Point;
         if b.len() != 33 || !(b[0] == 2 || b[0] == 3) {
             return None;
         }
-        let ep = k256::EncodedPoint::from_bytes(b).ok()?;
-        Option::<k256::AffinePoint>::from(k256::AffinePoint::from_encoded_point(&ep)).map(Into::into)
+        let ep = k256::Sec1Point::from_bytes(b).ok()?;
+        Option::<k256::AffinePoint>::from(k256::AffinePoint::from_sec1_point(&ep)).map(Into::into)
     }
     fn even(p: &Self::P) -> bool {
         use k256::elliptic_curve::point::AffineCoordinates;

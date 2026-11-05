@@ -487,7 +487,7 @@ fn native_recovered(row: &Value, blob: &[u8], digest: &[u8; 32]) -> Vec<(usize, 
                 let s = Signature::from_slice(&sig[..64]).ok()?;
                 let v = RecoveryId::from_byte(sig[64].checked_sub(27)?)?;
                 let vk = VerifyingKey::recover_from_prehash(digest, &s, v).ok()?;
-                Some(hx(&keccak256(&vk.to_encoded_point(false).as_bytes()[1..])[12..]))
+                Some(hx(&keccak256(&vk.to_sec1_point(false).as_bytes()[1..])[12..]))
             })
             .flatten();
         out.push((idx, addr));

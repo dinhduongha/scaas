@@ -4,7 +4,8 @@
 //! [`Wallet::native_key`] derive keys exactly as clientkeys (`derive`) and return handles that hold the store, its generation
 //! and a slot, no secret bytes. [`Wallet::lock`] waits for operations in flight, wipes the store and revokes every handle for
 //! good (`KeyRevoked`); dropping the wallet locks it, and a handle that outlives it stays valid memory that answers
-//! `KeyRevoked`. Signing comes with T3a–T3d, the vault with T9. Randomness: `rand_core` 0.6 `OsRng` inside; no call takes an
+//! `KeyRevoked`. Signing: [`UaKey::sign_ua`], [`UaKey::sign_member`], the native keys' key proof and raw digest, all through
+//! the [`Signer`] trait (`sign`, `signer`; T3a: the classic curves); the other kinds with T3b–T3d, the vault with T9. Randomness: `rand_core` 0.6 `OsRng` inside; no call takes an
 //! RNG. UNAUDITED.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
 
@@ -13,7 +14,14 @@ pub mod bounded;
 pub mod derive;
 #[cfg(not(feature = "vectors"))]
 pub(crate) mod derive;
+#[cfg(feature = "vectors")]
+pub mod sign;
+#[cfg(not(feature = "vectors"))]
+mod sign;
+mod signer;
 mod store;
+
+pub use signer::{AllowRawDigest, KeyRef, SigRole, SignRequest, Signer};
 
 use crate::UAError;
 use rand_core::{OsRng, RngCore};
@@ -252,7 +260,6 @@ pub struct UaKey {
     index: u32,
     key_data: Vec<u8>,
     ua: Option<[u8; 32]>,
-    #[cfg_attr(not(feature = "vectors"), allow(dead_code))] // read by the signers (T3a–T3d)
     secret: Handle,
 }
 
@@ -281,7 +288,6 @@ pub struct NativeKey {
     index: u32,
     coin_type: Option<u32>,
     public_key: Vec<u8>,
-    #[cfg_attr(not(feature = "vectors"), allow(dead_code))] // read by the signers (T3a–T3d)
     secret: Handle,
 }
 

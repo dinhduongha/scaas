@@ -13,7 +13,7 @@ use ark_ff::{BigInteger, PrimeField};
 use hkdf::Hkdf;
 use hmac::{Hmac, Mac};
 use p256::elliptic_curve::ff::{Field, PrimeField as _};
-use p256::elliptic_curve::sec1::ToEncodedPoint;
+use p256::elliptic_curve::sec1::ToSec1Point;
 use sha2::{Digest, Sha256, Sha512};
 use zeroize::{Zeroize, Zeroizing};
 
@@ -67,7 +67,7 @@ fn p256_key(b: &[u8; 32]) -> Option<p256::Scalar> {
 
 fn p256_compressed(k: &[u8; 32]) -> Result<Vec<u8>> {
     let sk = p256::SecretKey::from_slice(k).map_err(|_| Error::Argument)?;
-    Ok(sk.public_key().to_encoded_point(true).as_bytes().to_vec())
+    Ok(sk.public_key().to_sec1_point(true).as_bytes().to_vec())
 }
 
 /// SLIP-10 `(key ‖ chainCode)` at `path` (hardened steps carry [`HARDENED`]). ed25519: hardened steps only (`Argument`).
@@ -229,7 +229,7 @@ fn ed25519_public(s: &[u8]) -> Result<Vec<u8>> {
 
 fn secp_public(s: &[u8], compressed: bool) -> Result<Vec<u8>> {
     let sk = k256::SecretKey::from_slice(s).map_err(|_| Error::Argument)?;
-    Ok(sk.public_key().to_encoded_point(compressed).as_bytes().to_vec())
+    Ok(sk.public_key().to_sec1_point(compressed).as_bytes().to_vec())
 }
 
 fn mldsa<P: ml_dsa::MlDsaParams>(s: &[u8]) -> Result<Vec<u8>> {
@@ -250,10 +250,10 @@ pub fn ua_key_data(kind: u16, s: &[u8]) -> Result<Vec<u8>> {
     match kind {
         0x0101 => {
             let sk = p256::SecretKey::from_slice(s).map_err(|_| Error::Argument)?;
-            out = tail(sk.public_key().to_encoded_point(false).as_bytes())?;
+            out = tail(sk.public_key().to_sec1_point(false).as_bytes())?;
         }
         0x0102 => out = ed25519_public(s)?,
-        0x0103 => out = k256::schnorr::SigningKey::from_bytes(s).map_err(|_| Error::Argument)?.verifying_key().to_bytes().to_vec(),
+        0x0103 => out = k256::schnorr::SigningKey::from_slice(s).map_err(|_| Error::Argument)?.verifying_key().to_bytes().to_vec(),
         0x0108 => out = tail(&secp_public(s, false)?)?,
         0x0110 => out = secp_public(s, true)?,
         0x0104 | 0x0112 => {
@@ -309,5 +309,100 @@ pub fn native_public(network: Network, s: &[u8]) -> Result<Vec<u8>> {
         ed25519_public(s)
     } else {
         secp_public(s, true)
+    }
+}
+
+/// Lower-case hex.
+fn hex(b: &[u8]) -> String {
+    b.iter().map(|x| format!("{x:02x}")).collect()
+}
+
+/// EIP-55 checksummed `0x…` address of an uncompressed secp256k1 key `04 ‖ x ‖ y`.
+fn eip55(uncompressed: &[u8]) -> Result<String> {
+    let h = hex(crate::keccak256(uncompressed.get(1..).ok_or(Error::Argument)?).get(12..).ok_or(Error::Argument)?);
+    let check = hex(&crate::keccak256(h.as_bytes()));
+    let mut out = String::from("0x");
+    for (c, k) in h.chars().zip(check.chars()) {
+        out.push(if k > '7' { c.to_ascii_uppercase() } else { c });
+    }
+    Ok(out)
+}
+
+/// `bytes` as 5-bit groups, the last one zero-padded (bech32 `toWords`, RFC 4648 base32).
+fn groups5(bytes: &[u8]) -> Vec<u8> {
+    let (mut acc, mut bits, mut out) = (0u32, 0u32, Vec::new());
+    for b in bytes {
+        acc = ((acc << 8) | u32::from(*b)) & 0xfff;
+        bits += 8;
+        while bits >= 5 {
+            bits -= 5;
+            out.push(((acc >> bits) & 31) as u8);
+        }
+    }
+    if bits > 0 {
+        out.push(((acc << (5 - bits)) & 31) as u8);
+    }
+    out
+}
+
+fn alphabet(a: &[u8; 32], groups: impl IntoIterator<Item = u8>) -> String {
+    groups.into_iter().filter_map(|g| a.get(usize::from(g & 31)).map(|c| char::from(*c))).collect()
+}
+
+/// BIP-173 bech32 of `data` under `hrp`.
+fn bech32(hrp: &str, data: &[u8]) -> String {
+    const GEN: [u32; 5] = [0x3b6a_57b2, 0x2650_8e6d, 0x1ea1_19fa, 0x3d42_33dd, 0x2a14_62b3];
+    let words = groups5(data);
+    let mut chk = 1u32;
+    let expanded = hrp.bytes().map(|c| c >> 5).chain([0]).chain(hrp.bytes().map(|c| c & 31));
+    for v in expanded.chain(words.iter().copied()).chain([0; 6]) {
+        let top = chk >> 25;
+        chk = ((chk & 0x1ff_ffff) << 5) ^ u32::from(v);
+        for (i, g) in GEN.iter().enumerate() {
+            if (top >> i) & 1 == 1 {
+                chk ^= g;
+            }
+        }
+    }
+    chk ^= 1;
+    let sum = (0..6).map(|i| ((chk >> (5 * (5 - i))) & 31) as u8);
+    format!("{hrp}1{}", alphabet(b"qpzry9x8gf2tvdw0s3jn54khce6mua7l", words.into_iter().chain(sum)))
+}
+
+/// Stellar StrKey `G…` of an ed25519 key: base32 of `version ‖ key ‖ crc16-xmodem (little-endian)`; 35 bytes, so no padding.
+fn strkey(pk: &[u8]) -> String {
+    let body = [&[6u8 << 3][..], pk].concat();
+    let mut crc = 0u16;
+    for b in &body {
+        crc ^= u16::from(*b) << 8;
+        for _ in 0..8 {
+            crc = if crc & 0x8000 != 0 { (crc << 1) ^ 0x1021 } else { crc << 1 };
+        }
+    }
+    alphabet(b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567", groups5(&[&body[..], &crc.to_le_bytes()].concat()))
+}
+
+/// The address of a native key from its public key (clientkeys `describe`): EIP-55 (`evm`, `hedera_ecdsa`), bech32
+/// `cosmos` of RIPEMD-160(SHA-256(compressed key)), Sui `0x` BLAKE2b-256(`0x00 ‖ key`), Aptos `0x` SHA3-256(`key ‖ 0x00`),
+/// Stellar StrKey, Solana base58; `None` for `ton` and `hedera_ed25519` (clientkeys prints none).
+pub fn native_address(network: Network, public_key: &[u8]) -> Option<String> {
+    use sha3::Digest as _;
+    match network {
+        Network::Evm | Network::HederaEcdsa => {
+            let pk = k256::PublicKey::from_sec1_bytes(public_key).ok()?;
+            eip55(pk.to_sec1_point(false).as_bytes()).ok()
+        }
+        Network::Cosmos => {
+            use ripemd::Digest as _;
+            Some(bech32("cosmos", &ripemd::Ripemd160::digest(Sha256::digest(public_key))))
+        }
+        Network::Sui => {
+            use blake2::Digest as _;
+            Some(format!("0x{}", hex(&blake2::Blake2b::<blake2::digest::consts::U32>::digest([&[0u8][..], public_key].concat()))))
+        }
+        Network::Aptos => Some(format!("0x{}", hex(&sha3::Sha3_256::digest([public_key, &[0u8]].concat())))),
+        Network::Stellar => Some(strkey(public_key)),
+        Network::Solana => Some(bs58::encode(public_key).into_string()),
+        Network::Ton | Network::HederaEd25519 => None,
     }
 }

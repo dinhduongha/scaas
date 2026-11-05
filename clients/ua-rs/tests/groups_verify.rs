@@ -95,8 +95,8 @@ fn official_sections() {
     let z = &v["zfDkg"];
     assert!(dkg_transcript_ok(0x0111, &bytes(&z["keyData"])));
     // BIP-327 KeyAgg rows: Σ a_i·P_i = Σ H_i = Q, x(Q) = the official expected key
-    use k256::elliptic_curve::sec1::{FromEncodedPoint, ToEncodedPoint};
-    let pt = |b: &[u8]| k256::ProjectivePoint::from(k256::AffinePoint::from_encoded_point(&k256::EncodedPoint::from_bytes(b).unwrap()).unwrap());
+    use k256::elliptic_curve::sec1::{FromSec1Point, ToSec1Point};
+    let pt = |b: &[u8]| k256::ProjectivePoint::from(k256::AffinePoint::from_sec1_point(&k256::Sec1Point::from_bytes(b).unwrap()).unwrap());
     for r in arr(&v["bip327"]["keyAgg"]) {
         let mut q = k256::ProjectivePoint::IDENTITY;
         for (i, k) in arr(&r["keys"]).iter().enumerate() {
@@ -105,7 +105,7 @@ fn official_sections() {
             assert!(pt(&bytes(k)) * a == h);
             q += h;
         }
-        assert_eq!(q.to_affine().to_encoded_point(true).as_bytes(), &bytes(&r["Q"])[..]);
+        assert_eq!(q.to_affine().to_sec1_point(true).as_bytes(), &bytes(&r["Q"])[..]);
         assert_eq!(bytes(&r["Q"])[1..], bytes(&r["expectedX"])[..]);
     }
 }
@@ -120,7 +120,7 @@ fn t_frost_rows() {
         let ok = match r["verifier"].as_str().unwrap() {
             "frost-secp256k1" => frost_secp256k1(&key, &msg, &sig),
             _ => {
-                let (Ok(vk), Ok(s)) = (k256::schnorr::VerifyingKey::from_bytes(&key), k256::schnorr::Signature::try_from(&sig[..])) else { panic!() };
+                let (Ok(vk), Ok(s)) = (k256::schnorr::VerifyingKey::from_slice(&key), k256::schnorr::Signature::try_from(&sig[..])) else { panic!() };
                 vk.verify_raw(&msg, &s).is_ok()
             }
         };
