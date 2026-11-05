@@ -169,3 +169,12 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   wallets' address generic path and `executeMetaTransaction`. Tests as they stood before their meaning changed:
   `test/wallet/{MandateWallet,NamedWallets}.t.sol`, `test/account/AccountKat.t.sol` (the writer of the vectors
   `test/vectors/legacy/ua-mtx-merge/{mandate_pay_kat,mandate_revoke_kat}.json`). Not built.
+  T4 (Zether, R35): `src/zether/{ZetherLib,ZetherWrappedLib,WrappedZetherToken,IZetherToken}.sol` (and `ZetherLayer.sol`,
+  copied at T1): the address signed entries `mtxShield`, `mtxConfidentialTransfer`, `mtxConfidentialTransferCompact`,
+  `mtxConfidentialTransferSingle`, `mtxUnshield`, `mtxUnshieldUnwrap`, `mtxRollOver`, `mtxRollOverBatch`,
+  `mtxRollOverSigned`, `mtxSetRollOverMode` over `Envelope` + `bytes sig`, their typehashes (`ZetherTransfer`,
+  `ZetherTransferCompact`, `ZetherTransferSingle`, `ZetherUnshield`, `ZetherUnshieldUnwrap`, `RollOver`, `RollOverBatch`,
+  `RollOverSigned`, `SetRollOverMode`) and builders (`ZetherLib.multiCall`, `singleCall`, `unshieldCall`,
+  `ZetherWrappedLib.unwrapCall`), and the public address `envelopeBinding(MetaTransaction)` view; their `ua*` bodies took
+  the `mtx*` names and `uaEnvelopeBinding` the name `envelopeBinding`. Tests as they stood before their meaning changed:
+  `test/zether/{ZetherTyped,ZetherUA5c,ZetherRelay,ZetherProverCross,ZetherGasLimit}.t.sol`. Not built.
