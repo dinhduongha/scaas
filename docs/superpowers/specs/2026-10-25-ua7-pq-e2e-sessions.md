@@ -2,9 +2,9 @@
 
 **Status:** version 2, **accepted by the owner 2026-11-04** (revised the same day; the open items O1–O7 and the round name
 answered the same day, §14; HCS added as the third transport by the owner 2026-11-05, D14; per-session stores, `storeMessage`
-and Matrix optional the same day, D15). Version 1 (controller, 2026-10-25, with the
+and Matrix optional the same day, D15; libp2p for call signalling the same day, D16). Version 1 (controller, 2026-10-25, with the
 owner's answers of that day) is in this file's git history. Nothing is built. Version 2 applies the owner's thirteen
-decisions of 2026-11-04 (D1–D13) and of 2026-11-05 (D14, D15) (§15, register entry
+decisions of 2026-11-04 (D1–D13) and of 2026-11-05 (D14, D15, D16) (§15, register entry
 [CTR-CHAT-01](../../decisions.md#CTR-CHAT-01)) and the corrections of the architecture study
 (`docs/research/pqchat-architecture.md` §9; the two-page summary is `docs/research/pqchat-overview.md`). The build plan
 is [`2026-11-04-ua7-pqchat.md`](../plans/2026-11-04-ua7-pqchat.md). Queued after plan 5h and UA-8 (owner 2026-10-25).
@@ -54,6 +54,7 @@ is missing, extra and needed for sessions, metadata, chat features, security, an
 | C10 unlinkable mode | unchanged: research (§13) | D10 |
 | C7 Matrix "or any other channel" | a third transport: one Hedera Consensus Service topic per session (§7.3) | D14 |
 | C7 Matrix as the channel (D1: primary) | a per-session list of stores inside `sealedInfo` (Matrix room, HCS topic, chains), every message sent to each; Matrix optional; `storeMessage` keeps the opaque envelope in state without checks (P27–P29) | D15 |
+| C7 call signalling on Matrix only (D1) | libp2p peer to peer for call signalling, listed in the store list, rendezvous from the epoch key; no stored messages (P30) | D16 |
 
 ## 2. Architecture
 
@@ -70,6 +71,8 @@ flowchart LR
     CS["PqChat storeMessage on chain 1..n (any chain_uid with PqChat): the same envelope in state"]
   end
   BLOB["blob store (IPFS or HTTP, content-addressed): encrypted attachments"]
+  P2P["libp2p (when listed, D16): DHT rendezvous from K, call signalling only, no messages stored"]
+  BR["bootstrap / circuit relay nodes: run by any operator, not the node"]
   SFU["LiveKit SFU / TURN: SFrame media only"]
   NODE["scaas-node: relays PqChat writes; HCS submits (planned)"]
   CL["clients: ua-rs reference, ua-qt on libQuotient, JS wallet"]
@@ -80,6 +83,8 @@ flowchart LR
   NODE -.-> CS
   CL -.->|"user chooses: on chain, checked"| FB
   CL --> BLOB
+  CL -.->|"call signalling first, when listed"| P2P
+  P2P -.-> BR
   CL --> SFU
 ```
 
@@ -87,18 +92,20 @@ flowchart LR
 (CTR-UA-03, CTR-UA-07). **Key directory**: the UA's KEM key versions (CTR-UA-32). **Control plane**: `PqChat` — sessions,
 admins, members, epochs, wraps of the epoch key `K` — always on chain (D2). **Data plane**: messages, attachments,
 receipts, call signalling — on the **stores the session lists** (D15, P27): any of a Matrix room, an HCS topic (D14) and one
-or more chains through `storeMessage` (P29); attachments in a blob store or Matrix media (P28). A message goes through
+or more chains through `storeMessage` (P29); attachments in a blob store or Matrix media (P28); call signalling first over
+libp2p when the list names it (D16, P30). A message goes through
 `postMessage`, checked by the contract, only when the user chooses (D2).
 
-**P2 — Transports** (D1, D12, D14, D15). A session lists its **stores** in `sealedInfo` (P27): any subset, at least one,
+**P2 — Transports** (D1, D12, D14, D15, D16). A session lists its **stores** in `sealedInfo` (P27): any subset, at least one,
 of **Matrix** (§7.1; optional, the default when listed), **HCS**, one Hedera Consensus Service topic per session, a cheap
 public ordered log (§7.3), and **chains** by `chain_uid`, each through `storeMessage`, the envelope in state with no
 contract check (P29). The client sends every message to every listed store. Apart from the list, the user may post a
 message through **`postMessage`** (§7.2), where the contract checks the signature and membership. The signed record, its
 signature and the client checks are the same on every store; a store is a client choice, not a contract rule, so one rule
-still holds on every chain. Peer to peer: 1:1 calls only (§10). `scaas-node`: relays `PqChat`
+still holds on every chain. Peer to peer: 1:1 call media (§10) and, when the list names **libp2p**, call signalling
+(§7.5, P30), which is not a message store. `scaas-node`: relays `PqChat`
 writes as `call` jobs and, PLANNED, HCS messages as a Hedera job (§7.4); it stores, gossips or pushes no chat traffic and
-is no TURN or SFU.
+is no TURN, SFU, libp2p bootstrap or libp2p relay.
 
 ## 3. Members, KEM keys, devices
 
@@ -175,9 +182,11 @@ minimal form, CTR-UA-07). The contract verifies it through the registry's portab
   uses); fixed for the session's life.
 - `sealedInfo` = AES-256-GCM-SIV under `HKDF(K, "scaas/pqchat/v1/info" ‖ sessionId ‖ epochId)`, a random 96-bit nonce
   prepended, over the padded (§6.5) canonical JSON `{"stores": [<store>, …], "name", "topic", "matrix": {<ua>: <Matrix
-  user id>}}`, the store list of P27, at least one entry, each one of `{"kind": "matrix", "room": <Matrix room id>}`,
-  `{"kind": "hcs", "topic": "shard.realm.num"}` (§7.3) and `{"kind": "chain", "chainUid": <chain_uid>}` (P29), at most
-  one Matrix and one HCS entry, chain entries distinct; `matrix` (the user ids) present only when a Matrix store is listed.
+  user id>}}`, the store list of P27, each entry one of `{"kind": "matrix", "room": <Matrix room id>}`,
+  `{"kind": "hcs", "topic": "shard.realm.num"}` (§7.3), `{"kind": "chain", "chainUid": <chain_uid>}` (P29) and
+  `{"kind": "libp2p"}` (call signalling only, P30), at least one entry that is a message store (Matrix, HCS or chain; a
+  `libp2p` entry does not count), at most one Matrix, one HCS and one `libp2p` entry, chain entries distinct; `matrix`
+  (the user ids) present only when a Matrix store is listed.
   **The store list, the room id, the HCS topic id and Matrix user ids never appear on chain in the clear** (D10, D14,
   D15).
 - `parents` = the ids of the conversation heads the sender has seen, at most 8, sorted (P19).
@@ -347,12 +356,13 @@ the cost; attachments never go on chain (1 MiB ≈ 1.6 G state gas; P28). An HCS
 
 ## 7. Transports
 
-SPECIFIED (D15); nothing built.
+SPECIFIED (D15, D16); nothing built.
 
-**P27 — The session's stores** (D15). A session lists where its messages go in `sealedInfo` (§4.2), so the list is
+**P27 — The session's stores** (D15, D16). A session lists where its messages go in `sealedInfo` (§4.2), so the list is
 encrypted and nothing new appears on chain in the clear: any subset, **at least one**, of a Matrix room (§7.1), an HCS
 topic (§7.3) and one or more chains by `chain_uid`, any chain where `PqChat` is deployed, each written through
-`storeMessage` (P29). **Matrix is optional**: when listed it is the default (read first; its media and MatrixRTC
+`storeMessage` (P29). The list may also name **libp2p** (§7.5, P30) for call signalling; it stores no message, receives
+no replicated message and does not count toward "at least one". **Matrix is optional**: when listed it is the default (read first; its media and MatrixRTC
 available, P28). The client sends every message to **every listed store** (replication), as the same envelope of P15;
 readers read any listed store and dedupe by `messageId` (P19). The list may change only at a rekey: the new epoch's
 `sealedInfo` carries the new list, and messages of that epoch follow it. A store is a client choice, not a contract rule;
@@ -360,13 +370,14 @@ another kind of store or transport can be added later as a new `kind` in the lis
 Sepolia) can be retired and its data lost: fine for tests, not for durable history; the client says so when the user
 lists one.
 
-**P28 — Without Matrix** (D15). **Attachments**: the file is encrypted as today (a random AES-256-GCM key) and put in a
+**P28 — Without Matrix** (D15, D16). **Attachments**: the file is encrypted as today (a random AES-256-GCM key) and put in a
 content-addressed blob store (IPFS or any HTTP store), or in the Matrix media repository when Matrix is listed; the `file`
 content inside the envelope carries `{src, key, sha256, size bucket}`, `src` the content id (or the `mxc://` URI), so the
-key and the content hash travel only inside the envelope. Attachments never go on chain (§6.5). **Call signalling**: in
-the Matrix room when Matrix is listed (P21); otherwise over the HCS topic (D14) as encrypted envelope content types, as on
-Matrix; media stays WebRTC 1:1 and an SFU for groups (D12). A session that lists neither Matrix nor HCS has no call
-signalling in this version. **Push notifications** are out of scope: this spec defines no push service and the node sends
+key and the content hash travel only inside the envelope. Attachments never go on chain (§6.5). **Call signalling**:
+over libp2p first when the list names it (P30); otherwise in the Matrix room when Matrix is listed (P21), then over the
+HCS topic (D14), as encrypted envelope content types, as on Matrix; media stays WebRTC 1:1 and an SFU for groups (D12). A
+session that lists none of libp2p, Matrix and HCS (only chains) has no call signalling; listing libp2p gives it one
+(D16). **Push notifications** are out of scope: this spec defines no push service and the node sends
 no push (P17).
 
 ### 7.1 Matrix (default when listed)
@@ -484,7 +495,41 @@ client says so plainly when the user picks HCS: public, kept by mirror nodes onl
 `storeMessage` (D15) as `call` jobs: six rows in its call table, kept equal to the contract's entries (NODE-JOB-01), named JSON fields per job
 (NODE-JOB-20 style), no fee form (owner answer 4). The rule and the rows go in the node's own spec (`docs/node/job-api.md`
 call table), for every consumer. The node stores no chat traffic, runs no chat gossip, sends no push and is no TURN or SFU
-(D12). The Hedera job for HCS messages is P26 (PLANNED).
+(D12); it runs no libp2p bootstrap, DHT or relay node either (D16, P30). The Hedera job for HCS messages is P26 (PLANNED).
+
+### 7.5 libp2p (call signalling only)
+
+SPECIFIED (D16); nothing built.
+
+**P30 — libp2p for call signalling** (D16). When the store list names `{"kind": "libp2p"}` (§4.2), calls use it first for
+their signalling (P21): SDP offer and answer, ICE candidates, call-key events (`callKey`, P22), join and leave. Each is
+the P15 envelope as an encrypted content type, sent as the same bytes as the HCS payload, `abi.encode(v, hint, env)`
+(P25); nothing new travels in the clear, and receivers check it as in P25 and dedupe by `messageId` (P19). libp2p carries
+**no stored message**: no message is replicated to it, and nothing is kept for an offline member. A libp2p or Waku message
+store is left for later and not specified here.
+
+```text
+rdvKey    = HKDF(K, "scaas/pqchat/v1/call-rendezvous" || sessionId || epochId)     32 B, the DHT key
+k_peer    = HKDF(K, "scaas/pqchat/v1/call-peer" || sessionId || epochId)           32 B
+record    = nonce || AES-256-GCM-SIV(k_peer, nonce, pad(canonical JSON {"ua", "device", "peerId", "addrs"}))   nonce 96 bits, random
+topic     = lowercase hex of rdvKey                                                 GossipSub topic of the session's group calls
+```
+
+- **Rendezvous.** Only members hold `K`, so only members can compute `rdvKey`, find a session's call or open a record;
+  `rdvKey` changes with every epoch. A member's device online for calls publishes its encrypted provider record under
+  `rdvKey` in a Kademlia DHT (its libp2p peer id and addresses sealed under `k_peer`), republishes it while online, and
+  lets it expire when it goes offline. The record is not signed: the envelopes on the stream are (P15), so a forged
+  record leads only to a peer whose messages are dropped.
+- **Signalling.** 1:1: a direct libp2p stream between the two peers. Groups: the GossipSub topic `topic`, which members
+  join while in a call.
+- **Connectivity.** Hole punching (DCUtR) first, circuit relay v2 as the fallback; transports a browser can use (WebRTC,
+  WebTransport), so the JS wallet joins as any other client.
+- **Operators.** Bootstrap and relay nodes are run by anyone. Operators may run bootstrap or relay nodes; they are not
+  part of the node: `scaas-node` runs none (D12, P17).
+- **Mobile.** Background limits and battery cost apply: a call rings only while the app is active, or through a push the
+  user brings; push stays out of scope (P28).
+- **Media** is unchanged: WebRTC 1:1, an SFU for groups, SFrame keys as P22 and P23. Cost: no gas, no fee; bandwidth only
+  (§11). What it leaks: §9.
 
 ## 8. Ordering
 
@@ -498,13 +543,13 @@ call table), for every consumer. The node stores no chat traffic, runs no chat g
 | Matrix | per-room DAG, linearised per server | ignores it for display |
 | HCS | consensus timestamp and topic sequence number, one order per topic | display only, under P19; never epochs |
 | Chain store (`storeMessage`) | an append index per `hint` on each chain; none across chains | display only, under P19; never epochs |
-| Peer to peer (calls) | FIFO per link | — |
+| Peer to peer (call media; libp2p signalling, P30) | FIFO per link or stream; none across a GossipSub topic's publishers | — |
 
 **P19 — Conversation order** (every transport the same). Every message names `(epochId, sender, device, counter)` and
 `parents` (≤ 8 heads it saw). Display order: topological by `parents`, ties by the sender's timestamp inside the
 plaintext, then `messageId`. Counters may have gaps (nonce 5 may land before 4); a message for an unknown epoch is buffered
 until its epoch record arrives; a message in a child that lost the home-chain slot is shown as such if its `K` is held.
-The same `messageId` on Matrix, HCS, `postMessage` or `storeMessage` on any chain is one message.
+The same `messageId` on Matrix, HCS, libp2p, `postMessage` or `storeMessage` on any chain is one message.
 
 ## 9. Metadata
 
@@ -518,10 +563,11 @@ The same `messageId` on Matrix, HCS, `postMessage` or `storeMessage` on any chai
 | A blob store, anyone with a content id | the encrypted file's size and content id, upload time, the uploader's IP |
 | Anyone, from Hedera mirror nodes | for a session with a topic: the topic id, which links all of the session's messages (the cost of one topic per session); the creating and each submitting Hedera account; consensus time; payload size (bucketed); the 8-byte hint |
 | RPC providers, relayers | the IP of who reads or submits |
+| libp2p DHT nodes, bootstrap and circuit relays, call peers (P30) | the IP addresses and peer ids of members online for a call: network-level metadata, more than HCS or Matrix show; the `rdvKey` they publish under and its record's size and times. The `rdvKey` is unlinkable to the session without `K`, and records and signalling are encrypted |
 
 Rules: no store list, room id, HCS topic id or Matrix id on chain in the clear (`sealedInfo` only); padding buckets (§6.5); records
 HCS messages and stored messages submitted through a relayer rather than the author's own account; receipts and typing inside the envelope; Megolm as an outer layer where
-the client supports it. Hiding the member set and the sender on chain is the unlinkable mode (§13).
+the client supports it; over libp2p, a member that wants to hide its IP connects through a circuit relay (P30). Hiding the member set and the sender on chain is the unlinkable mode (§13).
 
 ## 10. Voice and video calls
 
@@ -540,10 +586,12 @@ sequenceDiagram
   Note over A,P: join or leave: callEpoch+1, new callSecret to the remaining participants
 ```
 
-**P21 — Transport** (D12). 1:1: WebRTC peer to peer (ICE, STUN, TURN when NAT requires), signalling in the session's
-Matrix room, or over its HCS topic when Matrix is not listed (P28; then group membership and transport discovery are
-envelope content types too). Groups: MatrixRTC (MSC4143, merged 2026-10-21) for membership (`m.rtc.member`) and transport discovery, with
-a LiveKit SFU (MSC4195). Any operator's TURN or LiveKit server; the node is neither.
+**P21 — Transport** (D12, D16). Signalling goes over **libp2p first** when the store list names it (P30: a direct stream
+for 1:1, the session's GossipSub topic for groups), otherwise in the session's Matrix room, otherwise over its HCS topic
+(P28); off Matrix, group membership and transport discovery are envelope content types too. 1:1 media: WebRTC peer to
+peer (ICE, STUN, TURN when NAT requires). Groups: MatrixRTC (MSC4143, merged 2026-10-21) for membership (`m.rtc.member`)
+and transport discovery when signalling is on Matrix, with a LiveKit SFU (MSC4195). Any operator's TURN, LiveKit server,
+libp2p bootstrap or relay; the node is none of them.
 
 **P22 — Media keys** (D13). Media is encrypted end to end with **SFrame** (RFC 9605), cipher suite `AES_256_GCM_SHA512_128`,
 through WebRTC Encoded Transform; DTLS-SRTP stays as the hop layer only (it ends at the SFU and is classical unless a hybrid
@@ -564,7 +612,7 @@ epoch ends every call key of the old epoch. A session member outside the call ca
 
 **P23 — What a call leaks.** The SFU: participants' IPs, join and leave times, streams, packet sizes and rates, the SFrame
 header (participant index, epoch bits, counter); not the media. TURN: IPs and volume. The homeserver: `m.rtc.member`
-events (who joined, when, which SFU). Hygiene: constant-bitrate Opus for voice; the RTP audio-level header extension off;
+events (who joined, when, which SFU). libp2p signalling: P20. Hygiene: constant-bitrate Opus for voice; the RTP audio-level header extension off;
 no call record on chain. SFrame does not authenticate a sender inside the group (RFC 9605 §6.1.1); a participant could
 forge another's media.
 
@@ -582,6 +630,7 @@ Estimates (architecture study §8): EIP-8037 1,530 gas per state byte, new slot 
 | new KEM version (`setKemKey`) | ≈ 6–14 M | $4–10 | $70–155 | < $0.15 |
 | `storeMessage`, 1,024-B bucket, signature bytes in state (FN-DSA-512 / ML-DSA-65), per listed chain (D15) | ≈ 4.1 / 8.1 M | $2.9 / 5.7 | $46 / 92 | $0.05 / 0.09 |
 | message, call key, attachment over Matrix; attachment in a blob store | 0 gas | hosting | | |
+| call signalling over libp2p (P30) | 0 gas, no fee | bandwidth only | | |
 
 `storeMessage` (P29): about 2.4 KB (FN-DSA-512) or 5.1 KB (ML-DSA-65) of blob at 1,530 gas per state byte, plus the
 blob's new account and two slots, no signature check; each listed chain pays it once. A test chain such as Sepolia costs
@@ -601,15 +650,17 @@ HCS (P25), estimates of 2026-11-05 in USD (Hedera fees are fixed in USD and paid
 
 KEM, HKDF, HMAC, AES-GCM(-SIV) and SFrame run in clients (the contract checks signatures, shapes, membership, epoch rules
 and nonces only): .NET 10 `System.Security.Cryptography.MLKem`; OpenSSL ≥ 3.5 (Qt client); Rust `ml-kem`, `x25519-dalek`,
-`aes-gcm-siv`, `sframe`; JS `@noble/post-quantum`, `@noble/curves`, `@noble/ciphers`. Every combiner, KDF label, struct
+`aes-gcm-siv`, `sframe`; JS `@noble/post-quantum`, `@noble/curves`, `@noble/ciphers`; libp2p (P30): `rust-libp2p` in
+`ua-rs`, `js-libp2p` in the JS wallet. Every combiner, KDF label, struct
 hash and envelope is fixed by vectors under `smartcontracts/vectors/pqchat/` (keys, the §7.2 check's refusals, wraps,
-records and typehashes, chains, messages, envelopes, call keys), read by every client.
+records and typehashes, chains, messages, envelopes, call keys, the P30 rendezvous key, record key, sealed record and
+topic name), read by every client.
 
 ## 13. What stays research
 
 The unlinkable mode (v1 C10: key-private wraps with view tags, one contract-wide queue with rotating tags, sender inside the
 ciphertext; `docs/research/pqchat-unlinkability.md`): later, for on-chain traffic (D10). MLS groups and an off-chain ratchet
-for 1:1 (D6): later. Per-device KEM keys (D9): later.
+for 1:1 (D6): later. Per-device KEM keys (D9): later. A libp2p or Waku message store (D16): later, not specified.
 
 ## 14. Open items: the owner's answers
 
@@ -661,7 +712,7 @@ Version 2 left seven items and the round name to the owner, each with a proposal
    and the device (**refined by D9**).
 
 **Decisions of 2026-11-04** (owner, all as the study recommended; [CTR-CHAT-01](../../decisions.md#CTR-CHAT-01)):
-D1 Matrix primary, chain fallback (changed by D14 and D15: a per-session store list, Matrix optional), P2P for 1:1 calls, the node relays only; D2 control plane always on chain, messages on
+D1 Matrix primary, chain fallback (changed by D14 and D15: a per-session store list, Matrix optional; and by D16: libp2p for call signalling), P2P for 1:1 calls, the node relays only; D2 control plane always on chain, messages on
 chain by choice; D3 `epoch = parent + 1`, one child per parent, first landed on the home chain wins; D4 admins change
 membership, self-leave and plain rekeys open to all; D5 consent in clients now, the public link stays until C10; D6 a
 per-sender ratchet and epoch rekeys now, KEM rotation the UA owner's choice (changed 2026-11-04: first "KEM rotation with
@@ -702,7 +753,21 @@ Matrix: attachments in a content-addressed blob store (IPFS or HTTP), Matrix med
 push out of scope (P28). Why: storage is the heaviest part of the data plane, and the owner wants a free choice and
 replication of stores, possibly without Matrix. Cost: each listed chain pays ≈ 4.1–8.1 M gas per 1-KiB message (§11);
 a chain store keeps an epoch's 8-byte hint public and linkable across chains (P20); a session without Matrix or HCS has no
-call signalling; a testnet store may lose its data.
+call signalling (closed by D16 when it lists libp2p); a testnet store may lose its data.
+
+**Decision of 2026-11-05** (owner: "as recommended"; a Change on [CTR-CHAT-01](../../decisions.md#CTR-CHAT-01)):
+**D16** — libp2p carries call signalling (SDP, ICE candidates, call-key events, join and leave) peer to peer, one more
+transport beside Matrix (MatrixRTC) and HCS, as the P15 envelope, nothing new in the clear; no stored messages (a libp2p
+or Waku message store later, not specified). Rendezvous under a DHT key derived from the epoch key, `rdvKey`; members
+publish encrypted provider records under it in a Kademlia DHT; a direct stream for 1:1, a GossipSub topic named from
+`rdvKey` for groups; it rotates with each epoch. Hole punching (DCUtR), circuit relay v2 as the fallback, browser
+transports (WebRTC, WebTransport). Bootstrap and relay nodes are run by anyone, never by `scaas-node`. A `{"kind":
+"libp2p"}` entry in the store list, signalling only, not counted as a message store; when listed, calls use it first.
+Media unchanged (P22, P23). (§7.5 P30, P2, P21, P27, P28, P20.) Why: a decentralised signalling path with no server and no
+fee, which also gives a chain-only session call signalling. Tox was considered and not chosen: classical NaCl identity
+keys, no browser client, a small ecosystem. Cost: DHT nodes, relays and peers see the IPs and peer ids of members online
+for a call (a circuit relay hides the IP); bootstrap and relay nodes must exist; on mobile, background limits and battery
+mean a call rings only while the app is active or through a push the user brings.
 
 ## 16. Work
 
@@ -721,6 +786,7 @@ For the plan (`docs/superpowers/plans/2026-11-04-ua7-pqchat.md`); EVM first, oth
 5. `clients/ua-rs` reference: keys, P14 check, wraps, records, chains, envelope, ordering, call keys; then `clients/ua-qt`
    on libQuotient (event type, room, chat screen, SFrame through Qt WebEngine or LiveKit's SDK), then the JS wallet; the HCS
    transport (§7.3), the store list with replication and chain stores (P27, P29) and blob-store attachments (P28) in each
-   client that implements PqChat.
+   client that implements PqChat; libp2p call signalling (P30) in `ua-rs` first, then the JS wallet and `ua-qt`, with
+   vectors for the rendezvous derivation.
 6. Docs: a `docs/contracts/` component section for `PqChat` (SPECIFIED, then BUILT), `docs/clients/`, the node call table.
 7. Not in this work: the unlinkable mode, MLS, per-device KEM keys, non-EVM families (each a `pqchat-<family>` round).
