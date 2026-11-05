@@ -34,11 +34,11 @@ contract NormalPqzToken is NormalToken, PqzLayer {
         if (!SigCheck.isContract(env.registry)) revert BadInit();
     }
 
-    function kind() public pure override(NormalToken, MetaTokenBase) returns (uint8) {
+    function kind() public pure virtual override(NormalToken, MetaTokenBase) returns (uint8) {
         return TokenStore.KIND_NORMAL_PQZ;
     }
 
-    function _validBits() internal pure override(NormalToken, GovernanceBase) returns (uint256) {
+    function _validBits() internal pure virtual override(NormalToken, GovernanceBase) returns (uint256) {
         return GovernanceBits.NORMAL_BITS;
     }
 

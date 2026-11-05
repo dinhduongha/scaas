@@ -78,6 +78,17 @@ interface IFactoryToken {
         uint256 minDecoyFee;
     }
 
+    /// @notice Regulated-kinds spec §2.4: the regulated kinds' (8-13) only; a plain kind (0-5) refuses any set field
+    ///         (`ConfigFieldForOtherKind(6)`). `complianceRegistry` ≠ 0 iff `ALLOWLIST` or `DENYLIST` (its code pinned by
+    ///         the release); `requiredFlags` ≠ 0 iff `ALLOWLIST`; `deniedFlags` ≠ 0 iff `DENYLIST`; `termsHash` ≠ 0 iff
+    ///         any of bits 5-10, 21. The regulated kinds check it at init.
+    struct RegulatedParams {
+        address complianceRegistry;
+        uint64 requiredFlags;
+        uint64 deniedFlags;
+        bytes32 termsHash;
+    }
+
     /// @notice CTR-TOK-25. Fields of another kind must be empty (`ConfigFieldForOtherKind`), so a token never carries a
     ///         setting it ignores and the factory's underlying index never lies.
     struct TokenConfig {
@@ -96,9 +107,11 @@ interface IFactoryToken {
         uint64 grantDelay;           // spec §1.6: the owner's two calls, at most 30 days; 0 = one call
         address rescueTo;            // spec §6.2: with `RESCUABLE` only, immutable; never the token or a pool
         uint256 maxSupply;           // WRAPPED* only, spec §5.2: the hybrid's cap, with `MINTABLE` only; 0 = no hybrid
+        RegulatedParams reg;         // *_REGULATED (8-13) only
     }
 
-    /// @notice A field set for another kind (`field`: 1 initialSupply/initialHolder, 2 legs, 3 rate, 4 conf, 5 maxSupply).
+    /// @notice A field set for another kind (`field`: 1 initialSupply/initialHolder, 2 legs, 3 rate, 4 conf, 5 maxSupply,
+    ///         6 reg).
     error ConfigFieldForOtherKind(uint8 field);
 
     /// @notice Called by the factory only, in the same call as the clone's `CREATE2`; `initArgs` is the creator's,
@@ -111,4 +124,11 @@ interface IFactoryToken {
 
     /// @notice CTR-TOK-21 kind of the implementation (and of every clone).
     function kind() external view returns (uint8);
+}
+
+/// @dev Regulated-kinds spec §2.4: a plain kind (0-5) refuses a set `reg` with `ConfigFieldForOtherKind(6)`; a regulated kind
+///      (8-13) reads it. Every init path of the kinds calls it with the token's own `kind()`.
+function requireRegOfKind(uint8 kind, IFactoryToken.RegulatedParams memory r) pure {
+    if (kind < TokenStore.KIND_NORMAL_REGULATED && (r.complianceRegistry != address(0) || r.requiredFlags != 0
+        || r.deniedFlags != 0 || r.termsHash != 0)) revert IFactoryToken.ConfigFieldForOtherKind(6);
 }

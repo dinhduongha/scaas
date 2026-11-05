@@ -31,11 +31,11 @@ contract NormalZetherToken is NormalToken, ZetherLayer {
         ZetherLayer(env)
     {}
 
-    function kind() public pure override(NormalToken, MetaTokenBase) returns (uint8) {
+    function kind() public pure virtual override(NormalToken, MetaTokenBase) returns (uint8) {
         return TokenStore.KIND_NORMAL_ZETHER;
     }
 
-    function _validBits() internal pure override(NormalToken, GovernanceBase) returns (uint256) {
+    function _validBits() internal pure virtual override(NormalToken, GovernanceBase) returns (uint256) {
         return GovernanceBits.NORMAL_BITS;
     }
 
@@ -47,7 +47,7 @@ contract NormalZetherToken is NormalToken, ZetherLayer {
     ///      the initial mint.
     function _initRaw(bytes calldata initArgs) internal override {
         (uint256 features_, uint256 locked, bytes32 owner_, uint64 delay, address rescueTo_, GovernanceLib.Roles memory roles) =
-            ZetherLib.initNormal(initArgs);
+            ZetherLib.initNormal(initArgs, kind());
         GovernanceLib.init(features_, locked, owner_, delay, rescueTo_, roles, _validBits(), _roleBits(), _contractOnlyBits(),
             _REGISTRY);
         (address holder, uint256 supply) = ZetherLib.initNormalConf(initArgs, TRANSFER_VERIFIER);

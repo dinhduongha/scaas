@@ -74,9 +74,10 @@ contract GovDeployTest is Test {
         h.deploy(ZUID, false, ska);
         h.limitBlockGas(0);
         // ua-mtx-merge T1: `size-baseline.json`'s WrappedToken row 52,297 -> 51,436 B, so the control moves with it;
-        // T2: 51,436 -> 46,804 B; T3: 46,804 -> 45,140 B; T6: 45,140 -> 42,669 B; T24: 42,669 -> 42,985 B
-        h.limitCode(42_984);
-        vm.expectRevert(bytes("WrappedToken runtime 42985 B > chain code limit 42984 B (CHAIN_CODE_LIMIT, CTR-GOV-19)"));
+        // T2: 51,436 -> 46,804 B; T3: 46,804 -> 45,140 B; T6: 45,140 -> 42,669 B; T24: 42,669 -> 42,985 B;
+        // T25: 42,985 -> 43,333 B
+        h.limitCode(43_332);
+        vm.expectRevert(bytes("WrappedToken runtime 43333 B > chain code limit 43332 B (CHAIN_CODE_LIMIT, CTR-GOV-19)"));
         h.deploy(ZUID, false, ska);
     }
 

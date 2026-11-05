@@ -1544,10 +1544,13 @@ alloy::sol! {
     #[derive(Default)]
     struct ConfidentialConfig { bytes auditorKey; uint256 shieldScale; uint256 maxShielded; uint256 confidentialFee; uint8 disclosureMode;
         uint8 auditorMode; uint256 minDecoyFee; }
+    /// Regulated-kinds spec §2.4 (plan T25): the regulated kinds' (8-13) only; a plain kind refuses any set field.
+    #[derive(Default)]
+    struct RegulatedParams { address complianceRegistry; uint64 requiredFlags; uint64 deniedFlags; bytes32 termsHash; }
     #[derive(Default)]
     struct TokenConfig { string name; string symbol; uint8 decimals; uint256 features; uint256 lockedFeatures; bytes32 owner; Roles roles;
         uint256 initialSupply; address initialHolder; Leg[] legs; RateConfig rate; ConfidentialConfig conf; uint64 grantDelay;
-        address rescueTo; uint256 maxSupply; }
+        address rescueTo; uint256 maxSupply; RegulatedParams reg; }
     struct FactoryEnv { address factory; bytes32 chainUid; address registry; address smartKeyAccountImpl; bool hedera; address[] deps;
         address[] libs; bytes32[] libCodeHashes; address govRouter; }
     function envOf(uint8 kind, uint16 envVersion) external view returns (FactoryEnv);

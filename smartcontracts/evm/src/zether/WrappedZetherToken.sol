@@ -51,20 +51,20 @@ contract WrappedZetherToken is WrappedToken, ZetherLayer, IZetherWrappedToken {
         return super.underlyings();
     }
 
-    function kind() public pure override(WrappedToken, MetaTokenBase) returns (uint8) {
+    function kind() public pure virtual override(WrappedToken, MetaTokenBase) returns (uint8) {
         return TokenStore.KIND_WRAPPED_ZETHER;
     }
 
-    function _validBits() internal pure override(WrappedToken, GovernanceBase) returns (uint256) {
+    function _validBits() internal pure virtual override(WrappedToken, GovernanceBase) returns (uint256) {
         return GovernanceBits.WRAPPED_BITS;
     }
 
     /// @dev `WrappedToken`'s masks, restated for the second base.
-    function _roleBits() internal pure override(WrappedToken, MetaTokenBase) returns (uint256) {
+    function _roleBits() internal pure virtual override(WrappedToken, MetaTokenBase) returns (uint256) {
         return GovernanceBits.WRAPPED_ROLES;
     }
 
-    function _contractOnlyBits() internal pure override(WrappedToken, MetaTokenBase) returns (uint256) {
+    function _contractOnlyBits() internal pure virtual override(WrappedToken, MetaTokenBase) returns (uint256) {
         return GovernanceBits.WRAPPED_CONTRACT_ONLY;
     }
 
@@ -72,7 +72,8 @@ contract WrappedZetherToken is WrappedToken, ZetherLayer, IZetherWrappedToken {
     function _init(TokenConfig memory) internal override(WrappedToken, MetaTokenBase) {}
 
     function _initRaw(bytes calldata initArgs) internal override {
-        ZetherWrappedLib.init(initArgs, TRANSFER_VERIFIER, _REGISTRY);
+        ZetherWrappedLib.init(initArgs, TRANSFER_VERIFIER, _REGISTRY, kind(), _validBits(), _roleBits(),
+            _contractOnlyBits());
     }
 
     // ------------------------------------------------------------------ wrap-shield / unshield-unwrap (CTR-ZTH-45)

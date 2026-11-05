@@ -17,7 +17,7 @@ import {MtxPipelineLib} from "./MtxPipelineLib.sol";
 import {IMetaTokenV2} from "./IMetaTokenV2.sol";
 import {IUALedger} from "./IUALedger.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
-import {IFactoryToken} from "../factory/IFactoryToken.sol";
+import {IFactoryToken, requireRegOfKind} from "../factory/IFactoryToken.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {FeePolicy, FeeMode} from "../common/FeePolicy.sol";
 import {UAKinds} from "../ua/UAKinds.sol";
@@ -90,8 +90,9 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
     }
 
     /// @dev `ConfigFieldForOtherKind` for a set field the kind does not use; `conf` is used only by `*_ZETHER`; `maxSupply`
-    ///      only by `WRAPPED*`, as `legs`.
+    ///      only by `WRAPPED*`, as `legs`; `reg` only by the regulated kinds (`requireRegOfKind` on `kind()`).
     function _requireUnused(TokenConfig memory cfg, bool supply, bool legs, bool rate, bool conf) internal pure {
+        requireRegOfKind(kind(), cfg.reg);
         if (supply && (cfg.initialSupply != 0 || cfg.initialHolder != address(0))) revert ConfigFieldForOtherKind(1);
         if (legs && cfg.legs.length != 0) revert ConfigFieldForOtherKind(2);
         if (legs && cfg.maxSupply != 0) revert ConfigFieldForOtherKind(5);

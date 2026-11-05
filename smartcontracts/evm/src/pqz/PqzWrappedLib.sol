@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-import {IFactoryToken} from "../factory/IFactoryToken.sol";
+import {IFactoryToken, requireRegOfKind} from "../factory/IFactoryToken.sol";
 import {GovernanceLib} from "../governance/GovernanceLib.sol";
-import {GovernanceBits} from "../governance/GovernanceBits.sol";
-import {TokenStore} from "../metatx/TokenStore.sol";
 import {IMetaTx} from "../metatx/IMetaTx.sol";
 import {MtxPipelineLib} from "../metatx/MtxPipelineLib.sol";
 import {WrappedLib} from "../metatx/WrappedLib.sol";
@@ -21,13 +19,17 @@ library PqzWrappedLib {
     uint8 private constant ABSOLUTE = MtxPipelineLib.FEE_CLASS_ABSOLUTE;
     uint8 private constant AMOUNT = MtxPipelineLib.FEE_CLASS_AMOUNT;
 
-    /// @notice The kind's init from the factory's raw `initArgs`: `initialSupply` and `initialHolder` empty, `legs`, the
-    ///         rate and `conf` are checked by the two libraries. Never on Hedera (`PqzLayer` refuses that env).
-    function init(bytes calldata initArgs, address registry, address verifier) public {
+    /// @notice The kind's init from the factory's raw `initArgs`: `initialSupply` and `initialHolder` empty, `reg` too on a
+    ///         plain kind, `legs`, the rate and `conf` are checked by the two libraries. `kind` and the masks are the token's
+    ///         own (`kind()`, `_validBits()`, `_roleBits()`, `_contractOnlyBits()`; regulated-kinds spec §2.4), never fixed
+    ///         here. Never on Hedera (`PqzLayer` refuses that env).
+    function init(bytes calldata initArgs, address registry, address verifier, uint8 kind, uint256 valid, uint256 roleBits,
+        uint256 contractOnly) public
+    {
         IFactoryToken.TokenConfig memory cfg = abi.decode(initArgs, (IFactoryToken.TokenConfig));
         if (cfg.initialSupply != 0 || cfg.initialHolder != address(0)) revert IFactoryToken.ConfigFieldForOtherKind(1);
-        WrappedLib.initToken(cfg, false, TokenStore.KIND_WRAPPED_PQZ, GovernanceBits.WRAPPED_BITS,
-            GovernanceBits.WRAPPED_ROLES, GovernanceBits.WRAPPED_CONTRACT_ONLY, registry);
+        requireRegOfKind(kind, cfg.reg);
+        WrappedLib.initToken(cfg, false, kind, valid, roleBits, contractOnly, registry);
         PqzStateLib.init(cfg.conf, registry, verifier);
     }
 

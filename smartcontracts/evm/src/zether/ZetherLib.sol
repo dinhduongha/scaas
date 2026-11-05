@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
-import {IFactoryToken} from "../factory/IFactoryToken.sol";
+import {IFactoryToken, requireRegOfKind} from "../factory/IFactoryToken.sol";
 import {GovernanceLib} from "../governance/GovernanceLib.sol";
 import {TokenStore} from "../metatx/TokenStore.sol";
 import {IMetaTx} from "../metatx/IMetaTx.sol";
@@ -240,20 +240,22 @@ library ZetherLib {
     }
 
     /// @notice `NormalZetherToken`'s init from the factory's raw `initArgs`, part 1 (CTR-ZTH-94, size lever 1 as
-    ///         `ZetherWrappedLib.init`): `legs`, `rate` and `maxSupply` must be empty, the metadata is written; returns what
-    ///         the token hands `GovernanceLib.init`, so this library holds no DELEGATECALL (`LinkClosure`).
-    function initNormal(bytes calldata initArgs) public returns (uint256 features, uint256 lockedFeatures, bytes32 owner,
+    ///         `ZetherWrappedLib.init`): `legs`, `rate` and `maxSupply` must be empty, `reg` too on a plain kind, the metadata
+    ///         and the token's `kind` are written; returns what the token hands `GovernanceLib.init`, so this library holds no
+    ///         DELEGATECALL (`LinkClosure`).
+    function initNormal(bytes calldata initArgs, uint8 kind) public returns (uint256 features, uint256 lockedFeatures, bytes32 owner,
         uint64 grantDelay, address rescueTo, GovernanceLib.Roles memory roles)
     {
         IFactoryToken.TokenConfig memory cfg = abi.decode(initArgs, (IFactoryToken.TokenConfig));
         if (cfg.legs.length != 0) revert IFactoryToken.ConfigFieldForOtherKind(2);
         if (cfg.maxSupply != 0) revert IFactoryToken.ConfigFieldForOtherKind(5);
         if (cfg.rate.rateDelay != 0 || cfg.rate.maxRateStepBps != 0) revert IFactoryToken.ConfigFieldForOtherKind(3);
+        requireRegOfKind(kind, cfg.reg);
         TokenStore.TokenStorage storage t = TokenStore.$();
         t.name = cfg.name;
         t.symbol = cfg.symbol;
         t.decimals = cfg.decimals;
-        t.kind = TokenStore.KIND_NORMAL_ZETHER;
+        t.kind = kind;
         return (cfg.features, cfg.lockedFeatures, cfg.owner, cfg.grantDelay, cfg.rescueTo, cfg.roles);
     }
 

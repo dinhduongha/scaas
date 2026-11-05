@@ -33,6 +33,7 @@ import argparse
 import ast
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -446,10 +447,11 @@ def dec_bytes(h, i=0):
 MTX = ("t", ["w", "b", "w", "w", "w", "w", "w", "w", "w"])
 UMTX_S = "(bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address)"
 # IFactoryToken.TokenConfig: name, symbol, decimals, features, lockedFeatures, owner, roles, initialSupply, initialHolder, legs,
-# rate, conf, grantDelay, rescueTo, maxSupply; `owner` and the five `roles` are UA ids (bytes32, a native account's address
-# padded: the same word as the address it was, CTR-GOV-01 Change)
+# rate, conf, grantDelay, rescueTo, maxSupply, reg (T25: complianceRegistry, requiredFlags, deniedFlags, termsHash; empty on
+# the PQZ kinds 4, 5); `owner` and the five `roles` are UA ids (bytes32, a native account's address padded: the same word as
+# the address it was, CTR-GOV-01 Change)
 CFG = ("t", ["b", "b", "w", "w", "w", "w", ("t", ["w"] * 5), "w", "w", ("a", ("t", ["w", "w", "w"])), ("t", ["w", "w"]),
-             ("t", ["b", "w", "w", "w", "w", "w", "w"]), "w", "w", "w"])
+             ("t", ["b", "w", "w", "w", "w", "w", "w"]), "w", "w", "w", ("t", ["w"] * 4)])
 # IFactoryToken.Env (plan 5g-Z2): factory, chainUid, registry, smartKeyAccountImpl, hedera, deps, libs, libCodeHashes, govRouter
 ENV = ("t", ["w", "w", "w", "w", "w", ("a", "w"), ("a", "w"), ("a", "w"), "w"])
 ENV_S = "(address,bytes32,address,address,bool,address[],address[],bytes32[],address)"
@@ -833,6 +835,22 @@ def abi_methods():
     return methods, events
 
 
+def sol_struct_t(name):
+    """The ABI type of struct `name` from the Solidity source (`IFactoryToken.sol`, `GovernanceLib.sol`'s `Roles`): the
+    shape `CFG` and `ENV` must follow (T25: a field added to `TokenConfig` turns the self-test red here)."""
+    src = "".join(open(os.path.join(EVM, p), encoding="utf-8").read() for p in
+                  ("src/factory/IFactoryToken.sol", "src/governance/GovernanceLib.sol"))
+    src = re.sub(r"//[^\n]*", "", src)
+    structs = {n: [f.split()[0] for f in body.split(";") if f.strip()] for n, body in re.findall(r"struct (\w+)\s*\{([^}]*)\}", src)}
+
+    def t(x):
+        if x.endswith("[]"):
+            return t(x[:-2]) + "[]"
+        x = x.split(".")[-1]
+        return "(" + ",".join(t(f) for f in structs[x]) + ")" if x in structs else x
+    return t(name)
+
+
 def abi_check():
     """Every signature this file hands to `cd`, its encoders, and the events it looks up, against the ABI in out/. A
     signature built at run time is `named_cd`'s alone; `named_rows` checks that one."""
@@ -962,6 +980,8 @@ def self_test():
     kat = (7622, hb("0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464"))
     check(ua_binding("0x" + "00" * 17 + "5caa01", kat, m) == hb("0x2bf9ed02f291a24e973d7013c788d50aae3bb9844c40c4c3ca5e9a37419abd33"),
           "ua_binding of an EOA's envelope = PqzRelay's KAT (SCAAS-PQZ-UA-ENVELOPE-V1, from padded, unbound fee recipient 0)")
+    check(abi_t(sol_struct_t("TokenConfig")) == CFG and abi_t(sol_struct_t("Env")) == ENV
+          and sol_struct_t("Env") == ENV_S, "CFG, ENV = IFactoryToken.TokenConfig, Env (the source's fields, `reg` included)")
     named_rows()
     abi_check()
 
@@ -1230,7 +1250,7 @@ def run(kd, kr, ke):
     def create(kind, name, sym, legs, dmode, amode, feat, supply=0, holder=0, conf=True, salt=b"p6g"):
         aud_key = aud.ua if amode else b""
         c = [name, sym, 6, feat, 0, sd.addr, [sd.addr if feat & 2 else 0, 0, 0, 0, 0], supply, holder, legs, [0, 0],
-             [aud_key, SCALE, MAXS, FEE, dmode, amode, MIN_DECOY] if conf else [b"", 0, 0, 0, 0, 0, 0], 0, 0, 0]
+             [aud_key, SCALE, MAXS, FEE, dmode, amode, MIN_DECOY] if conf else [b"", 0, 0, 0, 0, 0, 0], 0, 0, 0, [0, 0, 0, 0]]
         # plan 5g-Z2: initArgs = abi.encode(TokenConfig), opaque to the factory; the verifier is the release's
         data = cd("createToken(uint8,uint64,bytes,bytes32)", ["w", "w", "b", "w"], kind, 1, encs([CFG], [c]), kc(salt))
         r = sd.send(fac, data, f"createToken {sym} (kind {kind})")
