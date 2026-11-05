@@ -11,7 +11,10 @@ all-features = true
 # `ignore` entry with its reason.
 version = 2
 yanked = "deny"
-ignore = []
+ignore = [
+    # owner 2026-11-05 (plan "Owner answers after T0"): `paste` 1.0.15 is a proc macro of ark-ff 0.5 (unmaintained)
+    { id = "RUSTSEC-2024-0436", reason = "build-time only, not in the runtime" },
+]
 
 [licenses]
 version = 2

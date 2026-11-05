@@ -18,7 +18,7 @@
 #   docs:          python3 scripts/test_docs_check.py; python3 scripts/docs_check.py check; ... facts check; ... paths
 #   clients/clientkeys:    npm ci --ignore-scripts; npm test
 #   clients/zether-prover: cargo test; ./wasm-smoke.sh (wasm32 build + wasm-bindgen + node smoke); zether-cli against the tokens (ZetherProverCross)
-#   clients/ua-rs:         cargo test; cargo clippy --all-targets -- -D warnings; the same with --features signers (groups.json signers + regeneration), --features json (the JSON shim the wrappers call) and --features pq (the off-chain verifier's PQ kinds, ua8::check_*)
+#   clients/ua-rs:         cargo test; cargo clippy --all-targets -- -D warnings (default = wallet, ua-rs-sign MD-5); the same with --no-default-features (the verify-only layer), --features signers (groups.json signers + regeneration), --features json (the JSON shim the wrappers call), --features pq (the off-chain verifier's PQ kinds, ua8::check_*) and --features vectors (the wallet's test hooks: keys.json, BIP-32 / SLIP-10 / EIP-2333)
 #   clients/ua-py:         python3 -m unittest tests.test_vectors
 #   clients/ua-go:         go vet ./...; go test ./...
 #   clients/ua-cs:         dotnet test Scaas.Ua.Tests
@@ -483,20 +483,28 @@ jobs:
           workspaces: clients/ua-rs
       - name: clippy
         run: cargo clippy --all-targets -- -D warnings
+      - name: clippy (no default features)
+        run: cargo clippy --all-targets --no-default-features -- -D warnings
       - name: clippy (signers)
-        run: cargo clippy --all-targets --features signers -- -D warnings
+        run: cargo clippy --all-targets --no-default-features --features signers -- -D warnings
       - name: clippy (json)
-        run: cargo clippy --all-targets --features json -- -D warnings
+        run: cargo clippy --all-targets --no-default-features --features json -- -D warnings
       - name: clippy (pq)
-        run: cargo clippy --all-targets --features pq -- -D warnings
+        run: cargo clippy --all-targets --no-default-features --features pq -- -D warnings
+      - name: clippy (vectors)
+        run: cargo clippy --all-targets --features vectors -- -D warnings
       - name: vectors
         run: cargo test
+      - name: vectors (verify-only layer)
+        run: cargo test --no-default-features
       - name: groups.json (signers, byte-for-byte regeneration, BIP-327 / RFC 9591 vectors)
-        run: cargo test --features signers --test groups
+        run: cargo test --no-default-features --features signers --test groups
       - name: JSON shim (feature json)
-        run: cargo test --features json --test json
+        run: cargo test --no-default-features --features json --test json
       - name: Off-chain verifier (feature pq; ua8::check_*, UA8-D24)
-        run: cargo test --features pq --test pq --test ua8
+        run: cargo test --no-default-features --features pq --test pq --test ua8
+      - name: wallet core (feature vectors; keys.json, BIP-32 / SLIP-10 / EIP-2333, the secret store)
+        run: cargo test --features vectors --test wallet_keys
 
   ua-cxx:
     needs: changes

@@ -29,8 +29,33 @@ ml-dsa = { version = "=0.1.1", default-features = false, features = ["alloc"], o
 slh-dsa = { version = "=0.2.0-rc.5", default-features = false, optional = true }
 pqcrypto-falcon = { version = "=0.4.1", default-features = false, optional = true }
 pqcrypto-traits = { version = "=0.3.5", default-features = false, optional = true }
+# feature `wallet` (ua-rs-sign T2): BIP-39, BIP-32, HKDF / HMAC (SLIP-10, EIP-2333, the PQ seeds), zeroize; pins of T0
+# (runs/2026-11-05-ua-rs-sign-t0.md)
+bip39 = { version = "=2.2.2", default-features = false, features = ["alloc", "zeroize"], optional = true }
+bip32 = { version = "=0.5.3", default-features = false, features = ["alloc", "secp256k1"], optional = true }
+hkdf = { version = "=0.12.4", optional = true }
+hmac = { version = "=0.12.1", optional = true }
+zeroize = { version = "=1.8.2", optional = true }
+unicode-normalization = { version = "=0.1.26", optional = true }
+
+# wasm32-unknown-unknown: `rand_core` 0.6's `OsRng` through getrandom 0.2's JS backend (T0: features only, no --cfg)
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "=0.2.17", features = ["js"], optional = true }
 
 [features]
+# MD-5 (owner: the facades on by default). `--no-default-features` keeps the verify-only identity layer (+ `pq` / `json` /
+# `signers` as before). `zether` (T14) and `pqz` (T15) imply `wallet`; their crates come with those tasks; `pqz-set-*`:
+# exactly one with `pqz` (T15 checks it). `vectors`: test-only entry points (secrets through hooks), never in a release build.
+default = ["wallet", "zether", "pqz", "pqz-set-n2304-kmax4096"]
+wallet = ["pq", "signers", "json", "dep:bip39", "dep:bip32", "dep:hkdf", "dep:hmac", "dep:zeroize", "dep:unicode-normalization",
+    "rand_core/getrandom", "dep:getrandom", "ed25519-dalek/zeroize", "ml-dsa/zeroize", "slh-dsa/zeroize"]
+zether = ["wallet"]
+pqz = ["wallet"]
+pqz-set-n2048-kmax1024 = []
+pqz-set-n2304-kmax4096 = []
+pqz-set-n2560-kmax16384 = []
+pqz-set-n2816-kmax65536 = []
+vectors = ["wallet"]
 signers = ["dep:frost-core", "dep:frost-secp256k1", "dep:rand_core", "dep:rand_chacha"]
 json = ["dep:serde_json"]
 pq = ["dep:ml-dsa", "dep:slh-dsa", "dep:pqcrypto-falcon", "dep:pqcrypto-traits"]
@@ -50,6 +75,10 @@ required-features = ["json"]
 [[test]]
 name = "pq"
 required-features = ["pq"]
+
+[[test]]
+name = "wallet_keys"
+required-features = ["wallet"]
 
 # arkworks subgroup checks crawl unoptimised
 [profile.dev.package."*"]

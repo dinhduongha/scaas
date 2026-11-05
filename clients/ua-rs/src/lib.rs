@@ -4,7 +4,9 @@
 //! The curve code here (k256, p256, curve25519-dalek, arkworks) is independent of the JS generator's (noble): the vectors
 //! are accepted only when both agree. Feature `signers` (UA-2c): the MuSig2 / FROST group signers that generate
 //! `groups.json` (`musig2`, `frost`); the group kinds' registry checks are in the default build (`verify`). Feature `pq`
-//! (UA8-D24): the PQ kinds' verifiers (`pq`) behind `verify` and `ua8::check_*`; without it a PQ signature is refused. UNAUDITED.
+//! (UA8-D24): the PQ kinds' verifiers (`pq`) behind `verify` and `ua8::check_*`; without it a PQ signature is refused. Feature
+//! `wallet` (ua-rs-sign, on by default): the BIP-39 wallet, key derivation and the secret store (`wallet`);
+//! `--no-default-features` keeps this verify-only layer. UNAUDITED.
 use sha3::{Digest, Keccak256};
 
 mod keydata;
@@ -23,6 +25,8 @@ mod groups;
 pub mod musig2;
 #[cfg(feature = "signers")]
 pub mod frost;
+#[cfg(feature = "wallet")]
+pub mod wallet;
 
 /// An error whose [`UAError::code`] every implementation and the vector files share.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
