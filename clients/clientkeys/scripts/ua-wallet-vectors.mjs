@@ -28,6 +28,7 @@ import {
   deriveUAKey, uaKeyPath, signUAVector, sigRole, webauthnChallenge, webauthnAssertion, msigMemberSigs,
 } from '../src/uakey.js';
 import { PQ_MNEMONIC } from './ua-signers.mjs';
+import { readPinned } from './pinned.mjs';
 import { kemKeyOf, kemEncapsVector, ephemeralVector } from '../src/kem.js';
 import {
   PURPOSE as SEAL_PURPOSE, MAX_PT, LINK_WINDOW, sealVector, open as openSealed, wireForm, fromWire, sealContainer, sealBackup, openContainer, openLink,
@@ -429,6 +430,42 @@ if (process.env.UA_WALLET_DOWNLOADS) {
   must(hex(t.unsigned) === eip155.signingData && hex(t.sighash) === eip155.signingHash && s.v === eip155.v
     && int(s.r).toString() === eip155.r && int(s.s).toString() === eip155.s && hex(s.raw) === eip155.signedTx, 'EIP-155 example');
 }
+// External ECDSA known answers (T1c, spec §11, F-09), quoted with source and sha256; with UA_WALLET_DOWNLOADS=<dir> holding the
+// downloads, the file's sha256 is checked before it is read and every quoted value is found in it.
+const RFC6979 = { source: 'https://www.rfc-editor.org/rfc/rfc6979.txt', sha256: '0x456e8f17558fdbd206f968b96fc6f1b4a71ea331ab30ad17f711ab3adaa7d701',
+  section: 'A.2.5 (ECDSA, NIST P-256), SHA-256 rows', x: '0xc9afa9d845ba75166b5c215767b1d6934e50c3db36e89b127b8a622b120f6721',
+  Ux: '0x60fed4ba255a9d31c961eb74c6356d68c049b8923b61fa6ce669622e60f29fb6', Uy: '0x7903fe1008b8bc99a41ae9e95628bc64f2f1b20c2d7e9f5177a3c294d4462299',
+  rows: [
+    { hash: 'SHA-256', message: 'sample', k: '0xa6e3c57dd01abe90086538398355dd4c3b17aa873382b0f24d6129493d8aad60',
+      r: '0xefd48b2aacb6a8fd1140dd9cd45e81d69d2c877b56aaf991c34d0ea84eaf3716', s: '0xf7cb1c942d657c41d436c7a1b6e29f65f3e900dbb9aff4064dc4ab2f843acda8' },
+    { hash: 'SHA-256', message: 'test', k: '0xd16b6ae827f17175e040871a1c7ec3500192c4c92677336ec2537acaee0008e0',
+      r: '0xf1abb023518351cd71d881567b1ea663ed3efcf6c5132b354f28d3b0b7d38367', s: '0x019f4113742a2b14bd25926b49c649155f267e60d3814b4c0cc84250e46f0083' },
+  ] };
+const SECP_SET = { name: 'tiny-secp256k1 ECDSA fixtures (bitcoinjs), the described "valid" rows: RFC 6979 with HMAC-SHA256, low-s',
+  source: 'https://raw.githubusercontent.com/bitcoinjs/tiny-secp256k1/17d82c7fe38239d3ba0451202895837885f80e1c/tests/fixtures/ecdsa.json',
+  sha256: '0xb830aa30d0ab3b6c51440caffac9206b24ae5450a387a2db73789f5ce795595d' };
+// scripts/ua-wallet-secp256k1-rows.json holds the fixture's rows with a description, fields description, d, m, signature, recoveryId,
+// taken out of the pinned download with the stdlib (python3 -I, json.load, the same filter); checked against it below.
+const secpRows = JSON.parse(readFileSync(new URL('./ua-wallet-secp256k1-rows.json', import.meta.url), 'utf8'));
+if (process.env.UA_WALLET_DOWNLOADS) {
+  const text = readPinned(join(process.env.UA_WALLET_DOWNLOADS, 'rfc6979.txt'), RFC6979.sha256).toString('utf8').toUpperCase();
+  for (const v of [RFC6979.x, RFC6979.Ux, RFC6979.Uy, ...RFC6979.rows.flatMap((r) => [r.k, r.r, r.s])]) {
+    must(text.includes(v.slice(2).toUpperCase()), `rfc6979.txt quotes ${v.slice(0, 18)}`);
+  }
+  const fx = JSON.parse(readPinned(join(process.env.UA_WALLET_DOWNLOADS, 'tiny-secp256k1-ecdsa.json'), SECP_SET.sha256));
+  const want = fx.valid.filter((v) => 'description' in v).map(({ description, d, m, signature, recoveryId }) => ({ description, d, m, signature, recoveryId }));
+  must(JSON.stringify(want) === JSON.stringify(secpRows), 'the committed secp256k1 rows are the fixture\'s described rows');
+}
+for (const r of RFC6979.rows) {
+  const sig = p256.sign(sha256(utf8ToBytes(r.message)), fromHex(RFC6979.x), { prehash: false, lowS: false, extraEntropy: false, format: 'compact' });
+  must(hex(sig) === r.r + r.s.slice(2), `RFC 6979 A.2.5 ${r.message}`);
+}
+for (const r of secpRows) {
+  const rec = secp256k1.sign(fromHex('0x' + r.m), fromHex('0x' + r.d), { prehash: false, lowS: true, extraEntropy: false, format: 'recovered' });
+  must(hex(rec.subarray(1)) === '0x' + r.signature && rec[0] === r.recoveryId, `secp256k1 set: ${r.description}`);
+}
+const external = { rfc6979: RFC6979, secp256k1: { ...SECP_SET, rows: secpRows } };
+
 const ok2 = txs[3];
 const { to: _to, ...noTo } = ok2;
 const txRefusals = [
@@ -598,7 +635,8 @@ const sign = {
     + 'one key on chain 7622 (SCaaS testnet) and 22776 (SCaaS mainnet): a UAMetaTransfer in a token domain with chainId (UA key 0x0108, '
     + 'signUA metatx) and EIP-155 transactions of types 0 and 2 (the EVM key) give other digests and signatures per chain; refusals: a '
     + 'signature for one chain does not verify against the other\'s digest; portable: a record in the portable domain (no chainId) '
-    + 'is one digest and one signature on both.',
+    + 'is one digest and one signature on both. external (T1c): RFC 6979 A.2.5 (P-256, SHA-256; s as published, high or low) and a '
+    + 'named secp256k1 RFC 6979 set (low-s), each with its source URL and sha256.',
   ua: uaSigRows,
   member: memberRows,
   refusals: signRefusals,
@@ -609,6 +647,7 @@ const sign = {
   webauthn: { accepted: webauthnAccepted, refusals: waRefusals },
   msig: msigCases,
   chainSeparation,
+  external,
 };
 
 // ---------------------------------------------------------------------------------------------------- kem.json, seal.json, vault.json

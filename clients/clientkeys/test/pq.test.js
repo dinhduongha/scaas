@@ -11,6 +11,8 @@ import {
 } from '../src/pq.js';
 import { hex, fromHex, keccak_256, utf8ToBytes } from '../src/bytes.js';
 import { shake256 } from '@noble/hashes/sha3.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { ml_kem1024 } from '@noble/post-quantum/ml-kem.js';
 
 const V = JSON.parse(readFileSync(new URL('../../../smartcontracts/vectors/ua/pq_kat.json', import.meta.url)));
 const seed = seedFromWords(V.mnemonic);
@@ -147,4 +149,94 @@ test('fndsa1024 (CTR-UA-40): kind 0x0135, a 1,793 B 0x0A key, a holder, PQ weigh
   assert.deepEqual(kat.rows_over_1239, [82]);
   assert.equal(kat.cases.length, 10);
   for (const c of kat.cases) assert.ok(falcon1024padded.verify(fromHex(c.sig), fromHex(c.msg), fromHex(c.pk)), `count ${c.count}`);
+});
+
+// ua-rs-sign T1c: the external known answers of pq_external.json the signers and the KEM are held to (spec §11, F-10): ACVP
+// ML-KEM-1024 keyGen / encapDecap (and the two key checks), RFC 7748 X25519, ACVP ML-DSA / SLH-DSA sigGen; and the pinned-source
+// rule of the importers (a flipped source byte fails its sha256 check).
+const KEMX = await import('../src/kem.js').catch(() => ({}));
+const PINNED = await import('../scripts/pinned.mjs').catch(() => ({}));
+const X = JSON.parse(readFileSync(new URL('../../../smartcontracts/vectors/ua/pq_external.json', import.meta.url)));
+const Hx = (s) => fromHex(s);
+const ACVP_PREFIX = 'https://raw.githubusercontent.com/usnistgov/ACVP-Server/975de31eb83d87039ec88934fdc47d8c312b892d/gen-val/json-files/';
+
+test('pq_external.json: every T1c section names its source URL and a sha256', () => {
+  for (const k of ['acvp_mlkem_keygen', 'acvp_mlkem_encapdecap', 'acvp_mldsa_siggen', 'acvp_slhdsa_siggen', 'rfc7748']) {
+    assert.ok(X[k], k);
+    assert.match(X[k].sha256, /^[0-9a-f]{64}$/, k);
+    assert.ok(X[k].source.startsWith(k === 'rfc7748' ? 'https://www.rfc-editor.org/' : ACVP_PREFIX), k);
+  }
+});
+
+test('ACVP ML-KEM-1024 keyGen: KeyGen_internal(d, z) = (ek, dk)', () => {
+  assert.equal(X.acvp_mlkem_keygen.cases.length, 5);
+  for (const c of X.acvp_mlkem_keygen.cases) {
+    const { ek, dk } = KEMX.mlkemKeyGen(Hx(c.d), Hx(c.z));
+    assert.equal(hex(ek), c.ek, `tc ${c.tc}`);
+    assert.equal(hex(dk), c.dk, `tc ${c.tc}`);
+    assert.ok(KEMX.dkCheckOk(dk) && KEMX.ekModulusOk(ek));
+  }
+});
+
+test('ACVP ML-KEM-1024 encapDecap: encapsulation (m → c, K), decapsulation (valid and modified c), key checks', () => {
+  const s = X.acvp_mlkem_encapdecap;
+  for (const c of s.encapsulation) {
+    const { cipherText, sharedSecret } = ml_kem1024.encapsulate(Hx(c.ek), Hx(c.m));
+    assert.equal(hex(cipherText), c.c, `tc ${c.tc}`);
+    assert.equal(hex(sharedSecret), c.k, `tc ${c.tc}`);
+  }
+  assert.ok(s.decapsulation.some((c) => c.reason === 'modified ciphertext') && s.decapsulation.some((c) => c.reason === 'valid decapsulation'));
+  for (const c of s.decapsulation) assert.equal(hex(ml_kem1024.decapsulate(Hx(c.c), Hx(c.dk))), c.k, `tc ${c.tc} ${c.reason}`);
+  assert.equal(s.dkCheck.filter((c) => !c.valid).length > 0 && s.ekCheck.filter((c) => !c.valid).length > 0, true);
+  for (const c of s.dkCheck) assert.equal(KEMX.dkCheckOk(Hx(c.dk)), c.valid, `dk check tc ${c.tc}`);
+  for (const c of s.ekCheck) assert.equal(KEMX.ekModulusOk(Hx(c.ek)), c.valid, `ek check tc ${c.tc}`);
+});
+
+test('RFC 7748 X25519: §5.2 scalar multiplications and the iterated function (1, 1,000), §6.1 Diffie-Hellman', () => {
+  const r = X.rfc7748;
+  for (const v of r.scalarMult) assert.equal(hex(KEMX.x25519(Hx(v.k), Hx(v.u))), v.out);
+  let [k, u] = [Hx('0x09'.padEnd(66, '0')), Hx('0x09'.padEnd(66, '0'))];
+  for (let i = 1; i <= 1000; i++) {
+    [k, u] = [KEMX.x25519(k, u), k];
+    const want = r.iterated.find((x) => x.iterations === i);
+    if (want) assert.equal(hex(k), want.out, `after ${i}`);
+  }
+  const nine = Hx('0x09'.padEnd(66, '0'));
+  assert.equal(hex(KEMX.x25519(Hx(r.dh.a), nine)), r.dh.A);
+  assert.equal(hex(KEMX.x25519(Hx(r.dh.b), nine)), r.dh.B);
+  assert.equal(hex(KEMX.x25519(Hx(r.dh.a), Hx(r.dh.B))), r.dh.K);
+  assert.equal(hex(KEMX.x25519(Hx(r.dh.b), Hx(r.dh.A))), r.dh.K);
+});
+
+test('ACVP sigGen: the ML-DSA and SLH-DSA signers reproduce deterministic and hedged signatures over M\' (internal and pure external)', () => {
+  const ALG = { 'ML-DSA-44': PQ_KINDS.mldsa44.alg, 'ML-DSA-65': PQ_KINDS.mldsa65.alg, 'ML-DSA-87': PQ_KINDS.mldsa87.alg,
+    'SLH-DSA-SHA2-128s': PQ_KINDS.slhdsa128s.alg };
+  const cases = [...X.acvp_mldsa_siggen.cases, ...X.acvp_slhdsa_siggen.cases];
+  assert.equal(cases.length, 16);
+  for (const set of Object.keys(ALG)) {
+    for (const det of [true, false]) for (const iface of ['internal', 'external']) {
+      assert.ok(cases.some((c) => c.set === set && c.deterministic === det && c.iface === iface), `${set} ${det} ${iface}`);
+    }
+  }
+  for (const c of cases) {
+    const rand = c.deterministic ? false : Hx(c.rnd ?? c.addRand);
+    assert.equal(hex(ALG[c.set].internal.sign(Hx(c.mprime), Hx(c.sk), { extraEntropy: rand })), c.sig, `${c.set} tc ${c.tc}`);
+    assert.ok(ALG[c.set].internal.verify(Hx(c.sig), Hx(c.mprime), Hx(c.pk)));
+  }
+});
+
+test('pinned sources: a download is read only at its sha256; one flipped byte is refused', () => {
+  const dir = mkdtempSync(`${tmpdir()}/pinned-`);
+  try {
+    const f = `${dir}/source.txt`;
+    const body = utf8ToBytes('X25519 test vectors, RFC 7748 section 5.2');
+    writeFileSync(f, body);
+    const pin = Buffer.from(sha256(body)).toString('hex');
+    assert.equal(Buffer.from(PINNED.readPinned(f, pin)).toString(), 'X25519 test vectors, RFC 7748 section 5.2');
+    const flipped = body.slice(); flipped[3] ^= 1;
+    writeFileSync(f, flipped);
+    assert.throws(() => PINNED.readPinned(f, pin), /sha256 mismatch/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

@@ -432,3 +432,32 @@ test('chain separation (owner 2026-11-05): one message and one key on 7622 and 2
   assert.equal(hex(m.message), p.uaMsg);
   assert.equal(hex(key.signMember(B(p.td.message.ua), m.message)), p.signature);
 });
+
+test('sign.json external (T1c): RFC 6979 A.2.5 P-256 / SHA-256 and the named secp256k1 RFC 6979 set, with source and sha256', () => {
+  const X = S.external;
+  assert.ok(X, 'sign.json external');
+  for (const s of [X.rfc6979, X.secp256k1]) {
+    assert.match(s.sha256, /^0x[0-9a-f]{64}$/);
+    assert.ok(s.source.startsWith('https://'));
+  }
+  const x = B(X.rfc6979.x);
+  assert.equal(hex(p256.getPublicKey(x, false)), '0x04' + X.rfc6979.Ux.slice(2) + X.rfc6979.Uy.slice(2));
+  assert.deepEqual(X.rfc6979.rows.map((r) => r.message), ['sample', 'test']);
+  const n = p256.Point.Fn.ORDER;
+  for (const r of X.rfc6979.rows) {
+    const sig = p256.sign(sha256(utf8ToBytes(r.message)), x, { prehash: false, lowS: false, extraEntropy: false, format: 'compact' });
+    assert.equal(hex(sig), r.r + r.s.slice(2), r.message);
+    // the UA form (0x0101) is the low-s one of the same signature
+    const low = p256.sign(sha256(utf8ToBytes(r.message)), x, { prehash: false, lowS: true, extraEntropy: false, format: 'compact' });
+    const s = BigInt(r.s);
+    assert.equal(hex(low), r.r + (s > n / 2n ? n - s : s).toString(16).padStart(64, '0'));
+  }
+  assert.equal(X.secp256k1.rows.length, 20);
+  for (const r of X.secp256k1.rows) {
+    const rec = secp256k1.sign(B('0x' + r.m), B('0x' + r.d), { prehash: false, lowS: true, extraEntropy: false, format: 'recovered' });
+    assert.equal(hex(rec.subarray(1)), '0x' + r.signature, r.description);
+    assert.equal(rec[0], r.recoveryId);
+  }
+  // the named messages hash to m: the rows sign SHA-256 of the text
+  assert.ok(X.secp256k1.rows.filter((r) => hex(sha256(utf8ToBytes(r.description))) === '0x' + r.m).length >= 14);
+});

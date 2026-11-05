@@ -1,0 +1,23 @@
+# 2026-11-05 ua-rs-sign T1c: external known answers (plan T1c, MD-7, spec §11, F-09, F-10). UNAUDITED.
+step | commit | rc | counts
+red: node --test test/pq.test.js test/ua-wallet.test.js (new tests on f770b6b6) | f770b6b6 | 1 | 50 tests, 7 failed (every new test), 43 passed
+clientkeys npm test (before) | f770b6b6 | 0 | 279 tests, 277 pass, 0 fail, 2 skipped
+clientkeys npm test (foundry 1.8.5 on PATH) | (this commit) | 0 | 286 tests, 284 pass, 0 fail, 2 skipped
+vectors-check: pq-external.mjs <downloads> twice | (this commit) | 0 | pq_external.json identical; the six existing sections byte-identical, note line changed
+vectors-check: UA_WALLET_DOWNLOADS=<downloads> ua-wallet-vectors.mjs, then twice into scratch dirs | (this commit) | 0 | keys, sign, kem, seal, vault identical; only sign.json moves (section external)
+vectors-check: every other generator | f770b6b6 + diff | 0 | 12 files byte-identical
+negative control: one byte of rfc6979.txt / rfc7748.txt flipped | (this commit) | 1, 1 | "sha256 mismatch", nothing written
+forge-ua: forge test --match-path 'test/ua/*' (lib copied, evm_libs.sh check OK) | (this commit) | 0 | 40 suites, 551 passed, 0 failed
+mutants: 2026-11-05-ua-rs-sign-t1c-mutants.py | (this commit) | 0 | 5 killed, 0 survived, 0 not loaded (2026-11-05-ua-rs-sign-t1c-mutants.txt)
+docs_check check / paths | (this commit) | 0 | 0 errors 5 warnings / 0 machine paths
+# Sources (downloads not committed; rows and provenance are):
+# ACVP-Server 975de31e gen-val/json-files/ML-KEM-keyGen-FIPS203/internalProjection.json sha256 d7a62a2c3476957f56dd8d24f9004ea6776ccfe995ffe71a65bb9506dc9c7b1b
+# ACVP-Server 975de31e ML-KEM-encapDecap-FIPS203/internalProjection.json sha256 a556952ce869bb89c3a3196a701dad89647c193a34c86eafb61a9d710d5b810f
+# ACVP-Server 975de31e ML-DSA-sigGen-FIPS204/internalProjection.json sha256 72dcaf5f69853ca267ccd16af9cb40949786aca0fcfbf05d1ebeba132b93af22
+# ACVP-Server 975de31e SLH-DSA-sigGen-FIPS205/internalProjection.json sha256 62b42e7c27fda5de8a94aba2943ae413b59b6ea08141f3bc035b1eceae235dba
+# https://www.rfc-editor.org/rfc/rfc7748.txt sha256 279ca0ecc5e92e2962e27b846986aeb74729d9dd34bd4a04a362f80dcb596ad3
+# https://www.rfc-editor.org/rfc/rfc6979.txt sha256 456e8f17558fdbd206f968b96fc6f1b4a71ea331ab30ad17f711ab3adaa7d701
+# bitcoinjs/tiny-secp256k1 17d82c7f tests/fixtures/ecdsa.json sha256 b830aa30d0ab3b6c51440caffac9206b24ae5450a387a2db73789f5ce795595d
+# Rows: pq_external.json acvp_mlkem_keygen 5; acvp_mlkem_encapdecap encapsulation 5, decapsulation 10, dkCheck 10, ekCheck 10;
+# acvp_mldsa_siggen 12 (ML-DSA-44/65/87 x deterministic/hedged x internal/external pure, 1 each); acvp_slhdsa_siggen 4 (SHA2-128s);
+# rfc7748 scalarMult 2, iterated 2 (1, 1,000), dh 1. sign.json external: rfc6979 A.2.5 SHA-256 2 (sample, test), secp256k1 20.

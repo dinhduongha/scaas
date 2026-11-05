@@ -1,0 +1,9 @@
+# ua-rs-sign T1c mutants (plan T1c): one change each on a clean tree at f770b6b6 + the T1c diff, suite = node --test test/pq.test.js test/kem.test.js test/ua-wallet.test.js (clients/clientkeys), source restored byte for byte after each.
+# M2 mutates noble's adjustScalarBytes in node_modules (untracked; restored from memory and compared). Separately, with M2 applied, node --test test/pq.test.js fails exactly the RFC 7748 test.
+verdict | mutant | file | rc | failed tests: first
+killed   | M1 one ACVP d / z swapped (KeyGen_internal) | src/kem.js | rc=1 | 5 failed: ACVP ML-KEM-1024 keyGen: KeyGen_internal(d, z) =
+killed   | M2 X25519 clamping skipped | node_modules/@noble/curves/ed25519.js | rc=1 | 11 failed: KEM key only through the UA key: kemKey of the UA key equals kemKeyOf; another seed gives 
+killed   | M3 modulus bound 4096 for q | src/kem.js | rc=1 | 2 failed: ACVP ML-KEM-1024 encapDecap: encapsulation
+killed   | M4 dk check over the wrong range | src/kem.js | rc=1 | 7 failed: ACVP ML-KEM-1024 encapDecap: encapsulation
+killed   | M5 pinned sha256 not compared | scripts/pinned.mjs | rc=1 | 2 failed: pinned sources: a download is read only at its sha256; one flipped byte is refused
+mutants M1-M5 of 5, survived or not loaded: 0
