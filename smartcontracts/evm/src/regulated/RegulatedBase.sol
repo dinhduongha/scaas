@@ -5,7 +5,8 @@ import {MetaTokenBase} from "../metatx/MetaTokenBase.sol";
 import {GovernanceLib} from "../governance/GovernanceLib.sol";
 import {GovernanceBits} from "../governance/GovernanceBits.sol";
 import {IRegulatedToken} from "./IRegulatedToken.sol";
-import {RegulatedLib, RegulatedNotBuilt} from "./RegulatedLib.sol";
+import {RegulatedLib} from "./RegulatedLib.sol";
+import {IComplianceRegistry} from "./IComplianceRegistry.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {MtxPipelineLib} from "../metatx/MtxPipelineLib.sol";
 
@@ -14,8 +15,8 @@ import {MtxPipelineLib} from "../metatx/MtxPipelineLib.sol";
 ///        and holds the checks `F`, `P`, `R` as internal functions; each control is a thin stub that `DELEGATECALL`s
 ///        `RegulatedLib` with `_govSubject()` as a word. Each kind lists its base kind first and this second.
 /// @notice **UNAUDITED.** Plan T28: `F`, `P`, the pause-open set, the mirror sync, the views and FREEZE, RECORD, FORCE,
-///         PAUSE in `RegulatedLib`. Not yet built (they revert `RegulatedNotBuilt`): `R` with a list on and `canReceive`
-///         (T29: the bounded registry call, `REGISTRY_CODEHASH`), `operatorTransfer` (T32).
+///         PAUSE in `RegulatedLib`. Plan T29: `R` through the bounded `hasFlags` call, `canReceive`, `REGISTRY_CODEHASH`.
+///         Not yet built (it reverts `RegulatedNotBuilt` in `RegulatedLib`): `operatorTransfer` (T32).
 abstract contract RegulatedBase is MetaTokenBase, IRegulatedToken {
     /// @dev The bits the regulated kinds add to their base kind's `_validBits()` (spec §2.1, bit 22 CTR-GOV-20): 5-10, 21,
     ///      22 on 8 and 9; without `ALLOWLIST` (8) on the confidential kinds 10-13 (CTR-GOV-17).
@@ -33,6 +34,23 @@ abstract contract RegulatedBase is MetaTokenBase, IRegulatedToken {
     bytes4 private constant SEL_UNWRAP_LEG = 0xb5819a02;
     bytes4 private constant SEL_UNWRAP_TO_UA = 0xe4a9f766;
     bytes4 private constant SEL_BURN = 0x42966c68;
+    /// @dev The registry flag that satisfies any `requiredFlags`, never `deniedFlags` (CTR-AS-16).
+    uint256 private constant ELIGIBLE_CONTRACT = 8;
+
+    /// @dev The registry call's gas cap (spec §5, Codex 4): at least twice the canonical `hasFlags` measured cold, pinned
+    ///      (`RegistryFailure.t.sol`). The margin covers the call's own cost (a cold account) before the 63/64 forward.
+    uint256 internal constant REGISTRY_GAS = 50_000;
+    uint256 internal constant REGISTRY_GAS_MARGIN = 5_000;
+
+    /// @notice The canonical `ComplianceRegistry` runtime's `extcodehash` (F-11), from the release's `implArgs`
+    ///         (`abi.encode(bytes32)`, not 0): `initialize` refuses a registry of any other code (`RegistryCodeMismatch`).
+    bytes32 public immutable REGISTRY_CODEHASH;
+
+    constructor(bytes memory implArgs) {
+        bytes32 h = abi.decode(implArgs, (bytes32));
+        if (h == 0) revert RegulatedConfigInvalid();
+        REGISTRY_CODEHASH = h;
+    }
 
     /// @dev Base | 6, 21, 22: each power passes the amount it acts on (B-09).
     function _scalarBits() internal pure virtual override returns (uint256) {
@@ -47,7 +65,7 @@ abstract contract RegulatedBase is MetaTokenBase, IRegulatedToken {
 
     /// @dev `RegulatedLib.init` (spec §2.4) before the kind's own init, so before any mint.
     function _initRaw(bytes calldata initArgs) internal virtual override {
-        RegulatedLib.init(initArgs, _validBits());
+        RegulatedLib.init(initArgs, _validBits(), REGISTRY_CODEHASH);
         super._initRaw(initArgs);
     }
 
@@ -114,7 +132,26 @@ abstract contract RegulatedBase is MetaTokenBase, IRegulatedToken {
     }
     function freezeOf(bytes32 account) external view returns (FreezeState memory) { return RegulatedLib.$().freezes[account]; }
     function isFrozen(bytes32 account) external view returns (bool) { return RegulatedLib.frozen(account); }
-    function canReceive(bytes32) external view returns (bool ok, uint8 reason) { _notBuilt(); return (ok, reason); }
+
+    /// @notice `R(account)` with its reason (spec §3.1): 1 not attested or flags missing, 2 expired, 3 attester disabled,
+    ///         4 denied; (true, 0) when it may receive, and with both lists off, without a call. Two bounded calls
+    ///         (`attestationOf`, `attesterEnabled`); `ok` equals `hasFlags` on the same masks.
+    function canReceive(bytes32 account) external view returns (bool ok, uint8 reason) {
+        RegulatedLib.RegulatedStorage storage r = RegulatedLib.$();
+        uint8 c = r.controls;
+        if (c & RegulatedLib.C_LISTS == 0) return (true, 0);
+        address reg = r.complianceRegistry;
+        uint256[3] memory a = _regCall(reg, abi.encodeCall(IComplianceRegistry.attestationOf, (account)), 96);
+        uint256 on = _regCall(reg, abi.encodeCall(IComplianceRegistry.attesterEnabled, (uint32(a[2]))), 32)[0];
+        if (on > 1) revert RegistryUnavailable(reg);
+        bool active = on == 1 && a[1] >= block.timestamp;
+        uint256 req = c & RegulatedLib.C_ALLOW != 0 ? r.requiredFlags : 0;
+        if (req != 0 && !(active && (a[0] & req == req || a[0] & ELIGIBLE_CONTRACT != 0))) {
+            return (false, a[1] == 0 ? 1 : on == 0 ? 3 : !active ? 2 : 1);
+        }
+        if (c & RegulatedLib.C_DENY != 0 && active && a[0] & r.deniedFlags != 0) return (false, 4);
+        return (true, 0);
+    }
     function order(bytes32 recordId) external view returns (OrderRecord memory) { return RegulatedLib.$().orders[recordId]; }
 
     // ------------------------------------------------------------------ the hooks (spec §2.2, the rows of §3.2)
@@ -173,10 +210,33 @@ abstract contract RegulatedBase is MetaTokenBase, IRegulatedToken {
         _eligible(a);
     }
 
-    /// @dev `R(a)`, refused `NotEligible(a, 0)`. Both lists off: no call (T28). A list on is T29's bounded `hasFlags` call;
-    ///      until then `init` refuses a registry, so this branch is unreachable and fails closed.
-    function _eligible(bytes32) internal view {
-        if (RegulatedLib.$().controls & RegulatedLib.C_LISTS != 0) _notBuilt();
+    /// @dev `R(a)` (CTR-GOV-18), refused `NotEligible(a, 0)`: both lists off, no call; else the bounded `hasFlags(a,
+    ///      ALLOWLIST ? requiredFlags : 0, DENYLIST ? deniedFlags : 0)`.
+    function _eligible(bytes32 a) internal view {
+        RegulatedLib.RegulatedStorage storage r = RegulatedLib.$();
+        uint8 c = r.controls;
+        if (c & RegulatedLib.C_LISTS == 0) return;
+        address reg = r.complianceRegistry;
+        uint256 w = _regCall(reg, abi.encodeCall(IComplianceRegistry.hasFlags, (a,
+            c & RegulatedLib.C_ALLOW != 0 ? r.requiredFlags : 0, c & RegulatedLib.C_DENY != 0 ? r.deniedFlags : 0)), 32)[0];
+        if (w > 1) revert RegistryUnavailable(reg);
+        if (w == 0) revert NotEligible(a, 0);
+    }
+
+    /// @dev The bounded call (spec §5, Codex 4, F-11): never through a Solidity interface. With less than
+    ///      `REGISTRY_GAS x 64/63 + margin` left the call is not made (`RegistryGasStarved`: a relayer cannot starve it into
+    ///      a failure); a `STATICCALL` with gas `REGISTRY_GAS` into a fixed buffer of `len` bytes; success iff the call
+    ///      succeeded and returned exactly `len` bytes, else `RegistryUnavailable`. A failure never means eligible.
+    function _regCall(address reg, bytes memory cd, uint256 len) private view returns (uint256[3] memory out) {
+        uint256 left = gasleft();
+        if (left < REGISTRY_GAS * 64 / 63 + REGISTRY_GAS_MARGIN) revert RegistryGasStarved(REGISTRY_GAS, left);
+        bool ok;
+        uint256 size;
+        assembly ("memory-safe") {
+            ok := staticcall(REGISTRY_GAS, reg, add(cd, 0x20), mload(cd), out, len)
+            size := returndatasize()
+        }
+        if (!ok || size != len) revert RegistryUnavailable(reg);
     }
 
     /// @dev Clears `bit` in the mirror when it is one of 5-10, once the disable applied (Codex 3, I12).
@@ -184,10 +244,5 @@ abstract contract RegulatedBase is MetaTokenBase, IRegulatedToken {
         if (bit >= GovernanceBits.FREEZE && bit <= GovernanceBits.RECORD) {
             RegulatedLib.$().controls &= ~uint8(1 << (bit - GovernanceBits.FREEZE));
         }
-    }
-
-    /// @dev `view` with a condition always true, as the bodies that replace it read storage (no mutability warning upstream).
-    function _notBuilt() private view {
-        if (address(this) != address(0)) revert RegulatedNotBuilt();
     }
 }

@@ -9,9 +9,7 @@ import {GovernanceBits} from "../governance/GovernanceBits.sol";
 import {IGovernance} from "../governance/IGovernance.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 
-/// @notice Placeholder of what is not built yet: T29 (the receiver check: a registry, `canReceive`, `ALLOWLIST` /
-///         `DENYLIST` on the hot path) and T32 (`operatorTransfer`). A config naming a registry is refused with it at init
-///         (fail closed), so no token reaches a list check before T29.
+/// @notice Placeholder of what is not built yet: T32 (`operatorTransfer`).
 error RegulatedNotBuilt();
 
 /// @title The bodies of the regulated controls (CTR-AS-02's shape, regulated-kinds spec §3.1, §3.3, §3.4), reached by
@@ -25,7 +23,9 @@ library RegulatedLib {
     /// @dev `controls` holds bits 5-10 of `features`, shifted down by 5 (I12).
     uint8 internal constant C_FREEZE = 1;
     uint8 internal constant C_PAUSE = 1 << 2;
-    uint8 internal constant C_LISTS = (1 << 3) | (1 << 4);
+    uint8 internal constant C_ALLOW = 1 << 3;
+    uint8 internal constant C_DENY = 1 << 4;
+    uint8 internal constant C_LISTS = C_ALLOW | C_DENY;
     uint8 internal constant C_RECORD = 1 << 5;
     /// @dev CTR-AS-05, CTR-AS-06 (spec §3.5).
     uint64 internal constant FREEZE_SPAN = 30 days;
@@ -85,8 +85,9 @@ library RegulatedLib {
     /// @notice The checks of spec §2.4 on the factory's raw `initArgs`, before the kind's own init and any mint, and the
     ///         namespace written from them. `valid` is the kind's `_validBits()`: a bit outside it is refused first, as
     ///         `GovernanceLib.init` would (bit 8 on 10-13). The roles' holder rules, `RoleConflict` and the owner-0 rule are
-    ///         `GovernanceLib.init`'s; the initial-supply recipient's `R` is the mint's own `_regMove`.
-    function init(bytes calldata initArgs, uint256 valid) public {
+    ///         `GovernanceLib.init`'s; the initial-supply recipient's `R` is the mint's own `_regMove`. A registry must
+    ///         carry `registryCodehash`, the release's `REGISTRY_CODEHASH` (F-11), and is written in slot +0.
+    function init(bytes calldata initArgs, uint256 valid, bytes32 registryCodehash) public {
         IFactoryToken.TokenConfig memory cfg = abi.decode(initArgs, (IFactoryToken.TokenConfig));
         uint256 f = cfg.features;
         if (f & ~valid != 0) {
@@ -105,9 +106,12 @@ library RegulatedLib {
         {
             revert IRegulatedToken.RegulatedConfigInvalid();
         }
-        if (p.complianceRegistry != address(0)) revert RegulatedNotBuilt(); // T29: REGISTRY_CODEHASH, the bounded call
+        address reg = p.complianceRegistry;
+        if (reg != address(0) && reg.codehash != registryCodehash) {
+            revert IRegulatedToken.RegistryCodeMismatch(reg, reg.codehash);
+        }
         RegulatedStorage storage s = $();
-        s.controls = uint8(f >> GovernanceBits.FREEZE) & 0x3F;
+        (s.complianceRegistry, s.controls) = (reg, uint8(f >> GovernanceBits.FREEZE) & 0x3F);
         (s.requiredFlags, s.deniedFlags, s.termsHash) = (p.requiredFlags, p.deniedFlags, p.termsHash);
     }
 

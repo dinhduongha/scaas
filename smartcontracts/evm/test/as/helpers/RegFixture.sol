@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
+import {Vm, VmSafe} from "forge-std/Vm.sol";
 import {OpenFactory} from "../../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../../src/factory/IFactoryToken.sol";
@@ -14,9 +15,10 @@ import {IUARegistry} from "../../../src/ua/IUARegistry.sol";
 import {IRegulatedToken} from "../../../src/regulated/IRegulatedToken.sol";
 import {NormalRegulatedToken} from "../../../src/regulated/NormalRegulatedToken.sol";
 import {WrappedRegulatedToken} from "../../../src/regulated/WrappedRegulatedToken.sol";
+import {ComplianceRegistry} from "../../../src/regulated/ComplianceRegistry.sol";
 import {MockERC20, StubUARegistry} from "../../helpers/Mocks.sol";
 import {MtxDigest} from "../../helpers/MtxDigest.sol";
-import {Catalogue} from "../../helpers/Catalogue.sol";
+import {Catalogue, plainEnv, regArgs} from "../../helpers/Catalogue.sol";
 import {nid} from "../../helpers/Ids.sol";
 
 /// A contract id for the contract-only bits 5-7, 10 (`_check` reads its code only); it acts through `vm.prank`.
@@ -25,7 +27,9 @@ contract Holder {}
 /// Plan T28's fixture (regulated-kinds spec §2.4, §3): one factory with the releases of kinds 8 and 9 (and their bases 0, 1
 /// for the controls), a UA registry stand-in (every derived id a SIGNING UA), and one token of each regulated kind with
 /// `FREEZE`, `FORCE`, `PAUSE`, `RECORD`: the issuer and the compliance holders are two contracts (`FORCE` and `RECORD` never
-/// one id), the owner an EOA, `grantDelay` one day; `alice` holds 1,000,000 units of each.
+/// one id), the owner an EOA, `grantDelay` one day; `alice` holds 1,000,000 units of each. Plan T29: one canonical
+/// `ComplianceRegistry` (`creg`, its admin the contract `cadmin`, one enabled attester `attester`), and `_listed` for a token
+/// of kind 8 or 9 with `ALLOWLIST` / `DENYLIST` on it.
 abstract contract RegFixture is Test {
     uint256 internal constant ALICE_PK = 0xA11CE;
     uint256 internal constant BOB_PK = 0xB0B;
@@ -49,6 +53,12 @@ abstract contract RegFixture is Test {
     MockERC20 internal usd;
     address internal t8;
     address internal t9;
+    ComplianceRegistry internal creg;
+    address internal cadmin;
+    address internal attester = address(0xA77E);
+    uint64 internal constant KYC = 1;
+    uint64 internal constant SANCTIONED = 1 << 16; // an issuer-defined flag (16-63)
+    uint64 internal constant ELIGIBLE = 8; // ELIGIBLE_CONTRACT (CTR-AS-16)
 
     function _hedera() internal view virtual returns (bool) { return false; }
 
@@ -59,10 +69,10 @@ abstract contract RegFixture is Test {
         bool h = _hedera();
         Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(ureg), address(0), h);
         Catalogue.plain(f, IOpenFactory.TokenKind.WRAPPED, 1, type(WrappedToken).creationCode, address(ureg), address(0), h);
-        Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL_REGULATED, 1, type(NormalRegulatedToken).creationCode, address(ureg),
-            address(0), h);
-        Catalogue.plain(f, IOpenFactory.TokenKind.WRAPPED_REGULATED, 1, type(WrappedRegulatedToken).creationCode,
-            address(ureg), address(0), h);
+        Catalogue.release(f, IOpenFactory.TokenKind.NORMAL_REGULATED, 1, plainEnv(address(f), address(0), UID, address(ureg), h),
+            type(NormalRegulatedToken).creationCode, regArgs());
+        Catalogue.release(f, IOpenFactory.TokenKind.WRAPPED_REGULATED, 1, plainEnv(address(f), address(0), UID, address(ureg), h),
+            type(WrappedRegulatedToken).creationCode, regArgs());
         f.setKindEnabled(IOpenFactory.TokenKind.NORMAL_REGULATED, true);
         f.setKindEnabled(IOpenFactory.TokenKind.WRAPPED_REGULATED, true);
         issuer = address(new Holder());
@@ -71,6 +81,55 @@ abstract contract RegFixture is Test {
         t8 = f.createToken(IOpenFactory.TokenKind.NORMAL_REGULATED, 1, abi.encode(_cfg8()), "t8");
         t9 = f.createToken(IOpenFactory.TokenKind.WRAPPED_REGULATED, 1, abi.encode(_cfg9()), "t9");
         _wrapFor(t9, alice, SUPPLY);
+        cadmin = address(new Holder());
+        creg = new ComplianceRegistry(cadmin);
+        vm.prank(cadmin);
+        creg.setAttester(attester, true);
+    }
+
+    /// A token of kind 8 (`i == 0`, `SUPPLY` minted to `alice`, who is attested `KYC` first) or 9 (`alice` wraps `SUPPLY`)
+    /// as the fixture's, with `ALLOWLIST` (`required`, 0 = off) and `DENYLIST` (`denied`, 0 = off) on `creg`.
+    function _listed(uint256 i, uint64 required, uint64 denied, bytes32 salt) internal returns (address t) {
+        IFactoryToken.TokenConfig memory c = i == 0 ? _cfg8() : _cfg9();
+        if (required != 0) c.features |= 1 << GovernanceBits.ALLOWLIST;
+        if (denied != 0) c.features |= 1 << GovernanceBits.DENYLIST;
+        (c.reg.complianceRegistry, c.reg.requiredFlags, c.reg.deniedFlags) = (address(creg), required, denied);
+        _attest(nid(alice), KYC, type(uint64).max);
+        t = f.createToken(i == 0 ? IOpenFactory.TokenKind.NORMAL_REGULATED : IOpenFactory.TokenKind.WRAPPED_REGULATED, 1,
+            abi.encode(c), salt);
+        if (i == 1) _wrapFor(t, alice, SUPPLY);
+    }
+
+    /// `attester` attests `a` with `flags` until `until`.
+    function _attest(bytes32 a, uint64 flags, uint64 until) internal {
+        _attestAs(attester, a, flags, until);
+    }
+
+    /// Clears `bob`'s attestation left by an earlier loop round (the admin attests 0, 0).
+    function _clearBob() internal {
+        _attestAs(cadmin, nid(bob), 0, 0);
+    }
+
+    /// Counts the registry's `STATICCALL`s (selector `sel`, 0 = any) between `_countStart` and `_countEnd`.
+    function _countStart() internal {
+        vm.startStateDiffRecording();
+    }
+
+    function _countEnd(bytes4 sel) internal returns (uint256 n) {
+        Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
+        for (uint256 k; k < acc.length; ++k) {
+            if (acc[k].account == address(creg) && acc[k].kind == VmSafe.AccountAccessKind.StaticCall
+                && (sel == 0 || bytes4(acc[k].data) == sel)) ++n;
+        }
+    }
+
+    function _attestAs(address who, bytes32 a, uint64 flags, uint64 until) internal {
+        bytes32[] memory as_ = new bytes32[](1);
+        uint64[] memory fl = new uint64[](1);
+        uint64[] memory vu = new uint64[](1);
+        (as_[0], fl[0], vu[0]) = (a, flags, until);
+        vm.prank(who);
+        creg.attest(as_, fl, vu);
     }
 
     /// Kind 8: `PAYABLE | MINTABLE | BURNABLE` and the four controls; this test the minter; `SUPPLY` minted to `alice`.

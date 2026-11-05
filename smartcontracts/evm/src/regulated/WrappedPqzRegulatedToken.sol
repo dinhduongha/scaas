@@ -23,7 +23,11 @@ import {RegulatedBase} from "./RegulatedBase.sol";
 ///         hooks through `PqzLayer` and `WrappedPqzToken`; the refresh and the roll-over take none (U1, U2). `ALLOWLIST` (8)
 ///         is outside the kind's mask (CTR-GOV-17).
 contract WrappedPqzRegulatedToken is WrappedPqzToken, RegulatedBase {
-    constructor(uint16 envVersion, Env memory env, bytes memory implArgs) WrappedPqzToken(envVersion, env, implArgs) {}
+    /// @dev `implArgs = abi.encode(REGISTRY_CODEHASH)` (plan T29).
+    constructor(uint16 envVersion, Env memory env, bytes memory implArgs)
+        WrappedPqzToken(envVersion, env, implArgs)
+        RegulatedBase(implArgs)
+    {}
 
     function kind() public pure override(WrappedPqzToken, MetaTokenBase) returns (uint8) {
         return TokenStore.KIND_WRAPPED_PQZ_REGULATED;

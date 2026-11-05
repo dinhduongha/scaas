@@ -18,7 +18,11 @@ import {RegulatedBase} from "./RegulatedBase.sol";
 /// @notice **UNAUDITED.** Measured first with kind 13 (plan T27); FREEZE, RECORD, FORCE, PAUSE and the fee seats built
 ///         (T28). The wrap payer and the wrap order reach the regulated hooks through `WrappedToken`'s seats.
 contract WrappedRegulatedToken is WrappedToken, RegulatedBase {
-    constructor(uint16 envVersion, Env memory env, bytes memory implArgs) WrappedToken(envVersion, env, implArgs) {}
+    /// @dev `implArgs = abi.encode(REGISTRY_CODEHASH)` (plan T29).
+    constructor(uint16 envVersion, Env memory env, bytes memory implArgs)
+        WrappedToken(envVersion, env, implArgs)
+        RegulatedBase(implArgs)
+    {}
 
     function kind() public pure override(WrappedToken, MetaTokenBase) returns (uint8) {
         return TokenStore.KIND_WRAPPED_REGULATED;

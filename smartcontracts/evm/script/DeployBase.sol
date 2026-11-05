@@ -22,6 +22,7 @@ import {WrappedToken} from "../src/metatx/WrappedToken.sol";
 import {NormalRegulatedToken} from "../src/regulated/NormalRegulatedToken.sol";
 import {WrappedRegulatedToken} from "../src/regulated/WrappedRegulatedToken.sol";
 import {RegulatedLib} from "../src/regulated/RegulatedLib.sol";
+import {ComplianceRegistry} from "../src/regulated/ComplianceRegistry.sol";
 import {SCaaSDex} from "../src/dex/SCaaSDex.sol";
 import {UARegistry} from "../src/ua/UARegistry.sol";
 import {IUARegistry} from "../src/ua/IUARegistry.sol";
@@ -375,16 +376,18 @@ abstract contract DeployBase is Script {
     ///         `GovernanceLib`, already in it), the releases, version 1, each refused first by `_requireReleaseGas`, then both
     ///         kinds enabled (plan T28). JSON `implementation_normal_regulated`, `implementation_wrapped_regulated`. Hedera
     ///         takes both (`IS_HEDERA` from the env). The confidential regulated kinds deploy with their stacks (10, 11 under
-    ///         `DEPLOY_ZETHER`; 12, 13 by `script/pqz/e2e.py`). Until T29 a token naming a compliance registry is refused at
-    ///         init (`RegulatedNotBuilt`).
+    ///         `DEPLOY_ZETHER`; 12, 13 by `script/pqz/e2e.py`). Each release's `implArgs` is `abi.encode(REGISTRY_CODEHASH)`,
+    ///         the canonical `ComplianceRegistry` runtime's code hash (spec §5, F-11; plan T29): a token naming a registry of
+    ///         other code is refused at init. The registry's own deploy (`COMPLIANCE_ADMIN`) is `deploy.sh`'s (plan T33).
     function _deployRegulated(OpenFactory f, address reg, address smartKeyAccountImpl, bool isHedera) internal {
         address[] memory libs = new address[](5);
         (libs[0], libs[1], libs[2], libs[3], libs[4]) =
             (address(GovernanceLib), address(HederaLib), address(TradeLib), address(MtxPipelineLib), address(RegulatedLib));
         f.publishEnv(IOpenFactory.TokenKind.NORMAL_REGULATED, 1,
             _env(f, reg, smartKeyAccountImpl, isHedera, new address[](0), libs));
+        bytes memory implArgs = abi.encode(keccak256(type(ComplianceRegistry).runtimeCode));
         address n = _release(f, IOpenFactory.TokenKind.NORMAL_REGULATED, "NormalRegulatedToken",
-            type(NormalRegulatedToken).creationCode);
+            type(NormalRegulatedToken).creationCode, implArgs);
         _gate(n);
         vm.serializeAddress("deploy", "implementation_normal_regulated", n);
         libs = new address[](6);
@@ -393,7 +396,7 @@ abstract contract DeployBase is Script {
         f.publishEnv(IOpenFactory.TokenKind.WRAPPED_REGULATED, 1,
             _env(f, reg, smartKeyAccountImpl, isHedera, new address[](0), libs));
         address w = _release(f, IOpenFactory.TokenKind.WRAPPED_REGULATED, "WrappedRegulatedToken",
-            type(WrappedRegulatedToken).creationCode);
+            type(WrappedRegulatedToken).creationCode, implArgs);
         _gate(w);
         vm.serializeAddress("deploy", "implementation_wrapped_regulated", w);
         f.setKindEnabled(IOpenFactory.TokenKind.NORMAL_REGULATED, true);
@@ -425,8 +428,15 @@ abstract contract DeployBase is Script {
     function _release(OpenFactory f, IOpenFactory.TokenKind kind, string memory name, bytes memory code)
         internal returns (address)
     {
-        _requireReleaseGas(name, address(f), abi.encodeCall(f.deployImplementation, (kind, 1, 1, code, "")));
-        return f.deployImplementation(kind, 1, 1, code, "");
+        return _release(f, kind, name, code, "");
+    }
+
+    /// @notice As above with the release's `implArgs` (a regulated kind's `REGISTRY_CODEHASH`).
+    function _release(OpenFactory f, IOpenFactory.TokenKind kind, string memory name, bytes memory code,
+        bytes memory implArgs) internal returns (address)
+    {
+        _requireReleaseGas(name, address(f), abi.encodeCall(f.deployImplementation, (kind, 1, 1, code, implArgs)));
+        return f.deployImplementation(kind, 1, 1, code, implArgs);
     }
 
     /// @notice A release environment of this chain's factory `f` (plan 5g-Z2), each library's current code hash, and the

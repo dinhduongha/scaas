@@ -23,7 +23,8 @@ import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
 import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
 import {TradeLib} from "../../src/trade/TradeLib.sol";
 import {MtxRelayFee} from "../../src/metatx/MtxRelayFee.sol";
-import {plainEnv, pinned, closureLibs} from "../helpers/Catalogue.sol";
+import {plainEnv, pinned, closureLibs, regArgs} from "../helpers/Catalogue.sol";
+import {ComplianceRegistry} from "../../src/regulated/ComplianceRegistry.sol";
 import {ZUID} from "../zether/helpers/ZetherFixture.sol";
 import {ZetherDisclosure} from "../../src/zether/ZetherDisclosure.sol";
 import {
@@ -82,6 +83,8 @@ contract GovDeployTest is Test {
             assertEq(vm.parseJsonAddress(json, keys[i]), w);
             assertEq(WrappedRegulatedToken(payable(w)).chainUid(), ZUID, "gated");
             assertTrue(f.kindEnabled(k), "enabled (T28)");
+            assertEq(WrappedRegulatedToken(payable(w)).REGISTRY_CODEHASH(), keccak256(type(ComplianceRegistry).runtimeCode),
+                "the registry code pin in implArgs (T29)");
             IFactoryToken.Env memory e = f.envOf(k, 1);
             assertEq(keccak256(abi.encode(e.libs)), keccak256(abi.encode(closureLibs(k))), "link closure");
             for (uint256 j; j < e.libs.length; ++j) assertEq(e.libCodeHashes[j], e.libs[j].codehash, "pinned");
@@ -161,10 +164,10 @@ contract GovDeployTest is Test {
         zdeps = [address(new ZetherTransferVerifierBls12381(ip)), address(new ZetherBurnVerifierBls12381(ip)), address(ip),
             address(new ZetherDisclosure())];
         Create2Probe probe = new Create2Probe();
-        string[11] memory names = ["NormalToken", "WrappedToken", "NormalZetherToken", "WrappedZetherToken", "NormalPqzToken",
+        string[12] memory names = ["NormalToken", "WrappedToken", "NormalZetherToken", "WrappedZetherToken", "NormalPqzToken",
             "WrappedPqzToken", "SCaaSDex", "GovernanceRouter", "WrappedRegulatedToken", "WrappedPqzRegulatedToken",
-            "NormalRegulatedToken"];
-        bytes[11] memory codes = [
+            "NormalRegulatedToken", "ComplianceRegistry"];
+        bytes[12] memory codes = [
             _release(type(NormalToken).creationCode, IOpenFactory.TokenKind.NORMAL, router),
             _release(type(WrappedToken).creationCode, IOpenFactory.TokenKind.WRAPPED, router),
             _release(type(NormalZetherToken).creationCode, IOpenFactory.TokenKind.NORMAL_ZETHER, router),
@@ -175,7 +178,8 @@ contract GovDeployTest is Test {
             abi.encodePacked(type(GovernanceRouter).creationCode, abi.encode(ZUID, address(this), ska, false)),
             _release(type(WrappedRegulatedToken).creationCode, IOpenFactory.TokenKind.WRAPPED_REGULATED, router),
             _release(type(WrappedPqzRegulatedToken).creationCode, IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, router),
-            _release(type(NormalRegulatedToken).creationCode, IOpenFactory.TokenKind.NORMAL_REGULATED, router)
+            _release(type(NormalRegulatedToken).creationCode, IOpenFactory.TokenKind.NORMAL_REGULATED, router),
+            abi.encodePacked(type(ComplianceRegistry).creationCode, abi.encode(router)) // T29: a plain deploy, admin a contract
         ];
         for (uint256 i; i < codes.length; ++i) {
             address a = probe.deploy(codes[i], bytes32(i));
@@ -304,7 +308,7 @@ contract GovDeployTest is Test {
             e.deps = new address[](1);
             e.deps[0] = router; // any contract: the PQZ constructor checks code only (the verifier needs the chain's precompile)
         }
-        return abi.encodePacked(code, abi.encode(uint16(1), e, bytes("")));
+        return abi.encodePacked(code, abi.encode(uint16(1), e, uint8(kind) >= 8 ? regArgs() : bytes(""))); // T29
     }
 
     function _dex(address router) internal view returns (bytes memory) {

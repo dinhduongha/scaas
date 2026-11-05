@@ -5,7 +5,6 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {RegFixture} from "./helpers/RegFixture.sol";
 import {IRegulatedToken} from "../../src/regulated/IRegulatedToken.sol";
-import {RegulatedNotBuilt} from "../../src/regulated/RegulatedLib.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {IGovernance} from "../../src/governance/IGovernance.sol";
@@ -89,14 +88,15 @@ contract RegulatedInitTest is RegFixture {
         }
     }
 
-    /// A list on with its flags and a registry is consistent but T29's (the codehash pin, the bounded call): refused
-    /// `RegulatedNotBuilt`, fail closed.
-    function test_registryNotBuiltYet() public {
+    /// A list on with its flags and a registry that is not the canonical code: refused `RegistryCodeMismatch` (plan T29;
+    /// T28 refused it `RegulatedNotBuilt`). The canonical registry: `Registry.t.sol`.
+    function test_registryOfOtherCodeRefused() public {
         for (uint256 i; i < 2; ++i) {
             IFactoryToken.TokenConfig memory c = _cfg(i);
             c.features |= 1 << 9;
             (c.reg.deniedFlags, c.reg.complianceRegistry) = (4, address(0xC0FFEE));
-            _refused(i == 0 ? K8 : K9, c, abi.encodeWithSelector(RegulatedNotBuilt.selector));
+            _refused(i == 0 ? K8 : K9, c,
+                abi.encodeWithSelector(IRegulatedToken.RegistryCodeMismatch.selector, address(0xC0FFEE), bytes32(0)));
         }
     }
 

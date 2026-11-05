@@ -16,7 +16,11 @@ import {RegulatedBase} from "./RegulatedBase.sol";
 /// @title Kind `NORMAL_REGULATED` (8, CTR-GOV-16, regulated-kinds spec §2.1): `NormalToken` with the regulated layer.
 /// @notice **UNAUDITED.** `_initRaw` runs `RegulatedLib.init` before `NormalToken`'s init, so before the initial-supply mint.
 contract NormalRegulatedToken is NormalToken, RegulatedBase {
-    constructor(uint16 envVersion, Env memory env, bytes memory implArgs) NormalToken(envVersion, env, implArgs) {}
+    /// @dev `implArgs = abi.encode(REGISTRY_CODEHASH)` (plan T29).
+    constructor(uint16 envVersion, Env memory env, bytes memory implArgs)
+        NormalToken(envVersion, env, implArgs)
+        RegulatedBase(implArgs)
+    {}
 
     function kind() public pure override(NormalToken, MetaTokenBase) returns (uint8) {
         return TokenStore.KIND_NORMAL_REGULATED;

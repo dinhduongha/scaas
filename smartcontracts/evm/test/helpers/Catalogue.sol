@@ -21,6 +21,13 @@ import {PqzViewLib} from "../../src/pqz/PqzViewLib.sol";
 import {PqzWrappedLib} from "../../src/pqz/PqzWrappedLib.sol";
 import {UARegistryLib} from "../../src/ua/UARegistryLib.sol";
 import {RegulatedLib} from "../../src/regulated/RegulatedLib.sol";
+import {ComplianceRegistry} from "../../src/regulated/ComplianceRegistry.sol";
+
+/// @notice A regulated release's `implArgs` (regulated-kinds spec §5, F-11; plan T29): the canonical `ComplianceRegistry`
+///         runtime's code hash, `REGISTRY_CODEHASH`.
+function regArgs() pure returns (bytes memory) {
+    return abi.encode(keccak256(type(ComplianceRegistry).runtimeCode));
+}
 
 /// @notice A plain release environment (plan 5g-Z2): no dependencies, no pinned libraries.
 function plainEnv(address factory, address ska, bytes32 uid, address registry, bool hedera)
@@ -112,9 +119,16 @@ library Catalogue {
     function release(OpenFactory f, IOpenFactory.TokenKind kind, uint64 version, IFactoryToken.Env memory e,
         bytes memory code) internal returns (address)
     {
+        return release(f, kind, version, e, code, "");
+    }
+
+    /// @dev As above with the release's `implArgs` (a regulated kind 8-13: `regArgs()`, plan T29).
+    function release(OpenFactory f, IOpenFactory.TokenKind kind, uint64 version, IFactoryToken.Env memory e,
+        bytes memory code, bytes memory implArgs) internal returns (address)
+    {
         uint16 v = env(f, kind, e);
         vm.prank(f.registrar());
-        return f.deployImplementation(kind, version, v, code, "");
+        return f.deployImplementation(kind, version, v, code, implArgs);
     }
 
     /// @dev A plain release on `plainEnv(f, ska, f.chainUid(), registry, hedera)`.

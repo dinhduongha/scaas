@@ -18,7 +18,8 @@ import {IGovernance} from "../../src/governance/IGovernance.sol";
 import {WrappedRegulatedToken} from "../../src/regulated/WrappedRegulatedToken.sol";
 import {WrappedPqzRegulatedToken} from "../../src/regulated/WrappedPqzRegulatedToken.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
-import {Catalogue, plainEnv, pqzEnv} from "../helpers/Catalogue.sol";
+import {Catalogue, plainEnv, pqzEnv, regArgs} from "../helpers/Catalogue.sol";
+import {ComplianceRegistry} from "../../src/regulated/ComplianceRegistry.sol";
 import {PqzFixture} from "../pqz/helpers/PqzFixture.sol";
 import {PQZ_UID} from "../pqz/helpers/PqzRegistryBase.sol";
 
@@ -59,9 +60,9 @@ contract RegulatedSkeletonTest is PqzFixture {
         plain = plainEnv(address(factory), address(0), PQZ_UID, address(reg), false);
         pqz = pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv));
         r9 = WrappedRegulatedToken(payable(Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_REGULATED, 1, plain,
-            type(WrappedRegulatedToken).creationCode)));
+            type(WrappedRegulatedToken).creationCode, regArgs())));
         r13 = WrappedPqzRegulatedToken(payable(Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, 1, pqz,
-            type(WrappedPqzRegulatedToken).creationCode)));
+            type(WrappedPqzRegulatedToken).creationCode, regArgs())));
         w1 = WrappedToken(payable(Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED, 1, plain,
             type(WrappedToken).creationCode)));
         w5 = WrappedPqzToken(payable(Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_PQZ, 1, pqz,
@@ -84,7 +85,7 @@ contract RegulatedSkeletonTest is PqzFixture {
     /// Spec §2.1 and bit 22 (CTR-GOV-20): base | 5-10, 21, 22 (9) or base | 5-7, 9, 10, 21, 22 (13); roles | 5, 6, 7, 10, 21,
     /// 22; contract-only | 5, 6, 7, 10, 21 (never 22); scalar 1 | 6, 21, 22; delayed relax 5, 6, 7.
     function test_masks() public {
-        (uint256 v, uint256 r, uint256 c, uint256 s, uint256 d) = new WrappedRegulatedMasks(1, plain, "").masks();
+        (uint256 v, uint256 r, uint256 c, uint256 s, uint256 d) = new WrappedRegulatedMasks(1, plain, regArgs()).masks();
         uint256 reg = (1 << 5) | (1 << 6) | (1 << 7) | (1 << 8) | (1 << 9) | (1 << 10) | (1 << 21) | (1 << 22);
         assertEq(v, GovernanceBits.WRAPPED_BITS | reg, "9 valid");
         assertEq(r, GovernanceBits.WRAPPED_ROLES | REG_ROLES, "9 roles");
@@ -93,7 +94,7 @@ contract RegulatedSkeletonTest is PqzFixture {
         assertEq(d, (1 << 5) | (1 << 6) | (1 << 7), "9 delayed relax");
         assertEq(r9.validBits(), v, "9 validBits()");
 
-        (v, r, c, s, d) = new WrappedPqzRegulatedMasks(1, pqz, "").masks();
+        (v, r, c, s, d) = new WrappedPqzRegulatedMasks(1, pqz, regArgs()).masks();
         assertEq(v, GovernanceBits.WRAPPED_BITS | (reg & ~uint256(1 << 8)), "13 valid: no ALLOWLIST");
         assertEq(r, GovernanceBits.WRAPPED_ROLES | REG_ROLES, "13 roles");
         assertEq(c, GovernanceBits.WRAPPED_CONTRACT_ONLY | REG_CONTRACT_ONLY, "13 contract-only");
@@ -144,17 +145,31 @@ contract RegulatedSkeletonTest is PqzFixture {
         c.reg.termsHash = keccak256("terms");
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, uint8(8)));
         factory.createToken(IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, 1, abi.encode(c), "r13b");
+
+        // plan T29: DENYLIST (9) on kind 13 with the canonical registry creates; another code is refused at init
+        c = _wrappedCfg();
+        ComplianceRegistry creg = new ComplianceRegistry(address(new SkeletonIssuer()));
+        c.features |= 1 << 9;
+        (c.reg.deniedFlags, c.reg.complianceRegistry, c.reg.termsHash) = (4, address(creg), keccak256("terms"));
+        address t13 = factory.createToken(IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, 1, abi.encode(c), "r13c");
+        assertEq(IRegulatedToken(t13).regulatedConfig().complianceRegistry, address(creg));
+        c.reg.complianceRegistry = address(factory);
+        vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.RegistryCodeMismatch.selector, address(factory),
+            address(factory).codehash));
+        factory.createToken(IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, 1, abi.encode(c), "r13d");
     }
 
-    /// What T28 does not build revert the placeholder on both kinds: `operatorTransfer` (T32), `canReceive` (T29).
+    /// What is not built yet reverts the placeholder on both kinds: `operatorTransfer` (T32). `canReceive` is T29's: with
+    /// both lists off it answers (true, 0) and calls nothing.
     function test_notBuiltYet() public {
         address[2] memory ks = [address(r9), address(r13)];
         for (uint256 i; i < 2; ++i) {
             IRegulatedToken t = IRegulatedToken(ks[i]);
             vm.expectRevert(RegulatedNotBuilt.selector);
             t.operatorTransfer(bytes32(uint256(1)), bytes32(uint256(6)), 1, bytes32(uint256(2)));
-            vm.expectRevert(RegulatedNotBuilt.selector);
-            t.canReceive(bytes32(uint256(1)));
+            (bool ok, uint8 reason) = t.canReceive(bytes32(uint256(1)));
+            assertTrue(ok);
+            assertEq(reason, 0);
         }
     }
 
