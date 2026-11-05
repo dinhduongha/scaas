@@ -1,0 +1,33 @@
+# ua-mtx-merge T27: the regulated kinds 9 and 13 measured first on a skeleton (regulated-kinds spec §6.2, F-19; plan T27)
+# Tree: T27 build (src/regulated/: RegulatedBase, RegulatedLib, IRegulatedToken, WrappedRegulatedToken,
+# WrappedPqzRegulatedToken). Forge 1.8.5, solc 0.8.37, Amsterdam, optimizer 200, via_ir off, default set n2304-kmax4096.
+# Skeleton: every hook seat and row of spec §3.2 wired (the public pre row on 9, the fee-bearing pre row on 13), the eight
+# stubs and five views at their final arity, the init path through RegulatedLib.init; F, P, R, the mirror sync, the views and
+# RegulatedLib's bodies revert RegulatedNotBuilt. Not in it yet: the bodies of F / P / R (T28, T29: storage reads, the
+# bounded hasFlags STATICCALL), the pause-open set (T28), REGISTRY_CODEHASH (T29), group 3e (T37-T43). So these figures are a
+# floor for the token side. A measurement of size and gas used (forge is deterministic), not a timing calibration.
+#
+# Sizes: forge build src --sizes --json; scripts/size_gate.py: 0 errors, 92 contracts, above 65,536 B: none.
+| Release | base kind B | regulated skeleton B | delta | init B | spec §6.2 estimate (on M) | stop line 64,512 B |
+|---|---:|---:|---:|---:|---|---|
+| `WrappedRegulatedToken` (9) | `WrappedToken` 43,552 | 46,754 | +3,202 | 49,067 | 45.7-47.2 K (+3.0 to +4.5 K) | under by 17,758 |
+| `WrappedPqzRegulatedToken` (13) | `WrappedPqzToken` 56,721 | 60,127 | +3,406 | 62,817 | 59.5-61.2 K (+3.3 to +5.0 K) | under by 4,385 |
+| `RegulatedLib` (skeleton) | - | 919 | | 971 | 8-12 K | - |
+#
+# Stop rule (owner 2026-11-06): kind 13 at 60,127 B is under 64,512 B, so no lever was applied and no _above64KiB row added.
+#
+# Deploy gas, spec §6.2 method: each release one isolated CREATE2 transaction (GovDeploy.t.sol test_releaseGasPerKind,
+# Create2Probe); regular = gasTotalUsed x 64/63, state = EIP-8037's; asked = (regular + state) x 1.05 + 0.37 M (the
+# deployImplementation frame, measured in T10). Fits = asked <= the limit (EIP-8037 inclusion: regular + state, never a
+# block's gas_used). SCaaS testnet gate: runtime x 1,530 + 2^24 <= 200 M and runtime <= 131,072 B.
+| Release | runtime B | regular | state | (r + s) x 1.05 | asked (+ 0.37 M frame) | §6.2 estimate | 60 M | 70 M | regular x 1.05 < 2^24 | SCaaS testnet need (<= 200 M) |
+|---|---:|---:|---:|---:|---:|---|---|---|---|---:|
+| `WrappedToken (base of 9)` | 43,552 | 3,057,200 | 66,916,080 | 73.47 M | 73.84 M | (base) | no | no | yes | 83.41 M |
+| `WrappedRegulatedToken (9)` | 46,754 | 3,271,493 | 71,815,140 | 78.84 M | 79.21 M | 77.4-80.0 M | no | no | yes | 88.31 M |
+| `WrappedPqzToken (base of 13)` | 56,721 | 3,960,141 | 87,064,650 | 95.58 M | 95.95 M | (base) | no | no | yes | 103.56 M |
+| `WrappedPqzRegulatedToken (13)` | 60,127 | 4,188,997 | 92,275,830 | 101.29 M | 101.66 M | 100.6-103.5 M | no | no | yes | 108.77 M |
+#
+# Reading: both measured figures sit inside the spec §6.2 estimate (no figure is more than 50 % over it). Kind 13 is
+# 4,385 B under the stop line on the skeleton; still to come on its token side: the F / P / R bodies and the bounded call
+# (T28, T29), the pause-open set, REGISTRY_CODEHASH, the views' storage reads, and group 3e (pay-meta-tax §6.4: +2.3 to
+# +4.0 K on kind 13), so T31 / T33 / T37 / T40 re-measure it first and reduce lever by lever at or above 64,512 B.
