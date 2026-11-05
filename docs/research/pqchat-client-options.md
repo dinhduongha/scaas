@@ -355,6 +355,11 @@ mature the Qt mobile build is (store releases, device coverage) is to be checked
 Other points: use XMTP's libxmtp and Delta Chat core as models for the core's shape; calls last, after deciding P22's
 frame format against LiveKit's own (§2).
 
+**Owner 2026-11-05 (after this note):** `ua-rs` is the only signer, in its own round before the EVM freeze (the PQ
+signing row of §6, 2–3 pw, moves there); the wallet module is built in Rust (W3), wider than §6's row: SCaaS assets 5–9,
+general EVM services via alloy 6–10, Zether / PQZ provers 3–6, about 14–25 pw [E]; `pqchat-core` and `scaas-wallet` sign
+only through `ua-rs`.
+
 ## 10. Decisions for the owner
 
 1. **Path:** (1) Status fork, (2) wallet fork + chat, (3) chat-app fork + wallet, (4) own UI.
