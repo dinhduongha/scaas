@@ -237,3 +237,7 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   kinds it only marks `WrappedPqzToken`'s overrides and `MetaTokenBase._scalarBits` `virtual` and makes
   `MetaTokenBase.supportsInterface` `public` (so a regulated kind can extend it with `super`); `DeployBase` gains a path.
   The touched files keep their pre-round copies above; as they stood before T27: `a2325004`.
+  T28 (regulated kinds: `RegulatedLib`, `RegulatedBase`, kinds 8 and 9; spec `2026-11-05-regulated-kinds.md` §2.3, §2.4,
+  §3.1-§3.4): no copy. It replaces T27's placeholders (`RegulatedNotBuilt` bodies of a skeleton never deployed with value),
+  not a built body, typehash, struct, builder, row or handler; `RegulatedNotBuilt` stays for T29 / T32. New:
+  `src/regulated/NormalRegulatedToken.sol` and the `scaas.regulated` namespace. As they stood before T28: `59f18aae`.
