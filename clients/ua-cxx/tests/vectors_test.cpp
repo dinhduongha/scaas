@@ -148,6 +148,29 @@ static void natives_native_space_canonical_ids() {
     }
 }
 
+// ua-mtx-merge spec §6, MD-9: every row of id_display.json, and a row for every kind of the table.
+static void id_display_rows() {
+    json d = load("id_display.json");
+    for (auto& r : d["rows"]) {
+        auto id = r["id"].get<std::string>();
+        auto name = r["name"].get<std::string>();
+        uint16_t k = kind(r["kind"]);
+        if (r.contains("display")) {
+            auto& w = r["display"];
+            CHECK(idDisplay(id, k) == (w.contains("address") ? w["address"] : w["urn"]).get<std::string>(), name);
+        } else {
+            CHECK(code_of([&] { idDisplay(id, k); }) == r["error"].get<std::string>(), name);
+        }
+    }
+    for (auto& info : kinds()) {
+        bool has = false;
+        for (auto& r : d["rows"])
+            has = has || (kind(r["kind"]) == info.kind && (info.native ? r.value("error", "") == "UAKindNotDerived"
+                                                                        : r.contains("display") && r["display"].contains("urn")));
+        CHECK(has, std::string("no row for ") + std::string(info.name));
+    }
+}
+
 static void messages() {
     json k = load("kinds.json");
     for (auto& r : k["messages"]) {
@@ -770,7 +793,7 @@ int main(int argc, char** argv) {
         {"messages", messages}, {"structures", structures}, {"portable", portable}, {"kem_record", kem_record},
         {"pqz_key_record", pqz_key_record}, {"membership_rows", membership_rows}, {"portable_purposes", portable_purposes},
         {"holder_refusals", holder_refusals}, {"registration_args", registration_args}, {"nested_rows", nested_rows}, {"nested_inner", nested_inner}, {"set_key_args", set_key_args},
-        {"member_sig_hashes", member_sig_hashes}, {"governance_bits_rows", governance_bits_rows}};
+        {"member_sig_hashes", member_sig_hashes}, {"governance_bits_rows", governance_bits_rows}, {"id_display_rows", id_display_rows}};
     if (argc != 2 || !tests.count(argv[1])) { std::fprintf(stderr, "usage: vectors_test <name>\n"); return 2; }
     try { tests[argv[1]](); } catch (const std::exception& e) { std::fprintf(stderr, "exception: %s\n", e.what()); return 1; }
     return failures ? 1 : 0;

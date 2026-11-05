@@ -430,6 +430,26 @@ String canonicalId(String text) {
   return '0x${h.length == 64 && h.startsWith('0' * 24) ? h.substring(24) : h}';
 }
 
+final _id32Pattern = RegExp(r'^0x([0-9a-fA-F]{64})$');
+
+/// How a client shows a bytes32 id before the user signs (ua-mtx-merge spec §6, MD-9): the EIP-55 address of an id in the native
+/// space (top 96 bits zero, CTR-UA-03), else the URN `urn:scaas:ua:v1:<kind name>:<hex32>` (NET-ALL-21) under [kind], the id's
+/// registry kind (0 = none known: refused, never an address). [id] is `0x` + 64 hex digits.
+String idDisplay(String id, int kind) {
+  final m = _id32Pattern.firstMatch(id);
+  if (m == null) throw UAError('UAIdFormat', id);
+  final h = m.group(1)!.toLowerCase();
+  if (h.startsWith('0' * 24)) {
+    final a = h.substring(24);
+    final d = keccak256([Uint8List.fromList(ascii.encode(a))]);
+    final up = [for (var i = 0; i < 40; i++) (d[i ~/ 2] >> (i.isEven ? 4 : 0)) & 0xf >= 8 ? a[i].toUpperCase() : a[i]];
+    return '0x${up.join()}';
+  }
+  final k = kindInfo(kind);
+  if (k.native) throw UAError('UAKindNotDerived', k.name);
+  return 'urn:scaas:ua:v1:${k.name}:$h';
+}
+
 /// u16 threshold ‖ u16 count ‖ count × (u16 kind ‖ bytes32 id ‖ u16 weight). Members: (kind, id, weight).
 Uint8List encodeMsig(int threshold, List<(int, Uint8List, int)> members) {
   void u16(List<int> o, int v) {

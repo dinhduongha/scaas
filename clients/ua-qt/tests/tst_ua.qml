@@ -9,6 +9,7 @@ TestCase {
 
     property var k: vectors.load("kinds.json")
     property var s: vectors.load("structures.json")
+    property var d: vectors.load("id_display.json")
 
     function hex(v) { return v === null ? "" : v }
 
@@ -71,6 +72,25 @@ TestCase {
         for (const r of k.invalid) {
             compare(UaKinds.validateKeyData(r.kind, r.keyData, r.hederaNative), false, r.reason)
             compare(UaKinds.lastError, r.error, r.reason)
+        }
+    }
+
+    // ua-mtx-merge spec §6, MD-9: every row of id_display.json, and a row for every kind of the table.
+    function test_id_display_rows() {
+        verify(d.rows.length > 0)
+        for (const r of d.rows) {
+            const got = UaKinds.idDisplay(r.id, r.kind)
+            if (r.display) {
+                compare(got, r.display.address ?? r.display.urn, r.name)
+                compare(UaKinds.lastError, "", r.name)
+            } else {
+                compare(got, "", r.name)
+                compare(UaKinds.lastError, r.error, r.name)
+            }
+        }
+        for (const t of k.kinds) {
+            const want = t.native ? (r => r.error === "UAKindNotDerived") : (r => !!(r.display && r.display.urn))
+            verify(d.rows.some(r => r.kind === t.kind && want(r)), "no row for " + t.name)
         }
     }
 

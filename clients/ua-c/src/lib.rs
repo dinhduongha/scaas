@@ -881,6 +881,17 @@ pub extern "C" fn scaas_ua_canonical_id(text: *const c_char, out: *mut c_char, o
     })
 }
 
+/// How a client shows a `bytes32` id before the user signs (NUL-terminated): the EIP-55 address of a native-space id, else the
+/// URN `urn:scaas:ua:v1:<kind name>:<hex32>` under `kind`, the id's registry kind (0 = none known: `SCAAS_UA_ERR_KIND_UNKNOWN`).
+/// `id` is `0x` + 64 hex digits; non-UTF-8 text is `SCAAS_UA_ERR_ID_FORMAT`.
+#[no_mangle]
+pub extern "C" fn scaas_ua_id_display(id: *const c_char, kind: u16, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
+    run(|| {
+        let t = std::str::from_utf8(cstr(id)?).map_err(|_| ua::UAError::IdFormat)?;
+        write_str(out, out_len, ua::id_display(t, kind)?.text())
+    })
+}
+
 fn json_call(f: fn(&str) -> ua::json::JsonResult<String>, input: *const c_char, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
     run(|| {
         let t = std::str::from_utf8(cstr(input)?).map_err(|_| argument("JSON"))?;

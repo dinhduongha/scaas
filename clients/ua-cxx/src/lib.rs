@@ -170,6 +170,7 @@ mod ffi {
         ) -> Result<Vec<u8>>;
         fn member_digest(structure_ua: &[u8], ua_msg: &[u8]) -> Result<Vec<u8>>;
         fn canonical_id(text: &str) -> Result<String>;
+        fn id_display(id: &str, kind: u16) -> Result<String>;
         fn encode_msig(threshold: u16, members: &[Member]) -> Result<Vec<u8>>;
         fn registration_args(input: &str) -> Result<String>;
         fn set_kem_key_args(input: &str) -> Result<String>;
@@ -396,6 +397,9 @@ fn member_digest(structure_ua: &[u8], ua_msg: &[u8]) -> R<Vec<u8>> {
 }
 fn canonical_id(text: &str) -> R<String> {
     guard(|| Ok(ua::canonical_id(text)?))
+}
+fn id_display(id: &str, kind: u16) -> R<String> {
+    guard(|| Ok(ua::id_display(id, kind)?.text().to_owned()))
 }
 fn registration_args(input: &str) -> R<String> {
     guard(|| Ok(ua::json::registration_args_json(input)?))

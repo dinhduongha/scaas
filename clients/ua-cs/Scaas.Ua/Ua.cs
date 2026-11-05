@@ -420,6 +420,31 @@ public static partial class UA
         return "0x" + (h.Length == 64 && h.StartsWith(new string('0', 24), StringComparison.Ordinal) ? h[24..] : h);
     }
 
+    [GeneratedRegex(@"\A0x([0-9a-fA-F]{64})\z")]
+    private static partial Regex Id32Pattern();
+
+    /// <summary>How a client shows a bytes32 id before the user signs (ua-mtx-merge spec §6, MD-9): the EIP-55 address of an id in
+    /// the native space (top 96 bits zero, CTR-UA-03), else the URN <c>urn:scaas:ua:v1:&lt;kind name&gt;:&lt;hex32&gt;</c>
+    /// (NET-ALL-21) under <paramref name="kind"/>, the id's registry kind (0 = none known: refused, never an address).
+    /// <paramref name="id"/> is <c>0x</c> + 64 hex digits.</summary>
+    public static string IdDisplay(string id, ushort kind)
+    {
+        var m = Id32Pattern().Match(id);
+        if (!m.Success) throw new UAException("UAIdFormat", id);
+        var h = m.Groups[1].Value.ToLowerInvariant();
+        if (h.StartsWith(new string('0', 24), StringComparison.Ordinal))
+        {
+            var a = h[24..].ToCharArray();
+            var d = Keccak256(Encoding.ASCII.GetBytes(a));
+            for (var i = 0; i < a.Length; i++)
+                if (((d[i / 2] >> (i % 2 == 0 ? 4 : 0)) & 0xf) >= 8) a[i] = char.ToUpperInvariant(a[i]);
+            return "0x" + new string(a);
+        }
+        var k = KindInfo(kind);
+        if (k.Native) throw new UAException("UAKindNotDerived", k.Name);
+        return $"urn:scaas:ua:v1:{k.Name}:{h}";
+    }
+
     /// <summary><c>u16 threshold ‖ u16 count ‖ count × (u16 kind ‖ bytes32 id ‖ u16 weight)</c>.</summary>
     public static byte[] EncodeMsig(ushort threshold, IReadOnlyList<(ushort Kind, byte[] Id, ushort Weight)> members)
     {

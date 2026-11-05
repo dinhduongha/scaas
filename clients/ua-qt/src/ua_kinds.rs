@@ -126,6 +126,9 @@ pub mod qobject {
         #[qinvokable] #[cxx_name = "memberDigest"]
         fn member_digest(self: Pin<&mut Self>, structure_ua: &QString, ua_msg: &QString) -> QString;
         #[qinvokable] #[cxx_name = "canonicalId"] fn canonical_id(self: Pin<&mut Self>, text: &QString) -> QString;
+        /// ua-mtx-merge spec §6: how a client shows a bytes32 id before the user signs: the EIP-55 address of a native-space id,
+        /// else `urn:scaas:ua:v1:<kind name>:<hex32>` under `kind`, the id's registry kind (0 = none known: UAKindUnknown).
+        #[qinvokable] #[cxx_name = "idDisplay"] fn id_display(self: Pin<&mut Self>, id: &QString, kind: i32) -> QString;
         /// CTR-MTX-26: `keccak256("scaas.pay.meta" ‖ salt ‖ keccak256(meta))`; `salt` 32 bytes.
         #[qinvokable] #[cxx_name = "metaPayId"] fn meta_pay_id(self: Pin<&mut Self>, salt: &QString, meta: &QString) -> QString;
         /// CTR-MTX-03: `keccak256("scaas.pay.lane" ‖ p)` as 32 bytes hex (the on-chain `uint256`).
@@ -465,6 +468,9 @@ impl qobject::UaKinds {
     }
     pub fn canonical_id(self: Pin<&mut Self>, text: &QString) -> QString {
         QString::from(&self.run(|| from_ua(ua::canonical_id(&s(text)))))
+    }
+    pub fn id_display(self: Pin<&mut Self>, id: &QString, kind: i32) -> QString {
+        QString::from(&self.run(|| Ok(from_ua(ua::id_display(&s(id), k(kind)?))?.text().to_owned())))
     }
     pub fn registration_args(self: Pin<&mut Self>, input: &QString) -> QString {
         QString::from(&self.run(|| from_json(ua::json::registration_args_json(&s(input)))))

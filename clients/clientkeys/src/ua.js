@@ -1,6 +1,6 @@
 // UNAUDITED. UA identity layer (accounts.md §1.3–§1.6; CTR-UA-02…05, 07, 09, 11, 12): the kind table, ids, keyHash, purpose tags,
 // ua_msg, the portable records as typed EIP-712 structs under the name + version domain (typed-signing TS-D1 … TS-D4: the
-// register PoP, R_REG, KEM and PQZ key records), the registry's UAAuth digest, member digests, canonical ids and key-data
+// register PoP, R_REG, KEM and PQZ key records), the registry's UAAuth digest, member digests, canonical ids, the id display and key-data
 // validation. The same rules live in Solidity (src/ua/UAKinds.sol), Rust (clients/ua-rs), Python (clients/ua-py),
 // Go (clients/ua-go) and C# (clients/ua-cs); smartcontracts/vectors/ua/kinds.json, structures.json and portable.json, written
 // by scripts/ua-vectors.mjs and scripts/ua-portable-vectors.mjs from this file, pin all six. No signing here (UAKey and the
@@ -12,7 +12,7 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 import { bn254 } from '@noble/curves/bn254.js';
 import { bls12_381 } from '@noble/curves/bls12-381.js';
 import { keccak_256, concatBytes, utf8ToBytes, fromHex, hex, word } from './bytes.js';
-import { encodeType } from './evm.js';
+import { encodeType, checksumAddress } from './evm.js';
 
 /** An error whose `code` every implementation and the vector files share. */
 export class UAError extends Error {
@@ -480,6 +480,21 @@ export function canonicalId(text) {
   if (!m) fail('UAIdFormat', String(text));
   const h = m[1].toLowerCase();
   return h.length === 64 && h.startsWith('0'.repeat(24)) ? `0x${h.slice(24)}` : `0x${h}`;
+}
+
+/** How a client shows a `bytes32` id before the user signs (ua-mtx-merge spec §6, MD-9): an id in the native space (top 96
+ *  bits zero, CTR-UA-03) is its EIP-55 address, as the contract reads it; any other id is derived and shown only as its URN
+ *  `urn:scaas:ua:v1:<kind name>:<hex32>` (NET-ALL-21), for which the caller gives the id's kind from its registry record
+ *  (`kind` 0 = none known: refused, never shown as an address). `id` is `0x` + 64 hex digits. Lives here, not in evm.js:
+ *  evm.js cannot import this module (ua.js runs encodeType at load). smartcontracts/vectors/ua/id_display.json pins it. */
+export function idDisplay(id, kind = 0) {
+  const m = /^0x([0-9a-fA-F]{64})$/.exec(typeof id === 'string' ? id : '');
+  if (!m) fail('UAIdFormat', String(id));
+  const h = m[1].toLowerCase();
+  if (h.startsWith('0'.repeat(24))) return { kind: 'native', address: checksumAddress(h.slice(24)) };
+  const k = kindInfo(kind);
+  if (k.native) fail('UAKindNotDerived', k.name);
+  return { kind: 'derived', urn: `urn:scaas:ua:v1:${k.name}:${h}` };
 }
 
 export function encodeMsig(threshold, members) {
