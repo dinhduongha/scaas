@@ -11,8 +11,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 pub use crate::abi::{MetaTransaction, MetaTransfer, UAMetaTransaction, UAMetaTransfer, UASig};
-use crate::abi::{IToken, IUALedger};
-use alloy::sol_types::SolValue;
+use crate::abi::{IMtxIds, IToken};
 
 pub const MODE_RESTRICT_RELAYER: u32 = 0x01;
 pub const MODE_RESTRICT_FEE_RECIPIENT: u32 = 0x02;
@@ -362,7 +361,7 @@ impl Mtx {
     }
 }
 
-/// CTR-MTX-26: the signed payment is the one `mtxPayMeta` / `uaPayMeta` builds from `(salt, meta)`.
+/// CTR-MTX-26: the signed payment is the one `mtxPayMeta` builds from `(salt, meta)`.
 fn pay_meta_shape(entry_ref: B256, batch: U256, nonce: U256, salt: &B256, meta: &[u8]) -> Result<()> {
     let id = meta_pay_id(salt, meta);
     if entry_ref != id || batch != pay_lane(&id) || !nonce.is_zero() {
@@ -403,9 +402,10 @@ impl WireMetaTransfer {
     }
 }
 
-/// One signed UA meta-transaction (CTR-UA-26), either struct: `UAMetaTransaction` (`struct = call`, a self-call on the
-/// token's UA allowlist) or `UAMetaTransfer` (`struct = transfer`), on the one nonce map of the token, digest
-/// `uaDigest` / `uaTransferDigest` in the token's salted domain.
+/// One signed meta-transaction on ids (CTR-UA-26, CTR-MTX-30), either struct: `UAMetaTransaction` (`struct = call`, a
+/// self-call on the contract's allowlist: `_uaAllowed` for a derived id, `_mtxRule` for a native one) or `UAMetaTransfer`
+/// (`struct = transfer`), on the one nonce map of the token, digest `mtxDigest` / `mtxTransferDigest` in the token's salted
+/// domain. A native id (an address zero-padded) signs with its own key, no registry (ua-mtx-merge C).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UaMtx {
     Call(UAMetaTransaction),
@@ -503,38 +503,38 @@ impl UaMtx {
         }
     }
 
-    /// The relayed calldata: `uaExecuteTransfer(t, auth)`; `uaExecute` keeps `bytes auth` (TS-D14), the encoded `UASig`.
+    /// The relayed calldata: `mtxExecute(m, auth)` / `mtxExecuteTransfer(t, auth)`, `auth` the `UASig` (R47: no packed bytes).
     pub fn calldata(&self, auth: UASig) -> Bytes {
         match self.clone() {
-            Self::Call(m) => IUALedger::uaExecuteCall { m, auth: auth.abi_encode().into() }.abi_encode().into(),
-            Self::Transfer(t) => IUALedger::uaExecuteTransferCall { t, auth }.abi_encode().into(),
+            Self::Call(m) => IMtxIds::mtxExecuteCall { m, auth }.abi_encode().into(),
+            Self::Transfer(t) => IMtxIds::mtxExecuteTransferCall { t, auth }.abi_encode().into(),
         }
     }
 
-    /// A UA pay-meta job (CTR-MTX-26) as [`Mtx::pay_meta_calldata`]: `uaPayMeta`, or for an off-chain meta the plain
-    /// `uaExecuteTransfer` of the same struct.
+    /// A pay-meta job (CTR-MTX-26) as [`Mtx::pay_meta_calldata`]: `mtxPayMeta` on ids, or for an off-chain meta the plain
+    /// `mtxExecuteTransfer` of the same struct.
     pub fn pay_meta_calldata(&self, salt: B256, meta: Bytes, auth: UASig, on_chain: bool) -> Result<Bytes> {
         let Self::Transfer(t) = self else { bail!("a pay-meta job is a transfer struct") };
         pay_meta_shape(t.entryRef, t.batch, t.nonce, &salt, &meta)?;
         if !on_chain {
             return Ok(self.calldata(auth));
         }
-        Ok(IUALedger::uaPayMetaCall { from: t.from, to: t.to, amount: t.value, salt, meta, validUntil: t.validUntil,
+        Ok(IMtxIds::mtxPayMetaCall { from: t.from, to: t.to, amount: t.value, salt, meta, validUntil: t.validUntil,
             mode: t.mode, relayer: t.relayer, fee: t.fee, feeRecipient: t.feeRecipient, auth }.abi_encode().into())
     }
 
     /// Inverse of `calldata` and `pay_meta_calldata`: `(mtx, auth)`, `None` for any other call.
     pub fn from_calldata(data: &[u8]) -> Option<(Self, UASig)> {
-        if let Ok(c) = IUALedger::uaExecuteCall::abi_decode(data) {
-            return Some((Self::Call(c.m), UASig::abi_decode(&c.auth).ok()?));
+        if let Ok(c) = IMtxIds::mtxExecuteCall::abi_decode(data) {
+            return Some((Self::Call(c.m), c.auth));
         }
-        if let Ok(c) = IUALedger::uaPayMetaCall::abi_decode(data) {
+        if let Ok(c) = IMtxIds::mtxPayMetaCall::abi_decode(data) {
             let id = meta_pay_id(&c.salt, &c.meta);
             let t = UAMetaTransfer { from: c.from, to: c.to, value: c.amount, entryRef: id, batch: pay_lane(&id), nonce: U256::ZERO,
                 validUntil: c.validUntil, mode: c.mode, relayer: c.relayer, fee: c.fee, feeRecipient: c.feeRecipient };
             return Some((Self::Transfer(t), c.auth));
         }
-        IUALedger::uaExecuteTransferCall::abi_decode(data).ok().map(|c| (Self::Transfer(c.t), c.auth))
+        IMtxIds::mtxExecuteTransferCall::abi_decode(data).ok().map(|c| (Self::Transfer(c.t), c.auth))
     }
 }
 
@@ -726,8 +726,8 @@ mod tests {
         assert_eq!(free.digest(&d), before, "the digest is unchanged");
     }
 
-    /// CTR-MTX-26 on the UA ledger: `uaPayMeta` of `(salt, meta)` only for its payment (ref, lane, nonce 0), decoded
-    /// back to that `UAMetaTransfer`; an off-chain meta relays the plain `uaExecuteTransfer`.
+    /// CTR-MTX-26 on ids: `mtxPayMeta` of `(salt, meta)` only for its payment (ref, lane, nonce 0), decoded back to that
+    /// `UAMetaTransfer`; an off-chain meta relays the plain `mtxExecuteTransfer`.
     #[test]
     fn ua_pay_meta_calldata_checks_the_payment() {
         let (salt, meta) = (B256::repeat_byte(0x51), Bytes::from_static(b"invoice 42"));
@@ -738,8 +738,8 @@ mod tests {
         let m = UaMtx::Transfer(t.clone());
         let auth = UASig { keyData: Bytes::new(), signature: Bytes::from_static(&[7; 65]), members: vec![] };
         let on = m.pay_meta_calldata(salt, meta.clone(), auth.clone(), true).unwrap();
-        assert_eq!(on[..4], IUALedger::uaPayMetaCall::SELECTOR);
-        assert_eq!(UaMtx::from_calldata(&on), Some((m.clone(), auth.clone())), "uaPayMeta is its UAMetaTransfer");
+        assert_eq!(on[..4], IMtxIds::mtxPayMetaCall::SELECTOR);
+        assert_eq!(UaMtx::from_calldata(&on), Some((m.clone(), auth.clone())), "mtxPayMeta is its UAMetaTransfer");
         assert_eq!(m.pay_meta_calldata(salt, meta.clone(), auth.clone(), false).unwrap(), m.calldata(auth.clone()));
         for bad in [UAMetaTransfer { entryRef: B256::ZERO, ..t.clone() }, UAMetaTransfer { batch: U256::ZERO, ..t.clone() },
                     UAMetaTransfer { nonce: U256::from(1), ..t.clone() }] {

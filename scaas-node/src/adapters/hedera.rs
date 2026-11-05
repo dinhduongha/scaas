@@ -346,7 +346,7 @@ mod tests {
             "eth_call" => {
                 let input = b["params"][0]["input"].as_str().or(b["params"][0]["data"].as_str()).unwrap_or_default().to_string();
                 match &n.invalidate_revert {
-                    Some(d) if input.starts_with(&format!("0x{}", alloy::hex::encode(guard::SEL_MTX_INVALIDATE_NONCES))) => json!(
+                    Some(d) if input.starts_with(&format!("0x{}", alloy::hex::encode(guard::SEL_TOKEN_INVALIDATE_NONCES))) => json!(
                         {"jsonrpc": "2.0", "id": id, "error": {"code": 3, "message": "execution reverted", "data": format!("0x{}", alloy::hex::encode(d))}}),
                     _ => ok(json!(format!("0x{:064x}", n.mtx_nonce))),
                 }
@@ -386,14 +386,16 @@ mod tests {
         })
     }
 
-    /// Một job meta-tx tối thiểu (mô phỏng của Relay giả luôn qua).
+    /// Một job meta-tx tối thiểu (mô phỏng của Relay giả luôn qua). ua-mtx-merge T14: the transfer is a `ua_metatx` job (an EOA's
+    /// `UAMetaTransfer`, ids padded, its 64-byte HIP-632 signature in `auth`); the Hedera `MetaOp` and its KAT move in T18.
     fn job(valid_until: u64) -> Value {
         let z = format!("{:#x}", Address::ZERO);
-        json!({"id": 7, "token": format!("{:#x}", Address::repeat_byte(0x70)), "signature": format!("0x{}", "ab".repeat(64)),
+        json!({"id": 7, "kind": "ua_metatx", "token": format!("{:#x}", Address::repeat_byte(0x70)),
+               "auth": {"keyData": "0x", "signature": format!("0x{}", "ab".repeat(64)), "members": []},
                "struct": "transfer",
-               "metatx": {"from": format!("{:#x}", Address::repeat_byte(1)), "to": format!("{:#x}", Address::repeat_byte(2)),
-                          "value": "1", "entryRef": format!("{:#x}", B256::ZERO), "batch": "1", "nonce": "0",
-                          "validUntil": valid_until.to_string(), "mode": 0, "relayer": z, "fee": "0", "feeRecipient": z}})
+               "m": {"from": format!("{:#x}", Address::repeat_byte(1).into_word()), "to": format!("{:#x}", Address::repeat_byte(2).into_word()),
+                     "value": "1", "entryRef": format!("{:#x}", B256::ZERO), "batch": "1", "nonce": "0",
+                     "validUntil": valid_until.to_string(), "mode": 0, "relayer": z, "fee": "0", "feeRecipient": z}})
     }
 
     /// Chạy MỘT `lane_step` của `HederaAdapter` thật; trả các `chain_state` đã báo và trạng thái mạng giả.
@@ -509,7 +511,7 @@ mod tests {
     async fn the_hedera_lane_skips_bytes_already_in_flight() {
         let bound = std::time::Duration::from_secs(2);
         let z = format!("{:#x}", Address::ZERO);
-        let ua = |contract: &str| json!({"id": 9, "kind": "ua_metatx", "op": {"entry": "uaBurn", "contract": contract,
+        let ua = |contract: &str| json!({"id": 9, "kind": "ua_metatx", "op": {"entry": "mtxBurn", "contract": contract,
             "token": format!("{:#x}", Address::repeat_byte(0x70)), "args": {"amount": "5"},
             "envelope": {"from": format!("{:#x}", B256::repeat_byte(0xaa)), "batch": "9", "nonce": "0", "validUntil": "4000000000",
                 "mode": 0, "relayer": z, "fee": "0", "feeRecipient": z},
@@ -535,9 +537,9 @@ mod tests {
     /// whose RPC block 0 is not the pinned chain_uid never starts) and I1 (only registered tokens).
     #[tokio::test]
     async fn the_hedera_lane_keeps_n6_n2_and_registration() {
-        let inv = |token: Address| json!({"id": 8, "kind": "metatx", "op": {"entry": "mtxInvalidateNonces", "contract": "token",
-            "token": format!("{token:#x}"), "args": {"from": format!("{:#x}", Address::repeat_byte(1)), "batch": "1", "minNonce": "9"},
-            "signature": format!("0x{}", "ab".repeat(64)), "validUntil": (now() + 300).to_string()}});
+        let inv = |token: Address| json!({"id": 8, "kind": "ua_metatx", "op": {"entry": "mtxInvalidateNonces", "contract": "token",
+            "token": format!("{token:#x}"), "args": {"from": format!("{:#x}", Address::repeat_byte(1).into_word()), "batch": "1", "minNonce": "9"},
+            "auth": {"keyData": "0x", "signature": format!("0x{}", "ab".repeat(64)), "members": []}, "validUntil": (now() + 300).to_string()}});
         let already = IToken::MinNonceNotIncreasing { current: U256::from(9), requested: U256::from(9) }.abi_encode();
         let net = || Net { balance: "0x1", invalidate_revert: Some(already.clone()), ..Default::default() };
         let (states, s) = step_with(net(), inv(Address::repeat_byte(0x70))).await;

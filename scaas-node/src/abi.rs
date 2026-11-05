@@ -158,7 +158,10 @@ sol! {
         error InteractionFailed(uint256 index, address target, bytes reason);
     }
 
-    /// Every SCaaS contract on `MetaTxBase` (`IMetaTx`) plus the token surface the node reads or relays.
+    /// Every SCaaS contract on `MetaTxBase` (`IMetaTx`) plus the address surface: `SmartKeyAccount`'s (`IMetaTxAddress`: `mtxNonce`,
+    /// `mtxDigest`, `mtxExecute`), the events and errors. ua-mtx-merge: the token's address forms here (`MetaTransfer`, `mtxPayMeta`
+    /// on addresses, `TradeOrder`'s `mtxTrade` / `mtxCancelOrder` / `mtxInvalidateNonces` and views) are no token entry any more;
+    /// the gateway door, the mesh, the DEX venue and the Hedera adapter still read them until T15–T18 move them (`IMtxIds`).
     #[derive(Debug)]
     interface IToken {
         function mtxNonce(address from, uint256 batch) external view returns (uint256);
@@ -232,24 +235,18 @@ sol! {
         error MinNonceAboveCap(uint256 requested);
     }
 
-    /// `IUALedger` (CTR-UA-18/19/26): the UA ledger of every SCaaS token, off while `registry()` is 0; `uaNonce(pad(a),
-    /// b) == mtxNonce(a, b)` (one nonce map).
+    /// `IUALedger` (CTR-UA-18/19/26): the UA ledger of every SCaaS token, off while `registry()` is 0 (a derived side then reverts
+    /// `UALedgerOff`). Its signed entries are `IMtxIds`: they run for a native id at `registry() == 0` (ua-mtx-merge C, R9).
     #[derive(Debug)]
     interface IUALedger {
         function registry() external view returns (address);
-        function uaNonce(bytes32 ua, uint256 batch) external view returns (uint256);
-        function uaTransferDigest(UAMetaTransfer t) external view returns (bytes32);
-        function uaExecute(UAMetaTransaction m, bytes auth) external returns (bytes);
-        function uaExecuteTransfer(UAMetaTransfer t, UASig auth) external returns (bool);
-        /// CTR-MTX-26 (`IMetaTokenV2`): `uaPay` with `payId = metaPayId(salt, meta)`; `PaymentMeta` first.
-        function uaPayMeta(bytes32 from, bytes32 to, uint256 amount, bytes32 salt, bytes meta, uint256 validUntil,
-            uint32 mode, address relayer, uint256 fee, address feeRecipient, UASig auth) external returns (bool);
         function transferToUA(bytes32 to, uint256 amount) external returns (bool);
         function balanceOfUA(bytes32 ua) external view returns (uint256);
         event UAMetaTransactionExecuted(bytes32 indexed from, address indexed relayer, uint256 indexed batch,
             uint256 nonce, bytes32 digest, address feeRecipient, uint256 fee);
         event UAPaymentSettled(bytes32 indexed from, bytes32 indexed to, uint256 amount, uint256 feeAmount,
             address feeRecipient, bytes32 indexed entryRef);
+        event UANonceCancelled(bytes32 indexed ua, uint256 indexed batch, uint256 newNonce);
         error UALedgerOff();
         error UAPoolNotPayable();
         error UANotRegistered(bytes32 ua);
@@ -261,18 +258,29 @@ sol! {
         error UAUnauthorized(bytes32 ua);
     }
 
-    /// `ITradeToken.uaInvalidateNonces`: its selector, for an invalidation already in force.
+    /// The merged entries on ids (ua-mtx-merge, CTR-MTX-30) the node relays and reads on a token, the router and the mandate
+    /// wallets (`UAMetaTxBase`, `IUALedgerViews`, `IERC20MetaTx`, `IMetaTokenV2`, `ITradeToken`): one form for a native id (an
+    /// address zero-padded, its own key, no registry) and a derived UA; one nonce map. `SmartKeyAccount` keeps `IToken`'s
+    /// address entries (`mtxNonce(address)`).
     #[derive(Debug)]
-    interface ITokenUa {
-        function uaInvalidateNonces(bytes32 from, uint256 batch, uint256 newMin, UASig auth) external;
+    interface IMtxIds {
+        function mtxNonce(bytes32 from, uint256 batch) external view returns (uint256);
+        function mtxDigest(UAMetaTransaction m) external view returns (bytes32);
+        function mtxTransferDigest(UAMetaTransfer t) external view returns (bytes32);
+        function mtxExecute(UAMetaTransaction m, UASig auth) external returns (bytes);
+        function mtxExecuteTransfer(UAMetaTransfer t, UASig auth) external returns (bool);
+        /// CTR-MTX-26 (`IMetaTokenV2`): `mtxPay` with `payId = metaPayId(salt, meta)`; `PaymentMeta` first.
+        function mtxPayMeta(bytes32 from, bytes32 to, uint256 amount, bytes32 salt, bytes meta, uint256 validUntil,
+            uint32 mode, address relayer, uint256 fee, address feeRecipient, UASig auth) external returns (bool);
+        /// `ITradeToken.mtxInvalidateNonces` on ids (R12, R38); the DEX's keeps addresses and `bytes`.
+        function mtxInvalidateNonces(bytes32 from, uint256 batch, uint256 newMin, UASig auth) external;
     }
 
-    /// `MtxRelayFee` (CTR-MTX-27): a token fee to the relayer for a fee-less call; `uaRelay` for a UA payer.
+    /// `MtxRelayFee` (CTR-MTX-27, ua-mtx-merge T2 / R28): a token fee to the relayer for a fee-less call; `from` and `payee` ids
+    /// (one `relay`, the old `uaRelay` under this name; the address `relay` is in `legacy/ua-mtx-merge/abi.rs`).
     #[derive(Debug)]
     interface IMtxRelayFee {
-        function relay(address target, bytes callData, address token, address from, address payee, uint256 value,
-            uint256 validUntil, bytes sig) external;
-        function uaRelay(address target, bytes callData, address token, bytes32 from, bytes32 payee, uint256 value,
+        function relay(address target, bytes callData, address token, bytes32 from, bytes32 payee, uint256 value,
             uint256 validUntil, UASig auth) external;
         function relayRef(address target, bytes callData) external view returns (bytes32);
         function EXECUTOR() external view returns (address);
@@ -314,20 +322,22 @@ sol! {
         function acceptMembership(bytes32 ua, MemberSig memberSig) external;
     }
 
-    /// `MandateWallet` errors (CTR-ACC-06/07): a `call` job's revert reason names them, so the client re-reads
-    /// `epoch(token)` and re-signs on `StaleEpoch`.
+    /// `MandateWallet` errors (CTR-ACC-06/07, CTR-ACC-12 in the merged form: ids): a job's revert reason names them, so the
+    /// client re-reads `epoch(token)` and re-signs on `StaleEpoch`.
     #[derive(Debug)]
     interface IMandateWallet {
         error NotOwner();
         error NotDelegate();
         error NoMandate();
         error MandateExpired();
-        error PayeeNotAllowed(address payee);
+        error PayeeNotAllowed(bytes32 payee);
         error OverPaymentCap(uint256 amount, uint256 cap);
         error OverPeriodCap(uint256 wouldSpend, uint256 cap);
         error RefAlreadyPaid(bytes32 entryRef);
         error StaleEpoch(uint64 current, uint64 signed);
         error CallFailed(bytes reason);
+        error ZeroOwner();
+        error BadMandate();
         error PayFailed();
     }
 }

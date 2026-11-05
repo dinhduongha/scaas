@@ -23,18 +23,16 @@ use crate::metatx::{addr, check_mode, native, uint, MODE_RESTRICT_FEE_RECIPIENT,
 const ENV: [&str; 7] = ["batch", "nonce", "validUntil", "mode", "relayer", "fee", "feeRecipient"];
 const E_FIELDS: &str = "uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient";
 
-const ALL: &[&str] = &["token", "zether", "pqz", "wallet", "account", "gov_router"];
 const T: &[&str] = &["token", "zether", "pqz"];
-const TG: &[&str] = &["token", "zether", "pqz", "gov_router"];
+/// The ordered cancel on ids (Q2): the token kinds, the mandate wallet (Q6) and the router.
+const TWG: &[&str] = &["token", "zether", "pqz", "wallet", "gov_router"];
 /// The chain's `GovernanceRouter` (spec 2026-11-02-governance §3.2, §12.7): its typed entries only, none on a governed contract.
 const GR: &[&str] = &["gov_router"];
-const TD: &[&str] = &["token", "zether", "pqz", "dex"];
 const ZP: &[&str] = &["zether", "pqz"];
 const Z: &[&str] = &["zether"];
 const P: &[&str] = &["pqz"];
 const W: &[&str] = &["wallet"];
 const A: &[&str] = &["account"];
-const WA: &[&str] = &["wallet", "account"];
 const D: &[&str] = &["dex"];
 const REG: &[&str] = &["registry"];
 const FACT: &[&str] = &["factory"];
@@ -98,127 +96,89 @@ const NESTED: &[(&str, &str)] = &[
 
 /// `(struct, entry, contract kinds, fields, plan)`. `E` = the envelope fields. The plan is the entry's arguments in order;
 /// empty = `E`, the fields between `from` and the envelope, the signature. Tokens: `E`; a field; `name:Type`, an argument
-/// that is not signed; `(a,b)`, a tuple of fields; `[x]`, a one-element array; `$`, the whole struct; `wrap!x`, a `WrapOrder`
-/// field as the `TradeOrder` it is cancelled through; `@`, the signature: `bytes` (`signature`), `UASig` on a `ua*` entry
-/// (`auth`), `AccountSig` on the account's own entries (`auth`); `@bytes` / `@ua` where the entry differs.
+/// that is not signed; `(a,b)`, a tuple of fields; `[x]`, a one-element array; `$`, the whole struct; `wrap!x`, a `UAWrapOrder`
+/// field as the `UATradeOrder` it is cancelled through; `@`, the signature: `UASig` on a merged entry (a `UA*` struct, `auth`),
+/// `AccountSig` on the account's own entries (`auth`), `bytes` on the address entries left (`signature`); `@bytes` / `@ua` where
+/// the entry differs.
+///
+/// ua-mtx-merge (CTR-MTX-30): one signed entry per operation, `mtx<Op>(UAEnvelope, …, UASig)` signing `UA<Op>`, for a native id
+/// (an address zero-padded, its own key) and a derived UA alike; the address forms of merged operations and the `ua<Op>` names
+/// are in `legacy/ua-mtx-merge/`. The address entries left: the five wraps (`Envelope`, `bytes`), `SmartKeyAccount`'s own, the
+/// DEX's outside-token cancel and invalidation, the two Zether owner statements (signed as `UASig` of `ua`, no envelope).
 const TYPED: &[(&str, &str, &[&str], &str, &str)] = &[
-    ("CancelNonce", "mtxCancelNonce", ALL, "address from,uint256 lane,E", "E lane @bytes"),
-    ("Burn", "mtxBurn", T, "address from,uint256 amount,E", ""),
-    ("UABurn", "uaBurn", T, "bytes32 from,uint256 amount,E", ""),
+    ("CancelNonce", "mtxCancelNonce", A, "address from,uint256 lane,E", "E lane @bytes"),
+    ("UACancelNonce", "mtxCancelNonce", TWG, "bytes32 from,uint256 lane,E", ""),
+    ("UABurn", "mtxBurn", T, "bytes32 from,uint256 amount,E", ""),
     ("Wrap", "mtxWrap", T, "address from,uint256 amount,E", ""),
     ("WrapLeg", "mtxWrapLeg", T, "address from,address underlying,uint256 amount,E", ""),
-    ("Unwrap", "mtxUnwrap", T, "address from,uint256 wrapped,address recipient,uint256 minOut,E", ""),
-    ("UAUnwrap", "uaUnwrap", T, "bytes32 from,uint256 wrapped,address recipient,uint256 minOut,E", ""),
-    ("UnwrapLeg", "mtxUnwrapLeg", T, "address from,address underlying,uint256 wrapped,address recipient,uint256 minOut,E", ""),
-    ("UAUnwrapLeg", "uaUnwrapLeg", T, "bytes32 from,address underlying,uint256 wrapped,address recipient,uint256 minOut,E", ""),
+    ("UAUnwrap", "mtxUnwrap", T, "bytes32 from,uint256 wrapped,address recipient,uint256 minOut,E", ""),
+    ("UAUnwrapLeg", "mtxUnwrapLeg", T, "bytes32 from,address underlying,uint256 wrapped,address recipient,uint256 minOut,E", ""),
     ("AddReserve", "mtxAddReserve", T, "address from,address underlying,uint256 amount,E", ""),
     ("WrapToUA", "mtxWrapToUA", T, "address from,address underlying,uint256 amount,bytes32 to,E", ""),
-    ("UnwrapToUA", "mtxUnwrapToUA", T, "address from,address underlying,uint256 wrapped,bytes32 to,uint256 minOut,E", ""),
-    ("UAUnwrapToUA", "uaUnwrapToUA", T, "bytes32 from,address underlying,uint256 wrapped,bytes32 to,uint256 minOut,E", ""),
-    ("Shield", "mtxShield", ZP, "address from,bytes32 toUA,uint256 amount,E", ""),
-    ("UAShield", "uaShield", ZP, "bytes32 from,bytes32 toUA,uint256 amount,E", "E toUA amount @bytes"),
+    ("UAUnwrapToUA", "mtxUnwrapToUA", T, "bytes32 from,address underlying,uint256 wrapped,bytes32 to,uint256 minOut,E", ""),
+    ("UAShield", "mtxShield", ZP, "bytes32 from,bytes32 toUA,uint256 amount,E", ""),
     ("WrapShield", "mtxWrapShield", ZP, "address from,address underlying,uint256 amountIn,bytes32 toUA,E", ""),
-    ("RollOver", "mtxRollOver", ZP, "address from,bytes32 ua,uint256 n,E", ""),
-    ("UARollOver", "uaRollOver", ZP, "bytes32 from,bytes32 ua,uint256 n,E", ""),
-    ("PrepareAcc", "mtxPrepareAcc", P, "address from,bytes32 ua,uint256 half,E", ""),
-    ("UAPrepareAcc", "uaPrepareAcc", P, "bytes32 from,bytes32 ua,uint256 half,E", ""),
-    ("SetMandate", "mtxSetMandate", W, "address from,address token,address delegate,uint128 maxPerPayment,uint128 maxPerPeriod,uint64 periodSeconds,uint64 expiry,E", ""),
-    ("SetPayee", "mtxSetPayee", W, "address from,address token,address payee,bool allowed,E", ""),
-    ("RevokeMandate", "mtxRevokeMandate", W, "address from,address token,E", ""),
-    ("PayUnderMandate", "mtxPayUnderMandate", W, "address from,address token,address payee,uint256 amount,bytes32 entryRef,uint64 epoch,E", ""),
-    ("DelegateRevoke", "mtxDelegateRevoke", W, "address from,address token,uint64 epoch,E", ""),
+    ("UARollOver", "mtxRollOver", ZP, "bytes32 from,bytes32 ua,uint256 n,E", ""),
+    ("UAPrepareAcc", "mtxPrepareAcc", P, "bytes32 from,bytes32 ua,uint256 half,E", ""),
+    // the mandate wallets in the merged form (Q6, MD-11): owner and delegate are ids
+    ("UASetMandate", "mtxSetMandate", W, "bytes32 from,address token,bytes32 delegate,uint128 maxPerPayment,uint128 maxPerPeriod,uint64 periodSeconds,uint64 expiry,E", ""),
+    ("UASetPayee", "mtxSetPayee", W, "bytes32 from,address token,bytes32 payee,bool allowed,E", ""),
+    ("UARevokeMandate", "mtxRevokeMandate", W, "bytes32 from,address token,E", ""),
+    ("UAPayUnderMandate", "mtxPayUnderMandate", W, "bytes32 from,address token,bytes32 payee,uint256 amount,bytes32 entryRef,uint64 epoch,E", ""),
+    ("UADelegateRevoke", "mtxDelegateRevoke", W, "bytes32 from,address token,uint64 epoch,E", ""),
+    ("UAExecute", "mtxExecute", W, "bytes32 from,address target,uint256 value,bytes data,E", ""),
     ("AddKey", "mtxAddKey", A, "address from,uint8 kind,bytes32 x,bytes32 y,bytes32 rpIdHash,bytes32 originHash,E", ""),
     ("RemoveKey", "mtxRemoveKey", A, "address from,uint256 index,E", ""),
     ("RotateKey", "mtxRotateKey", A, "address from,uint256 index,uint8 kind,bytes32 x,bytes32 y,bytes32 rpIdHash,bytes32 originHash,E", ""),
     ("SetGuardian", "mtxSetGuardian", A, "address from,address guardian,E", ""),
     ("CancelRecovery", "mtxCancelRecovery", A, "address from,E", ""),
-    ("Execute", "mtxExecute", W, "address from,address target,uint256 value,bytes data,E", ""),
     ("Execute", "mtxExecute", A, "address from,address target,uint256 value,bytes data,E", ""),
-    ("PqzTransferSingle", "mtxConfidentialTransferSingle", P, "address from,PqzTransferArgs args,bytes proof,bytes accHint,E", PQZ_PLAN),
-    ("UAPqzTransferSingle", "uaConfidentialTransferSingle", P, "bytes32 from,PqzTransferArgs args,bytes proof,bytes accHint,E", PQZ_PLAN),
-    ("PqzTransferSingleCompact", "mtxConfidentialTransferSingleCompact", P, "address from,PqzTransferArgs args,bytes proof,bytes accHint,E", PQZ_PLAN),
-    ("UAPqzTransferSingleCompact", "uaConfidentialTransferSingleCompact", P, "bytes32 from,PqzTransferArgs args,bytes proof,bytes accHint,E", PQZ_PLAN),
-    ("PqzTransfer", "mtxConfidentialTransfer", P, "address from,PqzMultiArgs args,bytes proof,bytes accHint,E", PQZ_PLAN),
-    ("UAPqzTransfer", "uaConfidentialTransfer", P, "bytes32 from,PqzMultiArgs args,bytes proof,bytes accHint,E", PQZ_PLAN),
-    ("PqzTransferCompact", "mtxConfidentialTransferCompact", P, "address from,PqzMultiArgs args,bytes proof,bytes accHint,E", PQZ_PLAN),
-    ("UAPqzTransferCompact", "uaConfidentialTransferCompact", P, "bytes32 from,PqzMultiArgs args,bytes proof,bytes accHint,E", PQZ_PLAN),
-    ("PqzUnshield", "mtxUnshield", P, "address from,PqzBurnArgs args,uint256 amount,bytes32 recipient,bytes proof,bytes accHint,E", PQZ_BURN_PLAN),
-    ("UAPqzUnshield", "uaUnshield", P, "bytes32 from,PqzBurnArgs args,uint256 amount,bytes32 recipient,bytes proof,bytes accHint,E", PQZ_BURN_PLAN),
-    ("PqzUnshieldUnwrap", "mtxUnshieldUnwrap", P, "address from,PqzBurnArgs args,Unwrap unwrap,bytes proof,bytes accHint,E", PQZ_UNWRAP_PLAN),
-    ("UAPqzUnshieldUnwrap", "uaUnshieldUnwrap", P, "bytes32 from,PqzBurnArgs args,Unwrap unwrap,bytes proof,bytes accHint,E", PQZ_UNWRAP_PLAN),
-    ("ZetherTransferSingle", "mtxConfidentialTransferSingle", Z, "address from,ZetherSingle args,bytes proof,E", ""),
-    ("UAZetherTransferSingle", "uaConfidentialTransferSingle", Z, "bytes32 from,ZetherSingle args,bytes proof,E", ""),
-    ("ZetherTransfer", "mtxConfidentialTransfer", Z, "address from,ZetherMulti args,bytes proof,E", ""),
-    ("UAZetherTransfer", "uaConfidentialTransfer", Z, "bytes32 from,ZetherMulti args,bytes proof,E", ""),
-    ("ZetherTransferCompact", "mtxConfidentialTransferCompact", Z, "address from,ZetherMulti args,bytes proof,E", ""),
-    ("UAZetherTransferCompact", "uaConfidentialTransferCompact", Z, "bytes32 from,ZetherMulti args,bytes proof,E", ""),
-    ("ZetherUnshield", "mtxUnshield", Z, "address from,ZetherBurn args,uint256 amount,bytes32 recipient,bytes proof,E", ""),
-    ("UAZetherUnshield", "uaUnshield", Z, "bytes32 from,ZetherBurn args,uint256 amount,bytes32 recipient,bytes proof,E", ""),
-    ("ZetherUnshieldUnwrap", "mtxUnshieldUnwrap", Z, "address from,ZetherBurn args,Unwrap unwrap,bytes proof,E", ""),
-    ("UAZetherUnshieldUnwrap", "uaUnshieldUnwrap", Z, "bytes32 from,ZetherBurn args,Unwrap unwrap,bytes proof,E", ""),
-    ("RollOverSigned", "mtxRollOverSigned", Z, "address from,bytes32 ua,uint64 expectedPendingSeq,uint64 validUntilBlock,E", OWNER_ROLL_PLAN),
-    ("UARollOverSigned", "uaRollOverSigned", Z, "bytes32 from,bytes32 ua,uint64 expectedPendingSeq,uint64 validUntilBlock,E", OWNER_ROLL_PLAN),
-    ("SetRollOverMode", "mtxSetRollOverMode", Z, "address from,bytes32 ua,uint8 rollOverMode,uint64 validUntilBlock,E", OWNER_MODE_PLAN),
-    ("UASetRollOverMode", "uaSetRollOverMode", Z, "bytes32 from,bytes32 ua,uint8 rollOverMode,uint64 validUntilBlock,E", OWNER_MODE_PLAN),
-    ("RollOverBatch", "mtxRollOverBatch", Z, "address from,bytes32[] uas,E", ""),
-    ("UARollOverBatch", "uaRollOverBatch", Z, "bytes32 from,bytes32[] uas,E", ""),
-    ("ReceiverFee", "mtxPayReceiverFee", T, "MetaTransfer payment,uint256 fee,address feeRecipient,uint256 validUntil", "payment payerSig:bytes fee feeRecipient validUntil @"),
-    ("UAReceiverFee", "uaPayReceiverFee", T, "UAMetaTransfer payment,uint256 fee,address feeRecipient,uint256 validUntil", "payment payerSig:UASig fee feeRecipient validUntil @"),
-    ("RelayFee", "mtxRelayFee", T, "address from,address target,bytes32 callDataHash,address payee,uint256 value,uint256 validUntil,address relayer", "from target callDataHash payee value validUntil @"),
-    ("UARelayFee", "uaRelayFee", T, "bytes32 from,address target,bytes32 callDataHash,bytes32 payee,uint256 value,uint256 validUntil,address relayer", "from target callDataHash payee value validUntil @"),
-    ("WrapOrder", "mtxWrapOrder", T, "address from,address wrappedToken,uint256 amount,uint256 minMinted,uint256 minFill,uint256 fee,address relayer,address destination,uint8 flags,uint256 batch,uint256 nonce,uint256 validUntil", "underlying:address $ @"),
-    ("UAWrapOrder", "uaWrapOrder", T, "bytes32 from,address wrappedToken,uint256 amount,uint256 minMinted,uint256 minFill,uint256 fee,address relayer,bytes32 destination,uint8 flags,uint256 batch,uint256 nonce,uint256 validUntil", "underlying:address $ @"),
-    ("CancelOrder", "mtxCancelOrder", T, "TradeOrder order", "order @"),
-    ("CancelUAOrder", "uaCancelOrder", T, "UATradeOrder order", "order @"),
-    ("CancelWrapOrder", "mtxCancelOrder", T, "WrapOrder order", "wrap!order @"),
-    ("CancelUAWrapOrder", "uaCancelOrder", T, "UAWrapOrder order", "wrap!order @"),
+    ("UAPqzTransferSingle", "mtxConfidentialTransferSingle", P, "bytes32 from,PqzTransferArgs args,bytes proof,bytes accHint,E", PQZ_PLAN),
+    ("UAPqzTransferSingleCompact", "mtxConfidentialTransferSingleCompact", P, "bytes32 from,PqzTransferArgs args,bytes proof,bytes accHint,E", PQZ_PLAN),
+    ("UAPqzTransfer", "mtxConfidentialTransfer", P, "bytes32 from,PqzMultiArgs args,bytes proof,bytes accHint,E", PQZ_PLAN),
+    ("UAPqzTransferCompact", "mtxConfidentialTransferCompact", P, "bytes32 from,PqzMultiArgs args,bytes proof,bytes accHint,E", PQZ_PLAN),
+    ("UAPqzUnshield", "mtxUnshield", P, "bytes32 from,PqzBurnArgs args,uint256 amount,bytes32 recipient,bytes proof,bytes accHint,E", PQZ_BURN_PLAN),
+    ("UAPqzUnshieldUnwrap", "mtxUnshieldUnwrap", P, "bytes32 from,PqzBurnArgs args,Unwrap unwrap,bytes proof,bytes accHint,E", PQZ_UNWRAP_PLAN),
+    ("UAZetherTransferSingle", "mtxConfidentialTransferSingle", Z, "bytes32 from,ZetherSingle args,bytes proof,E", ""),
+    ("UAZetherTransfer", "mtxConfidentialTransfer", Z, "bytes32 from,ZetherMulti args,bytes proof,E", ""),
+    ("UAZetherTransferCompact", "mtxConfidentialTransferCompact", Z, "bytes32 from,ZetherMulti args,bytes proof,E", ""),
+    ("UAZetherUnshield", "mtxUnshield", Z, "bytes32 from,ZetherBurn args,uint256 amount,bytes32 recipient,bytes proof,E", ""),
+    ("UAZetherUnshieldUnwrap", "mtxUnshieldUnwrap", Z, "bytes32 from,ZetherBurn args,Unwrap unwrap,bytes proof,E", ""),
+    ("UARollOverSigned", "mtxRollOverSigned", Z, "bytes32 from,bytes32 ua,uint64 expectedPendingSeq,uint64 validUntilBlock,E", OWNER_ROLL_PLAN),
+    ("UASetRollOverMode", "mtxSetRollOverMode", Z, "bytes32 from,bytes32 ua,uint8 rollOverMode,uint64 validUntilBlock,E", OWNER_MODE_PLAN),
+    ("UARollOverBatch", "mtxRollOverBatch", Z, "bytes32 from,bytes32[] uas,E", ""),
+    ("UAReceiverFee", "mtxPayReceiverFee", T, "UAMetaTransfer payment,uint256 fee,address feeRecipient,uint256 validUntil", "payment payerSig:UASig fee feeRecipient validUntil @"),
+    ("UARelayFee", "mtxRelayFee", T, "bytes32 from,address target,bytes32 callDataHash,bytes32 payee,uint256 value,uint256 validUntil,address relayer", "from target callDataHash payee value validUntil @"),
+    ("UAWrapOrder", "mtxWrapOrder", T, "bytes32 from,address wrappedToken,uint256 amount,uint256 minMinted,uint256 minFill,uint256 fee,address relayer,bytes32 destination,uint8 flags,uint256 batch,uint256 nonce,uint256 validUntil", "underlying:address $ @"),
+    ("CancelUAOrder", "mtxCancelOrder", T, "UATradeOrder order", "order @"),
+    ("CancelUAWrapOrder", "mtxCancelOrder", T, "UAWrapOrder order", "wrap!order @"),
     ("CancelDexOrder", "mtxCancelOrders", D, "DexOrder order", "[order] [@]"),
-    ("UACancelNonce", "uaCancelNonce", TG, "bytes32 ua,uint256 batch,uint256 validUntil", "ua batch validUntil @"),
     ("ZetherRollOver", "mtxRollOverSigned", Z, "bytes32 ua,uint64 accSeq,uint64 expectedPendingSeq,uint64 validUntilBlock", "ua expectedPendingSeq validUntilBlock @ua"),
     ("ZetherSetRollOverMode", "mtxSetRollOverMode", Z, "bytes32 ua,uint8 mode,uint64 modeNonce,uint64 validUntilBlock", "ua mode validUntilBlock @ua"),
     ("PqzAuth", "", P, "uint8 op,bytes32 opTag,bytes32 psid,uint256 chainId,address token,address registry,bytes32 from,bytes32 to,bytes32 beneficiary,uint256 fee,uint256 amount,bytes32 recipient,uint64 sendCounter,uint64 p,uint256 validUntilBlock,bool auditorOn,uint256 shieldIn,bytes32 chainUid,bytes32 binding,uint128 salt,bytes32 memoHash,bytes32 bodyHash", ""),
-    // the `GovernanceRouter`'s closed table (spec §3.2): `mtx<Op>` / `ua<Op>`, `target` the first op word, fee mode `NONE`
-    ("GrantRole", "mtxGrantRole", GR, "address from,address target,uint8 bit,bytes32 account,E", ""),
-    ("UAGrantRole", "uaGrantRole", GR, "bytes32 from,address target,uint8 bit,bytes32 account,E", ""),
-    ("RevokeRole", "mtxRevokeRole", GR, "address from,address target,uint8 bit,bytes32 account,E", ""),
-    ("UARevokeRole", "uaRevokeRole", GR, "bytes32 from,address target,uint8 bit,bytes32 account,E", ""),
-    ("SetGrant", "mtxSetGrant", GR, "address from,address target,uint8 bit,bytes32 holder,GrantTerms terms,E", ""),
-    ("UASetGrant", "uaSetGrant", GR, "bytes32 from,address target,uint8 bit,bytes32 holder,GrantTerms terms,E", ""),
-    ("CancelGrant", "mtxCancelGrant", GR, "address from,address target,uint8 bit,bytes32 account,E", ""),
-    ("UACancelGrant", "uaCancelGrant", GR, "bytes32 from,address target,uint8 bit,bytes32 account,E", ""),
-    ("DisableFeature", "mtxDisableFeature", GR, "address from,address target,uint8 bit,E", ""),
-    ("UADisableFeature", "uaDisableFeature", GR, "bytes32 from,address target,uint8 bit,E", ""),
-    ("TransferOwnership", "mtxTransferOwnership", GR, "address from,address target,bytes32 newOwner,E", ""),
-    ("UATransferOwnership", "uaTransferOwnership", GR, "bytes32 from,address target,bytes32 newOwner,E", ""),
-    ("AcceptOwnership", "mtxAcceptOwnership", GR, "address from,address target,E", ""),
-    ("UAAcceptOwnership", "uaAcceptOwnership", GR, "bytes32 from,address target,E", ""),
-    ("RenounceOwnership", "mtxRenounceOwnership", GR, "address from,address target,E", ""),
-    ("UARenounceOwnership", "uaRenounceOwnership", GR, "bytes32 from,address target,E", ""),
-    ("RenounceRole", "mtxRenounceRole", GR, "address from,address target,uint8 bit,E", ""),
-    ("UARenounceRole", "uaRenounceRole", GR, "bytes32 from,address target,uint8 bit,E", ""),
-    ("Mint", "mtxMint", GR, "address from,address target,address to,uint256 amount,E", ""),
-    ("UAMint", "uaMint", GR, "bytes32 from,address target,address to,uint256 amount,E", ""),
-    ("MintToUA", "mtxMintToUA", GR, "address from,address target,bytes32 to,uint256 amount,E", ""),
-    ("UAMintToUA", "uaMintToUA", GR, "bytes32 from,address target,bytes32 to,uint256 amount,E", ""),
-    ("DisableWrap", "mtxDisableWrap", GR, "address from,address target,address leg,bytes32 reason,E", ""),
-    ("UADisableWrap", "uaDisableWrap", GR, "bytes32 from,address target,address leg,bytes32 reason,E", ""),
-    ("ProposeRate", "mtxProposeRate", GR, "address from,address target,address leg,uint96 num,uint96 den,E", ""),
-    ("UAProposeRate", "uaProposeRate", GR, "bytes32 from,address target,address leg,uint96 num,uint96 den,E", ""),
-    ("CancelRate", "mtxCancelRate", GR, "address from,address target,E", ""),
-    ("UACancelRate", "uaCancelRate", GR, "bytes32 from,address target,E", ""),
-    ("ExecuteRate", "mtxExecuteRate", GR, "address from,address target,E", ""),
-    ("UAExecuteRate", "uaExecuteRate", GR, "bytes32 from,address target,E", ""),
-    ("SetMarket", "mtxSetMarket", GR, "address from,address target,address base,address quote,bool listed,E", ""),
-    ("UASetMarket", "uaSetMarket", GR, "bytes32 from,address target,address base,address quote,bool listed,E", ""),
-    ("SetExchangeTarget", "mtxSetExchangeTarget", GR, "address from,address target,address exchangeTarget,bool listed,E", ""),
-    ("UASetExchangeTarget", "uaSetExchangeTarget", GR, "bytes32 from,address target,address exchangeTarget,bool listed,E", ""),
-    ("SetListedOnly", "mtxSetListedOnly", GR, "address from,address target,bool on,E", ""),
-    ("UASetListedOnly", "uaSetListedOnly", GR, "bytes32 from,address target,bool on,E", ""),
-    ("SetFeeSplit", "mtxSetFeeSplit", GR, "address from,address target,uint32 relayerSharePpm,address treasury,E", ""),
-    ("UASetFeeSplit", "uaSetFeeSplit", GR, "bytes32 from,address target,uint32 relayerSharePpm,address treasury,E", ""),
-    // not rows of the vector file: forge pins them (`TradeKat.t.sol`)
-    ("InvalidateNonces", "mtxInvalidateNonces", TD, "address from,uint256 batch,uint256 minNonce", "from batch minNonce @"),
-    ("UAInvalidateNonces", "uaInvalidateNonces", T, "bytes32 from,uint256 batch,uint256 minNonce", "from batch minNonce @"),
+    // the `GovernanceRouter`'s closed table (spec §3.2, ua-mtx-merge T7): `mtx<Op>`, `target` the first op word, fee mode `NONE`
+    ("UAGrantRole", "mtxGrantRole", GR, "bytes32 from,address target,uint8 bit,bytes32 account,E", ""),
+    ("UARevokeRole", "mtxRevokeRole", GR, "bytes32 from,address target,uint8 bit,bytes32 account,E", ""),
+    ("UASetGrant", "mtxSetGrant", GR, "bytes32 from,address target,uint8 bit,bytes32 holder,GrantTerms terms,E", ""),
+    ("UACancelGrant", "mtxCancelGrant", GR, "bytes32 from,address target,uint8 bit,bytes32 account,E", ""),
+    ("UADisableFeature", "mtxDisableFeature", GR, "bytes32 from,address target,uint8 bit,E", ""),
+    ("UATransferOwnership", "mtxTransferOwnership", GR, "bytes32 from,address target,bytes32 newOwner,E", ""),
+    ("UAAcceptOwnership", "mtxAcceptOwnership", GR, "bytes32 from,address target,E", ""),
+    ("UARenounceOwnership", "mtxRenounceOwnership", GR, "bytes32 from,address target,E", ""),
+    ("UARenounceRole", "mtxRenounceRole", GR, "bytes32 from,address target,uint8 bit,E", ""),
+    ("UAMint", "mtxMint", GR, "bytes32 from,address target,address to,uint256 amount,E", ""),
+    ("UAMintToUA", "mtxMintToUA", GR, "bytes32 from,address target,bytes32 to,uint256 amount,E", ""),
+    ("UADisableWrap", "mtxDisableWrap", GR, "bytes32 from,address target,address leg,bytes32 reason,E", ""),
+    ("UAProposeRate", "mtxProposeRate", GR, "bytes32 from,address target,address leg,uint96 num,uint96 den,E", ""),
+    ("UACancelRate", "mtxCancelRate", GR, "bytes32 from,address target,E", ""),
+    ("UAExecuteRate", "mtxExecuteRate", GR, "bytes32 from,address target,E", ""),
+    ("UASetMarket", "mtxSetMarket", GR, "bytes32 from,address target,address base,address quote,bool listed,E", ""),
+    ("UASetExchangeTarget", "mtxSetExchangeTarget", GR, "bytes32 from,address target,address exchangeTarget,bool listed,E", ""),
+    ("UASetListedOnly", "mtxSetListedOnly", GR, "bytes32 from,address target,bool on,E", ""),
+    ("UASetFeeSplit", "mtxSetFeeSplit", GR, "bytes32 from,address target,uint32 relayerSharePpm,address treasury,E", ""),
+    // not rows of the vector file: the DEX's (`dex_order_kat.json`) and the token's on ids (`uatrade_kat.json`), one name per kind
+    ("InvalidateNonces", "mtxInvalidateNonces", D, "address from,uint256 batch,uint256 minNonce", "from batch minNonce @"),
+    ("UAInvalidateNonces", "mtxInvalidateNonces", T, "bytes32 from,uint256 batch,uint256 minNonce", "from batch minNonce @"),
 ];
 const PQZ_PLAN: &str = "E args proof pqzAuth:UASig accHint @";
 const PQZ_BURN_PLAN: &str = "E args (amount,recipient) proof pqzAuth:UASig accHint @";
@@ -229,12 +189,9 @@ const OWNER_MODE_PLAN: &str = "E ua rollOverMode validUntilBlock ownerSig:UASig 
 /// `(entry, contract kinds, arguments)`: entries that sign no typed struct of their own; every argument is named JSON.
 const PLAIN: &[(&str, &[&str], &str)] = &[
     ("deploy", FACT, "SubjectKey firstKey,address guardian"),
-    ("mtxExecuteAsOwner", WA, "bytes data,uint256 nonce,uint256 validUntil,bytes sig"),
-    ("mtxExecuteAsOwnerRaw", W, "bytes data,uint256 nonce,uint256 validUntil,bytes sig"),
-    // the wallet's flat builders stay beside the named entries (owner 2026-11-01): the delegate's `MetaTransaction`, its lane
-    // the contract's; `op.struct` = the entry names this overload
-    ("mtxPayUnderMandate", W, "address token,address payee,uint256 amount,bytes32 entryRef,uint64 epoch,uint256 validUntil,bytes sig"),
-    ("mtxRevoke", W, "address token,uint64 epoch,uint256 validUntil,bytes sig"),
+    // `SmartKeyAccount`'s owner path; the mandate wallet's `mtxExecuteAsOwner(Raw)` and flat builders (`mtxPayUnderMandate`,
+    // `mtxRevoke`) are second entries of operations with a named one (MD-11 (a)): `legacy/ua-mtx-merge/typed.rs`
+    ("mtxExecuteAsOwner", A, "bytes data,uint256 nonce,uint256 validUntil,bytes sig"),
     ("register", REG, "uint16 kind,bytes keyData,UAAttrs attrs,bytes pop,bytes pqzPop"),
     ("registerMsig", REG, "MsigStructure structure,UAAttrs attrs,MemberSig[] pop,bytes pqzPop"),
     ("registerWebAuthn", REG, "WebAuthnKey key,UAAttrs attrs,bytes pop,bytes pqzPop"),
@@ -292,12 +249,14 @@ pub struct Row {
 }
 
 impl Row {
+    /// A merged entry (CTR-MTX-30): a `UA*` struct, its subject a `bytes32` id, `UASig`; a `ua_metatx` job (R43). The address
+    /// entries left (the wraps, `SmartKeyAccount`'s, the DEX's, the Zether owner statements) are `metatx` jobs.
     pub fn ua(&self) -> bool {
-        self.entry.starts_with("ua")
+        self.typed && (self.name.starts_with("UA") || self.name.starts_with("CancelUA"))
     }
 
     fn relay_fee(&self) -> bool {
-        matches!(self.name, "RelayFee" | "UARelayFee")
+        self.name == "UARelayFee"
     }
 
     /// The EIP-712 `encodeType` string.
@@ -386,7 +345,7 @@ fn build() -> Vec<Row> {
     for (name, entry, contracts, f, plan) in TYPED {
         let fields = fields_of(f);
         let enveloped = fields.len() > ENV.len() && fields[fields.len() - ENV.len()..].iter().map(|x| x.1.as_str()).eq(ENV);
-        let sig = if entry.starts_with("ua") {
+        let sig = if name.starts_with("UA") || name.starts_with("CancelUA") {
             Sig::Ua
         } else if *contracts == A {
             Sig::Account
@@ -403,8 +362,7 @@ fn build() -> Vec<Row> {
         };
         let s = selector(entry, &plan, &fields);
         let sent = match *name {
-            "RelayFee" => IMtxRelayFee::relayCall::SELECTOR,
-            "UARelayFee" => IMtxRelayFee::uaRelayCall::SELECTOR,
+            "UARelayFee" => IMtxRelayFee::relayCall::SELECTOR,
             _ => s,
         };
         let sig = plan.iter().find_map(|t| match t {
@@ -752,6 +710,11 @@ pub struct Typed {
     pub payee: Option<B256>,
     /// Filled by `Chain`-side code from `digest_on` (`Work` is built without a chain).
     pub digest: Option<B256>,
+    /// The subject (`from`, an order's, a payment's payer) is a derived UA: it signs merged entries only (B, `_uaAllowed`).
+    pub derived_signer: bool,
+    /// A derived `from` or `to` (the subject, a `to`, a payment's payer or payee): the token's UA ledger must be on (R44, step
+    /// 7a); an all-native op runs at `registry() == 0` (R9).
+    pub derived_side: bool,
 }
 
 impl Typed {
@@ -877,11 +840,12 @@ impl Op {
         let at = |t: &Val, i: usize| t.as_tuple().and_then(|x| x.get(i).cloned());
         let order = a.vals.get("order");
         // who signed: `from`, `ua`, the order's `from` (a `DexOrder`'s inner order), the payment's payee
+        let order_from = order.and_then(|t| match at(t, 0) {
+            Some(x @ (Val::Address(_) | Val::FixedBytes(..))) if row.name != "CancelDexOrder" => Some(x),
+            _ => at(t, 1).and_then(|x| at(&x, 0)),
+        });
         let who = a.vals.get("from").cloned().or_else(|| a.vals.get("ua").filter(|_| !row.enveloped).cloned())
-            .or_else(|| order.and_then(|t| match at(t, 0) {
-                Some(Val::Address(_) | Val::FixedBytes(..)) if row.name != "CancelDexOrder" => at(t, 0),
-                _ => at(t, 1).and_then(|x| at(&x, 0)),
-            }))
+            .or_else(|| order_from.clone())
             .or_else(|| a.vals.get("payment").and_then(|p| at(p, 1)));
         let native_sig = match (row.sig, a.sig.as_ref()) {
             (Some(Sig::Bytes), Some(Val::Bytes(b))) => Some(Bytes::from(b.clone())),
@@ -891,28 +855,33 @@ impl Op {
         };
         let signer = who.as_ref().and_then(word_of).and_then(|w| native(&w)).zip(native_sig);
         let payee = a.vals.get("payment").and_then(|p| at(p, 1)).as_ref().and_then(word_of);
+        // R44 / B: which sides are derived ids (an address is native by type)
+        let derived = |v: Option<Val>| v.as_ref().and_then(word_of).is_some_and(|w| native(&w).is_none());
+        let derived_signer = derived(a.vals.get("from").cloned()) || derived(order_from)
+            || derived(a.vals.get("payment").and_then(|p| at(p, 0)));
+        let derived_side = derived_signer || derived(a.vals.get("to").cloned()) || payee.is_some_and(|w| native(&w).is_none());
         let lane_hash = pos(&row.fields, "payment").and_then(|i| {
             let ty = row.fields[i].0.as_str();
             Some(hash_tuple(ty, nested(ty)?, a.vals["payment"].as_tuple()?))
         });
         let lane = if row.enveloped { lane_of(&a.vals) } else { a.vals.get("payment").and_then(payment_lane) };
-        if matches!(row.name, "PayUnderMandate" | "DelegateRevoke") {
+        if matches!(row.name, "UAPayUnderMandate" | "UADelegateRevoke") {
             mandate_shape(row, &a)?;
         }
         let domain_of = match extras(row).iter().any(|x| x.0 == "underlying") {
             true => a.vals["underlying"].as_address().expect("address"),
             false => token,
         };
-        let typed = Typed { contract, domain_of, struct_hash: a.struct_hash, lane_hash, signer, payee, digest: None };
+        let typed = Typed { contract, domain_of, struct_hash: a.struct_hash, lane_hash, signer, payee, digest: None, derived_signer, derived_side };
         Ok(Op { row, to, data: data.into(), typed, lane, valid_until })
     }
 }
 
-/// PayUnderMandate on `mandatePayLane(entryRef)`, DelegateRevoke on `mandateRevokeLane(token, epoch)`, both nonce 0 (C5 review):
+/// `UAPayUnderMandate` on `mandatePayLane(entryRef)`, `UADelegateRevoke` on `mandateRevokeLane(token, epoch)`, both nonce 0 (C5 review):
 /// a revoke is the kill switch, it must not queue behind a pending nonce on a shared lane.
 fn mandate_shape(row: &Row, a: &Assembled) -> Result<()> {
     let u = |n: &str| a.vals[n].as_uint().map_or(U256::ZERO, |x| x.0);
-    let lane = if row.name == "PayUnderMandate" {
+    let lane = if row.name == "UAPayUnderMandate" {
         mandate_pay_lane(a.vals["entryRef"].as_fixed_bytes().map_or(&[][..], |x| x.0))
     } else {
         mandate_revoke_lane(a.vals["token"].as_address().expect("address"), u("epoch").saturating_to())
@@ -961,9 +930,8 @@ pub mod testkit {
     use super::*;
 
     pub fn vectors() -> Value {
-        // ua-mtx-merge T11: path only, the rows as they stood before the merged entries (MD-7); T14 moves the node's rows
-        // onto the regenerated smartcontracts/vectors/typed/typed_ops.json
-        serde_json::from_str(include_str!("../../smartcontracts/vectors/typed/legacy/ua-mtx-merge/typed_ops.json")).unwrap()
+        // ua-mtx-merge T14: the regenerated rows (MD-7 as amended: 68 structs); the old ones are in the vectors' legacy place
+        serde_json::from_str(include_str!("../../smartcontracts/vectors/typed/typed_ops.json")).unwrap()
     }
 
     pub fn row_of(name: &str, contract: &str) -> &'static Row {
@@ -1078,7 +1046,7 @@ mod tests {
     }
 
     fn typed(contract: &'static str, domain_of: Address, h: B256) -> Typed {
-        Typed { contract, domain_of, struct_hash: Some(h), lane_hash: None, signer: None, payee: None, digest: None }
+        Typed { contract, domain_of, struct_hash: Some(h), lane_hash: None, signer: None, payee: None, digest: None, derived_signer: false, derived_side: false }
     }
 
     /// Every row and domain of `typed_ops.json`: encodeType, struct hash, digest, entry selector, calldata; the signature
@@ -1111,9 +1079,119 @@ mod tests {
                 calldata += 1;
             }
         }
-        assert_eq!((structs, domains, calldata), (112, 170, 169), "every row was walked");
-        assert_eq!(rows().iter().filter(|r| r.typed).count(), 115, "113 vector rows (Execute twice), the two invalidations");
-        assert_eq!(rows().iter().filter(|r| !r.typed).count(), 21);
+        assert_eq!((structs, domains, calldata), (68, 101, 100), "every row was walked");
+        assert_eq!(rows().iter().filter(|r| r.typed).count(), 70, "68 vector rows, the two invalidations (DEX, token)");
+        assert_eq!(rows().iter().filter(|r| !r.typed).count(), 18, "the wallet's three flat builders are gone (MD-11 (a))");
+    }
+
+    /// ua-mtx-merge T14 (Q2, R19): the `mtxCancelNonce` row is per kind: the ordered `UACancelNonce` (`bytes32 from`, `UASig`) on the
+    /// three token domains, the mandate wallet and the router; `CancelNonce` (`address from`, `bytes`) on `SmartKeyAccount` only.
+    #[test]
+    fn cancel_row_split_per_kind() {
+        let on = |kind: &str| rows().iter().filter(|r| r.entry == "mtxCancelNonce" && r.contracts.contains(&kind)).map(|r| r.name).collect::<Vec<_>>();
+        for k in ["token", "zether", "pqz", "wallet", "gov_router"] {
+            assert_eq!(on(k), ["UACancelNonce"], "{k}");
+        }
+        assert_eq!(on("account"), ["CancelNonce"]);
+        assert!(on("dex").is_empty() && on("registry").is_empty());
+        let (ua, a) = (row_of("UACancelNonce", "token"), row_of("CancelNonce", "account"));
+        assert_eq!((ua.fields[0].0.as_str(), ua.sig, ua.ua()), ("bytes32", Some(Sig::Ua), true));
+        assert_eq!((a.fields[0].0.as_str(), a.sig, a.ua()), ("address", Some(Sig::Bytes), false));
+    }
+
+    /// ua-mtx-merge T14 (R12, R38): `mtxInvalidateNonces` per kind: the token's on ids (`bytes32 from`, `UASig`), the DEX's on addresses
+    /// (`address from`, `bytes`); one entry name, two rows, never the other kind's.
+    #[test]
+    fn invalidate_row_split_per_kind() {
+        let on = |kind: &str| rows().iter().filter(|r| r.entry == "mtxInvalidateNonces" && r.contracts.contains(&kind)).map(|r| r.name).collect::<Vec<_>>();
+        for k in ["token", "zether", "pqz"] {
+            assert_eq!(on(k), ["UAInvalidateNonces"], "{k}");
+        }
+        assert_eq!(on("dex"), ["InvalidateNonces"]);
+        let (t, d) = (row_of("UAInvalidateNonces", "token"), row_of("InvalidateNonces", "dex"));
+        assert_eq!((t.fields[0].0.as_str(), t.sig), ("bytes32", Some(Sig::Ua)));
+        assert_eq!((d.fields[0].0.as_str(), d.sig), ("address", Some(Sig::Bytes)));
+        let cast = |s: &str| -> [u8; 4] { keccak256(s)[..4].try_into().unwrap() };
+        assert_eq!(t.selector, cast("mtxInvalidateNonces(bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))"));
+        assert_eq!(d.selector, cast("mtxInvalidateNonces(address,uint256,uint256,bytes)"));
+    }
+
+    /// The selectors a list of `MandateWallet.sol` names, read from its source: `X.selector` (its last segment) and the `_REVOKE_*`
+    /// constants, in the body of `function <f>` (to its closing brace at four spaces).
+    fn wallet_list(src: &str, f: &str) -> BTreeSet<String> {
+        let i = src.find(f).unwrap_or_else(|| panic!("{f}"));
+        let body = &src[i..i + src[i..].find("\n    }\n").unwrap()];
+        let ident = |c: char| c.is_ascii_alphanumeric() || c == '_' || c == '.';
+        body.split(|c: char| !ident(c)).filter_map(|t| match t.strip_suffix(".selector") {
+            Some(x) => x.rsplit('.').next().map(str::to_string),
+            None => t.starts_with("_REVOKE_").then(|| t.to_string()),
+        }).collect()
+    }
+
+    /// Q6 / MD-11 (d), both directions against the wallet's own lists: every wallet row is a merged `UA<Op>` entry (`ua_metatx`, `UASig`,
+    /// `bytes32 from`) whose operation is on `mtxSelectors()` (`_mtxRule`, a native subject), and every row but the cancel on `_uaAllowed`
+    /// (a derived subject, B); every operation on either list has its row. No address row and no plain row is left on the wallet.
+    #[test]
+    fn wallet_rows_are_ua_structs() {
+        let src = std::fs::read_to_string(format!("{}/../smartcontracts/evm/src/wallet/MandateWallet.sol", env!("CARGO_MANIFEST_DIR"))).unwrap();
+        let (native, derived) = (wallet_list(&src, "function mtxSelectors()"), wallet_list(&src, "function _uaAllowed("));
+        assert_eq!(native.len(), 7, "{native:?}");
+        // the row's operation: what `mtx<Op>` self-calls (`MandateWallet.sol`); the cancel bumps the lane itself
+        let op_of_row = |n: &str| match n {
+            "UAPayUnderMandate" => "payUnderMandate",
+            "UADelegateRevoke" => "_REVOKE_SIGNED",
+            "UASetMandate" => "setMandate",
+            "UASetPayee" => "setPayee",
+            "UARevokeMandate" => "_REVOKE_OWNER",
+            "UAExecute" => "execute",
+            "UACancelNonce" => "cancelNonce",
+            other => panic!("{other}: a wallet row the wallet does not list"),
+        };
+        let wallet: Vec<&Row> = rows().iter().filter(|r| !r.entry.is_empty() && r.contracts.contains(&"wallet")).collect();
+        for r in &wallet {
+            assert!(r.typed && r.ua() && r.enveloped && r.sig == Some(Sig::Ua) && r.fields[0] == ("bytes32".into(), "from".into()), "{}", r.name);
+        }
+        let ops = |skip: &str| wallet.iter().filter(|r| r.name != skip).map(|r| op_of_row(r.name).to_string()).collect::<BTreeSet<_>>();
+        assert_eq!(ops(""), native, "_mtxRule, both directions");
+        assert_eq!(ops("UACancelNonce"), derived, "_uaAllowed, both directions");
+        assert_eq!(wallet.len(), 7);
+    }
+
+    /// MD-11 (a): the wallet's flat builders and `mtxExecuteAsOwner(Raw)` are second entries of operations that have their named entry:
+    /// no row, refused by name, never built. The account keeps `mtxExecuteAsOwner`.
+    #[test]
+    fn wallet_flat_builders_refused_by_name() {
+        let w = format!("{:#x}", Address::repeat_byte(0x77));
+        let z = format!("{:#x}", Address::ZERO);
+        let s = format!("0x{}", "11".repeat(65));
+        let err = |op: Value| Op::parse(&op, FEE).unwrap_err().to_string();
+        let flat = json!({"token": z, "payee": z, "amount": "5", "entryRef": format!("{:#x}", B256::repeat_byte(1)), "epoch": "2", "validUntil": "1800000300", "sig": s});
+        assert!(err(json!({"entry": "mtxPayUnderMandate", "struct": "mtxPayUnderMandate", "token": w, "args": flat})).starts_with("UNKNOWN_ENTRY"));
+        assert!(err(json!({"entry": "mtxPayUnderMandate", "token": w, "args": flat})).contains("needs an envelope"), "the named entry's shape");
+        assert!(err(json!({"entry": "mtxRevoke", "token": w, "args": {"token": z, "epoch": "2", "validUntil": "1800000300", "sig": s}})).starts_with("UNKNOWN_ENTRY"));
+        let own = |entry: &str, contract: &str| json!({"entry": entry, "contract": contract, "token": w,
+            "args": {"data": "0x", "nonce": "0", "validUntil": "1800000300", "sig": s}});
+        assert!(err(own("mtxExecuteAsOwnerRaw", "wallet")).starts_with("UNKNOWN_ENTRY"));
+        assert!(err(own("mtxExecuteAsOwner", "wallet")).starts_with("UNKNOWN_ENTRY"));
+        Op::parse(&own("mtxExecuteAsOwner", "account"), FEE).unwrap();
+        assert!(rows().iter().all(|r| r.typed || !r.contracts.contains(&"wallet")), "no plain wallet row");
+    }
+
+    /// `SmartKeyAccount` keeps its address entries (Q6): `Envelope` with `address from`, `AccountSig` (the cancel: `bytes`), a `metatx`
+    /// job; `mtxExecuteAsOwner` on the account only; none of its structs on another kind.
+    #[test]
+    fn account_keeps_address_rows() {
+        let acct: BTreeSet<&str> = rows().iter().filter(|r| r.contracts.contains(&"account")).map(|r| r.name).collect();
+        assert_eq!(acct, ["AddKey", "CancelNonce", "CancelRecovery", "Execute", "RemoveKey", "RotateKey", "SetGuardian", "mtxExecuteAsOwner"]
+            .into_iter().collect());
+        for r in rows().iter().filter(|r| r.contracts.contains(&"account")) {
+            assert_eq!(r.contracts, ["account"], "{}: the account's alone", r.name);
+            assert!(!r.ua(), "{}", r.name);
+            if r.typed {
+                assert_eq!(r.fields[0], ("address".into(), "from".into()), "{}", r.name);
+                assert_eq!(r.sig, Some(if r.name == "CancelNonce" { Sig::Bytes } else { Sig::Account }), "{}", r.name);
+            }
+        }
     }
 
     /// One parse, two outputs: every field of every op moves the digest exactly when it moves the bytes sent (an unbound
@@ -1149,7 +1227,7 @@ mod tests {
             for kind in o["domains"].as_object().unwrap().keys() {
                 let Some(mut op) = op_of(name, kind, &v) else { continue };
                 let row = row_of(name, kind);
-                if name == "PayUnderMandate" || name == "DelegateRevoke" {
+                if name == "UAPayUnderMandate" || name == "UADelegateRevoke" {
                     continue; // their lanes: `mandate_ops_run_on_their_own_lane_at_nonce_zero`
                 }
                 let base = Op::parse(&op, FEE).unwrap_or_else(|e| panic!("{name}: {e:#}"));
@@ -1185,7 +1263,7 @@ mod tests {
                 }
             }
         }
-        assert!(walked > 1_500, "{walked}");
+        assert!(walked > 1_200, "{walked}"); // 1,238 leaves over the 68 merged rows (ua-mtx-merge T14; 1,500 over the 112 before)
     }
 
     /// Nested `msig` (spec 2026-11-02-msig-nested): a slot is `{index, members: [{index, sig}], sig}`. The old `keyData` and a list under an
@@ -1248,7 +1326,7 @@ mod tests {
     #[test]
     fn hex_fields_are_refused_by_name_and_a_declared_bytes_field_is_not() {
         let v = vectors();
-        let good = op_of("Unwrap", "token", &v).unwrap();
+        let good = op_of("UAUnwrap", "token", &v).unwrap();
         Op::parse(&good, FEE).unwrap();
         for k in ["data", "calldata"] {
             let mut o = good.clone();
@@ -1258,7 +1336,8 @@ mod tests {
             o["args"][k] = json!("0x1234");
             assert!(Op::parse(&o, FEE).unwrap_err().to_string().starts_with("HEX_DATA_REFUSED"), "args.{k}");
         }
-        Op::parse(&op_of("Execute", "wallet", &v).unwrap(), FEE).unwrap();
+        Op::parse(&op_of("UAExecute", "wallet", &v).unwrap(), FEE).unwrap();
+        Op::parse(&op_of("Execute", "account", &v).unwrap(), FEE).unwrap();
     }
 
     /// The router's rows (spec 2026-11-02-governance §3.2): every op is named JSON, `target` a named field the node signs and sends; a
@@ -1268,7 +1347,7 @@ mod tests {
         let v = vectors();
         let good = op_of("UASetGrant", "gov_router", &v).unwrap();
         let p = Op::parse(&good, FEE).unwrap();
-        assert_eq!((p.typed.contract, p.row.entry), ("gov_router", "uaSetGrant"));
+        assert_eq!((p.typed.contract, p.row.entry), ("gov_router", "mtxSetGrant"));
         assert_eq!(p.to, good["token"].as_str().unwrap().parse::<Address>().unwrap(), "sent to the router");
         let err = |f: &dyn Fn(&mut Value)| {
             let mut o = good.clone();
@@ -1305,7 +1384,7 @@ mod tests {
     #[test]
     fn grant_terms_decode_is_bounded() {
         let v = vectors();
-        let terms = v["ops"]["SetGrant"]["message"]["terms"].clone();
+        let terms = v["ops"]["UASetGrant"]["message"]["terms"].clone();
         assert_eq!(to_json("GrantTerms", &parse("GrantTerms", &terms, "t").unwrap()), terms);
         let err = |f: &dyn Fn(&mut Value)| {
             let mut t = terms.clone();
@@ -1335,7 +1414,7 @@ mod tests {
     #[test]
     fn an_op_is_exact() {
         let v = vectors();
-        let good = op_of("Unwrap", "token", &v).unwrap();
+        let good = op_of("UAUnwrap", "token", &v).unwrap();
         let err = |f: &dyn Fn(&mut Value)| {
             let mut o = good.clone();
             f(&mut o);
@@ -1355,8 +1434,9 @@ mod tests {
         // the dirty word of a padded address never reaches a leg
         let dirty = format!("0x{:0>64}", "ff");
         assert!(err(&|o| o["args"]["recipient"] = json!(dirty)).contains("args.recipient"));
-        assert!(err(&|o| { o["auth"] = o.as_object_mut().unwrap().remove("signature").unwrap(); }).contains("takes its signature as signature"));
-        assert!(err(&|o| { o.as_object_mut().unwrap().remove("signature"); }).contains("without its signature"));
+        assert!(err(&|o| { o["signature"] = o.as_object_mut().unwrap().remove("auth").unwrap(); }).contains("takes its signature as auth"));
+        assert!(err(&|o| { o.as_object_mut().unwrap().remove("auth"); }).contains("without its signature"));
+        assert!(err(&|o| o["auth"] = json!(format!("0x{}", "11".repeat(65)))).contains("signature: not an object"), "a UASig, never bytes");
         assert!(err(&|o| o["call"] = json!({})).contains("takes no op.call"));
     }
 
@@ -1364,7 +1444,7 @@ mod tests {
     #[test]
     fn unbound_fields_stay_out_of_the_digest_and_off_the_wire() {
         let v = vectors();
-        let mut op = op_of("Unwrap", "token", &v).unwrap();
+        let mut op = op_of("UAUnwrap", "token", &v).unwrap();
         op["envelope"]["mode"] = json!(0x20);
         let ours = Address::repeat_byte(0x99);
         let a = Op::parse(&op, Some(ours)).unwrap();
@@ -1377,39 +1457,35 @@ mod tests {
         let env = env.unwrap();
         assert_eq!(env["relayer"], json!(format!("{:#x}", Address::ZERO)));
         assert_eq!(env["feeRecipient"], json!(format!("{ours:#x}")));
-        let mut op = op_of("ReceiverFee", "token", &v).unwrap();
+        let mut op = op_of("UAReceiverFee", "token", &v).unwrap();
         let base = Op::parse(&op, FEE).unwrap().typed.struct_hash;
         op["args"]["payment"]["feeRecipient"] = json!(format!("{:#x}", Address::repeat_byte(0x77)));
         assert_eq!(Op::parse(&op, FEE).unwrap().typed.struct_hash, base, "mode 1 does not bind it");
     }
 
     /// C5 review: pay on `mandatePayLane(ref)`, revoke on `mandateRevokeLane(token, epoch)`, nonce 0. The lanes are forge's
-    /// (`mandate_pay_kat.json`, `mandate_revoke_kat.json`: `batch` beside the signed `data`), not this file's formula.
+    /// (`mandate_kat.json`, the merged entries: `batch` beside the signed `args`), not this file's formula.
     #[test]
     fn mandate_ops_run_on_their_own_lane_at_nonce_zero() {
-        let kat = |f: &str| -> Value {
-            let p = format!("{}/../smartcontracts/evm/test/vectors/legacy/ua-mtx-merge/{f}", env!("CARGO_MANIFEST_DIR"));
-            serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap()
-        };
-        let word = |k: &Value, i: usize| hex(&k["data"])[4 + 32 * i..4 + 32 * (i + 1)].to_vec();
-        let pay = kat("mandate_pay_kat.json");
+        let k: Value = serde_json::from_str(&std::fs::read_to_string(format!(
+            "{}/../smartcontracts/evm/test/vectors/mandate_kat.json", env!("CARGO_MANIFEST_DIR"))).unwrap()).unwrap();
+        let word = |k: &Value, i: usize| hex(&k["args"])[32 * i..32 * (i + 1)].to_vec();
         // `payUnderMandate(token, payee, amount, entryRef, epoch)`
-        assert_eq!(mandate_pay_lane(&word(&pay, 3)).to_string(), pay["batch"].as_str().unwrap());
-        let rev = kat("mandate_revoke_kat.json");
+        assert_eq!(mandate_pay_lane(&word(&k["pay"], 3)).to_string(), k["pay"]["batch"].as_str().unwrap());
         // `revoke(token, epoch)`
-        let token = Address::from_slice(&word(&rev, 0)[12..]);
-        let epoch = u64::from_be_bytes(word(&rev, 1)[24..].try_into().unwrap());
-        assert_eq!(mandate_revoke_lane(token, epoch).to_string(), rev["batch"].as_str().unwrap());
+        let token = Address::from_slice(&word(&k["revoke"], 0)[12..]);
+        let epoch = u64::from_be_bytes(word(&k["revoke"], 1)[24..].try_into().unwrap());
+        assert_eq!(mandate_revoke_lane(token, epoch).to_string(), k["revoke"]["batch"].as_str().unwrap());
         let v = vectors();
         let lane_of = |op: &Value| mandate_pay_lane(&hex(&op["args"]["entryRef"])).to_string();
-        let mut pay = op_of("PayUnderMandate", "wallet", &v).unwrap();
+        let mut pay = op_of("UAPayUnderMandate", "wallet", &v).unwrap();
         assert!(Op::parse(&pay, FEE).unwrap_err().to_string().starts_with("MANDATE_LANE"), "the vector's lane 7");
         pay["envelope"]["batch"] = json!(lane_of(&pay));
         pay["envelope"]["nonce"] = json!("0");
         Op::parse(&pay, FEE).unwrap();
         pay["envelope"]["nonce"] = json!("1");
         assert!(Op::parse(&pay, FEE).unwrap_err().to_string().starts_with("MANDATE_LANE"), "nonce 0 only");
-        let mut rev = op_of("DelegateRevoke", "wallet", &v).unwrap();
+        let mut rev = op_of("UADelegateRevoke", "wallet", &v).unwrap();
         let token: Address = rev["args"]["token"].as_str().unwrap().parse().unwrap();
         let epoch: u64 = rev["args"]["epoch"].as_str().unwrap().parse().unwrap();
         assert!(Op::parse(&rev, FEE).unwrap_err().to_string().starts_with("MANDATE_LANE"));
@@ -1418,63 +1494,50 @@ mod tests {
         Op::parse(&rev, FEE).unwrap();
         rev["args"]["epoch"] = json!((epoch + 1).to_string());
         assert!(Op::parse(&rev, FEE).unwrap_err().to_string().starts_with("MANDATE_LANE"), "another epoch is another lane");
+        // forge's pay calldata is what the node builds from the same fields: `mtxPayUnderMandate(UAEnvelope, …, UASig)`
+        let p = &k["pay"];
+        let s = |f: &str| p[f].as_str().unwrap().to_string();
+        let op = json!({"entry": "mtxPayUnderMandate", "contract": "wallet", "token": k["verifying_contract"], "envelope": {"from": s("from"),
+            "batch": s("batch"), "nonce": s("nonce"), "validUntil": s("valid_until"), "mode": s("mode").parse::<u32>().unwrap(),
+            "relayer": s("relayer"), "fee": s("fee"), "feeRecipient": s("fee_recipient")},
+            "args": {"token": format!("{token:#x}", token = Address::from_slice(&word(p, 0)[12..])), "payee": format!("0x{}", alloy::hex::encode(word(p, 1))),
+                "amount": U256::from_be_slice(&word(p, 2)).to_string(), "entryRef": format!("0x{}", alloy::hex::encode(word(p, 3))),
+                "epoch": U256::from_be_slice(&word(p, 4)).to_string()},
+            "auth": {"keyData": "0x", "signature": s("signature"), "members": []}});
+        let built = Op::parse(&op, FEE).unwrap();
+        assert_eq!(format!("0x{}", alloy::hex::encode(&built.data)), s("calldata"), "forge's calldata");
+        assert_eq!(format!("{:#x}", built.typed.struct_hash.unwrap()), s("struct_hash"));
     }
 
-    /// Owner 2026-11-01: the wallet's four flat builders stay beside the named entries: each builds, `op.struct` picks the
-    /// overload, and the bare name is refused rather than guessed.
-    #[test]
-    fn the_flat_wallet_builders_stay_beside_the_named_entries() {
-        let w = format!("{:#x}", Address::repeat_byte(0x77));
-        let z = format!("{:#x}", Address::ZERO);
-        let s = format!("0x{}", "11".repeat(65));
-        let pay = json!({"entry": "mtxPayUnderMandate", "struct": "mtxPayUnderMandate", "token": w, "args": {"token": z, "payee": z, "amount": "5",
-            "entryRef": format!("{:#x}", B256::repeat_byte(1)), "epoch": "2", "validUntil": "1800000300", "sig": s}});
-        let p = Op::parse(&pay, FEE).unwrap();
-        let cast: [u8; 4] = keccak256("mtxPayUnderMandate(address,address,uint256,bytes32,uint64,uint256,bytes)")[..4].try_into().unwrap();
-        assert_eq!((p.data[..4].try_into().unwrap(), p.lane, p.typed.struct_hash, p.valid_until), (cast, None, None, 1_800_000_300));
-        let mut bare = pay.clone();
-        bare.as_object_mut().unwrap().remove("struct");
-        assert!(Op::parse(&bare, FEE).unwrap_err().to_string().starts_with("ENTRY_AMBIGUOUS"));
-        let rev = json!({"entry": "mtxRevoke", "token": w, "args": {"token": z, "epoch": "2", "validUntil": "1800000300", "sig": s}});
-        let cast: [u8; 4] = keccak256("mtxRevoke(address,uint64,uint256,bytes)")[..4].try_into().unwrap();
-        assert_eq!(Op::parse(&rev, FEE).unwrap().data[..4], cast, "the kill switch path");
-        let raw = json!({"entry": "mtxExecuteAsOwnerRaw", "token": w, "args": {"data": "0x", "nonce": "0", "validUntil": "1800000300", "sig": s}});
-        Op::parse(&raw, FEE).unwrap();
-        let own = json!({"entry": "mtxExecuteAsOwner", "contract": "wallet", "token": w, "args": {"data": "0x", "nonce": "0", "validUntil": "1800000300", "sig": s}});
-        Op::parse(&own, FEE).unwrap();
-    }
-
-    /// forge's digests of the two invalidations, which `typed_ops.json` has no row for: token and DEX domain, the UA form.
+    /// forge's digests of the two invalidations, which `typed_ops.json` has no row for: the DEX's (`dex_order_kat.json`, the bytes
+    /// too) and the token's on ids (`uatrade_kat.json`, R12 / R38).
     #[test]
     fn invalidate_digests_match_the_vectors() {
-        use crate::abi::IToken;
+        use crate::abi::ISCaaSDex;
         let file = |f: &str| -> Value {
             serde_json::from_str(&std::fs::read_to_string(format!("{}/../smartcontracts/{f}", env!("CARGO_MANIFEST_DIR"))).unwrap()).unwrap()
         };
-        let digest = |contract: &str, at: &str, chain: u64, uid: &str, data: &Value| -> String {
-            let c = IToken::mtxInvalidateNoncesCall::abi_decode(&hex(data)).unwrap();
-            let op = json!({"entry": "mtxInvalidateNonces", "contract": contract, "token": at,
-                "args": {"from": format!("{:#x}", c.from), "batch": c.batch.to_string(), "minNonce": c.newMin.to_string()},
-                "signature": format!("0x{}", alloy::hex::encode(&c.sig)), "validUntil": "1800000300"});
-            let p = Op::parse(&op, FEE).unwrap();
-            assert_eq!(p.data.to_vec(), hex(data), "the bytes too");
-            format!("{:#x}", p.typed.digest_on(chain, uid.parse().unwrap()).unwrap())
-        };
-        let t = file("evm/test/vectors/legacy/ua-mtx-merge/trade_kat.json");
         let chain = |k: &Value| k["chain_id"].as_str().unwrap().parse::<u64>().unwrap();
-        assert_eq!(digest("token", t["verifying_contract"].as_str().unwrap(), chain(&t), t["salt"].as_str().unwrap(), &t["invalidate_calldata"]),
-            t["invalidate_digest"].as_str().unwrap().to_lowercase());
         let d = file("evm/test/vectors/dex_order_kat.json");
-        assert_eq!(digest("dex", d["dex"].as_str().unwrap(), chain(&d), d["salt"].as_str().unwrap(), &d["invalidate_calldata"]),
+        let data = &d["invalidate_calldata"];
+        let c = ISCaaSDex::mtxInvalidateNoncesCall::abi_decode(&hex(data)).unwrap();
+        let op = json!({"entry": "mtxInvalidateNonces", "contract": "dex", "token": d["dex"],
+            "args": {"from": format!("{:#x}", c.from), "batch": c.batch.to_string(), "minNonce": c.newMin.to_string()},
+            "signature": format!("0x{}", alloy::hex::encode(&c.sig)), "validUntil": "1800000300"});
+        let p = Op::parse(&op, FEE).unwrap();
+        assert_eq!(p.data.to_vec(), hex(data), "the bytes too");
+        assert_eq!(format!("{:#x}", p.typed.digest_on(chain(&d), d["salt"].as_str().unwrap().parse().unwrap()).unwrap()),
             d["invalidate_digest"].as_str().unwrap().to_lowercase());
         let u = file("vectors/ua/uatrade_kat.json");
         let rows_ = u["rows"].as_array().unwrap();
         assert!(!rows_.is_empty());
         for r in rows_ {
             let m = &r["invalidate"]["message"];
-            let op = json!({"entry": "uaInvalidateNonces", "contract": "token", "token": r["invalidate"]["domain"]["verifyingContract"],
+            let op = json!({"entry": "mtxInvalidateNonces", "contract": "token", "token": r["invalidate"]["domain"]["verifyingContract"],
                 "args": m, "auth": {"keyData": "0x", "signature": "0x", "members": []}, "validUntil": "1800000300"});
-            let h = Op::parse(&op, FEE).unwrap().typed.digest_on(u["chainId"].as_u64().unwrap(), u["chainUid"].as_str().unwrap().parse().unwrap());
+            let p = Op::parse(&op, FEE).unwrap();
+            assert_eq!(p.data[..4], crate::guard::SEL_TOKEN_INVALIDATE_NONCES);
+            let h = p.typed.digest_on(u["chainId"].as_u64().unwrap(), u["chainUid"].as_str().unwrap().parse().unwrap());
             assert_eq!(format!("{:#x}", h.unwrap()), r["invalidateDigest"].as_str().unwrap(), "{}", r["name"]);
         }
     }
@@ -1483,7 +1546,7 @@ mod tests {
     #[test]
     fn a_job_deadline_never_outlives_the_signed_one() {
         let v = vectors();
-        let mut op = op_of("Unwrap", "token", &v).unwrap();
+        let mut op = op_of("UAUnwrap", "token", &v).unwrap();
         let signed = 1_800_000_300u64;
         for (job, want) in [(signed + 100, signed), (signed - 100, signed - 100)] {
             op["validUntil"] = json!(job.to_string());
@@ -1491,14 +1554,14 @@ mod tests {
         }
         op.as_object_mut().unwrap().remove("validUntil");
         assert_eq!(Op::parse(&op, FEE).unwrap().valid_until, signed);
-        let mut fee = op_of("ReceiverFee", "token", &v).unwrap();
+        let mut fee = op_of("UAReceiverFee", "token", &v).unwrap();
         fee.as_object_mut().unwrap().remove("validUntil");
         let outer: u64 = fee["args"]["validUntil"].as_str().unwrap().parse().unwrap();
         fee["args"]["payment"]["validUntil"] = json!((outer + 5).to_string());
         assert_eq!(Op::parse(&fee, FEE).unwrap().valid_until, outer, "the sooner: the fee's");
         fee["args"]["payment"]["validUntil"] = json!((outer - 5).to_string());
         assert_eq!(Op::parse(&fee, FEE).unwrap().valid_until, outer - 5, "the sooner: the payment's");
-        let mut c = op_of("CancelOrder", "token", &v).unwrap();
+        let mut c = op_of("CancelUAOrder", "token", &v).unwrap();
         c["validUntil"] = json!((signed + 100).to_string());
         assert_eq!(Op::parse(&c, FEE).unwrap().valid_until, signed + 100, "the chain enforces no deadline on a cancel");
     }
@@ -1507,16 +1570,16 @@ mod tests {
     #[test]
     fn a_receiver_fee_is_recognised_by_its_payment_digest() {
         let v = vectors();
-        let d = &v["ops"]["ReceiverFee"]["domains"]["token"];
-        let op = op_of("ReceiverFee", "token", &v).unwrap();
+        let d = &v["ops"]["UAReceiverFee"]["domains"]["token"];
+        let op = op_of("UAReceiverFee", "token", &v).unwrap();
         let p = Op::parse(&op, FEE).unwrap();
         let (chain, at, uid) = domain_of(d);
-        let wire = v["ops"]["ReceiverFee"]["message"]["payment"].clone();
-        let m = crate::metatx::Mtx::from_wire(None, &wire).unwrap();
+        let wire = v["ops"]["UAReceiverFee"]["message"]["payment"].clone();
+        let m = crate::metatx::UaMtx::from_wire(None, &wire).unwrap();
         let dom = crate::metatx::Domain { name: "SCaaS MetaToken".into(), version: "1".into(), chain_id: chain, verifying_contract: at, salt: uid };
         assert_eq!(p.typed.lane_digest_on(chain, uid), Some(m.digest(&dom)), "the sol! struct, another path");
         assert_ne!(p.typed.lane_digest_on(chain, uid), p.typed.digest_on(chain, uid), "the in-flight key stays the outer op");
-        let plain = Op::parse(&op_of("Unwrap", "token", &v).unwrap(), FEE).unwrap();
+        let plain = Op::parse(&op_of("UAUnwrap", "token", &v).unwrap(), FEE).unwrap();
         assert_eq!(plain.typed.lane_digest_on(chain, uid), plain.typed.digest_on(chain, uid));
     }
 
@@ -1525,7 +1588,7 @@ mod tests {
     #[test]
     fn relay_fee_call_object() {
         let v = vectors();
-        for (name, kind) in [("RelayFee", "token"), ("UARelayFee", "token"), ("RelayFee", "pqz"), ("UARelayFee", "zether")] {
+        for (name, kind) in [("UARelayFee", "token"), ("UARelayFee", "pqz"), ("UARelayFee", "zether")] {
             let d = &v["ops"][name]["domains"][kind];
             let row = row_of(name, kind);
             let (_, args, sig) = split(row, name, kind, &v);
@@ -1535,23 +1598,20 @@ mod tests {
             let r = router_call(row, &a, target, call.into(), token).unwrap();
             assert_eq!(alloy::hex::encode(r), &d["routerCalldata"].as_str().unwrap()[2..], "{name} on {kind}");
             // the job: the inner op is a named entry; hash, target and the bytes follow it
-            let inner = op_of("Burn", "token", &v).unwrap();
+            let inner = op_of("UABurn", "token", &v).unwrap();
             let burn = Op::parse(&inner, FEE).unwrap();
             let mut a2 = args.clone();
             let o = a2.as_object_mut().unwrap();
             o.remove("target");
             o.remove("callDataHash");
-            let key = if row.sig == Some(Sig::Bytes) { "signature" } else { "auth" };
             let mut op = json!({"entry": row.entry, "contract": kind, "token": format!("{token:#x}"), "args": a2, "call": inner});
-            op[key] = sig.clone().unwrap();
+            op["auth"] = sig.clone().unwrap();
             let p = Op::parse(&op, FEE).unwrap_or_else(|e| panic!("{name}: {e:#}"));
             assert_eq!(p.to, args["relayer"].as_str().unwrap().parse::<Address>().unwrap(), "the signed router");
             assert_eq!(p.data[..4], row.sent);
             assert_ne!(p.data[..4], row.selector, "never the direct entry");
-            let c = if row.ua() { None } else { Some(IMtxRelayFee::relayCall::abi_decode(&p.data).unwrap()) };
-            if let Some(c) = c {
-                assert_eq!((c.target, c.callData.to_vec(), c.token), (burn.to, burn.data.to_vec(), token));
-            }
+            let c = IMtxRelayFee::relayCall::abi_decode(&p.data).unwrap();
+            assert_eq!((c.target, c.callData.to_vec(), c.token), (burn.to, burn.data.to_vec(), token));
             // the payer hashed the inner bytes: a node's `fee_recipient` leaves them alone
             let ours = Some(Address::repeat_byte(0x99));
             let mut open_inner = inner.clone();
@@ -1589,10 +1649,10 @@ mod tests {
     fn the_signer_is_found_where_the_row_keeps_it() {
         let v = vectors();
         let key: Address = v["key"]["address"].as_str().unwrap().parse().unwrap();
-        let payee: Address = v["ops"]["ReceiverFee"]["message"]["payment"]["to"].as_str().unwrap().parse().unwrap();
-        for (name, kind, who) in [("Unwrap", "token", Some(key)), ("UAUnwrap", "token", Some(key)), ("CancelOrder", "token", Some(key)),
-            ("CancelDexOrder", "dex", Some(key)), ("WrapOrder", "token", Some(key)), ("ReceiverFee", "token", Some(payee)),
-            ("UACancelNonce", "token", None), ("AddKey", "account", None)] {
+        let payee = Address::from_word(v["ops"]["UAReceiverFee"]["message"]["payment"]["to"].as_str().unwrap().parse().unwrap());
+        for (name, kind, who) in [("Wrap", "token", Some(key)), ("UAUnwrap", "token", Some(key)), ("CancelUAOrder", "token", Some(key)),
+            ("CancelDexOrder", "dex", Some(key)), ("UAWrapOrder", "token", Some(key)), ("UAReceiverFee", "token", Some(payee)),
+            ("UACancelNonce", "token", Some(key)), ("UASetPayee", "wallet", Some(key)), ("AddKey", "account", None)] {
             let op = op_of(name, kind, &v).unwrap();
             let s = Op::parse(&op, FEE).unwrap_or_else(|e| panic!("{name}: {e:#}")).typed.signer;
             assert_eq!(s.as_ref().map(|x| x.0), who, "{name}");

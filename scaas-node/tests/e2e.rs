@@ -1236,7 +1236,7 @@ fn quote_covers(sent: &[(u64, u128)], spent: U256, what: &str) -> u128 {
 #[tokio::test]
 #[ignore]
 async fn ua_pay_meta_and_relay_fee_jobs_on_anvil() {
-    use scaas_node::abi::{IUALedger, UAMetaTransfer};
+    use scaas_node::abi::{IMtxIds, IUALedger, UAMetaTransfer};
     use scaas_node::metatx::{meta_pay_id, pay_lane, relay_ref, UaMtx};
     let chain_id = 31905;
     let (_anvil, rpc) = start_anvil(chain_id, 31905).await;
@@ -1294,7 +1294,7 @@ async fn ua_pay_meta_and_relay_fee_jobs_on_anvil() {
         nonce: U256::ZERO, validUntil: U256::from(now() + 300), mode: MODE_RESTRICT_RELAYER, relayer: relayer.address(),
         fee: U256::ZERO, feeRecipient: Address::ZERO };
     let m = UaMtx::Transfer(t.clone());
-    assert_eq!(view(&rpc, token, IUALedger::uaTransferDigestCall { t }).await, m.digest(&d), "uaTransferDigest");
+    assert_eq!(view(&rpc, token, IMtxIds::mtxTransferDigestCall { t }).await, m.digest(&d), "mtxTransferDigest");
     let mut j = ua_job(1, &m, &ua_auth(&rpc, registry, &owner, b"scaas.ua.purpose.metatx.v1", m.digest(&d)).await);
     (j["salt"], j["meta"]) = (json!(format!("{salt:#x}")), json!(format!("0x{}", alloy::hex::encode(&meta))));
     state.lock().unwrap().jobs.push(j);

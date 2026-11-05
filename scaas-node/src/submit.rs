@@ -75,17 +75,20 @@ pub struct MetaRef {
     pub nonce: U256,
     /// The typed digest, computed here (`guard::fill_digest`); `None` until then.
     pub digest: Option<B256>,
-    /// A `ua_metatx` job: the UA ledger's nonce map (`uaNonce`), digest and `UAMetaTransactionExecuted`.
+    /// A `ua_metatx` job: a merged entry or a struct on ids (`UaMtx`), its `UAMetaTransactionExecuted`.
     pub ua: bool,
+    /// The subject's nonce is `mtxNonce(address, batch)` (`SmartKeyAccount`, `IMetaTxAddress`); else `mtxNonce(bytes32, batch)`
+    /// (tokens, the router, the mandate wallets: one nonce map on ids, ua-mtx-merge plan T14).
+    pub addr_nonce: bool,
 }
 
 impl MetaRef {
     pub fn of(token: Address, m: &Mtx, digest: Option<B256>) -> Self {
-        Self { token, from: m.from().into_word(), batch: m.batch(), nonce: m.nonce(), digest, ua: false }
+        Self { token, from: m.from().into_word(), batch: m.batch(), nonce: m.nonce(), digest, ua: false, addr_nonce: false }
     }
 
     pub fn of_ua(token: Address, m: &UaMtx, digest: Option<B256>) -> Self {
-        Self { token, from: m.from(), batch: m.batch(), nonce: m.nonce(), digest, ua: true }
+        Self { token, from: m.from(), batch: m.batch(), nonce: m.nonce(), digest, ua: true, addr_nonce: false }
     }
 }
 
@@ -207,7 +210,7 @@ pub fn work_from_job(job: &Job, fee_recipient: Option<Address>) -> Result<Work> 
         anyhow::bail!("unknown job kind {k:?} (metatx | ua_metatx | call)");
     }
     if job.receiver_fee.is_some() {
-        anyhow::bail!("receiver-pays (receiver_fee) goes as the named entry mtxPayReceiverFee / uaPayReceiverFee; refused, never relayed without it");
+        anyhow::bail!("receiver-pays (receiver_fee) goes as the named entry mtxPayReceiverFee; refused, never relayed without it");
     }
     if job.call.is_some() || job.calldata.is_some() || job.data.is_some() {
         return Err(hex_refused("call"));
@@ -224,20 +227,13 @@ pub fn work_from_job(job: &Job, fee_recipient: Option<Address>) -> Result<Work> 
     if job.kind.as_deref() == Some("ua_metatx") {
         return ua_work(job, fee_recipient);
     }
-    let (Some(m), Some(token), Some(sig)) = (&job.metatx, job.token, &job.signature) else {
-        anyhow::bail!("job {} has neither an op nor a transfer struct", job.id);
-    };
-    let mut m = Mtx::from_wire(job.struct_.as_deref(), m)?;
-    m.normalize(fee_recipient);
-    let sig = hex_bytes(sig)?;
-    let valid_until = m.valid_until().saturating_to();
-    let meta = Some(MetaRef::of(token, &m, None));
-    let typed = Some(transfer_typed(job.contract.as_deref(), token, m.struct_hash(), Some((m.from(), sig.clone())))?);
-    let data = match pay_meta(job)? {
-        None => m.calldata(sig),
-        Some((salt, pm, on_chain)) => m.pay_meta_calldata(salt, pm, sig, on_chain)?,
-    };
-    Ok(Work { job_id: Some(job.id), to: token, data, valid_until, meta, entry: false, typed })
+    if job.metatx.is_some() {
+        // R43 / CTR-MTX-30: an address `MetaTransfer` names the token's `mtxExecuteTransfer(MetaTransfer, bytes)` (or the address
+        // `mtxPayMeta`), which no token has left; refused by name, never relayed to a revert (legacy/ua-mtx-merge/submit.rs)
+        anyhow::bail!("OP_KIND_MISMATCH: a metatx job's MetaTransfer names the address mtxExecuteTransfer, no token entry since the \
+            merged entries: send ua_metatx with m (UAMetaTransfer, from / to bytes32 ids) and auth (UASig)");
+    }
+    anyhow::bail!("job {} has neither an op nor a transfer struct", job.id)
 }
 
 /// The domain of a transfer struct: the job's `contract`, a token kind.
@@ -248,7 +244,8 @@ pub fn transfer_typed(contract: Option<&str>, token: Address, struct_hash: B256,
         "pqz" => "pqz",
         c => anyhow::bail!("BAD_PAYLOAD: contract {c:?} (token | zether | pqz)"),
     };
-    Ok(Typed { contract, domain_of: token, struct_hash: Some(struct_hash), lane_hash: None, signer, payee: None, digest: None })
+    Ok(Typed { contract, domain_of: token, struct_hash: Some(struct_hash), lane_hash: None, signer, payee: None, digest: None,
+        derived_signer: false, derived_side: false })
 }
 
 /// A named entry: everything comes out of one [`Op::parse`]; a job carries it or a transfer struct, never both.
@@ -257,8 +254,10 @@ fn op_work(job: &Job, op: &serde_json::Value, fee_recipient: Option<Address>) ->
         anyhow::bail!("BAD_PAYLOAD: an op job is {{kind, op}}: token, signature and auth live in the op");
     }
     let (w, ua) = work_of_op(Some(job.id), op, fee_recipient)?;
+    // R43: the per-kind call table: a merged entry (a `UA*` struct) is a `ua_metatx` job, an address entry a `metatx` one
     if (job.kind.as_deref() == Some("ua_metatx")) != ua {
-        anyhow::bail!("OP_KIND_MISMATCH: {:?} job, ua entry {ua} (ua_metatx carries the ua* entries)", job.kind);
+        let want = if ua { "ua_metatx" } else { "metatx" };
+        anyhow::bail!("OP_KIND_MISMATCH: {} ({}) is no entry of a {:?} job: the call table lists it for {want}", op["entry"], op["struct"], job.kind);
     }
     Ok(w)
 }
@@ -267,7 +266,8 @@ fn op_work(job: &Job, op: &serde_json::Value, fee_recipient: Option<Address>) ->
 pub fn work_of_op(job_id: Option<i64>, op: &serde_json::Value, fee_recipient: Option<Address>) -> Result<(Work, bool)> {
     let p = Op::parse(op, fee_recipient)?;
     let ua = p.row.ua();
-    let meta = p.lane.map(|(from, batch, nonce)| MetaRef { token: p.to, from, batch, nonce, digest: None, ua });
+    let addr_nonce = p.typed.contract == "account";
+    let meta = p.lane.map(|(from, batch, nonce)| MetaRef { token: p.to, from, batch, nonce, digest: None, ua, addr_nonce });
     Ok((Work { job_id, to: p.to, data: p.data, valid_until: p.valid_until, meta, entry: true, typed: Some(p.typed) }, ua))
 }
 
@@ -287,8 +287,9 @@ fn pay_meta(job: &Job) -> Result<Option<(B256, Bytes, bool)>> {
     }
 }
 
-/// A `ua_metatx` struct job (job-api.md, CTR-UA-26): `{token, m, auth}` (+ `salt` / `meta` for `uaPayMeta`), relayed as
-/// `uaExecuteTransfer` / `uaPayMeta` of the normalized struct on the token's UA ledger; `auth` the `UASig` object.
+/// A `ua_metatx` struct job (job-api.md, CTR-UA-26, CTR-MTX-30): `{token, m, auth}` (+ `salt` / `meta` for `mtxPayMeta`), relayed
+/// as `mtxExecuteTransfer` / `mtxPayMeta` of the normalized struct on ids; `auth` the `UASig` object. A native `from` and `to`
+/// run at `registry() == 0` (R9); a derived side needs the UA ledger (R44, the guard).
 fn ua_work(job: &Job, fee_recipient: Option<Address>) -> Result<Work> {
     if job.metatx.is_some() || job.signature.is_some() {
         anyhow::bail!("a ua_metatx job is {{token, m, auth}} or {{op}}: no metatx or signature");
@@ -301,7 +302,11 @@ fn ua_work(job: &Job, fee_recipient: Option<Address>) -> Result<Work> {
     let auth = crate::abi::UASig::abi_decode(&parse("UASig", auth, "auth")?.abi_encode())?;
     let native_sig = (auth.keyData.is_empty() && auth.members.is_empty()).then(|| auth.signature.clone());
     let signer = crate::metatx::native(&m.from()).zip(native_sig);
-    let typed = Some(transfer_typed(job.contract.as_deref(), token, m.struct_hash(), signer)?);
+    let mut typed = transfer_typed(job.contract.as_deref(), token, m.struct_hash(), signer)?;
+    let to = match &m { UaMtx::Transfer(t) => Some(t.to), UaMtx::Call(_) => None };
+    typed.derived_signer = crate::metatx::native(&m.from()).is_none();
+    typed.derived_side = typed.derived_signer || to.is_some_and(|t| crate::metatx::native(&t).is_none());
+    let typed = Some(typed);
     let data = match pay_meta(job)? {
         None => m.calldata(auth),
         Some((salt, pm, on_chain)) => m.pay_meta_calldata(salt, pm, auth, on_chain)?,
@@ -931,7 +936,7 @@ pub(crate) mod tests {
     use serde_json::{json, Value};
 
     use super::*;
-    use crate::abi::{IToken, MetaTransfer};
+    use crate::abi::{IToken, MetaTransfer, UAMetaTransfer};
     use crate::adapter::tests::{fake_odoo, Fake, Shared};
 
     const D: &str = "0x7777777777777777777777777777777777777777777777777777777777777777";
@@ -944,7 +949,8 @@ pub(crate) mod tests {
     struct Evm {
         /// Mô phỏng `mtxExecuteTransfer`: `None` ok, `"revert"`, `"transport"`.
         sim: Option<&'static str>,
-        /// `mtxNonce`: `None` ⇒ lỗi RPC.
+        /// `mtxNonce(bytes32, batch)`, the token's one view on ids (ua-mtx-merge): `None` ⇒ lỗi RPC. The address view
+        /// `mtxNonce(address, batch)` is `SmartKeyAccount`'s: a token answers it with a revert here.
         mtx_nonce: Option<u64>,
         /// Số tx của lane đã vào khối (`latest` = `pending`).
         count: u64,
@@ -979,8 +985,6 @@ pub(crate) mod tests {
         block_err: bool,
         /// `eth_getTransactionByHash` answers a transaction with this gas limit (`None`: unknown, `null`).
         tx_gas: Option<u64>,
-        /// `uaNonce`: `None` ⇒ an RPC error.
-        ua_nonce: Option<u64>,
         /// `registry()` answers 0: the token's UA ledger is off.
         ua_off: bool,
         /// The `maxFeePerGas` of each sent tx.
@@ -1067,10 +1071,10 @@ pub(crate) mod tests {
                         e.l1_fee.map(|f| word(U256::from(f))).ok_or_else(|| err(3, "execution reverted", Some("0x".into())))
                     } else if sel == crate::abi::IUALedger::registryCall::SELECTOR {
                         Ok(word(U256::from(if e.ua_off { 0 } else { 0x5ca0_0001u64 })))
-                    } else if sel == crate::abi::IUALedger::uaNonceCall::SELECTOR {
-                        e.ua_nonce.map(|n| word(U256::from(n))).ok_or_else(|| err(-32000, "upstream timeout", None))
-                    } else if sel == IToken::mtxNonceCall::SELECTOR {
+                    } else if sel == crate::abi::IMtxIds::mtxNonceCall::SELECTOR {
                         e.mtx_nonce.map(|n| word(U256::from(n))).ok_or_else(|| err(-32000, "upstream timeout", None))
+                    } else if sel == IToken::mtxNonceCall::SELECTOR {
+                        Err(err(3, "execution reverted", Some("0x".into()))) // no address view on a token
                     } else {
                         match e.sim {
                             Some("revert") => {
@@ -1127,10 +1131,11 @@ pub(crate) mod tests {
         (url, s)
     }
 
-    fn meta(batch: u64) -> Mtx {
-        Mtx::Transfer(MetaTransfer {
-            from: payer(),
-            to: Address::repeat_byte(0x5e),
+    /// The payer's (a native id: an EOA padded) `UAMetaTransfer` (ua-mtx-merge: an EOA's transfer is the struct on ids).
+    fn meta(batch: u64) -> UaMtx {
+        UaMtx::Transfer(UAMetaTransfer {
+            from: payer().into_word(),
+            to: Address::repeat_byte(0x5e).into_word(),
             value: U256::from(1_000u64),
             entryRef: B256::repeat_byte(0x42),
             batch: U256::from(batch),
@@ -1143,15 +1148,23 @@ pub(crate) mod tests {
         })
     }
 
+    /// The address `MetaTransfer` an EOA signed before the merged entries: no token entry takes it (refused by name).
+    fn addr_meta(batch: u64) -> Mtx {
+        let UaMtx::Transfer(t) = meta(batch) else { unreachable!() };
+        Mtx::Transfer(MetaTransfer { from: payer(), to: Address::from_word(t.to), value: t.value, entryRef: t.entryRef, batch: t.batch,
+            nonce: t.nonce, validUntil: t.validUntil, mode: t.mode, relayer: t.relayer, fee: t.fee, feeRecipient: t.feeRecipient })
+    }
+
     /// The fake client's registered tokens: `TOKEN`.
     fn toks() -> Value {
         json!([{"address": format!("{TOKEN:#x}"), "decimals": 6}])
     }
 
+    /// The payer's transfer job: `ua_metatx`, `auth` its native `UASig` (the `0x11…` sentinel [`resign`] replaces).
     fn job(id: i64) -> Value {
         let (kind, wire) = meta(7).to_wire();
-        json!({"id": id, "kind": "metatx", "token": format!("{TOKEN:#x}"), "digest": D, "struct": kind,
-               "signature": format!("0x{}", "11".repeat(65)), "metatx": wire})
+        json!({"id": id, "kind": "ua_metatx", "token": format!("{TOKEN:#x}"), "digest": D, "struct": kind,
+               "auth": {"keyData": "0x", "signature": format!("0x{}", "11".repeat(65)), "members": []}, "m": wire})
     }
 
     async fn lane(rpc: &str, odoo: crate::odoo::Odoo, key: u8, set: InflightSet) -> Submitter {
@@ -1321,35 +1334,38 @@ pub(crate) mod tests {
         assert_eq!(rpc.lock().unwrap().gas[0], guard::erc1271_floor(len));
     }
 
+    /// The token's invalidation on ids (R12, R38): a merged entry, a `ua_metatx` job.
     fn inv_job(id: i64, token: Address) -> Value {
-        json!({"id": id, "kind": "metatx", "op": {"entry": "mtxInvalidateNonces", "contract": "token", "token": format!("{token:#x}"),
-            "args": {"from": format!("{:#x}", payer()), "batch": "1", "minNonce": "9"},
-            "signature": format!("0x{}", "11".repeat(65)), "validUntil": (now() + 300).to_string()}})
+        json!({"id": id, "kind": "ua_metatx", "op": {"entry": "mtxInvalidateNonces", "contract": "token", "token": format!("{token:#x}"),
+            "args": {"from": format!("{:#x}", payer().into_word()), "batch": "1", "minNonce": "9"},
+            "auth": {"keyData": "0x", "signature": format!("0x{}", "11".repeat(65)), "members": []}, "validUntil": (now() + 300).to_string()}})
     }
 
-    /// The token's order entries as `metatx` jobs (job-api.md): byte-identical with the forge KAT's relayed calldata.
+    /// The token's order entries on ids (R12, R38: `UATradeOrder`, `UASig`) as `ua_metatx` jobs (job-api.md): the cancel and the
+    /// invalidation of every signer row of `uatrade_kat.json` (clientkeys, cross-checked by forge's `UATradeVectors.t.sol`) give its
+    /// digests; their bytes are `typed_ops_kat_every_entry`'s (`CancelUAOrder`) and `invalidate_digests_match_the_vectors`'.
     #[test]
     fn entry_jobs_encode_as_the_token_reads_them() {
-        let p = format!("{}/../smartcontracts/evm/test/vectors/legacy/ua-mtx-merge/trade_kat.json", env!("CARGO_MANIFEST_DIR"));
-        let k: Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
-        let s = |f: &str| k[f].as_str().unwrap_or_else(|| panic!("{f}")).to_string();
-        let order = crate::abi::IToken::mtxCancelOrderCall::abi_decode(&alloy::hex::decode(&s("cancel_calldata")[2..]).unwrap()).unwrap();
-        let wire = crate::dex::WireOrder::from_sol(&order.o);
-        let op = json!({"entry": "mtxCancelOrder", "struct": "CancelOrder", "contract": "token", "token": s("verifying_contract"),
-            "args": {"order": wire}, "signature": format!("0x{}", alloy::hex::encode(&order.sig)), "validUntil": "1800000300"});
-        let job = |op: Value| -> Job { serde_json::from_value(json!({"id": 1, "kind": "metatx", "op": op})).unwrap() };
+        let k: Value = serde_json::from_str(include_str!("../../smartcontracts/vectors/ua/uatrade_kat.json")).unwrap();
+        let (chain, uid) = (k["chainId"].as_u64().unwrap(), k["chainUid"].as_str().unwrap().parse::<B256>().unwrap());
+        let job = |op: Value| -> Job { serde_json::from_value(json!({"id": 1, "kind": "ua_metatx", "op": op})).unwrap() };
+        let auth = |s: &Value| json!({"keyData": "0x", "signature": s, "members": []});
+        let native = k["rows"].as_array().unwrap().iter().find(|r| r["name"] == "native").unwrap();
+        let token = native["order"]["domain"]["verifyingContract"].clone();
+        let op = json!({"entry": "mtxCancelOrder", "struct": "CancelUAOrder", "contract": "token", "token": token,
+            "args": {"order": native["order"]["message"]}, "auth": auth(&native["cancelAuth"]), "validUntil": "1800000300"});
         let w = work_from_job(&job(op.clone()), None).unwrap();
-        assert_eq!((format!("0x{}", alloy::hex::encode(&w.data)), w.valid_until, w.meta), (s("cancel_calldata").to_lowercase(), 1_800_000_300, None));
-        assert!(w.entry);
-        let c = crate::abi::IToken::mtxInvalidateNoncesCall::abi_decode(&alloy::hex::decode(&s("invalidate_calldata")[2..]).unwrap()).unwrap();
-        let inv = json!({"entry": "mtxInvalidateNonces", "contract": "token", "token": s("verifying_contract"), "validUntil": "1800000300",
-            "args": {"from": format!("{:#x}", c.from), "batch": c.batch.to_string(), "minNonce": c.newMin.to_string()},
-            "signature": format!("0x{}", alloy::hex::encode(&c.sig))});
-        assert_eq!(format!("0x{}", alloy::hex::encode(&work_from_job(&job(inv), None).unwrap().data)), s("invalidate_calldata").to_lowercase());
-        // mtxTrade is never a job; an order that is not one; no deadline on an entry that needs one
-        for (bad, why) in [(json!({"entry": "mtxTrade", "contract": "token", "token": s("verifying_contract")}), "UNKNOWN_ENTRY"),
-            (json!({"entry": "mtxCancelOrder", "struct": "CancelOrder", "contract": "token", "token": s("verifying_contract"), "signature": "0x00"}), "args.order: missing"),
-            (json!({"entry": "mtxCancelOrder", "struct": "CancelOrder", "contract": "token", "token": s("verifying_contract"), "args": {"order": {}}, "signature": "0x00"}), "args.order.from: missing")] {
+        assert_eq!((w.valid_until, w.meta, w.entry), (1_800_000_300, None, true));
+        assert_eq!(format!("{:#x}", w.typed.as_ref().unwrap().digest_on(chain, uid).unwrap()), native["cancelDigest"].as_str().unwrap());
+        let inv = json!({"entry": "mtxInvalidateNonces", "contract": "token", "token": token, "validUntil": "1800000300",
+            "args": native["invalidate"]["message"], "auth": auth(&native["invalidateAuth"])});
+        let w = work_from_job(&job(inv), None).unwrap();
+        assert_eq!(format!("{:#x}", w.typed.as_ref().unwrap().digest_on(chain, uid).unwrap()), native["invalidateDigest"].as_str().unwrap());
+        // mtxTrade is never a job; an order that is not one; the address form of the cancel is gone (legacy/ua-mtx-merge)
+        for (bad, why) in [(json!({"entry": "mtxTrade", "contract": "token", "token": token}), "UNKNOWN_ENTRY"),
+            (json!({"entry": "mtxCancelOrder", "struct": "CancelOrder", "contract": "token", "token": token, "signature": "0x00"}), "UNKNOWN_ENTRY"),
+            (json!({"entry": "mtxCancelOrder", "struct": "CancelUAOrder", "contract": "token", "token": token, "auth": auth(&json!("0x"))}), "args.order: missing"),
+            (json!({"entry": "mtxCancelOrder", "struct": "CancelUAOrder", "contract": "token", "token": token, "args": {"order": {}}, "auth": auth(&json!("0x"))}), "args.order.from: missing")] {
             assert!(work_from_job(&job(bad), None).unwrap_err().to_string().contains(why), "{why}");
         }
     }
@@ -1391,24 +1407,26 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn outbox_jobs_are_normalized_and_keyed_by_the_token_digest() {
         let (thief, ours) = (Address::repeat_byte(0x7e), Address::repeat_byte(0x99));
-        let Mtx::Transfer(mut t) = meta(7) else { unreachable!() };
+        let UaMtx::Transfer(mut t) = meta(7) else { unreachable!() };
         (t.mode, t.fee, t.feeRecipient, t.relayer) = (0x20, U256::from(1_000u64), thief, thief); // FIXED fee, nothing bound
-        let raw = |t: &MetaTransfer| {
-            let (kind, wire) = Mtx::Transfer(t.clone()).to_wire();
-            json!({"id": 1, "kind": "metatx", "token": format!("{TOKEN:#x}"), "digest": format!("0x{}", "99".repeat(32)), "struct": kind,
-                   "signature": format!("0x{}", "11".repeat(65)), "metatx": wire})
+        let raw = |t: &UAMetaTransfer| {
+            let mut j = job(1);
+            j["digest"] = json!(format!("0x{}", "99".repeat(32)));
+            j["m"] = UaMtx::Transfer(t.clone()).to_wire().1;
+            j
         };
+        let unbound = |m: &UaMtx| match m { UaMtx::Transfer(t) => (t.feeRecipient, t.relayer), UaMtx::Call(c) => (c.feeRecipient, c.relayer) };
         let sent = |v: Value, fr: Option<Address>| {
             let w = work_from_job(&serde_json::from_value(v).unwrap(), fr).unwrap();
             assert_eq!(w.meta.unwrap().digest, None, "never the job's digest");
-            Mtx::from_calldata(&w.data).unwrap().0
+            UaMtx::from_calldata(&w.data).unwrap().0
         };
         let m = sent(raw(&t), Some(ours));
-        assert_eq!((m.fee_recipient(), m.relayer()), (ours, Address::ZERO));
+        assert_eq!(unbound(&m), (ours, Address::ZERO));
         let m = sent(raw(&t), None);
-        assert_eq!((m.fee_recipient(), m.relayer()), (Address::ZERO, Address::ZERO), "unset: the contract pays msg.sender");
-        let bound = MetaTransfer { mode: 0x23, ..t.clone() };
-        assert_eq!(sent(raw(&bound), Some(ours)), Mtx::Transfer(bound.clone()), "bound fields are the signer's");
+        assert_eq!(unbound(&m), (Address::ZERO, Address::ZERO), "unset: the contract pays msg.sender");
+        let bound = UAMetaTransfer { mode: 0x23, ..t.clone() };
+        assert_eq!(sent(raw(&bound), Some(ours)), UaMtx::Transfer(bound.clone()), "bound fields are the signer's");
         let mut rf = raw(&t);
         rf["receiver_fee"] = json!({"fee": "1", "feeRecipient": format!("{thief:#x}"), "validUntil": "1", "signature": "0x"});
         assert!(work_from_job(&serde_json::from_value(rf).unwrap(), None).is_err(), "receiver-pays is not built");
@@ -1422,8 +1440,8 @@ pub(crate) mod tests {
         let held = work_from_job(&serde_json::from_value(resign(raw(&t))).unwrap(), None).unwrap().typed.unwrap();
         assert!(set.contains(&held.digest_on(31337, B256::from(U256::from(UID))).unwrap()), "held while in flight");
         assert!(!set.contains(&B256::repeat_byte(0x99)), "the job's own digest is no key");
-        let m = Mtx::from_calldata(&rpc.lock().unwrap().sent[0].2).unwrap().0;
-        assert_eq!((m.fee_recipient(), m.relayer()), (Address::ZERO, Address::ZERO));
+        let m = UaMtx::from_calldata(&rpc.lock().unwrap().sent[0].2).unwrap().0;
+        assert_eq!(unbound(&m), (Address::ZERO, Address::ZERO));
     }
 
     /// Every report of one poll on a lane built with `tweak`, and the fake chain.
@@ -1443,18 +1461,13 @@ pub(crate) mod tests {
         let until = (now() + 300).to_string();
         let sel: [u8; 4] = data[..4].try_into().unwrap();
         if sel == crate::abi::IMtxRelayFee::relayCall::SELECTOR {
+            // one `relay` on ids (R28): a native payer's own key (the `0x11…` sentinel [`resign`] replaces), a derived one's 96 bytes
             let c = crate::abi::IMtxRelayFee::relayCall::abi_decode(&data).unwrap();
             let args = json!({"from": format!("{:#x}", c.from), "payee": format!("{:#x}", c.payee), "value": c.value.to_string(),
                 "validUntil": c.validUntil.to_string(), "relayer": format!("{target:#x}")});
-            return json!({"id": id, "kind": "metatx", "op": {"entry": "mtxRelayFee", "contract": "token", "token": format!("{:#x}", c.token),
-                "args": args, "call": inner_op(), "signature": format!("0x{}", "11".repeat(65))}});
-        }
-        if sel == crate::abi::IMtxRelayFee::uaRelayCall::SELECTOR {
-            let c = crate::abi::IMtxRelayFee::uaRelayCall::abi_decode(&data).unwrap();
-            let args = json!({"from": format!("{:#x}", c.from), "payee": format!("{:#x}", c.payee), "value": c.value.to_string(),
-                "validUntil": c.validUntil.to_string(), "relayer": format!("{target:#x}")});
-            return json!({"id": id, "kind": "ua_metatx", "op": {"entry": "uaRelayFee", "contract": "token", "token": format!("{:#x}", c.token),
-                "args": args, "call": inner_op(), "auth": {"keyData": "0x", "signature": format!("0x{}", "22".repeat(96)), "members": []}}});
+            let sig = if crate::metatx::native(&c.from).is_some() { "11".repeat(65) } else { "22".repeat(96) };
+            return json!({"id": id, "kind": "ua_metatx", "op": {"entry": "mtxRelayFee", "contract": "token", "token": format!("{:#x}", c.token),
+                "args": args, "call": inner_op(), "auth": {"keyData": "0x", "signature": format!("0x{sig}"), "members": []}}});
         }
         let row = crate::typed::rows().iter().find(|r| !r.typed && r.selector == sel);
         let op = match row {
@@ -1467,9 +1480,9 @@ pub(crate) mod tests {
     /// The relayed call of the relay-fee jobs: a named entry on `TARGET`, fee 0, the executor's to run.
     fn inner_op() -> Value {
         json!({"entry": "mtxCancelNonce", "contract": "token", "token": format!("{TARGET:#x}"), "args": {"lane": "9"},
-            "envelope": {"from": format!("{:#x}", payer()), "batch": "1", "nonce": "0", "validUntil": (now() + 600).to_string(), "mode": 0,
+            "envelope": {"from": format!("{:#x}", payer().into_word()), "batch": "1", "nonce": "0", "validUntil": (now() + 600).to_string(), "mode": 0,
                 "relayer": format!("{:#x}", Address::ZERO), "fee": "0", "feeRecipient": format!("{:#x}", Address::ZERO)},
-            "signature": format!("0x{}", "22".repeat(65))})
+            "auth": {"keyData": "0x", "signature": format!("0x{}", "22".repeat(65)), "members": []}})
     }
 
     fn settle_calldata() -> Vec<u8> {
@@ -1483,7 +1496,7 @@ pub(crate) mod tests {
     }
 
     fn owner_job(id: i64, target: Address) -> Value {
-        json!({"id": id, "kind": "call", "op": {"entry": "mtxExecuteAsOwner", "contract": "wallet", "token": format!("{target:#x}"),
+        json!({"id": id, "kind": "call", "op": {"entry": "mtxExecuteAsOwner", "contract": "account", "token": format!("{target:#x}"),
             "validUntil": (now() + 300).to_string(),
             "args": {"data": "0x", "nonce": "0", "validUntil": (now() + 300).to_string(), "sig": format!("0x{}", "11".repeat(65))}}})
     }
@@ -1492,9 +1505,9 @@ pub(crate) mod tests {
     #[test]
     fn hex_data_refused() {
         let v = crate::typed::testkit::vectors();
-        let op = crate::typed::testkit::op_of("Unwrap", "token", &v).unwrap();
+        let op = crate::typed::testkit::op_of("UAUnwrap", "token", &v).unwrap();
         let ok = |j: Value| work_from_job(&serde_json::from_value::<Job>(j).unwrap(), None);
-        ok(json!({"id": 1, "kind": "metatx", "op": op})).unwrap();
+        ok(json!({"id": 1, "kind": "ua_metatx", "op": op})).unwrap();
         ok(job(7)).unwrap();
         let refused = |j: Value, what: &str| {
             let e = ok(j).unwrap_err().to_string();
@@ -1514,6 +1527,7 @@ pub(crate) mod tests {
         hexcall["call"] = json!("0x1234");
         refused(json!({"id": 1, "kind": "metatx", "op": hexcall}), "op.call as hex");
         let mut m = job(7);
+        m["metatx"] = m["m"].take();
         m["metatx"]["data"] = json!("0x1234");
         refused(m, "metatx.data");
         let mut m = job(7);
@@ -1527,8 +1541,8 @@ pub(crate) mod tests {
         let mut m = u;
         m["m"]["data"] = json!("0x1234");
         refused(m, "ua_metatx m.data");
-        // the `ua_metatx` kind carries `ua*` entries only
-        let e = ok(json!({"id": 1, "kind": "ua_metatx", "op": op})).unwrap_err().to_string();
+        // a merged entry is a `ua_metatx` job only (R43)
+        let e = ok(json!({"id": 1, "kind": "metatx", "op": op})).unwrap_err().to_string();
         assert!(e.starts_with("OP_KIND_MISMATCH"), "{e}");
     }
 
@@ -1543,10 +1557,10 @@ pub(crate) mod tests {
             for kind in o["domains"].as_object().unwrap().keys() {
                 let Some(mut op) = op_of(name, kind, &v) else { continue };
                 let row = row_of(name, kind);
-                if matches!(row.name, "PayUnderMandate" | "DelegateRevoke") {
+                if matches!(row.name, "UAPayUnderMandate" | "UADelegateRevoke") {
                     op["envelope"]["nonce"] = json!("0");
                     op["envelope"]["batch"] = json!(match row.name {
-                        "PayUnderMandate" => crate::typed::mandate_pay_lane(&crate::typed::testkit::hex(&op["args"]["entryRef"])),
+                        "UAPayUnderMandate" => crate::typed::mandate_pay_lane(&crate::typed::testkit::hex(&op["args"]["entryRef"])),
                         _ => crate::typed::mandate_revoke_lane(op["args"]["token"].as_str().unwrap().parse().unwrap(),
                             op["args"]["epoch"].as_str().unwrap().parse().unwrap()),
                     }.to_string());
@@ -1573,7 +1587,7 @@ pub(crate) mod tests {
                 n += 1;
             }
         }
-        assert_eq!(n, 163, "every row with an entry, but the relay fees (relay_fee_call_object)");
+        assert_eq!(n, 97, "every row with an entry, but the relay fees (relay_fee_call_object)");
     }
 
     /// `EvmAdapter::call_key`, which the Hedera adapter delegates to (`the_hedera_lane_skips_bytes_already_in_flight` is the
@@ -1583,12 +1597,12 @@ pub(crate) mod tests {
     async fn evm_call_key_follows_the_bytes() {
         use crate::adapter::ChainAdapter;
         let ua = |contract: &str| -> Value {
-            json!({"id": 9, "kind": "ua_metatx", "op": {"entry": "uaBurn", "contract": contract, "token": format!("{TOKEN:#x}"), "args": {"amount": "5"},
+            json!({"id": 9, "kind": "ua_metatx", "op": {"entry": "mtxBurn", "contract": contract, "token": format!("{TOKEN:#x}"), "args": {"amount": "5"},
                 "envelope": {"from": format!("{UA:#x}"), "batch": "9", "nonce": "0", "validUntil": "4000000000", "mode": 0,
                     "relayer": format!("{:#x}", Address::ZERO), "fee": "0", "feeRecipient": format!("{:#x}", Address::ZERO)},
                 "auth": {"keyData": "0x", "signature": format!("0x{}", "22".repeat(96)), "members": []}}})
         };
-        let (url, _) = fake_evm(Evm { ua_nonce: Some(0), ..Default::default() }).await;
+        let (url, _) = fake_evm(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
         let cfg = test_cfg(&url);
         let chain = Chain::with_signer(&cfg, PrivateKeySigner::from_bytes(&B256::repeat_byte(1)).unwrap()).unwrap();
         let a = crate::adapters::evm::EvmAdapter::new(&cfg, vec![chain], Arc::new(std::sync::RwLock::new(vec![TOKEN]))).unwrap();
@@ -1610,10 +1624,10 @@ pub(crate) mod tests {
 
     /// A fixed op (its `validUntil` does not follow the clock, so two calls are one digest).
     fn op_job(id: i64) -> Value {
-        let env = json!({"from": format!("{:#x}", payer()), "batch": "7", "nonce": "0", "validUntil": "4000000000", "mode": 0,
+        let env = json!({"from": format!("{:#x}", payer().into_word()), "batch": "7", "nonce": "0", "validUntil": "4000000000", "mode": 0,
             "relayer": format!("{:#x}", Address::ZERO), "fee": "0", "feeRecipient": format!("{:#x}", Address::ZERO)});
-        json!({"id": id, "kind": "metatx", "op": {"entry": "mtxBurn", "contract": "token", "token": format!("{TOKEN:#x}"),
-            "envelope": env, "args": {"amount": "5"}, "signature": format!("0x{}", "11".repeat(65))}})
+        json!({"id": id, "kind": "ua_metatx", "op": {"entry": "mtxBurn", "contract": "token", "token": format!("{TOKEN:#x}"),
+            "envelope": env, "args": {"amount": "5"}, "auth": {"keyData": "0x", "signature": format!("0x{}", "11".repeat(65)), "members": []}}})
     }
 
     /// G2 by the digest computed here: no contract is read for it, two lanes sign one op once, both keys are held, and it
@@ -1649,14 +1663,14 @@ pub(crate) mod tests {
         // local signature check catches the claim first)
         let ua = |contract: &str| {
             let mut j = call_job(9, ROUTER, ua_relay_data(ROUTER.into_word(), 1_000));
-            j["op"] = json!({"entry": "uaBurn", "contract": contract, "token": format!("{TOKEN:#x}"), "args": {"amount": "5"},
+            j["op"] = json!({"entry": "mtxBurn", "contract": contract, "token": format!("{TOKEN:#x}"), "args": {"amount": "5"},
                 "envelope": {"from": format!("{UA:#x}"), "batch": "9", "nonce": "0", "validUntil": "4000000000", "mode": 0,
                     "relayer": format!("{:#x}", Address::ZERO), "fee": "0", "feeRecipient": format!("{:#x}", Address::ZERO)},
                 "auth": {"keyData": "0x", "signature": format!("0x{}", "22".repeat(96)), "members": []}});
             j
         };
         let set = InflightSet::default();
-        let (url, rpc) = fake_evm(Evm { ua_nonce: Some(0), ..Default::default() }).await;
+        let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
         let (odoo, _) = fake_odoo(Fake { jobs: vec![ua("token")], tokens: toks(), ..Default::default() }).await;
         let mut first = lane(&url, odoo, 1, set.clone()).await;
         first.poll_outbox().await;
@@ -1680,10 +1694,11 @@ pub(crate) mod tests {
         }
         let d = t.digest_on(31337, uid).unwrap();
         let s = format!("0x{}", alloy::hex::encode(payer_key().sign_hash_sync(&d).unwrap().as_bytes()));
-        if j.get("op").is_some() {
-            j["op"]["signature"] = json!(s);
+        let at = if j.get("op").is_some() { &mut j["op"] } else { &mut j };
+        if at.get("auth").is_some() {
+            at["auth"]["signature"] = json!(s);
         } else {
-            j["signature"] = json!(s);
+            at["signature"] = json!(s);
         }
         j
     }
@@ -1945,15 +1960,16 @@ pub(crate) mod tests {
         (B256::from_slice(&h("salt")), h("meta"))
     }
 
-    fn pay_meta_job(id: i64, salt: B256, pm: &[u8], tweak: impl FnOnce(&mut MetaTransfer)) -> Value {
+    fn pay_meta_job(id: i64, salt: B256, pm: &[u8], tweak: impl FnOnce(&mut UAMetaTransfer)) -> Value {
         let p = crate::metatx::meta_pay_id(&salt, pm);
-        let Mtx::Transfer(mut t) = meta(7) else { unreachable!() };
+        let UaMtx::Transfer(mut t) = meta(7) else { unreachable!() };
         (t.entryRef, t.batch) = (p, crate::metatx::pay_lane(&p));
         tweak(&mut t);
-        let (kind, wire) = Mtx::Transfer(t).to_wire();
-        json!({"id": id, "kind": "metatx", "token": format!("{TOKEN:#x}"), "digest": D, "struct": kind,
-               "signature": format!("0x{}", "11".repeat(65)), "metatx": wire,
-               "salt": format!("{salt:#x}"), "meta": format!("0x{}", alloy::hex::encode(pm))})
+        let mut j = job(id);
+        j["m"] = UaMtx::Transfer(t).to_wire().1;
+        j["salt"] = json!(format!("{salt:#x}"));
+        j["meta"] = json!(format!("0x{}", alloy::hex::encode(pm)));
+        j
     }
 
     /// CTR-MTX-26 on EVM (spec §9): the node checks `entryRef == metaPayId(salt, meta)`, `batch == payLane(entryRef)`,
@@ -1973,18 +1989,18 @@ pub(crate) mod tests {
         let (r, rpc) = outcomes(ok(), vec![pay_meta_job(7, salt, &pm, |_| {})], |_| {}).await;
         assert_eq!(states_of(&r), ["signed", "broadcast"], "{r:?}");
         let sent = rpc.lock().unwrap().sent[0].2.clone();
-        let c = IToken::mtxPayMetaCall::abi_decode(&sent).unwrap();
+        let c = crate::abi::IMtxIds::mtxPayMetaCall::abi_decode(&sent).unwrap();
         assert_eq!((c.salt, c.meta.to_vec()), (salt, pm.clone()));
-        let (Mtx::Transfer(t), _) = Mtx::from_calldata(&sent).unwrap() else { panic!() };
-        assert_eq!((t.entryRef, t.nonce), (crate::metatx::meta_pay_id(&salt, &pm), U256::ZERO), "mtxPayMeta is its MetaTransfer");
+        let (UaMtx::Transfer(t), _) = UaMtx::from_calldata(&sent).unwrap() else { panic!() };
+        assert_eq!((t.entryRef, t.nonce), (crate::metatx::meta_pay_id(&salt, &pm), U256::ZERO), "mtxPayMeta is its UAMetaTransfer");
         // off-chain meta: the same checks, the plain mtxExecuteTransfer of the same struct
         let mut off = pay_meta_job(7, salt, &pm, |_| {});
         off["meta_offchain"] = json!(true);
         let (r, rpc) = outcomes(ok(), vec![off], |_| {}).await;
         assert_eq!(states_of(&r), ["signed", "broadcast"], "{r:?}");
-        assert_eq!(rpc.lock().unwrap().sent[0].2[..4], IToken::mtxExecuteTransferCall::SELECTOR);
+        assert_eq!(rpc.lock().unwrap().sent[0].2[..4], crate::abi::IMtxIds::mtxExecuteTransferCall::SELECTOR);
         // a struct that is not the payment of (salt, meta): refused before any RPC
-        let bad: [fn(&mut MetaTransfer); 3] = [
+        let bad: [fn(&mut UAMetaTransfer); 3] = [
             |t| t.entryRef = B256::repeat_byte(0x42),
             |t| t.batch += U256::from(1),
             |t| t.nonce = U256::from(1),
@@ -1997,11 +2013,11 @@ pub(crate) mod tests {
         let mut half = pay_meta_job(7, salt, &pm, |_| {});
         half.as_object_mut().unwrap().remove("meta");
         assert_eq!(outcomes(ok(), vec![half], |_| {}).await.0[0].0, "dead", "salt without meta");
-        let (kind, wire) = Mtx::Call(crate::abi::MetaTransaction { from: payer(),
+        let (kind, wire) = UaMtx::Call(crate::abi::UAMetaTransaction { from: payer().into_word(),
             data: Bytes::from_static(&[0xcf, 0xdd, 0x7a, 0xea]), batch: U256::from(7), nonce: U256::ZERO,
             validUntil: U256::from(now() + 600), mode: 0, relayer: Address::ZERO, fee: U256::ZERO, feeRecipient: Address::ZERO }).to_wire();
-        let call = json!({"id": 7, "kind": "metatx", "token": format!("{TOKEN:#x}"), "digest": D, "struct": kind,
-            "signature": format!("0x{}", "11".repeat(65)), "metatx": wire, "salt": format!("{salt:#x}"), "meta": "0x"});
+        let mut call = job(7);
+        (call["struct"], call["m"], call["salt"], call["meta"]) = (json!(kind), wire, json!(format!("{salt:#x}")), json!("0x"));
         assert!(outcomes(ok(), vec![call], |_| {}).await.0[0].1.contains("HEX_DATA_REFUSED"), "a call struct is no pay-meta");
         let mut other = job(7);
         other["kind"] = json!("signed_op");
@@ -2146,8 +2162,9 @@ pub(crate) mod tests {
     /// A relay of `TARGET`'s call paying `value` to `to`, as the router's calldata.
     fn relay_data(to: Address, value: u64) -> Vec<u8> {
         let call: Bytes = IToken::mtxNonceCall { from: Address::ZERO, batch: U256::ZERO }.abi_encode().into();
-        crate::abi::IMtxRelayFee::relayCall { target: TARGET, callData: call, token: TOKEN, from: payer(), payee: to, value: U256::from(value),
-            validUntil: U256::from(now() + 600), sig: Bytes::from(vec![0x11; 65]) }.abi_encode()
+        crate::abi::IMtxRelayFee::relayCall { target: TARGET, callData: call, token: TOKEN, from: payer().into_word(), payee: to.into_word(),
+            value: U256::from(value), validUntil: U256::from(now() + 600),
+            auth: UASig { keyData: Bytes::new(), signature: Bytes::from(vec![0x11; 65]), members: vec![] } }.abi_encode()
     }
 
     fn lane1() -> Address {
@@ -2160,8 +2177,8 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn relay_fee_row_requires_router_and_registered_token() {
         let sig = |s: &str| -> [u8; 4] { alloy::primitives::keccak256(s)[..4].try_into().unwrap() };
-        assert_eq!(IToken::mtxPayMetaCall::SELECTOR,
-            sig("mtxPayMeta(address,address,uint256,bytes32,bytes,uint256,uint32,address,uint256,address,bytes)"));
+        assert_eq!(crate::abi::IMtxIds::mtxPayMetaCall::SELECTOR,
+            sig("mtxPayMeta(bytes32,bytes32,uint256,bytes32,bytes,uint256,uint32,address,uint256,address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))"));
         let mut cfg = test_cfg("http://127.0.0.1:9");
         relay_params(&mut cfg, &[]);
         let rf = guard::RelayFee::from_cfg(&cfg).unwrap().unwrap();
@@ -2186,11 +2203,10 @@ pub(crate) mod tests {
         // on the lane: a plain pay (or pay-meta) to the router or its executor is refused; no router ⇒ no relay row
         let ok = || Evm { mtx_nonce: Some(0), ..Default::default() };
         for to in [ROUTER, ROUTER.create(1)] {
-            let Mtx::Transfer(mut t) = meta(7) else { unreachable!() };
-            t.to = to;
-            let (kind, wire) = Mtx::Transfer(t).to_wire();
-            let j = json!({"id": 7, "kind": "metatx", "token": format!("{TOKEN:#x}"), "digest": D, "struct": kind,
-                           "signature": format!("0x{}", "11".repeat(65)), "metatx": wire});
+            let UaMtx::Transfer(mut t) = meta(7) else { unreachable!() };
+            t.to = to.into_word();
+            let mut j = job(7);
+            j["m"] = UaMtx::Transfer(t).to_wire().1;
             let (r, rpc) = outcomes(ok(), vec![j], |c| relay_params(c, &[])).await;
             assert!(r[0].0 == "dead" && r[0].1.starts_with("PAYEE_REFUSED"), "{r:?}");
             assert!(rpc.lock().unwrap().sent.is_empty());
@@ -2231,6 +2247,28 @@ pub(crate) mod tests {
 
     const UA: B256 = B256::repeat_byte(0xaa);
 
+    /// R43 (CTR-MTX-30, plan T14): a merged entry is a `ua_metatx` job and an address entry a `metatx` one; a job naming an entry its kind's
+    /// call table does not list is refused by name, never built. The address `MetaTransfer` struct job names the token's address
+    /// `mtxExecuteTransfer(MetaTransfer, bytes)`, which no token has left: refused by name too.
+    #[test]
+    fn a_metatx_job_naming_a_merged_entry_is_refused_by_name() {
+        let v = crate::typed::testkit::vectors();
+        let of = |kind: &str, op: &Value| -> Job { serde_json::from_value(json!({"id": 1, "kind": kind, "op": op})).unwrap() };
+        let mut unwrap = crate::typed::testkit::op_of("UAUnwrap", "token", &v).unwrap();
+        unwrap["entry"] = json!("mtxUnwrap");
+        let e = work_from_job(&of("metatx", &unwrap), None).unwrap_err().to_string();
+        assert!(e.starts_with("OP_KIND_MISMATCH") && e.contains("mtxUnwrap"), "{e}");
+        work_from_job(&of("ua_metatx", &unwrap), None).unwrap();
+        let wrap = crate::typed::testkit::op_of("Wrap", "token", &v).unwrap();
+        assert!(work_from_job(&of("ua_metatx", &wrap), None).unwrap_err().to_string().starts_with("OP_KIND_MISMATCH"), "the reverse");
+        work_from_job(&of("metatx", &wrap), None).unwrap();
+        let (kind, wire) = addr_meta(7).to_wire();
+        let addr: Job = serde_json::from_value(json!({"id": 1, "kind": "metatx", "token": format!("{TOKEN:#x}"), "struct": kind,
+            "signature": format!("0x{}", "11".repeat(65)), "metatx": wire})).unwrap();
+        let e = work_from_job(&addr, None).unwrap_err().to_string();
+        assert!(e.starts_with("OP_KIND_MISMATCH") && e.contains("mtxExecuteTransfer"), "{e}");
+    }
+
     fn ua_meta(batch: u64) -> crate::metatx::UaMtx {
         crate::metatx::UaMtx::Transfer(crate::abi::UAMetaTransfer { from: UA, to: Address::repeat_byte(0x5e).into_word(),
             value: U256::from(1_000u64), entryRef: B256::repeat_byte(0x42), batch: U256::from(batch), nonce: U256::ZERO,
@@ -2252,18 +2290,17 @@ pub(crate) mod tests {
     /// subject is the id on the UA nonce map. Any other payload shape is refused.
     #[test]
     fn ua_metatx_jobs_build_the_ua_entry_points() {
-        use crate::abi::IUALedger;
-        use crate::metatx::UaMtx;
+        use crate::abi::IMtxIds;
         let auth = UASig { keyData: Bytes::new(), signature: Bytes::from(vec![0x22; 96]), members: vec![] };
         let w = work(ua_job(7, &ua_meta(7))).unwrap();
         let mut m = ua_meta(7);
         m.normalize(Some(Address::repeat_byte(0xfe)));
         assert_eq!((w.to, w.data.clone(), w.entry), (TOKEN, m.calldata(auth.clone()), false));
-        assert_eq!(w.meta, Some(MetaRef { token: TOKEN, from: UA, batch: U256::from(7), nonce: U256::ZERO, digest: None, ua: true }));
+        assert_eq!(w.meta, Some(MetaRef { token: TOKEN, from: UA, batch: U256::from(7), nonce: U256::ZERO, digest: None, ua: true, addr_nonce: false }));
         assert_eq!(w.valid_until, m.valid_until().saturating_to::<u64>());
-        assert_eq!(w.data[..4], IUALedger::uaExecuteTransferCall::SELECTOR);
+        assert_eq!(w.data[..4], IMtxIds::mtxExecuteTransferCall::SELECTOR);
         assert_eq!(UaMtx::from_calldata(&w.data).map(|x| x.1), Some(auth.clone()), "auth is the UASig, field by field");
-        // a UA pay-meta job: uaPayMeta, or the plain uaExecuteTransfer for an off-chain meta
+        // a UA pay-meta job: mtxPayMeta on ids, or the plain mtxExecuteTransfer for an off-chain meta
         let (salt, pm) = (B256::repeat_byte(3), vec![9u8; 40]);
         let p = crate::metatx::meta_pay_id(&salt, &pm);
         let UaMtx::Transfer(mut t) = ua_meta(0) else { unreachable!() };
@@ -2271,10 +2308,10 @@ pub(crate) mod tests {
         let mut j = ua_job(9, &UaMtx::Transfer(t.clone()));
         (j["salt"], j["meta"]) = (json!(format!("{salt:#x}")), json!(format!("0x{}", alloy::hex::encode(&pm))));
         let w = work(j.clone()).unwrap();
-        let c = IUALedger::uaPayMetaCall::abi_decode(&w.data).unwrap();
+        let c = IMtxIds::mtxPayMetaCall::abi_decode(&w.data).unwrap();
         assert_eq!((c.from, c.salt, c.meta.to_vec()), (UA, salt, pm.clone()));
         j["meta_offchain"] = json!(true);
-        assert_eq!(work(j.clone()).unwrap().data[..4], IUALedger::uaExecuteTransferCall::SELECTOR);
+        assert_eq!(work(j.clone()).unwrap().data[..4], IMtxIds::mtxExecuteTransferCall::SELECTOR);
         j["meta"] = json!("0x00");
         assert!(work(j).is_err(), "the payment of (salt, meta) only");
         // refused shapes: the address body or fields in a UA job, a UA body in a metatx job, an address `from`
@@ -2301,17 +2338,17 @@ pub(crate) mod tests {
     /// simulation whose UA nonce is spent (`uaNonce(id, batch) > nonce`) is `consumed`, never `dead`.
     #[tokio::test]
     async fn ua_metatx_job_relays_and_a_spent_ua_nonce_is_consumed() {
-        let ok = || Evm { ua_nonce: Some(0), ..Default::default() };
+        let ok = || Evm { mtx_nonce: Some(0), ..Default::default() };
         let (r, rpc) = outcomes(ok(), vec![ua_job(7, &ua_meta(7))], |_| {}).await;
         assert_eq!(states_of(&r), ["signed", "broadcast"], "{r:?}");
         let sent = rpc.lock().unwrap().sent[0].clone();
-        assert_eq!((sent.1, &sent.2[..4]), (TOKEN, &crate::abi::IUALedger::uaExecuteTransferCall::SELECTOR[..]));
-        let (r, rpc) = outcomes(Evm { sim: Some("revert"), ua_nonce: Some(1), ..Default::default() }, vec![ua_job(7, &ua_meta(7))], |_| {}).await;
+        assert_eq!((sent.1, &sent.2[..4]), (TOKEN, &crate::abi::IMtxIds::mtxExecuteTransferCall::SELECTOR[..]));
+        let (r, rpc) = outcomes(Evm { sim: Some("revert"), mtx_nonce: Some(1), ..Default::default() }, vec![ua_job(7, &ua_meta(7))], |_| {}).await;
         assert_eq!(states_of(&r), ["consumed"], "{r:?}");
         assert!(rpc.lock().unwrap().sent.is_empty());
-        let (r, _) = outcomes(Evm { sim: Some("revert"), ua_nonce: Some(0), ..Default::default() }, vec![ua_job(7, &ua_meta(7))], |_| {}).await;
+        let (r, _) = outcomes(Evm { sim: Some("revert"), mtx_nonce: Some(0), ..Default::default() }, vec![ua_job(7, &ua_meta(7))], |_| {}).await;
         assert_eq!(states_of(&r), ["dead"], "{r:?}");
-        let (r, _) = outcomes(Evm { sim: Some("revert"), ua_nonce: None, ..Default::default() }, vec![ua_job(7, &ua_meta(7))], |_| {}).await;
+        let (r, _) = outcomes(Evm { sim: Some("revert"), mtx_nonce: None, ..Default::default() }, vec![ua_job(7, &ua_meta(7))], |_| {}).await;
         assert_eq!(states_of(&r), ["queued"], "an unreadable UA nonce decides nothing: {r:?}");
         // the guard: the UA ledger off, an unregistered token, a UA pay to the router, a UA meta above the cap
         let (r, rpc) = outcomes(Evm { ua_off: true, ..ok() }, vec![ua_job(7, &ua_meta(7))], |_| {}).await;
@@ -2337,23 +2374,23 @@ pub(crate) mod tests {
         assert!(r[0].0 == "dead" && r[0].1.starts_with("PAY_META_TOO_LONG"), "{r:?}");
     }
 
-    /// `uaRelay` for a UA payer: a router-bound `UAMetaTransfer` of `value` to `to` for `TARGET.cancelNonce(9)`.
+    /// `relay` for a derived payer `UA`: its `UARelayFee` of `value` to `to` for `TARGET`'s call.
     fn ua_relay_data(to: B256, value: u64) -> Vec<u8> {
         let call: Bytes = IToken::mtxNonceCall { from: Address::ZERO, batch: U256::ZERO }.abi_encode().into();
-        crate::abi::IMtxRelayFee::uaRelayCall { target: TARGET, callData: call, token: TOKEN, from: UA, payee: to, value: U256::from(value),
+        crate::abi::IMtxRelayFee::relayCall { target: TARGET, callData: call, token: TOKEN, from: UA, payee: to, value: U256::from(value),
             validUntil: U256::from(now() + 600), auth: UASig { keyData: Bytes::new(), signature: Bytes::from(vec![0x22; 96]), members: vec![] } }.abi_encode()
     }
 
-    /// CTR-MTX-27 for a UA payer: the call-table row `MtxRelayFee.uaRelay` takes the router's shape on ids (payee never
-    /// the executor's id) and `min_amount` as `relay`; the lane's cost is known only after the simulation (a UA verify
-    /// costs what its kind costs, millions of gas for a PQ kind), so the fee must also be worth, at the token's
-    /// `relay_fee.min_wei_value`, at least the quote = the gas limit × the max fee per gas the lane signs with. A token
-    /// without a price is refused for a UA payer; an address payer is priced only when its token has one.
+    /// CTR-MTX-27 for a derived payer: the call-table row `MtxRelayFee.relay` takes the router's shape on ids (payee never
+    /// the executor's id) and `min_amount`; the lane's cost is known only after the simulation (a UA verify costs what its
+    /// kind costs, millions of gas for a PQ kind), so the fee must also be worth, at the token's `relay_fee.min_wei_value`, at
+    /// least the quote = the gas limit × the max fee per gas the lane signs with. A token without a price is refused for a
+    /// derived payer; a native payer (an EOA padded) is priced only when its token has one.
     #[tokio::test]
     async fn ua_relay_fee_needs_a_price_and_covers_the_quote() {
         let sig = |s: &str| -> [u8; 4] { alloy::primitives::keccak256(s)[..4].try_into().unwrap() };
-        assert_eq!(crate::abi::IUALedger::uaPayMetaCall::SELECTOR,
-            sig("uaPayMeta(bytes32,bytes32,uint256,bytes32,bytes,uint256,uint32,address,uint256,address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))"));
+        assert_eq!(crate::abi::IMtxRelayFee::relayCall::SELECTOR,
+            sig("relay(address,bytes,address,bytes32,bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))"));
         let mut cfg = test_cfg("http://127.0.0.1:9");
         relay_params(&mut cfg, &[]);
         let rf = guard::RelayFee::from_cfg(&cfg).unwrap().unwrap();
@@ -2364,8 +2401,8 @@ pub(crate) mod tests {
         assert!(check(&ua_relay_data(open, 99)).unwrap_err().contains("below relay_fee.min_amount 100"));
         assert_eq!(check(&ua_relay_data(lane1().into_word(), 100)), Ok(TARGET), "bound to this lane");
         assert!(check(&ua_relay_data(B256::repeat_byte(0x5e), 100)).unwrap_err().contains("relay_bound_payee"));
-        let c = crate::abi::IMtxRelayFee::uaRelayCall::abi_decode(&ua_relay_data(open, 100)).unwrap();
-        let other = crate::abi::IMtxRelayFee::uaRelayCall { token: Address::repeat_byte(0x99), ..c }.abi_encode();
+        let c = crate::abi::IMtxRelayFee::relayCall::abi_decode(&ua_relay_data(open, 100)).unwrap();
+        let other = crate::abi::IMtxRelayFee::relayCall { token: Address::repeat_byte(0x99), ..c }.abi_encode();
         assert!(check(&other).unwrap_err().starts_with("TOKEN_NOT_SERVED"));
         // on the lane: no price ⇒ refused before any signature; then exactly the quote passes, one wei less does not
         let price = |p: u128| -> Vec<(&'static str, toml::Value)> {
@@ -2385,7 +2422,7 @@ pub(crate) mod tests {
             let e = rpc.lock().unwrap();
             (e.gas[0], e.fees[0], e.sent[0].2[..4].to_vec())
         };
-        assert_eq!(sel, crate::abi::IMtxRelayFee::uaRelayCall::SELECTOR);
+        assert_eq!(sel, crate::abi::IMtxRelayFee::relayCall::SELECTOR);
         // fix 1 (I1): the quote is taken at the job's fee ceiling, FEE_HEADROOM x the first max fee
         let quote = u128::from(gas) * guard::FEE_HEADROOM * fee;
         assert_eq!(guard::relay_quote(gas, guard::fee_ceiling(fee), 0), quote);
@@ -2395,7 +2432,7 @@ pub(crate) mod tests {
         // fix 1 (minor 3): the quote follows the current fees, so below it is a retry, never a kill
         assert!(r[0].0 == "queued" && r[0].1.starts_with("RELAY_FEE_REFUSED") && r[0].1.contains("quote"), "{r:?}");
         assert!(rpc.lock().unwrap().sent.is_empty(), "nothing sent below the quote");
-        // an address payer: priced only when its token has a price (T17's min_amount rule otherwise)
+        // a native payer: priced only when its token has a price (T17's min_amount rule otherwise)
         let (r, _) = go(relay_data(ROUTER, 1_000), vec![]).await;
         assert_eq!(states_of(&r), ["signed", "broadcast"], "{r:?}");
         let (r, _) = go(relay_data(ROUTER, 1_000), price((quote - 1) / 1_000)).await;
@@ -2518,7 +2555,7 @@ pub(crate) mod tests {
     /// subjects run, and the hold ends with the job. One key for both payer forms (`relay`'s address is its padded id).
     #[tokio::test]
     async fn a_relay_fee_job_holds_its_payer() {
-        let (url, rpc) = fake_evm(Evm { ua_nonce: Some(0), mtx_nonce: Some(0), ..Default::default() }).await;
+        let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
         let (odoo, o) = fake_odoo(Fake { tokens: toks(), ..Default::default() }).await;
         let mut s = lane_cfg(&url, odoo, 1, InflightSet::default(), priced(u128::MAX / 1_000)).await.unwrap();
         let last = |o: &Shared, id: i64| o.lock().unwrap().reports.iter().rev().find(|r| r["job_id"] == id).cloned().unwrap();

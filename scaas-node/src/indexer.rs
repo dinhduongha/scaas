@@ -478,6 +478,52 @@ mod tests {
         assert_eq!((out[4]["relay_payee"].as_str(), out[4]["relay_payee_ua"].as_str()), (Some(pool.as_str()), Some(id(shop).as_str())));
     }
 
+    /// R18 (ua-mtx-merge): a merged entry emits the `UA…` events only, an EOA's too. With a native id they are the address rows the
+    /// client ingests: `from` / `to` the EOA's address, no `from_ua`; the filter reads both topics.
+    #[test]
+    fn indexer_reads_ua_topics_for_an_eoa() {
+        use crate::abi::IUALedger;
+        let (token, eoa, shop) = (Address::repeat_byte(9), Address::repeat_byte(0x11), Address::repeat_byte(0x22));
+        let exec = IUALedger::UAMetaTransactionExecuted { from: eoa.into_word(), relayer: Address::repeat_byte(0x1a), batch: U256::from(7u64),
+            nonce: U256::from(1u64), digest: B256::repeat_byte(0xd1), feeRecipient: Address::ZERO, fee: U256::ZERO }.encode_log_data();
+        let paid = IUALedger::UAPaymentSettled { from: eoa.into_word(), to: shop.into_word(), amount: U256::from(10u64), feeAmount: U256::ZERO,
+            feeRecipient: Address::ZERO, entryRef: B256::repeat_byte(4) }.encode_log_data();
+        for t in [IUALedger::UAMetaTransactionExecuted::SIGNATURE_HASH, IUALedger::UAPaymentSettled::SIGNATURE_HASH] {
+            assert!(pay_filter(0, 1, vec![token], None).topics[0].matches(&t));
+        }
+        let out = pay_events(&[log_at(token, 1, 0, paid), log_at(token, 1, 1, exec)], None);
+        assert!(out.iter().all(client_ingest_accepts), "{out:?}");
+        assert_eq!((out[0]["event"].as_str(), out[0]["from"].as_str(), out[0]["to"].as_str()),
+            (Some("PaymentSettled"), Some(format!("{eoa:#x}").as_str()), Some(format!("{shop:#x}").as_str())));
+        assert_eq!((out[1]["event"].as_str(), out[1]["from"].as_str(), out[1]["nonce"].as_str()),
+            (Some("MetaTransactionExecuted"), Some(format!("{eoa:#x}").as_str()), Some("1")));
+        assert!(out.iter().all(|v| v["from_ua"].is_null() && v["to_ua"].is_null()), "a native id carries no id key");
+    }
+
+    /// The payment reference of an EOA's payment (`entry_ref`, the `pay_ref` a client matches) comes from `UAPaymentSettled`: its
+    /// `PaymentMeta` joins it by the EOA's address, and its open-mode `RelayFeePaid` (payer the padded EOA) by `(from, ref)`.
+    #[test]
+    fn pay_ref_reads_ua_payment_settled() {
+        use crate::abi::IUALedger;
+        let (token, router, lane) = (Address::repeat_byte(9), Address::repeat_byte(0x7f), Address::repeat_byte(0x1a));
+        let (eoa, shop) = (Address::repeat_byte(0x11), Address::repeat_byte(0x22));
+        let (p, r) = (B256::repeat_byte(4), B256::repeat_byte(5));
+        let settled = |to: Address, amount: u64, entry_ref: B256| IUALedger::UAPaymentSettled { from: eoa.into_word(), to: to.into_word(),
+            amount: U256::from(amount), feeAmount: U256::ZERO, feeRecipient: Address::ZERO, entryRef: entry_ref }.encode_log_data();
+        let logs = vec![
+            log_at(token, 1, 0, IToken::PaymentMeta { payId: p, meta: vec![0xab].into() }.encode_log_data()),
+            log_at(token, 1, 1, settled(shop, 100, p)),
+            log_at(token, 2, 0, settled(router, 5, r)),
+            log_at(router, 2, 1, IMtxRelayFee::RelayFeePaid { r#ref: r, target: shop, token, payer: eoa.into_word(), payee: lane.into_word(),
+                amount: U256::from(5u64) }.encode_log_data()),
+        ];
+        let out = pay_events(&logs, Some(router));
+        assert_eq!(out.len(), 2);
+        assert_eq!((out[0]["entry_ref"].as_str(), out[0]["meta"].as_str(), out[0]["from"].as_str()),
+            (Some(format!("{p:#x}").as_str()), Some("0xab"), Some(format!("{eoa:#x}").as_str())));
+        assert_eq!((out[1]["entry_ref"].as_str(), out[1]["relay_payee"].as_str()), (Some(format!("{r:#x}").as_str()), Some(format!("{lane:#x}").as_str())));
+    }
+
     /// Merge TODO a (recipe M1 on the EVM indexer): no registered token ⇒ nobody can filter this range, so the
     /// cursor stays put (a token activated later still gets its events) and no RPC is spent.
     #[tokio::test]
