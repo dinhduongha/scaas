@@ -1,9 +1,9 @@
 # UA-7: PqChat — post-quantum chat sessions (version 2)
 
 **Status:** version 2, **accepted by the owner 2026-11-04** (revised the same day; the open items O1–O7 and the round name
-answered the same day, §14). Version 1 (controller, 2026-10-25, with the
+answered the same day, §14; HCS added as the third transport by the owner 2026-11-05, D14). Version 1 (controller, 2026-10-25, with the
 owner's answers of that day) is in this file's git history. Nothing is built. Version 2 applies the owner's thirteen
-decisions of 2026-11-04 (D1–D13, §15, register entry
+decisions of 2026-11-04 (D1–D13) and of 2026-11-05 (D14) (§15, register entry
 [CTR-CHAT-01](../../decisions.md#CTR-CHAT-01)) and the corrections of the architecture study
 (`docs/research/pqchat-architecture.md` §9; the two-page summary is `docs/research/pqchat-overview.md`). The build plan
 is [`2026-11-04-ua7-pqchat.md`](../plans/2026-11-04-ua7-pqchat.md). Queued after plan 5h and UA-8 (owner 2026-10-25).
@@ -51,6 +51,7 @@ is missing, extra and needed for sessions, metadata, chat features, security, an
 | C8 "no forward secrecy beyond C4" | FS and PCS bounded by the KEM key version; rotation is the UA owner's choice, PqChat may suggest it (P5); a per-sender ratchet and epoch rekeys | D6 (changed 2026-11-04) |
 | — | `msig` expansion (P13), devices (P6), calls (§10), ordering per transport (§8), metadata hygiene (§9), FIPS 203 §7.2 check (P14) | D5, D8–D10, D12, D13 |
 | C10 unlinkable mode | unchanged: research (§13) | D10 |
+| C7 Matrix "or any other channel" | a third transport: one Hedera Consensus Service topic per session (§7.3) | D14 |
 
 ## 2. Architecture
 
@@ -66,12 +67,17 @@ flowchart LR
     MEDIA["media repository: encrypted attachments"]
     RTC["MatrixRTC: call membership and signalling"]
   end
+  subgraph HCS["Hedera Consensus Service: transport 3"]
+    TOPIC["one topic per session: the same signed record, ordered, public"]
+  end
   SFU["LiveKit SFU / TURN: SFrame media only"]
-  NODE["scaas-node: relays PqChat writes only"]
+  NODE["scaas-node: relays PqChat writes; HCS submits (planned)"]
   CL["clients: ua-rs reference, ua-qt on libQuotient, JS wallet"]
   CL --> REG
   CL --> NODE --> PQC
   CL --> ROOM
+  CL -.->|"user chooses: HCS"| TOPIC
+  NODE -.-> TOPIC
   CL -.->|"user chooses: store on chain"| FB
   CL --> RTC
   CL --> SFU
@@ -80,11 +86,15 @@ flowchart LR
 **P1 — Four layers** (D1). **Identity**: the UA and its signing key in `UARegistry`, the same id on every chain
 (CTR-UA-03, CTR-UA-07). **Key directory**: the UA's KEM key versions (CTR-UA-32). **Control plane**: `PqChat` — sessions,
 admins, members, epochs, wraps of the epoch key `K` — always on chain (D2). **Data plane**: messages, attachments,
-receipts, calls — on Matrix; a message goes on chain only when the user chooses (D2).
+receipts, calls — on Matrix, or a session's HCS topic (D14); a message goes on chain only when the user chooses (D2).
 
-**P2 — Transports** (D1, D12). Primary: Matrix. Fallback: the same signed message record posted to `PqChat` (§7.2). Peer to
-peer: 1:1 calls only (§10). `scaas-node`: relays `PqChat` writes as `call` jobs (§7.3); it stores, gossips or pushes no
-chat traffic and is no TURN or SFU.
+**P2 — Transports** (D1, D12, D14). Three, in this order; the user's client picks per session setting and, where §7.2
+allows, per message: **Matrix** (primary, §7.1) → **HCS**, one Hedera Consensus Service topic per session, a cheap public
+ordered log (§7.3) → **`PqChat` on chain**, the fallback with the bytes in state (§7.2). The signed record, its signature
+and the client checks are the same on every transport; HCS is a transport, not a contract rule, available wherever
+Hedera is, so one rule still holds on every chain. Peer to peer: 1:1 calls only (§10). `scaas-node`: relays `PqChat`
+writes as `call` jobs and, PLANNED, HCS messages as a Hedera job (§7.4); it stores, gossips or pushes no chat traffic and
+is no TURN or SFU.
 
 ## 3. Members, KEM keys, devices
 
@@ -160,8 +170,9 @@ minimal form, CTR-UA-07). The contract verifies it through the registry's portab
 - `homeChain` = the `chain_uid` of the chain that orders this session's epochs (the family-neutral id the factory already
   uses); fixed for the session's life.
 - `sealedInfo` = AES-256-GCM-SIV under `HKDF(K, "scaas/pqchat/v1/info" ‖ sessionId ‖ epochId)`, a random 96-bit nonce
-  prepended, over the padded (§6.5) canonical JSON `{"room": <Matrix room id>, "name", "topic", "matrix": {<ua>: <Matrix
-  user id>}}`. **The room id and Matrix user ids never appear on chain in the clear** (D10).
+  prepended, over the padded (§6.5) canonical JSON `{"room": <Matrix room id>, "hcs": <HCS topic id>, "name", "topic",
+  "matrix": {<ua>: <Matrix user id>}}` (`hcs` = `"shard.realm.num"`, present when the session has a topic, §7.3). **The
+  room id, the HCS topic id and Matrix user ids never appear on chain in the clear** (D10, D14).
 - `parents` = the ids of the conversation heads the sender has seen, at most 8, sorted (P19).
 - `ciphertext` = §6.4.
 
@@ -322,8 +333,8 @@ There is no deniability: a signature proves authorship of a ciphertext for good.
 ### 6.5 Padding
 
 Plaintexts are padded (length prefix, then zeros) to 256, 1,024, 4,096 or 16,384 B, then multiples of 16,384 B (D10).
-A message posted on chain is at most one 1,024-B bucket unless the user confirms the cost; attachments never go on chain
-(1 MiB ≈ 1.6 G state gas).
+The buckets apply on every transport. A message posted on chain is at most one 1,024-B bucket unless the user confirms
+the cost; attachments never go on chain (1 MiB ≈ 1.6 G state gas). An HCS message is bounded by the chunk limit (P25).
 
 ## 7. Transports
 
@@ -377,13 +388,58 @@ sequenceDiagram
   B->>B: verify sig against the event bytes and the stored hash, decrypt
 ```
 
-### 7.3 The node
+### 7.3 HCS (transport 3)
+
+SPECIFIED (D14); nothing built.
+
+```mermaid
+sequenceDiagram
+  participant A as sender client
+  participant N as scaas-node (Hedera job, planned) or own account
+  participant T as HCS topic of the session
+  participant M as mirror node
+  participant B as member client
+  A->>A: content -> pad -> ratchet -> ciphertext; sign PqChatMessage; seal the P15 envelope
+  A->>N: topic id, payload (named fields)
+  N->>T: TopicMessageSubmitTransaction (chunks of 1,024 B)
+  T-->>M: consensus timestamp, sequence number
+  B->>M: read the topic
+  B->>B: open envelope, verify the UA signature, check epoch membership and nonce, dedupe by messageId
+```
+
+**P24 — Topic** (D14). One HCS topic per session, created by the creator's client or through the node's relay (P26).
+It is **immutable**: no admin key; **no submit key** (UA keys are PQ and cannot be HCS keys, so anyone may submit and
+clients filter); **no custom fee** (HIP-991), so spam costs the spammer HBAR and clients drop it; an empty memo. The topic
+id travels only inside `sealedInfo` (§4.2), never in the clear on chain, as the Matrix room id (D10). Per-epoch topics are
+not used.
+
+**P25 — Message and client checks.** The payload is `abi.encode(uint8 v, bytes8 hint, bytes env)` with `v`, `hint` and
+`env` exactly as P15 (`env` = the envelope over `abi.encode(PqChatMessage, UASig)`): the same signed record as on
+Matrix and on chain, with the **signature's full bytes** (HCS keeps no state, so there is no hash-in-state split as in
+§7.2). Receipts, edits, redactions, reactions and call keys are content types inside the envelope, as on Matrix; the
+padding buckets of §6.5 apply. HCS splits a payload into chunks of 1,024 B, at most 20 by default, so about 20 KB per
+message: buckets up to 4,096 B fit with every signer kind, the 16,384-B bucket only with the shortest signatures; larger
+content goes as an attachment reference (Matrix media or chain) or the client refuses it. The contract is not involved;
+the receiving client checks, as for Matrix: the portable signature against the author's UA in the registry (any chain
+that holds it); the sender is a member of a complete epoch as the home chain orders it (P9); the nonce scope `(epochId,
+sender, device)` and its counter (§4.3); `messageId` dedupe across transports (P19). An envelope that does not open, a
+bad signature, a non-member or a replay is dropped silently.
+
+**P26 — Submission and retention.** A client submits with its own Hedera account, or `scaas-node` relays it as a new
+Hedera job with named fields (topic id, payload) and creates topics the same way; the lane key holds HBAR only, the node
+stores and gossips nothing. PLANNED: the node reaches Hedera today only through the JSON-RPC relay
+([NET-HED-04](../../networks/hedera.md#NET-HED-04)); the job's rule and its row go in the node's own spec
+(`docs/node/job-api.md`) when it is built. HCS messages live on **mirror nodes, not in consensus state**: public for as
+long as mirrors keep them, with no guarantee beyond that. A message that must stay in state goes on chain (§7.2). The
+client says so plainly when the user picks HCS: public, kept by mirror nodes only, nothing can be removed.
+
+### 7.4 The node
 
 **P17 — Relay only** (D1). `scaas-node` relays `createSession`, `rekey`, `addWraps`, `leave` and `postMessage` as `call`
 jobs: five rows in its call table, kept equal to the contract's entries (NODE-JOB-01), named JSON fields per job
 (NODE-JOB-20 style), no fee form (owner answer 4). The rule and the rows go in the node's own spec (`docs/node/job-api.md`
 call table), for every consumer. The node stores no chat traffic, runs no chat gossip, sends no push and is no TURN or SFU
-(D12).
+(D12). The Hedera job for HCS messages is P26 (PLANNED).
 
 ## 8. Ordering
 
@@ -395,13 +451,14 @@ call table), for every consumer. The node stores no chat traffic, runs no chat g
 | Chain, across chains | none: records are copied in any order | — |
 | Home chain, epochs | one child per parent, first complete wins (P9) | follows `childOf` on the home chain, after finality |
 | Matrix | per-room DAG, linearised per server | ignores it for display |
+| HCS | consensus timestamp and topic sequence number, one order per topic | display only, under P19; never epochs |
 | Peer to peer (calls) | FIFO per link | — |
 
 **P19 — Conversation order** (every transport the same). Every message names `(epochId, sender, device, counter)` and
 `parents` (≤ 8 heads it saw). Display order: topological by `parents`, ties by the sender's timestamp inside the
 plaintext, then `messageId`. Counters may have gaps (nonce 5 may land before 4); a message for an unknown epoch is buffered
 until its epoch record arrives; a message in a child that lost the home-chain slot is shown as such if its `K` is held.
-The same `messageId` on Matrix and on chain is one message.
+The same `messageId` on Matrix, HCS and chain is one message.
 
 ## 9. Metadata
 
@@ -411,10 +468,11 @@ The same `messageId` on Matrix and on chain is one message.
 |---|---|
 | Anyone, forever, from the chain | sessions, creators, admins, member UAs and their KEM versions, epoch authors and times; for on-chain messages the session, sender, device, counter, size and time; the submitter's account |
 | Homeservers | room membership (Matrix ids), sender Matrix id, time, envelope size (bucketed), the 8-byte hint |
+| Anyone, from Hedera mirror nodes | for a session with a topic: the topic id, which links all of the session's messages (the cost of one topic per session); the creating and each submitting Hedera account; consensus time; payload size (bucketed); the 8-byte hint |
 | RPC providers, relayers | the IP of who reads or submits |
 
-Rules: no room id or Matrix id on chain in the clear (`sealedInfo` only); padding buckets (§6.5); records submitted through
-a relayer rather than the author's own account; receipts and typing inside the envelope; Megolm as an outer layer where
+Rules: no room id, HCS topic id or Matrix id on chain in the clear (`sealedInfo` only); padding buckets (§6.5); records
+and HCS messages submitted through a relayer rather than the author's own account; receipts and typing inside the envelope; Megolm as an outer layer where
 the client supports it. Hiding the member set and the sender on chain is the unlinkable mode (§13).
 
 ## 10. Voice and video calls
@@ -474,6 +532,16 @@ Estimates (architecture study §8): EIP-8037 1,530 gas per state byte, new slot 
 | message 1 KiB on chain, signature hash in state (FN-DSA-512 / ML-DSA-65 cached / precompile) | 4.6 / 8.1 / 2.5 M | $3.2 / 5.7 / 1.7 | $52 / 92 / 28 | $0.03–0.09 |
 | new KEM version (`setKemKey`) | ≈ 6–14 M | $4–10 | $70–155 | < $0.15 |
 | message, call key, attachment over Matrix | 0 gas | hosting | | |
+
+HCS (P25), estimates of 2026-11-05 in USD (Hedera fees are fixed in USD and paid in HBAR), from
+[Submit a message](https://docs.hedera.com/native/consensus/submit-message) and
+[HIP-1261 Simple Fees](https://hedera.com/blog/hip-1261-a-developer-guide-to-simple-fees/); to be checked when built.
+
+| Item | Cost |
+|---|---|
+| message submit, topic without custom fees | ≈ $0.0001 base; ≈ $0.0002–0.0008 for 101–1,024 B; per chunk |
+| one signed record, 256-B bucket (FN-DSA-512 / ML-DSA-65) | 2 / 5 chunks, ≈ $0.0004–0.0016 / $0.001–0.004 |
+| topic creation, once per session | ≈ $0.01 |
 
 ## 12. Libraries and vectors
 
@@ -559,6 +627,16 @@ and **no forced KEM rotation** (changed the same day: the 30-day rotation with a
 UA owner's choice, P5); O7 a signed contact card exchanged out of band, no on-chain field; family rounds named
 `pqchat-<family>`.
 
+**Decision of 2026-11-05** (owner: "add HCS as transport 3 to the spec"; a Change on
+[CTR-CHAT-01](../../decisions.md#CTR-CHAT-01)): **D14** — the Hedera Consensus Service is the third transport, between
+Matrix and the chain (P2): one immutable topic per session (no admin key, no submit key, no custom fee, empty memo), its
+id only inside `sealedInfo`; the payload is the same signed record in the P15 envelope with the signature's full bytes;
+the receiving client checks it as on Matrix and dedupes by `messageId`; the topic's order is for display only, epochs stay
+on the home chain; messages live on mirror nodes, not in state; a client submits with its own Hedera account or through
+the node's Hedera job (PLANNED) (§7.3, P24–P26). Why: about 10,000× cheaper than an on-chain message, ordered and public
+without running a homeserver. Cost: Hedera only, retention as long as mirror nodes keep it, and the topic id links all
+of a session's messages.
+
 ## 16. Work
 
 For the plan (`docs/superpowers/plans/2026-11-04-ua7-pqchat.md`); EVM first, other families in their own rounds.
@@ -570,8 +648,10 @@ For the plan (`docs/superpowers/plans/2026-11-04-ua7-pqchat.md`); EVM first, oth
    signature hash; forge tests (red first): records in any order, a copied record on a second chain, the P9 removal
    attack refused, an incomplete child never blocks, `addWraps` by a stranger, a racing nonce, a forged signature, an
    `msig` admin; gas per wrap, epoch and message measured.
-4. Node: five call-table rows and the job shapes in `docs/node/job-api.md`.
+4. Node: five call-table rows and the job shapes in `docs/node/job-api.md`; then the Hedera job for HCS (topic create,
+   message submit; P26), its rule and row in the same spec.
 5. `clients/ua-rs` reference: keys, P14 check, wraps, records, chains, envelope, ordering, call keys; then `clients/ua-qt`
-   on libQuotient (event type, room, chat screen, SFrame through Qt WebEngine or LiveKit's SDK), then the JS wallet.
+   on libQuotient (event type, room, chat screen, SFrame through Qt WebEngine or LiveKit's SDK), then the JS wallet; the HCS
+   transport (§7.3) in each client that implements PqChat.
 6. Docs: a `docs/contracts/` component section for `PqChat` (SPECIFIED, then BUILT), `docs/clients/`, the node call table.
 7. Not in this work: the unlinkable mode, MLS, per-device KEM keys, non-EVM families (each a `pqchat-<family>` round).

@@ -6,6 +6,10 @@ Two-page summary of [`pqchat-architecture.md`](pqchat-architecture.md) (the full
 UA-7 ([spec](../superpowers/specs/2026-10-25-ua7-pq-e2e-sessions.md)). Nothing here is decided. Figures are estimates
 at ETH $2,261.87 and 0.31 gwei (both 2026-11-03).
 
+> Note (2026-11-05): the owner has since added a Hedera Consensus Service topic as the third transport, between Matrix
+> and the chain (spec §7.3, D14; [CTR-CHAT-01](../decisions.md#CTR-CHAT-01)). The picture shows it; the rest of this note
+> is as written on 2026-11-04.
+
 ## The picture
 
 ```mermaid
@@ -20,11 +24,13 @@ flowchart LR
     MEDIA["media repo: encrypted attachments"]
     RTC["MatrixRTC: call signalling"]
   end
+  TOPIC["HCS topic per session: transport 3 (added 2026-11-05)"]
   SFU["LiveKit SFU / TURN: SFrame media only"]
   CL["clients: ua-qt (libQuotient), JS wallet"]
   CL --> REG
   CL --> PQC
   CL --> ROOM
+  CL -.->|"user chooses"| TOPIC
   CL -.->|"server refuses or is gone"| FB
   CL --> RTC --> SFU
 ```
