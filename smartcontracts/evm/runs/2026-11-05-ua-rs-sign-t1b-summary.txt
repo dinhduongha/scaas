@@ -22,3 +22,14 @@ mutants: 2026-11-05-ua-rs-sign-t1b-mutants.py | (this commit) | 0 | 34 killed, 0
 docs_check check / paths / test_docs_check | (this commit) | 0 | 0 errors 5 warnings / 0 machine paths / ok
 # seal.json: containers 2 -> 4 (+ msig flat {p256, ed25519}, + msig nested), acceptance 14 -> 23 (- "an msig sender key"; + 10 UASig rows),
 # replay 9 rows rewritten (sender.sig -> sender.auth); seal, refusals, argumentRefusals unchanged; the old containers' sealed bytes and signatures unchanged.
+# 2026-11-05 follow-up (owner: "theo khuyên cả hai"): no kind in the container (the opener tries derive_ua, at most one kind matches);
+# an msig container sender needs its signers accepted at both levels (CTR-UA-37), accepted(id, index) supplied by the caller.
+step | commit | rc | counts
+red: node --test test/seal.test.js test/kem.test.js test/vault.test.js on ed1129b4's src/seal.js with the new tests and seal.json | ed1129b4 | 1 | 23 tests, 3 failed (acceptance rows: the first member-acceptance row opens; the new lookup test; replay: restoreBackup's options moved one place), 20 passed
+clientkeys npm test (foundry 1.8.5 on PATH) | (this commit) | 0 | 288 tests, 286 pass, 0 fail, 2 skipped (was 287 / 285: +1 lookup test)
+vectors-check: ua-wallet-vectors.mjs twice into scratch dirs, cmp with each other and the tree | (this commit) | 0 | seal.json moved (rows added, note); keys, sign, kem, vault byte-identical; no other generator imports seal.js
+mutants: 2026-11-05-ua-rs-sign-t1b-mutants.py | (this commit) | 0 | 39 killed, 0 survived, 0 not loaded (M35-M39 new: acceptance skipped at level 1, at level 2, weight over the signers, a missing lookup as all accepted, a non-false answer as accepted)
+docs_check check / paths / test_docs_check | (this commit) | 0 | 0 errors 5 warnings / 0 machine paths / ok
+# seal.json: acceptance 23 -> 29 (+ signer not accepted with the msig active through a non-signer, accepted weight below the threshold,
+# inner msig's slot not accepted (level 1), inner signer not accepted (level 2), no accepted lookup: ContainerSender; + control: a
+# non-signer not accepted opens); the msig containers and msig acceptance rows gain `accepted` (every member); no bytes moved.

@@ -160,13 +160,26 @@ const derives = (kind, keyData, id) => { try { return eq(ua.deriveUA(kind, keyDa
 const leafOk = (m, key, md, s) => SENDER_KINDS.includes(m.kind) && s.members.length === 0
   && kindVerify(m.kind, key, ua.uaMessage(m.kind, MEMBER, md), s.sig, false);
 
-/** An `msig` sender's `members` over its `ua_msg` `m0` (owner 2026-11-05): the minimal set at both levels (`msigSigMinimal`); a
- *  derived member over `memberDigest(senderUa, m0)`; an `msig` member with no `sig` of its own and its own non-empty list one level
- *  down over `innerDigest(member, memberDigest(senderUa, m0))`. Member key data from `members(id)`, never trusted (`memberKeys`). */
-function msigOk(id, d, m0, slots, members) {
+/** Member acceptance at one level (CTR-UA-37, owner 2026-11-05): the weight of the signing slots of `msig` `id` (hex) whose
+ *  `accepted(id, index)` is `true` must reach the threshold, else `ContainerSender`; any other answer counts as not accepted. The
+ *  set is minimal (every slot necessary), so this holds only when every signing member is accepted, and then the `msig`'s accepted
+ *  weight reaches its threshold. */
+function acceptedOk(id, d, slots, accepted) {
+  const { threshold, members: all } = ua.msigStructure(d);
+  const w = slots.reduce((t, s) => t + (accepted(id, s.index) === true ? all[s.index].weight : 0), 0);
+  if (w < threshold) fail('ContainerSender', `msig ${id}: the accepted weight of its signers is below the threshold`);
+}
+
+/** An `msig` sender's `members` over its `ua_msg` `m0` (owner 2026-11-05): the minimal set at both levels (`msigSigMinimal`), each
+ *  level's signers accepted (`acceptedOk`); a derived member over `memberDigest(senderUa, m0)`; an `msig` member with no `sig` of
+ *  its own and its own non-empty list one level down over `innerDigest(member, memberDigest(senderUa, m0))`. Member key data from
+ *  `members(id)`, never trusted (`memberKeys`). */
+function msigOk(id, d, m0, slots, members, accepted) {
   const keys = memberKeys(d, members);
   if (!ua.msigSigMinimal(d, slots, (x) => members(x)?.keyData)) return false;
   const all = ua.msigStructure(d).members;
+  acceptedOk(hex(id), d, slots, accepted);
+  for (const s of slots) if (all[s.index].kind === 0x0120) acceptedOk(all[s.index].id, keys[s.index], s.members, accepted);
   const md = ua.memberDigest(id, m0);
   return slots.every((s) => {
     const m = all[s.index];
@@ -187,8 +200,11 @@ const decode = (f) => { try { return f(); } catch { return fail('SealOpen', 'con
  *  single-key kind (`SENDER_KINDS`), recomputed here; then the `UASig` over the rebuilt aad and wire form (a single key: its
  *  `signature`, no members; an `msig`: no `signature`, `msigOk`), then the seal. A mismatch: `ContainerSender`; a bad
  *  signature, member set or tag: `SealOpen`. `members(id)` → `{ kind, keyData }`: an `msig` sender's member keys (re-derived;
- *  an unknown member: `ContainerSender`). `shortCode`: a link container's. No replay protection here (openLink, restoreBackup). */
-export async function openContainer(kemKey, c, expect, members, { shortCode } = {}) {
+ *  an unknown member: `ContainerSender`). `accepted(id, index)` → `memberAccepted(id, index)` of the chain's registry or an
+ *  indexer (CTR-UA-37): an `msig` sender needs it (missing: `ContainerSender`) and opens only with its signers accepted at both
+ *  levels (`acceptedOk`); a single key needs none. `shortCode`: a link container's. No replay protection here (openLink,
+ *  restoreBackup). */
+export async function openContainer(kemKey, c, expect, members, accepted, { shortCode } = {}) {
   if (c?.v !== 1) fail('SealVersion', 'container v 1 only');
   const no = (why) => fail('ContainerSender', why);
   if (c.purpose !== expect?.purpose) no('purpose not the expected one');
@@ -211,7 +227,10 @@ export async function openContainer(kemKey, c, expect, members, { shortCode } = 
   let ok;
   if (kind !== 0x0120) ok = auth.members.length === 0 && kindVerify(kind, auth.keyData, m0, auth.signature, false);
   else {
-    try { ok = auth.signature.length === 0 && msigOk(senderUa, auth.keyData, m0, auth.members, members ?? (() => null)); } catch { no('msig member keys'); }
+    if (typeof accepted !== 'function') no('an msig sender needs accepted(id, index)');
+    try { ok = auth.signature.length === 0 && msigOk(senderUa, auth.keyData, m0, auth.members, members ?? (() => null), accepted); } catch (e) {
+      no(e?.code === 'ContainerSender' ? e.reason : 'msig member keys');
+    }
   }
   if (!ok) fail('SealOpen', 'sender signature');
   return open(kemKey, c.purpose, aad, sealed);
@@ -234,13 +253,13 @@ const newSession = (kemKey, shortCode, start) => ({ kemKey, kemPk: kemKey.kemPk,
 
 /** The plaintext of a link container to `session`: `created` in the window (else `ContainerReplay`), the acceptance of
  *  `openContainer`; on success the session is used up and its key wiped (a second call: `ContainerReplay`). */
-export async function openLink(session, c, expect, members) {
+export async function openLink(session, c, expect, members, accepted) {
   if (session.used) fail('ContainerReplay', 'the session is used up');
   if (expect?.purpose !== PURPOSE.link) fail('Argument', 'a link session opens scaas/link/v1 only');
   if (!Number.isSafeInteger(c?.created) || c.created < session.start || c.created > session.end) {
     fail('ContainerReplay', 'created outside the session window');
   }
-  const pt = await openContainer(session.kemKey, c, expect, members, { shortCode: session.shortCode });
+  const pt = await openContainer(session.kemKey, c, expect, members, accepted, { shortCode: session.shortCode });
   session.used = true;
   session.kemKey.wipe();
   return pt;
@@ -275,9 +294,9 @@ export const sealBackup = ({ kemPk, recipient, sender, created, payload }, fixed
  *  the manifest entry naming it (else `ContainerSender`); over a device that holds this wallet (`current = { ua, generation }`
  *  with `ua` = sender.ua) an older generation is `BackupRollback` unless `allowRollback`, an equal one changes nothing
  *  (`install: false`). Returns `{ install, payload }`. */
-export async function restoreBackup(kemKey, c, expect, members, { current = null, allowRollback = false, bip39Passphrase = '' } = {}) {
+export async function restoreBackup(kemKey, c, expect, members, accepted, { current = null, allowRollback = false, bip39Passphrase = '' } = {}) {
   if (expect?.purpose !== PURPOSE.backup) fail('Argument', 'restore opens scaas/backup/v1 only');
-  const pt = await openContainer(kemKey, c, expect, members);
+  const pt = await openContainer(kemKey, c, expect, members, accepted);
   const payload = decodeBackup(pt);
   wipe(pt);
   const senderUa = hex(fromB64url(c.sender.ua));

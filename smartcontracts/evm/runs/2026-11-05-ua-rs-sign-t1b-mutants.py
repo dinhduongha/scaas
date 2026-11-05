@@ -51,6 +51,15 @@ M = [
     ("msig UASig with a signature of its own accepted", SEAL, "ok = auth.signature.length === 0 && msigOk(", "ok = msigOk("),
     ("msig member signature unchecked", SEAL, "  && kindVerify(m.kind, key, ua.uaMessage(m.kind, MEMBER, md), s.sig, false);", ";"),
     ("inner msig members over the outer member digest", SEAL, "const imd = ua.innerDigest(fromHex(m.id), md);", "const imd = md;"),
+    # owner 2026-11-05: an msig container sender needs accepted members (CTR-UA-37)
+    ("msig sender: member acceptance skipped (level 1)", SEAL, "  acceptedOk(hex(id), d, slots, accepted);\n", ""),
+    ("msig sender: member acceptance skipped (level 2)", SEAL,
+     "  for (const s of slots) if (all[s.index].kind === 0x0120) acceptedOk(all[s.index].id, keys[s.index], s.members, accepted);\n", ""),
+    ("msig sender: weight counted over the signers, not the accepted ones", SEAL,
+     "t + (accepted(id, s.index) === true ? all[s.index].weight : 0)", "t + all[s.index].weight"),
+    ("msig sender: a missing accepted lookup treated as all accepted", SEAL,
+     "if (typeof accepted !== 'function') no('an msig sender needs accepted(id, index)');", "if (typeof accepted !== 'function') accepted = () => true;"),
+    ("msig sender: an answer other than false treated as accepted", SEAL, "accepted(id, s.index) === true ?", "accepted(id, s.index) !== false ?"),
 ]
 bad = 0
 assert len({m[0] for m in M}) == len(M)

@@ -814,6 +814,11 @@ const keyMap = (ms) => Object.fromEntries(ms.map((m) => [m.id, { kind: m.kind, k
 const flatMembers = keyMap(flat);
 const nestedMembers = { ...keyMap(outer), ...keyMap(innerMs) };
 const lookup = (map) => (id) => map?.[id] ?? null;
+// the opener's accepted(id, index) (CTR-UA-37: memberAccepted of the chain's registry or an indexer): a row's `accepted` lists each
+// msig's accepted member indices; an index not listed is not accepted, a row without `accepted` passes no lookup
+const acceptedOf = (map) => (map ? (id, i) => map[id]?.includes(i) === true : undefined);
+const FLAT_ACCEPTED = { [H(flatUa)]: [0, 1, 2] };
+const NESTED_ACCEPTED = { [H(outerUa)]: [0, 1], [H(innerUa)]: [0, 1, 2] };
 const msigRef = (id, kd, slots, inner) => ({ ua: H(id), keyData: H(kd), slots, ...(inner ? { inner } : {}) });
 const msigSender = (r) => ({ ua: fromHex(r.ua), keyData: fromHex(r.keyData), inner: (x) => r.inner?.[x],
   slots: r.slots.map((s) => ({ index: s.index, key: s.key && keyOf(s.key), members: s.members?.map((m) => ({ index: m.index, key: keyOf(m.key) })) })) });
@@ -831,14 +836,14 @@ const containerRows = [
     pt: H(encodeBackup(payloadOf(2))), sender: W_ID, m: H(fx('backup.g2').m), e: H(fx('backup.g2').e) },
   { id: 'link', container: link, expect: expectLink, opener: { session: { seed: H(SESSION.seed), shortCode: SESSION.shortCode, start: SESSION.start } },
     pt: H(linkPt), sender: W_ID, m: H(fx('link').m), e: H(fx('link').e) },
-  { id: 'msig sender: flat {p256, ed25519}', container: flatC, expect: expectOf(flatUa), members: flatMembers, opener: { kem: R0 },
+  { id: 'msig sender: flat {p256, ed25519}', container: flatC, expect: expectOf(flatUa), members: flatMembers, accepted: FLAT_ACCEPTED, opener: { kem: R0 },
     pt: H(msigPt), sender: { msig: FLAT_SENDER }, m: H(fx('msig.flat').m), e: H(fx('msig.flat').e) },
-  { id: 'msig sender: nested, inner {two of three} + bls12381', container: nestedC, expect: expectOf(outerUa), members: nestedMembers, opener: { kem: R0 },
+  { id: 'msig sender: nested, inner {two of three} + bls12381', container: nestedC, expect: expectOf(outerUa), members: nestedMembers, accepted: NESTED_ACCEPTED, opener: { kem: R0 },
     pt: H(msigPt), sender: { msig: NESTED_SENDER }, m: H(fx('msig.nested').m), e: H(fx('msig.nested').e) },
 ];
 must(H(await openContainer(K0, backup2, expectBackup)) === containerRows[0].pt, 'backup opens');
 must(H(await openLink(session(), link, expectLink)) === containerRows[1].pt, 'link opens');
-for (const r of containerRows.slice(2)) must(H(await openContainer(K0, r.container, r.expect, lookup(r.members))) === r.pt, `${r.id} opens`);
+for (const r of containerRows.slice(2)) must(H(await openContainer(K0, r.container, r.expect, lookup(r.members), acceptedOf(r.accepted))) === r.pt, `${r.id} opens`);
 must(nestedC.sender.auth.members.some((s) => s.members.length === 2), 'the nested sender signs through its inner msig');
 
 // acceptance refusals, each from an otherwise valid container (C-03)
@@ -860,7 +865,8 @@ const innerMsg = ua.uaMessage(0x0120, ua.purposeTag('member'), ua.memberDigest(o
 const nestedSlots = (idx) => nestedC.sender.auth.members.map((s) => (s.index !== innerIdx ? s : { index: s.index,
   members: idx.map((j) => ({ index: j, sig: b64url(innerMs[j].key.signMember(innerUa, innerMsg)) })), sig: s.sig }));
 must(JSON.stringify(nestedSlots([0, 1])) === JSON.stringify(nestedC.sender.auth.members), 'positive control: the nested forging path');
-const msigRow = (c, id, members) => ({ container: c, expect: expectOf(id), members });
+const msigRow = (c, id, members, accepted = id === outerUa ? NESTED_ACCEPTED : FLAT_ACCEPTED) => ({ container: c, expect: expectOf(id), members, accepted });
+const flatSigners = [at(flat, 0x0101), at(flat, 0x0102)].sort();
 const acceptance = [
   { id: 'signed by a different registered UA', container: byOther, expect: expectBackup, error: 'ContainerSender' },
   { id: 'purpose not the expected one', container: backup2, expect: { ...expectBackup, purpose: SEAL_PURPOSE.link }, error: 'ContainerSender' },
@@ -881,6 +887,17 @@ const acceptance = [
   { id: 'msig sender: member keys unknown to the opener', ...msigRow(flatC, flatUa, {}), error: 'ContainerSender' },
   { id: 'msig sender: a member key that does not derive its id', ...msigRow(flatC, flatUa, Object.fromEntries(Object.entries(flatMembers)
     .map(([id, m], i) => [id, i === 0 ? { ...m, keyData: H(other.keyData) } : m]))), error: 'ContainerSender' },
+  // member acceptance (CTR-UA-37, owner 2026-11-05): an msig sender opens only with its signers accepted at both levels
+  { id: 'msig sender: a signing member not accepted (the msig active through a non-signer)', ...msigRow(flatC, flatUa, flatMembers,
+    { [H(flatUa)]: [flatSigners[1], at(flat, 0x0108)].sort() }), error: 'ContainerSender' },
+  { id: 'msig sender: accepted weight below the threshold (one of t = 2 accepted)', ...msigRow(flatC, flatUa, flatMembers,
+    { [H(flatUa)]: [flatSigners[0]] }), error: 'ContainerSender' },
+  { id: 'msig sender: signers accepted, a non-signer not (accepted)', ...msigRow(flatC, flatUa, flatMembers, { [H(flatUa)]: flatSigners }), error: null },
+  { id: 'msig sender: nested, the inner msig\'s slot not accepted (level 1)', ...msigRow(nestedC, outerUa, nestedMembers,
+    { [H(outerUa)]: [1 - innerIdx], [H(innerUa)]: [0, 1, 2] }), error: 'ContainerSender' },
+  { id: 'msig sender: nested, an inner signing member not accepted (level 2)', ...msigRow(nestedC, outerUa, nestedMembers,
+    { [H(outerUa)]: [0, 1], [H(innerUa)]: [1, 2] }), error: 'ContainerSender' },
+  { id: 'msig sender: no accepted lookup', ...msigRow(flatC, flatUa, flatMembers, null), error: 'ContainerSender' },
   { id: 'created changed (aad)', container: { ...structuredClone(backup2), created: CREATED + 1 }, expect: expectBackup, error: 'SealOpen' },
   { id: 'flipped ciphertext byte', container: flipField(backup2, ['sealed', 'ciphertext'], 0), expect: expectBackup, error: 'SealOpen' },
   { id: 'container v 2', container: { ...structuredClone(backup2), v: 2 }, expect: expectBackup, error: 'SealVersion' },
@@ -891,9 +908,9 @@ const openerKey = (o) => (o.kem ? kemOf(o.kem) : null);
 for (const x of acceptance) {
   let e = null;
   try {
-    if (x.link) await openLink(linkSessionVector(SESSION.seed, x.link.shortCode, SESSION.start), x.container, x.expect, lookup(x.members));
-    else if (x.restore) await restoreBackup(openerKey(x.opener), x.container, x.expect, lookup(x.members));
-    else await openContainer(openerKey(x.opener), x.container, x.expect, lookup(x.members));
+    if (x.link) await openLink(linkSessionVector(SESSION.seed, x.link.shortCode, SESSION.start), x.container, x.expect, lookup(x.members), acceptedOf(x.accepted));
+    else if (x.restore) await restoreBackup(openerKey(x.opener), x.container, x.expect, lookup(x.members), acceptedOf(x.accepted));
+    else await openContainer(openerKey(x.opener), x.container, x.expect, lookup(x.members), acceptedOf(x.accepted));
   } catch (err) { e = err; }
   must(x.error ? e?.code === x.error : !e, `acceptance ${x.id}: ${e?.message}`);
 }
@@ -926,7 +943,7 @@ const rollback = [
 for (const x of rollback) {
   let e = null;
   let r = null;
-  try { r = await restoreBackup(K0, x.container, x.expect, undefined, { current: x.current, allowRollback: x.allowRollback }); } catch (err) { e = err; }
+  try { r = await restoreBackup(K0, x.container, x.expect, undefined, undefined, { current: x.current, allowRollback: x.allowRollback }); } catch (err) { e = err; }
   must(x.error ? e?.code === x.error : !e && r.install === x.install, `rollback ${x.id}: ${e?.message}`);
 }
 const sealOut = {
@@ -940,9 +957,11 @@ const sealOut = {
     + '[{index, sig}], sig}]} (owner 2026-11-05) over m0 = uaMessage(kind, keccak256("scaas.ua.purpose.seal.v1"), keccak256(aad ‖ '
     + 'wire)) (MD-10, role authorization): a single key signs m0 itself (no members); an msig (no signature) in the minimal form at '
     + 'both levels, a member over uaMessage(kind, member, memberDigest(senderUa, m0)), an inner msig\'s over innerDigest. '
-    + 'openContainer(kemKey, container, expect, members): purpose, recipient (expected and the opener\'s), sender expected or in '
+    + 'openContainer(kemKey, container, expect, members, accepted): purpose, recipient (expected and the opener\'s), sender expected or in '
     + 'the set, auth.keyData derives sender.ua (msig, or one single-key kind), then the UASig (an msig\'s member keys from '
-    + 'members(id), re-derived) and the seal; ContainerSender / SealOpen / SealVersion. Link: created in [start, start + 600 s], one use '
+    + 'members(id), re-derived; its signers accepted at both levels, CTR-UA-37: the weight of the signing slots whose '
+    + 'accepted(id, index) is true reaches the threshold, a row\'s accepted lists each msig\'s accepted indices, no accepted '
+    + 'for an msig sender is refused, a single key needs none) and the seal; ContainerSender / SealOpen / SealVersion. Link: created in [start, start + 600 s], one use '
     + '(ContainerReplay). Backup payload: JSON {v, generation, entropy, secrets, manifest: {entries: [{kind, account, index, ua}]}}; '
     + 'restore: the entropy (BIP-39 passphrase empty) derives sender.ua at its manifest entry (else ContainerSender), an older '
     + 'generation over the same wallet is BackupRollback unless allowRollback, an equal one installs nothing.',

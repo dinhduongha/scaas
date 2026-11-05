@@ -26,6 +26,8 @@ const openerOf = (o) => (o.kem ? kemOf(o.kem) : null);
 const sessionOf = (s, shortCode = s.shortCode) => SL.linkSessionVector(B(s.seed), shortCode, s.start);
 // the opener's lookup of an msig sender's member keys by id (the row's `members`; never trusted, re-derived by openContainer)
 const lookup = (map) => (id) => map?.[id] ?? null;
+// the opener's accepted(id, index) (CTR-UA-37): the row's `accepted` lists each msig's accepted indices; no `accepted`, no lookup
+const acceptedOf = (map) => (map ? (id, i) => map[id]?.includes(i) === true : undefined);
 const senderOf = (r) => (r.sender.msig ? { ua: B(r.sender.msig.ua), keyData: B(r.sender.msig.keyData), inner: (x) => r.sender.msig.inner?.[x],
   slots: r.sender.msig.slots.map((s) => ({ index: s.index, key: s.key && keyOf(s.key), members: s.members?.map((m) => ({ index: m.index, key: keyOf(m.key) })) })) }
   : keyOf(r.sender));
@@ -77,8 +79,8 @@ test('seal.json containers: backup, link and msig senders reproduce byte for byt
       shortCode: r.opener.session?.shortCode }, { m: B(r.m), e: B(r.e), sig: {} });
     assert.deepEqual(again, c, r.id);
     assert.equal(hex(sender.ua), hex(B(r.expect.sender.ua)));
-    if (r.opener.kem) assert.equal(hex(await SL.openContainer(openerOf(r.opener), c, r.expect, lookup(r.members))), r.pt, r.id);
-    else assert.equal(hex(await SL.openLink(sessionOf(r.opener.session), c, r.expect, lookup(r.members))), r.pt, r.id);
+    if (r.opener.kem) assert.equal(hex(await SL.openContainer(openerOf(r.opener), c, r.expect, lookup(r.members), acceptedOf(r.accepted))), r.pt, r.id);
+    else assert.equal(hex(await SL.openLink(sessionOf(r.opener.session), c, r.expect, lookup(r.members), acceptedOf(r.accepted))), r.pt, r.id);
   }
   // sender.auth is a full UASig (owner 2026-11-05): a single key carries its key data and signature, an msig its members only
   const [single, msig] = [S.containers[0].container.sender.auth, S.containers[2].container.sender.auth];
@@ -107,24 +109,44 @@ test('container builder: an msig sender signs only in the minimal form (UAPoP), 
 });
 
 test('seal.json acceptance: each refusal from an otherwise valid container (C-03), before decapsulation where it says ContainerSender', async () => {
-  assert.equal(S.acceptance.length, 23);
+  assert.equal(S.acceptance.length, 29);
   for (const x of S.acceptance) {
     let got;
-    if (x.link) got = await codeOf(() => SL.openLink(sessionOf(S.containers[1].opener.session, x.link.shortCode), x.container, x.expect, lookup(x.members)));
-    else if (x.restore) got = await codeOf(() => SL.restoreBackup(openerOf(x.opener), x.container, x.expect, lookup(x.members)));
-    else got = await codeOf(() => SL.openContainer(openerOf(x.opener), x.container, x.expect, lookup(x.members)));
+    const a = acceptedOf(x.accepted);
+    if (x.link) got = await codeOf(() => SL.openLink(sessionOf(S.containers[1].opener.session, x.link.shortCode), x.container, x.expect, lookup(x.members), a));
+    else if (x.restore) got = await codeOf(() => SL.restoreBackup(openerOf(x.opener), x.container, x.expect, lookup(x.members), a));
+    else got = await codeOf(() => SL.openContainer(openerOf(x.opener), x.container, x.expect, lookup(x.members), a));
     assert.equal(got, x.error, x.id);
   }
   for (const id of ['signed by a different registered UA', 'purpose not the expected one', 'recipient not the expected one',
     'sender key whose UA is not sender.ua', 'backup entropy that does not derive sender.ua', 'link: swapped short code',
     'single-key UASig with members', 'msig sender: non-minimal member set (three of t = 2)',
-    'msig sender: nested level-2 non-minimal (inner three of t = 2)', 'msig sender: member keys unknown to the opener']) {
+    'msig sender: nested level-2 non-minimal (inner three of t = 2)', 'msig sender: member keys unknown to the opener',
+    'msig sender: a signing member not accepted (the msig active through a non-signer)',
+    'msig sender: accepted weight below the threshold (one of t = 2 accepted)', 'msig sender: signers accepted, a non-signer not (accepted)',
+    'msig sender: nested, the inner msig\'s slot not accepted (level 1)', 'msig sender: nested, an inner signing member not accepted (level 2)',
+    'msig sender: no accepted lookup']) {
     assert.ok(S.acceptance.some((x) => x.id === id), id);
   }
   // ContainerSender comes before decapsulation: a refused container never reaches the KEM key
   const x = S.acceptance.find((r) => r.id === 'purpose not the expected one');
   const spy = { ...openerOf(x.opener), decaps: () => { throw new Error('decapsulated'); } };
   assert.equal(await codeOf(() => SL.openContainer(spy, x.container, x.expect)), 'ContainerSender');
+});
+
+test('msig sender acceptance (CTR-UA-37): only a true answer accepts, a single key needs no lookup', async () => {
+  const [backup, flat, nested] = [S.containers[0], S.containers[2], S.containers[3]];
+  const openFlat = (a) => codeOf(() => SL.openContainer(openerOf(flat.opener), flat.container, flat.expect, lookup(flat.members), a));
+  // positive control: every member accepted opens, flat and nested
+  assert.equal(await openFlat(() => true), null);
+  assert.equal(await codeOf(() => SL.openContainer(openerOf(nested.opener), nested.container, nested.expect, lookup(nested.members), () => true)), null);
+  // fail-closed: a missing lookup, an unknown or non-true answer, a lookup that throws
+  for (const a of [undefined, null, 'accepted', () => undefined, () => null, () => 1, () => 'true', () => false, () => { throw new Error('rpc'); }]) {
+    assert.equal(await openFlat(a), 'ContainerSender', String(a));
+  }
+  // a single-key sender: the lookup is never asked
+  const never = () => { throw new Error('asked'); };
+  assert.equal(await codeOf(() => SL.openContainer(openerOf(backup.opener), backup.container, backup.expect, undefined, never)), null);
 });
 
 test('seal.json replay and rollback (C-11): link window and one use, backup generation', async () => {
@@ -135,7 +157,7 @@ test('seal.json replay and rollback (C-11): link window and one use, backup gene
     } else {
       let r = null;
       const got = await codeOf(async () => {
-        r = await SL.restoreBackup(openerOf(x.opener), x.container, x.expect, undefined, { current: x.current, allowRollback: x.allowRollback });
+        r = await SL.restoreBackup(openerOf(x.opener), x.container, x.expect, undefined, undefined, { current: x.current, allowRollback: x.allowRollback });
       });
       assert.equal(got, x.error ?? null, x.id);
       if (!x.error) assert.equal(r.install, x.install, x.id);
