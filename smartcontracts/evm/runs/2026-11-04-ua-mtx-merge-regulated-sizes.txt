@@ -74,3 +74,21 @@
 # and kind 13 1.8 M (1.7 %) over the top of their estimates, none more than 50 % over; the registry is under its estimate.
 # Kind 13 has 2,227 B left for T31 (the PQZ sites), T32 (operatorTransfer) and group 3e (+2.3 to +4.0 K, pay-meta-tax §6.4):
 # T31 / T32 / T33 re-measure it first and reduce lever by lever at or above 64,512 B.
+#
+# ua-mtx-merge T30 (the regulated Zether kinds 10 and 11: `_regZetherSender` computing `uaOf(yFrom)` from the raw G1, the
+# confidential pre row; NormalZetherToken / WrappedZetherToken only mark overrides `virtual`). Kind 13 re-checked first:
+# no shared code changed for it. Same method.
+| Release | base kind B | T30 B | delta vs base | init B | spec §6.2 estimate (on M) | stop line 64,512 B |
+|---|---:|---:|---:|---:|---|---|
+| `NormalZetherRegulatedToken` (10) | `NormalZetherToken` 41,132 | 46,717 | +5,585 | 50,444 | 43.8-45.5 K | under by 17,795 |
+| `WrappedZetherRegulatedToken` (11) | `WrappedZetherToken` 51,604 | 57,353 | +5,749 | 61,087 | 54.3-56.0 K | under by 7,159 |
+| `WrappedPqzRegulatedToken` (13) | `WrappedPqzToken` 56,721 | 62,285 (T29 62,285) | +5,564 | 65,088 | 59.5-61.2 K | under by 2,227 |
+# Stop rule: no kind at or above 64,512 B: no lever, no _above64KiB row. Kinds 0-5, 8, 9, RegulatedLib, ZetherLib and
+# GovernanceRouter unchanged. Deploy gas (GovDeploy test_releaseGasPerKind -vv):
+| Release | runtime B | regular | state | (r + s) x 1.05 | asked (+ 0.37 M frame) | §6.2 estimate | 60 M | 70 M | regular x 1.05 < 2^24 | SCaaS testnet need (<= 200 M) |
+|---|---:|---:|---:|---:|---:|---|---|---|---|---:|
+| `NormalZetherRegulatedToken (10)` | 46,717 | 3,371,357 | 71,758,530 | 78.89 M | 79.26 M | 74.4-77.3 M | no | no | yes | 88.25 M |
+| `WrappedZetherRegulatedToken (11)` | 57,353 | 4,070,408 | 88,031,610 | 96.71 M | 97.08 M | 92.0-94.9 M | no | no | yes | 104.53 M |
+| `WrappedPqzRegulatedToken (13)` | 62,285 | 4,336,713 | 95,577,570 | 104.91 M | 105.28 M | 100.6-103.5 M | no | no | yes | 112.07 M |
+# Reading: kinds 10 and 11 run about 1.2-1.4 K (2.7 %, 2.4 %) over the top of their size estimates and about 2 M (2.5 %,
+# 2.3 %) over their gas estimates, none more than 50 % over; both miss 60 and 70 M (accepted, Q7) and fit the SCaaS testnet.

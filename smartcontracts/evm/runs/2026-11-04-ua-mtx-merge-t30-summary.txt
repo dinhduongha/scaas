@@ -1,0 +1,51 @@
+# ua-mtx-merge T30 gate summary (full output in git-ignored .log files, not committed)
+# T30: the regulated Zether kinds 10 and 11 (regulated-kinds spec §4, §4.1, §4.3; CTR-GOV-17; U1-U5; I8, I9, I10). Zether
+# only (Zether != PQZ): kind 13 and the PQZ sources untouched.
+# Base: b0727dfc (T29 tip). T30 commits: legacy note (no copy, MD-4) 6245fea2, the build da66a98b, this one (sizes, harness,
+# mutants, summary).
+step | commit | rc | counts
+t30-red | worktree (T30 tests, kinds 10 and 11 without _regZetherSender and the confidential pre row, DeployBase without 10, 11) | 1 | test/as/confidential + GovDeploy: 14 passed 13 failed (frozen yFrom not refused on the direct and signed entries and the unshield-unwrap, the envelope subject refused at fee NONE by the public pre row, the transfers not paused, test_deployZetherRegulatedPath; the Force control's diff filter, fixed in the test: library DELEGATECALL frames)
+t30-green | build commit's tree | 0 | test/as/confidential/Zether*, GovDeploy, ZetherDeploy: 10 suites, 43 passed 0 failed
+t30-forge-full | build commit's tree before the pin move | 1 | forge test: 251 suites, 2764 passed 2 failed 14 skipped; the 2 = PlusZero gas pins (below), moved old -> new; PlusZero then 7 suites green (T29: 243 suites, 2738)
+t30-sizes | build commit | 0 | NormalZetherRegulatedToken 46,717 B (init 50,444), WrappedZetherRegulatedToken 57,353 B (init 61,087), new rows; WrappedPqzRegulatedToken 62,285 B unchanged; NormalZetherToken 41,132, WrappedZetherToken 51,604 unchanged (runs/2026-11-04-ua-mtx-merge-regulated-sizes.txt)
+t30-stop-rule | build commit | 0 | kind 13 re-checked first, 62,285 < 64,512 B (2,227 B left); kind 11 57,353 (7,159 left), kind 10 46,717 (17,795 left): no lever, no _above64KiB row
+t30-deploy-gas | build commit | 0 | GovDeploy test_releaseGasPerKind -vv, asked = (regular x 64/63 + state) x 1.05 + 0.37 M: kind 10 79.26 M, kind 11 97.08 M, kind 13 105.28 M (unchanged)
+t30-i10 | build commit | 0 | ZetherFreeze -vv (the token's frame, GasProbe): direct refusal 16.6-18.4 k (BUNDLE, COMPACT, single, unshield) < 200 k; signed (ECDSA): authorization 57.0-61.2 k, refused at 86.2-90.7 k < authorization + 200 k; the proof (~2.6 M on the mutant check-after-proof-bundle) never runs
+t30-sizegate | build commit | 0 | 0 errors, 96 contracts, above 65536 B: none
+t30-isolate | build commit | 0 | 22 passed 0 failed (forge --isolate UAGas, UARegistryGroups)
+t30-docs | build commit | 0 | docs_check check 0 errors, 5 warnings, 16 notes; paths 0
+t30-mutants | build commit | 1 each | 19 of 19 killed, none a compile error (runs/2026-11-04-ua-mtx-merge-t30-mutants.txt); two invalid mutants of the first run replaced (see that file); src and script restored after each
+t30-at-set-n2048-kmax1024 | build commit | 0 | test/{ua,pqz,as}/**: 85 suites, 914 passed 0 failed 1 skipped
+t30-at-set-n2304-kmax4096 | build commit | 0 | test/{ua,pqz,as}/**: 85 suites, 911 passed 0 failed 4 skipped
+t30-at-set-n2560-kmax16384 | build commit | 0 | test/{ua,pqz,as}/**: 85 suites, 910 passed 0 failed 5 skipped
+t30-at-set-n2816-kmax65536 | build commit | 0 | test/{ua,pqz,as}/**: 85 suites, 905 passed 0 failed 10 skipped; src/pqz/PqzSet.sol restored (git status src clean)
+t30-zether-cross | build commit | 0 | ZETHER_CLI=<zether-cli> forge test --ffi test/zether/ZetherProverCross.t.sol: 12 passed 0 failed
+t30-e2e-zether | build commit | 0 | scripts/e2e-zether.sh on a fresh local anvil (chain 31337, 200 M gas, 131,072 B code): deploy.sh DEPLOY_ZETHER=1 now also publishes 10 and 11 (deployments JSON implementation_{normal,wrapped}_zether_regulated_bls12381), 96 transactions ok, 0 FAIL, "e2e-zether: passed"; anvil stopped by the script (none left)
+#
+# Pins, old -> new: test/vectors/plus_zero_gas.json (compiler layout from the `virtual` keywords on NormalZetherToken and
+# WrappedZetherToken; slots unchanged, every other row unchanged): mtxTransfer_normalZether 85,320 -> 85,296;
+# uaExecuteTransfer_wrappedZether 141,629 -> 141,641 (T27 moved the latter 141,641 -> 141,629 for the same reason).
+# size-baseline.json: + NormalZetherRegulatedToken 46,717 (.init 50,444), + WrappedZetherRegulatedToken 57,353
+# (.init 61,087). No typehash, selector, layout, plain-kind slot, dex_order_kat.json row or GovernanceRouter address moved,
+# so no KAT reader (clientkeys, node) was rerun.
+#
+# Not run in T30: node suite and e2e (no node source or vector changed); pqz-core gate (no core, statement or set);
+# script/pqz/e2e.py (PQZ: T31); deploy.sh DEPLOY_REGULATED (T33).
+#
+# Conflicts with the plan / spec, and choices the text leaves open (none resolved silently):
+#   MODERATE: plan step 1 asks "FORCE and MODERATE leave ZetherLib state unchanged". Bit 21 has no body (owner 2026-11-05,
+#   CTR-GOV-20) and its replacement operatorTransfer is T32's (it reverts RegulatedNotBuilt today), so only FORCE is tested
+#   here (I8 by state diff); T32 owes the same state-diff row for operatorTransfer on 10 and 11.
+#   I10 "< 200 k": measured inside one frame (GasProbe), not the outer transaction: under `isolate` a proof's calldata alone
+#   costs ~0.4 M of intrinsic gas before the token runs, which no check can avoid. The signer class's authorization is
+#   measured, not assumed: the same signed call with a signature over another digest fails at step 2. Only the ECDSA class
+#   (an EOA envelope) is measured; the derived Zether-key class is tested for the pre-row refusal only (fee-bearing, frozen
+#   own id: Frozen before the signature). ERC-1271, HIP-632 and the PQ classes are I10's general rows (T36).
+#   Zether != PQZ mutant ("a Zether site hook in PqzLayer"): killed by a source lint (test_zetherHookNotInPqz: no PQZ
+#   source, nor RegulatedBase, names _regZetherSender), since a hook with no caller compiles to nothing.
+#   DeployBase: 10 and 11 deploy under DEPLOY_ZETHER alone (spec §6.1 "10, 11 under DEPLOY_ZETHER=1"), not also gated on
+#   DEPLOY_REGULATED; scripts/e2e-zether.sh therefore deploys them too. Their env's libraries are the base kind's env order
+#   (DeployBase._zetherLibs) plus RegulatedLib, a permutation of Catalogue.closureLibs (test: as a set).
+#   The plan's file list has no GovDeploy.t.sol, plus_zero_gas.json, size-baseline.json, NormalZetherToken.sol,
+#   WrappedZetherToken.sol or the fixture test/as/confidential/ZetherRegFixture.sol; each carries the release, a pin or the
+#   `virtual` the kinds need.
