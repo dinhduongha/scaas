@@ -197,3 +197,10 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   meaning changed: `test/v2/{Trade,Dex,DexHybrid,DexModes,DexExchange,UniswapExecutor}.t.sol`,
   `test/ua/{UADex,UATrade}.t.sol`, `test/metatx/TradeKat.t.sol`, `test/helpers/DexLegs.sol` (its `wire` made shape-0
   legs); the vectors `test/vectors/legacy/ua-mtx-merge/{trade_kat,dex_order_kat}.json`. Not built.
+  T7 (`GovernanceRouter`, R14, Q2): `src/governance/GovernanceRouter.sol` (and `GovernanceRouterBase.sol`, copied
+  earlier): the 19 address signed entries `mtx<Op>(Envelope, …, bytes sig)` (`_mtxCall`: `GrantRole`, `RevokeRole`,
+  `SetGrant`, `CancelGrant`, `DisableFeature`, `TransferOwnership`, `AcceptOwnership`, `RenounceOwnership`,
+  `RenounceRole`, `Mint`, `MintToUA`, `DisableWrap`, `ProposeRate`, `CancelRate`, `ExecuteRate`, `SetMarket`,
+  `SetExchangeTarget`, `SetListedOnly`, `SetFeeSplit`) and their 19 address typehashes; the `ua<Op>` bodies (`_uaCall`)
+  took the `mtx<Op>` names. Tests as they stood before their meaning changed: `test/governance/{GovRouter,
+  GovRouterTypehash}.t.sol` (and `test/metatx/TypedOps.t.sol`, copied earlier). Not built.
