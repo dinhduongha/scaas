@@ -1,0 +1,33 @@
+# ua-mtx-merge T17 gate summary (full output in git-ignored .log files, not committed)
+# T17: node DEX (plan T17, spec §3.4, R12, R38, CTR-DEX-26): the book keeps every order in the one form the DEX decodes a leg
+# to (UATradeOrder; a TradeOrder's ids zero-padded), its signature in its shape's field (dex::Auth); a SCaaS sell token takes a
+# UATradeOrder with auth (UASig), an outside token a TradeOrder with signature, the other form refused LEG_SHAPE; a native id
+# checked by its own key (R17), a derived id by the token's registry requireAuthorized under trade (registry 0 = refused);
+# SCaaS legs settle shape 1; the token-side cancel (CancelUAOrder) and invalidation (UAInvalidateNonces on the id) are
+# ua_metatx jobs; the watcher releases on UALegSettled and takes UAOrderCancelled / UANoncesInvalidated from a SCaaS token only.
+# Toolchain: the root rust-toolchain.toml; the shared node target directory of the main checkout (CARGO_TARGET_DIR),
+# scripts/capped, cargo -j2, the whole suite at CAPPED_MEM=6G.
+# Base: 5d3de16e (T14 + T13 + origin/main). T17 commits: 2888769d (legacy copies, MD-4), 7705d97e (the build), this one
+# (harness, mutants, summary).
+step | commit | rc | counts
+t17-base | 2888769d | 101 | dex:: lib tests 46 passed 2 failed: kat_hashes_and_calldata_match_forge (since T6), venue settle_jobs_are_one_per_market_and_cancels_go_where_the_order_lives (address CancelOrder, since T14)
+t17-red | 2888769d code + 7705d97e's dex / venue test modules | 101 | does not compile: 177 errors (no Auth, UATradeOrder book, auth_of / order_of, WireOrder::from_ua, ua_sig_json, 4-argument place); the per-test reds are the mutants below
+t17-cargo-test | 7705d97e | 0 | 624 passed 0 failed 56 ignored (lib 619, fuzz 4, mesh_vectors 1; every e2e_* ignored); lib 611/2 -> 619/0 (+6 new tests, 1 renamed)
+t17-clippy | 7705d97e | 0 | cargo clippy --all-targets -- -D warnings: no warning
+t17-e2e | - | - | not run: plan T17 lists none; tests/e2e.rs compiles (canon(), minNonce by id); its DEX flows still post a TradeOrder + signature for a SCaaS token (refused LEG_SHAPE at run): T18 (dex_order_with_a_ua_trade_order_leg)
+t17-docs | 7705d97e | 0 | docs_check check 0 errors, 5 warnings, 16 notes; paths 0; test_docs_check ok
+t17-mutants | this commit's harness on 7705d97e | 101 each | 11 of 11 killed, none a compile error (runs/2026-11-04-ua-mtx-merge-t17-mutants.txt): destination-dropped-from-digest, destination-dropped-from-wire, legsettled-for-a-scaas-leg, ua-leg-settled-not-asked, shape-zero-accepted, scaas-leg-sent-shape-zero, r17-dropped, registry-zero-accepted, invalidate-job-kind-metatx, cancel-job-kind-metatx, token-order-event-from-the-dex
+#
+# Pins: none moved (typed.rs rows, guard selector pins, vectors and KATs untouched). The DEX KAT reads dex_order_kat.json as
+# T6 regenerated it (taker shape 1); the token-side rows moved from legacy trade_kat.json to uatrade_kat.json.
+#
+# Client-facing (operator note, T19): POST /v1/dex/orders, /cancel, /cancel-all take auth (UASig JSON) for a SCaaS sell token,
+# signature for an outside one; cancel-all from is an id for a SCaaS lane; GET /v1/dex/orders?maker takes an id or an address;
+# a stored row of a shape-1 order carries auth and an empty signature, its order's from / destination as 32-byte hex;
+# dex_book_commit's token-side cancel / invalidate jobs are kind ua_metatx; dex_fill_ingest gets UAOrderCancelled /
+# UANoncesInvalidated as OrderCancelled / NoncesInvalidated with the id (the C6-7 residual of a book-only UANoncesInvalidated
+# closes: the client store now hears a token's invalidation).
+#
+# Stale, owned by later tasks: tests/e2e.rs DEX flows and the anvil dex run (T18); dex-venue.md NODE-DEX-15 forms, routes,
+# watcher text (C6-7, "shape-0 legs until UA F5"), contracts/dex.md line 13 ("order intake waits for UA F5"), store.md Row
+# line refs (T19). The gateway's DEX route bodies changed in gateway.rs (T15 owns the token doors: merge there).
