@@ -1,0 +1,22 @@
+mutant | test that went red | rc
+op-on-poolmove | test_freezeAndPauseApply, test_receiverCheckApplies | 1
+from-with-code-accepted | test_nativeFromWithCodeRefused | 1
+target-out-of-digest | test_eachOpByDerived, test_eachOpByNative, test_feeModeIsNone, test_msigBelowThresholdRefused, test_msigSlotNotAcceptedIsInert, test_nestedTermsRoundTrip, test_pqMsigOwnsGrantsMintsAndHandsOver, test_refuted_formerOwnersEnvelope, test_refuted_relayerAltersTheTarget, test_refuted_replayAcrossRoutersAndChains, test_refuted_targetReentersTheRouter, test_routerRow_ForceTransfer, test_routerRow_Freeze, test_routerRow_OperatorTransfer, test_routerRow_OperatorTransferAnyHolder, test_routerRow_Pause, test_routerRow_RecordOrder, test_routerRow_RevokeOrder, test_routerRow_Unfreeze, test_routerRow_Unpause, test_routerRow_strangerRefused, test_routerRow_targetIsSigned, test_starvedRelayerUAVerifyGasNonceUnspent, test_subjectClearedInTheSameTransaction, test_subjectOnlyToTheLiveTarget, test_targetWithoutCodeRefused, test_wrongSubjectRefusedNonceUnspent | 1
+limited-window-not-enforced | test_limitedDailyWindow | 1
+plain-kind-accepts-bit22 | test_plainKindsRefuseOperatorTransfer | 1
+bit21-given-the-body | test_derivedToMustBeSigning, test_everyControlBuilt, test_freezeAndPauseApply, test_limitedDailyWindow, test_moderateHasNoBody, test_nativeFromWithCodeRefused, test_operatorTransferCannotReachShielded, test_operatorTransferMoves, test_operatorTransferMovesPublicOnly_pqzStateUntouched, test_operatorTransferMovesPublicOnly_zetherStateUntouched, test_receiverCheckApplies, test_refusals, test_roleAndFeature, test_routerRow_OperatorTransfer, test_routerRow_OperatorTransferAnyHolder, test_routerRow_strangerRefused, test_routerRow_targetIsSigned, test_strangerRevertsOnEveryGatedRow | 1
+bit21-moderated-entry | test_everySelectorIsClassified, test_moderateHasNoBody | 1
+op-writes-pqz-state | test_operatorTransferCannotReachShielded, test_operatorTransferMovesPublicOnly_pqzStateUntouched | 1
+op-reads-pqz-state | test_operatorTransferMovesPublicOnly_pqzStateUntouched | 1
+op-writes-zether-state | test_operatorTransferMovesPublicOnly_zetherStateUntouched | 1
+op-reads-zether-state | test_operatorTransferMovesPublicOnly_zetherStateUntouched | 1
+amount-zero-accepted | test_refusals | 1
+ref-zero-accepted | test_refusals | 1
+self-move-accepted | test_refusals | 1
+from-pool-accepted | test_refusals | 1
+to-pool-accepted | test_refusals | 1
+checkto-dropped | test_derivedToMustBeSigning | 1
+event-dropped | test_operatorTransferMoves | 1
+router-op-wrong-selector | test_routerRow_OperatorTransfer, test_routerRow_OperatorTransferAnyHolder, test_routerRow_strangerRefused, test_routerRow_targetIsSigned | 1
+router-typehash-fields-swapped | test_routerRow_ForceTransfer, test_routerRow_OperatorTransfer, test_routerRow_RevokeOrder, test_routerRow_Unfreeze, test_uaForceTransferTypehashIsPinned | 1
+router-row-on-token-domain | guard::tests::allow_lists_equal_the_selector_audit_both_directions | 101

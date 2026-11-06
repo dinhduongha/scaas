@@ -1,0 +1,30 @@
+# ua-mtx-merge T36 gate summary (full output in git-ignored .log files beside this, not committed)
+# T36: the regulated invariants I1-I13 (test/as/invariant) and the mutant harness (mutants.py, run_mutants.sh).
+# src and script unchanged by T36 (test and runs only); HEAD 18d786a4 differs from the run's tree by docs/ commits only.
+step | commit | rc | counts
+t36-mutants | src of 1f1b02af + T36 tree | 1 each | 23 of 23 killed, none a compile error, src and script restored after each (mutants.txt): 17 t36-*, 6 port-*; 4 killed by the T36 invariant suite alone (t36-k10..k13-disable-not-composed, I12), 3 by the earlier suites alone, 16 by both
+t36-port-t27-stub | 18d786a4 + T36 tree | 1 | port-t27-stub-freeze-skips-lib killed (T1-T7 freeze tests, I12 and others); added after T27's own re-run let it live (below)
+t36-forge-full | src of 1f1b02af + T36 tree | 0 | 2874 passed 0 failed 14 skipped, 274 suites (forge test, default set n2304-kmax4096); RegInv8Test..RegInv13Test: 72 invariant_I* + 6 test_everyCheckReached pass
+t36-at-set-n2048-kmax1024 | src of 1f1b02af + T36 tree | 0 | 1006 passed 0 failed 1 skipped, 109 suites (at-set.sh test --match-path 'test/{ua/**,pqz/**,as/**,governance/GovDeploy.t.sol,v2/LinkClosure.t.sol}'); 72 invariant_I* pass; PqzSet.sol restored
+t36-at-set-n2304-kmax4096 | src of 1f1b02af + T36 tree | 0 | 1003 passed 0 failed 4 skipped, 109 suites; 72 invariant_I* pass; PqzSet.sol restored
+t36-at-set-n2560-kmax16384 | src of 1f1b02af + T36 tree | 0 | 1002 passed 0 failed 5 skipped, 109 suites; 72 invariant_I* pass; PqzSet.sol restored
+t36-at-set-n2816-kmax65536 | src of 1f1b02af + T36 tree | 0 | 997 passed 0 failed 10 skipped, 109 suites; 72 invariant_I* pass; PqzSet.sol restored
+t36-size-gate | src of 1f1b02af + T36 tree | 0 | 0 errors, 97 contracts; above 64 KiB: none (src unchanged)
+t36-docs-check | src of 1f1b02af + T36 tree | 0 | 0 errors, 5 warnings, 16 notes (docs_check check); paths 0; test_docs_check ok
+rerun-t24 | 18d786a4 + T36 tree | 0 | 10 of 10 killed (rc 1); red-test lists grew, no rc changed
+rerun-t25 | 18d786a4 + T36 tree | 0 | 8 of 8 killed; table identical
+rerun-t26 | 18d786a4 + T36 tree | 0 | 20 of 20 killed; red-test lists grew, no rc changed
+rerun-t27 | 18d786a4 + T36 tree | 0 | 13 killed, 3 anchor moved (99: init-skips-regulatedlib, view-isfrozen-false, deploy-regulated-without-lib -> port-* killed), 1 alive: stub-freeze-skips-lib (rc 0; T28 built freeze and changed test_stubsAndViewsNotBuilt, so T27's skeleton suite no longer tests it -> port-t27-stub-freeze-skips-lib killed)
+rerun-t28 | 18d786a4 + T36 tree | 0 | 34 killed, 2 anchor moved (99: force-zero-accepted, init-skips-regulatedlib -> port-* killed)
+rerun-t29 | 18d786a4 + T36 tree | 0 | 23 killed, 1 anchor moved (99: deploy-implargs-empty -> port-* killed)
+rerun-t30 | 18d786a4 + T36 tree | 0 | 19 of 19 killed
+rerun-t31 | 18d786a4 + T36 tree | 0 | 20 of 20 killed
+rerun-t32 | 18d786a4 + T36 tree | 0 | 21 of 21 killed (20 forge rc 1, 1 node rc 101), as committed
+rerun-t33 | 18d786a4 + T36 tree | 0 | 13 of 13 killed; table identical
+rerun-t34 | 18d786a4 + T36 tree | 0 | 27 of 27 killed (18 rc 1, 9 node rc 101), table identical
+rerun-t35 | 18d786a4 + T36 tree | 0 | 26 of 26 killed (node rc 101), table identical; run alone (CAPPED_MEM=6G, no other cargo)
+#
+# "table differs" for t24, t26-t32 on the re-run: more tests now go red for the same mutant (suites grew in later tasks),
+# the committed tables' hand-written notes are not regenerated, and the moved anchors above. No rc 1 turned into rc 0 except
+# T27 stub-freeze-skips-lib, explained and killed by its port. The committed tables are restored; rerun-t<NN>.txt hold the
+# re-runs.

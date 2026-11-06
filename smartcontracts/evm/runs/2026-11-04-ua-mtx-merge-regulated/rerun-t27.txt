@@ -1,0 +1,18 @@
+mutant | test that went red | rc
+supports-no-iregulated | test_supportsIRegulatedToken | 1
+init-skips-regulatedlib | test_createRefusedUntilBuilt | 99
+k13-pre-reads-at-fee-none | test_hookSeatsWired | 1
+k13-pre-never-reads | test_hookSeatsWired | 1
+k9-regpre-unwired | test_hookSeatsWired | 1
+k9-regmove-unwired | test_hookSeatsWired | 1
+k13-regmove-unwired | test_hookSeatsWired | 1
+k13-regpayer-unwired | test_hookSeatsWired | 1
+k13-allowlist-in-mask | test_createKinds9And13, test_masks | 1
+operator-contract-only | test_masks | 1
+delayed-relax-zero | test_masks | 1
+scalar-without-operator | test_masks | 1
+k9-kind-wrapped | setUp, test_deployRegulatedPath, test_linkClosureWithRegulatedLib, test_registryDeployedAndDexAttested, test_regulatedReleasesPublished_10, test_regulatedReleasesPublished_11, test_regulatedReleasesPublished_12, test_regulatedReleasesPublished_13, test_regulatedReleasesPublished_8, test_regulatedReleasesPublished_9 | 1
+stub-freeze-skips-lib | NONE (a finding) | 0
+view-isfrozen-false | test_stubsAndViewsNotBuilt | 99
+deploy-regulated-ignored | test_deployRegulatedPath, test_linkClosureWithRegulatedLib, test_registryDeployedAndDexAttested, test_regulatedReleasesPublished_8, test_regulatedReleasesPublished_9 | 1
+deploy-regulated-without-lib | test_deployRegulatedPath | 99
