@@ -13,8 +13,9 @@
 //!   command's allow-list (so no `key`, `seed32`, `s`, `e` or witness field passes, at any depth: the only nested objects are
 //!   the legs `{pk, ua, amount}`), parsed into typed values. `enc` (`pqzl::enc`), `dec` (`dec` / `dec_win`), the proofs
 //!   `proveRegister` / `proveKeyRecord` (op 3 `R_REG` over `pqz_reg_message` / the `setPqzKey` message), `proveTransfer`
-//!   (op 1, `R_TX` / `R_TX0`), `proveBurn`, `proveRefresh` (op 2), `proveTransferMulti` (op 7, with the sender memo
-//!   `memo::seal` under `seed32`), `proveDiscloseSender` (op 4, `r, e1, e2_t` re-derived), `proveDisclose` (op 5, receiver or
+//!   (op 1, `R_TX` / `R_TX0`), `proveBurn`, `proveRefresh` (op 2), `proveTransferMulti` (op 7; an explicit `mode`, `HASH`
+//!   with the sender memo `memo::seal` under `seed32` and `memoHash = keccak256(salt ‖ sealedMemo)`, `BUNDLE` with neither,
+//!   as `PqzCore._parseMulti`; owner 2026-11-06), `proveDiscloseSender` (op 4, `r, e1, e2_t` re-derived), `proveDisclose` (op 5, receiver or
 //!   auditor), `openMemo`. Statements are `pqz-stmt`'s builders, witnesses pqz-ffi's layouts (`fixture::wit_*`), proofs
 //!   `pqz_ffi::prove` with `rnd32` from the OS RNG (hedged, CTR-PQZ-19). The debit's balance is `Dec(T)` with the handle's key.
 //! - **Encryption randomness** (CTR-PQZ-19): a transfer (op 1, op 7) draws a fresh 16-byte `salt` and encrypts from
@@ -181,7 +182,7 @@ fn allowed(cmd: &str, field: &str) -> bool {
         "proveTransfer" => has(HEADER) || has(&["proofSystemId", "toUA", "pkT", "pkA", "T", "amount", "memoHash"]),
         "proveBurn" => has(HEADER) || has(&["proofSystemId", "amount", "recipient", "T", "memoHash"]),
         "proveRefresh" => has(HEADER) || has(&["proofSystemId", "T", "memoHash"]),
-        "proveTransferMulti" => has(HEADER) || has(&["proofSystemId", "legs", "pkA", "T"]),
+        "proveTransferMulti" => has(HEADER) || has(&["proofSystemId", "legs", "pkA", "T", "mode"]),
         "proveDiscloseSender" => has(&["stmt", "fromUA", "sendCounter", "salt", "auditorOn", "M", "leg"]),
         "proveDisclose" => field == "stmt",
         "openMemo" => has(&["chainUid", "token", "fromUA", "sendCounter", "memo"]),
@@ -311,6 +312,15 @@ impl Header {
     }
 }
 
+/// Op 7's storage mode (`ZetherTypes.TransferMode`, a named request field with no default; owner 2026-11-06): `HASH`
+/// (commit-reveal) keeps the sender memo and its `memoHash`, `BUNDLE` has no memo and `memoHash` 0 (`PqzCore._parseMulti`).
+/// The token's `disclosureMode` decides which one a caller may use; the facade does not guess it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Mode {
+    Hash,
+    Bundle,
+}
+
 /// The typed request of a command.
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Req {
@@ -321,7 +331,7 @@ enum Req {
     Transfer { id: Word, h: Header, to_ua: Word, pk_t: Vec<u8>, pk_a: Option<Vec<u8>>, t: Vec<u8>, amount: u64, memo_hash: Word },
     Burn { id: Word, h: Header, amount: u64, recipient: Word, t: Vec<u8>, memo_hash: Word },
     Refresh { id: Word, h: Header, t: Vec<u8>, memo_hash: Word },
-    Multi { id: Word, h: Header, legs: Vec<(Vec<u8>, Word, u64)>, pk_a: Option<Vec<u8>>, t: Vec<u8> },
+    Multi { id: Word, h: Header, legs: Vec<(Vec<u8>, Word, u64)>, pk_a: Option<Vec<u8>>, t: Vec<u8>, mode: Mode },
     DiscloseSender { stmt: Vec<u8>, from_ua: Word, send_counter: u64, salt: [u8; 16], aud: bool, multi: Option<(usize, usize)> },
     Disclose { stmt: Vec<u8> },
     OpenMemo { chain_uid: Word, token: [u8; 20], from_ua: Word, send_counter: u64, memo: Vec<u8> },
@@ -369,7 +379,12 @@ fn req(cmd: &str, f: &Fields<'_>) -> Result<Req> {
                 let l = Fields::new(l.as_object().ok_or(Error::Argument)?, LEG)?;
                 Ok((l.pk("pk")?, l.word("ua")?, l.u64("amount")?))
             });
-            Req::Multi { id: f.id()?, h: f.header()?, legs: legs.collect::<Result<_>>()?, pk_a: f.opt_pk("pkA")?, t: f.ct("T")? }
+            let mode = match f.get("mode")?.as_str() {
+                Some("HASH") => Mode::Hash,
+                Some("BUNDLE") => Mode::Bundle,
+                _ => return Err(Error::Argument),
+            };
+            Req::Multi { id: f.id()?, h: f.header()?, legs: legs.collect::<Result<_>>()?, pk_a: f.opt_pk("pkA")?, t: f.ct("T")?, mode }
         }
         "proveDiscloseSender" => {
             let multi = match (f.has("M"), f.has("leg")) {
@@ -631,7 +646,7 @@ impl PqzKey {
     }
 
     /// Command `cmd` of [`COMMANDS`] on `request_json` (named fields, `0x` hex bytes, `u64` numbers) with this handle's key:
-    /// its JSON answer (`enc`: `{u, vs}`; `dec`: `{value}`; a proof: `{stmt, proof}` and `message` (op 3) or `memo` (op 7);
+    /// its JSON answer (`enc`: `{u, vs}`; `dec`: `{value}`; a proof: `{stmt, proof}` and `message` (op 3) or `memo` (op 7, `HASH`);
     /// `openMemo`: `{auditorOn, legs: [{amount, ua}]}`). A prover refusal (a balance below amount and fee, a statement that is not
     /// the key's) is `Argument`, no detail.
     pub fn call(&self, cmd: &str, request_json: &[u8]) -> Result<String> {
@@ -670,7 +685,9 @@ impl PqzKey {
             Req::Refresh { id, h, t, memo_hash } => self.with_sk(|_, sk| {
                 self.debit_own(sk, d, Form::Refresh, h.fill(Debit::header(Form::Refresh, id)), t, Some(h.fee), memo_hash)
             })?,
-            Req::Multi { id, h, legs, pk_a, t } => self.with_sk(|seed32, sk| self.multi(seed32, sk, d, id, h, legs, pk_a.as_deref(), t))?,
+            Req::Multi { id, h, legs, pk_a, t, mode } => {
+                self.with_sk(|seed32, sk| self.multi(seed32, sk, d, id, h, legs, pk_a.as_deref(), t, *mode))?
+            }
             Req::DiscloseSender { stmt, from_ua, send_counter, salt, aud, multi } => {
                 stmt_id(stmt)?;
                 let Ok(Stmt::Disclose(s)) = parse(Form::DiscloseSender.op(), stmt) else { return Err(Error::Argument) };
@@ -783,10 +800,12 @@ impl PqzKey {
         Ok(proved(&stmt, &prove(form.op(), &stmt, &wit, &d.rnd32)?))
     }
 
-    /// Op 7: `pqzl::enc_multi` from CTR-PQZ-19's `seed_enc`, `recipientsHash` over the legs' UAs, the sender memo under `seed32`.
+    /// Op 7: `pqzl::enc_multi` from CTR-PQZ-19's `seed_enc`, `recipientsHash` over the legs' UAs; on `HASH` the sender memo
+    /// `salt ‖ sealedMemo` under `seed32` and `memoHash = keccak256(salt ‖ sealedMemo)`, on `BUNDLE` no memo and `memoHash` 0.
     #[allow(clippy::too_many_arguments)]
     fn multi(
         &self, seed32: &[u8], sk: &Sk, d: &Draw, id: &Word, h: &Header, legs: &[(Vec<u8>, Word, u64)], pk_a: Option<&[u8]>, t: &[u8],
+        mode: Mode,
     ) -> Result<Value> {
         let (m, aud) = (legs.len(), pk_a.is_some());
         if !built_legs(id).contains(&m) {
@@ -806,8 +825,11 @@ impl PqzKey {
             Some(k) => k,
             None => seed32,
         };
-        let memo = pqz_ffi::memo::seal(memo_key, &hd, aud, &memo_legs).ok_or(Error::Argument)?;
-        *hd.get_mut(H_MEMO_HASH).ok_or(Error::Argument)? = crate::keccak256(&memo);
+        let memo = match mode {
+            Mode::Hash => Some(pqz_ffi::memo::seal(memo_key, &hd, aud, &memo_legs).ok_or(Error::Argument)?),
+            Mode::Bundle => None,
+        };
+        *hd.get_mut(H_MEMO_HASH).ok_or(Error::Argument)? = memo.as_deref().map_or([0; 32], crate::keccak256);
         let seed = Zeroizing::new(match d.seed_enc {
             Some(s) => s,
             None => seed_enc(seed32, &h.chain_uid, &h.token, &h.from_ua, h.send_counter, &salt)?,
@@ -834,7 +856,7 @@ impl PqzKey {
         let stmt = st.encode().map_err(|_| Error::Argument)?;
         let wit = Zeroizing::new(wit_multi(&sk.0, &c.0, &d_legs, df));
         let mut v = proved(&stmt, &prove(pqz_ffi::stmt::OP_TRANSFER_MULTI, &stmt, &wit, &d.rnd32)?);
-        if let Some(o) = v.as_object_mut() {
+        if let (Some(o), Some(memo)) = (v.as_object_mut(), memo) {
             o.insert("memo".into(), to_hex(&memo).into());
         }
         Ok(v)
