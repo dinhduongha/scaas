@@ -255,3 +255,8 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   Owner ruling 2026-11-06 (`ComplianceRegistry`: only the admin overwrites or revokes an admin-written slot; spec
   `2026-11-05-regulated-kinds.md` §5): no copy. `attest` keeps its signature and body and gains one check before the write
   (`AdminWrittenSlot`); no entry, struct, row or handler is dropped; the runtime hash moves. As it stood before: `4ba3decb`.
+  T31 (the regulated PQZ kinds 12 and 13; spec `2026-11-05-regulated-kinds.md` §4.2, §4.3): no copy. It supersedes no built
+  body, typehash, struct, builder, row or handler: the PQZ seats in `PqzLayer` and `WrappedPqzToken` (T26) and kind 13
+  (T27-T29) are unchanged; `NormalPqzToken` only marks its overrides `virtual` (same runtime size); `script/pqz/e2e.py`
+  publishes the releases 12 and 13 beside 0, 4 and 5. New: `src/regulated/NormalPqzRegulatedToken.sol`. As they stood
+  before T31: `024e143c`.
