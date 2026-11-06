@@ -1,0 +1,14 @@
+# 2026-11-06 ua-rs-sign T13b mutants (smartcontracts/evm/runs/2026-11-06-ua-rs-sign-t13b-mutants.py), on the T13b tree (the run before the commit; the files equal the commit's).
+# One mutant per run on a clean tree, the CMake build (cxx-qt, cargo, C++) and the whole Qt Quick Test suite (tst_ua -input tests, offscreen),
+# each file restored byte for byte; NOT-LOADED or SURVIVED is a finding (exit 1). The plan's three: M1 the QML load check skipped, M2 a secret
+# buffer not wiped (the C++ side, ua-cxx in this build), M3 a handle released twice (the id registry); the controller's M4-M8: the policy
+# bypassed from QML, the seal's aad, the UASig key order, lastError, the wallet error codes.
+killed     | M1 the load check skipped | clients/ua-qt/src/ua_wallet.rs | rc=1 | 1 failed: UaWallet::test_load_refuses_wrong_abi_or_features | Totals: 37 passed, 1 failed, 0 skipped, 0 blacklisted, 1524ms
+killed     | M2 a secret buffer not wiped (the C++ side: from_mnemonic's words and passphrase) | clients/ua-cxx/src/wallet.rs | rc=1 | 1 failed: UaWallet::test_secret_buffer_wiped_after_call | Totals: 37 passed, 1 failed, 0 skipped, 0 blacklisted, 826ms
+killed     | M3 a handle released twice: the registry keeps it, a second release succeeds | clients/ua-cxx/src/wallet.rs | rc=1 | 1 failed: UaWallet::test_a_handle_released_once | Totals: 37 passed, 1 failed, 0 skipped, 0 blacklisted, 737ms
+killed     | M4 signTyped from QML skips the policy (Any) | clients/ua-qt/src/ua_wallet.rs | rc=1 | 1 failed: UaWallet::test_sign_by_handle_id | Totals: 37 passed, 1 failed, 0 skipped, 0 blacklisted, 709ms
+killed     | M5 seal ignores the aad | clients/ua-qt/src/ua_wallet.rs | rc=1 | 1 failed: UaWallet::test_seal_to_a_public_key | Totals: 37 passed, 1 failed, 0 skipped, 0 blacklisted, 762ms
+killed     | M6 uaSig keys in reverse order | clients/ua-qt/src/ua_wallet.rs | rc=1 | 1 failed: UaWallet::test_uasig_msig_by_handle_ids | Totals: 37 passed, 1 failed, 0 skipped, 0 blacklisted, 743ms
+killed     | M7 lastError not cleared before a call | clients/ua-qt/src/ua_wallet.rs | rc=3 | 3 failed: UaWallet::test_load_refuses_wrong_abi_or_features, UaWallet::test_seal_to_a_public_key, UaWallet::test_sign_by_handle_id | Totals: 35 passed, 3 failed, 0 skipped, 0 blacklisted, 768ms
+killed     | M8 a revoked key's error code dropped (lastError UAArgument) | clients/ua-qt/src/ua_wallet.rs | rc=4 | 4 failed: UaWallet::test_revoked_after_lock_public_data_readable, UaWallet::test_seal_to_a_public_key, UaWallet::test_sign_by_handle_id, UaWallet::test_uasig_msig_by_handle_ids | Totals: 34 passed, 4 failed, 0 skipped, 0 blacklisted, 701ms
+mutants M1-M8 of 8: 8 killed, 0 survived, 0 not loaded

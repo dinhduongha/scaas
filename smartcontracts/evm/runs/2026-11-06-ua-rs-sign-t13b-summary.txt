@@ -1,0 +1,19 @@
+# 2026-11-06 ua-rs-sign T13b: ua-qt (spec §9.2, §6.2; plan T13 row T13b). The QML singleton UaWallet (clients/ua-qt/src/ua_wallet.rs) over
+# ua-cxx: public data, seal to a public key, sign by handle id; no decaps, open, raw digest, typed Any, export or handle in QML. The C++
+# side of an app is ua-cxx (its rlib and C++ in this build); ua-cxx gained an id registry (registerKey / releaseKey). UNAUDITED.
+# All commands through scripts/capped, foreground, -j2, --locked, --offline; Qt 6.12.0 gcc_64; full logs git-ignored (clients/ua-qt/target/t13b/).
+step | commit | rc | counts
+red: cmake --build (tests/tst_wallet.qml, the fixture in tst_ua.cpp; no UaWallet, no registry) | c451c2be + tests | 1 | tst_ua.cpp does not compile: 'registerKey' / 'releaseKey' is not a member of scaas::ua (5 errors); no UaWallet QML type
+Cargo.lock | 02a1d7fb | - | clients/ua-qt: the scaas-ua wallet graph at ua-cxx's versions (86 packages, the lock seeded with ua-cxx's entries); sha3 0.10.9 -> 0.10.8, zeroize 1.9.1 -> 1.8.2
+cmake --build; tst_ua -input tests (offscreen), via ctest | 02a1d7fb | 0 | 38 passed: UaKinds 25 + UaWallet 9 (+ init / cleanup); finding: a QML test named test_*_data is read by QtQuickTest as a data function and never ran (renamed)
+cargo clippy --all-targets -D warnings (clients/ua-qt, QMAKE Qt 6.12) | 02a1d7fb | 0 | 0 of ours (first run: 9 pre-existing ua_kinds.rs findings, fixed: is_multiple_of; too_many_arguments allowed on the module)
+cargo clippy --all-targets -D warnings (clients/ua-cxx, after the registry) | 02a1d7fb | 0 | 0 of ours; pqzl's 2 deprecated warnings
+ua-cxx ctest after the registry | 02a1d7fb | 0 | 35 of 35
+cargo deny --all-features --config ../ua-rs/deny.toml check: ua-qt (lock moved), ua-cxx | 02a1d7fb | 0 | advisories ok, bans ok, licenses ok, sources ok each
+cargo tree --locked --offline -e normal: ua-cxx, ua-qt, scaas-node, ua-rs/fuzz, ua-c | 02a1d7fb | 0 | 5 of 5
+mutants: 2026-11-06-ua-rs-sign-t13b-mutants.py | 02a1d7fb | 0 | 8 killed, 0 survived, 0 not loaded (the plan's 3 and 5 of the controller's)
+# Not re-run after the mutants: the full Qt suite (the harness asserts every file restored byte for byte and rebuilt the tree, rc 0).
+# Decisions (controller): (1) ua-qt reuses ua-cxx (rlib + its C++ compiled by build.rs, headers via links) instead of a second C++ surface.
+# (2) Keys reach QML through a process-wide id registry in ua-cxx; an id is not a secret, release frees once. (3) The QML load check calls
+# scaas::ua::load() (one check, one test hook for C++ and QML). (4) QML gets no typed Any, raw digest, KEM handle or facade calls.
+# Conflicts: none with the spec; the plan's T13b file list names src/*.rs and QML tests only: ua-cxx and tst_ua.cpp changed too.
