@@ -27,6 +27,8 @@
 #   clients/ua-qt:         cmake -S . -B build -G Ninja (QMAKE, CMAKE_PREFIX_PATH set) && cmake --build build && QT_QPA_PLATFORM=offscreen ctest
 #   clients/ua-dart-frb:   dart pub get --enforce-lockfile; cargo build --locked --manifest-path rust/Cargo.toml; dart test
 #   clients/ua-dart:       dart analyze; dart test; dart test -p node; dart run test/vectors_test.dart (asserts off)
+#   test-features:         python3 scripts/check_test_features.py (ARCH-POS-13: no `vectors` / `hazmat` of scaas-ua, zether-prover, pqz-ffi
+#                          in a production manifest or in the cargo tree -e features graph of ua-c, ua-cxx, ua-qt, ua-dart-frb, zether-prover)
 #   UA-8 portable registrations: smartcontracts/vectors/ua/portable.json is read by ua-rs, ua-py, ua-go, ua-cs, ua-c, ua-cxx, ua-qt, ua-dart, ua-dart-frb,
 #                  clientkeys and forge (UARegistryUA8.t.sol); the jobs above already run them, so no new job. The old chain-bound vectors are in
 #                  smartcontracts/vectors/ua/legacy/. The local closing gate: smartcontracts/evm/runs/2026-10-30-ua8-gates.sh (its logs are runs/2026-10-30-ua8-*.txt)
@@ -39,10 +41,10 @@ name: scaas-ci
 on:
   pull_request:
     types: [opened, synchronize, reopened, labeled] # labeled: a ci-full-* label reruns with that group on
-    paths: ['smartcontracts/**', 'scaas-node/**', 'clients/**', 'docs/**', 'scripts/docs_check.py', 'scripts/test_docs_check.py', 'scripts/size_gate.py', 'pqz-core/**', 'rust-toolchain.toml', '.github/workflows/ci.yml', '.github/ci_changes.py']
+    paths: ['smartcontracts/**', 'scaas-node/**', 'clients/**', 'docs/**', 'scripts/docs_check.py', 'scripts/test_docs_check.py', 'scripts/size_gate.py', 'scripts/check_test_features.py', 'pqz-core/**', 'rust-toolchain.toml', '.github/workflows/ci.yml', '.github/ci_changes.py']
   push:
     branches: [main]
-    paths: ['smartcontracts/**', 'scaas-node/**', 'clients/**', 'docs/**', 'scripts/docs_check.py', 'scripts/test_docs_check.py', 'scripts/size_gate.py', 'pqz-core/**', 'rust-toolchain.toml', '.github/workflows/ci.yml', '.github/ci_changes.py']
+    paths: ['smartcontracts/**', 'scaas-node/**', 'clients/**', 'docs/**', 'scripts/docs_check.py', 'scripts/test_docs_check.py', 'scripts/size_gate.py', 'scripts/check_test_features.py', 'pqz-core/**', 'rust-toolchain.toml', '.github/workflows/ci.yml', '.github/ci_changes.py']
   workflow_dispatch:
     inputs:
       full:
@@ -90,6 +92,7 @@ jobs:
       ua_cs: ${{ steps.f.outputs.ua_cs }}
       ua_dart_frb: ${{ steps.f.outputs.ua_dart_frb }}
       ua_dart: ${{ steps.f.outputs.ua_dart }}
+      test_features: ${{ steps.f.outputs.test_features }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -361,6 +364,18 @@ jobs:
         run: python3 scripts/docs_check.py facts check
       - name: no machine paths in tracked files
         run: python3 scripts/docs_check.py paths
+
+  test-features:
+    needs: changes
+    if: needs.changes.outputs.test_features == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: no test feature in a production artifact (manifests, feature graphs, positive controls)
+        run: python3 scripts/check_test_features.py
 
   clientkeys:
     needs: changes

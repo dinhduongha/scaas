@@ -12,6 +12,12 @@ use scaas_ua::facade::pqz::{check_set, pqz_set, AllowSecretExport, PqzCmd, PqzKe
 use scaas_ua::wallet::{aead_open, hkdf_sha256, Alg, Error, Wallet};
 use serde_json::{json, Value};
 
+/// Feature `vectors` (Codex C1, T15c2): key handles only after the test-only marker; every test here unlocks first.
+fn unlock() {
+    #[cfg(feature = "vectors")]
+    scaas_ua::facade::vectors_unlock(scaas_ua::facade::TestOnly);
+}
+
 const WORDS: &str = "legal winner thank year wave sausage worth useful legal winner thank yellow";
 
 fn hx(b: &[u8]) -> String {
@@ -87,6 +93,7 @@ fn foreign_id() -> Word {
 /// be32(index))`, recomputed here with the tag spelled out; `pk = pqzl::keygen(seed32).pk`.
 #[test]
 fn pqz_key_is_the_ua_pq_rule() {
+    unlock();
     let w = wallet();
     let seed = bip39::Mnemonic::parse(WORDS).unwrap().to_seed("");
     for (a, i) in [(0u32, 0u32), (0, 1), (1, 0), (7, 3)] {
@@ -108,6 +115,7 @@ fn pqz_key_is_the_ua_pq_rule() {
 /// `rnd32` comes from the OS RNG: the same statement and witness proved twice give two different proofs, each valid.
 #[test]
 fn two_proofs_differ() {
+    unlock();
     let w = wallet();
     let k = w.pqz_key(0, 0).unwrap();
     let ua = scaas_ua::derive_ua(0x0131, &w.ua_key(0x0131, 0, 0).unwrap().key_data(), false).unwrap();
@@ -127,6 +135,7 @@ fn two_proofs_differ() {
 #[test]
 #[cfg_attr(not(feature = "vectors"), allow(clippy::single_element_loop))] // a release build has no proveDisclose
 fn set_mismatch_refused() {
+    unlock();
     let s = pqz_set();
     assert_eq!((s.name.as_str(), s.pk_len, s.pqzl_id), (st::SET, st::PK_BYTES, PQZL_ID));
     assert_eq!(s.pqzh_id, pqz_ffi::PQZH.then_some(PQZH_ID));
@@ -178,6 +187,7 @@ fn set_mismatch_refused() {
 /// the handle is `KeyRevoked`, the public key stays readable, a new key or export is `WalletLocked`.
 #[test]
 fn pqz_handle_KeyRevoked_after_lock() {
+    unlock();
     let w = wallet();
     let k = w.pqz_key(0, 0).unwrap();
     let reg = json!({"proofSystemId": hx(&PQZL_ID), "kind": 0x0131, "ua": hx(&[1; 32])});
@@ -211,6 +221,7 @@ fn pqz_handle_KeyRevoked_after_lock() {
 #[cfg(feature = "vectors")]
 #[test]
 fn unlock_does_not_revive_a_pqz_handle() {
+    unlock();
     let w = wallet();
     let k = w.pqz_key(0, 0).unwrap();
     let t = balance(&k, 5);
@@ -251,6 +262,7 @@ const RAW: [&str; 7] = ["dec", "proveTransfer", "proveBurn", "proveRefresh", "pr
 /// request, as `Argument` (an unknown command, before the key); under `vectors` they are there (the vector files' hooks).
 #[test]
 fn release_has_no_raw_decrypt() {
+    unlock();
     let release = ["enc", "proveRegister", "proveKeyRecord", "proveDiscloseSender"];
     let want: Vec<&str> = if cfg!(feature = "vectors") {
         ["enc", "dec", "proveRegister", "proveKeyRecord", "proveTransfer", "proveBurn", "proveRefresh", "proveTransferMulti",
@@ -275,10 +287,56 @@ fn release_has_no_raw_decrypt() {
     }
 }
 
+/// Fable P3-3 (T15c2): the raw commands' typed requests and match arms compile only under `vectors`: in `src/facade/pqz.rs`
+/// each `Req` variant, `req()` arm and `run()` arm of `dec`, the debits, `proveDisclose` and `openMemo` sits right under
+/// `#[cfg(feature = "vectors")]` (a source assertion: the enum is private, so no `compile_fail` test can name it from outside;
+/// its helpers are gated too, so an ungated arm also fails to build). The kept commands' variants are not gated.
+#[test]
+fn raw_requests_compile_only_under_vectors() {
+    let src = std::fs::read_to_string(format!("{}/src/facade/pqz.rs", env!("CARGO_MANIFEST_DIR"))).unwrap();
+    let lines: Vec<&str> = src.lines().map(str::trim).collect();
+    let gated = |i: usize| i > 0 && lines[i - 1] == "#[cfg(feature = \"vectors\")]";
+    // the variant (`Dec {`), the `run()` arm (`Req::Dec { .. } =>`), the `req()` and allow-list arms (`"dec" =>`)
+    let at = |v: &str, cmd: &str| -> Vec<usize> {
+        let l = &lines;
+        (0..l.len())
+            .filter(|&i| {
+                l[i].starts_with(&format!("{v} {{"))
+                    || (l[i].starts_with(&format!("Req::{v} {{")) && l[i].contains("=>"))
+                    || l[i].starts_with(&format!("\"{cmd}\" =>"))
+            })
+            .collect()
+    };
+    let raw = [("Dec", "dec"), ("Transfer", "proveTransfer"), ("Burn", "proveBurn"), ("Refresh", "proveRefresh"),
+        ("Multi", "proveTransferMulti"), ("Disclose", "proveDisclose"), ("OpenMemo", "openMemo")];
+    for (v, cmd) in raw {
+        let found = at(v, cmd);
+        assert_eq!(found.len(), 4, "{v}: variant, two arms, allow-list");
+        found.iter().for_each(|&i| assert!(gated(i), "{v}: line {} not under cfg(vectors): {}", i + 1, lines[i]));
+    }
+    for (v, cmd) in [("Enc", "enc"), ("Register", "proveRegister"), ("KeyRecord", "proveKeyRecord"), ("DiscloseSender", "proveDiscloseSender")] {
+        let found = at(v, cmd);
+        assert_eq!(found.len(), 4, "{v}: positive control");
+        found.iter().for_each(|&i| assert!(!gated(i), "{v}: a kept command is gated"));
+    }
+    assert_eq!(scaas_ua::VECTORS, cfg!(feature = "vectors"), "scaas_ua::VECTORS is the build's");
+}
+
+/// Fable P3-1 (T15c2): `disclose_sender` compares the re-derived `u` and `v` with the statement's in constant time
+/// (`subtle::ConstantTimeEq`), not with a slice `!=` (a source assertion; no timing test).
+#[test]
+fn disclose_sender_compares_in_constant_time() {
+    let src = std::fs::read_to_string(format!("{}/src/facade/pqz.rs", env!("CARGO_MANIFEST_DIR"))).unwrap();
+    let body = &src[src.find("    fn disclose_sender(").unwrap()..src.find("    fn cache_key(").unwrap()];
+    assert!(body.contains(".ct_eq(u)") && body.contains(".ct_eq(v)"), "ct_eq on u and v");
+    assert!(!body.contains("!="), "no slice `!=` in disclose_sender");
+}
+
 /// Every command, positive control first: a minimal well-formed request passes the decoder; with a `key` (or `seed32`, `s`,
 /// `e`, `wit`) field at the top, or a `key` inside a leg, it is refused before anything reaches pqz-core.
 #[test]
 fn a_key_field_in_command_json_is_refused() {
+    unlock();
     let w = wallet();
     let k = w.pqz_key(0, 0).unwrap();
     let (pk, t, id) = (hx(&k.pk()), hx(&balance(&k, 1000)), hx(&PQZL_ID));
@@ -311,6 +369,7 @@ fn a_key_field_in_command_json_is_refused() {
 /// Spec §9.3: 1 MiB and depth 8; only `u64` numbers; keys and ciphertexts of this set's length and canonical.
 #[test]
 fn command_json_is_bounded_and_typed() {
+    unlock();
     let w = wallet();
     let k = w.pqz_key(0, 0).unwrap();
     let pk = hx(&k.pk());
@@ -342,6 +401,7 @@ fn command_json_is_bounded_and_typed() {
 #[cfg(feature = "vectors")]
 #[test]
 fn transfer_and_disclosures_verify() {
+    unlock();
     let w = wallet();
     let (a, b, c) = (w.pqz_key(0, 0).unwrap(), w.pqz_key(1, 0).unwrap(), w.pqz_key(2, 0).unwrap());
     let t = balance(&a, 1000);
@@ -391,6 +451,7 @@ fn transfer_and_disclosures_verify() {
 #[cfg(feature = "vectors")]
 #[test]
 fn burn_and_refresh_verify() {
+    unlock();
     let w = wallet();
     let k = w.pqz_key(0, 0).unwrap();
     let t = balance(&k, 1000);
@@ -419,6 +480,7 @@ fn burn_and_refresh_verify() {
 #[cfg(feature = "vectors")]
 #[test]
 fn transfer_multi_memo_and_sender_disclosure() {
+    unlock();
     let w = wallet();
     let (a, b, c, z) = (w.pqz_key(0, 0).unwrap(), w.pqz_key(1, 0).unwrap(), w.pqz_key(2, 0).unwrap(), w.pqz_key(3, 0).unwrap());
     let t = balance(&a, 1000);
@@ -461,6 +523,7 @@ fn multi_req(a: &PqzKey, b: &PqzKey, mode: &str) -> Value {
 #[cfg(feature = "vectors")]
 #[test]
 fn multi_bundle_memo_hash_is_zero() {
+    unlock();
     let w = wallet();
     let (a, b) = (w.pqz_key(0, 0).unwrap(), w.pqz_key(1, 0).unwrap());
     let p = call(&a, "proveTransferMulti", &multi_req(&a, &b, "BUNDLE")).unwrap();
@@ -476,6 +539,7 @@ fn multi_bundle_memo_hash_is_zero() {
 #[cfg(feature = "vectors")]
 #[test]
 fn multi_hash_memo_hash_matches_contract() {
+    unlock();
     let w = wallet();
     let (a, b) = (w.pqz_key(0, 0).unwrap(), w.pqz_key(1, 0).unwrap());
     let p = call(&a, "proveTransferMulti", &multi_req(&a, &b, "HASH")).unwrap();
@@ -492,6 +556,7 @@ fn multi_hash_memo_hash_matches_contract() {
 #[cfg(feature = "vectors")]
 #[test]
 fn multi_without_mode_refused() {
+    unlock();
     let w = wallet();
     let (a, b) = (w.pqz_key(0, 0).unwrap(), w.pqz_key(1, 0).unwrap());
     let req = multi_req(&a, &b, "HASH");
@@ -509,6 +574,7 @@ fn multi_without_mode_refused() {
 /// field) verifies.
 #[test]
 fn key_record_register_verifies() {
+    unlock();
     let w = wallet();
     let k = w.pqz_key(0, 0).unwrap();
     let ua = [0x42; 32];
@@ -522,6 +588,7 @@ fn key_record_register_verifies() {
 /// recomputed here from the exported leaf; another key's box does not open.
 #[test]
 fn cache_box_key_and_label() {
+    unlock();
     let w = wallet();
     let k = w.pqz_key(0, 0).unwrap();
     let entries = br#"{"T":"0x01","value":1000}"#;
@@ -598,6 +665,7 @@ mod vectors {
 
     #[test]
     fn keygen_rows_through_the_facade() {
+        unlock();
         let rows = pv("keygen.json")["rows"].as_array().unwrap().clone();
         assert!(!rows.is_empty());
         for r in rows {
@@ -610,6 +678,7 @@ mod vectors {
     /// `"none"` result is `Argument`.
     #[test]
     fn memo_open_rows_through_the_facade() {
+        unlock();
         let f = pv("statement_transfer_multi.json");
         let mut n = 0;
         for r in f["memo_open"].as_array().unwrap() {
@@ -648,6 +717,7 @@ mod vectors {
     /// `memoHash` 0 (`PqzCore._parseMulti` leaves it unset) and no memo. No other word or byte depends on the mode.
     #[test]
     fn multi_rows_per_mode() {
+        unlock();
         let f = pv("statement_transfer_multi.json");
         let mut n = 0;
         for st_row in f["rows"].as_array().unwrap() {
@@ -692,6 +762,7 @@ mod vectors {
     /// Every row of `proof_pqzl.json` and `proof_pqzh.json` (where this set has PQZH): statement and proof through the facade.
     #[test]
     fn proof_rows_through_the_facade() {
+        unlock();
         let files = [
             ("statement_transfer.json", pv("statement_transfer.json")),
             ("statement_burn.json", pv("statement_burn.json")),

@@ -14,6 +14,12 @@ use scaas_ua::wallet::{
 };
 use serde_json::Value;
 
+/// Feature `vectors` (Codex C1, T15c2): key handles only after the test-only marker; every test here unlocks first.
+fn unlock() {
+    #[cfg(feature = "vectors")]
+    scaas_ua::facade::vectors_unlock(scaas_ua::facade::TestOnly);
+}
+
 fn file(name: &str) -> Vec<u8> {
     std::fs::read(format!("{}/fuzz/regress/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap()
 }
@@ -32,6 +38,7 @@ fn over_depth(name: &str, dec: impl Fn(&[u8]) -> Result<()>) {
 
 #[test]
 fn json_inputs_deeper_than_their_cap_are_refused_unparsed() {
+    unlock();
     over_depth("typed_data/over-depth-9.json", |b| TypedData::from_json(b).map(|_| ()));
     over_depth("expect/over-depth-5.json", |b| Expect::from_json(b).map(|_| ()));
     over_depth("tx/over-depth-5.json", |b| EvmTx::from_json(b).map(|_| ()));
@@ -47,6 +54,7 @@ fn json_inputs_deeper_than_their_cap_are_refused_unparsed() {
 
 #[test]
 fn json_inputs_longer_than_their_cap_are_refused_unparsed() {
+    unlock();
     // the same files without `x`, padded with spaces to the cap (accepted) and one byte past it (refused, unparsed)
     type Dec<'a> = &'a dyn Fn(&[u8]) -> Result<()>;
     let cases: [(&str, usize, Dec); 11] = [
@@ -77,6 +85,7 @@ fn json_inputs_longer_than_their_cap_are_refused_unparsed() {
 
 #[test]
 fn sealed_short_of_its_tag_is_refused() {
+    unlock();
     let b = file("sealed/short-tag.bin");
     assert_eq!(Sealed::from_wire(&b).err(), Some(Error::SealOpen));
     let mut full = b.clone();
@@ -86,6 +95,7 @@ fn sealed_short_of_its_tag_is_refused() {
 
 #[test]
 fn sealed_past_its_plaintext_cap_does_not_open() {
+    unlock();
     let b = file("sealed/short-tag.bin");
     let key = scaas_ua::wallet::KemKeyPair::generate_ephemeral().unwrap();
     let mut s = Sealed::from_wire(&[&b[..], &[0]].concat()).unwrap();
@@ -95,6 +105,7 @@ fn sealed_past_its_plaintext_cap_does_not_open() {
 
 #[test]
 fn kem_pk_of_another_scheme_or_length_is_refused() {
+    unlock();
     let s2 = file("kem_pk/scheme-2.bin");
     assert_eq!(kem_encaps(&s2).err(), Some(Error::KemCheck));
     assert_eq!(kem_encaps(&file("kem_pk/len-1602.bin")).err(), Some(Error::KemCheck));
@@ -105,6 +116,7 @@ fn kem_pk_of_another_scheme_or_length_is_refused() {
 
 #[test]
 fn mnemonic_past_1_kib_or_24_words_is_refused() {
+    unlock();
     let long = String::from_utf8(file("mnemonic/over-1025-bytes.txt")).unwrap();
     assert_eq!(long.len(), 1025);
     assert_eq!(Wallet::from_mnemonic(&long, "").err(), Some(Error::Argument));
@@ -118,6 +130,7 @@ fn mnemonic_past_1_kib_or_24_words_is_refused() {
 /// `seal.json` with an `expect` reads, an approved set past 64 UAs, an index past `u16` and an unknown key do not.
 #[test]
 fn container_json_inputs_read_the_vector_rows() {
+    unlock();
     let seal: Value = serde_json::from_slice(&std::fs::read(format!("{}/../../smartcontracts/vectors/ua/seal.json", env!("CARGO_MANIFEST_DIR"))).unwrap()).unwrap();
     let mut n = 0;
     for k in ["containers", "acceptance", "replay"] {
@@ -161,6 +174,7 @@ fn container_json_inputs_read_the_vector_rows() {
 #[cfg(feature = "zether")]
 #[test]
 fn zether_inputs_past_their_caps_are_refused_unparsed() {
+    unlock();
     use scaas_ua::facade::zether::{ZetherCmd, COMMANDS};
     // the spec's caps (§9.3) and the box's, stated here: not the crate's constants, which a changed cap would move too
     const CMD_MAX: usize = 1 << 20;
@@ -219,6 +233,7 @@ fn zether_inputs_past_their_caps_are_refused_unparsed() {
 #[cfg(feature = "pqz")]
 #[test]
 fn pqz_inputs_past_their_caps_are_refused_unparsed() {
+    unlock();
     use scaas_ua::facade::pqz::{PqzCmd, COMMANDS};
     // the spec's caps (§9.3) and the box's, stated here: not the crate's constants, which a changed cap would move too
     const CMD_MAX: usize = 1 << 20;

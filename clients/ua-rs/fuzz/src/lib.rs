@@ -219,6 +219,8 @@ fn one(t: &str, data: &[u8]) {
                 None => {
                     static KEY: OnceLock<(Wallet, ZetherKey)> = OnceLock::new();
                     let (_, k) = KEY.get_or_init(|| {
+                        // a `vectors` build makes key handles only after the test-only marker (Codex C1, T15c2)
+                        scaas_ua::facade::vectors_unlock(scaas_ua::facade::TestOnly);
                         let w = Wallet::from_mnemonic("legal winner thank year wave sausage worth useful legal winner thank yellow", "")
                             .unwrap_or_else(|_| die("no wallet"));
                         let k = w.zether_key(60, 0, 7).unwrap_or_else(|_| die("no key"));
@@ -245,6 +247,8 @@ fn one(t: &str, data: &[u8]) {
                 None => {
                     static KEY: OnceLock<(Wallet, PqzKey)> = OnceLock::new();
                     let (_, k) = KEY.get_or_init(|| {
+                        // a `vectors` build makes key handles only after the test-only marker (Codex C1, T15c2)
+                        scaas_ua::facade::vectors_unlock(scaas_ua::facade::TestOnly);
                         let w = Wallet::from_mnemonic("legal winner thank year wave sausage worth useful legal winner thank yellow", "")
                             .unwrap_or_else(|_| die("no wallet"));
                         let k = w.pqz_key(0, 0).unwrap_or_else(|_| die("no key"));

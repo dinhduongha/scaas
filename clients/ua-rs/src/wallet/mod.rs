@@ -571,6 +571,7 @@ impl Wallet {
         &self, kk: &KemKeyPair, containers: &[SealedContainer], expect: &ContainerExpect, members: &crate::ua8::Members,
         accepted: Option<&crate::ua8::Accepted>, msig_ua: &[u8; 32], version: u64, pqz_key_hash: &[u8; 32],
     ) -> Result<crate::facade::pqz::PqzKey> {
+        crate::facade::release_or_unlocked()?;
         let k = crate::facade::pqz_backup::reconstruct(&self.store, kk, containers, expect, members, accepted, msig_ua, version, pqz_key_hash)?;
         self.store.note(|m| m.add_pqz_held(PqzHeldEntry { ua: *msig_ua, version, pqz_key_hash: *pqz_key_hash }));
         Ok(k)

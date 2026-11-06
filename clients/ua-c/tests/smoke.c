@@ -153,6 +153,7 @@ int main(void) {
 
     // external keys (T16, MD-13): none in a release build; the callback is neither kept nor called, *out untouched
     CHECK(!(scaas_ua_features() & SCAAS_UA_FEATURE_EXTERNAL));
+    CHECK(!(scaas_ua_features() & SCAAS_UA_FEATURE_VECTORS)); /* C1: never a test build */
     ScaasUaExternalSigner ext = {NULL, NULL, NULL};
     ScaasUaKey *ek = p256;
     CHECK(scaas_ua_external_key_new("{\"kind\":257,\"keyData\":\"0x\"}", &ext, &ek) == SCAAS_UA_ERR_KIND_UNAVAILABLE && ek == p256);

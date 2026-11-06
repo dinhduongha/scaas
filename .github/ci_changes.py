@@ -48,12 +48,15 @@ JOBS = {
     'ua-cs': ['clients/ua-cs/', 'smartcontracts/vectors/'],
     'ua-dart-frb': ['clients/ua-dart-frb/', 'clients/ua-rs/', 'smartcontracts/vectors/'] + RT,
     'ua-dart': ['clients/ua-dart/', 'smartcontracts/vectors/', 'smartcontracts/evm/'],
+    # ARCH-POS-13 (ua-rs-sign T15c2): no test feature in a production artifact; every manifest that can reach scaas-ua,
+    # zether-prover or pqz-ffi
+    'test-features': ['clients/', 'pqz-core/ffi/', 'scaas-node/Cargo.toml', 'scripts/check_test_features.py'] + RT,
 }
 # ci-full-<group>: the jobs a label or a manual run forces on; ci-full: every job.
 GROUPS = {
     'ci-full-contracts': [j for j in JOBS if j.startswith('contract-')],
     'ci-full-node': ['node'],
-    'ci-full-clients': ['clientkeys', 'zether-prover'] + [j for j in JOBS if j.startswith('ua-')],
+    'ci-full-clients': ['clientkeys', 'zether-prover', 'test-features'] + [j for j in JOBS if j.startswith('ua-')],
     'ci-full-pqz': ['pqz'],
     'ci-full': list(JOBS),
 }
@@ -129,7 +132,7 @@ if __name__ == '__main__':
     assert set(GROUPS['ci-full-contracts']) == {f'contract-{f}' for f in
                                                 'evm soroban solana near algorand aptos sui cosmos ton'.split()}
     assert set(GROUPS['ci-full-clients']) == {'clientkeys', 'zether-prover', 'ua-rs', 'ua-cxx', 'ua-c', 'ua-qt', 'ua-py',
-                                              'ua-go', 'ua-cs', 'ua-dart-frb', 'ua-dart'}
+                                              'ua-go', 'ua-cs', 'ua-dart-frb', 'ua-dart', 'test-features'}
     assert all(needed(['docs/x.md'], ['ci-full']).values())
     assert needed(['docs/x.md'], ['bug', 'ci-full-node']) == needed(['docs/x.md'], ['ci-full-node'])  # other labels ignored
     assert needed([''], ['ci-full-pqz']) == {j: j in ('pqz', 'docs') for j in JOBS}  # manual run
@@ -145,7 +148,7 @@ if __name__ == '__main__':
         assert needed([p]) == {j: j == 'docs' or j in js for j in JOBS}, p
     assert {j for j, r in needed(['rust-toolchain.toml']).items() if r} == {
         'docs', 'contract-soroban', 'contract-solana', 'contract-near', 'contract-cosmos', 'node', 'pqz', 'zether-prover',
-        'ua-rs', 'ua-cxx', 'ua-c', 'ua-qt', 'ua-dart-frb'}
+        'ua-rs', 'ua-cxx', 'ua-c', 'ua-qt', 'ua-dart-frb', 'test-features'}
     assert needed(['smartcontracts/evm/foundry.txt'])['contract-evm']  # a .txt outside runs/ counts
     assert needed(['scaas-node/runs/a.txt', 'scaas-node/src/x.rs'])['node']
     assert needed(['smartcontracts/evm/runs/a.txt'], ['ci-full-contracts'])['contract-evm']  # a label still forces

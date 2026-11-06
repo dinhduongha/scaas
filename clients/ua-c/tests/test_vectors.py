@@ -882,7 +882,7 @@ MN = {m['id']: m for m in KEYS['mnemonics']}
 NETWORKS = ['evm', 'cosmos', 'hedera_ecdsa', 'hedera_ed25519', 'sui', 'stellar', 'ton', 'aptos', 'solana']
 COIN_DEFAULT, MNEMONIC_MAX, KEM_CT = 0xFFFFFFFF, 256, 1568
 FEATURES = ['wallet', 'pq', 'falcon', 'zether', 'pqz', 'pqz-set-n2048-kmax1024', 'pqz-set-n2304-kmax4096', 'pqz-set-n2560-kmax16384',
-            'pqz-set-n2816-kmax65536', 'external', 'mlock']
+            'pqz-set-n2816-kmax65536', 'external', 'mlock', 'vectors']
 FEATURE = {n: 1 << i for i, n in enumerate(FEATURES)}
 # appended after SCAAS_UA_ERR_UNAUTHORIZED (20), no renumbering; a KEM key of a non-holder is the existing UAKemHolder (12)
 STATUS = {n: i for i, n in enumerate(['SealOpen', 'SealVersion', 'KemCheck', 'Aead', 'VaultOpen', 'VaultParams', 'VaultVersion',
@@ -1063,6 +1063,7 @@ class WalletAbi(WalletCase):
         f = L.features()
         self.assertTrue(f & FEATURE['wallet'] and f & FEATURE['pq'], hex(f))
         self.assertFalse(f & FEATURE['external'], 'MD-13: no external key in a release build')
+        self.assertFalse(f & FEATURE['vectors'], 'C1: never a vectors build')
         self.assertEqual(f >> len(FEATURES), 0, 'no bit past the named ones')
         self.assertLessEqual(bin(f >> 5 & 0xf).count('1'), 1, 'at most one pqz-set-*')
 

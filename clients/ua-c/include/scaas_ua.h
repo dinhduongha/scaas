@@ -79,6 +79,12 @@
 #define SCAAS_UA_FEATURE_MLOCK (1 << 10)
 
 /**
+ * scaas-ua was built with its test feature `vectors` (Cargo may unify it in): never in a release build. This crate refuses to
+ * compile so, and every binding refuses to load a library with this bit (spec no-decryption-oracle §4.8, Codex C1, T15c2).
+ */
+#define SCAAS_UA_FEATURE_VECTORS (1 << 11)
+
+/**
  * The networks of `scaas_ua_wallet_native_key` (clientkeys `NETWORKS`).
  */
 #define SCAAS_UA_NETWORK_EVM 0

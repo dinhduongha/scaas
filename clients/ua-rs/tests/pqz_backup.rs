@@ -16,6 +16,12 @@ use scaas_ua::wallet::{
 };
 use serde_json::Value;
 
+/// Feature `vectors` (Codex C1, T15c2): key handles only after the test-only marker; every test here unlocks first.
+fn unlock() {
+    #[cfg(feature = "vectors")]
+    scaas_ua::facade::vectors_unlock(scaas_ua::facade::TestOnly);
+}
+
 fn none(_: [u8; 32]) -> Option<(u16, Vec<u8>)> {
     None
 }
@@ -107,6 +113,7 @@ fn refused_before_combining<T>(what: &str, f: impl FnOnce() -> Result<T, Error>)
 /// opens what the operator's key sealed (its balance-cache box), its lock revokes it, and the new operator can deal new shares of it.
 #[test]
 fn k_shares_rebuild_a_key_matching_pqzKeyHash() {
+    unlock();
     let g = group(2);
     let b = g.deal(None);
     assert_eq!((b.header.k, b.header.n, b.header.version, b.header.msig_ua), (2, 3, 0, g.msig_ua), "k = the threshold, n = 3");
@@ -129,6 +136,7 @@ fn k_shares_rebuild_a_key_matching_pqzKeyHash() {
 /// k − 1 shares are refused (2-of-3 and 3-of-3), before combining; the positive control first.
 #[test]
 fn k_minus_1_shares_refused() {
+    unlock();
     for t in [2u16, 3] {
         let g = group(t);
         let b = g.deal(None);
@@ -144,6 +152,7 @@ fn k_minus_1_shares_refused() {
 /// of two backups do not mix, an index given twice counts once, and the rebuilt key must hash to the registered one.
 #[test]
 fn a_share_for_another_msig_key_or_version_refused() {
+    unlock();
     let g = group(2);
     let b = g.deal(None);
     let cs: Vec<SealedContainer> = (0..3).map(|i| g.to_rebuilder(&b, i)).collect();
@@ -178,6 +187,7 @@ fn a_share_for_another_msig_key_or_version_refused() {
 /// A share container carries exactly the header and 32 bytes of the share: no wallet entropy, no `seed32` (k ≥ 2).
 #[test]
 fn shares_never_carry_wallet_entropy() {
+    unlock();
     let g = group(2);
     let b = g.deal(None);
     let seed32 = g.op.export_pqz_leaf_raw(7, 0, scaas_ua::facade::pqz::AllowSecretExport).unwrap();
@@ -210,6 +220,7 @@ fn shares_never_carry_wallet_entropy() {
 /// The recipients: each a direct member, distinct, by its own single-key UA KEM key (MD-11: an `msig` holds none); k in 1..=n.
 #[test]
 fn recipients_and_k_checked() {
+    unlock();
     let g = group(2);
     let ok = |k, rs: &[Recipient]| g.pqz.seal_seed_backup(&g.op_key, &g.msig_kd, 0, k, rs).map(|b| (b.header.k, b.header.n));
     assert_eq!(ok(None, &g.recipients()), Ok((2, 3)), "control");
@@ -234,6 +245,7 @@ fn recipients_and_k_checked() {
 /// stands; a backup of the key at that version clears it, one of another version or key does not; a single key never warns.
 #[test]
 fn a_missing_backup_warns_and_never_refuses() {
+    unlock();
     let g = group(2);
     let pk = g.pqz.pk();
     assert_eq!(seed_backup_warning(MSIG, &g.msig_ua, 0, &pk, &[]), Some(SEED_BACKUP_MISSING));
@@ -267,6 +279,7 @@ fn a_missing_backup_warns_and_never_refuses() {
 /// A share is sealed on only from a share container: a container of another purpose is `Argument`.
 #[test]
 fn reseal_takes_share_containers_only() {
+    unlock();
     let g = group(2);
     let (_, k1, kk1) = &g.members[1];
     let set = g.senders();
@@ -295,6 +308,7 @@ fn reseal_takes_share_containers_only() {
 #[cfg(feature = "vectors")]
 #[test]
 fn field_and_split_known_answers() {
+    unlock();
     use scaas_ua::facade::pqz_backup::{vectors_gf_mul, vectors_split};
     assert_eq!(vectors_gf_mul(0x57, 0x83), 0xc1);
     assert_eq!(vectors_gf_mul(0x57, 0x13), 0xfe);
@@ -330,6 +344,7 @@ fn field_and_split_known_answers() {
 #[cfg(feature = "vectors")]
 #[test]
 fn a_backup_record_past_its_caps_is_refused_unparsed() {
+    unlock();
     use scaas_ua::wallet::bounded;
     let g = group(2);
     let j = g.deal(None).to_json().into_bytes();
@@ -375,6 +390,7 @@ fn decrypts(g: &Group, k: &PqzKey) -> Result<Value, Error> {
 /// refuse (`Argument`), as for an imported key.
 #[test]
 fn a_rebuilt_key_survives_lock_and_unlock_through_its_vault() {
+    unlock();
     let g = group(2);
     let b = g.deal(None);
     let kh = g.key_hash();
@@ -426,6 +442,7 @@ fn a_rebuilt_key_survives_lock_and_unlock_through_its_vault() {
 /// The rebuilder's backup (and so its link) carries the key under its label: the restored wallet holds and lists it.
 #[test]
 fn the_rebuilders_backup_carries_the_key() {
+    unlock();
     let g = group(2);
     let b = g.deal(None);
     let kh = g.key_hash();
@@ -448,6 +465,7 @@ fn the_rebuilders_backup_carries_the_key() {
 #[cfg(feature = "vectors")]
 #[test]
 fn a_held_vault_is_checked_against_its_key_hash() {
+    unlock();
     let g = group(2);
     let kh = g.key_hash();
     let seed32 = g.op.export_pqz_leaf_raw(7, 0, scaas_ua::facade::pqz::AllowSecretExport).unwrap();

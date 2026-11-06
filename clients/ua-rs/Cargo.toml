@@ -71,6 +71,9 @@ zether-prover = { path = "../zether-prover", default-features = false, optional 
 # `pqzl-rust`, no C core; PQZH (Ligero) at every set that has it). Every proof, statement, transcript and encryption stays there;
 # ua-rs adds key custody (the PQZ leaf `seed32` in the wallet's arena) and the ABI. The parameter set: `pqz-set-<set>` -> `set-<set>`.
 pqz-ffi = { path = "../../pqz-core/ffi", default-features = false, features = ["prove", "pqzl-rust"], optional = true }
+# ua-rs-sign T15c2 (Fable P3-1): the facade's constant-time compares (`subtle::ConstantTimeEq`); in the lock already (k256,
+# scaas-ct), the pin of scaas-ct
+subtle = { version = "=2.6.1", default-features = false, optional = true }
 
 # ua-rs-sign T10: feature `mlock` (spec §8.2): `mlock` / `MADV_DONTDUMP` of the arena's chunks on Unix; any 0.2, so a dependent keeps
 # its own (libc was in the lock: getrandom); off Unix (wasm32) not taken
@@ -93,7 +96,7 @@ default = ["wallet", "zether", "pqz", "pqz-set-n2304-kmax4096", "mlock"]
 wallet = ["pq", "signers", "json", "dep:bip39", "dep:bip32", "dep:hkdf", "dep:hmac", "dep:zeroize", "dep:unicode-normalization",
     "dep:ripemd", "dep:bs58", "dep:blake2", "dep:alloy-rlp", "dep:ml-kem", "dep:aes-gcm", "dep:aes-gcm-siv", "dep:base64ct", "dep:scrypt", "dep:js-sys", "rand_core/getrandom", "dep:getrandom", "ed25519-dalek/zeroize", "ml-dsa/zeroize", "slh-dsa/zeroize"]
 zether = ["wallet", "dep:zether-prover"]
-pqz = ["wallet", "dep:pqz-ffi"]
+pqz = ["wallet", "dep:pqz-ffi", "dep:subtle"]
 pqz-set-n2048-kmax1024 = ["pqz-ffi?/set-n2048-kmax1024"]
 pqz-set-n2304-kmax4096 = ["pqz-ffi?/set-n2304-kmax4096"]
 pqz-set-n2560-kmax16384 = ["pqz-ffi?/set-n2560-kmax16384"]
@@ -214,3 +217,8 @@ required-features = ["pqz"]
 [[test]]
 name = "wallet_external"
 required-features = ["vectors"]
+
+# ua-rs-sign T15c2 (Codex C1): a `vectors` build makes key handles only after the test-only marker (its own process)
+[[test]]
+name = "vectors_marker"
+required-features = ["vectors", "pqz", "zether"]

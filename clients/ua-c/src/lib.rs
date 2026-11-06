@@ -1064,6 +1064,9 @@ pub const SCAAS_UA_FEATURE_PQZ_SET_N2816_KMAX65536: u64 = 1 << 8;
 pub const SCAAS_UA_FEATURE_EXTERNAL: u64 = 1 << 9;
 /// The secret arena is `mlock`ed and no-dump (Unix; best effort, `scaas_ua_wallet_memory_protection` reports it).
 pub const SCAAS_UA_FEATURE_MLOCK: u64 = 1 << 10;
+/// scaas-ua was built with its test feature `vectors` (Cargo may unify it in): never in a release build. This crate refuses to
+/// compile so, and every binding refuses to load a library with this bit (spec no-decryption-oracle §4.8, Codex C1, T15c2).
+pub const SCAAS_UA_FEATURE_VECTORS: u64 = 1 << 11;
 
 /// The networks of `scaas_ua_wallet_native_key` (clientkeys `NETWORKS`).
 pub const SCAAS_UA_NETWORK_EVM: u32 = 0;
@@ -1299,6 +1302,7 @@ pub extern "C" fn scaas_ua_features() -> u64 {
             | on(b::PQZ, SCAAS_UA_FEATURE_PQZ)
             | b::PQZ_SETS.iter().zip(sets).fold(0, |a, (x, bit)| a | on(*x, bit))
             | on(b::MLOCK, SCAAS_UA_FEATURE_MLOCK)
+            | on(b::VECTORS, SCAAS_UA_FEATURE_VECTORS)
     })
 }
 
@@ -2785,7 +2789,8 @@ mod tests {
         ];
         sets.iter().for_each(|(bit, on)| assert_eq!(has(*bit), *on));
         assert!(!has(SCAAS_UA_FEATURE_EXTERNAL), "MD-13: no external key in a release build");
-        assert_eq!(f >> 11, 0, "no bit past SCAAS_UA_FEATURE_MLOCK");
+        assert!(!has(SCAAS_UA_FEATURE_VECTORS), "C1: never a vectors build");
+        assert_eq!(f >> 12, 0, "no bit past SCAAS_UA_FEATURE_VECTORS");
         let w = uw::Wallet::from_mnemonic("legal winner thank year wave sausage worth useful legal winner thank yellow", "").unwrap();
         let falcon = w.ua_key(0x0132, 0, 0);
         assert_eq!(has(SCAAS_UA_FEATURE_FALCON), falcon.is_ok());

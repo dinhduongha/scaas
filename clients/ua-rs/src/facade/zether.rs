@@ -225,6 +225,7 @@ impl zeroize::ZeroizeOnDrop for ZetherKey {}
 
 /// [`crate::wallet::Wallet::zether_key`].
 pub(crate) fn derive(store: &Arc<SecretStore>, coin: u32, account: u32, key_use: u32) -> Result<ZetherKey> {
+    super::release_or_unlocked()?;
     if key_use != USE_CONF && key_use != USE_VIEWING {
         return Err(Error::Argument);
     }

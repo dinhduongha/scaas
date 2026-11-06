@@ -9,6 +9,12 @@ use scaas_ua::facade::zether::{ZetherCmd, COMMANDS};
 use scaas_ua::wallet::{Error, Wallet};
 use serde_json::{json, Value};
 
+/// Feature `vectors` (Codex C1, T15c2): key handles only after the test-only marker; every test here unlocks first.
+fn unlock() {
+    #[cfg(feature = "vectors")]
+    scaas_ua::facade::vectors_unlock(scaas_ua::facade::TestOnly);
+}
+
 fn read(path: &str) -> Value {
     let p = format!("{}/../{path}", env!("CARGO_MANIFEST_DIR"));
     serde_json::from_str(&std::fs::read_to_string(&p).unwrap_or_else(|_| panic!("{p}"))).unwrap()
@@ -41,6 +47,7 @@ fn request(file: &str) -> Value {
 
 #[test]
 fn conf_and_viewing_keys_are_r33_keys() {
+    unlock();
     let w = wallet();
     let rows = zv("r33_keys.json")["bls12381"]["keys"].as_array().unwrap().clone();
     assert_eq!(rows.len(), 4);
@@ -56,6 +63,7 @@ fn conf_and_viewing_keys_are_r33_keys() {
 
 #[test]
 fn key_use_other_than_conf_or_viewing_is_refused() {
+    unlock();
     let w = wallet();
     assert!(w.zether_key(60, 0, 7).is_ok() && w.zether_key(60, 0, 8).is_ok(), "positive control");
     for u in [0, 6, 9, u32::MAX] {
@@ -66,6 +74,7 @@ fn key_use_other_than_conf_or_viewing_is_refused() {
 #[test]
 #[allow(non_snake_case)]
 fn zether_handle_KeyRevoked_after_lock() {
+    unlock();
     let w = wallet();
     let k = w.zether_key(60, 0, 7).unwrap();
     let pop = json!({"curve": "bls12381"});
@@ -93,6 +102,7 @@ fn zether_handle_KeyRevoked_after_lock() {
 #[cfg(feature = "vectors")]
 #[test]
 fn unlock_does_not_revive_a_zether_handle() {
+    unlock();
     let r = zv("r33_keys.json");
     let w = wallet();
     let k = w.zether_key(60, 0, 7).unwrap();
@@ -106,6 +116,7 @@ fn unlock_does_not_revive_a_zether_handle() {
 /// as `Argument` (an unknown command, before the key); under `vectors` they are there and zether-prover runs them (`hazmat`).
 #[test]
 fn release_has_no_raw_decrypt() {
+    unlock();
     let raw = ["decrypt", "decryptPending", "checkBalance", "proveTransfer", "proveTransferMulti", "proveBurn", "openMemo",
         "recoverTransfer", "openDisclosure"];
     let release = ["encrypt", "pop", "ownerAuth", "uaSig", "shieldCalldata", "envelope", "typedDigest", "namedCall"];
@@ -144,6 +155,7 @@ fn release_has_no_raw_decrypt() {
 /// the top or inside a nested object it is refused before anything reaches zether-prover.
 #[test]
 fn a_key_field_in_command_json_is_refused() {
+    unlock();
     let t = request("transfer_bls12381.json");
     let k = wallet().zether_key(60, 0, 7).unwrap();
     let secret_key = json!({"seed": "0x".to_string() + &"11".repeat(64), "coin": 60, "account": 0});
@@ -174,6 +186,7 @@ fn a_key_field_in_command_json_is_refused() {
 /// curve and an unknown command.
 #[test]
 fn fields_outside_the_allow_list_are_refused() {
+    unlock();
     let t = request("transfer_bls12381.json");
     for (cmd, f, x) in [
         ("proveTransfer", "includeWitness", json!(true)),
@@ -205,6 +218,7 @@ fn fields_outside_the_allow_list_are_refused() {
 /// finding, regress/zether_cmd/float-number.bin).
 #[test]
 fn numbers_other_than_u64_are_refused() {
+    unlock();
     let y = json!(format!("0x{}", hex::encode(wallet().zether_key(60, 0, 7).unwrap().y())));
     assert!(ZetherCmd::from_json("encrypt", json!({"Y": y, "amount": 5}).to_string().as_bytes()).is_ok(), "positive control");
     for bad in ["1.5", "-1", "1e22", "17592189870442189000000"] {
@@ -217,6 +231,7 @@ fn numbers_other_than_u64_are_refused() {
 
 #[test]
 fn command_json_is_bounded_by_length_and_depth() {
+    unlock();
     // the top object, `message`, then n - 2 arrays: depth n
     let deep = |n: usize| format!("{{\"op\":\"ZetherRollOver\",\"message\":{{\"a\":{}0{}}}}}", "[".repeat(n - 2), "]".repeat(n - 2));
     assert!(ZetherCmd::from_json("typedDigest", deep(8).as_bytes()).is_ok(), "depth 8");
@@ -230,6 +245,7 @@ fn command_json_is_bounded_by_length_and_depth() {
 
 #[test]
 fn pop_and_check_balance_through_the_facade() {
+    unlock();
     let w = wallet();
     let r = &zv("r33_keys.json")["bls12381"]["keys"][0];
     let k = w.zether_key(60, 0, 7).unwrap();
@@ -264,6 +280,7 @@ fn pop_and_check_balance_through_the_facade() {
 /// AAD is `Aead`, and a box sealed here opens to the same plaintext.
 #[test]
 fn cache_box_equals_clientkeys() {
+    unlock();
     let z = ua_vec("zether.json");
     let keys = ua_vec("keys.json");
     let words = |id: &Value| keys["mnemonics"].as_array().unwrap().iter().find(|m| &m["id"] == id).unwrap().clone();
@@ -308,6 +325,7 @@ fn cache_box_equals_clientkeys() {
 #[cfg(feature = "vectors")]
 #[test]
 fn zether_prover_vectors_through_the_facade() {
+    unlock();
     use rand_chacha::rand_core::SeedableRng;
     use rand_chacha::ChaCha20Rng;
     let r33 = zv("r33_keys.json");

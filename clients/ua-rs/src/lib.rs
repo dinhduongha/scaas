@@ -55,9 +55,15 @@ pub mod build {
     ];
     /// The arena is `mlock`ed and no-dump (feature `mlock`, Unix; compiled out elsewhere).
     pub const MLOCK: bool = cfg!(all(unix, feature = "mlock"));
-    /// The test-only entry points (feature `vectors`): never in a release build, so `ua-c` refuses to compile with it.
+    /// The test-only entry points (feature `vectors`): never in a release build, so `ua-c`, `ua-cxx` and `ua-dart-frb` refuse
+    /// to compile with it, `scaas_ua_features()` reports it (`SCAAS_UA_FEATURE_VECTORS`) and every binding refuses to load such
+    /// a library (spec no-decryption-oracle §4.8, Codex C1).
     pub const VECTORS: bool = cfg!(feature = "vectors");
 }
+
+/// [`build::VECTORS`]: this crate was built with the test feature `vectors` (Cargo unifies features: a dependency may have
+/// turned it on). Its key-handle constructors then refuse until `facade::vectors_unlock` (spec no-decryption-oracle §4.8).
+pub use build::VECTORS;
 
 /// An error whose [`UAError::code`] every implementation and the vector files share.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
