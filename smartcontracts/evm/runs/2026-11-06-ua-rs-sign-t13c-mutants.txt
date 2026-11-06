@@ -1,0 +1,17 @@
+# 2026-11-06 ua-rs-sign T13c mutants (smartcontracts/evm/runs/2026-11-06-ua-rs-sign-t13c-mutants.py), on the T13c tree (the run before the commit; the files equal the commit's).
+# One mutant per run on a clean tree, the cargo build of clients/ua-dart-frb/rust (the library the tests load) and the whole `dart test`
+# (wallet_test.dart 15 + vectors_test.dart 19 cases), each file restored byte for byte; NOT-LOADED or SURVIVED is a finding (exit 1). The plan's
+# three: M1 the load check skipped, M2 a secret buffer not wiped, M3 a handle freed twice (the generated native release of UaKey decrements
+# twice; the process aborts, SIGABRT, rc=-6, during the handle tests); the controller's M4-M10: wipe on success only, any feature bit, one
+# entry point without the load check, the u64 guard, the unlock order, the UA prefix of error codes, the seed-backup answers.
+killed     | M1 the load check skipped (every entry point) | clients/ua-dart-frb/lib/src/wallet.dart | rc=1 | 1 failed: load_refuses_wrong_abi_or_features | +33 -1
+killed     | M2 a secret buffer not wiped | clients/ua-dart-frb/lib/src/wallet.dart | rc=1 | 3 failed: load_refuses_wrong_abi_or_features, secret_buffer_wiped_after_call, seed_backup_sequence | +31 -3
+killed     | M3 a handle freed twice (the generated native UaKey release decrements twice) | clients/ua-dart-frb/rust/src/frb_generated.rs | rc=-6 | 0 failed:  | +18 -0
+killed     | M4 secrets wiped on success only | clients/ua-dart-frb/lib/src/wallet.dart | rc=1 | 2 failed: load_refuses_wrong_abi_or_features, secret_buffer_wiped_after_call | +32 -2
+killed     | M5 load: any required feature bit passes | clients/ua-dart-frb/lib/src/wallet.dart | rc=1 | 1 failed: load_refuses_wrong_abi_or_features | +33 -1
+killed     | M6 kemEphemeral runs without the load check | clients/ua-dart-frb/lib/src/wallet.dart | rc=1 | 1 failed: load_refuses_wrong_abi_or_features | +33 -1
+killed     | M7 a version outside u64 not refused before frb wraps it | clients/ua-dart-frb/lib/src/wallet.dart | rc=1 | 1 failed: kem_json | +33 -1
+killed     | M8 unlock: the passphrase tried first when both are given | clients/ua-dart-frb/rust/src/api/wallet.rs | rc=1 | 1 failed: vault_json and rs_vault_json | +33 -1
+killed     | M9 the UA prefix of a wallet error code dropped | clients/ua-dart-frb/rust/src/api/wallet.rs | rc=1 | 12 failed: aead_hkdf_hmac, backup_link_restore, custody, kem_json, keys_json, pqz_facade, seal_json, secret_buffer_wiped_after_call, seed_backup_sequence, sign_json, vault_json and rs_vault_json, zether_facade | +22 -12
+killed     | M10 the seed-backup answers not wiped | clients/ua-dart-frb/lib/src/wallet.dart | rc=1 | 1 failed: seed_backup_sequence | +33 -1
+mutants M1-M10 of 10, survived or not loaded: 0

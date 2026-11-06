@@ -1,0 +1,22 @@
+# 2026-11-06 ua-rs-sign T13c: ua-dart-frb (spec §9.1, §9.2, §10; plan T13 row T13c). The wallet and the Zether and PQZ facades over the Rust API
+# through flutter_rust_bridge 2.13.0 (rust/src/api/wallet.rs, opaque handles), a hand Dart facade (lib/src/wallet.dart: the load check, the
+# caller's secret buffers zeroed after every call). UNAUDITED.
+# All commands through scripts/capped, foreground, -j2, --locked, --offline; Dart SDK of Flutter (3.12); full logs git-ignored (clients/ua-dart-frb/rust/target/t13c/).
+step | commit | rc | counts
+red: dart test test/wallet_test.dart (before the binding) | 9e8b7441 + tests | 1 | 103 compile errors (no wallet API)
+flutter_rust_bridge_codegen generate (rustfmt installed for 1.97.1, second run) | 7dca925b | 0 | lib/src/rust/api/wallet.dart, frb_generated*.dart, rust/src/frb_generated.rs; unit struct Live skipped (private, not in Dart)
+Cargo.lock | 7dca925b | - | the scaas-ua wallet graph at ua-cxx's versions; js-sys 0.3.106 -> 0.3.107, wasm-bindgen 0.2.129 -> 0.2.130 (+ web-sys, -futures; ua-rs pins js-sys =0.3.107); sha3 0.10.9 -> 0.10.8; zeroize 1.9.1 -> 1.8.2; litrs 1.0.1 -> 1.0.0 (cargo update --precise)
+cargo build (clients/ua-dart-frb/rust) | 7dca925b | 0 | pqzl's 2 deprecated warnings, none of ours
+dart test (wallet_test.dart + vectors_test.dart) | 7dca925b | 0 | 34 passed: wallet 15 + vectors 19
+dart analyze lib test | 7dca925b | 0 | 0 of ours (1 pre-existing info: vectors_test.dart unnecessary_import); first run: 1 warning in wallet_test.dart, fixed
+cargo test (clients/ua-dart-frb/rust) | 7dca925b | 0 | 0 tests (the suite is dart test)
+cargo clippy --all-targets -D warnings (clients/ua-dart-frb/rust) | 7dca925b | 0 | 0 of ours; pqzl's 2 deprecated warnings
+cargo deny --all-features --config ../../ua-rs/deny.toml check (clients/ua-dart-frb/rust, lock moved) | 7dca925b | 0 | advisories ok, bans ok, licenses ok, sources ok
+cargo tree --locked --offline -e normal: ua-cxx, ua-qt, ua-dart-frb/rust, scaas-node, ua-rs/fuzz, ua-c | 7dca925b | 0 | 6 of 6
+mutants: 2026-11-06-ua-rs-sign-t13c-mutants.py | 7dca925b | 0 | 10 killed, 0 survived, 0 not loaded (the plan's 3 and 7 of the controller's)
+# Decisions (controller): (1) the entry points without a handle and every call that takes a secret go through the Dart facade; the
+# barrel hides the generated ones. (2) Rust-API bindings have no C ABI version: abi_version() reports 6 and features() the bits of
+# scaas_ua_features(); refusal UAAbiMismatch (binding-side, as ua-cxx). (3) Handle methods carry no load check: a handle exists only
+# from a checked entry point. (4) AEAD / HKDF / HMAC key inputs are not wiped by the facade (as ua-cxx, ua-py: caller-held primitives).
+# Residual: frb copies a List<int> argument into its transfer buffer, which is freed, not zeroed.
+# Conflicts: none with the spec. Optional-secret parameters are Uint8List? (frb's mapping of Option<Vec<u8>>).
