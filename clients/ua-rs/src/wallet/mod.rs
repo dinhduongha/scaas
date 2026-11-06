@@ -435,6 +435,11 @@ impl SeedBackup {
     doc = "```",
     doc = "```compile_fail,E0599",
     doc = "let _ = scaas_ua::wallet::KemKeyPair::vectors_ephemeral(&[0; 96]);",
+    doc = "```",
+    doc = "```compile_fail,E0599",
+    doc = "fn f(w: &scaas_ua::wallet::Wallet, k: &scaas_ua::wallet::UaKey) {",
+    doc = "    let _ = w.vectors_link_seal(k, &[], \"1\", 0, &[0; 32], &[0; 32]);",
+    doc = "}",
     doc = "```"
 )]
 pub struct Wallet {

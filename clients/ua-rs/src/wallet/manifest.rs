@@ -13,7 +13,11 @@
 //! naming it (`ContainerSender`), and over a device that holds this wallet an older generation is `BackupRollback` unless the
 //! caller passes [`AllowRollback`]; an equal generation installs nothing. UNAUDITED.
 use super::eip712::{from_hex, to_hex};
-use super::seal::{is_sender_kind, now, seal_container, ContainerExpect, ContainerSigner, Recipient, SealedContainer, PURPOSE_BACKUP};
+use super::kem::{kem_encaps, Encapsulated};
+use super::seal::{
+    is_sender_kind, now, seal_container, seal_container_with, ContainerExpect, ContainerSigner, Recipient, SealedContainer, PURPOSE_BACKUP,
+    PURPOSE_LINK,
+};
 use super::vault::{Unlock, Vault, PrfEnvelope, SEED_LENGTHS};
 use super::{bounded, derive, seed_of, Error, KemKeyPair, KeyId, Network, NativeKey, Result, UaKey, Wallet};
 use crate::derive_ua;
@@ -373,12 +377,40 @@ impl Wallet {
     /// containers (`Argument` otherwise, or for no recipient); `created` the clock. The BIP-39 passphrase is never in it.
     // ponytail: the payload is built once for every recipient; per-recipient generations if a holder ever needs its own.
     pub fn backup_seal(&self, sender: &UaKey, recipients: &[Recipient]) -> Result<Vec<SealedContainer>> {
-        let ua = sender.ua.filter(|_| is_sender_kind(sender.kind) && sender.secret.of_store(&self.store)).ok_or(Error::Argument)?;
         if recipients.is_empty() {
             return Err(Error::Argument);
         }
         let created = now()?;
-        let pt = self.store.with_all(|a, m| {
+        let pt = self.payload(sender, true)?;
+        let signer = ContainerSigner::Key(sender);
+        recipients.iter().map(|r| seal_container(r, PURPOSE_BACKUP, &signer, created, pt.as_bytes(), None)).collect()
+    }
+
+    /// The link container of this wallet to a new device's session (spec §6.3, C-11; owner 2026-11-06), what
+    /// [`Wallet::from_link`] opens: `scaas/link/v1` to the session's ephemeral key `session_kem_pk` (the recipient
+    /// `keccak256(kemPk)`), the `short_code` the new device shows in the `aad`, `created` the clock (the session's window is the
+    /// opener's check), signed by `sender` as [`Wallet::backup_seal`]'s, over the same `BackupPayload` (the entropy, the
+    /// imported keys, the manifest entries with `sender`'s, the current `backup_generation`: a link raises none). `Argument`
+    /// for a sender of another wallet or of a kind that does not sign containers, or an empty short code; `KemCheck` for the
+    /// key; `WalletLocked` while locked. The BIP-39 passphrase is never in it.
+    pub fn link_seal(&self, sender: &UaKey, session_kem_pk: &[u8], short_code: &str) -> Result<SealedContainer> {
+        self.link_seal_with(sender, session_kem_pk, short_code, now()?, kem_encaps)
+    }
+
+    fn link_seal_with(
+        &self, sender: &UaKey, session_kem_pk: &[u8], short_code: &str, created: u64,
+        encaps: impl FnOnce(&[u8]) -> Result<Encapsulated>,
+    ) -> Result<SealedContainer> {
+        let pt = self.payload(sender, false)?;
+        let r = Recipient::ephemeral(session_kem_pk);
+        seal_container_with(&r, PURPOSE_LINK, &ContainerSigner::Key(sender), created, pt.as_bytes(), Some(short_code), encaps)
+    }
+
+    /// The `BackupPayload` of this wallet with `sender` (a container key of this wallet) in its entries; `raise`: a backup
+    /// raises `backup_generation` first.
+    fn payload(&self, sender: &UaKey, raise: bool) -> Result<Zeroizing<String>> {
+        let ua = sender.ua.filter(|_| is_sender_kind(sender.kind) && sender.secret.of_store(&self.store)).ok_or(Error::Argument)?;
+        self.store.with_all(|a, m| {
             m.add_ua(sender.kind, sender.account, sender.index, ua);
             let secrets = m
                 .imports
@@ -386,11 +418,11 @@ impl Wallet {
                 .map(|i| Ok((*i, Zeroizing::new(a.secret(KeyId::Import(i.n)).ok_or(Error::Argument)?.to_vec()))))
                 .collect::<Result<Vec<_>>>()?;
             let entropy = Zeroizing::new(a.entropy()?.to_vec());
-            m.backup_generation = m.backup_generation.checked_add(1).ok_or(Error::Argument)?;
+            if raise {
+                m.backup_generation = m.backup_generation.checked_add(1).ok_or(Error::Argument)?;
+            }
             Ok(BackupPayload { generation: m.backup_generation, entropy, secrets, entries: m.entries.clone() }.to_json())
-        })?;
-        let signer = ContainerSigner::Key(sender);
-        recipients.iter().map(|r| seal_container(r, PURPOSE_BACKUP, &signer, created, pt.as_bytes(), None)).collect()
+        })
     }
 
     /// The wallet a backup container carries (spec §6.3, C-03, C-11): `expect.purpose` must be `scaas/backup/v1`
@@ -440,6 +472,17 @@ fn install(p: BackupPayload, bip39_passphrase: &str) -> Result<Wallet> {
 /// The wallet of a link payload (the same `BackupPayload`; [`Wallet::from_link`]).
 pub(super) fn install_link(pt: &[u8], bip39_passphrase: &str) -> Result<Wallet> {
     install(BackupPayload::from_json(pt)?, bip39_passphrase)
+}
+
+/// Test-only (feature `vectors`): the link seal at a given clock, `m` and `e`.
+#[cfg(feature = "vectors")]
+impl Wallet {
+    #[allow(clippy::too_many_arguments)]
+    pub fn vectors_link_seal(
+        &self, sender: &UaKey, session_kem_pk: &[u8], short_code: &str, created: u64, m: &[u8; 32], e: &[u8; 32],
+    ) -> Result<SealedContainer> {
+        self.link_seal_with(sender, session_kem_pk, short_code, created, |k| super::kem::vectors_encaps(k, m, e))
+    }
 }
 
 /// Test-only (feature `vectors`): a backup payload read and written back.

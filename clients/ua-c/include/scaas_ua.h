@@ -1021,6 +1021,38 @@ ScaasUaStatus scaas_ua_wallet_import_native_key(const ScaasUaWallet *w,
                                                 ScaasUaKey **out);
 
 /**
+ * Imported key `n` of `network` (`native-import:<network>:<n>`), only for the network it was imported for (CLI-SGN-11): else
+ * SCAAS_UA_ERR_ARGUMENT, as for a key the manifest lists but the wallet does not hold (after unlock: open its label vault first,
+ * `scaas_ua_wallet_open_label_vault`). SCAAS_UA_ERR_WALLET_LOCKED while locked.
+ */
+ScaasUaStatus scaas_ua_wallet_imported_key(const ScaasUaWallet *w,
+                                           uint32_t network,
+                                           uint32_t n,
+                                           ScaasUaKey **out);
+
+/**
+ * A vault of label `manifest` (the manifest JSON) or `native-import:<network>:<n>` (that imported key) under `vault_passphrase`
+ * (the new-passphrase policy), as `scaas_ua_wallet_seal_vault`; SCAAS_UA_ERR_ARGUMENT for another label or a key the wallet does
+ * not hold. Each call makes a new vault (a size query too).
+ */
+ScaasUaStatus scaas_ua_wallet_seal_label_vault(const ScaasUaWallet *w,
+                                               const char *label,
+                                               const char *vault_passphrase,
+                                               char *out_json,
+                                               size_t *out_len);
+
+/**
+ * Opens a vault of `scaas_ua_wallet_seal_label_vault` into this (unlocked) wallet: `manifest` replaces the manifest,
+ * `native-import:...` installs that key, so an imported key is reachable again after `scaas_ua_wallet_unlock`. Exactly one of
+ * `vault_passphrase` and `prf32` as `scaas_ua_wallet_unlock`; SCAAS_UA_ERR_ARGUMENT for another label (the seed vault unlocks
+ * with `scaas_ua_wallet_unlock`); the vault's errors as `scaas_ua_wallet_open_vault`.
+ */
+ScaasUaStatus scaas_ua_wallet_open_label_vault(const ScaasUaWallet *w,
+                                               const char *vault_json,
+                                               const char *vault_passphrase,
+                                               const uint8_t *prf32);
+
+/**
  * The public manifest JSON `{v, entries, natives, kem, imports, backupGeneration, backupSenders}` (kept by lock).
  */
 ScaasUaStatus scaas_ua_wallet_manifest_json(const ScaasUaWallet *w,
@@ -1052,7 +1084,8 @@ ScaasUaStatus scaas_ua_wallet_backup_seal(const ScaasUaWallet *w,
 
 /**
  * The wallet a backup container carries, opened by `kk` against `expect_json` (`{purpose: "scaas/backup/v1", sender: {ua} |
- * {set}, recipient: {ua, version} | {kemPkHash}}`), `members_json` (`{"<id>": {kind, keyData}}`, NULL = none) and
+ * {set}, recipient: {ua, version} | {kemPkHash}}`, 16 KiB), `members_json` (`{"<id>": {kind, keyData}}`, at most 512 KiB and
+ * 64 UAs, NULL = none) and
  * `accepted_json` (`{"<msig id>": [accepted member indices]}`, the caller's `memberAccepted` reads; NULL for a single-key sender,
  * SCAAS_UA_ERR_CONTAINER_SENDER for an `msig` one). Over `current` (NULL = none), a wallet holding the sender's UA: an older
  * generation is SCAAS_UA_ERR_BACKUP_ROLLBACK, an equal one installs nothing: `*installed = false`, `*out = NULL`, SCAAS_UA_OK.
@@ -1081,6 +1114,21 @@ ScaasUaStatus scaas_ua_wallet_restore_backup_rollback(const ScaasUaKemKey *kk,
                                                       const char *bip39_passphrase,
                                                       ScaasUaWallet **out,
                                                       bool *installed);
+
+/**
+ * The existing device's link container (JSON) to a new device's session: `session_kem_pk` (the session's
+ * `scaas_ua_link_session_kem_pk`, SCAAS_UA_KEM_PK_LEN bytes, else SCAAS_UA_ERR_KEM_CHECK) and the `short_code` it shows, signed by
+ * `sender` (a UA key of this wallet that signs containers, else SCAAS_UA_ERR_ARGUMENT), carrying the wallet's entropy, imported
+ * keys, manifest entries and backup generation (raised by none), what `scaas_ua_wallet_from_link` installs. A size query seals
+ * again. The container carries the entropy sealed to the session key: only the session's holder opens it.
+ */
+ScaasUaStatus scaas_ua_wallet_link_seal(const ScaasUaWallet *w,
+                                        const ScaasUaKey *sender,
+                                        const uint8_t *session_kem_pk,
+                                        size_t session_kem_pk_len,
+                                        const char *short_code,
+                                        char *out_json,
+                                        size_t *out_len);
 
 /**
  * The wallet a link container carries to `session` (`expect_json` purpose `scaas/link/v1`, the other inputs as

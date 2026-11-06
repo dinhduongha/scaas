@@ -933,6 +933,8 @@ for name, res, args in [
     ('wallet_zether_key', st, [P, u32, u32, u32, P]), ('zether_key_free', None, [P]), ('zether_public', st, [P, P, P]),
     ('zether_call', st, [P, u8, u8, P, P]), ('zether_seal_balance_cache', st, [P, u8, sz, P, P]),
     ('zether_open_balance_cache', st, [P, u8, P, P]),
+    ('wallet_link_seal', st, [P, P, u8, sz, u8, P, P]), ('wallet_seal_label_vault', st, [P, u8, u8, P, P]),
+    ('wallet_open_label_vault', st, [P, u8, u8, u8]), ('wallet_imported_key', st, [P, u32, u32, P]),
 ]:
     f = getattr(LIB, 'scaas_ua_' + name)
     f.restype, f.argtypes = res, args
@@ -1364,6 +1366,10 @@ class WalletSeal(WalletCase):
         self.assertEqual(sig_of(L.open_container, kk, jb(r['container']), jb(deep), None, None)[0], 'UAArgument')
         big = json.dumps(r['expect']).encode() + b' ' * (16 << 10)
         self.assertEqual(sig_of(L.open_container, kk, jb(r['container']), big, None, None)[0], 'UAArgument')
+        # members_json: 512 KiB (owner 2026-11-06), the other two 16 KiB
+        members = b'{}' + b' ' * ((512 << 10) - 2)
+        self.assertEqual(sig_of(L.open_container, kk, jb(r['container']), jb(r['expect']), members, None), ('', b(r['pt'])), '512 KiB')
+        self.assertEqual(sig_of(L.open_container, kk, jb(r['container']), jb(r['expect']), members + b' ', None)[0], 'UAArgument')
 
     def replay_current(self, r):
         """A wallet holding `current.ua` at `current.generation` (raised by backup_seal), or None."""
@@ -1442,6 +1448,41 @@ class WalletSeal(WalletCase):
                   lambda: L.link_session_kem_pk(s, pk)):
             self.assertEqual(name_of(f()), 'UAKeyRevoked', 'the session is consumed by its first install')
 
+    def test_link_seal_round_trip(self):
+        """T12 follow-up (owner 2026-11-06): the existing device seals the link container; the new device installs it; a wrong
+        short code and a key of another wallet are refused."""
+        w = mnemonic_wallet('twelve_words')
+        self.addCleanup(L.wallet_free, w)
+        key = self.key(None, 0x0102, w=w)
+        ok(L.wallet_import_native_key(w, 0, bytes(range(1, 33)), 32, C.byref(P())))
+        ua = hx(out32(L.derive_ua, 0x0102, var(L.key_data, key), 32, False))
+        for wrong in (False, True):
+            s = handle(L.link_session_new)
+            self.addCleanup(L.link_session_free, s)
+            pk = C.create_string_buffer(KEM_PK)
+            ok(L.link_session_kem_pk(s, pk))
+            code = text(L.link_session_short_code, s)
+            if wrong:
+                code = '00000000' if code != '00000000' else '00000001'
+            c = text(L.wallet_link_seal, w, key, pk.raw, KEM_PK, code.encode())
+            expect = {'purpose': 'scaas/link/v1', 'sender': {'ua': ua}, 'recipient': {'kemPkHash': hx(out32(L.keccak256, pk.raw, KEM_PK))}}
+            out = P()
+            status = L.wallet_from_link(s, c.encode(), jb(expect), None, None, b'', C.byref(out))
+            if wrong:
+                self.assertEqual(name_of(status), 'UASealOpen')
+                continue
+            ok(status)
+            self.addCleanup(L.wallet_free, out)
+            self.assertEqual(var(L.key_data, self.key(None, 0x0102, w=out)), var(L.key_data, key))
+            self.assertEqual(json.loads(text(L.wallet_manifest_json, out))['imports'], json.loads(text(L.wallet_manifest_json, w))['imports'])
+        s = handle(L.link_session_new)
+        self.addCleanup(L.link_session_free, s)
+        pk = C.create_string_buffer(KEM_PK)
+        ok(L.link_session_kem_pk(s, pk))
+        other = self.key('pq_kat', 0x0102)
+        self.assertEqual(sig_of(L.wallet_link_seal, w, other, pk.raw, KEM_PK, b'12345678')[0], 'UAArgument', "another wallet's key")
+        self.assertEqual(sig_of(L.wallet_link_seal, w, key, pk.raw, KEM_PK - 1, b'12345678')[0], 'UAKemCheck')
+
 
 class WalletVault(WalletCase):
     def unlock_of(self, u):
@@ -1512,6 +1553,31 @@ class WalletCustody(WalletCase):
         self.assertEqual(sig_of(L.sign_ua, k, out32(L.purpose_tag, b'metatx'), bytes(32))[0], 'UAKeyRevoked', 'unlock does not revive')
         self.assertEqual(var(L.sign_ua, self.key(None, 0x0101, w=w), out32(L.purpose_tag, b'metatx'), bytes(32)), before)
         self.assertEqual(name_of(L.wallet_unlock(w, v, b'correct horse 9', None, b'')), 'UAArgument', 'already unlocked')
+
+    def test_imported_key_after_unlock(self):
+        """T12 follow-up (owner 2026-11-06): an imported key is reachable again after unlock through its label vault."""
+        w = mnemonic_wallet('twelve_words')
+        self.addCleanup(L.wallet_free, w)
+        seed_v = text(L.wallet_seal_vault, w, b'correct horse 9').encode()
+        k = handle(L.wallet_import_native_key, w, 0, bytes(range(1, 33)), 32)
+        self.addCleanup(L.key_free, k)
+        d = bytes(range(32))
+        before = var(L.sign_digest_raw, k, d)
+        label_v = text(L.wallet_seal_label_vault, w, b'native-import:evm:0', b'correct horse 9').encode()
+        self.assertEqual(sig_of(L.wallet_seal_label_vault, w, b'native-import:evm:7', b'correct horse 9')[0], 'UAArgument', 'not held')
+        ok(L.wallet_lock(w))
+        self.assertEqual(name_of(L.wallet_imported_key(w, 0, 0, C.byref(P()))), 'UAWalletLocked')
+        ok(L.wallet_unlock(w, seed_v, b'correct horse 9', None, b''))
+        self.assertEqual(name_of(L.wallet_imported_key(w, 0, 0, C.byref(P()))), 'UAArgument', 'listed, not held before its vault opens')
+        self.assertEqual(name_of(L.wallet_open_label_vault(w, label_v, b'wrong horse 9', None)), 'UAVaultOpen')
+        self.assertEqual(name_of(L.wallet_open_label_vault(w, seed_v, b'correct horse 9', None)), 'UAArgument', 'the seed vault is not a label vault')
+        ok(L.wallet_open_label_vault(w, label_v, b'correct horse 9', None))
+        k2 = handle(L.wallet_imported_key, w, 0, 0)
+        self.addCleanup(L.key_free, k2)
+        self.assertEqual(var(L.sign_digest_raw, k2, d), before, 'the same key (RFC 6979)')
+        self.assertEqual(sig_of(L.sign_digest_raw, k, d)[0], 'UAKeyRevoked', 'the old handle stays revoked')
+        self.assertEqual(name_of(L.wallet_imported_key(w, 1, 0, C.byref(P()))), 'UAArgument', 'another network (CLI-SGN-11)')
+        self.assertEqual(name_of(L.wallet_imported_key(w, 0, 1, C.byref(P()))), 'UAArgument', 'an unknown n')
 
     def test_unlock_with_another_wallets_vault_is_WalletMismatch(self):
         w = mnemonic_wallet('twelve_words')

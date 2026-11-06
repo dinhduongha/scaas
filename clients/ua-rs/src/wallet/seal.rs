@@ -434,7 +434,7 @@ fn container_sig(sender: &ContainerSigner, key_data: Vec<u8>, digest: &[u8; 32])
 }
 
 #[allow(clippy::too_many_arguments)]
-fn seal_container_with(
+pub(super) fn seal_container_with(
     recipient: &Recipient, purpose: &str, sender: &ContainerSigner, created: u64, pt: &[u8], short_code: Option<&str>,
     encaps: impl FnOnce(&[u8]) -> Result<Encapsulated>,
 ) -> Result<SealedContainer> {
@@ -640,8 +640,10 @@ impl Wallet {
 }
 
 /// The JSON inputs of a container open across the C ABI and the bindings (spec §9.2, §9.3; no callback crosses the ABI): each
-/// at most 16 KiB and JSON depth 4 ([`bounded::json`]), ids and bytes `0x` hex, an unknown key `Argument`.
+/// JSON depth 4 ([`bounded::json`]), ids and bytes `0x` hex, an unknown key `Argument`; `expect_json` and `accepted_json` at most
+/// 16 KiB, `members_json` at most 512 KiB and 64 UAs (owner 2026-11-06: 16 KiB held about three ML-DSA-87 member keys).
 const LOOKUP_JSON: usize = 16 << 10;
+const MEMBERS_JSON: usize = 512 << 10;
 const LOOKUP_DEPTH: usize = 4;
 
 /// A 32-byte `0x` hex value.
@@ -707,15 +709,20 @@ fn parse_expect(v: &Value) -> Option<ContainerExpectJson> {
 pub struct MembersJson(Vec<([u8; 32], u16, Vec<u8>)>);
 
 impl MembersJson {
-    /// `Argument` past 16 KiB or depth 4, for an id that is not 32 bytes, a kind that is not a `u16` or key data that is not hex.
+    /// `Argument` past 512 KiB, depth 4 or 64 UAs, for an id that is not 32 bytes, a kind that is not a `u16` or key data that
+    /// is not hex.
     pub fn from_json(json: &[u8]) -> Result<MembersJson> {
-        let v = bounded::json(json, LOOKUP_JSON, LOOKUP_DEPTH)?;
+        let v = bounded::json(json, MEMBERS_JSON, LOOKUP_DEPTH)?;
         let entry = |(id, x): (&String, &Value)| {
             let x = only(x, &["kind", "keyData"])?;
             let kind = u16::try_from(x.get("kind")?.as_u64()?).ok()?;
             Some((h32(&Value::from(id.as_str()))?, kind, from_hex(x.get("keyData")?.as_str()?)?))
         };
-        v.as_object().and_then(|o| o.iter().map(entry).collect::<Option<_>>()).map(MembersJson).ok_or(Error::Argument)
+        v.as_object()
+            .filter(|o| o.len() <= SET_MAX)
+            .and_then(|o| o.iter().map(entry).collect::<Option<_>>())
+            .map(MembersJson)
+            .ok_or(Error::Argument)
     }
 
     /// The [`Members`] answer for `id`.

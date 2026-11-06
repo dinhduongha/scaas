@@ -38,6 +38,8 @@ const MANIFEST: (usize, usize) = (1 << 20, 3);
 const PAYLOAD: (usize, usize) = (1 << 20, 4);
 const CONTAINER: (usize, usize) = (4 << 20, 7);
 const LOOKUP: (usize, usize) = (16 * 1024, 4);
+/// `members_json`: 512 KiB (owner 2026-11-06), depth 4.
+const MEMBERS: (usize, usize) = (512 * 1024, 4);
 const UASIG: (usize, usize) = (64 * 1024, 6);
 const ZCMD: (usize, usize) = (1 << 20, 8);
 const ZBOX: (usize, usize) = (2 << 20, 1);
@@ -183,7 +185,7 @@ fn one(t: &str, data: &[u8]) {
             json(data, LOOKUP, ContainerExpectJson::from_json);
         }
         "members" => {
-            json(data, LOOKUP, MembersJson::from_json);
+            json(data, MEMBERS, MembersJson::from_json);
         }
         "accepted" => {
             json(data, LOOKUP, AcceptedJson::from_json);

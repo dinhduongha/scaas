@@ -4,7 +4,8 @@
 //! `serde_json` (`bounded::vectors_parsed` unchanged): most decoders would refuse the parsed value too, which would hide a
 //! missing bound. Positive control per file: the same input without its extra key `x` is accepted and parsed once. The
 //! binary targets have no depth: `sealed` one byte short of its tag, `kem_pk` scheme 2 and 1,602 bytes, `mnemonic` past 1 KiB
-//! and 24 words. T12: the container open's JSON inputs (`expect_json`, `members_json`, `accepted_json`: 16 KiB, depth 4) and
+//! and 24 words. T12: the container open's JSON inputs (`expect_json`, `accepted_json`: 16 KiB, depth 4; `members_json`: 512 KiB,
+//! depth 4, owner 2026-11-06) and
 //! the `UASig` request (64 KiB, depth 6) of the C ABI. T14: the Zether command (1 MiB, depth 8) and cache box (2 MiB, depth 1). UNAUDITED.
 use scaas_ua::wallet::{
     bounded, kem_encaps, vectors_backup_payload, AcceptedJson, ContainerExpectJson, Error, EvmTx, Expect, Manifest, MembersJson,
@@ -56,7 +57,7 @@ fn json_inputs_longer_than_their_cap_are_refused_unparsed() {
         ("manifest/payload-over-depth-5.json", 1 << 20, &|b| vectors_backup_payload(b).map(|_| ())),
         ("container/over-depth-8.json", 4 << 20, &|b| SealedContainer::from_json(b).map(|_| ())),
         ("container_expect/over-depth-5.json", 16 << 10, &|b| ContainerExpectJson::from_json(b).map(|_| ())),
-        ("members/over-depth-5.json", 16 << 10, &|b| MembersJson::from_json(b).map(|_| ())),
+        ("members/over-depth-5.json", 512 << 10, &|b| MembersJson::from_json(b).map(|_| ())),
         ("accepted/over-depth-5.json", 16 << 10, &|b| AcceptedJson::from_json(b).map(|_| ())),
         ("uasig/over-depth-7.json", 64 << 10, &|b| UaSigRequest::from_json(b).map(|_| ())),
     ];

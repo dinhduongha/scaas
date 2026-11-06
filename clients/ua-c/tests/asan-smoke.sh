@@ -5,6 +5,7 @@
 #   scripts/capped tests/asan-smoke.sh
 # -Zsanitizer needs the unstable flag: RUSTC_BOOTSTRAP=1 on the stable 1.97.1 toolchain, test builds only (target/asan, never a
 # release artefact). std is not rebuilt (no -Zbuild-std): its own code is not instrumented, ours and every dependency's is.
+# RUSTC_BOOTSTRAP=1 is accepted by the owner (2026-11-06) for this test-only ASan build in target/asan; nothing else here sets it.
 set -eu
 cd "$(dirname "$0")/.."
 TRIPLE=x86_64-unknown-linux-gnu
