@@ -105,6 +105,39 @@ fn unlock_reopens_the_vault() {
 }
 
 #[test]
+fn unlock_refuses_a_vault_of_another_wallet() {
+    let w = Wallet::from_mnemonic(&words(), "pass-a").unwrap();
+    let key = w.ua_key(0x0102, 0, 0).unwrap();
+    let vault = w.seal_vault(PASS, None).unwrap();
+    let (other, _) = Wallet::generate().unwrap();
+    let foreign = other.seal_vault(PASS, None).unwrap();
+    w.lock();
+    let before = w.manifest();
+    // another wallet's seed vault, and this vault with another BIP-39 passphrase: another seed under the kept manifest
+    assert_eq!(w.unlock(&foreign, Unlock::VaultPassphrase(PASS), "pass-a").err(), Some(Error::WalletMismatch));
+    assert_eq!(w.unlock(&vault, Unlock::VaultPassphrase(PASS), "").err(), Some(Error::WalletMismatch));
+    assert_eq!(w.unlock(&vault, Unlock::VaultPassphrase(PASS), "pass-b").err(), Some(Error::WalletMismatch));
+    assert_eq!(w.ua_key(0x0102, 0, 0).err(), Some(Error::WalletLocked), "a refused unlock leaves the wallet locked");
+    assert_eq!(w.manifest(), before, "and its manifest as it was");
+    #[cfg(feature = "vectors")]
+    assert_eq!(w.vectors_unlock(&words(), "").err(), Some(Error::WalletMismatch), "the hook takes the same check");
+    // positive control: this wallet's vault and passphrase
+    w.unlock(&vault, Unlock::VaultPassphrase(PASS), "pass-a").unwrap();
+    assert_eq!(w.ua_key(0x0102, 0, 0).unwrap().key_data(), key.key_data());
+}
+
+#[test]
+fn unlock_with_an_empty_manifest_has_nothing_to_compare() {
+    // no UA key derived yet: the manifest names no UA, so any seed vault reopens the wallet (documented on `unlock`)
+    let w = wallet();
+    let (other, _) = Wallet::generate().unwrap();
+    let foreign = other.seal_vault(PASS, None).unwrap();
+    w.lock();
+    assert!(w.manifest().entries.is_empty());
+    w.unlock(&foreign, Unlock::VaultPassphrase(PASS), "").unwrap();
+}
+
+#[test]
 #[allow(non_snake_case)]
 fn derive_lock_then_sign_decaps_open_prove_are_KeyRevoked() {
     let w = wallet();

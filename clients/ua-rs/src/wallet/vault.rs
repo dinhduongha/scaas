@@ -273,7 +273,11 @@ impl Wallet {
     /// arena at the generation `lock()` raised. Earlier handles stay `KeyRevoked`; derive new ones. `Argument` while unlocked.
     /// The manifest is the one `lock()` kept; an imported key it lists is held again only once its `native-import:` vault is
     /// reopened with [`Wallet::open_label_vault`] ([`Wallet::imported_key`] is `Argument` until then): this call takes the seed
-    /// vault alone, and each label vault has its own DEK and unlock.
+    /// vault alone, and each label vault has its own DEK and unlock. The vault must be this wallet's: the seed it holds, with
+    /// `bip39_passphrase`, must derive the UA of the manifest's first entry (its `kind` / `account` / `index`), else
+    /// `WalletMismatch` (another wallet's seed vault, or another BIP-39 passphrase) and the wallet stays locked; an error of
+    /// that derivation (`KindUnavailable` for a Falcon entry on a build without Falcon) is returned as it is. A wallet locked
+    /// before any UA key was derived has an empty manifest and nothing to compare: any seed vault reopens it.
     pub fn unlock(&self, vault: &Vault, unlock: Unlock, bip39_passphrase: &str) -> Result<()> {
         self.unlock_entropy(&seed_entropy(vault, unlock)?, bip39_passphrase)
     }

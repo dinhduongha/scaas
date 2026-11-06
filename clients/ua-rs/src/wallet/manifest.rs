@@ -251,15 +251,16 @@ fn parse_payload(v: &Value) -> Option<BackupPayload> {
     Some(BackupPayload { generation: v.get("generation")?.as_u64()?, entropy, secrets, entries })
 }
 
+/// The UA `seed` derives at entry `e`'s `kind` / `account` / `index` (the secret dropped here).
+pub(super) fn entry_ua(seed: &[u8; 64], e: &ManifestEntry) -> Result<[u8; 32]> {
+    let (_secret, key_data) = derive::ua_key(e.kind, derive::ua_secret(seed, e.kind, e.account, e.index)?)?;
+    Ok(derive_ua(e.kind, &key_data, false)?)
+}
+
 /// Whether the payload's entropy (with `bip39_passphrase`) derives `sender` at the manifest entry naming it.
 fn derives_sender(p: &BackupPayload, sender: &[u8; 32], bip39_passphrase: &str) -> bool {
     let Some(e) = p.entries.iter().find(|e| e.ua == *sender) else { return false };
-    let derived = || -> Result<[u8; 32]> {
-        let seed = seed_of(&p.entropy, bip39_passphrase)?;
-        let (_secret, key_data) = derive::ua_key(e.kind, derive::ua_secret(&*seed, e.kind, e.account, e.index)?)?;
-        Ok(derive_ua(e.kind, &key_data, false)?)
-    };
-    derived().ok() == Some(*sender)
+    seed_of(&p.entropy, bip39_passphrase).and_then(|seed| entry_ua(&seed, e)).ok() == Some(*sender)
 }
 
 impl Wallet {

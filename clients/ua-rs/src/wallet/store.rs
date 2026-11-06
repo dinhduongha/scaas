@@ -13,7 +13,7 @@
 //! process-wide `PR_SET_DUMPABLE` is never set: a host app that wants it sets it itself. UNAUDITED.
 // the readers of secrets (`Handle::with`, the entropy for the vault) are the signers (T3a–T3d) and the vault (T9)
 #![cfg_attr(not(feature = "vectors"), allow(dead_code))]
-use super::manifest::Manifest;
+use super::manifest::{entry_ua, Manifest};
 use super::{Error, KeyId, Result};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
@@ -241,11 +241,18 @@ impl SecretStore {
     }
 
     /// The arena from the entropy and its seed, at the current generation; `Argument` while one is open (a second arena would
-    /// move the slots of live handles).
+    /// move the slots of live handles); `WalletMismatch` if the manifest kept by `lock()` has a first entry and `seed` does not
+    /// derive its UA (another wallet's seed), checked under the same write lock before the arena is built. An empty manifest
+    /// (a new wallet, or one locked before any UA key was derived) has nothing to compare: any seed opens it.
     pub(crate) fn open(&self, entropy: &[u8], seed: &[u8; 64]) -> Result<()> {
         let mut g = self.write();
         if g.arena.is_some() {
             return Err(Error::Argument);
+        }
+        if let Some(e) = g.manifest.entries.first() {
+            if entry_ua(seed, e)? != e.ua {
+                return Err(Error::WalletMismatch);
+            }
         }
         g.arena = Some(Arena::new(entropy, seed)?);
         Ok(())

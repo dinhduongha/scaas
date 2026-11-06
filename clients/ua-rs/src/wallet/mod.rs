@@ -129,6 +129,10 @@ pub enum Error {
     VaultVersion,
     /// A backup older than the one the wallet holds, without [`AllowRollback`] (spec §6.3, C-11).
     BackupRollback,
+    /// [`Wallet::unlock`] with a seed vault that opened but whose seed, with this BIP-39 passphrase, does not derive the UA of
+    /// the kept manifest's first entry: another wallet's vault, or another BIP-39 passphrase. Not `VaultOpen` (the vault did
+    /// open: a new vault passphrase does not help) and not `Argument` (the input is well formed); the wallet stays locked.
+    WalletMismatch,
     Ua(UAError),
 }
 
@@ -153,6 +157,7 @@ impl Error {
             Error::VaultParams => "VaultParams",
             Error::VaultVersion => "VaultVersion",
             Error::BackupRollback => "BackupRollback",
+            Error::WalletMismatch => "WalletMismatch",
             Error::Ua(e) => e.code(),
         }
     }
