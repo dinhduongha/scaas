@@ -18,5 +18,7 @@ mutants: 2026-11-06-ua-rs-sign-t13c-mutants.py | 7dca925b | 0 | 10 killed, 0 sur
 # barrel hides the generated ones. (2) Rust-API bindings have no C ABI version: abi_version() reports 6 and features() the bits of
 # scaas_ua_features(); refusal UAAbiMismatch (binding-side, as ua-cxx). (3) Handle methods carry no load check: a handle exists only
 # from a checked entry point. (4) AEAD / HKDF / HMAC key inputs are not wiped by the facade (as ua-cxx, ua-py: caller-held primitives).
-# Residual: frb copies a List<int> argument into its transfer buffer, which is freed, not zeroed.
+# Residual: frb copies a List<int> argument into its transfer buffer, which is freed, not zeroed. Closed by the follow-up
+# (owner 2026-11-06, 2026-11-06-ua-rs-sign-t13c-secrets-summary.txt): every secret in or out is a Rust-owned SecretBytes written
+# and read in place through dart:ffi, which also supersedes decision (4) (AEAD / HKDF / HMAC keys are SecretBytes too).
 # Conflicts: none with the spec. Optional-secret parameters are Uint8List? (frb's mapping of Option<Vec<u8>>).
