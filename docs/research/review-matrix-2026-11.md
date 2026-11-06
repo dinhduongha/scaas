@@ -34,7 +34,7 @@ The reviewers are AI models, none independent of the project; everything cryptog
 | Model | Strength here | Notes |
 |---|---|---|
 | **Claude workflow** (Opus, several lenses, adversarial verify of each finding) | breadth, spec ↔ code, blast radius, test quality | needs the owner's explicit go (token cost) |
-| **Fable** (independent counter-review) | design flaws, what is missing, architecture, economics | given the code and the spec, not our conclusions |
+| **Fable** (independent counter-review) | design flaws, what is missing, architecture, economics; **and, on every spec with security or cryptographic content, a full security and cryptography review beside Codex's** (owner 2026-11-06: two independent reviewers miss different things) | given the code and the spec, not our conclusions; never Codex's report |
 | **Codex** (security review) | code-level crypto, signatures / EIP-712, keys, FFI, reentrancy | only on the owner's word (credits); free `codex sandbox` check first; output inside the worktree |
 | **agy** (Gemini, web search) | standards and known CVEs of dependencies, cross-checks of parameters, a second crypto opinion | read-only; cite sources |
 
