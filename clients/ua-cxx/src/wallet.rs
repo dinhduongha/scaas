@@ -8,7 +8,8 @@
 //! no error carries an input. UNAUDITED.
 use crate::{guard, UaErr, R};
 use scaas_ua as ua;
-use std::sync::atomic::{AtomicI64, Ordering};
+use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use ua::facade::{pqz as fpqz, zether as fzether};
 use ua::wallet as uw;
@@ -69,7 +70,6 @@ mod ffi {
 
     extern "Rust" {
         type Wallet;
-        #[derive(ExternType)]
         type Key;
         type KeyList;
         type KemKey;
@@ -142,6 +142,10 @@ mod ffi {
         fn key_list_push(l: &mut KeyList, k: &Key);
         fn uasig(request_json: &str, keys: &KeyList) -> Result<String>;
         fn kem_key(k: &Key, version: u64) -> Result<Box<KemKey>>;
+        // ua-rs-sign T13b: a key handle by id for a script layer (ua-qt's QML singleton), which never holds the handle itself;
+        // the id names a shared handle (revoked with its wallet as any other), never a secret
+        fn key_register(k: &Key) -> u64;
+        fn key_release(id: u64) -> bool;
 
         fn kem_ephemeral() -> Result<Box<KemKey>>;
         fn kem_pk(kk: &KemKey) -> Vec<u8>;
@@ -206,7 +210,7 @@ enum KeyInner {
     Ua(uw::UaKey),
     Native(uw::NativeKey),
 }
-/// A UA or native key handle; shared (`Arc`) so a key list or a registry (ua-qt) can hold it beside its owner.
+/// A UA or native key handle; shared (`Arc`) so a key list or the id registry can hold it beside its owner.
 pub struct Key(Arc<KeyInner>, Live);
 pub struct KeyList(Vec<Arc<KeyInner>>);
 pub struct KemKey(uw::KemKeyPair, Live);
@@ -217,10 +221,46 @@ pub struct ZetherKey(fzether::ZetherKey, Live);
 pub struct PqzKey(fpqz::PqzKey, Live);
 
 impl Key {
-    /// Another handle of the same key (ua-qt's registry).
+    /// Another handle of the same key (a key list, the id registry).
     pub fn share(&self) -> Key {
         Key(Arc::clone(&self.0), Live::new())
     }
+    /// The UA key, or `None` for a native key.
+    pub fn ua_key(&self) -> Option<&uw::UaKey> {
+        match &*self.0 {
+            KeyInner::Ua(u) => Some(u),
+            KeyInner::Native(_) => None,
+        }
+    }
+    /// The native key, or `None` for a UA key.
+    pub fn native_key(&self) -> Option<&uw::NativeKey> {
+        match &*self.0 {
+            KeyInner::Native(n) => Some(n),
+            KeyInner::Ua(_) => None,
+        }
+    }
+    pub fn signer(&self) -> &dyn uw::Signer {
+        signer(&self.0)
+    }
+}
+
+/// The handles registered by id (`key_register`), for a script layer that gets ids, never handles (ua-qt's QML).
+static REGISTRY: Mutex<BTreeMap<u64, Key>> = Mutex::new(BTreeMap::new());
+static NEXT_ID: AtomicU64 = AtomicU64::new(1);
+fn key_register(k: &Key) -> u64 {
+    let id = NEXT_ID.fetch_add(1, Ordering::SeqCst);
+    if let Ok(mut r) = REGISTRY.lock() {
+        r.insert(id, k.share());
+    }
+    id
+}
+/// Frees the registry's handle of `id` once: `false` for an id it does not hold (released already, or never given).
+fn key_release(id: u64) -> bool {
+    REGISTRY.lock().map(|mut r| r.remove(&id).is_some()).unwrap_or(false)
+}
+/// A handle of the key registered as `id` (another share of it), or `None`.
+pub fn registered(id: u64) -> Option<Key> {
+    REGISTRY.lock().ok()?.get(&id).map(Key::share)
 }
 
 fn abi_version() -> u32 {

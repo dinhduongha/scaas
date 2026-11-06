@@ -5,9 +5,12 @@ edition = "2021"
 rust-version = "1.97.1"
 publish = false
 description = "C++ (cxx) bridge over scaas-ua. UNAUDITED."
+# ua-rs-sign T13b: also an rlib, so ua-qt links this bridge (its C++ side is ua-cxx); `links` exports the generated headers
+# (DEP_SCAAS_UA_CXX_CXXBRIDGE_DIR*) to that build
+links = "scaas-ua-cxx"
 
 [lib]
-crate-type = ["staticlib"]
+crate-type = ["staticlib", "rlib"]
 
 # ua-rs-sign T13a: the wallet (spec §9.1) and both facades at the default PQZ set (MD-5, as ua-c's default), `mlock` on native
 # builds; never `vectors` (src/wallet.rs refuses it at compile time)

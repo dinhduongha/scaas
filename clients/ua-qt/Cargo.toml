@@ -4,17 +4,21 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.97.1"
 publish = false
-description = "CXX-Qt QObject UaKinds (QML module Scaas.Ua) over scaas-ua. UNAUDITED."
+description = "CXX-Qt QObjects UaKinds and UaWallet (QML module Scaas.Ua) over scaas-ua and ua-cxx. UNAUDITED."
 
 [lib]
 crate-type = ["staticlib"]
 
+# ua-rs-sign T13b: the wallet through ua-cxx (the C++ side of an app; the QML singleton UaWallet signs by handle id), which
+# brings scaas-ua's wallet, both facades (n2304-kmax4096) and mlock
 [dependencies]
 scaas-ua = { path = "../ua-rs", default-features = false, features = ["json"] }
+scaas-ua-cxx = { path = "../ua-cxx" }
 cxx = "=1.0.202"
 cxx-qt = "=0.10.0"
 cxx-qt-lib = "=0.10.0"
 serde_json = "=1.0.145"
+zeroize = "=1.8.2"
 
 [build-dependencies]
 cxx-qt-build = "=0.10.0"

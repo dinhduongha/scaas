@@ -235,6 +235,9 @@ std::string uaSig(const std::string& requestJson, const std::vector<const Key*>&
     });
 }
 
+uint64_t registerKey(const Key& k) { return ffi::key_register(k.ffi()); }
+bool releaseKey(uint64_t id) { return ffi::key_release(id); }
+
 // --- KEM, seal / open, link ------------------------------------------------------------------------------------------------
 
 KemKey KemKey::ephemeral() {

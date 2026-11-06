@@ -375,6 +375,11 @@ public:
 };
 // The UASig builder (the C ABI's scaas_ua_uasig): request JSON with keys by position in `keys`.
 std::string uaSig(const std::string& requestJson, const std::vector<const Key*>& keys);
+// A key handle by id for a script layer that must never hold a handle (ua-qt's QML singleton signs by id): registerKey shares
+// the handle under a new id (the handle stays the caller's too; both are revoked with their wallet); releaseKey frees the
+// registry's share once (false for an id it does not hold).
+uint64_t registerKey(const Key& k);
+bool releaseKey(uint64_t id);
 
 class KemKey : public Handle<ffi::KemKey> {
 public:

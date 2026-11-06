@@ -204,7 +204,7 @@ fn hx(b: &[u8]) -> String {
 fn bytes(q: &QString) -> Res<Vec<u8>> {
     let t = s(q);
     let h = t.strip_prefix("0x").unwrap_or(&t);
-    if h.len() % 2 != 0 || !h.bytes().all(|c| c.is_ascii_hexdigit()) {
+    if !h.len().is_multiple_of(2) || !h.bytes().all(|c| c.is_ascii_hexdigit()) {
         return Err(ARG);
     }
     Ok((0..h.len()).step_by(2).map(|i| u8::from_str_radix(&h[i..i + 2], 16).unwrap()).collect())
