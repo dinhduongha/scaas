@@ -112,7 +112,11 @@ static void load_refuses_wrong_abi_or_features() {
     CHECK(code_of([] { load(); }) == "UAAbiMismatch", "features without pqz");
     detail::reportedFeatures = [] { return kRequiredFeatures & ~feature::kPqzSetN2304Kmax4096; };
     CHECK(code_of([] { load(); }) == "UAAbiMismatch", "another pqz set");
+    detail::reportedFeatures = [] { return kRequiredFeatures | feature::kVectors; };  // Codex C1: a test build
+    CHECK(code_of([] { load(); }) == "UAAbiMismatch", "a vectors build");
+    CHECK(code_of([] { KemKey::ephemeral(); }) == "UAAbiMismatch", "a vectors build: kem ephemeral");
     detail::reportedFeatures = feat;
+    CHECK(!(features() & feature::kVectors), "the linked core is not a test build");
     load();
 }
 
@@ -741,6 +745,14 @@ static void zether_facade() {
     for (auto f : {"popDigest", "registrationDigest", "uaMsg"}) CHECK(pop[f] == R33["bls12381"]["keys"][0]["pop"][f], f);
     CHECK(code_of([&] { k.call("pop", R"({"key":{"seed":"0x11","coin":60,"account":0}})"); }) == "UAArgument", "a key field");
     CHECK(code_of([&] { k.call("verifyTransfer", "{}"); }) == "UAArgument", "verifiers are not exposed");
+    // ARCH-POS-13 (T15c2, Fable P2-5): a release build has no raw decrypt; a well-formed `decrypt` / `checkBalance` of a
+    // ciphertext is an unknown command
+    json ct = json::parse(k.call("encrypt", json{{"curve", "bls12381"}, {"Y", hx(k.y())}, {"amount", 5}}.dump()));
+    CHECK(ct.contains("C") && ct.contains("D"), "encrypt (positive control)");
+    CHECK(code_of([&] { k.call("decrypt", json{{"curve", "bls12381"}, {"ct", ct}}.dump()); }) == "UAArgument",
+          "no decrypt in a release build");
+    CHECK(code_of([&] { k.call("checkBalance", json{{"curve", "bls12381"}, {"acc", ct}, {"balance", 5}}.dump()); }) == "UAArgument",
+          "no checkBalance in a release build");
     for (auto& r : Z["cacheBox"]) {
         Secret a(MN.at(r["mnemonic"])["words"].get<std::string>()), b(MN.at(r["mnemonic"])["passphrase"].get<std::string>());
         Wallet zw = Wallet::fromMnemonic(a, b);

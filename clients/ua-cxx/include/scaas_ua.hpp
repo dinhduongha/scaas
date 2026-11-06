@@ -191,7 +191,8 @@ constexpr uint32_t kAbiVersion = 6;
 namespace feature {
 constexpr uint64_t kWallet = 1u << 0, kPq = 1u << 1, kFalcon = 1u << 2, kZether = 1u << 3, kPqz = 1u << 4,
                    kPqzSetN2048Kmax1024 = 1u << 5, kPqzSetN2304Kmax4096 = 1u << 6, kPqzSetN2560Kmax16384 = 1u << 7,
-                   kPqzSetN2816Kmax65536 = 1u << 8, kExternal = 1u << 9, kMlock = 1u << 10;
+                   kPqzSetN2816Kmax65536 = 1u << 8, kExternal = 1u << 9, kMlock = 1u << 10,
+                   kVectors = 1u << 11;  // a test build (scaas-ua `vectors`): load() refuses it (Codex C1)
 }
 constexpr uint64_t kRequiredFeatures =
     feature::kWallet | feature::kPq | feature::kZether | feature::kPqz | feature::kPqzSetN2304Kmax4096;
@@ -201,8 +202,9 @@ constexpr uint32_t kCoinDefault = 0xffffffffu;  // nativeKey: the network's own 
 constexpr uint32_t kAeadAes256Gcm = 1, kAeadAes256GcmSiv = 2;
 constexpr uint32_t kZetherUseConf = 7, kZetherUseViewing = 8;
 
-// Checks the linked core against this header: abi_version == kAbiVersion and every bit of kRequiredFeatures present, else
-// Error("UAAbiMismatch", "abi_version" | "features"). Every entry point that takes no handle runs it first.
+// Checks the linked core against this header: abi_version == kAbiVersion, every bit of kRequiredFeatures present and
+// feature::kVectors clear (never a test build, spec no-decryption-oracle §4.8), else Error("UAAbiMismatch", "abi_version" |
+// "features"). Every entry point that takes no handle runs it first.
 void load();
 uint64_t features();     // what the linked core holds (feature::*)
 int64_t liveHandles();   // handles alive now (a test of "freed exactly once")

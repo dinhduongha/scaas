@@ -63,7 +63,8 @@ void Secret::wipe() noexcept { zero(b_.data(), b_.size()); }
 
 void load() {
     if (detail::reportedAbiVersion() != kAbiVersion) throw Error("UAAbiMismatch", "abi_version");
-    if ((detail::reportedFeatures() & kRequiredFeatures) != kRequiredFeatures) throw Error("UAAbiMismatch", "features");
+    uint64_t f = detail::reportedFeatures();
+    if ((f & kRequiredFeatures) != kRequiredFeatures || (f & feature::kVectors)) throw Error("UAAbiMismatch", "features");
 }
 uint64_t features() { return ffi::features(); }
 int64_t liveHandles() { return ffi::live_handles(); }
