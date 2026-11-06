@@ -942,6 +942,7 @@ for name, res, args in [
     ('pqz_seed_backup', st, [P, P, u8, sz, u64, C.c_uint8, P, sz, P, P]),
     ('pqz_share_reseal', st, [P, u8, u8, u8, u8, P, P, P, P]),
     ('wallet_pqz_reconstruct', st, [P, P, u8, u8, u8, u8, u8, u64, u8, P]),
+    ('wallet_pqz_held_key', st, [P, u8, P]),
     ('pqz_seed_backup_warning', st, [u16, u8, u64, u8, sz, u8, P]),
 ]:
     f = getattr(LIB, 'scaas_ua_' + name)
@@ -2043,6 +2044,34 @@ class WalletPqzBackup(WalletCase):
         m = bl()
         ok(L.pqz_seed_backup_warning(0x0130, self.mua[0], 0, self.pk, len(self.pk), None, C.byref(m)))
         self.assertFalse(m.value, 'a single key needs no backup')
+
+    def test_rebuilt_key_after_lock_and_unlock(self):
+        """T16b (owner 2026-11-06): the rebuilt key persists in the rebuilder's pqz-held vault; after unlock it is held again
+        once that vault opens, checked against its pqzKeyHash."""
+        self.pk = var(L.pqz_public, self.pqz)
+        b = self.deal()
+        self.kh = bytes.fromhex(b['pqzKeyHash'][2:])
+        w = mnemonic_wallet(self.mids[0])  # a wallet of its own: it is locked below
+        self.addCleanup(L.wallet_free, w)
+        out = P()
+        ok(L.wallet_pqz_reconstruct(w, self.kks[0], jb(b['shares'][:1] + [json.loads(once(
+            L.pqz_share_reseal, self.kks[1], jb(b['shares'][1]), jb(self.expect(1)), None, None, C.byref(self.rec(0)),
+            self.mkeys[1]))]), jb(self.expect(0)), None, None, self.msig_ua, 0, self.kh, C.byref(out)))
+        self.addCleanup(L.pqz_key_free, out)
+        self.assertEqual(json.loads(text(L.wallet_manifest_json, w))['pqzHeld'],
+                         [{'ua': hx(self.msig_ua), 'version': 0, 'pqzKeyHash': hx(self.kh)}])
+        label = f'pqz-held:{hx(self.msig_ua)}:0:{hx(self.kh)}'.encode()
+        seed_v = text(L.wallet_seal_vault, w, b'correct horse 9').encode()
+        held_v = text(L.wallet_seal_label_vault, w, label, b'correct horse 9').encode()
+        ok(L.wallet_lock(w))
+        self.assertEqual(name_of(L.wallet_pqz_held_key(w, self.kh, C.byref(P()))), 'UAWalletLocked')
+        ok(L.wallet_unlock(w, seed_v, b'correct horse 9', None, b''))
+        self.assertEqual(name_of(L.wallet_pqz_held_key(w, self.kh, C.byref(P()))), 'UAArgument', 'listed, not held before its vault opens')
+        ok(L.wallet_open_label_vault(w, held_v, b'correct horse 9', None))
+        k = handle(L.wallet_pqz_held_key, w, self.kh)
+        self.addCleanup(L.pqz_key_free, k)
+        self.assertEqual(var(L.pqz_public, k), self.pk, 'the operator\'s key again')
+        self.assertEqual(name_of(L.wallet_pqz_held_key(w, bytes(32), C.byref(P()))), 'UAArgument', 'another key hash')
 
     def test_k_and_recipients_checked(self):
         self.assertEqual(self.deal(3)['k'], 3)

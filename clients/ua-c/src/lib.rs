@@ -1464,9 +1464,10 @@ pub extern "C" fn scaas_ua_wallet_imported_key(w: *const ScaasUaWallet, network:
     })
 }
 
-/// A vault of label `manifest` (the manifest JSON) or `native-import:<network>:<n>` (that imported key) under `vault_passphrase`
-/// (the new-passphrase policy), as `scaas_ua_wallet_seal_vault`; SCAAS_UA_ERR_ARGUMENT for another label or a key the wallet does
-/// not hold. Each call makes a new vault (a size query too).
+/// A vault of label `manifest` (the manifest JSON), `native-import:<network>:<n>` (that imported key) or
+/// `pqz-held:<ua>:<version>:<pqzKeyHash>` (a PQZ key rebuilt by `scaas_ua_wallet_pqz_reconstruct`, its seed32) under
+/// `vault_passphrase` (the new-passphrase policy), as `scaas_ua_wallet_seal_vault`; SCAAS_UA_ERR_ARGUMENT for another label or a
+/// key the wallet does not hold. Each call makes a new vault (a size query too).
 #[no_mangle]
 pub extern "C" fn scaas_ua_wallet_seal_label_vault(
     w: *const ScaasUaWallet,
@@ -1479,7 +1480,9 @@ pub extern "C" fn scaas_ua_wallet_seal_label_vault(
 }
 
 /// Opens a vault of `scaas_ua_wallet_seal_label_vault` into this (unlocked) wallet: `manifest` replaces the manifest,
-/// `native-import:...` installs that key, so an imported key is reachable again after `scaas_ua_wallet_unlock`. Exactly one of
+/// `native-import:...` installs that key, so an imported key is reachable again after `scaas_ua_wallet_unlock`; `pqz-held:...`
+/// installs that PQZ key only if its seed32 gives the label's pqzKeyHash (else SCAAS_UA_ERR_ARGUMENT, nothing held; then
+/// `scaas_ua_wallet_pqz_held_key`; SCAAS_UA_ERR_KIND_UNAVAILABLE without `pqz`). Exactly one of
 /// `vault_passphrase` and `prf32` as `scaas_ua_wallet_unlock`; SCAAS_UA_ERR_ARGUMENT for another label (the seed vault unlocks
 /// with `scaas_ua_wallet_unlock`); the vault's errors as `scaas_ua_wallet_open_vault`.
 #[no_mangle]
@@ -1496,7 +1499,7 @@ pub extern "C" fn scaas_ua_wallet_open_label_vault(
     })
 }
 
-/// The public manifest JSON `{v, entries, natives, kem, imports, backupGeneration, backupSenders}` (kept by lock).
+/// The public manifest JSON `{v, entries, natives, kem, imports, pqzHeld, backupGeneration, backupSenders}` (kept by lock).
 #[no_mangle]
 pub extern "C" fn scaas_ua_wallet_manifest_json(w: *const ScaasUaWallet, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
     run(|| write_str(out, out_len, &handle(w)?.0.manifest().to_json()))
@@ -2629,7 +2632,10 @@ pub extern "C" fn scaas_ua_pqz_share_reseal(
 /// share containers, 1 MiB) each opened by `kk` as `expect_json` says; every header must be (`msig_ua32`, `version`,
 /// `pqz_key_hash32` = the registered key's hash) with one k and n, the indices distinct, at least k of them, and the rebuilt
 /// seed32 must give a key of that hash; else SCAAS_UA_ERR_ARGUMENT and nothing is installed. The new key handle in `*out`
-/// (account and index u32::MAX; lock and free of `w` revoke it): its holder is the new operator.
+/// (account and index u32::MAX; lock and free of `w` revoke it): its holder is the new operator. The key persists as an imported
+/// key does (owner 2026-11-06): listed in the manifest's `pqzHeld`, in `w`'s backup and link payloads, and in the vault of label
+/// `pqz-held:<msig ua>:<version>:<pqzKeyHash>` (`scaas_ua_wallet_seal_label_vault`); after unlock, open that vault and take it
+/// with `scaas_ua_wallet_pqz_held_key`. The new operator should rotate to a new key version soon (spec 3g).
 #[no_mangle]
 #[allow(clippy::too_many_arguments)]
 pub extern "C" fn scaas_ua_wallet_pqz_reconstruct(
@@ -2660,6 +2666,25 @@ pub extern "C" fn scaas_ua_wallet_pqz_reconstruct(
         #[cfg(not(feature = "pqz"))]
         {
             let _ = (w, kk, containers_json, expect_json, members_json, accepted_json, msig_ua32, version, pqz_key_hash32, out);
+            Err(fail(SCAAS_UA_ERR_KIND_UNAVAILABLE))
+        }
+    })
+}
+
+/// The PQZ key `w` rebuilt (`scaas_ua_wallet_pqz_reconstruct`) or reopened from its `pqz-held:` vault, by its key hash
+/// `pqz_key_hash32`: SCAAS_UA_ERR_ARGUMENT unless the manifest lists it and the wallet holds it (after unlock, open its vault
+/// first); SCAAS_UA_ERR_WALLET_LOCKED while locked. Account and index u32::MAX.
+#[no_mangle]
+pub extern "C" fn scaas_ua_wallet_pqz_held_key(w: *const ScaasUaWallet, pqz_key_hash32: *const u8, out: *mut *mut ScaasUaPqzKey) -> ScaasUaStatus {
+    run(|| {
+        if out.is_null() {
+            return Err(argument("NULL"));
+        }
+        #[cfg(feature = "pqz")]
+        return give(out, ScaasUaPqzKey(handle(w)?.0.pqz_held_key(arr(pqz_key_hash32)?)?));
+        #[cfg(not(feature = "pqz"))]
+        {
+            let _ = (w, pqz_key_hash32);
             Err(fail(SCAAS_UA_ERR_KIND_UNAVAILABLE))
         }
     })

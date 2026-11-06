@@ -15,7 +15,13 @@
 //! - **Rebuild.** [`crate::wallet::Wallet::reconstruct_pqz_seed`] opens k or more containers, refuses fewer than the header's k,
 //!   mixed headers, a header other than the expected `(msig ua, version, pqzKeyHash)` and repeated indices, interpolates, and
 //!   installs the result only if its key hashes to the registered `pqzKeyHash`. The key lives in the rebuilder's wallet
-//!   store (lock revokes it) and is not in that wallet's own backup: the new operator deals new shares of it (or rotates).
+//!   store (lock revokes the handle) and persists as an imported key does (T16b, owner 2026-11-06): the manifest's `pqzHeld`,
+//!   the vault of label `pqz-held:<msig ua>:<version>:<pqzKeyHash>` and the wallet's backup and link payloads, each checked
+//!   against `pqzKeyHash` when it is reopened ([`crate::wallet::Wallet::pqz_held_key`] after `unlock`). The new operator
+//!   deals new shares of it and should rotate to a new key version soon (spec 3g): the old operator and every member who
+//!   held k shares can read under this one.
+//! - **Recipients: direct members only** (owner 2026-11-06): a member that is itself an `msig` gets no share (it holds no KEM
+//!   key); its own members are not reached.
 //! - **Warning, never a refusal** (owner 2026-11-06): [`seed_backup_warning`] says when an `msig` PQZ holder's key has no
 //!   backup that covers it; `register` / `setPqzKey` are built either way.
 //!

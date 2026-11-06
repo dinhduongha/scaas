@@ -233,6 +233,14 @@ impl Vault {
     }
 }
 
+/// Test-only (feature `vectors`): a vault of any label and payload (a forged `pqz-held:` vault, T16b).
+#[cfg(feature = "vectors")]
+impl Vault {
+    pub fn vectors_seal(label: &str, secret: &[u8], pin: &str) -> Result<Vault> {
+        Vault::seal(label, secret, pin, None)
+    }
+}
+
 fn parse(v: &Value) -> Option<Vault> {
     let bytes = |x: &Value, k: &str| Base64UrlUnpadded::decode_vec(x.get(k)?.as_str()?).ok();
     let gcm = |x: &Value| Some(GcmBox { iv: bytes(x, "iv")?, ct: bytes(x, "ct")? });

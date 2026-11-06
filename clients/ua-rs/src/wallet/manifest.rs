@@ -4,7 +4,11 @@
 //! The [`Manifest`] is the wallet's public record: the UA keys, native keys and KEM keys written at their first use, the
 //! imported keys, `backup_generation` and `backup_senders`; `lock()` keeps it, it travels in the backup and link payloads (its
 //! `entries`) and in a vault of label `manifest`. It is never a trust anchor. An imported key ([`Wallet::import_native_key`])
-//! is tagged with its network (CLI-SGN-11: refused for any other) and stored as `native-import:<network>:<n>`.
+//! is tagged with its network (CLI-SGN-11: refused for any other) and stored as `native-import:<network>:<n>`. A PQZ key this
+//! wallet rebuilt from an `msig`'s k-of-n backup (T16a; `Wallet::reconstruct_pqz_seed`, feature `pqz`) persists the same way
+//! (T16b, owner 2026-11-06): listed in the manifest's `pqzHeld`, its `seed32` in a vault of label
+//! `pqz-held:<ua>:<version>:<pqzKeyHash>` (keyed `(ua, version, pqzKeyHash)`, spec 3g §7.2 C8 / F-14) and in the backup's
+//! `secrets` under that label; reopening either checks the key against `pqzKeyHash` before it is held.
 //!
 //! A backup ([`Wallet::backup_seal`]) is the container `scaas/backup/v1` of `BackupPayload {v: 1, generation, entropy, secrets:
 //! [{label, bytes}], manifest: {entries: [{kind, account, index, ua}]}}`, JSON in this field order (owner 2026-11-05), each
@@ -19,6 +23,7 @@ use super::seal::{
     PURPOSE_LINK,
 };
 use super::vault::{Unlock, Vault, PrfEnvelope, SEED_LENGTHS};
+use super::store::Arena;
 use super::{bounded, derive, seed_of, Error, KemKeyPair, KeyId, Network, NativeKey, Result, UaKey, Wallet};
 use crate::derive_ua;
 use crate::ua8::{Accepted, Members};
@@ -57,6 +62,15 @@ pub struct ImportEntry {
     pub n: u32,
 }
 
+/// A PQZ key rebuilt from the k-of-n backup of `msig` `ua`'s key of record `version` (T16a / T16b): its label
+/// `pqz-held:<ua>:<version>:<pqzKeyHash>`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PqzHeldEntry {
+    pub ua: [u8; 32],
+    pub version: u64,
+    pub pqz_key_hash: [u8; 32],
+}
+
 /// The wallet's public record (spec §8.3).
 // ponytail: no `label` / `created` per entry, no KEM `origin` and no FROST shares: nothing produces them in this round; add
 // them with their first producer (a random KEM key, a DKG share, a naming call).
@@ -66,6 +80,8 @@ pub struct Manifest {
     pub natives: Vec<NativeEntry>,
     pub kem: Vec<KemEntry>,
     pub imports: Vec<ImportEntry>,
+    /// The PQZ keys rebuilt from an `msig`'s k-of-n backup (T16b): public, the `seed32` is in the arena only.
+    pub pqz_held: Vec<PqzHeldEntry>,
     /// The generation of the last backup this wallet sealed or restored (§6.3).
     pub backup_generation: u64,
     /// The UAs whose backups this wallet agreed to hold: a restore's approved sender set (§6.3).
@@ -81,6 +97,8 @@ const PAYLOAD_DEPTH: usize = 4;
 const GAP_MAX: u32 = 1024;
 /// The prefix of an imported key's label.
 const IMPORT: &str = "native-import:";
+/// The prefix of a rebuilt PQZ key's label (T16b).
+const PQZ_HELD: &str = "pqz-held:";
 
 impl Manifest {
     pub(crate) fn add_ua(&mut self, kind: u16, account: u32, index: u32, ua: [u8; 32]) {
@@ -101,8 +119,14 @@ impl Manifest {
             self.kem.push(e);
         }
     }
+    #[cfg(feature = "pqz")]
+    pub(crate) fn add_pqz_held(&mut self, e: PqzHeldEntry) {
+        if !self.pqz_held.contains(&e) {
+            self.pqz_held.push(e);
+        }
+    }
 
-    /// `{v: 1, entries, natives, kem, imports, backupGeneration, backupSenders}` (UAs `0x` hex).
+    /// `{v: 1, entries, natives, kem, imports, pqzHeld, backupGeneration, backupSenders}` (UAs and hashes `0x` hex).
     pub fn to_json(&self) -> String {
         let list = |v: Vec<String>| v.join(",");
         let entries = list(self.entries.iter().map(entry_json).collect());
@@ -117,15 +141,22 @@ impl Manifest {
         );
         let kem = list(self.kem.iter().map(|k| format!("{{\"ua\":\"{}\",\"version\":{}}}", to_hex(&k.ua), k.version)).collect());
         let imports = list(self.imports.iter().map(|i| format!("{{\"network\":\"{}\",\"n\":{}}}", i.network.name(), i.n)).collect());
+        let held = list(
+            self.pqz_held
+                .iter()
+                .map(|p| format!("{{\"ua\":\"{}\",\"version\":{},\"pqzKeyHash\":\"{}\"}}", to_hex(&p.ua), p.version, to_hex(&p.pqz_key_hash)))
+                .collect(),
+        );
         let senders = list(self.backup_senders.iter().map(|u| format!("\"{}\"", to_hex(u))).collect());
         format!(
-            "{{\"v\":1,\"entries\":[{entries}],\"natives\":[{natives}],\"kem\":[{kem}],\"imports\":[{imports}],\"backupGeneration\":{},\
+            "{{\"v\":1,\"entries\":[{entries}],\"natives\":[{natives}],\"kem\":[{kem}],\"imports\":[{imports}],\"pqzHeld\":[{held}],\"backupGeneration\":{},\
              \"backupSenders\":[{senders}]}}",
             self.backup_generation
         )
     }
 
-    /// The named fields of a manifest JSON: `Argument` past 1 MiB or depth 3 or for a malformed field.
+    /// The named fields of a manifest JSON: `Argument` past 1 MiB or depth 3 or for a malformed field; an absent `pqzHeld` is
+    /// none (a manifest written before T16b).
     pub fn from_json(json: &[u8]) -> Result<Manifest> {
         let v = bounded::json(json, MANIFEST_JSON, MANIFEST_DEPTH)?;
         parse_manifest(&v).ok_or(Error::Argument)
@@ -175,22 +206,74 @@ fn parse_manifest(v: &Value) -> Option<Manifest> {
         natives,
         kem: list(v, "kem")?.iter().map(|k| Some(KemEntry { ua: ua_of(k.get("ua")?)?, version: k.get("version")?.as_u64()? })).collect::<Option<_>>()?,
         imports: list(v, "imports")?.iter().map(|i| Some(ImportEntry { network: network_of(i)?, n: u32::try_from(i.get("n")?.as_u64()?).ok()? })).collect::<Option<_>>()?,
+        // absent in a manifest written before T16b: none
+        pqz_held: match v.get("pqzHeld") {
+            None => vec![],
+            Some(_) => list(v, "pqzHeld")?.iter().map(pqz_held_of).collect::<Option<_>>()?,
+        },
         backup_generation: v.get("backupGeneration")?.as_u64()?,
         backup_senders: list(v, "backupSenders")?.iter().map(ua_of).collect::<Option<_>>()?,
     })
 }
 
-fn import_label(i: &ImportEntry) -> String {
-    format!("{IMPORT}{}:{}", i.network.name(), i.n)
+fn pqz_held_of(v: &Value) -> Option<PqzHeldEntry> {
+    let h = |k: &str| ua_of(v.get(k)?);
+    Some(PqzHeldEntry { ua: h("ua")?, version: v.get("version")?.as_u64()?, pqz_key_hash: h("pqzKeyHash")? })
 }
 
-/// `native-import:<network>:<n>` (`n` canonical decimal), else `Argument`.
-fn parse_import_label(label: &str) -> Result<ImportEntry> {
-    let (net, n) = label.strip_prefix(IMPORT).and_then(|r| r.split_once(':')).ok_or(Error::Argument)?;
-    let n: u32 = n.parse().map_err(|_| Error::Argument)?;
-    let network = Network::from_name(net).ok_or(Error::Argument)?;
-    let e = ImportEntry { network, n };
-    (import_label(&e) == label).then_some(e).ok_or(Error::Argument)
+/// A secret the wallet holds outside its derivations, by its label vault's and backup secret's label.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Held {
+    /// `native-import:<network>:<n>`
+    Import(ImportEntry),
+    /// `pqz-held:<ua>:<version>:<pqzKeyHash>` (T16b)
+    Pqz(PqzHeldEntry),
+}
+
+impl Held {
+    fn label(&self) -> String {
+        match self {
+            Held::Import(i) => format!("{IMPORT}{}:{}", i.network.name(), i.n),
+            Held::Pqz(p) => format!("{PQZ_HELD}{}:{}:{}", to_hex(&p.ua), p.version, to_hex(&p.pqz_key_hash)),
+        }
+    }
+
+    /// `native-import:<network>:<n>` or `pqz-held:<ua>:<version>:<pqzKeyHash>`, each field canonical (decimal; `0x` and 64
+    /// lower-case hex digits), else `Argument`.
+    fn parse(label: &str) -> Result<Held> {
+        let h = if let Some(r) = label.strip_prefix(IMPORT) {
+            let (net, n) = r.split_once(':').ok_or(Error::Argument)?;
+            let network = Network::from_name(net).ok_or(Error::Argument)?;
+            Held::Import(ImportEntry { network, n: n.parse().map_err(|_| Error::Argument)? })
+        } else {
+            let r = label.strip_prefix(PQZ_HELD).ok_or(Error::Argument)?;
+            let h32 = |x: &str| from_hex(x).and_then(|b| <[u8; 32]>::try_from(b).ok());
+            let p = || {
+                let mut f = r.split(':');
+                Some(PqzHeldEntry { ua: h32(f.next()?)?, version: f.next()?.parse().ok()?, pqz_key_hash: h32(f.next()?)? })
+            };
+            Held::Pqz(p().ok_or(Error::Argument)?)
+        };
+        (h.label() == label).then_some(h).ok_or(Error::Argument)
+    }
+
+    /// Its secret, if the manifest lists it and the arena holds it, else `Argument` (a `pqz-held:` secret on a build without
+    /// `pqz` too).
+    fn secret(&self, a: &Arena, m: &Manifest) -> Result<Zeroizing<Vec<u8>>> {
+        let id = match self {
+            Held::Import(i) => m.imports.contains(i).then_some(KeyId::Import(i.n)),
+            #[cfg(feature = "pqz")]
+            Held::Pqz(p) => m.pqz_held.contains(p).then_some(KeyId::PqzHeld(p.pqz_key_hash)),
+            #[cfg(not(feature = "pqz"))]
+            Held::Pqz(_) => None,
+        };
+        id.and_then(|id| a.secret(id)).map(|s| Zeroizing::new(s.to_vec())).ok_or(Error::Argument)
+    }
+}
+
+/// Every secret the manifest lists outside the derivations: the imported keys, then the rebuilt PQZ keys.
+fn held(m: &Manifest) -> impl Iterator<Item = Held> + '_ {
+    m.imports.iter().copied().map(Held::Import).chain(m.pqz_held.iter().copied().map(Held::Pqz))
 }
 
 /// The marker of a restore that may install an older backup over newer state, passed after the user confirmed it (spec §6.3;
@@ -202,7 +285,7 @@ pub struct AllowRollback;
 struct BackupPayload {
     generation: u64,
     entropy: Zeroizing<Vec<u8>>,
-    secrets: Vec<(ImportEntry, Zeroizing<Vec<u8>>)>,
+    secrets: Vec<(Held, Zeroizing<Vec<u8>>)>,
     entries: Vec<ManifestEntry>,
 }
 
@@ -216,7 +299,7 @@ impl BackupPayload {
         s.push_str("\",\"secrets\":[");
         for (n, (e, b)) in self.secrets.iter().enumerate() {
             s.push_str(if n == 0 { "{\"label\":\"" } else { ",{\"label\":\"" });
-            s.push_str(&import_label(e));
+            s.push_str(&e.label());
             s.push_str("\",\"bytes\":\"");
             s.push_str(&Zeroizing::new(Base64UrlUnpadded::encode_string(b)));
             s.push_str("\"}");
@@ -228,7 +311,7 @@ impl BackupPayload {
     }
 
     /// `Argument` for anything malformed (owner 2026-11-05): `v` ≠ 1, an entropy of other than 16, 20, 24, 28 or 32 bytes, a
-    /// secret of another label than `native-import:`, an entry out of range. The JSON's strings are wiped after the read.
+    /// secret of another label than `native-import:` or `pqz-held:`, an entry out of range. The JSON's strings are wiped after the read.
     fn from_json(pt: &[u8]) -> Result<BackupPayload> {
         let mut v = bounded::json(pt, super::seal::MAX_PT, PAYLOAD_DEPTH)?;
         let p = parse_payload(&v);
@@ -248,7 +331,7 @@ fn parse_payload(v: &Value) -> Option<BackupPayload> {
         Some(l) => l
             .as_array()?
             .iter()
-            .map(|s| Some((parse_import_label(s.get("label")?.as_str()?).ok()?, b64(s.get("bytes")?)?)))
+            .map(|s| Some((Held::parse(s.get("label")?.as_str()?).ok()?, b64(s.get("bytes")?)?)))
             .collect::<Option<_>>()?,
     };
     let entries = list(v.get("manifest")?, "entries")?.iter().map(entry_of).collect::<Option<_>>()?;
@@ -343,32 +426,51 @@ impl Wallet {
         })
     }
 
-    /// A vault of label `manifest` (the manifest JSON) or `native-import:<network>:<n>` (that imported key), as
-    /// [`Wallet::seal_vault`]; `Argument` for another label or a key the wallet does not hold.
+    /// A vault of label `manifest` (the manifest JSON), `native-import:<network>:<n>` (that imported key) or
+    /// `pqz-held:<ua>:<version>:<pqzKeyHash>` (that rebuilt PQZ key's `seed32`, T16b), as [`Wallet::seal_vault`]; `Argument`
+    /// for another label or a key the wallet does not hold.
     pub fn seal_label_vault(&self, label: &str, vault_passphrase: &str, prf: Option<&PrfEnvelope>) -> Result<Vault> {
         let secret = if label == "manifest" {
             Zeroizing::new(self.manifest().to_json().into_bytes())
         } else {
-            let e = parse_import_label(label)?;
-            self.store.with_all(|a, m| {
-                let held = m.imports.contains(&e).then(|| a.secret(KeyId::Import(e.n))).flatten();
-                held.map(|s| Zeroizing::new(s.to_vec())).ok_or(Error::Argument)
-            })?
+            let h = Held::parse(label)?;
+            self.store.with_all(|a, m| h.secret(a, m))?
         };
         Vault::seal(label, &secret, vault_passphrase, prf)
     }
 
     /// Opens a vault of [`Wallet::seal_label_vault`] into this wallet: `manifest` replaces the manifest, `native-import:…`
-    /// installs that key. `Argument` for another label (the seed vault opens with [`Wallet::open_vault`]); errors of the
-    /// vault as [`Wallet::open_vault`].
+    /// installs that key, `pqz-held:…` installs that PQZ key only if its `seed32` gives a key of the label's `pqzKeyHash`
+    /// (`Argument` otherwise, nothing held; `KindUnavailable` on a build without `pqz`). `Argument` for another label (the
+    /// seed vault opens with [`Wallet::open_vault`]); errors of the vault as [`Wallet::open_vault`].
     pub fn open_label_vault(&self, vault: &Vault, unlock: Unlock) -> Result<()> {
         if vault.label() == "manifest" {
             let m = Manifest::from_json(&vault.open(unlock)?)?;
             self.store.note(|x| *x = m);
             return Ok(());
         }
-        let e = parse_import_label(vault.label())?;
-        self.import_at(e, &vault.open(unlock)?)
+        let h = Held::parse(vault.label())?;
+        self.install_held(h, &vault.open(unlock)?)
+    }
+
+    fn install_held(&self, h: Held, secret: &[u8]) -> Result<()> {
+        match h {
+            Held::Import(e) => self.import_at(e, secret),
+            Held::Pqz(p) => self.install_pqz_held(p, secret),
+        }
+    }
+
+    /// `seed32` as the rebuilt PQZ key `p`: held only if its key hashes to `p.pqz_key_hash`, then listed.
+    #[cfg(feature = "pqz")]
+    fn install_pqz_held(&self, p: PqzHeldEntry, seed32: &[u8]) -> Result<()> {
+        let seed: &[u8; 32] = seed32.try_into().map_err(|_| Error::Argument)?;
+        crate::facade::pqz::install(&self.store, seed, &p.pqz_key_hash)?;
+        self.store.note(|m| m.add_pqz_held(p));
+        Ok(())
+    }
+    #[cfg(not(feature = "pqz"))]
+    fn install_pqz_held(&self, _: PqzHeldEntry, _: &[u8]) -> Result<()> {
+        Err(Error::KindUnavailable)
     }
 
     /// The backup of this wallet (spec §6.3, §8.4): `backup_generation` raised once, then one container `scaas/backup/v1` per
@@ -412,11 +514,7 @@ impl Wallet {
         let ua = sender.ua.filter(|_| is_sender_kind(sender.kind) && sender.secret.of_store(&self.store)).ok_or(Error::Argument)?;
         self.store.with_all(|a, m| {
             m.add_ua(sender.kind, sender.account, sender.index, ua);
-            let secrets = m
-                .imports
-                .iter()
-                .map(|i| Ok((*i, Zeroizing::new(a.secret(KeyId::Import(i.n)).ok_or(Error::Argument)?.to_vec()))))
-                .collect::<Result<Vec<_>>>()?;
+            let secrets = held(m).map(|h| Ok((h, h.secret(a, m)?))).collect::<Result<Vec<_>>>()?;
             let entropy = Zeroizing::new(a.entropy()?.to_vec());
             if raise {
                 m.backup_generation = m.backup_generation.checked_add(1).ok_or(Error::Argument)?;
@@ -459,8 +557,8 @@ impl Wallet {
 /// The wallet of a payload: the entropy, the imported keys, the manifest entries and the generation.
 fn install(p: BackupPayload, bip39_passphrase: &str) -> Result<Wallet> {
     let w = Wallet::from_entropy(&p.entropy, bip39_passphrase)?;
-    for (e, secret) in &p.secrets {
-        w.import_at(*e, secret)?;
+    for (h, secret) in &p.secrets {
+        w.install_held(*h, secret)?;
     }
     w.store.note(|m| {
         m.entries = p.entries.clone();

@@ -63,7 +63,7 @@ pub(crate) use eip712::{from_hex, to_hex};
 pub use kem::{is_kem_holder, kem_encaps, KemKeyPair};
 #[cfg(feature = "vectors")]
 pub use manifest::vectors_backup_payload;
-pub use manifest::{AllowRollback, ImportEntry, KemEntry, Manifest, ManifestEntry, NativeEntry};
+pub use manifest::{AllowRollback, ImportEntry, KemEntry, Manifest, ManifestEntry, NativeEntry, PqzHeldEntry};
 pub use pairing::{FrostSession, Musig2Session};
 pub use policy::{sign_typed_by, AllowAnyTypedData, AllowRow, Expect, Invalidate, SubjectKey};
 #[cfg(feature = "pqz")]
@@ -558,13 +558,32 @@ impl Wallet {
     /// `k` of them; the rebuilt `seed32` must give a key of `pqz_key_hash`. Then it is installed in this wallet's store (lock
     /// revokes the handle) and this wallet's holder is the new operator. `Argument` for any of these; errors of the opening as
     /// [`KemKeyPair::open_container`]; `WalletLocked` while locked.
+    ///
+    /// It persists as an imported key does (T16b, owner 2026-11-06): listed in the manifest (`pqzHeld`, kept by `lock()`), in
+    /// this wallet's backup and link payloads, and in a vault of label `pqz-held:<msig ua>:<version>:<pqzKeyHash>`
+    /// ([`Wallet::seal_label_vault`]); after `unlock`, [`Wallet::open_label_vault`] of that vault holds it again (checked
+    /// against `pqzKeyHash`) and [`Wallet::pqz_held_key`] returns it. The new operator should rotate to a new key version soon
+    /// (spec 3g, `2026-11-06-pqz-key-versions.md` §1 / §7.2): every member who held k shares, and the old operator, can read
+    /// under this version.
     #[cfg(feature = "pqz")]
     #[allow(clippy::too_many_arguments)]
     pub fn reconstruct_pqz_seed(
         &self, kk: &KemKeyPair, containers: &[SealedContainer], expect: &ContainerExpect, members: &crate::ua8::Members,
         accepted: Option<&crate::ua8::Accepted>, msig_ua: &[u8; 32], version: u64, pqz_key_hash: &[u8; 32],
     ) -> Result<crate::facade::pqz::PqzKey> {
-        crate::facade::pqz_backup::reconstruct(&self.store, kk, containers, expect, members, accepted, msig_ua, version, pqz_key_hash)
+        let k = crate::facade::pqz_backup::reconstruct(&self.store, kk, containers, expect, members, accepted, msig_ua, version, pqz_key_hash)?;
+        self.store.note(|m| m.add_pqz_held(PqzHeldEntry { ua: *msig_ua, version, pqz_key_hash: *pqz_key_hash }));
+        Ok(k)
+    }
+
+    /// The PQZ key this wallet rebuilt ([`Wallet::reconstruct_pqz_seed`]) or reopened from its `pqz-held:` vault (T16b), by
+    /// its key hash: `Argument` unless the manifest lists it and the store holds it (after `unlock`, open its vault first);
+    /// `WalletLocked` while locked. Account and index `u32::MAX`.
+    pub fn pqz_held_key(&self, pqz_key_hash: &[u8; 32]) -> Result<crate::facade::pqz::PqzKey> {
+        if !self.store.manifest().pqz_held.iter().any(|e| e.pqz_key_hash == *pqz_key_hash) {
+            return Err(Error::Argument);
+        }
+        crate::facade::pqz::held(&self.store, pqz_key_hash)
     }
 
     /// The 32-byte PQZ leaf `seed32` of `account` / `index` in the clear, for `pqz-cli` or a key oracle (spec §8.4,

@@ -4,13 +4,15 @@
 //! hash to the registered `pqzKeyHash`, and the one who rebuilds holds it; k − 1 shares, a share of another `msig`, key or
 //! version, mixed headers and repeated indices are refused before the shares are combined; a share carries no wallet entropy;
 //! a missing backup is a warning, never a refusal. Under feature `vectors` the field and the split are pinned by known answers
-//! computed by an independent implementation (exp / log tables). UNAUDITED.
+//! computed by an independent implementation (exp / log tables). T16b (owner 2026-11-06): the rebuilt key persists in the
+//! rebuilder's `pqz-held:` vault, manifest and backup, and is checked against `pqzKeyHash` when reopened. UNAUDITED.
 #![allow(non_snake_case)]
 use scaas_ua::facade::pqz::PqzKey;
 use scaas_ua::facade::pqz_backup::{seed_backup_warning, PqzSeedBackup, PURPOSE_PQZ_SHARE, SEED_BACKUP_MISSING};
 use scaas_ua::ua8::{MsigMember, MsigStructure};
 use scaas_ua::wallet::{
-    ContainerExpect, Error, ExpectedSender, KemKeyPair, Recipient, SealedContainer, UaKey, Wallet,
+    ContainerExpect, Error, ExpectedSender, KemKeyPair, Manifest, Recipient, SealedContainer, UaKey, Unlock, Vault, Wallet,
+    PURPOSE_BACKUP,
 };
 use serde_json::Value;
 
@@ -346,4 +348,130 @@ fn a_backup_record_past_its_caps_is_refused_unparsed() {
     let deep = format!("{}{}{}", "[".repeat(10), "", "]".repeat(10)).into_bytes();
     assert_eq!(PqzSeedBackup::from_json(&deep).err(), Some(Error::Argument));
     assert_eq!(bounded::vectors_parsed(), before, "refused before serde_json");
+}
+
+// --- T16b (owner 2026-11-06): the rebuilt key persists in the rebuilder's vault and backup ---
+
+const PIN: &str = "correct horse 9";
+
+/// `pqz-held:<ua>:<version>:<pqzKeyHash>`.
+fn held_label(ua: &[u8; 32], version: u64, kh: &[u8; 32]) -> String {
+    format!("pqz-held:0x{}:{version}:0x{}", hex::encode(ua), hex::encode(kh))
+}
+
+/// `seed32` in hex and base64url: what a persisted copy in the clear would show.
+fn clear_forms(seed32: &[u8; 32]) -> [String; 2] {
+    use base64ct::{Base64UrlUnpadded, Encoding};
+    [hex::encode(seed32), Base64UrlUnpadded::encode_string(seed32)]
+}
+
+/// `dec` of a fresh encryption of 4242 to the operator's key, by `k`.
+fn decrypts(g: &Group, k: &PqzKey) -> Result<Value, Error> {
+    let e: Value = serde_json::from_str(&g.pqz.call("enc", format!("{{\"pks\":[\"0x{}\"],\"values\":[4242]}}", hex::encode(g.pqz.pk())).as_bytes()).unwrap()).unwrap();
+    let ct = format!("{}{}", e["u"].as_str().unwrap(), e["vs"][0].as_str().unwrap().trim_start_matches("0x"));
+    Ok(serde_json::from_str::<Value>(&k.call("dec", format!("{{\"ct\":\"{ct}\"}}").as_bytes())?).unwrap()["value"].clone())
+}
+
+/// Rebuild → lock → unlock: the key is listed in the manifest (public: the hash, never `seed32`), its vault (sealed under the
+/// passphrase, its JSON exported and read back) holds it again once opened, checked against `pqzKeyHash`, and it decrypts what
+/// the operator's key encrypted. Between unlock and that open it is listed but not held: `pqz_held_key` and `backup_seal`
+/// refuse (`Argument`), as for an imported key.
+#[test]
+fn a_rebuilt_key_survives_lock_and_unlock_through_its_vault() {
+    let g = group(2);
+    let b = g.deal(None);
+    let kh = g.key_hash();
+    let seed32 = g.op.export_pqz_leaf_raw(7, 0, scaas_ua::facade::pqz::AllowSecretExport).unwrap();
+    let cs: Vec<SealedContainer> = (0..2).map(|i| g.to_rebuilder(&b, i)).collect();
+    let k = g.rebuild(&cs, &g.msig_ua, 0, &kh).unwrap();
+    let w = &g.members[0].0;
+    let entry = scaas_ua::wallet::PqzHeldEntry { ua: g.msig_ua, version: 0, pqz_key_hash: kh };
+    assert_eq!(w.manifest().pqz_held, [entry]);
+    assert_eq!(w.pqz_held_key(&kh).unwrap().pk(), g.pqz.pk(), "by its key hash");
+    assert_eq!(w.pqz_held_key(&[0; 32]).err(), Some(Error::Argument), "another hash");
+    let label = held_label(&g.msig_ua, 0, &kh);
+    let seed_v = w.seal_vault(PIN, None).unwrap();
+    let held_v = Vault::from_json(w.seal_label_vault(&label, PIN, None).unwrap().to_json().as_bytes()).unwrap();
+    assert_eq!(held_v.label(), label);
+    assert_eq!(w.seal_label_vault(&held_label(&g.msig_ua, 1, &kh), PIN, None).err(), Some(Error::Argument), "another version: not held");
+    for clear in clear_forms(&seed32) {
+        assert!(!held_v.to_json().contains(&clear), "the vault holds seed32 sealed");
+        assert!(!w.manifest().to_json().contains(&clear), "the manifest holds no seed32");
+    }
+    let mut m = Manifest::from_json(w.manifest().to_json().as_bytes()).unwrap();
+    assert_eq!(m.pqz_held, [entry], "the manifest JSON round-trips the entry");
+    m.pqz_held.clear();
+    assert_eq!(Manifest::from_json(m.to_json().replace(",\"pqzHeld\":[]", "").as_bytes()).unwrap(), m, "absent: none");
+    let bad = w.manifest().to_json().replace("\"version\":0,", "\"version\":\"0\",");
+    assert_eq!(Manifest::from_json(bad.as_bytes()).err(), Some(Error::Argument), "a malformed entry");
+
+    w.lock();
+    assert_eq!(decrypts(&g, &k).err(), Some(Error::KeyRevoked), "lock revokes the handle");
+    assert_eq!(w.pqz_held_key(&kh).err(), Some(Error::WalletLocked));
+    assert_eq!(w.manifest().pqz_held, [entry], "lock keeps the manifest");
+    w.unlock(&seed_v, Unlock::VaultPassphrase(PIN), "").unwrap();
+    assert_eq!(w.pqz_held_key(&kh).err(), Some(Error::Argument), "listed, not held before its vault opens");
+    let wk = w.ua_key(PQ, 0, 0).unwrap(); // the old handle is revoked
+    assert!(w.seal_label_vault("manifest", PIN, None).is_ok(), "control: the new handle and the store work");
+    assert_eq!(w.backup_seal(&wk, &[g.recipient(1)]).err(), Some(Error::Argument), "a backup without the listed key is refused");
+    assert_eq!(w.open_label_vault(&held_v, Unlock::VaultPassphrase("wrong horse 9")).err(), Some(Error::VaultOpen));
+    w.open_label_vault(&held_v, Unlock::VaultPassphrase(PIN)).unwrap();
+    let k2 = w.pqz_held_key(&kh).unwrap();
+    assert_eq!((k2.pk(), k2.account(), k2.index()), (g.pqz.pk(), u32::MAX, u32::MAX));
+    assert_eq!(decrypts(&g, &k2).unwrap(), 4242, "the reopened key sees the balance");
+    assert_eq!(w.manifest().pqz_held, [entry], "listed once");
+    for clear in clear_forms(&seed32) {
+        assert!(!w.manifest().to_json().contains(&clear), "the manifest holds no seed32 after the reopen");
+    }
+    assert!(w.backup_seal(&wk, &[g.recipient(1)]).is_ok(), "held again: the backup builds");
+}
+
+/// The rebuilder's backup (and so its link) carries the key under its label: the restored wallet holds and lists it.
+#[test]
+fn the_rebuilders_backup_carries_the_key() {
+    let g = group(2);
+    let b = g.deal(None);
+    let kh = g.key_hash();
+    let cs: Vec<SealedContainer> = (0..2).map(|i| g.to_rebuilder(&b, i)).collect();
+    g.rebuild(&cs, &g.msig_ua, 0, &kh).unwrap();
+    let (w, wk, _) = &g.members[0];
+    let c = w.backup_seal(wk, &[g.recipient(1)]).unwrap().remove(0);
+    let kk1 = &g.members[1].2;
+    let s = [wk.ua().unwrap()];
+    let e = ContainerExpect { purpose: PURPOSE_BACKUP, sender: ExpectedSender::Set(&s), recipient: kk1.recipient() };
+    let pt: Value = serde_json::from_slice(&kk1.open_container(&c, &e, &none, None).unwrap()).unwrap();
+    assert_eq!(pt["secrets"][0]["label"], held_label(&g.msig_ua, 0, &kh));
+    let r = Wallet::restore_backup(kk1, &c, &e, &none, None, None, None, "").unwrap().unwrap();
+    assert_eq!(r.manifest().pqz_held, w.manifest().pqz_held);
+    assert_eq!(decrypts(&g, &r.pqz_held_key(&kh).unwrap()).unwrap(), 4242);
+}
+
+/// A `pqz-held:` vault is checked on reload: a `seed32` that does not give the label's `pqzKeyHash` is `Argument` and nothing
+/// is held or listed; a label of another form is `Argument`. The positive control first.
+#[cfg(feature = "vectors")]
+#[test]
+fn a_held_vault_is_checked_against_its_key_hash() {
+    let g = group(2);
+    let kh = g.key_hash();
+    let seed32 = g.op.export_pqz_leaf_raw(7, 0, scaas_ua::facade::pqz::AllowSecretExport).unwrap();
+    let other = g.op.export_pqz_leaf_raw(7, 1, scaas_ua::facade::pqz::AllowSecretExport).unwrap();
+    let label = held_label(&g.msig_ua, 0, &kh);
+    let w = Wallet::generate().unwrap().0;
+    let open = |l: &str, s: &[u8]| w.open_label_vault(&Vault::vectors_seal(l, s, PIN).unwrap(), Unlock::VaultPassphrase(PIN));
+    assert_eq!(open(&label, &*other).err(), Some(Error::Argument), "another key under this hash");
+    assert_eq!(open(&label, &seed32[..31]).err(), Some(Error::Argument), "31 bytes");
+    assert!(w.manifest().pqz_held.is_empty() && w.pqz_held_key(&kh).is_err(), "nothing held or listed");
+    let hx = hex::encode(kh);
+    for bad in [
+        label.replace(&hx, &hx.to_uppercase()),
+        label.replace(":0:", ":00:"),
+        label.replace(":0:", "::"),
+        format!("{label}:"),
+        label.replacen("0x", "", 1),
+    ] {
+        assert_eq!(open(&bad, &*seed32).err(), Some(Error::Argument), "{bad}");
+    }
+    open(&label, &*seed32).unwrap();
+    assert_eq!(w.pqz_held_key(&kh).unwrap().pk(), g.pqz.pk(), "control");
+    assert_eq!(w.manifest().pqz_held, [scaas_ua::wallet::PqzHeldEntry { ua: g.msig_ua, version: 0, pqz_key_hash: kh }]);
 }

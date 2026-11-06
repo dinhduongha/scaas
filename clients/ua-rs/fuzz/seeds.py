@@ -49,7 +49,7 @@ def unhex(s):
 
 sign, seal, kem, keys = load("sign.json"), load("seal.json"), load("kem.json"), load("keys.json")
 manifest = {"v": 1, "entries": [{"kind": r["kind"], "account": r["account"], "index": r["index"], "ua": r["ua"]} for r in kem["keys"]],
-            "natives": [], "kem": [], "imports": [], "backupGeneration": 0, "backupSenders": []}
+            "natives": [], "kem": [], "imports": [], "pqzHeld": [], "backupGeneration": 0, "backupSenders": []}
 payloads = [unhex(c["pt"]) for c in seal["containers"] if c["container"]["purpose"] in ("scaas/backup/v1", "scaas/link/v1")]
 opens = [r for k in ("containers", "acceptance", "replay") for r in seal[k]]
 nested = next(r for r in sign["msig"] if r["case"].startswith("nested minimal"))

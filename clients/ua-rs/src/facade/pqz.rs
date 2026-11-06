@@ -600,6 +600,12 @@ pub(crate) fn install(store: &Arc<SecretStore>, seed32: &[u8; 32], pqz_key_hash:
     Ok(PqzKey { account: u32::MAX, index: u32::MAX, pk, secret })
 }
 
+/// The key [`install`] put in `store` under `pqz_key_hash` (`Argument` if it holds none).
+pub(crate) fn held(store: &Arc<SecretStore>, pqz_key_hash: &[u8; 32]) -> Result<PqzKey> {
+    let (secret, pk) = store.key(KeyId::PqzHeld(*pqz_key_hash), |_| Err(Error::Argument))?;
+    Ok(PqzKey { account: u32::MAX, index: u32::MAX, pk, secret })
+}
+
 impl PqzKey {
     /// The derivation account (`u32::MAX` for a key rebuilt from a k-of-n backup).
     pub fn account(&self) -> u32 {
