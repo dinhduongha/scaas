@@ -116,11 +116,27 @@ MUTANTS = {
                                      "        if (taxMode == 1) {\n",
                                      "        if (taxMode == 1) {\n            revert IRegulatedToken.TaxModeInvalid(taxMode);\n",
                                      "test/as/confidential/TaxConfidential.t.sol"),
+    # T41 (clientkeys, run with `node --test` in clients/clientkeys: the match is "node:<test files>")
+    "relayfee-field-order": ("t41", "../../clients/clientkeys/src/evm.js",
+                             "uint256 value,uint256 batch,uint256 nonce,`", "uint256 value,uint256 nonce,uint256 batch,`",
+                             "node:test/relayfee.test.js test/typed-ops.test.js"),
+    "relayer-not-zeroed": ("t41", "../../clients/clientkeys/src/evm.js",
+                           "      if (!(BigInt(m.mode) & 1n)) m.relayer = ZERO_ADDRESS;\n", "",
+                           "node:test/paymeta.test.js test/typed-ops.test.js"),
+    "schema2-invoiceno": ("t41", "../../clients/clientkeys/src/evm.js",
+                          "    return abiEncode(['string', 'uint64'], [f.creditorRef, due]);",
+                          "    return abiEncode(['string', 'string', 'uint64'], [f.creditorRef, f.invoiceNo ?? '', due]);",
+                          "node:test/paymeta.test.js"),
+    "metapayid-old-tag": ("t41", "../../clients/clientkeys/src/evm.js",
+                          "utf8ToBytes('scaas.pay.meta.v2')", "utf8ToBytes('scaas.pay.meta')",
+                          "node:test/paymeta.test.js test/paytax.test.js"),
 }
 
 
 def red_tests(log):
-    return sorted(set(re.findall(r"\[FAIL[^\]]*\] (\w+)\(", log)))
+    forge = re.findall(r"\[FAIL[^\]]*\] (\w+)\(", log)
+    node = re.findall(r"^\u2716 (.+?) \(\d", log, re.M)  # node --test: "✖ <name> (<ms>)"
+    return sorted(set(forge) | set(n for n in node if n != "failing tests:"))
 
 
 def run(mid):
@@ -133,7 +149,11 @@ def run(mid):
     try:
         open(full, "w").write(src.replace(old, new))
         with open(logp, "w") as log:
-            rc = subprocess.call([CAPPED, FORGE, "test", "--match-path", match], cwd=EVM, stdout=log, stderr=subprocess.STDOUT)
+            if match.startswith("node:"):
+                rc = subprocess.call(["node", "--test", *match[5:].split()], cwd=os.path.join(EVM, "../../clients/clientkeys"),
+                                     stdout=log, stderr=subprocess.STDOUT)
+            else:
+                rc = subprocess.call([CAPPED, FORGE, "test", "--match-path", match], cwd=EVM, stdout=log, stderr=subprocess.STDOUT)
     finally:
         open(full, "w").write(src)
     # on an uncommitted task (MUTANTS_UNCOMMITTED=1) the file must equal what it held before the run; else git's HEAD
