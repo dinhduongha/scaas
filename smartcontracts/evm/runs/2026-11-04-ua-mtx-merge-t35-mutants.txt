@@ -1,0 +1,27 @@
+mutant | test that went red | rc
+audit-row-missing-11 | guard::tests::allow_lists_equal_the_selector_audit_both_directions, guard::tests::regulated_kinds_rows_equal_contract_11 | 101
+node-row-missing | guard::tests::allow_lists_equal_the_selector_audit_both_directions, guard::tests::guard_allows_every_named_entry_only, submit::tests::job_api_explicit_json_roundtrip, typed::tests::digest_and_calldata_cannot_diverge, typed::tests::router_control_rows, typed::tests::typed_ops_kat_every_entry | 101
+frozen-as-dead | abi::tests::regulated_refusals_are_named, submit::tests::frozen_revert_is_refusal_not_dead | 101
+e2e-frozen-as-dead | regulated_transfer_refused_frozen | 101
+market-not-halted | dex::venue::tests::market_halts_on_paused_and_reopens | 101
+audit-control-signed-9 | guard::tests::allow_lists_equal_the_selector_audit_both_directions, guard::tests::regulated_kinds_rows_equal_contract_9 | 101
+router-control-on-token | guard::tests::allow_lists_equal_the_selector_audit_both_directions, typed::tests::router_control_rows, typed::tests::router_ops_are_named_and_refuse_hex | 101
+sol-ua-allowed-extended-12 | guard::tests::regulated_kinds_rows_equal_contract_12 | 101
+registry-unavailable-dead | abi::tests::regulated_refusals_are_named, submit::tests::registry_unavailable_is_refusal | 101
+governance-errors-unnamed | abi::tests::regulated_refusals_are_named | 101
+interface-id-or | abi::tests::regulated_interface_id_is_the_xor_of_its_functions | 101
+paused-blames-maker | dex::venue::tests::token_paused_not_grief_scored | 101
+precheck-no-frozen | dex::venue::tests::regulated_leg_precheck_refuses_by_name | 101
+precheck-no-venue | dex::venue::tests::regulated_leg_precheck_refuses_by_name | 101
+precheck-no-attestation-shorter | dex::venue::tests::regulated_leg_precheck_refuses_by_name | 101
+registry-none-allowed | dex::venue::tests::regulated_leg_precheck_refuses_by_name | 101
+frozen-drops-buying-too | dex::venue::tests::account_frozen_drops_the_makers_orders | 101
+regulated-events-from-any-token | dex::venue::tests::account_frozen_drops_the_makers_orders | 101
+halted-trade-acked | dex::venue::tests::market_halts_on_paused_and_reopens | 101
+codehash-unchecked | chain::tests::compliance_registry_code_hash_fails_closed | 101
+codehash-empty-code-accepted | chain::tests::compliance_registry_code_hash_fails_closed | 101
+config-half-accepted | config::tests::compliance_registry_and_its_code_hash_together | 101
+no-alert-on-paused | indexer::tests::alert_on_relax_proposed | 101
+filter-misses-regulated | indexer::tests::alert_on_relax_proposed | 101
+forced-transfer-from-raw | indexer::tests::alert_on_relax_proposed | 101
+derived-freeze-bit-wrong | indexer::tests::alert_on_relax_proposed | 101
