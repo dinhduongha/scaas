@@ -1190,3 +1190,25 @@ P1 `proveDisclose` nhận nguyên statement op 5, nên tạo được proof hay 
 mã `T` của bên gọi, RPC hoặc relayer thấy thành công hay không; F4 P3 `dec`/`decrypt_raw` của `pqz-core` trả nhiễu (chỉ
 trong tiến trình); F5 P2 `zk_mul_by_x` của org key oracle (PLANNED) là oracle static-DH cho Zether; F6 P3 Zether giải mã
 `(C, D)` của bên gọi: không lấy lại được khóa, nhưng lộ plaintext và thời gian, `D·x` không chạy thời gian cố định.
+
+### 12.7 Hai chế độ vận hành cho tài khoản `msig` PQZ, một đường khôi phục (chủ dự án 2026-11-06)
+
+Bản sao lưu k-of-n `seed32` và MPC không phải hai phương án để chọn một: chúng là hai chế độ vận hành, và bản sao lưu nằm
+bên dưới cả hai làm lưới an toàn.
+
+| | **Chế độ operator** (bây giờ) | **Chế độ MPC** (sau này) |
+|---|---|---|
+| Ai giữ khóa | một operator, giữ trọn | không ai giữ trọn; mỗi thành viên một phần |
+| Xem số dư | operator giải mã theo đường (A); tầng đọc chain kiểm state (ARCH-POS-13) | cả nhóm giải mã ngưỡng, chỉ theo đường proof (token tạo với `legProof = CALLDATA`, nghiên cứu [pqz-leg-proof-option.vi.md](pqz-leg-proof-option.vi.md)) |
+| Chi tiêu | operator tạo proof; lớp `msig` của UA chặn trên chain | cần prover PQZL chạy MPC (D): còn nghiên cứu (§8, §12.2) |
+| Trạng thái | **đã xây** (T16a, T16b trên `ua-rs-sign`) | nghiên cứu: leg proof đang làm, prover MPC chưa bắt đầu |
+| Bản sao lưu k-of-n `seed32` | có: khi mất hoặc thay operator | có: khi mất leg proof |
+| Khi gặp sự cố | ghép `seed32`, operator mới, xoay sang khóa version mới (spec 3g) | ghép `seed32`, một thành viên thành operator, xoay sang khóa version mới: **quay về chế độ operator** |
+
+- **Bây giờ:** chỉ có chế độ operator, kèm bản sao lưu k-of-n.
+- **Sau này:** chế độ MPC, khi có đủ hai thứ: option `legProof` (bịt oracle trong nhóm ở §12.5) và prover MPC (chi tiêu
+  mà không ai giữ trọn khóa).
+- **Mọi sự cố đều về cùng một đường:** ghép `seed32` từ k-of-n, chọn operator, xoay version khóa. Nhóm MPC không bao giờ
+  quay về đường (A) (chủ dự án 2026-11-06), vì (A) trong nhóm chính là oracle của §12.5; chủ khóa đơn thì được (khuyến nghị
+  của người điều phối, theo R1–R6 của spec chống oracle). Cho tới khi xoay khóa, operator giữ trọn khóa; phần chia của các
+  version cũ được giữ, không bao giờ xóa.

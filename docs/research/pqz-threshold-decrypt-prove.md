@@ -1189,3 +1189,25 @@ F2 P1 `proveDisclose` takes the whole op 5 statement, so proof-or-refusal is a 1
 decrypt a caller `T`, success visible to an RPC or relayer; F4 P3 `pqz-core` `dec`/`decrypt_raw` return noise
 (in-process only); F5 P2 the PLANNED org key oracle's `zk_mul_by_x` is a static-DH oracle for Zether; F6 P3 Zether
 decrypt on caller `(C, D)`: no key recovery, but plaintext and timing leak, `D·x` not constant-time.
+
+### 12.7 Two operating modes for a PQZ `msig` account, one recovery path (owner 2026-11-06)
+
+The k-of-n `seed32` backup and MPC are not alternatives to choose between: they are two operating modes, and the backup
+sits under both as the safety net.
+
+| | **Operator mode** (now) | **MPC mode** (later) |
+|---|---|---|
+| Who holds the key | one operator, whole | nobody whole; one share per member |
+| Viewing | the operator decrypts on path (A); the reading layer checks chain state (ARCH-POS-13) | the quorum decrypts by threshold, on the proof path only (token created with `legProof = CALLDATA`, research [pqz-leg-proof-option.md](pqz-leg-proof-option.md)) |
+| Spending | the operator proves; the UA's `msig` layer gates on chain | needs the MPC PQZL prover (D): research (§8, §12.2) |
+| Status | **built** (T16a, T16b on `ua-rs-sign`) | research: leg proofs in progress, MPC prover not started |
+| k-of-n `seed32` backup | yes: when the operator is lost or replaced | yes: when leg proofs are lost |
+| On failure | rebuild `seed32`, new operator, rotate to a new key version (spec 3g) | rebuild `seed32`, one member becomes the operator, rotate to a new key version: **back to operator mode** |
+
+- **Now:** operator mode only, with the k-of-n backup.
+- **Later:** MPC mode, once both pieces exist: the `legProof` option (closes the in-quorum oracle of §12.5) and the MPC
+  prover (spending without anyone holding the whole key).
+- **Every failure ends on the same path:** rebuild `seed32` from k-of-n, choose an operator, rotate the key version. An
+  MPC quorum never falls back to path (A) (owner 2026-11-06), since (A) inside a quorum is the §12.5 oracle; a single
+  holder may (controller recommendation, under R1–R6 of the no-oracle spec). Until rotation the operator holds the whole
+  key; shares of old versions are kept, never deleted.
