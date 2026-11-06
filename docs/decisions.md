@@ -3049,6 +3049,7 @@ Change (2026-10-13): owner — a constraint for when the suite is built: the reg
 **Cost if wrong.** Checking senders too could trap holders who lost status.
 **Source.** `history/specs/2026-10-06-asset-suite-design.md:118`
 Change (2026-11-04, governance T17; owner ruling CTR-GOV-18): the receiver check has two feature bits on one `ComplianceRegistry`, both off by default: `ALLOWLIST` (bit 8) reads `requiredFlags`, `DENYLIST` (bit 9) reads `deniedFlags`; `R(a) = (!ALLOWLIST || (flags(a) & requiredFlags) == requiredFlags) && (!DENYLIST || (flags(a) & deniedFlags) == 0)`; the view is `complianceRegistry()`, apart from `registry()`. Status: SPECIFIED.
+Change (2026-11-06; owner ruling): only the admin overwrites or revokes a slot the admin (attester id 0) wrote; another attester gets `AdminWrittenSlot(account)`. A slot is admin-held when `attesterId == 0 && flags != 0` (an empty slot also reads id 0); an admin row of flags 0 is a revoke and stays open to attesters. Attesters still overwrite their own and each other's rows. Source: owner, 2026-11-06; regulated-kinds spec §5. Status: BUILT on branch `ua-mtx-merge`.
 
 ### CTR-AS-08 — Regulated checks at the shape step and in _update
 - old: R207 · status: current · owner: yes · date: 2026-10-08 · normative: contracts/asset-suite.md#CTR-AS-08 · superseded-by: —

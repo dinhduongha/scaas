@@ -21,7 +21,7 @@ import {nid} from "../helpers/Ids.sol";
 contract RegistryTest is RegFixture {
     /// The canonical registry runtime's code hash (a pin: it moves with the registry's source, its interface or the
     /// compiler settings, old -> new in the commit).
-    bytes32 internal constant REGISTRY_CODEHASH = 0x4905274752bb319bf684aeb7cac64b066308634b1b3166c99b6346f26b787edc;
+    bytes32 internal constant REGISTRY_CODEHASH = 0x8e2d42b6304131a9159832ae910e4e39f609cd9fdbffbd6c91a090cec2f43f0c;
     uint64 internal constant ACCR = 2;
     uint64 internal constant MAX = type(uint64).max;
     bytes32 internal constant ACC = bytes32(uint256(0xACC));
@@ -89,6 +89,57 @@ contract RegistryTest is RegFixture {
         creg.attest(new bytes32[](2), new uint64[](1), new uint64[](2));
         _attestAs(cadmin, ACC, 0, MAX); // revoke
         assertFalse(_has(ACC, KYC, 0));
+    }
+
+    /// Owner 2026-11-06: a row the admin wrote (stored `attesterId == 0 && flags != 0`) only the admin overwrites or
+    /// revokes; an attester gets `AdminWrittenSlot(account)`, in a batch too (nothing written). An empty slot is open; an
+    /// admin row of flags 0 (a revoke) is open, nothing left to protect. Attesters overwrite their own and each other's
+    /// rows. Each refusal after its control.
+    function test_adminWrittenSlotOnlyAdmin() public {
+        bytes32 b = bytes32(uint256(0xB0B));
+        bytes memory locked = abi.encodeWithSelector(IComplianceRegistry.AdminWrittenSlot.selector, ACC);
+        vm.prank(cadmin);
+        creg.setAttester(bob, true); // attester id 2
+        _attest(ACC, KYC, MAX); // the control: an empty slot is open to an attester
+        _attest(ACC, ACCR, 7); // its own row
+        _attestAs(bob, ACC, KYC, MAX); // another attester's row
+        _attest(ACC, SANCTIONED, MAX); // and back
+        _attestAs(cadmin, ACC, KYC, MAX); // the admin over an attester's row
+        vm.expectRevert(locked);
+        _attest(ACC, ACCR, MAX); // overwrite an admin row
+        vm.expectRevert(locked);
+        _attest(ACC, 0, MAX); // revoke an admin row
+        vm.expectRevert(locked);
+        _attestAs(bob, ACC, 0, 0); // another attester, the same
+        (uint64 fl, uint64 vu, uint32 id) = creg.attestationOf(ACC);
+        assertEq(fl, KYC);
+        assertEq(vu, MAX);
+        assertEq(id, 0, "the admin's row stands");
+        // a batch with an admin row in it writes nothing
+        bytes32[] memory as_ = new bytes32[](2);
+        uint64[] memory f2 = new uint64[](2);
+        uint64[] memory v2 = new uint64[](2);
+        (as_[0], as_[1], f2[0], f2[1], v2[0], v2[1]) = (b, ACC, KYC, KYC, MAX, MAX);
+        vm.prank(attester);
+        vm.expectRevert(locked);
+        creg.attest(as_, f2, v2);
+        (fl,,) = creg.attestationOf(b);
+        assertEq(fl, 0, "the batch's first row reverted with it");
+        // the admin still overwrites and revokes its own row
+        _attestAs(cadmin, ACC, ACCR, 9);
+        (fl, vu, id) = creg.attestationOf(ACC);
+        assertEq(fl, ACCR);
+        assertEq(vu, 9);
+        assertEq(id, 0);
+        _attestAs(cadmin, ACC, 0, MAX); // the admin's revoke: flags 0, nothing left to protect
+        _attest(ACC, KYC, MAX); // open again to an attester
+        (fl,, id) = creg.attestationOf(ACC);
+        assertEq(fl, KYC);
+        assertEq(id, 1);
+        // ELIGIBLE_CONTRACT rows are admin rows too
+        _attestAs(cadmin, ACC, ELIGIBLE, MAX);
+        vm.expectRevert(locked);
+        _attest(ACC, KYC, MAX);
     }
 
     /// CTR-AS-16: `ELIGIBLE_CONTRACT` only by the admin and only with `validUntil == type(uint64).max`.

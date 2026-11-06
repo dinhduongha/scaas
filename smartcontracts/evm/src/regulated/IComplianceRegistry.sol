@@ -18,6 +18,9 @@ interface IComplianceRegistry {
     /// @notice `ELIGIBLE_CONTRACT` (8) set by anyone but the admin, or with a `validUntil` other than `type(uint64).max`
     ///         (CTR-AS-16).
     error EligibleContractAdminOnly();
+    /// @notice An attester (id != 0) wrote over or revoked a row the admin wrote: a stored `attesterId == 0` with
+    ///         `flags != 0` (owner 2026-11-06). An empty slot and an admin row of flags 0 stay open.
+    error AdminWrittenSlot(bytes32 account);
 
     /// @notice Set once by the constructor, a contract (CTR-AS-07); never written again.
     function admin() external view returns (address);
@@ -27,7 +30,8 @@ interface IComplianceRegistry {
     /// @notice Id 0 (the admin) is always enabled; an id never assigned is not.
     function attesterEnabled(uint32 id) external view returns (bool);
     /// @notice An enabled attester, or the admin (id 0). Flags 0 revoke. `ELIGIBLE_CONTRACT` only by the admin, with
-    ///         `validUntil == type(uint64).max` (CTR-AS-16).
+    ///         `validUntil == type(uint64).max` (CTR-AS-16). A row the admin wrote (`attesterId == 0 && flags != 0`) only
+    ///         the admin overwrites or revokes; an attester gets `AdminWrittenSlot` (owner 2026-11-06).
     function attest(bytes32[] calldata accounts, uint64[] calldata flags, uint64[] calldata validUntil) external;
     function attestationOf(bytes32 account) external view returns (uint64 flags, uint64 validUntil, uint32 attesterId);
     /// @notice `(required == 0 || (active && ((f & required) == required || f & ELIGIBLE_CONTRACT != 0)))

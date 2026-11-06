@@ -66,6 +66,7 @@ contract ReceiverTest is RegFixture {
             _reason(t, b, true, 0, KYC, SANCTIONED, "ELIGIBLE_CONTRACT");
 
             address d = _listed(i, 0, SANCTIONED, bytes32(i + 10));
+            _attestAs(cadmin, b, 0, MAX); // an admin row: only the admin clears it (owner 2026-11-06)
             _attest(b, KYC, MAX);
             _reason(d, b, true, 0, 0, SANCTIONED, "denylist: not denied");
             _reason(d, nid(address(0x5EED)), true, 0, 0, SANCTIONED, "denylist: unattested");

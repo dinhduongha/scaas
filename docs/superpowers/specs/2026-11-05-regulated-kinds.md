@@ -473,7 +473,7 @@ interface IComplianceRegistry {
     event AttesterSet(address indexed attester, uint32 indexed attesterId, bool enabled);
     event Attested(bytes32 indexed account, uint64 flags, uint64 validUntil, uint32 indexed attesterId);
     error NotAdmin(); error NotAttester(); error AdminNotContract(address a); error LengthMismatch();
-    error EligibleContractAdminOnly();
+    error EligibleContractAdminOnly(); error AdminWrittenSlot(bytes32 account);   // the latter: owner 2026-11-06
     function admin() external view returns (address);                 // set once by the constructor, a contract (CTR-AS-07)
     function setAttester(address attester, bool enabled) external;     // admin; ids assigned once, never reused
     function attesterId(address attester) external view returns (uint32);
@@ -491,6 +491,12 @@ interface IComplianceRegistry {
   denied ≠ 0)`, `active = attesterEnabled(id) && validUntil ≥ now`. Disabling an attester voids its attestations at once.
 - Hook on the UA ledger: `_regMove` calls it for every receiver, native and derived, the UA → UA branch included.
 - Identity of `admin` and attesters: as CTR-AS-07 states (addresses; accounts keyed `bytes32`). Q5.
+- **Change (owner 2026-11-06): only the admin overwrites an admin-written slot.** A slot the admin (attester id 0) wrote
+  can be overwritten or revoked only by the admin; an attester gets `AdminWrittenSlot(account)` (the whole batch reverts).
+  An empty slot also reads `attesterId == 0`, so the slot is admin-held when `attesterId == 0 && flags != 0`. An admin row
+  of flags 0 (a revoke, whatever its `validUntil`) is open to attesters again: nothing is left to protect. Attesters still
+  overwrite their own rows and each other's. The registry's `REGISTRY_CODEHASH` moves with it. Status: BUILT (branch
+  `ua-mtx-merge`, `test_adminWrittenSlotOnlyAdmin`).
 
 **Bounded call (Codex 4, F-11).** The token never calls the registry through a Solidity interface. `RegulatedBase._hasFlags`:
 if `gasleft() < REGISTRY_GAS × 64 / 63 + margin` revert `RegistryGasStarved(REGISTRY_GAS, left)` (a relayer cannot starve the

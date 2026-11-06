@@ -92,3 +92,10 @@
 | `WrappedPqzRegulatedToken (13)` | 62,285 | 4,336,713 | 95,577,570 | 104.91 M | 105.28 M | 100.6-103.5 M | no | no | yes | 112.07 M |
 # Reading: kinds 10 and 11 run about 1.2-1.4 K (2.7 %, 2.4 %) over the top of their size estimates and about 2 M (2.5 %,
 # 2.3 %) over their gas estimates, none more than 50 % over; both miss 60 and 70 M (accepted, Q7) and fit the SCaaS testnet.
+#
+# ua-mtx-merge, owner ruling 2026-11-06 (ComplianceRegistry: only the admin overwrites or revokes an admin-written slot,
+# `attesterId == 0 && flags != 0`; AdminWrittenSlot). Kind 13 re-checked first: no token code changed. Same method.
+| Release | T29 B | now B | delta | init B | regular | state | (r x 64/63 + s) x 1.05 | SCaaS testnet need (<= 200 M) |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| `ComplianceRegistry` (a plain deploy, no frame) | 2,462 | 2,538 | +76 | 2,728 | 202,743 (was 196,502) | 4,164,660 (was 4,048,380) | 4.59 M (was 4.46 M) | 20.66 M |
+| `WrappedPqzRegulatedToken` (13) | 62,285 | 62,285 | 0 | 65,088 | | | | |

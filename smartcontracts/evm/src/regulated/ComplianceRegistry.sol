@@ -57,7 +57,11 @@ contract ComplianceRegistry is IComplianceRegistry {
             if (flags[i] & ELIGIBLE_CONTRACT != 0 && (id != 0 || validUntil[i] != type(uint64).max)) {
                 revert EligibleContractAdminOnly();
             }
-            _attestations[accounts[i]] = Attestation(flags[i], validUntil[i], id);
+            Attestation storage s = _attestations[accounts[i]];
+            // Owner 2026-11-06: an admin row (id 0, flags != 0) is the admin's alone; an empty slot also reads id 0, and
+            // an admin row of flags 0 is a revoke, both open.
+            if (id != 0 && s.attesterId == 0 && s.flags != 0) revert AdminWrittenSlot(accounts[i]);
+            (s.flags, s.validUntil, s.attesterId) = (flags[i], validUntil[i], id);
             emit Attested(accounts[i], flags[i], validUntil[i], id);
         }
     }

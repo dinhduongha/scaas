@@ -354,20 +354,26 @@ interface IComplianceRegistry {
     event AttesterSet(address indexed attester, uint32 indexed attesterId, bool enabled);
     event Attested(address indexed account, uint64 flags, uint64 validUntil, uint32 indexed attesterId);
     error NotAdmin(); error NotAttester(); error AdminNotContract(address a); error LengthMismatch();
-    error EligibleContractAdminOnly();
+    error EligibleContractAdminOnly(); error AdminWrittenSlot(bytes32 account);
 
     function admin() external view returns (address);                 // immutable, a contract (multisig recommended)
     function setAttester(address attester, bool enabled) external;     // admin; ids assigned once, never reused
     function attesterId(address attester) external view returns (uint32);
     function attesterEnabled(uint32 id) external view returns (bool);
     function attest(address[] calldata accounts, uint64[] calldata flags, uint64[] calldata validUntil) external;
-        // enabled attester, or admin (id 0); flags 0 = revoke; ELIGIBLE_CONTRACT only by admin
+        // enabled attester, or admin (id 0); flags 0 = revoke; ELIGIBLE_CONTRACT only by admin;
+        // a slot with attesterId == 0 && flags != 0 only the admin overwrites or revokes (AdminWrittenSlot)
     function attestationOf(address account) external view returns (uint64 flags, uint64 validUntil, uint32 attesterId);
     function hasFlags(bytes32 account, uint64 required, uint64 denied) external view returns (bool);
         // (required == 0 || (active && ((flags & required) == required || flags & ELIGIBLE_CONTRACT != 0)))
         //   && !(active && flags & denied != 0), with active = attesterEnabled(id) && validUntil ≥ now
 }
 ```
+
+Change (owner 2026-11-06): a slot the admin (id 0) wrote can be overwritten or revoked only by the admin; another
+attester gets `AdminWrittenSlot(account)`. An empty slot also reads `attesterId == 0`, so a slot is admin-held when
+`attesterId == 0 && flags != 0`; an admin row of flags 0 is a revoke and stays open to attesters, since nothing is left to
+protect. Attesters still overwrite their own and each other's rows. Status: BUILT (branch `ua-mtx-merge`).
 
 Flag bits (meaning set by the issuer's policy, market-neutral): `KYC_DONE = 1`, `ACCREDITED = 2`,
 `SANCTIONS_CLEAR = 4`, `ELIGIBLE_CONTRACT = 8` ([CTR-AS-16](#CTR-AS-16)); bits 16–63 issuer-defined. One registry may
