@@ -3,7 +3,7 @@
 """No test feature in a production artifact (ARCH-POS-13; spec no-decryption-oracle §4.8, Codex C1 and C7; ua-rs-sign T15c2).
 
 Cargo unifies features: any crate that turns on `vectors` or `hazmat` of `scaas-ua`, `zether-prover` or `pqz-ffi` hands every
-build beside it the raw decrypt commands. Two checks, each with its positive control (a check that cannot fail proves
+build beside it the raw decrypt commands; `scaas-ct`'s `vectors` records every ladder's secret scalar (T15l, Fable P3-4). Two checks, each with its positive control (a check that cannot fail proves
 nothing), exit 1 on any finding:
 
 1. manifests: no tracked `Cargo.toml` (outside `legacy/`) enables one of those features outside `[dev-dependencies]` or a
@@ -21,7 +21,7 @@ import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-GUARDED = ("scaas-ua", "zether-prover", "pqz-ffi")
+GUARDED = ("scaas-ua", "zether-prover", "pqz-ffi", "scaas-ct")
 TEST = ("vectors", "hazmat")
 # test-only crates: the fuzz harness of ua-rs (its targets reach the facades through `vectors`)
 TEST_ONLY = {"clients/ua-rs/fuzz/Cargo.toml"}
@@ -32,6 +32,8 @@ ARTIFACTS = [
     ("clients/ua-qt", []),
     ("clients/ua-dart-frb/rust", []),
     ("clients/zether-prover", []),  # zether-read-balance, zether-cli and the wasm library: the package's features
+    ("scaas-node", []),  # the node (scaas-ua for the UA formats; T15l, Fable P3-4)
+    ("pqz-core/ffi/wasm", []),  # pqz-ffi's wasm32 library (T15l, Fable P3-4)
 ]
 DEP_TABLES = ("dependencies", "build-dependencies")
 
@@ -127,7 +129,9 @@ def main():
     fwd = head + '[dependencies]\nzether-prover = { path = "x" }\n[features]\ndefault = ["x"]\nx = ["zether-prover/hazmat"]\n'
     ok = (check_manifest("scratch", head + "[dependencies]\n" + dep) != [] and check_manifest("scratch", fwd) != []
           and check_manifest("scratch", head + "[dev-dependencies]\n" + dep) == [])
-    print(f"positive control (manifests): vectors in [dependencies] and a forwarded hazmat found, [dev-dependencies] not: {ok}")
+    ok = ok and check_manifest("scratch", head + '[dependencies]\nscaas-ct = { path = "x", features = ["vectors"] }\n') != []
+    print(f"positive control (manifests): vectors in [dependencies] (scaas-ua, scaas-ct) and a forwarded hazmat found, "
+          f"[dev-dependencies] not: {ok}")
     bad += [] if ok else ["positive control (manifests) failed"]
     for cwd, extra in ARTIFACTS:
         found = check_graph(cwd, extra)
@@ -138,6 +142,18 @@ def main():
     ok = any("scaas-ua feature \"vectors\"" in x for x in forced) and any("zether-prover feature \"hazmat\"" in x for x in forced)
     print(f"positive control (graph): ua-c with scaas-ua/vectors forced: {len(forced)} findings, both crates found: {ok}")
     bad += [] if ok else ["positive control (graph) failed"]
+    # T15l (Fable P3-4): the new rows are seen too: scaas-ct's `vectors` forced into zether-prover's graph (its dev-dependency
+    # enables it for the tests only) is found; the node's graph holds scaas-ua and the wasm library's pqz-ffi, so neither row is
+    # vacuous, and both are rows of ARTIFACTS (forcing scaas-ua/vectors in the node does not resolve: its serde_json pin; pqz-ffi has no test feature of its
+    # own yet, pqz-core `hazmat` is T15h)
+    ct = check_graph("clients/zether-prover", ["--features", "scaas-ct/vectors"])
+    rows = [r[0] for r in ARTIFACTS]
+    node = "scaas-node" in rows and tree("scaas-node", "scaas-ua", []) is not None
+    wasm = "pqz-core/ffi/wasm" in rows and tree("pqz-core/ffi/wasm", "pqz-ffi", []) is not None
+    ok = any('scaas-ct feature "vectors"' in x for x in ct) and node and wasm
+    print(f"positive control (graph): scaas-ct/vectors forced in zether-prover: {len(ct)} findings; scaas-ua in scaas-node's "
+          f"graph {node}, pqz-ffi in pqz-core/ffi/wasm's {wasm}: {ok}")
+    bad += [] if ok else ["positive control (graph, T15l rows) failed"]
     for b in bad:
         print(f"FINDING: {b}")
     print(f"check_test_features: {'FAIL' if bad else 'ok'}")
