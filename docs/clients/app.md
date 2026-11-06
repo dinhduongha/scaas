@@ -33,7 +33,8 @@ wallets); balances and the token catalogue; token creation (factory v1 and v2) a
 meta-tx token; wrap/unwrap including gasless unwrap (target: `mtxExecute` with the token's `unwrap` calldata, and
 `mtxWrap` by signature for a SCaaS underlying; as built on the v2 line `mtxExecute(unwrap…)`); meta-tx transfers and payments submitted through a node gateway
 (all families) or self-paid; the DEX order book (home-bound and relayer-unbound markets) with place/cancel; Zether
-(register, deposit/shield, confidential transfer, withdraw, balance via the device cache + BSGS).
+(register, deposit/shield, confidential transfer, withdraw, balance via the device cache, or BSGS over words read as
+[a reading layer](#confidential-reading)).
 
 **Console** (login to one node's admin API, built-in users or OIDC): chains, tokens, lanes, namespaces, jobs, mesh peers
 (SSRF-guarded), policy, gossip (peers, topics, announces, bans, trusted), DEX markets and homes, external-client API keys,
@@ -519,6 +520,17 @@ table, falling back to `executeMetaTransaction` for unknown versions — includi
 versions. Target: every gasless operation of a token is `mtxExecute` with calldata the app encodes and decodes against
 the implementation's allowlist ([CLI-SGN-34](signers-clientkeys.md#CLI-SGN-34)); `mtxTransfer`, `mtxPay` and
 `mtxBatch` stay as typed builders. `termsHash` documents link only to config-listed URLs.
+
+<a id="confidential-reading"></a>**Confidential balances: the app is a layer that reads the chain.** SPECIFIED. Before anything
+decrypts a Zether balance (and a PQZ one once the app carries PQZ), the app meets the requirements on the wallet layer that
+reads the chain ([ua-libraries.md](ua-libraries.md#reading-layer), owner ruling "never a decryption oracle", 2026-11-06). The
+words come from one source the holder chose (requirement 1): `config.json`'s `chains[].rpc` is an app default, so it serves a
+decryption only once the holder has selected that node explicitly; until then the balance comes from the holder's own sealed
+balance cache and no word from it is decrypted. Every word of one balance comes from one final block of the configured chain,
+as storage, for a catalogued token and the holder's own account (requirements 2 to 6). Nothing that depends on a decryption
+goes back to the source (requirement 7): no retry, follow-up read or error report keyed on the result. The browser build of
+zether-prover has no raw decrypt (its raw commands exist only under `hazmat`); its words commands come with the browser
+binding (PLANNED).
 
 <a id="contract-roles"></a><a id="CLI-APP-18"></a>**CLI-APP-18** — **Contract-held roles get calldata, not transactions.**
 `rateAdmin` must be a contract, so rate operations are emitted as **Safe Transaction Builder JSON** (`{to, value: "0",
