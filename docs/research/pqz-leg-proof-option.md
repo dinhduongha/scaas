@@ -852,6 +852,50 @@ the same work, plus a `pqz-stmt` change and a full gate at four sets (hours each
    light client, otherwise the wallet refuses? *Recommendation:* yes.
 4. **(d):** a watch item, no work now? *Recommendation:* yes.
 
+## 15A. Agreed design (owner 2026-11-06)
+
+The owner agreed the following as the design direction ("thống nhất vậy"). It is research until a spec and plan exist;
+a `decisions.md` entry follows with the spec. Estimates on paper at `n2304-kmax4096`, UNAUDITED; USD only as
+`gas × gwei × 1e-9 × ETH-USD` with 1 gwei and 3,000 USD/ETH as assumptions.
+
+**Always stored, every token with the proof path** (≈ +0.15 M gas per debit, ≈ 0.45 USD):
+- every pending slot is kept for good (§14; reverses the deletion rule of `pq-zero-knowledge.md` §7.4), plus one record
+  slot per debit (previous blob pointer and queue position; a second slot only when `shieldIn ≠ 0`): ≈ 0.10 M;
+- a seed-keyed `ownTag` (32 B) in each own debit's blob, bound by `memoHash`, on every own debit: op 1, op 7, burn,
+  refresh (§15, (b′)): ≈ 0.05 M. A rollover writes no own ciphertext and needs no tag: `acc` is a cache, `T` is rebuilt
+  from its parts.
+
+**`T` is not stored**: it is rebuilt from state (§14); the proof binds `T` verbatim in its statement, so a wrongly rebuilt
+`T` fails verification.
+
+**Where the debit proof P and its header (≈ 640 B: `beneficiary`, `fee`, `amount`, `recipient`, `validUntilBlock`,
+`envelopeBinding`) live is a token setting**, chosen at creation, immutable; the header always follows P:
+
+| Setting | P + header | Extra gas per debit | ≈ USD | For |
+|---|---|---|---|---|
+| none | calldata only; the wallet fetches the transaction by the credit's transaction hash and parses the envelope | 0 | 0 | default; works for direct calls and SCaaS envelopes; a call made through another contract needs a trace, which many RPCs do not serve, else path (A) |
+| log | an event from the token itself | +0.38–0.65 M | +1.1–2.0 | active wallets: robust for every call shape; short-term, lost when the chain expires history (same lifetime as calldata), loss accepted |
+| SSTORE2 | state | +73–125 M | +220–375 | no history dependence, an MPC quorum included; needs a large block (op 1 ≈ 102 M, op 7 M = 8 with the auditor ≈ 194 M): document it for token creators |
+
+**Sealing.** An own debit or a refresh seals every earlier credit into the holder's own `v_f`, which carries `ownTag`;
+after that no P of those credits is ever needed. A rollover seals nothing. The wallet knows from state whether credits are
+unsealed (pending slots after its last debit record) and may advise one refresh before going cold (≈ 27.7 M gas, about
+the cost of a burn). No design may rely on periodic holder action (cold wallets).
+
+**After a reinstall:**
+
+| Case | Action |
+|---|---|
+| no credit since the last own debit | `ownTag` only; nothing from history |
+| new credits, P still available (calldata, log or state) | verify P, decrypt, optionally refresh to seal |
+| new credits, P lost, a source the holder trusts (own node, verifying light client; R1–R6) | path (A): decrypt, then refresh to seal |
+| new credits, P lost, no trusted source | the wallet refuses; funds stay, waiting for a trusted source |
+
+An MPC quorum never uses path (A); with P lost it rebuilds `seed32` from k-of-n, one member becomes the operator, who
+seals by refresh under (A) with a trusted source and rotates the key version (owner, §9.2). Rejected by the owner: the
+wallet keeping P, SCaaS nodes archiving debits, the sender handing P over, periodic settling, a chain-history setting as a
+rule (not related). A succinct certificate in state (§15 (d)) stays a watch item.
+
 ## 16. Sources
 
 - Naor, Yung, "Public-key cryptosystems provably secure against chosen ciphertext attacks", STOC 1990 [paper].

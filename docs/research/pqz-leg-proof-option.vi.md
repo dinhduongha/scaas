@@ -842,6 +842,50 @@ gần như vậy, cộng một thay đổi `pqz-stmt` và full gate ở bốn b�
    kiểm, nếu không thì ví từ chối? *Khuyến nghị:* có.
 4. **(d):** chỉ là mục theo dõi, chưa làm gì? *Khuyến nghị:* có.
 
+## 15A. Thiết kế đã thống nhất (chủ dự án 2026-11-06)
+
+Chủ dự án thống nhất hướng thiết kế dưới đây ("thống nhất vậy"). Đây vẫn là nghiên cứu cho tới khi có spec và plan; mục
+`decisions.md` đi cùng spec. Ước lượng trên giấy ở `n2304-kmax4096`, UNAUDITED; USD chỉ theo công thức
+`gas × gwei × 1e-9 × ETH-USD` với giả định 1 gwei và 3.000 USD/ETH.
+
+**Luôn lưu, mọi token có đường proof** (≈ +0,15 M gas mỗi lần chi, ≈ 0,45 USD):
+- giữ mọi slot khoản nhận vĩnh viễn (§14; đảo luật xóa của `pq-zero-knowledge.md` §7.4), cộng một slot bản ghi mỗi lần
+  chi (con trỏ blob trước và vị trí hàng đợi; thêm một slot khi `shieldIn ≠ 0`): ≈ 0,10 M;
+- `ownTag` (32 B) khóa bằng seed trong blob của mỗi lần chi của chính chủ, ràng buộc qua `memoHash`, trên mọi lần chi của
+  chính chủ: op 1, op 7, burn, refresh (§15, (b′)): ≈ 0,05 M. Rollover không ghi ciphertext của chính chủ nên không cần
+  thẻ: `acc` là bộ nhớ đệm, `T` dựng lại từ các phần.
+
+**Không lưu `T`**: dựng lại từ state (§14); proof ràng buộc nguyên văn `T` trong statement, nên dựng sai `T` thì verify
+không qua.
+
+**Nơi lưu proof chi P và header của nó (≈ 640 B: `beneficiary`, `fee`, `amount`, `recipient`, `validUntilBlock`,
+`envelopeBinding`) là cấu hình của token**, chọn khi tạo, không đổi được; header luôn đi theo P:
+
+| Cấu hình | P + header | Gas thêm mỗi lần chi | ≈ USD | Dành cho |
+|---|---|---|---|---|
+| không lưu | chỉ trong calldata; ví tải giao dịch theo transaction hash của khoản nhận rồi tách envelope | 0 | 0 | mặc định; chạy với lời gọi trực tiếp và envelope SCaaS; gọi qua contract khác thì cần trace, nhiều RPC không có, khi đó dùng đường (A) |
+| log | event do chính token phát | +0,38–0,65 M | +1,1–2,0 | ví hay hoạt động: lấy được với mọi kiểu gọi; ngắn hạn, mất khi chain xóa lịch sử (cùng tuổi thọ calldata), chấp nhận mất |
+| SSTORE2 | state | +73–125 M | +220–375 | không phụ thuộc lịch sử, kể cả nhóm MPC; cần block lớn (op 1 ≈ 102 M, op 7 M = 8 có auditor ≈ 194 M): ghi rõ cho người tạo token |
+
+**Niêm phong.** Một lần chi của chính chủ hoặc một lần refresh niêm phong mọi khoản nhận trước đó vào `v_f` của chính chủ,
+có `ownTag`; sau đó không bao giờ cần P của các khoản đó. Rollover không niêm phong gì. Ví biết từ state còn khoản chưa niêm
+phong không (slot khoản nhận sau bản ghi lần chi cuối) và có thể khuyên refresh một lần trước khi cất ví lạnh (≈ 27,7 M gas,
+cỡ một lần burn). Không thiết kế nào được dựa vào hành động định kỳ của chủ khóa (ví lạnh).
+
+**Sau khi cài lại:**
+
+| Tình huống | Làm gì |
+|---|---|
+| không có khoản nhận nào từ lần chi cuối | chỉ cần `ownTag`; không cần gì từ lịch sử |
+| có khoản mới, còn P (calldata, log hoặc state) | verify P, giải mã, có thể refresh để niêm phong |
+| có khoản mới, mất P, có nguồn chủ khóa tin (node của mình, light client kiểm chứng; R1–R6) | đường (A): giải mã, rồi refresh để niêm phong |
+| có khoản mới, mất P, không có nguồn tin cậy | ví từ chối; tiền vẫn còn, chờ có nguồn tin cậy |
+
+Nhóm MPC không bao giờ dùng đường (A); mất P thì ghép `seed32` từ k-of-n, một thành viên thành operator, operator niêm
+phong bằng refresh theo (A) với nguồn tin cậy rồi xoay version khóa (chủ dự án, §9.2). Chủ dự án đã bác: ví giữ P, node
+SCaaS lưu trữ giao dịch chi, người gửi chuyển P, chốt định kỳ, cấu hình lịch sử chain thành rule (không liên quan).
+Chứng nhận gọn trong state (§15 (d)) vẫn chỉ là mục theo dõi.
+
 ## 16. Nguồn
 
 - Naor, Yung, "Public-key cryptosystems provably secure against chosen ciphertext attacks", STOC 1990 [paper].
