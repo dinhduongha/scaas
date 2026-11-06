@@ -1,0 +1,26 @@
+# 2026-11-06 ua-rs-sign T16: the external-key interface (spec §9.4, MD-13; plan T16). clients/ua-rs src/wallet/signer.rs: external_answer (normalise
+# low-s / v, verify against the KeyRef under the request's role, ExternalSignature otherwise) and TestExternalKey (feature `vectors`); the typed,
+# transaction, key-proof and raw-digest builders take &dyn Signer (sign_typed_by, sign_transaction_by, sign_key_proof_by, sign_digest_by).
+# clients/ua-c: the new error's status (30, reserved since T12); tests/smoke.c: the release build has no external key. UNAUDITED.
+# All commands through scripts/capped, foreground, -j2, --locked, --offline; full logs git-ignored (clients/ua-rs/target/t16/, clients/ua-c/target/t16/).
+step | commit | rc | counts
+red: ua-rs cargo test --features vectors --test wallet_external (tests only) | 13c495a7 + tests | 101 | does not compile: E0432 5 unresolved imports (TestExternalKey, sign_*_by), E0599 no variant ExternalSignature (6)
+ua-rs test --features vectors --test wallet_external | bbe8803a | 0 | 5 passed: every ua row, at least 44 (Falcon's 4 when the build has Falcon; 16 byte-equal, the rest verified under their role), 5 member rows, 10 policy + 3 typed + 7 tx rows, 4 WebAuthn rows
+ua-rs clippy --all-targets -D warnings: default, --no-default-features, vectors, wallet,mlock, wallet | bbe8803a | 0 | 0 warnings each (5 cells; first run: 9 findings in signer.rs, indexing_slicing and type_complexity, fixed)
+ua-rs test --features vectors | bbe8803a | 0 | 31 suites, 344 passed, 3 ignored
+ua-rs test (default) | bbe8803a | 0 | 29 suites, 282 passed, 1 ignored
+ua-rs test --no-default-features --features wallet,mlock | bbe8803a | 0 | 27 suites, 256 passed, 1 ignored
+ua-c clippy --all-targets -D warnings: default, --no-default-features | bbe8803a | 0 | 0 warnings each
+ua-c cargo test (lib + header) | bbe8803a | 0 | 2 suites, 9 passed (header unchanged: no export changed)
+ua-c C smoke (cc -std=c99 -Werror) | bbe8803a | 0 | smoke ok (+ external: bit clear, external_key_new KIND_UNAVAILABLE, *out untouched)
+ua-c ASan smoke (tests/asan-smoke.sh) | bbe8803a | 0 | smoke ok, no report
+ua-c test_vectors.py (ctypes) | bbe8803a | 0 | 82 tests OK
+cargo tree --locked --offline -e normal: ua-cxx, ua-qt, ua-dart-frb/rust, scaas-node, ua-rs/fuzz, ua-c, ua-rs | bbe8803a | 0 | 7 of 7; no lock file changed
+docs_check check / paths | bbe8803a | 0 | 0 errors 5 warnings (existing) / 0 machine paths
+mutants: 2026-11-06-ua-rs-sign-t16-mutants.py | bbe8803a | 0 | 10 killed, 0 survived, 0 not loaded (the plan's 2 and 8 of the controller's)
+# Decisions (controller, the owner may override): (1) The spec says the policy, typed and transaction builders take &dyn Signer; the code had
+# them as NativeKey methods: free functions *_by added, the methods call them (no signature removed). (2) TestExternalKey takes a KeyRef and a
+# device closure (wrapping an internal key is one closure), so a test can tamper with the answer or answer for a passkey (0x0100); it exists
+# only under `vectors`; external_answer is compiled in every wallet build (dead code there until phase 2's constructor). (3) The C ABI stays
+# KIND_UNAVAILABLE in every build (MD-13: no external key in this round); no vectors-build C path.
+# Not covered: a request whose kind differs from the KeyRef's (no public builder can make one; the check refuses it as Argument).

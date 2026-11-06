@@ -1,0 +1,16 @@
+# 2026-11-06 ua-rs-sign T16 mutants (smartcontracts/evm/runs/2026-11-06-ua-rs-sign-t16-mutants.py), on the T16 tree (the run before the commit; the files equal bbe8803a's).
+# One mutant per run on a clean tree, `cargo test --features vectors --test wallet_external` (M2: the doc tests of wallet::signer), each file
+# restored byte for byte; NOT-LOADED or SURVIVED is a finding (exit 1). The plan's two: M1 verify-after-sign skipped, M2 SignRequest gains a public
+# constructor (the compile_fail doc test now compiles); the controller's M3-M10: the role, low-s and v normalisation, P-256, the ed25519 native
+# branch, the WebAuthn challenge, the shared native digest.
+killed     | M1 verify-after-sign skipped | clients/ua-rs/src/wallet/signer.rs | rc=101 | 2 failed: a_bad_external_signature_is_ExternalSignature, webauthn_rows_through_an_external_passkey
+killed     | M2 SignRequest gains a public constructor (UaMsg no longer non_exhaustive) | clients/ua-rs/src/wallet/signer.rs | rc=101 | 1 failed: src/wallet/signer.rs - wallet::signer (line 21) - compile fail
+killed     | M3 the post-verification ignores the role (always Authorization) | clients/ua-rs/src/wallet/signer.rs | rc=101 | 1 failed: sign_json_rows_through_an_external_key_equal_the_internal_ones
+killed     | M4 secp256k1 high s not normalised | clients/ua-rs/src/wallet/signer.rs | rc=101 | 1 failed: high_s_from_device_normalised
+killed     | M5 v not flipped with s | clients/ua-rs/src/wallet/signer.rs | rc=101 | 1 failed: high_s_from_device_normalised
+killed     | M6 v 0 / 1 not read as 27 / 28 | clients/ua-rs/src/wallet/signer.rs | rc=101 | 1 failed: high_s_from_device_normalised
+killed     | M7 P-256 high s not normalised | clients/ua-rs/src/wallet/signer.rs | rc=101 | 1 failed: high_s_from_device_normalised
+killed     | M8 an ed25519 native key verified as secp256k1 | clients/ua-rs/src/wallet/signer.rs | rc=101 | 2 failed: a_bad_external_signature_is_ExternalSignature, native_rows_through_an_external_key
+killed     | M9 WebAuthn answer not verified against the challenge | clients/ua-rs/src/wallet/signer.rs | rc=101 | 1 failed: webauthn_rows_through_an_external_passkey
+killed     | M10 native_digest: a transaction signs the zero digest | clients/ua-rs/src/wallet/sign.rs | rc=101 | 1 failed: native_rows_through_an_external_key
+mutants M1-M10 of 10, survived or not loaded: 0
