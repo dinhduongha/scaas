@@ -20,6 +20,7 @@ quyết được ưu tiên (AGENTS.md, "Which source wins").
 **Mục lục**
 
 1. [Tóm tắt](#1-tóm-tắt)
+   - [1A. Tổng quan nhanh](#1a-tổng-quan-nhanh)
 2. [Các quy tắc mọi đề xuất đều tuân theo](#2-các-quy-tắc-mọi-đề-xuất-đều-tuân-theo)
 3. [Một tính năng nằm ở đâu](#3-một-tính-năng-nằm-ở-đâu)
 4. [Danh mục](#4-danh-mục)
@@ -56,6 +57,119 @@ quyết được ưu tiên (AGENTS.md, "Which source wins").
 - **Mục mới của chủ dự án** là một quỹ chung. Người góp quỹ nạp tiền vào bất cứ lúc nào họ muốn. Mỗi thành viên có một
   hạn mức rút cộng dồn theo ngày và được chuyển sang kỳ sau, đến một mức trần. Tên khuyến nghị là
   **`StipendFund`** ("quỹ trợ cấp có hạn mức rút cộng dồn"). Cơ chế là một token bucket áp trên **hạn mức**, không phải trên tiền (§5).
+
+## 1A. Tổng quan nhanh
+
+Mỗi mục một hàng ngắn. Các bảng không thêm gì so với §4–§6: khi một hàng khác với mục chi tiết, mục chi tiết được ưu
+tiên. Mỗi mã dẫn tới mục của nó. *Nơi nằm*: **token** = một bit mới trên các loại có quản lý 8 và 9 (bị từ chối trên
+10–13); **riêng** = hợp đồng riêng; **node** = node hoặc client; **đã có** = đã SPECIFIED hoặc BUILT. *Đóng băng*: có phải
+xong trước khi đóng băng EVM hay không; "—" khi câu hỏi không đặt ra. *Ưu tiên*: như §4 (P1, P2, P3, E đã có, R bị loại bỏ).
+
+**A. Phong tỏa và vesting** ([§4.1](#41-a-phong-tỏa-và-vesting))
+
+| Mã + tính năng | Tương tự ngoài đời thực | Cơ chế | Nơi nằm | Đóng băng | Ưu tiên |
+|---|---|---|---|---|---|
+| [A1](#a1) LOCKUP | Phong tỏa sau IPO, thời gian nắm giữ chứng khoán hạn chế chuyển nhượng | Số lượng bị phong tỏa theo tài khoản đến một ngày; chỉ áp lên đơn vị được giao cho người nắm giữ. | token | trước | P1 |
+| [A2](#a2) VESTING | Cấp cổ phần cho nhân viên, mở khóa token cho nhà đầu tư | Mỗi khoản cấp một bản sao `VestingGrant`, `release()` không cần cấp phép (CTR-AS-10: không phải kho). | riêng (đã có, SPECIFIED) | sau | E / P2 (xây dựng) |
+| [A3](#a3) CLAWBACK | Điều khoản malus và thu hồi, "bad leaver" | Tùy chọn `clawbackUntil` của `VestingGrant` cho phần chưa giải ngân; phần đã giải ngân chỉ qua `FORCE` có hồ sơ. | riêng | sau | P3 |
+| [A4](#a4) TERM_DEPOSIT | Tiền gửi có kỳ hạn, chứng chỉ tiền gửi | Mỗi sản phẩm một bản sao kho; rút trước hạn nhận gốc trừ tiền phạt; lãi do nhà phát hành cấp vốn. | riêng | sau | P2 |
+| [A5](#a5) NOTICE_ACCOUNT | Tài khoản tiền gửi có báo trước | Kho của A4 với `requestWithdraw`, nhận được sau thời gian báo trước (mẫu yêu cầu và nhận của ERC-7540). | riêng | sau | P3 |
+| [A6](#a6) LIEN / PLEDGE | Cầm cố cổ phiếu để vay, phong tỏa số tiền (amount block), khóa margin | `PledgeEscrow`: bên nhận cầm cố thu khi vỡ nợ hoặc giải phóng; hết hạn thì người nắm giữ lấy lại. | riêng | sau | P2 |
+| [A7](#a7) FUND_LOCKIN | Thời gian khóa chứng chỉ quỹ | Là A1 LOCKUP áp dụng lúc đăng ký mua (`mintLocked`); không có mục riêng. | token (A1) | trước | như A1 |
+
+**B. Sự kiện doanh nghiệp** ([§4.2](#42-b-sự-kiện-doanh-nghiệp))
+
+| Mã + tính năng | Tương tự ngoài đời thực | Cơ chế | Nơi nằm | Đóng băng | Ưu tiên |
+|---|---|---|---|---|---|
+| [B1](#b1) SNAPSHOT / ngày đăng ký cuối cùng | Ngày chốt quyền nhận cổ tức hoặc dự họp | Node lập chỉ mục số dư tại block đăng ký; điểm kiểm tra trong token bị loại bỏ (CTR-AS-11). | node | — | R trong token; bộ dựng của node E |
+| [B2](#b2) DISTRIBUTION | Cổ tức, coupon | `Distribution`: nhận kiểu kéo theo từng lá Merkle, `sweep` sau khi hết hạn (CTR-AS-11). | riêng (đã có, SPECIFIED) | sau | E / P2 (xây dựng) |
+| [B3](#b3) KHẤU TRỪ TẠI NGUỒN | Thuế khấu trừ tại nguồn trên cổ tức | Các lá tính ròng ngoài chuỗi, thêm một lá cho mỗi cơ quan thuế; không đổi hợp đồng. | node / client | — | P2 (việc của client) |
+| [B4](#b4) CỔ PHIẾU THƯỞNG, cổ tức bằng cổ phiếu, DRIP | Phát hành cổ phiếu thưởng, cổ tức bằng cổ phiếu, tái đầu tư cổ tức | Minter phát hành vào một `Distribution` của cùng token; DRIP là một tùy chọn nhận mới. | riêng (đã có; tùy chọn DRIP mới) | sau | E; DRIP P3 |
+| [B5](#b5) SPLIT / gộp cổ phiếu | Chia tách, gộp cổ phiếu | Chuyển sang token mới qua một `ExchangeOffer` (CTR-AS-12); không có hệ số tỷ lệ. | riêng (đã có) | sau | E; hệ số tỷ lệ R |
+| [B6](#b6) PHÁT HÀNH QUYỀN MUA | Quyền ưu tiên mua, chuyển nhượng được hoặc không | Một `Distribution` token quyền, rồi một `RightsOffer` nhận quyền cộng tiền mặt. | riêng | sau | P3 |
+| [B7](#b7) MUA LẠI / CHÀO MUA CÔNG KHAI | Chào mua giá cố định, đấu giá kiểu Hà Lan, mua lại trên thị trường | Giá cố định: `ExchangeOffer` có `capIn`; thị trường: lệnh mua trên DEX; kiểu Hà Lan: bản sao mới. | đã có; kiểu Hà Lan riêng | sau | E / P3 |
+| [B8](#b8) MATURITY | Trái phiếu ngừng giao dịch khi đáo hạn | Sau `maturityAt` chỉ còn đốt hoặc gửi đến `ExchangeOffer` mua lại; `accelerate` chỉ làm sớm hơn. | token | trước | P1 |
+| [B9](#b9) CALL và PUT | Nhà phát hành mua lại trước hạn, người nắm giữ bán lại | Call toàn bộ: `accelerate` của B8 cộng `ExchangeOffer`; put: lời chào vào ngày bán lại; call một phần theo tỷ lệ. | đã có + B8 | trước (B8) | P1 (B8), E |
+| [B10](#b10) QUỸ TRẢ NỢ DẦN | Nhà phát hành thu hồi dần một phần đợt phát hành mỗi năm | Lệnh mua trên DEX hoặc `ExchangeOffer` có cấp vốn; lịch là một `VestingGrant` chảy vào lời chào. | đã có (kết hợp) | sau | E (mẫu P3) |
+| [B11](#b11) CHUYỂN ĐỔI | Trái phiếu chuyển đổi, cổ phần ưu đãi sang phổ thông, chứng quyền | Tự nguyện: `ExchangeOffer`; bắt buộc: dừng theo B8 rồi nhận; chứng quyền: hợp đồng hai đầu vào của B6. | đã có / hợp đồng của B6 | sau | E / P3 |
+| [B12](#b12) SÁP NHẬP, tách doanh nghiệp, đổi tên | Sáp nhập, chào hoán hoán đổi, tách doanh nghiệp | Sáp nhập: `ExchangeOffer` cũ → mới; tách: `Distribution`; tên bất biến nên chuyển đổi hoặc công bố. | đã có | sau | E |
+| [B13](#b13) BỎ PHIẾU / ủy quyền | Đại hội cổ đông, bỏ phiếu ủy quyền | Chủ dự án nói "chưa phải lúc này"; sẽ cần điểm kiểm tra trong token, mở lại CTR-AS-11. | — | — | P3 / R hôm nay |
+
+**C. Ngân hàng và thanh toán** ([§4.3](#43-c-ngân-hàng-và-thanh-toán))
+
+| Mã + tính năng | Tương tự ngoài đời thực | Cơ chế | Nơi nằm | Đóng băng | Ưu tiên |
+|---|---|---|---|---|---|
+| [C1](#c1) HOLD / CAPTURE | Thẻ tín dụng pre-auth, tiền cọc khách sạn | `HoldEscrow`: người trả ký lệnh hold; merchant chốt toàn bộ hoặc một phần; hết hạn thì tự trả lại phần còn lại. | riêng | sau | P2 |
+| [C2](#c2) KÝ QUỸ có trọng tài; L/C; bảo lãnh | Đại lý ký quỹ, tín dụng thư (UCP 600), bảo lãnh theo yêu cầu (URDG 758) | `ArbiterEscrow`: trọng tài chấp nhận hoặc từ chối hash chứng từ; hết hạn thì tiền về người mua. | riêng | sau | P2 |
+| [C3](#c3) TRANSFER_LIMIT | Quy tắc tần suất AML, hạn mức chuyển tiền ngày, hạng ví e-money | Bộ đếm theo cửa sổ cho mỗi tài khoản; hạn mức theo hạng lấy từ cờ `ComplianceRegistry`, bảng cố định lúc tạo. | token | trước | P1 |
+| [C4](#c4) Thời hạn CHARGEBACK | Bồi hoàn thẻ, quyền rút lại giao dịch của người tiêu dùng | `SettlementEscrow` giữ khoản thanh toán trong một cửa sổ; người trả có thể khiếu nại; trọng tài quyết định. | riêng (một chế độ của C2) | sau | P3 |
+| [C5](#c5) LÃI SUẤT / PHÍ LƯU GIỮ | Lãi tiết kiệm, lãi suất âm, phí nắm giữ | Kho có giá cổ phần tăng hoặc giảm theo lãi được cấp vốn; không có chỉ số trong token (CTR-AS-12). | riêng | sau | P3; chỉ số trong token R |
+| [C6](#c6) THỪA KẾ | Người thụ hưởng khi qua đời, tài khoản ngủ đông, người thi hành di chúc | Khôi phục bằng người giám hộ UA và `SmartKeyAccount`; `HeirSwitch` tùy chọn theo mẫu §5; lệnh tòa qua `FORCE`. | riêng / tài khoản | sau | P3 |
+| [C7](#c7) LỆNH CHUYỂN TIỀN ĐỊNH KỲ | Lệnh chuyển tiền định kỳ của ngân hàng | `MandateWallet`: người được ủy quyền trả cho người nhận đã duyệt trong hạn mức; node chạy lịch (CTR-ACC-06). | đã có (BUILT) | — | E |
+| [C8](#c8) QUÉT SỐ DƯ / gộp quỹ | Quét về số dư không hoặc mục tiêu, gộp quỹ danh nghĩa | Mỗi công ty con một `MandateWallet` trả về tài khoản chính; node tính phần vượt; tùy chọn `keepAtLeast`. | đã có + node; tùy chọn riêng | sau | P3 |
+| [C9](#c9) TÀI KHOẢN PHỤ | Tài khoản phụ, tài khoản ảo | Nhiều id UA cho một chủ thể, hoặc một `MandateWallet` cho mỗi mục đích, cộng `entryRef` / `PayMeta`. | đã có | — | E |
+| [C10](#c10) CHIA THANH TOÁN | Hoa hồng sàn, phí đại lý, chia sẻ doanh thu | Bản sao `PaymentSplitter` với người nhận và tỷ lệ ppm cố định; chi trả hoặc để từng người tự nhận. | riêng | sau | P2 |
+| [C11](#c11) RỔ ĐA TIỀN TỆ | Rổ tiền tệ | `WRAPPED` với 1–8 chân theo tỷ lệ cố định hoặc điều chỉnh được. | đã có (BUILT) | — | E |
+| [C12](#c12) QUỸ CHUNG | Tiền tiêu vặt, công tác phí, trợ cấp | `StipendFund` (§5): tiền gộp chung, hạn mức rút theo ngày cho từng thành viên, cộng dồn có trần. | riêng | sau | P2 |
+| [C13](#c13) THẤU CHI / hạn mức tín dụng | Thấu chi, hạn mức tín dụng | Cho vay ngoài phạm vi; tối đa là ký quỹ do bên cho vay cấp vốn, hạn mức §5 làm giới hạn giải ngân. | riêng | sau | P3 |
+| [C14](#c14) Tài sản NGỦ ĐÔNG | Sung công tài sản không người nhận | Chỉ `FORCE` có hồ sơ mới di chuyển số dư (CTR-TOK-10), nên sung công là một lệnh đã ghi nhận. | đã có | — | E |
+
+**D. Tuân thủ** ([§4.4](#44-d-tuân-thủ))
+
+| Mã + tính năng | Tương tự ngoài đời thực | Cơ chế | Nơi nằm | Đóng băng | Ưu tiên |
+|---|---|---|---|---|---|
+| [D1](#d1) OWNERSHIP_CAP | Tỷ lệ sở hữu tối đa, giới hạn một nhà đầu tư, hạn mức nắm giữ CBDC | Mỗi lần ghi có, số dư người nhận ≤ trần (tuyệt đối hoặc ppm tổng cung); hợp đồng trung chuyển được miễn. | token | trước | P1 |
+| [D2](#d2) CLASS_CAP | Room ngoại (chỉ là ví dụ), quy tắc tập trung của REIT | Bộ đếm toàn token cho số dư của nhóm mang cờ; `resyncClass` không cần cấp phép sửa cờ đã cũ. | token | trước, hoặc bản phát hành thứ hai | P1, hoặc P2 |
+| [D3](#d3) HOLDER_CAP | Giới hạn số cổ đông của công ty tư nhân | Bộ đếm số dư khác không; từ chối người nắm giữ mới khi vượt `maxHolders`. | token | trước | P1 |
+| [D4](#d4) SENDER_DENYLIST | Giai đoạn cấm giao dịch của người nội bộ, "nhà đầu tư này không được bán" | Người gửi không được mang cờ nào trong `senderDeniedFlags`; cấm giao dịch là chứng thực `BLACKOUT` có `validUntil`. | token | trước | P1 |
+| [D5](#d5) MIN_HOLDING | Mức đầu tư tối thiểu của quỹ, mệnh giá tối thiểu của trái phiếu, lô chẵn | Sau mỗi chuyển động, mỗi phía giữ 0 hoặc ≥ `minHolding`; số lượng là bội của `lot`. | token | trước | P1 (hoặc P2) |
+| [D6](#d6) TRANSFER_APPROVAL | HĐQT duyệt chuyển nhượng cổ phần, quyền từ chối đầu tiên | `TransferApprovalEscrow` (duyệt, từ chối, khớp quyền từ chối đầu tiên); bit ROUTE_ONLY tùy chọn trong token. | riêng + token (ROUTE_ONLY) | ký quỹ sau; ROUTE_ONLY quyết định trước | P3; quyết định ROUTE_ONLY P2 |
+| [D7](#d7) DANH SÁCH TRẮNG ĐỐI TÁC | Người nhận được phép do người nắm giữ chọn | `MandateWallet.payeeAllowed`, hoặc danh sách người nhận theo thành viên của quỹ §5; không có gì trong token. | đã có | — | E |
+| [D8](#d8) Dữ liệu TRAVEL-RULE | Khuyến nghị 16 của FATF | Dữ liệu trao đổi ngoài chuỗi theo `entryRef`; trên chuỗi tối đa một cam kết trong `PayMeta`. | node / ngoài chuỗi | — | P3 |
+| [D9](#d9) Tạm dừng BẤT KHẢ KHÁNG | Tạm dừng toàn thị trường, ngắt mạch | `PAUSE` theo từng token (≤ 7 d); node dừng thị trường khi `Paused`; không có công tắc liên token. | đã có + node | — | E |
+| [D10](#d10) Vai trò | Đại lý chuyển nhượng, tổ chức đăng ký, đại lý sự kiện doanh nghiệp | Bit nhà phát hành 5–7 và bit 10, quản trị viên hoặc người chứng thực registry, `admin` của các lời chào. | đã có | — | E |
+| [D11](#d11) PHÂN VÙNG / đợt | Phân vùng ERC-1410, các loại cổ phần | Một số dư cho mỗi người nắm giữ trên mỗi token; mỗi nhóm là token riêng, chuyển qua `ExchangeOffer`. | — (R trong token) | — | R; P3 như loại đa token sau này |
+| [D12](#d12) TÀI LIỆU | Bản cáo bạch và thông báo (ERC-1643) | `termsHash` và `documentHash` đã có; danh sách có phiên bản là một `DocumentRegistry` riêng nhỏ. | riêng | sau | P3 |
+| [D13](#d13) MÃ HẠN CHẾ CHUYỂN NHƯỢNG | `detectTransferRestriction` của ERC-1404 | View `canTransfer(from, to, value)` trên loại 8 và 9, trả về một mã lý do. | token (view) | trước | P1 |
+| [D14](#d14) HẾT HẠN ĐIỂM THƯỞNG | Điểm thưởng khách hàng có hạn dùng | Bị loại bỏ trên số dư (CTR-AS-14); hết hạn là khi lời chào đổi kết thúc. | — | — | R |
+
+**E. Quỹ** ([§4.5](#45-e-quỹ))
+
+| Mã + tính năng | Tương tự ngoài đời thực | Cơ chế | Nơi nằm | Đóng băng | Ưu tiên |
+|---|---|---|---|---|---|
+| [E1](#e1) ĐĂNG KÝ MUA / BÁN LẠI theo NAV | Ngày giao dịch của quỹ mở, định giá theo NAV kỳ tới | `FundVault` với yêu cầu ERC-7540, thực hiện theo NAV đã chứng thực; kho phát hành chứng chỉ quỹ. | riêng | sau | P2 |
+| [E2](#e2) CỔNG GIỚI HẠN BÁN LẠI | Cổng giới hạn bán lại (redemption gate) của quỹ | Trong `FundVault`: yêu cầu của một kỳ thực hiện theo tỷ lệ đến mức cổng; phần còn lại sang kỳ sau. | riêng | sau | P2 (cùng E1) |
+| [E3](#e3) Tạo lập và mua lại BẰNG HIỆN VẬT | Lô chứng chỉ ETF, thành viên lập quỹ (AP) | Minter `CreationDesk` nhận rổ và phát hành đơn vị; chỉ tài khoản có cờ AP. | riêng | sau | P3 |
+| [E4](#e4) PHÍ | Phí quản lý, phí thưởng hiệu quả, mốc cao nhất | Trong `FundVault`: thu bằng phát hành hoặc giá cổ phần; phí thưởng tính ngoài chuỗi từ NAV đã chứng thực. | riêng | sau | P3 |
+| [E5](#e5) Chứng thực NAV / giá | Công bố NAV, lãi suất tham chiếu, bằng chứng dự trữ | `AttestedFeed`: giá trị có chữ ký của một UA người chứng thực, kèm `validUntil`, theo mô hình nhóm 3f. | riêng | sau | P2 |
+| [E6](#e6) SWING PRICING | Định giá điều chỉnh, phí chống pha loãng | Điều chỉnh NAV theo dòng tiền ròng, bên trong `FundVault`. | riêng | sau | P3 |
+
+**Mục mới của chủ dự án** ([§5](#5-mục-mới-của-chủ-dự-án-quỹ-chung-có-hạn-mức-rút-cộng-dồn))
+
+| Mã + tính năng | Tương tự ngoài đời thực | Cơ chế | Nơi nằm | Đóng băng | Ưu tiên |
+|---|---|---|---|---|---|
+| [§5](#5-mục-mới-của-chủ-dự-án-quỹ-chung-có-hạn-mức-rút-cộng-dồn) `StipendFund` | Tiền tiêu vặt do cha mẹ cấp, công tác phí, học bổng | Người góp quỹ nạp bất cứ lúc nào; hạn mức rút của mỗi thành viên cộng dồn theo ngày, có trần. | riêng | sau | P2 |
+
+**Các loại tài sản** ([§6](#6-các-loại-tài-sản); ma trận loại tài sản × tính năng ở [§6.8](#68-ma-trận-đối-chiếu))
+
+| Loại tài sản | Cần gì ngoài danh mục chung | Mục danh mục dùng | Mục mới |
+|---|---|---|---|
+| [Trái phiếu và công cụ nợ khác](#61-trái-phiếu-và-các-công-cụ-nợ-khác) | Coupon, đáo hạn, call và put, vỡ nợ, lãi dồn tích, mệnh giá tối thiểu | B2, B8, B9, B10, D5, E5, `ExchangeOffer`, ALLOWLIST | F1 RATE_FIXING, F2 AMORTISATION, F3 ACCRUED_INTEREST, F4 TRADABILITY_GATE |
+| [Hàng hóa](#62-hàng-hóa) | Bảo đảm bằng hàng vật chất, bằng chứng dự trữ, giao hàng vật chất, hủy tín chỉ carbon, cấp chất lượng và năm phát hành | E5, B8, A6, C5, `ExchangeOffer` | G1 SECURE_MINT, G2 PHYSICAL_REDEMPTION, G3 RETIREMENT |
+| [Quỹ](#63-quỹ) | Định giá NAV, cửa sổ giao dịch, cổng giới hạn, ETF bằng hiện vật, phí, thời gian khóa, mức tối thiểu, tập trung của REIT | E1–E6, A1, B2, D1, D2, D3, D5, ALLOWLIST | không có |
+| [Phái sinh (chỉ nghiên cứu)](#64-phái-sinh-và-sản-phẩm-cấu-trúc-chỉ-ở-mức-nghiên-cứu) | Khóa ký quỹ, đáo hạn và thanh toán, giá từ oracle, covered call | A6, E5, B11, `ExchangeOffer` | không có; không gì trong token |
+| [Bất động sản và tài sản thực khác](#65-bất-động-sản-và-các-tài-sản-thực-khác) | Sở hữu phân mảnh, thu nhập cho thuê, squeeze-out, quyền ưu tiên mua, định giá | ALLOWLIST, A1, B2, D1, D3, D5, D6, E5, `FORCE` | H1 SQUEEZE_OUT |
+| [Tiền và thanh toán](#66-tiền-và-thanh-toán) | Dự trữ, giới hạn phát hành, phong tỏa theo lệnh tòa, hạn mức theo hạng, hạn mức CBDC, phiếu quà tặng, lương | `WRAPPED`, G1, C3, D1, `FREEZE` / `RECORD` / `FORCE`, `OPERATOR_TRANSFER`, §5, A2, C7, C10, D14, TAX | M1 OVERFLOW_REDIRECT (từ chối trong token), M2 PURPOSE_BOUND |
+| [Hóa đơn và khoản phải thu](#67-hóa-đơn-và-khoản-phải-thu) | Một token cho mỗi hóa đơn, chuyển nhượng, bên nợ trả tiền, cấp vốn trùng, ngày đến hạn | ALLOWLIST, B8, C2, `ExchangeOffer`, `Distribution` | R1 RECEIVABLE_SETTLEMENT, R2 RECEIVABLE_REGISTRY |
+
+**Thứ tự khuyến nghị** ([§8](#8-thứ-tự-khuyến-nghị))
+
+| Bước | Khi nào | Các mục, theo thứ tự |
+|---|---|---|
+| 1 | ngay | Xác nhận các phán quyết của §3.3 (Q9, Q10): không snapshot, hệ số tỷ lệ hay chỉ số trong token |
+| 2 | trước khi đóng băng, chỉ loại 8 và 9 | D4, D5 → A1 → B8 → D1 → D3 → C3 → M2 → D2 → D13 |
+| 3 | sau khi đóng băng, các hợp đồng riêng | E5 → §5 → C1 → `VestingGrant` / `Distribution` / `ExchangeOffer` → G1 → E1 / E2 → C2 → C10 → A4 → A6 |
+| 4 | sau này | G2 / G3, R1 / R2, H1, B6, A3, E3 / E4 / E6, ký quỹ D6, D12, C4 / C6 / C8 / C13, bỏ phiếu khi chủ dự án yêu cầu |
 
 ## 2. Các quy tắc mọi đề xuất đều tuân theo
 
@@ -166,7 +280,7 @@ thái chuyển sang state gas.
 
 ### 4.1 A. Phong tỏa và vesting
 
-**A1 LOCKUP** — số lượng bị phong tỏa theo từng tài khoản cho đến một ngày.
+<a id="a1"></a>**A1 LOCKUP** — số lượng bị phong tỏa theo từng tài khoản cho đến một ngày.
 - *Tương tự:* phong tỏa sau IPO đối với người nội bộ, thời gian nắm giữ đối với chứng khoán hạn chế chuyển nhượng, thời
   gian khóa chứng chỉ quỹ, cam kết kiểu staking.
 - *Cơ chế:* một `Lock { uint128 amount; uint64 until; }` theo từng tài khoản. Với mỗi lần gửi, `balance − amount ≥ value`
@@ -184,7 +298,7 @@ thái chuyển sang state gas.
   token [ước tính].
 - *Đóng băng / ưu tiên:* trước khi đóng băng, **P1**.
 
-**A2 VESTING** — cliff, tuyến tính hoặc theo bậc, có thể thu hồi hoặc không thể thu hồi.
+<a id="a2"></a>**A2 VESTING** — cliff, tuyến tính hoặc theo bậc, có thể thu hồi hoặc không thể thu hồi.
 - *Tương tự:* cấp cổ phần cho nhân viên, mở khóa token cho nhà đầu tư, trả lương theo dòng (streaming payroll).
 - *Cơ chế:* `VestingGrant`, một bản sao cho mỗi khoản cấp, được cấp vốn theo kiểu phản thực tế (counterfactually), với
   `release()` không cần cấp phép (CTR-AS-10). Điều này khớp với các thiết kế trên thị trường: OpenZeppelin
@@ -194,7 +308,7 @@ thái chuyển sang state gas.
 - *Nơi nằm:* EXISTS (SPECIFIED). *Bảo mật:* chỉ đơn vị công khai. *Đóng băng / ưu tiên:* sau khi đóng băng, **E / P2**
   (xây dựng).
 
-**A3 CLAWBACK của các khoản cấp đã vest** — thu hồi các đơn vị đã vest, hoặc thậm chí đã giải ngân, vì lý do chính đáng.
+<a id="a3"></a>**A3 CLAWBACK của các khoản cấp đã vest** — thu hồi các đơn vị đã vest, hoặc thậm chí đã giải ngân, vì lý do chính đáng.
 - *Tương tự:* điều khoản giảm thưởng (malus) và thu hồi ("bad leaver" — người rời đi vi phạm), tước quyền khi vi phạm điều
   khoản không cạnh tranh.
 - *Cơ chế:* với các đơn vị chưa giải ngân, một tùy chọn `VestingGrant` `clawbackUntil` với một `clawbackAuthority` cố định
@@ -204,7 +318,7 @@ thái chuyển sang state gas.
 - *Bit:* không có (một bên cố định lúc tạo). *Nơi nằm:* SEPARATE, như một phần mở rộng của `VestingGrant` trong một phiên
   bản `AssetFactory` mới. *Bảo mật:* chỉ đơn vị công khai. *Ưu tiên:* **P3**.
 
-**A4 TERM_DEPOSIT** — kỳ hạn cố định với phạt rút trước hạn.
+<a id="a4"></a>**A4 TERM_DEPOSIT** — kỳ hạn cố định với phạt rút trước hạn.
 - *Tương tự:* tiền gửi có kỳ hạn của ngân hàng hoặc chứng chỉ tiền gửi.
 - *Cơ chế:* một bản sao kho cho mỗi sản phẩm: `deposit` → một vị thế có `maturity`. `withdraw` trước đáo hạn trả
   `principal − penalty`, và tiền phạt chuyển đến `penaltyTo` cố định lúc tạo. Lãi do nhà phát hành cấp vốn dưới dạng nạp
@@ -212,12 +326,12 @@ thái chuyển sang state gas.
 - *Bit:* không có, hoặc một bit ứng dụng (128–255) cho quản trị viên sản phẩm. *Nơi nằm:* SEPARATE. *Bảo mật:* chỉ đơn
   vị công khai. *Ưu tiên:* **P2**.
 
-**A5 NOTICE_ACCOUNT** — rút tiền sau N ngày báo trước.
+<a id="a5"></a>**A5 NOTICE_ACCOUNT** — rút tiền sau N ngày báo trước.
 - *Tương tự:* tài khoản tiền gửi có báo trước của ngân hàng.
 - *Cơ chế:* cùng kho như A4, với `requestWithdraw` → có thể nhận sau `notice`. Đây là mẫu yêu cầu và nhận (request and
   claim) của ERC-7540. *Nơi nằm:* SEPARATE. *Ưu tiên:* **P3**.
 
-**A6 LIEN / PLEDGE** — cầm cố đơn vị cho bên nhận cầm cố.
+<a id="a6"></a>**A6 LIEN / PLEDGE** — cầm cố đơn vị cho bên nhận cầm cố.
 - *Tương tự:* cầm cố cổ phiếu làm tài sản bảo đảm khoản vay, quyền giữ tiền gửi của ngân hàng (một "phong tỏa số tiền"
   (amount block) trong core banking), khóa ký quỹ giao dịch (margin).
 - *Cơ chế, hai phương án.* (a) **Ký quỹ:** người nắm giữ chuyển các đơn vị vào một `PledgeEscrow` nêu tên bên nhận cầm cố.
@@ -228,12 +342,12 @@ thái chuyển sang state gas.
   cố có phải giữ đứng tên người nắm giữ không.
 - *Bit:* không có cho (a). *Nơi nằm:* SEPARATE. *Bảo mật:* chỉ đơn vị công khai. *Ưu tiên:* **P2**.
 
-**A7 FUND_LOCKIN** — thời gian khóa chứng chỉ quỹ. Đây là A1 LOCKUP áp dụng lúc đăng ký mua (`mintLocked`). Không có mục
+<a id="a7"></a>**A7 FUND_LOCKIN** — thời gian khóa chứng chỉ quỹ. Đây là A1 LOCKUP áp dụng lúc đăng ký mua (`mintLocked`). Không có mục
 riêng.
 
 ### 4.2 B. Sự kiện doanh nghiệp
 
-**B1 SNAPSHOT / ngày đăng ký cuối cùng**
+<a id="b1"></a>**B1 SNAPSHOT / ngày đăng ký cuối cùng**
 - *Tương tự:* ngày đăng ký cuối cùng của một đợt chia cổ tức hoặc một cuộc họp.
 - *Cơ chế theo phán quyết:* node lập chỉ mục số dư tại block đăng ký một cách tất định, và ai cũng có thể tính lại
   (CTR-AS-11). Gốc của `Distribution` được công bố với ít nhất một giờ xem xét trước khi mở nhận. Trên một chuỗi có thanh
@@ -244,23 +358,23 @@ riêng.
   chuỗi hoặc cho quyền hưởng không cần tin cậy mà không có thời gian xem xét.
 - *Nơi nằm:* NODE. *Ưu tiên:* **R** (trong token); bộ dựng snapshot của node là **E**.
 
-**B2 DISTRIBUTION** cổ tức và coupon — `Distribution` (CTR-AS-11): nhận theo kiểu kéo (pull) cho mỗi lá Merkle, `sweep`
+<a id="b2"></a>**B2 DISTRIBUTION** cổ tức và coupon — `Distribution` (CTR-AS-11): nhận theo kiểu kéo (pull) cho mỗi lá Merkle, `sweep`
 sau `expiry`. EXISTS (SPECIFIED). **E / P2** (xây dựng).
 
-**B3 KHẤU TRỪ TẠI NGUỒN trên các đợt phân phối**
+<a id="b3"></a>**B3 KHẤU TRỪ TẠI NGUỒN trên các đợt phân phối**
 - *Tương tự:* thuế khấu trừ tại nguồn trên cổ tức.
 - *Cơ chế:* các lá được tính **ròng** ngoài chuỗi, cộng một lá cho mỗi cơ quan thuế. Không cần thay đổi hợp đồng. `mtxPayWithTax`
   của nhóm 3e là một phép chia do người trả ký lúc thanh toán và không phù hợp với nhận theo kiểu kéo. Một lần nhận tự động
   chia sẽ cần `Distribution` đọc `taxConfig()` của một token chi trả có quản lý: có thể làm sau, chưa cần.
 - *Nơi nằm:* NODE / client. *Ưu tiên:* **P2** (việc của client).
 
-**B4 Phát hành cổ phiếu THƯỞNG, cổ tức bằng cổ phiếu, tái đầu tư cổ tức** — minter phát hành vào một bản sao `Distribution`
+<a id="b4"></a>**B4 Phát hành cổ phiếu THƯỞNG, cổ tức bằng cổ phiếu, tái đầu tư cổ tức** — minter phát hành vào một bản sao `Distribution`
 của cùng token. DRIP là một tùy chọn khi nhận ("tiền mặt hoặc đơn vị"), dưới dạng hai lá cho mỗi người nắm giữ mà lần nhận
 lấy một: một tùy chọn `Distribution` mới, **P3**.
 
-**B5 SPLIT / gộp cổ phiếu** — chuyển đổi qua một `ExchangeOffer` (CTR-AS-12). EXISTS. Hệ số tỷ lệ là **R**.
+<a id="b5"></a>**B5 SPLIT / gộp cổ phiếu** — chuyển đổi qua một `ExchangeOffer` (CTR-AS-12). EXISTS. Hệ số tỷ lệ là **R**.
 
-**B6 PHÁT HÀNH QUYỀN MUA**
+<a id="b6"></a>**B6 PHÁT HÀNH QUYỀN MUA**
 - *Tương tự:* quyền ưu tiên mua, có thể chuyển nhượng (giao dịch được) hoặc không, với giá đăng ký và thời gian đăng ký, và
   tùy chọn đăng ký mua vượt (excess / over-subscription).
 - *Cơ chế:* (1) một `Distribution` token quyền cho người nắm giữ tại ngày đăng ký cuối cùng. Một loại thường làm cho quyền
@@ -270,14 +384,14 @@ lấy một: một tùy chọn `Distribution` mới, **P3**.
   `tokenIn`, nên đây là một hợp đồng mới.
 - *Nơi nằm:* SEPARATE. *Bảo mật:* chỉ đơn vị công khai. *Ưu tiên:* **P3**.
 
-**B7 MUA LẠI / CHÀO MUA CÔNG KHAI**
+<a id="b7"></a>**B7 MUA LẠI / CHÀO MUA CÔNG KHAI**
 - *Tương tự:* chào mua công khai giá cố định, chào mua theo đấu giá kiểu Hà Lan, mua lại trên thị trường.
 - *Cơ chế:* giá cố định là một `ExchangeOffer` có `capIn`; thị trường mở là một lệnh mua trên DEX (CTR-AS-12). Chào mua
   theo đấu giá kiểu Hà Lan (người nắm giữ đặt giá; giá khớp là giá thấp nhất lấp đủ mục tiêu) là một bản sao mới, gần với
   đấu thầu kín trong [tender.md](../contracts/tender.md) nhưng người đặt giá là người nắm giữ.
 - *Nơi nằm:* EXISTS (giá cố định), SEPARATE (Hà Lan). *Ưu tiên:* **E / P3**.
 
-**B8 MATURITY** — dừng chuyển nhượng khi đáo hạn.
+<a id="b8"></a>**B8 MATURITY** — dừng chuyển nhượng khi đáo hạn.
 - *Tương tự:* một trái phiếu ngừng giao dịch khi đáo hạn hoặc sau ngày đăng ký cuối cùng sau cùng. Vòng đời của một tín
   phiếu thương mại kết thúc vào ngày đến hạn.
 - *Cơ chế:* một `maturityAt` lúc tạo. Sau thời điểm đó, mọi lần gửi bị từ chối trừ việc đốt và chuyển đến lời chào mua lại
@@ -291,7 +405,7 @@ lấy một: một tùy chọn `Distribution` mới, **P3**.
   *Kích thước / gas:* ngày nằm trong slot cấu hình +1 (còn trống 8 byte ở đó); không đọc theo tài khoản [ước tính +150–250
   B]. *Ưu tiên:* **P1**.
 
-**B9 CALL và PUT** của trái phiếu
+<a id="b9"></a>**B9 CALL và PUT** của trái phiếu
 - *Tương tự:* quyền mua lại trước hạn của nhà phát hành (toàn bộ hoặc một phần), quyền bán lại của người nắm giữ.
 - *Cơ chế:* mua lại toàn bộ là `accelerate` của B8 cộng một `ExchangeOffer` theo giá mua lại (mệnh giá cộng phần bù). Bán
   lại là một `ExchangeOffer` nhà phát hành mở vào ngày bán lại: người nắm giữ tự chọn dùng nó. **Mua lại một phần theo bốc
@@ -300,23 +414,23 @@ lấy một: một tùy chọn `Distribution` mới, **P3**.
   ngoài chuỗi. Khuyến nghị mua lại theo tỷ lệ bằng lời chào; không bốc thăm.
 - *Nơi nằm:* EXISTS (các lời chào) + B8. *Ưu tiên:* **P1** (B8), **E**.
 
-**B10 QUỸ TRẢ NỢ DẦN (sinking fund)** — nhà phát hành thu hồi một phần đợt phát hành mỗi năm, bằng mua hoặc bốc thăm.
+<a id="b10"></a>**B10 QUỸ TRẢ NỢ DẦN (sinking fund)** — nhà phát hành thu hồi một phần đợt phát hành mỗi năm, bằng mua hoặc bốc thăm.
 - *Cơ chế:* mua là một lệnh mua trên DEX hoặc một `ExchangeOffer` giá cố định được cấp vốn theo lịch. Bốc thăm, xem B9.
   Một lịch có cấp vốn là một `VestingGrant` có người thụ hưởng là lời chào (một dòng chảy vào lời chào). *Nơi nằm:* EXISTS
   kết hợp. *Ưu tiên:* **E** (chỉ mẫu, **P3**).
 
-**B11 CHUYỂN ĐỔI** — trái phiếu chuyển đổi thành cổ phần, cổ phần ưu đãi thành phổ thông, chứng quyền.
+<a id="b11"></a>**B11 CHUYỂN ĐỔI** — trái phiếu chuyển đổi thành cổ phần, cổ phần ưu đãi thành phổ thông, chứng quyền.
 - *Cơ chế:* chuyển đổi tự nguyện là một `ExchangeOffer` (`tokenIn` bị đốt, `tokenOut` được giao hoặc phát hành), trong một
   khoảng thời gian và theo một tỷ lệ. Chuyển đổi **bắt buộc** có cùng giới hạn như mua lại bắt buộc: token ngừng giao dịch
   (B8) và người nắm giữ được chuyển đổi bằng cách nhận, không bao giờ bằng cách di chuyển số dư của họ. Chứng quyền có giá
   thực hiện là một `ExchangeOffer` nhận chứng quyền cộng tiền mặt, như hợp đồng hai đầu vào của B6.
 - *Nơi nằm:* EXISTS / hợp đồng của B6. *Ưu tiên:* **E / P3**.
 
-**B12 SÁP NHẬP, chào hoán hoán đổi, tách doanh nghiệp, đổi tên** — sáp nhập hoặc hoán đổi là một `ExchangeOffer` (cũ →
+<a id="b12"></a>**B12 SÁP NHẬP, chào hoán hoán đổi, tách doanh nghiệp, đổi tên** — sáp nhập hoặc hoán đổi là một `ExchangeOffer` (cũ →
 mới). Tách doanh nghiệp là một `Distribution` của token mới. Đổi tên không thể xảy ra: tên và ký hiệu là bất biến, nên đó
 là một chuyển đổi hoặc một công bố thông tin. **E**.
 
-**B13 BỎ PHIẾU / ủy quyền** — chủ dự án nói "chưa phải lúc này" (regulated-kinds spec §1, non-goals). Nếu đến, nó cần điểm
+<a id="b13"></a>**B13 BỎ PHIẾU / ủy quyền** — chủ dự án nói "chưa phải lúc này" (regulated-kinds spec §1, non-goals). Nếu đến, nó cần điểm
 kiểm tra trong token, điều sẽ mở lại CTR-AS-11. **P3 / R hôm nay**.
 
 **Các loại sự kiện ISO 15022 đối chiếu với danh mục.** ISO 15022 liệt kê các sự kiện doanh nghiệp theo chỉ báo sự kiện
@@ -349,7 +463,7 @@ loại sự kiện doanh nghiệp ISO 20022, mà ghi chú này không sao chép 
 
 ### 4.3 C. Ngân hàng và thanh toán
 
-**C1 HOLD / CAPTURE** — cấp phép trước (pre-authorisation).
+<a id="c1"></a>**C1 HOLD / CAPTURE** — cấp phép trước (pre-authorisation).
 - *Tương tự:* tạm giữ cấp phép thẻ: số tiền được giữ chỗ, sau đó được thu toàn bộ, một phần, hoặc tăng dần, và được giải
   phóng khi hết hạn (thời hạn theo tổ chức thẻ khoảng 5–31 ngày, tùy tổ chức thẻ và loại đơn vị chấp nhận thẻ). Cũng như
   tiền đặt cọc khách sạn hoặc thuê xe, hay cấp phép trước ở cây xăng.
@@ -361,7 +475,7 @@ loại sự kiện doanh nghiệp ISO 20022, mà ghi chú này không sao chép 
 - *Bit:* không có (các bên cố định theo từng lần tạm giữ). *Nơi nằm:* SEPARATE (phép kiểm tra 2). *Bảo mật:* đơn vị công
   khai; người trả dùng loại bảo mật thì gỡ che chắn trước. *Ưu tiên:* **P2**.
 
-**C2 KÝ QUỸ có trọng tài; tín dụng thư; bảo lãnh theo yêu cầu**
+<a id="c2"></a>**C2 KÝ QUỸ có trọng tài; tín dụng thư; bảo lãnh theo yêu cầu**
 - *Tương tự:* một đại lý ký quỹ (escrow agent); tín dụng thư chứng từ (UCP 600): thanh toán khi xuất trình chứng từ phù hợp
   do ngân hàng kiểm tra; bảo lãnh theo yêu cầu (URDG 758): thanh toán khi có yêu cầu hợp lệ trước khi hết hạn.
 - *Cơ chế:* một bản sao `ArbiterEscrow` với `buyer`, `seller`, `arbiter`, `expiry`, `documentsRequired` (hash của các loại
@@ -371,7 +485,7 @@ loại sự kiện doanh nghiệp ISO 20022, mà ghi chú này không sao chép 
   Chứng từ nằm ngoài chuỗi; chỉ hash lên chuỗi (architecture §10).
 - *Bit:* không có. *Nơi nằm:* SEPARATE. *Ưu tiên:* **P2**.
 
-**C3 TRANSFER_LIMIT** — tần suất theo từng tài khoản trong mỗi cửa sổ thời gian.
+<a id="c3"></a>**C3 TRANSFER_LIMIT** — tần suất theo từng tài khoản trong mỗi cửa sổ thời gian.
 - *Tương tự:* quy tắc tần suất chống rửa tiền (AML), hạn mức chuyển tiền hằng ngày của tài khoản ngân hàng, các hạng ví
   tiền điện tử (e-money).
 - *Cơ chế:* một bộ đếm cửa sổ theo từng tài khoản trên các lần gửi, `spent ≤ limit(tier)` trong `window`. **Hạng lấy từ
@@ -386,7 +500,7 @@ loại sự kiện doanh nghiệp ISO 20022, mà ghi chú này không sao chép 
   mỗi lần gửi [ước tính]. +300–500 B phía token [ước tính].
 - *Ưu tiên:* **P1**.
 
-**C4 Thời hạn CHARGEBACK** — một giai đoạn có thể đảo ngược sau khi thanh toán.
+<a id="c4"></a>**C4 Thời hạn CHARGEBACK** — một giai đoạn có thể đảo ngược sau khi thanh toán.
 - *Tương tự:* bồi hoàn thẻ (chargeback), quyền rút lại giao dịch của người tiêu dùng.
 - *Cơ chế:* không có đảo ngược tại chỗ (architecture §2). Một `SettlementEscrow` giữ khoản thanh toán trong `window`. Người
   trả có thể `dispute(reasonRef)` trong thời gian đó; trọng tài quyết định hoàn tiền hay giải phóng; nếu không có tranh chấp,
@@ -394,14 +508,14 @@ loại sự kiện doanh nghiệp ISO 20022, mà ghi chú này không sao chép 
   đồng.
 - *Nơi nằm:* SEPARATE. *Ưu tiên:* **P3**.
 
-**C5 LÃI SUẤT / PHÍ LƯU GIỮ (demurrage)**
+<a id="c5"></a>**C5 LÃI SUẤT / PHÍ LƯU GIỮ (demurrage)**
 - *Tương tự:* lãi suất tiết kiệm; lãi suất âm hoặc phí nắm giữ (demurrage).
 - *Cơ chế:* một chỉ số trong token là **R** (§3.3). Thay vào đó, một kho giữ token và giá cổ phần của kho tăng theo lãi
   được cấp vốn (ERC-4626; cơ chế chỉ số của Aave và Compound là mô hình, nhưng giữ bên trong kho, không bao giờ trong
   token). Phí lưu giữ là giá cổ phần kho giảm dần.
 - *Nơi nằm:* SEPARATE. *Ưu tiên:* **P3**.
 
-**C6 THỪA KẾ / khôi phục khi chủ tài khoản không còn hoạt động (dead-man recovery)**
+<a id="c6"></a>**C6 THỪA KẾ / khôi phục khi chủ tài khoản không còn hoạt động (dead-man recovery)**
 - *Tương tự:* người thụ hưởng khi chủ tài khoản qua đời (payable-on-death), thủ tục tài khoản ngủ đông, di chúc do người
   thi hành di chúc thực hiện.
 - *Cơ chế:* là vấn đề của tài khoản, không phải của token: khôi phục bằng người giám hộ UA và `SmartKeyAccount`
@@ -410,10 +524,10 @@ loại sự kiện doanh nghiệp ISO 20022, mà ghi chú này không sao chép 
   của người nắm giữ đã mất dùng `FORCE` với một hồ sơ.
 - *Nơi nằm:* SEPARATE / tài khoản. *Ưu tiên:* **P3**.
 
-**C7 LỆNH CHUYỂN TIỀN ĐỊNH KỲ** — `MandateWallet` (BUILT, CTR-ACC-06): một người được ủy quyền thanh toán trong hạn mức
+<a id="c7"></a>**C7 LỆNH CHUYỂN TIỀN ĐỊNH KỲ** — `MandateWallet` (BUILT, CTR-ACC-06): một người được ủy quyền thanh toán trong hạn mức
 mỗi lần và mỗi kỳ cho các người nhận đã duyệt, và node chạy lịch. **E**.
 
-**C8 QUÉT SỐ DƯ (sweep) / gộp quỹ (cash pooling)**
+<a id="c8"></a>**C8 QUÉT SỐ DƯ (sweep) / gộp quỹ (cash pooling)**
 - *Tương tự:* quét về số dư không hoặc về số dư mục tiêu vào một tài khoản chính; gộp quỹ danh nghĩa (notional pooling).
 - *Cơ chế:* quét vật lý là một `MandateWallet` cho mỗi tài khoản công ty con với người được ủy quyền là ngân quỹ, người nhận
   là tài khoản chính, kèm hạn mức mỗi kỳ. Node tính "số dư trên mức mục tiêu" và gửi lệnh quét. Một quy tắc mục tiêu thực
@@ -421,10 +535,10 @@ mỗi lần và mỗi kỳ cho các người nhận đã duyệt, và node chạ
   quỹ danh nghĩa là việc kế toán, ngoài chuỗi.
 - *Nơi nằm:* EXISTS + NODE; tùy chọn SEPARATE. *Ưu tiên:* **P3**.
 
-**C9 TÀI KHOẢN PHỤ / tài khoản ảo** — nhiều id UA cho mỗi chủ thể, hoặc một `MandateWallet` cho mỗi mục đích, cộng
+<a id="c9"></a>**C9 TÀI KHOẢN PHỤ / tài khoản ảo** — nhiều id UA cho mỗi chủ thể, hoặc một `MandateWallet` cho mỗi mục đích, cộng
 `entryRef` / `PayMeta` cho tài khoản ảo trong ERP. **E** (không có tính năng token).
 
-**C10 CHIA THANH TOÁN** — phí và hoa hồng.
+<a id="c10"></a>**C10 CHIA THANH TOÁN** — phí và hoa hồng.
 - *Tương tự:* hoa hồng sàn thương mại, phí đại lý, chia sẻ doanh thu.
 - *Cơ chế:* một bản sao `PaymentSplitter` với các người nhận cố định lúc tạo và tỷ lệ theo ppm. Người trả thanh toán cho
   bộ chia bằng một `mtxPay` và `PayMeta`; bất kỳ ai gọi `distribute(token)`; phần của từng người nhận được chi trả, hoặc được
@@ -432,19 +546,19 @@ mỗi lần và mỗi kỳ cho các người nhận đã duyệt, và node chạ
   đặc biệt ở cấp token chỉ dành cho thuế.
 - *Nơi nằm:* SEPARATE. *Ưu tiên:* **P2**.
 
-**C11 RỔ ĐA TIỀN TỆ** — `WRAPPED` với 1–8 chân theo tỷ lệ cố định hoặc điều chỉnh được (BUILT). **E**.
+<a id="c11"></a>**C11 RỔ ĐA TIỀN TỆ** — `WRAPPED` với 1–8 chân theo tỷ lệ cố định hoặc điều chỉnh được (BUILT). **E**.
 
-**C12 QUỸ CHUNG có hạn mức rút cộng dồn** — mục của chủ dự án, §5. SEPARATE, **P2**.
+<a id="c12"></a>**C12 QUỸ CHUNG có hạn mức rút cộng dồn** — mục của chủ dự án, §5. SEPARATE, **P2**.
 
-**C13 THẤU CHI / hạn mức tín dụng** — cho vay nằm ngoài phạm vi; tối đa, một hạn mức tín dụng là một ký quỹ do bên cho vay
+<a id="c13"></a>**C13 THẤU CHI / hạn mức tín dụng** — cho vay nằm ngoài phạm vi; tối đa, một hạn mức tín dụng là một ký quỹ do bên cho vay
 cấp vốn với hạn mức của §5 làm giới hạn giải ngân. **P3**.
 
-**C14 Tài sản NGỦ ĐÔNG / không người nhận** — không vai trò nào di chuyển số dư ngoài `FORCE` dựa trên một hồ sơ
+<a id="c14"></a>**C14 Tài sản NGỦ ĐÔNG / không người nhận** — không vai trò nào di chuyển số dư ngoài `FORCE` dựa trên một hồ sơ
 (CTR-TOK-10), nên việc sung công (escheat) là một lệnh đã ghi nhận. **E** (không có tính năng mới).
 
 ### 4.4 D. Tuân thủ
 
-**D1 OWNERSHIP_CAP** — trần cho mỗi người nắm giữ.
+<a id="d1"></a>**D1 OWNERSHIP_CAP** — trần cho mỗi người nắm giữ.
 - *Tương tự:* tỷ lệ sở hữu tối đa khi không chào mua công khai hoặc không được chấp thuận, giới hạn cho một nhà đầu tư, hạn
   mức nắm giữ CBDC (§6.6).
 - *Cơ chế:* với mỗi lần ghi có, `balanceAfter(to) ≤ cap`, trong đó cap là một số lượng tuyệt đối hoặc ppm của
@@ -455,7 +569,7 @@ cấp vốn với hạn mức của §5 làm giới hạn giải ngân. **P3**.
 - *Kích thước / gas:* số dư của người nhận đã nằm trong đường ghi của `_update`, nên không có lần đọc mới. ppm cần
   `totalSupply`, một lần đọc ấm. +150–250 B [ước tính]. *Ưu tiên:* **P1**.
 
-**D2 CLASS_CAP** — trần tổng hợp cho một nhóm người nắm giữ.
+<a id="d2"></a>**D2 CLASS_CAP** — trần tổng hợp cho một nhóm người nắm giữ.
 - *Tương tự:* giới hạn sở hữu nước ngoài. **Chỉ là ví dụ:** các công ty niêm yết của Việt Nam có room ngoại ("room ngoại",
   Nghị định 155/2020/ND-CP theo Luật Chứng khoán 54/2019/QH14, thường là 49% hoặc giới hạn theo ngành), được theo dõi trên
   toàn bộ các nhà đầu tư nước ngoài trên HOSE / HNX. Các ví dụ khác: quy tắc tập trung của REIT, giới hạn đối với người nắm
@@ -473,7 +587,7 @@ cấp vốn với hạn mức của §5 làm giới hạn giải ngân. **P3**.
   tiên:* **P1** nếu chủ dự án muốn chứng khoán có quản lý cho các thị trường có giới hạn như vậy, nếu không thì **P2** dưới
   dạng bản phát hành thứ hai.
 
-**D3 HOLDER_CAP** — số lượng người nắm giữ tối đa, có thể theo từng nhóm.
+<a id="d3"></a>**D3 HOLDER_CAP** — số lượng người nắm giữ tối đa, có thể theo từng nhóm.
 - *Tương tự:* giới hạn số cổ đông của công ty tư nhân, các ngưỡng làm phát sinh tư cách công ty đại chúng, trần số nhà đầu
   tư không chuyên nghiệp.
 - *Cơ chế:* một bộ đếm số dư khác không, điều chỉnh khi một số dư chuyển từ 0 → khác không hoặc ngược lại, và từ chối khi
@@ -483,7 +597,7 @@ cấp vốn với hạn mức của §5 làm giới hạn giải ngân. **P3**.
 - *Kích thước / gas:* `SSTORE` bộ đếm chỉ khi chuyển trạng thái 0 ↔ khác không (+2.9–5 k gas) [ước tính]; +150–250 B. *Ưu
   tiên:* **P1**.
 
-**D4 SENDER_DENYLIST** — giai đoạn cấm giao dịch và các nhóm phía người gửi.
+<a id="d4"></a>**D4 SENDER_DENYLIST** — giai đoạn cấm giao dịch và các nhóm phía người gửi.
 - *Tương tự:* giai đoạn cấm giao dịch của người nội bộ trước khi công bố kết quả kinh doanh; khóa theo nhóm; "nhà đầu tư
   này không được bán".
 - *Cơ chế:* kiểm tra registry hiện chỉ áp cho người nhận (CTR-GOV-18: "a denied account can still send" — tài khoản bị từ
@@ -494,7 +608,7 @@ cấp vốn với hạn mức của §5 làm giới hạn giải ngân. **P3**.
 - *Kích thước / gas:* một lệnh gọi registry có giới hạn mỗi lần gửi (≤ `REGISTRY_GAS`); +150 B [ước tính]. *Ưu tiên:*
   **P1** (rẻ, và tổng quát).
 
-**D5 MIN_HOLDING** — mức nắm giữ tối thiểu và quy mô lô.
+<a id="d5"></a>**D5 MIN_HOLDING** — mức nắm giữ tối thiểu và quy mô lô.
 - *Tương tự:* mức đầu tư tối thiểu của quỹ, mệnh giá tối thiểu của trái phiếu (thường lớn với các đợt phát hành cho nhà
   đầu tư tổ chức), lô chẵn.
 - *Cơ chế:* sau một chuyển động, số dư mỗi phía là 0 hoặc ≥ `minHolding`, và `value % lot == 0`. Cả hai là các số cố định
@@ -503,7 +617,7 @@ cấp vốn với hạn mức của §5 làm giới hạn giải ngân. **P3**.
 - *Kích thước / gas:* không có lần đọc mới (số dư đã nằm trong đường đi); +100–200 B [ước tính]. *Ưu tiên:* **P1** (chi phí
   thấp), hoặc P2.
 
-**D6 TRANSFER_APPROVAL** — chuyển nhượng hai bước có phê duyệt của nhà phát hành, và quyền ưu tiên mua (quyền từ chối đầu
+<a id="d6"></a>**D6 TRANSFER_APPROVAL** — chuyển nhượng hai bước có phê duyệt của nhà phát hành, và quyền ưu tiên mua (quyền từ chối đầu
 tiên (right of first refusal)).
 - *Tương tự:* các kiểm tra trước chuyển nhượng kiểu ERC-1404 / ERC-3643; controller của ERC-1400; cổ phần ghi danh cần hội
   đồng quản trị chấp thuận; quyền từ chối đầu tiên trong thỏa thuận cổ đông.
@@ -514,10 +628,10 @@ tiên (right of first refusal)).
 - *Bit:* bit tham số ROUTE_ONLY, TBD (nếu muốn). *Nơi nằm:* SEPARATE (ký quỹ) + TOKEN (route-only). *Bảo mật:* bị từ chối
   trên 10–13. *Ưu tiên:* **P3**; ROUTE_ONLY là quyết định **P2** trước khi đóng băng (§9 Q15).
 
-**D7 DANH SÁCH TRẮNG ĐỐI TÁC** do người nắm giữ chọn (người nhận được phép) — `MandateWallet.payeeAllowed` (BUILT), hoặc
+<a id="d7"></a>**D7 DANH SÁCH TRẮNG ĐỐI TÁC** do người nắm giữ chọn (người nhận được phép) — `MandateWallet.payeeAllowed` (BUILT), hoặc
 danh sách người nhận theo từng thành viên của quỹ §5. Trong token: không. **E**.
 
-**D8 Dữ liệu TRAVEL-RULE**
+<a id="d8"></a>**D8 Dữ liệu TRAVEL-RULE**
 - *Tương tự:* Khuyến nghị 16 của FATF: dữ liệu người khởi tạo và người thụ hưởng đi kèm giao dịch chuyển giữa các nhà cung
   cấp dịch vụ. Ngưỡng khác nhau (USD/EUR 1,000 trong văn bản FATF; bằng không trong Quy định 2023/1113 của EU).
 - *Cơ chế:* không bao giờ trên chuỗi (architecture §10). Các nhà cung cấp dịch vụ trao đổi dữ liệu ngoài chuỗi, khóa theo
@@ -525,40 +639,40 @@ danh sách người nhận theo từng thành viên của quỹ §5. Trong token
   (mã hóa cho người nhận) mang một tham chiếu, không bao giờ là dữ liệu.
 - *Nơi nằm:* NODE / ngoài chuỗi. *Ưu tiên:* **P3** (tài liệu tích hợp).
 
-**D9 Phong tỏa BẤT KHẢ KHÁNG theo loại tài sản**
+<a id="d9"></a>**D9 Phong tỏa BẤT KHẢ KHÁNG theo loại tài sản**
 - *Tương tự:* tạm dừng toàn thị trường, cơ chế ngắt mạch (circuit breaker).
 - *Cơ chế:* theo từng token, `PAUSE` (≤ 7 d, thời gian chờ, CTR-AS-06). Một công tắc liên token được nhiều token đọc sẽ thêm
   một lệnh gọi mỗi giao dịch chuyển và tạo ra một khóa duy nhất dừng được mọi tài sản: bị bác bỏ. Tạm dừng toàn loại là
   chính sách của sàn: node dừng các thị trường khi `Paused` (NODE-DEX-11) và một nhà vận hành tạm dừng từng token.
 - *Nơi nằm:* EXISTS + NODE. *Ưu tiên:* **E**.
 
-**D10 Vai trò: đại lý chuyển nhượng, tổ chức đăng ký, đại lý sự kiện doanh nghiệp**
+<a id="d10"></a>**D10 Vai trò: đại lý chuyển nhượng, tổ chức đăng ký, đại lý sự kiện doanh nghiệp**
 - *Tương tự:* một đại lý chuyển nhượng đã đăng ký giữ sổ cổ đông và thực hiện các sự kiện doanh nghiệp (Securitize là đại
   lý chuyển nhượng đã đăng ký với SEC; Polymesh chỉ định một đại lý sự kiện doanh nghiệp cho mỗi tài sản).
 - *Ánh xạ:* đại lý chuyển nhượng nắm các bit nhà phát hành 5–7 và bit tuân thủ 10 dưới dạng hợp đồng hoặc `msig`
   (CTR-AS-03); tổ chức đăng ký là quản trị viên hoặc người chứng thực của `ComplianceRegistry`; đại lý sự kiện doanh nghiệp
   là `admin` của các bản sao `Distribution` / `ExchangeOffer`. Sổ cổ đông do node lập chỉ mục (asset-suite §9). **E**.
 
-**D11 PHÂN VÙNG / đợt (tranche)** (ERC-1410, ERC-7518 trên ERC-1155) — một số dư cho mỗi người nắm giữ trên mỗi token (lập
+<a id="d11"></a>**D11 PHÂN VÙNG / đợt (tranche)** (ERC-1410, ERC-7518 trên ERC-1155) — một số dư cho mỗi người nắm giữ trên mỗi token (lập
 luận "raw amounts" của CTR-AS-12). Một nhóm hoặc đợt là token riêng của nó, và chuyển giữa các nhóm là một `ExchangeOffer`.
 Phong tỏa kiểu phân vùng là A1. Trong token: **R** (theo thiết kế, không theo phán quyết): **P3** chỉ như một loại đa token
 trong tương lai.
 
-**D12 TÀI LIỆU** (ERC-1643) — `termsHash` lúc tạo và `documentHash` cho mỗi hồ sơ đã có. Một danh sách tài liệu có phiên
+<a id="d12"></a>**D12 TÀI LIỆU** (ERC-1643) — `termsHash` lúc tạo và `documentHash` cho mỗi hồ sơ đã có. Một danh sách tài liệu có phiên
 bản cho mỗi token (bản cáo bạch, thông báo) là một `DocumentRegistry` riêng nhỏ khóa theo token, với lịch sử giữ dưới dạng
 sự kiện. **P3**.
 
-**D13 MÃ HẠN CHẾ CHUYỂN NHƯỢNG** (`detectTransferRestriction` của ERC-1404) — một view chạy mọi phép kiểm tra mà không di
+<a id="d13"></a>**D13 MÃ HẠN CHẾ CHUYỂN NHƯỢNG** (`detectTransferRestriction` của ERC-1404) — một view chạy mọi phép kiểm tra mà không di
 chuyển đơn vị, trả về một mã lý do. `canReceive` đã có; một `canTransfer(from, to, value) returns (bool, uint8)` kết hợp
 trên loại 8 và 9 phục vụ ví và bước kiểm tra trước của sàn DEX. **P1** (chỉ là view; +200 B [ước tính]).
 
-**D14 HẾT HẠN ĐIỂM THƯỞNG** — hết hạn theo lô (các lô FIFO cho mỗi người nắm giữ) tốn một danh sách cho mỗi tài khoản. Hết
+<a id="d14"></a>**D14 HẾT HẠN ĐIỂM THƯỞNG** — hết hạn theo lô (các lô FIFO cho mỗi người nắm giữ) tốn một danh sách cho mỗi tài khoản. Hết
 hạn do không hoạt động cần một vai trò đốt, điều CTR-TOK-10 cấm. Cả hai đều là **R** (asset-suite §7): hết hạn là khi lời
 chào đổi kết thúc.
 
 ### 4.5 E. Quỹ
 
-**E1 Cửa sổ ĐĂNG KÝ MUA / BÁN LẠI theo NAV**
+<a id="e1"></a>**E1 Cửa sổ ĐĂNG KÝ MUA / BÁN LẠI theo NAV**
 - *Tương tự:* ngày giao dịch của quỹ mở, định giá theo NAV kỳ tới (forward pricing).
 - *Cơ chế:* một `FundVault` với các yêu cầu bất đồng bộ của ERC-7540: `requestDeposit` / `requestRedeem` → đang chờ → có thể
   nhận theo NAV mà quỹ chứng thực tại điểm giao dịch. Giá được xác định khi thực hiện, không phải khi yêu cầu. Chứng chỉ quỹ
@@ -566,25 +680,25 @@ chào đổi kết thúc.
   đã dự liệu cho giới hạn tốc độ.
 - *Nơi nằm:* SEPARATE. *Ưu tiên:* **P2**.
 
-**E2 CỔNG GIỚI HẠN BÁN LẠI (redemption gate)** — tối đa X% NAV được bán lại mỗi kỳ giao dịch, theo tỷ lệ, phần còn lại
+<a id="e2"></a>**E2 CỔNG GIỚI HẠN BÁN LẠI (redemption gate)** — tối đa X% NAV được bán lại mỗi kỳ giao dịch, theo tỷ lệ, phần còn lại
 chuyển sang kỳ sau.
 - *Cơ chế:* bên trong `FundVault`: các yêu cầu của một kỳ được thực hiện theo tỷ lệ đến mức cổng. Cổng cuộn là một token
   bucket trên các lần bán lại: cơ chế của §5 ở cấp quỹ, với hạn mức tính bằng đồng tiền của quỹ.
 - *Nơi nằm:* SEPARATE. *Ưu tiên:* **P2** (cùng E1).
 
-**E3 Tạo lập và mua lại BẰNG HIỆN VẬT** — kiểu ETF: một thành viên lập quỹ (authorised participant) giao rổ và nhận một lô
+<a id="e3"></a>**E3 Tạo lập và mua lại BẰNG HIỆN VẬT** — kiểu ETF: một thành viên lập quỹ (authorised participant) giao rổ và nhận một lô
 chứng chỉ quỹ, hoặc ngược lại. Một hợp đồng `CreationDesk` (minter) nhận các chân của rổ bằng `transferFrom` và phát hành N
 đơn vị; mua lại đốt chúng và giao rổ. Chỉ các tài khoản có cờ AP trong registry mới được dùng. Gần với `WRAPPED` có chân,
 nhưng với một rổ thay đổi hằng ngày (được chứng thực), nên đây là một hợp đồng riêng. **P3**.
 
-**E4 PHÍ: quản lý, thưởng hiệu quả, mốc cao nhất (high-water mark)**
+<a id="e4"></a>**E4 PHÍ: quản lý, thưởng hiệu quả, mốc cao nhất (high-water mark)**
 - *Cơ chế:* phí quản lý dồn tích theo thời gian và được thu bằng cách phát hành đơn vị mới cho người quản lý (pha loãng)
   hoặc qua giá cổ phần của kho. Phí thưởng hiệu quả trên mốc cao nhất cần lịch sử NAV trên mỗi đơn vị; nó được tính ngoài
   chuỗi từ NAV đã chứng thực và thu bằng phát hành, có trần theo điều lệ quỹ. Mọi thứ nằm trong `FundVault` (minter); token
   không biết gì.
 - *Nơi nằm:* SEPARATE. *Ưu tiên:* **P3**.
 
-**E5 Chứng thực NAV / giá**
+<a id="e5"></a>**E5 Chứng thực NAV / giá**
 - *Cơ chế:* một giá trị có chữ ký từ một UA người chứng thực (NAV, lãi suất tham chiếu, số liệu dự trữ, chứng nhận chất
   lượng) kèm `validUntil`. Mô hình là verifier có chứng thực của nhóm 3f: một người chứng thực cho mỗi hợp đồng sử dụng, cố
   định hoặc chuyển giao được có báo trước, thu hồi được ngay (các phán quyết O2 và R4 của chủ dự án trong attested-verify
@@ -592,7 +706,7 @@ nhưng với một rổ thay đổi hằng ngày (được chứng thực), nên
   §6.4.
 - *Nơi nằm:* SEPARATE. *Ưu tiên:* **P2** (nó mở khóa nhiều loại tài sản).
 
-**E6 ĐỊNH GIÁ ĐIỀU CHỈNH (swing pricing) / phí chống pha loãng** — điều chỉnh NAV theo dòng tiền ròng, bên trong
+<a id="e6"></a>**E6 ĐỊNH GIÁ ĐIỀU CHỈNH (swing pricing) / phí chống pha loãng** — điều chỉnh NAV theo dòng tiền ròng, bên trong
 `FundVault`. **P3**.
 
 ## 5. Mục mới của chủ dự án: quỹ chung có hạn mức rút cộng dồn

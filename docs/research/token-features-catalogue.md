@@ -17,6 +17,7 @@ note differs from a component doc or an owner ruling, the component doc or the r
 **Contents**
 
 1. [Summary](#1-summary)
+   - [1A. At a glance](#1a-at-a-glance)
 2. [Rules every suggestion obeys](#2-rules-every-suggestion-obeys)
 3. [Where a feature lives](#3-where-a-feature-lives)
 4. [The catalogue](#4-the-catalogue)
@@ -49,6 +50,119 @@ note differs from a component doc or an owner ruling, the component doc or the r
 - **The owner's new item** is a shared fund. Funders deposit money in it whenever they want. Each member has a withdrawal
   quota that accrues daily and carries over, up to a cap. The recommended name is **`StipendFund`** ("quỹ trợ cấp có hạn
   mức rút cộng dồn"). The mechanism is a token bucket over a **quota**, not over money (§5).
+
+## 1A. At a glance
+
+One short row per entry. The tables add nothing to §4–§6: where a row and its entry differ, the entry wins. Each id links
+to its entry. *Where*: **token** = a new bit on the regulated kinds 8 and 9 (refused on 10–13); **separate** = its own
+contract; **node** = node or clients; **exists** = already SPECIFIED or BUILT. *Freeze*: whether it must land before the
+EVM freeze; "—" where the question does not arise. *Priority*: as in §4 (P1, P2, P3, E exists, R ruled out).
+
+**A. Locks and vesting** ([§4.1](#41-a-locks-and-vesting))
+
+| Id + feature | Real-world analogue | Mechanism | Where | Freeze | Priority |
+|---|---|---|---|---|---|
+| [A1](#a1) LOCKUP | IPO lock-up, holding period of restricted securities | Locked amount per account until a date; only on units given to the holder. | token | before | P1 |
+| [A2](#a2) VESTING | Employee equity grants, investor token unlocks | One `VestingGrant` clone per grant, permissionless `release()` (CTR-AS-10: not a vault). | separate (exists, SPECIFIED) | after | E / P2 (build) |
+| [A3](#a3) CLAWBACK | Malus and claw-back clauses, bad leaver | `VestingGrant` option `clawbackUntil` for unreleased units; released units only by `FORCE` with a record. | separate | after | P3 |
+| [A4](#a4) TERM_DEPOSIT | Bank time deposit, certificate of deposit | A vault clone per product; early withdrawal pays principal minus a penalty; the issuer funds interest. | separate | after | P2 |
+| [A5](#a5) NOTICE_ACCOUNT | Bank notice account | A4's vault with `requestWithdraw`, claimable after the notice (ERC-7540 request and claim). | separate | after | P3 |
+| [A6](#a6) LIEN / PLEDGE | Share pledge for a loan, bank amount block, margin lock | `PledgeEscrow`: the lienholder enforces on default or releases; the holder reclaims at expiry. | separate | after | P2 |
+| [A7](#a7) FUND_LOCKIN | Lock-in period of fund units | A1 LOCKUP applied at subscription (`mintLocked`); no separate entry. | token (A1) | before | as A1 |
+
+**B. Corporate actions** ([§4.2](#42-b-corporate-actions))
+
+| Id + feature | Real-world analogue | Mechanism | Where | Freeze | Priority |
+|---|---|---|---|---|---|
+| [B1](#b1) SNAPSHOT / record date | Record date of a dividend or a meeting | The node indexes balances at the record block; in-token checkpoints ruled out (CTR-AS-11). | node | — | R in token; node builder E |
+| [B2](#b2) DISTRIBUTION | Dividends, coupons | `Distribution`: a pull claim per Merkle leaf, `sweep` after expiry (CTR-AS-11). | separate (exists, SPECIFIED) | after | E / P2 (build) |
+| [B3](#b3) WITHHOLDING | Dividend withholding tax | Leaves computed net off chain, plus one leaf per tax authority; no contract change. | node / clients | — | P2 (client work) |
+| [B4](#b4) BONUS, stock dividend, DRIP | Bonus issue, stock dividend, dividend reinvestment | The minter mints into a `Distribution` of the same token; DRIP is a new claim option. | separate (exists; DRIP option new) | after | E; DRIP P3 |
+| [B5](#b5) SPLIT / reverse split | Stock split, reverse split | Migration to a new token through an `ExchangeOffer` (CTR-AS-12); no scale factor. | separate (exists) | after | E; scale factor R |
+| [B6](#b6) RIGHTS ISSUE | Pre-emptive subscription right, renounceable or not | A `Distribution` of a rights token, then a `RightsOffer` taking rights plus cash. | separate | after | P3 |
+| [B7](#b7) BUYBACK / TENDER | Fixed-price tender, Dutch-auction tender, open-market repurchase | Fixed price: `ExchangeOffer` with `capIn`; open market: a DEX bid; Dutch auction: a new clone. | exists; Dutch separate | after | E / P3 |
+| [B8](#b8) MATURITY | A bond stops trading at maturity | After `maturityAt`, only burn or a send to the redemption `ExchangeOffer`; `accelerate` only earlier. | token | before | P1 |
+| [B9](#b9) CALL and PUT | Issuer call, holder put | Full call: B8 `accelerate` + `ExchangeOffer`; put: an offer at the put date; partial call pro rata. | exists + B8 | before (B8) | P1 (B8), E |
+| [B10](#b10) SINKING FUND | The issuer retires part of an issue each year | A DEX bid or a funded `ExchangeOffer`; the schedule is a `VestingGrant` into the offer. | exists (composition) | after | E (template P3) |
+| [B11](#b11) CONVERSION | Convertible notes, preferred into common, warrants | Voluntary: `ExchangeOffer`; mandatory: B8 stop, then claim; warrants: B6's two-input contract. | exists / B6's contract | after | E / P3 |
+| [B12](#b12) MERGER, spin-off, name change | Merger, exchange offer, spin-off | Merger: `ExchangeOffer` old → new; spin-off: `Distribution`; names are immutable, so migration or disclosure. | exists | after | E |
+| [B13](#b13) VOTING / proxy | Shareholder meeting, proxy vote | The owner said "not now"; it would need in-token checkpoints, reopening CTR-AS-11. | — | — | P3 / R today |
+
+**C. Banking and payments** ([§4.3](#43-c-banking-and-payments))
+
+| Id + feature | Real-world analogue | Mechanism | Where | Freeze | Priority |
+|---|---|---|---|---|---|
+| [C1](#c1) HOLD / CAPTURE | Card pre-authorisation, hotel deposit | `HoldEscrow`: the payer signs a hold; the merchant captures all or part; the rest returns at expiry. | separate | after | P2 |
+| [C2](#c2) ESCROW with arbiter; LC; guarantee | Escrow agent, documentary credit (UCP 600), demand guarantee (URDG 758) | `ArbiterEscrow`: the arbiter honours or refuses presented document hashes; at expiry funds return to the buyer. | separate | after | P2 |
+| [C3](#c3) TRANSFER_LIMIT | AML velocity rule, daily bank transfer limit, e-money wallet tiers | Window counter per account; the limit per tier comes from `ComplianceRegistry` flags, table fixed at creation. | token | before | P1 |
+| [C4](#c4) CHARGEBACK window | Card chargeback, consumer right of withdrawal | `SettlementEscrow` holds a payment for a window; the payer may dispute; an arbiter decides. | separate (a mode of C2) | after | P3 |
+| [C5](#c5) INTEREST / DEMURRAGE | Savings rate, negative rate, holding fee | A vault whose share price rises or falls with funded interest; no index in the token (CTR-AS-12). | separate | after | P3; in-token index R |
+| [C6](#c6) INHERITANCE | Payable-on-death beneficiary, dormant account, executor | UA guardian recovery and `SmartKeyAccount`; an optional `HeirSwitch` on the §5 pattern; court orders by `FORCE`. | separate / accounts | after | P3 |
+| [C7](#c7) STANDING ORDERS | Bank standing order | `MandateWallet`: a delegate pays approved payees within caps; the node runs the schedule (CTR-ACC-06). | exists (BUILT) | — | E |
+| [C8](#c8) SWEEP / cash pooling | Zero- or target-balancing sweep, notional pooling | A `MandateWallet` per subsidiary paying the master; the node computes the excess; optional `keepAtLeast`. | exists + node; option separate | after | P3 |
+| [C9](#c9) SUB-ACCOUNTS | Sub-accounts, virtual accounts | Several UA ids per subject, or a `MandateWallet` per purpose, plus `entryRef` / `PayMeta`. | exists | — | E |
+| [C10](#c10) PAYMENT SPLIT | Marketplace commission, agent's fee, revenue sharing | A `PaymentSplitter` clone with fixed recipients and ppm shares; paid out or claimed. | separate | after | P2 |
+| [C11](#c11) MULTI-CURRENCY BASKET | Currency basket | `WRAPPED` with 1–8 legs at fixed or adjustable rates. | exists (BUILT) | — | E |
+| [C12](#c12) SHARED FUND | Pocket money, per diem, stipend | `StipendFund` (§5): pooled money, a daily draw quota per member with capped carry-over. | separate | after | P2 |
+| [C13](#c13) OVERDRAFT / credit line | Overdraft, credit line | Lending is out of scope; at most a lender-funded escrow with the §5 quota as drawdown limit. | separate | after | P3 |
+| [C14](#c14) DORMANT / unclaimed property | Escheat of unclaimed property | Only `FORCE` against a record moves balances (CTR-TOK-10), so escheat is a recorded order. | exists | — | E |
+
+**D. Compliance** ([§4.4](#44-d-compliance))
+
+| Id + feature | Real-world analogue | Mechanism | Where | Freeze | Priority |
+|---|---|---|---|---|---|
+| [D1](#d1) OWNERSHIP_CAP | Maximum shareholding, single-investor limit, CBDC holding limit | On every credit, the receiver's balance ≤ cap (absolute or ppm of supply); pass-through contracts exempt. | token | before | P1 |
+| [D2](#d2) CLASS_CAP | Foreign-ownership room (example only), REIT concentration rule | A token-wide counter of the balances of a flagged class; a permissionless `resyncClass` fixes stale flags. | token | before, or a second release | P1, or P2 |
+| [D3](#d3) HOLDER_CAP | Shareholder limit of a private company | A counter of non-zero balances; a new holder above `maxHolders` is refused. | token | before | P1 |
+| [D4](#d4) SENDER_DENYLIST | Insider blackout window, "this investor may not sell" | The sender must hold none of `senderDeniedFlags`; a blackout is a `BLACKOUT` attestation with `validUntil`. | token | before | P1 |
+| [D5](#d5) MIN_HOLDING | Fund minimum investment, bond minimum denomination, board lots | After a move each side holds 0 or ≥ `minHolding`; the value is a multiple of `lot`. | token | before | P1 (or P2) |
+| [D6](#d6) TRANSFER_APPROVAL | Board approval of share transfers, right of first refusal | `TransferApprovalEscrow` (approve, reject, first-refusal match); an optional ROUTE_ONLY bit in the token. | separate + token (ROUTE_ONLY) | escrow after; ROUTE_ONLY decided before | P3; ROUTE_ONLY P2 decision |
+| [D7](#d7) COUNTERPARTY WHITELIST | Allowed payees chosen by the holder | `MandateWallet.payeeAllowed`, or the §5 fund's per-member payee list; nothing in the token. | exists | — | E |
+| [D8](#d8) TRAVEL-RULE data | FATF Recommendation 16 | Data exchanged off chain, keyed by `entryRef`; on chain at most a commitment in `PayMeta`. | node / off chain | — | P3 |
+| [D9](#d9) FORCE-MAJEURE halt | Market-wide halt, circuit breaker | `PAUSE` per token (≤ 7 d); the node halts markets on `Paused`; no cross-token switch. | exists + node | — | E |
+| [D10](#d10) Roles | Transfer agent, registrar, corporate-actions agent | Issuer bits 5–7 and bit 10, the registry admin or attester, and the offers' `admin`. | exists | — | E |
+| [D11](#d11) PARTITIONS / tranches | ERC-1410 partitions, share classes | One balance per holder per token; a class is its own token, moved by `ExchangeOffer`. | — (R in token) | — | R; P3 as a future multi-token kind |
+| [D12](#d12) DOCUMENTS | Prospectus and notices (ERC-1643) | `termsHash` and `documentHash` exist; a versioned list is a small separate `DocumentRegistry`. | separate | after | P3 |
+| [D13](#d13) TRANSFER RESTRICTION CODES | ERC-1404 `detectTransferRestriction` | A `canTransfer(from, to, value)` view on kinds 8 and 9 that returns a reason code. | token (view) | before | P1 |
+| [D14](#d14) LOYALTY EXPIRY | Expiring loyalty points | Ruled out on balances (CTR-AS-14); expiry is the end of the redemption offer. | — | — | R |
+
+**E. Funds** ([§4.5](#45-e-funds))
+
+| Id + feature | Real-world analogue | Mechanism | Where | Freeze | Priority |
+|---|---|---|---|---|---|
+| [E1](#e1) SUBSCRIPTION / REDEMPTION at NAV | Mutual-fund dealing days, forward pricing | `FundVault` with ERC-7540 requests filled at the attested NAV; the vault mints the fund units. | separate | after | P2 |
+| [E2](#e2) REDEMPTION GATES | A fund's redemption gate | Inside `FundVault`: a period's requests filled pro rata to the gate; the rest carried over. | separate | after | P2 (with E1) |
+| [E3](#e3) IN-KIND creation and redemption | ETF creation unit, authorised participant | A `CreationDesk` minter takes the basket and mints units; only AP-flagged accounts. | separate | after | P3 |
+| [E4](#e4) FEES | Management fee, performance fee, high-water mark | Inside `FundVault`: collected by minting or the share price; performance computed off chain from attested NAV. | separate | after | P3 |
+| [E5](#e5) NAV / price attestation | NAV publication, reference rate, proof of reserves | `AttestedFeed`: a signed value from an attester UA with `validUntil`, on group 3f's model. | separate | after | P2 |
+| [E6](#e6) SWING PRICING | Swing pricing, anti-dilution levy | A NAV adjustment on net flows, inside `FundVault`. | separate | after | P3 |
+
+**The owner's new item** ([§5](#5-the-owners-new-item-a-shared-fund-with-an-accruing-withdrawal-quota))
+
+| Id + feature | Real-world analogue | Mechanism | Where | Freeze | Priority |
+|---|---|---|---|---|---|
+| [§5](#5-the-owners-new-item-a-shared-fund-with-an-accruing-withdrawal-quota) `StipendFund` | Pocket money from parents, per diem, stipend | Funders deposit any time; each member's draw quota accrues daily, carries over up to a cap. | separate | after | P2 |
+
+**Asset classes** ([§6](#6-asset-classes); the class × feature matrix is in [§6.8](#68-cross-reference-matrix))
+
+| Class | What it needs beyond the generic list | Catalogue entries used | New entries |
+|---|---|---|---|
+| [Bonds and other debt](#61-bonds-and-other-debt) | Coupons, maturity, call and put, default, accrued interest, minimum denomination | B2, B8, B9, B10, D5, E5, `ExchangeOffer`, ALLOWLIST | F1 RATE_FIXING, F2 AMORTISATION, F3 ACCRUED_INTEREST, F4 TRADABILITY_GATE |
+| [Commodities](#62-commodities) | Physical backing, proof of reserves, physical delivery, carbon retirement, grades and vintages | E5, B8, A6, C5, `ExchangeOffer` | G1 SECURE_MINT, G2 PHYSICAL_REDEMPTION, G3 RETIREMENT |
+| [Funds](#63-funds) | NAV pricing, dealing windows, gates, in-kind ETF, fees, lock-in, minimums, REIT concentration | E1–E6, A1, B2, D1, D2, D3, D5, ALLOWLIST | none |
+| [Derivatives (research only)](#64-derivatives-and-structured-products-research-level-only) | Margin locks, expiry and settlement, oracle prices, covered calls | A6, E5, B11, `ExchangeOffer` | none; nothing in the token |
+| [Real estate and other RWA](#65-real-estate-and-other-real-world-assets) | Fractional ownership, rental income, squeeze-out, pre-emption, valuation | ALLOWLIST, A1, B2, D1, D3, D5, D6, E5, `FORCE` | H1 SQUEEZE_OUT |
+| [Money and payments](#66-money-and-payments) | Reserves, mint limits, court freezes, tier limits, CBDC holding limits, vouchers, payroll | `WRAPPED`, G1, C3, D1, `FREEZE` / `RECORD` / `FORCE`, `OPERATOR_TRANSFER`, §5, A2, C7, C10, D14, TAX | M1 OVERFLOW_REDIRECT (refused in the token), M2 PURPOSE_BOUND |
+| [Invoices and receivables](#67-invoices-and-receivables) | One token per invoice, assignment, debtor payment, double financing, due date | ALLOWLIST, B8, C2, `ExchangeOffer`, `Distribution` | R1 RECEIVABLE_SETTLEMENT, R2 RECEIVABLE_REGISTRY |
+
+**Recommended order** ([§8](#8-recommended-order))
+
+| Step | When | Items, in order |
+|---|---|---|
+| 1 | now | Confirm the §3.3 rulings (Q9, Q10): no snapshot, scale factor or index in the token |
+| 2 | before the freeze, kinds 8 and 9 only | D4, D5 → A1 → B8 → D1 → D3 → C3 → M2 → D2 → D13 |
+| 3 | after the freeze, separate contracts | E5 → §5 → C1 → `VestingGrant` / `Distribution` / `ExchangeOffer` → G1 → E1 / E2 → C2 → C10 → A4 → A6 |
+| 4 | later | G2 / G3, R1 / R2, H1, B6, A3, E3 / E4 / E6, D6 escrow, D12, C4 / C6 / C8 / C13, voting when asked |
 
 ## 2. Rules every suggestion obeys
 
@@ -155,7 +269,7 @@ Gas figures use the pre-EIP-8037 schedule [est.]; on Amsterdam, state creation m
 
 ### 4.1 A. Locks and vesting
 
-**A1 LOCKUP** — locked amount per account until a date.
+<a id="a1"></a>**A1 LOCKUP** — locked amount per account until a date.
 - *Analogue:* an IPO lock-up for insiders, a holding period for restricted securities, a lock-in of fund units, a
   staking-style commitment.
 - *Mechanism:* a per-account `Lock { uint128 amount; uint64 until; }`. On every send, `balance − amount ≥ value` while
@@ -171,7 +285,7 @@ Gas figures use the pre-EIP-8037 schedule [est.]; on Amsterdam, state creation m
   side [est.].
 - *Freeze / priority:* before the freeze, **P1**.
 
-**A2 VESTING** — cliff, linear or step, revocable or irrevocable.
+<a id="a2"></a>**A2 VESTING** — cliff, linear or step, revocable or irrevocable.
 - *Analogue:* employee equity grants, investor token unlocks, streaming payroll.
 - *Mechanism:* `VestingGrant`, one clone per grant, funded counterfactually, with a permissionless `release()`
   (CTR-AS-10). This matches the market designs: OpenZeppelin `VestingWallet`, Sablier Lockup (linear, dynamic, tranched;
@@ -179,7 +293,7 @@ Gas figures use the pre-EIP-8037 schedule [est.]; on Amsterdam, state creation m
 - *Bit:* none. The grantor is a party fixed at creation (CTR-GOV-14).
 - *Where:* EXISTS (SPECIFIED). *Conf.:* public units only. *Freeze / priority:* after the freeze, **E / P2** (build).
 
-**A3 CLAWBACK of vested grants** — take back vested, or even released, units for cause.
+<a id="a3"></a>**A3 CLAWBACK of vested grants** — take back vested, or even released, units for cause.
 - *Analogue:* malus and claw-back clauses ("bad leaver"), forfeiture on a breach of non-compete.
 - *Mechanism:* for units not yet released, a `VestingGrant` option `clawbackUntil` with a `clawbackAuthority` fixed at
   creation, who may reclaim vested but unreleased units before that date. For units already released, there is no
@@ -188,7 +302,7 @@ Gas figures use the pre-EIP-8037 schedule [est.]; on Amsterdam, state creation m
 - *Bit:* none (a party fixed at creation). *Where:* SEPARATE, as an extension of `VestingGrant` in a new `AssetFactory`
   version. *Conf.:* public units only. *Priority:* **P3**.
 
-**A4 TERM_DEPOSIT** — a fixed term with an early-withdrawal penalty.
+<a id="a4"></a>**A4 TERM_DEPOSIT** — a fixed term with an early-withdrawal penalty.
 - *Analogue:* a bank time deposit or certificate of deposit.
 - *Mechanism:* a vault clone per product: `deposit` → a position with `maturity`. `withdraw` before maturity pays
   `principal − penalty`, and the penalty goes to a creation-time `penaltyTo`. Interest is funded by the issuer as a top-up,
@@ -196,12 +310,12 @@ Gas figures use the pre-EIP-8037 schedule [est.]; on Amsterdam, state creation m
 - *Bit:* none, or an application bit (128–255) for the product admin. *Where:* SEPARATE. *Conf.:* public units only.
   *Priority:* **P2**.
 
-**A5 NOTICE_ACCOUNT** — a withdrawal after N days' notice.
+<a id="a5"></a>**A5 NOTICE_ACCOUNT** — a withdrawal after N days' notice.
 - *Analogue:* a bank notice account.
 - *Mechanism:* the same vault as A4, with `requestWithdraw` → claimable after `notice`. This is ERC-7540's request and
   claim pattern. *Where:* SEPARATE. *Priority:* **P3**.
 
-**A6 LIEN / PLEDGE** — encumber units for a lienholder.
+<a id="a6"></a>**A6 LIEN / PLEDGE** — encumber units for a lienholder.
 - *Analogue:* a pledge of shares as loan collateral, a bank's lien on a deposit (an "amount block" in core banking), a
   margin lock.
 - *Mechanism, two options.* (a) **Escrow:** the holder transfers the units to a `PledgeEscrow` naming the lienholder. The
@@ -212,12 +326,12 @@ Gas figures use the pre-EIP-8037 schedule [est.]; on Amsterdam, state creation m
   stay in the holder's name.
 - *Bit:* none for (a). *Where:* SEPARATE. *Conf.:* public units only. *Priority:* **P2**.
 
-**A7 FUND_LOCKIN** — a lock-in period of fund units. This is A1 LOCKUP applied at subscription (`mintLocked`). There is
+<a id="a7"></a>**A7 FUND_LOCKIN** — a lock-in period of fund units. This is A1 LOCKUP applied at subscription (`mintLocked`). There is
 no separate entry.
 
 ### 4.2 B. Corporate actions
 
-**B1 SNAPSHOT / record date**
+<a id="b1"></a>**B1 SNAPSHOT / record date**
 - *Analogue:* the record date of a dividend or a meeting.
 - *Mechanism as ruled:* the node indexes balances at the record block deterministically, and anyone can recompute it
   (CTR-AS-11). The `Distribution` root is published with at least one hour of review before claims open. On a chain with
@@ -228,23 +342,23 @@ no separate entry.
   for on-chain voting or for trustless entitlement without the review window.
 - *Where:* NODE. *Priority:* **R** (in token); the node snapshot builder is **E**.
 
-**B2 DISTRIBUTION** of dividends and coupons — `Distribution` (CTR-AS-11): a pull claim per Merkle leaf, `sweep` after
+<a id="b2"></a>**B2 DISTRIBUTION** of dividends and coupons — `Distribution` (CTR-AS-11): a pull claim per Merkle leaf, `sweep` after
 `expiry`. EXISTS (SPECIFIED). **E / P2** (build).
 
-**B3 WITHHOLDING on distributions**
+<a id="b3"></a>**B3 WITHHOLDING on distributions**
 - *Analogue:* dividend withholding tax.
 - *Mechanism:* the leaves are computed **net** off chain, plus one leaf per tax authority. That needs no contract change.
   Group 3e's `mtxPayWithTax` is a payer-signed split at payment and does not fit a pull claim. A claim that splits
   automatically would need `Distribution` to read `taxConfig()` of a regulated payout token: possible later, not needed.
 - *Where:* NODE / clients. *Priority:* **P2** (client work).
 
-**B4 BONUS issue, stock dividend, dividend reinvestment** — the minter mints into a `Distribution` clone of the same
+<a id="b4"></a>**B4 BONUS issue, stock dividend, dividend reinvestment** — the minter mints into a `Distribution` clone of the same
 token. DRIP is a claim option ("cash or units"), as two leaves per holder of which the claim takes one: a new
 `Distribution` option, **P3**.
 
-**B5 SPLIT / reverse split** — a migration through an `ExchangeOffer` (CTR-AS-12). EXISTS. A scale factor is **R**.
+<a id="b5"></a>**B5 SPLIT / reverse split** — a migration through an `ExchangeOffer` (CTR-AS-12). EXISTS. A scale factor is **R**.
 
-**B6 RIGHTS ISSUE**
+<a id="b6"></a>**B6 RIGHTS ISSUE**
 - *Analogue:* a pre-emptive subscription right, renounceable (tradable) or not, with a subscription price and window, and
   optional excess (over-)subscription.
 - *Mechanism:* (1) a `Distribution` of a rights token to the holders at the record date. A plain kind makes the rights
@@ -254,14 +368,14 @@ token. DRIP is a claim option ("cash or units"), as two leaves per holder of whi
   new contract.
 - *Where:* SEPARATE. *Conf.:* public units only. *Priority:* **P3**.
 
-**B7 BUYBACK / TENDER**
+<a id="b7"></a>**B7 BUYBACK / TENDER**
 - *Analogue:* a fixed-price tender offer, a Dutch-auction tender, open-market repurchase.
 - *Mechanism:* fixed price is an `ExchangeOffer` with `capIn`; open market is a DEX bid (CTR-AS-12). A Dutch-auction
   tender (holders bid prices; the clearing price is the lowest price that fills the target) is a new clone, close to the
   sealed-bid tender in [tender.md](../contracts/tender.md) but with holders as bidders.
 - *Where:* EXISTS (fixed price), SEPARATE (Dutch). *Priority:* **E / P3**.
 
-**B8 MATURITY** — a transfer stop at maturity.
+<a id="b8"></a>**B8 MATURITY** — a transfer stop at maturity.
 - *Analogue:* a bond stops trading at maturity or after the last record date. A commercial paper note's life ends at its
   due date.
 - *Mechanism:* a creation-time `maturityAt`. After it, every send is refused except a burn and a transfer to the token's
@@ -274,7 +388,7 @@ token. DRIP is a claim option ("cash or units"), as two leaves per holder of whi
 - *Where:* TOKEN (test 1: after maturity nothing may trade anywhere). *Conf.:* refused on 10–13. *Size / gas:* the date
   sits in the config slot +1 (8 bytes free there); no per-account read [est. +150–250 B]. *Priority:* **P1**.
 
-**B9 CALL and PUT** of bonds
+<a id="b9"></a>**B9 CALL and PUT** of bonds
 - *Analogue:* an issuer call (full or partial), a holder put.
 - *Mechanism:* a full call is B8 `accelerate` plus an `ExchangeOffer` at the call price (par plus premium). A put is an
   `ExchangeOffer` the issuer opens at the put date: holders choose to use it. A **partial call by lot** needs randomness,
@@ -283,23 +397,23 @@ token. DRIP is a claim option ("cash or units"), as two leaves per holder of whi
   no lottery.
 - *Where:* EXISTS (offers) + B8. *Priority:* **P1** (B8), **E**.
 
-**B10 SINKING FUND** — the issuer retires part of an issue each year, by purchase or by drawing.
+<a id="b10"></a>**B10 SINKING FUND** — the issuer retires part of an issue each year, by purchase or by drawing.
 - *Mechanism:* purchase is a DEX bid or a fixed-price `ExchangeOffer` funded on schedule. Drawing, see B9. A funded
   schedule is a `VestingGrant` whose beneficiary is the offer (a stream into the offer). *Where:* EXISTS composition.
   *Priority:* **E** (template only, **P3**).
 
-**B11 CONVERSION** — convertible notes into shares, preferred into common, warrants.
+<a id="b11"></a>**B11 CONVERSION** — convertible notes into shares, preferred into common, warrants.
 - *Mechanism:* a voluntary conversion is an `ExchangeOffer` (`tokenIn` burned, `tokenOut` delivered or minted), within a
   window and at a ratio. A **mandatory** conversion has the same limit as a mandatory call: the token stops trading
   (B8) and holders are converted by claim, never by moving their balances. Warrants with a strike price are an
   `ExchangeOffer` that takes the warrant plus cash, as B6's two-input contract.
 - *Where:* EXISTS / B6's contract. *Priority:* **E / P3**.
 
-**B12 MERGER, exchange offer, spin-off, name change** — a merger or exchange is an `ExchangeOffer` (old → new). A
+<a id="b12"></a>**B12 MERGER, exchange offer, spin-off, name change** — a merger or exchange is an `ExchangeOffer` (old → new). A
 spin-off is a `Distribution` of the new token. A name change cannot happen: name and symbol are immutable, so it is a
 migration or a disclosure. **E**.
 
-**B13 VOTING / proxy** — the owner said "not now" (regulated-kinds spec §1, non-goals). If it comes, it needs in-token
+<a id="b13"></a>**B13 VOTING / proxy** — the owner said "not now" (regulated-kinds spec §1, non-goals). If it comes, it needs in-token
 checkpoints, which would reopen CTR-AS-11. **P3 / R today**.
 
 **ISO 15022 event types against the catalogue.** ISO 15022 lists corporate actions by event indicator (`:22F::CAEV`).
@@ -332,7 +446,7 @@ action event types, which this note did not reproduce in full.
 
 ### 4.3 C. Banking and payments
 
-**C1 HOLD / CAPTURE** — a pre-authorisation.
+<a id="c1"></a>**C1 HOLD / CAPTURE** — a pre-authorisation.
 - *Analogue:* a card authorisation hold: the amount is reserved, then captured in full, partly, or incrementally, and
   released at expiry (scheme windows of about 5–31 days, depending on the scheme and merchant type). Also a hotel or
   car-rental deposit, or a fuel pump pre-auth.
@@ -344,7 +458,7 @@ action event types, which this note did not reproduce in full.
 - *Bit:* none (parties fixed per hold). *Where:* SEPARATE (test 2). *Conf.:* public units; a confidential payer unshields
   first. *Priority:* **P2**.
 
-**C2 ESCROW with an arbiter; letter of credit; demand guarantee**
+<a id="c2"></a>**C2 ESCROW with an arbiter; letter of credit; demand guarantee**
 - *Analogue:* an escrow agent; a documentary credit (UCP 600): payment against conforming documents examined by a bank;
   a demand guarantee (URDG 758): payment on a complying demand before expiry.
 - *Mechanism:* an `ArbiterEscrow` clone with `buyer`, `seller`, `arbiter`, `expiry`, `documentsRequired` (hashes of
@@ -354,7 +468,7 @@ action event types, which this note did not reproduce in full.
   reject). Documents stay off chain; only hashes go on chain (architecture §10).
 - *Bit:* none. *Where:* SEPARATE. *Priority:* **P2**.
 
-**C3 TRANSFER_LIMIT** — velocity per account per window.
+<a id="c3"></a>**C3 TRANSFER_LIMIT** — velocity per account per window.
 - *Analogue:* an AML velocity rule, daily transfer limits of bank accounts, e-money wallet tiers.
 - *Mechanism:* a per-account window counter on sends, `spent ≤ limit(tier)` within `window`. The **tier comes from
   `ComplianceRegistry` flags** (issuer bits 16–63), mapped through a token-wide table `uint128[4] tierLimit` fixed at
@@ -368,31 +482,31 @@ action event types, which this note did not reproduce in full.
   +5–25 k gas per send [est.]. +300–500 B token side [est.].
 - *Priority:* **P1**.
 
-**C4 CHARGEBACK window** — a reversible period after a payment.
+<a id="c4"></a>**C4 CHARGEBACK window** — a reversible period after a payment.
 - *Analogue:* card chargebacks, a consumer's right of withdrawal.
 - *Mechanism:* there is no reversal in place (architecture §2). A `SettlementEscrow` holds a payment for `window`. The
   payer may `dispute(reasonRef)` within it; an arbiter decides refund or release; without a dispute anyone may release it
   after the window. That is C2 with a time default, offered as a mode of the same contract.
 - *Where:* SEPARATE. *Priority:* **P3**.
 
-**C5 INTEREST / DEMURRAGE**
+<a id="c5"></a>**C5 INTEREST / DEMURRAGE**
 - *Analogue:* a savings rate; a negative rate or a holding fee (demurrage).
 - *Mechanism:* an index in the token is **R** (§3.3). Instead, a vault holds the token and its share price rises with
   funded interest (ERC-4626; Aave's and Compound's index mechanisms are the model, but kept inside the vault, never in
   the token). Demurrage is a falling price of vault shares.
 - *Where:* SEPARATE. *Priority:* **P3**.
 
-**C6 INHERITANCE / dead-man recovery**
+<a id="c6"></a>**C6 INHERITANCE / dead-man recovery**
 - *Analogue:* a payable-on-death beneficiary, a dormant-account procedure, a will executed by an executor.
 - *Mechanism:* an account matter, not a token one: UA guardian recovery and `SmartKeyAccount` ([accounts.md](../contracts/accounts.md)).
   A separate `HeirSwitch` that holds funds and releases them to a beneficiary after `inactivity` without a heartbeat can
   be built on the §5 pattern. A court-ordered transfer of a deceased holder's units uses `FORCE` with a record.
 - *Where:* SEPARATE / accounts. *Priority:* **P3**.
 
-**C7 STANDING ORDERS** — `MandateWallet` (BUILT, CTR-ACC-06): a delegate pays within per-payment and per-period caps to
+<a id="c7"></a>**C7 STANDING ORDERS** — `MandateWallet` (BUILT, CTR-ACC-06): a delegate pays within per-payment and per-period caps to
 approved payees, and the node runs the schedule. **E**.
 
-**C8 SWEEP / cash pooling**
+<a id="c8"></a>**C8 SWEEP / cash pooling**
 - *Analogue:* zero-balancing or target-balancing sweeps into a master account; notional pooling.
 - *Mechanism:* physical sweeping is a `MandateWallet` per subsidiary account whose delegate is the treasury, whose payee
   is the master, with a per-period cap. The node computes "balance above target" and sends the sweep. A target rule
@@ -400,29 +514,29 @@ approved payees, and the node runs the schedule. **E**.
   accounting, off chain.
 - *Where:* EXISTS + NODE; option SEPARATE. *Priority:* **P3**.
 
-**C9 SUB-ACCOUNTS / virtual accounts** — several UA ids per subject, or one `MandateWallet` per purpose, plus `entryRef`
+<a id="c9"></a>**C9 SUB-ACCOUNTS / virtual accounts** — several UA ids per subject, or one `MandateWallet` per purpose, plus `entryRef`
 / `PayMeta` for virtual accounts in the ERP. **E** (no token feature).
 
-**C10 PAYMENT SPLIT** — fees and commissions.
+<a id="c10"></a>**C10 PAYMENT SPLIT** — fees and commissions.
 - *Analogue:* a marketplace commission, an agent's fee, revenue sharing.
 - *Mechanism:* a `PaymentSplitter` clone with creation-time recipients and ppm shares. A payer pays the splitter with one
   `mtxPay` and `PayMeta`; anyone calls `distribute(token)`; each recipient's share is paid out, or claimed (pull, so that
   one frozen recipient cannot block the rest). Group 3e's tax split is the token-level special case for tax only.
 - *Where:* SEPARATE. *Priority:* **P2**.
 
-**C11 MULTI-CURRENCY BASKET** — `WRAPPED` with 1–8 legs at fixed or adjustable rates (BUILT). **E**.
+<a id="c11"></a>**C11 MULTI-CURRENCY BASKET** — `WRAPPED` with 1–8 legs at fixed or adjustable rates (BUILT). **E**.
 
-**C12 SHARED FUND with an accruing withdrawal quota** — the owner's item, §5. SEPARATE, **P2**.
+<a id="c12"></a>**C12 SHARED FUND with an accruing withdrawal quota** — the owner's item, §5. SEPARATE, **P2**.
 
-**C13 OVERDRAFT / credit line** — lending is out of scope; at most a credit line is an escrow funded by the lender with
+<a id="c13"></a>**C13 OVERDRAFT / credit line** — lending is out of scope; at most a credit line is an escrow funded by the lender with
 the §5 quota as the drawdown limit. **P3**.
 
-**C14 DORMANT / unclaimed property** — no role moves balances except `FORCE` against a record (CTR-TOK-10), so an
+<a id="c14"></a>**C14 DORMANT / unclaimed property** — no role moves balances except `FORCE` against a record (CTR-TOK-10), so an
 escheat is a recorded order. **E** (no new feature).
 
 ### 4.4 D. Compliance
 
-**D1 OWNERSHIP_CAP** — a per-holder cap.
+<a id="d1"></a>**D1 OWNERSHIP_CAP** — a per-holder cap.
 - *Analogue:* a maximum shareholding without a takeover bid or approval, a single-investor limit, a CBDC holding limit
   (§6.6).
 - *Mechanism:* on every credit, `balanceAfter(to) ≤ cap`, where cap is either an absolute amount or ppm of
@@ -433,7 +547,7 @@ escheat is a recorded order. **E** (no new feature).
 - *Size / gas:* the receiver's balance is already in the write path of `_update`, so there is no new read. ppm needs
   `totalSupply`, one warm read. +150–250 B [est.]. *Priority:* **P1**.
 
-**D2 CLASS_CAP** — an aggregate cap for a holder class.
+<a id="d2"></a>**D2 CLASS_CAP** — an aggregate cap for a holder class.
 - *Analogue:* a foreign-ownership limit. **Example only:** Vietnam's listed companies have a foreign-ownership room
   ("room ngoại", Decree 155/2020/ND-CP under the Securities Law 54/2019/QH14, often 49% or a sector limit), tracked across
   all foreign holders on HOSE / HNX. Other examples: a REIT's concentration rule, a limit on non-accredited holders.
@@ -448,7 +562,7 @@ escheat is a recorded order. **E** (no new feature).
   counter `SSTORE` and the per-account bit: +10–30 k gas [est.]; +400–700 B [est.]. *Priority:* **P1** if the owner wants
   regulated securities for markets with such limits, otherwise **P2** as a second release.
 
-**D3 HOLDER_CAP** — a maximum number of holders, optionally per class.
+<a id="d3"></a>**D3 HOLDER_CAP** — a maximum number of holders, optionally per class.
 - *Analogue:* a private company's shareholder limit, thresholds that trigger public-company status, a cap on investors who
   are not accredited.
 - *Mechanism:* a counter of non-zero balances, adjusted when a balance goes 0 → non-zero or back, and refused when a new
@@ -457,7 +571,7 @@ escheat is a recorded order. **E** (no new feature).
 - *Bit:* a parameter bit HOLDER_CAP, TBD. *Where:* TOKEN. *Conf.:* refused on 10–13.
 - *Size / gas:* the counter `SSTORE` only on a 0 ↔ non-zero transition (+2.9–5 k gas) [est.]; +150–250 B. *Priority:* **P1**.
 
-**D4 SENDER_DENYLIST** — blackout windows and sender-side classes.
+<a id="d4"></a>**D4 SENDER_DENYLIST** — blackout windows and sender-side classes.
 - *Analogue:* insider-trading blackout windows before results; a class lock-in; "this investor may not sell".
 - *Mechanism:* the registry check is receiver-only today (CTR-GOV-18: "a denied account can still send"). The new rule is
   that a **sender** must hold none of `senderDeniedFlags`. A blackout is an attestation of flag `BLACKOUT` with
@@ -467,14 +581,14 @@ escheat is a recorded order. **E** (no new feature).
 - *Size / gas:* one bounded registry call per send (≤ `REGISTRY_GAS`); +150 B [est.]. *Priority:* **P1** (cheap, and
   general).
 
-**D5 MIN_HOLDING** — a minimum holding and lot size.
+<a id="d5"></a>**D5 MIN_HOLDING** — a minimum holding and lot size.
 - *Analogue:* a fund's minimum investment, a bond's minimum denomination (often large for wholesale issues), board lots.
 - *Mechanism:* after a move, each side's balance is 0 or ≥ `minHolding`, and `value % lot == 0`. Both are creation-time
   numbers.
 - *Bit:* a parameter bit MIN_HOLDING, TBD. *Where:* TOKEN. *Conf.:* refused on 10–13.
 - *Size / gas:* no new read (balances are in the path); +100–200 B [est.]. *Priority:* **P1** (low cost), or P2.
 
-**D6 TRANSFER_APPROVAL** — a two-step transfer with issuer approval, and pre-emption (right of first refusal).
+<a id="d6"></a>**D6 TRANSFER_APPROVAL** — a two-step transfer with issuer approval, and pre-emption (right of first refusal).
 - *Analogue:* ERC-1404 / ERC-3643 style pre-transfer checks; ERC-1400's controller; registered shares that need board
   approval; a right of first refusal in a shareholders' agreement.
 - *Mechanism:* (a) a `TransferApprovalEscrow`: the seller sends the units with the intended buyer; the approver
@@ -484,10 +598,10 @@ escheat is a recorded order. **E** (no new feature).
 - *Bit:* ROUTE_ONLY parameter bit, TBD (if wanted). *Where:* SEPARATE (escrow) + TOKEN (route-only). *Conf.:* refused
   on 10–13. *Priority:* **P3**; ROUTE_ONLY **P2** decision before the freeze (§9 Q15).
 
-**D7 COUNTERPARTY WHITELIST** chosen by the holder (allowed payees) — `MandateWallet.payeeAllowed` (BUILT), or the §5
+<a id="d7"></a>**D7 COUNTERPARTY WHITELIST** chosen by the holder (allowed payees) — `MandateWallet.payeeAllowed` (BUILT), or the §5
 fund's per-member payee list. In the token: no. **E**.
 
-**D8 TRAVEL-RULE data**
+<a id="d8"></a>**D8 TRAVEL-RULE data**
 - *Analogue:* FATF Recommendation 16: originator and beneficiary data travel with a transfer between service providers.
   Thresholds vary (USD/EUR 1,000 in the FATF text; zero in the EU's Regulation 2023/1113).
 - *Mechanism:* never on chain (architecture §10). Service providers exchange the data off chain, keyed by the
@@ -495,37 +609,37 @@ fund's per-member payee list. In the token: no. **E**.
   (encrypted to the payee) carrying a reference, never the data.
 - *Where:* NODE / off chain. *Priority:* **P3** (the integration doc).
 
-**D9 FORCE-MAJEURE freeze per asset class**
+<a id="d9"></a>**D9 FORCE-MAJEURE freeze per asset class**
 - *Analogue:* a market-wide halt, a circuit breaker.
 - *Mechanism:* per token, `PAUSE` (≤ 7 d, cooldown, CTR-AS-06). A cross-token switch read by many tokens would add a call
   per transfer and create one key that halts every asset: rejected. A class-wide halt is venue policy: the node halts
   markets on `Paused` (NODE-DEX-11) and an operator pauses each token.
 - *Where:* EXISTS + NODE. *Priority:* **E**.
 
-**D10 Roles: transfer agent, registrar, corporate-actions agent**
+<a id="d10"></a>**D10 Roles: transfer agent, registrar, corporate-actions agent**
 - *Analogue:* a registered transfer agent keeps the cap table and runs corporate actions (Securitize is an SEC-registered
   transfer agent; Polymesh names a corporate-actions agent per asset).
 - *Mapping:* the transfer agent holds the issuer bits 5–7 and the compliance bit 10 as contracts or `msig` (CTR-AS-03);
   the registrar is the `ComplianceRegistry` admin or attester; the corporate-actions agent is the `admin` of
   `Distribution` / `ExchangeOffer` clones. The cap table is node-indexed (asset-suite §9). **E**.
 
-**D11 PARTITIONS / tranches** (ERC-1410, ERC-7518 on ERC-1155) — one balance per holder per token (CTR-AS-12's "raw
+<a id="d11"></a>**D11 PARTITIONS / tranches** (ERC-1410, ERC-7518 on ERC-1155) — one balance per holder per token (CTR-AS-12's "raw
 amounts" reasoning). A class or tranche is its own token, and moving between classes is an `ExchangeOffer`. A
 partition-style lockup is A1. In the token: **R** (by design, not by a ruling): **P3** only as a future multi-token kind.
 
-**D12 DOCUMENTS** (ERC-1643) — `termsHash` at creation and `documentHash` per record exist. A versioned document list per
+<a id="d12"></a>**D12 DOCUMENTS** (ERC-1643) — `termsHash` at creation and `documentHash` per record exist. A versioned document list per
 token (prospectus, notices) is a small separate `DocumentRegistry` keyed by token, with history kept as events. **P3**.
 
-**D13 TRANSFER RESTRICTION CODES** (ERC-1404's `detectTransferRestriction`) — a view that runs every check without
+<a id="d13"></a>**D13 TRANSFER RESTRICTION CODES** (ERC-1404's `detectTransferRestriction`) — a view that runs every check without
 moving units, returning a reason code. `canReceive` exists; a combined `canTransfer(from, to, value) returns (bool,
 uint8)` on kinds 8 and 9 serves wallets and the DEX venue pre-check. **P1** (a view only; +200 B [est.]).
 
-**D14 LOYALTY EXPIRY** — per-lot expiry (FIFO lots per holder) costs a list per account. Inactivity expiry needs a burn by
+<a id="d14"></a>**D14 LOYALTY EXPIRY** — per-lot expiry (FIFO lots per holder) costs a list per account. Inactivity expiry needs a burn by
 a role, which CTR-TOK-10 forbids. Both are **R** (asset-suite §7): expiry is the end of the redemption offer.
 
 ### 4.5 E. Funds
 
-**E1 SUBSCRIPTION / REDEMPTION windows at NAV**
+<a id="e1"></a>**E1 SUBSCRIPTION / REDEMPTION windows at NAV**
 - *Analogue:* mutual-fund dealing days, forward pricing at the next NAV.
 - *Mechanism:* a `FundVault` with ERC-7540 asynchronous requests: `requestDeposit` / `requestRedeem` → pending →
   claimable at the NAV the fund attests at the dealing point. The price is set at fulfilment, not at request. The fund
@@ -533,31 +647,31 @@ a role, which CTR-TOK-10 forbids. Both are **R** (asset-suite §7): expiry is th
   §7 already foresees for rate limits.
 - *Where:* SEPARATE. *Priority:* **P2**.
 
-**E2 REDEMPTION GATES** — at most X% of NAV redeemed per dealing period, pro rata, with the rest carried over.
+<a id="e2"></a>**E2 REDEMPTION GATES** — at most X% of NAV redeemed per dealing period, pro rata, with the rest carried over.
 - *Mechanism:* inside `FundVault`: the requests of a period are filled pro rata to the gate. A rolling gate is a token
   bucket on redemptions: the §5 mechanism at fund level, with the quota in fund currency.
 - *Where:* SEPARATE. *Priority:* **P2** (with E1).
 
-**E3 IN-KIND creation and redemption** — ETF style: an authorised participant delivers the basket and receives a creation
+<a id="e3"></a>**E3 IN-KIND creation and redemption** — ETF style: an authorised participant delivers the basket and receives a creation
 unit, or the reverse. A `CreationDesk` contract (minter) takes the basket legs by `transferFrom` and mints N units;
 redemption burns them and delivers the basket. Only accounts with an AP flag in the registry may use it. Close to
 `WRAPPED` with legs, but with a basket that changes daily (attested), so it is a separate contract. **P3**.
 
-**E4 FEES: management, performance, high-water mark**
+<a id="e4"></a>**E4 FEES: management, performance, high-water mark**
 - *Mechanism:* a management fee accrues in time and is collected by minting new units to the manager (dilution) or by
   the vault's share price. A performance fee above a high-water mark needs NAV per unit history; it is computed off chain
   from attested NAV and collected by minting, capped by the fund rules. Everything lives in the `FundVault` (minter);
   the token knows nothing.
 - *Where:* SEPARATE. *Priority:* **P3**.
 
-**E5 NAV / price attestation**
+<a id="e5"></a>**E5 NAV / price attestation**
 - *Mechanism:* a signed value from an attester UA (NAV, a reference rate, a reserve figure, a grade certificate) with
   `validUntil`. The model is group 3f's attested verifier: one attester per consumer contract, fixed or transferable with
   notice, revocable at once (owner rulings O2 and R4 of the attested-verify spec). A generic `AttestedFeed` contract
   serves E1, §6.1 (floating-rate notes), §6.2 (proof of reserves) and §6.4.
 - *Where:* SEPARATE. *Priority:* **P2** (it unlocks several classes).
 
-**E6 SWING PRICING / anti-dilution levy** — a NAV adjustment on net flows, inside `FundVault`. **P3**.
+<a id="e6"></a>**E6 SWING PRICING / anti-dilution levy** — a NAV adjustment on net flows, inside `FundVault`. **P3**.
 
 ## 5. The owner's new item: a shared fund with an accruing withdrawal quota
 
