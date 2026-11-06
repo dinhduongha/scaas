@@ -273,3 +273,8 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   and its vector `test/vectors/mandate_kat.json`; the shared vector `smartcontracts/vectors/metatx/paymeta.json` (the old
   formula, which the non-EVM families keep until their rounds) is at `smartcontracts/vectors/metatx/legacy/ua-mtx-merge/`.
   Not built.
+  T38 (the relay fee on free lanes), as they stood at 2ced92b5 (the T37 tip): `src/metatx/{MtxRelayFee,IERC20MetaTx}.sol` and
+  `MetaTokenBase.sol` (copied at T37) with `UARelayFee(bytes32 from,address target,bytes32 callDataHash,bytes32 payee,
+  uint256 value,uint256 validUntil,address relayer)`, the token's seven-argument `mtxRelayFee` on lane `payLane(ref)` at
+  nonce 0, `_relayHash` and the router's eight-argument `relay`; `test/metatx/{MtxRelayFee,TradeTyped}.t.sol` as they stood before their
+  meaning changed. Not built.
