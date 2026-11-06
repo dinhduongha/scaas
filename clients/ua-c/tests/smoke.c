@@ -151,6 +151,12 @@ int main(void) {
     CHECK(scaas_ua_export_pqz_leaf_raw(w, 0, 0, leaf) == SCAAS_UA_OK);
     memset(leaf, 0, sizeof leaf); // the caller zeroizes the exported leaf
 
+    // external keys (T16, MD-13): none in a release build; the callback is neither kept nor called, *out untouched
+    CHECK(!(scaas_ua_features() & SCAAS_UA_FEATURE_EXTERNAL));
+    ScaasUaExternalSigner ext = {NULL, NULL, NULL};
+    ScaasUaKey *ek = p256;
+    CHECK(scaas_ua_external_key_new("{\"kind\":257,\"keyData\":\"0x\"}", &ext, &ek) == SCAAS_UA_ERR_KIND_UNAVAILABLE && ek == p256);
+
     // the wallet freed before its children: each child stays valid memory and answers KEY_REVOKED (ASan: no use after free)
     scaas_ua_wallet_free(w);
     len = sizeof qout;

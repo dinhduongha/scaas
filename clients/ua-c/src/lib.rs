@@ -190,6 +190,7 @@ impl From<uw::Error> for Fail {
             E::BackupRollback => SCAAS_UA_ERR_BACKUP_ROLLBACK,
             E::WalletMismatch => SCAAS_UA_ERR_WALLET_MISMATCH,
             E::PqzSetMismatch => SCAAS_UA_ERR_PQZ_SET_MISMATCH,
+            E::ExternalSignature => SCAAS_UA_ERR_EXTERNAL_SIGNATURE,
             _ => SCAAS_UA_ERR_INTERNAL, // `#[non_exhaustive]`: a variant added later maps here until it has its status
         };
         fail(status)

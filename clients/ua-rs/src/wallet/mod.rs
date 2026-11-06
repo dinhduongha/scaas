@@ -65,13 +65,16 @@ pub use kem::{is_kem_holder, kem_encaps, KemKeyPair};
 pub use manifest::vectors_backup_payload;
 pub use manifest::{AllowRollback, ImportEntry, KemEntry, Manifest, ManifestEntry, NativeEntry};
 pub use pairing::{FrostSession, Musig2Session};
-pub use policy::{AllowAnyTypedData, AllowRow, Expect, Invalidate, SubjectKey};
+pub use policy::{sign_typed_by, AllowAnyTypedData, AllowRow, Expect, Invalidate, SubjectKey};
 pub use seal::{
     seal, seal_container, AcceptedJson, ContainerExpect, ContainerExpectJson, ContainerSigner, ExpectedSender, LinkSession,
     MembersJson, Recipient, RecipientId, Sealed, SealedContainer, LINK_WINDOW, MAX_PT, PURPOSE_BACKUP, PURPOSE_LINK,
 };
+pub use sign::{sign_digest_by, sign_key_proof_by};
+#[cfg(feature = "vectors")]
+pub use signer::TestExternalKey;
 pub use signer::{AllowRawDigest, KeyRef, SigRole, SignRequest, Signer};
-pub use tx::{AccessListItem, EvmTx, SignedTx};
+pub use tx::{sign_transaction_by, AccessListItem, EvmTx, SignedTx};
 pub use uasig::{membership_sig, msig_sig, ua_sig, Slot, UaSigRequest};
 pub use vault::{check_passphrase, PrfEnvelope, Unlock, Vault};
 pub use webauthn::{webauthn_assertion, webauthn_challenge};
@@ -138,6 +141,9 @@ pub enum Error {
     WalletMismatch,
     /// A PQZ call whose `proofSystemId` or deployed parameter set is not this build's (spec §10.2: one set per build).
     PqzSetMismatch,
+    /// An external key's answer that, once normalised (low-s, `v`), does not verify against its [`KeyRef`] under the request's
+    /// role (spec §9.4, MD-13): nothing is returned.
+    ExternalSignature,
     Ua(UAError),
 }
 
@@ -164,6 +170,7 @@ impl Error {
             Error::BackupRollback => "BackupRollback",
             Error::WalletMismatch => "WalletMismatch",
             Error::PqzSetMismatch => "PqzSetMismatch",
+            Error::ExternalSignature => "ExternalSignature",
             Error::Ua(e) => e.code(),
         }
     }

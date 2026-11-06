@@ -184,13 +184,35 @@ impl NativeKey {
 
     /// The key proof: the signature of `keccak256("scaas-subject-key-proof-v1" ‖ challenge)`.
     pub fn sign_key_proof(&self, challenge: &[u8]) -> Result<Vec<u8>> {
-        let digest = keccak256(&[KEY_PROOF_PREFIX, challenge].concat());
-        self.sign_request(&SignRequest::KeyProof { digest })
+        sign_key_proof_by(self, challenge)
     }
 
     /// A raw 32-byte digest, only with the marker value (CLI-SGN-40).
-    pub fn sign_digest(&self, digest: &[u8; 32], _: AllowRawDigest) -> Result<Vec<u8>> {
-        self.sign_request(&SignRequest::RawDigest { digest: *digest })
+    pub fn sign_digest(&self, digest: &[u8; 32], allow: AllowRawDigest) -> Result<Vec<u8>> {
+        sign_digest_by(self, digest, allow)
+    }
+}
+
+/// [`NativeKey::sign_key_proof`] by any [`Signer`] (spec §9.4).
+pub fn sign_key_proof_by(key: &dyn Signer, challenge: &[u8]) -> Result<Vec<u8>> {
+    key.sign_request(&SignRequest::KeyProof { digest: keccak256(&[KEY_PROOF_PREFIX, challenge].concat()) })
+}
+
+/// [`NativeKey::sign_digest`] by any [`Signer`] (spec §9.4), only with the marker value (CLI-SGN-40).
+pub fn sign_digest_by(key: &dyn Signer, digest: &[u8; 32], _: AllowRawDigest) -> Result<Vec<u8>> {
+    key.sign_request(&SignRequest::RawDigest { digest: *digest })
+}
+
+/// The 32 bytes a native key signs for `req`: a key proof's or raw digest; on a secp256k1 key also an EIP-712 digest or a
+/// transaction's sighash. `Argument` for any other request.
+pub(super) fn native_digest(req: &SignRequest, secp256k1: bool) -> Result<[u8; 32]> {
+    match req {
+        SignRequest::KeyProof { digest } | SignRequest::RawDigest { digest } => Ok(*digest),
+        SignRequest::Eip712 { domain_separator, struct_hash, .. } if secp256k1 => {
+            Ok(super::eip712::eip712_digest(domain_separator, struct_hash))
+        }
+        SignRequest::Transaction { sighash, .. } if secp256k1 => Ok(*sighash),
+        _ => Err(Error::Argument),
     }
 }
 
@@ -206,14 +228,7 @@ impl Signer for NativeKey {
     /// A key proof, a raw digest, or (secp256k1 networks only) an EIP-712 digest or a transaction's sighash, `r ‖ s ‖ v`.
     fn sign_request(&self, req: &SignRequest) -> Result<Vec<u8>> {
         let scheme = if self.network.ed25519() { Scheme::Ed25519 } else { Scheme::Secp256k1 };
-        let digest = match req {
-            SignRequest::KeyProof { digest } | SignRequest::RawDigest { digest } => *digest,
-            SignRequest::Eip712 { domain_separator, struct_hash, .. } if scheme == Scheme::Secp256k1 => {
-                super::eip712::eip712_digest(domain_separator, struct_hash)
-            }
-            SignRequest::Transaction { sighash, .. } if scheme == Scheme::Secp256k1 => *sighash,
-            _ => return Err(Error::Argument),
-        };
+        let digest = native_digest(req, scheme == Scheme::Secp256k1)?;
         self.secret.with(|s| sign_scheme(scheme, s, &digest, None))?
     }
 }

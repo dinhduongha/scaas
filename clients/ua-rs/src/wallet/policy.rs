@@ -443,14 +443,19 @@ impl NativeKey {
     /// the user confirmed (`PolicyRefused`, nothing signed; a non-zero unbound `relayer` / `feeRecipient` included); `Any` signs the
     /// value as supplied. The digest signed is always the faithful one of `td`. `Argument`: malformed typed data, an ed25519 key.
     pub fn sign_typed(&self, td: &TypedData, expect: Expect) -> Result<Vec<u8>> {
-        let req = eip712::request(td)?;
-        let SignRequest::Eip712 { domain_separator, struct_hash, .. } = &req else { return Err(Error::Argument) };
-        let digest = eip712_digest(domain_separator, struct_hash);
-        if !matches!(expect, Expect::Any(AllowAnyTypedData)) && check(td, &expect)? != digest {
-            return Err(Error::PolicyRefused);
-        }
-        self.sign_request(&req)
+        sign_typed_by(self, td, expect)
     }
+}
+
+/// [`NativeKey::sign_typed`] by any [`Signer`] (spec §9.4: an external key's typed data passes the same policy).
+pub fn sign_typed_by(key: &dyn Signer, td: &TypedData, expect: Expect) -> Result<Vec<u8>> {
+    let req = eip712::request(td)?;
+    let SignRequest::Eip712 { domain_separator, struct_hash, .. } = &req else { return Err(Error::Argument) };
+    let digest = eip712_digest(domain_separator, struct_hash);
+    if !matches!(expect, Expect::Any(AllowAnyTypedData)) && check(td, &expect)? != digest {
+        return Err(Error::PolicyRefused);
+    }
+    key.sign_request(&req)
 }
 
 // --- the ports of clientkeys `evm.js` (same order of checks; every refusal is `PolicyRefused`) ---

@@ -400,10 +400,15 @@ impl NativeKey {
     /// The transaction signed by this key (a secp256k1 native key; the ed25519 networks are `Argument`): RFC 6979, low-s,
     /// the envelope and `(r, s, yParity)`.
     pub fn sign_transaction(&self, tx: &EvmTx) -> Result<SignedTx> {
-        let req = request(tx)?;
-        let SignRequest::Transaction { sighash, .. } = req else { return Err(Error::Argument) };
-        tx.signed(sighash, &self.sign_request(&req)?)
+        sign_transaction_by(self, tx)
     }
+}
+
+/// [`NativeKey::sign_transaction`] by any [`Signer`] (spec §9.4).
+pub fn sign_transaction_by(key: &dyn Signer, tx: &EvmTx) -> Result<SignedTx> {
+    let req = request(tx)?;
+    let SignRequest::Transaction { sighash, .. } = req else { return Err(Error::Argument) };
+    tx.signed(sighash, &key.sign_request(&req)?)
 }
 
 #[cfg(feature = "vectors")]
