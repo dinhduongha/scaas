@@ -219,7 +219,8 @@ and it stays blocked on the same open question as the PQZ quorum (research §12.
 
 `PqzCore` on `ua-mtx-merge`: `memo = mode == HASH ? 2 + 40·m : 0` (~408) and `if (memo != 0) o.memoHash =
 keccak256(abi.encodePacked(t.salt, t.sealedMemo))` (~430); op 1 the same at ~286 / ~304 with `SEALED = 41`. The facade's
-memo is `salt(16) ‖ sealed` (`pqz_ffi::memo::seal`), so `keccak(memo)` equals the HASH formula, but BUNDLE needs 0. Fix:
+memo is `salt(16) ‖ sealed` (`pqz_ffi::memo::seal`), so `keccak(memo)` equals the HASH formula, but BUNDLE needs 0. Fix
+(**owner decision 2026-11-06**, decided, not an option):
 `proveTransferMulti` takes an explicit `mode` field (`"BUNDLE"` or `"HASH"`, no default); HASH → `memoHash =
 keccak256(salt ‖ sealedMemo)` and the memo returned; BUNDLE → `memoHash = 0` and no memo returned. The token's
 `disclosureMode` decides which a caller may use (COMPACT refuses BUNDLE on chain, ~399); the facade does not guess it. A
