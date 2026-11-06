@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 """The C ABI (include/scaas_ua.h) through ctypes against smartcontracts/vectors/ua/: mirrors
 clients/ua-cxx/tests/vectors_test.cpp row for row, plus the ABI edges (buffers, NULL, non-UTF-8, per-thread last error).
-ABI v6 (ua-rs-sign T12): the wallet surface over keys.json, sign.json, kem.json, seal.json and vault.json (classes Wallet*).
+ABI v6 (ua-rs-sign T12): the wallet surface over keys.json, sign.json, kem.json, seal.json and vault.json (classes Wallet*);
+T14: the Zether facade over zether.json and clients/zether-prover/vectors/ (class WalletZether).
 From clients/ua-c after `cargo build --locked`: python3 -m unittest -v tests.test_vectors
 (overrides: SCAAS_UA_C_LIB = the shared library, SCAAS_UA_VECTORS = the vectors directory)."""
 import ctypes as C
@@ -929,6 +930,9 @@ for name, res, args in [
     ('aead_seal', st, [u32, u8, u8, u8, sz, u8, sz, P, P]), ('aead_open', st, [u32, u8, u8, u8, sz, u8, sz, P, P]),
     ('hkdf_sha256', st, [u8, sz, u8, sz, u8, sz, P, sz]), ('hmac_sha256', st, [u8, sz, u8, sz, P]),
     ('webauthn_challenge', st, [u8, u8, P]), ('webauthn_assertion', st, [u8, sz, u8, u8, sz, u8, sz, u8, u8, P, P]),
+    ('wallet_zether_key', st, [P, u32, u32, u32, P]), ('zether_key_free', None, [P]), ('zether_public', st, [P, P, P]),
+    ('zether_call', st, [P, u8, u8, P, P]), ('zether_seal_balance_cache', st, [P, u8, sz, P, P]),
+    ('zether_open_balance_cache', st, [P, u8, P, P]),
 ]:
     f = getattr(LIB, 'scaas_ua_' + name)
     f.restype, f.argtypes = res, args
@@ -1606,7 +1610,13 @@ class WalletErrors(WalletCase):
         td = jb({'types': {'EIP712Domain': []}, 'primaryType': 'SECRETvalue0xdead', 'domain': {}, 'message': {'v': 'SECRETvalue0xdead'}})
         expect = jb({'check': 'Payment', 'account': '0xdeadbeefcafe1234', 'payee': 'Pa55-word-Secret'})
         o, n = C.create_string_buffer(8192), sz(8192)
+        zk = handle(L.wallet_zether_key, w, 60, 0, 7)
+        self.addCleanup(L.zether_key_free, zk)
         calls = [
+            lambda: L.zether_call(zk, b'zebrasecretword', b'{}', o, C.byref(n)),
+            lambda: L.zether_call(zk, b'proveTransfer', jb({'key': {'mnemonic': 'zebrasecretword Pa55-word-Secret'}}), o, C.byref(n)),
+            lambda: L.zether_call(zk, b'checkBalance', jb({'acc': {'C': '0xdeadbeefcafe1234', 'D': '0x'}, 'balance': 'SECRETvalue0xdead'}), o, C.byref(n)),
+            lambda: L.zether_open_balance_cache(zk, jb({'iv': 'Qx7SekritPurp0se', 'ct': 'zebrasecretword'}), o, C.byref(n)),
             lambda: L.wallet_from_mnemonic(words, b'Pa55-word-Secret', C.byref(P())),
             lambda: L.wallet_open_vault(vault, b'Pa55-word-Secret', None, b'zebrasecretword', C.byref(P())),
             lambda: L.wallet_open_vault(b'{"v":1,"label":"Pa55-word-Secret"}', b'Pa55-word-Secret', None, None, C.byref(P())),
@@ -1649,6 +1659,112 @@ class WalletCrypto(WalletCase):
             bad = ct[:-1] + bytes([ct[-1] ^ 1])
             self.assertEqual(sig_of(L.aead_open, alg, key, nonce, aad, 3, bad, len(bad)), ('UAAead', None))
         self.assertEqual(sig_of(L.aead_seal, 3, key, nonce, aad, 3, data, len(data))[0], 'UAArgument')
+
+
+ZV = HERE.parents[1] / 'zether-prover' / 'vectors'
+R33 = json.loads((ZV / 'r33_keys.json').read_text())
+ZJ = json.loads((VEC / 'zether.json').read_text())
+
+
+class WalletZether(WalletCase):
+    """T14 (spec §10.1): the Zether facade through the C ABI."""
+
+    def zw(self, passphrase=''):
+        w = handle(L.wallet_from_mnemonic, R33['mnemonic'].encode(), passphrase.encode())
+        self.addCleanup(L.wallet_free, w)
+        return w
+
+    def zk(self, w, coin=60, account=0, use=7):
+        k = handle(L.wallet_zether_key, w, coin, account, use)
+        self.addCleanup(L.zether_key_free, k)
+        return k
+
+    def public(self, k):
+        y, ua = C.create_string_buffer(128), C.create_string_buffer(32)
+        ok(L.zether_public(k, y, ua))
+        return '0x' + y.raw.hex(), '0x' + ua.raw.hex()
+
+    def call(self, k, cmd, req):
+        st_, out = sig_of(L.zether_call, k, cmd.encode(), jb(req))
+        return st_, None if out is None else json.loads(out[:-1])
+
+    def request(self, f):
+        r = json.loads((ZV / f).read_text())['request']
+        r.pop('key')
+        r.pop('includeWitness')
+        return r
+
+    def test_zether_feature_in_the_default_build(self):
+        self.assertTrue(L.features() & FEATURE['zether'])
+
+    def test_r33_keys(self):
+        w = self.zw()
+        for r in R33['bls12381']['keys']:
+            _, _, coin, account, use = r['path'].split('/')
+            self.assertEqual(self.public(self.zk(w, int(coin), int(account), int(use))), (r['Y'], r['UA']), r['path'])
+        self.assertEqual(name_of(L.wallet_zether_key(w, 60, 0, 9, C.byref(P()))), 'UAArgument')
+
+    def test_pop_and_check_balance(self):
+        k = self.zk(self.zw())
+        st_, pop = self.call(k, 'pop', {'curve': 'bls12381'})
+        self.assertEqual(st_, '')
+        r = R33['bls12381']['keys'][0]['pop']
+        for f in ('popDigest', 'registrationDigest', 'uaMsg'):
+            self.assertEqual(pop[f], r[f], f)
+        t = self.request('transfer_bls12381.json')
+        self.assertEqual(self.call(k, 'checkBalance', {'acc': t['acc'], 'balance': t['balance']}), ('', {'ok': True}))
+        st_, out = self.call(k, 'proveTransfer', t)
+        self.assertEqual(st_, '')
+        self.assertEqual(out['entryRef'], json.loads((ZV / 'transfer_bls12381.json').read_text())['entryRef'])
+        self.assertNotIn('witness', out)
+
+    def test_a_key_field_in_command_json_is_refused(self):
+        k = self.zk(self.zw())
+        t = self.request('transfer_bls12381.json')
+        for cmd, req in [('pop', {}), ('proveTransfer', t), ('checkBalance', {'acc': t['acc'], 'balance': t['balance']})]:
+            self.assertEqual(self.call(k, cmd, req)[0], '', cmd + ': positive control')
+            bad = dict(req, key={'seed': '0x' + '11' * 64, 'coin': 60, 'account': 0})
+            self.assertEqual(self.call(k, cmd, bad), ('UAArgument', None), cmd)
+        for f in ('includeWitness', 'revealSecret'):
+            self.assertEqual(self.call(k, 'proveTransfer', dict(t, **{f: True})), ('UAArgument', None), f)
+        self.assertEqual(self.call(k, 'verifyTransfer', {})[0], 'UAArgument', 'verifiers are not exposed')
+        self.assertEqual(self.call(k, 'pop', {'curve': 'bls12381', 'x': {'a': ' ' * 10}})[0], 'UAArgument')
+
+    def test_cache_box_rows(self):
+        for r in ZJ['cacheBox']:
+            m = MN[r['mnemonic']]
+            w = handle(L.wallet_from_mnemonic, m['words'].encode(), m['passphrase'].encode())
+            self.addCleanup(L.wallet_free, w)
+            k = self.zk(w, r['coin'], r['account'], r['use'])
+            self.assertEqual(self.public(k), (r['Y'], r['UA']))
+            pt = var(L.zether_open_balance_cache, k, jb(r['box']))
+            self.assertEqual('0x' + pt.hex(), r['plaintext'], r['id'])
+            box = text(L.zether_seal_balance_cache, k, pt, len(pt))
+            self.assertEqual(var(L.zether_open_balance_cache, k, box.encode()), pt, r['id'] + ': round trip')
+        for r in ZJ['cacheRefusals']:
+            m = MN[r['mnemonic']]
+            w = handle(L.wallet_from_mnemonic, m['words'].encode(), m['passphrase'].encode())
+            self.addCleanup(L.wallet_free, w)
+            self.assertEqual(sig_of(L.zether_open_balance_cache, self.zk(w, r['coin'], r['account'], r['use']), jb(r['box'])),
+                             ('UAAead', None), r['id'])
+
+    def test_zether_handle_after_lock_and_free_is_KEY_REVOKED(self):
+        w = self.zw()
+        k = self.zk(w)
+        y = self.public(k)
+        ok(L.wallet_lock(w))
+        self.assertEqual(self.call(k, 'pop', {}), ('UAKeyRevoked', None))
+        self.assertEqual(sig_of(L.zether_seal_balance_cache, k, b'{}', 2), ('UAKeyRevoked', None))
+        self.assertEqual(self.public(k), y, 'public data stays readable')
+        self.assertEqual(name_of(L.wallet_zether_key(w, 60, 0, 7, C.byref(P()))), 'UAWalletLocked')
+        w2 = handle(L.wallet_from_mnemonic, R33['mnemonic'].encode(), b'')
+        k2 = handle(L.wallet_zether_key, w2, 60, 1, 7)
+        L.wallet_free(w2)
+        try:
+            self.assertEqual(self.call(k2, 'pop', {}), ('UAKeyRevoked', None))
+        finally:
+            L.zether_key_free(k2)
+        L.zether_key_free(None)
 
 if __name__ == '__main__':
     unittest.main()

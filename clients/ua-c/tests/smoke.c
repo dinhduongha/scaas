@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 // C99 smoke test of include/scaas_ua.h against the staticlib. The full vector suite is tests/test_vectors.py.
 // ABI v6 (ua-rs-sign T12): one sign.json row per kind group through key handles, and a child handle after its wallet is freed
-// (KEY_REVOKED; run under AddressSanitizer, tests/asan-smoke.sh: no use after free).
+// (KEY_REVOKED; run under AddressSanitizer, tests/asan-smoke.sh: no use after free). T14: a Zether key's PoP and balance-cache box, and
+// its handle after the wallet is freed.
 #include <stdio.h>
 #include <string.h>
 
@@ -103,8 +104,29 @@ int main(void) {
     CHECK(scaas_ua_open(kk, "scaas/test/v1", NULL, 0, mlkem_ct, mlkem_len, eph, ct, ct_len, pt, &pt_len) == SCAAS_UA_OK && pt_len == 5 &&
           memcmp(pt, "smoke", 5) == 0);
 
+    // Zether (T14, default build): the conf key's PoP and a balance-cache box round trip; a key field is refused
+    CHECK(scaas_ua_features() & SCAAS_UA_FEATURE_ZETHER);
+    ScaasUaZetherKey *zk = NULL;
+    CHECK(scaas_ua_wallet_zether_key(w, 60, 0, SCAAS_UA_ZETHER_USE_CONF, &zk) == SCAAS_UA_OK && zk);
+    uint8_t zy[SCAAS_UA_ZETHER_Y_LEN], zua[32];
+    CHECK(scaas_ua_zether_public(zk, zy, zua) == SCAAS_UA_OK);
+    char zout[4096];
+    len = sizeof zout;
+    CHECK(scaas_ua_zether_call(zk, "pop", "{\"curve\":\"bls12381\"}", zout, &len) == SCAAS_UA_OK && strstr(zout, "\"pop\""));
+    len = sizeof zout;
+    CHECK(scaas_ua_zether_call(zk, "pop", "{\"key\":{\"x\":\"0x01\"}}", zout, &len) == SCAAS_UA_ERR_ARGUMENT);
+    len = sizeof zout;
+    CHECK(scaas_ua_zether_seal_balance_cache(zk, (const uint8_t *)"{}", 2, zout, &len) == SCAAS_UA_OK);
+    uint8_t zpt[16];
+    size_t zpt_len = sizeof zpt;
+    CHECK(scaas_ua_zether_open_balance_cache(zk, zout, zpt, &zpt_len) == SCAAS_UA_OK && zpt_len == 2 && memcmp(zpt, "{}", 2) == 0);
+
     // the wallet freed before its children: each child stays valid memory and answers KEY_REVOKED (ASan: no use after free)
     scaas_ua_wallet_free(w);
+    len = sizeof zout;
+    CHECK(scaas_ua_zether_call(zk, "pop", "{}", zout, &len) == SCAAS_UA_ERR_KEY_REVOKED);
+    CHECK(scaas_ua_zether_public(zk, zy, zua) == SCAAS_UA_OK);
+    scaas_ua_zether_key_free(zk);
     len = sizeof sig;
     CHECK(scaas_ua_sign_ua(p256, purpose, digest, sig, &len) == SCAAS_UA_ERR_KEY_REVOKED);
     len = sizeof sig;
@@ -124,6 +146,7 @@ int main(void) {
     scaas_ua_kem_free(NULL);
     scaas_ua_link_session_free(NULL);
     scaas_ua_seed_backup_free(NULL);
+    scaas_ua_zether_key_free(NULL);
 
     if (failures) return 1;
     puts("smoke ok");

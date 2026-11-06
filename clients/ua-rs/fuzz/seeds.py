@@ -9,7 +9,9 @@ Seeds: typed_data (sign.json typed generic / canon / refusals, policy td), expec
 refusals), vault (vault.json, rs_vault.json), manifest (a manifest of kem.json's UA rows; the backup / link payloads of
 seal.json's containers), container (seal.json containers, acceptance), sealed (seal.json wire), kem_pk (kem.json keys and
 encapsRefusals), mnemonic (keys.json mnemonics, normalization); T12: container_expect, members, accepted (seal.json's expect,
-members and accepted inputs of an open), uasig (sign.json's msig rows and ua rows as UaSigRequest JSON).
+members and accepted inputs of an open), uasig (sign.json's msig rows and ua rows as UaSigRequest JSON); T14: zether_cmd (one
+byte, the command's index in facade::zether::COMMANDS, then its JSON: clients/zether-prover/vectors/ requests without their key and
+witness flag, the disclosure cases, the envelope; the index after the last, zether.json's cache boxes).
 """
 import json
 import os
@@ -17,6 +19,11 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 V = os.path.join(HERE, "../../../smartcontracts/vectors/ua")
+ZV = os.path.join(HERE, "../../zether-prover/vectors")
+# the order of scaas_ua::facade::zether::COMMANDS (tests/fuzz_caps.rs checks the indices used here); BOX: the box reader
+ZCMDS = ["encrypt", "decrypt", "decryptPending", "checkBalance", "proveTransfer", "proveTransferMulti", "proveBurn", "openMemo",
+         "recoverTransfer", "openDisclosure", "pop", "ownerAuth", "uaSig", "shieldCalldata", "envelope", "typedDigest", "namedCall"]
+BOX = len(ZCMDS)
 
 
 def load(name):
@@ -49,6 +56,37 @@ def uasig(r):
     return {"purpose": r["purposeTag"], "digest": r["digest"], "msig": m}
 
 
+def zload(name):
+    with open(os.path.join(ZV, name), encoding="utf-8") as f:
+        return json.load(f)
+
+
+def zreq(name):
+    """A zether-prover vector request as a facade caller sends it: no key, no witness flag."""
+    return {k: v for k, v in zload(name)["request"].items() if k not in ("key", "includeWitness")}
+
+
+def zc(cmd, v):
+    return bytes([ZCMDS.index(cmd)]) + js(v)
+
+
+def zether_seeds():
+    t = zreq("transfer_bls12381.json")
+    out = [zc("proveTransfer", zreq(f)) for f in ("transfer_bls12381.json", "transfer_noaud_bls12381.json")]
+    out += [zc("proveTransferMulti", zreq(f)) for f in ("transfer_multi_bls12381.json", "transfer_multi_noaud_bls12381.json")]
+    out += [zc("proveBurn", zreq("burn_bls12381.json")), zc("checkBalance", {"acc": t["acc"], "balance": t["balance"]}),
+            zc("decrypt", {"ct": t["acc"], "tableBits": 18, "boundBits": 36}), zc("encrypt", {"Y": t["yTo"], "amount": 5}),
+            zc("pop", {"curve": "bls12381"}), zc("ownerAuth", {"digest": "0x" + "11" * 32}),
+            zc("uaSig", {"purpose": "metatx", "digest": "0x" + "22" * 32}), zc("shieldCalldata", {"Y": t["yTo"], "amount": 1})]
+    out += [zc("openDisclosure", {**{k: v for k, v in c.items() if k not in ("opening", "expect")},
+                                  "kind": {1: "receiver", 2: "auditor"}.get(c["kind"], "sender")})
+            for c in zload("disclosure_bls12381.json")["cases"]]
+    e = zload("envelope.json")
+    out += [zc("envelope", {k: e[k] for k in ("chainId", "chainUid", "token", "meta")})]
+    out += [bytes([BOX]) + js(r["box"]) for k in ("cacheBox", "cacheRefusals") for r in load("zether.json")[k]]
+    return out
+
+
 def seeds():
     t = sign["typed"]
     yield "typed_data", [js(r["td"]) for k in ("generic", "canon", "refusals") for r in t[k]] + [js(r["td"]) for r in sign["policy"]]
@@ -64,6 +102,7 @@ def seeds():
     yield "members", [js(r["members"]) for r in opens if "members" in r]
     yield "accepted", [js(r["accepted"]) for r in opens if r.get("accepted") is not None]
     yield "uasig", [js(uasig(r)) for r in sign["msig"]] + [js({"purpose": r["purposeTag"], "digest": r["digest"], "key": 0}) for r in sign["ua"][:4]]
+    yield "zether_cmd", zether_seeds()
 
 
 def nest(n):
@@ -102,6 +141,9 @@ def regress():
         "members/over-depth-5.json": over(next(r["members"] for r in opens if "members" in r), 4),
         "accepted/over-depth-5.json": over(next(r["accepted"] for r in opens if r.get("accepted")), 4),
         "uasig/over-depth-7.json": over(uasig(nested), 6),
+        # T14: a Zether command (1 MiB, depth 8) and a cache box (2 MiB, depth 1), each behind its index byte
+        "zether_cmd/cmd-over-depth-9.bin": bytes([ZCMDS.index("proveTransfer")]) + over(zreq("transfer_bls12381.json"), 8),
+        "zether_cmd/box-over-depth-2.bin": bytes([BOX]) + over(load("zether.json")["cacheBox"][0]["box"], 1),
     }
 
 

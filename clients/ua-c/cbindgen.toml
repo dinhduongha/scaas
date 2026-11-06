@@ -19,12 +19,13 @@ header = """
 //   the size. A size query runs the call (a signature, seal or vault is made again; scaas_ua_wallet_backup_seal raises the
 //   generation each time), except where the call says its capacity is checked first. Strings are written NUL-terminated and
 //   *out_len counts the NUL.
-// - Handles (ScaasUaWallet, ScaasUaKey, ScaasUaKemKey, ScaasUaLinkSession, ScaasUaSeedBackup) are the only Rust allocations that
-//   cross the ABI. The caller frees each handle it received exactly once with its _free; _free(NULL) is a no-op; _free zeroizes
+// - Handles (ScaasUaWallet, ScaasUaKey, ScaasUaKemKey, ScaasUaLinkSession, ScaasUaSeedBackup, ScaasUaZetherKey) are the only Rust
+//   allocations that cross the ABI. The caller frees each handle it received exactly once with its _free; _free(NULL) is a no-op; _free zeroizes
 //   what the handle holds. There is no reference count: use after free, a double free, or freeing a handle while a call on it
 //   runs is undefined.
 // - Every call may run on any thread, and a handle may be used from any thread concurrently; the last-error detail is per thread.
-// - Wallet and child handles: a key, KEM or session handle refers to its wallet's secret store, not into the wallet handle.
+// - Wallet and child handles: a key, KEM, session or facade (Zether) handle refers to its wallet's secret store, not into the
+//   wallet handle.
 //   scaas_ua_wallet_lock and scaas_ua_wallet_free wait for calls in flight, wipe the store and revoke every child handle, which
 //   then returns SCAAS_UA_ERR_KEY_REVOKED (scaas_ua_wallet_unlock does not revive it) until the caller frees it;
 //   freeing the wallet before its children is defined.

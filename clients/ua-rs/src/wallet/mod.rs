@@ -80,7 +80,7 @@ pub use vectors::vectors_chunks_released;
 use crate::UAError;
 use rand_core::{OsRng, RngCore};
 use std::sync::Arc;
-use store::{Handle, SecretStore};
+pub(crate) use store::{Handle, SecretStore};
 pub use store::MemoryProtection;
 use unicode_normalization::UnicodeNormalization;
 use zeroize::{Zeroize, Zeroizing};
@@ -246,6 +246,9 @@ pub(crate) enum KeyId {
     Kem([u8; 32], u64),
     /// Imported key `n` (`native-import:<network>:<n>`, spec §8.3).
     Import(u32),
+    /// The Zether key `m/12381/<coin>/<account>/<use>` (spec §10.1, feature `zether`).
+    #[cfg(feature = "zether")]
+    Zether(u32, u32, u32),
 }
 
 /// A mnemonic as clientkeys `normalizeMnemonic` (NFKD, lower case, single spaces), at most 1 KiB and 24 words (spec §9.3),
@@ -500,6 +503,17 @@ impl Wallet {
         })?;
         self.store.note(|m| m.add_native(network, coin_type, index));
         Ok(NativeKey { network, index, coin_type, public_key, secret })
+    }
+}
+
+/// Feature `zether` (spec §10.1, T14): the facade's key handle.
+#[cfg(feature = "zether")]
+impl Wallet {
+    /// The Zether key of `coin` / `account` (`key_use` 7: the conf key, 8: the viewing key; any other `Argument`), BLS12-381,
+    /// EIP-2333 path `m/12381/<coin>/<account>/<use>` (zether-prover `ZetherKey::derive`); `x` stays in this wallet's arena
+    /// (`lock()` revokes the handle), `Y` and the UA come out. `WalletLocked` while locked.
+    pub fn zether_key(&self, coin: u32, account: u32, key_use: u32) -> Result<crate::facade::zether::ZetherKey> {
+        crate::facade::zether::derive(&self.store, coin, account, key_use)
     }
 }
 

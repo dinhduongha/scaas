@@ -15,11 +15,17 @@
 //! - T12: `container_expect`, `members`, `accepted` (the container open's JSON inputs across the C ABI) and `uasig` (the `UASig`
 //!   request) under their caps.
 //!
-//! The Zether and PQZ command decoders (`zether_cmd`, `pqz_cmd`) come with their facades (T14, T15). UNAUDITED.
+//! - T14: `zether_cmd`, the Zether facade's command decoder (1 MiB, depth 8, an allow-list per command): the first byte names
+//!   the command (its index in `facade::zether::COMMANDS`, modulo one more than their count), the rest is the JSON; the extra
+//!   index is the balance-cache box reader (2 MiB, depth 1), opened with a fixed wallet's key (never opens a fuzzed box). An
+//!   accepted command reads back to itself and holds no `key` member at any depth.
+//!
+//! The PQZ command decoder (`pqz_cmd`) comes with its facade (T15). UNAUDITED.
 use scaas_ua::wallet::{
     bounded, kem_encaps, vectors_backup_payload, AcceptedJson, ContainerExpectJson, EvmTx, Expect, KemKeyPair, Manifest, MembersJson,
     Sealed, SealedContainer, TypedData, UaSigRequest, Vault, Wallet,
 };
+use scaas_ua::facade::zether::{ZetherCmd, ZetherKey, COMMANDS};
 use std::fmt::Debug;
 use std::sync::OnceLock;
 
@@ -33,6 +39,8 @@ const PAYLOAD: (usize, usize) = (1 << 20, 4);
 const CONTAINER: (usize, usize) = (4 << 20, 7);
 const LOOKUP: (usize, usize) = (16 * 1024, 4);
 const UASIG: (usize, usize) = (64 * 1024, 6);
+const ZCMD: (usize, usize) = (1 << 20, 8);
+const ZBOX: (usize, usize) = (2 << 20, 1);
 /// `version ‖ scheme ‖ mlkemCt (1,568) ‖ x25519Eph (32)` and a 16-byte tag.
 const SEALED_MIN: usize = 2 + 1568 + 32 + 16;
 
@@ -93,6 +101,15 @@ fn json<T: PartialEq + Debug>(data: &[u8], (len, deep): (usize, usize), dec: imp
 fn same<T: PartialEq + Debug>(a: &T, b: scaas_ua::wallet::Result<T>, what: &str) {
     if b.as_ref() != Ok(a) {
         die(&format!("{what}: written back and read again differs: {b:?}"));
+    }
+}
+
+/// Whether an object in `v` has a member named `key`.
+fn has_key(v: &serde_json::Value) -> bool {
+    match v {
+        serde_json::Value::Object(o) => o.iter().any(|(k, x)| k == "key" || has_key(x)),
+        serde_json::Value::Array(a) => a.iter().any(has_key),
+        _ => false,
     }
 }
 
@@ -179,9 +196,35 @@ fn one(t: &str, data: &[u8]) {
                 }
             }
         }
+        "zether_cmd" => {
+            let Some((&b, rest)) = data.split_first() else { return };
+            match COMMANDS.get(usize::from(b) % (COMMANDS.len() + 1)) {
+                Some(cmd) => {
+                    if let Some(c) = json(rest, ZCMD, |d| ZetherCmd::from_json(cmd, d)) {
+                        same(&c, ZetherCmd::from_json(cmd, c.to_json().as_bytes()), "zether_cmd");
+                        let v: serde_json::Value = serde_json::from_str(&c.to_json()).unwrap_or_else(|_| die("to_json not JSON"));
+                        if has_key(&v) {
+                            die("a command with a `key` member accepted");
+                        }
+                    }
+                }
+                None => {
+                    static KEY: OnceLock<(Wallet, ZetherKey)> = OnceLock::new();
+                    let (_, k) = KEY.get_or_init(|| {
+                        let w = Wallet::from_mnemonic("legal winner thank year wave sausage worth useful legal winner thank yellow", "")
+                            .unwrap_or_else(|_| die("no wallet"));
+                        let k = w.zether_key(60, 0, 7).unwrap_or_else(|_| die("no key"));
+                        (w, k)
+                    });
+                    if json(rest, ZBOX, |d| k.open_balance_cache(d).map(|p| p.to_vec())).is_some() {
+                        die("a fuzzed box opened");
+                    }
+                }
+            }
+        }
         _ => die(
             "UA_FUZZ_TARGET: typed_data | expect | tx | vault | manifest | container | sealed | kem_pk | mnemonic | container_expect | \
-             members | accepted | uasig",
+             members | accepted | uasig | zether_cmd",
         ),
     }
 }

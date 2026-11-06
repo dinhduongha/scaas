@@ -63,6 +63,10 @@ base64ct = { version = "=1.8.3", default-features = false, features = ["alloc"],
 # `simple` / `std` (password-hash and its rand_core 0.6 are not taken): salsa20 0.10.2, pbkdf2 0.12.2 (MIT OR Apache-2.0)
 scrypt = { version = "=0.11.0", default-features = false, optional = true }
 
+# ua-rs-sign T14: feature `zether` (spec §10.1): the Zether prover (BLS12-381 only; its legacy `bn254` feature stays off). Every
+# proof, transcript and encryption stays there; ua-rs adds key custody (the conf key `x` in the wallet's arena) and the ABI.
+zether-prover = { path = "../zether-prover", default-features = false, optional = true }
+
 # ua-rs-sign T10: feature `mlock` (spec §8.2): `mlock` / `MADV_DONTDUMP` of the arena's chunks on Unix; any 0.2, so a dependent keeps
 # its own (libc was in the lock: getrandom); off Unix (wasm32) not taken
 [target.'cfg(unix)'.dependencies]
@@ -76,13 +80,13 @@ js-sys = { version = "=0.3.107", optional = true }
 
 [features]
 # MD-5 (owner: the facades on by default). `--no-default-features` keeps the verify-only identity layer (+ `pq` / `json` /
-# `signers` as before). `zether` (T14) and `pqz` (T15) imply `wallet`; their crates come with those tasks; `pqz-set-*`:
+# `signers` as before). `zether` (T14: zether-prover) and `pqz` (T15) imply `wallet`; `pqz`'s crates come with T15; `pqz-set-*`:
 # exactly one with `pqz` (T15 checks it). `vectors`: test-only entry points (secrets through hooks), never in a release build.
 # `mlock` on by default for native builds (owner 2026-11-06, superseding MD-5's list); off Unix it compiles out (no libc).
 default = ["wallet", "zether", "pqz", "pqz-set-n2304-kmax4096", "mlock"]
 wallet = ["pq", "signers", "json", "dep:bip39", "dep:bip32", "dep:hkdf", "dep:hmac", "dep:zeroize", "dep:unicode-normalization",
     "dep:ripemd", "dep:bs58", "dep:blake2", "dep:alloy-rlp", "dep:ml-kem", "dep:aes-gcm", "dep:aes-gcm-siv", "dep:base64ct", "dep:scrypt", "dep:js-sys", "rand_core/getrandom", "dep:getrandom", "ed25519-dalek/zeroize", "ml-dsa/zeroize", "slh-dsa/zeroize"]
-zether = ["wallet"]
+zether = ["wallet", "dep:zether-prover"]
 pqz = ["wallet"]
 pqz-set-n2048-kmax1024 = []
 pqz-set-n2304-kmax4096 = []
@@ -180,3 +184,8 @@ required-features = ["wallet"]
 [[test]]
 name = "fuzz_caps"
 required-features = ["vectors"]
+
+# ua-rs-sign T14: the Zether facade (spec §10.1)
+[[test]]
+name = "facade_zether"
+required-features = ["zether"]

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-// Generates smartcontracts/vectors/ua/keys.json and sign.json (ua-rs-sign T1a), kem.json, seal.json and vault.json (T1b) (spec §11, plan MD-7): the UA keys of src/uakey.js
+// Generates smartcontracts/vectors/ua/keys.json and sign.json (ua-rs-sign T1a), kem.json, seal.json and vault.json (T1b), zether.json (T14) (spec §11, plan MD-7): the UA keys of src/uakey.js
 // and the native keys of src/seed.js per mnemonic, kind, account and index, with the refusals; the UA signatures, member
 // signatures, BLS roles, the scaas Schnorr nonce-map rows, typed-data rows (generic hasher, canonical builders), the signing
 // policy (src/evm.js check*), EVM transactions of types 0-3 and the EIP-155 example, WebAuthn assertions, msig member sets and the
@@ -22,7 +22,8 @@ import * as ua from '../src/ua.js';
 import * as evm from '../src/evm.js';
 import { verify, clientDataOk } from '../src/ua-verify.js';
 import { NETWORKS, wordsToEntropy, seedFromEntropy, seedFromWords, deriveKey, signTyped, signTransaction } from '../src/seed.js';
-import { eip2333 } from '../src/zether.js';
+import { eip2333, deriveConfKey, sealBalanceCache, openBalanceCache } from '../src/zether.js';
+import { hkdf } from '@noble/hashes/hkdf.js';
 import { PQ_KINDS, pqMessage } from '../src/pq.js';
 import {
   deriveUAKey, uaKeyPath, signUAVector, sigRole, webauthnChallenge, webauthnAssertion, msigMemberSigs,
@@ -34,7 +35,7 @@ import {
   PURPOSE as SEAL_PURPOSE, MAX_PT, LINK_WINDOW, sealVector, open as openSealed, wireForm, fromWire, sealContainer, sealBackup, openContainer, openLink,
   linkSessionVector, restoreBackup, encodeBackup, containerAad,
 } from '../src/seal.js';
-import { createVault, rewrapPin, openSeedVault } from '../src/vault.js';
+import { createVault, rewrapPin, openSeedVault, seal as boxSeal } from '../src/vault.js';
 
 const VECTORS = fileURLToPath(new URL('../../../smartcontracts/vectors/', import.meta.url));
 const OUT = process.argv[2] ?? join(VECTORS, 'ua');
@@ -1045,12 +1046,64 @@ const vaultOut = {
   refusals: vaultRefusals,
 };
 
+// --- zether.json (ua-rs-sign T14, spec §10.1): the Zether balance-cache box of src/zether.js sealBalanceCache / openBalanceCache
+// under the conf key x (m/12381/60/<account>/7) of keys.json's mnemonics; the iv from a stream per box (the platform RNG in use) ---
+const ZC = 'bls12381';
+const ZC_INFO = utf8ToBytes('scaas-zether-balance-cache-v1');
+const conf = (mnemonic, account) => deriveConfKey(SEEDS[mnemonic], { curve: ZC, coin: 60, account });
+const cacheText = (entries) => JSON.stringify(entries, (_, v) => (typeof v === 'bigint' ? v.toString() : v));
+const ZUA = H(keccak_256(utf8ToBytes('zether.json ua')));
+const ZTOKEN = '0x5fbdb2315678afecb367f032d93f642f64180aa3';
+const cacheBox = [];
+for (const [id, mnemonic, account, entries] of [
+  ['one entry, balance 2^54 - 1 (past 2^53)', 'pq_kat', 0, { [`${ZUA}:${ZTOKEN}`]: { ua: ZUA, token: ZTOKEN, accSeq: 3, balance: (1n << 54n) - 1n } }],
+  ['empty cache', 'pq_kat', 0, {}],
+  ['two entries, account 1', 'pq_kat', 1, {
+    [`${ZUA}:${ZTOKEN}`]: { ua: ZUA, token: ZTOKEN, accSeq: 9, balance: 0n },
+    [`${ZUA}:0x${'ee'.repeat(20)}`]: { ua: ZUA, token: `0x${'ee'.repeat(20)}`, accSeq: 1, balance: 12345n } }],
+]) {
+  const k = conf(mnemonic, account);
+  const box = await withStream(`zc.${cacheBox.length}`, () => sealBalanceCache(ZC, k.x, entries));
+  must(JSON.stringify(cacheText(await openBalanceCache(ZC, k.x, box))) === JSON.stringify(cacheText(entries)), `cache box ${id}`);
+  cacheBox.push({ id, mnemonic, coin: 60, account, use: 7, Y: k.Y, UA: k.UA, entries: JSON.parse(cacheText(entries)),
+    plaintext: H(utf8ToBytes(cacheText(entries))), box });
+}
+// the box key as zether.js derives it (HKDF-SHA256, no salt, info CACHE_INFO), checked against sealBalanceCache at the same iv
+const cacheKey = (x) => hkdf(sha256, x, undefined, ZC_INFO, 32);
+const c0 = cacheBox[0];
+const x0 = conf(c0.mnemonic, c0.account).x;
+must(JSON.stringify(await withStream('zc.0', () => boxSeal(cacheKey(x0), fromHex(c0.plaintext), `zether-cache:${ZC}`))) === JSON.stringify(c0.box), 'cache key');
+const flipB64 = (s) => s.slice(0, -2) + (s.slice(-2) === 'AA' ? 'AQ' : 'AA');
+const cacheRefusals = [
+  { id: 'another account\'s key (account 1 opens account 0\'s box)', mnemonic: 'pq_kat', coin: 60, account: 1, use: 7, box: c0.box },
+  { id: 'ciphertext changed', mnemonic: 'pq_kat', coin: 60, account: 0, use: 7, box: { ...c0.box, ct: flipB64(c0.box.ct) } },
+  { id: 'iv changed', mnemonic: 'pq_kat', coin: 60, account: 0, use: 7, box: { ...c0.box, iv: flipB64(c0.box.iv) } },
+  { id: 'AAD zether-cache:bn254 (sealed under another curve label)', mnemonic: 'pq_kat', coin: 60, account: 0, use: 7,
+    box: await withStream('zc.aad', () => boxSeal(cacheKey(x0), fromHex(c0.plaintext), 'zether-cache:bn254')) },
+];
+for (const r of cacheRefusals) {
+  must(Object.keys(await openBalanceCache(ZC, conf(r.mnemonic, r.account).x, r.box)).length === 0, `cache refusal ${r.id}`);
+}
+const zetherOut = {
+  note: 'Generated by clients/clientkeys/scripts/ua-wallet-vectors.mjs (ua-rs-sign T14) from src/zether.js sealBalanceCache / '
+    + 'openBalanceCache; never edit by hand. Box {iv, ct}: AES-256-GCM under HKDF-SHA256(x as 32 bytes, no salt, '
+    + '"scaas-zether-balance-cache-v1", 32), AAD "zether-cache:<curve>", base64url without padding, plaintext the entries as '
+    + 'JSON (balances as decimal strings). x is the Zether conf key m/12381/<coin>/<account>/<use> of the keys.json mnemonic; Y '
+    + 'and UA its public key and UA. The rows\' ivs come from a fixed stream; a real box draws its iv from the platform RNG. '
+    + 'cacheRefusals do not open (clientkeys: an empty cache; ua-rs: Aead).',
+  curve: ZC,
+  aad: `zether-cache:${ZC}`,
+  cacheBox,
+  cacheRefusals,
+};
+
 mkdirSync(OUT, { recursive: true });
 writeFileSync(join(OUT, 'keys.json'), JSON.stringify(keys, null, 1) + '\n');
 writeFileSync(join(OUT, 'sign.json'), JSON.stringify(sign, null, 1) + '\n');
 writeFileSync(join(OUT, 'kem.json'), JSON.stringify(kem, null, 1) + '\n');
 writeFileSync(join(OUT, 'seal.json'), JSON.stringify(sealOut, null, 1) + '\n');
 writeFileSync(join(OUT, 'vault.json'), JSON.stringify(vaultOut, null, 1) + '\n');
+writeFileSync(join(OUT, 'zether.json'), JSON.stringify(zetherOut, null, 1) + '\n');
 console.log(`keys.json: ${uaRows.length} ua, ${nativeRows.length} native, ${keyRefusals.length} refusals; sign.json: ${uaSigRows.length} ua, `
   + `${memberRows.length} member, ${policy.length} policy, ${txRows.length} tx, ${msigCases.length} msig`);
 console.log(`kem.json: ${kemRows.length} keys, ${kemRefusals.length} key refusals, ${encRows.length} encaps, ${encapsRefusals.length} encaps refusals, `

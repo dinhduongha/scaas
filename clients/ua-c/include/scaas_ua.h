@@ -11,12 +11,13 @@
 //   the size. A size query runs the call (a signature, seal or vault is made again; scaas_ua_wallet_backup_seal raises the
 //   generation each time), except where the call says its capacity is checked first. Strings are written NUL-terminated and
 //   *out_len counts the NUL.
-// - Handles (ScaasUaWallet, ScaasUaKey, ScaasUaKemKey, ScaasUaLinkSession, ScaasUaSeedBackup) are the only Rust allocations that
-//   cross the ABI. The caller frees each handle it received exactly once with its _free; _free(NULL) is a no-op; _free zeroizes
+// - Handles (ScaasUaWallet, ScaasUaKey, ScaasUaKemKey, ScaasUaLinkSession, ScaasUaSeedBackup, ScaasUaZetherKey) are the only Rust
+//   allocations that cross the ABI. The caller frees each handle it received exactly once with its _free; _free(NULL) is a no-op; _free zeroizes
 //   what the handle holds. There is no reference count: use after free, a double free, or freeing a handle while a call on it
 //   runs is undefined.
 // - Every call may run on any thread, and a handle may be used from any thread concurrently; the last-error detail is per thread.
-// - Wallet and child handles: a key, KEM or session handle refers to its wallet's secret store, not into the wallet handle.
+// - Wallet and child handles: a key, KEM, session or facade (Zether) handle refers to its wallet's secret store, not into the
+//   wallet handle.
 //   scaas_ua_wallet_lock and scaas_ua_wallet_free wait for calls in flight, wipe the store and revoke every child handle, which
 //   then returns SCAAS_UA_ERR_KEY_REVOKED (scaas_ua_wallet_unlock does not revive it) until the caller frees it;
 //   freeing the wallet before its children is defined.
@@ -132,6 +133,18 @@
 #define SCAAS_UA_ENTROPY_MAX 32
 
 /**
+ * `Y` of a Zether key (`scaas_ua_zether_public`): the contracts' G1 encoding, 128 bytes.
+ */
+#define SCAAS_UA_ZETHER_Y_LEN 128
+
+/**
+ * `key_use` of `scaas_ua_wallet_zether_key`: the conf key and the viewing key.
+ */
+#define SCAAS_UA_ZETHER_USE_CONF 7
+
+#define SCAAS_UA_ZETHER_USE_VIEWING 8
+
+/**
  * A KEM key pair: a UA's (`scaas_ua_kem_key`) or an ephemeral one (`scaas_ua_kem_ephemeral`). Free it with `scaas_ua_kem_free`.
  */
 typedef struct ScaasUaKemKey ScaasUaKemKey;
@@ -157,6 +170,12 @@ typedef struct ScaasUaSeedBackup ScaasUaSeedBackup;
  * A wallet: its secret store and manifest. Free it with `scaas_ua_wallet_free` (which locks it first).
  */
 typedef struct ScaasUaWallet ScaasUaWallet;
+
+/**
+ * A Zether key (spec §10.1, feature `zether`; `scaas_ua_wallet_zether_key`): its wallet's store, a generation and the slot of
+ * `x`, and the public `Y` and UA. Free it with `scaas_ua_zether_key_free`.
+ */
+typedef struct ScaasUaZetherKey ScaasUaZetherKey;
 
 /**
  * The result of every fallible call: `SCAAS_UA_OK` or one of `SCAAS_UA_ERR_*`.
@@ -1394,6 +1413,59 @@ ScaasUaStatus scaas_ua_hmac_sha256(const uint8_t *key,
 ScaasUaStatus scaas_ua_webauthn_challenge(const uint8_t *purpose32,
                                           const uint8_t *digest32,
                                           uint8_t *out32);
+
+/**
+ * The Zether key of `coin` / `account` (`key_use`: SCAAS_UA_ZETHER_USE_CONF or _VIEWING, else SCAAS_UA_ERR_ARGUMENT), BLS12-381,
+ * EIP-2333 path m/12381/<coin>/<account>/<use>; `x` stays in the wallet's store (lock and free revoke the handle:
+ * SCAAS_UA_ERR_KEY_REVOKED). SCAAS_UA_ERR_WALLET_LOCKED while locked.
+ */
+ScaasUaStatus scaas_ua_wallet_zether_key(const ScaasUaWallet *w,
+                                         uint32_t coin,
+                                         uint32_t account,
+                                         uint32_t key_use,
+                                         ScaasUaZetherKey **out);
+
+void scaas_ua_zether_key_free(ScaasUaZetherKey *k);
+
+/**
+ * The key's `Y` (SCAAS_UA_ZETHER_Y_LEN bytes) and its UA (kind 0x0141); public, readable after lock.
+ */
+ScaasUaStatus scaas_ua_zether_public(const ScaasUaZetherKey *k,
+                                     uint8_t *y128,
+                                     uint8_t *ua32);
+
+/**
+ * zether-prover's command `cmd` (encrypt, decrypt, decryptPending, checkBalance, proveTransfer, proveTransferMulti, proveBurn,
+ * openMemo, recoverTransfer, openDisclosure, pop, ownerAuth, uaSig, shieldCalldata, envelope, typedDigest, namedCall) on
+ * `request_json` (named fields, at most 1 MiB, depth 8) with the handle's key: its JSON answer into `out_json`. Every field is
+ * checked against the command's allow-list: a `key` object, `revealSecret`, `includeWitness`, an unknown field or another
+ * curve is SCAAS_UA_ERR_ARGUMENT, and so is a refusal of the prover (no detail: it could name a request value). A size query
+ * runs the command again (a proof is made again, with new randomness).
+ */
+ScaasUaStatus scaas_ua_zether_call(const ScaasUaZetherKey *k,
+                                   const char *cmd,
+                                   const char *request_json,
+                                   char *out_json,
+                                   size_t *out_len);
+
+/**
+ * clientkeys `sealBalanceCache`: the box `{"iv", "ct"}` (JSON) of the cache entries `entries_json` (at most 1 MiB) under the
+ * key's `x` (AES-256-GCM, a fresh iv; a size query seals again).
+ */
+ScaasUaStatus scaas_ua_zether_seal_balance_cache(const ScaasUaZetherKey *k,
+                                                 const uint8_t *entries_json,
+                                                 size_t entries_json_len,
+                                                 char *out_json,
+                                                 size_t *out_len);
+
+/**
+ * clientkeys `openBalanceCache`: the entries of a box into `out`. SCAAS_UA_ERR_AEAD for a box that does not open under this key
+ * (clientkeys: an empty cache), SCAAS_UA_ERR_ARGUMENT for one that is not `{iv, ct}`. The caller zeroizes `out`.
+ */
+ScaasUaStatus scaas_ua_zether_open_balance_cache(const ScaasUaZetherKey *k,
+                                                 const char *box_json,
+                                                 uint8_t *out,
+                                                 size_t *out_len);
 
 /**
  * The `webauthn-p256` signature `abi.encode(authData, clientDataJSON, r, s)` of an assertion against `expected_challenge32`

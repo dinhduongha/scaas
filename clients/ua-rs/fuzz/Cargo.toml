@@ -15,6 +15,8 @@ crate-type = ["staticlib"]
 
 [dependencies]
 scaas-ua = { path = "..", features = ["vectors"] }
+# T14: the zether_cmd oracle reads an accepted command back as JSON (the version in the lock)
+serde_json = "=1.0.145"
 
 [profile.release]
 debug = 1

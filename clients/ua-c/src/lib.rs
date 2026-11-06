@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! C ABI over `scaas-ua`; the header `include/scaas_ua.h` is generated from this file by cbindgen (tests/header.rs).
 //! The caller owns every buffer; since ABI 6 (ua-rs-sign T12, spec §9.2) the opaque handles (`ScaasUaWallet`, `ScaasUaKey`,
-//! `ScaasUaKemKey`, `ScaasUaLinkSession`, `ScaasUaSeedBackup`) are the only Rust allocations that cross it. Every export runs
+//! `ScaasUaKemKey`, `ScaasUaLinkSession`, `ScaasUaSeedBackup`; T14: `ScaasUaZetherKey`) are the only Rust allocations that cross it. Every export runs
 //! inside `guard` (the one `catch_unwind`; `profile.release` keeps `panic = "unwind"`): a panic never unwinds into C, it is
 //! `SCAAS_UA_ERR_INTERNAL` (frost-core's OS-RNG panics included, though no FROST call is exported). Status-returning exports go
 //! through `run`, which also sets the thread-local `scaas_ua_last_error` detail; no detail carries an argument (a wallet error is
@@ -1102,6 +1102,19 @@ pub struct ScaasUaKemKey(uw::KemKeyPair);
 pub struct ScaasUaLinkSession(Mutex<Option<uw::LinkSession>>);
 /// The recovery phrase of `scaas_ua_wallet_generate`: reveal once, challenge, verify, take. Free it with `scaas_ua_seed_backup_free`.
 pub struct ScaasUaSeedBackup(Mutex<uw::SeedBackup>);
+/// A Zether key (spec §10.1, feature `zether`; `scaas_ua_wallet_zether_key`): its wallet's store, a generation and the slot of
+/// `x`, and the public `Y` and UA. Free it with `scaas_ua_zether_key_free`.
+pub struct ScaasUaZetherKey(ZetherInner);
+#[cfg(feature = "zether")]
+type ZetherInner = ua::facade::zether::ZetherKey;
+#[cfg(not(feature = "zether"))]
+type ZetherInner = ();
+
+/// `Y` of a Zether key (`scaas_ua_zether_public`): the contracts' G1 encoding, 128 bytes.
+pub const SCAAS_UA_ZETHER_Y_LEN: usize = 128;
+/// `key_use` of `scaas_ua_wallet_zether_key`: the conf key and the viewing key.
+pub const SCAAS_UA_ZETHER_USE_CONF: u32 = 7;
+pub const SCAAS_UA_ZETHER_USE_VIEWING: u32 = 8;
 
 /// The arena's memory protection now (`scaas_ua_wallet_memory_protection`): chunks, of them `mlock`ed, of them no-dump; all 0
 /// while locked.
@@ -2138,6 +2151,134 @@ pub extern "C" fn scaas_ua_webauthn_challenge(purpose32: *const u8, digest32: *c
     run(|| put(out32.cast(), uw::webauthn_challenge(arr(purpose32)?, arr(digest32)?)?))
 }
 
+// ---------------------------------------------------------------------------------------------------------------------------
+// The Zether facade (ua-rs-sign T14, spec §10.1; feature `zether`, in the default build): the key handle, zether-prover's
+// commands with the handle's key, the balance-cache box. Without the feature every call is SCAAS_UA_ERR_KIND_UNAVAILABLE.
+// ---------------------------------------------------------------------------------------------------------------------------
+
+#[cfg(feature = "zether")]
+fn zether<'a>(k: *const ScaasUaZetherKey) -> R<&'a ZetherInner> {
+    Ok(&handle(k)?.0)
+}
+
+/// The Zether key of `coin` / `account` (`key_use`: SCAAS_UA_ZETHER_USE_CONF or _VIEWING, else SCAAS_UA_ERR_ARGUMENT), BLS12-381,
+/// EIP-2333 path m/12381/<coin>/<account>/<use>; `x` stays in the wallet's store (lock and free revoke the handle:
+/// SCAAS_UA_ERR_KEY_REVOKED). SCAAS_UA_ERR_WALLET_LOCKED while locked.
+#[no_mangle]
+pub extern "C" fn scaas_ua_wallet_zether_key(
+    w: *const ScaasUaWallet,
+    coin: u32,
+    account: u32,
+    key_use: u32,
+    out: *mut *mut ScaasUaZetherKey,
+) -> ScaasUaStatus {
+    run(|| {
+        if out.is_null() {
+            return Err(argument("NULL"));
+        }
+        #[cfg(feature = "zether")]
+        return give(out, ScaasUaZetherKey(handle(w)?.0.zether_key(coin, account, key_use)?));
+        #[cfg(not(feature = "zether"))]
+        {
+            let _ = (w, coin, account, key_use);
+            Err(fail(SCAAS_UA_ERR_KIND_UNAVAILABLE))
+        }
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn scaas_ua_zether_key_free(k: *mut ScaasUaZetherKey) {
+    free(k)
+}
+
+/// The key's `Y` (SCAAS_UA_ZETHER_Y_LEN bytes) and its UA (kind 0x0141); public, readable after lock.
+#[no_mangle]
+pub extern "C" fn scaas_ua_zether_public(k: *const ScaasUaZetherKey, y128: *mut u8, ua32: *mut u8) -> ScaasUaStatus {
+    run(|| {
+        #[cfg(feature = "zether")]
+        {
+            let k = zether(k)?;
+            let y: [u8; SCAAS_UA_ZETHER_Y_LEN] = k.y().try_into().map_err(|_| fail(SCAAS_UA_ERR_INTERNAL))?;
+            if y128.is_null() || ua32.is_null() {
+                return Err(argument("NULL"));
+            }
+            put(y128.cast(), y)?;
+            put(ua32.cast(), k.ua())
+        }
+        #[cfg(not(feature = "zether"))]
+        {
+            let _ = (k, y128, ua32);
+            Err(fail(SCAAS_UA_ERR_KIND_UNAVAILABLE))
+        }
+    })
+}
+
+/// zether-prover's command `cmd` (encrypt, decrypt, decryptPending, checkBalance, proveTransfer, proveTransferMulti, proveBurn,
+/// openMemo, recoverTransfer, openDisclosure, pop, ownerAuth, uaSig, shieldCalldata, envelope, typedDigest, namedCall) on
+/// `request_json` (named fields, at most 1 MiB, depth 8) with the handle's key: its JSON answer into `out_json`. Every field is
+/// checked against the command's allow-list: a `key` object, `revealSecret`, `includeWitness`, an unknown field or another
+/// curve is SCAAS_UA_ERR_ARGUMENT, and so is a refusal of the prover (no detail: it could name a request value). A size query
+/// runs the command again (a proof is made again, with new randomness).
+#[no_mangle]
+pub extern "C" fn scaas_ua_zether_call(
+    k: *const ScaasUaZetherKey,
+    cmd: *const c_char,
+    request_json: *const c_char,
+    out_json: *mut c_char,
+    out_len: *mut usize,
+) -> ScaasUaStatus {
+    run(|| {
+        #[cfg(feature = "zether")]
+        return write_str(out_json, out_len, &zether(k)?.call(text(cmd)?, cstr(request_json)?)?);
+        #[cfg(not(feature = "zether"))]
+        {
+            let _ = (k, cmd, request_json, out_json, out_len);
+            Err(fail(SCAAS_UA_ERR_KIND_UNAVAILABLE))
+        }
+    })
+}
+
+/// clientkeys `sealBalanceCache`: the box `{"iv", "ct"}` (JSON) of the cache entries `entries_json` (at most 1 MiB) under the
+/// key's `x` (AES-256-GCM, a fresh iv; a size query seals again).
+#[no_mangle]
+pub extern "C" fn scaas_ua_zether_seal_balance_cache(
+    k: *const ScaasUaZetherKey,
+    entries_json: *const u8,
+    entries_json_len: usize,
+    out_json: *mut c_char,
+    out_len: *mut usize,
+) -> ScaasUaStatus {
+    run(|| {
+        #[cfg(feature = "zether")]
+        return write_str(out_json, out_len, &zether(k)?.seal_balance_cache(bytes(entries_json, entries_json_len)?)?);
+        #[cfg(not(feature = "zether"))]
+        {
+            let _ = (k, entries_json, entries_json_len, out_json, out_len);
+            Err(fail(SCAAS_UA_ERR_KIND_UNAVAILABLE))
+        }
+    })
+}
+
+/// clientkeys `openBalanceCache`: the entries of a box into `out`. SCAAS_UA_ERR_AEAD for a box that does not open under this key
+/// (clientkeys: an empty cache), SCAAS_UA_ERR_ARGUMENT for one that is not `{iv, ct}`. The caller zeroizes `out`.
+#[no_mangle]
+pub extern "C" fn scaas_ua_zether_open_balance_cache(
+    k: *const ScaasUaZetherKey,
+    box_json: *const c_char,
+    out: *mut u8,
+    out_len: *mut usize,
+) -> ScaasUaStatus {
+    run(|| {
+        #[cfg(feature = "zether")]
+        return write_var(out, out_len, &zether(k)?.open_balance_cache(cstr(box_json)?)?);
+        #[cfg(not(feature = "zether"))]
+        {
+            let _ = (k, box_json, out, out_len);
+            Err(fail(SCAAS_UA_ERR_KIND_UNAVAILABLE))
+        }
+    })
+}
+
 /// The `webauthn-p256` signature `abi.encode(authData, clientDataJSON, r, s)` of an assertion against `expected_challenge32`
 /// (low-s, the chains' clientDataJSON rule), verified with `key_data` before it is written: SCAAS_UA_ERR_WEBAUTHN_ASSERTION.
 #[no_mangle]
@@ -2214,6 +2355,8 @@ mod tests {
         wipes::<uw::KemKeyPair>();
         wipes::<uw::LinkSession>();
         wipes::<uw::SeedBackup>();
+        #[cfg(feature = "zether")]
+        wipes::<ZetherInner>();
     }
 
     #[test]

@@ -4,7 +4,8 @@
 //! values 2^64, past JavaScript's 2^53).
 //!
 //! A `key` is `{"x": hex}` or `{"mnemonic": words, "passphrase"?: s, "coin": n, "account": n}`
-//! or `{"seed": hex, "coin": n, "account": n}` (R33, `<use> = 7`).
+//! or `{"seed": hex, "coin": n, "account": n}` (R33, `<use> = 7`). A custodian that holds the key itself (ua-rs's Zether
+//! facade, ua-rs-sign T14) calls [`call_with_key`] instead: the key is handed over, never a `key` object.
 
 use ark_ff::{UniformRand, Zero};
 use rand_core::{CryptoRng, OsRng, RngCore};
@@ -126,6 +127,14 @@ pub fn key<C: ZCurve>(v: &Value) -> R<ZetherKey<C>> {
     ZetherKey::conf(&seed, num32(k, "coin")?, num32(k, "account")?).map_err(e)
 }
 
+/// The given key (a custodian's, [`call_with_key`]), else the request's `key` field.
+fn key_or<C: ZCurve>(given: Option<&ZetherKey<C>>, v: &Value) -> R<ZetherKey<C>> {
+    match given {
+        Some(k) => Ok(k.clone()),
+        None => key::<C>(v),
+    }
+}
+
 fn ct<C: ZCurve>(v: &Value, k: &str) -> R<Ciphertext<C>> {
     let c = get(v, k)?;
     Ok(Ciphertext { c: point::<C>(c, "C")?, d: point::<C>(c, "D")? })
@@ -216,10 +225,14 @@ fn transfer_multi_name(mode: TransferMode, compact: bool) -> &'static str {
 }
 
 pub fn prove_transfer_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v: &Value, rng: &mut Rn) -> R<Value> {
+    prove_transfer_with::<C, Rn>(gens, None, v, rng)
+}
+
+fn prove_transfer_with<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, given: Option<&ZetherKey<C>>, v: &Value, rng: &mut Rn) -> R<Value> {
     if compact_token(v)? {
         return Err("a COMPACT token refuses the single format (TransferEntryDisabled)".into());
     }
-    let k = key::<C>(v)?;
+    let k = key_or::<C>(given, v)?;
     let h = header(v, 0, [0; 32], false)?;
     let y_aud = y_aud::<C>(v)?;
     let (st, p, w) = zether::prove_transfer(
@@ -259,7 +272,16 @@ pub fn prove_transfer_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v
 /// without auditor, refused on a `FULL` one, the sender's choice on an `OPTIONAL` one (`auditorMode`, checked when
 /// given); the same holds for `proveTransfer`. Relayed like the single format (`envelopeBinding`, CTR-ZTH-34); a relayed build requires `uaSigner` (`"ecdsa"` | `"fndsa512"` | `"mldsa65"` | `"mldsa44"` | `"slhdsa128s"` | `"mldsa87"` | `"fndsa1024"` | `"ed25519"` | `"p256"` | `"webauthn-p256"`, caps from accounts.md; or a numeric `uaSignerGas` for any other kind such as an msig; review2 C3-2) so the gas check counts `_uaAuthorize`.
 pub fn prove_transfer_multi_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v: &Value, rng: &mut Rn) -> R<Value> {
-    let k = key::<C>(v)?;
+    prove_transfer_multi_with::<C, Rn>(gens, None, v, rng)
+}
+
+fn prove_transfer_multi_with<C: ZCurve, Rn: RngCore + CryptoRng>(
+    gens: &Gens<C>,
+    given: Option<&ZetherKey<C>>,
+    v: &Value,
+    rng: &mut Rn,
+) -> R<Value> {
+    let k = key_or::<C>(given, v)?;
     let h = header(v, 0, [0; 32], false)?;
     let compact = compact_token(v)?;
     let mode = match v.get("mode").filter(|x| !x.is_null()) {
@@ -336,7 +358,11 @@ fn recipient_id(v: &Value) -> R<[u8; 32]> {
 }
 
 pub fn prove_burn_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v: &Value, rng: &mut Rn) -> R<Value> {
-    let k = key::<C>(v)?;
+    prove_burn_with::<C, Rn>(gens, None, v, rng)
+}
+
+fn prove_burn_with<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, given: Option<&ZetherKey<C>>, v: &Value, rng: &mut Rn) -> R<Value> {
+    let k = key_or::<C>(given, v)?;
     let amount = num(v, "amount")?;
     let recipient = recipient_id(v)?;
     let h = header(v, amount, recipient, true)?;
@@ -416,7 +442,11 @@ fn recovery_header(v: &Value, send_counter: u64) -> R<Header> {
 /// (the flag) and the legs (`toUA`, `amount`). `recoverTransfer` takes no keys (the entry blob holds `R`). Unverified: a wrong key or a tampered memo gives
 /// garbage here, which `recoverTransfer` then refuses against the stored record.
 pub fn open_memo_json<C: ZCurve>(v: &Value) -> R<Value> {
-    let k = key::<C>(v)?;
+    open_memo_with::<C>(None, v)
+}
+
+fn open_memo_with<C: ZCurve>(given: Option<&ZetherKey<C>>, v: &Value) -> R<Value> {
+    let k = key_or::<C>(given, v)?;
     let Source { send_counter, memo, .. } = recovery_source::<C>(v)?;
     let memo = memo.ok_or("`entry`/`payload` carries no memo (not commit-reveal): `recoverTransfer` needs no keys")?;
     let h = recovery_header(v, send_counter)?;
@@ -440,7 +470,11 @@ pub fn open_memo_json<C: ZCurve>(v: &Value) -> R<Value> {
 /// events give an indexer), `auditorIncluded`, and the sender's openings `senderS` (every leg) and `senderCp[j]` (leg
 /// `j`). Needs `chainId`, `chainUid`, `token`.
 pub fn recover_transfer_json<C: ZCurve, Rn: RngCore + CryptoRng>(v: &Value, rng: &mut Rn) -> R<Value> {
-    let k = key::<C>(v)?;
+    recover_transfer_with::<C, Rn>(None, v, rng)
+}
+
+fn recover_transfer_with<C: ZCurve, Rn: RngCore + CryptoRng>(given: Option<&ZetherKey<C>>, v: &Value, rng: &mut Rn) -> R<Value> {
+    let k = key_or::<C>(given, v)?;
     let p = point_len::<C>();
     let Source { send_counter, rec, memo, single } = recovery_source::<C>(v)?;
     let h = recovery_header(v, send_counter)?;
@@ -603,11 +637,39 @@ fn meta(v: &Value) -> R<MetaTx> {
     })
 }
 
-fn by_curve<C: ZCurve>(cmd: &str, v: &Value, rng: &mut OsRng) -> R<Value> {
+/// `RECEIVER_X` / `AUDITOR` (CTR-ZTH-43): the recipient's or the auditor's Chaum-Pedersen opening of leg `index` of a stored
+/// entry with its own key (`kind` `"receiver"` | `"auditor"`; the sender's `SENDER_S` / `SENDER_CP` come from
+/// `recoverTransfer`). The fields are those of `ITransferDisclosure` (`entryRef`, `index`, `amount`, the leg's `Yt`, `Cout`,
+/// `Dout`, `Ya`, `Caud`, `Daud`) with `chainId`, `chainUid`, `token`.
+fn open_disclosure_json<C: ZCurve, Rn: RngCore + CryptoRng>(k: &ZetherKey<C>, v: &Value, rng: &mut Rn) -> R<Value> {
+    let kind = match get(v, "kind")?.as_str() {
+        Some("receiver") => schnorr::OpeningKind::ReceiverX,
+        Some("auditor") => schnorr::OpeningKind::Auditor,
+        _ => return Err("`kind` must be \"receiver\" or \"auditor\" (the sender's openings come from `recoverTransfer`)".into()),
+    };
+    let entry = schnorr::Entry {
+        chain_id: num(v, "chainId")?,
+        chain_uid: fixed(v, "chainUid")?,
+        token: fixed(v, "token")?,
+        entry_ref: fixed(v, "entryRef")?,
+        index: num(v, "index")?,
+        y_t: point::<C>(v, "Yt")?,
+        c_out: point::<C>(v, "Cout")?,
+        d_out: point::<C>(v, "Dout")?,
+        y_a: point::<C>(v, "Ya")?,
+        c_aud: point::<C>(v, "Caud")?,
+        d_aud: point::<C>(v, "Daud")?,
+    };
+    let opening = schnorr::open_chaum_pedersen(&entry, num(v, "amount")?, kind, k, rng).map_err(e)?;
+    Ok(json!({"kind": kind as u8, "opening": hx(&opening)}))
+}
+
+fn by_curve<C: ZCurve, Rn: RngCore + CryptoRng>(cmd: &str, v: &Value, given: Option<&ZetherKey<C>>, rng: &mut Rn) -> R<Value> {
     let gens = || Gens::<C>::new();
+    let key = |v: &Value| key_or::<C>(given, v);
     match cmd {
         "keygen" => {
-            let k = key::<C>(v)?;
+            let k = key(v)?;
             let mut out = json!({"curve": C::NAME, "Y": hx(&k.encoded_y()), "UA": hx(&k.ua())});
             if v.get("revealSecret").and_then(Value::as_bool) == Some(true) {
                 out["x"] = json!(sc::<C>(&k.x));
@@ -621,7 +683,7 @@ fn by_curve<C: ZCurve>(cmd: &str, v: &Value, rng: &mut OsRng) -> R<Value> {
         // BSGS on `ct` (zether-limits §4): `tableBits`/`boundBits` default to the target's
         // (wasm 22/44, native 24–26/54 by RAM). `decryptPending` defaults to 22/44 everywhere.
         "decrypt" | "decryptPending" => {
-            let k = key::<C>(v)?;
+            let k = key(v)?;
             let d = if cmd == "decrypt" { BsgsParams::for_target() } else { BsgsParams::MOBILE };
             let p = BsgsParams::new(opt_bits(v, "tableBits", d.table_bits)?, opt_bits(v, "boundBits", d.bound_bits)?)
                 .map_err(e)?;
@@ -641,21 +703,22 @@ fn by_curve<C: ZCurve>(cmd: &str, v: &Value, rng: &mut OsRng) -> R<Value> {
         }
         // Cache validation (limits §5): `[balance]G == C − [x]D`, no BSGS.
         "checkBalance" => {
-            let k = key::<C>(v)?;
+            let k = key(v)?;
             Ok(json!({"ok": check_balance(&ct::<C>(v, "acc")?, &k.x, num(v, "balance")?)}))
         }
-        "proveTransfer" => prove_transfer_json::<C, _>(&gens(), v, rng),
-        "proveTransferMulti" => prove_transfer_multi_json::<C, _>(&gens(), v, rng),
-        "proveBurn" => prove_burn_json::<C, _>(&gens(), v, rng),
-        "openMemo" => open_memo_json::<C>(v),
-        "recoverTransfer" => recover_transfer_json::<C, _>(v, rng),
+        "proveTransfer" => prove_transfer_with::<C, _>(&gens(), given, v, rng),
+        "proveTransferMulti" => prove_transfer_multi_with::<C, _>(&gens(), given, v, rng),
+        "proveBurn" => prove_burn_with::<C, _>(&gens(), given, v, rng),
+        "openMemo" => open_memo_with::<C>(given, v),
+        "recoverTransfer" => recover_transfer_with::<C, _>(given, v, rng),
+        "openDisclosure" => open_disclosure_json::<C, _>(&key(v)?, v, rng),
         "verifyTransfer" => verify_json::<C>(&gens(), v, false),
         "verifyTransferMulti" => verify_multi_json::<C>(&gens(), v),
         "verifyBurn" => verify_json::<C>(&gens(), v, true),
         // The `register` PoP (UA-8 P1, portable: no chain, chainUid or registry; a Zether UA holds no PQZ key or KEM record),
         // over the typed `UARegistration` (typed-signing TS-D3); `popDigest` is the typed `UAPortableRecord` digest.
         "pop" => {
-            let k = key::<C>(v)?;
+            let k = key(v)?;
             let rd = schnorr::zether_registration_digest::<C>(&k.ua());
             Ok(json!({
                 "kind": zether_kind::<C>(), "Y": hx(&k.encoded_y()), "UA": hx(&k.ua()),
@@ -666,7 +729,7 @@ fn by_curve<C: ZCurve>(cmd: &str, v: &Value, rng: &mut OsRng) -> R<Value> {
         }
         // A self account's owner op (roll-over, mode): `sig` is the raw R‖z of `UASig{signature: sig}` for `mtxRollOverSigned` / `mtxSetRollOverMode`.
         "ownerAuth" => {
-            let k = key::<C>(v)?;
+            let k = key(v)?;
             let d = fixed::<32>(v, "digest")?;
             Ok(json!({
                 "uaMsg": hx(&schnorr::ua_message::<C>(&schnorr::purpose_tag("zether-owner"), &d)),
@@ -675,7 +738,7 @@ fn by_curve<C: ZCurve>(cmd: &str, v: &Value, rng: &mut OsRng) -> R<Value> {
         }
         // The Zether UA signs every UA-ledger write (UA-6): `sig` = Schnorr by x over `ua_message(purpose, digest)`.
         "uaSig" => {
-            let k = key::<C>(v)?;
+            let k = key(v)?;
             let (purpose, d) = (get(v, "purpose")?.as_str().ok_or("`purpose` must be a string")?, fixed::<32>(v, "digest")?);
             // the purposes a Zether UA signs (no `member`: the kind is SIGNING, not MEMBER; no `zether-auth`: no PQZ key); `pop` has its own command. `sig` is the raw R‖z: a token's `bytes auth` wants abi.encode(bytes(""), sig), `requireAuthorized` takes UASig{signature: sig}
             const PURPOSES: [&str; 8] = ["metatx", "metatx-cancel", "zether-owner", "keyop", "receiver-fee", "vp", "vc-anchor", "trade"];
@@ -699,6 +762,33 @@ fn by_curve<C: ZCurve>(cmd: &str, v: &Value, rng: &mut OsRng) -> R<Value> {
 pub fn call(cmd: &str, input: &str) -> R<String> {
     let v: Value = serde_json::from_str(input).map_err(e)?;
     let out = match cmd {
+        "envelope" | "typedDigest" | "namedCall" => keyless(cmd, &v)?,
+        _ => match get(&v, "curve")?.as_str() {
+            #[cfg(feature = "bn254")]
+            Some("bn254") => by_curve::<Bn254, _>(cmd, &v, None, &mut OsRng)?,
+            Some("bls12381") => by_curve::<Bls12381, _>(cmd, &v, None, &mut OsRng)?,
+            _ => return Err("curve must be \"bls12381\" (bn254 is a legacy build feature)".into()),
+        },
+    };
+    Ok(out.to_string())
+}
+
+/// One command of [`call`] on a parsed request with the key handed over by a custodian that holds it (ua-rs's Zether
+/// facade, ua-rs-sign T14, spec §10.1), BLS12-381, at the caller's randomness. The request then takes no `key` object (the
+/// custodian never forwards one) and neither of the flags that return secrets (`revealSecret`, `includeWitness`).
+pub fn call_with_key<Rn: RngCore + CryptoRng>(cmd: &str, v: &Value, key: &ZetherKey<Bls12381>, rng: &mut Rn) -> R<Value> {
+    if let Some(f) = ["key", "revealSecret", "includeWitness"].into_iter().find(|f| v.get(*f).is_some()) {
+        return Err(format!("a request with a given key takes no `{f}`"));
+    }
+    match cmd {
+        "envelope" | "typedDigest" | "namedCall" => keyless(cmd, v),
+        _ => by_curve::<Bls12381, _>(cmd, v, Some(key), rng),
+    }
+}
+
+/// The commands that take no key and no curve.
+fn keyless(cmd: &str, v: &Value) -> R<Value> {
+    Ok(match cmd {
         "envelope" => {
             let (chain, uid, token) = (num(&v, "chainId")?, fixed::<32>(&v, "chainUid")?, fixed::<20>(&v, "token")?);
             let m = meta(&v)?;
@@ -714,12 +804,6 @@ pub fn call(cmd: &str, input: &str) -> R<String> {
         // typed-signing C7: a prover build as a named relayed entry (`mtxConfidentialTransferSingle(Envelope, ZetherSingle, proof, sig)`, ...):
         // the typed `message`, the `digest` the wallet signs and, with `sig`, the `calldata`. The generic `envelope` path stays.
         "namedCall" => typed::named_call(&v)?,
-        _ => match get(&v, "curve")?.as_str() {
-            #[cfg(feature = "bn254")]
-            Some("bn254") => by_curve::<Bn254>(cmd, &v, &mut OsRng)?,
-            Some("bls12381") => by_curve::<Bls12381>(cmd, &v, &mut OsRng)?,
-            _ => return Err("curve must be \"bls12381\" (bn254 is a legacy build feature)".into()),
-        },
-    };
-    Ok(out.to_string())
+        _ => return Err(format!("unknown command `{cmd}`")),
+    })
 }

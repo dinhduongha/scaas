@@ -10,10 +10,11 @@ description = "C ABI (cbindgen header) over scaas-ua. UNAUDITED."
 crate-type = ["cdylib", "staticlib"]
 
 # ABI 6 (ua-rs-sign T12): the wallet always (spec §9.2); `mlock` on by default for native builds (owner 2026-11-06, as ua-rs'
-# default): the arena `mlock`ed and no-dump on Unix, compiled out elsewhere. The facades come with T14 (`zether`) and T15 (`pqz`,
-# exactly one `pqz-set-*`); `scaas_ua_features()` reports what scaas-ua was built with. Never `vectors` (lib.rs refuses it).
+# default): the arena `mlock`ed and no-dump on Unix, compiled out elsewhere. The Zether facade (T14, `zether`) on by default (MD-5,
+# as ua-rs); `pqz` (exactly one `pqz-set-*`) comes with T15; `scaas_ua_features()` reports what scaas-ua was built with. Never
+# `vectors` (lib.rs refuses it).
 [features]
-default = ["mlock"]
+default = ["mlock", "zether"]
 mlock = ["scaas-ua/mlock"]
 zether = ["scaas-ua/zether"]
 pqz = ["scaas-ua/pqz"]

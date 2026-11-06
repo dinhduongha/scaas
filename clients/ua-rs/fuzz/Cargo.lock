@@ -269,6 +269,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "90dbd31c98227229239363921e60fcf5e558e43ec69094d46fc4996f08d1d5bc"
 dependencies = [
  "bitcoin_hashes",
+ "serde",
  "unicode-normalization",
  "zeroize",
 ]
@@ -1361,6 +1362,7 @@ dependencies = [
  "slh-dsa",
  "unicode-normalization",
  "zeroize",
+ "zether-prover",
 ]
 
 [[package]]
@@ -1368,6 +1370,7 @@ name = "scaas-ua-fuzz"
 version = "0.1.0"
 dependencies = [
  "scaas-ua",
+ "serde_json",
 ]
 
 [[package]]
@@ -1439,6 +1442,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4148590afebada386688f18773da617792bf2ef03ffc1e4cbd2b1d45b023e0ba"
 dependencies = [
  "serde_core",
+ "serde_derive",
 ]
 
 [[package]]
@@ -1804,4 +1808,29 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "zether-prover"
+version = "0.1.0"
+dependencies = [
+ "ark-bls12-381",
+ "ark-ec",
+ "ark-ff",
+ "ark-serialize",
+ "ark-std",
+ "bip39",
+ "getrandom",
+ "hex",
+ "hkdf",
+ "hmac 0.12.1",
+ "rand_chacha",
+ "rand_core 0.6.4",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sha3 0.10.9",
+ "thiserror",
+ "wasm-bindgen",
+ "zeroize",
 ]
