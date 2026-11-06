@@ -4,6 +4,7 @@
 // ignore_for_file: unused_import, unused_element, unnecessary_import, duplicate_ignore, invalid_use_of_internal_member, annotate_overrides, non_constant_identifier_names, curly_braces_in_flow_control_structures, prefer_const_literals_to_create_immutables, unused_field
 
 import 'api/ua.dart';
+import 'api/wallet.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'frb_generated.dart';
@@ -64,7 +65,7 @@ class ScaasUa extends BaseEntrypoint<ScaasUaApi, ScaasUaApiImpl, ScaasUaWire> {
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => -1646221037;
+  int get rustContentHash => 1698158737;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -76,6 +77,214 @@ class ScaasUa extends BaseEntrypoint<ScaasUaApi, ScaasUaApiImpl, ScaasUaWire> {
 }
 
 abstract class ScaasUaApi extends BaseApi {
+  Future<Uint8List> crateApiWalletUaKemKeyDecaps({
+    required UaKemKey that,
+    required List<int> mlkemCt,
+    required List<int> x25519Eph,
+  });
+
+  Uint8List crateApiWalletUaKemKeyKemPk({required UaKemKey that});
+
+  Future<Uint8List> crateApiWalletUaKemKeyOpen({
+    required UaKemKey that,
+    required String purpose,
+    required List<int> aad,
+    required UaSealed sealed,
+  });
+
+  Future<Uint8List> crateApiWalletUaKemKeyOpenContainer({
+    required UaKemKey that,
+    required String containerJson,
+    required String expectJson,
+    String? membersJson,
+    String? acceptedJson,
+  });
+
+  void crateApiWalletUaKeyListPush({required UaKeyList that, required UaKey k});
+
+  String crateApiWalletUaKeyAddress({required UaKey that});
+
+  bool crateApiWalletUaKeyIsUa({required UaKey that});
+
+  Uint8List crateApiWalletUaKeyKeyData({required UaKey that});
+
+  int crateApiWalletUaKeyKind({required UaKey that});
+
+  String crateApiWalletUaKeyNetworkName({required UaKey that});
+
+  Future<Uint8List> crateApiWalletUaKeySignDigestRaw({
+    required UaKey that,
+    required List<int> digest,
+  });
+
+  Future<Uint8List> crateApiWalletUaKeySignKeyProof({
+    required UaKey that,
+    required List<int> challenge,
+  });
+
+  Future<Uint8List> crateApiWalletUaKeySignMember({
+    required UaKey that,
+    required List<int> structureUa,
+    required List<int> structureUaMsg,
+  });
+
+  Future<Uint8List> crateApiWalletUaKeySignTransaction({
+    required UaKey that,
+    required String txJson,
+  });
+
+  Future<Uint8List> crateApiWalletUaKeySignTyped({
+    required UaKey that,
+    required String typedDataJson,
+    required String expectJson,
+  });
+
+  Future<Uint8List> crateApiWalletUaKeySignTypedAny({
+    required UaKey that,
+    required String typedDataJson,
+  });
+
+  Future<Uint8List> crateApiWalletUaKeySignUa({
+    required UaKey that,
+    required List<int> purpose,
+    required List<int> digest,
+  });
+
+  Uint8List crateApiWalletUaKeyUaId({required UaKey that});
+
+  Uint8List crateApiWalletUaLinkSessionKemPk({required UaLinkSession that});
+
+  String crateApiWalletUaLinkSessionShortCode({required UaLinkSession that});
+
+  Future<String> crateApiWalletUaPqzKeyCall({
+    required UaPqzKey that,
+    required String cmd,
+    required String requestJson,
+  });
+
+  Future<Uint8List> crateApiWalletUaPqzKeyOpenBalanceCache({
+    required UaPqzKey that,
+    required String boxJson,
+  });
+
+  Uint8List crateApiWalletUaPqzKeyPk({required UaPqzKey that});
+
+  Future<String> crateApiWalletUaPqzKeySealBalanceCache({
+    required UaPqzKey that,
+    required List<int> entries,
+  });
+
+  Future<Uint32List> crateApiWalletUaSeedBackupChallenge({
+    required UaSeedBackup that,
+  });
+
+  Future<Uint8List> crateApiWalletUaSeedBackupReveal({
+    required UaSeedBackup that,
+  });
+
+  Future<Uint8List?> crateApiWalletUaSeedBackupTake({
+    required UaSeedBackup that,
+  });
+
+  Future<String> crateApiWalletUaWalletDiscoverCandidates({
+    required UaWallet that,
+    required int kind,
+    required int account,
+    required int gap,
+  });
+
+  Future<Uint8List> crateApiWalletUaWalletExportPqzLeafRaw({
+    required UaWallet that,
+    required int account,
+    required int index,
+  });
+
+  Future<UaKey> crateApiWalletUaWalletImportedKey({
+    required UaWallet that,
+    required String networkName,
+    required int n,
+  });
+
+  Future<String> crateApiWalletUaWalletLinkSeal({
+    required UaWallet that,
+    required UaKey sender,
+    required List<int> sessionKemPk,
+    required String shortCode,
+  });
+
+  void crateApiWalletUaWalletLock({required UaWallet that});
+
+  String crateApiWalletUaWalletManifestJson({required UaWallet that});
+
+  UaMemoryProtection crateApiWalletUaWalletMemoryProtection({
+    required UaWallet that,
+  });
+
+  Future<UaKey> crateApiWalletUaWalletNativeKey({
+    required UaWallet that,
+    required String networkName,
+    required int index,
+    int? coinType,
+  });
+
+  Future<UaPqzKey> crateApiWalletUaWalletPqzKey({
+    required UaWallet that,
+    required int account,
+    required int index,
+  });
+
+  Future<UaKey> crateApiWalletUaWalletUaKey({
+    required UaWallet that,
+    required int kind,
+    required int account,
+    required int index,
+  });
+
+  Future<UaZetherKey> crateApiWalletUaWalletZetherKey({
+    required UaWallet that,
+    required int coin,
+    required int account,
+    required int keyUse,
+  });
+
+  Future<String> crateApiWalletUaZetherKeyCall({
+    required UaZetherKey that,
+    required String cmd,
+    required String requestJson,
+  });
+
+  Future<Uint8List> crateApiWalletUaZetherKeyOpenBalanceCache({
+    required UaZetherKey that,
+    required String boxJson,
+  });
+
+  Future<String> crateApiWalletUaZetherKeySealBalanceCache({
+    required UaZetherKey that,
+    required List<int> entriesJson,
+  });
+
+  Uint8List crateApiWalletUaZetherKeyUaId({required UaZetherKey that});
+
+  Uint8List crateApiWalletUaZetherKeyY({required UaZetherKey that});
+
+  int crateApiWalletAbiVersion();
+
+  Future<Uint8List> crateApiWalletAeadOpen({
+    required int algId,
+    required List<int> key32,
+    required List<int> nonce12,
+    required List<int> aad,
+    required List<int> data,
+  });
+
+  Future<Uint8List> crateApiWalletAeadSeal({
+    required int algId,
+    required List<int> key32,
+    required List<int> nonce12,
+    required List<int> aad,
+    required List<int> data,
+  });
+
   String crateApiUaCanonicalId({required String text});
 
   U8Array32 crateApiUaChainKeyHash({required PlatformInt64 chainId});
@@ -91,11 +300,25 @@ abstract class ScaasUaApi extends BaseApi {
     required List<(PlatformInt64, U8Array32, PlatformInt64)> members,
   });
 
+  BigInt crateApiWalletFeatures();
+
   String crateApiUaGovernanceBit({required PlatformInt64 bit});
 
   U8Array32? crateApiUaGroupTag({required String group});
 
   String? crateApiUaGroupTagString({required String group});
+
+  Future<Uint8List> crateApiWalletHkdfSha256({
+    required List<int> ikm,
+    required List<int> salt,
+    required List<int> info,
+    required int len,
+  });
+
+  Future<Uint8List> crateApiWalletHmacSha256({
+    required List<int> keyBytes,
+    required List<int> data,
+  });
 
   HolderPop crateApiUaHolderPopMessage({
     required PlatformInt64 kind,
@@ -137,6 +360,10 @@ abstract class ScaasUaApi extends BaseApi {
 
   U8Array32 crateApiUaKeccak256({required List<int> data});
 
+  Future<UaEncapsulated> crateApiWalletKemEncaps({required List<int> kemPk});
+
+  Future<UaKemKey> crateApiWalletKemEphemeral();
+
   U8Array32 crateApiUaKemRecordDigest({
     required U8Array32 ua,
     required BigInt version,
@@ -161,9 +388,20 @@ abstract class ScaasUaApi extends BaseApi {
     required List<int> keyData,
   });
 
+  Future<UaKemKey> crateApiWalletKeyKemKey({
+    required UaKey k,
+    required BigInt version,
+  });
+
+  Future<UaKeyList> crateApiWalletKeyListNew();
+
   KindInfo crateApiUaKindInfo({required PlatformInt64 kind});
 
   String crateApiUaKindTagString({required PlatformInt64 kind});
+
+  Future<UaLinkSession> crateApiWalletLinkSessionNew();
+
+  PlatformInt64 crateApiWalletLiveHandles();
 
   U8Array32 crateApiUaMemberDigest({
     required U8Array32 structureUa,
@@ -197,6 +435,8 @@ abstract class ScaasUaApi extends BaseApi {
     required U8Array32 pqzKeyHash,
     required U8Array32 kemRecordHash,
   });
+
+  Future<void> crateApiWalletPqzCheckSet({required String deployedJson});
 
   U8Array32 crateApiUaPqzKeyDigest({
     required U8Array32 ua,
@@ -237,6 +477,8 @@ abstract class ScaasUaApi extends BaseApi {
     Uint8List? kemPk,
   });
 
+  Future<String> crateApiWalletPqzSet();
+
   U8Array32 crateApiUaPurposeTag({required String purpose});
 
   U8Array32 crateApiUaPurposeTagV({
@@ -258,6 +500,18 @@ abstract class ScaasUaApi extends BaseApi {
     required List<int> keyData,
     required PlatformInt64 index,
     required List<int> stored,
+  });
+
+  Future<UaSealed> crateApiWalletSeal({
+    required List<int> kemPk,
+    required String purpose,
+    required List<int> aad,
+    required List<int> pt,
+  });
+
+  Future<bool> crateApiWalletSeedBackupVerify({
+    required UaSeedBackup b,
+    required List<Uint8List> answers,
   });
 
   String crateApiUaSetKemKeyArgs({required String input});
@@ -286,11 +540,199 @@ abstract class ScaasUaApi extends BaseApi {
     required List<int> keyData,
   });
 
+  Future<String> crateApiWalletUasig({
+    required String requestJson,
+    required UaKeyList keys,
+  });
+
   void crateApiUaValidateKeyData({
     required PlatformInt64 kind,
     required List<int> keyData,
     required bool hederaNative,
   });
+
+  Future<String> crateApiWalletVaultEnablePrf({
+    required String vaultJson,
+    required List<int> vaultPassphrase,
+    required List<int> prf32,
+    required String credentialId,
+    required List<int> salt,
+  });
+
+  Future<bool> crateApiWalletVaultNeedsRewrap({required String vaultJson});
+
+  Future<String> crateApiWalletVaultRewrapPin({
+    required String vaultJson,
+    required List<int> oldPassphrase,
+    required List<int> newPassphrase,
+  });
+
+  Future<List<String>> crateApiWalletWalletBackupSeal({
+    required UaWallet w,
+    required UaKey sender,
+    required List<UaRecipient> recipients,
+  });
+
+  Future<UaWallet> crateApiWalletWalletFromLink({
+    required UaLinkSession session,
+    required String containerJson,
+    required String expectJson,
+    String? membersJson,
+    String? acceptedJson,
+    required List<int> bip39Passphrase,
+  });
+
+  Future<UaWallet> crateApiWalletWalletFromMnemonic({
+    required List<int> words,
+    required List<int> bip39Passphrase,
+  });
+
+  Future<(UaWallet, UaSeedBackup)> crateApiWalletWalletGenerate();
+
+  Future<UaKey> crateApiWalletWalletImportNativeKey({
+    required UaWallet w,
+    required String networkName,
+    required List<int> secretKey,
+  });
+
+  Future<void> crateApiWalletWalletOpenLabelVault({
+    required UaWallet w,
+    required String vaultJson,
+    Uint8List? vaultPassphrase,
+    Uint8List? prf32,
+  });
+
+  Future<UaWallet> crateApiWalletWalletOpenVault({
+    required String vaultJson,
+    Uint8List? vaultPassphrase,
+    Uint8List? prf32,
+    required List<int> bip39Passphrase,
+  });
+
+  Future<UaWallet?> crateApiWalletWalletRestoreBackup({
+    required UaKemKey kk,
+    required String containerJson,
+    required String expectJson,
+    String? membersJson,
+    String? acceptedJson,
+    required List<int> bip39Passphrase,
+  });
+
+  Future<UaWallet?> crateApiWalletWalletRestoreBackupOver({
+    required UaWallet current,
+    required UaKemKey kk,
+    required String containerJson,
+    required String expectJson,
+    String? membersJson,
+    String? acceptedJson,
+    required List<int> bip39Passphrase,
+  });
+
+  Future<UaWallet?> crateApiWalletWalletRestoreBackupRollback({
+    required UaWallet current,
+    required UaKemKey kk,
+    required String containerJson,
+    required String expectJson,
+    String? membersJson,
+    String? acceptedJson,
+    required List<int> bip39Passphrase,
+  });
+
+  Future<String> crateApiWalletWalletSealLabelVault({
+    required UaWallet w,
+    required String label,
+    required List<int> vaultPassphrase,
+  });
+
+  Future<String> crateApiWalletWalletSealVault({
+    required UaWallet w,
+    required List<int> vaultPassphrase,
+  });
+
+  Future<void> crateApiWalletWalletUnlock({
+    required UaWallet w,
+    required String vaultJson,
+    Uint8List? vaultPassphrase,
+    Uint8List? prf32,
+    required List<int> bip39Passphrase,
+  });
+
+  Future<Uint8List> crateApiWalletWebauthnAssertion({
+    required List<int> keyData,
+    required List<int> expectedChallenge,
+    required List<int> authData,
+    required List<int> clientDataJson,
+    required List<int> r,
+    required List<int> s,
+  });
+
+  Future<Uint8List> crateApiWalletWebauthnChallenge({
+    required List<int> purpose,
+    required List<int> digest,
+  });
+
+  RustArcIncrementStrongCountFnType
+  get rust_arc_increment_strong_count_UaKemKey;
+
+  RustArcDecrementStrongCountFnType
+  get rust_arc_decrement_strong_count_UaKemKey;
+
+  CrossPlatformFinalizerArg get rust_arc_decrement_strong_count_UaKemKeyPtr;
+
+  RustArcIncrementStrongCountFnType get rust_arc_increment_strong_count_UaKey;
+
+  RustArcDecrementStrongCountFnType get rust_arc_decrement_strong_count_UaKey;
+
+  CrossPlatformFinalizerArg get rust_arc_decrement_strong_count_UaKeyPtr;
+
+  RustArcIncrementStrongCountFnType
+  get rust_arc_increment_strong_count_UaKeyList;
+
+  RustArcDecrementStrongCountFnType
+  get rust_arc_decrement_strong_count_UaKeyList;
+
+  CrossPlatformFinalizerArg get rust_arc_decrement_strong_count_UaKeyListPtr;
+
+  RustArcIncrementStrongCountFnType
+  get rust_arc_increment_strong_count_UaLinkSession;
+
+  RustArcDecrementStrongCountFnType
+  get rust_arc_decrement_strong_count_UaLinkSession;
+
+  CrossPlatformFinalizerArg
+  get rust_arc_decrement_strong_count_UaLinkSessionPtr;
+
+  RustArcIncrementStrongCountFnType
+  get rust_arc_increment_strong_count_UaPqzKey;
+
+  RustArcDecrementStrongCountFnType
+  get rust_arc_decrement_strong_count_UaPqzKey;
+
+  CrossPlatformFinalizerArg get rust_arc_decrement_strong_count_UaPqzKeyPtr;
+
+  RustArcIncrementStrongCountFnType
+  get rust_arc_increment_strong_count_UaSeedBackup;
+
+  RustArcDecrementStrongCountFnType
+  get rust_arc_decrement_strong_count_UaSeedBackup;
+
+  CrossPlatformFinalizerArg get rust_arc_decrement_strong_count_UaSeedBackupPtr;
+
+  RustArcIncrementStrongCountFnType
+  get rust_arc_increment_strong_count_UaWallet;
+
+  RustArcDecrementStrongCountFnType
+  get rust_arc_decrement_strong_count_UaWallet;
+
+  CrossPlatformFinalizerArg get rust_arc_decrement_strong_count_UaWalletPtr;
+
+  RustArcIncrementStrongCountFnType
+  get rust_arc_increment_strong_count_UaZetherKey;
+
+  RustArcDecrementStrongCountFnType
+  get rust_arc_decrement_strong_count_UaZetherKey;
+
+  CrossPlatformFinalizerArg get rust_arc_decrement_strong_count_UaZetherKeyPtr;
 }
 
 class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
@@ -302,13 +744,1625 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
   });
 
   @override
+  Future<Uint8List> crateApiWalletUaKemKeyDecaps({
+    required UaKemKey that,
+    required List<int> mlkemCt,
+    required List<int> x25519Eph,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKemKey(
+            that,
+            serializer,
+          );
+          sse_encode_list_prim_u_8_loose(mlkemCt, serializer);
+          sse_encode_list_prim_u_8_loose(x25519Eph, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 1,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_prim_u_8_strict,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletUaKemKeyDecapsConstMeta,
+        argValues: [that, mlkemCt, x25519Eph],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletUaKemKeyDecapsConstMeta =>
+      const TaskConstMeta(
+        debugName: "UaKemKey_decaps",
+        argNames: ["that", "mlkemCt", "x25519Eph"],
+      );
+
+  @override
+  Uint8List crateApiWalletUaKemKeyKemPk({required UaKemKey that}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKemKey(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 2)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_prim_u_8_strict,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiWalletUaKemKeyKemPkConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletUaKemKeyKemPkConstMeta =>
+      const TaskConstMeta(debugName: "UaKemKey_kem_pk", argNames: ["that"]);
+
+  @override
+  Future<Uint8List> crateApiWalletUaKemKeyOpen({
+    required UaKemKey that,
+    required String purpose,
+    required List<int> aad,
+    required UaSealed sealed,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKemKey(
+            that,
+            serializer,
+          );
+          sse_encode_String(purpose, serializer);
+          sse_encode_list_prim_u_8_loose(aad, serializer);
+          sse_encode_box_autoadd_ua_sealed(sealed, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 3,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_prim_u_8_strict,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletUaKemKeyOpenConstMeta,
+        argValues: [that, purpose, aad, sealed],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletUaKemKeyOpenConstMeta => const TaskConstMeta(
+    debugName: "UaKemKey_open",
+    argNames: ["that", "purpose", "aad", "sealed"],
+  );
+
+  @override
+  Future<Uint8List> crateApiWalletUaKemKeyOpenContainer({
+    required UaKemKey that,
+    required String containerJson,
+    required String expectJson,
+    String? membersJson,
+    String? acceptedJson,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKemKey(
+            that,
+            serializer,
+          );
+          sse_encode_String(containerJson, serializer);
+          sse_encode_String(expectJson, serializer);
+          sse_encode_opt_String(membersJson, serializer);
+          sse_encode_opt_String(acceptedJson, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 4,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_prim_u_8_strict,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletUaKemKeyOpenContainerConstMeta,
+        argValues: [that, containerJson, expectJson, membersJson, acceptedJson],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletUaKemKeyOpenContainerConstMeta =>
+      const TaskConstMeta(
+        debugName: "UaKemKey_open_container",
+        argNames: [
+          "that",
+          "containerJson",
+          "expectJson",
+          "membersJson",
+          "acceptedJson",
+        ],
+      );
+
+  @override
+  void crateApiWalletUaKeyListPush({
+    required UaKeyList that,
+    required UaKey k,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKeyList(
+            that,
+            serializer,
+          );
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKey(
+            k,
+            serializer,
+          );
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 5)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiWalletUaKeyListPushConstMeta,
+        argValues: [that, k],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletUaKeyListPushConstMeta =>
+      const TaskConstMeta(debugName: "UaKeyList_push", argNames: ["that", "k"]);
+
+  @override
+  String crateApiWalletUaKeyAddress({required UaKey that}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKey(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 6)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletUaKeyAddressConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletUaKeyAddressConstMeta =>
+      const TaskConstMeta(debugName: "UaKey_address", argNames: ["that"]);
+
+  @override
+  bool crateApiWalletUaKeyIsUa({required UaKey that}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKey(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 7)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_bool,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiWalletUaKeyIsUaConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletUaKeyIsUaConstMeta =>
+      const TaskConstMeta(debugName: "UaKey_is_ua", argNames: ["that"]);
+
+  @override
+  Uint8List crateApiWalletUaKeyKeyData({required UaKey that}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKey(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 8)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_prim_u_8_strict,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiWalletUaKeyKeyDataConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletUaKeyKeyDataConstMeta =>
+      const TaskConstMeta(debugName: "UaKey_key_data", argNames: ["that"]);
+
+  @override
+  int crateApiWalletUaKeyKind({required UaKey that}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKey(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 9)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_u_16,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiWalletUaKeyKindConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletUaKeyKindConstMeta =>
+      const TaskConstMeta(debugName: "UaKey_kind", argNames: ["that"]);
+
+  @override
+  String crateApiWalletUaKeyNetworkName({required UaKey that}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKey(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 10)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiWalletUaKeyNetworkNameConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletUaKeyNetworkNameConstMeta =>
+      const TaskConstMeta(debugName: "UaKey_network_name", argNames: ["that"]);
+
+  @override
+  Future<Uint8List> crateApiWalletUaKeySignDigestRaw({
+    required UaKey that,
+    required List<int> digest,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKey(
+            that,
+            serializer,
+          );
+          sse_encode_list_prim_u_8_loose(digest, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 11,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_prim_u_8_strict,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletUaKeySignDigestRawConstMeta,
+        argValues: [that, digest],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletUaKeySignDigestRawConstMeta =>
+      const TaskConstMeta(
+        debugName: "UaKey_sign_digest_raw",
+        argNames: ["that", "digest"],
+      );
+
+  @override
+  Future<Uint8List> crateApiWalletUaKeySignKeyProof({
+    required UaKey that,
+    required List<int> challenge,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKey(
+            that,
+            serializer,
+          );
+          sse_encode_list_prim_u_8_loose(challenge, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 12,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_prim_u_8_strict,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletUaKeySignKeyProofConstMeta,
+        argValues: [that, challenge],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletUaKeySignKeyProofConstMeta =>
+      const TaskConstMeta(
+        debugName: "UaKey_sign_key_proof",
+        argNames: ["that", "challenge"],
+      );
+
+  @override
+  Future<Uint8List> crateApiWalletUaKeySignMember({
+    required UaKey that,
+    required List<int> structureUa,
+    required List<int> structureUaMsg,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKey(
+            that,
+            serializer,
+          );
+          sse_encode_list_prim_u_8_loose(structureUa, serializer);
+          sse_encode_list_prim_u_8_loose(structureUaMsg, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 13,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_prim_u_8_strict,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletUaKeySignMemberConstMeta,
+        argValues: [that, structureUa, structureUaMsg],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletUaKeySignMemberConstMeta =>
+      const TaskConstMeta(
+        debugName: "UaKey_sign_member",
+        argNames: ["that", "structureUa", "structureUaMsg"],
+      );
+
+  @override
+  Future<Uint8List> crateApiWalletUaKeySignTransaction({
+    required UaKey that,
+    required String txJson,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKey(
+            that,
+            serializer,
+          );
+          sse_encode_String(txJson, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 14,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_prim_u_8_strict,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletUaKeySignTransactionConstMeta,
+        argValues: [that, txJson],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletUaKeySignTransactionConstMeta =>
+      const TaskConstMeta(
+        debugName: "UaKey_sign_transaction",
+        argNames: ["that", "txJson"],
+      );
+
+  @override
+  Future<Uint8List> crateApiWalletUaKeySignTyped({
+    required UaKey that,
+    required String typedDataJson,
+    required String expectJson,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKey(
+            that,
+            serializer,
+          );
+          sse_encode_String(typedDataJson, serializer);
+          sse_encode_String(expectJson, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 15,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_prim_u_8_strict,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletUaKeySignTypedConstMeta,
+        argValues: [that, typedDataJson, expectJson],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletUaKeySignTypedConstMeta =>
+      const TaskConstMeta(
+        debugName: "UaKey_sign_typed",
+        argNames: ["that", "typedDataJson", "expectJson"],
+      );
+
+  @override
+  Future<Uint8List> crateApiWalletUaKeySignTypedAny({
+    required UaKey that,
+    required String typedDataJson,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKey(
+            that,
+            serializer,
+          );
+          sse_encode_String(typedDataJson, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 16,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_prim_u_8_strict,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletUaKeySignTypedAnyConstMeta,
+        argValues: [that, typedDataJson],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletUaKeySignTypedAnyConstMeta =>
+      const TaskConstMeta(
+        debugName: "UaKey_sign_typed_any",
+        argNames: ["that", "typedDataJson"],
+      );
+
+  @override
+  Future<Uint8List> crateApiWalletUaKeySignUa({
+    required UaKey that,
+    required List<int> purpose,
+    required List<int> digest,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKey(
+            that,
+            serializer,
+          );
+          sse_encode_list_prim_u_8_loose(purpose, serializer);
+          sse_encode_list_prim_u_8_loose(digest, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 17,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_prim_u_8_strict,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletUaKeySignUaConstMeta,
+        argValues: [that, purpose, digest],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletUaKeySignUaConstMeta => const TaskConstMeta(
+    debugName: "UaKey_sign_ua",
+    argNames: ["that", "purpose", "digest"],
+  );
+
+  @override
+  Uint8List crateApiWalletUaKeyUaId({required UaKey that}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKey(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 18)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_prim_u_8_strict,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletUaKeyUaIdConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletUaKeyUaIdConstMeta =>
+      const TaskConstMeta(debugName: "UaKey_ua_id", argNames: ["that"]);
+
+  @override
+  Uint8List crateApiWalletUaLinkSessionKemPk({required UaLinkSession that}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaLinkSession(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 19)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_prim_u_8_strict,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletUaLinkSessionKemPkConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletUaLinkSessionKemPkConstMeta =>
+      const TaskConstMeta(
+        debugName: "UaLinkSession_kem_pk",
+        argNames: ["that"],
+      );
+
+  @override
+  String crateApiWalletUaLinkSessionShortCode({required UaLinkSession that}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaLinkSession(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 20)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletUaLinkSessionShortCodeConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletUaLinkSessionShortCodeConstMeta =>
+      const TaskConstMeta(
+        debugName: "UaLinkSession_short_code",
+        argNames: ["that"],
+      );
+
+  @override
+  Future<String> crateApiWalletUaPqzKeyCall({
+    required UaPqzKey that,
+    required String cmd,
+    required String requestJson,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaPqzKey(
+            that,
+            serializer,
+          );
+          sse_encode_String(cmd, serializer);
+          sse_encode_String(requestJson, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 21,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletUaPqzKeyCallConstMeta,
+        argValues: [that, cmd, requestJson],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletUaPqzKeyCallConstMeta => const TaskConstMeta(
+    debugName: "UaPqzKey_call",
+    argNames: ["that", "cmd", "requestJson"],
+  );
+
+  @override
+  Future<Uint8List> crateApiWalletUaPqzKeyOpenBalanceCache({
+    required UaPqzKey that,
+    required String boxJson,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaPqzKey(
+            that,
+            serializer,
+          );
+          sse_encode_String(boxJson, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 22,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_prim_u_8_strict,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletUaPqzKeyOpenBalanceCacheConstMeta,
+        argValues: [that, boxJson],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletUaPqzKeyOpenBalanceCacheConstMeta =>
+      const TaskConstMeta(
+        debugName: "UaPqzKey_open_balance_cache",
+        argNames: ["that", "boxJson"],
+      );
+
+  @override
+  Uint8List crateApiWalletUaPqzKeyPk({required UaPqzKey that}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaPqzKey(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 23)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_prim_u_8_strict,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiWalletUaPqzKeyPkConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletUaPqzKeyPkConstMeta =>
+      const TaskConstMeta(debugName: "UaPqzKey_pk", argNames: ["that"]);
+
+  @override
+  Future<String> crateApiWalletUaPqzKeySealBalanceCache({
+    required UaPqzKey that,
+    required List<int> entries,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaPqzKey(
+            that,
+            serializer,
+          );
+          sse_encode_list_prim_u_8_loose(entries, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 24,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletUaPqzKeySealBalanceCacheConstMeta,
+        argValues: [that, entries],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletUaPqzKeySealBalanceCacheConstMeta =>
+      const TaskConstMeta(
+        debugName: "UaPqzKey_seal_balance_cache",
+        argNames: ["that", "entries"],
+      );
+
+  @override
+  Future<Uint32List> crateApiWalletUaSeedBackupChallenge({
+    required UaSeedBackup that,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaSeedBackup(
+            that,
+            serializer,
+          );
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 25,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_prim_u_32_strict,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletUaSeedBackupChallengeConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletUaSeedBackupChallengeConstMeta =>
+      const TaskConstMeta(
+        debugName: "UaSeedBackup_challenge",
+        argNames: ["that"],
+      );
+
+  @override
+  Future<Uint8List> crateApiWalletUaSeedBackupReveal({
+    required UaSeedBackup that,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaSeedBackup(
+            that,
+            serializer,
+          );
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 26,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_prim_u_8_strict,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletUaSeedBackupRevealConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletUaSeedBackupRevealConstMeta =>
+      const TaskConstMeta(debugName: "UaSeedBackup_reveal", argNames: ["that"]);
+
+  @override
+  Future<Uint8List?> crateApiWalletUaSeedBackupTake({
+    required UaSeedBackup that,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaSeedBackup(
+            that,
+            serializer,
+          );
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 27,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_opt_list_prim_u_8_strict,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletUaSeedBackupTakeConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletUaSeedBackupTakeConstMeta =>
+      const TaskConstMeta(debugName: "UaSeedBackup_take", argNames: ["that"]);
+
+  @override
+  Future<String> crateApiWalletUaWalletDiscoverCandidates({
+    required UaWallet that,
+    required int kind,
+    required int account,
+    required int gap,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+            that,
+            serializer,
+          );
+          sse_encode_u_16(kind, serializer);
+          sse_encode_u_32(account, serializer);
+          sse_encode_u_32(gap, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 28,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletUaWalletDiscoverCandidatesConstMeta,
+        argValues: [that, kind, account, gap],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletUaWalletDiscoverCandidatesConstMeta =>
+      const TaskConstMeta(
+        debugName: "UaWallet_discover_candidates",
+        argNames: ["that", "kind", "account", "gap"],
+      );
+
+  @override
+  Future<Uint8List> crateApiWalletUaWalletExportPqzLeafRaw({
+    required UaWallet that,
+    required int account,
+    required int index,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+            that,
+            serializer,
+          );
+          sse_encode_u_32(account, serializer);
+          sse_encode_u_32(index, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 29,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_prim_u_8_strict,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletUaWalletExportPqzLeafRawConstMeta,
+        argValues: [that, account, index],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletUaWalletExportPqzLeafRawConstMeta =>
+      const TaskConstMeta(
+        debugName: "UaWallet_export_pqz_leaf_raw",
+        argNames: ["that", "account", "index"],
+      );
+
+  @override
+  Future<UaKey> crateApiWalletUaWalletImportedKey({
+    required UaWallet that,
+    required String networkName,
+    required int n,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+            that,
+            serializer,
+          );
+          sse_encode_String(networkName, serializer);
+          sse_encode_u_32(n, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 30,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData:
+              sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKey,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletUaWalletImportedKeyConstMeta,
+        argValues: [that, networkName, n],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletUaWalletImportedKeyConstMeta =>
+      const TaskConstMeta(
+        debugName: "UaWallet_imported_key",
+        argNames: ["that", "networkName", "n"],
+      );
+
+  @override
+  Future<String> crateApiWalletUaWalletLinkSeal({
+    required UaWallet that,
+    required UaKey sender,
+    required List<int> sessionKemPk,
+    required String shortCode,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+            that,
+            serializer,
+          );
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKey(
+            sender,
+            serializer,
+          );
+          sse_encode_list_prim_u_8_loose(sessionKemPk, serializer);
+          sse_encode_String(shortCode, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 31,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletUaWalletLinkSealConstMeta,
+        argValues: [that, sender, sessionKemPk, shortCode],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletUaWalletLinkSealConstMeta =>
+      const TaskConstMeta(
+        debugName: "UaWallet_link_seal",
+        argNames: ["that", "sender", "sessionKemPk", "shortCode"],
+      );
+
+  @override
+  void crateApiWalletUaWalletLock({required UaWallet that}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 32)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiWalletUaWalletLockConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletUaWalletLockConstMeta =>
+      const TaskConstMeta(debugName: "UaWallet_lock", argNames: ["that"]);
+
+  @override
+  String crateApiWalletUaWalletManifestJson({required UaWallet that}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 33)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiWalletUaWalletManifestJsonConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletUaWalletManifestJsonConstMeta =>
+      const TaskConstMeta(
+        debugName: "UaWallet_manifest_json",
+        argNames: ["that"],
+      );
+
+  @override
+  UaMemoryProtection crateApiWalletUaWalletMemoryProtection({
+    required UaWallet that,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 34)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_ua_memory_protection,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiWalletUaWalletMemoryProtectionConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletUaWalletMemoryProtectionConstMeta =>
+      const TaskConstMeta(
+        debugName: "UaWallet_memory_protection",
+        argNames: ["that"],
+      );
+
+  @override
+  Future<UaKey> crateApiWalletUaWalletNativeKey({
+    required UaWallet that,
+    required String networkName,
+    required int index,
+    int? coinType,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+            that,
+            serializer,
+          );
+          sse_encode_String(networkName, serializer);
+          sse_encode_u_32(index, serializer);
+          sse_encode_opt_box_autoadd_u_32(coinType, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 35,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData:
+              sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKey,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletUaWalletNativeKeyConstMeta,
+        argValues: [that, networkName, index, coinType],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletUaWalletNativeKeyConstMeta =>
+      const TaskConstMeta(
+        debugName: "UaWallet_native_key",
+        argNames: ["that", "networkName", "index", "coinType"],
+      );
+
+  @override
+  Future<UaPqzKey> crateApiWalletUaWalletPqzKey({
+    required UaWallet that,
+    required int account,
+    required int index,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+            that,
+            serializer,
+          );
+          sse_encode_u_32(account, serializer);
+          sse_encode_u_32(index, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 36,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData:
+              sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaPqzKey,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletUaWalletPqzKeyConstMeta,
+        argValues: [that, account, index],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletUaWalletPqzKeyConstMeta =>
+      const TaskConstMeta(
+        debugName: "UaWallet_pqz_key",
+        argNames: ["that", "account", "index"],
+      );
+
+  @override
+  Future<UaKey> crateApiWalletUaWalletUaKey({
+    required UaWallet that,
+    required int kind,
+    required int account,
+    required int index,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+            that,
+            serializer,
+          );
+          sse_encode_u_16(kind, serializer);
+          sse_encode_u_32(account, serializer);
+          sse_encode_u_32(index, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 37,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData:
+              sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKey,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletUaWalletUaKeyConstMeta,
+        argValues: [that, kind, account, index],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletUaWalletUaKeyConstMeta =>
+      const TaskConstMeta(
+        debugName: "UaWallet_ua_key",
+        argNames: ["that", "kind", "account", "index"],
+      );
+
+  @override
+  Future<UaZetherKey> crateApiWalletUaWalletZetherKey({
+    required UaWallet that,
+    required int coin,
+    required int account,
+    required int keyUse,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+            that,
+            serializer,
+          );
+          sse_encode_u_32(coin, serializer);
+          sse_encode_u_32(account, serializer);
+          sse_encode_u_32(keyUse, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 38,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData:
+              sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaZetherKey,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletUaWalletZetherKeyConstMeta,
+        argValues: [that, coin, account, keyUse],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletUaWalletZetherKeyConstMeta =>
+      const TaskConstMeta(
+        debugName: "UaWallet_zether_key",
+        argNames: ["that", "coin", "account", "keyUse"],
+      );
+
+  @override
+  Future<String> crateApiWalletUaZetherKeyCall({
+    required UaZetherKey that,
+    required String cmd,
+    required String requestJson,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaZetherKey(
+            that,
+            serializer,
+          );
+          sse_encode_String(cmd, serializer);
+          sse_encode_String(requestJson, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 39,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletUaZetherKeyCallConstMeta,
+        argValues: [that, cmd, requestJson],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletUaZetherKeyCallConstMeta =>
+      const TaskConstMeta(
+        debugName: "UaZetherKey_call",
+        argNames: ["that", "cmd", "requestJson"],
+      );
+
+  @override
+  Future<Uint8List> crateApiWalletUaZetherKeyOpenBalanceCache({
+    required UaZetherKey that,
+    required String boxJson,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaZetherKey(
+            that,
+            serializer,
+          );
+          sse_encode_String(boxJson, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 40,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_prim_u_8_strict,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletUaZetherKeyOpenBalanceCacheConstMeta,
+        argValues: [that, boxJson],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletUaZetherKeyOpenBalanceCacheConstMeta =>
+      const TaskConstMeta(
+        debugName: "UaZetherKey_open_balance_cache",
+        argNames: ["that", "boxJson"],
+      );
+
+  @override
+  Future<String> crateApiWalletUaZetherKeySealBalanceCache({
+    required UaZetherKey that,
+    required List<int> entriesJson,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaZetherKey(
+            that,
+            serializer,
+          );
+          sse_encode_list_prim_u_8_loose(entriesJson, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 41,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletUaZetherKeySealBalanceCacheConstMeta,
+        argValues: [that, entriesJson],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletUaZetherKeySealBalanceCacheConstMeta =>
+      const TaskConstMeta(
+        debugName: "UaZetherKey_seal_balance_cache",
+        argNames: ["that", "entriesJson"],
+      );
+
+  @override
+  Uint8List crateApiWalletUaZetherKeyUaId({required UaZetherKey that}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaZetherKey(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 42)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_prim_u_8_strict,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiWalletUaZetherKeyUaIdConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletUaZetherKeyUaIdConstMeta =>
+      const TaskConstMeta(debugName: "UaZetherKey_ua_id", argNames: ["that"]);
+
+  @override
+  Uint8List crateApiWalletUaZetherKeyY({required UaZetherKey that}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaZetherKey(
+            that,
+            serializer,
+          );
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 43)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_prim_u_8_strict,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiWalletUaZetherKeyYConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletUaZetherKeyYConstMeta =>
+      const TaskConstMeta(debugName: "UaZetherKey_y", argNames: ["that"]);
+
+  @override
+  int crateApiWalletAbiVersion() {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 44)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_u_32,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiWalletAbiVersionConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletAbiVersionConstMeta =>
+      const TaskConstMeta(debugName: "abi_version", argNames: []);
+
+  @override
+  Future<Uint8List> crateApiWalletAeadOpen({
+    required int algId,
+    required List<int> key32,
+    required List<int> nonce12,
+    required List<int> aad,
+    required List<int> data,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_u_32(algId, serializer);
+          sse_encode_list_prim_u_8_loose(key32, serializer);
+          sse_encode_list_prim_u_8_loose(nonce12, serializer);
+          sse_encode_list_prim_u_8_loose(aad, serializer);
+          sse_encode_list_prim_u_8_loose(data, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 45,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_prim_u_8_strict,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletAeadOpenConstMeta,
+        argValues: [algId, key32, nonce12, aad, data],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletAeadOpenConstMeta => const TaskConstMeta(
+    debugName: "aead_open",
+    argNames: ["algId", "key32", "nonce12", "aad", "data"],
+  );
+
+  @override
+  Future<Uint8List> crateApiWalletAeadSeal({
+    required int algId,
+    required List<int> key32,
+    required List<int> nonce12,
+    required List<int> aad,
+    required List<int> data,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_u_32(algId, serializer);
+          sse_encode_list_prim_u_8_loose(key32, serializer);
+          sse_encode_list_prim_u_8_loose(nonce12, serializer);
+          sse_encode_list_prim_u_8_loose(aad, serializer);
+          sse_encode_list_prim_u_8_loose(data, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 46,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_prim_u_8_strict,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletAeadSealConstMeta,
+        argValues: [algId, key32, nonce12, aad, data],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletAeadSealConstMeta => const TaskConstMeta(
+    debugName: "aead_seal",
+    argNames: ["algId", "key32", "nonce12", "aad", "data"],
+  );
+
+  @override
   String crateApiUaCanonicalId({required String text}) {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(text, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 1)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 47)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -331,7 +2385,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_i_64(chainId, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 2)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 48)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_u_8_array_32,
@@ -360,7 +2414,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           sse_encode_i_64(kind, serializer);
           sse_encode_list_prim_u_8_loose(keyData, serializer);
           sse_encode_bool(hederaNative, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 3)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 49)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_u_8_array_32,
@@ -389,7 +2443,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_i_64(threshold, serializer);
           sse_encode_list_record_i_64_u_8_array_32_i_64(members, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 4)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 50)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_list_prim_u_8_strict,
@@ -408,13 +2462,35 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
   );
 
   @override
+  BigInt crateApiWalletFeatures() {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 51)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_u_64,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiWalletFeaturesConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletFeaturesConstMeta =>
+      const TaskConstMeta(debugName: "features", argNames: []);
+
+  @override
   String crateApiUaGovernanceBit({required PlatformInt64 bit}) {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_i_64(bit, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 5)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 52)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -437,7 +2513,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(group, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 6)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 53)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_opt_u_8_array_32,
@@ -460,7 +2536,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(group, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 7)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 54)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_opt_String,
@@ -475,6 +2551,78 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
 
   TaskConstMeta get kCrateApiUaGroupTagStringConstMeta =>
       const TaskConstMeta(debugName: "group_tag_string", argNames: ["group"]);
+
+  @override
+  Future<Uint8List> crateApiWalletHkdfSha256({
+    required List<int> ikm,
+    required List<int> salt,
+    required List<int> info,
+    required int len,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_list_prim_u_8_loose(ikm, serializer);
+          sse_encode_list_prim_u_8_loose(salt, serializer);
+          sse_encode_list_prim_u_8_loose(info, serializer);
+          sse_encode_u_32(len, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 55,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_prim_u_8_strict,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletHkdfSha256ConstMeta,
+        argValues: [ikm, salt, info, len],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletHkdfSha256ConstMeta => const TaskConstMeta(
+    debugName: "hkdf_sha256",
+    argNames: ["ikm", "salt", "info", "len"],
+  );
+
+  @override
+  Future<Uint8List> crateApiWalletHmacSha256({
+    required List<int> keyBytes,
+    required List<int> data,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_list_prim_u_8_loose(keyBytes, serializer);
+          sse_encode_list_prim_u_8_loose(data, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 56,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_prim_u_8_strict,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiWalletHmacSha256ConstMeta,
+        argValues: [keyBytes, data],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletHmacSha256ConstMeta => const TaskConstMeta(
+    debugName: "hmac_sha256",
+    argNames: ["keyBytes", "data"],
+  );
 
   @override
   HolderPop crateApiUaHolderPopMessage({
@@ -497,7 +2645,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           sse_encode_opt_list_prim_u_8_strict(pqzPop, serializer);
           sse_encode_opt_list_prim_u_8_strict(pqzPopHash, serializer);
           sse_encode_opt_list_prim_u_8_strict(kemPk, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 8)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 57)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_holder_pop,
@@ -546,7 +2694,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           sse_encode_opt_list_prim_u_8_strict(pqzPopHash, serializer);
           sse_encode_opt_list_prim_u_8_strict(kemPk, serializer);
           sse_encode_String(inner, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 9)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 58)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_holder_pop,
@@ -590,7 +2738,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_u_8_array_32(id, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 10)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 59)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
@@ -617,7 +2765,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_i_64(kind, serializer);
           sse_encode_bool(hederaNative, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 11)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 60)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
@@ -642,7 +2790,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_i_64(kind, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 12)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 61)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
@@ -665,7 +2813,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_u_8_array_32(tag, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 13)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 62)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
@@ -688,7 +2836,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_i_64(kind, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 14)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 63)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
@@ -711,7 +2859,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_i_64(kind, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 15)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 64)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
@@ -734,7 +2882,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_i_64(kind, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 16)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 65)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
@@ -757,7 +2905,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_list_prim_u_8_loose(data, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 17)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 66)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_u_8_array_32,
@@ -774,6 +2922,62 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
       const TaskConstMeta(debugName: "keccak256", argNames: ["data"]);
 
   @override
+  Future<UaEncapsulated> crateApiWalletKemEncaps({required List<int> kemPk}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_list_prim_u_8_loose(kemPk, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 67,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_ua_encapsulated,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletKemEncapsConstMeta,
+        argValues: [kemPk],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletKemEncapsConstMeta =>
+      const TaskConstMeta(debugName: "kem_encaps", argNames: ["kemPk"]);
+
+  @override
+  Future<UaKemKey> crateApiWalletKemEphemeral() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 68,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData:
+              sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKemKey,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletKemEphemeralConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletKemEphemeralConstMeta =>
+      const TaskConstMeta(debugName: "kem_ephemeral", argNames: []);
+
+  @override
   U8Array32 crateApiUaKemRecordDigest({
     required U8Array32 ua,
     required BigInt version,
@@ -786,7 +2990,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           sse_encode_u_8_array_32(ua, serializer);
           sse_encode_u_64(version, serializer);
           sse_encode_list_prim_u_8_loose(kemPk, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 18)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 69)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_u_8_array_32,
@@ -817,7 +3021,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           sse_encode_u_8_array_32(ua, serializer);
           sse_encode_u_64(version, serializer);
           sse_encode_list_prim_u_8_loose(kemPk, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 19)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 70)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_u_8_array_32,
@@ -850,7 +3054,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           sse_encode_u_8_array_32(ua, serializer);
           sse_encode_u_64(version, serializer);
           sse_encode_list_prim_u_8_loose(kemPk, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 20)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 71)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_u_8_array_32,
@@ -879,7 +3083,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_i_64(kind, serializer);
           sse_encode_list_prim_u_8_loose(keyData, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 21)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 72)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_opt_u_8_array_32,
@@ -898,13 +3102,77 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
   );
 
   @override
+  Future<UaKemKey> crateApiWalletKeyKemKey({
+    required UaKey k,
+    required BigInt version,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKey(
+            k,
+            serializer,
+          );
+          sse_encode_u_64(version, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 73,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData:
+              sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKemKey,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletKeyKemKeyConstMeta,
+        argValues: [k, version],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletKeyKemKeyConstMeta =>
+      const TaskConstMeta(debugName: "key_kem_key", argNames: ["k", "version"]);
+
+  @override
+  Future<UaKeyList> crateApiWalletKeyListNew() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 74,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData:
+              sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKeyList,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiWalletKeyListNewConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletKeyListNewConstMeta =>
+      const TaskConstMeta(debugName: "key_list_new", argNames: []);
+
+  @override
   KindInfo crateApiUaKindInfo({required PlatformInt64 kind}) {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_i_64(kind, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 22)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 75)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_kind_info,
@@ -927,7 +3195,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_i_64(kind, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 23)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 76)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -944,6 +3212,56 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
       const TaskConstMeta(debugName: "kind_tag_string", argNames: ["kind"]);
 
   @override
+  Future<UaLinkSession> crateApiWalletLinkSessionNew() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 77,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData:
+              sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaLinkSession,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletLinkSessionNewConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletLinkSessionNewConstMeta =>
+      const TaskConstMeta(debugName: "link_session_new", argNames: []);
+
+  @override
+  PlatformInt64 crateApiWalletLiveHandles() {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 78)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_i_64,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiWalletLiveHandlesConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletLiveHandlesConstMeta =>
+      const TaskConstMeta(debugName: "live_handles", argNames: []);
+
+  @override
   U8Array32 crateApiUaMemberDigest({
     required U8Array32 structureUa,
     required U8Array32 uaMsg,
@@ -954,7 +3272,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_u_8_array_32(structureUa, serializer);
           sse_encode_u_8_array_32(uaMsg, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 24)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 79)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_u_8_array_32,
@@ -983,7 +3301,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_u_8_array_32(ua, serializer);
           sse_encode_u_8_array_32(member, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 25)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 80)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_u_8_array_32,
@@ -1007,7 +3325,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 26)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 81)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_u_8_array_32,
@@ -1030,7 +3348,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_list_prim_u_8_loose(keyData, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 27)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 82)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
@@ -1059,7 +3377,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_list_prim_u_8_loose(keyData, serializer);
           sse_encode_String(inner, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 28)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 83)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
@@ -1089,7 +3407,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_i_64(kind, serializer);
           sse_encode_list_prim_u_8_loose(raw, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 29)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 84)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_u_8_array_32,
@@ -1111,7 +3429,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 30)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 85)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_u_8_array_32,
@@ -1142,7 +3460,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           sse_encode_i_64(kind, serializer);
           sse_encode_u_8_array_32(pqzKeyHash, serializer);
           sse_encode_u_8_array_32(kemRecordHash, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 31)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 86)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_u_8_array_32,
@@ -1162,6 +3480,36 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
       );
 
   @override
+  Future<void> crateApiWalletPqzCheckSet({required String deployedJson}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(deployedJson, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 87,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletPqzCheckSetConstMeta,
+        argValues: [deployedJson],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletPqzCheckSetConstMeta => const TaskConstMeta(
+    debugName: "pqz_check_set",
+    argNames: ["deployedJson"],
+  );
+
+  @override
   U8Array32 crateApiUaPqzKeyDigest({
     required U8Array32 ua,
     required U8Array32 pqzKeyHash,
@@ -1172,7 +3520,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_u_8_array_32(ua, serializer);
           sse_encode_u_8_array_32(pqzKeyHash, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 32)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 88)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_u_8_array_32,
@@ -1203,7 +3551,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           sse_encode_u_8_array_32(ua, serializer);
           sse_encode_u_8_array_32(pqzKeyHash, serializer);
           sse_encode_u_8_array_32(pqzPopHash, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 33)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 89)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_u_8_array_32,
@@ -1243,7 +3591,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           sse_encode_opt_list_prim_u_8_strict(pqzPop, serializer);
           sse_encode_opt_list_prim_u_8_strict(pqzPopHash, serializer);
           sse_encode_bool(alreadySet, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 34)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 90)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_pqz_key_record,
@@ -1293,7 +3641,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           sse_encode_opt_list_prim_u_8_strict(pqzPopHash, serializer);
           sse_encode_bool(alreadySet, serializer);
           sse_encode_String(inner, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 35)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 91)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_pqz_key_record,
@@ -1345,7 +3693,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           sse_encode_u_8_array_32(ua, serializer);
           sse_encode_list_prim_u_8_loose(pqzKey, serializer);
           sse_encode_opt_list_prim_u_8_strict(kemPk, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 36)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 92)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_u_8_array_32,
@@ -1364,13 +3712,40 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
   );
 
   @override
+  Future<String> crateApiWalletPqzSet() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 93,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiWalletPqzSetConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletPqzSetConstMeta =>
+      const TaskConstMeta(debugName: "pqz_set", argNames: []);
+
+  @override
   U8Array32 crateApiUaPurposeTag({required String purpose}) {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(purpose, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 37)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 94)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_u_8_array_32,
@@ -1397,7 +3772,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(purpose, serializer);
           sse_encode_i_64(version, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 38)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 95)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_u_8_array_32,
@@ -1422,7 +3797,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(input, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 39)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 96)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -1455,7 +3830,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           sse_encode_u_8_array_32(pqzKeyHash, serializer);
           sse_encode_u_8_array_32(kemRecordHash, serializer);
           sse_encode_u_8_array_32(pqzPopHash, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 40)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 97)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_u_8_array_32,
@@ -1487,7 +3862,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           sse_encode_list_prim_u_8_loose(keyData, serializer);
           sse_encode_i_64(index, serializer);
           sse_encode_list_prim_u_8_loose(stored, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 41)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 98)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -1507,13 +3882,93 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
       );
 
   @override
+  Future<UaSealed> crateApiWalletSeal({
+    required List<int> kemPk,
+    required String purpose,
+    required List<int> aad,
+    required List<int> pt,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_list_prim_u_8_loose(kemPk, serializer);
+          sse_encode_String(purpose, serializer);
+          sse_encode_list_prim_u_8_loose(aad, serializer);
+          sse_encode_list_prim_u_8_loose(pt, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 99,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_ua_sealed,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletSealConstMeta,
+        argValues: [kemPk, purpose, aad, pt],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletSealConstMeta => const TaskConstMeta(
+    debugName: "seal",
+    argNames: ["kemPk", "purpose", "aad", "pt"],
+  );
+
+  @override
+  Future<bool> crateApiWalletSeedBackupVerify({
+    required UaSeedBackup b,
+    required List<Uint8List> answers,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaSeedBackup(
+            b,
+            serializer,
+          );
+          sse_encode_list_list_prim_u_8_strict(answers, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 100,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_bool,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletSeedBackupVerifyConstMeta,
+        argValues: [b, answers],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletSeedBackupVerifyConstMeta =>
+      const TaskConstMeta(
+        debugName: "seed_backup_verify",
+        argNames: ["b", "answers"],
+      );
+
+  @override
   String crateApiUaSetKemKeyArgs({required String input}) {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(input, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 42)!;
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 101,
+          )!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -1536,7 +3991,11 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(input, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 43)!;
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 102,
+          )!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -1559,7 +4018,11 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_i_64(kind, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 44)!;
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 103,
+          )!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_u_8_array_32,
@@ -1590,7 +4053,11 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           sse_encode_u_8_array_32(ua, serializer);
           sse_encode_u_8_array_32(purpose, serializer);
           sse_encode_u_8_array_32(digest, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 45)!;
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 104,
+          )!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_u_8_array_32,
@@ -1615,7 +4082,11 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_box_autoadd_ua_domain(domain, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 46)!;
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 105,
+          )!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_u_8_array_32,
@@ -1647,7 +4118,11 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           sse_encode_i_64(kind, serializer);
           sse_encode_u_8_array_32(purpose, serializer);
           sse_encode_u_8_array_32(digest, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 47)!;
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 106,
+          )!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_u_8_array_32,
@@ -1676,7 +4151,11 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_i_64(kind, serializer);
           sse_encode_list_prim_u_8_loose(keyData, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 48)!;
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 107,
+          )!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_u_8_array_32,
@@ -1693,6 +4172,43 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
       const TaskConstMeta(debugName: "ua_of", argNames: ["kind", "keyData"]);
 
   @override
+  Future<String> crateApiWalletUasig({
+    required String requestJson,
+    required UaKeyList keys,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(requestJson, serializer);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKeyList(
+            keys,
+            serializer,
+          );
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 108,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletUasigConstMeta,
+        argValues: [requestJson, keys],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletUasigConstMeta => const TaskConstMeta(
+    debugName: "uasig",
+    argNames: ["requestJson", "keys"],
+  );
+
+  @override
   void crateApiUaValidateKeyData({
     required PlatformInt64 kind,
     required List<int> keyData,
@@ -1705,7 +4221,11 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           sse_encode_i_64(kind, serializer);
           sse_encode_list_prim_u_8_loose(keyData, serializer);
           sse_encode_bool(hederaNative, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 49)!;
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 109,
+          )!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -1723,6 +4243,1104 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
     argNames: ["kind", "keyData", "hederaNative"],
   );
 
+  @override
+  Future<String> crateApiWalletVaultEnablePrf({
+    required String vaultJson,
+    required List<int> vaultPassphrase,
+    required List<int> prf32,
+    required String credentialId,
+    required List<int> salt,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(vaultJson, serializer);
+          sse_encode_list_prim_u_8_loose(vaultPassphrase, serializer);
+          sse_encode_list_prim_u_8_loose(prf32, serializer);
+          sse_encode_String(credentialId, serializer);
+          sse_encode_list_prim_u_8_loose(salt, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 110,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletVaultEnablePrfConstMeta,
+        argValues: [vaultJson, vaultPassphrase, prf32, credentialId, salt],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletVaultEnablePrfConstMeta =>
+      const TaskConstMeta(
+        debugName: "vault_enable_prf",
+        argNames: [
+          "vaultJson",
+          "vaultPassphrase",
+          "prf32",
+          "credentialId",
+          "salt",
+        ],
+      );
+
+  @override
+  Future<bool> crateApiWalletVaultNeedsRewrap({required String vaultJson}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(vaultJson, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 111,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_bool,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletVaultNeedsRewrapConstMeta,
+        argValues: [vaultJson],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletVaultNeedsRewrapConstMeta =>
+      const TaskConstMeta(
+        debugName: "vault_needs_rewrap",
+        argNames: ["vaultJson"],
+      );
+
+  @override
+  Future<String> crateApiWalletVaultRewrapPin({
+    required String vaultJson,
+    required List<int> oldPassphrase,
+    required List<int> newPassphrase,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(vaultJson, serializer);
+          sse_encode_list_prim_u_8_loose(oldPassphrase, serializer);
+          sse_encode_list_prim_u_8_loose(newPassphrase, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 112,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletVaultRewrapPinConstMeta,
+        argValues: [vaultJson, oldPassphrase, newPassphrase],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletVaultRewrapPinConstMeta =>
+      const TaskConstMeta(
+        debugName: "vault_rewrap_pin",
+        argNames: ["vaultJson", "oldPassphrase", "newPassphrase"],
+      );
+
+  @override
+  Future<List<String>> crateApiWalletWalletBackupSeal({
+    required UaWallet w,
+    required UaKey sender,
+    required List<UaRecipient> recipients,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+            w,
+            serializer,
+          );
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKey(
+            sender,
+            serializer,
+          );
+          sse_encode_list_ua_recipient(recipients, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 113,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_String,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletWalletBackupSealConstMeta,
+        argValues: [w, sender, recipients],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletWalletBackupSealConstMeta =>
+      const TaskConstMeta(
+        debugName: "wallet_backup_seal",
+        argNames: ["w", "sender", "recipients"],
+      );
+
+  @override
+  Future<UaWallet> crateApiWalletWalletFromLink({
+    required UaLinkSession session,
+    required String containerJson,
+    required String expectJson,
+    String? membersJson,
+    String? acceptedJson,
+    required List<int> bip39Passphrase,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaLinkSession(
+            session,
+            serializer,
+          );
+          sse_encode_String(containerJson, serializer);
+          sse_encode_String(expectJson, serializer);
+          sse_encode_opt_String(membersJson, serializer);
+          sse_encode_opt_String(acceptedJson, serializer);
+          sse_encode_list_prim_u_8_loose(bip39Passphrase, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 114,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData:
+              sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletWalletFromLinkConstMeta,
+        argValues: [
+          session,
+          containerJson,
+          expectJson,
+          membersJson,
+          acceptedJson,
+          bip39Passphrase,
+        ],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletWalletFromLinkConstMeta =>
+      const TaskConstMeta(
+        debugName: "wallet_from_link",
+        argNames: [
+          "session",
+          "containerJson",
+          "expectJson",
+          "membersJson",
+          "acceptedJson",
+          "bip39Passphrase",
+        ],
+      );
+
+  @override
+  Future<UaWallet> crateApiWalletWalletFromMnemonic({
+    required List<int> words,
+    required List<int> bip39Passphrase,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_list_prim_u_8_loose(words, serializer);
+          sse_encode_list_prim_u_8_loose(bip39Passphrase, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 115,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData:
+              sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletWalletFromMnemonicConstMeta,
+        argValues: [words, bip39Passphrase],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletWalletFromMnemonicConstMeta =>
+      const TaskConstMeta(
+        debugName: "wallet_from_mnemonic",
+        argNames: ["words", "bip39Passphrase"],
+      );
+
+  @override
+  Future<(UaWallet, UaSeedBackup)> crateApiWalletWalletGenerate() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 116,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData:
+              sse_decode_record_auto_owned_rust_opaque_flutter_rust_bridgefor_generated_rust_auto_opaque_inner_ua_wallet_auto_owned_rust_opaque_flutter_rust_bridgefor_generated_rust_auto_opaque_inner_ua_seed_backup,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletWalletGenerateConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletWalletGenerateConstMeta =>
+      const TaskConstMeta(debugName: "wallet_generate", argNames: []);
+
+  @override
+  Future<UaKey> crateApiWalletWalletImportNativeKey({
+    required UaWallet w,
+    required String networkName,
+    required List<int> secretKey,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+            w,
+            serializer,
+          );
+          sse_encode_String(networkName, serializer);
+          sse_encode_list_prim_u_8_loose(secretKey, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 117,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData:
+              sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKey,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletWalletImportNativeKeyConstMeta,
+        argValues: [w, networkName, secretKey],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletWalletImportNativeKeyConstMeta =>
+      const TaskConstMeta(
+        debugName: "wallet_import_native_key",
+        argNames: ["w", "networkName", "secretKey"],
+      );
+
+  @override
+  Future<void> crateApiWalletWalletOpenLabelVault({
+    required UaWallet w,
+    required String vaultJson,
+    Uint8List? vaultPassphrase,
+    Uint8List? prf32,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+            w,
+            serializer,
+          );
+          sse_encode_String(vaultJson, serializer);
+          sse_encode_opt_list_prim_u_8_strict(vaultPassphrase, serializer);
+          sse_encode_opt_list_prim_u_8_strict(prf32, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 118,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletWalletOpenLabelVaultConstMeta,
+        argValues: [w, vaultJson, vaultPassphrase, prf32],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletWalletOpenLabelVaultConstMeta =>
+      const TaskConstMeta(
+        debugName: "wallet_open_label_vault",
+        argNames: ["w", "vaultJson", "vaultPassphrase", "prf32"],
+      );
+
+  @override
+  Future<UaWallet> crateApiWalletWalletOpenVault({
+    required String vaultJson,
+    Uint8List? vaultPassphrase,
+    Uint8List? prf32,
+    required List<int> bip39Passphrase,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(vaultJson, serializer);
+          sse_encode_opt_list_prim_u_8_strict(vaultPassphrase, serializer);
+          sse_encode_opt_list_prim_u_8_strict(prf32, serializer);
+          sse_encode_list_prim_u_8_loose(bip39Passphrase, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 119,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData:
+              sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletWalletOpenVaultConstMeta,
+        argValues: [vaultJson, vaultPassphrase, prf32, bip39Passphrase],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletWalletOpenVaultConstMeta =>
+      const TaskConstMeta(
+        debugName: "wallet_open_vault",
+        argNames: ["vaultJson", "vaultPassphrase", "prf32", "bip39Passphrase"],
+      );
+
+  @override
+  Future<UaWallet?> crateApiWalletWalletRestoreBackup({
+    required UaKemKey kk,
+    required String containerJson,
+    required String expectJson,
+    String? membersJson,
+    String? acceptedJson,
+    required List<int> bip39Passphrase,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKemKey(
+            kk,
+            serializer,
+          );
+          sse_encode_String(containerJson, serializer);
+          sse_encode_String(expectJson, serializer);
+          sse_encode_opt_String(membersJson, serializer);
+          sse_encode_opt_String(acceptedJson, serializer);
+          sse_encode_list_prim_u_8_loose(bip39Passphrase, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 120,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData:
+              sse_decode_opt_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletWalletRestoreBackupConstMeta,
+        argValues: [
+          kk,
+          containerJson,
+          expectJson,
+          membersJson,
+          acceptedJson,
+          bip39Passphrase,
+        ],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletWalletRestoreBackupConstMeta =>
+      const TaskConstMeta(
+        debugName: "wallet_restore_backup",
+        argNames: [
+          "kk",
+          "containerJson",
+          "expectJson",
+          "membersJson",
+          "acceptedJson",
+          "bip39Passphrase",
+        ],
+      );
+
+  @override
+  Future<UaWallet?> crateApiWalletWalletRestoreBackupOver({
+    required UaWallet current,
+    required UaKemKey kk,
+    required String containerJson,
+    required String expectJson,
+    String? membersJson,
+    String? acceptedJson,
+    required List<int> bip39Passphrase,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+            current,
+            serializer,
+          );
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKemKey(
+            kk,
+            serializer,
+          );
+          sse_encode_String(containerJson, serializer);
+          sse_encode_String(expectJson, serializer);
+          sse_encode_opt_String(membersJson, serializer);
+          sse_encode_opt_String(acceptedJson, serializer);
+          sse_encode_list_prim_u_8_loose(bip39Passphrase, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 121,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData:
+              sse_decode_opt_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletWalletRestoreBackupOverConstMeta,
+        argValues: [
+          current,
+          kk,
+          containerJson,
+          expectJson,
+          membersJson,
+          acceptedJson,
+          bip39Passphrase,
+        ],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletWalletRestoreBackupOverConstMeta =>
+      const TaskConstMeta(
+        debugName: "wallet_restore_backup_over",
+        argNames: [
+          "current",
+          "kk",
+          "containerJson",
+          "expectJson",
+          "membersJson",
+          "acceptedJson",
+          "bip39Passphrase",
+        ],
+      );
+
+  @override
+  Future<UaWallet?> crateApiWalletWalletRestoreBackupRollback({
+    required UaWallet current,
+    required UaKemKey kk,
+    required String containerJson,
+    required String expectJson,
+    String? membersJson,
+    String? acceptedJson,
+    required List<int> bip39Passphrase,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+            current,
+            serializer,
+          );
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKemKey(
+            kk,
+            serializer,
+          );
+          sse_encode_String(containerJson, serializer);
+          sse_encode_String(expectJson, serializer);
+          sse_encode_opt_String(membersJson, serializer);
+          sse_encode_opt_String(acceptedJson, serializer);
+          sse_encode_list_prim_u_8_loose(bip39Passphrase, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 122,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData:
+              sse_decode_opt_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletWalletRestoreBackupRollbackConstMeta,
+        argValues: [
+          current,
+          kk,
+          containerJson,
+          expectJson,
+          membersJson,
+          acceptedJson,
+          bip39Passphrase,
+        ],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletWalletRestoreBackupRollbackConstMeta =>
+      const TaskConstMeta(
+        debugName: "wallet_restore_backup_rollback",
+        argNames: [
+          "current",
+          "kk",
+          "containerJson",
+          "expectJson",
+          "membersJson",
+          "acceptedJson",
+          "bip39Passphrase",
+        ],
+      );
+
+  @override
+  Future<String> crateApiWalletWalletSealLabelVault({
+    required UaWallet w,
+    required String label,
+    required List<int> vaultPassphrase,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+            w,
+            serializer,
+          );
+          sse_encode_String(label, serializer);
+          sse_encode_list_prim_u_8_loose(vaultPassphrase, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 123,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletWalletSealLabelVaultConstMeta,
+        argValues: [w, label, vaultPassphrase],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletWalletSealLabelVaultConstMeta =>
+      const TaskConstMeta(
+        debugName: "wallet_seal_label_vault",
+        argNames: ["w", "label", "vaultPassphrase"],
+      );
+
+  @override
+  Future<String> crateApiWalletWalletSealVault({
+    required UaWallet w,
+    required List<int> vaultPassphrase,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+            w,
+            serializer,
+          );
+          sse_encode_list_prim_u_8_loose(vaultPassphrase, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 124,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletWalletSealVaultConstMeta,
+        argValues: [w, vaultPassphrase],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletWalletSealVaultConstMeta =>
+      const TaskConstMeta(
+        debugName: "wallet_seal_vault",
+        argNames: ["w", "vaultPassphrase"],
+      );
+
+  @override
+  Future<void> crateApiWalletWalletUnlock({
+    required UaWallet w,
+    required String vaultJson,
+    Uint8List? vaultPassphrase,
+    Uint8List? prf32,
+    required List<int> bip39Passphrase,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+            w,
+            serializer,
+          );
+          sse_encode_String(vaultJson, serializer);
+          sse_encode_opt_list_prim_u_8_strict(vaultPassphrase, serializer);
+          sse_encode_opt_list_prim_u_8_strict(prf32, serializer);
+          sse_encode_list_prim_u_8_loose(bip39Passphrase, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 125,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletWalletUnlockConstMeta,
+        argValues: [w, vaultJson, vaultPassphrase, prf32, bip39Passphrase],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletWalletUnlockConstMeta => const TaskConstMeta(
+    debugName: "wallet_unlock",
+    argNames: ["w", "vaultJson", "vaultPassphrase", "prf32", "bip39Passphrase"],
+  );
+
+  @override
+  Future<Uint8List> crateApiWalletWebauthnAssertion({
+    required List<int> keyData,
+    required List<int> expectedChallenge,
+    required List<int> authData,
+    required List<int> clientDataJson,
+    required List<int> r,
+    required List<int> s,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_list_prim_u_8_loose(keyData, serializer);
+          sse_encode_list_prim_u_8_loose(expectedChallenge, serializer);
+          sse_encode_list_prim_u_8_loose(authData, serializer);
+          sse_encode_list_prim_u_8_loose(clientDataJson, serializer);
+          sse_encode_list_prim_u_8_loose(r, serializer);
+          sse_encode_list_prim_u_8_loose(s, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 126,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_prim_u_8_strict,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletWebauthnAssertionConstMeta,
+        argValues: [keyData, expectedChallenge, authData, clientDataJson, r, s],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletWebauthnAssertionConstMeta =>
+      const TaskConstMeta(
+        debugName: "webauthn_assertion",
+        argNames: [
+          "keyData",
+          "expectedChallenge",
+          "authData",
+          "clientDataJson",
+          "r",
+          "s",
+        ],
+      );
+
+  @override
+  Future<Uint8List> crateApiWalletWebauthnChallenge({
+    required List<int> purpose,
+    required List<int> digest,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_list_prim_u_8_loose(purpose, serializer);
+          sse_encode_list_prim_u_8_loose(digest, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 127,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_prim_u_8_strict,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletWebauthnChallengeConstMeta,
+        argValues: [purpose, digest],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletWebauthnChallengeConstMeta =>
+      const TaskConstMeta(
+        debugName: "webauthn_challenge",
+        argNames: ["purpose", "digest"],
+      );
+
+  RustArcIncrementStrongCountFnType
+  get rust_arc_increment_strong_count_UaKemKey => wire
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKemKey;
+
+  RustArcDecrementStrongCountFnType
+  get rust_arc_decrement_strong_count_UaKemKey => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKemKey;
+
+  RustArcIncrementStrongCountFnType
+  get rust_arc_increment_strong_count_UaKey => wire
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKey;
+
+  RustArcDecrementStrongCountFnType
+  get rust_arc_decrement_strong_count_UaKey => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKey;
+
+  RustArcIncrementStrongCountFnType
+  get rust_arc_increment_strong_count_UaKeyList => wire
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKeyList;
+
+  RustArcDecrementStrongCountFnType
+  get rust_arc_decrement_strong_count_UaKeyList => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKeyList;
+
+  RustArcIncrementStrongCountFnType
+  get rust_arc_increment_strong_count_UaLinkSession => wire
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaLinkSession;
+
+  RustArcDecrementStrongCountFnType
+  get rust_arc_decrement_strong_count_UaLinkSession => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaLinkSession;
+
+  RustArcIncrementStrongCountFnType
+  get rust_arc_increment_strong_count_UaPqzKey => wire
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaPqzKey;
+
+  RustArcDecrementStrongCountFnType
+  get rust_arc_decrement_strong_count_UaPqzKey => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaPqzKey;
+
+  RustArcIncrementStrongCountFnType
+  get rust_arc_increment_strong_count_UaSeedBackup => wire
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaSeedBackup;
+
+  RustArcDecrementStrongCountFnType
+  get rust_arc_decrement_strong_count_UaSeedBackup => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaSeedBackup;
+
+  RustArcIncrementStrongCountFnType
+  get rust_arc_increment_strong_count_UaWallet => wire
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet;
+
+  RustArcDecrementStrongCountFnType
+  get rust_arc_decrement_strong_count_UaWallet => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet;
+
+  RustArcIncrementStrongCountFnType
+  get rust_arc_increment_strong_count_UaZetherKey => wire
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaZetherKey;
+
+  RustArcDecrementStrongCountFnType
+  get rust_arc_decrement_strong_count_UaZetherKey => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaZetherKey;
+
+  @protected
+  UaKemKey
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKemKey(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return UaKemKeyImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  UaKey
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKey(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return UaKeyImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  UaKeyList
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKeyList(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return UaKeyListImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  UaLinkSession
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaLinkSession(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return UaLinkSessionImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  UaPqzKey
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaPqzKey(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return UaPqzKeyImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  UaSeedBackup
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaSeedBackup(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return UaSeedBackupImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  UaWallet
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return UaWalletImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  UaZetherKey
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaZetherKey(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return UaZetherKeyImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  UaKeyList
+  dco_decode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKeyList(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return UaKeyListImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  UaKemKey
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKemKey(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return UaKemKeyImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  UaKey
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKey(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return UaKeyImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  UaKeyList
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKeyList(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return UaKeyListImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  UaLinkSession
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaLinkSession(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return UaLinkSessionImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  UaPqzKey
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaPqzKey(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return UaPqzKeyImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  UaSeedBackup
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaSeedBackup(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return UaSeedBackupImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  UaWallet
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return UaWalletImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  UaZetherKey
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaZetherKey(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return UaZetherKeyImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  UaKemKey
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKemKey(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return UaKemKeyImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  UaKey
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKey(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return UaKeyImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  UaKeyList
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKeyList(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return UaKeyListImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  UaLinkSession
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaLinkSession(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return UaLinkSessionImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  UaPqzKey
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaPqzKey(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return UaPqzKeyImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  UaSeedBackup
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaSeedBackup(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return UaSeedBackupImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  UaWallet
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return UaWalletImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
+  @protected
+  UaZetherKey
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaZetherKey(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return UaZetherKeyImpl.frbInternalDcoDecode(raw as List<dynamic>);
+  }
+
   @protected
   String dco_decode_String(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
@@ -1736,9 +5354,32 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
   }
 
   @protected
+  UaWallet
+  dco_decode_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+      raw,
+    );
+  }
+
+  @protected
+  int dco_decode_box_autoadd_u_32(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as int;
+  }
+
+  @protected
   UaDomain dco_decode_box_autoadd_ua_domain(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_ua_domain(raw);
+  }
+
+  @protected
+  UaSealed dco_decode_box_autoadd_ua_sealed(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_ua_sealed(raw);
   }
 
   @protected
@@ -1780,6 +5421,18 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
   }
 
   @protected
+  List<String> dco_decode_list_String(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_String).toList();
+  }
+
+  @protected
+  List<Uint8List> dco_decode_list_list_prim_u_8_strict(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_list_prim_u_8_strict).toList();
+  }
+
+  @protected
   Uint32List dco_decode_list_prim_u_32_strict(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as Uint32List;
@@ -1807,9 +5460,34 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
   }
 
   @protected
+  List<UaRecipient> dco_decode_list_ua_recipient(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_ua_recipient).toList();
+  }
+
+  @protected
   String? dco_decode_opt_String(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_String(raw);
+  }
+
+  @protected
+  UaWallet?
+  dco_decode_opt_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null
+        ? null
+        : dco_decode_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+            raw,
+          );
+  }
+
+  @protected
+  int? dco_decode_opt_box_autoadd_u_32(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_u_32(raw);
   }
 
   @protected
@@ -1838,6 +5516,26 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
       message: dco_decode_u_8_array_32(arr[4]),
       pqzRegMessage: dco_decode_u_8_array_32(arr[5]),
       memberDigest: dco_decode_opt_u_8_array_32(arr[6]),
+    );
+  }
+
+  @protected
+  (UaWallet, UaSeedBackup)
+  dco_decode_record_auto_owned_rust_opaque_flutter_rust_bridgefor_generated_rust_auto_opaque_inner_ua_wallet_auto_owned_rust_opaque_flutter_rust_bridgefor_generated_rust_auto_opaque_inner_ua_seed_backup(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2) {
+      throw Exception('Expected 2 elements, got ${arr.length}');
+    }
+    return (
+      dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+        arr[0],
+      ),
+      dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaSeedBackup(
+        arr[1],
+      ),
     );
   }
 
@@ -1907,6 +5605,19 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
   }
 
   @protected
+  UaEncapsulated dco_decode_ua_encapsulated(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return UaEncapsulated(
+      mlkemCt: dco_decode_list_prim_u_8_strict(arr[0]),
+      x25519Eph: dco_decode_list_prim_u_8_strict(arr[1]),
+      ss: dco_decode_list_prim_u_8_strict(arr[2]),
+    );
+  }
+
+  @protected
   UAError dco_decode_ua_error(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -1919,9 +5630,356 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
   }
 
   @protected
+  UaMemoryProtection dco_decode_ua_memory_protection(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return UaMemoryProtection(
+      chunks: dco_decode_u_32(arr[0]),
+      locked: dco_decode_u_32(arr[1]),
+      noDump: dco_decode_u_32(arr[2]),
+    );
+  }
+
+  @protected
+  UaRecipient dco_decode_ua_recipient(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    return UaRecipient(
+      kind: dco_decode_u_16(arr[0]),
+      keyData: dco_decode_list_prim_u_8_strict(arr[1]),
+      version: dco_decode_u_64(arr[2]),
+      kemPk: dco_decode_list_prim_u_8_strict(arr[3]),
+      ephemeral: dco_decode_bool(arr[4]),
+    );
+  }
+
+  @protected
+  UaSealed dco_decode_ua_sealed(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return UaSealed(
+      mlkemCt: dco_decode_list_prim_u_8_strict(arr[0]),
+      x25519Eph: dco_decode_list_prim_u_8_strict(arr[1]),
+      ciphertext: dco_decode_list_prim_u_8_strict(arr[2]),
+    );
+  }
+
+  @protected
   void dco_decode_unit(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return;
+  }
+
+  @protected
+  BigInt dco_decode_usize(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dcoDecodeU64(raw);
+  }
+
+  @protected
+  UaKemKey
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKemKey(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return UaKemKeyImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  UaKey
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKey(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return UaKeyImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  UaKeyList
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKeyList(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return UaKeyListImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  UaLinkSession
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaLinkSession(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return UaLinkSessionImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  UaPqzKey
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaPqzKey(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return UaPqzKeyImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  UaSeedBackup
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaSeedBackup(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return UaSeedBackupImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  UaWallet
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return UaWalletImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  UaZetherKey
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaZetherKey(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return UaZetherKeyImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  UaKeyList
+  sse_decode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKeyList(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return UaKeyListImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  UaKemKey
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKemKey(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return UaKemKeyImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  UaKey
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKey(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return UaKeyImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  UaKeyList
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKeyList(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return UaKeyListImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  UaLinkSession
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaLinkSession(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return UaLinkSessionImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  UaPqzKey
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaPqzKey(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return UaPqzKeyImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  UaSeedBackup
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaSeedBackup(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return UaSeedBackupImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  UaWallet
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return UaWalletImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  UaZetherKey
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaZetherKey(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return UaZetherKeyImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  UaKemKey
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKemKey(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return UaKemKeyImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  UaKey
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKey(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return UaKeyImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  UaKeyList
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKeyList(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return UaKeyListImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  UaLinkSession
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaLinkSession(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return UaLinkSessionImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  UaPqzKey
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaPqzKey(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return UaPqzKeyImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  UaSeedBackup
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaSeedBackup(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return UaSeedBackupImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  UaWallet
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return UaWalletImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
+  }
+
+  @protected
+  UaZetherKey
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaZetherKey(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return UaZetherKeyImpl.frbInternalSseDecode(
+      sse_decode_usize(deserializer),
+      sse_decode_i_32(deserializer),
+    );
   }
 
   @protected
@@ -1938,9 +5996,32 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
   }
 
   @protected
+  UaWallet
+  sse_decode_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+      deserializer,
+    ));
+  }
+
+  @protected
+  int sse_decode_box_autoadd_u_32(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_u_32(deserializer));
+  }
+
+  @protected
   UaDomain sse_decode_box_autoadd_ua_domain(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_ua_domain(deserializer));
+  }
+
+  @protected
+  UaSealed sse_decode_box_autoadd_ua_sealed(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_ua_sealed(deserializer));
   }
 
   @protected
@@ -1988,6 +6069,32 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
   }
 
   @protected
+  List<String> sse_decode_list_String(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <String>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_String(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<Uint8List> sse_decode_list_list_prim_u_8_strict(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <Uint8List>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_list_prim_u_8_strict(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
   Uint32List sse_decode_list_prim_u_32_strict(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var len_ = sse_decode_i_32(deserializer);
@@ -2022,11 +6129,50 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
   }
 
   @protected
+  List<UaRecipient> sse_decode_list_ua_recipient(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <UaRecipient>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_ua_recipient(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
   String? sse_decode_opt_String(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
     if (sse_decode_bool(deserializer)) {
       return (sse_decode_String(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  UaWallet?
+  sse_decode_opt_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+        deserializer,
+      ));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  int? sse_decode_opt_box_autoadd_u_32(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_u_32(deserializer));
     } else {
       return null;
     }
@@ -2073,6 +6219,23 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
       pqzRegMessage: var_pqzRegMessage,
       memberDigest: var_memberDigest,
     );
+  }
+
+  @protected
+  (UaWallet, UaSeedBackup)
+  sse_decode_record_auto_owned_rust_opaque_flutter_rust_bridgefor_generated_rust_auto_opaque_inner_ua_wallet_auto_owned_rust_opaque_flutter_rust_bridgefor_generated_rust_auto_opaque_inner_ua_seed_backup(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_field0 =
+        sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+          deserializer,
+        );
+    var var_field1 =
+        sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaSeedBackup(
+          deserializer,
+        );
+    return (var_field0, var_field1);
   }
 
   @protected
@@ -2139,6 +6302,19 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
   }
 
   @protected
+  UaEncapsulated sse_decode_ua_encapsulated(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_mlkemCt = sse_decode_list_prim_u_8_strict(deserializer);
+    var var_x25519Eph = sse_decode_list_prim_u_8_strict(deserializer);
+    var var_ss = sse_decode_list_prim_u_8_strict(deserializer);
+    return UaEncapsulated(
+      mlkemCt: var_mlkemCt,
+      x25519Eph: var_x25519Eph,
+      ss: var_ss,
+    );
+  }
+
+  @protected
   UAError sse_decode_ua_error(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_code = sse_decode_String(deserializer);
@@ -2147,14 +6323,390 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
   }
 
   @protected
+  UaMemoryProtection sse_decode_ua_memory_protection(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_chunks = sse_decode_u_32(deserializer);
+    var var_locked = sse_decode_u_32(deserializer);
+    var var_noDump = sse_decode_u_32(deserializer);
+    return UaMemoryProtection(
+      chunks: var_chunks,
+      locked: var_locked,
+      noDump: var_noDump,
+    );
+  }
+
+  @protected
+  UaRecipient sse_decode_ua_recipient(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_kind = sse_decode_u_16(deserializer);
+    var var_keyData = sse_decode_list_prim_u_8_strict(deserializer);
+    var var_version = sse_decode_u_64(deserializer);
+    var var_kemPk = sse_decode_list_prim_u_8_strict(deserializer);
+    var var_ephemeral = sse_decode_bool(deserializer);
+    return UaRecipient(
+      kind: var_kind,
+      keyData: var_keyData,
+      version: var_version,
+      kemPk: var_kemPk,
+      ephemeral: var_ephemeral,
+    );
+  }
+
+  @protected
+  UaSealed sse_decode_ua_sealed(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_mlkemCt = sse_decode_list_prim_u_8_strict(deserializer);
+    var var_x25519Eph = sse_decode_list_prim_u_8_strict(deserializer);
+    var var_ciphertext = sse_decode_list_prim_u_8_strict(deserializer);
+    return UaSealed(
+      mlkemCt: var_mlkemCt,
+      x25519Eph: var_x25519Eph,
+      ciphertext: var_ciphertext,
+    );
+  }
+
+  @protected
   void sse_decode_unit(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
+  }
+
+  @protected
+  BigInt sse_decode_usize(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getBigUint64();
   }
 
   @protected
   int sse_decode_i_32(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getInt32();
+  }
+
+  @protected
+  void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKemKey(
+    UaKemKey self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as UaKemKeyImpl).frbInternalSseEncode(move: true),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKey(
+    UaKey self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as UaKeyImpl).frbInternalSseEncode(move: true),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKeyList(
+    UaKeyList self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as UaKeyListImpl).frbInternalSseEncode(move: true),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaLinkSession(
+    UaLinkSession self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as UaLinkSessionImpl).frbInternalSseEncode(move: true),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaPqzKey(
+    UaPqzKey self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as UaPqzKeyImpl).frbInternalSseEncode(move: true),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaSeedBackup(
+    UaSeedBackup self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as UaSeedBackupImpl).frbInternalSseEncode(move: true),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+    UaWallet self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as UaWalletImpl).frbInternalSseEncode(move: true),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaZetherKey(
+    UaZetherKey self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as UaZetherKeyImpl).frbInternalSseEncode(move: true),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKeyList(
+    UaKeyList self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as UaKeyListImpl).frbInternalSseEncode(move: false),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKemKey(
+    UaKemKey self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as UaKemKeyImpl).frbInternalSseEncode(move: false),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKey(
+    UaKey self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as UaKeyImpl).frbInternalSseEncode(move: false),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKeyList(
+    UaKeyList self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as UaKeyListImpl).frbInternalSseEncode(move: false),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaLinkSession(
+    UaLinkSession self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as UaLinkSessionImpl).frbInternalSseEncode(move: false),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaPqzKey(
+    UaPqzKey self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as UaPqzKeyImpl).frbInternalSseEncode(move: false),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaSeedBackup(
+    UaSeedBackup self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as UaSeedBackupImpl).frbInternalSseEncode(move: false),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+    UaWallet self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as UaWalletImpl).frbInternalSseEncode(move: false),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaZetherKey(
+    UaZetherKey self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as UaZetherKeyImpl).frbInternalSseEncode(move: false),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKemKey(
+    UaKemKey self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as UaKemKeyImpl).frbInternalSseEncode(move: null),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKey(
+    UaKey self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as UaKeyImpl).frbInternalSseEncode(move: null),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKeyList(
+    UaKeyList self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as UaKeyListImpl).frbInternalSseEncode(move: null),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaLinkSession(
+    UaLinkSession self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as UaLinkSessionImpl).frbInternalSseEncode(move: null),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaPqzKey(
+    UaPqzKey self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as UaPqzKeyImpl).frbInternalSseEncode(move: null),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaSeedBackup(
+    UaSeedBackup self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as UaSeedBackupImpl).frbInternalSseEncode(move: null),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+    UaWallet self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as UaWalletImpl).frbInternalSseEncode(move: null),
+      serializer,
+    );
+  }
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaZetherKey(
+    UaZetherKey self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_usize(
+      (self as UaZetherKeyImpl).frbInternalSseEncode(move: null),
+      serializer,
+    );
   }
 
   @protected
@@ -2170,12 +6722,40 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
   }
 
   @protected
+  void
+  sse_encode_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+    UaWallet self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+      self,
+      serializer,
+    );
+  }
+
+  @protected
+  void sse_encode_box_autoadd_u_32(int self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_32(self, serializer);
+  }
+
+  @protected
   void sse_encode_box_autoadd_ua_domain(
     UaDomain self,
     SseSerializer serializer,
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_ua_domain(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_ua_sealed(
+    UaSealed self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_ua_sealed(self, serializer);
   }
 
   @protected
@@ -2204,6 +6784,27 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
     sse_encode_bool(self.native, serializer);
     sse_encode_list_prim_u_32_strict(self.lengths, serializer);
     sse_encode_opt_String(self.group, serializer);
+  }
+
+  @protected
+  void sse_encode_list_String(List<String> self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_String(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_list_prim_u_8_strict(
+    List<Uint8List> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_list_prim_u_8_strict(item, serializer);
+    }
   }
 
   @protected
@@ -2251,12 +6852,51 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
   }
 
   @protected
+  void sse_encode_list_ua_recipient(
+    List<UaRecipient> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_ua_recipient(item, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_opt_String(String? self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
     sse_encode_bool(self != null, serializer);
     if (self != null) {
       sse_encode_String(self, serializer);
+    }
+  }
+
+  @protected
+  void
+  sse_encode_opt_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+    UaWallet? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+        self,
+        serializer,
+      );
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_u_32(int? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_u_32(self, serializer);
     }
   }
 
@@ -2293,6 +6933,23 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
     sse_encode_u_8_array_32(self.message, serializer);
     sse_encode_u_8_array_32(self.pqzRegMessage, serializer);
     sse_encode_opt_u_8_array_32(self.memberDigest, serializer);
+  }
+
+  @protected
+  void
+  sse_encode_record_auto_owned_rust_opaque_flutter_rust_bridgefor_generated_rust_auto_opaque_inner_ua_wallet_auto_owned_rust_opaque_flutter_rust_bridgefor_generated_rust_auto_opaque_inner_ua_seed_backup(
+    (UaWallet, UaSeedBackup) self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+      self.$1,
+      serializer,
+    );
+    sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaSeedBackup(
+      self.$2,
+      serializer,
+    );
   }
 
   @protected
@@ -2352,10 +7009,50 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
   }
 
   @protected
+  void sse_encode_ua_encapsulated(
+    UaEncapsulated self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_list_prim_u_8_strict(self.mlkemCt, serializer);
+    sse_encode_list_prim_u_8_strict(self.x25519Eph, serializer);
+    sse_encode_list_prim_u_8_strict(self.ss, serializer);
+  }
+
+  @protected
   void sse_encode_ua_error(UAError self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.code, serializer);
     sse_encode_String(self.reason, serializer);
+  }
+
+  @protected
+  void sse_encode_ua_memory_protection(
+    UaMemoryProtection self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_32(self.chunks, serializer);
+    sse_encode_u_32(self.locked, serializer);
+    sse_encode_u_32(self.noDump, serializer);
+  }
+
+  @protected
+  void sse_encode_ua_recipient(UaRecipient self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_16(self.kind, serializer);
+    sse_encode_list_prim_u_8_strict(self.keyData, serializer);
+    sse_encode_u_64(self.version, serializer);
+    sse_encode_list_prim_u_8_strict(self.kemPk, serializer);
+    sse_encode_bool(self.ephemeral, serializer);
+  }
+
+  @protected
+  void sse_encode_ua_sealed(UaSealed self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_list_prim_u_8_strict(self.mlkemCt, serializer);
+    sse_encode_list_prim_u_8_strict(self.x25519Eph, serializer);
+    sse_encode_list_prim_u_8_strict(self.ciphertext, serializer);
   }
 
   @protected
@@ -2364,8 +7061,439 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
   }
 
   @protected
+  void sse_encode_usize(BigInt self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putBigUint64(self);
+  }
+
+  @protected
   void sse_encode_i_32(int self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     serializer.buffer.putInt32(self);
   }
+}
+
+@sealed
+class UaKemKeyImpl extends RustOpaque implements UaKemKey {
+  // Not to be used by end users
+  UaKemKeyImpl.frbInternalDcoDecode(List<dynamic> wire)
+    : super.frbInternalDcoDecode(wire, _kStaticData);
+
+  // Not to be used by end users
+  UaKemKeyImpl.frbInternalSseDecode(BigInt ptr, int externalSizeOnNative)
+    : super.frbInternalSseDecode(ptr, externalSizeOnNative, _kStaticData);
+
+  static final _kStaticData = RustArcStaticData(
+    rustArcIncrementStrongCount:
+        ScaasUa.instance.api.rust_arc_increment_strong_count_UaKemKey,
+    rustArcDecrementStrongCount:
+        ScaasUa.instance.api.rust_arc_decrement_strong_count_UaKemKey,
+    rustArcDecrementStrongCountPtr:
+        ScaasUa.instance.api.rust_arc_decrement_strong_count_UaKemKeyPtr,
+  );
+
+  /// The shared secret (the caller wipes it).
+  Future<Uint8List> decaps({
+    required List<int> mlkemCt,
+    required List<int> x25519Eph,
+  }) => ScaasUa.instance.api.crateApiWalletUaKemKeyDecaps(
+    that: this,
+    mlkemCt: mlkemCt,
+    x25519Eph: x25519Eph,
+  );
+
+  Uint8List kemPk() =>
+      ScaasUa.instance.api.crateApiWalletUaKemKeyKemPk(that: this);
+
+  /// The plaintext (the caller wipes it).
+  Future<Uint8List> open({
+    required String purpose,
+    required List<int> aad,
+    required UaSealed sealed,
+  }) => ScaasUa.instance.api.crateApiWalletUaKemKeyOpen(
+    that: this,
+    purpose: purpose,
+    aad: aad,
+    sealed: sealed,
+  );
+
+  /// A container's plaintext, accepted as `expect_json` says (spec §6.3); `members_json` / `accepted_json` null = none.
+  Future<Uint8List> openContainer({
+    required String containerJson,
+    required String expectJson,
+    String? membersJson,
+    String? acceptedJson,
+  }) => ScaasUa.instance.api.crateApiWalletUaKemKeyOpenContainer(
+    that: this,
+    containerJson: containerJson,
+    expectJson: expectJson,
+    membersJson: membersJson,
+    acceptedJson: acceptedJson,
+  );
+}
+
+@sealed
+class UaKeyImpl extends RustOpaque implements UaKey {
+  // Not to be used by end users
+  UaKeyImpl.frbInternalDcoDecode(List<dynamic> wire)
+    : super.frbInternalDcoDecode(wire, _kStaticData);
+
+  // Not to be used by end users
+  UaKeyImpl.frbInternalSseDecode(BigInt ptr, int externalSizeOnNative)
+    : super.frbInternalSseDecode(ptr, externalSizeOnNative, _kStaticData);
+
+  static final _kStaticData = RustArcStaticData(
+    rustArcIncrementStrongCount:
+        ScaasUa.instance.api.rust_arc_increment_strong_count_UaKey,
+    rustArcDecrementStrongCount:
+        ScaasUa.instance.api.rust_arc_decrement_strong_count_UaKey,
+    rustArcDecrementStrongCountPtr:
+        ScaasUa.instance.api.rust_arc_decrement_strong_count_UaKeyPtr,
+  );
+
+  String address() =>
+      ScaasUa.instance.api.crateApiWalletUaKeyAddress(that: this);
+
+  bool isUa() => ScaasUa.instance.api.crateApiWalletUaKeyIsUa(that: this);
+
+  /// A UA key's key data, a native key's public key.
+  Uint8List keyData() =>
+      ScaasUa.instance.api.crateApiWalletUaKeyKeyData(that: this);
+
+  /// A UA key's kind; 0 for a native key.
+  int kind() => ScaasUa.instance.api.crateApiWalletUaKeyKind(that: this);
+
+  /// "" for a UA key.
+  String networkName() =>
+      ScaasUa.instance.api.crateApiWalletUaKeyNetworkName(that: this);
+
+  /// A native key only: `UARawDigestRefused` for a UA key.
+  Future<Uint8List> signDigestRaw({required List<int> digest}) => ScaasUa
+      .instance
+      .api
+      .crateApiWalletUaKeySignDigestRaw(that: this, digest: digest);
+
+  Future<Uint8List> signKeyProof({required List<int> challenge}) => ScaasUa
+      .instance
+      .api
+      .crateApiWalletUaKeySignKeyProof(that: this, challenge: challenge);
+
+  Future<Uint8List> signMember({
+    required List<int> structureUa,
+    required List<int> structureUaMsg,
+  }) => ScaasUa.instance.api.crateApiWalletUaKeySignMember(
+    that: this,
+    structureUa: structureUa,
+    structureUaMsg: structureUaMsg,
+  );
+
+  /// The raw transaction.
+  Future<Uint8List> signTransaction({required String txJson}) => ScaasUa
+      .instance
+      .api
+      .crateApiWalletUaKeySignTransaction(that: this, txJson: txJson);
+
+  /// Typed data through the signing policy (`expect_json`: what the user confirmed, spec §5.4).
+  Future<Uint8List> signTyped({
+    required String typedDataJson,
+    required String expectJson,
+  }) => ScaasUa.instance.api.crateApiWalletUaKeySignTyped(
+    that: this,
+    typedDataJson: typedDataJson,
+    expectJson: expectJson,
+  );
+
+  /// Any typed data, as supplied (the explicit opt-in of `AllowAnyTypedData`).
+  Future<Uint8List> signTypedAny({required String typedDataJson}) =>
+      ScaasUa.instance.api.crateApiWalletUaKeySignTypedAny(
+        that: this,
+        typedDataJson: typedDataJson,
+      );
+
+  Future<Uint8List> signUa({
+    required List<int> purpose,
+    required List<int> digest,
+  }) => ScaasUa.instance.api.crateApiWalletUaKeySignUa(
+    that: this,
+    purpose: purpose,
+    digest: digest,
+  );
+
+  Uint8List uaId() => ScaasUa.instance.api.crateApiWalletUaKeyUaId(that: this);
+}
+
+@sealed
+class UaKeyListImpl extends RustOpaque implements UaKeyList {
+  // Not to be used by end users
+  UaKeyListImpl.frbInternalDcoDecode(List<dynamic> wire)
+    : super.frbInternalDcoDecode(wire, _kStaticData);
+
+  // Not to be used by end users
+  UaKeyListImpl.frbInternalSseDecode(BigInt ptr, int externalSizeOnNative)
+    : super.frbInternalSseDecode(ptr, externalSizeOnNative, _kStaticData);
+
+  static final _kStaticData = RustArcStaticData(
+    rustArcIncrementStrongCount:
+        ScaasUa.instance.api.rust_arc_increment_strong_count_UaKeyList,
+    rustArcDecrementStrongCount:
+        ScaasUa.instance.api.rust_arc_decrement_strong_count_UaKeyList,
+    rustArcDecrementStrongCountPtr:
+        ScaasUa.instance.api.rust_arc_decrement_strong_count_UaKeyListPtr,
+  );
+
+  /// Adds `k` at the next position (the list shares the handle).
+  void push({required UaKey k}) =>
+      ScaasUa.instance.api.crateApiWalletUaKeyListPush(that: this, k: k);
+}
+
+@sealed
+class UaLinkSessionImpl extends RustOpaque implements UaLinkSession {
+  // Not to be used by end users
+  UaLinkSessionImpl.frbInternalDcoDecode(List<dynamic> wire)
+    : super.frbInternalDcoDecode(wire, _kStaticData);
+
+  // Not to be used by end users
+  UaLinkSessionImpl.frbInternalSseDecode(BigInt ptr, int externalSizeOnNative)
+    : super.frbInternalSseDecode(ptr, externalSizeOnNative, _kStaticData);
+
+  static final _kStaticData = RustArcStaticData(
+    rustArcIncrementStrongCount:
+        ScaasUa.instance.api.rust_arc_increment_strong_count_UaLinkSession,
+    rustArcDecrementStrongCount:
+        ScaasUa.instance.api.rust_arc_decrement_strong_count_UaLinkSession,
+    rustArcDecrementStrongCountPtr:
+        ScaasUa.instance.api.rust_arc_decrement_strong_count_UaLinkSessionPtr,
+  );
+
+  Uint8List kemPk() =>
+      ScaasUa.instance.api.crateApiWalletUaLinkSessionKemPk(that: this);
+
+  String shortCode() =>
+      ScaasUa.instance.api.crateApiWalletUaLinkSessionShortCode(that: this);
+}
+
+@sealed
+class UaPqzKeyImpl extends RustOpaque implements UaPqzKey {
+  // Not to be used by end users
+  UaPqzKeyImpl.frbInternalDcoDecode(List<dynamic> wire)
+    : super.frbInternalDcoDecode(wire, _kStaticData);
+
+  // Not to be used by end users
+  UaPqzKeyImpl.frbInternalSseDecode(BigInt ptr, int externalSizeOnNative)
+    : super.frbInternalSseDecode(ptr, externalSizeOnNative, _kStaticData);
+
+  static final _kStaticData = RustArcStaticData(
+    rustArcIncrementStrongCount:
+        ScaasUa.instance.api.rust_arc_increment_strong_count_UaPqzKey,
+    rustArcDecrementStrongCount:
+        ScaasUa.instance.api.rust_arc_decrement_strong_count_UaPqzKey,
+    rustArcDecrementStrongCountPtr:
+        ScaasUa.instance.api.rust_arc_decrement_strong_count_UaPqzKeyPtr,
+  );
+
+  /// The PQZ commands with this handle's key; the whole JSON (at most 1,052,672 bytes), never sized by a query.
+  Future<String> call({required String cmd, required String requestJson}) =>
+      ScaasUa.instance.api.crateApiWalletUaPqzKeyCall(
+        that: this,
+        cmd: cmd,
+        requestJson: requestJson,
+      );
+
+  /// The cache's plaintext (the caller wipes it).
+  Future<Uint8List> openBalanceCache({required String boxJson}) => ScaasUa
+      .instance
+      .api
+      .crateApiWalletUaPqzKeyOpenBalanceCache(that: this, boxJson: boxJson);
+
+  Uint8List pk() => ScaasUa.instance.api.crateApiWalletUaPqzKeyPk(that: this);
+
+  Future<String> sealBalanceCache({required List<int> entries}) => ScaasUa
+      .instance
+      .api
+      .crateApiWalletUaPqzKeySealBalanceCache(that: this, entries: entries);
+}
+
+@sealed
+class UaSeedBackupImpl extends RustOpaque implements UaSeedBackup {
+  // Not to be used by end users
+  UaSeedBackupImpl.frbInternalDcoDecode(List<dynamic> wire)
+    : super.frbInternalDcoDecode(wire, _kStaticData);
+
+  // Not to be used by end users
+  UaSeedBackupImpl.frbInternalSseDecode(BigInt ptr, int externalSizeOnNative)
+    : super.frbInternalSseDecode(ptr, externalSizeOnNative, _kStaticData);
+
+  static final _kStaticData = RustArcStaticData(
+    rustArcIncrementStrongCount:
+        ScaasUa.instance.api.rust_arc_increment_strong_count_UaSeedBackup,
+    rustArcDecrementStrongCount:
+        ScaasUa.instance.api.rust_arc_decrement_strong_count_UaSeedBackup,
+    rustArcDecrementStrongCountPtr:
+        ScaasUa.instance.api.rust_arc_decrement_strong_count_UaSeedBackupPtr,
+  );
+
+  /// Three 1-based positions to ask.
+  Future<Uint32List> challenge() =>
+      ScaasUa.instance.api.crateApiWalletUaSeedBackupChallenge(that: this);
+
+  /// The words, once (the caller wipes them).
+  Future<Uint8List> reveal() =>
+      ScaasUa.instance.api.crateApiWalletUaSeedBackupReveal(that: this);
+
+  /// The entropy, once confirmed; null before that and after the first call.
+  Future<Uint8List?> take() =>
+      ScaasUa.instance.api.crateApiWalletUaSeedBackupTake(that: this);
+}
+
+@sealed
+class UaWalletImpl extends RustOpaque implements UaWallet {
+  // Not to be used by end users
+  UaWalletImpl.frbInternalDcoDecode(List<dynamic> wire)
+    : super.frbInternalDcoDecode(wire, _kStaticData);
+
+  // Not to be used by end users
+  UaWalletImpl.frbInternalSseDecode(BigInt ptr, int externalSizeOnNative)
+    : super.frbInternalSseDecode(ptr, externalSizeOnNative, _kStaticData);
+
+  static final _kStaticData = RustArcStaticData(
+    rustArcIncrementStrongCount:
+        ScaasUa.instance.api.rust_arc_increment_strong_count_UaWallet,
+    rustArcDecrementStrongCount:
+        ScaasUa.instance.api.rust_arc_decrement_strong_count_UaWallet,
+    rustArcDecrementStrongCountPtr:
+        ScaasUa.instance.api.rust_arc_decrement_strong_count_UaWalletPtr,
+  );
+
+  /// JSON `[{index, ua}]`.
+  Future<String> discoverCandidates({
+    required int kind,
+    required int account,
+    required int gap,
+  }) => ScaasUa.instance.api.crateApiWalletUaWalletDiscoverCandidates(
+    that: this,
+    kind: kind,
+    account: account,
+    gap: gap,
+  );
+
+  /// The PQZ leaf `seed32`: the explicit export (spec §8.4); the caller wipes it.
+  Future<Uint8List> exportPqzLeafRaw({
+    required int account,
+    required int index,
+  }) => ScaasUa.instance.api.crateApiWalletUaWalletExportPqzLeafRaw(
+    that: this,
+    account: account,
+    index: index,
+  );
+
+  Future<UaKey> importedKey({required String networkName, required int n}) =>
+      ScaasUa.instance.api.crateApiWalletUaWalletImportedKey(
+        that: this,
+        networkName: networkName,
+        n: n,
+      );
+
+  Future<String> linkSeal({
+    required UaKey sender,
+    required List<int> sessionKemPk,
+    required String shortCode,
+  }) => ScaasUa.instance.api.crateApiWalletUaWalletLinkSeal(
+    that: this,
+    sender: sender,
+    sessionKemPk: sessionKemPk,
+    shortCode: shortCode,
+  );
+
+  void lock() => ScaasUa.instance.api.crateApiWalletUaWalletLock(that: this);
+
+  String manifestJson() =>
+      ScaasUa.instance.api.crateApiWalletUaWalletManifestJson(that: this);
+
+  UaMemoryProtection memoryProtection() =>
+      ScaasUa.instance.api.crateApiWalletUaWalletMemoryProtection(that: this);
+
+  /// `network_name` the clientkeys name (`evm`, `hedera_ecdsa`, ...); `coin_type` null = the network's own.
+  Future<UaKey> nativeKey({
+    required String networkName,
+    required int index,
+    int? coinType,
+  }) => ScaasUa.instance.api.crateApiWalletUaWalletNativeKey(
+    that: this,
+    networkName: networkName,
+    index: index,
+    coinType: coinType,
+  );
+
+  Future<UaPqzKey> pqzKey({required int account, required int index}) => ScaasUa
+      .instance
+      .api
+      .crateApiWalletUaWalletPqzKey(that: this, account: account, index: index);
+
+  Future<UaKey> uaKey({
+    required int kind,
+    required int account,
+    required int index,
+  }) => ScaasUa.instance.api.crateApiWalletUaWalletUaKey(
+    that: this,
+    kind: kind,
+    account: account,
+    index: index,
+  );
+
+  Future<UaZetherKey> zetherKey({
+    required int coin,
+    required int account,
+    required int keyUse,
+  }) => ScaasUa.instance.api.crateApiWalletUaWalletZetherKey(
+    that: this,
+    coin: coin,
+    account: account,
+    keyUse: keyUse,
+  );
+}
+
+@sealed
+class UaZetherKeyImpl extends RustOpaque implements UaZetherKey {
+  // Not to be used by end users
+  UaZetherKeyImpl.frbInternalDcoDecode(List<dynamic> wire)
+    : super.frbInternalDcoDecode(wire, _kStaticData);
+
+  // Not to be used by end users
+  UaZetherKeyImpl.frbInternalSseDecode(BigInt ptr, int externalSizeOnNative)
+    : super.frbInternalSseDecode(ptr, externalSizeOnNative, _kStaticData);
+
+  static final _kStaticData = RustArcStaticData(
+    rustArcIncrementStrongCount:
+        ScaasUa.instance.api.rust_arc_increment_strong_count_UaZetherKey,
+    rustArcDecrementStrongCount:
+        ScaasUa.instance.api.rust_arc_decrement_strong_count_UaZetherKey,
+    rustArcDecrementStrongCountPtr:
+        ScaasUa.instance.api.rust_arc_decrement_strong_count_UaZetherKeyPtr,
+  );
+
+  /// zether-prover's commands with this handle's key; no request field carries a key.
+  Future<String> call({required String cmd, required String requestJson}) =>
+      ScaasUa.instance.api.crateApiWalletUaZetherKeyCall(
+        that: this,
+        cmd: cmd,
+        requestJson: requestJson,
+      );
+
+  /// The cache's plaintext (the caller wipes it).
+  Future<Uint8List> openBalanceCache({required String boxJson}) => ScaasUa
+      .instance
+      .api
+      .crateApiWalletUaZetherKeyOpenBalanceCache(that: this, boxJson: boxJson);
+
+  Future<String> sealBalanceCache({required List<int> entriesJson}) =>
+      ScaasUa.instance.api.crateApiWalletUaZetherKeySealBalanceCache(
+        that: this,
+        entriesJson: entriesJson,
+      );
+
+  Uint8List uaId() =>
+      ScaasUa.instance.api.crateApiWalletUaZetherKeyUaId(that: this);
+
+  /// `Y`, 128 bytes.
+  Uint8List y() => ScaasUa.instance.api.crateApiWalletUaZetherKeyY(that: this);
 }

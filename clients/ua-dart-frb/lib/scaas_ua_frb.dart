@@ -5,6 +5,43 @@ import 'src/rust/api/ua.dart' as g;
 
 export 'src/rust/api/ua.dart' hide kemRecordHash, kemRecordDigest, kemRecordMessage;
 export 'src/rust/frb_generated.dart' show ScaasUa;
+// ua-rs-sign T13c: the wallet. The handle types and their methods from the generated API; every entry point without a handle
+// and every call that takes a secret through the facade (lib/src/wallet.dart: the load check, the caller's buffers wiped).
+export 'src/rust/api/wallet.dart'
+    hide
+        walletGenerate,
+        walletFromMnemonic,
+        walletOpenVault,
+        walletUnlock,
+        walletSealVault,
+        walletImportNativeKey,
+        walletSealLabelVault,
+        walletOpenLabelVault,
+        walletRestoreBackup,
+        walletRestoreBackupOver,
+        walletRestoreBackupRollback,
+        walletFromLink,
+        walletBackupSeal,
+        keyKemKey,
+        seedBackupVerify,
+        vaultNeedsRewrap,
+        vaultRewrapPin,
+        vaultEnablePrf,
+        kemEphemeral,
+        kemEncaps,
+        seal,
+        linkSessionNew,
+        keyListNew,
+        uasig,
+        aeadSeal,
+        aeadOpen,
+        hkdfSha256,
+        hmacSha256,
+        webauthnChallenge,
+        webauthnAssertion,
+        pqzSet,
+        pqzCheckSet;
+export 'src/wallet.dart';
 
 // A KEM version is a Rust u64, and flutter_rust_bridge encodes a BigInt with toSigned(64): 2^64 + 1 would reach Rust as 1
 // and -1 as 2^64 - 1. These three keep the generated signatures and refuse such a version first (UAKemVersion, as ua-dart

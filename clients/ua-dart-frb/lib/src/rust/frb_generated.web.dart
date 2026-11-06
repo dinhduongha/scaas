@@ -7,6 +7,7 @@
 // ignore_for_file: argument_type_not_assignable
 
 import 'api/ua.dart';
+import 'api/wallet.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'frb_generated.dart';
@@ -20,6 +21,187 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
     required super.portManager,
   });
 
+  CrossPlatformFinalizerArg
+  get rust_arc_decrement_strong_count_UaKemKeyPtr => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKemKey;
+
+  CrossPlatformFinalizerArg get rust_arc_decrement_strong_count_UaKeyPtr => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKey;
+
+  CrossPlatformFinalizerArg
+  get rust_arc_decrement_strong_count_UaKeyListPtr => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKeyList;
+
+  CrossPlatformFinalizerArg
+  get rust_arc_decrement_strong_count_UaLinkSessionPtr => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaLinkSession;
+
+  CrossPlatformFinalizerArg
+  get rust_arc_decrement_strong_count_UaPqzKeyPtr => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaPqzKey;
+
+  CrossPlatformFinalizerArg
+  get rust_arc_decrement_strong_count_UaSeedBackupPtr => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaSeedBackup;
+
+  CrossPlatformFinalizerArg
+  get rust_arc_decrement_strong_count_UaWalletPtr => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet;
+
+  CrossPlatformFinalizerArg
+  get rust_arc_decrement_strong_count_UaZetherKeyPtr => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaZetherKey;
+
+  @protected
+  UaKemKey
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKemKey(
+    dynamic raw,
+  );
+
+  @protected
+  UaKey
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKey(
+    dynamic raw,
+  );
+
+  @protected
+  UaKeyList
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKeyList(
+    dynamic raw,
+  );
+
+  @protected
+  UaLinkSession
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaLinkSession(
+    dynamic raw,
+  );
+
+  @protected
+  UaPqzKey
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaPqzKey(
+    dynamic raw,
+  );
+
+  @protected
+  UaSeedBackup
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaSeedBackup(
+    dynamic raw,
+  );
+
+  @protected
+  UaWallet
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+    dynamic raw,
+  );
+
+  @protected
+  UaZetherKey
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaZetherKey(
+    dynamic raw,
+  );
+
+  @protected
+  UaKeyList
+  dco_decode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKeyList(
+    dynamic raw,
+  );
+
+  @protected
+  UaKemKey
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKemKey(
+    dynamic raw,
+  );
+
+  @protected
+  UaKey
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKey(
+    dynamic raw,
+  );
+
+  @protected
+  UaKeyList
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKeyList(
+    dynamic raw,
+  );
+
+  @protected
+  UaLinkSession
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaLinkSession(
+    dynamic raw,
+  );
+
+  @protected
+  UaPqzKey
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaPqzKey(
+    dynamic raw,
+  );
+
+  @protected
+  UaSeedBackup
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaSeedBackup(
+    dynamic raw,
+  );
+
+  @protected
+  UaWallet
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+    dynamic raw,
+  );
+
+  @protected
+  UaZetherKey
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaZetherKey(
+    dynamic raw,
+  );
+
+  @protected
+  UaKemKey
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKemKey(
+    dynamic raw,
+  );
+
+  @protected
+  UaKey
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKey(
+    dynamic raw,
+  );
+
+  @protected
+  UaKeyList
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKeyList(
+    dynamic raw,
+  );
+
+  @protected
+  UaLinkSession
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaLinkSession(
+    dynamic raw,
+  );
+
+  @protected
+  UaPqzKey
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaPqzKey(
+    dynamic raw,
+  );
+
+  @protected
+  UaSeedBackup
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaSeedBackup(
+    dynamic raw,
+  );
+
+  @protected
+  UaWallet
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+    dynamic raw,
+  );
+
+  @protected
+  UaZetherKey
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaZetherKey(
+    dynamic raw,
+  );
+
   @protected
   String dco_decode_String(dynamic raw);
 
@@ -27,7 +209,19 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
   bool dco_decode_bool(dynamic raw);
 
   @protected
+  UaWallet
+  dco_decode_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+    dynamic raw,
+  );
+
+  @protected
+  int dco_decode_box_autoadd_u_32(dynamic raw);
+
+  @protected
   UaDomain dco_decode_box_autoadd_ua_domain(dynamic raw);
+
+  @protected
+  UaSealed dco_decode_box_autoadd_ua_sealed(dynamic raw);
 
   @protected
   HolderPop dco_decode_holder_pop(dynamic raw);
@@ -37,6 +231,12 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
 
   @protected
   KindInfo dco_decode_kind_info(dynamic raw);
+
+  @protected
+  List<String> dco_decode_list_String(dynamic raw);
+
+  @protected
+  List<Uint8List> dco_decode_list_list_prim_u_8_strict(dynamic raw);
 
   @protected
   Uint32List dco_decode_list_prim_u_32_strict(dynamic raw);
@@ -52,7 +252,19 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
   dco_decode_list_record_i_64_u_8_array_32_i_64(dynamic raw);
 
   @protected
+  List<UaRecipient> dco_decode_list_ua_recipient(dynamic raw);
+
+  @protected
   String? dco_decode_opt_String(dynamic raw);
+
+  @protected
+  UaWallet?
+  dco_decode_opt_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+    dynamic raw,
+  );
+
+  @protected
+  int? dco_decode_opt_box_autoadd_u_32(dynamic raw);
 
   @protected
   Uint8List? dco_decode_opt_list_prim_u_8_strict(dynamic raw);
@@ -62,6 +274,12 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
 
   @protected
   PqzKeyRecord dco_decode_pqz_key_record(dynamic raw);
+
+  @protected
+  (UaWallet, UaSeedBackup)
+  dco_decode_record_auto_owned_rust_opaque_flutter_rust_bridgefor_generated_rust_auto_opaque_inner_ua_wallet_auto_owned_rust_opaque_flutter_rust_bridgefor_generated_rust_auto_opaque_inner_ua_seed_backup(
+    dynamic raw,
+  );
 
   @protected
   (PlatformInt64, U8Array32, PlatformInt64)
@@ -89,10 +307,175 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
   UaDomain dco_decode_ua_domain(dynamic raw);
 
   @protected
+  UaEncapsulated dco_decode_ua_encapsulated(dynamic raw);
+
+  @protected
   UAError dco_decode_ua_error(dynamic raw);
 
   @protected
+  UaMemoryProtection dco_decode_ua_memory_protection(dynamic raw);
+
+  @protected
+  UaRecipient dco_decode_ua_recipient(dynamic raw);
+
+  @protected
+  UaSealed dco_decode_ua_sealed(dynamic raw);
+
+  @protected
   void dco_decode_unit(dynamic raw);
+
+  @protected
+  BigInt dco_decode_usize(dynamic raw);
+
+  @protected
+  UaKemKey
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKemKey(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaKey
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKey(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaKeyList
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKeyList(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaLinkSession
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaLinkSession(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaPqzKey
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaPqzKey(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaSeedBackup
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaSeedBackup(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaWallet
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaZetherKey
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaZetherKey(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaKeyList
+  sse_decode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKeyList(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaKemKey
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKemKey(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaKey
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKey(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaKeyList
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKeyList(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaLinkSession
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaLinkSession(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaPqzKey
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaPqzKey(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaSeedBackup
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaSeedBackup(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaWallet
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaZetherKey
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaZetherKey(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaKemKey
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKemKey(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaKey
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKey(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaKeyList
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKeyList(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaLinkSession
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaLinkSession(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaPqzKey
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaPqzKey(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaSeedBackup
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaSeedBackup(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaWallet
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaZetherKey
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaZetherKey(
+    SseDeserializer deserializer,
+  );
 
   @protected
   String sse_decode_String(SseDeserializer deserializer);
@@ -101,7 +484,19 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
   bool sse_decode_bool(SseDeserializer deserializer);
 
   @protected
+  UaWallet
+  sse_decode_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  int sse_decode_box_autoadd_u_32(SseDeserializer deserializer);
+
+  @protected
   UaDomain sse_decode_box_autoadd_ua_domain(SseDeserializer deserializer);
+
+  @protected
+  UaSealed sse_decode_box_autoadd_ua_sealed(SseDeserializer deserializer);
 
   @protected
   HolderPop sse_decode_holder_pop(SseDeserializer deserializer);
@@ -111,6 +506,14 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
 
   @protected
   KindInfo sse_decode_kind_info(SseDeserializer deserializer);
+
+  @protected
+  List<String> sse_decode_list_String(SseDeserializer deserializer);
+
+  @protected
+  List<Uint8List> sse_decode_list_list_prim_u_8_strict(
+    SseDeserializer deserializer,
+  );
 
   @protected
   Uint32List sse_decode_list_prim_u_32_strict(SseDeserializer deserializer);
@@ -126,7 +529,19 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
   sse_decode_list_record_i_64_u_8_array_32_i_64(SseDeserializer deserializer);
 
   @protected
+  List<UaRecipient> sse_decode_list_ua_recipient(SseDeserializer deserializer);
+
+  @protected
   String? sse_decode_opt_String(SseDeserializer deserializer);
+
+  @protected
+  UaWallet?
+  sse_decode_opt_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  int? sse_decode_opt_box_autoadd_u_32(SseDeserializer deserializer);
 
   @protected
   Uint8List? sse_decode_opt_list_prim_u_8_strict(SseDeserializer deserializer);
@@ -136,6 +551,12 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
 
   @protected
   PqzKeyRecord sse_decode_pqz_key_record(SseDeserializer deserializer);
+
+  @protected
+  (UaWallet, UaSeedBackup)
+  sse_decode_record_auto_owned_rust_opaque_flutter_rust_bridgefor_generated_rust_auto_opaque_inner_ua_wallet_auto_owned_rust_opaque_flutter_rust_bridgefor_generated_rust_auto_opaque_inner_ua_seed_backup(
+    SseDeserializer deserializer,
+  );
 
   @protected
   (PlatformInt64, U8Array32, PlatformInt64)
@@ -163,13 +584,205 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
   UaDomain sse_decode_ua_domain(SseDeserializer deserializer);
 
   @protected
+  UaEncapsulated sse_decode_ua_encapsulated(SseDeserializer deserializer);
+
+  @protected
   UAError sse_decode_ua_error(SseDeserializer deserializer);
+
+  @protected
+  UaMemoryProtection sse_decode_ua_memory_protection(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  UaRecipient sse_decode_ua_recipient(SseDeserializer deserializer);
+
+  @protected
+  UaSealed sse_decode_ua_sealed(SseDeserializer deserializer);
 
   @protected
   void sse_decode_unit(SseDeserializer deserializer);
 
   @protected
+  BigInt sse_decode_usize(SseDeserializer deserializer);
+
+  @protected
   int sse_decode_i_32(SseDeserializer deserializer);
+
+  @protected
+  void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKemKey(
+    UaKemKey self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKey(
+    UaKey self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKeyList(
+    UaKeyList self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaLinkSession(
+    UaLinkSession self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaPqzKey(
+    UaPqzKey self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaSeedBackup(
+    UaSeedBackup self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+    UaWallet self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaZetherKey(
+    UaZetherKey self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKeyList(
+    UaKeyList self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKemKey(
+    UaKemKey self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKey(
+    UaKey self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKeyList(
+    UaKeyList self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaLinkSession(
+    UaLinkSession self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaPqzKey(
+    UaPqzKey self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaSeedBackup(
+    UaSeedBackup self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+    UaWallet self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaZetherKey(
+    UaZetherKey self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKemKey(
+    UaKemKey self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKey(
+    UaKey self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKeyList(
+    UaKeyList self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaLinkSession(
+    UaLinkSession self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaPqzKey(
+    UaPqzKey self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaSeedBackup(
+    UaSeedBackup self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+    UaWallet self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaZetherKey(
+    UaZetherKey self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_String(String self, SseSerializer serializer);
@@ -178,8 +791,24 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
   void sse_encode_bool(bool self, SseSerializer serializer);
 
   @protected
+  void
+  sse_encode_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+    UaWallet self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_u_32(int self, SseSerializer serializer);
+
+  @protected
   void sse_encode_box_autoadd_ua_domain(
     UaDomain self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ua_sealed(
+    UaSealed self,
     SseSerializer serializer,
   );
 
@@ -191,6 +820,15 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
 
   @protected
   void sse_encode_kind_info(KindInfo self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_String(List<String> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_list_prim_u_8_strict(
+    List<Uint8List> self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_list_prim_u_32_strict(
@@ -214,7 +852,23 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
   );
 
   @protected
+  void sse_encode_list_ua_recipient(
+    List<UaRecipient> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_opt_String(String? self, SseSerializer serializer);
+
+  @protected
+  void
+  sse_encode_opt_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+    UaWallet? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_u_32(int? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_list_prim_u_8_strict(
@@ -227,6 +881,13 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
 
   @protected
   void sse_encode_pqz_key_record(PqzKeyRecord self, SseSerializer serializer);
+
+  @protected
+  void
+  sse_encode_record_auto_owned_rust_opaque_flutter_rust_bridgefor_generated_rust_auto_opaque_inner_ua_wallet_auto_owned_rust_opaque_flutter_rust_bridgefor_generated_rust_auto_opaque_inner_ua_seed_backup(
+    (UaWallet, UaSeedBackup) self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_record_i_64_u_8_array_32_i_64(
@@ -256,10 +917,31 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
   void sse_encode_ua_domain(UaDomain self, SseSerializer serializer);
 
   @protected
+  void sse_encode_ua_encapsulated(
+    UaEncapsulated self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_ua_error(UAError self, SseSerializer serializer);
 
   @protected
+  void sse_encode_ua_memory_protection(
+    UaMemoryProtection self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_ua_recipient(UaRecipient self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_ua_sealed(UaSealed self, SseSerializer serializer);
+
+  @protected
   void sse_encode_unit(void self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_usize(BigInt self, SseSerializer serializer);
 
   @protected
   void sse_encode_i_32(int self, SseSerializer serializer);
@@ -269,6 +951,134 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
 
 class ScaasUaWire implements BaseWire {
   ScaasUaWire.fromExternalLibrary(ExternalLibrary lib);
+
+  void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKemKey(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKemKey(
+        ptr,
+      );
+
+  void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKemKey(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKemKey(
+        ptr,
+      );
+
+  void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKey(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKey(
+        ptr,
+      );
+
+  void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKey(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKey(
+        ptr,
+      );
+
+  void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKeyList(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKeyList(
+        ptr,
+      );
+
+  void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKeyList(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKeyList(
+        ptr,
+      );
+
+  void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaLinkSession(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaLinkSession(
+        ptr,
+      );
+
+  void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaLinkSession(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaLinkSession(
+        ptr,
+      );
+
+  void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaPqzKey(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaPqzKey(
+        ptr,
+      );
+
+  void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaPqzKey(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaPqzKey(
+        ptr,
+      );
+
+  void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaSeedBackup(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaSeedBackup(
+        ptr,
+      );
+
+  void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaSeedBackup(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaSeedBackup(
+        ptr,
+      );
+
+  void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+        ptr,
+      );
+
+  void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+        ptr,
+      );
+
+  void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaZetherKey(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaZetherKey(
+        ptr,
+      );
+
+  void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaZetherKey(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaZetherKey(
+        ptr,
+      );
 }
 
 @JS('wasm_bindgen')
@@ -276,4 +1086,84 @@ external ScaasUaWasmModule get wasmModule;
 
 @JS()
 @anonymous
-extension type ScaasUaWasmModule._(JSObject _) implements JSObject {}
+extension type ScaasUaWasmModule._(JSObject _) implements JSObject {
+  external void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKemKey(
+    int ptr,
+  );
+
+  external void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKemKey(
+    int ptr,
+  );
+
+  external void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKey(
+    int ptr,
+  );
+
+  external void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKey(
+    int ptr,
+  );
+
+  external void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKeyList(
+    int ptr,
+  );
+
+  external void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKeyList(
+    int ptr,
+  );
+
+  external void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaLinkSession(
+    int ptr,
+  );
+
+  external void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaLinkSession(
+    int ptr,
+  );
+
+  external void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaPqzKey(
+    int ptr,
+  );
+
+  external void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaPqzKey(
+    int ptr,
+  );
+
+  external void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaSeedBackup(
+    int ptr,
+  );
+
+  external void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaSeedBackup(
+    int ptr,
+  );
+
+  external void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+    int ptr,
+  );
+
+  external void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+    int ptr,
+  );
+
+  external void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaZetherKey(
+    int ptr,
+  );
+
+  external void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaZetherKey(
+    int ptr,
+  );
+}

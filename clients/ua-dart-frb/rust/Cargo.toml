@@ -9,9 +9,12 @@ description = "flutter_rust_bridge v2 wrapper over scaas-ua. UNAUDITED."
 [lib]
 crate-type = ["cdylib", "staticlib"]
 
+# ua-rs-sign T13c: the wallet (spec §9.1) and both facades at the default PQZ set (MD-5, as ua-c), `mlock` on native builds;
+# never `vectors` (src/api/wallet.rs refuses it at compile time)
 [dependencies]
 flutter_rust_bridge = "=2.13.0"
-scaas-ua = { path = "../../ua-rs", default-features = false, features = ["json"] }
+scaas-ua = { path = "../../ua-rs", default-features = false, features = ["json", "wallet", "mlock", "zether", "pqz", "pqz-set-n2304-kmax4096"] }
+zeroize = "=1.8.2"
 
 # arkworks subgroup checks crawl unoptimised
 [profile.dev.package."*"]
