@@ -57,7 +57,7 @@ fn inner_in(v: &Value) -> JsonResult<Vec<InnerSig>> {
 }
 /// `{id: keyData}`: at most 16 entries of at most `4 + 36 × 16` bytes each, an `msig` of 16 members (`Argument` otherwise). A value is a
 /// string, so the object is the one level; serde_json's recursion limit bounds the parse.
-fn inners_in(v: &Value) -> JsonResult<Vec<([u8; 32], Vec<u8>)>> {
+pub(crate) fn inners_in(v: &Value) -> JsonResult<Vec<([u8; 32], Vec<u8>)>> {
     if v.is_null() {
         return Ok(vec![]);
     }
@@ -170,6 +170,11 @@ fn args_json(r: &RegisterArgs) -> Value {
 }
 fn sig_json(s: &UASig) -> Value {
     json!({ "keyData": hx(&s.key_data), "signature": hx(&s.signature), "members": members_json(&s.members) })
+}
+/// A `UASig` as the `sig` the `_args` calls take, `{keyData, signature, members: [{index, members: [{index, sig}], sig}]}` (the
+/// output of ua-c's `scaas_ua_uasig`).
+pub fn uasig_json(s: &UASig) -> String {
+    sig_json(s).to_string()
 }
 fn fill_json(f: &SetKemKeyArgs) -> Value {
     json!({ "ua": hx(&f.ua), "version": f.version, "kem": kem_json(&f.kem), "sig": sig_json(&f.sig) })

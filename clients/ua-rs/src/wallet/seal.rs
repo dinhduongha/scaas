@@ -62,7 +62,8 @@ use crate::ua8::{inner_digest, member_keys, msig_sig_minimal, Accepted, Inner, I
 use crate::{derive_ua, keccak256, member_digest, purpose_tag, seal_purpose_tag, ua_message};
 use base64ct::{Base64UrlUnpadded, Encoding};
 use rand_core::{OsRng, RngCore};
-use serde_json::Value;
+use super::eip712::from_hex;
+use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
 
@@ -635,6 +636,113 @@ impl Wallet {
         let r = link_install(&session, c, expect, members, accepted, bip39_passphrase);
         session.key.wipe_own_store();
         r
+    }
+}
+
+/// The JSON inputs of a container open across the C ABI and the bindings (spec §9.2, §9.3; no callback crosses the ABI): each
+/// at most 16 KiB and JSON depth 4 ([`bounded::json`]), ids and bytes `0x` hex, an unknown key `Argument`.
+const LOOKUP_JSON: usize = 16 << 10;
+const LOOKUP_DEPTH: usize = 4;
+
+/// A 32-byte `0x` hex value.
+fn h32(v: &Value) -> Option<[u8; 32]> {
+    from_hex(v.as_str()?)?.try_into().ok()
+}
+/// `v` as an object whose keys are all in `keys`.
+fn only<'a>(v: &'a Value, keys: &[&str]) -> Option<&'a Map<String, Value>> {
+    let o = v.as_object()?;
+    o.keys().all(|k| keys.contains(&k.as_str())).then_some(o)
+}
+
+/// A [`ContainerExpect`] read from JSON, owning its data; [`ContainerExpectJson::get`] lends the expectation.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ContainerExpectJson {
+    purpose: String,
+    sender: Vec<[u8; 32]>,
+    set: bool,
+    recipient: RecipientId,
+}
+
+impl ContainerExpectJson {
+    /// `{purpose, sender: {ua} | {set: [ua, …]}, recipient: {ua, version} | {kemPkHash}}` (clientkeys `openContainer`'s
+    /// `expect`, the vector rows' `expect`): an approved set holds at most 64 UAs; anything else `Argument`.
+    pub fn from_json(json: &[u8]) -> Result<ContainerExpectJson> {
+        let v = bounded::json(json, LOOKUP_JSON, LOOKUP_DEPTH)?;
+        parse_expect(&v).ok_or(Error::Argument)
+    }
+
+    pub fn get(&self) -> ContainerExpect<'_> {
+        let sender = match (self.set, self.sender.first()) {
+            (false, Some(u)) => ExpectedSender::Ua(*u),
+            _ => ExpectedSender::Set(&self.sender),
+        };
+        ContainerExpect { purpose: &self.purpose, sender, recipient: self.recipient }
+    }
+}
+
+fn parse_expect(v: &Value) -> Option<ContainerExpectJson> {
+    let o = only(v, &["purpose", "sender", "recipient"])?;
+    let purpose = o.get("purpose")?.as_str()?.to_owned();
+    let s = only(o.get("sender")?, &["ua", "set"])?;
+    let (sender, set) = match (s.get("ua"), s.get("set")) {
+        (Some(u), None) => (vec![h32(u)?], false),
+        (None, Some(l)) => {
+            let l = l.as_array().filter(|l| l.len() <= SET_MAX)?;
+            (l.iter().map(h32).collect::<Option<Vec<_>>>()?, true)
+        }
+        _ => return None,
+    };
+    let r = only(o.get("recipient")?, &["ua", "version", "kemPkHash"])?;
+    let recipient = match (r.get("ua"), r.get("version"), r.get("kemPkHash")) {
+        (Some(ua), Some(version), None) => RecipientId::Ua { ua: h32(ua)?, version: version.as_u64()? },
+        (None, None, Some(h)) => RecipientId::KemPkHash(h32(h)?),
+        _ => return None,
+    };
+    Some(ContainerExpectJson { purpose, sender, set, recipient })
+}
+
+/// An `msig` sender's member keys by id ([`Members`]) read from JSON: `{"<id>": {kind, keyData}}`. Never trusted: the opener
+/// checks that each answer derives its id. [`MembersJson::default`] answers nothing (a single-key sender asks nothing).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct MembersJson(Vec<([u8; 32], u16, Vec<u8>)>);
+
+impl MembersJson {
+    /// `Argument` past 16 KiB or depth 4, for an id that is not 32 bytes, a kind that is not a `u16` or key data that is not hex.
+    pub fn from_json(json: &[u8]) -> Result<MembersJson> {
+        let v = bounded::json(json, LOOKUP_JSON, LOOKUP_DEPTH)?;
+        let entry = |(id, x): (&String, &Value)| {
+            let x = only(x, &["kind", "keyData"])?;
+            let kind = u16::try_from(x.get("kind")?.as_u64()?).ok()?;
+            Some((h32(&Value::from(id.as_str()))?, kind, from_hex(x.get("keyData")?.as_str()?)?))
+        };
+        v.as_object().and_then(|o| o.iter().map(entry).collect::<Option<_>>()).map(MembersJson).ok_or(Error::Argument)
+    }
+
+    /// The [`Members`] answer for `id`.
+    pub fn lookup(&self, id: [u8; 32]) -> Option<(u16, Vec<u8>)> {
+        self.0.iter().find(|(x, ..)| *x == id).map(|(_, k, d)| (*k, d.clone()))
+    }
+}
+
+/// The caller's `memberAccepted` reads ([`Accepted`]) as JSON: `{"<msig id>": [accepted member indices]}`; an index not listed
+/// (or an id not named) is not accepted.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct AcceptedJson(Vec<([u8; 32], Vec<u16>)>);
+
+impl AcceptedJson {
+    /// `Argument` past 16 KiB or depth 4, for an id that is not 32 bytes or an index that is not a `u16`.
+    pub fn from_json(json: &[u8]) -> Result<AcceptedJson> {
+        let v = bounded::json(json, LOOKUP_JSON, LOOKUP_DEPTH)?;
+        let index = |i: &Value| u16::try_from(i.as_u64()?).ok();
+        let entry = |(id, l): (&String, &Value)| {
+            Some((h32(&Value::from(id.as_str()))?, l.as_array()?.iter().map(index).collect::<Option<_>>()?))
+        };
+        v.as_object().and_then(|o| o.iter().map(entry).collect::<Option<_>>()).map(AcceptedJson).ok_or(Error::Argument)
+    }
+
+    /// The [`Accepted`] answer for `(id, index)`.
+    pub fn accepted(&self, id: [u8; 32], index: u16) -> bool {
+        self.0.iter().any(|(x, l)| *x == id && l.contains(&index))
     }
 }
 

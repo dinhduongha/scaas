@@ -9,8 +9,33 @@ description = "C ABI (cbindgen header) over scaas-ua. UNAUDITED."
 [lib]
 crate-type = ["cdylib", "staticlib"]
 
+# ABI 6 (ua-rs-sign T12): the wallet always (spec §9.2); `mlock` on by default for native builds (owner 2026-11-06, as ua-rs'
+# default): the arena `mlock`ed and no-dump on Unix, compiled out elsewhere. The facades come with T14 (`zether`) and T15 (`pqz`,
+# exactly one `pqz-set-*`); `scaas_ua_features()` reports what scaas-ua was built with. Never `vectors` (lib.rs refuses it).
+[features]
+default = ["mlock"]
+mlock = ["scaas-ua/mlock"]
+zether = ["scaas-ua/zether"]
+pqz = ["scaas-ua/pqz"]
+pqz-set-n2048-kmax1024 = ["scaas-ua/pqz-set-n2048-kmax1024"]
+pqz-set-n2304-kmax4096 = ["scaas-ua/pqz-set-n2304-kmax4096"]
+pqz-set-n2560-kmax16384 = ["scaas-ua/pqz-set-n2560-kmax16384"]
+pqz-set-n2816-kmax65536 = ["scaas-ua/pqz-set-n2816-kmax65536"]
+
 [dependencies]
-scaas-ua = { path = "../ua-rs", default-features = false, features = ["json"] }
+scaas-ua = { path = "../ua-rs", default-features = false, features = ["json", "wallet"] }
 
 [dev-dependencies]
 cbindgen = { version = "=0.28.0", default-features = false }
+
+# Every export runs in catch_unwind, which does nothing under panic = "abort" (spec §9.2): keep unwinding in every profile.
+[profile.release]
+panic = "unwind"
+
+[profile.dev]
+panic = "unwind"
+
+# as ua-rs: scrypt (N = 2^17), the PQ signers and the arkworks subgroup checks crawl unoptimised (tests/test_vectors.py runs the
+# debug library)
+[profile.dev.package."*"]
+opt-level = 3

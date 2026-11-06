@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 # One fuzz run of one target (ua-rs-sign T11), under scripts/capped, foreground, after build.sh:
 #   scripts/capped clients/ua-rs/fuzz/run.sh <target> <seconds> [label]
-#   target: typed_data | expect | tx | vault | manifest | container | sealed | kem_pk | mnemonic
+#   target: typed_data | expect | tx | vault | manifest | container | sealed | kem_pk | mnemonic | container_expect | members |
+#           accepted | uasig
 # Fuzzes target/fuzz/ua-fuzz on a work corpus (target/fuzz/work/<target>), the seeds rebuilt from the vector files
 # (seeds.py, target/fuzz/seeds/<target>) and regress/<target>/ (the inputs past each cap, and any crash input with its fix).
 # Log: runs/<label>-<target>.log (git-ignored; the record commits a summary). A crash input lands in

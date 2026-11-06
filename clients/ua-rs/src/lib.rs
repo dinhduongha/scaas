@@ -33,6 +33,29 @@ pub mod wallet;
 #[cfg(feature = "vectors")]
 pub use scaas_ct;
 
+/// What this build of the crate holds (ua-rs-sign T12; spec §9.2 "build discovery"): read by `ua-c`'s `scaas_ua_features()`,
+/// which a binding checks at load. Each is the crate's own `cfg`, so a feature a dependent did not ask for but another enabled
+/// (Cargo unifies features) still shows.
+pub mod build {
+    pub const WALLET: bool = cfg!(feature = "wallet");
+    pub const PQ: bool = cfg!(feature = "pq");
+    /// The vendored PQClean Falcon was built (`build.rs`; not on wasm32): `0x0132`, `0x0135` sign and verify.
+    pub const FALCON: bool = cfg!(scaas_falcon);
+    pub const ZETHER: bool = cfg!(feature = "zether");
+    pub const PQZ: bool = cfg!(feature = "pqz");
+    /// The `pqz-set-*` features, in this order: `n2048-kmax1024`, `n2304-kmax4096`, `n2560-kmax16384`, `n2816-kmax65536`.
+    pub const PQZ_SETS: [bool; 4] = [
+        cfg!(feature = "pqz-set-n2048-kmax1024"),
+        cfg!(feature = "pqz-set-n2304-kmax4096"),
+        cfg!(feature = "pqz-set-n2560-kmax16384"),
+        cfg!(feature = "pqz-set-n2816-kmax65536"),
+    ];
+    /// The arena is `mlock`ed and no-dump (feature `mlock`, Unix; compiled out elsewhere).
+    pub const MLOCK: bool = cfg!(all(unix, feature = "mlock"));
+    /// The test-only entry points (feature `vectors`): never in a release build, so `ua-c` refuses to compile with it.
+    pub const VECTORS: bool = cfg!(feature = "vectors");
+}
+
 /// An error whose [`UAError::code`] every implementation and the vector files share.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UAError {

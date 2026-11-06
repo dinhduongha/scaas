@@ -12,7 +12,8 @@
 use super::eip712::{self, TypedData};
 use super::sign::{check_purpose, member_request, ua_request};
 use super::signer::{KeyRef, SignRequest, Signer};
-use super::{Error, Network, Result};
+use super::{bounded, Error, Network, Result};
+use serde_json::Value;
 use crate::ua8::{
     is_portable_purpose, membership_digest, msig_slots_minimal, Inner, InnerSig, MemberSig, MsigMember, MsigStructure, UASig,
     PORTABLE_DOMAIN_SEPARATOR,
@@ -253,4 +254,113 @@ fn sign(p: &Plan, ua: &[u8; 32], msg: &[u8; 32], native: &Native) -> Result<Memb
             Ok(MemberSig { index: p.index, members, sig: vec![] })
         }
     }
+}
+
+/// The largest `UaSigRequest` JSON and its depth (`{msig: {slots: [{members: [{…}]}]}}` is 6; spec §9.3's rule, T12).
+const REQUEST_JSON: usize = 64 << 10;
+const REQUEST_DEPTH: usize = 6;
+/// An `msig` has at most 16 members (CTR-UA-09).
+const SLOTS_MAX: usize = 16;
+
+/// The `UASig` builder as one JSON call (spec §9.2: ua-c `scaas_ua_uasig`, the `registration_args` convention: named fields, `0x`
+/// hex): the request names its signing keys by their position in a list of handles the caller passes beside it, so no key
+/// crosses as JSON. `{purpose, digest, domain?, key}` builds [`ua_sig`] of `keys[key]`; `{purpose, digest, domain?, msig: {keyData,
+/// inner?, slots: [{index, key} | {index, members: [{index, key}]}]}}` builds [`msig_sig`] (no `record`: a native member in a
+/// portable purpose is `Argument`). `domain` is `{generation, chainId, registry, chainUid}`, read only for a native key.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UaSigRequest {
+    purpose: [u8; 32],
+    digest: [u8; 32],
+    domain: Option<(u32, u64, [u8; 20], [u8; 32])>,
+    by: By,
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum By {
+    Key(usize),
+    Msig { key_data: Vec<u8>, inner: Vec<([u8; 32], Vec<u8>)>, slots: Vec<(u16, SlotBy)> },
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum SlotBy {
+    Key(usize),
+    Members(Vec<(u16, usize)>),
+}
+
+impl UaSigRequest {
+    /// The request (64 KiB, JSON depth 6, at most 16 slots and 16 members a slot): `Argument` for anything else, an unknown key
+    /// included. The key positions are checked by [`UaSigRequest::sign`].
+    pub fn from_json(json: &[u8]) -> Result<UaSigRequest> {
+        let v = bounded::json(json, REQUEST_JSON, REQUEST_DEPTH)?;
+        parse_request(&v).ok_or(Error::Argument)
+    }
+
+    /// The `UASig`, each key `keys[i]` of the request (`Argument` for a position past the list); errors as [`ua_sig`] /
+    /// [`msig_sig`].
+    pub fn sign(&self, keys: &[&dyn Signer]) -> Result<UASig> {
+        let key = |i: &usize| keys.get(*i).copied().ok_or(Error::Argument);
+        let domain = self.domain.map(|(generation, chain_id, registry, chain_uid)| Domain { generation, chain_id, registry, chain_uid });
+        match &self.by {
+            By::Key(i) => ua_sig(key(i)?, domain.as_ref(), &self.purpose, &self.digest),
+            By::Msig { key_data, inner, slots } => {
+                let slots = slots
+                    .iter()
+                    .map(|(index, s)| match s {
+                        SlotBy::Key(i) => Ok(Slot::Member { index: *index, key: key(i)? }),
+                        SlotBy::Members(l) => Ok(Slot::Msig {
+                            index: *index,
+                            members: l.iter().map(|(j, i)| Ok((*j, key(i)?))).collect::<Result<_>>()?,
+                        }),
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+                let lookup = crate::json::lookup(inner);
+                msig_sig(key_data, &lookup, &self.purpose, &self.digest, domain.as_ref(), None, &slots)
+            }
+        }
+    }
+}
+
+fn parse_request(v: &Value) -> Option<UaSigRequest> {
+    let only = |v: &Value, keys: &[&str]| v.as_object().filter(|o| o.keys().all(|k| keys.contains(&k.as_str()))).cloned();
+    let h = |v: &Value| eip712::from_hex(v.as_str()?);
+    let h32 = |v: &Value| <[u8; 32]>::try_from(h(v)?).ok();
+    let u16_of = |v: &Value| u16::try_from(v.as_u64()?).ok();
+    let pos = |v: &Value| usize::try_from(v.as_u64()?).ok();
+    let o = only(v, &["purpose", "digest", "domain", "key", "msig"])?;
+    let domain = match o.get("domain") {
+        None => None,
+        Some(d) => {
+            let d = only(d, &["generation", "chainId", "registry", "chainUid"])?;
+            let registry = <[u8; 20]>::try_from(h(d.get("registry")?)?).ok()?;
+            Some((u32::try_from(d.get("generation")?.as_u64()?).ok()?, d.get("chainId")?.as_u64()?, registry, h32(d.get("chainUid")?)?))
+        }
+    };
+    let by = match (o.get("key"), o.get("msig")) {
+        (Some(k), None) => By::Key(pos(k)?),
+        (None, Some(m)) => {
+            let m = only(m, &["keyData", "inner", "slots"])?;
+            let inner = match m.get("inner") {
+                None => vec![],
+                Some(i) => crate::json::inners_in(i).ok()?,
+            };
+            let slot = |s: &Value| {
+                let s = only(s, &["index", "key", "members"])?;
+                let index = u16_of(s.get("index")?)?;
+                match (s.get("key"), s.get("members")) {
+                    (Some(k), None) => Some((index, SlotBy::Key(pos(k)?))),
+                    (None, Some(l)) => {
+                        let l = l.as_array().filter(|l| l.len() <= SLOTS_MAX)?;
+                        let member = |x: &Value| {
+                            let x = only(x, &["index", "key"])?;
+                            Some((u16_of(x.get("index")?)?, pos(x.get("key")?)?))
+                        };
+                        Some((index, SlotBy::Members(l.iter().map(member).collect::<Option<_>>()?)))
+                    }
+                    _ => None,
+                }
+            };
+            let slots = m.get("slots")?.as_array().filter(|l| l.len() <= SLOTS_MAX)?;
+            By::Msig { key_data: h(m.get("keyData")?)?, inner, slots: slots.iter().map(slot).collect::<Option<_>>()? }
+        }
+        _ => return None,
+    };
+    Some(UaSigRequest { purpose: h32(o.get("purpose")?)?, digest: h32(o.get("digest")?)?, domain, by })
 }

@@ -8,7 +8,8 @@
 Seeds: typed_data (sign.json typed generic / canon / refusals, policy td), expect (policy expect), tx (tx rows, published,
 refusals), vault (vault.json, rs_vault.json), manifest (a manifest of kem.json's UA rows; the backup / link payloads of
 seal.json's containers), container (seal.json containers, acceptance), sealed (seal.json wire), kem_pk (kem.json keys and
-encapsRefusals), mnemonic (keys.json mnemonics, normalization).
+encapsRefusals), mnemonic (keys.json mnemonics, normalization); T12: container_expect, members, accepted (seal.json's expect,
+members and accepted inputs of an open), uasig (sign.json's msig rows and ua rows as UaSigRequest JSON).
 """
 import json
 import os
@@ -35,6 +36,17 @@ sign, seal, kem, keys = load("sign.json"), load("seal.json"), load("kem.json"), 
 manifest = {"v": 1, "entries": [{"kind": r["kind"], "account": r["account"], "index": r["index"], "ua": r["ua"]} for r in kem["keys"]],
             "natives": [], "kem": [], "imports": [], "backupGeneration": 0, "backupSenders": []}
 payloads = [unhex(c["pt"]) for c in seal["containers"] if c["container"]["purpose"] in ("scaas/backup/v1", "scaas/link/v1")]
+opens = [r for k in ("containers", "acceptance", "replay") for r in seal[k]]
+nested = next(r for r in sign["msig"] if r["case"].startswith("nested minimal"))
+
+
+def uasig(r):
+    """A sign.json msig row as a UaSigRequest: its keys numbered in slot order."""
+    n = iter(range(64))
+    slot = lambda s: ({"index": s["index"], "members": [{"index": x["index"], "key": next(n)} for x in s["members"]]}
+                      if "members" in s else {"index": s["index"], "key": next(n)})
+    m = {"keyData": r["keyData"], "slots": [slot(s) for s in r["slots"]], **({"inner": r["inner"]} if "inner" in r else {})}
+    return {"purpose": r["purposeTag"], "digest": r["digest"], "msig": m}
 
 
 def seeds():
@@ -48,6 +60,10 @@ def seeds():
     yield "sealed", [unhex(r["wire"]) for r in seal["seal"]]
     yield "kem_pk", [unhex(r["kemPk"]) for k in ("keys", "encapsRefusals") for r in kem[k]]
     yield "mnemonic", [r["words"].encode() for k in ("mnemonics", "normalization") for r in keys[k]]
+    yield "container_expect", [js(r["expect"]) for r in opens]
+    yield "members", [js(r["members"]) for r in opens if "members" in r]
+    yield "accepted", [js(r["accepted"]) for r in opens if r.get("accepted") is not None]
+    yield "uasig", [js(uasig(r)) for r in sign["msig"]] + [js({"purpose": r["purposeTag"], "digest": r["digest"], "key": 0}) for r in sign["ua"][:4]]
 
 
 def nest(n):
@@ -81,6 +97,11 @@ def regress():
         # no depth: 24 valid words padded with spaces to 1,025 bytes, and 25 words
         "mnemonic/over-1025-bytes.txt": (words + " " * (1025 - len(words.encode()))).encode(),
         "mnemonic/over-25-words.txt": (words + " " + words.split()[0]).encode(),
+        # T12: the container open's JSON inputs (16 KiB, depth 4) and the UASig request (64 KiB, depth 6)
+        "container_expect/over-depth-5.json": over(seal["acceptance"][0]["expect"], 4),
+        "members/over-depth-5.json": over(next(r["members"] for r in opens if "members" in r), 4),
+        "accepted/over-depth-5.json": over(next(r["accepted"] for r in opens if r.get("accepted")), 4),
+        "uasig/over-depth-7.json": over(uasig(nested), 6),
     }
 
 

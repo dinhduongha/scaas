@@ -4,10 +4,11 @@
 //! `serde_json` (`bounded::vectors_parsed` unchanged): most decoders would refuse the parsed value too, which would hide a
 //! missing bound. Positive control per file: the same input without its extra key `x` is accepted and parsed once. The
 //! binary targets have no depth: `sealed` one byte short of its tag, `kem_pk` scheme 2 and 1,602 bytes, `mnemonic` past 1 KiB
-//! and 24 words. UNAUDITED.
+//! and 24 words. T12: the container open's JSON inputs (`expect_json`, `members_json`, `accepted_json`: 16 KiB, depth 4) and
+//! the `UASig` request (64 KiB, depth 6) of the C ABI. UNAUDITED.
 use scaas_ua::wallet::{
-    bounded, kem_encaps, vectors_backup_payload, Error, EvmTx, Expect, Manifest, Result, Sealed, SealedContainer, TypedData,
-    Vault, Wallet,
+    bounded, kem_encaps, vectors_backup_payload, AcceptedJson, ContainerExpectJson, Error, EvmTx, Expect, Manifest, MembersJson,
+    Result, Sealed, SealedContainer, TypedData, UaSigRequest, Vault, Wallet,
 };
 use serde_json::Value;
 
@@ -36,13 +37,17 @@ fn json_inputs_deeper_than_their_cap_are_refused_unparsed() {
     over_depth("manifest/over-depth-4.json", |b| Manifest::from_json(b).map(|_| ()));
     over_depth("manifest/payload-over-depth-5.json", |b| vectors_backup_payload(b).map(|_| ()));
     over_depth("container/over-depth-8.json", |b| SealedContainer::from_json(b).map(|_| ()));
+    over_depth("container_expect/over-depth-5.json", |b| ContainerExpectJson::from_json(b).map(|_| ()));
+    over_depth("members/over-depth-5.json", |b| MembersJson::from_json(b).map(|_| ()));
+    over_depth("accepted/over-depth-5.json", |b| AcceptedJson::from_json(b).map(|_| ()));
+    over_depth("uasig/over-depth-7.json", |b| UaSigRequest::from_json(b).map(|_| ()));
 }
 
 #[test]
 fn json_inputs_longer_than_their_cap_are_refused_unparsed() {
     // the same files without `x`, padded with spaces to the cap (accepted) and one byte past it (refused, unparsed)
     type Dec<'a> = &'a dyn Fn(&[u8]) -> Result<()>;
-    let cases: [(&str, usize, Dec); 7] = [
+    let cases: [(&str, usize, Dec); 11] = [
         ("typed_data/over-depth-9.json", 64 << 10, &|b| TypedData::from_json(b).map(|_| ())),
         ("expect/over-depth-5.json", 16 << 10, &|b| Expect::from_json(b).map(|_| ())),
         ("tx/over-depth-5.json", 16 << 10, &|b| EvmTx::from_json(b).map(|_| ())),
@@ -50,6 +55,10 @@ fn json_inputs_longer_than_their_cap_are_refused_unparsed() {
         ("manifest/over-depth-4.json", 1 << 20, &|b| Manifest::from_json(b).map(|_| ())),
         ("manifest/payload-over-depth-5.json", 1 << 20, &|b| vectors_backup_payload(b).map(|_| ())),
         ("container/over-depth-8.json", 4 << 20, &|b| SealedContainer::from_json(b).map(|_| ())),
+        ("container_expect/over-depth-5.json", 16 << 10, &|b| ContainerExpectJson::from_json(b).map(|_| ())),
+        ("members/over-depth-5.json", 16 << 10, &|b| MembersJson::from_json(b).map(|_| ())),
+        ("accepted/over-depth-5.json", 16 << 10, &|b| AcceptedJson::from_json(b).map(|_| ())),
+        ("uasig/over-depth-7.json", 64 << 10, &|b| UaSigRequest::from_json(b).map(|_| ())),
     ];
     for (name, cap, dec) in cases {
         let mut v: Value = serde_json::from_slice(&file(name)).unwrap();
@@ -101,4 +110,45 @@ fn mnemonic_past_1_kib_or_24_words_is_refused() {
     let words = String::from_utf8(file("mnemonic/over-25-words.txt")).unwrap();
     assert_eq!(words.split_whitespace().count(), 25);
     assert_eq!(Wallet::from_mnemonic(&words, "").err(), Some(Error::Argument));
+}
+
+/// T12: the expectation, member keys and accepted lists read from the vector rows' JSON are the ones the open uses: each row of
+/// `seal.json` with an `expect` reads, an approved set past 64 UAs, an index past `u16` and an unknown key do not.
+#[test]
+fn container_json_inputs_read_the_vector_rows() {
+    let seal: Value = serde_json::from_slice(&std::fs::read(format!("{}/../../smartcontracts/vectors/ua/seal.json", env!("CARGO_MANIFEST_DIR"))).unwrap()).unwrap();
+    let mut n = 0;
+    for k in ["containers", "acceptance", "replay"] {
+        for r in seal[k].as_array().unwrap() {
+            assert!(ContainerExpectJson::from_json(r["expect"].to_string().as_bytes()).is_ok(), "{}", r["id"]);
+            if let Some(m) = r.get("members") {
+                let m2 = MembersJson::from_json(m.to_string().as_bytes()).unwrap();
+                for (id, x) in m.as_object().unwrap() {
+                    let id: [u8; 32] = hex::decode(&id[2..]).unwrap().try_into().unwrap();
+                    assert_eq!(m2.lookup(id), Some((x["kind"].as_u64().unwrap() as u16, hex::decode(&x["keyData"].as_str().unwrap()[2..]).unwrap())));
+                }
+                assert_eq!(m2.lookup([0; 32]), None);
+            }
+            if let Some(a) = r.get("accepted").filter(|a| !a.is_null()) {
+                let a2 = AcceptedJson::from_json(a.to_string().as_bytes()).unwrap();
+                for (id, l) in a.as_object().unwrap() {
+                    let id: [u8; 32] = hex::decode(&id[2..]).unwrap().try_into().unwrap();
+                    for i in l.as_array().unwrap() {
+                        assert!(a2.accepted(id, i.as_u64().unwrap() as u16));
+                    }
+                    assert!(!a2.accepted(id, 999));
+                }
+            }
+            n += 1;
+        }
+    }
+    assert_eq!(n, 4 + 29 + 9);
+    let ua = format!("\"0x{}\"", "11".repeat(32));
+    let set = |k: usize| format!("{{\"purpose\":\"scaas/backup/v1\",\"sender\":{{\"set\":[{}]}},\"recipient\":{{\"kemPkHash\":{ua}}}}}", vec![ua.clone(); k].join(","));
+    assert!(ContainerExpectJson::from_json(set(64).as_bytes()).is_ok(), "64 UAs (control)");
+    assert_eq!(ContainerExpectJson::from_json(set(65).as_bytes()).err(), Some(Error::Argument), "65 UAs");
+    let extra = set(1).replacen('{', "{\"x\":1,", 1);
+    assert_eq!(ContainerExpectJson::from_json(extra.as_bytes()).err(), Some(Error::Argument), "unknown key");
+    assert!(AcceptedJson::from_json(format!("{{{ua}:[65535]}}").as_bytes()).is_ok(), "u16 (control)");
+    assert_eq!(AcceptedJson::from_json(format!("{{{ua}:[65536]}}").as_bytes()).err(), Some(Error::Argument), "past u16");
 }

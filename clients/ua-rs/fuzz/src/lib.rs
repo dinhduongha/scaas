@@ -12,10 +12,13 @@
 //!   wire form is accepted exactly when it holds its fixed fields and a tag at version and scheme 1, and never opens to a key
 //!   it was not sealed to.
 //!
+//! - T12: `container_expect`, `members`, `accepted` (the container open's JSON inputs across the C ABI) and `uasig` (the `UASig`
+//!   request) under their caps.
+//!
 //! The Zether and PQZ command decoders (`zether_cmd`, `pqz_cmd`) come with their facades (T14, T15). UNAUDITED.
 use scaas_ua::wallet::{
-    bounded, kem_encaps, vectors_backup_payload, EvmTx, Expect, KemKeyPair, Manifest, Sealed, SealedContainer, TypedData,
-    Vault, Wallet,
+    bounded, kem_encaps, vectors_backup_payload, AcceptedJson, ContainerExpectJson, EvmTx, Expect, KemKeyPair, Manifest, MembersJson,
+    Sealed, SealedContainer, TypedData, UaSigRequest, Vault, Wallet,
 };
 use std::fmt::Debug;
 use std::sync::OnceLock;
@@ -28,6 +31,8 @@ const VAULT: (usize, usize) = (2 << 20, 2);
 const MANIFEST: (usize, usize) = (1 << 20, 3);
 const PAYLOAD: (usize, usize) = (1 << 20, 4);
 const CONTAINER: (usize, usize) = (4 << 20, 7);
+const LOOKUP: (usize, usize) = (16 * 1024, 4);
+const UASIG: (usize, usize) = (64 * 1024, 6);
 /// `version ‖ scheme ‖ mlkemCt (1,568) ‖ x25519Eph (32)` and a 16-byte tag.
 const SEALED_MIN: usize = 2 + 1568 + 32 + 16;
 
@@ -157,7 +162,27 @@ fn one(t: &str, data: &[u8]) {
                 die("not deterministic");
             }
         }
-        _ => die("UA_FUZZ_TARGET: typed_data | expect | tx | vault | manifest | container | sealed | kem_pk | mnemonic"),
+        "container_expect" => {
+            json(data, LOOKUP, ContainerExpectJson::from_json);
+        }
+        "members" => {
+            json(data, LOOKUP, MembersJson::from_json);
+        }
+        "accepted" => {
+            json(data, LOOKUP, AcceptedJson::from_json);
+        }
+        "uasig" => {
+            // no key handles: a parsed request signs nothing (every key position is past the empty list)
+            if let Some(r) = json(data, UASIG, UaSigRequest::from_json) {
+                if r.sign(&[]).is_ok() {
+                    die("a UASig built with no key");
+                }
+            }
+        }
+        _ => die(
+            "UA_FUZZ_TARGET: typed_data | expect | tx | vault | manifest | container | sealed | kem_pk | mnemonic | container_expect | \
+             members | accepted | uasig",
+        ),
     }
 }
 

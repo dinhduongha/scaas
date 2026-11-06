@@ -65,14 +65,15 @@ pub use manifest::{AllowRollback, ImportEntry, KemEntry, Manifest, ManifestEntry
 pub use pairing::{FrostSession, Musig2Session};
 pub use policy::{AllowAnyTypedData, AllowRow, Expect, Invalidate, SubjectKey};
 pub use seal::{
-    seal, seal_container, ContainerExpect, ContainerSigner, ExpectedSender, LinkSession, Recipient, RecipientId, Sealed,
-    SealedContainer, LINK_WINDOW, MAX_PT, PURPOSE_BACKUP, PURPOSE_LINK,
+    seal, seal_container, AcceptedJson, ContainerExpect, ContainerExpectJson, ContainerSigner, ExpectedSender, LinkSession,
+    MembersJson, Recipient, RecipientId, Sealed, SealedContainer, LINK_WINDOW, MAX_PT, PURPOSE_BACKUP, PURPOSE_LINK,
 };
 pub use signer::{AllowRawDigest, KeyRef, SigRole, SignRequest, Signer};
 pub use tx::{AccessListItem, EvmTx, SignedTx};
-pub use uasig::{membership_sig, msig_sig, ua_sig, Slot};
+pub use uasig::{membership_sig, msig_sig, ua_sig, Slot, UaSigRequest};
 pub use vault::{check_passphrase, PrfEnvelope, Unlock, Vault};
 pub use webauthn::{webauthn_assertion, webauthn_challenge};
+pub use zeroize::ZeroizeOnDrop;
 #[cfg(feature = "vectors")]
 pub use vectors::vectors_chunks_released;
 
@@ -507,6 +508,20 @@ impl Drop for Wallet {
         self.store.lock();
     }
 }
+
+// `ZeroizeOnDrop` (the marker of zeroize: a type whose drop wipes what it holds) of each type a C ABI handle wraps (T12, spec
+// §9.2 "`_free` zeroizes"); ua-c checks the bound statically. Where the wipe happens:
+// - `Wallet`: its drop locks the store, which wipes and releases every arena chunk (`store.rs`, each `Chunk` zeroized at drop).
+// - `UaKey`, `NativeKey`, `KemKeyPair`: no secret bytes of their own (their store's `Arc`, a generation and a slot); the slot is
+//   wiped with its store, at the wallet's lock or drop, or, for an ephemeral key's own store, when its last handle drops.
+// - `SeedBackup`: the entropy is `Zeroizing`.
+// - `LinkSession`: its key's store is its own (wiped as above) and `from_link` wipes it whatever the outcome.
+impl zeroize::ZeroizeOnDrop for Wallet {}
+impl zeroize::ZeroizeOnDrop for UaKey {}
+impl zeroize::ZeroizeOnDrop for NativeKey {}
+impl zeroize::ZeroizeOnDrop for KemKeyPair {}
+impl zeroize::ZeroizeOnDrop for SeedBackup {}
+impl zeroize::ZeroizeOnDrop for LinkSession {}
 
 /// A UA key handle: its store, generation and slot; no secret bytes. No `Clone`.
 pub struct UaKey {
