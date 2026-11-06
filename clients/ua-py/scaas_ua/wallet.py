@@ -22,7 +22,7 @@ from . import UAError
 
 ABI_VERSION = 6
 FEATURES = ('wallet', 'pq', 'falcon', 'zether', 'pqz', 'pqz-set-n2048-kmax1024', 'pqz-set-n2304-kmax4096',
-            'pqz-set-n2560-kmax16384', 'pqz-set-n2816-kmax65536', 'external', 'mlock')
+            'pqz-set-n2560-kmax16384', 'pqz-set-n2816-kmax65536', 'external', 'mlock', 'vectors')
 FEATURE = {n: 1 << i for i, n in enumerate(FEATURES)}
 _SETS = sum(v for n, v in FEATURE.items() if n.startswith('pqz-set-'))
 NETWORKS = ('evm', 'cosmos', 'hedera_ecdsa', 'hedera_ed25519', 'sui', 'stellar', 'ton', 'aptos', 'solana')
@@ -48,9 +48,12 @@ class WalletError(UAError):
 
 
 def check_build(abi, features):
-    """Refuses a library of another ABI or an unknown feature set (the load check)."""
+    """Refuses a library of another ABI or an unknown feature set (the load check), and any test build (bit ``vectors``,
+    spec no-decryption-oracle §4.8, Codex C1)."""
     if abi != ABI_VERSION:
         raise LibraryMismatch(f'libscaas_ua_c ABI {abi}, this binding needs {ABI_VERSION}')
+    if features & FEATURE['vectors']:
+        raise LibraryMismatch('libscaas_ua_c is a test build (feature vectors): refused')
     need = FEATURE['wallet'] | FEATURE['pq']
     sets = features & _SETS
     if (features & need != need or features >> len(FEATURES) or sets & (sets - 1)

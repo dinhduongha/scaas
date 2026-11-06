@@ -123,7 +123,8 @@ class Load(unittest.TestCase):
         W.check_build(6, good)
         W.check_build(6, f['wallet'] | f['pq'])
         for label, abi, feats in [('abi 5', 5, good), ('abi 7', 7, good), ('no wallet', 6, good & ~f['wallet']),
-                                  ('no pq', 6, good & ~f['pq']), ('an unknown bit', 6, good | 1 << 11),
+                                  ('no pq', 6, good & ~f['pq']), ('an unknown bit', 6, good | 1 << 12),
+                                  ('a vectors build (C1)', 6, good | f['vectors']),
                                   ('two sets', 6, good | f['pqz-set-n2048-kmax1024']), ('pqz without a set', 6, f['wallet'] | f['pq'] | f['pqz']),
                                   ('a set without pqz', 6, f['wallet'] | f['pq'] | f['pqz-set-n2304-kmax4096'])]:
             with self.subTest(label), self.assertRaises(W.LibraryMismatch):
