@@ -43,7 +43,7 @@ contract for the contract-only bits 5–7, 10, 21, on every family
 The transfer power this text drafted as `moderatedTransfer` on bit 21 moves to a new bit 22 `OPERATOR_TRANSFER`, entry
 `operatorTransfer(bytes32 from, bytes32 to, uint256 amount, bytes32 ref)`, relayed as `mtxOperatorTransfer`, with the
 CTR-GOV-08 refusals unchanged and public balances only (CTR-GOV-13). **Any holder** (an EOA, a single-key UA, an `msig`, a
-contract), `WHOLE` or `LIMITED` (a daily `perWindow`, `total`, `maxUses`, `validUntil`, `delegable` leaves: the loyalty /
+contract). The bit grants the power; each holder's own grant is `WHOLE` or `LIMITED` (a `LIMITED` grant binds a daily `perWindow`, `total`, `maxUses`, `validUntil`, `delegable` leaves: the loyalty /
 point-of-sale case), on the **regulated kinds 8–13 only** (owner correction, same day): a plain kind refuses bit 22 as it
 refuses 5–9 (`FeatureInvalidForKind`), so the plain kinds take no byte and "+0" is untouched. Bit 21 `MODERATE` keeps its
 rules (contract-only, RK-1) and is re-scoped by the owner to "other hierarchical moderation", meaning TBD: no body is built
