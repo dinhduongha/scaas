@@ -94,7 +94,7 @@ public class WalletTests : IDisposable
         const ulong good = UaLib.FeatureWallet | UaLib.FeaturePq | UaLib.FeaturePqz | UaLib.FeaturePqzSetN2304Kmax4096;
         UaLib.CheckBuild(6, good);
         UaLib.CheckBuild(6, UaLib.FeatureWallet | UaLib.FeaturePq);
-        foreach (var (abi, f) in new (uint, ulong)[] { (5, good), (7, good), (6, good & ~UaLib.FeatureWallet), (6, good & ~UaLib.FeaturePq), (6, good | 1UL << 11),
+        foreach (var (abi, f) in new (uint, ulong)[] { (5, good), (7, good), (6, good & ~UaLib.FeatureWallet), (6, good & ~UaLib.FeaturePq), (6, good | 1UL << 12), (6, good | UaLib.FeatureVectors),
                      (6, good | UaLib.FeaturePqzSetN2048Kmax1024), (6, UaLib.FeatureWallet | UaLib.FeaturePq | UaLib.FeaturePqz),
                      (6, UaLib.FeatureWallet | UaLib.FeaturePq | UaLib.FeaturePqzSetN2304Kmax4096) })
             Assert.Throws<LibraryMismatchException>(() => UaLib.CheckBuild(abi, f));
@@ -105,7 +105,7 @@ public class WalletTests : IDisposable
     {
         Assert.Equal(6u, UaLib.AbiVersion());
         var f = UaLib.Features();
-        Assert.True((f & UaLib.FeatureWallet) != 0 && (f & UaLib.FeaturePq) != 0 && (f & UaLib.FeatureExternal) == 0);
+        Assert.True((f & UaLib.FeatureWallet) != 0 && (f & UaLib.FeaturePq) != 0 && (f & UaLib.FeatureExternal) == 0 && (f & UaLib.FeatureVectors) == 0);
         Assert.Equal("UAKindUnavailable", Code(() => UaLib.ExternalKeyNew("{\"kind\":257,\"keyData\":\"0x\"}")));
         Assert.Equal("UAPqzSetMismatch", UaLib.StatusName(40));
     }

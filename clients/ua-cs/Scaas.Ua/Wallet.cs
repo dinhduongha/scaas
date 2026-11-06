@@ -271,7 +271,9 @@ public static unsafe class UaLib
     public const ulong FeatureWallet = 1 << 0, FeaturePq = 1 << 1, FeatureFalcon = 1 << 2, FeatureZether = 1 << 3, FeaturePqz = 1 << 4,
         FeaturePqzSetN2048Kmax1024 = 1 << 5, FeaturePqzSetN2304Kmax4096 = 1 << 6, FeaturePqzSetN2560Kmax16384 = 1 << 7,
         FeaturePqzSetN2816Kmax65536 = 1 << 8, FeatureExternal = 1 << 9, FeatureMlock = 1 << 10;
-    const ulong FeatureEnd = 1 << 11;
+    /// <summary>A test build (scaas-ua feature `vectors`): CheckBuild refuses it (spec no-decryption-oracle §4.8, Codex C1).</summary>
+    public const ulong FeatureVectors = 1 << 11;
+    const ulong FeatureEnd = 1 << 12;
     const ulong FeatureSets = FeaturePqzSetN2048Kmax1024 | FeaturePqzSetN2304Kmax4096 | FeaturePqzSetN2560Kmax16384 | FeaturePqzSetN2816Kmax65536;
     public static readonly string[] Networks = ["evm", "cosmos", "hedera_ecdsa", "hedera_ed25519", "sui", "stellar", "ton", "aptos", "solana"];
     public const uint CoinDefault = 0xFFFFFFFF, AeadAes256Gcm = 1, AeadAes256GcmSiv = 2;
@@ -293,10 +295,11 @@ public static unsafe class UaLib
         lock (LoadLock) _loaded = false;
     }
 
-    /// <summary>Refuses a library of another ABI or an unknown feature set (the load check).</summary>
+    /// <summary>Refuses a library of another ABI or an unknown feature set (the load check), and any test build (FeatureVectors).</summary>
     public static void CheckBuild(uint abi, ulong features)
     {
         if (abi != AbiVersionRequired) throw new LibraryMismatchException($"libscaas_ua_c ABI {abi}, this binding needs {AbiVersionRequired}");
+        if ((features & FeatureVectors) != 0) throw new LibraryMismatchException("libscaas_ua_c is a test build (feature vectors): refused");
         const ulong need = FeatureWallet | FeaturePq;
         var sets = features & FeatureSets;
         if ((features & need) != need || features >= FeatureEnd || (sets & (sets - 1)) != 0 || (sets != 0) != ((features & FeaturePqz) != 0))
