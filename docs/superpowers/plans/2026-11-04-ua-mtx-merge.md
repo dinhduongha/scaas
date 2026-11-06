@@ -3,7 +3,7 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or
 > superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status (2026-11-04):** plan, not executed; its decisions MD-1 to MD-10 accepted by the owner 2026-11-04. **Owner 2026-11-04 (after T0): build M first** (A + B + C with the router's pairs, Q2, R17, R47: tasks T1-T8 with T3b, T10-T23 without a lever), then a checkpoint: gates, the whole-branch review (Claude, Fable, Codex) and the PR of M into `main`. **T9 (levers D / L) is not started: the owner decides it after M.** M alone fits a 200 M block, not 70 M for `WrappedToken` (72.37 M asked, T0), so no public chain deploy before that decision. Nothing is built from it; this commit writes no code, contract, test or vector. **Owner 2026-11-04 (after T1): Q6 changed:** the mandate wallets are built in this round in the merged form (task T3b, MD-11); T1 is built. **Owner 2026-11-05:** the six regulated kinds 8–13 are built in this branch as task group **T24–T36**, after T18 and before T19 ([spec](../specs/2026-11-05-regulated-kinds.md), revised after the Fable and Codex reviews; 19 agent-days); T19–T23 cover the group. **Owner 2026-11-06:** group **3e** (payment metadata, free pay lanes, tax on the regulated kinds) is built as **T37–T43** after T36 and before 3c ([spec](../specs/2026-11-05-pay-meta-tax.md), approved 2026-11-06; 14.5 agent-days plus 0.5 on T19, 15 in all); T19–T23 cover it. Totals of the added groups: T24–T36 19, T37–T43 with T19's share 15, together 34 agent-days.
+**Status (2026-11-04):** plan, not executed; its decisions MD-1 to MD-10 accepted by the owner 2026-11-04. **Owner 2026-11-04 (after T0): build M first** (A + B + C with the router's pairs, Q2, R17, R47: tasks T1-T8 with T3b, T10-T23 without a lever), then a checkpoint: gates, the whole-branch review (Claude, Fable, Codex) and the PR of M into `main`. **T9 (levers D / L) is not started: the owner decides it after M.** M alone fits a 200 M block, not 70 M for `WrappedToken` (72.37 M asked, T0), so no public chain deploy before that decision. Nothing is built from it; this commit writes no code, contract, test or vector. **Owner 2026-11-04 (after T1): Q6 changed:** the mandate wallets are built in this round in the merged form (task T3b, MD-11); T1 is built. **Owner 2026-11-05:** the six regulated kinds 8–13 are built in this branch as task group **T24–T36**, after T18 and before T19 ([spec](../specs/2026-11-05-regulated-kinds.md), revised after the Fable and Codex reviews; 19 agent-days); T19–T23 cover the group. **Owner 2026-11-06:** group **3e** (payment metadata, free pay lanes, tax on the regulated kinds) is built as **T37–T43** after T36 and before 3c ([spec](../specs/2026-11-05-pay-meta-tax.md), approved 2026-11-06; 14.5 agent-days plus 0.5 on T19, 15 in all); T19–T23 cover it. **Owner 2026-11-06:** group **3f** (attested proof verification, PQZ only) is built as **T44–T50** after T43 and before 3c ([spec](../specs/2026-11-06-attested-verify.md), approved 2026-11-06 after the Codex and Fable reviews and rulings R1–R4; 10 agent-days, T50 its docs share in T19); T19–T23 cover it. Totals of the added groups: T24–T36 19, T37–T43 with T19's share 15, T44–T50 10, together 44 agent-days.
 
 **Spec:** [`2026-11-04-ua-mtx-merge.md`](../specs/2026-11-04-ua-mtx-merge.md), **accepted by the owner 2026-11-04** (Q1–Q7, §10);
 rules R1–R47 (§5), invariants 1–7 (§8), measurement (§9). **Ruling:** [CTR-MTX-30](../../decisions.md#CTR-MTX-30), its Q6 Change, and the Change
@@ -215,7 +215,8 @@ rustc 1.90); Node `node --test` (`clients/clientkeys`); `zether-prover`; `ua-rs`
 | Wallets | T20 | after T11, owner-assisted, beside T14–T19; before reset 2 |
 | Regulated | T24 → T25 → T26 → T27 → T28 → T29 → T30 → T31 → T32 → T33; T34 beside T33; T35 after T33, T34; T36 after T33, beside T34–T35 | after T18, before T19 (owner 2026-11-05); contracts sequential in this worktree; T27 measures kinds 9 and 13 before T28 fills the bodies |
 | Pay meta, tax (3e) | T37 → T38 → T39 → T40; T41 after T40; T42 after T41; T43 after T40, beside T41–T42 | after T36, before 3c (owner 2026-11-06); contracts sequential in this worktree; T37 and T40 measure kind 13 first |
-| Docs | T19 | drafts beside T14–T18, T24–T36 and T37–T43; lands after T43 and 3c (BUILT only with code and tests) |
+| Attested PQZ (3f) | T44 → T45; T46 after T45; T47 after T46; T48 and T49 after T45, beside T46–T47; T50 beside, lands in T19 | after T43, before 3c (owner 2026-11-06); contracts sequential in this worktree; T45 measures kind 13 first |
+| Docs | T19 | drafts beside T14–T18, T24–T36, T37–T43 and T44–T50; lands after T50 and 3c (BUILT only with code and tests) |
 | Close | T21 → T22 → T23 | |
 | Next | TODO item 4 | SCaaS testnet reset 2 deploys the merged code (not this plan) |
 
@@ -1449,9 +1450,168 @@ fields `tax`, `tax_mode`, `tax_recipient`, `net`, `withheld_by`; alerts on `TaxR
 
 **Gates:** whole `forge test`, four sets.
 
+### Attested proof verification for PQZ (group 3f, owner approved 2026-11-06): tasks T44–T50
+
+**Spec:** [`2026-11-06-attested-verify.md`](../specs/2026-11-06-attested-verify.md), revised after the Codex and Fable reviews
+([Codex](../../research/attest-codex-review.md), [Fable](../../research/attest-fable-review.md)); rulings O1, O2, O5 and R1–R4
+(PQZ only, the attestation inline, unproven keys in ATTESTED mode, an immediate revocation); one question open (spec §12, Q1:
+revoking a fixed verifier, recommended no). **Place:** after T43, before 3c (`PqChat` and the registry generation); T19, T21, T22,
+T23 cover the group. **Order:** contracts T44 → T45, sequential in this worktree (shared `PqzCore`, `PqzLayer`,
+`size-baseline.json`); T46 (`clients/`, `smartcontracts/vectors/`) after T45 fixes the ABI; T47 (node) after T46; T48 (the
+reference verifier service, its own crate) and T49 (invariants, mutants) after T45, beside T46–T47; T50 (docs share) drafts beside
+them and lands in T19. **Estimate:** 10 agent-days. Every contracts task ends with the whole `forge test` green at the default set
+and the size gate, and runs `script/pqz/at-set.sh <set> test --match-path 'test/{ua,pqz,as/confidential}/*'` at the four sets (one
+run per work tree, `PqzSet.sol` restored). Red first, positive control first, one change at a time; mutants one at a time on a
+clean tree, logged `mutant | test that went red | rc`; heavy runs through `scripts/capped`, foreground. Legacy copies (MD-4) are
+the first commit of each task that replaces a body.
+
+### Task T44: the ATTESTED core in `PqzCore`, `PqzStateLib`, `PqzLayer`
+
+**Depends on:** T43. **Estimate:** 2.
+
+**Files:** `src/factory/IFactoryToken.sol` (`ConfidentialConfig`: `verifyMode`, `attestVerifier`, `attestFixed`) and the
+`TokenConfig` decode of every kind; `src/pqz/{PqzCore,PqzStateLib,PqzWrappedLib,PqzLayer,IPqzToken}.sol`; `src/ua/UAKinds.sol`
+(`PURPOSE_PROOF_ATTEST`); `script/pqz/e2e.py` (the zero-dep release form); `test/pqz/{AttestCore,AttestVerifier}.t.sol` (new);
+the layout pin.
+
+**Interfaces:** spec §3–§6: `verifyMode` in byte 22 of `PqzStorage` slot 0; the verifier state appended (§4.4); `PqzLayer`'s
+constructor admits `releaseProofVerifier = 0`; PRECOMPILE init refuses it `SelfTestFailed(address(0))` before any call, ATTESTED
+init reads nothing from it (`psid = PqzSet.PQZL_ID`); `attesterUA` checked (§4.1: kinds, `AttestVerifierUnregistered`,
+`AttestVerifierKind`, the frozen shape); `_check(o, buf, proof, authSig, att, attSig)` with spec §5.3's ATTESTED branch, the
+`UAVerifyGas` `try`/`catch` shape, `ProofAttested`; `_keyPtr` / `_creditKey` without `proven` in ATTESTED mode, the set length
+kept; the auditor rule; the bodies of `setAttestVerifier`, `cancelAttestVerifier`, `revokeAttestVerifier` (owner, the factory's
+`noticePeriod()`, same proposer and owner generation, epoch bump, immediate revocation); `PqzAttest` typehash pin.
+
+- [ ] **Step 1: Failing tests:** `test_attest_positiveControl`, `test_attest_wrong{Token,Chain,Psid,Epoch,Statement,Proof}`,
+      `test_attest_expired`, `test_attest_rejectedSignature`, `test_attest_starvedIsUAVerifyGas`, `test_attest_epochABA`,
+      `test_attest_revokedRefuses`, `test_attest_shapeChanged_{nativeCode,msigMemberCode,slotAccepted}`,
+      `test_verifierKind_{refused,unregistered,controls}`, `test_transfer_{notReady,atEta,notProposer,ownerChanged,fixed,same,zeroNotice}`,
+      `test_revoke_{immediate,deletesPending,fixedRefused}`, `test_mode_{immutable,configInvalid,valueInvalid}`,
+      `test_release_zeroDep_{precompileRefused,attestedInits}`, `test_attested_neverCallsPrecompile`,
+      `test_precompile_ignoresAttestation`, `test_keys_unproven_{attestedAccepts,precompileRefuses,wrongLength}`,
+      `test_auditor_unproven_{attested,precompile}`, `test_ciphertexts_sameInBothModes`, `test_PqzAttestTypehashIsPinned`.
+- [ ] **Step 2:** FAIL. **Step 3: Implement.** **Step 4:** PASS; whole `forge test`; the four sets; size gate.
+- [ ] **Step 5: Mutants:** spec §15's Binding, Verifier, Mode and Keys rows.
+- [ ] **Step 6:** Commit `ua-mtx-merge T44: PQZ ATTESTED core, verifier transfer and revocation`.
+
+### Task T45: the entries, the view, the stubs; kind 13 first
+
+**Depends on:** T44. **Estimate:** 2.5.
+
+**Files:** `src/pqz/{PqzLayer,WrappedPqzToken,NormalPqzToken,IPqzToken,PqzTransferLib,PqzBurnLib,PqzViewLib}.sol`,
+`src/regulated/{NormalPqzRegulatedToken,WrappedPqzRegulatedToken}.sol`, `src/governance/GovernanceRouter*.sol` (three ops);
+`test/vectors/selector_audit.json`; gas and layout pins; `size-baseline.json`; `runs/<date>-ua-mtx-merge-attest-sizes.txt`
+(summary).
+
+**Interfaces:** spec §5.3–§5.4: `PqzAttest calldata att, IUARegistry.UASig calldata attSig` last on every proof-carrying entry
+(direct and signed forms; twelve on 5, 13, ten on 4, 12), outside every `UA*` struct (no typehash moves); the struct fallback
+`PqzAttestation` only if the legacy decoder runs out of stack; `verifyTransferAmount` five-argument form `AttestationRequired()`
+in ATTESTED mode, seven-argument form; stubs `setAttestVerifier(bytes32)`, `cancelAttestVerifier()`, `revokeAttestVerifier()`,
+the view `attestConfig()`; router `mtxSetAttestVerifier`, `mtxCancelAttestVerifier`, `mtxRevokeAttestVerifier` over
+`UASetAttestVerifier`, `UACancelAttestVerifier`, `UARevokeAttestVerifier`.
+
+- [ ] **Step 1: Failing tests:** `test_entry_{transfer,compact,single,singleCompact,unshield,refresh,unshieldUnwrap}_{direct,signed}_attested`,
+      the same `_precompile` with an empty attestation, `test_signedForms_typehashesUnchanged`, `test_attestationSwapByRelayer_harmless`,
+      `test_disclosure_{fiveArgCannotVerify,sevenArgTrue,sevenArgWrongAmount,sevenArgRevoked}`, `test_router_attestOps`,
+      `test_mtxSelectors_attest_{4,5,12,13}`.
+- [ ] **Step 2:** FAIL. **Step 3: Implement**, kind 13 first (the parameters on one entry, then the rest, then the view, then the
+      stubs), then 12, 5, 4, then every other kind (the config decode).
+- [ ] **Step 4:** PASS; whole `forge test`; the four sets; size gate and deploy gas on the regulated spec's §6.2 method. **Stop
+      rule (spec §9, 3e O18):** a kind at or above **64,512 B** is reduced by spec §9's levers 1–5 in order, one at a time, size
+      and whole `forge test` re-run after each, until it is under; back to the controller only when every lever is applied (the
+      `_above64KiB` row is not a fallback). A deploy-gas figure more than 50 % over spec §9 is reported, without stopping.
+- [ ] **Step 5: Mutants:** spec §15's Disclosure row; the attestation decoded but not passed to `_check`.
+- [ ] **Step 6:** Commit `ua-mtx-merge T45: PQZ attested entries, disclosure, verifier stubs and router ops`.
+
+**Pins, old → new:** gas of every PQZ entry in both modes (the comments name the mode; spec §10 row 8); sizes of 0–13, the router,
+the PQZ libraries; `LinkClosure` codehashes; layout. **Gates:** whole `forge test`, four sets, size gate.
+
+### Task T46: vectors and clients
+
+**Depends on:** T45. **Estimate:** 1.
+
+**Files:** `smartcontracts/vectors/pqz/attest.json` (new, by a forge writer), `typed/typed_ops.json` (three router rows);
+`clients/clientkeys` (`PqzAttest` digest and builder, `statementHash` / `proofHash`, the entries' calldata with the pair, the
+creation fields); `clients/ua-rs` and `ua-c`, `ua-cxx`, `ua-qt`, `ua-dart-frb` (sign `PqzAttest` under `proof-attest`).
+
+- [ ] **Step 1:** Failing readers in `clientkeys` and `ua-rs` against `attest.json`. **Step 2:** FAIL. **Step 3: Implement.**
+- [ ] **Step 4:** PASS; generators re-run, `git diff --exit-code`.
+- [ ] **Step 5:** Commit `ua-mtx-merge T46: PqzAttest vectors and clients`.
+
+### Task T47: node
+
+**Depends on:** T46. **Estimate:** 1.5.
+
+**Files:** `scaas-node/src/{typed,guard,submit,indexer,gateway,adapter}.rs`, the error table, `node.example.toml` (endpoint names
+and the shield-refusal switch, no secret), `tests/e2e.rs` (ignored, anvil); `docs/node/` drafts for T50.
+
+**Interfaces:** spec §11.1: the named `attest: {verifierEpoch, validUntil, auth}` on the PQZ entries; `PqzAttest` rebuilt by the
+node from the token, the chain, `proofSystemId()`, the simulated statement and the job's proof; `ATTESTATION_MISSING`,
+`ATTESTATION_NOT_EXPECTED`, `HEX_ARGS_REFUSED`; fetching from `[attest] endpoints` with the bounded `UASig` decoder, a size limit
+and a timeout; the indexer's `lastAttestationAt`, epoch and revoked state; `[attest] refuse_shield_when_unserved` (off by default)
+and `VERIFIER_UNREACHABLE`; alerts on `AttestVerifierProposed` and `AttestVerifierRevoked`. The node holds no verifier key.
+
+- [ ] **Step 1: Failing tests:** `attest_subobject_builds_struct`, `attest_hex_refused`, `attested_job_without_attest_fetches_or_refuses`,
+      `precompile_job_with_attest_refused`, `attest_epoch_mismatch_refetch_once`, `attestation_mismatch_not_dead`,
+      `shield_refused_when_unserved_and_enabled`, `shield_sent_when_disabled`, `pqz_attest_rows_equal_contract_{4,5,12,13}`,
+      `router_attest_rows`, `indexer_joins_proof_attested_with_position`; e2e: `pqz_attested_transfer_on_anvil`,
+      `pqz_revoked_verifier_on_anvil`.
+- [ ] **Step 2:** FAIL. **Step 3: Implement.** **Step 4:** PASS; `CAPPED_MEM=6G ../scripts/capped cargo test` alone; clippy
+      `-D warnings`; `--test e2e -- --ignored --test-threads=1`. No `anvil` left.
+- [ ] **Step 5: Mutants:** spec §15's Node row.
+- [ ] **Step 6:** Commit `ua-mtx-merge T47: node attested PQZ jobs and the verifier health signal`.
+
+### Task T48: `scaas-attestd`, the reference verifier service
+
+**Depends on:** T45; beside T46, T47. **Estimate:** 1.
+
+**Files:** a new crate and binary `scaas-attestd/` (never linked into `scaas-node`), its example config (keystore name only, no
+secret), its tests; `docs/node/ops.md` draft (a separately operated trust role).
+
+**Interfaces:** spec §11.2: `POST /v1/attest` `{token, chainId, op, statement, proof, verifierEpoch}`, the set-derived body limit,
+depth ≤ 4; release address → set; statement rebuilt from state and compared; `pqz-ffi`'s `pqz_precompile`; spec §6's key checks
+(stored `pqzPop` bytes, the `R_REG` message per path, single ownership) cached by `(ua, pqzKeyHash)`; signs only on verdict 1;
+the probe signature; logs every signature.
+
+- [ ] **Step 1: Failing tests:** `signs_valid_statement`, `refuses_verdict_zero`, `refuses_tampered_statement`,
+      `refuses_key_without_stored_pop`, `refuses_key_owned_by_other_ua`, `cache_keyed_by_ua_and_keyhash`,
+      `refuses_oversized_and_deep_body`, `refuses_wrong_set_length`, `probe_signature`.
+- [ ] **Step 2:** FAIL. **Step 3: Implement.** **Step 4:** PASS under `scripts/capped`; clippy `-D warnings`.
+- [ ] **Step 5: Mutants:** spec §15's Service row.
+- [ ] **Step 6:** Commit `ua-mtx-merge T48: scaas-attestd reference verifier service`.
+
+### Task T49: invariants I1–I6 and the mutant harness
+
+**Depends on:** T45; beside T46–T48. **Estimate:** 1.
+
+**Files:** `test/pqz/invariant/Attest{Handler,Invariants}.t.sol`; `smartcontracts/evm/runs/<date>-ua-mtx-merge-attest/`
+(`mutants.py`, `README.md`, the summary `mutant | test that went red | rc`, no absolute paths).
+
+- [ ] **Step 1:** Handlers over every proof-carrying entry in both modes, transfers A → B → A, revocations, shape changes;
+      invariants I1–I6 of spec §14.
+- [ ] **Step 2:** Run at the default set and the four sets.
+- [ ] **Step 3: Mutants:** every row of spec §15 not already killed in T44–T48 (the harness re-runs those too); a survivor is a
+      finding for its owning task.
+- [ ] **Step 4:** Commit `ua-mtx-merge T49: attested-verify invariants I1-I6 and the mutant harness, <n> kills`.
+
+**Gates:** whole `forge test`, four sets.
+
+### Task T50: the docs share of group 3f
+
+**Depends on:** T44–T49 for BUILT tags (drafts beside them). **Estimate:** 1. Lands inside T19's commit.
+
+**Files:** the spec's §10 Change lines and §13 entries (CTR-PQZ-27…30, NODE-JOB-22; `docs_check.py` confirms they are next-free) in
+`docs/decisions.md`; `pq-zero-knowledge.md` §1, §9 (CTR-PQZ-01, -10, -11 Changes), §12 (the verifier threat row), §14;
+`accounts.md` CTR-UA-16's Change; `docs/networks/evm.md`; `integration.md` (the off-chain disclosure check and the audit replay at
+the exact transaction position); `docs/node/job-api.md`, `ops.md` (the verifier service as a separate trust role, the shield
+switch), `indexer-feeds.md`; the operator note's attested rows.
+
+- [ ] **Step 1:** Write each change; figures quoted from T44–T49 logs; BUILT only where code and tests exist.
+- [ ] **Step 2:** `docs_check.py check`, `paths`, `resolve` on each new id: rc 0. Committed with T19.
+
 ### Task T19: docs, decisions, operator note
 
-**Depends on:** T1–T18, T24–T36 and T37–T43 for BUILT tags (drafts beside T14–T18, T24–T36 and T37–T43). **Estimate:** +0.5 for group 3e.
+**Depends on:** T1–T18, T24–T36, T37–T43 and T44–T50 for BUILT tags (drafts beside T14–T18, T24–T36, T37–T43 and T44–T50). **Estimate:** +0.5 for group 3e; group 3f's share is T50 (1), committed here.
 
 **Files, each rule rewritten once, linked elsewhere:**
 - `docs/contracts/metatx.md` (CTR-MTX-01, -05, -06, -09, -11, -12, -14, -15, -17, -18, -21, -22, -23, -24, -26, -27, -28, -29), `accounts.md`
@@ -1524,7 +1684,7 @@ outside the repo).
   generator of T2, T6, T8, T11, T13, T34, T37, T40, T41 (`regulated_kat.json`'s, `paymeta.json`'s and `paytax.json`'s writers included) and `dex_order_kat.json`'s writer, then `git diff --exit-code`; `cargo-scaas-node` under
   `CAPPED_MEM=6G` alone (the whole node suite, clippy `-D warnings`); `docs` runs `test_docs_check.py`, `docs_check.py check`
   and `paths`.
-- `NEW_TESTS`: every test name of T1–T18, T24–T36 and T37–T43 in its pass form (`forge|forge|…`, `cargo-scaas-node|cargo|…`, `node-e2e-anvil|cargo|…`,
+- `NEW_TESTS`: every test name of T1–T18, T24–T36, T37–T43 and T44–T49 in its pass form (`forge|forge|…`, `cargo-scaas-node|cargo|…`, `node-e2e-anvil|cargo|…`,
   `clientkeys|node|…`, one row per language of T13), written from the diff, not from this plan.
 
 - [ ] **Step 1:** Write the runner and the names.
