@@ -297,9 +297,9 @@ contract GovDeployTest is Test {
         // ua-mtx-merge T1: `size-baseline.json`'s WrappedToken row 52,297 -> 51,436 B, so the control moves with it;
         // T2: 51,436 -> 46,804 B; T3: 46,804 -> 45,140 B; T6: 45,140 -> 42,669 B; T24: 42,669 -> 42,985 B;
         // T25: 42,985 -> 43,333 B; T26: 43,333 -> 43,552 B; pay-meta-tax T37: 43,552 -> 43,667 B; T38: 43,667 -> 43,714 B;
-        // T39: 43,714 -> 43,711 B
-        h.limitCode(43_710);
-        vm.expectRevert(bytes("WrappedToken runtime 43711 B > chain code limit 43710 B (CHAIN_CODE_LIMIT, CTR-GOV-19)"));
+        // T39: 43,714 -> 43,711 B; T40: 43,711 -> 43,503 B (lever 5: `_payMeta` in `MtxPipelineLib`)
+        h.limitCode(43_502);
+        vm.expectRevert(bytes("WrappedToken runtime 43503 B > chain code limit 43502 B (CHAIN_CODE_LIMIT, CTR-GOV-19)"));
         h.deploy(ZUID, false, ska);
     }
 
