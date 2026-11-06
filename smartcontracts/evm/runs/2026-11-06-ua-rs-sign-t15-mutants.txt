@@ -1,0 +1,34 @@
+# 2026-11-06 ua-rs-sign T15 mutants: python3 -I smartcontracts/evm/runs/2026-11-06-ua-rs-sign-t15-mutants.py (each mutant alone on a clean tree, its suite, files restored).
+# First run (27 of 28 before the prover-call counter): M14 / M15 (the receiver's own-key and the sender's u / v checks skipped) SURVIVED: pqz-core's
+# prover also refuses an unsatisfied witness, so the refusal looked the same. Closed before the commit: a vectors-only prover-call counter;
+# the tests now require each refusal before the prover; M16 (the balance check) added. The final run on the committed tree:
+killed     | M1 rnd32 fixed in a release build | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: two_proofs_differ
+killed     | M2 set mismatch accepted (any proofSystemId) | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: set_mismatch_refused
+killed     | M3 TAG(kind) for utf8(tag) in the PQZ HKDF | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: pqz_key_is_the_ua_pq_rule
+killed     | M4 a deployed set of another build accepted | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: set_mismatch_refused
+killed     | M5 a `key` field on every allow-list | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: a_key_field_in_command_json_is_refused
+killed     | M6 a `key` field allowed in a leg | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: a_key_field_in_command_json_is_refused
+killed     | M7 seed_enc HKDF salt label changed (V3) | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: transfer_and_disclosures_verify
+killed     | M8 seed_enc without the salt (a re-proof at one counter reuses r) | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: transfer_and_disclosures_verify
+killed     | M9 a burn's seed fixed (not fresh) | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: burn_and_refresh_verify
+killed     | M10 cache AAD label changed (zether-cache:) | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: cache_box_key_and_label
+killed     | M11 cache key info changed (v2) | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: cache_box_key_and_label
+killed     | M12 the memo sealed under another key | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: transfer_multi_memo_and_sender_disclosure
+killed     | M13 recipientsHash not over the legs' UAs | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: transfer_multi_memo_and_sender_disclosure
+killed     | M14 the receiver disclosure's own-key check skipped | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: transfer_and_disclosures_verify
+killed     | M15 the sender disclosure's u / v check skipped | clients/ua-rs/src/facade/pqz.rs | rc=101 | 2 failed: transfer_and_disclosures_verify, transfer_multi_memo_and_sender_disclosure
+killed     | M16 the balance check wrapping (an overdraft reaches the prover) | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: transfer_and_disclosures_verify
+killed     | M17 Transfer0 for an audited transfer | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: vectors::proof_rows_through_the_facade
+killed     | M18 dec window 4 accepted | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: command_json_is_bounded_and_typed
+killed     | M19 a float amount read as u64 | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: command_json_is_bounded_and_typed
+killed     | M20 command JSON depth 9 read | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: pqz_inputs_past_their_caps_are_refused_unparsed
+killed     | M21 command JSON past 1 MiB read | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: pqz_inputs_past_their_caps_are_refused_unparsed
+killed     | M22 cache box JSON past 2 MiB read | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: pqz_inputs_past_their_caps_are_refused_unparsed
+killed     | M23 cache box JSON depth 2 read | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: pqz_inputs_past_their_caps_are_refused_unparsed
+killed     | M24 the generation check of Handle::with skipped (unlock revives a PQZ handle) | clients/ua-rs/src/wallet/store.rs | rc=101 | 1 failed: unlock_does_not_revive_a_pqz_handle
+killed     | M25 fuzz: a panic in the PQZ decoder (positive control of the unwinding fuzz profile) | clients/ua-rs/src/facade/pqz.rs | rc=1 | 0 failed: 
+killed     | M26 ua-c: pqz not in the default build | clients/ua-c/Cargo.toml | rc=1 | 1 failed: test_pqz_and_one_set_in_the_default_build
+killed     | M27 ua-c: PqzSetMismatch folded into Internal | clients/ua-c/src/lib.rs | rc=1 | 1 failed: test_register_set_mismatch_and_key_field
+killed     | M28 ua-c: the leaf export writes zeros | clients/ua-c/src/lib.rs | rc=1 | 1 failed: test_leaf_is_the_ua_pq_rule
+killed     | M29 ua-c: a pqz_call error echoes its request | clients/ua-c/src/lib.rs | rc=1 | 1 failed: test_error_strings_never_contain_an_input
+mutants M1-M29 of 29, survived or not loaded: 0
