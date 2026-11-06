@@ -1,0 +1,18 @@
+# 2026-11-06 ua-rs-sign T15c mutants (smartcontracts/evm/runs/2026-11-06-ua-rs-sign-t15c-mutants.py), on the tree of 9107ae01. One
+# mutant per run, its own command (release cells of facade_pqz / facade_zether, zether-prover's call_with_key / read_balance,
+# the vectors cell of facade_zether, ua-c ctypes WalletPqz WalletZether), each file restored byte for byte; NOT-LOADED or SURVIVED
+# is a finding (exit 1). M1-M2 from the run of afffb881's tree, M3-M12 one per call at 9107ae01. An earlier run at 6978925b had M2
+# SURVIVED and M3 hung: both closed by the follow-ups (see the summary).
+killed     | M1 PQZ: `dec` back in the release list | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: release_has_no_raw_decrypt
+killed     | M2 zether-prover: `hazmat` on by default | clients/zether-prover/Cargo.toml | rc=101 | 1 failed: hazmat_is_off_by_default
+killed     | M3 zether-read-balance: `--rpc` accepted | clients/zether-prover/src/bin/zether-read-balance.rs | rc=101 | 1 failed: rpc_refused
+killed     | M4 PQZ: `proveTransfer` back in the release list | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: release_has_no_raw_decrypt
+killed     | M5 PQZ: `proveDisclose` back in the release list | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: release_has_no_raw_decrypt
+killed     | M6 PQZ: `openMemo` back in the release list | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: release_has_no_raw_decrypt
+killed     | M7 PQZ: `dec` back, seen through the C ABI (ua-c ctypes) | clients/ua-rs/src/facade/pqz.rs | rc=1 | 1 failed: test_enc_dec_and_cache_box
+killed     | M8 Zether: `checkBalance` back in the facade's release list | clients/ua-rs/src/facade/zether.rs | rc=101 | 1 failed: release_has_no_raw_decrypt
+killed     | M9 Zether: `recoverTransfer` back in the facade's release list | clients/ua-rs/src/facade/zether.rs | rc=101 | 1 failed: release_has_no_raw_decrypt
+killed     | M10 zether-prover: the api gate removed | clients/zether-prover/src/api.rs | rc=101 | 1 failed: release_has_no_raw_decrypt
+killed     | M11 zether-prover: `openDisclosure` off the HAZMAT list | clients/zether-prover/src/api.rs | rc=101 | 1 failed: release_has_no_raw_decrypt
+killed     | M12 ua-rs `vectors` without zether-prover's `hazmat` | clients/ua-rs/Cargo.toml | rc=101 | 1 failed: release_has_no_raw_decrypt
+mutants M1-M12 of 12, survived or not loaded: 0
