@@ -75,7 +75,7 @@ function tupleTypes(t) {
   return out;
 }
 
-const isDynamic = (t) => t === 'bytes' || t.endsWith('[]') || (t.startsWith('(') && tupleTypes(t).some(isDynamic));
+const isDynamic = (t) => t === 'bytes' || t === 'string' || t.endsWith('[]') || (t.startsWith('(') && tupleTypes(t).some(isDynamic));
 const headSize = (t) => (t.startsWith('(') && !isDynamic(t) ? tupleTypes(t).reduce((n, m) => n + headSize(m), 0) : 32);
 
 function encodeOne(t, v) {
@@ -85,6 +85,7 @@ function encodeOne(t, v) {
   }
   if (t.startsWith('(')) return abiEncode(tupleTypes(t), v);
   if (t === 'bytes') return padded(v instanceof Uint8Array ? v : fromHex(v));
+  if (t === 'string') return padded(utf8ToBytes(String(v)));
   if (t === 'address') return addressWord(v);
   if (t === 'bytes32') return bytes32(v);
   if (t === 'bool') return boolWord(v);
@@ -97,7 +98,7 @@ function encodeOne(t, v) {
   throw new Error(`unsupported ABI type ${t}`);
 }
 
-/** `abi.encode`: uintN, bool, address, bytesN, bytes, `T[]` and tuples written `(t1,t2,...)`, nested and dynamic ones too. */
+/** `abi.encode`: uintN, bool, address, bytesN, bytes, string (UTF-8), `T[]` and tuples written `(t1,t2,...)`, nested and dynamic ones too. */
 export function abiEncode(types, values) {
   const heads = [];
   const tails = [];

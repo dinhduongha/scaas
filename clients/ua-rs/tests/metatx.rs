@@ -14,9 +14,11 @@ fn b32(v: &Value) -> [u8; 32] {
     bytes(v).try_into().unwrap()
 }
 
+/// The old commitment (`scaas.pay.meta`), kept for the non-EVM families: the legacy file (pay-meta-tax T41; the v2 rows are
+/// tests/pay.rs's).
 #[test]
 fn meta_pay_id_vectors() {
-    let rows = load("paymeta.json");
+    let rows = load("legacy/ua-mtx-merge/paymeta.json");
     assert_eq!(rows.len(), 6);
     for r in &rows {
         let id = meta_pay_id(&b32(&r["salt"]), &bytes(&r["meta"]));

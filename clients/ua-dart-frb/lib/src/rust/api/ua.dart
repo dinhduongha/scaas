@@ -10,7 +10,7 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 // These functions are ignored because they are not marked as `pub`: `arg`, `hash`, `k`, `n`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `fmt`, `from`, `from`, `try_from`
 
-/// `governance_bits.json`'s row of `bit` as JSON, `{bit, name, type, sentences}` (spec 2026-11-02-governance §1.2): bits 0-22,
+/// `governance_bits.json`'s row of `bit` as JSON, `{bit, name, type, sentences}` (spec 2026-11-02-governance §1.2): bits 0-23,
 /// any other `UAArgument`.
 String governanceBit({required PlatformInt64 bit}) =>
     ScaasUa.instance.api.crateApiUaGovernanceBit(bit: bit);
@@ -391,6 +391,16 @@ String setKemKeyArgs({required String input}) =>
 /// the same fields, `sig` complete.
 String setPqzKeyArgs({required String input}) =>
     ScaasUa.instance.api.crateApiUaSetPqzKeyArgs(input: input);
+
+/// What a payer signs (pay-meta-tax T41), JSON in and out: `{struct, domain: {name, chainId, verifyingContract, salt}, message}`,
+/// `struct` `UAMetaTransfer`, `UAPayWithTax` (`{payment, taxMode, tax}`) or `UARelayFee`; out `{structHash, digest}`.
+String payDigest({required String input}) =>
+    ScaasUa.instance.api.crateApiUaPayDigest(input: input);
+
+/// `metaPayId` under `scaas.pay.meta.v2` (pay-meta-tax T41): in `{salt, payNo, schema, body}`, out `{payId}`; a refused shape or
+/// `payNo` is `UAArgument`.
+String metaPayId({required String input}) =>
+    ScaasUa.instance.api.crateApiUaMetaPayId(input: input);
 
 /// Members are `(kind, id, weight)`; a kind outside 0..=0xFFFF is `UAKindUnknown`, a threshold or weight outside u16 (or
 /// more than 65535 members) is `UAArgument`.

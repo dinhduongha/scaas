@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {MtxDigest} from "../helpers/MtxDigest.sol";
+import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 import {IMetaTxAddress} from "../../src/metatx/IMetaTxAddress.sol";
 import {IERC5267} from "@openzeppelin/contracts/interfaces/IERC5267.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
@@ -71,6 +72,15 @@ function tryRowAs(string memory j, string memory op, string memory kind, address
 
 // The ordered cancel on ids (Q2), on the tokens, the router and the mandate wallets.
 string constant UA_CANCEL_NONCE = "mtxCancelNonce((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))";
+
+/// pay-meta-tax T41: a pay row's `PayMeta` (`domains.<kind>.extra.meta`), the entry's last parameter.
+function rowMeta(string memory j, string memory op, string memory kind) pure returns (MetaTxLib.PayMeta memory m) {
+    string memory p = domainField(op, kind, "extra.meta.");
+    m.salt = VM.parseJsonBytes32(j, string.concat(p, "salt"));
+    m.payNo = VM.parseJsonString(j, string.concat(p, "payNo"));
+    m.schema = uint16(VM.parseJsonUint(j, string.concat(p, "schema")));
+    m.body = VM.parseJsonBytes(j, string.concat(p, "body"));
+}
 
 /// `to` in place of `old`, the same length, in `cd`.
 function swap(bytes memory cd, bytes memory old, bytes memory to) pure {
@@ -549,23 +559,27 @@ contract TypedOpsTest is UALedgerBase {
     }
 
     /// The delegate is the row's key; the payee the row's derived-looking id, registered here, paid by `payWithFeeToUA`.
-    /// pay-meta-tax T37, meaning: the row's calldata is `mtxPayUnderMandate` without `PayMeta`, which has no function
-    /// now (its `entryRef` is no `PayMeta` commitment either); T41 regenerates the row (`meta` last, `entryRef` its
-    /// commitment) and runs it again.
+    /// pay-meta-tax T41: the row carries its `PayMeta` (`extra.meta`), the entry's last parameter; `entryRef` its commitment.
     function test_typedOpsVectors_UAPayUnderMandate() public {
         string memory op = "UAPayUnderMandate";
+        address token = _addr(op, "token");
         bytes32 payee = _b32(op, "payee");
         assertFalse(UAKinds.inNativeSpace(payee), "the row's payee is a derived id");
+        MetaTxLib.PayMeta memory m = rowMeta(j, op, "wallet");
+        assertEq(PayMetaKit.id(m), _b32(op, "entryRef"), "the row's entryRef commits to its PayMeta");
         MandateWallet w = _rowMandate(op, _b32(op, "from"), _uint(op, "amount"));
-        rowHasNoEntry(j, op, "wallet", address(w), _payUnderMandateCall(op));
-        assertFalse(w.refUsed(_b32(op, "entryRef")));
+        _tokenAt(token).transfer(address(w), _uint(op, "amount"));
+        vm.mockCall(REG_L, abi.encodeCall(IUARegistry.kindOf, (payee)), abi.encode(UAKinds.P256));
+        vm.prank(address(0xA11));
+        w.setPayee(token, payee, true);
+        _walletRow(op, w, _payUnderMandateCall(op, m));
+        assertEq(NormalToken(token).balanceOfUA(payee), _uint(op, "amount"));
+        assertTrue(w.refUsed(_b32(op, "entryRef")));
     }
 
-    function _payUnderMandateCall(string memory op) internal view returns (bytes memory) {
-        return abi.encodeWithSignature(string.concat("mtxPayUnderMandate((bytes32,uint256,uint256,uint256,uint32,address,",
-            "uint256,address),address,bytes32,uint256,bytes32,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))"),
-            _walletEnv(op), _addr(op, "token"), _b32(op, "payee"), _uint(op, "amount"), _b32(op, "entryRef"),
-            uint64(_uint(op, "epoch")), _walletSig(op));
+    function _payUnderMandateCall(string memory op, MetaTxLib.PayMeta memory m) internal view returns (bytes memory) {
+        return abi.encodeCall(MandateWallet.mtxPayUnderMandate, (_walletEnv(op), _addr(op, "token"), _b32(op, "payee"),
+            _uint(op, "amount"), _b32(op, "entryRef"), uint64(_uint(op, "epoch")), _walletSig(op), m));
     }
 
     function test_typedOpsVectors_UADelegateRevoke() public {
@@ -1289,6 +1303,9 @@ contract TypedOpsRouterTest is UALedgerBase {
     /// The test is the factory of every clone and registered no token: a market's legs are outside.
     function isToken(address) external pure returns (bool) { return false; }
 
+    /// The factory's notice period the regulated clones read for a tax-rate increase (pay-meta-tax spec §6.2): none here.
+    function noticePeriod() external pure returns (uint64) { return 0; }
+
     function setUp() public override {
         super.setUp();
         j = vm.readFile(TYPED_OPS);
@@ -1694,7 +1711,8 @@ contract TypedOpsRouterTest is UALedgerBase {
         (c.name, c.symbol, c.decimals, c.owner) = ("R", "R", 6, MetaTxLib.pad(address(this)));
         c.features = 1 | (uint256(1) << GovernanceBits.FREEZE) | (uint256(1) << GovernanceBits.FORCE)
             | (uint256(1) << GovernanceBits.PAUSE) | (uint256(1) << GovernanceBits.RECORD)
-            | (uint256(1) << GovernanceBits.OPERATOR_TRANSFER);
+            | (uint256(1) << GovernanceBits.OPERATOR_TRANSFER) | (uint256(1) << GovernanceBits.TAX);
+        c.reg.taxRecipient = MetaTxLib.pad(address(0x7A1)); // pay-meta-tax T41: bit 23, the issuer seat holds it
         (c.roles.issuer, c.roles.compliance) = keyIsIssuer ? (me, MetaTxLib.pad(regOther)) : (MetaTxLib.pad(regOther), me);
         (c.initialSupply, c.initialHolder) = (1000, address(uint160(uint256(_b32("UARecordOrder", "subject")))));
         c.reg.termsHash = keccak256("terms");
@@ -1793,6 +1811,21 @@ contract TypedOpsRouterTest is UALedgerBase {
         _row(op);
         assertEq(t.balanceOf(to), _uint(op, "amount"));
         assertEq(t.balanceOf(from), 1000 - _uint(op, "amount"));
+    }
+
+    /// pay-meta-tax T39 / T41: the router's two tax ops, bit 23 on the key (the issuer seat), the factory's notice 0.
+    function test_routerRow_UASetTaxRate() public {
+        string memory op = "UASetTaxRate";
+        NormalRegulatedToken t = _regAt(op, true);
+        _row(op);
+        assertEq(t.taxConfig().effectivePpm, _uint(op, "ratePpm"));
+    }
+
+    function test_routerRow_UASetTaxRecipient() public {
+        string memory op = "UASetTaxRecipient";
+        NormalRegulatedToken t = _regAt(op, true);
+        _row(op);
+        assertEq(t.taxConfig().taxRecipient, _b32(op, "taxRecipient"));
     }
 
     /// spec §6 on the router (`MetaTxLib.canon`): the rows bind the relayer (mode 1), the fee recipient is unbound. A wallet

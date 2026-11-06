@@ -776,16 +776,36 @@ void main() {
     }
   });
 
-  // governance T14: governanceBit against governance_bits.json on disk, every row; past bit 22 UAArgument
+  // governance T14: governanceBit against governance_bits.json on disk, every row; past bit 23 UAArgument
   test('governance bits rows', () {
     final v = jsonDecode(File('$vectors/../governance/governance_bits.json').readAsStringSync()) as Map;
     final rows = v['bits'] as List;
-    expect(rows.length, 23);
+    expect(rows.length, 24);
     for (final r in rows) {
       expect(jsonDecode(governanceBit(bit: r['bit'] as int)), r, reason: 'bit ${r['bit']}');
     }
-    for (final bit in [23, 127, 128, 255, 256, -1]) {
+    for (final bit in [24, 127, 128, 255, 256, -1]) {
       expect(errCode(() => governanceBit(bit: bit)), 'UAArgument', reason: '$bit');
     }
+  });
+
+  // pay-meta-tax T41: paymeta.json v2 rows (257 bytes refused) and paytax.json's UAPayWithTax digest row
+  test('pay rows', () {
+    final pm = jsonDecode(File('$vectors/../metatx/paymeta.json').readAsStringSync()) as List;
+    for (final r in pm) {
+      final i = jsonEncode({'salt': r['salt'], 'payNo': r['payNo'], 'schema': r['schema'], 'body': r['body']});
+      if (r['accepted'] as bool) {
+        expect((jsonDecode(metaPayId(input: i)) as Map)['payId'], r['payId'], reason: r['name'] as String);
+      } else {
+        expect(errCode(() => metaPayId(input: i)), 'UAArgument', reason: r['name'] as String);
+      }
+    }
+    final pt = jsonDecode(File('$vectors/../metatx/paytax.json').readAsStringSync()) as List;
+    final r = pt.firstWhere((x) => x['name'] == 'digest_unbound_relayer_fee_recipient') as Map;
+    final payment = {for (final k in ['from', 'to', 'value', 'entryRef', 'batch', 'nonce', 'validUntil', 'mode', 'relayer', 'fee', 'feeRecipient']) k: r[k]};
+    final got = jsonDecode(payDigest(input: jsonEncode({'struct': 'UAPayWithTax', 'domain': r['domain'],
+        'message': {'payment': payment, 'taxMode': r['taxMode'], 'tax': r['tax']}}))) as Map;
+    expect(got['digest'], r['digest']);
+    expect(got['structHash'], r['structHash']);
   });
 }

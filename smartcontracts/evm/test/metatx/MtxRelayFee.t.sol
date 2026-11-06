@@ -577,19 +577,34 @@ contract MtxRelayFeeTest is PqzRegistryBase {
     /// `relay` on ids. T11 (MD-7): the `UARelayFee` row names `relay` itself and runs verbatim; the retired `RelayFee` row is
     /// read from `TYPED_OPS_LEGACY`.
     function test_relayFeeRows() public {
-        // pay-meta-tax T38, meaning: the `UARelayFee` row signs the struct without `batch` / `nonce` and its router call is
-        // the eight-argument `relay`, which has no function now; T41 regenerates the row (the new struct, the new `relay`)
-        // and runs it again
+        // pay-meta-tax T41: the `UARelayFee` row signs the struct with `batch` / `nonce` (the payer's own lane) and its router
+        // call is the ten-argument `relay`; it runs verbatim, the signature re-made under `tok`'s domain
         string memory j = vm.readFile(TYPED_OPS);
         address at = vm.parseJsonAddress(j, domainField("UARelayFee", "token", "router"));
         deployCodeTo("MtxRelayFee.sol:MtxRelayFee", at);
+        address tgt = vm.parseJsonAddress(j, msgField("UARelayFee", "target"));
+        vm.etch(tgt, hex"00");
+        address payer = vm.parseJsonAddress(j, ".key.address");
+        tok.mint(payer, 1_000);
         _relayFeeRowHasNoEntry(vm.readFile(TYPED_OPS_LEGACY), at);
-        checkRow(j, "UARelayFee", "token");
-        bytes memory cd = vm.parseJsonBytes(j, domainField("UARelayFee", "token", "routerCalldata"));
+        string memory op = "UARelayFee";
+        checkRow(j, op, "token");
+        bytes memory cd = vm.parseJsonBytes(j, domainField(op, "token", "routerCalldata"));
+        assertEq(bytes4(cd), MtxRelayFee.relay.selector, "the row names the router's relay on ids");
+        bytes memory rowSig = vm.parseJsonBytes(j, domainField(op, "token", "signature"));
+        assertEq(keccak256(vm.parseJsonBytes(j, domainField(op, "token", "relayedCall"))), vm.parseJsonBytes32(j, msgField(op, "callDataHash")));
+        bytes memory sig = onChain(j, op, address(tok));
+        uint256 w = find(cd, rowSig);
+        for (uint256 k; k < 65; ++k) cd[w + k] = sig[k];
+        // the row's token is its own address: the call goes to `tok`
+        bytes memory tokWord = abi.encode(vm.parseJsonAddress(j, domainField(op, "token", "domain.verifyingContract")));
+        w = find(cd, tokWord);
+        bytes memory real = abi.encode(address(tok));
+        for (uint256 k; k < 32; ++k) cd[w + k] = real[k];
         vm.prank(REL);
         (bool ok, bytes memory ret) = at.call(cd);
-        assertFalse(ok, "the eight-argument relay has no entry");
-        assertEq(ret.length, 0);
+        assertTrue(ok, vm.toString(ret));
+        assertEq(tok.balanceOf(REL), FEE, "open mode");
     }
 
     function _relayFeeRowHasNoEntry(string memory j, address at) internal {

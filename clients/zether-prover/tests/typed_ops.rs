@@ -5,7 +5,7 @@ use zether_prover::api::call;
 
 /// Rows of the vector the Zether prover does not build, each with its reason: another contract kind's domain (the row has no
 /// `zether` domain), so a Zether key never signs it. Any other row without a `zether` domain fails the test.
-const NOT_ZETHER: [&str; 49] = [
+const NOT_ZETHER: [&str; 51] = [
     // the token kind's own (non-Zether) accounts: UA prepare is a NormalToken / WrappedToken entry
     "UAPrepareAcc",
     // SmartKeyAccount: signed by its owner's keys, not by a Zether key
@@ -24,6 +24,8 @@ const NOT_ZETHER: [&str; 49] = [
     "UACancelRate", "UAExecuteRate", "UASetMarket", "UASetExchangeTarget", "UASetListedOnly", "UASetFeeSplit",
     // ua-mtx-merge T34: the regulated kinds' controls on the router (regulated-kinds spec §3.1); public balances only
     "UAFreeze", "UAUnfreeze", "UAForceTransfer", "UAPause", "UAUnpause", "UARecordOrder", "UARevokeOrder", "UAOperatorTransfer",
+    // pay-meta-tax T39 / T41: bit 23's two router ops
+    "UASetTaxRate", "UASetTaxRecipient",
 ];
 
 fn vector() -> Value {
@@ -60,7 +62,7 @@ fn every_zether_row_digest_equals_the_vector() {
         assert_eq!(out["domainSeparator"], dom["domainSeparator"], "{op} domainSeparator");
         assert_eq!(out["digest"], dom["digest"], "{op} digest");
     }
-    assert_eq!(zether, 27, "the vector's Zether rows");
+    assert_eq!(zether, 28, "the vector's Zether rows (pay-meta-tax T41: + UAPayWithTax)");
     assert_eq!(zether + other.len(), ops.len());
     let mut want = NOT_ZETHER.to_vec();
     want.sort_unstable();

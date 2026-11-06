@@ -776,14 +776,37 @@ static void set_key_args() {
         CHECK(code_of([&] { setPqzKeyArgs(bad.first); }) == bad.second, bad.first);
 }
 
-// governance T14: governanceBit against governance_bits.json on disk, every row; past bit 22 UAArgument
+// governance T14: governanceBit against governance_bits.json on disk, every row; past bit 23 UAArgument
 static void governance_bits_rows() {
     std::ifstream f(std::string(SCAAS_UA_VECTORS_DIR) + "/../governance/governance_bits.json");
     if (!f) { std::fprintf(stderr, "cannot open governance_bits.json\n"); std::exit(2); }
     json v = json::parse(f);
-    CHECK(v["bits"].size() == 23, "rows 0-22");
+    CHECK(v["bits"].size() == 24, "rows 0-23");
     for (auto& r : v["bits"]) CHECK(json::parse(governanceBit(r["bit"].get<uint8_t>())) == r, std::to_string(r["bit"].get<int>()));
-    for (int bit : {23, 127, 128, 255}) CHECK(code_of([&] { governanceBit(uint8_t(bit)); }) == "UAArgument", std::to_string(bit));
+    for (int bit : {24, 127, 128, 255}) CHECK(code_of([&] { governanceBit(uint8_t(bit)); }) == "UAArgument", std::to_string(bit));
+}
+
+// pay-meta-tax T41: paymeta.json v2 rows (257 bytes refused) and paytax.json's UAPayWithTax digest row
+static void pay_rows() {
+    auto read = [](const std::string& n) {
+        std::ifstream f(std::string(SCAAS_UA_VECTORS_DIR) + "/../metatx/" + n);
+        if (!f) { std::fprintf(stderr, "cannot open %s\n", n.c_str()); std::exit(2); }
+        return json::parse(f);
+    };
+    for (auto& r : read("paymeta.json")) {
+        json i = {{"salt", r["salt"]}, {"payNo", r["payNo"]}, {"schema", r["schema"]}, {"body", r["body"]}};
+        if (r["accepted"].get<bool>()) CHECK(json::parse(metaPayId(i.dump()))["payId"] == r["payId"], r["name"].get<std::string>());
+        else CHECK(code_of([&] { metaPayId(i.dump()); }) == "UAArgument", r["name"].get<std::string>());
+    }
+    for (auto& r : read("paytax.json")) {
+        if (r["name"] != "digest_unbound_relayer_fee_recipient") continue;
+        json p;
+        for (auto k : {"from", "to", "value", "entryRef", "batch", "nonce", "validUntil", "mode", "relayer", "fee", "feeRecipient"}) p[k] = r[k];
+        json i = {{"struct", "UAPayWithTax"}, {"domain", r["domain"]}, {"message", {{"payment", p}, {"taxMode", r["taxMode"]}, {"tax", r["tax"]}}}};
+        json got = json::parse(payDigest(i.dump()));
+        CHECK(got["digest"] == r["digest"], "UAPayWithTax digest");
+        CHECK(got["structHash"] == r["structHash"], "UAPayWithTax struct hash");
+    }
 }
 
 int main(int argc, char** argv) {
@@ -792,7 +815,7 @@ int main(int argc, char** argv) {
         {"invalid_rows", invalid_rows}, {"natives_native_space_canonical_ids", natives_native_space_canonical_ids},
         {"messages", messages}, {"structures", structures}, {"portable", portable}, {"kem_record", kem_record},
         {"pqz_key_record", pqz_key_record}, {"membership_rows", membership_rows}, {"portable_purposes", portable_purposes},
-        {"holder_refusals", holder_refusals}, {"registration_args", registration_args}, {"nested_rows", nested_rows}, {"nested_inner", nested_inner}, {"set_key_args", set_key_args},
+        {"holder_refusals", holder_refusals}, {"registration_args", registration_args}, {"nested_rows", nested_rows}, {"nested_inner", nested_inner}, {"set_key_args", set_key_args}, {"pay_rows", pay_rows},
         {"member_sig_hashes", member_sig_hashes}, {"governance_bits_rows", governance_bits_rows}, {"id_display_rows", id_display_rows}};
     if (argc != 2 || !tests.count(argv[1])) { std::fprintf(stderr, "usage: vectors_test <name>\n"); return 2; }
     try { tests[argv[1]](); } catch (const std::exception& e) { std::fprintf(stderr, "exception: %s\n", e.what()); return 1; }

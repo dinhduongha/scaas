@@ -17,7 +17,7 @@ use std::collections::BTreeSet;
 type R<T> = Result<T, String>;
 
 /// Every typed op the Zether token kinds take (the rows of `typed_ops.json` with a `zether` domain).
-pub const OPS: [(&str, &str); 27] = [
+pub const OPS: [(&str, &str); 28] = [
     ("UABurn", "UABurn(bytes32 from,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
     ("Wrap", "Wrap(address from,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
     ("WrapLeg", "WrapLeg(address from,address underlying,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
@@ -38,7 +38,10 @@ pub const OPS: [(&str, &str); 27] = [
     ("UASetRollOverMode", "UASetRollOverMode(bytes32 from,bytes32 ua,uint8 rollOverMode,uint64 validUntilBlock,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
     ("UARollOverBatch", "UARollOverBatch(bytes32 from,bytes32[] uas,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
     ("UAReceiverFee", "UAReceiverFee(UAMetaTransfer payment,uint256 fee,address feeRecipient,uint256 validUntil)UAMetaTransfer(bytes32 from,bytes32 to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
-    ("UARelayFee", "UARelayFee(bytes32 from,address target,bytes32 callDataHash,bytes32 payee,uint256 value,uint256 validUntil,address relayer)"),
+    // pay-meta-tax T38 / T41: the payer's own lane (O4)
+    ("UARelayFee", "UARelayFee(bytes32 from,address target,bytes32 callDataHash,bytes32 payee,uint256 value,uint256 batch,uint256 nonce,uint256 validUntil,address relayer)"),
+    // pay-meta-tax T40 / T41: a public payment with its tax on the regulated Zether kinds 10, 11 (spec §5.2)
+    ("UAPayWithTax", "UAPayWithTax(UAMetaTransfer payment,uint8 taxMode,uint256 tax)UAMetaTransfer(bytes32 from,bytes32 to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
     ("UAWrapOrder", "UAWrapOrder(bytes32 from,address wrappedToken,uint256 amount,uint256 minMinted,uint256 minFill,uint256 fee,address relayer,bytes32 destination,uint8 flags,uint256 batch,uint256 nonce,uint256 validUntil)"),
     ("CancelUAOrder", "CancelUAOrder(UATradeOrder order)UATradeOrder(bytes32 from,address receiveToken,uint256 amount,uint256 receiveAmount,uint256 minFill,uint256 fee,address relayer,address dex,bytes32 destination,uint8 flags,uint256 batch,uint256 nonce,uint256 validUntil)"),
     ("CancelUAWrapOrder", "CancelUAWrapOrder(UAWrapOrder order)UAWrapOrder(bytes32 from,address wrappedToken,uint256 amount,uint256 minMinted,uint256 minFill,uint256 fee,address relayer,bytes32 destination,uint8 flags,uint256 batch,uint256 nonce,uint256 validUntil)"),

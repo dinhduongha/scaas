@@ -34,7 +34,7 @@ import { hex, fromHex, keccak_256, utf8ToBytes, concatBytes, abiEncode } from '.
 import * as ua from '../src/ua.js';
 import {
   hashStruct, hashTypedData, padId, payLane, uaMetaTxTypedData, uaMetaTransferTypedData, unwrapToUACall, uaTradeOrderTypedData,
-  uaInvalidateNoncesTypedData, uaReceiverFeeTypedData, cancelUAOrderTypedData,
+  uaInvalidateNoncesTypedData, uaReceiverFeeTypedData, cancelUAOrderTypedData, payMeta, metaPayId,
 } from '../src/evm.js';
 import { PQ_KINDS, pqMessage } from '../src/pq.js';
 import { holderPopMessageV1 } from '../legacy/ua8/ua-pop-v1.js';
@@ -496,14 +496,16 @@ const m3Auth = (s, purpose, d) => hex(s.keyData
   ? abiEncode(['bytes', 'bytes'], [s.keyData, SCHEMES[s.name].sign(int(fromHex(row(s.name).secret)), ua.uaMessage(s.kind, tag(purpose), d))])
   : ecdsa(nativeSk, d));
 /** One receiver-pays row: `payerAuth` under `metatx` over the payment digest, `payeeAuth` under `receiver-fee` over the
- *  `ReceiverFee` digest; `sign(signer, purpose, digest)` makes either auth blob. */
+ *  `ReceiverFee` digest; `sign(signer, purpose, digest)` makes either auth blob. pay-meta-tax T41 (O11): the payment's
+ *  `entryRef` is the commitment of the row's `meta` (a salt-only `PayMeta`, `mtxPayReceiverFee`'s last parameter). */
 const rfRow = (payer, payee, sign) => {
-  const ref = keccak_256(utf8ToBytes(`scaas.metatx3.receiverFee.${payer.name}.${payee.name}`));
+  const meta = payMeta({ salt: hex(keccak_256(utf8ToBytes(`scaas.metatx3.receiverFee.${payer.name}.${payee.name}`))) });
+  const ref = fromHex(metaPayId(meta));
   const transfer = m3Payment(payer.id, payee.id, ref);
   const paymentDigest = hashTypedData(transfer);
   const receiverFee = uaReceiverFeeTypedData({ ...M3, message: { payment: transfer.message, ...M3_RF } });
   const receiverFeeDigest = hashTypedData(receiverFee);
-  return { payer: payer.name, payee: payee.name, transfer, paymentDigest: hex(paymentDigest), receiverFee,
+  return { payer: payer.name, payee: payee.name, meta, transfer, paymentDigest: hex(paymentDigest), receiverFee,
     receiverFeeDigest: hex(receiverFeeDigest), payerAuth: sign(payer, 'metatx', paymentDigest),
     payeeAuth: sign(payee, 'receiver-fee', receiverFeeDigest) };
 };

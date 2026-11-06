@@ -21,8 +21,8 @@ const UID = '0x' + 'c1'.repeat(32);
 const NOW = 1_800_000_000;
 // ua-mtx-merge T11 (R21): the payment is `UARelayFee` between ids, the router's `relay(…, bytes32 from, bytes32 payee, …, UASig)`
 const base = { token: TOKEN, chainId: 7622, chainUid: UID, router: ROUTER, executor: EXECUTOR, target: TARGET,
-  from: padId(PAYER), amount: 25n, validUntil: NOW + 300 };
-const RELAY = `relay(address,bytes,address,bytes32,bytes32,uint256,uint256,${'(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])'})`;
+  from: padId(PAYER), amount: 25n, batch: 7, nonce: 2, validUntil: NOW + 300 }; // pay-meta-tax O4: the payer's own lane
+const RELAY = `relay(address,bytes,address,bytes32,bytes32,uint256,uint256,uint256,uint256,${'(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])'})`;
 const inner = (mode, relayer) => metaTxTypedData({ name: 'SCaaS TestRegistry', contract: TARGET, chainId: 7622,
   chainUid: UID, message: { from: SIGNER, data: '0x12345678', nonce: 4, validUntil: NOW + 300, mode, relayer } });
 
@@ -45,11 +45,12 @@ test('buildRelayFee: open mode by default, one prompt with both intents, the rou
   const callData = '0xdeadbeef';
   const p = plan.payment(callData);
   assert.equal(p.ref, relayRef(7622, TARGET, callData));
-  assert.equal(p.lane, payLane(p.ref));
+  assert.equal(p.lane, 7n, 'the payer\'s lane, not payLane(ref)');
+  assert.equal(p.nonce, 2n);
   const m = p.typedData.message;
   assert.equal(p.typedData.primaryType, 'UARelayFee');
-  assert.deepEqual([m.from, m.target, m.callDataHash, m.payee, m.value, m.validUntil, m.relayer],
-    [padId(PAYER), TARGET, hex(keccak_256(fromHex(callData))), padId(ROUTER), '25', String(NOW + 300), ROUTER]);
+  assert.deepEqual([m.from, m.target, m.callDataHash, m.payee, m.value, m.batch, m.nonce, m.validUntil, m.relayer],
+    [padId(PAYER), TARGET, hex(keccak_256(fromHex(callData))), padId(ROUTER), '25', '7', '2', String(NOW + 300), ROUTER]);
   assert.equal(hex(p.digest), hex(hashTypedData(p.typedData)));
   const cd = p.calldata(new Uint8Array(65));
   assert.equal(hex(cd.subarray(0, 4)), sel(RELAY));
@@ -132,4 +133,13 @@ test('buildRelayFee refuses an inner call on another chain or outliving its paym
   assert.equal(buildRelayFee({ ...base, validUntil: NOW + 300, inner: ok }).call.message.relayer, EXECUTOR);
   assert.throws(() => buildRelayFee({ ...base, payee: '0x' + '00'.repeat(32) }), /zero address/);
   assert.throws(() => buildRelayFee({ ...base, payee: padId(TOKEN) }), /token itself/);
+});
+
+test('buildRelayFee: the lane and nonce are the payer\'s and required (T38 / T41, O4)', () => {
+  const { batch, nonce, ...noLane } = base;
+  assert.throws(() => buildRelayFee(noLane), /lane is required/);
+  assert.throws(() => buildRelayFee({ ...noLane, batch: 1 }), /nonce is required/);
+  assert.equal(TYPED_OPS.UARelayFee.typeString, 'UARelayFee(bytes32 from,address target,bytes32 callDataHash,bytes32 payee,'
+    + 'uint256 value,uint256 batch,uint256 nonce,uint256 validUntil,address relayer)');
+  assert.equal(TYPED_OPS.UARelayFee.typehash, '0x220269b9987739caf1274adfea8055b107d8e0a4b237683de5b13ae493e43ea5', 'MtxRelayFee.t.sol pin');
 });

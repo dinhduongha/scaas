@@ -36,10 +36,14 @@ const tradeTuple = (o) => [o.from, o.receiveToken, o.amount, o.receiveAmount, o.
 const wrapTuple = (o) => [o.from, o.wrappedToken, o.amount, o.minMinted, o.minFill, o.fee, o.relayer, o.destination, o.flags,
   o.batch, o.nonce, o.validUntil];
 const asTrade = (o) => ({ ...o, receiveToken: o.wrappedToken, receiveAmount: o.minMinted, dex: o.wrappedToken });
+// pay-meta-tax T41: a pay entry's last parameter, `PayMeta {salt, payNo, schema, body}`, unsigned
+const metaTuple = (x) => [x.salt, x.payNo, x.schema, x.body];
 const transferTuple = (t) => [t.from, t.to, t.value, t.entryRef, t.batch, t.nonce, t.validUntil, t.mode, t.relayer, t.fee, t.feeRecipient];
 const OTHER = {
-  UAReceiverFee: (m, s, d) => [transferTuple(m.payment), ['0x', d.extra.payerSig, []], m.fee, m.feeRecipient, m.validUntil, ['0x', s, []]],
-  UARelayFee: (m, s) => [m.from, m.target, m.callDataHash, m.payee, m.value, m.validUntil, ['0x', s, []]],
+  UAReceiverFee: (m, s, d) => [transferTuple(m.payment), ['0x', d.extra.payerSig, []], m.fee, m.feeRecipient, m.validUntil, ['0x', s, []],
+    metaTuple(d.extra.meta)],
+  UARelayFee: (m, s) => [m.from, m.target, m.callDataHash, m.payee, m.value, m.batch, m.nonce, m.validUntil, ['0x', s, []]],
+  UAPayWithTax: (m, s, d) => [transferTuple(m.payment), m.taxMode, m.tax, ['0x', s, []], metaTuple(d.extra.meta)],
   UAWrapOrder: (m, s, d) => [d.domain.verifyingContract, wrapTuple(m), ['0x', s, []]],
   CancelUAOrder: (m, s) => [tradeTuple(m.order), ['0x', s, []]],
   CancelUAWrapOrder: (m, s) => [tradeTuple(asTrade(m.order)), ['0x', s, []]],
@@ -59,7 +63,7 @@ export function expectedCall(name, r, d) {
   const account = ACCOUNT.has(name) || (name === 'Execute' && d.domain.name === 'SCaaS SmartKeyAccount');
   // ua-mtx-merge (R47): every merged entry takes `UASig`, `mtxShield` too; a native id's is `{0x, signature, []}` (R17)
   const sig = account ? ['0', [], d.signature] : ua ? ['0x', d.signature, []] : d.signature;
-  return [envelope(m), ...own, sig];
+  return [envelope(m), ...own, sig, ...(name === 'UAPayUnderMandate' ? [metaTuple(d.extra.meta)] : [])];
 }
 
 /** Decoded values and `expectedCall` on one form: lower-case hex, decimal strings. */

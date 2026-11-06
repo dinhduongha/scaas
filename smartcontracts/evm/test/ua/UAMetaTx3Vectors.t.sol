@@ -207,10 +207,8 @@ contract UAMetaTx3VectorsTest is UARegistryBase {
     }
 
     /// `receiverFee` rows: the payment digest and the `ReceiverFee` digest recomputed by the token, the row's two auth
-    /// blobs verified by the registry (the payer under `metatx`, a derived payee under `receiver-fee`). pay-meta-tax T37
-    /// (O11), meaning: the rows' `entryRef` is no `PayMeta` commitment (this file is unchanged, spec §7.3), so
-    /// `mtxPayReceiverFee` refuses each by name (`PayMetaMismatch`); the executed receiver fee of every payee kind is in
-    /// `UAReceiverFee.t.sol` (was: executed here).
+    /// blobs verified by the registry (the payer under `metatx`, a derived payee under `receiver-fee`), then executed.
+    /// pay-meta-tax T41 (O11): each row carries its `PayMeta` (`meta`), the entry's last parameter, `entryRef` its commitment.
     function test_vectors_receiverFee() public {
         uint256 n;
         for (uint256 i; vm.keyExistsJson(vj, string.concat(".receiverFee[", vm.toString(i), "]")); ++i) {
@@ -228,15 +226,26 @@ contract UAMetaTx3VectorsTest is UARegistryBase {
             IUARegistry.UASig memory payeeAuth = UACall.auth(t.to, vm.parseJsonBytes(vj, string.concat(r, "payeeAuth")));
             _authorizedAs(t.from, UAKinds.PURPOSE_METATX, d, payerAuth);
             _authorizedAs(t.to, UAKinds.PURPOSE_RECEIVER_FEE, tok.receiverFeeDigest(t, fee, feeTo, until), payeeAuth);
-            MetaTxLib.PayMeta memory m = PayMetaKit.meta(bytes32(i));
+            MetaTxLib.PayMeta memory m = _metaAt(string.concat(r, "meta."));
+            assertEq(PayMetaKit.id(m), t.entryRef, "the row's entryRef commits to its PayMeta");
             vm.prank(t.relayer);
-            vm.expectRevert(abi.encodeWithSelector(IMetaTokenV2.PayMetaMismatch.selector, t.entryRef, PayMetaKit.id(m)));
+            uint256 g = gasleft();
             tok.mtxPayReceiverFee(t, payerAuth, fee, feeTo, until, payeeAuth, m);
-            assertEq(tok.balanceOfUA(t.to), before);
+            g -= gasleft();
+            emit log_named_uint(string.concat("mtxPayReceiverFee ", vm.parseJsonString(vj, string.concat(r, "payer")), " > ",
+                vm.parseJsonString(vj, string.concat(r, "payee"))), g);
+            assertEq(tok.balanceOfUA(t.to), before + t.value - fee);
             ++n;
         }
         assertEq(n, 11);
-        assertEq(tok.balanceOf(address(0xFEE)), 0);
+        assertEq(tok.balanceOf(address(0xFEE)), 11 * 300_000);
+    }
+
+    function _metaAt(string memory p) internal view returns (MetaTxLib.PayMeta memory m) {
+        m.salt = vm.parseJsonBytes32(vj, string.concat(p, "salt"));
+        m.payNo = vm.parseJsonString(vj, string.concat(p, "payNo"));
+        m.schema = uint16(vm.parseJsonUint(vj, string.concat(p, "schema")));
+        m.body = vm.parseJsonBytes(vj, string.concat(p, "body"));
     }
 
     /// `id`'s `UASig` over `digest` under `purpose`: a native id's own ECDSA, a derived one through the registry.

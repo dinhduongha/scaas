@@ -8,6 +8,7 @@ import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {NormalRegulatedToken} from "../../src/regulated/NormalRegulatedToken.sol";
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
 import {IGovernance} from "../../src/governance/IGovernance.sol";
 import {IUALedger} from "../../src/metatx/IUALedger.sol";
@@ -608,5 +609,58 @@ contract TaxTest is RegFixture {
         assertEq(vm.parseJsonBytes32(f, string.concat(q, ".structHash")), sh, "UAPayWithTax struct hash");
         assertEq(vm.parseJsonBytes32(f, string.concat(q, ".digest")), _vecDigest(sh), "UAPayWithTax digest");
         assertEq(vm.parseJsonBytes32(f, string.concat(q, ".paymentHash")), MetaTxLib.hashStruct(x), "canonical payment");
+    }
+
+    // ---- typed_ops.json's `UAPayWithTax` row (clientkeys, pay-meta-tax T41)
+
+    function _rowPayment(string memory j, string memory p) internal pure returns (MetaTxLib.UAMetaTransfer memory x) {
+        x.from = vm.parseJsonBytes32(j, string.concat(p, "from"));
+        x.to = vm.parseJsonBytes32(j, string.concat(p, "to"));
+        x.value = vm.parseJsonUint(j, string.concat(p, "value"));
+        x.entryRef = vm.parseJsonBytes32(j, string.concat(p, "entryRef"));
+        x.batch = vm.parseJsonUint(j, string.concat(p, "batch"));
+        x.nonce = vm.parseJsonUint(j, string.concat(p, "nonce"));
+        x.validUntil = vm.parseJsonUint(j, string.concat(p, "validUntil"));
+        x.mode = uint32(vm.parseJsonUint(j, string.concat(p, "mode")));
+        x.relayer = vm.parseJsonAddress(j, string.concat(p, "relayer"));
+        x.fee = vm.parseJsonUint(j, string.concat(p, "fee"));
+        x.feeRecipient = vm.parseJsonAddress(j, string.concat(p, "feeRecipient"));
+    }
+
+    function _rowMeta(string memory j, string memory p) internal pure returns (MetaTxLib.PayMeta memory m) {
+        m.salt = vm.parseJsonBytes32(j, string.concat(p, "salt"));
+        m.payNo = vm.parseJsonString(j, string.concat(p, "payNo"));
+        m.schema = uint16(vm.parseJsonUint(j, string.concat(p, "schema")));
+        m.body = vm.parseJsonBytes(j, string.concat(p, "body"));
+    }
+
+    /// The row's struct hash is the contract's formula, its calldata the entry's with the row's `PayMeta`; re-signed by the
+    /// row's key under this kind-8 token's domain, it lands: payee `+(value - tax)`, recipient `+tax`.
+    function test_payWithTax_typedOpsRow() public {
+        string memory j = vm.readFile("../vectors/typed/typed_ops.json");
+        MetaTxLib.UAMetaTransfer memory x = _rowPayment(j, ".ops.UAPayWithTax.message.payment.");
+        uint8 mode = uint8(vm.parseJsonUint(j, ".ops.UAPayWithTax.message.taxMode"));
+        uint256 tax = vm.parseJsonUint(j, ".ops.UAPayWithTax.message.tax");
+        assertEq(keccak256(abi.encode(UA_PAY_WITH_TAX, MetaTxLib.hashStruct(x), mode, tax)),
+            vm.parseJsonBytes32(j, ".ops.UAPayWithTax.structHash"), "struct hash");
+        assertEq(vm.parseJsonBytes32(j, ".ops.UAPayWithTax.typehash"), keccak256(bytes(vm.parseJsonString(j, ".ops.UAPayWithTax.typeString"))));
+        assertEq(vm.parseJsonBytes32(j, ".ops.UAPayWithTax.typehash"), UA_PAY_WITH_TAX, "UAPayWithTax typehash");
+        MetaTxLib.PayMeta memory m = _rowMeta(j, ".ops.UAPayWithTax.domains.token.extra.meta.");
+        assertEq(PayMetaKit.id(m), x.entryRef, "the row's entryRef commits to its PayMeta");
+        IUARegistry.UASig memory rowSig;
+        rowSig.signature = vm.parseJsonBytes(j, ".ops.UAPayWithTax.domains.token.signature");
+        assertEq(keccak256(abi.encodeCall(IRegulatedToken.mtxPayWithTax, (x, mode, tax, rowSig, m))),
+            keccak256(vm.parseJsonBytes(j, ".ops.UAPayWithTax.domains.token.calldata")), "the row's calldata");
+        uint256 pk = vm.parseJsonUint(j, ".key.private");
+        assertEq(x.from, nid(vm.addr(pk)));
+        NormalToken(t8t).mint(vm.addr(pk), x.value); // this test is the kind-8 token's minter
+        vm.warp(x.validUntil - 300);
+        (uint8 v, bytes32 r, bytes32 ss) = vm.sign(pk, _taxDigest(t8t, x, mode, tax));
+        IUARegistry.UASig memory s;
+        s.signature = abi.encodePacked(r, ss, v);
+        vm.prank(x.relayer);
+        IRegulatedToken(t8t).mtxPayWithTax(x, mode, tax, s, m);
+        assertEq(IERC20(t8t).balanceOf(address(uint160(uint256(x.to)))), x.value - tax);
+        assertEq(IERC20(t8t).balanceOf(taxTo), tax);
     }
 }

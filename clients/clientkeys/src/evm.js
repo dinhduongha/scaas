@@ -150,7 +150,8 @@ const orderOf = (id) => `${id} from,address receiveToken,uint256 amount,uint256 
 const wrapOrderOf = (id) => `${id} from,address wrappedToken,uint256 amount,uint256 minMinted,uint256 minFill,uint256 fee,`
   + `address relayer,${id} destination,uint8 flags,uint256 batch,uint256 nonce,uint256 validUntil`;
 const transferOf = (id) => `${id} from,${id} to,uint256 value,bytes32 entryRef,${E}`;
-const relayFeeOf = (id) => `${id} from,address target,bytes32 callDataHash,${id} payee,uint256 value,uint256 validUntil,address relayer`;
+const relayFeeOf = (id) => `${id} from,address target,bytes32 callDataHash,${id} payee,uint256 value,uint256 batch,uint256 nonce,`
+  + 'uint256 validUntil,address relayer';
 const RECEIVER_FEE = 'uint256 fee,address feeRecipient,uint256 validUntil';
 
 // Every struct a signed type nests or an entry takes (Appendix X.2). The last group is calldata only, never signed.
@@ -180,6 +181,8 @@ const STRUCTS = Object.fromEntries(Object.entries({
   MemberSig: 'uint16 index,InnerSig[] members,bytes sig',
   UASig: 'bytes keyData,bytes signature,MemberSig[] members', AccountSig: 'uint256 keyIndex,bytes32[] proof,bytes signature',
   Payout: 'uint256 amount,bytes32 recipient',
+  // pay-meta-tax spec §3.1: the last parameter of every pay entry, unsigned (its commitment is the signed `entryRef`)
+  PayMeta: 'bytes32 salt,string payNo,uint16 schema,bytes body',
   // a holder's terms, nested in the router's `SetGrant` / `UASetGrant` (governance spec §3.2: `hashStruct` signed, the struct the argument)
   GrantTerms: 'uint128 min,uint128 max,uint128 total,uint128 perWindow,uint32 window,uint64 validUntil,uint32 maxUses,bool delegable,bytes32 scope',
 }).map(([name, list]) => [name, fields(list)]));
@@ -187,7 +190,9 @@ const STRUCTS = Object.fromEntries(Object.entries({
 const DOMAIN_OF = { NormalToken: 'SCaaS MetaToken', WrappedToken: 'SCaaS MetaToken', NormalZetherToken: 'SCaaS ZetherToken',
   WrappedZetherToken: 'SCaaS ZetherToken', NormalPqzToken: 'SCaaS PqzToken', WrappedPqzToken: 'SCaaS PqzToken',
   MandateWallet: 'SCaaS MandateWallet', SmartKeyAccount: 'SCaaS SmartKeyAccount', SCaaSDex: 'SCaaS Dex',
-  GovernanceRouter: 'SCaaS GovernanceRouter' };
+  GovernanceRouter: 'SCaaS GovernanceRouter', NormalRegulatedToken: 'SCaaS MetaToken', WrappedRegulatedToken: 'SCaaS MetaToken',
+  NormalZetherRegulatedToken: 'SCaaS ZetherToken', WrappedZetherRegulatedToken: 'SCaaS ZetherToken',
+  NormalPqzRegulatedToken: 'SCaaS PqzToken', WrappedPqzRegulatedToken: 'SCaaS PqzToken' };
 const NORMAL = ['NormalToken', 'NormalZetherToken', 'NormalPqzToken'];
 const WRAPPED = ['WrappedToken', 'WrappedZetherToken', 'WrappedPqzToken'];
 const TOKENS = [...NORMAL, ...WRAPPED];
@@ -198,6 +203,9 @@ const WRAPPED_CONFIDENTIAL = ['WrappedZetherToken', 'WrappedPqzToken'];
 const WALLET = ['MandateWallet'];
 const ACCOUNT = ['SmartKeyAccount'];
 const ROUTER = ['GovernanceRouter'];
+// The regulated kinds 8-13 (pay-meta-tax spec §5.1): their token, Zether and PQZ classes sign in the base kinds' domains.
+const REGULATED = ['NormalRegulatedToken', 'WrappedRegulatedToken', 'NormalZetherRegulatedToken', 'WrappedZetherRegulatedToken',
+  'NormalPqzRegulatedToken', 'WrappedPqzRegulatedToken'];
 
 const isRaw = (s) => s instanceof Uint8Array || typeof s === 'string';
 const required = (v, what) => (v === undefined ? refuse(`${what} is required`) : v);
@@ -223,6 +231,8 @@ const pqzUnshield = (m, x) => [['PqzBurnArgs', m.args], ['Payout', m], ['bytes',
 const pqzUnwrap = (m, x) => [['PqzBurnArgs', m.args], ['Unwrap', m.unwrap], ['bytes', m.proof], pqzAuthOf(x), ['bytes', m.accHint]];
 const zetherOp = (args) => (m) => [[args, m.args], ['bytes', m.proof]];
 const PQZ_TAIL = 'bytes proof,bytes accHint';
+// A pay entry's last parameter (pay-meta-tax spec §2.1): `x.meta`, checked by `payMeta` (never empty, O11).
+const payMetaTail = (m, x = {}) => [['PayMeta', payMeta(required(x.meta, 'the payment metadata'))]];
 
 // The one table of the type strings (plan Part C, Appendix X.4). ua-mtx-merge (CTR-MTX-30): one signed entry per operation.
 // `fields`: an envelope op. `UA<Op>` is the merged entry `mtx<Op>(UAEnvelope e, <op>, UASig auth)` over `UA<Op>(bytes32 from,
@@ -253,7 +263,8 @@ const OPS = {
   UASetMandate: { fields: 'address token,bytes32 delegate,uint128 maxPerPayment,uint128 maxPerPeriod,uint64 periodSeconds,uint64 expiry', on: WALLET },
   UASetPayee: { fields: 'address token,bytes32 payee,bool allowed', on: WALLET },
   UARevokeMandate: { fields: 'address token', on: WALLET },
-  UAPayUnderMandate: { fields: 'address token,bytes32 payee,uint256 amount,bytes32 entryRef,uint64 epoch', on: WALLET },
+  // pay-meta-tax spec §2.4: `PayMeta` the last parameter, unsigned, bound by the signed `entryRef` (`x.meta`)
+  UAPayUnderMandate: { fields: 'address token,bytes32 payee,uint256 amount,bytes32 entryRef,uint64 epoch', on: WALLET, tail: payMetaTail },
   UADelegateRevoke: { fields: 'address token,uint64 epoch', on: WALLET },
   UAExecute: { fields: 'address target,uint256 value,bytes data', on: WALLET },
   // SmartKeyAccount: `SubjectKey` flattened, its own entries signed with `AccountSig` (Appendix X row 13)
@@ -285,10 +296,15 @@ const OPS = {
   UARollOverBatch: { fields: 'bytes32[] uas', on: ZETHER },
   // TS-D19: `x.payerSig` is the payer's signature of the nested `UAMetaTransfer`
   UAReceiverFee: { raw: `UAMetaTransfer payment,${RECEIVER_FEE}`, on: TOKENS, entry: 'mtxPayReceiverFee', call: (m, sig, x) => [['UAMetaTransfer', m.payment],
-    ['UASig', uaSigOf(x.payerSig, 'payerSig')], ['uint256', m.fee], ['address', m.feeRecipient], ['uint256', m.validUntil], ['UASig', uaSigOf(sig)]] },
-  // The router calls this as the struct's `relayer` (`msg.sender`), on the lane `payLane(ref)`, nonce 0.
+    ['UASig', uaSigOf(x.payerSig, 'payerSig')], ['uint256', m.fee], ['address', m.feeRecipient], ['uint256', m.validUntil], ['UASig', uaSigOf(sig)],
+    ...payMetaTail(m, x)] },
+  // pay-meta-tax spec §5.2: the payer signs the payment with its tax (kinds 8-13); `x.meta` the `PayMeta`
+  UAPayWithTax: { raw: 'UAMetaTransfer payment,uint8 taxMode,uint256 tax', on: REGULATED, entry: 'mtxPayWithTax',
+    call: (m, sig, x) => [['UAMetaTransfer', m.payment], ['uint8', m.taxMode], ['uint256', m.tax], ['UASig', uaSigOf(sig)], ...payMetaTail(m, x)] },
+  // The router calls this as the struct's `relayer` (`msg.sender`), on the payer's own lane `(batch, nonce)` (pay-meta-tax O4).
   UARelayFee: { raw: relayFeeOf('bytes32'), on: TOKENS, entry: 'mtxRelayFee', call: (m, sig) => [['bytes32', m.from], ['address', m.target],
-    ['bytes32', m.callDataHash], ['bytes32', m.payee], ['uint256', m.value], ['uint256', m.validUntil], ['UASig', uaSigOf(sig)]] },
+    ['bytes32', m.callDataHash], ['bytes32', m.payee], ['uint256', m.value], ['uint256', m.batch], ['uint256', m.nonce],
+    ['uint256', m.validUntil], ['UASig', uaSigOf(sig)]] },
   // Signed in the underlying's domain, submitted to `wrappedToken`, which needs the leg: `underlying` is `verifyingContract`.
   UAWrapOrder: { raw: wrapOrderOf('bytes32'), on: TOKENS, entry: 'mtxWrapOrder',
     call: (m, sig, x, td) => [['address', td.domain.verifyingContract], ['UAWrapOrder', m], ['UASig', uaSigOf(sig)]] },
@@ -334,6 +350,9 @@ const OPS = {
     + 'uint256 maxAmount,uint64 freezeUntil', on: ROUTER },
   UARevokeOrder: { fields: 'address target,bytes32 recordId,bytes32 reasonRef', on: ROUTER },
   UAOperatorTransfer: { fields: 'address target,bytes32 account,bytes32 to,uint256 amount,bytes32 ref', on: ROUTER },
+  // bit 23 `TAX` (pay-meta-tax spec §6.2): the one PERCENT rate, the recipient
+  UASetTaxRate: { fields: 'address target,uint32 ratePpm', on: ROUTER },
+  UASetTaxRecipient: { fields: 'address target,bytes32 taxRecipient', on: ROUTER },
   // The statement's header words verbatim (purpose `zether-auth`); signed into `pqzAuth`, no entry of its own.
   PqzAuth: { raw: 'uint8 op,bytes32 opTag,bytes32 psid,uint256 chainId,address token,address registry,bytes32 from,bytes32 to,bytes32 beneficiary,'
     + 'uint256 fee,uint256 amount,bytes32 recipient,uint64 sendCounter,uint64 p,uint256 validUntilBlock,bool auditorOn,uint256 shieldIn,'
@@ -370,7 +389,7 @@ function defineOp(primary, def) {
   const call = (td, sig, x = {}) => {
     const m = td.message;
     const params = def.raw ? def.call(m, sig, x, td) : [[ua ? 'UAEnvelope' : 'Envelope', m],
-      ...(def.args ? def.args(m, x) : own.slice(1, -7).map((f) => [f.type, m[f.name]])), sigParam(td, sig)];
+      ...(def.args ? def.args(m, x) : own.slice(1, -7).map((f) => [f.type, m[f.name]])), sigParam(td, sig), ...(def.tail ? def.tail(m, x) : [])];
     const abiTypes = params.map(([t]) => abiType(t));
     const abi = `${entry}(${abiTypes.join(',')})`;
     return { abi, data: abiCall(abi, abiTypes, params.map(([t, v]) => abiValue(t, v))) };
@@ -480,6 +499,7 @@ export const {
   addKeyTypedData, addKeyCalldata, removeKeyTypedData, removeKeyCalldata, rotateKeyTypedData, rotateKeyCalldata,
   setGuardianTypedData, setGuardianCalldata, cancelRecoveryTypedData, cancelRecoveryCalldata, executeTypedData, executeCalldata,
   uaReceiverFeeTypedData, uaReceiverFeeCalldata, uaRelayFeeTypedData, uaRelayFeeCalldata, uaWrapOrderTypedData, uaWrapOrderCalldata,
+  uaPayWithTaxTypedData, uaPayWithTaxCalldata,
   cancelUAOrderTypedData, cancelUAOrderCalldata, cancelUAWrapOrderTypedData, cancelUAWrapOrderCalldata,
   cancelDexOrderTypedData, cancelDexOrderCalldata,
 } = OP_BUILDERS;
@@ -500,7 +520,10 @@ const sel = (sig) => hex(keccak_256(utf8ToBytes(sig)).subarray(0, 4));
 // Never inside a `MetaTransaction` (CLI-SGN-34): moving funds is a `MetaTransfer`, and EOAs never approve (CLI-SGN-36).
 const NEVER_CALLED = new Set(['transfer(address,uint256)', 'transferFrom(address,address,uint256)',
   'approve(address,uint256)', 'payWithFee(address,uint256,uint8,uint256,address,bytes32)', 'pay(bytes32)',
-  'payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32)'].map(sel));
+  'payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32)',
+  'payWithFee(address,uint256,uint8,uint256,address,bytes32,(bytes32,string,uint16,bytes))',
+  'payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32,(bytes32,string,uint16,bytes))',
+  'payWithTax(bytes32,uint256,uint8,uint256,bytes32,(bytes32,string,uint16,bytes))'].map(sel));
 export const ADD_KEY_SELECTOR = keccak_256(utf8ToBytes(`addKey(${KEY_TUPLE})`)).subarray(0, 4);
 const KEY_PROOF_PREFIX = utf8ToBytes('scaas-subject-key-proof-v1');
 
@@ -618,10 +641,15 @@ export const wrapToUACall = (underlying, amount, to) =>
 /** `unwrapToUA(underlying, wrapped, to, minOut)`: direct, in a `MetaTransaction` or a `UAMetaTransaction` (`AMOUNT(1)`). */
 export const unwrapToUACall = (underlying, wrapped, to, minOut) => abiCall('unwrapToUA(address,uint256,bytes32,uint256)',
   ['address', 'uint256', 'bytes32', 'uint256'], [underlying, wrapped, to, minOut]);
-/** `payWithFeeToUA(to, amount, feeMode, fee, feeRecipient, entryRef)`: direct only (never a call, as `payWithFee`). */
-export const payWithFeeToUACalldata = (to, amount, feeMode, fee, feeRecipient, entryRef) =>
-  abiCall('payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32)',
-    ['bytes32', 'uint256', 'uint8', 'uint256', 'address', 'bytes32'], [to, amount, feeMode, fee, feeRecipient, entryRef]);
+/** `payWithFeeToUA(to, amount, feeMode, fee, feeRecipient, entryRef, meta)`: direct only (never a call, as `payWithFee`);
+ *  `entryRef` must be `metaPayId(meta)` (pay-meta-tax spec §2.1). */
+export function payWithFeeToUACalldata(to, amount, feeMode, fee, feeRecipient, entryRef, meta) {
+  const m = payMeta(required(meta, 'the payment metadata'));
+  if (!same(entryRef, metaPayId(m))) refuse('the payment id does not commit to its metadata');
+  return abiCall(`payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32,${abiType('PayMeta')})`,
+    ['bytes32', 'uint256', 'uint8', 'uint256', 'address', 'bytes32', abiType('PayMeta')],
+    [to, amount, feeMode, fee, feeRecipient, entryRef, abiValue('PayMeta', m)]);
+}
 
 /** The lane of a payment request, `keccak256("scaas.pay.lane" ‖ entryRef)` with nonce 0 (CTR-MTX-03; on chain `payLane`). */
 export function payLane(entryRef) {
@@ -714,106 +742,190 @@ export function checkReceiverFee(td, { payee, chainId, chainUid, amount, decimal
   return { digest, paymentDigest, payer: p.from, fee, feeRecipient };
 }
 
-// ------------------------------------------------------------------ CTR-MTX-26: the payment id commits to its metadata
+// ------------------------------------------------------------------ CTR-MTX-26 (pay-meta-tax spec §3): `PayMeta` v2
 
 const asBytes = (v) => (v instanceof Uint8Array ? v : fromHex(v));
 const at = (b, i) => BigInt(hex(b.subarray(32 * i, 32 * i + 32)));
 
-/** `metaPayId(salt, meta) = keccak256("scaas.pay.meta" ‖ salt ‖ keccak256(meta))` (CTR-MTX-26; on chain `metaPayId`). */
-export function metaPayId(salt, meta) {
+/** The old commitment `keccak256("scaas.pay.meta" ‖ salt ‖ keccak256(meta))`: the non-EVM families keep it until their own
+ *  round (pay-meta-tax spec §8, Q10; `metaop.js`). The EVM pay entries take `metaPayId(PayMeta)`. */
+export function metaPayIdV1(salt, meta) {
   return hex(keccak_256(concatBytes(utf8ToBytes('scaas.pay.meta'), bytes32(salt), keccak_256(asBytes(meta)))));
 }
 
-/** The envelope `meta = abi.encode(uint16 schema, bytes body)`. */
-export function encodeMeta(schema, body) {
-  if (!Number.isInteger(schema) || schema < 0 || schema > 0xffff) throw new Error('schema is a uint16');
-  return abiEncode(['uint16', 'bytes'], [schema, asBytes(body)]);
-}
+export const PAY_NO_MAX = 256;
+// C0 and C1 controls, DEL; the bidirectional marks, embeddings, overrides and isolates (display spoofing, spec §3.1)
+const PAY_NO_CONTROL = /[\u0000-\u001f\u007f-\u009f]/;
+const PAY_NO_BIDI = /[؜‎‏‪-‮⁦-⁩]/;
 
-/** The `bytes` whose head word is word `i` of `b`, read strictly (re-encoding checks canonical form). */
-function dynAt(b, i) {
-  const off = at(b, i);
-  if (off + 32n > BigInt(b.length)) refuse('the metadata is malformed');
-  const n = at(b.subarray(Number(off)), 0);
-  if (off + 32n + n > BigInt(b.length)) refuse('the metadata is malformed');
-  return b.subarray(Number(off) + 32, Number(off) + 32 + Number(n));
+/** A `payNo` a wallet signs (spec §3.1, O15): text, valid UTF-8 (no lone surrogate), at most 256 bytes, no control
+ *  character, no bidirectional mark or override. Returns its UTF-8 bytes. */
+export function checkPayNo(payNo) {
+  if (typeof payNo !== 'string') refuse('the payment number is text');
+  if (/[\ud800-\udfff]/.test(payNo.replace(/[\ud800-\udbff][\udc00-\udfff]/g, ''))) refuse('the payment number is not UTF-8');
+  const b = utf8ToBytes(payNo);
+  if (b.length > PAY_NO_MAX) refuse(`the payment number is ${b.length} bytes, above ${PAY_NO_MAX}`);
+  if (PAY_NO_CONTROL.test(payNo)) refuse('the payment number holds a control character');
+  if (PAY_NO_BIDI.test(payNo)) refuse('the payment number holds a bidirectional override');
+  return b;
 }
 
 function utf8(b) {
   try { return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(b); } catch { return refuse('the note is not UTF-8'); }
 }
 
-/** Decodes a `meta` for the review screen (CTR-MTX-26 bodies): 1 note (`{note}`), 2 structured reference
- *  (`{creditorRef, invoiceNo, dueDate}`), 3 bound call (`{chainId, target, callHash}`), 4 encrypted (`{encrypted: n
- *  bytes}`, not decrypted here). Only the canonical ABI form is accepted; an unknown schema is refused. */
-export function decodeMeta(meta) {
-  const m = asBytes(meta);
-  if (m.length < 96) refuse('the metadata is malformed');
-  const schema = at(m, 0);
-  if (schema > 0xffffn) refuse('the metadata is malformed');
-  const body = dynAt(m, 1);
-  if (hex(encodeMeta(Number(schema), body)) !== hex(m)) refuse('the metadata is not in canonical form');
-  let shown;
-  if (schema === 1n) shown = { note: utf8(body) };
-  else if (schema === 2n) {
-    if (body.length < 96) refuse('the metadata is malformed');
-    const [creditor, invoice, dueDate] = [dynAt(body, 0), dynAt(body, 1), at(body, 2)];
-    if (dueDate >= 1n << 64n || hex(abiEncode(['bytes', 'bytes', 'uint64'], [creditor, invoice, dueDate])) !== hex(body)) {
-      refuse('the metadata is not in canonical form');
-    }
-    shown = { creditorRef: utf8(creditor), invoiceNo: utf8(invoice), dueDate };
-  } else if (schema === 3n) {
-    if (body.length !== 96) refuse('the metadata is malformed');
-    shown = { chainId: at(body, 0), target: hex(body.subarray(32, 64)), callHash: hex(body.subarray(64, 96)) };
-  } else if (schema === 4n) shown = { encrypted: body.length };
-  else refuse('unknown metadata schema');
-  return { schema: Number(schema), body, shown };
+/** The body of schema `schema` from its named fields (spec §3.1): 0 none; 1 `{note}` (UTF-8, non-empty); 2 `{creditorRef,
+ *  dueDate}` = `abi.encode(string, uint64)`; 3 `{chainId, target, callHash}` = `abi.encode(uint256, bytes32, bytes32)`; 4
+ *  `{ciphertext}` (the one crypto object, bytes, non-empty). */
+export function encodeMetaBody(schema, f = {}) {
+  if (schema === 0) return new Uint8Array(0);
+  if (schema === 1) {
+    if (typeof f.note !== 'string' || f.note === '') refuse('a note is non-empty text');
+    return utf8ToBytes(f.note);
+  }
+  if (schema === 2) {
+    const due = uint(f.dueDate, 'the due date');
+    if (due >= 1n << 64n || typeof f.creditorRef !== 'string') refuse('a structured reference is {creditorRef, dueDate}');
+    return abiEncode(['string', 'uint64'], [f.creditorRef, due]);
+  }
+  if (schema === 3) return abiEncode(['uint256', 'bytes32', 'bytes32'], [uint(f.chainId, 'the chain id'), f.target, f.callHash]);
+  if (schema === 4) {
+    const c = asBytes(required(f.ciphertext, 'the ciphertext'));
+    if (c.length === 0) refuse('the ciphertext is empty');
+    return c;
+  }
+  return refuse('unknown metadata schema');
 }
 
-/** `(salt, meta)` → payId, lane, decoded meta; refuses when the request's `entryRef` is not `metaPayId(salt, meta)`. */
-function payMetaParts({ salt, meta, entryRef }) {
-  const s = hex(bytes32(salt));
-  const m = asBytes(meta);
-  const { schema, shown } = decodeMeta(m);
-  const payId = metaPayId(s, m);
+/** The named fields of a body for the review screen, read strictly (re-encoding checks the canonical form). An unknown
+ *  schema is shown as opaque data, never as facts (spec §3.2). */
+export function decodeMetaBody(schema, body) {
+  const b = asBytes(body);
+  if (schema === 0) {
+    if (b.length) refuse('schema 0 carries no body');
+    return {};
+  }
+  if (schema === 1) {
+    if (!b.length) refuse('a note is non-empty');
+    return { note: utf8(b) };
+  }
+  if (schema === 2) {
+    if (b.length < 96) refuse('the metadata is malformed');
+    const off = at(b, 0);
+    if (off !== 64n) refuse('the metadata is not in canonical form');
+    const n = at(b.subarray(64), 0);
+    if (96n + n > BigInt(b.length)) refuse('the metadata is malformed');
+    const f = { creditorRef: utf8(b.subarray(96, 96 + Number(n))), dueDate: at(b, 1) };
+    if (f.dueDate >= 1n << 64n || hex(encodeMetaBody(2, f)) !== hex(b)) refuse('the metadata is not in canonical form');
+    return f;
+  }
+  if (schema === 3) {
+    if (b.length !== 96) refuse('the metadata is malformed');
+    return { chainId: at(b, 0), target: hex(b.subarray(32, 64)), callHash: hex(b.subarray(64, 96)) };
+  }
+  if (schema === 4) return { encrypted: b.length };
+  return { opaque: b.length };
+}
+
+const randomSalt = () => {
+  const s = new Uint8Array(32);
+  crypto.getRandomValues(s);
+  return hex(s);
+};
+
+/** A `PayMeta {salt, payNo, schema, body}` (spec §3.1), checked as the contract and the wallet rules ask: a non-zero salt
+ *  (from the CSPRNG when absent), `schema == 0` iff the body is empty, the `payNo` rules of `checkPayNo`. The body is the
+ *  hex given, or built from `fields` (`encodeMetaBody`). Returns `{salt, payNo, schema, body}` (hex). */
+export function payMeta({ salt, payNo = '', schema = 0, body, fields: f } = {}) {
+  const s = hex(bytes32(salt ?? randomSalt()));
+  if (BigInt(s) === 0n) refuse('the salt is 0');
+  if (!Number.isInteger(schema) || schema < 0 || schema > 0xffff) refuse('the schema is a uint16');
+  checkPayNo(payNo);
+  const b = body !== undefined ? asBytes(body) : encodeMetaBody(schema, f);
+  if ((schema === 0) !== (b.length === 0)) refuse('schema 0 iff the body is empty');
+  return { salt: s, payNo, schema, body: hex(b) };
+}
+
+/** `metaPayId(m) = keccak256("scaas.pay.meta.v2" ‖ salt ‖ keccak256(abi.encode(string payNo, uint16 schema, bytes body)))`
+ *  (CTR-MTX-26 Change; on chain `metaPayId(PayMeta)`). */
+export function metaPayId(meta) {
+  const m = payMeta(meta);
+  return hex(keccak_256(concatBytes(utf8ToBytes('scaas.pay.meta.v2'), fromHex(m.salt),
+    keccak_256(abiEncode(['string', 'uint16', 'bytes'], [m.payNo, m.schema, fromHex(m.body)])))));
+}
+
+/** The warning of spec §3.3 (F-24): a clear `payNo` or a schema 1 or 2 body is public forever. Shown once per payee per
+ *  `session` (a `Set` the wallet keeps for the session); `null` when there is nothing to warn of or it was shown. */
+export function payMetaWarning(meta, payee, session) {
+  const m = payMeta(meta);
+  if (m.payNo === '' && m.schema !== 1 && m.schema !== 2) return null;
+  const k = String(payee).toLowerCase();
+  if (session.has(k)) return null;
+  session.add(k);
+  return 'This payment publishes its number or note in clear, searchable by anyone, forever; schema 4 (encrypted to the payee) keeps it private.';
+}
+
+/** `meta` → its checked form, commitment and decoded fields; refuses when `entryRef` is given and is not `metaPayId(meta)`. */
+function payMetaParts(meta, entryRef) {
+  const m = payMeta(required(meta, 'the payment metadata'));
+  const payId = metaPayId(m);
   if (entryRef != null && !same(entryRef, payId)) refuse('the payment id does not commit to its metadata');
-  return { salt: s, meta: m, payId, lane: payLane(payId), schema, shown };
+  return { meta: m, payId, shown: { payNo: m.payNo, schema: m.schema, ...decodeMetaBody(m.schema, m.body) } };
 }
 
-const PAY_TAIL = ['uint256', 'uint32', 'address', 'uint256', 'address'];
-
-/** A pay-meta payment the client builds (CTR-MTX-26): the `UAMetaTransfer` of `mtxPay` between 32-byte ids (`padId` of a
- *  native address) with `entryRef = metaPayId(salt, meta)`, lane `payLane(entryRef)`, nonce 0. `entryRef` (optional, the
- *  request's) must equal it, else refused. `amount` in base units. `calldata(auth)` is `mtxPayMeta(…, UASig)` (meta
- *  published), or with `onChain: false` the off-chain variant `mtxPay(…, payId, …, UASig)` (the same digest; the payee keeps
- *  `(salt, meta)`); `auth` a raw signature (a native id) or a `UASig`. ua-mtx-merge (R20): the address `mtxPay` /
- *  `mtxPayMeta` and the `uaPay` / `uaPayMeta` names are legacy. Returns {typedData, digest, payId, lane, salt, meta, schema,
- *  shown, calldata}. */
-export function buildUaPayMeta({ name, token, chainId, chainUid, from, to, amount, salt, meta, entryRef, validUntil, mode = 0,
-  relayer = ZERO_ADDRESS, fee = 0, feeRecipient = ZERO_ADDRESS, onChain = true }) {
-  const p = payMetaParts({ salt, meta, entryRef });
+/** The payer's payment (pay-meta-tax spec §2.1): the `UAMetaTransfer` of `mtxPay(t, UASig auth, PayMeta meta)` between
+ *  32-byte ids with `entryRef = metaPayId(meta)`; `entryRef` given (the request's) must equal it. Any lane (O3): `batch` /
+ *  `nonce` the caller's, by default the request lane `payLane(entryRef)` nonce 0 (a client convention). Returns
+ *  {typedData, digest, payId, meta, shown, calldata(auth)}. */
+export function buildPay({ name, token, chainId, chainUid, from, to, amount, meta, entryRef, batch, nonce, validUntil, mode = 0,
+  relayer = ZERO_ADDRESS, fee = 0, feeRecipient = ZERO_ADDRESS }) {
+  const p = payMetaParts(meta, entryRef);
   const typedData = uaMetaTransferTypedData({ name, contract: token, chainId, chainUid, message: { from, to, value: amount,
-    entryRef: p.payId, batch: p.lane, nonce: 0, validUntil, mode, relayer, fee, feeRecipient } });
-  const t = typedData.message;
-  const tailTypes = [...PAY_TAIL, abiType('UASig')];
-  const tail = (sig) => [t.validUntil, t.mode, t.relayer, t.fee, t.feeRecipient, abiValue('UASig', uaSigOf(sig))];
-  const calldata = (sig) => (onChain
-    ? abiCall(`mtxPayMeta(bytes32,bytes32,uint256,bytes32,bytes,${tailTypes.join(',')})`,
-      ['bytes32', 'bytes32', 'uint256', 'bytes32', 'bytes', ...tailTypes], [t.from, t.to, t.value, p.salt, p.meta, ...tail(sig)])
-    : abiCall(`mtxPay(bytes32,bytes32,uint256,bytes32,${tailTypes.join(',')})`,
-      ['bytes32', 'bytes32', 'uint256', 'bytes32', ...tailTypes], [t.from, t.to, t.value, p.payId, ...tail(sig)]));
-  return { typedData, digest: digestOf(typedData), payId: p.payId, lane: p.lane, salt: p.salt, meta: hex(p.meta),
-    schema: p.schema, shown: p.shown, calldata };
+    entryRef: p.payId, batch: batch ?? payLane(p.payId), nonce: nonce ?? 0, validUntil, mode, relayer, fee, feeRecipient } });
+  const types = [abiType('UAMetaTransfer'), abiType('UASig'), abiType('PayMeta')];
+  const calldata = (auth) => abiCall(`mtxPay(${types.join(',')})`, types,
+    [abiValue('UAMetaTransfer', typedData.message), abiValue('UASig', uaSigOf(auth)), abiValue('PayMeta', p.meta)]);
+  return { typedData, digest: digestOf(typedData), payId: p.payId, meta: p.meta, shown: p.shown, calldata };
 }
 
-/** `checkPayment` for a pay-meta request: the server's `UAMetaTransfer` must carry `entryRef = metaPayId(salt, meta)` of
- *  the `(salt, meta)` the client holds (else refused), then every `checkPayment` check with that `entryRef`. Returns
- *  `checkPayment`'s result plus {payId, salt, meta, schema, shown} for the review screen. */
-export function checkPayMeta(td, { salt, meta, entryRef, ...opts }) {
-  const p = payMetaParts({ salt, meta, entryRef });
+/** Receiver-pays (spec §2.5): the payer's payment (`buildPay`, fee NONE, relayer bound: mode 1) and the payee's
+ *  `UAReceiverFee` over it; `calldata(payerAuth, payeeAuth)` is `mtxPayReceiverFee(t, payerAuth, fee, feeRecipient,
+ *  rfValidUntil, payeeAuth, meta)`. */
+export function buildPayReceiverFee({ fee, feeRecipient, rfValidUntil, ...pay }) {
+  const payer = buildPay({ ...pay, mode: 1, fee: 0, feeRecipient: ZERO_ADDRESS });
+  const at = { name: pay.name ?? 'SCaaS MetaToken', contract: pay.token, chainId: pay.chainId, chainUid: pay.chainUid };
+  const typedData = uaReceiverFeeTypedData({ ...at, message: { payment: payer.typedData.message, fee, feeRecipient, validUntil: rfValidUntil } });
+  return { payment: payer, typedData, digest: digestOf(typedData), payId: payer.payId, meta: payer.meta, shown: payer.shown,
+    calldata: (payerAuth, payeeAuth) => uaReceiverFeeCalldata(typedData, payeeAuth, { payerSig: payerAuth, meta: payer.meta }) };
+}
+
+/** The tax of a PERCENT payment, `floor(value × ratePpm / 10^6)` (PT-6), from `regulatedConfig().tax.effectivePpm`. */
+export const percentTax = (value, ratePpm) => uint(value, 'the amount') * uint(ratePpm, 'the rate') / 1000000n;
+
+/** A payment with its tax on a regulated kind (spec §5.2, §5.3): `UAPayWithTax{payment, taxMode, tax}` signed by the payer;
+ *  `taxMode` 1 PERCENT (`tax` must be `percentTax(amount, ratePpm)`, the token's effective rate, when `ratePpm` is given)
+ *  or 2 AMOUNT (the payer's figure); `tax ≤ amount`. The recipient is the token's, not signed: the wallet shows
+ *  `taxRecipient`. Returns {typedData, digest, payId, meta, shown, calldata(auth)}. */
+export function buildPayWithTax({ taxMode, tax, ratePpm, taxRecipient, ...pay }) {
+  if (taxMode !== 1 && taxMode !== 2) refuse('the tax mode is 1 (PERCENT) or 2 (AMOUNT)');
+  const t = uint(tax, 'the tax');
+  if (t > uint(pay.amount, 'the amount')) refuse('the tax is more than the payment');
+  if (taxMode === 1 && ratePpm != null && t !== percentTax(pay.amount, ratePpm)) refuse('the tax is not the token\'s rate');
+  const payment = buildPay(pay);
+  const at = { name: pay.name ?? 'SCaaS MetaToken', contract: pay.token, chainId: pay.chainId, chainUid: pay.chainUid };
+  const typedData = uaPayWithTaxTypedData({ ...at, message: { payment: payment.typedData.message, taxMode, tax: t } });
+  return { typedData, digest: digestOf(typedData), payId: payment.payId, meta: payment.meta,
+    shown: { ...payment.shown, tax: t, taxMode, taxRecipient: taxRecipient ?? null },
+    calldata: (auth) => uaPayWithTaxCalldata(typedData, auth, { meta: payment.meta }) };
+}
+
+/** `checkPayment` for a pay request with its `PayMeta`: the server's `UAMetaTransfer` must carry `entryRef = metaPayId(meta)`
+ *  of the `meta` the client holds (else refused), then every `checkPayment` check with that `entryRef`. Returns
+ *  `checkPayment`'s result plus {payId, meta, shown}. */
+export function checkPayMeta(td, { meta, entryRef, ...opts }) {
+  const p = payMetaParts(meta, entryRef);
   if (!same(((td && td.message) || {}).entryRef, p.payId)) refuse('the payment id does not commit to its metadata');
-  return { ...checkPayment(td, { ...opts, entryRef: p.payId }), payId: p.payId, salt: p.salt, meta: hex(p.meta),
-    schema: p.schema, shown: p.shown };
+  return { ...checkPayment(td, { ...opts, entryRef: p.payId }), payId: p.payId, meta: p.meta, shown: p.shown };
 }
 
 // ------------------------------------------------------------------ CTR-MTX-27: a token fee for a fee-less call
@@ -862,10 +974,13 @@ export function mtxExecuteTransferCalldata(td, signature) {
  *  {call (the inner typed data to sign first, or null), prompt {call, payment}: both intents for one review,
  *  payment(callData) → {ref, lane, typedData, digest, calldata(auth)}}: `callData` is the call with its own signature
  *  (`<op>Calldata`, `mtxExecuteCalldata`); the payment is `UARelayFee{from, target, callDataHash, payee, value: amount,
- *  validUntil, relayer: router}`, on lane `payLane(ref)` with nonce 0 implicit; `calldata` is the router's `relay(target,
- *  callData, token, from, payee, value, validUntil, UASig auth)`. */
+ *  batch, nonce, validUntil, relayer: router}` on the payer's own lane `(batch, nonce)` (pay-meta-tax spec §4, O4: one
+ *  signature pays once); `calldata` is the router's `relay(target, callData, token, from, payee, value, batch, nonce,
+ *  validUntil, UASig auth)`. */
 export function buildRelayFee({ name = 'SCaaS MetaToken', token, chainId, chainUid, router, executor, target, inner, from,
-  amount, payee, validUntil }) {
+  amount, payee, batch, nonce, validUntil }) {
+  const lane = uint(required(batch, 'the payer\'s lane'), 'the lane');
+  const n = uint(required(nonce, 'the payer\'s nonce'), 'the nonce');
   if (same(target, executor) || same(target, router)) refuse('a relay never targets the router or its executor');
   const open = payee == null;
   const to = open ? padId(router) : payee;
@@ -892,15 +1007,15 @@ export function buildRelayFee({ name = 'SCaaS MetaToken', token, chainId, chainU
   };
   const payment = (callData) => {
     const ref = relayRef(chainId, target, callData);
-    const lane = payLane(ref);
     const typedData = uaRelayFeeTypedData({ name, contract: token, chainId, chainUid,
-      message: { from, target, callDataHash: hex(keccak_256(asBytes(callData))), payee: to, value: amount, validUntil, relayer: router } });
+      message: { from, target, callDataHash: hex(keccak_256(asBytes(callData))), payee: to, value: amount, batch: lane, nonce: n,
+        validUntil, relayer: router } });
     const t = typedData.message;
     const sigType = abiType('UASig');
-    const calldata = (sig) => abiCall(`relay(address,bytes,address,bytes32,bytes32,uint256,uint256,${sigType})`,
-      ['address', 'bytes', 'address', 'bytes32', 'bytes32', 'uint256', 'uint256', sigType],
-      [target, asBytes(callData), token, t.from, t.payee, t.value, t.validUntil, abiValue('UASig', uaSigOf(sig))]);
-    return { ref, lane, typedData, digest: digestOf(typedData), calldata };
+    const calldata = (sig) => abiCall(`relay(address,bytes,address,bytes32,bytes32,uint256,uint256,uint256,uint256,${sigType})`,
+      ['address', 'bytes', 'address', 'bytes32', 'bytes32', 'uint256', 'uint256', 'uint256', 'uint256', sigType],
+      [target, asBytes(callData), token, t.from, t.payee, t.value, t.batch, t.nonce, t.validUntil, abiValue('UASig', uaSigOf(sig))]);
+    return { ref, lane, nonce: n, typedData, digest: digestOf(typedData), calldata };
   };
   return { call, prompt, payment };
 }
@@ -1118,13 +1233,13 @@ export function bidMinBase(minFill, amount, receiveAmount) {
   return (uint(minFill, 'minFill') * uint(receiveAmount, 'the price') + a - 1n) / a;
 }
 
-// The governance bits 0-22 (spec 2026-11-02-governance §1.2; bit 22 CTR-GOV-20): name and type. The disclosure sentences are the file's,
+// The governance bits 0-23 (spec 2026-11-02-governance §1.2; bit 22 CTR-GOV-20; bit 23 pay-meta-tax §6.1): name and type. The disclosure sentences are the file's,
 // smartcontracts/vectors/governance/governance_bits.json, which the app reads; test/governance-bits.test.js holds this table to it.
-// Bits 23-127 are free; bits 128-255 are the application contract's own, the word is its bitLabel(bit) (CTR-GOV-10's Change).
+// Bits 24-127 are free; bits 128-255 are the application contract's own, the word is its bitLabel(bit) (CTR-GOV-10's Change).
 export const GOVERNANCE_BITS = Object.freeze([
   ['PAYABLE', 'capability'], ['MINTABLE', 'power'], ['BURNABLE', 'capability'], ['RATE_ADJUSTABLE', 'power'],
   ['WRAP_DISABLEABLE', 'power'], ['FREEZE', 'power'], ['FORCE', 'power'], ['PAUSE', 'power'], ['ALLOWLIST', 'capability'],
   ['DENYLIST', 'capability'], ['RECORD', 'power'], ['LISTING', 'power'], ['FEE_ROUTING', 'power'], ['', 'unused'], ['', 'unused'],
   ['ARBITRATE', 'reserved'], ['CORRECT', 'reserved'], ['RESCUABLE', 'capability'], ['PUBLISH', 'power'], ['DEPRECATE', 'power'],
-  ['ENABLE_KIND', 'power'], ['MODERATE', 'power'], ['OPERATOR_TRANSFER', 'power'],
+  ['ENABLE_KIND', 'power'], ['MODERATE', 'power'], ['OPERATOR_TRANSFER', 'power'], ['TAX', 'power'],
 ].map(([name, type], bit) => Object.freeze({ bit, name, type })));

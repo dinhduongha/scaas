@@ -9,7 +9,7 @@ import {
   cancelUAOrderTypedData, cancelDexOrderTypedData, invalidateNoncesTypedData, uaInvalidateNoncesTypedData, checkTradeOrder, bidMinFill,
   bidMinBase, checkCancel, payLane, uaReceiverFeeTypedData, wrapToUACall, unwrapToUACall, payWithFeeToUACalldata, checkReceiverFee,
   uaPayUnderMandateTypedData, uaPayUnderMandateCalldata, uaDelegateRevokeTypedData, uaDelegateRevokeCalldata, mtxExecuteCalldata,
-  mtxExecuteTransferCalldata, TYPED_OPS,
+  mtxExecuteTransferCalldata, TYPED_OPS, metaPayId,
 } from '../src/evm.js';
 import { abiEncode, hex, fromHex, keccak_256, utf8ToBytes } from '../src/bytes.js';
 
@@ -131,7 +131,10 @@ test('mandate_kat.json equals the builders (pay and delegate revoke): UAPayUnder
     assert.equal(TYPED_OPS[td.primaryType].typehash, k.type_hash, row);
     assert.equal(hex(hashStruct(td.types, td.primaryType, td.message)), k.struct_hash, row);
     assert.equal(hex(hashTypedData(td)), k.digest, row);
-    assert.equal(hex(calldata(td, k.signature)), k.calldata, row);
+    // pay-meta-tax T37 / T41: the pay takes its `PayMeta` last, unsigned; the signed `entryRef` is its commitment
+    const meta = row === 'pay' ? { salt: k.meta_salt, payNo: k.meta_pay_no, schema: Number(k.meta_schema), body: k.meta_body } : undefined;
+    if (meta) assert.equal(metaPayId(meta), args.entryRef, 'the entryRef commits to the PayMeta');
+    assert.equal(hex(calldata(td, k.signature, meta && { meta })), k.calldata, row);
     const r = secp256k1.Signature.fromBytes(fromHex(k.signature).subarray(0, 64), 'compact').addRecoveryBit(fromHex(k.signature)[64] - 27);
     assert.equal(evmAddress(r.recoverPublicKey(fromHex(k.digest)).toBytes(false)).toLowerCase(), kat.signer.toLowerCase(), row);
     assert.equal(k.from, padId(kat.signer).toLowerCase(), `${row}: the owner's address zero-padded`);
@@ -612,9 +615,14 @@ test('UA-5a: UAReceiverFee typed data and the receivers\' calldata (`cast callda
   assert.equal(hex(wrapToUACall(U, 1000000n, TO)), '0x1b0237ad' + W(BigInt(U)) + W(1000000n) + 'ab'.repeat(32));
   assert.equal(hex(unwrapToUACall(U, 1000000n, TO, 990000n)),
     '0xe4a9f766' + W(BigInt(U)) + W(1000000n) + 'ab'.repeat(32) + W(990000n));
-  assert.equal(hex(payWithFeeToUACalldata(TO, 100000000n, 2, 100000n, '0x0000000000000000000000000000000000000fee',
-    '0x' + 'cd'.repeat(32))), '0x18c3a777' + 'ab'.repeat(32) + W(100000000n) + W(2n) + W(100000n) + W(0xfeen)
-    + 'cd'.repeat(32));
+  // pay-meta-tax T41: `PayMeta` last; the entryRef its commitment (a salt-only meta here)
+  const META = { salt: '0x' + '5a'.repeat(32) };
+  const REF = metaPayId(META);
+  const pw = hex(payWithFeeToUACalldata(TO, 100000000n, 2, 100000n, '0x0000000000000000000000000000000000000fee', REF, META));
+  assert.equal(pw.slice(0, 10), hex(keccak_256(utf8ToBytes(
+    'payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32,(bytes32,string,uint16,bytes))')).subarray(0, 4)));
+  assert.equal(pw.slice(10, 10 + 64 * 7), 'ab'.repeat(32) + W(100000000n) + W(2n) + W(100000n) + W(0xfeen) + REF.slice(2) + W(224n));
+  assert.equal(pw.slice(10 + 64 * 7, 10 + 64 * 8), '5a'.repeat(32), 'the tuple starts with the salt');
   // checkCall decodes the two allowlisted receivers; payWithFeeToUA is never signed as a call (as payWithFee)
   const k = legacyKat('metatx_kat.json');
   const allowlist = [{ selector: '0x1b0237ad', name: 'wrapToUA', feeClass: 1 },
@@ -631,7 +639,7 @@ test('UA-5a: UAReceiverFee typed data and the receivers\' calldata (`cast callda
   const unwrap = hex(unwrapToUACall(U, 1000000n, TO, 0n));
   assert.equal(run(unwrap, { mode: 0x11, fee: '10000' }).fee, 10000n);   // PERCENT on wrapped (argument 1): 1 %
   assert.throws(() => run(hex(wrapToUACall(U, 1000000n, TO)), { mode: 0x11, fee: '1' }), /a percentage fee/);
-  assert.throws(() => run(hex(payWithFeeToUACalldata(TO, 1n, 0, 0n, '0x' + '00'.repeat(20), TO))), /never signed as a call/);
+  assert.throws(() => run(hex(payWithFeeToUACalldata(TO, 1n, 0, 0n, '0x' + '00'.repeat(20), REF, META))), /never signed as a call/);
 });
 
 test('receiver-pays: the payee co-signs UAReceiverFee nesting only the payment it expects, within its own bounds', () => {

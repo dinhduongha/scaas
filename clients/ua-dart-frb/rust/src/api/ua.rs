@@ -69,7 +69,7 @@ impl TryFrom<UaDomain> for scaas_ua::Domain {
     }
 }
 
-/// `governance_bits.json`'s row of `bit` as JSON, `{bit, name, type, sentences}` (spec 2026-11-02-governance §1.2): bits 0-22,
+/// `governance_bits.json`'s row of `bit` as JSON, `{bit, name, type, sentences}` (spec 2026-11-02-governance §1.2): bits 0-23,
 /// any other `UAArgument`.
 #[frb(sync)]
 pub fn governance_bit(bit: i64) -> R<String> {
@@ -417,6 +417,18 @@ pub fn set_kem_key_args(input: String) -> R<String> {
 #[frb(sync)]
 pub fn set_pqz_key_args(input: String) -> R<String> {
     Ok(scaas_ua::json::set_pqz_key_args_json(&input)?)
+}
+/// What a payer signs (pay-meta-tax T41), JSON in and out: `{struct, domain: {name, chainId, verifyingContract, salt}, message}`,
+/// `struct` `UAMetaTransfer`, `UAPayWithTax` (`{payment, taxMode, tax}`) or `UARelayFee`; out `{structHash, digest}`.
+#[frb(sync)]
+pub fn pay_digest(input: String) -> R<String> {
+    Ok(scaas_ua::json::pay_digest_json(&input)?)
+}
+/// `metaPayId` under `scaas.pay.meta.v2` (pay-meta-tax T41): in `{salt, payNo, schema, body}`, out `{payId}`; a refused shape or
+/// `payNo` is `UAArgument`.
+#[frb(sync)]
+pub fn meta_pay_id(input: String) -> R<String> {
+    Ok(scaas_ua::json::meta_pay_id_json(&input)?)
 }
 /// Members are `(kind, id, weight)`; a kind outside 0..=0xFFFF is `UAKindUnknown`, a threshold or weight outside u16 (or
 /// more than 65535 members) is `UAArgument`.

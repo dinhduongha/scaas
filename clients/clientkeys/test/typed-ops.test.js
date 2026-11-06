@@ -40,7 +40,7 @@ const PLAN = {
   UARollOver: '0xd5ad0bcf…0465fd', UAPrepareAcc: '0x33e99b3c…c460e5',
   AddKey: '0x9d156f1f…7244a6bb', RemoveKey: '0xcef46d27…618280b3', RotateKey: '0x5b8f8761…64fb0777',
   SetGuardian: '0xd2603850…6b967689f6', CancelRecovery: '0x3df995dd…1213adda', Execute: '0xe0b649e9…c6053f1df7',
-  UAReceiverFee: '0xb12d2a08…7c75021a', UARelayFee: '0x77fa32c7…cd3eb54d', UAWrapOrder: '0x2a01cb57…fc04533c',
+  UAReceiverFee: '0xb12d2a08…7c75021a', UARelayFee: '0x220269b9…e493e43ea5', UAWrapOrder: '0x2a01cb57…fc04533c',
   CancelUAOrder: '0x47eb46c7…a1eaeba', CancelUAWrapOrder: '0x7679e176…2326d9d', CancelDexOrder: '0xcc35e105…f433c6',
   ZetherRollOver: '0x52e2c8f8…71768b1e', ZetherSetRollOverMode: '0x5f5a4ffa…4d55e09d', PqzAuth: '0x380b0de6…42644e6f',
   UACancelNonce: '0xcd17c2129240241748e841a7f0572558b9c5a900a47bc540170a8c258d291c54',
@@ -50,6 +50,8 @@ const PLAN = {
   UAPayUnderMandate: '0xadbc54026c0db2f3af4387e08d6db8d717cb74af436468a089f09d377d6f0119',
   UADelegateRevoke: '0x774892773810b24a4c22164980cf38c17d181e11c99acc17c7229238a11035e0',
   UAExecute: '0x0d4d513cf9b5169c6422cb757a9af6c10be34ccd883caa3a1d18d165cf9ea413',
+  // pay-meta-tax T41: `UARelayFee` with batch, nonce (T38, MtxRelayFee.t.sol's pin); `UAPayWithTax` (paytax.json, forge-written)
+  UAPayWithTax: '0x4a5f25751af8f3abdc633328e8e9871ea0ebeb4084608bb83ae8140803a21857',
 };
 
 // Appendix X.4, the nested strings verbatim.
@@ -105,7 +107,7 @@ function tupleMembers(t) {
   out.push(t.slice(start, -1));
   return out;
 }
-const dyn = (t) => t === 'bytes' || t.endsWith('[]') || (t[0] === '(' && tupleMembers(t).some(dyn));
+const dyn = (t) => t === 'bytes' || t === 'string' || t.endsWith('[]') || (t[0] === '(' && tupleMembers(t).some(dyn));
 const size = (t) => (t[0] === '(' && !dyn(t) ? tupleMembers(t).reduce((n, m) => n + size(m), 0) : 32);
 function decodeList(types, b) {
   let at = 0;
@@ -122,6 +124,7 @@ function decodeOne(t, b) {
   }
   if (t[0] === '(') return decodeList(tupleMembers(t), b);
   if (t === 'bytes') return hex(b.subarray(32, 32 + Number(BigInt(hex(b.subarray(0, 32))))));
+  if (t === 'string') return new TextDecoder('utf-8', { fatal: true }).decode(b.subarray(32, 32 + Number(BigInt(hex(b.subarray(0, 32))))));
   if (t === 'address') return hex(b.subarray(12, 32));
   if (t === 'bytes32') return hex(b.subarray(0, 32));
   if (/^bytes\d+$/.test(t)) return hex(b.subarray(0, Number(t.slice(5))));
@@ -174,8 +177,9 @@ test('the table covers every allowlisted entry of every contract, one row per op
   // ua-mtx-merge T11 (MD-7): 112 − 45 retired − the wallet's five address ops (Q6) + its six `UA<Op>` = 68; `UACancelNonce` an
   // envelope op now (Q2)
   // T34: + the router's eight regulated controls (regulated-kinds spec §3.1): 76, 67 envelope ops
-  assert.equal(Object.keys(TYPED_OPS).length, 76);
-  assert.equal(Object.values(TYPED_OPS).filter((o) => o.envelope).length, 67);
+  // pay-meta-tax T41: + `UAPayWithTax` (a raw struct) and the router's `UASetTaxRate`, `UASetTaxRecipient`: 79, 69
+  assert.equal(Object.keys(TYPED_OPS).length, 79);
+  assert.equal(Object.values(TYPED_OPS).filter((o) => o.envelope).length, 69);
   for (const o of Object.values(TYPED_OPS)) {
     if (o.envelope) assert.ok(o.entry.startsWith('mtx'), o.primary);
     if (o.ua) assert.equal(o.fields[0].type, 'bytes32', o.primary);
@@ -246,7 +250,8 @@ test('a merged entry\'s calldata carries UASig{signature} for an EOA: empty keyD
     if (!TYPED_OPS[name].ua || !TYPED_OPS[name].envelope) continue;
     for (const [kind, d] of domains(r)) {
       const got = decodeList(paramTypes(d.abi), fromHex(d.calldata).subarray(4));
-      assert.deepEqual(norm(got.at(-1)), norm(['0x', d.signature, []]), `${name} ${kind}`);
+      // pay-meta-tax T41: the mandate pay takes its `PayMeta` after the signature
+      assert.deepEqual(norm(got.at(name === 'UAPayUnderMandate' ? -2 : -1)), norm(['0x', d.signature, []]), `${name} ${kind}`);
       assert.equal(got[0][0], V.key.ua, `${name} ${kind}: the EOA's id, its address zero-padded`);
       n++;
     }
@@ -295,14 +300,15 @@ test('the cancel row is ordered and native-capable: UACancelNonce(bytes32 from,u
 // governance T12 (spec §3.2): the router's rows read from the contract's own pin, test/governance/GovRouterTypehash.t.sol
 // (literal strings and `cast keccak` hashes), apart from the table in src/evm.js: a mismatch is a stop-and-report.
 // ua-mtx-merge T7 / T11 (R14): 19 `UA<Op>` rows on the `mtx<Op>` entries; the 19 address rows retired.
-test('GovernanceRouter: 27 rows equal GovRouterTypehash.t.sol, target the first op word, fee mode NONE, the router domain only', () => {
+test('GovernanceRouter: 29 rows equal GovRouterTypehash.t.sol, target the first op word, fee mode NONE, the router domain only', () => {
   const sol = readFileSync(new URL('../../../smartcontracts/evm/test/governance/GovRouterTypehash.t.sol', import.meta.url), 'utf8');
   const pins = [...sol.matchAll(/keccak256\(\s*((?:"[^"]*"\s*)+)\)\);\s*assertEq\(T\.\w+, (0x[0-9a-f]{64})\)/g)]
     .map(([, lits, hash]) => [[...lits.matchAll(/"([^"]*)"/g)].map((x) => x[1]).join(''), hash]);
   // T32: + the eight regulated controls (regulated-kinds spec §3.1, CTR-GOV-20); T34 writes their rows
-  assert.equal(pins.length, 28);
+  // pay-meta-tax T39 / T41: + `UASetTaxRate`, `UASetTaxRecipient`
+  assert.equal(pins.length, 30);
   const rows = pins.filter(([s]) => !s.startsWith('GrantTerms('));
-  assert.equal(rows.length, 27);
+  assert.equal(rows.length, 29);
   for (const [s, hash] of rows) {
     const name = s.slice(0, s.indexOf('('));
     const op = TYPED_OPS[name];
@@ -318,7 +324,7 @@ test('GovernanceRouter: 27 rows equal GovRouterTypehash.t.sol, target the first 
     assert.equal(r.domains.gov_router.domain.name, 'SCaaS GovernanceRouter', name);
     assert.deepEqual([r.message.mode, r.message.fee], [1, '0'], `${name}: fee mode NONE`);
   }
-  assert.equal(Object.values(TYPED_OPS).filter((o) => o.on.includes('GovernanceRouter')).length, 28);
+  assert.equal(Object.values(TYPED_OPS).filter((o) => o.on.includes('GovernanceRouter')).length, 30);
   assert.equal(V.ops.UACancelNonce.domains.gov_router.domain.name, 'SCaaS GovernanceRouter');
   assert.equal(V.ops.CancelNonce.domains.gov_router, undefined);
 });

@@ -18,7 +18,7 @@ pub mod qobject {
         #[qinvokable] #[cxx_name = "kindInfo"] fn kind_info(self: Pin<&mut Self>, kind: i32) -> QString;
         #[qinvokable] fn tag(self: Pin<&mut Self>, kind: i32) -> QString;
         #[qinvokable] #[cxx_name = "kindTagString"] fn kind_tag_string(self: Pin<&mut Self>, kind: i32) -> QString;
-        /// `governance_bits.json`'s row of `bit` as JSON, `{bit, name, type, sentences}` (bits 0-22; else "" and `UAArgument`).
+        /// `governance_bits.json`'s row of `bit` as JSON, `{bit, name, type, sentences}` (bits 0-23; else "" and `UAArgument`).
         #[qinvokable] #[cxx_name = "governanceBit"] fn governance_bit(self: Pin<&mut Self>, bit: i32) -> QString;
         #[qinvokable] #[cxx_name = "groupTag"] fn group_tag(self: Pin<&mut Self>, group: &QString) -> QString;
         #[qinvokable] #[cxx_name = "groupTagString"] fn group_tag_string(self: Pin<&mut Self>, group: &QString) -> QString;
@@ -166,6 +166,14 @@ pub mod qobject {
         /// Out: the same fields, `sig` complete.
         #[qinvokable] #[cxx_name = "setPqzKeyArgs"]
         fn set_pqz_key_args(self: Pin<&mut Self>, input: &QString) -> QString;
+        /// What a payer signs (pay-meta-tax T41), JSON in and out: `{struct, domain: {name, chainId, verifyingContract, salt}, message}`,
+        /// `struct` `UAMetaTransfer`, `UAPayWithTax` (`{payment, taxMode, tax}`) or `UARelayFee`; out `{structHash, digest}`.
+        #[qinvokable] #[cxx_name = "payDigest"]
+        fn pay_digest(self: Pin<&mut Self>, input: &QString) -> QString;
+        /// `metaPayId` under `scaas.pay.meta.v2` (pay-meta-tax T41): in `{salt, payNo, schema, body}`, out `{payId}`; a refused shape or
+        /// `payNo` is `UAArgument`.
+        #[qinvokable] #[cxx_name = "metaPayIdV2"]
+        fn meta_pay_id_v2(self: Pin<&mut Self>, input: &QString) -> QString;
     }
 }
 
@@ -480,6 +488,12 @@ impl qobject::UaKinds {
     }
     pub fn set_pqz_key_args(self: Pin<&mut Self>, input: &QString) -> QString {
         QString::from(&self.run(|| from_json(ua::json::set_pqz_key_args_json(&s(input)))))
+    }
+    pub fn pay_digest(self: Pin<&mut Self>, input: &QString) -> QString {
+        QString::from(&self.run(|| from_json(ua::json::pay_digest_json(&s(input)))))
+    }
+    pub fn meta_pay_id_v2(self: Pin<&mut Self>, input: &QString) -> QString {
+        QString::from(&self.run(|| from_json(ua::json::meta_pay_id_json(&s(input)))))
     }
     pub fn encode_msig(self: Pin<&mut Self>, threshold: i32, members: &QString) -> QString {
         self.hex(|| {

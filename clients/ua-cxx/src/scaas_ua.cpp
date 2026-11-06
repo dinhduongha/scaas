@@ -197,6 +197,12 @@ std::string setKemKeyArgs(const std::string& input) {
 std::string setPqzKeyArgs(const std::string& input) {
     return jsonCall([&] { return ffi::set_pqz_key_args(input); });
 }
+std::string payDigest(const std::string& input) {
+    return jsonCall([&] { return ffi::pay_digest(input); });
+}
+std::string metaPayId(const std::string& input) {
+    return jsonCall([&] { return ffi::meta_pay_id(input); });
+}
 Bytes encodeMsig(uint16_t th, const std::vector<Member>& ms) {
     std::vector<ffi::Member> v;
     for (auto& m : ms) v.push_back(conv(m));

@@ -5,6 +5,7 @@ export {
   checkCall, checkOp, checkTradeOrder, checkWrapOrder, checkUAWrapOrder, checkCancel, payLane, uaTradeOrderTypedData, tradeOrderTypedData, cancelUAOrderTypedData,
   cancelUAWrapOrderTypedData, invalidateNoncesTypedData, uaInvalidateNoncesTypedData,
   uaMetaTxTypedData, uaMetaTransferTypedData, padId,
-  metaPayId, decodeMeta, checkPayMeta, buildUaPayMeta, relayRef, mtxExecuteCalldata, mtxExecuteTransferCalldata, buildRelayFee,
+  metaPayId, payMeta, checkPayNo, encodeMetaBody, decodeMetaBody, payMetaWarning, checkPayMeta, buildPay, buildPayReceiverFee,
+  buildPayWithTax, percentTax, relayRef, mtxExecuteCalldata, mtxExecuteTransferCalldata, buildRelayFee,
 } from './evm.js';
 export { b64url, fromB64url, hex, fromHex } from './bytes.js';

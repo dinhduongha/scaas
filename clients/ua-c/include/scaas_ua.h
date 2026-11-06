@@ -273,7 +273,7 @@ ScaasUaStatus scaas_ua_kind_tag_string(uint16_t kind,
 
 /**
  * Governance bit `bit`'s row of `governance_bits.json` (spec 2026-11-02-governance §1.2) as JSON, `{bit, name, type, sentences}`
- * (NUL-terminated; `*out_len` counts the NUL). Bits 0-22; any other bit is `SCAAS_UA_ERR_ARGUMENT` (23-127 free, 128-255 the
+ * (NUL-terminated; `*out_len` counts the NUL). Bits 0-23; any other bit is `SCAAS_UA_ERR_ARGUMENT` (24-127 free, 128-255 the
  * application's `bitLabel`).
  */
 ScaasUaStatus scaas_ua_governance_bit(uint8_t bit,
@@ -641,6 +641,22 @@ ScaasUaStatus scaas_ua_set_kem_key_args(const char *input,
 ScaasUaStatus scaas_ua_set_pqz_key_args(const char *input,
                                         char *out,
                                         size_t *out_len);
+
+/**
+ * What a payer signs (pay-meta-tax T41), JSON in and out: `{struct, domain: {name, chainId, verifyingContract, salt}, message}`,
+ * `struct` `UAMetaTransfer`, `UAPayWithTax` (`{payment, taxMode, tax}`) or `UARelayFee`; out `{structHash, digest}`.
+ */
+ScaasUaStatus scaas_ua_pay_digest(const char *input,
+                                  char *out,
+                                  size_t *out_len);
+
+/**
+ * `metaPayId` under `scaas.pay.meta.v2` (pay-meta-tax T41): in `{salt, payNo, schema, body}`, out `{payId}`; a refused shape or
+ * `payNo` is `UAArgument`.
+ */
+ScaasUaStatus scaas_ua_meta_pay_id(const char *input,
+                                   char *out,
+                                   size_t *out_len);
 
 /**
  * The `msig` key data for `n` members (`members` may be NULL when `n == 0`): 4 + 36 * n bytes.

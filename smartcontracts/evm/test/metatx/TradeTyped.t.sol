@@ -36,7 +36,7 @@ import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {PqzFixture} from "../pqz/helpers/PqzFixture.sol";
 import {ZetherFixture} from "../zether/helpers/ZetherFixture.sol";
 import {VM, TYPED_OPS, TYPED_OPS_LEGACY, checkRow, onChain, domainOf, domainField, ecdsa, rowKey, rowEnvelope2} from "./NamedEntry.t.sol";
-import {swap, tryRowAs, UA_CANCEL_NONCE} from "./TypedOps.t.sol";
+import {swap, tryRowAs, UA_CANCEL_NONCE, rowMeta} from "./TypedOps.t.sol";
 import {nid} from "../helpers/Ids.sol";
 
 /// The address `WrapOrder` (R39: in legacy/ua-mtx-merge/ after T3), kept here to encode its retired row.
@@ -263,26 +263,21 @@ abstract contract OrderRows is Test {
         assertEq(t.balanceOf(payee), 0);
     }
 
-    /// pay-meta-tax T38, meaning: the row signs `UARelayFee` without `batch` / `nonce` and calls the seven-argument
-    /// `mtxRelayFee`, which has no function now; T41 regenerates the row and runs it again.
+    /// pay-meta-tax T38 / T41: the row signs `UARelayFee` with the payer's own lane `(batch, nonce)` and runs.
     function test_typedOpsVectors_UARelayFeeRow() public {
         j = vm.readFile(TYPED_OPS);
         NormalToken t = _normalKind();
         bytes32 from = vm.parseJsonBytes32(j, _f("UARelayFee", "from"));
+        t.mint(address(uint160(uint256(from))), FUNDS);
         bytes32 payee = vm.parseJsonBytes32(j, _f("UARelayFee", "payee"));
         uint256 value = _u(_f("UARelayFee", "value"));
         (address tgt, bytes32 cdh) = _callOf("UARelayFee");
-        bytes memory built = abi.encodeWithSignature(
-            "mtxRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-            from, tgt, cdh, payee, value, _u(_f("UARelayFee", "validUntil")), _uaSig("UARelayFee"));
-        checkRow(j, "UARelayFee", _kind());
-        bytes memory cd = vm.parseJsonBytes(j, domainField("UARelayFee", _kind(), "calldata"));
-        assertEq(keccak256(built), keccak256(cd), "the row: the old calldata");
-        vm.prank(vm.parseJsonAddress(j, _f("UARelayFee", "relayer")));
-        (bool ok, bytes memory ret) = address(t).call(cd);
-        assertFalse(ok, "a retired entry runs");
-        assertEq(ret.length, 0);
-        assertEq(t.balanceOf(address(uint160(uint256(payee)))), 0);
+        bytes memory built = abi.encodeCall(IERC20MetaTx.mtxRelayFee, (from, tgt, cdh, payee, value, _u(_f("UARelayFee", "batch")),
+            _u(_f("UARelayFee", "nonce")), _u(_f("UARelayFee", "validUntil")), _uaSig("UARelayFee")));
+        _runRenamed("UARelayFee", address(t), address(t), vm.parseJsonAddress(j, _f("UARelayFee", "relayer")), built,
+            IERC20MetaTx.mtxRelayFee.selector);
+        assertEq(t.balanceOf(address(uint160(uint256(payee)))), value);
+        assertEq(t.mtxNonce(from, _u(_f("UARelayFee", "batch"))), _u(_f("UARelayFee", "nonce")) + 1, "the payer's lane");
     }
 
     function _payment(string memory op) private view returns (MetaTxLib.UAMetaTransfer memory t) {
@@ -339,20 +334,11 @@ abstract contract OrderRows is Test {
         payer.signature = vm.parseJsonBytes(j, domainField(op, _kind(), "extra.payerSig"));
         uint256 fee = _u(_f(op, "fee"));
         address feeTo = vm.parseJsonAddress(j, _f(op, "feeRecipient"));
-        // pay-meta-tax T37, meaning: the row's calldata is the entry without `PayMeta`, which has no function now (its
-        // `entryRef` is no `PayMeta` commitment either); T41 regenerates the row (`meta` last) and runs it again
-        bytes memory built = abi.encodeWithSignature(string.concat("mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,",
-            "uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,",
-            "address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))"), x, payer, fee, feeTo, _u(_f(op, "validUntil")),
-            _uaSig(op));
-        checkRow(j, op, _kind());
-        bytes memory cd = vm.parseJsonBytes(j, domainField(op, _kind(), "calldata"));
-        assertEq(keccak256(built), keccak256(cd), "the row: the old calldata");
-        vm.prank(x.relayer);
-        (bool ok, bytes memory ret) = address(t).call(cd);
-        assertFalse(ok, "a retired entry runs");
-        assertEq(ret.length, 0);
-        assertEq(t.balanceOf(feeTo), 0);
+        // pay-meta-tax T41: the row's `PayMeta` (`extra.meta`) the entry's last parameter, `entryRef` its commitment
+        bytes memory built = abi.encodeCall(IMetaTokenV2.mtxPayReceiverFee, (x, payer, fee, feeTo, _u(_f(op, "validUntil")),
+            _uaSig(op), rowMeta(j, op, _kind())));
+        _receiverFee(op, t, x, t.mtxTransferDigest(x), built);
+        assertEq(t.balanceOf(feeTo), fee);
     }
 
     /// ua-mtx-merge T1, meaning: the old row is the unordered `UACancelNonce(bytes32 ua,uint256 batch,uint256 validUntil)`;

@@ -175,6 +175,8 @@ mod ffi {
         fn registration_args(input: &str) -> Result<String>;
         fn set_kem_key_args(input: &str) -> Result<String>;
         fn set_pqz_key_args(input: &str) -> Result<String>;
+        fn pay_digest(input: &str) -> Result<String>;
+        fn meta_pay_id(input: &str) -> Result<String>;
     }
 }
 use ffi::{HolderPop, KindInfo, Member, PqzKeyRecord};
@@ -201,7 +203,7 @@ fn kind_at(index: usize) -> KindInfo {
 fn tag(kind: u16) -> R<Vec<u8>> {
     guard(|| Ok(ua::tag(kind)?.to_vec()))
 }
-/// `governance_bits.json`'s row of `bit` as JSON (spec 2026-11-02-governance §1.2); past bit 22 `UAArgument`.
+/// `governance_bits.json`'s row of `bit` as JSON (spec 2026-11-02-governance §1.2); past bit 23 `UAArgument`.
 fn governance_bit(bit: u8) -> R<String> {
     guard(|| ua::governance_bit(bit).map(str::to_string).ok_or_else(|| UaErr("UAArgument: bit".into())))
 }
@@ -409,6 +411,12 @@ fn set_kem_key_args(input: &str) -> R<String> {
 }
 fn set_pqz_key_args(input: &str) -> R<String> {
     guard(|| Ok(ua::json::set_pqz_key_args_json(input)?))
+}
+fn pay_digest(input: &str) -> R<String> {
+    guard(|| Ok(ua::json::pay_digest_json(input)?))
+}
+fn meta_pay_id(input: &str) -> R<String> {
+    guard(|| Ok(ua::json::meta_pay_id_json(input)?))
 }
 fn encode_msig(threshold: u16, members: &[Member]) -> R<Vec<u8>> {
     guard(|| {

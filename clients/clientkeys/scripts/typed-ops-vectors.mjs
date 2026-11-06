@@ -12,7 +12,8 @@ import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { hex, fromHex, keccak_256, utf8ToBytes, concatBytes } from '../src/bytes.js';
-import { TYPED_OPS, OP_BUILDERS, hashStruct, hashTypedData, uaMetaTransferTypedData, padId, payLane, buildRelayFee } from '../src/evm.js';
+import { TYPED_OPS, OP_BUILDERS, hashStruct, hashTypedData, uaMetaTransferTypedData, padId, payLane, buildRelayFee, payMeta, metaPayId,
+} from '../src/evm.js';
 import { confPublic, g1 } from '../src/zether.js';
 import { recordId } from '../src/regulated.js';
 import { ecdsa, nativeSk, nativeAddr, nativeUa, be } from './ua-signers.mjs';
@@ -63,8 +64,11 @@ const envelope = (op) => {
   return { batch: 7, nonce: 0, validUntil: VALID_UNTIL, mode, relayer: RELAYER, fee, feeRecipient: noFee ? '0x' + '00'.repeat(20) : FEE_TO };
 };
 const ZETHER_UA = confPublic('bls12381', 0xb0bn).UA; // `bob` of ZetherFixture
+// pay-meta-tax T41: every pay row's `entryRef` is the commitment of one `PayMeta` (its `extra.meta`, the entry's last parameter)
+const META = payMeta({ salt: hex(hash('paymeta.salt')), payNo: 'INV-2026-0042' });
+const META_ID = metaPayId(META);
 const pay = (id, to) => {
-  const entryRef = hex(hash('payment'));
+  const entryRef = META_ID;
   return { from: id, to, value: 100000000, entryRef, batch: payLane(entryRef), nonce: 0, validUntil: VALID_UNTIL, mode: 1, relayer: RELAYER,
     fee: 0, feeRecipient: NONE };
 };
@@ -86,6 +90,11 @@ const ROW = {
   PqzAuth: { op: 1, chainId: contexts.A.chainId, token: CONTRACT.pqz, registry: contexts.A.registry, chainUid: contexts.A.chainUid },
   UAReceiverFee: { payment: pay(hex(nativeUa), padId('0x0000000000000000000000000000000000005409')), fee: 300000, feeRecipient: FEE_TO,
     validUntil: 1800000060 },
+  // a regulated kind's payment with its tax (pay-meta-tax spec §5.2): AMOUNT 1,000 of the 100,000,000
+  UAPayWithTax: { payment: pay(hex(nativeUa), padId('0x0000000000000000000000000000000000005409')), taxMode: 2, tax: 1000 },
+  UAPayUnderMandate: { entryRef: META_ID },
+  UASetTaxRate: { ratePpm: 50000 },
+  UASetTaxRecipient: { taxRecipient: padId('0x00000000000000000000000000000000000007a0') },
 };
 ROW.UAWrapOrder = wrapOrder(hex(nativeUa), NO_ID);
 ROW.CancelUAOrder = { order: order(hex(nativeUa), NO_ID) };
@@ -141,7 +150,10 @@ function extraOf(name, td, at) {
   const base = name.replace(/^UA/, '');
   if (base.startsWith('Pqz') && base !== 'PqzAuth') return { pqzAuth: PQZ_AUTH };
   if (base === 'RollOverSigned' || base === 'SetRollOverMode') return { ownerSig: OWNER_SIG };
-  if (base === 'ReceiverFee') return { payerSig: nativeSig(hashTypedData(uaMetaTransferTypedData({ ...at, message: td.message.payment }))) };
+  if (base === 'ReceiverFee') {
+    return { payerSig: nativeSig(hashTypedData(uaMetaTransferTypedData({ ...at, message: td.message.payment }))), meta: META };
+  }
+  if (base === 'PayWithTax' || base === 'PayUnderMandate') return { meta: META };
   return undefined;
 }
 
@@ -151,7 +163,7 @@ for (const [name, op] of Object.entries(TYPED_OPS)) {
   const row = { typeString: op.typeString, typehash: op.typehash, on: op.on, types: op.types, domains: {} };
   const message = sample(name, op);
   const relay = name === 'UARelayFee' ? { token: CONTRACT.token, chainId: contexts.A.chainId, chainUid: contexts.A.chainUid, router: ROUTER,
-    executor: EXECUTOR, target: TARGET, from: hex(nativeUa), amount: 25, validUntil: VALID_UNTIL } : null;
+    executor: EXECUTOR, target: TARGET, from: hex(nativeUa), amount: 25, batch: 7, nonce: 0, validUntil: VALID_UNTIL } : null;
   const callData = filler('relayed.call', 100);
   for (const dn of op.domains) {
     const kind = KIND[dn];
@@ -186,7 +198,7 @@ const out = {
     + 'vectors/typed/legacy/ua-mtx-merge/), `bytes` on the address entries left (the five wraps, `SmartKeyAccount`), '
     + '`AccountSig{0, [], signature}` on the account\'s own entries. An unbound `relayer` / `feeRecipient` is 0 in the message, '
     + 'as the contract hashes it. Field values not set by the generator are fillers (keccak256 of the field path), not valid '
-    + 'proofs or ciphertexts. `extra`: what the entry takes unsigned.',
+    + 'proofs or ciphertexts. `extra`: what the entry takes unsigned (`meta`: the `PayMeta` a pay entry takes last, pay-meta-tax T41).',
   version: 1, context: 'A', key: { private: hex(be(nativeSk, 32)), address: FROM, ua: hex(nativeUa) }, ops,
 };
 mkdirSync(OUT, { recursive: true });

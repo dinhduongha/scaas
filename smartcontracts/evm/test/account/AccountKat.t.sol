@@ -167,6 +167,7 @@ contract MandateWalletKatTest is MtxKatBase {
         assertEq(vm.parseJsonBytes(onDisk, ".revoke.calldata"), vm.parseJsonBytes(rev, ".calldata"));
         assertEq(vm.parseJsonBytes(onDisk, ".revoke.signature"), vm.parseJsonBytes(rev, ".signature"));
         assertEq(vm.parseJsonUint(onDisk, ".pay.batch"), w.mandatePayLane(PayMetaKit.ref(keccak256("scaas.kat.entryRef"))));
+        assertEq(vm.parseJsonBytes32(onDisk, ".pay.meta_salt"), PayMetaKit.meta(keccak256("scaas.kat.entryRef")).salt);
         assertEq(vm.parseJsonUint(onDisk, ".revoke.batch"), w.mandateRevokeLane(address(tok), 1));
     }
 
@@ -183,6 +184,12 @@ contract MandateWalletKatTest is MtxKatBase {
             (e, address(tok), MetaTxLib.pad(PAYEE), 12_345_678, ref, 1, a, PayMetaKit.meta(keccak256("scaas.kat.entryRef"))));
         (bool ok, bytes memory ret) = address(w).call(cd);
         assertTrue(ok, string(ret));
+        // pay-meta-tax T41: the `PayMeta` the entry takes last (unsigned; `entryRef` its commitment), for the readers
+        MetaTxLib.PayMeta memory m = PayMetaKit.meta(keccak256("scaas.kat.entryRef"));
+        vm.serializeBytes32("pay", "meta_salt", m.salt);
+        vm.serializeString("pay", "meta_pay_no", m.payNo);
+        vm.serializeUint("pay", "meta_schema", m.schema);
+        vm.serializeBytes("pay", "meta_body", m.body);
         return (_entry("pay", UA_PAY_UNDER_MANDATE, e, args, digest, a.signature, cd), digest);
     }
 
