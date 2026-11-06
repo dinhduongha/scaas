@@ -18,16 +18,17 @@ contract GovBitsVectorTest is Test {
     string constant OUT = "../vectors/governance/governance_bits.json";
 
     /// The bits that have holders on some kind of this release (`_roleBits()` of `NORMAL*`, `WRAPPED*`, `SCaaSDex`).
-    uint256 constant ROLES = B.NORMAL_ROLES | B.WRAPPED_ROLES | B.DEX_BITS | B.REGULATED_ROLES | (1 << B.OPERATOR_TRANSFER);
+    uint256 constant ROLES = B.NORMAL_ROLES | B.WRAPPED_ROLES | B.DEX_BITS | B.REGULATED_ROLES | (1 << B.OPERATOR_TRANSFER)
+        | (1 << B.TAX);
     /// The last row (CTR-GOV-20).
-    uint256 constant LAST = B.OPERATOR_TRANSFER;
+    uint256 constant LAST = B.TAX; // pay-meta-tax T39 (CTR-GOV-21 proposed)
     /// `RegulatedBase`'s masks (internal there), composed from the same constants: the bits 8-13 add, without `ALLOWLIST` on
     /// 10-13 (CTR-GOV-17); the contract-only ones (an `msig` UA counts, RK-1); bit 22 any holder. Kind 8's `validBits()` is
     /// held to `REG` below, kinds 9 and 13 in `RegulatedSkeleton.test_masks`.
-    uint256 constant REG = B.REGULATED | (1 << B.RECORD) | (1 << B.MODERATE) | (1 << B.OPERATOR_TRANSFER);
+    uint256 constant REG = B.REGULATED | (1 << B.RECORD) | (1 << B.MODERATE) | (1 << B.OPERATOR_TRANSFER) | (1 << B.TAX);
     uint256 constant REG_CONFIDENTIAL = REG & ~(uint256(1) << B.ALLOWLIST);
     uint256 constant REG_CONTRACT_ONLY = B.REGULATED_ROLES;
-    uint256 constant REG_ROLES = B.REGULATED_ROLES | (1 << B.OPERATOR_TRANSFER);
+    uint256 constant REG_ROLES = B.REGULATED_ROLES | (1 << B.OPERATOR_TRANSFER) | (1 << B.TAX);
 
     uint256 private _next;
 
@@ -279,6 +280,18 @@ contract GovBitsVectorTest is Test {
                 _one(
                     "all",
                     "A holder moves public units out of an account to another, no record, within its grant, subject to FREEZE, PAUSE and the receiver check; any holder, a person's key included."
+                )
+            )
+        );
+        j = string.concat(
+            j,
+            _row(
+                B.TAX,
+                "TAX",
+                "power",
+                _one(
+                    "all",
+                    "Any holder (an EOA too) sets the tax recipient and the one PERCENT rate; a rate increase waits the factory's notice period (shown; it may be 0 on a test chain), a decrease is immediate and makes PERCENT payments in flight fail; a recipient change is immediate and is not signed by the payer; an AMOUNT tax is the payer's signed figure, unchecked by the contract; the owner can stop tax collection at once."
                 )
             )
         );

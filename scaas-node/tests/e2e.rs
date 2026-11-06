@@ -1546,7 +1546,8 @@ alloy::sol! {
         uint8 auditorMode; uint256 minDecoyFee; }
     /// Regulated-kinds spec §2.4 (plan T25): the regulated kinds' (8-13) only; a plain kind refuses any set field.
     #[derive(Default)]
-    struct RegulatedParams { address complianceRegistry; uint64 requiredFlags; uint64 deniedFlags; bytes32 termsHash; }
+    struct RegulatedParams { address complianceRegistry; uint64 requiredFlags; uint64 deniedFlags; bytes32 termsHash;
+        bytes32 taxRecipient; }
     #[derive(Default)]
     struct TokenConfig { string name; string symbol; uint8 decimals; uint256 features; uint256 lockedFeatures; bytes32 owner; Roles roles;
         uint256 initialSupply; address initialHolder; Leg[] legs; RateConfig rate; ConfidentialConfig conf; uint64 grantDelay;

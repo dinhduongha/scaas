@@ -1,11 +1,11 @@
 {
-  "mtxCancelNonce_router": 72686,
+  "mtxCancelNonce_router": 72664,
   "mtxMint_router": 99308,
   "mtxTransfer_normal": 85310,
   "mtxTransfer_normalPqz": 85298,
   "mtxTransfer_normalZether": 85298,
   "mtxTransfer_wrapped": 85354,
-  "mtxTransfer_wrappedPqz": 85327,
+  "mtxTransfer_wrappedPqz": 85315,
   "mtxTransfer_wrappedZether": 85276,
   "transferToUA_normal": 67942,
   "transferToUA_normalPqz": 68060,
@@ -24,5 +24,5 @@
   "uaExecuteTransfer_normalZether": 141663,
   "uaExecuteTransfer_wrapped": 100065,
   "uaExecuteTransfer_wrappedPqz": 265112,
-  "uaExecuteTransfer_wrappedZether": 141641
+  "uaExecuteTransfer_wrappedZether": 141629
 }

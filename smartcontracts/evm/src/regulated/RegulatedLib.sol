@@ -10,6 +10,7 @@ import {IGovernance} from "../governance/IGovernance.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {MtxPipelineLib} from "../metatx/MtxPipelineLib.sol";
 import {UAKinds} from "../ua/UAKinds.sol";
+import {IOpenFactory} from "../factory/IOpenFactory.sol";
 
 /// @title The bodies of the regulated controls (CTR-AS-02's shape, regulated-kinds spec §3.1, §3.3, §3.4), reached by
 ///        `DELEGATECALL` from the thin stubs of `RegulatedBase`: storage is the token's `scaas.regulated` namespace,
@@ -47,6 +48,8 @@ library RegulatedLib {
         bytes32 termsHash;                                                // +2
         mapping(bytes32 account => IRegulatedToken.FreezeState) freezes;  // +3
         mapping(bytes32 recordId => IRegulatedToken.OrderRecord) orders;  // +4
+        bytes32 taxRecipient;                                             // +5 (pay-meta-tax spec §6.2)
+        IRegulatedToken.TaxRate taxRate;                                  // +6
     }
 
     // keccak256(abi.encode(uint256(keccak256("scaas.regulated")) - 1)) & ~bytes32(uint256(0xff))
@@ -86,7 +89,7 @@ library RegulatedLib {
     ///         `GovernanceLib.init` would (bit 8 on 10-13). The roles' holder rules, `RoleConflict` and the owner-0 rule are
     ///         `GovernanceLib.init`'s; the initial-supply recipient's `R` is the mint's own `_regMove`. A registry must
     ///         carry `registryCodehash`, the release's `REGISTRY_CODEHASH` (F-11), and is written in slot +0.
-    function init(bytes calldata initArgs, uint256 valid, bytes32 registryCodehash) public {
+    function init(bytes calldata initArgs, uint256 valid, bytes32 registryCodehash, address uaRegistry) public {
         IFactoryToken.TokenConfig memory cfg = abi.decode(initArgs, (IFactoryToken.TokenConfig));
         uint256 f = cfg.features;
         if (f & ~valid != 0) {
@@ -101,7 +104,8 @@ library RegulatedLib {
         bool deny = f & (1 << GovernanceBits.DENYLIST) != 0;
         if ((f & (1 << GovernanceBits.FORCE) != 0 && !record) || (record && !freeze_)
             || allow != (p.requiredFlags != 0) || deny != (p.deniedFlags != 0)
-            || (p.complianceRegistry != address(0)) != (allow || deny) || (p.termsHash != 0) != (f & TERMS_BITS != 0))
+            || (p.complianceRegistry != address(0)) != (allow || deny) || (p.termsHash != 0) != (f & TERMS_BITS != 0)
+            || (p.taxRecipient != 0) != (f & (1 << GovernanceBits.TAX) != 0))
         {
             revert IRegulatedToken.RegulatedConfigInvalid();
         }
@@ -112,6 +116,44 @@ library RegulatedLib {
         RegulatedStorage storage s = $();
         (s.complianceRegistry, s.controls) = (reg, uint8(f >> GovernanceBits.FREEZE) & 0x3F);
         (s.requiredFlags, s.deniedFlags, s.termsHash) = (p.requiredFlags, p.deniedFlags, p.termsHash);
+        if (p.taxRecipient != 0) _taxRecipient(s, p.taxRecipient, uaRegistry); // the rate starts at 0
+    }
+
+    // ------------------------------------------------------------------ TAX (pay-meta-tax spec §6, bit 23)
+
+    /// @notice The rate a PERCENT tax is checked against now: the pending one once its `eta` passed.
+    function effectiveRate() internal view returns (uint32) {
+        IRegulatedToken.TaxRate storage t = $().taxRate;
+        return t.eta != 0 && block.timestamp >= t.eta ? t.pendingPpm : t.ratePpm;
+    }
+
+    /// @notice Bit 23 (`use`, no scalar). A matured pending rate is folded first; then a rate at or under the effective one
+    ///         applies at once and clears the pending one; a higher one waits the factory's `noticePeriod()` (0 possible;
+    ///         the token passes its `FACTORY`, an immutable the library cannot read, F-20).
+    function setTaxRate(uint32 ratePpm, address factory, bytes32 subject) public {
+        GovernanceUse.use(GovernanceBits.TAX, subject, 0);
+        if (ratePpm > 1_000_000) revert IRegulatedToken.TaxRateInvalid(ratePpm);
+        IRegulatedToken.TaxRate storage t = $().taxRate;
+        uint32 eff = effectiveRate();
+        uint64 at = uint64(block.timestamp);
+        if (ratePpm <= eff) (t.ratePpm, t.pendingPpm, t.eta) = (ratePpm, 0, 0);
+        else (t.ratePpm, t.pendingPpm, t.eta) = (eff, ratePpm, at += IOpenFactory(factory).noticePeriod());
+        emit IRegulatedToken.TaxRateSet(ratePpm, at);
+    }
+
+    /// @notice Bit 23 (`use`, no scalar), at once (Q4). The token checks `R` after it.
+    function setTaxRecipient(bytes32 r, bytes32 subject, address uaRegistry) public {
+        GovernanceUse.use(GovernanceBits.TAX, subject, 0);
+        _taxRecipient($(), r, uaRegistry);
+    }
+
+    /// @dev Not 0, either pool or the token; a derived id registered SIGNING (a record never changes kind); not frozen.
+    function _taxRecipient(RegulatedStorage storage s, bytes32 r, address uaRegistry) private {
+        if (r == 0 || _pool(r)) revert IRegulatedToken.TaxRecipientInvalid(r);
+        if (!UAKinds.inNativeSpace(r)) MtxPipelineLib._checkTo(uaRegistry, r);
+        if (frozen(r)) revert IRegulatedToken.Frozen(r);
+        s.taxRecipient = r;
+        emit IRegulatedToken.TaxRecipientSet(r);
     }
 
     // ------------------------------------------------------------------ FREEZE (spec §3.3 T1-T5)

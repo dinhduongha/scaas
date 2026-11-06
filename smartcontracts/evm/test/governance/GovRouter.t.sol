@@ -218,6 +218,11 @@ abstract contract GovRouterFixture is UARegistryBase {
 
     // ------------------------------------------------------------------ governed contracts
 
+    /// The tokens' `FACTORY` is this fixture: the factory's notice period a regulated kind reads (pay-meta-tax T39, bit 23).
+    function noticePeriod() external pure returns (uint64) {
+        return 0;
+    }
+
     function _env() internal view returns (IFactoryToken.Env memory e) {
         e = plainEnv(address(this), address(0), chainUidA, PREG, false);
         e.govRouter = address(router);
@@ -799,10 +804,12 @@ contract GovRouterRegulatedTest is GovRouterFixture {
     uint256 constant R_RECORD = 5;
     uint256 constant R_REVOKE = 6;
     uint256 constant R_OPERATOR = 7;
+    uint256 constant R_TAX_RATE = 8; // pay-meta-tax T39 (spec §6.2): bit 23 `TAX`
+    uint256 constant R_TAX_RECIPIENT = 9;
     bytes32 constant REF = bytes32(uint256(0x5EF));
     address constant OTHER = address(0xF00);
 
-    Row[8] internal reg8;
+    Row[10] internal reg8;
     address internal regImpl;
 
     function setUp() public override {
@@ -818,6 +825,8 @@ contract GovRouterRegulatedTest is GovRouterFixture {
         reg8[R_REVOKE] = Row("RevokeOrder", ",bytes32 recordId,bytes32 reasonRef", router.mtxRevokeOrder.selector);
         reg8[R_OPERATOR] = Row("OperatorTransfer", ",bytes32 account,bytes32 to,uint256 amount,bytes32 ref",
             router.mtxOperatorTransfer.selector);
+        reg8[R_TAX_RATE] = Row("SetTaxRate", ",uint32 ratePpm", router.mtxSetTaxRate.selector);
+        reg8[R_TAX_RECIPIENT] = Row("SetTaxRecipient", ",bytes32 taxRecipient", router.mtxSetTaxRecipient.selector);
     }
 
     /// Kind 8 with `FREEZE`, `FORCE`, `PAUSE`, `RECORD`, `OPERATOR_TRANSFER`; owner `eoa`, no grant delay; `BOB` holds 1,000.
@@ -827,13 +836,18 @@ contract GovRouterRegulatedTest is GovRouterFixture {
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.decimals, c.owner) = ("R", "R", 6, eoa);
         c.features = 1 | (uint256(1) << 5) | (uint256(1) << 6) | (uint256(1) << 7) | (uint256(1) << 10)
-            | (uint256(1) << GovernanceBits.OPERATOR_TRANSFER);
+            | (uint256(1) << GovernanceBits.OPERATOR_TRANSFER) | (uint256(1) << GovernanceBits.TAX);
+        c.reg.taxRecipient = _pad(address(0x7A0)); // pay-meta-tax T39: bit 23 with the issuer seat
         (c.roles.issuer, c.roles.compliance) = (issuer, compliance);
         (c.initialSupply, c.initialHolder) = (1000, BOB);
         c.reg.termsHash = keccak256("terms");
         t.initialize(address(this), 1, abi.encode(c));
         vm.prank(address(uint160(uint256(eoa))));
         t.grantRole(GovernanceBits.OPERATOR_TRANSFER, operator);
+        if (operator != issuer) {
+            vm.prank(address(uint160(uint256(eoa))));
+            t.grantRole(GovernanceBits.TAX, operator);
+        }
     }
 
     function _typehashR(uint256 op) internal view returns (bytes32) {
@@ -903,6 +917,26 @@ contract GovRouterRegulatedTest is GovRouterFixture {
     function test_routerRow_RevokeOrder() public { _row(R_REVOKE); }
     function test_routerRow_Unfreeze() public { _row(R_UNFREEZE); }
     function test_routerRow_OperatorTransfer() public { _row(R_OPERATOR); }
+
+    /// pay-meta-tax T39 (spec §6.1, §6.2, O9): bit 23 relayed by every holder class (an EOA, a single-key UA, a contract,
+    /// an `msig`) at fee 0, through `mtxSetTaxRate` and `mtxSetTaxRecipient`.
+    function test_routerRow_SetTaxRate() public {
+        bytes32[4] memory hs = [eoa, pq, wallet, msig];
+        for (uint256 k; k < 4; ++k) {
+            NormalRegulatedToken t = _regulated(wallet, msig, hs[k]);
+            _rdo(R_TAX_RATE, hs[k], address(t), abi.encode(uint32(1_000 + k)));
+            assertEq(t.taxConfig().effectivePpm, 1_000 + k);
+        }
+    }
+
+    function test_routerRow_SetTaxRecipient() public {
+        bytes32[4] memory hs = [eoa, pq, wallet, msig];
+        for (uint256 k; k < 4; ++k) {
+            NormalRegulatedToken t = _regulated(wallet, msig, hs[k]);
+            _rdo(R_TAX_RECIPIENT, hs[k], address(t), abi.encode(_pad(TREASURY)));
+            assertEq(t.taxConfig().taxRecipient, _pad(TREASURY));
+        }
+    }
 
     /// Bit 22 takes any holder: an EOA and a single-key derived UA (`pq`) relay `mtxOperatorTransfer` too.
     function test_routerRow_OperatorTransferAnyHolder() public {

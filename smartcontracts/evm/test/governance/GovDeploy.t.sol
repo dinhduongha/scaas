@@ -296,9 +296,10 @@ contract GovDeployTest is Test {
         h.limitBlockGas(0);
         // ua-mtx-merge T1: `size-baseline.json`'s WrappedToken row 52,297 -> 51,436 B, so the control moves with it;
         // T2: 51,436 -> 46,804 B; T3: 46,804 -> 45,140 B; T6: 45,140 -> 42,669 B; T24: 42,669 -> 42,985 B;
-        // T25: 42,985 -> 43,333 B; T26: 43,333 -> 43,552 B; pay-meta-tax T37: 43,552 -> 43,667 B; T38: 43,667 -> 43,714 B
-        h.limitCode(43_713);
-        vm.expectRevert(bytes("WrappedToken runtime 43714 B > chain code limit 43713 B (CHAIN_CODE_LIMIT, CTR-GOV-19)"));
+        // T25: 42,985 -> 43,333 B; T26: 43,333 -> 43,552 B; pay-meta-tax T37: 43,552 -> 43,667 B; T38: 43,667 -> 43,714 B;
+        // T39: 43,714 -> 43,711 B
+        h.limitCode(43_710);
+        vm.expectRevert(bytes("WrappedToken runtime 43711 B > chain code limit 43710 B (CHAIN_CODE_LIMIT, CTR-GOV-19)"));
         h.deploy(ZUID, false, ska);
     }
 
@@ -485,8 +486,9 @@ contract GovDeployTest is Test {
         // router's metadata hash: `IGovernance`); T26: -> this (the two empty hooks `UAMetaTxBase` adds, its
         // `mtxCancelNonce` seats); T32: 0xBc8Df1a828dA586e5ccB8Db8942bbCC9c130cC34 -> this (the eight regulated control ops)
         // pay-meta-tax T37: 0xb7a8E5b24F6822cba41f77A6c4CdeEDAfA9399F1 -> 0xd2EaEC2593D30e536d3E0900008f66dc67A2B032 (the
-        // metadata hash: `MetaTxLib.PayMeta`); T38: -> this (the metadata hash: `IERC20MetaTx.mtxRelayFee`)
-        assertEq(router, 0x2BEc911FA998177Eb0a56B94Fd4Dc5e5dae7e819, "GovernanceRouter");
+        // metadata hash: `MetaTxLib.PayMeta`); T38: -> 0x2BEc911FA998177Eb0a56B94Fd4Dc5e5dae7e819 (the metadata hash:
+        // `IERC20MetaTx.mtxRelayFee`); T39: -> this (`mtxSetTaxRate`, `mtxSetTaxRecipient`)
+        assertEq(router, 0xe6D87D56A2aB446F60Ec89CF75D9ab33f443C8B2, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append, `abi.encode(envVersion, env, implArgs)`: the env names the real Zether

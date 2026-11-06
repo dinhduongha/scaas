@@ -108,6 +108,19 @@ contract GovernanceRouter is GovernanceRouterBase {
             auth);
     }
 
+    /// @notice Bit 23 `TAX` (pay-meta-tax spec §6.2): any holder; fee mode `NONE`, relayable at fee 0.
+    function mtxSetTaxRate(MetaTxLib.UAEnvelope calldata e, address target, uint32 ratePpm, IUARegistry.UASig calldata auth)
+        external
+    {
+        _ua(T.UA_SET_TAX_RATE, e, target, IRegulatedToken.setTaxRate.selector, abi.encode(ratePpm), auth);
+    }
+
+    function mtxSetTaxRecipient(MetaTxLib.UAEnvelope calldata e, address target, bytes32 taxRecipient,
+        IUARegistry.UASig calldata auth) external
+    {
+        _ua(T.UA_SET_TAX_RECIPIENT, e, target, IRegulatedToken.setTaxRecipient.selector, abi.encode(taxRecipient), auth);
+    }
+
     // ------------------------------------------------------------------ the powers on the DEX
 
     function mtxSetMarket(MetaTxLib.UAEnvelope calldata e, address target, address base, address quote, bool listed,

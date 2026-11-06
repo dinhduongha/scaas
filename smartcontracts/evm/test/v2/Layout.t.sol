@@ -69,6 +69,8 @@ contract NamespaceProbe is UAMetaTxBase {
         (r.requiredFlags, r.deniedFlags, r.pauseCooldownUntil, r.termsHash) = (0xc3, 0xc4, 0xc5, bytes32(uint256(0xc6)));
         r.freezes[U] = IRegulatedToken.FreezeState(0xc7, 0xc8, 0xc9, true, V);
         r.orders[U] = IRegulatedToken.OrderRecord(V, U, 0xca, true, 0xcb, 0xcc);
+        // pay-meta-tax T39 (spec §6.2): +5 `taxRecipient`, +6 `TaxRate`
+        (r.taxRecipient, r.taxRate) = (bytes32(uint256(0xc0)), IRegulatedToken.TaxRate(0xbd, 0xbe, 0xbf));
         // plan T19c (no-decryption-oracle spec §4.4, §4.7): `scaas.pqz` and `scaas.zether`, read by `ua-rs` from the pin
         PqzCore.PqzStorage storage q = PqzCore.$();
         (q.pqz, q.disclosureMode, q.auditorMode, q.verifier) =
@@ -226,6 +228,10 @@ contract LayoutTest is V2Fixture {
         f[15] = F("orders[A].revoked", u, 0, 1, 1);
         f[16] = F("orders[A].maxAmount", u, 0, 0xcb, 32);
         f = _more(f, F("orders[A].executed", u, 0, 0xcc, 32));
+        f = _more(f, F("taxRecipient", 0, 0, 0xc0, 32));
+        f = _more(f, F("taxRate.ratePpm", 0, 0, 0xbd, 4));
+        f = _more(f, F("taxRate.pendingPpm", 0, 0, 0xbe, 4));
+        f = _more(f, F("taxRate.eta", 0, 0, 0xbf, 8));
         _ns(address(p), "regulated", "scaas.regulated", f);
         // plan T19c: a `bytes` row's value is its length; a `mapping` row's `k2` is the key of the struct member's mapping
         f = new F[](28);

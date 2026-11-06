@@ -61,6 +61,16 @@ abstract contract GovRegulatedRows is Test {
         _rCreate(wrapped, c, "c");
     }
 
+    /// pay-meta-tax T39 (spec §5.1, O8): bit 23 `TAX` is valid on 8-13 only; each plain kind refuses it at creation.
+    function test_taxBit_plainKindRefuses() public {
+        for (uint256 w; w < 2; ++w) {
+            IFactoryToken.TokenConfig memory c = _rCfg(w == 1, 1 | (1 << 23));
+            vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, uint8(23)));
+            _rCreate(w == 1, c, "tax");
+            assertEq(IGovernance(_rCreate(w == 1, _rCfg(w == 1, 1), "ok23")).validBits() & (1 << 23), 0, "validBits");
+        }
+    }
+
     function _noRegulatedValid(bool wrapped) internal {
         address t = _rCreate(wrapped, _rCfg(wrapped, 1), "v");
         uint256 v = IGovernance(t).validBits();

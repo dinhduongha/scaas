@@ -17,6 +17,24 @@ interface IRegulatedToken {
         uint64 pauseCooldownUntil;
     }
 
+    /// @notice Pay-meta-tax spec §6.2: slot +6 of `scaas.regulated`, the one token-wide PERCENT rate (O10).
+    struct TaxRate {
+        uint32 ratePpm;
+        uint32 pendingPpm;
+        uint64 eta;
+    }
+
+    /// @notice `taxConfig()` (one struct view, B-1).
+    struct TaxConfig {
+        bytes32 taxRecipient;
+        bool enabled;
+        uint32 ratePpm;
+        uint32 pendingPpm;
+        uint64 eta;
+        uint32 effectivePpm;
+        uint64 noticePeriod;
+    }
+
     /// @notice One account's freeze (spec §2.3): slot a `until ‖ episodeStart ‖ issuerCooldownUntil ‖ recordBacked`, slot b.
     struct FreezeState {
         uint64 until;
@@ -46,7 +64,13 @@ interface IRegulatedToken {
     event OrderRevoked(bytes32 indexed recordId, bytes32 reasonRef);
     event OperatorTransfer(bytes32 indexed from, bytes32 indexed to, uint256 amount, bytes32 indexed ref);
 
+    /// @notice Pay-meta-tax spec §6.2: `effectiveAt` is now for a decrease, `now + noticePeriod` for an increase.
+    event TaxRateSet(uint32 ratePpm, uint64 effectiveAt);
+    event TaxRecipientSet(bytes32 indexed taxRecipient);
+
     error Frozen(bytes32 account);
+    error TaxRateInvalid(uint32 ratePpm);
+    error TaxRecipientInvalid(bytes32 taxRecipient);
     error TokenPaused(uint64 until);
     /// @notice `reason` 0: refused by `hasFlags` on the hot path; 1-4 from `canReceive`.
     error NotEligible(bytes32 account, uint8 reason);
@@ -94,6 +118,13 @@ interface IRegulatedToken {
     function revokeOrder(bytes32 recordId, bytes32 reasonRef) external;
     /// @notice Bit 22, any holder, scalar `amount` (CTR-GOV-20): public balances only.
     function operatorTransfer(bytes32 from, bytes32 to, uint256 amount, bytes32 ref) external;
+
+    /// @notice Bit 23, any holder (pay-meta-tax spec §6.2): the one PERCENT rate, `<= 10^6` ppm; a decrease at once, an
+    ///         increase after the factory's `noticePeriod()`.
+    function setTaxRate(uint32 ratePpm) external;
+    /// @notice Bit 23: not 0, a pool or the token; a derived id registered SIGNING; not frozen and eligible (`R`).
+    function setTaxRecipient(bytes32 taxRecipient) external;
+    function taxConfig() external view returns (TaxConfig memory);
 
     function regulatedConfig() external view returns (RegulatedConfig memory);
     function freezeOf(bytes32 account) external view returns (FreezeState memory);

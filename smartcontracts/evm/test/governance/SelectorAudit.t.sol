@@ -344,11 +344,13 @@ contract SelectorAuditPlainTest is SelectorAuditRows, UALedgerBase {
         wr.initialize(address(this), 1, abi.encode(w));
     }
 
-    /// The regulated controls on (5, 6, 7, 10, 22): the issuer the test, the compliance holder another contract; bit 22
-    /// has no init holder, so the stranger's refusal is the role's.
+    /// The regulated controls on (5, 6, 7, 10, 22, 23): the issuer the test, the compliance holder another contract; bit 22
+    /// has no init holder, so the stranger's refusal is the role's; bit 23 (pay-meta-tax T39) is the issuer's, with a
+    /// recipient.
     function _regulate(IFactoryToken.TokenConfig memory c) internal {
         c.features |= (uint256(1) << 5) | (uint256(1) << 6) | (uint256(1) << 7) | (uint256(1) << 10)
-            | (uint256(1) << GovernanceBits.OPERATOR_TRANSFER);
+            | (uint256(1) << GovernanceBits.OPERATOR_TRANSFER) | (uint256(1) << GovernanceBits.TAX);
+        c.reg.taxRecipient = bytes32(uint256(0x7A0));
         (c.roles.issuer, c.roles.compliance) = (bytes32(uint256(uint160(address(this)))),
             bytes32(uint256(uint160(address(new AuditHolder())))));
         c.reg.termsHash = keccak256("terms");

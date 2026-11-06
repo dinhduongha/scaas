@@ -1969,6 +1969,16 @@
    "error": "NotOwner(bytes32)"
   },
   {
+   "sig": "setTaxRate(uint32)",
+   "class": "BIT(23)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "setTaxRecipient(bytes32)",
+   "class": "BIT(23)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
    "sig": "transfer(address,uint256)",
    "class": "OWN_BALANCE",
    "error": ""
@@ -2249,6 +2259,16 @@
    "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
    "class": "OWNER",
    "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "setTaxRate(uint32)",
+   "class": "BIT(23)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "setTaxRecipient(bytes32)",
+   "class": "BIT(23)",
+   "error": "MissingRole(uint8,bytes32)"
   },
   {
    "sig": "transfer(address,uint256)",
@@ -2601,6 +2621,16 @@
    "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
    "class": "OWNER",
    "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "setTaxRate(uint32)",
+   "class": "BIT(23)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "setTaxRecipient(bytes32)",
+   "class": "BIT(23)",
+   "error": "MissingRole(uint8,bytes32)"
   },
   {
    "sig": "transfer(address,uint256)",
@@ -2995,6 +3025,16 @@
    "error": "NotOwner(bytes32)"
   },
   {
+   "sig": "setTaxRate(uint32)",
+   "class": "BIT(23)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "setTaxRecipient(bytes32)",
+   "class": "BIT(23)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
    "sig": "transfer(address,uint256)",
    "class": "OWN_BALANCE",
    "error": ""
@@ -3335,6 +3375,16 @@
    "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
    "class": "OWNER",
    "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "setTaxRate(uint32)",
+   "class": "BIT(23)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "setTaxRecipient(bytes32)",
+   "class": "BIT(23)",
+   "error": "MissingRole(uint8,bytes32)"
   },
   {
    "sig": "transfer(address,uint256)",
@@ -3719,6 +3769,16 @@
    "error": "NotOwner(bytes32)"
   },
   {
+   "sig": "setTaxRate(uint32)",
+   "class": "BIT(23)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "setTaxRecipient(bytes32)",
+   "class": "BIT(23)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
    "sig": "transfer(address,uint256)",
    "class": "OWN_BALANCE",
    "error": ""
@@ -4061,6 +4121,16 @@
   },
   {
    "sig": "mtxSetMarket((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,address,address,bool,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxSetTaxRate((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxSetTaxRecipient((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },

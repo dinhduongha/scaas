@@ -9,6 +9,7 @@ import {RegulatedLib} from "./RegulatedLib.sol";
 import {IComplianceRegistry} from "./IComplianceRegistry.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {MtxPipelineLib} from "../metatx/MtxPipelineLib.sol";
+import {IOpenFactory} from "../factory/IOpenFactory.sol";
 
 /// @title The regulated layer of kinds 8-13 (CTR-GOV-03, regulated-kinds spec §2.1, §2.2, §3): abstract over `MetaTokenBase`,
 ///        it overrides the ledger and fee hooks, the masks it shares, `disableFeature`, `supportsInterface`, the init path,
@@ -21,11 +22,12 @@ abstract contract RegulatedBase is MetaTokenBase, IRegulatedToken {
     /// @dev The bits the regulated kinds add to their base kind's `_validBits()` (spec §2.1, bit 22 CTR-GOV-20): 5-10, 21,
     ///      22 on 8 and 9; without `ALLOWLIST` (8) on the confidential kinds 10-13 (CTR-GOV-17).
     uint256 internal constant REG_BITS = GovernanceBits.REGULATED | (1 << GovernanceBits.RECORD)
-        | (1 << GovernanceBits.MODERATE) | (1 << GovernanceBits.OPERATOR_TRANSFER);
+        | (1 << GovernanceBits.MODERATE) | (1 << GovernanceBits.OPERATOR_TRANSFER) | (1 << GovernanceBits.TAX);
     uint256 internal constant REG_BITS_CONFIDENTIAL = REG_BITS & ~(uint256(1) << GovernanceBits.ALLOWLIST);
-    /// @dev Added to `_roleBits()`: 5, 6, 7, 10, 21 (contract-only, an `msig` UA counts, RK-1) and 22 (any holder).
-    uint256 internal constant REG_ROLES = GovernanceBits.REGULATED_ROLES | (1 << GovernanceBits.OPERATOR_TRANSFER);
-    /// @dev Added to `_contractOnlyBits()`: 5, 6, 7, 10, 21; never 22.
+    /// @dev Added to `_roleBits()`: 5, 6, 7, 10, 21 (contract-only, an `msig` UA counts, RK-1) and 22, 23 (any holder).
+    uint256 internal constant REG_ROLES = GovernanceBits.REGULATED_ROLES | (1 << GovernanceBits.OPERATOR_TRANSFER)
+        | (1 << GovernanceBits.TAX);
+    /// @dev Added to `_contractOnlyBits()`: 5, 6, 7, 10, 21; never 22 or 23.
     uint256 internal constant REG_CONTRACT_ONLY = GovernanceBits.REGULATED_ROLES;
     /// @dev The pause-open set (spec §3.2, RK-7), by the inner selector: `unwrap(uint256,address,uint256)`,
     ///      `unwrap(address,uint256,address,uint256)`, `unwrapToUA(address,uint256,bytes32,uint256)`, `burn(uint256)`. A kind
@@ -58,14 +60,17 @@ abstract contract RegulatedBase is MetaTokenBase, IRegulatedToken {
             | (1 << GovernanceBits.OPERATOR_TRANSFER);
     }
 
-    /// @dev 5, 6, 7: losing them relaxes only after `grantDelay` (spec §3.6).
+    /// @dev 5, 6, 7: losing them relaxes only after `grantDelay` (spec §3.6); never 23 (pay-meta-tax Q5: the owner's
+    ///      revoke of a compromised single-key holder is immediate).
     function _delayedRelaxBits() internal pure virtual override returns (uint256) {
-        return GovernanceBits.ISSUER_BITS;
+        return GovernanceBits.ISSUER_BITS & ~(uint256(1) << GovernanceBits.TAX);
     }
 
     /// @dev `RegulatedLib.init` (spec §2.4) before the kind's own init, so before any mint.
     function _initRaw(bytes calldata initArgs) internal virtual override {
-        RegulatedLib.init(initArgs, _validBits(), REGISTRY_CODEHASH);
+        RegulatedLib.init(initArgs, _validBits(), REGISTRY_CODEHASH, _REGISTRY);
+        bytes32 r = RegulatedLib.$().taxRecipient;
+        if (r != 0) _eligible(r); // `R` at creation too (pay-meta-tax spec §6.2, B-5)
         super._initRaw(initArgs);
     }
 
@@ -117,6 +122,18 @@ abstract contract RegulatedBase is MetaTokenBase, IRegulatedToken {
         RegulatedLib.revokeOrder(recordId, reasonRef, _govSubject());
     }
 
+    /// @notice Bit 23 (pay-meta-tax spec §6.2): the one PERCENT rate; the factory's `noticePeriod()` read by the library
+    ///         from the `FACTORY` passed here, after the holder check (F-20).
+    function setTaxRate(uint32 ratePpm) external nonReentrant {
+        RegulatedLib.setTaxRate(ratePpm, FACTORY, _govSubject());
+    }
+
+    /// @notice Bit 23: the tax recipient, at once (Q4); the library's checks, then `R` here (F-15).
+    function setTaxRecipient(bytes32 taxRecipient) external nonReentrant {
+        RegulatedLib.setTaxRecipient(taxRecipient, _govSubject(), _REGISTRY);
+        _eligible(taxRecipient);
+    }
+
     /// @notice The library refuses and `use`s; the move is `_uaMove`, hooked, so `P`, `F(from)` and `R(to)` apply (§3.4).
     function operatorTransfer(bytes32 from, bytes32 to, uint256 amount, bytes32 ref) external nonReentrant {
         RegulatedLib.operatorTransfer(from, to, amount, ref, _govSubject(), _REGISTRY);
@@ -131,6 +148,14 @@ abstract contract RegulatedBase is MetaTokenBase, IRegulatedToken {
             r.pauseCooldownUntil);
     }
     function freezeOf(bytes32 account) external view returns (FreezeState memory) { return RegulatedLib.$().freezes[account]; }
+
+    /// @notice What a wallet and the node read to build and check a taxed payment (pay-meta-tax spec §6.2).
+    function taxConfig() external view returns (TaxConfig memory c) {
+        RegulatedLib.RegulatedStorage storage r = RegulatedLib.$();
+        TaxRate memory t = r.taxRate;
+        c = TaxConfig(r.taxRecipient, GovernanceLib.hasFeature(GovernanceBits.TAX), t.ratePpm, t.pendingPpm, t.eta,
+            RegulatedLib.effectiveRate(), IOpenFactory(FACTORY).noticePeriod());
+    }
     function isFrozen(bytes32 account) external view returns (bool) { return RegulatedLib.frozen(account); }
 
     /// @notice `R(account)` with its reason (spec §3.1): 1 not attested or flags missing, 2 expired, 3 attester disabled,

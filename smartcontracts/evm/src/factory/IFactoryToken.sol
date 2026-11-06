@@ -87,6 +87,7 @@ interface IFactoryToken {
         uint64 requiredFlags;
         uint64 deniedFlags;
         bytes32 termsHash;
+        bytes32 taxRecipient; // pay-meta-tax spec §6.2: != 0 iff bit 23 `TAX`
     }
 
     /// @notice CTR-TOK-25. Fields of another kind must be empty (`ConfigFieldForOtherKind`), so a token never carries a

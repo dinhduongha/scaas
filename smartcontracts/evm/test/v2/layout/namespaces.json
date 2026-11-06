@@ -265,7 +265,11 @@
       "orders[A].freezeUntil",
       "orders[A].revoked",
       "orders[A].maxAmount",
-      "orders[A].executed"
+      "orders[A].executed",
+      "taxRecipient",
+      "taxRate.ratePpm",
+      "taxRate.pendingPpm",
+      "taxRate.eta"
     ],
     "slots": [
       0,
@@ -285,7 +289,11 @@
       4,
       4,
       4,
-      4
+      4,
+      5,
+      6,
+      6,
+      6
     ],
     "inner": [
       0,
@@ -305,7 +313,11 @@
       2,
       2,
       3,
-      4
+      4,
+      0,
+      0,
+      0,
+      0
     ],
     "bytes": [
       0,
@@ -325,7 +337,11 @@
       0,
       8,
       0,
-      0
+      0,
+      0,
+      0,
+      4,
+      8
     ]
   },
   "pqz": {

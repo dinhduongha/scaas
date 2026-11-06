@@ -79,6 +79,11 @@ library GovernanceRouterTypes {
         "UARecordOrder(bytes32 from,address target,bytes32 orderId,bytes32 documentHash,bytes32 subject,bytes32 beneficiary,uint256 maxAmount,uint64 freezeUntil,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     bytes32 internal constant UA_REVOKE_ORDER = keccak256(
         "UARevokeOrder(bytes32 from,address target,bytes32 recordId,bytes32 reasonRef,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    // ---- bit 23 `TAX` of the regulated kinds (pay-meta-tax spec §6.2), fee mode `NONE`
+    bytes32 internal constant UA_SET_TAX_RATE = keccak256(
+        "UASetTaxRate(bytes32 from,address target,uint32 ratePpm,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_SET_TAX_RECIPIENT = keccak256(
+        "UASetTaxRecipient(bytes32 from,address target,bytes32 taxRecipient,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     bytes32 internal constant UA_OPERATOR_TRANSFER = keccak256(
         "UAOperatorTransfer(bytes32 from,address target,bytes32 account,bytes32 to,uint256 amount,bytes32 ref,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
 }

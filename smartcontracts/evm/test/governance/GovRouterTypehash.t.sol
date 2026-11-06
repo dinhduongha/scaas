@@ -151,6 +151,19 @@ contract GovRouterTypehashTest is Test {
         assertEq(T.UA_FORCE_TRANSFER, 0x29f5036246375be4eb17b4e995b326935a99cc74c4f0cec933eb9aca28cec4e3);
     }
 
+    /// pay-meta-tax T39 (spec §6.2): the two router ops of bit 23 `TAX`.
+    function test_uaSetTaxRateTypehashIsPinned() public pure {
+        assertEq(T.UA_SET_TAX_RATE, keccak256(
+                "UASetTaxRate(bytes32 from,address target,uint32 ratePpm,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_SET_TAX_RATE, 0x75a25977ad049952fa3befd753aa1c9dbc3a38461944061e37d2652fdc6d123f);
+    }
+
+    function test_uaSetTaxRecipientTypehashIsPinned() public pure {
+        assertEq(T.UA_SET_TAX_RECIPIENT, keccak256(
+                "UASetTaxRecipient(bytes32 from,address target,bytes32 taxRecipient,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_SET_TAX_RECIPIENT, 0x35a73542fb90c355f539cf8ebee2a653d5a10216b659fc5304d32671e634750f);
+    }
+
     function test_uaPauseTypehashIsPinned() public pure {
         assertEq(T.UA_PAUSE, keccak256(
                 "UAPause(bytes32 from,address target,bytes32 ref,uint64 until,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));

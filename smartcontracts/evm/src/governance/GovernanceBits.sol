@@ -24,12 +24,17 @@ library GovernanceBits {
     ///      2026-11-05): any holder (never contract-only), `WHOLE` or `LIMITED`, on the regulated kinds 8-13 only; a plain
     ///      kind refuses it. Its entry is plan T32.
     uint8 internal constant OPERATOR_TRANSFER = 22;
+    /// @dev The tax recipient and the one token-wide PERCENT rate of the regulated kinds 8-13 (pay-meta-tax spec §6, O9,
+    ///      O10): a power, no scalar, no scope; any holder (an EOA, an `msig`, a contract), never contract-only; granted
+    ///      with the issuer seat; never delay-relaxed (Q5).
+    uint8 internal constant TAX = 23;
 
     /// @dev Flags 5–9 (CTR-AS-17, CTR-GOV-18): the controls of the regulated kinds 8–13; no plain kind's valid mask holds
     ///      them, so a plain kind refuses each with `FeatureInvalidForKind` (regulated-kinds spec Q3).
     uint256 internal constant REGULATED = (1 << FREEZE) | (1 << FORCE) | (1 << PAUSE) | (1 << ALLOWLIST) | (1 << DENYLIST);
-    /// @dev `Roles.issuer`'s bits: `init` grants it each one that is set (regulated-kinds spec §2.4).
-    uint256 internal constant ISSUER_BITS = (1 << FREEZE) | (1 << FORCE) | (1 << PAUSE);
+    /// @dev `Roles.issuer`'s bits: `init` grants it each one that is set (regulated-kinds spec §2.4; bit 23, pay-meta-tax
+    ///      spec §6.1, F-19).
+    uint256 internal constant ISSUER_BITS = (1 << FREEZE) | (1 << FORCE) | (1 << PAUSE) | (1 << TAX);
     /// @dev The contract-only bits a threshold (`msig`) UA may hold as a contract (RK-1, CTR-AS-03 Change, owner
     ///      2026-11-05); any other contract-only bit (`RATE_ADJUSTABLE`) still takes a native id with code.
     uint256 internal constant REGULATED_ROLES =

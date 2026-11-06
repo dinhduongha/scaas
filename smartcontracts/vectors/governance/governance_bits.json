@@ -24,7 +24,8 @@
     {"bit": 19, "name": "DEPRECATE", "type": "power", "sentences": {"all": "A holder marks a release unusable for new instances, never undone."}},
     {"bit": 20, "name": "ENABLE_KIND", "type": "power", "sentences": {"all": "A holder turns a catalogue kind on or off."}},
     {"bit": 21, "name": "MODERATE", "type": "power", "kinds": [8, 9, 10, 11, 12, 13], "holder": "contractOrMsig", "sentences": {"all": "A power with no entry yet: its meaning, hierarchical moderation, is still open (owner 2026-11-05); a holder can do nothing with it."}},
-    {"bit": 22, "name": "OPERATOR_TRANSFER", "type": "power", "kinds": [8, 9, 10, 11, 12, 13], "holder": "any", "sentences": {"all": "A holder moves public units out of an account to another, no record, within its grant, subject to FREEZE, PAUSE and the receiver check; any holder, a person's key included."}}
+    {"bit": 22, "name": "OPERATOR_TRANSFER", "type": "power", "kinds": [8, 9, 10, 11, 12, 13], "holder": "any", "sentences": {"all": "A holder moves public units out of an account to another, no record, within its grant, subject to FREEZE, PAUSE and the receiver check; any holder, a person's key included."}},
+    {"bit": 23, "name": "TAX", "type": "power", "kinds": [8, 9, 10, 11, 12, 13], "holder": "any", "sentences": {"all": "Any holder (an EOA too) sets the tax recipient and the one PERCENT rate; a rate increase waits the factory's notice period (shown; it may be 0 on a test chain), a decrease is immediate and makes PERCENT payments in flight fail; a recipient change is immediate and is not signed by the payer; an AMOUNT tax is the payer's signed figure, unchecked by the contract; the owner can stop tax collection at once."}}
   ],
   "sentences": {
     "delegable": "Can add unlimited leaves at once, sharing a remaining budget of {N}.",
