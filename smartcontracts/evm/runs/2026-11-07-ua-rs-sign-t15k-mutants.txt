@@ -1,0 +1,13 @@
+# 2026-11-07 ua-rs-sign T15k: the mutant run of 2026-11-07-ua-rs-sign-t15k-mutants.py (one foreground call through scripts/capped,
+# release cell, `cargo test --test facade_pqz_state`; every file restored by the harness, then `git diff --exit-code`: clean).
+# Tree: 2163b9f8. Positive control before the mutants: the T15e pqz.rs (9fcaaa54) under T15k's tests fails 7 of 11
+# (op1_memo_per_mode and burn_and_refresh_memo_hash_is_zero among them; memo_hash_is_the_contracts checks the forge rows only).
+killed     | M1 op 1 HASH: memoHash left 0 | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: op1_memo_per_mode
+killed     | M2 op 1 BUNDLE: memoHash set | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: op1_memo_per_mode
+killed     | M3 op 1 HASH: the salt dropped from the hash | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: op1_memo_per_mode
+killed     | M4 op 1: a default mode (BUNDLE without the field) | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: op1_memo_per_mode
+killed     | M5 op 1 HASH: the memo's leg not (amount, toUA) | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: op1_memo_per_mode
+killed     | M6 op 1 HASH: auditorOn not in the memo's flags | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: op1_memo_per_mode
+killed     | M7 burn: a free memoHash taken | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: burn_and_refresh_memo_hash_is_zero
+killed     | M8 refresh: a free memoHash taken | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: burn_and_refresh_memo_hash_is_zero
+mutants M1-M8 of 8, survived or not loaded: 0

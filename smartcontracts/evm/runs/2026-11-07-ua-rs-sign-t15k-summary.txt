@@ -1,0 +1,22 @@
+# 2026-11-07 ua-rs-sign T15k: memoHash per mode for op 1, burn and refresh (Fable P3-5; after ua-mtx-merge T36a, PqzCore.SEALED
+# = 42: op 1's memo in op 7's encoding, M = 1). Commit 2163b9f8 (+ this record). proveTransfer: an explicit `mode` (HASH /
+# BUNDLE, no default) replaces the free memoHash; HASH: memo::seal(seed32, header, auditorOn, [(amount, toUA)]) = salt ‖ 42 B,
+# memoHash = keccak256(salt ‖ sealedMemo), the memo answered; BUNDLE: 0, no memo. proveBurn / proveRefresh: memoHash 0, no
+# field (PqzCore.prepareBurn never sets it). The raw* forms (vectors) keep the vector files' word. The oracle of the formula:
+# the forge rows' statement words (state.json `memoHash`, ua-mtx-merge f9910a31, contract commit b40d7589). UNAUDITED.
+# All commands through scripts/capped, foreground, -j2, --locked, --offline.
+step | commit | rc | counts
+ua-rs test (default, the release cell) | 2163b9f8 | 0 | 31 suites, 304 passed, 1 ignored (facade_pqz_state 11)
+ua-rs test --features vectors | 2163b9f8 | 0 | 34 suites, 377 passed, 3 ignored (facade_pqz_state 12)
+ua-rs test --no-default-features --features wallet,mlock | 2163b9f8 | 0 | 27 suites, 256 passed, 1 ignored
+ua-rs facade_pqz + facade_pqz_state + pqz_backup at pqz-set-n2048-kmax1024, release / vectors | 2163b9f8 | 0 | 11 + 11 + 9 / 22 + 12 + 12 passed
+positive control: T15k's tests over the T15e pqz.rs (9fcaaa54) | 9fcaaa54 | 101 | 7 of 11 failed (op1_memo_per_mode, burn_and_refresh_memo_hash_is_zero, and the request-shape tests)
+ua-rs clippy --all-targets -D warnings: default, vectors, --no-default-features, wallet,mlock, zether, zether+vectors, pqz,n2048 (+ vectors) | 2163b9f8 | 0 | 0 of ours each (8 cells)
+ua-rs/fuzz cargo check; seeds.py --regress | 2163b9f8 | 0 | builds; pqz_cmd regress unchanged (no command added)
+ua-c clippy -D warnings; cargo build; cargo test (lib + header); C smoke + c++ -fsyntax-only; test_vectors.py | 2163b9f8 | 0 | 0 of ours; 4 + 5 passed; smoke ok; 85 tests OK
+check_test_features.py | 2163b9f8 | 0 | ok
+cargo tree --locked --offline -e normal (8 crates as T15e) | 2163b9f8 | 0 | 8 of 8
+cargo deny --all-features check: ua-rs; ua-c, zether-prover (--config ../ua-rs/deny.toml) | 2163b9f8 | 0 | ok each
+docs_check check / paths | 2163b9f8 | 0 | 0 errors 5 warnings (existing) / 0 machine paths
+mutants: 2026-11-07-ua-rs-sign-t15k-mutants.py | 2163b9f8 | 0 | 8 killed, 0 survived, 0 not loaded (2026-11-07-ua-rs-sign-t15k-mutants.txt), git diff clean
+# Residual: the bindings pass the new `mode` only through scaas_ua_pqz_call's JSON (T15g).
