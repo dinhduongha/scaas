@@ -109,8 +109,7 @@ for n, (name, reps, (cwd, cmd), kind) in enumerate(M[lo - 1:hi], lo):
     failed = sorted(set(re.findall(r"^test (.+?) \.\.\. FAILED", out, re.M)) | set(re.findall(r"^(?:FAIL|ERROR): (\S+)", out, re.M))
                     | set(re.findall(r"^--- FAIL: (\S+)", out, re.M))
                     | set(re.findall(r"^\s*\d+/\d+ Test +#\d+: (\S+) .*\*\*\*Failed", out, re.M))
-                    | set(re.findall(r"Failed (\S+) \[", out)) | set(re.findall(r"\[E\] (.*)$", out, re.M))
-                    | set(re.findall(r"^\s*\d+:\d+ \S*\+\d+ -\d+: (.+?) \[E\]", out, re.M)))
+                    | set(re.findall(r"Failed (\S+) \[", out)) | set(re.findall(r": (\w+) \[E\]", out)))
     verdict = "NOT-LOADED" if NOT_BUILT.search(out) else "SURVIVED  " if rc == 0 else "killed    "
     bad += verdict != "killed    "
     print(f"{verdict} | M{n} {name} | {', '.join(sorted(orig))} | rc={rc} | {len(failed)} failed: {', '.join(failed)[:400]}", flush=True)
