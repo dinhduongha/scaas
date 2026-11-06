@@ -280,8 +280,9 @@ no scope. **Valid on kinds 4, 5, 12, 13 only;** every other kind, Zether's inclu
 - **Release:** new releases of kinds 4, 5, 12, 13 and of the PQZ libraries, with their factory catalogue rows (`OpenFactory` /
   `DeployBase` / `script/pqz/e2e.py`, release codehashes, `LinkClosure` pins). Nothing deployed is upgraded; no migration.
 - **`scaas.pqz` (`PqzStorage`):** slot 0 bytes 23–24; appended after the 3f and 3g fields: `debitRec`, `proofOf`,
-  `proofStoreEta`; the account's `lastDebit` in the slot 3g freed. No existing slot moves. If T52 has not pinned `scaas.pqz` in
-  `test/v2/layout/namespaces.json`, T58 pins it; the pin moves old → new.
+  `proofStoreEta`; the account's `lastDebit` in the slot 3g freed. No existing slot moves. `scaas.pqz` is pinned field by field in
+  `test/v2/layout/namespaces.json` (`Layout.t.sol`, plan T19c; `ua-rs` reads it as a vector): T58 updates that pin, old → new,
+  with the new fields' probe rows.
 - **Typehashes:** the PQZ `UA*` structs that embed the args (§3.2) and `UASetProofStore`; old → new in the commit.
 - **Selectors:** `selector_audit.json` rows for `setProofStore`, `proofStore`, `pendingProofStore`, `pqzDebitRecord`,
   `pqzDebitProof`, the router's `mtxSetProofStore`; `mtxSelectors()` of the tokens unchanged.

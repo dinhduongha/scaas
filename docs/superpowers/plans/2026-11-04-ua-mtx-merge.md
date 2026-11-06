@@ -1808,7 +1808,8 @@ commit of each task that replaces a body. No `pqz-core` change, so no full gate.
 **Depends on:** T57. **Estimate:** 3.5.
 
 **Files:** `src/pqz/{PqzCore,PqzStateLib,PqzViewLib,PqzLayer,IPqzToken}.sol`, the four PQZ token sources for forwards;
-`test/pqz/PqzDebitRecord.t.sol` (new); `test/v2/layout/namespaces.json` (`scaas.pqz`, pinned here if T52 did not); the PQZ gas
+`test/pqz/PqzDebitRecord.t.sol` (new); `test/v2/layout/namespaces.json` and `test/v2/Layout.t.sol` (`scaas.pqz`, pinned field by field by T19c: this task moves that
+pin old → new with its probe rows; `ua-rs` reads the file as a vector); the PQZ gas
 pins; `size-baseline.json`; `runs/<date>-ua-mtx-merge-proofpath-sizes.txt` (summary).
 
 **Interfaces:** spec §2: both deletion loops removed (`_debit`, `rollOver`), `cleared` and `floor` updates kept;
