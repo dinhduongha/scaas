@@ -392,7 +392,8 @@ and of lattice threshold schemes. (6) Any distributed prover for LNP22 or Ligero
 7. **Threshold UA KEM.** *Recommendation:* no; per-member sealing (MD-11) stays.
 8. **`msig` PQZ seed backup (A) — answered: accepted (owner 2026-11-06), built in `ua-rs-sign` after T16.** Remaining detail:
    should the client refuse to build `register` / `setPqzKey` for an `msig` PQZ holder until the k-of-n backup containers
-   exist, with k = the `msig` threshold and n = its accepted members by default? *Recommendation:* yes; share `seed32` only,
+   exist, with k = the `msig` threshold and n = its accepted members by default? **Answered (owner 2026-11-06): no** — the
+   client warns and still builds them. Share `seed32` only,
    seal each share to a member's own single-key UA KEM key; the reconstructor becomes the new operator.
 9. **PQZ key rotation for an `msig` holder (B) — answered: rejected (owner 2026-11-06)**: the balance migration still needs
    the old operator's key. Nothing to decide.

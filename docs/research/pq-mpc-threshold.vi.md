@@ -387,7 +387,8 @@ quy tắc client.
 7. **KEM ngưỡng cho UA.** *Khuyến nghị:* không; giữ niêm phong từng thành viên (MD-11).
 8. **Sao lưu seed PQZ cho `msig` (A) — đã trả lời: chấp nhận (owner 2026-11-06), xây trong `ua-rs-sign` sau T16.** Chi tiết
    còn lại: client có nên từ chối dựng `register` / `setPqzKey` cho holder PQZ `msig` cho tới khi các container sao lưu k-of-n
-   tồn tại, mặc định k = ngưỡng `msig` và n = các thành viên đã chấp nhận? *Khuyến nghị:* có; chỉ chia `seed32`, niêm phong mỗi
+   tồn tại, mặc định k = ngưỡng `msig` và n = các thành viên đã chấp nhận? **Đã trả lời (owner 2026-11-06): không** — client
+   chỉ cảnh báo và vẫn dựng. Chỉ chia `seed32`, niêm phong mỗi
    phần chia tới khóa KEM của UA đơn khóa riêng của thành viên; người dựng lại trở thành operator mới.
 9. **Xoay khóa PQZ cho holder `msig` (B) — đã trả lời: bác bỏ (owner 2026-11-06)**: việc di chuyển số dư vẫn cần khóa của
    operator cũ. Không còn gì để quyết.
