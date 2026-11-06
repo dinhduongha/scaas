@@ -5,6 +5,14 @@
 
 **Status (2026-11-04):** plan, not executed; its decisions MD-1 to MD-10 accepted by the owner 2026-11-04. **Owner 2026-11-04 (after T0): build M first** (A + B + C with the router's pairs, Q2, R17, R47: tasks T1-T8 with T3b, T10-T23 without a lever), then a checkpoint: gates, the whole-branch review (Claude, Fable, Codex) and the PR of M into `main`. **T9 (levers D / L) is not started: the owner decides it after M.** M alone fits a 200 M block, not 70 M for `WrappedToken` (72.37 M asked, T0), so no public chain deploy before that decision. Nothing is built from it; this commit writes no code, contract, test or vector. **Owner 2026-11-04 (after T1): Q6 changed:** the mandate wallets are built in this round in the merged form (task T3b, MD-11); T1 is built. **Owner 2026-11-05:** the six regulated kinds 8–13 are built in this branch as task group **T24–T36**, after T18 and before T19 ([spec](../specs/2026-11-05-regulated-kinds.md), revised after the Fable and Codex reviews; 19 agent-days); T19–T23 cover the group. **Owner 2026-11-06:** group **3e** (payment metadata, free pay lanes, tax on the regulated kinds) is built as **T37–T43** after T36 and before 3c ([spec](../specs/2026-11-05-pay-meta-tax.md), approved 2026-11-06; 14.5 agent-days plus 0.5 on T19, 15 in all); T19–T23 cover it. **Owner 2026-11-06:** group **3f** (attested proof verification, PQZ only) is built as **T44–T50** after T43 and before 3c ([spec](../specs/2026-11-06-attested-verify.md), approved 2026-11-06 after the Codex and Fable reviews and rulings R1–R4; 10 agent-days, T50 its docs share in T19); T19–T23 cover it. **Owner 2026-11-06:** group **3g** (versioned PQZ keys) is built as **T51–T57** after T50 and before 3c, with 3c's registry generation ([spec](../specs/2026-11-06-pqz-key-versions.md), approved 2026-11-06 after the Codex and Fable reviews and rulings R1–R5; 19.5 agent-days, T57 its docs share in T19, plus 1 on `ua-rs-sign`); T19–T23 cover it. **Owner 2026-11-07:** group **3h** (the PQZ proof path, contract side: the debit record, `ownTag` and the key-version tail, `proofStore` `NONE` / `LOG` (SSTORE2 dropped by the owner, kept in the spec's Appendix A), bit 24 `PQZ_PROOF`, the integration gate) is built as **T58–T66** after T57 and before 3c ([spec](../specs/2026-11-06-pqz-proof-path.md), from the owner-agreed design of research `pqz-leg-proof-option.md` §15A, revised after the Codex and Fable reviews and the owner's decisions O9–O13, **approved 2026-11-07**; 19 agent-days, T66 its docs share in T19; the client side, 14–16.5 agent-days, goes to the no-oracle spec on `ua-rs-sign`). Totals of the added groups: T24–T36 19, T37–T43 with T19's share 15, T44–T50 10, T51–T57 19.5, together 63.5 agent-days; with 3h 82.5. **Owner 2026-11-07: 3g before 3f.** The build order is 3e (T37–T43) → 3g (T51–T57, after T43) → 3f (T44–T50, after T57) → 3h (T58–T66, after T50) → 3c → T19–T23; task ids unchanged. 3g's ATTESTED items move to 3f, which builds its ATTESTED mode over versioned keys (3g §5, KV-12): T53's ATTESTED disclosure form and `test_attested_*`, T52's `test_inflight_attested_refused` and the ATTESTED-token case of `test_keyReused_*` (with the M-T6 kill) go to T44 / T45; the per-version cache `(ua, version, pqzKeyHash)` to T48; the node's `AttestationMismatch` arm of `PQZ_KEY_ROTATED` to T47.
 
+**Size window (owner 2026-11-07, until T66b):** kind 13 (`WrappedPqzRegulatedToken`) was accepted at 64,522 B in T40, 10 B over
+the 64,512 B stop line (levers 1, 3 as two calls, 5, 6 and 8's events applied; levers 4 and 8's checks grew it and stay out). Until
+T66b (after 3h), kind 13, and any kind 3e, 3g, 3f or 3h pushes up, may exceed the stop line and also 65,536 B: a task that
+crosses 64 KiB pins the kind temporarily in `_above64KiB` with the reason "owner 2026-11-07, removed by T66b", records old -> new
+sizes and continues instead of stopping. The only hard limit is the reset chain's ceiling, 131,072 B runtime and 262,144 B init
+(CTR-GOV-19). This supersedes the "never `_above64KiB`" stop of the 3e spec (O18) and the same stop in 3g, 3f and 3h, for this
+window only.
+
 **Spec:** [`2026-11-04-ua-mtx-merge.md`](../specs/2026-11-04-ua-mtx-merge.md), **accepted by the owner 2026-11-04** (Q1–Q7, §10);
 rules R1–R47 (§5), invariants 1–7 (§8), measurement (§9). **Ruling:** [CTR-MTX-30](../../decisions.md#CTR-MTX-30), its Q6 Change, and the Change
 lines it points to (CTR-MTX-09, CTR-MTX-29, CTR-TOK-24, CTR-UA-19, CTR-DEX-25, CTR-ACC-12, CTR-UA-27). Spike: `docs/research/governance/prototype/merge-entries.md`
@@ -218,6 +226,7 @@ rustc 1.90); Node `node --test` (`clients/clientkeys`); `zether-prover`; `ua-rs`
 | Versioned PQZ keys (3g) | T51 → T52 → T53; T54 after T53; T55 after T54; T56 after T53, beside T54–T55; T57 beside, lands in T19 | after T43, before 3f (owner 2026-11-07: 3g before 3f); contracts sequential in this worktree; T51 measures the registry's deploy gas, T52 measures kind 13 first (from what T43 leaves); 3c's rebalance comes after T53; the ATTESTED items go to 3f |
 | Attested PQZ (3f) | T44 → T45; T46 after T45; T47 after T46; T48 and T49 after T45, beside T46–T47; T50 beside, lands in T19 | after T57, before 3h (owner 2026-11-07: 3g before 3f); contracts sequential in this worktree; T45 measures kind 13 first (from what T57 leaves); ATTESTED built over versioned keys (3g §5) |
 | PQZ proof path (3h) | T58 → T59 → T60 → T61; T62 after T61; T63 after T62; T64 and T65 after T61, beside T62–T63; T66 beside, lands in T19 | after T50, before 3c (owner approved 2026-11-07); contracts sequential in this worktree; T58 measures kind 13 first; each format moves in the task that changes it; no task waits for `ua-rs-sign` |
+| Size (T66b) | T66b | after T66, before 3c (owner 2026-11-07); one task, sequential in this worktree |
 | Docs | T19 | drafts beside T14–T18, T24–T36, T37–T43, T51–T57, T44–T50 and T58–T66; lands after T66 and 3c (BUILT only with code and tests) |
 | Close | T21 → T22 → T23 | |
 | Next | TODO item 4 | SCaaS testnet reset 2 deploys the merged code (not this plan) |
@@ -2014,6 +2023,23 @@ spec §5.5 note); the operator note's `own_tag` and `PROOF_STORE_OVER_LANE_CAP` 
 
 - [ ] **Step 1:** Write each change; figures quoted from T58–T65 logs; BUILT only where code and tests exist.
 - [ ] **Step 2:** `docs_check.py check`, `paths`, `resolve` on each new id: rc 0. Committed with T19.
+
+### Task T66b: kind 13 size reduction after 3h (owner 2026-11-07)
+
+**Depends on:** T66 (3g, 3f and 3h landed). **Before:** 3c. **Estimate:** 3 (with the short spec and its review).
+
+**Why:** T40 left kind 13 at 64,522 B, 10 B over the 64,512 B stop line, with every lever of the 3e spec §6.4 tried (owner
+2026-11-07: accepted for now). Until this task, kinds pushed up by 3e, 3g, 3f or 3h may exceed the stop line and 65,536 B,
+pinned temporarily in `_above64KiB` ("owner 2026-11-07, removed by T66b"; see the size window in the header).
+
+- [ ] **Step 1: Recompute** every kind's size (0-13, the router, the libraries) at the tip after 3h: `forge build src --sizes
+      --json`, `size_gate.py`, deploy gas on the regulated spec's §6.2 method; a table old -> new against T40's figures.
+- [ ] **Step 2: Choose structural levers** (for example a library for a large block of a kind, not micro-optimisation), in a short
+      spec with the split checklist of the 3e spec §6.4 (DELEGATECALL storage, `this`, `msg.sender`, return data, the one
+      `nonReentrant`, `LinkClosure` pins); reviewed before building.
+- [ ] **Step 3: Build** them; target every kind back under the 64,512 B stop line **with margin**; remove every temporary
+      `_above64KiB` pin of the window; `size-baseline.json` old -> new with the reason.
+- [ ] **Step 4:** whole `forge test`, the four PQZ sets, size gate, gas pins old -> new, mutants of each split.
 
 ### Task T19: docs, decisions, operator note
 
