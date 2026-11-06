@@ -531,6 +531,9 @@ No factory change (governance spec §4.2): per kind `publishEnv(kind, envVersion
   a contract the operator names (`COMPLIANCE_ADMIN`, an env var naming an address, no key in config), and the admin attests
   `SCaaSDex` and `DexPuller` as `ELIGIBLE_CONTRACT` before an `ALLOWLIST` token trades; the deployments JSON gains
   `compliance_registry` and the registry codehash; `node.example.toml` gains the key's name.
+  **Change (owner 2026-11-06):** the attestations are the operator's step, not the deploy's: the admin is a contract the
+  script holds no key for, and a venue and its puller exist only after `createDex`. After `createDex` the admin signs
+  `attest([venue, venue.puller()], [8, 8], [2^64-1, 2^64-1])`; `deploy.sh` prints that step (built in T33, `63aa8696`).
 - **Router address (M-07).** The new hooks move `GovernanceRouter`'s bytecode (the empty `UAMetaTxBase` hooks and CBOR
   metadata), so its CREATE2 address, `Env.govRouter` of every release, `deployments/*.json` and the node's `governance_routers`
   move; reset 2 covers it, as T7's address move.
