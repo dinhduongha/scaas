@@ -75,7 +75,11 @@ void main() {
     expect(await code(() async => load()), 'UAAbiMismatch');
     UaLoadHook.reportedFeatures = () => kRequiredFeatures & ~BigInt.from(UaFeature.pqzSetN2304Kmax4096);
     expect(await code(kemEphemeral), 'UAAbiMismatch');
+    UaLoadHook.reportedFeatures = () => kRequiredFeatures | BigInt.from(UaFeature.vectors); // Codex C1: a test build
+    expect(await code(() async => load()), 'UAAbiMismatch');
+    expect(await code(kemEphemeral), 'UAAbiMismatch');
     UaLoadHook.reset();
+    expect(features() & BigInt.from(UaFeature.vectors), BigInt.zero, reason: 'the linked library is not a test build');
     load();
   });
 
@@ -570,6 +574,13 @@ void main() {
     final zk = await wl.zetherKey(coin: 60, account: 0, keyUse: 7);
     expect(jsonDecode(await zk.call(cmd: 'pop', requestJson: '{"curve":"bls12381"}'))['uaMsg'], isNotNull);
     expect(await code(() => zk.call(cmd: 'pop', requestJson: '{"key":{"seed":"0x11","coin":60,"account":0}}')), 'UAArgument');
+    // ARCH-POS-13 (T15c2, Fable P2-5): a release build has no raw decrypt; a well-formed `decrypt` / `checkBalance` of a
+    // ciphertext is an unknown command
+    final ct = jsonDecode(await zk.call(cmd: 'encrypt', requestJson: jsonEncode({'curve': 'bls12381', 'Y': hx(zk.y()), 'amount': 5})));
+    expect([ct['C'], ct['D']], everyElement(isNotNull), reason: 'encrypt (positive control)');
+    expect(await code(() => zk.call(cmd: 'decrypt', requestJson: jsonEncode({'curve': 'bls12381', 'ct': ct}))), 'UAArgument');
+    expect(await code(() => zk.call(cmd: 'checkBalance', requestJson: jsonEncode({'curve': 'bls12381', 'acc': ct, 'balance': 5}))),
+        'UAArgument');
     wl.lock();
     expect(await code(() => zk.call(cmd: 'pop', requestJson: '{}')), 'UAKeyRevoked');
     expect(zk.y().length, 128, reason: 'public data stays readable');

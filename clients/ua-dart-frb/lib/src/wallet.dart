@@ -25,6 +25,8 @@ abstract final class UaFeature {
   static const int wallet = 1 << 0, pq = 1 << 1, falcon = 1 << 2, zether = 1 << 3, pqz = 1 << 4;
   static const int pqzSetN2048Kmax1024 = 1 << 5, pqzSetN2304Kmax4096 = 1 << 6, pqzSetN2560Kmax16384 = 1 << 7;
   static const int pqzSetN2816Kmax65536 = 1 << 8, external = 1 << 9, mlock = 1 << 10;
+  /// A test build (scaas-ua feature `vectors`): [load] refuses it (spec no-decryption-oracle §4.8, Codex C1).
+  static const int vectors = 1 << 11;
 }
 
 /// What this facade needs of the library.
@@ -44,10 +46,11 @@ abstract final class UaLoadHook {
   }
 }
 
-/// Refuses a library of another surface generation or without the required features.
+/// Refuses a library of another surface generation, without the required features, or a test build ([UaFeature.vectors]).
 void load() {
   if (UaLoadHook.reportedAbiVersion() != kAbiVersion) throw const UAError(code: 'UAAbiMismatch', reason: 'abi_version');
-  if (UaLoadHook.reportedFeatures() & kRequiredFeatures != kRequiredFeatures) {
+  final f = UaLoadHook.reportedFeatures();
+  if (f & kRequiredFeatures != kRequiredFeatures || f & BigInt.from(UaFeature.vectors) != BigInt.zero) {
     throw const UAError(code: 'UAAbiMismatch', reason: 'features');
   }
 }

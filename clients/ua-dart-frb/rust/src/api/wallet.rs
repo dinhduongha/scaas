@@ -210,6 +210,7 @@ pub fn features() -> u64 {
         | on(b::PQZ, 4)
         | b::PQZ_SETS.iter().zip(5..).fold(0, |a, (x, bit)| a | on(*x, bit))
         | on(b::MLOCK, 10)
+        | on(b::VECTORS, 11)
 }
 /// Handles alive now (a test of "freed exactly once").
 #[frb(sync)]
