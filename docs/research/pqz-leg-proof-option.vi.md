@@ -859,7 +859,9 @@ Chủ dự án thống nhất hướng thiết kế dưới đây ("thống nh�
 không qua.
 
 **Nơi lưu proof chi P và header của nó (≈ 640 B: `beneficiary`, `fee`, `amount`, `recipient`, `validUntilBlock`,
-`envelopeBinding`) là cấu hình của token**, chọn khi tạo, không đổi được; header luôn đi theo P:
+`envelopeBinding`) là cấu hình của token**, chọn khi tạo và **đổi được** về sau (chủ dự án 2026-11-06) bởi quản trị
+của token; thay đổi chỉ áp cho các lần chi sau đó, các lần chi trước giữ nguyên nơi đã lưu, và slot bản ghi của mỗi lần chi
+ghi chế độ của nó để ví biết lấy P ở đâu. Header luôn đi theo P:
 
 | Cấu hình | P + header | Gas thêm mỗi lần chi | ≈ USD | Dành cho |
 |---|---|---|---|---|

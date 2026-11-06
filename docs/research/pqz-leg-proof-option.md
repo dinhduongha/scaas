@@ -869,7 +869,9 @@ a `decisions.md` entry follows with the spec. Estimates on paper at `n2304-kmax4
 `T` fails verification.
 
 **Where the debit proof P and its header (≈ 640 B: `beneficiary`, `fee`, `amount`, `recipient`, `validUntilBlock`,
-`envelopeBinding`) live is a token setting**, chosen at creation, immutable; the header always follows P:
+`envelopeBinding`) live is a token setting**, chosen at creation and **changeable** later (owner 2026-11-06) by the
+token's governance; a change applies to later debits only, earlier debits keep where they were stored, and each debit's
+record slot notes its mode so a wallet knows where to fetch that P. The header always follows P:
 
 | Setting | P + header | Extra gas per debit | ≈ USD | For |
 |---|---|---|---|---|
