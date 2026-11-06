@@ -19,6 +19,7 @@ ZV = ROOT / 'clients' / 'zether-prover' / 'vectors'
 KEYS, SIGN, KEMV, SEAL, VAULT, ZJ = (json.loads((VEC / f).read_text()) for f in
                                      ('keys.json', 'sign.json', 'kem.json', 'seal.json', 'vault.json', 'zether.json'))
 R33 = json.loads((ZV / 'r33_keys.json').read_text())
+STATE = ROOT / 'smartcontracts' / 'vectors'
 MN = {m['id']: m for m in KEYS['mnemonics']}
 DETERMINISTIC = {0x0101, 0x0102, 0x0106, 0x0107, 0x0108}  # RFC 6979, ed25519, BLS: byte-equal in a release build
 FALCON = (0x0132, 0x0135)
@@ -41,6 +42,22 @@ def code(f):
     except W.WalletError as e:
         return e.code
     return ''
+
+
+def commands(name):
+    """scaas-ua `facade::<name>::COMMANDS` read from its source (T15g): (the release commands, the `vectors`-only raw forms).
+    A test asserts that a command is in it, never that it equals a list (spec no-decryption-oracle §4.13)."""
+    src = (ROOT / 'clients' / 'ua-rs' / 'src' / 'facade' / f'{name}.rs').read_text()
+    body = src[src.index('pub const COMMANDS: &[&str] = &['):]
+    out, gated = ([], []), False
+    for ln in body[:body.index('];')].splitlines()[1:]:
+        ln = ln.strip()
+        if ln == '#[cfg(feature = "vectors")]':
+            gated = True
+        elif ln.startswith('"'):
+            out[gated].append(ln.strip('",'))
+            gated = False
+    return out
 
 
 def abi_word(x):
@@ -768,11 +785,34 @@ class Zether(Case):
         self.assertEqual({f: pop[f] for f in ('popDigest', 'registrationDigest', 'uaMsg')},
                          {f: r[f] for f in ('popDigest', 'registrationDigest', 'uaMsg')})
         t = self.request('transfer_bls12381.json')
-        # ARCH-POS-13 (T15c): a release build has no command that decrypts a caller's ciphertext (until T14b)
+        # ARCH-POS-13 (T15c, T14b): no command of a release build decrypts a caller's ciphertext (the words commands: below)
         self.assertEqual(code(lambda: k.call('checkBalance', {'acc': t['acc'], 'balance': t['balance']})), 'UAArgument')
         self.assertEqual(code(lambda: k.call('proveTransfer', t)), 'UAArgument')
         self.assertEqual(code(lambda: k.call('pop', {'key': {'seed': '0x' + '11' * 64}})), 'UAArgument')
         self.assertEqual(code(lambda: k.call('proveTransfer', dict(t, includeWitness=True))), 'UAArgument')
+
+    def test_words_commands_on_the_forge_rows(self):
+        """T15g (ARCH-POS-13): the words commands on the forge rows (smartcontracts/vectors/zether/state.json; the holders are
+        r33_keys.json's): each in COMMANDS, the balances the contract's; another holder's words refused before the key (ua-rs
+        tests/facade_zether_state.rs counts the key's uses); every `vectors`-only raw form refused by the release library."""
+        release, raw = commands('zether')
+        for c in ('balance', 'pendingBalance'):
+            self.assertIn(c, release)
+        self.assertTrue(raw)
+        rows = json.loads((STATE / 'zether' / 'state.json').read_text())
+        row = {r['name'].split(':')[0]: r for r in rows['accounts']}
+        loc = {f: rows[f] for f in ('family', 'chainId', 'chainUid', 'token', 'block', 'psid')}
+
+        def words(name):
+            return dict(loc, ua=row[name]['ua'], account=row[name]['account'], accountData=row[name]['accountData'], tableBits=18,
+                        boundBits=20)
+        w = self.zw()
+        alice, bob = self.keep(w.zether_key(60, 0, 7)), self.keep(w.zether_key(60, 1, 7))
+        self.assertEqual(json.loads(alice.call('balance', words('alice')))['amount'], str(row['alice']['balance']))
+        self.assertEqual(json.loads(bob.call('pendingBalance', words('bob')))['amount'], str(row['bob']['pending']))
+        self.assertEqual(code(lambda: bob.call('balance', words('alice'))), 'UAArgument', "another holder's words")
+        for c in raw:
+            self.assertEqual(code(lambda: alice.call(c, {})), 'UAArgument', c)
 
     def test_cache_box_rows(self):
         for r in ZJ['cacheBox']:
@@ -838,6 +878,24 @@ class Pqz(Case):
         box = k.seal_balance_cache(bytearray(b'{"v":1}'))
         self.assertEqual(k.open_balance_cache(box), b'{"v":1}')
         self.assertEqual(code(lambda: self.keep(w.pqz_key(0, 1)).open_balance_cache(box)), 'UAAead')
+
+    def test_words_commands_on_the_forge_rows(self):
+        """T15g (ARCH-POS-13): `balance` on a forge row (smartcontracts/vectors/pqz/n2304-kmax4096/state.json): in COMMANDS;
+        the forge keys are mocked, so the words bind to no wallet key and are refused (UAArgument), with the other set's psid
+        UAPqzSetMismatch, both before the key (ua-rs tests/facade_pqz_state.rs counts the key's uses); every `vectors`-only
+        raw form refused by the release library."""
+        release, raw = commands('pqz')
+        self.assertIn('balance', release)
+        self.assertTrue(raw)
+        rows = json.loads((STATE / 'pqz' / 'n2304-kmax4096' / 'state.json').read_text())
+        a = rows['accounts'][0]
+        words = dict({f: rows[f] for f in ('chainUid', 'token', 'psid')},
+                     **{f: a[f] for f in ('ua', 'block', 'account', 'pending', 'accWords', 'blobs', 'keyRecord')})
+        k = self.keep(self.new_wallet('pq_kat').pqz_key())
+        self.assertEqual(code(lambda: k.call('balance', words)), 'UAArgument')
+        self.assertEqual(code(lambda: k.call('balance', dict(words, psid='0x' + PQZL_ID['n2048-kmax1024']))), 'UAPqzSetMismatch')
+        for c in raw:
+            self.assertEqual(code(lambda: k.call(c, {})), 'UAArgument', c)
 
     def test_pqz_handle_after_lock_is_KEY_REVOKED(self):
         w = self.new_wallet('pq_kat')
