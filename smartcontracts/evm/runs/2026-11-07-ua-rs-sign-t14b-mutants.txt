@@ -38,3 +38,6 @@ killed     | M21 the CLI's genesis check skipped (R2) | clients/zether-prover/sr
 killed     | M22 the CLI's depth past the head read at genesis (R3) | clients/zether-prover/src/bin/zether-read-balance.rs | rc=101 | 1 failed: rpc_reading_layer_against_anvil
 killed     | M23 --ct back in a release build | clients/zether-prover/src/bin/zether-read-balance.rs | rc=101 | 1 failed: ct_only_with_hazmat_and_rpc_only_as_a_reading_layer
 # 25 killed, 0 survived, 0 not loaded (after (a) and (b))
+# T15l re-run (Fable P3-5): the replacement strings brought to HEAD (T14b, T15k and T15l had rewritten them), those mutants run again:
+killed     | M1 raw acc accepted (checkBalance allow-list) | clients/zether-prover/src/state.rs | rc=101 | 1 failed: word_location_and_role_negatives_are_refused_before_the_key | at c363e034 | rc=0, git diff --exit-code 0
+# T15l re-run: 1 killed, 0 survived, 0 not loaded (0 superseded; the other mutants above stand, every string checked at HEAD)

@@ -16,3 +16,11 @@ killed     | M10 zether-prover: the api gate removed | clients/zether-prover/src
 killed     | M11 zether-prover: `openDisclosure` off the HAZMAT list | clients/zether-prover/src/api.rs | rc=101 | 1 failed: release_has_no_raw_decrypt
 killed     | M12 ua-rs `vectors` without zether-prover's `hazmat` | clients/ua-rs/Cargo.toml | rc=101 | 1 failed: release_has_no_raw_decrypt
 mutants M1-M12 of 12, survived or not loaded: 0
+# T15l re-run (Fable P3-5): the replacement strings brought to HEAD (T14b, T15k and T15l had rewritten them), those mutants run again:
+superseded | M3 zether-read-balance: `--rpc` accepted (superseded by T14b: --rpc is the R1-R7 reading layer) | at c363e034 | rc=0, git diff --exit-code 0
+killed     | M4 PQZ: `rawProveTransfer` back in the release list (T15e renamed the raw form) | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: release_has_no_raw_decrypt | at c363e034 | rc=0, git diff --exit-code 0
+killed     | M5 PQZ: `rawProveDisclose` back in the release list (T15e renamed the raw form) | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: release_has_no_raw_decrypt | at c363e034 | rc=0, git diff --exit-code 0
+killed     | M6 PQZ: `rawOpenMemo` back in the release list (T15e renamed the raw form) | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: release_has_no_raw_decrypt | at c363e034 | rc=0, git diff --exit-code 0
+killed     | M8 Zether: `rawCheckBalance` back in the facade's release list (T14b renamed the raw form) | clients/ua-rs/src/facade/zether.rs | rc=101 | 1 failed: release_has_no_raw_decrypt | at c363e034 | rc=0, git diff --exit-code 0
+killed     | M9 Zether: `rawRecoverTransfer` back in the facade's release list (T14b renamed the raw form) | clients/ua-rs/src/facade/zether.rs | rc=101 | 1 failed: release_has_no_raw_decrypt | at c363e034 | rc=0, git diff --exit-code 0
+# T15l re-run: 5 killed, 0 survived, 0 not loaded (1 superseded; the other mutants above stand, every string checked at HEAD)

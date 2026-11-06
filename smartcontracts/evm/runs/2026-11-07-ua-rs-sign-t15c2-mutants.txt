@@ -28,3 +28,6 @@ killed     | M18 PQZ: disclose_sender's ConstantTimeEq back to != | clients/ua-r
 killed     | M19 Zether: `decrypt` back in the facade's release list and zether-prover's gate removed, seen through ua-cxx | clients/ua-rs/src/facade/zether.rs, clients/zether-prover/src/api.rs | rc=8 | 1 failed: wallet_zether_facade
 killed     | M20 Zether: `decrypt` back in the facade's release list and zether-prover's gate removed, seen through ua-dart-frb | clients/ua-rs/src/facade/zether.rs, clients/zether-prover/src/api.rs | rc=1 | 0 failed: 
 mutants M1-M20 of 20: 20 killed, 0 survived, 0 not loaded
+# T15l re-run (Fable P3-5): the replacement strings brought to HEAD (T14b, T15k and T15l had rewritten them), those mutants run again:
+killed     | M13 zether-prover: open_sender_cp left pub | clients/zether-prover/src/schnorr.rs | rc=101 | 1 failed: hazmat_helpers_are_not_pub | at c363e034 | rc=0, git diff --exit-code 0
+# T15l re-run: 1 killed, 0 survived, 0 not loaded (0 superseded; the other mutants above stand, every string checked at HEAD)

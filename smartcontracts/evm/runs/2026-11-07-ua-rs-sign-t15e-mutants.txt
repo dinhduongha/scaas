@@ -24,3 +24,8 @@ killed     | M16 the opened memo not compared with the entry | clients/ua-rs/src
 killed     | M17 the units cap (K_MAX) not checked | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: word_negatives_refused_before_the_key
 killed     | M15 an auditor read of an entry without the copies (rerun, the strengthened test) | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: entry_and_role_negatives_refused_before_the_key
 mutants M1-M17 of 17, survived or not loaded: 0
+# T15l re-run (Fable P3-5): the replacement strings brought to HEAD (T14b, T15k and T15l had rewritten them), those mutants run again:
+killed     | M1 caller's T accepted (proveTransfer allow-list) | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: requests_carry_words_only | at c363e034 | rc=0, git diff --exit-code 0
+killed     | M2 p taken from the request (proveRefresh allow-list) | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: requests_carry_words_only | at c363e034 | rc=0, git diff --exit-code 0
+killed     | M16 the opened memo not compared with the entry | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: open_memo_binds_the_entry | at c363e034 | rc=0, git diff --exit-code 0
+# T15l re-run: 3 killed, 0 survived, 0 not loaded (0 superseded; the other mutants above stand, every string checked at HEAD)
