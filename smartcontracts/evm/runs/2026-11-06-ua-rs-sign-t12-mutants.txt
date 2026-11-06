@@ -1,0 +1,27 @@
+# 2026-11-06 ua-rs-sign T12: mutants of the C ABI v6 tests and the T12 decoders' caps (smartcontracts/evm/runs/2026-11-06-ua-rs-sign-t12-mutants.py).
+# Each alone on the T12 code commit b62cb2b4, its suite run, every file restored byte for byte; a NOT-LOADED or SURVIVED mutant is a finding.
+# M14's first form did not compile (let _ = on a lock guard: deny(let_underscore_lock)); fixed to drop(...) and re-run alone: killed. M2 re-run
+# with the harness recording the test build's error code (E0277: the static ZeroizeOnDrop bound).
+killed     | M1 an error string echoes its input (the vault JSON) | clients/ua-c/src/lib.rs | rc=1 | 1 failed: test_error_strings_never_contain_an_input
+killed     | M2 ZeroizeOnDrop removed from a handle's inner type (SeedBackup) | clients/ua-rs/src/wallet/mod.rs | rc=101 | test build: E0277 | 0 failed: 
+killed     | M3 KIND_UNAVAILABLE folded into KIND_UNKNOWN | clients/ua-c/src/lib.rs | rc=1 | 1 failed: test_external_key_new_is_KIND_UNAVAILABLE
+killed     | M4 the catch_unwind wrapper dropped from one export (scaas_ua_features) | clients/ua-c/src/lib.rs | rc=101 | 1 failed: every_export_is_guarded
+killed     | M5 wallet_free frees the store under live children | clients/ua-rs/src/wallet/mod.rs | rc=134 | AddressSanitizer: heap-use-after-free | 0 failed: 
+killed     | M6 catch_unwind removed from the one guard | clients/ua-c/src/lib.rs | rc=101 | 1 failed: tests::a_panic_is_internal_never_an_unwind
+killed     | M7 both unlock secrets: the passphrase first | clients/ua-c/src/lib.rs | rc=1 | 1 failed: test_exactly_one_unlock_secret
+killed     | M8 accepted_json ignored: every member accepted | clients/ua-c/src/lib.rs | rc=1 | 1 failed: test_seal_json_acceptance
+killed     | M9 members_json ignored | clients/ua-c/src/lib.rs | rc=1 | 1 failed: test_seal_json_containers
+killed     | M10 restore: installed always true (the None flag lost) | clients/ua-c/src/lib.rs | rc=1 | 1 failed: test_seal_json_replay_backup_rows_and_the_none_flag
+killed     | M11 restore_backup_rollback without its marker | clients/ua-c/src/lib.rs | rc=1 | 1 failed: test_seal_json_replay_backup_rows_and_the_none_flag
+killed     | M12 sign_digest_raw on a UA key: Argument, not RawDigestRefused | clients/ua-c/src/lib.rs | rc=1 | 1 failed: test_sign_digest_raw_on_a_ua_key_is_RawDigestRefused
+killed     | M13 WalletLocked reported as KeyRevoked | clients/ua-c/src/lib.rs | rc=1 | 1 failed: test_lock_revokes_and_unlock_does_not_revive
+killed     | M14 the link session not consumed on a failed install | clients/ua-c/src/lib.rs | rc=1 | 1 failed: test_link_session_is_consumed
+killed     | M15 seed_backup_reveal without its capacity check (a short buffer reveals) | clients/ua-c/src/lib.rs | rc=1 | 1 failed: test_seed_backup_sequence
+killed     | M16 the mlock bit never set | clients/ua-c/src/lib.rs | rc=101 | 1 failed: tests::features_bits_match_the_build
+killed     | M17 expect / members / accepted JSON past 16 KiB read | clients/ua-rs/src/wallet/seal.rs | rc=101 | 1 failed: json_inputs_longer_than_their_cap_are_refused_unparsed
+killed     | M18 expect / members / accepted JSON depth 5 read | clients/ua-rs/src/wallet/seal.rs | rc=101 | 1 failed: json_inputs_deeper_than_their_cap_are_refused_unparsed
+killed     | M19 an approved set past 64 UAs read | clients/ua-rs/src/wallet/seal.rs | rc=101 | 1 failed: container_json_inputs_read_the_vector_rows
+killed     | M20 UASig request depth 7 read | clients/ua-rs/src/wallet/uasig.rs | rc=101 | 1 failed: json_inputs_deeper_than_their_cap_are_refused_unparsed
+killed     | M21 expect_json read past an unknown key | clients/ua-rs/src/wallet/seal.rs | rc=101 | 1 failed: container_json_inputs_read_the_vector_rows
+killed     | M22 UASig request: msig slots in another order than given (sorted) | clients/ua-rs/src/wallet/uasig.rs | rc=1 | 1 failed: test_sign_json_msig_rows_through_uasig
+mutants M1-M22 of 22: 22 killed, 0 survived, 0 not loaded
