@@ -1,10 +1,10 @@
 # PQZ proof path, contract side (group 3h) — design
 
-**Status:** **approved by the owner 2026-11-07; build after 3e, 3f and 3g (T57) per the work order, before 3c.** SPECIFIED, nothing built. Written 2026-11-06; revised 2026-11-07 after two independent reviews (Codex: 1 P1, 6 P2,
+**Status:** **approved by the owner 2026-11-07; build after 3f (T50) per the work order (3e → 3g → 3f → 3h; owner 2026-11-07: 3g before 3f), before 3c.** SPECIFIED, nothing built. Written 2026-11-06; revised 2026-11-07 after two independent reviews (Codex: 1 P1, 6 P2,
 1 P3; Fable: 1 P1, 4 P2, several P3; no P0), every item accepted (§15); **revised again 2026-11-07 for the owner's decisions O9–O12:
 `proofStore` has only `NONE` and `LOG`; SSTORE2 proof storage is dropped and its design kept in Appendix A**, and O13 (Q3). No
 owner question is open (§14). Work-order group **3h** of branch `ua-mtx-merge`: plan tasks **T58–T66** in
-[`2026-11-04-ua-mtx-merge.md`](../plans/2026-11-04-ua-mtx-merge.md), after 3g (T51–T57) and before 3c, so the round's docs
+[`2026-11-04-ua-mtx-merge.md`](../plans/2026-11-04-ua-mtx-merge.md), after 3f (T44–T50; 3g before 3f, owner 2026-11-07) and before 3c, so the round's docs
 (T19), gates (T21), review (T22) and PR (T23) cover it and the EVM freeze and audit include it. **PQZ only:** Zether gets nothing
 (Zether ≠ PQZ). **Everything here is UNAUDITED.** Gas and size figures are paper arithmetic over figures the repository records;
 nothing was measured.
@@ -338,7 +338,7 @@ at the four sets; the pin moves old → new in T60's commit (owner's word, 2026-
 | `PqzStateLib` | +0.1 KB: the setter body; the rollover's loop out |
 | `PqzViewLib` | +0.3 to +0.5 KB: the record view, `rOf` in `transferEntry` |
 
-**Kind 13 (`WrappedPqzRegulatedToken`) is measured first in T58**, from what T57 leaves, and T58 pulls lever 1 at once (the headroom
+**Kind 13 (`WrappedPqzRegulatedToken`) is measured first in T58**, from what T50 leaves, and T58 pulls lever 1 at once (the headroom
 after 3e, 3f, 3g is thin). Stop line **64,512 B** (3e O18): at or above it, in order, one at a time, re-measuring (sizes, whole
 `forge test`, PQZ tests at four sets): (1) the setter and the views as one-line forwards into `PqzStateLib` / `PqzViewLib`; (2) the
 record and event writer as one library function, not inlined twice; (3) the unused levers of 3e, 3f, 3g in their order. Each
@@ -512,7 +512,7 @@ that task (Codex C5); T62 finishes what is left.
 
 | Task | Content | Depends on | Agent-days |
 |---|---|---|---|
-| T58 | Debit record (`Δp`, `w1` per R1, `lastDebit`, `prevCounter`), both deletions out, `pqzDebitRecord`, `pqzAccount.lastDebit`, `scaas.pqz` pin; kind 13 measured first and size lever 1 pulled | T57 | 3.5 |
+| T58 | Debit record (`Δp`, `w1` per R1, `lastDebit`, `prevCounter`), both deletions out, `pqzDebitRecord`, `pqzAccount.lastDebit`, `scaas.pqz` pin; kind 13 measured first and size lever 1 pulled | T50 | 3.5 |
 | T59 | `ownTag`, the `kv` tail and `rOf`, `memoHash`; typehash pins; with them the `typed_ops.json` PQZ rows, the shared `ownTag` KAT, `clientkeys` `evm.js` and every reader of those rows | T58 | 3.5 |
 | T60 | `proofStore` `NONE` / `LOG`: config, slot 0 byte 23, the `LOG` event, the record's mode; the `TokenConfig` rows and their readers; **the measurement matrix** (§7), the unsupported-combination table, the `PQZ_DEBIT_MIN_GAS` pin with `LOG` (O11) | T59 | 2.5 |
 | T61 | Bit 24: masks, holders, `setProofStore` (next debit, both directions), the disable freeze, the router op and its typed row and readers, `selector_audit.json`, `governance_bits.json` | T60 | 1.5 |
@@ -524,8 +524,8 @@ that task (Codex C5); T62 finishes what is left.
 | | **Contract part in all** | | **19** |
 
 Order: T58 → T59 → T60 → T61 sequential in this worktree (shared `PqzCore`, `PqzLayer`, `size-baseline.json`); T62 after T61; T63
-after T62; T64 and T65 after T61, beside T62–T63 (at most two heavy at once); T66 drafts beside, lands in T19. Placement: after 3g
-(T57), before 3c (3h touches no registry code; 3c's rebalance comes after every PQZ contract change).
+after T62; T64 and T65 after T61, beside T62–T63 (at most two heavy at once); T66 drafts beside, lands in T19. Placement: after 3f
+(T50), before 3c (3h touches no registry code; 3c's rebalance comes after every PQZ contract change).
 
 ### 13.2 What must wait for the no-oracle spec's T15e
 
