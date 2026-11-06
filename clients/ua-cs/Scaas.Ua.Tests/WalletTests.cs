@@ -738,7 +738,7 @@ public class WalletTests : IDisposable
         var req = JsonNode.Parse(tv.GetProperty("request").GetRawText())!.AsObject();
         req.Remove("key");
         req.Remove("includeWitness");
-        // ARCH-POS-13 (T15c): a release build has no command that decrypts a caller's ciphertext (until T14b)
+        // ARCH-POS-13 (T15c, T14b): no command of a release build decrypts a caller's ciphertext (the words commands: below)
         Assert.Equal("UAArgument", Code(() => k.Call("checkBalance", new JsonObject { ["acc"] = req["acc"]!.DeepClone(), ["balance"] = req["balance"]!.DeepClone() }.ToJsonString())));
         Assert.Equal("UAArgument", Code(() => k.Call("proveTransfer", req.ToJsonString())));
         Assert.Equal("UAArgument", Code(() => k.Call("pop", "{\"key\":{\"seed\":\"0x11\"}}")));
@@ -758,6 +758,78 @@ public class WalletTests : IDisposable
         w.Lock();
         Assert.Equal("UAKeyRevoked", Code(() => k.Call("pop", "{}")));
         Assert.Equal(y0, k.Public().Y);
+    }
+
+    /// <summary>scaas-ua <c>facade::&lt;name&gt;::COMMANDS</c> read from its source (T15g): the release commands and the
+    /// <c>vectors</c>-only raw forms. A test asserts that a command is in it, never that it equals a list (spec
+    /// no-decryption-oracle §4.13).</summary>
+    static (List<string> Release, List<string> Raw) Commands(string name)
+    {
+        var src = File.ReadAllText(Path.Combine(Root, "clients", "ua-rs", "src", "facade", name + ".rs"));
+        var body = src[src.IndexOf("pub const COMMANDS: &[&str] = &[", StringComparison.Ordinal)..];
+        (List<string> Release, List<string> Raw) res = ([], []);
+        var gated = false;
+        foreach (var l in body[..body.IndexOf("];", StringComparison.Ordinal)].Split('\n').Skip(1).Select(x => x.Trim()))
+        {
+            if (l == "#[cfg(feature = \"vectors\")]") gated = true;
+            else if (l.StartsWith('"'))
+            {
+                (gated ? res.Raw : res.Release).Add(l.Trim('"', ','));
+                gated = false;
+            }
+        }
+        return res;
+    }
+
+    /// <summary>T15g (ARCH-POS-13): the words commands on the forge rows (smartcontracts/vectors/zether/state.json; the holders
+    /// are r33_keys.json's): each in COMMANDS, the balances the contract's; another holder's words refused before the key (ua-rs
+    /// tests/facade_zether_state.rs counts the key's uses); every <c>vectors</c>-only raw form refused by the release library.</summary>
+    [Fact]
+    public void ZetherWordsOnTheForgeRows()
+    {
+        var (release, raw) = Commands("zether");
+        Assert.Contains("balance", release);
+        Assert.Contains("pendingBalance", release);
+        Assert.NotEmpty(raw);
+        var st = Load("smartcontracts/vectors/zether/state.json");
+        var row = Rows(st, "accounts").ToDictionary(r => S(r, "name").Split(':')[0]);
+        string Words(string name)
+        {
+            var o = new JsonObject { ["tableBits"] = 18, ["boundBits"] = 20 };
+            foreach (var f in new[] { "family", "chainId", "chainUid", "token", "block", "psid" }) o[f] = JsonNode.Parse(st.GetProperty(f).GetRawText());
+            foreach (var f in new[] { "ua", "account", "accountData" }) o[f] = JsonNode.Parse(row[name].GetProperty(f).GetRawText());
+            return o.ToJsonString();
+        }
+        var r33 = Load("clients/zether-prover/vectors/r33_keys.json");
+        var w = Keep(Wallet.FromMnemonic(Utf8(S(r33, "mnemonic"))));
+        var (alice, bob) = (Keep(w.ZetherKey(60, 0, 7)), Keep(w.ZetherKey(60, 1, 7)));
+        string Amount(ZetherKey k, string cmd, string name) => S(JsonDocument.Parse(k.Call(cmd, Words(name))).RootElement, "amount");
+        Assert.Equal(row["alice"].GetProperty("balance").GetRawText(), Amount(alice, "balance", "alice"));
+        Assert.Equal(row["bob"].GetProperty("pending").GetRawText(), Amount(bob, "pendingBalance", "bob"));
+        Assert.Equal("UAArgument", Code(() => bob.Call("balance", Words("alice"))));
+        foreach (var c in raw) Assert.Equal("UAArgument", Code(() => alice.Call(c, "{}")));
+    }
+
+    /// <summary>T15g (ARCH-POS-13): <c>balance</c> on a forge row (smartcontracts/vectors/pqz/n2304-kmax4096/state.json): in
+    /// COMMANDS; the forge keys are mocked, so the words bind to no wallet key and are refused (UAArgument), with the other set's
+    /// psid UAPqzSetMismatch, both before the key (ua-rs tests/facade_pqz_state.rs counts the key's uses); every
+    /// <c>vectors</c>-only raw form refused.</summary>
+    [Fact]
+    public void PqzWordsOnTheForgeRows()
+    {
+        var (release, raw) = Commands("pqz");
+        Assert.Contains("balance", release);
+        Assert.NotEmpty(raw);
+        var st = Load("smartcontracts/vectors/pqz/n2304-kmax4096/state.json");
+        var a = Rows(st, "accounts").First();
+        var words = new JsonObject();
+        foreach (var f in new[] { "chainUid", "token", "psid" }) words[f] = JsonNode.Parse(st.GetProperty(f).GetRawText());
+        foreach (var f in new[] { "ua", "block", "account", "pending", "accWords", "blobs", "keyRecord" }) words[f] = JsonNode.Parse(a.GetProperty(f).GetRawText());
+        var k = Keep(Fresh("pq_kat").PqzKey(0, 0));
+        Assert.Equal("UAArgument", Code(() => k.Call("balance", words.ToJsonString())));
+        words["psid"] = Pqzl2048;
+        Assert.Equal("UAPqzSetMismatch", Code(() => k.Call("balance", words.ToJsonString())));
+        foreach (var c in raw) Assert.Equal("UAArgument", Code(() => k.Call(c, "{}")));
     }
 
     // --- the PQZ facade ---
