@@ -11,9 +11,9 @@ find_program(CARGO cargo REQUIRED)
 set(SCAAS_UA_CARGO_TARGET_DIR "${CMAKE_CURRENT_BINARY_DIR}/cargo" CACHE PATH "cargo target dir")
 set(_gen "${SCAAS_UA_CARGO_TARGET_DIR}/cxxbridge")
 set(_lib "${SCAAS_UA_CARGO_TARGET_DIR}/release/${CMAKE_STATIC_LIBRARY_PREFIX}scaas_ua_cxx${CMAKE_STATIC_LIBRARY_SUFFIX}")
-file(GLOB _rs CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.rs" "${CMAKE_CURRENT_SOURCE_DIR}/../ua-rs/src/*.rs")
+file(GLOB_RECURSE _rs CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.rs" "${CMAKE_CURRENT_SOURCE_DIR}/../ua-rs/src/*.rs")
 add_custom_command(
-  OUTPUT "${_lib}" "${_gen}/scaas-ua-cxx/src/lib.rs.h"
+  OUTPUT "${_lib}" "${_gen}/scaas-ua-cxx/src/lib.rs.h" "${_gen}/scaas-ua-cxx/src/wallet.rs.h"
   COMMAND ${CMAKE_COMMAND} -E env "CARGO_TARGET_DIR=${SCAAS_UA_CARGO_TARGET_DIR}"
           ${CARGO} build --release --locked --manifest-path "${CMAKE_CURRENT_SOURCE_DIR}/Cargo.toml"
   DEPENDS ${_rs} Cargo.toml Cargo.lock build.rs "${CMAKE_CURRENT_SOURCE_DIR}/../ua-rs/Cargo.toml"
@@ -23,10 +23,11 @@ add_custom_target(scaas_ua_cargo DEPENDS "${_lib}")
 add_library(scaas_ua_rust STATIC IMPORTED)
 set_target_properties(scaas_ua_rust PROPERTIES IMPORTED_LOCATION "${_lib}")
 
-add_library(scaas_ua STATIC src/scaas_ua.cpp)
+add_library(scaas_ua STATIC src/scaas_ua.cpp src/wallet.cpp)
 add_library(ScaasUa::scaas_ua ALIAS scaas_ua)
 add_dependencies(scaas_ua scaas_ua_cargo)
 set_source_files_properties(src/scaas_ua.cpp PROPERTIES OBJECT_DEPENDS "${_gen}/scaas-ua-cxx/src/lib.rs.h")
+set_source_files_properties(src/wallet.cpp PROPERTIES OBJECT_DEPENDS "${_gen}/scaas-ua-cxx/src/wallet.rs.h")
 target_include_directories(scaas_ua PUBLIC include PRIVATE "${_gen}")
 target_link_libraries(scaas_ua PUBLIC scaas_ua_rust Threads::Threads ${CMAKE_DL_LIBS})
 
@@ -43,5 +44,14 @@ if(BUILD_TESTING)
                  portable_purposes holder_refusals registration_args nested_rows nested_inner set_key_args membership_rows member_sig_hashes
                  governance_bits_rows)
     add_test(NAME ${t} COMMAND vectors_test ${t})
+  endforeach()
+  # ua-rs-sign T13a: the wallet surface (keys, sign, kem, seal, vault, rs_vault, rs_signatures, zether.json; the facades)
+  add_executable(wallet_test tests/wallet_test.cpp)
+  target_link_libraries(wallet_test PRIVATE ScaasUa::scaas_ua nlohmann_json::nlohmann_json)
+  target_compile_definitions(wallet_test PRIVATE SCAAS_UA_VECTORS_DIR="${SCAAS_UA_VECTORS_DIR}")
+  foreach(t load_refuses_wrong_abi_or_features secret_buffer_wiped_after_call handle_freed_once keys_json sign_json rs_signatures_json
+                 kem_json seal_json backup_link_restore vault_json rs_vault_json custody seed_backup_sequence
+                 error_strings_never_contain_an_input aead_hkdf_hmac zether_facade pqz_facade)
+    add_test(NAME wallet_${t} COMMAND wallet_test ${t})
   endforeach()
 endif()
