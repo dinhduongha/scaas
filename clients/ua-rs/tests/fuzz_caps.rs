@@ -197,7 +197,7 @@ fn zether_inputs_past_their_caps_are_refused_unparsed() {
     // the command
     let (i, b) = split("zether_cmd/cmd-over-depth-9.bin");
     let cmd = COMMANDS[i];
-    assert_eq!(cmd, "proveTransfer");
+    assert_eq!(cmd, "rawProveTransfer");
     let before = bounded::vectors_parsed();
     assert_eq!(ZetherCmd::from_json(cmd, &b).err(), Some(Error::Argument));
     assert_eq!(bounded::vectors_parsed(), before, "deeper than 8: refused before serde_json");

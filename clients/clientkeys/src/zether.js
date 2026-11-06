@@ -282,6 +282,17 @@ export const openConfKey = openVault;
 // store it as `confVault.cache`. Every use re-checks it against the on-chain `acc`
 // (`[b]G == C − [x]D`, one comparison): a stale or wrong value is dropped, never spent — the prover
 // and the contract would refuse a proof built on it anyway. Balances are BigInt (they pass 2^53).
+//
+// ARCH-POS-13 ("never a decryption oracle", owner 2026-11-06; ua-rs-sign T14b, spec no-decryption-oracle §4.2, §4.7): every
+// `acc` / `pending` these functions take (`state.acc`, the ciphertexts `readBalance` hands to `decrypt`) must be the
+// holder's own account as a reading layer meeting R1–R7 read it: one source the holder trusts (their own node, a node they
+// configured, a verifying light client), the configured chain, one final block, storage words (not views), a token the
+// factory catalogues, the account of this key, nothing about the result sent back. A ciphertext from an untrusted RPC or
+// indexer turns `checkBalance` and `decrypt` into an oracle for that source. The prover wasm's raw `decrypt`,
+// `decryptPending` and `checkBalance` exist only in its test build (`hazmat`, T15c); ua-rs's Zether facade takes the raw
+// storage words instead (`balance`, `pendingBalance`, `checkBalance`) and rebuilds the ciphertexts itself; the desktop
+// `zether-read-balance` reads them as such a reading layer (`--rpc` with the holder's chain configuration) or opens this
+// cache box (`--cache-box`). Comments only here: this module's code is unchanged.
 
 export const DEVICE_BOUND_BITS = 44;
 const CACHE_INFO = utf8ToBytes('scaas-zether-balance-cache-v1');

@@ -199,6 +199,10 @@ required-features = ["vectors"]
 name = "facade_zether"
 required-features = ["zether"]
 
+[[test]]
+name = "facade_zether_state"
+required-features = ["zether"]
+
 # ua-rs-sign T12 follow-ups (owner 2026-11-06): the link seal of the existing device, the members JSON cap
 [[test]]
 name = "wallet_link"

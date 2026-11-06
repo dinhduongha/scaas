@@ -102,7 +102,7 @@ fn recovery<C: ZCurve>() {
     for _ in 0..2 {
         let out = read_balance(&args, &k0).unwrap();
         // review N3: a pasted ciphertext alone is the user's word, neither verified nor refuted.
-        assert_eq!(out, json!({"balance": left.to_string(), "accSeq": null, "verified": null, "source": "pasted"}));
+        assert_eq!(out, json!({"balance": left.to_string(), "accSeq": null, "block": null, "source": "pasted"}));
     }
     assert_eq!(std::fs::metadata(&file).unwrap().len(), (8 + 1 + curve.len() + 1) as u64 + (12 << 22));
     // A bound below the balance, out-of-range knobs and a table file of another size are refused.
@@ -116,19 +116,217 @@ fn recovery<C: ZCurve>() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
-/// ARCH-POS-13 (ua-rs-sign T15c): `--rpc` is refused, naming the rule, before the key is read and before any request goes
-/// out; the pasted `--ct` path runs (positive control). The URL's port is closed again before the call, so a build that sent
-/// the request fails fast (connection refused, another error) instead of waiting on a listener that never answers.
+/// ARCH-POS-13 (ua-rs-sign T14b, Fable P3-4): a pasted `--ct` exists only with feature `hazmat` (a ciphertext typed in by
+/// hand is chosen by whoever handed it over); `--rpc` without the holder's configuration (R1–R5: chain id, chain_uid, factory,
+/// token, depth or finalized) is refused before any request goes out. The URL's port is closed again before the call, so a
+/// build that sent the request fails fast instead of waiting on a listener that never answers.
 #[test]
-fn rpc_refused() {
+fn ct_only_with_hazmat_and_rpc_only_as_a_reading_layer() {
     let k0 = json!({"mnemonic": MNEMONIC, "coin": 60, "account": 0});
-    let url = format!("http://{}", std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap());
-    let rpc = ["--curve", "bls12381", "--table-bits", "20", "--bound-bits", "24", "--rpc", &url, "--token", "0x5fbdb2315678afecb367f032d93f642f64180aa3"];
-    let e = read_balance(&rpc, &k0).unwrap_err();
-    assert!(e.contains("--rpc refused: ARCH-POS-13"), "{e}");
     let y = zether_prover::keys::ZetherKey::<Bls12381>::conf(&zether_prover::keys::seed_from_mnemonic(MNEMONIC, "").unwrap()[..], 60, 0).unwrap();
     let ct = zether_prover::elgamal::encrypt(&y.y, 77, &Fr::<Bls12381>::from(5u64));
     let pasted = format!("{}:{}", hx(&encode_point::<Bls12381>(&ct.c)), hx(&encode_point::<Bls12381>(&ct.d)));
-    let out = read_balance(&["--curve", "bls12381", "--table-bits", "20", "--bound-bits", "24", "--ct", &pasted], &k0).unwrap();
-    assert_eq!(out["balance"], json!("77"), "the pasted path: positive control");
+    let r = read_balance(&["--curve", "bls12381", "--table-bits", "20", "--bound-bits", "24", "--ct", &pasted], &k0);
+    if cfg!(feature = "hazmat") {
+        assert_eq!(r.unwrap()["balance"], json!("77"), "hazmat: the pasted path");
+    } else {
+        assert!(r.unwrap_err().contains("unknown argument --ct"), "release: no --ct");
+    }
+    let url = format!("http://{}", std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap());
+    let tok = "0x5fbdb2315678afecb367f032d93f642f64180aa3";
+    for missing in ["--chain-id", "--chain-uid", "--factory", "--token", "--depth"] {
+        let mut a = vec!["--curve", "bls12381", "--table-bits", "20", "--rpc", &url, "--chain-id", "31337", "--chain-uid", tok,
+            "--factory", tok, "--token", tok, "--depth", "1"];
+        let i = a.iter().position(|x| *x == missing).unwrap();
+        a.drain(i..i + 2);
+        assert!(read_balance(&a, &k0).unwrap_err().contains("--rpc needs"), "{missing}");
+    }
+    let both = ["--curve", "bls12381", "--rpc", &url, "--chain-id", "1", "--chain-uid", tok, "--factory", tok, "--token", tok, "--depth",
+        "1", "--finalized"];
+    assert!(read_balance(&both, &k0).unwrap_err().contains("--rpc needs"), "one of --depth / --finalized");
+}
+
+fn b64url(b: &[u8]) -> String {
+    const A: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    let mut s = String::new();
+    for c in b.chunks(3) {
+        let n = c.iter().enumerate().fold(0u32, |a, (i, x)| a | (u32::from(*x) << (16 - 8 * i)));
+        for i in 0..=c.len() {
+            s.push(A[(n >> (18 - 6 * i) & 63) as usize] as char);
+        }
+    }
+    s
+}
+
+/// clientkeys `sealBalanceCache` of `entries` under the conf key of `k` (AES-256-GCM, HKDF-SHA256 of `x`).
+fn seal(k: &zether_prover::keys::ZetherKey<Bls12381>, entries: &Value, path: &std::path::Path) {
+    use aes_gcm::aead::{Aead, KeyInit, Payload};
+    let mut ck = [0u8; 32];
+    hkdf::Hkdf::<sha2::Sha256>::new(None, &zether_prover::curve::encode_scalar::<Bls12381>(&k.x)).expand(b"scaas-zether-balance-cache-v1", &mut ck).unwrap();
+    let iv = [7u8; 12];
+    let ct = aes_gcm::Aes256Gcm::new_from_slice(&ck).unwrap()
+        .encrypt(&aes_gcm::Nonce::from(iv), Payload { msg: entries.to_string().as_bytes(), aad: b"zether-cache:bls12381" })
+        .unwrap();
+    std::fs::write(path, json!({"iv": b64url(&iv), "ct": b64url(&ct)}).to_string()).unwrap();
+}
+
+/// `{k: v}`.
+fn one(k: &str, v: Value) -> Value {
+    Value::Object(serde_json::Map::from_iter([(k.to_string(), v)]))
+}
+
+fn kat_key(id: &str, account: u32) -> Value {
+    let keys: Value = serde_json::from_str(&std::fs::read_to_string(format!("{}/../../smartcontracts/vectors/ua/keys.json", env!("CARGO_MANIFEST_DIR"))).unwrap()).unwrap();
+    let m = keys["mnemonics"].as_array().unwrap().iter().find(|m| m["id"] == id).unwrap();
+    json!({"mnemonic": m["words"], "passphrase": m["passphrase"], "coin": 60, "account": account})
+}
+
+/// The holder's own balance-cache box (Fable P3-4): clientkeys' box (`smartcontracts/vectors/ua/zether.json`) opens under its
+/// key (the entries are read; this key's UA has none there), not under another key; a box with this key's entry gives the
+/// cached balance without any ciphertext.
+#[test]
+fn the_holders_cache_box() {
+    let z: Value = serde_json::from_str(&std::fs::read_to_string(format!("{}/../../smartcontracts/vectors/ua/zether.json", env!("CARGO_MANIFEST_DIR"))).unwrap()).unwrap();
+    let r = &z["cacheBox"][0];
+    let dir = std::env::temp_dir().join(format!("zrb-box-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("box.json");
+    std::fs::write(&file, r["box"].to_string()).unwrap();
+    let k = kat_key(r["mnemonic"].as_str().unwrap(), r["account"].as_u64().unwrap() as u32);
+    let tok = "0x5fbdb2315678afecb367f032d93f642f64180aa3";
+    let args = ["--curve", "bls12381", "--cache-box", file.to_str().unwrap(), "--token", tok];
+    assert!(read_balance(&args, &k).unwrap_err().contains("no entry for this key's UA"), "clientkeys' box opens");
+    assert!(read_balance(&args, &kat_key(r["mnemonic"].as_str().unwrap(), 1)).unwrap_err().contains("does not open"), "another key");
+    let key = zether_prover::api::key::<Bls12381>(&json!({"key": k})).unwrap();
+    let id = format!("{}:{tok}", hx(&key.ua()));
+    seal(&key, &one(&id, json!({"ua": hx(&key.ua()), "token": tok, "accSeq": 3, "balance": "18014398509481983"})), &file);
+    let out = read_balance(&args, &k).unwrap();
+    assert_eq!(out, json!({"balance": "18014398509481983", "accSeq": 3, "block": null, "source": "cache"}));
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+fn rpc(url: &str, method: &str, params: Value) -> Value {
+    let body = json!({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}).to_string();
+    let out = Command::new("curl").args(["-s", "-X", "POST", "-H", "content-type: application/json", "--data", &body, url]).output().unwrap();
+    let v: Value = serde_json::from_slice(&out.stdout).unwrap_or(Value::Null);
+    v["result"].clone()
+}
+
+/// Stops the local anvil when the test ends, whatever the outcome.
+struct Anvil(std::process::Child);
+impl Drop for Anvil {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
+fn add(a: &[u8; 32], i: u64) -> [u8; 32] {
+    let mut o = *a;
+    let mut c = u128::from(i);
+    for b in o.iter_mut().rev() {
+        let t = u128::from(*b) + (c & 0xff);
+        *b = t as u8;
+        c = (c >> 8) + (t >> 8);
+    }
+    o
+}
+
+/// `zether-read-balance --rpc` as a reading layer (R1–R7, spec §4.2) against a local `anvil` (`ANVIL`, default `anvil` on the
+/// PATH; run with `--ignored` under `scripts/capped`): the state is written into storage with `anvil_setStorageAt` (a
+/// factory's `_info[token]`, the token's `psid` and two accounts), then read. R2: another chain id or chain_uid refused. R3:
+/// a depth past the head refused; the words of the block at `head − depth`, not the head's. R5: a token the factory does not
+/// catalogue, or catalogues as a PQZ kind, refused. R6: this key's account, not the other one. The cache box checked against
+/// the state: a right entry is used without BSGS (`cache+rpc`), a stale one falls back to BSGS on the state.
+#[test]
+#[ignore]
+fn rpc_reading_layer_against_anvil() {
+    use zether_prover::curve::{keccak256, proof_system_id};
+    let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let url = format!("http://127.0.0.1:{port}");
+    let bin = std::env::var("ANVIL").unwrap_or_else(|_| "anvil".into());
+    let _anvil = Anvil(Command::new(bin).args(["--port", &port.to_string(), "--silent"]).stdout(Stdio::null()).spawn().unwrap());
+    let mut up = false;
+    for _ in 0..100 {
+        if rpc(&url, "eth_chainId", json!([])).is_string() {
+            up = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    assert!(up, "anvil did not start");
+    let chain_id = u64::from_str_radix(rpc(&url, "eth_chainId", json!([])).as_str().unwrap().trim_start_matches("0x"), 16).unwrap();
+    let genesis = rpc(&url, "eth_getBlockByNumber", json!(["0x0", false]))["hash"].as_str().unwrap().to_string();
+    let set = |addr: &str, slot: &[u8; 32], w: &[u8; 32]| {
+        assert_eq!(rpc(&url, "anvil_setStorageAt", json!([addr, hx(slot), hx(w)])), json!(true));
+    };
+    let be = |n: u64| {
+        let mut w = [0u8; 32];
+        w[24..].copy_from_slice(&n.to_be_bytes());
+        w
+    };
+    let (factory, token, other_token, pqz_token) = ("0x00000000000000000000000000000000000fac70", "0x0000000000000000000000000000000000002e7a",
+        "0x0000000000000000000000000000000000002e7b", "0x0000000000000000000000000000000000002e7c");
+    let catalogue = |t: &str, kind: u8| {
+        let mut k = [0u8; 32];
+        k[12..].copy_from_slice(&hex::decode(&t[2..]).unwrap());
+        let mut info = [0u8; 32];
+        info[2] = 1; // exists
+        info[11] = kind;
+        set(factory, &keccak256(&[k, be(8)].concat()), &info);
+    };
+    catalogue(token, 2);
+    catalogue(pqz_token, 4);
+    let root = zether_prover::state::ROOT;
+    set(token, &add(&root, 6), &proof_system_id::<Bls12381>());
+    let seed = zether_prover::keys::seed_from_mnemonic(MNEMONIC, "").unwrap();
+    let keys: Vec<_> = (0..2).map(|a| zether_prover::keys::ZetherKey::<Bls12381>::conf(&seed[..], 60, a).unwrap()).collect();
+    // the account of key `i` holding `b` at accSeq 5
+    let account = |i: usize, b: u64| {
+        let k = &keys[i];
+        let base = keccak256(&[k.ua(), add(&root, 8)].concat());
+        let ct = zether_prover::elgamal::encrypt(&k.y, b, &Fr::<Bls12381>::from(11u64 + i as u64));
+        for (f, p) in [ct.c, ct.d].iter().enumerate() {
+            let s = add(&base, f as u64);
+            set(token, &s, &be(2 * 128 + 1));
+            let enc = encode_point::<Bls12381>(p);
+            for (j, c) in enc.chunks(32).enumerate() {
+                set(token, &add(&keccak256(&s), j as u64), &c.try_into().unwrap());
+            }
+        }
+        set(token, &add(&base, 4), &be(5)); // accSeq 5 (the low 8 bytes)
+    };
+    account(0, 42);
+    account(1, 99);
+    rpc(&url, "anvil_mine", json!(["0x3"]));
+    account(0, 43); // the head's state: a read at depth 1 must not see it
+    rpc(&url, "anvil_mine", json!(["0x1"]));
+    let k0 = json!({"mnemonic": MNEMONIC, "coin": 60, "account": 0});
+    let cid = chain_id.to_string();
+    let args = |chain: &str, uid: &str, tok: &str, depth: &str| {
+        ["--curve", "bls12381", "--table-bits", "20", "--bound-bits", "24", "--rpc", &url, "--chain-id", chain, "--chain-uid", uid,
+            "--factory", factory, "--token", tok, "--depth", depth].map(String::from).to_vec()
+    };
+    let run = |a: Vec<String>| read_balance(&a.iter().map(String::as_str).collect::<Vec<_>>(), &k0);
+    let out = run(args(&cid, &genesis, token, "2")).unwrap();
+    assert_eq!((out["balance"].clone(), out["accSeq"].clone(), out["source"].clone()), (json!("42"), json!(5), json!("rpc")), "R3, R6");
+    assert_eq!(run(args(&cid, &genesis, token, "0")).unwrap()["balance"], json!("43"), "the head (positive control of R3)");
+    assert!(run(args("1", &genesis, token, "2")).unwrap_err().contains("R2"), "another chain id");
+    assert!(run(args(&cid, &hx(&[0x24; 32]), token, "2")).unwrap_err().contains("R2"), "another chain_uid");
+    assert!(run(args(&cid, &genesis, token, "100")).unwrap_err().contains("R3"), "a depth past the head");
+    assert!(run(args(&cid, &genesis, other_token, "2")).unwrap_err().contains("R5"), "not catalogued");
+    assert!(run(args(&cid, &genesis, pqz_token, "2")).unwrap_err().contains("R5"), "catalogued as PQZ");
+    // the cache box checked against the state
+    let dir = std::env::temp_dir().join(format!("zrb-anvil-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("box.json");
+    let id = format!("{}:{token}", hx(&keys[0].ua()));
+    for (b, source, want) in [(42u64, "cache+rpc", "42"), (41, "rpc", "42")] {
+        seal(&keys[0], &one(&id, json!({"ua": hx(&keys[0].ua()), "token": token, "accSeq": 5, "balance": b.to_string()})), &file);
+        let mut a = args(&cid, &genesis, token, "2");
+        a.extend(["--cache-box".to_string(), file.to_str().unwrap().to_string()]);
+        let out = run(a).unwrap();
+        assert_eq!((out["balance"].clone(), out["source"].clone()), (json!(want), json!(source)), "cache {b}");
+    }
+    std::fs::remove_dir_all(&dir).unwrap();
 }

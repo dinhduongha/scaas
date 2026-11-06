@@ -11,7 +11,7 @@ use std::sync::{Arc, Mutex};
 use ark_ec::CurveGroup;
 use ark_ff::{BigInteger, PrimeField, Zero};
 
-use crate::curve::{generator, Fr, ZCurve, G};
+use crate::curve::{generator, secret_mul, Fr, ZCurve, G};
 use crate::ZError;
 
 pub const TABLE_BITS_MIN: u32 = 18;
@@ -133,17 +133,17 @@ pub fn encrypt<C: ZCurve>(y: &G<C>, b: u64, r: &Fr<C>) -> Ciphertext<C> {
 }
 
 hazmat_pub! {
-/// `g^b` from a ciphertext.
-fn decrypt_point<C: ZCurve>(ct: &Ciphertext<C>, x: &Fr<C>) -> G<C> {
-    ct.c - ct.d * x
+/// `g^b` from a ciphertext: `C − [x]D`, `[x]D` by [`secret_mul`] (T14b, Codex C6).
+fn decrypt_point<C: ZCurve>(ct: &Ciphertext<C>, x: &Fr<C>) -> Result<G<C>, ZError> {
+    Ok(ct.c - secret_mul(&ct.d, x)?)
 }
 }
 
 hazmat_pub! {
 /// Cache validation (limits §5): `[b]G == C − [x]D`. A stale or wrong cached balance fails here,
 /// and a proof built on it would be refused by the prover and the contract anyway.
-fn check_balance<C: ZCurve>(acc: &Ciphertext<C>, x: &Fr<C>, b: u64) -> bool {
-    decrypt_point(acc, x) == generator::<C>() * Fr::<C>::from(b)
+fn check_balance<C: ZCurve>(acc: &Ciphertext<C>, x: &Fr<C>, b: u64) -> Result<bool, ZError> {
+    Ok(decrypt_point(acc, x)? == generator::<C>() * Fr::<C>::from(b))
 }
 }
 
@@ -259,7 +259,7 @@ impl<C: ZCurve> BsgsTable<C> {
 
     hazmat_pub! {
     fn decrypt(&self, ct: &Ciphertext<C>, x: &Fr<C>, bound_bits: u32) -> Result<u64, ZError> {
-        self.dlog(&decrypt_point(ct, x), bound_bits)
+        self.dlog(&decrypt_point(ct, x)?, bound_bits)
     }
     }
 
@@ -359,10 +359,10 @@ mod tests {
         assert_eq!(t.decrypt(&encrypt(&y, (1 << 12) - 1, &r), &x, 12).unwrap(), (1 << 12) - 1);
         // check_balance: one comparison, any size.
         let big = encrypt(&y, (1 << 54) - 3, &r);
-        assert!(check_balance(&big, &x, (1 << 54) - 3));
-        assert!(!check_balance(&big, &x, (1 << 54) - 2));
-        assert!(!check_balance(&big, &x2, (1 << 54) - 3));
-        assert!(check_balance(&Ciphertext::<C>::zero(), &x, 0));
+        assert!(check_balance(&big, &x, (1 << 54) - 3).unwrap());
+        assert!(!check_balance(&big, &x, (1 << 54) - 2).unwrap());
+        assert!(!check_balance(&big, &x2, (1 << 54) - 3).unwrap());
+        assert!(check_balance(&Ciphertext::<C>::zero(), &x, 0).unwrap());
     }
 
     #[cfg(feature = "bn254")]

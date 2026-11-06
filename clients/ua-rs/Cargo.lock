@@ -1864,6 +1864,7 @@ dependencies = [
 name = "zether-prover"
 version = "0.1.0"
 dependencies = [
+ "aes-gcm",
  "ark-bls12-381",
  "ark-ec",
  "ark-ff",
@@ -1876,6 +1877,7 @@ dependencies = [
  "hmac 0.12.1",
  "rand_chacha",
  "rand_core 0.6.4",
+ "scaas-ct",
  "serde",
  "serde_json",
  "sha2 0.10.9",

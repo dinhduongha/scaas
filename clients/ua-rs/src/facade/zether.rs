@@ -5,24 +5,36 @@
 //!   (EIP-2333 `m/12381/<coin>/<account>/<use>`, use 7 the conf key, 8 the viewing key) into the wallet's arena; the handle
 //!   holds the store, its generation and the slot (no secret bytes), `Y` and the UA. Every secret operation runs under the
 //!   store's read guard, so `lock()` revokes the handle (`KeyRevoked`, for good; spec §8.2).
-//! - **Commands.** zether-prover's `api` commands that need the key or are public ([`COMMANDS`]; a release build keeps only
-//!   encrypt, the PoP, the owner and UA signatures, the shield calldata, the envelope, typed digests and named calls,
-//!   ARCH-POS-13, the rest is feature `vectors` until T14b): encrypt, decrypt and the
-//!   pending decrypt, the balance check, the transfer, multi-recipient and burn proofs, the memo, the recovery (with the
-//!   sender's openings `SENDER_S` / `SENDER_CP`), the receiver's and auditor's openings (`openDisclosure`), the PoP, the owner
-//!   and UA signatures, the shield calldata, the envelope, typed digests and named calls. Not exposed: the verifiers,
-//!   `keygen` (the handle gives `Y` and the UA). The command JSON is read by the bounded reader (1 MiB, depth 8), then each
-//!   field is checked against the command's **allow-list** (and each nested object against its own), so no `key` object and
-//!   none of the prover's secret-returning flags (`revealSecret`, `includeWitness`) can pass; the facade hands the key to
-//!   `api::call_with_key` itself. A prover refusal is `Argument` (its text is not passed on: it can name request values).
+//! - **Commands** ([`COMMANDS`]): encrypt, the PoP, the owner and UA signatures, the shield calldata, the envelope, typed
+//!   digests and named calls (zether-prover's `api`), and the **words commands** (zether-prover's `state`; ARCH-POS-13, T14b):
+//!   `balance`, `pendingBalance`, `checkBalance`, `proveTransfer`, `proveTransferMulti`, `proveBurn`, `openMemo`,
+//!   `recoverTransfer` (with the sender's openings `SENDER_S` / `SENDER_CP`), `openDisclosure` (the receiver's and the
+//!   auditor's openings, the amount decrypted inside). Not exposed: the verifiers, `keygen` (the handle gives `Y` and the UA).
+//!   The command JSON is read by the bounded reader (1 MiB, depth 8), then each field is checked against the command's
+//!   **allow-list** (and each nested object against its own), so no `key` object and none of the prover's secret-returning
+//!   flags (`revealSecret`, `includeWitness`) can pass; the facade hands the key to zether-prover itself. A prover refusal is
+//!   `Argument` (its text is not passed on: it can name request values).
+//! - **No decryption oracle** (ARCH-POS-13, owner 2026-11-06; spec no-decryption-oracle §4.3, §4.7, T14b): a command that
+//!   decrypts takes a named location (`family`, `chainId`, `chainUid`, `token`, `block`, `ua`, the entry's `fromUA` and
+//!   `sendCounter`, a leg `index`) and the **raw** storage words the reading layer read at one block (the account struct's
+//!   slots, the `bytes` data slots, `entries` / `entryPtrs` / `memos` and the SSTORE2 code, the token's `psid`, `modes` and
+//!   `auditorKey` words), never a ciphertext, an entry, a memo or a parsed state field. zether-prover's `state::prepare`
+//!   checks `psid` and the family, parses the words by the pinned layout (`ua-mtx-merge` T19c), checks them, binds the leg
+//!   and the role to this handle's `Y` and rebuilds the ciphertexts exactly as `ZetherLib`; only then is the key used
+//!   (`state::run`). Every refusal before that is `Argument`; after it only `KeyRevoked` and `Argument` to the caller (a
+//!   balance below a debit). Whether the words are real chain state of a catalogued token is the reading layer's duty
+//!   (R1–R7), not this library's (spec §4.12). The raw forms (`decrypt`, `decryptPending`, `raw*`) exist only under the test
+//!   feature `vectors`.
 //! - **Balance cache** (clientkeys `sealBalanceCache` / `openBalanceCache`): AES-256-GCM under
 //!   `HKDF-SHA256(x, no salt, "scaas-zether-balance-cache-v1", 32)`, AAD `zether-cache:bls12381`, the box `{iv, ct}` in
 //!   unpadded base64url. The bookkeeping over the entries (`setCachedBalance`, `cacheAfterDebit`, `cacheAfterRollOver`) needs
 //!   `x` only through the balance check, which is the `checkBalance` command.
 //!
 //! Randomness: `rand_core` 0.6 `OsRng` inside (the prover's proofs, nonces and openings are hedged on it); the fixed-randomness
-//! entry points exist only under feature `vectors`. Residual (spec §8.2): the prover's scalar copies on the stack and its
-//! scalar multiplications by `x` (arkworks, not `secret_mul`). UNAUDITED.
+//! entry points exist only under feature `vectors`. Every multiplication of a supplied point by `x` (and by the proofs'
+//! nonce over `x`) runs through `scaas_ct::secret_mul` in zether-prover (T14b, Codex C6). Residual (spec §8.2): the
+//! prover's scalar copies on the stack, its fixed-base multiplications `[x]G`, and the per-transfer secrets `s`, `t_j` on
+//! supplied keys (arkworks). UNAUDITED.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing, clippy::disallowed_methods)]
 
 use crate::wallet::{aead_open, aead_seal, bounded, hkdf_sha256, Alg, Error, Handle, KeyId, Result, SecretStore};
@@ -31,7 +43,7 @@ use rand_core::{CryptoRng, OsRng, RngCore};
 use serde_json::{json, Map, Value};
 use std::sync::Arc;
 use zeroize::Zeroizing;
-use zether_prover::curve::{decode_scalar, encode_scalar, Bls12381};
+use zether_prover::curve::{decode_point, decode_scalar, encode_scalar, Bls12381};
 use zether_prover::keys::ZetherKey as ProverKey;
 
 /// The conf key's and the viewing key's `<use>` (zether-prover `USE_CONF`, `USE_DISCLOSURE`).
@@ -47,19 +59,21 @@ pub const BOX_DEPTH: usize = 1;
 const CACHE_INFO: &[u8] = b"scaas-zether-balance-cache-v1";
 const CACHE_AAD: &[u8] = b"zether-cache:bls12381";
 
-/// The header fields of the transfer and burn proofs (zether-prover `api::header`).
+/// The header fields of the transfer and burn proofs (zether-prover `api::header`; the raw commands, feature `vectors`).
+#[cfg(feature = "vectors")]
 const HEADER: &[&str] =
     &["chainId", "chainUid", "token", "envelopeBinding", "unwrapBinding", "sendCounter", "accSeq", "fee", "beneficiary", "validUntilBlock"];
-/// The recovery source and its chain fields (`recovery_source`, `recovery_header`).
+/// The recovery source and its chain fields (`recovery_source`, `recovery_header`; the raw commands, feature `vectors`).
+#[cfg(feature = "vectors")]
 const RECOVERY: &[&str] = &["payload", "entry", "sendCounter", "memo", "chainId", "chainUid", "token"];
 
 /// The commands, in this order (the fuzz target `zether_cmd`, built with `vectors`, names them by index).
 ///
-/// ARCH-POS-13 ("never a decryption oracle", owner 2026-11-06; spec no-decryption-oracle §4.8, T15c): a release build (no
-/// feature `vectors`) has no command that decrypts or opens a ciphertext its caller chose: `decrypt`, `decryptPending`,
-/// `checkBalance`, `proveTransfer`, `proveTransferMulti`, `proveBurn`, `openMemo`, `recoverTransfer` and `openDisclosure` exist
-/// only under the test feature `vectors` (which also turns on zether-prover's `hazmat`) until they take proven state (T14b).
-/// In a release build they are unknown commands (`Argument`, before the key is touched).
+/// ARCH-POS-13 ("never a decryption oracle", owner 2026-11-06; spec no-decryption-oracle §4.7, §4.8, T15c, T14b): a release
+/// build (no feature `vectors`) has no command that decrypts or opens a ciphertext its caller chose. The decrypting commands
+/// take raw words ([`zether_prover::state`]); their raw forms `decrypt`, `decryptPending` and `raw*` (zether-prover's raw
+/// commands, `hazmat`) exist only under the test feature `vectors`: in a release build they are unknown commands
+/// (`Argument`, before the key is touched).
 pub const COMMANDS: &[&str] = &[
     "encrypt",
     #[cfg(feature = "vectors")]
@@ -67,19 +81,19 @@ pub const COMMANDS: &[&str] = &[
     #[cfg(feature = "vectors")]
     "decryptPending",
     #[cfg(feature = "vectors")]
-    "checkBalance",
+    "rawCheckBalance",
     #[cfg(feature = "vectors")]
-    "proveTransfer",
+    "rawProveTransfer",
     #[cfg(feature = "vectors")]
-    "proveTransferMulti",
+    "rawProveTransferMulti",
     #[cfg(feature = "vectors")]
-    "proveBurn",
+    "rawProveBurn",
     #[cfg(feature = "vectors")]
-    "openMemo",
+    "rawOpenMemo",
     #[cfg(feature = "vectors")]
-    "recoverTransfer",
+    "rawRecoverTransfer",
     #[cfg(feature = "vectors")]
-    "openDisclosure",
+    "rawOpenDisclosure",
     "pop",
     "ownerAuth",
     "uaSig",
@@ -87,29 +101,64 @@ pub const COMMANDS: &[&str] = &[
     "envelope",
     "typedDigest",
     "namedCall",
+    "balance",
+    "pendingBalance",
+    "checkBalance",
+    "proveTransfer",
+    "proveTransferMulti",
+    "proveBurn",
+    "openMemo",
+    "recoverTransfer",
+    "openDisclosure",
 ];
+
+/// The words commands: zether-prover's `state` (its allow-lists, `prepare` before the key, `run` with it).
+fn words(cmd: &str) -> bool {
+    zether_prover::state::COMMANDS.contains(&cmd)
+}
+
+/// zether-prover's `api` name of a raw command (feature `vectors`): `rawX` → `x`.
+#[cfg(feature = "vectors")]
+fn prover_name(cmd: &str) -> String {
+    match cmd.strip_prefix("raw") {
+        Some(r) => r.get(..1).map(str::to_lowercase).unwrap_or_default() + r.get(1..).unwrap_or_default(),
+        None => cmd.to_string(),
+    }
+}
 
 /// The allow-list of `cmd`'s top-level fields (the fields zether-prover's `api` reads for it, never `key`, `revealSecret`,
 /// `includeWitness`); `curve` where the command is a curve command.
 fn allowed(cmd: &str, field: &str) -> bool {
     let has = |l: &[&str]| l.contains(&field);
+    if words(cmd) {
+        return zether_prover::state::allowed(cmd, field);
+    }
     match cmd {
         "encrypt" | "shieldCalldata" => has(&["curve", "Y", "amount"]),
+        #[cfg(feature = "vectors")]
         "decrypt" => has(&["curve", "ct", "tableBits", "boundBits", "allowLargeTable"]),
+        #[cfg(feature = "vectors")]
         "decryptPending" => has(&["curve", "pending", "tableBits", "boundBits", "allowLargeTable"]),
-        "checkBalance" => has(&["curve", "acc", "balance"]),
-        "proveTransfer" => has(HEADER) || has(&["curve", "disclosureMode", "yTo", "yAud", "auditorMode", "acc", "balance", "amount"]),
-        "proveTransferMulti" => {
+        #[cfg(feature = "vectors")]
+        "rawCheckBalance" => has(&["curve", "acc", "balance"]),
+        #[cfg(feature = "vectors")]
+        "rawProveTransfer" => has(HEADER) || has(&["curve", "disclosureMode", "yTo", "yAud", "auditorMode", "acc", "balance", "amount"]),
+        #[cfg(feature = "vectors")]
+        "rawProveTransferMulti" => {
             has(HEADER)
                 || has(&[
                     "curve", "disclosureMode", "mode", "recipients", "yAud", "auditorMode", "decoyFee", "minDecoyFee", "uaSigner",
                     "uaSignerGas", "acc", "balance",
                 ])
         }
-        "proveBurn" => has(HEADER) || has(&["curve", "amount", "recipient", "acc", "balance"]),
-        "openMemo" => has(RECOVERY) || field == "curve",
-        "recoverTransfer" => has(RECOVERY) || has(&["curve", "tableBits", "boundBits", "yAud"]),
-        "openDisclosure" => has(&[
+        #[cfg(feature = "vectors")]
+        "rawProveBurn" => has(HEADER) || has(&["curve", "amount", "recipient", "acc", "balance"]),
+        #[cfg(feature = "vectors")]
+        "rawOpenMemo" => has(RECOVERY) || field == "curve",
+        #[cfg(feature = "vectors")]
+        "rawRecoverTransfer" => has(RECOVERY) || has(&["curve", "tableBits", "boundBits", "yAud"]),
+        #[cfg(feature = "vectors")]
+        "rawOpenDisclosure" => has(&[
             "curve", "kind", "chainId", "chainUid", "token", "entryRef", "index", "amount", "Yt", "Cout", "Dout", "Ya", "Caud", "Daud",
         ]),
         "pop" => field == "curve",
@@ -154,6 +203,11 @@ fn clean(x: &Value) -> bool {
 fn shape(field: &str, x: &Value) -> bool {
     match field {
         "acc" | "ct" | "pending" => flat(x, &["C", "D"]),
+        "account" => x.as_array().is_some_and(|a| a.iter().all(Value::is_string)),
+        "accountData" | "entryWords" | "memoWords" | "auditorKeyWords" => {
+            x.as_array().is_some_and(|a| a.iter().all(|w| flat(w, &["slot", "word"])))
+        }
+        "blob" => flat(x, &["address", "code"]),
         "recipients" => x.as_array().is_some_and(|a| a.iter().all(|r| flat(r, &["yTo", "amount"]))),
         "meta" => flat(x, &["from", "data", "batch", "nonce", "validUntil", "mode", "relayer", "fee", "feeRecipient"]),
         "env" => flat(x, &["from", "batch", "nonce", "validUntil", "mode", "relayer", "fee", "feeRecipient"]),
@@ -262,6 +316,8 @@ impl ZetherKey {
 
     /// `f` over `x` under the store's read guard: `KeyRevoked` once the wallet was locked or freed.
     fn with_x<T>(&self, f: impl FnOnce(&[u8]) -> Result<T>) -> Result<T> {
+        #[cfg(feature = "vectors")]
+        KEY_USES.with(|n| n.set(n.get() + 1));
         self.secret.with(f)?
     }
 
@@ -276,7 +332,19 @@ impl ZetherKey {
     fn run<Rn: RngCore + CryptoRng>(&self, cmd: &str, request_json: &[u8], rng: &mut Rn) -> Result<String> {
         let c = ZetherCmd::from_json(cmd, request_json)?;
         let v = Value::Object(c.v);
-        self.with_key(|k| zether_prover::api::call_with_key(c.cmd, &v, k, rng).map(|o| o.to_string()).map_err(|_| Error::Argument))
+        if words(c.cmd) {
+            // the words parsed, checked, bound to this handle's `Y` and rebuilt before the key is touched (ARCH-POS-13)
+            let y = decode_point::<Bls12381>(&self.y).map_err(|_| Error::Argument)?;
+            let p = zether_prover::state::prepare(c.cmd, &v, &y).map_err(|_| Error::Argument)?;
+            return self.with_key(|k| zether_prover::state::run(&p, k, rng).map(|o| o.to_string()).map_err(|_| Error::Argument));
+        }
+        #[cfg(feature = "vectors")]
+        let owned = prover_name(c.cmd);
+        #[cfg(feature = "vectors")]
+        let name = owned.as_str();
+        #[cfg(not(feature = "vectors"))]
+        let name = c.cmd;
+        self.with_key(|k| zether_prover::api::call_with_key(name, &v, k, rng).map(|o| o.to_string()).map_err(|_| Error::Argument))
     }
 
     /// Command `cmd` of [`COMMANDS`] on `request_json` (named fields, as zether-prover's `api`, without a key) with this
@@ -318,6 +386,18 @@ impl ZetherKey {
         let ct = field("ct")?;
         self.with_x(|x| aead_open(Alg::Aes256Gcm, &*Self::cache_key(x)?, &iv, CACHE_AAD, &ct))
     }
+}
+
+thread_local! {
+    static KEY_USES: core::cell::Cell<usize> = const { core::cell::Cell::new(0) };
+}
+
+/// Test-only (feature `vectors`): how many times a Zether handle on this thread used its key (every secret operation of a
+/// command). A refusal of the words (location, parse, consistency, leg, role) comes before any (spec no-decryption-oracle §5:
+/// "key unused").
+#[cfg(feature = "vectors")]
+pub fn vectors_key_uses() -> usize {
+    KEY_USES.with(|n| n.get())
 }
 
 /// Test-only (feature `vectors`, never in a release build): the generator's randomness.

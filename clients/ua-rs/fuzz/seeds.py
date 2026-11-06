@@ -11,7 +11,8 @@ seal.json's containers), container (seal.json containers, acceptance), sealed (s
 encapsRefusals), mnemonic (keys.json mnemonics, normalization); T12: container_expect, members, accepted (seal.json's expect,
 members and accepted inputs of an open), uasig (sign.json's msig rows and ua rows as UaSigRequest JSON); T14: zether_cmd (one
 byte, the command's index in facade::zether::COMMANDS, then its JSON: clients/zether-prover/vectors/ requests without their key and
-witness flag, the disclosure cases, the envelope; the index after the last, zether.json's cache boxes); T15: pqz_cmd (one byte, the
+witness flag, the disclosure cases, the envelope; T14b, the words commands over smartcontracts/vectors/zether/state.json; the
+index after the last, zether.json's cache boxes); T15: pqz_cmd (one byte, the
 command's index in facade::pqz::COMMANDS, then its JSON: requests built from smartcontracts/vectors/pqz/n2304-kmax4096/, the
 default set's statement files (keys and T sliced from the statements) and, T15e, its state.json rows (raw words); the index after the last, a well-formed box that opens
 under no key).
@@ -24,8 +25,10 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 V = os.path.join(HERE, "../../../smartcontracts/vectors/ua")
 ZV = os.path.join(HERE, "../../zether-prover/vectors")
 # the order of scaas_ua::facade::zether::COMMANDS (tests/fuzz_caps.rs checks the indices used here); BOX: the box reader
-ZCMDS = ["encrypt", "decrypt", "decryptPending", "checkBalance", "proveTransfer", "proveTransferMulti", "proveBurn", "openMemo",
-         "recoverTransfer", "openDisclosure", "pop", "ownerAuth", "uaSig", "shieldCalldata", "envelope", "typedDigest", "namedCall"]
+ZCMDS = ["encrypt", "decrypt", "decryptPending", "rawCheckBalance", "rawProveTransfer", "rawProveTransferMulti", "rawProveBurn",
+         "rawOpenMemo", "rawRecoverTransfer", "rawOpenDisclosure", "pop", "ownerAuth", "uaSig", "shieldCalldata", "envelope",
+         "typedDigest", "namedCall", "balance", "pendingBalance", "checkBalance", "proveTransfer", "proveTransferMulti", "proveBurn",
+         "openMemo", "recoverTransfer", "openDisclosure"]
 BOX = len(ZCMDS)
 # the order of scaas_ua::facade::pqz::COMMANDS (tests/fuzz_caps.rs checks it); QBOX: the PQZ box reader
 QCMDS = ["enc", "dec", "proveRegister", "proveKeyRecord", "rawProveTransfer", "rawProveBurn", "rawProveRefresh", "rawProveTransferMulti",
@@ -81,17 +84,28 @@ def zc(cmd, v):
 
 def zether_seeds():
     t = zreq("transfer_bls12381.json")
-    out = [zc("proveTransfer", zreq(f)) for f in ("transfer_bls12381.json", "transfer_noaud_bls12381.json")]
-    out += [zc("proveTransferMulti", zreq(f)) for f in ("transfer_multi_bls12381.json", "transfer_multi_noaud_bls12381.json")]
-    out += [zc("proveBurn", zreq("burn_bls12381.json")), zc("checkBalance", {"acc": t["acc"], "balance": t["balance"]}),
+    out = [zc("rawProveTransfer", zreq(f)) for f in ("transfer_bls12381.json", "transfer_noaud_bls12381.json")]
+    out += [zc("rawProveTransferMulti", zreq(f)) for f in ("transfer_multi_bls12381.json", "transfer_multi_noaud_bls12381.json")]
+    out += [zc("rawProveBurn", zreq("burn_bls12381.json")), zc("rawCheckBalance", {"acc": t["acc"], "balance": t["balance"]}),
             zc("decrypt", {"ct": t["acc"], "tableBits": 18, "boundBits": 36}), zc("encrypt", {"Y": t["yTo"], "amount": 5}),
             zc("pop", {"curve": "bls12381"}), zc("ownerAuth", {"digest": "0x" + "11" * 32}),
             zc("uaSig", {"purpose": "metatx", "digest": "0x" + "22" * 32}), zc("shieldCalldata", {"Y": t["yTo"], "amount": 1})]
-    out += [zc("openDisclosure", {**{k: v for k, v in c.items() if k not in ("opening", "expect")},
+    out += [zc("rawOpenDisclosure", {**{k: v for k, v in c.items() if k not in ("opening", "expect")},
                                   "kind": {1: "receiver", 2: "auditor"}.get(c["kind"], "sender")})
             for c in zload("disclosure_bls12381.json")["cases"]]
     e = zload("envelope.json")
     out += [zc("envelope", {k: e[k] for k in ("chainId", "chainUid", "token", "meta")})]
+    # T14b: the words commands over the forge rows (smartcontracts/vectors/zether/state.json)
+    with open(os.path.join(HERE, "../../../smartcontracts/vectors/zether/state.json"), encoding="utf-8") as f:
+        st = json.load(f)
+    loc = {k: st[k] for k in ("family", "chainId", "chainUid", "token", "block", "psid")}
+    for a in st["accounts"]:
+        w = {**loc, "ua": a["ua"], "account": a["account"], "accountData": a["accountData"]}
+        out += [zc("balance", {**w, "tableBits": 18, "boundBits": 20}), zc("checkBalance", {**w, "balance": a["balance"]})]
+    for x in st["entries"]:
+        ent = {**loc, "fromUA": x["fromUA"], "sendCounter": x["sendCounter"], "entryWords": x["entryWords"], "entryPtr": x["entryPtr"],
+               **{k: x[k] for k in ("blob", "memoWords") if k in x}}
+        out += [zc("openDisclosure", {**ent, "ua": x["to"][0], "kind": "receiver", "index": 0})]
     out += [bytes([BOX]) + js(r["box"]) for k in ("cacheBox", "cacheRefusals") for r in load("zether.json")[k]]
     return out
 
@@ -222,7 +236,7 @@ def regress():
         "accepted/over-depth-5.json": over(next(r["accepted"] for r in opens if r.get("accepted")), 4),
         "uasig/over-depth-7.json": over(uasig(nested), 6),
         # T14: a Zether command (1 MiB, depth 8) and a cache box (2 MiB, depth 1), each behind its index byte
-        "zether_cmd/cmd-over-depth-9.bin": bytes([ZCMDS.index("proveTransfer")]) + over(zreq("transfer_bls12381.json"), 8),
+        "zether_cmd/cmd-over-depth-9.bin": bytes([ZCMDS.index("rawProveTransfer")]) + over(zreq("transfer_bls12381.json"), 8),
         "zether_cmd/box-over-depth-2.bin": bytes([BOX]) + over(load("zether.json")["cacheBox"][0]["box"], 1),
         # T15: a PQZ command (1 MiB, depth 8) and a cache box (2 MiB, depth 1), each behind its index byte
         "pqz_cmd/cmd-over-depth-9.bin": bytes([QCMDS.index("proveRegister")]) + over(

@@ -30,6 +30,7 @@ pub mod envelope;
 pub mod keys;
 pub mod nonce;
 pub mod schnorr;
+pub mod state;
 pub mod transcript;
 pub mod typed;
 pub mod vectors;
@@ -49,6 +50,8 @@ pub enum ZError {
     DecryptBound,
     #[error("bsgs: {0}")]
     Bsgs(&'static str),
+    #[error("the OS random number generator failed")]
+    Rng,
     #[error("witness out of range")]
     OutOfRange,
     #[error("malformed proof: {0}")]

@@ -185,7 +185,7 @@ fn ct<C: ZCurve>(v: &Value, k: &str) -> R<Ciphertext<C>> {
     Ok(Ciphertext { c: point::<C>(c, "C")?, d: point::<C>(c, "D")? })
 }
 
-fn ct_json<C: ZCurve>(c: &Ciphertext<C>) -> Value {
+pub(crate) fn ct_json<C: ZCurve>(c: &Ciphertext<C>) -> Value {
     json!({"C": hx(&encode_point::<C>(&c.c)), "D": hx(&encode_point::<C>(&c.d))})
 }
 
@@ -217,6 +217,21 @@ fn header(v: &Value, amount: u64, recipient: [u8; 32], burn: bool) -> R<Header> 
         memo_hash: [0; 32],
         valid_until_block: num(v, "validUntilBlock")?,
     })
+}
+
+/// BSGS parameters (`tableBits` / `boundBits`, defaults `d`), the table checked to fit (review L4): native checks free RAM
+/// (a same-size table already in memory needs nothing more, review N4); a browser tab stays at <= 2^24 (256 MiB) unless the
+/// caller opts in with `allowLargeTable`.
+pub(crate) fn bsgs_params<C: ZCurve>(v: &Value, d: BsgsParams) -> R<BsgsParams> {
+    let p = BsgsParams::new(opt_bits(v, "tableBits", d.table_bits)?, opt_bits(v, "boundBits", d.bound_bits)?).map_err(e)?;
+    if cfg!(target_arch = "wasm32") {
+        if p.table_bits > WASM_TABLE_BITS_DEFAULT_MAX && v.get("allowLargeTable") != Some(&Value::Bool(true)) {
+            return Err("tableBits above 24 in wasm needs \"allowLargeTable\": true".into());
+        }
+    } else if cached_table_bits::<C>() != Some(p.table_bits) {
+        check_ram(p.table_bits, mem_available()).map_err(e)?;
+    }
+    Ok(p)
 }
 
 /// Secrets (x, s, blinding factors) leave the call only when the request asks for them
@@ -275,7 +290,7 @@ fn prove_transfer_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v: &V
 }
 }
 
-fn prove_transfer_with<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, given: Option<&ZetherKey<C>>, v: &Value, rng: &mut Rn) -> R<Value> {
+pub(crate) fn prove_transfer_with<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, given: Option<&ZetherKey<C>>, v: &Value, rng: &mut Rn) -> R<Value> {
     if compact_token(v)? {
         return Err("a COMPACT token refuses the single format (TransferEntryDisabled)".into());
     }
@@ -324,7 +339,7 @@ fn prove_transfer_multi_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>,
 }
 }
 
-fn prove_transfer_multi_with<C: ZCurve, Rn: RngCore + CryptoRng>(
+pub(crate) fn prove_transfer_multi_with<C: ZCurve, Rn: RngCore + CryptoRng>(
     gens: &Gens<C>,
     given: Option<&ZetherKey<C>>,
     v: &Value,
@@ -412,7 +427,7 @@ fn prove_burn_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v: &Value
 }
 }
 
-fn prove_burn_with<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, given: Option<&ZetherKey<C>>, v: &Value, rng: &mut Rn) -> R<Value> {
+pub(crate) fn prove_burn_with<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, given: Option<&ZetherKey<C>>, v: &Value, rng: &mut Rn) -> R<Value> {
     let k = key_or::<C>(given, v)?;
     let amount = num(v, "amount")?;
     let recipient = recipient_id(v)?;
@@ -498,7 +513,7 @@ fn open_memo_json<C: ZCurve>(v: &Value) -> R<Value> {
 }
 }
 
-fn open_memo_with<C: ZCurve>(given: Option<&ZetherKey<C>>, v: &Value) -> R<Value> {
+pub(crate) fn open_memo_with<C: ZCurve>(given: Option<&ZetherKey<C>>, v: &Value) -> R<Value> {
     let k = key_or::<C>(given, v)?;
     let Source { send_counter, memo, .. } = recovery_source::<C>(v)?;
     let memo = memo.ok_or("`entry`/`payload` carries no memo (not commit-reveal): `recoverTransfer` needs no keys")?;
@@ -528,7 +543,7 @@ fn recover_transfer_json<C: ZCurve, Rn: RngCore + CryptoRng>(v: &Value, rng: &mu
 }
 }
 
-fn recover_transfer_with<C: ZCurve, Rn: RngCore + CryptoRng>(given: Option<&ZetherKey<C>>, v: &Value, rng: &mut Rn) -> R<Value> {
+pub(crate) fn recover_transfer_with<C: ZCurve, Rn: RngCore + CryptoRng>(given: Option<&ZetherKey<C>>, v: &Value, rng: &mut Rn) -> R<Value> {
     let k = key_or::<C>(given, v)?;
     let p = point_len::<C>();
     let Source { send_counter, rec, memo, single } = recovery_source::<C>(v)?;
@@ -550,12 +565,7 @@ fn recover_transfer_with<C: ZCurve, Rn: RngCore + CryptoRng>(given: Option<&Zeth
             (ys.into_iter().zip(ml.iter().map(|l| l.amount)).collect(), aud)
         }
         (r, None) => {
-            let bsgs = BsgsParams::for_target();
-            let bp = BsgsParams::new(opt_bits(v, "tableBits", bsgs.table_bits)?, opt_bits(v, "boundBits", bsgs.bound_bits)?)
-                .map_err(e)?;
-            if !cfg!(target_arch = "wasm32") && cached_table_bits::<C>() != Some(bp.table_bits) {
-                check_ram(bp.table_bits, mem_available()).map_err(e)?;
-            }
+            let bp = bsgs_params::<C>(v, BsgsParams::for_target())?;
             let pt = |o: usize| decode_point::<C>(&r[o..o + p]).map_err(e);
             let mut legs = Vec::new();
             let mut aud = false;
@@ -742,19 +752,7 @@ fn by_curve<C: ZCurve, Rn: RngCore + CryptoRng>(cmd: &str, v: &Value, given: Opt
         // (wasm 22/44, native 24–26/54 by RAM). `decryptPending` defaults to 22/44 everywhere.
         "decrypt" | "decryptPending" => {
             let k = key(v)?;
-            let d = if cmd == "decrypt" { BsgsParams::for_target() } else { BsgsParams::MOBILE };
-            let p = BsgsParams::new(opt_bits(v, "tableBits", d.table_bits)?, opt_bits(v, "boundBits", d.bound_bits)?)
-                .map_err(e)?;
-            // Review L4: a caller-chosen table must fit. Native checks free RAM; a browser tab stays at
-            // <= 2^24 (256 MiB) unless the caller explicitly opts in with `allowLargeTable`.
-            if cfg!(target_arch = "wasm32") {
-                if p.table_bits > WASM_TABLE_BITS_DEFAULT_MAX && v.get("allowLargeTable") != Some(&Value::Bool(true)) {
-                    return Err("tableBits above 24 in wasm needs \"allowLargeTable\": true".into());
-                }
-            } else if cached_table_bits::<C>() != Some(p.table_bits) {
-                // a same-size table already in memory needs nothing more (review N4)
-                check_ram(p.table_bits, mem_available()).map_err(e)?;
-            }
+            let p = bsgs_params::<C>(v, if cmd == "decrypt" { BsgsParams::for_target() } else { BsgsParams::MOBILE })?;
             let field = if cmd == "decrypt" { "ct" } else { "pending" };
             let amount = cached_table::<C>(p.table_bits).map_err(e)?.decrypt(&ct::<C>(v, field)?, &k.x, p.bound_bits);
             Ok(json!({"amount": amount.map_err(e)?.to_string()}))
@@ -762,7 +760,7 @@ fn by_curve<C: ZCurve, Rn: RngCore + CryptoRng>(cmd: &str, v: &Value, given: Opt
         // Cache validation (limits §5): `[balance]G == C − [x]D`, no BSGS.
         "checkBalance" => {
             let k = key(v)?;
-            Ok(json!({"ok": check_balance(&ct::<C>(v, "acc")?, &k.x, num(v, "balance")?)}))
+            Ok(json!({"ok": check_balance(&ct::<C>(v, "acc")?, &k.x, num(v, "balance")?).map_err(e)?}))
         }
         "proveTransfer" => prove_transfer_with::<C, _>(&gens(), given, v, rng),
         "proveTransferMulti" => prove_transfer_multi_with::<C, _>(&gens(), given, v, rng),

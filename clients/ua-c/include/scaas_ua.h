@@ -1510,15 +1510,17 @@ ScaasUaStatus scaas_ua_zether_public(const ScaasUaZetherKey *k,
                                      uint8_t *ua32);
 
 /**
- * zether-prover's command `cmd` (encrypt, decrypt, decryptPending, checkBalance, proveTransfer, proveTransferMulti, proveBurn,
- * openMemo, recoverTransfer, openDisclosure, pop, ownerAuth, uaSig, shieldCalldata, envelope, typedDigest, namedCall) on
- * `request_json` (named fields, at most 1 MiB, depth 8) with the handle's key: its JSON answer into `out_json`. Every field is
- * checked against the command's allow-list: a `key` object, `revealSecret`, `includeWitness`, an unknown field or another
- * curve is SCAAS_UA_ERR_ARGUMENT, and so is a refusal of the prover (no detail: it could name a request value). A size query
- * runs the command again (a proof is made again, with new randomness). ARCH-POS-13 (ua-rs-sign T15c): this release library
- * has none of the commands that decrypt or open a caller's ciphertext (decrypt, decryptPending, checkBalance, proveTransfer,
- * proveTransferMulti, proveBurn, openMemo, recoverTransfer, openDisclosure): each is SCAAS_UA_ERR_ARGUMENT until it takes
- * proven state.
+ * zether-prover's command `cmd` (encrypt, pop, ownerAuth, uaSig, shieldCalldata, envelope, typedDigest, namedCall, and the
+ * words commands balance, pendingBalance, checkBalance, proveTransfer, proveTransferMulti, proveBurn, openMemo,
+ * recoverTransfer, openDisclosure) on `request_json` (named fields, at most 1 MiB, depth 8) with the handle's key: its JSON
+ * answer into `out_json`. Every field is checked against the command's allow-list: a `key` object, `revealSecret`,
+ * `includeWitness`, an unknown field or another curve is SCAAS_UA_ERR_ARGUMENT, and so is a refusal of the prover (no
+ * detail: it could name a request value). A size query runs the command again (a proof is made again, with new randomness).
+ * ARCH-POS-13 (ua-rs-sign T15c, T14b): a command that decrypts takes a named location and the raw storage words a reading
+ * layer read (account slots, `bytes` data slots, entry, pointer, SSTORE2 code and memo words, the token's words), never a
+ * ciphertext, entry, memo or parsed state field; the words are parsed, checked, bound to the handle's key and rebuilt
+ * before the key is used. This release library has no raw form (decrypt, decryptPending, raw*): each is
+ * SCAAS_UA_ERR_ARGUMENT.
  */
 ScaasUaStatus scaas_ua_zether_call(const ScaasUaZetherKey *k,
                                    const char *cmd,

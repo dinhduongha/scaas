@@ -85,7 +85,7 @@ fn zether_handle_KeyRevoked_after_lock() {
     #[cfg(feature = "vectors")]
     {
         let t = request("transfer_bls12381.json");
-        assert_eq!(call(&k, "checkBalance", &json!({"acc": t["acc"], "balance": t["balance"]})).err(), Some(Error::KeyRevoked));
+        assert_eq!(call(&k, "rawCheckBalance", &json!({"acc": t["acc"], "balance": t["balance"]})).err(), Some(Error::KeyRevoked));
     }
     assert_eq!(k.seal_balance_cache(b"{}").err(), Some(Error::KeyRevoked));
     assert_eq!(k.open_balance_cache(cache.as_bytes()).err(), Some(Error::KeyRevoked));
@@ -112,27 +112,30 @@ fn unlock_does_not_revive_a_zether_handle() {
     assert!(call(&w.zether_key(60, 0, 7).unwrap(), "pop", &json!({})).is_ok(), "a new handle works");
 }
 
-/// ARCH-POS-13 (T15c, F6 / F7 / F8): a release build lists none of the raw commands and refuses each, with its vector request,
-/// as `Argument` (an unknown command, before the key); under `vectors` they are there and zether-prover runs them (`hazmat`).
+/// ARCH-POS-13 (T15c, T14b; F6 / F7 / F8): a release build lists none of the raw commands and refuses each, with its vector
+/// request, as `Argument` (an unknown command, before the key); under `vectors` they are there and zether-prover runs them
+/// (`hazmat`). The words commands are in every build and refuse a raw ciphertext field (`acc`, `ct`, `pending`, `entry`).
 #[test]
 fn release_has_no_raw_decrypt() {
     unlock();
-    let raw = ["decrypt", "decryptPending", "checkBalance", "proveTransfer", "proveTransferMulti", "proveBurn", "openMemo",
-        "recoverTransfer", "openDisclosure"];
-    let release = ["encrypt", "pop", "ownerAuth", "uaSig", "shieldCalldata", "envelope", "typedDigest", "namedCall"];
-    let mut want = vec!["encrypt"];
-    if cfg!(feature = "vectors") {
-        want.extend(raw);
+    let raw = ["decrypt", "decryptPending", "rawCheckBalance", "rawProveTransfer", "rawProveTransferMulti", "rawProveBurn", "rawOpenMemo",
+        "rawRecoverTransfer", "rawOpenDisclosure"];
+    let release = ["encrypt", "pop", "ownerAuth", "uaSig", "shieldCalldata", "envelope", "typedDigest", "namedCall", "balance",
+        "pendingBalance", "checkBalance", "proveTransfer", "proveTransferMulti", "proveBurn", "openMemo", "recoverTransfer", "openDisclosure"];
+    for cmd in release {
+        assert!(COMMANDS.contains(&cmd), "{cmd}");
     }
-    want.extend(&release[1..]);
-    assert_eq!(COMMANDS, &want[..]);
+    for cmd in raw {
+        assert_eq!(COMMANDS.contains(&cmd), cfg!(feature = "vectors"), "{cmd}");
+    }
+    assert_eq!(COMMANDS.len(), release.len() + if cfg!(feature = "vectors") { raw.len() } else { 0 });
     let w = wallet();
     let k = w.zether_key(60, 0, 7).unwrap();
     let t = request("transfer_bls12381.json");
     for cmd in raw {
         let req = match cmd {
-            "proveTransfer" => t.clone(),
-            "checkBalance" => json!({"acc": t["acc"], "balance": t["balance"]}),
+            "rawProveTransfer" => t.clone(),
+            "rawCheckBalance" => json!({"acc": t["acc"], "balance": t["balance"]}),
             "decrypt" => json!({"ct": t["acc"], "tableBits": 18, "boundBits": 20}),
             _ => json!({}),
         };
@@ -144,7 +147,23 @@ fn release_has_no_raw_decrypt() {
         }
     }
     if cfg!(feature = "vectors") {
-        assert_eq!(call(&k, "checkBalance", &json!({"acc": t["acc"], "balance": t["balance"]})), Ok(json!({"ok": true})), "hazmat on");
+        assert_eq!(call(&k, "rawCheckBalance", &json!({"acc": t["acc"], "balance": t["balance"]})), Ok(json!({"ok": true})), "hazmat on");
+    }
+    for (cmd, f, x) in [
+        ("checkBalance", "acc", json!({"C": t["acc"]["C"], "D": t["acc"]["D"]})),
+        ("balance", "ct", json!({"C": t["acc"]["C"], "D": t["acc"]["D"]})),
+        ("pendingBalance", "pending", json!({"C": t["acc"]["C"], "D": t["acc"]["D"]})),
+        ("proveTransfer", "acc", json!({"C": t["acc"]["C"], "D": t["acc"]["D"]})),
+        ("proveBurn", "accSeq", json!(1)),
+        ("openMemo", "memo", json!("0x00")),
+        ("recoverTransfer", "payload", json!("0x00")),
+        ("openDisclosure", "Cout", json!("0x00")),
+        ("openDisclosure", "amount", json!(1)),
+    ] {
+        let mut r = json!({});
+        assert!(ZetherCmd::from_json(cmd, r.to_string().as_bytes()).is_ok(), "{cmd}: positive control");
+        r[f] = x;
+        assert_eq!(ZetherCmd::from_json(cmd, r.to_string().as_bytes()).err(), Some(Error::Argument), "{cmd} with {f}");
     }
     for cmd in release {
         assert!(ZetherCmd::from_json(cmd, b"{}").is_ok(), "{cmd}: positive control");
@@ -161,10 +180,10 @@ fn a_key_field_in_command_json_is_refused() {
     let secret_key = json!({"seed": "0x".to_string() + &"11".repeat(64), "coin": 60, "account": 0});
     for cmd in COMMANDS {
         let base = match *cmd {
-            "proveTransfer" => t.clone(),
-            "checkBalance" => json!({"acc": t["acc"], "balance": t["balance"]}),
-            "proveTransferMulti" => request("transfer_multi_bls12381.json"),
-            "proveBurn" => request("burn_bls12381.json"),
+            "rawProveTransfer" => t.clone(),
+            "rawCheckBalance" => json!({"acc": t["acc"], "balance": t["balance"]}),
+            "rawProveTransferMulti" => request("transfer_multi_bls12381.json"),
+            "rawProveBurn" => request("burn_bls12381.json"),
             _ => json!({}),
         };
         assert!(ZetherCmd::from_json(cmd, base.to_string().as_bytes()).is_ok(), "{cmd}: positive control");
@@ -262,12 +281,12 @@ fn pop_and_check_balance_through_the_facade() {
     #[cfg(feature = "vectors")]
     {
         let t = request("transfer_bls12381.json");
-        assert_eq!(call(&k, "checkBalance", &json!({"acc": t["acc"], "balance": t["balance"]})).unwrap(), json!({"ok": true}));
+        assert_eq!(call(&k, "rawCheckBalance", &json!({"acc": t["acc"], "balance": t["balance"]})).unwrap(), json!({"ok": true}));
         let more = t["balance"].as_u64().unwrap() + 1;
-        assert_eq!(call(&k, "checkBalance", &json!({"acc": t["acc"], "balance": more})).unwrap(), json!({"ok": false}));
+        assert_eq!(call(&k, "rawCheckBalance", &json!({"acc": t["acc"], "balance": more})).unwrap(), json!({"ok": false}));
         // another account's handle does not open it
         let other = w.zether_key(60, 1, 7).unwrap();
-        assert_eq!(call(&other, "checkBalance", &json!({"acc": t["acc"], "balance": t["balance"]})).unwrap(), json!({"ok": false}));
+        assert_eq!(call(&other, "rawCheckBalance", &json!({"acc": t["acc"], "balance": t["balance"]})).unwrap(), json!({"ok": false}));
     }
     // a uaSig verifies too
     let d = "0x".to_string() + &"5a".repeat(32);
@@ -350,11 +369,11 @@ fn zether_prover_vectors_through_the_facade() {
         o.remove("opening");
         o.remove("expect");
         o.insert("kind".into(), json!(kind));
-        assert_eq!(run(k, "openDisclosure", &q, rng)["opening"], c["opening"], "{kind} opening, leg {}", c["index"]);
+        assert_eq!(run(k, "rawOpenDisclosure", &q, rng)["opening"], c["opening"], "{kind} opening, leg {}", c["index"]);
     };
     let mut rng = ChaCha20Rng::seed_from_u64(0x5a37_4e72);
     let mut cp_rng = ChaCha20Rng::seed_from_u64(0x5e9d_e7c9);
-    let t = run(&from, "proveTransfer", &request("transfer_bls12381.json"), &mut rng);
+    let t = run(&from, "rawProveTransfer", &request("transfer_bls12381.json"), &mut rng);
     same("transfer_bls12381.json", &t);
     disclose(&to, &cases[1], "receiver", &mut rng);
     disclose(&aud, &cases[2], "auditor", &mut rng);
@@ -362,22 +381,22 @@ fn zether_prover_vectors_through_the_facade() {
     let q = request("transfer_bls12381.json");
     let rec = run(
         &from,
-        "recoverTransfer",
+        "rawRecoverTransfer",
         &json!({"payload": t["payload"], "chainId": q["chainId"], "chainUid": q["chainUid"], "token": q["token"], "yAud": q["yAud"],
                 "tableBits": 18, "boundBits": 36}),
         &mut cp_rng,
     );
     assert_eq!(rec["senderS"], cases[0]["opening"]);
     assert_eq!(rec["senderCp"][0], cases[3]["opening"]);
-    same("transfer_noaud_bls12381.json", &run(&from, "proveTransfer", &request("transfer_noaud_bls12381.json"), &mut rng));
-    same("burn_bls12381.json", &run(&from, "proveBurn", &request("burn_bls12381.json"), &mut rng));
+    same("transfer_noaud_bls12381.json", &run(&from, "rawProveTransfer", &request("transfer_noaud_bls12381.json"), &mut rng));
+    same("burn_bls12381.json", &run(&from, "rawProveBurn", &request("burn_bls12381.json"), &mut rng));
     // schnorr_bls12381.json is a fixed-nonce row (no facade call takes a nonce): its key is this handle's
     let s = zv("schnorr_bls12381.json");
     assert_eq!(from.y(), h(&s["Y"]));
-    same("transfer_multi_bls12381.json", &run(&from, "proveTransferMulti", &request("transfer_multi_bls12381.json"), &mut rng));
+    same("transfer_multi_bls12381.json", &run(&from, "rawProveTransferMulti", &request("transfer_multi_bls12381.json"), &mut rng));
     disclose(&to, &cases[5], "receiver", &mut cp_rng);
     disclose(&aud, &cases[6], "auditor", &mut cp_rng);
-    same("transfer_multi_noaud_bls12381.json", &run(&from, "proveTransferMulti", &request("transfer_multi_noaud_bls12381.json"), &mut rng));
+    same("transfer_multi_noaud_bls12381.json", &run(&from, "rawProveTransferMulti", &request("transfer_multi_noaud_bls12381.json"), &mut rng));
     // r33_keys.json's PoPs: seed 33, account 0 then account 1
     let mut pop_rng = ChaCha20Rng::seed_from_u64(33);
     for (i, account) in [(0, 0u32), (2, 1)] {
