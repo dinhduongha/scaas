@@ -50,8 +50,8 @@ reasoning; [estimate] our paper arithmetic; [unverified] could not be checked. S
 | Hybrid: split balance | n accounts, n operators: each sees its part only; costs n times the keeping (§6) | [inference] | none | allowed as client practice |
 | Rotation after (A) reconstruction, as a new UA | Works today: rebuild the old `seed32`, new operator, new `msig` UA with a fresh key, confidential transfer proved under the old key; the cost is a new identity (§7.1) | [repo] [inference] | none | the near-term recovery procedure |
 | Versioned PQZ keys under one UA (path (A), later C/D) | `pqzKeyAt(ua, version)`, a current pointer, `R_REG` and `keyOwner` per version; per-version account state in the token; no version enters the statement, so the proof layer is untouched (§7.3) | [inference] | a new registry generation and new PQZ token releases; **same `proofSystemId`**, no new pqz-core vectors | spec now; placement is the owner's (§7.5) |
-| **Verdict (C)** | **Feasible now by MPC rounding**, off chain, no contract or parameter change; flooding is out | | | build a prototype |
-| **Verdict (D)** | **Research**: PQZL possible without verifier change but costly and unproven against insiders; PQZH not needed | | | research spike only |
+| **Verdict (C)** | **Feasible now by MPC rounding**, off chain, no contract or parameter change; flooding is out. Deeper research (§12.1): a simulated MPC rounding equals `pqz_dec` on the frozen vectors at all four sets | [repo] | | build a prototype |
+| **Verdict (D)** | **Research**: PQZL possible without verifier change but costly and unproven against insiders; PQZH not needed. Deeper research (§12.2): online fits the inline window, offline Gaussian masks ≈ 0.35 GB per party per proof; the blocker is the security of revealed aborts | | | research spike only |
 
 ## 2. Setting
 
@@ -280,7 +280,7 @@ comparison ([ePrint 2021/119](https://eprint.iacr.org/2021/119), FC 2021) [paper
 ML-KEM, which must also run the FO re-encryption and hashes in MPC (145–290 rounds,
 [ePrint 2026/2220](https://eprint.iacr.org/2026/2220)) [preprint]: PQZ decryption has no hash.
 
-One detail: `Δ = ⌊q/2^b⌋` is not `q/2^b`, so BFV's `round(2^b·w/q)` and PQZ's `round(w/Δ)` differ by at most
+Corrected by the harness of §12.1: `Sub` gives negative digit sums, so the window must be centred (`y = w + ⌊Δ/2⌋ + Δ·⌊q/(2Δ)⌋`), and `Δ` is even at `n2304-kmax4096`. One detail: `Δ = ⌊q/2^b⌋` is not `q/2^b`, so BFV's `round(2^b·w/q)` and PQZ's `round(w/Δ)` differ by at most
 `M·2^b·(q/2^b − Δ)/q ≈ 2^-12` of a unit at `n2304-kmax4096`; under the proven noise bound both give the same `M`. A
 prototype must match `pqz_dec` on the frozen vectors anyway [inference].
 
@@ -777,10 +777,10 @@ t or more shares or of the whole key.
 | Step | What | Class | Agent-days (off-chain prototype) [estimate] | Depends on |
 |---|---|---|---|---|
 | H3′ | operator-attested views: `R_DR` proofs over `v_f` and credits, verified by members off chain | build now | 1–2 | none |
-| C1 | simulated (one process) Shamir sharing over `F_q`, local partials, MPC rounding; equality with `pqz_dec` on the frozen vectors at all four sets; refusal of non-state ciphertexts; designated output | build now | 3–5 | none |
+| C1 | simulated (one process) Shamir sharing over `F_q`, local partials, MPC rounding; equality with `pqz_dec` on the frozen vectors at all four sets; refusal of non-state ciphertexts; designated output | **done as a research harness (§12.1)** | — | none |
 | C2 | dealer tool: fresh `seed32` → `s, e, pk`, `R_REG`, Shamir shares of `(s, e)`, (A) shares of `seed32` | build now, after an owner ruling (Q2) | 2–3 | ua-rs-sign T16a (A) |
 | C3 | networked, malicious-secure (honest majority) service with preprocessing (edaBits or modulus conversion) | build after C1 | 10–15 | C1 |
-| D1 | research spike: LaZer prover as an MPC dataflow; proof sketch for revealing rejected `w`, `t`, `v`; Gaussian-sampling choice; leakage of local shares | research | 10–15 (paper work) | C1 |
+| D1 | research spike: LaZer prover as an MPC dataflow; proof sketch for revealing rejected `w`, `t`, `v`; Gaussian-sampling choice; leakage of local shares | research; dataflow and cost model in §12.2, the security proof still open | 10–15 (paper work) | C1 |
 | D2 | simulated MPC PQZL prover whose proofs the existing verifier accepts | research prototype | 20–30 | D1 |
 | D3 | networked malicious PQZL prover | build only if D1 and D2 succeed | 40–60, plus external review | D2 |
 | R0 | client procedure "(A) reconstruct → rotate as a new UA" (§7.1), with tests on a local chain | build now, after (A) | 1–2 | ua-rs-sign T16a (A) |
@@ -934,3 +934,193 @@ TEE:
 
 - TEE.Fail coverage, BleepingComputer 2025-10-28 —
   https://bleepingcomputer.com/news/security/teefail-attack-breaks-confidential-computing-on-intel-amd-nvidia-cpus [vendor/news]
+
+## 12. Deeper research (2026-11-06)
+
+Added the same day at the owner's request: deeper work where §4 and §5 stopped at estimates. Research only, PQZ only,
+**UNAUDITED**. Nothing in pqz-core, the contracts, the node or the clients changed. Owner rulings above are not reopened.
+The harness and its output are in [`pqz-threshold-decrypt-prove/`](pqz-threshold-decrypt-prove/). No timing was measured.
+
+### 12.1 C1 as a research harness: MPC rounding equals `pqz_dec` on the frozen vectors at all four sets
+
+**What it does** ([`pqz_threshold_c1.py`](pqz-threshold-decrypt-prove/pqz_threshold_c1.py), output
+[`pqz_threshold_c1.out`](pqz-threshold-decrypt-prove/pqz_threshold_c1.out); Python 3 standard library plus the vectors'
+own checker `smartcontracts/vectors/pqz/pqz_kat.py` for KeyGen, Enc, Add / Sub and the set constants) [repo]:
+
+1. A dealer Shamir-shares every coefficient of `s` over `F_q` (degree `d = (n − 1)/2`).
+2. Each party computes `u^T s_j` locally (negacyclic products in `Z_q[X]/(X^64 + 1)`, window `win`) and so its share of
+   `y = v − u^T s + ⌊Δ/2⌋ + Δ·B` with `B = ⌊q/(2Δ)⌋`.
+3. **Offline:** a random `r = r_hi·Δ + r_lo`, uniform in `[0, q)`, with shared bits of `r_hi` and `r_lo`. The bits come
+   from a jointly random value by the square-root method (open `a²`, `b = (a/√(a²) + 1)/2`); `r_lo < Δ` and `r < q` are
+   tested in MPC and only the accept bit opens.
+4. **Online:** open `c = y + r mod q` (uniform); compute, as public-versus-shared bitwise comparisons (log-depth prefix-OR),
+   `wrap = [c < r]` in mixed radix `(hi, lo)`, `[c_lo < r_lo]` and `[c′_lo < r_lo]` with `c′ = c + q`; then
+   `M + B = c_hi − r_hi − [c_lo < r_lo] + wrap·(c′_hi − c_hi − [c′_lo < r_lo] + [c_lo < r_lo])`, one multiplication; open `M`.
+5. Compare `M` with the `M` fields of the frozen vectors, which the C core's `Dec` wrote through `pqz-vectors` [repo].
+
+**Results** [repo, harness output]:
+
+| Check | `n2048-kmax1024` | `n2304-kmax4096` | `n2560-kmax16384` | `n2816-kmax65536` |
+|---|---|---|---|---|
+| `enc.json`: 10 fresh legs (values 0 to 2^64 − 1), Add / Sub with Trivial and with a ciphertext | equal | equal | equal | equal |
+| `worstcase_noise.json` bound: `K_MAX − 1` credits at `B_FRESH` exactly (noise 12,145,056 / 54,103,140 / 239,584,992 / 1,044,627,900) | equal | equal | equal | equal |
+| a `v` at window 3 (auditor copy of an `R_TXM` leg; expected from the reference `Dec`, not a frozen row) | equal | equal | equal | equal |
+| parties | n = 5 | n = 3, 5, 7 | n = 5 | n = 5 |
+| N1 one wrong coefficient in party 2's key share, all n shares checked at an opening | abort | abort | abort | abort |
+| N1b the same, fast path that opens from `d + 1` shares only | wrong `M` | wrong `M` | wrong `M` | wrong `M` |
+| N2 only `d` parties: multiplication refused; two partials interpolated and rounded in the clear | refused; wrong `M` | refused; wrong `M` | refused; wrong `M` | refused; wrong `M` |
+| N3 caller-supplied ciphertext | refused | refused | refused | refused |
+| N3b the same with the state rule off: crafted queries that recover `s` exactly (8·K) | 256 | 288 | 320 | 352 |
+| N4 comparator mutant (`M_0 + 1`) | caught | caught | caught | caught |
+| values opened online | `c`, `M` | `c`, `M` | `c`, `M` | `c`, `M` |
+
+**Two design points the harness found** [repo]:
+
+- **`Sub` gives negative digit sums** (`enc.json`: `1,000,000 − Trivial(1,000)` decrypts to `M = (−8, −10, −1, 4, 15, 0, …)`),
+  and `pqz_dec` centres `w`. The recipe of §4.4 (`y = w + ⌊Δ/2⌋`, then `⌊y/Δ⌋`) is wrong for such a ciphertext: the window
+  must be centred, which the shift `Δ·B` above does, and an opened `M` is read as a centred field element.
+- **`Δ` is even at `n2304-kmax4096`** (233,747,196; odd at the other three sets). `⌊(w + ⌊Δ/2⌋)/Δ⌋ = ⌊(2w + Δ)/(2Δ)⌋`
+  holds for both parities, so one formula serves every set; a "Δ odd, no ties" argument does not.
+
+**The rounding oracle, concretely** [repo]. With the state rule off, a query with `u` the unit polynomial at polynomial `j`
+and `v_i = ⌈Δ/2⌉ + off` returns `M_i = [s_j[16w + i] ≤ off]`; `off ∈ {0, −1}` over the four windows gives every coefficient
+of `s ∈ {−1, 0, 1}`: **8·K queries** (288 at `n2304-kmax4096`) recover `s` exactly. Two of them were also run through the
+MPC with the same answers: **MPC rounding does not protect a key by itself; the decrypt-only-chain-state rule of §4.7
+does.** This is a second route to the key next to §3.3's (crafted credits plus opened noise).
+
+**What is simulated, precisely.** Every party is a slot in one process; sending is a counter (no network, no
+authentication). Multiplication is the semi-honest resharing protocol (BGW degree reduction, with `n ≥ 2d + 1` online);
+openings check that all `n` shares lie on one degree-`d` polynomial, which detects up to `n − d − 1` wrong shares (N1) but
+not an additive error injected into a resharing. Malicious security needs a multiplication check on top, for example
+Chida et al. ([ePrint 2018/570](https://eprint.iacr.org/2018/570), CRYPTO 2018) [paper], at about twice the
+multiplications. The key dealer is trusted (roadmap C2). Nothing secret is computed in the clear: the rounding runs as an
+MPC sub-protocol, not as an opened `w`.
+
+**Cost model** (counted by the harness, one decryption = 16 coefficients; a field element sent as 8 bytes) [repo]:
+
+| Set, n | Online rounds | Online multiplications | Online elements sent per party | Offline multiplications | Offline elements sent per party |
+|---|---|---|---|---|---|
+| `n2048-kmax1024`, 5 | 9 | 4,784 | 19,264 (≈ 154 KB) | 10,656 | 55,296 (≈ 442 KB) |
+| `n2304-kmax4096`, 3 | 9 | 5,264 | 10,592 (≈ 85 KB) | 11,301 | 29,280 (≈ 234 KB) |
+| `n2304-kmax4096`, 5 | 9 | 5,264 | 21,184 (≈ 169 KB) | 11,301 | 58,560 (≈ 468 KB) |
+| `n2304-kmax4096`, 7 | 9 | 5,264 | 31,776 (≈ 254 KB) | 14,296 | 111,552 (≈ 892 KB) |
+| `n2560-kmax16384`, 5 | 9 | 5,744 | 23,104 (≈ 185 KB) | 15,288 | 78,624 (≈ 629 KB) |
+| `n2816-kmax65536`, 5 | 9 | 6,224 | 25,024 (≈ 200 KB) | 14,328 | 73,440 (≈ 588 KB) |
+
+Offline counts vary between runs with the rejection draws. The 9 online rounds are: open `c`, five prefix-OR layers, two
+products, open `M`. Three comparisons per coefficient (48 per ciphertext) match §4.4's
+estimate of 32–48 (`hi` 17–23 bits, `lo` 26–32 bits across the sets); no full-width comparison is needed in mixed radix. The bytes are an **upper bound**: the circuit is a plain
+prefix-OR (about `L·log L` products per comparison), not Rabbit or edaBits. Published protocols are much leaner, though
+they target `q = 2^k` (Zyskind–Zarchy–Leibovich–Peikert, read in full by our search agent: for their example, `q = 2^64`
+and one plaintext bit, 656 bits online per party plus commitments, three sequential openings, no online multiplication,
+8.48 ms at 4 parties on a 1 ms network, measured by its authors) [paper]; PQZ's `q` is prime, which the
+Damgård–Kolby–Orlandi–Pawlak variants for arbitrary source moduli cover (about 63 preprocessed bits against about 17,000;
+abstract only) [preprint], and a one-round conversion with one opening is now claimed optimal (Damgård–Hasler–Kolby–Pawlak,
+[ePrint 2026/2450](https://eprint.iacr.org/2026/2450), 2026-10-12, abstract only) [preprint].
+
+**Verdict (C): unchanged, now with evidence.** MPC rounding reproduces `pqz_dec` exactly at every set, including the
+reachable worst-case noise and negative digit sums, opening only a uniform mask and `M`. C1 is done as a research harness;
+C2 (dealer tool) and C3 (networked, malicious-secure service) remain as in §8.3.
+
+### 12.2 D1 paper spike: the PQZL prover as an MPC dataflow
+
+**Dataflow for one `R_TX` proof at `n2304-kmax4096`** (sizes of §5.2; `y1` 10,880 and `y2` 4,480 coefficients per
+attempt, `z3` / `z4` 256 each, about 18 quad attempts) [repo] [inference]:
+
+| Step | Class under Shamir sharing | Size per attempt | Basis for its cost |
+|---|---|---|---|
+| Witness preparation: `s_f`, `e_f` dealt once; `r`, `e1`, `e2_*` as CBD from shared random bits, norm test opens one accept bit | linear + one comparison per vector | per proof | harness: random bits and comparisons as in §12.1 |
+| `e_T = w − Δ·M` and its 27-bit decomposition (16 coefficients) | linear, then bit decomposition | per proof | ≈ C1 per coefficient: hundreds of multiplications each |
+| ABDLOP commitment `tA` with jointly sampled ternary `s2`; `power2round` | linear, one opening inside the quorum (§5.2) | once | free apart from the opening |
+| Masks `y1`, `y2`, `y3`, `y4` | **MPC discrete-Gaussian sampling**, input-independent, so fully offline | 15,360 + 512 samples | below |
+| `w = A1·y1 + A2′·y21 + y22`, `HighBits(w)` | linear, then either an opening inside the quorum or 1,408 roundings | 1,408 coefficients | opening ≈ 22 KB at n = 3; in MPC ≈ 1,408 × 329 ≈ 4.6·10^5 multiplications (C1's online count per coefficient) |
+| `t`, `v`, `h` garbage terms | degree 2: local products, one resharing, opened re-randomised | a few polynomials | one resharing |
+| `z = y + c·s` | linear (c public) | 15,872 | free |
+| Rejection: `⟨z, c·s⟩`, `‖c·s‖²`, `exp` in fixed point, compare with a shared uniform `u`; z2's Rej1 sign test; bimodal z3, z4 with shared signs β (512 products) | **degree 2 + fixed-point exp + one comparison per test**; only the verdict opens | about 4 tests | inner products: one resharing each (sum the local products first); exp + comparison: 10^3–10^4 multiplications, 30–60 rounds [estimate] |
+| On accept: open `z1`, `z21`, hint | opening | 15,360 | one opening |
+| Fiat–Shamir | public | — | clear |
+
+**The rejection tests are not the bulk.** Unlike threshold ML-DSA, whose rejection is a per-coefficient norm check, LaZer's
+tests are a few aggregate tests per attempt: inner products of shared vectors (one resharing each), then one exponential and
+one comparison. Scaling Quorus's per-coefficient costs to 15,360 coefficients overstates them.
+
+**MPC Gaussian sampling is the bulk** [inference] [estimate]. No MPC sampler is reported at LNP22's widths: published
+per-sample figures are 619 B and under 2 ms per party, amortised over 1,000 samples, three parties, semi-honest, but
+only for σ ≤ 1,000 (Meisingseth–Rechberger–Schmid, [ePrint 2025/805](https://eprint.iacr.org/2025/805), abstract only) [to appear, CCS 2026]; 11.59 MB and 0.06 s per sample
+at 16 parties (Franzese et al., [ePrint 2025/1025](https://eprint.iacr.org/2025/1025), abstract only) [paper, ACM CCS]; about 0.2 s per sample, malicious, on MP-SPDZ
+(Fu–Wang, CCS 2024, arXiv 2409.10667) [paper]. Wide masks need not be sampled wide: by the convolution lemma of Micciancio–Walter
+([ePrint 2017/259](https://eprint.iacr.org/2017/259), CRYPTO 2017) [paper] `x1 + k·x2` with `x_i ← D_σ0` is close to
+`D_{σ0·√(1+k²)}`, and a public linear combination is free in MPC. With σ0 ≈ 1,000 that is `k ≈ 406` for σ1 ≈ 406,323 and
+`k ≈ 6` for σ2 ≈ 6,349: **two narrow samples per mask coefficient** [inference; the lemma's smoothing and precision
+conditions were not checked against LaZer's sampler]. Then, per party per `R_TX` proof at 619 B per narrow sample:
+
+| Item | Per attempt | Per proof (≈ 18 attempts) |
+|---|---|---|
+| Narrow Gaussian samples | ≈ 31,700 | ≈ 5.7·10^5 |
+| Offline traffic for masks | ≈ 20 MB | ≈ 0.35 GB |
+| Offline sampler CPU at 2 ms per sample | ≈ 1 min | ≈ 20 min |
+| Online: w opening, rejection tests, z opening (n = 3) | ≈ 0.3–0.5 MB | ≈ 5–10 MB |
+| Online rounds, sequential / 8 attempts in parallel (expected iterations `1/(1 − (17/18)^8) ≈ 2.7`) | 30–60 | ≈ 600–1,100 / ≈ 80–170 |
+
+**Sharper verdict than "10–100×"** [estimate, basis above]: *online*, a threshold PQZL prover is close to one prover's linear
+algebra per party plus 80–170 rounds with parallel attempts (seconds on a WAN, well inside the ≈ 110 s inline window of
+§5.5); *offline*, mask sampling costs about 0.35 GB and on the order of 20 CPU-minutes per party per proof, roughly
+10^3 times one native prove (0.5–1 s, [repo]), all input-independent and precomputable. So the earlier "10–100×" was
+too pessimistic for online latency and too optimistic for total work. If `w` may not open inside the quorum, add about 8 MB
+per attempt online.
+
+**What revealing rejected attempts leaks** [inference]. The quorum sees, per rejected attempt, `w` (or `HighBits(w)`), the
+hiding commitments `t`, `v`, `ty3`, `ty4`, `tβ`, the public challenge and the verdict ⊥; never `z`. `w = A1·y1 + A2′·y21 + y22`
+already has the MLWE form that Quorus had to add to ML-DSA (`w = Ay + e_w`, so that `w1` and `c` of rejected attempts can be
+revealed; USENIX 2026 version, read in full by our search agent) [paper]; the verdict is a function of `(y, c, s)` whose `y` is hidden behind
+`w`, the situation the computational simulation of aborted transcripts covers for signatures (Devevey et al., ePrint
+2023/245; del Pino–Niot, ePrint 2025/872, as cited by Quorus) [paper]. **That holds only with jointly sampled masks**:
+with local Gaussian shares each insider knows part of `y`, and both the verdict and the opened `z` carry information about
+`s` that no published proof bounds for this protocol. A related caution: TALUS (Kao–Chang, arXiv 2603.22109, abstract only)
+claims key recovery after about 2^30 signatures for a FIPS 204-exact threshold scheme that reveals a summed nonce
+[preprint] [unverified]. No published proof covers LaZer's composite protocol either way.
+
+**New literature since §5.4** (from a search on 2026-11-06; tags as read):
+
+- **Griffy, Youdom Kemmoe, Nguyen, Silde, "Threshold lattice-based zero-knowledge proofs",
+  [ePrint 2026/1750](https://eprint.iacr.org/2026/1750)** (2026-08-20; abstract and the WPEC 2026 talk slides,
+  2026-10-28, read; PDF not opened) [preprint]: the first threshold lattice ZK proofs for exact relations, for the
+  Attema–Lyubashevsky–Seiler and Esgin–Nguyen–Seiler proofs (predecessors of LNP22, not LNP22 or ABDLOP); Shamir-shared
+  witness; additive mask shares; **rejection sampling removed via Hint-MLWE**, with a "√t extra slack" so the proof is about
+  √t larger; quadratic garbage terms under threshold BGV; passive security, at most t − 1 corruptions; no concrete costs
+  published. For PQZ this route changes the norm bounds the verifier accepts: a new parameter set, a new `proofSystemId`,
+  new vectors and the full gate, which are owner decisions [inference].
+- **LaZer-PW02** (NIST preview, class S6, 2026-06-24, read in full) [NIST preview]: a single-prover LNP22-family ZKPoK
+  for use beside threshold schemes; plans iterative rejection sampling to narrow the masks (Gärtner, CRYPTO 2025). No other
+  S6 preview distributes a prover.
+- Nothing distributes an LNP22, ABDLOP, LaBRADOR or Greyhound prover [unverified, searched 2026-11-06].
+
+**Verdict (D): unchanged, research, but the blocker is now named as security, not cost.** The exact path (joint Gaussian
+masks, LaZer's rejection rules, everything opened a proof field) keeps today's verifier, `proofSystemId` and vectors; its
+online cost fits the inline window and its offline cost is about 0.35 GB and tens of CPU-minutes per party per proof.
+Three open items keep it research: (1) a proof that revealing rejected `w`, commitments and verdicts to the quorum is safe
+for LaZer's composite protocol; (2) an MPC sampler at LaZer's precision (the convolution step is our inference; no sampler
+reports these widths); (3) malicious security of the whole pipeline. The literature's own direction (2026/1750:
+Hint-MLWE, no rejection, √t slack) would mean new parameters. D2 (simulated MPC prover verified by `pqz_verify`) remains
+the next step if the owner wants one.
+
+### 12.3 Other news that bears on the verdicts
+
+- **NIST threshold call** ([TCall-1](https://csrc.nist.gov/projects/threshold-cryptography/tcall-1), page read
+  2026-11-06): the package deadline is still "expected to be set to 2027-Mar-01 (it will not be before)", unconfirmed after
+  TCPT3; optional preliminary packages December 1–31, 2026 [paper, NIST page]. Threshold KEM / PKE previews in class S2
+  include Amber, PQarrots (Kea) and Adamas (one-round TPKE with **polynomial flooding**, partial-decryption shares of
+  1.87 KB to 16.4 MB) [NIST preview]. None changes §4: flooding still does not fit PQZ's `q`.
+- **MPC rounding is maturing:** Ajax (USENIX Security 2026, read in full by our search agent) opens `e + r mod Δ` after a double sharing,
+  2 online rounds, 0.9 ms at n = 3 on a LAN (its authors' figure) [paper]; Modulus Operandi (2026/2450) claims one round
+  [preprint]. This strengthens verdict (C) and points C3 to an arbitrary-modulus conversion rather than our prefix circuit.
+
+### 12.4 Open questions for the owner (new)
+
+1. **C3 basis.** Build the networked service on an arbitrary-modulus conversion (Damgård et al.) rather than on the
+   harness's prefix circuit? *Recommendation:* yes, when C3 is scheduled; keep the harness as its reference for equality.
+2. **D2 or wait.** Spend 20–30 agent-days on a simulated MPC PQZL prover now, or wait for a security argument on revealed
+   aborts (or for a 2026/1750-style LNP22 result)? *Recommendation:* wait; nothing in the cost model blocks it, the proof
+   gap does.
+3. **A Hint-MLWE, rejection-free PQZL variant** would be a new `proofSystemId` and parameter set. *Recommendation:* not
+   now; record it as the literature's direction.

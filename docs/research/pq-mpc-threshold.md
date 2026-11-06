@@ -8,6 +8,14 @@ Written 2026-11-06 at the owner's request. Research only: nothing here is a rule
 where an owner ruling is quoted (§6). Everything cryptographic in SCaaS is **UNAUDITED**, and so is every scheme below.
 Zether (classical ElGamal) and PQZ (MLWE) are separate systems and are treated separately throughout.
 
+**Deeper research (2026-11-06).** Two deep dives follow this survey and refine three rows of §1. **PQZ:**
+[pqz-threshold-decrypt-prove.md](pqz-threshold-decrypt-prove.md) §12. A simulated MPC rounding equals `pqz_dec` on the
+frozen vectors at all four sets, and a rounding oracle on caller-supplied ciphertexts recovers `s` in 8·K queries. The
+distributed LNP22 prover is costed: online fits, offline Gaussian masks take about 0.35 GB per party per proof, and the
+blocker is a security proof for revealed aborts. **Zether:** [zether-threshold-mpc.md](zether-threshold-mpc.md) §5.10. A
+3-of-5 joint transfer proof passes the real native verifier, so "Zether threshold spending: research" in §1 is superseded:
+it is feasible with no contract change. All of this is UNAUDITED.
+
 **Evidence tags.** [paper] peer-reviewed publication; [to appear] accepted, published version not yet out; [preprint]
 ePrint or arXiv, not peer-reviewed; [NIST preview] a talk or preview document for the NIST threshold call; [vendor] a
 claim by the authors' company or a press release; [repo] read from this repository; [inference] our reasoning;

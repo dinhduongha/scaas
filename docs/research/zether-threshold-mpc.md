@@ -23,7 +23,7 @@ not peer-reviewed; [vendor] a project's or company's own documentation, specific
 | Where `x` enters | Decryption, the `x` lines of each Σ proof (`A_y`, `A_bal`, `z_x`), every Zether Schnorr and the `RECEIVER_X` / `AUDITOR` openings: all **linear** in `x`. Non-linear uses (HKDF of `x` for `s`, `t_j`, memo and cache keys, EIP-2333 path 7) are client-side and unchecked on chain | [repo] | — | §3 |
 | (C) Threshold decryption | Shamir shares of `x`, partial decryptions `[x_i]D` with a DLEQ proof, Lagrange in the exponent, then the existing BSGS. One round. Textbook since 1989 | [paper] | none | build, with the auditor of CTR-ZTH-41 first |
 | (D) Threshold proving | Only `z_x` and the `k_x` parts of `A_y`, `A_bal` need the shares: a FROST-style threshold Schnorr with nonces on two bases. The Bulletproofs hold no `x` and are built by one coordinator in the clear | [repo] [inference] | none | prototype now, cryptographic review before value |
-| Does the joint proof verify unchanged? | **Yes.** Same statement, transcript, wire format and verifier; no new `proofSystemId`, no new on-chain vectors. A script on real BLS12-381 checks E1–E8 on a 3-of-5 joint proof | [inference] | none | add a forge test with a joint proof in the prototype |
+| Does the joint proof verify unchanged? | **Yes.** Same statement, transcript, wire format and verifier; no new `proofSystemId`, no new on-chain vectors. A script on real BLS12-381 checks E1–E8 on a 3-of-5 joint proof; **a 3-of-5 joint proof in the exact wire format passes the real native verifier `zether-cli verifyTransfer` (§5.10)** | [repo] | none | add a forge test with a joint proof (§5.10) |
 | Balance privacy inside the quorum | Not achievable: whoever builds BP#2 needs `b'` in the clear, and a threshold decryption yields `[b]G`, whose small log anyone holding it can find. Only the coordinator must learn it | [inference] | — | choose who coordinates |
 | PoP, owner ops, UA-ledger writes | FROST with a SCaaS Zether ciphersuite (as ua-rs's FROST-bn254 one) gives a plain Zether Schnorr; registry and tokens verify it unchanged. BLS threshold does not apply | [repo] [inference] | none | reuse frost-core |
 | Auditor key (CTR-ZTH-41) | Threshold decryption of `C_aud_j` plus a threshold Chaum–Pedersen `AUDITOR` opening; both verify unchanged | [repo] [inference] | none | first deliverable |
@@ -342,8 +342,8 @@ single prover. Consequences: **no contract change, no new `proofSystemId`, no ne
 property holds as long as one honest holder's nonce is uniform. New vectors are needed only for the client protocol (the
 ciphersuite, the binding factor, the share formats).
 
-**Check.** A short Python script (py_ecc, real BLS12-381 G1, the zether.md §5 transcript and `hashToScalar`; kept in a private
-scratchpad, not committed) runs a Pedersen-style 3-of-5 DKG, a threshold decryption of `acc` with DLEQ shares, the joint Σ of a
+**Check.** A short Python script (py_ecc, real BLS12-381 G1, the zether.md §5 transcript and `hashToScalar`;
+[`zether_threshold_sim.py`](zether-threshold-mpc/zether_threshold_sim.py)) runs a Pedersen-style 3-of-5 DKG, a threshold decryption of `acc` with DLEQ shares, the joint Σ of a
 single-recipient audited transfer as in §5.2, a threshold Zether Schnorr and a threshold `AUDITOR` opening, and checks E1–E8 as
 written in §8.1 [inference]. Results:
 
@@ -356,8 +356,8 @@ written in §8.1 [inference]. Results:
 | threshold Schnorr, threshold `AUDITOR` opening | verify | — |
 
 The script does not build Bulletproofs (no `x` in them) and uses a random `Hb`, not the NUMS generator; it is an algebra check,
-not a test of the Rust prover or the Solidity verifier. The prototype should add a forge test that feeds a jointly produced
-proof to the real verifier.
+not a test of the Rust prover or the Solidity verifier. §5.10 feeds a jointly produced proof to the real native verifier;
+the forge test remains.
 
 ### 5.9 Rounds and communication
 
@@ -373,6 +373,57 @@ Single-recipient transfer, t = 3, BLS12-381 (point 128 B, scalar 32 B) [inferenc
 
 A multi-recipient transfer adds `4 · 128` statement bytes and five coordinator commitments per leg; the holders' part does not
 grow. A Schnorr (PoP, owner op) is plain FROST: about 0.3 KB out and 1 KB in per holder [inference].
+
+### 5.10 Deeper research (2026-11-06): a joint proof checked by the real verifier
+
+§5.8's script checked E1–E8 in Python; it left open whether a jointly produced proof passes the repository's own verifier.
+[`zether_threshold_verify.py`](zether-threshold-mpc/zether_threshold_verify.py) (output
+[`zether_threshold_verify.out`](zether-threshold-mpc/zether_threshold_verify.out)) closes that gap without touching
+production code [repo]:
+
+- **Real:** BLS12-381 G1 (py_ecc); the committed generators `Hb`, `U`, `G_i`, `H_i`
+  (`smartcontracts/evm/test/vectors/zether/generators_bls12381.json`); the 512-byte header of the frozen vector
+  `clients/zether-prover/vectors/transfer_bls12381.json` (opTag, `proofSystemId`, fee 300, binding); the exact statement
+  and proof layouts of `TransferStatement` / `TransferProof` (`42·128 + 512` bytes); and the **verifier**:
+  `zether-cli verifyTransfer`, i.e. `zether_prover::zether::verify_transfer`, the native mirror of the on-chain verifier
+  (E1–E8, both Bulletproofs, point and scalar decoding with subgroup checks). The binary was the release build already in
+  `clients/zether-prover/target/` (built after the last change to `src/`); the run first verifies the frozen vector as a
+  positive control.
+- **Simulated:** the 3-of-5 holders in one process (no network, no authentication); the DKG is the sim's Feldman-style sum;
+  the coordinator's Bulletproofs are a Python port of `bulletproofs.rs` `prove_unchecked` with fresh random nonces.
+
+| Case | `verifyTransfer` | Step-6 blame |
+|---|---|---|
+| P0 frozen vector `transfer_bls12381.json` | ok | — |
+| P1 one-holder proof by the Python port (checks the port) | ok | — |
+| P2 joint 3-of-5 proofs, holders {1, 3, 4} and {2, 4, 5} | **ok** | none |
+| N1 two holders answer for a 3-of-5 key | E1 | none |
+| N2 holder 3 adds 1 to `z_i` | E1 | holder 3 |
+| N3 holder 4 uses another nonce on `D_acc` | E5 | holder 4 |
+| N4 a valid joint proof with its last byte flipped | BP-2 (inner product) | — |
+| N5 the same proof against another `Y_f` | E1 | — |
+| N6 a proof by group 1 for a statement naming group 2 as sender | E1 | — |
+
+**Result.** A transfer proof made by three of five share holders, with nobody holding `x`, is accepted unchanged by the real
+native verifier, and the negative controls fail where they should [repo, harness output]. The joint proofs are written to
+[`joint_transfer_bls12381.json`](zether-threshold-mpc/joint_transfer_bls12381.json) (regenerated on every run).
+
+**Not done: the Solidity verifier.** `IZetherVerifier.verifyTransfer(statement, proof)` exists, and
+`test/zether/ZetherMsmDifferential.t.sol` already checks the merged Solidity verifier against the Rust vectors [repo]. A forge
+test that feeds `joint_transfer_bls12381.json` to it needs a test file in `smartcontracts/evm/test/` and either a copy of the
+JSON under `test/vectors/` or a read entry for `docs/research/` in `foundry.toml`'s `fs_permissions` (today only
+`./test/vectors`, `./deployments`, `./test/v2/layout`, `./out`). That is a test-only change in the contracts tree, run
+through `scripts/capped forge test`; it was left out because this work is research-only. It is open question 11 (§9).
+
+**Correction to §5.8:** its script ([`zether_threshold_sim.py`](zether-threshold-mpc/zether_threshold_sim.py)) is committed
+next to this note, not kept in a private scratchpad.
+
+**Literature check (2026-11-06)** [preprint]: no new threshold or collaborative Bulletproofs paper since §5.4. Collaborative
+CP-NIZKs (Alghazwi et al., ePrint 2024/1209, now in the International Journal of Information Security, 2026, as reported by
+our search agent) shares the witness **additively, N-of-N (SPDZ)**, with security with abort against up to N − 1
+corruptions; its inner-product argument runs locally on opened vectors by default [paper] [unverified beyond the
+abstract and the search agent's reading]. It is not needed here: §5.4's answer stands (the coordinator knows `b′`, so the
+range proofs need no MPC).
 
 ## 6. Registration, PoP and signatures with a shared `x`
 
@@ -531,6 +582,9 @@ plan task or contract change follows from this note until the owner asks.
    factor before mainnet 22776 or any customer use; it is UNAUDITED until then.
 10. **CLI-SGN-32 wording** ("the memo key derives from `D^x`", §2 aside). *Recommendation:* correct it in a docs pass; not part of
     this note.
+11. **Forge check of a joint proof (new, 2026-11-06).** Allow a test-only forge test in `smartcontracts/evm/test/` that reads
+    a jointly produced proof (a copy of `joint_transfer_bls12381.json` under `test/vectors/`) and calls the Solidity
+    `verifyTransfer`? *Recommendation:* yes, with the (D) prototype; the native verifier already accepts it (§5.10).
 
 ## 10. Sources
 

@@ -25,7 +25,7 @@ nhỏ ở §5.8; [unverified] không kiểm chứng được. Nguồn: §10.
 | `x` đi vào đâu | Giải mã, các dòng chứa `x` của mỗi bằng chứng Σ (`A_y`, `A_bal`, `z_x`), mọi chữ ký Schnorr Zether và các phép mở `RECEIVER_X` / `AUDITOR`: tất cả **tuyến tính** theo `x`. Các chỗ phi tuyến (HKDF của `x` cho `s`, `t_j`, khóa memo và khóa cache, đường EIP-2333 số 7) nằm ở client và không được kiểm trên chuỗi | [repo] | — | §3 |
 | (C) Giải mã ngưỡng | Chia `x` theo Shamir, giải mã từng phần `[x_i]D` kèm bằng chứng DLEQ, Lagrange trên số mũ, rồi BSGS như hiện có. Một vòng. Kinh điển từ 1989 | [paper] | không | xây, bắt đầu bằng auditor của CTR-ZTH-41 |
 | (D) Chứng minh ngưỡng | Chỉ `z_x` và phần `k_x` của `A_y`, `A_bal` cần các phần khóa: một Schnorr ngưỡng kiểu FROST với nonce trên hai cơ sở. Bulletproofs không chứa `x`, do một điều phối viên dựng ở dạng rõ | [repo] [inference] | không | làm prototype ngay, review mật mã trước khi có giá trị thật |
-| Bằng chứng chung có qua verifier cũ nguyên vẹn không? | **Có.** Cùng statement, transcript, định dạng truyền và verifier; không có `proofSystemId` mới, không có vector on-chain mới. Một script trên BLS12-381 thật kiểm E1–E8 cho một bằng chứng chung 3-of-5 | [inference] | không | thêm một forge test với bằng chứng chung trong prototype |
+| Bằng chứng chung có qua verifier cũ nguyên vẹn không? | **Có.** Cùng statement, transcript, định dạng truyền và verifier; không có `proofSystemId` mới, không có vector on-chain mới. Một script trên BLS12-381 thật kiểm E1–E8 cho một bằng chứng chung 3-of-5; **một bằng chứng chung 3-of-5 đúng định dạng truyền qua được verifier native thật `zether-cli verifyTransfer` (§5.10)** | [repo] | không | thêm một forge test với bằng chứng chung (§5.10) |
 | Giữ kín số dư ngay trong nhóm | Không làm được: ai dựng BP#2 cũng cần `b'` ở dạng rõ, và giải mã ngưỡng cho ra `[b]G`, mà ai giữ nó cũng tìm được log nhỏ. Chỉ điều phối viên phải biết | [inference] | — | chọn ai điều phối |
 | PoP, thao tác chủ tài khoản, ghi sổ UA | FROST với một ciphersuite Zether của SCaaS (như ciphersuite FROST-bn254 của ua-rs) cho ra một Schnorr Zether bình thường; registry và token xác minh không đổi. Ngưỡng BLS không áp dụng | [repo] [inference] | không | dùng lại frost-core |
 | Khóa auditor (CTR-ZTH-41) | Giải mã ngưỡng `C_aud_j` cộng một phép mở Chaum–Pedersen `AUDITOR` ngưỡng; cả hai xác minh không đổi | [repo] [inference] | không | sản phẩm đầu tiên |
@@ -342,8 +342,8 @@ chứng được gộp đúng thỏa mãn; statement, transcript, byte của b�
 **không đổi hợp đồng, không có `proofSystemId` mới, không có vector on-chain mới**; tính zero-knowledge giữ nguyên chừng nào nonce
 của một người giữ trung thực là đều. Vector mới chỉ cần cho giao thức client (ciphersuite, hệ số ràng buộc, định dạng phần khóa).
 
-**Kiểm.** Một script Python ngắn (py_ecc, BLS12-381 G1 thật, transcript và `hashToScalar` của zether.md §5; giữ trong một
-scratchpad riêng, không commit) chạy một DKG kiểu Pedersen 3-of-5, một giải mã ngưỡng `acc` với phần DLEQ, Σ chung của một giao
+**Kiểm.** Một script Python ngắn (py_ecc, BLS12-381 G1 thật, transcript và `hashToScalar` của zether.md §5;
+[`zether_threshold_sim.py`](zether-threshold-mpc/zether_threshold_sim.py)) chạy một DKG kiểu Pedersen 3-of-5, một giải mã ngưỡng `acc` với phần DLEQ, Σ chung của một giao
 dịch một người nhận có auditor như §5.2, một Schnorr Zether ngưỡng và một phép mở `AUDITOR` ngưỡng, rồi kiểm E1–E8 đúng như
 §8.1 [inference]. Kết quả:
 
@@ -356,8 +356,8 @@ dịch một người nhận có auditor như §5.2, một Schnorr Zether ngư�
 | Schnorr ngưỡng, phép mở `AUDITOR` ngưỡng | xác minh được | — |
 
 Script không dựng Bulletproof (chúng không chứa `x`) và dùng một `Hb` ngẫu nhiên, không phải generator NUMS; nó là một phép kiểm
-đại số, không phải kiểm thử prover Rust hay verifier Solidity. Prototype nên thêm một forge test đưa một bằng chứng dựng chung
-vào verifier thật.
+đại số, không phải kiểm thử prover Rust hay verifier Solidity. §5.10 đưa một bằng chứng dựng chung vào verifier native
+thật; forge test vẫn còn.
 
 ### 5.9 Số vòng và lưu lượng
 
@@ -373,6 +373,55 @@ Giao dịch một người nhận, t = 3, BLS12-381 (điểm 128 B, vô hướng
 
 Một giao dịch nhiều người nhận thêm `4 · 128` byte statement và năm cam kết của điều phối viên mỗi leg; phần của người giữ không
 tăng. Một Schnorr (PoP, thao tác chủ) là FROST thường: khoảng 0.3 KB đi và 1 KB đến mỗi người giữ [inference].
+
+### 5.10 Nghiên cứu sâu hơn (2026-11-06): một bằng chứng chung được verifier thật kiểm
+
+Script của §5.8 kiểm E1–E8 bằng Python; nó để ngỏ câu hỏi liệu một bằng chứng dựng chung có qua verifier của chính kho mã hay
+không. [`zether_threshold_verify.py`](zether-threshold-mpc/zether_threshold_verify.py) (đầu ra
+[`zether_threshold_verify.out`](zether-threshold-mpc/zether_threshold_verify.out)) lấp khoảng trống đó mà không chạm vào mã
+production [repo]:
+
+- **Thật:** BLS12-381 G1 (py_ecc); các generator đã commit `Hb`, `U`, `G_i`, `H_i`
+  (`smartcontracts/evm/test/vectors/zether/generators_bls12381.json`); header 512 byte của vector đóng băng
+  `clients/zether-prover/vectors/transfer_bls12381.json` (opTag, `proofSystemId`, phí 300, binding); đúng bố cục statement và
+  bằng chứng của `TransferStatement` / `TransferProof` (`42·128 + 512` byte); và **verifier**: `zether-cli verifyTransfer`,
+  tức `zether_prover::zether::verify_transfer`, bản native tương ứng với verifier on-chain (E1–E8, cả hai Bulletproof, giải mã
+  điểm và vô hướng có kiểm nhóm con). Binary là bản release đã có sẵn trong `clients/zether-prover/target/` (build sau lần
+  sửa cuối của `src/`); lần chạy kiểm vector đóng băng trước, làm đối chứng dương.
+- **Mô phỏng:** 3-of-5 người giữ trong một tiến trình (không mạng, không xác thực); DKG là phép cộng kiểu Feldman của script
+  sim; Bulletproof của điều phối viên là bản port Python của `prove_unchecked` trong `bulletproofs.rs`, với nonce ngẫu nhiên mới.
+
+| Trường hợp | `verifyTransfer` | Bước 6 chỉ ra |
+|---|---|---|
+| P0 vector đóng băng `transfer_bls12381.json` | ok | — |
+| P1 bằng chứng một người giữ do bản port Python dựng (kiểm bản port) | ok | — |
+| P2 bằng chứng chung 3-of-5, người giữ {1, 3, 4} và {2, 4, 5} | **ok** | không ai |
+| N1 hai người giữ trả lời cho khóa 3-of-5 | E1 | không ai |
+| N2 người giữ 3 cộng 1 vào `z_i` | E1 | người giữ 3 |
+| N3 người giữ 4 dùng nonce khác trên `D_acc` | E5 | người giữ 4 |
+| N4 một bằng chứng chung hợp lệ bị lật byte cuối | BP-2 (inner product) | — |
+| N5 cùng bằng chứng đó với một `Y_f` khác | E1 | — |
+| N6 bằng chứng của nhóm 1 cho statement ghi nhóm 2 là người gửi | E1 | — |
+
+**Kết quả.** Một bằng chứng chuyển do ba trong năm người giữ phần khóa tạo, không ai giữ `x`, được verifier native thật chấp
+nhận nguyên vẹn, và các đối chứng âm thất bại đúng chỗ [repo, đầu ra harness]. Các bằng chứng chung được ghi vào
+[`joint_transfer_bls12381.json`](zether-threshold-mpc/joint_transfer_bls12381.json) (sinh lại ở mỗi lần chạy).
+
+**Chưa làm: verifier Solidity.** `IZetherVerifier.verifyTransfer(statement, proof)` đã có, và
+`test/zether/ZetherMsmDifferential.t.sol` đã kiểm verifier Solidity hợp nhất với các vector Rust [repo]. Một forge test đưa
+`joint_transfer_bls12381.json` vào nó cần một file test trong `smartcontracts/evm/test/` và hoặc một bản sao JSON dưới
+`test/vectors/`, hoặc một mục đọc cho `docs/research/` trong `fs_permissions` của `foundry.toml` (hiện chỉ có `./test/vectors`,
+`./deployments`, `./test/v2/layout`, `./out`). Đó là một thay đổi chỉ cho test trong cây hợp đồng, chạy qua
+`scripts/capped forge test`; nó bị bỏ ra vì việc này chỉ là nghiên cứu. Đây là câu hỏi mở 11 (§9).
+
+**Sửa §5.8:** script của nó ([`zether_threshold_sim.py`](zether-threshold-mpc/zether_threshold_sim.py)) đã được commit cạnh
+ghi chú này, không nằm trong scratchpad riêng.
+
+**Kiểm tài liệu (2026-11-06)** [preprint]: không có bài Bulletproofs ngưỡng hay cộng tác mới nào kể từ §5.4. Collaborative
+CP-NIZKs (Alghazwi và cộng sự, ePrint 2024/1209, nay ở International Journal of Information Security, 2026, theo agent tìm
+kiếm của chúng tôi) chia witness **theo kiểu cộng, N-of-N (SPDZ)**, an toàn có hủy bỏ trước tới N − 1 bên bị chiếm; mặc định
+lập luận inner-product của nó chạy cục bộ trên các vectơ đã mở [paper] [unverified ngoài phần tóm tắt và phần agent tìm kiếm
+đã đọc]. Ở đây không cần nó: câu trả lời của §5.4 giữ nguyên (điều phối viên biết `b′`, nên các range proof không cần MPC).
 
 ## 6. Đăng ký, PoP và chữ ký với `x` được chia
 
@@ -529,6 +578,9 @@ task hay thay đổi contract nào từ ghi chú này cho tới khi chủ dự �
    mainnet 22776 hay mọi khách hàng dùng; tới lúc đó nó là UNAUDITED.
 10. **Câu chữ CLI-SGN-32** ("the memo key derives from `D^x`", ghi chú bên lề §2). *Khuyến nghị:* sửa trong một lượt docs; không
     thuộc ghi chú này.
+11. **Kiểm bằng forge một bằng chứng chung (mới, 2026-11-06).** Cho phép một forge test chỉ để test trong
+    `smartcontracts/evm/test/` đọc một bằng chứng dựng chung (bản sao `joint_transfer_bls12381.json` dưới `test/vectors/`) và gọi
+    `verifyTransfer` Solidity? *Khuyến nghị:* có, cùng prototype (D); verifier native đã chấp nhận nó (§5.10).
 
 ## 10. Nguồn
 

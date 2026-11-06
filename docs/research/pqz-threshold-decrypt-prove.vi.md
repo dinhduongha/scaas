@@ -53,8 +53,8 @@ của chúng tôi; [estimate] tính toán trên giấy của chúng tôi; [unver
 | Kết hợp: chia số dư | n tài khoản, n người vận hành: mỗi người chỉ thấy phần của mình; tốn gấp n lần công giữ (§6) | [inference] | không | cho phép như thực hành phía client |
 | Xoay sau khi dựng lại bằng (A), dưới dạng UA mới | Dùng được ngay: dựng lại `seed32` cũ, người vận hành mới, UA `msig` mới với khóa mới, chuyển khoản bí mật được chứng minh bằng khóa cũ; cái giá là một danh tính mới (§7.1) | [repo] [inference] | không | quy trình khôi phục trước mắt |
 | Khóa PQZ có phiên bản dưới một UA (con đường (A), sau đó C/D) | `pqzKeyAt(ua, version)`, một con trỏ phiên bản hiện hành, `R_REG` và `keyOwner` theo từng phiên bản; trạng thái tài khoản theo phiên bản trong token; không có phiên bản nào đi vào statement, nên tầng bằng chứng không đổi (§7.3) | [inference] | một thế hệ registry mới và các bản phát hành token PQZ mới; **cùng `proofSystemId`**, không có vectors pqz-core mới | đặc tả ngay; vị trí do chủ dự án quyết (§7.5) |
-| **Kết luận (C)** | **Khả thi ngay bằng làm tròn trong MPC**, ngoài chuỗi, không đổi hợp đồng hay tham số; làm ngập nhiễu bị loại | | | làm nguyên mẫu |
-| **Kết luận (D)** | **Nghiên cứu**: PQZL khả thi mà không đổi bên kiểm tra nhưng tốn kém và chưa được chứng minh an toàn trước người trong nhóm; không cần PQZH | | | chỉ khảo sát nghiên cứu |
+| **Kết luận (C)** | **Khả thi ngay bằng làm tròn trong MPC**, ngoài chuỗi, không đổi hợp đồng hay tham số; làm ngập nhiễu bị loại. Nghiên cứu sâu hơn (§12.1): làm tròn MPC mô phỏng bằng `pqz_dec` trên các vectors đóng băng ở cả bốn bộ | [repo] | | làm nguyên mẫu |
+| **Kết luận (D)** | **Nghiên cứu**: PQZL khả thi mà không đổi bên kiểm tra nhưng tốn kém và chưa được chứng minh an toàn trước người trong nhóm; không cần PQZH. Nghiên cứu sâu hơn (§12.2): trực tuyến vừa cửa sổ inline, mặt nạ Gauss ngoại tuyến ≈ 0.35 GB mỗi bên mỗi bằng chứng; trở ngại là an toàn của việc mở lần thử bị hủy | | | chỉ khảo sát nghiên cứu |
 
 ## 2. Bối cảnh
 
@@ -280,7 +280,7 @@ edaBits ([ePrint 2020/338](https://eprint.iacr.org/2020/338), CRYPTO 2020) [pape
 phải chạy phép mã hóa lại FO và các hàm băm trong MPC (145–290 vòng, [ePrint 2026/2220](https://eprint.iacr.org/2026/2220))
 [preprint]: giải mã PQZ không có hàm băm.
 
-Một chi tiết: `Δ = ⌊q/2^b⌋` không phải `q/2^b`, nên `round(2^b·w/q)` của BFV và `round(w/Δ)` của PQZ khác nhau nhiều nhất
+Được harness ở §12.1 sửa lại: `Sub` cho tổng chữ số âm, nên cửa sổ phải căn giữa (`y = w + ⌊Δ/2⌋ + Δ·⌊q/(2Δ)⌋`), và `Δ` chẵn ở `n2304-kmax4096`. Một chi tiết: `Δ = ⌊q/2^b⌋` không phải `q/2^b`, nên `round(2^b·w/q)` của BFV và `round(w/Δ)` của PQZ khác nhau nhiều nhất
 `M·2^b·(q/2^b − Δ)/q ≈ 2^-12` của một đơn vị ở `n2304-kmax4096`; dưới cận nhiễu đã chứng minh cả hai cho cùng `M`. Dù sao
 nguyên mẫu cũng phải khớp `pqz_dec` trên các vectors đã đóng băng [inference].
 
@@ -775,10 +775,10 @@ chứng; dưới C/D, làm mới chủ động bao phủ phần lớn sự kiệ
 | Bước | Nội dung | Loại | Ngày-agent (nguyên mẫu ngoài chuỗi) [estimate] | Phụ thuộc |
 |---|---|---|---|---|
 | H3′ | cách xem có chứng thực của người vận hành: bằng chứng `R_DR` trên `v_f` và các khoản ghi có, thành viên kiểm tra ngoài chuỗi | xây ngay | 1–2 | không |
-| C1 | chia sẻ Shamir trên `F_q` mô phỏng (một tiến trình), phần cục bộ, làm tròn trong MPC; bằng với `pqz_dec` trên các vectors đóng băng ở cả bốn bộ; từ chối bản mã không đến từ trạng thái; kết quả cho người được chỉ định | xây ngay | 3–5 | không |
+| C1 | chia sẻ Shamir trên `F_q` mô phỏng (một tiến trình), phần cục bộ, làm tròn trong MPC; bằng với `pqz_dec` trên các vectors đóng băng ở cả bốn bộ; từ chối bản mã không đến từ trạng thái; kết quả cho người được chỉ định | **đã xong dưới dạng harness nghiên cứu (§12.1)** | — | không |
 | C2 | công cụ người chia khóa: `seed32` mới → `s, e, pk`, `R_REG`, phần Shamir của `(s, e)`, phần (A) của `seed32` | xây ngay, sau phán quyết của chủ dự án (Q2) | 2–3 | ua-rs-sign T16a (A) |
 | C3 | dịch vụ nối mạng, an toàn trước kẻ ác ý (đa số trung thực), có tiền xử lý (edaBits hoặc chuyển modulus) | xây sau C1 | 10–15 | C1 |
-| D1 | khảo sát nghiên cứu: bộ chứng minh LaZer dưới dạng luồng dữ liệu MPC; phác thảo chứng minh cho việc mở `w`, `t`, `v` bị loại; chọn cách lấy mẫu Gauss; rò rỉ của phần cục bộ | nghiên cứu | 10–15 (việc trên giấy) | C1 |
+| D1 | khảo sát nghiên cứu: bộ chứng minh LaZer dưới dạng luồng dữ liệu MPC; phác thảo chứng minh cho việc mở `w`, `t`, `v` bị loại; chọn cách lấy mẫu Gauss; rò rỉ của phần cục bộ | nghiên cứu; luồng dữ liệu và mô hình chi phí ở §12.2, chứng minh an toàn vẫn còn mở | 10–15 (việc trên giấy) | C1 |
 | D2 | bộ chứng minh PQZL MPC mô phỏng mà bằng chứng được bên kiểm tra hiện có chấp nhận | nguyên mẫu nghiên cứu | 20–30 | D1 |
 | D3 | bộ chứng minh PQZL nối mạng, an toàn trước kẻ ác ý | chỉ xây nếu D1 và D2 thành công | 40–60, cộng rà soát bên ngoài | D2 |
 | R0 | quy trình client "(A) dựng lại → xoay bằng một UA mới" (§7.1), có kiểm thử trên chuỗi cục bộ | xây ngay, sau (A) | 1–2 | ua-rs-sign T16a (A) |
@@ -934,3 +934,196 @@ TEE:
 
 - Bài đưa tin về TEE.Fail, BleepingComputer 2025-10-28 —
   https://bleepingcomputer.com/news/security/teefail-attack-breaks-confidential-computing-on-intel-amd-nvidia-cpus [vendor/news]
+
+## 12. Nghiên cứu sâu hơn (2026-11-06)
+
+Bổ sung cùng ngày theo yêu cầu của chủ dự án: đi sâu hơn ở những chỗ §4 và §5 mới dừng ở ước lượng. Chỉ là nghiên cứu, chỉ
+về PQZ, **UNAUDITED**. Không có gì trong pqz-core, hợp đồng, node hay client thay đổi. Các phán quyết của chủ dự án ở trên
+không được mở lại. Harness và đầu ra của nó nằm trong [`pqz-threshold-decrypt-prove/`](pqz-threshold-decrypt-prove/). Không đo
+thời gian.
+
+### 12.1 C1 dưới dạng harness nghiên cứu: làm tròn trong MPC bằng `pqz_dec` trên các vectors đóng băng ở cả bốn bộ
+
+**Harness làm gì** ([`pqz_threshold_c1.py`](pqz-threshold-decrypt-prove/pqz_threshold_c1.py), đầu ra
+[`pqz_threshold_c1.out`](pqz-threshold-decrypt-prove/pqz_threshold_c1.out); thư viện chuẩn Python 3 cộng với bộ kiểm của chính
+vectors `smartcontracts/vectors/pqz/pqz_kat.py` cho KeyGen, Enc, Add / Sub và các hằng của bộ tham số) [repo]:
+
+1. Một người chia khóa chia Shamir từng hệ số của `s` trên `F_q` (bậc `d = (n − 1)/2`).
+2. Mỗi bên tự tính `u^T s_j` (tích negacyclic trong `Z_q[X]/(X^64 + 1)`, cửa sổ `win`), từ đó có phần chia của
+   `y = v − u^T s + ⌊Δ/2⌋ + Δ·B` với `B = ⌊q/(2Δ)⌋`.
+3. **Ngoại tuyến:** một `r = r_hi·Δ + r_lo` ngẫu nhiên, đều trên `[0, q)`, kèm các bit chia sẻ của `r_hi` và `r_lo`. Các bit
+   sinh từ một giá trị ngẫu nhiên chung bằng phương pháp căn bậc hai (mở `a²`, `b = (a/√(a²) + 1)/2`); `r_lo < Δ` và `r < q`
+   được kiểm trong MPC và chỉ bit chấp nhận được mở.
+4. **Trực tuyến:** mở `c = y + r mod q` (đều); tính, bằng so sánh bit công khai với bit chia sẻ (prefix-OR độ sâu log),
+   `wrap = [c < r]` theo cơ số hỗn hợp `(hi, lo)`, `[c_lo < r_lo]` và `[c′_lo < r_lo]` với `c′ = c + q`; rồi
+   `M + B = c_hi − r_hi − [c_lo < r_lo] + wrap·(c′_hi − c_hi − [c′_lo < r_lo] + [c_lo < r_lo])`, một phép nhân; mở `M`.
+5. So `M` với các trường `M` của vectors đóng băng, do `Dec` của lõi C ghi qua `pqz-vectors` [repo].
+
+**Kết quả** [repo, đầu ra harness]:
+
+| Kiểm | `n2048-kmax1024` | `n2304-kmax4096` | `n2560-kmax16384` | `n2816-kmax65536` |
+|---|---|---|---|---|
+| `enc.json`: 10 leg mới (giá trị 0 đến 2^64 − 1), Add / Sub với Trivial và với một bản mã | bằng | bằng | bằng | bằng |
+| `worstcase_noise.json` bound: `K_MAX − 1` khoản ghi có đúng `B_FRESH` (nhiễu 12,145,056 / 54,103,140 / 239,584,992 / 1,044,627,900) | bằng | bằng | bằng | bằng |
+| một `v` ở cửa sổ 3 (bản sao auditor của một leg `R_TXM`; giá trị mong đợi từ `Dec` tham chiếu, không phải hàng đóng băng) | bằng | bằng | bằng | bằng |
+| số bên | n = 5 | n = 3, 5, 7 | n = 5 | n = 5 |
+| N1 một hệ số sai trong phần khóa của bên 2, kiểm cả n phần khi mở | hủy | hủy | hủy | hủy |
+| N1b như trên, đường nhanh mở từ đúng `d + 1` phần | `M` sai | `M` sai | `M` sai | `M` sai |
+| N2 chỉ `d` bên: phép nhân bị từ chối; hai phần nội suy rồi làm tròn dạng rõ | từ chối; `M` sai | từ chối; `M` sai | từ chối; `M` sai | từ chối; `M` sai |
+| N3 bản mã do người gọi đưa vào | từ chối | từ chối | từ chối | từ chối |
+| N3b như trên khi tắt quy tắc trạng thái: số truy vấn dựng sẵn khôi phục đúng `s` (8·K) | 256 | 288 | 320 | 352 |
+| N4 đột biến bộ so sánh (`M_0 + 1`) | bắt được | bắt được | bắt được | bắt được |
+| giá trị mở trực tuyến | `c`, `M` | `c`, `M` | `c`, `M` | `c`, `M` |
+
+**Hai điểm thiết kế harness tìm ra** [repo]:
+
+- **`Sub` cho tổng chữ số âm** (`enc.json`: `1,000,000 − Trivial(1,000)` giải mã ra `M = (−8, −10, −1, 4, 15, 0, …)`), và
+  `pqz_dec` căn giữa `w`. Công thức ở §4.4 (`y = w + ⌊Δ/2⌋`, rồi `⌊y/Δ⌋`) sai với bản mã như vậy: cửa sổ phải được căn giữa,
+  việc mà dịch `Δ·B` ở trên làm, và `M` sau khi mở được đọc như một phần tử trường đã căn giữa.
+- **`Δ` chẵn ở `n2304-kmax4096`** (233,747,196; lẻ ở ba bộ còn lại). `⌊(w + ⌊Δ/2⌋)/Δ⌋ = ⌊(2w + Δ)/(2Δ)⌋` đúng với cả hai
+  tính chẵn lẻ, nên một công thức dùng cho mọi bộ; lập luận "Δ lẻ, không có hòa" thì không.
+
+**Oracle làm tròn, cụ thể** [repo]. Khi tắt quy tắc trạng thái, một truy vấn với `u` là đa thức đơn vị ở đa thức `j` và
+`v_i = ⌈Δ/2⌉ + off` trả về `M_i = [s_j[16w + i] ≤ off]`; `off ∈ {0, −1}` qua bốn cửa sổ cho mọi hệ số của `s ∈ {−1, 0, 1}`:
+**8·K truy vấn** (288 ở `n2304-kmax4096`) khôi phục đúng `s`. Hai trong số đó cũng chạy qua MPC và cho cùng câu trả lời:
+**tự làm tròn trong MPC không bảo vệ khóa; quy tắc chỉ giải mã trạng thái chuỗi của §4.7 mới bảo vệ.** Đây là con đường
+thứ hai tới khóa, bên cạnh con đường của §3.3 (khoản ghi có dựng sẵn cộng nhiễu bị mở).
+
+**Chính xác thì cái gì được mô phỏng.** Mỗi bên là một ô trong một tiến trình; việc gửi chỉ là bộ đếm (không mạng, không xác
+thực). Phép nhân là giao thức chia lại nửa trung thực (giảm bậc BGW, cần `n ≥ 2d + 1` bên trực tuyến); khi mở, harness kiểm
+cả `n` phần nằm trên một đa thức bậc `d`, phát hiện tới `n − d − 1` phần sai (N1) nhưng không phát hiện lỗi cộng chèn vào
+một lần chia lại. An toàn trước kẻ ác ý cần thêm một bước kiểm phép nhân, ví dụ Chida và cộng sự
+([ePrint 2018/570](https://eprint.iacr.org/2018/570), CRYPTO 2018) [paper], tốn khoảng gấp đôi số phép nhân. Người chia khóa
+được tin cậy (C2 trong lộ trình). Không có gì bí mật được tính dạng rõ: phép làm tròn chạy như một giao thức con MPC, không
+phải bằng cách mở `w`.
+
+**Mô hình chi phí** (harness đếm, một lần giải mã = 16 hệ số; một phần tử trường gửi đi tính 8 byte) [repo]:
+
+| Bộ, n | Vòng trực tuyến | Phép nhân trực tuyến | Phần tử gửi mỗi bên, trực tuyến | Phép nhân ngoại tuyến | Phần tử gửi mỗi bên, ngoại tuyến |
+|---|---|---|---|---|---|
+| `n2048-kmax1024`, 5 | 9 | 4,784 | 19,264 (≈ 154 KB) | 10,656 | 55,296 (≈ 442 KB) |
+| `n2304-kmax4096`, 3 | 9 | 5,264 | 10,592 (≈ 85 KB) | 11,301 | 29,280 (≈ 234 KB) |
+| `n2304-kmax4096`, 5 | 9 | 5,264 | 21,184 (≈ 169 KB) | 11,301 | 58,560 (≈ 468 KB) |
+| `n2304-kmax4096`, 7 | 9 | 5,264 | 31,776 (≈ 254 KB) | 14,296 | 111,552 (≈ 892 KB) |
+| `n2560-kmax16384`, 5 | 9 | 5,744 | 23,104 (≈ 185 KB) | 15,288 | 78,624 (≈ 629 KB) |
+| `n2816-kmax65536`, 5 | 9 | 6,224 | 25,024 (≈ 200 KB) | 14,328 | 73,440 (≈ 588 KB) |
+
+Số liệu ngoại tuyến thay đổi giữa các lần chạy theo các lần rút bị loại. 9 vòng trực tuyến là: mở `c`, năm lớp prefix-OR,
+hai phép nhân, mở `M`. Ba phép so sánh mỗi hệ số (48 mỗi bản mã) khớp ước lượng 32–48 của §4.4 (`hi` 17–23 bit, `lo` 26–32
+bit tùy bộ); theo cơ số hỗn hợp không cần so sánh đủ độ rộng. Số byte là **cận trên**: mạch là prefix-OR đơn giản (khoảng
+`L·log L` phép nhân mỗi phép so sánh), không phải Rabbit hay edaBits. Các giao thức đã công bố gọn hơn nhiều, dù chúng nhắm
+`q = 2^k` (Zyskind–Zarchy–Leibovich–Peikert, agent tìm kiếm của chúng tôi đã đọc toàn văn: với ví dụ của họ, `q = 2^64` và một
+bit bản rõ, 656 bit trực tuyến mỗi bên cộng cam kết, ba lần mở nối tiếp, không có phép nhân trực tuyến, 8.48 ms với 4 bên trên
+mạng 1 ms, do tác giả đo) [paper]; `q` của PQZ là số nguyên tố, trường hợp mà các biến thể modulus nguồn tùy ý của
+Damgård–Kolby–Orlandi–Pawlak bao quát (khoảng 63 bit tiền xử lý so với khoảng 17,000; chỉ đọc tóm tắt) [preprint], và một phép
+chuyển một vòng với một lần mở nay được tuyên bố là tối ưu (Damgård–Hasler–Kolby–Pawlak,
+[ePrint 2026/2450](https://eprint.iacr.org/2026/2450), 2026-10-12, chỉ đọc tóm tắt) [preprint].
+
+**Kết luận (C): không đổi, nay có bằng chứng.** Làm tròn trong MPC tái tạo đúng `pqz_dec` ở mọi bộ, kể cả nhiễu xấu nhất đạt
+được và tổng chữ số âm, chỉ mở một mặt nạ đều và `M`. C1 đã xong dưới dạng harness nghiên cứu; C2 (công cụ chia khóa) và C3
+(dịch vụ qua mạng, an toàn trước kẻ ác ý) vẫn như §8.3.
+
+### 12.2 Khảo sát D1 trên giấy: bộ chứng minh PQZL dưới dạng luồng dữ liệu MPC
+
+**Luồng dữ liệu cho một bằng chứng `R_TX` ở `n2304-kmax4096`** (kích thước của §5.2; mỗi lần thử `y1` 10,880 và `y2` 4,480 hệ
+số, `z3` / `z4` mỗi cái 256, khoảng 18 lần thử quad) [repo] [inference]:
+
+| Bước | Loại khi chia Shamir | Kích thước mỗi lần thử | Cơ sở chi phí |
+|---|---|---|---|
+| Chuẩn bị witness: `s_f`, `e_f` chia một lần; `r`, `e1`, `e2_*` là CBD từ bit ngẫu nhiên chia sẻ, phép kiểm chuẩn chỉ mở một bit chấp nhận | tuyến tính + một phép so sánh mỗi vectơ | mỗi bằng chứng | harness: bit ngẫu nhiên và phép so sánh như §12.1 |
+| `e_T = w − Δ·M` và phép tách 27 bit (16 hệ số) | tuyến tính, rồi tách bit | mỗi bằng chứng | ≈ C1 mỗi hệ số: vài trăm phép nhân |
+| Cam kết ABDLOP `tA` với `s2` tam phân lấy mẫu chung; `power2round` | tuyến tính, một lần mở trong nhóm (§5.2) | một lần | miễn phí ngoài lần mở |
+| Mặt nạ `y1`, `y2`, `y3`, `y4` | **lấy mẫu Gauss rời rạc trong MPC**, không phụ thuộc đầu vào, nên hoàn toàn ngoại tuyến | 15,360 + 512 mẫu | bên dưới |
+| `w = A1·y1 + A2′·y21 + y22`, `HighBits(w)` | tuyến tính, rồi hoặc mở trong nhóm hoặc 1,408 phép làm tròn | 1,408 hệ số | mở ≈ 22 KB với n = 3; trong MPC ≈ 1,408 × 329 ≈ 4.6·10^5 phép nhân (số phép nhân trực tuyến mỗi hệ số của C1) |
+| Các số hạng rác `t`, `v`, `h` | bậc 2: tích cục bộ, một lần chia lại, mở sau khi ngẫu nhiên hóa lại | vài đa thức | một lần chia lại |
+| `z = y + c·s` | tuyến tính (c công khai) | 15,872 | miễn phí |
+| Loại bỏ: `⟨z, c·s⟩`, `‖c·s‖²`, `exp` dấu phẩy tĩnh, so với `u` đều chia sẻ; phép kiểm dấu Rej1 của z2; z3, z4 hai mode với dấu β chia sẻ (512 tích) | **bậc 2 + exp dấu phẩy tĩnh + một phép so sánh mỗi phép kiểm**; chỉ kết quả được mở | khoảng 4 phép kiểm | tích trong: một lần chia lại mỗi cái (cộng các tích cục bộ trước); exp + so sánh: 10^3–10^4 phép nhân, 30–60 vòng [estimate] |
+| Khi chấp nhận: mở `z1`, `z21`, gợi ý | mở | 15,360 | một lần mở |
+| Fiat–Shamir | công khai | — | dạng rõ |
+
+**Phép kiểm loại bỏ không phải phần nặng.** Khác ML-DSA ngưỡng, nơi loại bỏ là kiểm chuẩn trên từng hệ số, phép kiểm của LaZer
+là vài phép kiểm tổng hợp mỗi lần thử: tích trong của các vectơ chia sẻ (mỗi cái một lần chia lại), rồi một hàm mũ và một
+phép so sánh. Đem chi phí theo từng hệ số của Quorus nhân lên 15,360 hệ số là phóng đại.
+
+**Lấy mẫu Gauss trong MPC là phần nặng** [inference] [estimate]. Chưa có bộ lấy mẫu MPC nào công bố số liệu ở độ rộng của
+LNP22: các số liệu mỗi mẫu đã công bố là 619 B và dưới 2 ms mỗi bên, chia đều trên 1,000 mẫu, ba bên, nửa trung thực, nhưng
+chỉ cho σ ≤ 1,000 (Meisingseth–Rechberger–Schmid, [ePrint 2025/805](https://eprint.iacr.org/2025/805), chỉ đọc tóm tắt) [to
+appear, CCS 2026]; 11.59 MB và 0.06 s mỗi mẫu với 16 bên (Franzese và cộng sự,
+[ePrint 2025/1025](https://eprint.iacr.org/2025/1025), chỉ đọc tóm tắt) [paper, ACM CCS]; khoảng 0.2 s mỗi mẫu, ác ý, trên
+MP-SPDZ (Fu–Wang, CCS 2024, arXiv 2409.10667) [paper]. Mặt nạ rộng không cần lấy mẫu trực tiếp ở độ rộng lớn: theo bổ đề tích
+chập của Micciancio–Walter ([ePrint 2017/259](https://eprint.iacr.org/2017/259), CRYPTO 2017) [paper], `x1 + k·x2` với
+`x_i ← D_σ0` gần với `D_{σ0·√(1+k²)}`, và một tổ hợp tuyến tính công khai là miễn phí trong MPC. Với σ0 ≈ 1,000 thì `k ≈ 406`
+cho σ1 ≈ 406,323 và `k ≈ 6` cho σ2 ≈ 6,349: **hai mẫu hẹp cho mỗi hệ số mặt nạ** [inference; điều kiện làm trơn và độ chính
+xác của bổ đề chưa được đối chiếu với bộ lấy mẫu của LaZer]. Khi đó, mỗi bên, mỗi bằng chứng `R_TX`, với 619 B mỗi mẫu hẹp:
+
+| Hạng mục | Mỗi lần thử | Mỗi bằng chứng (≈ 18 lần thử) |
+|---|---|---|
+| Mẫu Gauss hẹp | ≈ 31,700 | ≈ 5.7·10^5 |
+| Lưu lượng ngoại tuyến cho mặt nạ | ≈ 20 MB | ≈ 0.35 GB |
+| CPU bộ lấy mẫu ngoại tuyến ở 2 ms mỗi mẫu | ≈ 1 phút | ≈ 20 phút |
+| Trực tuyến: mở w, phép kiểm loại bỏ, mở z (n = 3) | ≈ 0.3–0.5 MB | ≈ 5–10 MB |
+| Vòng trực tuyến, tuần tự / 8 lần thử song song (số vòng lặp kỳ vọng `1/(1 − (17/18)^8) ≈ 2.7`) | 30–60 | ≈ 600–1,100 / ≈ 80–170 |
+
+**Kết luận rõ hơn "10–100×"** [estimate, theo cơ sở trên]: *trực tuyến*, một bộ chứng minh PQZL ngưỡng gần bằng đại số tuyến
+tính của một bên chứng minh cho mỗi bên, cộng 80–170 vòng khi thử song song (vài giây trên WAN, nằm gọn trong cửa sổ inline
+≈ 110 s của §5.5); *ngoại tuyến*, lấy mẫu mặt nạ tốn khoảng 0.35 GB và cỡ 20 phút CPU mỗi bên mỗi bằng chứng, cỡ 10^3 lần một
+lần chứng minh gốc (0.5–1 s, [repo]), tất cả không phụ thuộc đầu vào và tính trước được. Vậy con số "10–100×" trước đây quá
+bi quan về độ trễ trực tuyến và quá lạc quan về tổng công việc. Nếu `w` không được mở trong nhóm, thêm khoảng 8 MB trực tuyến
+mỗi lần thử.
+
+**Việc mở các lần thử bị loại làm lộ gì** [inference]. Với mỗi lần thử bị loại, nhóm thấy `w` (hoặc `HighBits(w)`), các cam
+kết che giấu `t`, `v`, `ty3`, `ty4`, `tβ`, challenge công khai và kết quả ⊥; không bao giờ thấy `z`.
+`w = A1·y1 + A2′·y21 + y22` vốn đã có dạng MLWE mà Quorus phải thêm vào ML-DSA (`w = Ay + e_w`, để `w1` và `c` của lần thử bị
+loại có thể mở; bản USENIX 2026, agent tìm kiếm của chúng tôi đã đọc toàn văn) [paper]; kết quả là một hàm của `(y, c, s)`
+mà `y` của nó ẩn sau `w`, đúng tình huống mà phép mô phỏng tính toán các transcript bị hủy bao quát cho chữ ký (Devevey và
+cộng sự, ePrint 2023/245; del Pino–Niot, ePrint 2025/872, theo trích dẫn của Quorus) [paper]. **Điều này chỉ đúng khi mặt nạ
+được lấy mẫu chung**: với phần Gauss cục bộ, mỗi người trong nhóm biết một phần của `y`, và cả kết quả lẫn `z` đã mở đều mang
+thông tin về `s` mà chưa có chứng minh công bố nào chặn được cho giao thức này. Một cảnh báo liên quan: TALUS (Kao–Chang, arXiv
+2603.22109, chỉ đọc tóm tắt) tuyên bố khôi phục được khóa sau khoảng 2^30 chữ ký với một lược đồ ngưỡng đúng FIPS 204 mà để lộ
+một nonce tổng [preprint] [unverified]. Theo cả hai hướng, chưa có chứng minh công bố nào bao quát giao thức tổng hợp của LaZer.
+
+**Tài liệu mới kể từ §5.4** (từ một lượt tìm ngày 2026-11-06; nhãn theo mức đã đọc):
+
+- **Griffy, Youdom Kemmoe, Nguyen, Silde, "Threshold lattice-based zero-knowledge proofs",
+  [ePrint 2026/1750](https://eprint.iacr.org/2026/1750)** (2026-08-20; đã đọc tóm tắt và slide bài nói WPEC 2026,
+  2026-10-28; chưa mở PDF) [preprint]: các bằng chứng ZK lưới ngưỡng đầu tiên cho quan hệ chính xác, cho bằng chứng của
+  Attema–Lyubashevsky–Seiler và Esgin–Nguyen–Seiler (tiền thân của LNP22, không phải LNP22 hay ABDLOP); witness chia Shamir;
+  mặt nạ chia cộng; **bỏ lấy mẫu loại bỏ nhờ Hint-MLWE**, với "√t extra slack" nên bằng chứng lớn hơn khoảng √t lần; số hạng
+  rác bậc hai dưới BGV ngưỡng; an toàn thụ động, tối đa t − 1 bên bị chiếm; chưa công bố chi phí cụ thể. Với PQZ, hướng này đổi
+  các cận chuẩn mà bên kiểm tra chấp nhận: một bộ tham số mới, `proofSystemId` mới, vectors mới và full gate, đều là quyết định
+  của chủ dự án [inference].
+- **LaZer-PW02** (bản preview NIST, lớp S6, 2026-06-24, đã đọc toàn văn) [NIST preview]: một ZKPoK họ LNP22 với một bên chứng
+  minh, để dùng cạnh các lược đồ ngưỡng; có kế hoạch lấy mẫu loại bỏ lặp để thu hẹp mặt nạ (Gärtner, CRYPTO 2025). Không
+  preview S6 nào khác phân tán bộ chứng minh.
+- Không có công trình nào phân tán bộ chứng minh LNP22, ABDLOP, LaBRADOR hay Greyhound [unverified, tìm ngày 2026-11-06].
+
+**Kết luận (D): không đổi, vẫn là nghiên cứu, nhưng trở ngại nay được gọi đúng tên là an toàn, không phải chi phí.** Con đường
+chính xác (mặt nạ Gauss chung, quy tắc loại bỏ của LaZer, mọi giá trị mở là một trường của bằng chứng) giữ nguyên bên kiểm tra,
+`proofSystemId` và vectors hiện nay; chi phí trực tuyến vừa cửa sổ inline và chi phí ngoại tuyến khoảng 0.35 GB và vài chục
+phút CPU mỗi bên mỗi bằng chứng. Ba việc còn mở giữ nó ở mức nghiên cứu: (1) một chứng minh rằng mở `w`, các cam kết và kết
+quả của lần thử bị loại cho nhóm là an toàn với giao thức tổng hợp của LaZer; (2) một bộ lấy mẫu MPC ở độ chính xác của LaZer
+(bước tích chập là suy luận của chúng tôi; chưa bộ lấy mẫu nào công bố số liệu ở các độ rộng này); (3) an toàn trước kẻ ác ý của
+cả chuỗi. Hướng của chính giới nghiên cứu (2026/1750: Hint-MLWE, không loại bỏ, dư √t) sẽ kéo theo tham số mới. D2 (bộ chứng
+minh MPC mô phỏng được `pqz_verify` kiểm) vẫn là bước tiếp theo nếu chủ dự án muốn.
+
+### 12.3 Tin mới khác liên quan tới các kết luận
+
+- **Lời kêu gọi ngưỡng của NIST** ([TCall-1](https://csrc.nist.gov/projects/threshold-cryptography/tcall-1), trang đọc ngày
+  2026-11-06): hạn nộp gói vẫn là "expected to be set to 2027-Mar-01 (it will not be before)", chưa được xác nhận sau TCPT3;
+  gói sơ bộ tùy chọn từ 1 đến 31 tháng 12 năm 2026 [paper, trang NIST]. Các preview KEM / PKE ngưỡng lớp S2 gồm Amber, PQarrots
+  (Kea) và Adamas (TPKE một vòng dùng **làm ngập đa thức**, phần giải mã từng phần từ 1.87 KB tới 16.4 MB) [NIST preview].
+  Không cái nào đổi §4: làm ngập vẫn không vừa `q` của PQZ.
+- **Làm tròn trong MPC đang trưởng thành:** Ajax (USENIX Security 2026, agent tìm kiếm của chúng tôi đã đọc toàn văn) mở
+  `e + r mod Δ` sau một chia sẻ kép, 2 vòng trực tuyến, 0.9 ms với n = 3 trên LAN (số của tác giả) [paper]; Modulus Operandi
+  (2026/2450) tuyên bố một vòng [preprint]. Điều này củng cố kết luận (C) và hướng C3 tới một phép chuyển modulus tùy ý thay vì
+  mạch prefix của chúng tôi.
+
+### 12.4 Câu hỏi mở cho chủ dự án (mới)
+
+1. **Nền cho C3.** Dựng dịch vụ qua mạng trên một phép chuyển modulus tùy ý (Damgård và cộng sự) thay vì mạch prefix của
+   harness? *Khuyến nghị:* có, khi C3 được xếp lịch; giữ harness làm tham chiếu so bằng.
+2. **D2 hay chờ.** Bỏ 20–30 agent-day cho một bộ chứng minh PQZL MPC mô phỏng ngay, hay chờ một lập luận an toàn cho việc mở
+   lần thử bị hủy (hoặc một kết quả kiểu 2026/1750 cho LNP22)? *Khuyến nghị:* chờ; mô hình chi phí không chặn nó, khoảng trống
+   chứng minh mới chặn.
+3. **Một biến thể PQZL Hint-MLWE, không loại bỏ** sẽ là `proofSystemId` và bộ tham số mới. *Khuyến nghị:* không phải bây giờ;
+   ghi lại như hướng đi của giới nghiên cứu.

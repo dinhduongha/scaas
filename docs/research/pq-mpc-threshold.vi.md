@@ -10,6 +10,14 @@ Viết ngày 2026-11-06 theo yêu cầu của chủ dự án. Chỉ là nghiên 
 xếp lịch việc gì, trừ chỗ trích phán quyết của chủ dự án (§6). Mọi thứ mật mã trong SCaaS đều **UNAUDITED**, và mọi lược đồ
 dưới đây cũng vậy. Zether (ElGamal cổ điển) và PQZ (MLWE) là hai hệ riêng biệt và được xét riêng trong suốt ghi chú.
 
+**Nghiên cứu sâu hơn (2026-11-06).** Hai phân tích chuyên sâu tiếp theo bản khảo sát này và làm rõ ba dòng của §1. **PQZ:**
+[pqz-threshold-decrypt-prove.vi.md](pqz-threshold-decrypt-prove.vi.md) §12. Làm tròn MPC mô phỏng bằng `pqz_dec` trên các
+vectors đóng băng ở cả bốn bộ, và một oracle làm tròn trên bản mã do người gọi đưa vào khôi phục `s` sau 8·K truy vấn. Bộ chứng
+minh LNP22 phân tán đã có chi phí: trực tuyến vừa, mặt nạ Gauss ngoại tuyến khoảng 0.35 GB mỗi bên mỗi bằng chứng, và trở ngại
+là chứng minh an toàn cho việc mở lần thử bị hủy. **Zether:** [zether-threshold-mpc.vi.md](zether-threshold-mpc.vi.md) §5.10.
+Một bằng chứng chuyển chung 3-of-5 qua được verifier native thật, nên dòng "Zether chi tiêu ngưỡng: nghiên cứu" ở §1 không còn
+đúng: nó khả thi mà không đổi hợp đồng. Tất cả đều UNAUDITED.
+
 **Nhãn bằng chứng.** [paper] công bố có bình duyệt; [to appear] đã được nhận đăng, bản chính thức chưa ra; [preprint]
 ePrint hoặc arXiv, chưa bình duyệt; [NIST preview] bài nói hoặc tài liệu preview cho lời kêu gọi ngưỡng của NIST; [vendor]
 tuyên bố của công ty tác giả hoặc thông cáo báo chí; [repo] đọc từ kho mã này; [inference] suy luận của chúng tôi;
