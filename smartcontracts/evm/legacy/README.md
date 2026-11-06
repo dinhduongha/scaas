@@ -284,3 +284,6 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   `ISSUER_BITS`; `src/factory/IFactoryToken.sol` with `RegulatedParams` of four fields. Tests as they stood before their
   meaning changed: `test/as/RegulatedSkeleton.t.sol` (the masks without bit 23), `test/governance/GovBitsVector.t.sol` (rows
   0-22). Not built.
+  T40 (`mtxPayWithTax` and `payWithTax` on kinds 8-13), as it stood at ff5f18f5 (the T39 tip): `src/metatx/ERC20MetaTx.sol`
+  with the three-argument `_uaExecuteTransfer(t, signed, auth)` (no withheld leg). `RegulatedBase`, `RegulatedLib` and
+  `IRegulatedToken` before T40 are the pre-T39 copies above plus T39's commit. Not built.
