@@ -1748,6 +1748,23 @@ class WalletCrypto(WalletCase):
 ZV = HERE.parents[1] / 'zether-prover' / 'vectors'
 R33 = json.loads((ZV / 'r33_keys.json').read_text())
 ZJ = json.loads((VEC / 'zether.json').read_text())
+STATE = HERE.parents[2] / 'smartcontracts' / 'vectors'
+
+
+def commands(name):
+    """scaas-ua `facade::<name>::COMMANDS` read from its source (T15g): (the release commands, the `vectors`-only raw forms).
+    A test asserts that a command is in it, never that it equals a list (spec no-decryption-oracle §4.13)."""
+    src = (HERE.parents[1] / 'ua-rs' / 'src' / 'facade' / f'{name}.rs').read_text()
+    body = src[src.index('pub const COMMANDS: &[&str] = &['):]
+    out, gated = ([], []), False
+    for ln in body[:body.index('];')].splitlines()[1:]:
+        ln = ln.strip()
+        if ln == '#[cfg(feature = "vectors")]':
+            gated = True
+        elif ln.startswith('"'):
+            out[gated].append(ln.strip('",'))
+            gated = False
+    return out
 
 
 class WalletZether(WalletCase):
@@ -1796,10 +1813,35 @@ class WalletZether(WalletCase):
         for f in ('popDigest', 'registrationDigest', 'uaMsg'):
             self.assertEqual(pop[f], r[f], f)
         t = self.request('transfer_bls12381.json')
-        # ARCH-POS-13 (T15c): a release build has no command that decrypts a caller's ciphertext (until T14b)
+        # ARCH-POS-13 (T15c, T14b): no command of a release build decrypts a caller's ciphertext (the words commands: below)
         for cmd, req in [('checkBalance', {'acc': t['acc'], 'balance': t['balance']}), ('proveTransfer', t),
                          ('decrypt', {'ct': t['acc']}), ('recoverTransfer', {})]:
             self.assertEqual(self.call(k, cmd, req), ('UAArgument', None), cmd)
+
+    def test_words_commands_on_the_forge_rows(self):
+        """T15g (ARCH-POS-13): the words commands through the C ABI on the forge rows (smartcontracts/vectors/zether/state.json;
+        the holders are r33_keys.json's): each in COMMANDS, the balances the contract's; another holder's words refused before
+        the key (ua-rs tests/facade_zether_state.rs counts the key's uses); every `vectors`-only raw form refused here."""
+        release, raw = commands('zether')
+        for c in ('balance', 'pendingBalance'):
+            self.assertIn(c, release)
+        self.assertTrue(raw)
+        rows = json.loads((STATE / 'zether' / 'state.json').read_text())
+        row = {r['name'].split(':')[0]: r for r in rows['accounts']}
+        loc = {f: rows[f] for f in ('family', 'chainId', 'chainUid', 'token', 'block', 'psid')}
+
+        def words(name):
+            return dict(loc, ua=row[name]['ua'], account=row[name]['account'], accountData=row[name]['accountData'], tableBits=18,
+                        boundBits=20)
+        w = self.zw()
+        alice, bob = self.zk(w, 60, 0, 7), self.zk(w, 60, 1, 7)
+        st_, out = self.call(alice, 'balance', words('alice'))
+        self.assertEqual((st_, out['amount']), ('', str(row['alice']['balance'])))
+        st_, out = self.call(bob, 'pendingBalance', words('bob'))
+        self.assertEqual((st_, out['amount']), ('', str(row['bob']['pending'])))
+        self.assertEqual(self.call(bob, 'balance', words('alice')), ('UAArgument', None), "another holder's words")
+        for c in raw:
+            self.assertEqual(self.call(alice, c, {}), ('UAArgument', None), c)
 
     def test_a_key_field_in_command_json_is_refused(self):
         k = self.zk(self.zw())
@@ -1945,6 +1987,24 @@ class WalletPqz(WalletCase):
         box = text(L.pqz_seal_balance_cache, k, b'{"v":1}', 7)
         self.assertEqual(var(L.pqz_open_balance_cache, k, box.encode()), b'{"v":1}')
         self.assertEqual(sig_of(L.pqz_open_balance_cache, self.qk(w, 0, 1), box.encode()), ('UAAead', None))
+
+    def test_words_commands_on_the_forge_rows(self):
+        """T15g (ARCH-POS-13): `balance` through the C ABI on a forge row (smartcontracts/vectors/pqz/n2304-kmax4096/state.json):
+        in COMMANDS; the forge keys are mocked, so the words bind to no wallet key and are refused (UAArgument), with the
+        other set's psid UAPqzSetMismatch, both before the key (ua-rs tests/facade_pqz_state.rs counts the key's uses); every
+        `vectors`-only raw form refused here."""
+        release, raw = commands('pqz')
+        self.assertIn('balance', release)
+        self.assertTrue(raw)
+        rows = json.loads((STATE / 'pqz' / 'n2304-kmax4096' / 'state.json').read_text())
+        a = rows['accounts'][0]
+        words = dict({f: rows[f] for f in ('chainUid', 'token', 'psid')},
+                     **{f: a[f] for f in ('ua', 'block', 'account', 'pending', 'accWords', 'blobs', 'keyRecord')})
+        k = self.qk(self.qw())
+        self.assertEqual(self.call(k, 'balance', words), ('UAArgument', None))
+        self.assertEqual(self.call(k, 'balance', dict(words, psid='0x' + PQZL_ID['n2048-kmax1024'])), ('UAPqzSetMismatch', None))
+        for c in raw:
+            self.assertEqual(self.call(k, c, {}), ('UAArgument', None), c)
 
     def test_pqz_handle_after_lock_and_free_is_KEY_REVOKED(self):
         w = self.qw()

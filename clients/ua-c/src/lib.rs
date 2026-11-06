@@ -2309,7 +2309,9 @@ pub extern "C" fn scaas_ua_zether_public(k: *const ScaasUaZetherKey, y128: *mut 
 /// ARCH-POS-13 (ua-rs-sign T15c, T14b): a command that decrypts takes a named location and the raw storage words a reading
 /// layer read (account slots, `bytes` data slots, entry, pointer, SSTORE2 code and memo words, the token's words), never a
 /// ciphertext, entry, memo or parsed state field; the words are parsed, checked, bound to the handle's key and rebuilt
-/// before the key is used. This release library has no raw form (decrypt, decryptPending, raw*): each is
+/// before the key is used. A debit's optional `balance` hint is the holder's own plaintext from its sealed balance-cache box,
+/// never a value from the reading layer or a remote party: its check against the rebuilt `acc` is a balance-equality test
+/// (spec no-decryption-oracle §4.7). This release library has no raw form (decrypt, decryptPending, raw*): each is
 /// SCAAS_UA_ERR_ARGUMENT.
 #[no_mangle]
 pub extern "C" fn scaas_ua_zether_call(

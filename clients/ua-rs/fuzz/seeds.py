@@ -24,16 +24,21 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 V = os.path.join(HERE, "../../../smartcontracts/vectors/ua")
 ZV = os.path.join(HERE, "../../zether-prover/vectors")
-# the order of scaas_ua::facade::zether::COMMANDS (tests/fuzz_caps.rs checks the indices used here); BOX: the box reader
-ZCMDS = ["encrypt", "decrypt", "decryptPending", "rawCheckBalance", "rawProveTransfer", "rawProveTransferMulti", "rawProveBurn",
-         "rawOpenMemo", "rawRecoverTransfer", "rawOpenDisclosure", "pop", "ownerAuth", "uaSig", "shieldCalldata", "envelope",
-         "typedDigest", "namedCall", "balance", "pendingBalance", "checkBalance", "proveTransfer", "proveTransferMulti", "proveBurn",
-         "openMemo", "recoverTransfer", "openDisclosure"]
+
+
+def commands(name):
+    """`facade::<name>::COMMANDS` in its order, read from the source (T15g): every entry, the `vectors`-only raw forms too (the
+    fuzz targets are built with `vectors`); tests/fuzz_caps.rs reads the source by the same rule and compares it with COMMANDS."""
+    with open(os.path.join(HERE, "../src/facade", name + ".rs"), encoding="utf-8") as f:
+        src = f.read()
+    body = src[src.index("pub const COMMANDS: &[&str] = &["):]
+    return [ln.strip().strip('",') for ln in body[:body.index("];")].splitlines()[1:] if ln.strip().startswith('"')]
+
+
+# the command index of the fuzz targets; BOX / QBOX: the index after the last, the box readers
+ZCMDS = commands("zether")
 BOX = len(ZCMDS)
-# the order of scaas_ua::facade::pqz::COMMANDS (tests/fuzz_caps.rs checks it); QBOX: the PQZ box reader
-QCMDS = ["enc", "dec", "proveRegister", "proveKeyRecord", "rawProveTransfer", "rawProveBurn", "rawProveRefresh", "rawProveTransferMulti",
-         "proveDiscloseSender", "rawProveDisclose", "rawOpenMemo", "balance", "proveTransfer", "proveBurn", "proveRefresh",
-         "proveTransferMulti", "auditRead", "proveDisclose", "openMemo"]
+QCMDS = commands("pqz")
 QBOX = len(QCMDS)
 PV = os.path.join(HERE, "../../../smartcontracts/vectors/pqz/n2304-kmax4096")
 

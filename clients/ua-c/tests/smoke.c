@@ -121,6 +121,14 @@ int main(void) {
     uint8_t zpt[16];
     size_t zpt_len = sizeof zpt;
     CHECK(scaas_ua_zether_open_balance_cache(zk, zout, zpt, &zpt_len) == SCAAS_UA_OK && zpt_len == 2 && memcmp(zpt, "{}", 2) == 0);
+    // ARCH-POS-13 (T15g): a words command without its words is refused before the key; this release build has no raw form
+    static const char *const zraw[] = {"decrypt", "decryptPending", "rawCheckBalance", "rawOpenMemo", "rawOpenDisclosure"};
+    for (size_t i = 0; i < sizeof zraw / sizeof zraw[0]; i++) {
+        len = sizeof zout;
+        CHECK(scaas_ua_zether_call(zk, zraw[i], "{}", zout, &len) == SCAAS_UA_ERR_ARGUMENT);
+    }
+    len = sizeof zout;
+    CHECK(scaas_ua_zether_call(zk, "balance", "{\"family\":\"evm\"}", zout, &len) == SCAAS_UA_ERR_ARGUMENT);
 
     // PQZ (T15, default build: n2304-kmax4096): the set, an R_REG proof, a key field refused, a cache box, the leaf export
     CHECK(scaas_ua_features() & SCAAS_UA_FEATURE_PQZ);
@@ -143,6 +151,13 @@ int main(void) {
     CHECK(scaas_ua_pqz_call(qk, "proveRegister", qreq, qout, &len) == SCAAS_UA_OK && strstr(qout, "\"proof\"") && strstr(qout, "\"message\""));
     len = sizeof qout;
     CHECK(scaas_ua_pqz_call(qk, "dec", "{\"key\":{\"seed32\":\"0x01\"}}", qout, &len) == SCAAS_UA_ERR_ARGUMENT);
+    static const char *const qraw[] = {"rawProveTransfer", "rawProveDisclose", "rawOpenMemo"};
+    for (size_t i = 0; i < sizeof qraw / sizeof qraw[0]; i++) {
+        len = sizeof qout;
+        CHECK(scaas_ua_pqz_call(qk, qraw[i], "{}", qout, &len) == SCAAS_UA_ERR_ARGUMENT);
+    }
+    len = sizeof qout;
+    CHECK(scaas_ua_pqz_call(qk, "balance", "{\"block\":7}", qout, &len) == SCAAS_UA_ERR_ARGUMENT);
     len = sizeof qout;
     CHECK(scaas_ua_pqz_seal_balance_cache(qk, (const uint8_t *)"{}", 2, qout, &len) == SCAAS_UA_OK);
     size_t qpt_len = sizeof zpt;

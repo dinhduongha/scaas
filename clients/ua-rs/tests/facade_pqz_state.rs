@@ -589,3 +589,26 @@ fn burn_and_refresh_memo_hash_is_zero() {
         assert!(verify(2, &s, &h(&p["proof"])), "{cmd}");
     }
 }
+
+/// T15g (the bindings' PQZ row, through `scaas_ua_pqz_call`'s JSON): the forge keys are mocked, so a forge row's words parse,
+/// check and rebuild (`from_json` accepts them) but bind to no wallet key: on a wallet's handle each `balance` is refused with
+/// `Argument` before the key; the same words with the other set's `psid`, `PqzSetMismatch`, the key unused.
+#[test]
+fn forge_rows_on_another_handle_are_refused_before_the_key() {
+    unlock();
+    let r = rows();
+    let other = if st::SET == "n2048-kmax1024" { "n2304-kmax4096/" } else { "" };
+    let p = format!("{}/../../smartcontracts/vectors/pqz/{other}state.json", env!("CARGO_MANIFEST_DIR"));
+    let other: Value = serde_json::from_str(&std::fs::read_to_string(&p).unwrap()).unwrap();
+    assert_ne!(other["psid"], r["psid"]);
+    let w = Wallet::from_mnemonic(WORDS, "").unwrap();
+    let k = w.pqz_key(0, 0).unwrap();
+    for a in r["accounts"].as_array().unwrap() {
+        let name = a["name"].as_str().unwrap();
+        let words = json!({"chainUid": r["chainUid"], "token": r["token"], "psid": r["psid"], "ua": a["ua"], "block": a["block"],
+            "account": a["account"], "pending": a["pending"], "accWords": a["accWords"], "blobs": a["blobs"], "keyRecord": a["keyRecord"]});
+        assert!(PqzCmd::from_json("balance", words.to_string().as_bytes()).is_ok(), "{name}: the words parse (control)");
+        refused(name, &k, "balance", &words, Error::Argument);
+        refused(name, &k, "balance", &merge(words, json!({"psid": other["psid"]})), Error::PqzSetMismatch);
+    }
+}

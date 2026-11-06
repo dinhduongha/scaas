@@ -20,6 +20,16 @@ fn unlock() {
     scaas_ua::facade::vectors_unlock(scaas_ua::facade::TestOnly);
 }
 
+/// T15g: `facade::<name>::COMMANDS` read from the source by `fuzz/seeds.py`'s rule (`commands`): every quoted line of the
+/// list, in order, the `vectors`-only entries too. The seeds' command index is this list; compared with COMMANDS by the caller.
+#[cfg(any(feature = "zether", feature = "pqz"))]
+fn source_commands(name: &str) -> Vec<String> {
+    let src = std::fs::read_to_string(format!("{}/src/facade/{name}.rs", env!("CARGO_MANIFEST_DIR"))).unwrap();
+    let body = &src[src.find("pub const COMMANDS: &[&str] = &[").unwrap()..];
+    let body = &body[..body.find("];").unwrap()];
+    body.lines().skip(1).map(str::trim).filter(|l| l.starts_with('"')).map(|l| l.trim_end_matches(',').trim_matches('"').to_string()).collect()
+}
+
 fn file(name: &str) -> Vec<u8> {
     std::fs::read(format!("{}/fuzz/regress/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap()
 }
@@ -179,10 +189,7 @@ fn zether_inputs_past_their_caps_are_refused_unparsed() {
     // the spec's caps (§9.3) and the box's, stated here: not the crate's constants, which a changed cap would move too
     const CMD_MAX: usize = 1 << 20;
     const BOX_MAX: usize = 2 << 20;
-    let src = std::fs::read_to_string(format!("{}/fuzz/seeds.py", env!("CARGO_MANIFEST_DIR"))).unwrap();
-    let list = &src[src.find("ZCMDS = [").unwrap() + 9..];
-    let named: Vec<&str> = list[..list.find(']').unwrap()].split(',').map(|s| s.trim().trim_matches('"')).collect();
-    assert_eq!(named, COMMANDS, "seeds.py's ZCMDS is COMMANDS");
+    assert_eq!(source_commands("zether"), COMMANDS, "seeds.py's ZCMDS: COMMANDS read from the source");
     let w = Wallet::from_mnemonic("legal winner thank year wave sausage worth useful legal winner thank yellow", "").unwrap();
     let k = w.zether_key(60, 0, 7).unwrap();
     let split = |name: &str| {
@@ -239,10 +246,7 @@ fn pqz_inputs_past_their_caps_are_refused_unparsed() {
     // T15e: the PQZ command cap is 4 MiB (a debit's raw words; spec no-decryption-oracle §4.3)
     const CMD_MAX: usize = 4 << 20;
     const BOX_MAX: usize = 2 << 20;
-    let src = std::fs::read_to_string(format!("{}/fuzz/seeds.py", env!("CARGO_MANIFEST_DIR"))).unwrap();
-    let list = &src[src.find("QCMDS = [").unwrap() + 9..];
-    let named: Vec<&str> = list[..list.find(']').unwrap()].split(',').map(|s| s.trim().trim_matches('"')).collect();
-    assert_eq!(named, COMMANDS, "seeds.py's QCMDS is COMMANDS");
+    assert_eq!(source_commands("pqz"), COMMANDS, "seeds.py's QCMDS: COMMANDS read from the source");
     let w = Wallet::from_mnemonic("legal winner thank year wave sausage worth useful legal winner thank yellow", "").unwrap();
     let k = w.pqz_key(0, 0).unwrap();
     let split = |name: &str| {
