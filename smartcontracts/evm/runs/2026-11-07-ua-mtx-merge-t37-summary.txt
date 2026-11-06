@@ -1,0 +1,20 @@
+# ua-mtx-merge T37 gate summary (full output in git-ignored .log files, not committed)
+# T37 (pay-meta-tax spec §2, §3; O2, O3, O11, O12, O15; C1, C5): PayMeta last on every pay entry (mtxPay struct form,
+# mtxPayReceiverFee, payWithFee, payWithFeeToUA, the mandate wallets' pay entries), _payMeta and metaPayId v2, free pay
+# lanes, mtxPayMeta / _uaPayMeta / _uaPay / metaPayId(bytes32,bytes) to legacy/ua-mtx-merge/3e/. UNAUDITED.
+# Base: 86751e34. Commits: f27369f7 (legacy copies), 3740b85e (implementation), this one (summary, mutants table, harness).
+step | commit | rc | counts
+t37-red | f27369f7 + tests only | 1 | compile error: MetaTxLib.PayMeta not found (test/helpers/PayMetaKit.sol, test/metatx/{PayMeta,PayLanes}.t.sol)
+t37-build | 3740b85e | 0 | src then each test directory one at a time (a one-shot compile of 202 files hit the 4 GB cap, rc 143)
+t37-forge-full-first | 3740b85e - pins | 1 | 2860 passed 34 failed 14 skipped, 276 suites: the pins of the change only (sizes 2, plus-zero gas 22, CREATE2 addresses 1, the KATs 2, selector audit 1) and 6 test call sites fixed before the commit
+t37-forge-full | 3740b85e | 0 | 2894 passed 0 failed 14 skipped, 276 suites (forge, default set n2304-kmax4096)
+t37-at-set-n2048-kmax1024 | 3740b85e | 0 | 868 passed 0 failed 1 skipped, 85 suites (at-set.sh test --match-path 'test/{ua,pqz,as/confidential}/*'); PqzSet.sol restored
+t37-at-set-n2304-kmax4096 | 3740b85e | 0 | 865 passed 0 failed 4 skipped, 85 suites; PqzSet.sol restored
+t37-at-set-n2560-kmax16384 | 3740b85e | 0 | 864 passed 0 failed 5 skipped, 85 suites; PqzSet.sol restored
+t37-at-set-n2816-kmax65536 | 3740b85e | 0 | 859 passed 0 failed 10 skipped, 85 suites; PqzSet.sol restored
+t37-size-gate | 3740b85e | 0 | 0 errors, 97 contracts, above 65536 B: none; kind 13 62,285 -> 62,392 B (2,120 B under the 64,512 B stop line: no lever)
+t37-mutants | 3740b85e | 1 each | 10 of 10 killed, none a compile error (runs/2026-11-07-ua-mtx-merge-t37-mutants.txt; harness runs/2026-11-07-ua-mtx-merge-paytax/mutants.py): payNo out of the hash, the old tag, salt 0 allowed, the schema/body rule dropped, _payMeta after the transfer, the 256-byte bound at 255 and 257, PaymentMeta skipped, payLane / nonce 0 enforced in receiver-fee, the wallet passing an empty PayMeta; git diff --exit-code -- src clean after
+t37-clientkeys | 3740b85e | 1 | 241 passed 9 failed of 253: paymeta.test.js (6, the v1 formula) and evm.test.js (the mandate KAT calldata) are T41's rows; near / algorand read the legacy copy since 43a09e7d (20 passed)
+#
+# Gas (MetaTxGasV2, logged): P mtxPay fresh lane 192,898 -> 200,232; calldata 612 -> 900 B. plus_zero_gas.json re-recorded
+# (-44..+67 per row, the dispatcher's table; plus_zero_slots.json unchanged). Sizes: size-baseline.json _comment.
