@@ -87,10 +87,10 @@ MUTANTS = {
     "tax-above-amount-allowed": ("t40", "src/regulated/RegulatedLib.sol",
                                  "        if (tax > value) revert IRegulatedToken.TaxExceedsAmount(tax, value);\n", "",
                                  "test/as/Tax.t.sol"),
-    "tax-leg-from-payee": ("t40", "src/metatx/ERC20MetaTx.sol", "if (withheld != 0) _uaMove(t.from, withheldTo, withheld);",
-                           "if (withheld != 0) _uaMove(t.to, withheldTo, withheld);", "test/as/Tax.t.sol"),
-    "payee-credited-gross": ("t40", "src/metatx/ERC20MetaTx.sol", "_uaMove(t.from, t.to, t.value - withheld);",
-                             "_uaMove(t.from, t.to, t.value);", "test/as/Tax.t.sol"),
+    "tax-leg-from-payee": ("t40", "src/metatx/ERC20MetaTx.sol", "if (withheld != 0) _uaMove(from, withheldTo, withheld);",
+                           "if (withheld != 0) _uaMove(to, withheldTo, withheld);", "test/as/Tax.t.sol"),
+    "payee-credited-gross": ("t40", "src/metatx/ERC20MetaTx.sol", "_uaMove(from, to, value - withheld);",
+                             "_uaMove(from, to, value);", "test/as/Tax.t.sol"),
     "recipient-from-calldata": ("t40", "src/regulated/RegulatedLib.sol", "        r = $().taxRecipient;\n",
                                 "        r = bytes32(uint256(uint160(msg.sender)));\n", "test/as/Tax.t.sol"),
     "regfeeto-skipped": ("t40", "src/regulated/RegulatedBase.sol", "        _regFeeTo(r, tax);\n", "", "test/as/Tax.t.sol"),
@@ -105,6 +105,12 @@ MUTANTS = {
                                      "MetaTxLib.hashStruct(t), taxMode, tax, r)", "test/as/Tax.t.sol"),
     "paywithtax-payer-is-payee": ("t40", "src/regulated/RegulatedBase.sol", "bytes32 payer = MetaTxLib.pad(_msgSender());",
                                   "bytes32 payer = MetaTxLib.pad(tx.origin);", "test/as/Tax.t.sol"),
+    # the confidential fee rule (`requireConfidentialSafe`: PERCENT refused) applied to a public pay with tax; the 10-13
+    # rows must catch it (B-3), so only their suite runs
+    "percent-refused-confidential": ("t40", "src/regulated/RegulatedLib.sol",
+                                     "        if (taxMode == 1) {\n",
+                                     "        if (taxMode == 1) {\n            revert IRegulatedToken.TaxModeInvalid(taxMode);\n",
+                                     "test/as/confidential/TaxConfidential.t.sol"),
 }
 
 
