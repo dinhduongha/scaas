@@ -365,14 +365,14 @@ SPECIFIED (D15–D17); nothing built.
 
 **P27 — The session's stores** (D15–D17). A session lists where its messages go in `sealedInfo` (§4.2), so the list is
 encrypted and nothing new appears on chain in the clear: any subset, **at least one**, of a Matrix room (§7.1), an HCS
-topic (§7.3), one or more chains by `chain_uid`, any chain where `PqChat` is deployed, each written through
+topic (§7.3), one or more chains by `chain_uid`: **any EVM chain** where `PqChat` is deployed (one rule on every chain, owner
+2026-11-06; other families in their own rounds), each written through
 `storeMessage` (P29), and a Waku content topic (§7.6, P31). The list may also name **libp2p** (§7.5, P30) for call signalling; it stores no message, receives
 no replicated message and does not count toward "at least one". **Matrix is optional**: when listed it is the default (read first; its media and MatrixRTC
 available, P28). The client sends every message to **every listed store** (replication), as the same envelope of P15;
 readers read any listed store and dedupe by `messageId` (P19). The list may change only at a rekey: the new epoch's
 `sealedInfo` carries the new list, and messages of that epoch follow it. A store is a client choice, not a contract rule;
-another kind of store or transport can be added later as a new `kind` in the list. **A testnet store** (for example
-Sepolia) can be retired and its data lost: fine for tests, not for durable history; the client says so when the user
+another kind of store or transport can be added later as a new `kind` in the list. **A test-chain store** can be retired and its data lost: fine for tests, not for durable history; the client says so when the user
 lists one.
 
 **P28 — Without Matrix** (D15, D16). **Attachments**: the file is encrypted as today (a random AES-256-GCM key) and put in a
@@ -673,8 +673,8 @@ Estimates (architecture study §8): EIP-8037 1,530 gas per state byte, new slot 
 | message over Waku (P31) | 0 gas, no fee | bandwidth; an RLN membership, if the network requires one, is the user's | | |
 
 `storeMessage` (P29): about 2.4 KB (FN-DSA-512) or 5.1 KB (ML-DSA-65) of blob at 1,530 gas per state byte, plus the
-blob's new account and two slots, no signature check; each listed chain pays it once. A test chain such as Sepolia costs
-test ETH only.
+blob's new account and two slots, no signature check; each listed chain pays it once. A test chain costs
+its test token only.
 
 HCS (P25), estimates of 2026-11-05 in USD (Hedera fees are fixed in USD and paid in HBAR), from
 [Submit a message](https://docs.hedera.com/native/consensus/submit-message) and
