@@ -199,6 +199,10 @@ ciphertext; `value()` keeps wiping the noise.
 - `zether-prover`: the raw commands stay behind `hazmat` (T15c), and so do the public helpers that bypass the dispatcher
   (`api::open_memo_json` and the decrypt and disclosure primitives in `api.rs`, `elgamal.rs`, `schnorr.rs`): `pub` only under
   `hazmat`, `pub(crate)` otherwise, so the crate's own code keeps its access (T15c2).
+- A debit's optional `balance` hint (the holder's plaintext, zether-limits D5: a balance above the device BSGS bound) stays,
+  and must come from the holder's own sealed balance-cache box, never from the reading layer or a remote party: the facade
+  checks it against the rebuilt `acc` (`[b]G == C − [x]D`), so a hint check is a balance-equality test (controller decision
+  2026-11-07, T15g).
 - **Every multiplication by `key.x` on a supplied point** runs through `scaas_ct::secret_mul`: decrypt and check, and the
   transfer, multi-recipient, burn and disclosure paths in `zether.rs` and `schnorr.rs` (T14b), not only `decrypt_point`.
 - `zether-read-balance`: `--rpc` is a reading layer and is re-enabled only as one meeting R1 to R7; a raw `--ct` (a
