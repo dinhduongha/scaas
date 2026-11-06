@@ -9,7 +9,11 @@
 #include <functional>
 #include <map>
 #include <nlohmann/json.hpp>
+#include <iterator>
 #include <set>
+#include <sstream>
+#include <utility>
+#include <vector>
 
 #include "scaas_ua.hpp"
 
@@ -773,6 +777,80 @@ static void zether_facade() {
     CHECK(k.y() == y, "public data stays readable");
 }
 
+// scaas-ua `facade::<name>::COMMANDS` read from its source (T15g): {the release commands, the `vectors`-only raw forms}. A
+// test asserts that a command is in it, never that it equals a list (spec no-decryption-oracle §4.13).
+static std::pair<std::vector<std::string>, std::vector<std::string>> commands(const std::string& name) {
+    std::ifstream f(std::string(SCAAS_UA_VECTORS_DIR) + "/../../../clients/ua-rs/src/facade/" + name + ".rs");
+    std::string src((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    std::string body = src.substr(src.find("pub const COMMANDS: &[&str] = &["));
+    std::istringstream in(body.substr(0, body.find("];")));
+    std::pair<std::vector<std::string>, std::vector<std::string>> out;
+    bool gated = false;
+    std::string ln;
+    std::getline(in, ln);  // the declaration
+    while (std::getline(in, ln)) {
+        ln.erase(0, ln.find_first_not_of(" \t"));
+        if (ln.rfind("#[cfg(feature = \"vectors\")]", 0) == 0) {
+            gated = true;
+        } else if (!ln.empty() && ln[0] == '"') {
+            (gated ? out.second : out.first).push_back(ln.substr(1, ln.find('"', 1) - 1));
+            gated = false;
+        }
+    }
+    return out;
+}
+static bool member(const std::vector<std::string>& v, const std::string& s) { return std::find(v.begin(), v.end(), s) != v.end(); }
+
+// T15g (ARCH-POS-13): the words commands on the forge rows (smartcontracts/vectors/zether/state.json; the holders are
+// r33_keys.json's): each in COMMANDS, the balances the contract's; another holder's words refused before the key (ua-rs
+// tests/facade_zether_state.rs counts the key's uses); every `vectors`-only raw form refused by the release build.
+static void zether_words() {
+    auto [release, raw] = commands("zether");
+    CHECK(member(release, "balance") && member(release, "pendingBalance") && !raw.empty(), "COMMANDS membership");
+    json st = load_json(std::string(SCAAS_UA_VECTORS_DIR) + "/../zether/state.json");
+    std::map<std::string, json> row;
+    for (auto& r : st["accounts"]) {
+        std::string n = r["name"];
+        row[n.substr(0, n.find(':'))] = r;
+    }
+    auto words = [&](const std::string& name) {
+        json o = {{"ua", row[name]["ua"]}, {"account", row[name]["account"]}, {"accountData", row[name]["accountData"]},
+                  {"tableBits", 18}, {"boundBits", 20}};
+        for (auto f : {"family", "chainId", "chainUid", "token", "block", "psid"}) o[f] = st[f];
+        return o.dump();
+    };
+    json R33 = load_json(std::string(SCAAS_UA_VECTORS_DIR) + "/../../../clients/zether-prover/vectors/r33_keys.json");
+    Secret mw(R33["mnemonic"].get<std::string>()), mp;
+    Wallet w = Wallet::fromMnemonic(mw, mp);
+    ZetherKey alice = w.zetherKey(60, 0, kZetherUseConf);
+    ZetherKey bob = w.zetherKey(60, 1, kZetherUseConf);
+    CHECK(json::parse(alice.call("balance", words("alice")))["amount"] == std::to_string(row["alice"]["balance"].get<uint64_t>()),
+          "alice's balance");
+    CHECK(json::parse(bob.call("pendingBalance", words("bob")))["amount"] == std::to_string(row["bob"]["pending"].get<uint64_t>()),
+          "bob's pending balance");
+    CHECK(code_of([&] { bob.call("balance", words("alice")); }) == "UAArgument", "another holder's words");
+    for (auto& c : raw) CHECK(code_of([&] { alice.call(c, "{}"); }) == "UAArgument", c);
+}
+
+// T15g (ARCH-POS-13): `balance` on a forge row (smartcontracts/vectors/pqz/n2304-kmax4096/state.json): in COMMANDS; the forge
+// keys are mocked, so the words bind to no wallet key and are refused (UAArgument), with the other set's psid
+// UAPqzSetMismatch, both before the key (ua-rs tests/facade_pqz_state.rs counts the key's uses); every `vectors`-only raw form
+// refused.
+static void pqz_words() {
+    auto [release, raw] = commands("pqz");
+    CHECK(member(release, "balance") && !raw.empty(), "COMMANDS membership");
+    json st = load_json(std::string(SCAAS_UA_VECTORS_DIR) + "/../pqz/n2304-kmax4096/state.json");
+    json a = st["accounts"][0];
+    json words = {{"chainUid", st["chainUid"]}, {"token", st["token"]}, {"psid", st["psid"]}};
+    for (auto f : {"ua", "block", "account", "pending", "accWords", "blobs", "keyRecord"}) words[f] = a[f];
+    Wallet w = wallet_of("pq_kat");
+    PqzKey k = w.pqzKey(0, 0);
+    CHECK(code_of([&] { k.call("balance", words.dump()); }) == "UAArgument", "a forge row: no wallet key");
+    words["psid"] = "0xc752e7f57778114dbfaac5d43843577b54e13e3ed162517145a37b5a3ec6cdfe";  // n2048-kmax1024
+    CHECK(code_of([&] { k.call("balance", words.dump()); }) == "UAPqzSetMismatch", "the other set's psid");
+    for (auto& c : raw) CHECK(code_of([&] { k.call(c, "{}"); }) == "UAArgument", c);
+}
+
 // --- PQZ facade ------------------------------------------------------------------------------------------------------------
 
 static void pqz_facade() {
@@ -828,7 +906,9 @@ int main(int argc, char** argv) {
         {"error_strings_never_contain_an_input", error_strings_never_contain_an_input},
         {"aead_hkdf_hmac", aead_hkdf_hmac},
         {"zether_facade", zether_facade},
-        {"pqz_facade", pqz_facade}};
+        {"pqz_facade", pqz_facade},
+        {"zether_words", zether_words},
+        {"pqz_words", pqz_words}};
     if (argc != 2 || !tests.count(argv[1])) {
         std::fprintf(stderr, "usage: wallet_test <name>\n");
         return 2;
