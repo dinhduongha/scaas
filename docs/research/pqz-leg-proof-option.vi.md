@@ -43,6 +43,7 @@ tính toán trên giấy của chúng tôi.
 | Q6 Chi phí ví | `n2304-kmax4096`, 4.096 khoản ghi có: độc lập ≈ 204 MB phải tải, debit-T ≈ 0,42–0,72 GB; kiểm ≈ 90 s (độc lập) hoặc 185–211 s (debit-T) đơn luồng, ước lượng theo p99 [estimate]. Kiểm một lần khi khoản đến và giữ chứng minh; khôi phục mới chỉ cần các phần từ lần ghi nợ cuối. |
 | Q7 Thay đổi gì | debit-T: một log mỗi ghi nợ, một cờ bất biến trong phiên bản catalogue mới, một đường chứng minh trong `ua-rs`, vector cho bố cục log. Quan hệ độc lập: `proofSystemId` mới, op precompile mới, vector trong mọi client, full gate ở bốn bộ, và cắt bớt op 7. Zether: không cần cho khoá (§11.4). |
 | Kết luận | **Xây `legProof = CALLDATA` dưới dạng debit-T**; không thêm quan hệ leg độc lập. Nó cho người giữ khoá một đường giải mã thứ hai dựa trên chứng minh, cho quorum MPC một đường an toàn về khoá, và giữ (A) làm dự phòng cho người giữ khoá đơn lẻ (§12). |
+| Bổ sung 2026-11-06: `T` từ state (§14) | Nếu hợp đồng thôi xoá các slot pending và ghi một slot bản ghi cho mỗi lần ghi nợ, thì mọi `T` trong quá khứ là một hàm của state (≈ 0,10 M gas mỗi ghi nợ, như nhau ở mọi bộ, thay cho log `T` 0,15–0,20 M). Cách này chỉ bỏ được phần phụ thuộc lịch sử của `T`: chứng minh ghi nợ nằm trong calldata, và giữ nó trong state tốn ≈ 65–131 M gas mỗi ghi nợ PQZL, không vừa. Dự phòng §9 và quy tắc kho lưu vẫn cần. Bên ngoài sẽ không lưu chứng minh, nên ở cả hai dạng, tính sẵn có dựa vào việc ví người nhận giữ dữ liệu. Lý do chọn hướng 2 là chi phí và việc tổ hợp nằm trong state: chỉ là ưu tiên nhẹ (§14.7, §14.8). |
 
 ## 2. Tuỳ chọn dựa trên điều gì
 
@@ -389,7 +390,228 @@ phủ burn và refresh.
 3. **Kho lưu trong node:** thêm một quy tắc PLANNED rằng indexer của `scaas-node` lưu và phục vụ dữ liệu ghi nợ của token
    `CALLDATA` theo `entryRef`? *Khuyến nghị:* có; dữ liệu tự kiểm, nên không thêm sự tin cậy nào vào node.
 
-## 14. Nguồn
+## 14. debit-T từ state: giữ các phần của T và lưu tham chiếu (2026-11-06)
+
+**Câu hỏi (owner, 2026-11-06, hướng 2).** Ghi log `header ‖ T` (§5) phụ thuộc lịch sử (EIP-4444). Lưu nguyên `T` tốn
+≈ 21 M (SSTORE2) hoặc ≈ 41 M (slot mới) ở `n2304-kmax4096` và đã bị loại. Thay vào đó, hợp đồng có thể giữ các phần tạo nên
+`T` (vốn đã nằm trong state) và lưu một tham chiếu ngắn cho mỗi lần ghi nợ, để mọi `T` trong quá khứ dựng lại được chỉ từ
+state hay không? Phần này đọc theo `PqzCore.sol` và `PqzStateLib.sol` trên nhánh `ua-mtx-merge` (số dòng bên dưới). Phần
+tính toán nằm trong [`debit_t_state.py`](pqz-leg-proof-option/debit_t_state.py) và
+[`.out`](pqz-leg-proof-option/debit_t_state.out). Không đo gì cả.
+
+### 14.1 `T` gồm những gì, và hôm nay mất gì
+
+`_total` (`PqzCore.sol` 748–767) [repo]: `T = reduce(acc ± Σ pending[window) + Trivial(digits(shieldIn)))`. Cửa sổ là
+`[rolled, p)` khi `p ≥ rolled`, và `[p, rolled)` (bị trừ) khi `p < rolled`; `|p − rolled| ≤ INLINE_MAX` (10 với op 7 của
+PQZH).
+
+| Phần của `T` | Nằm ở đâu | Ghi hoặc đổi | Hôm nay mất gì [repo] |
+|---|---|---|---|
+| `acc` dạng tham chiếu `(accBlob, accU, accV)`: `(u_0, v_f)` của lần ghi nợ trước (burn, refresh: `(u′, v_f)`) | op blob của lần ghi nợ trước (SSTORE2, không bao giờ xoá) và ba trường tài khoản | `_debit` 861 | blob còn; các trường tài khoản bị lần ghi nợ sau ghi đè (861), và `p` của lần ghi nợ đó chỉ còn đến khi rollover kế tiếp dời `rolled` / `floor` (862; `PqzStateLib` 100–108) |
+| `acc` vật chất hoá: `accWords` (339 / 417 / 504 / 598 slot) và `accHash`, hoặc hint calldata có keccak bằng `accHash` | slot | mỗi rollover ghi đè mọi từ tại chỗ (`PqzStateLib` 92–96, 99); một lần ghi nợ xoá cờ `MAT` (861) | bị ghi đè ở mỗi rollover; chỉ là cache: bằng `v_f` trước cộng các mục đã cuộn, mod `q` |
+| một khoản ghi có: `pending[i] = blob ‖ uOff ‖ vOff ‖ block` | một slot trỏ vào blob của người gửi | `_credit` 334–340 | slot bị lần ghi nợ sau xoá với `[cleared, p)` (863) và bị rollover xoá với `[cleared, rolled − INLINE_MAX)` (`PqzStateLib` 106); bản mã vẫn ở trong blob của người gửi |
+| mục TRIVIAL `(amount, block)` | chỉ trong slot | `_trivial` 348–364 (chỉ gộp vào mục cuối khi mục đó còn pending, cùng block) | bị xoá cùng slot; số tiền chỉ còn trong event `Shielded` |
+| `Trivial(digits(shieldIn))` | từ header 480 (calldata) | — | không bao giờ nằm trong state |
+
+Các event (`Debited(ua, p, p, blob)`, `Credited`, `Shielded`, `RolledOver`) mang đủ tất cả, nhưng chúng là lịch sử.
+
+**Một đẳng thức** [inference, từ mã]. Gọi `p_k` là `p` của lần ghi nợ có bộ đếm `k` của người giữ khoá và `B_k` là op blob
+của nó (`B_{−1}` = `Trivial(0)`, `p_{−1}` = 0). Đẳng thức sau đúng với mọi đường đi: `acc` dạng tham chiếu hay vật chất hoá,
+có hay không có hint, cửa sổ lên hay xuống, bao nhiêu rollover ở giữa cũng vậy.
+
+```
+T_k = reduce( (u, v_f) của B_{k−1}  +  Σ_{i ∈ [p_{k−1}, p_k)} entry_i  +  Trivial(digits(shieldIn_k)) )
+```
+
+Sau lần ghi nợ `k − 1`, `acc = B_{k−1}` và `rolled = floor = p_{k−1}` (861–862). Rollover cộng các mục theo thứ tự
+(`PqzStateLib` 86–88). Cửa sổ xuống trừ dưới dạng `+ (q − y)` (`PqzCt.addBlob`, `neg`). Mọi lane được rút gọn mod `q` ở
+cuối, nên kết quả là thặng dư chính tắc và các tổng rút gọn về đoạn `[p_{k−1}, p_k)`; đoạn này tồn tại vì
+`p ≥ floor ≥ p_{k−1}` (752). Quy tắc đơn vị (762–766) cho `unitsOf(T_k) = (p_k − p_{k−1}) + 2 ≤ K_MAX`, nên
+`Δp_k ≤ K_MAX − 2` (lần ghi nợ đầu: `p ≤ K_MAX − 1`). Một mục đã tiêu không bao giờ đổi, vì phép gộp TRIVIAL chỉ chạm mục
+cuối ở chỉ số `≥ max(floor, rolled)` (354–355). **Vậy `acc` vật chất hoá, `accHash`, hint và các rollover chỉ là cache:
+không cái nào cần để dựng lại `T`.** Cái cần là: blob của lần ghi nợ trước, `p_{k−1}`, `p_k`, các mục ở giữa, và
+`shieldIn_k`.
+
+**Chứng minh ràng buộc `T` thế nào** [repo]. `T` nằm nguyên văn trong statement, ngay sau các khoá (op 1: 271, op 7: 481,
+burn và refresh: 604). `PqzAuth` đã ký phủ nó qua `bodyHash = keccak256(statement[640:])` (`authDigest`, 839–851). Precompile
+kiểm chứng minh trên toàn bộ statement (PQZL hấp thụ digest của statement trước tiên, CTR-PQZ-19). Hôm nay không lưu và
+không log hash nào của `T`, và cũng không cần: một `T` dựng sai làm phép kiểm thất bại, như ở §5.
+
+### 14.2 Thay đổi tối thiểu
+
+1. **Bỏ hai chỗ xoá** (`PqzCore.sol` 863, `PqzStateLib.sol` 106). `cleared` và `floor` vẫn cập nhật như cũ: `floor` vẫn
+   giới hạn un-roll ở `INLINE_MAX`, còn `cleared` chỉ đánh dấu chỗ hợp đồng thôi đọc. Không slot hiện có nào bị dời.
+2. **Một bản ghi cho mỗi lần ghi nợ**, ghi trong `_debit`, khoá theo `entryRef` của lần ghi nợ (id của CTR-PQZ-23; burn tính
+   nó trong `_sent` và hôm nay bỏ đi, dòng 555): `debitRec[entryRef] = { blob(160) ‖ p(64), shieldIn }`, từ thứ hai chỉ ghi
+   khi `shieldIn ≠ 0`. Không lưu `uOff` / `vOff`: `v_f` nằm ở `blobLength − VP`; `u` nằm ở 0 với blob burn hoặc refresh
+   (dài đúng `CTP`) và ở 16 với blob chuyển khoản (luôn dài hơn). Có một biến thể một từ `blob ‖ Δp(32) ‖ shieldIn(64)`
+   (`Δp < 2^16` ở mọi bộ, `shieldIn ≤ 2^62`), nhưng khi đó người đọc phải cộng dồn `Δp` qua mọi lần ghi nợ trước; ta chọn
+   dạng hai từ. Một view với trường có tên: `pqzDebitRecord(ua, counter) → (blob, p, shieldIn)`.
+3. **Chỉ log header** (tuỳ chọn, §14.6): `DebitHeader(entryRef, header)`, 640 B.
+
+**Dựng lại** (do ví, hoặc do bất kỳ server không tin cậy nào làm; chứng minh sẽ kiểm câu trả lời), cho lần ghi nợ của `from`
+có bộ đếm `k`:
+
+1. đọc `rec_k` và `rec_{k−1}` (với `k = 0` thì không có: `Trivial(0)`, `p = 0`);
+2. lấy `(u, v_f)` từ `blob_{k−1}` (`eth_getCode`; các hệ số nén được bung ra lane 64 bit);
+3. với mỗi `i` trong `[p_{k−1}, p_k)`, đọc `pending[from][i]` (`pqzPending`, hoặc `pendingCt`): khoản ghi có thì lấy `(u, v)`
+   từ blob của nó, mục TRIVIAL thì dùng `Trivial(digits(amount))`;
+4. cộng theo lane 64 bit, cộng `Trivial(digits(shieldIn_k))`, rút gọn mod `q`: được `T_k`;
+5. dựng statement (`out` cũng lấy từ `blob_k`: `u_g`, `v_j`, `v_{a,j}`, `v_f`; khoá lấy từ registry; các từ header theo
+   §14.6) rồi kiểm chứng minh.
+
+### 14.3 Chi phí trên giấy, cả bốn bộ
+
+Bản ghi là một slot ở mọi bộ, nên các con số như nhau ở mọi bộ, trừ cột rollover [estimate]:
+
+| Hạng mục | State gas (EIP-8037) | Regular gas |
+|---|---|---|
+| bản ghi, mỗi lần ghi nợ (op 1, op 7, burn, refresh, unwrap) | +97.920; thêm +97.920 khi `shieldIn ≠ 0` | ≈ +5.000 |
+| các lần xoá mà ghi nợ không làm nữa (0 đến `2·INLINE_MAX` = 32 slot) | 0: xoá một slot đã có từ trước giao dịch không hoàn lại state gas (EIP-8037) | −12.100 gộp mỗi slot (EIP-8038 2.100 + 10.000): tới −0,39 M. Người trả phí cũng mất phần hoàn khi xoá (4.800 mỗi slot ở Osaka; con số Amsterdam chưa có trong repo) |
+| rollover (các lần xoá không làm nữa, tới `ROLL_MAX`) | 0 | tới −1,16 / −0,97 / −0,77 / −0,39 M gộp |
+| `mtxPrepareAcc` | 0 | 0 |
+| log chỉ header (tuỳ chọn) | 0 | ≈ +0,01 M |
+
+Chênh lệch ròng mỗi lần ghi nợ, theo góc nhìn người trả phí: +0,10 M khi không bỏ được lần xoá nào, giảm tới ≈ −0,13 M khi bỏ
+được 32. So sánh: log `header ‖ T` tốn 0,15 / 0,16 / 0,18 / 0,20 M (tăng theo `CT`); lưu nguyên `T` tốn 16,8 / 20,6 / 24,8 /
+29,4 M bằng SSTORE2, hoặc 33,2 / 40,8 / 49,4 / 58,6 M bằng slot mới. Hướng 2 kèm log header tốn nhiều nhất ≈ 0,11 M, như nhau
+ở mọi bộ: rẻ hơn log khoảng một phần ba, và rẻ hơn lưu `T` khoảng 200 lần.
+
+**Vừa giới hạn.** Regular gas đổi nhiều nhất +5.000 và thường giảm, nên không dạng nào tiến gần 2^24 hơn (EIP-7825).
+`tx.gas` tăng ≈ 0,1 M state gas. Một lần ghi nợ vốn đã mang 17,6–70,5 M state gas, nên phần thêm nhiều nhất là 0,6 %; không
+kết luận nào về việc được đưa vào block theo EIP-8037 thay đổi. `PQZ_DEBIT_MIN_GAS` và các ghim gas chỉ đổi sau khi đo, và
+việc đo cần lời của owner.
+
+### 14.4 Tăng trưởng state và các giới hạn bị chạm tới
+
+- **Mỗi khoản ghi có:** +32 B, giữ mãi. 97.920 state gas của nó đã trả lúc ghi khoản ghi có, và việc xoá chưa bao giờ hoàn
+  lại phần đó. **Mỗi lần ghi nợ:** +32 B, hoặc +64 B khi có `shieldIn`. Blob op 1 có auditor hôm nay là 11.052 / 13.572 /
+  16.348 / 19.380 B (CTR-PQZ-07), nên phần tăng mỗi lần ghi nợ dưới 0,6 %. Mỗi tài khoản tăng `32 · (số khoản ghi có + số
+  lần ghi nợ)` B: 32 MB cho 10^6 khoản ghi có [estimate].
+- **Hàng đợi không giới hạn** (CTR-PQZ-06): mỗi khoản mồi nhử giờ để lại 32 B vĩnh viễn. Như hôm nay, mỗi khoản mồi nhử tốn
+  của người gửi một lần ghi nợ và trả `decoyFee` cho nạn nhân. Việc này đảo ngược lý do ghi ở
+  [pq-zero-knowledge.md §7.4](../contracts/pq-zero-knowledge.md#transfer) ("giữ state khỏi tăng 32 B mỗi khoản ghi có mãi
+  mãi") và ở spec state (§5.5), nên là một thay đổi quy tắc và cần một mục trong decisions.
+- **`ROLL_MAX`, `mtxPrepareAcc`, `K_MAX`:** quy tắc không đổi. Rollover rẻ hơn vì không còn xoá, nên các con số rollover đã
+  ghim (`PqzStatePinGasTest`) chỉ có thể giảm, và biên hẹp của `n2560-kmax16384` (6.032 gas) không thể tệ hơn. Nâng
+  `ROLL_MAX` cần một lần rollscan, và rollscan cần lời của owner. `Δp ≤ K_MAX − 2` đã suy ra từ phép kiểm đơn vị hiện có.
+- **Kích thước mã:** bỏ hai vòng lặp; thêm một lệnh ghi, view và event tuỳ chọn, tức vài trăm byte trong `PqzTransferLib`
+  (17.697 B), `PqzBurnLib` (10.074 B) và `PqzStateLib`, cộng selector của view trên các token. Hàng token PQZ lớn nhất,
+  `WrappedPqzRegulatedToken`, là 62.285 B, còn xa trần 131.072 B (CTR-GOV-19) [estimate].
+- **Ví không có server:** để tự dựng `T` của một bên thứ ba, ví phải tải `Δp` mục. Thường là 1 đến 16 mục (13–213 KB ở
+  `n2304-kmax4096`). Trường hợp xấu nhất là `K_MAX − 1` mục: 11 MB / 55 MB / 264 MB / 1,25 GB, so với 18,5 KB cho `T` trong
+  một log. Bất kỳ indexer nào cũng có thể tính `T` một lần và phục vụ nó, và chứng minh sẽ kiểm, nên chỉ ví hoàn toàn không
+  có server mới chịu trường hợp xấu nhất.
+
+### 14.5 Đối chiếu với các quy tắc
+
+- **Không bao giờ mất bản mã:** được củng cố. Bản mã vốn đã còn, vì blob không bao giờ bị xoá. Cái mất hôm nay là tổ hợp:
+  bản mã nào đã tạo nên `T`, và các số tiền TRIVIAL. Hướng 2 giữ lại tổ hợp đó, nên mọi `T` mà một lần ghi nợ đã chứng minh
+  trên đó đều là hàm của state.
+- **Tham số tường minh:** không thêm entry point hay tham số nào. Bản ghi là lưu trữ nội bộ; view trả về các trường có tên.
+- **Ghim bố cục:** hôm nay `scaas.pqz` (`PqzStorage`) không có trong `test/v2/layout/namespaces.json` [repo]. Thêm một mapping
+  ở cuối không dời slot nào; nên ghim `scaas.pqz` trong cùng thay đổi. Typehash, `PqzAuth`, statement và `proofSystemId`
+  không đổi, nên không cần vector quan hệ và không cần full gate. Chỉ cần vector mới cho bản ghi và phép dựng lại.
+- **Bất biến:** một phiên bản catalogue mới cho các kind PQZ và các thư viện; không gì đã triển khai bị đổi. Mọi chain đều
+  chỉ để thử nghiệm, nên không cần di chuyển dữ liệu.
+- **Một quy tắc trên mọi chain:** token PQZ chỉ có trên EVM. Soroban không có (NET-SOR-26), và cây mã của các họ khác không có
+  token PQZ nào [repo]. Nếu sau này xây ở đó, cùng quy tắc vẫn áp dụng (giữ các mục, mỗi lần ghi nợ một bản ghi), nhưng chi phí
+  giữ state khác nhau [inference]: entry persistent của Soroban cần gia hạn TTL (entry bị lưu trữ có thể khôi phục), NEAR khoá
+  số dư theo mỗi byte lưu (xoá thì được nhả lại), và box của Algorand nâng số dư tối thiểu.
+
+### 14.6 Có bỏ được phụ thuộc lịch sử không? Không, chỉ phần của `T`
+
+Chứng minh nằm trong calldata. Một `T` dựng từ state là thông tin công khai, vì ai cũng tính được. Cái chứng nhận một khoản
+ghi có là chứng minh `P` được kiểm trên statement, nên một `T` chỉ từ state mà không có `P` thì không chứng nhận gì.
+[inference]
+
+- **Vẫn cần từ lịch sử:** chính giao dịch ghi nợ. Nó mang `P` và các từ header không có trong state: `beneficiary`, `fee`
+  (op 7: `txFee + M·decoyFee`), `amount` và `recipient` (burn; chúng cũng phân biệt `opTag` của burn với refresh),
+  `validUntilBlock`, và `envelopeBinding` (phong bì relay và chế độ). Mọi đầu vào khác của statement đều có trong state theo
+  hướng 2: các từ định danh của header; `to` hoặc `recipientsHash`, `auditorOn` và `salt` từ blob; `memoHash` từ `memos`;
+  `p` và `shieldIn` từ bản ghi; khoá từ registry; `out` từ blob; và `T` theo §14.2.
+- **Giữ cả `P` trong state** [estimate]: op 1 có auditor cần thêm 65,8 / 71,8 / 77,6 / 84,5 M state gas, burn thêm
+  64,5–83,2 M, op 7 M = 8 có auditor thêm 111,9–131,0 M, và một lần ghi nợ PQZH ≈ +385 M ở `n2304-kmax4096`. Khi đó một op 1
+  cần `tx.gas` ≈ 92–125 M. Con số này vượt một block 60 M (mốc tham chiếu C0-10) và vượt `max_gas_per_tx` 64 M của node SCaaS
+  testnet; với quy tắc "không giả định giới hạn block của ta" thì không thể dựa vào nó ở đâu cả. Nó còn cần 2 đến 4 mảnh code
+  theo giới hạn công khai 24.576 B, và state mỗi lần ghi nợ tăng lên 2,8–3,9 lần blob hôm nay. **Không khả thi.** Lưu các từ
+  header còn thiếu (khoảng sáu từ) mà không có `P` thì vô ích.
+- **Kết luận:** hướng 2 chỉ bỏ được phụ thuộc lịch sử của `T`. Dự phòng §9 vẫn còn: (A) cho người giữ khoá đơn lẻ, còn với
+  quorum thì dựng lại seed và xoay khoá. Quy tắc kho lưu của §9.3 cũng còn, nhưng thứ phải giữ thu hẹp lại thành giao dịch
+  ghi nợ (calldata của nó), không cần receipt. Log `header ‖ T` không còn cần nữa; log chỉ header là một tiện ích, để mọi
+  client khỏi phải tự dựng `envelopeBinding` từ giao dịch bên ngoài.
+- **Cái nó thật sự mang lại:** (1) chi phí mỗi lần ghi nợ giảm từ 0,15–0,20 M xuống ≈ 0,10–0,11 M, như nhau ở mọi bộ; (2) `T`
+  không phụ thuộc receipt lẫn node lưu state lưu trữ (biến thể không đổi gì của §5); (3) tổ hợp của mọi lần ghi nợ cũ nằm
+  trong state, nên các từ tài khoản của §3.3 cho một lần ghi nợ cũ kiểm được với state; (4) bất kỳ server nào cũng phục vụ
+  được `T`, và chứng minh sẽ kiểm nó.
+
+### 14.7 Lưu giữ: ai giữ chứng minh (nhận xét của owner, 2026-11-06)
+
+Nhận xét của owner: "bên ngoài sẽ không lưu các chứng minh". Coi điều đó là đã cho [inference trừ chỗ có thẻ khác]:
+
+1. **Người giữ khoá thật sự cần gì.** Chỉ dữ liệu ghi nợ (giao dịch ghi nợ có `P`, cộng `T` hoặc bản ghi của nó) của các
+   khoản ghi có kể từ lần ghi nợ cuối của chính mình, cùng với lần ghi nợ cuối đó. Một lần ghi nợ tiêu nhiều nhất
+   `K_MAX − 2` mục; hàng đợi không giới hạn, nên mồi nhử vượt quá số đó thuộc về lần ghi nợ sau. Không cần gì cũ hơn: tổ hợp
+   cũ chỉ quan trọng khi kiểm toán.
+   - **Lần ghi nợ cuối của chính mình:** với op 1 và op 7, `v_f` được kiểm bằng phép kiểm mã hoá lại của §4 (i). Phép kiểm
+     này cần seed, bộ đếm và salt từ blob, tất cả đều trong state, và không cần `P`. Với **burn hoặc refresh** thì không được:
+     tính ngẫu nhiên của chúng là mới (CTR-PQZ-19), nên phép kiểm dựa trên chứng minh duy nhất là chính `P` của người giữ
+     khoá. Ví đã tạo `P` và có thể giữ nó. Sau khi khôi phục mới từ seed, nếu lần ghi nợ cuối là burn hoặc refresh, người giữ
+     khoá cần `P` đó từ lịch sử, hoặc phải quay về (A) [repo, §4].
+   - **Một quorum MPC** không có seed, nên cần `P` cho lần ghi nợ cuối của chính nó, ở mọi loại (§4).
+2. **Ai có lợi ích giữ nó.**
+   - Ví người nhận: tải và kiểm khi nhận, rồi giữ dữ liệu (§9.3). Đây là bản chính, và không tốn gì trên chain.
+   - Người gửi trao `P` cho người nhận qua một kênh kiểu memo: **owner đã loại (2026-11-06)**, vì không làm và không hợp lý.
+     Hôm nay cũng không có kênh như vậy [repo]: sealed memo chỉ 41 B trên chain (CTR-PQZ-23).
+   - Các node SCaaS vận hành: một quy tắc PLANNED trong spec node (§9.3). Node là mở, nên đây là bảo đảm của chính
+     `scaas-node`, không phải của một bên tiêu thụ.
+   - Các chain SCaaS vận hành (22776, SCaaS testnet): có thể cấu hình để giữ lịch sử. Node `rpc` của SCaaS testnet chạy archive
+     cho state (NET-EVM-10) [repo]; giữ thân block và receipt cần một thiết lập riêng được ghi rõ, và với 22776 thì chỉ owner
+     quyết. Chain của khách hàng do họ tự chọn.
+3. **Mất dữ liệu thì mất gì:** chỉ mất đường chứng minh. Tiền vẫn tiêu được qua các phương án dự phòng: (A) cho người giữ khoá
+   đơn lẻ; với quorum MPC thì dựng lại `seed32` theo k-of-n, rồi đến operator, rồi xoay khoá (quyết định của owner, §9.2).
+4. **Trường hợp còn sót lại:** một ví ngoại tuyến lâu hơn cửa sổ lịch sử của một chain bên ngoài, và không kho lưu nào phục vụ
+   giao dịch (không node SCaaS nào theo dõi chain đó, và chính chain đó cho lịch sử hết hạn). Trường hợp này như nhau ở cả hai
+   dạng. Hướng 2 dựng lại `T` từ state, nhưng `P` và các từ header vẫn mất y như vậy, nên cả hai dạng đều kết thúc ở cùng phương
+   án dự phòng.
+
+**Điều này nghĩa là gì khi so hướng 2 với việc log `T`.** Lợi ích về tính sẵn có của hướng 2 là nhỏ. Với trường hợp đáng kể,
+hoặc người nhận đã giữ dữ liệu khi nhận, hoặc chính chứng minh đã mất. Phần còn lại là chi phí (≈ 0,10–0,11 M so với
+0,15–0,20 M mỗi lần ghi nợ), không phụ thuộc receipt, tổ hợp của mọi lần ghi nợ nằm trong state, và một indexer có thể phục vụ
+`T` mà không cần đã theo dõi log. Đổi lại là +32 B vĩnh viễn cho mỗi khoản ghi có và mỗi lần ghi nợ, và việc đảo ngược một quy
+tắc đã ghi.
+
+### 14.8 Kết luận, công sức, câu hỏi cho owner
+
+**Kết luận** [inference, UNAUDITED]. Hướng 2 đúng đắn và rẻ. `T` của mọi lần ghi nợ trở thành hàm của state nếu hợp đồng thôi
+xoá các slot pending và ghi một bản ghi cho mỗi lần ghi nợ; `acc` vật chất hoá và các rollover không cần cho việc dựng lại. Nó
+thay nửa `T` của log debit-T với khoảng hai phần ba chi phí, như nhau ở mọi bộ. Nó **không** bỏ được phụ thuộc lịch sử: chứng
+minh và sáu từ header vẫn nằm trong calldata, và chứng minh không vừa trong state. Vì bên ngoài sẽ không lưu chứng minh
+(§14.7), ở cả hai dạng tính sẵn có đều dựa vào việc người nhận giữ dữ liệu khi nhận, và ở cả hai dạng trường hợp còn sót lại
+đều quay về (A) hoặc việc xoay khoá của §9.2. Vì vậy lựa chọn dựa trên chi phí và việc tổ hợp nằm trong state, không dựa trên
+tính sẵn có. Đây là ưu tiên nhẹ, không phải quyết định dứt khoát. Dạng debit-T được khuyến nghị: **`T` từ state cộng log chỉ
+header**, thay cho log `header ‖ T`. Log `header ‖ T` mà không tăng state vẫn là lựa chọn hợp lý nếu owner muốn giữ quy tắc xoá.
+
+| Bước | Việc | Ngày-agent [estimate] |
+|---|---|---|
+| D2-1 | Hợp đồng: bỏ hai chỗ xoá, thêm bản ghi, view và log header. Test forge: `T` dựng từ state bằng `T` của statement sau các chuỗi ngẫu nhiên gồm khoản ghi có, shield (kể cả gộp cùng block), rollover, un-roll, op 1, op 7, burn, refresh và unwrap. Ghim `scaas.pqz`; size gate ở bốn bộ; ghim gas cũ → mới sau khi đo (theo lời owner) | 3–4 (thay cho R2 ở §12) |
+| D2-2 | Vector: từ bản ghi và một hàng dựng lại, ở bộ mặc định và một bộ khác; phép dựng lại trong `ua-rs` và `ua-c` | +1–2 |
+| D2-3 | Node: indexer tính `T` và phục vụ theo `entryRef`; thứ kho lưu phải giữ là giao dịch ghi nợ | +1 |
+| D2-4 | Tài liệu: `pq-zero-knowledge.md` §7.1, §7.4, CTR-PQZ-07; một mục decisions đảo ngược việc xoá; các bản tiếng Việt | +1 |
+| | **debit-T ở dạng này, tổng cộng** | **≈ 16–25** (so với 13–21 ở §12) |
+
+**Câu hỏi cho owner**
+
+1. **Giữ mọi slot pending vĩnh viễn** (+32 B cho mỗi khoản ghi có và mỗi lần ghi nợ), để mọi `T` là hàm của state? Việc này
+   đảo ngược §5.5 của spec state. *Khuyến nghị:* có. Nó không tốn state gas (theo EIP-8037, việc xoá chưa bao giờ hoàn lại
+   state gas) và giảm regular gas; nó cần một mục trong decisions.
+2. **Header:** log header 640 byte (≈ 0,01 M), hay để mọi client tự dựng nó từ calldata của giao dịch, kể cả binding của phong
+   bì relay? *Khuyến nghị:* log nó.
+3. **Tính sẵn có của chứng minh:** chấp nhận rằng chứng minh ghi nợ ở lại trong lịch sử (trong state nó tốn ≈ 65–131 M mỗi
+   lần ghi nợ PQZL và không vừa), nên dự phòng §9 và quy tắc kho lưu vẫn còn, với thứ kho lưu phải giữ thu hẹp thành các giao
+   dịch ghi nợ? *Khuyến nghị:* có.
+
+## 15. Nguồn
 
 - Naor, Yung, "Public-key cryptosystems provably secure against chosen ciphertext attacks", STOC 1990 [paper].
 - Sahai, "Non-malleable non-interactive zero knowledge and adaptive chosen-ciphertext security", FOCS 1999 [paper].

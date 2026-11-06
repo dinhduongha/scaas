@@ -39,6 +39,9 @@ paper arithmetic.
 | Q6 Wallet cost | `n2304-kmax4096`, 4,096 credits: standalone ≈ 204 MB to fetch, debit-T ≈ 0.42–0.72 GB; verify ≈ 90 s (standalone) or 185–211 s (debit-T) single-threaded, p99 proxy [estimate]. Verify once on arrival and keep the proof; a fresh restore needs only the parts since the last debit. |
 | Q7 What changes | debit-T: one log per debit, an immutable flag in a new catalogue version, a proof path in `ua-rs`, vectors for the log layout. A standalone relation: a new `proofSystemId`, a precompile op, vectors in every client, the full gate at four sets, and an op 7 cut. Zether: not needed for the key (§11.4). |
 | Verdict | **Build `legProof = CALLDATA` as debit-T**; do not add a standalone leg relation. It gives a holder a second, proof-based decrypt path, gives an MPC quorum a key-safe path, and keeps (A) as the single holder's fallback (§12). |
+| Added 2026-11-06: `T` from state (§14) | If the contract stops deleting pending slots and writes one record slot per debit, every historical `T` is a function of state (≈ 0.10 M gas per debit, flat across sets, instead of the 0.15–0.20 M log of `T`). It removes only `T`'s history dependence: the debit proof is calldata, and keeping it in state costs ≈ 65–131 M gas per PQZL debit, which does not fit. The §9 fallback and the archive rule stay. Outside parties will not store proofs, so availability
+rests on the recipient's wallet keeping the material in both forms. The case for direction 2 is cost and having the
+composition in state, a mild preference (§14.7, §14.8). |
 
 ## 2. What the option rests on
 
@@ -391,7 +394,235 @@ gates and does not cover burn and refresh.
 3. **Archive in the node:** add a PLANNED rule that `scaas-node`'s indexer stores and serves the debit material of
    `CALLDATA` tokens by `entryRef`? *Recommendation:* yes; it is self-verifying, so it adds no trust in the node.
 
-## 14. Sources
+## 14. debit-T from state: keep T's parts and store references (2026-11-06)
+
+**Question (owner, 2026-11-06, direction 2).** Logging `header ‖ T` (§5) depends on history (EIP-4444), and storing `T`
+whole costs ≈ 21 M (SSTORE2) or ≈ 41 M (fresh slots) at `n2304-kmax4096`, which was rejected. Can the contract instead keep
+the parts `T` is made of, which are already in state, and store a short reference per debit, so that every historical `T`
+rebuilds from state alone? Read against `PqzCore.sol` and `PqzStateLib.sol` on branch `ua-mtx-merge` (line numbers below);
+arithmetic in [`debit_t_state.py`](pqz-leg-proof-option/debit_t_state.py) and
+[`.out`](pqz-leg-proof-option/debit_t_state.out). Nothing was measured.
+
+### 14.1 What `T` is made of, and what is lost today
+
+`_total` (`PqzCore.sol` 748–767) [repo]: `T = reduce(acc ± Σ pending[window) + Trivial(digits(shieldIn)))`, with the window
+`[rolled, p)` when `p ≥ rolled` and `[p, rolled)` (subtracted) when `p < rolled`, `|p − rolled| ≤ INLINE_MAX` (10 for a PQZH
+op 7).
+
+| Part of `T` | Where it lives | Written or changed | Lost today [repo] |
+|---|---|---|---|
+| `acc` as a reference `(accBlob, accU, accV)`: the previous debit's `(u_0, v_f)` (burn, refresh: `(u′, v_f)`) | the previous debit's op blob (SSTORE2, never deleted) and three account fields | `_debit` 861 | the blob stays; the account fields are overwritten by the next debit (861), and that debit's `p` survives only until the next rollover moves `rolled` / `floor` (862; `PqzStateLib` 100–108) |
+| `acc` materialised: `accWords` (339 / 417 / 504 / 598 slots) and `accHash`, or the calldata hint whose keccak equals `accHash` | slots | every rollover rewrites every word in place (`PqzStateLib` 92–96, 99); a debit clears `MAT` (861) | overwritten at every rollover; a cache: it equals the previous `v_f` plus the rolled entries, mod `q` |
+| a credit: `pending[i] = blob ‖ uOff ‖ vOff ‖ block` | one slot pointing into the sender's blob | `_credit` 334–340 | the slot is deleted by the next debit for `[cleared, p)` (863) and by a rollover for `[cleared, rolled − INLINE_MAX)` (`PqzStateLib` 106); the ciphertext stays in the sender's blob |
+| a TRIVIAL entry `(amount, block)` | the slot only | `_trivial` 348–364 (merged into the tail only while it is still pending, same block) | deleted with its slot; the amount survives only in the `Shielded` event |
+| `Trivial(digits(shieldIn))` | header word 480 (calldata) | — | never in state |
+
+The events (`Debited(ua, p, p, blob)`, `Credited`, `Shielded`, `RolledOver`) carry all of it, but they are history.
+
+**An identity** [inference from the code]. Let `p_k` be the `p` of the holder's debit with counter `k` and `B_k` its op
+blob (`B_{−1}` = `Trivial(0)`, `p_{−1}` = 0). For every path (a referenced or materialised `acc`, with or without the
+hint, a window up or down, any rollovers in between):
+
+```
+T_k = reduce( (u, v_f) of B_{k−1}  +  Σ_{i ∈ [p_{k−1}, p_k)} entry_i  +  Trivial(digits(shieldIn_k)) )
+```
+
+After debit `k − 1`, `acc = B_{k−1}` and `rolled = floor = p_{k−1}` (861–862); a rollover adds entries in order
+(`PqzStateLib` 86–88); a down window subtracts as `+ (q − y)` (`PqzCt.addBlob`, `neg`); every lane is reduced mod `q`
+at the end, so the result is the canonical residue and the sums telescope to `[p_{k−1}, p_k)`, a range that exists since
+`p ≥ floor ≥ p_{k−1}` (752). The units rule (762–766) gives `unitsOf(T_k) = (p_k − p_{k−1}) + 2 ≤ K_MAX`, so
+`Δp_k ≤ K_MAX − 2` (the first debit: `p ≤ K_MAX − 1`). A consumed entry never changes: a TRIVIAL merge touches only the
+tail at an index `≥ max(floor, rolled)` (354–355). **So the materialised `acc`, `accHash`, the hint and the rollovers are
+caches: none of them is needed to rebuild `T`.** What is needed: the previous debit's blob, `p_{k−1}`, `p_k`, the entries
+in between, and `shieldIn_k`.
+
+**How the proof binds `T`** [repo]. `T` sits verbatim in the statement after the keys (op 1: 271, op 7: 481, burn and
+refresh: 604); the signed `PqzAuth` covers it through `bodyHash = keccak256(statement[640:])` (`authDigest`, 839–851); the
+precompile verifies the proof over the whole statement (PQZL absorbs the statement digest first, CTR-PQZ-19). No hash of
+`T` is stored or logged today, and none is needed: a wrongly rebuilt `T` makes the verification fail, as in §5.
+
+### 14.2 The minimal change
+
+1. **Stop the two deletions** (`PqzCore.sol` 863, `PqzStateLib.sol` 106). `cleared` and `floor` keep their updates, so
+   `floor` still bounds an un-roll to `INLINE_MAX` and `cleared` only marks where the contract stops reading. No existing
+   slot moves.
+2. **One record per debit**, written in `_debit`, keyed by the debit's `entryRef` (the CTR-PQZ-23 id; a burn computes it in
+   `_sent` and today discards it, 555): `debitRec[entryRef] = { blob(160) ‖ p(64), shieldIn }`, the second word written
+   only when `shieldIn ≠ 0`. `uOff` / `vOff` are not stored: `v_f` is at `blobLength − VP`, and `u` at 0 for a burn or
+   refresh blob (length exactly `CTP`) and at 16 for a transfer blob (always longer). A one-word variant `blob ‖ Δp(32) ‖
+   shieldIn(64)` exists (`Δp < 2^16` at every set, `shieldIn ≤ 2^62`), but a reader then sums `Δp` over every earlier
+   debit; we take the two-word form. One view, named fields: `pqzDebitRecord(ua, counter) → (blob, p, shieldIn)`.
+3. **Log the header only** (optional, §14.6): `DebitHeader(entryRef, header)`, 640 B.
+
+**Rebuild** (a wallet, or any untrusted server whose answer the proof then checks), for the debit of `from` with counter
+`k`:
+
+1. read `rec_k` and `rec_{k−1}` (none for `k = 0`: `Trivial(0)`, `p = 0`);
+2. `(u, v_f)` from `blob_{k−1}` (`eth_getCode`, packed coefficients expanded to 64-bit lanes);
+3. for `i` in `[p_{k−1}, p_k)`: `pending[from][i]` (`pqzPending`, or `pendingCt`): a credit's `(u, v)` from its blob, a
+   TRIVIAL entry as `Trivial(digits(amount))`;
+4. add in 64-bit lanes, add `Trivial(digits(shieldIn_k))`, reduce mod `q`: that is `T_k`;
+5. build the statement (`out` from `blob_k` too: `u_g`, `v_j`, `v_{a,j}`, `v_f`; keys from the registry; the header words
+   of §14.6) and verify the proof.
+
+### 14.3 Cost on paper, all four sets
+
+The record is one slot whatever the set, so the figures are the same at every set except the rollover column
+[estimate]:
+
+| Item | State gas (EIP-8037) | Regular gas |
+|---|---|---|
+| record, every debit (op 1, op 7, burn, refresh, unwrap) | +97,920; +97,920 more when `shieldIn ≠ 0` | ≈ +5,000 |
+| deletions skipped by a debit (0 to `2·INLINE_MAX` = 32 slots) | 0: clearing a slot that existed before the transaction gives no state gas back (EIP-8037) | −12,100 gross per slot (EIP-8038 2,100 + 10,000): up to −0.39 M. The payer also forgoes the clear refund (4,800 per slot at Osaka; the Amsterdam figure is not in the repo) |
+| rollover (deletions skipped, up to `ROLL_MAX`) | 0 | up to −1.16 / −0.97 / −0.77 / −0.39 M gross |
+| `mtxPrepareAcc` | 0 | 0 |
+| header-only log (optional) | 0 | ≈ +0.01 M |
+
+Net per debit, as the payer sees it: +0.10 M with no deletion skipped, down to ≈ −0.13 M with 32 skipped. Compare: a log of
+`header ‖ T` costs 0.15 / 0.16 / 0.18 / 0.20 M (it grows with `CT`); `T` whole costs 16.8 / 20.6 / 24.8 / 29.4 M in SSTORE2
+or 33.2 / 40.8 / 49.4 / 58.6 M in fresh slots. Direction 2 with the header log costs ≈ 0.11 M at most, flat across sets:
+about a third less than the log, and about 200 times less than storing `T`.
+
+**Fit.** Regular gas moves by at most +5,000 and usually falls, so no form gets closer to 2^24 (EIP-7825). `tx.gas` grows
+by ≈ 0.1 M of state gas. A debit already carries 17.6–70.5 M of state gas, so this adds at most 0.6 %; it changes no
+verdict of EIP-8037 inclusion. `PQZ_DEBIT_MIN_GAS` and the gas pins move only after a measurement, which needs the
+owner's word.
+
+### 14.4 State growth and the limits it touches
+
+- **Per credit:** +32 B, kept for good. Its 97,920 state gas was paid when the credit was written, and clearing never
+  gave it back. **Per debit:** +32 B, or +64 B with `shieldIn`. Today's op 1 blob with the auditor is 11,052 / 13,572 /
+  16,348 / 19,380 B (CTR-PQZ-07), so the growth per debit is under 0.6 %. Per account the growth is `32 · (credits +
+  debits)` B: 32 MB for 10^6 credits [estimate].
+- **The unbounded queue** (CTR-PQZ-06): every decoy now leaves 32 B for good. As today, each decoy costs its sender a debit
+  and pays the victim `decoyFee`. This reverses the reason given in [pq-zero-knowledge.md §7.4](../contracts/pq-zero-knowledge.md#transfer)
+  ("keeps state from growing by 32 B per credit forever") and in the state spec (§5.5), so it is a rule change and needs a
+  decisions entry.
+- **`ROLL_MAX`, `mtxPrepareAcc`, `K_MAX`:** the rules do not change. A rollover gets cheaper because it no longer deletes,
+  so the pinned rollover figures (`PqzStatePinGasTest`) can only fall, and the tight `n2560-kmax16384` margin (6,032 gas)
+  cannot get worse. Raising `ROLL_MAX` would need a rollscan, and a rollscan needs the owner's word. `Δp ≤ K_MAX − 2`
+  already follows from today's units check.
+- **Code size:** two loops go; one store, the view and the optional event come in, which is a few hundred bytes in
+  `PqzTransferLib` (17,697 B), `PqzBurnLib` (10,074 B) and `PqzStateLib`, plus the view's selector on the tokens. The
+  largest PQZ token row, `WrappedPqzRegulatedToken`, is 62,285 B, far under the 131,072 B ceiling (CTR-GOV-19)
+  [estimate].
+- **A wallet without a server:** to rebuild a third party's `T` itself, a wallet fetches the `Δp` entries. Usually that is
+  1 to 16 (13–213 KB at `n2304-kmax4096`). The worst case is `K_MAX − 1` entries: 11 MB / 55 MB / 264 MB / 1.25 GB, against
+  18.5 KB for `T` in a log. Any indexer can compute `T` once and serve it, and the proof checks it, so only a wallet with
+  no server at all pays the worst case.
+
+### 14.5 Against the rules
+
+- **Never lose ciphertext:** strengthened. Ciphertexts already stay, since blobs are never deleted. What is lost today is
+  the composition: which ciphertexts made up `T`, and the TRIVIAL amounts. Direction 2 keeps it, so every `T` a debit
+  proved over is a function of state.
+- **Explicit parameters:** no new entry point or argument. The record is internal storage; the view returns named fields.
+- **Layout pins:** `scaas.pqz` (`PqzStorage`) is not in `test/v2/layout/namespaces.json` today [repo]. Appending a mapping
+  moves no slot; pinning `scaas.pqz` in the same change is advised. Typehashes, `PqzAuth`, statements and `proofSystemId`
+  do not change, so no relation vectors and no full gate. New vectors are needed only for the record and the rebuild.
+- **Immutability:** a new catalogue version of the PQZ kinds and libraries; nothing deployed changes. All chains are
+  test-only, so no migration.
+- **One rule on every chain:** PQZ tokens exist only on EVM. Soroban has none (NET-SOR-26), and the other families' trees
+  hold no PQZ token [repo]. If one is ever built, the same rule applies there (keep the entries, one record per debit),
+  but holding state costs differently [inference]: Soroban's persistent entries need TTL extension (archived entries can
+  be restored), NEAR locks balance per stored byte (deleting would release it), and Algorand boxes raise the minimum
+  balance.
+
+### 14.6 Does it remove the history dependence? No, only `T`'s part
+
+The proof is calldata. A `T` rebuilt from state is public, since anyone can compute it. What certifies a credit is the
+proof `P` verified over the statement, so a state-only `T` without `P` certifies nothing. [inference]
+
+- **Still needed from history:** the debit transaction itself. It carries `P` and the header words that are not in
+  state: `beneficiary`, `fee` (op 7: `txFee + M·decoyFee`), `amount` and `recipient` (burn; they also tell a burn's
+  `opTag` from a refresh's), `validUntilBlock`, and `envelopeBinding` (the relay envelope and the mode). Every other
+  statement input is in state under direction 2: the header's identity words, `to` or `recipientsHash`, `auditorOn` and
+  `salt` from the blob, `memoHash` from `memos`, `p` and `shieldIn` from the record, the keys from the registry, `out`
+  from the blob and `T` from §14.2.
+- **Keeping `P` in state as well** [estimate]: op 1 with the auditor needs +65.8 / 71.8 / 77.6 / 84.5 M of state gas, a
+  burn +64.5–83.2 M, op 7 M = 8 with the auditor +111.9–131.0 M, and a PQZH debit ≈ +385 M at `n2304-kmax4096`. An op 1
+  would then need `tx.gas` ≈ 92–125 M. That is over a 60 M block (the C0-10 reference) and over the SCaaS testnet node's
+  64 M `max_gas_per_tx`, and under "no block limit of ours" it cannot be relied on anywhere. It also needs 2 to 4 code
+  chunks at the public 24,576 B limit, and the state per debit grows to 2.8–3.9 times today's blob. **Not viable.** Storing
+  the missing header words (about six words) would be pointless without `P`.
+- **Conclusion:** direction 2 removes the history dependence of `T` only. The §9 fallback stays: (A) for a single holder,
+  and for a quorum, rebuild the seed and rotate. The archive rule of §9.3 stays too, but what it must keep shrinks to the
+  debit transaction (its calldata), with no receipt. The `header ‖ T` log is no longer needed; a header-only log is a
+  convenience that spares every client from rebuilding `envelopeBinding` out of the outer transaction.
+- **What it does give:** (1) the cost per debit falls from 0.15–0.20 M to ≈ 0.10–0.11 M, flat across sets; (2) `T` depends
+  neither on receipts nor on archive state nodes (the zero-change variant of §5); (3) the composition of every past debit
+  is in state, so §3.3's account words for a past debit can be checked against state; (4) any server can serve `T`, and
+  the proof checks it.
+
+### 14.7 Retention: who keeps the proof (owner remark, 2026-11-06)
+
+The owner's remark: "outside parties won't store the proofs". Taking that as given [inference unless tagged]:
+
+1. **What a holder needs.** Only the debit material (the debit transaction with `P`, plus `T` or its record) of the
+   credits since its own last debit, together with its own last debit. A debit consumes at most `K_MAX − 2` entries; the
+   queue is unbounded, so decoys beyond that belong to a later debit. Nothing older is needed: a past composition only
+   matters for an audit.
+   - **Its own last debit:** for op 1 and op 7, `v_f` is checked by the re-encryption check of §4 (i). That needs the
+     seed, the counter and the salt from the blob, all in state, and no `P`. For a **burn or refresh** it is not: their
+     randomness is fresh (CTR-PQZ-19), so the only proof-based check is the holder's own proof `P`. The wallet made `P`
+     and can keep it. After a fresh restore from the seed, if the last debit was a burn or refresh, the holder needs that
+     `P` from history or falls back to (A) [repo, §4].
+   - **An MPC quorum** has no seed, so it needs `P` for its own last debit of every kind (§4).
+2. **Who has an interest in keeping it.**
+   - The recipient's wallet: it fetches and verifies on arrival and keeps the material (§9.3). This is the main copy, and it
+     costs nothing on chain.
+   - The sender handing `P` to the recipient over a memo-like channel: **rejected by the owner (2026-11-06)** as not done
+     and not reasonable. No such channel exists today either [repo]: the sealed memo is 41 B on chain (CTR-PQZ-23).
+   - Nodes SCaaS runs: a PLANNED node-spec rule (§9.3). The node is open, so this is a guarantee of `scaas-node` itself,
+     not of a consumer.
+   - Chains SCaaS runs (22776, the SCaaS testnet): they can be configured to keep history. The SCaaS testnet's `rpc` node
+     runs archive for state (NET-EVM-10) [repo]; keeping block bodies and receipts would need its own stated setting,
+     owner-only for 22776. Customer chains choose for themselves.
+3. **What is lost when the material is gone:** only the proof path. Funds stay spendable through the fallbacks: (A) for a
+   single holder, and for an MPC quorum, rebuild `seed32` k-of-n, then an operator, then a key rotation (owner decision,
+   §9.2).
+4. **The residual case:** a wallet that stays offline longer than a foreign chain's history window, with no archive
+   serving the transaction (no SCaaS-run node watched that chain, and the chain itself expires history). That case does not change between the two forms. Direction 2 rebuilds
+   `T` from state, but `P` and the header words are gone just the same, so both forms end in the same fallback.
+
+**What this means for direction 2 against logging `T`.** The availability gain of direction 2 is small. For the case that
+matters, the material is either kept on arrival by the recipient, or the proof itself is missing. What remains is cost
+(≈ 0.10–0.11 M against 0.15–0.20 M per debit), no dependence on receipts, the composition of every debit in state, and an
+indexer that can serve `T` without having watched the logs. Set against that are the permanent +32 B per credit and per
+debit and the reversal of a recorded rule.
+
+### 14.8 Verdict, effort, owner questions
+
+**Verdict** [inference, UNAUDITED]. Direction 2 is sound and cheap. Every debit's `T` becomes a function of state if the
+contract stops deleting pending slots and writes one record per debit; the materialised `acc` and the rollovers are not
+needed for the rebuild. It replaces the `T` half of the debit-T log at about two thirds of its cost, flat across sets. It
+does **not** remove the dependence on history: the proof and six header words stay in calldata, and the proof does not
+fit in state. Since outside parties will not store proofs (§14.7), availability rests on the recipient keeping the
+material on arrival in both forms, and the residual case falls back to (A) or the §9.2 rotation in both. The choice
+therefore rests on cost and on the composition being in state, not on availability. It is a mild preference, not a
+decisive one. Recommended form of debit-T: **`T` from state plus a header-only log**, in place of logging `header ‖ T`.
+Logging `header ‖ T` with no state growth remains a reasonable choice if the owner prefers to keep the deletion rule.
+
+| Step | Work | Agent-days [estimate] |
+|---|---|---|
+| D2-1 | Contracts: drop the two deletions, add the record, the view and the header log. Forge tests: `T` rebuilt from state equals the statement's `T` after random runs of credits, shields (same-block merges included), rollovers, un-rolls, op 1, op 7, burn, refresh and unwrap. Pin `scaas.pqz`; size gate at four sets; gas pins old → new after measurement (the owner's word) | 3–4 (in place of §12 R2) |
+| D2-2 | Vectors: the record word and one rebuild row, at the default set and one other; the rebuild in `ua-rs` and `ua-c` | +1–2 |
+| D2-3 | Node: the indexer computes `T` and serves it by `entryRef`; the archive item is the debit transaction | +1 |
+| D2-4 | Docs: `pq-zero-knowledge.md` §7.1, §7.4, CTR-PQZ-07; a decisions entry reversing the deletion; the Vietnamese copies | +1 |
+| | **debit-T in this form, in all** | **≈ 16–25** (against 13–21 in §12) |
+
+**Owner questions**
+
+1. **Keep every pending slot for good** (+32 B per credit and per debit), so that every `T` is a function of state? This
+   reverses the state spec's §5.5. *Recommendation:* yes. It costs no state gas (clearing never returned any under
+   EIP-8037) and lowers regular gas; it needs a decisions entry.
+2. **Header:** log the 640-byte header (≈ 0.01 M), or let every client rebuild it from the transaction's calldata,
+   including the relay envelope's binding? *Recommendation:* log it.
+3. **Proof availability:** accept that the debit proof stays in history (in state it costs ≈ 65–131 M per PQZL debit and
+   does not fit), so that the §9 fallback and the archive rule stay, with the archive item narrowed to debit
+   transactions? *Recommendation:* yes.
+
+## 15. Sources
 
 - Naor, Yung, "Public-key cryptosystems provably secure against chosen ciphertext attacks", STOC 1990 [paper].
 - Sahai, "Non-malleable non-interactive zero knowledge and adaptive chosen-ciphertext security", FOCS 1999 [paper].
