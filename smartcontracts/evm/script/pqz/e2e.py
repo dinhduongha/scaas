@@ -1075,18 +1075,25 @@ def run(kd, kr, ke):
     # from the init code without arguments on env 1, named explicitly (owner 2026-10-20; the factory appends
     # envVersion, env, implArgs)
     fac = D.deploy("OpenFactory", encs(["w"] * 3, [sd.addr, uid, 0]))
-    for kind, name in ((0, "NormalToken"), (4, "NormalPqzToken"), (5, "WrappedPqzToken")):
+    # ua-mtx-merge T31 (regulated-kinds spec §6.1): the regulated PQZ kinds 12, 13 too, each on its base kind's env with
+    # `RegulatedLib` in the link closure (D.linked finds it), `implArgs` = abi.encode(REGISTRY_CODEHASH), the canonical
+    # `ComplianceRegistry` runtime's code hash (F-11); this run creates no regulated token (the regulated rows are the forge
+    # suites test/as/confidential/Pqz*: a token naming a registry needs one deployed with COMPLIANCE_ADMIN, plan T33)
+    reg_hash = keccak256(bytes.fromhex(json.load(open(os.path.join(EVM, "out", "ComplianceRegistry.sol",
+                                                                   "ComplianceRegistry.json")))["deployedBytecode"]["object"][2:]))
+    for kind, name in ((0, "NormalToken"), (4, "NormalPqzToken"), (5, "WrappedPqzToken"), (12, "NormalPqzRegulatedToken"),
+                       (13, "WrappedPqzRegulatedToken")):
         require_release_gas(name)
         code, libs = D.linked(name)
         hashes = [keccak256(bytes.fromhex(rpc("eth_getCode", [a, "latest"])[2:])) for a in libs]
         env = [fac, uid, reg, 0, 0, [pqv] if kind else [], libs, hashes, router]
         sd.send(fac, cd(f"publishEnv(uint8,uint16,{ENV_S})", ["w", "w", ENV], kind, 1, env), f"publishEnv(kind {kind}, 1)")
         r = sd.send(fac, cd("deployImplementation(uint8,uint64,uint16,bytes,bytes)", ["w", "w", "w", "b", "b"],
-                               kind, 1, 1, code, b""),
+                               kind, 1, 1, code, reg_hash if kind >= 8 else b""),
                     f"deployImplementation(kind {kind}, 1) {name}")
         lg = next(x for x in r["logs"] if x["address"].lower() == fac.lower() and len(x["topics"]) == 4)
         log(f"      {name} release at 0x{lg['topics'][3][-40:]} ({int(r['gasUsed'], 16):,} gas)")
-    for kind in (4, 5):
+    for kind in (4, 5, 12, 13):
         sd.send(fac, cd("setKindEnabled(uint8,bool)", ["w", "w"], kind, 1), f"setKindEnabled({kind}, true)")
 
     # -------------------------------------------------------------- 2. UAs

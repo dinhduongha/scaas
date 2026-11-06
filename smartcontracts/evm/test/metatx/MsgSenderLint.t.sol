@@ -14,15 +14,16 @@ contract MsgSenderLintTest is Test {
     // ua-mtx-merge MD-6: + MetaTxAddressBase (the address bodies moved out of MetaTxBase), MtxRelayFee, the PQZ token files,
     // ZetherWrappedLib; `PqzLayer` and `SCaaSDex` read `this.` on purpose (pinned in `test_noExternalSelfCalls`)
     // ua-mtx-merge T3b (MD-6's way): + the mandate wallets, on `UAMetaTxBase` (Q6)
-    // ua-mtx-merge T27: + the regulated layer and kinds (`src/regulated/`), none reading `msg.sender`; T28: + kind 8
-    string[31] internal FILES = ["src/wallet/MandateWallet.sol", "src/hedera/HederaMandateWallet.sol", "src/metatx/MetaTxAddressBase.sol", "src/metatx/MtxRelayFee.sol", "src/pqz/NormalPqzToken.sol",
+    // ua-mtx-merge T27: + the regulated layer and kinds (`src/regulated/`), none reading `msg.sender`; T28: + kind 8; T31: + kind 12
+    string[32] internal FILES = ["src/wallet/MandateWallet.sol", "src/hedera/HederaMandateWallet.sol", "src/metatx/MetaTxAddressBase.sol", "src/metatx/MtxRelayFee.sol", "src/pqz/NormalPqzToken.sol",
         "src/pqz/WrappedPqzToken.sol", "src/pqz/PqzWrappedLib.sol", "src/zether/ZetherWrappedLib.sol", "src/metatx/MetaTxBase.sol", "src/metatx/UAMetaTxBase.sol", "src/metatx/MtxPipelineLib.sol", "src/metatx/ERC20MetaTx.sol", "src/metatx/MetaTokenBase.sol",
         "src/metatx/NormalToken.sol", "src/metatx/WrappedToken.sol", "src/metatx/WrappedLib.sol",
         "src/governance/GovernanceLib.sol", "src/hedera/HederaLib.sol", "src/trade/TradeLib.sol", "src/zether/ZetherLayer.sol",
         "src/zether/ZetherLib.sol", "src/zether/NormalZetherToken.sol", "src/zether/WrappedZetherToken.sol",
         "src/governance/GovernanceBase.sol", "src/governance/GovernanceRouterBase.sol", "src/governance/GovernanceRouter.sol",
         "src/regulated/RegulatedBase.sol", "src/regulated/RegulatedLib.sol", "src/regulated/WrappedRegulatedToken.sol",
-        "src/regulated/WrappedPqzRegulatedToken.sol", "src/regulated/NormalRegulatedToken.sol"];
+        "src/regulated/WrappedPqzRegulatedToken.sol", "src/regulated/NormalRegulatedToken.sol",
+        "src/regulated/NormalPqzRegulatedToken.sol"];
 
     /// Occurrences of `pat` (not preceded by an identifier character); `exceptSelector` skips `pat<ident>.selector`.
     function _count(string memory path, bytes memory pat, bool exceptSelector) internal view returns (uint256 n) {
@@ -123,6 +124,7 @@ contract MsgSenderLintTest is Test {
         assertEq(_count("src/regulated/WrappedRegulatedToken.sol", "msg.sender", false), 0, "WrappedRegulatedToken");
         assertEq(_count("src/regulated/WrappedPqzRegulatedToken.sol", "msg.sender", false), 0, "WrappedPqzRegulatedToken");
         assertEq(_count("src/regulated/NormalRegulatedToken.sol", "msg.sender", false), 0, "NormalRegulatedToken");
+        assertEq(_count("src/regulated/NormalPqzRegulatedToken.sol", "msg.sender", false), 0, "NormalPqzRegulatedToken");
     }
 
     /// CTR-MTX-18: an external self-call (`this.f(…)`) inside an allowlisted body would let a guarded callee consume

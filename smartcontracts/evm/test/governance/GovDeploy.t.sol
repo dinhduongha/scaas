@@ -19,6 +19,7 @@ import {WrappedPqzToken} from "../../src/pqz/WrappedPqzToken.sol";
 import {NormalRegulatedToken} from "../../src/regulated/NormalRegulatedToken.sol";
 import {WrappedRegulatedToken} from "../../src/regulated/WrappedRegulatedToken.sol";
 import {WrappedPqzRegulatedToken} from "../../src/regulated/WrappedPqzRegulatedToken.sol";
+import {NormalPqzRegulatedToken} from "../../src/regulated/NormalPqzRegulatedToken.sol";
 import {NormalZetherRegulatedToken} from "../../src/regulated/NormalZetherRegulatedToken.sol";
 import {WrappedZetherRegulatedToken} from "../../src/regulated/WrappedZetherRegulatedToken.sol";
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
@@ -187,9 +188,9 @@ contract GovDeployTest is Test {
     /// release (the six kinds, the DEX); one gas below the need is refused by name (the control).
     function test_everyKindsReleaseFitsTwoHundredMillion() public {
         DeployHarness h = new DeployHarness();
-        string[12] memory kinds = ["NormalToken", "WrappedToken", "NormalZetherToken", "WrappedZetherToken", "NormalPqzToken",
+        string[13] memory kinds = ["NormalToken", "WrappedToken", "NormalZetherToken", "WrappedZetherToken", "NormalPqzToken",
             "WrappedPqzToken", "SCaaSDex", "NormalRegulatedToken", "WrappedRegulatedToken", "WrappedPqzRegulatedToken",
-            "NormalZetherRegulatedToken", "WrappedZetherRegulatedToken"];
+            "NormalZetherRegulatedToken", "WrappedZetherRegulatedToken", "NormalPqzRegulatedToken"];
         for (uint256 i; i < kinds.length; ++i) {
             uint256 need = h.gasNeed(kinds[i]);
             assertEq(need, vm.parseJsonUint(vm.readFile("./size-baseline.json"), string.concat(".", kinds[i])) * 1530 + TX_GAS_CAP,
@@ -211,10 +212,11 @@ contract GovDeployTest is Test {
         zdeps = [address(new ZetherTransferVerifierBls12381(ip)), address(new ZetherBurnVerifierBls12381(ip)), address(ip),
             address(new ZetherDisclosure())];
         Create2Probe probe = new Create2Probe();
-        string[14] memory names = ["NormalToken", "WrappedToken", "NormalZetherToken", "WrappedZetherToken", "NormalPqzToken",
+        string[15] memory names = ["NormalToken", "WrappedToken", "NormalZetherToken", "WrappedZetherToken", "NormalPqzToken",
             "WrappedPqzToken", "SCaaSDex", "GovernanceRouter", "WrappedRegulatedToken", "WrappedPqzRegulatedToken",
-            "NormalRegulatedToken", "ComplianceRegistry", "NormalZetherRegulatedToken", "WrappedZetherRegulatedToken"];
-        bytes[14] memory codes = [
+            "NormalRegulatedToken", "ComplianceRegistry", "NormalZetherRegulatedToken", "WrappedZetherRegulatedToken",
+            "NormalPqzRegulatedToken"];
+        bytes[15] memory codes = [
             _release(type(NormalToken).creationCode, IOpenFactory.TokenKind.NORMAL, router),
             _release(type(WrappedToken).creationCode, IOpenFactory.TokenKind.WRAPPED, router),
             _release(type(NormalZetherToken).creationCode, IOpenFactory.TokenKind.NORMAL_ZETHER, router),
@@ -228,7 +230,8 @@ contract GovDeployTest is Test {
             _release(type(NormalRegulatedToken).creationCode, IOpenFactory.TokenKind.NORMAL_REGULATED, router),
             abi.encodePacked(type(ComplianceRegistry).creationCode, abi.encode(router)), // T29: a plain deploy, admin a contract
             _release(type(NormalZetherRegulatedToken).creationCode, IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, router), // T30
-            _release(type(WrappedZetherRegulatedToken).creationCode, IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, router)
+            _release(type(WrappedZetherRegulatedToken).creationCode, IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, router),
+            _release(type(NormalPqzRegulatedToken).creationCode, IOpenFactory.TokenKind.NORMAL_PQZ_REGULATED, router) // T31
         ];
         for (uint256 i; i < codes.length; ++i) {
             address a = probe.deploy(codes[i], bytes32(i));

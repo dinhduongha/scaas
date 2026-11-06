@@ -108,10 +108,10 @@ contract LinkClosureTest is Test {
             f.envOf(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1));
         _assertEnvIsClosure("DeployBase DEX", "SCaaSDex", f.dexEnvOf(1));
 
-        // plan T27: the regulated kinds 9 and 13 (their base kind's closure and `RegulatedLib`); T28: kind 8
+        // plan T27: the regulated kinds 9 and 13 (their base kind's closure and `RegulatedLib`); T28: kind 8; T31: kind 12
         string[14] memory impls = ["NormalToken", "WrappedToken", "NormalZetherToken",
             "WrappedZetherToken", "NormalPqzToken", "WrappedPqzToken", "", "", "NormalRegulatedToken", "WrappedRegulatedToken",
-            "", "", "", "WrappedPqzRegulatedToken"];
+            "", "", "NormalPqzRegulatedToken", "WrappedPqzRegulatedToken"];
         for (uint8 k; k < 14; ++k) {
             if (bytes(impls[k]).length == 0) continue;
             IFactoryToken.Env memory e;
