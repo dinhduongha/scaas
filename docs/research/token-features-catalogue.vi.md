@@ -1052,6 +1052,11 @@ riêng trên E5. Phái sinh vẫn ở mức nghiên cứu.
 
 ## 9. Câu hỏi mở cho chủ dự án
 
+**Chủ dự án 2026-11-06:** Q1–Q17 trả lời theo đề xuất, chỉ là định hướng nghiên cứu. Chưa lên lịch, chưa build; chưa có spec,
+task hay thay đổi contract nào từ ghi chú này cho tới khi chủ dự án yêu cầu. Nhóm tính năng trong token (kind 8 và 9) chỉ
+vào được trước EVM freeze nếu được lên lịch trước T23.
+
+
 Mỗi câu hỏi có một khuyến nghị; không câu nào chặn nhánh hiện tại.
 
 | # | Câu hỏi | Khuyến nghị |

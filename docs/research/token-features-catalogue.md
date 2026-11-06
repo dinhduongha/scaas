@@ -1011,6 +1011,11 @@ on E5. Derivatives stay research.
 
 ## 9. Open questions for the owner
 
+**Owner 2026-11-06:** Q1–Q17 answered as recommended, as a research direction only. Nothing is scheduled or built yet; no
+spec, plan task or contract change follows from this note until the owner asks. The in-token group (kinds 8 and 9) can only
+land before the EVM freeze if it is scheduled before T23.
+
+
 Each question has a recommendation; none blocks the current branch.
 
 | # | Question | Recommendation |
