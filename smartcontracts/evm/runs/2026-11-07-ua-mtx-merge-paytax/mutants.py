@@ -95,14 +95,19 @@ MUTANTS = {
                                 "        r = bytes32(uint256(uint160(msg.sender)));\n", "test/as/Tax.t.sol"),
     "regfeeto-skipped": ("t40", "src/regulated/RegulatedBase.sol", "        _regFeeTo(r, tax);\n", "", "test/as/Tax.t.sol"),
     "paymenttaxed-skipped-at-zero": ("t40", "src/regulated/RegulatedBase.sol",
-                                     "        emit PaymentTaxed(t.entryRef, t.to, r, t.from, taxMode, tax, d);",
-                                     "        if (tax != 0) emit PaymentTaxed(t.entryRef, t.to, r, t.from, taxMode, tax, d);",
+                                     "        RegulatedLib.taxed(t.entryRef, t.to, r, t.from, taxMode, tax, d);",
+                                     "        if (tax != 0) RegulatedLib.taxed(t.entryRef, t.to, r, t.from, taxMode, tax, d);",
                                      "test/as/Tax.t.sol"),
     "paymenttaxed-without-from": ("t40", "src/regulated/RegulatedBase.sol",
-                                  "        emit PaymentTaxed(t.entryRef, t.to, r, t.from, taxMode, tax, d);",
-                                  "        emit PaymentTaxed(t.entryRef, t.to, r, 0, taxMode, tax, d);", "test/as/Tax.t.sol"),
-    "recipient-hashed-into-struct": ("t40", "src/regulated/RegulatedBase.sol", "MetaTxLib.hashStruct(t), taxMode, tax)",
-                                     "MetaTxLib.hashStruct(t), taxMode, tax, r)", "test/as/Tax.t.sol"),
+                                  "        RegulatedLib.taxed(t.entryRef, t.to, r, t.from, taxMode, tax, d);",
+                                  "        RegulatedLib.taxed(t.entryRef, t.to, r, 0, taxMode, tax, d);", "test/as/Tax.t.sol"),
+    "paymenttaxed-direct-without-from": ("t40", "src/regulated/RegulatedLib.sol",
+                                         "emit IRegulatedToken.PaymentTaxed(entryRef, to, r, payer, taxMode, tax, 0);",
+                                         "emit IRegulatedToken.PaymentTaxed(entryRef, to, r, 0, taxMode, tax, 0);",
+                                         "test/as/Tax.t.sol"),
+    "recipient-hashed-into-struct": ("t40", "src/regulated/RegulatedBase.sol", "MtxPipelineLib.payWithTaxHash(t, taxMode, tax)",
+                                     "keccak256(abi.encode(MtxPipelineLib.payWithTaxHash(t, taxMode, tax), r))",
+                                     "test/as/Tax.t.sol"),
     "paywithtax-payer-is-payee": ("t40", "src/regulated/RegulatedBase.sol", "bytes32 payer = MetaTxLib.pad(_msgSender());",
                                   "bytes32 payer = MetaTxLib.pad(tx.origin);", "test/as/Tax.t.sol"),
     # the confidential fee rule (`requireConfidentialSafe`: PERCENT refused) applied to a public pay with tax; the 10-13
@@ -131,7 +136,9 @@ def run(mid):
             rc = subprocess.call([CAPPED, FORGE, "test", "--match-path", match], cwd=EVM, stdout=log, stderr=subprocess.STDOUT)
     finally:
         open(full, "w").write(src)
-    clean = subprocess.call(["git", "diff", "--quiet", "--exit-code", "--", path], cwd=EVM)
+    # on an uncommitted task (MUTANTS_UNCOMMITTED=1) the file must equal what it held before the run; else git's HEAD
+    clean = (open(full).read() != src) if os.environ.get("MUTANTS_UNCOMMITTED") == "1" \
+        else subprocess.call(["git", "diff", "--quiet", "--exit-code", "--", path], cwd=EVM)
     if clean != 0:
         raise SystemExit(f"{mid}: {path} not restored")
     out = open(logp).read()
