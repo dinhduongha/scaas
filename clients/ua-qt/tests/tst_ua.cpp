@@ -111,6 +111,12 @@ public:
         g_features = su::features() & ~su::feature::kPqz;
         su::detail::reportedFeatures = [] { return g_features; };
     }
+    // Codex C1 (T15c2): a core built with scaas-ua's test feature `vectors`
+    Q_INVOKABLE void reportVectorsBuild() {
+        g_features = su::features() | su::feature::kVectors;
+        su::detail::reportedFeatures = [] { return g_features; };
+    }
+    Q_INVOKABLE bool linkedCoreIsATestBuild() { return su::features() & su::feature::kVectors; }
     Q_INVOKABLE void restoreReported() {
         su::detail::reportedAbiVersion = original_abi_;
         su::detail::reportedFeatures = original_features_;

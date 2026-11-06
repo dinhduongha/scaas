@@ -32,6 +32,11 @@ TestCase {
         compare(UaWallet.keyData(id), "")
         compare(UaWallet.lastError, "UAAbiMismatch")
         fixture.restoreReported()
+        fixture.reportVectorsBuild()  // Codex C1 (T15c2): a test build is refused at load
+        compare(UaWallet.keyData(id), "")
+        compare(UaWallet.lastError, "UAAbiMismatch")
+        fixture.restoreReported()
+        compare(fixture.linkedCoreIsATestBuild(), false)
         verify(UaWallet.keyData(id).length > 2)
         compare(UaWallet.lastError, "")
     }
@@ -41,6 +46,8 @@ TestCase {
         compare(fixture.mnemonicWipedAfterOpen(), true)
     }
 
+    // ARCH-POS-13 (Fable P2-5, T15c2): UaWallet wraps neither facade (no `zetherKey`, `pqzKey`, `call` below), so ua-qt has no
+    // Zether or PQZ call path and no "raw command refused" assertion of its own; ua-cxx's tests hold them.
     function test_no_decaps_no_raw_export_no_handle() {
         for (const n of ["decaps", "open", "openContainer", "kemKey", "exportPqzLeafRaw", "signDigestRaw", "signTypedAny",
                          "registerKey", "releaseKey", "uaKey", "nativeKey", "fromMnemonic", "openVault", "reveal", "take",
