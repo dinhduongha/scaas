@@ -156,7 +156,7 @@ abstract contract PqzFixture is PqzRegistryBase, PqzArgs {
     }
 
     function _memo() internal view returns (bytes memory) {
-        return bytes.concat(salt, _slice(_blob(0x3e30, 64), 0, 41));
+        return bytes.concat(salt, _slice(_blob(0x3e30, 64), 0, PqzCore.SEALED));
     }
 
     // ------------------------------------------------------------------ the client

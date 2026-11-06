@@ -753,7 +753,7 @@ contract PqzStatePinGasTest is PqzSlots {
     /// Op 1 from `carol`, `compact` the commit-reveal form.
     function _nOp1(bool aud, bool compact, string memory key) internal freed {
         IPqzToken.PqzTransferArgs memory t = _ts(_payload(0, 0, carol, bob, alice, _out(77, aud), ""));
-        if (compact) t.sealedMemo = _slice(_blob(1, 64), 0, 41);
+        if (compact) t.sealedMemo = _slice(_blob(1, 64), 0, PqzCore.SEALED);
         bytes memory proof = _pf("pqzh", key);
         string memory op = compact ? "PqzTransferSingleCompact" : "PqzTransferSingle";
         IUARegistry.UASig memory sig = _signN(op, address(tok), abi.encode(_hashT(t), keccak256(proof), keccak256("")));

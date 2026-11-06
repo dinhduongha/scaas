@@ -184,7 +184,7 @@ library PqzCore {
     uint256 internal constant HEADER = 640;
     uint256 internal constant OUT_ON = PqzCt.CT + 2 * PqzCt.V; // `u ‖ v_t ‖ v_f ‖ v_a`
     uint256 internal constant OUT_OFF = PqzCt.CT + PqzCt.V;
-    uint256 internal constant SEALED = 41; // op 1's memo after its clear salt
+    uint256 internal constant SEALED = 2 + 40 * 1; // op 1's memo after its clear salt: op 7's encoding, M = 1 (CTR-PQZ-23)
     uint256 internal constant DISCLOSE = PqzSet.STMT_DISCLOSE;
 
     function $() internal pure returns (PqzStorage storage s) {

@@ -783,7 +783,7 @@ contract PqzPartLengthsTest is PqzNamedBase {
             (x, t.vAuditor) = (t.vAuditor, new bytes(_badAud()[i]));
             _t(t, t.vAuditor.length, false);
             t.vAuditor = x;
-            // no memo on BUNDLE, 41 bytes on commit-reveal
+            // no memo on BUNDLE, 42 bytes on commit-reveal (41 refused, CTR-PQZ-23)
             t.sealedMemo = new bytes(_nonEmpty(57)[i]);
             _t(t, t.sealedMemo.length, false);
             if (t.sealedMemo.length != PqzCore.SEALED) _t(t, t.sealedMemo.length, true);
@@ -792,6 +792,17 @@ contract PqzPartLengthsTest is PqzNamedBase {
         _t(t, 0, true); // commit-reveal without the memo
         tok.mtxConfidentialTransferSingle(t, hex"01", _pqAuth(), "");
         assertEq(tok.pqzAccount(alice).sendCounter, 1, "the unchanged struct passes");
+    }
+
+    /// CTR-PQZ-23 (owner 2026-11-06): op 1's commit-reveal memo is op 7's encoding with M = 1, `salt ‖ sealed` with
+    /// `sealed = flags ‖ u8(M) ‖ be8(a) ‖ toUA` XOR the keystream, 2 + 40·1 bytes; the old 41-byte form is refused.
+    function test_op1MemoIsOp7EncodingWithOneLeg() public {
+        IPqzToken.PqzTransferArgs memory t = _ts(_sPl(tok, alice, true, "", 70));
+        t.sealedMemo = new bytes(41);
+        _t(t, 41, true);
+        t.sealedMemo = new bytes(2 + 40 * 1);
+        tok.mtxConfidentialTransferSingleCompact(t, hex"01", _pqAuth(), "");
+        assertEq(tok.pqzAccount(alice).sendCounter, 1, "the 42-byte sealed memo passes");
     }
 
     function _m(IPqzToken.PqzMultiArgs memory t, uint256 len, bool compact) internal {

@@ -24,7 +24,7 @@ abstract contract PqzArgs {
     uint256 internal constant T_OUT = 208;
     uint256 internal constant M_OUT = 240;
     uint256 internal constant B_OUT = 160;
-    uint256 internal constant MEMO_LEN = 57;
+    uint256 internal constant MEMO_LEN = 16 + PqzCore.SEALED;
 
     /// A holder's `pqzAuth` with a filler ML-DSA signature (the key is the one on record).
     function _pqAuth() internal pure returns (IUARegistry.UASig memory s) {
@@ -59,11 +59,11 @@ abstract contract PqzArgs {
 
     /// The test's reference for "today's bytes": the packed payloads of `_payload`, `_mpayload`, read back into the explicit
     /// struct, so every statement comparison below is packed reference against the token's assembly from the fields
-    /// (Appendix X.2). Op 1: `p ‖ vub ‖ shieldIn ‖ from ‖ to ‖ ben ‖ salt ‖ u ‖ v_t ‖ v_f ‖ [v_a] ‖ [salt ‖ sealed41]`.
+    /// (Appendix X.2). Op 1: `p ‖ vub ‖ shieldIn ‖ from ‖ to ‖ ben ‖ salt ‖ u ‖ v_t ‖ v_f ‖ [v_a] ‖ [salt ‖ sealed42]`.
     function _ts(bytes memory pl) internal pure returns (IPqzToken.PqzTransferArgs memory t) {
         uint256 rest = pl.length - 208;
-        bool memo = rest == PqzCore.OUT_ON + 57 || rest == PqzCore.OUT_OFF + 57;
-        if (memo) rest -= 57;
+        bool memo = rest == PqzCore.OUT_ON + MEMO_LEN || rest == PqzCore.OUT_OFF + MEMO_LEN;
+        if (memo) rest -= MEMO_LEN;
         t.p = uint64(uint256(_word(pl, 0)));
         t.validUntilBlock = uint256(_word(pl, 32));
         t.shieldIn = uint256(_word(pl, 64));
@@ -75,7 +75,7 @@ abstract contract PqzArgs {
         t.vTo = _part(pl, 208 + PqzCt.PK, PqzCt.V);
         t.vFrom = _part(pl, 208 + PqzCt.CT, PqzCt.V);
         if (rest == PqzCore.OUT_ON) t.vAuditor = _part(pl, 208 + PqzCore.OUT_OFF, PqzCt.V);
-        if (memo) t.sealedMemo = _part(pl, pl.length - 41, 41);
+        if (memo) t.sealedMemo = _part(pl, pl.length - PqzCore.SEALED, PqzCore.SEALED);
     }
 
     /// Op 7: `p ‖ vub ‖ shieldIn ‖ from ‖ ben ‖ M ‖ decoyFee ‖ salt ‖ UA_0 … ‖ u_0 … ‖ v_0 … ‖ v_f ‖ [v_{a,0} …] ‖ [salt ‖ sealed]`.

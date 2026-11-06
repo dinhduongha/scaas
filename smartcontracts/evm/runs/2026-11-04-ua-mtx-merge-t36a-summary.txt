@@ -1,0 +1,18 @@
+# ua-mtx-merge T36a gate summary (full output in git-ignored .log files, not committed)
+# T36a (CTR-PQZ-23 change, owner 2026-11-06): op 1's commit-reveal memo in op 7's encoding with M = 1,
+# `PqzCore.SEALED` 41 -> 42 (2 + 40·1); a 41-byte sealed memo refused. No statement, relation or proofSystemId change.
+step | commit | rc | counts
+t36a-red | ba40f0cc + test only | 1 | test_op1MemoIsOp7EncodingWithOneLeg FAIL (the 41-byte memo accepted), test_partLengths_op1 PASS
+t36a-green | ba40f0cc + T36a | 0 | 106 passed 0 failed, 11 suites (PqzTyped, PqzNormal, PqzShared, PqzMulti, ExplicitParamsCalldata, PqzPairs)
+t36a-mutants | ba40f0cc + T36a | 1 each | 2 of 2 killed by test_op1MemoIsOp7EncodingWithOneLeg (runs/2026-11-04-ua-mtx-merge-t36a-mutants.txt): the old length kept (41), op 7's rule with M = 0 (2)
+t36a-forge-full | ba40f0cc + T36a | 0 | 2875 passed 0 failed 14 skipped, 274 suites (default set n2304-kmax4096); compiled first in chunks (forge build per test directory) after a one-shot compile of 170 files hit the 4 GB cap (oom-kill, rc 143)
+t36a-at-set-n2048-kmax1024 | ba40f0cc + T36a | 0 | 866 passed 0 failed 1 skipped, 84 suites (at-set.sh test --match-path 'test/{ua,pqz,as/confidential}/*'); PqzSet.sol restored
+t36a-at-set-n2304-kmax4096 | ba40f0cc + T36a | 0 | 863 passed 0 failed 4 skipped, 84 suites; PqzSet.sol restored
+t36a-at-set-n2560-kmax16384 | ba40f0cc + T36a | 0 | 862 passed 0 failed 5 skipped, 84 suites; PqzSet.sol restored
+t36a-at-set-n2816-kmax65536 | ba40f0cc + T36a | 0 | 857 passed 0 failed 10 skipped, 84 suites; PqzSet.sol restored
+t36a-size-gate | ba40f0cc + T36a | 0 | 0 errors, 97 contracts; above 64 KiB: none; no runtime size changed against T36
+t36a-docs-check | ba40f0cc + T36a | 0 | 0 errors, 5 warnings, 16 notes (docs_check check); paths 0; test_docs_check ok
+#
+# No vector row holds an op 1 memo (typed_ops.json's sealedMemo rows are 0 or 64 B; the typed digest checks no length), so
+# no vector is regenerated. The gas tests assert caps only; the op 1 commit-reveal gas row in pq-zero-knowledge.md stays
+# the 57-byte measurement of its time, marked so. Clients: the ua-rs facade's op 1 memo is a ua-rs-sign follow-up (T15).

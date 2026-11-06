@@ -1495,7 +1495,7 @@ def transfer(pq, s, C, frm, to, ben, v, aud_on, what, binding=ZERO32, send=True,
     p = stt["pendingCount"]
     compact = int(call(tok, cd("disclosureMode()", [])), 16) == 1
     salt = os.urandom(16)
-    sealed = os.urandom(41) if compact else b""  # ponytail: memo body random (the token stores it unread, after `salt`);
+    sealed = os.urandom(2 + 40 * 1) if compact else b""  # op 7's encoding, M = 1 (CTR-PQZ-23); ponytail: body random (stored unread);
     # the CTR-ZTH-50 HKDF memo is the client's (P6h)
     fee = FEE if ben != b"\0" * 32 else 0
     ben_ua = ben.ua if isinstance(ben, UA) else ben

@@ -14,7 +14,7 @@ contract PqzPackedRef {
     uint256 internal constant T_OUT = 208;
     uint256 internal constant M_OUT = 240;
     uint256 internal constant B_OUT = 160;
-    uint256 internal constant MEMO = 57;
+    uint256 internal constant MEMO = 16 + PqzCore.SEALED; // op 1's memo, op 7's encoding with M = 1 (CTR-PQZ-23)
 
     function single(PqzCore.Env memory e, bytes calldata payload) external view returns (bytes memory) {
         PqzCore._bindMode(e);
