@@ -91,7 +91,7 @@ impl World {
     }
     /// Op 1 from `from` to `to`, verified and settled; the entry.
     fn pay(&mut self, from: &Word, to: &Word, amount: u64, aud: bool) -> Word {
-        let mut extra = json!({"toUA": hx(to), "pkT": self.pk(to), "amount": amount, "memoHash": hx(&[0; 32])});
+        let mut extra = json!({"toUA": hx(to), "pkT": self.pk(to), "amount": amount, "mode": "BUNDLE"});
         if aud {
             extra["pkA"] = json!(self.pk(&AUD));
         }
@@ -191,7 +191,7 @@ fn state_rows_reproduce_the_contract() {
             assert_eq!((&b["T"], &b["p"], &b["sendCounter"], &b["key"]), (&a["T"], &a["p"], &a["sendCounter"], &json!(key)), "{name}: balance");
         }
         let refresh = merge(words, json!({"chainId": r["chainId"], "registry": r["registry"], "fee": 0, "validUntilBlock": 1u64 << 40,
-            "shieldIn": a["shieldIn"], "envelopeBinding": hx(&[0; 32]), "memoHash": hx(&[0; 32])}));
+            "shieldIn": a["shieldIn"], "envelopeBinding": hx(&[0; 32])}));
         let b = rebuilt("proveRefresh", &refresh);
         assert_eq!((&b["T"], &b["p"], &b["sendCounter"]), (&a["T"], &a["p"], &a["sendCounter"]), "{name}: refresh");
         n += 1;
@@ -246,7 +246,7 @@ fn balances_and_debits_over_rebuilt_words() {
     assert_eq!((wd.balance(&A), wd.balance(&BOB)), (700, 300));
     wd.c.shield(&BOB, 5);
     // a burn: Bob's acc becomes the burn blob
-    let p = call(wd.key(&BOB), "proveBurn", &wd.debit(&BOB, json!({"amount": 100, "recipient": hx(&[3; 32]), "memoHash": hx(&[0; 32])}))).unwrap();
+    let p = call(wd.key(&BOB), "proveBurn", &wd.debit(&BOB, json!({"amount": 100, "recipient": hx(&[3; 32])}))).unwrap();
     assert_eq!(p["p"], 2);
     assert!(verify(2, &h(&p["stmt"]), &h(&p["proof"])));
     wd.c.settle_burn(&h(&p["stmt"]));
@@ -257,7 +257,7 @@ fn balances_and_debits_over_rebuilt_words() {
     wd.c.roll(&A, 1);
     assert_eq!(wd.c.own(&A, 16)["accWords"].as_array().unwrap().len(), ACC_WORDS);
     assert_eq!(wd.balance(&A), 775);
-    let p = call(wd.key(&A), "proveRefresh", &wd.debit(&A, json!({"memoHash": hx(&[0; 32])}))).unwrap();
+    let p = call(wd.key(&A), "proveRefresh", &wd.debit(&A, json!({}))).unwrap();
     assert!(verify(2, &h(&p["stmt"]), &h(&p["proof"])));
     wd.c.settle_burn(&h(&p["stmt"]));
     assert_eq!(wd.balance(&A), 775);
@@ -266,7 +266,7 @@ fn balances_and_debits_over_rebuilt_words() {
     assert_eq!(ans.get("memo"), None);
     assert_eq!((wd.balance(&A), wd.balance(&BOB), wd.balance(&Z)), (675, 305, 0));
     // over the balance: refused after the key, to the caller only
-    let over = wd.debit(&BOB, json!({"toUA": hx(&A), "pkT": wd.pk(&A), "amount": 306, "memoHash": hx(&[0; 32])}));
+    let over = wd.debit(&BOB, json!({"toUA": hx(&A), "pkT": wd.pk(&A), "amount": 306, "mode": "BUNDLE"}));
     assert_eq!(call(wd.key(&BOB), "proveTransfer", &over).err(), Some(Error::Argument));
 }
 
@@ -321,8 +321,8 @@ fn requests_carry_words_only() {
     assert_eq!((b["p"].clone(), b["value"].clone()), (json!(16), json!((0..16).sum::<u64>())));
     let reqs = [
         ("balance", base.clone()),
-        ("proveRefresh", wd.debit(&A, json!({"memoHash": hx(&[0; 32])}))),
-        ("proveTransfer", wd.debit(&A, json!({"toUA": hx(&BOB), "pkT": wd.pk(&BOB), "amount": 1, "memoHash": hx(&[0; 32])}))),
+        ("proveRefresh", wd.debit(&A, json!({}))),
+        ("proveTransfer", wd.debit(&A, json!({"toUA": hx(&BOB), "pkT": wd.pk(&BOB), "amount": 1, "mode": "HASH"}))),
     ];
     let ct = hx(&vec![0u8; st::PK_BYTES + 128]);
     for (cmd, req) in &reqs {
@@ -506,4 +506,86 @@ fn open_memo_binds_the_entry() {
     let mut flip = memo.clone();
     flip[16 + 2 + 8] ^= 1;
     assert_eq!(call(k, "openMemo", &merge(m, json!({"memo": hx(&flip)}))).err(), Some(Error::Argument));
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------
+// T15k (Fable P3-5; ua-mtx-merge T36a): op 1's memo per `mode`, op 2's `memoHash` 0, as the contract's statements.
+// ---------------------------------------------------------------------------------------------------------------------------
+
+/// The forge rows' statement words (`PqzStateVectors.t.sol`, the token's statement views): op 1 and op 7 on HASH carry
+/// `keccak256(salt ‖ sealedMemo)` with op 1's `sealedMemo` 42 bytes (op 7's encoding, M = 1: `PqzCore.SEALED`), op 1 on
+/// BUNDLE and a burn 0. The facade's formula is checked against them.
+#[test]
+fn memo_hash_is_the_contracts() {
+    let r = rows();
+    let rows = r["memoHash"].as_array().unwrap();
+    assert_eq!(rows.len(), 4);
+    for m in rows {
+        let (op, mode) = (m["op"].as_u64().unwrap(), m["mode"].as_str().unwrap());
+        let want = h(&m["memoHash"]);
+        if mode == "HASH" {
+            let (salt, sealed) = (h(&m["salt"]), h(&m["sealedMemo"]));
+            assert_eq!(salt.len(), 16);
+            if op == 1 {
+                assert_eq!(sealed.len(), pqz_ffi::memo::memo_len(1) - 16, "op 1: op 7's encoding, M = 1");
+            }
+            assert_eq!(scaas_ua::keccak256(&[salt, sealed].concat()).to_vec(), want, "op {op} HASH");
+        } else {
+            assert_eq!(want, vec![0; 32], "op {op} {mode}: 0");
+        }
+    }
+}
+
+/// Op 1 per `mode` (no default): HASH answers the memo `salt ‖ sealedMemo` (58 bytes, the statement's salt) with
+/// `memoHash = keccak256(salt ‖ sealedMemo)` in the statement, and the sender opens it from the settled entry to its one leg
+/// `(amount, toUA)`; BUNDLE has `memoHash` 0 and no memo; both verify. A request without `mode`, with another value, or with
+/// a `memoHash` field is refused before the key.
+#[test]
+fn op1_memo_per_mode() {
+    let mut wd = World::new();
+    wd.c.shield(&A, 1000);
+    let base = wd.debit(&A, json!({"toUA": hx(&BOB), "pkT": wd.pk(&BOB), "pkA": wd.pk(&AUD), "amount": 300}));
+    let ka = wd.key(&A);
+    for bad in [json!(null), json!("hash"), json!("NONE"), json!(0)] {
+        refused(&format!("mode {bad}"), ka, "proveTransfer", &merge(base.clone(), json!({"mode": bad})), Error::Argument);
+    }
+    refused("no mode", ka, "proveTransfer", &base, Error::Argument);
+    refused("a free memoHash", ka, "proveTransfer", &merge(base.clone(), json!({"mode": "BUNDLE", "memoHash": hx(&[0; 32])})), Error::Argument);
+    let b = call(ka, "proveTransfer", &merge(base.clone(), json!({"mode": "BUNDLE"}))).unwrap();
+    let st_b = h(&b["stmt"]);
+    let Stmt::Debit(d) = st::parse(1, &st_b).unwrap() else { panic!() };
+    assert_eq!((d.header[st::H_MEMO_HASH], b.get("memo")), ([0; 32], None), "BUNDLE: memoHash 0, no memo");
+    assert!(verify(1, &st_b, &h(&b["proof"])));
+    let p = call(ka, "proveTransfer", &merge(base, json!({"mode": "HASH"}))).unwrap();
+    let (stmt, memo) = (h(&p["stmt"]), h(&p["memo"]));
+    assert!(verify(1, &stmt, &h(&p["proof"])));
+    let Stmt::Debit(d) = st::parse(1, &stmt).unwrap() else { panic!() };
+    assert_eq!(memo.len(), 16 + 42, "salt ‖ sealedMemo, PqzCore.SEALED = 42");
+    assert_eq!(&memo[..16], &d.header[st::H_SALT][16..], "the statement's salt");
+    assert_eq!(d.header[st::H_MEMO_HASH], scaas_ua::keccak256(&memo), "keccak256(salt ‖ sealedMemo)");
+    let e = wd.c.settle1(&stmt, Some(&memo));
+    let o = call(wd.key(&A), "openMemo", &merge(wd.c.entry(&e, &A), json!({"memo": hx(&memo)}))).unwrap();
+    assert_eq!(o, json!({"auditorOn": true, "legs": [{"amount": 300, "ua": hx(&BOB)}]}));
+}
+
+/// Burn and refresh carry `memoHash` 0 (`PqzCore.prepareBurn` never sets it): no `memoHash` or `mode` field is taken.
+#[test]
+fn burn_and_refresh_memo_hash_is_zero() {
+    let wd = {
+        let mut w = World::new();
+        w.c.shield(&A, 1000);
+        w
+    };
+    let k = wd.key(&A);
+    let burn = wd.debit(&A, json!({"amount": 10, "recipient": hx(&[3; 32])}));
+    for (cmd, req) in [("proveBurn", burn), ("proveRefresh", wd.debit(&A, json!({})))] {
+        for (f, v) in [("memoHash", json!(hx(&[0xD1; 32]))), ("mode", json!("HASH"))] {
+            refused(&format!("{cmd} with {f}"), k, cmd, &merge(req.clone(), json!({ f: v })), Error::Argument);
+        }
+        let p = call(k, cmd, &req).unwrap();
+        let s = h(&p["stmt"]);
+        let Stmt::Debit(d) = st::parse(2, &s).unwrap() else { panic!() };
+        assert_eq!(d.header[st::H_MEMO_HASH], [0; 32], "{cmd}: memoHash 0");
+        assert!(verify(2, &s, &h(&p["proof"])), "{cmd}");
+    }
 }

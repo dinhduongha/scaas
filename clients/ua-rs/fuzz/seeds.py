@@ -154,7 +154,7 @@ def pqz_seeds():
              "blobs": a["blobs"], "keyRecord": a["keyRecord"]}
         out.append(qc("balance", w))
         out.append(qc("proveRefresh", {**w, "chainId": sv["chainId"], "registry": sv["registry"], "fee": 0, "validUntilBlock": 1 << 40,
-                                       "shieldIn": a["shieldIn"], "envelopeBinding": h(bytes(32)), "memoHash": h(bytes(32))}))
+                                       "shieldIn": a["shieldIn"], "envelopeBinding": h(bytes(32))}))
     e = next(x for x in sv["entries"] if x["legs"][0]["auditorCt"])
     base = {**loc, "chainId": sv["chainId"], "entryRef": e["entryRef"], "fromUA": e["fromUA"], "sendCounter": e["sendCounter"],
             "entryPtr": e["entryPtr"], "block": 1, "leg": 0}

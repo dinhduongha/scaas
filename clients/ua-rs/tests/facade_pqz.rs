@@ -278,9 +278,9 @@ fn words_request(k: &PqzKey, cmd: &str) -> Value {
     let pk = hx(&k.pk());
     match cmd {
         "balance" => c.own(&ua, 16),
-        "proveTransfer" => merge(debit, json!({"toUA": hx(&[2; 32]), "pkT": pk, "amount": 1, "memoHash": hx(&[0; 32])})),
-        "proveBurn" => merge(debit, json!({"amount": 1, "recipient": hx(&[3; 32]), "memoHash": hx(&[0; 32])})),
-        "proveRefresh" => merge(debit, json!({"memoHash": hx(&[0; 32])})),
+        "proveTransfer" => merge(debit, json!({"toUA": hx(&[2; 32]), "pkT": pk, "amount": 1, "mode": "HASH"})),
+        "proveBurn" => merge(debit, json!({"amount": 1, "recipient": hx(&[3; 32])})),
+        "proveRefresh" => debit,
         "proveTransferMulti" => merge(debit, json!({"legs": [{"pk": pk, "ua": hx(&[2; 32]), "amount": 1}], "mode": "BUNDLE"})),
         "auditRead" => merge(merge(c.entry(&er, &ua), c.auditor_words(2)), json!({"ua": hx(&ua), "leg": 0})),
         "proveDisclose" => merge(c.entry(&er, &ua), json!({"ua": hx(&ua), "leg": 0, "kind": "RECEIVER_X", "registry": hx(&REG)})),
