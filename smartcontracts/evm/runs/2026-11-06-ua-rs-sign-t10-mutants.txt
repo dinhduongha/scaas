@@ -1,0 +1,24 @@
+# 2026-11-06 ua-rs-sign T10 mutants: python3 -I smartcontracts/evm/runs/2026-11-06-ua-rs-sign-t10-mutants.py (from the worktree root; one run of 1-19), on the tree committed as b2c56d53;
+# suites (in clients/ua-rs): scripts/capped cargo test -j2 --locked --features vectors,mlock --test wallet_custody --test wallet_memory (custody, memory);
+# --features vectors --test wallet_custody --test wallet_vault (unlock's vault checks); --doc wallet::Wallet (the compile-fail guards, default features).
+# One mutant per run, every file restored byte for byte; the failed-test list is cut at 200 characters. UNAUDITED.
+killed   | M1 Clone on UaKey (a second handle of the secret) | src/wallet/mod.rs | rc=101 | 1 failed: src/wallet/mod.rs - wallet::Wallet (line 372)
+killed   | M2 lock keeps the entropy (the arena stays) | src/wallet/store.rs | rc=101 | 5 failed: concurrent_lock_and_sign, lock_keeps_manifest_drops_secrets, ua_key_on_locked_wallet_is_WalletLocked, unlock_does_not_revive_old_handles, unlock_reopens_the_vault
+killed   | M3 generation not raised by lock() | src/wallet/store.rs | rc=101 | 2 failed: unlock_does_not_revive_old_handles, unlock_reopens_the_vault
+killed   | M4 generation check skipped in one secret operation (Handle::with: sign, decaps, open) | src/wallet/store.rs | rc=101 | 2 failed: unlock_does_not_revive_old_handles, unlock_reopens_the_vault
+killed   | M5 unlock restores the old generation | src/wallet/store.rs | rc=101 | 2 failed: unlock_does_not_revive_old_handles, unlock_reopens_the_vault
+killed   | M6 lock() not waiting for operations in flight (the operation runs outside the read guard) | src/wallet/store.rs | rc=101 | 1 failed: lock_returns_only_after_operations_in_flight
+killed   | M7 mlock on another allocation only (the chunk reported locked, not locked) | src/wallet/store.rs | rc=101 | 2 failed: arena_chunks_locked_and_no_dump, mlock_refused_never_fails_the_wallet
+killed   | M8 chunk not wiped at release | src/wallet/store.rs | rc=101 | 1 failed: concurrent_lock_and_sign
+killed   | M9 release does not unlock or unmark | src/wallet/store.rs | rc=101 | 1 failed: arena_chunks_locked_and_no_dump
+killed   | M10 MADV_DONTDUMP not applied (reported) | src/wallet/store.rs | rc=101 | 1 failed: arena_chunks_locked_and_no_dump
+killed   | M11 a refused mlock reported as locked | src/wallet/store.rs | rc=101 | 1 failed: mlock_refused_never_fails_the_wallet
+killed   | M12 memory_protection counts every chunk as locked | src/wallet/store.rs | rc=101 | 1 failed: mlock_refused_never_fails_the_wallet
+killed   | M13 generation check skipped in Handle::derive (an old UA handle's kem_key) | src/wallet/store.rs | rc=101 | 1 failed: unlock_does_not_revive_old_handles
+killed   | M14 unlock of an unlocked wallet replaces its arena | src/wallet/store.rs | rc=101 | 1 failed: unlock_reopens_the_vault
+killed   | M15 dropping the wallet does not lock it | src/wallet/mod.rs | rc=101 | 1 failed: wallet_dropped_with_children_retained
+killed   | M16 unlock skips the seed label check | src/wallet/vault.rs | rc=101 | 1 failed: unlock_reopens_the_vault
+killed   | M17 unlock skips the entropy length check | src/wallet/vault.rs | rc=101 | 2 failed: seed_payload_of_31_bytes_refused, vault_json_refusals
+killed   | M18 Debug on KemKeyPair | src/wallet/kem.rs | rc=101 | 1 failed: src/wallet/mod.rs - wallet::Wallet (line 396)
+killed   | M19 a secret accessor in a release build | src/wallet/mod.rs | rc=101 | 1 failed: src/wallet/mod.rs - wallet::Wallet (line 405)
+mutants M1-M19 of 19, survived or not loaded: 0
