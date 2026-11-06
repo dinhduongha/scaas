@@ -9,7 +9,9 @@ import {GovernanceBits} from "../governance/GovernanceBits.sol";
 import {IGovernance} from "../governance/IGovernance.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {MtxPipelineLib} from "../metatx/MtxPipelineLib.sol";
+import {IUALedger} from "../metatx/IUALedger.sol";
 import {UAKinds} from "../ua/UAKinds.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {IOpenFactory} from "../factory/IOpenFactory.sol";
 
 /// @title The bodies of the regulated controls (CTR-AS-02's shape, regulated-kinds spec §3.1, §3.3, §3.4), reached by
@@ -139,6 +141,35 @@ library RegulatedLib {
         if (ratePpm <= eff) (t.ratePpm, t.pendingPpm, t.eta) = (ratePpm, 0, 0);
         else (t.ratePpm, t.pendingPpm, t.eta) = (eff, ratePpm, at += IOpenFactory(factory).noticePeriod());
         emit IRegulatedToken.TaxRateSet(ratePpm, at);
+    }
+
+    /// @notice Spec §5.3 step 3-4: the mode (1 PERCENT, 2 AMOUNT), `tax <= value`, PERCENT `tax == floor(value x rate /
+    ///         10^6)` at the effective rate (PT-6), the recipient not the payee. Returns the recipient.
+    function checkTax(bytes32 to, uint256 value, uint8 taxMode, uint256 tax) public view returns (bytes32 r) {
+        if (taxMode != 1 && taxMode != 2) revert IRegulatedToken.TaxModeInvalid(taxMode);
+        if (tax > value) revert IRegulatedToken.TaxExceedsAmount(tax, value);
+        if (taxMode == 1) {
+            uint256 expected = Math.mulDiv(value, effectiveRate(), 1_000_000);
+            if (tax != expected) revert IRegulatedToken.TaxMismatch(expected, tax);
+        }
+        r = $().taxRecipient;
+        if (r == to) revert IRegulatedToken.TaxRecipientIsPayee();
+    }
+
+    /// @notice `payWithTax` after its moves (lever 8): `UAPaymentSettled` gross (no fee) and `PaymentTaxed` with digest 0,
+    ///         emitted here under `DELEGATECALL` (the logs carry the token's address).
+    function directTaxed(bytes32 entryRef, bytes32 to, bytes32 r, bytes32 payer, uint256 amount, uint8 taxMode, uint256 tax)
+        public
+    {
+        emit IUALedger.UAPaymentSettled(payer, to, amount, 0, address(0), entryRef);
+        emit IRegulatedToken.PaymentTaxed(entryRef, to, r, payer, taxMode, tax, 0);
+    }
+
+    /// @notice `PaymentTaxed` (spec §5.3 step 6), emitted here under `DELEGATECALL`: the log carries the token's address.
+    function taxed(bytes32 entryRef, bytes32 payee, bytes32 r, bytes32 from, uint8 taxMode, uint256 tax, bytes32 digest)
+        public
+    {
+        emit IRegulatedToken.PaymentTaxed(entryRef, payee, r, from, taxMode, tax, digest);
     }
 
     /// @notice Bit 23 (`use`, no scalar), at once (Q4). The token checks `R` after it.

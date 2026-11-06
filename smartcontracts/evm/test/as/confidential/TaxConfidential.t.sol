@@ -13,6 +13,9 @@ import {IUARegistry} from "../../../src/ua/IUARegistry.sol";
 import {MtxDigest} from "../../helpers/MtxDigest.sol";
 import {PayMetaKit} from "../../helpers/PayMetaKit.sol";
 import {nid} from "../../helpers/Ids.sol";
+import {PqzLayer} from "../../../src/pqz/PqzLayer.sol";
+import {WrappedPqzToken} from "../../../src/pqz/WrappedPqzToken.sol";
+import {ZetherLayer} from "../../../src/zether/ZetherLayer.sol";
 
 /// The tax rows every confidential regulated kind shares (pay-meta-tax spec §5.1, O8, B-2, B-3, J7): a public pay with tax
 /// works on 10-13 (PERCENT too: `requireConfidentialSafe` does not apply to a public pay), and no confidential op has a tax
@@ -57,4 +60,144 @@ contract TaxConfidential13Test is PqzRegFixture {
         c.reg.taxRecipient = nid(TaxRows.TAX_TO);
         factory.createToken(_kind(), 1, abi.encode(c), "tax1");
     }
+}
+
+
+/// The tax rows of the PQZ kinds 12 (`_isWrapped` false) and 13: the fixture's token with bit 23 and a recipient; the test
+/// contract holds public units.
+abstract contract TaxPqzRows is PqzRegFixture {
+    uint256 internal constant PUB = 1_000_000;
+
+    function setUp() public override {
+        super.setUp();
+        IFactoryToken.TokenConfig memory c = _regCfg();
+        c.features |= uint256(1) << GovernanceBits.TAX;
+        c.reg.taxRecipient = nid(TaxRows.TAX_TO);
+        tok = PqzLayer(factory.createToken(_kind(), 1, abi.encode(c), "ptax"));
+        w = WrappedPqzToken(payable(address(tok)));
+        _shieldTo(alice, 300);
+        _pub(address(this), PUB);
+    }
+
+    /// A public pay with tax works (O8), PERCENT included (B-3: `requireConfidentialSafe` does not apply).
+    function _payWithTaxOn() internal {
+        vm.prank(issuer);
+        IRegulatedToken(address(tok)).setTaxRate(100_000);
+        IRegulatedToken(address(tok)).payWithTax(alice, 1_000, 1, 100, PayMetaKit.ref("c1"), PayMetaKit.meta("c1"));
+        assertEq(tok.balanceOfUA(alice), 900);
+        assertEq(tok.balanceOf(TaxRows.TAX_TO), 100);
+    }
+
+    /// J7: a shield, a shielded single transfer and an unshield with `TAX` set: no `PaymentTaxed`, no read or write of
+    /// `scaas.regulated` +5 / +6.
+    function _noTaxLeg() internal {
+        for (uint256 i; i < 3; ++i) {
+            uint256 snap = vm.snapshotState();
+            vm.recordLogs();
+            vm.record();
+            if (i == 0) {
+                _shieldTo(alice, 1);
+            } else {
+                (bool ok,,) = _try(_opCall(i == 1 ? 2 : 4, bytes32(0), 0));
+                assertTrue(ok, "the confidential op ran");
+            }
+            (bytes32[] memory reads, bytes32[] memory writes) = vm.accesses(address(tok));
+            for (uint256 j; j < reads.length; ++j) {
+                assertTrue(reads[j] != TaxRows.SLOT5 && reads[j] != TaxRows.SLOT6, "a tax slot read");
+            }
+            for (uint256 j; j < writes.length; ++j) assertTrue(writes[j] != TaxRows.SLOT5 && writes[j] != TaxRows.SLOT6);
+            Vm.Log[] memory logs = vm.getRecordedLogs();
+            for (uint256 j; j < logs.length; ++j) assertTrue(logs[j].topics.length == 0
+                || logs[j].topics[0] != IRegulatedToken.PaymentTaxed.selector, "PaymentTaxed on a confidential op");
+            vm.revertToState(snap);
+        }
+    }
+}
+
+contract TaxPqz12Test is TaxPqzRows {
+    function _isWrapped() internal pure override returns (bool) {
+        return false;
+    }
+
+    function test_payWithTax_on_12() public { _payWithTaxOn(); }
+    function test_confidentialOps_noTaxLeg_12() public { _noTaxLeg(); }
+}
+
+contract TaxPqz13Test is TaxPqzRows {
+    function _isWrapped() internal pure override returns (bool) {
+        return true;
+    }
+
+    function test_payWithTax_on_13() public { _payWithTaxOn(); }
+    function test_confidentialOps_noTaxLeg_13() public { _noTaxLeg(); }
+}
+
+/// The tax rows of the Zether kinds 10 (`_isWrapped` false) and 11: the fixture's token re-created with bit 23 and a
+/// recipient; `alice` holds `BAL` shielded, this test holds public units.
+abstract contract TaxZetherRows is ZetherRegFixture {
+    uint256 internal constant BAL = 50;
+    uint256 internal constant PUB = 1_000_000;
+    address internal constant PAYEE = address(0xB0B5);
+
+    function setUp() public override {
+        super.setUp();
+        IFactoryToken.TokenConfig memory c = _regCfg(true, 1 << 40);
+        c.features |= uint256(1) << GovernanceBits.TAX;
+        c.reg.taxRecipient = nid(TaxRows.TAX_TO);
+        tok = ZetherLayer(factory.createToken(_kind(), 1, abi.encode(c), "ztax"));
+        _funded(BAL);
+        _public(tok, address(this), PUB);
+    }
+
+    /// A public pay with tax works (O8), PERCENT included (B-3: `requireConfidentialSafe` does not apply).
+    function _payWithTaxOn() internal {
+        vm.prank(issuer);
+        IRegulatedToken(address(tok)).setTaxRate(100_000);
+        IRegulatedToken(address(tok)).payWithTax(nid(PAYEE), 1_000, 1, 100, PayMetaKit.ref("z1"), PayMetaKit.meta("z1"));
+        assertEq(IERC20(address(tok)).balanceOf(PAYEE), 900);
+        assertEq(IERC20(address(tok)).balanceOf(TaxRows.TAX_TO), 100);
+    }
+
+    /// J7: a shield, a shielded single transfer and an unshield with `TAX` set: no `PaymentTaxed`, no read or write of
+    /// `scaas.regulated` +5 / +6.
+    function _noTaxLeg() internal {
+        for (uint256 i; i < 3; ++i) {
+            uint256 snap = vm.snapshotState();
+            vm.recordLogs();
+            vm.record();
+            if (i == 0) {
+                tok.mtxShield(aId, 1);
+            } else {
+                (bool ok,,) = _try(_opCall(i == 1 ? 2 : 3, BAL, 0));
+                assertTrue(ok, "the confidential op ran");
+            }
+            (bytes32[] memory reads, bytes32[] memory writes) = vm.accesses(address(tok));
+            for (uint256 j; j < reads.length; ++j) {
+                assertTrue(reads[j] != TaxRows.SLOT5 && reads[j] != TaxRows.SLOT6, "a tax slot read");
+            }
+            for (uint256 j; j < writes.length; ++j) assertTrue(writes[j] != TaxRows.SLOT5 && writes[j] != TaxRows.SLOT6);
+            Vm.Log[] memory logs = vm.getRecordedLogs();
+            for (uint256 j; j < logs.length; ++j) assertTrue(logs[j].topics.length == 0
+                || logs[j].topics[0] != IRegulatedToken.PaymentTaxed.selector, "PaymentTaxed on a confidential op");
+            vm.revertToState(snap);
+        }
+    }
+}
+
+contract TaxZether10Test is TaxZetherRows {
+    function _isWrapped() internal pure override returns (bool) {
+        return false;
+    }
+
+    function test_payWithTax_on_10() public { _payWithTaxOn(); }
+    function test_confidentialOps_noTaxLeg_10() public { _noTaxLeg(); }
+}
+
+contract TaxZether11Test is TaxZetherRows {
+    function _isWrapped() internal pure override returns (bool) {
+        return true;
+    }
+
+    function test_payWithTax_on_11() public { _payWithTaxOn(); }
+    function test_confidentialOps_noTaxLeg_11() public { _noTaxLeg(); }
 }

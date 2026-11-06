@@ -184,7 +184,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
         t.validUntil = validUntil;
         t.mode = mode;
         t.relayer = relayer;
-        _uaExecuteTransfer(t, 0, auth);
+        _uaExecuteTransfer(t, 0, auth, 0, 0);
         return true;
     }
 
@@ -204,7 +204,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
         t.relayer = relayer;
         t.fee = fee;
         t.feeRecipient = feeRecipient;
-        _uaExecuteTransfer(t, 0, auth);
+        _uaExecuteTransfer(t, 0, auth, 0, 0);
         return true;
     }
 
@@ -215,24 +215,19 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
     {
         GovernanceLib.requireFeature(GovernanceBits.PAYABLE);
         _payMeta(t.entryRef, meta);
-        _uaExecuteTransfer(t, 0, auth);
+        _uaExecuteTransfer(t, 0, auth, 0, 0);
         return true;
     }
 
     /// @notice CTR-MTX-26 (spec §3.1): the commitment of a `PayMeta`, under the versioned tag `scaas.pay.meta.v2`.
     function metaPayId(MetaTxLib.PayMeta calldata meta) public pure returns (bytes32) {
-        return keccak256(abi.encodePacked("scaas.pay.meta.v2", meta.salt,
-            keccak256(abi.encode(meta.payNo, meta.schema, meta.body))));
+        return MtxPipelineLib.metaPayId(meta);
     }
 
     /// @dev Spec §3.2, in order: a non-zero salt, `schema == 0` iff the body is empty, `payNo` at most 256 bytes,
     ///      `entryRef == metaPayId(m)`; then `PaymentMeta`. Every pay entry calls it after its gates, before any signature.
     function _payMeta(bytes32 entryRef, MetaTxLib.PayMeta calldata m) internal {
-        if (m.salt == 0 || (m.schema == 0) != (m.body.length == 0)) revert PayMetaShape();
-        if (bytes(m.payNo).length > 256) revert PayNoTooLong(bytes(m.payNo).length);
-        bytes32 id = metaPayId(m);
-        if (entryRef != id) revert PayMetaMismatch(entryRef, id);
-        emit PaymentMeta(id, m.payNo, m.schema, m.body);
+        MtxPipelineLib.payMeta(entryRef, m); // lever 5 (pay-meta-tax spec §6.4): the body in the linked library
     }
 
     // ------------------------------------------------------------------ receiver-pays (CTR-MTX-05, CTR-MTX-06)
@@ -274,7 +269,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
         if (feeRecipient == address(this)) revert TransferToSelf();
         if (feeRecipient == MetaTxLib.UA_POOL) revert UAPoolNotPayable();
         _regFeeTo(to, fee);
-        bytes32 d = _uaExecuteTransfer(t, 0, payerAuth);
+        bytes32 d = _uaExecuteTransfer(t, 0, payerAuth, 0, 0);
         MtxPipelineLib.authorize(_mtxCtx(), t.to, UAKinds.PURPOSE_RECEIVER_FEE,
             receiverFeeDigest(t, fee, feeRecipient, rfValidUntil), payeeAuth);
         _uaMove(t.to, to, fee);
@@ -301,7 +296,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
         t.validUntil = validUntil;
         t.mode = MetaTxLib.MODE_RESTRICT_RELAYER;
         t.relayer = msg.sender;
-        _uaExecuteTransfer(t, _relayHash(t, target, callDataHash), auth);
+        _uaExecuteTransfer(t, _relayHash(t, target, callDataHash), auth, 0, 0);
     }
 
     function _relayRef(address target, bytes32 callDataHash) private view returns (bytes32) {

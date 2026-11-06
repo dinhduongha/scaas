@@ -487,8 +487,10 @@ contract GovDeployTest is Test {
         // `mtxCancelNonce` seats); T32: 0xBc8Df1a828dA586e5ccB8Db8942bbCC9c130cC34 -> this (the eight regulated control ops)
         // pay-meta-tax T37: 0xb7a8E5b24F6822cba41f77A6c4CdeEDAfA9399F1 -> 0xd2EaEC2593D30e536d3E0900008f66dc67A2B032 (the
         // metadata hash: `MetaTxLib.PayMeta`); T38: -> 0x2BEc911FA998177Eb0a56B94Fd4Dc5e5dae7e819 (the metadata hash:
-        // `IERC20MetaTx.mtxRelayFee`); T39: -> this (`mtxSetTaxRate`, `mtxSetTaxRecipient`)
-        assertEq(router, 0xe6D87D56A2aB446F60Ec89CF75D9ab33f443C8B2, "GovernanceRouter");
+        // `IERC20MetaTx.mtxRelayFee`); T39: -> 0xe6D87D56A2aB446F60Ec89CF75D9ab33f443C8B2 (`mtxSetTaxRate`,
+        // `mtxSetTaxRecipient`); T40: -> this (the metadata hash: `IRegulatedToken`'s two tax entries; `MtxPipelineLib`'s
+        // levers 5 and 6)
+        assertEq(router, 0x9F9448a2e031D1d7055c7D7b6593EA8f752c7D91, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append, `abi.encode(envVersion, env, implArgs)`: the env names the real Zether

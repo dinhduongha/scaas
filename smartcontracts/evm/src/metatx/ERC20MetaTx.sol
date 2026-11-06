@@ -229,7 +229,7 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBase, IERC20Payment, ITradeToken
     function mtxExecuteTransfer(MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata auth)
         external nonReentrant returns (bool)
     {
-        _uaExecuteTransfer(t, 0, auth);
+        _uaExecuteTransfer(t, 0, auth, 0, 0);
         return true;
     }
 
@@ -240,7 +240,7 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBase, IERC20Payment, ITradeToken
         uint256 n = ts.length;
         if (n == 0) revert MtxBatchEmpty();
         if (n != auths.length) revert MtxBatchLengthMismatch();
-        for (uint256 i; i < n; ++i) _uaExecuteTransfer(ts[i], 0, auths[i]);
+        for (uint256 i; i < n; ++i) _uaExecuteTransfer(ts[i], 0, auths[i], 0, 0);
         return true;
     }
 
@@ -253,18 +253,26 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBase, IERC20Payment, ITradeToken
     ///      (CTR-MTX-23 on ids): steps 1-4 in `MtxPipelineLib.preTransferUA` (`have` read here), everything checked
     ///      before the nonce and the moves, which cannot fail afterwards. `signed`: the struct the signer signed when it
     ///      is not `t` (`UARelayFee`), else 0. Returns the digest. A native side moves in the ERC-20 ledger and emits
-    ///      `Transfer`; the events are the `UA…` ones for every subject (R18).
-    function _uaExecuteTransfer(MetaTxLib.UAMetaTransfer memory t, bytes32 signed, IUARegistry.UASig calldata auth)
-        internal returns (bytes32)
+    ///      `Transfer`; the events are the `UA…` ones for every subject (R18). `withheld` of `t.value` goes from the payer to
+    ///      `withheldTo` instead of the payee (a tax, pay-meta-tax spec §5.3, O13); every other caller passes 0, 0.
+    function _uaExecuteTransfer(MetaTxLib.UAMetaTransfer memory t, bytes32 signed, IUARegistry.UASig calldata auth,
+        uint256 withheld, bytes32 withheldTo) internal returns (bytes32)
     {
         _regPre(t.from, 0, t.mode);
         MtxPipelineLib.Out memory o = MtxPipelineLib.preTransferUA(_mtxCtx(), t, signed, balanceOfUA(t.from), auth); // 1-4
         _regFeeTo(MetaTxLib.pad(o.feeTo), o.fee);
         if (o.fee != 0) _uaMove(t.from, MetaTxLib.pad(o.feeTo), o.fee);                                // 5
-        _uaMove(t.from, t.to, t.value);
+        _uaSplit(t.from, t.to, t.value, withheld, withheldTo);
         if (t.entryRef != 0) emit UAPaymentSettled(t.from, t.to, t.value, o.fee, o.feeTo, t.entryRef);
         emit UAMetaTransactionExecuted(t.from, msg.sender, t.batch, t.nonce, o.digest, o.feeTo, o.fee); // 6
         return o.digest;
+    }
+
+    /// @dev A payment of `value`: `value - withheld` to `to`, `withheld` to `withheldTo`, both from `from` (a tax,
+    ///      pay-meta-tax spec §5.3 O13, lever 1: one split for `mtxPayWithTax` and `payWithTax`); both moves hooked.
+    function _uaSplit(bytes32 from, bytes32 to, uint256 value, uint256 withheld, bytes32 withheldTo) internal {
+        _uaMove(from, to, value - withheld);
+        if (withheld != 0) _uaMove(from, withheldTo, withheld);
     }
 
     /// @dev The receiver of every `…ToUA` function (CTR-UA-28): the ledger on and a registered SIGNING derived id; a

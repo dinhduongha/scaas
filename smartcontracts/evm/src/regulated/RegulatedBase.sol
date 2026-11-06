@@ -10,6 +10,7 @@ import {IComplianceRegistry} from "./IComplianceRegistry.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {MtxPipelineLib} from "../metatx/MtxPipelineLib.sol";
 import {IOpenFactory} from "../factory/IOpenFactory.sol";
+import {IUARegistry} from "../ua/IUARegistry.sol";
 
 /// @title The regulated layer of kinds 8-13 (CTR-GOV-03, regulated-kinds spec §2.1, §2.2, §3): abstract over `MetaTokenBase`,
 ///        it overrides the ledger and fee hooks, the masks it shares, `disableFeature`, `supportsInterface`, the init path,
@@ -132,6 +133,46 @@ abstract contract RegulatedBase is MetaTokenBase, IRegulatedToken {
     function setTaxRecipient(bytes32 taxRecipient) external nonReentrant {
         RegulatedLib.setTaxRecipient(taxRecipient, _govSubject(), _REGISTRY);
         _eligible(taxRecipient);
+    }
+
+    /// @notice The payment `t` with its tax (pay-meta-tax spec §5.3, CTR-AS-18 proposed): the payer signs `UAPayWithTax`
+    ///         (`t`, `taxMode`, `tax`); `PAYABLE` and `TAX`; `PayMeta`; the tax checked (PERCENT against the effective rate,
+    ///         AMOUNT as signed) and its recipient read here (`R`, `F` at the fee-leg seat, RK-6); then one execution:
+    ///         payer -> payee `value - tax`, payer -> recipient `tax` (O13); `UAPaymentSettled` gross; `PaymentTaxed`.
+    function mtxPayWithTax(MetaTxLib.UAMetaTransfer calldata t, uint8 taxMode, uint256 tax, IUARegistry.UASig calldata auth,
+        MetaTxLib.PayMeta calldata meta) external nonReentrant returns (bool)
+    {
+        _taxGates(t.entryRef, meta);
+        bytes32 r = _taxTo(t.to, t.value, taxMode, tax);
+        bytes32 d = _uaExecuteTransfer(t, MtxPipelineLib.payWithTaxHash(t, taxMode, tax), auth, tax, r); // lever 6
+        RegulatedLib.taxed(t.entryRef, t.to, r, t.from, taxMode, tax, d);
+        return true;
+    }
+
+    /// @notice The direct twin for a contract payer (spec §5.6, O13): the caller pays, no signature, nonce or fee; not on
+    ///         the generic self-call's allow-list (`mtxPayWithTax` is the relayed form).
+    function payWithTax(bytes32 to, uint256 amount, uint8 taxMode, uint256 tax, bytes32 entryRef,
+        MetaTxLib.PayMeta calldata meta) external nonReentrant returns (bool)
+    {
+        _taxGates(entryRef, meta);
+        MtxPipelineLib._checkTo(_REGISTRY, to);
+        bytes32 r = _taxTo(to, amount, taxMode, tax);
+        bytes32 payer = MetaTxLib.pad(_msgSender());
+        _uaSplit(payer, to, amount, tax, r);
+        RegulatedLib.directTaxed(entryRef, to, r, payer, amount, taxMode, tax); // lever 8: the two events
+        return true;
+    }
+
+    function _taxGates(bytes32 entryRef, MetaTxLib.PayMeta calldata meta) private {
+        GovernanceLib.requireFeature(GovernanceBits.PAYABLE);
+        GovernanceLib.requireFeature(GovernanceBits.TAX);
+        _payMeta(entryRef, meta);
+    }
+
+    /// @dev Spec §5.3 steps 3-4: the library's checks return the recipient; `F(r)`, `R(r)` at the fee-leg seat (RK-6).
+    function _taxTo(bytes32 to, uint256 value, uint8 taxMode, uint256 tax) private view returns (bytes32 r) {
+        r = RegulatedLib.checkTax(to, value, taxMode, tax);
+        _regFeeTo(r, tax);
     }
 
     /// @notice The library refuses and `use`s; the move is `_uaMove`, hooked, so `P`, `F(from)` and `R(to)` apply (§3.4).

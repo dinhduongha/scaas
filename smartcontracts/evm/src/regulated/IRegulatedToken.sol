@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {MetaTxLib} from "../common/MetaTxLib.sol";
+import {IUARegistry} from "../ua/IUARegistry.sol";
+
 /// @title The regulated kinds 8-13 (CTR-GOV-03, regulated-kinds spec §3.1): the controls as direct entries, the views, the
 ///        errors and events. A regulated kind answers `type(IRegulatedToken).interfaceId` in ERC-165 (M-10); kinds 0-5 do not.
 /// @notice **UNAUDITED.** Every entry is `nonReentrant` and gated by `GovernanceUse.use(bit, subject, scalar)`; a relayed
@@ -67,10 +70,17 @@ interface IRegulatedToken {
     /// @notice Pay-meta-tax spec §6.2: `effectiveAt` is now for a decrease, `now + noticePeriod` for an increase.
     event TaxRateSet(uint32 ratePpm, uint64 effectiveAt);
     event TaxRecipientSet(bytes32 indexed taxRecipient);
+    /// @notice After the payment's events, also at `tax == 0` (C6, F-05); `digest` 0 on `payWithTax` (no signed struct).
+    event PaymentTaxed(bytes32 indexed entryRef, bytes32 indexed payee, bytes32 indexed taxRecipient, bytes32 from,
+        uint8 taxMode, uint256 tax, bytes32 digest);
 
     error Frozen(bytes32 account);
     error TaxRateInvalid(uint32 ratePpm);
     error TaxRecipientInvalid(bytes32 taxRecipient);
+    error TaxModeInvalid(uint8 taxMode);
+    error TaxExceedsAmount(uint256 tax, uint256 amount);
+    error TaxMismatch(uint256 expected, uint256 got);
+    error TaxRecipientIsPayee();
     error TokenPaused(uint64 until);
     /// @notice `reason` 0: refused by `hasFlags` on the hot path; 1-4 from `canReceive`.
     error NotEligible(bytes32 account, uint8 reason);
@@ -125,6 +135,12 @@ interface IRegulatedToken {
     /// @notice Bit 23: not 0, a pool or the token; a derived id registered SIGNING; not frozen and eligible (`R`).
     function setTaxRecipient(bytes32 taxRecipient) external;
     function taxConfig() external view returns (TaxConfig memory);
+    /// @notice Bits 0 (`PAYABLE`) and 23: a payment with its tax, signed `UAPayWithTax` by `t.from` (spec §5.3).
+    function mtxPayWithTax(MetaTxLib.UAMetaTransfer calldata t, uint8 taxMode, uint256 tax, IUARegistry.UASig calldata auth,
+        MetaTxLib.PayMeta calldata meta) external returns (bool);
+    /// @notice The direct twin, the caller pays (spec §5.6).
+    function payWithTax(bytes32 to, uint256 amount, uint8 taxMode, uint256 tax, bytes32 entryRef,
+        MetaTxLib.PayMeta calldata meta) external returns (bool);
 
     function regulatedConfig() external view returns (RegulatedConfig memory);
     function freezeOf(bytes32 account) external view returns (FreezeState memory);

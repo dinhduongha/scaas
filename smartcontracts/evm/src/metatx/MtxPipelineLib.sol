@@ -6,6 +6,7 @@ import {IMetaTx} from "./IMetaTx.sol";
 import {IERC20MetaTx} from "./IERC20MetaTx.sol";
 import {IUALedger} from "./IUALedger.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
+import {IMetaTokenV2} from "./IMetaTokenV2.sol";
 import {FeePolicy, FeeMode} from "../common/FeePolicy.sol";
 import {SigCheck} from "../common/SigCheck.sol";
 import {HederaLib} from "../hedera/HederaLib.sol";
@@ -66,6 +67,12 @@ library MtxPipelineLib {
         "UAReceiverFee(UAMetaTransfer payment,uint256 fee,address feeRecipient,uint256 validUntil)UAMetaTransfer(bytes32 from,"
         "bytes32 to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,"
         "address relayer,uint256 fee,address feeRecipient)"
+    );
+
+    bytes32 private constant UA_PAY_WITH_TAX_TYPEHASH = keccak256(
+        "UAPayWithTax(UAMetaTransfer payment,uint8 taxMode,uint256 tax)UAMetaTransfer(bytes32 from,bytes32 to,uint256 value,"
+        "bytes32 entryRef,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,"
+        "address feeRecipient)"
     );
 
     // keccak256(abi.encode(uint256(keccak256("scaas.metatx")) - 1)) & ~bytes32(uint256(0xff))
@@ -154,6 +161,12 @@ library MtxPipelineLib {
     {
         return MessageHashUtils.toTypedDataHash(domainSeparator, keccak256(abi.encode(
             UA_RECEIVER_FEE_TYPEHASH, _structHash(t), fee, feeRecipient, validUntil)));
+    }
+
+    /// @notice The payer's struct hash of a payment with its tax (pay-meta-tax spec §5.2, lever 6): `UAPayWithTax`, nesting
+    ///         the payment's canonical struct hash (an unbound relayer / fee recipient zeroed).
+    function payWithTaxHash(MetaTxLib.UAMetaTransfer calldata t, uint8 taxMode, uint256 tax) external pure returns (bytes32) {
+        return keccak256(abi.encode(UA_PAY_WITH_TAX_TYPEHASH, _structHash(t), taxMode, tax));
     }
 
     // ------------------------------------------------------------------ internal (one source per rule)
@@ -370,5 +383,22 @@ library MtxPipelineLib {
 
     function _canon(uint32 mode, uint32 bit, address a) private pure returns (address) {
         return mode & bit != 0 ? a : address(0);
+    }
+
+    // ------------------------------------------------------------------ the pay entries' metadata (pay-meta-tax spec §3)
+
+    /// @notice CTR-MTX-26 (spec §3.1): the commitment of a `PayMeta`, under the versioned tag `scaas.pay.meta.v2`.
+    function metaPayId(MetaTxLib.PayMeta calldata m) public pure returns (bytes32) {
+        return keccak256(abi.encodePacked("scaas.pay.meta.v2", m.salt, keccak256(abi.encode(m.payNo, m.schema, m.body))));
+    }
+
+    /// @notice Spec §3.2, in order: a non-zero salt, `schema == 0` iff the body is empty, `payNo` at most 256 bytes,
+    ///         `entryRef == metaPayId(m)`; then `PaymentMeta` (under `DELEGATECALL`: the token's log). Writes nothing.
+    function payMeta(bytes32 entryRef, MetaTxLib.PayMeta calldata m) public {
+        if (m.salt == 0 || (m.schema == 0) != (m.body.length == 0)) revert IMetaTokenV2.PayMetaShape();
+        if (bytes(m.payNo).length > 256) revert IMetaTokenV2.PayNoTooLong(bytes(m.payNo).length);
+        bytes32 id = metaPayId(m);
+        if (entryRef != id) revert IMetaTokenV2.PayMetaMismatch(entryRef, id);
+        emit IMetaTokenV2.PaymentMeta(id, m.payNo, m.schema, m.body);
     }
 }

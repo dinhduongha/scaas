@@ -1889,6 +1889,11 @@
    "error": ""
   },
   {
+   "sig": "mtxPayWithTax((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,string,uint16,bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
    "sig": "mtxRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
@@ -1925,6 +1930,11 @@
   },
   {
    "sig": "payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32,(bytes32,string,uint16,bytes))",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "payWithTax(bytes32,uint256,uint8,uint256,bytes32,(bytes32,string,uint16,bytes))",
    "class": "OWN_BALANCE",
    "error": ""
   },
@@ -2141,6 +2151,11 @@
    "error": ""
   },
   {
+   "sig": "mtxPayWithTax((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,string,uint16,bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
    "sig": "mtxRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
@@ -2212,6 +2227,11 @@
   },
   {
    "sig": "payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32,(bytes32,string,uint16,bytes))",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "payWithTax(bytes32,uint256,uint8,uint256,bytes32,(bytes32,string,uint16,bytes))",
    "class": "OWN_BALANCE",
    "error": ""
   },
@@ -2483,6 +2503,11 @@
    "error": ""
   },
   {
+   "sig": "mtxPayWithTax((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,string,uint16,bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
    "sig": "mtxRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
@@ -2579,6 +2604,11 @@
   },
   {
    "sig": "payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32,(bytes32,string,uint16,bytes))",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "payWithTax(bytes32,uint256,uint8,uint256,bytes32,(bytes32,string,uint16,bytes))",
    "class": "OWN_BALANCE",
    "error": ""
   },
@@ -2825,6 +2855,11 @@
    "error": ""
   },
   {
+   "sig": "mtxPayWithTax((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,string,uint16,bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
    "sig": "mtxRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
@@ -2976,6 +3011,11 @@
   },
   {
    "sig": "payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32,(bytes32,string,uint16,bytes))",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "payWithTax(bytes32,uint256,uint8,uint256,bytes32,(bytes32,string,uint16,bytes))",
    "class": "OWN_BALANCE",
    "error": ""
   },
@@ -3257,6 +3297,11 @@
    "error": ""
   },
   {
+   "sig": "mtxPayWithTax((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,string,uint16,bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
    "sig": "mtxPrepareAcc((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
@@ -3333,6 +3378,11 @@
   },
   {
    "sig": "payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32,(bytes32,string,uint16,bytes))",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "payWithTax(bytes32,uint256,uint8,uint256,bytes32,(bytes32,string,uint16,bytes))",
    "class": "OWN_BALANCE",
    "error": ""
   },
@@ -3589,6 +3639,11 @@
    "error": ""
   },
   {
+   "sig": "mtxPayWithTax((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,string,uint16,bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
    "sig": "mtxPrepareAcc((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
@@ -3720,6 +3775,11 @@
   },
   {
    "sig": "payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32,(bytes32,string,uint16,bytes))",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "payWithTax(bytes32,uint256,uint8,uint256,bytes32,(bytes32,string,uint16,bytes))",
    "class": "OWN_BALANCE",
    "error": ""
   },
