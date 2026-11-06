@@ -68,6 +68,17 @@ fn release_has_no_raw_decrypt() {
     assert!(call("encrypt", &json!({"curve": "bls12381", "Y": format!("0x{}", hex::encode(k.encoded_y())), "amount": 1}).to_string()).is_ok());
 }
 
+/// `hazmat` is never a default feature (the shipped library, CLI and wasm build without it): read from Cargo.toml itself, since
+/// `cfg!(feature = "hazmat")` in this test would follow a default that turned it on.
+#[test]
+fn hazmat_is_off_by_default() {
+    let toml = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml")).unwrap();
+    let features = &toml[toml.find("[features]").unwrap()..];
+    let features = &features[..features[1..].find("\n[").map_or(features.len(), |i| i + 1)];
+    assert!(features.contains("\nhazmat = []"), "the feature exists");
+    assert!(!features.lines().any(|l| l.trim_start().starts_with("default") && l.contains("hazmat")), "hazmat in default");
+}
+
 #[test]
 fn a_given_key_refuses_key_reveal_and_witness_fields() {
     let k = key(0);
