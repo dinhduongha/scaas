@@ -879,6 +879,11 @@ record slot notes its mode so a wallet knows where to fetch that P. The header a
 | log | an event from the token itself | +0.38–0.65 M | +1.1–2.0 | active wallets: robust for every call shape; short-term, lost when the chain expires history (same lifetime as calldata), loss accepted |
 | SSTORE2 | state | +73–125 M | +220–375 | no history dependence, an MPC quorum included; needs a large block (op 1 ≈ 102 M, op 7 M = 8 with the auditor ≈ 194 M): document it for token creators |
 
+**Who may change it (owner 2026-11-06, proposed name):** a new governance bit `PQZ_PROOF` in the SCaaS band, on PQZ
+kinds only; bit 23 is planned for `TAX` (spec 3e), so the first free bit after it, 24, is the candidate — the spec fixes
+the number, the holder kinds and whether a relaxation is delayed. **Zether needs no such bit:** ElGamal decryption has no
+key-recovery oracle (§11.4), so Zether keeps path (A) only and has no proof-storage setting.
+
 **Sealing.** An own debit or a refresh seals every earlier credit into the holder's own `v_f`, which carries `ownTag`;
 after that no P of those credits is ever needed. A rollover seals nothing. The wallet knows from state whether credits are
 unsealed (pending slots after its last debit record) and may advise one refresh before going cold (≈ 27.7 M gas, about

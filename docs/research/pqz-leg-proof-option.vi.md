@@ -869,6 +869,11 @@ ghi chế độ của nó để ví biết lấy P ở đâu. Header luôn đi t
 | log | event do chính token phát | +0,38–0,65 M | +1,1–2,0 | ví hay hoạt động: lấy được với mọi kiểu gọi; ngắn hạn, mất khi chain xóa lịch sử (cùng tuổi thọ calldata), chấp nhận mất |
 | SSTORE2 | state | +73–125 M | +220–375 | không phụ thuộc lịch sử, kể cả nhóm MPC; cần block lớn (op 1 ≈ 102 M, op 7 M = 8 có auditor ≈ 194 M): ghi rõ cho người tạo token |
 
+**Ai được đổi (chủ dự án 2026-11-06, tên đề xuất):** một bit quản trị mới `PQZ_PROOF` trong dải của SCaaS, chỉ cho các
+kind PQZ; bit 23 đã dành cho `TAX` (spec 3e), nên bit trống kế tiếp là 24 — spec chốt số bit, loại người giữ, và việc
+nới lỏng có bị trì hoãn không. **Zether không cần bit này:** giải mã ElGamal không có oracle lấy lại khóa (§11.4), nên
+Zether chỉ dùng đường (A) và không có cấu hình lưu proof.
+
 **Niêm phong.** Một lần chi của chính chủ hoặc một lần refresh niêm phong mọi khoản nhận trước đó vào `v_f` của chính chủ,
 có `ownTag`; sau đó không bao giờ cần P của các khoản đó. Rollover không niêm phong gì. Ví biết từ state còn khoản chưa niêm
 phong không (slot khoản nhận sau bản ghi lần chi cuối) và có thể khuyên refresh một lần trước khi cất ví lạnh (≈ 27,7 M gas,
