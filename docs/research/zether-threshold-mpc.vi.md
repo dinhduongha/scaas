@@ -506,6 +506,10 @@ giá trị thật. Xếp lịch là việc của chủ dự án.
 
 ### Câu hỏi mở cho chủ dự án
 
+**Chủ dự án 2026-11-06:** trả lời theo đề xuất, chỉ là định hướng nghiên cứu. Chưa lên lịch, chưa có spec hay build; không có
+task hay thay đổi contract nào từ ghi chú này cho tới khi chủ dự án yêu cầu.
+
+
 1. **Tài khoản Zether của một tổ chức nên là một nhóm ngưỡng (D) thay vì một người giữ?** *Khuyến nghị:* có cho tài khoản tổ chức;
    đó là cách duy nhất để một lần tiêu Zether cổ điển cần hơn một bên, và 2-of-3 của CLI-SGN-32 đã giả định điều đó.
 2. **Seed nhóm `σ` cho `s`, `t_j` và khóa memo.** Niêm phong `σ` cho mọi người giữ, để người giữ nào cũng mở và dựng lại được các

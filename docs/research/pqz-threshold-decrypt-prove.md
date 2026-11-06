@@ -791,6 +791,10 @@ t or more shares or of the whole key.
 
 ## 9. Open questions for the owner
 
+**Owner 2026-11-06:** answered as recommended, as a research direction only. Nothing is scheduled, specified or built; no
+plan task or contract change follows from this note until the owner asks.
+
+
 1. **Q1. Output of a decryption: the quorum or a designated viewer?** Recommendation: quorum output when a spend is
    being built (the members approve the amounts anyway), designated output for viewing; the service decides per request
    with the members' consent.

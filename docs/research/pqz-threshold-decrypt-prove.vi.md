@@ -789,6 +789,10 @@ chứng; dưới C/D, làm mới chủ động bao phủ phần lớn sự kiệ
 
 ## 9. Câu hỏi mở cho chủ dự án
 
+**Chủ dự án 2026-11-06:** trả lời theo đề xuất, chỉ là định hướng nghiên cứu. Chưa lên lịch, chưa có spec hay build; không có
+task hay thay đổi contract nào từ ghi chú này cho tới khi chủ dự án yêu cầu.
+
+
 1. **Q1. Kết quả giải mã cho cả nhóm hay cho một người xem được chỉ định?** Khuyến nghị: cho cả nhóm khi đang dựng một khoản chi
    (các thành viên vốn duyệt số tiền), cho người được chỉ định khi xem; dịch vụ quyết định theo từng yêu cầu với sự đồng ý của
    các thành viên.

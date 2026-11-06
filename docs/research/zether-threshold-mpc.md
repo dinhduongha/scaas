@@ -507,6 +507,10 @@ with value. Scheduling is the owner's.
 
 ### Open questions for the owner
 
+**Owner 2026-11-06:** answered as recommended, as a research direction only. Nothing is scheduled, specified or built; no
+plan task or contract change follows from this note until the owner asks.
+
+
 1. **Should an organisation's Zether account be a threshold group (D) rather than one holder?** *Recommendation:* yes for
    organisation accounts; it is the only way a classical Zether spend can need more than one party, and CLI-SGN-32's 2-of-3
    already assumes it.
