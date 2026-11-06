@@ -1,0 +1,30 @@
+# 2026-11-07 ua-rs-sign T15c2: the mutant run of 2026-11-07-ua-rs-sign-t15c2-mutants.py (one mutant per foreground call through
+# scripts/capped, every file restored by the harness, then `git diff --exit-code` on clients/ and scripts/: clean after each).
+# Tree: e01c5237 (the T15c2 commits) + the harness. Kind "build" (M15, M16): the compiler is the guard, the named error kills.
+# Superseded during the run (findings of the run, not of the code): (a) the first M15 (the Req::Dec variant alone) was run as
+# a test mutant and did not build (E0004: run()'s match is no longer exhaustive): reclassified as a build kill, and a mutant
+# that compiles (the `dec` allow-list arm, M17) added for the source assertion; (b) the first M19 (`decrypt` back in the Zether
+# facade's release list only) SURVIVED at the binding: zether-prover's own hazmat gate still refuses it, so a binding sees
+# UAArgument either way (the facade layer alone is killed by T15c's facade_zether release test); M19 / M20 now remove both
+# layers, which is what a binding's assertion can see.
+killed     | M1 ua-py: check_build accepts a vectors build | clients/ua-py/scaas_ua/wallet.py | rc=1 | 1 failed: test_load_refuses_wrong_abi_or_features
+killed     | M2 ua-go: CheckBuild accepts a vectors build | clients/ua-go/wallet/wallet.go | rc=1 | 1 failed: TestLoadRefusesWrongAbiOrFeatures
+killed     | M3 ua-cs: CheckBuild accepts a vectors build | clients/ua-cs/Scaas.Ua/Wallet.cs | rc=1 | 1 failed: Scaas.Ua.Tests.WalletTests.LoadRefusesWrongAbiOrFeatures
+killed     | M4 ua-cxx: load() accepts a vectors build | clients/ua-cxx/src/wallet.cpp | rc=8 | 1 failed: wallet_load_refuses_wrong_abi_or_features
+killed     | M5 ua-cxx's load() accepting a vectors build, seen through ua-qt | clients/ua-cxx/src/wallet.cpp | rc=1 | 1 failed: ua::UaWallet::test_load_refuses_wrong_abi_or_features()
+killed     | M6 ua-dart-frb: load() accepts a vectors build | clients/ua-dart-frb/lib/src/wallet.dart | rc=1 | 0 failed: 
+killed     | M7 ua-rs: key handles in a vectors build without the marker | clients/ua-rs/src/facade/mod.rs | rc=101 | 1 failed: key_handles_need_the_test_only_marker
+killed     | M8 check_test_features: the graph check finds nothing | scripts/check_test_features.py | rc=1 | 1 failed: positive control (graph) failed
+killed     | M9 check_test_features: the manifest check of dependencies finds nothing | scripts/check_test_features.py | rc=1 | 1 failed: positive control (manifests) failed
+killed     | M10 ua-c's manifest asks for scaas-ua/vectors (a real violation) | clients/ua-c/Cargo.toml | rc=1 | 3 failed: clients/ua-c/Cargo.toml: [dependencies] scaas-ua enables scaas-ua/vectors, clients/ua-c: scaas-ua feature "vectors", clients/ua-c: zether-prover feature "hazmat" <- scaas-ua feature "vectors"
+killed     | M11 zether-prover: default reaches hazmat through a feature | clients/zether-prover/Cargo.toml | rc=101 | 1 failed: hazmat_is_off_by_default
+killed     | M12 zether-prover: open_memo_json left pub | clients/zether-prover/src/api.rs | rc=101 | 1 failed: src/api.rs - api::HAZMAT (line 47) - compile fail
+killed     | M13 zether-prover: open_sender_cp left pub | clients/zether-prover/src/schnorr.rs | rc=101 | 1 failed: hazmat_helpers_are_not_pub
+killed     | M14 zether-prover: hazmat_pub!'s release arm pub | clients/zether-prover/src/lib.rs | rc=101 | 4 failed: src/api.rs - api::HAZMAT (line 47) - compile fail, src/api.rs - api::HAZMAT (line 50) - compile fail, src/api.rs - api::HAZMAT (line 53) - compile fail, src/api.rs - api::HAZMAT (line 58) - compile fail
+killed     | M15 PQZ: the Req::Dec variant compiled in release (run()'s match is no longer exhaustive) | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: E0004
+killed     | M16 PQZ: Req::Dec, its req() and run() arms compiled in release (the gated helpers refuse to build) | clients/ua-rs/src/facade/pqz.rs | rc=101 | 2 failed: E0425, E0599
+killed     | M17 PQZ: the `dec` allow-list arm compiled in release (it compiles: the source assertion) | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: raw_requests_compile_only_under_vectors
+killed     | M18 PQZ: disclose_sender's ConstantTimeEq back to != | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: disclose_sender_compares_in_constant_time
+killed     | M19 Zether: `decrypt` back in the facade's release list and zether-prover's gate removed, seen through ua-cxx | clients/ua-rs/src/facade/zether.rs, clients/zether-prover/src/api.rs | rc=8 | 1 failed: wallet_zether_facade
+killed     | M20 Zether: `decrypt` back in the facade's release list and zether-prover's gate removed, seen through ua-dart-frb | clients/ua-rs/src/facade/zether.rs, clients/zether-prover/src/api.rs | rc=1 | 0 failed: 
+mutants M1-M20 of 20: 20 killed, 0 survived, 0 not loaded

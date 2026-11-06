@@ -1,0 +1,50 @@
+# 2026-11-07 ua-rs-sign T15c2: T15c follow-ups, production artifacts and the remaining gates (ARCH-POS-13 "never a decryption
+# oracle"; spec no-decryption-oracle §4.7, §4.8, §9; Codex C1, C3, C7; Fable P2-5, P3-1, P3-3). Commits: 945e91d7 (PQZ / ABI),
+# e32f03b7 (Zether), 9dc7fba7 (ua-cxx), 1b956adc (ua-qt), 22d978ce (ua-dart-frb), efcaef1f (ua-py), ff977963 (ua-go),
+# e01c5237 (ua-cs). C1: scaas_ua::VECTORS; in a `vectors` build every key-handle constructor refuses (Argument) until
+# facade::vectors_unlock(TestOnly); SCAAS_UA_FEATURE_VECTORS (1 << 11) and every binding's load check refuses it. C1 / C7:
+# scripts/check_test_features.py (manifests; `cargo tree -e features,normal,build -i <crate>` of ua-c, ua-cxx, ua-qt, ua-dart-frb,
+# zether-prover; a positive control each), CI job test-features. C3: zether-prover's decrypt and opening helpers `pub` only under
+# `hazmat` (hazmat_pub!). C7: hazmat_is_off_by_default follows default's closure through `cargo metadata`. P2-5: the Zether
+# raw-command assertion in ua-cxx and ua-dart-frb; ua-qt wraps neither facade (noted). P3-1: disclose_sender by
+# subtle::ConstantTimeEq. P3-3: Req variants, arms and their helpers only under `vectors`. No contract, statement, transcript,
+# vector file or C ABI call changed (one new feature bit); one dependency line (subtle =2.6.1, in every lock already). UNAUDITED.
+# All commands through scripts/capped, foreground, -j2, --locked, --offline; full logs git-ignored (clients/*/target/t15c2/).
+# Code gates on the tree of e01c5237 (run before the commits on the same bytes; the bindings again after the mutant run).
+step | commit | rc | counts
+ua-rs test (default: zether + pqz n2304-kmax4096, the release cell) | 945e91d7 | 0 | 30 suites, 293 passed, 1 ignored (+ raw_requests_compile_only_under_vectors, disclose_sender_compares_in_constant_time, the vectors_unlock compile_fail doctest)
+ua-rs test --features vectors | 945e91d7 | 0 | 33 suites, 365 passed, 3 ignored (+ vectors_marker; every handle-making test unlocks first)
+ua-rs test --no-default-features --features wallet,mlock | 945e91d7 | 0 | 27 suites, 256 passed, 1 ignored (no facade: unchanged)
+ua-rs facade_pqz + pqz_backup at pqz-set-n2048-kmax1024, release / vectors | 945e91d7 | 0 | 20 / 34 passed
+ua-rs clippy --all-targets -D warnings: default, vectors, --no-default-features, wallet,mlock, zether, zether+vectors, pqz,pqz-set-n2048-kmax1024 (+ vectors) | 945e91d7 | 0 | 0 of ours each (8 cells); pqzl's 2 deprecated GenericArray warnings
+ua-rs/fuzz cargo check (vectors) | 945e91d7 | 0 | builds (the two key handles unlock first)
+zether-prover cargo test (default, no hazmat) | e32f03b7 | 0 | 13 suites, 64 passed (+ hazmat_helpers_are_not_pub, 4 compile_fail doctests E0603 / E0624; envelope_disclosure's openings compile out)
+zether-prover cargo test --features hazmat | e32f03b7 | 0 | 13 suites, 78 passed (+ the same 4 lines as no_run doctests: the positive control); recover.rs' 2 unused-import warnings pre-existing
+zether-prover wasm-smoke.sh (shipped wasm, no hazmat) / ZETHER_HAZMAT=1 | e32f03b7 | 0 | 3 checks / 9 checks (proveTransfer 603 ms, not a calibrated timing)
+ua-c cargo build (debug, release); cargo test (lib + header, header regenerated) | 945e91d7 | 0 | 4 + 5 passed
+ua-c clippy --all-targets -D warnings | 945e91d7 | 0 | 0 of ours
+ua-c test_vectors.py (ctypes) | 945e91d7 | 0 | 85 tests OK (the vectors bit clear)
+ua-c C smoke (cc -std=c99 -Wall -Wextra -Werror) | 945e91d7 | 0 | smoke ok (the vectors bit clear)
+ua-py unittest tests.test_wallet tests.test_vectors (release libscaas_ua_c) | efcaef1f | 0 | 83 OK
+ua-go go vet; go test -count=1 ./... | ff977963 | 0 | vet clean; 52 passed
+ua-cs dotnet test Scaas.Ua.Tests (then dotnet build-server shutdown) | e01c5237 | 0 | 51 passed
+ua-cxx clippy -D warnings; cmake --build build; ctest | 9dc7fba7 | 0 | 0 of ours; 35 of 35 (again after the mutant run: 35 of 35)
+ua-qt cmake (Qt 6.12) --build; tst_ua offscreen | 1b956adc | 0 | ctest 1 of 1, 38 passed (again after the mutant run)
+ua-dart-frb cargo build (rust/); dart test wallet_test.dart vectors_test.dart | 22d978ce | 0 | 34 passed (again after the mutant run)
+check_test_features.py | 945e91d7 | 0 | 57 Cargo.toml, 0 findings; 5 graphs, 0 findings; positive controls: a scratch manifest (vectors in [dependencies], hazmat forwarded from default) found, [dev-dependencies] not; ua-c with scaas-ua/vectors forced: scaas-ua "vectors" and zether-prover "hazmat" found
+.github/ci_changes.py self-test | 945e91d7 | 0 | ok (job test-features)
+cargo tree --locked --offline -e normal: ua-rs, ua-c, ua-cxx, ua-qt, ua-dart-frb/rust, ua-rs/fuzz, zether-prover, scaas-node | 945e91d7 | 0 | 8 of 8; six locks gained the one line "subtle" under scaas-ua
+cargo deny --all-features check: ua-rs; ua-c and zether-prover (--config ../ua-rs/deny.toml) | 945e91d7 | 0 | advisories ok, bans ok, licenses ok, sources ok each
+docs_check check / paths | e01c5237 | 0 | 0 errors 5 warnings (existing) / 0 machine paths
+mutants: 2026-11-07-ua-rs-sign-t15c2-mutants.py | e01c5237 | 0 | 20 killed, 0 survived, 0 not loaded (2026-11-07-ua-rs-sign-t15c2-mutants.txt): the plan's 4 (a binding's load check removed: 6 bindings, ua-qt through ua-cxx; a helper left pub: 2 + the macro; Req::Dec arm compiled in release: build refused; ConstantTimeEq back to !=) and the controller's (the production-build check disabled: graph and manifest; a real ua-c violation; hazmat through a default feature; the key-handle marker removed; the Zether binding assertions)
+# Decisions (controller, the owner may override): (1) The marker is a process-wide unlock (`vectors_unlock(TestOnly)`, an
+# AtomicBool) checked by pqz_key, pqz_held_key, reconstruct_pqz_seed, zether_key and export_pqz_leaf_raw; not install() (a
+# wallet restore keeps working) and not PqzKey::vectors_from_seed32 (itself test-only). (2) Req is private, so no compile_fail
+# test can name Req::Dec; the guards are the compiler (a variant without its arm: E0004; an arm without its gated helpers:
+# E0425 / E0599) and a source assertion for what compiles (the allow-list arms). (3) BsgsTable::decrypt is gated too;
+# zether-read-balance's pasted --ct (kept until T14b) takes C - [x]D itself and the public dlog. (4) The graph check also covers
+# ua-cxx and ua-qt (the plan names ua-c, ua-dart-frb, zether-read-balance; T15i asks for every binding). (5) The features bit
+# is reported by ua-c, ua-cxx and ua-dart-frb, which also refuse to compile with `vectors`: removing the report is an
+# equivalent mutant there (no build can set it); the bindings' refusal is tested through their load hooks.
+# Residuals: zether.rs' public prove functions (key + acc + balance) and the --ct path stay for T14b; the COMMANDS-membership
+# form of the binding tests is T15g; pqz-core `hazmat` is T15h; docs are T15j.
