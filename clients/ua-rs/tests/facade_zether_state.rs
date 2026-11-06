@@ -131,8 +131,16 @@ fn balances_from_the_words() {
         let p = call(&k, "pendingBalance", &with(v.clone(), bsgs.clone())).unwrap();
         assert_eq!(p["amount"], a["pending"].as_u64().unwrap().to_string(), "{name}");
         let bal = a["balance"].as_u64().unwrap();
-        assert_eq!(call(&k, "checkBalance", &with(v.clone(), json!({"balance": bal}))).unwrap()["ok"], true, "{name}");
-        assert_eq!(call(&k, "checkBalance", &with(v.clone(), json!({"balance": bal + 1}))).unwrap()["ok"], false, "{name}");
+        // T15l (Fable P3-1): the holder's sealed box, never a plain number
+        let seq = a["view"]["accSeq"].as_u64().unwrap();
+        let bx = |b: u64, s: u64| with(v.clone(), json!({"cacheBox": cache_box(&k, &rows, b, s)}));
+        assert_eq!(call(&k, "checkBalance", &bx(bal, seq)).unwrap()["ok"], true, "{name}");
+        assert_eq!(call(&k, "checkBalance", &bx(bal + 1, seq)).unwrap()["ok"], false, "{name}");
+        assert_eq!(call(&k, "checkBalance", &bx(bal, seq + 1)).unwrap()["ok"], false, "{name}: a stale entry");
+        refused(&format!("{name}: a plain number"), &k, "checkBalance", &with(v.clone(), json!({"balance": bal})));
+        let other = handle(&w, if name == "alice" { "bob" } else { "alice" });
+        let foreign = with(v.clone(), json!({"cacheBox": cache_box(&other, &rows, bal, seq)}));
+        assert_eq!(call(&k, "checkBalance", &foreign).err(), Some(Error::Argument), "{name}: another key's box");
     }
     // KeyRevoked after lock: the handle's status, not the words'
     let k = handle(&w, "alice");
@@ -185,6 +193,13 @@ fn openings_for_the_receiver_and_the_auditor_verify() {
     assert_eq!(opened, (3, 3), "bob's three legs, the three audited legs");
 }
 
+/// The holder's sealed balance-cache box (`seal_balance_cache`) of its one entry `<UA>:<token>` (T15l, Fable P3-1).
+fn cache_box(k: &ZetherKey, rows: &Value, balance: u64, acc_seq: u64) -> Value {
+    let id = format!("{}:{}", hw(&k.ua()), rows["token"].as_str().unwrap().to_lowercase());
+    let entries = json!({ id: {"balance": balance.to_string(), "accSeq": acc_seq} });
+    serde_json::from_str(&k.seal_balance_cache(entries.to_string().as_bytes()).unwrap()).unwrap()
+}
+
 fn verified(cmd: &str, out: &Value) -> bool {
     let r = zether_prover::api::call(cmd, &json!({"curve": "bls12381", "statement": out["statement"], "proof": out["proof"]}).to_string());
     serde_json::from_str::<Value>(&r.unwrap()).unwrap()["ok"] == true
@@ -197,15 +212,18 @@ fn debits_over_the_words_verify() {
     let (alice, bob) = (handle(&w, "alice"), handle(&w, "bob"));
     let y_bob = hw(&bob.y());
     let v = with(acct(&rows, &alice, row(&rows, "alice")), json!({"validUntilBlock": 1000, "yAud": rows["auditorY"]}));
-    let t = call(&alice, "proveTransfer", &with(v.clone(), json!({"yTo": y_bob, "amount": 10, "balance": 843}))).unwrap();
+    let seq = row(&rows, "alice")["view"]["accSeq"].as_u64().unwrap();
+    let bx = |b: u64| cache_box(&alice, &rows, b, seq);
+    let t = call(&alice, "proveTransfer", &with(v.clone(), json!({"yTo": y_bob, "amount": 10, "cacheBox": bx(843)}))).unwrap();
     assert!(verified("verifyTransfer", &t));
+    refused("a plain balance hint", &alice, "proveTransfer", &with(v.clone(), json!({"yTo": y_bob, "amount": 10, "balance": 843})));
     let t = call(&alice, "proveTransfer", &with(v.clone(), json!({"yTo": y_bob, "amount": 10, "tableBits": 18, "boundBits": 20}))).unwrap();
     assert!(verified("verifyTransfer", &t), "the balance by BSGS of the rebuilt acc");
-    assert_eq!(call(&alice, "proveTransfer", &with(v.clone(), json!({"yTo": y_bob, "amount": 10, "balance": 842}))).err(),
+    assert_eq!(call(&alice, "proveTransfer", &with(v.clone(), json!({"yTo": y_bob, "amount": 10, "cacheBox": bx(842)}))).err(),
         Some(Error::Argument), "a balance hint that is not the rebuilt acc's");
     let m = call(&alice, "proveTransferMulti", &with(v.clone(), json!({"mode": "compact", "recipients": [{"yTo": y_bob, "amount": 4}]}))).unwrap();
     assert!(verified("verifyTransferMulti", &m));
-    let mut b = with(v, json!({"amount": 5, "recipient": "0x00000000000000000000000000000000000b0c00", "balance": 843}));
+    let mut b = with(v, json!({"amount": 5, "recipient": "0x00000000000000000000000000000000000b0c00", "cacheBox": bx(843)}));
     b.as_object_mut().unwrap().remove("yAud");
     assert!(verified("verifyBurn", &call(&alice, "proveBurn", &b).unwrap()));
 }
@@ -217,8 +235,9 @@ fn location_word_and_role_negatives_are_refused_with_the_key_unused() {
     let (alice, bob, aud) = (handle(&w, "alice"), handle(&w, "bob"), handle(&w, "auditor"));
     let a = row(&rows, "alice");
     let v = acct(&rows, &alice, a);
-    assert!(call(&alice, "checkBalance", &with(v.clone(), json!({"balance": 843}))).is_ok(), "positive control");
-    let chk = |x: Value| with(with(v.clone(), json!({"balance": 843})), x);
+    let bx = json!({"cacheBox": cache_box(&alice, &rows, 843, a["view"]["accSeq"].as_u64().unwrap())});
+    assert_eq!(call(&alice, "checkBalance", &with(v.clone(), bx.clone())).unwrap()["ok"], true, "positive control");
+    let chk = |x: Value| with(with(v.clone(), bx.clone()), x);
     let mut swapped = a["accountData"].clone();
     let w0 = swapped[0]["word"].clone();
     swapped[0]["word"] = swapped[1]["word"].clone();
@@ -231,7 +250,7 @@ fn location_word_and_role_negatives_are_refused_with_the_key_unused() {
         ("another family's words", chk(json!({"family": "soroban"}))),
         ("another psid", chk(json!({"psid": hw(&[0x11; 32])}))),
         ("another reader's ua", chk(json!({"ua": row(&rows, "bob")["ua"]}))),
-        ("bob's account words on alice's handle", with(acct(&rows, &alice, row(&rows, "bob")), json!({"balance": 135}))),
+        ("bob's account words on alice's handle", with(acct(&rows, &alice, row(&rows, "bob")), bx.clone())),
         ("five account slots", chk(json!({"account": short}))),
         ("data words swapped", chk(json!({"accountData": swapped}))),
         ("an extra data word", chk(json!({"accountData": extra}))),

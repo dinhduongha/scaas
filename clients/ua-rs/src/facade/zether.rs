@@ -28,7 +28,9 @@
 //! - **Balance cache** (clientkeys `sealBalanceCache` / `openBalanceCache`): AES-256-GCM under
 //!   `HKDF-SHA256(x, no salt, "scaas-zether-balance-cache-v1", 32)`, AAD `zether-cache:bls12381`, the box `{iv, ct}` in
 //!   unpadded base64url. The bookkeeping over the entries (`setCachedBalance`, `cacheAfterDebit`, `cacheAfterRollOver`) needs
-//!   `x` only through the balance check, which is the `checkBalance` command.
+//!   `x` only through the balance check, which is the `checkBalance` command: it takes the box itself (`cacheBox`), opens it
+//!   inside and checks its entry `<UA>:<token>` at the words' `accSeq` against the rebuilt `acc`; a debit's balance hint is the
+//!   same box (T15l, Fable P3-1: never a caller's number, so a check is no balance-equality test for whoever builds requests).
 //!
 //! Randomness: `rand_core` 0.6 `OsRng` inside (the prover's proofs, nonces and openings are hedged on it); the fixed-randomness
 //! entry points exist only under feature `vectors`. Every multiplication of a supplied point by `x` (and by the proofs'
@@ -197,7 +199,7 @@ fn clean(x: &Value) -> bool {
     }
 }
 
-/// The shape of a field's value: the ciphertexts `{C, D}`, the legs `[{yTo, amount}]`, the envelope `meta` / `env`, the
+/// The shape of a field's value: the holder's sealed balance-cache box `{iv, ct}` (T15l), the ciphertexts `{C, D}`, the legs `[{yTo, amount}]`, the envelope `meta` / `env`, the
 /// `unwrap` arguments, the typed `message` (any struct the prover's typed hasher checks field by field, without a `key`
 /// anywhere); every other field a [`scalar`].
 fn shape(field: &str, x: &Value) -> bool {
@@ -208,6 +210,7 @@ fn shape(field: &str, x: &Value) -> bool {
             x.as_array().is_some_and(|a| a.iter().all(|w| flat(w, &["slot", "word"])))
         }
         "blob" => flat(x, &["address", "code"]),
+        "cacheBox" => flat(x, &["iv", "ct"]),
         "recipients" => x.as_array().is_some_and(|a| a.iter().all(|r| flat(r, &["yTo", "amount"]))),
         "meta" => flat(x, &["from", "data", "batch", "nonce", "validUntil", "mode", "relayer", "fee", "feeRecipient"]),
         "env" => flat(x, &["from", "batch", "nonce", "validUntil", "mode", "relayer", "fee", "feeRecipient"]),

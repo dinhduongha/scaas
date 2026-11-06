@@ -12,6 +12,7 @@ use serde_json::{json, Value};
 use zether_prover::curve::{decode_scalar, encode_point, Bls12381, Fr};
 use zether_prover::keys::ZetherKey;
 use zether_prover::state;
+mod cache_box;
 
 type K = ZetherKey<Bls12381>;
 
@@ -53,7 +54,8 @@ fn every_x_multiplication_on_a_supplied_point_is_secret_mul() {
     let acct = with(base(&alice), json!({"account": a["account"], "accountData": a["accountData"]}));
     let bsgs = json!({"tableBits": 18, "boundBits": 20});
     let y_bob = hx(&encode_point::<Bls12381>(&bob.y));
-    let debit = json!({"validUntilBlock": 1000, "balance": 843});
+    let seq = a["view"]["accSeq"].as_u64().unwrap();
+    let debit = json!({"validUntilBlock": 1000, "cacheBox": cache_box::entry(&alice, &rows["token"], 843, seq)});
     let mut rng = ChaCha20Rng::seed_from_u64(3);
     let mut run = |cmd: &str, v: Value, k: &K| {
         runs(&k.x);
@@ -62,7 +64,7 @@ fn every_x_multiplication_on_a_supplied_point_is_secret_mul() {
     };
     // decrypt: [x]D once; check: once; a debit: the balance check on x, the nonce k_x on D (E5's A_bal)
     assert_eq!(run("balance", with(acct.clone(), bsgs.clone()), &alice), (1, 1), "balance");
-    assert_eq!(run("checkBalance", with(acct.clone(), json!({"balance": 843})), &alice), (1, 1), "checkBalance");
+    assert_eq!(run("checkBalance", with(acct.clone(), json!({"cacheBox": cache_box::entry(&alice, &rows["token"], 843, seq)})), &alice), (1, 1), "checkBalance");
     assert_eq!(run("proveTransfer", with(with(acct.clone(), debit.clone()), json!({"yTo": y_bob, "amount": 1})), &alice), (1, 2), "proveTransfer");
     assert_eq!(run("proveTransferMulti", with(with(acct.clone(), debit.clone()), json!({"mode": "bundle",
         "recipients": [{"yTo": y_bob, "amount": 1}]})), &alice), (1, 2), "proveTransferMulti");

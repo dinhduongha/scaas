@@ -12,6 +12,7 @@ use zether_prover::curve::{decode_point, decode_scalar, encode_point, Bls12381, 
 use zether_prover::keys::ZetherKey;
 use zether_prover::schnorr::{verify_opening, Entry, OpeningKind};
 use zether_prover::state::{self, LAYOUT, ROOT};
+mod cache_box;
 
 type K = ZetherKey<Bls12381>;
 
@@ -120,8 +121,18 @@ fn accounts_rebuild_and_decrypt() {
         for f in ["tableBits", "boundBits"] {
             v.as_object_mut().unwrap().remove(f);
         }
-        assert_eq!(call("checkBalance", &with(v.clone(), &json!({"balance": bal})), &k).unwrap()["ok"], true);
-        assert_eq!(call("checkBalance", &with(v.clone(), &json!({"balance": bal + 1})), &k).unwrap()["ok"], false);
+        // T15l (Fable P3-1): the holder's sealed box, never a plain number; its entry only at the words' accSeq
+        let seq = a["view"]["accSeq"].as_u64().unwrap();
+        let bx = |b: u64, s: u64| with(v.clone(), &json!({"cacheBox": cache_box::entry(&k, &rows["token"], b, s)}));
+        assert_eq!(call("checkBalance", &bx(bal, seq), &k).unwrap()["ok"], true, "{}", a["name"]);
+        assert_eq!(call("checkBalance", &bx(bal + 1, seq), &k).unwrap()["ok"], false);
+        assert_eq!(call("checkBalance", &bx(bal, seq + 1), &k).unwrap()["ok"], false, "a stale entry");
+        assert!(call("checkBalance", &with(v.clone(), &json!({"balance": bal})), &k).is_err(), "a plain number");
+        let other = key(if holder(a) == "alice" { "bob" } else { "alice" });
+        let foreign = with(v.clone(), &json!({"cacheBox": cache_box::entry(&other, &rows["token"], bal, seq)}));
+        assert!(call("checkBalance", &foreign, &k).is_err(), "another key's box");
+        let no_entry = with(v.clone(), &json!({"cacheBox": cache_box::seal(&k, &json!({}))}));
+        assert!(call("checkBalance", &no_entry, &k).is_err(), "no entry for this UA and token");
     }
 }
 
@@ -187,12 +198,18 @@ fn debits_over_rebuilt_words_verify() {
     let (alice, bob, carol) = (key("alice"), key("bob"), key("carol"));
     let y = |k: &K| format!("0x{}", hex::encode(encode_point::<Bls12381>(&k.y)));
     let v = with(acct_req(&rows, &alice, a), &json!({"validUntilBlock": 1000, "yAud": rows["auditorY"]}));
-    let t = call("proveTransfer", &with(v.clone(), &json!({"yTo": y(&bob), "amount": 10, "balance": 843})), &alice).unwrap();
+    let seq = a["view"]["accSeq"].as_u64().unwrap();
+    let bx = |b: u64, s: u64| json!(cache_box::entry(&alice, &rows["token"], b, s));
+    let t = call("proveTransfer", &with(v.clone(), &json!({"yTo": y(&bob), "amount": 10, "cacheBox": bx(843, seq)})), &alice).unwrap();
     assert!(verify("verifyTransfer", &t));
+    // a stale entry (another accSeq): the balance by BSGS
+    let t = call("proveTransfer", &with(v.clone(), &json!({"yTo": y(&bob), "amount": 10, "cacheBox": bx(844, seq + 1)})), &alice).unwrap();
+    assert!(verify("verifyTransfer", &t));
+    assert!(call("proveTransfer", &with(v.clone(), &json!({"yTo": y(&bob), "amount": 10, "balance": 843})), &alice).is_err(), "a plain number");
     // the balance from the rebuilt acc by BSGS when the caller gives none
     let t = call("proveTransfer", &with(v.clone(), &json!({"yTo": y(&bob), "amount": 10})), &alice).unwrap();
     assert!(verify("verifyTransfer", &t));
-    assert!(call("proveTransfer", &with(v.clone(), &json!({"yTo": y(&bob), "amount": 10, "balance": 844})), &alice).is_err(),
+    assert!(call("proveTransfer", &with(v.clone(), &json!({"yTo": y(&bob), "amount": 10, "cacheBox": bx(844, seq)})), &alice).is_err(),
         "a balance hint that does not decrypt from the rebuilt acc");
     let m = call("proveTransferMulti", &with(v.clone(), &json!({"mode": "bundle", "recipients": [{"yTo": y(&bob), "amount": 3},
         {"yTo": y(&carol), "amount": 0}]})), &alice).unwrap();
@@ -363,7 +380,8 @@ fn the_sender_recovers_its_own_entries_from_words() {
     let rows = rows();
     let (alice, bob, carol) = (key("alice"), key("bob"), key("carol"));
     let y = |k: &K| hw(&encode_point::<Bls12381>(&k.y));
-    let v = with(acct_req(&rows, &alice, &rows["accounts"][0]), &json!({"validUntilBlock": 1000, "yAud": rows["auditorY"], "balance": 843,
+    let v = with(acct_req(&rows, &alice, &rows["accounts"][0]), &json!({"validUntilBlock": 1000, "yAud": rows["auditorY"],
+        "cacheBox": cache_box::entry(&alice, &rows["token"], 843, rows["accounts"][0]["view"]["accSeq"].as_u64().unwrap()),
         "recipients": [{"yTo": y(&bob), "amount": 7}, {"yTo": y(&carol), "amount": 0}]}));
     let ns = |n: u64| add(&h(&rows["layout"]["root"]).try_into().unwrap(), n);
     let map = |k: &[u8], n: u64| kk(&[k, &ns(n)].concat());

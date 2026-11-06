@@ -39,12 +39,11 @@
 use std::io::{IsTerminal, Read};
 use std::process::{Command, ExitCode, Stdio};
 
-use aes_gcm::aead::{Aead, KeyInit, Payload};
 use serde_json::{json, Value};
 use zeroize::Zeroizing;
 #[cfg(feature = "bn254")]
 use zether_prover::curve::Bn254;
-use zether_prover::curve::{encode_scalar, keccak256, Bls12381, ZCurve};
+use zether_prover::curve::{keccak256, Bls12381, ZCurve};
 use zether_prover::elgamal::{check_ram, mem_available, BsgsParams, BsgsTable};
 use zether_prover::keys::ZetherKey;
 use zether_prover::state;
@@ -54,8 +53,6 @@ const TABLE_BITS_CLI: std::ops::RangeInclusive<u32> = 20..=27;
 /// NORMAL_ZETHER, WRAPPED_ZETHER, NORMAL_ZETHER_REGULATED, WRAPPED_ZETHER_REGULATED).
 const INFO_SLOT: u64 = 8;
 const ZETHER_KINDS: [u8; 4] = [2, 3, 10, 11];
-const CACHE_INFO: &[u8] = b"scaas-zether-balance-cache-v1";
-const CACHE_AAD: &[u8] = b"zether-cache:bls12381";
 
 #[derive(Default)]
 struct Args {
@@ -258,52 +255,13 @@ fn read_words(a: &Args, ua: &[u8; 32]) -> Result<Value, String> {
         "ua": hx(ua), "account": account, "accountData": data}))
 }
 
-fn b64url(s: &str) -> Result<Vec<u8>, String> {
-    let val = |c: u8| match c {
-        b'A'..=b'Z' => Ok(c - b'A'),
-        b'a'..=b'z' => Ok(c - b'a' + 26),
-        b'0'..=b'9' => Ok(c - b'0' + 52),
-        b'-' => Ok(62),
-        b'_' => Ok(63),
-        _ => Err("not base64url".to_string()),
-    };
-    let (mut out, mut acc, mut n) = (Vec::new(), 0u32, 0);
-    for c in s.bytes() {
-        acc = (acc << 6) | u32::from(val(c)?);
-        n += 6;
-        if n >= 8 {
-            n -= 8;
-            out.push((acc >> n) as u8);
-        }
-    }
-    Ok(out)
-}
-
-/// The holder's cache entry `<UA>:<token>` of the box (clientkeys `openBalanceCache`): `(balance, accSeq)`.
-fn cache_entry(path: &str, k: &ZetherKey<Bls12381>, token: &str) -> Result<(u64, u64), String> {
+/// The holder's cache entry `<UA>:<token>` of the box file (clientkeys `openBalanceCache`; `state::open_cache_entry`):
+/// `(balance, accSeq)` and the box.
+fn cache_entry(path: &str, k: &ZetherKey<Bls12381>, token: &str) -> Result<(u64, u64, Value), String> {
     let b: Value = serde_json::from_slice(&std::fs::read(path).map_err(|e| format!("{path}: {e}"))?).map_err(|_| "--cache-box: JSON")?;
-    let field = |f: &str| b.get(f).and_then(Value::as_str).ok_or(format!("--cache-box: no `{f}`")).and_then(b64url);
-    let iv: [u8; 12] = field("iv")?.try_into().map_err(|_| "--cache-box: a 12-byte iv")?;
-    if b.as_object().is_none_or(|o| o.len() != 2) {
-        return Err("--cache-box: not a box {iv, ct}".into());
-    }
-    let x = Zeroizing::new(encode_scalar::<Bls12381>(&k.x));
-    let mut ck = Zeroizing::new([0u8; 32]);
-    hkdf::Hkdf::<sha2::Sha256>::new(None, &x[..]).expand(CACHE_INFO, &mut ck[..]).map_err(|_| "hkdf")?;
-    let pt = Zeroizing::new(
-        aes_gcm::Aes256Gcm::new_from_slice(&ck[..])
-            .map_err(|_| "aes")?
-            .decrypt(&aes_gcm::Nonce::from(iv), Payload { msg: &field("ct")?, aad: CACHE_AAD })
-            .map_err(|_| "--cache-box: the box does not open under this key")?,
-    );
-    let entries: Value = serde_json::from_slice(&pt).map_err(|_| "--cache-box: entries JSON")?;
-    let id = format!("{}:{}", hx(&k.ua()), token.to_lowercase());
-    let e = entries.get(&id).ok_or("--cache-box: no entry for this key's UA and --token")?;
-    let n = |f: &str| match &e[f] {
-        Value::String(s) => s.parse::<u64>().map_err(|_| format!("cache `{f}`")),
-        x => x.as_u64().ok_or(format!("cache `{f}`")),
-    };
-    Ok((n("balance")?, n("accSeq")?))
+    let t: [u8; 20] = unhex(token)?.try_into().map_err(|_| "--token is 20 bytes")?;
+    let (balance, seq) = state::open_cache_entry(k, &b, &t).map_err(|e| format!("--cache-box: {e}"))?;
+    Ok((balance, seq, b))
 }
 
 fn table<C: ZCurve>(a: &Args) -> Result<BsgsTable<C>, String> {
@@ -331,7 +289,7 @@ fn run_state(a: &Args, key_json: &Value) -> Result<Value, String> {
         _ => None,
     };
     if a.rpc.is_none() {
-        let (balance, acc_seq) = cached.ok_or("no source")?;
+        let (balance, acc_seq, _) = cached.ok_or("no source")?;
         if a.pending {
             return Err("--pending needs --rpc (the cache holds acc only)".into());
         }
@@ -340,13 +298,13 @@ fn run_state(a: &Args, key_json: &Value) -> Result<Value, String> {
     let mut v = read_words(a, &k.ua())?;
     let block = v["block"].clone();
     let mut rng = rand_core::OsRng;
-    if let (Some((balance, seq)), false) = (cached, a.pending) {
-        v["balance"] = json!(balance);
+    if let (Some((balance, seq, bx)), false) = (cached, a.pending) {
+        v["cacheBox"] = bx;
         let ok = state::run(&state::prepare("checkBalance", &v, &k.y)?, &k, &mut rng)?;
-        if ok["ok"] == true && ok["state"]["accSeq"] == seq {
+        if ok["ok"] == true {
             return Ok(json!({"balance": balance.to_string(), "accSeq": seq, "block": block, "source": "cache+rpc"}));
         }
-        v.as_object_mut().ok_or("words")?.remove("balance");
+        v.as_object_mut().ok_or("words")?.remove("cacheBox");
     }
     let p = state::prepare(if a.pending { "pendingBalance" } else { "balance" }, &v, &k.y)?;
     let acc_seq = p.account().ok_or("no account")?.acc_seq;
@@ -434,7 +392,6 @@ mod tests {
         wipe(&mut v);
         assert_eq!(v["key"]["x"], json!(""));
         assert_eq!(v["key"]["n"][0], json!(""));
-        assert_eq!(b64url("AQIDBA").unwrap(), [1, 2, 3, 4]);
         assert_eq!(add(&[0xff; 32], 1), [0; 32]);
     }
 }

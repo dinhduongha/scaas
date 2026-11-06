@@ -74,9 +74,11 @@ const LOC: &[&str] = &["curve", "family", "chainId", "chainUid", "token", "block
 const ACCT: &[&str] = &["account", "accountData"];
 const BSGS: &[&str] = &["tableBits", "boundBits", "allowLargeTable"];
 /// A debit's caller fields (encryption to public keys, the fee, the binding and the policy hints the chain checks again);
-/// `sendCounter` and `accSeq` come from the words. `balance`: the holder's own plaintext (its balance cache, zether-limits D5),
-/// checked against the rebuilt `acc` before proving (`[b]G == C − [x]D`); without it the balance is BSGS of the rebuilt `acc`.
-const DEBIT: &[&str] = &["envelopeBinding", "fee", "beneficiary", "validUntilBlock", "disclosureMode", "auditorMode", "balance"];
+/// `sendCounter` and `accSeq` come from the words. `cacheBox`: the holder's own sealed balance-cache box `{iv, ct}` (clientkeys
+/// `sealBalanceCache`, zether-limits D5; T15l, Fable P3-1: never a plain number), opened under the key, its entry
+/// `<UA>:<token>` used only at the words' `accSeq` and checked against the rebuilt `acc` before proving (`[b]G == C − [x]D`);
+/// without it, or with a stale entry, the balance is BSGS of the rebuilt `acc`.
+const DEBIT: &[&str] = &["envelopeBinding", "fee", "beneficiary", "validUntilBlock", "disclosureMode", "auditorMode", "cacheBox"];
 const ENTRY: &[&str] = &["fromUA", "sendCounter", "entryWords", "entryPtr", "blob", "memoWords"];
 /// The fields that hold words (everything else is a caller field passed on to the prover).
 const WORDS: &[&str] = &["family", "block", "psid", "ua", "account", "accountData", "fromUA", "entryWords", "entryPtr", "blob", "memoWords", "modes", "auditorKeyWords"];
@@ -88,7 +90,7 @@ pub fn allowed(cmd: &str, field: &str) -> bool {
     let debit = |l: &[&str]| has(LOC) || has(ACCT) || has(DEBIT) || has(BSGS) || has(l);
     match cmd {
         "balance" | "pendingBalance" => has(LOC) || has(ACCT) || has(BSGS),
-        "checkBalance" => has(LOC) || has(ACCT) || field == "balance",
+        "checkBalance" => has(LOC) || has(ACCT) || field == "cacheBox",
         "proveTransfer" => debit(&["yTo", "yAud", "amount"]),
         "proveTransferMulti" => debit(&["yAud", "mode", "recipients", "decoyFee", "minDecoyFee", "uaSigner", "uaSignerGas"]),
         "proveBurn" => debit(&["amount", "recipient", "unwrapBinding"]),
@@ -461,17 +463,25 @@ pub fn run<Rn: RngCore + CryptoRng>(p: &Prepared, k: &ZetherKey<B>, rng: &mut Rn
             "balance" => Ok(json!({"amount": amount_of(&a.acc, k, &f, BsgsParams::for_target())?.to_string(), "state": counters})),
             "pendingBalance" => Ok(json!({"amount": amount_of(&a.pending, k, &f, BsgsParams::MOBILE)?.to_string(), "state": counters})),
             "checkBalance" => {
-                let b = match get(&f, "balance")? {
-                    Value::String(s) => s.parse::<u64>().map_err(|_| "`balance` must be a decimal u64")?,
-                    x => x.as_u64().ok_or("`balance` must be a u64")?,
-                };
-                Ok(json!({"ok": check_balance(&a.acc, &k.x, b).map_err(|e| e.to_string())?, "state": counters}))
+                // the holder's own cached balance (its sealed box), at the words' `accSeq`, against the rebuilt `acc`
+                let (b, seq) = open_cache_entry(k, get(&f, "cacheBox")?, &p.token)?;
+                let ok = seq == a.acc_seq && check_balance(&a.acc, &k.x, b).map_err(|e| e.to_string())?;
+                Ok(json!({"ok": ok, "state": counters}))
             }
             _ => {
                 let mut m = p.fields.clone();
-                if !m.contains_key("balance") {
-                    m.insert("balance".into(), json!(amount_of(&a.acc, k, &f, BsgsParams::for_target())?.to_string()));
-                }
+                let hint = match m.remove("cacheBox") {
+                    Some(bx) => {
+                        let (b, seq) = open_cache_entry(k, &bx, &p.token)?;
+                        (seq == a.acc_seq).then_some(b)
+                    }
+                    None => None,
+                };
+                let b = match hint {
+                    Some(b) => b,
+                    None => amount_of(&a.acc, k, &f, BsgsParams::for_target())?,
+                };
+                m.insert("balance".into(), json!(b.to_string()));
                 for x in BSGS {
                     m.remove(*x);
                 }
@@ -537,6 +547,61 @@ pub fn run<Rn: RngCore + CryptoRng>(p: &Prepared, k: &ZetherKey<B>, rng: &mut Rn
     }
 }
 
+/// zether.js `CACHE_INFO` and the AAD of `sealBalanceCache` on BLS12-381.
+const CACHE_INFO: &[u8] = b"scaas-zether-balance-cache-v1";
+const CACHE_AAD: &[u8] = b"zether-cache:bls12381";
+
+/// Unpadded base64url (the box's `iv` and `ct`).
+fn b64url(s: &str) -> R<Vec<u8>> {
+    let val = |c: u8| match c {
+        b'A'..=b'Z' => Ok(c - b'A'),
+        b'a'..=b'z' => Ok(c - b'a' + 26),
+        b'0'..=b'9' => Ok(c - b'0' + 52),
+        b'-' => Ok(62),
+        b'_' => Ok(63),
+        _ => Err("not base64url".to_string()),
+    };
+    let (mut out, mut acc, mut n) = (Vec::new(), 0u32, 0);
+    for c in s.bytes() {
+        acc = (acc << 6) | u32::from(val(c)?);
+        n += 6;
+        if n >= 8 {
+            n -= 8;
+            out.push((acc >> n) as u8);
+        }
+    }
+    Ok(out)
+}
+
+/// The holder's entry `<UA>:<token>` (lowercase `0x` hex) of its sealed balance-cache box `{iv, ct}` (clientkeys
+/// `sealBalanceCache`: AES-256-GCM under `HKDF-SHA256(x, no salt, "scaas-zether-balance-cache-v1", 32)`, AAD
+/// `zether-cache:bls12381`): `(balance, accSeq)`. A box that does not open under `k`, or holds no such entry, is refused. No
+/// outsider can make a box that opens (T15l, Fable P3-1: the balance hint is the holder's own, never a caller's number).
+pub fn open_cache_entry(k: &ZetherKey<B>, bx: &Value, token: &[u8; 20]) -> R<(u64, u64)> {
+    use aes_gcm::aead::{Aead, KeyInit, Payload};
+    if bx.as_object().is_none_or(|o| o.len() != 2) {
+        return Err("the cache box is {iv, ct}".into());
+    }
+    let field = |f: &str| b64url(get(bx, f)?.as_str().ok_or("the cache box's fields are base64url")?);
+    let iv: [u8; 12] = field("iv")?.try_into().map_err(|_| "a 12-byte iv")?;
+    let x = zeroize::Zeroizing::new(crate::curve::encode_scalar::<B>(&k.x));
+    let mut ck = zeroize::Zeroizing::new([0u8; 32]);
+    hkdf::Hkdf::<sha2::Sha256>::new(None, &x[..]).expand(CACHE_INFO, &mut ck[..]).map_err(|_| "hkdf")?;
+    let pt = zeroize::Zeroizing::new(
+        aes_gcm::Aes256Gcm::new_from_slice(&ck[..])
+            .map_err(|_| "aes")?
+            .decrypt(&aes_gcm::Nonce::from(iv), Payload { msg: &field("ct")?, aad: CACHE_AAD })
+            .map_err(|_| "the cache box does not open under this key")?,
+    );
+    let entries: Value = serde_json::from_slice(&pt).map_err(|_| "the cache entries are not JSON")?;
+    let e = entries.get(format!("{}:{}", hx(&k.ua()), hx(token))).ok_or("no entry for this key's UA and token")?;
+    let n = |f: &str| match &e[f] {
+        Value::String(s) => s.parse::<u64>().map_err(|_| format!("cache `{f}`")),
+        x => x.as_u64().ok_or(format!("cache `{f}`")),
+    };
+    Ok((n("balance")?, n("accSeq")?))
+}
+
 /// [`prepare`]'s `balance` (`acc`) or `pendingBalance` (`pending`) by BSGS on the caller's own table (public data; e.g.
 /// `zether-read-balance --table-file`), bound `2^bound_bits`.
 pub fn amount_with_table(p: &Prepared, k: &ZetherKey<B>, t: &BsgsTable<B>, bound_bits: u32) -> R<u64> {
@@ -552,4 +617,13 @@ pub fn amount_with_table(p: &Prepared, k: &ZetherKey<B>, t: &BsgsTable<B>, bound
 /// [`prepare`] then [`run`]: `cmd` on the words of `v` with the key `k`.
 pub fn call_with_key<Rn: RngCore + CryptoRng>(cmd: &str, v: &Value, k: &ZetherKey<B>, rng: &mut Rn) -> R<Value> {
     run(&prepare(cmd, v, &k.y)?, k, rng)
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn b64url_decodes() {
+        assert_eq!(super::b64url("AQIDBA").unwrap(), [1, 2, 3, 4]);
+        assert!(super::b64url("AQ=").is_err());
+    }
 }
