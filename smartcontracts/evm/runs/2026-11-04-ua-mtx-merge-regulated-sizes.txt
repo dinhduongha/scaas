@@ -115,3 +115,19 @@
 # Reading: kind 12 runs 1.2 K (2.4 %) over the top of its size estimate and 2.1 M (2.4 %) over its gas estimate, not more than
 # 50 % over; both PQZ kinds miss 60 and 70 M (not a target, CTR-GOV-19) and fit the SCaaS testnet. Kind 13 keeps 2,227 B for
 # T32 (operatorTransfer) and group 3e.
+#
+# ua-mtx-merge T32 (bit 22 `operatorTransfer`, CTR-GOV-20: the body in RegulatedLib, the token stub unchanged since T27; the
+# router's eight regulated control ops). Kind 13 measured first. Same method.
+| Release | T31 B | T32 B | delta | init B | stop line 64,512 B |
+|---|---:|---:|---:|---:|---|
+| `WrappedPqzRegulatedToken` (13) | 62,285 | 62,285 | 0 | 65,088 | under by 2,227 |
+| `NormalPqzRegulatedToken` (12) | 52,626 | 52,626 | 0 | 55,426 | under by 11,886 |
+| `WrappedZetherRegulatedToken` (11) | 57,353 | 57,353 | 0 | 61,087 | under by 7,159 |
+| `NormalZetherRegulatedToken` (10) | 46,717 | 46,717 | 0 | 50,444 | under by 17,795 |
+| `WrappedRegulatedToken` (9) | 48,938 | 48,938 | 0 | 51,362 | under by 15,574 |
+| `NormalRegulatedToken` (8) | 38,257 | 38,257 | 0 | 40,674 | under by 26,255 |
+| `RegulatedLib` (library, not in the baseline) | 7,275 | 8,201 | +926 | 8,253 | - |
+| `GovernanceRouter` (not in the baseline) | 11,771 | 13,136 | +1,365 | 14,047 | - |
+# Stop rule: no kind at or above 64,512 B: no lever, no _above64KiB row; the token side of group 3e and 3f keeps 2,227 B on
+# kind 13. Deploy gas (GovDeploy test_releaseGasPerKind -vv): kinds 8-13 regular and state unchanged (8 64.99 M, 9 82.88 M,
+# 10 79.26 M, 11 97.08 M, 12 89.10 M, 13 105.28 M asked); GovernanceRouter regular 943,404, state 20,281,680, x 1.05 22.29 M.
