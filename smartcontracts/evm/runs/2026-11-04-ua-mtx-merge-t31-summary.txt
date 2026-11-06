@@ -1,0 +1,46 @@
+# ua-mtx-merge T31 gate summary (full output in git-ignored .log files, not committed)
+# T31: the regulated PQZ kinds 12 and 13 (regulated-kinds spec §4, §4.2, §4.3; CTR-GOV-17; U1-U5; I8, I9, I10). PQZ only
+# (Zether != PQZ): kinds 10, 11 and the Zether sources untouched.
+# Base: 024e143c (after the owner's 2026-11-06 registry ruling). T31 commits: legacy note (no copy, MD-4) cb57dab4, the build
+# 508d45c6, this one (sizes, harness, mutants, summary).
+step | commit | rc | counts
+t31-red | worktree (T31 tests; kind 12 with the public pre row, kind 13 as built in T26-T29) | 1 | test/as/confidential/Pqz*: 10 suites, 35 passed 3 failed: PqzFreeze12 test_envelopeSubjectNeverTheSender (a frozen subject at fee NONE refused by the public pre row), PqzReceiver12/13 test_deniedAndFrozenLegsReceive (a test fault, the client mirror used on unmirrored credits; fixed in the test)
+t31-green | build commit's tree | 0 | test/as/confidential/Pqz*: 10 suites, 38 passed 0 failed
+t31-touched | build commit's tree | 0 | test/as/**, GovDeploy, LinkClosure, MsgSenderLint, PlusZero: 43 suites, 209 passed 0 failed
+t31-forge-full | build commit's tree | 0 | forge test: 261 suites, 2805 passed 0 failed 14 skipped (before T31: 251 suites, 2767)
+t31-sizes | build commit | 0 | kind 13 measured first: 62,285 B unchanged (init 65,088); NormalPqzRegulatedToken 52,626 B (init 55,426), new row; NormalPqzToken 47,183, WrappedPqzToken 56,721 unchanged (runs/2026-11-04-ua-mtx-merge-regulated-sizes.txt)
+t31-stop-rule | build commit | 0 | kind 13 62,285 < 64,512 B (2,227 B left), kind 12 52,626 (11,886 left): no lever, no _above64KiB row
+t31-deploy-gas | build commit | 0 | GovDeploy test_releaseGasPerKind -vv, asked = (regular x 64/63 + state) x 1.05 + 0.37 M: kind 12 89.10 M, kind 13 105.28 M (unchanged)
+t31-i10 | build commit | 0 | PqzFreeze -vv (the token's frame, GasProbe): direct refusal 27.4-41.6 k < 200 k (4 transfer entries, unshield, unshield-unwrap); signed (ECDSA, fee NONE) refused at 107-123 k; a rejected proof still reads Frozen (the proof is never reached); 0 slots of the sender's PQZ account read
+t31-sizegate | build commit | 0 | 0 errors, 97 contracts, above 65536 B: none
+t31-isolate | build commit | 0 | 22 passed 0 failed (forge --isolate UAGas, UARegistryGroups)
+t31-docs | build commit | 0 | docs_check check 0 errors, 5 warnings, 16 notes; paths 0
+t31-mutants | build commit | 1 each | 20 of 20 killed on the first run, none a compile error (runs/2026-11-04-ua-mtx-merge-t31-mutants.txt); src and script restored after each
+t31-at-set-n2048-kmax1024 | build commit | 0 | test/{ua,pqz,as}/**: 95 suites, 953 passed 0 failed 1 skipped
+t31-at-set-n2304-kmax4096 | build commit | 0 | test/{ua,pqz,as}/**: 95 suites, 950 passed 0 failed 4 skipped
+t31-at-set-n2560-kmax16384 | build commit | 0 | test/{ua,pqz,as}/**: 95 suites, 949 passed 0 failed 5 skipped
+t31-at-set-n2816-kmax65536 | build commit | 0 | test/{ua,pqz,as}/**: 95 suites, 944 passed 0 failed 10 skipped; src/pqz/PqzSet.sol restored (git diff HEAD clean)
+t31-e2e-selftest | build commit | 0 | python3 -I script/pqz/e2e.py --self-test: 0 failures (no chain)
+#
+# Pins, old -> new: size-baseline.json + NormalPqzRegulatedToken 52,626 (.init 55,426). No gas pin moved (PlusZero green after
+# the virtual keywords on NormalPqzToken), no typehash, selector, layout, plain-kind slot or GovernanceRouter address.
+#
+# Not run in T31: the e2e.py chain run (it needs the PQZ and ML-DSA precompiles: only the SCaaS testnet has them, which is not
+# touched; no local chain carries them), so the release lines e2e.py gains (12, 13) are syntax-checked and self-tested only;
+# node suite (no node source or vector changed); pqz-core gate (no core, statement or set).
+#
+# Conflicts with the plan / spec, and choices the text leaves open (none resolved silently):
+#   Red first is thin for kind 13: its seats (T26) and body (T27-T29) were already built, so its rows passed on the first
+#   run; the mutants (20 of 20) are the evidence that each row can fail.
+#   MODERATE: plan step 1 asks "FORCE and MODERATE leave acc, pending and totalShielded unchanged". Bit 21 has no body (owner
+#   2026-11-05, CTR-GOV-20); operatorTransfer is T32's (it reverts RegulatedNotBuilt), so only FORCE is tested (I8 by state
+#   diff); T32 owes the same state-diff row for operatorTransfer on 12 and 13 (as on 10 and 11).
+#   I10: measured inside one frame (GasProbe), as T30; the proofs are mocked, so "before the proof" is shown by a rejected
+#   proof still reading Frozen, not by the proof's gas.
+#   Unshield-unwrap on 13: the sender check is first in _burn (spec §4.2's site), after the reserve quote (a view); on 11 it
+#   is at the top. Both before the proof.
+#   The plan's file list has no PqzRegFixture.sol, GovDeploy, LinkClosure, MsgSenderLint, size-baseline.json or
+#   NormalPqzToken.sol; each carries the release, a pin or the virtual kind 12 needs. PqzRegFixture imports PqzNamedBase
+#   through test/merge/PqzPairs.t.sol: that file and PqzTyped.t.sol import each other, and entering at PqzTyped fails to
+#   compile (a base after its derived contract).
+#   DeployBase keeps 12, 13 out (its comment: "12, 13 by script/pqz/e2e.py"); deploy.sh DEPLOY_REGULATED is T33's.

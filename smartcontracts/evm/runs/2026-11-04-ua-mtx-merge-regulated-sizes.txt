@@ -99,3 +99,19 @@
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | `ComplianceRegistry` (a plain deploy, no frame) | 2,462 | 2,538 | +76 | 2,728 | 202,743 (was 196,502) | 4,164,660 (was 4,048,380) | 4.59 M (was 4.46 M) | 20.66 M |
 | `WrappedPqzRegulatedToken` (13) | 62,285 | 62,285 | 0 | 65,088 | | | | |
+#
+# ua-mtx-merge T31 (the regulated PQZ kinds 12 and 13: kind 12 new on NormalPqzToken, whose overrides only become `virtual`;
+# the PQZ seats of PqzLayer / WrappedPqzToken and kind 13 unchanged). Kind 13 measured first, before and after. Same method.
+| Release | base kind B | T31 B | delta vs base | init B | spec §6.2 estimate (on M) | stop line 64,512 B |
+|---|---:|---:|---:|---:|---|---|
+| `WrappedPqzRegulatedToken` (13) | `WrappedPqzToken` 56,721 | 62,285 (T30 62,285) | +5,564 | 65,088 | 59.5-61.2 K | under by 2,227 |
+| `NormalPqzRegulatedToken` (12) | `NormalPqzToken` 47,183 | 52,626 | +5,443 | 55,426 | 49.7-51.4 K | under by 11,886 |
+# Stop rule: no kind at or above 64,512 B: no lever, no _above64KiB row. NormalPqzToken 47,183 and WrappedPqzToken 56,721
+# unchanged. Deploy gas (GovDeploy test_releaseGasPerKind -vv; regular already x 64/63):
+| Release | runtime B | regular | state | (r + s) x 1.05 | asked (+ 0.37 M frame) | §6.2 estimate | 60 M | 70 M | regular x 1.05 < 2^24 | SCaaS testnet need (<= 200 M) |
+|---|---:|---:|---:|---:|---:|---|---|---|---|---:|
+| `NormalPqzRegulatedToken (12)` | 52,626 | 3,702,158 | 80,799,300 | 88.73 M | 89.10 M | 84.2-87.0 M | no | no | yes | 97.29 M |
+| `WrappedPqzRegulatedToken (13)` | 62,285 | 4,336,713 | 95,577,570 | 104.91 M | 105.28 M | 100.6-103.5 M | no | no | yes | 112.07 M |
+# Reading: kind 12 runs 1.2 K (2.4 %) over the top of its size estimate and 2.1 M (2.4 %) over its gas estimate, not more than
+# 50 % over; both PQZ kinds miss 60 and 70 M (not a target, CTR-GOV-19) and fit the SCaaS testnet. Kind 13 keeps 2,227 B for
+# T32 (operatorTransfer) and group 3e.
