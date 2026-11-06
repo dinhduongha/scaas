@@ -3,7 +3,8 @@
 **Status:** SPECIFIED, nothing built (2026-11-06). Revised twice the same day: after the Fable review (P1-1 … P3-3, accepted by
 the controller), then by **owner rulings 2026-11-06**: `ua-rs` contains no light client and no chain-state verifier; the check
 that words are real chain state belongs to the layer that reads the chain (the wallet layer and the app, as `ua-rs-sign` spec
-§10.2 already places chain reading); `ua-rs` keeps the library duties of §4.3. Fix spec for owner ruling ARCH-POS-13 "Never a
+§10.2 already places chain reading); `ua-rs` keeps the library duties of §4.3. The owner then decided Q1, Q1b and Q3 as
+recommended and recorded Q2 as moot for `ua-rs` (2026-11-06, §7). Fix spec for owner ruling ARCH-POS-13 "Never a
 decryption oracle" (`docs/decisions.md` on branch `ua-mtx-merge`, not yet on this branch, commit `62adb3d7`; also in
 `AGENTS.md`). The owner's words: **"NO oracle!"**: absolute, no exception, no opt-in. Plan tasks: appended to
 [`plans/2026-11-05-ua-rs-sign.md`](../plans/2026-11-05-ua-rs-sign.md) (section "ARCH-POS-13 rework"). Inputs: the read-only code
@@ -88,7 +89,7 @@ indexer and passing them to `ua-rs` is an oracle, and the fault is that layer's.
 
 - **R1 Trusted source.** Words come from a source the holder trusts: the holder's own node, a node the holder configured
   explicitly, or a light client of the reading layer that verifies finality and state proofs. A default or discovered endpoint
-  is not trusted for this (owner question Q1).
+  is not trusted for this (owner decision Q1, 2026-11-06, §7).
 - **R2 Known chain.** The chain is the pair `(chainId, chain_uid)` of the holder's configuration (genesis hashes as pinned in
   `smartcontracts/evm/chain-uids.json`, [NET-ALL-22](../../networks/README.md#NET-ALL-22)), never the source's own answer.
 - **R3 Catalogued token.** The token is catalogued by that chain's `OpenFactory` (its known address) with a PQZ kind for the
@@ -183,8 +184,8 @@ The old commands stay only under the test feature `vectors`, never in a release 
 caller. Not reachable from outside today (pqz-ffi's own C ABI exports only `pqz_precompile` and `pqz_max_input`). A feature
 `hazmat` around those exports, enabled by the self-test, `vectors`, the vector generator and `ua-rs`, changes no transcript,
 relation or byte; defence in depth only, since Cargo unifies features and every binary with `ua-rs` + `pqz` has `dec` compiled
-in (the command set is what keeps it unreachable). **Gate:** recommended to land with the next core change, with the owner
-waiving the four-set full gate for this `cfg`-only change (a build at all four sets plus `kat`) (Q3).
+in (the command set is what keeps it unreachable). **Gate (owner decision Q3, 2026-11-06):** it lands with the next pqz-core change; the
+four-set full gate is waived for this `cfg`-only change and replaced by a build at all four sets plus `kat`.
 
 ### 4.9 Server key oracle (CLI-SGN-31, PLANNED; F5)
 
@@ -221,7 +222,7 @@ contract, node or byte-format change. `ua-rs` stays I/O-free and holds no chain 
   path impossible and the location explicit; the test of §5 shows this residual on purpose.
 - **The reading layer's source.** A full node of the holder's: none beyond the chain's rules. A light client: the chain's
   sealing keys (a sealer or a leaked sealing key can fabricate state, one key on a single-signer chain, NET-EVM-04). Another
-  operator's node: that operator (Q1b).
+  operator's node: that operator (owner decision Q1b, 2026-11-06, §7).
 - A stale read shows an old balance; a debit over it is refused on chain (T8 retry), revealing nothing about `s`.
 - A genuine state is composed partly by senders (credits, decoys); its decryption is the holder's own data and reveals
   nothing about `s` (fact 1).
@@ -261,17 +262,20 @@ On `ua-mtx-merge` (task T19b; not edited from here):
 | `docs/decisions.md` | ARCH-POS-13's source: the audit done, this spec; entries for the owner rulings of 2026-11-06 (no verifier in `ua-rs`; the reading layer's duty), the library input rule, R1 to R6, the CLI-SGN-31 change and the Zether rule, each in full |
 | `docs/research/pqz-threshold-decrypt-prove.md` | §12.5: a link to this spec's §3; the quorum question stays open |
 
-## 7. Owner questions
+## 7. Owner decisions (2026-11-06; formerly the open questions)
 
-1. **Q1 — what counts as "a source the holder trusts" (R1).** **Recommended:** the holder's own node, a node the holder
-   configured explicitly, or a verifying light client in the reading layer; never an app default or a discovered endpoint.
-2. **Q1b — the source's residual.** A light client trusts sealing keys; another operator's node trusts that operator (§4.12).
-   **Recommended: accept** as the holder's chosen trust, stated in `zether.md` and `pq-zero-knowledge.md`.
-3. **Q2 — now moot for `ua-rs`.** `ua-rs` has no chain adapters, so nothing in it blocks Zether on Soroban, Algorand or
-   Solana; what changes is that a reading layer there must meet R1 (a trusted node of that family), and `ua-rs` needs that
-   family's Zether layout parser. No decision needed now.
-4. **Q3 — pqz-core `hazmat` (unchanged).** **Recommended:** land it with the next core change and waive the four-set full
-   gate for this `cfg`-only change (a build at all four sets plus `kat`).
+1. **Q1 — decided (owner 2026-11-06): R1's trusted source** is the holder's own node, a node the holder configured
+   explicitly, or a verifying light client in the reading layer; never an app default or a discovered endpoint.
+2. **Q1b — decided (owner 2026-11-06): the residual of the chosen source** (a light client trusts the chain's sealing keys;
+   another operator's node trusts that operator) is the holder's chosen trust. It is stated in `zether.md` and
+   `pq-zero-knowledge.md` (T19b).
+3. **Q2 — recorded as moot for `ua-rs` (owner 2026-11-06).** `ua-rs` has no chain adapters, so nothing in it blocks Zether on
+   Soroban, Algorand or Solana; a reading layer there must meet R1 (a trusted node of that family), and `ua-rs` needs that
+   family's Zether layout parser.
+4. **Q3 — decided (owner 2026-11-06): `hazmat`** lands with the next pqz-core change; the four-set full gate is waived for this
+   `cfg`-only change and replaced by a build at all four sets plus `kat`.
+
+No owner question remains open in this spec.
 
 ## 8. Effort
 
