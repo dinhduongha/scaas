@@ -287,3 +287,7 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   T40 (`mtxPayWithTax` and `payWithTax` on kinds 8-13), as it stood at ff5f18f5 (the T39 tip): `src/metatx/ERC20MetaTx.sol`
   with the three-argument `_uaExecuteTransfer(t, signed, auth)` (no withheld leg). `RegulatedBase`, `RegulatedLib` and
   `IRegulatedToken` before T40 are the pre-T39 copies above plus T39's commit. Not built.
+  T41 (pay-meta and tax vectors, clientkeys and ua-rs rows), as they stood at bc6592b1 (the T40 tip): `test/metatx/TypedOps.t.sol`
+  (`UAPayUnderMandate`'s row finding no entry), `test/ua/{UAMetaTx3Pq,UAMetaTx3Vectors}.t.sol` (the receiver-fee rows refused
+  `PayMetaMismatch`, the two-`mldsa65` run waiting for a commitment row). The vector copies: `smartcontracts/vectors/typed/legacy/
+  ua-mtx-merge/3e/typed_ops.json`, `smartcontracts/vectors/ua/legacy/ua-mtx-merge/3e/{metatx3,pq_signatures}.json`. Not built.
