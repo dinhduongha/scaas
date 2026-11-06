@@ -40,10 +40,11 @@ tính toán trên giấy của chúng tôi.
 | Q3 Oracle MPC trong quorum của §12.5? | **Đóng đối với khoá** nếu mỗi thành viên tự kiểm chứng minh của mọi phần và tự cộng các phần trước khi góp một phần giải mã [inference]. Còn lại: quorum đồng ý mở những tổng nào (chuyện chính sách và riêng tư) và phương án dự phòng khi mất chứng minh (§9.2, quyết định của owner). |
 | Q4 Kích thước và gas ở bốn bộ tham số | Chứng minh leg độc lập ≈ `R_DS` + 0,5 KB (29,5 / 31,3 / 33,5 / 36,5 KB); mỗi leg một cái tốn ≈ 4,2–4,5 M gas, nên op 1 có auditor, op 7 M ≥ 2 có auditor và op 7 M ≥ 4 không auditor không còn vừa 2^24. Một chứng minh gộp cho mỗi giao dịch vừa mọi dạng trừ op 7 M = 8 (có auditor thì không bao giờ; không auditor chỉ vừa ở ước lượng thấp). debit-T vừa mọi dạng đang vừa hôm nay (§6). PQZH không mang thêm được chứng minh nào (giới hạn calldata); debit-T không cần. |
 | Q5 Gộp, kiểm theo lô | Một chứng minh cho mỗi giao dịch (`R_LEGS`, hàng 2, 3, 5 của `R_TXM`) là được nhưng đó chính là chứng minh ghi nợ; kiểm theo lô trong ví là kiểm song song, chưa biết cách gộp đại số cho chứng minh LNP22 [inference]. |
-| Q6 Chi phí ví | `n2304-kmax4096`, 4.096 khoản ghi có: độc lập ≈ 204 MB phải tải, debit-T ≈ 0,42–0,72 GB; kiểm ≈ 90 s (độc lập) hoặc 185–211 s (debit-T) đơn luồng, ước lượng theo p99 [estimate]. Kiểm một lần khi khoản đến và giữ chứng minh; khôi phục mới chỉ cần các phần từ lần ghi nợ cuối. |
+| Q6 Chi phí ví | `n2304-kmax4096`, 4.096 khoản ghi có: độc lập ≈ 204 MB phải tải, debit-T ≈ 0,42–0,72 GB; kiểm ≈ 90 s (độc lập) hoặc 185–211 s (debit-T) đơn luồng, ước lượng theo p99 [estimate]. Khôi phục mới chỉ cần các phần từ lần ghi nợ cuối; sau khi cài lại thì chứng minh của chúng lấy từ đâu: §15. |
 | Q7 Thay đổi gì | debit-T: một log mỗi ghi nợ, một cờ bất biến trong phiên bản catalogue mới, một đường chứng minh trong `ua-rs`, vector cho bố cục log. Quan hệ độc lập: `proofSystemId` mới, op precompile mới, vector trong mọi client, full gate ở bốn bộ, và cắt bớt op 7. Zether: không cần cho khoá (§11.4). |
 | Kết luận | **Xây `legProof = CALLDATA` dưới dạng debit-T**; không thêm quan hệ leg độc lập. Nó cho người giữ khoá một đường giải mã thứ hai dựa trên chứng minh, cho quorum MPC một đường an toàn về khoá, và giữ (A) làm dự phòng cho người giữ khoá đơn lẻ (§12). |
-| Bổ sung 2026-11-06: `T` từ state (§14) | Nếu hợp đồng thôi xoá các slot pending và ghi một slot bản ghi cho mỗi lần ghi nợ, thì mọi `T` trong quá khứ là một hàm của state (≈ 0,10 M gas mỗi ghi nợ, như nhau ở mọi bộ, thay cho log `T` 0,15–0,20 M). Cách này chỉ bỏ được phần phụ thuộc lịch sử của `T`: chứng minh ghi nợ nằm trong calldata, và giữ nó trong state tốn ≈ 65–131 M gas mỗi ghi nợ PQZL, không vừa. Dự phòng §9 và quy tắc kho lưu vẫn cần. Bên ngoài sẽ không lưu chứng minh, nên ở cả hai dạng, tính sẵn có dựa vào việc ví người nhận giữ dữ liệu. Lý do chọn hướng 2 là chi phí và việc tổ hợp nằm trong state: chỉ là ưu tiên nhẹ (§14.7, §14.8). |
+| Bổ sung 2026-11-06: `T` từ state (§14) | Nếu hợp đồng thôi xoá các slot pending và ghi một slot bản ghi cho mỗi lần ghi nợ, thì mọi `T` trong quá khứ là một hàm của state (≈ 0,10 M gas mỗi ghi nợ, như nhau ở mọi bộ, thay cho log `T` 0,15–0,20 M). Cách này chỉ bỏ được phần phụ thuộc lịch sử của `T`: chứng minh ghi nợ nằm trong calldata, và giữ nó trong state tốn ≈ 65–131 M gas mỗi ghi nợ PQZL, không vừa. Dự phòng §9 vẫn cần. **Quyết định của owner (2026-11-06):** giữ mọi slot pending (chấp nhận); ví giữ `P`, node SCaaS lưu trữ ghi nợ và người gửi trao `P` đều bị loại làm bên giữ (§14). |
+| Bổ sung 2026-11-06: sau khi cài lại (§15) | Một người giữ khoá khôi phục từ seed, ngoại tuyến nhiều năm, giải mã an toàn về khoá mà không cần tin bên đọc nếu (1) mỗi lần ghi nợ của chính mình mang một tag khoá theo seed trên `v_f` (hoặc burn và refresh suy ra tính ngẫu nhiên như op 1), nên không cần `P` của chính mình, và (2) giao dịch ghi nợ của các khoản ghi có đang chờ vẫn được lịch sử của chính chain phục vụ. Tất toán (hành động của người giữ khoá) bị loại; chứng chỉ gọn trong state không vừa. Còn sót: khoản ghi có cũ hơn cửa sổ lịch sử của chain → (A) với node riêng của người giữ khoá hoặc light client có kiểm, nếu không thì từ chối. |
 
 ## 2. Tuỳ chọn dựa trên điều gì
 
@@ -142,7 +143,8 @@ nguồn đưa. Để hiển thị nó có thể giải mã từng phần riêng 
 ghi nợ có `unitsOf(T) ≤ K_MAX` theo quy tắc của chính hợp đồng.
 
 **Khuyến nghị:** (ii) cho mọi người. (i) là lối tắt rẻ hơn cho người giữ khoá đơn lẻ chỉ ở op 1 / op 7; nó không phủ burn
-và refresh, nên không thể là cách duy nhất.
+và refresh, nên không thể là cách duy nhất. Sau khi cài lại, `P` của chính người giữ khoá chỉ còn trong lịch sử; §15.3 làm cho mọi
+lần ghi nợ của chính mình kiểm được mà không cần nó.
 
 ## 5. Phát hiện: công bố `T` của ghi nợ, và chứng minh hiện có chính là chứng minh leg (debit-T)
 
@@ -230,13 +232,14 @@ các phép kiểm LNP22 (khác với gộp MSM của Bulletproofs) [inference], 
 ≈ 22 ms với `R_DS`, 45 ms với `R_TX`, 51 ms với `R_TXM` M = 8 có auditor, p99 trên máy chủ chain: 4.096 khoản ≈ 90 s hoặc
 185–211 s trên một lõi, chia cho số lõi dùng. Ví wasm chậm hơn. Không đo.
 
-**Ví thật sự kiểm những gì.** Chỉ các phần của số dư hiện tại: lần ghi nợ cuối và các mục từ `p` của nó. Mỗi phần kiểm một lần,
-khi đến, và giữ lại dữ liệu chứng minh: chi phí khối lớn ở trên là việc khôi phục mới một tài khoản đầy. Hàng đợi pending
+**Ví thật sự kiểm những gì.** Chỉ các phần của số dư hiện tại: lần ghi nợ cuối và các mục từ `p` của nó. Ví có thể cache
+các phần đã kiểm, nhưng không gì dựa vào cache đó (owner 2026-11-06, §14): chi phí khối lớn ở trên là cái ví cài lại phải trả (§15). Hàng đợi pending
 không giới hạn (CTR-PQZ-06), nên một trận lũ mồi nhử bắt lần khôi phục mới kiểm nhiều chứng minh hơn; mỗi mồi nhử tốn cho
 người gửi một ghi nợ và trả cho nạn nhân `decoyFee`, như hôm nay.
 
 **Lịch sử hết hạn** (EIP-4444): chứng minh, payload và log nằm trong thân block và receipt, chúng hết hạn; state thì không.
-Một phần mà dữ liệu chứng minh không còn ai phục vụ thì đường chứng minh không kiểm được nữa; §9 bàn phương án dự phòng.
+Một phần mà dữ liệu chứng minh không còn ai phục vụ thì đường chứng minh không kiểm được nữa; §9 bàn phương án dự phòng,
+§15.2 bàn cái gì hết hạn ở đâu.
 
 ## 8. Hai đường giải mã trong `ua-rs`, hai lệnh
 
@@ -301,16 +304,18 @@ dealer của ghi chú nghiên cứu: mỗi phiên bản khoá đi kèm các ph�
 
 ### 9.3 Làm cho dự phòng hiếm xảy ra
 
-| Biện pháp | Thuộc về đâu |
+| Biện pháp | Trạng thái |
 |---|---|
-| Ví giữ dữ liệu chứng minh của mọi phần đã kiểm khi đến (cache cục bộ); khi đó mất lịch sử chỉ ảnh hưởng lần khôi phục mới | quy tắc client (`ua-libraries.md`, tầng ví); thư viện nhận dữ liệu làm đầu vào và không tự I/O |
-| Mỗi thành viên quorum giữ mọi chứng minh đã kiểm; cache của một thành viên bất kỳ phục vụ được mọi thành viên khác, vì dữ liệu tự kiểm | spec của dịch vụ quorum (C3, chưa lên lịch) |
-| Một kho lưu: indexer của `scaas-node`, hoặc bất kỳ indexer không tin cậy nào, lưu và phục vụ log ghi nợ, payload và chứng minh theo `entryRef` | **spec của node** (`docs/node/store.md`, `gateway.md`), ở mức PLANNED: bảo đảm của node thuộc về node, và nó không cần tin cậy; node vẫn không bao giờ giải mã (NODE-GEN-01) |
+| Ví giữ dữ liệu chứng minh của mọi phần đã kiểm khi đến | **bị loại làm bên giữ** (owner 2026-11-06): ví có thể bị xoá và cài lại. Cache cục bộ là tiện ích, không gì dựa vào nó |
+| Mỗi thành viên quorum giữ mọi chứng minh đã kiểm | cùng lý lẽ: tiện ích, không phải bên giữ (thiết bị của thành viên cũng có thể mất) [inference] |
+| Một kho lưu trong indexer của `scaas-node`, phục vụ dữ liệu ghi nợ theo `entryRef` | **bị loại** (owner 2026-11-06): không liên quan đến việc của node |
+| Người gửi trao `P` cho người nhận | **bị loại** (owner 2026-11-06, §14.7) |
+| Còn lại | §15: ghi nợ của chính mình tự kiểm được, ghi nợ của bên thứ ba lấy từ lịch sử của chính chain, ngoài đó là (A) |
 
 **Giữ lại làm đòn tấn công** [inference]. Với người giữ khoá đơn lẻ: không thu được gì về `s`; tối đa là buộc dùng (A) hoặc
-bị từ chối. Với quorum: có thể đẩy về §9.2, một khoảng thời gian một operator giữ khoá. Cache của một thành viên trung thực
-hay một kho lưu bất kỳ là đủ để chặn, và việc dựng lại cần `k` thành viên, nên người ngoài không tự kích hoạt được; các thành
-viên chỉ nên tuyên bố mất dữ liệu sau khi đã thử cache của mọi thành viên và các kho lưu.
+bị từ chối. Với quorum: có thể đẩy về §9.2, một khoảng thời gian một operator giữ khoá. Bất kỳ full node hay bản sao lịch sử nào
+của chain còn phục vụ giao dịch ghi nợ là đủ để chặn, và việc dựng lại cần `k` thành viên, nên người ngoài không tự kích hoạt
+được; các thành viên chỉ nên tuyên bố mất dữ liệu sau khi đã thử lịch sử của chain từ nhiều nguồn.
 
 ## 10. Q3: oracle trong quorum của §12.5
 
@@ -340,7 +345,7 @@ cho khoản ghi có; debit-T cho lựa chọn thứ hai một nội dung thật.
 - **Vector:** bố cục log và "statement dựng lại từ lịch sử bằng statement của hợp đồng" ở bộ mặc định và một bộ khác, do
   `ua-rs` và C ABI (`ua-c`) mà các binding gọi đọc.
 - **`ua-rs`:** các lệnh của đường chứng minh ở §8, bộ kiểm trên thiết bị (đã được liên kết qua `pqz-ffi`).
-- **Node:** quy tắc kho lưu PLANNED (§9.3); indexer chuẩn hoá event mới.
+- **Node:** nhiều nhất là indexer chuẩn hoá event mới. Không có quy tắc kho lưu (owner loại, 2026-11-06, §14).
 
 ### 11.2 Một quan hệ độc lập (không khuyến nghị)
 
@@ -372,9 +377,9 @@ xoá nhu cầu một nguồn tin cậy cho các từ tài khoản trước một
 | R2 | Hợp đồng: `legProof` bất biến, log `DebitStatement` ở mọi dạng ghi nợ, test forge (log bằng statement đã kiểm; đường từ chối; bất biến của §8), size gate ở bốn bộ | 3–4 |
 | R3 | Vector: bố cục log và dựng lại statement, bộ mặc định + một bộ khác; bộ đọc `ua-c` | 1–2 |
 | R4 | Đường chứng minh `ua-rs`: `balanceProven` và các lệnh ghi nợ, một trạng thái, test âm (`T` giả, sai khoá, đổi leg, vượt `K_MAX`, hệ số không chính tắc), mutant, harness 8·K làm test âm | 5–7 |
-| R5 | Node: quy tắc kho lưu PLANNED, lưu ở indexer và đọc qua gateway theo `entryRef` | 2–4 |
-| R6 | Docs: `pq-zero-knowledge.md` (tuỳ chọn, log, đường chứng minh), `ua-libraries.md` (cache client), trạng thái §12.5, bản tiếng Việt | 1–2 |
-| | **Tổng** | **13–21** |
+| R5 | ~~Node: quy tắc kho lưu~~, bỏ (owner 2026-11-06: không phải việc của node) | 0 |
+| R6 | Docs: `pq-zero-knowledge.md` (tuỳ chọn, log, đường chứng minh), `ua-libraries.md` (đường chứng minh; cache là tuỳ chọn, không gì dựa vào nó), trạng thái §12.5, bản tiếng Việt | 1–2 |
+| | **Tổng** | **11–17** |
 
 Bản thân dịch vụ quorum vẫn là C3 (chưa lên lịch). Một quan hệ độc lập sẽ tốn ≈ 30–45 ngày-agent cộng bốn full gate và không
 phủ burn và refresh.
@@ -388,7 +393,8 @@ phủ burn và refresh.
    giải, trạng thái "đã giải trên giấy, UNAUDITED", chờ review của R1? *Khuyến nghị:* có; quorum vẫn chưa xây cho đến khi C3
    được lên lịch.
 3. **Kho lưu trong node:** thêm một quy tắc PLANNED rằng indexer của `scaas-node` lưu và phục vụ dữ liệu ghi nợ của token
-   `CALLDATA` theo `entryRef`? *Khuyến nghị:* có; dữ liệu tự kiểm, nên không thêm sự tin cậy nào vào node.
+   `CALLDATA` theo `entryRef`? **Đã quyết (owner 2026-11-06): không**, việc này không liên quan đến việc của node. Dữ liệu
+   lấy từ đâu thay vào đó: §15.
 
 ## 14. debit-T từ state: giữ các phần của T và lưu tham chiếu (2026-11-06)
 
@@ -398,6 +404,19 @@ phủ burn và refresh.
 state hay không? Phần này đọc theo `PqzCore.sol` và `PqzStateLib.sol` trên nhánh `ua-mtx-merge` (số dòng bên dưới). Phần
 tính toán nằm trong [`debit_t_state.py`](pqz-leg-proof-option/debit_t_state.py) và
 [`.out`](pqz-leg-proof-option/debit_t_state.out). Không đo gì cả.
+
+**Quyết định của owner (2026-11-06)** cho phần này:
+
+1. **Chấp nhận: giữ mọi slot pending vĩnh viễn** (+32 B cho mỗi khoản ghi có và mỗi lần ghi nợ), để mọi `T` là hàm của state
+   (§14.2). Việc này đảo ngược quy tắc xoá của [pq-zero-knowledge.md §7.4](../contracts/pq-zero-knowledge.md#transfer) và §5.5
+   của spec state; cần một mục trong `decisions.md` khi xây.
+2. **Loại: "ví giữ `P` khi khoản ghi có đến"** làm bên giữ chứng minh: ví có thể bị xoá và cài lại.
+3. **Loại: "node SCaaS lưu trữ giao dịch ghi nợ"**: không liên quan đến việc của node.
+4. **Đã loại trước đó trong ngày:** người gửi trao `P` cho người nhận (§14.7).
+5. **Nhận xét về tất toán:** ví lạnh không thể tất toán các khoản ghi có đang chờ một cách đều đặn, nên không thiết kế nào được
+   đòi người giữ khoá hành động định kỳ (§15.4).
+
+Dữ liệu ghi nợ lấy từ đâu thay vào đó, cho một người giữ khoá ngoại tuyến nhiều năm rồi cài lại: §15.
 
 ### 14.1 `T` gồm những gì, và hôm nay mất gì
 
@@ -537,17 +556,18 @@ ghi có là chứng minh `P` được kiểm trên statement, nên một `T` ch�
   theo giới hạn công khai 24.576 B, và state mỗi lần ghi nợ tăng lên 2,8–3,9 lần blob hôm nay. **Không khả thi.** Lưu các từ
   header còn thiếu (khoảng sáu từ) mà không có `P` thì vô ích.
 - **Kết luận:** hướng 2 chỉ bỏ được phụ thuộc lịch sử của `T`. Dự phòng §9 vẫn còn: (A) cho người giữ khoá đơn lẻ, còn với
-  quorum thì dựng lại seed và xoay khoá. Quy tắc kho lưu của §9.3 cũng còn, nhưng thứ phải giữ thu hẹp lại thành giao dịch
-  ghi nợ (calldata của nó), không cần receipt. Log `header ‖ T` không còn cần nữa; log chỉ header là một tiện ích, để mọi
+  quorum thì dựng lại seed và xoay khoá. Thứ người giữ khoá vẫn phải tải từ lịch sử thu hẹp lại thành giao
+  dịch ghi nợ (calldata của nó), không cần receipt; lấy nó từ đâu là §15 (kho lưu ở node đã bị loại). Log `header ‖ T` không còn cần nữa; log chỉ header là một tiện ích, để mọi
   client khỏi phải tự dựng `envelopeBinding` từ giao dịch bên ngoài.
 - **Cái nó thật sự mang lại:** (1) chi phí mỗi lần ghi nợ giảm từ 0,15–0,20 M xuống ≈ 0,10–0,11 M, như nhau ở mọi bộ; (2) `T`
   không phụ thuộc receipt lẫn node lưu state lưu trữ (biến thể không đổi gì của §5); (3) tổ hợp của mọi lần ghi nợ cũ nằm
   trong state, nên các từ tài khoản của §3.3 cho một lần ghi nợ cũ kiểm được với state; (4) bất kỳ server nào cũng phục vụ
   được `T`, và chứng minh sẽ kiểm nó.
 
-### 14.7 Lưu giữ: ai giữ chứng minh (nhận xét của owner, 2026-11-06)
+### 14.7 Lưu giữ: ai giữ chứng minh (nhận xét và quyết định của owner, 2026-11-06)
 
-Nhận xét của owner: "bên ngoài sẽ không lưu các chứng minh". Coi điều đó là đã cho [inference trừ chỗ có thẻ khác]:
+Nhận xét của owner: "bên ngoài sẽ không lưu các chứng minh", cùng các quyết định ngày 2026-11-06 ở đầu §14. Coi chúng là đã
+cho [inference trừ chỗ có thẻ khác]:
 
 1. **Người giữ khoá thật sự cần gì.** Chỉ dữ liệu ghi nợ (giao dịch ghi nợ có `P`, cộng `T` hoặc bản ghi của nó) của các
    khoản ghi có kể từ lần ghi nợ cuối của chính mình, cùng với lần ghi nợ cuối đó. Một lần ghi nợ tiêu nhiều nhất
@@ -555,63 +575,274 @@ Nhận xét của owner: "bên ngoài sẽ không lưu các chứng minh". Coi �
    cũ chỉ quan trọng khi kiểm toán.
    - **Lần ghi nợ cuối của chính mình:** với op 1 và op 7, `v_f` được kiểm bằng phép kiểm mã hoá lại của §4 (i). Phép kiểm
      này cần seed, bộ đếm và salt từ blob, tất cả đều trong state, và không cần `P`. Với **burn hoặc refresh** thì không được:
-     tính ngẫu nhiên của chúng là mới (CTR-PQZ-19), nên phép kiểm dựa trên chứng minh duy nhất là chính `P` của người giữ
-     khoá. Ví đã tạo `P` và có thể giữ nó. Sau khi khôi phục mới từ seed, nếu lần ghi nợ cuối là burn hoặc refresh, người giữ
-     khoá cần `P` đó từ lịch sử, hoặc phải quay về (A) [repo, §4].
+     tính ngẫu nhiên của chúng là mới (CTR-PQZ-19), nên hôm nay phép kiểm dựa trên chứng minh duy nhất là chính `P` của người
+     giữ khoá, mà sau khi cài lại thì `P` chỉ còn trong lịch sử [repo, §4]. §15.3 bỏ nhu cầu này.
    - **Một quorum MPC** không có seed, nên cần `P` cho lần ghi nợ cuối của chính nó, ở mọi loại (§4).
-2. **Ai có lợi ích giữ nó.**
-   - Ví người nhận: tải và kiểm khi nhận, rồi giữ dữ liệu (§9.3). Đây là bản chính, và không tốn gì trên chain.
+2. **Ai có thể giữ nó, và phán quyết của owner.**
+   - Ví người nhận, giữ dữ liệu khi khoản đến: **bị loại làm bên giữ** (owner 2026-11-06). Ví có thể bị xoá và cài lại; cache
+     cục bộ là tiện ích, không gì dựa vào nó.
    - Người gửi trao `P` cho người nhận qua một kênh kiểu memo: **owner đã loại (2026-11-06)**, vì không làm và không hợp lý.
      Hôm nay cũng không có kênh như vậy [repo]: sealed memo chỉ 41 B trên chain (CTR-PQZ-23).
-   - Các node SCaaS vận hành: một quy tắc PLANNED trong spec node (§9.3). Node là mở, nên đây là bảo đảm của chính
-     `scaas-node`, không phải của một bên tiêu thụ.
-   - Các chain SCaaS vận hành (22776, SCaaS testnet): có thể cấu hình để giữ lịch sử. Node `rpc` của SCaaS testnet chạy archive
-     cho state (NET-EVM-10) [repo]; giữ thân block và receipt cần một thiết lập riêng được ghi rõ, và với 22776 thì chỉ owner
-     quyết. Chain của khách hàng do họ tự chọn.
+   - Các node SCaaS vận hành (`scaas-node`, một kho lưu giao dịch ghi nợ): **owner đã loại (2026-11-06)**, không liên quan đến
+     việc của node.
+   - Chính chain: các full node của nó giữ thân block chừng nào cấu hình của chain còn nói vậy. Với các chain SCaaS vận hành
+     (22776, SCaaS testnet) đây là một thiết lập của chain, với 22776 thì chỉ owner quyết; chain của khách hàng do họ tự chọn
+     (§15.2).
 3. **Mất dữ liệu thì mất gì:** chỉ mất đường chứng minh. Tiền vẫn tiêu được qua các phương án dự phòng: (A) cho người giữ khoá
    đơn lẻ; với quorum MPC thì dựng lại `seed32` theo k-of-n, rồi đến operator, rồi xoay khoá (quyết định của owner, §9.2).
-4. **Trường hợp còn sót lại:** một ví ngoại tuyến lâu hơn cửa sổ lịch sử của một chain bên ngoài, và không kho lưu nào phục vụ
-   giao dịch (không node SCaaS nào theo dõi chain đó, và chính chain đó cho lịch sử hết hạn). Trường hợp này như nhau ở cả hai
-   dạng. Hướng 2 dựng lại `T` từ state, nhưng `P` và các từ header vẫn mất y như vậy, nên cả hai dạng đều kết thúc ở cùng phương
-   án dự phòng.
+4. **Trường hợp còn sót lại:** một khoản ghi có đang chờ mà giao dịch ghi nợ của nó không còn full node hay bản sao lịch sử nào
+   của chain đó phục vụ (chain cho lịch sử hết hạn và người giữ khoá vắng mặt lâu hơn). Trường hợp này như nhau ở cả hai dạng.
+   Hướng 2 dựng lại `T` từ state, nhưng `P` và các từ header vẫn mất y như vậy, nên cả hai dạng đều kết thúc ở cùng phương án
+   dự phòng.
 
-**Điều này nghĩa là gì khi so hướng 2 với việc log `T`.** Lợi ích về tính sẵn có của hướng 2 là nhỏ. Với trường hợp đáng kể,
-hoặc người nhận đã giữ dữ liệu khi nhận, hoặc chính chứng minh đã mất. Phần còn lại là chi phí (≈ 0,10–0,11 M so với
-0,15–0,20 M mỗi lần ghi nợ), không phụ thuộc receipt, tổ hợp của mọi lần ghi nợ nằm trong state, và một indexer có thể phục vụ
-`T` mà không cần đã theo dõi log. Đổi lại là +32 B vĩnh viễn cho mỗi khoản ghi có và mỗi lần ghi nợ, và việc đảo ngược một quy
-tắc đã ghi.
+**Điều này nghĩa là gì khi so hướng 2 với việc log `T`.** Lợi ích về tính sẵn có của hướng 2 là nhỏ: ở cả hai dạng, chứng
+minh đều lấy từ lịch sử của chính chain (§15). Phần còn lại là chi phí (≈ 0,10–0,11 M so với 0,15–0,20 M mỗi lần ghi nợ),
+không phụ thuộc receipt, tổ hợp của mọi lần ghi nợ nằm trong state, và một indexer có thể phục vụ `T` mà không cần đã theo dõi
+log. Đổi lại là +32 B vĩnh viễn cho mỗi khoản ghi có và mỗi lần ghi nợ, và việc đảo ngược một quy tắc đã ghi, điều owner đã
+chấp nhận (2026-11-06).
 
 ### 14.8 Kết luận, công sức, câu hỏi cho owner
 
 **Kết luận** [inference, UNAUDITED]. Hướng 2 đúng đắn và rẻ. `T` của mọi lần ghi nợ trở thành hàm của state nếu hợp đồng thôi
 xoá các slot pending và ghi một bản ghi cho mỗi lần ghi nợ; `acc` vật chất hoá và các rollover không cần cho việc dựng lại. Nó
 thay nửa `T` của log debit-T với khoảng hai phần ba chi phí, như nhau ở mọi bộ. Nó **không** bỏ được phụ thuộc lịch sử: chứng
-minh và sáu từ header vẫn nằm trong calldata, và chứng minh không vừa trong state. Vì bên ngoài sẽ không lưu chứng minh
-(§14.7), ở cả hai dạng tính sẵn có đều dựa vào việc người nhận giữ dữ liệu khi nhận, và ở cả hai dạng trường hợp còn sót lại
-đều quay về (A) hoặc việc xoay khoá của §9.2. Vì vậy lựa chọn dựa trên chi phí và việc tổ hợp nằm trong state, không dựa trên
-tính sẵn có. Đây là ưu tiên nhẹ, không phải quyết định dứt khoát. Dạng debit-T được khuyến nghị: **`T` từ state cộng log chỉ
-header**, thay cho log `header ‖ T`. Log `header ‖ T` mà không tăng state vẫn là lựa chọn hợp lý nếu owner muốn giữ quy tắc xoá.
+minh và sáu từ header vẫn nằm trong calldata, và chứng minh không vừa trong state. Ở cả hai dạng, chứng minh đều lấy từ lịch
+sử của chính chain (§15; bên giữ là ví hay node đều bị loại, §14.7), và ở cả hai dạng trường hợp còn sót lại đều quay về (A)
+hoặc việc xoay khoá của §9.2. Vì vậy lựa chọn dựa trên chi phí và việc tổ hợp nằm trong state, không dựa trên tính sẵn có.
+Dạng debit-T: **`T` từ state cộng log chỉ header**, thay cho log `header ‖ T`; owner đã chấp nhận giữ mọi slot pending
+(2026-11-06), điều mà dạng này cần.
 
 | Bước | Việc | Ngày-agent [estimate] |
 |---|---|---|
 | D2-1 | Hợp đồng: bỏ hai chỗ xoá, thêm bản ghi, view và log header. Test forge: `T` dựng từ state bằng `T` của statement sau các chuỗi ngẫu nhiên gồm khoản ghi có, shield (kể cả gộp cùng block), rollover, un-roll, op 1, op 7, burn, refresh và unwrap. Ghim `scaas.pqz`; size gate ở bốn bộ; ghim gas cũ → mới sau khi đo (theo lời owner) | 3–4 (thay cho R2 ở §12) |
 | D2-2 | Vector: từ bản ghi và một hàng dựng lại, ở bộ mặc định và một bộ khác; phép dựng lại trong `ua-rs` và `ua-c` | +1–2 |
-| D2-3 | Node: indexer tính `T` và phục vụ theo `entryRef`; thứ kho lưu phải giữ là giao dịch ghi nợ | +1 |
+| D2-3 | ~~Node: indexer phục vụ `T` và lưu trữ giao dịch ghi nợ~~, bỏ (owner 2026-11-06: không có kho lưu ở node); client hay server bất kỳ tự dựng `T` từ state | 0 |
 | D2-4 | Tài liệu: `pq-zero-knowledge.md` §7.1, §7.4, CTR-PQZ-07; một mục decisions đảo ngược việc xoá; các bản tiếng Việt | +1 |
-| | **debit-T ở dạng này, tổng cộng** | **≈ 16–25** (so với 13–21 ở §12) |
+| | **debit-T ở dạng này, tổng cộng** | **≈ 13–20** (§12 không có R5, R2 thay bằng D2-1, cộng D2-2 và D2-4); tag ghi nợ của chính mình ở §15 thêm 2–4 |
 
 **Câu hỏi cho owner**
 
 1. **Giữ mọi slot pending vĩnh viễn** (+32 B cho mỗi khoản ghi có và mỗi lần ghi nợ), để mọi `T` là hàm của state? Việc này
-   đảo ngược §5.5 của spec state. *Khuyến nghị:* có. Nó không tốn state gas (theo EIP-8037, việc xoá chưa bao giờ hoàn lại
-   state gas) và giảm regular gas; nó cần một mục trong decisions.
+   đảo ngược §5.5 của spec state. **Đã quyết (owner 2026-11-06): có**; mục decisions được viết khi xây.
 2. **Header:** log header 640 byte (≈ 0,01 M), hay để mọi client tự dựng nó từ calldata của giao dịch, kể cả binding của phong
    bì relay? *Khuyến nghị:* log nó.
 3. **Tính sẵn có của chứng minh:** chấp nhận rằng chứng minh ghi nợ ở lại trong lịch sử (trong state nó tốn ≈ 65–131 M mỗi
-   lần ghi nợ PQZL và không vừa), nên dự phòng §9 và quy tắc kho lưu vẫn còn, với thứ kho lưu phải giữ thu hẹp thành các giao
-   dịch ghi nợ? *Khuyến nghị:* có.
+   lần ghi nợ PQZL và không vừa), nên dự phòng §9 vẫn còn và chứng minh lấy từ lịch sử của chính chain (§15)? Bên giữ là ví
+   hay node đều đã bị loại (owner 2026-11-06). *Khuyến nghị:* có; các câu hỏi của §15 làm rõ thêm.
 
-## 15. Nguồn
+## 15. Chứng minh ghi nợ lấy từ đâu sau khi cài lại (2026-11-06)
+
+**Câu hỏi (owner, 2026-11-06).** Một người giữ khoá có ví bị xoá và khôi phục từ seed, hay một ví lạnh ngoại tuyến nhiều năm,
+phải giải mã số dư một cách an toàn về khoá. Ví không giữ `P`, người gửi không trao nó, node SCaaS không lưu trữ nó, và không
+thể đòi người giữ khoá hành động định kỳ (§14, quyết định của owner). Dữ liệu ghi nợ có thể lấy từ đâu, hoặc tránh nhu cầu đó
+thế nào, mà không tin bên đọc state của đường (A)?
+
+**Sự đánh đổi** [inference]. Một phép giải mã an toàn về khoá khi mọi phần là bản mã đã chứng minh (§3.1). Hoặc bên đọc bảo
+đảm các phần là state của chain, mà hợp đồng đã chứng minh (đường (A), [ARCH-POS-13](../decisions.md#ARCH-POS-13)), hoặc người
+giữ khoá tự kiểm bằng chứng. Bằng chứng mà người giữ khoá tự kiểm được chỉ có hai loại: một chứng minh, hoặc một giá trị khoá
+theo bí mật của chính mình. Mọi thứ khác (một cờ, một hash hay một bộ đếm trong state) lại là tin vào người đọc state. Mỗi
+phương án dưới đây là một trong ba thứ đó.
+
+Thẻ như trên, thêm **[web]**: tài liệu của client hay thông báo đọc ngày 2026-11-06, không qua bình duyệt.
+
+### 15.1 Người giữ khoá cài lại cần gì
+
+Với `T` từ state (§14, đã chấp nhận), số dư là `v_f` của lần ghi nợ cuối của chính mình cộng các mục `[p_last, pendingCount)`.
+Mục TRIVIAL dựng lại từ số tiền trong state. Còn hai nhu cầu [repo, §14.1, §14.6]:
+
+- **N1, lần ghi nợ cuối của chính mình.** Với op 1 và op 7, phép kiểm mã hoá lại của §4 (i) đã chạy được từ seed và state.
+  Với burn hoặc refresh, hôm nay chỉ `P` của chính người giữ khoá chứng nhận `v_f`, và sau khi cài lại `P` chỉ còn trong lịch sử.
+- **N2, ghi nợ của bên thứ ba.** Với mỗi khoản ghi có đang chờ: giao dịch ghi nợ của người gửi, gồm `P` và khoảng sáu từ
+  header. Slot pending giữ số block (`blob ‖ uOff ‖ vOff ‖ block`), nên client biết phải tải block nào; nó tìm giao dịch ghi nợ
+  trong block đó bằng cách dựng lại các statement ứng viên.
+
+Với ví lạnh, N2 phủ mọi khoản ghi có từ lần ghi nợ cuối của chính mình, có thể là nhiều năm, kể cả mồi nhử.
+
+### 15.2 (a) Lịch sử của chính chain
+
+**Tải gì** [estimate, §7]. Một thân block cho mỗi khoản ghi có đang chờ; ở `n2304-kmax4096` ≈ 93–186 KB mỗi khoản (kể cả khoá
+người gửi), kiểm ≈ 45–51 ms mỗi khoản (ước lượng theo p99, một lõi); một ghi nợ PQZH ≈ 250 KB. Bất kỳ full node, endpoint
+công khai hay bản sao nào của chain cũng phục vụ được: calldata giả chỉ làm phép kiểm thất bại (chuyện sẵn sàng, không bao giờ
+là chuyện khoá).
+
+**Ai cho lịch sử hết hạn** [web]:
+
+- **Ethereum mainnet và Sepolia:** mọi execution client hỗ trợ hết hạn lịch sử một phần (EIP-4444) từ tháng 7/2025. Nó bỏ
+  thân block và receipt trước Merge, chỉ vậy. Geth: tự chọn từ v1.16.0 (`geth prune-history`; `--history.chain postmerge`
+  cho node mới). Nethermind: mặc định bật từ 1.32.2 cho node đồng bộ mới, qua các ancient barrier
+  (`Sync.AncientBodiesBarrier`, `Sync.AncientReceiptsBarrier`). Việc cắt chỉ áp dụng cho mainnet và Sepolia. Lịch sử đã hết
+  hạn vẫn lấy được từ các bản sao và torrent (eth-clients history endpoints), với ít peer phục vụ hơn.
+- **Hết hạn cuốn chiếu** (chỉ giữ một cửa sổ gần đây): thông báo tháng 7/2025 nói việc này đang làm. Đến ngày 2026-11-06 chúng
+  tôi không tìm thấy nguồn nào nói nó đã triển khai hay đã lên lịch cho toàn mạng. Nethermind đã có sẵn: `History.Pruning` có
+  các chế độ `Disabled` (mặc định, tài liệu cho 2.2.0), `UseAncientBarriers` và `Rolling`. `Rolling` giữ
+  `History.RetentionEpochs`, ít nhất bằng `minHistoryRetentionEpochs` trong chainspec; bản phát hành 1.33 cho 82.125 epoch
+  (≈ 1 năm trên mainnet) là mặc định và là mức tối thiểu. Chỉ thân block và receipt bị cắt, không bao giờ cắt state. Một node
+  công bố khoảng nó phục vụ theo eth/69 (EIP-7642).
+- **Các chain có PQZ:** token PQZ chỉ có ở nơi precompile PQZ được đưa vào: SCaaS testnet, 22776 và chain của khách hàng
+  [repo]; Ethereum mainnet không có. Điều quan trọng ở đó là các node của chính chain được cấu hình giữ gì. Nethermind giữ mọi
+  thân block và receipt trừ khi operator bật `History.Pruning`, và ancient barrier không áp dụng cho các chain đó [web,
+  inference].
+- **SCaaS testnet:** node `rpc` chạy archive cho state ([NET-EVM-10](../networks/evm.md#NET-EVM-10)) [repo]. Cấu hình node
+  của stack (nằm ngoài repository này) không có mục `History`, nên mặc định của Nethermind giữ mọi thân block và receipt
+  [inference]. Đó là một mặc định, không phải một quy tắc đã ghi: một thay đổi cấu hình hay một lần reset testnet sẽ chấm dứt
+  nó. **22776** chỉ owner quyết. **Chain của khách hàng** tự chọn. Trong cả ba trường hợp, giữ thân block là thiết lập của các
+  node của chain đó. Nó không phải quy tắc của `scaas-node`, cũng không phải bảo đảm của node.
+
+**Kết luận (a)** [inference]. Lịch sử phủ N2 chừng nào còn một full node hay bản sao của chain đó phục vụ block. Ví lạnh vắng
+mặt nhiều năm cần lưu giữ **toàn bộ**; một cửa sổ cuốn chiếu một năm không đủ. Lịch sử cũng không giúp N1 hơn N2: lần ghi nợ
+cuối của chính một ví lạnh cũng cũ y như vậy.
+
+### 15.3 (b) Mọi lần ghi nợ của chính mình tự kiểm được
+
+**(b) như được hỏi: suy ra tính ngẫu nhiên của burn và refresh như op 1.** Hôm nay burn và refresh dùng tính ngẫu nhiên mới vì
+salt trong header của chúng là 0, nên một seed suy từ bộ đếm sẽ lặp lại `r` và `e2_f` giữa hai lần dựng ở cùng `sendCounter`
+với số dư khác nhau (CTR-PQZ-19, owner 2026-10-13) [repo]. Với một salt 16 byte mới cho mỗi lần dựng, đặt trong từ salt
+(`16 byte 0 ‖ salt`, như giao dịch chuyển) và trong blob, lý do va chạm biến mất: hai lần dựng khác nhau ở salt. Phép suy ra
+là `seed_enc` với một nhãn riêng cho các dạng này (controller đặt tên). Sau khi cài lại, người giữ khoá suy `r, e1, e2_f` từ
+seed, bộ đếm và salt, đòi `u′ = Aᵀr + e1` đúng từng byte, tính `z = v_f − pkᵀr − e2_f mod q`, và đòi mọi hệ số của `z` đúng
+bằng `Δ·d`, `d ∈ [0, 16)`. Trong `z` không có nhiễu, vì đã biết `e2_f`.
+
+- **Đúng đắn đối với khoá** [inference, UNAUDITED]. `s` không bao giờ được dùng, nên việc chấp nhận, từ chối và `d′` là hàm
+  của các giá trị suy từ seed và các byte, không bao giờ của `s`. Đây không phải Fujisaki–Okamoto: FO suy `r` từ thông điệp và
+  mã hoá lại sau khi giải mã [paper]. Ở đây `r` đến từ một PRF trên đầu vào công khai và không giải mã gì cả: đó là phép kiểm
+  mã hoá lại tất định trên bản mã của chính người giữ khoá, như §4 (i).
+- **Còn lại gì:** tính dễ uốn `Δ·k` của §4. Một nguồn cộng `Δ·k` vào một hệ số của `v_f` sẽ được chấp nhận hay bị từ chối tuỳ
+  theo chữ số đó: một bit số dư (lớp của §3.3), không phải một bit khoá.
+- **Thuộc quan hệ hay prover?** Quan hệ chứng minh có tồn tại `r, e1, e2_f` ngắn trong các cận chuẩn; client rút chúng thế nào
+  không thuộc quan hệ [repo, §3.1]. Việc rút là `Enc` của client, làm trước khi prover nhận witness, nên `pqzl`, transcript và
+  các cận chuẩn không đổi. Các giá trị suy ra phải đến từ cùng bộ lấy mẫu và cùng cận như op 1, vốn đã làm theo cách này.
+- **Dù vậy vẫn phải đổi:** `pqz-stmt` liệt kê từ salt của burn và refresh là từ bằng 0 (`zero_words`,
+  `pqz-core/stmt/src/lib.rs`) [repo]. Cho phép salt làm thay đổi tập statement mà precompile chấp nhận, nên plugin được dựng
+  lại trên mọi chain có nó. `pqz-stmt` nằm trong danh sách full gate, nên chạy full gate ở bốn bộ. Vector burn và refresh được
+  sinh lại trong mọi client, và CTR-PQZ-19 được viết lại kèm một mục decisions (nó đảo ngược quy tắc 2026-10-13 của owner).
+  `PqzAuth` đã ký từ salt. Không bắt buộc `proofSystemId` mới, vì quy tắc chỉ đòi khi transcript hay quan hệ đổi. Owner vẫn có
+  thể muốn một id mới, vì bộ kiểm cũ từ chối statement mới; mọi chain đều chỉ để thử nghiệm.
+
+**(b′) Một tag khoá theo seed của chính mình, dạng nhỏ hơn** [inference, UNAUDITED]. Mọi lần ghi nợ (op 1, op 7, burn, refresh,
+unwrap) mang `ownTag = MAC_K(chainUid ‖ token ‖ fromUA ‖ be32(sendCounter) ‖ keccak256(P(u) ‖ P(v_f)))`. Ở đây
+`K = HKDF(pqzKeySeed, một nhãn riêng)`, độc lập với `s`; `P(·)` là dạng nén lưu trữ; `u` là `u_0` hoặc `u′`. Tag là một trường
+payload có tên và được nối vào op blob (32 B). Nó được ràng buộc bởi từ `memoHash` đã ký: op 1 và op 7 băm nó cùng memo, còn burn
+hay refresh đặt `memoHash = keccak256(ownTag)`. `memoHash` không phải từ bằng 0 ở dạng nào [repo, `pqz-stmt`], nên relayer
+không sửa được tag. Sau khi cài lại, người giữ khoá kiểm tag trên các byte đọc từ nguồn bất kỳ, rồi giải mã `v_f`, một bản mã
+mới của chính mình.
+
+- Việc từ chối chỉ phụ thuộc `K` và các byte, không bao giờ phụ thuộc `s` hay số dư. Nó cũng đóng tính dễ uốn bit số dư của
+  (b), và đối xử mọi loại ghi nợ như nhau.
+- Không cần đổi `pqz-core`, không full gate, không `proofSystemId` mới. Nó đổi một phiên bản catalogue mới của hợp đồng (đầu vào
+  `memoHash` và bố cục blob, điều này cũng đổi quy tắc độ dài của §14.2), các client dựng `memoHash`, và các vector có hàng
+  `memoHash`. Chi phí: 32 B trong SSTORE2 ≈ +0,05 M state gas mỗi lần ghi nợ, ở ≈ 1.539 state gas mỗi byte
+  ([`debit_t_state.out`](pqz-leg-proof-option/debit_t_state.out)) [estimate].
+- Nó không cần hành động nào của người giữ khoá ngoài chính các lần ghi nợ của mình.
+
+**Với cả hai:** quorum MPC không có seed, nên cần PRF hay MAC chạy trong MPC (chưa thiết kế), hoặc `P` của chính nó từ lịch sử.
+**Kết quả:** N1 không còn với người giữ khoá đơn lẻ; còn lại N2.
+
+### 15.4 (c) Tất toán cửa sổ pending
+
+**Bị loại vì là hành động của người giữ khoá** (nhận xét của owner, 2026-11-06): ví lạnh không thể tất toán các khoản ghi có
+đang chờ một cách đều đặn. Nhận xét đó cũng loại việc người giữ khoá tự chứng thực (một MAC khoá theo seed trên các khoản ghi có
+đã kiểm, ghi lên chain): đó cũng là hành động định kỳ. Còn lại là một bước tất toán không cần người giữ khoá, không giải mã và
+không bên tin cậy [inference]:
+
+- **`mtxRollOver`** (ai cũng gọi được) cộng bản mã mod `q`. Một `acc` đã cuộn vẫn là tổng của chính các phần đó, và mỗi phần cần
+  chứng minh của nó (§4). Nó không chứng nhận gì.
+- **Một refresh** chứng minh `v_f` mã hoá kết quả giải mã `T` trừ phí. Nó cần `s` hoặc bản rõ: chỉ người giữ khoá.
+- **Ngẫu nhiên hoá lại** `T + Enc(0)` kèm chứng minh của bản mã số 0: ai cũng làm được, nhưng nó chỉ chứng nhận kết quả so với
+  `T`, mà các phần của `T` vẫn chưa được chứng minh, và nó không đặt lại nhiễu.
+- **Bất kỳ ai khác chứng minh điều gì về bản rõ** đều cần `s`.
+- **Bất cứ thứ gì hợp đồng ghi** (một cờ "đã kiểm", một số đếm, một hash) chỉ được tin qua state: đường (A).
+
+**Vậy không có bước tất toán nào như thế**, trừ một chứng chỉ tự kiểm mà bất kỳ ai dựng từ chứng minh của các khoản ghi có khi
+lịch sử còn phục vụ chúng. Đó là (d).
+
+### 15.5 (d) Một chứng chỉ gọn trong state
+
+**Nó sẽ chứng minh gì:** cho mỗi khoản ghi có, hoặc cho cả một hàng đợi hay một token, hoặc "bản mã này đúng dạng" (các hàng
+`R_LEG`), hoặc "tồn tại một chứng minh PQZL hợp lệ cho một statement chứa nó" (kiểm đệ quy LNP22). Người gửi hoặc một prover bất
+kỳ không cần phép sẽ dựng nó. Như vậy không cần người giữ khoá hành động và không cần tin ai, nhưng nó phải nằm trong **state**,
+vì thứ gì trong calldata cũng hết hạn như `P`.
+
+**Kích thước, 2024–2026:**
+
+| Hệ | Kích thước chứng minh | Bộ kiểm | Trạng thái |
+|---|---|---|---|
+| LaBRADOR (lattice) [paper] | 58 KB cho R1CS 2^20 ràng buộc | tuyến tính theo statement | mã nghiên cứu, chỉ AVX-512 |
+| Greyhound (PCS lattice) [paper] | ≈ 53 KB chứng minh đánh giá, bậc tới 2^30; polylog khi ghép LaBRADOR | `O(√N)` | nghiên cứu |
+| LatticeFold / LatticeFold+ (folding lattice) [paper] | folding; chứng minh cuối vẫn cần một SNARK nén | — | nghiên cứu, chưa thấy kích thước triển khai được công bố |
+| zkVM dựa trên WHIR, dựa trên hash (leanVM / leanMultisig, gộp XMSS) [web] | ≈ 127–229 KiB ở rate 1/4 (an toàn theo giả thuyết hay đã chứng minh); ≈ 190–200 KiB sau đệ quy 2→1 | nhanh | nguyên mẫu, tham số chưa chốt |
+| `R_LEG` độc lập của ta (LNP22) [repo, §6] | 29,5–36,5 KB | — | chưa xây |
+
+**Chi phí state** ở ≈ 1.539 state gas mỗi byte [estimate]: `R_LEG` mỗi khoản ghi có ≈ 45–56 M; chứng minh lattice 53–58 KB ≈
+82–89 M; chứng minh dựa trên hash 127–229 KiB ≈ 200–361 M. Một chứng chỉ cho mỗi hàng đợi, ghi đè tại chỗ: 229 KiB là 7.328
+slot, ở 5.000 gas mỗi lần ghi lại (con số trước Amsterdam; con số Amsterdam không có trong repo) ≈ 37 M regular gas, vượt 2^24.
+Gửi nó tốn ≈ 15 M theo sàn calldata 64 gas mỗi byte (EIP-7976).
+
+**Mạch:** số học mod `q` của PQZ trên đa thức bậc `n` là phi bản địa trong mọi trường SNARK mà chúng tôi biết, và chúng tôi không
+biết bản cài đặt nào kiểm đệ quy chứng minh LNP22 [inference].
+
+**Kết luận (d):** không vừa và chưa chín. Nó sẽ cần một hệ chứng minh mới, `proofSystemId` mới, một op precompile và full gate.
+Chỉ là mục theo dõi.
+
+### 15.6 (e) Các cách khác
+
+- **Hợp đồng mã hoá lại hay ngẫu nhiên hoá lại các khoản ghi có vào không gian khoá của người giữ khoá.** Hợp đồng không giữ bí
+  mật nào (mọi state đều công khai), và tính ngẫu nhiên nó dùng cũng công khai. Đầu ra của nó là hàm công khai của đầu vào công
+  khai: nó không chứng minh gì mà người giữ khoá kiểm được nếu không tin state. Proxy re-encryption cần một khoá mã hoá lại suy
+  từ bí mật của người giữ khoá (một hành động của người giữ khoá), và mã hoá lại trên lattice thêm nhiễu và cần chứng minh riêng.
+  **Bị loại.**
+- **Một uỷ ban mã hoá lại theo ngưỡng, một TEE, hay một dịch vụ chứng nhận:** một bên tin cậy. **Bị loại.**
+- **Người gửi lưu chứng minh cho từng leg trong state:** theo số liệu của (d), ≈ 45–56 M state gas mỗi leg. **Bị loại vì chi
+  phí.**
+- **Xoay khoá khi cài lại:** việc chuyển là một lần ghi nợ, nên nó giải mã số dư cũ và có cùng nhu cầu.
+- **Full node riêng của người giữ khoá, hay light client có kiểm:** đó là đường (A) với các nguồn R1 cho phép (spec no-oracle,
+  Q1, owner 2026-11-06). Niềm tin chuyển từ bên đọc sang luật của chain hay khoá niêm phong của nó; trên chain Clique, khoá niêm
+  phong là của operator. Full node không cần lịch sử block để đọc state hiện tại (snap sync) [inference]. Đây là đường còn sót
+  lại ở dưới, không phải một đường mới.
+
+### 15.7 Kết luận cho người giữ khoá ngoại tuyến nhiều năm
+
+**Tổ hợp** [inference, UNAUDITED]: hướng 2 (`T` từ state, đã chấp nhận), cộng (b′) hoặc (b) trên mọi lần ghi nợ, cộng (a) toàn
+bộ lịch sử block của chính chain cho ghi nợ của bên thứ ba. Một người giữ khoá khôi phục chỉ từ seed:
+
+1. đọc state từ nguồn bất kỳ;
+2. kiểm lần ghi nợ cuối của chính mình bằng tag, hoặc bằng mã hoá lại, không cần `P`;
+3. tải giao dịch ghi nợ của mỗi khoản ghi có đang chờ từ bất kỳ full node hay bản sao lịch sử nào của chain đó;
+4. dựng lại mỗi statement với `T` từ state và tự kiểm mỗi `P`;
+5. giải mã.
+
+Như vậy không cần bên đọc tin cậy, không kho lưu của SCaaS hay của ví, không cần người gửi trao lại, không cần người giữ khoá
+hành động định kỳ.
+
+**Chi phí** [estimate]: trên chain ≈ +0,05 M state gas mỗi lần ghi nợ cho (b′), cộng thêm vào ≈ 0,10 M của hướng 2. Trên thiết
+bị ≈ 93–186 KB và 45–51 ms mỗi khoản ghi có đang chờ ở `n2304-kmax4096`, nhân với số khoản đang chờ. Số này không giới hạn khi
+có mồi nhử, và mỗi mồi nhử tốn cho người gửi một lần ghi nợ và `decoyFee`.
+
+**Còn sót lại:**
+
+1. Một khoản ghi có đang chờ mà giao dịch ghi nợ của nó không còn full node hay bản sao nào của chain đó phục vụ. Việc này xảy
+   ra trên chain có hết hạn cuốn chiếu (≈ 1 năm khi cấu hình theo cửa sổ mặc định của Nethermind) khi người giữ khoá vắng mặt
+   lâu hơn. Khi đó người giữ khoá dùng (A) với node riêng hoặc light client có kiểm, nếu không thì ví từ chối. Trên các chain có
+   node giữ toàn bộ lịch sử block, phần còn sót này bằng 0 chừng nào chúng còn giữ. Với các chain SCaaS vận hành, đó là một
+   thiết lập của chain.
+2. Quorum MPC cũng cần `P` cho các lần ghi nợ của chính nó, vì không có seed (§15.3).
+3. Tổ hợp (§3.3) và các mục kiểm toán còn mở (§3.1) không đổi. Mọi thứ ở đây đều UNAUDITED.
+
+**Công sức** [estimate]: (b′) hợp đồng 1–2, client và vector 1–2, tài liệu 0,5: **≈ 2–4 ngày-agent**. Nếu chọn (b): khối lượng
+gần như vậy, cộng một thay đổi `pqz-stmt` và full gate ở bốn bộ (mỗi bộ vài giờ).
+
+**Câu hỏi cho owner**
+
+1. **Ghi nợ của chính mình sau khi cài lại:** (b′), một `ownTag` khoá theo seed được ràng buộc qua `memoHash` (không đổi
+   `pqz-core`, đóng tính dễ uốn bit số dư), hay (b), tính ngẫu nhiên suy ra cho burn và refresh (đổi `pqz-stmt` và full gate;
+   đảo ngược quy tắc 2026-10-13)? *Khuyến nghị:* (b′).
+2. **Các chain SCaaS vận hành giữ toàn bộ lịch sử block:** ghi thành một thiết lập chain rõ ràng trong `docs/networks/evm.md`
+   (`History.Pruning` tắt trên các node của SCaaS testnet; 22776 theo lời owner), và ghi chú cho chain của khách hàng rằng đường
+   chứng minh chỉ lùi xa bằng lịch sử của họ? *Khuyến nghị:* có. Đó là cấu hình chain, không phải quy tắc của `scaas-node`.
+3. **Phần còn sót:** một khoản ghi có cũ hơn lịch sử của chain đi qua (A) với node riêng của người giữ khoá hoặc light client có
+   kiểm, nếu không thì ví từ chối? *Khuyến nghị:* có.
+4. **(d):** chỉ là mục theo dõi, chưa làm gì? *Khuyến nghị:* có.
+
+## 16. Nguồn
 
 - Naor, Yung, "Public-key cryptosystems provably secure against chosen ciphertext attacks", STOC 1990 [paper].
 - Sahai, "Non-malleable non-interactive zero knowledge and adaptive chosen-ciphertext security", FOCS 1999 [paper].
@@ -622,6 +853,16 @@ header**, thay cho log `header ‖ T`. Log `header ‖ T` mà không tăng state
   Hofheinz, Hövelmanns, Kiltz, "A modular analysis of the Fujisaki–Okamoto transformation", TCC 2017 [paper].
 - [EIP-4444](https://eips.ethereum.org/EIPS/eip-4444) (lịch sử hết hạn), [EIP-7825](https://eips.ethereum.org/EIPS/eip-7825),
   [EIP-7976](https://eips.ethereum.org/EIPS/eip-7976), [EIP-8037](https://eips.ethereum.org/EIPS/eip-8037).
+- Beullens, Seiler, "LaBRADOR: compact proofs for R1CS from Module-SIS", CRYPTO 2023 [paper]; Nguyen, Seiler,
+  "Greyhound: fast polynomial commitments from lattices", CRYPTO 2024, [ePrint 2024/1293](https://eprint.iacr.org/2024/1293)
+  [paper]; Boneh, Chen, "LatticeFold" (2024) và "LatticeFold+" (2025) [paper]; [lattice-dogs/labrador](https://github.com/lattice-dogs/labrador)
+  (bản cài đặt).
+- Hết hạn lịch sử, đọc ngày 2026-11-06 [web]: [thông báo hết hạn lịch sử một phần](https://blog.ethereum.org/2025/07/08/partial-history-exp)
+  (Ethereum Foundation, 2025-07-08); [Nethermind history pruning](https://docs.nethermind.io/fundamentals/history-pruning)
+  (tài liệu cho 2.2.0); [bản phát hành Nethermind 1.33](https://www.nethermind.io/blog/nethermind-client-v1-33-smaller-faster-and-real-time-ui)
+  (82.125 epoch); [history endpoints](https://eth-clients.github.io/history-endpoints); [EIP-7642](https://eips.ethereum.org/EIPS/eip-7642) (eth/69).
+- Kích thước gộp dựa trên hash [web]: benchmark trong README của [leanEthereum/leanMultisig](https://github.com/leanEthereum/leanMultisig)
+  (WHIR, gộp XMSS).
 - Repository: [pq-zero-knowledge.md](../contracts/pq-zero-knowledge.md) §4.3, §7, §9.3;
   `pqz-core/params/sets/README.md`; `pqz-core/nethermind/chain/engine-pqz-provisional-n*.json`;
   [pqz-threshold-decrypt-prove.md](pqz-threshold-decrypt-prove.md) §12; spec no-oracle và plan ua-rs-sign (T16a, T16b) trên
