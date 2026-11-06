@@ -3,7 +3,7 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or
 > superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status (2026-11-04):** plan, not executed; its decisions MD-1 to MD-10 accepted by the owner 2026-11-04. **Owner 2026-11-04 (after T0): build M first** (A + B + C with the router's pairs, Q2, R17, R47: tasks T1-T8 with T3b, T10-T23 without a lever), then a checkpoint: gates, the whole-branch review (Claude, Fable, Codex) and the PR of M into `main`. **T9 (levers D / L) is not started: the owner decides it after M.** M alone fits a 200 M block, not 70 M for `WrappedToken` (72.37 M asked, T0), so no public chain deploy before that decision. Nothing is built from it; this commit writes no code, contract, test or vector. **Owner 2026-11-04 (after T1): Q6 changed:** the mandate wallets are built in this round in the merged form (task T3b, MD-11); T1 is built. **Owner 2026-11-05:** the six regulated kinds 8–13 are built in this branch as task group **T24–T36**, after T18 and before T19 ([spec](../specs/2026-11-05-regulated-kinds.md), revised after the Fable and Codex reviews; 19 agent-days); T19–T23 cover the group. **Owner 2026-11-06:** group **3e** (payment metadata, free pay lanes, tax on the regulated kinds) is built as **T37–T43** after T36 and before 3c ([spec](../specs/2026-11-05-pay-meta-tax.md), approved 2026-11-06; 14.5 agent-days plus 0.5 on T19, 15 in all); T19–T23 cover it. **Owner 2026-11-06:** group **3f** (attested proof verification, PQZ only) is built as **T44–T50** after T43 and before 3c ([spec](../specs/2026-11-06-attested-verify.md), approved 2026-11-06 after the Codex and Fable reviews and rulings R1–R4; 10 agent-days, T50 its docs share in T19); T19–T23 cover it. **Owner 2026-11-06:** group **3g** (versioned PQZ keys) is built as **T51–T57** after T50 and before 3c, with 3c's registry generation ([spec](../specs/2026-11-06-pqz-key-versions.md), approved 2026-11-06 after the Codex and Fable reviews and rulings R1–R5; 19.5 agent-days, T57 its docs share in T19, plus 1 on `ua-rs-sign`); T19–T23 cover it. **Owner 2026-11-07:** group **3h** (the PQZ proof path, contract side: the debit record, `ownTag` and the key-version tail, `proofStore` `NONE` / `LOG` (SSTORE2 dropped by the owner, kept in the spec's Appendix A), bit 24 `PQZ_PROOF`, the integration gate) is built as **T58–T66** after T57 and before 3c ([spec](../specs/2026-11-06-pqz-proof-path.md), from the owner-agreed design of research `pqz-leg-proof-option.md` §15A, revised after the Codex and Fable reviews and the owner's decisions O9–O13, **approved 2026-11-07**; 19 agent-days, T66 its docs share in T19; the client side, 14–16.5 agent-days, goes to the no-oracle spec on `ua-rs-sign`). Totals of the added groups: T24–T36 19, T37–T43 with T19's share 15, T44–T50 10, T51–T57 19.5, together 63.5 agent-days; with 3h 82.5.
+**Status (2026-11-04):** plan, not executed; its decisions MD-1 to MD-10 accepted by the owner 2026-11-04. **Owner 2026-11-04 (after T0): build M first** (A + B + C with the router's pairs, Q2, R17, R47: tasks T1-T8 with T3b, T10-T23 without a lever), then a checkpoint: gates, the whole-branch review (Claude, Fable, Codex) and the PR of M into `main`. **T9 (levers D / L) is not started: the owner decides it after M.** M alone fits a 200 M block, not 70 M for `WrappedToken` (72.37 M asked, T0), so no public chain deploy before that decision. Nothing is built from it; this commit writes no code, contract, test or vector. **Owner 2026-11-04 (after T1): Q6 changed:** the mandate wallets are built in this round in the merged form (task T3b, MD-11); T1 is built. **Owner 2026-11-05:** the six regulated kinds 8–13 are built in this branch as task group **T24–T36**, after T18 and before T19 ([spec](../specs/2026-11-05-regulated-kinds.md), revised after the Fable and Codex reviews; 19 agent-days); T19–T23 cover the group. **Owner 2026-11-06:** group **3e** (payment metadata, free pay lanes, tax on the regulated kinds) is built as **T37–T43** after T36 and before 3c ([spec](../specs/2026-11-05-pay-meta-tax.md), approved 2026-11-06; 14.5 agent-days plus 0.5 on T19, 15 in all); T19–T23 cover it. **Owner 2026-11-06:** group **3f** (attested proof verification, PQZ only) is built as **T44–T50** after T43 and before 3c ([spec](../specs/2026-11-06-attested-verify.md), approved 2026-11-06 after the Codex and Fable reviews and rulings R1–R4; 10 agent-days, T50 its docs share in T19); T19–T23 cover it. **Owner 2026-11-06:** group **3g** (versioned PQZ keys) is built as **T51–T57** after T50 and before 3c, with 3c's registry generation ([spec](../specs/2026-11-06-pqz-key-versions.md), approved 2026-11-06 after the Codex and Fable reviews and rulings R1–R5; 19.5 agent-days, T57 its docs share in T19, plus 1 on `ua-rs-sign`); T19–T23 cover it. **Owner 2026-11-07:** group **3h** (the PQZ proof path, contract side: the debit record, `ownTag` and the key-version tail, `proofStore` `NONE` / `LOG` (SSTORE2 dropped by the owner, kept in the spec's Appendix A), bit 24 `PQZ_PROOF`, the integration gate) is built as **T58–T66** after T57 and before 3c ([spec](../specs/2026-11-06-pqz-proof-path.md), from the owner-agreed design of research `pqz-leg-proof-option.md` §15A, revised after the Codex and Fable reviews and the owner's decisions O9–O13, **approved 2026-11-07**; 19 agent-days, T66 its docs share in T19; the client side, 14–16.5 agent-days, goes to the no-oracle spec on `ua-rs-sign`). Totals of the added groups: T24–T36 19, T37–T43 with T19's share 15, T44–T50 10, T51–T57 19.5, together 63.5 agent-days; with 3h 82.5. **Owner 2026-11-07: 3g before 3f.** The build order is 3e (T37–T43) → 3g (T51–T57, after T43) → 3f (T44–T50, after T57) → 3h (T58–T66, after T50) → 3c → T19–T23; task ids unchanged. 3g's ATTESTED items move to 3f, which builds its ATTESTED mode over versioned keys (3g §5, KV-12): T53's ATTESTED disclosure form and `test_attested_*`, T52's `test_inflight_attested_refused` and the ATTESTED-token case of `test_keyReused_*` (with the M-T6 kill) go to T44 / T45; the per-version cache `(ua, version, pqzKeyHash)` to T48; the node's `AttestationMismatch` arm of `PQZ_KEY_ROTATED` to T47.
 
 **Spec:** [`2026-11-04-ua-mtx-merge.md`](../specs/2026-11-04-ua-mtx-merge.md), **accepted by the owner 2026-11-04** (Q1–Q7, §10);
 rules R1–R47 (§5), invariants 1–7 (§8), measurement (§9). **Ruling:** [CTR-MTX-30](../../decisions.md#CTR-MTX-30), its Q6 Change, and the Change
@@ -215,10 +215,10 @@ rustc 1.90); Node `node --test` (`clients/clientkeys`); `zether-prover`; `ua-rs`
 | Wallets | T20 | after T11, owner-assisted, beside T14–T19; before reset 2 |
 | Regulated | T24 → T25 → T26 → T27 → T28 → T29 → T30 → T31 → T32 → T33; T34 beside T33; T35 after T33, T34; T36 after T33, beside T34–T35 | after T18, before T19 (owner 2026-11-05); contracts sequential in this worktree; T27 measures kinds 9 and 13 before T28 fills the bodies |
 | Pay meta, tax (3e) | T37 → T38 → T39 → T40; T41 after T40; T42 after T41; T43 after T40, beside T41–T42 | after T36, before 3c (owner 2026-11-06); contracts sequential in this worktree; T37 and T40 measure kind 13 first |
-| Attested PQZ (3f) | T44 → T45; T46 after T45; T47 after T46; T48 and T49 after T45, beside T46–T47; T50 beside, lands in T19 | after T43, before 3c (owner 2026-11-06); contracts sequential in this worktree; T45 measures kind 13 first |
-| Versioned PQZ keys (3g) | T51 → T52 → T53; T54 after T53; T55 after T54; T56 after T53, beside T54–T55; T57 beside, lands in T19 | after T50, before 3c (owner 2026-11-06); contracts sequential in this worktree; T51 measures the registry's deploy gas, T52 measures kind 13 first; 3c's rebalance comes after T53 |
-| PQZ proof path (3h) | T58 → T59 → T60 → T61; T62 after T61; T63 after T62; T64 and T65 after T61, beside T62–T63; T66 beside, lands in T19 | after T57, before 3c (owner approved 2026-11-07); contracts sequential in this worktree; T58 measures kind 13 first; each format moves in the task that changes it; no task waits for `ua-rs-sign` |
-| Docs | T19 | drafts beside T14–T18, T24–T36, T37–T43, T44–T50, T51–T57 and T58–T66; lands after T66 and 3c (BUILT only with code and tests) |
+| Versioned PQZ keys (3g) | T51 → T52 → T53; T54 after T53; T55 after T54; T56 after T53, beside T54–T55; T57 beside, lands in T19 | after T43, before 3f (owner 2026-11-07: 3g before 3f); contracts sequential in this worktree; T51 measures the registry's deploy gas, T52 measures kind 13 first (from what T43 leaves); 3c's rebalance comes after T53; the ATTESTED items go to 3f |
+| Attested PQZ (3f) | T44 → T45; T46 after T45; T47 after T46; T48 and T49 after T45, beside T46–T47; T50 beside, lands in T19 | after T57, before 3h (owner 2026-11-07: 3g before 3f); contracts sequential in this worktree; T45 measures kind 13 first (from what T57 leaves); ATTESTED built over versioned keys (3g §5) |
+| PQZ proof path (3h) | T58 → T59 → T60 → T61; T62 after T61; T63 after T62; T64 and T65 after T61, beside T62–T63; T66 beside, lands in T19 | after T50, before 3c (owner approved 2026-11-07); contracts sequential in this worktree; T58 measures kind 13 first; each format moves in the task that changes it; no task waits for `ua-rs-sign` |
+| Docs | T19 | drafts beside T14–T18, T24–T36, T37–T43, T51–T57, T44–T50 and T58–T66; lands after T66 and 3c (BUILT only with code and tests) |
 | Close | T21 → T22 → T23 | |
 | Next | TODO item 4 | SCaaS testnet reset 2 deploys the merged code (not this plan) |
 
@@ -1469,8 +1469,8 @@ fields `tax`, `tax_mode`, `tax_recipient`, `net`, `withheld_by`; alerts on `TaxR
 **Spec:** [`2026-11-06-attested-verify.md`](../specs/2026-11-06-attested-verify.md), revised after the Codex and Fable reviews
 ([Codex](../../research/attest-codex-review.md), [Fable](../../research/attest-fable-review.md)); rulings O1, O2, O5 and R1–R4
 (PQZ only, the attestation inline, unproven keys in ATTESTED mode, an immediate revocation); one question open (spec §12, Q1:
-revoking a fixed verifier, recommended no). **Place:** after T43, before 3c (`PqChat` and the registry generation); T19, T21, T22,
-T23 cover the group. **Order:** contracts T44 → T45, sequential in this worktree (shared `PqzCore`, `PqzLayer`,
+revoking a fixed verifier, recommended no). **Place:** after T57 (3g; owner 2026-11-07: 3g before 3f), before 3h and 3c (`PqChat` and the registry generation); T19, T21,
+T22, T23 cover the group. ATTESTED is built over 3g's versioned keys (3g §5, KV-12). **Order:** contracts T44 → T45, sequential in this worktree (shared `PqzCore`, `PqzLayer`,
 `size-baseline.json`); T46 (`clients/`, `smartcontracts/vectors/`) after T45 fixes the ABI; T47 (node) after T46; T48 (the
 reference verifier service, its own crate) and T49 (invariants, mutants) after T45, beside T46–T47; T50 (docs share) drafts beside
 them and lands in T19. **Estimate:** 10 agent-days. Every contracts task ends with the whole `forge test` green at the default set
@@ -1481,7 +1481,7 @@ the first commit of each task that replaces a body.
 
 ### Task T44: the ATTESTED core in `PqzCore`, `PqzStateLib`, `PqzLayer`
 
-**Depends on:** T43. **Estimate:** 2.
+**Depends on:** T57 (3g before 3f, owner 2026-11-07). **Estimate:** 2.
 
 **Files:** `src/factory/IFactoryToken.sol` (`ConfidentialConfig`: `verifyMode`, `attestVerifier`, `attestFixed`) and the
 `TokenConfig` decode of every kind; `src/pqz/{PqzCore,PqzStateLib,PqzWrappedLib,PqzLayer,IPqzToken}.sol`; `src/ua/UAKinds.sol`
@@ -1493,7 +1493,7 @@ constructor admits `releaseProofVerifier = 0`; PRECOMPILE init refuses it `SelfT
 init reads nothing from it (`psid = PqzSet.PQZL_ID`); `attesterUA` checked (§4.1: kinds, `AttestVerifierUnregistered`,
 `AttestVerifierKind`, the frozen shape); `_check(o, buf, proof, authSig, att, attSig)` with spec §5.3's ATTESTED branch, the
 `UAVerifyGas` `try`/`catch` shape, `ProofAttested`; `_keyPtr` / `_creditKey` without `proven` in ATTESTED mode, the set length
-kept; the auditor rule; the bodies of `setAttestVerifier`, `cancelAttestVerifier`, `revokeAttestVerifier` (owner, the factory's
+kept, per key version as 3g's KV-12 ATTESTED column (built in T51–T53); the auditor rule; the bodies of `setAttestVerifier`, `cancelAttestVerifier`, `revokeAttestVerifier` (owner, the factory's
 `noticePeriod()`, same proposer and owner generation, epoch bump, immediate revocation); `PqzAttest` typehash pin.
 
 - [ ] **Step 1: Failing tests:** `test_attest_positiveControl`, `test_attest_wrong{Token,Chain,Psid,Epoch,Statement,Proof}`,
@@ -1503,7 +1503,10 @@ kept; the auditor rule; the bodies of `setAttestVerifier`, `cancelAttestVerifier
       `test_revoke_{immediate,deletesPending,fixedRefused}`, `test_mode_{immutable,configInvalid,valueInvalid}`,
       `test_release_zeroDep_{precompileRefused,attestedInits}`, `test_attested_neverCallsPrecompile`,
       `test_precompile_ignoresAttestation`, `test_keys_unproven_{attestedAccepts,precompileRefuses,wrongLength}`,
-      `test_auditor_unproven_{attested,precompile}`, `test_ciphertexts_sameInBothModes`, `test_PqzAttestTypehashIsPinned`.
+      `test_auditor_unproven_{attested,precompile}`, `test_ciphertexts_sameInBothModes`, `test_PqzAttestTypehashIsPinned`; moved
+      from 3g (owner 2026-11-07: 3g before 3f): `test_inflight_attested_refused`, `test_attested_{currentProvenOnVerifier,
+      v0UnprovenWhileNoneProven,noVerifierNeedsBytes}`, `test_attested_outstanding_notRetargetable`, the ATTESTED-token case of
+      `test_keyReused_{legs,auditor,migration}` (two UAs storing one key on a registry without the verifier) with the M-T6 kill.
 - [ ] **Step 2:** FAIL. **Step 3: Implement.** **Step 4:** PASS; whole `forge test`; the four sets; size gate.
 - [ ] **Step 5: Mutants:** spec §15's Binding, Verifier, Mode and Keys rows.
 - [ ] **Step 6:** Commit `ua-mtx-merge T44: PQZ ATTESTED core, verifier transfer and revocation`.
@@ -1520,7 +1523,8 @@ kept; the auditor rule; the bodies of `setAttestVerifier`, `cancelAttestVerifier
 **Interfaces:** spec §5.3–§5.4: `PqzAttest calldata att, IUARegistry.UASig calldata attSig` last on every proof-carrying entry
 (direct and signed forms; twelve on 5, 13, ten on 4, 12), outside every `UA*` struct (no typehash moves); the struct fallback
 `PqzAttestation` only if the legacy decoder runs out of stack; `verifyTransferAmount` five-argument form `AttestationRequired()`
-in ATTESTED mode, seven-argument form; stubs `setAttestVerifier(bytes32)`, `cancelAttestVerifier()`, `revokeAttestVerifier()`,
+in ATTESTED mode, seven-argument form, both with 3g's `keyVersion` after `kind` (3g KV-11; `test_disclosure_attested_withVersion`
+moved from T53); stubs `setAttestVerifier(bytes32)`, `cancelAttestVerifier()`, `revokeAttestVerifier()`,
 the view `attestConfig()`; router `mtxSetAttestVerifier`, `mtxCancelAttestVerifier`, `mtxRevokeAttestVerifier` over
 `UASetAttestVerifier`, `UACancelAttestVerifier`, `UARevokeAttestVerifier`.
 
@@ -1529,7 +1533,8 @@ the view `attestConfig()`; router `mtxSetAttestVerifier`, `mtxCancelAttestVerifi
       `test_disclosure_{fiveArgCannotVerify,sevenArgTrue,sevenArgWrongAmount,sevenArgRevoked}`, `test_router_attestOps`,
       `test_mtxSelectors_attest_{4,5,12,13}`.
 - [ ] **Step 2:** FAIL. **Step 3: Implement**, kind 13 first (the parameters on one entry, then the rest, then the view, then the
-      stubs), then 12, 5, 4, then every other kind (the config decode).
+      stubs), then 12, 5, 4, then every other kind (the config decode). Kind 13's baseline is what T57 leaves (3g in); spec §9's
+      lever 5 also takes 3g's §6.3 levers not yet used, after 3e's.
 - [ ] **Step 4:** PASS; whole `forge test`; the four sets; size gate and deploy gas on the regulated spec's §6.2 method. **Stop
       rule (spec §9, 3e O18):** a kind at or above **64,512 B** is reduced by spec §9's levers 1–5 in order, one at a time, size
       and whole `forge test` re-run after each, until it is under; back to the controller only when every lever is applied (the
@@ -1563,7 +1568,8 @@ and the shield-refusal switch, no secret), `tests/e2e.rs` (ignored, anvil); `doc
 node from the token, the chain, `proofSystemId()`, the simulated statement and the job's proof; `ATTESTATION_MISSING`,
 `ATTESTATION_NOT_EXPECTED`, `HEX_ARGS_REFUSED`; fetching from `[attest] endpoints` with the bounded `UASig` decoder, a size limit
 and a timeout; the indexer's `lastAttestationAt`, epoch and revoked state; `[attest] refuse_shield_when_unserved` (off by default)
-and `VERIFIER_UNREACHABLE`; alerts on `AttestVerifierProposed` and `AttestVerifierRevoked`. The node holds no verifier key.
+and `VERIFIER_UNREACHABLE`; alerts on `AttestVerifierProposed` and `AttestVerifierRevoked`; `PQZ_KEY_ROTATED` (T55) also on an `AttestationMismatch`
+simulation error. The node holds no verifier key.
 
 - [ ] **Step 1: Failing tests:** `attest_subobject_builds_struct`, `attest_hex_refused`, `attested_job_without_attest_fetches_or_refuses`,
       `precompile_job_with_attest_refused`, `attest_epoch_mismatch_refetch_once`, `attestation_mismatch_not_dead`,
@@ -1584,7 +1590,8 @@ secret), its tests; `docs/node/ops.md` draft (a separately operated trust role).
 
 **Interfaces:** spec §11.2: `POST /v1/attest` `{token, chainId, op, statement, proof, verifierEpoch}`, the set-derived body limit,
 depth ≤ 4; release address → set; statement rebuilt from state and compared; `pqz-ffi`'s `pqz_precompile`; spec §6's key checks
-(stored `pqzPop` bytes, the `R_REG` message per path, single ownership) cached by `(ua, pqzKeyHash)`; signs only on verdict 1;
+(stored `pqzPop` bytes, the `R_REG` message per path and per key version, single ownership across UAs and versions) cached by
+`(ua, version, pqzKeyHash)` (3g KV-12); signs only on verdict 1;
 the probe signature; logs every signature.
 
 - [ ] **Step 1: Failing tests:** `signs_valid_statement`, `refuses_verdict_zero`, `refuses_tampered_statement`,
@@ -1629,7 +1636,7 @@ switch), `indexer-feeds.md`; the operator note's attested rows.
 ([Codex](../../research/pqzver-codex-review.md), [Fable](../../research/pqzver-fable-review.md)); rulings O1–O7 and R1–R5 (no
 `keyVersion` in `PqzAuth`; R-cross-set's version-0 replacement retired; receiver and auditor versions not named, with the decoy
 filter and the intake refusal; 60 M accepted if 57 M is missed; every other finding adopted); no question open. **Place:** after
-T50, before 3c, with 3c's registry generation (3c's rebalance after T53, measured with 3g in); T19, T21, T22, T23 cover the group.
+T43, before 3f (owner 2026-11-07: 3g before 3f) and 3c, with 3c's registry generation (3c's rebalance after T53, measured with 3g in); T19, T21, T22, T23 cover the group.
 **Order:** contracts T51 → T52 → T53, sequential in this worktree (shared `UARegistryLib`, `UAStore`, `PqzCore`, `PqzLayer`,
 `size-baseline.json`); T54 (`clients/`, `smartcontracts/vectors/`) after T53 fixes the ABI; T55 (node) after T54; T56 (invariants,
 mutants) after T53, beside T54–T55; T57 (docs share) drafts beside them and lands in T19. The `ua-rs-sign` items (T15
@@ -1642,7 +1649,7 @@ each task that replaces a body.
 
 ### Task T51: the registry: versioned PQZ key records
 
-**Depends on:** T50. **Estimate:** 3.5.
+**Depends on:** T43 (3g before 3f, owner 2026-11-07). **Estimate:** 3.5.
 
 **Files:** `src/ua/{UAStore,UARegistryLib,UARegistry,IUARegistry,UAKinds}.sol`; `legacy/ua-mtx-merge/` (the four- and two-argument
 `setPqzKey` / `storePqzPop`, R-cross-set's replacement); `script/DeployBase.sol`, `script/pqz/e2e.py` (callers);
@@ -1689,13 +1696,15 @@ direct and signed (100-byte static rule in `_pqzRule`, `_isPqzOp`); views with `
 `keyVersion`, `PqzRolledOver`.
 
 - [ ] **Step 1: Failing tests:** spec §14's token rows: `test_credit_afterRotation_lands_vPlus1`,
-      `test_inflight_{precompile,attested}_refused`, `test_burn_v0_notRetargetable`, `test_stale_{payment,op7,burnAmount}_refused`,
-      `test_stale_{refresh,migration}_ok`, `test_selfTransfer_{current,op7Leg}_refused`, `test_keyReused_{legs,auditor,migration}`,
+      `test_inflight_precompile_refused`, `test_burn_v0_notRetargetable`, `test_stale_{payment,op7,burnAmount}_refused`,
+      `test_stale_{refresh,migration}_ok`, `test_selfTransfer_{current,op7Leg}_refused`, `test_keyReused_{legs,auditor,migration}` (PRECOMPILE controls; the
+      ATTESTED-token case and the M-T6 kill go to T44),
       `test_keyVersion_{above,unprovenStale}_refused`, `test_equalTrivial_accountSettled`, `test_replay_afterMigration_refused`,
       `test_counter_sharedAcrossVersions`, `test_rollover_{stale,neverChecked}`, `test_static_{100ok,68refused}`,
       `test_decoys_landOnCurrent`, `test_auditorRotation`, `test_restore_twoVersions`, typehash pins, `test_mtxSelectors_pqzver_{4,5,12,13}`.
 - [ ] **Step 2:** FAIL. **Step 3: Implement**, kind 13 first (the state and one entry, then the rest, then the views and events),
-      then 12, 5, 4, then the four libraries.
+      then 12, 5, 4, then the four libraries. Kind 13's baseline is what T43 leaves (3f not yet in); spec §6.3's lever 5 is 3e's
+      levers only.
 - [ ] **Step 4:** PASS; whole `forge test`; the four sets; size gate and deploy gas. **Stop rule (spec §6.3, 3e O18):** a kind at
       or above **64,512 B** is reduced by spec §6.3's levers 1–5 in order, one at a time, size and whole `forge test` re-run after
       each, until it is under; back to the controller only when every lever is applied (`_above64KiB` is not a fallback).
@@ -1705,20 +1714,20 @@ direct and signed (100-byte static rule in `_pqzRule`, `_isPqzOp`); views with `
 **Pins, old → new:** gas of every PQZ entry; the `UA*` typehashes; sizes of 4, 5, 12, 13 and the PQZ libraries; `LinkClosure`
 codehashes; the `scaas.pqz` layout. **Gates:** whole `forge test`, four sets, size gate.
 
-### Task T53: disclosure, ATTESTED, the local rotation run
+### Task T53: disclosure, the local rotation run
 
 **Depends on:** T52. **Estimate:** 2.
 
-**Files:** `src/pqz/{PqzLayer,PqzViewLib,PqzCore}.sol` (disclosure with `keyVersion`, both 3f forms), the 3f ATTESTED paths
-(`_keyPtr` per version); `script/pqz/e2e.py` (the rotation scenario); `test/pqz/PqzKeyVersionsAttest.t.sol` (new).
+**Files:** `src/pqz/{PqzLayer,PqzViewLib,PqzCore}.sol` (disclosure with `keyVersion`, the PRECOMPILE form); `script/pqz/e2e.py`
+(the rotation scenario); `test/pqz/PqzKeyVersionsDisclosure.t.sol` (new). The ATTESTED items (the attested disclosure form with
+`keyVersion`, `_keyPtr` per version in ATTESTED mode, their tests) are built in T44 / T45 (owner 2026-11-07: 3g before 3f).
 
-- [ ] **Step 1: Failing tests:** `test_disclosure_{right,unknown}`, `test_disclosure_attested_withVersion`,
-      `test_attested_{currentProvenOnVerifier,v0UnprovenWhileNoneProven,noVerifierNeedsBytes}`, `test_attested_outstanding_notRetargetable`.
+- [ ] **Step 1: Failing tests:** `test_disclosure_{right,unknown}`.
 - [ ] **Step 2:** FAIL. **Step 3: Implement.** **Step 4:** PASS; whole `forge test`; the four sets; the e2e rotation run (an
       `msig` holder: register v1, prove, credit, migrate, disclose) on a local chain with the PQZ precompile brought up for the task,
       never the live testnet stack; no node left running.
 - [ ] **Step 5: Mutants:** M-T7.
-- [ ] **Step 6:** Commit `ua-mtx-merge T53: PQZ disclosure by key version, ATTESTED versions, local rotation run`.
+- [ ] **Step 6:** Commit `ua-mtx-merge T53: PQZ disclosure by key version, local rotation run`.
 
 ### Task T54: vectors and clients
 
@@ -1746,7 +1755,7 @@ record builders, derivation, wallet rules, additive recovery); `clients/ua-rs` a
 **Interfaces:** spec §7.3: `key_version` on PQZ debit, rollover and prepare jobs; `call` rows for the two registry entries; the
 allow-lists both directions with the static lengths and per-kind rollover rows; `PQZ_KEY_VERSION_UNKNOWN`, `PQZ_KEY_STALE`,
 `PQZ_KEY_REUSED`, `PQZ_KEY_ROTATION_PENDING`, `PQZ_KEY_ROTATED` (after a `UAPqzKeyCurrent` since intake, with the simulation
-error, never `dead`); the indexer's version events and feeds; keepers per `(ua, version)`.
+error, never `dead`; the `AttestationMismatch` arm lands in T47); the indexer's version events and feeds; keepers per `(ua, version)`.
 
 - [ ] **Step 1: Failing tests:** `pqz_key_version_named`, `pqz_hex_refused`, `pqz_rows_equal_contract_{4,5,12,13}`,
       `rollover_rows_per_kind`, `rotation_pending_refused_at_intake`, `rotated_after_event_not_dead`, `rotated_needs_event`,
@@ -1767,7 +1776,7 @@ error, never `dead`); the indexer's version events and feeds; keepers per `(ua, 
       spec §13.
 - [ ] **Step 2:** Run at the default set and the four sets.
 - [ ] **Step 3: Mutants:** every row of spec §14 not already killed in T51–T55 (the harness re-runs those too); a survivor is a
-      finding for its owning task.
+      finding for its owning task. M-T6's ATTESTED-token kill belongs to T44 (3f after 3g) and T49 re-runs it.
 - [ ] **Step 4:** Commit `ua-mtx-merge T56: PQZ key version invariants J1-J10 and the mutant harness, <n> kills`.
 
 **Gates:** whole `forge test`, four sets.
@@ -1790,7 +1799,7 @@ the operator note's rotation runbook.
 revised 2026-11-07 after the Codex and Fable reviews (no P0; every item accepted, spec §15; R1, R2 required) and for the owner's
 decisions of 2026-11-07 (O9 `proofStore` is `NONE` or `LOG`, SSTORE2 dropped and kept in the spec's Appendix A; O10 bit 24; O11
 `PQZ_DEBIT_MIN_GAS` with `LOG`; O12 the MPC quorum's dependence on history; O13 the wizard refuses unsupported combinations);
-**approved by the owner 2026-11-07**, no question open. **Starts after 3e, 3f and 3g (T57)** per the work order. **Place:** after T57, before 3c (3h touches no registry code; 3c's
+**approved by the owner 2026-11-07**, no question open. **Starts after 3e, 3g and 3f (T50)** per the work order (owner 2026-11-07: 3g before 3f). **Place:** after T50, before 3c (3h touches no registry code; 3c's
 rebalance still comes after every PQZ contract change); T19, T21, T22, T23 cover the group. **Order:** contracts T58 → T59 → T60 →
 T61, sequential in this worktree (shared `PqzCore`, `PqzLayer`, the PQZ libraries, `size-baseline.json`); T62 (the remaining
 vectors) after T61; T63 (node) after T62; T64 (invariants, mutants) and T65 (integration gate) after T61, beside T62–T63, at most
@@ -1807,7 +1816,7 @@ commit of each task that replaces a body. No `pqz-core` change, so no full gate.
 
 ### Task T58: the debit record
 
-**Depends on:** T57. **Estimate:** 3.5.
+**Depends on:** T50 (3f, the last group before 3h). **Estimate:** 3.5.
 
 **Files:** `src/pqz/{PqzCore,PqzStateLib,PqzViewLib,PqzLayer,IPqzToken}.sol`, the four PQZ token sources for forwards;
 `test/pqz/PqzDebitRecord.t.sol` (new); `test/v2/layout/namespaces.json` (`scaas.pqz`, pinned here if T52 did not); the PQZ gas

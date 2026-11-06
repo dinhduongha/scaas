@@ -1,10 +1,10 @@
 # Versioned PQZ keys (group 3g) — design
 
-**Status:** **approved by the owner 2026-11-06; build after T50, with 3c's registry generation.** SPECIFIED; nothing is built.
+**Status:** **approved by the owner 2026-11-06; build after T43, before 3f (owner 2026-11-07: 3g before 3f), with 3c's registry generation.** SPECIFIED; nothing is built.
 Revised after the Codex and Fable reviews of the first draft ([Codex](../../research/pqzver-codex-review.md): 2 high, 2 medium;
 [Fable](../../research/pqzver-fable-review.md): 0 P0, 0 P1, 5 P2, 10 P3, verdicts on Q1–Q4, a missing-items list) and the
 owner's rulings R1–R5 of 2026-11-06; every finding's outcome is in §17. Work-order group **3g** of branch `ua-mtx-merge`: tasks
-**T51–T57** after 3f (T44–T50) and before 3c (`PqChat` and the registry generation, whose `UARegistryLib` ↔ `UARegistry`
+**T51–T57** after 3e (T37–T43) and before 3f (T44–T50, owner 2026-11-07) and 3c (`PqChat` and the registry generation, whose `UARegistryLib` ↔ `UARegistry`
 rebalance comes last, after every PQZ contract change), so the round's docs (T19), gates (T21), review (T22) and PR (T23) cover it
 and the EVM freeze and audit include it. **PQZ only:** no Zether contract, statement or vector changes. **Everything here is
 UNAUDITED.**
@@ -442,9 +442,10 @@ M-T5). Migration confidentiality additionally assumes honest independent keys (r
 this branch, with 3c's `requirePortable` and "an `msig` has no KEM key" (which does not touch PQZ: an `msig` keeps its PQZ key,
 CTR-PQZ-12); mainnet 22776 (the owner's) gets this release or a later one, never an earlier one. New PQZ token releases (kinds 4,
 5, 12, 13) with their factory catalogue rows (`OpenFactory` / `DeployBase` entries, release codehashes); nothing deployed is
-upgraded. Order in the branch: **3e (T37–T43) → 3f (T44–T50) → 3g (T51–T57) → 3c** (its registry items, then the `UARegistryLib` ↔
-`UARegistry` rebalance last, measured with 3g in) → T19–T23. 3g follows 3f because both change `PqzCore._check` / `_keyPtr` and
-the PQZ entry signatures; it precedes 3c because the rebalance must come after every PQZ contract change (TODO item 3c).
+upgraded. Order in the branch (owner 2026-11-07: 3g before 3f): **3e (T37–T43) → 3g (T51–T57) → 3f (T44–T50) → 3h (T58–T66) → 3c** (its
+registry items, then the `UARegistryLib` ↔ `UARegistry` rebalance last, measured with 3g in) → T19–T23. Both 3g and 3f change
+`PqzCore._check` / `_keyPtr` and the PQZ entry signatures, so 3f builds its ATTESTED mode over versioned keys and takes §5's
+ATTESTED items (KV-12, the attested disclosure form with `keyVersion`, their tests); it precedes 3c because the rebalance must come after every PQZ contract change (TODO item 3c).
 
 ### 6.2 Registry size and deploy gas
 
@@ -485,13 +486,13 @@ deploy gas. `storePqzPop`'s run-time gas at the largest set is KV-2's, not this 
 | PQZ tokens, kinds 4, 5, 12, 13 (`PqzLayer`) | +0.5 to +1.1 KB | one `uint64` field in three args structs (decoders of the twelve entries), `mtxRollOver` / `mtxPrepareAcc` with a version (direct and signed, new selectors and static length), four views with a version, the events, three errors (`KeyReused`, `StaleKeyVersion`, `KeyVersionUnknown`) |
 | `PqzStateLib`, `PqzTransferLib`, `PqzBurnLib`, `PqzViewLib` | +0.3 to +0.8 KB each | the nested account mapping, `sendCounter[ua]`, the current and stale reads, the pairwise compare, the disclosure version |
 
-**Kind 13 (`WrappedPqzRegulatedToken`) is measured first in T52**, from what T50 leaves (62,285 B after T29/T30: 3g alone would
-leave 1.1–1.7 KB under the line, before 3e and 3f add theirs, each reduced under the line by its own levers). The stop line is
+**Kind 13 (`WrappedPqzRegulatedToken`) is measured first in T52**, from what T43 leaves (62,285 B after T29/T30: 3g alone would
+leave 1.1–1.7 KB under the line, before 3e adds its own and 3f, built after 3g, adds its own, each reduced under the line by its own levers). The stop line is
 **64,512 B** (3e O18): at or above it the task applies, in order, one at a time, re-measuring after each: (1) the four versioned
 views as one-line forwards into `PqzViewLib` / `PqzStateLib` (the pattern `pqzAcc` already uses); (2) the three errors as one
 `KeyVersionInvalid(uint8 reason, bytes32 ua, uint64 keyVersion)`; (3) the rollover and prepare bodies wholly in `PqzStateLib`, the
 token passing only its immutables; (4) the pairwise compare and the stale rule inside the libraries' shared `PqzCore` steps, none
-in the token; (5) 3e's and 3f's levers not yet used, in their order. Each library lever passes the split checklist (DELEGATECALL
+in the token; (5) 3e's levers not yet used, in its order. Each library lever passes the split checklist (DELEGATECALL
 storage in `scaas.pqz`, `address(this)` the token, `msg.sender` the direct caller, fixed return data, the token's one
 `nonReentrant` guard, `LinkClosure` pins and library codehashes old → new). `_above64KiB` is not a fallback (3e O18). Deploy gas
 of the PQZ releases grows by about +0.8 to +1.8 M; they already need a block above 60 M (the SCaaS testnet's 200 M; accepted gap,
@@ -718,7 +719,7 @@ refuse a version-0 replacement and a repeated key; backups keyed with `pqzKeyHas
 
 ## 15. Tasks — SPECIFIED
 
-Written into the merge plan as **T51–T57**, after T50 and before 3c; T19 (docs), T21 (gates), T22 (review) and T23 (PR) cover the
+Written into the merge plan as **T51–T57**, after T43 and before 3f and 3c (owner 2026-11-07: 3g before 3f); T19 (docs), T21 (gates), T22 (review) and T23 (PR) cover the
 group. Contracts T51 → T52 → T53 sequential in this worktree (shared `UARegistryLib`, `PqzCore`, `size-baseline.json`); T54 after
 T53 fixes the ABI; T55 after T54; T56 after T53, beside T54–T55; T57 lands in T19. Every contracts task ends with the whole `forge
 test` green at the default set, the size gate and the PQZ tests at the four sets (one run per work tree, `PqzSet.sol` restored).
@@ -726,9 +727,9 @@ Legacy copies are the first commit of each task that replaces a body.
 
 | Task | Content | Depends on | Estimate (agent-days) |
 |---|---|---|---|
-| T51 | Registry: `UAStore` layout and the new active pin, `setPqzKey(ua, version, …)`, `storePqzPop(ua, version, …)`, the two typed structs and digests (pins), the per-UA key marker, eligibility and `current` (F-1), `UAPqzKeyCurrent`, per-version `keyOwner`, list once, the views of KV-3, the host rules 1–4, R-cross-set's replacement retired (R2), legacy moves, `IUARegistry`, `DeployBase` / `e2e.py` callers; sizes and the T10 deploy-gas rows at four sets (§6.2) | T50 | 3.5 |
+| T51 | Registry: `UAStore` layout and the new active pin, `setPqzKey(ua, version, …)`, `storePqzPop(ua, version, …)`, the two typed structs and digests (pins), the per-UA key marker, eligibility and `current` (F-1), `UAPqzKeyCurrent`, per-version `keyOwner`, list once, the views of KV-3, the host rules 1–4, R-cross-set's replacement retired (R2), legacy moves, `IUARegistry`, `DeployBase` / `e2e.py` callers; sizes and the T10 deploy-gas rows at four sets (§6.2) | T43 | 3.5 |
 | T52 | Token: `acct[ua][version]`, `sendCounter[ua]` (layout pin), `keyVersion` in the three args structs (typehash pins), credits to current, the capture-once debit, the stale rule, migration, the pairwise `KeyReused`, rollover / prepare (100-byte static rule) / views / events, `mtxSelectors`, `selector_audit.json`, the factory catalogue rows, gas pins; **kind 13 measured first**, then 4, 5, 12 and the four libraries, stop rule and levers (§6.3) | T51 | 4 |
-| T53 | Disclosure with `keyVersion` (both 3f forms); ATTESTED with versions (KV-12); the rotation scenario in `script/pqz/e2e.py` on a local chain with the PQZ precompile, brought up for the task (never the live testnet stack) | T52 | 2 |
+| T53 | Disclosure with `keyVersion` (the PRECOMPILE form; the attested form and ATTESTED with versions, KV-12, are built in 3f's T44 / T45); the rotation scenario in `script/pqz/e2e.py` on a local chain with the PQZ precompile, brought up for the task (never the live testnet stack) | T52 | 2 |
 | T54 | Vectors and clients: the three generators (§7.1), `clientkeys` builders, derivation, wallet rules (stale, pending decoy filter, repeated key) and additive recovery, every `ua-*` reading the rows (ten packages); `git diff --exit-code` | T53 | 4.5 |
 | T55 | Node: job fields, call rows, allow-lists both directions with static lengths and per-kind rollover rows, the five refusals, indexer events and feeds, keepers per version, operator-note draft; the whole suite with `CAPPED_MEM=6G` alone, clippy, e2e on anvil | T54 | 2 |
 | T56 | Invariants J1–J10 (handlers over credits, shields, debits of every version, rotations, proofs, the host) and the mutant harness of §14 (about thirty mutants, four sets) | T53; beside T54–T55 | 2.5 |

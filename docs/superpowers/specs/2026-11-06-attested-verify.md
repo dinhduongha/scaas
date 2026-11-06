@@ -1,10 +1,10 @@
 # Attested proof verification for PQZ (group 3f) — design
 
-**Status:** **approved by the owner 2026-11-06; build after T43.** SPECIFIED; nothing is built. Revised after the Codex and Fable
+**Status:** **approved by the owner 2026-11-06; build after T57 (3g; owner 2026-11-07: 3g before 3f).** SPECIFIED; nothing is built. Revised after the Codex and Fable
 reviews of the first draft ([Codex](../../research/attest-codex-review.md): 2 high, 6 medium, 3 low;
 [Fable](../../research/attest-fable-review.md): 0 P0, 4 P1, 8 P2, 4 P3, its answers (a) and (b)) and the owner's rulings R1–R4 of
 2026-11-06; every finding's outcome is in §17. Work-order group **3f** of branch `ua-mtx-merge`: tasks **T44–T50** after 3e
-(T37–T43) and before 3c (`PqChat` and the registry generation), so the round's docs (T19), gates (T21), review (T22) and PR (T23)
+(T37–T43) and 3g (T51–T57, owner 2026-11-07), before 3h and 3c (`PqChat` and the registry generation), so the round's docs (T19), gates (T21), review (T22) and PR (T23)
 cover it and the EVM freeze and audit include it (O5). **PQZ only** (R1). **Everything here is UNAUDITED.**
 
 **Rules this spec applies, not reopens:** [CTR-PQZ-09](../../contracts/pq-zero-knowledge.md#CTR-PQZ-09) (proof systems and
@@ -359,7 +359,7 @@ Zether: no family change (R1).
 ## 9. Size plan — SPECIFIED
 
 **Baseline.** Kind 13 measured 62,285 B after T29/T30 (2,227 B under the 64,512 B stop line), before T31–T36 and 3e's +2.3–4.0 K
-(3e §6.4, reduced under the line by its own levers). 3f starts from what T43 leaves.
+(3e §6.4, reduced under the line by its own levers). 3f starts from what T57 leaves (3g in).
 
 | Contract | Δ runtime [est.] | What |
 |---|---|---|
@@ -393,7 +393,7 @@ one `nonReentrant` around the entry, `LinkClosure` pins and codehashes old → n
 | 2 | `attestConfig()` merged into an existing PQZ struct view | 0.1–0.2 KB | an `eth_call` shape change for wallets and the node |
 | 3 | The seven-argument `verifyTransferAmount` body in `PqzViewLib` behind a forward with no local decode | 0.1–0.2 KB | view gas +~1 k |
 | 4 | The attestation pair as one named struct `PqzAttestation` on every entry (one decoder instead of two per entry) | 0.1–0.3 KB | an ABI shape choice for clients; still explicit |
-| 5 | 3e's levers not yet used (its §6.4 rows), in its order | per 3e | as 3e |
+| 5 | 3e's levers not yet used (its §6.4 rows), then 3g's (its §6.3), in their order | per 3e, 3g | as 3e, 3g |
 
 **Not levers without the owner's word:** a views-behind-`fallback` module, `optimizer_runs`, `via_ir`, dropping an entry or a ruling,
 or putting the attestation inside the `proof` bytes (CTR-MTX-29).
@@ -545,7 +545,7 @@ Negatives, each able to fail:
 
 ## 16. Tasks — SPECIFIED
 
-Written into the merge plan as **T44–T50**, after T43 and before 3c; T19 (docs), T21 (gates), T22 (review) and T23 (PR) cover
+Written into the merge plan as **T44–T50**, after T57 (3g; owner 2026-11-07) and before 3h and 3c; T19 (docs), T21 (gates), T22 (review) and T23 (PR) cover
 the group. Contracts T44 → T45 sequential in this worktree (shared `PqzCore`, `PqzLayer`, `size-baseline.json`); T46 after T45
 fixes the ABI; T47 after T46; T48 beside T46–T47 (its own crate); T49 after T45, beside T46–T48. Every contracts task ends with
 the whole `forge test` green at the default set and the size gate, and runs `script/pqz/at-set.sh <set> test --match-path
@@ -554,7 +554,7 @@ a body is replaced. Heavy runs through `scripts/capped`, foreground.
 
 | Task | Content | Depends on | Estimate (agent-days) |
 |---|---|---|---|
-| T44 | Core: `ConfidentialConfig` fields and `TokenConfig` ripple; `PqzLayer` constructor and `_init` (zero dep), `PqzStateLib.init` (ATTESTED init, the auditor rule); `PqzCore._check` ATTESTED branch, `_keyPtr` / `_creditKey`; the verifier storage, shape, transfer, revocation bodies; events, errors; `PqzAttest` typehash pin, `PURPOSE_PROOF_ATTEST`; `script/pqz/e2e.py` zero-dep form | T43 | 2 |
+| T44 | Core: `ConfidentialConfig` fields and `TokenConfig` ripple; `PqzLayer` constructor and `_init` (zero dep), `PqzStateLib.init` (ATTESTED init, the auditor rule); `PqzCore._check` ATTESTED branch, `_keyPtr` / `_creditKey`; the verifier storage, shape, transfer, revocation bodies; events, errors; `PqzAttest` typehash pin, `PURPOSE_PROOF_ATTEST`; `script/pqz/e2e.py` zero-dep form | T57 | 2 |
 | T45 | Entries: the two parameters on the proof-carrying entries of 4, 5, 12, 13 (twelve on 5, 13; ten on 4, 12) (the struct fallback if the stack needs it); the seven-argument `verifyTransferAmount` and `AttestationRequired`; the three stubs, `attestConfig()`, the three router ops; `mtxSelectors()`, `selector_audit.json`; layout and gas pins old → new; **kind 13 measured first**, stop rule and levers (§9), then every kind; the four sets; the tests of §15 | T44 | 2.5 |
 | T46 | Vectors and clients: `attest.json`, `typed_ops.json` rows, `clientkeys` builders and digests, `ua-rs` and wrappers, the creation fields in the wizard and clients; generators re-run, `git diff --exit-code` | T45 | 1 |
 | T47 | Node: the `attest` sub-object, rebuilding `PqzAttest`, fetching with bounds, pre-checks, rows, errors, indexer joins and alerts, the health signal and the opt-in shield refusal, operator-note draft; `CAPPED_MEM=6G` whole suite alone, clippy, e2e on anvil in both modes | T46 | 1.5 |
