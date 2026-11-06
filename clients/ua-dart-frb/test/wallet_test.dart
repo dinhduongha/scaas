@@ -49,6 +49,24 @@ Future<UaKemKey> kemOf(Map r) async {
   return keyKemKey(k: k, version: BigInt.parse('${r['version']}'));
 }
 
+/// scaas-ua `facade::<name>::COMMANDS` read from its source (T15g): (the release commands, the `vectors`-only raw forms). A test
+/// asserts that a command is in it, never that it equals a list (spec no-decryption-oracle §4.13).
+(List<String>, List<String>) commands(String name) {
+  final src = File('$vectors/../../../clients/ua-rs/src/facade/$name.rs').readAsStringSync();
+  final body = src.substring(src.indexOf('pub const COMMANDS: &[&str] = &['));
+  final (release, raw) = (<String>[], <String>[]);
+  var gated = false;
+  for (final l in body.substring(0, body.indexOf('];')).split('\n').skip(1).map((x) => x.trim())) {
+    if (l == '#[cfg(feature = "vectors")]') {
+      gated = true;
+    } else if (l.startsWith('"')) {
+      (gated ? raw : release).add(l.replaceAll(RegExp(r'[",]'), ''));
+      gated = false;
+    }
+  }
+  return (release, raw);
+}
+
 bool get falcon => features() & BigInt.from(UaFeature.falcon) != BigInt.zero;
 
 void main() {
@@ -584,6 +602,56 @@ void main() {
     wl.lock();
     expect(await code(() => zk.call(cmd: 'pop', requestJson: '{}')), 'UAKeyRevoked');
     expect(zk.y().length, 128, reason: 'public data stays readable');
+  });
+
+  // T15g (ARCH-POS-13): the words commands on the forge rows (smartcontracts/vectors/zether/state.json; the holders are
+  // r33_keys.json's): each in COMMANDS, the balances the contract's; another holder's words refused before the key (ua-rs
+  // tests/facade_zether_state.rs counts the key's uses); every `vectors`-only raw form refused.
+  test('zether_words', () async {
+    final (release, raw) = commands('zether');
+    expect(release, containsAll(['balance', 'pendingBalance']));
+    expect(raw, isNotEmpty);
+    final st = load_('../zether/state.json');
+    final row = {for (final r in st['accounts'] as List) (r['name'] as String).split(':')[0]: r};
+    String words(String name) => jsonEncode({
+          for (final f in ['family', 'chainId', 'chainUid', 'token', 'block', 'psid']) f: st[f],
+          for (final f in ['ua', 'account', 'accountData']) f: row[name][f],
+          'tableBits': 18,
+          'boundBits': 20,
+        });
+    final r33 = jsonDecode(File('$vectors/../../../clients/zether-prover/vectors/r33_keys.json').readAsStringSync());
+    final wl = await walletFromMnemonic(words: secs(r33['mnemonic'] as String), bip39Passphrase: none());
+    final alice = await wl.zetherKey(coin: 60, account: 0, keyUse: 7);
+    final bob = await wl.zetherKey(coin: 60, account: 1, keyUse: 7);
+    expect(jsonDecode(await alice.call(cmd: 'balance', requestJson: words('alice')))['amount'], '${row['alice']['balance']}');
+    expect(jsonDecode(await bob.call(cmd: 'pendingBalance', requestJson: words('bob')))['amount'], '${row['bob']['pending']}');
+    expect(await code(() => bob.call(cmd: 'balance', requestJson: words('alice'))), 'UAArgument', reason: "another holder's words");
+    for (final c in raw) {
+      expect(await code(() => alice.call(cmd: c, requestJson: '{}')), 'UAArgument', reason: c);
+    }
+  });
+
+  // T15g (ARCH-POS-13): `balance` on a forge row (smartcontracts/vectors/pqz/n2304-kmax4096/state.json): in COMMANDS; the forge
+  // keys are mocked, so the words bind to no wallet key and are refused (UAArgument), with the other set's psid
+  // UAPqzSetMismatch, both before the key (ua-rs tests/facade_pqz_state.rs counts the key's uses); every `vectors`-only raw form
+  // refused.
+  test('pqz_words', () async {
+    final (release, raw) = commands('pqz');
+    expect(release, contains('balance'));
+    expect(raw, isNotEmpty);
+    final st = load_('../pqz/n2304-kmax4096/state.json');
+    final a = st['accounts'][0];
+    final words = {
+      for (final f in ['chainUid', 'token', 'psid']) f: st[f],
+      for (final f in ['ua', 'block', 'account', 'pending', 'accWords', 'blobs', 'keyRecord']) f: a[f],
+    };
+    final k = await (await walletOf('pq_kat')).pqzKey(account: 0, index: 0);
+    expect(await code(() => k.call(cmd: 'balance', requestJson: jsonEncode(words))), 'UAArgument');
+    final other = {...words, 'psid': '0xc752e7f57778114dbfaac5d43843577b54e13e3ed162517145a37b5a3ec6cdfe'}; // n2048-kmax1024
+    expect(await code(() => k.call(cmd: 'balance', requestJson: jsonEncode(other))), 'UAPqzSetMismatch');
+    for (final c in raw) {
+      expect(await code(() => k.call(cmd: c, requestJson: '{}')), 'UAArgument', reason: c);
+    }
   });
 
   test('pqz_facade', () async {
