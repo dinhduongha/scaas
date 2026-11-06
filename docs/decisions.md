@@ -657,6 +657,7 @@ It said: result queue default, node-configured callbacks.
 
 **Why.** A bump after the subject nonce is consumed only burns gas.
 **Source.** [history/specs/2026-10-05-relayer-mesh-design.md](history/specs/2026-10-05-relayer-mesh-design.md) line 80; [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 1690; [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 1930.
+Change (2026-11-06, ua-mtx-merge T35, regulated-kinds spec §7; status: BUILT, `submit::tests::{frozen_revert_is_refusal_not_dead, registry_unavailable_is_refusal}`, e2e `regulated_transfer_refused_frozen`): after the consumption check, a simulation revert a later block may lift — `Frozen`, `TokenPaused`, `NotEligible`, `FeeRecipientFrozen`, `RegistryUnavailable`, `RegistryGasStarved` (`abi::regulated_refusal`) — is reported `queued` with `REGULATED_REFUSED: <named error>`, never `dead`: the payload may still land after an unfreeze, an unpause or an attestation, or by another relayer. It ends `dead` only by expiry or the attempt cap (NODE-LANE-14). Every §3.1 error and `NotProposer` is decoded by name; a named error outside the six is `dead` as before.
 
 ### NODE-LANE-10 — Normalize unbound relayer and feeRecipient
 - old: R84, R100 · status: current · owner: no · date: 2026-10-06 · normative: node/submit-lanes.md#NODE-LANE-10 · superseded-by: —
@@ -1054,6 +1055,7 @@ Change: with signed per-order fees the check covers listing, recorded token kind
 
 **Why.** Managed markets enforce eligibility on chain; checking at intake avoids matches that would revert.
 **Source.** [history/specs/2026-10-06-asset-suite-design.md](history/specs/2026-10-06-asset-suite-design.md) line 176.
+Change (2026-11-06, ua-mtx-merge T35, regulated-kinds spec §7 and F-16; status: BUILT in part): the intake pre-check runs on every market with a regulated leg, managed or not (`PAUSED`, `FROZEN`, `VENUE_NOT_ELIGIBLE`, `NOT_ELIGIBLE`, `ATTESTATION_SHORTER`, `REGISTRY_NOT_CONFIGURED`, `REGISTRY_MISMATCH`); a market halts on `Paused` and reopens on `Unpaused` or at `pausedUntil`; `AccountFrozen` drops the account's orders selling that token; a `TokenPaused` revert blames no order. The managed-market config stays SPECIFIED ([dex-venue.md](node/dex-venue.md#NODE-DEX-11)).
 
 ### NODE-DEX-12 — DEX book gossip, two order modes
 - old: R124 · status: current · owner: yes · date: 2026-10-06 · normative: node/dex-venue.md#NODE-DEX-12 · superseded-by: —
@@ -3115,6 +3117,7 @@ Change (2026-11-04, governance T17; owner rulings CTR-GOV-05 with its Change, -1
 **Cost if wrong.** Eligible contracts that hold and release value would bypass the receiver check.
 **Source.** `history/specs/2026-10-06-asset-suite-design.md:193`
 Change (2026-11-04, governance T17; owner ruling CTR-GOV-18): `ELIGIBLE_CONTRACT` satisfies any `requiredFlags`, never `deniedFlags`. Status: SPECIFIED.
+Change (owner 2026-11-06): the `ELIGIBLE_CONTRACT` rows of a DEX venue and its `DexPuller` are an operator step of the registry admin (a contract or an `msig`): `attest([venue, venue.puller()], [8, 8], [2^64−1, 2^64−1])` after `createDex`; the deploy script does not send them (old: regulated-kinds spec §6.1, "the admin attests `SCaaSDex` and `DexPuller` … before an `ALLOWLIST` token trades", read as part of the deploy). The node never assumes them: the venue alerts `VENUE_NOT_ELIGIBLE` at load and refuses orders on such a leg by that name. Status: BUILT (node, ua-mtx-merge T35; [ops.md](node/ops.md#regulated-legs)).
 
 ## 23. Contracts — Zether (classical)
 

@@ -30,7 +30,7 @@ use super::{
     auth_of, hex_of, order_of, pair, trade_of, ua_sig_json, Auth, Book, DexOrder, ISCaaSDex, MarketCfg, Placement,
     PlannedSettlement, Resting, Row, UATradeOrder, WireOrder, FLAG_IOC, KIND_OUTSIDE, KIND_SCAAS, PURPOSE_TRADE,
 };
-use crate::abi::{IMtxIds, IToken, IUALedger, IUARegistry, TradeFill};
+use crate::abi::{IComplianceRegistry, IERC165, IMtxIds, IRegulatedToken, IToken, IUALedger, IUARegistry, TradeFill};
 use crate::metatx::native;
 use crate::chain::{classify, is_contract, Chain, SimError};
 use crate::finality::{next_range, quorum_ok, safe_head, Mode};
@@ -208,6 +208,12 @@ pub struct Venue {
     book: Mutex<Book>,
     trades: std::sync::Mutex<VecDeque<TradeView>>,
     cancels: std::sync::Mutex<CancelQueue>,
+    /// The regulated legs (kinds 8-13: ERC-165 at start) and the `pausedUntil` last seen of each (regulated-kinds spec §7,
+    /// NODE-DEX-11): a market with a regulated leg halts while it is in the future.
+    regulated: std::sync::Mutex<HashMap<Address, u64>>,
+    /// The chain's `compliance_registry`, its code hash checked when the chain was loaded (fail closed); `None`: a regulated
+    /// leg with a list on is refused `REGISTRY_NOT_CONFIGURED`.
+    registry: Option<Address>,
 }
 
 impl Venue {
@@ -242,6 +248,8 @@ impl Venue {
             .context("dex_book_load")?;
         let book = Book::load(markets, &load.rows)?;
         info!(chain = n, orders = book.len(), "dex book loaded");
+        // fail closed: a configured registry whose code is not the pinned one stops the venue
+        let me_registry = chain.compliance_registry().await.context("compliance_registry")?;
         let me = Arc::new(Self {
             chain,
             relay,
@@ -253,8 +261,11 @@ impl Venue {
             book: Mutex::new(book),
             trades: Default::default(),
             cancels: Default::default(),
+            regulated: Default::default(),
+            registry: me_registry,
         });
         me.load_pending(&mut *me.book.lock().await).await.context("pending fills")?;
+        me.load_regulated().await.context("regulated legs")?;
         Ok(me)
     }
 
@@ -288,6 +299,114 @@ impl Venue {
 
     fn kind(&self, token: Address) -> u8 {
         self.kinds.get(&token).copied().unwrap_or_default()
+    }
+
+    // ------------------------------------------------------------------------------ regulated legs (NODE-DEX-11)
+
+    /// The SCaaS legs that answer `type(IRegulatedToken).interfaceId` (M-10), each with its `pausedUntil`; for each, the venue's
+    /// own eligibility, alerted by name, never assumed: the registry admin attests the DEX and its puller `ELIGIBLE_CONTRACT`
+    /// (an operator step, owner 2026-11-06); until then intake refuses `VENUE_NOT_ELIGIBLE` on a listed leg.
+    async fn load_regulated(&self) -> Result<()> {
+        for (&t, _) in self.kinds.iter().filter(|(_, k)| **k == KIND_SCAAS) {
+            let call = IERC165::supportsInterfaceCall { id: crate::abi::regulated_interface_id().into() };
+            let regulated = match self.chain.call_view(t, call).await {
+                Ok(yes) => yes,
+                Err(SimError::Revert(_)) => false,
+                Err(SimError::Transport(e)) => bail!("supportsInterface of {t:#x}: {e}"),
+            };
+            if !regulated {
+                continue;
+            }
+            let c = view(&self.chain, t, IRegulatedToken::regulatedConfigCall {}).await?;
+            self.set_paused(t, c.pausedUntil);
+            for (who, name) in [(self.dex, "venue"), (self.puller, "puller")] {
+                match self.leg_receivable(t, &c, who.into_word(), now()).await {
+                    Ok((true, ..)) => {}
+                    Ok((false, reason, _)) => warn!(chain = self.chain.number, token = %t, %who, reason, alert = "VENUE_NOT_ELIGIBLE",
+                        "the {name} is not eligible on a regulated leg: the registry admin attests [venue, venue.puller()] as \
+                         ELIGIBLE_CONTRACT (8, validUntil 2^64-1); until then orders on it are refused"),
+                    Err(e) => warn!(chain = self.chain.number, token = %t, %who, alert = "VENUE_NOT_ELIGIBLE", "{name}: {e}"),
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn set_paused(&self, token: Address, until: u64) {
+        if let Ok(mut m) = self.regulated.lock() {
+            m.insert(token, until);
+        }
+    }
+
+    /// `Some(pausedUntil)` while a regulated `token` is paused at `at` (a market with it halts); reopens at `pausedUntil`.
+    fn halted(&self, token: Address, at: u64) -> Option<u64> {
+        self.regulated.lock().ok()?.get(&token).copied().filter(|u| *u > at)
+    }
+
+    fn is_regulated(&self, token: Address) -> bool {
+        self.regulated.lock().is_ok_and(|m| m.contains_key(&token))
+    }
+
+    /// `R(who)` on a regulated leg as its `canReceive` answers it (`scaas_ua::regulated::can_receive` over the registry's
+    /// `attestationOf` and `attesterEnabled`), with the attestation's `validUntil`; both lists off: `(true, 0, u64::MAX)`.
+    /// The leg's registry must be the configured one: `REGISTRY_NOT_CONFIGURED`, `REGISTRY_MISMATCH` otherwise.
+    async fn leg_receivable(&self, token: Address, c: &IRegulatedToken::RegulatedConfig, who: B256, at: u64)
+        -> std::result::Result<(bool, u8, u64), VenueError>
+    {
+        const C_ALLOW: u8 = 1 << 3; // RegulatedLib: `controls` = features bits 5-10 >> 5; ALLOWLIST 8, DENYLIST 9
+        const C_DENY: u8 = 1 << 4;
+        let (req, den) = ((c.controls & C_ALLOW != 0).then_some(c.requiredFlags), (c.controls & C_DENY != 0).then_some(c.deniedFlags));
+        if req.is_none() && den.is_none() {
+            return Ok((true, 0, u64::MAX));
+        }
+        let reg = match self.registry {
+            None => return Err(bad(format!("REGISTRY_NOT_CONFIGURED: {token:#x} reads registry {:#x}; set compliance_registry", c.complianceRegistry))),
+            Some(r) if r != c.complianceRegistry => {
+                return Err(bad(format!("REGISTRY_MISMATCH: {token:#x} reads registry {:#x}, not compliance_registry {r:#x}", c.complianceRegistry)))
+            }
+            Some(r) => r,
+        };
+        let a = view(&self.chain, reg, IComplianceRegistry::attestationOfCall { account: who }).await.map_err(down)?;
+        let on = view(&self.chain, reg, IComplianceRegistry::attesterEnabledCall { id: a.attesterId }).await.map_err(down)?;
+        let att = scaas_ua::regulated::Attestation { flags: a.flags, valid_until: a.validUntil, attester_enabled: on };
+        let (ok, reason) = scaas_ua::regulated::can_receive(req, den, &att, at);
+        Ok((ok, reason, a.validUntil))
+    }
+
+    /// NODE-DEX-11's intake pre-check of an order on each regulated leg, read live (the token is the arbiter regardless):
+    /// `PAUSED` (and the market halts), the seller `FROZEN` on the token it sells, the venue `VENUE_NOT_ELIGIBLE`, the receiver
+    /// `NOT_ELIGIBLE` on the token it buys, an order outliving its receiver's attestation `ATTESTATION_SHORTER`.
+    async fn precheck(&self, sell: Address, o: &UATradeOrder) -> std::result::Result<(), VenueError> {
+        let at = now();
+        for t in [sell, o.receiveToken] {
+            if !self.is_regulated(t) {
+                continue;
+            }
+            let c = view(&self.chain, t, IRegulatedToken::regulatedConfigCall {}).await.map_err(down)?;
+            self.set_paused(t, c.pausedUntil);
+            if c.pausedUntil > at {
+                return Err(bad(format!("PAUSED: {t:#x} until {}", c.pausedUntil)));
+            }
+            if t == sell && view(&self.chain, t, IRegulatedToken::isFrozenCall { account: o.from }).await.map_err(down)? {
+                return Err(bad(format!("FROZEN: {:#x} on {t:#x}", o.from)));
+            }
+            // the venue receives every leg of a regulated token: pulled in, then paid out
+            if let (false, reason, _) = self.leg_receivable(t, &c, self.dex.into_word(), at).await? {
+                return Err(bad(format!("VENUE_NOT_ELIGIBLE: the DEX {:#x} on {t:#x}, reason {reason}: the registry admin attests \
+                    [venue, venue.puller()] as ELIGIBLE_CONTRACT", self.dex)));
+            }
+            if t == o.receiveToken {
+                let who = if o.destination.is_zero() { o.from } else { o.destination };
+                let (ok, reason, until) = self.leg_receivable(t, &c, who, at).await?;
+                if !ok {
+                    return Err(bad(format!("NOT_ELIGIBLE: {who:#x} on {t:#x}, reason {reason}")));
+                }
+                if o.validUntil > U256::from(until) {
+                    return Err(bad(format!("ATTESTATION_SHORTER: the order runs to {}, {who:#x}'s attestation to {until}", o.validUntil)));
+                }
+            }
+        }
+        Ok(())
     }
 
     // ------------------------------------------------------------------------------ chain reads
@@ -417,10 +536,22 @@ impl Venue {
             };
             let f = TradeFill { sellFill: sold, receiveFill: recv, dexFee: fee(recv, &r.order), submitter: self.relayer() };
             let data = IToken::mtxTradeCall { o: r.order.clone(), auth: auth.clone(), f }.abi_encode();
-            match self.call(self.dex, r.sell, data).await {
+            let tx = TransactionRequest::default().from(self.dex).to(r.sell).input(data.into());
+            match self.chain.primary().call(tx).await {
                 Ok(_) => {}
-                Err(SimError::Revert(_)) => out.push(r.hash),
-                Err(SimError::Transport(e)) => return Err(down(format!("rpc: {e}"))),
+                Err(e) => {
+                    // F-16: a pause is no leg's fault; the market halts until it ends, nobody is blamed
+                    let paused = e.as_error_resp().and_then(|x| x.as_revert_data()).filter(|_| self.is_regulated(r.sell))
+                        .and_then(|raw| <IRegulatedToken::TokenPaused as alloy::sol_types::SolError>::abi_decode(&raw).ok());
+                    if let Some(p) = paused {
+                        self.set_paused(r.sell, p.until);
+                        return Err(bad(format!("PAUSED: {:#x} until {}", r.sell, p.until)));
+                    }
+                    match classify(&e) {
+                        SimError::Revert(_) => out.push(r.hash),
+                        SimError::Transport(e) => return Err(down(format!("rpc: {e}"))),
+                    }
+                }
             }
         }
         Ok(out)
@@ -468,6 +599,7 @@ impl Venue {
         if !self.authorized(sell, o.from, h, &sig).await.map_err(down)? {
             return Err(bad("bad order signature"));
         }
+        self.precheck(sell, &o).await?;
         let c = self.on_chain(sell, h, &o).await.map_err(down)?;
         let mut book = self.book.lock().await;
         book.purge(now());
@@ -734,13 +866,18 @@ impl Venue {
         // order never jams the chain (review I3). ponytail: drops the healthy legs of a bad settlement too; split
         // per leg if that ever costs real fills.
         let mut skip: Vec<B256> = vec![];
+        // a failed trade on a halted market (a regulated leg paused) waits, unacked, until the market reopens
+        let at = now();
+        let open = |ft: &&FailedTrade| !ft.makers.iter().chain(std::iter::once(&ft.taker)).filter_map(|l| l.row.as_ref()?.resting().ok())
+            .any(|r| self.halted(r.sell, at).is_some() || self.halted(r.order.receiveToken, at).is_some());
+        let failed: Vec<&FailedTrade> = sr.failed.iter().filter(open).collect();
         let (mut next, mut settlements, mut touched);
         let (mut round, mut give_up) = (0, false);
         loop {
             next = book.clone();
             settlements = Vec::<PlannedSettlement>::new();
             touched = Vec::<(i64, Resting)>::new();
-            for ft in &sr.failed {
+            for ft in &failed {
                 // makers first: each goes back as it rested, then the taker takes again in its original role
                 for leg in ft.makers.iter().chain(std::iter::once(&ft.taker)) {
                     let Some(row) = &leg.row else { continue };
@@ -780,7 +917,7 @@ impl Venue {
             round += 1;
             give_up = round >= MAX_ROUNDS; // the last round hands nothing back: ack, never jam
         }
-        commit.acks.extend(sr.failed.iter().map(|ft| ft.tag.clone()));
+        commit.acks.extend(failed.iter().map(|ft| ft.tag.clone()));
         self.add_settlements(&mut commit, &next, &settlements);
         // Every order handed back (re-matched or not) is written to the client, or a restart loses it.
         for (market_id, r) in &touched {
@@ -809,6 +946,8 @@ impl Venue {
                 let (a, Some(t)) = (l.address(), l.topic0()) else { return false };
                 if *t == IToken::UAOrderCancelled::SIGNATURE_HASH || *t == IToken::UANoncesInvalidated::SIGNATURE_HASH {
                     self.kind(a) == KIND_SCAAS
+                } else if REGULATED_TOPICS.contains(t) {
+                    self.is_regulated(a)
                 } else {
                     a == self.dex
                 }
@@ -817,8 +956,9 @@ impl Venue {
             .collect()
     }
 
-    /// Apply accepted events to the in-memory book.
-    fn apply_events(&self, book: &mut Book, events: &[Value]) {
+    /// Apply accepted events to the in-memory book; the orders an `AccountFrozen` dropped, for the client store.
+    fn apply_events(&self, book: &mut Book, events: &[Value]) -> Vec<Resting> {
+        let mut frozen_out = vec![];
         for e in events {
             let addr_of = |k: &str| e[k].as_str().unwrap_or_default().parse::<Address>();
             match e["event"].as_str() {
@@ -838,6 +978,17 @@ impl Venue {
                         }
                     }
                 }
+                // regulated-kinds spec §7, NODE-DEX-11: the market halts while a leg is paused and reopens on `Unpaused` or at
+                // `pausedUntil`; a frozen account cannot send, so its orders selling that token leave the book
+                Some("Paused") => self.set_paused(addr_of("contract").unwrap_or_default(), e["until"].as_u64().unwrap_or(u64::MAX)),
+                Some("Unpaused") => self.set_paused(addr_of("contract").unwrap_or_default(), 0),
+                Some("AccountFrozen") => {
+                    let (t, a) = (addr_of("contract").unwrap_or_default(), e["account"].as_str().unwrap_or_default().parse::<B256>());
+                    if let Ok(a) = a {
+                        let gone: Vec<B256> = book.all().filter(|r| r.sell == t && r.order.from == a).map(|r| r.hash).collect();
+                        frozen_out.extend(gone.into_iter().filter_map(|h| book.remove(h)));
+                    }
+                }
                 Some("NoncesInvalidated") => {
                     // the DEX's `from` is an address, a SCaaS token's (`UANoncesInvalidated`) an id: the book keys both as ids
                     let f = e["from"].as_str().unwrap_or_default();
@@ -855,6 +1006,7 @@ impl Venue {
                 _ => {}
             }
         }
+        frozen_out
     }
 
     /// One watcher round: the DEX's and the market tokens' logs in the final range ⇒ `dex_fill_ingest` ⇒ orders
@@ -887,19 +1039,35 @@ impl Venue {
             ISCaaSDex::NoncesInvalidated::SIGNATURE_HASH,
             IToken::UAOrderCancelled::SIGNATURE_HASH,
             IToken::UANoncesInvalidated::SIGNATURE_HASH,
+            IRegulatedToken::Paused::SIGNATURE_HASH,
+            IRegulatedToken::Unpaused::SIGNATURE_HASH,
+            IRegulatedToken::AccountFrozen::SIGNATURE_HASH,
         ]);
         let logs = self.chain.primary().get_logs(&f).await?;
         let events = self.accepted(&logs);
+        // the regulated legs' events are the venue's own (the halt, the frozen makers): the client gets the orders' states
+        let fills: Vec<&Value> = events.iter().filter(|e| !matches!(e["event"].as_str(), Some("Paused" | "Unpaused" | "AccountFrozen"))).collect();
         let _: Value = idx
             .call(
                 "blockchain.dex.trade",
                 "dex_fill_ingest",
                 json!({"evm_chain_number": self.chain.number, "from_block": from, "to_block": to,
-                       "to_block_hash": format!("{hash:#x}"), "events": events}),
+                       "to_block_hash": format!("{hash:#x}"), "events": fills}),
             )
             .await?;
         // The client closed the orders; the book in memory follows (review D13).
-        self.apply_events(&mut *self.book.lock().await, &events);
+        let mut book = self.book.lock().await;
+        let frozen = self.apply_events(&mut book, &events);
+        if !frozen.is_empty() {
+            let mut commit = Commit::default();
+            for r in &frozen {
+                if let Some(m) = book.market_of(r.sell, r.order.receiveToken).map(|m| m.id) {
+                    commit.order(m, r, "invalid");
+                }
+            }
+            let next = book.clone();
+            self.commit_or_reload(&mut book, next, commit).await.map_err(|e| anyhow!("{e}"))?;
+        }
         Ok(true)
     }
 
@@ -1199,11 +1367,27 @@ pub fn encode_event(log: &Log) -> Option<Value> {
         v["from"] = json!(format!("{:#x}", e.from));
         v["batch"] = json!(e.batch.to_string());
         v["min_nonce"] = json!(e.minNonce.to_string());
+    } else if topic0 == IRegulatedToken::Paused::SIGNATURE_HASH {
+        let e = log.log_decode::<IRegulatedToken::Paused>().ok()?.inner.data;
+        v["event"] = json!("Paused");
+        v["until"] = json!(e.until);
+    } else if topic0 == IRegulatedToken::Unpaused::SIGNATURE_HASH {
+        log.log_decode::<IRegulatedToken::Unpaused>().ok()?;
+        v["event"] = json!("Unpaused");
+    } else if topic0 == IRegulatedToken::AccountFrozen::SIGNATURE_HASH {
+        let e = log.log_decode::<IRegulatedToken::AccountFrozen>().ok()?.inner.data;
+        v["event"] = json!("AccountFrozen");
+        v["account"] = json!(format!("{:#x}", e.account));
+        v["until"] = json!(e.until);
     } else {
         return None;
     }
     Some(v)
 }
+
+/// The regulated legs' events the venue reads (NODE-DEX-11), from a regulated token only.
+const REGULATED_TOPICS: [B256; 3] =
+    [IRegulatedToken::Paused::SIGNATURE_HASH, IRegulatedToken::Unpaused::SIGNATURE_HASH, IRegulatedToken::AccountFrozen::SIGNATURE_HASH];
 
 #[cfg(test)]
 mod tests {
@@ -1423,7 +1607,18 @@ mod tests {
         registry: Address,
         /// The digests the registry's `requireAuthorized` accepts (any other reverts `UAUnauthorized`).
         authorized: HashSet<B256>,
+        /// A regulated token's `regulatedConfig()` (`complianceRegistry` = `REG_REGISTRY`): `(controls, requiredFlags,
+        /// deniedFlags, pausedUntil)`.
+        reg: HashMap<Address, (u8, u64, u64, u64)>,
+        /// `isFrozen` on every regulated token.
+        frozen: HashSet<B256>,
+        /// `REG_REGISTRY.attestationOf`: `(flags, validUntil)`, attester 0 (enabled); absent: `(0, 0)`.
+        attest: HashMap<B256, (u64, u64)>,
+        /// The leg on this token reverts `TokenPaused(until)`, in a settlement and in its own `mtxTrade` (a pause that lands after
+        /// the intake read).
+        trade_paused: HashMap<Address, u64>,
     }
+    const REG_REGISTRY: Address = Address::repeat_byte(0xc0);
     type W = Arc<std::sync::Mutex<World>>;
 
     fn oh(o: &UATradeOrder) -> B256 {
@@ -1465,7 +1660,9 @@ mod tests {
                     let word = |v: U256| hexs(&v.abi_encode());
                     let fails = |w: &World, sell: Address, o: &UATradeOrder| -> Option<Vec<u8>> {
                         let h = if sell == BASE || sell == QUOTE { oh(o) } else { B256::ZERO };
-                        if w.named.contains(&h) {
+                        if let Some(until) = w.trade_paused.get(&sell) {
+                            Some(IRegulatedToken::TokenPaused { until: *until }.abi_encode())
+                        } else if w.named.contains(&h) {
                             Some(IToken::BelowMinFill { orderHash: h }.abi_encode())
                         } else if w.bad_sig.contains(&h) || w.silent.contains(&h) {
                             Some(IToken::MetaTxBadSignature {}.abi_encode())
@@ -1532,11 +1729,29 @@ mod tests {
                     } else if sel == IToken::mtxTradeCall::SELECTOR {
                         assert_eq!(from, DEX, "a leg is probed as the DEX pulls it");
                         let h = oh(&IToken::mtxTradeCall::abi_decode(&input).unwrap().o);
-                        if w.bad_sig.contains(&h) || w.wordy.contains(&h) || w.no_trade.contains(&to) {
+                        if let Some(until) = w.trade_paused.get(&to) {
+                            revert(IRegulatedToken::TokenPaused { until: *until }.abi_encode())
+                        } else if w.bad_sig.contains(&h) || w.wordy.contains(&h) || w.no_trade.contains(&to) {
                             revert(IToken::MetaTxBadSignature {}.abi_encode())
                         } else {
                             Ok(hexs(&[]))
                         }
+                    } else if sel == IRegulatedToken::regulatedConfigCall::SELECTOR {
+                        let (controls, required, denied, paused) = w.reg[&to];
+                        Ok(hexs(&IRegulatedToken::regulatedConfigCall::abi_encode_returns(&IRegulatedToken::RegulatedConfig {
+                            complianceRegistry: REG_REGISTRY, controls, requiredFlags: required, deniedFlags: denied, termsHash: B256::ZERO,
+                            pausedUntil: paused, pauseCooldownUntil: 0 })))
+                    } else if sel == IRegulatedToken::isFrozenCall::SELECTOR {
+                        assert!(w.reg.contains_key(&to));
+                        let a = IRegulatedToken::isFrozenCall::abi_decode(&input).unwrap().account;
+                        Ok(hexs(&w.frozen.contains(&a).abi_encode()))
+                    } else if sel == IComplianceRegistry::attestationOfCall::SELECTOR {
+                        assert_eq!(to, REG_REGISTRY);
+                        let a = IComplianceRegistry::attestationOfCall::abi_decode(&input).unwrap().account;
+                        let (f, v) = w.attest.get(&a).copied().unwrap_or_default();
+                        Ok(hexs(&(f, v, 0u32).abi_encode()))
+                    } else if sel == IComplianceRegistry::attesterEnabledCall::SELECTOR {
+                        Ok(hexs(&true.abi_encode()))
                     } else {
                         panic!("unexpected eth_call {}", alloy::hex::encode(sel))
                     }
@@ -1591,7 +1806,8 @@ mod tests {
         book.next_seq = 100;
         let v = Venue { chain, relay, indexer: None, dex: DEX, puller: Address::repeat_byte(0x9),
             kinds: [(BASE, KIND_SCAAS), (QUOTE, KIND_SCAAS)].into_iter().collect(), clone_codehash: None,
-            book: Mutex::new(book), trades: Default::default(), cancels: Default::default() };
+            book: Mutex::new(book), trades: Default::default(), cancels: Default::default(), regulated: Default::default(),
+            registry: None };
         (v, world)
     }
 
@@ -1608,6 +1824,126 @@ mod tests {
         let mut l = log_of(data);
         l.inner.address = addr;
         l
+    }
+
+    /// A venue whose BASE is a regulated leg (`controls`, `required`, `denied`, open), on the configured registry.
+    async fn regulated_venue(mut w: World, controls: u8, required: u64, denied: u64, makers: Vec<(UATradeOrder, Bytes)>) -> (Venue, W) {
+        w.reg.insert(BASE, (controls, required, denied, 0));
+        let (mut v, world) = venue(w, makers).await;
+        v.registry = Some(REG_REGISTRY);
+        v.set_paused(BASE, 0);
+        (v, world)
+    }
+
+    /// Regulated-kinds spec §7 (F-16): a market with a regulated leg halts on `Paused` — intake refuses `PAUSED`, nothing is
+    /// matched or simulated, the resting maker stays — and reopens on `Unpaused`, or at `pausedUntil` with no event at all.
+    #[tokio::test]
+    async fn market_halts_on_paused_and_reopens() {
+        let (m, t) = (PrivateKeySigner::random(), PrivateKeySigner::random());
+        let ask = order(m.address(), QUOTE, 10, 30, 1);
+        let (v, w) = regulated_venue(World::default(), 0, 0, 0, vec![(ask.clone(), sig_of(&m, oh(&ask)))]).await;
+        let until = now() + 3_600;
+        w.lock().unwrap().reg.get_mut(&BASE).unwrap().3 = until;
+        let paused = log_at(BASE, IRegulatedToken::Paused { r#ref: B256::repeat_byte(1), until }.encode_log_data());
+        let events = v.accepted(&[paused]);
+        assert_eq!(events.len(), 1, "a regulated leg's Paused is read");
+        v.apply_events(&mut *v.book.lock().await, &events);
+        assert_eq!(v.halted(BASE, now()), Some(until));
+        let err = take(&v, &t, 30, 10, 1).await.unwrap_err();
+        assert!(matches!(&err, VenueError::Bad(e) if e.starts_with("PAUSED")), "{err}");
+        assert!(in_book(&v.rows().await, &ask), "the maker rests through the pause");
+        // a failed trade on the halted market waits, unacked, until the market reopens
+        let row = Row::of(&Resting { hash: oh(&ask), sell: BASE, order: ask.clone(), auth: Auth::Ua(ua(sig_of(&m, oh(&ask)))),
+            remaining: ask.amount, seq: 1 });
+        let (relay, store) = crate::adapter::tests::fake_odoo(crate::adapter::tests::Fake {
+            dex_sync: json!({"failed": [{"tag": "0x01", "taker": {"row": null, "fill": "30"}, "makers": [{"row": row, "fill": "10"}]}]}),
+            ..Default::default()
+        }).await;
+        let v = Venue { relay, ..v };
+        v.sync_once().await.unwrap();
+        assert!(store.lock().unwrap().commits.iter().all(|c| c["acks"].as_array().is_none_or(|a| a.is_empty())), "not acked while halted");
+        // reopens on Unpaused
+        w.lock().unwrap().reg.get_mut(&BASE).unwrap().3 = now();
+        let unpaused = log_at(BASE, IRegulatedToken::Unpaused { r#ref: B256::repeat_byte(1) }.encode_log_data());
+        v.apply_events(&mut *v.book.lock().await, &v.accepted(&[unpaused]));
+        assert_eq!(v.halted(BASE, now()), None);
+        assert_eq!(take(&v, &t, 30, 10, 2).await.unwrap().status, "filled");
+        // and at pausedUntil, passively
+        v.set_paused(BASE, now() + 10);
+        assert!(v.halted(BASE, now()).is_some() && v.halted(BASE, now() + 10).is_none());
+    }
+
+    /// F-16: a settlement that reverts `TokenPaused` (a pause that landed after the intake read) is never the maker's fault:
+    /// no order is marked invalid or dropped, the market halts until the revert's `until`, and the taker is refused `PAUSED`.
+    #[tokio::test]
+    async fn token_paused_not_grief_scored() {
+        let (m, t) = (PrivateKeySigner::random(), PrivateKeySigner::random());
+        let ask = order(m.address(), QUOTE, 10, 30, 1);
+        let until = now() + 600;
+        let w = World { trade_paused: [(BASE, until)].into_iter().collect(), ..Default::default() };
+        let (v, _) = regulated_venue(w, 0, 0, 0, vec![(ask.clone(), sig_of(&m, oh(&ask)))]).await;
+        let err = take(&v, &t, 30, 10, 1).await.unwrap_err();
+        assert!(matches!(&err, VenueError::Bad(e) if e.starts_with("PAUSED")), "{err}");
+        assert!(in_book(&v.rows().await, &ask), "the maker is not blamed");
+        assert_eq!(v.halted(BASE, now()), Some(until), "the market halts until the revert's until");
+    }
+
+    /// NODE-DEX-11's intake pre-check on a regulated leg, each refusal by name, nothing matched: the seller frozen on the token it
+    /// sells; the receiver not eligible on the token it buys (`canReceive`'s reason); an order outliving its receiver's
+    /// attestation; the venue itself not attested (never assumed: an operator step of the registry admin, owner 2026-11-06);
+    /// a list on with no `compliance_registry` configured. An eligible pair trades.
+    #[tokio::test]
+    async fn regulated_leg_precheck_refuses_by_name() {
+        let (m, t) = (PrivateKeySigner::random(), PrivateKeySigner::random());
+        let (kyc, eligible, max) = (1u64, 8u64, u64::MAX);
+        let ask = order(m.address(), QUOTE, 10, 30, 1);
+        let attest = |who: &[(Address, u64, u64)]| who.iter().map(|(a, f, v)| (a.into_word(), (*f, *v))).collect::<HashMap<_, _>>();
+        let ok_world = || World { attest: attest(&[(DEX, eligible, max), (t.address(), kyc, max)]), ..Default::default() };
+        let refused = |r: std::result::Result<PlaceReply, VenueError>| match r {
+            Err(VenueError::Bad(e)) => e,
+            other => panic!("{:?}", other.map(|p| p.status)),
+        };
+        // the taker sells QUOTE (plain) and buys BASE (regulated, ALLOWLIST = 8, KYC required)
+        let (v, _) = regulated_venue(World { attest: attest(&[(DEX, eligible, max)]), ..ok_world() }, 8, kyc, 0, vec![(ask.clone(), sig_of(&m, oh(&ask)))]).await;
+        let e = refused(take(&v, &t, 30, 10, 1).await);
+        assert!(e.starts_with("NOT_ELIGIBLE") && e.contains("reason 1"), "{e}");
+        let (v, _) = regulated_venue(World { attest: attest(&[(DEX, eligible, max), (t.address(), kyc, now() + 60)]), ..ok_world() }, 8, kyc, 0,
+            vec![(ask.clone(), sig_of(&m, oh(&ask)))]).await;
+        assert!(refused(take(&v, &t, 30, 10, 1).await).starts_with("ATTESTATION_SHORTER"));
+        let (v, _) = regulated_venue(World { attest: attest(&[(t.address(), kyc, max)]), ..ok_world() }, 8, kyc, 0,
+            vec![(ask.clone(), sig_of(&m, oh(&ask)))]).await;
+        assert!(refused(take(&v, &t, 30, 10, 1).await).starts_with("VENUE_NOT_ELIGIBLE"));
+        let (mut v, _) = regulated_venue(ok_world(), 8, kyc, 0, vec![(ask.clone(), sig_of(&m, oh(&ask)))]).await;
+        v.registry = None;
+        assert!(refused(take(&v, &t, 30, 10, 1).await).starts_with("REGISTRY_NOT_CONFIGURED"));
+        // a frozen seller of the regulated leg: the taker selling BASE
+        let bid = order(m.address(), BASE, 30, 10, 1);
+        let (v, _) = regulated_venue(World { frozen: [t.address().into_word()].into_iter().collect(), ..ok_world() }, 0, 0, 0, vec![]).await;
+        v.book.lock().await.insert(Resting { hash: oh(&bid), sell: QUOTE, remaining: bid.amount, order: bid.clone(), auth: Auth::Ua(ua(sig_of(&m, oh(&bid)))), seq: 1 });
+        let sell_base = order(t.address(), QUOTE, 10, 30, 1);
+        let e = refused(v.place(BASE, &WireOrder::from_ua(&sell_base), None, Some(&ua_sig_json(&ua(sig_of(&t, oh(&sell_base)))))).await);
+        assert!(e.starts_with("FROZEN"), "{e}");
+        // eligible: trades
+        let (v, _) = regulated_venue(ok_world(), 8, kyc, 0, vec![(ask.clone(), sig_of(&m, oh(&ask)))]).await;
+        assert_eq!(take(&v, &t, 30, 10, 1).await.unwrap().status, "filled");
+    }
+
+    /// Spec §7: an `AccountFrozen` of a regulated leg drops that account's orders selling it (a frozen account cannot send);
+    /// its orders buying it stay (credits are never refused for a freeze), and another token's event drops nothing.
+    #[tokio::test]
+    async fn account_frozen_drops_the_makers_orders() {
+        let m = PrivateKeySigner::random();
+        let ask = order(m.address(), QUOTE, 10, 30, 1);
+        let (v, _) = regulated_venue(World::default(), 0, 0, 0, vec![(ask.clone(), sig_of(&m, oh(&ask)))]).await;
+        let bid = order(m.address(), BASE, 30, 10, 2);
+        v.book.lock().await.insert(Resting { hash: oh(&bid), sell: QUOTE, remaining: bid.amount, order: bid.clone(), auth: Auth::Ua(ua(sig_of(&m, oh(&bid)))), seq: 9 });
+        let frozen = |token: Address| log_at(token, IRegulatedToken::AccountFrozen { account: m.address().into_word(), r#ref: B256::repeat_byte(1),
+            recordId: B256::ZERO, until: now() + 60 }.encode_log_data());
+        v.apply_events(&mut *v.book.lock().await, &v.accepted(&[frozen(QUOTE)]));
+        assert!(in_book(&v.rows().await, &ask), "QUOTE is no regulated leg: not its event");
+        v.apply_events(&mut *v.book.lock().await, &v.accepted(&[frozen(BASE)]));
+        let rows = v.rows().await;
+        assert!(!in_book(&rows, &ask) && in_book(&rows, &bid), "the order selling BASE leaves, the one buying it stays");
     }
 
     #[tokio::test]

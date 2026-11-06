@@ -82,6 +82,8 @@ pub struct Chain {
     /// `chain_uid` from the config, checked against the RPC's block 0 (NODE-GW-07).
     pinned_uid: Option<B256>,
     uid: tokio::sync::OnceCell<B256>,
+    /// `compliance_registry` and its pinned code hash (regulated-kinds spec §5, F-11).
+    compliance: Option<(Address, B256)>,
 }
 
 impl Chain {
@@ -107,6 +109,7 @@ impl Chain {
             address,
             pinned_uid: cfg.chain_uid,
             uid: Default::default(),
+            compliance: cfg.compliance_registry.zip(cfg.compliance_registry_codehash),
         })
     }
 
@@ -170,6 +173,20 @@ impl Chain {
             })
             .await
             .copied()
+    }
+
+    /// The configured `compliance_registry` once its runtime code hashes to the pinned `compliance_registry_codehash`
+    /// (regulated-kinds spec §5: one canonical code, no proxy); `Ok(None)` when none is configured. Another code, no code, or
+    /// an unreadable one is an error: the caller does not start (fail closed).
+    pub async fn compliance_registry(&self) -> Result<Option<Address>> {
+        let Some((a, pin)) = self.compliance else { return Ok(None) };
+        let code = self.primary().get_code_at(a).await.map_err(|e| anyhow!("chain {}: compliance_registry code: {e}", self.number))?;
+        let got = alloy::primitives::keccak256(&code);
+        if code.is_empty() || got != pin {
+            return Err(anyhow!("chain {}: compliance_registry {a:#x} code hash {got:#x} is not compliance_registry_codehash {pin:#x}",
+                self.number));
+        }
+        Ok(Some(a))
     }
 
     /// A view call; a revert is the contract's answer (`SimError::Revert`), anything else the transport's.
@@ -334,6 +351,38 @@ mod tests {
         let c = chain("http://127.0.0.1:9", Some(genesis));
         assert!(c.uid().await.is_err() && c.uid().await.is_err());
         assert!(c.uid.get().is_none());
+    }
+
+    /// Regulated-kinds spec §5, §7: the configured registry is used only while its code hashes to the pin; another code, none, or
+    /// an unreachable RPC is an error (the venue does not start); none configured is `None`.
+    #[tokio::test]
+    async fn compliance_registry_code_hash_fails_closed() {
+        let code = vec![0x60u8, 0x00, 0x60, 0x00, 0xf3];
+        let c2 = code.clone();
+        let app = axum::Router::new().route("/", axum::routing::post(move |axum::Json(r): axum::Json<Value>| {
+            let c2 = c2.clone();
+            async move {
+                let at = r["params"][0].as_str().unwrap_or_default().to_lowercase();
+                let code = if at == format!("{:#x}", Address::repeat_byte(0xc0)) { c2 } else { vec![] };
+                axum::Json(json!({"jsonrpc": "2.0", "id": r["id"], "result": format!("0x{}", alloy::hex::encode(code))}))
+            }
+        }));
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", l.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+        let with = |url: &str, a: Option<Address>, h: Option<B256>| {
+            let cfg = ChainCfg { evm_chain_number: 296, rpc_urls: vec![url.into()], compliance_registry: a, compliance_registry_codehash: h,
+                ..Default::default() };
+            Chain::with_signer(&cfg, PrivateKeySigner::random()).unwrap()
+        };
+        let (reg, pin) = (Address::repeat_byte(0xc0), alloy::primitives::keccak256(&code));
+        assert_eq!(with(&url, Some(reg), Some(pin)).compliance_registry().await.unwrap(), Some(reg));
+        assert_eq!(with(&url, None, None).compliance_registry().await.unwrap(), None);
+        let e = with(&url, Some(reg), Some(B256::repeat_byte(1))).compliance_registry().await.unwrap_err().to_string();
+        assert!(e.contains("is not compliance_registry_codehash"), "{e}");
+        assert!(with(&url, Some(Address::repeat_byte(0xc1)), Some(alloy::primitives::keccak256([]))).compliance_registry().await.is_err(),
+            "no code is never the pin, even the empty code's hash");
+        assert!(with("http://127.0.0.1:9", Some(reg), Some(pin)).compliance_registry().await.is_err());
     }
 
     /// An RPC answering every `eth_call` with 5 and keeping each call's input.

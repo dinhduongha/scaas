@@ -1128,6 +1128,29 @@ mod tests {
         assert_eq!(d.selector, cast("mtxInvalidateNonces(address,uint256,uint256,bytes)"));
     }
 
+    /// Regulated-kinds spec §3.1, §7 (plan T35): the router's eight control rows are the ops `scaas_ua::regulated` signs, each way
+    /// — the same `UA<Op>` type string (`UAOperatorTransfer` with `account`, CTR-GOV-20), the entry `mtx<Op>`, a merged `UASig`
+    /// entry with an envelope on `gov_router` alone, and a `typed_ops.json` row in the router's domain; no other `gov_router` row
+    /// is a regulated control, and none of the eight is a row of a token kind (the direct controls are `BIT` entries).
+    #[test]
+    fn router_control_rows() {
+        use scaas_ua::regulated::{type_string as ua_type, REGULATED_OPS};
+        let v = vectors();
+        for (op, _) in REGULATED_OPS {
+            let r = row_of(op, "gov_router");
+            assert_eq!(r.type_string(), ua_type(op).unwrap(), "{op}");
+            assert_eq!(r.entry, format!("mtx{}", &op[2..]), "{op}");
+            assert_eq!(r.contracts, ["gov_router"], "{op}: the router's alone");
+            assert!(r.ua() && r.enveloped && r.sig == Some(Sig::Ua), "{op}");
+            assert!(v["ops"][op]["domains"]["gov_router"].is_object(), "{op}: no typed_ops.json row");
+        }
+        let controls = ["mtxFreeze", "mtxUnfreeze", "mtxForceTransfer", "mtxPause", "mtxUnpause", "mtxRecordOrder", "mtxRevokeOrder",
+            "mtxOperatorTransfer"];
+        let ours: BTreeSet<&str> = rows().iter().filter(|r| controls.contains(&r.entry)).map(|r| r.name).collect();
+        assert_eq!(ours, REGULATED_OPS.iter().map(|(n, _)| *n).collect(), "the router's control rows, both directions");
+        assert_eq!(row_of("UAOperatorTransfer", "gov_router").fields[2], ("bytes32".into(), "account".into()));
+    }
+
     /// The selectors a list of `MandateWallet.sol` names, read from its source: `X.selector` (its last segment) and the `_REVOKE_*`
     /// constants, in the body of `function <f>` (to its closing brace at four spaces).
     fn wallet_list(src: &str, f: &str) -> BTreeSet<String> {

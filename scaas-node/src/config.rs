@@ -287,6 +287,15 @@ pub struct ChainCfg {
     /// config row. Empty: every router job is refused.
     #[serde(default)]
     pub governance_routers: Vec<Address>,
+    /// The chain's canonical `ComplianceRegistry` (regulated-kinds spec §5, §7; the deployments JSON's `compliance_registry`): the
+    /// registry the venue's pre-check reads for a regulated leg (NODE-DEX-11). An address, no secret. Set with
+    /// `compliance_registry_codehash`, or neither.
+    #[serde(default)]
+    pub compliance_registry: Option<Address>,
+    /// The registry's runtime code hash (the deployments JSON's `compliance_registry_codehash`, the releases' `REGISTRY_CODEHASH`):
+    /// checked against the chain's `eth_getCode` when the venue loads; another code or none stops it (fail closed).
+    #[serde(default)]
+    pub compliance_registry_codehash: Option<B256>,
     /// Ví lạnh nhận phí của meta-tx không ràng buộc `feeRecipient` (R84, EVM/Hedera); không phải khoá lane.
     /// Không đặt ⇒ ghi 0: contract trả phí cho `msg.sender` (lane gửi).
     #[serde(default)]
@@ -400,6 +409,8 @@ impl Default for ChainCfg {
             token_factory: None,
             ua_registry: None,
             governance_routers: vec![],
+            compliance_registry: None,
+            compliance_registry_codehash: None,
             fee_recipient: None,
             poll_ms: default_poll(),
             stuck_after_secs: default_stuck(),
@@ -554,6 +565,9 @@ impl Config {
             keys::lane_path_coin(&c.family, 0, c.coin_type).with_context(|| format!("chain {key}"))?;
             if c.rpc_urls.is_empty() || c.rpc_urls.len() < c.finality.quorum {
                 bail!("chain {key}: {} rpc_urls < quorum {}", c.rpc_urls.len(), c.finality.quorum);
+            }
+            if c.compliance_registry.is_some() != c.compliance_registry_codehash.is_some() {
+                bail!("chain {key}: compliance_registry and compliance_registry_codehash are set together");
             }
             if c.is_evm() {
                 if c.evm_chain_number == 0 {
@@ -969,6 +983,22 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
         c.validate().unwrap();
         assert!(c.modules.submit && c.modules.indexer && !c.modules.gateway);
         assert_eq!(c.chains[0].stuck_after_secs, 60);
+    }
+
+    /// Regulated-kinds spec §7: `compliance_registry` and its code hash are set together, or neither (no secret: an address and a
+    /// hash; `chain::compliance_registry_code_hash_fails_closed` checks the code).
+    #[test]
+    fn compliance_registry_and_its_code_hash_together() {
+        let with = |extra: &str| -> Result<Config> {
+            let c: Config = toml::from_str(&OK.replace("signer_key_env = \"K\"", &format!("signer_key_env = \"K\"\n{extra}")))?;
+            c.validate().map(|_| c)
+        };
+        let (a, h) = (format!("{:#x}", Address::repeat_byte(0xc0)), format!("{:#x}", B256::repeat_byte(1)));
+        assert!(with(&format!("compliance_registry = \"{a}\"")).unwrap_err().to_string().contains("set together"));
+        assert!(with(&format!("compliance_registry_codehash = \"{h}\"")).unwrap_err().to_string().contains("set together"));
+        let c = with(&format!("compliance_registry = \"{a}\"\ncompliance_registry_codehash = \"{h}\"")).unwrap();
+        assert_eq!((c.chains[0].compliance_registry, c.chains[0].compliance_registry_codehash), (Some(Address::repeat_byte(0xc0)), Some(B256::repeat_byte(1))));
+        assert_eq!(with("").unwrap().chains[0].compliance_registry, None);
     }
 
     /// T17: the relay-fee / pay-meta keys of every family: defaults, and a set-but-invalid value is a startup error.

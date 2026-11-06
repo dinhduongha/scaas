@@ -9,7 +9,7 @@ use alloy::sol_types::SolEvent;
 use serde_json::{json, Value};
 use tracing::{info, warn};
 
-use crate::abi::{IMtxRelayFee, IToken, IUALedger};
+use crate::abi::{IGovernance, IMtxRelayFee, IRegulatedToken, IToken, IUALedger};
 use crate::chain::Chain;
 use crate::finality::{next_range, quorum_ok, safe_head, Mode};
 use crate::odoo::Odoo;
@@ -105,10 +105,95 @@ pub fn encode_event(log: &Log) -> Option<Value> {
         v["digest"] = json!(format!("{:#x}", e.digest));
         v["fee_recipient"] = json!(format!("{:#x}", e.feeRecipient));
         v["fee"] = json!(e.fee.to_string());
-    } else {
+    } else if !regulated_event(log, topic0, &mut v) {
         return None;
     }
     Some(v)
+}
+
+/// The events an alert goes out on (regulated-kinds spec §7, M-08; asset-suite A2: a compromised `compliance` records fake
+/// orders, so every record is shown).
+pub const ALERTS: [&str; 4] = ["OrderRecorded", "RelaxProposed", "AccountFrozen", "Paused"];
+
+/// The topics of [`regulated_event`]: the regulated kinds' §3.1 events and the governance events the indexer derives from.
+pub const REGULATED_TOPICS: [B256; 11] = [
+    IRegulatedToken::AccountFrozen::SIGNATURE_HASH, IRegulatedToken::AccountUnfrozen::SIGNATURE_HASH,
+    IRegulatedToken::ForcedTransfer::SIGNATURE_HASH, IRegulatedToken::Paused::SIGNATURE_HASH, IRegulatedToken::Unpaused::SIGNATURE_HASH,
+    IRegulatedToken::OrderRecorded::SIGNATURE_HASH, IRegulatedToken::OrderRevoked::SIGNATURE_HASH,
+    IRegulatedToken::OperatorTransfer::SIGNATURE_HASH, IGovernance::RelaxProposed::SIGNATURE_HASH,
+    IGovernance::FeatureDisabled::SIGNATURE_HASH, IGovernance::RoleRevoked::SIGNATURE_HASH,
+];
+
+/// A regulated kind's event (spec §3.1) or a governance one into `v`, ids as `bytes32` hex but `from` / `to`, which the client's
+/// ingest reads as addresses ([`put_id`]: a derived UA is `UA_POOL` with the id in `<k>_ua`); `alert` on [`ALERTS`]; `derived`
+/// for what an event ends: `FeatureDisabled(5)` every freeze, `FeatureDisabled(10)` every record-backed freeze, `RoleRevoked`
+/// the holder's bit. `false`: not one of them.
+fn regulated_event(log: &Log, topic0: B256, v: &mut Value) -> bool {
+    use IRegulatedToken as R;
+    let h = |w: B256| json!(format!("{w:#x}"));
+    if topic0 == R::AccountFrozen::SIGNATURE_HASH {
+        let Ok(e) = log.log_decode::<R::AccountFrozen>() else { return false };
+        let e = e.inner.data;
+        (v["event"], v["account"], v["ref"], v["record_id"], v["until"]) = (json!("AccountFrozen"), h(e.account), h(e.r#ref), h(e.recordId), json!(e.until));
+    } else if topic0 == R::AccountUnfrozen::SIGNATURE_HASH {
+        let Ok(e) = log.log_decode::<R::AccountUnfrozen>() else { return false };
+        let e = e.inner.data;
+        (v["event"], v["account"], v["ref"]) = (json!("AccountUnfrozen"), h(e.account), h(e.r#ref));
+    } else if topic0 == R::ForcedTransfer::SIGNATURE_HASH {
+        let Ok(e) = log.log_decode::<R::ForcedTransfer>() else { return false };
+        let e = e.inner.data;
+        (v["event"], v["record_id"], v["amount"]) = (json!("ForcedTransfer"), h(e.recordId), json!(e.amount.to_string()));
+        put_id(v, "from", e.from);
+        put_id(v, "to", e.to);
+    } else if topic0 == R::Paused::SIGNATURE_HASH {
+        let Ok(e) = log.log_decode::<R::Paused>() else { return false };
+        let e = e.inner.data;
+        (v["event"], v["ref"], v["until"]) = (json!("Paused"), h(e.r#ref), json!(e.until));
+    } else if topic0 == R::Unpaused::SIGNATURE_HASH {
+        let Ok(e) = log.log_decode::<R::Unpaused>() else { return false };
+        (v["event"], v["ref"]) = (json!("Unpaused"), h(e.inner.data.r#ref));
+    } else if topic0 == R::OrderRecorded::SIGNATURE_HASH {
+        let Ok(e) = log.log_decode::<R::OrderRecorded>() else { return false };
+        let e = e.inner.data;
+        (v["event"], v["record_id"], v["order_id"], v["subject"], v["beneficiary"]) =
+            (json!("OrderRecorded"), h(e.recordId), h(e.orderId), h(e.subject), h(e.beneficiary));
+        (v["max_amount"], v["freeze_until"], v["document_hash"]) = (json!(e.maxAmount.to_string()), json!(e.freezeUntil), h(e.documentHash));
+    } else if topic0 == R::OrderRevoked::SIGNATURE_HASH {
+        let Ok(e) = log.log_decode::<R::OrderRevoked>() else { return false };
+        let e = e.inner.data;
+        (v["event"], v["record_id"], v["reason_ref"]) = (json!("OrderRevoked"), h(e.recordId), h(e.reasonRef));
+    } else if topic0 == R::OperatorTransfer::SIGNATURE_HASH {
+        let Ok(e) = log.log_decode::<R::OperatorTransfer>() else { return false };
+        let e = e.inner.data;
+        (v["event"], v["amount"], v["ref"]) = (json!("OperatorTransfer"), json!(e.amount.to_string()), h(e.r#ref));
+        put_id(v, "from", e.from);
+        put_id(v, "to", e.to);
+    } else if topic0 == IGovernance::RelaxProposed::SIGNATURE_HASH {
+        let Ok(e) = log.log_decode::<IGovernance::RelaxProposed>() else { return false };
+        let e = e.inner.data;
+        (v["event"], v["bit"], v["account"], v["action"], v["proposer"], v["eta"]) =
+            (json!("RelaxProposed"), json!(e.bit), h(e.account), json!(e.action), h(e.proposer), json!(e.eta));
+    } else if topic0 == IGovernance::FeatureDisabled::SIGNATURE_HASH {
+        let Ok(e) = log.log_decode::<IGovernance::FeatureDisabled>() else { return false };
+        let e = e.inner.data;
+        (v["event"], v["bit"], v["by"]) = (json!("FeatureDisabled"), json!(e.bit), h(e.by));
+        match e.bit {
+            5 => v["derived"] = json!("every_freeze_ended"),
+            10 => v["derived"] = json!("every_record_backed_freeze_ended"),
+            _ => {}
+        }
+    } else if topic0 == IGovernance::RoleRevoked::SIGNATURE_HASH {
+        let Ok(e) = log.log_decode::<IGovernance::RoleRevoked>() else { return false };
+        let e = e.inner.data;
+        (v["event"], v["bit"], v["account"], v["sender"], v["derived"]) =
+            (json!("RoleRevoked"), json!(e.bit), h(e.account), h(e.sender), json!("holder_lost_bit"));
+    } else {
+        return false;
+    }
+    if v["event"].as_str().is_some_and(|e| ALERTS.contains(&e)) {
+        v["alert"] = json!(true);
+    }
+    true
 }
 
 /// CTR-MTX-26 / -27 indexer join, one rule for every family (T17, controller ruling 2026-10-28, owner may override).
@@ -167,14 +252,16 @@ pub fn join_pay_events(mut events: Vec<Value>) -> Vec<Value> {
 /// router, its `RelayFeePaid`), decoded and joined.
 pub fn pay_filter(from: u64, to: u64, mut addrs: Vec<Address>, router: Option<Address>) -> Filter {
     addrs.extend(router);
-    Filter::new().from_block(from).to_block(to).address(addrs).event_signature(vec![
+    let mut topics = vec![
         IToken::PaymentSettled::SIGNATURE_HASH,
         IToken::MetaTransactionExecuted::SIGNATURE_HASH,
         IToken::PaymentMeta::SIGNATURE_HASH,
         IMtxRelayFee::RelayFeePaid::SIGNATURE_HASH,
         IUALedger::UAPaymentSettled::SIGNATURE_HASH,
         IUALedger::UAMetaTransactionExecuted::SIGNATURE_HASH,
-    ])
+    ];
+    topics.extend(REGULATED_TOPICS);
+    Filter::new().from_block(from).to_block(to).address(addrs).event_signature(topics)
 }
 
 /// `pay_filter`'s logs ⇒ Odoo's events: a `RelayFeePaid` only from the router, a token event only from a token.
@@ -263,6 +350,9 @@ pub async fn step(chain: &Chain, odoo: &Odoo, router: Option<Address>) -> anyhow
             .topic2(wallets);
         let logs = chain.primary().get_logs(&f).await?;
         events.extend(inbound(logs.iter().filter_map(encode_event).collect(), &pairs));
+    }
+    for e in events.iter().filter(|e| e["alert"] == true) {
+        warn!(chain = chain.number, alert = %e["event"], contract = %e["contract"], tx = %e["tx_hash"], "regulated alert: {e}");
     }
     let r = odoo.ingest(chain.number, from, to, &format!("{hash:#x}"), &events).await?;
     info!(chain = chain.number, from, to, created = r.created, "ingested");
@@ -356,6 +446,56 @@ mod tests {
         assert!(encode_event(&pending).is_none());
         let foreign = log_of(LogData::new_unchecked(vec![B256::repeat_byte(7)], Default::default()));
         assert!(encode_event(&foreign).is_none());
+    }
+
+    /// Regulated-kinds spec §7 (M-08): the §3.1 events and `RelaxProposed` are rows of the range with ids as `bytes32` hex; an
+    /// `alert` on every `OrderRecorded`, `RelaxProposed`, `AccountFrozen`, `Paused` and on no other; `derived` names what a
+    /// `FeatureDisabled(5)`, `FeatureDisabled(10)` and a `RoleRevoked` end. The filter asks for every one of them.
+    #[test]
+    fn alert_on_relax_proposed() {
+        use crate::abi::{IGovernance as G, IRegulatedToken as R};
+        let (a, r) = (B256::repeat_byte(0xa1), B256::repeat_byte(0x7e));
+        let enc = |d: LogData| pay_events(&[log_of(d)], None).pop().unwrap_or_else(|| panic!("not read"));
+        let v = enc(G::RelaxProposed { bit: 5, account: a, action: 3, proposer: r, eta: 1_800_000_000 }.encode_log_data());
+        assert_eq!((v["event"].as_str(), v["alert"].as_bool()), (Some("RelaxProposed"), Some(true)), "{v}");
+        assert_eq!((v["bit"].as_u64(), v["action"].as_u64(), v["eta"].as_u64()), (Some(5), Some(3), Some(1_800_000_000)));
+        assert_eq!((v["account"].as_str(), v["proposer"].as_str()), (Some(format!("{a:#x}").as_str()), Some(format!("{r:#x}").as_str())));
+        let alerts = [
+            enc(R::OrderRecorded { recordId: r, orderId: a, subject: a, beneficiary: r, maxAmount: U256::from(5), freezeUntil: 9, documentHash: r }.encode_log_data()),
+            enc(R::AccountFrozen { account: a, r#ref: r, recordId: B256::ZERO, until: 9 }.encode_log_data()),
+            enc(R::Paused { r#ref: r, until: 9 }.encode_log_data()),
+        ];
+        for (v, e) in alerts.iter().zip(["OrderRecorded", "AccountFrozen", "Paused"]) {
+            assert_eq!((v["event"].as_str(), v["alert"].as_bool()), (Some(e), Some(true)), "{v}");
+        }
+        assert_eq!(alerts[1]["until"].as_u64(), Some(9));
+        let quiet = [
+            enc(R::AccountUnfrozen { account: a, r#ref: r }.encode_log_data()),
+            enc(R::Unpaused { r#ref: r }.encode_log_data()),
+            enc(R::OrderRevoked { recordId: r, reasonRef: a }.encode_log_data()),
+            enc(R::ForcedTransfer { recordId: r, from: a, to: r, amount: U256::from(3) }.encode_log_data()),
+            enc(R::OperatorTransfer { from: a, to: r, amount: U256::from(3), r#ref: r }.encode_log_data()),
+        ];
+        for v in &quiet {
+            assert!(v["alert"].is_null(), "{v}");
+        }
+        // `from` / `to` in the client's address form: a native id its address, a derived one `UA_POOL` and `<k>_ua`
+        let native = Address::repeat_byte(3).into_word();
+        let ft = enc(R::ForcedTransfer { recordId: r, from: native, to: a, amount: U256::from(3) }.encode_log_data());
+        assert_eq!((ft["from"].as_str(), ft["to_ua"].as_str()), (Some(format!("{:#x}", Address::repeat_byte(3)).as_str()), Some(format!("{a:#x}").as_str())));
+        assert_eq!(ft["to"].as_str().map(str::len), Some(42));
+        let derived = |d: LogData| enc(d)["derived"].as_str().map(str::to_string);
+        assert_eq!(derived(G::FeatureDisabled { bit: 5, by: a }.encode_log_data()).as_deref(), Some("every_freeze_ended"));
+        assert_eq!(derived(G::FeatureDisabled { bit: 10, by: a }.encode_log_data()).as_deref(), Some("every_record_backed_freeze_ended"));
+        assert_eq!(derived(G::FeatureDisabled { bit: 7, by: a }.encode_log_data()), None);
+        assert_eq!(derived(G::RoleRevoked { bit: 6, account: a, sender: r }.encode_log_data()).as_deref(), Some("holder_lost_bit"));
+        let f = pay_filter(1, 2, vec![Address::repeat_byte(9)], None);
+        for t in [R::AccountFrozen::SIGNATURE_HASH, R::AccountUnfrozen::SIGNATURE_HASH, R::ForcedTransfer::SIGNATURE_HASH,
+            R::Paused::SIGNATURE_HASH, R::Unpaused::SIGNATURE_HASH, R::OrderRecorded::SIGNATURE_HASH, R::OrderRevoked::SIGNATURE_HASH,
+            R::OperatorTransfer::SIGNATURE_HASH, G::RelaxProposed::SIGNATURE_HASH, G::FeatureDisabled::SIGNATURE_HASH,
+            G::RoleRevoked::SIGNATURE_HASH] {
+            assert!(f.topics[0].matches(&t), "{t:#x} not asked");
+        }
     }
 
     fn log_at(address: Address, tx: u8, log_index: u64, data: LogData) -> Log {

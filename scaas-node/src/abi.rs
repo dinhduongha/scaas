@@ -346,6 +346,125 @@ sol! {
         error BadMandate();
         error PayFailed();
     }
+
+    /// `IRegulatedToken` (regulated-kinds spec §3.1; kinds 8-13): the controls, the views the venue's pre-check reads
+    /// (NODE-DEX-11), the events the indexer and the venue watch, and the errors the node names. Every function of the
+    /// interface is here: [`regulated_interface_id`] is their XOR, as `type(IRegulatedToken).interfaceId`.
+    #[derive(Debug)]
+    interface IRegulatedToken {
+        struct RegulatedConfig { address complianceRegistry; uint8 controls; uint64 requiredFlags; uint64 deniedFlags;
+            bytes32 termsHash; uint64 pausedUntil; uint64 pauseCooldownUntil; }
+        struct FreezeState { uint64 until; uint64 episodeStart; uint64 issuerCooldownUntil; bool recordBacked; bytes32 recordId; }
+        struct OrderRecord { bytes32 subject; bytes32 beneficiary; uint64 freezeUntil; bool revoked; uint256 maxAmount; uint256 executed; }
+        event AccountFrozen(bytes32 indexed account, bytes32 indexed ref, bytes32 recordId, uint64 until);
+        event AccountUnfrozen(bytes32 indexed account, bytes32 indexed ref);
+        event ForcedTransfer(bytes32 indexed recordId, bytes32 indexed from, bytes32 indexed to, uint256 amount);
+        event Paused(bytes32 indexed ref, uint64 until);
+        event Unpaused(bytes32 indexed ref);
+        event OrderRecorded(bytes32 indexed recordId, bytes32 indexed orderId, bytes32 indexed subject, bytes32 beneficiary,
+            uint256 maxAmount, uint64 freezeUntil, bytes32 documentHash);
+        event OrderRevoked(bytes32 indexed recordId, bytes32 reasonRef);
+        event OperatorTransfer(bytes32 indexed from, bytes32 indexed to, uint256 amount, bytes32 indexed ref);
+        error Frozen(bytes32 account);
+        error TokenPaused(uint64 until);
+        error NotEligible(bytes32 account, uint8 reason);
+        error FeeRecipientFrozen(bytes32 account);
+        error RefRequired();
+        error RegulatedConfigInvalid();
+        error RegistryCodeMismatch(address registry, bytes32 codehash);
+        error RegistryUnavailable(address registry);
+        error RegistryGasStarved(uint256 cap, uint256 left);
+        error OrderExists(bytes32 recordId);
+        error OrderUnknown(bytes32 recordId);
+        error OrderInactive(bytes32 recordId);
+        error SubjectNotFrozen(bytes32 subject);
+        error OrderExceeded(uint256 remaining);
+        error FreezeTooLong(uint64 maxUntil);
+        error FreezeCooldown(uint64 until);
+        error NotFrozen(bytes32 account);
+        error AlreadyRecordFrozen(bytes32 account);
+        error RecordFreezeShorter(uint64 until);
+        error FreezeTargetRefused(bytes32 account);
+        error PauseTooLong(uint64 until);
+        error PauseCooldown(uint64 until);
+        error ForceTargetRefused(bytes32 account);
+        error OperatorTargetRefused(bytes32 account);
+        error AmountZero();
+        error NotPaused();
+        function freeze(bytes32 account, bytes32 ref, bytes32 recordId) external;
+        function unfreeze(bytes32 account, bytes32 ref) external;
+        function forceTransfer(bytes32 recordId, uint256 amount) external;
+        function pause(bytes32 ref, uint64 until) external;
+        function unpause(bytes32 ref) external;
+        function recordOrder(bytes32 orderId, bytes32 documentHash, bytes32 subject, bytes32 beneficiary, uint256 maxAmount,
+            uint64 freezeUntil) external;
+        function revokeOrder(bytes32 recordId, bytes32 reasonRef) external;
+        function operatorTransfer(bytes32 from, bytes32 to, uint256 amount, bytes32 ref) external;
+        function regulatedConfig() external view returns (RegulatedConfig);
+        function freezeOf(bytes32 account) external view returns (FreezeState);
+        function isFrozen(bytes32 account) external view returns (bool);
+        function canReceive(bytes32 account) external view returns (bool ok, uint8 reason);
+        function order(bytes32 recordId) external view returns (OrderRecord);
+    }
+
+    /// ERC-165 (`MetaTokenBase.supportsInterface`): a regulated kind answers [`regulated_interface_id`], kinds 0-5 do not (M-10).
+    #[derive(Debug)]
+    interface IERC165 {
+        function supportsInterface(bytes4 id) external view returns (bool);
+    }
+
+    /// `IComplianceRegistry` (regulated-kinds spec §5): the two reads `canReceive` makes, read by the venue to compute `R` with
+    /// `scaas_ua::regulated::can_receive` and to know the receiver's attestation `validUntil` (NODE-DEX-11, `ATTESTATION_SHORTER`).
+    #[derive(Debug)]
+    interface IComplianceRegistry {
+        event AttesterSet(address indexed attester, uint32 indexed attesterId, bool enabled);
+        event Attested(bytes32 indexed account, uint64 flags, uint64 validUntil, uint32 indexed attesterId);
+        function attestationOf(bytes32 account) external view returns (uint64 flags, uint64 validUntil, uint32 attesterId);
+        function attesterEnabled(uint32 id) external view returns (bool);
+        error NotAdmin();
+        error NotAttester();
+        error AdminNotContract(address a);
+        error LengthMismatch();
+        error EligibleContractAdminOnly();
+        error AdminWrittenSlot(bytes32 account);
+    }
+
+    /// `IGovernance`'s events the indexer reads (M-08) and the errors of a role or a pending the node names (§3.1).
+    #[derive(Debug)]
+    interface IGovernance {
+        event RoleRevoked(uint8 indexed bit, bytes32 indexed account, bytes32 indexed sender);
+        event FeatureDisabled(uint8 indexed bit, bytes32 indexed by);
+        event RelaxProposed(uint8 indexed bit, bytes32 indexed account, uint8 action, bytes32 proposer, uint64 eta);
+        error MissingRole(uint8 bit, bytes32 account);
+        error RoleNotContract(uint8 bit, bytes32 account);
+        error RoleConflict(uint8 bit, bytes32 account);
+        error GrantTermsMismatch(uint8 bit, bytes32 account);
+        error GrantNotReady(uint8 bit, bytes32 account, uint64 eta);
+        error NotProposer(uint8 bit, bytes32 account, bytes32 proposer);
+        error FeatureInvalidForKind(uint8 bit);
+        error FeatureLocked(uint8 bit);
+        error FeatureNotSet(uint8 bit);
+        error GrantExhausted(uint8 field);
+        error GrantExpired(uint8 bit, bytes32 holder);
+        error GrantBarred(uint8 bit, bytes32 account);
+    }
+}
+
+/// `type(IRegulatedToken).interfaceId`: the XOR of its functions' selectors.
+pub fn regulated_interface_id() -> [u8; 4] {
+    use alloy::sol_types::SolInterface;
+    IRegulatedToken::IRegulatedTokenCalls::selectors().fold([0u8; 4], |a, s| std::array::from_fn(|i| a[i] ^ s[i]))
+}
+
+/// A regulated token's refusal that a later block may lift (regulated-kinds spec §7): the account is frozen, the token
+/// paused, the receiver not eligible, the fee recipient frozen, or the registry unreadable. The node names it and never
+/// reports the job `dead` for it while its payload may still land (another relayer, after an unfreeze, an unpause or an
+/// attestation); it is never counted against the subject's or a maker's grief score (asset-suite §2.7, F-16). `reason`
+/// is a `decode_revert` string.
+pub fn regulated_refusal(reason: &str) -> Option<&'static str> {
+    const LIFTABLE: [&str; 6] = ["Frozen", "TokenPaused", "NotEligible", "FeeRecipientFrozen", "RegistryUnavailable", "RegistryGasStarved"];
+    let name = reason.split(['(', ' ', '{']).next().unwrap_or_default();
+    LIFTABLE.into_iter().find(|n| *n == name)
 }
 
 /// Readable error name for `last_error` on the client; raw hex when it is none of ours.
@@ -363,6 +482,15 @@ pub fn decode_revert(data: &[u8]) -> String {
         return format!("{e:?}");
     }
     if let Ok(e) = IUALedger::IUALedgerErrors::abi_decode(data) {
+        return format!("{e:?}");
+    }
+    if let Ok(e) = IRegulatedToken::IRegulatedTokenErrors::abi_decode(data) {
+        return format!("{e:?}");
+    }
+    if let Ok(e) = IGovernance::IGovernanceErrors::abi_decode(data) {
+        return format!("{e:?}");
+    }
+    if let Ok(e) = IComplianceRegistry::IComplianceRegistryErrors::abi_decode(data) {
         return format!("{e:?}");
     }
     format!("revert 0x{}", alloy::hex::encode(data))
@@ -383,5 +511,76 @@ mod tests {
         let e = IToken::MinNonceNotIncreasing { current: U256::from(5), requested: U256::from(5) }.abi_encode();
         assert!(decode_revert(&e).starts_with("MinNonceNotIncreasing("));
         assert!(decode_revert(&[1, 2, 3]).starts_with("revert 0x"));
+    }
+
+    /// `type(IRegulatedToken).interfaceId`: the XOR of the thirteen `cast sig` selectors (0xf35dd87a, cast 1.8.5).
+    #[test]
+    fn regulated_interface_id_is_the_xor_of_its_functions() {
+        assert_eq!(regulated_interface_id(), [0xf3, 0x5d, 0xd8, 0x7a]);
+    }
+
+    /// Regulated-kinds spec §7: every §3.1 error and `NotProposer` decoded by name; the six a later block may lift are the
+    /// refusals the submit path and the venue keep apart from `dead` and from blame; the others are not.
+    #[test]
+    fn regulated_refusals_are_named() {
+        let a = alloy::primitives::B256::repeat_byte(0xf1);
+        for (data, name) in [
+            (IRegulatedToken::Frozen { account: a }.abi_encode(), "Frozen"),
+            (IRegulatedToken::TokenPaused { until: 7 }.abi_encode(), "TokenPaused"),
+            (IRegulatedToken::NotEligible { account: a, reason: 1 }.abi_encode(), "NotEligible"),
+            (IRegulatedToken::FeeRecipientFrozen { account: a }.abi_encode(), "FeeRecipientFrozen"),
+            (IRegulatedToken::RegistryUnavailable { registry: alloy::primitives::Address::repeat_byte(5) }.abi_encode(), "RegistryUnavailable"),
+            (IRegulatedToken::RegistryGasStarved { cap: U256::from(50_000), left: U256::from(1) }.abi_encode(), "RegistryGasStarved"),
+        ] {
+            let r = decode_revert(&data);
+            assert!(r.starts_with(&format!("{name}(")), "{r}");
+            assert_eq!(regulated_refusal(&r), Some(name), "{r}");
+        }
+        for (data, name) in [
+            (IGovernance::NotProposer { bit: 5, account: a, proposer: a }.abi_encode(), "NotProposer"),
+            (IGovernance::MissingRole { bit: 5, account: a }.abi_encode(), "MissingRole"),
+            (IRegulatedToken::RefRequired {}.abi_encode(), "RefRequired"),
+            (IRegulatedToken::PauseCooldown { until: 1 }.abi_encode(), "PauseCooldown"),
+            (IComplianceRegistry::AdminWrittenSlot { account: a }.abi_encode(), "AdminWrittenSlot"),
+        ] {
+            let r = decode_revert(&data);
+            assert!(r.starts_with(&format!("{name}(")), "{r}");
+            assert_eq!(regulated_refusal(&r), None, "{name}: named, not liftable");
+        }
+        assert_eq!(regulated_refusal("FrozenX(..)"), None);
+        assert_eq!(regulated_refusal("revert 0x1234"), None);
+    }
+
+    /// The node's reader of `smartcontracts/vectors/governance/regulated_kat.json` (regulated-kinds spec §7; forge writes it
+    /// from a real kind-8 token): every refused transition's `error.data`, the contract's own bytes, decodes to the error its
+    /// `sig` names; the `R` rows are what `scaas_ua::regulated::can_receive` answers (the venue's pre-check, NODE-DEX-11); the
+    /// `recordId` rows are `record_id`'s.
+    #[test]
+    fn regulated_kat_rows_read_by_the_node() {
+        use scaas_ua::regulated::{can_receive, record_id, Attestation};
+        let p = format!("{}/../smartcontracts/vectors/governance/regulated_kat.json", env!("CARGO_MANIFEST_DIR"));
+        let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
+        let w = |s: &serde_json::Value| -> [u8; 32] { s.as_str().unwrap().parse::<alloy::primitives::B256>().unwrap().0 };
+        let n = |s: &serde_json::Value| -> u64 { s.as_str().unwrap().parse().unwrap() };
+        let mut named = 0;
+        for r in v["freeze"].as_array().unwrap().iter().filter(|r| !r["error"].is_null()) {
+            let sig = r["error"]["sig"].as_str().unwrap();
+            let data = alloy::hex::decode(r["error"]["data"].as_str().unwrap()).unwrap();
+            let got = decode_revert(&data);
+            assert!(got.starts_with(&format!("{}(", &sig[..sig.find('(').unwrap()])), "{}: {got} is not {sig}", r["name"]);
+            named += 1;
+        }
+        assert_eq!(named, 17, "every refused freeze row");
+        let rows = v["receiver"].as_array().unwrap();
+        for r in rows {
+            let a = Attestation { flags: n(&r["flags"]), valid_until: n(&r["validUntil"]), attester_enabled: r["attesterEnabled"].as_bool().unwrap() };
+            let (req, den) = (r["allowlist"].as_bool().unwrap().then(|| n(&r["requiredFlags"])), r["denylist"].as_bool().unwrap().then(|| n(&r["deniedFlags"])));
+            let got = can_receive(req, den, &a, n(&r["now"]));
+            assert_eq!(got, (r["ok"].as_bool().unwrap(), r["reason"].as_u64().unwrap() as u8), "{}", r["name"]);
+        }
+        assert_eq!(rows.len(), 44);
+        for r in v["recordId"].as_array().unwrap() {
+            assert_eq!(record_id(&w(&r["orderId"]), &w(&r["subject"]), &w(&r["beneficiary"])), w(&r["recordId"]), "{}", r["name"]);
+        }
     }
 }

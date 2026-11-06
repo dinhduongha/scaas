@@ -181,6 +181,13 @@ Further events, same object, same filters (decoders for a new kind ship before t
   `/v1/events` per canonical id; native ids keep today's form;
 - post-quantum Zether: `MetaTransactionExecuted`, `UAMetaTransactionExecuted`, `Transfer` and `UATransfer` of a PQZ
   token normalized like any meta token's, beside the `Pqz*` events ([contracts/pq-zero-knowledge.md](../contracts/pq-zero-knowledge.md));
+- regulated kinds 8–13 (BUILT on EVM, ua-mtx-merge T35, `indexer.rs`; regulated-kinds spec §7, M-08): `AccountFrozen`,
+  `AccountUnfrozen`, `ForcedTransfer`, `Paused`, `Unpaused`, `OrderRecorded`, `OrderRevoked`, `OperatorTransfer` and the
+  governance events `RelaxProposed`, `FeatureDisabled`, `RoleRevoked`, ids as `bytes32` hex but `from` / `to` in the address
+  form above (`UA_POOL` and `<k>_ua` for a derived id); `alert: true` on every `OrderRecorded`, `RelaxProposed`,
+  `AccountFrozen` and `Paused` (and a `warn` log line naming it); `derived` = `every_freeze_ended` on `FeatureDisabled(5)`,
+  `every_record_backed_freeze_ended` on `FeatureDisabled(10)`, `holder_lost_bit` on `RoleRevoked`. Test:
+  `indexer::tests::alert_on_relax_proposed`;
 - planned asset suite: `OrderRecorded`, `OrderRevoked`, `AccountFrozen`, `AccountUnfrozen`, `ForcedTransfer`, `Paused`,
   `Unpaused`, `FeatureDisabled`, `RoleGranted`, `RoleRevoked`, `Attested`, `AttesterSet`, `GrantCreated`, `Released`, `Revoked`,
   `RevocationRenounced`, `MilestoneApproved`, `ExcessSwept`, `DistributionCreated`, `Claimed`, `Cancelled`, `Swept`,

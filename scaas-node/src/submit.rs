@@ -640,6 +640,11 @@ impl Submitter {
         }
         match self.consumed(w).await {
             Ok(true) => self.report_consumed(w).await,
+            // regulated-kinds spec §7: a freeze, a pause, an eligibility or the registry may lift and the payload may still
+            // land (here later, or by another relayer): a named refusal, back in the queue, never `dead`
+            Ok(false) if crate::abi::regulated_refusal(&reason).is_some() => {
+                self.requeue(w, format!("REGULATED_REFUSED: {reason}")).await
+            }
             Ok(false) => self.fail(w, reason).await,
             Err(e) => self.requeue(w, format!("mtxNonce: {e:#}")).await,
         }
@@ -1087,6 +1092,17 @@ pub(crate) mod tests {
                                 let data = alloy::sol_types::SolError::abi_encode(&data);
                                 Err(err(3, "execution reverted", Some(format!("0x{}", alloy::hex::encode(data)))))
                             }
+                            // a regulated token's refusals (regulated-kinds spec §3.1)
+                            Some("frozen") => {
+                                let data = crate::abi::IRegulatedToken::Frozen { account: B256::repeat_byte(0xf1) };
+                                let data = alloy::sol_types::SolError::abi_encode(&data);
+                                Err(err(3, "execution reverted", Some(format!("0x{}", alloy::hex::encode(data)))))
+                            }
+                            Some("registry_unavailable") => {
+                                let data = crate::abi::IRegulatedToken::RegistryUnavailable { registry: Address::repeat_byte(0xc0) };
+                                let data = alloy::sol_types::SolError::abi_encode(&data);
+                                Err(err(3, "execution reverted", Some(format!("0x{}", alloy::hex::encode(data)))))
+                            }
                             // Nethermind 2.2.0's answer for a call over 2^24 regular gas (EIP-7825 under EIP-8037)
                             Some("oog") => Err(err(-32000, "out of gas", None)),
                             Some("estimate_oog" | "estimate_down") => Ok(word(U256::from(1))),
@@ -1285,6 +1301,36 @@ pub(crate) mod tests {
             lane(&url, odoo, 1, InflightSet::default()).await.poll_outbox().await;
             assert_eq!(states(&o), [want], "mtxNonce {nonce:?}");
         }
+    }
+
+    /// Regulated-kinds spec §7: a simulation revert `Frozen` is a named refusal, never `dead` while the payload may still land
+    /// (an unfreeze, another relayer): the job goes back `queued` with the error named, nothing sent. A spent subject nonce is
+    /// still `consumed` first, an unreadable one still `queued`.
+    #[tokio::test]
+    async fn frozen_revert_is_refusal_not_dead() {
+        for (nonce, want) in [(Some(0), "queued"), (Some(1), "consumed"), (None, "queued")] {
+            let (url, rpc) = fake_evm(Evm { sim: Some("frozen"), mtx_nonce: nonce, ..Default::default() }).await;
+            let (odoo, o) = fake_odoo(Fake { jobs: vec![job(7)], tokens: toks(), ..Default::default() }).await;
+            lane(&url, odoo, 1, InflightSet::default()).await.poll_outbox().await;
+            assert_eq!(states(&o), [want], "mtxNonce {nonce:?}");
+            assert!(rpc.lock().unwrap().sent.is_empty());
+            if nonce == Some(0) {
+                let err = o.lock().unwrap().reports[0]["error"].as_str().unwrap().to_string();
+                assert!(err.starts_with("REGULATED_REFUSED: Frozen("), "{err}");
+            }
+        }
+    }
+
+    /// As `Frozen`: `RegistryUnavailable` (the token's bounded registry call failed) is a refusal, named, never `dead`.
+    #[tokio::test]
+    async fn registry_unavailable_is_refusal() {
+        let (url, rpc) = fake_evm(Evm { sim: Some("registry_unavailable"), mtx_nonce: Some(0), ..Default::default() }).await;
+        let (odoo, o) = fake_odoo(Fake { jobs: vec![job(7)], tokens: toks(), ..Default::default() }).await;
+        lane(&url, odoo, 1, InflightSet::default()).await.poll_outbox().await;
+        assert_eq!(states(&o), ["queued"]);
+        let err = o.lock().unwrap().reports[0]["error"].as_str().unwrap().to_string();
+        assert!(err.starts_with("REGULATED_REFUSED: RegistryUnavailable("), "{err}");
+        assert!(rpc.lock().unwrap().sent.is_empty());
     }
 
     /// PAY-FIX2 / NODE-GW-07 / MT-8, wired into the submitter: refusals come before any simulation or signature.
@@ -1587,7 +1633,8 @@ pub(crate) mod tests {
                 n += 1;
             }
         }
-        assert_eq!(n, 97, "every row with an entry, but the relay fees (relay_fee_call_object)");
+        // plan T34 added the router's eight regulated control rows to typed_ops.json (97 -> 105); T34 ran typed:: and guard:: only
+        assert_eq!(n, 105, "every row with an entry, but the relay fees (relay_fee_call_object)");
     }
 
     /// `EvmAdapter::call_key`, which the Hedera adapter delegates to (`the_hedera_lane_skips_bytes_already_in_flight` is the

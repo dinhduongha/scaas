@@ -1114,6 +1114,99 @@ mod tests {
         assert_eq!(ours, router, "the router's allow-list, both directions");
         assert_eq!((rowed, exempt, governed), (ROWED, EXEMPT, GOVERNED), "every SIGNED entry was walked");
     }
+    /// Regulated-kinds spec §7 (plan T35), one kind 8-13 against its base kind, both directions:
+    /// - the contract: its `mtxSelectors()`, `_mtxRule` and `_uaAllowed` are `return super.<f>(…)` over the base kind, and
+    ///   `RegulatedBase` defines none of them, so the meta-tx allow-lists are the base kind's;
+    /// - `selector_audit.json`: its `SIGNED` entries are the base kind's, each way; every other entry it adds is one of the eight
+    ///   `BIT` controls (5, 6, 7, 10, 22), none a row of any node kind (relayed through the router only);
+    /// - the node: the rows of the base's node kind on its `SIGNED` entries are the same set on the regulated kind, and the guard
+    ///   allows each of them on that node kind, whose rule is a registered token.
+    fn regulated_kind_rows_equal_contract(kind: &str, base: &str, node_kind: &str, base_dir: &str) {
+        let root = format!("{}/../smartcontracts/evm", env!("CARGO_MANIFEST_DIR"));
+        let read = |p: &str| std::fs::read_to_string(format!("{root}/{p}")).unwrap_or_else(|e| panic!("{p}: {e}"));
+        let src = read(&format!("src/regulated/{kind}.sol"));
+        assert!(src.contains(&format!("contract {kind} is {base}, RegulatedBase {{")), "{kind} is {base}, RegulatedBase");
+        assert!(read(&format!("src/{base_dir}/{base}.sol")).contains(&format!("contract {base} ")), "{base} in src/{base_dir}");
+        for (f, args) in [("mtxSelectors", "()"), ("_mtxRule", "(sel)"), ("_uaAllowed", "(sel)")] {
+            let i = src.find(&format!("function {f}(")).unwrap_or_else(|| panic!("{kind}: no {f}"));
+            let body = &src[i..i + src[i..].find("\n    }\n").unwrap()];
+            assert!(body.contains(&format!("override({base}, ")), "{kind}.{f} overrides {base}'s");
+            let stmts: Vec<&str> = body[body.find('{').unwrap() + 1..].split(';').map(str::trim).filter(|s| !s.is_empty()).collect();
+            assert_eq!(stmts, [format!("return super.{f}{args}")], "{kind}.{f}: the base kind's, unchanged");
+        }
+        for lib in ["RegulatedBase", "RegulatedLib"] {
+            let s = read(&format!("src/regulated/{lib}.sol"));
+            for f in ["function mtxSelectors(", "function _mtxRule(", "function _uaAllowed("] {
+                assert!(!s.contains(f), "{lib} defines {f}: {kind}'s super would reach it first");
+            }
+        }
+        let p = format!("{root}/test/vectors/selector_audit.json");
+        let audit: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
+        let sel = |s: &str| -> [u8; 4] { alloy::primitives::keccak256(s)[..4].try_into().unwrap() };
+        let class = |c: &str| -> std::collections::BTreeMap<String, String> {
+            audit[c].as_array().unwrap_or_else(|| panic!("{c}")).iter()
+                .map(|r| (r["sig"].as_str().unwrap().to_string(), r["class"].as_str().unwrap().to_string())).collect()
+        };
+        let (k, b) = (class(kind), class(base));
+        let signed = |m: &std::collections::BTreeMap<String, String>| -> std::collections::BTreeSet<String> {
+            m.iter().filter(|(_, c)| *c == "SIGNED").map(|(s, _)| s.clone()).collect()
+        };
+        assert_eq!(signed(&k), signed(&b), "{kind}: SIGNED entries are {base}'s, both directions");
+        for (s, c) in &b {
+            assert_eq!(k.get(s), Some(c), "{kind}: {s} keeps {base}'s class");
+        }
+        let added: std::collections::BTreeMap<&String, &String> = k.iter().filter(|(s, _)| !b.contains_key(*s)).collect();
+        let controls = ["freeze(bytes32,bytes32,bytes32)", "unfreeze(bytes32,bytes32)", "forceTransfer(bytes32,uint256)",
+            "pause(bytes32,uint64)", "unpause(bytes32)", "recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64)",
+            "revokeOrder(bytes32,bytes32)", "operatorTransfer(bytes32,bytes32,uint256,bytes32)"];
+        assert_eq!(added.keys().map(|s| s.as_str()).collect::<std::collections::BTreeSet<_>>(), controls.into_iter().collect(), "{kind}");
+        for (s, c) in &added {
+            assert!(c.starts_with("BIT("), "{kind}: {s} is {c}");
+            for nk in ["token", "zether", "pqz", "wallet", "account", "dex", "registry", "factory", "gov_router"] {
+                assert!(row(sel(s), nk).is_none(), "{kind}: the control {s} is a {nk} row");
+            }
+        }
+        assert_eq!(rule_of(node_kind), Some(Rule::Token));
+        let rows_on = |m: &std::collections::BTreeMap<String, String>| -> std::collections::BTreeSet<&'static str> {
+            let s: HashSet<[u8; 4]> = signed(m).iter().map(|x| sel(x)).collect();
+            typed::rows().iter().filter(|r| !r.entry.is_empty() && r.contracts.contains(&node_kind) && s.contains(&r.selector))
+                .map(|r| r.name).collect()
+        };
+        let (rk, rb) = (rows_on(&k), rows_on(&b));
+        assert!(!rk.is_empty(), "{kind}: no {node_kind} row");
+        assert_eq!(rk, rb, "{kind}: the {node_kind} rows are {base}'s, both directions");
+        for s in signed(&k) {
+            if let Some(r) = typed::rows().iter().find(|r| !r.entry.is_empty() && r.contracts.contains(&node_kind) && r.selector == sel(&s)) {
+                assert!(row(r.sent, node_kind).is_some(), "{kind}: the guard refuses {}", r.name);
+            }
+        }
+    }
+
+    #[test]
+    fn regulated_kinds_rows_equal_contract_8() {
+        regulated_kind_rows_equal_contract("NormalRegulatedToken", "NormalToken", "token", "metatx");
+    }
+    #[test]
+    fn regulated_kinds_rows_equal_contract_9() {
+        regulated_kind_rows_equal_contract("WrappedRegulatedToken", "WrappedToken", "token", "metatx");
+    }
+    #[test]
+    fn regulated_kinds_rows_equal_contract_10() {
+        regulated_kind_rows_equal_contract("NormalZetherRegulatedToken", "NormalZetherToken", "zether", "zether");
+    }
+    #[test]
+    fn regulated_kinds_rows_equal_contract_11() {
+        regulated_kind_rows_equal_contract("WrappedZetherRegulatedToken", "WrappedZetherToken", "zether", "zether");
+    }
+    #[test]
+    fn regulated_kinds_rows_equal_contract_12() {
+        regulated_kind_rows_equal_contract("NormalPqzRegulatedToken", "NormalPqzToken", "pqz", "pqz");
+    }
+    #[test]
+    fn regulated_kinds_rows_equal_contract_13() {
+        regulated_kind_rows_equal_contract("WrappedPqzRegulatedToken", "WrappedPqzToken", "pqz", "pqz");
+    }
+
     /// Counted from the two files outside this code (python over `selector_audit.json` and `typed_ops.json`): 229 `SIGNED` entries
     /// of the eight contracts, 127 of them rows (120 vector rows, the token's invalidation, the DEX's six plain entries and its
     /// invalidation); 91 governance entries. Plan T32: (127, 102, 91) -> (234, 202, 217): + the router's eight regulated

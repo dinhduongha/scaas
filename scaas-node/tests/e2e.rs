@@ -30,7 +30,7 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::routing::post;
 use axum::{Json, Router};
-use scaas_node::abi::{IMtxIds, IToken, IUALedger, UAMetaTransaction, UAMetaTransfer, UASig};
+use scaas_node::abi::{IERC165, IMtxIds, IToken, IUALedger, UAMetaTransaction, UAMetaTransfer, UASig};
 use scaas_node::chain::Chain;
 use scaas_node::config::{ChainCfg, FinalityCfg, OdooCfg};
 use scaas_node::dex::venue::Venue;
@@ -1985,4 +1985,137 @@ async fn relayed_zether_proof_under_the_ua_tag() {
     let left = zether_cli("decrypt", &json!({"curve": "bls12381", "key": {"x": format!("{x:#x}")}, "ct": {"C": hx(&after.accC), "D": hx(&after.accD)},
         "tableBits": 18, "boundBits": 32}));
     assert_eq!(left["amount"].as_str().map(str::to_string).unwrap_or_else(|| left["amount"].to_string()), "1214", "the UA's balance by decryption");
+}
+
+// ------------------------------------------------------------------ regulated kinds 8-13 on anvil (plan T35)
+
+alloy::sol! {
+    function isFrozen(bytes32 account) external view returns (bool);
+}
+
+/// The deploy with the regulated releases and the canonical `ComplianceRegistry` (`DEPLOY_REGULATED`, its admin a contract: code
+/// set by `anvil_setCode`, the registry's constructor refuses an EOA), a `SmartKeyAccount` of `issuer_key` as the `issuer`
+/// (bit 5 is contract-only), and a kind-8 token with `FREEZE` whose supply is `holder`'s. No list is on: no registry read.
+async fn regulated_token(chain_id: u64, rpc: &str, issuer_key: &PrivateKeySigner, holder: Address) -> (Value, Address, Address) {
+    let admin = Address::repeat_byte(0xad);
+    let p = ProviderBuilder::new().connect_http(rpc.parse().unwrap());
+    let _: Value = p.raw_request("anvil_setCode".into(), (admin, "0x00")).await.unwrap();
+    let sc = sc();
+    let status = Command::new("forge").current_dir(sc)
+        .args(["script", "script/Deploy.s.sol", "--rpc-url", rpc, "--broadcast", "--slow", "--silent", "--disable-code-size-limit", "--sender", DEPLOYER_ADDRESS])
+        .env("PRIVATE_KEY", DEPLOYER).env("DEMO_SUPPLY", "1000000000000").env("DEMO_HOLDER", format!("{holder:#x}"))
+        .env("FOUNDRY_PROFILE", "scaas-testnet").env("DEPLOY_REGULATED", "true").env("COMPLIANCE_ADMIN", format!("{admin:#x}"))
+        .status().expect("forge in PATH");
+    assert!(status.success(), "forge script failed");
+    let dep: Value = serde_json::from_str(&std::fs::read_to_string(format!("{sc}/deployments/{chain_id}.json")).unwrap()).unwrap();
+    assert!(dep["implementation_normal_regulated"].is_string() && dep["compliance_registry"].is_string(), "{dep}");
+    let deployer = key(DEPLOYER);
+    let factory: Address = dep["smart_key_account_factory"].as_str().unwrap().parse().unwrap();
+    let first = SubjectKey { kind: 2, x: issuer_key.address().into_word(), y: B256::ZERO, rpIdHash: B256::ZERO, originHash: B256::ZERO };
+    let issuer = create(rpc, &deployer, factory, deployCall { firstKey: first, guardian: Address::repeat_byte(0x6a) }.abi_encode()).await;
+    let f: Address = dep["token_factory"].as_str().unwrap().parse().unwrap();
+    let c = TokenConfig { name: "SCaaS Regulated".into(), symbol: "bREG".into(), decimals: 6, features: U256::from(1u64 << 5), // FREEZE
+        owner: deployer.address().into_word(), roles: Roles { issuer: issuer.into_word(), ..Default::default() },
+        initialSupply: U256::from(1_000_000u64), initialHolder: holder,
+        reg: RegulatedParams { termsHash: B256::repeat_byte(0x7e), ..Default::default() }, ..Default::default() };
+    let t = create(rpc, &deployer, f, createTokenCall { kind: 8, version: 1, initArgs: c.abi_encode().into(), salt: B256::repeat_byte(0x35) }.abi_encode()).await;
+    let id = view(rpc, t, IERC165::supportsInterfaceCall { id: scaas_node::abi::regulated_interface_id().into() }).await;
+    assert!(id, "a kind-8 token answers type(IRegulatedToken).interfaceId (the node's XOR)");
+    (dep, t, issuer)
+}
+
+
+/// The router's `mtxFreeze` (`mtx<Op>`, op `UA<Op>`), or another of the eight, signed by the issuer account through ERC-1271 (its
+/// owner key's ECDSA in the account's `(keyIndex, proof, sig)` form), on the target's lane.
+#[allow(clippy::too_many_arguments)]
+fn issuer_op(entry: &str, args: Value, issuer: Address, owner: &PrivateKeySigner, router: Address, token: Address, nonce: u64, chain_id: u64,
+    uid: B256) -> Value
+{
+    let mut op = json!({"entry": entry, "contract": "gov_router", "token": format!("{router:#x}"), "args": args,
+        "envelope": envelope(issuer, U256::from_be_slice(token.as_slice()), nonce),
+        "auth": {"keyData": "0x", "signature": format!("0x{}", "11".repeat(65)), "members": []}});
+    let d = scaas_node::typed::Op::parse(&op, None).unwrap().typed.digest_on(chain_id, uid).unwrap();
+    let ecdsa = owner.sign_hash_sync(&d).unwrap().as_bytes().to_vec();
+    let sig = (U256::ZERO, Vec::<B256>::new(), Bytes::from(ecdsa)).abi_encode_params();
+    op["auth"]["signature"] = json!(format!("0x{}", alloy::hex::encode(sig)));
+    op
+}
+
+/// Regulated-kinds spec §3.1, §7 (plan T35): the issuer's `mtxFreeze` on the chain's `GovernanceRouter`, a `ua_metatx` job relayed at
+/// fee 0 by a lane that holds no role (the issuer a contract, ERC-1271); the token's `isFrozen` reads true, and the indexer
+/// sends `AccountFrozen` with an `alert`.
+#[tokio::test]
+#[ignore]
+async fn regulated_freeze_relayed_by_router() {
+    let chain_id = 31914;
+    let (_anvil, rpc) = start_anvil(chain_id, 31914).await;
+    let (owner, holder) = (small_key(0x35A), small_key(0x35B));
+    let (dep, token, issuer) = regulated_token(chain_id, &rpc, &owner, holder.address()).await;
+    let uid: B256 = dep["chain_uid"].as_str().unwrap().parse().unwrap();
+    let router: Address = dep["governance_router"].as_str().unwrap().parse().unwrap();
+    let a = holder.address().into_word();
+    let op = issuer_op("mtxFreeze", json!({"target": format!("{token:#x}"), "account": format!("{a:#x}"),
+        "ref": format!("{:#x}", B256::repeat_byte(0x5e)), "recordId": format!("{:#x}", B256::ZERO)}), issuer, &owner, router, token, 0, chain_id, uid);
+    let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![format!("{token:#x}")], ..Default::default() }));
+    let odoo = odoo_at(start_fake(state.clone()).await);
+    let cfg = ChainCfg { governance_routers: vec![router], ..chain_cfg(chain_id, &rpc, None) };
+    let mut s = Submitter::start(Chain::with_signer(&cfg, key(RELAYER)).unwrap(), odoo.clone(), cfg.clone(), "e2e-reg-0".into(),
+        Default::default()).await.unwrap();
+    assert!(!view(&rpc, token, isFrozenCall { account: a }).await);
+    state.lock().unwrap().jobs.push(json!({"id": 1, "kind": "ua_metatx", "op": op}));
+    run_outbox(&mut s).await;
+    assert_eq!(report(&state, 1)["chain_state"], "mined", "{}", report(&state, 1));
+    assert!(view(&rpc, token, isFrozenCall { account: a }).await, "the issuer's freeze ran through the router");
+    let ichain = Chain::with_signer(&cfg, key(RELAYER)).unwrap();
+    while scaas_node::indexer::step(&ichain, &odoo, Some(router)).await.unwrap() {}
+    let ingested = state.lock().unwrap().ingested.clone();
+    let f = ingested.iter().find(|e| e["event"] == "AccountFrozen").unwrap_or_else(|| panic!("no AccountFrozen in {ingested:?}"));
+    assert_eq!((f["account"].as_str(), f["alert"].as_bool()), (Some(format!("{a:#x}").as_str()), Some(true)), "{f}");
+}
+
+/// Regulated-kinds spec §7 (plan T35): a frozen holder's transfer is refused by name and never `dead` while it may still land: the
+/// simulation reverts `Frozen`, the job goes back `queued` with `REGULATED_REFUSED: Frozen(…)` and nothing is sent; after the
+/// issuer's `mtxUnfreeze` the same job is relayed and mined.
+#[tokio::test]
+#[ignore]
+async fn regulated_transfer_refused_frozen() {
+    let chain_id = 31915;
+    let (_anvil, rpc) = start_anvil(chain_id, 31915).await;
+    let (owner, holder) = (small_key(0x35C), small_key(0x35D));
+    let (dep, token, issuer) = regulated_token(chain_id, &rpc, &owner, holder.address()).await;
+    let uid: B256 = dep["chain_uid"].as_str().unwrap().parse().unwrap();
+    let router: Address = dep["governance_router"].as_str().unwrap().parse().unwrap();
+    let a = holder.address().into_word();
+    let ref_ = format!("{:#x}", B256::repeat_byte(0x5e));
+    let freeze = issuer_op("mtxFreeze", json!({"target": format!("{token:#x}"), "account": format!("{a:#x}"), "ref": ref_,
+        "recordId": format!("{:#x}", B256::ZERO)}), issuer, &owner, router, token, 0, chain_id, uid);
+    let unfreeze = issuer_op("mtxUnfreeze", json!({"target": format!("{token:#x}"), "account": format!("{a:#x}"), "ref": ref_}),
+        issuer, &owner, router, token, 1, chain_id, uid);
+    let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![format!("{token:#x}")], ..Default::default() }));
+    let odoo = odoo_at(start_fake(state.clone()).await);
+    let cfg = ChainCfg { governance_routers: vec![router], ..chain_cfg(chain_id, &rpc, None) };
+    let mut s = Submitter::start(Chain::with_signer(&cfg, key(RELAYER)).unwrap(), odoo.clone(), cfg.clone(), "e2e-reg-1".into(),
+        Default::default()).await.unwrap();
+    state.lock().unwrap().jobs.push(json!({"id": 1, "kind": "ua_metatx", "op": freeze}));
+    run_outbox(&mut s).await;
+    assert_eq!(report(&state, 1)["chain_state"], "mined", "{}", report(&state, 1));
+    let to = Address::repeat_byte(0x77);
+    let m = payment(holder.address(), to, 5, B256::ZERO, U256::from(4), 0, Address::ZERO, 0, Address::ZERO);
+    let d = token_domain(&dep, chain_id, token);
+    let sent_before = ProviderBuilder::new().connect_http(rpc.parse().unwrap()).get_transaction_count(key(RELAYER).address()).await.unwrap();
+    let transfer = job(2, token, &m, &format!("{:#x}", m.digest(&d)), sign(&holder, &d, &m));
+    state.lock().unwrap().jobs.push(transfer.clone());
+    run_outbox(&mut s).await;
+    let r = report(&state, 2);
+    assert_eq!(r["chain_state"], "queued", "a refusal, never dead: {r}");
+    assert!(r["error"].as_str().unwrap().starts_with("REGULATED_REFUSED: Frozen("), "{r}");
+    let sent_after = ProviderBuilder::new().connect_http(rpc.parse().unwrap()).get_transaction_count(key(RELAYER).address()).await.unwrap();
+    assert_eq!(sent_after, sent_before, "nothing sent");
+    state.lock().unwrap().jobs.push(json!({"id": 3, "kind": "ua_metatx", "op": unfreeze}));
+    run_outbox(&mut s).await;
+    assert_eq!(report(&state, 3)["chain_state"], "mined", "{}", report(&state, 3));
+    state.lock().unwrap().jobs.push(transfer); // the client's queue hands a `queued` job out again
+    run_outbox(&mut s).await;
+    assert_eq!(report(&state, 2)["chain_state"], "mined", "the refused job landed after the unfreeze: {}", report(&state, 2));
+    assert_eq!(balance(&rpc, token, to).await, U256::from(5u8));
 }
