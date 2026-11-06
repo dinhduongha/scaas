@@ -123,7 +123,7 @@ it hands over are real chain state. Design, findings and the owner's decisions: 
 handles and features; each rule names the one it is about or says both. UNAUDITED.
 
 <a id="library-duties"></a>***Library duties (`ua-rs` facades and every binding): BUILT*** (ua-rs-sign T15c, T15c2, T15e, T14b,
-T15g, T15i):
+T15g, T15i, T15l):
 
 1. **No bare ciphertext in a production artifact (both).** No release command takes a ciphertext, a statement, `T`, `p` or a
    parsed state field. The raw forms (table below) and their request types compile only under the test feature `vectors`;
@@ -143,19 +143,26 @@ T15g, T15i):
    on that leg. These checks stop a careless caller; they never make words authentic.
 4. **One refusal before the key (both).** Every refusal before the key is used is `Argument` (C: `SCAAS_UA_ERR_ARGUMENT`)
    with no detail; PQZ's `psid` of another set is `PqzSetMismatch` (a fact of the build, compared before anything is parsed).
-   After the key only `KeyRevoked` (the wallet locked or freed), `Aead` (the balance-cache box) and a debit's refusal (balance
-   below amount and fee), each to the caller only.
-5. **A Zether debit's `balance` hint (Zether).** The holder's plaintext from its own sealed balance-cache box (a balance above
-   the device's BSGS bound), never a value from the reading layer or a remote party: the facade checks it against the
-   rebuilt `acc` (`[b]G == C − [x]D`), so the check is a balance-equality test. Every multiplication of the key `x` by a
-   supplied point runs through `scaas_ct::secret_mul`.
+   After the key only `KeyRevoked` (the wallet locked or freed), `Aead` (the standalone balance-cache box calls
+   `open_balance_cache`) and these refusals, **all `Argument`**, each to the caller only (T15l, Fable P3-8): PQZ, digits that
+   are not a balance (a decryption above `u64`); a debit's balance below amount and fee; an opened memo that does not name
+   the entry's legs (`auditorOn` and the leg UAs, compared in constant time); `proveDiscloseSender`'s leg that is not the
+   sender's re-derivation (another key as the leg owner's, another sender's entry); Zether, `DecryptBound` (the balance above
+   the BSGS bound), a `cacheBox` that does not open under the key or holds no entry for the UA and token, a debit below its
+   amount; and a prover refusal on either.
+5. **A Zether balance hint is the sealed box (Zether).** `checkBalance` and a debit's hint take the holder's own sealed
+   balance-cache box `{iv, ct}` (`cacheBox`, a balance above the device's BSGS bound), never a number (T15l, Fable P3-1): the
+   facade opens it under the handle's key, uses its entry `<UA>:<token>` only at the words' `accSeq` (a stale entry: BSGS of
+   the rebuilt `acc`) and checks it against the rebuilt `acc` (`[b]G == C − [x]D`). Every multiplication of the key `x` by a
+   supplied point runs through `scaas_ct::secret_mul`; the per-transfer secrets stay on arkworks (a leak reveals that
+   transfer's amounts, never `x`).
 6. **No test feature in a production artifact (both).** `scaas_ua::VECTORS` and the feature bit `SCAAS_UA_FEATURE_VECTORS`
    (`1 << 11`): `ua-c` does not compile with it, every binding refuses to load a library that has it, and a `vectors` build
    makes key handles only after a test-only marker. `scripts/check_test_features.py` (CI and the gates) fails when a manifest
-   enables `vectors` or `hazmat` of `scaas-ua`, `zether-prover` or `pqz-ffi` outside `[dev-dependencies]` or a test-only crate,
-   or when `cargo tree -e features` of `ua-c` (the library `ua-py`, `ua-go` and `ua-cs` load), `ua-cxx`, `ua-qt`, `ua-dart-frb`'s
-   crate or `zether-prover` (`zether-read-balance`) shows either, transitive defaults included; each check has a positive
-   control. The name `hazmat` follows the RustCrypto convention and is not a security boundary: the command set is.
+   enables `vectors` or `hazmat` of `scaas-ua`, `zether-prover` or `pqz-ffi`, or `vectors` of `scaas-ct`, outside
+   `[dev-dependencies]` or a test-only crate, or when `cargo tree -e features` of `ua-c` (the library `ua-py`, `ua-go` and
+   `ua-cs` load), `ua-cxx`, `ua-qt`, `ua-dart-frb`'s crate, `zether-prover` (`zether-read-balance`), `scaas-node` or
+   `pqz-core/ffi/wasm` shows one, transitive defaults included; each check has a positive control. The name `hazmat` follows the RustCrypto convention and is not a security boundary: the command set is.
 7. **Tests that can fail (both).** `clients/ua-rs/tests/no_oracle.rs`: the 8·K crafted PQZ queries recover `s` through the
    `vectors`-only raw `dec` (positive control) and are refused by every production command in every bare shape with the key
    unused; consistent fabricated words are decrypted (the residual control: authenticity is the reading layer's). `ua-py`
@@ -167,7 +174,7 @@ T15g, T15i):
 
 | Facade (`COMMANDS`) | Decrypts nothing | Location and raw words | `vectors` only (raw) |
 |---|---|---|---|
-| PQZ (`facade::pqz`) | `enc`, `proveRegister`, `proveKeyRecord`, `proveDiscloseSender` | `balance`, `proveTransfer`, `proveBurn`, `proveRefresh`, `proveTransferMulti` (with `mode`), `auditRead` (the auditor's handle), `proveDisclose` (`RECEIVER_X` or `AUDITOR`), `openMemo` (the sender's handle) | `dec`, `rawProveTransfer`, `rawProveBurn`, `rawProveRefresh`, `rawProveTransferMulti`, `rawProveDisclose`, `rawOpenMemo` |
+| PQZ (`facade::pqz`) | `enc`, `proveRegister`, `proveKeyRecord` | `balance` (with `forOp7`), `proveTransfer`, `proveBurn`, `proveRefresh`, `proveTransferMulti` (with `mode`), `auditRead` (the auditor's handle), `proveDisclose` (`RECEIVER_X` or `AUDITOR`), `proveDiscloseSender` and `openMemo` (the sender's handle) | `dec`, `rawProveTransfer`, `rawProveBurn`, `rawProveRefresh`, `rawProveTransferMulti`, `rawProveDisclose`, `rawOpenMemo`, `rawProveDiscloseSender` |
 | Zether (`facade::zether`) | `encrypt`, `pop`, `ownerAuth`, `uaSig`, `shieldCalldata`, `envelope`, `typedDigest`, `namedCall` | `balance`, `pendingBalance`, `checkBalance`, `proveTransfer`, `proveTransferMulti`, `proveBurn`, `openMemo`, `recoverTransfer`, `openDisclosure` | `decrypt`, `decryptPending`, `rawCheckBalance`, `rawProveTransfer`, `rawProveTransferMulti`, `rawProveBurn`, `rawOpenMemo`, `rawRecoverTransfer`, `rawOpenDisclosure` |
 
 The words each command reads are in its rustdoc (`facade::pqz::COMMANDS` and `STATE_LAYOUT`; zether-prover `state`). The C ABI
@@ -177,7 +184,10 @@ command is in `COMMANDS`, never that the list equals one, so a later proof path 
 <a id="reading-layer"></a>***Requirements on the wallet layer that reads the chain: SPECIFIED*** (normative for every layer
 that hands words to `ua-rs`, in this repository or outside it; `ua-rs` contains no light client and no chain-state verifier,
 owner 2026-11-06). Reading the words from an untrusted RPC or indexer and passing them on is the oracle, and the fault is that
-layer's. EVM assertions; another family states its own before its layout parser lands. Numbered as in the spec's §4.2.
+layer's. Stated plainly (Fable review 2026-11-07, verdict 1): `ua-rs` decrypts **any internally consistent fabricated words**,
+so the **full key-recovery oracle** (8·K crafted PQZ queries recover the key `s`) exists for any app that breaks these
+requirements; the library's word checks stop a careless caller, never a forger. Zether has a reference reading layer
+(`zether-read-balance --rpc`, below); **PQZ has none yet**: the owner approved one (2026-11-07, plan task T15m, PLANNED). EVM assertions; another family states its own before its layout parser lands. Numbered as in the spec's §4.2.
 
 | # | Requirement | Checkable assertion |
 |---|---|---|

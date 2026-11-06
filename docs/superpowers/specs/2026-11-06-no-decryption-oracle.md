@@ -1,6 +1,8 @@
 # No decryption oracle: bringing the client libraries in line with ARCH-POS-13 — fix spec
 
-**Status:** SPECIFIED, nothing built (2026-11-06). Revised twice the same day: after the Fable review (P1-1 … P3-3, accepted by
+**Status:** built on `ua-rs-sign` (T15b … T15k, the fix wave T15l after the Fable review of 2026-11-07); the reading layer
+outside this repository SPECIFIED; a PQZ reference reading layer is plan task T15m (owner-approved 2026-11-07, not built).
+First written SPECIFIED (2026-11-06). Revised twice the same day: after the Fable review (P1-1 … P3-3, accepted by
 the controller), then by **owner rulings 2026-11-06**: `ua-rs` contains no light client and no chain-state verifier; the check
 that words are real chain state belongs to the layer that reads the chain (the wallet layer and the app, as `ua-rs-sign` spec
 §10.2 already places chain reading); `ua-rs` keeps the library duties of §4.3. The owner then decided Q1, Q1b and Q3 as
@@ -159,7 +161,7 @@ the holder's chosen trust, stated in `zether.md` and `pq-zero-knowledge.md` (T19
 
 | Old (absent from production builds, T15c / T15c2) | New | Output, to whom |
 |---|---|---|
-| `dec {ct, window}` | `balance {chainUid, token, ua, block, psid, words}` | `{value, p, sendCounter}` to the caller (the holder's own balance) |
+| `dec {ct, window}` | `balance {chainUid, token, ua, block, psid, words, forOp7}` (`forOp7` a named boolean, no default: the `p` an op 7 would use, `INLINE_MAX_PQZH` on a PQZH token; T15l, Fable P3-6) | `{value, p, sendCounter}` to the caller (the holder's own balance) |
 | `proveTransfer / proveBurn / proveRefresh / proveTransferMulti` with `T`, `p` | the same commands with location, `psid` and words in place of `T` and `p`; `pkT`, `pkA`, legs and `mode` stay | `{stmt, proof}`; a refusal after the key (balance below amount + fee) goes to the caller only |
 | (none) | `auditRead {chainUid, token, entryRef, fromUA, sendCounter, leg, block, psid, words}` on the **auditor's** key handle (one auditor key per token) | `{amount}` of the audited copy at its window, to the auditor |
 
@@ -173,8 +175,18 @@ ciphertext; `value()` keeps wiping the noise.
   AUDITOR}`: `entryRef` recomputed (§4.3), the leg rebuilt from the entry blob, decrypted, the op 5 statement built inside
   (CTR-PQZ-14 layout, `pk` = the handle's) and proven; the output goes to the viewer the holder names. On chain,
   `verifyTransferAmount` reads the entry and the registry key itself.
-- `proveDiscloseSender` (op 4) decrypts nothing: it re-derives `r, e1, e2_t` and compares; the comparison becomes constant-time
-  (`subtle::ConstantTimeEq`, T15c2).
+- `proveDiscloseSender {chainUid, token, entryRef, fromUA, sendCounter, entryPtr, leg, registry, block, psid, words,
+  legKeyRecord}` (op 4 `SENDER_S`, on the **sender's** handle; T15l, Fable P2-1): `keyRecord` is `fromUA`'s and must be the
+  handle's key, `legKeyRecord` the registry's `pqzKey[UA_j]` (with its code), the statement's `pk`; `entryRef` recomputed
+  (§4.3), the leg `u_g`, `v_j` rebuilt from the entry blob and the salt read from it. The facade re-derives `r, e1, e2_j` from
+  CTR-PQZ-19's `seed_enc` by encrypting zero to the leg owner's key (an `M = 1` entry has op 1's and op 7's shape alike: both
+  re-derivations are made, the matching one used), reads the **amount from the entry itself** (each `(v_j − v0) mod q` is
+  `Δ·digit`, the digits counted branch-free) and requires `u_g` and `v_j` to equal the re-derivation at that amount (constant
+  time); then it builds the op 4 statement (CTR-PQZ-14 layout) and proves it: `{stmt, proof, amount}`. No request field
+  carries an amount or a statement, so no caller can test a guess against the holder's sent amounts (the previous form took a
+  caller's statement: success or `Argument` was a plaintext-equality test, no key recovery). The statement form stays only
+  under `vectors` (`rawProveDiscloseSender`, the vector rows). On chain, `verifyTransferAmount` reads the entry and the leg
+  owner's registry key itself.
 - `openMemo {chainUid, token, entryRef, fromUA, sendCounter, block, psid, words}`: the memo is `memos[entryRef]`, `entryRef`
   recomputed, header words from the named fields and the blob.
 - op 1, burn and refresh still take `memoHash` as a free word; after T36a the facade computes it per `mode` as for op 7 (plan
@@ -199,12 +211,18 @@ ciphertext; `value()` keeps wiping the noise.
 - `zether-prover`: the raw commands stay behind `hazmat` (T15c), and so do the public helpers that bypass the dispatcher
   (`api::open_memo_json` and the decrypt and disclosure primitives in `api.rs`, `elgamal.rs`, `schnorr.rs`): `pub` only under
   `hazmat`, `pub(crate)` otherwise, so the crate's own code keeps its access (T15c2).
-- A debit's optional `balance` hint (the holder's plaintext, zether-limits D5: a balance above the device BSGS bound) stays,
-  and must come from the holder's own sealed balance-cache box, never from the reading layer or a remote party: the facade
-  checks it against the rebuilt `acc` (`[b]G == C − [x]D`), so a hint check is a balance-equality test (controller decision
-  2026-11-07, T15g).
+- A debit's optional balance hint (the holder's plaintext, zether-limits D5: a balance above the device BSGS bound) and
+  `checkBalance` take the holder's own **sealed balance-cache box** `{iv, ct}` (`cacheBox`; clientkeys `sealBalanceCache`),
+  never a number (T15l, Fable P3-1): the box is opened inside under the handle's key (`HKDF-SHA256(x,
+  "scaas-zether-balance-cache-v1")`, AAD `zether-cache:bls12381`), its entry `<UA>:<token>` is used only at the words'
+  `accSeq` and checked against the rebuilt `acc` (`[b]G == C − [x]D`); a stale entry falls back to BSGS of the rebuilt `acc`.
+  No one without the key can make a box that opens, so the rule "the hint comes from the holder's own box" is code, not a duty
+  of the caller. Residual: fabricated words with the holder's real box are still a balance-equality test (§4.12). A box that
+  does not open is `Argument` inside a command (the standalone `open_balance_cache` keeps `Aead`).
 - **Every multiplication by `key.x` on a supplied point** runs through `scaas_ct::secret_mul`: decrypt and check, and the
   transfer, multi-recipient, burn and disclosure paths in `zether.rs` and `schnorr.rs` (T14b), not only `decrypt_point`.
+  Residual (Fable P3-7): the per-transfer secrets still use arkworks' variable-time multiplication (`elgamal::encrypt`'s
+  `y·r`, `st.y_t·k_s`, `y_f·k_s`, `open_sender_cp`'s `e.y_t·s`); a timing leak there reveals that transfer's amounts, never `x`.
 - `zether-read-balance`: `--rpc` is a reading layer and is re-enabled only as one meeting R1 to R7; a raw `--ct` (a
   ciphertext typed in by hand: a social oracle, plaintext only) moves under `hazmat`; the production CLI accepts the holder's
   own sealed balance-cache box or R1-fetched state instead.
@@ -254,10 +272,16 @@ byte-format change (T19c adds layout pins and tests only). `ua-rs` stays I/O-fre
 
 ### 4.12 Residuals (stated plainly)
 
-- **`ua-rs` alone cannot tell chain state from forged words.** Internally consistent raw words of a fabricated "blob" holding
-  crafted `(u, v)` are rebuilt and decrypted like real ones. An app that feeds `ua-rs` words from an untrusted source creates
-  the oracle of §1, and ARCH-POS-13 binds that app (R1 to R7). The library makes the bare-ciphertext path impossible and the
-  location explicit; the residual control of §5 shows this on purpose.
+- **`ua-rs` alone cannot tell chain state from forged words** (stated plainly after the Fable review of 2026-11-07, its
+  verdict 1). With the owner's ruling (no verifier in `ua-rs`), the library decrypts **any internally consistent fabricated
+  words**: a fabricated "blob" holding crafted `(u, v)` is rebuilt and decrypted like a real one, so **the full key-recovery
+  oracle of §1 exists for any app that breaks the reading-layer requirements R1 to R7** (8·K fabricated `balance` requests
+  recover `s`; `auditRead` and `proveDisclose` give the same at their windows). The library makes the bare-ciphertext path
+  impossible and the location explicit, and every word check refuses a careless caller; none makes words authentic. The
+  residual control of §5 (`no_oracle.rs`) shows this on purpose. ARCH-POS-13 then binds the app.
+- **Reference reading layers.** Zether has one: `zether-read-balance --rpc` (R1 to R7, T14b). **PQZ has none yet**: an app
+  reading PQZ state for `ua-rs` builds its own; the owner approved a PQZ reference reading-layer CLI (2026-11-07, plan task
+  T15m, SPECIFIED, not built). Until it lands, the R1 to R7 assertions of §4.2 are the only guide.
 - **The reading layer's source:** see §4.2 (owner decision Q1b).
 - A stale read shows an old balance; a debit over it is refused on chain (T8 retry), revealing nothing about `s`.
 - A genuine state is composed partly by senders (credits, decoys); its decryption is the holder's own data and reveals
