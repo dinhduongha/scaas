@@ -1,0 +1,16 @@
+# 2026-11-06 ua-rs-sign T11 mutants: python3 -I smartcontracts/evm/runs/2026-11-06-ua-rs-sign-t11-mutants.py (from the worktree root; one run of 1-10), on the T11 tree
+# committed as 08edeea3 (that commit only adds a clippy type alias in tests/fuzz_caps.rs and a doc blank line in fuzz/src/lib.rs after the run); one bound removed per fuzz target (the JSON decoders: the depth bound at the call site;
+# sealed, kem_pk, mnemonic have no depth: their bound). Each mutant must be hit twice: the corpus case (in clients/ua-rs: scripts/capped cargo test -j2 --locked
+# --features vectors --test fuzz_caps) and a short fuzz run (UA_FUZZ_TAG=mutant: fuzz/build.sh, then fuzz/run.sh <target> 60, which stops at the first
+# FINDING). One mutant per run, every file restored byte for byte. UNAUDITED.
+killed   | M1 typed_data: TypedData::from_json depth bound removed | src/wallet/eip712.rs | test rc=101 json_inputs_deeper_than_their_cap_are_refused_unparsed | fuzz: ua-fuzz FINDING (typed_data): past its cap (1392 B, depth 9) and parsed
+killed   | M2 expect: Expect::from_json depth bound removed | src/wallet/policy.rs | test rc=101 json_inputs_deeper_than_their_cap_are_refused_unparsed | fuzz: ua-fuzz FINDING (expect): past its cap (427 B, depth 5) and parsed
+killed   | M3 tx: EvmTx::from_json depth bound removed | src/wallet/tx.rs | test rc=101 json_inputs_deeper_than_their_cap_are_refused_unparsed | fuzz: ua-fuzz FINDING (tx): past its cap (170 B, depth 5) and parsed
+killed   | M4 vault: Vault::from_json depth bound removed | src/wallet/vault.rs | test rc=101 json_inputs_deeper_than_their_cap_are_refused_unparsed | fuzz: ua-fuzz FINDING (vault): past its cap (310 B, depth 3) and accepted
+killed   | M5 manifest: Manifest::from_json depth bound removed | src/wallet/manifest.rs | test rc=101 json_inputs_deeper_than_their_cap_are_refused_unparsed | fuzz: ua-fuzz FINDING (manifest): past its cap (289 B, depth 4) and parsed
+killed   | M6 manifest: backup payload depth bound removed | src/wallet/manifest.rs | test rc=101 json_inputs_deeper_than_their_cap_are_refused_unparsed | fuzz: ua-fuzz FINDING (manifest): past its cap (303 B, depth 5) and accepted
+killed   | M7 container: SealedContainer::from_json depth bound removed | src/wallet/seal.rs | test rc=101 json_inputs_deeper_than_their_cap_are_refused_unparsed | fuzz: ua-fuzz FINDING (container): past its cap (2990 B, depth 8) and accepted
+killed   | M8 sealed: Sealed::from_wire tag length dropped from the minimum | src/wallet/seal.rs | test rc=101 sealed_short_of_its_tag_is_refused | fuzz: ua-fuzz FINDING (sealed): from_wire accepted a 1617-byte input
+killed   | M9 kem_pk: kemPk scheme and length check removed | src/wallet/kem.rs | test rc=101 kem_pk_of_another_scheme_or_length_is_refused | fuzz: ua-fuzz FINDING (kem_pk): a 1601-byte kemPk of scheme Some(2) accepted
+killed   | M10 mnemonic: mnemonic 1 KiB bound removed | src/wallet/mod.rs | test rc=101 mnemonic_past_1_kib_or_24_words_is_refused | fuzz: ua-fuzz FINDING (mnemonic): a mnemonic of 1025 B, 24 words accepted
+mutants M1-M10 of 10, survived or not loaded: 0
