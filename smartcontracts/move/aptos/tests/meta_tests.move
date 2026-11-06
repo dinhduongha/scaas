@@ -578,7 +578,7 @@ module scaas::meta_tests {
 
     const LANE_1A: address = @0x1a;
 
-    // Rule 1: every row of smartcontracts/vectors/metatx/paymeta.json (`long_body_4096` as a hash only).
+    // Rule 1: every row of smartcontracts/vectors/metatx/legacy/ua-mtx-merge/paymeta.json (`long_body_4096` as a hash only).
     #[test]
     fun pay_meta_vectors_match() {
         let rows = v::pm_rows();

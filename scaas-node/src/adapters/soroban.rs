@@ -2400,7 +2400,7 @@ mod tests {
         format!("0x{}", "ab".repeat(64))
     }
     fn meta_row() -> Value {
-        let rows: Vec<Value> = serde_json::from_str(include_str!("../../../smartcontracts/vectors/metatx/paymeta.json")).unwrap();
+        let rows: Vec<Value> = serde_json::from_str(include_str!("../../../smartcontracts/vectors/metatx/legacy/ua-mtx-merge/paymeta.json")).unwrap();
         rows[0].clone()
     }
     fn strip(s: &Value) -> Vec<u8> {

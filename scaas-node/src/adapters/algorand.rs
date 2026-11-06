@@ -2309,7 +2309,7 @@ mod tests {
 
     const VECTORS: &str = include_str!("../../../smartcontracts/algorand/vectors/algorand-vectors.json");
     const TXV: &str = include_str!("../../../smartcontracts/algorand/vectors/algorand-tx.json");
-    const PAYMETA: &str = include_str!("../../../smartcontracts/vectors/metatx/paymeta.json");
+    const PAYMETA: &str = include_str!("../../../smartcontracts/vectors/metatx/legacy/ua-mtx-merge/paymeta.json");
     const TOKEN: u64 = 1001;
     const ROUTER: u64 = 1002;
     const TARGET: u64 = 1003;

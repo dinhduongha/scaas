@@ -12,7 +12,7 @@ from conftest import (ALGOD, BUDGET, MBR_ALLOWANCE, MBR_BALANCE, MBR_LANE, MBR_U
                       rec_mbr, refused_actions, run, sha256, sim, sp, ua, view, wait)
 
 ZERO_ADDR = encoding.encode_address(Z32)
-PAYMETA = json.load(open(os.path.join(REPO, 'smartcontracts', 'vectors', 'metatx', 'paymeta.json')))
+PAYMETA = json.load(open(os.path.join(REPO, 'smartcontracts', 'vectors', 'metatx', 'legacy', 'ua-mtx-merge', 'paymeta.json')))
 # Largest `meta` of `mtx_pay_meta` on its costliest log path (native payer → UA receiver: PaymentMeta,
 # MetaTransactionExecuted, arc200_Transfer, UaTransfer, PaymentSettled ≤ 1,024 B of logs); measured, pinned in
 # runs/2026-10-28-algorand-limits.txt. The app-call argument limit (2,048 B) is looser.

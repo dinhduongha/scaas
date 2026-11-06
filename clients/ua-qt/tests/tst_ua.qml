@@ -421,7 +421,7 @@ TestCase {
     }
 
     // metatx split T18: CTR-MTX-26 metaPayId / payLane and CTR-MTX-27 relayRef (EVM) against the forge-written vectors
-    property var pm: vectors.load("../metatx/paymeta.json")
+    property var pm: vectors.load("../metatx/legacy/ua-mtx-merge/paymeta.json")
     property var rr: vectors.load("../metatx/relayref.json")
 
     function test_meta_pay_id_vectors() {

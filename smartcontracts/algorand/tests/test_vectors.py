@@ -1,4 +1,4 @@
-"""R5: the generator's vectors (`vectors/algorand-vectors.json`, `smartcontracts/vectors/metatx/paymeta.json`) against
+"""R5: the generator's vectors (`vectors/algorand-vectors.json`, `smartcontracts/vectors/metatx/legacy/ua-mtx-merge/paymeta.json`) against
 the apps' own derivations (`contracts/common.py`) run on the AVM (the probe app, simulate)."""
 import base64
 import json
@@ -9,7 +9,7 @@ from algosdk import abi, encoding
 from conftest import LABEL, METAOP_T, REPO, ROOT, Acct, sha256, view
 
 V = json.load(open(os.path.join(ROOT, 'vectors', 'algorand-vectors.json')))
-PAYMETA = json.load(open(os.path.join(REPO, 'smartcontracts', 'vectors', 'metatx', 'paymeta.json')))
+PAYMETA = json.load(open(os.path.join(REPO, 'smartcontracts', 'vectors', 'metatx', 'legacy', 'ua-mtx-merge', 'paymeta.json')))
 
 
 def unhx(s):

@@ -478,7 +478,7 @@ fn cross_implementation_vector() {
 // ------------------------------------------------------------------ CTR-MTX-26: RelayPayMeta
 
 fn paymeta_rows() -> Vec<serde_json::Value> {
-    serde_json::from_str(include_str!("../../../vectors/metatx/paymeta.json")).unwrap()
+    serde_json::from_str(include_str!("../../../vectors/metatx/legacy/ua-mtx-merge/paymeta.json")).unwrap()
 }
 
 fn unhex(v: &serde_json::Value) -> Vec<u8> {
