@@ -1,0 +1,42 @@
+# 2026-11-06 ua-rs-sign T9 mutants: python3 -I smartcontracts/evm/runs/2026-11-06-ua-rs-sign-t9-mutants.py (from the worktree root; one run of 1-34, then 35 35), on the tree committed as 6e092199;
+# suite (in clients/ua-rs): scripts/capped cargo test -j2 --locked --features vectors --test wallet_vault.
+# One mutant per run, every file restored byte for byte; the failed-test list is cut at 200 characters. UNAUDITED.
+killed   | M1 AAD label dropped | src/wallet/vault.rs | rc=101 | 4 failed: rewrap_pin_keeps_the_dek, rs_vault_json_rows_open, seed_payload_of_31_bytes_refused, vault_json_vaults_open
+killed   | M2 stored scrypt parameters ignored (N of a new envelope) | src/wallet/vault.rs | rc=101 | 3 failed: rewrap_pin_keeps_the_dek, seed_payload_of_31_bytes_refused, vault_json_vaults_open
+killed   | M3 bounds check removed (any N, r, p) | src/wallet/vault.rs | rc=101 | 0 failed: 
+killed   | M4 NFKC dropped | src/wallet/vault.rs | rc=101 | 1 failed: vault_json_vaults_open
+killed   | M5 64-byte seed stored for the entropy | src/wallet/vault.rs | rc=101 | 4 failed: bip39_passphrase_absent_from_every_payload, prf_envelope, twelve_word_wallet_round_trips_vault_and_backup, vault_seal_open_round_trip
+killed   | M6 entropy padded to 32 bytes (vault) | src/wallet/vault.rs | rc=101 | 3 failed: prf_envelope, twelve_word_wallet_round_trips_vault_and_backup, vault_seal_open_round_trip
+killed   | M7 entropy padded to 32 bytes (backup payload) | src/wallet/manifest.rs | rc=101 | 4 failed: backup_restores_manifest_and_secrets, backup_signed_by_another_registered_ua_refused, older_backup_over_newer_refused_with_allow_rollback_accepted_equal_is_a_no_op, twelve_word_wallet_round_trips_vaul
+killed   | M8 v: 2 reported as a wrong passphrase | src/wallet/vault.rs | rc=101 | 1 failed: vault_json_refusals
+killed   | M9 PRF envelope opened without its label | src/wallet/vault.rs | rc=101 | 3 failed: prf_envelope, rs_vault_json_rows_open, vault_json_vaults_open
+killed   | M10 generation compare skipped | src/wallet/manifest.rs | rc=101 | 2 failed: older_backup_over_newer_refused_with_allow_rollback_accepted_equal_is_a_no_op, seal_json_restore_rows
+killed   | M11 backup self-consistency skipped | src/wallet/manifest.rs | rc=101 | 3 failed: backup_whose_entropy_does_not_derive_sender_refused, bip39_passphrase_absent_from_every_payload, seal_json_restore_rows
+killed   | M12 equal generation installs (no-op removed) | src/wallet/manifest.rs | rc=101 | 2 failed: older_backup_over_newer_refused_with_allow_rollback_accepted_equal_is_a_no_op, seal_json_restore_rows
+killed   | M13 AllowRollback ignored | src/wallet/manifest.rs | rc=101 | 2 failed: older_backup_over_newer_refused_with_allow_rollback_accepted_equal_is_a_no_op, seal_json_restore_rows
+killed   | M14 backup_seal does not raise the generation | src/wallet/manifest.rs | rc=101 | 3 failed: backup_restores_manifest_and_secrets, older_backup_over_newer_refused_with_allow_rollback_accepted_equal_is_a_no_op, seal_json_restore_rows
+killed   | M15 self-consistency at the first entry, not the sender's | src/wallet/manifest.rs | rc=101 | 1 failed: backup_restores_manifest_and_secrets
+killed   | M16 payload entropy length unchecked | src/wallet/manifest.rs | rc=101 | 1 failed: backup_payload_json
+killed   | M17 manifest UA case unchecked | src/wallet/manifest.rs | rc=101 | 1 failed: backup_payload_json
+killed   | M18 imported key served for another network | src/wallet/manifest.rs | rc=101 | 1 failed: imported_key_refused_for_another_family
+killed   | M19 passphrase policy: digits only accepted | src/wallet/vault.rs | rc=101 | 2 failed: passphrase_policy, rewrap_pin_keeps_the_dek
+killed   | M20 restore of a non-backup purpose | src/wallet/manifest.rs | rc=101 | 1 failed: backup_whose_entropy_does_not_derive_sender_refused
+killed   | M21 backup sealed with another wallet's key | src/wallet/manifest.rs | rc=101 | 1 failed: backup_restores_manifest_and_secrets
+killed   | M22 lock wipes the manifest | src/wallet/store.rs | rc=101 | 2 failed: manifest_records_first_use_and_survives_lock, older_backup_over_newer_refused_with_allow_rollback_accepted_equal_is_a_no_op
+killed   | M23 open_vault label not checked | src/wallet/vault.rs | rc=101 | 1 failed: vault_json_refusals
+killed   | M24 seed payload length not checked on open | src/wallet/vault.rs | rc=101 | 2 failed: seed_payload_of_31_bytes_refused, vault_json_refusals
+killed   | M25 discovery past index 0 for EIP-2333 kinds | src/wallet/manifest.rs | rc=101 | 1 failed: discover_candidates_gap
+killed   | M26 link installs the entropy only | src/wallet/manifest.rs | rc=101 | 1 failed: link_installs_manifest_and_secrets
+killed   | M27 SeedBackup handed out unconfirmed | src/wallet/mod.rs | rc=101 | 1 failed: seed_backup_shown_once_and_confirmed
+killed   | M28 SeedBackup revealed twice | src/wallet/mod.rs | rc=101 | 1 failed: seed_backup_shown_once_and_confirmed
+killed   | M29 needs_rewrap always false | src/wallet/vault.rs | rc=101 | 1 failed: rewrap_pin_keeps_the_dek
+killed   | M30 rewrap_pin rotates the DEK (a new vault) | src/wallet/vault.rs | rc=101 | 1 failed: rewrap_pin_keeps_the_dek
+killed   | M31 KEM key not written to the manifest | src/wallet/kem.rs | rc=101 | 1 failed: manifest_records_first_use_and_survives_lock
+killed   | M32 payload field order changed (generation before v) | src/wallet/manifest.rs | rc=101 | 1 failed: backup_payload_json
+killed   | M33 restored imports dropped | src/wallet/manifest.rs | rc=101 | 3 failed: backup_restores_manifest_and_secrets, link_installs_manifest_and_secrets, seal_json_restore_rows
+killed   | M34 restored generation not set | src/wallet/manifest.rs | rc=101 | 5 failed: backup_restores_manifest_and_secrets, link_installs_manifest_and_secrets, older_backup_over_newer_refused_with_allow_rollback_accepted_equal_is_a_no_op, rs_vault_json_rows_open, seal_json_restore_rows
+killed   | M35 bounds check: r and p not checked (N still bounded) | src/wallet/vault.rs | rc=101 | 1 failed: vault_json_refusals
+mutants M1-M35 of 35, survived or not loaded: 0
+# M3 kills by a crash, not an assertion: with no bound the N = 2^31 row of vault_json_refusals asks scrypt for a 2 TiB buffer and
+#   the test binary aborts (rc 101, no test reached its assertion). M35 keeps N bounded and drops r / p: the r = 16 and p = 2 rows
+#   then run scrypt at r = 8, p = 1 and answer VaultOpen, not VaultParams (an assertion kill).
