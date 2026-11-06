@@ -819,7 +819,7 @@ sequenceDiagram
     Note over F: hạn mức tính khi đọc: min(cap, stored + rate x days)
     C->>R: signs UAWithdraw(to = shop, 250,000, entryRef)
     R->>F: mtxWithdraw(e, shop, 250,000, entryRef, auth, meta)
-    F->>F: check quota and balance; write quota and refUsed
+    F->>F: check quota and balance, then write quota and refUsed
     F->>T: payWithFee(shop, 250,000, NONE, 0, 0, entryRef, meta)
     T-->>S: PaymentSettled(entryRef)
 ```
