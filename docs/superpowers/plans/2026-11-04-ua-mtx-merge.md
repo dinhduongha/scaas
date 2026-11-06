@@ -1246,6 +1246,18 @@ test --match-path 'test/{ua,pqz,as/confidential}/*'` at the four sets (one run p
 positive control first, one change at a time; mutants one at a time on a clean tree, logged `mutant | test that went red | rc`;
 heavy runs through `scripts/capped`, foreground. Legacy copies (MD-4) are the first commit of each task that replaces a body.
 
+### Task T36a: PQZ op 1 memo in op 7's encoding (owner 2026-11-06, CTR-PQZ-23 Change)
+
+**Depends on:** T36. **Estimate:** 0.5. **Why:** op 1's memo (57 B, `SEALED = 41`) and op 7's (`18 + 40·M`, M byte, keystream
+label `"PQZ/memo/ks/v1"`) were two encodings, and pqz-core builds only op 7's; the owner made op 1 use op 7's encoding with
+M = 1 and approved both labels. **Files:** `src/pqz/PqzCore.sol` (`SEALED` 41 → 42, i.e. `2 + 40·1`), its tests, the PQZ docs
+(`pq-zero-knowledge.md` CTR-PQZ-23 text), any op 1 memo vector row or `e2e.py` builder. No statement, relation or
+`proofSystemId` change (`memoHash` is a header word). - [ ] Red: an op 1 HASH transfer with a 42-byte sealed memo is
+refused today; green after; a 41-byte one refused after. **Mutants:** the old length kept; op 7's length rule applied with
+M = 0. **Gates:** whole `forge test`, the four sets on `test/{ua,pqz,as/confidential}`, size gate. **Commit:** `ua-mtx-merge
+T36a: PQZ op 1 memo in op 7's encoding`. The client side (ua-rs facade op 1 memo through `memo::seal` with one leg) is a
+`ua-rs-sign` follow-up of T15.
+
 ### Task T37: pay entries with `PayMeta`, free pay lanes, the mandate wallets
 
 **Depends on:** T36. **Estimate:** 3.
