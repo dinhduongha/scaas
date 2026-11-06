@@ -1,0 +1,23 @@
+# 2026-11-06 ua-rs-sign T13d mutants: python3 -I smartcontracts/evm/runs/2026-11-06-ua-rs-sign-t13d-mutants.py (each mutant alone on a clean tree, its test classes, files restored).
+# First run: M13 (then 'the stale pointer passed') hung its suite (a negative in-flight count makes close wait forever): replaced by 'a call on a closed handle
+# reaches the library', and the harness got a 600 s suite timeout. The final run (two ranges, 1-9 and 10-18) on the tree committed as 877094b3 (the T13d code commit):
+Compact grep - strips whitespace, truncates, groups by file
+
+Usage: rtk grep [OPTIONS] <PATTERN> [PATH] [EXTRA_ARGS]...
+
+Arguments:
+  <PATTERN>        Pattern to search
+  [PATH]           Path to search in [default: .]
+  [EXTRA_ARGS]...  Extra ripgrep arguments (e.g., -i, -A 3, -w, --glob)
+
+Options:
+  -l, --max-len <MAX_LEN>      Max line length [default: 80]
+  -m, --max <MAX>              Max results to show [default: 200]
+      --context-only           Show only match context (not full line)
+  -t, --file-type <FILE_TYPE>  Filter by file type (e.g., ts, py, rust)
+  -n, --line-numbers           Show line numbers (always on, accepted for grep/rg compatibility)
+  -v, --verbose...             Verbosity level (-v, -vv, -vvv)
+      --ultra-compact          Ultra-compact mode: ASCII icons, inline format (Level 2 optimizations)
+      --skip-env               Set SKIP_ENV_VALIDATION=1 for child processes (Next.js, tsc, lint, prisma)
+  -h, --help                   Print help
+mutants M1-M18 of 18, survived or not loaded: 0

@@ -1,0 +1,36 @@
+# 2026-11-06 ua-rs-sign T13e: ua-go binding (spec §9.2; plan T13). clients/ua-go/wallet (package wallet, cgo) links libscaas_ua_c (C ABI v6):
+# the same surface as T13d (wallet, keys, imported keys and label vaults, sign, uasig, WebAuthn, KEM, seal / open / container, link incl.
+# link_seal, backup / restore / rollback, vault rewrap / PRF, AEAD / HKDF / HMAC, the Zether and PQZ facades, export_pqz_leaf_raw); the v5
+# identity calls stay the parent package's own port (the cross-check). UNAUDITED.
+# go 1.25.0 (GOTOOLCHAIN auto), go vet / go test through scripts/capped, foreground; full logs git-ignored (clients/ua-go/t13e-*.log).
+step | commit | rc | counts
+red: go vet ./wallet/ (wallet_test.go, no wallet.go) | 877094b3 + tests | 1 | does not compile: undefined: Wallet (wallet_test.go:93)
+ua-go go vet ./... | a5bcd806 | 0 | 0 findings (both packages)
+ua-go go test -count=1 -v ./... | a5bcd806 | 0 | 52 passed: ua (own port) 26, ua/wallet 26 (TestLoadRefusesWrongAbiOrFeatures, TestAbiVersionIs6AndFeatures, TestHandleFreedExactlyOnce, TestCloseWaitsForACallInFlight, TestUseAfterCloseNeverReachesTheLibrary, TestSecretBufferWipedAfterCall, TestFixedSizeAndShortSecretsAreRefused, the vector-row tests, Zether, Pqz)
+mutants: 2026-11-06-ua-rs-sign-t13e-mutants.py | a5bcd806 | 0 | 17 killed, 0 survived, 0 not loaded (2026-11-06-ua-rs-sign-t13e-mutants.txt): the plan's 3 and 14 of the controller's
+# Rows read: as T13d (keys, sign incl. msig memberSigs bytes, kem, seal, vault, zether.json; zether-prover r33_keys / transfer_bls12381; PQZ set,
+# leaf, proveRegister, enc / dec, cache box), the own port's DeriveUA / UAMessage / Keccak256 as cross-check; the same release-only skips.
+# Decisions (controller, the owner may override): (1) A subpackage clients/ua-go/wallet, not ua-go/wallet.go in the root package (the plan's
+# file): cgo in the root package would make every importer of the identity port build with cgo and link libscaas_ua_c. (2) cgo links
+# -L${SRCDIR}/../../ua-c/target/release -lscaas_ua_c with an rpath (CGO_LDFLAGS may name another build). (3) Load: every constructor and
+# module-level call runs Load() (a mutex, cached on success only); CheckBuild as T13d; test hook abiVersionHook. (4) Each library call runs on a
+# locked OS thread (runtime.LockOSThread) so scaas_ua_last_error is that call's: a goroutine can move between threads. (5) Secret inputs are
+# []byte (strings cannot be wiped); the NUL-terminated copies come from secretBuf (the test hook), are pinned (runtime.Pinner, so the
+# answers array of SeedBackup.Verify may hold them) and wiped after the call; caller []byte (PRF secret, imported key, AEAD key, plaintexts)
+# go to C by pointer, no copy; secret outputs are []byte the caller wipes (Wipe). (6) Fixed-size inputs are [32]byte arrays or length-checked
+# (UAKeyData). (7) Handles: one type per handle over handle{RWMutex, p, free}: calls hold the read lock, Close takes the write lock (waits for
+# calls in flight) and frees once; runtime.SetFinalizer (track) frees what Close did not; a call after Close is ErrClosed. Several handles in
+# one call (backup_seal, link_seal, uasig, restore) are held together, a handle listed twice once. (8) Optional JSON (members, accepted) "" =
+# NULL. (9) PqzKey.Call uses PqzOutMax, never a size query.
+# Notes: (1) T18 owns CI: the ua-go job's go test ./... now needs ua-c's release build first (the wallet package links it). (2) The test file
+# uses the stdlib crypto/pbkdf2 (go 1.25), no new module dependency; go.mod / go.sum unchanged.
+# Conflicts: the plan's T13 row names the files; ua-go uses a subpackage (T13e decision 1). Spec §9.2's list does not name link_seal,
+# imported_key, the label vaults or PqzSetMismatch (T12 follow-up and T15 conflicts, unchanged); the bindings cover them as asked. Spec and plan not edited.
+# What T16 / T16a depend on: (1) Each binding passes cb = NULL to scaas_ua_external_key_new and expects UAKindUnavailable; no binding
+# marshals a ScaasUaExternalSigner callback yet (ctypes CFUNCTYPE, cgo //export, UnmanagedCallersOnly): if T16 lets a test build take a real
+# signer through the C ABI, each binding needs a callback wrapper. (2) The load check knows bit 9 `external` (a build with it set loads) and
+# refuses any bit past `mlock`: a new feature bit needs the binding's FEATURES table extended. (3) A change of ScaasUaExternalSigner's layout or
+# external_key_new's signature means ABI 7: every binding's ABI constant and CheckBuild move with it (they refuse 7 by design). (4) T16a's new
+# C calls (k-of-n PQZ seed backup) are appended exports: each binding needs wrappers; a binding that declares an export the library lacks
+# fails at load (ua-py: AttributeError in load(); ua-go: link error; ua-cs: EntryPointNotFoundException at first call). New statuses need no
+# binding change (names come from scaas_ua_status_name). (5) T18 (CI): the ua-py / ua-go / ua-cs jobs need ua-c's release build first.
