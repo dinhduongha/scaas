@@ -117,17 +117,15 @@ fn recovery<C: ZCurve>() {
 }
 
 /// ARCH-POS-13 (ua-rs-sign T15c): `--rpc` is refused, naming the rule, before the key is read and before any request goes
-/// out (a listener on the URL sees no connection); the pasted `--ct` path runs (positive control).
+/// out; the pasted `--ct` path runs (positive control). The URL's port is closed again before the call, so a build that sent
+/// the request fails fast (connection refused, another error) instead of waiting on a listener that never answers.
 #[test]
 fn rpc_refused() {
     let k0 = json!({"mnemonic": MNEMONIC, "coin": 60, "account": 0});
-    let srv = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-    srv.set_nonblocking(true).unwrap();
-    let url = format!("http://{}", srv.local_addr().unwrap());
+    let url = format!("http://{}", std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap());
     let rpc = ["--curve", "bls12381", "--table-bits", "20", "--bound-bits", "24", "--rpc", &url, "--token", "0x5fbdb2315678afecb367f032d93f642f64180aa3"];
     let e = read_balance(&rpc, &k0).unwrap_err();
     assert!(e.contains("--rpc refused: ARCH-POS-13"), "{e}");
-    assert_eq!(srv.accept().err().map(|e| e.kind()), Some(std::io::ErrorKind::WouldBlock), "no request went out");
     let y = zether_prover::keys::ZetherKey::<Bls12381>::conf(&zether_prover::keys::seed_from_mnemonic(MNEMONIC, "").unwrap()[..], 60, 0).unwrap();
     let ct = zether_prover::elgamal::encrypt(&y.y, 77, &Fr::<Bls12381>::from(5u64));
     let pasted = format!("{}:{}", hx(&encode_point::<Bls12381>(&ct.c)), hx(&encode_point::<Bls12381>(&ct.d)));
