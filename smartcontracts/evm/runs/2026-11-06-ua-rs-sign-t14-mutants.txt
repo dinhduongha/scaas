@@ -1,0 +1,30 @@
+# 2026-11-06 ua-rs-sign T14 mutants (smartcontracts/evm/runs/2026-11-06-ua-rs-sign-t14-mutants.py), on the tree of 2d8e1d11 (the T14 code commit).
+# One mutant per run on a clean tree, each file restored byte for byte; NOT-LOADED or SURVIVED is a finding (exit 1). The plan's 2 (M1, M2), 22 of the controller's.
+# M7 survived its first run (tests/fuzz_caps.rs read the crate's CMD_MAX, so the test moved with the cap); closed before the code commit was final:
+# fuzz_caps and the fuzz oracle state the caps as literals, M7's suite adds the facade bound test, M8 (the box length) added. That first run:
+#   SURVIVED   | M7 command JSON past 1 MiB read | clients/ua-rs/src/facade/zether.rs | rc=0 | 0 failed:
+killed     | M1 a `key` field forwarded to zether-prover (on every allow-list, any shape) | clients/ua-rs/src/facade/zether.rs | rc=101 | 1 failed: a_key_field_in_command_json_is_refused
+killed     | M2 cache AAD label changed (zether-cache:bn254) | clients/ua-rs/src/facade/zether.rs | rc=101 | 1 failed: cache_box_equals_clientkeys
+killed     | M3 includeWitness on proveTransfer's allow-list | clients/ua-rs/src/facade/zether.rs | rc=101 | 1 failed: fields_outside_the_allow_list_are_refused
+killed     | M4 the ciphertext objects not shape-checked | clients/ua-rs/src/facade/zether.rs | rc=101 | 1 failed: a_key_field_in_command_json_is_refused
+killed     | M5 the typed message not checked for a key | clients/ua-rs/src/facade/zether.rs | rc=101 | 1 failed: a_key_field_in_command_json_is_refused
+killed     | M6 command JSON depth 9 read | clients/ua-rs/src/facade/zether.rs | rc=101 | 1 failed: command_json_is_bounded_by_length_and_depth
+killed     | M7 command JSON past 1 MiB read | clients/ua-rs/src/facade/zether.rs | rc=101 | 1 failed: zether_inputs_past_their_caps_are_refused_unparsed
+killed     | M8 cache box JSON past 2 MiB read | clients/ua-rs/src/facade/zether.rs | rc=101 | 1 failed: zether_inputs_past_their_caps_are_refused_unparsed
+killed     | M9 cache box JSON depth 2 read | clients/ua-rs/src/facade/zether.rs | rc=101 | 1 failed: zether_inputs_past_their_caps_are_refused_unparsed
+killed     | M10 any JSON number accepted (floats, negatives) | clients/ua-rs/src/facade/zether.rs | rc=101 | 1 failed: numbers_other_than_u64_are_refused
+killed     | M11 key_use not checked | clients/ua-rs/src/facade/zether.rs | rc=101 | 1 failed: key_use_other_than_conf_or_viewing_is_refused
+killed     | M12 the viewing key derived at the conf path | clients/ua-rs/src/facade/zether.rs | rc=101 | 1 failed: conf_and_viewing_keys_are_r33_keys
+killed     | M13 cache key info changed (v2) | clients/ua-rs/src/facade/zether.rs | rc=101 | 1 failed: cache_box_equals_clientkeys
+killed     | M14 the generation check of Handle::with skipped (unlock revives a Zether handle) | clients/ua-rs/src/wallet/store.rs | rc=101 | 1 failed: unlock_does_not_revive_a_zether_handle
+killed     | M15 vectors_call ignores its RNG (the replay is real) | clients/ua-rs/src/facade/zether.rs | rc=101 | 1 failed: zether_prover_vectors_through_the_facade
+killed     | M16 zether-prover: call_with_key takes a `key` field | clients/zether-prover/src/api.rs | rc=101 | 1 failed: a_given_key_refuses_key_reveal_and_witness_fields
+killed     | M17 zether-prover: call_with_key takes includeWitness | clients/zether-prover/src/api.rs | rc=101 | 1 failed: a_given_key_refuses_key_reveal_and_witness_fields
+killed     | M18 zether-prover: the given key ignored (the request's key used) | clients/zether-prover/src/api.rs | rc=101 | 3 failed: a_given_key_proves_the_same_bytes_as_the_json_key, a_given_key_refuses_key_reveal_and_witness_fields, open_disclosure_gives_the_receiver_and_auditor_openings
+killed     | M19 zether-prover: openDisclosure's receiver kind opened as the auditor's | clients/zether-prover/src/api.rs | rc=101 | 1 failed: open_disclosure_gives_the_receiver_and_auditor_openings
+killed     | M20 ua-c: zether_key_free outside the guard | clients/ua-c/src/lib.rs | rc=101 | 1 failed: every_export_is_guarded
+killed     | M21 ua-c: zether_key_free frees nothing (a leaked handle) | clients/ua-c/src/lib.rs | rc=134 | LeakSanitizer: detected | 0 failed: 
+killed     | M22 ua-c: zether not in the default build | clients/ua-c/Cargo.toml | rc=1 | 1 failed: test_zether_feature_in_the_default_build
+killed     | M23 ua-c: zether_public writes a zero UA | clients/ua-c/src/lib.rs | rc=1 | 1 failed: test_r33_keys
+killed     | M24 ua-c: a zether_call error echoes its request | clients/ua-c/src/lib.rs | rc=1 | 1 failed: test_error_strings_never_contain_an_input
+mutants M1-M24 of 24: 24 killed, 0 survived, 0 not loaded
