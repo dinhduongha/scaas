@@ -13,7 +13,7 @@ members and accepted inputs of an open), uasig (sign.json's msig rows and ua row
 byte, the command's index in facade::zether::COMMANDS, then its JSON: clients/zether-prover/vectors/ requests without their key and
 witness flag, the disclosure cases, the envelope; the index after the last, zether.json's cache boxes); T15: pqz_cmd (one byte, the
 command's index in facade::pqz::COMMANDS, then its JSON: requests built from smartcontracts/vectors/pqz/n2304-kmax4096/, the
-default set's statement files (keys and T sliced from the statements); the index after the last, a well-formed box that opens
+default set's statement files (keys and T sliced from the statements) and, T15e, its state.json rows (raw words); the index after the last, a well-formed box that opens
 under no key).
 """
 import json
@@ -28,8 +28,9 @@ ZCMDS = ["encrypt", "decrypt", "decryptPending", "checkBalance", "proveTransfer"
          "recoverTransfer", "openDisclosure", "pop", "ownerAuth", "uaSig", "shieldCalldata", "envelope", "typedDigest", "namedCall"]
 BOX = len(ZCMDS)
 # the order of scaas_ua::facade::pqz::COMMANDS (tests/fuzz_caps.rs checks it); QBOX: the PQZ box reader
-QCMDS = ["enc", "dec", "proveRegister", "proveKeyRecord", "proveTransfer", "proveBurn", "proveRefresh", "proveTransferMulti",
-         "proveDiscloseSender", "proveDisclose", "openMemo"]
+QCMDS = ["enc", "dec", "proveRegister", "proveKeyRecord", "rawProveTransfer", "rawProveBurn", "rawProveRefresh", "rawProveTransferMulti",
+         "proveDiscloseSender", "rawProveDisclose", "rawOpenMemo", "balance", "proveTransfer", "proveBurn", "proveRefresh",
+         "proveTransferMulti", "auditRead", "proveDisclose", "openMemo"]
 QBOX = len(QCMDS)
 PV = os.path.join(HERE, "../../../smartcontracts/vectors/pqz/n2304-kmax4096")
 
@@ -123,16 +124,16 @@ def pqz_seeds():
            qc("proveRegister", {"proofSystemId": pqzl, "kind": 0x0131, "ua": h(bytes(range(32)))}),
            qc("proveRegister", {"proofSystemId": pqzl, "kind": 0x0130, "ua": h(bytes(32)), "kemPk": "0x01" + "00" * 1600}),
            qc("proveKeyRecord", {"proofSystemId": pqzl, "ua": h(bytes(range(32)))}),
-           qc("proveTransfer", {**header(tr), "proofSystemId": pqzl, "toUA": word(tr["header"]["toUA"]), "pkT": h(pk_t), "pkA": h(pk_a),
+           qc("rawProveTransfer", {**header(tr), "proofSystemId": pqzl, "toUA": word(tr["header"]["toUA"]), "pkT": h(pk_t), "pkA": h(pk_a),
                                 "T": h(t), "amount": 123456, "memoHash": word(tr["header"]["memoHash"])})]
-    for f, cmd, extra in (("statement_burn.json", "proveBurn", lambda r: {"amount": r["header"]["amount"], "recipient": word(r["header"]["recipient"])}),
-                          ("statement_refresh.json", "proveRefresh", lambda r: {})):
+    for f, cmd, extra in (("statement_burn.json", "rawProveBurn", lambda r: {"amount": r["header"]["amount"], "recipient": word(r["header"]["recipient"])}),
+                          ("statement_refresh.json", "rawProveRefresh", lambda r: {})):
         r = pload(f)["rows"][0]
         b = bytes.fromhex(r["stmt"])
         out.append(qc(cmd, {**header(r), **extra(r), "proofSystemId": pqzl, "T": h(b[640 + PK:640 + PK + CT]), "memoHash": word(r["header"]["memoHash"])}))
     m = next(r for r in pload("statement_transfer_multi.json")["rows"] if r["case"] == "M1-on")
     b = bytes.fromhex(m["stmt"])
-    out.append(qc("proveTransferMulti", {**header(m), "proofSystemId": pqzl, "pkA": h(b[640 + 2 * PK:640 + 3 * PK]),
+    out.append(qc("rawProveTransferMulti", {**header(m), "proofSystemId": pqzl, "pkA": h(b[640 + 2 * PK:640 + 3 * PK]),
                                          "legs": [{"pk": h(b[640 + PK:640 + 2 * PK]), "ua": word(m["objects"]["uas"][0]), "amount": 123456}],
                                          "T": h(b[640 + 3 * PK:640 + 3 * PK + CT]), "mode": "HASH"}))
     for r in pload("statement_disclose.json")["rows"]:
@@ -142,9 +143,25 @@ def pqz_seeds():
             out.append(qc("proveDiscloseSender", {"stmt": "0x" + r["stmt"], "fromUA": h(b"\xa1" * 32), "sendCounter": 3, "salt": "0x" + "5a" * 16,
                                                   "auditorOn": True, "M": 2, "leg": 1}))
         else:
-            out.append(qc("proveDisclose", {"stmt": "0x" + r["stmt"]}))
-    out.append(qc("openMemo", {"chainUid": word(m["header"]["chainUid"]), "token": "0x" + m["header"]["token"], "fromUA": word(m["header"]["fromUA"]),
+            out.append(qc("rawProveDisclose", {"stmt": "0x" + r["stmt"]}))
+    out.append(qc("rawOpenMemo", {"chainUid": word(m["header"]["chainUid"]), "token": "0x" + m["header"]["token"], "fromUA": word(m["header"]["fromUA"]),
                                "sendCounter": m["header"]["sendCounter"], "memo": "0x" + m["memo"]["memo"]}))
+    # T15e: the words commands from the forge state rows (state.json): an account's words, an entry leg's
+    sv = pload("state.json")
+    loc = {k: sv[k] for k in ("chainUid", "token", "psid")}
+    for a in sv["accounts"][:2]:
+        w = {**loc, "ua": a["ua"], "block": a["block"], "account": a["account"], "pending": a["pending"], "accWords": a["accWords"],
+             "blobs": a["blobs"], "keyRecord": a["keyRecord"]}
+        out.append(qc("balance", w))
+        out.append(qc("proveRefresh", {**w, "chainId": sv["chainId"], "registry": sv["registry"], "fee": 0, "validUntilBlock": 1 << 40,
+                                       "shieldIn": a["shieldIn"], "envelopeBinding": h(bytes(32)), "memoHash": h(bytes(32))}))
+    e = next(x for x in sv["entries"] if x["legs"][0]["auditorCt"])
+    base = {**loc, "chainId": sv["chainId"], "entryRef": e["entryRef"], "fromUA": e["fromUA"], "sendCounter": e["sendCounter"],
+            "entryPtr": e["entryPtr"], "block": 1, "leg": 0}
+    out.append(qc("proveDisclose", {**base, "ua": e["legs"][0]["ua"], "kind": "RECEIVER_X", "registry": sv["registry"],
+                                    "blobs": [e["blob"], e["legs"][0]["key"]], "keyRecord": e["legs"][0]["keyRecord"]}))
+    out.append(qc("auditRead", {**base, "ua": sv["auditorUA"], "auditorMode": sv["auditorMode"], "auditorUA": sv["auditorUA"],
+                                "blobs": [e["blob"], sv["auditorKey"]], "keyRecord": sv["auditorKeyRecord"]}))
     out.append(bytes([QBOX]) + js({"iv": "AAAAAAAAAAAAAAAA", "ct": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}))
     return out
 

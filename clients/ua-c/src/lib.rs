@@ -2425,15 +2425,16 @@ pub extern "C" fn scaas_ua_pqz_public(k: *const ScaasUaPqzKey, out: *mut u8, out
     })
 }
 
-/// PQZ command `cmd` (enc, dec, proveRegister, proveKeyRecord, proveTransfer, proveBurn, proveRefresh, proveTransferMulti,
-/// proveDiscloseSender, proveDisclose, openMemo) on `request_json` (named fields, bytes "0x" hex, u64 numbers; at most 1 MiB,
-/// depth 8) with the handle's key: its JSON answer into `out_json`. Every field is checked against the command's allow-list: a
-/// `key`, `seed32` or any other field not on it is SCAAS_UA_ERR_ARGUMENT, a `proofSystemId` of another set
-/// SCAAS_UA_ERR_PQZ_SET_MISMATCH, a prover refusal SCAAS_UA_ERR_ARGUMENT (no detail). Pass `out_json` of SCAAS_UA_PQZ_OUT_MAX
-/// bytes: a size query runs the command again (a new proof, with new randomness and, for a transfer, a new salt) and the next
-/// proof's length can differ (SCAAS_UA_ERR_BUFFER). ARCH-POS-13 (ua-rs-sign T15c): this release library has none of the
-/// commands that decrypt or open a caller's ciphertext, statement or `T` (dec, proveTransfer, proveBurn, proveRefresh,
-/// proveTransferMulti, proveDisclose, openMemo): each is SCAAS_UA_ERR_ARGUMENT until it takes proven state.
+/// PQZ command `cmd` (enc, proveRegister, proveKeyRecord, proveDiscloseSender and, on raw storage words, balance, proveTransfer,
+/// proveBurn, proveRefresh, proveTransferMulti, auditRead, proveDisclose, openMemo) on `request_json` (named fields, bytes "0x"
+/// hex, u64 numbers; at most 4 MiB, depth 8) with the handle's key: its JSON answer into `out_json`. Every field is checked against
+/// the command's allow-list: a `key`, `seed32` or any other field not on it is SCAAS_UA_ERR_ARGUMENT, a `proofSystemId` or `psid`
+/// of another set SCAAS_UA_ERR_PQZ_SET_MISMATCH, a prover refusal SCAAS_UA_ERR_ARGUMENT (no detail). Pass `out_json` of
+/// SCAAS_UA_PQZ_OUT_MAX bytes: a size query runs the command again (a new proof, with new randomness and, for a transfer, a new
+/// salt) and the next proof's length can differ (SCAAS_UA_ERR_BUFFER). ARCH-POS-13 (ua-rs-sign T15c, T15e): no command takes a
+/// ciphertext, statement or `T`; a decrypting command takes a named location and the raw storage words the reading layer read
+/// (scaas-ua `facade::pqz::COMMANDS`, `STATE_LAYOUT`), rebuilds every ciphertext itself and refuses words that do not parse,
+/// check or bind to the handle's registered key with SCAAS_UA_ERR_ARGUMENT before the key is used.
 #[no_mangle]
 pub extern "C" fn scaas_ua_pqz_call(
     k: *const ScaasUaPqzKey,

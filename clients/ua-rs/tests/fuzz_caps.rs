@@ -236,7 +236,8 @@ fn pqz_inputs_past_their_caps_are_refused_unparsed() {
     unlock();
     use scaas_ua::facade::pqz::{PqzCmd, COMMANDS};
     // the spec's caps (§9.3) and the box's, stated here: not the crate's constants, which a changed cap would move too
-    const CMD_MAX: usize = 1 << 20;
+    // T15e: the PQZ command cap is 4 MiB (a debit's raw words; spec no-decryption-oracle §4.3)
+    const CMD_MAX: usize = 4 << 20;
     const BOX_MAX: usize = 2 << 20;
     let src = std::fs::read_to_string(format!("{}/fuzz/seeds.py", env!("CARGO_MANIFEST_DIR"))).unwrap();
     let list = &src[src.find("QCMDS = [").unwrap() + 9..];
@@ -264,11 +265,11 @@ fn pqz_inputs_past_their_caps_are_refused_unparsed() {
     assert!(PqzCmd::from_json(cmd, &ok).is_ok(), "without x");
     assert_eq!(bounded::vectors_parsed(), before + 1);
     ok.resize(CMD_MAX, b' ');
-    assert!(PqzCmd::from_json(cmd, &ok).is_ok(), "at 1 MiB");
+    assert!(PqzCmd::from_json(cmd, &ok).is_ok(), "at 4 MiB");
     ok.push(b' ');
     let before = bounded::vectors_parsed();
-    assert_eq!(PqzCmd::from_json(cmd, &ok).err(), Some(Error::Argument), "1 MiB + 1");
-    assert_eq!(bounded::vectors_parsed(), before, "1 MiB + 1: unparsed");
+    assert_eq!(PqzCmd::from_json(cmd, &ok).err(), Some(Error::Argument), "4 MiB + 1");
+    assert_eq!(bounded::vectors_parsed(), before, "4 MiB + 1: unparsed");
     // the cache box
     let (i, b) = split("pqz_cmd/box-over-depth-2.bin");
     assert_eq!(i, COMMANDS.len(), "the index after the last command");

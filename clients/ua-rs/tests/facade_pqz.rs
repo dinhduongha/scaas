@@ -9,8 +9,10 @@
 #![allow(non_snake_case)]
 use pqz_ffi::stmt::{self as st, Disclose, Form, Stmt, Word, PQZH_ID, PQZL_ID};
 use scaas_ua::facade::pqz::{check_set, pqz_set, AllowSecretExport, PqzCmd, PqzKey, PqzSet, COMMANDS};
+use scaas_ua::facade::pqz_pack;
 use scaas_ua::wallet::{aead_open, hkdf_sha256, Alg, Error, Wallet};
 use serde_json::{json, Value};
+mod pqz_chain;
 
 /// Feature `vectors` (Codex C1, T15c2): key handles only after the test-only marker; every test here unlocks first.
 fn unlock() {
@@ -158,10 +160,10 @@ fn set_mismatch_refused() {
     let t = balance(&k, 1000);
     #[cfg(feature = "vectors")]
     cmds.extend([
-        ("proveBurn", merge(header(1), json!({"amount": 1, "recipient": hx(&[3; 32]), "T": hx(&t), "memoHash": hx(&[0; 32])}))),
-        ("proveRefresh", merge(header(1), json!({"T": hx(&t), "memoHash": hx(&[0; 32])}))),
-        ("proveTransfer", merge(header(1), json!({"toUA": hx(&[2; 32]), "pkT": hx(&k.pk()), "T": hx(&t), "amount": 1, "memoHash": hx(&[0; 32])}))),
-        ("proveTransferMulti", merge(header(1), json!({"legs": [{"pk": hx(&k.pk()), "ua": hx(&[2; 32]), "amount": 1}], "T": hx(&t), "mode": "HASH"}))),
+        ("rawProveBurn", merge(header(1), json!({"amount": 1, "recipient": hx(&[3; 32]), "T": hx(&t), "memoHash": hx(&[0; 32])}))),
+        ("rawProveRefresh", merge(header(1), json!({"T": hx(&t), "memoHash": hx(&[0; 32])}))),
+        ("rawProveTransfer", merge(header(1), json!({"toUA": hx(&[2; 32]), "pkT": hx(&k.pk()), "T": hx(&t), "amount": 1, "memoHash": hx(&[0; 32])}))),
+        ("rawProveTransferMulti", merge(header(1), json!({"legs": [{"pk": hx(&k.pk()), "ua": hx(&[2; 32]), "amount": 1}], "T": hx(&t), "mode": "HASH"}))),
     ]);
     for (cmd, base) in &cmds {
         let ok = merge(base.clone(), json!({"proofSystemId": hx(&PQZL_ID)}));
@@ -174,7 +176,7 @@ fn set_mismatch_refused() {
     let (u, v) = (vec![0u8; st::PK_BYTES], vec![0u8; 128]);
     for (form, cmd, extra) in [
         #[cfg(feature = "vectors")]
-        (Form::DiscloseReceiver, "proveDisclose", json!({})),
+        (Form::DiscloseReceiver, "rawProveDisclose", json!({})),
         (Form::DiscloseSender, "proveDiscloseSender", json!({"fromUA": hx(&[0xA1; 32]), "sendCounter": 1, "salt": hx(&[5; 16]), "auditorOn": false})),
     ] {
         let mut stmt = disclosure(form, &PQZL_ID, 0, 1, &k.pk(), &u, &v);
@@ -196,14 +198,19 @@ fn pqz_handle_KeyRevoked_after_lock() {
     let t = balance(&k, 1000);
     #[cfg(feature = "vectors")]
     assert_eq!(dec(&k, &t, 0), Ok(1000), "positive control");
+    let bal = words_request(&k, "balance");
+    assert_eq!(call(&k, "balance", &bal).unwrap()["value"], 5, "positive control: words");
     let cache = k.seal_balance_cache(b"{}").unwrap();
     w.lock();
     assert_eq!(call(&k, "proveRegister", &reg).err(), Some(Error::KeyRevoked));
+    // T15e: a words command's only status about the handle (the words checked first: these are well formed)
+    assert_eq!(call(&k, "balance", &bal).err(), Some(Error::KeyRevoked));
+    assert_eq!(call(&k, "auditRead", &words_request(&k, "auditRead")).err(), Some(Error::KeyRevoked));
     #[cfg(feature = "vectors")]
     {
         assert_eq!(dec(&k, &t, 0).err(), Some(Error::KeyRevoked));
         let memo = json!({"chainUid": hx(&[1; 32]), "token": hx(&[2; 20]), "fromUA": hx(&[3; 32]), "sendCounter": 1, "memo": hx(&[0; 58])});
-        assert_eq!(call(&k, "openMemo", &memo).err(), Some(Error::KeyRevoked));
+        assert_eq!(call(&k, "rawOpenMemo", &memo).err(), Some(Error::KeyRevoked));
     }
     assert_eq!(k.seal_balance_cache(b"{}").err(), Some(Error::KeyRevoked));
     assert_eq!(k.open_balance_cache(cache.as_bytes()).err(), Some(Error::KeyRevoked));
@@ -243,30 +250,60 @@ fn base_request(k: &PqzKey, cmd: &str) -> Value {
         "dec" => json!({"ct": t}),
         "proveRegister" => json!({"proofSystemId": id, "kind": 0x0131, "ua": hx(&[1; 32])}),
         "proveKeyRecord" => json!({"proofSystemId": id, "ua": hx(&[1; 32])}),
-        "proveTransfer" => merge(header(1), json!({"proofSystemId": id, "toUA": hx(&[2; 32]), "pkT": pk, "T": t, "amount": 1, "memoHash": hx(&[0; 32])})),
-        "proveBurn" => merge(header(1), json!({"proofSystemId": id, "amount": 1, "recipient": hx(&[3; 32]), "T": t, "memoHash": hx(&[0; 32])})),
-        "proveRefresh" => merge(header(1), json!({"proofSystemId": id, "T": t, "memoHash": hx(&[0; 32])})),
-        "proveTransferMulti" => merge(header(1), json!({"proofSystemId": id, "legs": [leg], "T": t, "mode": "BUNDLE"})),
+        "rawProveTransfer" => merge(header(1), json!({"proofSystemId": id, "toUA": hx(&[2; 32]), "pkT": pk, "T": t, "amount": 1, "memoHash": hx(&[0; 32])})),
+        "rawProveBurn" => merge(header(1), json!({"proofSystemId": id, "amount": 1, "recipient": hx(&[3; 32]), "T": t, "memoHash": hx(&[0; 32])})),
+        "rawProveRefresh" => merge(header(1), json!({"proofSystemId": id, "T": t, "memoHash": hx(&[0; 32])})),
+        "rawProveTransferMulti" => merge(header(1), json!({"proofSystemId": id, "legs": [leg], "T": t, "mode": "BUNDLE"})),
         "proveDiscloseSender" => json!({"stmt": sstmt, "fromUA": hx(&[1; 32]), "sendCounter": 1, "salt": hx(&[5; 16]), "auditorOn": true}),
-        "proveDisclose" => json!({"stmt": stmt}),
-        "openMemo" => json!({"chainUid": hx(&[1; 32]), "token": hx(&[2; 20]), "fromUA": hx(&[3; 32]), "sendCounter": 1, "memo": hx(&[0; 58])}),
+        "rawProveDisclose" => json!({"stmt": stmt}),
+        "rawOpenMemo" => json!({"chainUid": hx(&[1; 32]), "token": hx(&[2; 20]), "fromUA": hx(&[3; 32]), "sendCounter": 1, "memo": hx(&[0; 58])}),
+        _ => words_request(k, cmd),
+    }
+}
+
+/// A words command's minimal well-formed request for `k` (T15e): `k` is the holder `0xA1…` of a chain with one TRIVIAL entry
+/// and one op 1 entry (zero ciphertexts, the auditor copy on, a commit-reveal memo) of which `k` is sender, receiver and auditor.
+fn words_request(k: &PqzKey, cmd: &str) -> Value {
+    use pqz_chain::*;
+    let ua = [0xA1; 32];
+    let mut c = Chain::new();
+    c.register(ua, &k.pk());
+    c.auditor = Some(ua);
+    c.shield(&ua, 5);
+    let blob = [vec![0x5a; 16], vec![0u8; pqz_pack::PKP + 2 * pqz_pack::VP], ua.to_vec(), vec![0u8; pqz_pack::VP]].concat();
+    let ptr = c.put(blob);
+    let er = entry_ref(&ua, 0);
+    c.entries.insert(er, Ent { ptr, from: ua, ctr: 0, memo: vec![] });
+    let debit = merge(c.own(&ua, 16), c.debit_fields());
+    let pk = hx(&k.pk());
+    match cmd {
+        "balance" => c.own(&ua, 16),
+        "proveTransfer" => merge(debit, json!({"toUA": hx(&[2; 32]), "pkT": pk, "amount": 1, "memoHash": hx(&[0; 32])})),
+        "proveBurn" => merge(debit, json!({"amount": 1, "recipient": hx(&[3; 32]), "memoHash": hx(&[0; 32])})),
+        "proveRefresh" => merge(debit, json!({"memoHash": hx(&[0; 32])})),
+        "proveTransferMulti" => merge(debit, json!({"legs": [{"pk": pk, "ua": hx(&[2; 32]), "amount": 1}], "mode": "BUNDLE"})),
+        "auditRead" => merge(merge(c.entry(&er, &ua), c.auditor_words(2)), json!({"ua": hx(&ua), "leg": 0})),
+        "proveDisclose" => merge(c.entry(&er, &ua), json!({"ua": hx(&ua), "leg": 0, "kind": "RECEIVER_X", "registry": hx(&REG)})),
+        "openMemo" => merge(c.entry(&er, &ua), json!({"memo": hx(&[[0x5a; 16].as_slice(), &[0; 42]].concat())})),
         _ => panic!("{cmd}: no base request"),
     }
 }
 
 /// The raw commands ARCH-POS-13 keeps out of a release build (T15c): each decrypts or opens a ciphertext, statement or `T`
 /// its caller chose.
-const RAW: [&str; 7] = ["dec", "proveTransfer", "proveBurn", "proveRefresh", "proveTransferMulti", "proveDisclose", "openMemo"];
+const RAW: [&str; 7] = ["dec", "rawProveTransfer", "rawProveBurn", "rawProveRefresh", "rawProveTransferMulti", "rawProveDisclose", "rawOpenMemo"];
 
 /// ARCH-POS-13 (T15c, F1 / F2 / F3 / F8): a release build lists none of the raw commands and refuses each, with a well-formed
 /// request, as `Argument` (an unknown command, before the key); under `vectors` they are there (the vector files' hooks).
 #[test]
 fn release_has_no_raw_decrypt() {
     unlock();
-    let release = ["enc", "proveRegister", "proveKeyRecord", "proveDiscloseSender"];
+    let release = ["enc", "proveRegister", "proveKeyRecord", "proveDiscloseSender", "balance", "proveTransfer", "proveBurn", "proveRefresh",
+        "proveTransferMulti", "auditRead", "proveDisclose", "openMemo"];
     let want: Vec<&str> = if cfg!(feature = "vectors") {
-        ["enc", "dec", "proveRegister", "proveKeyRecord", "proveTransfer", "proveBurn", "proveRefresh", "proveTransferMulti",
-            "proveDiscloseSender", "proveDisclose", "openMemo"].to_vec()
+        ["enc", "dec", "proveRegister", "proveKeyRecord", "rawProveTransfer", "rawProveBurn", "rawProveRefresh", "rawProveTransferMulti",
+            "proveDiscloseSender", "rawProveDisclose", "rawOpenMemo", "balance", "proveTransfer", "proveBurn", "proveRefresh",
+            "proveTransferMulti", "auditRead", "proveDisclose", "openMemo"].to_vec()
     } else {
         release.to_vec()
     };
@@ -307,12 +344,23 @@ fn raw_requests_compile_only_under_vectors() {
             })
             .collect()
     };
-    let raw = [("Dec", "dec"), ("Transfer", "proveTransfer"), ("Burn", "proveBurn"), ("Refresh", "proveRefresh"),
-        ("Multi", "proveTransferMulti"), ("Disclose", "proveDisclose"), ("OpenMemo", "openMemo")];
-    for (v, cmd) in raw {
+    // `dec` and the raw disclosure: their own variants; the raw debits and memo (T15e): the words commands' variants, built
+    // from a caller's `T` or memo only by these gated arms and the gated `Fields::ct` / `Fields::header`
+    for (v, cmd) in [("Dec", "dec"), ("Disclose", "rawProveDisclose")] {
         let found = at(v, cmd);
         assert_eq!(found.len(), 4, "{v}: variant, two arms, allow-list");
         found.iter().for_each(|&i| assert!(gated(i), "{v}: line {} not under cfg(vectors): {}", i + 1, lines[i]));
+    }
+    for cmd in ["rawProveTransfer", "rawProveBurn", "rawProveRefresh", "rawProveTransferMulti", "rawOpenMemo"] {
+        let found: Vec<usize> = (0..lines.len())
+            .filter(|&i| lines[i].starts_with(&format!("\"{cmd}\" =>")) || lines[i] == format!("\"{cmd}\","))
+            .collect();
+        assert_eq!(found.len(), 3, "{cmd}: COMMANDS, req() and allow-list");
+        found.iter().for_each(|&i| assert!(gated(i), "{cmd}: line {} not under cfg(vectors): {}", i + 1, lines[i]));
+    }
+    for f in ["fn ct(&self, k: &str)", "fn header(&self)"] {
+        let i = lines.iter().position(|l| l.starts_with(f)).unwrap();
+        assert!(gated(i), "{f}: the caller's T and header parse only under vectors");
     }
     for (v, cmd) in [("Enc", "enc"), ("Register", "proveRegister"), ("KeyRecord", "proveKeyRecord"), ("DiscloseSender", "proveDiscloseSender")] {
         let found = at(v, cmd);
@@ -354,11 +402,11 @@ fn a_key_field_in_command_json_is_refused() {
     }
     let mut nested = merge(header(1), json!({"proofSystemId": id, "legs": [leg.clone()], "T": t, "mode": "HASH"}));
     nested["legs"][0]["key"] = secret.clone();
-    assert_eq!(PqzCmd::from_json("proveTransferMulti", nested.to_string().as_bytes()).err(), Some(Error::Argument), "key inside a leg");
+    assert_eq!(PqzCmd::from_json("rawProveTransferMulti", nested.to_string().as_bytes()).err(), Some(Error::Argument), "key inside a leg");
     #[cfg(feature = "vectors")]
     {
         nested["legs"][0].as_object_mut().unwrap().remove("key");
-        assert!(PqzCmd::from_json("proveTransferMulti", nested.to_string().as_bytes()).is_ok(), "positive control: without the key");
+        assert!(PqzCmd::from_json("rawProveTransferMulti", nested.to_string().as_bytes()).is_ok(), "positive control: without the key");
     }
     // a field of one command on another, an unknown command
     let reg = json!({"proofSystemId": id, "kind": 0x0131, "ua": hx(&[1; 32]), "T": t});
@@ -366,7 +414,7 @@ fn a_key_field_in_command_json_is_refused() {
     assert_eq!(PqzCmd::from_json("prove", b"{}").err(), Some(Error::Argument));
 }
 
-/// Spec §9.3: 1 MiB and depth 8; only `u64` numbers; keys and ciphertexts of this set's length and canonical.
+/// Spec §9.3: 4 MiB (T15e: a debit's raw words; was 1 MiB) and depth 8; only `u64` numbers; keys and ciphertexts of this set's length and canonical.
 #[test]
 fn command_json_is_bounded_and_typed() {
     unlock();
@@ -375,10 +423,10 @@ fn command_json_is_bounded_and_typed() {
     let pk = hx(&k.pk());
     let mut ok = json!({"pks": [pk], "values": [1]}).to_string().into_bytes();
     assert!(PqzCmd::from_json("enc", &ok).is_ok());
-    ok.resize(1 << 20, b' ');
-    assert!(PqzCmd::from_json("enc", &ok).is_ok(), "at 1 MiB");
+    ok.resize(4 << 20, b' ');
+    assert!(PqzCmd::from_json("enc", &ok).is_ok(), "at 4 MiB");
     ok.push(b' ');
-    assert_eq!(PqzCmd::from_json("enc", &ok).err(), Some(Error::Argument), "1 MiB + 1");
+    assert_eq!(PqzCmd::from_json("enc", &ok).err(), Some(Error::Argument), "4 MiB + 1");
     let deep = format!("{{\"pks\": [{pk:?}], \"values\": [1], \"x\": {}1{}}}", "[".repeat(7), "]".repeat(7));
     assert_eq!(PqzCmd::from_json("enc", deep.as_bytes()).err(), Some(Error::Argument), "depth 8 parses, x not allowed");
     let deeper = format!("{{\"values\": {}1{}}}", "[".repeat(8), "]".repeat(8));
@@ -407,7 +455,7 @@ fn transfer_and_disclosures_verify() {
     let t = balance(&a, 1000);
     let req = merge(header(3), json!({"proofSystemId": hx(&PQZL_ID), "toUA": hx(&[0xB0; 32]), "pkT": hx(&b.pk()), "pkA": hx(&c.pk()),
         "T": hx(&t), "amount": 300, "memoHash": hx(&[0xD1; 32])}));
-    let p = call(&a, "proveTransfer", &req).unwrap();
+    let p = call(&a, "rawProveTransfer", &req).unwrap();
     let (stmt, proof) = (h(&p["stmt"]), h(&p["proof"]));
     assert!(verify(1, &stmt, &proof));
     let Stmt::Debit(d) = st::parse(1, &stmt).unwrap() else { panic!() };
@@ -428,7 +476,7 @@ fn transfer_and_disclosures_verify() {
         &[dg(300), dg(693), dg(300)], &seed).unwrap();
     assert_eq!((&e.u[..], &e.vs[0][..], &e.vs[1][..]), (d.u, d.v_t.unwrap(), d.v_f), "seed_enc = HKDF(seed32, SCAAS-PQZ-ENC-V2, …)");
     // a second build at the same counter draws a fresh salt: another u
-    let p2 = call(&a, "proveTransfer", &req).unwrap();
+    let p2 = call(&a, "rawProveTransfer", &req).unwrap();
     assert_ne!(h(&p2["stmt"]), stmt);
     // disclosures
     let ss = disclosure(Form::DiscloseSender, &PQZL_ID, 0, 300, &b.pk(), d.u, d.v_t.unwrap());
@@ -438,13 +486,13 @@ fn transfer_and_disclosures_verify() {
     let wrong = merge(origin.clone(), json!({"sendCounter": 4}));
     refused_before_the_prover("another counter: another seed", || call(&a, "proveDiscloseSender", &wrong));
     let rx = disclosure(Form::DiscloseReceiver, &PQZL_ID, 1, 300, &b.pk(), d.u, d.v_t.unwrap());
-    assert!(verify(5, &rx, &h(&call(&b, "proveDisclose", &json!({"stmt": hx(&rx)})).unwrap()["proof"])));
-    refused_before_the_prover("not Alice's key", || call(&a, "proveDisclose", &json!({"stmt": hx(&rx)})));
+    assert!(verify(5, &rx, &h(&call(&b, "rawProveDisclose", &json!({"stmt": hx(&rx)})).unwrap()["proof"])));
+    refused_before_the_prover("not Alice's key", || call(&a, "rawProveDisclose", &json!({"stmt": hx(&rx)})));
     let au = disclosure(Form::DiscloseAuditor, &PQZL_ID, 2, 300, &c.pk(), d.u, d.v_a.unwrap());
-    assert!(verify(5, &au, &h(&call(&c, "proveDisclose", &json!({"stmt": hx(&au)})).unwrap()["proof"])));
+    assert!(verify(5, &au, &h(&call(&c, "rawProveDisclose", &json!({"stmt": hx(&au)})).unwrap()["proof"])));
     // overdraft: 994 + 7 > 1,000
     let over = merge(req, json!({"amount": 994}));
-    refused_before_the_prover("overdraft", || call(&a, "proveTransfer", &over));
+    refused_before_the_prover("overdraft", || call(&a, "rawProveTransfer", &over));
 }
 
 /// Op 2: burn and refresh verify; the new balance decrypts.
@@ -456,18 +504,18 @@ fn burn_and_refresh_verify() {
     let k = w.pqz_key(0, 0).unwrap();
     let t = balance(&k, 1000);
     let burn = merge(header(4), json!({"proofSystemId": hx(&PQZL_ID), "amount": 100, "recipient": hx(&[3; 32]), "T": hx(&t), "memoHash": hx(&[0xD1; 32])}));
-    let p = call(&k, "proveBurn", &burn).unwrap();
+    let p = call(&k, "rawProveBurn", &burn).unwrap();
     let stmt = h(&p["stmt"]);
     assert!(verify(2, &stmt, &h(&p["proof"])));
     let Stmt::Debit(d) = st::parse(2, &stmt).unwrap() else { panic!() };
     assert_eq!((d.form, d.amount(), d.header[st::H_RECIPIENT]), (Form::Burn, 100, [3; 32]));
     assert_eq!(dec(&k, &[d.u, d.v_f].concat(), 0), Ok(893));
     // CTR-PQZ-19: a burn's randomness is fresh on every build (never fixed by the counter)
-    let again = h(&call(&k, "proveBurn", &burn).unwrap()["stmt"]);
+    let again = h(&call(&k, "rawProveBurn", &burn).unwrap()["stmt"]);
     let Stmt::Debit(d2) = st::parse(2, &again).unwrap() else { panic!() };
     assert_ne!(d2.u, d.u, "a second burn of the same balance at the same counter: another u");
     let refresh = merge(header(5), json!({"proofSystemId": hx(&PQZL_ID), "T": hx(&t), "memoHash": hx(&[0xD1; 32])}));
-    let p = call(&k, "proveRefresh", &refresh).unwrap();
+    let p = call(&k, "rawProveRefresh", &refresh).unwrap();
     let stmt = h(&p["stmt"]);
     assert!(verify(2, &stmt, &h(&p["proof"])));
     let Stmt::Debit(d) = st::parse(2, &stmt).unwrap() else { panic!() };
@@ -486,7 +534,7 @@ fn transfer_multi_memo_and_sender_disclosure() {
     let t = balance(&a, 1000);
     let legs = json!([{"pk": hx(&b.pk()), "ua": hx(&[0xB0; 32]), "amount": 250}, {"pk": hx(&z.pk()), "ua": hx(&[0xB1; 32]), "amount": 0}]);
     let req = merge(header(9), json!({"proofSystemId": hx(&PQZL_ID), "legs": legs, "pkA": hx(&c.pk()), "T": hx(&t), "mode": "HASH"}));
-    let p = call(&a, "proveTransferMulti", &req).unwrap();
+    let p = call(&a, "rawProveTransferMulti", &req).unwrap();
     let (stmt, memo) = (h(&p["stmt"]), h(&p["memo"]));
     assert!(verify(7, &stmt, &h(&p["proof"])));
     let Stmt::Multi(m) = st::parse(7, &stmt).unwrap() else { panic!() };
@@ -499,16 +547,16 @@ fn transfer_multi_memo_and_sender_disclosure() {
     }
     let salt: [u8; 16] = m.header[st::H_SALT][16..].try_into().unwrap();
     let mref = json!({"chainUid": hx(&[0xC1; 32]), "token": hx(&[0x11; 20]), "fromUA": hx(&[0xA1; 32]), "sendCounter": 9, "memo": hx(&memo)});
-    let o = call(&a, "openMemo", &mref).unwrap();
+    let o = call(&a, "rawOpenMemo", &mref).unwrap();
     assert_eq!(o, json!({"auditorOn": true, "legs": [{"amount": 250, "ua": hx(&[0xB0; 32])}, {"amount": 0, "ua": hx(&[0xB1; 32])}]}));
-    assert_eq!(call(&b, "openMemo", &mref).err(), Some(Error::Argument), "another key's memo");
+    assert_eq!(call(&b, "rawOpenMemo", &mref).err(), Some(Error::Argument), "another key's memo");
     let ss = disclosure(Form::DiscloseSender, &PQZL_ID, 0, 250, &b.pk(), m.u(0), m.v(0));
     let origin = json!({"stmt": hx(&ss), "fromUA": hx(&[0xA1; 32]), "sendCounter": 9, "salt": hx(&salt), "auditorOn": true, "M": 2, "leg": 0});
     assert!(verify(4, &ss, &h(&call(&a, "proveDiscloseSender", &origin).unwrap()["proof"])));
     refused_before_the_prover("leg 1 is not Bob's", || call(&a, "proveDiscloseSender", &merge(origin, json!({"leg": 1}))));
     // M not built (3), and a leg past M
     let three = merge(req, json!({"legs": [legs[0], legs[1], legs[1]]}));
-    assert_eq!(call(&a, "proveTransferMulti", &three).err(), Some(Error::Argument));
+    assert_eq!(call(&a, "rawProveTransferMulti", &three).err(), Some(Error::Argument));
 }
 
 /// T15b (F10, owner 2026-11-06): an op 7 request for `M` legs of `mode`, from a balance of 1,000.
@@ -526,7 +574,7 @@ fn multi_bundle_memo_hash_is_zero() {
     unlock();
     let w = wallet();
     let (a, b) = (w.pqz_key(0, 0).unwrap(), w.pqz_key(1, 0).unwrap());
-    let p = call(&a, "proveTransferMulti", &multi_req(&a, &b, "BUNDLE")).unwrap();
+    let p = call(&a, "rawProveTransferMulti", &multi_req(&a, &b, "BUNDLE")).unwrap();
     let stmt = h(&p["stmt"]);
     assert!(verify(7, &stmt, &h(&p["proof"])));
     let Stmt::Multi(m) = st::parse(7, &stmt).unwrap() else { panic!() };
@@ -542,7 +590,7 @@ fn multi_hash_memo_hash_matches_contract() {
     unlock();
     let w = wallet();
     let (a, b) = (w.pqz_key(0, 0).unwrap(), w.pqz_key(1, 0).unwrap());
-    let p = call(&a, "proveTransferMulti", &multi_req(&a, &b, "HASH")).unwrap();
+    let p = call(&a, "rawProveTransferMulti", &multi_req(&a, &b, "HASH")).unwrap();
     let (stmt, memo) = (h(&p["stmt"]), h(&p["memo"]));
     assert!(verify(7, &stmt, &h(&p["proof"])));
     let Stmt::Multi(m) = st::parse(7, &stmt).unwrap() else { panic!() };
@@ -560,13 +608,13 @@ fn multi_without_mode_refused() {
     let w = wallet();
     let (a, b) = (w.pqz_key(0, 0).unwrap(), w.pqz_key(1, 0).unwrap());
     let req = multi_req(&a, &b, "HASH");
-    assert!(PqzCmd::from_json("proveTransferMulti", req.to_string().as_bytes()).is_ok(), "positive control");
+    assert!(PqzCmd::from_json("rawProveTransferMulti", req.to_string().as_bytes()).is_ok(), "positive control");
     let mut none = req.clone();
     none.as_object_mut().unwrap().remove("mode");
-    refused_before_the_prover("no mode", || call(&a, "proveTransferMulti", &none));
+    refused_before_the_prover("no mode", || call(&a, "rawProveTransferMulti", &none));
     for bad in [json!("hash"), json!("NONE"), json!("COMPACT"), json!(0), json!(1), json!(null), json!(["HASH"])] {
         let r = merge(req.clone(), json!({"mode": bad}));
-        refused_before_the_prover(&format!("mode {bad}"), || call(&a, "proveTransferMulti", &r));
+        refused_before_the_prover(&format!("mode {bad}"), || call(&a, "rawProveTransferMulti", &r));
     }
 }
 
@@ -695,7 +743,7 @@ mod vectors {
             let k = PqzKey::vectors_from_seed32(&s32(&r["key_seed"])).unwrap();
             let req = json!({"chainUid": word(&hd["chainUid"]), "token": hx(&h(&hd["token"])), "fromUA": word(&hd["fromUA"]),
                 "sendCounter": hd["sendCounter"], "memo": hx(&memo)});
-            let o = call(&k, "openMemo", &req);
+            let o = call(&k, "rawOpenMemo", &req);
             let name = r["name"].as_str().unwrap();
             if r["result"] == "none" {
                 assert_eq!(o.err(), Some(Error::Argument), "{name}");
@@ -734,7 +782,7 @@ mod vectors {
             let k = key(&o["pk_f"]);
             let d = Draw::vectors([7; 32], Some(s32(&o["out"]["seed_enc"])), salt(st_row), Some(s32(&st_row["memo"]["key_seed"])));
             let run = |mode: &str| -> Value {
-                serde_json::from_str(&k.vectors_call("proveTransferMulti", merge(req.clone(), json!({"mode": mode})).to_string().as_bytes(), &d).unwrap())
+                serde_json::from_str(&k.vectors_call("rawProveTransferMulti", merge(req.clone(), json!({"mode": mode})).to_string().as_bytes(), &d).unwrap())
                     .unwrap()
             };
             let case = st_row["case"].as_str().unwrap();
@@ -801,7 +849,7 @@ mod vectors {
                     }
                     let k = key(&o["pk_f"]);
                     let got: Value = serde_json::from_str(
-                        &k.vectors_call("proveTransferMulti", req.to_string().as_bytes(),
+                        &k.vectors_call("rawProveTransferMulti", req.to_string().as_bytes(),
                             &d(&o["out"]["seed_enc"], salt(st_row), Some(s32(&st_row["memo"]["key_seed"]))))
                         .unwrap(),
                     )
@@ -812,7 +860,7 @@ mod vectors {
                     let dr = f["disclosures"].as_array().unwrap().iter().find(|x| x["case"] == c).unwrap();
                     let want = h(&dr["stmt"]);
                     let k = key(&dr["objects"]["pk"]);
-                    let got = k.vectors_call("proveDisclose", json!({"stmt": hx(&with_id(&want, id))}).to_string().as_bytes(), &d(&Value::Null, None, None));
+                    let got = k.vectors_call("rawProveDisclose", json!({"stmt": hx(&with_id(&want, id))}).to_string().as_bytes(), &d(&Value::Null, None, None));
                     (serde_json::from_str(&got.unwrap()).unwrap(), want)
                 } else {
                     let form = s["form"].as_str().unwrap();
@@ -832,7 +880,7 @@ mod vectors {
                                 // any sender handle: the witness is the encryption's; pk_f stands in for the other recipients
                                 (PqzKey::vectors_from_seed32(&s32(&o["ct"]["recipients"][1])).unwrap(), "proveDiscloseSender", req)
                             } else {
-                                (key(&o["pk"]), "proveDisclose", json!({"stmt": hx(&with_id(&want, id))}))
+                                (key(&o["pk"]), "rawProveDisclose", json!({"stmt": hx(&with_id(&want, id))}))
                             };
                             serde_json::from_str(&k.vectors_call(cmd, req.to_string().as_bytes(), &d(&o["ct"]["seed_enc"], None, None)).unwrap()).unwrap()
                         }
@@ -849,14 +897,14 @@ mod vectors {
                                     if let Some(a) = db.pk_a {
                                         req["pkA"] = json!(hx(a));
                                     }
-                                    "proveTransfer"
+                                    "rawProveTransfer"
                                 }
                                 "BURN" => {
                                     req["amount"] = hd["amount"].clone();
                                     req["recipient"] = json!(word(&hd["recipient"]));
-                                    "proveBurn"
+                                    "rawProveBurn"
                                 }
-                                "REFRESH" => "proveRefresh",
+                                "REFRESH" => "rawProveRefresh",
                                 other => panic!("{other}"),
                             };
                             let k = key(&o["pk_f"]);

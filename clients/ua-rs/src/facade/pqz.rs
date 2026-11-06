@@ -9,8 +9,17 @@
 //!   [`crate::wallet::Wallet::export_pqz_leaf_raw`] is the one export of `seed32` (marker [`AllowSecretExport`]).
 //! - **Set.** [`pqz_set`] names this build's set, `PK` length and `proofSystemId`s; [`check_set`] compares a token's deployed
 //!   `PqzSet` with it, and every proving command names the token's `proofSystemId`: another set's is `PqzSetMismatch`.
-//! - **Commands** ([`COMMANDS`], [`PqzKey::call`]; a release build has only `enc`, `proveRegister`, `proveKeyRecord` and
-//!   `proveDiscloseSender`, ARCH-POS-13, the rest is feature `vectors` until T15e): named-field JSON (bounded reader, 1 MiB, depth 8), each field on its
+//! - **No decryption oracle** (ARCH-POS-13, owner 2026-11-06; spec no-decryption-oracle §4.3–§4.6, T15e): a command that
+//!   decrypts takes a named location and the **raw** storage words the reading layer read at one block (account struct slots,
+//!   pending slots, `acc` slots, SSTORE2 codes, the registry's key record), never a ciphertext, statement, `T`, `p` or parsed
+//!   field. The facade alone checks `psid`, parses the words by the pinned layout ([`STATE_LAYOUT`]), checks them (public data
+//!   only), binds the selected leg and the role to the handle's registered key, rebuilds `T`, `p`, the entries and the op 5
+//!   statement exactly as `PqzCore`, and only then uses the key. Every refusal before that is `Argument` (another set's `psid`:
+//!   `PqzSetMismatch`); after it only `KeyRevoked` and, for a debit over the balance, `Argument` to the caller. Whether the words
+//!   are real chain state of a catalogued token is the reading layer's duty (R1–R7), not this library's (§4.12).
+//! - **Commands** ([`COMMANDS`], [`PqzKey::call`]: `enc`, `proveRegister`, `proveKeyRecord`, `proveDiscloseSender` and the
+//!   words commands `balance`, `proveTransfer`, `proveBurn`, `proveRefresh`, `proveTransferMulti`, `auditRead`, `proveDisclose`,
+//!   `openMemo`; the raw `dec` and `raw*` commands only under feature `vectors`): named-field JSON (bounded reader, 4 MiB, depth 8), each field on its
 //!   command's allow-list (so no `key`, `seed32`, `s`, `e` or witness field passes, at any depth: the only nested objects are
 //!   the legs `{pk, ua, amount}`), parsed into typed values. `enc` (`pqzl::enc`), `dec` (`dec` / `dec_win`), the proofs
 //!   `proveRegister` / `proveKeyRecord` (op 3 `R_REG` over `pqz_reg_message` / the `setPqzKey` message), `proveTransfer`
@@ -34,26 +43,24 @@
 use crate::wallet::{aead_open, aead_seal, bounded, from_hex, hkdf_sha256, to_hex, Alg, Error, Handle, KeyId, Result, SecretStore};
 use base64ct::{Base64UrlUnpadded, Encoding};
 use hkdf::Hkdf;
-use pqz_ffi::fixture::{wit_ds, wit_key};
-use pqz_ffi::pqzl::{self, Key, PK_BYTES};
+use super::pqz_pack::{unpack, ACC_WORDS, CTP, PKP, VP};
+use pqz_ffi::fixture::{wit_debit, wit_ds, wit_key, wit_multi};
+use pqz_ffi::pqzl::{self, Key, CT_BYTES, PK_BYTES};
 use pqz_ffi::selftest::digits;
-use pqz_ffi::stmt::{built_legs, check_pk, legs_per_group, parse, Disclose, Form, Register, Stmt, Word, PQZH_ID, PQZL_ID};
+use pqz_ffi::stmt::{
+    built_legs, check_pk, coeffs_ok, groups, legs_per_group, parse, u64_word, Debit, Disclose, Form, Multi, Register, Stmt, Word, DELTA,
+    DISC_WORDS, DW_AMOUNT, H_AMOUNT, H_BENEFICIARY, H_CHAIN_ID, H_CHAIN_UID, H_ENVELOPE, H_FEE, H_FROM, H_MEMO_HASH, H_PLAIN_USED, H_P,
+    H_RECIPIENT, H_RECIPIENTS_HASH, H_REGISTRY, H_SALT, H_SEND_COUNTER, H_TO, H_TOKEN, H_VALID_UNTIL, K_MAX, PQZH_ID, PQZL_ID, Q,
+};
 use rand_core::{OsRng, RngCore};
 use serde_json::{json, Map, Value};
 use sha2::Sha256;
 use std::sync::Arc;
 use subtle::{Choice, ConstantTimeEq};
-// ARCH-POS-13 (Fable P3-3, T15c2): what only the raw commands use (`dec`, the debits, `proveDisclose`, `openMemo`) compiles
-// only under the test feature `vectors`, so a release build cannot construct `Req::Dec` or reach their code at all.
+// ARCH-POS-13 (Fable P3-3, T15c2): what only the raw commands use (`dec`, the `raw*` commands) compiles only under the test
+// feature `vectors`, so a release build cannot construct `Req::Dec` or a request from a caller's `T`, statement or memo.
 #[cfg(feature = "vectors")]
-use pqz_ffi::{
-    fixture::{wit_debit, wit_multi},
-    pqzl::CT_BYTES,
-    stmt::{
-        check_ct, u64_word, Debit, Multi, H_AMOUNT, H_BENEFICIARY, H_CHAIN_ID, H_CHAIN_UID, H_ENVELOPE, H_FEE, H_FROM, H_MEMO_HASH,
-        H_PLAIN_USED, H_P, H_RECIPIENT, H_RECIPIENTS_HASH, H_REGISTRY, H_SALT, H_SEND_COUNTER, H_TO, H_TOKEN, H_VALID_UNTIL,
-    },
-};
+use pqz_ffi::stmt::check_ct;
 use zeroize::{Zeroize, Zeroizing};
 
 // one parameter set per build (owner 2026-10-21): pqz-stmt refuses two, and silently takes n2048-kmax1024 for none
@@ -65,8 +72,9 @@ const _: () = assert!(
 
 /// The PQZ key's tag (CTR-PQZ-13): `utf8` in the HKDF info, as every PQ seed.
 pub const TAG: &str = "scaas.ua.pqz-mlwe.v1";
-/// The command JSON's caps (spec §9.3).
-pub const CMD_MAX: usize = 1 << 20;
+/// The command JSON's caps (spec §9.3; T15e: 4 MiB, not 1 MiB, for the raw words of a debit: up to `INLINE_MAX` pending blobs
+/// of an audited 8-leg op 7, the `acc` blob or slots and the key's code, in hex, at `n2816-kmax65536` ≈ 2.3 MiB).
+pub const CMD_MAX: usize = 4 << 20;
 pub const CMD_DEPTH: usize = 8;
 /// The balance-cache box JSON's caps: `{iv, ct}` of a plaintext up to [`crate::wallet::MAX_PT`] (1 MiB) in base64url.
 pub const BOX_MAX: usize = 2 << 20;
@@ -162,13 +170,23 @@ pub fn enc(pks: &[Vec<u8>], values: &[u64]) -> Result<(Vec<u8>, Vec<Vec<u8>>)> {
 
 /// The commands of [`PqzKey::call`], in this order (the fuzz target `pqz_cmd`, built with `vectors`, names them by index).
 ///
-/// ARCH-POS-13 ("never a decryption oracle", owner 2026-11-06; spec no-decryption-oracle §4.1, T15c): a release build (no
-/// feature `vectors`) has no command that decrypts or opens a ciphertext, statement or `T` its caller chose: `dec`,
-/// `proveTransfer`, `proveBurn`, `proveRefresh`, `proveTransferMulti`, `proveDisclose` and `openMemo` exist only under the test
-/// feature `vectors` (the vector files feed `T` and `ct`) until they take proven state (T15e). In a release build they are
-/// unknown commands (`Argument`, before the key is touched), and their typed requests, match arms and helpers do not compile
-/// (Fable P3-3, T15c2). Kept: `enc` (public), `proveRegister`, `proveKeyRecord` (own key) and `proveDiscloseSender` (decrypts
-/// nothing: a re-derivation compared with the statement in constant time).
+/// ARCH-POS-13 ("never a decryption oracle", owner 2026-11-06; spec no-decryption-oracle §4.3–§4.6, T15c, T15e): no command of
+/// a release build decrypts or opens a ciphertext, statement or `T` its caller chose. The decrypting commands take a named
+/// location and raw storage words and rebuild every ciphertext themselves (the words to read: [`STATE_LAYOUT`] and each
+/// command's line below). The raw forms, `dec` and the `raw*` commands (the vector files' `T`, statements and memos), exist only
+/// under the test feature `vectors`; in a release build they are unknown commands (`Argument`, before the key is touched), and
+/// their parsers do not compile (Fable P3-3, T15c2). `enc` is public, `proveRegister` and `proveKeyRecord` prove the own key,
+/// `proveDiscloseSender` decrypts nothing (a re-derivation compared with the statement in constant time).
+///
+/// The words commands, each `{chainUid, token, block, psid, blobs, keyRecord, …}` (+ the fields of its line):
+/// - `balance {ua, account, pending, accWords}` → `{value, p, sendCounter}` (the holder's own balance at the `p` a debit would use);
+/// - `proveTransfer {…balance, chainId, registry, beneficiaryUA?, fee, validUntilBlock, shieldIn, envelopeBinding, toUA, pkT,
+///   pkA?, amount, memoHash}`, `proveBurn {…, amount, recipient, memoHash}`, `proveRefresh {…, memoHash}`,
+///   `proveTransferMulti {…, legs, pkA?, mode}` → `{stmt, proof, p}` (+ `memo` on op 7 `HASH`): `T`, `p` and `sendCounter` from the words;
+/// - `auditRead {chainId, entryRef, fromUA, sendCounter, entryPtr, leg, auditorMode, auditorUA}` on the auditor's handle → `{amount}`;
+/// - `proveDisclose {chainId, registry, entryRef, fromUA, sendCounter, entryPtr, leg, kind, [auditorMode, auditorUA]}`, `kind`
+///   `RECEIVER_X` (the leg's owner's handle) or `AUDITOR` (the auditor's) → `{stmt, proof, amount}` (op 5);
+/// - `openMemo {chainId, entryRef, fromUA, sendCounter, entryPtr, memo}` on the sender's handle → `{auditorOn, legs}`.
 pub const COMMANDS: &[&str] = &[
     "enc",
     #[cfg(feature = "vectors")]
@@ -176,30 +194,86 @@ pub const COMMANDS: &[&str] = &[
     "proveRegister",
     "proveKeyRecord",
     #[cfg(feature = "vectors")]
-    "proveTransfer",
+    "rawProveTransfer",
     #[cfg(feature = "vectors")]
-    "proveBurn",
+    "rawProveBurn",
     #[cfg(feature = "vectors")]
-    "proveRefresh",
+    "rawProveRefresh",
     #[cfg(feature = "vectors")]
-    "proveTransferMulti",
+    "rawProveTransferMulti",
     "proveDiscloseSender",
     #[cfg(feature = "vectors")]
-    "proveDisclose",
+    "rawProveDisclose",
     #[cfg(feature = "vectors")]
+    "rawOpenMemo",
+    "balance",
+    "proveTransfer",
+    "proveBurn",
+    "proveRefresh",
+    "proveTransferMulti",
+    "auditRead",
+    "proveDisclose",
     "openMemo",
 ];
 
-/// The debit header fields a caller gives (the facade sets opTag, the id, `auditorOn`, `salt` and what it computes).
+/// The storage layout the words commands parse (`ua-mtx-merge`, `PqzCore.Account` / `PqzStorage` in the ERC-7201 namespace
+/// `scaas.pqz`, pinned by T19c in `test/v2/layout/namespaces.json`; `tests/facade_pqz_state.rs` compares this table with the
+/// pin file): `(label, slot, inner, byte, width)`, `slot` in the namespace, `inner` the slot inside `acct[ua]`, `byte` counted
+/// from the low end of the word (solc's packing). The reading layer reads, at one block:
+/// - `account`: `acct[ua]` slots `inner` 0..4 (`keccak256(ua ‖ root + 8) + inner`), in slot order;
+/// - `pending`: `{index, word}` for every index in `[rolled, p)`, `p = min(pendingCount, rolled + INLINE_MAX, rolled + K_MAX − 1 −
+///   accUnits)` (`INLINE_MAX` 16, 10 for op 7 of a PQZH token; CTR-PQZ-06), the word at `keccak256(index ‖ acct + 4)`:
+///   `blob(160) ‖ uOff(16) ‖ vOff(16) ‖ block(64)` (`PqzCore._credit`);
+/// - `accWords`: with `flags & 1` the `ACC_WORDS` slots from `acct + 5` as stored (`not()` of the packed stream), else none;
+/// - `blobs`: `{address, code}` by `eth_getCode` of every SSTORE2 pointer used: the `acc` reference's (without `flags & 1`),
+///   each pending credit's, the entry's (`entryPtr`) and the key's;
+/// - `keyRecord`: the registry's `pqzKey[ua]` word (`UAStore.Layout` slot 2: `ptr(160) ‖ proven(8) ‖ added(8)`), the holder's;
+/// - `psid`: slot 2; `auditorMode`: slot 0 (`pqz(160) ‖ disclosureMode(8) ‖ auditorMode(8)`); `auditorUA`: slot 7;
+///   `entryPtr`: `entryPtr[entryRef]` (slot 9); `memo`: the bytes of `memos[entryRef]` (slot 10).
+pub const STATE_LAYOUT: &[(&str, u64, u64, usize, usize)] = &[
+    ("disclosureMode", 0, 0, 20, 1),
+    ("auditorMode", 0, 0, 21, 1),
+    ("psid", 2, 0, 0, 32),
+    ("auditorUA", 7, 0, 0, 32),
+    ("acct[U].pendingCount", 8, 0, 0, 8),
+    ("acct[U].rolled", 8, 0, 8, 8),
+    ("acct[U].floor", 8, 0, 16, 8),
+    ("acct[U].cleared", 8, 0, 24, 8),
+    ("acct[U].accBlob", 8, 1, 0, 20),
+    ("acct[U].accU", 8, 1, 20, 2),
+    ("acct[U].accV", 8, 1, 22, 2),
+    ("acct[U].accUnits", 8, 1, 24, 4),
+    ("acct[U].flags", 8, 1, 28, 1),
+    ("acct[U].sendCounter", 8, 2, 0, 8),
+    ("acct[U].accHash", 8, 3, 0, 32),
+    ("acct[U].pending[3]", 8, 4, 0, 32),
+    ("acct[U].accWords[0]", 8, 5, 0, 32),
+    ("entryPtr[V]", 9, 0, 0, 20),
+    ("memos[V]", 10, 0, 0, 32),
+];
+
+/// `PqzCore.INLINE_MAX`, `INLINE_MAX_PQZH` (op 7 of a PQZH token), the `MAT` flag (`acc` in `accWords`).
+const INLINE_MAX: u64 = 16;
+const INLINE_MAX_PQZH: u64 = 10;
+const MAT: u8 = 1;
+
+/// The location fields every words command takes.
+const LOC: &[&str] = &["chainUid", "token", "block", "psid", "blobs", "keyRecord"];
+/// An account's words and a debit's caller fields (the facade sets opTag, the id, `auditorOn`, `salt`, `p`, `sendCounter`).
+const ACCT: &[&str] = &["ua", "account", "pending", "accWords"];
+const DEBIT: &[&str] = &["chainId", "registry", "beneficiaryUA", "fee", "validUntilBlock", "shieldIn", "envelopeBinding"];
+/// An old entry's location.
+const ENTRY: &[&str] = &["chainId", "entryRef", "fromUA", "sendCounter", "entryPtr"];
+/// The raw debits' header fields (feature `vectors`: the vector files give `T` and `p`).
 #[cfg(feature = "vectors")]
 const HEADER: &[&str] =
     &["chainId", "token", "registry", "fromUA", "beneficiaryUA", "fee", "sendCounter", "p", "validUntilBlock", "plainUsed", "chainUid", "envelopeBinding"];
-#[cfg(feature = "vectors")]
 const LEG: &[&str] = &["pk", "ua", "amount"];
 
 /// The allow-list of `cmd`'s fields.
 fn allowed(cmd: &str, field: &str) -> bool {
     let has = |l: &[&str]| l.contains(&field);
+    let debit = |l: &[&str]| has(LOC) || has(ACCT) || has(DEBIT) || has(l);
     match cmd {
         "enc" => has(&["pks", "values"]),
         #[cfg(feature = "vectors")]
@@ -207,18 +281,26 @@ fn allowed(cmd: &str, field: &str) -> bool {
         "proveRegister" => has(&["proofSystemId", "kind", "ua", "kemPk"]),
         "proveKeyRecord" => has(&["proofSystemId", "ua"]),
         #[cfg(feature = "vectors")]
-        "proveTransfer" => has(HEADER) || has(&["proofSystemId", "toUA", "pkT", "pkA", "T", "amount", "memoHash"]),
+        "rawProveTransfer" => has(HEADER) || has(&["proofSystemId", "toUA", "pkT", "pkA", "T", "amount", "memoHash"]),
         #[cfg(feature = "vectors")]
-        "proveBurn" => has(HEADER) || has(&["proofSystemId", "amount", "recipient", "T", "memoHash"]),
+        "rawProveBurn" => has(HEADER) || has(&["proofSystemId", "amount", "recipient", "T", "memoHash"]),
         #[cfg(feature = "vectors")]
-        "proveRefresh" => has(HEADER) || has(&["proofSystemId", "T", "memoHash"]),
+        "rawProveRefresh" => has(HEADER) || has(&["proofSystemId", "T", "memoHash"]),
         #[cfg(feature = "vectors")]
-        "proveTransferMulti" => has(HEADER) || has(&["proofSystemId", "legs", "pkA", "T", "mode"]),
+        "rawProveTransferMulti" => has(HEADER) || has(&["proofSystemId", "legs", "pkA", "T", "mode"]),
         "proveDiscloseSender" => has(&["stmt", "fromUA", "sendCounter", "salt", "auditorOn", "M", "leg"]),
         #[cfg(feature = "vectors")]
-        "proveDisclose" => field == "stmt",
+        "rawProveDisclose" => field == "stmt",
         #[cfg(feature = "vectors")]
-        "openMemo" => has(&["chainUid", "token", "fromUA", "sendCounter", "memo"]),
+        "rawOpenMemo" => has(&["chainUid", "token", "fromUA", "sendCounter", "memo"]),
+        "balance" => has(LOC) || has(ACCT),
+        "proveTransfer" => debit(&["toUA", "pkT", "pkA", "amount", "memoHash"]),
+        "proveBurn" => debit(&["amount", "recipient", "memoHash"]),
+        "proveRefresh" => debit(&["memoHash"]),
+        "proveTransferMulti" => debit(&["legs", "pkA", "mode"]),
+        "auditRead" => has(LOC) || has(ENTRY) || has(&["ua", "leg", "auditorMode", "auditorUA"]),
+        "proveDisclose" => has(LOC) || has(ENTRY) || has(&["ua", "registry", "leg", "kind", "auditorMode", "auditorUA"]),
+        "openMemo" => has(LOC) || has(ENTRY) || field == "memo",
         _ => false,
     }
 }
@@ -252,11 +334,23 @@ impl<'a> Fields<'a> {
     fn word(&self, k: &str) -> Result<Word> {
         self.arr(k)
     }
-    #[cfg(feature = "vectors")]
+    fn opt_word(&self, k: &str) -> Result<Word> {
+        if self.has(k) {
+            self.word(k)
+        } else {
+            Ok([0; 32])
+        }
+    }
+    fn list(&self, k: &str) -> Result<&'a Vec<Value>> {
+        self.get(k)?.as_array().ok_or(Error::Argument)
+    }
+    /// An array of 32-byte words.
+    fn words(&self, k: &str) -> Result<Vec<Word>> {
+        self.list(k)?.iter().map(|w| hex(w)?.try_into().map_err(|_| Error::Argument)).collect()
+    }
     fn pk(&self, k: &str) -> Result<Vec<u8>> {
         pk(hex(self.get(k)?)?)
     }
-    #[cfg(feature = "vectors")]
     fn opt_pk(&self, k: &str) -> Result<Option<Vec<u8>>> {
         self.has(k).then(|| self.pk(k)).transpose()
     }
@@ -273,7 +367,7 @@ impl<'a> Fields<'a> {
             token: self.arr("token")?,
             registry: self.arr("registry")?,
             from_ua: self.word("fromUA")?,
-            beneficiary_ua: if self.has("beneficiaryUA") { self.word("beneficiaryUA")? } else { [0; 32] },
+            beneficiary_ua: self.opt_word("beneficiaryUA")?,
             fee: self.u64("fee")?,
             send_counter: self.u64("sendCounter")?,
             p: self.u64("p")?,
@@ -285,6 +379,24 @@ impl<'a> Fields<'a> {
     }
     fn id(&self) -> Result<Word> {
         system(&self.word("proofSystemId")?)
+    }
+    /// The op 7 legs `{pk, ua, amount}`.
+    fn legs(&self) -> Result<Vec<(Vec<u8>, Word, u64)>> {
+        self.list("legs")?
+            .iter()
+            .map(|l| {
+                let l = Fields::new(l.as_object().ok_or(Error::Argument)?, LEG)?;
+                Ok((l.pk("pk")?, l.word("ua")?, l.u64("amount")?))
+            })
+            .collect()
+    }
+    /// Op 7's `mode`, no default.
+    fn mode(&self) -> Result<Mode> {
+        match self.get("mode")?.as_str() {
+            Some("HASH") => Ok(Mode::Hash),
+            Some("BUNDLE") => Ok(Mode::Bundle),
+            _ => Err(Error::Argument),
+        }
     }
 }
 
@@ -302,7 +414,6 @@ fn pk_ref(b: &[u8]) -> Result<&[u8; PK_BYTES]> {
 }
 
 /// The debit header words a caller gives.
-#[cfg(feature = "vectors")]
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Header {
     chain_id: u64,
@@ -319,14 +430,12 @@ struct Header {
     envelope_binding: Word,
 }
 
-#[cfg(feature = "vectors")]
 fn addr(a: &[u8; 20]) -> Word {
     let mut w = [0u8; 32];
     w.iter_mut().skip(12).zip(a).for_each(|(o, b)| *o = *b);
     w
 }
 
-#[cfg(feature = "vectors")]
 impl Header {
     /// `h` (opTag, id, auditorOn, `M` already set) with the given words.
     fn fill(&self, mut h: [Word; 20]) -> [Word; 20] {
@@ -355,11 +464,276 @@ impl Header {
 /// Op 7's storage mode (`ZetherTypes.TransferMode`, a named request field with no default; owner 2026-11-06): `HASH`
 /// (commit-reveal) keeps the sender memo and its `memoHash`, `BUNDLE` has no memo and `memoHash` 0 (`PqzCore._parseMulti`).
 /// The token's `disclosureMode` decides which one a caller may use; the facade does not guess it.
-#[cfg(feature = "vectors")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Mode {
     Hash,
     Bundle,
+}
+
+// ------------------------------------------------------------------------------------------------------------------------------
+// Raw words → ciphertexts (spec no-decryption-oracle §4.3, §4.4): public data only, before any key use; every refusal `Argument`.
+// ------------------------------------------------------------------------------------------------------------------------------
+
+/// `n` bytes of a storage word from byte `at` counted from its low end (solc's packing).
+fn lo(w: &Word, at: usize, n: usize) -> Result<&[u8]> {
+    w.get(32 - at - n..32 - at).ok_or(Error::Argument)
+}
+
+fn lo_u64(w: &Word, at: usize, n: usize) -> Result<u64> {
+    Ok(lo(w, at, n)?.iter().fold(0u64, |a, b| a << 8 | u64::from(*b)))
+}
+
+fn lo_addr(w: &Word, at: usize) -> Result<[u8; 20]> {
+    lo(w, at, 20)?.try_into().map_err(|_| Error::Argument)
+}
+
+/// Every byte of `w` above the low `used` bytes is zero (nothing else is packed there).
+fn only_low(w: &Word, used: usize) -> Result<()> {
+    w.get(..32 - used).filter(|h| h.iter().all(|b| *b == 0)).map(|_| ()).ok_or(Error::Argument)
+}
+
+/// The SSTORE2 codes of one request (`{address, code}`, each address once); [`Blobs::done`] refuses one that was not used.
+struct Blobs(Vec<([u8; 20], Vec<u8>, bool)>);
+
+impl Blobs {
+    fn new(f: &Fields<'_>) -> Result<Blobs> {
+        let mut v: Vec<([u8; 20], Vec<u8>, bool)> = Vec::new();
+        for b in f.list("blobs")? {
+            let b = Fields::new(b.as_object().ok_or(Error::Argument)?, &["address", "code"])?;
+            let a: [u8; 20] = b.arr("address")?;
+            if v.iter().any(|x| x.0 == a) {
+                return Err(Error::Argument);
+            }
+            v.push((a, b.bytes("code")?, false));
+        }
+        Ok(Blobs(v))
+    }
+    /// The data of the SSTORE2 code at `a` (after its STOP byte).
+    fn data(&mut self, a: &[u8; 20]) -> Result<&[u8]> {
+        let b = self.0.iter_mut().find(|x| x.0 == *a && *a != [0; 20]).ok_or(Error::Argument)?;
+        b.2 = true;
+        match b.1.split_first() {
+            Some((0, d)) => Ok(d),
+            _ => Err(Error::Argument),
+        }
+    }
+    fn done(&self) -> Result<()> {
+        if self.0.iter().all(|x| x.2) {
+            Ok(())
+        } else {
+            Err(Error::Argument)
+        }
+    }
+}
+
+/// The registered PQZ key of the holder whose registry word `pqzKey[ua]` is `record` (`ptr ‖ proven ‖ added`): proven, its
+/// code `0x00 ‖ pk` of this set's length (`PqzCore._keyPtr`). The caller compares it with the handle's key before any use.
+fn registered_key(record: &Word, blobs: &mut Blobs) -> Result<Vec<u8>> {
+    only_low(record, 22)?;
+    let (ptr, proven, added) = (lo_addr(record, 0)?, lo_u64(record, 20, 1)?, lo_u64(record, 21, 1)?);
+    if proven != 1 || added > 1 {
+        return Err(Error::Argument);
+    }
+    pk(blobs.data(&ptr)?.to_vec())
+}
+
+/// `u ‖ v` (64-bit lanes) of a stored entry: the packed `u` at byte `u_off`, `v` at `v_off` of the data (`PqzCt.loadBlob`); an
+/// offset outside the data is refused (the contract would read zeros past the code).
+fn load(d: &[u8], u_off: usize, v_off: usize) -> Result<Vec<u8>> {
+    let part = |o: usize, n: usize| d.get(o..o.checked_add(n)?).and_then(unpack);
+    Ok([part(u_off, PKP).ok_or(Error::Argument)?, part(v_off, VP).ok_or(Error::Argument)?].concat())
+}
+
+/// `c += x` lane-wise (`x` 64-bit lanes); the sums stay below 2^64 (at most `INLINE_MAX + 2` terms `< q < 2^54`).
+fn add(c: &mut [u64], x: &[u8]) {
+    c.iter_mut().zip(x.chunks_exact(8)).for_each(|(a, b)| *a += b.iter().fold(0u64, |s, y| s << 8 | u64::from(*y)));
+}
+
+/// `c += Trivial(digits(amount))`: `v[i] += Δ·digit_i` (`PqzCt.addTrivial`).
+fn add_trivial(c: &mut [u64], amount: u64) {
+    let delta = DELTA.unsigned_abs();
+    c.iter_mut().skip(PK_BYTES / 8).take(16).enumerate().for_each(|(i, a)| *a += delta * ((amount >> (4 * i)) & 15));
+}
+
+/// The account struct `acct[ua]` (`PqzCore.Account`, slots 0..4 as pinned).
+struct Acct {
+    count: u64,
+    rolled: u64,
+    floor: u64,
+    cleared: u64,
+    acc_blob: [u8; 20],
+    acc_u: usize,
+    acc_v: usize,
+    units: u64,
+    flags: u8,
+    send_counter: u64,
+    acc_hash: Word,
+}
+
+fn acct(w: &[Word]) -> Result<Acct> {
+    let [s0, s1, s2, s3] = w else { return Err(Error::Argument) };
+    only_low(s1, 29)?;
+    only_low(s2, 8)?;
+    Ok(Acct {
+        count: lo_u64(s0, 0, 8)?,
+        rolled: lo_u64(s0, 8, 8)?,
+        floor: lo_u64(s0, 16, 8)?,
+        cleared: lo_u64(s0, 24, 8)?,
+        acc_blob: lo_addr(s1, 0)?,
+        acc_u: lo_u64(s1, 20, 2)? as usize,
+        acc_v: lo_u64(s1, 22, 2)? as usize,
+        units: lo_u64(s1, 24, 4)?,
+        flags: lo_u64(s1, 28, 1)? as u8,
+        send_counter: lo_u64(s2, 0, 8)?,
+        acc_hash: *s3,
+    })
+}
+
+/// `ua`'s own account from its raw words: the rebuilt `T` (`T = acc + Σ pending[rolled, p) + Trivial(shieldIn)`, reduced, as
+/// `PqzCore._total` with `p ≥ rolled`), the `p` the facade chooses (CTR-PQZ-06: `pendingCount` or the largest `p` the inline
+/// window and `K_MAX` allow; never from the request), the account's `sendCounter` and its registered key.
+struct Own {
+    t: Vec<u8>,
+    p: u64,
+    send_counter: u64,
+    key: Vec<u8>,
+}
+
+/// [`Own`] of a request (`psid` first, then the words); `op7`: op 7 (its PQZH inline window); `debit`: a debit's
+/// `Trivial(shieldIn)` term.
+fn own(f: &Fields<'_>, op7: bool, debit: bool) -> Result<(Word, Own)> {
+    let id = system(&f.word("psid")?)?;
+    let shield_in = if debit { f.u64("shieldIn")? } else { 0 };
+    let mut blobs = Blobs::new(f)?;
+    let key = registered_key(&f.word("keyRecord")?, &mut blobs)?;
+    let a = acct(&f.words("account")?)?;
+    let acc_words = f.words("accWords")?;
+    let pending: Vec<(u64, Word)> = f
+        .list("pending")?
+        .iter()
+        .map(|e| {
+            let e = Fields::new(e.as_object().ok_or(Error::Argument)?, &["index", "word"])?;
+            Ok((e.u64("index")?, e.word("word")?))
+        })
+        .collect::<Result<_>>()?;
+    if !(a.cleared <= a.floor && a.floor <= a.rolled && a.rolled <= a.count) {
+        return Err(Error::Argument);
+    }
+    // unitsOf(T) = accUnits + 1 + (p − rolled) ≤ K_MAX
+    let room = (K_MAX as u64).checked_sub(a.units + 1).ok_or(Error::Argument)?;
+    let inline = if op7 && id == PQZH_ID { INLINE_MAX_PQZH } else { INLINE_MAX };
+    let p = a.count.min(a.rolled.saturating_add(inline.min(room)));
+    let mut c = vec![0u64; CT_BYTES / 8];
+    if a.flags & MAT != 0 {
+        // the slots hold not(stream word); the stream (CTP bytes) hashes to accHash
+        if acc_words.len() != ACC_WORDS {
+            return Err(Error::Argument);
+        }
+        let stream: Vec<u8> = acc_words.iter().flat_map(|w| w.map(|b| !b)).take(CTP).collect();
+        if crate::keccak256(&stream) != a.acc_hash {
+            return Err(Error::Argument);
+        }
+        add(&mut c, &unpack(&stream).ok_or(Error::Argument)?);
+    } else if !acc_words.is_empty() {
+        return Err(Error::Argument);
+    } else if a.acc_blob != [0; 20] {
+        add(&mut c, &load(blobs.data(&a.acc_blob)?, a.acc_u, a.acc_v)?);
+    }
+    // the window [rolled, p), selected by index only: exactly those, in order
+    if pending.len() as u64 != p - a.rolled {
+        return Err(Error::Argument);
+    }
+    for (k, (i, e)) in pending.iter().enumerate() {
+        if *i != a.rolled + k as u64 || *e == [0; 32] {
+            return Err(Error::Argument);
+        }
+        // `vOff == 0`: a TRIVIAL entry, its amount the low 64 bits of the blob field (never `blob == 0`)
+        let v_off = lo_u64(e, 8, 2)? as usize;
+        if v_off == 0 {
+            add_trivial(&mut c, lo_u64(e, 12, 8)?);
+        } else {
+            add(&mut c, &load(blobs.data(&lo_addr(e, 12)?)?, lo_u64(e, 10, 2)? as usize, v_off)?);
+        }
+    }
+    add_trivial(&mut c, shield_in);
+    blobs.done()?;
+    let t = c.iter().flat_map(|x| (x % Q).to_be_bytes()).collect();
+    Ok((id, Own { t, p, send_counter: a.send_counter, key }))
+}
+
+/// `entryRef = keccak256(abi.encode(TAG_ENTRY, chainId, chainUid, token, fromUA, sendCounter))` (`PqzCore.entryRefOf`).
+fn entry_ref(chain_id: u64, chain_uid: &Word, token: &[u8; 20], from: &Word, counter: u64) -> Word {
+    let tag = crate::keccak256(b"SCAAS-PQZ-ENTRY-V1");
+    crate::keccak256(&[tag, u64_word(chain_id), *chain_uid, addr(token), *from, u64_word(counter)].concat())
+}
+
+/// An old entry, located by its sender's `fromUA` and `sendCounter` (the request's `entryRef` must recompute from them):
+/// `R` of its op blob (`PqzCore.rOf`: the data less the trailing `v_f`) and the blob's shape `(G, M, auditorOn)`.
+struct Entry {
+    r: Vec<u8>,
+    g: usize,
+    m: usize,
+    aud: bool,
+    entry_ref: Word,
+}
+
+fn entry(f: &Fields<'_>, blobs: &mut Blobs) -> Result<Entry> {
+    let (chain_uid, token) = (f.word("chainUid")?, f.arr("token")?);
+    let er = entry_ref(f.u64("chainId")?, &chain_uid, &token, &f.word("fromUA")?, f.u64("sendCounter")?);
+    if er != f.word("entryRef")? {
+        return Err(Error::Argument);
+    }
+    let ptr = f.word("entryPtr")?;
+    only_low(&ptr, 20)?;
+    let d = blobs.data(&lo_addr(&ptr, 0)?)?;
+    let r = d.get(..d.len().checked_sub(VP).ok_or(Error::Argument)?).ok_or(Error::Argument)?.to_vec();
+    // `PqzCore._bundleShape`: `salt ‖ u_0 … u_{G−1} ‖ (v_j ‖ [v_{a,j}] ‖ UA_j)_{j<M}`, unique by length for M ≤ 8
+    let rem = r.len().checked_sub(16 + PKP).ok_or(Error::Argument)?;
+    let g = 1 + rem / PKP;
+    let rem = rem % PKP;
+    for aud in [true, false] {
+        let ls = 32 + VP * (1 + aud as usize);
+        let m = rem / ls;
+        if m != 0 && m <= 8 && rem == ls * m && groups(m, aud) == g {
+            return Ok(Entry { r, g, m, aud, entry_ref: er });
+        }
+    }
+    Err(Error::Argument)
+}
+
+impl Entry {
+    fn leg_at(&self, j: usize) -> usize {
+        16 + PKP * self.g + (32 + VP * (1 + self.aud as usize)) * j
+    }
+    /// `UA_j` of leg `j`.
+    fn owner(&self, j: usize) -> Result<Word> {
+        let end = self.leg_at(j + 1);
+        self.r.get(end - 32..end).and_then(|w| w.try_into().ok()).ok_or(Error::Argument)
+    }
+    /// Leg `j` as a ciphertext (`PqzCore._legOf`): `u_{g(j)} ‖ v_j`, or the auditor copy `v_{a,j}`; canonical.
+    fn ct(&self, j: usize, auditor: bool) -> Result<Vec<u8>> {
+        if j >= self.m || (auditor && !self.aud) {
+            return Err(Error::Argument);
+        }
+        let u_off = 16 + PKP * (j / legs_per_group(self.aud));
+        let leg = self.leg_at(j);
+        let ct = load(&self.r, u_off, if auditor { leg + VP } else { leg })?;
+        if coeffs_ok(&ct) {
+            Ok(ct)
+        } else {
+            Err(Error::Argument)
+        }
+    }
+}
+
+/// The auditor of the token (`auditorMode` not NONE, `auditorUA`) from its two raw words.
+fn auditor(f: &Fields<'_>) -> Result<Word> {
+    let w = f.word("auditorMode")?;
+    only_low(&w, 22)?;
+    if !matches!(lo_u64(&w, 21, 1)?, 1 | 2) {
+        return Err(Error::Argument);
+    }
+    f.word("auditorUA")
 }
 
 /// The typed request of a command.
@@ -370,75 +744,99 @@ enum Req {
     Dec { ct: Vec<u8>, window: usize },
     Register { id: Word, kind: u16, ua: Word, kem_pk: Option<Vec<u8>> },
     KeyRecord { id: Word, ua: Word },
-    #[cfg(feature = "vectors")]
+    Balance { t: Vec<u8>, p: u64, send_counter: u64 },
     Transfer { id: Word, h: Header, to_ua: Word, pk_t: Vec<u8>, pk_a: Option<Vec<u8>>, t: Vec<u8>, amount: u64, memo_hash: Word },
-    #[cfg(feature = "vectors")]
     Burn { id: Word, h: Header, amount: u64, recipient: Word, t: Vec<u8>, memo_hash: Word },
-    #[cfg(feature = "vectors")]
     Refresh { id: Word, h: Header, t: Vec<u8>, memo_hash: Word },
-    #[cfg(feature = "vectors")]
     Multi { id: Word, h: Header, legs: Vec<(Vec<u8>, Word, u64)>, pk_a: Option<Vec<u8>>, t: Vec<u8>, mode: Mode },
     DiscloseSender { stmt: Vec<u8>, from_ua: Word, send_counter: u64, salt: [u8; 16], aud: bool, multi: Option<(usize, usize)> },
     #[cfg(feature = "vectors")]
     Disclose { stmt: Vec<u8> },
-    #[cfg(feature = "vectors")]
-    OpenMemo { chain_uid: Word, token: [u8; 20], from_ua: Word, send_counter: u64, memo: Vec<u8> },
+    /// A rebuilt leg: `auditRead` (`form` `None`) or `proveDisclose` (op 5 `words`, the amount filled after decryption).
+    Leg { form: Option<Form>, words: [Word; DISC_WORDS], ct: Vec<u8>, window: usize },
+    /// `expect`: the entry's `(auditorOn, UA_j)` the opened memo must name (`None` only for the raw form).
+    OpenMemo { chain_uid: Word, token: [u8; 20], from_ua: Word, send_counter: u64, memo: Vec<u8>, expect: Option<(bool, Vec<Word>)> },
 }
 
-fn req(cmd: &str, f: &Fields<'_>) -> Result<Req> {
+/// A words debit's header: the caller's fields, `p` and `sendCounter` from the account.
+fn own_header(f: &Fields<'_>, o: &Own) -> Result<Header> {
+    Ok(Header {
+        chain_id: f.u64("chainId")?,
+        token: f.arr("token")?,
+        registry: f.arr("registry")?,
+        from_ua: f.word("ua")?,
+        beneficiary_ua: f.opt_word("beneficiaryUA")?,
+        fee: f.u64("fee")?,
+        send_counter: o.send_counter,
+        p: o.p,
+        valid_until_block: f.u64("validUntilBlock")?,
+        plain_used: f.u64("shieldIn")?,
+        chain_uid: f.word("chainUid")?,
+        envelope_binding: f.word("envelopeBinding")?,
+    })
+}
+
+/// The typed request and, for a words command, the registered key the handle must hold (checked before any key use).
+fn req(cmd: &str, f: &Fields<'_>) -> Result<(Req, Option<Vec<u8>>)> {
+    let debit = |op7: bool| -> Result<(Word, Own, Header)> {
+        let (id, o) = own(f, op7, true)?;
+        let h = own_header(f, &o)?;
+        Ok((id, o, h))
+    };
     Ok(match cmd {
         "enc" => {
-            let pks = f.get("pks")?.as_array().ok_or(Error::Argument)?.iter().map(|p| pk(hex(p)?)).collect::<Result<_>>()?;
-            let values = f.get("values")?.as_array().ok_or(Error::Argument)?.iter().map(|v| v.as_u64().ok_or(Error::Argument));
-            Req::Enc { pks, values: values.collect::<Result<_>>()? }
+            let pks = f.list("pks")?.iter().map(|p| pk(hex(p)?)).collect::<Result<_>>()?;
+            let values = f.list("values")?.iter().map(|v| v.as_u64().ok_or(Error::Argument));
+            (Req::Enc { pks, values: values.collect::<Result<_>>()? }, None)
         }
         #[cfg(feature = "vectors")]
         "dec" => {
             let window = if f.has("window") { f.u64("window")? } else { 0 };
-            Req::Dec { ct: f.ct("ct")?, window: usize::try_from(window).ok().filter(|w| *w < 4).ok_or(Error::Argument)? }
+            (Req::Dec { ct: f.ct("ct")?, window: usize::try_from(window).ok().filter(|w| *w < 4).ok_or(Error::Argument)? }, None)
         }
-        "proveRegister" => Req::Register {
-            id: f.id()?,
-            kind: u16::try_from(f.u64("kind")?).map_err(|_| Error::Argument)?,
-            ua: f.word("ua")?,
-            kem_pk: f.has("kemPk").then(|| f.bytes("kemPk")).transpose()?,
-        },
-        "proveKeyRecord" => Req::KeyRecord { id: f.id()?, ua: f.word("ua")? },
+        "proveRegister" => (
+            Req::Register {
+                id: f.id()?,
+                kind: u16::try_from(f.u64("kind")?).map_err(|_| Error::Argument)?,
+                ua: f.word("ua")?,
+                kem_pk: f.has("kemPk").then(|| f.bytes("kemPk")).transpose()?,
+            },
+            None,
+        ),
+        "proveKeyRecord" => (Req::KeyRecord { id: f.id()?, ua: f.word("ua")? }, None),
         #[cfg(feature = "vectors")]
-        "proveTransfer" => Req::Transfer {
-            id: f.id()?,
-            h: f.header()?,
-            to_ua: f.word("toUA")?,
-            pk_t: f.pk("pkT")?,
-            pk_a: f.opt_pk("pkA")?,
-            t: f.ct("T")?,
-            amount: f.u64("amount")?,
-            memo_hash: f.word("memoHash")?,
-        },
+        "rawProveTransfer" => (
+            Req::Transfer {
+                id: f.id()?,
+                h: f.header()?,
+                to_ua: f.word("toUA")?,
+                pk_t: f.pk("pkT")?,
+                pk_a: f.opt_pk("pkA")?,
+                t: f.ct("T")?,
+                amount: f.u64("amount")?,
+                memo_hash: f.word("memoHash")?,
+            },
+            None,
+        ),
         #[cfg(feature = "vectors")]
-        "proveBurn" => Req::Burn {
-            id: f.id()?,
-            h: f.header()?,
-            amount: f.u64("amount")?,
-            recipient: f.word("recipient")?,
-            t: f.ct("T")?,
-            memo_hash: f.word("memoHash")?,
-        },
+        "rawProveBurn" => (
+            Req::Burn {
+                id: f.id()?,
+                h: f.header()?,
+                amount: f.u64("amount")?,
+                recipient: f.word("recipient")?,
+                t: f.ct("T")?,
+                memo_hash: f.word("memoHash")?,
+            },
+            None,
+        ),
         #[cfg(feature = "vectors")]
-        "proveRefresh" => Req::Refresh { id: f.id()?, h: f.header()?, t: f.ct("T")?, memo_hash: f.word("memoHash")? },
+        "rawProveRefresh" => (Req::Refresh { id: f.id()?, h: f.header()?, t: f.ct("T")?, memo_hash: f.word("memoHash")? }, None),
         #[cfg(feature = "vectors")]
-        "proveTransferMulti" => {
-            let legs = f.get("legs")?.as_array().ok_or(Error::Argument)?.iter().map(|l| {
-                let l = Fields::new(l.as_object().ok_or(Error::Argument)?, LEG)?;
-                Ok((l.pk("pk")?, l.word("ua")?, l.u64("amount")?))
-            });
-            let mode = match f.get("mode")?.as_str() {
-                Some("HASH") => Mode::Hash,
-                Some("BUNDLE") => Mode::Bundle,
-                _ => return Err(Error::Argument),
-            };
-            Req::Multi { id: f.id()?, h: f.header()?, legs: legs.collect::<Result<_>>()?, pk_a: f.opt_pk("pkA")?, t: f.ct("T")?, mode }
-        }
+        "rawProveTransferMulti" => (
+            Req::Multi { id: f.id()?, h: f.header()?, legs: f.legs()?, pk_a: f.opt_pk("pkA")?, t: f.ct("T")?, mode: f.mode()? },
+            None,
+        ),
         "proveDiscloseSender" => {
             let multi = match (f.has("M"), f.has("leg")) {
                 (false, false) => None,
@@ -448,54 +846,177 @@ fn req(cmd: &str, f: &Fields<'_>) -> Result<Req> {
                 )),
                 _ => return Err(Error::Argument),
             };
-            Req::DiscloseSender {
-                stmt: f.bytes("stmt")?,
-                from_ua: f.word("fromUA")?,
-                send_counter: f.u64("sendCounter")?,
-                salt: f.arr("salt")?,
-                aud: f.get("auditorOn")?.as_bool().ok_or(Error::Argument)?,
-                multi,
-            }
+            (
+                Req::DiscloseSender {
+                    stmt: f.bytes("stmt")?,
+                    from_ua: f.word("fromUA")?,
+                    send_counter: f.u64("sendCounter")?,
+                    salt: f.arr("salt")?,
+                    aud: f.get("auditorOn")?.as_bool().ok_or(Error::Argument)?,
+                    multi,
+                },
+                None,
+            )
         }
         #[cfg(feature = "vectors")]
-        "proveDisclose" => Req::Disclose { stmt: f.bytes("stmt")? },
+        "rawProveDisclose" => (Req::Disclose { stmt: f.bytes("stmt")? }, None),
         #[cfg(feature = "vectors")]
-        "openMemo" => Req::OpenMemo {
-            chain_uid: f.word("chainUid")?,
-            token: f.arr("token")?,
-            from_ua: f.word("fromUA")?,
-            send_counter: f.u64("sendCounter")?,
-            memo: f.bytes("memo")?,
-        },
+        "rawOpenMemo" => (
+            Req::OpenMemo {
+                chain_uid: f.word("chainUid")?,
+                token: f.arr("token")?,
+                from_ua: f.word("fromUA")?,
+                send_counter: f.u64("sendCounter")?,
+                memo: f.bytes("memo")?,
+                expect: None,
+            },
+            None,
+        ),
+        "balance" => {
+            let (_, o) = own(f, false, false)?;
+            (Req::Balance { t: o.t, p: o.p, send_counter: o.send_counter }, Some(o.key))
+        }
+        "proveTransfer" => {
+            let (id, o, h) = debit(false)?;
+            let r = Req::Transfer {
+                id,
+                h,
+                to_ua: f.word("toUA")?,
+                pk_t: f.pk("pkT")?,
+                pk_a: f.opt_pk("pkA")?,
+                t: o.t,
+                amount: f.u64("amount")?,
+                memo_hash: f.word("memoHash")?,
+            };
+            (r, Some(o.key))
+        }
+        "proveBurn" => {
+            let (id, o, h) = debit(false)?;
+            (Req::Burn { id, h, amount: f.u64("amount")?, recipient: f.word("recipient")?, t: o.t, memo_hash: f.word("memoHash")? }, Some(o.key))
+        }
+        "proveRefresh" => {
+            let (id, o, h) = debit(false)?;
+            (Req::Refresh { id, h, t: o.t, memo_hash: f.word("memoHash")? }, Some(o.key))
+        }
+        "proveTransferMulti" => {
+            let (id, o, h) = debit(true)?;
+            (Req::Multi { id, h, legs: f.legs()?, pk_a: f.opt_pk("pkA")?, t: o.t, mode: f.mode()? }, Some(o.key))
+        }
+        "auditRead" | "proveDisclose" => {
+            let id = system(&f.word("psid")?)?;
+            let mut blobs = Blobs::new(f)?;
+            let key = registered_key(&f.word("keyRecord")?, &mut blobs)?;
+            let e = entry(f, &mut blobs)?;
+            blobs.done()?;
+            let j = usize::try_from(f.u64("leg")?).map_err(|_| Error::Argument)?;
+            let form = match (cmd, f.has("kind").then(|| f.get("kind").map(Value::as_str))) {
+                ("auditRead", None) => None,
+                ("proveDisclose", Some(Ok(Some("RECEIVER_X")))) => Some(Form::DiscloseReceiver),
+                ("proveDisclose", Some(Ok(Some("AUDITOR")))) => Some(Form::DiscloseAuditor),
+                _ => return Err(Error::Argument),
+            };
+            let auditor_read = form != Some(Form::DiscloseReceiver);
+            // the role: the leg's owner, or the token's auditor (its words only then, and the entry has the copies)
+            if f.has("auditorMode") != auditor_read || f.has("auditorUA") != auditor_read {
+                return Err(Error::Argument);
+            }
+            let holder = if auditor_read { auditor(f)? } else { e.owner(j)? };
+            let ct = e.ct(j, auditor_read)?;
+            let window = if auditor_read { j % legs_per_group(true) } else { 0 };
+            let mut words = Disclose::words(form.unwrap_or(Form::DiscloseAuditor), &id);
+            if let Some(form) = form {
+                for (i, w) in [
+                    (2, u64_word(f.u64("chainId")?)),
+                    (3, f.word("chainUid")?),
+                    (4, addr(&f.arr("token")?)),
+                    (5, addr(&f.arr("registry")?)),
+                    (6, e.entry_ref),
+                    (8, u64_word(if form == Form::DiscloseAuditor { 2 + 256 * window as u64 } else { 1 })),
+                ] {
+                    *words.get_mut(i).ok_or(Error::Argument)? = w;
+                }
+            } else if f.has("registry") {
+                return Err(Error::Argument);
+            }
+            // `keyRecord` is `ua`'s; `ua` is the leg's owner `UA_j` or the token's auditor
+            if holder != f.word("ua")? {
+                return Err(Error::Argument);
+            }
+            (Req::Leg { form, words, ct, window }, Some(key))
+        }
+        "openMemo" => {
+            system(&f.word("psid")?)?;
+            let mut blobs = Blobs::new(f)?;
+            let key = registered_key(&f.word("keyRecord")?, &mut blobs)?;
+            let e = entry(f, &mut blobs)?;
+            blobs.done()?;
+            let memo = f.bytes("memo")?;
+            // the memo of this entry: its salt the blob's, its length `16 + 2 + 40·M` for the blob's M
+            if memo.get(..16) != e.r.get(..16) || memo.len() != pqz_ffi::memo::memo_len(e.m) {
+                return Err(Error::Argument);
+            }
+            let uas = (0..e.m).map(|j| e.owner(j)).collect::<Result<_>>()?;
+            let r = Req::OpenMemo {
+                chain_uid: f.word("chainUid")?,
+                token: f.arr("token")?,
+                from_ua: f.word("fromUA")?,
+                send_counter: f.u64("sendCounter")?,
+                memo,
+                expect: Some((e.aud, uas)),
+            };
+            (r, Some(key))
+        }
         _ => return Err(Error::Argument),
     })
 }
 
-/// A PQZ command as the facade runs it: its name, its fields (each on the command's allow-list) and their typed values.
-/// Public data only.
+/// A PQZ command as the facade runs it: its name, its fields (each on the command's allow-list), their typed values and, for a
+/// words command, the registered key the handle must hold. Public data only.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PqzCmd {
     cmd: &'static str,
     v: Map<String, Value>,
     req: Req,
+    key: Option<Vec<u8>>,
 }
 
 impl PqzCmd {
     /// `json` (at most [`CMD_MAX`] bytes, depth [`CMD_DEPTH`], the bounded reader) as command `cmd`: an object whose fields
     /// are all on `cmd`'s allow-list and each of its type; else `Argument` (an unknown command, a `key` or any other field
     /// not on the list, a missing field, a number other than a `u64`, a key or ciphertext of another length or not
-    /// canonical) or `PqzSetMismatch` (a `proofSystemId` not of this build).
+    /// canonical, raw words that do not parse, check or rebuild) or `PqzSetMismatch` (a `proofSystemId` or `psid` not of this
+    /// build).
     pub fn from_json(cmd: &str, json: &[u8]) -> Result<PqzCmd> {
         let cmd = *COMMANDS.iter().find(|c| **c == cmd).ok_or(Error::Argument)?;
         let Value::Object(v) = bounded::json(json, CMD_MAX, CMD_DEPTH)? else { return Err(Error::Argument) };
         if !v.keys().all(|k| allowed(cmd, k)) {
             return Err(Error::Argument);
         }
-        let req = req(cmd, &Fields(&v))?;
-        Ok(PqzCmd { cmd, v, req })
+        let (req, key) = req(cmd, &Fields(&v))?;
+        Ok(PqzCmd { cmd, v, req, key })
     }
     pub fn cmd(&self) -> &'static str {
         self.cmd
+    }
+    /// Test-only (feature `vectors`): what a words command rebuilt from its words, before any key use: `{T, p, sendCounter}`
+    /// of an account, `{ct, window, words}` of an entry leg, `{auditorOn, uas}` a memo must name; the registered `key`.
+    #[cfg(feature = "vectors")]
+    pub fn vectors_rebuilt(&self) -> Value {
+        let mut v = match &self.req {
+            Req::Balance { t, p, send_counter } => json!({"T": to_hex(t), "p": p, "sendCounter": send_counter}),
+            Req::Transfer { h, t, .. } | Req::Burn { h, t, .. } | Req::Refresh { h, t, .. } | Req::Multi { h, t, .. } => {
+                json!({"T": to_hex(t), "p": h.p, "sendCounter": h.send_counter})
+            }
+            Req::Leg { words, ct, window, .. } => {
+                json!({"ct": to_hex(ct), "window": window, "words": words.iter().map(|w| to_hex(w)).collect::<Vec<_>>()})
+            }
+            Req::OpenMemo { expect: Some((aud, uas)), .. } => json!({"auditorOn": aud, "uas": uas.iter().map(|w| to_hex(w)).collect::<Vec<_>>()}),
+            _ => json!({}),
+        };
+        if let (Some(o), Some(k)) = (v.as_object_mut(), &self.key) {
+            o.insert("key".into(), to_hex(k).into());
+        }
+        v
     }
     /// The fields as JSON (what [`PqzCmd::from_json`] reads back to the same command).
     pub fn to_json(&self) -> String {
@@ -525,6 +1046,22 @@ impl Draw {
             memo_key: None,
         })
     }
+    /// A transfer's salt: fresh from the OS RNG (feature `vectors`: the generator's, when given).
+    fn salt(&self) -> Result<[u8; 16]> {
+        #[cfg(feature = "vectors")]
+        if let Some(s) = self.salt {
+            return Ok(s);
+        }
+        os16()
+    }
+    /// The memo's key seed: `seed32` (feature `vectors`: the generator's, when given).
+    fn memo_key<'a>(&'a self, seed32: &'a [u8]) -> &'a [u8] {
+        #[cfg(feature = "vectors")]
+        if let Some(k) = &self.memo_key {
+            return k;
+        }
+        seed32
+    }
     /// Test-only (feature `vectors`): the generator's randomness (`seed_enc`, `salt`, the memo key in place of `seed32`).
     #[cfg(feature = "vectors")]
     pub fn vectors(rnd32: [u8; 32], seed_enc: Option<[u8; 32]>, salt: Option<[u8; 16]>, memo_key: Option<[u8; 32]>) -> Draw {
@@ -538,7 +1075,6 @@ fn os32() -> Result<[u8; 32]> {
     Ok(b)
 }
 
-#[cfg(feature = "vectors")]
 fn os16() -> Result<[u8; 16]> {
     let mut b = [0u8; 16];
     OsRng.try_fill_bytes(&mut b).map_err(|_| Error::Rng)?;
@@ -566,10 +1102,8 @@ impl Drop for Wiped {
     }
 }
 
-#[cfg(feature = "vectors")]
 struct WipedMulti(pqzl::EncMulti);
 
-#[cfg(feature = "vectors")]
 impl Drop for WipedMulti {
     fn drop(&mut self) {
         for g in &mut self.0.groups {
@@ -584,7 +1118,6 @@ impl Drop for WipedMulti {
 }
 
 /// `Σ M_i 16^i` of a decryption, as a `u64` (else `Argument`: not a balance); the noise wiped (CTR-PQZ-14: it never leaves).
-#[cfg(feature = "vectors")]
 fn value(d: Option<([i64; 16], [i64; 16])>) -> Result<u64> {
     let (m, mut noise) = d.ok_or(Error::Argument)?;
     noise.zeroize();
@@ -601,6 +1134,14 @@ fn prove(op: u8, stmt: &[u8], wit: &[u8], rnd32: &[u8; 32]) -> Result<Vec<u8>> {
 #[cfg(feature = "vectors")]
 thread_local! {
     static PROVER_CALLS: core::cell::Cell<usize> = const { core::cell::Cell::new(0) };
+    static KEY_USES: core::cell::Cell<usize> = const { core::cell::Cell::new(0) };
+}
+
+/// Test-only (feature `vectors`): how many times a handle on this thread rebuilt its key (every secret operation of a command).
+/// A refusal of the words (parse, consistency, leg, role) comes before any (spec no-decryption-oracle §5: "key unused").
+#[cfg(feature = "vectors")]
+pub fn vectors_key_uses() -> usize {
+    KEY_USES.with(|n| n.get())
 }
 
 /// Test-only (feature `vectors`): how many calls on this thread reached pqz-core's prover. A refusal of the facade's own
@@ -609,6 +1150,14 @@ thread_local! {
 #[cfg(feature = "vectors")]
 pub fn vectors_prover_calls() -> usize {
     PROVER_CALLS.with(|n| n.get())
+}
+
+/// A debit's answer with the `p` it was proven at (the transaction's `p`).
+fn with_p(mut v: Value, h: &Header) -> Value {
+    if let Some(o) = v.as_object_mut() {
+        o.insert("p".into(), h.p.into());
+    }
+    v
 }
 
 fn proved(stmt: &[u8], proof: &[u8]) -> Value {
@@ -716,6 +1265,8 @@ impl PqzKey {
     /// `f` over `seed32` and the key pair rebuilt from it, under the store's read guard: `KeyRevoked` once the wallet was
     /// locked or freed.
     fn with_sk<T>(&self, f: impl FnOnce(&[u8], &Sk) -> Result<T>) -> Result<T> {
+        #[cfg(feature = "vectors")]
+        KEY_USES.with(|n| n.set(n.get() + 1));
         self.secret.with(|seed32| f(seed32, &keygen(seed32)?))?
     }
 
@@ -728,6 +1279,10 @@ impl PqzKey {
     }
 
     fn run(&self, c: &PqzCmd, d: &Draw) -> Result<String> {
+        // a words command: the handle holds the key registered for the account, leg or role the words name (before any use)
+        if c.key.as_ref().is_some_and(|k| *k != self.pk) {
+            return Err(Error::Argument);
+        }
         let out = match &c.req {
             Req::Enc { pks, values } => {
                 let (u, vs) = enc(pks, values)?;
@@ -748,24 +1303,24 @@ impl PqzKey {
                 let message = crate::ua_message(crate::PQZ_SCHEME, &tag, &crate::ua8::pqz_key_digest(ua, &kh))?;
                 self.register(id, &message, &d.rnd32)?
             }
-            #[cfg(feature = "vectors")]
-            Req::Transfer { id, h, to_ua, pk_t, pk_a, t, amount, memo_hash } => {
-                self.with_sk(|seed32, sk| self.transfer(seed32, sk, d, id, h, to_ua, pk_t, pk_a.as_deref(), t, *amount, memo_hash))?
+            Req::Balance { t, p, send_counter } => {
+                let t: &[u8; CT_BYTES] = t.as_slice().try_into().map_err(|_| Error::Argument)?;
+                json!({"value": self.with_sk(|_, sk| value(pqzl::dec(&sk.0.s, t)))?, "p": p, "sendCounter": send_counter})
             }
-            #[cfg(feature = "vectors")]
+            Req::Transfer { id, h, to_ua, pk_t, pk_a, t, amount, memo_hash } => {
+                with_p(self.with_sk(|seed32, sk| self.transfer(seed32, sk, d, id, h, to_ua, pk_t, pk_a.as_deref(), t, *amount, memo_hash))?, h)
+            }
             Req::Burn { id, h, amount, recipient, t, memo_hash } => self.with_sk(|_, sk| {
                 let mut hd = h.fill(Debit::header(Form::Burn, id));
                 *hd.get_mut(H_AMOUNT).ok_or(Error::Argument)? = u64_word(*amount);
                 *hd.get_mut(H_RECIPIENT).ok_or(Error::Argument)? = *recipient;
                 self.debit_own(sk, d, Form::Burn, hd, t, amount.checked_add(h.fee), memo_hash)
-            })?,
-            #[cfg(feature = "vectors")]
+            }).map(|v| with_p(v, h))?,
             Req::Refresh { id, h, t, memo_hash } => self.with_sk(|_, sk| {
                 self.debit_own(sk, d, Form::Refresh, h.fill(Debit::header(Form::Refresh, id)), t, Some(h.fee), memo_hash)
-            })?,
-            #[cfg(feature = "vectors")]
+            }).map(|v| with_p(v, h))?,
             Req::Multi { id, h, legs, pk_a, t, mode } => {
-                self.with_sk(|seed32, sk| self.multi(seed32, sk, d, id, h, legs, pk_a.as_deref(), t, *mode))?
+                with_p(self.with_sk(|seed32, sk| self.multi(seed32, sk, d, id, h, legs, pk_a.as_deref(), t, *mode))?, h)
             }
             Req::DiscloseSender { stmt, from_ua, send_counter, salt, aud, multi } => {
                 stmt_id(stmt)?;
@@ -782,13 +1337,35 @@ impl PqzKey {
                 let wit = Zeroizing::new(self.with_sk(|_, sk| Ok(wit_key(&sk.0)))?);
                 proved(stmt, &prove(Form::DiscloseReceiver.op(), stmt, &wit, &d.rnd32)?)
             }
-            #[cfg(feature = "vectors")]
-            Req::OpenMemo { chain_uid, token, from_ua, send_counter, memo } => self.with_sk(|seed32, _| {
+            Req::Leg { form, words, ct, window } => {
+                let ct: &[u8; CT_BYTES] = ct.as_slice().try_into().map_err(|_| Error::Argument)?;
+                let amount = self.with_sk(|_, sk| value(pqzl::dec_win(&sk.0.s, ct, *window)))?;
+                match form {
+                    None => json!({"amount": amount}),
+                    Some(form) => {
+                        let mut words = *words;
+                        *words.get_mut(DW_AMOUNT).ok_or(Error::Argument)? = u64_word(amount);
+                        let (u, v) = ct.split_at(PK_BYTES);
+                        let stmt = Stmt::Disclose(Disclose { form: *form, words, pk: &self.pk, u, v }).encode().map_err(|_| Error::Argument)?;
+                        let wit = Zeroizing::new(self.with_sk(|_, sk| Ok(wit_key(&sk.0)))?);
+                        let mut out = proved(&stmt, &prove(form.op(), &stmt, &wit, &d.rnd32)?);
+                        if let Some(o) = out.as_object_mut() {
+                            o.insert("amount".into(), amount.into());
+                        }
+                        out
+                    }
+                }
+            }
+            Req::OpenMemo { chain_uid, token, from_ua, send_counter, memo, expect } => self.with_sk(|seed32, _| {
                 let mut hd = [[0u8; 32]; 20];
                 for (i, w) in [(H_CHAIN_UID, *chain_uid), (H_TOKEN, addr(token)), (H_FROM, *from_ua), (H_SEND_COUNTER, u64_word(*send_counter))] {
                     *hd.get_mut(i).ok_or(Error::Argument)? = w;
                 }
                 let (aud, legs) = pqz_ffi::memo::open(seed32, &hd, memo).ok_or(Error::Argument)?;
+                // the opened memo names the entry's legs (no MAC: a memo of another key or entry rebuilds other UAs)
+                if expect.as_ref().is_some_and(|(a, uas)| *a != aud || legs.iter().map(|l| l.1).ne(uas.iter().copied())) {
+                    return Err(Error::Argument);
+                }
                 let legs: Vec<Value> = legs.iter().map(|(a, ua)| json!({"amount": a, "ua": to_hex(ua)})).collect();
                 Ok(json!({"auditorOn": aud, "legs": legs}))
             })?,
@@ -810,7 +1387,6 @@ impl PqzKey {
     }
 
     /// The balance of `t` (this key's `T`) less `debit`, as digits, else `Argument`.
-    #[cfg(feature = "vectors")]
     fn rest(sk: &Sk, t: &[u8], debit: Option<u64>) -> Result<(u64, [u8; 16])> {
         let t: &[u8; CT_BYTES] = t.try_into().map_err(|_| Error::Argument)?;
         let bal = value(pqzl::dec(&sk.0.s, t))?;
@@ -818,7 +1394,6 @@ impl PqzKey {
         Ok((rest, digits(rest)))
     }
 
-    #[cfg(feature = "vectors")]
     /// Op 2 (burn, refresh): `Enc(pk_f, balance − debit)` from a fresh seed (CTR-PQZ-19: never the counter's).
     #[allow(clippy::too_many_arguments)]
     fn debit_own(&self, sk: &Sk, d: &Draw, form: Form, mut hd: [Word; 20], t: &[u8], debit: Option<u64>, memo_hash: &Word) -> Result<Value> {
@@ -837,7 +1412,6 @@ impl PqzKey {
         Ok(proved(&stmt, &prove(form.op(), &stmt, &wit, &d.rnd32)?))
     }
 
-    #[cfg(feature = "vectors")]
     /// Op 1: `Enc([pk_t, pk_f, pk_a], [amount, balance − amount − fee, amount])` from CTR-PQZ-19's `seed_enc`.
     #[allow(clippy::too_many_arguments)]
     fn transfer(
@@ -845,10 +1419,7 @@ impl PqzKey {
         amount: u64, memo_hash: &Word,
     ) -> Result<Value> {
         let form = if pk_a.is_some() { Form::Transfer } else { Form::Transfer0 };
-        let salt = match d.salt {
-            Some(s) => s,
-            None => os16()?,
-        };
+        let salt = d.salt()?;
         let mut hd = h.fill(Debit::header(form, id));
         *hd.get_mut(H_TO).ok_or(Error::Argument)? = *to_ua;
         *hd.get_mut(H_MEMO_HASH).ok_or(Error::Argument)? = *memo_hash;
@@ -884,7 +1455,6 @@ impl PqzKey {
         Ok(proved(&stmt, &prove(form.op(), &stmt, &wit, &d.rnd32)?))
     }
 
-    #[cfg(feature = "vectors")]
     /// Op 7: `pqzl::enc_multi` from CTR-PQZ-19's `seed_enc`, `recipientsHash` over the legs' UAs; on `HASH` the sender memo
     /// `salt ‖ sealedMemo` under `seed32` and `memoHash = keccak256(salt ‖ sealedMemo)`, on `BUNDLE` no memo and `memoHash` 0.
     #[allow(clippy::too_many_arguments)]
@@ -898,18 +1468,12 @@ impl PqzKey {
         }
         let total = legs.iter().try_fold(h.fee, |a, l| a.checked_add(l.2));
         let (_, df) = Self::rest(sk, t, total)?;
-        let salt = match d.salt {
-            Some(s) => s,
-            None => os16()?,
-        };
+        let salt = d.salt()?;
         let mut hd = h.fill(Multi::header(id, m, aud));
         *hd.get_mut(H_RECIPIENTS_HASH).ok_or(Error::Argument)? = crate::keccak256(&legs.iter().flat_map(|l| l.1).collect::<Vec<u8>>());
         hd.get_mut(H_SALT).ok_or(Error::Argument)?.iter_mut().skip(16).zip(salt).for_each(|(o, b)| *o = b);
         let memo_legs: Vec<(u64, Word)> = legs.iter().map(|l| (l.2, l.1)).collect();
-        let memo_key: &[u8] = match &d.memo_key {
-            Some(k) => k,
-            None => seed32,
-        };
+        let memo_key = d.memo_key(seed32);
         let memo = match mode {
             Mode::Hash => Some(pqz_ffi::memo::seal(memo_key, &hd, aud, &memo_legs).ok_or(Error::Argument)?),
             Mode::Bundle => None,

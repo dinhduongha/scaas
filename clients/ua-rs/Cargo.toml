@@ -213,6 +213,11 @@ required-features = ["pqz"]
 name = "pqz_backup"
 required-features = ["pqz"]
 
+# ua-rs-sign T15e: PQZ on raw words (spec no-decryption-oracle §4.3–§4.6)
+[[test]]
+name = "facade_pqz_state"
+required-features = ["pqz"]
+
 # ua-rs-sign T16: the external-key interface (spec §9.4, MD-13): `TestExternalKey` is a `vectors` entry point
 [[test]]
 name = "wallet_external"

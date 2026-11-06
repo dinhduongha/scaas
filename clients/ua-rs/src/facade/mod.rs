@@ -5,6 +5,8 @@
 pub mod pqz;
 #[cfg(feature = "pqz")]
 pub mod pqz_backup;
+#[cfg(feature = "pqz")]
+pub mod pqz_pack;
 #[cfg(feature = "zether")]
 pub mod zether;
 
