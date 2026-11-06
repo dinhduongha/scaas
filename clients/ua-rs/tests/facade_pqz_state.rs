@@ -435,6 +435,13 @@ fn entry_and_role_negatives_refused_before_the_key() {
     let ptr = wd.c.put(blob);
     let e0 = entry_ref(&Z, 77);
     wd.c.entries.insert(e0, Ent { ptr, from: Z, ctr: 77, memo: vec![] });
+    // the same on an unaudited op 7 entry of two legs, where `v_j`'s auditor offset still lies inside `R` (zero ciphertexts,
+    // small UA words: every field canonical)
+    let ua1 = { let mut u = [0u8; 32]; u[31] = 1; u };
+    let blob7 = [vec![0x5a; 16], vec![0u8; PKP], vec![0u8; VP], ua1.to_vec(), vec![0u8; VP], ua1.to_vec(), vec![0u8; VP]].concat();
+    let ptr7 = wd.c.put(blob7);
+    let e7 = entry_ref(&Z, 78);
+    wd.c.entries.insert(e7, Ent { ptr: ptr7, from: Z, ctr: 78, memo: vec![] });
     let rx = merge(wd.c.entry(&e1, &BOB), json!({"ua": hx(&BOB), "leg": 0, "kind": "RECEIVER_X", "registry": hx(&REG)}));
     let au = merge(merge(wd.c.entry(&e1, &AUD), wd.c.auditor_words(2)), json!({"ua": hx(&AUD), "leg": 0}));
     let (kb, ka, kz) = (wd.key(&BOB), wd.key(&AUD), wd.key(&Z));
@@ -460,6 +467,8 @@ fn entry_and_role_negatives_refused_before_the_key() {
     refused("auditorMode past OPTIONAL", ka, "auditRead", &merge(au.clone(), wd.c.auditor_words(3)), Error::Argument);
     let au0 = merge(merge(wd.c.entry(&e0, &AUD), wd.c.auditor_words(2)), json!({"ua": hx(&AUD), "leg": 0}));
     refused("an auditor read of an entry without auditor copies", ka, "auditRead", &au0, Error::Argument);
+    let au7 = merge(merge(wd.c.entry(&e7, &AUD), wd.c.auditor_words(2)), json!({"ua": hx(&AUD), "leg": 0}));
+    refused("an auditor read of an op 7 entry without auditor copies", ka, "auditRead", &au7, Error::Argument);
     refused("the auditor words on a receiver read", kb, "proveDisclose", &merge(rx.clone(), wd.c.auditor_words(2)), Error::Argument);
     let mut no_aud = au.clone();
     no_aud.as_object_mut().unwrap().remove("auditorUA");

@@ -1,0 +1,26 @@
+# 2026-11-07 ua-rs-sign T15e: the mutant run of 2026-11-07-ua-rs-sign-t15e-mutants.py (one mutant at a time through
+# scripts/capped, foreground, `cargo test --features vectors --test facade_pqz_state`; every file restored by the harness,
+# then `git diff --exit-code`: clean after each batch). Tree: e7d6349d + the harness. 17 mutants: the plan's nine (M1-M9) and
+# the controller's eight (M10-M17). Superseded during the run: (a) the first M3 replacement did not compile (NOT-LOADED,
+# `flat_map(|w| w)` yields &u8): fixed to `flat_map(|w| *w)`, then killed; (b) the first M15 SURVIVED: an auditor read of
+# an unaudited op 1 entry is refused by the bounds of `R` anyway (the copy's offset runs past it), so the guard was not
+# observed; the test gained an unaudited 2-leg op 7 entry whose copy offset lies inside `R` (with every field canonical),
+# and M15 was run again: killed. Final: 17 killed, 0 survived, 0 not loaded.
+killed     | M1 caller's T accepted (proveTransfer allow-list) | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: requests_carry_words_only
+killed     | M2 p taken from the request (proveRefresh allow-list) | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: requests_carry_words_only
+killed     | M3 not() skipped on accWords | clients/ua-rs/src/facade/pqz.rs | rc=101 | 3 failed: balances_and_debits_over_rebuilt_words, state_rows_reproduce_the_contract, word_negatives_refused_before_the_key
+killed     | M4 TRIVIAL read as blob == 0 | clients/ua-rs/src/facade/pqz.rs | rc=101 | 7 failed: balances_and_debits_over_rebuilt_words, disclosures_audit_reads_and_memo_over_rebuilt_words, entry_and_role_negatives_refused_before_the_key, open_memo_binds_the_entry, requests_carry_words_only, state_rows_reproduce_the_contract, word_negatives_refused_before_the_key
+killed     | M5 the unpacker's field width off by one | clients/ua-rs/src/facade/pqz_pack.rs | rc=101 | 1 failed: stored_form_is_the_contracts
+killed     | M6 the accHash comparison skipped | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: word_negatives_refused_before_the_key
+killed     | M7 entryRef not recomputed | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: entry_and_role_negatives_refused_before_the_key
+killed     | M8 the leg's UA_j not compared | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: entry_and_role_negatives_refused_before_the_key
+killed     | M9 the auditor window w ignored | clients/ua-rs/src/facade/pqz.rs | rc=101 | 2 failed: disclosures_audit_reads_and_memo_over_rebuilt_words, state_rows_reproduce_the_contract
+killed     | M10 psid not checked before the words | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: word_negatives_refused_before_the_key
+killed     | M11 the handle not bound to the registered key | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: word_negatives_refused_before_the_key
+killed     | M12 pending selected without its index | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: word_negatives_refused_before_the_key
+killed     | M13 an unused blob accepted | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: word_negatives_refused_before_the_key
+killed     | M14 auditorMode NONE accepted | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: entry_and_role_negatives_refused_before_the_key
+killed     | M16 the opened memo not compared with the entry | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: open_memo_binds_the_entry
+killed     | M17 the units cap (K_MAX) not checked | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: word_negatives_refused_before_the_key
+killed     | M15 an auditor read of an entry without the copies (rerun, the strengthened test) | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: entry_and_role_negatives_refused_before_the_key
+mutants M1-M17 of 17, survived or not loaded: 0

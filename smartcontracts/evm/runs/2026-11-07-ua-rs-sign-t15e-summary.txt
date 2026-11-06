@@ -1,0 +1,38 @@
+# 2026-11-07 ua-rs-sign T15e: PQZ on raw words (ARCH-POS-13 "never a decryption oracle"; spec no-decryption-oracle §4.3-§4.6,
+# §4.13, §5; Codex C4, C5; Fable P1-1, P2-1, P2-2, P2-3). Commits: e7d6349d (ua-rs-sign: facade, unpacker, tests, vectors
+# copies, harness), the follow-up commit of this summary (one stronger negative test, the mutant record); ua-mtx-merge
+# f9910a31 (the forge state-vector writer, state.json at two sets, pqz_kat.py check_state, foundry.toml fs line; contract
+# commit b40d7589, T19c's pin inside the rows). Words commands: balance, proveTransfer, proveBurn, proveRefresh,
+# proveTransferMulti, auditRead, proveDisclose, openMemo; raw forms only under `vectors` (dec, raw*). PQZ command cap
+# 1 MiB -> 4 MiB. No contract, statement, transcript or C ABI call change; no dependency change. UNAUDITED.
+# All commands through scripts/capped, foreground, -j2, --locked, --offline; full logs git-ignored / scratch.
+step | commit | rc | counts
+forge test --match-path test/pqz/PqzStateVectors.t.sol, STATE_VECTORS=1, n2304-kmax4096 (detached worktree at b40d7589) | b40d7589 | 0 | 1 passed; state.json written twice, same sha256 (7e9c4390…)
+same through script/pqz/at-set.sh n2048-kmax1024 | b40d7589 | 0 | 1 passed; twice, same sha256 (4566cfba…)
+pqz_kat.py --check state.json (PQZ_SET each set) | f9910a31 | 0 | ok at both sets; positive control: one T nibble changed -> FAIL
+state.json into ua-rs-sign by `git show f9910a31:<path>` (no hand copy) | e7d6349d | 0 | 2 files, sha256 equal
+ua-rs test (default: zether + pqz n2304-kmax4096, the release cell) | e7d6349d | 0 | 33 suites, 332 passed, 1 ignored (facade_pqz_state 8 at the final tree)
+ua-rs test --features vectors | e7d6349d | 0 | 34 suites, 374 passed, 3 ignored (facade_pqz_state 9 at the final tree, state_rows_reproduce_the_contract included)
+ua-rs test --no-default-features --features wallet,mlock | e7d6349d | 0 | 29 suites, 283 passed, 1 ignored
+ua-rs facade_pqz_state + facade_pqz + pqz_backup at pqz-set-n2048-kmax1024, release / vectors | e7d6349d | 0 | 8 + 11 + 9 / 9 + 22 + 12 passed (final tree: facade_pqz_state 8 / 9)
+ua-rs clippy --all-targets -D warnings: default, vectors, --no-default-features, wallet,mlock, zether, zether+vectors, pqz,n2048 (+ vectors) | e7d6349d | 0 | 0 of ours each (8 cells; default and vectors again at the final tree); pqzl's 2 deprecated GenericArray warnings
+ua-rs/fuzz cargo check (vectors); seeds.py --regress | e7d6349d | 0 | builds; pqz_cmd/box-over-depth-2.bin regenerated (index 19: COMMANDS grew)
+ua-c clippy -D warnings; cargo build; cargo test (lib + header); C smoke + c++ -fsyntax-only; test_vectors.py | e7d6349d | 0 | 0 of ours; built; 4 + 5 passed; smoke ok; 85 tests OK
+check_test_features.py | e7d6349d | 0 | ok (positive control: ua-c with scaas-ua/vectors forced: 2 findings)
+cargo tree --locked --offline -e normal: ua-rs, ua-c, ua-cxx, ua-qt, ua-dart-frb/rust, ua-rs/fuzz, zether-prover, scaas-node | e7d6349d | 0 | 8 of 8; no lock changed
+cargo deny --all-features check: ua-rs; ua-c and zether-prover (--config ../ua-rs/deny.toml) | e7d6349d | 0 | advisories ok, bans ok, licenses ok, sources ok each
+docs_check check / paths | e7d6349d | 0 | 0 errors 5 warnings (existing) / 0 machine paths
+mutants: 2026-11-07-ua-rs-sign-t15e-mutants.py | e7d6349d+ | 0 | 17 killed, 0 survived, 0 not loaded (2026-11-07-ua-rs-sign-t15e-mutants.txt), git diff --exit-code clean after each batch
+# Decisions (controller, the owner may override): (1) Request shape: location fields chainUid, token, block, psid (+ chainId,
+# registry where the statement or entryRef needs them), words account [4 slots], pending [{index, word}], accWords, blobs
+# [{address, code}] (every SSTORE2 code, the key's too), keyRecord (the registry word pqzKey[ua]), entryPtr, memo, auditorMode
+# and auditorUA (raw slot words); `ua` names the holder of an entry read (the leg's owner or the auditor). (2) The facade's
+# p: min(pendingCount, rolled + INLINE_MAX (10 for op 7 of a PQZH token), rolled + K_MAX - 1 - accUnits); the reading layer
+# reads exactly [rolled, p). Debit answers add `p`; proveDisclose adds `amount`. (3) The raw commands stay under `vectors` as
+# dec and raw* (the vector-file tests and T15i's positive control). (4) Command cap 4 MiB (spec §9.3 said 1 MiB): 16 pending
+# 8-leg audited blobs + acc + key in hex reach about 2.3 MiB at n2816-kmax65536. (5) openMemo also compares the opened legs'
+# UAs and auditorOn with the entry blob (after the key, to the caller only). (6) The layout pin is compared through the
+# forge rows (the writer copies T19c's scaas.pqz entry), not by a file copied into ua-rs-sign's own layout directory.
+# Residuals: the facade cannot tell chain state from consistent fabricated words, nor check that a keyRecord word was read
+# at pqzKey[ua] (the reading layer's R1-R7; spec §4.12); memoHash of op 1, burn and refresh is a free word until T15k;
+# bindings carry the new commands only through scaas_ua_pqz_call's JSON (T15g); the ua-c doc line updated, header regenerated.
