@@ -221,9 +221,11 @@ pub struct Entry<C: ZCurve> {
     pub d_aud: G<C>,
 }
 
+hazmat_pub! {
 /// `SENDER_S`: `abi.encode(uint256 s)`.
-pub fn open_sender<C: ZCurve>(s: &Fr<C>) -> Vec<u8> {
+fn open_sender<C: ZCurve>(s: &Fr<C>) -> Vec<u8> {
     encode_scalar::<C>(s).to_vec()
+}
 }
 
 /// Challenge preimage up to the statement points; also the opening nonce's public input.
@@ -281,9 +283,10 @@ fn cp_open<C: ZCurve, R: RngCore + CryptoRng>(
     abi::encode(&[Tok::Bytes(a1), Tok::Bytes(a2), Tok::Word(encode_scalar::<C>(&z))])
 }
 
+hazmat_pub! {
 /// `RECEIVER_X` / `AUDITOR`: Chaum-Pedersen `log_G(K) == log_B(M − [amount]G)` (`B = D_out`, or `D_aud` for the
 /// auditor), `abi.encode(bytes A1, bytes A2, uint256 z)`.
-pub fn open_chaum_pedersen<C: ZCurve, R: RngCore + CryptoRng>(
+fn open_chaum_pedersen<C: ZCurve, R: RngCore + CryptoRng>(
     e: &Entry<C>,
     amount: u64,
     kind: OpeningKind,
@@ -302,10 +305,12 @@ pub fn open_chaum_pedersen<C: ZCurve, R: RngCore + CryptoRng>(
     }
     Ok(cp_open(e, amount, kind, &key.x, rng))
 }
+}
 
+hazmat_pub! {
 /// `SENDER_CP`: Chaum-Pedersen on the shared `s`, `log_G(D_out) == log_{Y_t}(C_out − [amount]G)`;
 /// opens leg `e.index` only, where `s` itself opens every leg of the transfer.
-pub fn open_sender_cp<C: ZCurve, R: RngCore + CryptoRng>(
+fn open_sender_cp<C: ZCurve, R: RngCore + CryptoRng>(
     e: &Entry<C>,
     amount: u64,
     s: &Fr<C>,
@@ -321,6 +326,7 @@ pub fn open_sender_cp<C: ZCurve, R: RngCore + CryptoRng>(
         return Err(ZError::BadStatement("amount does not open this ciphertext"));
     }
     Ok(cp_open(e, amount, OpeningKind::SenderCp, s, rng))
+}
 }
 
 /// Mirror of `verifyTransferAmount`.

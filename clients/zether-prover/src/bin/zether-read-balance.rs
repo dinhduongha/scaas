@@ -166,7 +166,9 @@ fn run<C: ZCurve>(a: &Args, key_json: &Value) -> Result<Value, String> {
         (None, None) => unreachable!("parse() requires --ct or --rpc"),
     };
     check_ram(a.table_bits, mem_available()).map_err(|e| e.to_string())?;
-    let b = table::<C>(a)?.decrypt(&ct, &k.x, a.bound_bits).map_err(|e| e.to_string())?;
+    // ARCH-POS-13 residual until T14b (the pasted `--ct` moves under `hazmat` there): the library's decrypt helpers are `pub`
+    // only under `hazmat` (T15c2, Codex C3), so this tool takes `C - [x]D` itself and only the public `dlog`
+    let b = table::<C>(a)?.dlog(&(ct.c - ct.d * k.x), a.bound_bits).map_err(|e| e.to_string())?;
     if verified == Some(false) {
         eprintln!("unverified (RPC): this node chose the ciphertext; check it against your own node or the wallet");
     }

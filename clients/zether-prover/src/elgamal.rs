@@ -132,22 +132,28 @@ pub fn encrypt<C: ZCurve>(y: &G<C>, b: u64, r: &Fr<C>) -> Ciphertext<C> {
     Ciphertext { c: g * Fr::<C>::from(b) + *y * r, d: g * r }
 }
 
+hazmat_pub! {
 /// `g^b` from a ciphertext.
-pub fn decrypt_point<C: ZCurve>(ct: &Ciphertext<C>, x: &Fr<C>) -> G<C> {
+fn decrypt_point<C: ZCurve>(ct: &Ciphertext<C>, x: &Fr<C>) -> G<C> {
     ct.c - ct.d * x
 }
-
-/// Cache validation (limits §5): `[b]G == C − [x]D`. A stale or wrong cached balance fails here,
-/// and a proof built on it would be refused by the prover and the contract anyway.
-pub fn check_balance<C: ZCurve>(acc: &Ciphertext<C>, x: &Fr<C>, b: u64) -> bool {
-    decrypt_point(acc, x) == generator::<C>() * Fr::<C>::from(b)
 }
 
+hazmat_pub! {
+/// Cache validation (limits §5): `[b]G == C − [x]D`. A stale or wrong cached balance fails here,
+/// and a proof built on it would be refused by the prover and the contract anyway.
+fn check_balance<C: ZCurve>(acc: &Ciphertext<C>, x: &Fr<C>, b: u64) -> bool {
+    decrypt_point(acc, x) == generator::<C>() * Fr::<C>::from(b)
+}
+}
+
+hazmat_pub! {
 /// `pending` with the device bound of zether-limits §2.2 (2^44, table 2^22): what a wallet adds
 /// to its cached balance on rollOver. Larger incoming amounts need desktop/CLI.
-pub fn decrypt_pending<C: ZCurve>(pending: &Ciphertext<C>, x: &Fr<C>) -> Result<u64, ZError> {
+fn decrypt_pending<C: ZCurve>(pending: &Ciphertext<C>, x: &Fr<C>) -> Result<u64, ZError> {
     let p = BsgsParams::MOBILE;
     cached_table::<C>(p.table_bits)?.decrypt(pending, x, p.bound_bits)
+}
 }
 
 /// The process-wide table for `table_bits` (one slot per curve: asking for another size drops the
@@ -251,8 +257,10 @@ impl<C: ZCurve> BsgsTable<C> {
         Err(ZError::DecryptBound)
     }
 
-    pub fn decrypt(&self, ct: &Ciphertext<C>, x: &Fr<C>, bound_bits: u32) -> Result<u64, ZError> {
+    hazmat_pub! {
+    fn decrypt(&self, ct: &Ciphertext<C>, x: &Fr<C>, bound_bits: u32) -> Result<u64, ZError> {
         self.dlog(&decrypt_point(ct, x), bound_bits)
+    }
     }
 
     /// `MAGIC ‖ u8 len ‖ curve name ‖ u8 table_bits ‖ (u64 key LE ‖ u32 j LE)*` — 12 B per entry.

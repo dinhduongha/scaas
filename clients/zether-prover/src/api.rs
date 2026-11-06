@@ -43,6 +43,42 @@ use crate::zether::{
 type R<T> = Result<T, String>;
 
 /// The commands that decrypt or open a caller's ciphertext: feature `hazmat` only (ARCH-POS-13).
+#[cfg_attr(
+    not(feature = "hazmat"),
+    doc = "Without `hazmat` neither are the helpers that would bypass the dispatcher (T15c2, Codex C3; `hazmat_pub!`):",
+    doc = "```compile_fail,E0603",
+    doc = "let _ = zether_prover::api::open_memo_json::<zether_prover::curve::Bls12381>;",
+    doc = "```",
+    doc = "```compile_fail,E0603",
+    doc = "let _ = zether_prover::elgamal::check_balance::<zether_prover::curve::Bls12381>;",
+    doc = "```",
+    doc = "```compile_fail,E0624",
+    doc = "fn f(t: &zether_prover::elgamal::BsgsTable<zether_prover::curve::Bls12381>, c: &zether_prover::elgamal::Ciphertext<zether_prover::curve::Bls12381>) {",
+    doc = "    let _ = t.decrypt(c, &Default::default(), 24);",
+    doc = "}",
+    doc = "```",
+    doc = "```compile_fail,E0603",
+    doc = "let _ = zether_prover::schnorr::open_sender::<zether_prover::curve::Bls12381>;",
+    doc = "```"
+)]
+#[cfg_attr(
+    feature = "hazmat",
+    doc = "With `hazmat` the helpers are `pub` (the positive control of the `compile_fail` tests without it):",
+    doc = "```no_run",
+    doc = "let _ = zether_prover::api::open_memo_json::<zether_prover::curve::Bls12381>;",
+    doc = "```",
+    doc = "```no_run",
+    doc = "let _ = zether_prover::elgamal::check_balance::<zether_prover::curve::Bls12381>;",
+    doc = "```",
+    doc = "```no_run",
+    doc = "fn f(t: &zether_prover::elgamal::BsgsTable<zether_prover::curve::Bls12381>, c: &zether_prover::elgamal::Ciphertext<zether_prover::curve::Bls12381>) {",
+    doc = "    let _ = t.decrypt(c, &Default::default(), 24);",
+    doc = "}",
+    doc = "```",
+    doc = "```no_run",
+    doc = "let _ = zether_prover::schnorr::open_sender::<zether_prover::curve::Bls12381>;",
+    doc = "```"
+)]
 pub const HAZMAT: [&str; 9] =
     ["decrypt", "decryptPending", "checkBalance", "proveTransfer", "proveTransferMulti", "proveBurn", "openMemo", "recoverTransfer", "openDisclosure"];
 
@@ -233,8 +269,10 @@ fn transfer_multi_name(mode: TransferMode, compact: bool) -> &'static str {
     }
 }
 
-pub fn prove_transfer_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v: &Value, rng: &mut Rn) -> R<Value> {
+hazmat_pub! {
+fn prove_transfer_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v: &Value, rng: &mut Rn) -> R<Value> {
     prove_transfer_with::<C, Rn>(gens, None, v, rng)
+}
 }
 
 fn prove_transfer_with<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, given: Option<&ZetherKey<C>>, v: &Value, rng: &mut Rn) -> R<Value> {
@@ -274,14 +312,16 @@ fn prove_transfer_with<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, given
     Ok(out)
 }
 
+hazmat_pub! {
 /// `recipients`: `[{"yTo", "amount"}, …]` (decoys with amount 0); `fee` the txFee (`confidentialFee` with a
 /// `beneficiary`), `decoyFee` the per-leg fee the token pays to every leg (default 0; `minDecoyFee`, the token's, checked
 /// when given): the statement's fee is `fee + M · decoyFee` (owner 2026-10-20); `mode`, the stored form: `bundle` | `compact`, by default the token's (`disclosureMode` `"bundle"`, the default: `bundle`; `"compact"`: `compact`, the only
 /// form it takes), so the calldata calls `mtxConfidentialTransfer` unless a gas-saving form is asked for. `yAud` absent or null leaves the auditor out (statement `Y_a = O`, every `C_aud = O`): required on a token
 /// without auditor, refused on a `FULL` one, the sender's choice on an `OPTIONAL` one (`auditorMode`, checked when
 /// given); the same holds for `proveTransfer`. Relayed like the single format (`envelopeBinding`, CTR-ZTH-34); a relayed build requires `uaSigner` (`"ecdsa"` | `"fndsa512"` | `"mldsa65"` | `"mldsa44"` | `"slhdsa128s"` | `"mldsa87"` | `"fndsa1024"` | `"ed25519"` | `"p256"` | `"webauthn-p256"`, caps from accounts.md; or a numeric `uaSignerGas` for any other kind such as an msig; review2 C3-2) so the gas check counts `_uaAuthorize`.
-pub fn prove_transfer_multi_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v: &Value, rng: &mut Rn) -> R<Value> {
+fn prove_transfer_multi_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v: &Value, rng: &mut Rn) -> R<Value> {
     prove_transfer_multi_with::<C, Rn>(gens, None, v, rng)
+}
 }
 
 fn prove_transfer_multi_with<C: ZCurve, Rn: RngCore + CryptoRng>(
@@ -366,8 +406,10 @@ fn recipient_id(v: &Value) -> R<[u8; 32]> {
     Ok(o)
 }
 
-pub fn prove_burn_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v: &Value, rng: &mut Rn) -> R<Value> {
+hazmat_pub! {
+fn prove_burn_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v: &Value, rng: &mut Rn) -> R<Value> {
     prove_burn_with::<C, Rn>(gens, None, v, rng)
+}
 }
 
 fn prove_burn_with<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, given: Option<&ZetherKey<C>>, v: &Value, rng: &mut Rn) -> R<Value> {
@@ -446,12 +488,14 @@ fn recovery_header(v: &Value, send_counter: u64) -> R<Header> {
     })
 }
 
+hazmat_pub! {
 /// Step 1 of a storage-only recovery (CTR-ZTH-50): open the memo of a commit-reveal entry (`entry` =
 /// `transferEntry(entryRef)`, `memo` = `transferMemo(entryRef)`, `sendCounter`, `chainId`, `chainUid`, `token`). Returns the `salt`, `auditorIncluded`
 /// (the flag) and the legs (`toUA`, `amount`). `recoverTransfer` takes no keys (the entry blob holds `R`). Unverified: a wrong key or a tampered memo gives
 /// garbage here, which `recoverTransfer` then refuses against the stored record.
-pub fn open_memo_json<C: ZCurve>(v: &Value) -> R<Value> {
+fn open_memo_json<C: ZCurve>(v: &Value) -> R<Value> {
     open_memo_with::<C>(None, v)
+}
 }
 
 fn open_memo_with<C: ZCurve>(given: Option<&ZetherKey<C>>, v: &Value) -> R<Value> {
@@ -466,6 +510,7 @@ fn open_memo_with<C: ZCurve>(given: Option<&ZetherKey<C>>, v: &Value) -> R<Value
     }))
 }
 
+hazmat_pub! {
 /// Recovery of one of the sender's transfers from its key and chain data only (CTR-ZTH-30, CTR-ZTH-50; disclosure
 /// review G1/R7): no amount, recipient or log remembered. The source is either
 /// - `entry` = `transferEntry(entryRef)` with `sendCounter` (the sender walks `0 … sendCounter(fromUA) − 1`): the record
@@ -478,8 +523,9 @@ fn open_memo_with<C: ZCurve>(given: Option<&ZetherKey<C>>, v: &Value) -> R<Value
 /// `salt`, `entryRef`, the legs (`toUA`, `yTo`, `amount`), `bundles` (= `R`), `commitment` (`keccak256(R)`, the hash the
 /// events give an indexer), `auditorIncluded`, and the sender's openings `senderS` (every leg) and `senderCp[j]` (leg
 /// `j`). Needs `chainId`, `chainUid`, `token`.
-pub fn recover_transfer_json<C: ZCurve, Rn: RngCore + CryptoRng>(v: &Value, rng: &mut Rn) -> R<Value> {
+fn recover_transfer_json<C: ZCurve, Rn: RngCore + CryptoRng>(v: &Value, rng: &mut Rn) -> R<Value> {
     recover_transfer_with::<C, Rn>(None, v, rng)
+}
 }
 
 fn recover_transfer_with<C: ZCurve, Rn: RngCore + CryptoRng>(given: Option<&ZetherKey<C>>, v: &Value, rng: &mut Rn) -> R<Value> {

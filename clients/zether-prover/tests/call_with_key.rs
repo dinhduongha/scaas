@@ -7,7 +7,9 @@
 use rand_chacha::rand_core::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 use serde_json::{json, Value};
-use zether_prover::api::{call_with_key, prove_transfer_json};
+use zether_prover::api::call_with_key;
+#[cfg(feature = "hazmat")]
+use zether_prover::api::prove_transfer_json;
 use zether_prover::bulletproofs::Gens;
 use zether_prover::curve::{decode_point, Bls12381};
 use zether_prover::keys::{seed_from_mnemonic, ZetherKey};
@@ -68,15 +70,58 @@ fn release_has_no_raw_decrypt() {
     assert!(call("encrypt", &json!({"curve": "bls12381", "Y": format!("0x{}", hex::encode(k.encoded_y())), "amount": 1}).to_string()).is_ok());
 }
 
-/// `hazmat` is never a default feature (the shipped library, CLI and wasm build without it): read from Cargo.toml itself, since
-/// `cfg!(feature = "hazmat")` in this test would follow a default that turned it on.
+/// `hazmat` is never a default feature, not even through another feature (Codex C7, T15c2): the closure of `default` over
+/// the package's feature table as `cargo metadata` parses it, since `cfg!(feature = "hazmat")` in this test would follow a
+/// default that turned it on.
 #[test]
 fn hazmat_is_off_by_default() {
-    let toml = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml")).unwrap();
-    let features = &toml[toml.find("[features]").unwrap()..];
-    let features = &features[..features[1..].find("\n[").map_or(features.len(), |i| i + 1)];
-    assert!(features.contains("\nhazmat = []"), "the feature exists");
-    assert!(!features.lines().any(|l| l.trim_start().starts_with("default") && l.contains("hazmat")), "hazmat in default");
+    let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
+    let manifest = concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml");
+    let out = std::process::Command::new(cargo)
+        .args(["metadata", "--no-deps", "--format-version", "1", "--offline", "--manifest-path", manifest])
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let m: Value = serde_json::from_slice(&out.stdout).unwrap();
+    let pkg = m["packages"].as_array().unwrap().iter().find(|p| p["name"] == "zether-prover").unwrap();
+    let table = pkg["features"].as_object().unwrap();
+    assert!(table.contains_key("hazmat"), "the feature exists");
+    let (mut seen, mut todo) = (std::collections::BTreeSet::new(), vec!["default".to_string()]);
+    while let Some(f) = todo.pop() {
+        if seen.insert(f.clone()) {
+            // this package's own features ("dep:x" and "x/y" name other crates)
+            let next = table.get(&f).and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_str);
+            todo.extend(next.filter(|d| !d.contains(':') && !d.contains('/')).map(String::from));
+        }
+    }
+    assert!(!seen.contains("hazmat"), "hazmat reached from default: {seen:?}");
+}
+
+/// Codex C3 (T15c2): the helpers that decrypt or open a caller's ciphertext, entry or memo outside the dispatcher are
+/// `pub` only under `hazmat` (the `hazmat_pub!` macro of lib.rs; a source assertion beside the `compile_fail` tests on
+/// `api::HAZMAT`).
+#[test]
+fn hazmat_helpers_are_not_pub() {
+    let src = |f: &str| std::fs::read_to_string(format!("{}/src/{f}", env!("CARGO_MANIFEST_DIR"))).unwrap();
+    for (file, names) in [
+        ("api.rs", &["prove_transfer_json", "prove_transfer_multi_json", "prove_burn_json", "open_memo_json", "recover_transfer_json"][..]),
+        ("elgamal.rs", &["decrypt_point", "check_balance", "decrypt_pending", "decrypt"]),
+        ("schnorr.rs", &["open_sender", "open_chaum_pedersen", "open_sender_cp"]),
+    ] {
+        let s = src(file);
+        let lines: Vec<&str> = s.lines().map(str::trim).collect();
+        for name in names {
+            let at: Vec<usize> = (0..lines.len()).filter(|&i| lines[i].starts_with(&format!("fn {name}<")) || lines[i].starts_with(&format!("fn {name}("))).collect();
+            assert_eq!(at.len(), 1, "{file}: fn {name}");
+            assert!(!s.contains(&format!("pub fn {name}<")) && !s.contains(&format!("pub fn {name}(")), "{file}: pub fn {name}");
+            let open = (0..at[0]).rev().find(|&i| !lines[i].starts_with("///")).unwrap();
+            assert_eq!(lines[open], "hazmat_pub! {", "{file}: {name} outside hazmat_pub!");
+        }
+    }
+    let lib = src("lib.rs");
+    let mac = &lib[lib.find("macro_rules! hazmat_pub").unwrap()..];
+    let mac = &mac[..mac.find("\n}\n").unwrap()];
+    assert!(mac.contains("#[cfg(not(feature = \"hazmat\"))]") && mac.contains("pub(crate) fn"), "the macro's release arm");
 }
 
 #[test]
