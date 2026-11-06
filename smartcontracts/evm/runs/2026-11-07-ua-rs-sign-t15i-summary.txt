@@ -1,0 +1,70 @@
+# 2026-11-07 ua-rs-sign T15i: the oracle harness, the closing mechanical gates and the Claude self-review of the ARCH-POS-13 rework
+# ("never a decryption oracle"; spec no-decryption-oracle §1, §4.8, §4.12, §5). Commits: ef8a04b5 (ua-rs tests/no_oracle.rs,
+# tests/pqz_wallet_rows.rs, smartcontracts/vectors/pqz/gen_wallet_state.sh and n2304-kmax4096/wallet_state.json, the fuzz manifest
+# over-depth-4.json from seeds.py), ed92ec0b (every binding decrypts a PQZ balance; ua-py's harness through the C ABI), 8eb75c96
+# (the gate runner 2026-11-07-ua-rs-sign-gates.sh and the mutant harness), de747500 and c6f8b841 (the harness reads dart's failed
+# test name; verdicts unchanged), the follow-up commit of this summary and the mutant record. No scaas-ua / zether-prover source,
+# ABI, contract, statement, transcript, vector of another generator or dependency changed. The Fable review runs separately.
+# UNAUDITED.
+# All commands through scripts/capped, foreground, -j2, --locked, --offline; step logs git-ignored (smartcontracts/evm/runs/*.log).
+step | commit | rc | counts
+ua-rs test (default: zether + pqz n2304-kmax4096, the release cell) | ef8a04b5 tree | 0 | 34 suites, 316 passed, 1 ignored (+ no_oracle 4, pqz_wallet_rows 1)
+ua-rs test --features vectors (lib + tests in two calls, then --doc) | ef8a04b5 tree | 0 | 37 suites, 390 passed, 4 ignored (+ no_oracle 5, pqz_wallet_rows 1 + the ignored generator)
+ua-rs clippy --all-targets -D warnings: default, vectors | ef8a04b5 tree | 0 | 0 of ours each; pqzl's 2 deprecated GenericArray warnings
+gates no-oracle: no_oracle + pqz_wallet_rows, release then vectors | 8eb75c96 | 0 | 4 + 1 / 5 + 1 passed (positive control: the raw dec recovers s from 288 = 8·K queries)
+gates no-oracle-n2048: no_oracle at n2048-kmax1024, release then vectors | 8eb75c96 | 0 | 4 / 5 passed (256 = 8·K queries recover s)
+gates no-oracle-ua-py: libscaas_ua_c release, ua-py Pqz.test_no_oracle | 8eb75c96 | 0 | 1 OK (288 queries x 6 shapes x 17 commands incl. dec, each UAArgument)
+gates wallet-rows: gen_wallet_state.sh twice, git diff --exit-code | 8eb75c96 | 0 | sha256 cb9a934f... both runs, equal to the committed file
+gates test-features: check_test_features.py; positive control scaas-ua/vectors forced in clients/ua-c/Cargo.toml, restored | 8eb75c96 | 0 | 57 manifests 0 findings; graphs ua-c, ua-cxx, ua-qt, ua-dart-frb/rust, zether-prover 0 findings; forced: rc 1 (1 manifest + 2 graph findings); tree clean
+gates mutant-logs: the T15b, T15c, T15c2, T15e, T14b, T15g, T15k records | 8eb75c96 | 0 | each ends with no survivor and none not loaded
+gates mutant-1 .. mutant-12 (2026-11-07-ua-rs-sign-t15i-mutants.py n n; git diff --exit-code after each) | 8eb75c96 (M12 c6f8b841) | 0 | 12 killed, 0 survived, 0 not loaded (2026-11-07-ua-rs-sign-t15i-mutants.txt)
+gates rebuild: libscaas_ua_c release + debug, ua-cxx, ua-dart-frb from the clean tree | c6f8b841 | 0 | built; tree clean
+ua-c test_vectors.py (debug libscaas_ua_c) | ed92ec0b tree | 0 | 87 tests OK
+ua-py unittest tests.test_wallet tests.test_vectors (release libscaas_ua_c) | ed92ec0b tree | 0 | 86 OK (+1 test_no_oracle)
+ua-go go vet; go test -count=1 ./... | ed92ec0b tree | 0 | vet clean; 54 passed
+ua-cs dotnet test Scaas.Ua.Tests (then dotnet build-server shutdown) | ed92ec0b tree | 0 | 53 passed
+ua-cxx cmake --build build; ctest | ed92ec0b tree | 0 | 37 of 37
+ua-dart-frb cargo build (rust/); dart test wallet_test.dart vectors_test.dart | ed92ec0b tree | 0 | 36 passed
+ua-rs/fuzz seeds.py --regress twice; fuzz_caps (vectors) | ef8a04b5 tree | 0 | regress/ stable after the first run (manifest/over-depth-4.json: the pqzHeld field); fuzz_caps 9 passed
+# Controller decisions applied (2026-11-07): (1) a binding-level PQZ round trip that decrypts: wallet_state.json holds `balance`
+# words for pq_kat's pqz_key(0,0) (acc a reference into an op 1 blob, 750) and pqz_key(0,1) (a pending credit and a TRIVIAL entry,
+# 257), written by ua-rs under `vectors` on its simulated chain (tests/pqz_chain, PqzCore's stored form; the forge rows tie that
+# form to the contract) with fixed draws; the generator script sits beside the rows; every reader (ua-rs, ua-c, ua-py, ua-go, ua-cs,
+# ua-cxx, ua-dart-frb) decrypts each row; ua-qt wraps neither facade. (2) over-depth-4.json regenerated from seeds.py.
+# Harness choices: the residual control decrypts through `balance` (window 0, 2·K queries) and asserts s at those coefficients;
+# auditRead on fabricated auditor entries reaches windows 0..S_AUD-1 (S_AUD 3 at n2304-kmax4096, 4 at the two larger sets), so
+# fabricated words give the whole oracle of §1 at those windows: the reading layer's duty (R1-R7), stated in §4.12. The word and
+# role negatives of §5 are T15e's (facade_pqz_state.rs) and T14b's (facade_zether_state.rs), not repeated here.
+#
+# Claude self-review of the rework (git diff 401bebf9..HEAD and T15b 997fb015, T15c 9ee9d76a..9107ae01; source: ua-rs facade
+# pqz.rs, pqz_pack.rs, zether.rs, mod.rs, lib.rs; zether-prover state.rs, api.rs, elgamal.rs, schnorr.rs, zether-read-balance.rs;
+# ua-c lib.rs and header; the bindings' load checks; check_test_features.py). Lenses: crypto (rebuild and unpacker equal to the
+# contract), custody (no decrypt without location and raw words, no detail in refusals), production artifacts, the same class in
+# every binding, Zether and PQZ apart. UNAUDITED; findings for the fix wave, none fixed here (each needs an owner or controller call).
+# R1 P2 PQZ proveDiscloseSender (op 4) still takes a caller statement: the facade re-encrypts the statement's claimed amount to
+#    the claimed recipient key with the seed-derived randomness and compares with the statement's (u, v); success (a proof) or
+#    Argument is an equality oracle on the holder's own sent amounts and recipient keys for any statement a caller builds from
+#    the public entry (u, v_t) and a guess. No key recovery (the randomness is deterministic per entry, the compare constant
+#    time), but it is "a result about a ciphertext chosen by someone else". Spec §4.6 keeps the command as "decrypts nothing".
+#    Proposal: the words form of proveDisclose (location, fromUA = the handle's account, sendCounter, entry words; the statement
+#    built inside, the amount from the holder's memo or records), or the residual stated in §4.6 / §4.12.
+# R2 P2 Zether checkBalance {words, balance} and a debit's `balance` hint take the plaintext as a caller number; `{ok}` and a
+#    debit's success are a balance-equality test on the real acc. Spec §4.7 says the hint comes only from the holder's sealed
+#    cache box, which the library cannot tell. Proposal: take the sealed box {iv, ct} (opened inside under the handle's key; no
+#    outsider can make a valid box) instead of the number, so the rule is code; zether-read-balance already reads --cache-box.
+# R3 P3 zether-read-balance R5 reads OpenFactory `_info[token]` at a hand-copied slot (8) and byte offsets (kind 20, exists 29):
+#    no OpenFactory layout pin exists (ua-mtx-merge test/v2/layout has no OpenFactory.json) and its anvil test sets that slot by
+#    the CLI's own assumption. Proposal: pin `_info` on ua-mtx-merge (as T19c did for scaas.pqz / scaas.zether) and read the pin.
+# R4 P3 check_test_features.py ARTIFACTS has no scaas-node and no pqz-core/ffi/wasm, both over pqz-ffi; harmless while pqz-ffi
+#    has no test feature, but T15h (pqz-core hazmat) must add both to the graph check.
+# R5 P3 consistency, per spec: PQZ openMemo takes `memo` as bytes (§4.3) while Zether takes memoWords bound to their slots of
+#    memos[entryRef]; PQZ cannot tell a memo from another slot (the reading layer's R4). Note only.
+# Checked and held: psid compared first (PqzSetMismatch, the build's, before any parse); every PQZ word refusal is Argument
+# before the key (registered-key bind in run before with_sk); `p` chosen inside (min of pendingCount, inline window, K_MAX room)
+# and the pending indexes exactly [rolled, p); TRIVIAL as vOff == 0; not() and accHash on accWords; lane sums below 2^64
+# (INLINE_MAX + 2 terms < 2^54); every blob used once (Blobs::done); entryRef recomputed; the auditor window j % S_AUD and the
+# op 5 kind word 2 + 256·w; Zether prepare before the key (the reader's own acct[ua(Y)] slots, the leg's Y_t or the token's
+# auditor key with a copy), every x·(supplied point) through secret_mul; ua-c's vectors bit and every binding's load refusal;
+# COMMANDS membership (never equality) in every binding.
+# Residuals (unchanged): the library cannot tell chain state from consistent fabricated words (residual control here and in
+# facade_zether_state.rs); memoHash of op 1, burn and refresh per T15k; pqz-core hazmat waits for T15h.
