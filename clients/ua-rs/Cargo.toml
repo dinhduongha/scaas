@@ -78,7 +78,8 @@ js-sys = { version = "=0.3.107", optional = true }
 # MD-5 (owner: the facades on by default). `--no-default-features` keeps the verify-only identity layer (+ `pq` / `json` /
 # `signers` as before). `zether` (T14) and `pqz` (T15) imply `wallet`; their crates come with those tasks; `pqz-set-*`:
 # exactly one with `pqz` (T15 checks it). `vectors`: test-only entry points (secrets through hooks), never in a release build.
-default = ["wallet", "zether", "pqz", "pqz-set-n2304-kmax4096"]
+# `mlock` on by default for native builds (owner 2026-11-06, superseding MD-5's list); off Unix it compiles out (no libc).
+default = ["wallet", "zether", "pqz", "pqz-set-n2304-kmax4096", "mlock"]
 wallet = ["pq", "signers", "json", "dep:bip39", "dep:bip32", "dep:hkdf", "dep:hmac", "dep:zeroize", "dep:unicode-normalization",
     "dep:ripemd", "dep:bs58", "dep:blake2", "dep:alloy-rlp", "dep:ml-kem", "dep:aes-gcm", "dep:aes-gcm-siv", "dep:base64ct", "dep:scrypt", "dep:js-sys", "rand_core/getrandom", "dep:getrandom", "ed25519-dalek/zeroize", "ml-dsa/zeroize", "slh-dsa/zeroize"]
 zether = ["wallet"]
