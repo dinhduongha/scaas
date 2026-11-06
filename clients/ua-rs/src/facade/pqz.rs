@@ -17,8 +17,8 @@
 //!   statement exactly as `PqzCore`, and only then uses the key. Every refusal before that is `Argument` (another set's `psid`:
 //!   `PqzSetMismatch`); after it only `KeyRevoked` and, for a debit over the balance, `Argument` to the caller. Whether the words
 //!   are real chain state of a catalogued token is the reading layer's duty (R1–R7), not this library's (§4.12).
-//! - **Commands** ([`COMMANDS`], [`PqzKey::call`]: `enc`, `proveRegister`, `proveKeyRecord`, `proveDiscloseSender` and the
-//!   words commands `balance`, `proveTransfer`, `proveBurn`, `proveRefresh`, `proveTransferMulti`, `auditRead`, `proveDisclose`,
+//! - **Commands** ([`COMMANDS`], [`PqzKey::call`]: `enc`, `proveRegister`, `proveKeyRecord` and the words commands `balance`,
+//!   `proveTransfer`, `proveBurn`, `proveRefresh`, `proveTransferMulti`, `auditRead`, `proveDisclose`, `proveDiscloseSender`,
 //!   `openMemo`; the raw `dec` and `raw*` commands only under feature `vectors`): named-field JSON (bounded reader, 4 MiB, depth 8), each field on its
 //!   command's allow-list (so no `key`, `seed32`, `s`, `e` or witness field passes, at any depth: the only nested objects are
 //!   the legs `{pk, ua, amount}`), parsed into typed values. `enc` (`pqzl::enc`), `dec` (`dec` / `dec_win`), the proofs
@@ -26,7 +26,8 @@
 //!   (op 1, `R_TX` / `R_TX0`) and `proveTransferMulti` (op 7), each with an explicit `mode` (owner 2026-11-06; T15b, T15k): `HASH`
 //!   with the sender memo `memo::seal` under `seed32` (op 1: op 7's encoding with M = 1, `PqzCore.SEALED` = 42, T36a) and
 //!   `memoHash = keccak256(salt ‖ sealedMemo)`, `BUNDLE` with neither, as `PqzCore._parseTransfer` / `_parseMulti`;
-//!   `proveBurn`, `proveRefresh` (op 2; `memoHash` 0, as `PqzCore.prepareBurn` leaves it), `proveDiscloseSender` (op 4, `r, e1, e2_t` re-derived), `proveDisclose` (op 5, receiver or
+//!   `proveBurn`, `proveRefresh` (op 2; `memoHash` 0, as `PqzCore.prepareBurn` leaves it), `proveDiscloseSender` (op 4 of the
+//!   sender's own entry: `r, e1, e2_j` re-derived, the amount read from the entry, T15l), `proveDisclose` (op 5, receiver or
 //!   auditor), `openMemo`. Statements are `pqz-stmt`'s builders, witnesses pqz-ffi's layouts (`fixture::wit_*`), proofs
 //!   `pqz_ffi::prove` with `rnd32` from the OS RNG (hedged, CTR-PQZ-19). The debit's balance is `Dec(T)` with the handle's key.
 //! - **Encryption randomness** (CTR-PQZ-19): a transfer (op 1, op 7) draws a fresh 16-byte `salt` and encrypts from
@@ -49,7 +50,7 @@ use pqz_ffi::fixture::{wit_debit, wit_ds, wit_key, wit_multi};
 use pqz_ffi::pqzl::{self, Key, CT_BYTES, PK_BYTES};
 use pqz_ffi::selftest::digits;
 use pqz_ffi::stmt::{
-    built_legs, check_pk, coeffs_ok, groups, legs_per_group, parse, u64_word, Debit, Disclose, Form, Multi, Register, Stmt, Word, DELTA,
+    built_legs, check_pk, coeffs_ok, groups, legs_per_group, u64_word, Debit, Disclose, Form, Multi, Register, Stmt, Word, DELTA,
     DISC_WORDS, DW_AMOUNT, H_AMOUNT, H_BENEFICIARY, H_CHAIN_ID, H_CHAIN_UID, H_ENVELOPE, H_FEE, H_FROM, H_MEMO_HASH, H_PLAIN_USED, H_P,
     H_RECIPIENT, H_RECIPIENTS_HASH, H_REGISTRY, H_SALT, H_SEND_COUNTER, H_TO, H_TOKEN, H_VALID_UNTIL, K_MAX, PQZH_ID, PQZL_ID, Q,
 };
@@ -57,11 +58,11 @@ use rand_core::{OsRng, RngCore};
 use serde_json::{json, Map, Value};
 use sha2::Sha256;
 use std::sync::Arc;
-use subtle::{Choice, ConstantTimeEq};
+use subtle::{Choice, ConstantTimeEq, ConstantTimeLess};
 // ARCH-POS-13 (Fable P3-3, T15c2): what only the raw commands use (`dec`, the `raw*` commands) compiles only under the test
 // feature `vectors`, so a release build cannot construct `Req::Dec` or a request from a caller's `T`, statement or memo.
 #[cfg(feature = "vectors")]
-use pqz_ffi::stmt::check_ct;
+use pqz_ffi::stmt::{check_ct, parse};
 use zeroize::{Zeroize, Zeroizing};
 
 // one parameter set per build (owner 2026-10-21): pqz-stmt refuses two, and silently takes n2048-kmax1024 for none
@@ -153,6 +154,7 @@ fn system(id: &Word) -> Result<Word> {
 
 /// A statement's `proofSystemId` word (bytes 32..64), checked by [`system`] before the statement is parsed (pqz-stmt refuses
 /// every id it does not know as a malformed statement).
+#[cfg(feature = "vectors")]
 fn stmt_id(stmt: &[u8]) -> Result<Word> {
     system(&stmt.get(32..64).and_then(|w| w.try_into().ok()).ok_or(Error::Argument)?)
 }
@@ -176,17 +178,22 @@ pub fn enc(pks: &[Vec<u8>], values: &[u64]) -> Result<(Vec<u8>, Vec<Vec<u8>>)> {
 /// location and raw storage words and rebuild every ciphertext themselves (the words to read: [`STATE_LAYOUT`] and each
 /// command's line below). The raw forms, `dec` and the `raw*` commands (the vector files' `T`, statements and memos), exist only
 /// under the test feature `vectors`; in a release build they are unknown commands (`Argument`, before the key is touched), and
-/// their parsers do not compile (Fable P3-3, T15c2). `enc` is public, `proveRegister` and `proveKeyRecord` prove the own key,
-/// `proveDiscloseSender` decrypts nothing (a re-derivation compared with the statement in constant time).
+/// their parsers do not compile (Fable P3-3, T15c2). `enc` is public, `proveRegister` and `proveKeyRecord` prove the own key.
+/// `rawProveDiscloseSender` (the op 4 statement form, a caller's statement and amount: an equality test on the holder's sent
+/// amounts, Fable P2-1) exists only under `vectors` too; `proveDiscloseSender` takes the entry's words (T15l).
 ///
 /// The words commands, each `{chainUid, token, block, psid, blobs, keyRecord, …}` (+ the fields of its line):
-/// - `balance {ua, account, pending, accWords}` → `{value, p, sendCounter}` (the holder's own balance at the `p` a debit would use);
+/// - `balance {ua, account, pending, accWords, forOp7}` → `{value, p, sendCounter}` (the holder's own balance at the `p` a debit
+///   would use: `forOp7` true for an op 7, whose inline window on a PQZH token is `INLINE_MAX_PQZH`, false for op 1 / op 2);
 /// - `proveTransfer {…balance, chainId, registry, beneficiaryUA?, fee, validUntilBlock, shieldIn, envelopeBinding, toUA, pkT,
 ///   pkA?, amount, mode}`, `proveBurn {…, amount, recipient}`, `proveRefresh {…}`,
 ///   `proveTransferMulti {…, legs, pkA?, mode}` → `{stmt, proof, p}` (+ `memo` on op 7 `HASH`): `T`, `p` and `sendCounter` from the words;
 /// - `auditRead {chainId, entryRef, fromUA, sendCounter, entryPtr, leg, auditorMode, auditorUA}` on the auditor's handle → `{amount}`;
 /// - `proveDisclose {chainId, registry, entryRef, fromUA, sendCounter, entryPtr, leg, kind, [auditorMode, auditorUA]}`, `kind`
 ///   `RECEIVER_X` (the leg's owner's handle) or `AUDITOR` (the auditor's) → `{stmt, proof, amount}` (op 5);
+/// - `proveDiscloseSender {chainId, registry, entryRef, fromUA, sendCounter, entryPtr, leg, legKeyRecord}` on the sender's handle
+///   (`keyRecord` `fromUA`'s, `legKeyRecord` the registry's `pqzKey[UA_j]` with its code in `blobs`) → `{stmt, proof, amount}`
+///   (op 4 `SENDER_S`, the amount the entry's own);
 /// - `openMemo {chainId, entryRef, fromUA, sendCounter, entryPtr, memo}` on the sender's handle → `{auditorOn, legs}`.
 pub const COMMANDS: &[&str] = &[
     "enc",
@@ -215,6 +222,8 @@ pub const COMMANDS: &[&str] = &[
     "auditRead",
     "proveDisclose",
     "openMemo",
+    #[cfg(feature = "vectors")]
+    "rawProveDiscloseSender",
 ];
 
 /// The storage layout the words commands parse (`ua-mtx-merge`, `PqzCore.Account` / `PqzStorage` in the ERC-7201 namespace
@@ -289,12 +298,14 @@ fn allowed(cmd: &str, field: &str) -> bool {
         "rawProveRefresh" => has(HEADER) || has(&["proofSystemId", "T", "memoHash"]),
         #[cfg(feature = "vectors")]
         "rawProveTransferMulti" => has(HEADER) || has(&["proofSystemId", "legs", "pkA", "T", "mode"]),
-        "proveDiscloseSender" => has(&["stmt", "fromUA", "sendCounter", "salt", "auditorOn", "M", "leg"]),
+        #[cfg(feature = "vectors")]
+        "rawProveDiscloseSender" => has(&["stmt", "fromUA", "sendCounter", "salt", "auditorOn", "M", "leg"]),
+        "proveDiscloseSender" => has(LOC) || has(ENTRY) || has(&["registry", "leg", "legKeyRecord"]),
         #[cfg(feature = "vectors")]
         "rawProveDisclose" => field == "stmt",
         #[cfg(feature = "vectors")]
         "rawOpenMemo" => has(&["chainUid", "token", "fromUA", "sendCounter", "memo"]),
-        "balance" => has(LOC) || has(ACCT),
+        "balance" => has(LOC) || has(ACCT) || field == "forOp7",
         "proveTransfer" => debit(&["toUA", "pkT", "pkA", "amount", "mode"]),
         "proveBurn" => debit(&["amount", "recipient"]),
         "proveRefresh" => debit(&[]),
@@ -745,6 +756,22 @@ enum Memo {
     Given(Word),
 }
 
+/// The op 4 / op 5 statement words of an old entry (CTR-PQZ-14, `PqzCore._discHead`): opTag, the id, `chainId`, `chainUid`,
+/// `token`, `registry`, `entryRef`; the amount (word 7) and the kind word (word 8) are the caller's to fill.
+fn disc_words(f: &Fields<'_>, form: Form, id: &Word, entry_ref: &Word) -> Result<[Word; DISC_WORDS]> {
+    let mut words = Disclose::words(form, id);
+    for (i, w) in [
+        (2, u64_word(f.u64("chainId")?)),
+        (3, f.word("chainUid")?),
+        (4, addr(&f.arr("token")?)),
+        (5, addr(&f.arr("registry")?)),
+        (6, *entry_ref),
+    ] {
+        *words.get_mut(i).ok_or(Error::Argument)? = w;
+    }
+    Ok(words)
+}
+
 /// The typed request of a command.
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Req {
@@ -758,7 +785,11 @@ enum Req {
     Burn { id: Word, h: Header, amount: u64, recipient: Word, t: Vec<u8>, memo_hash: Word },
     Refresh { id: Word, h: Header, t: Vec<u8>, memo_hash: Word },
     Multi { id: Word, h: Header, legs: Vec<(Vec<u8>, Word, u64)>, pk_a: Option<Vec<u8>>, t: Vec<u8>, mode: Mode },
+    #[cfg(feature = "vectors")]
     DiscloseSender { stmt: Vec<u8>, from_ua: Word, send_counter: u64, salt: [u8; 16], aud: bool, multi: Option<(usize, usize)> },
+    /// Op 4 of leg `j` of the sender's own entry (`proveDiscloseSender`): the statement's words (the amount filled from the
+    /// entry), the leg owner's registered key, the leg rebuilt from the op blob, the blob's salt and shape `(auditorOn, M)`.
+    SenderLeg { words: [Word; DISC_WORDS], pk_t: Vec<u8>, ct: Vec<u8>, from_ua: Word, send_counter: u64, salt: [u8; 16], aud: bool, m: usize, j: usize },
     #[cfg(feature = "vectors")]
     Disclose { stmt: Vec<u8> },
     /// A rebuilt leg: `auditRead` (`form` `None`) or `proveDisclose` (op 5 `words`, the amount filled after decryption).
@@ -846,7 +877,8 @@ fn req(cmd: &str, f: &Fields<'_>) -> Result<(Req, Option<Vec<u8>>)> {
             Req::Multi { id: f.id()?, h: f.header()?, legs: f.legs()?, pk_a: f.opt_pk("pkA")?, t: f.ct("T")?, mode: f.mode()? },
             None,
         ),
-        "proveDiscloseSender" => {
+        #[cfg(feature = "vectors")]
+        "rawProveDiscloseSender" => {
             let multi = match (f.has("M"), f.has("leg")) {
                 (false, false) => None,
                 (true, true) => Some((
@@ -882,7 +914,10 @@ fn req(cmd: &str, f: &Fields<'_>) -> Result<(Req, Option<Vec<u8>>)> {
             None,
         ),
         "balance" => {
-            let (_, o) = own(f, false, false)?;
+            // `forOp7`: the `p` (and value) an op 7 would use (`INLINE_MAX_PQZH` on a PQZH token), else op 1 / op 2's
+            system(&f.word("psid")?)?;
+            let op7 = f.get("forOp7")?.as_bool().ok_or(Error::Argument)?;
+            let (_, o) = own(f, op7, false)?;
             (Req::Balance { t: o.t, p: o.p, send_counter: o.send_counter }, Some(o.key))
         }
         "proveTransfer" => {
@@ -932,18 +967,10 @@ fn req(cmd: &str, f: &Fields<'_>) -> Result<(Req, Option<Vec<u8>>)> {
             let holder = if auditor_read { auditor(f)? } else { e.owner(j)? };
             let ct = e.ct(j, auditor_read)?;
             let window = if auditor_read { j % legs_per_group(true) } else { 0 };
-            let mut words = Disclose::words(form.unwrap_or(Form::DiscloseAuditor), &id);
+            let mut words = Disclose::words(Form::DiscloseAuditor, &id);
             if let Some(form) = form {
-                for (i, w) in [
-                    (2, u64_word(f.u64("chainId")?)),
-                    (3, f.word("chainUid")?),
-                    (4, addr(&f.arr("token")?)),
-                    (5, addr(&f.arr("registry")?)),
-                    (6, e.entry_ref),
-                    (8, u64_word(if form == Form::DiscloseAuditor { 2 + 256 * window as u64 } else { 1 })),
-                ] {
-                    *words.get_mut(i).ok_or(Error::Argument)? = w;
-                }
+                words = disc_words(f, form, &id, &e.entry_ref)?;
+                *words.get_mut(8).ok_or(Error::Argument)? = u64_word(if form == Form::DiscloseAuditor { 2 + 256 * window as u64 } else { 1 });
             } else if f.has("registry") {
                 return Err(Error::Argument);
             }
@@ -952,6 +979,30 @@ fn req(cmd: &str, f: &Fields<'_>) -> Result<(Req, Option<Vec<u8>>)> {
                 return Err(Error::Argument);
             }
             (Req::Leg { form, words, ct, window }, Some(key))
+        }
+        "proveDiscloseSender" => {
+            let id = system(&f.word("psid")?)?;
+            let mut blobs = Blobs::new(f)?;
+            // `keyRecord` is `fromUA`'s (the handle's own: the sender), `legKeyRecord` the leg owner's (the statement's `pk`)
+            let key = registered_key(&f.word("keyRecord")?, &mut blobs)?;
+            let pk_t = registered_key(&f.word("legKeyRecord")?, &mut blobs)?;
+            let e = entry(f, &mut blobs)?;
+            blobs.done()?;
+            let j = usize::try_from(f.u64("leg")?).map_err(|_| Error::Argument)?;
+            let ct = e.ct(j, false)?;
+            let salt = e.r.get(..16).and_then(|x| x.try_into().ok()).ok_or(Error::Argument)?;
+            let r = Req::SenderLeg {
+                words: disc_words(f, Form::DiscloseSender, &id, &e.entry_ref)?,
+                pk_t,
+                ct,
+                from_ua: f.word("fromUA")?,
+                send_counter: f.u64("sendCounter")?,
+                salt,
+                aud: e.aud,
+                m: e.m,
+                j,
+            };
+            (r, Some(key))
         }
         "openMemo" => {
             system(&f.word("psid")?)?;
@@ -1008,7 +1059,8 @@ impl PqzCmd {
         self.cmd
     }
     /// Test-only (feature `vectors`): what a words command rebuilt from its words, before any key use: `{T, p, sendCounter}`
-    /// of an account, `{ct, window, words}` of an entry leg, `{auditorOn, uas}` a memo must name; the registered `key`.
+    /// of an account, `{ct, window, words}` of an entry leg, `{ct, legKey, salt, auditorOn, M, words}` of a sender's leg,
+    /// `{auditorOn, uas}` a memo must name; the registered `key`.
     #[cfg(feature = "vectors")]
     pub fn vectors_rebuilt(&self) -> Value {
         let mut v = match &self.req {
@@ -1020,6 +1072,8 @@ impl PqzCmd {
                 json!({"ct": to_hex(ct), "window": window, "words": words.iter().map(|w| to_hex(w)).collect::<Vec<_>>()})
             }
             Req::OpenMemo { expect: Some((aud, uas)), .. } => json!({"auditorOn": aud, "uas": uas.iter().map(|w| to_hex(w)).collect::<Vec<_>>()}),
+            Req::SenderLeg { words, pk_t, ct, salt, aud, m, .. } => json!({"ct": to_hex(ct), "legKey": to_hex(pk_t), "salt": to_hex(salt),
+                "auditorOn": aud, "M": m, "words": words.iter().map(|w| to_hex(w)).collect::<Vec<_>>()}),
             _ => json!({}),
         };
         if let (Some(o), Some(k)) = (v.as_object_mut(), &self.key) {
@@ -1132,6 +1186,23 @@ fn value(d: Option<([i64; 16], [i64; 16])>) -> Result<u64> {
     noise.zeroize();
     let v = m.iter().rev().try_fold(0i128, |a, &x| a.checked_mul(16)?.checked_add(i128::from(x)));
     v.and_then(|v| u64::try_from(v).ok()).ok_or(Error::Argument)
+}
+
+/// The amount a leg `v` carries over the sender's re-encryption of zero `v0` (the same randomness and key): each of the 16
+/// coefficients `(v − v0) mod q` is `Δ·digit`, the digit counted branch-free (`digit < 16`); and whether `v` is exactly `v0 +
+/// Δ·digits` (constant time). A `v` that is not the sender's encryption of some amount gives `false`.
+fn sender_amount(v: &[u8], v0: &[u8]) -> (u64, Choice) {
+    let delta = DELTA.unsigned_abs();
+    let lane = |b: &[u8]| b.iter().fold(0u64, |a, x| a << 8 | u64::from(*x));
+    let (mut amount, mut want) = (0u64, Vec::with_capacity(v0.len()));
+    for (i, (a, z)) in v.chunks_exact(8).zip(v0.chunks_exact(8)).enumerate() {
+        let (a, z) = (lane(a) % Q, lane(z) % Q);
+        let diff = (a + Q - z) % Q;
+        let k = (1..16u64).fold(0u64, |k, t| k + u64::from((!diff.ct_lt(&(t * delta))).unwrap_u8()));
+        amount |= k << (4 * i);
+        want.extend(((z + delta * k) % Q).to_be_bytes());
+    }
+    (amount, want.ct_eq(v))
 }
 
 fn prove(op: u8, stmt: &[u8], wit: &[u8], rnd32: &[u8; 32]) -> Result<Vec<u8>> {
@@ -1331,11 +1402,15 @@ impl PqzKey {
             Req::Multi { id, h, legs, pk_a, t, mode } => {
                 with_p(self.with_sk(|seed32, sk| self.multi(seed32, sk, d, id, h, legs, pk_a.as_deref(), t, *mode))?, h)
             }
+            #[cfg(feature = "vectors")]
             Req::DiscloseSender { stmt, from_ua, send_counter, salt, aud, multi } => {
                 stmt_id(stmt)?;
                 let Ok(Stmt::Disclose(s)) = parse(Form::DiscloseSender.op(), stmt) else { return Err(Error::Argument) };
                 self.with_sk(|seed32, _| self.disclose_sender(seed32, d, stmt, &s, from_ua, *send_counter, salt, *aud, *multi))?
             }
+            Req::SenderLeg { words, pk_t, ct, from_ua, send_counter, salt, aud, m, j } => self.with_sk(|seed32, _| {
+                self.disclose_sender_leg(seed32, d, *words, pk_t, ct, from_ua, *send_counter, salt, *aud, *m, *j)
+            })?,
             #[cfg(feature = "vectors")]
             Req::Disclose { stmt } => {
                 stmt_id(stmt)?;
@@ -1371,9 +1446,13 @@ impl PqzKey {
                     *hd.get_mut(i).ok_or(Error::Argument)? = w;
                 }
                 let (aud, legs) = pqz_ffi::memo::open(seed32, &hd, memo).ok_or(Error::Argument)?;
-                // the opened memo names the entry's legs (no MAC: a memo of another key or entry rebuilds other UAs)
-                if expect.as_ref().is_some_and(|(a, uas)| *a != aud || legs.iter().map(|l| l.1).ne(uas.iter().copied())) {
-                    return Err(Error::Argument);
+                // the opened memo names the entry's legs (no MAC: a memo of another key or entry rebuilds other UAs); compared in
+                // constant time (Fable P3-2: the opened UAs come from the key's keystream); the counts are public (the memo's length)
+                if let Some((a, uas)) = expect {
+                    let same = legs.iter().zip(uas).fold(u8::from(*a).ct_eq(&u8::from(aud)), |c, (l, w)| c & l.1.ct_eq(w));
+                    if legs.len() != uas.len() || !bool::from(same) {
+                        return Err(Error::Argument);
+                    }
                 }
                 let legs: Vec<Value> = legs.iter().map(|(a, ua)| json!({"amount": a, "ua": to_hex(ua)})).collect();
                 Ok(json!({"auditorOn": aud, "legs": legs}))
@@ -1536,30 +1615,91 @@ impl PqzKey {
     }
 
     /// Op 4 `SENDER_S` of leg 0 of an op 1 transfer (`multi` `None`, `aud` its auditorOn) or leg `j` of an op 7 transfer of `M`
-    /// legs (`multi` `Some((M, j))`): `r, e1, e2_t` re-derived from CTR-PQZ-19's `seed_enc` (the transfer's `fromUA`,
-    /// `sendCounter`, `salt`; `chainUid` and `token` from the statement), checked against the statement's `u` and `v`.
+    /// legs (`multi` `Some((M, j))`) from a caller's statement (feature `vectors`, the vector files' rows): `r, e1, e2_t`
+    /// re-derived from CTR-PQZ-19's `seed_enc` (the transfer's `fromUA`, `sendCounter`, `salt`; `chainUid` and `token` from the
+    /// statement), checked against the statement's `u` and `v`.
+    #[cfg(feature = "vectors")]
     #[allow(clippy::too_many_arguments)]
     fn disclose_sender(
         &self, seed32: &[u8], d: &Draw, stmt: &[u8], s: &Disclose<'_>, from_ua: &Word, send_counter: u64, salt: &[u8; 16],
         aud: bool, multi: Option<(usize, usize)>,
     ) -> Result<Value> {
         let Disclose { words, pk: pk_t, u, v, .. } = s.clone();
-        let id = system(words.get(1).ok_or(Error::Argument)?)?;
+        let seed = self.sender_seed(seed32, d, &words, from_ua, send_counter, salt)?;
+        let (mut c, i) = self.sender_enc(&seed, pk_t, aud, multi, &words, digits(s.amount()))?;
+        // Fable P3-1: the re-derived `u`, `v` against the statement's in constant time (`subtle`)
+        let v_eq = c.0.vs.get(i).map_or(Choice::from(0), |x| x[..].ct_eq(v));
+        if !bool::from(c.0.u[..].ct_eq(u) & v_eq) {
+            return Err(Error::Argument);
+        }
+        c.0.e2.swap(0, i);
+        let wit = Zeroizing::new(wit_ds(&c.0));
+        Ok(proved(stmt, &prove(Form::DiscloseSender.op(), stmt, &wit, &d.rnd32)?))
+    }
+
+    /// Op 4 `SENDER_S` of leg `j` of the handle's own entry, rebuilt from its words (T15l, Fable P2-1; spec no-decryption-oracle
+    /// §4.6): `r, e1, e2_j` re-derived from CTR-PQZ-19's `seed_enc` (`fromUA`, `sendCounter`, the blob's salt; `chainUid` and
+    /// `token` the location's) by encrypting zero to the leg owner's registered key; the amount is the entry's own, read from the
+    /// leg's `v` less that encryption (`Δ·digit` per coefficient, never a caller's guess); the leg's `u` and `v` must equal the
+    /// re-derivation at that amount (constant time), else `Argument`. An `M = 1` entry is op 1's or op 7's (one shape): both
+    /// re-derivations are made, the matching one used. Then the statement (`pk` the leg owner's key, `u`, `v` the leg's) and its
+    /// proof: `{stmt, proof, amount}`.
+    #[allow(clippy::too_many_arguments)]
+    fn disclose_sender_leg(
+        &self, seed32: &[u8], d: &Draw, mut words: [Word; DISC_WORDS], pk_t: &[u8], ct: &[u8], from_ua: &Word, send_counter: u64,
+        salt: &[u8; 16], aud: bool, m: usize, j: usize,
+    ) -> Result<Value> {
+        let seed = self.sender_seed(seed32, d, &words, from_ua, send_counter, salt)?;
+        let (u, v) = ct.split_at(PK_BYTES);
+        let shapes: &[Option<(usize, usize)>] = if m == 1 { &[None, Some((1, 0))] } else { &[Some((m, j))] };
+        let mut found = None;
+        for multi in shapes {
+            let (c, i) = self.sender_enc(&seed, pk_t, aud, *multi, &words, [0; 16])?;
+            let (amount, v_eq) = sender_amount(v, c.0.vs.get(i).ok_or(Error::Argument)?);
+            let ok = bool::from(c.0.u[..].ct_eq(u) & v_eq);
+            if ok && found.is_none() {
+                found = Some((c, i, amount));
+            }
+        }
+        let (mut c, i, amount) = found.ok_or(Error::Argument)?;
+        *words.get_mut(DW_AMOUNT).ok_or(Error::Argument)? = u64_word(amount);
+        let stmt = Stmt::Disclose(Disclose { form: Form::DiscloseSender, words, pk: pk_t, u, v }).encode().map_err(|_| Error::Argument)?;
+        c.0.e2.swap(0, i);
+        let wit = Zeroizing::new(wit_ds(&c.0));
+        let mut out = proved(&stmt, &prove(Form::DiscloseSender.op(), &stmt, &wit, &d.rnd32)?);
+        if let Some(o) = out.as_object_mut() {
+            o.insert("amount".into(), amount.into());
+        }
+        Ok(out)
+    }
+
+    /// CTR-PQZ-19's `seed_enc` of the sender's transfer named by op 4's `words` (`chainUid` word 3, `token` word 4).
+    fn sender_seed(
+        &self, seed32: &[u8], d: &Draw, words: &[Word; DISC_WORDS], from_ua: &Word, send_counter: u64, salt: &[u8; 16],
+    ) -> Result<Zeroizing<[u8; 32]>> {
         let (chain_uid, token) = (words.get(3).ok_or(Error::Argument)?, words.get(4).ok_or(Error::Argument)?);
         let token: [u8; 20] = token.get(12..).and_then(|t| t.try_into().ok()).ok_or(Error::Argument)?;
-        let seed = Zeroizing::new(match d.seed_enc {
+        Ok(Zeroizing::new(match d.seed_enc {
             Some(x) => x,
             None => seed_enc(seed32, chain_uid, &token, from_ua, send_counter, salt)?,
-        });
+        }))
+    }
+
+    /// The sender's re-encryption of the transfer's leg: op 1 (`multi` `None`: `[pk_t, pk_f, (pk_a)]`, leg 0) or op 7 group
+    /// `j / per` (`multi` `Some((M, j))`), `dv` at the leg, zero elsewhere; this handle's `pk` stands in for the other recipients
+    /// (the randomness does not depend on them). The encryption and the leg's index in it.
+    fn sender_enc(
+        &self, seed: &[u8; 32], pk_t: &[u8], aud: bool, multi: Option<(usize, usize)>, words: &[Word; DISC_WORDS], dv: [u8; 16],
+    ) -> Result<(Wiped, usize)> {
+        let id = system(words.get(1).ok_or(Error::Argument)?)?;
         let own = pk_ref(&self.pk)?;
-        let dv = digits(s.amount());
-        let (mut c, i) = match multi {
+        Ok(match multi {
             None => {
                 let n = 2 + aud as usize;
                 let pks = [pk_ref(pk_t)?, own, own];
                 let msgs = [dv, [0; 16], [0; 16]];
                 let (pks, msgs) = (pks.get(..n).ok_or(Error::Argument)?, msgs.get(..n).ok_or(Error::Argument)?);
-                (Wiped(pqzl::enc(pks, msgs, &seed).ok_or(Error::Argument)?), 0)
+                (Wiped(pqzl::enc(pks, msgs, seed).ok_or(Error::Argument)?), 0)
             }
             Some((m, j)) => {
                 if !built_legs(&id).contains(&m) || j >= m {
@@ -1579,18 +1719,9 @@ impl PqzKey {
                 }
                 let mut msgs = vec![[0u8; 16]; pks.len()];
                 *msgs.get_mut(i).ok_or(Error::Argument)? = dv;
-                let c = pqzl::enc_win(&pks, Some(&win), &msgs, &pqzl::enc_group_seed(&seed, g)).ok_or(Error::Argument)?;
-                (Wiped(c), i)
+                (Wiped(pqzl::enc_win(&pks, Some(&win), &msgs, &pqzl::enc_group_seed(seed, g)).ok_or(Error::Argument)?), i)
             }
-        };
-        // Fable P3-1: the re-derived `u`, `v` against the statement's in constant time (`subtle`)
-        let v_eq = c.0.vs.get(i).map_or(Choice::from(0), |x| x[..].ct_eq(v));
-        if !bool::from(c.0.u[..].ct_eq(u) & v_eq) {
-            return Err(Error::Argument);
-        }
-        c.0.e2.swap(0, i);
-        let wit = Zeroizing::new(wit_ds(&c.0));
-        Ok(proved(stmt, &prove(Form::DiscloseSender.op(), stmt, &wit, &d.rnd32)?))
+        })
     }
 
     fn cache_key(seed32: &[u8]) -> Result<Zeroizing<[u8; 32]>> {

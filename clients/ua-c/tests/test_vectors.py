@@ -2000,7 +2000,7 @@ class WalletPqz(WalletCase):
         rows = json.loads((STATE / 'pqz' / 'n2304-kmax4096' / 'state.json').read_text())
         a = rows['accounts'][0]
         words = dict({f: rows[f] for f in ('chainUid', 'token', 'psid')},
-                     **{f: a[f] for f in ('ua', 'block', 'account', 'pending', 'accWords', 'blobs', 'keyRecord')})
+                     **{f: a[f] for f in ('ua', 'block', 'account', 'pending', 'accWords', 'blobs', 'keyRecord')}, forOp7=False)
         k = self.qk(self.qw())
         self.assertEqual(self.call(k, 'balance', words), ('UAArgument', None))
         self.assertEqual(self.call(k, 'balance', dict(words, psid='0x' + PQZL_ID['n2048-kmax1024'])), ('UAPqzSetMismatch', None))

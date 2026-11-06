@@ -84,7 +84,7 @@ impl World {
         hx(&self.key(ua).pk())
     }
     fn balance(&self, ua: &Word) -> u64 {
-        call(self.key(ua), "balance", &self.c.own(ua, 16)).unwrap()["value"].as_u64().unwrap()
+        call(self.key(ua), "balance", &self.c.bal(ua)).unwrap()["value"].as_u64().unwrap()
     }
     fn debit(&self, ua: &Word, extra: Value) -> Value {
         merge(merge(self.c.own(ua, 16), self.c.debit_fields()), extra)
@@ -187,7 +187,7 @@ fn state_rows_reproduce_the_contract() {
         words.as_object_mut().unwrap().remove("registry");
         let key = hx(&h(&a["blobs"][0]["code"])[1..]);
         if a["shieldIn"] == 0 {
-            let b = rebuilt("balance", &words);
+            let b = rebuilt("balance", &merge(words.clone(), json!({"forOp7": false})));
             assert_eq!((&b["T"], &b["p"], &b["sendCounter"], &b["key"]), (&a["T"], &a["p"], &a["sendCounter"], &json!(key)), "{name}: balance");
         }
         let refresh = merge(words, json!({"chainId": r["chainId"], "registry": r["registry"], "fee": 0, "validUntilBlock": 1u64 << 40,
@@ -209,6 +209,13 @@ fn state_rows_reproduce_the_contract() {
             assert_eq!((&b["ct"], &b["window"]), (&l["ct"], &json!(0)), "{name} leg {}", l["leg"]);
             assert_eq!(b["words"][6], e["entryRef"], "{name}: entryRef in the statement");
             assert_eq!(b["key"], json!(hx(&h(&l["key"]["code"])[1..])), "{name}: the leg owner's registered key");
+            // T15l: the sender's op 4 of the same leg (its key record the sender account's row)
+            let from = r["accounts"].as_array().unwrap().iter().find(|a| a["ua"] == e["fromUA"]).unwrap();
+            let ds = merge(base.clone(), json!({"leg": l["leg"], "blobs": [e["blob"], from["blobs"][0], l["key"]], "keyRecord": from["keyRecord"],
+                "legKeyRecord": l["keyRecord"]}));
+            let b = rebuilt("proveDiscloseSender", &ds);
+            assert_eq!((&b["ct"], &b["words"][6], &b["words"][0]), (&l["ct"], &e["entryRef"], &json!(hx(&Form::DiscloseSender.op_tag()))), "{name}: op 4");
+            assert_eq!((&b["legKey"], &b["key"]), (&json!(hx(&h(&l["key"]["code"])[1..])), &json!(hx(&h(&from["blobs"][0]["code"])[1..]))), "{name}: op 4 keys");
             if l["auditorCt"] != "" {
                 let j = l["leg"].as_u64().unwrap();
                 let au = merge(base.clone(), json!({"ua": r["auditorUA"], "leg": j, "blobs": [e["blob"], r["auditorKey"]],
@@ -240,7 +247,7 @@ fn balances_and_debits_over_rebuilt_words() {
     let mut wd = World::new();
     wd.c.shield(&A, 600);
     wd.c.shield(&A, 400);
-    let b = call(wd.key(&A), "balance", &wd.c.own(&A, 16)).unwrap();
+    let b = call(wd.key(&A), "balance", &wd.c.bal(&A)).unwrap();
     assert_eq!(b, json!({"value": 1000, "p": 2, "sendCounter": 0}));
     wd.pay(&A, &BOB, 300, true);
     assert_eq!((wd.balance(&A), wd.balance(&BOB)), (700, 300));
@@ -317,10 +324,10 @@ fn requests_carry_words_only() {
     }
     let base = wd.c.own(&A, 16);
     assert_eq!(base["pending"].as_array().unwrap().len(), 16, "p = rolled + INLINE_MAX");
-    let b = call(wd.key(&A), "balance", &base).unwrap();
+    let b = call(wd.key(&A), "balance", &wd.c.bal(&A)).unwrap();
     assert_eq!((b["p"].clone(), b["value"].clone()), (json!(16), json!((0..16).sum::<u64>())));
     let reqs = [
-        ("balance", base.clone()),
+        ("balance", wd.c.bal(&A)),
         ("proveRefresh", wd.debit(&A, json!({}))),
         ("proveTransfer", wd.debit(&A, json!({"toUA": hx(&BOB), "pkT": wd.pk(&BOB), "amount": 1, "mode": "HASH"}))),
     ];
@@ -333,7 +340,21 @@ fn requests_carry_words_only() {
             refused(&format!("{cmd} with {f}"), wd.key(&A), cmd, &merge(req.clone(), json!({ f: v })), Error::Argument);
         }
     }
+    // `forOp7` (T15l, Fable P3-6): named, no default, a bool
+    for bad in [json!(null), json!(0), json!("true")] {
+        refused(&format!("forOp7 {bad}"), wd.key(&A), "balance", &merge(base.clone(), json!({"forOp7": bad})), Error::Argument);
+    }
+    refused("no forOp7", wd.key(&A), "balance", &base, Error::Argument);
     if pqz_ffi::PQZH {
+        // an op 7 of a PQZH token reads INLINE_MAX_PQZH pending entries: `balance` with `forOp7` reports that `p` and value
+        let mut b10 = merge(wd.c.own(&A, 10), json!({"forOp7": true}));
+        b10["psid"] = json!(hx(&st::PQZH_ID));
+        let b = call(wd.key(&A), "balance", &b10).unwrap();
+        assert_eq!((b["p"].clone(), b["value"].clone()), (json!(10), json!((0..10).sum::<u64>())), "forOp7 on a PQZH token");
+        refused("forOp7 false over op 7's window", wd.key(&A), "balance", &merge(b10.clone(), json!({"forOp7": false})), Error::Argument);
+        let mut b16 = wd.c.bal(&A);
+        b16["psid"] = json!(hx(&st::PQZH_ID));
+        assert_eq!(call(wd.key(&A), "balance", &b16).unwrap()["p"], 16, "op 1 / op 2 on a PQZH token: INLINE_MAX");
         // op 7 of a PQZH token: INLINE_MAX_PQZH (feature vectors: the rebuilt p)
         #[cfg(feature = "vectors")]
         {
@@ -368,10 +389,10 @@ fn word_negatives_refused_before_the_key() {
     wd.c.roll(&A, 1);
     wd.c.shield(&A, 4);
     let k = wd.key(&BOB);
-    let ok = wd.c.own(&BOB, 16);
+    let ok = wd.c.bal(&BOB);
     assert_eq!(call(k, "balance", &ok).unwrap()["value"], 307, "positive control: Bob");
     let ka = wd.key(&A);
-    let oka = wd.c.own(&A, 16);
+    let oka = wd.c.bal(&A);
     assert_eq!(call(ka, "balance", &oka).unwrap()["value"], 707, "positive control: Alice (materialised)");
     let neg = |what: &str, k: &PqzKey, base: &Value, f: &dyn Fn(&mut Value), want: Error| {
         let mut r = base.clone();
@@ -481,6 +502,82 @@ fn entry_and_role_negatives_refused_before_the_key() {
     for f in ["ct", "stmt", "T", "amount", "u", "v"] {
         refused(&format!("{f} on proveDisclose"), kb, "proveDisclose", &r(&rx, json!({ f: "0x00" })), Error::Argument);
     }
+}
+
+fn prover_calls() -> usize {
+    #[cfg(feature = "vectors")]
+    return scaas_ua::facade::pqz::vectors_prover_calls();
+    #[cfg(not(feature = "vectors"))]
+    0
+}
+
+/// T15l (Fable P2-1; spec §4.6): `proveDiscloseSender` over the sender's own entry words, op 1 (audited, and an amount 0) and
+/// op 7 (`M = 1`, the op 1 shape; `M = 4` audited, leg 3 in group 1): the amount is the entry's (the request has no amount or
+/// statement field), the statement's `pk` the leg owner's registered key, its `u`, `v` the leg's (those of the receiver's
+/// `RECEIVER_X` statement); each proof verifies.
+#[test]
+fn sender_disclosure_over_rebuilt_words() {
+    let mut wd = World::new();
+    wd.c.shield(&A, 1000);
+    let e1 = wd.pay(&A, &BOB, 300, true);
+    let e0 = wd.pay(&A, &Z, 0, false);
+    let (e7, _) = wd.pay_multi(&A, &[(BOB, 7)], false, "HASH");
+    let (e74, _) = wd.pay_multi(&A, &[(BOB, 10), (Z, 20), (X, 30), (Y, 40)], true, "BUNDLE");
+    let ka = wd.key(&A);
+    for (er, j, owner, amount, rx) in [(e1, 0, BOB, 300, true), (e0, 0, Z, 0, false), (e7, 0, BOB, 7, false), (e74, 0, BOB, 10, false), (e74, 3, Y, 40, true)] {
+        let p = call(ka, "proveDiscloseSender", &wd.c.sender_leg(&er, j, &owner)).unwrap();
+        assert_eq!(p["amount"], amount, "leg {j}");
+        let s = h(&p["stmt"]);
+        assert!(verify(4, &s, &h(&p["proof"])), "op 4 leg {j} verifies");
+        let Stmt::Disclose(d) = st::parse(4, &s).unwrap() else { panic!() };
+        assert_eq!((d.form, d.words[6], d.amount(), d.pk), (Form::DiscloseSender, er, amount, &wd.key(&owner).pk()[..]));
+        if rx {
+            let q = merge(wd.c.entry(&er, &owner), json!({"ua": hx(&owner), "leg": j, "kind": "RECEIVER_X", "registry": hx(&REG)}));
+            let r = h(&call(wd.key(&owner), "proveDisclose", &q).unwrap()["stmt"]);
+            let Stmt::Disclose(r) = st::parse(5, &r).unwrap() else { panic!() };
+            assert_eq!((r.u, r.v, r.amount(), &r.words[2..7]), (d.u, d.v, amount, &d.words[2..7]), "the receiver's statement, the same leg");
+        }
+    }
+}
+
+/// T15l: `proveDiscloseSender`'s negatives. Before the key (one status, the key unused): a caller `amount`, `stmt`, `salt`,
+/// `auditorOn` or `M`; `entryRef` not recomputing; a leg outside the entry; the leg owner's record or code missing; the
+/// sender's record on another handle; another set's `psid`. After the key, before the prover (the sender's re-derivation does
+/// not match the leg): another key record as the leg owner's, another sender's entry under its own record.
+#[test]
+fn sender_disclosure_negatives() {
+    let mut wd = World::new();
+    wd.c.shield(&A, 1000);
+    wd.c.shield(&Z, 1000);
+    let e1 = wd.pay(&A, &BOB, 300, true);
+    let ez = wd.pay(&Z, &BOB, 5, false);
+    let (ka, kb) = (wd.key(&A), wd.key(&BOB));
+    let ok = wd.c.sender_leg(&e1, 0, &BOB);
+    assert!(PqzCmd::from_json("proveDiscloseSender", ok.to_string().as_bytes()).is_ok(), "positive control");
+    for (f, v) in [("amount", json!(300)), ("stmt", json!("0x00")), ("salt", json!(hx(&[0x5a; 16]))), ("auditorOn", json!(true)), ("M", json!(1)),
+        ("ua", json!(hx(&A))), ("kind", json!("SENDER_S"))]
+    {
+        refused(&format!("a caller {f}"), ka, "proveDiscloseSender", &merge(ok.clone(), json!({ f: v })), Error::Argument);
+    }
+    refused("entryRef not recomputing", ka, "proveDiscloseSender", &merge(ok.clone(), json!({"sendCounter": 7})), Error::Argument);
+    refused("a leg outside the entry", ka, "proveDiscloseSender", &merge(ok.clone(), json!({"leg": 1})), Error::Argument);
+    let mut no_owner = ok.clone();
+    no_owner.as_object_mut().unwrap().remove("legKeyRecord");
+    refused("no legKeyRecord", ka, "proveDiscloseSender", &no_owner, Error::Argument);
+    let mut no_code = ok.clone();
+    no_code["blobs"].as_array_mut().unwrap().pop();
+    refused("the leg owner's key code missing", ka, "proveDiscloseSender", &no_code, Error::Argument);
+    refused("the sender's record on Bob's handle", kb, "proveDiscloseSender", &ok, Error::Argument);
+    refused("psid of another set", ka, "proveDiscloseSender", &merge(ok.clone(), json!({"psid": hx(&[7; 32])})), Error::PqzSetMismatch);
+    let calls = prover_calls();
+    let other_owner = wd.c.sender_leg(&e1, 0, &Z);
+    assert_eq!(call(ka, "proveDiscloseSender", &other_owner).err(), Some(Error::Argument), "Z's key as the leg owner's");
+    // Z's entry, asked on Alice's handle with Alice's own record: entryRef recomputes, the re-derivation (Alice's seed) does not
+    let mut theirs = wd.c.sender_leg(&ez, 0, &BOB);
+    theirs["keyRecord"] = json!(hx(&wd.c.key_record(&A)));
+    theirs["blobs"] = json!(wd.c.blobs_json(&[wd.c.entries[&ez].ptr, wd.c.keys[&A], wd.c.keys[&BOB]]));
+    assert_eq!(call(ka, "proveDiscloseSender", &theirs).err(), Some(Error::Argument), "another sender's entry");
+    assert_eq!(prover_calls(), calls, "refused before the prover");
 }
 
 /// `openMemo` of an old entry: its memo's salt and length are the entry blob's, the opened legs are the blob's, the sender's
@@ -606,7 +703,8 @@ fn forge_rows_on_another_handle_are_refused_before_the_key() {
     for a in r["accounts"].as_array().unwrap() {
         let name = a["name"].as_str().unwrap();
         let words = json!({"chainUid": r["chainUid"], "token": r["token"], "psid": r["psid"], "ua": a["ua"], "block": a["block"],
-            "account": a["account"], "pending": a["pending"], "accWords": a["accWords"], "blobs": a["blobs"], "keyRecord": a["keyRecord"]});
+            "account": a["account"], "pending": a["pending"], "accWords": a["accWords"], "blobs": a["blobs"], "keyRecord": a["keyRecord"],
+            "forOp7": false});
         assert!(PqzCmd::from_json("balance", words.to_string().as_bytes()).is_ok(), "{name}: the words parse (control)");
         refused(name, &k, "balance", &words, Error::Argument);
         refused(name, &k, "balance", &merge(words, json!({"psid": other["psid"]})), Error::PqzSetMismatch);

@@ -2429,8 +2429,8 @@ pub extern "C" fn scaas_ua_pqz_public(k: *const ScaasUaPqzKey, out: *mut u8, out
     })
 }
 
-/// PQZ command `cmd` (enc, proveRegister, proveKeyRecord, proveDiscloseSender and, on raw storage words, balance, proveTransfer,
-/// proveBurn, proveRefresh, proveTransferMulti, auditRead, proveDisclose, openMemo) on `request_json` (named fields, bytes "0x"
+/// PQZ command `cmd` (enc, proveRegister, proveKeyRecord and, on raw storage words, balance, proveTransfer, proveBurn,
+/// proveRefresh, proveTransferMulti, auditRead, proveDisclose, proveDiscloseSender, openMemo) on `request_json` (named fields, bytes "0x"
 /// hex, u64 numbers; at most 4 MiB, depth 8) with the handle's key: its JSON answer into `out_json`. Every field is checked against
 /// the command's allow-list: a `key`, `seed32` or any other field not on it is SCAAS_UA_ERR_ARGUMENT, a `proofSystemId` or `psid`
 /// of another set SCAAS_UA_ERR_PQZ_SET_MISMATCH, a prover refusal SCAAS_UA_ERR_ARGUMENT (no detail). Pass `out_json` of

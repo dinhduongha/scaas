@@ -1389,6 +1389,7 @@ func TestPqzWordsOnTheForgeRows(t *testing.T) {
 	for _, f := range []string{"ua", "block", "account", "pending", "accWords", "blobs", "keyRecord"} {
 		words[f] = a[f]
 	}
+	words["forOp7"] = false
 	f := newFix(t)
 	k := must(f.fresh("pq_kat").PqzKey(0, 0))
 	defer k.Close()

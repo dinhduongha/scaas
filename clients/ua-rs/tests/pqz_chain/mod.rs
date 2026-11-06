@@ -248,6 +248,18 @@ impl Chain {
             "account": a.slots().iter().map(|w| hx(w)).collect::<Vec<_>>(), "pending": pending, "accWords": acc_words,
             "blobs": self.blobs_json(&blobs), "keyRecord": hx(&self.key_record(ua))})
     }
+    /// A `balance` request for `ua` (op 1 / op 2's `p`: `forOp7` false).
+    pub fn bal(&self, ua: &Word) -> Value {
+        merge(self.own(ua, 16), json!({"forOp7": false}))
+    }
+    /// A `proveDiscloseSender` request of leg `j` of entry `er` for its sender (`keyRecord` the sender's, `legKeyRecord` and
+    /// its code the leg owner's `owner`).
+    pub fn sender_leg(&self, er: &Word, j: usize, owner: &Word) -> Value {
+        let e = &self.entries[er];
+        let mut v = self.entry(er, &e.from);
+        v["blobs"] = json!(self.blobs_json(&[e.ptr, self.keys[&e.from], self.keys[owner]]));
+        merge(v, json!({"leg": j, "registry": hx(&REG), "legKeyRecord": hx(&self.key_record(owner))}))
+    }
     pub fn blobs_json(&self, list: &[[u8; 20]]) -> Vec<Value> {
         let mut seen = Vec::new();
         list.iter()

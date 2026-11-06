@@ -644,6 +644,7 @@ void main() {
     final words = {
       for (final f in ['chainUid', 'token', 'psid']) f: st[f],
       for (final f in ['ua', 'block', 'account', 'pending', 'accWords', 'blobs', 'keyRecord']) f: a[f],
+      'forOp7': false,
     };
     final k = await (await walletOf('pq_kat')).pqzKey(account: 0, index: 0);
     expect(await code(() => k.call(cmd: 'balance', requestJson: jsonEncode(words))), 'UAArgument');

@@ -135,7 +135,6 @@ fn two_proofs_differ() {
 /// One set per build: another set's `proofSystemId` on any proving command, another deployed set, or a statement of
 /// another id is `PqzSetMismatch`; this build's ids and set pass (positive controls).
 #[test]
-#[cfg_attr(not(feature = "vectors"), allow(clippy::single_element_loop))] // a release build has no proveDisclose
 fn set_mismatch_refused() {
     unlock();
     let s = pqz_set();
@@ -172,16 +171,18 @@ fn set_mismatch_refused() {
         assert_eq!(PqzCmd::from_json(cmd, bad.to_string().as_bytes()).err(), Some(Error::PqzSetMismatch), "{cmd}");
         assert_eq!(call(&k, cmd, &bad).err(), Some(Error::PqzSetMismatch), "{cmd}: call");
     }
-    // a disclosure statement of another id
-    let (u, v) = (vec![0u8; st::PK_BYTES], vec![0u8; 128]);
-    for (form, cmd, extra) in [
-        #[cfg(feature = "vectors")]
-        (Form::DiscloseReceiver, "rawProveDisclose", json!({})),
-        (Form::DiscloseSender, "proveDiscloseSender", json!({"fromUA": hx(&[0xA1; 32]), "sendCounter": 1, "salt": hx(&[5; 16]), "auditorOn": false})),
-    ] {
-        let mut stmt = disclosure(form, &PQZL_ID, 0, 1, &k.pk(), &u, &v);
-        stmt[32..64].copy_from_slice(&foreign_id());
-        assert_eq!(call(&k, cmd, &merge(json!({"stmt": hx(&stmt)}), extra)).err(), Some(Error::PqzSetMismatch), "{cmd}");
+    // a disclosure statement of another id (the raw forms; the words forms' `psid`: facade_pqz_state.rs)
+    #[cfg(feature = "vectors")]
+    {
+        let (u, v) = (vec![0u8; st::PK_BYTES], vec![0u8; 128]);
+        for (form, cmd, extra) in [
+            (Form::DiscloseReceiver, "rawProveDisclose", json!({})),
+            (Form::DiscloseSender, "rawProveDiscloseSender", json!({"fromUA": hx(&[0xA1; 32]), "sendCounter": 1, "salt": hx(&[5; 16]), "auditorOn": false})),
+        ] {
+            let mut stmt = disclosure(form, &PQZL_ID, 0, 1, &k.pk(), &u, &v);
+            stmt[32..64].copy_from_slice(&foreign_id());
+            assert_eq!(call(&k, cmd, &merge(json!({"stmt": hx(&stmt)}), extra)).err(), Some(Error::PqzSetMismatch), "{cmd}");
+        }
     }
 }
 
@@ -254,7 +255,7 @@ fn base_request(k: &PqzKey, cmd: &str) -> Value {
         "rawProveBurn" => merge(header(1), json!({"proofSystemId": id, "amount": 1, "recipient": hx(&[3; 32]), "T": t, "memoHash": hx(&[0; 32])})),
         "rawProveRefresh" => merge(header(1), json!({"proofSystemId": id, "T": t, "memoHash": hx(&[0; 32])})),
         "rawProveTransferMulti" => merge(header(1), json!({"proofSystemId": id, "legs": [leg], "T": t, "mode": "BUNDLE"})),
-        "proveDiscloseSender" => json!({"stmt": sstmt, "fromUA": hx(&[1; 32]), "sendCounter": 1, "salt": hx(&[5; 16]), "auditorOn": true}),
+        "rawProveDiscloseSender" => json!({"stmt": sstmt, "fromUA": hx(&[1; 32]), "sendCounter": 1, "salt": hx(&[5; 16]), "auditorOn": true}),
         "rawProveDisclose" => json!({"stmt": stmt}),
         "rawOpenMemo" => json!({"chainUid": hx(&[1; 32]), "token": hx(&[2; 20]), "fromUA": hx(&[3; 32]), "sendCounter": 1, "memo": hx(&[0; 58])}),
         _ => words_request(k, cmd),
@@ -277,7 +278,7 @@ fn words_request(k: &PqzKey, cmd: &str) -> Value {
     let debit = merge(c.own(&ua, 16), c.debit_fields());
     let pk = hx(&k.pk());
     match cmd {
-        "balance" => c.own(&ua, 16),
+        "balance" => merge(c.own(&ua, 16), json!({"forOp7": false})),
         "proveTransfer" => merge(debit, json!({"toUA": hx(&[2; 32]), "pkT": pk, "amount": 1, "mode": "HASH"})),
         "proveBurn" => merge(debit, json!({"amount": 1, "recipient": hx(&[3; 32])})),
         "proveRefresh" => debit,
@@ -285,13 +286,17 @@ fn words_request(k: &PqzKey, cmd: &str) -> Value {
         "auditRead" => merge(merge(c.entry(&er, &ua), c.auditor_words(2)), json!({"ua": hx(&ua), "leg": 0})),
         "proveDisclose" => merge(c.entry(&er, &ua), json!({"ua": hx(&ua), "leg": 0, "kind": "RECEIVER_X", "registry": hx(&REG)})),
         "openMemo" => merge(c.entry(&er, &ua), json!({"memo": hx(&[[0x5a; 16].as_slice(), &[0; 42]].concat())})),
+        "proveDiscloseSender" => {
+            merge(c.entry(&er, &ua), json!({"leg": 0, "registry": hx(&REG), "legKeyRecord": hx(&c.key_record(&ua))}))
+        }
         _ => panic!("{cmd}: no base request"),
     }
 }
 
 /// The raw commands ARCH-POS-13 keeps out of a release build (T15c): each decrypts or opens a ciphertext, statement or `T`
 /// its caller chose.
-const RAW: [&str; 7] = ["dec", "rawProveTransfer", "rawProveBurn", "rawProveRefresh", "rawProveTransferMulti", "rawProveDisclose", "rawOpenMemo"];
+const RAW: [&str; 8] =
+    ["dec", "rawProveTransfer", "rawProveBurn", "rawProveRefresh", "rawProveTransferMulti", "rawProveDisclose", "rawOpenMemo", "rawProveDiscloseSender"];
 
 /// ARCH-POS-13 (T15c, F1 / F2 / F3 / F8): a release build lists none of the raw commands and refuses each, with a well-formed
 /// request, as `Argument` (an unknown command, before the key); under `vectors` they are there (the vector files' hooks).
@@ -303,7 +308,7 @@ fn release_has_no_raw_decrypt() {
     let want: Vec<&str> = if cfg!(feature = "vectors") {
         ["enc", "dec", "proveRegister", "proveKeyRecord", "rawProveTransfer", "rawProveBurn", "rawProveRefresh", "rawProveTransferMulti",
             "proveDiscloseSender", "rawProveDisclose", "rawOpenMemo", "balance", "proveTransfer", "proveBurn", "proveRefresh",
-            "proveTransferMulti", "auditRead", "proveDisclose", "openMemo"].to_vec()
+            "proveTransferMulti", "auditRead", "proveDisclose", "openMemo", "rawProveDiscloseSender"].to_vec()
     } else {
         release.to_vec()
     };
@@ -346,7 +351,7 @@ fn raw_requests_compile_only_under_vectors() {
     };
     // `dec` and the raw disclosure: their own variants; the raw debits and memo (T15e): the words commands' variants, built
     // from a caller's `T` or memo only by these gated arms and the gated `Fields::ct` / `Fields::header`
-    for (v, cmd) in [("Dec", "dec"), ("Disclose", "rawProveDisclose")] {
+    for (v, cmd) in [("Dec", "dec"), ("Disclose", "rawProveDisclose"), ("DiscloseSender", "rawProveDiscloseSender")] {
         let found = at(v, cmd);
         assert_eq!(found.len(), 4, "{v}: variant, two arms, allow-list");
         found.iter().for_each(|&i| assert!(gated(i), "{v}: line {} not under cfg(vectors): {}", i + 1, lines[i]));
@@ -362,9 +367,10 @@ fn raw_requests_compile_only_under_vectors() {
         let i = lines.iter().position(|l| l.starts_with(f)).unwrap();
         assert!(gated(i), "{f}: the caller's T and header parse only under vectors");
     }
-    for (v, cmd) in [("Enc", "enc"), ("Register", "proveRegister"), ("KeyRecord", "proveKeyRecord"), ("DiscloseSender", "proveDiscloseSender")] {
+    // (`SenderLeg` also has its arm in the test-only `vectors_rebuilt`)
+    for (v, cmd, n) in [("Enc", "enc", 4), ("Register", "proveRegister", 4), ("KeyRecord", "proveKeyRecord", 4), ("SenderLeg", "proveDiscloseSender", 5)] {
         let found = at(v, cmd);
-        assert_eq!(found.len(), 4, "{v}: positive control");
+        assert_eq!(found.len(), n, "{v}: positive control");
         found.iter().for_each(|&i| assert!(!gated(i), "{v}: a kept command is gated"));
     }
     assert_eq!(scaas_ua::VECTORS, cfg!(feature = "vectors"), "scaas_ua::VECTORS is the build's");
@@ -378,6 +384,16 @@ fn disclose_sender_compares_in_constant_time() {
     let body = &src[src.find("    fn disclose_sender(").unwrap()..src.find("    fn cache_key(").unwrap()];
     assert!(body.contains(".ct_eq(u)") && body.contains(".ct_eq(v)"), "ct_eq on u and v");
     assert!(!body.contains("!="), "no slice `!=` in disclose_sender");
+}
+
+/// Fable P3-2 (T15l): `openMemo` compares the opened memo's `auditorOn` and UAs with the entry's in constant time (the opened
+/// values come from the key's keystream), not with `Iterator::ne` or `!=` (a source assertion; the lengths are public).
+#[test]
+fn open_memo_compares_in_constant_time() {
+    let src = std::fs::read_to_string(format!("{}/src/facade/pqz.rs", env!("CARGO_MANIFEST_DIR"))).unwrap();
+    let arm = &src[src.find("            Req::OpenMemo { chain_uid").unwrap()..src.find("        Ok(out.to_string())").unwrap()];
+    assert!(arm.contains("l.1.ct_eq(w)") && arm.contains("u8::from(*a).ct_eq(&u8::from(aud))"), "ct_eq on the UAs and auditorOn");
+    assert!(!arm.contains(".ne(") && !arm.contains("*a != aud"), "no variable-time compare of opened values");
 }
 
 /// Every command, positive control first: a minimal well-formed request passes the decoder; with a `key` (or `seed32`, `s`,
@@ -481,10 +497,10 @@ fn transfer_and_disclosures_verify() {
     // disclosures
     let ss = disclosure(Form::DiscloseSender, &PQZL_ID, 0, 300, &b.pk(), d.u, d.v_t.unwrap());
     let origin = json!({"stmt": hx(&ss), "fromUA": hx(&[0xA1; 32]), "sendCounter": 3, "salt": hx(&salt), "auditorOn": true});
-    let s = call(&a, "proveDiscloseSender", &origin).unwrap();
+    let s = call(&a, "rawProveDiscloseSender", &origin).unwrap();
     assert!(verify(4, &ss, &h(&s["proof"])));
     let wrong = merge(origin.clone(), json!({"sendCounter": 4}));
-    refused_before_the_prover("another counter: another seed", || call(&a, "proveDiscloseSender", &wrong));
+    refused_before_the_prover("another counter: another seed", || call(&a, "rawProveDiscloseSender", &wrong));
     let rx = disclosure(Form::DiscloseReceiver, &PQZL_ID, 1, 300, &b.pk(), d.u, d.v_t.unwrap());
     assert!(verify(5, &rx, &h(&call(&b, "rawProveDisclose", &json!({"stmt": hx(&rx)})).unwrap()["proof"])));
     refused_before_the_prover("not Alice's key", || call(&a, "rawProveDisclose", &json!({"stmt": hx(&rx)})));
@@ -552,8 +568,8 @@ fn transfer_multi_memo_and_sender_disclosure() {
     assert_eq!(call(&b, "rawOpenMemo", &mref).err(), Some(Error::Argument), "another key's memo");
     let ss = disclosure(Form::DiscloseSender, &PQZL_ID, 0, 250, &b.pk(), m.u(0), m.v(0));
     let origin = json!({"stmt": hx(&ss), "fromUA": hx(&[0xA1; 32]), "sendCounter": 9, "salt": hx(&salt), "auditorOn": true, "M": 2, "leg": 0});
-    assert!(verify(4, &ss, &h(&call(&a, "proveDiscloseSender", &origin).unwrap()["proof"])));
-    refused_before_the_prover("leg 1 is not Bob's", || call(&a, "proveDiscloseSender", &merge(origin, json!({"leg": 1}))));
+    assert!(verify(4, &ss, &h(&call(&a, "rawProveDiscloseSender", &origin).unwrap()["proof"])));
+    refused_before_the_prover("leg 1 is not Bob's", || call(&a, "rawProveDiscloseSender", &merge(origin, json!({"leg": 1}))));
     // M not built (3), and a leg past M
     let three = merge(req, json!({"legs": [legs[0], legs[1], legs[1]]}));
     assert_eq!(call(&a, "rawProveTransferMulti", &three).err(), Some(Error::Argument));
@@ -878,7 +894,7 @@ mod vectors {
                                 let req = json!({"stmt": hx(&with_id(&want, id)), "fromUA": hx(&[0xA1; 32]), "sendCounter": 3,
                                     "salt": hx(&[0x5A; 16]), "auditorOn": o["ct"]["recipients"].as_array().unwrap().len() == 3});
                                 // any sender handle: the witness is the encryption's; pk_f stands in for the other recipients
-                                (PqzKey::vectors_from_seed32(&s32(&o["ct"]["recipients"][1])).unwrap(), "proveDiscloseSender", req)
+                                (PqzKey::vectors_from_seed32(&s32(&o["ct"]["recipients"][1])).unwrap(), "rawProveDiscloseSender", req)
                             } else {
                                 (key(&o["pk"]), "rawProveDisclose", json!({"stmt": hx(&with_id(&want, id))}))
                             };

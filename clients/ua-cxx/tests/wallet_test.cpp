@@ -845,6 +845,7 @@ static void pqz_words() {
     json a = st["accounts"][0];
     json words = {{"chainUid", st["chainUid"]}, {"token", st["token"]}, {"psid", st["psid"]}};
     for (auto f : {"ua", "block", "account", "pending", "accWords", "blobs", "keyRecord"}) words[f] = a[f];
+    words["forOp7"] = false;
     Wallet w = wallet_of("pq_kat");
     PqzKey k = w.pqzKey(0, 0);
     CHECK(code_of([&] { k.call("balance", words.dump()); }) == "UAArgument", "a forge row: no wallet key");

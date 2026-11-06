@@ -106,7 +106,7 @@ def zether_seeds():
     loc = {k: st[k] for k in ("family", "chainId", "chainUid", "token", "block", "psid")}
     for a in st["accounts"]:
         w = {**loc, "ua": a["ua"], "account": a["account"], "accountData": a["accountData"]}
-        out += [zc("balance", {**w, "tableBits": 18, "boundBits": 20}), zc("checkBalance", {**w, "balance": a["balance"]})]
+        out += [zc("balance", {**w, "tableBits": 18, "boundBits": 20}), zc("checkBalance", {**w, "cacheBox": {"iv": "AAAAAAAAAAAAAAAA", "ct": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}})]
     for x in st["entries"]:
         ent = {**loc, "fromUA": x["fromUA"], "sendCounter": x["sendCounter"], "entryWords": x["entryWords"], "entryPtr": x["entryPtr"],
                **{k: x[k] for k in ("blob", "memoWords") if k in x}}
@@ -157,9 +157,9 @@ def pqz_seeds():
                                          "T": h(b[640 + 3 * PK:640 + 3 * PK + CT]), "mode": "HASH"}))
     for r in pload("statement_disclose.json")["rows"]:
         if r["form"] == "DISCLOSE-SENDER":
-            out.append(qc("proveDiscloseSender", {"stmt": "0x" + r["stmt"], "fromUA": h(b"\xa1" * 32), "sendCounter": 3, "salt": "0x" + "5a" * 16,
+            out.append(qc("rawProveDiscloseSender", {"stmt": "0x" + r["stmt"], "fromUA": h(b"\xa1" * 32), "sendCounter": 3, "salt": "0x" + "5a" * 16,
                                                   "auditorOn": True}))
-            out.append(qc("proveDiscloseSender", {"stmt": "0x" + r["stmt"], "fromUA": h(b"\xa1" * 32), "sendCounter": 3, "salt": "0x" + "5a" * 16,
+            out.append(qc("rawProveDiscloseSender", {"stmt": "0x" + r["stmt"], "fromUA": h(b"\xa1" * 32), "sendCounter": 3, "salt": "0x" + "5a" * 16,
                                                   "auditorOn": True, "M": 2, "leg": 1}))
         else:
             out.append(qc("rawProveDisclose", {"stmt": "0x" + r["stmt"]}))
@@ -171,7 +171,7 @@ def pqz_seeds():
     for a in sv["accounts"][:2]:
         w = {**loc, "ua": a["ua"], "block": a["block"], "account": a["account"], "pending": a["pending"], "accWords": a["accWords"],
              "blobs": a["blobs"], "keyRecord": a["keyRecord"]}
-        out.append(qc("balance", w))
+        out.append(qc("balance", {**w, "forOp7": False}))
         out.append(qc("proveRefresh", {**w, "chainId": sv["chainId"], "registry": sv["registry"], "fee": 0, "validUntilBlock": 1 << 40,
                                        "shieldIn": a["shieldIn"], "envelopeBinding": h(bytes(32))}))
     e = next(x for x in sv["entries"] if x["legs"][0]["auditorCt"])
@@ -179,6 +179,9 @@ def pqz_seeds():
             "entryPtr": e["entryPtr"], "block": 1, "leg": 0}
     out.append(qc("proveDisclose", {**base, "ua": e["legs"][0]["ua"], "kind": "RECEIVER_X", "registry": sv["registry"],
                                     "blobs": [e["blob"], e["legs"][0]["key"]], "keyRecord": e["legs"][0]["keyRecord"]}))
+    snd = next(x for x in sv["accounts"] if x["ua"] == e["fromUA"])
+    out.append(qc("proveDiscloseSender", {**base, "registry": sv["registry"], "blobs": [e["blob"], snd["blobs"][0], e["legs"][0]["key"]],
+                                          "keyRecord": snd["keyRecord"], "legKeyRecord": e["legs"][0]["keyRecord"]}))
     out.append(qc("auditRead", {**base, "ua": sv["auditorUA"], "auditorMode": sv["auditorMode"], "auditorUA": sv["auditorUA"],
                                 "blobs": [e["blob"], sv["auditorKey"]], "keyRecord": sv["auditorKeyRecord"]}))
     out.append(bytes([QBOX]) + js({"iv": "AAAAAAAAAAAAAAAA", "ct": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}))

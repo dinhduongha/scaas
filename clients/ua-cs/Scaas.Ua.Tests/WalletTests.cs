@@ -826,6 +826,7 @@ public class WalletTests : IDisposable
         var words = new JsonObject();
         foreach (var f in new[] { "chainUid", "token", "psid" }) words[f] = JsonNode.Parse(st.GetProperty(f).GetRawText());
         foreach (var f in new[] { "ua", "block", "account", "pending", "accWords", "blobs", "keyRecord" }) words[f] = JsonNode.Parse(a.GetProperty(f).GetRawText());
+        words["forOp7"] = false;
         var k = Keep(Fresh("pq_kat").PqzKey(0, 0));
         Assert.Equal("UAArgument", Code(() => k.Call("balance", words.ToJsonString())));
         words["psid"] = Pqzl2048;

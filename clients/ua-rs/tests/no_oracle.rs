@@ -19,7 +19,7 @@ mod pqz_chain;
 use pqz_chain::*;
 use pqz_ffi::stmt::{DELTA, PK_BYTES, Q};
 use scaas_ua::facade::pqz::{AllowSecretExport, PqzCmd, PqzKey, COMMANDS};
-use scaas_ua::facade::pqz_pack::PKP;
+use scaas_ua::facade::pqz_pack::{PKP, VP};
 use scaas_ua::wallet::{Error, Wallet};
 use serde_json::{json, Value};
 
@@ -169,21 +169,31 @@ fn a_crafted_query_beside_real_words_is_refused() {
     c.register(A, &k.pk());
     c.shield(&A, 1234);
     let words = c.own(&A, 16);
-    assert_eq!(call(&k, "balance", &words).unwrap()["value"], 1234, "the words alone");
+    assert_eq!(call(&k, "balance", &c.bal(&A)).unwrap()["value"], 1234, "the words alone");
     let debit = merge(words.clone(), c.debit_fields());
+    // an old entry of the holder's (an op 1 blob, structurally valid): `proveDiscloseSender`'s words
+    let blob = [vec![0x5a; 16], vec![0u8; PKP + VP], [0xB0; 32].to_vec(), vec![0u8; VP]].concat();
+    let ptr = c.put(blob);
+    let er = entry_ref(&A, 0);
+    c.entries.insert(er, Ent { ptr, from: A, ctr: 0, memo: vec![] });
     let pk = format!("0x{}", hex::encode(k.pk()));
     let reqs = [
-        ("balance", words.clone()),
+        ("balance", c.bal(&A)),
         ("proveRefresh", debit.clone()),
         ("proveBurn", merge(debit.clone(), json!({"amount": 1, "recipient": hx(&[0x0B; 32])}))),
         ("proveTransfer", merge(debit.clone(), json!({"toUA": hx(&A), "pkT": pk, "amount": 1, "mode": "BUNDLE"}))),
         ("proveTransferMulti", merge(debit, json!({"legs": [{"pk": pk, "ua": hx(&A), "amount": 1}], "mode": "BUNDLE"}))),
+        ("proveDiscloseSender", c.sender_leg(&er, 0, &A)),
     ];
     let before = key_uses();
     let (u, v) = query(0, 0);
     for (cmd, r) in &reqs {
         assert!(PqzCmd::from_json(cmd, r.to_string().as_bytes()).is_ok(), "{cmd}: the request alone parses");
-        for s in shapes(&u, &v, 0) {
+        // T15l (Fable P2-1): the old op 4 form rode a statement and its amount; beside real words both are refused by the
+        // allow-list (the right reason: the words alone parse, so no field is missing), never by a later compare
+        let guess = [json!({"amount": 1234}), json!({"amount": 1234, "stmt": format!("0x{}", hex::encode(&u))})];
+        let extra = if *cmd == "proveDiscloseSender" || *cmd == "balance" { &guess[..] } else { &[] };
+        for s in shapes(&u, &v, 0).into_iter().chain(extra.iter().cloned()) {
             let m = merge(r.clone(), s.clone());
             assert_eq!(PqzCmd::from_json(cmd, m.to_string().as_bytes()).err(), Some(Error::Argument), "{cmd} {s:.60}");
             assert_eq!(call(&k, cmd, &m).err(), Some(Error::Argument), "{cmd} {s:.60}");
@@ -205,7 +215,7 @@ fn residual_control_fabricated_words_are_decrypted() {
         c.register(A, &k.pk());
         let ptr = c.put([vec![0u8; 16], pack(u), pack(v)].concat());
         c.credit(&A, ptr, 16, 16 + PKP);
-        call(&k, "balance", &c.own(&A, 16)).unwrap()["value"].as_u64().unwrap()
+        call(&k, "balance", &c.bal(&A)).unwrap()["value"].as_u64().unwrap()
     });
     assert_eq!(n, 2 * K);
     for (i, r) in rec.iter().enumerate() {

@@ -71,7 +71,7 @@ fn write_wallet_rows() {
     c.settle1(&stmt, None);
     c.shield(&B, 7);
     let row = |name: &str, index: u32, ua: &[u8; 32], value: u64| {
-        json!({"name": name, "account": 0, "index": index, "command": "balance", "request": c.own(ua, 16), "value": value})
+        json!({"name": name, "account": 0, "index": index, "command": "balance", "request": c.bal(ua), "value": value})
     };
     let out = json!({
         "set": SET,
