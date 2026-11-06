@@ -1333,7 +1333,7 @@ func in(list []string, s string) bool {
 // tests/facade_zether_state.rs counts the key's uses); every `vectors`-only raw form refused by the release library.
 func TestZetherWordsOnTheForgeRows(t *testing.T) {
 	release, raw := commands(t, "zether")
-	if !in(release, "balance") || !in(release, "pendingBalance") || len(raw) == 0 {
+	if !in(release, "balance") || !in(release, "pendingBalance") || !in(raw, "decrypt") || !in(raw, "decryptPending") {
 		t.Fatal(release, raw)
 	}
 	st := vec(t, "smartcontracts/vectors/zether/state.json")
@@ -1380,7 +1380,7 @@ func TestZetherWordsOnTheForgeRows(t *testing.T) {
 // both before the key (ua-rs tests/facade_pqz_state.rs counts the key's uses); every `vectors`-only raw form refused.
 func TestPqzWordsOnTheForgeRows(t *testing.T) {
 	release, raw := commands(t, "pqz")
-	if !in(release, "balance") || len(raw) == 0 {
+	if !in(release, "balance") || !in(raw, "dec") {
 		t.Fatal(release, raw)
 	}
 	st := vec(t, "smartcontracts/vectors/pqz/n2304-kmax4096/state.json")

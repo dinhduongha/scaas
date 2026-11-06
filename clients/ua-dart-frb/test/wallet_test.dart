@@ -610,7 +610,7 @@ void main() {
   test('zether_words', () async {
     final (release, raw) = commands('zether');
     expect(release, containsAll(['balance', 'pendingBalance']));
-    expect(raw, isNotEmpty);
+    expect(raw, containsAll(['decrypt', 'decryptPending']));
     final st = load_('../zether/state.json');
     final row = {for (final r in st['accounts'] as List) (r['name'] as String).split(':')[0]: r};
     String words(String name) => jsonEncode({
@@ -638,7 +638,7 @@ void main() {
   test('pqz_words', () async {
     final (release, raw) = commands('pqz');
     expect(release, contains('balance'));
-    expect(raw, isNotEmpty);
+    expect(raw, contains('dec'));
     final st = load_('../pqz/n2304-kmax4096/state.json');
     final a = st['accounts'][0];
     final words = {

@@ -1825,7 +1825,8 @@ class WalletZether(WalletCase):
         release, raw = commands('zether')
         for c in ('balance', 'pendingBalance'):
             self.assertIn(c, release)
-        self.assertTrue(raw)
+        for c in ('decrypt', 'decryptPending'):
+            self.assertIn(c, raw)
         rows = json.loads((STATE / 'zether' / 'state.json').read_text())
         row = {r['name'].split(':')[0]: r for r in rows['accounts']}
         loc = {f: rows[f] for f in ('family', 'chainId', 'chainUid', 'token', 'block', 'psid')}
@@ -1995,7 +1996,7 @@ class WalletPqz(WalletCase):
         `vectors`-only raw form refused here."""
         release, raw = commands('pqz')
         self.assertIn('balance', release)
-        self.assertTrue(raw)
+        self.assertIn('dec', raw)
         rows = json.loads((STATE / 'pqz' / 'n2304-kmax4096' / 'state.json').read_text())
         a = rows['accounts'][0]
         words = dict({f: rows[f] for f in ('chainUid', 'token', 'psid')},

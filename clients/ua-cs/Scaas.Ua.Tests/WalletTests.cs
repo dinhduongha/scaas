@@ -790,7 +790,8 @@ public class WalletTests : IDisposable
         var (release, raw) = Commands("zether");
         Assert.Contains("balance", release);
         Assert.Contains("pendingBalance", release);
-        Assert.NotEmpty(raw);
+        Assert.Contains("decrypt", raw);
+        Assert.Contains("decryptPending", raw);
         var st = Load("smartcontracts/vectors/zether/state.json");
         var row = Rows(st, "accounts").ToDictionary(r => S(r, "name").Split(':')[0]);
         string Words(string name)
@@ -819,7 +820,7 @@ public class WalletTests : IDisposable
     {
         var (release, raw) = Commands("pqz");
         Assert.Contains("balance", release);
-        Assert.NotEmpty(raw);
+        Assert.Contains("dec", raw);
         var st = Load("smartcontracts/vectors/pqz/n2304-kmax4096/state.json");
         var a = Rows(st, "accounts").First();
         var words = new JsonObject();

@@ -806,7 +806,8 @@ static bool member(const std::vector<std::string>& v, const std::string& s) { re
 // tests/facade_zether_state.rs counts the key's uses); every `vectors`-only raw form refused by the release build.
 static void zether_words() {
     auto [release, raw] = commands("zether");
-    CHECK(member(release, "balance") && member(release, "pendingBalance") && !raw.empty(), "COMMANDS membership");
+    CHECK(member(release, "balance") && member(release, "pendingBalance"), "COMMANDS membership");
+    CHECK(member(raw, "decrypt") && member(raw, "decryptPending"), "the raw forms only under vectors");
     json st = load_json(std::string(SCAAS_UA_VECTORS_DIR) + "/../zether/state.json");
     std::map<std::string, json> row;
     for (auto& r : st["accounts"]) {
@@ -838,7 +839,8 @@ static void zether_words() {
 // refused.
 static void pqz_words() {
     auto [release, raw] = commands("pqz");
-    CHECK(member(release, "balance") && !raw.empty(), "COMMANDS membership");
+    CHECK(member(release, "balance"), "COMMANDS membership");
+    CHECK(member(raw, "dec"), "the raw form only under vectors");
     json st = load_json(std::string(SCAAS_UA_VECTORS_DIR) + "/../pqz/n2304-kmax4096/state.json");
     json a = st["accounts"][0];
     json words = {{"chainUid", st["chainUid"]}, {"token", st["token"]}, {"psid", st["psid"]}};
