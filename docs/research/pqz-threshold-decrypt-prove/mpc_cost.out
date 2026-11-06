@@ -1,0 +1,14 @@
+n2048-kmax1024 R_DR/R_DS/R_REG: leaf 482 B, 4 perms/leaf, 131024 Keccak-f, 5.03e+09 AND, A2B 3.7e+08 AND, total 5.4e+09 AND = 0.63 GiB/party at 1 bit/AND
+n2048-kmax1024 R_TX: leaf 848 B, 7 perms/leaf, 229292 Keccak-f, 8.8e+09 AND, A2B 6.7e+08 AND, total 9.47e+09 AND = 1.10 GiB/party at 1 bit/AND
+n2304-kmax4096 R_DR/R_DS/R_REG: leaf 482 B, 4 perms/leaf, 183008 Keccak-f, 7.03e+09 AND, A2B 5.1e+08 AND, total 7.54e+09 AND = 0.88 GiB/party at 1 bit/AND
+n2304-kmax4096 R_TX: leaf 848 B, 7 perms/leaf, 320264 Keccak-f, 1.23e+10 AND, A2B 9.3e+08 AND, total 1.32e+10 AND = 1.54 GiB/party at 1 bit/AND
+PQZL masks per quad attempt 10880+4480=15360; per proof ~2.76e+05 Gaussian samples
+  at 1e+04 AND/sample: 2.76e+09 AND = 0.32 GiB/party
+  at 1e+05 AND/sample: 2.76e+10 AND = 3.22 GiB/party
+alpha 275.8, eta*alpha 38610, sigma1/(eta*alpha) 10.52
+  t=2: one honest share sigma1/sqrt(t) / (eta*alpha) = 7.44
+  t=3: one honest share sigma1/sqrt(t) / (eta*alpha) = 6.08
+  t=4: one honest share sigma1/sqrt(t) / (eta*alpha) = 5.26
+n=3: degree 1, reconstruct 2, multiplication online 3
+n=5: degree 2, reconstruct 3, multiplication online 5
+n=7: degree 3, reconstruct 4, multiplication online 7
