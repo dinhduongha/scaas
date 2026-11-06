@@ -1,0 +1,38 @@
+# 2026-11-06 ua-rs-sign T8: AEAD (Alg::{Aes256Gcm, Aes256GcmSiv}, aead_seal / aead_open, a bad tag Aead and no plaintext), HKDF-SHA256
+# (hkdf_sha256, hkdf_expand_sha256, len <= 255 x 32), HMAC-SHA256; seal / open (Sealed, HKDF info "scaas/seal/v1" || scheme || be16
+# len(purpose) || purpose || keccak256(kemPk), AES-256-GCM nonce 0, pt <= 1 MiB, purpose [a-z0-9./-]{1,64}, SealVersion, SealOpen); the
+# backup and link containers (base64url JSON, the sender's full UASig under the off-chain seal purpose, open_container with
+# ContainerExpect / Members / Accepted, all checks before decapsulation, ContainerSender); LinkSession (8-digit code, 10-minute window,
+# ContainerReplay) and Wallet::from_link consuming the session. Spec §6.3, §7, §9.1; C-03, C-11, MD-10, MD-11. UNAUDITED.
+# All commands in clients/ua-rs through scripts/capped, -j2, --locked; full logs git-ignored (clients/ua-rs/target/t8/<step>.log).
+# Gates ran on the tree committed as 11140f4b, the T8 code commit (the commit before this summary).
+step | commit | rc | counts
+red: cargo test --features vectors --test wallet_seal (tests only) | 9e948968 | 101 | does not compile: 44 errors, E0432 (3) unresolved wallet::{aead_open, aead_seal, hkdf_*, hmac_sha256, seal, Alg, ContainerExpect, ...}, seal_purpose_tag; E0425 (2); E0599 (39) no open, open_container, recipient, from_link, variants SealOpen / Aead / SealVersion / ContainerSender
+green: cargo test --features vectors --test wallet_seal | 11140f4b | 0 | 26 passed
+clippy --all-targets -D warnings (default = wallet + zether + pqz + pqz-set-n2304-kmax4096) | 11140f4b | 0 | 0 warnings (one type_complexity in the new test fixed by a type alias)
+clippy --no-default-features | 11140f4b | 0 | 0 warnings
+clippy --no-default-features --features signers | 11140f4b | 0 | 0 warnings
+clippy --no-default-features --features json | 11140f4b | 0 | 0 warnings
+clippy --no-default-features --features pq | 11140f4b | 0 | 0 warnings
+clippy --features vectors | 11140f4b | 0 | 0 warnings
+test (default) | 11140f4b | 0 | 23 suites, 206 passed, 0 failed, 1 ignored (T7: 181; + wallet_seal 21, + 4 doc tests: two compile_fail, two controls)
+test --no-default-features | 11140f4b | 0 | 10 suites, 50 passed (unchanged)
+test --no-default-features --features signers --test groups | 11140f4b | 0 | 8 passed, 1 ignored
+test --no-default-features --features json --test json | 11140f4b | 0 | 5 passed
+test --no-default-features --features pq --test pq --test ua8 --test nested | 11140f4b | 0 | 45 passed
+test --features vectors | 11140f4b | 0 | 23 suites, 252 passed, 0 failed, 2 ignored (T7: 222; + wallet_seal 26, + 4 doc tests)
+build wasm32-unknown-unknown --no-default-features / --no-default-features --features signers / pq / wallet / default | 11140f4b | 0 | ok, 5 of 5 (link clock js_sys::Date::now)
+cargo deny --all-features check (cargo-deny 0.20.2) | 11140f4b | 0 | advisories ok, bans ok, licenses ok, sources ok; warnings: 22 duplicates (unchanged from T7)
+Cargo.lock | 11140f4b | - | + aead 0.5.2, aes 0.8.4, aes-gcm 0.10.3, aes-gcm-siv 0.11.1, cipher 0.4.4, ctr 0.9.2, ghash 0.5.1, inout 0.1.4, opaque-debug 0.3.1, polyval 0.6.2, universal-hash 0.5.1 (base64ct 1.8.3 and js-sys 0.3.107 were in the lock)
+cargo update -p scaas-ua --offline; cargo tree --locked --offline in scaas-node, ua-c, ua-cxx, ua-qt, ua-dart-frb/rust | 11140f4b | 0 | 5 of 5; no lock moves for scaas-ua. scaas-node's offline update again re-resolved tempfile's getrandom 0.4.3 -> 0.3.4 (unrelated): reverted, cargo tree --locked passes on the committed lock
+clientkeys npm test | - | - | not run: no vector or JS file changed
+mutants: 2026-11-06-ua-rs-sign-t8-mutants.py | 11140f4b | 0 | 35 killed, 0 survived, 0 not loaded (2026-11-06-ua-rs-sign-t8-mutants.txt); first run: M28, M35 survived, closed by two tests before the commit
+docs_check check / paths | 11140f4b | 0 | 0 errors 5 warnings (existing) / 0 machine paths
+# Byte-equal and refused: seal.json seal rows rebuilt with the row's m and e; open, refusals, argumentRefusals; containers 4 (backup
+# generation 2, link, msig flat, msig nested) rebuilt byte-equal and their JSON round trip, 3 opened (the link one by its session);
+# acceptance 28 rows outside link (ContainerSender, SealOpen, SealVersion or accepted; the restore row opens here, its refusal is
+# T9's) and the link rows (window, swapped short code). External: NIST GCM 13-16, RFC 8452 C.2, RFC 5869 A.1 / A.3, RFC 4231 1-2.
+# Notes: (1) the seal purpose is outside PURPOSES as seal_purpose_tag() (clientkeys SEAL_TAG); MD-10's text says PURPOSES with an
+# off-chain mark. (2) Wallet::from_link takes bip39_passphrase as its last argument (spec §9.1 has none). (3) a failed from_link
+# wipes the session. (4) MD-11: only the seal-caller half (Recipient::ua refuses an msig with KemHolder); record builders are 3c's.
+# (5) from_link installs the payload's entropy only; secrets / manifest / generation and restore_backup are T9's.

@@ -1,0 +1,44 @@
+# 2026-11-06 ua-rs-sign T8 mutants: python3 -I smartcontracts/evm/runs/2026-11-06-ua-rs-sign-t8-mutants.py (from the worktree root, one run of 1-35), on the tree committed as 11140f4b;
+# suite (in clients/ua-rs): scripts/capped cargo test -j2 --locked --features vectors --test wallet_seal.
+# One mutant per run, every file restored byte for byte; the failed-test list is cut at 200 characters. UNAUDITED.
+killed   | M1 kemPkHash left out of the HKDF info | src/wallet/seal.rs | rc=101 | 13 failed: approved_set_bounded, msig_member_msig_with_own_sig_refused, msig_sender_without_accepted_refused, seal_json_acceptance, seal_json_containers_open, seal_json_open, seal_json_refusals, single_key_sende
+killed   | M2 purpose left out of the HKDF info | src/wallet/seal.rs | rc=101 | 13 failed: approved_set_bounded, msig_member_msig_with_own_sig_refused, msig_sender_without_accepted_refused, seal_json_acceptance, seal_json_containers_open, seal_json_open, seal_json_refusals, single_key_sende
+killed   | M3 aad ignored (seal and open) | src/wallet/seal.rs | rc=101 | 13 failed: approved_set_bounded, msig_member_msig_with_own_sig_refused, msig_sender_without_accepted_refused, seal_json_acceptance, seal_json_containers_open, seal_json_open, seal_json_refusals, single_key_sende
+killed   | M4 open returns plaintext on a bad tag (the ciphertext without its tag) | src/wallet/aead.rs | rc=101 | 3 failed: aead_open_refusals, seal_json_argument_refusals, seal_json_refusals
+killed   | M5 container sender signature unchecked (single key) | src/wallet/seal.rs | rc=101 | 1 failed: seal_json_acceptance
+killed   | M6 msig sender with a non-minimal set accepted (level 1) | src/ua8.rs | rc=101 | 1 failed: seal_json_acceptance
+killed   | M7 msig sender with a non-minimal set accepted (level 2) | src/ua8.rs | rc=101 | 1 failed: seal_json_acceptance
+killed   | M8 single-key UASig with members accepted | src/wallet/seal.rs | rc=101 | 1 failed: seal_json_acceptance
+killed   | M9 member acceptance skipped (level 1) | src/wallet/seal.rs | rc=101 | 2 failed: msig_sender_without_accepted_refused, seal_json_acceptance
+killed   | M10 member acceptance skipped (level 2) | src/wallet/seal.rs | rc=101 | 1 failed: seal_json_acceptance
+killed   | M11 accepted weight counted over the signers, not the accepted ones | src/wallet/seal.rs | rc=101 | 2 failed: msig_sender_without_accepted_refused, seal_json_acceptance
+killed   | M12 a missing accepted treated as all accepted | src/wallet/seal.rs | rc=101 | 2 failed: msig_sender_without_accepted_refused, seal_json_acceptance
+killed   | M13 short code left out of the link aad | src/wallet/seal.rs | rc=101 | 4 failed: vectors::link_session_key_wiped_after_install, vectors::seal_json_acceptance_link, vectors::seal_json_containers_rebuilt, vectors::seal_json_replay_link
+killed   | M14 expected sender ignored | src/wallet/seal.rs | rc=101 | 1 failed: seal_json_acceptance
+killed   | M15 purpose expectation skipped | src/wallet/seal.rs | rc=101 | 1 failed: seal_json_acceptance
+killed   | M16 recipient expectation skipped (the container's recipient field) | src/wallet/seal.rs | rc=101 | 1 failed: seal_json_acceptance
+killed   | M17 recipient expectation skipped (the opening key's own) | src/wallet/seal.rs | rc=101 | 1 failed: seal_json_acceptance
+killed   | M18 derive_ua recomputation skipped (any kind whose key data parses) | src/wallet/seal.rs | rc=101 | 1 failed: seal_json_acceptance
+killed   | M19 link window not checked | src/wallet/seal.rs | rc=101 | 1 failed: vectors::seal_json_replay_link
+killed   | M20 link window: lower bound only | src/wallet/seal.rs | rc=101 | 1 failed: vectors::seal_json_replay_link
+killed   | M21 link window: upper bound only | src/wallet/seal.rs | rc=101 | 1 failed: vectors::seal_json_replay_link
+killed   | M22 scheme byte of the HKDF info changed (2) | src/wallet/seal.rs | rc=101 | 13 failed: approved_set_bounded, msig_member_msig_with_own_sig_refused, msig_sender_without_accepted_refused, seal_json_acceptance, seal_json_containers_open, seal_json_open, seal_json_refusals, single_key_sende
+killed   | M23 seal version / scheme not checked by open | src/wallet/seal.rs | rc=101 | 1 failed: seal_json_refusals
+killed   | M24 plaintext over 1 MiB sealed | src/wallet/seal.rs | rc=101 | 2 failed: pt_over_1_MiB_refused, seal_json_argument_refusals
+killed   | M25 purpose charset not checked | src/wallet/seal.rs | rc=101 | 1 failed: seal_json_argument_refusals
+killed   | M26 the sender signs the aad only (wire form left out) | src/wallet/seal.rs | rc=101 | 10 failed: approved_set_bounded, msig_member_msig_with_own_sig_refused, msig_sender_without_accepted_refused, seal_json_acceptance, seal_json_containers_open, single_key_sender_never_asks_accepted, vectors::link
+killed   | M27 msig sender's own signature allowed | src/wallet/seal.rs | rc=101 | 1 failed: seal_json_acceptance
+killed   | M28 msig member of an msig with a signature of its own allowed | src/wallet/seal.rs | rc=101 | 1 failed: msig_member_msig_with_own_sig_refused
+killed   | M29 approved sender set unbounded | src/wallet/seal.rs | rc=101 | 1 failed: approved_set_bounded
+killed   | M30 MD-11: Recipient::ua accepts a non-holder (an msig) | src/wallet/seal.rs | rc=101 | 1 failed: msig_recipient_refused
+killed   | M31 link session key not wiped | src/wallet/seal.rs | rc=101 | 1 failed: vectors::link_session_key_wiped_after_install
+killed   | M32 GCM-SIV computed as GCM | src/wallet/aead.rs | rc=101 | 2 failed: aead_open_refusals, rfc8452_aes256_gcm_siv
+killed   | M33 HMAC key ignored | src/wallet/aead.rs | rc=101 | 1 failed: rfc4231_hmac_sha256
+killed   | M34 HKDF salt ignored | src/wallet/aead.rs | rc=101 | 1 failed: rfc5869_hkdf_sha256
+killed   | M35 container JSON length bound raised (64 MiB) | src/wallet/seal.rs | rc=101 | 1 failed: container_json_bounds
+mutants M1-M35 of 35, survived or not loaded: 0
+# First run (before the two tests below): M28 and M35 SURVIVED (rc 0). Findings closed by tests, then the full run above:
+# M28 (an msig member of an msig with a signature of its own): seal.json has no such row (clientkeys msigOk checks it);
+#   new msig_member_msig_with_own_sig_refused (the nested row with slot 0's sig set; control: the row opens unchanged).
+# M35 (container JSON bound 4 -> 64 MiB): 5 MiB of spaces is malformed JSON, Argument either way; container_json_bounds
+#   now pads a valid container to exactly 4 MiB (reads, control) and one byte past it (Argument).
