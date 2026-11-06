@@ -4,12 +4,17 @@
 // ignore_for_file: invalid_use_of_internal_member, unused_import, unnecessary_import
 
 import '../frb_generated.dart';
+import 'dart:ffi' as ffi;
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'ua.dart';
 
-// These functions are ignored because they are not marked as `pub`: `a`, `alg`, `arg`, `container`, `key`, `native`, `network`, `new`, `read`, `restore`, `secret`, `signer`, `text`, `ua`, `unlock`, `with`, `with`
-// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `KeyInner`, `Live`, `Opening`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `drop`, `from`
+// These functions are ignored because they are not marked as `pub`: `a`, `alg`, `alloc`, `arg`, `container`, `get_mut`, `get`, `k32`, `key`, `native`, `network`, `new`, `out`, `read`, `read`, `restore`, `signer`, `text`, `ua`, `unlock`, `with`, `with`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Block`, `KeyInner`, `Live`, `Opening`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `drop`, `drop`, `from`
+
+/// A new secret of `len` zero bytes (`UAArgument` above 16 MiB); Dart's `SecretBytes.take` fills it.
+SecretBytes secretAlloc({required int len}) =>
+    ScaasUa.instance.api.crateApiWalletSecretAlloc(len: len);
 
 int abiVersion() => ScaasUa.instance.api.crateApiWalletAbiVersion();
 
@@ -23,8 +28,8 @@ Future<(UaWallet, UaSeedBackup)> walletGenerate() =>
     ScaasUa.instance.api.crateApiWalletWalletGenerate();
 
 Future<UaWallet> walletFromMnemonic({
-  required List<int> words,
-  required List<int> bip39Passphrase,
+  required SecretBytes words,
+  required SecretBytes bip39Passphrase,
 }) => ScaasUa.instance.api.crateApiWalletWalletFromMnemonic(
   words: words,
   bip39Passphrase: bip39Passphrase,
@@ -33,9 +38,9 @@ Future<UaWallet> walletFromMnemonic({
 /// Exactly one of `vault_passphrase` / `prf32` (null = absent; both: the PRF secret, the passphrase not tried).
 Future<UaWallet> walletOpenVault({
   required String vaultJson,
-  Uint8List? vaultPassphrase,
-  Uint8List? prf32,
-  required List<int> bip39Passphrase,
+  SecretBytes? vaultPassphrase,
+  SecretBytes? prf32,
+  required SecretBytes bip39Passphrase,
 }) => ScaasUa.instance.api.crateApiWalletWalletOpenVault(
   vaultJson: vaultJson,
   vaultPassphrase: vaultPassphrase,
@@ -46,9 +51,9 @@ Future<UaWallet> walletOpenVault({
 Future<void> walletUnlock({
   required UaWallet w,
   required String vaultJson,
-  Uint8List? vaultPassphrase,
-  Uint8List? prf32,
-  required List<int> bip39Passphrase,
+  SecretBytes? vaultPassphrase,
+  SecretBytes? prf32,
+  required SecretBytes bip39Passphrase,
 }) => ScaasUa.instance.api.crateApiWalletWalletUnlock(
   w: w,
   vaultJson: vaultJson,
@@ -59,7 +64,7 @@ Future<void> walletUnlock({
 
 Future<String> walletSealVault({
   required UaWallet w,
-  required List<int> vaultPassphrase,
+  required SecretBytes vaultPassphrase,
 }) => ScaasUa.instance.api.crateApiWalletWalletSealVault(
   w: w,
   vaultPassphrase: vaultPassphrase,
@@ -68,7 +73,7 @@ Future<String> walletSealVault({
 Future<UaKey> walletImportNativeKey({
   required UaWallet w,
   required String networkName,
-  required List<int> secretKey,
+  required SecretBytes secretKey,
 }) => ScaasUa.instance.api.crateApiWalletWalletImportNativeKey(
   w: w,
   networkName: networkName,
@@ -78,7 +83,7 @@ Future<UaKey> walletImportNativeKey({
 Future<String> walletSealLabelVault({
   required UaWallet w,
   required String label,
-  required List<int> vaultPassphrase,
+  required SecretBytes vaultPassphrase,
 }) => ScaasUa.instance.api.crateApiWalletWalletSealLabelVault(
   w: w,
   label: label,
@@ -88,8 +93,8 @@ Future<String> walletSealLabelVault({
 Future<void> walletOpenLabelVault({
   required UaWallet w,
   required String vaultJson,
-  Uint8List? vaultPassphrase,
-  Uint8List? prf32,
+  SecretBytes? vaultPassphrase,
+  SecretBytes? prf32,
 }) => ScaasUa.instance.api.crateApiWalletWalletOpenLabelVault(
   w: w,
   vaultJson: vaultJson,
@@ -104,7 +109,7 @@ Future<UaWallet?> walletRestoreBackup({
   required String expectJson,
   String? membersJson,
   String? acceptedJson,
-  required List<int> bip39Passphrase,
+  required SecretBytes bip39Passphrase,
 }) => ScaasUa.instance.api.crateApiWalletWalletRestoreBackup(
   kk: kk,
   containerJson: containerJson,
@@ -122,7 +127,7 @@ Future<UaWallet?> walletRestoreBackupOver({
   required String expectJson,
   String? membersJson,
   String? acceptedJson,
-  required List<int> bip39Passphrase,
+  required SecretBytes bip39Passphrase,
 }) => ScaasUa.instance.api.crateApiWalletWalletRestoreBackupOver(
   current: current,
   kk: kk,
@@ -141,7 +146,7 @@ Future<UaWallet?> walletRestoreBackupRollback({
   required String expectJson,
   String? membersJson,
   String? acceptedJson,
-  required List<int> bip39Passphrase,
+  required SecretBytes bip39Passphrase,
 }) => ScaasUa.instance.api.crateApiWalletWalletRestoreBackupRollback(
   current: current,
   kk: kk,
@@ -158,7 +163,7 @@ Future<UaWallet> walletFromLink({
   required String expectJson,
   String? membersJson,
   String? acceptedJson,
-  required List<int> bip39Passphrase,
+  required SecretBytes bip39Passphrase,
 }) => ScaasUa.instance.api.crateApiWalletWalletFromLink(
   session: session,
   containerJson: containerJson,
@@ -168,10 +173,10 @@ Future<UaWallet> walletFromLink({
   bip39Passphrase: bip39Passphrase,
 );
 
-/// Whether `answers` are the words at the challenged positions, in order.
+/// Whether `answers` are the words at the challenged positions, in order (the call consumes them).
 Future<bool> seedBackupVerify({
   required UaSeedBackup b,
-  required List<Uint8List> answers,
+  required List<SecretBytes> answers,
 }) =>
     ScaasUa.instance.api.crateApiWalletSeedBackupVerify(b: b, answers: answers);
 
@@ -180,8 +185,8 @@ Future<bool> vaultNeedsRewrap({required String vaultJson}) =>
 
 Future<String> vaultRewrapPin({
   required String vaultJson,
-  required List<int> oldPassphrase,
-  required List<int> newPassphrase,
+  required SecretBytes oldPassphrase,
+  required SecretBytes newPassphrase,
 }) => ScaasUa.instance.api.crateApiWalletVaultRewrapPin(
   vaultJson: vaultJson,
   oldPassphrase: oldPassphrase,
@@ -190,8 +195,8 @@ Future<String> vaultRewrapPin({
 
 Future<String> vaultEnablePrf({
   required String vaultJson,
-  required List<int> vaultPassphrase,
-  required List<int> prf32,
+  required SecretBytes vaultPassphrase,
+  required SecretBytes prf32,
   required String credentialId,
   required List<int> salt,
 }) => ScaasUa.instance.api.crateApiWalletVaultEnablePrf(
@@ -229,7 +234,7 @@ Future<UaSealed> seal({
   required List<int> kemPk,
   required String purpose,
   required List<int> aad,
-  required List<int> pt,
+  required SecretBytes pt,
 }) => ScaasUa.instance.api.crateApiWalletSeal(
   kemPk: kemPk,
   purpose: purpose,
@@ -250,24 +255,25 @@ Future<String> uasig({required String requestJson, required UaKeyList keys}) =>
       keys: keys,
     );
 
-/// `alg` 1 = AES-256-GCM, 2 = AES-256-GCM-SIV.
+/// `alg` 1 = AES-256-GCM, 2 = AES-256-GCM-SIV; `pt` the plaintext.
 Future<Uint8List> aeadSeal({
   required int algId,
-  required List<int> key32,
+  required SecretBytes key32,
   required List<int> nonce12,
   required List<int> aad,
-  required List<int> data,
+  required SecretBytes pt,
 }) => ScaasUa.instance.api.crateApiWalletAeadSeal(
   algId: algId,
   key32: key32,
   nonce12: nonce12,
   aad: aad,
-  data: data,
+  pt: pt,
 );
 
-Future<Uint8List> aeadOpen({
+/// The plaintext of `data`.
+Future<SecretBytes> aeadOpen({
   required int algId,
-  required List<int> key32,
+  required SecretBytes key32,
   required List<int> nonce12,
   required List<int> aad,
   required List<int> data,
@@ -279,8 +285,9 @@ Future<Uint8List> aeadOpen({
   data: data,
 );
 
-Future<Uint8List> hkdfSha256({
-  required List<int> ikm,
+/// The output keying material.
+Future<SecretBytes> hkdfSha256({
+  required SecretBytes ikm,
   required List<int> salt,
   required List<int> info,
   required int len,
@@ -291,8 +298,9 @@ Future<Uint8List> hkdfSha256({
   len: len,
 );
 
+/// The MAC (not a secret).
 Future<Uint8List> hmacSha256({
-  required List<int> keyBytes,
+  required SecretBytes keyBytes,
   required List<int> data,
 }) => ScaasUa.instance.api.crateApiWalletHmacSha256(
   keyBytes: keyBytes,
@@ -329,25 +337,53 @@ Future<String> pqzSet() => ScaasUa.instance.api.crateApiWalletPqzSet();
 Future<void> pqzCheckSet({required String deployedJson}) =>
     ScaasUa.instance.api.crateApiWalletPqzCheckSet(deployedJson: deployedJson);
 
+// Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SecretBytes>>
+abstract class SecretBytes implements RustOpaqueInterface {
+  /// The address of the first byte, for Dart's in-place write or read; the same for the buffer's life.
+  BigInt addr();
+
+  /// The secret's length in bytes.
+  int size();
+
+  /// A new secret holding [src], written in place (no codec copy); [src] is zeroed afterwards, whatever the outcome. Native
+  /// targets only: this package imports `dart:ffi` and does not build for the web.
+  static SecretBytes take(Uint8List src) {
+    try {
+      final s = secretAlloc(len: src.length);
+      ffi.Pointer<ffi.Uint8>.fromAddress(
+        s.addr().toInt(),
+      ).asTypedList(src.length).setAll(0, src);
+      return s;
+    } finally {
+      src.fillRange(0, src.length, 0);
+    }
+  }
+
+  /// A view of [s] in Rust memory, no copy; valid until [s] is disposed (a view kept past that reads freed memory).
+  static Uint8List view(SecretBytes s) => ffi.Pointer<ffi.Uint8>.fromAddress(
+    s.addr().toInt(),
+  ).asTypedList(s.size());
+}
+
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<UaKemKey>>
 abstract class UaKemKey implements RustOpaqueInterface {
-  /// The shared secret (the caller wipes it).
-  Future<Uint8List> decaps({
+  /// The shared secret.
+  Future<SecretBytes> decaps({
     required List<int> mlkemCt,
     required List<int> x25519Eph,
   });
 
   Uint8List kemPk();
 
-  /// The plaintext (the caller wipes it).
-  Future<Uint8List> open({
+  /// The plaintext.
+  Future<SecretBytes> open({
     required String purpose,
     required List<int> aad,
     required UaSealed sealed,
   });
 
   /// A container's plaintext, accepted as `expect_json` says (spec §6.3); `members_json` / `accepted_json` null = none.
-  Future<Uint8List> openContainer({
+  Future<SecretBytes> openContainer({
     required String containerJson,
     required String expectJson,
     String? membersJson,
@@ -418,12 +454,12 @@ abstract class UaPqzKey implements RustOpaqueInterface {
   /// The PQZ commands with this handle's key; the whole JSON (at most 1,052,672 bytes), never sized by a query.
   Future<String> call({required String cmd, required String requestJson});
 
-  /// The cache's plaintext (the caller wipes it).
-  Future<Uint8List> openBalanceCache({required String boxJson});
+  /// The cache's plaintext.
+  Future<SecretBytes> openBalanceCache({required String boxJson});
 
   Uint8List pk();
 
-  Future<String> sealBalanceCache({required List<int> entries});
+  Future<String> sealBalanceCache({required SecretBytes entries});
 }
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<UaSeedBackup>>
@@ -431,11 +467,11 @@ abstract class UaSeedBackup implements RustOpaqueInterface {
   /// Three 1-based positions to ask.
   Future<Uint32List> challenge();
 
-  /// The words, once (the caller wipes them).
-  Future<Uint8List> reveal();
+  /// The words, once.
+  Future<SecretBytes> reveal();
 
   /// The entropy, once confirmed; null before that and after the first call.
-  Future<Uint8List?> take();
+  Future<SecretBytes?> take();
 }
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<UaWallet>>
@@ -447,8 +483,8 @@ abstract class UaWallet implements RustOpaqueInterface {
     required int gap,
   });
 
-  /// The PQZ leaf `seed32`: the explicit export (spec §8.4); the caller wipes it.
-  Future<Uint8List> exportPqzLeafRaw({
+  /// The PQZ leaf `seed32`: the explicit export (spec §8.4).
+  Future<SecretBytes> exportPqzLeafRaw({
     required int account,
     required int index,
   });
@@ -494,10 +530,10 @@ abstract class UaZetherKey implements RustOpaqueInterface {
   /// zether-prover's commands with this handle's key; no request field carries a key.
   Future<String> call({required String cmd, required String requestJson});
 
-  /// The cache's plaintext (the caller wipes it).
-  Future<Uint8List> openBalanceCache({required String boxJson});
+  /// The cache's plaintext.
+  Future<SecretBytes> openBalanceCache({required String boxJson});
 
-  Future<String> sealBalanceCache({required List<int> entriesJson});
+  Future<String> sealBalanceCache({required SecretBytes entriesJson});
 
   Uint8List uaId();
 
@@ -505,11 +541,11 @@ abstract class UaZetherKey implements RustOpaqueInterface {
   Uint8List y();
 }
 
-/// `kem_encaps`: `ss` is a secret (the caller wipes it).
+/// `kem_encaps`: `ss` is the shared secret.
 class UaEncapsulated {
   final Uint8List mlkemCt;
   final Uint8List x25519Eph;
-  final Uint8List ss;
+  final SecretBytes ss;
 
   const UaEncapsulated({
     required this.mlkemCt,

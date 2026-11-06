@@ -86,7 +86,7 @@ use crate::UAError;
 use rand_core::{OsRng, RngCore};
 use std::sync::Arc;
 pub(crate) use store::{Handle, SecretStore};
-pub use store::MemoryProtection;
+pub use store::{protect, MemoryProtection};
 use unicode_normalization::UnicodeNormalization;
 use zeroize::{Zeroize, Zeroizing};
 

@@ -39,9 +39,10 @@ pub struct MemoryProtection {
     pub no_dump: usize,
 }
 
-/// `mlock` and `MADV_DONTDUMP` of a chunk (feature `mlock`, Unix).
+/// `mlock` and `MADV_DONTDUMP` of a chunk (feature `mlock`, Unix); public for a binding's own secret buffers (ua-dart-frb),
+/// which keep the same rule: whole pages of their own, wiped before `off`.
 #[cfg(all(feature = "mlock", unix))]
-mod protect {
+pub mod protect {
     use libc::c_void;
 
     /// Whether `[p, p + len)` is whole pages of this system (a 64 KiB-page kernel: no, so nothing is locked or marked; an
@@ -53,7 +54,7 @@ mod protect {
     }
 
     /// `(locked, no_dump)`: whether `mlock` and `MADV_DONTDUMP` took on the chunk at `p`.
-    pub(super) fn on(p: *mut u8, len: usize) -> (bool, bool) {
+    pub fn on(p: *mut u8, len: usize) -> (bool, bool) {
         if !whole_pages(p, len) {
             return (false, false);
         }
@@ -68,7 +69,7 @@ mod protect {
     }
 
     /// Undoes `on` for the chunk at `p` (already wiped).
-    pub(super) fn off(p: *mut u8, len: usize, locked: bool, no_dump: bool) {
+    pub fn off(p: *mut u8, len: usize, locked: bool, no_dump: bool) {
         #[cfg(any(target_os = "linux", target_os = "android"))]
         if no_dump {
             // SAFETY: as in `on`; the chunk is still allocated
@@ -85,11 +86,13 @@ mod protect {
 
 /// Without feature `mlock`, or off Unix (wasm32, Windows): nothing is locked or marked.
 #[cfg(not(all(feature = "mlock", unix)))]
-mod protect {
-    pub(super) fn on(_: *mut u8, _: usize) -> (bool, bool) {
+pub mod protect {
+    /// `(false, false)`: nothing taken.
+    pub fn on(_: *mut u8, _: usize) -> (bool, bool) {
         (false, false)
     }
-    pub(super) fn off(_: *mut u8, _: usize, _: bool, _: bool) {}
+    /// Nothing to undo.
+    pub fn off(_: *mut u8, _: usize, _: bool, _: bool) {}
 }
 
 /// One arena chunk: a page-aligned block that never moves, locked and marked no-dump from allocation (feature `mlock`), and at

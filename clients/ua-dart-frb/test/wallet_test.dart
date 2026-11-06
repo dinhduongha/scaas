@@ -20,6 +20,10 @@ Uint8List bytes(String s) {
 String hx(List<int> b) => '0x${b.map((x) => x.toRadixString(16).padLeft(2, '0')).join()}';
 Uint8List utf8b(String s) => Uint8List.fromList(utf8.encode(s));
 bool allZero(List<int> b) => b.every((x) => x == 0);
+SecretBytes sec(List<int> b) => SecretBytes.take(Uint8List.fromList(b));
+SecretBytes secs(String s) => sec(utf8.encode(s));
+SecretBytes none() => SecretBytes.take(Uint8List(0));
+Uint8List view(SecretBytes s) => SecretBytes.view(s);
 int num_(dynamic v) => v is String ? int.parse(v) : v as int;
 
 /// The UAError code [f] throws, or null.
@@ -37,8 +41,8 @@ final mn = {for (final m in keys['mnemonics'] as List) m['id'] as String: m as M
 const deterministic = {0x0101, 0x0102, 0x0106, 0x0107, 0x0108};
 final _wallets = <String, UaWallet>{};
 
-Future<UaWallet> walletOf(String id) => walletFromMnemonic(
-    words: utf8b(mn[id]!['words'] as String), bip39Passphrase: utf8b(mn[id]!['passphrase'] as String));
+Future<UaWallet> walletOf(String id) =>
+    walletFromMnemonic(words: secs(mn[id]!['words'] as String), bip39Passphrase: secs(mn[id]!['passphrase'] as String));
 Future<UaWallet> w(String id) async => _wallets[id] ??= await walletOf(id);
 Future<UaKemKey> kemOf(Map r) async {
   final k = await (await w((r['mnemonic'] ?? 'pq_kat') as String)).uaKey(kind: num_(r['kind']), account: num_(r['account']), index: num_(r['index']));
@@ -59,12 +63,11 @@ void main() {
     expect(features() & kRequiredFeatures, kRequiredFeatures);
     UaLoadHook.reportedAbiVersion = () => 5; // an older library
     expect(() => load(), throwsA(isA<UAError>().having((e) => e.code, 'code', 'UAAbiMismatch')));
-    final words = utf8b(mn['pq_kat']!['words'] as String);
-    expect(await code(() => walletFromMnemonic(words: words, bip39Passphrase: Uint8List(0))), 'UAAbiMismatch');
-    expect(allZero(words), true, reason: 'wiped even when refused at load');
+    final words = secs(mn['pq_kat']!['words'] as String);
+    expect(await code(() => walletFromMnemonic(words: words, bip39Passphrase: none())), 'UAAbiMismatch');
     expect(await code(kemEphemeral), 'UAAbiMismatch');
     expect(await code(linkSessionNew), 'UAAbiMismatch');
-    expect(await code(() => seal(kemPk: Uint8List(1601)..[0] = 1, purpose: 'scaas/backup/v1', aad: [], pt: [])), 'UAAbiMismatch');
+    expect(await code(() => seal(kemPk: Uint8List(1601)..[0] = 1, purpose: 'scaas/backup/v1', aad: [], pt: none())), 'UAAbiMismatch');
     UaLoadHook.reportedAbiVersion = () => 7;
     expect(await code(() async => load()), 'UAAbiMismatch');
     UaLoadHook.reset();
@@ -76,31 +79,34 @@ void main() {
     load();
   });
 
-  test('secret_buffer_wiped_after_call', () async {
-    final words = utf8b(mn['pq_kat']!['words'] as String), pass = utf8b(mn['pq_kat']!['passphrase'] as String);
-    final n = words.length;
+  test('secret_bytes_take_and_dispose', () async {
+    final src = utf8b(mn['pq_kat']!['words'] as String), copy = Uint8List.fromList(src);
+    final words = SecretBytes.take(src);
+    expect(src.length == copy.length && allZero(src), true, reason: 'take zeroes the source');
+    expect(view(words), copy, reason: 'the secret is in Rust memory');
+    expect(words.size(), copy.length);
+    final addr = words.addr();
+    expect(words.addr(), addr, reason: 'never moved');
+    final pass = secs(mn['pq_kat']!['passphrase'] as String);
     final wl = await walletFromMnemonic(words: words, bip39Passphrase: pass);
-    expect(words.length == n && allZero(words), true, reason: 'mnemonic');
-    expect(allZero(pass), true, reason: 'BIP-39 passphrase');
-    final bad = utf8b('not a mnemonic at all');
-    expect(await code(() => walletFromMnemonic(words: bad, bip39Passphrase: Uint8List(0))), 'UAArgument');
-    expect(allZero(bad), true, reason: 'wiped on the error path too');
-    final pin = utf8b('correct horse 9');
-    final v = await walletSealVault(w: wl, vaultPassphrase: pin);
-    expect(allZero(pin), true, reason: 'seal_vault passphrase');
-    final pin2 = utf8b('correct horse 9');
-    final w2 = await walletOpenVault(vaultJson: v, vaultPassphrase: pin2, bip39Passphrase: Uint8List(0));
-    expect(allZero(pin2), true, reason: 'open_vault passphrase');
-    final imp = Uint8List.fromList(List.generate(32, (i) => i + 1));
-    await walletImportNativeKey(w: w2, networkName: 'evm', secretKey: imp);
-    expect(allZero(imp), true, reason: 'imported key');
-    final o1 = utf8b('correct horse 9'), o2 = utf8b('battery staple 7');
-    await vaultRewrapPin(vaultJson: v, oldPassphrase: o1, newPassphrase: o2);
-    expect(allZero(o1) && allZero(o2), true, reason: 'rewrap passphrases');
+    expect(view(words), copy, reason: 'borrowed by the call, not consumed');
+    expect(hx((await wl.uaKey(kind: 0x0102, account: 0, index: 0)).keyData()),
+        hx((await (await w('pq_kat')).uaKey(kind: 0x0102, account: 0, index: 0)).keyData()));
+    words.dispose();
+    expect(words.isDisposed, true);
+    expect(await code(() => walletFromMnemonic(words: secs('not a mnemonic at all'), bip39Passphrase: none())), 'UAArgument');
+    expect(SecretBytes.take(Uint8List(0)).size(), 0);
+    final over = Uint8List((1 << 24) + 1)..[0] = 7;
+    expect(() => SecretBytes.take(over), throwsA(isA<UAError>().having((e) => e.code, 'code', 'UAArgument')));
+    expect(over[0], 0, reason: 'zeroed when refused too');
     final leaf = await wl.exportPqzLeafRaw(account: 0, index: 0);
-    expect(leaf.length, 32);
-    wipe(leaf);
-    expect(allZero(leaf), true, reason: 'an output secret: wipe');
+    expect([leaf.size(), allZero(view(leaf))], [32, false]);
+    leaf.dispose();
+    final (wg, sb) = await walletGenerate();
+    final answers = [secs('a'), secs('b'), secs('c')];
+    await code(() => seedBackupVerify(b: sb, answers: answers));
+    expect(answers.every((a) => a.isDisposed), true, reason: 'the answers are consumed');
+    wg.dispose();
   });
 
   test('handle_freed_once', () async {
@@ -297,7 +303,7 @@ void main() {
     }
     final kk = await kemOf(k['keys'][0]);
     final e = await kemEncaps(kemPk: bytes(k['keys'][0]['kemPk']));
-    expect(await kk.decaps(mlkemCt: e.mlkemCt, x25519Eph: e.x25519Eph), e.ss);
+    expect(view(await kk.decaps(mlkemCt: e.mlkemCt, x25519Eph: e.x25519Eph)), view(e.ss));
     for (final r in k['decaps'] as List) {
       final eph = bytes(r['x25519Eph']);
       if (eph.length != 32) continue;
@@ -305,7 +311,7 @@ void main() {
       if (r['error'] != null) {
         expect(await code(() => kd.decaps(mlkemCt: bytes(r['mlkemCt']), x25519Eph: eph)), 'UA${r['error']}', reason: r['id']);
       } else {
-        expect(hx(await kd.decaps(mlkemCt: bytes(r['mlkemCt']), x25519Eph: eph)), r['ss'], reason: r['id']);
+        expect(hx(view(await kd.decaps(mlkemCt: bytes(r['mlkemCt']), x25519Eph: eph))), r['ss'], reason: r['id']);
       }
     }
     expect((await kemEphemeral()).kemPk().length, 1601);
@@ -317,9 +323,9 @@ void main() {
       if (!(r['recipient'] as Map).containsKey('kind')) continue;
       final kk = await kemOf(r['recipient']);
       final sealed = UaSealed(mlkemCt: bytes(r['mlkemCt']), x25519Eph: bytes(r['x25519Eph']), ciphertext: bytes(r['ciphertext']));
-      expect(hx(await kk.open(purpose: r['purpose'], aad: bytes(r['aad']), sealed: sealed)), hx(bytes(r['pt'])), reason: r['id']);
-      final fresh = await seal(kemPk: bytes(r['kemPk']), purpose: r['purpose'], aad: bytes(r['aad']), pt: bytes(r['pt']));
-      expect(hx(await kk.open(purpose: r['purpose'], aad: bytes(r['aad']), sealed: fresh)), hx(bytes(r['pt'])));
+      expect(hx(view(await kk.open(purpose: r['purpose'], aad: bytes(r['aad']), sealed: sealed))), hx(bytes(r['pt'])), reason: r['id']);
+      final fresh = await seal(kemPk: bytes(r['kemPk']), purpose: r['purpose'], aad: bytes(r['aad']), pt: sec(bytes(r['pt'])));
+      expect(hx(view(await kk.open(purpose: r['purpose'], aad: bytes(r['aad']), sealed: fresh))), hx(bytes(r['pt'])));
     }
     final base = (s['seal'] as List).firstWhere((r) => r['id'] == s['refusals']['base']);
     for (final r in s['refusals']['rows'] as List) {
@@ -338,8 +344,8 @@ void main() {
       final members = r['members'] == null ? null : jsonEncode(r['members']);
       final accepted = r['accepted'] == null ? null : jsonEncode(r['accepted']);
       expect(
-          hx(await kk.openContainer(
-              containerJson: jsonEncode(r['container']), expectJson: jsonEncode(r['expect']), membersJson: members, acceptedJson: accepted)),
+          hx(view(await kk.openContainer(
+              containerJson: jsonEncode(r['container']), expectJson: jsonEncode(r['expect']), membersJson: members, acceptedJson: accepted))),
           hx(bytes(r['pt'])),
           reason: r['id']);
       if (accepted != null) {
@@ -364,7 +370,7 @@ void main() {
               expectJson: jsonEncode(r['expect']),
               membersJson: members,
               acceptedJson: accepted,
-              bip39Passphrase: Uint8List(0))
+              bip39Passphrase: none())
           : kk.openContainer(
               containerJson: jsonEncode(r['container']), expectJson: jsonEncode(r['expect']), membersJson: members, acceptedJson: accepted));
       expect(got, r['error'] == null ? null : 'UA${r['error']}', reason: r['id']);
@@ -390,11 +396,11 @@ void main() {
       'recipient': {'ua': hx(rec.uaId()), 'version': 0}
     });
     final kk = await kemOf(k['keys'][0]);
-    final r = await walletRestoreBackup(kk: kk, containerJson: cs[0], expectJson: expectJson, bip39Passphrase: Uint8List(0));
+    final r = await walletRestoreBackup(kk: kk, containerJson: cs[0], expectJson: expectJson, bip39Passphrase: none());
     expect(hx((await r!.uaKey(kind: 0x0102, account: 0, index: 0)).keyData()), hx(sender.keyData()));
     expect(jsonDecode(r.manifestJson())['backupGeneration'], 1);
     expect(
-        await walletRestoreBackupOver(current: r, kk: kk, containerJson: cs[0], expectJson: expectJson, bip39Passphrase: Uint8List(0)),
+        await walletRestoreBackupOver(current: r, kk: kk, containerJson: cs[0], expectJson: expectJson, bip39Passphrase: none()),
         isNull,
         reason: 'an equal generation installs nothing');
     await walletBackupSeal(w: wl, sender: sender, recipients: [
@@ -402,10 +408,10 @@ void main() {
     ]);
     expect(
         await code(() =>
-            walletRestoreBackupOver(current: wl, kk: kk, containerJson: cs[0], expectJson: expectJson, bip39Passphrase: Uint8List(0))),
+            walletRestoreBackupOver(current: wl, kk: kk, containerJson: cs[0], expectJson: expectJson, bip39Passphrase: none())),
         'UABackupRollback');
     expect(
-        await walletRestoreBackupRollback(current: wl, kk: kk, containerJson: cs[0], expectJson: expectJson, bip39Passphrase: Uint8List(0)),
+        await walletRestoreBackupRollback(current: wl, kk: kk, containerJson: cs[0], expectJson: expectJson, bip39Passphrase: none()),
         isNotNull);
     final s = await linkSessionNew();
     final c = await wl.linkSeal(sender: sender, sessionKemPk: s.kemPk(), shortCode: s.shortCode());
@@ -414,9 +420,9 @@ void main() {
       'sender': {'ua': hx(sender.uaId())},
       'recipient': {'kemPkHash': hx(keccak256(data: s.kemPk()))}
     });
-    final linked = await walletFromLink(session: s, containerJson: c, expectJson: lexp, bip39Passphrase: Uint8List(0));
+    final linked = await walletFromLink(session: s, containerJson: c, expectJson: lexp, bip39Passphrase: none());
     expect(hx((await linked.uaKey(kind: 0x0102, account: 0, index: 0)).keyData()), hx(sender.keyData()));
-    expect(await code(() => walletFromLink(session: s, containerJson: c, expectJson: lexp, bip39Passphrase: Uint8List(0))), 'UAKeyRevoked');
+    expect(await code(() => walletFromLink(session: s, containerJson: c, expectJson: lexp, bip39Passphrase: none())), 'UAKeyRevoked');
     expect(await code(() async => s.kemPk()), 'UAKeyRevoked');
   });
 
@@ -425,9 +431,9 @@ void main() {
     final byEntropy = {for (final m in keys['mnemonics'] as List) if (m['passphrase'] == '') m['entropy']: m['id']};
     Future<UaWallet> open(Map vault, Map u) => walletOpenVault(
         vaultJson: jsonEncode(vault),
-        vaultPassphrase: u.containsKey('pin') ? utf8b(u['pin']) : null,
-        prf32: u.containsKey('prfOutput') ? bytes(u['prfOutput']) : null,
-        bip39Passphrase: Uint8List(0));
+        vaultPassphrase: u.containsKey('pin') ? secs(u['pin']) : null,
+        prf32: u.containsKey('prfOutput') ? sec(bytes(u['prfOutput'])) : null,
+        bip39Passphrase: none());
     for (final r in v['vaults'] as List) {
       final wl = await open(r['vault'], r['unlock']);
       expect(hx((await wl.uaKey(kind: 0x0102, account: 0, index: 0)).keyData()),
@@ -458,7 +464,7 @@ void main() {
             'sender': {'ua': b['senderUa']},
             'recipient': {'ua': hx(rua), 'version': 0}
           }),
-          bip39Passphrase: Uint8List(0));
+          bip39Passphrase: none());
       final m = jsonDecode(restored!.manifestJson());
       expect(m['backupGeneration'], b['generation']);
       expect((m['imports'] as List).length, (b['secrets'] as List).length);
@@ -468,7 +474,7 @@ void main() {
 
   test('custody', () async {
     final wl = await walletOf('twelve_words');
-    final v = await walletSealVault(w: wl, vaultPassphrase: utf8b('correct horse 9'));
+    final v = await walletSealVault(w: wl, vaultPassphrase: secs('correct horse 9'));
     final k = await wl.uaKey(kind: 0x0101, account: 0, index: 0);
     final metatx = purposeTag(purpose: 'metatx');
     final before = await k.signUa(purpose: metatx, digest: Uint8List(32));
@@ -476,17 +482,17 @@ void main() {
     expect(await code(() => k.signUa(purpose: metatx, digest: Uint8List(32))), 'UAKeyRevoked');
     expect(await code(() => wl.uaKey(kind: 0x0101, account: 0, index: 0)), 'UAWalletLocked');
     expect(wl.memoryProtection().chunks, 0);
-    await walletUnlock(w: wl, vaultJson: v, vaultPassphrase: utf8b('correct horse 9'), bip39Passphrase: Uint8List(0));
+    await walletUnlock(w: wl, vaultJson: v, vaultPassphrase: secs('correct horse 9'), bip39Passphrase: none());
     expect(await code(() => k.signUa(purpose: metatx, digest: Uint8List(32))), 'UAKeyRevoked', reason: 'unlock does not revive');
     expect(await (await wl.uaKey(kind: 0x0101, account: 0, index: 0)).signUa(purpose: metatx, digest: Uint8List(32)), before);
-    final ik = await walletImportNativeKey(w: wl, networkName: 'evm', secretKey: Uint8List.fromList(List.generate(32, (i) => i + 1)));
+    final ik = await walletImportNativeKey(w: wl, networkName: 'evm', secretKey: sec(List.generate(32, (i) => i + 1)));
     final d = Uint8List(32)..fillRange(0, 32, 7);
     final sig = await ik.signDigestRaw(digest: d);
-    final label = await walletSealLabelVault(w: wl, label: 'native-import:evm:0', vaultPassphrase: utf8b('correct horse 9'));
+    final label = await walletSealLabelVault(w: wl, label: 'native-import:evm:0', vaultPassphrase: secs('correct horse 9'));
     wl.lock();
-    await walletUnlock(w: wl, vaultJson: v, vaultPassphrase: utf8b('correct horse 9'), bip39Passphrase: Uint8List(0));
+    await walletUnlock(w: wl, vaultJson: v, vaultPassphrase: secs('correct horse 9'), bip39Passphrase: none());
     expect(await code(() => wl.importedKey(networkName: 'evm', n: 0)), 'UAArgument');
-    await walletOpenLabelVault(w: wl, vaultJson: label, vaultPassphrase: utf8b('correct horse 9'));
+    await walletOpenLabelVault(w: wl, vaultJson: label, vaultPassphrase: secs('correct horse 9'));
     expect(await (await wl.importedKey(networkName: 'evm', n: 0)).signDigestRaw(digest: d), sig);
     // a child after its wallet's disposal
     final tmp = await walletOf('pq_kat');
@@ -497,10 +503,10 @@ void main() {
     // another wallet's vault
     final w5 = await walletOf('twelve_words');
     await w5.uaKey(kind: 0x0102, account: 0, index: 0);
-    final other = await walletSealVault(w: await w('pq_kat'), vaultPassphrase: utf8b('correct horse 9'));
+    final other = await walletSealVault(w: await w('pq_kat'), vaultPassphrase: secs('correct horse 9'));
     w5.lock();
     expect(
-        await code(() => walletUnlock(w: w5, vaultJson: other, vaultPassphrase: utf8b('correct horse 9'), bip39Passphrase: Uint8List(0))),
+        await code(() => walletUnlock(w: w5, vaultJson: other, vaultPassphrase: secs('correct horse 9'), bip39Passphrase: none())),
         'UAWalletMismatch');
     final disc = jsonDecode(await (await w('pq_kat')).discoverCandidates(kind: 0x0102, account: 0, gap: 3)) as List;
     expect(disc.length, 3);
@@ -509,38 +515,41 @@ void main() {
   test('seed_backup_sequence', () async {
     final (wl, sb) = await walletGenerate();
     final phrase = await sb.reveal();
-    final words = utf8.decode(phrase).split(' ');
+    final words = utf8.decode(view(phrase)).split(' ');
     expect(words.length, 24);
     expect(await code(() => sb.reveal()), 'UAArgument', reason: 'shown once');
     expect(await sb.take(), isNull);
     final pos = await sb.challenge();
-    final answers = [for (final p in pos) utf8b(words[p - 1])];
+    final answers = [for (final p in pos) secs(words[p - 1])];
     expect(await seedBackupVerify(b: sb, answers: answers), true);
-    expect(answers.every(allZero), true, reason: 'answers wiped');
-    expect((await sb.take())!.length, 32);
+    expect(answers.every((a) => a.isDisposed), true, reason: 'answers consumed');
+    expect((await sb.take())!.size(), 32);
     expect(await sb.take(), isNull, reason: 'handed out once');
-    final w2 = await walletFromMnemonic(words: phrase, bip39Passphrase: Uint8List(0));
-    expect(allZero(phrase), true);
+    final w2 = await walletFromMnemonic(words: phrase, bip39Passphrase: none());
+    phrase.dispose();
     expect(hx((await w2.uaKey(kind: 0x0102, account: 0, index: 0)).keyData()),
         hx((await wl.uaKey(kind: 0x0102, account: 0, index: 0)).keyData()));
   });
 
   test('aead_hkdf_hmac', () async {
-    expect(hx(await hmacSha256(keyBytes: Uint8List(20)..fillRange(0, 20, 0x0b), data: utf8b('Hi There'))),
+    expect(hx(await hmacSha256(keyBytes: sec(Uint8List(20)..fillRange(0, 20, 0x0b)), data: utf8b('Hi There'))),
         '0xb0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7');
     expect(
-        hx(await hkdfSha256(
-            ikm: Uint8List(22)..fillRange(0, 22, 0x0b),
+        hx(view(await hkdfSha256(
+            ikm: sec(Uint8List(22)..fillRange(0, 22, 0x0b)),
             salt: List.generate(13, (i) => i),
             info: List.generate(10, (i) => 0xf0 + i),
-            len: 42)),
+            len: 42))),
         '0x3cb25f25faacd57a90434f64d0362f2a2d2d0a90cf1a5a4c5db02d56ecc4c5bf34007208d5b887185865');
     for (final alg in [1, 2]) {
-      final ct = await aeadSeal(algId: alg, key32: Uint8List(32), nonce12: Uint8List(12), aad: utf8b('aad'), data: utf8b('plaintext'));
-      expect(utf8.decode(await aeadOpen(algId: alg, key32: Uint8List(32), nonce12: Uint8List(12), aad: utf8b('aad'), data: ct)),
+      final key = sec(Uint8List(32));
+      final ct = await aeadSeal(algId: alg, key32: key, nonce12: Uint8List(12), aad: utf8b('aad'), pt: secs('plaintext'));
+      expect(utf8.decode(view(await aeadOpen(algId: alg, key32: key, nonce12: Uint8List(12), aad: utf8b('aad'), data: ct))),
           'plaintext');
+      expect(await code(() => aeadOpen(algId: alg, key32: sec(Uint8List(31)), nonce12: Uint8List(12), aad: utf8b('aad'), data: ct)),
+          'UAArgument');
       ct[ct.length - 1] ^= 1;
-      expect(await code(() => aeadOpen(algId: alg, key32: Uint8List(32), nonce12: Uint8List(12), aad: utf8b('aad'), data: ct)), 'UAAead');
+      expect(await code(() => aeadOpen(algId: alg, key32: key, nonce12: Uint8List(12), aad: utf8b('aad'), data: ct)), 'UAAead');
     }
   });
 
@@ -550,8 +559,8 @@ void main() {
       final zk = await (await w(r['mnemonic'])).zetherKey(coin: r['coin'], account: r['account'], keyUse: r['use']);
       expect([hx(zk.y()), hx(zk.uaId())], [r['Y'], r['UA']], reason: r['id']);
       final pt = await zk.openBalanceCache(boxJson: jsonEncode(r['box']));
-      expect(hx(pt), r['plaintext'], reason: r['id']);
-      expect(hx(await zk.openBalanceCache(boxJson: await zk.sealBalanceCache(entriesJson: pt))), hx(pt));
+      expect(hx(view(pt)), r['plaintext'], reason: r['id']);
+      expect(hx(view(await zk.openBalanceCache(boxJson: await zk.sealBalanceCache(entriesJson: pt)))), hx(view(pt)));
     }
     for (final r in z['cacheRefusals'] as List) {
       final zk = await (await w(r['mnemonic'])).zetherKey(coin: r['coin'], account: r['account'], keyUse: r['use']);
@@ -584,8 +593,8 @@ void main() {
     final e = jsonDecode(await k.call(cmd: 'enc', requestJson: jsonEncode({'pks': [hx(k.pk())], 'values': [123456]})));
     final dec = jsonDecode(await k.call(cmd: 'dec', requestJson: jsonEncode({'ct': e['u'] + (e['vs'][0] as String).substring(2)})));
     expect(dec['value'], 123456);
-    final box = await k.sealBalanceCache(entries: utf8b('{"v":1}'));
-    expect(utf8.decode(await k.openBalanceCache(boxJson: box)), '{"v":1}');
+    final box = await k.sealBalanceCache(entries: secs('{"v":1}'));
+    expect(utf8.decode(view(await k.openBalanceCache(boxJson: box))), '{"v":1}');
     wl.lock();
     expect(await code(() => k.call(cmd: 'proveRegister', requestJson: jsonEncode(req))), 'UAKeyRevoked');
     expect(await code(() => wl.exportPqzLeafRaw(account: 0, index: 0)), 'UAWalletLocked');

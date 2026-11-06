@@ -40,7 +40,8 @@ export 'src/rust/api/wallet.dart'
         webauthnChallenge,
         webauthnAssertion,
         pqzSet,
-        pqzCheckSet;
+        pqzCheckSet,
+        secretAlloc;
 export 'src/wallet.dart';
 
 // A KEM version is a Rust u64, and flutter_rust_bridge encodes a BigInt with toSigned(64): 2^64 + 1 would reach Rust as 1

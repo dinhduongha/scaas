@@ -40,7 +40,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1698158737;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 97025785;
 
 // Section: executor
 
@@ -48,6 +48,100 @@ flutter_rust_bridge::frb_generated_default_handler!();
 
 // Section: wire_funcs
 
+fn wire__crate__api__wallet__SecretBytes_addr_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "SecretBytes_addr",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SecretBytes>,
+            >>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let mut api_that_guard = None;
+                let decode_indices_ =
+                    flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
+                        flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                            &api_that, 0, true,
+                        ),
+                    ]);
+                for i in decode_indices_ {
+                    match i {
+                        0 => api_that_guard = Some(api_that.lockable_decode_sync_ref_mut()),
+                        _ => unreachable!(),
+                    }
+                }
+                let mut api_that_guard = api_that_guard.unwrap();
+                let output_ok =
+                    Ok::<_, ()>(crate::api::wallet::SecretBytes::addr(&mut *api_that_guard))?;
+                std::result::Result::Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__wallet__SecretBytes_size_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "SecretBytes_size",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SecretBytes>,
+            >>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let mut api_that_guard = None;
+                let decode_indices_ =
+                    flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
+                        flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                            &api_that, 0, false,
+                        ),
+                    ]);
+                for i in decode_indices_ {
+                    match i {
+                        0 => api_that_guard = Some(api_that.lockable_decode_sync_ref()),
+                        _ => unreachable!(),
+                    }
+                }
+                let api_that_guard = api_that_guard.unwrap();
+                let output_ok =
+                    Ok::<_, ()>(crate::api::wallet::SecretBytes::size(&*api_that_guard))?;
+                std::result::Result::Ok(output_ok)
+            })())
+        },
+    )
+}
 fn wire__crate__api__wallet__UaKemKey_decaps_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -1242,27 +1336,37 @@ fn wire__crate__api__wallet__UaPqzKey_seal_balance_cache_impl(
             let api_that = <RustOpaqueMoi<
                 flutter_rust_bridge::for_generated::RustAutoOpaqueInner<UaPqzKey>,
             >>::sse_decode(&mut deserializer);
-            let api_entries = <Vec<u8>>::sse_decode(&mut deserializer);
+            let api_entries = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SecretBytes>,
+            >>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, crate::api::ua::UAError>((move || {
                     let mut api_that_guard = None;
+                    let mut api_entries_guard = None;
                     let decode_indices_ =
                         flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
                             flutter_rust_bridge::for_generated::LockableOrderInfo::new(
                                 &api_that, 0, false,
                             ),
+                            flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                                &api_entries,
+                                1,
+                                false,
+                            ),
                         ]);
                     for i in decode_indices_ {
                         match i {
                             0 => api_that_guard = Some(api_that.lockable_decode_sync_ref()),
+                            1 => api_entries_guard = Some(api_entries.lockable_decode_sync_ref()),
                             _ => unreachable!(),
                         }
                     }
                     let api_that_guard = api_that_guard.unwrap();
+                    let api_entries_guard = api_entries_guard.unwrap();
                     let output_ok = crate::api::wallet::UaPqzKey::seal_balance_cache(
                         &*api_that_guard,
-                        api_entries,
+                        &*api_entries_guard,
                     )?;
                     std::result::Result::Ok(output_ok)
                 })())
@@ -2154,27 +2258,40 @@ fn wire__crate__api__wallet__UaZetherKey_seal_balance_cache_impl(
             let api_that = <RustOpaqueMoi<
                 flutter_rust_bridge::for_generated::RustAutoOpaqueInner<UaZetherKey>,
             >>::sse_decode(&mut deserializer);
-            let api_entries_json = <Vec<u8>>::sse_decode(&mut deserializer);
+            let api_entries_json = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SecretBytes>,
+            >>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, crate::api::ua::UAError>((move || {
                     let mut api_that_guard = None;
+                    let mut api_entries_json_guard = None;
                     let decode_indices_ =
                         flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
                             flutter_rust_bridge::for_generated::LockableOrderInfo::new(
                                 &api_that, 0, false,
                             ),
+                            flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                                &api_entries_json,
+                                1,
+                                false,
+                            ),
                         ]);
                     for i in decode_indices_ {
                         match i {
                             0 => api_that_guard = Some(api_that.lockable_decode_sync_ref()),
+                            1 => {
+                                api_entries_json_guard =
+                                    Some(api_entries_json.lockable_decode_sync_ref())
+                            }
                             _ => unreachable!(),
                         }
                     }
                     let api_that_guard = api_that_guard.unwrap();
+                    let api_entries_json_guard = api_entries_json_guard.unwrap();
                     let output_ok = crate::api::wallet::UaZetherKey::seal_balance_cache(
                         &*api_that_guard,
-                        api_entries_json,
+                        &*api_entries_json_guard,
                     )?;
                     std::result::Result::Ok(output_ok)
                 })())
@@ -2327,16 +2444,32 @@ fn wire__crate__api__wallet__aead_open_impl(
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_alg_id = <u32>::sse_decode(&mut deserializer);
-            let api_key32 = <Vec<u8>>::sse_decode(&mut deserializer);
+            let api_key32 = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SecretBytes>,
+            >>::sse_decode(&mut deserializer);
             let api_nonce12 = <Vec<u8>>::sse_decode(&mut deserializer);
             let api_aad = <Vec<u8>>::sse_decode(&mut deserializer);
             let api_data = <Vec<u8>>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, crate::api::ua::UAError>((move || {
+                    let mut api_key32_guard = None;
+                    let decode_indices_ =
+                        flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
+                            flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                                &api_key32, 0, false,
+                            ),
+                        ]);
+                    for i in decode_indices_ {
+                        match i {
+                            0 => api_key32_guard = Some(api_key32.lockable_decode_sync_ref()),
+                            _ => unreachable!(),
+                        }
+                    }
+                    let api_key32_guard = api_key32_guard.unwrap();
                     let output_ok = crate::api::wallet::aead_open(
                         api_alg_id,
-                        api_key32,
+                        &*api_key32_guard,
                         api_nonce12,
                         api_aad,
                         api_data,
@@ -2370,19 +2503,43 @@ fn wire__crate__api__wallet__aead_seal_impl(
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_alg_id = <u32>::sse_decode(&mut deserializer);
-            let api_key32 = <Vec<u8>>::sse_decode(&mut deserializer);
+            let api_key32 = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SecretBytes>,
+            >>::sse_decode(&mut deserializer);
             let api_nonce12 = <Vec<u8>>::sse_decode(&mut deserializer);
             let api_aad = <Vec<u8>>::sse_decode(&mut deserializer);
-            let api_data = <Vec<u8>>::sse_decode(&mut deserializer);
+            let api_pt = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SecretBytes>,
+            >>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, crate::api::ua::UAError>((move || {
+                    let mut api_key32_guard = None;
+                    let mut api_pt_guard = None;
+                    let decode_indices_ =
+                        flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
+                            flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                                &api_key32, 0, false,
+                            ),
+                            flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                                &api_pt, 1, false,
+                            ),
+                        ]);
+                    for i in decode_indices_ {
+                        match i {
+                            0 => api_key32_guard = Some(api_key32.lockable_decode_sync_ref()),
+                            1 => api_pt_guard = Some(api_pt.lockable_decode_sync_ref()),
+                            _ => unreachable!(),
+                        }
+                    }
+                    let api_key32_guard = api_key32_guard.unwrap();
+                    let api_pt_guard = api_pt_guard.unwrap();
                     let output_ok = crate::api::wallet::aead_seal(
                         api_alg_id,
-                        api_key32,
+                        &*api_key32_guard,
                         api_nonce12,
                         api_aad,
-                        api_data,
+                        &*api_pt_guard,
                     )?;
                     std::result::Result::Ok(output_ok)
                 })())
@@ -2655,15 +2812,35 @@ fn wire__crate__api__wallet__hkdf_sha256_impl(
             };
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_ikm = <Vec<u8>>::sse_decode(&mut deserializer);
+            let api_ikm = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SecretBytes>,
+            >>::sse_decode(&mut deserializer);
             let api_salt = <Vec<u8>>::sse_decode(&mut deserializer);
             let api_info = <Vec<u8>>::sse_decode(&mut deserializer);
             let api_len = <u32>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, crate::api::ua::UAError>((move || {
-                    let output_ok =
-                        crate::api::wallet::hkdf_sha256(api_ikm, api_salt, api_info, api_len)?;
+                    let mut api_ikm_guard = None;
+                    let decode_indices_ =
+                        flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
+                            flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                                &api_ikm, 0, false,
+                            ),
+                        ]);
+                    for i in decode_indices_ {
+                        match i {
+                            0 => api_ikm_guard = Some(api_ikm.lockable_decode_sync_ref()),
+                            _ => unreachable!(),
+                        }
+                    }
+                    let api_ikm_guard = api_ikm_guard.unwrap();
+                    let output_ok = crate::api::wallet::hkdf_sha256(
+                        &*api_ikm_guard,
+                        api_salt,
+                        api_info,
+                        api_len,
+                    )?;
                     std::result::Result::Ok(output_ok)
                 })())
             }
@@ -2692,13 +2869,35 @@ fn wire__crate__api__wallet__hmac_sha256_impl(
             };
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_key_bytes = <Vec<u8>>::sse_decode(&mut deserializer);
+            let api_key_bytes = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SecretBytes>,
+            >>::sse_decode(&mut deserializer);
             let api_data = <Vec<u8>>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, ()>((move || {
-                    let output_ok =
-                        Ok::<_, ()>(crate::api::wallet::hmac_sha256(api_key_bytes, api_data))?;
+                    let mut api_key_bytes_guard = None;
+                    let decode_indices_ =
+                        flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
+                            flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                                &api_key_bytes,
+                                0,
+                                false,
+                            ),
+                        ]);
+                    for i in decode_indices_ {
+                        match i {
+                            0 => {
+                                api_key_bytes_guard = Some(api_key_bytes.lockable_decode_sync_ref())
+                            }
+                            _ => unreachable!(),
+                        }
+                    }
+                    let api_key_bytes_guard = api_key_bytes_guard.unwrap();
+                    let output_ok = Ok::<_, ()>(crate::api::wallet::hmac_sha256(
+                        &*api_key_bytes_guard,
+                        api_data,
+                    ))?;
                     std::result::Result::Ok(output_ok)
                 })())
             }
@@ -4131,15 +4330,61 @@ fn wire__crate__api__wallet__seal_impl(
             let api_kem_pk = <Vec<u8>>::sse_decode(&mut deserializer);
             let api_purpose = <String>::sse_decode(&mut deserializer);
             let api_aad = <Vec<u8>>::sse_decode(&mut deserializer);
-            let api_pt = <Vec<u8>>::sse_decode(&mut deserializer);
+            let api_pt = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SecretBytes>,
+            >>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, crate::api::ua::UAError>((move || {
+                    let mut api_pt_guard = None;
+                    let decode_indices_ =
+                        flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
+                            flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                                &api_pt, 0, false,
+                            ),
+                        ]);
+                    for i in decode_indices_ {
+                        match i {
+                            0 => api_pt_guard = Some(api_pt.lockable_decode_sync_ref()),
+                            _ => unreachable!(),
+                        }
+                    }
+                    let api_pt_guard = api_pt_guard.unwrap();
                     let output_ok =
-                        crate::api::wallet::seal(api_kem_pk, api_purpose, api_aad, api_pt)?;
+                        crate::api::wallet::seal(api_kem_pk, api_purpose, api_aad, &*api_pt_guard)?;
                     std::result::Result::Ok(output_ok)
                 })())
             }
+        },
+    )
+}
+fn wire__crate__api__wallet__secret_alloc_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "secret_alloc",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_len = <u32>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, crate::api::ua::UAError>((move || {
+                let output_ok = crate::api::wallet::secret_alloc(api_len)?;
+                std::result::Result::Ok(output_ok)
+            })())
         },
     )
 }
@@ -4168,7 +4413,7 @@ fn wire__crate__api__wallet__seed_backup_verify_impl(
             let api_b = <RustOpaqueMoi<
                 flutter_rust_bridge::for_generated::RustAutoOpaqueInner<UaSeedBackup>,
             >>::sse_decode(&mut deserializer);
-            let api_answers = <Vec<Vec<u8>>>::sse_decode(&mut deserializer);
+            let api_answers = <Vec<SecretBytes>>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, crate::api::ua::UAError>((move || {
@@ -4517,17 +4762,46 @@ fn wire__crate__api__wallet__vault_enable_prf_impl(
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_vault_json = <String>::sse_decode(&mut deserializer);
-            let api_vault_passphrase = <Vec<u8>>::sse_decode(&mut deserializer);
-            let api_prf32 = <Vec<u8>>::sse_decode(&mut deserializer);
+            let api_vault_passphrase = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SecretBytes>,
+            >>::sse_decode(&mut deserializer);
+            let api_prf32 = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SecretBytes>,
+            >>::sse_decode(&mut deserializer);
             let api_credential_id = <String>::sse_decode(&mut deserializer);
             let api_salt = <Vec<u8>>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, crate::api::ua::UAError>((move || {
+                    let mut api_vault_passphrase_guard = None;
+                    let mut api_prf32_guard = None;
+                    let decode_indices_ =
+                        flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
+                            flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                                &api_vault_passphrase,
+                                0,
+                                false,
+                            ),
+                            flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                                &api_prf32, 1, false,
+                            ),
+                        ]);
+                    for i in decode_indices_ {
+                        match i {
+                            0 => {
+                                api_vault_passphrase_guard =
+                                    Some(api_vault_passphrase.lockable_decode_sync_ref())
+                            }
+                            1 => api_prf32_guard = Some(api_prf32.lockable_decode_sync_ref()),
+                            _ => unreachable!(),
+                        }
+                    }
+                    let api_vault_passphrase_guard = api_vault_passphrase_guard.unwrap();
+                    let api_prf32_guard = api_prf32_guard.unwrap();
                     let output_ok = crate::api::wallet::vault_enable_prf(
                         api_vault_json,
-                        api_vault_passphrase,
-                        api_prf32,
+                        &*api_vault_passphrase_guard,
+                        &*api_prf32_guard,
                         api_credential_id,
                         api_salt,
                     )?;
@@ -4593,15 +4867,49 @@ fn wire__crate__api__wallet__vault_rewrap_pin_impl(
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_vault_json = <String>::sse_decode(&mut deserializer);
-            let api_old_passphrase = <Vec<u8>>::sse_decode(&mut deserializer);
-            let api_new_passphrase = <Vec<u8>>::sse_decode(&mut deserializer);
+            let api_old_passphrase = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SecretBytes>,
+            >>::sse_decode(&mut deserializer);
+            let api_new_passphrase = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SecretBytes>,
+            >>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, crate::api::ua::UAError>((move || {
+                    let mut api_old_passphrase_guard = None;
+                    let mut api_new_passphrase_guard = None;
+                    let decode_indices_ =
+                        flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
+                            flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                                &api_old_passphrase,
+                                0,
+                                false,
+                            ),
+                            flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                                &api_new_passphrase,
+                                1,
+                                false,
+                            ),
+                        ]);
+                    for i in decode_indices_ {
+                        match i {
+                            0 => {
+                                api_old_passphrase_guard =
+                                    Some(api_old_passphrase.lockable_decode_sync_ref())
+                            }
+                            1 => {
+                                api_new_passphrase_guard =
+                                    Some(api_new_passphrase.lockable_decode_sync_ref())
+                            }
+                            _ => unreachable!(),
+                        }
+                    }
+                    let api_old_passphrase_guard = api_old_passphrase_guard.unwrap();
+                    let api_new_passphrase_guard = api_new_passphrase_guard.unwrap();
                     let output_ok = crate::api::wallet::vault_rewrap_pin(
                         api_vault_json,
-                        api_old_passphrase,
-                        api_new_passphrase,
+                        &*api_old_passphrase_guard,
+                        &*api_new_passphrase_guard,
                     )?;
                     std::result::Result::Ok(output_ok)
                 })())
@@ -4704,11 +5012,14 @@ fn wire__crate__api__wallet__wallet_from_link_impl(
             let api_expect_json = <String>::sse_decode(&mut deserializer);
             let api_members_json = <Option<String>>::sse_decode(&mut deserializer);
             let api_accepted_json = <Option<String>>::sse_decode(&mut deserializer);
-            let api_bip39_passphrase = <Vec<u8>>::sse_decode(&mut deserializer);
+            let api_bip39_passphrase = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SecretBytes>,
+            >>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, crate::api::ua::UAError>((move || {
                     let mut api_session_guard = None;
+                    let mut api_bip39_passphrase_guard = None;
                     let decode_indices_ =
                         flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
                             flutter_rust_bridge::for_generated::LockableOrderInfo::new(
@@ -4716,21 +5027,31 @@ fn wire__crate__api__wallet__wallet_from_link_impl(
                                 0,
                                 false,
                             ),
+                            flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                                &api_bip39_passphrase,
+                                1,
+                                false,
+                            ),
                         ]);
                     for i in decode_indices_ {
                         match i {
                             0 => api_session_guard = Some(api_session.lockable_decode_sync_ref()),
+                            1 => {
+                                api_bip39_passphrase_guard =
+                                    Some(api_bip39_passphrase.lockable_decode_sync_ref())
+                            }
                             _ => unreachable!(),
                         }
                     }
                     let api_session_guard = api_session_guard.unwrap();
+                    let api_bip39_passphrase_guard = api_bip39_passphrase_guard.unwrap();
                     let output_ok = crate::api::wallet::wallet_from_link(
                         &*api_session_guard,
                         api_container_json,
                         api_expect_json,
                         api_members_json,
                         api_accepted_json,
-                        api_bip39_passphrase,
+                        &*api_bip39_passphrase_guard,
                     )?;
                     std::result::Result::Ok(output_ok)
                 })())
@@ -4760,13 +5081,44 @@ fn wire__crate__api__wallet__wallet_from_mnemonic_impl(
             };
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_words = <Vec<u8>>::sse_decode(&mut deserializer);
-            let api_bip39_passphrase = <Vec<u8>>::sse_decode(&mut deserializer);
+            let api_words = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SecretBytes>,
+            >>::sse_decode(&mut deserializer);
+            let api_bip39_passphrase = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SecretBytes>,
+            >>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, crate::api::ua::UAError>((move || {
-                    let output_ok =
-                        crate::api::wallet::wallet_from_mnemonic(api_words, api_bip39_passphrase)?;
+                    let mut api_words_guard = None;
+                    let mut api_bip39_passphrase_guard = None;
+                    let decode_indices_ =
+                        flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
+                            flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                                &api_words, 0, false,
+                            ),
+                            flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                                &api_bip39_passphrase,
+                                1,
+                                false,
+                            ),
+                        ]);
+                    for i in decode_indices_ {
+                        match i {
+                            0 => api_words_guard = Some(api_words.lockable_decode_sync_ref()),
+                            1 => {
+                                api_bip39_passphrase_guard =
+                                    Some(api_bip39_passphrase.lockable_decode_sync_ref())
+                            }
+                            _ => unreachable!(),
+                        }
+                    }
+                    let api_words_guard = api_words_guard.unwrap();
+                    let api_bip39_passphrase_guard = api_bip39_passphrase_guard.unwrap();
+                    let output_ok = crate::api::wallet::wallet_from_mnemonic(
+                        &*api_words_guard,
+                        &*api_bip39_passphrase_guard,
+                    )?;
                     std::result::Result::Ok(output_ok)
                 })())
             }
@@ -4831,28 +5183,41 @@ fn wire__crate__api__wallet__wallet_import_native_key_impl(
                 flutter_rust_bridge::for_generated::RustAutoOpaqueInner<UaWallet>,
             >>::sse_decode(&mut deserializer);
             let api_network_name = <String>::sse_decode(&mut deserializer);
-            let api_secret_key = <Vec<u8>>::sse_decode(&mut deserializer);
+            let api_secret_key = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SecretBytes>,
+            >>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, crate::api::ua::UAError>((move || {
                     let mut api_w_guard = None;
+                    let mut api_secret_key_guard = None;
                     let decode_indices_ =
                         flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
                             flutter_rust_bridge::for_generated::LockableOrderInfo::new(
                                 &api_w, 0, false,
                             ),
+                            flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                                &api_secret_key,
+                                1,
+                                false,
+                            ),
                         ]);
                     for i in decode_indices_ {
                         match i {
                             0 => api_w_guard = Some(api_w.lockable_decode_sync_ref()),
+                            1 => {
+                                api_secret_key_guard =
+                                    Some(api_secret_key.lockable_decode_sync_ref())
+                            }
                             _ => unreachable!(),
                         }
                     }
                     let api_w_guard = api_w_guard.unwrap();
+                    let api_secret_key_guard = api_secret_key_guard.unwrap();
                     let output_ok = crate::api::wallet::wallet_import_native_key(
                         &*api_w_guard,
                         api_network_name,
-                        api_secret_key,
+                        &*api_secret_key_guard,
                     )?;
                     std::result::Result::Ok(output_ok)
                 })())
@@ -4886,8 +5251,9 @@ fn wire__crate__api__wallet__wallet_open_label_vault_impl(
                 flutter_rust_bridge::for_generated::RustAutoOpaqueInner<UaWallet>,
             >>::sse_decode(&mut deserializer);
             let api_vault_json = <String>::sse_decode(&mut deserializer);
-            let api_vault_passphrase = <Option<Vec<u8>>>::sse_decode(&mut deserializer);
-            let api_prf32 = <Option<Vec<u8>>>::sse_decode(&mut deserializer);
+            let api_vault_passphrase =
+                <Option<RustAutoOpaqueMoi<SecretBytes>>>::sse_decode(&mut deserializer);
+            let api_prf32 = <Option<RustAutoOpaqueMoi<SecretBytes>>>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, crate::api::ua::UAError>((move || {
@@ -4940,17 +5306,39 @@ fn wire__crate__api__wallet__wallet_open_vault_impl(
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_vault_json = <String>::sse_decode(&mut deserializer);
-            let api_vault_passphrase = <Option<Vec<u8>>>::sse_decode(&mut deserializer);
-            let api_prf32 = <Option<Vec<u8>>>::sse_decode(&mut deserializer);
-            let api_bip39_passphrase = <Vec<u8>>::sse_decode(&mut deserializer);
+            let api_vault_passphrase =
+                <Option<RustAutoOpaqueMoi<SecretBytes>>>::sse_decode(&mut deserializer);
+            let api_prf32 = <Option<RustAutoOpaqueMoi<SecretBytes>>>::sse_decode(&mut deserializer);
+            let api_bip39_passphrase = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SecretBytes>,
+            >>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, crate::api::ua::UAError>((move || {
+                    let mut api_bip39_passphrase_guard = None;
+                    let decode_indices_ =
+                        flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
+                            flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                                &api_bip39_passphrase,
+                                0,
+                                false,
+                            ),
+                        ]);
+                    for i in decode_indices_ {
+                        match i {
+                            0 => {
+                                api_bip39_passphrase_guard =
+                                    Some(api_bip39_passphrase.lockable_decode_sync_ref())
+                            }
+                            _ => unreachable!(),
+                        }
+                    }
+                    let api_bip39_passphrase_guard = api_bip39_passphrase_guard.unwrap();
                     let output_ok = crate::api::wallet::wallet_open_vault(
                         api_vault_json,
                         api_vault_passphrase,
                         api_prf32,
-                        api_bip39_passphrase,
+                        &*api_bip39_passphrase_guard,
                     )?;
                     std::result::Result::Ok(output_ok)
                 })())
@@ -4987,31 +5375,44 @@ fn wire__crate__api__wallet__wallet_restore_backup_impl(
             let api_expect_json = <String>::sse_decode(&mut deserializer);
             let api_members_json = <Option<String>>::sse_decode(&mut deserializer);
             let api_accepted_json = <Option<String>>::sse_decode(&mut deserializer);
-            let api_bip39_passphrase = <Vec<u8>>::sse_decode(&mut deserializer);
+            let api_bip39_passphrase = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SecretBytes>,
+            >>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, crate::api::ua::UAError>((move || {
                     let mut api_kk_guard = None;
+                    let mut api_bip39_passphrase_guard = None;
                     let decode_indices_ =
                         flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
                             flutter_rust_bridge::for_generated::LockableOrderInfo::new(
                                 &api_kk, 0, false,
                             ),
+                            flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                                &api_bip39_passphrase,
+                                1,
+                                false,
+                            ),
                         ]);
                     for i in decode_indices_ {
                         match i {
                             0 => api_kk_guard = Some(api_kk.lockable_decode_sync_ref()),
+                            1 => {
+                                api_bip39_passphrase_guard =
+                                    Some(api_bip39_passphrase.lockable_decode_sync_ref())
+                            }
                             _ => unreachable!(),
                         }
                     }
                     let api_kk_guard = api_kk_guard.unwrap();
+                    let api_bip39_passphrase_guard = api_bip39_passphrase_guard.unwrap();
                     let output_ok = crate::api::wallet::wallet_restore_backup(
                         &*api_kk_guard,
                         api_container_json,
                         api_expect_json,
                         api_members_json,
                         api_accepted_json,
-                        api_bip39_passphrase,
+                        &*api_bip39_passphrase_guard,
                     )?;
                     std::result::Result::Ok(output_ok)
                 })())
@@ -5051,12 +5452,15 @@ fn wire__crate__api__wallet__wallet_restore_backup_over_impl(
             let api_expect_json = <String>::sse_decode(&mut deserializer);
             let api_members_json = <Option<String>>::sse_decode(&mut deserializer);
             let api_accepted_json = <Option<String>>::sse_decode(&mut deserializer);
-            let api_bip39_passphrase = <Vec<u8>>::sse_decode(&mut deserializer);
+            let api_bip39_passphrase = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SecretBytes>,
+            >>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, crate::api::ua::UAError>((move || {
                     let mut api_current_guard = None;
                     let mut api_kk_guard = None;
+                    let mut api_bip39_passphrase_guard = None;
                     let decode_indices_ =
                         flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
                             flutter_rust_bridge::for_generated::LockableOrderInfo::new(
@@ -5067,16 +5471,26 @@ fn wire__crate__api__wallet__wallet_restore_backup_over_impl(
                             flutter_rust_bridge::for_generated::LockableOrderInfo::new(
                                 &api_kk, 1, false,
                             ),
+                            flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                                &api_bip39_passphrase,
+                                2,
+                                false,
+                            ),
                         ]);
                     for i in decode_indices_ {
                         match i {
                             0 => api_current_guard = Some(api_current.lockable_decode_sync_ref()),
                             1 => api_kk_guard = Some(api_kk.lockable_decode_sync_ref()),
+                            2 => {
+                                api_bip39_passphrase_guard =
+                                    Some(api_bip39_passphrase.lockable_decode_sync_ref())
+                            }
                             _ => unreachable!(),
                         }
                     }
                     let api_current_guard = api_current_guard.unwrap();
                     let api_kk_guard = api_kk_guard.unwrap();
+                    let api_bip39_passphrase_guard = api_bip39_passphrase_guard.unwrap();
                     let output_ok = crate::api::wallet::wallet_restore_backup_over(
                         &*api_current_guard,
                         &*api_kk_guard,
@@ -5084,7 +5498,7 @@ fn wire__crate__api__wallet__wallet_restore_backup_over_impl(
                         api_expect_json,
                         api_members_json,
                         api_accepted_json,
-                        api_bip39_passphrase,
+                        &*api_bip39_passphrase_guard,
                     )?;
                     std::result::Result::Ok(output_ok)
                 })())
@@ -5124,12 +5538,15 @@ fn wire__crate__api__wallet__wallet_restore_backup_rollback_impl(
             let api_expect_json = <String>::sse_decode(&mut deserializer);
             let api_members_json = <Option<String>>::sse_decode(&mut deserializer);
             let api_accepted_json = <Option<String>>::sse_decode(&mut deserializer);
-            let api_bip39_passphrase = <Vec<u8>>::sse_decode(&mut deserializer);
+            let api_bip39_passphrase = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SecretBytes>,
+            >>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, crate::api::ua::UAError>((move || {
                     let mut api_current_guard = None;
                     let mut api_kk_guard = None;
+                    let mut api_bip39_passphrase_guard = None;
                     let decode_indices_ =
                         flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
                             flutter_rust_bridge::for_generated::LockableOrderInfo::new(
@@ -5140,16 +5557,26 @@ fn wire__crate__api__wallet__wallet_restore_backup_rollback_impl(
                             flutter_rust_bridge::for_generated::LockableOrderInfo::new(
                                 &api_kk, 1, false,
                             ),
+                            flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                                &api_bip39_passphrase,
+                                2,
+                                false,
+                            ),
                         ]);
                     for i in decode_indices_ {
                         match i {
                             0 => api_current_guard = Some(api_current.lockable_decode_sync_ref()),
                             1 => api_kk_guard = Some(api_kk.lockable_decode_sync_ref()),
+                            2 => {
+                                api_bip39_passphrase_guard =
+                                    Some(api_bip39_passphrase.lockable_decode_sync_ref())
+                            }
                             _ => unreachable!(),
                         }
                     }
                     let api_current_guard = api_current_guard.unwrap();
                     let api_kk_guard = api_kk_guard.unwrap();
+                    let api_bip39_passphrase_guard = api_bip39_passphrase_guard.unwrap();
                     let output_ok = crate::api::wallet::wallet_restore_backup_rollback(
                         &*api_current_guard,
                         &*api_kk_guard,
@@ -5157,7 +5584,7 @@ fn wire__crate__api__wallet__wallet_restore_backup_rollback_impl(
                         api_expect_json,
                         api_members_json,
                         api_accepted_json,
-                        api_bip39_passphrase,
+                        &*api_bip39_passphrase_guard,
                     )?;
                     std::result::Result::Ok(output_ok)
                 })())
@@ -5191,28 +5618,41 @@ fn wire__crate__api__wallet__wallet_seal_label_vault_impl(
                 flutter_rust_bridge::for_generated::RustAutoOpaqueInner<UaWallet>,
             >>::sse_decode(&mut deserializer);
             let api_label = <String>::sse_decode(&mut deserializer);
-            let api_vault_passphrase = <Vec<u8>>::sse_decode(&mut deserializer);
+            let api_vault_passphrase = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SecretBytes>,
+            >>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, crate::api::ua::UAError>((move || {
                     let mut api_w_guard = None;
+                    let mut api_vault_passphrase_guard = None;
                     let decode_indices_ =
                         flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
                             flutter_rust_bridge::for_generated::LockableOrderInfo::new(
                                 &api_w, 0, false,
                             ),
+                            flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                                &api_vault_passphrase,
+                                1,
+                                false,
+                            ),
                         ]);
                     for i in decode_indices_ {
                         match i {
                             0 => api_w_guard = Some(api_w.lockable_decode_sync_ref()),
+                            1 => {
+                                api_vault_passphrase_guard =
+                                    Some(api_vault_passphrase.lockable_decode_sync_ref())
+                            }
                             _ => unreachable!(),
                         }
                     }
                     let api_w_guard = api_w_guard.unwrap();
+                    let api_vault_passphrase_guard = api_vault_passphrase_guard.unwrap();
                     let output_ok = crate::api::wallet::wallet_seal_label_vault(
                         &*api_w_guard,
                         api_label,
-                        api_vault_passphrase,
+                        &*api_vault_passphrase_guard,
                     )?;
                     std::result::Result::Ok(output_ok)
                 })())
@@ -5245,26 +5685,41 @@ fn wire__crate__api__wallet__wallet_seal_vault_impl(
             let api_w = <RustOpaqueMoi<
                 flutter_rust_bridge::for_generated::RustAutoOpaqueInner<UaWallet>,
             >>::sse_decode(&mut deserializer);
-            let api_vault_passphrase = <Vec<u8>>::sse_decode(&mut deserializer);
+            let api_vault_passphrase = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SecretBytes>,
+            >>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, crate::api::ua::UAError>((move || {
                     let mut api_w_guard = None;
+                    let mut api_vault_passphrase_guard = None;
                     let decode_indices_ =
                         flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
                             flutter_rust_bridge::for_generated::LockableOrderInfo::new(
                                 &api_w, 0, false,
                             ),
+                            flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                                &api_vault_passphrase,
+                                1,
+                                false,
+                            ),
                         ]);
                     for i in decode_indices_ {
                         match i {
                             0 => api_w_guard = Some(api_w.lockable_decode_sync_ref()),
+                            1 => {
+                                api_vault_passphrase_guard =
+                                    Some(api_vault_passphrase.lockable_decode_sync_ref())
+                            }
                             _ => unreachable!(),
                         }
                     }
                     let api_w_guard = api_w_guard.unwrap();
-                    let output_ok =
-                        crate::api::wallet::wallet_seal_vault(&*api_w_guard, api_vault_passphrase)?;
+                    let api_vault_passphrase_guard = api_vault_passphrase_guard.unwrap();
+                    let output_ok = crate::api::wallet::wallet_seal_vault(
+                        &*api_w_guard,
+                        &*api_vault_passphrase_guard,
+                    )?;
                     std::result::Result::Ok(output_ok)
                 })())
             }
@@ -5297,32 +5752,46 @@ fn wire__crate__api__wallet__wallet_unlock_impl(
                 flutter_rust_bridge::for_generated::RustAutoOpaqueInner<UaWallet>,
             >>::sse_decode(&mut deserializer);
             let api_vault_json = <String>::sse_decode(&mut deserializer);
-            let api_vault_passphrase = <Option<Vec<u8>>>::sse_decode(&mut deserializer);
-            let api_prf32 = <Option<Vec<u8>>>::sse_decode(&mut deserializer);
-            let api_bip39_passphrase = <Vec<u8>>::sse_decode(&mut deserializer);
+            let api_vault_passphrase =
+                <Option<RustAutoOpaqueMoi<SecretBytes>>>::sse_decode(&mut deserializer);
+            let api_prf32 = <Option<RustAutoOpaqueMoi<SecretBytes>>>::sse_decode(&mut deserializer);
+            let api_bip39_passphrase = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SecretBytes>,
+            >>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, crate::api::ua::UAError>((move || {
                     let mut api_w_guard = None;
+                    let mut api_bip39_passphrase_guard = None;
                     let decode_indices_ =
                         flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
                             flutter_rust_bridge::for_generated::LockableOrderInfo::new(
                                 &api_w, 0, false,
                             ),
+                            flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                                &api_bip39_passphrase,
+                                1,
+                                false,
+                            ),
                         ]);
                     for i in decode_indices_ {
                         match i {
                             0 => api_w_guard = Some(api_w.lockable_decode_sync_ref()),
+                            1 => {
+                                api_bip39_passphrase_guard =
+                                    Some(api_bip39_passphrase.lockable_decode_sync_ref())
+                            }
                             _ => unreachable!(),
                         }
                     }
                     let api_w_guard = api_w_guard.unwrap();
+                    let api_bip39_passphrase_guard = api_bip39_passphrase_guard.unwrap();
                     let output_ok = crate::api::wallet::wallet_unlock(
                         &*api_w_guard,
                         api_vault_json,
                         api_vault_passphrase,
                         api_prf32,
-                        api_bip39_passphrase,
+                        &*api_bip39_passphrase_guard,
                     )?;
                     std::result::Result::Ok(output_ok)
                 })())
@@ -5414,6 +5883,9 @@ fn wire__crate__api__wallet__webauthn_challenge_impl(
 // Section: related_funcs
 
 flutter_rust_bridge::frb_generated_moi_arc_impl_value!(
+    flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SecretBytes>
+);
+flutter_rust_bridge::frb_generated_moi_arc_impl_value!(
     flutter_rust_bridge::for_generated::RustAutoOpaqueInner<UaKemKey>
 );
 flutter_rust_bridge::frb_generated_moi_arc_impl_value!(
@@ -5439,6 +5911,26 @@ flutter_rust_bridge::frb_generated_moi_arc_impl_value!(
 );
 
 // Section: dart2rust
+
+impl SseDecode for RustAutoOpaqueMoi<SecretBytes> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <RustOpaqueMoi<
+            flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SecretBytes>,
+        >>::sse_decode(deserializer);
+        return flutter_rust_bridge::for_generated::rust_auto_opaque_explicit_decode(inner);
+    }
+}
+
+impl SseDecode for SecretBytes {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <RustOpaqueMoi<
+            flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SecretBytes>,
+        >>::sse_decode(deserializer);
+        return flutter_rust_bridge::for_generated::rust_auto_opaque_decode_owned(inner);
+    }
+}
 
 impl SseDecode for UaKemKey {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -5517,6 +6009,16 @@ impl SseDecode for UaZetherKey {
             flutter_rust_bridge::for_generated::RustAutoOpaqueInner<UaZetherKey>,
         >>::sse_decode(deserializer);
         return flutter_rust_bridge::for_generated::rust_auto_opaque_decode_owned(inner);
+    }
+}
+
+impl SseDecode
+    for RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SecretBytes>>
+{
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <usize>::sse_decode(deserializer);
+        return decode_rust_opaque_moi(inner);
     }
 }
 
@@ -5660,6 +6162,18 @@ impl SseDecode for crate::api::ua::KindInfo {
     }
 }
 
+impl SseDecode for Vec<SecretBytes> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<SecretBytes>::sse_decode(deserializer));
+        }
+        return ans_;
+    }
+}
+
 impl SseDecode for Vec<String> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -5667,18 +6181,6 @@ impl SseDecode for Vec<String> {
         let mut ans_ = Vec::with_capacity(len_ as usize);
         for idx_ in 0..len_ {
             ans_.push(<String>::sse_decode(deserializer));
-        }
-        return ans_;
-    }
-}
-
-impl SseDecode for Vec<Vec<u8>> {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        let mut len_ = <i32>::sse_decode(deserializer);
-        let mut ans_ = Vec::with_capacity(len_ as usize);
-        for idx_ in 0..len_ {
-            ans_.push(<Vec<u8>>::sse_decode(deserializer));
         }
         return ans_;
     }
@@ -5732,11 +6234,33 @@ impl SseDecode for Vec<crate::api::wallet::UaRecipient> {
     }
 }
 
+impl SseDecode for Option<RustAutoOpaqueMoi<SecretBytes>> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<RustAutoOpaqueMoi<SecretBytes>>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
 impl SseDecode for Option<String> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         if (<bool>::sse_decode(deserializer)) {
             return Some(<String>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<SecretBytes> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<SecretBytes>::sse_decode(deserializer));
         } else {
             return None;
         }
@@ -5893,7 +6417,7 @@ impl SseDecode for crate::api::wallet::UaEncapsulated {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_mlkemCt = <Vec<u8>>::sse_decode(deserializer);
         let mut var_x25519Eph = <Vec<u8>>::sse_decode(deserializer);
-        let mut var_ss = <Vec<u8>>::sse_decode(deserializer);
+        let mut var_ss = <SecretBytes>::sse_decode(deserializer);
         return crate::api::wallet::UaEncapsulated {
             mlkem_ct: var_mlkemCt,
             x25519_eph: var_x25519Eph,
@@ -5988,141 +6512,141 @@ fn pde_ffi_dispatcher_primary_impl(
 ) {
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
-        1 => wire__crate__api__wallet__UaKemKey_decaps_impl(port, ptr, rust_vec_len, data_len),
-        3 => wire__crate__api__wallet__UaKemKey_open_impl(port, ptr, rust_vec_len, data_len),
-        4 => wire__crate__api__wallet__UaKemKey_open_container_impl(
+        3 => wire__crate__api__wallet__UaKemKey_decaps_impl(port, ptr, rust_vec_len, data_len),
+        5 => wire__crate__api__wallet__UaKemKey_open_impl(port, ptr, rust_vec_len, data_len),
+        6 => wire__crate__api__wallet__UaKemKey_open_container_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        11 => {
+        13 => {
             wire__crate__api__wallet__UaKey_sign_digest_raw_impl(port, ptr, rust_vec_len, data_len)
         }
-        12 => {
+        14 => {
             wire__crate__api__wallet__UaKey_sign_key_proof_impl(port, ptr, rust_vec_len, data_len)
         }
-        13 => wire__crate__api__wallet__UaKey_sign_member_impl(port, ptr, rust_vec_len, data_len),
-        14 => {
+        15 => wire__crate__api__wallet__UaKey_sign_member_impl(port, ptr, rust_vec_len, data_len),
+        16 => {
             wire__crate__api__wallet__UaKey_sign_transaction_impl(port, ptr, rust_vec_len, data_len)
         }
-        15 => wire__crate__api__wallet__UaKey_sign_typed_impl(port, ptr, rust_vec_len, data_len),
-        16 => {
+        17 => wire__crate__api__wallet__UaKey_sign_typed_impl(port, ptr, rust_vec_len, data_len),
+        18 => {
             wire__crate__api__wallet__UaKey_sign_typed_any_impl(port, ptr, rust_vec_len, data_len)
         }
-        17 => wire__crate__api__wallet__UaKey_sign_ua_impl(port, ptr, rust_vec_len, data_len),
-        21 => wire__crate__api__wallet__UaPqzKey_call_impl(port, ptr, rust_vec_len, data_len),
-        22 => wire__crate__api__wallet__UaPqzKey_open_balance_cache_impl(
+        19 => wire__crate__api__wallet__UaKey_sign_ua_impl(port, ptr, rust_vec_len, data_len),
+        23 => wire__crate__api__wallet__UaPqzKey_call_impl(port, ptr, rust_vec_len, data_len),
+        24 => wire__crate__api__wallet__UaPqzKey_open_balance_cache_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        24 => wire__crate__api__wallet__UaPqzKey_seal_balance_cache_impl(
+        26 => wire__crate__api__wallet__UaPqzKey_seal_balance_cache_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        25 => {
+        27 => {
             wire__crate__api__wallet__UaSeedBackup_challenge_impl(port, ptr, rust_vec_len, data_len)
         }
-        26 => wire__crate__api__wallet__UaSeedBackup_reveal_impl(port, ptr, rust_vec_len, data_len),
-        27 => wire__crate__api__wallet__UaSeedBackup_take_impl(port, ptr, rust_vec_len, data_len),
-        28 => wire__crate__api__wallet__UaWallet_discover_candidates_impl(
+        28 => wire__crate__api__wallet__UaSeedBackup_reveal_impl(port, ptr, rust_vec_len, data_len),
+        29 => wire__crate__api__wallet__UaSeedBackup_take_impl(port, ptr, rust_vec_len, data_len),
+        30 => wire__crate__api__wallet__UaWallet_discover_candidates_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        29 => wire__crate__api__wallet__UaWallet_export_pqz_leaf_raw_impl(
+        31 => wire__crate__api__wallet__UaWallet_export_pqz_leaf_raw_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        30 => {
+        32 => {
             wire__crate__api__wallet__UaWallet_imported_key_impl(port, ptr, rust_vec_len, data_len)
         }
-        31 => wire__crate__api__wallet__UaWallet_link_seal_impl(port, ptr, rust_vec_len, data_len),
-        35 => wire__crate__api__wallet__UaWallet_native_key_impl(port, ptr, rust_vec_len, data_len),
-        36 => wire__crate__api__wallet__UaWallet_pqz_key_impl(port, ptr, rust_vec_len, data_len),
-        37 => wire__crate__api__wallet__UaWallet_ua_key_impl(port, ptr, rust_vec_len, data_len),
-        38 => wire__crate__api__wallet__UaWallet_zether_key_impl(port, ptr, rust_vec_len, data_len),
-        39 => wire__crate__api__wallet__UaZetherKey_call_impl(port, ptr, rust_vec_len, data_len),
-        40 => wire__crate__api__wallet__UaZetherKey_open_balance_cache_impl(
+        33 => wire__crate__api__wallet__UaWallet_link_seal_impl(port, ptr, rust_vec_len, data_len),
+        37 => wire__crate__api__wallet__UaWallet_native_key_impl(port, ptr, rust_vec_len, data_len),
+        38 => wire__crate__api__wallet__UaWallet_pqz_key_impl(port, ptr, rust_vec_len, data_len),
+        39 => wire__crate__api__wallet__UaWallet_ua_key_impl(port, ptr, rust_vec_len, data_len),
+        40 => wire__crate__api__wallet__UaWallet_zether_key_impl(port, ptr, rust_vec_len, data_len),
+        41 => wire__crate__api__wallet__UaZetherKey_call_impl(port, ptr, rust_vec_len, data_len),
+        42 => wire__crate__api__wallet__UaZetherKey_open_balance_cache_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        41 => wire__crate__api__wallet__UaZetherKey_seal_balance_cache_impl(
+        43 => wire__crate__api__wallet__UaZetherKey_seal_balance_cache_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        45 => wire__crate__api__wallet__aead_open_impl(port, ptr, rust_vec_len, data_len),
-        46 => wire__crate__api__wallet__aead_seal_impl(port, ptr, rust_vec_len, data_len),
-        55 => wire__crate__api__wallet__hkdf_sha256_impl(port, ptr, rust_vec_len, data_len),
-        56 => wire__crate__api__wallet__hmac_sha256_impl(port, ptr, rust_vec_len, data_len),
-        67 => wire__crate__api__wallet__kem_encaps_impl(port, ptr, rust_vec_len, data_len),
-        68 => wire__crate__api__wallet__kem_ephemeral_impl(port, ptr, rust_vec_len, data_len),
-        73 => wire__crate__api__wallet__key_kem_key_impl(port, ptr, rust_vec_len, data_len),
-        74 => wire__crate__api__wallet__key_list_new_impl(port, ptr, rust_vec_len, data_len),
-        77 => wire__crate__api__wallet__link_session_new_impl(port, ptr, rust_vec_len, data_len),
-        87 => wire__crate__api__wallet__pqz_check_set_impl(port, ptr, rust_vec_len, data_len),
-        93 => wire__crate__api__wallet__pqz_set_impl(port, ptr, rust_vec_len, data_len),
-        99 => wire__crate__api__wallet__seal_impl(port, ptr, rust_vec_len, data_len),
-        100 => wire__crate__api__wallet__seed_backup_verify_impl(port, ptr, rust_vec_len, data_len),
-        108 => wire__crate__api__wallet__uasig_impl(port, ptr, rust_vec_len, data_len),
-        110 => wire__crate__api__wallet__vault_enable_prf_impl(port, ptr, rust_vec_len, data_len),
-        111 => wire__crate__api__wallet__vault_needs_rewrap_impl(port, ptr, rust_vec_len, data_len),
-        112 => wire__crate__api__wallet__vault_rewrap_pin_impl(port, ptr, rust_vec_len, data_len),
-        113 => wire__crate__api__wallet__wallet_backup_seal_impl(port, ptr, rust_vec_len, data_len),
-        114 => wire__crate__api__wallet__wallet_from_link_impl(port, ptr, rust_vec_len, data_len),
-        115 => {
+        47 => wire__crate__api__wallet__aead_open_impl(port, ptr, rust_vec_len, data_len),
+        48 => wire__crate__api__wallet__aead_seal_impl(port, ptr, rust_vec_len, data_len),
+        57 => wire__crate__api__wallet__hkdf_sha256_impl(port, ptr, rust_vec_len, data_len),
+        58 => wire__crate__api__wallet__hmac_sha256_impl(port, ptr, rust_vec_len, data_len),
+        69 => wire__crate__api__wallet__kem_encaps_impl(port, ptr, rust_vec_len, data_len),
+        70 => wire__crate__api__wallet__kem_ephemeral_impl(port, ptr, rust_vec_len, data_len),
+        75 => wire__crate__api__wallet__key_kem_key_impl(port, ptr, rust_vec_len, data_len),
+        76 => wire__crate__api__wallet__key_list_new_impl(port, ptr, rust_vec_len, data_len),
+        79 => wire__crate__api__wallet__link_session_new_impl(port, ptr, rust_vec_len, data_len),
+        89 => wire__crate__api__wallet__pqz_check_set_impl(port, ptr, rust_vec_len, data_len),
+        95 => wire__crate__api__wallet__pqz_set_impl(port, ptr, rust_vec_len, data_len),
+        101 => wire__crate__api__wallet__seal_impl(port, ptr, rust_vec_len, data_len),
+        103 => wire__crate__api__wallet__seed_backup_verify_impl(port, ptr, rust_vec_len, data_len),
+        111 => wire__crate__api__wallet__uasig_impl(port, ptr, rust_vec_len, data_len),
+        113 => wire__crate__api__wallet__vault_enable_prf_impl(port, ptr, rust_vec_len, data_len),
+        114 => wire__crate__api__wallet__vault_needs_rewrap_impl(port, ptr, rust_vec_len, data_len),
+        115 => wire__crate__api__wallet__vault_rewrap_pin_impl(port, ptr, rust_vec_len, data_len),
+        116 => wire__crate__api__wallet__wallet_backup_seal_impl(port, ptr, rust_vec_len, data_len),
+        117 => wire__crate__api__wallet__wallet_from_link_impl(port, ptr, rust_vec_len, data_len),
+        118 => {
             wire__crate__api__wallet__wallet_from_mnemonic_impl(port, ptr, rust_vec_len, data_len)
         }
-        116 => wire__crate__api__wallet__wallet_generate_impl(port, ptr, rust_vec_len, data_len),
-        117 => wire__crate__api__wallet__wallet_import_native_key_impl(
+        119 => wire__crate__api__wallet__wallet_generate_impl(port, ptr, rust_vec_len, data_len),
+        120 => wire__crate__api__wallet__wallet_import_native_key_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        118 => wire__crate__api__wallet__wallet_open_label_vault_impl(
+        121 => wire__crate__api__wallet__wallet_open_label_vault_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        119 => wire__crate__api__wallet__wallet_open_vault_impl(port, ptr, rust_vec_len, data_len),
-        120 => {
+        122 => wire__crate__api__wallet__wallet_open_vault_impl(port, ptr, rust_vec_len, data_len),
+        123 => {
             wire__crate__api__wallet__wallet_restore_backup_impl(port, ptr, rust_vec_len, data_len)
         }
-        121 => wire__crate__api__wallet__wallet_restore_backup_over_impl(
+        124 => wire__crate__api__wallet__wallet_restore_backup_over_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        122 => wire__crate__api__wallet__wallet_restore_backup_rollback_impl(
+        125 => wire__crate__api__wallet__wallet_restore_backup_rollback_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        123 => wire__crate__api__wallet__wallet_seal_label_vault_impl(
+        126 => wire__crate__api__wallet__wallet_seal_label_vault_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        124 => wire__crate__api__wallet__wallet_seal_vault_impl(port, ptr, rust_vec_len, data_len),
-        125 => wire__crate__api__wallet__wallet_unlock_impl(port, ptr, rust_vec_len, data_len),
-        126 => wire__crate__api__wallet__webauthn_assertion_impl(port, ptr, rust_vec_len, data_len),
-        127 => wire__crate__api__wallet__webauthn_challenge_impl(port, ptr, rust_vec_len, data_len),
+        127 => wire__crate__api__wallet__wallet_seal_vault_impl(port, ptr, rust_vec_len, data_len),
+        128 => wire__crate__api__wallet__wallet_unlock_impl(port, ptr, rust_vec_len, data_len),
+        129 => wire__crate__api__wallet__webauthn_assertion_impl(port, ptr, rust_vec_len, data_len),
+        130 => wire__crate__api__wallet__webauthn_challenge_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -6135,81 +6659,99 @@ fn pde_ffi_dispatcher_sync_impl(
 ) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
-        2 => wire__crate__api__wallet__UaKemKey_kem_pk_impl(ptr, rust_vec_len, data_len),
-        5 => wire__crate__api__wallet__UaKeyList_push_impl(ptr, rust_vec_len, data_len),
-        6 => wire__crate__api__wallet__UaKey_address_impl(ptr, rust_vec_len, data_len),
-        7 => wire__crate__api__wallet__UaKey_is_ua_impl(ptr, rust_vec_len, data_len),
-        8 => wire__crate__api__wallet__UaKey_key_data_impl(ptr, rust_vec_len, data_len),
-        9 => wire__crate__api__wallet__UaKey_kind_impl(ptr, rust_vec_len, data_len),
-        10 => wire__crate__api__wallet__UaKey_network_name_impl(ptr, rust_vec_len, data_len),
-        18 => wire__crate__api__wallet__UaKey_ua_id_impl(ptr, rust_vec_len, data_len),
-        19 => wire__crate__api__wallet__UaLinkSession_kem_pk_impl(ptr, rust_vec_len, data_len),
-        20 => wire__crate__api__wallet__UaLinkSession_short_code_impl(ptr, rust_vec_len, data_len),
-        23 => wire__crate__api__wallet__UaPqzKey_pk_impl(ptr, rust_vec_len, data_len),
-        32 => wire__crate__api__wallet__UaWallet_lock_impl(ptr, rust_vec_len, data_len),
-        33 => wire__crate__api__wallet__UaWallet_manifest_json_impl(ptr, rust_vec_len, data_len),
-        34 => {
+        1 => wire__crate__api__wallet__SecretBytes_addr_impl(ptr, rust_vec_len, data_len),
+        2 => wire__crate__api__wallet__SecretBytes_size_impl(ptr, rust_vec_len, data_len),
+        4 => wire__crate__api__wallet__UaKemKey_kem_pk_impl(ptr, rust_vec_len, data_len),
+        7 => wire__crate__api__wallet__UaKeyList_push_impl(ptr, rust_vec_len, data_len),
+        8 => wire__crate__api__wallet__UaKey_address_impl(ptr, rust_vec_len, data_len),
+        9 => wire__crate__api__wallet__UaKey_is_ua_impl(ptr, rust_vec_len, data_len),
+        10 => wire__crate__api__wallet__UaKey_key_data_impl(ptr, rust_vec_len, data_len),
+        11 => wire__crate__api__wallet__UaKey_kind_impl(ptr, rust_vec_len, data_len),
+        12 => wire__crate__api__wallet__UaKey_network_name_impl(ptr, rust_vec_len, data_len),
+        20 => wire__crate__api__wallet__UaKey_ua_id_impl(ptr, rust_vec_len, data_len),
+        21 => wire__crate__api__wallet__UaLinkSession_kem_pk_impl(ptr, rust_vec_len, data_len),
+        22 => wire__crate__api__wallet__UaLinkSession_short_code_impl(ptr, rust_vec_len, data_len),
+        25 => wire__crate__api__wallet__UaPqzKey_pk_impl(ptr, rust_vec_len, data_len),
+        34 => wire__crate__api__wallet__UaWallet_lock_impl(ptr, rust_vec_len, data_len),
+        35 => wire__crate__api__wallet__UaWallet_manifest_json_impl(ptr, rust_vec_len, data_len),
+        36 => {
             wire__crate__api__wallet__UaWallet_memory_protection_impl(ptr, rust_vec_len, data_len)
         }
-        42 => wire__crate__api__wallet__UaZetherKey_ua_id_impl(ptr, rust_vec_len, data_len),
-        43 => wire__crate__api__wallet__UaZetherKey_y_impl(ptr, rust_vec_len, data_len),
-        44 => wire__crate__api__wallet__abi_version_impl(ptr, rust_vec_len, data_len),
-        47 => wire__crate__api__ua__canonical_id_impl(ptr, rust_vec_len, data_len),
-        48 => wire__crate__api__ua__chain_key_hash_impl(ptr, rust_vec_len, data_len),
-        49 => wire__crate__api__ua__derive_ua_impl(ptr, rust_vec_len, data_len),
-        50 => wire__crate__api__ua__encode_msig_impl(ptr, rust_vec_len, data_len),
-        51 => wire__crate__api__wallet__features_impl(ptr, rust_vec_len, data_len),
-        52 => wire__crate__api__ua__governance_bit_impl(ptr, rust_vec_len, data_len),
-        53 => wire__crate__api__ua__group_tag_impl(ptr, rust_vec_len, data_len),
-        54 => wire__crate__api__ua__group_tag_string_impl(ptr, rust_vec_len, data_len),
-        57 => wire__crate__api__ua__holder_pop_message_impl(ptr, rust_vec_len, data_len),
-        58 => wire__crate__api__ua__holder_pop_message_with_impl(ptr, rust_vec_len, data_len),
-        59 => wire__crate__api__ua__in_native_space_impl(ptr, rust_vec_len, data_len),
-        60 => wire__crate__api__ua__is_member_impl(ptr, rust_vec_len, data_len),
-        61 => wire__crate__api__ua__is_native_impl(ptr, rust_vec_len, data_len),
-        62 => wire__crate__api__ua__is_portable_purpose_impl(ptr, rust_vec_len, data_len),
-        63 => wire__crate__api__ua__is_pqz_holder_impl(ptr, rust_vec_len, data_len),
-        64 => wire__crate__api__ua__is_signing_impl(ptr, rust_vec_len, data_len),
-        65 => wire__crate__api__ua__is_zether_impl(ptr, rust_vec_len, data_len),
-        66 => wire__crate__api__ua__keccak256_impl(ptr, rust_vec_len, data_len),
-        69 => wire__crate__api__ua__kem_record_digest_impl(ptr, rust_vec_len, data_len),
-        70 => wire__crate__api__ua__kem_record_hash_impl(ptr, rust_vec_len, data_len),
-        71 => wire__crate__api__ua__kem_record_message_impl(ptr, rust_vec_len, data_len),
-        72 => wire__crate__api__ua__key_hash_of_impl(ptr, rust_vec_len, data_len),
-        75 => wire__crate__api__ua__kind_info_impl(ptr, rust_vec_len, data_len),
-        76 => wire__crate__api__ua__kind_tag_string_impl(ptr, rust_vec_len, data_len),
-        78 => wire__crate__api__wallet__live_handles_impl(ptr, rust_vec_len, data_len),
-        79 => wire__crate__api__ua__member_digest_impl(ptr, rust_vec_len, data_len),
-        80 => wire__crate__api__ua__membership_digest_impl(ptr, rust_vec_len, data_len),
-        81 => wire__crate__api__ua__msg_tag_impl(ptr, rust_vec_len, data_len),
-        82 => wire__crate__api__ua__msig_pqz_eligible_impl(ptr, rust_vec_len, data_len),
-        83 => wire__crate__api__ua__msig_pqz_eligible_with_impl(ptr, rust_vec_len, data_len),
-        84 => wire__crate__api__ua__native_id_impl(ptr, rust_vec_len, data_len),
-        85 => wire__crate__api__ua__portable_domain_separator_impl(ptr, rust_vec_len, data_len),
-        86 => wire__crate__api__ua__portable_record_digest_impl(ptr, rust_vec_len, data_len),
-        88 => wire__crate__api__ua__pqz_key_digest_impl(ptr, rust_vec_len, data_len),
-        89 => wire__crate__api__ua__pqz_key_record_digest_impl(ptr, rust_vec_len, data_len),
-        90 => wire__crate__api__ua__pqz_key_record_message_impl(ptr, rust_vec_len, data_len),
-        91 => wire__crate__api__ua__pqz_key_record_message_with_impl(ptr, rust_vec_len, data_len),
-        92 => wire__crate__api__ua__pqz_reg_message_impl(ptr, rust_vec_len, data_len),
-        94 => wire__crate__api__ua__purpose_tag_impl(ptr, rust_vec_len, data_len),
-        95 => wire__crate__api__ua__purpose_tag_v_impl(ptr, rust_vec_len, data_len),
-        96 => wire__crate__api__ua__registration_args_impl(ptr, rust_vec_len, data_len),
-        97 => wire__crate__api__ua__registration_digest_impl(ptr, rust_vec_len, data_len),
-        98 => wire__crate__api__ua__replayed_member_sig_impl(ptr, rust_vec_len, data_len),
-        101 => wire__crate__api__ua__set_kem_key_args_impl(ptr, rust_vec_len, data_len),
-        102 => wire__crate__api__ua__set_pqz_key_args_impl(ptr, rust_vec_len, data_len),
-        103 => wire__crate__api__ua__tag_impl(ptr, rust_vec_len, data_len),
-        104 => wire__crate__api__ua__ua_auth_digest_impl(ptr, rust_vec_len, data_len),
-        105 => wire__crate__api__ua__ua_auth_domain_separator_impl(ptr, rust_vec_len, data_len),
-        106 => wire__crate__api__ua__ua_message_impl(ptr, rust_vec_len, data_len),
-        107 => wire__crate__api__ua__ua_of_impl(ptr, rust_vec_len, data_len),
-        109 => wire__crate__api__ua__validate_key_data_impl(ptr, rust_vec_len, data_len),
+        44 => wire__crate__api__wallet__UaZetherKey_ua_id_impl(ptr, rust_vec_len, data_len),
+        45 => wire__crate__api__wallet__UaZetherKey_y_impl(ptr, rust_vec_len, data_len),
+        46 => wire__crate__api__wallet__abi_version_impl(ptr, rust_vec_len, data_len),
+        49 => wire__crate__api__ua__canonical_id_impl(ptr, rust_vec_len, data_len),
+        50 => wire__crate__api__ua__chain_key_hash_impl(ptr, rust_vec_len, data_len),
+        51 => wire__crate__api__ua__derive_ua_impl(ptr, rust_vec_len, data_len),
+        52 => wire__crate__api__ua__encode_msig_impl(ptr, rust_vec_len, data_len),
+        53 => wire__crate__api__wallet__features_impl(ptr, rust_vec_len, data_len),
+        54 => wire__crate__api__ua__governance_bit_impl(ptr, rust_vec_len, data_len),
+        55 => wire__crate__api__ua__group_tag_impl(ptr, rust_vec_len, data_len),
+        56 => wire__crate__api__ua__group_tag_string_impl(ptr, rust_vec_len, data_len),
+        59 => wire__crate__api__ua__holder_pop_message_impl(ptr, rust_vec_len, data_len),
+        60 => wire__crate__api__ua__holder_pop_message_with_impl(ptr, rust_vec_len, data_len),
+        61 => wire__crate__api__ua__in_native_space_impl(ptr, rust_vec_len, data_len),
+        62 => wire__crate__api__ua__is_member_impl(ptr, rust_vec_len, data_len),
+        63 => wire__crate__api__ua__is_native_impl(ptr, rust_vec_len, data_len),
+        64 => wire__crate__api__ua__is_portable_purpose_impl(ptr, rust_vec_len, data_len),
+        65 => wire__crate__api__ua__is_pqz_holder_impl(ptr, rust_vec_len, data_len),
+        66 => wire__crate__api__ua__is_signing_impl(ptr, rust_vec_len, data_len),
+        67 => wire__crate__api__ua__is_zether_impl(ptr, rust_vec_len, data_len),
+        68 => wire__crate__api__ua__keccak256_impl(ptr, rust_vec_len, data_len),
+        71 => wire__crate__api__ua__kem_record_digest_impl(ptr, rust_vec_len, data_len),
+        72 => wire__crate__api__ua__kem_record_hash_impl(ptr, rust_vec_len, data_len),
+        73 => wire__crate__api__ua__kem_record_message_impl(ptr, rust_vec_len, data_len),
+        74 => wire__crate__api__ua__key_hash_of_impl(ptr, rust_vec_len, data_len),
+        77 => wire__crate__api__ua__kind_info_impl(ptr, rust_vec_len, data_len),
+        78 => wire__crate__api__ua__kind_tag_string_impl(ptr, rust_vec_len, data_len),
+        80 => wire__crate__api__wallet__live_handles_impl(ptr, rust_vec_len, data_len),
+        81 => wire__crate__api__ua__member_digest_impl(ptr, rust_vec_len, data_len),
+        82 => wire__crate__api__ua__membership_digest_impl(ptr, rust_vec_len, data_len),
+        83 => wire__crate__api__ua__msg_tag_impl(ptr, rust_vec_len, data_len),
+        84 => wire__crate__api__ua__msig_pqz_eligible_impl(ptr, rust_vec_len, data_len),
+        85 => wire__crate__api__ua__msig_pqz_eligible_with_impl(ptr, rust_vec_len, data_len),
+        86 => wire__crate__api__ua__native_id_impl(ptr, rust_vec_len, data_len),
+        87 => wire__crate__api__ua__portable_domain_separator_impl(ptr, rust_vec_len, data_len),
+        88 => wire__crate__api__ua__portable_record_digest_impl(ptr, rust_vec_len, data_len),
+        90 => wire__crate__api__ua__pqz_key_digest_impl(ptr, rust_vec_len, data_len),
+        91 => wire__crate__api__ua__pqz_key_record_digest_impl(ptr, rust_vec_len, data_len),
+        92 => wire__crate__api__ua__pqz_key_record_message_impl(ptr, rust_vec_len, data_len),
+        93 => wire__crate__api__ua__pqz_key_record_message_with_impl(ptr, rust_vec_len, data_len),
+        94 => wire__crate__api__ua__pqz_reg_message_impl(ptr, rust_vec_len, data_len),
+        96 => wire__crate__api__ua__purpose_tag_impl(ptr, rust_vec_len, data_len),
+        97 => wire__crate__api__ua__purpose_tag_v_impl(ptr, rust_vec_len, data_len),
+        98 => wire__crate__api__ua__registration_args_impl(ptr, rust_vec_len, data_len),
+        99 => wire__crate__api__ua__registration_digest_impl(ptr, rust_vec_len, data_len),
+        100 => wire__crate__api__ua__replayed_member_sig_impl(ptr, rust_vec_len, data_len),
+        102 => wire__crate__api__wallet__secret_alloc_impl(ptr, rust_vec_len, data_len),
+        104 => wire__crate__api__ua__set_kem_key_args_impl(ptr, rust_vec_len, data_len),
+        105 => wire__crate__api__ua__set_pqz_key_args_impl(ptr, rust_vec_len, data_len),
+        106 => wire__crate__api__ua__tag_impl(ptr, rust_vec_len, data_len),
+        107 => wire__crate__api__ua__ua_auth_digest_impl(ptr, rust_vec_len, data_len),
+        108 => wire__crate__api__ua__ua_auth_domain_separator_impl(ptr, rust_vec_len, data_len),
+        109 => wire__crate__api__ua__ua_message_impl(ptr, rust_vec_len, data_len),
+        110 => wire__crate__api__ua__ua_of_impl(ptr, rust_vec_len, data_len),
+        112 => wire__crate__api__ua__validate_key_data_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
 
 // Section: rust2dart
+
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for FrbWrapper<SecretBytes> {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        flutter_rust_bridge::for_generated::rust_auto_opaque_encode::<_, MoiArc<_>>(self.0)
+            .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for FrbWrapper<SecretBytes> {}
+
+impl flutter_rust_bridge::IntoIntoDart<FrbWrapper<SecretBytes>> for SecretBytes {
+    fn into_into_dart(self) -> FrbWrapper<SecretBytes> {
+        self.into()
+    }
+}
 
 // Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for FrbWrapper<UaKemKey> {
@@ -6516,6 +7058,20 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::wallet::UaSealed>
     }
 }
 
+impl SseEncode for RustAutoOpaqueMoi<SecretBytes> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SecretBytes>>>::sse_encode(flutter_rust_bridge::for_generated::rust_auto_opaque_explicit_encode(self), serializer);
+    }
+}
+
+impl SseEncode for SecretBytes {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SecretBytes>>>::sse_encode(flutter_rust_bridge::for_generated::rust_auto_opaque_encode::<_, MoiArc<_>>(self), serializer);
+    }
+}
+
 impl SseEncode for UaKemKey {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -6572,6 +7128,17 @@ impl SseEncode for UaZetherKey {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<UaZetherKey>>>::sse_encode(flutter_rust_bridge::for_generated::rust_auto_opaque_encode::<_, MoiArc<_>>(self), serializer);
+    }
+}
+
+impl SseEncode
+    for RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SecretBytes>>
+{
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        let (ptr, size) = self.sse_encode_raw();
+        <usize>::sse_encode(ptr, serializer);
+        <i32>::sse_encode(size, serializer);
     }
 }
 
@@ -6706,22 +7273,22 @@ impl SseEncode for crate::api::ua::KindInfo {
     }
 }
 
+impl SseEncode for Vec<SecretBytes> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <SecretBytes>::sse_encode(item, serializer);
+        }
+    }
+}
+
 impl SseEncode for Vec<String> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <i32>::sse_encode(self.len() as _, serializer);
         for item in self {
             <String>::sse_encode(item, serializer);
-        }
-    }
-}
-
-impl SseEncode for Vec<Vec<u8>> {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        <i32>::sse_encode(self.len() as _, serializer);
-        for item in self {
-            <Vec<u8>>::sse_encode(item, serializer);
         }
     }
 }
@@ -6766,12 +7333,32 @@ impl SseEncode for Vec<crate::api::wallet::UaRecipient> {
     }
 }
 
+impl SseEncode for Option<RustAutoOpaqueMoi<SecretBytes>> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <RustAutoOpaqueMoi<SecretBytes>>::sse_encode(value, serializer);
+        }
+    }
+}
+
 impl SseEncode for Option<String> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
             <String>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<SecretBytes> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <SecretBytes>::sse_encode(value, serializer);
         }
     }
 }
@@ -6915,7 +7502,7 @@ impl SseEncode for crate::api::wallet::UaEncapsulated {
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <Vec<u8>>::sse_encode(self.mlkem_ct, serializer);
         <Vec<u8>>::sse_encode(self.x25519_eph, serializer);
-        <Vec<u8>>::sse_encode(self.ss, serializer);
+        <SecretBytes>::sse_encode(self.ss, serializer);
     }
 }
 
@@ -6996,6 +7583,20 @@ mod io {
     // Section: boilerplate
 
     flutter_rust_bridge::frb_generated_boilerplate_io!();
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn frbgen_scaas_ua_frb_rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecretBytes(
+        ptr: *const std::ffi::c_void,
+    ) {
+        MoiArc::<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SecretBytes>>::increment_strong_count(ptr as _);
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "C" fn frbgen_scaas_ua_frb_rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecretBytes(
+        ptr: *const std::ffi::c_void,
+    ) {
+        MoiArc::<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SecretBytes>>::decrement_strong_count(ptr as _);
+    }
 
     #[unsafe(no_mangle)]
     pub extern "C" fn frbgen_scaas_ua_frb_rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKemKey(
@@ -7133,6 +7734,20 @@ mod web {
     // Section: boilerplate
 
     flutter_rust_bridge::frb_generated_boilerplate_web!();
+
+    #[wasm_bindgen]
+    pub fn rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecretBytes(
+        ptr: *const std::ffi::c_void,
+    ) {
+        MoiArc::<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SecretBytes>>::increment_strong_count(ptr as _);
+    }
+
+    #[wasm_bindgen]
+    pub fn rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecretBytes(
+        ptr: *const std::ffi::c_void,
+    ) {
+        MoiArc::<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SecretBytes>>::decrement_strong_count(ptr as _);
+    }
 
     #[wasm_bindgen]
     pub fn rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKemKey(

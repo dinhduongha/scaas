@@ -22,6 +22,10 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
   });
 
   CrossPlatformFinalizerArg
+  get rust_arc_decrement_strong_count_SecretBytesPtr => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecretBytes;
+
+  CrossPlatformFinalizerArg
   get rust_arc_decrement_strong_count_UaKemKeyPtr => wire
       .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKemKey;
 
@@ -51,6 +55,18 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
   CrossPlatformFinalizerArg
   get rust_arc_decrement_strong_count_UaZetherKeyPtr => wire
       .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaZetherKey;
+
+  @protected
+  SecretBytes
+  dco_decode_AutoExplicit_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecretBytes(
+    dynamic raw,
+  );
+
+  @protected
+  SecretBytes
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecretBytes(
+    dynamic raw,
+  );
 
   @protected
   UaKemKey
@@ -101,8 +117,20 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
   );
 
   @protected
+  SecretBytes
+  dco_decode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecretBytes(
+    dynamic raw,
+  );
+
+  @protected
   UaKeyList
   dco_decode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKeyList(
+    dynamic raw,
+  );
+
+  @protected
+  SecretBytes
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecretBytes(
     dynamic raw,
   );
 
@@ -151,6 +179,12 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
   @protected
   UaZetherKey
   dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaZetherKey(
+    dynamic raw,
+  );
+
+  @protected
+  SecretBytes
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecretBytes(
     dynamic raw,
   );
 
@@ -209,6 +243,12 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
   bool dco_decode_bool(dynamic raw);
 
   @protected
+  SecretBytes
+  dco_decode_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecretBytes(
+    dynamic raw,
+  );
+
+  @protected
   UaWallet
   dco_decode_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
     dynamic raw,
@@ -233,10 +273,13 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
   KindInfo dco_decode_kind_info(dynamic raw);
 
   @protected
-  List<String> dco_decode_list_String(dynamic raw);
+  List<SecretBytes>
+  dco_decode_list_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecretBytes(
+    dynamic raw,
+  );
 
   @protected
-  List<Uint8List> dco_decode_list_list_prim_u_8_strict(dynamic raw);
+  List<String> dco_decode_list_String(dynamic raw);
 
   @protected
   Uint32List dco_decode_list_prim_u_32_strict(dynamic raw);
@@ -255,7 +298,19 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
   List<UaRecipient> dco_decode_list_ua_recipient(dynamic raw);
 
   @protected
+  SecretBytes?
+  dco_decode_opt_AutoExplicit_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecretBytes(
+    dynamic raw,
+  );
+
+  @protected
   String? dco_decode_opt_String(dynamic raw);
+
+  @protected
+  SecretBytes?
+  dco_decode_opt_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecretBytes(
+    dynamic raw,
+  );
 
   @protected
   UaWallet?
@@ -328,6 +383,18 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
   BigInt dco_decode_usize(dynamic raw);
 
   @protected
+  SecretBytes
+  sse_decode_AutoExplicit_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecretBytes(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  SecretBytes
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecretBytes(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   UaKemKey
   sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKemKey(
     SseDeserializer deserializer,
@@ -376,8 +443,20 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
   );
 
   @protected
+  SecretBytes
+  sse_decode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecretBytes(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   UaKeyList
   sse_decode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKeyList(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  SecretBytes
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecretBytes(
     SseDeserializer deserializer,
   );
 
@@ -426,6 +505,12 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
   @protected
   UaZetherKey
   sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaZetherKey(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  SecretBytes
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecretBytes(
     SseDeserializer deserializer,
   );
 
@@ -484,6 +569,12 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
   bool sse_decode_bool(SseDeserializer deserializer);
 
   @protected
+  SecretBytes
+  sse_decode_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecretBytes(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   UaWallet
   sse_decode_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
     SseDeserializer deserializer,
@@ -508,12 +599,13 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
   KindInfo sse_decode_kind_info(SseDeserializer deserializer);
 
   @protected
-  List<String> sse_decode_list_String(SseDeserializer deserializer);
-
-  @protected
-  List<Uint8List> sse_decode_list_list_prim_u_8_strict(
+  List<SecretBytes>
+  sse_decode_list_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecretBytes(
     SseDeserializer deserializer,
   );
+
+  @protected
+  List<String> sse_decode_list_String(SseDeserializer deserializer);
 
   @protected
   Uint32List sse_decode_list_prim_u_32_strict(SseDeserializer deserializer);
@@ -532,7 +624,19 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
   List<UaRecipient> sse_decode_list_ua_recipient(SseDeserializer deserializer);
 
   @protected
+  SecretBytes?
+  sse_decode_opt_AutoExplicit_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecretBytes(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   String? sse_decode_opt_String(SseDeserializer deserializer);
+
+  @protected
+  SecretBytes?
+  sse_decode_opt_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecretBytes(
+    SseDeserializer deserializer,
+  );
 
   @protected
   UaWallet?
@@ -611,6 +715,20 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
 
   @protected
   void
+  sse_encode_AutoExplicit_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecretBytes(
+    SecretBytes self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecretBytes(
+    SecretBytes self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
   sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKemKey(
     UaKemKey self,
     SseSerializer serializer,
@@ -667,8 +785,22 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
 
   @protected
   void
+  sse_encode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecretBytes(
+    SecretBytes self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
   sse_encode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKeyList(
     UaKeyList self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecretBytes(
+    SecretBytes self,
     SseSerializer serializer,
   );
 
@@ -725,6 +857,13 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
   void
   sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaZetherKey(
     UaZetherKey self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecretBytes(
+    SecretBytes self,
     SseSerializer serializer,
   );
 
@@ -792,6 +931,13 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
 
   @protected
   void
+  sse_encode_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecretBytes(
+    SecretBytes self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
   sse_encode_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
     UaWallet self,
     SseSerializer serializer,
@@ -822,13 +968,14 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
   void sse_encode_kind_info(KindInfo self, SseSerializer serializer);
 
   @protected
-  void sse_encode_list_String(List<String> self, SseSerializer serializer);
-
-  @protected
-  void sse_encode_list_list_prim_u_8_strict(
-    List<Uint8List> self,
+  void
+  sse_encode_list_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecretBytes(
+    List<SecretBytes> self,
     SseSerializer serializer,
   );
+
+  @protected
+  void sse_encode_list_String(List<String> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_prim_u_32_strict(
@@ -858,7 +1005,21 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
   );
 
   @protected
+  void
+  sse_encode_opt_AutoExplicit_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecretBytes(
+    SecretBytes? self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_opt_String(String? self, SseSerializer serializer);
+
+  @protected
+  void
+  sse_encode_opt_box_autoadd_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecretBytes(
+    SecretBytes? self,
+    SseSerializer serializer,
+  );
 
   @protected
   void
@@ -951,6 +1112,22 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
 
 class ScaasUaWire implements BaseWire {
   ScaasUaWire.fromExternalLibrary(ExternalLibrary lib);
+
+  void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecretBytes(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecretBytes(
+        ptr,
+      );
+
+  void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecretBytes(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecretBytes(
+        ptr,
+      );
 
   void
   rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKemKey(
@@ -1087,6 +1264,16 @@ external ScaasUaWasmModule get wasmModule;
 @JS()
 @anonymous
 extension type ScaasUaWasmModule._(JSObject _) implements JSObject {
+  external void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecretBytes(
+    int ptr,
+  );
+
+  external void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecretBytes(
+    int ptr,
+  );
+
   external void
   rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaKemKey(
     int ptr,
