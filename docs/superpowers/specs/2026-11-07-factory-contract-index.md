@@ -118,10 +118,10 @@ limit (inclusion is regular + state, EIP-8037).
 
 ## 4. Size, layout, formats
 
-- **Size:** `OpenFactory` runtime 15,821 B in the current local build, under its EIP-170 limit of 24,576 B
-  (`size_gate.py`: not a token, so not 20,480; not in `size-baseline.json`). Three paged struct views and the record add an
-  estimated 2.5–4 KB. If it crossed 24,576 B it would need a baseline row with a reason (the ceiling is 131,072 B,
-  CTR-GOV-19): T67 stops and reports instead.
+- **Size:** `OpenFactory` runtime 15,821 B in the current local build; the record and three paged struct views add an
+  estimated 2.5–4 KB, far below the 64 KiB ceiling (EIP-7954, Glamsterdam mandatory on every chain that runs these
+  contracts) and the repo's 64,512 B stop line. T67 records old → new in the size-gate ratchet (`size-baseline.json`),
+  adding an `OpenFactory` row if it is not tracked.
 - **Layout pins:** none. `test/v2/layout/` pins the ERC-7201 namespaces of clones; the factory is not a proxy, is never
   upgraded and is never a DELEGATECALL target, so its sequential layout protects nothing. Its slot use is pinned by T67's
   slot-count test instead.

@@ -2071,12 +2071,12 @@ returning `(Created[] page, uint256 total)`; `ClassUnknown`, `PageTooLarge`. The
       `test_index_derivedOwnerUA`, `test_index_ownerZeroNotListed`, `test_index_ownerMovedKeepsCreationOwner`,
       `test_index_spamClaimListedWithCreator`, `test_index_nestedCreationOrder`, `test_index_page_{nZero,maxPage,overMax,lastPartial,fromAtTotal,fromPastTotal}`,
       `test_index_classUnknown_{0,3}`, `test_index_classFilter`, `test_index_saltAlreadyUsed`, `test_index_slotCount_{steady,first}`.
-- [ ] **Step 3:** FAIL. **Step 4: Implement.** **Step 5:** PASS; whole `forge test`; size gate (`OpenFactory` ≤ 24,576 B: if it
-      crosses, stop and report, no baseline row without the owner).
+- [ ] **Step 3:** FAIL. **Step 4: Implement.** **Step 5:** PASS; whole `forge test`; size gate (`OpenFactory` old → new recorded in
+      `size-baseline.json`, a row added if it is not tracked; far below the 64,512 B stop line).
 - [ ] **Step 6:** Commit `ua-mtx-merge T67: factory contract index, per-class lists and paged views`.
 
 **Pins, old → new:** `GovGas` `createToken` and `createDex` (spec §3: about +5 new slots, ≈ +489,600 state gas steady);
-`OpenFactory` runtime and init size. **Gates:** whole `forge test`, size gate.
+`OpenFactory` runtime and init size in `size-baseline.json` (15,821 B today). **Gates:** whole `forge test`, size gate.
 
 ### Task T68: mutants, deploy scripts, the factory address
 
