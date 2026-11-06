@@ -31,11 +31,14 @@ M = [
        '"proveDiscloseSender" => has(LOC) || has(ENTRY) || has(&["registry", "leg", "legKeyRecord", "amount"]),')],
      PQ("sender_disclosure_negatives")),
     ("op 4: the leg's v not compared with the re-derivation (u only)",
-     [(Q, "            let ok = bool::from(c.0.u[..].ct_eq(u) & v_eq);", "            let ok = bool::from(c.0.u[..].ct_eq(u)) || bool::from(v_eq);")],
+     [(Q, "        if !bool::from(c.0.u[..].ct_eq(u) & v_eq) {\n            return Err(Error::Argument);\n        }\n        *words",
+       "        if !bool::from(c.0.u[..].ct_eq(u)) {\n            return Err(Error::Argument);\n        }\n        *words")],
      PQ("sender_disclosure_negatives")),
-    ("op 4: an M = 1 entry read as op 7 only", [(Q, "if m == 1 { &[None, Some((1, 0))] }", "if m == 1 { &[Some((1, 0))] }")],
+    # (M3 and M4 first tried an M = 1 entry as op 1 only / op 7 only: both survived, because op 1 IS op 7's encryption at
+    # M = 1, so the two re-derivations were one; the code now makes one, and these two mutants test the group arithmetic)
+    ("op 4: the leg's index inside its group ignored", [(Q, "let (n, i) = ((lo + per).min(m) - lo, j - lo);", "let (n, i) = ((lo + per).min(m) - lo, 0);")],
      PQ("sender_disclosure_over_rebuilt_words")),
-    ("op 4: an M = 1 entry read as op 1 only", [(Q, "if m == 1 { &[None, Some((1, 0))] }", "if m == 1 { &[None] }")],
+    ("op 4: group 0's seed for every group", [(Q, "&pqzl::enc_group_seed(seed, g)", "&pqzl::enc_group_seed(seed, 0)")],
      PQ("sender_disclosure_over_rebuilt_words")),
     ("op 4: the digit count off by one", [(Q, "let k = (1..16u64).fold(", "let k = (0..16u64).fold(")],
      PQ("sender_disclosure_over_rebuilt_words")),
@@ -56,7 +59,7 @@ M = [
     # P3-1: Zether's balance hint from the sealed box only
     ("checkBalance: a plain balance back on the allow-list", [(ST, '"checkBalance" => has(LOC) || has(ACCT) || field == "cacheBox",',
                                                                '"checkBalance" => has(LOC) || has(ACCT) || field == "cacheBox" || field == "balance",')],
-     ZS),
+     (R, CARGO + ["--features", "vectors", "--test", "facade_zether_state", "balances_from_the_words"])),
     ("checkBalance: the cache entry's accSeq not compared", [(ST, "let ok = seq == a.acc_seq && check_balance(", "let ok = seq == seq && check_balance(")],
      ZS),
     ("a debit: a stale cache entry used", [(ST, "                        (seq == a.acc_seq).then_some(b)", "                        Some(b)")], ZS),

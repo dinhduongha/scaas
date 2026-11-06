@@ -1641,9 +1641,9 @@ impl PqzKey {
     /// §4.6): `r, e1, e2_j` re-derived from CTR-PQZ-19's `seed_enc` (`fromUA`, `sendCounter`, the blob's salt; `chainUid` and
     /// `token` the location's) by encrypting zero to the leg owner's registered key; the amount is the entry's own, read from the
     /// leg's `v` less that encryption (`Δ·digit` per coefficient, never a caller's guess); the leg's `u` and `v` must equal the
-    /// re-derivation at that amount (constant time), else `Argument`. An `M = 1` entry is op 1's or op 7's (one shape): both
-    /// re-derivations are made, the matching one used. Then the statement (`pk` the leg owner's key, `u`, `v` the leg's) and its
-    /// proof: `{stmt, proof, amount}`.
+    /// re-derivation at that amount (constant time), else `Argument`. An `M = 1` entry is op 1's or op 7's (one shape, and one
+    /// re-derivation: op 1 is op 7's encryption with `M = 1`, group 0's seed `seed_enc`). Then the statement (`pk` the leg
+    /// owner's key, `u`, `v` the leg's) and its proof: `{stmt, proof, amount}`.
     #[allow(clippy::too_many_arguments)]
     fn disclose_sender_leg(
         &self, seed32: &[u8], d: &Draw, mut words: [Word; DISC_WORDS], pk_t: &[u8], ct: &[u8], from_ua: &Word, send_counter: u64,
@@ -1651,17 +1651,11 @@ impl PqzKey {
     ) -> Result<Value> {
         let seed = self.sender_seed(seed32, d, &words, from_ua, send_counter, salt)?;
         let (u, v) = ct.split_at(PK_BYTES);
-        let shapes: &[Option<(usize, usize)>] = if m == 1 { &[None, Some((1, 0))] } else { &[Some((m, j))] };
-        let mut found = None;
-        for multi in shapes {
-            let (c, i) = self.sender_enc(&seed, pk_t, aud, *multi, &words, [0; 16])?;
-            let (amount, v_eq) = sender_amount(v, c.0.vs.get(i).ok_or(Error::Argument)?);
-            let ok = bool::from(c.0.u[..].ct_eq(u) & v_eq);
-            if ok && found.is_none() {
-                found = Some((c, i, amount));
-            }
+        let (mut c, i) = self.sender_enc(&seed, pk_t, aud, Some((m, j)), &words, [0; 16])?;
+        let (amount, v_eq) = sender_amount(v, c.0.vs.get(i).ok_or(Error::Argument)?);
+        if !bool::from(c.0.u[..].ct_eq(u) & v_eq) {
+            return Err(Error::Argument);
         }
-        let (mut c, i, amount) = found.ok_or(Error::Argument)?;
         *words.get_mut(DW_AMOUNT).ok_or(Error::Argument)? = u64_word(amount);
         let stmt = Stmt::Disclose(Disclose { form: Form::DiscloseSender, words, pk: pk_t, u, v }).encode().map_err(|_| Error::Argument)?;
         c.0.e2.swap(0, i);

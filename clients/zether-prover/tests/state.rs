@@ -133,6 +133,12 @@ fn accounts_rebuild_and_decrypt() {
         assert!(call("checkBalance", &foreign, &k).is_err(), "another key's box");
         let no_entry = with(v.clone(), &json!({"cacheBox": cache_box::seal(&k, &json!({}))}));
         assert!(call("checkBalance", &no_entry, &k).is_err(), "no entry for this UA and token");
+        // the holder's own box, but its only entry is another UA's (or another token's) at the right balance
+        let tok = rows["token"].as_str().unwrap().to_lowercase();
+        for id in [format!("0x{}:{tok}", hex::encode(other.ua())), format!("0x{}:0x{}", hex::encode(k.ua()), "11".repeat(20))] {
+            let wrong = with(v.clone(), &json!({"cacheBox": cache_box::seal(&k, &json!({ id.clone(): {"balance": bal.to_string(), "accSeq": seq} }))}));
+            assert!(call("checkBalance", &wrong, &k).is_err(), "{id}: not this key's entry");
+        }
     }
 }
 

@@ -512,7 +512,7 @@ fn prover_calls() -> usize {
 }
 
 /// T15l (Fable P2-1; spec §4.6): `proveDiscloseSender` over the sender's own entry words, op 1 (audited, and an amount 0) and
-/// op 7 (`M = 1`, the op 1 shape; `M = 4` audited, leg 3 in group 1): the amount is the entry's (the request has no amount or
+/// op 7 (`M = 1`, the op 1 shape; `M = 4` audited, leg 1 inside group 0, leg 3 in group 1): the amount is the entry's (the request has no amount or
 /// statement field), the statement's `pk` the leg owner's registered key, its `u`, `v` the leg's (those of the receiver's
 /// `RECEIVER_X` statement); each proof verifies.
 #[test]
@@ -524,7 +524,7 @@ fn sender_disclosure_over_rebuilt_words() {
     let (e7, _) = wd.pay_multi(&A, &[(BOB, 7)], false, "HASH");
     let (e74, _) = wd.pay_multi(&A, &[(BOB, 10), (Z, 20), (X, 30), (Y, 40)], true, "BUNDLE");
     let ka = wd.key(&A);
-    for (er, j, owner, amount, rx) in [(e1, 0, BOB, 300, true), (e0, 0, Z, 0, false), (e7, 0, BOB, 7, false), (e74, 0, BOB, 10, false), (e74, 3, Y, 40, true)] {
+    for (er, j, owner, amount, rx) in [(e1, 0, BOB, 300, true), (e0, 0, Z, 0, false), (e7, 0, BOB, 7, false), (e74, 0, BOB, 10, false), (e74, 1, Z, 20, false), (e74, 3, Y, 40, true)] {
         let p = call(ka, "proveDiscloseSender", &wd.c.sender_leg(&er, j, &owner)).unwrap();
         assert_eq!(p["amount"], amount, "leg {j}");
         let s = h(&p["stmt"]);
