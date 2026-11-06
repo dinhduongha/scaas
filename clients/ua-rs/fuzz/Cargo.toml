@@ -20,8 +20,9 @@ serde_json = "=1.0.145"
 
 [profile.release]
 debug = 1
-# any panic is a finding: abort, which libFuzzer reports as a crash; overflow and debug_assert! too (as cargo-fuzz)
-panic = "abort"
+# any panic is a finding: caught at LLVMFuzzerTestOneInput and aborted there, which libFuzzer reports as a crash; overflow and
+# debug_assert! too (as cargo-fuzz). Unwind, not abort (T15): pqz-ffi refuses panic = "abort" on native targets.
+panic = "unwind"
 overflow-checks = true
 debug-assertions = true
 

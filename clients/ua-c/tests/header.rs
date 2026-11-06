@@ -82,3 +82,12 @@ fn every_export_is_guarded() {
     }
     assert!(n > 100, "{n} exports");
 }
+
+/// Spec §8.4: the PQZ leaf export is the one call that returns a secret: its own name and a warning in the header.
+#[test]
+fn export_pqz_leaf_raw_is_warned() {
+    let h = header();
+    let at = h.find("scaas_ua_export_pqz_leaf_raw(").unwrap();
+    let doc = &h[h[..at].rfind("*/").unwrap().saturating_sub(600)..at];
+    assert!(doc.contains("WARNING: returns a secret in the clear") && doc.contains("The caller zeroizes"), "{doc}");
+}

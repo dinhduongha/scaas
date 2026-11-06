@@ -11,7 +11,10 @@ seal.json's containers), container (seal.json containers, acceptance), sealed (s
 encapsRefusals), mnemonic (keys.json mnemonics, normalization); T12: container_expect, members, accepted (seal.json's expect,
 members and accepted inputs of an open), uasig (sign.json's msig rows and ua rows as UaSigRequest JSON); T14: zether_cmd (one
 byte, the command's index in facade::zether::COMMANDS, then its JSON: clients/zether-prover/vectors/ requests without their key and
-witness flag, the disclosure cases, the envelope; the index after the last, zether.json's cache boxes).
+witness flag, the disclosure cases, the envelope; the index after the last, zether.json's cache boxes); T15: pqz_cmd (one byte, the
+command's index in facade::pqz::COMMANDS, then its JSON: requests built from smartcontracts/vectors/pqz/n2304-kmax4096/, the
+default set's statement files (keys and T sliced from the statements); the index after the last, a well-formed box that opens
+under no key).
 """
 import json
 import os
@@ -24,6 +27,11 @@ ZV = os.path.join(HERE, "../../zether-prover/vectors")
 ZCMDS = ["encrypt", "decrypt", "decryptPending", "checkBalance", "proveTransfer", "proveTransferMulti", "proveBurn", "openMemo",
          "recoverTransfer", "openDisclosure", "pop", "ownerAuth", "uaSig", "shieldCalldata", "envelope", "typedDigest", "namedCall"]
 BOX = len(ZCMDS)
+# the order of scaas_ua::facade::pqz::COMMANDS (tests/fuzz_caps.rs checks it); QBOX: the PQZ box reader
+QCMDS = ["enc", "dec", "proveRegister", "proveKeyRecord", "proveTransfer", "proveBurn", "proveRefresh", "proveTransferMulti",
+         "proveDiscloseSender", "proveDisclose", "openMemo"]
+QBOX = len(QCMDS)
+PV = os.path.join(HERE, "../../../smartcontracts/vectors/pqz/n2304-kmax4096")
 
 
 def load(name):
@@ -87,6 +95,60 @@ def zether_seeds():
     return out
 
 
+def pload(name):
+    with open(os.path.join(PV, name), encoding="utf-8") as f:
+        return json.load(f)
+
+
+def qc(cmd, v):
+    return bytes([QCMDS.index(cmd)]) + js(v)
+
+
+def pqz_seeds():
+    """Requests of every PQZ command from the default set's statement files: keys and T sliced from the statements."""
+    PK, CT = 18432, 18432 + 128
+    h = lambda b: "0x" + b.hex()
+    word = lambda s: h(bytes(32 - len(bytes.fromhex(s))) + bytes.fromhex(s))
+    pqzl = "0x" + pload("proof_pqzl.json")["proof_system_id"]
+    def header(r):
+        f = r["header"]
+        o = {k: f[k] for k in ("chainId", "fee", "sendCounter", "p", "validUntilBlock", "plainUsed")}
+        o.update({k: "0x" + f[k] for k in ("token", "registry")})
+        o.update({k: word(f[k]) for k in ("fromUA", "beneficiaryUA", "chainUid", "envelopeBinding") if k in f})
+        return o
+    tr = pload("statement_transfer.json")["rows"][0]
+    s = bytes.fromhex(tr["stmt"])
+    pk_f, pk_t, pk_a, t = s[640:640 + PK], s[640 + PK:640 + 2 * PK], s[640 + 2 * PK:640 + 3 * PK], s[640 + 3 * PK:640 + 3 * PK + CT]
+    out = [qc("enc", {"pks": [h(pk_t)], "values": [123456]}), qc("dec", {"ct": h(t)}), qc("dec", {"ct": h(t), "window": 3}),
+           qc("proveRegister", {"proofSystemId": pqzl, "kind": 0x0131, "ua": h(bytes(range(32)))}),
+           qc("proveRegister", {"proofSystemId": pqzl, "kind": 0x0130, "ua": h(bytes(32)), "kemPk": "0x01" + "00" * 1600}),
+           qc("proveKeyRecord", {"proofSystemId": pqzl, "ua": h(bytes(range(32)))}),
+           qc("proveTransfer", {**header(tr), "proofSystemId": pqzl, "toUA": word(tr["header"]["toUA"]), "pkT": h(pk_t), "pkA": h(pk_a),
+                                "T": h(t), "amount": 123456, "memoHash": word(tr["header"]["memoHash"])})]
+    for f, cmd, extra in (("statement_burn.json", "proveBurn", lambda r: {"amount": r["header"]["amount"], "recipient": word(r["header"]["recipient"])}),
+                          ("statement_refresh.json", "proveRefresh", lambda r: {})):
+        r = pload(f)["rows"][0]
+        b = bytes.fromhex(r["stmt"])
+        out.append(qc(cmd, {**header(r), **extra(r), "proofSystemId": pqzl, "T": h(b[640 + PK:640 + PK + CT]), "memoHash": word(r["header"]["memoHash"])}))
+    m = next(r for r in pload("statement_transfer_multi.json")["rows"] if r["case"] == "M1-on")
+    b = bytes.fromhex(m["stmt"])
+    out.append(qc("proveTransferMulti", {**header(m), "proofSystemId": pqzl, "pkA": h(b[640 + 2 * PK:640 + 3 * PK]),
+                                         "legs": [{"pk": h(b[640 + PK:640 + 2 * PK]), "ua": word(m["objects"]["uas"][0]), "amount": 123456}],
+                                         "T": h(b[640 + 3 * PK:640 + 3 * PK + CT])}))
+    for r in pload("statement_disclose.json")["rows"]:
+        if r["form"] == "DISCLOSE-SENDER":
+            out.append(qc("proveDiscloseSender", {"stmt": "0x" + r["stmt"], "fromUA": h(b"\xa1" * 32), "sendCounter": 3, "salt": "0x" + "5a" * 16,
+                                                  "auditorOn": True}))
+            out.append(qc("proveDiscloseSender", {"stmt": "0x" + r["stmt"], "fromUA": h(b"\xa1" * 32), "sendCounter": 3, "salt": "0x" + "5a" * 16,
+                                                  "auditorOn": True, "M": 2, "leg": 1}))
+        else:
+            out.append(qc("proveDisclose", {"stmt": "0x" + r["stmt"]}))
+    out.append(qc("openMemo", {"chainUid": word(m["header"]["chainUid"]), "token": "0x" + m["header"]["token"], "fromUA": word(m["header"]["fromUA"]),
+                               "sendCounter": m["header"]["sendCounter"], "memo": "0x" + m["memo"]["memo"]}))
+    out.append(bytes([QBOX]) + js({"iv": "AAAAAAAAAAAAAAAA", "ct": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}))
+    return out
+
+
 def seeds():
     t = sign["typed"]
     yield "typed_data", [js(r["td"]) for k in ("generic", "canon", "refusals") for r in t[k]] + [js(r["td"]) for r in sign["policy"]]
@@ -103,6 +165,7 @@ def seeds():
     yield "accepted", [js(r["accepted"]) for r in opens if r.get("accepted") is not None]
     yield "uasig", [js(uasig(r)) for r in sign["msig"]] + [js({"purpose": r["purposeTag"], "digest": r["digest"], "key": 0}) for r in sign["ua"][:4]]
     yield "zether_cmd", zether_seeds()
+    yield "pqz_cmd", pqz_seeds()
 
 
 def nest(n):
@@ -144,6 +207,10 @@ def regress():
         # T14: a Zether command (1 MiB, depth 8) and a cache box (2 MiB, depth 1), each behind its index byte
         "zether_cmd/cmd-over-depth-9.bin": bytes([ZCMDS.index("proveTransfer")]) + over(zreq("transfer_bls12381.json"), 8),
         "zether_cmd/box-over-depth-2.bin": bytes([BOX]) + over(load("zether.json")["cacheBox"][0]["box"], 1),
+        # T15: a PQZ command (1 MiB, depth 8) and a cache box (2 MiB, depth 1), each behind its index byte
+        "pqz_cmd/cmd-over-depth-9.bin": bytes([QCMDS.index("proveRegister")]) + over(
+            {"proofSystemId": "0x" + pload("proof_pqzl.json")["proof_system_id"], "kind": 0x0131, "ua": "0x" + "11" * 32}, 8),
+        "pqz_cmd/box-over-depth-2.bin": bytes([QBOX]) + over({"iv": "AAAAAAAAAAAAAAAA", "ct": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}, 1),
     }
 
 

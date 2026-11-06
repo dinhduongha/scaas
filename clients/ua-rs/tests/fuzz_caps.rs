@@ -6,7 +6,8 @@
 //! binary targets have no depth: `sealed` one byte short of its tag, `kem_pk` scheme 2 and 1,602 bytes, `mnemonic` past 1 KiB
 //! and 24 words. T12: the container open's JSON inputs (`expect_json`, `accepted_json`: 16 KiB, depth 4; `members_json`: 512 KiB,
 //! depth 4, owner 2026-11-06) and
-//! the `UASig` request (64 KiB, depth 6) of the C ABI. T14: the Zether command (1 MiB, depth 8) and cache box (2 MiB, depth 1). UNAUDITED.
+//! the `UASig` request (64 KiB, depth 6) of the C ABI. T14: the Zether command (1 MiB, depth 8) and cache box (2 MiB, depth 1). T15: the PQZ command (1 MiB, depth 8) and
+//! cache box (2 MiB, depth 1). UNAUDITED.
 use scaas_ua::wallet::{
     bounded, kem_encaps, vectors_backup_payload, AcceptedJson, ContainerExpectJson, Error, EvmTx, Expect, Manifest, MembersJson,
     Result, Sealed, SealedContainer, TypedData, UaSigRequest, Vault, Wallet,
@@ -206,6 +207,61 @@ fn zether_inputs_past_their_caps_are_refused_unparsed() {
     assert_eq!(bounded::vectors_parsed(), before, "deeper than 1: refused before serde_json");
     let mut ok = without_x(&b);
     assert_eq!(k.open_balance_cache(&ok).err(), Some(Error::Aead), "without x: parsed, another wallet's box");
+    assert_eq!(bounded::vectors_parsed(), before + 1);
+    ok.resize(BOX_MAX, b' ');
+    assert_eq!(k.open_balance_cache(&ok).err(), Some(Error::Aead), "at 2 MiB");
+    ok.push(b' ');
+    let before = bounded::vectors_parsed();
+    assert_eq!(k.open_balance_cache(&ok).err(), Some(Error::Argument), "2 MiB + 1");
+    assert_eq!(bounded::vectors_parsed(), before, "2 MiB + 1: unparsed");
+}
+
+#[cfg(feature = "pqz")]
+#[test]
+fn pqz_inputs_past_their_caps_are_refused_unparsed() {
+    use scaas_ua::facade::pqz::{PqzCmd, COMMANDS};
+    // the spec's caps (§9.3) and the box's, stated here: not the crate's constants, which a changed cap would move too
+    const CMD_MAX: usize = 1 << 20;
+    const BOX_MAX: usize = 2 << 20;
+    let src = std::fs::read_to_string(format!("{}/fuzz/seeds.py", env!("CARGO_MANIFEST_DIR"))).unwrap();
+    let list = &src[src.find("QCMDS = [").unwrap() + 9..];
+    let named: Vec<&str> = list[..list.find(']').unwrap()].split(',').map(|s| s.trim().trim_matches('"')).collect();
+    assert_eq!(named, COMMANDS, "seeds.py's QCMDS is COMMANDS");
+    let w = Wallet::from_mnemonic("legal winner thank year wave sausage worth useful legal winner thank yellow", "").unwrap();
+    let k = w.pqz_key(0, 0).unwrap();
+    let split = |name: &str| {
+        let b = file(name);
+        (b[0] as usize, b[1..].to_vec())
+    };
+    let without_x = |b: &[u8]| {
+        let mut v: Value = serde_json::from_slice(b).unwrap();
+        v.as_object_mut().unwrap().remove("x").unwrap();
+        serde_json::to_vec(&v).unwrap()
+    };
+    // the command
+    let (i, b) = split("pqz_cmd/cmd-over-depth-9.bin");
+    let cmd = COMMANDS[i];
+    assert_eq!(cmd, "proveRegister");
+    let before = bounded::vectors_parsed();
+    assert_eq!(PqzCmd::from_json(cmd, &b).err(), Some(Error::Argument));
+    assert_eq!(bounded::vectors_parsed(), before, "deeper than 8: refused before serde_json");
+    let mut ok = without_x(&b);
+    assert!(PqzCmd::from_json(cmd, &ok).is_ok(), "without x");
+    assert_eq!(bounded::vectors_parsed(), before + 1);
+    ok.resize(CMD_MAX, b' ');
+    assert!(PqzCmd::from_json(cmd, &ok).is_ok(), "at 1 MiB");
+    ok.push(b' ');
+    let before = bounded::vectors_parsed();
+    assert_eq!(PqzCmd::from_json(cmd, &ok).err(), Some(Error::Argument), "1 MiB + 1");
+    assert_eq!(bounded::vectors_parsed(), before, "1 MiB + 1: unparsed");
+    // the cache box
+    let (i, b) = split("pqz_cmd/box-over-depth-2.bin");
+    assert_eq!(i, COMMANDS.len(), "the index after the last command");
+    let before = bounded::vectors_parsed();
+    assert_eq!(k.open_balance_cache(&b).err(), Some(Error::Argument));
+    assert_eq!(bounded::vectors_parsed(), before, "deeper than 1: refused before serde_json");
+    let mut ok = without_x(&b);
+    assert_eq!(k.open_balance_cache(&ok).err(), Some(Error::Aead), "without x: parsed, opens under no key");
     assert_eq!(bounded::vectors_parsed(), before + 1);
     ok.resize(BOX_MAX, b' ');
     assert_eq!(k.open_balance_cache(&ok).err(), Some(Error::Aead), "at 2 MiB");

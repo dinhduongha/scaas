@@ -888,7 +888,7 @@ FEATURE = {n: 1 << i for i, n in enumerate(FEATURES)}
 STATUS = {n: i for i, n in enumerate(['SealOpen', 'SealVersion', 'KemCheck', 'Aead', 'VaultOpen', 'VaultParams', 'VaultVersion',
                                       'RawDigestRefused', 'PolicyRefused', 'ExternalSignature', 'WalletLocked', 'KeyRevoked',
                                       'ContainerSender', 'ContainerReplay', 'BackupRollback', 'WebAuthnAssertion', 'KindUnavailable',
-                                      'WalletMismatch', 'Rng'], 21)}
+                                      'WalletMismatch', 'Rng', 'PqzSetMismatch'], 21)}
 # deterministic in a release build (RFC 6979, ed25519, BLS): byte-equal; the others are randomized: the length only
 DETERMINISTIC = {0x0101, 0x0102, 0x0106, 0x0107, 0x0108}
 
@@ -935,6 +935,10 @@ for name, res, args in [
     ('zether_open_balance_cache', st, [P, u8, P, P]),
     ('wallet_link_seal', st, [P, P, u8, sz, u8, P, P]), ('wallet_seal_label_vault', st, [P, u8, u8, P, P]),
     ('wallet_open_label_vault', st, [P, u8, u8, u8]), ('wallet_imported_key', st, [P, u32, u32, P]),
+    ('wallet_pqz_key', st, [P, u32, u32, P]), ('pqz_key_free', None, [P]), ('pqz_public', st, [P, P, P]),
+    ('pqz_call', st, [P, u8, u8, P, P]), ('pqz_seal_balance_cache', st, [P, u8, sz, P, P]),
+    ('pqz_open_balance_cache', st, [P, u8, P, P]), ('pqz_set', st, [P, P]), ('pqz_check_set', st, [u8]),
+    ('export_pqz_leaf_raw', st, [P, u32, u32, P]),
 ]:
     f = getattr(LIB, 'scaas_ua_' + name)
     f.restype, f.argtypes = res, args
@@ -1061,7 +1065,7 @@ class WalletAbi(WalletCase):
         for n, v in STATUS.items():
             self.assertEqual(L.status_name(v).decode(), 'UA' + n)
         self.assertEqual(L.status_name(12).decode(), 'UAKemHolder')
-        self.assertEqual(L.status_name(40).decode(), 'UAStatusUnknown')
+        self.assertEqual(L.status_name(41).decode(), 'UAStatusUnknown')  # T15: 40 -> 41 (UAPqzSetMismatch appended)
         self.assertNotEqual(STATUS['KindUnavailable'], 3)
 
     def test_free_null_is_a_noop(self):
@@ -1678,7 +1682,15 @@ class WalletErrors(WalletCase):
         o, n = C.create_string_buffer(8192), sz(8192)
         zk = handle(L.wallet_zether_key, w, 60, 0, 7)
         self.addCleanup(L.zether_key_free, zk)
+        qk = handle(L.wallet_pqz_key, w, 0, 0)
+        self.addCleanup(L.pqz_key_free, qk)
         calls = [
+            lambda: L.pqz_call(qk, b'zebrasecretword', b'{}', o, C.byref(n)),
+            lambda: L.pqz_call(qk, b'proveRegister', jb({'key': {'seed32': 'zebrasecretword Pa55-word-Secret'}}), o, C.byref(n)),
+            lambda: L.pqz_call(qk, b'dec', jb({'ct': '0xdeadbeefcafe1234', 'window': 'SECRETvalue0xdead'}), o, C.byref(n)),
+            lambda: L.pqz_call(qk, b'proveRegister', jb({'proofSystemId': '0x' + 'de' * 32, 'kind': 305, 'ua': '0x' + '11' * 32}), o, C.byref(n)),
+            lambda: L.pqz_open_balance_cache(qk, jb({'iv': 'Qx7SekritPurp0se', 'ct': 'zebrasecretword'}), o, C.byref(n)),
+            lambda: L.pqz_check_set(jb({'set': 'Qx7SekritPurp0se', 'pkLen': 1, 'pqzlId': '0x' + '00' * 32, 'pqzhId': None})),
             lambda: L.zether_call(zk, b'zebrasecretword', b'{}', o, C.byref(n)),
             lambda: L.zether_call(zk, b'proveTransfer', jb({'key': {'mnemonic': 'zebrasecretword Pa55-word-Secret'}}), o, C.byref(n)),
             lambda: L.zether_call(zk, b'checkBalance', jb({'acc': {'C': '0xdeadbeefcafe1234', 'D': '0x'}, 'balance': 'SECRETvalue0xdead'}), o, C.byref(n)),
@@ -1831,6 +1843,124 @@ class WalletZether(WalletCase):
         finally:
             L.zether_key_free(k2)
         L.zether_key_free(None)
+
+
+PQZL_ID = {'n2048-kmax1024': 'c752e7f57778114dbfaac5d43843577b54e13e3ed162517145a37b5a3ec6cdfe',
+           'n2304-kmax4096': 'ef1ffbcbd05394f8276e50a6c254022edf53bbd08a56e22aadddac2b9b90336e',
+           'n2560-kmax16384': 'eacf34a3a8b6b5aff9be26e24ec03176e2699784c4ff8a1b4c8921cb09276882',
+           'n2816-kmax65536': 'a801f5c4697a35a88b90a28249d73cf2e1634d8875bf1a5f6af6c283ac8e8aa9'}
+
+
+PQZ_OUT_MAX = 1_052_672  # SCAAS_UA_PQZ_OUT_MAX
+
+
+class WalletPqz(WalletCase):
+    """T15 (spec §10.2): the PQZ facade through the C ABI (the Rust suite tests/facade_pqz.rs verifies every proof)."""
+
+    def qw(self):
+        m = MN['pq_kat']
+        w = handle(L.wallet_from_mnemonic, m['words'].encode(), m['passphrase'].encode())
+        self.addCleanup(L.wallet_free, w)
+        return w
+
+    def qk(self, w, account=0, index=0):
+        k = handle(L.wallet_pqz_key, w, account, index)
+        self.addCleanup(L.pqz_key_free, k)
+        return k
+
+    def call(self, k, cmd, req):
+        # one call into a buffer of SCAAS_UA_PQZ_OUT_MAX: a size query would prove again, and a proof's length varies
+        buf, n = C.create_string_buffer(PQZ_OUT_MAX), sz(PQZ_OUT_MAX)
+        status = L.pqz_call(k, cmd.encode(), jb(req), buf, C.byref(n))
+        return name_of(status), json.loads(buf.raw[:n.value - 1]) if status == OK else None
+
+    def test_out_max_holds_a_proof_twice(self):
+        k = self.qk(self.qw())
+        req = {'proofSystemId': '0x' + PQZL_ID['n2304-kmax4096'], 'kind': 0x0131, 'ua': '0x' + '11' * 32}
+        small = C.create_string_buffer(64)
+        n = sz(64)
+        self.assertEqual(name_of(L.pqz_call(k, b'proveRegister', jb(req), small, C.byref(n))), 'UABuffer')
+        self.assertLessEqual(n.value, PQZ_OUT_MAX)
+        self.assertEqual(self.call(k, 'proveRegister', req)[0], '')
+
+    def the_set(self):
+        return json.loads(text(L.pqz_set))
+
+    def test_pqz_and_one_set_in_the_default_build(self):
+        f = L.features()
+        self.assertTrue(f & FEATURE['pqz'])
+        sets = [n for n in FEATURES if n.startswith('pqz-set-') and f & FEATURE[n]]
+        self.assertEqual(sets, ['pqz-set-n2304-kmax4096'])
+        s = self.the_set()
+        self.assertEqual((s['set'], s['pkLen'], s['pqzlId']), ('n2304-kmax4096', 18432, '0x' + PQZL_ID['n2304-kmax4096']))
+        self.assertEqual(name_of(L.pqz_check_set(jb(s))), '')
+        for other in (dict(s, set='n2048-kmax1024'), dict(s, pkLen=16384), dict(s, pqzlId='0x' + PQZL_ID['n2048-kmax1024']),
+                      dict(s, pqzhId=None)):
+            self.assertEqual(name_of(L.pqz_check_set(jb(other))), 'UAPqzSetMismatch', other)
+        self.assertEqual(name_of(L.pqz_check_set(jb(dict(s, extra=1)))), 'UAArgument')
+        self.assertEqual(L.status_name(40).decode(), 'UAPqzSetMismatch')
+
+    def test_leaf_is_the_ua_pq_rule(self):
+        import hashlib
+        import hmac
+        m = MN['pq_kat']
+        seed = hashlib.pbkdf2_hmac('sha512', m['words'].encode(), b'mnemonic' + m['passphrase'].encode(), 2048)
+        prk = hmac.new(b'scaas.ua.pq.v1', seed, hashlib.sha256).digest()
+        w = self.qw()
+        for a, i in ((0, 0), (1, 2)):
+            info = b'scaas.ua.pqz-mlwe.v1' + a.to_bytes(4, 'big') + i.to_bytes(4, 'big')
+            want = hmac.new(prk, info + b'\x01', hashlib.sha256).digest()
+            leaf = C.create_string_buffer(32)
+            ok(L.export_pqz_leaf_raw(w, a, i, leaf))
+            self.assertEqual(leaf.raw, want, (a, i))
+            self.assertEqual(len(var(L.pqz_public, self.qk(w, a, i))), 18432)
+        self.assertEqual(name_of(L.export_pqz_leaf_raw(w, 1 << 31, 0, C.create_string_buffer(32))), 'UAArgument')
+        self.assertEqual(name_of(L.export_pqz_leaf_raw(w, 0, 0, None)), 'UAArgument')
+
+    def test_register_set_mismatch_and_key_field(self):
+        k = self.qk(self.qw())
+        req = {'proofSystemId': '0x' + PQZL_ID['n2304-kmax4096'], 'kind': 0x0131, 'ua': '0x' + '11' * 32}
+        st_, out = self.call(k, 'proveRegister', req)
+        self.assertEqual(st_, '')
+        pk = var(L.pqz_public, k)
+        self.assertEqual(bytes.fromhex(out['stmt'][2:])[96:], pk)
+        self.assertEqual(self.call(k, 'proveRegister', dict(req, proofSystemId='0x' + PQZL_ID['n2048-kmax1024'])), ('UAPqzSetMismatch', None))
+        for f in ('key', 'seed32', 's', 'witness'):
+            self.assertEqual(self.call(k, 'proveRegister', dict(req, **{f: {'seed32': '0x' + '11' * 32}})), ('UAArgument', None), f)
+        self.assertEqual(self.call(k, 'verify', {})[0], 'UAArgument', 'verifiers are not exposed')
+
+    def test_enc_dec_and_cache_box(self):
+        w = self.qw()
+        k = self.qk(w)
+        pk = '0x' + var(L.pqz_public, k).hex()
+        st_, e = self.call(k, 'enc', {'pks': [pk], 'values': [123456]})
+        self.assertEqual(st_, '')
+        self.assertEqual(self.call(k, 'dec', {'ct': e['u'] + e['vs'][0][2:]}), ('', {'value': 123456}))
+        box = text(L.pqz_seal_balance_cache, k, b'{"v":1}', 7)
+        self.assertEqual(var(L.pqz_open_balance_cache, k, box.encode()), b'{"v":1}')
+        self.assertEqual(sig_of(L.pqz_open_balance_cache, self.qk(w, 0, 1), box.encode()), ('UAAead', None))
+
+    def test_pqz_handle_after_lock_and_free_is_KEY_REVOKED(self):
+        w = self.qw()
+        k = self.qk(w)
+        pk = var(L.pqz_public, k)
+        box = text(L.pqz_seal_balance_cache, k, b'{}', 2)
+        ok(L.wallet_lock(w))
+        self.assertEqual(sig_of(L.pqz_open_balance_cache, k, box.encode()), ('UAKeyRevoked', None))
+        req = {'proofSystemId': '0x' + PQZL_ID['n2304-kmax4096'], 'kind': 0x0131, 'ua': '0x' + '11' * 32}
+        self.assertEqual(self.call(k, 'proveRegister', req), ('UAKeyRevoked', None))
+        self.assertEqual(var(L.pqz_public, k), pk, 'public data stays readable')
+        self.assertEqual(name_of(L.wallet_pqz_key(w, 0, 0, C.byref(P()))), 'UAWalletLocked')
+        self.assertEqual(name_of(L.export_pqz_leaf_raw(w, 0, 0, C.create_string_buffer(32))), 'UAWalletLocked')
+        m = MN['pq_kat']
+        w2 = handle(L.wallet_from_mnemonic, m['words'].encode(), m['passphrase'].encode())
+        k2 = handle(L.wallet_pqz_key, w2, 0, 1)
+        L.wallet_free(w2)
+        try:
+            self.assertEqual(sig_of(L.pqz_seal_balance_cache, k2, b'{}', 2), ('UAKeyRevoked', None))
+        finally:
+            L.pqz_key_free(k2)
+        L.pqz_key_free(None)
 
 if __name__ == '__main__':
     unittest.main()

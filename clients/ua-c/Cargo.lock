@@ -1274,6 +1274,38 @@ dependencies = [
 ]
 
 [[package]]
+name = "pqz-ffi"
+version = "0.1.0"
+dependencies = [
+ "hkdf",
+ "pqz-stmt",
+ "pqzh-ligero",
+ "pqzl",
+ "sha2 0.10.9",
+ "sha3 0.10.8",
+]
+
+[[package]]
+name = "pqz-stmt"
+version = "0.1.0"
+
+[[package]]
+name = "pqzh-ligero"
+version = "0.1.0"
+dependencies = [
+ "pqz-stmt",
+ "sha3 0.10.8",
+]
+
+[[package]]
+name = "pqzl"
+version = "0.1.0"
+dependencies = [
+ "aes",
+ "sha3 0.10.8",
+]
+
+[[package]]
 name = "primefield"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1461,6 +1493,7 @@ dependencies = [
  "ml-dsa",
  "ml-kem",
  "p256",
+ "pqz-ffi",
  "rand_chacha",
  "rand_core 0.6.4",
  "ripemd",
@@ -1468,7 +1501,7 @@ dependencies = [
  "scrypt",
  "serde_json",
  "sha2 0.10.9",
- "sha3 0.10.9",
+ "sha3 0.10.8",
  "slh-dsa",
  "unicode-normalization",
  "zeroize",
@@ -1621,9 +1654,9 @@ dependencies = [
 
 [[package]]
 name = "sha3"
-version = "0.10.9"
+version = "0.10.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "77fd7028345d415a4034cf8777cd4f8ab1851274233b45f84e3d955502d93874"
+checksum = "75872d278a8f37ef87fa0ddbda7802605cb18344497949862c0d4dcb291eba60"
 dependencies = [
  "digest 0.10.7",
  "keccak 0.1.6",
@@ -2026,7 +2059,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
- "sha3 0.10.9",
+ "sha3 0.10.8",
  "thiserror",
  "wasm-bindgen",
  "zeroize",

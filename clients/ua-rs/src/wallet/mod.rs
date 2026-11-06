@@ -58,6 +58,8 @@ mod webauthn;
 
 pub use aead::{aead_open, aead_seal, hkdf_expand_sha256, hkdf_sha256, hmac_sha256, Alg};
 pub use eip712::{scaas_typed_data, TypedData};
+#[cfg(feature = "pqz")]
+pub(crate) use eip712::{from_hex, to_hex};
 pub use kem::{is_kem_holder, kem_encaps, KemKeyPair};
 #[cfg(feature = "vectors")]
 pub use manifest::vectors_backup_payload;
@@ -134,6 +136,8 @@ pub enum Error {
     /// the kept manifest's first entry: another wallet's vault, or another BIP-39 passphrase. Not `VaultOpen` (the vault did
     /// open: a new vault passphrase does not help) and not `Argument` (the input is well formed); the wallet stays locked.
     WalletMismatch,
+    /// A PQZ call whose `proofSystemId` or deployed parameter set is not this build's (spec §10.2: one set per build).
+    PqzSetMismatch,
     Ua(UAError),
 }
 
@@ -159,6 +163,7 @@ impl Error {
             Error::VaultVersion => "VaultVersion",
             Error::BackupRollback => "BackupRollback",
             Error::WalletMismatch => "WalletMismatch",
+            Error::PqzSetMismatch => "PqzSetMismatch",
             Error::Ua(e) => e.code(),
         }
     }
@@ -249,6 +254,9 @@ pub(crate) enum KeyId {
     /// The Zether key `m/12381/<coin>/<account>/<use>` (spec §10.1, feature `zether`).
     #[cfg(feature = "zether")]
     Zether(u32, u32, u32),
+    /// The PQZ leaf `seed32` of `account` / `index` (spec §10.2, feature `pqz`).
+    #[cfg(feature = "pqz")]
+    Pqz(u32, u32),
 }
 
 /// A mnemonic as clientkeys `normalizeMnemonic` (NFKD, lower case, single spaces), at most 1 KiB and 24 words (spec §9.3),
@@ -519,6 +527,25 @@ impl Wallet {
     /// (`lock()` revokes the handle), `Y` and the UA come out. `WalletLocked` while locked.
     pub fn zether_key(&self, coin: u32, account: u32, key_use: u32) -> Result<crate::facade::zether::ZetherKey> {
         crate::facade::zether::derive(&self.store, coin, account, key_use)
+    }
+}
+
+/// Feature `pqz` (spec §10.2, T15): the facade's key handle and the one explicit export of a secret.
+#[cfg(feature = "pqz")]
+impl Wallet {
+    /// The PQZ key of `account` / `index` (each below 2^31): `seed32 = HKDF-SHA256(seed, "scaas.ua.pq.v1",
+    /// utf8("scaas.ua.pqz-mlwe.v1") ‖ be32(account) ‖ be32(index))` → `pqzl::keygen`; `seed32` stays in this wallet's arena
+    /// (`lock()` revokes the handle), `pk` comes out. `WalletLocked` while locked.
+    pub fn pqz_key(&self, account: u32, index: u32) -> Result<crate::facade::pqz::PqzKey> {
+        crate::facade::pqz::derive(&self.store, account, index)
+    }
+
+    /// The 32-byte PQZ leaf `seed32` of `account` / `index` in the clear, for `pqz-cli` or a key oracle (spec §8.4,
+    /// CTR-PQZ-13): the only call that returns a secret, so it takes the marker value. The caller wipes it (`Zeroizing`).
+    pub fn export_pqz_leaf_raw(
+        &self, account: u32, index: u32, _: crate::facade::pqz::AllowSecretExport,
+    ) -> Result<Zeroizing<[u8; 32]>> {
+        crate::facade::pqz::derive(&self.store, account, index)?.leaf()
     }
 }
 

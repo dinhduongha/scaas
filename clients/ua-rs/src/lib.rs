@@ -30,7 +30,7 @@ pub mod frost;
 #[cfg(feature = "wallet")]
 pub mod wallet;
 /// The facades (spec §10; ua-rs-sign T14 `zether`, T15 `pqz`): key custody and the ABI over the prover crates.
-#[cfg(feature = "zether")]
+#[cfg(any(feature = "zether", feature = "pqz"))]
 pub mod facade;
 /// Test-only (feature `vectors`): the ladder's record of `secret_mul` (the structural test, spec §12).
 #[cfg(feature = "vectors")]

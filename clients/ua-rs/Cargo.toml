@@ -67,6 +67,11 @@ scrypt = { version = "=0.11.0", default-features = false, optional = true }
 # proof, transcript and encryption stays there; ua-rs adds key custody (the conf key `x` in the wallet's arena) and the ABI.
 zether-prover = { path = "../zether-prover", default-features = false, optional = true }
 
+# ua-rs-sign T15: feature `pqz` (spec §10.2): the PQZ prover side of pqz-core (`pqz-ffi` feature `prove`, the Rust PQZL backend
+# `pqzl-rust`, no C core; PQZH (Ligero) at every set that has it). Every proof, statement, transcript and encryption stays there;
+# ua-rs adds key custody (the PQZ leaf `seed32` in the wallet's arena) and the ABI. The parameter set: `pqz-set-<set>` -> `set-<set>`.
+pqz-ffi = { path = "../../pqz-core/ffi", default-features = false, features = ["prove", "pqzl-rust"], optional = true }
+
 # ua-rs-sign T10: feature `mlock` (spec §8.2): `mlock` / `MADV_DONTDUMP` of the arena's chunks on Unix; any 0.2, so a dependent keeps
 # its own (libc was in the lock: getrandom); off Unix (wasm32) not taken
 [target.'cfg(unix)'.dependencies]
@@ -80,18 +85,18 @@ js-sys = { version = "=0.3.107", optional = true }
 
 [features]
 # MD-5 (owner: the facades on by default). `--no-default-features` keeps the verify-only identity layer (+ `pq` / `json` /
-# `signers` as before). `zether` (T14: zether-prover) and `pqz` (T15) imply `wallet`; `pqz`'s crates come with T15; `pqz-set-*`:
-# exactly one with `pqz` (T15 checks it). `vectors`: test-only entry points (secrets through hooks), never in a release build.
+# `signers` as before). `zether` (T14: zether-prover) and `pqz` (T15: pqz-ffi) imply `wallet`; `pqz-set-*`: exactly one
+# with `pqz` (src/facade/pqz.rs refuses to compile otherwise). `vectors`: test-only entry points (secrets through hooks), never in a release build.
 # `mlock` on by default for native builds (owner 2026-11-06, superseding MD-5's list); off Unix it compiles out (no libc).
 default = ["wallet", "zether", "pqz", "pqz-set-n2304-kmax4096", "mlock"]
 wallet = ["pq", "signers", "json", "dep:bip39", "dep:bip32", "dep:hkdf", "dep:hmac", "dep:zeroize", "dep:unicode-normalization",
     "dep:ripemd", "dep:bs58", "dep:blake2", "dep:alloy-rlp", "dep:ml-kem", "dep:aes-gcm", "dep:aes-gcm-siv", "dep:base64ct", "dep:scrypt", "dep:js-sys", "rand_core/getrandom", "dep:getrandom", "ed25519-dalek/zeroize", "ml-dsa/zeroize", "slh-dsa/zeroize"]
 zether = ["wallet", "dep:zether-prover"]
-pqz = ["wallet"]
-pqz-set-n2048-kmax1024 = []
-pqz-set-n2304-kmax4096 = []
-pqz-set-n2560-kmax16384 = []
-pqz-set-n2816-kmax65536 = []
+pqz = ["wallet", "dep:pqz-ffi"]
+pqz-set-n2048-kmax1024 = ["pqz-ffi?/set-n2048-kmax1024"]
+pqz-set-n2304-kmax4096 = ["pqz-ffi?/set-n2304-kmax4096"]
+pqz-set-n2560-kmax16384 = ["pqz-ffi?/set-n2560-kmax16384"]
+pqz-set-n2816-kmax65536 = ["pqz-ffi?/set-n2816-kmax65536"]
 vectors = ["wallet", "scaas-ct/vectors", "ml-kem/hazmat"]
 # T10: the arena's chunks `mlock`ed and no-dump (Linux, Android), best effort, reported by `Wallet::memory_protection`; a no-op
 # off Unix (wasm32: compiled out)
@@ -194,3 +199,8 @@ required-features = ["zether"]
 [[test]]
 name = "wallet_link"
 required-features = ["wallet"]
+
+# ua-rs-sign T15: the PQZ facade (spec §10.2)
+[[test]]
+name = "facade_pqz"
+required-features = ["pqz"]

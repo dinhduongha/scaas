@@ -145,6 +145,13 @@
 #define SCAAS_UA_ZETHER_USE_VIEWING 8
 
 /**
+ * The buffer `scaas_ua_pqz_call` needs at most, at every parameter set: twice the largest `MAX_INPUT` (524,288: a statement
+ * and its proof, in hex) and 4,096 bytes for the memo, the message and the JSON. A proof's length varies from one build to the
+ * next, so size `out_json` by this bound, not by a size query.
+ */
+#define SCAAS_UA_PQZ_OUT_MAX 1052672
+
+/**
  * A KEM key pair: a UA's (`scaas_ua_kem_key`) or an ephemeral one (`scaas_ua_kem_ephemeral`). Free it with `scaas_ua_kem_free`.
  */
 typedef struct ScaasUaKemKey ScaasUaKemKey;
@@ -160,6 +167,12 @@ typedef struct ScaasUaKey ScaasUaKey;
  * which every call on it is SCAAS_UA_ERR_KEY_REVOKED. Free it with `scaas_ua_link_session_free`.
  */
 typedef struct ScaasUaLinkSession ScaasUaLinkSession;
+
+/**
+ * A PQZ key (spec §10.2, feature `pqz`; `scaas_ua_wallet_pqz_key`): its wallet's store, a generation and the slot of the PQZ
+ * leaf `seed32`, and the public `pk`. Free it with `scaas_ua_pqz_key_free`.
+ */
+typedef struct ScaasUaPqzKey ScaasUaPqzKey;
 
 /**
  * The recovery phrase of `scaas_ua_wallet_generate`: reveal once, challenge, verify, take. Free it with `scaas_ua_seed_backup_free`.
@@ -474,6 +487,11 @@ typedef struct {
  */
 #define SCAAS_UA_ERR_RNG 39
 
+/**
+ * "UAPqzSetMismatch": a PQZ call whose `proofSystemId` or deployed parameter set (`scaas_ua_pqz_check_set`) is not this build's.
+ */
+#define SCAAS_UA_ERR_PQZ_SET_MISMATCH 40
+
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus
@@ -487,7 +505,7 @@ uint32_t scaas_ua_abi_version(void);
  * The static code string of a status: "UAOk", "UAKeyData" ... "UAPurposeUnknown" (the vector files' `error` values),
  * "UAArgument", "UABuffer", "UAInternal", "UAPqzHolder", "UAKemHolder", "UAKemVersion", "UAKemKeyLength", "UAPqzPopHash",
  * "UAPqzKeySet", "UAKemScheme", "UAMemberUnknown", "UAPoP", "UAUnauthorized", then (ABI 6) "UA" and the wallet vector files'
- * `error` value: "UASealOpen" ... "UAWalletMismatch", "UARng"; "UAStatusUnknown" for any other value.
+ * `error` value: "UASealOpen" ... "UAWalletMismatch", "UARng", "UAPqzSetMismatch"; "UAStatusUnknown" for any other value.
  */
 const char *scaas_ua_status_name(ScaasUaStatus status);
 
@@ -1514,6 +1532,79 @@ ScaasUaStatus scaas_ua_zether_open_balance_cache(const ScaasUaZetherKey *k,
                                                  const char *box_json,
                                                  uint8_t *out,
                                                  size_t *out_len);
+
+/**
+ * The PQZ key of `account` / `index` (each below 2^31, else SCAAS_UA_ERR_ARGUMENT): seed32 = HKDF-SHA256(seed, "scaas.ua.pq.v1",
+ * "scaas.ua.pqz-mlwe.v1" || be32(account) || be32(index)) -> pqzl keygen; seed32 stays in the wallet's store (lock and free
+ * revoke the handle: SCAAS_UA_ERR_KEY_REVOKED). SCAAS_UA_ERR_WALLET_LOCKED while locked.
+ */
+ScaasUaStatus scaas_ua_wallet_pqz_key(const ScaasUaWallet *w,
+                                      uint32_t account,
+                                      uint32_t index,
+                                      ScaasUaPqzKey **out);
+
+void scaas_ua_pqz_key_free(ScaasUaPqzKey *k);
+
+/**
+ * The key's `pk` (the set's `pkLen` bytes, `scaas_ua_pqz_set`); public, readable after lock.
+ */
+ScaasUaStatus scaas_ua_pqz_public(const ScaasUaPqzKey *k, uint8_t *out, size_t *out_len);
+
+/**
+ * PQZ command `cmd` (enc, dec, proveRegister, proveKeyRecord, proveTransfer, proveBurn, proveRefresh, proveTransferMulti,
+ * proveDiscloseSender, proveDisclose, openMemo) on `request_json` (named fields, bytes "0x" hex, u64 numbers; at most 1 MiB,
+ * depth 8) with the handle's key: its JSON answer into `out_json`. Every field is checked against the command's allow-list: a
+ * `key`, `seed32` or any other field not on it is SCAAS_UA_ERR_ARGUMENT, a `proofSystemId` of another set
+ * SCAAS_UA_ERR_PQZ_SET_MISMATCH, a prover refusal SCAAS_UA_ERR_ARGUMENT (no detail). Pass `out_json` of SCAAS_UA_PQZ_OUT_MAX
+ * bytes: a size query runs the command again (a new proof, with new randomness and, for a transfer, a new salt) and the next
+ * proof's length can differ (SCAAS_UA_ERR_BUFFER).
+ */
+ScaasUaStatus scaas_ua_pqz_call(const ScaasUaPqzKey *k,
+                                const char *cmd,
+                                const char *request_json,
+                                char *out_json,
+                                size_t *out_len);
+
+/**
+ * The balance-cache box `{"iv", "ct"}` (JSON) of `entries` (at most 1 MiB) under the key's leaf (AES-256-GCM, AAD
+ * "pqz-cache:<set>", a fresh iv; a size query seals again).
+ */
+ScaasUaStatus scaas_ua_pqz_seal_balance_cache(const ScaasUaPqzKey *k,
+                                              const uint8_t *entries,
+                                              size_t entries_len,
+                                              char *out_json,
+                                              size_t *out_len);
+
+/**
+ * The entries of a box into `out`. SCAAS_UA_ERR_AEAD for a box that does not open under this key and set (an empty cache),
+ * SCAAS_UA_ERR_ARGUMENT for one that is not `{iv, ct}`. The caller zeroizes `out`.
+ */
+ScaasUaStatus scaas_ua_pqz_open_balance_cache(const ScaasUaPqzKey *k,
+                                              const char *box_json,
+                                              uint8_t *out,
+                                              size_t *out_len);
+
+/**
+ * This build's PQZ parameter set as JSON `{"set", "pkLen", "pqzlId", "pqzhId"}` (`pqzhId` null at a set without PQZH).
+ */
+ScaasUaStatus scaas_ua_pqz_set(char *out_json,
+                               size_t *out_len);
+
+/**
+ * SCAAS_UA_OK if `deployed_json` (a token's `PqzSet` as `scaas_ua_pqz_set` writes it, at most 1 KiB) is this build's set, else
+ * SCAAS_UA_ERR_PQZ_SET_MISMATCH (SCAAS_UA_ERR_ARGUMENT for malformed JSON).
+ */
+ScaasUaStatus scaas_ua_pqz_check_set(const char *deployed_json);
+
+/**
+ * WARNING: returns a secret in the clear. The 32-byte PQZ leaf seed32 of `account` / `index` into `out32`, for `pqz-cli` or a
+ * key oracle (spec §8.4); by this call's own name, never logged. The caller zeroizes `out32` (explicit_bzero / SecureZeroMemory).
+ * SCAAS_UA_ERR_WALLET_LOCKED while locked.
+ */
+ScaasUaStatus scaas_ua_export_pqz_leaf_raw(const ScaasUaWallet *w,
+                                           uint32_t account,
+                                           uint32_t index,
+                                           uint8_t *out32);
 
 /**
  * The `webauthn-p256` signature `abi.encode(authData, clientDataJSON, r, s)` of an assertion against `expected_challenge32`

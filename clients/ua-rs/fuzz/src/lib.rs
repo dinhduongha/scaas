@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! The oracles of ua-rs's libFuzzer targets (ua-rs-sign T11; spec §9.3), one binary, the target named by `UA_FUZZ_TARGET`
 //! (`run.sh` sets it). On every input each target checks (a failed check prints a FINDING and aborts: a libFuzzer crash;
-//! a panic aborts too, `panic = "abort"`):
+//! a panic aborts too, caught at the entry point):
 //! - no panic;
 //! - the same input twice gives the same result;
 //! - the JSON decoders: an input longer than the decoder's cap, or nesting deeper than its depth cap (counted here by a scan
@@ -20,11 +20,15 @@
 //!   index is the balance-cache box reader (2 MiB, depth 1), opened with a fixed wallet's key (never opens a fuzzed box). An
 //!   accepted command reads back to itself and holds no `key` member at any depth.
 //!
-//! The PQZ command decoder (`pqz_cmd`) comes with its facade (T15). UNAUDITED.
+//! - T15: `pqz_cmd`, the PQZ facade's command decoder (1 MiB, depth 8, an allow-list per command, typed values): the first byte
+//!   names the command (its index in `facade::pqz::COMMANDS`, modulo one more than their count), the rest is the JSON; the extra
+//!   index is the balance-cache box reader (2 MiB, depth 1), opened with a fixed wallet's PQZ key (never opens a fuzzed box). An
+//!   accepted command reads back to itself and holds no `key` member at any depth. No proof is made (decoding only). UNAUDITED.
 use scaas_ua::wallet::{
     bounded, kem_encaps, vectors_backup_payload, AcceptedJson, ContainerExpectJson, EvmTx, Expect, KemKeyPair, Manifest, MembersJson,
     Sealed, SealedContainer, TypedData, UaSigRequest, Vault, Wallet,
 };
+use scaas_ua::facade::pqz::{PqzCmd, PqzKey, COMMANDS as PQZ_COMMANDS};
 use scaas_ua::facade::zether::{ZetherCmd, ZetherKey, COMMANDS};
 use std::fmt::Debug;
 use std::sync::OnceLock;
@@ -43,6 +47,8 @@ const MEMBERS: (usize, usize) = (512 * 1024, 4);
 const UASIG: (usize, usize) = (64 * 1024, 6);
 const ZCMD: (usize, usize) = (1 << 20, 8);
 const ZBOX: (usize, usize) = (2 << 20, 1);
+const QCMD: (usize, usize) = (1 << 20, 8);
+const QBOX: (usize, usize) = (2 << 20, 1);
 /// `version ‖ scheme ‖ mlkemCt (1,568) ‖ x25519Eph (32)` and a 16-byte tag.
 const SEALED_MIN: usize = 2 + 1568 + 32 + 16;
 
@@ -224,9 +230,35 @@ fn one(t: &str, data: &[u8]) {
                 }
             }
         }
+        "pqz_cmd" => {
+            let Some((&b, rest)) = data.split_first() else { return };
+            match PQZ_COMMANDS.get(usize::from(b) % (PQZ_COMMANDS.len() + 1)) {
+                Some(cmd) => {
+                    if let Some(c) = json(rest, QCMD, |d| PqzCmd::from_json(cmd, d)) {
+                        same(&c, PqzCmd::from_json(cmd, c.to_json().as_bytes()), "pqz_cmd");
+                        let v: serde_json::Value = serde_json::from_str(&c.to_json()).unwrap_or_else(|_| die("to_json not JSON"));
+                        if has_key(&v) {
+                            die("a command with a `key` member accepted");
+                        }
+                    }
+                }
+                None => {
+                    static KEY: OnceLock<(Wallet, PqzKey)> = OnceLock::new();
+                    let (_, k) = KEY.get_or_init(|| {
+                        let w = Wallet::from_mnemonic("legal winner thank year wave sausage worth useful legal winner thank yellow", "")
+                            .unwrap_or_else(|_| die("no wallet"));
+                        let k = w.pqz_key(0, 0).unwrap_or_else(|_| die("no key"));
+                        (w, k)
+                    });
+                    if json(rest, QBOX, |d| k.open_balance_cache(d).map(|p| p.to_vec())).is_some() {
+                        die("a fuzzed box opened");
+                    }
+                }
+            }
+        }
         _ => die(
             "UA_FUZZ_TARGET: typed_data | expect | tx | vault | manifest | container | sealed | kem_pk | mnemonic | container_expect | \
-             members | accepted | uasig | zether_cmd",
+             members | accepted | uasig | zether_cmd | pqz_cmd",
         ),
     }
 }
@@ -239,6 +271,10 @@ fn one(t: &str, data: &[u8]) {
 pub unsafe extern "C" fn LLVMFuzzerTestOneInput(data: *const u8, size: usize) -> i32 {
     let t = TARGET.get_or_init(|| std::env::var("UA_FUZZ_TARGET").unwrap_or_default());
     let input = if size == 0 { &[][..] } else { std::slice::from_raw_parts(data, size) };
-    one(t, input);
+    // T15: the profile unwinds (pqz-ffi refuses panic = "abort" on native targets), so a panic is caught here and is still a
+    // finding: abort, which libFuzzer reports as a crash (the panic hook has printed it)
+    if std::panic::catch_unwind(|| one(t, input)).is_err() {
+        die("panic");
+    }
     0
 }

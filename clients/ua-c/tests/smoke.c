@@ -2,6 +2,7 @@
 // C99 smoke test of include/scaas_ua.h against the staticlib. The full vector suite is tests/test_vectors.py.
 // ABI v6 (ua-rs-sign T12): one sign.json row per kind group through key handles, and a child handle after its wallet is freed
 // (KEY_REVOKED; run under AddressSanitizer, tests/asan-smoke.sh: no use after free). T14: a Zether key's PoP and balance-cache box, and
+// its handle after the wallet is freed. T15: a PQZ key's set, an R_REG proof, a key field refused, the cache box, the leaf export, and
 // its handle after the wallet is freed.
 #include <stdio.h>
 #include <string.h>
@@ -121,8 +122,44 @@ int main(void) {
     size_t zpt_len = sizeof zpt;
     CHECK(scaas_ua_zether_open_balance_cache(zk, zout, zpt, &zpt_len) == SCAAS_UA_OK && zpt_len == 2 && memcmp(zpt, "{}", 2) == 0);
 
+    // PQZ (T15, default build: n2304-kmax4096): the set, an R_REG proof, a key field refused, a cache box, the leaf export
+    CHECK(scaas_ua_features() & SCAAS_UA_FEATURE_PQZ);
+    CHECK(scaas_ua_features() & SCAAS_UA_FEATURE_PQZ_SET_N2304_KMAX4096);
+    static char qout[SCAAS_UA_PQZ_OUT_MAX];
+    len = sizeof qout;
+    CHECK(scaas_ua_pqz_set(qout, &len) == SCAAS_UA_OK && strstr(qout, "\"n2304-kmax4096\""));
+    CHECK(scaas_ua_pqz_check_set(qout) == SCAAS_UA_OK);
+    CHECK(scaas_ua_pqz_check_set("{\"set\":\"n2048-kmax1024\",\"pkLen\":16384,\"pqzlId\":\"0x00\",\"pqzhId\":null}") ==
+          SCAAS_UA_ERR_ARGUMENT);
+    ScaasUaPqzKey *qk = NULL;
+    CHECK(scaas_ua_wallet_pqz_key(w, 0, 0, &qk) == SCAAS_UA_OK && qk);
+    static uint8_t qpk[32768];
+    size_t qpk_len = sizeof qpk;
+    CHECK(scaas_ua_pqz_public(qk, qpk, &qpk_len) == SCAAS_UA_OK && qpk_len == 18432);
+    char qreq[256];
+    snprintf(qreq, sizeof qreq, "{\"proofSystemId\":\"0x%s\",\"kind\":305,\"ua\":\"0x%064d\"}",
+             "ef1ffbcbd05394f8276e50a6c254022edf53bbd08a56e22aadddac2b9b90336e", 1);
+    len = sizeof qout;
+    CHECK(scaas_ua_pqz_call(qk, "proveRegister", qreq, qout, &len) == SCAAS_UA_OK && strstr(qout, "\"proof\"") && strstr(qout, "\"message\""));
+    len = sizeof qout;
+    CHECK(scaas_ua_pqz_call(qk, "dec", "{\"key\":{\"seed32\":\"0x01\"}}", qout, &len) == SCAAS_UA_ERR_ARGUMENT);
+    len = sizeof qout;
+    CHECK(scaas_ua_pqz_seal_balance_cache(qk, (const uint8_t *)"{}", 2, qout, &len) == SCAAS_UA_OK);
+    size_t qpt_len = sizeof zpt;
+    CHECK(scaas_ua_pqz_open_balance_cache(qk, qout, zpt, &qpt_len) == SCAAS_UA_OK && qpt_len == 2 && memcmp(zpt, "{}", 2) == 0);
+    uint8_t leaf[32];
+    CHECK(scaas_ua_export_pqz_leaf_raw(w, 0, 0, leaf) == SCAAS_UA_OK);
+    memset(leaf, 0, sizeof leaf); // the caller zeroizes the exported leaf
+
     // the wallet freed before its children: each child stays valid memory and answers KEY_REVOKED (ASan: no use after free)
     scaas_ua_wallet_free(w);
+    len = sizeof qout;
+    CHECK(scaas_ua_pqz_call(qk, "dec", "{}", qout, &len) == SCAAS_UA_ERR_ARGUMENT); // decoded before the key: no ct
+    len = sizeof qout;
+    CHECK(scaas_ua_pqz_seal_balance_cache(qk, (const uint8_t *)"{}", 2, qout, &len) == SCAAS_UA_ERR_KEY_REVOKED);
+    qpk_len = sizeof qpk;
+    CHECK(scaas_ua_pqz_public(qk, qpk, &qpk_len) == SCAAS_UA_OK);
+    scaas_ua_pqz_key_free(qk);
     len = sizeof zout;
     CHECK(scaas_ua_zether_call(zk, "pop", "{}", zout, &len) == SCAAS_UA_ERR_KEY_REVOKED);
     CHECK(scaas_ua_zether_public(zk, zy, zua) == SCAAS_UA_OK);
@@ -147,6 +184,7 @@ int main(void) {
     scaas_ua_link_session_free(NULL);
     scaas_ua_seed_backup_free(NULL);
     scaas_ua_zether_key_free(NULL);
+    scaas_ua_pqz_key_free(NULL);
 
     if (failures) return 1;
     puts("smoke ok");
