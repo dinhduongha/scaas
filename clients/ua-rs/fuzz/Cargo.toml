@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+[package]
+name = "scaas-ua-fuzz"
+version = "0.1.0"
+edition = "2021"
+license-file = "../../../LICENSE"
+publish = false
+
+# The oracles of the libFuzzer targets of ua-rs (ua-rs-sign T11; spec §9.3): a staticlib that exports
+# LLVMFuzzerTestOneInput itself (the target named by UA_FUZZ_TARGET), linked by build.sh with clang 18's libFuzzer, on
+# pqz-core/fuzz's pattern (stable 1.97.1, sancov RUSTFLAGS, no nightly / cargo-fuzz). Feature `vectors` of scaas-ua: the
+# bounded reader's parse counter and the backup payload reader (test-only entry points; never a release build).
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+scaas-ua = { path = "..", features = ["vectors"] }
+
+[profile.release]
+debug = 1
+# any panic is a finding: abort, which libFuzzer reports as a crash; overflow and debug_assert! too (as cargo-fuzz)
+panic = "abort"
+overflow-checks = true
+debug-assertions = true
+
+[workspace]

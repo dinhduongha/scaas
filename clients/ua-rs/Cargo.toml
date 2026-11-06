@@ -175,3 +175,8 @@ required-features = ["wallet"]
 [[test]]
 name = "wallet_memory"
 required-features = ["wallet"]
+
+# ua-rs-sign T11: each fuzz target's input past its cap (fuzz/regress/), refused outside the fuzzer
+[[test]]
+name = "fuzz_caps"
+required-features = ["vectors"]

@@ -35,7 +35,21 @@ pub fn json(bytes: &[u8], max_len: usize, max_depth: usize) -> Result<Value> {
             _ => {}
         }
     }
+    #[cfg(feature = "vectors")]
+    PARSED.with(|n| n.set(n.get() + 1));
     serde_json::from_slice(bytes).map_err(|_| Error::Argument)
+}
+
+#[cfg(feature = "vectors")]
+thread_local! {
+    static PARSED: core::cell::Cell<usize> = const { core::cell::Cell::new(0) };
+}
+
+/// Test-only (feature `vectors`): how many inputs on this thread passed both bounds and reached `serde_json` (T11: an input
+/// past a cap must never reach it, which a decoder's own refusal of the parsed value would hide).
+#[cfg(feature = "vectors")]
+pub fn vectors_parsed() -> usize {
+    PARSED.with(|n| n.get())
 }
 
 /// Every string of a JSON value (its depth bounded by [`json`]) zeroized: what a decoder of secrets runs after its read.
