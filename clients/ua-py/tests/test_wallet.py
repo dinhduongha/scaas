@@ -897,6 +897,41 @@ class Pqz(Case):
         self.assertEqual(code(lambda: k.call('balance', dict(words, psid='0x' + PQZL_ID['n2048-kmax1024']))), 'UAPqzSetMismatch')
         for c in raw:
             self.assertEqual(code(lambda: k.call(c, {})), 'UAArgument', c)
+        # T15i: words rows for wallet keys (smartcontracts/vectors/pqz/n2304-kmax4096/wallet_state.json, written by ua-rs
+        # under `vectors`, gen_wallet_state.sh): each row's own handle decrypts its balance
+        w = self.new_wallet('pq_kat')
+        for r in json.loads((STATE / 'pqz' / 'n2304-kmax4096' / 'wallet_state.json').read_text())['rows']:
+            q = self.keep(w.pqz_key(r['account'], r['index']))
+            self.assertEqual(json.loads(q.call('balance', r['request']))['value'], r['value'], r['name'])
+
+    def test_no_oracle(self):
+        """T15i (ARCH-POS-13; spec no-decryption-oracle §5): ua-rs tests/no_oracle.rs's harness through the C ABI. The 8·K
+        crafted queries (`u` the unit polynomial at polynomial j, every `v` coefficient ⌈Δ/2⌉ + off, off 0 and -1, four windows;
+        through a raw decrypt they recover s, ua-rs's positive control) in every bare shape (a ciphertext with and without a
+        window, `T` with and without `p`, a statement, `u` / `v`) to every release command and to `dec`: each refused with one
+        status. Control: the same handle and call path answer a well-formed `enc`."""
+        st = json.loads((ROOT / 'pqz-core' / 'params' / 'sets' / 'n2304-kmax4096' / 'set.json').read_text())
+        q, delta, polys = st['q'], st['delta'], st['k']
+        release, raw = commands('pqz')
+        self.assertIn('dec', raw)
+        self.assertNotIn('dec', release)
+        k = self.keep(self.new_wallet('pq_kat').pqz_key())
+        self.assertEqual(len(json.loads(k.call('enc', {'pks': [hx(k.public())], 'values': [1]}))['vs']), 1, 'the call path answers')
+        n = 0
+        for j in range(polys):
+            u = bytearray(8 * 64 * polys)
+            u[8 * 64 * j + 7] = 1
+            for w in range(4):
+                for off in (0, -1):
+                    v = (((delta + 1) // 2 + off) % q).to_bytes(8, 'big') * 16
+                    ct = hx(bytes(u) + v)
+                    for shape in ({'ct': ct}, {'ct': ct, 'window': w}, {'T': ct}, {'T': ct, 'p': 1}, {'stmt': ct},
+                                  {'u': hx(u), 'v': hx(v)}):
+                        req = json.dumps(shape)
+                        for c in release + ['dec']:
+                            self.assertEqual(code(lambda: k.call(c, req)), 'UAArgument', (c, j, w, off, list(shape)))
+                    n += 1
+        self.assertEqual(n, 8 * polys)
 
     def test_pqz_handle_after_lock_is_KEY_REVOKED(self):
         w = self.new_wallet('pq_kat')

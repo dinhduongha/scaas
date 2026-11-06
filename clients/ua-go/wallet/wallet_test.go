@@ -1404,6 +1404,18 @@ func TestPqzWordsOnTheForgeRows(t *testing.T) {
 			t.Fatal(c, err)
 		}
 	}
+	// T15i: words rows for wallet keys (smartcontracts/vectors/pqz/n2304-kmax4096/wallet_state.json, written by ua-rs under
+	// `vectors`, gen_wallet_state.sh): each row's own handle decrypts its balance
+	w := f.fresh("pq_kat")
+	for _, r := range rows(vec(t, "smartcontracts/vectors/pqz/n2304-kmax4096/wallet_state.json")["rows"]) {
+		q := must(w.PqzKey(uint32(r["account"].(float64)), uint32(r["index"].(float64))))
+		out := must(q.Call("balance", js(r["request"])))
+		q.Close()
+		var got obj
+		if err := json.Unmarshal([]byte(out), &got); err != nil || got["value"] != r["value"] {
+			t.Fatal(r["name"], out, err)
+		}
+	}
 }
 
 // --- the PQZ facade ---

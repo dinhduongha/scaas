@@ -652,6 +652,13 @@ void main() {
     for (final c in raw) {
       expect(await code(() => k.call(cmd: c, requestJson: '{}')), 'UAArgument', reason: c);
     }
+    // T15i: words rows for wallet keys (smartcontracts/vectors/pqz/n2304-kmax4096/wallet_state.json, written by ua-rs under
+    // `vectors`, gen_wallet_state.sh): each row's own handle decrypts its balance
+    final w = await walletOf('pq_kat');
+    for (final r in load_('../pqz/n2304-kmax4096/wallet_state.json')['rows']) {
+      final q = await w.pqzKey(account: r['account'], index: r['index']);
+      expect(jsonDecode(await q.call(cmd: 'balance', requestJson: jsonEncode(r['request'])))['value'], r['value'], reason: r['name']);
+    }
   });
 
   test('pqz_facade', () async {

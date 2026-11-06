@@ -851,6 +851,13 @@ static void pqz_words() {
     words["psid"] = "0xc752e7f57778114dbfaac5d43843577b54e13e3ed162517145a37b5a3ec6cdfe";  // n2048-kmax1024
     CHECK(code_of([&] { k.call("balance", words.dump()); }) == "UAPqzSetMismatch", "the other set's psid");
     for (auto& c : raw) CHECK(code_of([&] { k.call(c, "{}"); }) == "UAArgument", c);
+    // T15i: words rows for wallet keys (smartcontracts/vectors/pqz/n2304-kmax4096/wallet_state.json, written by ua-rs under
+    // `vectors`, gen_wallet_state.sh): each row's own handle decrypts its balance
+    json ws = load_json(std::string(SCAAS_UA_VECTORS_DIR) + "/../pqz/n2304-kmax4096/wallet_state.json");
+    for (auto& r : ws["rows"]) {
+        PqzKey q = w.pqzKey(r["account"].get<uint32_t>(), r["index"].get<uint32_t>());
+        CHECK(json::parse(q.call("balance", r["request"].dump()))["value"] == r["value"], r["name"].get<std::string>());
+    }
 }
 
 // --- PQZ facade ------------------------------------------------------------------------------------------------------------

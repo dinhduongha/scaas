@@ -2006,6 +2006,12 @@ class WalletPqz(WalletCase):
         self.assertEqual(self.call(k, 'balance', dict(words, psid='0x' + PQZL_ID['n2048-kmax1024'])), ('UAPqzSetMismatch', None))
         for c in raw:
             self.assertEqual(self.call(k, c, {}), ('UAArgument', None), c)
+        # T15i: words rows for wallet keys (smartcontracts/vectors/pqz/n2304-kmax4096/wallet_state.json, written by ua-rs
+        # under `vectors`, gen_wallet_state.sh): each row's own handle decrypts its balance through the C ABI
+        w = self.qw()
+        for r in json.loads((STATE / 'pqz' / 'n2304-kmax4096' / 'wallet_state.json').read_text())['rows']:
+            st_, out = self.call(self.qk(w, r['account'], r['index']), 'balance', r['request'])
+            self.assertEqual((st_, out and out['value']), (name_of(OK), r['value']), r['name'])
 
     def test_pqz_handle_after_lock_and_free_is_KEY_REVOKED(self):
         w = self.qw()

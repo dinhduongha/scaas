@@ -831,6 +831,15 @@ public class WalletTests : IDisposable
         words["psid"] = Pqzl2048;
         Assert.Equal("UAPqzSetMismatch", Code(() => k.Call("balance", words.ToJsonString())));
         foreach (var c in raw) Assert.Equal("UAArgument", Code(() => k.Call(c, "{}")));
+        // T15i: words rows for wallet keys (smartcontracts/vectors/pqz/n2304-kmax4096/wallet_state.json, written by ua-rs under
+        // vectors, gen_wallet_state.sh): each row's own handle decrypts its balance
+        var w = Fresh("pq_kat");
+        foreach (var r in Rows(Load("smartcontracts/vectors/pqz/n2304-kmax4096/wallet_state.json"), "rows"))
+        {
+            var q = Keep(w.PqzKey(r.GetProperty("account").GetUInt32(), r.GetProperty("index").GetUInt32()));
+            var got = JsonDocument.Parse(q.Call("balance", r.GetProperty("request").GetRawText())).RootElement.GetProperty("value");
+            Assert.True(got.GetUInt64() == r.GetProperty("value").GetUInt64(), S(r, "name"));
+        }
     }
 
     // --- the PQZ facade ---
