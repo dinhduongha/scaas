@@ -104,7 +104,7 @@ fn refused_before_combining<T>(what: &str, f: impl FnOnce() -> Result<T, Error>)
 }
 
 /// k of n shares (every pair of a 2-of-3) rebuild a key of the registered `pqzKeyHash`, held by the rebuilder's wallet: it
-/// decrypts what the operator's key encrypted, its lock revokes it, and the new operator can deal new shares of it.
+/// opens what the operator's key sealed (its balance-cache box), its lock revokes it, and the new operator can deal new shares of it.
 #[test]
 fn k_shares_rebuild_a_key_matching_pqzKeyHash() {
     let g = group(2);
@@ -118,14 +118,11 @@ fn k_shares_rebuild_a_key_matching_pqzKeyHash() {
         assert_eq!((k.account(), k.index()), (u32::MAX, u32::MAX));
     }
     let k = g.rebuild(&cs, &g.msig_ua, 0, &g.key_hash()).unwrap(); // all three
-    let e: Value = serde_json::from_str(&g.pqz.call("enc", format!("{{\"pks\":[\"0x{}\"],\"values\":[4242]}}", hex::encode(g.pqz.pk())).as_bytes()).unwrap()).unwrap();
-    let ct = format!("{}{}", e["u"].as_str().unwrap(), e["vs"][0].as_str().unwrap().trim_start_matches("0x"));
-    let d: Value = serde_json::from_str(&k.call("dec", format!("{{\"ct\":\"{ct}\"}}").as_bytes()).unwrap()).unwrap();
-    assert_eq!(d["value"], 4242, "the new operator sees the balance");
+    assert_eq!(decrypts(&g, &k).unwrap(), 4242, "the new operator sees the balance");
     let again = k.seal_seed_backup(&g.members[0].1, &g.msig_kd, 0, None, &g.recipients()).unwrap();
     assert!(again.covers(&g.msig_ua, 0, &g.key_hash()), "the new operator deals new shares of the same key");
     g.members[0].0.lock();
-    assert_eq!(k.call("dec", format!("{{\"ct\":\"{ct}\"}}").as_bytes()).err(), Some(Error::KeyRevoked));
+    assert_eq!(decrypts(&g, &k).err(), Some(Error::KeyRevoked));
     drop(g.op);
 }
 
@@ -365,16 +362,16 @@ fn clear_forms(seed32: &[u8; 32]) -> [String; 2] {
     [hex::encode(seed32), Base64UrlUnpadded::encode_string(seed32)]
 }
 
-/// `dec` of a fresh encryption of 4242 to the operator's key, by `k`.
+/// The operator's balance-cache box of `4242` opened by `k` (the same `seed32`). Not `dec`: a release build has no raw decrypt
+/// (ARCH-POS-13, T15c).
 fn decrypts(g: &Group, k: &PqzKey) -> Result<Value, Error> {
-    let e: Value = serde_json::from_str(&g.pqz.call("enc", format!("{{\"pks\":[\"0x{}\"],\"values\":[4242]}}", hex::encode(g.pqz.pk())).as_bytes()).unwrap()).unwrap();
-    let ct = format!("{}{}", e["u"].as_str().unwrap(), e["vs"][0].as_str().unwrap().trim_start_matches("0x"));
-    Ok(serde_json::from_str::<Value>(&k.call("dec", format!("{{\"ct\":\"{ct}\"}}").as_bytes())?).unwrap()["value"].clone())
+    let b = g.pqz.seal_balance_cache(b"4242").unwrap();
+    Ok(serde_json::from_slice(&k.open_balance_cache(b.as_bytes())?).unwrap())
 }
 
 /// Rebuild → lock → unlock: the key is listed in the manifest (public: the hash, never `seed32`), its vault (sealed under the
-/// passphrase, its JSON exported and read back) holds it again once opened, checked against `pqzKeyHash`, and it decrypts what
-/// the operator's key encrypted. Between unlock and that open it is listed but not held: `pqz_held_key` and `backup_seal`
+/// passphrase, its JSON exported and read back) holds it again once opened, checked against `pqzKeyHash`, and it opens what
+/// the operator's key sealed. Between unlock and that open it is listed but not held: `pqz_held_key` and `backup_seal`
 /// refuse (`Argument`), as for an imported key.
 #[test]
 fn a_rebuilt_key_survives_lock_and_unlock_through_its_vault() {

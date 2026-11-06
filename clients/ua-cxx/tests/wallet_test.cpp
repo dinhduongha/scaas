@@ -785,8 +785,9 @@ static void pqz_facade() {
     bad["key"] = {{"seed32", hx(Bytes(32, 0x11))}};
     CHECK(code_of([&] { k.call("proveRegister", bad.dump()); }) == "UAArgument", "a key field");
     json e = json::parse(k.call("enc", json{{"pks", json::array({hx(k.pk())})}, {"values", json::array({123456})}}.dump()));
-    json dec = json::parse(k.call("dec", json{{"ct", e["u"].get<std::string>() + e["vs"][0].get<std::string>().substr(2)}}.dump()));
-    CHECK(dec["value"] == 123456, "enc / dec");
+    // ARCH-POS-13 (T15c): a release build has no raw decrypt; a well-formed `dec` is an unknown command
+    std::string ct = e["u"].get<std::string>() + e["vs"][0].get<std::string>().substr(2);
+    CHECK(code_of([&] { k.call("dec", json{{"ct", ct}}.dump()); }) == "UAArgument", "no dec in a release build");
     std::string box = k.sealBalanceCache(str(R"({"v":1})"));
     CHECK(k.openBalanceCache(box).copy() == str(R"({"v":1})"), "cache box");
     CHECK(code_of([&] { w.pqzKey(0, 1).openBalanceCache(box); }) == "UAAead", "another key's box");

@@ -38,9 +38,9 @@ fn merge(mut a: Value, b: Value) -> Value {
     }
     a
 }
-/// A debit header as a caller gives it (counter `ctr`, fee 7).
 /// `f` is refused with `Argument` before pqz-core's prover runs (feature `vectors`: the prover-call counter; without it the
 /// refusal alone).
+#[cfg(feature = "vectors")]
 fn refused_before_the_prover<T: std::fmt::Debug>(what: &str, f: impl FnOnce() -> Result<T, Error>) {
     #[cfg(feature = "vectors")]
     let before = scaas_ua::facade::pqz::vectors_prover_calls();
@@ -48,6 +48,7 @@ fn refused_before_the_prover<T: std::fmt::Debug>(what: &str, f: impl FnOnce() ->
     #[cfg(feature = "vectors")]
     assert_eq!(scaas_ua::facade::pqz::vectors_prover_calls(), before, "{what}: refused before the prover");
 }
+/// A debit header as a caller gives it (counter `ctr`, fee 7).
 fn header(ctr: u64) -> Value {
     json!({"chainId": 7622, "token": hx(&[0x11; 20]), "registry": hx(&[0x22; 20]), "fromUA": hx(&[0xA1; 32]),
         "beneficiaryUA": hx(&[0xA3; 32]), "fee": 7, "sendCounter": ctr, "p": 5, "validUntilBlock": 1_000_000, "plainUsed": 0,
@@ -58,6 +59,7 @@ fn balance(k: &PqzKey, value: u64) -> Vec<u8> {
     let e = call(k, "enc", &json!({"pks": [hx(&k.pk())], "values": [value]})).unwrap();
     [h(&e["u"]), h(&e["vs"][0])].concat()
 }
+#[cfg(feature = "vectors")]
 fn dec(k: &PqzKey, ct: &[u8], window: u64) -> Result<u64, Error> {
     call(k, "dec", &json!({"ct": hx(ct), "window": window})).map(|v| v["value"].as_u64().unwrap())
 }
@@ -140,15 +142,17 @@ fn set_mismatch_refused() {
     }
     let w = wallet();
     let k = w.pqz_key(0, 0).unwrap();
+    #[cfg_attr(not(feature = "vectors"), allow(unused_mut))]
+    let mut cmds = vec![("proveRegister", json!({"kind": 0x0131, "ua": hx(&[1; 32])})), ("proveKeyRecord", json!({"ua": hx(&[1; 32])}))];
+    #[cfg(feature = "vectors")]
     let t = balance(&k, 1000);
-    let cmds = [
-        ("proveRegister", json!({"kind": 0x0131, "ua": hx(&[1; 32])})),
-        ("proveKeyRecord", json!({"ua": hx(&[1; 32])})),
+    #[cfg(feature = "vectors")]
+    cmds.extend([
         ("proveBurn", merge(header(1), json!({"amount": 1, "recipient": hx(&[3; 32]), "T": hx(&t), "memoHash": hx(&[0; 32])}))),
         ("proveRefresh", merge(header(1), json!({"T": hx(&t), "memoHash": hx(&[0; 32])}))),
         ("proveTransfer", merge(header(1), json!({"toUA": hx(&[2; 32]), "pkT": hx(&k.pk()), "T": hx(&t), "amount": 1, "memoHash": hx(&[0; 32])}))),
         ("proveTransferMulti", merge(header(1), json!({"legs": [{"pk": hx(&k.pk()), "ua": hx(&[2; 32]), "amount": 1}], "T": hx(&t), "mode": "HASH"}))),
-    ];
+    ]);
     for (cmd, base) in &cmds {
         let ok = merge(base.clone(), json!({"proofSystemId": hx(&PQZL_ID)}));
         assert!(PqzCmd::from_json(cmd, ok.to_string().as_bytes()).is_ok(), "{cmd}: positive control");
@@ -159,6 +163,7 @@ fn set_mismatch_refused() {
     // a disclosure statement of another id
     let (u, v) = (vec![0u8; st::PK_BYTES], vec![0u8; 128]);
     for (form, cmd, extra) in [
+        #[cfg(feature = "vectors")]
         (Form::DiscloseReceiver, "proveDisclose", json!({})),
         (Form::DiscloseSender, "proveDiscloseSender", json!({"fromUA": hx(&[0xA1; 32]), "sendCounter": 1, "salt": hx(&[5; 16]), "auditorOn": false})),
     ] {
@@ -174,15 +179,21 @@ fn set_mismatch_refused() {
 fn pqz_handle_KeyRevoked_after_lock() {
     let w = wallet();
     let k = w.pqz_key(0, 0).unwrap();
+    let reg = json!({"proofSystemId": hx(&PQZL_ID), "kind": 0x0131, "ua": hx(&[1; 32])});
+    assert!(call(&k, "proveRegister", &reg).is_ok(), "positive control");
+    #[cfg(feature = "vectors")]
     let t = balance(&k, 1000);
+    #[cfg(feature = "vectors")]
     assert_eq!(dec(&k, &t, 0), Ok(1000), "positive control");
     let cache = k.seal_balance_cache(b"{}").unwrap();
     w.lock();
-    assert_eq!(dec(&k, &t, 0).err(), Some(Error::KeyRevoked));
-    let reg = json!({"proofSystemId": hx(&PQZL_ID), "kind": 0x0131, "ua": hx(&[1; 32])});
     assert_eq!(call(&k, "proveRegister", &reg).err(), Some(Error::KeyRevoked));
-    let memo = json!({"chainUid": hx(&[1; 32]), "token": hx(&[2; 20]), "fromUA": hx(&[3; 32]), "sendCounter": 1, "memo": hx(&[0; 58])});
-    assert_eq!(call(&k, "openMemo", &memo).err(), Some(Error::KeyRevoked));
+    #[cfg(feature = "vectors")]
+    {
+        assert_eq!(dec(&k, &t, 0).err(), Some(Error::KeyRevoked));
+        let memo = json!({"chainUid": hx(&[1; 32]), "token": hx(&[2; 20]), "fromUA": hx(&[3; 32]), "sendCounter": 1, "memo": hx(&[0; 58])});
+        assert_eq!(call(&k, "openMemo", &memo).err(), Some(Error::KeyRevoked));
+    }
     assert_eq!(k.seal_balance_cache(b"{}").err(), Some(Error::KeyRevoked));
     assert_eq!(k.open_balance_cache(cache.as_bytes()).err(), Some(Error::KeyRevoked));
     assert_eq!(w.pqz_key(0, 0).err(), Some(Error::WalletLocked));
@@ -193,7 +204,7 @@ fn pqz_handle_KeyRevoked_after_lock() {
     let w2 = wallet();
     let k2 = w2.pqz_key(0, 1).unwrap();
     drop(w2);
-    assert_eq!(dec(&k2, &t, 0).err(), Some(Error::KeyRevoked));
+    assert_eq!(call(&k2, "proveRegister", &reg).err(), Some(Error::KeyRevoked));
 }
 
 #[cfg(feature = "vectors")]
@@ -208,33 +219,72 @@ fn unlock_does_not_revive_a_pqz_handle() {
     assert_eq!(dec(&w.pqz_key(0, 0).unwrap(), &t, 0), Ok(5), "a new handle works");
 }
 
+/// Every command of the vectors build (the release one's and the raw ones): a minimal well-formed request for `k`.
+fn base_request(k: &PqzKey, cmd: &str) -> Value {
+    let (pk, t) = (hx(&k.pk()), hx(&balance(k, 1000)));
+    let id = hx(&PQZL_ID);
+    let stmt = hx(&disclosure(Form::DiscloseReceiver, &PQZL_ID, 1, 1, &k.pk(), &vec![0u8; st::PK_BYTES], &[0u8; 128]));
+    let sstmt = hx(&disclosure(Form::DiscloseSender, &PQZL_ID, 0, 1, &k.pk(), &vec![0u8; st::PK_BYTES], &[0u8; 128]));
+    let leg = json!({"pk": pk, "ua": hx(&[2; 32]), "amount": 1});
+    match cmd {
+        "enc" => json!({"pks": [pk], "values": [1]}),
+        "dec" => json!({"ct": t}),
+        "proveRegister" => json!({"proofSystemId": id, "kind": 0x0131, "ua": hx(&[1; 32])}),
+        "proveKeyRecord" => json!({"proofSystemId": id, "ua": hx(&[1; 32])}),
+        "proveTransfer" => merge(header(1), json!({"proofSystemId": id, "toUA": hx(&[2; 32]), "pkT": pk, "T": t, "amount": 1, "memoHash": hx(&[0; 32])})),
+        "proveBurn" => merge(header(1), json!({"proofSystemId": id, "amount": 1, "recipient": hx(&[3; 32]), "T": t, "memoHash": hx(&[0; 32])})),
+        "proveRefresh" => merge(header(1), json!({"proofSystemId": id, "T": t, "memoHash": hx(&[0; 32])})),
+        "proveTransferMulti" => merge(header(1), json!({"proofSystemId": id, "legs": [leg], "T": t, "mode": "BUNDLE"})),
+        "proveDiscloseSender" => json!({"stmt": sstmt, "fromUA": hx(&[1; 32]), "sendCounter": 1, "salt": hx(&[5; 16]), "auditorOn": true}),
+        "proveDisclose" => json!({"stmt": stmt}),
+        "openMemo" => json!({"chainUid": hx(&[1; 32]), "token": hx(&[2; 20]), "fromUA": hx(&[3; 32]), "sendCounter": 1, "memo": hx(&[0; 58])}),
+        _ => panic!("{cmd}: no base request"),
+    }
+}
+
+/// The raw commands ARCH-POS-13 keeps out of a release build (T15c): each decrypts or opens a ciphertext, statement or `T`
+/// its caller chose.
+const RAW: [&str; 7] = ["dec", "proveTransfer", "proveBurn", "proveRefresh", "proveTransferMulti", "proveDisclose", "openMemo"];
+
+/// ARCH-POS-13 (T15c, F1 / F2 / F3 / F8): a release build lists none of the raw commands and refuses each, with a well-formed
+/// request, as `Argument` (an unknown command, before the key); under `vectors` they are there (the vector files' hooks).
+#[test]
+fn release_has_no_raw_decrypt() {
+    let release = ["enc", "proveRegister", "proveKeyRecord", "proveDiscloseSender"];
+    let want: Vec<&str> = if cfg!(feature = "vectors") {
+        ["enc", "dec", "proveRegister", "proveKeyRecord", "proveTransfer", "proveBurn", "proveRefresh", "proveTransferMulti",
+            "proveDiscloseSender", "proveDisclose", "openMemo"].to_vec()
+    } else {
+        release.to_vec()
+    };
+    assert_eq!(COMMANDS, &want[..]);
+    let w = wallet();
+    let k = w.pqz_key(0, 0).unwrap();
+    for cmd in RAW {
+        let req = base_request(&k, cmd);
+        let got = (PqzCmd::from_json(cmd, req.to_string().as_bytes()).err(), call(&k, cmd, &req).err());
+        if cfg!(feature = "vectors") {
+            assert_eq!(got.0, None, "{cmd}: a vectors build has it");
+        } else {
+            assert_eq!(got, (Some(Error::Argument), Some(Error::Argument)), "{cmd}: refused in a release build");
+        }
+    }
+    for cmd in release {
+        assert!(PqzCmd::from_json(cmd, base_request(&k, cmd).to_string().as_bytes()).is_ok(), "{cmd}: positive control");
+    }
+}
+
 /// Every command, positive control first: a minimal well-formed request passes the decoder; with a `key` (or `seed32`, `s`,
 /// `e`, `wit`) field at the top, or a `key` inside a leg, it is refused before anything reaches pqz-core.
 #[test]
 fn a_key_field_in_command_json_is_refused() {
     let w = wallet();
     let k = w.pqz_key(0, 0).unwrap();
-    let (pk, t) = (hx(&k.pk()), hx(&balance(&k, 1000)));
-    let id = hx(&PQZL_ID);
-    let stmt = hx(&disclosure(Form::DiscloseReceiver, &PQZL_ID, 1, 1, &k.pk(), &vec![0u8; st::PK_BYTES], &[0u8; 128]));
-    let sstmt = hx(&disclosure(Form::DiscloseSender, &PQZL_ID, 0, 1, &k.pk(), &vec![0u8; st::PK_BYTES], &[0u8; 128]));
+    let (pk, t, id) = (hx(&k.pk()), hx(&balance(&k, 1000)), hx(&PQZL_ID));
     let leg = json!({"pk": pk, "ua": hx(&[2; 32]), "amount": 1});
     let secret = json!({"seed32": hx(&[0x11; 32]), "account": 0});
     for cmd in COMMANDS {
-        let base = match *cmd {
-            "enc" => json!({"pks": [pk], "values": [1]}),
-            "dec" => json!({"ct": t}),
-            "proveRegister" => json!({"proofSystemId": id, "kind": 0x0131, "ua": hx(&[1; 32])}),
-            "proveKeyRecord" => json!({"proofSystemId": id, "ua": hx(&[1; 32])}),
-            "proveTransfer" => merge(header(1), json!({"proofSystemId": id, "toUA": hx(&[2; 32]), "pkT": pk, "T": t, "amount": 1, "memoHash": hx(&[0; 32])})),
-            "proveBurn" => merge(header(1), json!({"proofSystemId": id, "amount": 1, "recipient": hx(&[3; 32]), "T": t, "memoHash": hx(&[0; 32])})),
-            "proveRefresh" => merge(header(1), json!({"proofSystemId": id, "T": t, "memoHash": hx(&[0; 32])})),
-            "proveTransferMulti" => merge(header(1), json!({"proofSystemId": id, "legs": [leg], "T": t, "mode": "BUNDLE"})),
-            "proveDiscloseSender" => json!({"stmt": sstmt, "fromUA": hx(&[1; 32]), "sendCounter": 1, "salt": hx(&[5; 16]), "auditorOn": true}),
-            "proveDisclose" => json!({"stmt": stmt}),
-            "openMemo" => json!({"chainUid": hx(&[1; 32]), "token": hx(&[2; 20]), "fromUA": hx(&[3; 32]), "sendCounter": 1, "memo": hx(&[0; 58])}),
-            _ => panic!("{cmd}: no base request"),
-        };
+        let base = base_request(&k, cmd);
         assert!(PqzCmd::from_json(cmd, base.to_string().as_bytes()).is_ok(), "{cmd}: positive control");
         for field in ["key", "seed32", "s", "e", "wit", "witness"] {
             let mut top = base.clone();
@@ -246,6 +296,11 @@ fn a_key_field_in_command_json_is_refused() {
     let mut nested = merge(header(1), json!({"proofSystemId": id, "legs": [leg.clone()], "T": t, "mode": "HASH"}));
     nested["legs"][0]["key"] = secret.clone();
     assert_eq!(PqzCmd::from_json("proveTransferMulti", nested.to_string().as_bytes()).err(), Some(Error::Argument), "key inside a leg");
+    #[cfg(feature = "vectors")]
+    {
+        nested["legs"][0].as_object_mut().unwrap().remove("key");
+        assert!(PqzCmd::from_json("proveTransferMulti", nested.to_string().as_bytes()).is_ok(), "positive control: without the key");
+    }
     // a field of one command on another, an unknown command
     let reg = json!({"proofSystemId": id, "kind": 0x0131, "ua": hx(&[1; 32]), "T": t});
     assert_eq!(PqzCmd::from_json("proveRegister", reg.to_string().as_bytes()).err(), Some(Error::Argument), "T on proveRegister");
@@ -276,12 +331,14 @@ fn command_json_is_bounded_and_typed() {
     let mut big = k.pk();
     big[..8].copy_from_slice(&u64::MAX.to_be_bytes());
     assert_eq!(PqzCmd::from_json("enc", json!({"pks": [hx(&big)], "values": [1]}).to_string().as_bytes()).err(), Some(Error::Argument), "coefficient ≥ q");
+    #[cfg(feature = "vectors")]
     assert_eq!(PqzCmd::from_json("dec", json!({"ct": hx(&balance(&k, 1)), "window": 4}).to_string().as_bytes()).err(), Some(Error::Argument));
 }
 
 /// Op 1 end to end: Alice pays Bob 300 with fee 7 from a balance of 1,000, the auditor Carol copied; the proof verifies,
 /// Bob, Alice and Carol each decrypt their part; the encryption seed is CTR-PQZ-19's (recomputed here from the exported leaf
 /// and the statement's salt); `SENDER_S`, `RECEIVER_X` and `AUDITOR` disclosures verify; an overdraft is refused.
+#[cfg(feature = "vectors")]
 #[test]
 fn transfer_and_disclosures_verify() {
     let w = wallet();
@@ -330,6 +387,7 @@ fn transfer_and_disclosures_verify() {
 }
 
 /// Op 2: burn and refresh verify; the new balance decrypts.
+#[cfg(feature = "vectors")]
 #[test]
 fn burn_and_refresh_verify() {
     let w = wallet();
@@ -357,6 +415,7 @@ fn burn_and_refresh_verify() {
 
 /// Op 7 with the auditor: two legs (Bob 250, a decoy 0); the proof verifies; the memo opens under the sender's key to the
 /// legs; the auditor decrypts each copy at its window; the sender discloses leg 0 (`SENDER_S`, re-derived).
+#[cfg(feature = "vectors")]
 #[test]
 fn transfer_multi_memo_and_sender_disclosure() {
     let w = wallet();
@@ -390,6 +449,7 @@ fn transfer_multi_memo_and_sender_disclosure() {
 }
 
 /// T15b (F10, owner 2026-11-06): an op 7 request for `M` legs of `mode`, from a balance of 1,000.
+#[cfg(feature = "vectors")]
 fn multi_req(a: &PqzKey, b: &PqzKey, mode: &str) -> Value {
     let legs = json!([{"pk": hx(&b.pk()), "ua": hx(&[0xB0; 32]), "amount": 250}]);
     merge(header(9), json!({"proofSystemId": hx(&PQZL_ID), "legs": legs, "T": hx(&balance(a, 1000)), "mode": mode}))
@@ -397,6 +457,7 @@ fn multi_req(a: &PqzKey, b: &PqzKey, mode: &str) -> Value {
 
 /// `PqzCore._parseMulti` on BUNDLE: no memo (`sealedMemo` empty) and `memoHash` 0. The facade's statement has word
 /// `H_MEMO_HASH` 0, the answer no `memo`, and the proof verifies.
+#[cfg(feature = "vectors")]
 #[test]
 fn multi_bundle_memo_hash_is_zero() {
     let w = wallet();
@@ -411,6 +472,7 @@ fn multi_bundle_memo_hash_is_zero() {
 
 /// `PqzCore._parseMulti` on HASH: `memoHash = keccak256(abi.encodePacked(t.salt, t.sealedMemo))`, `salt` the header's
 /// low 16 bytes and `sealedMemo` `2 + 40·M` bytes. The facade's `memo` is `salt ‖ sealedMemo`.
+#[cfg(feature = "vectors")]
 #[test]
 fn multi_hash_memo_hash_matches_contract() {
     let w = wallet();
@@ -426,6 +488,7 @@ fn multi_hash_memo_hash_matches_contract() {
 }
 
 /// No default mode: a request without `mode`, or with any other value, is refused before the key is used.
+#[cfg(feature = "vectors")]
 #[test]
 fn multi_without_mode_refused() {
     let w = wallet();

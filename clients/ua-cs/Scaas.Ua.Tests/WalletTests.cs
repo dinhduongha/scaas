@@ -794,7 +794,8 @@ public class WalletTests : IDisposable
         Assert.Equal("UAArgument", Code(() => k.Call("proveRegister", req.ToJsonString())));
         req.Remove("seed32");
         var e = JsonDocument.Parse(k.Call("enc", new JsonObject { ["pks"] = new JsonArray(Hx(pk)), ["values"] = new JsonArray(123456) }.ToJsonString())).RootElement;
-        Assert.Equal("{\"value\":123456}", k.Call("dec", new JsonObject { ["ct"] = S(e, "u") + e.GetProperty("vs")[0].GetString()![2..] }.ToJsonString()));
+        // ARCH-POS-13 (T15c): a release build has no raw decrypt; a well-formed `dec` is an unknown command
+        Assert.Equal("UAArgument", Code(() => k.Call("dec", new JsonObject { ["ct"] = S(e, "u") + e.GetProperty("vs")[0].GetString()![2..] }.ToJsonString())));
         var box = k.SealBalanceCache(Utf8("{\"v\":1}"));
         Assert.Equal(Utf8("{\"v\":1}"), k.OpenBalanceCache(box));
         Assert.Equal("UAAead", Code(() => Keep(w.PqzKey(0, 1)).OpenBalanceCache(box)));

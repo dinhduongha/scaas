@@ -2424,7 +2424,9 @@ pub extern "C" fn scaas_ua_pqz_public(k: *const ScaasUaPqzKey, out: *mut u8, out
 /// `key`, `seed32` or any other field not on it is SCAAS_UA_ERR_ARGUMENT, a `proofSystemId` of another set
 /// SCAAS_UA_ERR_PQZ_SET_MISMATCH, a prover refusal SCAAS_UA_ERR_ARGUMENT (no detail). Pass `out_json` of SCAAS_UA_PQZ_OUT_MAX
 /// bytes: a size query runs the command again (a new proof, with new randomness and, for a transfer, a new salt) and the next
-/// proof's length can differ (SCAAS_UA_ERR_BUFFER).
+/// proof's length can differ (SCAAS_UA_ERR_BUFFER). ARCH-POS-13 (ua-rs-sign T15c): this release library has none of the
+/// commands that decrypt or open a caller's ciphertext, statement or `T` (dec, proveTransfer, proveBurn, proveRefresh,
+/// proveTransferMulti, proveDisclose, openMemo): each is SCAAS_UA_ERR_ARGUMENT until it takes proven state.
 #[no_mangle]
 pub extern "C" fn scaas_ua_pqz_call(
     k: *const ScaasUaPqzKey,

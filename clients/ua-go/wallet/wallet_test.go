@@ -1359,8 +1359,9 @@ func TestPqz(t *testing.T) {
 	delete(req, "seed32")
 	var e obj
 	_ = json.Unmarshal([]byte(must(k.Call("enc", js(obj{"pks": []string{hx(pk)}, "values": []int{123456}})))), &e)
-	if got := must(k.Call("dec", js(obj{"ct": e["u"].(string) + e["vs"].([]any)[0].(string)[2:]}))); got != `{"value":123456}` {
-		t.Fatal(got)
+	// ARCH-POS-13 (T15c): a release build has no raw decrypt; a well-formed `dec` is an unknown command
+	if _, err := k.Call("dec", js(obj{"ct": e["u"].(string) + e["vs"].([]any)[0].(string)[2:]})); code(err) != "UAArgument" {
+		t.Fatal(err)
 	}
 	box := must(k.SealBalanceCache([]byte(`{"v":1}`)))
 	if pt := must(k.OpenBalanceCache(box)); string(pt) != `{"v":1}` {

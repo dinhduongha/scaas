@@ -832,7 +832,8 @@ class Pqz(Case):
         w = self.new_wallet('pq_kat')
         k = self.keep(w.pqz_key())
         e = json.loads(k.call('enc', {'pks': [hx(k.public())], 'values': [123456]}))
-        self.assertEqual(json.loads(k.call('dec', {'ct': e['u'] + e['vs'][0][2:]})), {'value': 123456})
+        # ARCH-POS-13 (T15c): a release build has no raw decrypt; a well-formed `dec` is an unknown command
+        self.assertEqual(code(lambda: k.call('dec', {'ct': e['u'] + e['vs'][0][2:]})), 'UAArgument')
         box = k.seal_balance_cache(bytearray(b'{"v":1}'))
         self.assertEqual(k.open_balance_cache(box), b'{"v":1}')
         self.assertEqual(code(lambda: self.keep(w.pqz_key(0, 1)).open_balance_cache(box)), 'UAAead')

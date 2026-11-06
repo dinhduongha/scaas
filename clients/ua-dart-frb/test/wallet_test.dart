@@ -591,8 +591,8 @@ void main() {
     expect(await code(() => k.call(cmd: 'proveRegister', requestJson: jsonEncode({...req, 'key': {'seed32': '0x${'11' * 32}'}}))),
         'UAArgument');
     final e = jsonDecode(await k.call(cmd: 'enc', requestJson: jsonEncode({'pks': [hx(k.pk())], 'values': [123456]})));
-    final dec = jsonDecode(await k.call(cmd: 'dec', requestJson: jsonEncode({'ct': e['u'] + (e['vs'][0] as String).substring(2)})));
-    expect(dec['value'], 123456);
+    // ARCH-POS-13 (T15c): a release build has no raw decrypt; a well-formed `dec` is an unknown command
+    expect(await code(() => k.call(cmd: 'dec', requestJson: jsonEncode({'ct': e['u'] + (e['vs'][0] as String).substring(2)}))), 'UAArgument');
     final box = await k.sealBalanceCache(entries: secs('{"v":1}'));
     expect(utf8.decode(view(await k.openBalanceCache(boxJson: box))), '{"v":1}');
     wl.lock();

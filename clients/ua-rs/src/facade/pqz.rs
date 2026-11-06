@@ -9,7 +9,8 @@
 //!   [`crate::wallet::Wallet::export_pqz_leaf_raw`] is the one export of `seed32` (marker [`AllowSecretExport`]).
 //! - **Set.** [`pqz_set`] names this build's set, `PK` length and `proofSystemId`s; [`check_set`] compares a token's deployed
 //!   `PqzSet` with it, and every proving command names the token's `proofSystemId`: another set's is `PqzSetMismatch`.
-//! - **Commands** ([`COMMANDS`], [`PqzKey::call`]): named-field JSON (bounded reader, 1 MiB, depth 8), each field on its
+//! - **Commands** ([`COMMANDS`], [`PqzKey::call`]; a release build has only `enc`, `proveRegister`, `proveKeyRecord` and
+//!   `proveDiscloseSender`, ARCH-POS-13, the rest is feature `vectors` until T15e): named-field JSON (bounded reader, 1 MiB, depth 8), each field on its
 //!   command's allow-list (so no `key`, `seed32`, `s`, `e` or witness field passes, at any depth: the only nested objects are
 //!   the legs `{pk, ua, amount}`), parsed into typed values. `enc` (`pqzl::enc`), `dec` (`dec` / `dec_win`), the proofs
 //!   `proveRegister` / `proveKeyRecord` (op 3 `R_REG` over `pqz_reg_message` / the `setPqzKey` message), `proveTransfer`
@@ -151,18 +152,32 @@ pub fn enc(pks: &[Vec<u8>], values: &[u64]) -> Result<(Vec<u8>, Vec<Vec<u8>>)> {
     Ok((c.0.u.to_vec(), c.0.vs.iter().map(|v| v.to_vec()).collect()))
 }
 
-/// The commands of [`PqzKey::call`], in this order (the fuzz target `pqz_cmd` names them by index).
+/// The commands of [`PqzKey::call`], in this order (the fuzz target `pqz_cmd`, built with `vectors`, names them by index).
+///
+/// ARCH-POS-13 ("never a decryption oracle", owner 2026-11-06; spec no-decryption-oracle §4.1, T15c): a release build (no
+/// feature `vectors`) has no command that decrypts or opens a ciphertext, statement or `T` its caller chose: `dec`,
+/// `proveTransfer`, `proveBurn`, `proveRefresh`, `proveTransferMulti`, `proveDisclose` and `openMemo` exist only under the test
+/// feature `vectors` (the vector files feed `T` and `ct`) until they take proven state (T15e). In a release build they are
+/// unknown commands (`Argument`, before the key is touched). Kept: `enc` (public), `proveRegister`, `proveKeyRecord` (own key)
+/// and `proveDiscloseSender` (decrypts nothing: a re-derivation compared with the statement).
 pub const COMMANDS: &[&str] = &[
     "enc",
+    #[cfg(feature = "vectors")]
     "dec",
     "proveRegister",
     "proveKeyRecord",
+    #[cfg(feature = "vectors")]
     "proveTransfer",
+    #[cfg(feature = "vectors")]
     "proveBurn",
+    #[cfg(feature = "vectors")]
     "proveRefresh",
+    #[cfg(feature = "vectors")]
     "proveTransferMulti",
     "proveDiscloseSender",
+    #[cfg(feature = "vectors")]
     "proveDisclose",
+    #[cfg(feature = "vectors")]
     "openMemo",
 ];
 

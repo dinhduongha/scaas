@@ -1940,7 +1940,8 @@ class WalletPqz(WalletCase):
         pk = '0x' + var(L.pqz_public, k).hex()
         st_, e = self.call(k, 'enc', {'pks': [pk], 'values': [123456]})
         self.assertEqual(st_, '')
-        self.assertEqual(self.call(k, 'dec', {'ct': e['u'] + e['vs'][0][2:]}), ('', {'value': 123456}))
+        # ARCH-POS-13 (T15c): a release build has no raw decrypt; a well-formed `dec` is an unknown command
+        self.assertEqual(self.call(k, 'dec', {'ct': e['u'] + e['vs'][0][2:]}), ('UAArgument', None))
         box = text(L.pqz_seal_balance_cache, k, b'{"v":1}', 7)
         self.assertEqual(var(L.pqz_open_balance_cache, k, box.encode()), b'{"v":1}')
         self.assertEqual(sig_of(L.pqz_open_balance_cache, self.qk(w, 0, 1), box.encode()), ('UAAead', None))
