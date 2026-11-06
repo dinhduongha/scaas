@@ -103,6 +103,10 @@ governance_routers = ["0xB64D2D5f27D2d5eA951409773343D856e41Fb8E0", "0xFeC9586a1
                                                  # the ua*/mtx* merge moves the router's bytecode, so a deploy of it (reset 2)
                                                  # lists new CREATE2 addresses here (GovDeploy.t.sol
                                                  # test_routerAndRelayFeeNewAddresses)
+# compliance_registry = "0x..."                  # ComplianceRegistry ("compliance_registry" in deployments/<id>.json,
+                                                 # DEPLOY_REGULATED=1): the canonical registry the regulated kinds 8-13
+                                                 # pin by code hash ("compliance_registry_codehash"); an address, no secret
+                                                 # (regulated-kinds spec §6.1, §7)
 # fee_recipient = "0x..."                        # cold wallet for fees of gateway meta-txs that leave feeRecipient
                                                  # unbound (R84); never a lane key. Unset: the fee goes to the sending lane.
 # tokens = [{ address = "0x...", decimals = 6 }] # registered tokens, imported into the store (R95, MESH R86)

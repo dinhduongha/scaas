@@ -544,6 +544,22 @@ def artifact(name, src=None):
     return j["bytecode"]["object"].removeprefix("0x"), j["bytecode"].get("linkReferences", {})
 
 
+# The releases `run` publishes (kind, implementation), each version 1 on env 1; ua-mtx-merge T31: the regulated PQZ kinds.
+RELEASES = ((0, "NormalToken"), (4, "NormalPqzToken"), (5, "WrappedPqzToken"), (12, "NormalPqzRegulatedToken"),
+            (13, "WrappedPqzRegulatedToken"))
+
+
+def registry_codehash():
+    """The canonical `ComplianceRegistry` runtime's code hash (regulated-kinds spec §5, F-11), from out/."""
+    j = json.load(open(os.path.join(EVM, "out", "ComplianceRegistry.sol", "ComplianceRegistry.json")))
+    return keccak256(bytes.fromhex(j["deployedBytecode"]["object"].removeprefix("0x")))
+
+
+def impl_args(kind):
+    """A release's `implArgs`: a regulated kind's (8-13) `abi.encode(REGISTRY_CODEHASH)`, 32 bytes; else none."""
+    return registry_codehash() if kind >= 8 else b""
+
+
 class Deployer:
     def __init__(self, s):
         self.s = s
@@ -924,6 +940,21 @@ def named_rows():
     check(len(head) == 640 and K.PQZ_AUTH_TYPEHASH == hb(a["typehash"]) and got == hb(a["domains"]["pqz"]["digest"]), "PqzAuth: K.auth_digest = the row's")
 
 
+def release_rows():
+    """ua-mtx-merge T33 (regulated-kinds spec §6.1): the releases `run` publishes, the regulated PQZ kinds 12 and 13 among
+    them: `RegulatedLib` linked in each regulated one's init code (so in its env's link closure) and in no base kind's, and
+    each regulated release's `implArgs` the `ComplianceRegistry` runtime's code hash, the pin of test/as/Registry.t.sol."""
+    check([k for k, _ in RELEASES] == [0, 4, 5, 12, 13], f"releases: kinds {[k for k, _ in RELEASES]}")
+    pin = re.search(r"REGISTRY_CODEHASH = (0x[0-9a-f]{64});", open(os.path.join(EVM, "test/as/Registry.t.sol")).read())
+    check(pin is not None and registry_codehash() == hb(pin.group(1)), "ComplianceRegistry runtime hash = Registry.t.sol's pin")
+    for kind, name in RELEASES:
+        _, links = artifact(name)
+        reg = any("RegulatedLib" in ls for ls in links.values())
+        check(reg == (kind >= 8), f"{name} (kind {kind}): RegulatedLib {'linked' if reg else 'not linked'}")
+        want = registry_codehash() if kind >= 8 else b""
+        check(impl_args(kind) == want and len(want) in (0, 32), f"{name} (kind {kind}): implArgs {len(want)} B")
+
+
 def self_test():
     """No chain (typed-signing P8, C8): the portable messages and the registry arguments this script builds, against
     portable.json's rows at pqz_kat's set — R_REG / PoP / KEM / PQZ-key messages from clientkeys, `registrationArgs`
@@ -984,6 +1015,7 @@ def self_test():
           and sol_struct_t("Env") == ENV_S, "CFG, ENV = IFactoryToken.TokenConfig, Env (the source's fields, `reg` included)")
     named_rows()
     abi_check()
+    release_rows()
 
 
 def main():
@@ -1079,21 +1111,18 @@ def run(kd, kr, ke):
     # `RegulatedLib` in the link closure (D.linked finds it), `implArgs` = abi.encode(REGISTRY_CODEHASH), the canonical
     # `ComplianceRegistry` runtime's code hash (F-11); this run creates no regulated token (the regulated rows are the forge
     # suites test/as/confidential/Pqz*: a token naming a registry needs one deployed with COMPLIANCE_ADMIN, plan T33)
-    reg_hash = keccak256(bytes.fromhex(json.load(open(os.path.join(EVM, "out", "ComplianceRegistry.sol",
-                                                                   "ComplianceRegistry.json")))["deployedBytecode"]["object"][2:]))
-    for kind, name in ((0, "NormalToken"), (4, "NormalPqzToken"), (5, "WrappedPqzToken"), (12, "NormalPqzRegulatedToken"),
-                       (13, "WrappedPqzRegulatedToken")):
+    for kind, name in RELEASES:
         require_release_gas(name)
         code, libs = D.linked(name)
         hashes = [keccak256(bytes.fromhex(rpc("eth_getCode", [a, "latest"])[2:])) for a in libs]
         env = [fac, uid, reg, 0, 0, [pqv] if kind else [], libs, hashes, router]
         sd.send(fac, cd(f"publishEnv(uint8,uint16,{ENV_S})", ["w", "w", ENV], kind, 1, env), f"publishEnv(kind {kind}, 1)")
         r = sd.send(fac, cd("deployImplementation(uint8,uint64,uint16,bytes,bytes)", ["w", "w", "w", "b", "b"],
-                               kind, 1, 1, code, reg_hash if kind >= 8 else b""),
+                               kind, 1, 1, code, impl_args(kind)),
                     f"deployImplementation(kind {kind}, 1) {name}")
         lg = next(x for x in r["logs"] if x["address"].lower() == fac.lower() and len(x["topics"]) == 4)
         log(f"      {name} release at 0x{lg['topics'][3][-40:]} ({int(r['gasUsed'], 16):,} gas)")
-    for kind in (4, 5, 12, 13):
+    for kind in [k for k, _ in RELEASES if k]:
         sd.send(fac, cd("setKindEnabled(uint8,bool)", ["w", "w"], kind, 1), f"setKindEnabled({kind}, true)")
 
     # -------------------------------------------------------------- 2. UAs

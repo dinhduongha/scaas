@@ -48,6 +48,9 @@ contract DeployHarness is DeployBase {
     /// `DEPLOY_REGULATED` for the next `deploy`.
     function setRegulated(bool r) external { deployRegulated = r; }
 
+    /// `COMPLIANCE_ADMIN` for the next `deploy` (plan T33).
+    function setComplianceAdmin(address a) external { complianceAdmin = a; }
+
     function deploy(bytes32 uid_, bool zether, address ska) external returns (OpenFactory f, string memory json) {
         return deploy(uid_, zether, ska, false);
     }

@@ -16,7 +16,13 @@
 #                            a chain at 24,576 refuses the deploy. CHAIN_CODE_LIMIT? (default 65,536, EIP-7954): the chain's
 #                            declared code limit, a release above it refused by name before anything is sent (CTR-GOV-19,
 #                            GD-4); the SCaaS testnet after the reset of pqz-core/nethermind/chain/RUNBOOK.md ("Code size
-#                            128 KiB"): 131072. DEPLOY_WRAPPED=1 adds the WRAPPED release (GD-12); DEPLOY_REGULATED=1 the regulated releases (kind 9 today, disabled until built). Always --gas-estimate-multiplier 105: forge's default x1.30 on
+#                            128 KiB"): 131072. DEPLOY_WRAPPED=1 adds the WRAPPED release (GD-12); DEPLOY_REGULATED=1 the regulated releases 8, 9, enabled (10, 11 come with
+#                            DEPLOY_ZETHER, 12, 13 with script/pqz/e2e.py) and the canonical ComplianceRegistry by CREATE2, its
+#                            admin COMPLIANCE_ADMIN (an address with code, CTR-AS-07; none or an EOA refused AdminNotContract):
+#                            JSON compliance_registry, compliance_registry_codehash (every regulated release's REGISTRY_CODEHASH).
+#                            The admin then attests each DEX venue (createDex) and its puller() ELIGIBLE_CONTRACT, validUntil
+#                            2^64-1, before an ALLOWLIST token trades there: its own call, this script holds no admin key.
+#                            Always --gas-estimate-multiplier 105: forge's default x1.30 on
 #                            the BLS inner-product verifier (~14 M, DEPLOY_ZETHER) exceeds the 2^24 per-transaction cap
 #                            (EIP-7825); the largest implementation, WrappedPqzToken (13,319,335 gas measured), is
 #                            deployed by script/pqz/e2e.py, not here. DEPLOY_ZETHER=1 (any chain but Hedera) adds the Zether

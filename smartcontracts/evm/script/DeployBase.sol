@@ -91,8 +91,11 @@ abstract contract DeployBase is Script {
     ///         every kind runs on the SCaaS testnet).
     bool internal deployWrapped;
     /// @notice `DEPLOY_REGULATED` env (default false): also deploy the regulated releases (`_deployRegulated`, regulated-kinds
-    ///         spec §6.1): kinds 8 and 9, enabled (plan T28).
+    ///         spec §6.1): kinds 8 and 9, enabled (plan T28), and the canonical `ComplianceRegistry` (plan T33).
     bool internal deployRegulated;
+    /// @notice `COMPLIANCE_ADMIN` env (read with `DEPLOY_REGULATED`): the canonical `ComplianceRegistry`'s admin, a contract
+    ///         the operator names (CTR-AS-07, regulated-kinds spec §6.1, F-21); the registry's constructor refuses any other.
+    address internal complianceAdmin;
     /// @notice `OpenFactory.noticePeriod` (plan 5g-Z2; owner ruling 2026-10-20): `NOTICE_PERIOD` env. Safe by default:
     ///         every chain not in `_isTestChain` is a mainnet (22776, Hedera 295, Ethereum, BSC, an unknown chain), with
     ///         default and floor 3 days; 7622 defaults to 10 minutes, the other test / dev chains to 0. At most 30 days
@@ -264,6 +267,7 @@ abstract contract DeployBase is Script {
         deployZether = vm.envOr("DEPLOY_ZETHER", false);
         deployWrapped = vm.envOr("DEPLOY_WRAPPED", false);
         deployRegulated = vm.envOr("DEPLOY_REGULATED", false);
+        complianceAdmin = vm.envOr("COMPLIANCE_ADMIN", address(0));
         noticePeriod = _checkedNotice(block.chainid, vm.envOr("NOTICE_PERIOD", _defaultNotice(block.chainid)));
         uid = _chainUid();
         require(CREATE2_FACTORY.code.length != 0,
@@ -331,6 +335,7 @@ abstract contract DeployBase is Script {
         UARegistry reg = _deployUARegistry(smartKeyAccountImpl, isHedera);
         _deployGovRouter(address(reg), smartKeyAccountImpl, isHedera); // before every release: its address is in the env
         _deployRelayFee();
+        if (deployRegulated) _deployComplianceRegistry();
         _gate(address(f));
         vm.serializeAddress("deploy", "token_factory", address(f));
         if (register) {
@@ -380,14 +385,14 @@ abstract contract DeployBase is Script {
     ///         takes both (`IS_HEDERA` from the env). The confidential regulated kinds deploy with their stacks (10, 11 under
     ///         `DEPLOY_ZETHER`, `_deployZetherRegulated`; 12, 13 by `script/pqz/e2e.py`). Each release's `implArgs` is `abi.encode(REGISTRY_CODEHASH)`,
     ///         the canonical `ComplianceRegistry` runtime's code hash (spec §5, F-11; plan T29): a token naming a registry of
-    ///         other code is refused at init. The registry's own deploy (`COMPLIANCE_ADMIN`) is `deploy.sh`'s (plan T33).
+    ///         other code is refused at init. The registry itself: `_deployComplianceRegistry` (plan T33).
     function _deployRegulated(OpenFactory f, address reg, address smartKeyAccountImpl, bool isHedera) internal {
         address[] memory libs = new address[](5);
         (libs[0], libs[1], libs[2], libs[3], libs[4]) =
             (address(GovernanceLib), address(HederaLib), address(TradeLib), address(MtxPipelineLib), address(RegulatedLib));
         f.publishEnv(IOpenFactory.TokenKind.NORMAL_REGULATED, 1,
             _env(f, reg, smartKeyAccountImpl, isHedera, new address[](0), libs));
-        bytes memory implArgs = abi.encode(keccak256(type(ComplianceRegistry).runtimeCode));
+        bytes memory implArgs = abi.encode(_registryCodehash());
         address n = _release(f, IOpenFactory.TokenKind.NORMAL_REGULATED, "NormalRegulatedToken",
             type(NormalRegulatedToken).creationCode, implArgs);
         _gate(n);
@@ -403,6 +408,24 @@ abstract contract DeployBase is Script {
         vm.serializeAddress("deploy", "implementation_wrapped_regulated", w);
         f.setKindEnabled(IOpenFactory.TokenKind.NORMAL_REGULATED, true);
         f.setKindEnabled(IOpenFactory.TokenKind.WRAPPED_REGULATED, true);
+    }
+
+    /// @notice Regulated-kinds spec §6.1 (F-21, plan T33), under `DEPLOY_REGULATED`: the canonical `ComplianceRegistry` by
+    ///         CREATE2, its admin `COMPLIANCE_ADMIN` (CTR-AS-07: a contract; none or an EOA is refused by the registry's own
+    ///         constructor, `AdminNotContract`), its runtime the code every regulated release pins (`REGISTRY_CODEHASH`,
+    ///         F-11). JSON `compliance_registry`, `compliance_registry_codehash`. Not a release: no factory, no `chainUid()`;
+    ///         the code pin is its gate. The `ELIGIBLE_CONTRACT` rows of a DEX venue (`createDex`, after this deploy) and of
+    ///         its `puller()` are the admin's own `attest` call: this script holds no key of the admin.
+    function _deployComplianceRegistry() internal {
+        ComplianceRegistry r = new ComplianceRegistry{salt: salt}(complianceAdmin);
+        require(address(r).codehash == _registryCodehash(), "ComplianceRegistry: code differs from REGISTRY_CODEHASH (F-11)");
+        vm.serializeAddress("deploy", "compliance_registry", address(r));
+        vm.serializeBytes32("deploy", "compliance_registry_codehash", address(r).codehash);
+    }
+
+    /// @notice The canonical `ComplianceRegistry` runtime's code hash, every regulated release's `implArgs` (spec §5, F-11).
+    function _registryCodehash() internal pure returns (bytes32) {
+        return keccak256(type(ComplianceRegistry).runtimeCode);
     }
 
     /// @notice `MtxRelayFee` (CTR-MTX-27) by CREATE2, the same address on every chain (no constructor argument, no
@@ -654,7 +677,7 @@ abstract contract DeployBase is Script {
     ///         `ComplianceRegistry` runtime's code hash (F-11), then both kinds enabled. JSON
     ///         `implementation_{normal,wrapped}_zether_regulated_bls12381`. Never on Hedera (`ZetherLayer`).
     function _deployZetherRegulated(OpenFactory f, address reg, address smartKeyAccountImpl, address[] memory deps) internal {
-        bytes memory implArgs = abi.encode(keccak256(type(ComplianceRegistry).runtimeCode));
+        bytes memory implArgs = abi.encode(_registryCodehash());
         f.publishEnv(IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, 1,
             _env(f, reg, smartKeyAccountImpl, false, deps, _withRegulatedLib(_zetherLibs(false))));
         f.publishEnv(IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, 1,

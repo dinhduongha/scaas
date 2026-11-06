@@ -122,6 +122,35 @@ contract LinkClosureTest is Test {
         }
     }
 
+    /// Plan T33 (regulated-kinds spec §6.1): every regulated kind's env equals its implementation's link closure with
+    /// `RegulatedLib` in it, its code hash in `libCodeHashes`: the envs `DeployBase` publishes (8, 9 by `DEPLOY_REGULATED`,
+    /// 10, 11 by `DEPLOY_ZETHER`) and `closureLibs` for all six (12, 13 are `script/pqz/e2e.py`'s, its self-test checks them).
+    function test_linkClosureWithRegulatedLib() public {
+        DeployHarness h = new DeployHarness();
+        h.setRegulated(true);
+        h.setComplianceAdmin(address(this));
+        (OpenFactory f,) = h.deploy(ZUID, true, new SmartKeyAccountFactory(ZUID).IMPLEMENTATION());
+        string[6] memory impls = ["NormalRegulatedToken", "WrappedRegulatedToken", "NormalZetherRegulatedToken",
+            "WrappedZetherRegulatedToken", "NormalPqzRegulatedToken", "WrappedPqzRegulatedToken"];
+        for (uint8 i; i < 6; ++i) {
+            IOpenFactory.TokenKind k = IOpenFactory.TokenKind(8 + i);
+            IFactoryToken.Env memory e;
+            if (i < 4) e = f.envOf(k, 1);
+            else (e.libs, e.libCodeHashes) = (closureLibs(k), _pins(closureLibs(k)));
+            _assertEnvIsClosure(impls[i], impls[i], e);
+            bool lib;
+            for (uint256 j; j < e.libs.length; ++j) {
+                lib = lib || (e.libs[j] == address(RegulatedLib) && e.libCodeHashes[j] == address(RegulatedLib).codehash);
+            }
+            assertTrue(lib, string.concat(impls[i], ": RegulatedLib and its code hash"));
+        }
+    }
+
+    function _pins(address[] memory libs) internal view returns (bytes32[] memory h) {
+        h = new bytes32[](libs.length);
+        for (uint256 i; i < libs.length; ++i) h[i] = libs[i].codehash;
+    }
+
     /// typed-signing R2: the registry's link closure is `UARegistryLib` alone, and that library links nothing. The deployed
     /// registry (through `DeployBase`, CREATE2) holds exactly one DELEGATECALL, `_lib`'s, whose target is that library.
     function test_registryClosure() public {
