@@ -1607,6 +1607,73 @@ ScaasUaStatus scaas_ua_export_pqz_leaf_raw(const ScaasUaWallet *w,
                                            uint8_t *out32);
 
 /**
+ * The k-of-n backup of the PQZ key `k`'s seed32 as the PQZ key of record `version` of the `msig` `msig_key_data` (its
+ * CTR-UA-09 key data): share i + 1 sealed to `recipients[i]` (`n` of them, each a direct member's own single-key UA KEM key,
+ * distinct; an ephemeral key or the `msig` itself is refused), signed by `sender` (a UA key of a kind that signs containers).
+ * `threshold` 0 takes the `msig`'s threshold; 1 <= k <= n. The record `{v, msigUa, version, pqzKeyHash, k, n, shares:
+ * [container JSON]}` into `out_json`: public data (each share is sealed to its member); the caller keeps it, and the records
+ * of old versions too. A size query deals again (new shares).
+ */
+ScaasUaStatus scaas_ua_pqz_seed_backup(const ScaasUaPqzKey *k,
+                                       const ScaasUaKey *sender,
+                                       const uint8_t *msig_key_data,
+                                       size_t msig_key_data_len,
+                                       uint64_t version,
+                                       uint8_t threshold,
+                                       const ScaasUaRecipient *recipients,
+                                       size_t n,
+                                       char *out_json,
+                                       size_t *out_len);
+
+/**
+ * A member's share container (`container_json`, opened by `kk` against `expect_json` with purpose "scaas/pqz-share/v1",
+ * `members_json` and `accepted_json` as `scaas_ua_wallet_restore_backup`) sealed again, the same share and header, to `to`
+ * (the member who rebuilds the key) and signed by `sender`: its container JSON into `out_json`. The share never leaves the
+ * library in the clear. SCAAS_UA_ERR_ARGUMENT for another purpose or a malformed share.
+ */
+ScaasUaStatus scaas_ua_pqz_share_reseal(const ScaasUaKemKey *kk,
+                                        const char *container_json,
+                                        const char *expect_json,
+                                        const char *members_json,
+                                        const char *accepted_json,
+                                        const ScaasUaRecipient *to,
+                                        const ScaasUaKey *sender,
+                                        char *out_json,
+                                        size_t *out_len);
+
+/**
+ * The PQZ key of an `msig` rebuilt from its k-of-n backup into `w`'s store: `containers_json` (a JSON array of at most 16
+ * share containers, 1 MiB) each opened by `kk` as `expect_json` says; every header must be (`msig_ua32`, `version`,
+ * `pqz_key_hash32` = the registered key's hash) with one k and n, the indices distinct, at least k of them, and the rebuilt
+ * seed32 must give a key of that hash; else SCAAS_UA_ERR_ARGUMENT and nothing is installed. The new key handle in `*out`
+ * (account and index u32::MAX; lock and free of `w` revoke it): its holder is the new operator.
+ */
+ScaasUaStatus scaas_ua_wallet_pqz_reconstruct(const ScaasUaWallet *w,
+                                              const ScaasUaKemKey *kk,
+                                              const char *containers_json,
+                                              const char *expect_json,
+                                              const char *members_json,
+                                              const char *accepted_json,
+                                              const uint8_t *msig_ua32,
+                                              uint64_t version,
+                                              const uint8_t *pqz_key_hash32,
+                                              ScaasUaPqzKey **out);
+
+/**
+ * `*missing = true` when `kind` is an `msig` (0x0120) and no backup record in `backups_json` (a JSON array of the records
+ * `scaas_ua_pqz_seed_backup` writes, at most 4 MiB; NULL = none) covers its PQZ key `pqz_key` at `version` (the same `msig`
+ * UA `ua32`, key hash and version, all n shares). The client shows the warning and still builds `register` / `setPqzKey`
+ * (owner 2026-11-06: a warning, never a refusal). A single-key kind: false.
+ */
+ScaasUaStatus scaas_ua_pqz_seed_backup_warning(uint16_t kind,
+                                               const uint8_t *ua32,
+                                               uint64_t version,
+                                               const uint8_t *pqz_key,
+                                               size_t pqz_key_len,
+                                               const char *backups_json,
+                                               bool *missing);
+
+/**
  * The `webauthn-p256` signature `abi.encode(authData, clientDataJSON, r, s)` of an assertion against `expected_challenge32`
  * (low-s, the chains' clientDataJSON rule), verified with `key_data` before it is written: SCAAS_UA_ERR_WEBAUTHN_ASSERTION.
  */

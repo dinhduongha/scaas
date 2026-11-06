@@ -1538,19 +1538,19 @@ pub extern "C" fn scaas_ua_wallet_backup_seal(
             return Err(argument("NULL"));
         }
         let (w, sender) = (handle(w)?, ua_key(handle(sender)?)?);
-        let rs = bytes(recipients, n)?
-            .iter()
-            .map(|r| {
-                let pk = bytes(r.kem_pk, r.kem_pk_len)?;
-                if r.ephemeral {
-                    return Ok(uw::Recipient::ephemeral(pk));
-                }
-                Ok(uw::Recipient::ua(r.kind, bytes(r.key_data, r.key_data_len)?, r.version, pk)?)
-            })
-            .collect::<R<Vec<_>>>()?;
+        let rs = bytes(recipients, n)?.iter().map(recipient).collect::<R<Vec<_>>>()?;
         let cs = w.0.backup_seal(sender, &rs)?;
         write_str(out_json, out_len, &format!("[{}]", cs.iter().map(uw::SealedContainer::to_json).collect::<Vec<_>>().join(",")))
     })
+}
+
+/// A `ScaasUaRecipient` as the wallet's `Recipient`.
+fn recipient(r: &ScaasUaRecipient) -> R<uw::Recipient> {
+    let pk = bytes(r.kem_pk, r.kem_pk_len)?;
+    if r.ephemeral {
+        return Ok(uw::Recipient::ephemeral(pk));
+    }
+    Ok(uw::Recipient::ua(r.kind, bytes(r.key_data, r.key_data_len)?, r.version, pk)?)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2522,6 +2522,177 @@ pub extern "C" fn scaas_ua_export_pqz_leaf_raw(w: *const ScaasUaWallet, account:
         #[cfg(not(feature = "pqz"))]
         {
             let _ = (w, account, index, out32);
+            Err(fail(SCAAS_UA_ERR_KIND_UNAVAILABLE))
+        }
+    })
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------
+// The k-of-n backup of an `msig` holder's PQZ key (ua-rs-sign T16a, owner 2026-11-06; feature `pqz`): Shamir shares of the
+// operator's PQZ seed32 only, each sealed to one member's own single-key UA KEM key (an `msig` holds no KEM key), container
+// purpose "scaas/pqz-share/v1"; any k rebuild the key, which must hash to the registered pqzKeyHash. A missing backup is a
+// warning (`scaas_ua_pqz_seed_backup_warning`), never a refusal: `register` / `setPqzKey` build either way.
+// ---------------------------------------------------------------------------------------------------------------------------
+
+/// The containers JSON of `scaas_ua_wallet_pqz_reconstruct`: at most 1 MiB, an array of at most 16 share containers.
+#[cfg(feature = "pqz")]
+const PQZ_SHARES_JSON: usize = 1 << 20;
+/// The backups JSON of `scaas_ua_pqz_seed_backup_warning`: at most 4 MiB, an array of backup records.
+#[cfg(feature = "pqz")]
+const PQZ_BACKUPS_JSON: usize = 4 << 20;
+
+/// A JSON array (at most `max` bytes, `depth` deep) of items each read by `f` from its own JSON text.
+#[cfg(feature = "pqz")]
+fn json_list<T>(json: *const c_char, max: usize, depth: usize, f: impl Fn(&[u8]) -> uw::Result<T>) -> R<Vec<T>> {
+    let v = uw::bounded::json(cstr(json)?, max, depth)?;
+    let items = v.as_array().ok_or_else(|| argument("a JSON array"))?;
+    Ok(items.iter().map(|x| f(x.to_string().as_bytes())).collect::<uw::Result<Vec<_>>>()?)
+}
+
+/// The k-of-n backup of the PQZ key `k`'s seed32 as the PQZ key of record `version` of the `msig` `msig_key_data` (its
+/// CTR-UA-09 key data): share i + 1 sealed to `recipients[i]` (`n` of them, each a direct member's own single-key UA KEM key,
+/// distinct; an ephemeral key or the `msig` itself is refused), signed by `sender` (a UA key of a kind that signs containers).
+/// `threshold` 0 takes the `msig`'s threshold; 1 <= k <= n. The record `{v, msigUa, version, pqzKeyHash, k, n, shares:
+/// [container JSON]}` into `out_json`: public data (each share is sealed to its member); the caller keeps it, and the records
+/// of old versions too. A size query deals again (new shares).
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn scaas_ua_pqz_seed_backup(
+    k: *const ScaasUaPqzKey,
+    sender: *const ScaasUaKey,
+    msig_key_data: *const u8,
+    msig_key_data_len: usize,
+    version: u64,
+    threshold: u8,
+    recipients: *const ScaasUaRecipient,
+    n: usize,
+    out_json: *mut c_char,
+    out_len: *mut usize,
+) -> ScaasUaStatus {
+    run(|| {
+        #[cfg(feature = "pqz")]
+        {
+            if out_len.is_null() {
+                return Err(argument("NULL"));
+            }
+            let (k, sender) = (pqz(k)?, ua_key(handle(sender)?)?);
+            let rs = bytes(recipients, n)?.iter().map(recipient).collect::<R<Vec<_>>>()?;
+            let t = (threshold != 0).then_some(threshold);
+            let b = k.seal_seed_backup(sender, bytes(msig_key_data, msig_key_data_len)?, version, t, &rs)?;
+            write_str(out_json, out_len, &b.to_json())
+        }
+        #[cfg(not(feature = "pqz"))]
+        {
+            let _ = (k, sender, msig_key_data, msig_key_data_len, version, threshold, recipients, n, out_json, out_len);
+            Err(fail(SCAAS_UA_ERR_KIND_UNAVAILABLE))
+        }
+    })
+}
+
+/// A member's share container (`container_json`, opened by `kk` against `expect_json` with purpose "scaas/pqz-share/v1",
+/// `members_json` and `accepted_json` as `scaas_ua_wallet_restore_backup`) sealed again, the same share and header, to `to`
+/// (the member who rebuilds the key) and signed by `sender`: its container JSON into `out_json`. The share never leaves the
+/// library in the clear. SCAAS_UA_ERR_ARGUMENT for another purpose or a malformed share.
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn scaas_ua_pqz_share_reseal(
+    kk: *const ScaasUaKemKey,
+    container_json: *const c_char,
+    expect_json: *const c_char,
+    members_json: *const c_char,
+    accepted_json: *const c_char,
+    to: *const ScaasUaRecipient,
+    sender: *const ScaasUaKey,
+    out_json: *mut c_char,
+    out_len: *mut usize,
+) -> ScaasUaStatus {
+    run(|| {
+        #[cfg(feature = "pqz")]
+        {
+            if out_len.is_null() {
+                return Err(argument("NULL"));
+            }
+            let (kk, c, to, sender) = (handle(kk)?, container(container_json)?, recipient(handle(to)?)?, ua_key(handle(sender)?)?);
+            let o = Opening::read(expect_json, members_json, accepted_json)?;
+            let r = o.with(|e, m, a| kk.0.reseal_pqz_share(&c, e, m, a, &to, sender))?;
+            write_str(out_json, out_len, &r.to_json())
+        }
+        #[cfg(not(feature = "pqz"))]
+        {
+            let _ = (kk, container_json, expect_json, members_json, accepted_json, to, sender, out_json, out_len);
+            Err(fail(SCAAS_UA_ERR_KIND_UNAVAILABLE))
+        }
+    })
+}
+
+/// The PQZ key of an `msig` rebuilt from its k-of-n backup into `w`'s store: `containers_json` (a JSON array of at most 16
+/// share containers, 1 MiB) each opened by `kk` as `expect_json` says; every header must be (`msig_ua32`, `version`,
+/// `pqz_key_hash32` = the registered key's hash) with one k and n, the indices distinct, at least k of them, and the rebuilt
+/// seed32 must give a key of that hash; else SCAAS_UA_ERR_ARGUMENT and nothing is installed. The new key handle in `*out`
+/// (account and index u32::MAX; lock and free of `w` revoke it): its holder is the new operator.
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn scaas_ua_wallet_pqz_reconstruct(
+    w: *const ScaasUaWallet,
+    kk: *const ScaasUaKemKey,
+    containers_json: *const c_char,
+    expect_json: *const c_char,
+    members_json: *const c_char,
+    accepted_json: *const c_char,
+    msig_ua32: *const u8,
+    version: u64,
+    pqz_key_hash32: *const u8,
+    out: *mut *mut ScaasUaPqzKey,
+) -> ScaasUaStatus {
+    run(|| {
+        #[cfg(feature = "pqz")]
+        {
+            if out.is_null() {
+                return Err(argument("NULL"));
+            }
+            let (w, kk) = (handle(w)?, handle(kk)?);
+            let (ua, kh) = (arr(msig_ua32)?, arr(pqz_key_hash32)?);
+            let cs = json_list(containers_json, PQZ_SHARES_JSON, 8, uw::SealedContainer::from_json)?;
+            let o = Opening::read(expect_json, members_json, accepted_json)?;
+            let key = o.with(|e, m, a| w.0.reconstruct_pqz_seed(&kk.0, &cs, e, m, a, ua, version, kh))?;
+            give(out, ScaasUaPqzKey(key))
+        }
+        #[cfg(not(feature = "pqz"))]
+        {
+            let _ = (w, kk, containers_json, expect_json, members_json, accepted_json, msig_ua32, version, pqz_key_hash32, out);
+            Err(fail(SCAAS_UA_ERR_KIND_UNAVAILABLE))
+        }
+    })
+}
+
+/// `*missing = true` when `kind` is an `msig` (0x0120) and no backup record in `backups_json` (a JSON array of the records
+/// `scaas_ua_pqz_seed_backup` writes, at most 4 MiB; NULL = none) covers its PQZ key `pqz_key` at `version` (the same `msig`
+/// UA `ua32`, key hash and version, all n shares). The client shows the warning and still builds `register` / `setPqzKey`
+/// (owner 2026-11-06: a warning, never a refusal). A single-key kind: false.
+#[no_mangle]
+pub extern "C" fn scaas_ua_pqz_seed_backup_warning(
+    kind: u16,
+    ua32: *const u8,
+    version: u64,
+    pqz_key: *const u8,
+    pqz_key_len: usize,
+    backups_json: *const c_char,
+    missing: *mut bool,
+) -> ScaasUaStatus {
+    run(|| {
+        #[cfg(feature = "pqz")]
+        {
+            let bs = if backups_json.is_null() {
+                vec![]
+            } else {
+                json_list(backups_json, PQZ_BACKUPS_JSON, 10, ua::facade::pqz_backup::PqzSeedBackup::from_json)?
+            };
+            let w = ua::facade::pqz_backup::seed_backup_warning(kind, arr(ua32)?, version, bytes(pqz_key, pqz_key_len)?, &bs);
+            put(missing, w.is_some())
+        }
+        #[cfg(not(feature = "pqz"))]
+        {
+            let _ = (kind, ua32, version, pqz_key, pqz_key_len, backups_json, missing);
             Err(fail(SCAAS_UA_ERR_KIND_UNAVAILABLE))
         }
     })

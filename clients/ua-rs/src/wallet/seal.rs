@@ -594,14 +594,14 @@ fn short_code() -> Result<String> {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-pub(super) fn now() -> Result<u64> {
+pub(crate) fn now() -> Result<u64> {
     let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_err(|_| Error::Argument)?;
     Ok(t.as_secs())
 }
 
 // `SystemTime::now` panics on wasm32-unknown-unknown: the JS clock, as the OS RNG takes the JS backend
 #[cfg(target_arch = "wasm32")]
-pub(super) fn now() -> Result<u64> {
+pub(crate) fn now() -> Result<u64> {
     let ms = js_sys::Date::now();
     if !(ms.is_finite() && ms >= 0.0) {
         return Err(Error::Argument);

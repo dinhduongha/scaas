@@ -939,6 +939,10 @@ for name, res, args in [
     ('pqz_call', st, [P, u8, u8, P, P]), ('pqz_seal_balance_cache', st, [P, u8, sz, P, P]),
     ('pqz_open_balance_cache', st, [P, u8, P, P]), ('pqz_set', st, [P, P]), ('pqz_check_set', st, [u8]),
     ('export_pqz_leaf_raw', st, [P, u32, u32, P]),
+    ('pqz_seed_backup', st, [P, P, u8, sz, u64, C.c_uint8, P, sz, P, P]),
+    ('pqz_share_reseal', st, [P, u8, u8, u8, u8, P, P, P, P]),
+    ('wallet_pqz_reconstruct', st, [P, P, u8, u8, u8, u8, u8, u64, u8, P]),
+    ('pqz_seed_backup_warning', st, [u16, u8, u64, u8, sz, u8, P]),
 ]:
     f = getattr(LIB, 'scaas_ua_' + name)
     f.restype, f.argtypes = res, args
@@ -1961,6 +1965,96 @@ class WalletPqz(WalletCase):
         finally:
             L.pqz_key_free(k2)
         L.pqz_key_free(None)
+
+
+class WalletPqzBackup(WalletCase):
+    """T16a (owner 2026-11-06): the k-of-n backup of an msig holder's PQZ seed32 through the C ABI (the Rust suite
+    tests/pqz_backup.rs pins the field, the split and every refusal). Three members (0x0130, one mnemonic each), a 2-of-3 msig."""
+
+    def setUp(self):
+        self.mids = ['bip39_test', 'twelve_words', 'non_ascii_passphrase']
+        self.op = self.w('pq_kat')
+        self.op_key = self.key('pq_kat', 0x0130)
+        self.pqz = handle(L.wallet_pqz_key, self.op, 7, 0)
+        self.addCleanup(L.pqz_key_free, self.pqz)
+        self.mkeys = [self.key(m, 0x0130) for m in self.mids]
+        self.mkd = [var(L.key_data, k) for k in self.mkeys]
+        self.mua = [out32(L.derive_ua, 0x0130, kd, len(kd), False) for kd in self.mkd]
+        self.kks = [handle(L.kem_key, k, 0) for k in self.mkeys]
+        for kk in self.kks:
+            self.addCleanup(L.kem_free, kk)
+        self.kpk = []
+        for kk in self.kks:
+            buf = C.create_string_buffer(KEM_PK)
+            ok(L.kem_pk(kk, buf))
+            self.kpk.append(buf.raw)
+        order = sorted(range(3), key=lambda i: self.mua[i])
+        self.msig_kd = (2).to_bytes(2, 'big') + (3).to_bytes(2, 'big') + b''.join(
+            (0x0130).to_bytes(2, 'big') + self.mua[i] + (1).to_bytes(2, 'big') for i in order)
+        self.msig_ua = out32(L.derive_ua, 0x0120, self.msig_kd, len(self.msig_kd), False)
+        self.op_ua = out32(L.derive_ua, 0x0130, var(L.key_data, self.op_key), len(var(L.key_data, self.op_key)), False)
+
+    def rec(self, i):
+        return Recipient(0x0130, self.mkd[i], len(self.mkd[i]), 0, self.kpk[i], len(self.kpk[i]), False)
+
+    def expect(self, i):
+        return {'purpose': 'scaas/pqz-share/v1', 'sender': {'set': [hx(u) for u in [self.op_ua] + self.mua]},
+                'recipient': {'ua': hx(self.mua[i]), 'version': 0}}
+
+    def deal(self, threshold=0):
+        recs = (Recipient * 3)(*[self.rec(i) for i in range(3)])
+        return json.loads(once(L.pqz_seed_backup, self.pqz, self.op_key, self.msig_kd, len(self.msig_kd), 0, threshold, recs, 3))
+
+    def rebuild(self, cs, ua=None, kh=None):
+        out = P()
+        status = L.wallet_pqz_reconstruct(self.w(self.mids[0]), self.kks[0], jb(cs), jb(self.expect(0)), None, None,
+                                          ua or self.msig_ua, 0, kh or self.kh, C.byref(out))
+        if status == OK:
+            self.addCleanup(L.pqz_key_free, out)
+        return name_of(status), out
+
+    def warn(self, backups, version=0):
+        m = bl()
+        ok(L.pqz_seed_backup_warning(0x0120, self.msig_ua, version, self.pk, len(self.pk), jb(backups), C.byref(m)))
+        return m.value
+
+    def test_two_of_three_rebuild_through_the_abi(self):
+        self.pk = var(L.pqz_public, self.pqz)
+        b = self.deal()
+        self.kh = bytes.fromhex(b['pqzKeyHash'][2:])
+        self.assertEqual((b['k'], b['n'], b['version'], b['msigUa']), (2, 3, 0, hx(self.msig_ua)))
+        self.assertEqual(len(b['shares']), 3)
+        # member 1 seals its share on to member 0, who rebuilds from its own and that one
+        r0 = self.rec(0)
+        fwd = json.loads(once(L.pqz_share_reseal, self.kks[1], jb(b['shares'][1]), jb(self.expect(1)), None, None,
+                              C.byref(r0), self.mkeys[1]))
+        st_, k = self.rebuild([b['shares'][0], fwd])
+        self.assertEqual(st_, '')
+        self.assertEqual(var(L.pqz_public, k), self.pk, 'the rebuilt key is the operator\'s')
+        self.assertEqual(self.rebuild([b['shares'][0]])[0], 'UAArgument', 'k - 1 shares')
+        other = bytes([self.msig_ua[0] ^ 1]) + self.msig_ua[1:]
+        self.assertEqual(self.rebuild([b['shares'][0], fwd], ua=other)[0], 'UAArgument', 'another msig')
+        self.assertEqual(self.rebuild([b['shares'][0], fwd], kh=bytes(32))[0], 'UAArgument', 'another key hash')
+        # the warning: missing without a backup, cleared by this one; never a refusal (a status OK either way)
+        self.assertTrue(self.warn(None))
+        self.assertTrue(self.warn([]))
+        self.assertFalse(self.warn([b]))
+        self.assertTrue(self.warn([b], version=1))
+        m = bl()
+        ok(L.pqz_seed_backup_warning(0x0130, self.mua[0], 0, self.pk, len(self.pk), None, C.byref(m)))
+        self.assertFalse(m.value, 'a single key needs no backup')
+
+    def test_k_and_recipients_checked(self):
+        self.assertEqual(self.deal(3)['k'], 3)
+        recs = (Recipient * 3)(*[self.rec(i) for i in range(3)])
+        status = lambda t, rs, n: sig_of(L.pqz_seed_backup, self.pqz, self.op_key, self.msig_kd, len(self.msig_kd), 0, t, rs, n)[0]
+        self.assertEqual(status(4, recs, 3), 'UAArgument', 'k > n')
+        twice = (Recipient * 2)(self.rec(0), self.rec(0))
+        self.assertEqual(status(0, twice, 2), 'UAArgument', 'a member twice')
+        eph = (Recipient * 2)(self.rec(0), Recipient(0, None, 0, 0, self.kpk[1], len(self.kpk[1]), True))
+        self.assertEqual(status(0, eph, 2), 'UAArgument', 'an ephemeral key')
+        ms = (Recipient * 1)(Recipient(0x0120, self.msig_kd, len(self.msig_kd), 0, self.kpk[0], len(self.kpk[0]), False))
+        self.assertEqual(status(1, ms, 1), 'UAKemHolder', 'MD-11: an msig holds no KEM key')
 
 if __name__ == '__main__':
     unittest.main()

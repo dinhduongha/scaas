@@ -205,6 +205,10 @@ required-features = ["wallet"]
 name = "facade_pqz"
 required-features = ["pqz"]
 
+[[test]]
+name = "pqz_backup"
+required-features = ["pqz"]
+
 # ua-rs-sign T16: the external-key interface (spec §9.4, MD-13): `TestExternalKey` is a `vectors` entry point
 [[test]]
 name = "wallet_external"

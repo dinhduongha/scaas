@@ -3,5 +3,7 @@
 //! the prover crates. Zether and PQZ are separate modules, handles and features; neither calls the other. UNAUDITED.
 #[cfg(feature = "pqz")]
 pub mod pqz;
+#[cfg(feature = "pqz")]
+pub mod pqz_backup;
 #[cfg(feature = "zether")]
 pub mod zether;

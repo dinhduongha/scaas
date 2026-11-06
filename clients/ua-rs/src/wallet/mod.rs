@@ -66,6 +66,8 @@ pub use manifest::vectors_backup_payload;
 pub use manifest::{AllowRollback, ImportEntry, KemEntry, Manifest, ManifestEntry, NativeEntry};
 pub use pairing::{FrostSession, Musig2Session};
 pub use policy::{sign_typed_by, AllowAnyTypedData, AllowRow, Expect, Invalidate, SubjectKey};
+#[cfg(feature = "pqz")]
+pub(crate) use seal::now;
 pub use seal::{
     seal, seal_container, AcceptedJson, ContainerExpect, ContainerExpectJson, ContainerSigner, ExpectedSender, LinkSession,
     MembersJson, Recipient, RecipientId, Sealed, SealedContainer, LINK_WINDOW, MAX_PT, PURPOSE_BACKUP, PURPOSE_LINK,
@@ -264,6 +266,9 @@ pub(crate) enum KeyId {
     /// The PQZ leaf `seed32` of `account` / `index` (spec §10.2, feature `pqz`).
     #[cfg(feature = "pqz")]
     Pqz(u32, u32),
+    /// A PQZ `seed32` rebuilt from an `msig`'s k-of-n backup, by its key hash (T16a, feature `pqz`).
+    #[cfg(feature = "pqz")]
+    PqzHeld([u8; 32]),
 }
 
 /// A mnemonic as clientkeys `normalizeMnemonic` (NFKD, lower case, single spaces), at most 1 KiB and 24 words (spec §9.3),
@@ -545,6 +550,21 @@ impl Wallet {
     /// (`lock()` revokes the handle), `pk` comes out. `WalletLocked` while locked.
     pub fn pqz_key(&self, account: u32, index: u32) -> Result<crate::facade::pqz::PqzKey> {
         crate::facade::pqz::derive(&self.store, account, index)
+    }
+
+    /// The PQZ key of an `msig` rebuilt from its k-of-n backup (T16a, owner 2026-11-06; [`crate::facade::pqz_backup`]): the
+    /// share `containers` (at most 16), each opened by `kk` as `expect` says (purpose `scaas/pqz-share/v1`); every header must
+    /// be `(msig_ua, version, pqz_key_hash)` (the registered key's hash) with one `k` and `n`, the indices distinct, at least
+    /// `k` of them; the rebuilt `seed32` must give a key of `pqz_key_hash`. Then it is installed in this wallet's store (lock
+    /// revokes the handle) and this wallet's holder is the new operator. `Argument` for any of these; errors of the opening as
+    /// [`KemKeyPair::open_container`]; `WalletLocked` while locked.
+    #[cfg(feature = "pqz")]
+    #[allow(clippy::too_many_arguments)]
+    pub fn reconstruct_pqz_seed(
+        &self, kk: &KemKeyPair, containers: &[SealedContainer], expect: &ContainerExpect, members: &crate::ua8::Members,
+        accepted: Option<&crate::ua8::Accepted>, msig_ua: &[u8; 32], version: u64, pqz_key_hash: &[u8; 32],
+    ) -> Result<crate::facade::pqz::PqzKey> {
+        crate::facade::pqz_backup::reconstruct(&self.store, kk, containers, expect, members, accepted, msig_ua, version, pqz_key_hash)
     }
 
     /// The 32-byte PQZ leaf `seed32` of `account` / `index` in the clear, for `pqz-cli` or a key oracle (spec §8.4,

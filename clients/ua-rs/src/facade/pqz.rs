@@ -589,7 +589,19 @@ pub(crate) fn derive(store: &Arc<SecretStore>, account: u32, index: u32) -> Resu
     Ok(PqzKey { account, index, pk, secret })
 }
 
+/// A key rebuilt from an `msig`'s k-of-n backup (T16a): `seed32` into `store` by its key hash, only if `pqzl::keygen(seed32)`
+/// hashes to `pqz_key_hash` (else `Argument`, nothing stored). Its `account` and `index` are `u32::MAX` (no derivation path).
+pub(crate) fn install(store: &Arc<SecretStore>, seed32: &[u8; 32], pqz_key_hash: &[u8; 32]) -> Result<PqzKey> {
+    let pk = keygen(seed32)?.0.pk.to_vec();
+    if crate::key_hash_of(crate::PQZ_SCHEME, &pk)? != Some(*pqz_key_hash) {
+        return Err(Error::Argument);
+    }
+    let (secret, pk) = store.key(KeyId::PqzHeld(*pqz_key_hash), |_| Ok((Zeroizing::new(seed32.to_vec()), pk)))?;
+    Ok(PqzKey { account: u32::MAX, index: u32::MAX, pk, secret })
+}
+
 impl PqzKey {
+    /// The derivation account (`u32::MAX` for a key rebuilt from a k-of-n backup).
     pub fn account(&self) -> u32 {
         self.account
     }
