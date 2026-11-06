@@ -3,7 +3,7 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or
 > superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status (2026-11-04):** plan, not executed; its decisions MD-1 to MD-10 accepted by the owner 2026-11-04. **Owner 2026-11-04 (after T0): build M first** (A + B + C with the router's pairs, Q2, R17, R47: tasks T1-T8 with T3b, T10-T23 without a lever), then a checkpoint: gates, the whole-branch review (Claude, Fable, Codex) and the PR of M into `main`. **T9 (levers D / L) is not started: the owner decides it after M.** M alone fits a 200 M block, not 70 M for `WrappedToken` (72.37 M asked, T0), so no public chain deploy before that decision. Nothing is built from it; this commit writes no code, contract, test or vector. **Owner 2026-11-04 (after T1): Q6 changed:** the mandate wallets are built in this round in the merged form (task T3b, MD-11); T1 is built. **Owner 2026-11-05:** the six regulated kinds 8–13 are built in this branch as task group **T24–T36**, after T18 and before T19 ([spec](../specs/2026-11-05-regulated-kinds.md), revised after the Fable and Codex reviews; 19 agent-days); T19–T23 cover the group. **Owner 2026-11-06:** group **3e** (payment metadata, free pay lanes, tax on the regulated kinds) is built as **T37–T43** after T36 and before 3c ([spec](../specs/2026-11-05-pay-meta-tax.md), approved 2026-11-06; 14.5 agent-days plus 0.5 on T19, 15 in all); T19–T23 cover it. **Owner 2026-11-06:** group **3f** (attested proof verification, PQZ only) is built as **T44–T50** after T43 and before 3c ([spec](../specs/2026-11-06-attested-verify.md), approved 2026-11-06 after the Codex and Fable reviews and rulings R1–R4; 10 agent-days, T50 its docs share in T19); T19–T23 cover it. Totals of the added groups: T24–T36 19, T37–T43 with T19's share 15, T44–T50 10, together 44 agent-days.
+**Status (2026-11-04):** plan, not executed; its decisions MD-1 to MD-10 accepted by the owner 2026-11-04. **Owner 2026-11-04 (after T0): build M first** (A + B + C with the router's pairs, Q2, R17, R47: tasks T1-T8 with T3b, T10-T23 without a lever), then a checkpoint: gates, the whole-branch review (Claude, Fable, Codex) and the PR of M into `main`. **T9 (levers D / L) is not started: the owner decides it after M.** M alone fits a 200 M block, not 70 M for `WrappedToken` (72.37 M asked, T0), so no public chain deploy before that decision. Nothing is built from it; this commit writes no code, contract, test or vector. **Owner 2026-11-04 (after T1): Q6 changed:** the mandate wallets are built in this round in the merged form (task T3b, MD-11); T1 is built. **Owner 2026-11-05:** the six regulated kinds 8–13 are built in this branch as task group **T24–T36**, after T18 and before T19 ([spec](../specs/2026-11-05-regulated-kinds.md), revised after the Fable and Codex reviews; 19 agent-days); T19–T23 cover the group. **Owner 2026-11-06:** group **3e** (payment metadata, free pay lanes, tax on the regulated kinds) is built as **T37–T43** after T36 and before 3c ([spec](../specs/2026-11-05-pay-meta-tax.md), approved 2026-11-06; 14.5 agent-days plus 0.5 on T19, 15 in all); T19–T23 cover it. **Owner 2026-11-06:** group **3f** (attested proof verification, PQZ only) is built as **T44–T50** after T43 and before 3c ([spec](../specs/2026-11-06-attested-verify.md), approved 2026-11-06 after the Codex and Fable reviews and rulings R1–R4; 10 agent-days, T50 its docs share in T19); T19–T23 cover it. **Owner 2026-11-06:** group **3g** (versioned PQZ keys) is built as **T51–T57** after T50 and before 3c, with 3c's registry generation ([spec](../specs/2026-11-06-pqz-key-versions.md), approved 2026-11-06 after the Codex and Fable reviews and rulings R1–R5; 19.5 agent-days, T57 its docs share in T19, plus 1 on `ua-rs-sign`); T19–T23 cover it. Totals of the added groups: T24–T36 19, T37–T43 with T19's share 15, T44–T50 10, T51–T57 19.5, together 63.5 agent-days.
 
 **Spec:** [`2026-11-04-ua-mtx-merge.md`](../specs/2026-11-04-ua-mtx-merge.md), **accepted by the owner 2026-11-04** (Q1–Q7, §10);
 rules R1–R47 (§5), invariants 1–7 (§8), measurement (§9). **Ruling:** [CTR-MTX-30](../../decisions.md#CTR-MTX-30), its Q6 Change, and the Change
@@ -216,7 +216,8 @@ rustc 1.90); Node `node --test` (`clients/clientkeys`); `zether-prover`; `ua-rs`
 | Regulated | T24 → T25 → T26 → T27 → T28 → T29 → T30 → T31 → T32 → T33; T34 beside T33; T35 after T33, T34; T36 after T33, beside T34–T35 | after T18, before T19 (owner 2026-11-05); contracts sequential in this worktree; T27 measures kinds 9 and 13 before T28 fills the bodies |
 | Pay meta, tax (3e) | T37 → T38 → T39 → T40; T41 after T40; T42 after T41; T43 after T40, beside T41–T42 | after T36, before 3c (owner 2026-11-06); contracts sequential in this worktree; T37 and T40 measure kind 13 first |
 | Attested PQZ (3f) | T44 → T45; T46 after T45; T47 after T46; T48 and T49 after T45, beside T46–T47; T50 beside, lands in T19 | after T43, before 3c (owner 2026-11-06); contracts sequential in this worktree; T45 measures kind 13 first |
-| Docs | T19 | drafts beside T14–T18, T24–T36, T37–T43 and T44–T50; lands after T50 and 3c (BUILT only with code and tests) |
+| Versioned PQZ keys (3g) | T51 → T52 → T53; T54 after T53; T55 after T54; T56 after T53, beside T54–T55; T57 beside, lands in T19 | after T50, before 3c (owner 2026-11-06); contracts sequential in this worktree; T51 measures the registry's deploy gas, T52 measures kind 13 first; 3c's rebalance comes after T53 |
+| Docs | T19 | drafts beside T14–T18, T24–T36, T37–T43, T44–T50 and T51–T57; lands after T57 and 3c (BUILT only with code and tests) |
 | Close | T21 → T22 → T23 | |
 | Next | TODO item 4 | SCaaS testnet reset 2 deploys the merged code (not this plan) |
 
@@ -1621,9 +1622,169 @@ switch), `indexer-feeds.md`; the operator note's attested rows.
 - [ ] **Step 1:** Write each change; figures quoted from T44–T49 logs; BUILT only where code and tests exist.
 - [ ] **Step 2:** `docs_check.py check`, `paths`, `resolve` on each new id: rc 0. Committed with T19.
 
+### Versioned PQZ keys (group 3g, owner approved 2026-11-06): tasks T51–T57
+
+**Spec:** [`2026-11-06-pqz-key-versions.md`](../specs/2026-11-06-pqz-key-versions.md), revised after the Codex and Fable reviews
+([Codex](../../research/pqzver-codex-review.md), [Fable](../../research/pqzver-fable-review.md)); rulings O1–O7 and R1–R5 (no
+`keyVersion` in `PqzAuth`; R-cross-set's version-0 replacement retired; receiver and auditor versions not named, with the decoy
+filter and the intake refusal; 60 M accepted if 57 M is missed; every other finding adopted); no question open. **Place:** after
+T50, before 3c, with 3c's registry generation (3c's rebalance after T53, measured with 3g in); T19, T21, T22, T23 cover the group.
+**Order:** contracts T51 → T52 → T53, sequential in this worktree (shared `UARegistryLib`, `UAStore`, `PqzCore`, `PqzLayer`,
+`size-baseline.json`); T54 (`clients/`, `smartcontracts/vectors/`) after T53 fixes the ABI; T55 (node) after T54; T56 (invariants,
+mutants) after T53, beside T54–T55; T57 (docs share) drafts beside them and lands in T19. The `ua-rs-sign` items (T15
+`pqz_key(version)`, T16a's header with the version) belong to that branch's stream. **Estimate:** 19.5 agent-days, plus 1 on
+`ua-rs-sign`. Every contracts task ends with the whole `forge test` green at the default set and the size gate, and runs
+`script/pqz/at-set.sh <set> test --match-path 'test/{ua,pqz,as/confidential}/*'` at the four sets (one run per work tree,
+`PqzSet.sol` restored). Red first, positive control first, one change at a time; mutants one at a time on a clean tree, logged
+`mutant | test that went red | rc`; heavy runs through `scripts/capped`, foreground. Legacy copies (MD-4) are the first commit of
+each task that replaces a body.
+
+### Task T51: the registry: versioned PQZ key records
+
+**Depends on:** T50. **Estimate:** 3.5.
+
+**Files:** `src/ua/{UAStore,UARegistryLib,UARegistry,IUARegistry,UAKinds}.sol`; `legacy/ua-mtx-merge/` (the four- and two-argument
+`setPqzKey` / `storePqzPop`, R-cross-set's replacement); `script/DeployBase.sol`, `script/pqz/e2e.py` (callers);
+`test/ua/{PqzKeyVersions,UAStoreLayout}.t.sol` (new); typehash pins; `size-baseline.json`;
+`runs/<date>-ua-mtx-merge-pqzver-registry.txt` (summary).
+
+**Interfaces:** spec §2: `setPqzKey(bytes32 ua, uint64 version, bytes pqzKey, bytes32 pqzPopHash, UASig sig)`, `storePqzPop(bytes32
+ua, uint64 version, bytes pqzPop)`; `UAPqzKeyVersion`, `UAPqzKeyVersionRecord` and their digests; version 0 write-once (R2,
+`UAPqzKeySet`), v ≥ 1 `== latest + 1` (`UAPqzKeyVersion`); the per-UA marker `pqzKeyUsed` (`UAKeyInUse`, the predecessor read on a
+host); eligibility (proven; without the verifier, the set length and the proof bytes stored) and `current`, moving only in
+`register` with `pqzPop` and `storePqzPop`; `UAPqzKeyCurrent`; `keyOwner` per version; the list once per UA; views `pqzKeyOf`
+(version first), `pqzKeyAt`, `pqzKeyLatest`, `pqzKeyUsed`, `pqzPopOf(ua, v)`, `pqzKeySigOf(ua, v)`; the events with `version`;
+`register` emits no `UAPqzKeyAdded`; the host rules 1–4 of spec §2.3; `UAStore` slots 2, 7, 8, 9 nested, 13 and 14 retired
+placeholders, 17 `PqzVersions`, 18 `pqzKeyUsed`.
+
+- [ ] **Step 1: Failing tests:** spec §14's registry rows: `test_v1_{single,msig}_stored`, `test_v1_{fewMembers,operator,keyData,v0Struct,forV2}_refused`,
+      `test_consent_otherUA_refused`, `test_record_crossChain_accepted`, `test_sequence_{gap,noV0,twice}_refused`,
+      `test_rreg_{v2Message,unversioned,popV2,otherUA}_refused`, `test_repeatedKey_refused_{verifier,noVerifier,host}`,
+      `test_current_{notAtSetPqzKey,atStorePqzPop,otherSetNever,noBytesNotCurrent,lateProofKeeps,registerWithPop}`,
+      `test_list_once`, `test_v0_secondKey_refused` (R2) with its control `test_v0_noVerifier_nothingReplaced`,
+      `test_host_{latestMax,readsOwnFirst,stableAsGen1Grows,provesBytesItself,gen1Divergence}`, `test_register_noPqzKeyAdded`,
+      `test_UAPqzKeyVersion{,Record}TypehashIsPinned`, `test_UAStoreLayout`.
+- [ ] **Step 2:** FAIL. **Step 3: Implement.** **Step 4:** PASS; whole `forge test`; the four sets; size gate; both registry
+      contracts' deploy gas on T10's public-gate formula at the four sets (spec §6.2), rows old → new.
+- [ ] **Step 5: Mutants:** spec §14's M-R1 … M-R7.
+- [ ] **Step 6:** Commit `ua-mtx-merge T51: versioned PQZ key records in the registry`.
+
+**Pins, old → new:** the `UAStore` layout (the new active pin), the two typehashes, `selector_audit.json`'s registry rows, the
+registry and library sizes and deploy gas. **Gates:** whole `forge test`, four sets, size gate.
+
+### Task T52: the token: per-version state; kind 13 first
+
+**Depends on:** T51. **Estimate:** 4.
+
+**Files:** `src/pqz/{PqzCore,PqzStateLib,PqzTransferLib,PqzBurnLib,PqzViewLib,PqzLayer,IPqzToken,WrappedPqzToken,NormalPqzToken}.sol`,
+`src/regulated/{NormalPqzRegulatedToken,WrappedPqzRegulatedToken}.sol`, the factory catalogue rows (`OpenFactory` / `DeployBase`);
+`test/pqz/PqzKeyVersionsToken.t.sol` (new); `test/vectors/selector_audit.json`; gas, typehash and layout pins;
+`size-baseline.json`; `runs/<date>-ua-mtx-merge-pqzver-sizes.txt` (summary).
+
+**Interfaces:** spec §3: `acct[ua][version]`, `sendCounter[ua]`; `uint64 keyVersion` after `fromUA` in `PqzTransferArgs`,
+`PqzMultiArgs`, `PqzBurnArgs`; credits to `pqzKeyOf(to)` read once; the capture-once debit; `StaleKeyVersion`, `KeyVersionUnknown`;
+the op 1 migration; the pairwise `KeyReused`; `mtxRollOver(bytes32, uint64, uint256)`, `mtxPrepareAcc(bytes32, uint64, uint256)`
+direct and signed (100-byte static rule in `_pqzRule`, `_isPqzOp`); views with `keyVersion`; `Credited`, `Debited` with
+`keyVersion`, `PqzRolledOver`.
+
+- [ ] **Step 1: Failing tests:** spec §14's token rows: `test_credit_afterRotation_lands_vPlus1`,
+      `test_inflight_{precompile,attested}_refused`, `test_burn_v0_notRetargetable`, `test_stale_{payment,op7,burnAmount}_refused`,
+      `test_stale_{refresh,migration}_ok`, `test_selfTransfer_{current,op7Leg}_refused`, `test_keyReused_{legs,auditor,migration}`,
+      `test_keyVersion_{above,unprovenStale}_refused`, `test_equalTrivial_accountSettled`, `test_replay_afterMigration_refused`,
+      `test_counter_sharedAcrossVersions`, `test_rollover_{stale,neverChecked}`, `test_static_{100ok,68refused}`,
+      `test_decoys_landOnCurrent`, `test_auditorRotation`, `test_restore_twoVersions`, typehash pins, `test_mtxSelectors_pqzver_{4,5,12,13}`.
+- [ ] **Step 2:** FAIL. **Step 3: Implement**, kind 13 first (the state and one entry, then the rest, then the views and events),
+      then 12, 5, 4, then the four libraries.
+- [ ] **Step 4:** PASS; whole `forge test`; the four sets; size gate and deploy gas. **Stop rule (spec §6.3, 3e O18):** a kind at
+      or above **64,512 B** is reduced by spec §6.3's levers 1–5 in order, one at a time, size and whole `forge test` re-run after
+      each, until it is under; back to the controller only when every lever is applied (`_above64KiB` is not a fallback).
+- [ ] **Step 5: Mutants:** spec §14's M-T1 … M-T10.
+- [ ] **Step 6:** Commit `ua-mtx-merge T52: PQZ state per key version, the stale rule, migration`.
+
+**Pins, old → new:** gas of every PQZ entry; the `UA*` typehashes; sizes of 4, 5, 12, 13 and the PQZ libraries; `LinkClosure`
+codehashes; the `scaas.pqz` layout. **Gates:** whole `forge test`, four sets, size gate.
+
+### Task T53: disclosure, ATTESTED, the local rotation run
+
+**Depends on:** T52. **Estimate:** 2.
+
+**Files:** `src/pqz/{PqzLayer,PqzViewLib,PqzCore}.sol` (disclosure with `keyVersion`, both 3f forms), the 3f ATTESTED paths
+(`_keyPtr` per version); `script/pqz/e2e.py` (the rotation scenario); `test/pqz/PqzKeyVersionsAttest.t.sol` (new).
+
+- [ ] **Step 1: Failing tests:** `test_disclosure_{right,unknown}`, `test_disclosure_attested_withVersion`,
+      `test_attested_{currentProvenOnVerifier,v0UnprovenWhileNoneProven,noVerifierNeedsBytes}`, `test_attested_outstanding_notRetargetable`.
+- [ ] **Step 2:** FAIL. **Step 3: Implement.** **Step 4:** PASS; whole `forge test`; the four sets; the e2e rotation run (an
+      `msig` holder: register v1, prove, credit, migrate, disclose) on a local chain with the PQZ precompile brought up for the task,
+      never the live testnet stack; no node left running.
+- [ ] **Step 5: Mutants:** M-T7.
+- [ ] **Step 6:** Commit `ua-mtx-merge T53: PQZ disclosure by key version, ATTESTED versions, local rotation run`.
+
+### Task T54: vectors and clients
+
+**Depends on:** T53. **Estimate:** 4.5.
+
+**Files:** `smartcontracts/vectors/ua/{portable,pq_kat}.json`, `smartcontracts/vectors/typed/typed_ops.json` (generators
+`ua-portable-vectors.mjs`, `pq-vectors.mjs`, `typed-ops-vectors.mjs`); `clients/clientkeys` (`ua.js`, `ua-verify.js`, `evm.js`, `pq.js`:
+record builders, derivation, wallet rules, additive recovery); `clients/ua-rs` and the wrappers `ua-c`, `ua-cxx`, `ua-qt`,
+`ua-dart-frb`; `ua-py`, `ua-go`, `ua-cs`, `ua-dart`.
+
+- [ ] **Step 1:** Failing readers of the new rows in every package; `clientkeys` tests for the stale rule, the pending decoy
+      filter, the repeated-key refusal, backups keyed with `pqzKeyHash`, and the audited op 7 recovery after rotations.
+- [ ] **Step 2:** FAIL. **Step 3: Implement.** **Step 4:** PASS; generators re-run, `git diff --exit-code`;
+      `smartcontracts/vectors/pqz/<set>/` byte-equal (J8).
+- [ ] **Step 5: Mutants:** M-C1.
+- [ ] **Step 6:** Commit `ua-mtx-merge T54: PQZ key version vectors and clients`.
+
+### Task T55: node
+
+**Depends on:** T54. **Estimate:** 2.
+
+**Files:** `scaas-node/src/{typed,guard,submit,indexer,adapter}.rs`, the error table, `tests/e2e.rs` (ignored, anvil);
+`docs/node/` drafts for T57.
+
+**Interfaces:** spec §7.3: `key_version` on PQZ debit, rollover and prepare jobs; `call` rows for the two registry entries; the
+allow-lists both directions with the static lengths and per-kind rollover rows; `PQZ_KEY_VERSION_UNKNOWN`, `PQZ_KEY_STALE`,
+`PQZ_KEY_REUSED`, `PQZ_KEY_ROTATION_PENDING`, `PQZ_KEY_ROTATED` (after a `UAPqzKeyCurrent` since intake, with the simulation
+error, never `dead`); the indexer's version events and feeds; keepers per `(ua, version)`.
+
+- [ ] **Step 1: Failing tests:** `pqz_key_version_named`, `pqz_hex_refused`, `pqz_rows_equal_contract_{4,5,12,13}`,
+      `rollover_rows_per_kind`, `rotation_pending_refused_at_intake`, `rotated_after_event_not_dead`, `rotated_needs_event`,
+      `stale_refused_by_name`, `indexer_current_feed`, `keeper_rolls_every_version`; e2e `pqz_rotation_on_anvil`.
+- [ ] **Step 2:** FAIL. **Step 3: Implement.** **Step 4:** PASS; `CAPPED_MEM=6G ../scripts/capped cargo test` alone; clippy
+      `-D warnings`; `--test e2e -- --ignored --test-threads=1`. No `anvil` left.
+- [ ] **Step 5: Mutants:** M-N1.
+- [ ] **Step 6:** Commit `ua-mtx-merge T55: node PQZ key versions`.
+
+### Task T56: invariants J1–J10 and the mutant harness
+
+**Depends on:** T53; beside T54–T55. **Estimate:** 2.5.
+
+**Files:** `test/pqz/invariant/PqzVer{Handler,Invariants}.t.sol`; `smartcontracts/evm/runs/<date>-ua-mtx-merge-pqzver/`
+(`mutants.py`, `README.md`, the summary `mutant | test that went red | rc`, no absolute paths).
+
+- [ ] **Step 1:** Handlers over credits, shields, debits of every version, rotations, proofs and the host; invariants J1–J10 of
+      spec §13.
+- [ ] **Step 2:** Run at the default set and the four sets.
+- [ ] **Step 3: Mutants:** every row of spec §14 not already killed in T51–T55 (the harness re-runs those too); a survivor is a
+      finding for its owning task.
+- [ ] **Step 4:** Commit `ua-mtx-merge T56: PQZ key version invariants J1-J10 and the mutant harness, <n> kills`.
+
+**Gates:** whole `forge test`, four sets.
+
+### Task T57: the docs share of group 3g
+
+**Depends on:** T51–T56 for BUILT tags (drafts beside them). **Estimate:** 1. Lands inside T19's commit.
+
+**Files:** spec §9's docs; the spec's §10 Change lines (R2's Change line on the owner ruling R-cross-set included) and §12 entries
+(CTR-UA-41, CTR-PQZ-31, CTR-PQZ-32, NODE-JOB-23, CLI-SGN-43; `docs_check.py` confirms they are next-free) in `docs/decisions.md`;
+the operator note's rotation runbook.
+
+- [ ] **Step 1:** Write each change; figures quoted from T51–T56 logs; BUILT only where code and tests exist.
+- [ ] **Step 2:** `docs_check.py check`, `paths`, `resolve` on each new id: rc 0. Committed with T19.
+
 ### Task T19: docs, decisions, operator note
 
-**Depends on:** T1–T18, T24–T36, T37–T43 and T44–T50 for BUILT tags (drafts beside T14–T18, T24–T36, T37–T43 and T44–T50). **Estimate:** +0.5 for group 3e; group 3f's share is T50 (1), committed here.
+**Depends on:** T1–T18, T24–T36, T37–T43, T44–T50 and T51–T57 for BUILT tags (drafts beside T14–T18, T24–T36, T37–T43, T44–T50 and T51–T57). **Estimate:** +0.5 for group 3e; group 3f's share is T50 (1) and group 3g's is T57 (1), committed here.
 
 **Files, each rule rewritten once, linked elsewhere:**
 - `docs/contracts/metatx.md` (CTR-MTX-01, -05, -06, -09, -11, -12, -14, -15, -17, -18, -21, -22, -23, -24, -26, -27, -28, -29), `accounts.md`
