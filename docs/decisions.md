@@ -4789,9 +4789,11 @@ Change (2026-10-20, controller record): with `plainPending` removed the limit re
 **Source.** `history/specs/2026-10-06-pq-zether-design.md:367`
 
 ### CTR-PQZ-19 — Message-bound derived encryption randomness
-- old: R288 · status: current · owner: no · date: 2026-10-06 · normative: contracts/pq-zero-knowledge.md#CTR-PQZ-19 · superseded-by: —
+- old: R288 · status: current · owner: yes · date: 2026-10-06 · normative: contracts/pq-zero-knowledge.md#CTR-PQZ-19 · superseded-by: —
 
 Change (2026-10-11): owner — the seed is bound to a fresh published 16-byte salt instead of the amounts (CTR-ZTH-30 for PQZ): a re-proof still never reuses `r`, and the sender remembers no amount. Source add: owner, 2026-10-11.
+
+Change (2026-11-06): owner — the controller proposal is approved as recommended: `seed_enc` derived by HKDF with the label `"SCAAS-PQZ-ENC-V2"` and a fresh salt per transfer, first built in a client by `ua-rs-sign` T15 (`12b4577a`). Status of the rule: owner. Source add: owner, 2026-11-06.
 
 Change (2026-10-13): owner — burn and refresh take fresh CSPRNG randomness (hedging with the key seed allowed), never the counter-derived seed: their salt is 0, so two burns at one `sendCounter` for different balances would reveal `Δ·(b' − b'')`; no disclosure re-derives it. Source add: owner, 2026-10-13 (`research/pqz-relations-burn-disclose.md` §5).
 Change (2026-10-14): controller proposal (owner may override) — P6e plan D6, PQZH half (branch `p6e-b1`): the Ligero prover's masking randomness is hedged with the witness, `SHAKE256("SCAAS-PQZH-LIGERO-RNG-V2" ‖ rnd32 ‖ u8(op) ‖ be32(len(stmt)) ‖ stmt ‖ wit)` (was `SHAKE256("SCAAS-PQZH-LIGERO-RNG" ‖ rnd32 ‖ u8(op) ‖ stmt)`), so a repeated `rnd32` with another witness gives unrelated masks; the verifier is unchanged, PQZH proof bytes change once, before the PQZH vectors freeze. The PQZL half (`SCAAS-PQZ-PROVER-RND-V2`) is a separate change. Source: `superpowers/plans/2026-10-14-p6e-relations.md` (D6), `research/pqzh-ligero.md` §12.
