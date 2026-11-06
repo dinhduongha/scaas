@@ -1,0 +1,16 @@
+# 2026-11-06 ua-rs-sign T12 follow-ups mutants (smartcontracts/evm/runs/2026-11-06-ua-rs-sign-t12fu-mutants.py), on the tree of 69a6ad74.
+# One mutant per run on a clean tree, each file restored byte for byte; NOT-LOADED or SURVIVED is a finding (exit 1). Per item: link seal M1-M5,
+# members cap M6-M8, imported keys M9-M11, the ASan script M12 (the build fails without the flag: it shows the flag is needed, no behaviour).
+killed     | M1 link_seal raises the backup generation | clients/ua-rs/src/wallet/manifest.rs | rc=101 | 1 failed: vectors::link_seal_equals_clientkeys_link_row
+killed     | M2 link_seal under the backup purpose | clients/ua-rs/src/wallet/manifest.rs | rc=101 | 1 failed: link_seal_then_from_link_installs
+killed     | M3 the payload's sender not checked to be this wallet's | clients/ua-rs/src/wallet/manifest.rs | rc=101 | 1 failed: link_seal_takes_a_container_key_of_this_wallet
+killed     | M4 the link payload without the imported keys | clients/ua-rs/src/wallet/manifest.rs | rc=101 | 1 failed: link_seal_then_from_link_installs
+killed     | M5 ua-c: link_seal under a fixed short code | clients/ua-c/src/lib.rs | rc=1 | 1 failed: test_link_seal_round_trip
+killed     | M6 members_json back to 16 KiB | clients/ua-rs/src/wallet/seal.rs | rc=101 | 1 failed: json_inputs_longer_than_their_cap_are_refused_unparsed
+killed     | M7 members_json past 64 UAs read | clients/ua-rs/src/wallet/seal.rs | rc=101 | 1 failed: members_json_holds_64_mldsa87_members_and_no_more
+killed     | M8 ua-c: members_json read at the expect cap | clients/ua-c/src/lib.rs | rc=1 | 1 failed: test_container_json_inputs_are_bounded
+killed     | M9 ua-c: imported_key ignores its network | clients/ua-c/src/lib.rs | rc=1 | 1 failed: test_imported_key_after_unlock
+killed     | M10 ua-c: open_label_vault opens nothing | clients/ua-c/src/lib.rs | rc=1 | 1 failed: test_imported_key_after_unlock
+killed     | M11 ua-c: seal_label_vault seals the manifest whatever the label | clients/ua-c/src/lib.rs | rc=1 | 1 failed: test_imported_key_after_unlock
+killed     | M12 asan-smoke.sh without RUSTC_BOOTSTRAP=1 | clients/ua-c/tests/asan-smoke.sh | rc=101 | rustc: -Z only on nightly | 0 failed: 
+mutants M1-M12 of 12: 12 killed, 0 survived, 0 not loaded
