@@ -1148,3 +1148,44 @@ used for an account key until this vulnerability is resolved. The auditor key is
 [pq-mpc-threshold.md](pq-mpc-threshold.md), top) and is also not built. Outsider decryption oracles (a wallet or service
 that decrypts what a stranger hands it and reveals anything about the result) are a separate rule and a separate code
 audit (owner 2026-11-06, pending).
+
+### 12.6 Who a decryption oracle exposes: every key holder, not only MPC (2026-11-06)
+
+[ARCH-POS-13](../decisions.md#ARCH-POS-13) (owner): never a decryption oracle. The oracle is a property of decrypting a
+ciphertext someone else chose, so it reaches every PQZ key, whoever holds it:
+
+| Holder | Who holds the key | Who can use an oracle | Effect |
+|---|---|---|---|
+| MPC quorum | nobody whole; one share per member | one member (§12.5, open) | that member gets the whole key |
+| (A) operator | one operator, whole | outsiders: a malicious RPC or indexer, a service wrapping `dec`, a disclosure requester (audit F1–F3 below) | outsider gets the key: reads every balance; spends too where no `msig` layer stops it |
+| (A) operator | — | an `msig` member asking the operator to "look at this ciphertext" | the member gets the key without k shares, bypassing the backup's threshold |
+| single-holder wallet | the owner | a malicious RPC, an app calling `dec` on foreign bytes | key lost |
+| auditor (one key per token) | the auditor | anyone who can hand ciphertexts to the auditor's desk | every audited amount of the token |
+
+**Under (A)**, the operator serves members only views of the `msig` account's own state: it reads the chain itself and
+hands members an `R_DR` proof to check (H3′), and never decrypts a ciphertext a member or an outsider supplies. (A) is
+usable now but is safe against outsiders only once the library has no oracle left (below); the in-quorum hole of §12.5
+stays open, so PQZ MPC for account keys stays unused.
+
+**"No decrypt path reachable over the network" (code audit, 2026-11-06) means only this:** nothing in the repository
+listens on a network and passes what it receives to a decrypt function. `scaas-node` has no decrypt code (NODE-GEN-01);
+ua-rs, ua-c and the bindings are libraries with no server; zether-prover has one CLI that reads a balance over RPC;
+`pqz-cli serve` is SPECIFIED, not built. It is **not** a safety claim. The libraries expose `dec`, `proveDisclose` and
+the spend commands on caller-supplied ciphertexts (F1–F3), so one line in an application outside the repository makes a
+remote oracle:
+
+```
+attacker → (network) → app or service outside the repo → ua-rs dec(ct) → result → attacker
+```
+
+and a malicious RPC needs no server at all: it feeds a crafted "balance" ciphertext, the wallet decrypts it and then
+spends or refuses, and the RPC or relayer observes which, one bit per spend. The fix is in the library, by construction:
+no bare-ciphertext input, inputs bound to chain state the library checks itself, and nothing about a decryption ever
+returned to whoever supplied the ciphertext (spec `2026-11-06-no-decryption-oracle.md`, branch `ua-rs-sign`).
+
+**Audit findings (read-only, 2026-11-06), paths on branch `ua-rs-sign`:** F1 P1 `clients/ua-rs/src/facade/pqz.rs` `dec`
+returns all 16 digits of any well-formed ciphertext (the rounding oracle, in every binding through `scaas_ua_pqz_call`);
+F2 P1 `proveDisclose` takes the whole op 5 statement, so proof-or-refusal is a 1-bit oracle; F3 P2 the spend commands
+decrypt a caller `T`, success visible to an RPC or relayer; F4 P3 `pqz-core` `dec`/`decrypt_raw` return noise
+(in-process only); F5 P2 the PLANNED org key oracle's `zk_mul_by_x` is a static-DH oracle for Zether; F6 P3 Zether
+decrypt on caller `(C, D)`: no key recovery, but plaintext and timing leak, `D·x` not constant-time.

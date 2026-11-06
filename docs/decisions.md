@@ -254,6 +254,8 @@ nothing about its decryption is returned or signalled to that source. No excepti
 `n2304-kmax4096`; research note on PQZ threshold decryption, §12.1). MPC does not
 help: inside a quorum the oracle hands one member the whole key (§12.5, open). Zether's ElGamal has no such key
 recovery, but one rule for every scheme keeps every decrypt path the same. Owner (2026-11-06): never use an oracle.
+It applies to every key holder, not only an MPC quorum: a single-holder wallet, the operator of option (A), and the
+auditor key of a token are all exposed the same way.
 **Cost if wrong.** A reachable decrypt path is a key-recovery attack on every account behind it. PQZ MPC quorums for
 account keys are not built while the in-quorum oracle is open; `msig` holders use option (A), the operator, meanwhile.
 **Source.** Owner ruling 2026-11-06; [research/pqz-threshold-decrypt-prove.md](research/pqz-threshold-decrypt-prove.md) §12.1, §12.5; the code audit of decrypt entry points (2026-11-06, pending).

@@ -1150,3 +1150,43 @@ dùng nhóm MPC PQZ cho khóa tài khoản cho tới khi lỗ hổng này đư�
 cho mỗi token, [pq-mpc-threshold.vi.md](pq-mpc-threshold.vi.md), đầu file) và cũng chưa được xây. Oracle giải mã cho người
 ngoài (ví hoặc dịch vụ giải mã thứ người lạ đưa và để lộ bất kỳ điều gì về kết quả) là một rule riêng và một đợt rà code
 riêng (chủ dự án 2026-11-06, đang làm).
+
+### 12.6 Oracle giải mã ảnh hưởng ai: mọi người giữ khóa, không chỉ MPC (2026-11-06)
+
+[ARCH-POS-13](../decisions.md#ARCH-POS-13) (chủ dự án): không bao giờ có oracle giải mã. Oracle là tính chất của việc
+giải mã ciphertext do người khác chọn, nên nó chạm tới mọi khóa PQZ, bất kể ai giữ:
+
+| Người nắm giữ | Ai giữ khóa | Ai có thể lợi dụng oracle | Hậu quả |
+|---|---|---|---|
+| Nhóm MPC | không ai giữ trọn; mỗi thành viên một phần | một thành viên (§12.5, đang mở) | thành viên đó có trọn khóa |
+| (A) operator | một operator, giữ trọn | người ngoài: RPC hoặc indexer độc, dịch vụ bọc `dec`, người yêu cầu disclose (F1–F3 bên dưới) | người ngoài có khóa: đọc mọi số dư; chi được nếu không có lớp `msig` chặn |
+| (A) operator | — | thành viên `msig` nhờ operator "xem giúp ciphertext này" | thành viên có khóa mà không cần k phần chia, vượt qua ngưỡng của bản sao lưu |
+| Ví một người | chính chủ | RPC độc, app gọi `dec` với bytes lạ | mất khóa |
+| Auditor (một khóa cho mỗi token) | auditor | ai gửi được ciphertext tới bàn auditor | mọi số tiền được kiểm toán của token |
+
+**Với (A)**, operator chỉ cho thành viên xem trạng thái của chính tài khoản `msig`: tự đọc chain, đưa thành viên proof
+`R_DR` để tự kiểm (H3′), và không bao giờ giải mã ciphertext do thành viên hay người ngoài đưa vào. (A) dùng được ngay
+nhưng chỉ an toàn trước người ngoài khi thư viện không còn oracle (bên dưới); lỗ trong nhóm ở §12.5 vẫn mở, nên MPC PQZ
+cho khóa tài khoản vẫn chưa dùng.
+
+**"Không có đường giải mã nào gọi được qua mạng" (rà code 2026-11-06) chỉ có nghĩa:** trong repo không có gì mở cổng
+mạng rồi chuyển dữ liệu nhận được vào hàm giải mã. `scaas-node` không có code giải mã (NODE-GEN-01); ua-rs, ua-c và các
+binding là thư viện, không có server; zether-prover có một CLI đọc số dư qua RPC; `pqz-cli serve` mới SPECIFIED, chưa
+code. Đây **không** phải lời khẳng định an toàn. Thư viện có sẵn `dec`, `proveDisclose` và các lệnh chi nhận ciphertext
+của bên gọi (F1–F3), nên chỉ một dòng code trong một app ngoài repo là thành oracle qua mạng:
+
+```
+kẻ tấn công → (mạng) → app hoặc dịch vụ ngoài repo → ua-rs dec(ct) → kết quả → kẻ tấn công
+```
+
+và RPC độc không cần server nào: nó đưa ciphertext "số dư" tự chế, ví giải mã rồi chi hoặc từ chối, RPC hoặc relayer
+nhìn thấy kết quả, mỗi lần chi lộ một bit. Cách sửa nằm trong thư viện, ngay từ thiết kế: không nhận ciphertext trần,
+đầu vào gắn với chain state mà thư viện tự kiểm, và không bao giờ trả bất cứ điều gì về việc giải mã cho bên đưa
+ciphertext (spec `2026-11-06-no-decryption-oracle.md`, nhánh `ua-rs-sign`).
+
+**Kết quả rà code (chỉ đọc, 2026-11-06), đường dẫn trên nhánh `ua-rs-sign`:** F1 P1 `clients/ua-rs/src/facade/pqz.rs`
+`dec` trả đủ 16 chữ số của mọi ciphertext đúng dạng (oracle làm tròn, có trong mọi binding qua `scaas_ua_pqz_call`); F2
+P1 `proveDisclose` nhận nguyên statement op 5, nên tạo được proof hay bị từ chối là oracle 1 bit; F3 P2 các lệnh chi giải
+mã `T` của bên gọi, RPC hoặc relayer thấy thành công hay không; F4 P3 `dec`/`decrypt_raw` của `pqz-core` trả nhiễu (chỉ
+trong tiến trình); F5 P2 `zk_mul_by_x` của org key oracle (PLANNED) là oracle static-DH cho Zether; F6 P3 Zether giải mã
+`(C, D)` của bên gọi: không lấy lại được khóa, nhưng lộ plaintext và thời gian, `D·x` không chạy thời gian cố định.
