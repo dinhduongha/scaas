@@ -899,7 +899,8 @@ mod tests {
             }
         }
         assert_eq!((sent, relayed, refused), (97, 3, 97), "the walk reached every row with an entry; the relay fees: submit.rs");
-        assert_eq!(typed::rows().iter().filter(|r| !r.entry.is_empty()).count(), 87, "table rows: 69 typed with an entry, 18 plain");
+        // plan T32: 87 -> 95, the router's eight regulated controls (no vector rows until plan T34, so not walked above)
+        assert_eq!(typed::rows().iter().filter(|r| !r.entry.is_empty()).count(), 95, "table rows: 77 typed with an entry, 18 plain");
         // selectors with no row: refused on every kind, on a target that would otherwise pass
         let target = Address::repeat_byte(0x31);
         let g = Guard::new(&ChainCfg { dex: Some(target), governance_routers: vec![target], ..cfg.clone() }, Arc::new(RwLock::new(vec![target]))).unwrap();
@@ -1024,9 +1025,12 @@ mod tests {
     }
 
     /// The kind of each contract of `selector_audit.json` (`DexPuller` is no target of a job: the DEX calls it).
+    /// Plan T32: the regulated kinds 8-13 on their base kind's contract kind (regulated-kinds spec §7).
     const AUDIT_KINDS: &[(&str, &str)] = &[("NormalToken", "token"), ("WrappedToken", "token"), ("NormalZetherToken", "zether"),
         ("WrappedZetherToken", "zether"), ("NormalPqzToken", "pqz"), ("WrappedPqzToken", "pqz"), ("SCaaSDex", "dex"),
-        ("GovernanceRouter", "gov_router")];
+        ("GovernanceRouter", "gov_router"), ("NormalRegulatedToken", "token"), ("WrappedRegulatedToken", "token"),
+        ("NormalZetherRegulatedToken", "zether"), ("WrappedZetherRegulatedToken", "zether"), ("NormalPqzRegulatedToken", "pqz"),
+        ("WrappedPqzRegulatedToken", "pqz")];
     /// `SIGNED` entries no job names, each with its reason: `(name, the argument list's start)`.
     const NOT_ROWS: &[(&str, &str, &str)] = &[
         ("executeMetaTransaction", "((address,bytes,", "the EIP-1776 alias (R3): its address MetaTransaction is no job shape"),
@@ -1104,17 +1108,19 @@ mod tests {
         }
         let router: HashSet<[u8; 4]> = audit["GovernanceRouter"].as_array().unwrap().iter().filter(|r| r["class"] == "SIGNED")
             .map(|r| sel(r["sig"].as_str().unwrap())).collect();
-        assert_eq!(router.len(), 20, "19 ops and the ordered cancel");
+        assert_eq!(router.len(), 28, "19 ops, the eight regulated controls (plan T32) and the ordered cancel");
         let ours: HashSet<[u8; 4]> = typed::rows().iter().filter(|r| !r.entry.is_empty() && r.contracts.contains(&"gov_router")).map(|r| r.sent).collect();
         assert_eq!(ours, router, "the router's allow-list, both directions");
         assert_eq!((rowed, exempt, governed), (ROWED, EXEMPT, GOVERNED), "every SIGNED entry was walked");
     }
     /// Counted from the two files outside this code (python over `selector_audit.json` and `typed_ops.json`): 229 `SIGNED` entries
     /// of the eight contracts, 127 of them rows (120 vector rows, the token's invalidation, the DEX's six plain entries and its
-    /// invalidation); 91 governance entries.
-    const ROWED: usize = 127;
-    const EXEMPT: usize = 102;
-    const GOVERNED: usize = 91;
+    /// invalidation); 91 governance entries. Plan T32: (127, 102, 91) -> (234, 202, 217): + the router's eight regulated
+    /// controls (rowed) and the six regulated kinds 8-13 (their base kind's entries again, and eight `BIT` controls each):
+    /// 436 `SIGNED` entries of the fourteen contracts, 217 governance entries (python over `selector_audit.json`).
+    const ROWED: usize = 234;
+    const EXEMPT: usize = 202;
+    const GOVERNED: usize = 217;
 
     /// As [`bound`], `registry()` answering `registry` (`Address::ZERO`: the UA ledger off, R9).
     async fn bound_with_registry(uid: B256, registry: Address) -> ChainCfg {

@@ -62,12 +62,32 @@ library GovernanceRouterTypes {
         "UASetListedOnly(bytes32 from,address target,bool on,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     bytes32 internal constant UA_SET_FEE_SPLIT = keccak256(
         "UASetFeeSplit(bytes32 from,address target,uint32 relayerSharePpm,address treasury,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+
+    // ---- the controls of the regulated kinds 8-13 (plan T32; regulated-kinds spec §3.1, Q8): the direct entry's
+    //      parameters; `UAOperatorTransfer` names the moved account `account`, as `from` is the signer's (CTR-GOV-20)
+    bytes32 internal constant UA_FREEZE = keccak256(
+        "UAFreeze(bytes32 from,address target,bytes32 account,bytes32 ref,bytes32 recordId,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_UNFREEZE = keccak256(
+        "UAUnfreeze(bytes32 from,address target,bytes32 account,bytes32 ref,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_FORCE_TRANSFER = keccak256(
+        "UAForceTransfer(bytes32 from,address target,bytes32 recordId,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_PAUSE = keccak256(
+        "UAPause(bytes32 from,address target,bytes32 ref,uint64 until,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_UNPAUSE = keccak256(
+        "UAUnpause(bytes32 from,address target,bytes32 ref,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_RECORD_ORDER = keccak256(
+        "UARecordOrder(bytes32 from,address target,bytes32 orderId,bytes32 documentHash,bytes32 subject,bytes32 beneficiary,uint256 maxAmount,uint64 freezeUntil,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_REVOKE_ORDER = keccak256(
+        "UARevokeOrder(bytes32 from,address target,bytes32 recordId,bytes32 reasonRef,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_OPERATOR_TRANSFER = keccak256(
+        "UAOperatorTransfer(bytes32 from,address target,bytes32 account,bytes32 to,uint256 amount,bytes32 ref,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
 }
 
 /// @title What every governance router of a chain shares (CTR-GOV-15 Change, owner 2026-11-04): the flow and the owner's and
 ///        a holder's ops of `IGovernance`, which every `GovernanceBase` contract has. `GovernanceRouter` adds the powers of
-///        SCaaS's kinds and the DEX; a router for other powers (an application's bits 128-255, the regulated kinds' bits) is
-///        another child of this base, named by the governed contract's `GOV_ROUTER` (`Env.govRouter` for a release).
+///        SCaaS's kinds (the regulated kinds' controls among them, plan T32, regulated-kinds spec Q8) and the DEX; a router
+///        for other powers (an application's bits 128-255) is another child of this base, named by the governed contract's
+///        `GOV_ROUTER` (`Env.govRouter` for a release).
 /// @notice No owner, no state of its own, no `receive`: it holds nothing. Fee mode `NONE` (`supportedModes() == 0x03`), every
 ///         entry relayable at fee 0. Each op is one signed entry `mtx<Op>(UAEnvelope, target, <op params>, UASig)` over `UA<Op>`
 ///         (ua-mtx-merge T7, R14: the `ua<Op>` body under the `mtx<Op>` name; the address `Envelope` + `bytes` forms are in

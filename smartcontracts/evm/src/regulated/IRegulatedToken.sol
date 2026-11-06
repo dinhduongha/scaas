@@ -70,7 +70,10 @@ interface IRegulatedToken {
     error PauseTooLong(uint64 until);
     error PauseCooldown(uint64 until);
     error ForceTargetRefused(bytes32 account);
-    /// @notice `forceTransfer(…, 0)` (F-08); `operatorTransfer` takes it too (T32). Not in spec §3.1's list (plan T28).
+    /// @notice `operatorTransfer`'s refusals of CTR-GOV-08 (CTR-GOV-20; spec §3.1's `ModerateTargetRefused`, read for bit
+    ///         22): `from == to`, 0, `pad(UA_POOL)`, `pad(SHIELD_POOL)` or the token on either side, a native `from` with code.
+    error OperatorTargetRefused(bytes32 account);
+    /// @notice `forceTransfer(…, 0)` and `operatorTransfer(…, 0, …)` (F-08). Not in spec §3.1's list (plan T28).
     error AmountZero();
     /// @notice `unpause` while not paused (spec §3.4 "unpause: paused"). Not in spec §3.1's list (plan T28).
     error NotPaused();

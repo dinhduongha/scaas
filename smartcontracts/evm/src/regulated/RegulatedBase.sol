@@ -16,7 +16,7 @@ import {MtxPipelineLib} from "../metatx/MtxPipelineLib.sol";
 ///        `RegulatedLib` with `_govSubject()` as a word. Each kind lists its base kind first and this second.
 /// @notice **UNAUDITED.** Plan T28: `F`, `P`, the pause-open set, the mirror sync, the views and FREEZE, RECORD, FORCE,
 ///         PAUSE in `RegulatedLib`. Plan T29: `R` through the bounded `hasFlags` call, `canReceive`, `REGISTRY_CODEHASH`.
-///         Not yet built (it reverts `RegulatedNotBuilt` in `RegulatedLib`): `operatorTransfer` (T32).
+///         Plan T32: `operatorTransfer` (bit 22, CTR-GOV-20). Bit 21 `MODERATE` has no body (owner 2026-11-05).
 abstract contract RegulatedBase is MetaTokenBase, IRegulatedToken {
     /// @dev The bits the regulated kinds add to their base kind's `_validBits()` (spec §2.1, bit 22 CTR-GOV-20): 5-10, 21,
     ///      22 on 8 and 9; without `ALLOWLIST` (8) on the confidential kinds 10-13 (CTR-GOV-17).

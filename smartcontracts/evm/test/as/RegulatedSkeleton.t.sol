@@ -13,7 +13,6 @@ import {WrappedPqzToken} from "../../src/pqz/WrappedPqzToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {IRegulatedToken} from "../../src/regulated/IRegulatedToken.sol";
-import {RegulatedNotBuilt} from "../../src/regulated/RegulatedLib.sol";
 import {IGovernance} from "../../src/governance/IGovernance.sol";
 import {WrappedRegulatedToken} from "../../src/regulated/WrappedRegulatedToken.sol";
 import {WrappedPqzRegulatedToken} from "../../src/regulated/WrappedPqzRegulatedToken.sol";
@@ -42,8 +41,8 @@ contract WrappedPqzRegulatedMasks is WrappedPqzRegulatedToken {
 /// the factory's `kind()` check; the masks are the base kind's plus the regulated bits (bit 8 not on 13, bit 22 never
 /// contract-only); ERC-165 answers `IRegulatedToken` on 9 and 13 only; every hook seat reaches `RegulatedBase` (the public
 /// pre row at any fee, the confidential one only fee-bearing). Plan T28 replaced the skeleton's placeholders: both kinds
-/// create, the seats are shown by `P`, and only `operatorTransfer` (T32) and `canReceive` (T29) still revert the
-/// placeholder. Each row has its plain-kind positive control.
+/// create, the seats are shown by `P`; T29 built `canReceive` and T32 `operatorTransfer`, so no placeholder is left.
+/// Each row has its plain-kind positive control.
 contract RegulatedSkeletonTest is PqzFixture {
     WrappedRegulatedToken internal r9;
     WrappedPqzRegulatedToken internal r13;
@@ -159,13 +158,14 @@ contract RegulatedSkeletonTest is PqzFixture {
         factory.createToken(IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, 1, abi.encode(c), "r13d");
     }
 
-    /// What is not built yet reverts the placeholder on both kinds: `operatorTransfer` (T32). `canReceive` is T29's: with
-    /// both lists off it answers (true, 0) and calls nothing.
-    function test_notBuiltYet() public {
+    /// Nothing reverts the placeholder any more: plan T32 built `operatorTransfer`, so a release without bit 22 refuses it
+    /// `FeatureNotSet(22)` before anything moves. `canReceive` is T29's: with both lists off it answers (true, 0) and calls
+    /// nothing.
+    function test_everyControlBuilt() public {
         address[2] memory ks = [address(r9), address(r13)];
         for (uint256 i; i < 2; ++i) {
             IRegulatedToken t = IRegulatedToken(ks[i]);
-            vm.expectRevert(RegulatedNotBuilt.selector);
+            vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, GovernanceBits.OPERATOR_TRANSFER));
             t.operatorTransfer(bytes32(uint256(1)), bytes32(uint256(6)), 1, bytes32(uint256(2)));
             (bool ok, uint8 reason) = t.canReceive(bytes32(uint256(1)));
             assertTrue(ok);

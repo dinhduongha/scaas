@@ -344,8 +344,8 @@ contract GovDeployTest is Test {
         assertEq(rf, 0xaf843Ac33a5A73A2baf3E979F922Bd3c1feD6B43, "MtxRelayFee");
         // ua-mtx-merge T24: 0x2AEfB2af419765600eC00a7D0CfC4dE30f2d3750 -> 0xAb151Df7DC7CbbD9755028a27Ad0bc55a34b5b53 (the
         // router's metadata hash: `IGovernance`); T26: -> this (the two empty hooks `UAMetaTxBase` adds, its
-        // `mtxCancelNonce` seats)
-        assertEq(router, 0xBc8Df1a828dA586e5ccB8Db8942bbCC9c130cC34, "GovernanceRouter");
+        // `mtxCancelNonce` seats); T32: 0xBc8Df1a828dA586e5ccB8Db8942bbCC9c130cC34 -> this (the eight regulated control ops)
+        assertEq(router, 0xb7a8E5b24F6822cba41f77A6c4CdeEDAfA9399F1, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append, `abi.encode(envVersion, env, implArgs)`: the env names the real Zether

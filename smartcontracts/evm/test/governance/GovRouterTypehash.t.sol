@@ -131,6 +131,56 @@ contract GovRouterTypehashTest is Test {
         assertEq(T.UA_SET_FEE_SPLIT, 0x6b852244442b250d05068e09239a3187da2ac9c9c3d2b8bfc89f77de52466649);
     }
 
+    // ---- plan T32 (regulated-kinds spec §3.1; owner 2026-11-05, CTR-GOV-20): the eight controls of the regulated kinds
+
+    function test_uaFreezeTypehashIsPinned() public pure {
+        assertEq(T.UA_FREEZE, keccak256(
+                "UAFreeze(bytes32 from,address target,bytes32 account,bytes32 ref,bytes32 recordId,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_FREEZE, 0xf5fc2a4678771231313015bbd08dc97a79091035881d6266350b0776d6a2984a);
+    }
+
+    function test_uaUnfreezeTypehashIsPinned() public pure {
+        assertEq(T.UA_UNFREEZE, keccak256(
+                "UAUnfreeze(bytes32 from,address target,bytes32 account,bytes32 ref,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_UNFREEZE, 0x20a16034799ae1e37ea7af0e3bc3e983f2ecd30a20c2b6c9234b8fa705fbb9a9);
+    }
+
+    function test_uaForceTransferTypehashIsPinned() public pure {
+        assertEq(T.UA_FORCE_TRANSFER, keccak256(
+                "UAForceTransfer(bytes32 from,address target,bytes32 recordId,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_FORCE_TRANSFER, 0x29f5036246375be4eb17b4e995b326935a99cc74c4f0cec933eb9aca28cec4e3);
+    }
+
+    function test_uaPauseTypehashIsPinned() public pure {
+        assertEq(T.UA_PAUSE, keccak256(
+                "UAPause(bytes32 from,address target,bytes32 ref,uint64 until,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_PAUSE, 0x7012cbf0bda862fc56133a096ecd7b9f807ea2ed26917f3f10cdf41c0ecb7282);
+    }
+
+    function test_uaUnpauseTypehashIsPinned() public pure {
+        assertEq(T.UA_UNPAUSE, keccak256(
+                "UAUnpause(bytes32 from,address target,bytes32 ref,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_UNPAUSE, 0xa0e6b7b2c0d59ae1f15155df7ad7a30795fdca2d126d90a823d9567f9485640b);
+    }
+
+    function test_uaRecordOrderTypehashIsPinned() public pure {
+        assertEq(T.UA_RECORD_ORDER, keccak256(
+                "UARecordOrder(bytes32 from,address target,bytes32 orderId,bytes32 documentHash,bytes32 subject,bytes32 beneficiary,uint256 maxAmount,uint64 freezeUntil,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_RECORD_ORDER, 0x9557599df6a72c81048fc69876b562d875d344af32ee60b25a6a5e6d54e8d988);
+    }
+
+    function test_uaRevokeOrderTypehashIsPinned() public pure {
+        assertEq(T.UA_REVOKE_ORDER, keccak256(
+                "UARevokeOrder(bytes32 from,address target,bytes32 recordId,bytes32 reasonRef,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_REVOKE_ORDER, 0xb5794e916523312dcd4225c8024c11f9fa4eb9e8e6c3bd525720e709e5a3f976);
+    }
+
+    function test_uaOperatorTransferTypehashIsPinned() public pure {
+        assertEq(T.UA_OPERATOR_TRANSFER, keccak256(
+                "UAOperatorTransfer(bytes32 from,address target,bytes32 account,bytes32 to,uint256 amount,bytes32 ref,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_OPERATOR_TRANSFER, 0xc6020647b60fc768241df1c03875c3f208172161422171416b21769872766fc9);
+    }
+
     /// ua-mtx-merge T7 (R14): the 19 address `<Op>` structs left the router with their `mtx<Op>(Envelope, …, bytes)` entries
     /// (legacy/ua-mtx-merge/src/governance/); their hashes stay pinned here, as the legacy pin of a retired form: a client
     /// or node row signing one of them signs for no entry.

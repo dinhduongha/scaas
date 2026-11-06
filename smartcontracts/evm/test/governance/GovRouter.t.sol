@@ -23,6 +23,9 @@ import {MockERC20} from "../helpers/Mocks.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
 import {UARegistryBase, MockWallet} from "../ua/UARegistryBase.sol";
 import {UACall} from "../ua/UACall.sol";
+import {NormalRegulatedToken} from "../../src/regulated/NormalRegulatedToken.sol";
+import {IRegulatedToken} from "../../src/regulated/IRegulatedToken.sol";
+import {regArgs} from "../helpers/Catalogue.sol";
 
 /// Reads the router's subject on behalf of a contract that is not the router's live target.
 contract SubjectPeek {
@@ -140,7 +143,7 @@ abstract contract GovRouterFixture is UARegistryBase {
     function isRegisteredToken(address) external pure returns (bool) { return false; }
     function isToken(address) external pure returns (bool) { return false; }
 
-    function setUp() public override {
+    function setUp() public virtual override {
         super.setUp();
         preg = _deploy(PREG, chainUidA, address(0), false, BUDGET, address(0), true, _mockPqCfg());
         router = new GovernanceRouter(chainUidA, PREG, address(0), false);
@@ -779,5 +782,183 @@ contract GovRouterTest is GovRouterFixture {
         assertEq(verifying, address(router));
         assertEq(salt, chainUidA);
         assertEq(router.chainUid(), chainUidA);
+    }
+}
+
+/// Plan T32 (regulated-kinds spec §3.1, Q8; owner 2026-11-05, CTR-GOV-20): the eight control ops of the regulated kinds on the
+/// router, `mtx<Op>(UAEnvelope, target, <the direct entry's params>, UASig)` over `UA<Op>`, fee mode `NONE`. Each runs on a
+/// real `NormalRegulatedToken` (kind 8) whose `GOV_ROUTER` is the router, signed by a contract holder (ERC-1271, `wallet`)
+/// and by an `msig` holder: two tokens, the issuer of one the compliance holder of the other (`FORCE` and `RECORD` never on
+/// one id). Bit 22 `OPERATOR_TRANSFER` is held by the same two ids. The token keeps no `mtx` twin (G19).
+contract GovRouterRegulatedTest is GovRouterFixture {
+    uint256 constant R_FREEZE = 0;
+    uint256 constant R_UNFREEZE = 1;
+    uint256 constant R_FORCE = 2;
+    uint256 constant R_PAUSE = 3;
+    uint256 constant R_UNPAUSE = 4;
+    uint256 constant R_RECORD = 5;
+    uint256 constant R_REVOKE = 6;
+    uint256 constant R_OPERATOR = 7;
+    bytes32 constant REF = bytes32(uint256(0x5EF));
+    address constant OTHER = address(0xF00);
+
+    Row[8] internal reg8;
+    address internal regImpl;
+
+    function setUp() public override {
+        super.setUp();
+        reg8[R_FREEZE] = Row("Freeze", ",bytes32 account,bytes32 ref,bytes32 recordId", router.mtxFreeze.selector);
+        reg8[R_UNFREEZE] = Row("Unfreeze", ",bytes32 account,bytes32 ref", router.mtxUnfreeze.selector);
+        reg8[R_FORCE] = Row("ForceTransfer", ",bytes32 recordId,uint256 amount", router.mtxForceTransfer.selector);
+        reg8[R_PAUSE] = Row("Pause", ",bytes32 ref,uint64 until", router.mtxPause.selector);
+        reg8[R_UNPAUSE] = Row("Unpause", ",bytes32 ref", router.mtxUnpause.selector);
+        reg8[R_RECORD] = Row("RecordOrder",
+            ",bytes32 orderId,bytes32 documentHash,bytes32 subject,bytes32 beneficiary,uint256 maxAmount,uint64 freezeUntil",
+            router.mtxRecordOrder.selector);
+        reg8[R_REVOKE] = Row("RevokeOrder", ",bytes32 recordId,bytes32 reasonRef", router.mtxRevokeOrder.selector);
+        reg8[R_OPERATOR] = Row("OperatorTransfer", ",bytes32 account,bytes32 to,uint256 amount,bytes32 ref",
+            router.mtxOperatorTransfer.selector);
+    }
+
+    /// Kind 8 with `FREEZE`, `FORCE`, `PAUSE`, `RECORD`, `OPERATOR_TRANSFER`; owner `eoa`, no grant delay; `BOB` holds 1,000.
+    function _regulated(bytes32 issuer, bytes32 compliance, bytes32 operator) internal returns (NormalRegulatedToken t) {
+        if (regImpl == address(0)) regImpl = address(new NormalRegulatedToken(1, _env(), regArgs()));
+        t = NormalRegulatedToken(Clones.clone(regImpl));
+        IFactoryToken.TokenConfig memory c;
+        (c.name, c.symbol, c.decimals, c.owner) = ("R", "R", 6, eoa);
+        c.features = 1 | (uint256(1) << 5) | (uint256(1) << 6) | (uint256(1) << 7) | (uint256(1) << 10)
+            | (uint256(1) << GovernanceBits.OPERATOR_TRANSFER);
+        (c.roles.issuer, c.roles.compliance) = (issuer, compliance);
+        (c.initialSupply, c.initialHolder) = (1000, BOB);
+        c.reg.termsHash = keccak256("terms");
+        t.initialize(address(this), 1, abi.encode(c));
+        vm.prank(address(uint160(uint256(eoa))));
+        t.grantRole(GovernanceBits.OPERATOR_TRANSFER, operator);
+    }
+
+    function _typehashR(uint256 op) internal view returns (bytes32) {
+        return keccak256(bytes(string.concat("UA", reg8[op].name, "(bytes32 from,address target", reg8[op].params, TAIL)));
+    }
+
+    /// The signed `mtx<Op>` of `from` for `target`, every op word static (the struct words are the call's).
+    function _rcall(uint256 op, bytes32 from, address target, bytes memory args) internal view returns (bytes memory) {
+        MetaTxLib.UAEnvelope memory e = _envelope(router, from, 0);
+        bytes32 h = keccak256(bytes.concat(abi.encode(_typehashR(op), e.from, target), args,
+            abi.encode(e.batch, e.nonce, e.validUntil, e.mode, address(0), e.fee, address(0))));
+        bytes32 d = keccak256(abi.encodePacked("\x19\x01", _domain(router), h));
+        bytes memory head = bytes.concat(abi.encode(e), abi.encode(target), args);
+        return bytes.concat(reg8[op].sel, head, abi.encode(head.length + 32), _tail(abi.encode(_auth(e.from, d))));
+    }
+
+    function _rdo(uint256 op, bytes32 from, address target, bytes memory args) internal {
+        _run(_rcall(op, from, target, args));
+    }
+
+    /// The eight in an order where each one's effect is read, up to `last`, on one token signed by `i` (issuer), `c`
+    /// (compliance), `o` (bit 22).
+    function _eight(uint256 last, bytes32 i, bytes32 c, bytes32 o) internal {
+        NormalRegulatedToken t = _regulated(i, c, o);
+        bytes32 bob = _pad(BOB);
+        bytes32 ben = _pad(TREASURY);
+        uint64 day = uint64(block.timestamp + 1 days);
+        _rdo(R_PAUSE, i, address(t), abi.encode(REF, day));
+        assertEq(t.regulatedConfig().pausedUntil, day, "Pause");
+        if (last == R_PAUSE) return;
+        _rdo(R_UNPAUSE, i, address(t), abi.encode(REF));
+        assertEq(t.regulatedConfig().pausedUntil, block.timestamp, "Unpause");
+        if (last == R_UNPAUSE) return;
+        bytes32 rid = keccak256(abi.encode(bytes32("order"), bob, ben));
+        _rdo(R_RECORD, c, address(t), abi.encode(bytes32("order"), keccak256("doc"), bob, ben, uint256(100), day));
+        assertEq(t.order(rid).subject, bob, "RecordOrder");
+        if (last == R_RECORD) return;
+        _rdo(R_FREEZE, i, address(t), abi.encode(bob, REF, rid));
+        assertTrue(t.isFrozen(bob), "Freeze");
+        if (last == R_FREEZE) return;
+        _rdo(R_FORCE, i, address(t), abi.encode(rid, uint256(30)));
+        assertEq(t.balanceOf(TREASURY), 30, "ForceTransfer");
+        if (last == R_FORCE) return;
+        _rdo(R_REVOKE, c, address(t), abi.encode(rid, bytes32("why")));
+        assertTrue(t.order(rid).revoked && !t.isFrozen(bob), "RevokeOrder");
+        if (last == R_REVOKE) return;
+        _rdo(R_FREEZE, i, address(t), abi.encode(_pad(OTHER), REF, bytes32(0)));
+        _rdo(R_UNFREEZE, i, address(t), abi.encode(_pad(OTHER), REF));
+        assertFalse(t.isFrozen(_pad(OTHER)), "Unfreeze");
+        if (last == R_UNFREEZE) return;
+        _rdo(R_OPERATOR, o, address(t), abi.encode(bob, ben, uint256(5), REF));
+        assertEq(t.balanceOf(TREASURY), 35, "OperatorTransfer");
+        assertEq(t.balanceOf(BOB), 965);
+    }
+
+    /// Each row signed by a contract holder (ERC-1271) and by an `msig` holder.
+    function _row(uint256 op) internal {
+        _eight(op, wallet, msig, wallet);
+        _eight(op, msig, wallet, msig);
+    }
+
+    function test_routerRow_Pause() public { _row(R_PAUSE); }
+    function test_routerRow_Unpause() public { _row(R_UNPAUSE); }
+    function test_routerRow_RecordOrder() public { _row(R_RECORD); }
+    function test_routerRow_Freeze() public { _row(R_FREEZE); }
+    function test_routerRow_ForceTransfer() public { _row(R_FORCE); }
+    function test_routerRow_RevokeOrder() public { _row(R_REVOKE); }
+    function test_routerRow_Unfreeze() public { _row(R_UNFREEZE); }
+    function test_routerRow_OperatorTransfer() public { _row(R_OPERATOR); }
+
+    /// Bit 22 takes any holder: an EOA and a single-key derived UA (`pq`) relay `mtxOperatorTransfer` too.
+    function test_routerRow_OperatorTransferAnyHolder() public {
+        bytes32[2] memory ops = [eoa, pq];
+        for (uint256 k; k < 2; ++k) {
+            NormalRegulatedToken t = _regulated(wallet, msig, ops[k]);
+            _rdo(R_OPERATOR, ops[k], address(t), abi.encode(_pad(BOB), _pad(TREASURY), uint256(5), REF));
+            assertEq(t.balanceOf(TREASURY), 5);
+        }
+    }
+
+    /// A holder's refusal and the token's are the router's: a stranger's signed op reverts `MissingRole` with its own id,
+    /// and the nonce is not spent.
+    function test_routerRow_strangerRefused() public {
+        NormalRegulatedToken t = _regulated(wallet, msig, wallet);
+        _rfail(_rcall(R_OPERATOR, stranger, address(t), abi.encode(_pad(BOB), _pad(TREASURY), uint256(5), REF)),
+            abi.encodeWithSelector(IGovernance.MissingRole.selector, uint8(GovernanceBits.OPERATOR_TRANSFER), stranger));
+        _rfail(_rcall(R_FREEZE, stranger, address(t), abi.encode(_pad(BOB), REF, bytes32(0))),
+            abi.encodeWithSelector(IGovernance.MissingRole.selector, uint8(GovernanceBits.FREEZE), stranger));
+        assertEq(router.mtxNonce(stranger, 0), 0);
+        _rdo(R_FREEZE, wallet, address(t), abi.encode(_pad(BOB), REF, bytes32(0))); // the control: the issuer
+    }
+
+    function _rfail(bytes memory cd, bytes memory err) internal {
+        (bool ok, bytes memory ret) = address(router).call(cd);
+        assertFalse(ok);
+        assertEq(ret, err);
+    }
+
+    /// `target` is a signed word: a signature for one token does not run on another.
+    function test_routerRow_targetIsSigned() public {
+        NormalRegulatedToken t1 = _regulated(wallet, msig, wallet);
+        NormalRegulatedToken t2 = _regulated(wallet, msig, wallet);
+        bytes memory cd = _rcall(R_OPERATOR, wallet, address(t1), abi.encode(_pad(BOB), _pad(TREASURY), uint256(5), REF));
+        bytes memory moved = bytes.concat(cd); // the same call with `target` at word 9 (after the 8-word envelope) moved
+        assembly ("memory-safe") { mstore(add(moved, add(36, 256)), t2) }
+        (bool ok,) = address(router).call(moved);
+        assertFalse(ok, "another target");
+        _run(cd);
+        assertEq(t1.balanceOf(TREASURY), 5);
+    }
+
+    /// No control has a twin on the token (G19): the router's selectors are no token entry, and the token's allow-list
+    /// carries none of the eight direct entries.
+    function test_tokenHasNoTwin() public {
+        NormalRegulatedToken t = _regulated(wallet, msig, wallet);
+        (bytes4[] memory s,,) = t.mtxSelectors();
+        bytes4[8] memory direct = [IRegulatedToken.freeze.selector, IRegulatedToken.unfreeze.selector,
+            IRegulatedToken.forceTransfer.selector, IRegulatedToken.pause.selector, IRegulatedToken.unpause.selector,
+            IRegulatedToken.recordOrder.selector, IRegulatedToken.revokeOrder.selector,
+            IRegulatedToken.operatorTransfer.selector];
+        for (uint256 k; k < 8; ++k) {
+            for (uint256 j; j < s.length; ++j) assertTrue(s[j] != direct[k]);
+            (bool ok, bytes memory ret) = address(t).call(bytes.concat(reg8[k].sel, new bytes(32 * 30)));
+            assertFalse(ok);
+            assertEq(ret.length, 0, reg8[k].name);
+        }
     }
 }

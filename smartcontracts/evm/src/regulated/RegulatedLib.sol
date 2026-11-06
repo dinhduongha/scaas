@@ -8,9 +8,8 @@ import {GovernanceUse} from "../governance/GovernanceBase.sol";
 import {GovernanceBits} from "../governance/GovernanceBits.sol";
 import {IGovernance} from "../governance/IGovernance.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
-
-/// @notice Placeholder of what is not built yet: T32 (`operatorTransfer`).
-error RegulatedNotBuilt();
+import {MtxPipelineLib} from "../metatx/MtxPipelineLib.sol";
+import {UAKinds} from "../ua/UAKinds.sol";
 
 /// @title The bodies of the regulated controls (CTR-AS-02's shape, regulated-kinds spec §3.1, §3.3, §3.4), reached by
 ///        `DELEGATECALL` from the thin stubs of `RegulatedBase`: storage is the token's `scaas.regulated` namespace,
@@ -266,12 +265,25 @@ library RegulatedLib {
         emit IRegulatedToken.Unpaused(ref);
     }
 
-    // ------------------------------------------------------------------ OPERATOR_TRANSFER (T32)
+    // ------------------------------------------------------------------ OPERATOR_TRANSFER (spec §3.4, CTR-GOV-20)
 
-    /// @notice The refusals of CTR-GOV-08 and CTR-GOV-13 and the power's `use`; the token then moves on `_uaMove` (hooked).
-    function operatorTransfer(bytes32 /* from */, bytes32 /* to */, uint256 /* amount */, bytes32 /* ref */,
-        bytes32 /* subject */, address /* uaRegistry */) public pure
+    /// @notice Bit 22 by `use` with the amount (any holder; `LIMITED` debits its window), then the refusals of CTR-GOV-08:
+    ///         `amount` 0, `ref` 0, `from == to`, 0, either pool or the token on either side, a native `from` with code, an
+    ///         unregistered or non-SIGNING derived `to` (`_checkTo`). The token then moves on `_uaMove` (hooked: `P`,
+    ///         `F(from)`, `R(to)`): public balances only (CTR-GOV-13), never a confidential slot.
+    function operatorTransfer(bytes32 from, bytes32 to, uint256 amount, bytes32 ref, bytes32 subject, address uaRegistry)
+        public
     {
-        revert RegulatedNotBuilt();
+        GovernanceUse.use(GovernanceBits.OPERATOR_TRANSFER, subject, amount);
+        if (amount == 0) revert IRegulatedToken.AmountZero();
+        if (ref == 0) revert IRegulatedToken.RefRequired();
+        if (from == 0 || from == to || _pool(from)
+            || (UAKinds.inNativeSpace(from) && address(uint160(uint256(from))).code.length != 0))
+        {
+            revert IRegulatedToken.OperatorTargetRefused(from);
+        }
+        if (to == 0 || _pool(to)) revert IRegulatedToken.OperatorTargetRefused(to);
+        MtxPipelineLib._checkTo(uaRegistry, to);
+        emit IRegulatedToken.OperatorTransfer(from, to, amount, ref);
     }
 }
