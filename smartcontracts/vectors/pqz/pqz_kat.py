@@ -1827,9 +1827,72 @@ def check_worstcase(j, d):
     return bad
 
 
+# ---------------------------------------------------------------- state.json (ua-rs-sign T15e; no-decryption-oracle spec §4.4)
+PACK_B = (Q - 1).bit_length()  # PqzSet.PACK_BITS: ceil(log2 q), the stored form (P46)
+PKP, VP = PK_BYTES // 32 * PACK_B // 2, V_BYTES // 32 * PACK_B // 2
+
+
+def unpack_stored(b):
+    """The 64-bit lanes (be8) of a P46-packed part: every PACK_B bits big-endian, one coefficient."""
+    x, n = int.from_bytes(b, "big"), len(b) * 8 // PACK_B
+    assert len(b) * 8 == n * PACK_B
+    return b"".join(((x >> (PACK_B * (n - 1 - i))) & ((1 << PACK_B) - 1)).to_bytes(8, "big") for i in range(n))
+
+
+def check_state(j, d):
+    """The raw words of the forge state rows rebuilt here (third implementation, beside PqzCore and ua-rs): each account's
+    T = acc + Sum pending[rolled, p) + Trivial(shieldIn) at the clients' p (CTR-PQZ-06), acc from its reference blob or its
+    not() slots (checked against accHash); each entry's entryRef and leg ciphertexts from its op blob."""
+    bad = []
+    cmp(bad, "set", j["set"], SET)
+    hx = lambda s: bytes.fromhex(s[2:])
+    lo = lambda w, at, n: int.from_bytes(w[32 - at - n:32 - at], "big")
+    for a in j["accounts"]:
+        name = a["name"]
+        codes = {b["address"]: hx(b["code"])[1:] for b in a["blobs"]}
+        s0, s1, s2, s3 = (hx(w) for w in a["account"])
+        count, rolled, units, flags = lo(s0, 0, 8), lo(s0, 8, 8), lo(s1, 24, 4), lo(s1, 28, 1)
+        p = min(count, rolled + 16, rolled + K_MAX - 1 - units)
+        cmp(bad, f"{name}: p, sendCounter", (a["p"], a["sendCounter"]), (p, lo(s2, 0, 8)))
+        load = lambda ptr, u, v: unpack_stored(codes["0x" + ptr.hex()][u:u + PKP]) + unpack_stored(codes["0x" + ptr.hex()][v:v + VP])
+        if flags & 1:
+            stream = b"".join(bytes(255 - x for x in hx(w)) for w in a["accWords"])[:PKP + VP]
+            cmp(bad, f"{name}: accHash", keccak256(stream), s3)
+            t = unpack_stored(stream)
+        elif lo(s1, 0, 20):
+            t = load(s1[12:], lo(s1, 20, 2), lo(s1, 22, 2))
+        else:
+            t = bytes(CT_BYTES)
+        cmp(bad, f"{name}: pending indexes", [e["index"] for e in a["pending"]], list(range(rolled, p)))
+        for e in a["pending"]:
+            w = hx(e["word"])
+            t = ct_add(t, trivial(digits(lo(w, 12, 8))) if lo(w, 8, 2) == 0 else load(w[:20], lo(w, 10, 2), lo(w, 8, 2)))
+        t = ct_add(t, trivial(digits(a["shieldIn"])))
+        cmp(bad, f"{name}: T", t.hex(), a["T"][2:])
+    for e in j["entries"]:
+        name = e["name"]
+        cmp(bad, f"{name}: entryRef", "0x" + entry_ref(j["chainId"], hx(j["chainUid"]), hx(j["token"]), hx(e["fromUA"]),
+                                                       e["sendCounter"]).hex(), e["entryRef"])
+        r = hx(e["blob"]["code"])[1:-VP]
+        m = len(e["legs"])
+        aud = e["legs"][0]["auditorCt"] != ""
+        g = groups(m, aud)
+        ls = 32 + VP * (1 + aud)
+        for leg in e["legs"]:
+            k = leg["leg"]
+            at = 16 + PKP * g + ls * k
+            u = unpack_stored(r[16 + PKP * (k // lpg(aud)):][:PKP])
+            cmp(bad, f"{name} leg {k}: owner", "0x" + r[at + ls - 32:at + ls].hex(), leg["ua"])
+            cmp(bad, f"{name} leg {k}: ct", (u + unpack_stored(r[at:at + VP])).hex(), leg["ct"][2:])
+            if aud:
+                cmp(bad, f"{name} leg {k}: auditor copy", (u + unpack_stored(r[at + VP:at + 2 * VP])).hex(), leg["auditorCt"][2:])
+    return bad
+
+
 CHECKERS = {MULTI_FILE: check_multi, "matrix.json": check_matrix, "cbd.json": check_cbd, "keygen.json": check_keygen, "enc.json": check_enc,
             "statement_*": check_statement, "proof_*": check_proofs, "negative.json": check_negative,
-            "selftest.json": check_selftest, "fee0.json": check_fee0, "worstcase_noise.json": check_worstcase}
+            "selftest.json": check_selftest, "fee0.json": check_fee0, "worstcase_noise.json": check_worstcase,
+            "state.json": check_state}
 
 
 def check_files(paths, log):
