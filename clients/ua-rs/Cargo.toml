@@ -222,6 +222,16 @@ required-features = ["pqz"]
 name = "facade_pqz_state"
 required-features = ["pqz"]
 
+# ua-rs-sign T15i: the oracle harness (spec no-decryption-oracle §5): 8·K crafted queries, positive / negative / residual
+[[test]]
+name = "no_oracle"
+required-features = ["pqz", "zether"]
+
+# ua-rs-sign T15i: PQZ words rows for wallet keys (the bindings decrypt them); `write_wallet_rows` (vectors, ignored) writes them
+[[test]]
+name = "pqz_wallet_rows"
+required-features = ["pqz"]
+
 # ua-rs-sign T16: the external-key interface (spec §9.4, MD-13): `TestExternalKey` is a `vectors` entry point
 [[test]]
 name = "wallet_external"
