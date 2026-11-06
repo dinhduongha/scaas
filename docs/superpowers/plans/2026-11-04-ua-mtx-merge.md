@@ -224,10 +224,11 @@ rustc 1.90); Node `node --test` (`clients/clientkeys`); `zether-prover`; `ua-rs`
 | Regulated | T24 → T25 → T26 → T27 → T28 → T29 → T30 → T31 → T32 → T33; T34 beside T33; T35 after T33, T34; T36 after T33, beside T34–T35 | after T18, before T19 (owner 2026-11-05); contracts sequential in this worktree; T27 measures kinds 9 and 13 before T28 fills the bodies |
 | Pay meta, tax (3e) | T37 → T38 → T39 → T40; T41 after T40; T42 after T41; T43 after T40, beside T41–T42 | after T36, before 3c (owner 2026-11-06); contracts sequential in this worktree; T37 and T40 measure kind 13 first |
 | Versioned PQZ keys (3g) | T51 → T52 → T53; T54 after T53; T55 after T54; T56 after T53, beside T54–T55; T57 beside, lands in T19 | after T43, before 3f (owner 2026-11-07: 3g before 3f); contracts sequential in this worktree; T51 measures the registry's deploy gas, T52 measures kind 13 first (from what T43 leaves); 3c's rebalance comes after T53; the ATTESTED items go to 3f |
-| Attested PQZ (3f) | T44 → T45; T46 after T45; T47 after T46; T48 and T49 after T45, beside T46–T47; T50 beside, lands in T19 | after T57, before 3h (owner 2026-11-07: 3g before 3f); contracts sequential in this worktree; T45 measures kind 13 first (from what T57 leaves); ATTESTED built over versioned keys (3g §5) |
+| Factory index | T67 → T68; T69 beside, lands in T19 | **not started until the owner approves its spec**; after T57, before 3f (owner 2026-11-07: 3e → 3g → factory index → 3f → 3h → 3c); contracts sequential in this worktree (`src/factory/` only) |
+| Attested PQZ (3f) | T44 → T45; T46 after T45; T47 after T46; T48 and T49 after T45, beside T46–T47; T50 beside, lands in T19 | after T69 (the factory index), before 3h (owner 2026-11-07: 3g, then the factory index, before 3f); contracts sequential in this worktree; T45 measures kind 13 first (from what T57 leaves); ATTESTED built over versioned keys (3g §5) |
 | PQZ proof path (3h) | T58 → T59 → T60 → T61; T62 after T61; T63 after T62; T64 and T65 after T61, beside T62–T63; T66 beside, lands in T19 | after T50, before 3c (owner approved 2026-11-07); contracts sequential in this worktree; T58 measures kind 13 first; each format moves in the task that changes it; no task waits for `ua-rs-sign` |
 | Size (T66b) | T66b | after T66, before 3c (owner 2026-11-07); one task, sequential in this worktree |
-| Docs | T19 | drafts beside T14–T18, T24–T36, T37–T43, T51–T57, T44–T50 and T58–T66; lands after T66 and 3c (BUILT only with code and tests) |
+| Docs | T19 | drafts beside T14–T18, T24–T36, T37–T43, T51–T57, T67–T69, T44–T50 and T58–T66; lands after T66 and 3c (BUILT only with code and tests) |
 | Close | T21 → T22 → T23 | |
 | Next | TODO item 4 | SCaaS testnet reset 2 deploys the merged code (not this plan) |
 
@@ -1478,7 +1479,7 @@ fields `tax`, `tax_mode`, `tax_recipient`, `net`, `withheld_by`; alerts on `TaxR
 **Spec:** [`2026-11-06-attested-verify.md`](../specs/2026-11-06-attested-verify.md), revised after the Codex and Fable reviews
 ([Codex](../../research/attest-codex-review.md), [Fable](../../research/attest-fable-review.md)); rulings O1, O2, O5 and R1–R4
 (PQZ only, the attestation inline, unproven keys in ATTESTED mode, an immediate revocation); one question open (spec §12, Q1:
-revoking a fixed verifier, recommended no). **Place:** after T57 (3g; owner 2026-11-07: 3g before 3f), before 3h and 3c (`PqChat` and the registry generation); T19, T21,
+revoking a fixed verifier, recommended no). **Place:** after T69 (the factory index, which follows 3g; owner 2026-11-07: 3e → 3g → factory index → 3f), before 3h and 3c (`PqChat` and the registry generation); T19, T21,
 T22, T23 cover the group. ATTESTED is built over 3g's versioned keys (3g §5, KV-12). **Order:** contracts T44 → T45, sequential in this worktree (shared `PqzCore`, `PqzLayer`,
 `size-baseline.json`); T46 (`clients/`, `smartcontracts/vectors/`) after T45 fixes the ABI; T47 (node) after T46; T48 (the
 reference verifier service, its own crate) and T49 (invariants, mutants) after T45, beside T46–T47; T50 (docs share) drafts beside
@@ -1490,7 +1491,7 @@ the first commit of each task that replaces a body.
 
 ### Task T44: the ATTESTED core in `PqzCore`, `PqzStateLib`, `PqzLayer`
 
-**Depends on:** T57 (3g before 3f, owner 2026-11-07). **Estimate:** 2.
+**Depends on:** T69 (the factory index after 3g, before 3f; owner 2026-11-07). **Estimate:** 2.
 
 **Files:** `src/factory/IFactoryToken.sol` (`ConfidentialConfig`: `verifyMode`, `attestVerifier`, `attestFixed`) and the
 `TokenConfig` decode of every kind; `src/pqz/{PqzCore,PqzStateLib,PqzWrappedLib,PqzLayer,IPqzToken}.sol`; `src/ua/UAKinds.sol`
@@ -2041,9 +2042,72 @@ pinned temporarily in `_above64KiB` ("owner 2026-11-07, removed by T66b"; see th
       `_above64KiB` pin of the window; `size-baseline.json` old -> new with the reason.
 - [ ] **Step 4:** whole `forge test`, the four PQZ sets, size gate, gas pins old -> new, mutants of each split.
 
+### Factory contract index (owner 2026-11-07): tasks T67–T69
+
+**Spec:** [`2026-11-07-factory-contract-index.md`](../specs/2026-11-07-factory-contract-index.md), DRAFT. **Not started until the
+owner approves the spec** (its §6 questions answered). **Place (owner 2026-11-07):** after 3g (T57), before 3f (T44 depends on
+T69): 3e → 3g → factory index → 3f → 3h → 3c. Independent of the registry and of every token body: only `src/factory/`, its
+tests, `GovGas` and the deploy scripts move. **Order:** T67 → T68, sequential in this worktree; T69 (docs share) drafts beside
+them and lands in T19. **Estimate:** 3 agent-days. Each contracts task ends with the whole `forge test` green at the default set
+and the size gate; no PQZ file moves, so no per-set run. Red first, positive control first, one change at a time; mutants one at
+a time on a clean tree, logged `mutant | test that went red | rc`; heavy runs through `scripts/capped`, foreground. The legacy
+copy of `OpenFactory.sol` / `IOpenFactory.sol` (MD-4, `legacy/ua-mtx-merge/factory-index/`) is T67's first commit.
+
+### Task T67: the record, the per-class lists, the paged views
+
+**Depends on:** T57 and the owner's approval of the spec. **Estimate:** 2.
+
+**Files:** `src/factory/{OpenFactory,IOpenFactory}.sol`; `test/v2/FactoryIndex.t.sol` (new); `test/v2/Factory.t.sol`,
+`test/governance/GovGas.t.sol` (a `createDex` row beside `createToken`); `legacy/ua-mtx-merge/factory-index/`.
+
+**Interfaces (spec §2):** `struct Created {addr, creator, ownerUA, contractClass, kind, version, createdBlock, createdAt}`;
+`CLASS_TOKEN = 1`, `CLASS_DEX = 2`, `MAX_PAGE = 100`; `infoOf`, `contractsPage`, `contractsOfOwner`, `contractsOfCreator`
+returning `(Created[] page, uint256 total)`; `ClassUnknown`, `PageTooLarge`. The record replaces `_info` and `_dexVersion`;
+`isToken`, `isRegisteredToken`, `creatorOf`, `versionOf`, `isDex`, `dexVersionOf` keep their answers. Events unchanged.
+
+- [ ] **Step 1: Legacy copies** (MD-4); commit.
+- [ ] **Step 2: Failing tests** (spec §7), each with its positive control: `test_index_everyKind_{0..5,8..13}`,
+      `test_index_unregisteredVersionZero`, `test_index_dex`, `test_index_oldViewsUnchanged`, `test_index_relayerCreatorNotOwner`,
+      `test_index_derivedOwnerUA`, `test_index_ownerZeroNotListed`, `test_index_ownerMovedKeepsCreationOwner`,
+      `test_index_spamClaimListedWithCreator`, `test_index_nestedCreationOrder`, `test_index_page_{nZero,maxPage,overMax,lastPartial,fromAtTotal,fromPastTotal}`,
+      `test_index_classUnknown_{0,3}`, `test_index_classFilter`, `test_index_saltAlreadyUsed`, `test_index_slotCount_{steady,first}`.
+- [ ] **Step 3:** FAIL. **Step 4: Implement.** **Step 5:** PASS; whole `forge test`; size gate (`OpenFactory` ≤ 24,576 B: if it
+      crosses, stop and report, no baseline row without the owner).
+- [ ] **Step 6:** Commit `ua-mtx-merge T67: factory contract index, per-class lists and paged views`.
+
+**Pins, old → new:** `GovGas` `createToken` and `createDex` (spec §3: about +5 new slots, ≈ +489,600 state gas steady);
+`OpenFactory` runtime and init size. **Gates:** whole `forge test`, size gate.
+
+### Task T68: mutants, deploy scripts, the factory address
+
+**Depends on:** T67. **Estimate:** 0.5.
+
+**Files:** `smartcontracts/evm/runs/<date>-ua-mtx-merge-factory-index-mutants.txt`; `script/DeployBase.sol`,
+`script/hedera/DeployHedera.s.sol`, `script/pqz/e2e.py` only if they read a removed name.
+
+- [ ] **Step 1: Mutants** of spec §7, one at a time: each must turn a T67 test red; a survivor is a T67 finding.
+- [ ] **Step 2: Deploy dry run** on a local anvil (`Deploy.s.sol`, no broadcast to any shared chain): create one token and one
+      DEX, read them back by `contractsOfOwner` / `contractsOfCreator`; anvil stopped after.
+- [ ] **Step 3:** `rtk proxy grep` every vector and KAT for the factory's deterministic address; none expected (spec §4). The
+      `vectors-check` step of T21 confirms.
+- [ ] **Step 4:** Commit `ua-mtx-merge T68: factory index mutants and deploy check, <n> kills`.
+
+### Task T69: the docs share of the factory index
+
+**Depends on:** T67–T68 for BUILT tags (drafts beside them). **Estimate:** 0.5. Lands inside T19's commit.
+
+**Files:** `docs/contracts/token-wrappers.md` §6.1 (the new rule, proposed CTR-TOK-27, with the spec's §2; the CTR-TOK-25
+registry views bullet), `docs/contracts/dex.md` (CTR-DEX-24's Registry bullet: the record), `docs/node/indexer-feeds.md` (one
+PLANNED line: the state is authoritative, a mirror is a cache); `docs/decisions.md` (the CTR-TOK-27 entry with the owner's
+words of 2026-11-07 and the §6 rulings, Change lines on CTR-TOK-25 and CTR-DEX-24; `docs_check.py` confirms the id is
+next-free); the spec's status line.
+
+- [ ] **Step 1:** Write each change; figures quoted from T67–T68 logs; BUILT only where code and tests exist.
+- [ ] **Step 2:** `docs_check.py check`, `paths`, `resolve` on each new id: rc 0. Committed with T19.
+
 ### Task T19: docs, decisions, operator note
 
-**Depends on:** T1–T18, T24–T36, T37–T43, T44–T50, T51–T57 and T58–T66 for BUILT tags (drafts beside T14–T18, T24–T36, T37–T43, T44–T50, T51–T57 and T58–T66). **Estimate:** +0.5 for group 3e; group 3f's share is T50 (1), group 3g's is T57 (1) and group 3h's is T66 (1), committed here.
+**Depends on:** T1–T18, T24–T36, T37–T43, T44–T50, T51–T57, T67–T69 and T58–T66 for BUILT tags (drafts beside T14–T18, T24–T36, T37–T43, T44–T50, T51–T57, T67–T69 and T58–T66). **Estimate:** +0.5 for group 3e; group 3f's share is T50 (1), group 3g's is T57 (1), the factory index's is T69 (0.5) and group 3h's is T66 (1), committed here.
 
 **Files, each rule rewritten once, linked elsewhere:**
 - `docs/contracts/metatx.md` (CTR-MTX-01, -05, -06, -09, -11, -12, -14, -15, -17, -18, -21, -22, -23, -24, -26, -27, -28, -29), `accounts.md`
@@ -2116,7 +2180,7 @@ outside the repo).
   generator of T2, T6, T8, T11, T13, T34, T37, T40, T41 (`regulated_kat.json`'s, `paymeta.json`'s and `paytax.json`'s writers included) and `dex_order_kat.json`'s writer, then `git diff --exit-code`; `cargo-scaas-node` under
   `CAPPED_MEM=6G` alone (the whole node suite, clippy `-D warnings`); `docs` runs `test_docs_check.py`, `docs_check.py check`
   and `paths`.
-- `NEW_TESTS`: every test name of T1–T18, T24–T36, T37–T43 and T44–T49 in its pass form (`forge|forge|…`, `cargo-scaas-node|cargo|…`, `node-e2e-anvil|cargo|…`,
+- `NEW_TESTS`: every test name of T1–T18, T24–T36, T37–T43, T67–T68 and T44–T49 in its pass form (`forge|forge|…`, `cargo-scaas-node|cargo|…`, `node-e2e-anvil|cargo|…`,
   `clientkeys|node|…`, one row per language of T13), written from the diff, not from this plan.
 
 - [ ] **Step 1:** Write the runner and the names.
