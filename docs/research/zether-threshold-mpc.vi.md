@@ -555,6 +555,9 @@ giá trị thật. Xếp lịch là việc của chủ dự án.
 
 ### Câu hỏi mở cho chủ dự án
 
+**Chủ dự án 2026-11-06 (Q11, mới):** chấp nhận theo khuyến nghị: forge test đi cùng nguyên mẫu (D), không làm trước.
+Khóa auditor theo token và khóa người nắm giữ theo UA: xem [pq-mpc-threshold.vi.md](pq-mpc-threshold.vi.md) (đầu file).
+
 **Chủ dự án 2026-11-06:** trả lời theo đề xuất, chỉ là định hướng nghiên cứu. Chưa lên lịch, chưa có spec hay build; không có
 task hay thay đổi contract nào từ ghi chú này cho tới khi chủ dự án yêu cầu.
 

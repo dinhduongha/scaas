@@ -1117,6 +1117,10 @@ the next step if the owner wants one.
 
 ### 12.4 Open questions for the owner (new)
 
+**Owner 2026-11-06:** all three answered as recommended: C3 on a modulus conversion when C3 is scheduled; D2 waits;
+no Hint-MLWE variant now. Research direction only; nothing is scheduled. Auditor key per token versus holder key per UA:
+see [pq-mpc-threshold.md](pq-mpc-threshold.md) (top).
+
 1. **C3 basis.** Build the networked service on an arbitrary-modulus conversion (Damgård et al.) rather than on the
    harness's prefix circuit? *Recommendation:* yes, when C3 is scheduled; keep the harness as its reference for equality.
 2. **D2 or wait.** Spend 20–30 agent-days on a simulated MPC PQZL prover now, or wait for a security argument on revealed

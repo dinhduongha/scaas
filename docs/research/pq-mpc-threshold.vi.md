@@ -23,6 +23,18 @@ ePrint hoặc arXiv, chưa bình duyệt; [NIST preview] bài nói hoặc tài l
 tuyên bố của công ty tác giả hoặc thông cáo báo chí; [repo] đọc từ kho mã này; [inference] suy luận của chúng tôi;
 [estimate] tính toán trên giấy của chúng tôi; [unverified] không kiểm chứng được. Nguồn: §10.
 
+**Hai khóa MPC khác nhau (chủ dự án 2026-11-06).** MPC cho auditor và MPC cho người nắm giữ là hai khóa khác nhau,
+không bao giờ gộp:
+- **MPC auditor: một khóa cho mỗi token.** Khóa auditor của token (`auditorUA` với PQZ, `Y_a` với Zether) nhận bản sao
+  auditor của mọi giao dịch được kiểm toán của token đó, từ mọi người nắm giữ. Nhóm ngưỡng của nó (ví dụ công ty, hãng
+  kiểm toán, cơ quan quản lý) giải mã hoặc mở cho toàn bộ token. Nó không bao giờ chứng minh một lần chi.
+- **MPC người nắm giữ: một khóa cho mỗi UA.** Khóa tài khoản của mỗi người nắm giữ `msig` là một khóa ngưỡng riêng, với
+  thành viên, ngưỡng và bản sao lưu (A) riêng. Nó chỉ giải mã trạng thái của tài khoản đó và, theo (D), chỉ chứng minh các
+  lần chi của tài khoản đó. Hai tài khoản không bao giờ dùng chung khóa hay nhóm ngưỡng.
+- Hai loại khác nhau về phạm vi (cả token hay một tài khoản), về thành viên và về việc khóa làm (chỉ xem, hay xem và chi).
+  Một bên có thể ngồi trong cả hai nhóm, nhưng phần chia của nó là hai khóa riêng; phần chia của khóa này không bao giờ
+  dùng cho khóa kia.
+
 ## 1. Tóm tắt nhanh
 
 | Chủ đề | Hiện trạng kỹ thuật | Bằng chứng | Hợp với SCaaS hôm nay? | Khuyến nghị |

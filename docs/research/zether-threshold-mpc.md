@@ -558,6 +558,9 @@ with value. Scheduling is the owner's.
 
 ### Open questions for the owner
 
+**Owner 2026-11-06 (Q11, new):** accepted as recommended: the forge test comes with the (D) prototype, not before.
+Auditor key per token versus holder key per UA: see [pq-mpc-threshold.md](pq-mpc-threshold.md) (top).
+
 **Owner 2026-11-06:** answered as recommended, as a research direction only. Nothing is scheduled, specified or built; no
 plan task or contract change follows from this note until the owner asks.
 

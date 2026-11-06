@@ -21,6 +21,17 @@ ePrint or arXiv, not peer-reviewed; [NIST preview] a talk or preview document fo
 claim by the authors' company or a press release; [repo] read from this repository; [inference] our reasoning;
 [estimate] our arithmetic on paper; [unverified] could not be checked. Sources: §10.
 
+**Two different MPC keys (owner 2026-11-06).** MPC for the auditor and MPC for a holder are different keys and are
+never merged:
+- **Auditor MPC: one key per token.** The token's auditor key (`auditorUA` for PQZ, `Y_a` for Zether) receives the
+  auditor copy of every audited transfer of that token, from every holder. Its quorum (for example company, audit firm,
+  regulator) decrypts or opens for the whole token. It never proves a spend.
+- **Holder MPC: one key per UA.** Each `msig` holder's account key is its own threshold key, with its own members,
+  threshold and (A) backup. It decrypts only that account's state and, under (D), proves only that account's spends. Two
+  accounts never share a key or a quorum.
+- They differ in scope (the whole token or one account), in members, and in what the key does (view only, or view and
+  spend). One party may sit on both quorums, but its shares are two separate keys; a share of one never serves the other.
+
 ## 1. At a glance
 
 | Topic | State of the art | Evidence | Fits SCaaS today? | Recommendation |

@@ -1120,6 +1120,10 @@ minh MPC mô phỏng được `pqz_verify` kiểm) vẫn là bước tiếp theo
 
 ### 12.4 Câu hỏi mở cho chủ dự án (mới)
 
+**Chủ dự án 2026-11-06:** cả ba được trả lời theo khuyến nghị: C3 dựa trên chuyển đổi modulus khi C3 được xếp lịch; D2
+chờ; chưa làm biến thể Hint-MLWE. Chỉ là hướng nghiên cứu; không có gì được xếp lịch. Khóa auditor theo token và khóa người
+nắm giữ theo UA: xem [pq-mpc-threshold.vi.md](pq-mpc-threshold.vi.md) (đầu file).
+
 1. **Nền cho C3.** Dựng dịch vụ qua mạng trên một phép chuyển modulus tùy ý (Damgård và cộng sự) thay vì mạch prefix của
    harness? *Khuyến nghị:* có, khi C3 được xếp lịch; giữ harness làm tham chiếu so bằng.
 2. **D2 hay chờ.** Bỏ 20–30 agent-day cho một bộ chứng minh PQZL MPC mô phỏng ngay, hay chờ một lập luận an toàn cho việc mở
