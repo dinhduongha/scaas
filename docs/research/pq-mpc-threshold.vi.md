@@ -35,6 +35,11 @@ không bao giờ gộp:
   Một bên có thể ngồi trong cả hai nhóm, nhưng phần chia của nó là hai khóa riêng; phần chia của khóa này không bao giờ
   dùng cho khóa kia.
 
+**Lỗ hổng mở (chủ dự án 2026-11-06).** Một nhóm MPC PQZ là oracle giải mã cho bất kỳ thành viên nào được đưa ciphertext
+vào: 288 truy vấn dựng sẵn ở `n2304-kmax4096` cho thành viên đó trọn `s`. Chưa chọn cách chặn; cho tới khi có, người nắm
+giữ `msig` của PQZ dùng phương án (A), operator. Chi tiết: [pqz-threshold-decrypt-prove.vi.md](pqz-threshold-decrypt-prove.vi.md)
+§12.5.
+
 ## 1. Tóm tắt nhanh
 
 | Chủ đề | Hiện trạng kỹ thuật | Bằng chứng | Hợp với SCaaS hôm nay? | Khuyến nghị |

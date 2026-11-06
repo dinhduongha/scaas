@@ -1131,3 +1131,22 @@ nắm giữ theo UA: xem [pq-mpc-threshold.vi.md](pq-mpc-threshold.vi.md) (đầ
    chứng minh mới chặn.
 3. **Một biến thể PQZL Hint-MLWE, không loại bỏ** sẽ là `proofSystemId` và bộ tham số mới. *Khuyến nghị:* không phải bây giờ;
    ghi lại như hướng đi của giới nghiên cứu.
+
+### 12.5 Lỗ hổng mở: oracle giải mã bên trong nhóm ngưỡng (chủ dự án 2026-11-06)
+
+**Trạng thái: mở, chưa chọn cách chặn.** Mã hóa PQZ là IND-CPA, không phải CCA. Ai có thể nhờ nhóm ngưỡng giải mã một
+ciphertext do mình chọn và biết `M` thì lấy lại được `s` sau 8·K truy vấn dựng sẵn (288 ở `n2304-kmax4096`; §12.1, N3b).
+Trong một nhóm MPC, bên đó có thể là **một thành viên**: nếu các thành viên khác góp phần giải mã cho ciphertext do người
+đó đưa vào, người đó có trọn `s`, và từ đó ngưỡng không còn bảo vệ gì (người đó tự đọc mọi số dư và khoản nhận, kể cả sau
+khi rời nhóm). Đây không phải PQZ bị phá; đó là cái giá của việc giải mã ciphertext mà chưa ai kiểm giới hạn nhiễu.
+
+Hai cách hạn chế được đề xuất đều không được chủ dự án chấp nhận (2026-11-06): "mỗi thành viên chỉ giải mã ciphertext tự
+đọc từ contract state" bị đánh giá là không hợp lý, và chủ dự án không chọn cả cách đó lẫn "mỗi thành viên kiểm proof đúng
+dạng hoặc state proof trước khi góp phần". Vấn đề được ghi lại ở đây, chưa giải quyết.
+
+**Tạm thời (chủ dự án 2026-11-06):** người nắm giữ `msig` của PQZ dùng phương án (A), operator: một operator giữ khóa tài
+khoản, kèm bản sao lưu k-of-n của `seed32` theo T16a (`ua-rs-sign`) và xoay khóa bằng phiên bản (spec 3g). Không xây hay
+dùng nhóm MPC PQZ cho khóa tài khoản cho tới khi lỗ hổng này được giải quyết. Khóa auditor là trường hợp riêng (một khóa
+cho mỗi token, [pq-mpc-threshold.vi.md](pq-mpc-threshold.vi.md), đầu file) và cũng chưa được xây. Oracle giải mã cho người
+ngoài (ví hoặc dịch vụ giải mã thứ người lạ đưa và để lộ bất kỳ điều gì về kết quả) là một rule riêng và một đợt rà code
+riêng (chủ dự án 2026-11-06, đang làm).

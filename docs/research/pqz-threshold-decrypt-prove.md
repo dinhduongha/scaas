@@ -1128,3 +1128,23 @@ see [pq-mpc-threshold.md](pq-mpc-threshold.md) (top).
    gap does.
 3. **A Hint-MLWE, rejection-free PQZL variant** would be a new `proofSystemId` and parameter set. *Recommendation:* not
    now; record it as the literature's direction.
+
+### 12.5 Open vulnerability: a decryption oracle inside the quorum (owner 2026-11-06)
+
+**Status: open, no mitigation chosen.** PQZ encryption is IND-CPA, not CCA. Whoever can have the quorum decrypt a
+ciphertext of their choice and learn `M` recovers `s` with 8·K crafted queries (288 at `n2304-kmax4096`; §12.1, N3b).
+Inside an MPC quorum that party can be **one member**: if the other members contribute partials to a ciphertext that
+member supplies, the member ends with the whole `s`, and the threshold protects nothing from then on (the member reads
+every balance and credit alone, also after leaving the group). It is not a break of PQZ; it is the price of decrypting
+ciphertexts whose noise bound nobody has checked.
+
+The two candidate restrictions were not accepted by the owner (2026-11-06): "each member decrypts only ciphertexts it
+reads itself from contract state" was judged not reasonable, and the owner chose neither that nor "each member checks a
+well-formedness proof or a state proof before contributing". The problem stays recorded here, unresolved.
+
+**Interim (owner 2026-11-06):** PQZ `msig` holders use option (A), the operator: one operator holds the account key, with
+the k-of-n `seed32` backup of T16a (`ua-rs-sign`) and rotation by key versions (spec 3g). No PQZ MPC quorum is built or
+used for an account key until this vulnerability is resolved. The auditor key is a separate case (one key per token,
+[pq-mpc-threshold.md](pq-mpc-threshold.md), top) and is also not built. Outsider decryption oracles (a wallet or service
+that decrypts what a stranger hands it and reveals anything about the result) are a separate rule and a separate code
+audit (owner 2026-11-06, pending).

@@ -32,6 +32,11 @@ never merged:
 - They differ in scope (the whole token or one account), in members, and in what the key does (view only, or view and
   spend). One party may sit on both quorums, but its shares are two separate keys; a share of one never serves the other.
 
+**Open vulnerability (owner 2026-11-06).** A PQZ MPC quorum is a decryption oracle for any member who can supply the
+ciphertext: 288 crafted queries at `n2304-kmax4096` give that member the whole `s`. No mitigation is chosen; until one is,
+PQZ `msig` holders use option (A), the operator. Details: [pqz-threshold-decrypt-prove.md](pqz-threshold-decrypt-prove.md)
+§12.5.
+
 ## 1. At a glance
 
 | Topic | State of the art | Evidence | Fits SCaaS today? | Recommendation |
