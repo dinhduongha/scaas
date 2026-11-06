@@ -1,0 +1,20 @@
+# 2026-11-06 ua-rs-sign T16b mutants (smartcontracts/evm/runs/2026-11-06-ua-rs-sign-t16b-mutants.py), on the T16b tree (files equal a76814e7's, except that
+# src/facade/pqz.rs may already have held another agent's uncommitted T15b memo-mode edit during M4 / M6; pqz_backup does not reach op 7).
+# One mutant per run on a clean tree, `cargo test --features vectors --test pqz_backup` (M10: ua-c cargo build, then test_vectors.py
+# WalletPqzBackup), each file restored byte for byte; NOT-LOADED or SURVIVED is a finding (exit 1). The task's three: M1 not persisted,
+# M2 / M3 persisted unencrypted (the vault's data in the clear; seed32 in the public manifest), M4 / M5 wrong key id (held under another
+# hash; the reload checked against the label's ua); the controller's M6-M10: the key-hash check skipped on reload, the backup omits the
+# held keys, a non-canonical label, the manifest JSON drops pqzHeld, the C getter ignores the hash. An earlier run of M10 was
+# NOT-LOADED (E0284, the harness's replacement lacked a type annotation; the harness fixed, nothing else changed) and is not counted.
+killed     | M1 not persisted: the rebuild does not list the key | clients/ua-rs/src/wallet/mod.rs | rc=101 | 2 failed: a_rebuilt_key_survives_lock_and_unlock_through_its_vault, the_rebuilders_backup_carries_the_key
+killed     | M2 persisted unencrypted: the vault's data in the clear | clients/ua-rs/src/wallet/vault.rs | rc=101 | 2 failed: a_held_vault_is_checked_against_its_key_hash, a_rebuilt_key_survives_lock_and_unlock_through_its_vault
+killed     | M3 persisted unencrypted: the reopen lists seed32 in the public manifest | clients/ua-rs/src/wallet/manifest.rs | rc=101 | 3 failed: a_held_vault_is_checked_against_its_key_hash, a_rebuilt_key_survives_lock_and_unlock_through_its_vault, the_rebuilders_backup_carries_the_key
+killed     | M4 wrong key id: held under another hash | clients/ua-rs/src/facade/pqz.rs | rc=101 | 3 failed: a_held_vault_is_checked_against_its_key_hash, a_rebuilt_key_survives_lock_and_unlock_through_its_vault, the_rebuilders_backup_carries_the_key
+killed     | M5 wrong key id on reload: checked against the label's ua, not its pqzKeyHash | clients/ua-rs/src/wallet/manifest.rs | rc=101 | 3 failed: a_held_vault_is_checked_against_its_key_hash, a_rebuilt_key_survives_lock_and_unlock_through_its_vault, the_rebuilders_backup_carries_the_key
+mutants M1-M5 of 10, survived or not loaded: 0
+killed     | M6 the key-hash check skipped on reload | clients/ua-rs/src/facade/pqz.rs | rc=101 | 2 failed: a_held_vault_is_checked_against_its_key_hash, a_share_for_another_msig_key_or_version_refused
+killed     | M7 the backup omits the held keys | clients/ua-rs/src/wallet/manifest.rs | rc=101 | 2 failed: a_rebuilt_key_survives_lock_and_unlock_through_its_vault, the_rebuilders_backup_carries_the_key
+killed     | M8 a non-canonical label accepted | clients/ua-rs/src/wallet/manifest.rs | rc=101 | 1 failed: a_held_vault_is_checked_against_its_key_hash
+killed     | M9 the manifest JSON drops pqzHeld | clients/ua-rs/src/wallet/manifest.rs | rc=101 | 1 failed: a_rebuilt_key_survives_lock_and_unlock_through_its_vault
+killed     | M10 C ABI: the getter ignores the key hash | clients/ua-c/src/lib.rs | rc=1 | 1 failed: test_rebuilt_key_after_lock_and_unlock
+mutants M6-M10 of 10, survived or not loaded: 0
