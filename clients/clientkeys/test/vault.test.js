@@ -134,3 +134,22 @@ test('vault.json refusals: wrong passphrase, altered AAD label, N = 2^31 / 3, r 
   // v 2 is never reported as a wrong passphrase, and the parameters are refused before scrypt runs (a 2^31 N would not return)
   assert.ok(VJ.refusals.filter((x) => x.error === 'VaultVersion').length === 2);
 });
+
+// ua-rs-sign T9 (MD-7): the both-ways fixture rs_vault.json, written by ua-rs (tests/wallet_vault.rs, `--ignored regenerate`):
+// vaults sealed by ua-rs open here to their entropy, so a vault format both clients read the same wrong way cannot pass one-sided.
+test('rs_vault.json: ua-rs vaults (24 and 12 words, PRF envelope, rewrapped pin) open here', async () => {
+  const RS = (() => { try { return JSON.parse(readFileSync(new URL('rs_vault.json', uaDir), 'utf8')); } catch { return null; } })();
+  assert.ok(RS, 'rs_vault.json');
+  assert.ok(RS.note.includes('never edit by hand'));
+  assert.equal(RS.vaults.length, 4);
+  for (const r of RS.vaults) {
+    assert.equal(bytesToHex(await V.openSeedVault(r.vault, unlockOf(r.unlock))), r.plaintext.slice(2), r.id);
+    assert.deepEqual([r.vault.v, r.vault.label, r.vault.pin.kdf, r.vault.pin.N, r.vault.pin.r, r.vault.pin.p], [1, 'seed', 'scrypt', 2 ** 17, 8, 1], r.id);
+    assert.equal(V.needsRewrap(r.vault), false);
+  }
+  assert.deepEqual(RS.vaults.map((r) => fromHex(r.plaintext).length), [32, 16, 32, 16]);
+  assert.ok(RS.vaults.some((r) => r.vault.prf && r.unlock.prfOutput));
+  // negative control: a wrong passphrase on a ua-rs vault is VaultOpen
+  const pin = RS.vaults.find((r) => r.unlock.pin);
+  assert.equal(await codeOf(() => V.openSeedVault(pin.vault, { pin: pin.unlock.pin + 'x' })), 'VaultOpen');
+});

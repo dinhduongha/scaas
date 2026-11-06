@@ -227,6 +227,7 @@ impl UaKey {
             Ok((s, kem_pk))
         })?;
         secret.self_test(id, self_test)?;
+        secret.note(|m| m.add_kem(ua, version));
         Ok(KemKeyPair { kem_pk, recipient: RecipientId::Ua { ua, version }, secret })
     }
 }

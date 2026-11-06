@@ -198,3 +198,28 @@ test('12-word wallet round trip (C-10): mnemonic, signing key and KEM key equal 
   assert.equal(hex(again.payload.entropy), hex(entropy));
   assert.notEqual(fresh.sealed.mlkemCt, c.container.sealed.mlkemCt, 'release seal draws fresh m and e');
 });
+
+// ua-rs-sign T9 (MD-7): a backup container of ua-rs (Wallet::backup_seal, rs_vault.json) restores here: the payload's field order
+// and encoding, the sender's UASig and the entropy that derives sender.ua are read the same way by both clients.
+test('rs_vault.json backups: a ua-rs backup restores here', async () => {
+  const RS = json('rs_vault.json');
+  assert.ok(RS, 'rs_vault.json');
+  assert.equal(RS.backups.length, 1);
+  for (const r of RS.backups) {
+    const R = kemOf(r.opener.kem);
+    const expect = { purpose: SL.PURPOSE.backup, sender: { ua: r.senderUa }, recipient: R.recipient };
+    const { install, payload } = await SL.restoreBackup(R, r.container, expect);
+    assert.equal(install, true, r.id);
+    assert.equal(hex(payload.entropy), r.entropy);
+    assert.equal(payload.generation, r.generation);
+    assert.deepEqual(payload.secrets.map((s) => s.label), r.secrets);
+    assert.equal(hex(keyOf(r.sender).ua), r.senderUa);
+    assert.ok(payload.manifest.entries.some((e) => e.ua === r.senderUa));
+    // the generation check reads the ua-rs payload the same way
+    const current = { ua: r.senderUa, generation: r.generation + 1 };
+    assert.equal(await codeOf(() => SL.restoreBackup(R, r.container, expect, undefined, undefined, { current })), 'BackupRollback');
+    // negative control: another expected sender
+    const other = { ...expect, sender: { ua: '0x' + '11'.repeat(32) } };
+    assert.equal(await codeOf(() => SL.restoreBackup(R, r.container, other)), 'ContainerSender');
+  }
+});

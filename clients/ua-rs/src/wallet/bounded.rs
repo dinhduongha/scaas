@@ -37,3 +37,13 @@ pub fn json(bytes: &[u8], max_len: usize, max_depth: usize) -> Result<Value> {
     }
     serde_json::from_slice(bytes).map_err(|_| Error::Argument)
 }
+
+/// Every string of a JSON value (its depth bounded by [`json`]) zeroized: what a decoder of secrets runs after its read.
+pub(crate) fn wipe(v: &mut Value) {
+    match v {
+        Value::String(s) => zeroize::Zeroize::zeroize(s),
+        Value::Array(a) => a.iter_mut().for_each(wipe),
+        Value::Object(o) => o.values_mut().for_each(wipe),
+        _ => {}
+    }
+}

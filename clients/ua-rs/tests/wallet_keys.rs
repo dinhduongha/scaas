@@ -178,6 +178,12 @@ fn wallet_send_sync() {
 #[test]
 fn generate_is_24_words_and_the_backup_forgets() {
     let (w, mut backup) = Wallet::generate().unwrap();
+    // T9 (spec §8.4, CLI-SGN-11): handed out only after the three-word confirmation
+    assert!(backup.take().is_none());
+    let phrase = backup.reveal().unwrap();
+    let list: Vec<&str> = phrase.split(' ').collect();
+    let ask = backup.challenge().unwrap();
+    assert!(backup.verify(&ask.map(|i| list[i - 1])).unwrap());
     let entropy = backup.take().unwrap();
     assert_eq!(entropy.len(), 32);
     assert!(backup.take().is_none());

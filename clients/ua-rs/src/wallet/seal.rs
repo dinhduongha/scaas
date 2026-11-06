@@ -10,7 +10,7 @@
 //! **Seal authenticates no sender:** anyone can seal to any key; a raw [`Sealed`] proves nothing about who made it. **No replay
 //! protection:** [`KemKeyPair::open`] and [`KemKeyPair::open_container`] open a valid seal again and again; a valid signature and
 //! tag authenticate `created`, they do not make a container fresh (RFC 9180 §9.7.3 likewise). A link session gives its window and
-//! one use ([`Wallet::from_link`]); a restore its generation (T9).
+//! one use ([`Wallet::from_link`]); a restore its generation ([`Wallet::restore_backup`]).
 //!
 //! A container `{v: 1, purpose, recipient, sender: {ua, auth}, created, sealed}` carries the sender's full `UASig` over
 //! `uaMessage(kind, seal, keccak256(aad ‖ wire form))` under the off-chain purpose `scaas.ua.purpose.seal.v1` (MD-10): a single
@@ -64,7 +64,7 @@ use base64ct::{Base64UrlUnpadded, Encoding};
 use rand_core::{OsRng, RngCore};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
-use zeroize::{Zeroize, Zeroizing};
+use zeroize::Zeroizing;
 
 /// The purpose of a backup container (spec §8.4).
 pub const PURPOSE_BACKUP: &str = "scaas/backup/v1";
@@ -83,6 +83,10 @@ const MSIG: u16 = 0x0120;
 /// Zether key, an `msig` as a leaf: none.
 const SENDER_KINDS: [u16; 15] =
     [0x0100, 0x0101, 0x0102, 0x0103, 0x0104, 0x0105, 0x0106, 0x0107, 0x0108, 0x0130, 0x0131, 0x0132, 0x0133, 0x0134, 0x0135];
+/// Whether `kind` signs a container (a derived single key).
+pub(super) fn is_sender_kind(kind: u16) -> bool {
+    SENDER_KINDS.contains(&kind)
+}
 /// The container JSON: 1 MiB of ciphertext and two levels of 16 member signatures, base64url (spec §9.3: fixed field lengths).
 const CONTAINER_JSON: usize = 4 << 20;
 /// `{sender: {auth: {members: [{members: [{…}]}]}}}`.
@@ -589,44 +593,19 @@ fn short_code() -> Result<String> {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn now() -> Result<u64> {
+pub(super) fn now() -> Result<u64> {
     let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_err(|_| Error::Argument)?;
     Ok(t.as_secs())
 }
 
 // `SystemTime::now` panics on wasm32-unknown-unknown: the JS clock, as the OS RNG takes the JS backend
 #[cfg(target_arch = "wasm32")]
-fn now() -> Result<u64> {
+pub(super) fn now() -> Result<u64> {
     let ms = js_sys::Date::now();
     if !(ms.is_finite() && ms >= 0.0) {
         return Err(Error::Argument);
     }
     Ok((ms / 1000.0) as u64)
-}
-
-/// The entropy of a backup payload `{v: 1, generation, entropy, secrets, manifest: {entries}}` (JSON, base64url; spec §6.3,
-/// T9 reads the rest): `Argument` for anything malformed or an entropy of other than 16, 20, 24, 28 or 32 bytes. The JSON's
-/// strings are wiped after the read.
-fn payload_entropy(pt: &[u8]) -> Result<Zeroizing<Vec<u8>>> {
-    let mut v = bounded::json(pt, MAX_PT, 4)?;
-    let read = |v: &Value| -> Option<Zeroizing<Vec<u8>>> {
-        let well_formed = v.get("v")?.as_u64()? == 1 && v.get("generation")?.as_u64().is_some() && v.get("manifest")?.get("entries")?.is_array();
-        let e = Zeroizing::new(bytes_of(v.get("entropy")?)?);
-        (well_formed && [16, 20, 24, 28, 32].contains(&e.len())).then_some(e)
-    };
-    let e = read(&v);
-    wipe_strings(&mut v);
-    e.ok_or(Error::Argument)
-}
-
-/// Every string of a JSON value (depth bounded by its reader) zeroized.
-fn wipe_strings(v: &mut Value) {
-    match v {
-        Value::String(s) => s.zeroize(),
-        Value::Array(a) => a.iter_mut().for_each(wipe_strings),
-        Value::Object(o) => o.values_mut().for_each(wipe_strings),
-        _ => {}
-    }
 }
 
 fn link_install(
@@ -640,13 +619,14 @@ fn link_install(
         return Err(Error::ContainerReplay);
     }
     let pt = open_container_with(&s.key, c, expect, members, accepted, Some(&s.short_code))?;
-    Wallet::from_entropy(&payload_entropy(&pt)?, bip39_passphrase)
+    super::manifest::install_link(&pt, bip39_passphrase)
 }
 
 impl Wallet {
     /// The wallet a link container carries to `session` (spec §6.3, C-11): `expect.purpose` must be `scaas/link/v1`
     /// (`Argument`), `created` in the session's window (`ContainerReplay`), then [`KemKeyPair::open_container`]'s acceptance with
-    /// the session's short code in the `aad`; the payload's entropy (with `bip39_passphrase`, never carried) builds the wallet.
+    /// the session's short code in the `aad`; the payload (a `BackupPayload`: `Argument` if malformed) builds the wallet: its
+    /// entropy (with `bip39_passphrase`, never carried), imported keys, manifest entries and generation.
     /// The session is consumed and its key wiped whatever the outcome, so a second install cannot be expressed.
     pub fn from_link(
         session: LinkSession, c: &SealedContainer, expect: &ContainerExpect, members: &Members, accepted: Option<&Accepted>,

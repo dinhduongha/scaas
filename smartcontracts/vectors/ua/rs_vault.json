@@ -1,0 +1,159 @@
+{
+  "note": "Written by clients/ua-rs (tests/wallet_vault.rs, `cargo test --features vectors --test wallet_vault -- --ignored regenerate`; ua-rs-sign T9, MD-7); never edit by hand. Vaults sealed by ua-rs (Wallet::seal_vault: label seed, the BIP-39 entropy at its own length, scrypt N = 2^17, r = 8, p = 1, AES-256-GCM, AAD label|data / label|pin / label|prf; a PRF envelope by Vault::enable_prf's HKDF; a pin envelope replaced by rewrap_pin) and a backup container of Wallet::backup_seal (BackupPayload {v, generation, entropy, secrets, manifest: {entries}}, sealed to the opener's KEM key, signed by the sender's UA key); read by clientkeys (test/vault.test.js openSeedVault, test/seal.test.js restoreBackup), so a format both crates read the same wrong way cannot pass one-sided. A re-run keeps every row that still opens.",
+  "vaults": [
+    {
+      "id": "ua-rs 24 words",
+      "mnemonic": "pq_kat",
+      "vault": {
+        "v": 1,
+        "label": "seed",
+        "data": {
+          "iv": "LlWLLAxlIoX62dXB",
+          "ct": "yytkGe4Kazh6dd2ECKVxz5z9vdML48R9grVECWFPklTJQlY_NRs8PqqLHFvd9FB3"
+        },
+        "pin": {
+          "kdf": "scrypt",
+          "N": 131072,
+          "r": 8,
+          "p": 1,
+          "salt": "FGP_tOC-LHmDWKlvjvfNJg",
+          "iv": "1icoVsRhsaVdMaRq",
+          "ct": "hMgfO2TAhjEELszz77odF8KihY2PSXEFAvQ65Pol4XDVaDu_jBLgEf2eZ77H0eIn"
+        }
+      },
+      "unlock": {
+        "pin": "river-otter-7 ünï"
+      },
+      "plaintext": "0x150df9e3ab10f3f8f1428d723a6539662e181ec8781355396cec5fc2ce08d760"
+    },
+    {
+      "id": "ua-rs 12 words",
+      "mnemonic": "twelve_words",
+      "vault": {
+        "v": 1,
+        "label": "seed",
+        "data": {
+          "iv": "dZTHYgjDduzqaKY9",
+          "ct": "Bn8Avp8BkJB-AjAxPlCPLh3FZb7KKTTYDkiJ0P7Fz5E"
+        },
+        "pin": {
+          "kdf": "scrypt",
+          "N": 131072,
+          "r": 8,
+          "p": 1,
+          "salt": "y4BTGBFIoHeCPNU6i4QkEg",
+          "iv": "B97gYuO8W45FYKah",
+          "ct": "ctfUm9Sw3UQuIx5y1abn_csd_R8mPWI6ZxGoqwf5K24zHtlARH1eNB6bxgR6ZiDz"
+        }
+      },
+      "unlock": {
+        "pin": "river-otter-7 ünï"
+      },
+      "plaintext": "0x7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f"
+    },
+    {
+      "id": "ua-rs PRF envelope",
+      "mnemonic": "pq_kat",
+      "vault": {
+        "v": 1,
+        "label": "seed",
+        "data": {
+          "iv": "F3UT8LTg1Zjobve4",
+          "ct": "6Ef0Kyz0lK1TLpG9mlvBi637ko_8916yM9GQldSrNb3WFFuB_4sC3k0t2K9IwDmJ"
+        },
+        "pin": {
+          "kdf": "scrypt",
+          "N": 131072,
+          "r": 8,
+          "p": 1,
+          "salt": "ARo8E-fsn8masf6jRb_-XQ",
+          "iv": "ZzEKnrknofNc4ijA",
+          "ct": "ysWAKtZcp0lA0etf1rJ8McFeT20qy02rcU6hBBMxTyrd4r9WBoENvmjZ3V9exhpq"
+        },
+        "prf": {
+          "credentialId": "ua-rs-credential",
+          "salt": "MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
+          "iv": "yJA25WyZ_x3ai2tI",
+          "ct": "-lM79xw1ReL6ixW3yqqzYI5Le5t0oIFt_Xb2PwK1ux9xdpBj0pN1g-PHr76sYsi3"
+        }
+      },
+      "unlock": {
+        "prfOutput": "0x5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a"
+      },
+      "plaintext": "0x150df9e3ab10f3f8f1428d723a6539662e181ec8781355396cec5fc2ce08d760"
+    },
+    {
+      "id": "ua-rs rewrapped pin",
+      "mnemonic": "twelve_words",
+      "vault": {
+        "v": 1,
+        "label": "seed",
+        "data": {
+          "iv": "CzWS2k3yud3IUiwy",
+          "ct": "zyn8ghMDjQFqsFbsFYkM0ygMUkdMKmqWEJqtVmWs_KA"
+        },
+        "pin": {
+          "kdf": "scrypt",
+          "N": 131072,
+          "r": 8,
+          "p": 1,
+          "salt": "wC48xTD80gx5vPNKLBq2DQ",
+          "iv": "m80E2HXpjKFgP1Cv",
+          "ct": "501j0-HktLw3TKy_H9hR1K9ZP9vtzCDCSqkKElOk_nXwR91zizAbQ5KK6EdLIbCY"
+        }
+      },
+      "unlock": {
+        "pin": "river-otter-7 ünï"
+      },
+      "plaintext": "0x7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f"
+    }
+  ],
+  "backups": [
+    {
+      "id": "ua-rs backup, 12 words, an imported evm key",
+      "container": {
+        "v": 1,
+        "purpose": "scaas/backup/v1",
+        "recipient": {
+          "ua": "fjJS3h7JgfiGYWXDb4oa6GfuoBVbrVPvjABY5_2WiF4",
+          "version": 0
+        },
+        "created": 1793928947,
+        "sender": {
+          "ua": "ySb5o9bd8j3Sz9EL9pjFJx72-eCaOAWPPvDcBbKq4YY",
+          "auth": {
+            "keyData": "1EOs5mFjtF8qEFj96_cxyYG4G7MpkEq2rBXR75eIt4E",
+            "signature": "JWahgUrGMPwSzktDxQjls_U06J1p8Eieq-ejXL4qm_20nNDdBU4DfFo8Ib_16ktYaGzSC80mKKc67OW5lVo8Cg",
+            "members": []
+          }
+        },
+        "sealed": {
+          "mlkemCt": "dIvw2OvZQVkzH9mbdesRx3mFSkQoKsg09qVdgVLvQacW0HkGHR66aj1TAKPRRJzelg6invPn4lzetZmoDV-JCOI1LdFQYIZJEjKUZxipFXOU5cOyzoi7TC0y0Fcp23866EoUONMceP4FsqFPfGIhBxsuIQnanEDI_IkcU5Ft7V-hCKJlExqLUxvme-4xL3qvxkGQ6Jbh1u9iq1y66LEXIXjMX8suNHC2YuFI7Srg6Bx9r5wAXsHe4xlevYhJDIf1bbcM-DVjJiiKyoFTR4vu-tDAiVP-Xt4t5U7csuqAHWoC6bzH-o8aiyBtnL-ET26XQzKG2OitrjA1UCrl3CqrWuSw3zVH31keOtq2tlIIRyRTs6qi5VJkyBQ3SL3rfasqUeIi9jwvOiB5Nb4z-asIGIEYIf3N5pCeNH_38UV0rR5UsVj5zXHGqC_9vjM7wsXIVgHfBwivRA7W6P4vkeHXc7NeN44TCuMaYcVzLj0TIDp2z0sdNwTPdu4Sp77zp9z8IJeyJfULRNitGHlhiUZjLda7tQ6eCnpe4NtWzMk9E62bqYNU0dmierRwAa7yXxt34fZkxI8-80O3HSIEPmNWi6fi6odZwo3Y9KmkhuhmB4sxDzKc9C5T34W4BeCIrGksQpwIfbvD0VSTTy1PJsrPua9ogHMYAtiehZoZfT8uivc39Km3kPLxrOJSa_-4zLUdALTzhT90jCyzesnS5tIJPicxxzmAPlmMhMEYqz5bMNIp3DFZx4V4KovN89t1-ez1h5wCjBx-Dz9XZBtpKy7j6mGJkAqFUw9d7L0-pwU8p0i85wg0oKl87p9xdeDNi9taDoB8oKXGcmYZ2O1V76kH_Ugydlv4H2wMUzp4mu8vaXoSYYbDdkLoAF5saRklm-JqcqrzIElZ6SqqkEjzelp1Ki2HzOIo1_0UWHIvhrR-4oTCukhUs_XpGCZDynSe0cXApRrB_VGvDVG799Rv0XnbbbqELpM4Wme6GX_6G2BrA0fbBIzN9UmqVvAt98NK4TvZkDHnNiXvpfGY6gSA_hAjD11M56CWzXkXfD7hnlF67QvQ5cgAfjPhscetWnjYsbtKByBZVxVaoAp50WD5GM9M4ElC6ChxVcSceY3vvQtVMJLq87MmM8zQWxM7OIzhrZzGG9zRYFkMOZwavzCXBkXfe2v3ooMd-XlvfgC-uAsJiAChsK8IXoA7W8t4Z5cK-T8J0wMFU5pf63LNftssnKkgSpeShOelASvIzQWXUrKvZ0u8pkwiE3p3l5SE2-Ov6P28cMuLxqxKTYhH1mWoreeYL8QU6RuLNRp1MtoGgn2YP8uYcJ6gkbSLNPh4mmWICyKntnUauPqbXdQvrOZ6AgViBSLzQaW3y7bQBoaT9V6I4RS0unY1_VNIN0nhIxPYnzYgI3lNCuMtvo7C6eFRxW5U01KAToKzYTnslDE-0Dxe2NrUD4rNYNM11Sz8RdNBSbfXYwBhYdg2NgvDcoYHG1z7RYqdIivVPyYnhdiv1za5_XZWJd0cVwY6zHwUiHdDTRbyLG4TpRlWHW_dz8__rMgxGTuzZ-htARlRSHUJl771ryWcAlta981oni052OQDdyndC2Yr2qhQmz7lTyV1t89dBSuCdbTyYkoE87szbYdXFWFBqJieqBEqePLRzHcDEHUp8ak-Q8K0znrQvQVSrYibmL_T9N3mICw3FJmyWfGmWEz0cQFBU0hh7M_t489MRrEhp6Y7kYQQFVPRk4J3cmWpPZa_whPz0RkBG3uKeU2_y5xr36NEISJ0rurayc0v9SjLvilpUyyg3GNW7N6d-CKtnGPbwX68LmmhZRKQsrBk29uysgQiDyDfYSfzTgbAyQ3k14ZbnkpNylbqj8IQh3A6o5EIus4ERfi8vcrSLCA3uMKEeWc9OX_3YkAIxmtBL8RGvEP-r82FNRYab3-PG-atRWgPBXrA3WohOiMFg0Dp2re_wWNQ7MnQ3BaLq4-maYud-Mj_4KQ_yuWMdAe0NeKzEgH9ODTC9t77rTgAEU2Zr1r81rpineXBKFp6BqU9m2ErnvxHiFICih5g7DjIqHnno-KyZ_3W7i_3P7_O_AHZqyQ",
+          "x25519Eph": "ECwAME0j3JSYu0GkIk-NgtqVQD7hq9V-TUNbcfxZOVs",
+          "ciphertext": "SchHThoQ_CbzTWrpAejtGpA4o1iVDEoMaMzd4Gbae4L-w4_GDgFSFyz4i9kB1ObepGGhA8ytfV4Mdrs6qg9eyE_H8TH8QiJ_bKYTrh5-l2k2W6IzNXAXawOQJTxdsQAAQNjlig679USgbCteEkJwcTFflhZyq3wZieSfm6_8J6qTipkjO6vUO7COBLhlfffIXStsdEmnZS3XEnbDuDrjjxAiSrjHykH8r4uzL46vyUv6ssKImWiHwUBofGopl41gvSdRrixd47awndLjtkWnYI0_VdUDGDvX4Q9PnFVE9tqdO9_l7d08IT97S57fKTHDyUl566-R2_OQfgKbkYnr68_d50q7BAp_c28a-D6MxK3hyr8BClL4kxCB5sdEFyOrq8b4i6LvrNES2jXteHAOW9U"
+        }
+      },
+      "senderUa": "0xc926f9a3d6ddf23dd2cfd10bf698c5271ef6f9e09a38058f3ef0dc05b2aae186",
+      "sender": {
+        "mnemonic": "twelve_words",
+        "kind": 258,
+        "account": 0,
+        "index": 0
+      },
+      "opener": {
+        "kem": {
+          "mnemonic": "pq_kat",
+          "kind": 304,
+          "account": 0,
+          "index": 0,
+          "version": 0
+        }
+      },
+      "entropy": "0x7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f",
+      "generation": 1,
+      "secrets": [
+        "native-import:evm:0"
+      ]
+    }
+  ]
+}

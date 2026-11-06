@@ -13,8 +13,9 @@
 //! [`webauthn_challenge`] and [`webauthn_assertion`] (against the expected challenge, verified before return); `kem`, T7: the UA
 //! KEM key through its UA key's own store ([`UaKey::kem_key`]), [`kem_encaps`], [`KemKeyPair`]; `aead`, `seal`, T8: AEAD, HKDF, HMAC,
 //! [`seal`] / [`KemKeyPair::open`], the sealed containers of backup and link ([`seal_container`], [`KemKeyPair::open_container`],
-//! [`LinkSession`], [`Wallet::from_link`]); the vault with T9. Randomness: `rand_core` 0.6 `OsRng` inside; no call takes an
-//! RNG. UNAUDITED.
+//! [`LinkSession`], [`Wallet::from_link`]); `vault`, `manifest`, T9: the clientkeys vault v1 ([`Vault`], [`Wallet::seal_vault`],
+//! [`Wallet::open_vault`]), the [`Manifest`], discovery, imported keys, the [`SeedBackup`] confirmation, [`Wallet::backup_seal`] and
+//! [`Wallet::restore_backup`]. Randomness: `rand_core` 0.6 `OsRng` inside; no call takes an RNG. UNAUDITED.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing, clippy::disallowed_methods)]
 
 mod aead;
@@ -32,6 +33,7 @@ pub(crate) mod derive;
 pub mod pairing;
 #[cfg(not(feature = "vectors"))]
 mod pairing;
+mod manifest;
 mod policy;
 #[cfg(feature = "vectors")]
 pub mod seal;
@@ -49,11 +51,15 @@ mod signer;
 mod store;
 mod tx;
 mod uasig;
+mod vault;
 mod webauthn;
 
 pub use aead::{aead_open, aead_seal, hkdf_expand_sha256, hkdf_sha256, hmac_sha256, Alg};
 pub use eip712::{scaas_typed_data, TypedData};
 pub use kem::{is_kem_holder, kem_encaps, KemKeyPair};
+#[cfg(feature = "vectors")]
+pub use manifest::vectors_backup_payload;
+pub use manifest::{AllowRollback, ImportEntry, KemEntry, Manifest, ManifestEntry, NativeEntry};
 pub use pairing::{FrostSession, Musig2Session};
 pub use policy::{AllowAnyTypedData, AllowRow, Expect, Invalidate, SubjectKey};
 pub use seal::{
@@ -63,6 +69,7 @@ pub use seal::{
 pub use signer::{AllowRawDigest, KeyRef, SigRole, SignRequest, Signer};
 pub use tx::{AccessListItem, EvmTx, SignedTx};
 pub use uasig::{membership_sig, msig_sig, ua_sig, Slot};
+pub use vault::{check_passphrase, PrfEnvelope, Unlock, Vault};
 pub use webauthn::{webauthn_assertion, webauthn_challenge};
 
 use crate::UAError;
@@ -108,6 +115,15 @@ pub enum Error {
     ContainerSender,
     /// A link container created outside its session's window (spec §6.3, C-11).
     ContainerReplay,
+    /// A vault that does not open with this passphrase or PRF secret (wrong, or the vault altered), or a seed vault whose
+    /// payload is not BIP-39 entropy (spec §8.1).
+    VaultOpen,
+    /// A pin envelope outside `N ∈ {2^15, 2^16, 2^17}, r = 8, p = 1` (refused before scrypt runs; CLI-SGN-21).
+    VaultParams,
+    /// A vault of a version other than 1 (`v: 2` and its tombstone): open it where it was made and export v1 (spec §8.1).
+    VaultVersion,
+    /// A backup older than the one the wallet holds, without [`AllowRollback`] (spec §6.3, C-11).
+    BackupRollback,
     Ua(UAError),
 }
 
@@ -128,6 +144,10 @@ impl Error {
             Error::SealVersion => "SealVersion",
             Error::ContainerSender => "ContainerSender",
             Error::ContainerReplay => "ContainerReplay",
+            Error::VaultOpen => "VaultOpen",
+            Error::VaultParams => "VaultParams",
+            Error::VaultVersion => "VaultVersion",
+            Error::BackupRollback => "BackupRollback",
             Error::Ua(e) => e.code(),
         }
     }
@@ -213,6 +233,8 @@ pub(crate) enum KeyId {
     Native(Network, u32, Option<u32>),
     /// A UA's KEM key: its UA and the KEM record's version (spec §6.1).
     Kem([u8; 32], u64),
+    /// Imported key `n` (`native-import:<network>:<n>`, spec §8.3).
+    Import(u32),
 }
 
 /// A mnemonic as clientkeys `normalizeMnemonic` (NFKD, lower case, single spaces), at most 1 KiB and 24 words (spec §9.3),
@@ -245,14 +267,88 @@ fn entropy_of(m: bip39::Mnemonic) -> Result<Zeroizing<Vec<u8>>> {
     Ok(e)
 }
 
-/// The entropy of a new wallet, handed out once (spec §8.4; the three-word check and the vault are T9's).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum BackupState {
+    Fresh,
+    Revealed,
+    Challenged,
+    Verified,
+}
+
+/// The recovery phrase of a new wallet (spec §8.4, CLI-SGN-11, clientkeys `SeedBackup`): shown once ([`SeedBackup::reveal`]),
+/// confirmed by three words at random positions ([`SeedBackup::challenge`], [`SeedBackup::verify`]), only then handed out once
+/// ([`SeedBackup::take`]) and forgotten. States `fresh → revealed → challenged → verified → taken`.
 pub struct SeedBackup {
     entropy: Option<Zeroizing<Vec<u8>>>,
+    state: BackupState,
+    asked: [usize; 3],
 }
 
 impl SeedBackup {
-    /// The entropy; `None` after the first call.
+    fn words(&self) -> Result<bip39::Mnemonic> {
+        bip39::Mnemonic::from_entropy(self.entropy.as_deref().ok_or(Error::Argument)?).map_err(|_| Error::Argument)
+    }
+
+    /// The words, once (`Argument` after).
+    pub fn reveal(&mut self) -> Result<Zeroizing<String>> {
+        if self.state != BackupState::Fresh {
+            return Err(Error::Argument);
+        }
+        let words = Zeroizing::new(self.words()?.to_string());
+        self.state = BackupState::Revealed;
+        Ok(words)
+    }
+
+    /// Three distinct positions to ask, 1-based and ascending (OS RNG); asked again after a miss. `Argument` before `reveal`.
+    pub fn challenge(&mut self) -> Result<[usize; 3]> {
+        if !matches!(self.state, BackupState::Revealed | BackupState::Challenged) {
+            return Err(Error::Argument);
+        }
+        let count = self.words()?.word_count();
+        let bound = u32::try_from(count).map_err(|_| Error::Argument)?;
+        let mut picked: Vec<usize> = Vec::with_capacity(3);
+        while picked.len() < 3 {
+            let mut b = [0u8; 4];
+            OsRng.try_fill_bytes(&mut b).map_err(|_| Error::Rng)?;
+            let n = u32::from_be_bytes(b);
+            // uniform: draws above the last whole multiple of `count` are redrawn
+            if n >= u32::MAX - u32::MAX % bound {
+                continue;
+            }
+            let i = usize::try_from(n % bound).map_err(|_| Error::Argument)?;
+            if !picked.contains(&i) {
+                picked.push(i);
+            }
+        }
+        picked.sort_unstable();
+        let mut asked = [0usize; 3];
+        asked.iter_mut().zip(&picked).for_each(|(a, p)| *a = *p);
+        self.asked = asked;
+        self.state = BackupState::Challenged;
+        Ok(asked.map(|i| i + 1))
+    }
+
+    /// Whether `answers` are the words at the asked positions, in order (case and surrounding space ignored); `true` makes the
+    /// entropy available to [`SeedBackup::take`]. `Argument` before a challenge.
+    pub fn verify(&mut self, answers: &[&str]) -> Result<bool> {
+        if self.state != BackupState::Challenged {
+            return Err(Error::Argument);
+        }
+        let m = self.words()?;
+        let words: Vec<&str> = m.words().collect();
+        let ok = answers.len() == self.asked.len()
+            && self.asked.iter().zip(answers).all(|(i, a)| words.get(*i) == Some(&Zeroizing::new(a.trim().to_lowercase()).as_str()));
+        if ok {
+            self.state = BackupState::Verified;
+        }
+        Ok(ok)
+    }
+
+    /// The entropy, once the words were confirmed; `None` before that and after the first call.
     pub fn take(&mut self) -> Option<Zeroizing<Vec<u8>>> {
+        if self.state != BackupState::Verified {
+            return None;
+        }
         self.entropy.take()
     }
 }
@@ -268,7 +364,7 @@ impl Wallet {
         let mut e = Zeroizing::new(vec![0u8; 32]);
         OsRng.try_fill_bytes(&mut e).map_err(|_| Error::Rng)?;
         let w = Wallet::from_entropy(&e, "")?;
-        Ok((w, SeedBackup { entropy: Some(e) }))
+        Ok((w, SeedBackup { entropy: Some(e), state: BackupState::Fresh, asked: [0; 3] }))
     }
 
     /// The wallet of a 12- to 24-word English mnemonic (NFKD, case and spacing as clientkeys) and its BIP-39 passphrase.
@@ -304,6 +400,9 @@ impl Wallet {
         })?;
         // a MuSig2 participant (0x0110, 0x0112) has no UA of its own: its group is the UA
         let ua = if matches!(kind, 0x0110 | 0x0112) { None } else { Some(crate::derive_ua(kind, &key_data, false)?) };
+        if let Some(ua) = ua {
+            self.store.note(|m| m.add_ua(kind, account, index, ua));
+        }
         Ok(UaKey { kind, account, index, key_data, ua, secret })
     }
 
@@ -315,6 +414,7 @@ impl Wallet {
             let public = derive::native_public(network, &s)?;
             Ok((s, public))
         })?;
+        self.store.note(|m| m.add_native(network, coin_type, index));
         Ok(NativeKey { network, index, coin_type, public_key, secret })
     }
 }

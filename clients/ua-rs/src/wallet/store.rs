@@ -4,9 +4,11 @@
 //! in it as bytes. A handle holds the `Arc`, the generation at its creation and its slot: no secret bytes. Every secret
 //! operation runs under the read guard and refuses `KeyRevoked` when its generation is not the store's; `lock` takes the
 //! write lock (it waits for every operation in flight), wipes the arena and raises the generation, so no earlier handle works
-//! again; `open` builds a new arena at the raised generation. `mlock` / no-dump of the chunks is T10. UNAUDITED.
+//! again; `open` builds a new arena at the raised generation. The store also holds the wallet's public manifest (spec §8.3),
+//! outside the arena: `lock` keeps it. `mlock` / no-dump of the chunks is T10. UNAUDITED.
 // the readers of secrets (`Handle::with`, the entropy for the vault) are the signers (T3a–T3d) and the vault (T9)
 #![cfg_attr(not(feature = "vectors"), allow(dead_code))]
+use super::manifest::Manifest;
 use super::{Error, KeyId, Result};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
@@ -81,6 +83,17 @@ impl Arena {
         self.get(self.entropy)
     }
 
+    /// The secret of key `id`, if the arena holds it.
+    pub(crate) fn secret(&self, id: KeyId) -> Option<&[u8]> {
+        self.get(self.keys.get(&id)?.0).ok()
+    }
+
+    /// `secret` (and its public key data) as key `id`, a key not derived from the seed (an imported key).
+    pub(crate) fn insert(&mut self, id: KeyId, secret: &[u8], public: Vec<u8>) -> Result<()> {
+        let slot = self.put(secret)?;
+        self.keys.insert(id, (slot, public));
+        Ok(())
+    }
 }
 
 impl Drop for Arena {
@@ -94,6 +107,7 @@ impl Drop for Arena {
 struct Inner {
     generation: u64,
     arena: Option<Arena>,
+    manifest: Manifest,
 }
 
 pub(crate) struct SecretStore(RwLock<Inner>);
@@ -107,7 +121,7 @@ pub(crate) struct Handle {
 
 impl SecretStore {
     pub(crate) fn new() -> Arc<SecretStore> {
-        Arc::new(SecretStore(RwLock::new(Inner { generation: 0, arena: None })))
+        Arc::new(SecretStore(RwLock::new(Inner { generation: 0, arena: None, manifest: Manifest::default() })))
     }
 
     // a panic under the lock cannot leave a half-written arena that a reader would trust: every write path below either
@@ -176,12 +190,35 @@ impl SecretStore {
     pub(crate) fn single(secret: &[u8]) -> Result<Handle> {
         let mut arena = Arena::empty();
         let slot = arena.put(secret)?;
-        Ok(Handle { store: Arc::new(SecretStore(RwLock::new(Inner { generation: 0, arena: Some(arena) }))), generation: 0, slot })
+        let inner = Inner { generation: 0, arena: Some(arena), manifest: Manifest::default() };
+        Ok(Handle { store: Arc::new(SecretStore(RwLock::new(inner))), generation: 0, slot })
     }
 
     /// `f` over the open arena under the read guard; `WalletLocked` while locked.
     pub(crate) fn with_arena<R>(&self, f: impl FnOnce(&Arena) -> Result<R>) -> Result<R> {
         f(self.read().arena.as_ref().ok_or(Error::WalletLocked)?)
+    }
+
+    /// `f` over the seed under the read guard (a derivation that stores nothing: discovery); `WalletLocked` while locked.
+    pub(crate) fn with_seed<R>(&self, f: impl FnOnce(&[u8; 64]) -> Result<R>) -> Result<R> {
+        self.with_arena(|a| f(&Zeroizing::new(a.get(a.seed)?.try_into().map_err(|_| Error::Argument)?)))
+    }
+
+    /// `f` over the open arena and the manifest under the write lock; `WalletLocked` while locked.
+    pub(crate) fn with_all<R>(&self, f: impl FnOnce(&mut Arena, &mut Manifest) -> Result<R>) -> Result<R> {
+        let mut g = self.write();
+        let Inner { arena, manifest, .. } = &mut *g;
+        f(arena.as_mut().ok_or(Error::WalletLocked)?, manifest)
+    }
+
+    /// The manifest (public; kept by `lock`).
+    pub(crate) fn manifest(&self) -> Manifest {
+        self.read().manifest.clone()
+    }
+
+    /// `f` over the manifest under the write lock, locked or not.
+    pub(crate) fn note(&self, f: impl FnOnce(&mut Manifest)) {
+        f(&mut self.write().manifest);
     }
 
     #[cfg(feature = "vectors")]
@@ -204,6 +241,16 @@ impl Handle {
     /// A second handle of the same secret (a session keeps its key's), for the crate only: handles are not `Clone`.
     pub(crate) fn dup(&self) -> Handle {
         Handle { store: self.store.clone(), generation: self.generation, slot: self.slot }
+    }
+
+    /// Whether this handle is of store `s` (a backup's sender key of the wallet that seals).
+    pub(crate) fn of_store(&self, s: &Arc<SecretStore>) -> bool {
+        Arc::ptr_eq(&self.store, s)
+    }
+
+    /// `f` over this handle's store's manifest (a KEM key written at its first use).
+    pub(crate) fn note(&self, f: impl FnOnce(&mut Manifest)) {
+        self.store.note(f);
     }
 
     /// Locks this handle's store (wipes it, revokes every handle of it): an ephemeral key's own store only.

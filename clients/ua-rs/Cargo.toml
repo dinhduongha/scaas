@@ -59,6 +59,9 @@ ml-kem = { version = "=0.3.4", default-features = false, features = ["zeroize"],
 aes-gcm = { version = "=0.10.3", default-features = false, features = ["aes", "alloc", "zeroize"], optional = true }
 aes-gcm-siv = { version = "=0.11.1", default-features = false, features = ["aes", "alloc"], optional = true }
 base64ct = { version = "=1.8.3", default-features = false, features = ["alloc"], optional = true }
+# ua-rs-sign T9: the clientkeys vault v1 pin envelope (spec §8.1, CLI-SGN-02: scrypt N = 2^17, r = 8, p = 1), pin of T0; no
+# `simple` / `std` (password-hash and its rand_core 0.6 are not taken): salsa20 0.10.2, pbkdf2 0.12.2 (MIT OR Apache-2.0)
+scrypt = { version = "=0.11.0", default-features = false, optional = true }
 
 # wasm32-unknown-unknown: `rand_core` 0.6's `OsRng` through getrandom 0.2's JS backend (T0: features only, no --cfg)
 [target.'cfg(target_arch = "wasm32")'.dependencies]
@@ -72,7 +75,7 @@ js-sys = { version = "=0.3.107", optional = true }
 # exactly one with `pqz` (T15 checks it). `vectors`: test-only entry points (secrets through hooks), never in a release build.
 default = ["wallet", "zether", "pqz", "pqz-set-n2304-kmax4096"]
 wallet = ["pq", "signers", "json", "dep:bip39", "dep:bip32", "dep:hkdf", "dep:hmac", "dep:zeroize", "dep:unicode-normalization",
-    "dep:ripemd", "dep:bs58", "dep:blake2", "dep:alloy-rlp", "dep:ml-kem", "dep:aes-gcm", "dep:aes-gcm-siv", "dep:base64ct", "dep:js-sys", "rand_core/getrandom", "dep:getrandom", "ed25519-dalek/zeroize", "ml-dsa/zeroize", "slh-dsa/zeroize"]
+    "dep:ripemd", "dep:bs58", "dep:blake2", "dep:alloy-rlp", "dep:ml-kem", "dep:aes-gcm", "dep:aes-gcm-siv", "dep:base64ct", "dep:scrypt", "dep:js-sys", "rand_core/getrandom", "dep:getrandom", "ed25519-dalek/zeroize", "ml-dsa/zeroize", "slh-dsa/zeroize"]
 zether = ["wallet"]
 pqz = ["wallet"]
 pqz-set-n2048-kmax1024 = []
@@ -146,4 +149,8 @@ required-features = ["wallet"]
 
 [[test]]
 name = "wallet_seal"
+required-features = ["wallet"]
+
+[[test]]
+name = "wallet_vault"
 required-features = ["wallet"]
