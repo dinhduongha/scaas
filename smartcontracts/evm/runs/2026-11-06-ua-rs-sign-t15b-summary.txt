@@ -1,0 +1,25 @@
+# 2026-11-06 ua-rs-sign T15b: op 7 memoHash per explicit mode (owner 2026-11-06; spec no-decryption-oracle §4.11, finding F10). clients/ua-rs
+# src/facade/pqz.rs: proveTransferMulti takes the named field `mode` = "HASH" | "BUNDLE" (no default, any other value Argument before
+# the key); memoHash as PqzCore._parseMulti (ua-mtx-merge): HASH -> keccak256(salt || sealedMemo) and the memo `salt || sealedMemo`
+# returned, BUNDLE -> 0 and no memo (no memo sealed). Op 1 unchanged until ua-mtx-merge T36a. No contract, statement layout, transcript,
+# vector file, C ABI export or dependency changed. UNAUDITED.
+# All commands through scripts/capped, foreground, -j2, --locked, --offline; full logs git-ignored (clients/ua-rs/target/t15b/,
+# clients/ua-c/target/t15b/). Gates on the tree of 997fb015 (the T15b code commit).
+step | commit | rc | counts
+red: the new tests at the old allow-list (mutant M8 below: `mode` refused as at 215663a5) | 997fb015 - M8 | 101 | 5 failed (every op 7 test)
+positive control: the old memoHash (keccak256(memo) on every build; mutant M1) | 997fb015 - M1 | 101 | HASH tests pass (multi_hash_memo_hash_matches_contract, transfer_multi_memo_and_sender_disclosure), BUNDLE fail (multi_bundle_memo_hash_is_zero, vectors::multi_rows_per_mode)
+ua-rs test --features vectors --test facade_pqz | 997fb015 | 0 | 19 passed (T15: 15; + multi_bundle_memo_hash_is_zero, multi_hash_memo_hash_matches_contract, multi_without_mode_refused, vectors::multi_rows_per_mode: all 11 op 7 rows of statement_transfer_multi.json, HASH = the row's statement and memo, BUNDLE = the row's statement with memoHash 0, no memo)
+ua-rs test --test facade_pqz (default) | 997fb015 | 0 | 14 passed
+ua-rs test --no-default-features --features pqz,pqz-set-n2048-kmax1024 --test facade_pqz | 997fb015 | 0 | 14 passed
+ua-rs test --no-default-features --features pqz,pqz-set-n2048-kmax1024,vectors --test facade_pqz | 997fb015 | 0 | 19 passed (the n2048-kmax1024 rows)
+ua-rs test --features vectors --test fuzz_caps (seeds.py: the op 7 seed gains "mode") | 997fb015 | 0 | 9 passed
+ua-rs clippy --all-targets -D warnings: default, vectors, pqz,pqz-set-n2048-kmax1024 (+ vectors) | 997fb015 | 0 | 0 warnings each (4 cells); pqzl's 2 `deprecated` GenericArray warnings, not ours
+ua-c cargo build; cargo test (lib + header) | 997fb015 | 0 | 4 + 5 passed (no export or header change)
+ua-c test_vectors.py (ctypes) | 997fb015 | 0 | 85 tests OK
+ua-c C smoke (cc -std=c99 -Wall -Wextra -Werror) | 997fb015 | 0 | smoke ok
+docs_check check / paths | 997fb015 | 0 | 0 errors 5 warnings (existing) / 0 machine paths
+mutants: 2026-11-06-ua-rs-sign-t15b-mutants.py | 997fb015 | 0 | 8 killed, 0 survived, 0 not loaded (2026-11-06-ua-rs-sign-t15b-mutants.txt): the plan's 3 (memoHash set on BUNDLE, the salt dropped from the hash, a default mode) and 5 of the controller's
+# Decisions (controller, the owner may override): (1) The mode strings are the enum's names, "HASH" and "BUNDLE" (ZetherTypes.TransferMode);
+# no lower-case or numeric form. (2) BUNDLE seals no memo at all (nothing to return, the contract takes an empty sealedMemo). (3) The
+# contract's own statement for BUNDLE is not in a vector file; the test derives it from the HASH row with only memoHash zeroed, which is
+# _parseMulti's only mode-dependent word (envelopeBinding, where the mode is folded in, is a caller field).
