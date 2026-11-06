@@ -4,7 +4,8 @@
 the controller), then by **owner rulings 2026-11-06**: `ua-rs` contains no light client and no chain-state verifier; the check
 that words are real chain state belongs to the layer that reads the chain (the wallet layer and the app, as `ua-rs-sign` spec
 §10.2 already places chain reading); `ua-rs` keeps the library duties of §4.3. The owner then decided Q1, Q1b and Q3 as
-recommended and recorded Q2 as moot for `ua-rs` (2026-11-06, §7). Fix spec for owner ruling ARCH-POS-13 "Never a
+recommended and recorded Q2 as moot for `ua-rs` (2026-11-06, §7). Revised again after independent Fable and Codex reviews
+(2026-11-06 / 07, all items accepted, §9). Fix spec for owner ruling ARCH-POS-13 "Never a
 decryption oracle" (`docs/decisions.md` on branch `ua-mtx-merge`, not yet on this branch, commit `62adb3d7`; also in
 `AGENTS.md`). The owner's words: **"NO oracle!"**: absolute, no exception, no opt-in. Plan tasks: appended to
 [`plans/2026-11-05-ua-rs-sign.md`](../plans/2026-11-05-ua-rs-sign.md) (section "ARCH-POS-13 rework"). Inputs: the read-only code
@@ -40,14 +41,14 @@ the rule is one rule for every scheme.
 
 | Id | Sev. | Where (ua-rs-sign unless [M] = `ua-mtx-merge`) | Problem | Resolved in |
 |---|---|---|---|---|
-| F1 | P1 | `clients/ua-rs/src/facade/pqz.rs` command `dec {ct, window}` (parse ~337, run ~641, `value` ~504); every binding through `scaas_ua_pqz_call` (`ua-c` `lib.rs` ~2426, `ua-py`, `ua-go`, `ua-cs`, `ua-cxx`, `ua-dart-frb`) | any well-formed caller ciphertext → all 16 digits: the rounding oracle | §4.3, §4.5 |
+| F1 | P1 | `clients/ua-rs/src/facade/pqz.rs` command `dec {ct, window}` (parse ~337, run ~641, `value` ~504); every binding through `scaas_ua_pqz_call` (`ua-c` `lib.rs` ~2426, `ua-py`, `ua-go`, `ua-cs`, `ua-cxx`, `ua-dart-frb`) | any well-formed caller ciphertext → all 16 digits: the rounding oracle | §4.3, §4.5, §4.8 |
 | F2 | P1 | same file, `proveDisclose {stmt}` (~392, ~673) | the whole op 5 statement is the caller's; proof or refusal is a 1-bit oracle (≤ 2n queries) | §4.6 |
 | F3 | P2 | same file, `proveTransfer`, `proveBurn`, `proveRefresh`, `proveTransferMulti` (~348–372, ~655–667, `rest` ~709) | decrypt the caller's `T`; the success bit reaches a malicious RPC or relayer | §4.5 |
 | F4 | P3 | `pqz-core`: C `pqz.h` ~156–193, `pqz_keys.c` ~229–252; Rust `pqzl/rust/src/lib.rs` ~389–406 (`decrypt_raw`); `pqz-core/ffi/src/pqzl/{rust,c}.rs` (`dec`, `dec_win`) | return digits and noise / raw `w` to any in-process caller; [M] T6 says "noise never leaves `pqz_dec`" (`pq-zero-knowledge.md` ~2435) | §4.8 |
 | F5 | P2 | [M] `docs/clients/signers-clientkeys.md` ~81–88 (CLI-SGN-31), [M] `docs/research/07-custody-providers.md` ~111 (PLANNED) | `zk_mul_by_x(points, ctx)` is a static-DH oracle that bypasses `ChainWitness` | §4.9 |
 | F6 | P3 | `clients/zether-prover/src/api.rs` ~685–708 (`decrypt`, `decryptPending`, `checkBalance`); `clients/ua-rs/src/facade/zether.rs` | caller `(C, D)`: no key recovery, but plaintext and timing leak; variable-time `D·x` on an attacker's `D` | §4.7 |
 | F7 | P3 | `zether-prover` binary `zether-read-balance --rpc` | decrypts what an RPC hands it | §4.7 |
-| F8 | P3 | `openMemo` in both facades (PQZ: `pqz_ffi::memo::open`, a keystream without MAC) | a crafted memo with a real memo's header and salt returns the keystream, which opens the real memo (no key recovery) | §4.6, §4.7 |
+| F8 | P3 | `openMemo` in both facades (PQZ: `pqz_ffi::memo::open`, a keystream without MAC) | a crafted memo with a real memo's header and salt returns the keystream, which opens the real memo (no key recovery) | §4.3, §4.6, §4.7 |
 | F9 | — | docs: PQZ CTR-PQZ-03 / -14 / T6; Zether `zether.md` says nothing; NODE-LANE-03 and CLI-SGN-31 cover only the server oracle; `docs/clients/ua-libraries.md` says nothing | the rule is not stated where implementers read | §6 |
 | F10 | P2 | `pqz.rs` `multi` (~803): `memoHash = keccak(memo)` always | the contract fills `memoHash` only in HASH mode (`PqzCore._parseMulti`, ~430) and leaves 0 in BUNDLE; an op 7 BUNDLE proof from the facade is refused | §4.10 |
 
@@ -78,124 +79,158 @@ quorum members (research §12.5); that quorum question is not reopened here.
 
 | Layer | Duty under ARCH-POS-13 |
 |---|---|
-| The layer that reads the chain (wallet layer, app; outside this repository) | reads from a source the holder trusts; guarantees the words are chain state of a catalogued token on a known chain, for the account's registered key (R1 to R6, §4.2); never reports anything about a decryption to the source |
-| `ua-rs` (facades and every binding) | no bare ciphertext, statement or `T` API in release builds; decrypting commands take named location fields and the supplied storage words; rebuilds `T`, `p`, entries and the op 5 statement exactly as the contract; one refusal status; nothing about a decryption returned to anyone but its caller (§4.3) |
-| The enclave of CLI-SGN-31 (PLANNED) | as `ua-rs`, and whole operations only (§4.9); the layer feeding it bears R1 to R6 |
+| The layer that reads the chain (wallet layer, app; outside this repository) | reads from one source the holder trusts; guarantees the words are chain state of a catalogued token on a known chain, and that the selected leg belongs to the handle's key (R1 to R7, §4.2); never reports anything about a decryption to the source |
+| `ua-rs` (facades and every binding) | no bare ciphertext, statement or `T` API in a production artifact, and no way for a dependency to switch one back on (§4.8); decrypting commands take named location fields and the **raw** storage words; the facade alone parses them and rebuilds `T`, `p`, entries and the op 5 statement exactly as the contract; one refusal status; nothing about a decryption returned to anyone but its caller (§4.3) |
+| The enclave of CLI-SGN-31 (PLANNED) | as `ua-rs`, and whole operations only (§4.9); the layer feeding it bears R1 to R7 |
 
 ### 4.2 Requirements on the layer that reads the chain (normative; not `ua-rs` code)
 
-These are rules for the wallet layer and the app. They bind them under ARCH-POS-13: reading the words from an untrusted RPC or
-indexer and passing them to `ua-rs` is an oracle, and the fault is that layer's.
+These bind the wallet layer and the app under ARCH-POS-13: reading the words from an untrusted RPC or indexer and passing them
+to `ua-rs` is an oracle, and the fault is that layer's. Each requirement has a checkable assertion (EVM; another family states
+its own equivalent before its layout parser lands).
 
-- **R1 Trusted source.** Words come from a source the holder trusts: the holder's own node, a node the holder configured
-  explicitly, or a light client of the reading layer that verifies finality and state proofs. A default or discovered endpoint
-  is not trusted for this (owner decision Q1, 2026-11-06, §7).
-- **R2 Known chain.** The chain is the pair `(chainId, chain_uid)` of the holder's configuration (genesis hashes as pinned in
-  `smartcontracts/evm/chain-uids.json`, [NET-ALL-22](../../networks/README.md#NET-ALL-22)), never the source's own answer.
-- **R3 Catalogued token.** The token is catalogued by that chain's `OpenFactory` (its known address) with a PQZ kind for the
-  PQZ facade, a Zether kind for the Zether facade (`_info[token]`: `exists`, `kind`). A contract that only copies the layout
-  is not PQZ or Zether state.
-- **R4 Registered key.** The registry the token names holds, for the account, the key of the handle in use: PQZ
-  `pqzKeyOf(ua)` with `proven` set and `keccak256(GROUP("pqz-mlwe") ‖ pk)` equal to the handle's; for `auditRead` and
-  `AUDITOR` disclosure the account is the token's `auditorUA`; Zether, the registered `Y` equal to the handle's.
-- **R5 One block.** Every word of one request is from one block's state. (A pruning node such as Nethermind's default serves
-  `eth_getProof` only for recent blocks; a reading layer that verifies proofs asks at a recent head.)
-- **R6 Nothing back.** No result, failure, error code or result-dependent timing of a decryption goes back to the source; a
-  result goes to the holder or a viewer the holder names.
+| Id | Requirement | Checkable assertion |
+|---|---|---|
+| R1 | **One trusted source per request** (owner decision Q1, 2026-11-06, §7): the holder's own node, a node the holder configured explicitly, or a verifying light client in the reading layer; never an app default or a discovered endpoint. Every word of one request comes from that one source. | the request's words carry one source id from the holder's configuration; a second source in one request is refused by the reading layer |
+| R2 | **Known chain.** `(chainId, chain_uid)` from the holder's configuration (genesis hashes as pinned in `smartcontracts/evm/chain-uids.json`, [NET-ALL-22](../../networks/README.md#NET-ALL-22)). | `eth_chainId` and `eth_getBlockByNumber("0x0").hash` equal the configured pair |
+| R3 | **One final block.** All words from one block that is final by the chain's rule, or at the holder's configured confirmation depth where the chain has no finality (a single-signer chain, [NET-EVM-04](../../networks/evm.md#NET-EVM-04)). | every read names the same block number and hash; `head − block ≥ depth` or the block is at or below the chain's finalized tag |
+| R4 | **Real storage, not views.** Storage words by `eth_getStorageAt` / `eth_getProof` at that block; blob and key code by `eth_getCode`, whose `keccak256` equals the account's `codeHash` (proven where the source is a light client). `eth_call` views only from R1's own or configured node, never as the sole source of a word a light client verifies. | `keccak256(code) == codeHash` for each pointer; the storage method and block recorded per word |
+| R5 | **Catalogued token.** The token is catalogued by that chain's `OpenFactory` (its configured address) with a PQZ kind for the PQZ facade, a Zether kind for the Zether facade. | `_info[token]` read as storage: `exists` set and `kind` in the facade's kinds |
+| R6 | **The selected leg belongs to the handle.** For the leg the command reads: its recipient UA's registered key equals the handle's key (PQZ: `pqzKeyOf(ua)` with `proven` set and `keccak256(GROUP("pqz-mlwe") ‖ pk)` equal to the handle's; Zether: the registered `Y`). For an auditor read: the account is the token's `auditorUA`, the token's `auditorMode` is not NONE, and the entry actually holds an auditor copy for that leg (an entry without one is refused); for a disclosure kind, the token's `disclosureMode` allows it. | the registry and token words read as storage at the same block; the comparisons above |
+| R7 | **Nothing back.** No result, failure, error code, result-dependent timing, follow-up read or log line that depends on a decryption goes back to the source; a result goes to the holder or a viewer the holder names. | no request to the source after a decrypt depends on its outcome (reviewable in the reading layer's code) |
 
-`pkT`, `pkA` and the op 7 legs' keys stay plain caller fields: encryption to a public key is public, and a wrong recipient or
-auditor key is refused on chain by `PqzCore._creditKey` (and the auditor-key check).
+`pkT`, `pkA` and the op 7 legs' keys of a debit stay plain caller fields: encryption to a public key is public, and a wrong
+recipient or auditor key is refused on chain by `PqzCore._creditKey` (and the auditor-key check).
 
-**What the source's trust costs (stated, §4.12):** the holder's own full node re-executes the chain, so it trusts nothing more
-than the chain's rules. A light client trusts the chain's sealing keys: a sealer, or a leaked sealing key, can seal a header over
-a fabricated `stateRoot` (one key on a single-signer chain, [NET-EVM-04](../../networks/evm.md#NET-EVM-04)), and then the
-holders' spend attempts become the oracle of §1. A node operated by someone else trusts that operator.
+**The source's residual (owner decision Q1b, 2026-11-06, §7):** the holder's own full node re-executes the chain, so it trusts
+nothing beyond the chain's rules; a light client trusts the chain's sealing keys (a sealer or a leaked sealing key can seal a
+header over a fabricated `stateRoot`, one key on a single-signer chain); another operator's node trusts that operator. This is
+the holder's chosen trust, stated in `zether.md` and `pq-zero-knowledge.md` (T19b).
 
-### 4.3 `ua-rs`: location-bound words, rebuilt as the contract does
+### 4.3 `ua-rs`: raw words for a named location, parsed and rebuilt only by the facade
 
-> **A facade decrypts only a ciphertext it rebuilt itself from storage words supplied for a named location.** No
-> release-build command takes ciphertext bytes, a statement or a `T`. A decrypting command takes the location in named,
-> typed fields (`chainUid`, `token`, `ua`, `block`, and `entryRef` with `leg`, `mode` where they apply) and the storage words
-> the reading layer read at that block, in named fields. `ua-rs` parses them by the contract's pinned layout, checks that
-> they are consistent with each other, rebuilds the ciphertext exactly as the contract does, and only then uses the key. Every
-> refusal before the key is used returns one status (`Argument`, as every other facade refusal), with no detail.
+> **A facade decrypts only a ciphertext it rebuilt itself from raw storage words supplied for a named location.** No
+> production command takes ciphertext bytes, a statement, a `T` or parsed state fields. A decrypting command takes the
+> location in named, typed fields (`chainUid`, `token`, `ua`, `block`, and `entryRef` with `leg`, `fromUA`, `sendCounter`,
+> `mode` where they apply), the token's `psid` word, and the raw words the reading layer read at that block. The facade alone
+> parses them by the pinned layout (§4.4), checks they are consistent, rebuilds the ciphertext exactly as the contract does,
+> and only then uses the key. Every refusal before the key is used returns one status, `Argument`, with no detail. The only
+> other statuses a decrypting command returns are about the handle, not the ciphertext: `KeyRevoked` (the wallet was locked
+> or freed) and, for the balance-cache box, `Aead`.
 
-The consistency checks are public: indexes `[rolled, p)` contiguous, offsets inside their blob, a materialised `acc` stream
-hashing to the supplied `accHash`, `unitsOf(T) ≤ K_MAX`, the entry's leg inside the entry. They catch a careless caller; they
-do not make words authentic (§4.12).
+- **`psid` first.** The token's `proofSystemId` word is compared with the build's `PQZL_ID` / `PQZH_ID` before anything is
+  parsed (another set: `PqzSetMismatch`, as today).
+- **Raw words (PQZ), in named fields:** `account: [word]` (the account struct's slots in slot order, as pinned), `pending:
+  [{index, word}]`, `accWords: [word]` (the materialised `acc` slots as stored; the facade applies `not()` and unpacks),
+  `blobs: [{address, code}]`, and for an entry `entryPtr: word`, `memo: bytes`. A word is 32 bytes; a blob's code and a memo
+  are the only `bytes`.
+- **Consistency checks** (public, before the key): pending indexes are exactly `[rolled, p)` (the facade selects them by that
+  range only, never by content); offsets inside their blob; the unpacked `acc` hashing to `accHash` when materialised;
+  `unitsOf(T) ≤ K_MAX`; the leg inside the entry. They catch a careless caller; they do not make words authentic (§4.12).
+- **Leg and role (Codex C5; the library's half of R6).** The request also carries the registry's key record words for `ua`
+  (the record slot words and the key's SSTORE2 code) and, for an auditor command, the token's `auditorUA` and `auditorMode`
+  words. Before the key is used the facade checks: the selected leg's `UA_j` in the entry blob equals `ua`; the stored key
+  hashes (`keccak256(GROUP("pqz-mlwe") ‖ pk)`) to the handle's key hash and is `proven`; for `auditRead` / `AUDITOR`,
+  `auditorUA == ua`, `auditorMode` is not NONE and the entry holds an auditor copy for that leg. Like every word check, this
+  binds the role; it does not make the words authentic.
+- **Old entries (`openMemo`, `proveDisclose`):** the request names the entry's original `fromUA` and `sendCounter`; the facade
+  recomputes `entryRef` from them (as the contract derives it) and refuses a mismatch before the key is used. The header words
+  of the memo come from those fields and the entry blob, never from free fields.
 
-**Words, named fields (PQZ):** `account {pendingCount, rolled, floor, cleared, accBlob, accUOff, accVOff, accUnits, flags,
-sendCounter, accHash}`, `accStream` (bytes, the materialised `acc`, when `flags & 1`), `pending [{index, blob, uOff, vOff,
-block, amount}]` (the slot word's fields; `blob = 0` with `amount` for a TRIVIAL entry), `blobs [{address, code}]` (SSTORE2
-code of each blob read), and for an entry `entryBlob {address, code}`, `memo` (bytes, `memos[entryRef]`). One crypto object
-stays `bytes`: a blob's code, the `acc` stream, a memo. The list of what to read for a command and a location is documented
-with the commands (no separate helper).
+### 4.4 PQZ: words to ciphertexts
 
-### 4.4 PQZ: words to ciphertexts (layout of `pq-zero-knowledge.md` §7.1, pinned in `test/v2/layout/`)
-
-- `acc`: a reference → the blob's `u_0 ‖ v_f` at its offsets; materialised (`flags & 1`) → `accStream`, checked against
-  `accHash` as the contract checks its own `accHint`; never debited → `Trivial(0)`.
-- Pending `[rolled, p)`: a credit → `u ‖ v` at `uOff` / `vOff` of its blob; a TRIVIAL entry → `Trivial(digits(amount))`,
-  built here like the contract.
-- `T = acc ± Σ pending[window) + Trivial(shieldIn)` exactly as `PqzCore` builds it, `unitsOf(T) ≤ K_MAX`. **The facade
-  chooses `p`** by CTR-PQZ-06 (`pendingCount`, or the largest `p` the inline window allows), so `p` leaves the request.
-- An entry `(entryRef, leg)`: the blob → the leg's `u_g`, `v_j` (or the auditor copy `v_{a,j}` and its window `w`).
-- Vectors: a forge writer over the built token dumps state snapshots (the words above) with the contract's own `T` and entry
-  ciphertexts (from its statement views); the facade must reproduce them byte for byte. The contract is the authority.
+- **Layout pin.** `scaas.pqz` (and `scaas.zether`) are not yet in `smartcontracts/evm/test/v2/layout/namespaces.json`. A
+  contract-side task on `ua-mtx-merge` (T19c) pins every field of the PQZ account struct and `PqzStorage` (and the Zether
+  ones) there, with its `Layout.t.sol` test; the facade reads that pin file as a vector (it does not hand-copy slot numbers).
+- **Pending slot word:** `blob(160) ‖ uOff(16) ‖ vOff(16) ‖ block(64)`; a **TRIVIAL** entry is `vOff == 0`, with the amount in
+  the low 64 bits of the blob field (`pq-zero-knowledge.md` §7.1), never `blob == 0`.
+- **Stored form.** Blobs and the materialised `acc` hold coefficients in `PACK_BITS`-bit fields (stored form P46 at
+  `n2304-kmax4096`, 42 / 46 / … bits per set); `ua-rs` gains a Rust unpacker equal to the contract's, tested by vectors at two
+  sets at least, with mutants.
+- `acc`: a reference → the blob's `u_0 ‖ v_f` at its offsets; materialised (`flags & 1`) → `not()` of each `accWords` slot,
+  unpacked, checked against `accHash`; never debited → `Trivial(0)`. Pending `[rolled, p)`: a credit → `u ‖ v` at `uOff` /
+  `vOff` of its blob; a TRIVIAL entry → `Trivial(digits(amount))`. `T = acc ± Σ pending[window) + Trivial(shieldIn)` exactly
+  as `PqzCore`, `unitsOf(T) ≤ K_MAX`; **the facade chooses `p`** by CTR-PQZ-06. An entry `(entryRef, leg)`: `entryPtr` → blob →
+  the leg's `u_g`, `v_j` (or the auditor copy `v_{a,j}` at window `w`).
+- **Vectors** are versioned by contract commit: a forge writer over the built token dumps the raw words with the contract's
+  own `T` and entry ciphertexts (from its statement views); the facade reproduces them byte for byte.
 
 ### 4.5 PQZ: what replaces `dec` and the debit inputs
 
-| Old (refused in release builds, T15c) | New | Output, to whom |
+| Old (absent from production builds, T15c / T15c2) | New | Output, to whom |
 |---|---|---|
-| `dec {ct, window}` | `balance {chainUid, token, ua, block, words}` | `{value, p, sendCounter}` to the caller (the holder's own balance) |
-| `proveTransfer / proveBurn / proveRefresh / proveTransferMulti` with `T`, `p` | the same commands with location and words in place of `T` and `p`; `pkT`, `pkA`, legs and `mode` stay | `{stmt, proof}`; a refusal after the key (balance below amount + fee) goes to the caller only |
-| (none) | `auditRead {chainUid, token, entryRef, leg, block, words}` on the **auditor's** key handle (one auditor key per token) | `{amount}` of the audited copy at its window, to the auditor (the key holder) |
+| `dec {ct, window}` | `balance {chainUid, token, ua, block, psid, words}` | `{value, p, sendCounter}` to the caller (the holder's own balance) |
+| `proveTransfer / proveBurn / proveRefresh / proveTransferMulti` with `T`, `p` | the same commands with location, `psid` and words in place of `T` and `p`; `pkT`, `pkA`, legs and `mode` stay | `{stmt, proof}`; a refusal after the key (balance below amount + fee) goes to the caller only |
+| (none) | `auditRead {chainUid, token, entryRef, fromUA, sendCounter, leg, block, psid, words}` on the **auditor's** key handle (one auditor key per token) | `{amount}` of the audited copy at its window, to the auditor |
 
-The old commands stay only under the test feature `vectors`, never in a release build (backup, not delete). pqz-ffi's `dec` /
-`dec_win` calls move into the one private function that decrypts a rebuilt ciphertext; `value()` keeps wiping the noise.
+The old commands and their `Req` variants and match arms are compiled only under `vectors` (T15c2), so a production build cannot
+even construct `Req::Dec`. pqz-ffi's `dec` / `dec_win` calls move into the one private function that decrypts a rebuilt
+ciphertext; `value()` keeps wiping the noise.
 
 ### 4.6 PQZ: disclosure and memo
 
-- `proveDisclose {chainUid, token, entryRef, leg, kind, block, words}` with `kind ∈ {RECEIVER_X, AUDITOR}`: the leg rebuilt
-  from the entry blob (§4.4), decrypted, the op 5 statement built inside (layout of CTR-PQZ-14: `chainId`, `chainUid`,
-  `token`, `registry`, `entryRef`, `amount`, `kind + 256·w`, `pk` = the handle's, `u`, `v`) and proven. The output goes to the
-  viewer the holder names. On chain, `verifyTransferAmount` reads the entry from state and the key from the registry, so a
-  disclosure over forged words is refused there.
-- `proveDiscloseSender` (op 4) decrypts nothing: it re-derives `r, e1, e2_t` and compares (a MAC-like equality). Unchanged.
-- `openMemo {chainUid, token, entryRef, block, words}`: the memo is `memos[entryRef]` and the header words come from the entry
-  blob, never free fields; this closes F8 as far as the words are real (§4.12).
+- `proveDisclose {chainUid, token, entryRef, fromUA, sendCounter, leg, kind, block, psid, words}`, `kind ∈ {RECEIVER_X,
+  AUDITOR}`: `entryRef` recomputed (§4.3), the leg rebuilt from the entry blob, decrypted, the op 5 statement built inside
+  (CTR-PQZ-14 layout, `pk` = the handle's) and proven; the output goes to the viewer the holder names. On chain,
+  `verifyTransferAmount` reads the entry and the registry key itself.
+- `proveDiscloseSender` (op 4) decrypts nothing: it re-derives `r, e1, e2_t` and compares; the comparison becomes constant-time
+  (`subtle::ConstantTimeEq`, T15c2).
+- `openMemo {chainUid, token, entryRef, fromUA, sendCounter, block, psid, words}`: the memo is `memos[entryRef]`, `entryRef`
+  recomputed, header words from the named fields and the blob.
+- op 1, burn and refresh still take `memoHash` as a free word; after T36a the facade computes it per `mode` as for op 7 (plan
+  row T15k).
 
 ### 4.7 Zether (separate module, separate handle)
 
-- The same library duties: `decrypt`, `decryptPending`, `checkBalance` and every `acc` / `balance` / `(C, D)` input of
+- The same library duties. `decrypt`, `decryptPending`, `checkBalance` and every `acc` / `balance` / `(C, D)` input of
   `proveTransfer`, `proveTransferMulti`, `proveBurn`, `recoverTransfer`, `openDisclosure`, `openMemo` are replaced by location
-  fields and the Zether token's storage words, parsed by its pinned layout and rebuilt as the contract does; the balance hint
-  stays a cache of the holder's own value. A layout parser exists per family where a Zether token is deployed (EVM first);
-  another family's words are refused until its parser exists.
-- `zether-prover`'s `api` keeps the raw commands behind feature `hazmat` (T15c). `D·x` in decrypt and check runs through
-  `scaas_ct::secret_mul`.
-- `zether-read-balance --rpc` reads the chain, so it is a reading layer: refused by T15c, then re-enabled only as one that
-  meets R1 to R6 (the holder names the node; it checks the chain, the catalogue and the registered `Y`) and passes words to
-  the same rebuild.
+  fields and the Zether token's raw words, parsed by its pinned layout (T19c) and rebuilt as the contract does. Raw words
+  (EVM, names as pinned by T19c):
 
-### 4.8 pqz-core: the core decrypt functions (F4)
+  | Word group | What the facade reads |
+  |---|---|
+  | account | the account struct's slots in slot order: `acc` point words, `pending` point words, `accSeq`, `pendingSeq`, `lastRolledPendingSeq`, `sendCounter` |
+  | dynamic `bytes` slots | the length slot and the `keccak256(slot)`-addressed data slots, as `{slot, word}` |
+  | entries | `entryPtrs[entryRef]` (SSTORE2 pointer) and the record code `{address, code}`: `mode`, legs, `C_out_j`, `D`, `C_aud_j` |
+  | token | `auditorMode`, `disclosureMode`, `auditorKey` word(s) for R6 |
 
-`pqzl` `decrypt_raw`, the C `pqz_dec` family and pqz-ffi's `dec` / `dec_win` return noise or raw `w` to any in-process
-caller. Not reachable from outside today (pqz-ffi's own C ABI exports only `pqz_precompile` and `pqz_max_input`). A feature
-`hazmat` around those exports, enabled by the self-test, `vectors`, the vector generator and `ua-rs`, changes no transcript,
-relation or byte; defence in depth only, since Cargo unifies features and every binary with `ua-rs` + `pqz` has `dec` compiled
-in (the command set is what keeps it unreachable). **Gate (owner decision Q3, 2026-11-06):** it lands with the next pqz-core change; the
-four-set full gate is waived for this `cfg`-only change and replaced by a build at all four sets plus `kat`.
+  A layout parser exists per family where a Zether token is deployed (EVM first); another family's words are refused until
+  its parser exists.
+- `zether-prover`: the raw commands stay behind `hazmat` (T15c), and so do the public helpers that bypass the dispatcher
+  (`api::open_memo_json` and the decrypt and disclosure primitives in `api.rs`, `elgamal.rs`, `schnorr.rs`): `pub` only under
+  `hazmat`, `pub(crate)` otherwise, so the crate's own code keeps its access (T15c2).
+- **Every multiplication by `key.x` on a supplied point** runs through `scaas_ct::secret_mul`: decrypt and check, and the
+  transfer, multi-recipient, burn and disclosure paths in `zether.rs` and `schnorr.rs` (T14b), not only `decrypt_point`.
+- `zether-read-balance`: `--rpc` is a reading layer and is re-enabled only as one meeting R1 to R7; a raw `--ct` (a
+  ciphertext typed in by hand: a social oracle, plaintext only) moves under `hazmat`; the production CLI accepts the holder's
+  own sealed balance-cache box or R1-fetched state instead.
+
+### 4.8 No test feature in a production artifact; pqz-core `hazmat`
+
+- **The risk (Codex C1).** Cargo unifies features: any dependency that enables `scaas-ua/vectors` restores `dec` and the raw
+  commands in a `--release` build, and the C / FRB compile asserts do not cover a Rust user of the crate.
+- **Enforcement (T15c2):** (1) `scaas_ua::VECTORS` (`cfg!(feature = "vectors")`) and the `vectors` bit of
+  `scaas_ua_features()`; every binding refuses to load a library with the bit set, and the facade's constructor of a key
+  handle refuses (`Argument`) in a build with `vectors` unless the test-only marker type is used; (2) a repository check
+  (`scripts/check_test_features.py`, run in CI and the gate) that fails if any `Cargo.toml` enables `vectors` or `hazmat` of
+  `scaas-ua`, `zether-prover` or `pqz-ffi` outside `[dev-dependencies]` or a test-only crate; (3) a negative production-build
+  check: `cargo tree -e features` of each production artifact (`ua-c`, `ua-dart-frb`'s crate, `zether-read-balance`) shows no
+  `vectors` and no `zether-prover/hazmat`, parsed as a graph including transitive default features (Codex C7), and the same
+  build with `vectors` forced is shown to fail the check (positive control).
+- **pqz-core `hazmat` (owner decision Q3, 2026-11-06):** a feature over `pqzl` `decrypt_raw`, pqz-ffi's `dec` / `dec_win` and
+  the C `pqz_dec` family; it lands with the next pqz-core change; the four-set full gate is waived for this `cfg`-only change
+  and replaced by a build at all four sets plus `kat`. It is defence in depth: `ua-rs` enables it for its private decrypt
+  path, so it is in every `ua-rs` + `pqz` binary; the name follows the RustCrypto convention and is not a security boundary;
+  the command set is.
 
 ### 4.9 Server key oracle (CLI-SGN-31, PLANNED; F5)
 
 The enclave interface loses `zk_mul_by_x(points, ctx)` (a static-DH oracle on `x`), `zk_nonce_commit` / `zk_response` as
 separate calls (a response to a caller-chosen challenge is a proof or signature oracle) and the raw `elgamal_decrypt(C, D,
 ChainWitness)`. **Whole operations inside the enclave** (group B': balance, transfer, burn, disclosure), each taking location
-fields and words and rebuilding as `ua-rs` does; the layer that feeds it meets R1 to R6, so `ChainWitness` becomes "words from
-the tenant's trusted reading layer". Results go to the tenant (the key holder), never to the relayer or the broker's logs.
-The planned threshold auditor key (CTR-ZTH-41, `y_audit` 3-of-5) is a quorum decryption: ARCH-POS-13 covers it, and it stays
-blocked on research §12.5's open question.
+fields and raw words and rebuilding as `ua-rs` does; the layer that feeds it meets R1 to R7. Results go to the tenant (the key
+holder), never to the relayer or the broker's logs. The planned threshold auditor key (CTR-ZTH-41, `y_audit` 3-of-5) is a
+quorum decryption: ARCH-POS-13 covers it, and it stays blocked on research §12.5's open question.
 
 ### 4.10 Op 7 `memoHash` per mode (F10; owner decision 2026-11-06)
 
@@ -205,61 +240,75 @@ memo is `salt(16) ‖ sealed` (`pqz_ffi::memo::seal`), so `keccak(memo)` equals 
 **Decided (owner 2026-11-06):** the facade takes the memo mode as an explicit named request field, `mode` = `"HASH"` or
 `"BUNDLE"` (no default), for op 7 now and op 1 once T36a lands, and computes `memoHash` exactly as the contract does per
 mode: HASH → `keccak256(salt ‖ sealedMemo)` and the memo returned; BUNDLE → `memoHash = 0` and no memo returned. The token's
-`disclosureMode` decides which a caller may use (COMPACT refuses BUNDLE on chain, ~399). A test fails on the old behaviour: a
-BUNDLE op 7 statement's `H_MEMO_HASH` word is 0 and equals the forge-built statement for the same inputs.
+`disclosureMode` decides which a caller may use (COMPACT refuses BUNDLE on chain, ~399). Built in T15b.
 
 ### 4.11 What does not change
 
-`enc` (public), `proveRegister`, `proveKeyRecord`, `proveDiscloseSender`, the balance-cache boxes, the vault and backup
-formats, the KEM `open` (ML-KEM is CCA-secure; `ua-rs-sign` spec §6.2's handle rule stays), the C ABI's status set; no
-contract, node or byte-format change. `ua-rs` stays I/O-free and holds no chain trust.
+`enc` (public), `proveRegister`, `proveKeyRecord`, the balance-cache boxes, the vault and backup formats, the KEM `open`
+(ML-KEM is CCA-secure; `ua-rs-sign` spec §6.2's handle rule stays), the C ABI's status set; no contract code, node or
+byte-format change (T19c adds layout pins and tests only). `ua-rs` stays I/O-free and holds no chain trust.
 
 ### 4.12 Residuals (stated plainly)
 
-- **`ua-rs` alone cannot tell chain state from forged words.** Internally consistent words of a fabricated "blob" holding
-  crafted `(u, v)` are rebuilt and decrypted like real ones. An app that feeds `ua-rs` words from an untrusted source
-  creates the oracle of §1, and ARCH-POS-13 binds that app (R1 to R6). The library's part is to make the bare-ciphertext
-  path impossible and the location explicit; the test of §5 shows this residual on purpose.
-- **The reading layer's source.** A full node of the holder's: none beyond the chain's rules. A light client: the chain's
-  sealing keys (a sealer or a leaked sealing key can fabricate state, one key on a single-signer chain, NET-EVM-04). Another
-  operator's node: that operator (owner decision Q1b, 2026-11-06, §7).
+- **`ua-rs` alone cannot tell chain state from forged words.** Internally consistent raw words of a fabricated "blob" holding
+  crafted `(u, v)` are rebuilt and decrypted like real ones. An app that feeds `ua-rs` words from an untrusted source creates
+  the oracle of §1, and ARCH-POS-13 binds that app (R1 to R7). The library makes the bare-ciphertext path impossible and the
+  location explicit; the residual control of §5 shows this on purpose.
+- **The reading layer's source:** see §4.2 (owner decision Q1b).
 - A stale read shows an old balance; a debit over it is refused on chain (T8 retry), revealing nothing about `s`.
 - A genuine state is composed partly by senders (credits, decoys); its decryption is the holder's own data and reveals
   nothing about `s` (fact 1).
 - Timing after the key is used (BSGS for Zether, the PQZ prover) depends on the holder's own genuine value: a privacy residual
   to a local observer, not a key leak.
 
+### 4.13 Prepared for a later proof path (no build in this rework)
+
+A later round may let `ua-rs` check state proofs itself again (the owner ruled it out of this rework). So that nothing here
+blocks it: requests carry raw slot words by index (§4.3), which a proof path can verify unchanged; binding tests assert that a
+command is **in** `COMMANDS`, not that `COMMANDS` equals a list; a proof verifier may be compiled into `ua-rs` unexposed later
+without an API change; the HKDF label `PQZ/owntag/v1` is reserved for an own-output tag; pending entries are selected by
+`[rolled, p)` only; state vectors are versioned by contract commit.
+
 ## 5. Tests that must be able to fail
 
-- **The oracle harness as a test** (`clients/ua-rs/tests/no_oracle.rs`): the 8·K crafted queries of research §12.1 at the
-  default set. Positive control: through the `vectors`-only raw `dec` they recover `s` exactly. Negative: no release command
-  or binding call accepts a bare ciphertext, statement, `T` or `p` (one status, key-use counter 0).
-- **Residual control (§4.12):** the same crafted `(u, v)` wrapped as a consistent fabricated blob and supplied as words **is**
-  decrypted: the test records that authenticity is the reading layer's duty, not the library's.
-- Word negatives (one status, key unused): inconsistent indexes, an offset outside its blob, an `acc` stream not hashing to
-  `accHash`, more than `K_MAX` units, a leg outside its entry, a missing or extra word, a field of the wrong type.
-- Mutants (each must turn a test red): the caller's `T` accepted again; `p` taken from the request; the `accHash` comparison
-  skipped; a TRIVIAL entry built as `Trivial(0)`; the auditor window ignored; F10's `memoHash` always set.
+- **The oracle harness** (`clients/ua-rs/tests/no_oracle.rs`): the 8·K crafted queries of research §12.1 at the default set.
+  Positive control: through the `vectors`-only raw `dec` they recover `s` exactly. Negative: no production command or binding
+  call accepts a bare ciphertext, statement, `T`, `p` or parsed field (one status, key-use counter 0).
+- **Residual control (§4.12):** the same crafted `(u, v)` wrapped as consistent fabricated raw words **is** decrypted: the
+  test records that authenticity is the reading layer's duty.
+- **Word negatives** (one status, key unused): a `psid` of another set; indexes other than `[rolled, p)`; an offset outside its
+  blob; an `acc` not hashing to `accHash`; more than `K_MAX` units; a leg outside its entry; a `fromUA` / `sendCounter` that
+  does not recompute to `entryRef`; an auditor read of an entry without an auditor copy; a missing or extra word.
+- **Leg and role (Codex C5):** a foreign leg (its `UA_j` is another account), a registry key of another account or not
+  `proven`, a receiver read on the auditor handle, an auditor read on a receiver handle, an auditor read of a token with
+  `auditorMode` NONE: each refused with zero key use.
+- **Production artifacts (§4.8):** `check_test_features.py` and the `cargo tree -e features` check pass on the real manifests
+  and fail on a scratch manifest enabling `vectors` (positive control); a binding refuses a library whose `vectors` bit is set.
+- Mutants (each must turn a test red): the caller's `T` accepted again; `p` taken from the request; `not()` skipped on
+  `accWords`; TRIVIAL read as `blob == 0`; the `accHash` comparison skipped; the unpacker's field width off by one; `entryRef`
+  not recomputed; the auditor window ignored; F10's `memoHash` always set; the `vectors` load check removed. Every mutant run
+  is bracketed by `git diff --exit-code` (restored tree).
 - Byte equality with the contract: the forge state snapshots of §4.4 at the default set and one other set.
 
 ## 6. Doc changes
 
-On `ua-rs-sign` (task T15j): `ua-rs-sign` spec §10.1 / §10.2 (decrypt rows → location and words; chain reading and its checks
-stay with the reading layer); `docs/clients/ua-libraries.md`: two rule groups, the library duties of §4.3 and the reading-layer
-requirements R1 to R6 of §4.2, written for "the wallet layer that reads the chain" (current docs name no consumer), with their
+On `ua-rs-sign` (task T15j): `ua-rs-sign` spec §10.1 / §10.2 (decrypt rows → location and raw words; chain reading and its
+checks stay with the reading layer); `docs/clients/ua-libraries.md`: a rule group for the library duties (§4.3, §4.8) and one
+for "the wallet layer that reads the chain" (R1 to R7 with their assertions; current docs name no consumer), with their
 `decisions.md` entries at build (T19).
 
-On `ua-mtx-merge` (task T19b; not edited from here):
+On `ua-mtx-merge` (tasks T19b docs, T19c layout pins; not edited from here):
 
 | File | Change |
 |---|---|
-| `docs/contracts/pq-zero-knowledge.md` | T6: "noise never leaves `pqz_dec`" → decryption only of ciphertexts rebuilt from chain words a trusted reading layer supplies, the core's raw decrypt is `hazmat`; CTR-PQZ-14 and §4.2's owner-only `Dec` point at ARCH-POS-13; §7.8 "Restore from state alone" → from state read from a trusted source; the source-trust residual linked to NET-EVM-04 |
-| `docs/contracts/zether.md` | a rule (new id) pointing at ARCH-POS-13: the same split; `zether-read-balance` (line ~252) is a reading layer under R1 to R6; the residual linked to NET-EVM-04; CTR-ZTH-41's threshold key blocked on §12.5 |
-| `docs/clients/signers-clientkeys.md` | CLI-SGN-31 group B per §4.9; the `y_audit` note; the clientkeys `zether.js` wording; a link to the reading-layer requirements |
-| `docs/integration.md` | confidential payments: an integrator that reads PQZ or Zether state for a holder is a reading layer under R1 to R6 |
+| `smartcontracts/evm/test/v2/layout/namespaces.json`, `test/v2/Layout.t.sol` (T19c) | `scaas.pqz` and `scaas.zether`: every account-struct and storage field pinned (namespace slot, slot in struct, byte in word), tested by a write and `vm.load` as the existing pins; no contract code change |
+| `docs/contracts/pq-zero-knowledge.md` | T6: "noise never leaves `pqz_dec`" → decryption only of ciphertexts rebuilt from raw words a trusted reading layer supplies, the core's raw decrypt is `hazmat`; CTR-PQZ-14 and §4.2's owner-only `Dec` point at ARCH-POS-13; §7.8 "Restore from state alone" → from state read from a trusted source (views only from R1's node); the source-trust residual linked to NET-EVM-04 |
+| `docs/contracts/zether.md` | a rule (new id) pointing at ARCH-POS-13: the same split; `zether-read-balance` (line ~252) is a reading layer under R1 to R7, raw `--ct` under `hazmat`; the residual linked to NET-EVM-04; CTR-ZTH-41's threshold key blocked on §12.5 |
+| `docs/clients/signers-clientkeys.md` | CLI-SGN-31 group B per §4.9; the `y_audit` note; the clientkeys `zether.js` wording; a link to R1 to R7 |
+| `docs/integration.md` | confidential payments: an integrator reading PQZ or Zether state for a holder is a reading layer under R1 to R7 |
 | `docs/research/07-custody-providers.md` | a dated note at ~111: the group B sketch is superseded by ARCH-POS-13 / CLI-SGN-31 |
-| `docs/node/submit-lanes.md`, `docs/node/gateway.md` | NODE-LANE-03: the node never decrypts; a holder's reading layer may use a node only as R1 allows (no new node guarantee) |
-| `docs/decisions.md` | ARCH-POS-13's source: the audit done, this spec; entries for the owner rulings of 2026-11-06 (no verifier in `ua-rs`; the reading layer's duty), the library input rule, R1 to R6, the CLI-SGN-31 change and the Zether rule, each in full |
+| `docs/node/submit-lanes.md`, `docs/node/gateway.md` | NODE-LANE-03: the node never decrypts; a reading layer uses a node only as R1 allows (no new node guarantee) |
+| `docs/decisions.md` | ARCH-POS-13's source: the audit done, this spec; entries for the owner rulings and decisions of 2026-11-06 (no verifier in `ua-rs`; the reading layer's duty; Q1, Q1b, Q3), the library input rule, R1 to R7, the production-artifact rule, CLI-SGN-31 and the Zether rule, each in full |
 | `docs/research/pqz-threshold-decrypt-prove.md` | §12.5: a link to this spec's §3; the quorum question stays open |
 
 ## 7. Owner decisions (2026-11-06; formerly the open questions)
@@ -279,6 +328,16 @@ No owner question remains open in this spec.
 
 ## 8. Effort
 
-Plan tasks T15b, T15c, T15e, T14b, T15g–T15j and T19b (T15d and T15f dropped by the owner rulings): **17–23.5 agent-days**,
-critical path T15c → T15e → T15g → T15i ≈ 8.5–12 days. Not counted: the reading layer's checks (R1 to R6) in the wallet layer
-and the apps, outside this repository.
+Plan tasks T15c2, T19c, T15e, T14b, T15g–T15k and T19b remain (T15b and T15c are being finished; T15d and T15f were dropped
+by the owner rulings): **23.5–31.5 agent-days**, critical path (T15c2 ∥ T19c) → T15e → T15g → T15i ≈ 12.5–16.5 days (details in
+the plan). Not counted: the reading layer's checks (R1 to R7) in the wallet layer and the apps, outside this repository.
+
+## 9. Review response (Fable and Codex, 2026-11-06 / 07)
+
+All items accepted. Conflicts and choices: Codex C4 and Fable P2-2 are the same item (`openMemo` / disclosure of old entries:
+named `fromUA`, `sendCounter`, `entryRef` recomputed), merged in §4.3. Codex C7 and Fable's mechanical gate (`cargo tree -e
+features`) are one check, built in T15c2 and run again by T15i's gate. Fable P1-1's raw words replace the parsed word fields of
+the previous revision: the explicit-parameters rule still holds (every word sits in a named field; only code, memos and proofs
+are `bytes`), and one parser in the facade beats a parser in every reading layer. Fable P3-4 (`--ct`): the CLI accepts the
+holder's sealed cache box or R1-fetched state, and raw `--ct` moves under `hazmat`, rather than only documenting the residual,
+because a hand-typed ciphertext is exactly "a ciphertext chosen by someone else".
