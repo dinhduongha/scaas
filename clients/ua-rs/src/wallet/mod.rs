@@ -15,7 +15,9 @@
 //! [`seal`] / [`KemKeyPair::open`], the sealed containers of backup and link ([`seal_container`], [`KemKeyPair::open_container`],
 //! [`LinkSession`], [`Wallet::from_link`]); `vault`, `manifest`, T9: the clientkeys vault v1 ([`Vault`], [`Wallet::seal_vault`],
 //! [`Wallet::open_vault`]), the [`Manifest`], discovery, imported keys, the [`SeedBackup`] confirmation, [`Wallet::backup_seal`] and
-//! [`Wallet::restore_backup`]. Randomness: `rand_core` 0.6 `OsRng` inside; no call takes an RNG. UNAUDITED.
+//! [`Wallet::restore_backup`]; `store`, T10: [`Wallet::unlock`] (the seed vault into a new arena at the raised generation) and
+//! [`Wallet::memory_protection`] (the arena's chunks `mlock`ed and no-dump, feature `mlock`). Randomness: `rand_core` 0.6
+//! `OsRng` inside; no call takes an RNG. UNAUDITED.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing, clippy::disallowed_methods)]
 
 mod aead;
@@ -71,11 +73,14 @@ pub use tx::{AccessListItem, EvmTx, SignedTx};
 pub use uasig::{membership_sig, msig_sig, ua_sig, Slot};
 pub use vault::{check_passphrase, PrfEnvelope, Unlock, Vault};
 pub use webauthn::{webauthn_assertion, webauthn_challenge};
+#[cfg(feature = "vectors")]
+pub use vectors::vectors_chunks_released;
 
 use crate::UAError;
 use rand_core::{OsRng, RngCore};
 use std::sync::Arc;
 use store::{Handle, SecretStore};
+pub use store::MemoryProtection;
 use unicode_normalization::UnicodeNormalization;
 use zeroize::{Zeroize, Zeroizing};
 
@@ -354,6 +359,75 @@ impl SeedBackup {
 }
 
 /// A wallet: its secret store. `Send + Sync`, no `Clone`; dropping it locks it.
+///
+/// The handles are neither `Clone` nor `Debug` and give no secret bytes (spec §8.2; positive control first):
+/// ```
+/// use scaas_ua::wallet::{KemKeyPair, NativeKey, UaKey, Wallet};
+/// fn need<T: Send + Sync>() {}
+/// need::<UaKey>();
+/// need::<NativeKey>();
+/// need::<KemKeyPair>();
+/// need::<Wallet>();
+/// ```
+/// ```compile_fail,E0277
+/// fn need<T: Clone>() {}
+/// need::<scaas_ua::wallet::UaKey>();
+/// ```
+/// ```compile_fail,E0277
+/// fn need<T: Clone>() {}
+/// need::<scaas_ua::wallet::NativeKey>();
+/// ```
+/// ```compile_fail,E0277
+/// fn need<T: Clone>() {}
+/// need::<scaas_ua::wallet::KemKeyPair>();
+/// ```
+/// ```compile_fail,E0277
+/// fn need<T: Clone>() {}
+/// need::<scaas_ua::wallet::Wallet>();
+/// ```
+/// ```compile_fail,E0277
+/// fn need<T: std::fmt::Debug>() {}
+/// need::<scaas_ua::wallet::UaKey>();
+/// ```
+/// ```compile_fail,E0277
+/// fn need<T: std::fmt::Debug>() {}
+/// need::<scaas_ua::wallet::NativeKey>();
+/// ```
+/// ```compile_fail,E0277
+/// fn need<T: std::fmt::Debug>() {}
+/// need::<scaas_ua::wallet::KemKeyPair>();
+/// ```
+/// ```compile_fail,E0277
+/// fn need<T: std::fmt::Debug>() {}
+/// need::<scaas_ua::wallet::Wallet>();
+/// ```
+#[cfg_attr(
+    not(feature = "vectors"),
+    doc = "A release build (no feature `vectors`) has no secret accessor and no RNG or fixed-randomness parameter (F-01):",
+    doc = "```compile_fail,E0599",
+    doc = "fn f(k: &scaas_ua::wallet::UaKey) {",
+    doc = "    let _ = k.vectors_with_secret(|s| s.to_vec());",
+    doc = "}",
+    doc = "```",
+    doc = "```compile_fail,E0599",
+    doc = "fn f(w: &scaas_ua::wallet::Wallet) {",
+    doc = "    let _ = w.vectors_entropy();",
+    doc = "}",
+    doc = "```",
+    doc = "```compile_fail,E0599",
+    doc = "fn f(k: &scaas_ua::wallet::UaKey) {",
+    doc = "    let _ = k.vectors_sign_ua_fixed(&[0; 32], &[0; 32], &[0; 32]);",
+    doc = "}",
+    doc = "```",
+    doc = "```compile_fail,E0599",
+    doc = "fn f(k: &scaas_ua::wallet::UaKey) {",
+    doc = "    let _ = k.vectors_musig2_session(&[], &[], &[0; 32]);",
+    doc = "}",
+    doc = "```",
+    doc = "```compile_fail,E0599",
+    doc = "let _ = scaas_ua::wallet::KemKeyPair::vectors_ephemeral(&[0; 96]);",
+    doc = "```"
+)]
 pub struct Wallet {
     store: Arc<SecretStore>,
 }
@@ -384,9 +458,13 @@ impl Wallet {
         self.store.lock();
     }
 
+    /// The arena's memory protection now (spec §8.2, feature `mlock`, best effort): all zero while locked.
+    pub fn memory_protection(&self) -> MemoryProtection {
+        self.store.memory_protection()
+    }
+
     /// Reopens a locked wallet from its entropy at the raised generation; earlier handles stay revoked. `Argument` if open.
-    /// The vault's `unlock` (T9) calls it.
-    #[cfg_attr(not(feature = "vectors"), allow(dead_code))]
+    /// [`Wallet::unlock`] calls it.
     pub(crate) fn unlock_entropy(&self, entropy: &[u8], bip39_passphrase: &str) -> Result<()> {
         self.store.open(entropy, &*seed_of(entropy, bip39_passphrase)?)
     }
@@ -483,6 +561,11 @@ impl NativeKey {
 #[cfg(feature = "vectors")]
 mod vectors {
     use super::*;
+
+    /// `(released, released with a non-zero byte)`: the arena chunks released in this process (each wiped before it goes back).
+    pub fn vectors_chunks_released() -> (usize, usize) {
+        store::vectors::chunks_released()
+    }
 
     impl Wallet {
         pub fn vectors_entropy(&self) -> Result<Zeroizing<Vec<u8>>> {

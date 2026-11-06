@@ -266,13 +266,28 @@ impl Wallet {
     /// than `seed`, `VaultParams` / `VaultOpen` as the envelope, `VaultOpen` for a payload of other than 16, 20, 24, 28 or 32
     /// bytes (never padded or cut).
     pub fn open_vault(vault: &Vault, unlock: Unlock, bip39_passphrase: &str) -> Result<Wallet> {
-        if vault.label != "seed" {
-            return Err(Error::Argument);
-        }
-        let entropy = vault.open(unlock)?;
-        if !SEED_LENGTHS.contains(&entropy.len()) {
-            return Err(Error::VaultOpen);
-        }
-        Wallet::from_entropy(&entropy, bip39_passphrase)
+        Wallet::from_entropy(&seed_entropy(vault, unlock)?, bip39_passphrase)
     }
+
+    /// Reopens this locked wallet from its seed vault (spec §8.2, §9.1): the checks of [`Wallet::open_vault`], then a new
+    /// arena at the generation `lock()` raised. Earlier handles stay `KeyRevoked`; derive new ones. `Argument` while unlocked.
+    /// The manifest is the one `lock()` kept; an imported key it lists is held again only once its `native-import:` vault is
+    /// reopened with [`Wallet::open_label_vault`] ([`Wallet::imported_key`] is `Argument` until then): this call takes the seed
+    /// vault alone, and each label vault has its own DEK and unlock.
+    pub fn unlock(&self, vault: &Vault, unlock: Unlock, bip39_passphrase: &str) -> Result<()> {
+        self.unlock_entropy(&seed_entropy(vault, unlock)?, bip39_passphrase)
+    }
+}
+
+/// The entropy of a seed vault: `Argument` for a label other than `seed`, the envelope's errors, `VaultOpen` for a payload of
+/// other than 16, 20, 24, 28 or 32 bytes (never padded or cut).
+fn seed_entropy(vault: &Vault, unlock: Unlock) -> Result<Zeroizing<Vec<u8>>> {
+    if vault.label != "seed" {
+        return Err(Error::Argument);
+    }
+    let entropy = vault.open(unlock)?;
+    if !SEED_LENGTHS.contains(&entropy.len()) {
+        return Err(Error::VaultOpen);
+    }
+    Ok(entropy)
 }

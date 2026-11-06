@@ -5,7 +5,12 @@
 //! operation runs under the read guard and refuses `KeyRevoked` when its generation is not the store's; `lock` takes the
 //! write lock (it waits for every operation in flight), wipes the arena and raises the generation, so no earlier handle works
 //! again; `open` builds a new arena at the raised generation. The store also holds the wallet's public manifest (spec §8.3),
-//! outside the arena: `lock` keeps it. `mlock` / no-dump of the chunks is T10. UNAUDITED.
+//! outside the arena: `lock` keeps it. Memory protection (T10, feature `mlock`, best effort): each chunk is locked in RAM
+//! (`mlock`) and, on Linux and Android, excluded from core dumps (`MADV_DONTDUMP`) at allocation; at release it is wiped,
+//! unmarked and unlocked. A refused call is counted in [`MemoryProtection`], never an error. Outside that coverage: the crates'
+//! key types rebuilt per operation and their temporaries, the scrypt work buffer, the caller's buffers, every target without
+//! `mlock` (wasm32: compiled out, nothing is locked; Windows: no `VirtualLock` in this build, reported as not locked). The
+//! process-wide `PR_SET_DUMPABLE` is never set: a host app that wants it sets it itself. UNAUDITED.
 // the readers of secrets (`Handle::with`, the entropy for the vault) are the signers (T3a–T3d) and the vault (T9)
 #![cfg_attr(not(feature = "vectors"), allow(dead_code))]
 use super::manifest::Manifest;
@@ -22,6 +27,116 @@ pub(crate) const PAGE: usize = 16384;
 #[repr(C, align(16384))]
 struct Page([u8; PAGE]);
 
+/// What protection a wallet's arena has now (spec §8.2): counts of its chunks. All zero while the wallet is locked; `locked`
+/// and `no_dump` zero without feature `mlock` (and on wasm32). Best effort: a refused lock lowers a count and fails nothing.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct MemoryProtection {
+    /// The arena's chunks (16 KiB each).
+    pub chunks: usize,
+    /// Chunks locked in RAM (`mlock`): never written to swap.
+    pub locked: usize,
+    /// Chunks excluded from core dumps (`MADV_DONTDUMP`, Linux and Android).
+    pub no_dump: usize,
+}
+
+/// `mlock` and `MADV_DONTDUMP` of a chunk (feature `mlock`, Unix).
+#[cfg(all(feature = "mlock", unix))]
+mod protect {
+    use libc::c_void;
+
+    /// Whether `[p, p + len)` is whole pages of this system (a 64 KiB-page kernel: no, so nothing is locked or marked; an
+    /// unlock there would also release a neighbouring chunk sharing the page).
+    fn whole_pages(p: *mut u8, len: usize) -> bool {
+        // SAFETY: sysconf reads a constant of the system
+        let ps = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
+        usize::try_from(ps).is_ok_and(|ps| ps > 0 && (p as usize).is_multiple_of(ps) && len.is_multiple_of(ps))
+    }
+
+    /// `(locked, no_dump)`: whether `mlock` and `MADV_DONTDUMP` took on the chunk at `p`.
+    pub(super) fn on(p: *mut u8, len: usize) -> (bool, bool) {
+        if !whole_pages(p, len) {
+            return (false, false);
+        }
+        // SAFETY: `[p, p + len)` is one live allocation (a chunk) of whole pages; neither call reads or writes its bytes
+        let locked = unsafe { libc::mlock(p as *const c_void, len) } == 0;
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        // SAFETY: as above; MADV_DONTDUMP changes only the mapping's dump flag
+        let no_dump = unsafe { libc::madvise(p as *mut c_void, len, libc::MADV_DONTDUMP) } == 0;
+        #[cfg(not(any(target_os = "linux", target_os = "android")))]
+        let no_dump = false;
+        (locked, no_dump)
+    }
+
+    /// Undoes `on` for the chunk at `p` (already wiped).
+    pub(super) fn off(p: *mut u8, len: usize, locked: bool, no_dump: bool) {
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        if no_dump {
+            // SAFETY: as in `on`; the chunk is still allocated
+            unsafe { libc::madvise(p as *mut c_void, len, libc::MADV_DODUMP) };
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "android")))]
+        let _ = no_dump;
+        if locked {
+            // SAFETY: as in `on`
+            unsafe { libc::munlock(p as *const c_void, len) };
+        }
+    }
+}
+
+/// Without feature `mlock`, or off Unix (wasm32, Windows): nothing is locked or marked.
+#[cfg(not(all(feature = "mlock", unix)))]
+mod protect {
+    pub(super) fn on(_: *mut u8, _: usize) -> (bool, bool) {
+        (false, false)
+    }
+    pub(super) fn off(_: *mut u8, _: usize, _: bool, _: bool) {}
+}
+
+/// One arena chunk: a page-aligned block that never moves, locked and marked no-dump from allocation (feature `mlock`), and at
+/// release wiped first, then unmarked and unlocked.
+struct Chunk {
+    page: Box<Page>,
+    locked: bool,
+    no_dump: bool,
+}
+
+impl Chunk {
+    fn new() -> Chunk {
+        let mut page = Box::new(Page([0; PAGE]));
+        let (locked, no_dump) = protect::on(page.0.as_mut_ptr(), PAGE);
+        Chunk { page, locked, no_dump }
+    }
+}
+
+impl Drop for Chunk {
+    fn drop(&mut self) {
+        self.page.0.zeroize();
+        #[cfg(feature = "vectors")]
+        vectors::released(&self.page.0);
+        protect::off(self.page.0.as_mut_ptr(), PAGE, self.locked, self.no_dump);
+    }
+}
+
+/// Test-only (feature `vectors`): every chunk released in this process, and those released with a non-zero byte.
+#[cfg(feature = "vectors")]
+pub(crate) mod vectors {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    static RELEASED: AtomicUsize = AtomicUsize::new(0);
+    static NONZERO: AtomicUsize = AtomicUsize::new(0);
+
+    pub(super) fn released(bytes: &[u8]) {
+        RELEASED.fetch_add(1, Ordering::SeqCst);
+        if bytes.iter().any(|b| *b != 0) {
+            NONZERO.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+
+    /// `(released, released non-zero)`.
+    pub fn chunks_released() -> (usize, usize) {
+        (RELEASED.load(Ordering::SeqCst), NONZERO.load(Ordering::SeqCst))
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Slot {
     chunk: usize,
@@ -30,7 +145,7 @@ pub(crate) struct Slot {
 }
 
 pub(crate) struct Arena {
-    chunks: Vec<Box<Page>>,
+    chunks: Vec<Chunk>,
     used: usize, // bytes used in the last chunk
     total: usize, // bytes written, every chunk
     entropy: Slot,
@@ -60,11 +175,11 @@ impl Arena {
             return Err(Error::Argument);
         }
         if self.chunks.is_empty() || PAGE - self.used < bytes.len() {
-            self.chunks.push(Box::new(Page([0; PAGE])));
+            self.chunks.push(Chunk::new());
             self.used = 0;
         }
         let slot = Slot { chunk: self.chunks.len() - 1, start: self.used, len: bytes.len() };
-        let dst = self.chunks.last_mut().and_then(|c| c.0.get_mut(slot.start..slot.start + slot.len)).ok_or(Error::Argument)?;
+        let dst = self.chunks.last_mut().and_then(|c| c.page.0.get_mut(slot.start..slot.start + slot.len)).ok_or(Error::Argument)?;
         dst.copy_from_slice(bytes);
         self.used += bytes.len();
         self.total += bytes.len();
@@ -72,11 +187,11 @@ impl Arena {
     }
 
     fn get(&self, s: Slot) -> Result<&[u8]> {
-        self.chunks.get(s.chunk).and_then(|c| c.0.get(s.start..s.start + s.len)).ok_or(Error::KeyRevoked)
+        self.chunks.get(s.chunk).and_then(|c| c.page.0.get(s.start..s.start + s.len)).ok_or(Error::KeyRevoked)
     }
 
     fn get_mut(&mut self, s: Slot) -> Result<&mut [u8]> {
-        self.chunks.get_mut(s.chunk).and_then(|c| c.0.get_mut(s.start..s.start + s.len)).ok_or(Error::KeyRevoked)
+        self.chunks.get_mut(s.chunk).and_then(|c| c.page.0.get_mut(s.start..s.start + s.len)).ok_or(Error::KeyRevoked)
     }
 
     pub(crate) fn entropy(&self) -> Result<&[u8]> {
@@ -93,14 +208,6 @@ impl Arena {
         let slot = self.put(secret)?;
         self.keys.insert(id, (slot, public));
         Ok(())
-    }
-}
-
-impl Drop for Arena {
-    fn drop(&mut self) {
-        for c in &mut self.chunks {
-            c.0.zeroize();
-        }
     }
 }
 
@@ -209,6 +316,15 @@ impl SecretStore {
         let mut g = self.write();
         let Inner { arena, manifest, .. } = &mut *g;
         f(arena.as_mut().ok_or(Error::WalletLocked)?, manifest)
+    }
+
+    /// The open arena's protection; all zero while locked.
+    pub(crate) fn memory_protection(&self) -> MemoryProtection {
+        self.read().arena.as_ref().map_or_else(MemoryProtection::default, |a| MemoryProtection {
+            chunks: a.chunks.len(),
+            locked: a.chunks.iter().filter(|c| c.locked).count(),
+            no_dump: a.chunks.iter().filter(|c| c.no_dump).count(),
+        })
     }
 
     /// The manifest (public; kept by `lock`).
@@ -329,7 +445,7 @@ impl Handle {
         let p = self.with(|s| s.as_ptr() as usize)?;
         let g = self.store.read();
         let a = g.arena.as_ref().ok_or(Error::KeyRevoked)?;
-        let in_chunk = a.chunks.iter().any(|c| (c.0.as_ptr() as usize..c.0.as_ptr() as usize + PAGE).contains(&p));
+        let in_chunk = a.chunks.iter().any(|c| (c.page.0.as_ptr() as usize..c.page.0.as_ptr() as usize + PAGE).contains(&p));
         Ok(in_chunk && !(owner.0..owner.0 + owner.1).contains(&p))
     }
 }
