@@ -1259,7 +1259,7 @@ func TestZether(t *testing.T) {
 	req := tv["request"].(obj)
 	delete(req, "key")
 	delete(req, "includeWitness")
-	// ARCH-POS-13 (T15c): a release build has no command that decrypts a caller's ciphertext (until T14b)
+	// ARCH-POS-13 (T15c, T14b): no command of a release build decrypts a caller's ciphertext (the words commands: below)
 	for cmd, r := range map[string]obj{"checkBalance": {"acc": req["acc"], "balance": req["balance"]}, "proveTransfer": req} {
 		if _, err := k.Call(cmd, js(r)); code(err) != "UAArgument" {
 			t.Fatal(cmd, err)
@@ -1291,6 +1291,118 @@ func TestZether(t *testing.T) {
 	}
 	if y2, _ := must2(k.Public()); !bytes.Equal(y, y2) {
 		t.Fatal("public data stays readable")
+	}
+}
+
+// commands is scaas-ua `facade::<name>::COMMANDS` read from its source (T15g): the release commands and the `vectors`-only raw
+// forms. A test asserts that a command is in it, never that it equals a list (spec no-decryption-oracle §4.13).
+func commands(t *testing.T, name string) (release, raw []string) {
+	src, err := os.ReadFile("../../ua-rs/src/facade/" + name + ".rs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(src)[strings.Index(string(src), "pub const COMMANDS: &[&str] = &["):]
+	gated := false
+	for _, ln := range strings.Split(body[:strings.Index(body, "];")], "\n")[1:] {
+		ln = strings.TrimSpace(ln)
+		if ln == `#[cfg(feature = "vectors")]` {
+			gated = true
+		} else if strings.HasPrefix(ln, `"`) {
+			if gated {
+				raw = append(raw, strings.Trim(ln, `",`))
+			} else {
+				release = append(release, strings.Trim(ln, `",`))
+			}
+			gated = false
+		}
+	}
+	return
+}
+
+func in(list []string, s string) bool {
+	for _, x := range list {
+		if x == s {
+			return true
+		}
+	}
+	return false
+}
+
+// T15g (ARCH-POS-13): the words commands on the forge rows (smartcontracts/vectors/zether/state.json; the holders are
+// r33_keys.json's): each in COMMANDS, the balances the contract's; another holder's words refused before the key (ua-rs
+// tests/facade_zether_state.rs counts the key's uses); every `vectors`-only raw form refused by the release library.
+func TestZetherWordsOnTheForgeRows(t *testing.T) {
+	release, raw := commands(t, "zether")
+	if !in(release, "balance") || !in(release, "pendingBalance") || len(raw) == 0 {
+		t.Fatal(release, raw)
+	}
+	st := vec(t, "smartcontracts/vectors/zether/state.json")
+	row := map[string]obj{}
+	for _, r := range rows(st["accounts"]) {
+		row[strings.Split(r["name"].(string), ":")[0]] = r
+	}
+	words := func(name string) string {
+		r := obj{"ua": row[name]["ua"], "account": row[name]["account"], "accountData": row[name]["accountData"], "tableBits": 18, "boundBits": 20}
+		for _, f := range []string{"family", "chainId", "chainUid", "token", "block", "psid"} {
+			r[f] = st[f]
+		}
+		return js(r)
+	}
+	r33 := vec(t, "clients/zether-prover/vectors/r33_keys.json")
+	w := must(FromMnemonic([]byte(r33["mnemonic"].(string)), nil))
+	defer w.Close()
+	alice, bob := must(w.ZetherKey(60, 0, 7)), must(w.ZetherKey(60, 1, 7))
+	defer alice.Close()
+	defer bob.Close()
+	amount := func(k *ZetherKey, cmd, name string) any {
+		var out obj
+		must0(json.Unmarshal([]byte(must(k.Call(cmd, words(name)))), &out))
+		return out["amount"]
+	}
+	if got, want := amount(alice, "balance", "alice"), fmt.Sprint(row["alice"]["balance"]); got != want {
+		t.Fatal(got, want)
+	}
+	if got, want := amount(bob, "pendingBalance", "bob"), fmt.Sprint(row["bob"]["pending"]); got != want {
+		t.Fatal(got, want)
+	}
+	if _, err := bob.Call("balance", words("alice")); code(err) != "UAArgument" {
+		t.Fatal("another holder's words:", err)
+	}
+	for _, c := range raw {
+		if _, err := alice.Call(c, "{}"); code(err) != "UAArgument" {
+			t.Fatal(c, err)
+		}
+	}
+}
+
+// T15g (ARCH-POS-13): `balance` on a forge row (smartcontracts/vectors/pqz/n2304-kmax4096/state.json): in COMMANDS; the forge
+// keys are mocked, so the words bind to no wallet key and are refused (UAArgument), with the other set's psid UAPqzSetMismatch,
+// both before the key (ua-rs tests/facade_pqz_state.rs counts the key's uses); every `vectors`-only raw form refused.
+func TestPqzWordsOnTheForgeRows(t *testing.T) {
+	release, raw := commands(t, "pqz")
+	if !in(release, "balance") || len(raw) == 0 {
+		t.Fatal(release, raw)
+	}
+	st := vec(t, "smartcontracts/vectors/pqz/n2304-kmax4096/state.json")
+	a := rows(st["accounts"])[0]
+	words := obj{"chainUid": st["chainUid"], "token": st["token"], "psid": st["psid"]}
+	for _, f := range []string{"ua", "block", "account", "pending", "accWords", "blobs", "keyRecord"} {
+		words[f] = a[f]
+	}
+	f := newFix(t)
+	k := must(f.fresh("pq_kat").PqzKey(0, 0))
+	defer k.Close()
+	if _, err := k.Call("balance", js(words)); code(err) != "UAArgument" {
+		t.Fatal(err)
+	}
+	words["psid"] = pqzl2048
+	if _, err := k.Call("balance", js(words)); code(err) != "UAPqzSetMismatch" {
+		t.Fatal(err)
+	}
+	for _, c := range raw {
+		if _, err := k.Call(c, "{}"); code(err) != "UAArgument" {
+			t.Fatal(c, err)
+		}
 	}
 }
 
