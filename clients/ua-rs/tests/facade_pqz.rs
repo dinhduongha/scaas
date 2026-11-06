@@ -125,6 +125,7 @@ fn two_proofs_differ() {
 /// One set per build: another set's `proofSystemId` on any proving command, another deployed set, or a statement of
 /// another id is `PqzSetMismatch`; this build's ids and set pass (positive controls).
 #[test]
+#[cfg_attr(not(feature = "vectors"), allow(clippy::single_element_loop))] // a release build has no proveDisclose
 fn set_mismatch_refused() {
     let s = pqz_set();
     assert_eq!((s.name.as_str(), s.pk_len, s.pqzl_id), (st::SET, st::PK_BYTES, PQZL_ID));
