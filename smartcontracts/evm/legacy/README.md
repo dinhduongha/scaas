@@ -278,3 +278,9 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   uint256 value,uint256 validUntil,address relayer)`, the token's seven-argument `mtxRelayFee` on lane `payLane(ref)` at
   nonce 0, `_relayHash` and the router's eight-argument `relay`; `test/metatx/{MtxRelayFee,TradeTyped}.t.sol` as they stood before their
   meaning changed. Not built.
+  T39 (bit 23 `TAX`, the tax rate and recipient, router ops), as they stood at e273978e (the T38 tip):
+  `src/governance/GovernanceBits.sol` with `ISSUER_BITS` = 5, 6, 7; `src/regulated/{RegulatedLib,RegulatedBase,IRegulatedToken}.sol`
+  with `RegulatedLib.init(initArgs, valid, registryCodehash)`, `scaas.regulated` up to +4, `_delayedRelaxBits()` =
+  `ISSUER_BITS`; `src/factory/IFactoryToken.sol` with `RegulatedParams` of four fields. Tests as they stood before their
+  meaning changed: `test/as/RegulatedSkeleton.t.sol` (the masks without bit 23), `test/governance/GovBitsVector.t.sol` (rows
+  0-22). Not built.
