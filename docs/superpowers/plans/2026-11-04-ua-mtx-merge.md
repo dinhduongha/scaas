@@ -3,7 +3,7 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or
 > superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status (2026-11-04):** plan, not executed; its decisions MD-1 to MD-10 accepted by the owner 2026-11-04. **Owner 2026-11-04 (after T0): build M first** (A + B + C with the router's pairs, Q2, R17, R47: tasks T1-T8 with T3b, T10-T23 without a lever), then a checkpoint: gates, the whole-branch review (Claude, Fable, Codex) and the PR of M into `main`. **T9 (levers D / L) is not started: the owner decides it after M.** M alone fits a 200 M block, not 70 M for `WrappedToken` (72.37 M asked, T0), so no public chain deploy before that decision. Nothing is built from it; this commit writes no code, contract, test or vector. **Owner 2026-11-04 (after T1): Q6 changed:** the mandate wallets are built in this round in the merged form (task T3b, MD-11); T1 is built. **Owner 2026-11-05:** the six regulated kinds 8–13 are built in this branch as task group **T24–T36**, after T18 and before T19 ([spec](../specs/2026-11-05-regulated-kinds.md), revised after the Fable and Codex reviews; 19 agent-days); T19–T23 cover the group. **Owner 2026-11-06:** group **3e** (payment metadata, free pay lanes, tax on the regulated kinds) is built as **T37–T43** after T36 and before 3c ([spec](../specs/2026-11-05-pay-meta-tax.md), approved 2026-11-06; 14.5 agent-days plus 0.5 on T19, 15 in all); T19–T23 cover it. **Owner 2026-11-06:** group **3f** (attested proof verification, PQZ only) is built as **T44–T50** after T43 and before 3c ([spec](../specs/2026-11-06-attested-verify.md), approved 2026-11-06 after the Codex and Fable reviews and rulings R1–R4; 10 agent-days, T50 its docs share in T19); T19–T23 cover it. **Owner 2026-11-06:** group **3g** (versioned PQZ keys) is built as **T51–T57** after T50 and before 3c, with 3c's registry generation ([spec](../specs/2026-11-06-pqz-key-versions.md), approved 2026-11-06 after the Codex and Fable reviews and rulings R1–R5; 19.5 agent-days, T57 its docs share in T19, plus 1 on `ua-rs-sign`); T19–T23 cover it. Totals of the added groups: T24–T36 19, T37–T43 with T19's share 15, T44–T50 10, T51–T57 19.5, together 63.5 agent-days.
+**Status (2026-11-04):** plan, not executed; its decisions MD-1 to MD-10 accepted by the owner 2026-11-04. **Owner 2026-11-04 (after T0): build M first** (A + B + C with the router's pairs, Q2, R17, R47: tasks T1-T8 with T3b, T10-T23 without a lever), then a checkpoint: gates, the whole-branch review (Claude, Fable, Codex) and the PR of M into `main`. **T9 (levers D / L) is not started: the owner decides it after M.** M alone fits a 200 M block, not 70 M for `WrappedToken` (72.37 M asked, T0), so no public chain deploy before that decision. Nothing is built from it; this commit writes no code, contract, test or vector. **Owner 2026-11-04 (after T1): Q6 changed:** the mandate wallets are built in this round in the merged form (task T3b, MD-11); T1 is built. **Owner 2026-11-05:** the six regulated kinds 8–13 are built in this branch as task group **T24–T36**, after T18 and before T19 ([spec](../specs/2026-11-05-regulated-kinds.md), revised after the Fable and Codex reviews; 19 agent-days); T19–T23 cover the group. **Owner 2026-11-06:** group **3e** (payment metadata, free pay lanes, tax on the regulated kinds) is built as **T37–T43** after T36 and before 3c ([spec](../specs/2026-11-05-pay-meta-tax.md), approved 2026-11-06; 14.5 agent-days plus 0.5 on T19, 15 in all); T19–T23 cover it. **Owner 2026-11-06:** group **3f** (attested proof verification, PQZ only) is built as **T44–T50** after T43 and before 3c ([spec](../specs/2026-11-06-attested-verify.md), approved 2026-11-06 after the Codex and Fable reviews and rulings R1–R4; 10 agent-days, T50 its docs share in T19); T19–T23 cover it. **Owner 2026-11-06:** group **3g** (versioned PQZ keys) is built as **T51–T57** after T50 and before 3c, with 3c's registry generation ([spec](../specs/2026-11-06-pqz-key-versions.md), approved 2026-11-06 after the Codex and Fable reviews and rulings R1–R5; 19.5 agent-days, T57 its docs share in T19, plus 1 on `ua-rs-sign`); T19–T23 cover it. **2026-11-06, for the owner's review (not approved yet):** group **3h** (the PQZ proof path, contract side: the debit record, `ownTag`, `proofStore`, bit 24 `PQZ_PROOF`) as **T58–T65** after T57 and before 3c ([spec](../specs/2026-11-06-pqz-proof-path.md), from the owner-agreed design of research `pqz-leg-proof-option.md` §15A; 16 agent-days, T65 its docs share in T19; the client side, 11–13 agent-days, goes to the no-oracle spec on `ua-rs-sign`). Totals of the added groups: T24–T36 19, T37–T43 with T19's share 15, T44–T50 10, T51–T57 19.5, together 63.5 agent-days; with 3h 79.5.
 
 **Spec:** [`2026-11-04-ua-mtx-merge.md`](../specs/2026-11-04-ua-mtx-merge.md), **accepted by the owner 2026-11-04** (Q1–Q7, §10);
 rules R1–R47 (§5), invariants 1–7 (§8), measurement (§9). **Ruling:** [CTR-MTX-30](../../decisions.md#CTR-MTX-30), its Q6 Change, and the Change
@@ -217,7 +217,8 @@ rustc 1.90); Node `node --test` (`clients/clientkeys`); `zether-prover`; `ua-rs`
 | Pay meta, tax (3e) | T37 → T38 → T39 → T40; T41 after T40; T42 after T41; T43 after T40, beside T41–T42 | after T36, before 3c (owner 2026-11-06); contracts sequential in this worktree; T37 and T40 measure kind 13 first |
 | Attested PQZ (3f) | T44 → T45; T46 after T45; T47 after T46; T48 and T49 after T45, beside T46–T47; T50 beside, lands in T19 | after T43, before 3c (owner 2026-11-06); contracts sequential in this worktree; T45 measures kind 13 first |
 | Versioned PQZ keys (3g) | T51 → T52 → T53; T54 after T53; T55 after T54; T56 after T53, beside T54–T55; T57 beside, lands in T19 | after T50, before 3c (owner 2026-11-06); contracts sequential in this worktree; T51 measures the registry's deploy gas, T52 measures kind 13 first; 3c's rebalance comes after T53 |
-| Docs | T19 | drafts beside T14–T18, T24–T36, T37–T43, T44–T50 and T51–T57; lands after T57 and 3c (BUILT only with code and tests) |
+| PQZ proof path (3h) | T58 → T59 → T60 → T61; T62 after T61; T63 after T62; T64 after T61, beside T62–T63; T65 beside, lands in T19 | after T57, before 3c (pending the owner's review of the spec); contracts sequential in this worktree; T58 measures kind 13 first; no task waits for `ua-rs-sign` |
+| Docs | T19 | drafts beside T14–T18, T24–T36, T37–T43, T44–T50, T51–T57 and T58–T65; lands after T65 and 3c (BUILT only with code and tests) |
 | Close | T21 → T22 → T23 | |
 | Next | TODO item 4 | SCaaS testnet reset 2 deploys the merged code (not this plan) |
 
@@ -1782,9 +1783,190 @@ the operator note's rotation runbook.
 - [ ] **Step 1:** Write each change; figures quoted from T51–T56 logs; BUILT only where code and tests exist.
 - [ ] **Step 2:** `docs_check.py check`, `paths`, `resolve` on each new id: rc 0. Committed with T19.
 
+### PQZ proof path, contract side (group 3h, for the owner's review 2026-11-06): tasks T58–T65
+
+**Spec:** [`2026-11-06-pqz-proof-path.md`](../specs/2026-11-06-pqz-proof-path.md), from the owner-agreed design of research
+[`pqz-leg-proof-option.md`](../../research/pqz-leg-proof-option.md) §15A with §14 and §15 (b′); owner names of 2026-11-06 (PQZ proof
+path, path (A), debit record, `ownTag`, `proofStore` `NONE` / `LOG` / `SSTORE2`, `PQZ_PROOF`, seal); its questions Q1–Q3 open.
+**Not started before the owner approves the spec.** **Place:** after T57, before 3c (3h touches no registry code; 3c's rebalance
+still comes after every PQZ contract change); T19, T21, T22, T23 cover the group. **Order:** contracts T58 → T59 → T60 → T61,
+sequential in this worktree (shared `PqzCore`, `PqzLayer`, the PQZ libraries, `size-baseline.json`); T62 (`clients/`,
+`smartcontracts/vectors/`) after T61 fixes the ABI; T63 (node) after T62; T64 (invariants, mutants) after T61, beside T62–T63;
+T65 (docs share) drafts beside them and lands in T19. **The client side** (`ua-rs` proof-path commands, C ABI, bindings) is not
+in this plan: spec §13.3 lists it for the no-oracle spec on `ua-rs-sign`, where it waits for that branch's T15e; no task here
+waits for `ua-rs-sign`. **Estimate:** 16 agent-days. **PQZ only:** no Zether contract, statement, gas pin or vector moves.
+Every contracts task ends with the whole `forge test` green at the default set and the size gate, and runs `script/pqz/at-set.sh
+<set> test --match-path 'test/{ua,pqz,as/confidential}/*'` at the four sets (one run per work tree, `PqzSet.sol` restored). Red
+first, positive control first, one change at a time; mutants one at a time on a clean tree, logged `mutant | test that went red |
+rc`; heavy runs through `scripts/capped`, foreground. Gas figures in the spec are on paper; forge gas pins move old → new
+(deterministic; no timing or calibration). Legacy copies (MD-4) are the first commit of each task that replaces a body. No
+`pqz-core` change, so no full gate.
+
+### Task T58: the debit record
+
+**Depends on:** T57. **Estimate:** 3.
+
+**Files:** `src/pqz/{PqzCore,PqzStateLib,PqzViewLib,PqzLayer,IPqzToken}.sol`, the four PQZ token sources if a forward is added
+there; `test/pqz/PqzDebitRecord.t.sol` (new); `test/v2/layout/namespaces.json` (`scaas.pqz`, pinned here if T52 did not);
+`PqzStatePinGasTest` and the other PQZ gas pins; `size-baseline.json`; `runs/<date>-ua-mtx-merge-proofpath-sizes.txt` (summary).
+
+**Interfaces:** spec §2: both deletion loops removed (`_debit`, `rollOver`), `cleared` and `floor` updates kept; `debitRec[ua][counter]`
+with `w0 = prevBlob ‖ p ‖ proofStore ‖ flags ‖ 0` (`RECORD` always set; `proofStore` written 0 until T60) and `w1 = shieldIn ‖
+keyVersion` when either is non-zero (Q2's answer applies; if the owner answers no, `w1` only for `shieldIn` and the version moves
+to the walk of spec §2.3); `prevBlob` = the account's `accBlob` before the overwrite; `pqzDebitRecord(ua, counter)` with
+`DebitRecordUnknown`; `pqzPending` / `pqzPendingCt` below `cleared`.
+
+- [ ] **Step 1: Failing tests:** `test_debit_keepsPendingSlots`, `test_rollover_keepsPendingSlots` (controls: today's code
+      deletes), `test_pendingCt_belowCleared`, `test_record_{op1,op7,burn,refresh,unwrap,migration}`,
+      `test_record_wide_{shieldIn,keyVersion}`, `test_record_narrow` (`vm.accesses`: no `w1` slot), `test_record_prevBlob_afterRollover`,
+      `test_record_unknown_reverts`, `test_T_fromState_equalsStatement` (random runs of credits, shields with same-block merges,
+      rollovers, un-rolls and every debit form; `T` by spec §2.3 equals the statement's), `test_layout_scaasPqz`.
+- [ ] **Step 2:** FAIL. **Step 3: Implement**, kind 13 measured first (`forge build src --sizes --json`; stop line 64,512 B, spec
+      §8's levers in order, re-measured after each; `_above64KiB` is not a fallback).
+- [ ] **Step 4:** PASS; whole `forge test`; the four sets; size gate. Gas pins old → new (rollover and debit rows fall).
+- [ ] **Step 5: Mutants:** spec §11 M1–M6.
+- [ ] **Step 6:** Commit `ua-mtx-merge T58: PQZ debit record, pending slots kept`.
+
+**Pins, old → new:** `scaas.pqz` layout; PQZ gas pins; sizes of 4, 5, 12, 13 and the PQZ libraries; `LinkClosure` codehashes.
+**Gates:** whole `forge test`, four sets, size gate.
+
+### Task T59: `ownTag` in the blob, bound by `memoHash`
+
+**Depends on:** T58. **Estimate:** 2.
+
+**Files:** `src/pqz/{IPqzToken,PqzCore,PqzViewLib,PqzLayer}.sol`, the PQZ `UA*` typed structs and their typehash pins,
+`test/pqz/PqzOwnTag.t.sol` (new), the PQZ statement-view tests, `test/vectors/selector_audit.json` if a signature moves.
+
+**Interfaces:** spec §3: `bytes32 ownTag` after `salt` in `PqzTransferArgs` and `PqzMultiArgs`, after `beneficiaryUA` in
+`PqzBurnArgs`; the blob tail `… ‖ P(v_f) ‖ ownTag`; `memoHash = keccak256(memo ‖ ownTag)` (memo = `salt ‖ sealedMemo` on HASH,
+empty otherwise) in the debit and in the statement views; `transferEntry` = blob minus `VP + 32`; offsets of `u`, legs, auditor
+copies and `acc` unchanged.
+
+- [ ] **Step 1: Failing tests:** `test_ownTag_inBlob_{op1,op7,burn,refresh}`, `test_memoHash_{hash,bundle,burn}` (against a
+      statement built in the test from the args), `test_ownTag_swapped_refused` (a relayer's swap: `AuthRejected` or
+      `ProofRejected`), `test_transferEntry_length`, `test_disclosure_offsetsUnchanged`, the moved typehash pins.
+- [ ] **Step 2:** FAIL. **Step 3: Implement.** **Step 4:** PASS; whole `forge test`; the four sets; size gate.
+- [ ] **Step 5: Mutants:** spec §11 M7–M9.
+- [ ] **Step 6:** Commit `ua-mtx-merge T59: PQZ ownTag in every own debit, bound by memoHash`.
+
+**Pins, old → new:** the PQZ `UA*` typehashes; PQZ gas pins; sizes. **Gates:** whole `forge test`, four sets, size gate.
+
+### Task T60: `proofStore`
+
+**Depends on:** T59. **Estimate:** 2.5.
+
+**Files:** `src/factory/IFactoryToken.sol` (`ConfidentialConfig.proofStore`), `src/pqz/{PqzCore,PqzStateLib,PqzViewLib,PqzLayer,IPqzToken}.sol`,
+the shared config check that T44 uses for `verifyMode` on non-PQZ kinds (C7), the `TokenConfig` ripple (`script/DeployBase.sol`,
+`script/pqz/e2e.py`, test builders); `test/pqz/PqzProofStore.t.sol` (new); layout pin; `size-baseline.json`;
+`runs/<date>-ua-mtx-merge-proofpath-gas.txt` (summary: the PQZH × `LOG` rows for Q3).
+
+**Interfaces:** spec §4: `proofStore` at `PqzStorage` slot 0 byte 23 (confirm the byte against T44's built layout); `ProofStoreInvalid`;
+the record's mode; `PqzDebitProof(address indexed blob, bytes32 indexed ua, uint64 indexed sendCounter, bytes header, bytes
+proof)` with the verified `statement[0:640]`; `SSTORE2` chunks of at most 24,575 data bytes in `proofOf[blob]`;
+`pqzDebitProof(blob)`; `proofStore()`; both verify modes, PQZL and PQZH.
+
+- [ ] **Step 1: Failing tests:** `test_proofStore_{none,log,sstore2}_{op1,op7,burn}`, `test_proofStore_attested`,
+      `test_proofStore_invalid`, `test_proofStore_zether_refused`, `test_proofStore_chunkBoundary` (a proof of exactly
+      24,575 · n bytes and one more), `test_pqzDebitProof_emptyOtherwise`.
+- [ ] **Step 2:** FAIL. **Step 3: Implement.** **Step 4:** PASS; whole `forge test` (forge's raised `gas_limit` carries the
+      `SSTORE2` debits); the four sets; size gate. Forge regular gas of every PQZH debit form with `LOG` at each set against 2^24
+      written to the summary for the owner's Q3; no refusal is coded before the owner answers.
+- [ ] **Step 5: Mutants:** spec §11 M10–M12.
+- [ ] **Step 6:** Commit `ua-mtx-merge T60: PQZ proofStore NONE, LOG, SSTORE2`.
+
+**Pins, old → new:** `scaas.pqz` layout; `TokenConfig` encoding rows; PQZ gas pins; sizes. **Gates:** whole `forge test`, four
+sets, size gate.
+
+### Task T61: bit 24 `PQZ_PROOF` and the router op
+
+**Depends on:** T60. **Estimate:** 1.5.
+
+**Files:** `src/governance/{GovernanceBits,GovernanceLib,GovernanceRouterBase,IGovernanceRouter}.sol` (as T39 touched them for bit 23), the `_validBits()`
+/ `_roleBits()` of kinds 4, 5, 12, 13, `src/pqz/{PqzLayer,PqzStateLib}.sol` (`setProofStore`), `test/governance/GovProofBit.t.sol`
+(new), router typehash pins, `test/vectors/selector_audit.json`, `smartcontracts/vectors/governance/governance_bits.json` (bit 24
+with its sentence).
+
+**Interfaces:** spec §5 with Q1's answer: `GovernanceBits.PQZ_PROOF = 24` in `ISSUER_BITS` and the four kinds' `_roleBits()`, not
+in `_contractOnlyBits()` or `_delayedRelaxBits()`; `setProofStore(uint8 next)` gated by `GovernanceUse.use(PQZ_PROOF, …)`,
+`ProofStoreSet(previous, next)`, a same-value call a no-op; `mtxSetProofStore(UAEnvelope e, address target, uint8 next, UASig
+auth)` over `UASetProofStore(uint8 next)`, fee mode `NONE`.
+
+- [ ] **Step 1: Failing tests:** `test_bit24_validKinds_{4,5,12,13}`, `test_bit24_otherKindsRefused` (every other kind, Zether's
+      included), `test_bit24_anyHolder_{eoa,singleKey,msig,contract}`, `test_bit24_plainKindIssuerGrant`, `test_bit24_notDelayed`,
+      `test_setProofStore_{gated,noop,appliesLater}`, `test_router_UASetProofStore` (non-zero unbound relayer), `test_UASetProofStoreTypehashIsPinned`,
+      `test_mtxSelectors_unchanged`.
+- [ ] **Step 2:** FAIL. **Step 3: Implement.** **Step 4:** PASS; whole `forge test`; the four sets; size gate (router too).
+- [ ] **Step 5: Mutants:** spec §11 M13–M15.
+- [ ] **Step 6:** Commit `ua-mtx-merge T61: bit 24 PQZ_PROOF, setProofStore and its router op`.
+
+**Pins, old → new:** router typehashes (+1), router size and CREATE2 address; `selector_audit.json`; sizes. **Gates:** whole
+`forge test`, four sets, size gate.
+
+### Task T62: vectors and their readers
+
+**Depends on:** T61. **Estimate:** 2.5.
+
+**Files:** `smartcontracts/vectors/typed/typed_ops.json` (`typed-ops-vectors.mjs`: the PQZ `UA*` rows with `ownTag`,
+`UASetProofStore`, each with a non-zero unbound `relayer` / `feeRecipient`); a PQZ proof-path KAT (`ownTag`, `memoHash` per form,
+record words, the blob tail) written by a `clientkeys` generator at the default set and one other; the `TokenConfig` rows with
+`proofStore`; `clients/clientkeys` (`evm.js`: args builders, `memoHash`, `ownTag`); every reader of the moved rows: `ua-rs` and
+the wrappers `ua-c`, `ua-cxx`, `ua-qt`, `ua-dart-frb`; `ua-py`, `ua-go`, `ua-cs`, `ua-dart`.
+
+- [ ] **Step 1:** Failing readers of the new rows in every package; `clientkeys` tests: `ownTag` from a known seed, `memoHash`
+      on HASH, BUNDLE and burn, a forge cross-check that the contract's statement view gives the same `memoHash`.
+- [ ] **Step 2:** FAIL. **Step 3: Implement.** **Step 4:** PASS; generators re-run, `git diff --exit-code`;
+      `smartcontracts/vectors/pqz/<set>/` byte-equal.
+- [ ] **Step 5: Mutants:** `memoHash` without `ownTag` in `clientkeys`; `ownTag` over the unpacked `v_f`.
+- [ ] **Step 6:** Commit `ua-mtx-merge T62: PQZ proof-path vectors, clientkeys and readers`.
+
+### Task T63: node
+
+**Depends on:** T62. **Estimate:** 1.5.
+
+**Files:** `scaas-node/src/{typed,guard,indexer}.rs`, the error table if a refusal name is added, `tests/e2e.rs` (the `TokenConfig`
+encoder; ignored, anvil); `docs/node/` drafts for T65.
+
+**Interfaces:** spec §10: `own_tag` a named field of the PQZ debit jobs, old shapes refused by name (never `dead`); the
+`UASetProofStore` row and `mtxSetProofStore` selector, allow-lists equal to the contract's both directions; the indexer derives
+`ProofStoreSet`; no `PqzDebitProof` data indexed, no archive.
+
+- [ ] **Step 1: Failing tests:** `pqz_own_tag_named`, `pqz_old_shape_refused_by_name`, `proof_store_router_row_equal_contract`,
+      `indexer_proof_store_set`; e2e `pqz_debit_with_own_tag_on_anvil`.
+- [ ] **Step 2:** FAIL. **Step 3: Implement.** **Step 4:** PASS; `CAPPED_MEM=6G ../scripts/capped cargo test` alone; clippy
+      `-D warnings`; `--test e2e -- --ignored --test-threads=1`. No `anvil` left.
+- [ ] **Step 5: Mutants:** the router row missing on one side; `own_tag` defaulted to zero.
+- [ ] **Step 6:** Commit `ua-mtx-merge T63: node PQZ ownTag and proofStore rows`.
+
+### Task T64: invariants P1–P7 and the mutant harness
+
+**Depends on:** T61; beside T62–T63. **Estimate:** 2.
+
+**Files:** `test/pqz/invariant/ProofPath{Handler,Invariants}.t.sol`; `smartcontracts/evm/runs/<date>-ua-mtx-merge-proofpath/`
+(`mutants.py`, `README.md`, the summary `mutant | test that went red | rc`, no absolute paths).
+
+- [ ] **Step 1:** Handlers over credits, shields (same-block merges), rollovers, un-rolls, every debit form, 3g rotations and
+      migrations, `setProofStore`; invariants P1–P7 of spec §11 (P2 captures each debit's statement `T` and rebuilds it from
+      state).
+- [ ] **Step 2:** Run at the default set and the four sets.
+- [ ] **Step 3: Mutants:** M1–M15 (the harness re-runs those T58–T61 killed); a survivor is a finding for its owning task.
+- [ ] **Step 4:** Commit `ua-mtx-merge T64: PQZ proof-path invariants P1-P7 and the mutant harness, <n> kills`.
+
+**Gates:** whole `forge test`, four sets.
+
+### Task T65: the docs share of group 3h
+
+**Depends on:** T58–T64 for BUILT tags (drafts beside them). **Estimate:** 1. Lands inside T19's commit.
+
+**Files:** spec §12's files; its four `decisions.md` entries (CTR-PQZ-33, CTR-PQZ-34, CTR-PQZ-35, CTR-GOV-22; `docs_check.py`
+confirms they are next-free) and Change lines (the plan 5h deletion entries, CTR-PQZ-07, CTR-PQZ-23; the state spec §5.5 note);
+the operator note's `own_tag` row; a dated status line in the research note.
+
+- [ ] **Step 1:** Write each change; figures quoted from T58–T64 logs; BUILT only where code and tests exist.
+- [ ] **Step 2:** `docs_check.py check`, `paths`, `resolve` on each new id: rc 0. Committed with T19.
+
 ### Task T19: docs, decisions, operator note
 
-**Depends on:** T1–T18, T24–T36, T37–T43, T44–T50 and T51–T57 for BUILT tags (drafts beside T14–T18, T24–T36, T37–T43, T44–T50 and T51–T57). **Estimate:** +0.5 for group 3e; group 3f's share is T50 (1) and group 3g's is T57 (1), committed here.
+**Depends on:** T1–T18, T24–T36, T37–T43, T44–T50, T51–T57 and T58–T65 for BUILT tags (drafts beside T14–T18, T24–T36, T37–T43, T44–T50, T51–T57 and T58–T65). **Estimate:** +0.5 for group 3e; group 3f's share is T50 (1), group 3g's is T57 (1) and group 3h's is T65 (1), committed here.
 
 **Files, each rule rewritten once, linked elsewhere:**
 - `docs/contracts/metatx.md` (CTR-MTX-01, -05, -06, -09, -11, -12, -14, -15, -17, -18, -21, -22, -23, -24, -26, -27, -28, -29), `accounts.md`
