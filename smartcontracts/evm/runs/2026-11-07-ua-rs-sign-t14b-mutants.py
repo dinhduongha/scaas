@@ -29,8 +29,8 @@ NEG = "word_location_and_role_negatives_are_refused_before_the_key"
 
 M = [
     # the plan's three
-    ("raw acc accepted (checkBalance allow-list)", [(ST, '"checkBalance" => has(LOC) || has(ACCT) || field == "balance",',
-                                                     '"checkBalance" => has(LOC) || has(ACCT) || field == "balance" || field == "acc",')], S(NEG)),
+    ("raw acc accepted (checkBalance allow-list)", [(ST, '"checkBalance" => has(LOC) || has(ACCT) || field == "cacheBox",',
+                                                     '"checkBalance" => has(LOC) || has(ACCT) || field == "cacheBox" || field == "acc",')], S(NEG)),
     ("decrypt's [x]D left variable-time", [(EL, "    Ok(ct.c - secret_mul(&ct.d, x)?)", "    Ok(ct.c - ct.d * *x)")], SM),
     ("the CLI's catalogue check skipped (R5)", [(CLI, "    if info[2] != 1 || !ZETHER_KINDS.contains(&info[11]) {", "    if false {")],
      RB("--", "--include-ignored", "rpc_reading_layer_against_anvil")),

@@ -42,14 +42,15 @@ M = [
     # the plan's three
     ("PQZ: `dec` back in the release list", back(Q, "dec"), PQZ_REL),
     ("zether-prover: `hazmat` on by default", [(ZT, "\nhazmat = []\n", "\ndefault = [\"hazmat\"]\nhazmat = []\n")], DEFAULT),
-    ("zether-read-balance: `--rpc` accepted", [(RB, "    if a.rpc.is_some() {\n        return Err(", "    if false && a.rpc.is_some() {\n        return Err(")], RPC),
+    # superseded (T15l re-check): T14b made `--rpc` a reading layer meeting R1-R7 by design; its checks are T14b's mutants
+    ("zether-read-balance: `--rpc` accepted (superseded by T14b: --rpc is the R1-R7 reading layer)", [], None),
     # the controller's
-    ("PQZ: `proveTransfer` back in the release list", back(Q, "proveTransfer"), PQZ_REL),
-    ("PQZ: `proveDisclose` back in the release list", back(Q, "proveDisclose"), PQZ_REL),
-    ("PQZ: `openMemo` back in the release list", back(Q, "openMemo"), PQZ_REL),
+    ("PQZ: `rawProveTransfer` back in the release list (T15e renamed the raw form)", back(Q, "rawProveTransfer"), PQZ_REL),
+    ("PQZ: `rawProveDisclose` back in the release list (T15e renamed the raw form)", back(Q, "rawProveDisclose"), PQZ_REL),
+    ("PQZ: `rawOpenMemo` back in the release list (T15e renamed the raw form)", back(Q, "rawOpenMemo"), PQZ_REL),
     ("PQZ: `dec` back, seen through the C ABI (ua-c ctypes)", back(Q, "dec"), PY),
-    ("Zether: `checkBalance` back in the facade's release list", back(Z, "checkBalance"), ZETHER_REL),
-    ("Zether: `recoverTransfer` back in the facade's release list", back(Z, "recoverTransfer"), ZETHER_REL),
+    ("Zether: `rawCheckBalance` back in the facade's release list (T14b renamed the raw form)", back(Z, "rawCheckBalance"), ZETHER_REL),
+    ("Zether: `rawRecoverTransfer` back in the facade's release list (T14b renamed the raw form)", back(Z, "rawRecoverTransfer"), ZETHER_REL),
     ("zether-prover: the api gate removed", [(API, "if !cfg!(feature = \"hazmat\") && HAZMAT.contains(&cmd) {", "if false && HAZMAT.contains(&cmd) {")], PROVER),
     ("zether-prover: `openDisclosure` off the HAZMAT list",
      [(API, "\"recoverTransfer\", \"openDisclosure\"];", "\"recoverTransfer\", \"pop\"];")], PROVER),
@@ -71,7 +72,11 @@ def run(cwd, cmd):
 
 bad = 0
 lo, hi = (int(sys.argv[1]), int(sys.argv[2])) if len(sys.argv) == 3 else (1, len(M))
-for n, (name, reps, (cwd, cmd)) in enumerate(M[lo - 1:hi], lo):
+for n, (name, reps, where) in enumerate(M[lo - 1:hi], lo):
+    if where is None:
+        print(f"superseded | M{n} {name}", flush=True)
+        continue
+    cwd, cmd = where
     orig = {f: open(f, encoding="utf-8").read() for f, _, _ in reps}
     new = dict(orig)
     for f, a, b in reps:

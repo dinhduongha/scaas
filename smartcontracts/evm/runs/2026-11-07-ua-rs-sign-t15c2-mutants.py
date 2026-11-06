@@ -58,7 +58,7 @@ M = [
                                                 "fn open_memo_json_inner<C: ZCurve>(v: &Value) -> R<Value> {\n    open_memo_with::<C>(None, v)\n}\n}\npub fn open_memo_json<C: ZCurve>(v: &Value) -> R<Value> {\n    open_memo_with::<C>(None, v)\n}\n")], ZP_DOC, "test"),
     ("zether-prover: open_sender_cp left pub", [(ZP + "src/schnorr.rs", "hazmat_pub! {\n/// `SENDER_CP`", "/// `SENDER_CP`"),
                                                 (ZP + "src/schnorr.rs", "fn open_sender_cp<C: ZCurve, R: RngCore + CryptoRng>(", "pub fn open_sender_cp<C: ZCurve, R: RngCore + CryptoRng>("),
-                                                (ZP + "src/schnorr.rs", "    Ok(cp_open(e, amount, OpeningKind::SenderCp, s, rng))\n}\n}\n", "    Ok(cp_open(e, amount, OpeningKind::SenderCp, s, rng))\n}\n")], ZP_SRC, "test"),
+                                                (ZP + "src/schnorr.rs", "    cp_open(e, amount, OpeningKind::SenderCp, s, rng)\n}\n}\n", "    cp_open(e, amount, OpeningKind::SenderCp, s, rng)\n}\n")], ZP_SRC, "test"),
     ("zether-prover: hazmat_pub!'s release arm pub", [(ZP + "src/lib.rs", "        #[allow(dead_code)]\n        $(#[$m])*\n        pub(crate) fn $($t)*", "        #[allow(dead_code)]\n        $(#[$m])*\n        pub fn $($t)*")], ZP_DOC, "test"),
     # Fable P3-3: Req::Dec in a release build
     ("PQZ: the Req::Dec variant compiled in release (run()'s match is no longer exhaustive)",

@@ -20,10 +20,10 @@ T = lambda *names: (R, [CAPPED, "cargo", "test", "--locked", "--offline", "-j2",
 
 M = [
     # the plan's nine
-    ("caller's T accepted (proveTransfer allow-list)", [(Q, '"proveTransfer" => debit(&["toUA", "pkT", "pkA", "amount", "memoHash"]),',
-                                                         '"proveTransfer" => debit(&["toUA", "pkT", "pkA", "amount", "memoHash", "T"]),')],
+    ("caller's T accepted (proveTransfer allow-list)", [(Q, '"proveTransfer" => debit(&["toUA", "pkT", "pkA", "amount", "mode"]),',
+                                                         '"proveTransfer" => debit(&["toUA", "pkT", "pkA", "amount", "mode", "T"]),')],
      T("requests_carry_words_only")),
-    ("p taken from the request (proveRefresh allow-list)", [(Q, '"proveRefresh" => debit(&["memoHash"]),', '"proveRefresh" => debit(&["memoHash", "p"]),')],
+    ("p taken from the request (proveRefresh allow-list)", [(Q, '"proveRefresh" => debit(&[]),', '"proveRefresh" => debit(&["p"]),')],
      T("requests_carry_words_only")),
     ("not() skipped on accWords", [(Q, ".flat_map(|w| w.map(|b| !b)).take(CTP)", ".flat_map(|w| *w).take(CTP)")], T()),
     ("TRIVIAL read as blob == 0", [(Q, "        if v_off == 0 {\n            add_trivial(", "        if lo_addr(e, 12)? == [0; 20] {\n            add_trivial(")], T()),
@@ -48,7 +48,7 @@ M = [
      T("entry_and_role_negatives_refused_before_the_key")),
     ("an auditor read of an entry without the copies", [(Q, "        if j >= self.m || (auditor && !self.aud) {", "        if j >= self.m {")],
      T("entry_and_role_negatives_refused_before_the_key")),
-    ("the opened memo not compared with the entry", [(Q, "                if expect.as_ref().is_some_and(", "                if false && expect.as_ref().is_some_and(")],
+    ("the opened memo not compared with the entry", [(Q, "                    if legs.len() != uas.len() || !bool::from(same) {", "                    if false {")],
      T("open_memo_binds_the_entry")),
     ("the units cap (K_MAX) not checked", [(Q, "let room = (K_MAX as u64).checked_sub(a.units + 1).ok_or(Error::Argument)?;", "let room = (K_MAX as u64).saturating_sub(a.units + 1);")],
      T("word_negatives_refused_before_the_key")),

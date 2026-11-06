@@ -40,14 +40,14 @@ DEC = [  # every `vectors` gate of the raw `dec` removed (its command, allow-lis
     (Q, f'    {V}    Dec {{ ct: Vec<u8>, window: usize }},', '    Dec { ct: Vec<u8>, window: usize },'),
     (Q, f'            {V}            Req::Dec {{ ct, window }} => {{', '            Req::Dec { ct, window } => {'),
     (Q, f'    {V}    fn ct(&self, k: &str) -> Result<Vec<u8>> {{', '    fn ct(&self, k: &str) -> Result<Vec<u8>> {'),
-    (Q, f'{V}use pqz_ffi::stmt::check_ct;', 'use pqz_ffi::stmt::check_ct;'),
+    (Q, f'{V}use pqz_ffi::stmt::{{check_ct, parse}};', 'use pqz_ffi::stmt::{check_ct, parse};'),
 ]
 ACC_REF = [(Q, "    } else if a.acc_blob != [0; 20] {\n        add(&mut c, &load(blobs.data(&a.acc_blob)?, a.acc_u, a.acc_v)?);",
             "    } else if a.acc_blob == [1; 20] {\n        add(&mut c, &load(blobs.data(&a.acc_blob)?, a.acc_u, a.acc_v)?);")]
 M = [
     ("PQZ: the raw `dec` in a release build, seen by ua-rs no_oracle", DEC, UARS("no_oracle"), "test"),
     ("PQZ: `balance` takes a caller's `T` beside the words", [
-        (Q, '        "balance" => has(LOC) || has(ACCT),', '        "balance" => has(LOC) || has(ACCT) || field == "T",'),
+        (Q, '        "balance" => has(LOC) || has(ACCT) || field == "forOp7",', '        "balance" => has(LOC) || has(ACCT) || field == "forOp7" || field == "T",'),
         (Q, "(Req::Balance { t: o.t, p: o.p,", '(Req::Balance { t: if f.has("T") { f.bytes("T")? } else { o.t }, p: o.p,'),
     ], UARS("no_oracle"), "test"),
     ("PQZ: a crafted-query filter in the rebuild (a `u` with one non-zero coefficient refused): the residual moved", [

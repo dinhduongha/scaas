@@ -1,6 +1,6 @@
 #!/bin/bash
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-# ua-rs-sign T15i: the closing mechanical gates of the ARCH-POS-13 rework ("never a decryption oracle"; spec
+# ua-rs-sign T15i (T15l: the fix wave's mutants, `l-mutant-<n>`; every harness `check`ed by `mutant-logs`): the closing mechanical gates of the ARCH-POS-13 rework ("never a decryption oracle"; spec
 # no-decryption-oracle §4.8, §5). From the worktree root, foreground, one step per call:
 #   smartcontracts/evm/runs/2026-11-07-ua-rs-sign-gates.sh <step>      GATES_FRESH=1 re-runs a step that passed
 #   smartcontracts/evm/runs/2026-11-07-ua-rs-sign-gates.sh steps       (the step list)
@@ -12,9 +12,11 @@ set -u
 cd "$(git rev-parse --show-toplevel)"
 P=smartcontracts/evm/runs/2026-11-07-ua-rs-sign
 H=$P-t15i-mutants.py
+L=$P-t15l-mutants.py
 CAP=scripts/capped
 NMUT=$(python3 -I "$H" count)
-STEPS="no-oracle no-oracle-n2048 no-oracle-ua-py wallet-rows test-features mutant-logs $(seq -f 'mutant-%g' 1 "$NMUT" | tr '\n' ' ')rebuild"
+LMUT=$(python3 -I "$L" count)
+STEPS="no-oracle no-oracle-n2048 no-oracle-ua-py wallet-rows test-features mutant-logs $(seq -f 'mutant-%g' 1 "$NMUT" | tr '\n' ' ')$(seq -f 'l-mutant-%g' 1 "$LMUT" | tr '\n' ' ')rebuild"
 CARGO="cargo test --locked --offline -j2"
 N2048="--no-default-features --features wallet,zether,pqz,pqz-set-n2048-kmax1024,mlock"
 
@@ -43,13 +45,19 @@ step() {
                    git checkout -q -- $m
                    echo "positive control (scaas-ua/vectors forced in $m): rc=$r (must be 1)"
                    [ $r = 1 ] && git diff --exit-code ;;
-    # the mutant records of the earlier tasks of the rework: each ends with no survivor
+    # the mutant records of the earlier tasks of the rework: each ends with no survivor, and (T15l, Fable P3-5) every harness
+    # still applies at this commit (`check`: each replacement string found once), so a later change cannot leave a record that
+    # no longer tests anything
     mutant-logs) local t bad=0
                  for t in 2026-11-06-ua-rs-sign-t15b 2026-11-06-ua-rs-sign-t15c 2026-11-07-ua-rs-sign-t15c2 2026-11-07-ua-rs-sign-t15e \
-                          2026-11-07-ua-rs-sign-t14b 2026-11-07-ua-rs-sign-t15g 2026-11-07-ua-rs-sign-t15k; do
+                          2026-11-07-ua-rs-sign-t14b 2026-11-07-ua-rs-sign-t15g 2026-11-07-ua-rs-sign-t15k 2026-11-07-ua-rs-sign-t15i \
+                          2026-11-07-ua-rs-sign-t15l; do
                    l=$(tail -n 1 smartcontracts/evm/runs/$t-mutants.txt); echo "$t: $l"
                    grep -Eq '(survived or not loaded: 0|0 survived, 0 not loaded)$|0 survived, 0 not loaded \(' <<< "$l" || bad=1
+                   echo "$t check: $(python3 -I smartcontracts/evm/runs/$t-mutants.py check 2>&1 | tail -n 1)"
+                   python3 -I smartcontracts/evm/runs/$t-mutants.py check > /dev/null 2>&1 || bad=1
                  done; [ $bad = 0 ] ;;
+    l-mutant-*) local n=${1#l-mutant-}; python3 -I "$L" "$n" "$n"; local r=$?; git diff --exit-code && return $r ;;
     mutant-*) local n=${1#mutant-}; python3 -I "$H" "$n" "$n"; local r=$?; git diff --exit-code && return $r ;;
     # the libraries the binding mutants rebuilt, from the clean tree
     rebuild) $CAP cargo build --release --locked --offline -j2 --manifest-path clients/ua-c/Cargo.toml &&
