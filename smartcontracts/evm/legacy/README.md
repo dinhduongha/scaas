@@ -252,3 +252,6 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   body on kinds 2 and 3; `NormalZetherToken` and `WrappedZetherToken` only mark their overrides `virtual` (same
   runtime size, the metadata hash moves); `DeployBase._deployZether` gains `_deployZetherRegulated`. New:
   `src/regulated/{NormalZetherRegulatedToken,WrappedZetherRegulatedToken}.sol`. As they stood before T30: `b0727dfc`.
+  Owner ruling 2026-11-06 (`ComplianceRegistry`: only the admin overwrites or revokes an admin-written slot; spec
+  `2026-11-05-regulated-kinds.md` §5): no copy. `attest` keeps its signature and body and gains one check before the write
+  (`AdminWrittenSlot`); no entry, struct, row or handler is dropped; the runtime hash moves. As it stood before: `4ba3decb`.
