@@ -1259,13 +1259,11 @@ func TestZether(t *testing.T) {
 	req := tv["request"].(obj)
 	delete(req, "key")
 	delete(req, "includeWitness")
-	if got := must(k.Call("checkBalance", js(obj{"acc": req["acc"], "balance": req["balance"]}))); got != `{"ok":true}` {
-		t.Fatal(got)
-	}
-	var out obj
-	_ = json.Unmarshal([]byte(must(k.Call("proveTransfer", js(req)))), &out)
-	if out["entryRef"] != tv["entryRef"] {
-		t.Fatal("entryRef")
+	// ARCH-POS-13 (T15c): a release build has no command that decrypts a caller's ciphertext (until T14b)
+	for cmd, r := range map[string]obj{"checkBalance": {"acc": req["acc"], "balance": req["balance"]}, "proveTransfer": req} {
+		if _, err := k.Call(cmd, js(r)); code(err) != "UAArgument" {
+			t.Fatal(cmd, err)
+		}
 	}
 	if _, err := k.Call("pop", `{"key":{"seed":"0x11"}}`); code(err) != "UAArgument" {
 		t.Fatal(err)

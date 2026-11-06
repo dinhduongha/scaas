@@ -87,6 +87,7 @@ js-sys = { version = "=0.3.107", optional = true }
 # MD-5 (owner: the facades on by default). `--no-default-features` keeps the verify-only identity layer (+ `pq` / `json` /
 # `signers` as before). `zether` (T14: zether-prover) and `pqz` (T15: pqz-ffi) imply `wallet`; `pqz-set-*`: exactly one
 # with `pqz` (src/facade/pqz.rs refuses to compile otherwise). `vectors`: test-only entry points (secrets through hooks), never in a release build.
+# `vectors` also keeps the facades' raw decrypt commands and zether-prover's `hazmat` (ARCH-POS-13, T15c: never in a release build).
 # `mlock` on by default for native builds (owner 2026-11-06, superseding MD-5's list); off Unix it compiles out (no libc).
 default = ["wallet", "zether", "pqz", "pqz-set-n2304-kmax4096", "mlock"]
 wallet = ["pq", "signers", "json", "dep:bip39", "dep:bip32", "dep:hkdf", "dep:hmac", "dep:zeroize", "dep:unicode-normalization",
@@ -97,7 +98,7 @@ pqz-set-n2048-kmax1024 = ["pqz-ffi?/set-n2048-kmax1024"]
 pqz-set-n2304-kmax4096 = ["pqz-ffi?/set-n2304-kmax4096"]
 pqz-set-n2560-kmax16384 = ["pqz-ffi?/set-n2560-kmax16384"]
 pqz-set-n2816-kmax65536 = ["pqz-ffi?/set-n2816-kmax65536"]
-vectors = ["wallet", "scaas-ct/vectors", "ml-kem/hazmat"]
+vectors = ["wallet", "scaas-ct/vectors", "ml-kem/hazmat", "zether-prover?/hazmat"]
 # T10: the arena's chunks `mlock`ed and no-dump (Linux, Android), best effort, reported by `Wallet::memory_protection`; a no-op
 # off Unix (wasm32: compiled out)
 mlock = ["wallet", "dep:libc"]

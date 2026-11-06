@@ -6,6 +6,11 @@
 //! A `key` is `{"x": hex}` or `{"mnemonic": words, "passphrase"?: s, "coin": n, "account": n}`
 //! or `{"seed": hex, "coin": n, "account": n}` (R33, `<use> = 7`). A custodian that holds the key itself (ua-rs's Zether
 //! facade, ua-rs-sign T14) calls [`call_with_key`] instead: the key is handed over, never a `key` object.
+//!
+//! ARCH-POS-13 ("never a decryption oracle", owner 2026-11-06; ua-rs-sign T15c): the [`HAZMAT`] commands decrypt or open a
+//! ciphertext the caller hands over (`acc`, `ct`, `pending`, an entry, a memo); [`call`] and [`call_with_key`] refuse them
+//! unless the crate is built with feature `hazmat` (off by default and in every wasm build; tests, the vector tools and
+//! ua-rs's `vectors` turn it on) until they take proven state (ua-rs-sign T14b).
 
 use ark_ff::{UniformRand, Zero};
 use rand_core::{CryptoRng, OsRng, RngCore};
@@ -36,6 +41,10 @@ use crate::zether::{
 };
 
 type R<T> = Result<T, String>;
+
+/// The commands that decrypt or open a caller's ciphertext: feature `hazmat` only (ARCH-POS-13).
+pub const HAZMAT: [&str; 9] =
+    ["decrypt", "decryptPending", "checkBalance", "proveTransfer", "proveTransferMulti", "proveBurn", "openMemo", "recoverTransfer", "openDisclosure"];
 
 fn e<E: std::fmt::Display>(x: E) -> String {
     x.to_string()
@@ -665,6 +674,9 @@ fn open_disclosure_json<C: ZCurve, Rn: RngCore + CryptoRng>(k: &ZetherKey<C>, v:
 }
 
 fn by_curve<C: ZCurve, Rn: RngCore + CryptoRng>(cmd: &str, v: &Value, given: Option<&ZetherKey<C>>, rng: &mut Rn) -> R<Value> {
+    if !cfg!(feature = "hazmat") && HAZMAT.contains(&cmd) {
+        return Err(format!("`{cmd}` decrypts a ciphertext its caller chose: refused (ARCH-POS-13; feature `hazmat` only)"));
+    }
     let gens = || Gens::<C>::new();
     let key = |v: &Value| key_or::<C>(given, v);
     match cmd {

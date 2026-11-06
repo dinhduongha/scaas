@@ -3,6 +3,7 @@
 //! object; the request then takes no `key`, `revealSecret` or `includeWitness`. The same request gives the same bytes as the
 //! JSON-key path at the same randomness, and `openDisclosure` gives the receiver's and the auditor's openings
 //! (CTR-ZTH-43) that verify. No transcript is touched. UNAUDITED.
+#![cfg_attr(not(feature = "hazmat"), allow(dead_code, unused_imports))]
 use rand_chacha::rand_core::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 use serde_json::{json, Value};
@@ -35,6 +36,7 @@ fn request() -> Value {
     r
 }
 
+#[cfg(feature = "hazmat")] // ARCH-POS-13: the raw commands (api::HAZMAT) exist only under `hazmat`
 #[test]
 fn a_given_key_proves_the_same_bytes_as_the_json_key() {
     let gens = Gens::<Bls12381>::new();
@@ -44,6 +46,26 @@ fn a_given_key_proves_the_same_bytes_as_the_json_key() {
         assert_eq!(given[f], with_json[f], "{f}");
     }
     assert!(given.get("witness").is_none());
+}
+
+/// ARCH-POS-13 (ua-rs-sign T15c): without feature `hazmat` every command of `api::HAZMAT` is refused by `call` and
+/// `call_with_key`, naming the rule; with it they run (a well-formed `proveTransfer` proves). The other commands run in both.
+#[test]
+fn release_has_no_raw_decrypt() {
+    use zether_prover::api::{call, HAZMAT};
+    assert_eq!(HAZMAT, ["decrypt", "decryptPending", "checkBalance", "proveTransfer", "proveTransferMulti", "proveBurn", "openMemo",
+        "recoverTransfer", "openDisclosure"]);
+    let (k, mut rng) = (key(0), ChaCha20Rng::seed_from_u64(3));
+    for cmd in HAZMAT {
+        let r = json!({"curve": "bls12381"});
+        let (a, b) = (call(cmd, &r.to_string()).unwrap_err(), call_with_key(cmd, &r, &k, &mut rng).unwrap_err());
+        for e in [a, b] {
+            assert_eq!(e.contains("ARCH-POS-13"), !cfg!(feature = "hazmat"), "{cmd}: {e}");
+        }
+    }
+    assert_eq!(call_with_key("proveTransfer", &request(), &k, &mut rng).is_ok(), cfg!(feature = "hazmat"), "a well-formed proveTransfer");
+    assert!(call_with_key("pop", &json!({"curve": "bls12381"}), &k, &mut rng).is_ok(), "positive control");
+    assert!(call("encrypt", &json!({"curve": "bls12381", "Y": format!("0x{}", hex::encode(k.encoded_y())), "amount": 1}).to_string()).is_ok());
 }
 
 #[test]
@@ -78,6 +100,7 @@ fn entry(c: &Value) -> Entry<Bls12381> {
     }
 }
 
+#[cfg(feature = "hazmat")] // ARCH-POS-13: the raw commands (api::HAZMAT) exist only under `hazmat`
 #[test]
 fn open_disclosure_gives_the_receiver_and_auditor_openings() {
     let aud = ZetherKey::<Bls12381>::conf(&seed_from_mnemonic(zether_prover::vectors::MNEMONIC, "auditor").unwrap()[..], 60, 0).unwrap();

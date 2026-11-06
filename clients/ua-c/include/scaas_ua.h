@@ -1509,7 +1509,10 @@ ScaasUaStatus scaas_ua_zether_public(const ScaasUaZetherKey *k,
  * `request_json` (named fields, at most 1 MiB, depth 8) with the handle's key: its JSON answer into `out_json`. Every field is
  * checked against the command's allow-list: a `key` object, `revealSecret`, `includeWitness`, an unknown field or another
  * curve is SCAAS_UA_ERR_ARGUMENT, and so is a refusal of the prover (no detail: it could name a request value). A size query
- * runs the command again (a proof is made again, with new randomness).
+ * runs the command again (a proof is made again, with new randomness). ARCH-POS-13 (ua-rs-sign T15c): this release library
+ * has none of the commands that decrypt or open a caller's ciphertext (decrypt, decryptPending, checkBalance, proveTransfer,
+ * proveTransferMulti, proveBurn, openMemo, recoverTransfer, openDisclosure): each is SCAAS_UA_ERR_ARGUMENT until it takes
+ * proven state.
  */
 ScaasUaStatus scaas_ua_zether_call(const ScaasUaZetherKey *k,
                                    const char *cmd,

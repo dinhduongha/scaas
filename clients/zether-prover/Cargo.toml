@@ -21,6 +21,9 @@ path = "src/bin/zether-read-balance.rs"
 # bn254 left the contracts in UA-6 (kind 0x0140 gone): the curve, its tests and its vectors build only with this
 # feature (legacy, backup not delete). Default off.
 bn254 = ["dep:ark-bn254"]
+# ARCH-POS-13 (ua-rs-sign T15c): api's raw commands that decrypt or open a caller's ciphertext (`api::HAZMAT`). Off by default and
+# in every wasm build; the tests, the vector / CLI tools of the CI and ua-rs's `vectors` turn it on.
+hazmat = []
 
 [dependencies]
 ark-ff = "0.5"

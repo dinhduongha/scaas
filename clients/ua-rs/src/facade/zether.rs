@@ -5,7 +5,9 @@
 //!   (EIP-2333 `m/12381/<coin>/<account>/<use>`, use 7 the conf key, 8 the viewing key) into the wallet's arena; the handle
 //!   holds the store, its generation and the slot (no secret bytes), `Y` and the UA. Every secret operation runs under the
 //!   store's read guard, so `lock()` revokes the handle (`KeyRevoked`, for good; spec §8.2).
-//! - **Commands.** zether-prover's `api` commands that need the key or are public ([`COMMANDS`]): encrypt, decrypt and the
+//! - **Commands.** zether-prover's `api` commands that need the key or are public ([`COMMANDS`]; a release build keeps only
+//!   encrypt, the PoP, the owner and UA signatures, the shield calldata, the envelope, typed digests and named calls,
+//!   ARCH-POS-13, the rest is feature `vectors` until T14b): encrypt, decrypt and the
 //!   pending decrypt, the balance check, the transfer, multi-recipient and burn proofs, the memo, the recovery (with the
 //!   sender's openings `SENDER_S` / `SENDER_CP`), the receiver's and auditor's openings (`openDisclosure`), the PoP, the owner
 //!   and UA signatures, the shield calldata, the envelope, typed digests and named calls. Not exposed: the verifiers,
@@ -51,17 +53,32 @@ const HEADER: &[&str] =
 /// The recovery source and its chain fields (`recovery_source`, `recovery_header`).
 const RECOVERY: &[&str] = &["payload", "entry", "sendCounter", "memo", "chainId", "chainUid", "token"];
 
-/// The commands, in this order (the fuzz target `zether_cmd` names them by index).
+/// The commands, in this order (the fuzz target `zether_cmd`, built with `vectors`, names them by index).
+///
+/// ARCH-POS-13 ("never a decryption oracle", owner 2026-11-06; spec no-decryption-oracle §4.8, T15c): a release build (no
+/// feature `vectors`) has no command that decrypts or opens a ciphertext its caller chose: `decrypt`, `decryptPending`,
+/// `checkBalance`, `proveTransfer`, `proveTransferMulti`, `proveBurn`, `openMemo`, `recoverTransfer` and `openDisclosure` exist
+/// only under the test feature `vectors` (which also turns on zether-prover's `hazmat`) until they take proven state (T14b).
+/// In a release build they are unknown commands (`Argument`, before the key is touched).
 pub const COMMANDS: &[&str] = &[
     "encrypt",
+    #[cfg(feature = "vectors")]
     "decrypt",
+    #[cfg(feature = "vectors")]
     "decryptPending",
+    #[cfg(feature = "vectors")]
     "checkBalance",
+    #[cfg(feature = "vectors")]
     "proveTransfer",
+    #[cfg(feature = "vectors")]
     "proveTransferMulti",
+    #[cfg(feature = "vectors")]
     "proveBurn",
+    #[cfg(feature = "vectors")]
     "openMemo",
+    #[cfg(feature = "vectors")]
     "recoverTransfer",
+    #[cfg(feature = "vectors")]
     "openDisclosure",
     "pop",
     "ownerAuth",

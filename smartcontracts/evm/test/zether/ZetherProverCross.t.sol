@@ -14,7 +14,7 @@ import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 ///         prover's `statement` byte for byte, the prover's calldata settles, the stored form is the prover's and the
 ///         sender recovers `R` and `s` from storage alone. One cell per stored form, disclosure mode, auditor mode and
 ///         binding, on BLS12-381 (the bn254 suite is in `legacy/ua6/`). Skipped without the binary (CI's `zether-prover` job has it):
-///         `cargo build --release --bin zether-cli` (clients/zether-prover), then
+///         `cargo build --release --features hazmat --bin zether-cli` (ARCH-POS-13: the raw commands are test-only) (clients/zether-prover), then
 ///         `ZETHER_CLI=<path>/zether-cli forge test --ffi --match-path test/zether/ZetherProverCross.t.sol`.
 abstract contract ZetherProverCrossSuite is ZetherFixture {
     using stdJson for string;

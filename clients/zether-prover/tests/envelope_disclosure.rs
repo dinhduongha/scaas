@@ -251,6 +251,7 @@ fn entry_point_selectors_match_the_spec() {
 /// Final review m3 (CTR-ZTH-51): an unshield to a derived UA. `proveBurn` takes a 32-byte recipient id as well as a
 /// 20-byte address (its padded id); the statement's word 12 and the calldata's `recipient` word are that id, and the
 /// statement decodes back to it (no "dirty high bytes" refusal).
+#[cfg(feature = "hazmat")] // ARCH-POS-13: the raw commands (api::HAZMAT) exist only under `hazmat`
 #[test]
 fn burn_recipient_address_or_ua() {
     use serde_json::{json, Value};

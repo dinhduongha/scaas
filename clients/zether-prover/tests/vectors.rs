@@ -56,6 +56,7 @@ fn r33_keys_reproduced() {
     assert!(n >= 2);
 }
 
+#[cfg(feature = "hazmat")] // ARCH-POS-13: the raw commands (api::HAZMAT) exist only under `hazmat`
 #[test]
 fn api_roundtrip_mnemonic_keygen_prove_decrypt() {
     let mnemonic = zether_prover::vectors::MNEMONIC;

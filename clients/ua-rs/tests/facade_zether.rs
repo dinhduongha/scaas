@@ -73,8 +73,11 @@ fn zether_handle_KeyRevoked_after_lock() {
     let cache = k.seal_balance_cache(b"{}").unwrap();
     w.lock();
     assert_eq!(call(&k, "pop", &pop).err(), Some(Error::KeyRevoked));
-    let t = request("transfer_bls12381.json");
-    assert_eq!(call(&k, "checkBalance", &json!({"acc": t["acc"], "balance": t["balance"]})).err(), Some(Error::KeyRevoked));
+    #[cfg(feature = "vectors")]
+    {
+        let t = request("transfer_bls12381.json");
+        assert_eq!(call(&k, "checkBalance", &json!({"acc": t["acc"], "balance": t["balance"]})).err(), Some(Error::KeyRevoked));
+    }
     assert_eq!(k.seal_balance_cache(b"{}").err(), Some(Error::KeyRevoked));
     assert_eq!(k.open_balance_cache(cache.as_bytes()).err(), Some(Error::KeyRevoked));
     assert_eq!(w.zether_key(60, 0, 7).err(), Some(Error::WalletLocked));
@@ -97,6 +100,44 @@ fn unlock_does_not_revive_a_zether_handle() {
     w.vectors_unlock(r["mnemonic"].as_str().unwrap(), "").unwrap();
     assert_eq!(call(&k, "pop", &json!({})).err(), Some(Error::KeyRevoked));
     assert!(call(&w.zether_key(60, 0, 7).unwrap(), "pop", &json!({})).is_ok(), "a new handle works");
+}
+
+/// ARCH-POS-13 (T15c, F6 / F7 / F8): a release build lists none of the raw commands and refuses each, with its vector request,
+/// as `Argument` (an unknown command, before the key); under `vectors` they are there and zether-prover runs them (`hazmat`).
+#[test]
+fn release_has_no_raw_decrypt() {
+    let raw = ["decrypt", "decryptPending", "checkBalance", "proveTransfer", "proveTransferMulti", "proveBurn", "openMemo",
+        "recoverTransfer", "openDisclosure"];
+    let release = ["encrypt", "pop", "ownerAuth", "uaSig", "shieldCalldata", "envelope", "typedDigest", "namedCall"];
+    let mut want = vec!["encrypt"];
+    if cfg!(feature = "vectors") {
+        want.extend(raw);
+    }
+    want.extend(&release[1..]);
+    assert_eq!(COMMANDS, &want[..]);
+    let w = wallet();
+    let k = w.zether_key(60, 0, 7).unwrap();
+    let t = request("transfer_bls12381.json");
+    for cmd in raw {
+        let req = match cmd {
+            "proveTransfer" => t.clone(),
+            "checkBalance" => json!({"acc": t["acc"], "balance": t["balance"]}),
+            "decrypt" => json!({"ct": t["acc"], "tableBits": 18, "boundBits": 20}),
+            _ => json!({}),
+        };
+        let got = (ZetherCmd::from_json(cmd, req.to_string().as_bytes()).err(), call(&k, cmd, &req).err());
+        if cfg!(feature = "vectors") {
+            assert_eq!(got.0, None, "{cmd}: a vectors build has it");
+        } else {
+            assert_eq!(got, (Some(Error::Argument), Some(Error::Argument)), "{cmd}: refused in a release build");
+        }
+    }
+    if cfg!(feature = "vectors") {
+        assert_eq!(call(&k, "checkBalance", &json!({"acc": t["acc"], "balance": t["balance"]})), Ok(json!({"ok": true})), "hazmat on");
+    }
+    for cmd in release {
+        assert!(ZetherCmd::from_json(cmd, b"{}").is_ok(), "{cmd}: positive control");
+    }
 }
 
 /// Every command, positive control first: its vector request (or a minimal one) passes the decoder; with a `key` object at
@@ -164,11 +205,11 @@ fn fields_outside_the_allow_list_are_refused() {
 /// finding, regress/zether_cmd/float-number.bin).
 #[test]
 fn numbers_other_than_u64_are_refused() {
-    let acc = request("transfer_bls12381.json")["acc"].clone();
-    assert!(ZetherCmd::from_json("checkBalance", json!({"acc": acc, "balance": 5}).to_string().as_bytes()).is_ok(), "positive control");
+    let y = json!(format!("0x{}", hex::encode(wallet().zether_key(60, 0, 7).unwrap().y())));
+    assert!(ZetherCmd::from_json("encrypt", json!({"Y": y, "amount": 5}).to_string().as_bytes()).is_ok(), "positive control");
     for bad in ["1.5", "-1", "1e22", "17592189870442189000000"] {
-        let r = format!("{{\"acc\":{acc},\"balance\":{bad}}}");
-        assert_eq!(ZetherCmd::from_json("checkBalance", r.as_bytes()).err(), Some(Error::Argument), "{bad}");
+        let r = format!("{{\"Y\":{y},\"amount\":{bad}}}");
+        assert_eq!(ZetherCmd::from_json("encrypt", r.as_bytes()).err(), Some(Error::Argument), "{bad}");
     }
     let m = r#"{"op":"ZetherRollOver","message":{"accSeq":1.5}}"#;
     assert_eq!(ZetherCmd::from_json("typedDigest", m.as_bytes()).err(), Some(Error::Argument), "a float in the message");
@@ -202,13 +243,16 @@ fn pop_and_check_balance_through_the_facade() {
     // the PoP verifies under ua-rs's own 0x0141 verifier (verify.rs), not the prover's
     let msg: [u8; 32] = h(&pop["uaMsg"]).try_into().unwrap();
     assert!(scaas_ua::verify::verify(0x0141, &k.y(), &msg, &h(&pop["pop"]), true));
-    let t = request("transfer_bls12381.json");
-    assert_eq!(call(&k, "checkBalance", &json!({"acc": t["acc"], "balance": t["balance"]})).unwrap(), json!({"ok": true}));
-    let more = t["balance"].as_u64().unwrap() + 1;
-    assert_eq!(call(&k, "checkBalance", &json!({"acc": t["acc"], "balance": more})).unwrap(), json!({"ok": false}));
-    // another account's handle does not open it
-    let other = w.zether_key(60, 1, 7).unwrap();
-    assert_eq!(call(&other, "checkBalance", &json!({"acc": t["acc"], "balance": t["balance"]})).unwrap(), json!({"ok": false}));
+    #[cfg(feature = "vectors")]
+    {
+        let t = request("transfer_bls12381.json");
+        assert_eq!(call(&k, "checkBalance", &json!({"acc": t["acc"], "balance": t["balance"]})).unwrap(), json!({"ok": true}));
+        let more = t["balance"].as_u64().unwrap() + 1;
+        assert_eq!(call(&k, "checkBalance", &json!({"acc": t["acc"], "balance": more})).unwrap(), json!({"ok": false}));
+        // another account's handle does not open it
+        let other = w.zether_key(60, 1, 7).unwrap();
+        assert_eq!(call(&other, "checkBalance", &json!({"acc": t["acc"], "balance": t["balance"]})).unwrap(), json!({"ok": false}));
+    }
     // a uaSig verifies too
     let d = "0x".to_string() + &"5a".repeat(32);
     let s = call(&k, "uaSig", &json!({"purpose": "metatx", "digest": d})).unwrap();

@@ -1,6 +1,7 @@
 //! CTR-ZTH-30 / CTR-ZTH-50: `s`, the amounts and every bundle of a transfer from the sender's key and chain data alone
 //! (`recoverTransfer`): from storage (no logs; the stored record `R` and, on commit-reveal, the stored memo; review C0-3)
 //! or from calldata; a fresh salt per build; the token's modes in a request (`disclosureMode`, `auditorMode`, CTR-ZTH-38/48/49).
+#![cfg(feature = "hazmat")] // ARCH-POS-13: recoverTransfer, openMemo and the provers (api::HAZMAT) exist only under `hazmat`
 
 use serde_json::{json, Value};
 use zether_prover::api::{self, call};

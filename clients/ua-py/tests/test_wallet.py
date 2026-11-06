@@ -767,9 +767,9 @@ class Zether(Case):
         self.assertEqual({f: pop[f] for f in ('popDigest', 'registrationDigest', 'uaMsg')},
                          {f: r[f] for f in ('popDigest', 'registrationDigest', 'uaMsg')})
         t = self.request('transfer_bls12381.json')
-        self.assertEqual(json.loads(k.call('checkBalance', {'acc': t['acc'], 'balance': t['balance']})), {'ok': True})
-        out = json.loads(k.call('proveTransfer', t))
-        self.assertEqual(out['entryRef'], json.loads((ZV / 'transfer_bls12381.json').read_text())['entryRef'])
+        # ARCH-POS-13 (T15c): a release build has no command that decrypts a caller's ciphertext (until T14b)
+        self.assertEqual(code(lambda: k.call('checkBalance', {'acc': t['acc'], 'balance': t['balance']})), 'UAArgument')
+        self.assertEqual(code(lambda: k.call('proveTransfer', t)), 'UAArgument')
         self.assertEqual(code(lambda: k.call('pop', {'key': {'seed': '0x' + '11' * 64}})), 'UAArgument')
         self.assertEqual(code(lambda: k.call('proveTransfer', dict(t, includeWitness=True))), 'UAArgument')
 

@@ -19,6 +19,10 @@
 //! baby table (public data), or writes one after generating it. Prints
 //! `{"balance": "<decimal>", "accSeq": n|null, "verified": bool|null, "source": "rpc"|"pasted"|"rpc+pasted"}`;
 //! `accSeq` (RPC only) is what the wallet cache stores.
+//!
+//! ARCH-POS-13 ("never a decryption oracle", owner 2026-11-06; ua-rs-sign T15c): `--rpc` is refused. An RPC chooses the
+//! ciphertext it returns, so this tool would decrypt for it; the RPC path stays (backup) until it takes a form that decrypts
+//! no RPC-chosen ciphertext (ua-rs-sign T14b). The pasted `--ct` of the user's own backup is unchanged.
 
 use std::io::{IsTerminal, Read};
 use std::process::{Command, ExitCode, Stdio};
@@ -70,6 +74,9 @@ fn parse() -> Result<Args, String> {
             "--token" => a.token = Some(val()?),
             _ => return Err(format!("unknown argument {f}")),
         }
+    }
+    if a.rpc.is_some() {
+        return Err("--rpc refused: ARCH-POS-13, never decrypt a ciphertext an RPC hands over (paste your own with --ct)".into());
     }
     if !TABLE_BITS_CLI.contains(&a.table_bits) {
         return Err("--table-bits must be 20..=27".into());

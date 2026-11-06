@@ -1795,21 +1795,20 @@ class WalletZether(WalletCase):
         for f in ('popDigest', 'registrationDigest', 'uaMsg'):
             self.assertEqual(pop[f], r[f], f)
         t = self.request('transfer_bls12381.json')
-        self.assertEqual(self.call(k, 'checkBalance', {'acc': t['acc'], 'balance': t['balance']}), ('', {'ok': True}))
-        st_, out = self.call(k, 'proveTransfer', t)
-        self.assertEqual(st_, '')
-        self.assertEqual(out['entryRef'], json.loads((ZV / 'transfer_bls12381.json').read_text())['entryRef'])
-        self.assertNotIn('witness', out)
+        # ARCH-POS-13 (T15c): a release build has no command that decrypts a caller's ciphertext (until T14b)
+        for cmd, req in [('checkBalance', {'acc': t['acc'], 'balance': t['balance']}), ('proveTransfer', t),
+                         ('decrypt', {'ct': t['acc']}), ('recoverTransfer', {})]:
+            self.assertEqual(self.call(k, cmd, req), ('UAArgument', None), cmd)
 
     def test_a_key_field_in_command_json_is_refused(self):
         k = self.zk(self.zw())
         t = self.request('transfer_bls12381.json')
-        for cmd, req in [('pop', {}), ('proveTransfer', t), ('checkBalance', {'acc': t['acc'], 'balance': t['balance']})]:
+        for cmd, req in [('pop', {}), ('encrypt', {'Y': self.public(k)[0], 'amount': 1})]:
             self.assertEqual(self.call(k, cmd, req)[0], '', cmd + ': positive control')
             bad = dict(req, key={'seed': '0x' + '11' * 64, 'coin': 60, 'account': 0})
             self.assertEqual(self.call(k, cmd, bad), ('UAArgument', None), cmd)
         for f in ('includeWitness', 'revealSecret'):
-            self.assertEqual(self.call(k, 'proveTransfer', dict(t, **{f: True})), ('UAArgument', None), f)
+            self.assertEqual(self.call(k, 'pop', {f: True}), ('UAArgument', None), f)
         self.assertEqual(self.call(k, 'verifyTransfer', {})[0], 'UAArgument', 'verifiers are not exposed')
         self.assertEqual(self.call(k, 'pop', {'curve': 'bls12381', 'x': {'a': ' ' * 10}})[0], 'UAArgument')
 

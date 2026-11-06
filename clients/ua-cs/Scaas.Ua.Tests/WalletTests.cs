@@ -738,8 +738,9 @@ public class WalletTests : IDisposable
         var req = JsonNode.Parse(tv.GetProperty("request").GetRawText())!.AsObject();
         req.Remove("key");
         req.Remove("includeWitness");
-        Assert.Equal("{\"ok\":true}", k.Call("checkBalance", new JsonObject { ["acc"] = req["acc"]!.DeepClone(), ["balance"] = req["balance"]!.DeepClone() }.ToJsonString()));
-        Assert.Equal(S(tv, "entryRef"), S(JsonDocument.Parse(k.Call("proveTransfer", req.ToJsonString())).RootElement, "entryRef"));
+        // ARCH-POS-13 (T15c): a release build has no command that decrypts a caller's ciphertext (until T14b)
+        Assert.Equal("UAArgument", Code(() => k.Call("checkBalance", new JsonObject { ["acc"] = req["acc"]!.DeepClone(), ["balance"] = req["balance"]!.DeepClone() }.ToJsonString())));
+        Assert.Equal("UAArgument", Code(() => k.Call("proveTransfer", req.ToJsonString())));
         Assert.Equal("UAArgument", Code(() => k.Call("pop", "{\"key\":{\"seed\":\"0x11\"}}")));
         foreach (var r in Rows(Zj, "cacheBox"))
         {

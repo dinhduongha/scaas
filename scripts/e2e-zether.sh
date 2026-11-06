@@ -15,11 +15,11 @@
 #                                                      the SCaaS testnet: the deployer of that json; its releases must
 #                                                      be past the factory's notice period)
 # Needs forge, cast, jq, node (clients/clientkeys with its node_modules), anvil (local run), zether-cli
-# (`cargo build --release --bin zether-cli` in clients/zether-prover; ZETHER_CLI overrides the path).
+# (`cargo build --release --features hazmat --bin zether-cli` in clients/zether-prover; ZETHER_CLI overrides the path).
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export ZETHER_CLI="${ZETHER_CLI:-$ROOT/clients/zether-prover/target/release/zether-cli}"
-[ -x "$ZETHER_CLI" ] || { echo "no $ZETHER_CLI: cargo build --release --bin zether-cli (clients/zether-prover)" >&2; exit 2; }
+[ -x "$ZETHER_CLI" ] || { echo "no $ZETHER_CLI: cargo build --release --features hazmat --bin zether-cli (clients/zether-prover)" >&2; exit 2; }
 if [ -z "${RPC:-}" ]; then
   PORT="${PORT:-18545}"
   RPC="http://127.0.0.1:$PORT"

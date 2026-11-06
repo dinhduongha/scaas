@@ -17,7 +17,7 @@
 #   scaas-node:    cargo test; cargo clippy --all-targets -- -D warnings; cargo test --test e2e -- --ignored
 #   docs:          python3 scripts/test_docs_check.py; python3 scripts/docs_check.py check; ... facts check; ... paths
 #   clients/clientkeys:    npm ci --ignore-scripts; npm test
-#   clients/zether-prover: cargo test; ./wasm-smoke.sh (wasm32 build + wasm-bindgen + node smoke); zether-cli against the tokens (ZetherProverCross)
+#   clients/zether-prover: cargo test; cargo test --features hazmat (ARCH-POS-13: the raw commands, test-only); ./wasm-smoke.sh (wasm32 build + wasm-bindgen + node smoke: the shipped wasm refuses the raw commands) and ZETHER_HAZMAT=1 ./wasm-smoke.sh (the prover in wasm); zether-cli --features hazmat against the tokens (ZetherProverCross)
 #   clients/ua-rs:         cargo test; cargo clippy --all-targets -- -D warnings (default = wallet, ua-rs-sign MD-5); the same with --no-default-features (the verify-only layer), --features signers (groups.json signers + regeneration), --features json (the JSON shim the wrappers call), --features pq (the off-chain verifier's PQ kinds, ua8::check_*) and --features vectors (the wallet's test hooks: keys.json, BIP-32 / SLIP-10 / EIP-2333)
 #   clients/ua-py:         python3 -m unittest tests.test_vectors
 #   clients/ua-go:         go vet ./...; go test ./...
@@ -453,14 +453,18 @@ jobs:
           node-version: 22
       - name: unit tests and vectors
         run: cargo test
+      - name: unit tests and vectors with the raw commands (hazmat, ARCH-POS-13)
+        run: cargo test --features hazmat
       - name: wasm build and node smoke
         run: WASM_BINDGEN=wasm-bindgen ./wasm-smoke.sh
+      - name: wasm build and node smoke, hazmat (the prover in wasm)
+        run: ZETHER_HAZMAT=1 WASM_BINDGEN=wasm-bindgen ./wasm-smoke.sh
       - uses: foundry-rs/foundry-toolchain@v1
         with:
           version: v1.8.5
       - name: prover against the tokens (statement differential)
         run: |
-          cargo build --release --bin zether-cli
+          cargo build --release --features hazmat --bin zether-cli
           cd ../../smartcontracts/evm
           ../../scripts/evm_libs.sh install
           ZETHER_CLI=$PWD/../../clients/zether-prover/target/release/zether-cli forge test --ffi --match-path test/zether/ZetherProverCross.t.sol

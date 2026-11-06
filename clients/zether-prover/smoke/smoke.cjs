@@ -8,6 +8,10 @@ const { execFileSync } = require("node:child_process");
 const { zetherCall } = require("../pkg/zether_prover.js");
 
 const call = (cmd, req) => JSON.parse(zetherCall(cmd, JSON.stringify(req)));
+// ARCH-POS-13 (ua-rs-sign T15c): the shipped wasm (no feature `hazmat`) refuses every command that decrypts or opens a
+// caller's ciphertext; ZETHER_HAZMAT=1 ../wasm-smoke.sh builds the test-only `hazmat` wasm and runs the prover checks.
+const hazmat = process.env.ZETHER_HAZMAT === "1";
+const HAZMAT = ["decrypt", "decryptPending", "checkBalance", "proveTransfer", "proveTransferMulti", "proveBurn", "openMemo", "recoverTransfer", "openDisclosure"];
 const mnemonic = Array(23).fill("abandon").concat("art").join(" ");
 const token = "0x5fbdb2315678afecb367f032d93f642f64180aa3";
 const r33 = JSON.parse(fs.readFileSync(path.join(__dirname, "../vectors/r33_keys.json"), "utf8"));
@@ -24,6 +28,16 @@ for (const curve of ["bls12381"]) {
   n++;
 
   const acc = call("encrypt", { curve, Y: from.Y, amount: 50000 });
+  if (!hazmat) {
+    for (const cmd of HAZMAT) {
+      assert.throws(() => zetherCall(cmd, JSON.stringify({ curve, key: k0, ct: acc, acc, balance: 50000 })), /ARCH-POS-13/, cmd);
+    }
+    n++;
+    const vec = JSON.parse(fs.readFileSync(path.join(__dirname, `../vectors/transfer_${curve}.json`), "utf8"));
+    assert.equal(call("verifyTransfer", { curve, statement: vec.statement, proof: vec.proof }).ok, true);
+    n++;
+    continue;
+  }
   assert.equal(call("decrypt", { curve, key: k0, ct: acc, tableBits: 18, boundBits: 24 }).amount, "50000");
   assert.equal(call("checkBalance", { curve, key: k0, acc, balance: "50000" }).ok, true);
   assert.equal(call("checkBalance", { curve, key: k0, acc, balance: "50001" }).ok, false);
