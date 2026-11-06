@@ -15,6 +15,7 @@ import * as evm from '../src/evm.js';
 import * as zether from '../src/zether.js';
 import { hex, fromHex, keccak_256, utf8ToBytes, concatBytes, abiEncode, word } from '../src/bytes.js';
 import { expectedCall, norm } from '../scripts/typed-ops-expected.mjs';
+import * as reg from '../src/regulated.js';
 
 const { TYPED_OPS, hashTypedData, hashStruct, checkOp, checkWrapOrder, checkUAWrapOrder, checkTradeOrder, checkCancel, encodeType } = evm;
 const V = JSON.parse(readFileSync(new URL('../../../smartcontracts/vectors/typed/typed_ops.json', import.meta.url)));
@@ -172,8 +173,9 @@ test('the table covers every allowlisted entry of every contract, one row per op
   }
   // ua-mtx-merge T11 (MD-7): 112 − 45 retired − the wallet's five address ops (Q6) + its six `UA<Op>` = 68; `UACancelNonce` an
   // envelope op now (Q2)
-  assert.equal(Object.keys(TYPED_OPS).length, 68);
-  assert.equal(Object.values(TYPED_OPS).filter((o) => o.envelope).length, 59);
+  // T34: + the router's eight regulated controls (regulated-kinds spec §3.1): 76, 67 envelope ops
+  assert.equal(Object.keys(TYPED_OPS).length, 76);
+  assert.equal(Object.values(TYPED_OPS).filter((o) => o.envelope).length, 67);
   for (const o of Object.values(TYPED_OPS)) {
     if (o.envelope) assert.ok(o.entry.startsWith('mtx'), o.primary);
     if (o.ua) assert.equal(o.fields[0].type, 'bytes32', o.primary);
@@ -293,13 +295,14 @@ test('the cancel row is ordered and native-capable: UACancelNonce(bytes32 from,u
 // governance T12 (spec §3.2): the router's rows read from the contract's own pin, test/governance/GovRouterTypehash.t.sol
 // (literal strings and `cast keccak` hashes), apart from the table in src/evm.js: a mismatch is a stop-and-report.
 // ua-mtx-merge T7 / T11 (R14): 19 `UA<Op>` rows on the `mtx<Op>` entries; the 19 address rows retired.
-test('GovernanceRouter: 19 rows equal GovRouterTypehash.t.sol, target the first op word, fee mode NONE, the router domain only', () => {
+test('GovernanceRouter: 27 rows equal GovRouterTypehash.t.sol, target the first op word, fee mode NONE, the router domain only', () => {
   const sol = readFileSync(new URL('../../../smartcontracts/evm/test/governance/GovRouterTypehash.t.sol', import.meta.url), 'utf8');
   const pins = [...sol.matchAll(/keccak256\(\s*((?:"[^"]*"\s*)+)\)\);\s*assertEq\(T\.\w+, (0x[0-9a-f]{64})\)/g)]
     .map(([, lits, hash]) => [[...lits.matchAll(/"([^"]*)"/g)].map((x) => x[1]).join(''), hash]);
-  assert.equal(pins.length, 20);
+  // T32: + the eight regulated controls (regulated-kinds spec §3.1, CTR-GOV-20); T34 writes their rows
+  assert.equal(pins.length, 28);
   const rows = pins.filter(([s]) => !s.startsWith('GrantTerms('));
-  assert.equal(rows.length, 19);
+  assert.equal(rows.length, 27);
   for (const [s, hash] of rows) {
     const name = s.slice(0, s.indexOf('('));
     const op = TYPED_OPS[name];
@@ -315,9 +318,44 @@ test('GovernanceRouter: 19 rows equal GovRouterTypehash.t.sol, target the first 
     assert.equal(r.domains.gov_router.domain.name, 'SCaaS GovernanceRouter', name);
     assert.deepEqual([r.message.mode, r.message.fee], [1, '0'], `${name}: fee mode NONE`);
   }
-  assert.equal(Object.values(TYPED_OPS).filter((o) => o.on.includes('GovernanceRouter')).length, 20);
+  assert.equal(Object.values(TYPED_OPS).filter((o) => o.on.includes('GovernanceRouter')).length, 28);
   assert.equal(V.ops.UACancelNonce.domains.gov_router.domain.name, 'SCaaS GovernanceRouter');
   assert.equal(V.ops.CancelNonce.domains.gov_router, undefined);
+});
+
+// ua-mtx-merge T34 (regulated-kinds spec §3.1, §7; CTR-GOV-20 Change, owner 2026-11-06): the router's eight regulated controls.
+// Each digest with a non-zero relayer and fee recipient left unbound (mode 0, then the row's mode 1 with feeRecipient unbound)
+// equals the digest over the canonical 0, as `MetaTxLib.canon` hashes it, and differs from a hash of the raw message.
+const REGULATED = { UAFreeze: 'account,ref,recordId', UAUnfreeze: 'account,ref', UAForceTransfer: 'recordId,amount',
+  UAPause: 'ref,until', UAUnpause: 'ref', UARecordOrder: 'orderId,documentHash,subject,beneficiary,maxAmount,freezeUntil',
+  UARevokeOrder: 'recordId,reasonRef', UAOperatorTransfer: 'account,to,amount,ref' };
+test('the eight regulated router ops: from the signer, target, the direct entry\'s params; a non-zero unbound relayer or ' +
+  'feeRecipient signs as 0', () => {
+  const JUNK = '0x' + 'ba'.repeat(20);
+  for (const [name, params] of Object.entries(REGULATED)) {
+    const op = TYPED_OPS[name];
+    assert.deepEqual(op.fields.map((f) => f.name).slice(0, -7), ['from', 'target', ...params.split(',')], name);
+    const r = V.ops[name];
+    const d = r.domains.gov_router;
+    assert.deepEqual(Object.keys(r.domains), ['gov_router'], name);
+    const at = domainOf(r, d);
+    const build = (m) => builders[`${lower(name)}TypedData`]({ ...at, message: m });
+    // the row's own mode (1: relayer bound, fee recipient unbound) with a non-zero fee recipient
+    assert.equal(r.message.mode, 1, name);
+    const given = build({ ...r.message, feeRecipient: JUNK });
+    assert.equal(given.message.feeRecipient, ZERO, name);
+    assert.equal(hex(hashTypedData(given)), d.digest, name);
+    assert.notEqual(hex(hashStruct(given.types, name, { ...r.message, feeRecipient: JUNK })), r.structHash, `${name}: canon matters`);
+    // mode 0: both unbound, both non-zero, both signed as 0
+    const open = build({ ...r.message, mode: 0, relayer: JUNK, feeRecipient: JUNK });
+    assert.deepEqual([open.message.relayer, open.message.feeRecipient], [ZERO, ZERO], name);
+    assert.equal(hex(hashTypedData(open)), hex(hashTypedData(build({ ...r.message, mode: 0, relayer: ZERO, feeRecipient: ZERO }))), name);
+    assert.notEqual(hex(hashTypedData(open)), d.digest, `${name}: the mode is signed`);
+  }
+  // the owner's ruling: the moved account is `account`, the signer `from`
+  assert.ok(TYPED_OPS.UAOperatorTransfer.typeString.startsWith('UAOperatorTransfer(bytes32 from,address target,bytes32 account,bytes32 to,'));
+  assert.equal(V.ops.UAFreeze.message.recordId, reg.recordId(V.ops.UARecordOrder.message.orderId, V.ops.UARecordOrder.message.subject,
+    V.ops.UARecordOrder.message.beneficiary), 'one record across the rows');
 });
 
 test('a router row refuses a field off GrantTerms, a value out of range, a string bool, another domain; target is signed', () => {

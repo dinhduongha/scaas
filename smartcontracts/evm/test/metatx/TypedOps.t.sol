@@ -35,6 +35,9 @@ import {TokenStore} from "../../src/metatx/TokenStore.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {GovernanceRouter} from "../../src/governance/GovernanceRouter.sol";
+import {NormalRegulatedToken} from "../../src/regulated/NormalRegulatedToken.sol";
+import {regArgs} from "../helpers/Catalogue.sol";
+import {Holder} from "../as/helpers/RegFixture.sol";
 import {IGovernance} from "../../src/governance/IGovernance.sol";
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
 import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
@@ -1657,5 +1660,166 @@ contract TypedOpsRouterTest is UALedgerBase {
         assertFalse(ok, op);
         assertEq(ret.length, 0, string.concat(op, ": no such function"));
         assertEq(GovernanceRouter(router).mtxNonce(who, lane), 0, op);
+    }
+
+    // ------------------------------------------------------------------ ua-mtx-merge T34: the eight regulated controls
+
+    /// The regulated rows (regulated-kinds spec §3.1, plan T34; CTR-GOV-20) run verbatim on a kind-8 token cloned at the row's
+    /// `target`, `GOV_ROUTER` the router, at the time the rows were built for (`UAPause.until` within 7 days of it). The key's
+    /// native id holds the bit the op uses: 5, 6, 7 (issuer) and 10 (compliance) are contract-only (RK-1), so the key's
+    /// address has code at `initialize` only, as `_wrappedAt` does for bit 3; bit 22 takes any holder, granted by the owner
+    /// (this test). `FORCE` and `RECORD` never on one id: the other role is a `Holder`. One record runs through the rows:
+    /// `UARecordOrder` records it, `UAFreeze` backs a freeze with it, `UAForceTransfer` moves under it, `UARevokeOrder` ends it.
+    uint256 internal constant REG_NOW = 1_800_000_000;
+    address internal regImpl;
+    address internal regOther;
+
+    function _regAt(string memory op, bool keyIsIssuer) internal returns (NormalRegulatedToken t) {
+        vm.warp(REG_NOW);
+        if (regImpl == address(0)) {
+            IFactoryToken.Env memory e = plainEnv(address(this), address(0), chainUidA, REG_L, false);
+            e.govRouter = router;
+            regImpl = address(new NormalRegulatedToken(1, e, regArgs()));
+            regOther = address(new Holder());
+        }
+        t = NormalRegulatedToken(_addr(op, "target"));
+        _clone(regImpl, address(t));
+        IFactoryToken.TokenConfig memory c;
+        (c.name, c.symbol, c.decimals, c.owner) = ("R", "R", 6, MetaTxLib.pad(address(this)));
+        c.features = 1 | (uint256(1) << GovernanceBits.FREEZE) | (uint256(1) << GovernanceBits.FORCE)
+            | (uint256(1) << GovernanceBits.PAUSE) | (uint256(1) << GovernanceBits.RECORD)
+            | (uint256(1) << GovernanceBits.OPERATOR_TRANSFER);
+        (c.roles.issuer, c.roles.compliance) = keyIsIssuer ? (me, MetaTxLib.pad(regOther)) : (MetaTxLib.pad(regOther), me);
+        (c.initialSupply, c.initialHolder) = (1000, address(uint160(uint256(_b32("UARecordOrder", "subject")))));
+        c.reg.termsHash = keccak256("terms");
+        vm.etch(signer, hex"00");
+        t.initialize(address(this), 1, abi.encode(c));
+        vm.etch(signer, "");
+        t.grantRole(GovernanceBits.OPERATOR_TRANSFER, me);
+    }
+
+    /// `UARecordOrder`'s order, recorded directly by `who`; its `recordId`.
+    function _regRecord(NormalRegulatedToken t, address who) internal returns (bytes32) {
+        string memory op = "UARecordOrder";
+        bytes memory args = bytes.concat(abi.encode(_b32(op, "orderId"), _b32(op, "documentHash"), _b32(op, "subject")),
+            abi.encode(_b32(op, "beneficiary"), _uint(op, "maxAmount"), _uint(op, "freezeUntil")));
+        vm.prank(who);
+        (bool ok,) = address(t).call(bytes.concat(t.recordOrder.selector, args));
+        assertTrue(ok, "recordOrder");
+        return keccak256(abi.encode(_b32(op, "orderId"), _b32(op, "subject"), _b32(op, "beneficiary")));
+    }
+
+    function test_routerRow_UARecordOrder() public {
+        string memory op = "UARecordOrder";
+        NormalRegulatedToken t = _regAt(op, false);
+        _row(op);
+        bytes32 rid = keccak256(abi.encode(_b32(op, "orderId"), _b32(op, "subject"), _b32(op, "beneficiary")));
+        assertEq(t.order(rid).subject, _b32(op, "subject"));
+        assertEq(t.order(rid).beneficiary, _b32(op, "beneficiary"));
+        assertEq(t.order(rid).maxAmount, _uint(op, "maxAmount"));
+        assertEq(t.order(rid).freezeUntil, _uint(op, "freezeUntil"));
+    }
+
+    function test_routerRow_UAFreeze() public {
+        string memory op = "UAFreeze";
+        NormalRegulatedToken t = _regAt(op, true);
+        bytes32 rid = _regRecord(t, regOther);
+        assertEq(rid, _b32(op, "recordId"), "the row names UARecordOrder's record");
+        _row(op);
+        assertTrue(t.isFrozen(_b32(op, "account")));
+        assertEq(t.freezeOf(_b32(op, "account")).recordId, rid);
+    }
+
+    function test_routerRow_UAUnfreeze() public {
+        string memory op = "UAUnfreeze";
+        NormalRegulatedToken t = _regAt(op, true);
+        vm.prank(signer);
+        t.freeze(_b32(op, "account"), _b32(op, "ref"), 0);
+        assertTrue(t.isFrozen(_b32(op, "account")));
+        _row(op);
+        assertFalse(t.isFrozen(_b32(op, "account")));
+    }
+
+    function test_routerRow_UAForceTransfer() public {
+        string memory op = "UAForceTransfer";
+        NormalRegulatedToken t = _regAt(op, true);
+        bytes32 rid = _regRecord(t, regOther);
+        assertEq(rid, _b32(op, "recordId"));
+        vm.prank(signer);
+        t.freeze(_b32("UARecordOrder", "subject"), _b32("UAFreeze", "ref"), rid);
+        _row(op);
+        assertEq(t.balanceOf(address(uint160(uint256(_b32("UARecordOrder", "beneficiary"))))), _uint(op, "amount"));
+        assertEq(t.order(rid).executed, _uint(op, "amount"));
+    }
+
+    function test_routerRow_UAPause() public {
+        string memory op = "UAPause";
+        NormalRegulatedToken t = _regAt(op, true);
+        _row(op);
+        assertEq(t.regulatedConfig().pausedUntil, _uint(op, "until"));
+    }
+
+    function test_routerRow_UAUnpause() public {
+        string memory op = "UAUnpause";
+        NormalRegulatedToken t = _regAt(op, true);
+        vm.prank(signer);
+        t.pause(_b32(op, "ref"), uint64(REG_NOW + 1 days));
+        _row(op);
+        assertEq(t.regulatedConfig().pausedUntil, REG_NOW);
+    }
+
+    function test_routerRow_UARevokeOrder() public {
+        string memory op = "UARevokeOrder";
+        NormalRegulatedToken t = _regAt(op, false);
+        bytes32 rid = _regRecord(t, signer);
+        assertEq(rid, _b32(op, "recordId"));
+        _row(op);
+        assertTrue(t.order(rid).revoked);
+    }
+
+    /// Owner 2026-11-06 (CTR-GOV-20): the moved account is `account`, the signer the envelope's `from`.
+    function test_routerRow_UAOperatorTransfer() public {
+        string memory op = "UAOperatorTransfer";
+        NormalRegulatedToken t = _regAt(op, true);
+        address from = address(uint160(uint256(_b32(op, "account"))));
+        address to = address(uint160(uint256(_b32(op, "to"))));
+        assertTrue(_b32(op, "account") != me, "the moved account is not the signer");
+        _row(op);
+        assertEq(t.balanceOf(to), _uint(op, "amount"));
+        assertEq(t.balanceOf(from), 1000 - _uint(op, "amount"));
+    }
+
+    /// spec §6 on the router (`MetaTxLib.canon`): the rows bind the relayer (mode 1), the fee recipient is unbound. A wallet
+    /// that signs a non-zero fee recipient signs another digest, which the router refuses (the lane unspent); the canonical
+    /// 0 under the same envelope runs, whatever fee recipient the calldata carries.
+    function test_routerRow_regulatedUnboundFeeRecipientSignedIsRefused() public {
+        string memory op = "UAPause";
+        NormalRegulatedToken t = _regAt(op, true);
+        MetaTxLib.Envelope memory a = rowEnvelope2(j, op);
+        MetaTxLib.UAEnvelope memory e = MetaTxLib.UAEnvelope(me, a.batch, a.nonce, a.validUntil, a.mode, a.relayer, a.fee,
+            address(0xBA));
+        assertEq(e.mode & 2, 0, "fee recipient unbound");
+        (bytes32 ref, uint64 until) = (_b32(op, "ref"), uint64(_uint(op, "until")));
+        IUARegistry.UASig memory s;
+        s.signature = _pauseSig(e, address(t), ref, until, address(0xBA));
+        vm.prank(e.relayer);
+        (bool ok,) = router.call(abi.encodeCall(GovernanceRouter.mtxPause, (e, address(t), ref, until, s)));
+        assertFalse(ok, "a non-zero unbound fee recipient signed");
+        assertEq(GovernanceRouter(router).mtxNonce(me, e.batch), 0);
+        s.signature = _pauseSig(e, address(t), ref, until, address(0));
+        vm.prank(e.relayer);
+        GovernanceRouter(router).mtxPause(e, address(t), ref, until, s);
+        assertEq(t.regulatedConfig().pausedUntil, until);
+        assertEq(GovernanceRouter(router).mtxNonce(me, e.batch), 1);
+    }
+
+    function _pauseSig(MetaTxLib.UAEnvelope memory e, address target, bytes32 ref, uint64 until, address feeTo)
+        internal view returns (bytes memory)
+    {
+        bytes32 sh = keccak256(bytes.concat(abi.encode(vm.parseJsonBytes32(j, ".ops.UAPause.typehash"), e.from, target, ref, until),
+            abi.encode(e.batch, e.nonce, e.validUntil, e.mode, e.relayer, e.fee, feeTo)));
+        (uint8 v, bytes32 r, bytes32 ss) = vm.sign(uint256(vm.parseJsonBytes32(j, ".key.private")),
+            keccak256(abi.encodePacked(hex"1901", domainOf(router), sh)));
+        return abi.encodePacked(r, ss, v);
     }
 }

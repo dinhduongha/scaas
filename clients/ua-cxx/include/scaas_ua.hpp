@@ -65,7 +65,7 @@ KindInfo kindInfo(uint16_t kind);
 std::vector<KindInfo> kinds();  // the whole table, in order
 Bytes tag(uint16_t kind);
 std::string kindTagString(uint16_t kind);
-// governance_bits.json's row of `bit` as JSON {bit, name, type, sentences} (bits 0-21; any other throws UAArgument)
+// governance_bits.json's row of `bit` as JSON {bit, name, type, sentences} (bits 0-22; any other throws UAArgument)
 std::string governanceBit(uint8_t bit);
 std::optional<Bytes> groupTag(const std::string& group);
 std::optional<std::string> groupTagString(const std::string& group);

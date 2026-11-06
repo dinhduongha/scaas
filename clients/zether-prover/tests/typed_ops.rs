@@ -5,7 +5,7 @@ use zether_prover::api::call;
 
 /// Rows of the vector the Zether prover does not build, each with its reason: another contract kind's domain (the row has no
 /// `zether` domain), so a Zether key never signs it. Any other row without a `zether` domain fails the test.
-const NOT_ZETHER: [&str; 41] = [
+const NOT_ZETHER: [&str; 49] = [
     // the token kind's own (non-Zether) accounts: UA prepare is a NormalToken / WrappedToken entry
     "UAPrepareAcc",
     // SmartKeyAccount: signed by its owner's keys, not by a Zether key
@@ -22,6 +22,8 @@ const NOT_ZETHER: [&str; 41] = [
     "UAGrantRole", "UARevokeRole", "UASetGrant", "UACancelGrant", "UADisableFeature", "UATransferOwnership",
     "UAAcceptOwnership", "UARenounceOwnership", "UARenounceRole", "UAMint", "UAMintToUA", "UADisableWrap", "UAProposeRate",
     "UACancelRate", "UAExecuteRate", "UASetMarket", "UASetExchangeTarget", "UASetListedOnly", "UASetFeeSplit",
+    // ua-mtx-merge T34: the regulated kinds' controls on the router (regulated-kinds spec §3.1); public balances only
+    "UAFreeze", "UAUnfreeze", "UAForceTransfer", "UAPause", "UAUnpause", "UARecordOrder", "UARevokeOrder", "UAOperatorTransfer",
 ];
 
 fn vector() -> Value {

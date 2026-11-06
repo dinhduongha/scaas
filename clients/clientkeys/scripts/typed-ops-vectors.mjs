@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { hex, fromHex, keccak_256, utf8ToBytes, concatBytes } from '../src/bytes.js';
 import { TYPED_OPS, OP_BUILDERS, hashStruct, hashTypedData, uaMetaTransferTypedData, padId, payLane, buildRelayFee } from '../src/evm.js';
 import { confPublic, g1 } from '../src/zether.js';
+import { recordId } from '../src/regulated.js';
 import { ecdsa, nativeSk, nativeAddr, nativeUa, be } from './ua-signers.mjs';
 
 const VECTORS = fileURLToPath(new URL('../../../smartcontracts/vectors/', import.meta.url));
@@ -97,6 +98,24 @@ ROW.UASetGrant.terms = { min: 2, max: 50, total: 1000, perWindow: 100, window: 8
   scope: NO_ID };
 ROW.UAProposeRate = { num: 101, den: 100 };
 ROW.UAPqzTransferSingle = { args: COMMIT_REVEAL };
+// The regulated controls (regulated-kinds spec §3.1, ua-mtx-merge T34): values a kind-8 token at `target` takes at
+// REG_NOW (TypedOps.t.sol's regulated rows): one record runs through them, recorded by `UARecordOrder`, backing `UAFreeze`,
+// moved under by `UAForceTransfer`, ended by `UARevokeOrder`; `UAOperatorTransfer` moves the record's subject's units.
+const REG_NOW = 1800000000;
+const DAY = 86400;
+const REG_REF = hex(hash('regulated.ref'));
+const ORDER = { orderId: hex(hash('regulated.order')), documentHash: hex(hash('regulated.document')),
+  subject: padId('0x5ca00000000000000000000000000000000000c1'), beneficiary: padId('0x5ca00000000000000000000000000000000000c2'),
+  maxAmount: 1000, freezeUntil: REG_NOW + 90 * DAY };
+const RECORD = recordId(ORDER.orderId, ORDER.subject, ORDER.beneficiary);
+ROW.UARecordOrder = ORDER;
+ROW.UAFreeze = { account: ORDER.subject, ref: REG_REF, recordId: RECORD };
+ROW.UAUnfreeze = { account: ORDER.subject, ref: REG_REF };
+ROW.UAForceTransfer = { recordId: RECORD, amount: 30 };
+ROW.UAPause = { ref: REG_REF, until: REG_NOW + 3 * DAY };
+ROW.UAUnpause = { ref: REG_REF };
+ROW.UARevokeOrder = { recordId: RECORD, reasonRef: hex(hash('regulated.reason')) };
+ROW.UAOperatorTransfer = { account: ORDER.subject, to: ORDER.beneficiary, amount: 5, ref: REG_REF };
 
 function sample(name, op) {
   const own = {};

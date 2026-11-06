@@ -898,8 +898,9 @@ mod tests {
                 refused += 1;
             }
         }
-        assert_eq!((sent, relayed, refused), (97, 3, 97), "the walk reached every row with an entry; the relay fees: submit.rs");
-        // plan T32: 87 -> 95, the router's eight regulated controls (no vector rows until plan T34, so not walked above)
+        // plan T34: (97, 3, 97) -> (105, 3, 105), the router's eight regulated controls' vector rows walked
+        assert_eq!((sent, relayed, refused), (105, 3, 105), "the walk reached every row with an entry; the relay fees: submit.rs");
+        // plan T32: 87 -> 95, the router's eight regulated controls
         assert_eq!(typed::rows().iter().filter(|r| !r.entry.is_empty()).count(), 95, "table rows: 77 typed with an entry, 18 plain");
         // selectors with no row: refused on every kind, on a target that would otherwise pass
         let target = Address::repeat_byte(0x31);

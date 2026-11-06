@@ -878,12 +878,12 @@ class Abi(unittest.TestCase):
 
 class GovernanceBits(unittest.TestCase):
     def test_governance_bits_rows(self):
-        """governance T14: scaas_ua_governance_bit against governance_bits.json on disk, every row; past bit 21 UAArgument."""
+        """governance T14: scaas_ua_governance_bit against governance_bits.json on disk, every row; past bit 22 UAArgument."""
         v = json.loads((VEC.parent / 'governance' / 'governance_bits.json').read_text())
-        self.assertEqual(len(v['bits']), 22)
+        self.assertEqual(len(v['bits']), 23)
         for row in v['bits']:
             self.assertEqual(json.loads(text(L.governance_bit, row['bit'])), row, row['bit'])
-        for bit in (22, 127, 128, 255):
+        for bit in (23, 127, 128, 255):
             self.assertEqual(code_of(lambda: text(L.governance_bit, bit)), 'UAArgument', bit)
 
 

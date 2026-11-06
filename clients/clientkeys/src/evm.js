@@ -323,6 +323,17 @@ const OPS = {
   UASetExchangeTarget: { fields: 'address target,address exchangeTarget,bool listed', on: ROUTER },
   UASetListedOnly: { fields: 'address target,bool on', on: ROUTER },
   UASetFeeSplit: { fields: 'address target,uint32 relayerSharePpm,address treasury', on: ROUTER },
+  // The regulated kinds' controls (regulated-kinds spec §3.1, ua-mtx-merge T32 / T34): the direct entry's params after
+  // `target`; in `UAOperatorTransfer` the moved account is `account`, `from` the signer (CTR-GOV-20 Change, owner 2026-11-06).
+  UAFreeze: { fields: 'address target,bytes32 account,bytes32 ref,bytes32 recordId', on: ROUTER },
+  UAUnfreeze: { fields: 'address target,bytes32 account,bytes32 ref', on: ROUTER },
+  UAForceTransfer: { fields: 'address target,bytes32 recordId,uint256 amount', on: ROUTER },
+  UAPause: { fields: 'address target,bytes32 ref,uint64 until', on: ROUTER },
+  UAUnpause: { fields: 'address target,bytes32 ref', on: ROUTER },
+  UARecordOrder: { fields: 'address target,bytes32 orderId,bytes32 documentHash,bytes32 subject,bytes32 beneficiary,'
+    + 'uint256 maxAmount,uint64 freezeUntil', on: ROUTER },
+  UARevokeOrder: { fields: 'address target,bytes32 recordId,bytes32 reasonRef', on: ROUTER },
+  UAOperatorTransfer: { fields: 'address target,bytes32 account,bytes32 to,uint256 amount,bytes32 ref', on: ROUTER },
   // The statement's header words verbatim (purpose `zether-auth`); signed into `pqzAuth`, no entry of its own.
   PqzAuth: { raw: 'uint8 op,bytes32 opTag,bytes32 psid,uint256 chainId,address token,address registry,bytes32 from,bytes32 to,bytes32 beneficiary,'
     + 'uint256 fee,uint256 amount,bytes32 recipient,uint64 sendCounter,uint64 p,uint256 validUntilBlock,bool auditorOn,uint256 shieldIn,'
@@ -1107,13 +1118,13 @@ export function bidMinBase(minFill, amount, receiveAmount) {
   return (uint(minFill, 'minFill') * uint(receiveAmount, 'the price') + a - 1n) / a;
 }
 
-// The governance bits 0-21 (spec 2026-11-02-governance §1.2): name and type. The disclosure sentences are the file's,
+// The governance bits 0-22 (spec 2026-11-02-governance §1.2; bit 22 CTR-GOV-20): name and type. The disclosure sentences are the file's,
 // smartcontracts/vectors/governance/governance_bits.json, which the app reads; test/governance-bits.test.js holds this table to it.
-// Bits 22-127 are free; bits 128-255 are the application contract's own, the word is its bitLabel(bit) (CTR-GOV-10's Change).
+// Bits 23-127 are free; bits 128-255 are the application contract's own, the word is its bitLabel(bit) (CTR-GOV-10's Change).
 export const GOVERNANCE_BITS = Object.freeze([
   ['PAYABLE', 'capability'], ['MINTABLE', 'power'], ['BURNABLE', 'capability'], ['RATE_ADJUSTABLE', 'power'],
   ['WRAP_DISABLEABLE', 'power'], ['FREEZE', 'power'], ['FORCE', 'power'], ['PAUSE', 'power'], ['ALLOWLIST', 'capability'],
   ['DENYLIST', 'capability'], ['RECORD', 'power'], ['LISTING', 'power'], ['FEE_ROUTING', 'power'], ['', 'unused'], ['', 'unused'],
   ['ARBITRATE', 'reserved'], ['CORRECT', 'reserved'], ['RESCUABLE', 'capability'], ['PUBLISH', 'power'], ['DEPRECATE', 'power'],
-  ['ENABLE_KIND', 'power'], ['MODERATE', 'power'],
+  ['ENABLE_KIND', 'power'], ['MODERATE', 'power'], ['OPERATOR_TRANSFER', 'power'],
 ].map(([name, type], bit) => Object.freeze({ bit, name, type })));

@@ -940,7 +940,7 @@ pub mod testkit {
     use super::*;
 
     pub fn vectors() -> Value {
-        // ua-mtx-merge T14: the regenerated rows (MD-7 as amended: 68 structs); the old ones are in the vectors' legacy place
+        // ua-mtx-merge T14: the regenerated rows (MD-7 as amended: 68 structs; T34: 76); the old ones are in the vectors' legacy place
         serde_json::from_str(include_str!("../../smartcontracts/vectors/typed/typed_ops.json")).unwrap()
     }
 
@@ -1089,9 +1089,10 @@ mod tests {
                 calldata += 1;
             }
         }
-        assert_eq!((structs, domains, calldata), (68, 101, 100), "every row was walked");
-        // plan T32: 70 -> 78, the router's eight regulated controls (their vector rows are plan T34's)
-        assert_eq!(rows().iter().filter(|r| r.typed).count(), 78, "68 vector rows, the two invalidations (DEX, token), the eight regulated controls");
+        // plan T34: (68, 101, 100) -> (76, 109, 108), the router's eight regulated controls' vector rows
+        assert_eq!((structs, domains, calldata), (76, 109, 108), "every row was walked");
+        // plan T32: 70 -> 78, the router's eight regulated controls (their vector rows plan T34's)
+        assert_eq!(rows().iter().filter(|r| r.typed).count(), 78, "76 vector rows, the two invalidations (DEX, token)");
         assert_eq!(rows().iter().filter(|r| !r.typed).count(), 18, "the wallet's three flat builders are gone (MD-11 (a))");
     }
 

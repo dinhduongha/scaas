@@ -101,8 +101,8 @@ func Keccak256(parts ...[]byte) (out [32]byte) {
 
 var MsgTag = Keccak256([]byte("scaas.ua.msg.v1"))
 
-// GovernanceBit is a row of the governance bits 0-21 (spec 2026-11-02-governance §1.2). The disclosure sentences are read by the app from
-// smartcontracts/vectors/governance/governance_bits.json; bits 22-127 are free, 128-255 the application's bitLabel(bit).
+// GovernanceBit is a row of the governance bits 0-22 (spec 2026-11-02-governance §1.2). The disclosure sentences are read by the app from
+// smartcontracts/vectors/governance/governance_bits.json; bits 23-127 are free, 128-255 the application's bitLabel(bit).
 type GovernanceBit struct{ Name, Type string }
 
 // GovernanceBits is indexed by bit.
@@ -111,7 +111,7 @@ var GovernanceBits = []GovernanceBit{
 	{"WRAP_DISABLEABLE", "power"}, {"FREEZE", "power"}, {"FORCE", "power"}, {"PAUSE", "power"}, {"ALLOWLIST", "capability"},
 	{"DENYLIST", "capability"}, {"RECORD", "power"}, {"LISTING", "power"}, {"FEE_ROUTING", "power"}, {"", "unused"}, {"", "unused"},
 	{"ARBITRATE", "reserved"}, {"CORRECT", "reserved"}, {"RESCUABLE", "capability"}, {"PUBLISH", "power"}, {"DEPRECATE", "power"},
-	{"ENABLE_KIND", "power"}, {"MODERATE", "power"},
+	{"ENABLE_KIND", "power"}, {"MODERATE", "power"}, {"OPERATOR_TRANSFER", "power"},
 }
 
 func KindInfo(kind uint16) (*Kind, error) {

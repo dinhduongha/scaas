@@ -201,7 +201,7 @@ fn kind_at(index: usize) -> KindInfo {
 fn tag(kind: u16) -> R<Vec<u8>> {
     guard(|| Ok(ua::tag(kind)?.to_vec()))
 }
-/// `governance_bits.json`'s row of `bit` as JSON (spec 2026-11-02-governance §1.2); past bit 21 `UAArgument`.
+/// `governance_bits.json`'s row of `bit` as JSON (spec 2026-11-02-governance §1.2); past bit 22 `UAArgument`.
 fn governance_bit(bit: u8) -> R<String> {
     guard(|| ua::governance_bit(bit).map(str::to_string).ok_or_else(|| UaErr("UAArgument: bit".into())))
 }
