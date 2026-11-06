@@ -372,7 +372,7 @@ no replicated message and does not count toward "at least one". **Matrix is opti
 available, P28). The client sends every message to **every listed store** (replication), as the same envelope of P15;
 readers read any listed store and dedupe by `messageId` (P19). The list may change only at a rekey: the new epoch's
 `sealedInfo` carries the new list, and messages of that epoch follow it. A store is a client choice, not a contract rule;
-another kind of store or transport can be added later as a new `kind` in the list. **A test-chain store** can be retired and its data lost: fine for tests, not for durable history; the client says so when the user
+another kind of store or transport can be added later as a new `kind` in the list. **A test-chain store** (for example Sepolia) can be retired and its data lost: fine for tests, not for durable history; the client says so when the user
 lists one.
 
 **P28 — Without Matrix** (D15, D16). **Attachments**: the file is encrypted as today (a random AES-256-GCM key) and put in a
@@ -673,7 +673,7 @@ Estimates (architecture study §8): EIP-8037 1,530 gas per state byte, new slot 
 | message over Waku (P31) | 0 gas, no fee | bandwidth; an RLN membership, if the network requires one, is the user's | | |
 
 `storeMessage` (P29): about 2.4 KB (FN-DSA-512) or 5.1 KB (ML-DSA-65) of blob at 1,530 gas per state byte, plus the
-blob's new account and two slots, no signature check; each listed chain pays it once. A test chain costs
+blob's new account and two slots, no signature check; each listed chain pays it once. A test chain (for example Sepolia) costs
 its test token only.
 
 HCS (P25), estimates of 2026-11-05 in USD (Hedera fees are fixed in USD and paid in HBAR), from
