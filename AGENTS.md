@@ -36,6 +36,8 @@ Follow a stated rule as stated; do not add assumptions or reopen it with options
 ## Rules that do not bend
 
 - **Never lose ciphertext.** PQZ and Zether ciphertexts stay in contract state. Never only a hash plus calldata or events.
+- **Never a decryption oracle** (ARCH-POS-13). Nothing decrypts a ciphertext someone else chose and lets them learn anything
+  about the result: plaintext, error, timing or a later action. PQZ is IND-CPA; 288 crafted queries recover the key.
 - **Explicit parameters.** Named, typed parameters and typed EIP-712, one entry point per operation, named fields in node JSON. No packed
   `bytes` holding several fields, no hex bundles. Only one crypto object stays `bytes`: a proof, a ciphertext, a key, a signature.
 - **Every state-changing `mtx*` is relayable**, with a fee of 0 too.

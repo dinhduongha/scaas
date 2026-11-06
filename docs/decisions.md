@@ -241,6 +241,23 @@ longer holds alloy at 1.6, so its requirement does: `alloy = "~1.6"` (scaas-node
 **Cost if wrong.** A crate that needs a newer compiler waits until NEAR's cap moves, or the repository moves together.
 **Source.** Owner rulings 2026-11-05 (toolchain; alloy held at `~1.6`).
 
+### ARCH-POS-13 — Never a decryption oracle
+- old: — · status: current · owner: yes · date: 2026-11-06 · normative: decisions.md#ARCH-POS-13 · superseded-by: —
+
+**Rule.** No part of SCaaS ever acts as a decryption oracle, for PQZ or Zether: no wallet, client library, binding, CLI,
+service, node, MPC quorum or auditor tool decrypts, opens or test-decrypts a ciphertext chosen by anyone other than the
+key holder and lets that party learn anything about the result: the plaintext, success or failure, an error code,
+timing, or a later action that depends on it. A decryption result reaches only the key holder, or a viewer the key
+holder names. Where a ciphertext arrives from outside (an RPC or indexer response, a disclosure bundle, a peer message),
+nothing about its decryption is returned or signalled to that source. No exception, no opt-in.
+**Why.** PQZ encryption is IND-CPA, not CCA: a decryption oracle recovers the secret `s` with 8·K crafted queries (288 at
+`n2304-kmax4096`; research note on PQZ threshold decryption, §12.1). MPC does not
+help: inside a quorum the oracle hands one member the whole key (§12.5, open). Zether's ElGamal has no such key
+recovery, but one rule for every scheme keeps every decrypt path the same. Owner (2026-11-06): never use an oracle.
+**Cost if wrong.** A reachable decrypt path is a key-recovery attack on every account behind it. PQZ MPC quorums for
+account keys are not built while the in-quorum oracle is open; `msig` holders use option (A), the operator, meanwhile.
+**Source.** Owner ruling 2026-11-06; [research/pqz-threshold-decrypt-prove.md](research/pqz-threshold-decrypt-prove.md) §12.1, §12.5; the code audit of decrypt entry points (2026-11-06, pending).
+
 ### ARCH-POS-80 — EVM-only, META-only first scope
 - old: R1 · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: NET-ALL-02, CTR-ZTH-01, CTR-ZTH-18, CTR-ZTH-19, CTR-UA-02, CTR-UA-16, CTR-UA-22, INT-ERP-11, ARCH-POS-02
 
