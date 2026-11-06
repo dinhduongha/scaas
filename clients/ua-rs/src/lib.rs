@@ -170,6 +170,13 @@ pub const PURPOSES: &[&str] = &[
     "vc-anchor", "trade", "kem", "pqz-key", "membership",
 ];
 
+/// The off-chain purpose of a sealed container's sender signature, `keccak256("scaas.ua.purpose.seal.v1")` (MD-10, ua-rs-sign
+/// spec §6.3; clientkeys `SEAL_TAG`): never in [`PURPOSES`], never in a contract list; `sign_ua` refuses it, only the container
+/// builder signs under it.
+pub fn seal_purpose_tag() -> [u8; 32] {
+    keccak256(b"scaas.ua.purpose.seal.v1")
+}
+
 pub const DOMAIN_TYPE: &str =
     "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)";
 pub const UAAUTH_TYPE: &str = "UAAuth(bytes32 ua,bytes32 purpose,bytes32 digest)";

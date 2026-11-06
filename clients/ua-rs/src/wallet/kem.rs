@@ -15,6 +15,7 @@
 //! FIPS 203 §7.3 decapsulation-key check runs once per store per `(ua, version)`, its record in the store. `m` and `e` come
 //! from the OS RNG inside; fixed ones only through feature `vectors`. Whoever holds a [`KemKeyPair`] has a decapsulation
 //! oracle. UNAUDITED.
+use super::seal::RecipientId;
 use super::store::{Handle, SecretStore};
 use super::{Error, KeyId, Result, UaKey};
 use curve25519_dalek::montgomery::MontgomeryPoint;
@@ -162,6 +163,7 @@ fn decaps(s: &[u8], pk_x: &[u8], mlkem_ct: &[u8], eph: &[u8; 32]) -> Result<Zero
 /// it; an ephemeral key's: a store of its own, wiped on drop). No secret bytes of its own, no `Clone`.
 pub struct KemKeyPair {
     kem_pk: Vec<u8>,
+    recipient: RecipientId,
     secret: Handle,
 }
 
@@ -176,12 +178,29 @@ impl KemKeyPair {
     fn ephemeral(s: &[u8]) -> Result<KemKeyPair> {
         let kem_pk = kem_pk_of(s)?;
         self_test(s)?; // its store's only key, checked once
-        Ok(KemKeyPair { kem_pk, secret: SecretStore::single(s)? })
+        let recipient = RecipientId::KemPkHash(crate::keccak256(&kem_pk));
+        Ok(KemKeyPair { kem_pk, recipient, secret: SecretStore::single(s)? })
     }
 
     /// `0x01 ‖ ek ‖ pk_X`, 1,601 bytes.
     pub fn kem_pk(&self) -> Vec<u8> {
         self.kem_pk.clone()
+    }
+
+    /// The id a container names this key by (spec §6.3): `{ua, version}` of a UA's key, `keccak256(kemPk)` of an ephemeral one.
+    pub fn recipient(&self) -> RecipientId {
+        self.recipient
+    }
+
+    /// A second handle of the same key (a link session's probe, feature `vectors`).
+    #[cfg_attr(not(feature = "vectors"), allow(dead_code))]
+    pub(super) fn dup(&self) -> KemKeyPair {
+        KemKeyPair { kem_pk: self.kem_pk.clone(), recipient: self.recipient, secret: self.secret.dup() }
+    }
+
+    /// Wipes the key's store and revokes every handle of it: a link session's own store (spec §6.3), never a wallet's.
+    pub(super) fn wipe_own_store(&self) {
+        self.secret.revoke_store();
     }
 
     /// `ss` of `(mlkem_ct, x25519_eph)`: `KemCheck` for an `mlkem_ct` of other than 1,568 bytes or a small-order `E`;
@@ -208,7 +227,7 @@ impl UaKey {
             Ok((s, kem_pk))
         })?;
         secret.self_test(id, self_test)?;
-        Ok(KemKeyPair { kem_pk, secret })
+        Ok(KemKeyPair { kem_pk, recipient: RecipientId::Ua { ua, version }, secret })
     }
 }
 

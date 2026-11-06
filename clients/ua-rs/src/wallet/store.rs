@@ -206,6 +206,11 @@ impl Handle {
         Handle { store: self.store.clone(), generation: self.generation, slot: self.slot }
     }
 
+    /// Locks this handle's store (wipes it, revokes every handle of it): an ephemeral key's own store only.
+    pub(crate) fn revoke_store(&self) {
+        self.store.lock();
+    }
+
     /// The handle of key `id` derived from this handle's own store's seed, as [`SecretStore::key`]: `KeyRevoked` once the
     /// store's generation moved (a KEM key of a UA key, spec §6.1: no other wallet can be named).
     pub(crate) fn derive(

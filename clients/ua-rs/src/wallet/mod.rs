@@ -11,10 +11,13 @@
 //! and members by typed data); `eip712`, `policy`, T4: the faithful EIP-712 hasher, the SCaaS builders' canonical step, the
 //! `Expect` policy of [`NativeKey::sign_typed`]; `tx`, T5: [`NativeKey::sign_transaction`], EVM types 0-3 (no type 4); `webauthn`, T6:
 //! [`webauthn_challenge`] and [`webauthn_assertion`] (against the expected challenge, verified before return); `kem`, T7: the UA
-//! KEM key through its UA key's own store ([`UaKey::kem_key`]), [`kem_encaps`], [`KemKeyPair`]; the vault with T9. Randomness: `rand_core` 0.6 `OsRng` inside; no call takes an
+//! KEM key through its UA key's own store ([`UaKey::kem_key`]), [`kem_encaps`], [`KemKeyPair`]; `aead`, `seal`, T8: AEAD, HKDF, HMAC,
+//! [`seal`] / [`KemKeyPair::open`], the sealed containers of backup and link ([`seal_container`], [`KemKeyPair::open_container`],
+//! [`LinkSession`], [`Wallet::from_link`]); the vault with T9. Randomness: `rand_core` 0.6 `OsRng` inside; no call takes an
 //! RNG. UNAUDITED.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing, clippy::disallowed_methods)]
 
+mod aead;
 pub mod bounded;
 #[cfg(feature = "vectors")]
 pub mod derive;
@@ -31,6 +34,10 @@ pub mod pairing;
 mod pairing;
 mod policy;
 #[cfg(feature = "vectors")]
+pub mod seal;
+#[cfg(not(feature = "vectors"))]
+mod seal;
+#[cfg(feature = "vectors")]
 pub mod pqsign;
 #[cfg(not(feature = "vectors"))]
 mod pqsign;
@@ -44,10 +51,15 @@ mod tx;
 mod uasig;
 mod webauthn;
 
+pub use aead::{aead_open, aead_seal, hkdf_expand_sha256, hkdf_sha256, hmac_sha256, Alg};
 pub use eip712::{scaas_typed_data, TypedData};
 pub use kem::{is_kem_holder, kem_encaps, KemKeyPair};
 pub use pairing::{FrostSession, Musig2Session};
 pub use policy::{AllowAnyTypedData, AllowRow, Expect, Invalidate, SubjectKey};
+pub use seal::{
+    seal, seal_container, ContainerExpect, ContainerSigner, ExpectedSender, LinkSession, Recipient, RecipientId, Sealed,
+    SealedContainer, LINK_WINDOW, MAX_PT, PURPOSE_BACKUP, PURPOSE_LINK,
+};
 pub use signer::{AllowRawDigest, KeyRef, SigRole, SignRequest, Signer};
 pub use tx::{AccessListItem, EvmTx, SignedTx};
 pub use uasig::{membership_sig, msig_sig, ua_sig, Slot};
@@ -84,6 +96,18 @@ pub enum Error {
     /// A KEM input refused by its checks: `kemPk` scheme, length or modulus, a short ciphertext, an all-zero X25519 secret
     /// (spec §6.2); the derived key's self-test (FIPS 203 §7.3).
     KemCheck,
+    /// An AEAD tag that does not verify (spec §7): no plaintext.
+    Aead,
+    /// A seal that does not open with this key, purpose and `aad` (decapsulation checks, tag), or a container whose sender
+    /// signature, `UASig` form or member set does not verify (spec §6.3).
+    SealOpen,
+    /// A seal or container of a version or scheme other than 1 (spec §6.3).
+    SealVersion,
+    /// A container whose purpose, recipient, sender or key data is not the expected one, an `msig` sender without its
+    /// `accepted` lookup or with a signer not accepted, an unknown member key (spec §6.3, C-03, CTR-UA-37).
+    ContainerSender,
+    /// A link container created outside its session's window (spec §6.3, C-11).
+    ContainerReplay,
     Ua(UAError),
 }
 
@@ -99,6 +123,11 @@ impl Error {
             Error::WebAuthnAssertion => "WebAuthnAssertion",
             Error::KemHolder => "KemHolder",
             Error::KemCheck => "KemCheck",
+            Error::Aead => "Aead",
+            Error::SealOpen => "SealOpen",
+            Error::SealVersion => "SealVersion",
+            Error::ContainerSender => "ContainerSender",
+            Error::ContainerReplay => "ContainerReplay",
             Error::Ua(e) => e.code(),
         }
     }

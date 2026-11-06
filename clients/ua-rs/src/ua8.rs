@@ -797,7 +797,7 @@ pub fn decode_member_sigs(blob: &[u8]) -> Option<Vec<MemberSig>> {
 
 /// EVM `_memberOk` before the signature: each derived member's key by its id, in member order (native members: empty), an `msig` member's
 /// its structure, which holds no `msig` (two levels only, as the registry refused it).
-fn member_keys(d: &[u8], members: &Members) -> Result<Vec<Vec<u8>>> {
+pub(crate) fn member_keys(d: &[u8], members: &Members) -> Result<Vec<Vec<u8>>> {
     let key = |m: &MsigMember| {
         if is_native(m.kind) {
             return Ok(vec![]);

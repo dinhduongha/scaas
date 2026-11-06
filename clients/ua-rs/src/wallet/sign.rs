@@ -113,6 +113,12 @@ fn request(kind: u16, ua_msg: [u8; 32], role: SigRole) -> SignRequest {
     }
 }
 
+/// The request of a sealed container's sender of `kind` (spec §6.3, MD-10): `uaMessage(kind, seal, digest)` under the off-chain
+/// purpose, role `Authorization`; only the container builder (`seal`) asks it: `check_purpose` refuses that purpose everywhere else.
+pub(super) fn seal_request(kind: u16, digest: &[u8; 32]) -> Result<SignRequest> {
+    Ok(request(kind, ua_message(kind, &crate::seal_purpose_tag(), digest)?, SigRole::Authorization))
+}
+
 /// The request of `sign_member` for a key of `kind` (the `msig` builder's too): always `Authorization`.
 pub(super) fn member_request(kind: u16, structure_ua: &[u8; 32], structure_ua_msg: &[u8; 32]) -> Result<SignRequest> {
     let digest = member_digest(structure_ua, structure_ua_msg);

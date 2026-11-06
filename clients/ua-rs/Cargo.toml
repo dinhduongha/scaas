@@ -54,10 +54,17 @@ alloy-rlp = { version = "=0.3.17", default-features = false, optional = true }
 # Its release encapsulation runs `m` from `rand_core` 0.6 `OsRng` (as the PQ signers), so ml-kem's `getrandom` (getrandom 0.4) is
 # not taken. X25519 is curve25519-dalek 4's clamped Montgomery ladder (a dependency already): no x25519-dalek.
 ml-kem = { version = "=0.3.4", default-features = false, features = ["zeroize"], optional = true }
+# ua-rs-sign T8: AEAD (spec §7: AES-256-GCM, AES-256-GCM-SIV, both on `aes` 0.8, the generation pqzl pins) and the containers'
+# base64url (spec §6.3, unpadded, constant time); pins of T0
+aes-gcm = { version = "=0.10.3", default-features = false, features = ["aes", "alloc", "zeroize"], optional = true }
+aes-gcm-siv = { version = "=0.11.1", default-features = false, features = ["aes", "alloc"], optional = true }
+base64ct = { version = "=1.8.3", default-features = false, features = ["alloc"], optional = true }
 
 # wasm32-unknown-unknown: `rand_core` 0.6's `OsRng` through getrandom 0.2's JS backend (T0: features only, no --cfg)
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 getrandom = { version = "=0.2.17", features = ["js"], optional = true }
+# ua-rs-sign T8: the link window clock (`js_sys::Date::now`; `SystemTime::now` panics on wasm32-unknown-unknown)
+js-sys = { version = "=0.3.107", optional = true }
 
 [features]
 # MD-5 (owner: the facades on by default). `--no-default-features` keeps the verify-only identity layer (+ `pq` / `json` /
@@ -65,7 +72,7 @@ getrandom = { version = "=0.2.17", features = ["js"], optional = true }
 # exactly one with `pqz` (T15 checks it). `vectors`: test-only entry points (secrets through hooks), never in a release build.
 default = ["wallet", "zether", "pqz", "pqz-set-n2304-kmax4096"]
 wallet = ["pq", "signers", "json", "dep:bip39", "dep:bip32", "dep:hkdf", "dep:hmac", "dep:zeroize", "dep:unicode-normalization",
-    "dep:ripemd", "dep:bs58", "dep:blake2", "dep:alloy-rlp", "dep:ml-kem", "rand_core/getrandom", "dep:getrandom", "ed25519-dalek/zeroize", "ml-dsa/zeroize", "slh-dsa/zeroize"]
+    "dep:ripemd", "dep:bs58", "dep:blake2", "dep:alloy-rlp", "dep:ml-kem", "dep:aes-gcm", "dep:aes-gcm-siv", "dep:base64ct", "dep:js-sys", "rand_core/getrandom", "dep:getrandom", "ed25519-dalek/zeroize", "ml-dsa/zeroize", "slh-dsa/zeroize"]
 zether = ["wallet"]
 pqz = ["wallet"]
 pqz-set-n2048-kmax1024 = []
@@ -135,4 +142,8 @@ required-features = ["wallet"]
 
 [[test]]
 name = "wallet_kem"
+required-features = ["wallet"]
+
+[[test]]
+name = "wallet_seal"
 required-features = ["wallet"]

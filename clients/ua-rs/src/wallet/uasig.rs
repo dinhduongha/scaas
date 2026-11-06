@@ -92,6 +92,15 @@ pub fn msig_sig(
     slots: &[Slot],
 ) -> Result<UASig> {
     check_purpose(purpose)?;
+    msig_members(key_data, inner, purpose, digest, domain, record, slots)
+}
+
+/// [`msig_sig`] past its purpose check: the sealed container's sender (`seal`, MD-10: the off-chain seal purpose, no native member)
+/// calls it directly.
+pub(super) fn msig_members(
+    key_data: &[u8], inner: &Inner, purpose: &[u8; 32], digest: &[u8; 32], domain: Option<&Domain>, record: Option<&TypedData>,
+    slots: &[Slot],
+) -> Result<UASig> {
     let ua = derive_ua(MSIG, key_data, false)?;
     if !msig_slots_minimal(key_data, &slots.iter().map(Slot::index).collect::<Vec<_>>())? {
         return Err(Error::Ua(UAError::Pop));
