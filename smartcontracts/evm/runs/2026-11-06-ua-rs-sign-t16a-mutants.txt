@@ -1,0 +1,25 @@
+# 2026-11-06 ua-rs-sign T16a mutants (smartcontracts/evm/runs/2026-11-06-ua-rs-sign-t16a-mutants.py), on the T16a tree (files equal 4e734a7a's).
+# One mutant per run on a clean tree, `cargo test --features vectors --test pqz_backup` (M18: ua-c cargo build, then test_vectors.py
+# WalletPqzBackup), each file restored byte for byte; NOT-LOADED or SURVIVED is a finding (exit 1). The plan's three: M1 share header
+# unbound, M2 the key-hash check skipped, M3 threshold off by one; the controller's M4-M18: the split's degree, the field, Lagrange,
+# the x-coordinates, mixed headers, a repeated index, the polynomial dropped, membership, a member twice, the default k, the reseal
+# purpose, the warning (version, a missing share, a single key), the C ABI's default k.
+[22 more lines]killed     | M1 share header unbound: the expected (msig ua, version, pqzKeyHash) not checked | clients/ua-rs/src/facade/pqz_backup.rs | rc=101 | 1 failed: a_share_for_another_msig_key_or_version_refused
+killed     | M2 the key-hash check skipped | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: a_share_for_another_msig_key_or_version_refused
+killed     | M3 threshold off by one: k - 1 shares accepted | clients/ua-rs/src/facade/pqz_backup.rs | rc=101 | 1 failed: k_minus_1_shares_refused
+killed     | M4 threshold off by one in the split: degree k | clients/ua-rs/src/facade/pqz_backup.rs | rc=101 | 3 failed: a_share_for_another_msig_key_or_version_refused, k_minus_1_shares_refused, k_shares_rebuild_a_key_matching_pqzKeyHash
+killed     | M5 the field: x^8 + x^4 + x^3 + x^2 + 1 (0x1d) | clients/ua-rs/src/facade/pqz_backup.rs | rc=101 | 1 failed: field_and_split_known_answers
+killed     | M6 Lagrange: x_j / x_j for x_j / (x_j - x_i) | clients/ua-rs/src/facade/pqz_backup.rs | rc=101 | 4 failed: a_share_for_another_msig_key_or_version_refused, field_and_split_known_answers, k_minus_1_shares_refused, k_shares_rebuild_a_key_matching_pqzKeyHash
+killed     | M7 x-coordinates from 2 | clients/ua-rs/src/facade/pqz_backup.rs | rc=101 | 4 failed: a_share_for_another_msig_key_or_version_refused, field_and_split_known_answers, k_minus_1_shares_refused, k_shares_rebuild_a_key_matching_pqzKeyHash
+killed     | M8 mixed headers accepted | clients/ua-rs/src/facade/pqz_backup.rs | rc=101 | 1 failed: a_share_for_another_msig_key_or_version_refused
+killed     | M9 a repeated index accepted | clients/ua-rs/src/facade/pqz_backup.rs | rc=101 | 1 failed: a_share_for_another_msig_key_or_version_refused
+killed     | M10 the polynomial dropped: every share is seed32 | clients/ua-rs/src/facade/pqz_backup.rs | rc=101 | 3 failed: a_share_for_another_msig_key_or_version_refused, field_and_split_known_answers, shares_never_carry_wallet_entropy
+killed     | M11 a recipient that is no member accepted | clients/ua-rs/src/facade/pqz_backup.rs | rc=101 | 1 failed: recipients_and_k_checked
+killed     | M12 a member twice accepted | clients/ua-rs/src/facade/pqz_backup.rs | rc=101 | 1 failed: recipients_and_k_checked
+killed     | M13 default k is n, not the threshold | clients/ua-rs/src/facade/pqz_backup.rs | rc=101 | 6 failed: a_missing_backup_warns_and_never_refuses, a_share_for_another_msig_key_or_version_refused, field_and_split_known_answers, k_minus_1_shares_refused, k_shares_rebuild_a_key_matching_pqzKeyHash, recipients_and_k_checked
+killed     | M14 reseal of another purpose | clients/ua-rs/src/facade/pqz_backup.rs | rc=101 | 1 failed: reseal_takes_share_containers_only
+killed     | M15 the warning ignores the version | clients/ua-rs/src/facade/pqz_backup.rs | rc=101 | 1 failed: a_missing_backup_warns_and_never_refuses
+killed     | M16 the warning ignores a missing share | clients/ua-rs/src/facade/pqz_backup.rs | rc=101 | 1 failed: a_missing_backup_warns_and_never_refuses
+killed     | M17 a single key warns | clients/ua-rs/src/facade/pqz_backup.rs | rc=101 | 1 failed: a_missing_backup_warns_and_never_refuses
+killed     | M18 C ABI: threshold 0 passed as k = 0 | clients/ua-c/src/lib.rs | rc=1 | 1 failed: test_two_of_three_rebuild_through_the_abi
+mutants M1-M18 of 18, survived or not loaded: 0
