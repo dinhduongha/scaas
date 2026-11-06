@@ -2,7 +2,7 @@
 # T31: the regulated PQZ kinds 12 and 13 (regulated-kinds spec §4, §4.2, §4.3; CTR-GOV-17; U1-U5; I8, I9, I10). PQZ only
 # (Zether != PQZ): kinds 10, 11 and the Zether sources untouched.
 # Base: 024e143c (after the owner's 2026-11-06 registry ruling). T31 commits: legacy note (no copy, MD-4) cb57dab4, the build
-# 508d45c6, this one (sizes, harness, mutants, summary).
+# 65caf46f, this one (sizes, harness, mutants, summary).
 step | commit | rc | counts
 t31-red | worktree (T31 tests; kind 12 with the public pre row, kind 13 as built in T26-T29) | 1 | test/as/confidential/Pqz*: 10 suites, 35 passed 3 failed: PqzFreeze12 test_envelopeSubjectNeverTheSender (a frozen subject at fee NONE refused by the public pre row), PqzReceiver12/13 test_deniedAndFrozenLegsReceive (a test fault, the client mirror used on unmirrored credits; fixed in the test)
 t31-green | build commit's tree | 0 | test/as/confidential/Pqz*: 10 suites, 38 passed 0 failed
