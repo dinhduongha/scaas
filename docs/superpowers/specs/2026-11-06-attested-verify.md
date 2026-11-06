@@ -199,7 +199,7 @@ decodes it in `_init`, so the encoding moves for every kind (the regulated spec 
 deletes any pending transfer. Every proof-carrying op then refuses `AttestVerifierRevoked()`, and the attested
 `verifyTransferAmount` answers false. A new verifier comes only through §4.2 (proposal, notice, confirm); the token stays frozen
 meanwhile. Revocation can only stop, never move, the trust root, so it needs no notice (inside O2). On a **fixed** verifier,
-`revokeAttestVerifier` reverts `AttestVerifierFixed()` (Q1 asks the owner to confirm; the recommendation keeps "fixed" meaning no
+`revokeAttestVerifier` reverts `AttestVerifierFixed()` (owner 2026-11-06, Q1: no; keeps "fixed" meaning no
 owner power over the verifier). Events: `AttestVerifierProposed(bytes32 current, bytes32 next, uint64 eta)`,
 `AttestVerifierSet(bytes32 previous, bytes32 next, uint32 epoch)`, `AttestVerifierCancelled(bytes32 next)`,
 `AttestVerifierRevoked(bytes32 previous, uint32 epoch)`.
@@ -467,7 +467,7 @@ module (C7). The repository ships a reference implementation (`scaas-attestd`, i
 
 | # | Question | Recommendation |
 |---|---|---|
-| Q1 | May the owner revoke a **fixed** verifier (R4 does not say)? Revoking it freezes the confidential balances for ever, since a fixed token can never take a new verifier | **No:** "fixed" means the owner has no power over the verifier (O2); a fixed token's containment is the creation-time choice of a regulated kind with `PAUSE` / `FREEZE` (AV-1's table). Written so in §4.3 until the owner rules |
+| Q1 | May the owner revoke a **fixed** verifier (R4 does not say)? Revoking it freezes the confidential balances for ever, since a fixed token can never take a new verifier | **Answered (owner 2026-11-06): no.** "fixed" means the owner has no power over the verifier (O2); a fixed token's containment is the creation-time choice of a regulated kind with `PAUSE` / `FREEZE` (AV-1's table). Built so in §4.3 (`AttestVerifierFixed`); was: until the owner rules |
 
 Answered by the reviews and the rulings: Q2 (PQZL only) agreed by both reviews; Q3 (no extra verifier kinds now), Q4 (no bit),
 Q5 (no on-chain acceptance; the off-chain probe), Q7 (no cap on `validUntil`), Q8 (wrapped kinds allowed with the maximum-loss
