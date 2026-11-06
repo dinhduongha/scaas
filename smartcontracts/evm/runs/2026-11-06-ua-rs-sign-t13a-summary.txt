@@ -1,0 +1,32 @@
+# 2026-11-06 ua-rs-sign T13a: ua-cxx over the Rust API (spec §9.1, §9.2, §10; plan T13 table row T13a). clients/ua-cxx: src/wallet.rs, a
+# second cxx bridge over scaas_ua::wallet and both facades (opaque Rust handles Wallet, Key (UA or native, Arc-shared, ExternType),
+# KeyList, KemKey, LinkSession, SeedBackup, Restored, ZetherKey, PqzKey); src/wallet.cpp and include/scaas_ua.hpp: move-only handle
+# classes, Secret, load() (abi_version 6 and the required features wallet, pq, zether, pqz, pqz-set-n2304-kmax4096: UAAbiMismatch);
+# tests/wallet_test.cpp under ctest (17 cases). scaas-ua with wallet, mlock, zether, pqz, pqz-set-n2304-kmax4096; never vectors (a const
+# assert). UNAUDITED.
+# All commands through scripts/capped, foreground, -j2, --locked, --offline; full logs git-ignored (clients/ua-cxx/target/t13a/).
+step | commit | rc | counts
+red: cmake --build (tests/wallet_test.cpp and the header's declarations, no bridge, no src/wallet.cpp) | 1eba2d4e + tests | 1 | links not: 305 undefined references, scaas::ua::load() 6, detail::reportedAbiVersion 4, detail::reportedFeatures 4, Secret::wipe() 3, detail::drop 7 (one per handle type), liveHandles() 3, Wallet::fromMnemonic 9 ...; every wallet_* case red (load_refuses_wrong_abi_or_features, secret_buffer_wiped_after_call, handle_freed_once and the vector rows)
+Cargo.lock | 208805e9 | - | clients/ua-cxx: the scaas-ua wallet graph added (86 packages, each at ua-c's version: the lock seeded with ua-c's entries, cargo pruned the rest); sha3 0.10.9 -> 0.10.8 (pqz-ffi's =0.10.8), zeroize 1.9.1 -> 1.8.2 (ua-rs' =1.8.2); cc 1.8.0 kept (one cc)
+cargo clippy --all-targets -D warnings (clients/ua-cxx) | 208805e9 | 0 | 0 warnings of ours; pqzl (a path dependency) prints 2 `deprecated` GenericArray warnings, as at T15
+cmake --build build; ctest (clients/ua-cxx, Release staticlib) | 208805e9 | 0 | 35 of 35 passed: vectors_test 18 (unchanged) + wallet_test 17
+wallet_test rows | 208805e9 | 0 | keys.json ua rows (>= 184, Falcon kinds when the build has them) + UA ids, native rows (public key; address, or none: UAArgument), 19 refusals; sign.json ua (>= 10 byte-equal, the rest by length), member, policy 10 signed + 14 refused, typed generic / refusals, tx rows + refusals, webauthn accepted + refusals, msig 3 built + 4 refused through the UASig builder, single key = sign_ua; rs_signatures.json 18 rows (key data, uaMsg, a fresh release signature of the row's length, randomized); kem.json keys, 9 refusals (the decimal-string rows; the msig and 2^64 rows skipped), encaps refusals and round trip, decaps rows (the 31-byte E skipped); seal.json seal rows + fresh seals, refusals, argument refusals, 3 containers, 28 acceptance rows, msig without accepted ContainerSender; backup_seal / restore (over: equal generation installs nothing, BackupRollback, rollback by its own name), link_seal / from_link (consumed, wrong short code SealOpen, the vector link container ContainerReplay); vault.json vaults, refusals, exactly one unlock secret, seal / rewrap / enable PRF; rs_vault.json 4 vaults, the backup (generation, imports, imported key); custody (lock revokes, unlock does not revive, imported key back through its label vault, children after the wallet's destruction KEY_REVOKED, WalletMismatch, memory protection, discover); seed backup sequence; errors carry no input; AEAD / HKDF / HMAC (RFC 4231, RFC 5869); Zether r33 keys, PoP, a key field refused, zether.json cache boxes and refusals, KEY_REVOKED after lock; PQZ set and mismatch, an R_REG proof within kPqzOutMax (1,052,672 B, no size query: the call returns the whole JSON), a key field refused, enc / dec, cache box, KEY_REVOKED after lock
+cargo tree --locked --offline -e normal: ua-cxx, ua-qt, ua-dart-frb/rust, scaas-node, ua-rs/fuzz, ua-c | 208805e9 | 0 | 6 of 6
+cargo deny --all-features --config ../ua-rs/deny.toml check (clients/ua-cxx; its lock moved) | 208805e9 | 0 | advisories ok, bans ok, licenses ok, sources ok; 22 duplicate warnings (ua-rs' own 22)
+mutants: 2026-11-06-ua-rs-sign-t13a-mutants.py | 208805e9 | 0 | 18 killed, 0 survived, 0 not loaded (2026-11-06-ua-rs-sign-t13a-mutants.txt): the plan's 3 (load check skipped, a secret buffer not wiped, a handle freed twice) and 15 of the controller's
+ctest after the mutants (the tree rebuilt) | 208805e9 | 0 | 35 of 35 passed
+# Decisions (controller, the owner may override): (1) The Rust-API bindings have no C ABI version: the bridge reports ABI_VERSION 6 (the
+# surface generation, in step with SCAAS_UA_ABI_VERSION) and scaas_ua_features()'s bits from scaas_ua::build; the header's kAbiVersion and
+# kRequiredFeatures are what it was written for. Refusal: Error("UAAbiMismatch", "abi_version" | "features") (a new code, binding-side only).
+# The test hook is C++-side (detail::reportedAbiVersion / reportedFeatures, function pointers to the core by default), so a release library
+# carries no hook of its own. (2) Secret inputs cross as &mut [u8] and are zeroized in Rust before the call returns, success or not, so the
+# caller's Secret is all zero after it (the spec's "each binding zeroizes"); secret outputs are copied into a Secret and the bridge's buffer
+# zeroed. A seal's plaintext and an AEAD key are not taken as secrets (not in spec §9.2's list). (3) Handles are rust::Box raw pointers in
+# move-only classes (std::exchange on move; a moved-from handle throws UAArgument); liveHandles() counts the bridge's live handles for the
+# "freed once" test. (4) Networks by their clientkeys names ("evm", ...), not numbers; members / accepted JSON "" = none; restore returns
+# nullopt for "installed nothing"; rollback by its own name, over a wallet by restoreBackupOver. (5) One PQZ set per build (n2304-kmax4096,
+# as ua-c's default); another set is a Cargo.toml change. (6) Key is Arc-shared and #[derive(ExternType)] so ua-qt can hold a handle (T13b).
+# Notes: the panic guard of lib.rs maps a caught panic to "UAKeyData: internal" (unchanged from before T13a). No size query exists in this
+# binding (every output is returned whole), so the PQZ bound is a constant checked against the facade's OUT_MAX at compile time and a test.
+# Conflicts: none with the spec or plan; the plan names no commit message per binding ("one per binding"): "ua-rs-sign T13a: ua-cxx wallet
+# binding over the Rust API" was used.
