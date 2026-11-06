@@ -512,7 +512,7 @@ contract HookSeatsPlainTest is UALedgerBase, SeatExpect {
         np.mtxPayReceiverFee(t, _noSig(), 3, FEE_TO, block.timestamp + 60, _noSig(), PayMetaKit.meta(bytes32(uint256(9))));
         // mtxRelayFee: the relay's payee and value
         _expect(address(np), H_FEE, uaB, 0, 7);
-        np.mtxRelayFee(_pad(alice), address(0x1234), bytes32(0), uaB, 7, block.timestamp + 60, _noSig());
+        np.mtxRelayFee(_pad(alice), address(0x1234), bytes32(0), uaB, 7, 2, 0, block.timestamp + 60, _noSig());
         // a wrap into another id: the payer; into the caller (positive control): no payer seat
         _expect(address(wp), H_PAYER, _pad(address(this)), 0, 0);
         wp.wrapToUA(address(tok), 1, uaP);

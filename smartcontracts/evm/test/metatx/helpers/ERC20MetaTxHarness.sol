@@ -28,7 +28,9 @@ contract ERC20MetaTxHarness is ERC20MetaTx {
     }
 
     /// `MetaTokenBase`'s too.
-    function mtxRelayFee(bytes32, address, bytes32, bytes32, uint256, uint256, IUARegistry.UASig calldata) external pure {
+    function mtxRelayFee(bytes32, address, bytes32, bytes32, uint256, uint256, uint256, uint256, IUARegistry.UASig calldata)
+        external pure
+    {
         revert("harness");
     }
 

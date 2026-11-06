@@ -31,8 +31,10 @@ import {UAKinds} from "../ua/UAKinds.sol";
 ///         `UAMetaTransfer` through `mtxExecuteTransfer` (with or without `entryRef`) is never gated. Hedera is the immutable
 ///         `IS_HEDERA` (CTR-TOK-23): HIP-632 signatures through `MtxPipelineLib` (which calls `HederaLib`).
 abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IERC165, GovernanceBase, IRescuable {
+    /// @dev Pay-meta-tax spec §4 (O4): the payer's own lane `(from, batch)` and `nonce`; the struct without them is in
+    ///      legacy/ua-mtx-merge/3e/.
     bytes32 private constant UA_RELAY_FEE_TYPEHASH = keccak256(
-        "UARelayFee(bytes32 from,address target,bytes32 callDataHash,bytes32 payee,uint256 value,uint256 validUntil,address relayer)"
+        "UARelayFee(bytes32 from,address target,bytes32 callDataHash,bytes32 payee,uint256 value,uint256 batch,uint256 nonce,uint256 validUntil,address relayer)"
     );
 
     address public immutable FACTORY;
@@ -283,9 +285,10 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
 
     /// @notice The payment a relay's router takes (never allowlisted: `relayer` is the direct caller). `from` signed
     ///         `UARelayFee` with the router as `relayer`, so only the router's own call matches the signature; `payee`
-    ///         gets `value` on lane `payLane(ref)`, nonce 0, fee `NONE`, `ref` = the router's `relayRef(target, callData)`.
-    function mtxRelayFee(bytes32 from, address target, bytes32 callDataHash, bytes32 payee, uint256 value,
-        uint256 validUntil, IUARegistry.UASig calldata auth) external nonReentrant
+    ///         gets `value` on the payer's lane `(from, batch)` at `nonce` (pay-meta-tax spec §4, O4: one signature runs
+    ///         once, a call may be paid by several), fee `NONE`, `ref` = the router's `relayRef(target, callData)`.
+    function mtxRelayFee(bytes32 from, address target, bytes32 callDataHash, bytes32 payee, uint256 value, uint256 batch,
+        uint256 nonce, uint256 validUntil, IUARegistry.UASig calldata auth) external nonReentrant
     {
         _regFeeTo(payee, value);
         MetaTxLib.UAMetaTransfer memory t;
@@ -293,22 +296,25 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
         t.to = payee;
         t.value = value;
         t.entryRef = _relayRef(target, callDataHash);
-        t.batch = payLane(t.entryRef);
+        t.batch = batch;
+        t.nonce = nonce;
         t.validUntil = validUntil;
         t.mode = MetaTxLib.MODE_RESTRICT_RELAYER;
         t.relayer = msg.sender;
-        _uaExecuteTransfer(t, _relayHash(from, target, callDataHash, payee, value, validUntil), auth);
+        _uaExecuteTransfer(t, _relayHash(t, target, callDataHash), auth);
     }
 
     function _relayRef(address target, bytes32 callDataHash) private view returns (bytes32) {
         return keccak256(abi.encodePacked("scaas.relayfee", block.chainid, target, callDataHash));
     }
 
-    /// @dev The struct the payer signs, `UARelayFee`; `relayer` is `msg.sender` (the router).
-    function _relayHash(bytes32 from, address target, bytes32 callDataHash, bytes32 payee, uint256 value,
-        uint256 validUntil) private view returns (bytes32)
+    /// @dev The struct the payer signs, `UARelayFee`, from the payment `t` built of it; `relayer` is `msg.sender` (the
+    ///      router).
+    function _relayHash(MetaTxLib.UAMetaTransfer memory t, address target, bytes32 callDataHash)
+        private view returns (bytes32)
     {
-        return keccak256(abi.encode(UA_RELAY_FEE_TYPEHASH, from, target, callDataHash, payee, value, validUntil, msg.sender));
+        return keccak256(abi.encode(UA_RELAY_FEE_TYPEHASH, t.from, target, callDataHash, t.to, t.value, t.batch, t.nonce,
+            t.validUntil, msg.sender));
     }
 
     /// @dev Fee `PERCENT`/`FIXED`, recipient bound by the signer and non-zero.

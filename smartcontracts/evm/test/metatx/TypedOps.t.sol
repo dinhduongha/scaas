@@ -1122,14 +1122,21 @@ contract TypedOpsTest is UALedgerBase {
         uint256 until = block.timestamp + 300;
         // ua-mtx-merge T2 (R28): the one `relay`, on ids, over `UARelayFee`; alice signs with her own key
         IUARegistry.UASig memory s;
-        s.signature = _ecdsa(ALICE_PK, keccak256(abi.encodePacked(hex"1901", domainOf(address(tok)), keccak256(abi.encode(
-            keccak256("UARelayFee(bytes32 from,address target,bytes32 callDataHash,bytes32 payee,uint256 value,uint256 validUntil,address relayer)"),
-            MetaTxLib.pad(alice), address(wrp), keccak256(cd), MetaTxLib.pad(RELAYER), 25, until, address(router))))));
+        s.signature = _ecdsa(ALICE_PK, _relayFeeDigest(address(tok), address(wrp), keccak256(cd), until, address(router)));
         vm.prank(RELAYER);
-        router.relay(address(wrp), cd, address(tok), MetaTxLib.pad(alice), MetaTxLib.pad(RELAYER), 25, until, s);
+        router.relay(address(wrp), cd, address(tok), MetaTxLib.pad(alice), MetaTxLib.pad(RELAYER), 25, 2, 0, until, s);
         assertEq(und.balanceOf(bob), 100);
         assertEq(tok.balanceOf(RELAYER), 25);
         assertEq(wrp.mtxNonce(MetaTxLib.pad(alice), e.batch), 1);
+    }
+
+    /// alice's `UARelayFee` of 25 to `RELAYER` on lane 2, nonce 0 (pay-meta-tax T38; a helper: the test's stack).
+    function _relayFeeDigest(address token, address target, bytes32 cdh, uint256 until, address router)
+        internal view returns (bytes32)
+    {
+        return keccak256(abi.encodePacked(hex"1901", domainOf(token), keccak256(abi.encode(
+            keccak256("UARelayFee(bytes32 from,address target,bytes32 callDataHash,bytes32 payee,uint256 value,uint256 batch,uint256 nonce,uint256 validUntil,address relayer)"),
+            MetaTxLib.pad(alice), target, cdh, MetaTxLib.pad(RELAYER), uint256(25), uint256(2), uint256(0), until, router))));
     }
 }
 

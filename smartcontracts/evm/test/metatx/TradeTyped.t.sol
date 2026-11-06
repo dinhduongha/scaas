@@ -263,19 +263,26 @@ abstract contract OrderRows is Test {
         assertEq(t.balanceOf(payee), 0);
     }
 
+    /// pay-meta-tax T38, meaning: the row signs `UARelayFee` without `batch` / `nonce` and calls the seven-argument
+    /// `mtxRelayFee`, which has no function now; T41 regenerates the row and runs it again.
     function test_typedOpsVectors_UARelayFeeRow() public {
         j = vm.readFile(TYPED_OPS);
         NormalToken t = _normalKind();
         bytes32 from = vm.parseJsonBytes32(j, _f("UARelayFee", "from"));
-        t.mint(address(uint160(uint256(from))), FUNDS);
         bytes32 payee = vm.parseJsonBytes32(j, _f("UARelayFee", "payee"));
         uint256 value = _u(_f("UARelayFee", "value"));
         (address tgt, bytes32 cdh) = _callOf("UARelayFee");
-        bytes memory built = abi.encodeCall(IERC20MetaTx.mtxRelayFee, (from, tgt, cdh, payee, value, _u(_f("UARelayFee", "validUntil")),
-            _uaSig("UARelayFee")));
-        _runRenamed("UARelayFee", address(t), address(t), vm.parseJsonAddress(j, _f("UARelayFee", "relayer")), built,
-            IERC20MetaTx.mtxRelayFee.selector);
-        assertEq(t.balanceOf(address(uint160(uint256(payee)))), value);
+        bytes memory built = abi.encodeWithSignature(
+            "mtxRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+            from, tgt, cdh, payee, value, _u(_f("UARelayFee", "validUntil")), _uaSig("UARelayFee"));
+        checkRow(j, "UARelayFee", _kind());
+        bytes memory cd = vm.parseJsonBytes(j, domainField("UARelayFee", _kind(), "calldata"));
+        assertEq(keccak256(built), keccak256(cd), "the row: the old calldata");
+        vm.prank(vm.parseJsonAddress(j, _f("UARelayFee", "relayer")));
+        (bool ok, bytes memory ret) = address(t).call(cd);
+        assertFalse(ok, "a retired entry runs");
+        assertEq(ret.length, 0);
+        assertEq(t.balanceOf(address(uint160(uint256(payee)))), 0);
     }
 
     function _payment(string memory op) private view returns (MetaTxLib.UAMetaTransfer memory t) {

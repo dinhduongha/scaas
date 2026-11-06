@@ -62,13 +62,15 @@ contract MtxRelayFee is ReentrancyGuardTransient {
     /// @notice CTR-MTX-27 steps 1-6: the shape, `target` called by the executor, then `token.mtxRelayFee(…, auth)`
     ///         with this router as the struct's `relayer`, then in open mode (`payee == pad(router)`) `value` forwarded
     ///         to `msg.sender`. Any failure reverts it all. `from` and `payee` are ids: a native payer signs `UARelayFee`
-    ///         with its own key, a derived one through the token's registry.
+    ///         with its own key, a derived one through the token's registry. `batch` / `nonce` are the payer's lane (pay-meta-
+    ///         tax spec §4, O4): one signature pays once; a call is paid twice only by two signatures and a target that
+    ///         runs it twice.
     function relay(address target, bytes calldata callData, address token, bytes32 from, bytes32 payee, uint256 value,
-                   uint256 validUntil, IUARegistry.UASig calldata auth) external nonReentrant
+                   uint256 batch, uint256 nonce, uint256 validUntil, IUARegistry.UASig calldata auth) external nonReentrant
     {
         _shape(target, payee);
         MtxRelayExecutor(EXECUTOR).exec(target, callData);
-        IERC20MetaTx(token).mtxRelayFee(from, target, keccak256(callData), payee, value, validUntil, auth);
+        IERC20MetaTx(token).mtxRelayFee(from, target, keccak256(callData), payee, value, batch, nonce, validUntil, auth);
         emit RelayFeePaid(relayRef(target, callData), target, token, from, _payee(token, payee, value), value);
     }
 
@@ -78,8 +80,8 @@ contract MtxRelayFee is ReentrancyGuardTransient {
     }
 
     /// @dev CTR-MTX-27 step 2: the payee not the executor (`to` as an id; the token's `mtxRelayFee` does not know it), the
-    ///      rest of the old shape being the signed `UARelayFee` itself (the token builds `ref`, lane `payLane(ref)`, nonce 0,
-    ///      fee `NONE` and takes this router as `relayer`); and the target is a contract: code, not an EIP-7702 designator
+    ///      rest of the old shape being the signed `UARelayFee` itself (the token builds `ref` and the payment on the
+    ///      signed lane, fee `NONE`, and takes this router as `relayer`); and the target is a contract: code, not an EIP-7702 designator
     ///      (conformance item 9).
     function _shape(address target, bytes32 to) private view {
         if (to == MetaTxLib.pad(EXECUTOR)) revert RelayFeeShape();

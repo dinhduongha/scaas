@@ -18,6 +18,17 @@ import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {DexLegs} from "../helpers/DexLegs.sol";
 import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {nid} from "../helpers/Ids.sol";
+import {MtxDigest} from "../helpers/MtxDigest.sol";
+import {MtxRelayFee} from "../../src/metatx/MtxRelayFee.sol";
+
+/// A relay target with code (pay-meta-tax T38): its call runs every time.
+contract RelayPing {
+    uint256 public n;
+
+    function ping() external {
+        ++n;
+    }
+}
 
 /// A stand-in for a venue paying a relayer its share out of its own balance by an ordinary `transfer`
 /// (`SCaaSDex._payLeg`'s `_send`): the token cannot tell it from any payout.
@@ -144,7 +155,7 @@ contract FeeLegsTest is RegFixture {
         for (uint256 i; i < 2; ++i) {
             address t = _ks()[i];
             bytes memory cd = abi.encodeCall(MetaTokenBase.mtxRelayFee,
-                (nid(alice), address(0x7A), keccak256("call"), nid(feeTo), 5, block.timestamp + 60, _bad()));
+                (nid(alice), address(0x7A), keccak256("call"), nid(feeTo), 5, 2, 0, block.timestamp + 60, _bad()));
             bytes4 ctl = _try(t, cd);
             assertTrue(ctl != 0 && ctl != IRegulatedToken.FeeRecipientFrozen.selector, "control");
             _freeze(t, nid(feeTo));
@@ -224,4 +235,40 @@ contract FeeLegsTest is RegFixture {
         WrappedToken(payable(w)).mtxWrapOrder(u, o, sig);
         assertEq(IERC20(w).balanceOf(alice), 3000);
     }
+
+    /// alice's signed `UARelayFee` of 5 to the router (open mode) on lane 2, nonce 0, for `cd` on `target` (helpers: the
+    /// test's stack).
+    function _relaySig(address t, address target, bytes memory cd, address router, uint256 vu)
+        internal view returns (IUARegistry.UASig memory a)
+    {
+        bytes32 h = keccak256(abi.encode(keccak256(
+            "UARelayFee(bytes32 from,address target,bytes32 callDataHash,bytes32 payee,uint256 value,uint256 batch,uint256 nonce,uint256 validUntil,address relayer)"),
+            nid(alice), target, keccak256(cd), nid(router), uint256(5), uint256(2), uint256(0), vu, router));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, MtxDigest.typed(t, h));
+        a.signature = abi.encodePacked(r, s, v);
+    }
+
+    /// pay-meta-tax T38, O14 (spec §4.1): router open mode stays on the regulated kinds; its limitation pinned: a frozen
+    /// submitter is still paid, because RK-6 checks the signed payee (the router), not the one the router forwards to.
+    function test_relayFee_openModeFrozenSubmitterPaid() public {
+        MtxRelayFee router = new MtxRelayFee();
+        RelayPing target = new RelayPing();
+        for (uint256 i; i < 2; ++i) {
+            address t = _ks()[i];
+            _freeze(t, nid(relayer));
+            uint256 b0 = IERC20(t).balanceOf(relayer);
+            _openRelay(router, address(target), t);
+            assertEq(IERC20(t).balanceOf(relayer), b0 + 5, "O14: the frozen submitter is paid in open mode");
+        }
+    }
+
+    /// `relayer` submits alice's open-mode relay fee of 5 for `ping()` on `target`.
+    function _openRelay(MtxRelayFee router, address target, address t) internal {
+        bytes memory cd = abi.encodeCall(RelayPing.ping, ());
+        uint256 vu = block.timestamp + 300;
+        IUARegistry.UASig memory a = _relaySig(t, target, cd, address(router), vu);
+        vm.prank(relayer);
+        router.relay(target, cd, t, nid(alice), nid(address(router)), 5, 2, 0, vu, a);
+    }
+
 }

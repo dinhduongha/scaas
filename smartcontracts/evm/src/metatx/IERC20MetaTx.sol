@@ -26,9 +26,9 @@ interface IERC20MetaTx is IERC20, IMetaTx {
         external returns (bool);
     function mtxBatchTransfer(MetaTxLib.UAMetaTransfer[] calldata ts, IUARegistry.UASig[] calldata auths)
         external returns (bool);
-    /// @notice The relay-fee payment (CTR-MTX-27, TS-D19): `from` signed `UARelayFee{…, relayer}` under `metatx`,
-    ///         `relayer` read as `msg.sender`. Pays `value` to `payee` on lane `payLane(ref)`, nonce 0, fee `NONE`,
-    ///         `ref` = `MtxRelayFee.relayRef`.
-    function mtxRelayFee(bytes32 from, address target, bytes32 callDataHash, bytes32 payee, uint256 value,
-        uint256 validUntil, IUARegistry.UASig calldata auth) external;
+    /// @notice The relay-fee payment (CTR-MTX-27, TS-D19; pay-meta-tax spec §4): `from` signed `UARelayFee{…, batch,
+    ///         nonce, validUntil, relayer}` under `metatx`, `relayer` read as `msg.sender`. Pays `value` to `payee` on the
+    ///         payer's lane `(from, batch)` at `nonce`, fee `NONE`, `ref` = `MtxRelayFee.relayRef`.
+    function mtxRelayFee(bytes32 from, address target, bytes32 callDataHash, bytes32 payee, uint256 value, uint256 batch,
+        uint256 nonce, uint256 validUntil, IUARegistry.UASig calldata auth) external;
 }

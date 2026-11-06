@@ -49,7 +49,7 @@ interface IMergedT2 {
 /// `MtxRelayFee.relay` on ids (R28: today's `uaRelay` under the name `relay`).
 interface IRelayT2 {
     function relay(address target, bytes calldata callData, address token, bytes32 from, bytes32 payee, uint256 value,
-        uint256 validUntil, IUARegistry.UASig calldata auth) external;
+        uint256 batch, uint256 nonce, uint256 validUntil, IUARegistry.UASig calldata auth) external;
 }
 
 /// The address `MetaTransfer` (R46: in legacy/ua-mtx-merge/ after T2), kept here to sign and encode the retired forms.
@@ -125,8 +125,10 @@ contract TransferGroupTest is Test {
         "UAReceiverFee(UAMetaTransfer payment,uint256 fee,address feeRecipient,uint256 validUntil)UAMetaTransfer(bytes32 from,bytes32 to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     bytes32 internal constant OLD_RELAY_FEE_TYPEHASH = keccak256(
         "RelayFee(address from,address target,bytes32 callDataHash,address payee,uint256 value,uint256 validUntil,address relayer)");
+    // pay-meta-tax T38 (spec §4): `batch` and `nonce`, the payer's own lane
     bytes32 internal constant UA_RELAY_FEE_TYPEHASH = keccak256(
-        "UARelayFee(bytes32 from,address target,bytes32 callDataHash,bytes32 payee,uint256 value,uint256 validUntil,address relayer)");
+        "UARelayFee(bytes32 from,address target,bytes32 callDataHash,bytes32 payee,uint256 value,uint256 batch,uint256 nonce,uint256 validUntil,address relayer)");
+    uint256 internal constant RF_LANE = 31;
 
     address internal signer = vm.addr(PK);
     address internal payee = vm.addr(PAYEE_PK);
@@ -143,6 +145,8 @@ contract TransferGroupTest is Test {
         bytes cd;
         bytes32 payee;
         uint256 value;
+        uint256 batch;
+        uint256 nonce;
         uint256 validUntil;
         IUARegistry.UASig auth;
     }
@@ -305,18 +309,24 @@ contract TransferGroupTest is Test {
         r.payee = p;
         r.value = v;
         r.validUntil = block.timestamp + 600;
+        (r.batch, r.nonce) = (RF_LANE, MetaTokenBase(t).mtxNonce(from, RF_LANE));
         r.auth = _sig(PK, MtxDigest.typed(t, _relayHash(UA_RELAY_FEE_TYPEHASH, from, r)));
     }
 
     /// `UARelayFee` (or the old `RelayFee`, ids padded) with the router as `relayer`.
     function _relayHash(bytes32 typehash, bytes32 f, RelayArgs memory r) internal view returns (bytes32) {
-        return keccak256(abi.encode(typehash, f, address(probe), keccak256(r.cd), r.payee, r.value, r.validUntil,
-            address(router)));
+        if (typehash != UA_RELAY_FEE_TYPEHASH) {
+            return keccak256(abi.encode(typehash, f, address(probe), keccak256(r.cd), r.payee, r.value, r.validUntil,
+                address(router)));
+        }
+        return keccak256(abi.encode(typehash, f, address(probe), keccak256(r.cd), r.payee, r.value, r.batch, r.nonce,
+            r.validUntil, address(router)));
     }
 
     function _relayWith(RelayArgs memory r) internal {
         vm.prank(REL);
-        IRelayT2(address(router)).relay(address(probe), r.cd, r.t, from, r.payee, r.value, r.validUntil, r.auth);
+        IRelayT2(address(router)).relay(address(probe), r.cd, r.t, from, r.payee, r.value, r.batch, r.nonce, r.validUntil,
+            r.auth);
     }
 
     function _relay(address t, uint256 v, bytes32 p) internal {
@@ -742,7 +752,8 @@ contract TransferGroupTest is Test {
     /// last on every pay entry, `mtxPay` in its struct form, `mtxPayMeta` and `metaPayId(bytes32,bytes)` to legacy):
     /// IMetaTokenV2 0xfa5f874a -> 0xcd9d6940, IERC20Payment 0xcc624078 -> 0xced674ba.
     function test_typedPathInterfaceIdsArePinned() public pure {
-        assertEq(type(IERC20MetaTx).interfaceId, bytes4(0x05c4a9ef), "IERC20MetaTx");
+        // pay-meta-tax T38 (`mtxRelayFee` with `batch`, `nonce`): IERC20MetaTx 0x05c4a9ef -> 0x7513beba
+        assertEq(type(IERC20MetaTx).interfaceId, bytes4(0x7513beba), "IERC20MetaTx");
         assertEq(type(IMetaTokenV2).interfaceId, bytes4(0xcd9d6940), "IMetaTokenV2");
         assertEq(type(IERC20Payment).interfaceId, bytes4(0xced674ba), "IERC20Payment");
         assertEq(type(IUALedger).interfaceId, bytes4(0xac15edc6), "IUALedger");
