@@ -260,3 +260,16 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   (T27-T29) are unchanged; `NormalPqzToken` only marks its overrides `virtual` (same runtime size); `script/pqz/e2e.py`
   publishes the releases 12 and 13 beside 0, 4 and 5. New: `src/regulated/NormalPqzRegulatedToken.sol`. As they stood
   before T31: `024e143c`.
+  Group 3e (payment metadata, free pay lanes, tax; spec `2026-11-05-pay-meta-tax.md`), under `ua-mtx-merge/3e/` because the
+  pre-round copies of the same paths above stay as they are. T37 (pay entries with `PayMeta`, free pay lanes, the mandate
+  wallets), as they stood at `86751e34`: `src/metatx/{MetaTokenBase,IMetaTokenV2,IERC20Payment}.sol` with the flat
+  `mtxPay(bytes32 from, …, bytes32 payId, …)` on lane `payLane(payId)` at nonce 0, `mtxPayMeta`, `_uaPayMeta`, `_uaPay`,
+  `metaPayId(bytes32 salt, bytes meta)` under the tag `scaas.pay.meta`, `PaymentMeta(bytes32 indexed payId, bytes meta)`,
+  the six-argument `payWithFee` / `payWithFeeToUA` (any `entryRef`, 0 included) and the receiver-fee shape
+  `t.batch == payLane(t.entryRef)`, `t.nonce == 0`; `src/wallet/MandateWallet.sol` with `payUnderMandate` /
+  `mtxPayUnderMandate` without `PayMeta`. Tests as they stood before their meaning changed:
+  `test/metatx/PayMeta.t.sol`, `test/v2/{Base,ReceiverPays,MetaTxGasV2}.t.sol`, `test/ua/{UAReceiverFee,UALedgerNamed}.t.sol`,
+  `test/wallet/{MandateWallet,MandateWalletMerged}.t.sol`, `test/merge/TransferGroup.t.sol`, `test/account/AccountKat.t.sol`
+  and its vector `test/vectors/mandate_kat.json`; the shared vector `smartcontracts/vectors/metatx/paymeta.json` (the old
+  formula, which the non-EVM families keep until their rounds) is at `smartcontracts/vectors/metatx/legacy/ua-mtx-merge/`.
+  Not built.
