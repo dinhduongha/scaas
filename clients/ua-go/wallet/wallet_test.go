@@ -217,7 +217,7 @@ func TestLoadRefusesWrongAbiOrFeatures(t *testing.T) {
 		abi uint32
 		f   uint64
 	}{"abi 5": {5, good}, "abi 7": {7, good}, "no wallet": {6, good &^ FeatureWallet}, "no pq": {6, good &^ FeaturePq},
-		"an unknown bit": {6, good | 1<<11}, "two sets": {6, good | FeaturePqzSetN2048Kmax1024},
+		"an unknown bit": {6, good | 1<<12}, "a vectors build (C1)": {6, good | FeatureVectors}, "two sets": {6, good | FeaturePqzSetN2048Kmax1024},
 		"pqz without a set": {6, FeatureWallet | FeaturePq | FeaturePqz}, "a set without pqz": {6, FeatureWallet | FeaturePq | FeaturePqzSetN2304Kmax4096}} {
 		if !errors.Is(CheckBuild(c.abi, c.f), ErrLibraryMismatch) {
 			t.Error(label)
@@ -230,7 +230,7 @@ func TestAbiVersionIs6AndFeatures(t *testing.T) {
 		t.Fatal(ABI())
 	}
 	f := Features()
-	if f&FeatureWallet == 0 || f&FeaturePq == 0 || f&FeatureExternal != 0 {
+	if f&FeatureWallet == 0 || f&FeaturePq == 0 || f&FeatureExternal != 0 || f&FeatureVectors != 0 {
 		t.Fatalf("%#x", f)
 	}
 	if _, err := ExternalKeyNew(`{"kind":257,"keyData":"0x"}`); code(err) != "UAKindUnavailable" {

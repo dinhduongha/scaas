@@ -42,6 +42,8 @@ const (
 	FeaturePqzSetN2816Kmax65536
 	FeatureExternal
 	FeatureMlock
+	// FeatureVectors: a test build (scaas-ua feature `vectors`); CheckBuild refuses it (spec no-decryption-oracle §4.8, Codex C1).
+	FeatureVectors
 	featureEnd
 )
 
@@ -83,10 +85,13 @@ func (e *Error) Error() string { return e.Code + ": " + e.Detail }
 
 func refuse(what string) error { return &Error{Status: errKeyData, Code: "UAKeyData", Detail: what} }
 
-// CheckBuild refuses a library of another ABI or an unknown feature set (the load check).
+// CheckBuild refuses a library of another ABI or an unknown feature set (the load check), and any test build (FeatureVectors).
 func CheckBuild(abi uint32, features uint64) error {
 	if abi != ABIVersion {
 		return fmt.Errorf("%w: ABI %d, this binding needs %d", ErrLibraryMismatch, abi, ABIVersion)
+	}
+	if features&FeatureVectors != 0 {
+		return fmt.Errorf("%w: a test build (feature vectors)", ErrLibraryMismatch)
 	}
 	need, sets := FeatureWallet|FeaturePq, features&featureSets
 	if features&need != need || features >= featureEnd || sets&(sets-1) != 0 || (sets != 0) != (features&FeaturePqz != 0) {
