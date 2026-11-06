@@ -1,0 +1,56 @@
+# 2026-11-07 ua-rs-sign T14b: Zether on raw words (ARCH-POS-13 "never a decryption oracle"; spec no-decryption-oracle §4.2,
+# §4.3, §4.7, §5; Codex C6, Fable P2-6, P3-4). Commits: the T14b code commit on ua-rs-sign (zether-prover `state`, secret_mul,
+# zether-read-balance, the facade, tests, the rows copy, locks, the ua-c doc and header, clientkeys zether.js comments, the
+# mutant harness), the follow-up commit of this summary and the mutant record; ua-mtx-merge fe92dbf2 (the forge state-vector
+# writer test/zether/ZetherStateVectors.t.sol, smartcontracts/vectors/zether/state.json, foundry.toml fs line; contract commit
+# 43a09e7d, T19c's scaas.zether pin inside the rows). Words commands: balance, pendingBalance, checkBalance, proveTransfer,
+# proveTransferMulti, proveBurn, openMemo, recoverTransfer, openDisclosure; raw forms only under `vectors` (decrypt,
+# decryptPending, raw*) and zether-prover `hazmat`. No contract, statement, transcript or C ABI call change. New dependencies of
+# zether-prover: scaas-ct (path, shared with scaas-ua) and aes-gcm =0.10.3 (scaas-ua's pin; zeroize 1.9.0 -> 1.8.2 in its lock,
+# scaas-ct's pin). UNAUDITED.
+# All commands through scripts/capped, foreground, -j2, --locked, --offline (forge in a detached worktree of ua-mtx-merge,
+# removed after); full logs in the scratch directory, not committed.
+step | commit | rc | counts
+forge test --match-path test/zether/ZetherStateVectors.t.sol, STATE_VECTORS=1 (detached worktree at 43a09e7d) | 43a09e7d | 0 | 1 passed; state.json written twice, same sha256 (f4ea51bd...); the same rows as at f9910a31 apart from the commit
+state.json into ua-rs-sign by `git show fe92dbf2:<path>` (no hand copy) | 3b813d16 | 0 | sha256 equal
+zether-prover cargo test (default; -- --include-ignored: the anvil reading-layer test) | 3b813d16 | 0 | 15 suites, 73 passed; no anvil left
+zether-prover cargo test --features hazmat | 3b813d16 | 0 | 15 suites, 86 passed, 1 ignored (anvil); state, secret_mul, read_balance again at the final tree: 6 + 1 + 3 passed
+zether-prover ./wasm-smoke.sh and ZETHER_HAZMAT=1 ./wasm-smoke.sh (wasm32 + wasm-bindgen 0.2.129 + node) | 3b813d16 | 0 | 3 checks passed / 9 checks passed
+zether-prover clippy --all-targets -D warnings (not a CI gate) | 3b813d16 | 101 | 0 findings in the new or changed code; pre-existing: api.rs keyless needless_borrow (10), zether.rs manual_is_multiple_of (2), tests/zether_proofs.rs assertions_on_constants (1)
+ua-rs test (default: zether + pqz n2304-kmax4096, the release cell) | 3b813d16 | 0 | 32 suites, 310 passed, 1 ignored; facade_zether + facade_zether_state again at the final tree: 10 + 6 passed
+ua-rs test --features vectors | 3b813d16 | 0 | 35 suites, 383 passed, 3 ignored; facade_zether + facade_zether_state again at the final tree: 12 + 6 passed (key-use counter)
+ua-rs test --no-default-features --features wallet,mlock | 3b813d16 | 0 | 27 suites, 256 passed, 1 ignored
+ua-rs clippy --all-targets -D warnings: default, vectors, wallet,mlock, zether, zether+vectors | 3b813d16 | 0 | 0 of ours each (5 cells); pqzl's 2 deprecated GenericArray warnings
+ua-rs/fuzz cargo check; seeds.py; seeds.py --regress | 3b813d16 | 0 | builds; 309 seeds (39 zether_cmd); zether_cmd/box-over-depth-2.bin regenerated (COMMANDS grew: the box index 17 -> 26)
+ua-c clippy -D warnings; cargo build; cargo test (lib + header, SCAAS_UA_C_BLESS once); C smoke + c++ -fsyntax-only; test_vectors.py | 3b813d16 | 0 | 0; built; 4 + 5 passed; smoke ok; 85 tests OK
+check_test_features.py | 3b813d16 | 0 | ok (graph of ua-c, ua-cxx, ua-qt, ua-dart-frb, zether-prover: 0 findings; positive control: 2 findings)
+cargo tree --locked --offline -e normal: ua-rs, ua-c, ua-cxx, ua-qt, ua-dart-frb/rust, ua-rs/fuzz, zether-prover, scaas-node | 3b813d16 | 0 | 8 of 8 (locks of the six crates over zether-prover: its two new dependency entries only)
+cargo deny --all-features check: ua-rs; ua-c and zether-prover (--config ../ua-rs/deny.toml) | 3b813d16 | 0 | advisories ok, bans ok, licenses ok, sources ok each
+docs_check check / paths | 3b813d16 | 0 | 0 errors 5 warnings (existing) / 0 machine paths
+mutants: 2026-11-07-ua-rs-sign-t14b-mutants.py | 3b813d16 | 0 | 25 killed, 0 survived, 0 not loaded (2026-11-07-ua-rs-sign-t14b-mutants.txt); tree byte-equal after each
+# Decisions (controller, the owner may override): (1) The parser lives in zether-prover (`state`, public data only: `prepare`
+# with no key, then `run`), so ua-rs's facade and zether-read-balance share one parser; the facade calls `prepare` before it
+# touches the key (key-use counter) and keeps its own allow-list over the same field lists. (2) Request shape: location
+# `family` ("evm"; another family refused), `chainId`, `chainUid`, `token`, `block`, `psid`, `ua` (the reader, = the
+# handle's); words `account` [the six acct[ua] slots], `accountData` [{slot, word}], `entryWords` [{slot, word}] (length slot
+# first), `entryPtr`, `blob` {address, code}, `memoWords`, `modes` (slot 0), `auditorKeyWords`; an entry by `fromUA` +
+# `sendCounter` (entryRef recomputed; every slot checked against it). (3) Debits keep an optional `balance`: the holder's
+# own plaintext (its balance cache, zether-limits D5: a balance above the device BSGS bound is spent from the cache), checked
+# against the rebuilt acc (`[b]G == C - [x]D`) before proving; without it the balance is BSGS of the rebuilt acc. sendCounter
+# and accSeq come from the words; `disclosureMode` / `auditorMode` strings, `yTo`, `yAud`, legs, fee stay caller fields
+# (public keys and policy the chain checks again). (4) openDisclosure decrypts the leg's amount inside (BSGS) and returns it with
+# the opening; the auditor role needs `modes` auditorMode != NONE, the token's auditorKey = the handle's Y and a copy on the
+# leg. (5) Every multiplication of a supplied point by x goes through `scaas_ct::secret_mul` (decrypt, check, the three debit
+# balance checks, the receiver's / auditor's opening check), and so do the proofs' nonces over x on supplied points (A_bal of
+# transfer, multi-recipient and burn; the opening's A2): their leak is x's. (6) zether-read-balance: `--rpc` with
+# `--chain-id`, `--chain-uid` (genesis hash), `--factory`, `--token`, `--depth` or `--finalized` (R1-R5; every read by block
+# hash, EIP-1898; `_info[token]` slot 8 checked as a Zether kind 2, 3, 10, 11); `--cache-box` (the holder's clientkeys box;
+# with --rpc checked against the state, else BSGS); `--ct` only with `hazmat`. (7) Raw commands renamed raw* in the facade
+# (as T15e); zether-prover's own raw names unchanged (its vectors and the forge ProverCross job use them).
+# Residuals: the facade cannot tell chain state from consistent fabricated words (residual control
+# residual_control_consistent_fabricated_words_are_decrypted; R1-R7 are the reading layer's); the prover's per-transfer secrets
+# s, t_j and their nonces still multiply supplied keys by arkworks (not key.x; a leak reveals that transfer's amounts, not x);
+# the fixed-base [x]G, [k]G stay arkworks; zether-prover's api / wasm `zetherCall` has no words commands (the wasm-bindgen browser
+# binding is the next round, Q4); bindings carry the words commands through scaas_ua_zether_call's JSON only (T15g); the
+# forge rows' fixture memo is filler, so openMemo / recoverTransfer are tested on prover-made entries laid out as words, not on
+# forge rows; R4's codeHash check of an SSTORE2 pointer is not done by zether-read-balance (it reads no entry).

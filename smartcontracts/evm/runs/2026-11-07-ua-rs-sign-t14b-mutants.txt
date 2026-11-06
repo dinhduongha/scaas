@@ -1,0 +1,40 @@
+# 2026-11-07 ua-rs-sign T14b: the mutant run of 2026-11-07-ua-rs-sign-t14b-mutants.py (one mutant per call through
+# scripts/capped, foreground; every file restored by the harness, then `git diff` of the tree compared byte for byte with the
+# diff before the mutant: equal after each). zether-prover mutants: `cargo test --test state` (`prepare` refusals observed
+# directly: it holds no key), `--test secret_mul` (the scaas-ct ladder record per path), `--test read_balance` (the anvil
+# reading-layer test, anvil killed by the test: none left after any run); facade mutants: `--features vectors --test
+# facade_zether_state` (the key-use counter) and the release `--test facade_zether`. 25 mutants: the plan's three (M1 raw acc,
+# M2 a key.x multiplication left variable-time, M3 the CLI's catalogue check) and the controller's 22.
+# Superseded during the run: (a) M1 SURVIVED twice: the raw-acc negatives were refused for another field (tableBits on
+# checkBalance), not for the acc; the test gained a positive control per account command (the request without the raw field
+# prepares) and a raw acc / ct / pending on each; then killed. (b) M13 SURVIVED: the recipient's recoverTransfer was refused for
+# its missing auditorKeyWords; the test gained the field and a positive control (the sender's own entry prepares); then killed
+# (the same fix in ua-rs's facade_zether_state). (c) M5-M23 first ran from concurrent tool calls (all killed); they were run
+# again one per call, below, and those are the record.
+verdict | mutant | file | rc | failed tests
+killed     | M2 decrypt's [x]D left variable-time | clients/zether-prover/src/elgamal.rs | rc=101 | 1 failed: every_x_multiplication_on_a_supplied_point_is_secret_mul
+killed     | M3 the CLI's catalogue check skipped (R5) | clients/zether-prover/src/bin/zether-read-balance.rs | rc=101 | 1 failed: rpc_reading_layer_against_anvil
+killed     | M4 the burn's balance check variable-time | clients/zether-prover/src/zether.rs | rc=101 | 1 failed: every_x_multiplication_on_a_supplied_point_is_secret_mul
+killed     | M24 the facade uses the key before the words are checked | clients/ua-rs/src/facade/zether.rs | rc=101 | 1 failed: location_word_and_role_negatives_are_refused_with_the_key_unused
+killed     | M25 a raw command in a release build | clients/ua-rs/src/facade/zether.rs | rc=101 | 1 failed: release_has_no_raw_decrypt
+killed     | M1 raw acc accepted (checkBalance allow-list) | clients/zether-prover/src/state.rs | rc=101 | 1 failed: word_location_and_role_negatives_are_refused_before_the_key
+killed     | M13 a sender's command on another's entry | clients/zether-prover/src/state.rs | rc=101 | 1 failed: word_location_and_role_negatives_are_refused_before_the_key
+killed     | M5 the transfer's A_bal nonce variable-time | clients/zether-prover/src/zether.rs | rc=101 | 1 failed: every_x_multiplication_on_a_supplied_point_is_secret_mul
+killed     | M6 the multi-recipient A_bal nonce variable-time | clients/zether-prover/src/zether.rs | rc=101 | 1 failed: every_x_multiplication_on_a_supplied_point_is_secret_mul
+killed     | M7 the opening's amount check variable-time | clients/zether-prover/src/schnorr.rs | rc=101 | 1 failed: every_x_multiplication_on_a_supplied_point_is_secret_mul
+killed     | M8 the opening's nonce on B variable-time | clients/zether-prover/src/schnorr.rs | rc=101 | 1 failed: every_x_multiplication_on_a_supplied_point_is_secret_mul
+killed     | M9 the receiver's leg not bound to the handle | clients/zether-prover/src/state.rs | rc=101 | 1 failed: word_location_and_role_negatives_are_refused_before_the_key
+killed     | M10 auditorMode NONE accepted | clients/zether-prover/src/state.rs | rc=101 | 1 failed: word_location_and_role_negatives_are_refused_before_the_key
+killed     | M11 an auditor read of a leg without a copy | clients/zether-prover/src/state.rs | rc=101 | 1 failed: word_location_and_role_negatives_are_refused_before_the_key
+killed     | M12 entryRef not recomputed (slots not checked) | clients/zether-prover/src/state.rs | rc=101 | 1 failed: word_location_and_role_negatives_are_refused_before_the_key
+killed     | M14 another family's words accepted | clients/zether-prover/src/state.rs | rc=101 | 1 failed: word_location_and_role_negatives_are_refused_before_the_key
+killed     | M15 psid not compared | clients/zether-prover/src/state.rs | rc=101 | 1 failed: word_location_and_role_negatives_are_refused_before_the_key
+killed     | M16 ua not the reader's | clients/zether-prover/src/state.rs | rc=101 | 1 failed: word_location_and_role_negatives_are_refused_before_the_key
+killed     | M17 pending counters not checked | clients/zether-prover/src/state.rs | rc=101 | 1 failed: word_location_and_role_negatives_are_refused_before_the_key
+killed     | M18 not an SSTORE2 code accepted | clients/zether-prover/src/state.rs | rc=101 | 1 failed: word_location_and_role_negatives_are_refused_before_the_key
+killed     | M19 a memo of another record accepted | clients/zether-prover/src/state.rs | rc=101 | 1 failed: word_location_and_role_negatives_are_refused_before_the_key
+killed     | M20 a blob of another pointer accepted | clients/zether-prover/src/state.rs | rc=101 | 1 failed: word_location_and_role_negatives_are_refused_before_the_key
+killed     | M21 the CLI's genesis check skipped (R2) | clients/zether-prover/src/bin/zether-read-balance.rs | rc=101 | 1 failed: rpc_reading_layer_against_anvil
+killed     | M22 the CLI's depth past the head read at genesis (R3) | clients/zether-prover/src/bin/zether-read-balance.rs | rc=101 | 1 failed: rpc_reading_layer_against_anvil
+killed     | M23 --ct back in a release build | clients/zether-prover/src/bin/zether-read-balance.rs | rc=101 | 1 failed: ct_only_with_hazmat_and_rpc_only_as_a_reading_layer
+# 25 killed, 0 survived, 0 not loaded (after (a) and (b))
