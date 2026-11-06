@@ -158,6 +158,15 @@ library MetaTxLib {
         "UAMetaTransfer(bytes32 from,bytes32 to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
     );
 
+    /// @notice The payment metadata, the last parameter of every pay entry (CTR-MTX-26, pay-meta-tax spec §3.1, O2, O11):
+    ///         never empty; `entryRef == metaPayId(meta)`, which the contract checks and never parses further.
+    struct PayMeta {
+        bytes32 salt;    // 32 bytes from a CSPRNG; never 0
+        string  payNo;   // optional business document number; "" = none; at most 256 bytes
+        uint16  schema;  // 0 = no body; 1 note, 2 structured reference, 3 bound call, 4 encrypted
+        bytes   body;    // the schema's encoding; empty iff schema == 0
+    }
+
     function hashStruct(UAMetaTransaction memory m) internal pure returns (bytes32) {
         address r = (m.mode & MODE_RESTRICT_RELAYER) != 0 ? m.relayer : address(0);
         address f = (m.mode & MODE_RESTRICT_FEE_RECIPIENT) != 0 ? m.feeRecipient : address(0);

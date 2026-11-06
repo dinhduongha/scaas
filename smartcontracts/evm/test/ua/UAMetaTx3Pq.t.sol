@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {PayMetaKit} from "../helpers/PayMetaKit.sol";
+import {IMetaTokenV2} from "../../src/metatx/IMetaTokenV2.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {UAMldsaVerifier} from "../../src/ua/MlDsa.sol";
@@ -166,26 +168,19 @@ contract UAMetaTx3PqTest is UARegistryBase {
 
     uint256 internal constant TX_GAS_CAP = 16_777_216; // EIP-7825; chain 7622's block gas limit is the same
 
-    /// `mtxPayReceiverFee` with two `mldsa65` signatures (payer and payee) runs inside one capped transaction: the call
-    /// is given exactly `TX_GAS_CAP − 21,000 − calldata` (the registry holds each verify's full cap first), and the
-    /// transaction's gas — 21,000 + max(calldata + execution, the EIP-7623 floor) — stays under the cap (logged).
+    /// `mtxPayReceiverFee` with two `mldsa65` signatures (payer and payee): the row's digests are checked. pay-meta-tax T37
+    /// (O11), meaning: the row's `entryRef` is no `PayMeta` commitment (`ua/metatx3.json` is unchanged, spec §7.3), so
+    /// the entry refuses it by name before either signature; the run inside one capped transaction (was: executed,
+    /// `TX_GAS_CAP − 21,000 − calldata`, logged) waits for a row whose `entryRef` is a commitment.
     function test_receiverFee_twoMldsa65_underCap() public {
-        (MetaTxLib.UAMetaTransfer memory t, uint256 fee, bytes memory cd) = _receiverFeeRow(_pj(), ".metatx3.receiverFee[0].");
+        (MetaTxLib.UAMetaTransfer memory t,, bytes memory cd) = _receiverFeeRow(_pj(), ".metatx3.receiverFee[0].");
         tok.mint(address(this), t.value);
         tok.transferToUA(t.from, t.value);
-        (uint256 std, uint256 floor) = _calldataGas(cd);
         vm.prank(t.relayer);
-        uint256 g = gasleft();
-        (bool ok, bytes memory ret) = address(tok).call{gas: TX_GAS_CAP - 21_000 - std}(cd);
-        g -= gasleft();
-        if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
-        uint256 txGas = 21_000 + (std + g > floor ? std + g : floor);
-        emit log_named_uint("calldata bytes", cd.length);
-        emit log_named_uint("calldata gas (EIP-2028)", std);
-        emit log_named_uint("execution gas", g);
-        emit log_named_uint("transaction gas", txGas);
-        assertLt(txGas, TX_GAS_CAP);
-        assertEq(tok.balanceOfUA(t.to), t.value - fee);
+        (bool ok, bytes memory ret) = address(tok).call{gas: TX_GAS_CAP - 21_000}(cd);
+        assertFalse(ok);
+        assertEq(ret, abi.encodeWithSelector(IMetaTokenV2.PayMetaMismatch.selector, t.entryRef, PayMetaKit.ref(0)));
+        assertEq(tok.balanceOfUA(t.to), 0);
     }
 
     /// The row's payment (digest checked), its fee, and the `mtxPayReceiverFee` calldata (`ReceiverFee` digest checked).
@@ -212,7 +207,8 @@ contract UAMetaTx3PqTest is UARegistryBase {
         bytes memory payerAuth = vm.parseJsonBytes(pj, string.concat(r, "payerAuth"));
         bytes memory payeeAuth = vm.parseJsonBytes(pj, string.concat(r, "payeeAuth"));
         (uint256 fee, address feeTo, uint256 until) = _rfFields(pj, r);
-        return abi.encodeCall(tok.mtxPayReceiverFee, (t, UACall.auth(t.from, payerAuth), fee, feeTo, until, UACall.auth(t.to, payeeAuth)));
+        return abi.encodeCall(tok.mtxPayReceiverFee, (t, UACall.auth(t.from, payerAuth), fee, feeTo, until,
+            UACall.auth(t.to, payeeAuth), PayMetaKit.meta(0)));
     }
 
     /// EIP-2028 calldata gas (4 per zero byte, 16 otherwise) and the EIP-7623 floor (10 per token, 4 tokens per non-zero byte).

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 import {UACall} from "./UACall.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
@@ -61,17 +62,17 @@ contract UALedgerNamedTest is UALedgerBase {
         tok.mtxTransferWithFee(uaP, _pad(bob), 1, 1, 1, t.validUntil, RR | PCT, RELAYER, 1, FEE_TO, UACall.auth(uaP, a));
     }
 
-    /// `mtxPay(f,t,a,p,v,mode,r,x,R,s) ≡ mtxExecuteTransfer({f,t,a,p,payLane(p),0,v,mode,r,x,R}, s)`: the payment is
-    /// payable once through either entry.
+    /// `mtxPay(t, s, meta)` runs `mtxExecuteTransfer(t, s)`'s pipeline (pay-meta-tax T37, meaning: the struct form, any
+    /// lane; here the client's `payLane` convention): one signature lands once through either entry.
     function test_T_V3_1_uaPay() public {
-        bytes32 payId = keccak256("request-7");
+        bytes32 payId = PayMetaKit.ref("request-7");
         MetaTxLib.UAMetaTransfer memory t = _t(uaP, uaB, 300);
         (t.entryRef, t.batch, t.nonce) = (payId, tok.payLane(payId), 0);
         bytes memory a = _authT(address(tok), t);
         vm.expectEmit(address(tok));
         emit IUALedger.UAPaymentSettled(uaP, uaB, 300, 0, RELAYER, payId);
         vm.prank(RELAYER);
-        tok.mtxPay(uaP, uaB, 300, payId, t.validUntil, RR, RELAYER, 0, address(0), UACall.auth(uaP, a));
+        tok.mtxPay(t, UACall.auth(uaP, a), PayMetaKit.meta("request-7"));
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
         vm.prank(RELAYER);
         tok.mtxExecuteTransfer(t, UACall.auth(t.from, a));
@@ -83,8 +84,10 @@ contract UALedgerNamedTest is UALedgerBase {
         c.features = 1 << GovernanceBits.MINTABLE;
         NormalToken np = NormalToken(Clones.clone(address(new NormalToken(1, plainEnv(address(this), address(0), chainUidA, REG_L, false), ""))));
         np.initialize(address(this), 1, abi.encode(c));
+        MetaTxLib.UAMetaTransfer memory g = _t(uaP, uaB, 1);
+        g.entryRef = PayMetaKit.ref("p");
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, GovernanceBits.PAYABLE));
-        np.mtxPay(uaP, uaB, 1, keccak256("p"), block.timestamp + 1, RR, RELAYER, 0, address(0), UACall.auth(uaP, ""));
+        np.mtxPay(g, UACall.auth(uaP, ""), PayMetaKit.meta("p"));
         // a UAMetaTransfer with `entryRef` set is not gated
         np.mint(alice, 10);
         bytes32 ref = keccak256("p");

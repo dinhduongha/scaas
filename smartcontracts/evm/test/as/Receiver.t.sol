@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {RegFixture} from "./helpers/RegFixture.sol";
 import {IRegulatedToken} from "../../src/regulated/IRegulatedToken.sol";
@@ -28,7 +29,7 @@ contract ReceiverTest is RegFixture {
     uint64 constant ACCR = 2;
     uint64 constant MAX = type(uint64).max;
     address feeTo = address(0xFEE);
-    bytes32 constant PAYREF = keccak256("request-1");
+    bytes32 internal PAYREF = PayMetaKit.ref("request-1"); // pay-meta-tax T37: the commitment of its `PayMeta`
     bytes4 constant HAS_FLAGS = IComplianceRegistry.hasFlags.selector;
 
     function _reason(address t, bytes32 a, bool ok, uint8 reason, uint64 req, uint64 den, string memory what) internal view {
@@ -110,10 +111,10 @@ contract ReceiverTest is RegFixture {
             _attest(nid(bob), KYC, MAX);
             vm.prank(alice);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.NotEligible.selector, nid(feeTo), uint8(0)));
-            MetaTokenBase(t).payWithFee(bob, 100, FeeMode.FIXED, 1, feeTo, PAYREF);
+            MetaTokenBase(t).payWithFee(bob, 100, FeeMode.FIXED, 1, feeTo, PAYREF, PayMetaKit.meta("request-1"));
             _attest(nid(feeTo), KYC, MAX);
             vm.prank(alice);
-            MetaTokenBase(t).payWithFee(bob, 100, FeeMode.FIXED, 1, feeTo, PAYREF);
+            MetaTokenBase(t).payWithFee(bob, 100, FeeMode.FIXED, 1, feeTo, PAYREF, PayMetaKit.meta("request-1"));
 
             bytes32 rid = _order(t, keccak256("o"), nid(alice), nid(address(0xBE11)), 10, 0);
             _freeze(t, nid(alice));
@@ -203,15 +204,15 @@ contract ReceiverTest is RegFixture {
 
             _countStart();
             vm.prank(alice);
-            MetaTokenBase(t).payWithFee(bob, 100, FeeMode.FIXED, 1, feeTo, PAYREF);
+            MetaTokenBase(t).payWithFee(bob, 100, FeeMode.FIXED, 1, feeTo, PAYREF, PayMetaKit.meta("request-1"));
             _budget(3, "payWithFee");
             _countStart();
             vm.prank(alice);
-            MetaTokenBase(t).payWithFeeToUA(UA_X, 100, FeeMode.FIXED, 1, feeTo, keccak256("request-2"));
+            MetaTokenBase(t).payWithFeeToUA(UA_X, 100, FeeMode.FIXED, 1, feeTo, PayMetaKit.ref(keccak256("request-2")), PayMetaKit.meta(keccak256("request-2")));
             _budget(3, "payWithFeeToUA");
 
             MetaTxLib.UAMetaTransfer memory p = MetaTxLib.UAMetaTransfer({from: nid(alice), to: nid(bob), value: 100,
-                entryRef: keccak256("request-3"), batch: MetaTokenBase(t).payLane(keccak256("request-3")), nonce: 0,
+                entryRef: PayMetaKit.ref("request-3"), batch: MetaTokenBase(t).payLane(PayMetaKit.ref("request-3")), nonce: 0,
                 validUntil: block.timestamp + 300, mode: RR, relayer: relayer, fee: 0, feeRecipient: address(0)});
             IUARegistry.UASig memory ps;
             IUARegistry.UASig memory rs;
@@ -221,7 +222,7 @@ contract ReceiverTest is RegFixture {
             rs.signature = abi.encodePacked(r, s, v);
             _countStart();
             vm.prank(relayer);
-            MetaTokenBase(t).mtxPayReceiverFee(p, ps, 3, feeTo, block.timestamp + 300, rs);
+            MetaTokenBase(t).mtxPayReceiverFee(p, ps, 3, feeTo, block.timestamp + 300, rs, PayMetaKit.meta("request-3"));
             _budget(3, "mtxPayReceiverFee");
         }
     }

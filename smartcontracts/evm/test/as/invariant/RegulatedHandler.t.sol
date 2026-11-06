@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {PayMetaKit} from "../../helpers/PayMetaKit.sol";
 import {Test} from "forge-std/Test.sol";
 import {Vm, VmSafe} from "forge-std/Vm.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -662,7 +663,7 @@ contract RegPublicHandler is RegFixture, RegCore {
         (address feeTo,) = rel % 4 == 3 ? (relayer, 0) : _eoa(rel);
         if (feeTo == to) feeTo = relayer;
         _op(K_MOVE, from, abi.encodeCall(MetaTokenBase.payWithFee, (to, bound(amount, 0, 500), FeeMode.FIXED, fee % 5,
-            feeTo, CREF)));
+            feeTo, PayMetaKit.ref(CREF), PayMetaKit.meta(CREF))));
     }
 
     /// Kind 8: the minter mints to an id; kind 9: this handler wraps (a mint of the wrapped unit to itself).

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {MandateFixture} from "../wallet/MandateWallet.t.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
@@ -67,7 +68,8 @@ contract Sweeper7702Test is MandateFixture {
     function test_sweeper_directCallsRefused() public {
         bytes32 tokenOwner = v.owner();
         _swept(address(v), abi.encodeCall(IERC20.transfer, (attacker, 1_000)));
-        _swept(address(v), abi.encodeCall(IERC20Payment.payWithFee, (attacker, 1_000, FeeMode.NONE, 0, address(0), 0)));
+        _swept(address(v), abi.encodeCall(IERC20Payment.payWithFee, (attacker, 1_000, FeeMode.NONE, 0, address(0),
+            PayMetaKit.ref(0), PayMetaKit.meta(0))));
         _swept(address(v), abi.encodeCall(IERC20.approve, (address(sweeper), 1_000)));
         _swept(address(v), abi.encodeCall(NormalToken.mint, (attacker, 1e9)));
         _swept(address(v), abi.encodeCall(IGovernance.transferOwnership, (nid(attacker))));

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.20;
 
+import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {Test, console} from "forge-std/Test.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
@@ -240,12 +241,11 @@ contract MetaTxGasV2Test is Test {
 
     function test_gasP_payOpColdLane() public {
         MetaTxLib.UAMetaTransfer memory x = _mt(MetaTxLib.MODE_RESTRICT_RELAYER, 0, 0, 0, address(0));
-        bytes32 payId = keccak256("inv");
+        bytes32 payId = PayMetaKit.ref("inv"); // pay-meta-tax T37: `mtxPay(t, auth, PayMeta)`, any lane (payLane kept here)
         x.entryRef = payId;
         x.batch = v2.payLane(payId);
         bytes memory c2 = _cdT(address(v2), x);
-        bytes memory cn = _named(v2.mtxPay.selector, abi.encode(signer, recipient, 1 ether, payId, x.validUntil,
-            x.mode, relayer, 0, address(0)), _sigT(address(v2), x));
+        bytes memory cn = abi.encodeWithSelector(v2.mtxPay.selector, x, _sigT(address(v2), x), PayMetaKit.meta("inv"));
         uint256 s = _snap();
         uint256 g2 = _measure(address(v2), c2);
         vm.revertToState(s);
@@ -349,12 +349,11 @@ contract MetaTxGasV2Test is Test {
         _cd("I calldata mtxExecuteTransfer", abi.encodeCall(IERC20MetaTx.mtxExecuteTransfer, (x, s)));
         _cd("I calldata mtxTransfer", _named(v2.mtxTransfer.selector, abi.encode(signer, recipient, 1 ether, WARM, 1,
             x.validUntil, x.mode, relayer), s));
-        bytes32 p = keccak256("inv");
+        bytes32 p = PayMetaKit.ref("inv");
         x.entryRef = p;
         x.batch = v2.payLane(p);
         _cd("I calldata mtxExecuteTransfer(pay)", abi.encodeCall(IERC20MetaTx.mtxExecuteTransfer, (x, s)));
-        _cd("I calldata mtxPay", _named(v2.mtxPay.selector, abi.encode(signer, recipient, 1 ether, p, x.validUntil,
-            x.mode, relayer, 0, address(0)), s));
+        _cd("I calldata mtxPay", abi.encodeWithSelector(v2.mtxPay.selector, x, s, PayMetaKit.meta("inv")));
     }
 
     function _cd(string memory label, bytes memory cd) internal pure {

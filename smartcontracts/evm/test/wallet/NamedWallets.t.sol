@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 import {Hashes} from "@openzeppelin/contracts/utils/cryptography/Hashes.sol";
 import {UID_} from "../v2/helpers/V2Fixture.sol";
 import {MandateFixture} from "./MandateWallet.t.sol";
@@ -79,7 +80,7 @@ function payDigest(address w, MetaTxLib.UAEnvelope memory e, address token, addr
     view returns (bytes32)
 {
     string memory m = string.concat('"from":', h(e.from), ',"token":', a(token), ',"payee":', h(MetaTxLib.pad(payee)));
-    m = string.concat(m, ',"amount":', n(amount), ',"entryRef":', h(ref));
+    m = string.concat(m, ',"amount":', n(amount), ',"entryRef":', h(PayMetaKit.ref(ref))); // pay-meta-tax T37: a commitment
     m = string.concat(m, ',"epoch":', n(ep), ",", tail(e));
     return walletDigest(w, "UAPayUnderMandate", PAY, m);
 }
@@ -173,21 +174,21 @@ contract NamedMandateEntriesTest is MandateFixture {
         MetaTxLib.UAEnvelope memory e = _env(delegate, 0);
         IUARegistry.UASig memory sig = _paySig(e, 700, "inv", 1);
         vm.prank(relayer);
-        w.mtxPayUnderMandate(e, address(t), _id(npp), 700, "inv", 1, sig);
+        w.mtxPayUnderMandate(e, address(t), _id(npp), 700, _ref("inv"), 1, sig, _meta("inv"));
         assertEq(t.balanceOf(npp), 700);
-        assertTrue(w.refUsed("inv"));
+        assertTrue(w.refUsed(_ref("inv")));
         assertEq(w.mtxNonce(_id(delegate), LANE), 1);
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
-        w.mtxPayUnderMandate(e, address(t), _id(npp), 700, "inv", 1, sig);
+        w.mtxPayUnderMandate(e, address(t), _id(npp), 700, _ref("inv"), 1, sig, _meta("inv"));
 
         e.nonce = 1;
         sig = _paySig(e, 10, "b", 1);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
-        w.mtxPayUnderMandate(e, address(t), _id(npp), 11, "b", 1, sig);
+        w.mtxPayUnderMandate(e, address(t), _id(npp), 11, _ref("b"), 1, sig, _meta("b"));
         e = _env(owner, 0); // a valid signature of the wrong party
         sig = _ua(OWNER_PK, payDigest(address(w), e, address(t), npp, 10, "b", 1));
         vm.expectRevert(MandateWallet.NotDelegate.selector);
-        w.mtxPayUnderMandate(e, address(t), _id(npp), 10, "b", 1, sig);
+        w.mtxPayUnderMandate(e, address(t), _id(npp), 10, _ref("b"), 1, sig, _meta("b"));
     }
 
     function test_delegateRevokeTyped() public {
@@ -216,19 +217,19 @@ contract NamedMandateEntriesTest is MandateFixture {
         assertEq(w.epoch(address(t)), 3);
 
         vm.expectRevert(abi.encodeWithSelector(MandateWallet.StaleEpoch.selector, 3, 1));
-        w.mtxPayUnderMandate(p, address(t), _id(npp), 10, "old", 1, pay);
+        w.mtxPayUnderMandate(p, address(t), _id(npp), 10, _ref("old"), 1, pay, _meta("old"));
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
-        w.mtxPayUnderMandate(p, address(t), _id(npp), 10, "old", 3, pay);
+        w.mtxPayUnderMandate(p, address(t), _id(npp), 10, _ref("old"), 3, pay, _meta("old"));
         vm.expectRevert(abi.encodeWithSelector(MandateWallet.StaleEpoch.selector, 3, 1));
         w.mtxDelegateRevoke(r, address(t), 1, rev);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         w.mtxDelegateRevoke(r, address(t), 3, rev);
         IUARegistry.UASig memory ahead = _paySig(p, 10, "old", 4);
         vm.expectRevert(abi.encodeWithSelector(MandateWallet.StaleEpoch.selector, 3, 4));
-        w.mtxPayUnderMandate(p, address(t), _id(npp), 10, "old", 4, ahead);
+        w.mtxPayUnderMandate(p, address(t), _id(npp), 10, _ref("old"), 4, ahead, _meta("old"));
 
         pay = _paySig(p, 10, "old", 3);
-        w.mtxPayUnderMandate(p, address(t), _id(npp), 10, "old", 3, pay);
+        w.mtxPayUnderMandate(p, address(t), _id(npp), 10, _ref("old"), 3, pay, _meta("old"));
         assertEq(t.balanceOf(npp), 10);
         (bytes32 d,,,,,,) = w.mandates(address(t));
         assertEq(d, _id(delegate), "no old revoke took it");
@@ -238,14 +239,14 @@ contract NamedMandateEntriesTest is MandateFixture {
     /// `refUsed` and `epoch` stop a new signature by the delegate for the same payment or revoke, here or on the generic path.
     function test_mandateLanesFloatRefAndEpochGuard() public {
         MetaTxLib.UAEnvelope memory e = _env(delegate, 0);
-        w.mtxPayUnderMandate(e, address(t), _id(npp), 10, "once", 1, _paySig(e, 10, "once", 1));
+        w.mtxPayUnderMandate(e, address(t), _id(npp), 10, _ref("once"), 1, _paySig(e, 10, "once", 1), _meta("once"));
         e.batch = 99;
         IUARegistry.UASig memory again = _paySig(e, 10, "once", 1);
-        vm.expectRevert(abi.encodeWithSelector(MandateWallet.RefAlreadyPaid.selector, bytes32("once")));
-        w.mtxPayUnderMandate(e, address(t), _id(npp), 10, "once", 1, again);
+        vm.expectRevert(abi.encodeWithSelector(MandateWallet.RefAlreadyPaid.selector, _ref("once")));
+        w.mtxPayUnderMandate(e, address(t), _id(npp), 10, _ref("once"), 1, again, _meta("once"));
         MetaTxLib.UAMetaTransaction memory m = _payM(npp, 10, "once"); // the pay lane, on the generic path
         IUARegistry.UASig memory generic = _ua(DELEGATE_PK, w.mtxDigest(m));
-        vm.expectRevert(abi.encodeWithSelector(MandateWallet.RefAlreadyPaid.selector, bytes32("once")));
+        vm.expectRevert(abi.encodeWithSelector(MandateWallet.RefAlreadyPaid.selector, _ref("once")));
         w.mtxExecute(m, generic);
         assertEq(t.balanceOf(npp), 10);
 
@@ -381,7 +382,7 @@ contract NamedMandateEntriesTest is MandateFixture {
             abi.encodeCall(MandateWallet.mtxSetPayee, (e, address(t), _id(npp), true, none)),
             abi.encodeCall(MandateWallet.mtxRevokeMandate, (e, address(t), none)),
             abi.encodeCall(MandateWallet.mtxDelegateRevoke, (e, address(t), 1, none)),
-            abi.encodeCall(MandateWallet.mtxPayUnderMandate, (e, address(t), _id(npp), 1, 0, 1, none)),
+            abi.encodeCall(MandateWallet.mtxPayUnderMandate, (e, address(t), _id(npp), 1, _ref(0), 1, none, _meta(0))),
             abi.encodeCall(MandateWallet.mtxSetMandate, (e, address(t), _id(npp), 1, 1, 1, 1, none)),
             abi.encodeWithSelector(bytes4(keccak256("mtxExecute((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))")),
                 e, npp, uint256(0), bytes(""), none)
@@ -455,7 +456,7 @@ contract NamedHederaMandateTest is MandateFixture {
         hw.setMandate(address(t), _id(edDel), 100, 300, 1 days, uint64(block.timestamp + 1 days));
         MetaTxLib.UAEnvelope memory e = _env(edDel, 0);
         IUARegistry.UASig memory sig = _ed(ED_DEL, payDigest(address(hw), e, address(t), npp, 50, "e", 1));
-        hw.mtxPayUnderMandate(e, address(t), _id(npp), 50, "e", 1, sig);
+        hw.mtxPayUnderMandate(e, address(t), _id(npp), 50, _ref("e"), 1, sig, _meta("e"));
         assertEq(t.balanceOf(npp), 50);
         e = _env(edDel, 1);
         hw.mtxDelegateRevoke(e, address(t), 1, _ed(ED_DEL, delegateRevokeDigest(address(hw), e, address(t), 1)));
@@ -473,7 +474,7 @@ contract NamedHederaMandateTest is MandateFixture {
         MetaTxLib.UAEnvelope memory e = _env(address(cw), 0);
         IUARegistry.UASig memory sig = _ed(ED_DEL, payDigest(address(hw), e, address(t), npp, 50, "c", 1));
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
-        hw.mtxPayUnderMandate(e, address(t), _id(npp), 50, "c", 1, sig);
+        hw.mtxPayUnderMandate(e, address(t), _id(npp), 50, _ref("c"), 1, sig, _meta("c"));
     }
 }
 

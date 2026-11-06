@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 import {Test} from "forge-std/Test.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {SmartKeyAccount, SubjectKey, KeyKind} from "../../src/account/SmartKeyAccount.sol";
@@ -165,13 +166,13 @@ contract MandateWalletKatTest is MtxKatBase {
         assertEq(vm.parseJsonBytes(onDisk, ".pay.calldata"), vm.parseJsonBytes(pay, ".calldata"));
         assertEq(vm.parseJsonBytes(onDisk, ".revoke.calldata"), vm.parseJsonBytes(rev, ".calldata"));
         assertEq(vm.parseJsonBytes(onDisk, ".revoke.signature"), vm.parseJsonBytes(rev, ".signature"));
-        assertEq(vm.parseJsonUint(onDisk, ".pay.batch"), w.mandatePayLane(keccak256("scaas.kat.entryRef")));
+        assertEq(vm.parseJsonUint(onDisk, ".pay.batch"), w.mandatePayLane(PayMetaKit.ref(keccak256("scaas.kat.entryRef"))));
         assertEq(vm.parseJsonUint(onDisk, ".revoke.batch"), w.mandateRevokeLane(address(tok), 1));
     }
 
     /// The delegate's pay on its pay lane, nonce 0, executed.
     function _pay() internal returns (string memory, bytes32 digest) {
-        bytes32 ref = keccak256("scaas.kat.entryRef");
+        bytes32 ref = PayMetaKit.ref(keccak256("scaas.kat.entryRef")); // pay-meta-tax T37: a `PayMeta` commitment
         MetaTxLib.UAEnvelope memory e = MetaTxLib.UAEnvelope(MetaTxLib.pad(vm.addr(DELEGATE_PK)), w.mandatePayLane(ref), 0,
             1_800_000_300, 0, address(0), 0, address(0));
         bytes memory args = abi.encode(address(tok), MetaTxLib.pad(PAYEE), uint256(12_345_678), ref, uint64(1));
@@ -179,7 +180,7 @@ contract MandateWalletKatTest is MtxKatBase {
         IUARegistry.UASig memory a;
         a.signature = _ecdsa(DELEGATE_PK, digest);
         bytes memory cd = abi.encodeCall(MandateWallet.mtxPayUnderMandate,
-            (e, address(tok), MetaTxLib.pad(PAYEE), 12_345_678, ref, 1, a));
+            (e, address(tok), MetaTxLib.pad(PAYEE), 12_345_678, ref, 1, a, PayMetaKit.meta(keccak256("scaas.kat.entryRef"))));
         (bool ok, bytes memory ret) = address(w).call(cd);
         assertTrue(ok, string(ret));
         return (_entry("pay", UA_PAY_UNDER_MANDATE, e, args, digest, a.signature, cd), digest);

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.20;
 
+import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {UACall} from "../ua/UACall.sol";
 import {Test} from "forge-std/Test.sol";
@@ -128,7 +129,7 @@ contract HederaV2Test is Test {
         address feeTo = address(0xFEE);
         vm.prank(alice);
         IERC20MetaTx(t).transfer(payer, 500);
-        bytes32 ref = keccak256("request-1");
+        bytes32 ref = PayMetaKit.ref("request-1"); // pay-meta-tax T37: the commitment of its `PayMeta`
         MetaTxLib.UAMetaTransfer memory x = MetaTxLib.UAMetaTransfer({from: MetaTxLib.pad(payer),
             to: MetaTxLib.pad(alice), value: 200, entryRef: ref, batch: IMetaTokenV2(t).payLane(ref), nonce: 0,
             validUntil: block.timestamp + 300, mode: RR, relayer: relayer, fee: 0, feeRecipient: address(0)});
@@ -138,7 +139,8 @@ contract HederaV2Test is Test {
         bytes memory payeeSig = _edSign(IMetaTokenV2(t).receiverFeeDigest(x, 30, feeTo, block.timestamp));
         uint256 aliceBefore = IERC20MetaTx(t).balanceOf(alice);
         vm.prank(relayer);
-        IMetaTokenV2(t).mtxPayReceiverFee(x, _n(payerSig), 30, feeTo, block.timestamp, _n(payeeSig));
+        IMetaTokenV2(t).mtxPayReceiverFee(x, _n(payerSig), 30, feeTo, block.timestamp, _n(payeeSig),
+            PayMetaKit.meta("request-1"));
         assertEq(IERC20MetaTx(t).balanceOf(payer), 300);
         assertEq(IERC20MetaTx(t).balanceOf(alice), aliceBefore + 200 - 30);
         assertEq(IERC20MetaTx(t).balanceOf(feeTo), 30);
@@ -174,11 +176,11 @@ contract HederaV2Test is Test {
         usdt.approve(t, 10e6);
         WrappedToken(t).wrap(address(usdt), 10e6);
         vm.stopPrank();
-        bytes32 payId = keccak256("inv");
+        bytes32 payId = PayMetaKit.ref("inv");
         MetaTxLib.UAMetaTransfer memory x = _tr(shop, 3e6, payId, WrappedToken(t).payLane(payId));
         bytes memory sig = _edSign(IERC20MetaTx(t).mtxTransferDigest(x));
         vm.prank(relayer);
-        WrappedToken(t).mtxPay(x.from, x.to, 3e6, payId, x.validUntil, RR, relayer, 0, address(0), _n(sig));
+        WrappedToken(t).mtxPay(x, _n(sig), PayMetaKit.meta("inv"));
         assertEq(IERC20MetaTx(t).balanceOf(shop), 3e6);
     }
 
@@ -325,7 +327,7 @@ contract HederaV2Test is Test {
         address feeTo = address(0xFEE);
         vm.prank(alice);
         IERC20MetaTx(t).transfer(payer, 500);
-        bytes32 ref = keccak256("request-ua");
+        bytes32 ref = PayMetaKit.ref("request-ua");
         MetaTxLib.UAMetaTransfer memory x = MetaTxLib.UAMetaTransfer({from: bytes32(uint256(uint160(payer))),
             to: bytes32(uint256(uint160(alice))), value: 200, entryRef: ref, batch: IMetaTokenV2(t).payLane(ref), nonce: 0,
             validUntil: block.timestamp + 300, mode: RR, relayer: relayer, fee: 0, feeRecipient: address(0)});
@@ -334,7 +336,8 @@ contract HederaV2Test is Test {
         bytes memory payeeSig = _edSign(IMetaTokenV2(t).receiverFeeDigest(x, 30, feeTo, block.timestamp));
         uint256 aliceBefore = IERC20MetaTx(t).balanceOf(alice);
         vm.prank(relayer);
-        IMetaTokenV2(t).mtxPayReceiverFee(x, UACall.auth(x.from, abi.encodePacked(r, s, v)), 30, feeTo, block.timestamp, UACall.auth(x.to, payeeSig));
+        IMetaTokenV2(t).mtxPayReceiverFee(x, UACall.auth(x.from, abi.encodePacked(r, s, v)), 30, feeTo, block.timestamp, UACall.auth(x.to, payeeSig),
+            PayMetaKit.meta("request-ua"));
         assertEq(IERC20MetaTx(t).balanceOf(payer), 300);
         assertEq(IERC20MetaTx(t).balanceOf(alice), aliceBefore + 200 - 30);
         assertEq(IERC20MetaTx(t).balanceOf(feeTo), 30);

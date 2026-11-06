@@ -10,6 +10,7 @@ import {MergeBase} from "../merge/MergedEntry.t.sol";
 import {Mock1271Wallet} from "../helpers/WalletMocks.sol";
 import {GasBurner1271} from "../v2/helpers/V2Fixture.sol";
 import {MockHederaAccountService} from "../hedera/HederaMocks.sol";
+import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 
 /// The mandate wallets in the merged form (ua-mtx-merge T3b, spec §2.7, Q6, MD-11), called by selector: this file
 /// compiles on the address-form wallets too, so each test is red there on its own (plan T3b step 3).
@@ -31,7 +32,8 @@ interface IMandateMerged {
     function setPayee(address token, bytes32 payee, bool allowed) external;
     function revoke(address token) external;
     function execute(address target, uint256 value, bytes calldata data) external returns (bytes memory);
-    function payUnderMandate(address token, bytes32 payee, uint256 amount, bytes32 entryRef, uint64 epoch_) external;
+    function payUnderMandate(address token, bytes32 payee, uint256 amount, bytes32 entryRef, uint64 epoch_,
+        MetaTxLib.PayMeta calldata meta) external;
     function mtxSetMandate(MetaTxLib.UAEnvelope calldata e, address token, bytes32 delegate, uint128 maxPerPayment,
         uint128 maxPerPeriod, uint64 periodSeconds, uint64 expiry, IUARegistry.UASig calldata auth) external returns (bytes memory);
     function mtxSetPayee(MetaTxLib.UAEnvelope calldata e, address token, bytes32 payee, bool allowed,
@@ -39,7 +41,8 @@ interface IMandateMerged {
     function mtxRevokeMandate(MetaTxLib.UAEnvelope calldata e, address token, IUARegistry.UASig calldata auth)
         external returns (bytes memory);
     function mtxPayUnderMandate(MetaTxLib.UAEnvelope calldata e, address token, bytes32 payee, uint256 amount,
-        bytes32 entryRef, uint64 epoch_, IUARegistry.UASig calldata auth) external returns (bytes memory);
+        bytes32 entryRef, uint64 epoch_, IUARegistry.UASig calldata auth, MetaTxLib.PayMeta calldata meta)
+        external returns (bytes memory);
     function mtxDelegateRevoke(MetaTxLib.UAEnvelope calldata e, address token, uint64 epoch_, IUARegistry.UASig calldata auth)
         external returns (bytes memory);
     function mtxExecute(MetaTxLib.UAEnvelope calldata e, address target, uint256 value, bytes calldata data,
@@ -134,7 +137,7 @@ contract MandateWalletMergedTest is MergeBase {
     function _payDigest(IMandateMerged w, MetaTxLib.UAEnvelope memory e, address token, bytes32 payee, uint256 amount,
         bytes32 ref, uint64 ep) internal view returns (bytes32)
     {
-        return _named(address(w), UA_PAY_UNDER_MANDATE, e, abi.encode(token, payee, amount, ref, ep));
+        return _named(address(w), UA_PAY_UNDER_MANDATE, e, abi.encode(token, payee, amount, PayMetaKit.ref(ref), ep));
     }
 
     struct Pay { address token; bytes32 payee; uint256 amount; bytes32 ref; uint64 ep; }
@@ -147,7 +150,7 @@ contract MandateWalletMergedTest is MergeBase {
 
     function _payCd(IMandateMerged w, MetaTxLib.UAEnvelope memory e, Pay memory p) internal view returns (bytes memory) {
         IUARegistry.UASig memory a = _authOf(e.from, _payDigest(w, e, p.token, p.payee, p.amount, p.ref, p.ep));
-        return abi.encodeCall(IMandateMerged.mtxPayUnderMandate, (e, p.token, p.payee, p.amount, p.ref, p.ep, a));
+        return abi.encodeCall(IMandateMerged.mtxPayUnderMandate, (e, p.token, p.payee, p.amount, PayMetaKit.ref(p.ref), p.ep, a, PayMetaKit.meta(p.ref)));
     }
 
     function _executeCd(IMandateMerged w, MetaTxLib.UAEnvelope memory e, address target, uint256 value, bytes memory data)
@@ -219,7 +222,7 @@ contract MandateWalletMergedTest is MergeBase {
         vm.expectCall(REG_L, bytes(""), 0);
         _ok(address(w), cd, "a registry, not called");
         assertEq(tok.balanceOf(NPP), 700);
-        assertTrue(w.refUsed("r1"));
+        assertTrue(w.refUsed(PayMetaKit.ref("r1")));
         assertEq(w.mtxNonce(_pad(bob), w.mandatePayLane("r1")), 1);
     }
 
@@ -280,7 +283,8 @@ contract MandateWalletMergedTest is MergeBase {
         assertEq(tok.balanceOf(NPP), 10);
         uint256 before = tok.balanceOfUA(uaP);
         vm.expectCall(address(tok), abi.encodeWithSignature(
-            "payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32)", uaP, 400, 0, 0, address(0), bytes32("ua")));
+            "payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32,(bytes32,string,uint16,bytes))", uaP, 400, 0, 0,
+            address(0), PayMetaKit.ref("ua"), PayMetaKit.meta("ua")));
         _ok(address(w), _payCd(w, _pad(bob), address(tok), uaP, 400, "ua"), "derived payee");
         assertEq(tok.balanceOfUA(uaP), before + 400);
         assertEq(tok.balanceOf(address(w)), 10_000 - 410);
@@ -425,9 +429,9 @@ contract MandateWalletMergedTest is MergeBase {
         MetaTxLib.UAEnvelope memory e = _payEnv(w, _pad(bob), "s");
         IUARegistry.UASig memory a = _sig(BOB_PK, _payDigest(w, e, address(tok), _pad(NPP), 10, "s", 1));
         _refused(address(w), abi.encodeCall(IMandateMerged.mtxPayUnderMandate,
-            (e, address(tok), _pad(address(0x5745)), 10, "s", 1, a)),
+            (e, address(tok), _pad(address(0x5745)), 10, PayMetaKit.ref("s"), 1, a, PayMetaKit.meta("s"))),
             abi.encodeWithSelector(IMetaTx.MetaTxBadSignature.selector), "another approved payee");
-        _ok(address(w), abi.encodeCall(IMandateMerged.mtxPayUnderMandate, (e, address(tok), _pad(NPP), 10, "s", 1, a)),
+        _ok(address(w), abi.encodeCall(IMandateMerged.mtxPayUnderMandate, (e, address(tok), _pad(NPP), 10, PayMetaKit.ref("s"), 1, a, PayMetaKit.meta("s"))),
             "the signed payee");
         assertEq(tok.balanceOf(NPP), 10);
     }
@@ -548,10 +552,10 @@ contract MandateWalletMergedTest is MergeBase {
         e.validUntil = oe.validUntil;
         IUARegistry.UASig memory a;
         a.signature = oldSig;
-        _refused(address(w), abi.encodeCall(IMandateMerged.mtxPayUnderMandate, (e, address(tok), _pad(NPP), 10, "o", 1, a)),
+        _refused(address(w), abi.encodeCall(IMandateMerged.mtxPayUnderMandate, (e, address(tok), _pad(NPP), 10, PayMetaKit.ref("o"), 1, a, PayMetaKit.meta("o"))),
             abi.encodeWithSelector(IMetaTx.MetaTxBadSignature.selector), "the old struct's signature on the new entry");
         a = _sig(BOB_PK, _payDigest(w, e, address(tok), _pad(NPP), 10, "o", 1));
-        _ok(address(w), abi.encodeCall(IMandateMerged.mtxPayUnderMandate, (e, address(tok), _pad(NPP), 10, "o", 1, a)),
+        _ok(address(w), abi.encodeCall(IMandateMerged.mtxPayUnderMandate, (e, address(tok), _pad(NPP), 10, PayMetaKit.ref("o"), 1, a, PayMetaKit.meta("o"))),
             "positive control");
     }
 

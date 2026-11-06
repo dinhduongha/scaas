@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {PayMetaKit} from "../helpers/PayMetaKit.sol";
+import {IMetaTokenV2} from "../../src/metatx/IMetaTokenV2.sol";
 import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -59,7 +61,7 @@ contract LyingLedgerLeg is MockERC20 {
 
 /// accounts.md CTR-UA-28: a native caller credits a derived UA in one call; a mint into a UA is a UA-ledger move from 0.
 contract UAReceiversTest is UALedgerBase {
-    bytes32 internal constant REF = keccak256("scaas.ua5a.ref");
+    bytes32 internal REF = PayMetaKit.ref("scaas.ua5a.ref"); // pay-meta-tax T37: the commitment of its `PayMeta`
 
     UAMintHarness internal hm;
 
@@ -509,32 +511,44 @@ contract UAReceiversTest is UALedgerBase {
         vm.expectEmit(address(tok));
         emit IUALedger.UAPaymentSettled(_pad(alice), uaP, 1_000, 10, FEE_TO, REF);
         vm.prank(alice);
-        assertTrue(tok.payWithFeeToUA(uaP, 1_000, FeeMode.FIXED, 10, FEE_TO, REF));
+        assertTrue(tok.payWithFeeToUA(uaP, 1_000, FeeMode.FIXED, 10, FEE_TO, REF, PayMetaKit.meta("scaas.ua5a.ref")));
         assertEq(tok.balanceOfUA(uaP), 1_000);
         assertEq(tok.balanceOf(FEE_TO), 10);
         assertEq(tok.balanceOf(alice), 1_000_000 - 1_010);
         vm.startPrank(alice);
         vm.expectRevert(abi.encodeWithSelector(IUALedger.UANotRegistered.selector, _pad(bob)));
-        tok.payWithFeeToUA(_pad(bob), 1, FeeMode.NONE, 0, address(0), REF);
-        tok.payWithFeeToUA(uaZ, 1, FeeMode.NONE, 0, address(0), REF); // UA-6 U8: the Zether UA receives
+        tok.payWithFeeToUA(_pad(bob), 1, FeeMode.NONE, 0, address(0), REF, PayMetaKit.meta("scaas.ua5a.ref"));
+        tok.payWithFeeToUA(uaZ, 1, FeeMode.NONE, 0, address(0), REF, PayMetaKit.meta("scaas.ua5a.ref")); // UA-6 U8: the Zether UA receives
         assertEq(tok.balanceOfUA(uaZ), 1);
         vm.expectRevert(abi.encodeWithSelector(FeePolicy.FeeExceedsCap.selector, 10_001, 10_000));
-        tok.payWithFeeToUA(uaP, 1_000, FeeMode.PERCENT, 10_001, FEE_TO, REF);
+        tok.payWithFeeToUA(uaP, 1_000, FeeMode.PERCENT, 10_001, FEE_TO, REF, PayMetaKit.meta("scaas.ua5a.ref"));
         vm.stopPrank();
         NormalToken notPayable = _normal(1 << GovernanceBits.BURNABLE);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, GovernanceBits.PAYABLE));
         vm.prank(alice);
-        notPayable.payWithFeeToUA(uaP, 1, FeeMode.NONE, 0, address(0), REF);
-        _relay(address(tok), abi.encodeCall(MetaTokenBase.payWithFeeToUA, (uaP, 1, FeeMode.NONE, 0, address(0), REF)), RR,
+        notPayable.payWithFeeToUA(uaP, 1, FeeMode.NONE, 0, address(0), REF, PayMetaKit.meta("scaas.ua5a.ref"));
+        _relay(address(tok), abi.encodeCall(MetaTokenBase.payWithFeeToUA, (uaP, 1, FeeMode.NONE, 0, address(0), REF, PayMetaKit.meta("scaas.ua5a.ref"))), RR,
             0, address(0), abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, MetaTokenBase.payWithFeeToUA.selector));
+    }
+
+    /// pay-meta-tax T37 (spec §3.2): `payWithFeeToUA` with a `PayMeta` other than the one `entryRef` commits to is refused
+    /// by name, before any move; the matching one pays (the control).
+    function test_payWithFeeToUA_metaMismatch() public {
+        vm.startPrank(alice);
+        vm.expectRevert(abi.encodeWithSelector(IMetaTokenV2.PayMetaMismatch.selector, REF, PayMetaKit.ref("other")));
+        tok.payWithFeeToUA(uaP, 1_000, FeeMode.NONE, 0, address(0), REF, PayMetaKit.meta("other"));
+        assertEq(tok.balanceOfUA(uaP), 0);
+        tok.payWithFeeToUA(uaP, 1_000, FeeMode.NONE, 0, address(0), REF, PayMetaKit.meta("scaas.ua5a.ref"));
+        vm.stopPrank();
+        assertEq(tok.balanceOfUA(uaP), 1_000);
     }
 
     function test_payWithFeeToUA_poolFeeRecipientRefused() public {
         vm.startPrank(alice);
         vm.expectRevert(IUALedger.UAPoolNotPayable.selector);
-        tok.payWithFeeToUA(uaP, 1_000, FeeMode.FIXED, 1, POOL, REF);
+        tok.payWithFeeToUA(uaP, 1_000, FeeMode.FIXED, 1, POOL, REF, PayMetaKit.meta("scaas.ua5a.ref"));
         vm.expectRevert(IERC20MetaTx.TransferToSelf.selector);
-        tok.payWithFeeToUA(uaP, 1_000, FeeMode.FIXED, 1, address(tok), REF);
+        tok.payWithFeeToUA(uaP, 1_000, FeeMode.FIXED, 1, address(tok), REF, PayMetaKit.meta("scaas.ua5a.ref"));
         vm.stopPrank();
         assertEq(tok.balanceOf(POOL), 0);
     }
@@ -589,8 +603,8 @@ contract UAReceiversTest is UALedgerBase {
         _logPair("unwrap(u, ...) ledger leg", _gasOf(alice, address(wrpL), 0, abi.encodeWithSignature(
             "unwrap(address,uint256,address,uint256)", address(tok), 1_000, bob, 0)),
             "unwrapToUA ledger leg", _gasOf(alice, address(wrpL), 0, abi.encodeCall(WrappedToken.unwrapToUA, (address(tok), 1_000, uaB, 0))));
-        _logPair("payWithFee", _gasOf(alice, address(tok), 0, abi.encodeCall(MetaTokenBase.payWithFee, (bob, 1_000, FeeMode.FIXED, 10, FEE_TO, REF))),
-            "payWithFeeToUA", _gasOf(alice, address(tok), 0, abi.encodeCall(MetaTokenBase.payWithFeeToUA, (uaB, 1_000, FeeMode.FIXED, 10, FEE_TO, REF))));
+        _logPair("payWithFee", _gasOf(alice, address(tok), 0, abi.encodeCall(MetaTokenBase.payWithFee, (bob, 1_000, FeeMode.FIXED, 10, FEE_TO, REF, PayMetaKit.meta("scaas.ua5a.ref")))),
+            "payWithFeeToUA", _gasOf(alice, address(tok), 0, abi.encodeCall(MetaTokenBase.payWithFeeToUA, (uaB, 1_000, FeeMode.FIXED, 10, FEE_TO, REF, PayMetaKit.meta("scaas.ua5a.ref")))));
         _logPair("mint", _gasOf(address(this), address(tok), 0, abi.encodeCall(NormalToken.mint, (bob, 1_000))),
             "mintToUA", _gasOf(address(this), address(tok), 0, abi.encodeCall(NormalToken.mintToUA, (uaB, 1_000))));
     }

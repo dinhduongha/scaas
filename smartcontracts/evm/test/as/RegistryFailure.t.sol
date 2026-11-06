@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {RegFixture} from "./helpers/RegFixture.sol";
@@ -70,7 +71,7 @@ contract RegistryFailureTest is RegFixture {
                 _attest(nid(bob), 1, MAX);
                 _attest(nid(feeTo), 1, MAX);
                 bytes memory tr = abi.encodeCall(IERC20.transfer, (bob, 1));
-                bytes memory pay = abi.encodeCall(MetaTokenBase.payWithFee, (bob, 100, FeeMode.FIXED, 1, feeTo, keccak256("r")));
+                bytes memory pay = abi.encodeCall(MetaTokenBase.payWithFee, (bob, 100, FeeMode.FIXED, 1, feeTo, PayMetaKit.ref(keccak256("r")), PayMetaKit.meta(keccak256("r"))));
                 (bool ok,) = _as(alice, t, tr);
                 assertTrue(ok, "control");
                 vm.etch(address(creg), stubs[j]);

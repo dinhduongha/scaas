@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.20;
 
+import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {V2Fixture, BaseHarness, GasBurner1271, UID_} from "./helpers/V2Fixture.sol";
 import {Puller} from "../helpers/WalletMocks.sol";
@@ -230,7 +231,7 @@ contract BaseTest is V2Fixture {
         // payWithFee
         vm.prank(alice);
         vm.expectRevert(err);
-        t.payWithFee(shop, 100e6, FeeMode.PERCENT, 1_000, shop, bytes32(0));
+        t.payWithFee(shop, 100e6, FeeMode.PERCENT, 1_000, shop, PayMetaKit.ref("fee"), PayMetaKit.meta("fee"));
     }
 
     function testFuzz_feeConservesSupply(uint96 value, uint16 feePpm) public {
@@ -264,8 +265,8 @@ contract BaseTest is V2Fixture {
         }
         if (which == 2) x.entryRef = payId;
         if (which == 3) {
-            x.entryRef = payId;
-            x.batch = t.payLane(payId);
+            x.entryRef = PayMetaKit.ref(payId); // pay-meta-tax T37: a pay's `entryRef` is its `PayMeta`'s commitment
+            x.batch = t.payLane(x.entryRef);
         }
         bytes32 d = t.mtxTransferDigest(x);
         IUARegistry.UASig memory s = _signTr(PK, address(t), x);
@@ -277,7 +278,7 @@ contract BaseTest is V2Fixture {
         else if (which == 1) {
             t.mtxTransferWithFee(MetaTxLib.pad(alice), MetaTxLib.pad(shop), amount, x.batch, 0, x.validUntil, x.mode, relayer, x.fee, feeTaker, s);
         } else if (which == 2) t.mtxExecuteTransfer(x, s);
-        else t.mtxPay(MetaTxLib.pad(alice), MetaTxLib.pad(shop), amount, payId, x.validUntil, x.mode, relayer, 0, address(0), s);
+        else t.mtxPay(x, s, PayMetaKit.meta(payId));
         assertEq(t.mtxNonce(MetaTxLib.pad(alice), x.batch), 1);
     }
 
@@ -330,8 +331,10 @@ contract BaseTest is V2Fixture {
         assertEq(t.balanceOf(shop), 1e6);
     }
 
-    function test_mtxPayDerivesTheLaneAndPaysOnce() public {
-        bytes32 p = keccak256("invoice-1");
+    /// pay-meta-tax T37 (O3), meaning: the lane is no longer derived on chain; `payLane(p)` at nonce 0 is the client's
+    /// convention, and one signature still lands once (was `test_mtxPayDerivesTheLaneAndPaysOnce`).
+    function test_mtxPayOnPayLaneConventionOneSignatureOnce() public {
+        bytes32 p = PayMetaKit.ref("invoice-1");
         assertEq(t.payLane(p), uint256(keccak256(abi.encodePacked("scaas.pay.lane", p))));
         MetaTxLib.UAMetaTransfer memory x = _tr(alice, shop, 25e6, p, t.payLane(p), RR);
         IUARegistry.UASig memory s = _signTr(PK, address(t), x);
@@ -339,25 +342,25 @@ contract BaseTest is V2Fixture {
         // ua-mtx-merge T2 (R18, R20), meaning: `UAPaymentSettled` with padded ids on the merged path
         emit IUALedger.UAPaymentSettled(MetaTxLib.pad(alice), MetaTxLib.pad(shop), 25e6, 0, relayer, p);
         vm.prank(relayer);
-        t.mtxPay(MetaTxLib.pad(alice), MetaTxLib.pad(shop), 25e6, p, x.validUntil, RR, relayer, 0, address(0), s);
+        t.mtxPay(x, s, PayMetaKit.meta("invoice-1"));
         assertEq(t.mtxNonce(MetaTxLib.pad(alice), t.payLane(p)), 1);
         vm.prank(relayer);
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
-        t.mtxPay(MetaTxLib.pad(alice), MetaTxLib.pad(shop), 25e6, p, x.validUntil, RR, relayer, 0, address(0), s);
+        t.mtxPay(x, s, PayMetaKit.meta("invoice-1"));
     }
 
     /// R139 (review M2): "một lần" là theo ĐƯỜNG `mtxPay`. Cùng `entryRef` qua `payWithFee` vẫn phát event —
     /// reconciler coi lần hai là ngoại lệ, không phải khoản thứ hai.
     function test_payWithFeeSameEntryRefStillSettles() public {
-        bytes32 p = keccak256("invoice-1");
+        bytes32 p = PayMetaKit.ref("invoice-1");
         MetaTxLib.UAMetaTransfer memory x = _tr(alice, shop, 1e6, p, t.payLane(p), RR);
         IUARegistry.UASig memory s = _signTr(PK, address(t), x);
         vm.prank(relayer);
-        t.mtxPay(MetaTxLib.pad(alice), MetaTxLib.pad(shop), 1e6, p, x.validUntil, RR, relayer, 0, address(0), s);
+        t.mtxPay(x, s, PayMetaKit.meta("invoice-1"));
         vm.expectEmit(address(t));
         emit IERC20Payment.PaymentSettled(alice, shop, 1e6, 0, address(0), p);
         vm.prank(alice);
-        t.payWithFee(shop, 1e6, FeeMode.NONE, 0, address(0), p);
+        t.payWithFee(shop, 1e6, FeeMode.NONE, 0, address(0), p, PayMetaKit.meta("invoice-1"));
     }
 
     function _batchItems(uint256 n) internal view returns (MetaTxLib.UAMetaTransfer[] memory xs, IUARegistry.UASig[] memory ss) {

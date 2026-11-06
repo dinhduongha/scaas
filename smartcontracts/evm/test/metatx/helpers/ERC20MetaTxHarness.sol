@@ -6,6 +6,7 @@ import {MetaTxBase} from "../../../src/metatx/MetaTxBase.sol";
 import {IMetaTx} from "../../../src/metatx/IMetaTx.sol";
 import {FeeMode} from "../../../src/common/FeePolicy.sol";
 import {IUARegistry} from "../../../src/ua/IUARegistry.sol";
+import {MetaTxLib} from "../../../src/common/MetaTxLib.sol";
 
 /// The smallest token on `ERC20MetaTx`: `burn(uint256)` is `AMOUNT(0)`, `touch()` is `ABSOLUTE` (moves nothing).
 contract ERC20MetaTxHarness is ERC20MetaTx {
@@ -20,7 +21,9 @@ contract ERC20MetaTxHarness is ERC20MetaTx {
     function touch() external nonReentrant { emit Touched(_msgSender()); }
 
     /// Not allowlisted: `payWithFee` lives in `MetaTokenBase`; the harness only satisfies the interface.
-    function payWithFee(address, uint256, FeeMode, uint256, address, bytes32) external pure returns (bool) {
+    function payWithFee(address, uint256, FeeMode, uint256, address, bytes32, MetaTxLib.PayMeta calldata)
+        external pure returns (bool)
+    {
         revert("harness");
     }
 

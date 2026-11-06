@@ -332,9 +332,20 @@ abstract contract OrderRows is Test {
         payer.signature = vm.parseJsonBytes(j, domainField(op, _kind(), "extra.payerSig"));
         uint256 fee = _u(_f(op, "fee"));
         address feeTo = vm.parseJsonAddress(j, _f(op, "feeRecipient"));
-        bytes memory built = abi.encodeCall(IMetaTokenV2.mtxPayReceiverFee, (x, payer, fee, feeTo, _u(_f(op, "validUntil")), _uaSig(op)));
-        _receiverFee(op, t, x, t.mtxTransferDigest(x), built);
-        assertEq(t.balanceOf(feeTo), fee);
+        // pay-meta-tax T37, meaning: the row's calldata is the entry without `PayMeta`, which has no function now (its
+        // `entryRef` is no `PayMeta` commitment either); T41 regenerates the row (`meta` last) and runs it again
+        bytes memory built = abi.encodeWithSignature(string.concat("mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,",
+            "uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,",
+            "address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))"), x, payer, fee, feeTo, _u(_f(op, "validUntil")),
+            _uaSig(op));
+        checkRow(j, op, _kind());
+        bytes memory cd = vm.parseJsonBytes(j, domainField(op, _kind(), "calldata"));
+        assertEq(keccak256(built), keccak256(cd), "the row: the old calldata");
+        vm.prank(x.relayer);
+        (bool ok, bytes memory ret) = address(t).call(cd);
+        assertFalse(ok, "a retired entry runs");
+        assertEq(ret.length, 0);
+        assertEq(t.balanceOf(feeTo), 0);
     }
 
     /// ua-mtx-merge T1, meaning: the old row is the unordered `UACancelNonce(bytes32 ua,uint256 batch,uint256 validUntil)`;

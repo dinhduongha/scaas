@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {Test} from "forge-std/Test.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
@@ -143,8 +144,8 @@ contract FeaturesTest is Test {
         bytes memory off = abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, uint8(0));
         vm.prank(alice);
         vm.expectRevert(off);
-        t.payWithFee(shop, 1, FeeMode.NONE, 0, address(0), bytes32("r"));
-        bytes32 ref = keccak256("r");
+        t.payWithFee(shop, 1, FeeMode.NONE, 0, address(0), PayMetaKit.ref("r"), PayMetaKit.meta("r"));
+        bytes32 ref = PayMetaKit.ref("r");
         MetaTxLib.UAMetaTransfer memory x = MetaTxLib.UAMetaTransfer({from: MetaTxLib.pad(alice), to: MetaTxLib.pad(shop),
             value: 10, entryRef: ref, batch: t.payLane(ref), nonce: 0, validUntil: block.timestamp + 300, mode: RR,
             relayer: relayer, fee: 0, feeRecipient: address(0)});
@@ -152,10 +153,10 @@ contract FeaturesTest is Test {
         s.signature = _sig(t.mtxTransferDigest(x));
         vm.prank(relayer);
         vm.expectRevert(off);
-        t.mtxPay(x.from, x.to, 10, ref, x.validUntil, RR, relayer, 0, address(0), s);
+        t.mtxPay(x, s, PayMetaKit.meta("r"));
         vm.prank(relayer);
         vm.expectRevert(off);
-        t.mtxPayReceiverFee(x, s, 1, address(0xFEE), block.timestamp, s);
+        t.mtxPayReceiverFee(x, s, 1, address(0xFEE), block.timestamp, s, PayMetaKit.meta("r"));
         vm.prank(relayer);
         vm.expectEmit(address(t));
         emit IUALedger.UAPaymentSettled(x.from, x.to, 10, 0, relayer, ref); // a typed payment is never gated
@@ -166,7 +167,7 @@ contract FeaturesTest is Test {
     function test_payable_on_payWithFeeWorks() public {
         NormalToken t = _token(impl, _cfg(PAYABLE, 0, address(0), address(0), 100));
         vm.prank(alice);
-        t.payWithFee(shop, 10, FeeMode.NONE, 0, address(0), bytes32("r"));
+        t.payWithFee(shop, 10, FeeMode.NONE, 0, address(0), PayMetaKit.ref("r"), PayMetaKit.meta("r"));
         assertEq(t.balanceOf(shop), 10);
     }
 

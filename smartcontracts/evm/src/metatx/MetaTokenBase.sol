@@ -27,7 +27,7 @@ import {UAKinds} from "../ua/UAKinds.sol";
 ///         receiver-pays (CTR-MTX-05/06); one form per operation for native and derived ids (ua-mtx-merge T2: today's
 ///         `ua*` bodies under the `mtx*` names, the address bodies in legacy/ua-mtx-merge/). Features, owner and roles
 ///         (CTR-GOV-01) live in `GovernanceBase`, init and provenance in the ERC-7201 namespace `scaas.token`. Pay
-///         (`mtxPay`, `mtxPayMeta`, `payWithFee`, `payWithFeeToUA`, `mtxPayReceiverFee`) works only with `PAYABLE`; a
+///         (`mtxPay`, `payWithFee`, `payWithFeeToUA`, `mtxPayReceiverFee`, each with `PayMeta` last) works only with `PAYABLE`; a
 ///         `UAMetaTransfer` through `mtxExecuteTransfer` (with or without `entryRef`) is never gated. Hedera is the immutable
 ///         `IS_HEDERA` (CTR-TOK-23): HIP-632 signatures through `MtxPipelineLib` (which calls `HederaLib`).
 abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IERC165, GovernanceBase, IRescuable {
@@ -159,6 +159,8 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
         return GovernanceLib.$().rescueTo;
     }
 
+    /// @notice A client convention, not enforced (pay-meta-tax spec O3): a client that wants one payment per request
+    ///         signs on this lane at nonce 0; the contract does not care.
     function payLane(bytes32 payId) public pure returns (uint256) {
         return uint256(keccak256(abi.encodePacked("scaas.pay.lane", payId)));
     }
@@ -204,60 +206,31 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
         return true;
     }
 
-    /// @notice Payment `payId` on its own lane `payLane(payId)`, nonce 0 (CTR-MTX-10).
-    function mtxPay(
-        bytes32 from, bytes32 to, uint256 amount, bytes32 payId, uint256 validUntil,
-        uint32 mode, address relayer, uint256 fee, address feeRecipient, IUARegistry.UASig calldata auth
-    ) external nonReentrant returns (bool) {
+    /// @notice The payment `t` with its metadata (CTR-MTX-10, CTR-MTX-26; pay-meta-tax spec §2.1): any lane, the nonce
+    ///         space of `mtxExecuteTransfer` (O3); `t.entryRef == metaPayId(meta)` (O11), `PaymentMeta` first.
+    function mtxPay(MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata auth, MetaTxLib.PayMeta calldata meta)
+        external nonReentrant returns (bool)
+    {
         GovernanceLib.requireFeature(GovernanceBits.PAYABLE);
-        _uaExecuteTransfer(_uaPay(from, to, amount, payId, validUntil, mode, relayer, fee, feeRecipient), 0, auth);
+        _payMeta(t.entryRef, meta);
+        _uaExecuteTransfer(t, 0, auth);
         return true;
     }
 
-    /// @notice CTR-MTX-26: the payment id that commits to its metadata `meta = abi.encode(uint16 schema, bytes body)`.
-    function metaPayId(bytes32 salt, bytes memory meta) public pure returns (bytes32) {
-        return keccak256(abi.encodePacked("scaas.pay.meta", salt, keccak256(meta)));
+    /// @notice CTR-MTX-26 (spec §3.1): the commitment of a `PayMeta`, under the versioned tag `scaas.pay.meta.v2`.
+    function metaPayId(MetaTxLib.PayMeta calldata meta) public pure returns (bytes32) {
+        return keccak256(abi.encodePacked("scaas.pay.meta.v2", meta.salt,
+            keccak256(abi.encode(meta.payNo, meta.schema, meta.body))));
     }
 
-    /// @notice `mtxPay` with `payId = metaPayId(salt, meta)` (CTR-MTX-26): the same `UAMetaTransfer`, digest, lane and
-    ///         nonce; `PaymentMeta` before `UAPaymentSettled`. `meta` is hashed and logged, never parsed.
-    function mtxPayMeta(
-        bytes32 from, bytes32 to, uint256 amount, bytes32 salt, bytes memory meta, uint256 validUntil,
-        uint32 mode, address relayer, uint256 fee, address feeRecipient, IUARegistry.UASig calldata auth
-    ) external nonReentrant returns (bool) {
-        GovernanceLib.requireFeature(GovernanceBits.PAYABLE);
-        _uaPayMeta(from, to, amount, salt, meta, validUntil, mode, relayer, fee, feeRecipient, auth);
-        return true;
-    }
-
-    /// @dev `PaymentMeta`, then `mtxPay`'s struct and pipeline. Spec R11 (`via_ir` off): with `bytes calldata meta` the
-    ///      entry has 13 argument slots, one too many for the legacy ABI decoder; `bytes memory` is the same ABI type
-    ///      (`bytes`, same selector) in one slot. The 12 slots, the return and the `nonReentrant` flag leave no room
-    ///      for a local in the entry, so it passes its arguments here in order (each one DUP15) and `payId` lives here.
-    function _uaPayMeta(
-        bytes32 from, bytes32 to, uint256 amount, bytes32 salt, bytes memory meta, uint256 validUntil,
-        uint32 mode, address relayer, uint256 fee, address feeRecipient, IUARegistry.UASig calldata auth
-    ) private {
-        bytes32 payId = metaPayId(salt, meta);
-        emit PaymentMeta(payId, meta);
-        _uaExecuteTransfer(_uaPay(from, to, amount, payId, validUntil, mode, relayer, fee, feeRecipient), 0, auth);
-    }
-
-    /// @dev The struct of `mtxPay` and `mtxPayMeta`: `UAMetaTransfer{entryRef: payId, batch: payLane(payId), nonce: 0}`.
-    function _uaPay(
-        bytes32 from, bytes32 to, uint256 amount, bytes32 payId, uint256 validUntil,
-        uint32 mode, address relayer, uint256 fee, address feeRecipient
-    ) private pure returns (MetaTxLib.UAMetaTransfer memory t) {
-        t.from = from;
-        t.to = to;
-        t.value = amount;
-        t.entryRef = payId;
-        t.batch = payLane(payId);
-        t.validUntil = validUntil;
-        t.mode = mode;
-        t.relayer = relayer;
-        t.fee = fee;
-        t.feeRecipient = feeRecipient;
+    /// @dev Spec §3.2, in order: a non-zero salt, `schema == 0` iff the body is empty, `payNo` at most 256 bytes,
+    ///      `entryRef == metaPayId(m)`; then `PaymentMeta`. Every pay entry calls it after its gates, before any signature.
+    function _payMeta(bytes32 entryRef, MetaTxLib.PayMeta calldata m) internal {
+        if (m.salt == 0 || (m.schema == 0) != (m.body.length == 0)) revert PayMetaShape();
+        if (bytes(m.payNo).length > 256) revert PayNoTooLong(bytes(m.payNo).length);
+        bytes32 id = metaPayId(m);
+        if (entryRef != id) revert PayMetaMismatch(entryRef, id);
+        emit PaymentMeta(id, m.payNo, m.schema, m.body);
     }
 
     // ------------------------------------------------------------------ receiver-pays (CTR-MTX-05, CTR-MTX-06)
@@ -275,12 +248,22 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
     ///         slot with no UA balance behind it).
     function mtxPayReceiverFee(
         MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata payerAuth,
-        uint256 fee, address feeRecipient, uint256 rfValidUntil, IUARegistry.UASig calldata payeeAuth
+        uint256 fee, address feeRecipient, uint256 rfValidUntil, IUARegistry.UASig calldata payeeAuth,
+        MetaTxLib.PayMeta calldata meta
     ) external nonReentrant returns (bool) {
         GovernanceLib.requireFeature(GovernanceBits.PAYABLE);
-        if (t.entryRef == 0 || t.mode & MetaTxLib.MODE_FEE_MASK != 0 || t.fee != 0
-            || t.mode & MetaTxLib.MODE_RESTRICT_RELAYER == 0 || t.batch != payLane(t.entryRef) || t.nonce != 0
-            || feeRecipient == address(0)) revert ReceiverFeeShape();
+        _payMeta(t.entryRef, meta); // `entryRef` ≠ 0 with it; any lane (spec §2.5, O3)
+        _receiverFee(t, payerAuth, fee, feeRecipient, rfValidUntil, payeeAuth);
+        return true;
+    }
+
+    /// @dev `mtxPayReceiverFee`'s body after `_payMeta` (its seven arguments leave no stack for the locals).
+    function _receiverFee(
+        MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata payerAuth,
+        uint256 fee, address feeRecipient, uint256 rfValidUntil, IUARegistry.UASig calldata payeeAuth
+    ) private {
+        if (t.mode & MetaTxLib.MODE_FEE_MASK != 0 || t.fee != 0
+            || t.mode & MetaTxLib.MODE_RESTRICT_RELAYER == 0 || feeRecipient == address(0)) revert ReceiverFeeShape();
         if (block.timestamp > rfValidUntil) revert ReceiverFeeExpired(rfValidUntil, block.timestamp);
         if (fee == 0 || fee > t.value) revert ReceiverFeeAmount(fee, t.value);
         bytes32 to = MetaTxLib.pad(feeRecipient);
@@ -294,7 +277,6 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
             receiverFeeDigest(t, fee, feeRecipient, rfValidUntil), payeeAuth);
         _uaMove(t.to, to, fee);
         emit UAReceiverFeePaid(d, t.to, feeRecipient, fee);
-        return true;
     }
 
     // ------------------------------------------------------------------ relay fee (CTR-MTX-27, TS-D19)
@@ -306,9 +288,16 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
         uint256 validUntil, IUARegistry.UASig calldata auth) external nonReentrant
     {
         _regFeeTo(payee, value);
-        _uaExecuteTransfer(_uaPay(from, payee, value, _relayRef(target, callDataHash), validUntil,
-            MetaTxLib.MODE_RESTRICT_RELAYER, msg.sender, 0, address(0)),
-            _relayHash(from, target, callDataHash, payee, value, validUntil), auth);
+        MetaTxLib.UAMetaTransfer memory t;
+        t.from = from;
+        t.to = payee;
+        t.value = value;
+        t.entryRef = _relayRef(target, callDataHash);
+        t.batch = payLane(t.entryRef);
+        t.validUntil = validUntil;
+        t.mode = MetaTxLib.MODE_RESTRICT_RELAYER;
+        t.relayer = msg.sender;
+        _uaExecuteTransfer(t, _relayHash(from, target, callDataHash, payee, value, validUntil), auth);
     }
 
     function _relayRef(address target, bytes32 callDataHash) private view returns (bytes32) {
@@ -335,9 +324,11 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
 
     /// @notice The caller pays gas itself; the fee is on top, `amount` arrives whole; never to the payee (CTR-MTX-08).
     function payWithFee(
-        address to, uint256 amount, FeeMode feeMode, uint256 fee, address feeRecipient, bytes32 entryRef
+        address to, uint256 amount, FeeMode feeMode, uint256 fee, address feeRecipient, bytes32 entryRef,
+        MetaTxLib.PayMeta calldata meta
     ) external nonReentrant returns (bool) {
         GovernanceLib.requireFeature(GovernanceBits.PAYABLE);
+        _payMeta(entryRef, meta);
         address payer = _msgSender();
         uint256 feeAmount = FeePolicy.compute(feeMode, amount, fee);
         FeePolicy.validateRecipient(feeMode, feeRecipient);
@@ -354,9 +345,11 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
     /// @notice `payWithFee` to a derived payee (CTR-UA-28): the caller pays `amount` into `to`'s UA balance and the fee
     ///         on top to `feeRecipient` (an address: never the payee; `UA_POOL` and the token are refused by `_update`).
     function payWithFeeToUA(
-        bytes32 to, uint256 amount, FeeMode feeMode, uint256 fee, address feeRecipient, bytes32 entryRef
+        bytes32 to, uint256 amount, FeeMode feeMode, uint256 fee, address feeRecipient, bytes32 entryRef,
+        MetaTxLib.PayMeta calldata meta
     ) external nonReentrant returns (bool) {
         GovernanceLib.requireFeature(GovernanceBits.PAYABLE);
+        _payMeta(entryRef, meta);
         _requireDerivedReceiver(to);
         bytes32 payer = MetaTxLib.pad(_msgSender());
         uint256 feeAmount = FeePolicy.compute(feeMode, amount, fee);

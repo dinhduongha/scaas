@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {PayMetaKit} from "../helpers/PayMetaKit.sol";
+import {IMetaTokenV2} from "../../src/metatx/IMetaTokenV2.sol";
 import {UACall} from "../ua/UACall.sol";
 import {console2, Vm} from "forge-std/Test.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
@@ -246,9 +248,11 @@ contract MtxRelayFeeTest is PqzRegistryBase {
         vm.prank(REL);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         tok.mtxBatchTransfer(ts, ss);
+        // pay-meta-tax T37, meaning: `mtxPay` checks `PayMeta` first, and `ref` (a call's hash) is no `PayMeta`
+        // commitment: refused by name before the signature (was `MetaTxBadSignature`)
         vm.prank(REL);
-        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
-        tok.mtxPay(p.from, p.to, FEE, ref, p.validUntil, RR, REL, 0, address(0), _n(s));
+        vm.expectRevert(abi.encodeWithSelector(IMetaTokenV2.PayMetaMismatch.selector, ref, PayMetaKit.ref(0)));
+        tok.mtxPay(t, _n(s), PayMetaKit.meta(0));
         assertEq(tok.mtxNonce(MetaTxLib.pad(alice), p.batch), 0);
     }
 

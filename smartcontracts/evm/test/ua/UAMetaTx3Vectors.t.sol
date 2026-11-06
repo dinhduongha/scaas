@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {IMetaTokenV2} from "../../src/metatx/IMetaTokenV2.sol";
+import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
@@ -204,8 +206,11 @@ contract UAMetaTx3VectorsTest is UARegistryBase {
         assertEq(n, 11);
     }
 
-    /// `receiverFee` rows: the payment digest and the `ReceiverFee` digest recomputed by the token, then
-    /// `mtxPayReceiverFee` executed with the row's two auth blobs (a derived payee under `receiver-fee`).
+    /// `receiverFee` rows: the payment digest and the `ReceiverFee` digest recomputed by the token, the row's two auth
+    /// blobs verified by the registry (the payer under `metatx`, a derived payee under `receiver-fee`). pay-meta-tax T37
+    /// (O11), meaning: the rows' `entryRef` is no `PayMeta` commitment (this file is unchanged, spec §7.3), so
+    /// `mtxPayReceiverFee` refuses each by name (`PayMetaMismatch`); the executed receiver fee of every payee kind is in
+    /// `UAReceiverFee.t.sol` (was: executed here).
     function test_vectors_receiverFee() public {
         uint256 n;
         for (uint256 i; vm.keyExistsJson(vj, string.concat(".receiverFee[", vm.toString(i), "]")); ++i) {
@@ -221,17 +226,23 @@ contract UAMetaTx3VectorsTest is UARegistryBase {
             uint256 before = tok.balanceOfUA(t.to);
             IUARegistry.UASig memory payerAuth = UACall.auth(t.from, vm.parseJsonBytes(vj, string.concat(r, "payerAuth")));
             IUARegistry.UASig memory payeeAuth = UACall.auth(t.to, vm.parseJsonBytes(vj, string.concat(r, "payeeAuth")));
+            _authorizedAs(t.from, UAKinds.PURPOSE_METATX, d, payerAuth);
+            _authorizedAs(t.to, UAKinds.PURPOSE_RECEIVER_FEE, tok.receiverFeeDigest(t, fee, feeTo, until), payeeAuth);
+            MetaTxLib.PayMeta memory m = PayMetaKit.meta(bytes32(i));
             vm.prank(t.relayer);
-            uint256 g = gasleft();
-            tok.mtxPayReceiverFee(t, payerAuth, fee, feeTo, until, payeeAuth);
-            g -= gasleft();
-            emit log_named_uint(string.concat("mtxPayReceiverFee ", vm.parseJsonString(vj, string.concat(r, "payer")), " > ",
-                vm.parseJsonString(vj, string.concat(r, "payee"))), g);
-            assertEq(tok.balanceOfUA(t.to), before + t.value - fee);
+            vm.expectRevert(abi.encodeWithSelector(IMetaTokenV2.PayMetaMismatch.selector, t.entryRef, PayMetaKit.id(m)));
+            tok.mtxPayReceiverFee(t, payerAuth, fee, feeTo, until, payeeAuth, m);
+            assertEq(tok.balanceOfUA(t.to), before);
             ++n;
         }
         assertEq(n, 11);
-        assertEq(tok.balanceOf(address(0xFEE)), 11 * 300_000);
+        assertEq(tok.balanceOf(address(0xFEE)), 0);
+    }
+
+    /// `id`'s `UASig` over `digest` under `purpose`: a native id's own ECDSA, a derived one through the registry.
+    function _authorizedAs(bytes32 id, bytes32 purpose, bytes32 digest, IUARegistry.UASig memory auth) internal view {
+        if (UAKinds.inNativeSpace(id)) assertEq(ECDSA.recover(digest, auth.signature), address(uint160(uint256(id))));
+        else reg.requireAuthorized(id, purpose, digest, auth);
     }
 
     function _authorized(bytes32 from, bytes32 digest, bytes memory auth) internal view {

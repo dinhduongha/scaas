@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {RegFixture} from "./helpers/RegFixture.sol";
 import {IRegulatedToken} from "../../src/regulated/IRegulatedToken.sol";
@@ -34,7 +35,7 @@ contract FeeLegsTest is RegFixture {
     uint32 constant RR = MetaTxLib.MODE_RESTRICT_RELAYER;
     uint32 constant FIX = MetaTxLib.MODE_FEE_FIXED;
     address feeTo = address(0xFEE);
-    bytes32 constant PAYREF = keccak256("request-1");
+    bytes32 internal PAYREF = PayMetaKit.ref("request-1"); // pay-meta-tax T37: the commitment of its `PayMeta`
 
     /// The envelope's fee leg (`_regFeeTo` after `pre*`): a typed transfer at a `FIXED` fee to its relayer, refused
     /// `FeeRecipientFrozen(relayer)` when the relayer is frozen; the same signed transfer runs once it is not.
@@ -83,14 +84,14 @@ contract FeeLegsTest is RegFixture {
             _freeze(t, nid(feeTo));
             vm.startPrank(alice);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.FeeRecipientFrozen.selector, nid(feeTo)));
-            MetaTokenBase(t).payWithFee(bob, 100, FeeMode.FIXED, 1, feeTo, PAYREF);
+            MetaTokenBase(t).payWithFee(bob, 100, FeeMode.FIXED, 1, feeTo, PAYREF, PayMetaKit.meta("request-1"));
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.FeeRecipientFrozen.selector, nid(feeTo)));
-            MetaTokenBase(t).payWithFeeToUA(UA_X, 100, FeeMode.FIXED, 1, feeTo, PAYREF);
+            MetaTokenBase(t).payWithFeeToUA(UA_X, 100, FeeMode.FIXED, 1, feeTo, PAYREF, PayMetaKit.meta("request-1"));
             vm.stopPrank();
             _unfreeze(t, nid(feeTo));
             vm.startPrank(alice);
-            MetaTokenBase(t).payWithFee(bob, 100, FeeMode.FIXED, 1, feeTo, PAYREF);
-            MetaTokenBase(t).payWithFeeToUA(UA_X, 100, FeeMode.FIXED, 1, feeTo, PAYREF);
+            MetaTokenBase(t).payWithFee(bob, 100, FeeMode.FIXED, 1, feeTo, PAYREF, PayMetaKit.meta("request-1"));
+            MetaTokenBase(t).payWithFeeToUA(UA_X, 100, FeeMode.FIXED, 1, feeTo, PAYREF, PayMetaKit.meta("request-1"));
             vm.stopPrank();
             assertEq(IERC20(t).balanceOf(feeTo), 2);
         }
@@ -123,15 +124,15 @@ contract FeeLegsTest is RegFixture {
             _freeze(t, nid(feeTo));
             vm.prank(relayer);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.FeeRecipientFrozen.selector, nid(feeTo)));
-            MetaTokenBase(t).mtxPayReceiverFee(x, ps, 3, feeTo, until, rs);
+            MetaTokenBase(t).mtxPayReceiverFee(x, ps, 3, feeTo, until, rs, PayMetaKit.meta("request-1"));
             _unfreeze(t, nid(feeTo));
             _freeze(t, nid(bob));
             vm.prank(relayer);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.Frozen.selector, nid(bob)));
-            MetaTokenBase(t).mtxPayReceiverFee(x, ps, 3, feeTo, until, rs);
+            MetaTokenBase(t).mtxPayReceiverFee(x, ps, 3, feeTo, until, rs, PayMetaKit.meta("request-1"));
             _unfreeze(t, nid(bob));
             vm.prank(relayer);
-            MetaTokenBase(t).mtxPayReceiverFee(x, ps, 3, feeTo, until, rs);
+            MetaTokenBase(t).mtxPayReceiverFee(x, ps, 3, feeTo, until, rs, PayMetaKit.meta("request-1"));
             assertEq(IERC20(t).balanceOf(bob), 97);
             assertEq(IERC20(t).balanceOf(feeTo), 3);
         }

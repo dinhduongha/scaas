@@ -296,9 +296,9 @@ contract GovDeployTest is Test {
         h.limitBlockGas(0);
         // ua-mtx-merge T1: `size-baseline.json`'s WrappedToken row 52,297 -> 51,436 B, so the control moves with it;
         // T2: 51,436 -> 46,804 B; T3: 46,804 -> 45,140 B; T6: 45,140 -> 42,669 B; T24: 42,669 -> 42,985 B;
-        // T25: 42,985 -> 43,333 B; T26: 43,333 -> 43,552 B
-        h.limitCode(43_551);
-        vm.expectRevert(bytes("WrappedToken runtime 43552 B > chain code limit 43551 B (CHAIN_CODE_LIMIT, CTR-GOV-19)"));
+        // T25: 42,985 -> 43,333 B; T26: 43,333 -> 43,552 B; pay-meta-tax T37: 43,552 -> 43,667 B
+        h.limitCode(43_666);
+        vm.expectRevert(bytes("WrappedToken runtime 43667 B > chain code limit 43666 B (CHAIN_CODE_LIMIT, CTR-GOV-19)"));
         h.deploy(ZUID, false, ska);
     }
 
@@ -478,11 +478,13 @@ contract GovDeployTest is Test {
             deployer);
         assertTrue(rf != 0xD5D8d5e1cD81f1E83C5B6c1a4Fd9AcfF02d89BB2, "not reset 1's MtxRelayFee");
         assertTrue(router != 0xB64D2D5f27D2d5eA951409773343D856e41Fb8E0, "not reset 1's GovernanceRouter");
-        assertEq(rf, 0xaf843Ac33a5A73A2baf3E979F922Bd3c1feD6B43, "MtxRelayFee");
+        // pay-meta-tax T37: 0xaf843Ac33a5A73A2baf3E979F922Bd3c1feD6B43 -> this (the metadata hash: `MetaTxLib` gains `PayMeta`)
+        assertEq(rf, 0x616AEe61C11e53a1a5104d448eba7574e5AE2a8b, "MtxRelayFee");
         // ua-mtx-merge T24: 0x2AEfB2af419765600eC00a7D0CfC4dE30f2d3750 -> 0xAb151Df7DC7CbbD9755028a27Ad0bc55a34b5b53 (the
         // router's metadata hash: `IGovernance`); T26: -> this (the two empty hooks `UAMetaTxBase` adds, its
         // `mtxCancelNonce` seats); T32: 0xBc8Df1a828dA586e5ccB8Db8942bbCC9c130cC34 -> this (the eight regulated control ops)
-        assertEq(router, 0xb7a8E5b24F6822cba41f77A6c4CdeEDAfA9399F1, "GovernanceRouter");
+        // pay-meta-tax T37: 0xb7a8E5b24F6822cba41f77A6c4CdeEDAfA9399F1 -> this (the metadata hash: `MetaTxLib.PayMeta`)
+        assertEq(router, 0xd2EaEC2593D30e536d3E0900008f66dc67A2B032, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append, `abi.encode(envVersion, env, implArgs)`: the env names the real Zether

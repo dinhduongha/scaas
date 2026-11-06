@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 import {OrderJson} from "../helpers/OrderJson.sol";
 import {domainOf, h, n, a as a_} from "../metatx/NamedEntry.t.sol";
 import {Test} from "forge-std/Test.sol";
@@ -29,7 +30,8 @@ contract ReceiverPaysTest is Test {
     address internal payee = vm.addr(PAYEE_PK);
     address internal relayer = address(0xBEEF);
     address internal feeTo = address(0xFEE);
-    bytes32 internal constant REF = keccak256("request-1");
+    /// pay-meta-tax T37: the request's `entryRef` is the commitment of its `PayMeta` (`PayMetaKit.meta("request-1")`).
+    bytes32 internal REF = PayMetaKit.ref("request-1");
     uint32 internal constant RR = MetaTxLib.MODE_RESTRICT_RELAYER;
     NormalToken internal t;
 
@@ -63,7 +65,7 @@ contract ReceiverPaysTest is Test {
         IUARegistry.UASig memory ps = _n(_sig(PAYER_PK, t.mtxTransferDigest(x)));
         IUARegistry.UASig memory rs = _n(_sig(PAYEE_PK, t.receiverFeeDigest(x, fee, to, rfUntil)));
         vm.prank(relayer);
-        t.mtxPayReceiverFee(x, ps, fee, to, rfUntil, rs);
+        t.mtxPayReceiverFee(x, ps, fee, to, rfUntil, rs, PayMetaKit.meta("request-1"));
     }
 
     function _runRevert(MetaTxLib.UAMetaTransfer memory x, uint256 fee, address to, uint256 rfUntil, bytes memory err)
@@ -73,7 +75,7 @@ contract ReceiverPaysTest is Test {
         IUARegistry.UASig memory rs = _n(_sig(PAYEE_PK, t.receiverFeeDigest(x, fee, to, rfUntil)));
         vm.prank(relayer);
         vm.expectRevert(err);
-        t.mtxPayReceiverFee(x, ps, fee, to, rfUntil, rs);
+        t.mtxPayReceiverFee(x, ps, fee, to, rfUntil, rs, PayMetaKit.meta("request-1"));
     }
 
     /// C5-3: a `UA_POOL` fee recipient is refused before the payer's payment runs (the payee signature is not even
@@ -85,7 +87,7 @@ contract ReceiverPaysTest is Test {
         IUARegistry.UASig memory ps = _n(_sig(PAYER_PK, t.mtxTransferDigest(x)));
         vm.prank(relayer);
         vm.expectRevert(IUALedger.UAPoolNotPayable.selector);
-        t.mtxPayReceiverFee(x, ps, 3e6, MetaTxLib.UA_POOL, block.timestamp + 60, _n(hex"00"));
+        t.mtxPayReceiverFee(x, ps, 3e6, MetaTxLib.UA_POOL, block.timestamp + 60, _n(hex"00"), PayMetaKit.meta("request-1"));
         _runRevert(x, 3e6, MetaTxLib.SHIELD_POOL, block.timestamp + 60,
             abi.encodeWithSelector(IUALedger.ShieldPoolNotPayable.selector));
         assertEq(t.balanceOf(payer), 1_000e6);
@@ -119,8 +121,9 @@ contract ReceiverPaysTest is Test {
     function test_shapeErrors() public {
         bytes memory shape = abi.encodeWithSelector(IMetaTokenV2.ReceiverFeeShape.selector);
         MetaTxLib.UAMetaTransfer memory x = _pay(payee, 10e6);
-        x.entryRef = 0;
-        _runRevert(x, 1, feeTo, block.timestamp, shape);
+        x.entryRef = 0; // pay-meta-tax T37, meaning: `_payMeta` refuses it first, by name
+        _runRevert(x, 1, feeTo, block.timestamp,
+            abi.encodeWithSelector(IMetaTokenV2.PayMetaMismatch.selector, bytes32(0), REF));
         x = _pay(payee, 10e6);
         x.mode = RR | MetaTxLib.MODE_FEE_FIXED;
         _runRevert(x, 1, feeTo, block.timestamp, shape);
@@ -130,12 +133,8 @@ contract ReceiverPaysTest is Test {
         x = _pay(payee, 10e6);
         x.mode = 0;                                          // payer relayer unbound
         _runRevert(x, 1, feeTo, block.timestamp, shape);
-        x = _pay(payee, 10e6);
-        x.batch = 1;                                         // not payLane(entryRef)
-        _runRevert(x, 1, feeTo, block.timestamp, shape);
-        x = _pay(payee, 10e6);
-        x.nonce = 1;
-        _runRevert(x, 1, feeTo, block.timestamp, shape);
+        // pay-meta-tax T37 (O3, spec §2.5): `batch == payLane(entryRef)` and `nonce == 0` are no longer part of the shape
+        // (test/metatx/PayLanes.t.sol `test_receiverFee_freeLane`)
         _runRevert(_pay(payee, 10e6), 1, address(0), block.timestamp, shape);
     }
 
@@ -158,7 +157,7 @@ contract ReceiverPaysTest is Test {
         IUARegistry.UASig memory rs = _n(_sig(PAYEE_PK, t.receiverFeeDigest(other, 1, feeTo, block.timestamp)));
         vm.prank(relayer);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
-        t.mtxPayReceiverFee(x, ps, 1, feeTo, block.timestamp, rs);
+        t.mtxPayReceiverFee(x, ps, 1, feeTo, block.timestamp, rs, PayMetaKit.meta("request-1"));
         assertEq(t.balanceOf(payee), 0);                     // RP4: no fee without the payment, and vice versa
     }
 
@@ -170,7 +169,7 @@ contract ReceiverPaysTest is Test {
         t.mtxExecuteTransfer(x, ps);
         vm.prank(relayer);
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
-        t.mtxPayReceiverFee(x, ps, 1, feeTo, block.timestamp, rs);
+        t.mtxPayReceiverFee(x, ps, 1, feeTo, block.timestamp, rs, PayMetaKit.meta("request-1"));
         assertEq(t.balanceOf(feeTo), 0);
     }
 
@@ -180,7 +179,7 @@ contract ReceiverPaysTest is Test {
         IUARegistry.UASig memory ps = _n(_sig(PAYER_PK, t.mtxTransferDigest(x)));
         IUARegistry.UASig memory rs = _n(_sig(PAYEE_PK, t.receiverFeeDigest(x, 2e6, feeTo, block.timestamp)));
         vm.prank(relayer);
-        t.mtxPayReceiverFee(x, ps, 2e6, feeTo, block.timestamp, rs);
+        t.mtxPayReceiverFee(x, ps, 2e6, feeTo, block.timestamp, rs, PayMetaKit.meta("request-1"));
         assertEq(t.balanceOf(address(w)), 8e6);
         assertEq(t.balanceOf(feeTo), 2e6);
     }
@@ -223,18 +222,18 @@ contract ReceiverPaysTest is Test {
             IUARegistry.UASig memory old = _n(_sig(PAYEE_PK, flat));
             vm.prank(relayer);
             vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
-            t.mtxPayReceiverFee(x, ps, 3e6, feeTo, until, old);
+            t.mtxPayReceiverFee(x, ps, 3e6, feeTo, until, old, PayMetaKit.meta("request-1"));
         }
         {
             MetaTxLib.UAMetaTransfer memory y = _pay(payee, 100e6 + 1);
             IUARegistry.UASig memory forOther = _n(_sig(PAYEE_PK, t.receiverFeeDigest(y, 3e6, feeTo, until)));
             vm.prank(relayer);
             vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
-            t.mtxPayReceiverFee(x, ps, 3e6, feeTo, until, forOther);
+            t.mtxPayReceiverFee(x, ps, 3e6, feeTo, until, forOther, PayMetaKit.meta("request-1"));
         }
         assertEq(t.balanceOf(payee), 0);
         vm.prank(relayer);
-        t.mtxPayReceiverFee(x, ps, 3e6, feeTo, until, _n(_sig(PAYEE_PK, wallet)));
+        t.mtxPayReceiverFee(x, ps, 3e6, feeTo, until, _n(_sig(PAYEE_PK, wallet)), PayMetaKit.meta("request-1"));
         assertEq(t.balanceOf(feeTo), 3e6);
     }
 

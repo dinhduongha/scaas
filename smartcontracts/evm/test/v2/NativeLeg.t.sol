@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.20;
 
+import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 import {Errors} from "@openzeppelin/contracts/utils/Errors.sol";
 import {V2Fixture, UID_, Rate, wrappedInit} from "./helpers/V2Fixture.sol";
 import {RateAdminForwarder} from "./helpers/V2Mocks.sol";
@@ -32,8 +33,9 @@ contract CoinReentersEveryEntry {
     function arm(WrappedToken t_) external { t = t_; }
     receive() external payable {
         bytes[13] memory calls = [
-            abi.encodeWithSelector(t.payWithFee.selector, address(1), 1, 0, 0, address(0), bytes32(0)),
-            abi.encodeWithSelector(t.payWithFeeToUA.selector, bytes32(uint256(1) << 160), 1, 0, 0, address(0), bytes32(0)),
+            abi.encodeWithSelector(t.payWithFee.selector, address(1), 1, 0, 0, address(0), bytes32(0), PayMetaKit.meta(0)),
+            abi.encodeWithSelector(t.payWithFeeToUA.selector, bytes32(uint256(1) << 160), 1, 0, 0, address(0), bytes32(0),
+                PayMetaKit.meta(0)),
             abi.encodeWithSelector(t.grantRole.selector, uint8(1), address(1)),
             abi.encodeWithSelector(t.revokeRole.selector, uint8(1), address(1)),
             abi.encodeWithSelector(t.renounceRole.selector, uint8(1)),

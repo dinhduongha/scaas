@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 import {Test, Vm} from "forge-std/Test.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -30,13 +31,12 @@ interface IMergedT2 {
     function mtxTransferWithFee(bytes32 from, bytes32 to, uint256 amount, uint256 batch, uint256 nonce,
         uint256 validUntil, uint32 mode, address relayer, uint256 fee, address feeRecipient,
         IUARegistry.UASig calldata auth) external returns (bool);
-    function mtxPay(bytes32 from, bytes32 to, uint256 amount, bytes32 payId, uint256 validUntil, uint32 mode,
-        address relayer, uint256 fee, address feeRecipient, IUARegistry.UASig calldata auth) external returns (bool);
-    function mtxPayMeta(bytes32 from, bytes32 to, uint256 amount, bytes32 salt, bytes calldata meta, uint256 validUntil,
-        uint32 mode, address relayer, uint256 fee, address feeRecipient, IUARegistry.UASig calldata auth)
+    // pay-meta-tax T37: the pay entries in their struct form with `PayMeta` last (`mtxPayMeta` in legacy/)
+    function mtxPay(MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata auth, MetaTxLib.PayMeta calldata meta)
         external returns (bool);
     function mtxPayReceiverFee(MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata payerAuth, uint256 fee,
-        address feeRecipient, uint256 rfValidUntil, IUARegistry.UASig calldata payeeAuth) external returns (bool);
+        address feeRecipient, uint256 rfValidUntil, IUARegistry.UASig calldata payeeAuth, MetaTxLib.PayMeta calldata meta)
+        external returns (bool);
     function mtxExecuteTransfer(MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata auth)
         external returns (bool);
     function mtxBatchTransfer(MetaTxLib.UAMetaTransfer[] calldata ts, IUARegistry.UASig[] calldata auths)
@@ -256,8 +256,13 @@ contract TransferGroupTest is Test {
         return _raw(PK, MtxDigest.typed(t, _oldHash(_old(x))));
     }
 
-    function _payId(uint256 i) internal pure returns (bytes32) {
-        return keccak256(abi.encode("t2.pay", i));
+    /// pay-meta-tax T37: a payment's `entryRef` is the commitment of `PayMetaKit.meta(seed)`; `seedOf` finds the seed.
+    mapping(bytes32 entryRef => bytes32 seed) internal seedOf;
+
+    function _payId(uint256 i) internal returns (bytes32 ref) {
+        bytes32 seed = keccak256(abi.encode("t2.pay", i));
+        ref = PayMetaKit.ref(seed);
+        seedOf[ref] = seed;
     }
 
     /// The payment `mtxPay` builds: lane `payLane(payId)`, nonce 0, relayer `REL`.
@@ -291,18 +296,7 @@ contract TransferGroupTest is Test {
 
     function _payWith(address t, MetaTxLib.UAMetaTransfer memory x, IUARegistry.UASig memory s) internal returns (bool) {
         vm.prank(REL);
-        return IMergedT2(t).mtxPay(x.from, x.to, x.value, x.entryRef, x.validUntil, x.mode, x.relayer, x.fee,
-            x.feeRecipient, s);
-    }
-
-    /// `mtxPayMeta` with `pmSalt`, `pmMeta`: `x` is the payment it signs (`entryRef = metaPayId`).
-    bytes32 internal pmSalt;
-    bytes internal pmMeta;
-
-    function _payMeta(address t, MetaTxLib.UAMetaTransfer memory x, IUARegistry.UASig memory s) internal returns (bool) {
-        vm.prank(REL);
-        return IMergedT2(t).mtxPayMeta(x.from, x.to, x.value, pmSalt, pmMeta, x.validUntil, x.mode, x.relayer, x.fee,
-            x.feeRecipient, s);
+        return IMergedT2(t).mtxPay(x, s, PayMetaKit.meta(seedOf[x.entryRef]));
     }
 
     function _relayArgs(address t, uint256 v, bytes32 p) internal view returns (RelayArgs memory r) {
@@ -330,7 +324,7 @@ contract TransferGroupTest is Test {
     }
 
     /// `pay`'s receiver-pays leg: `t.to = pad(payee)`, mode `RESTRICT_RELAYER` (fee `NONE`), lane `payLane`, nonce 0.
-    function _rfLeg(address t, uint256 i, uint256 v) internal view returns (MetaTxLib.UAMetaTransfer memory) {
+    function _rfLeg(address t, uint256 i, uint256 v) internal returns (MetaTxLib.UAMetaTransfer memory) {
         return _payX(t, _payId(1000 + i), v, MetaTxLib.MODE_RESTRICT_RELAYER);
     }
 
@@ -346,7 +340,8 @@ contract TransferGroupTest is Test {
         IUARegistry.UASig memory b) internal returns (bool)
     {
         vm.prank(REL);
-        return IMergedT2(t).mtxPayReceiverFee(x, a, fee, FEE_TO, block.timestamp + 600, b);
+        return IMergedT2(t).mtxPayReceiverFee(x, a, fee, FEE_TO, block.timestamp + 600, b,
+            PayMetaKit.meta(seedOf[x.entryRef]));
     }
 
     function _receiverFee(address t, MetaTxLib.UAMetaTransfer memory x, uint256 fee) internal returns (bool) {
@@ -466,13 +461,12 @@ contract TransferGroupTest is Test {
         assertTrue(IMergedT2(t).mtxBatchTransfer(xs, as_), string.concat(kind, ": mtxBatchTransfer"));
     }
 
-    /// `mtxPayMeta` at `NONE`: the payment `mtxPay` signs with `payId = metaPayId(salt, meta)`.
+    /// `mtxPay` at `NONE` on a free lane (pay-meta-tax T37, meaning: was `mtxPayMeta`, now in legacy/).
     function _payMetaZero(address t, uint256 i, string memory kind) internal {
-        pmMeta = abi.encode(uint16(1), bytes("t2 invoice"));
-        pmSalt = keccak256(abi.encode("t2.salt", i));
-        MetaTxLib.UAMetaTransfer memory x = _payX(t, MetaTokenBase(t).metaPayId(pmSalt, pmMeta), 5, 0);
+        MetaTxLib.UAMetaTransfer memory x = _payX(t, _payId(500 + i), 5, 0);
+        x.batch = 23;
         IUARegistry.UASig memory s = _s(t, x);
-        assertTrue(_payMeta(t, x, s), string.concat(kind, ": mtxPayMeta"));
+        assertTrue(_payWith(t, x, s), string.concat(kind, ": mtxPay at NONE"));
     }
 
     // ------------------------------------------------------------------ the fee entries (listed by invariant 4)
@@ -744,11 +738,13 @@ contract TransferGroupTest is Test {
     /// The typed path left `IUALedger` for `IERC20MetaTx` (it runs with the ledger off for a native id, C, R9); the named
     /// entries of `IMetaTokenV2` are the merged ones; `IERC20Payment` (`payWithFee`) is unchanged. Old -> new (the old
     /// ids XOR-ed from the T1 interfaces' selectors): IERC20MetaTx 0x24cb820a -> 0x05c4a9ef, IMetaTokenV2 0x72c81896 ->
-    /// 0xfa5f874a, IERC20Payment 0xcc624078 (unchanged), IUALedger 0x1060e254 -> 0xac15edc6.
+    /// 0xfa5f874a, IERC20Payment 0xcc624078 (unchanged), IUALedger 0x1060e254 -> 0xac15edc6. pay-meta-tax T37 (`PayMeta`
+    /// last on every pay entry, `mtxPay` in its struct form, `mtxPayMeta` and `metaPayId(bytes32,bytes)` to legacy):
+    /// IMetaTokenV2 0xfa5f874a -> 0xcd9d6940, IERC20Payment 0xcc624078 -> 0xced674ba.
     function test_typedPathInterfaceIdsArePinned() public pure {
         assertEq(type(IERC20MetaTx).interfaceId, bytes4(0x05c4a9ef), "IERC20MetaTx");
-        assertEq(type(IMetaTokenV2).interfaceId, bytes4(0xfa5f874a), "IMetaTokenV2");
-        assertEq(type(IERC20Payment).interfaceId, bytes4(0xcc624078), "IERC20Payment");
+        assertEq(type(IMetaTokenV2).interfaceId, bytes4(0xcd9d6940), "IMetaTokenV2");
+        assertEq(type(IERC20Payment).interfaceId, bytes4(0xced674ba), "IERC20Payment");
         assertEq(type(IUALedger).interfaceId, bytes4(0xac15edc6), "IUALedger");
     }
 

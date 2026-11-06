@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 import {UACall} from "./UACall.sol";
 import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
@@ -194,7 +195,7 @@ contract UALedgerHandler is Test {
         amount = bound(amount, 0, tok.balanceOf(a) * 100 / 101);
         uint256 fee = withFee ? amount / 100 : 0;
         vm.prank(a);
-        tok.payWithFeeToUA(uas[ua % 2], amount, fee != 0 ? FeeMode.FIXED : FeeMode.NONE, fee, FEE_TO, keccak256("pay"));
+        tok.payWithFeeToUA(uas[ua % 2], amount, fee != 0 ? FeeMode.FIXED : FeeMode.NONE, fee, FEE_TO, PayMetaKit.ref(keccak256("pay")), PayMetaKit.meta(keccak256("pay")));
         _settle(tok, 1, fee != 0 ? 2 : 1);
     }
 
@@ -304,7 +305,8 @@ contract UALedgerHandler is Test {
         amount = bound(amount, 0, tok.balanceOfUA(p));
         if (amount == 0) return;
         fee = bound(fee, 1, amount);
-        bytes32 ref = keccak256(abi.encode("scaas.ua5a.inv", ++refs));
+        bytes32 seed = keccak256(abi.encode("scaas.ua5a.inv", ++refs));
+        bytes32 ref = PayMetaKit.ref(seed); // pay-meta-tax T37: the commitment of `PayMetaKit.meta(seed)`
         MetaTxLib.UAMetaTransfer memory x = MetaTxLib.UAMetaTransfer({
             from: p, to: q, value: amount, entryRef: ref, batch: tok.payLane(ref), nonce: 0,
             validUntil: block.timestamp + 300, mode: MetaTxLib.MODE_RESTRICT_RELAYER, relayer: RELAYER, fee: 0,
@@ -315,7 +317,7 @@ contract UALedgerHandler is Test {
         bytes memory payeeAuth = _sign(payee, UAKinds.PURPOSE_RECEIVER_FEE,
             tok.receiverFeeDigest(x, fee, FEE_TO, block.timestamp));
         vm.prank(RELAYER);
-        tok.mtxPayReceiverFee(x, UACall.auth(x.from, payerAuth), fee, FEE_TO, block.timestamp, UACall.auth(x.to, payeeAuth));
+        tok.mtxPayReceiverFee(x, UACall.auth(x.from, payerAuth), fee, FEE_TO, block.timestamp, UACall.auth(x.to, payeeAuth), PayMetaKit.meta(seed));
         bool pUA = payer > 2;
         bool qUA = payee > 2;
         // the payment (UATransfer iff a derived side, Transfer iff a native side), then the fee from the payee to FEE_TO

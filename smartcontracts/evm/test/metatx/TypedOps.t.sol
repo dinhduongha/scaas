@@ -549,24 +549,23 @@ contract TypedOpsTest is UALedgerBase {
     }
 
     /// The delegate is the row's key; the payee the row's derived-looking id, registered here, paid by `payWithFeeToUA`.
+    /// pay-meta-tax T37, meaning: the row's calldata is `mtxPayUnderMandate` without `PayMeta`, which has no function
+    /// now (its `entryRef` is no `PayMeta` commitment either); T41 regenerates the row (`meta` last, `entryRef` its
+    /// commitment) and runs it again.
     function test_typedOpsVectors_UAPayUnderMandate() public {
         string memory op = "UAPayUnderMandate";
-        address token = _addr(op, "token");
         bytes32 payee = _b32(op, "payee");
         assertFalse(UAKinds.inNativeSpace(payee), "the row's payee is a derived id");
         MandateWallet w = _rowMandate(op, _b32(op, "from"), _uint(op, "amount"));
-        _tokenAt(token).transfer(address(w), _uint(op, "amount"));
-        vm.mockCall(REG_L, abi.encodeCall(IUARegistry.kindOf, (payee)), abi.encode(UAKinds.P256));
-        vm.prank(address(0xA11));
-        w.setPayee(token, payee, true);
-        _walletRow(op, w, _payUnderMandateCall(op));
-        assertEq(NormalToken(token).balanceOfUA(payee), _uint(op, "amount"));
-        assertTrue(w.refUsed(_b32(op, "entryRef")));
+        rowHasNoEntry(j, op, "wallet", address(w), _payUnderMandateCall(op));
+        assertFalse(w.refUsed(_b32(op, "entryRef")));
     }
 
     function _payUnderMandateCall(string memory op) internal view returns (bytes memory) {
-        return abi.encodeCall(MandateWallet.mtxPayUnderMandate, (_walletEnv(op), _addr(op, "token"), _b32(op, "payee"),
-            _uint(op, "amount"), _b32(op, "entryRef"), uint64(_uint(op, "epoch")), _walletSig(op)));
+        return abi.encodeWithSignature(string.concat("mtxPayUnderMandate((bytes32,uint256,uint256,uint256,uint32,address,",
+            "uint256,address),address,bytes32,uint256,bytes32,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))"),
+            _walletEnv(op), _addr(op, "token"), _b32(op, "payee"), _uint(op, "amount"), _b32(op, "entryRef"),
+            uint64(_uint(op, "epoch")), _walletSig(op));
     }
 
     function test_typedOpsVectors_UADelegateRevoke() public {

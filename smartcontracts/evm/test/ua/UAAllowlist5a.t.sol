@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 import {UAMetaTxBase} from "../../src/metatx/UAMetaTxBase.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {UACall} from "./UACall.sol";
@@ -160,7 +161,7 @@ contract UAAllowlist5aTest is UALedgerBase {
         bytes[6] memory calls = [
             abi.encodeCall(WrappedToken.wrapToUA, (address(und), 1, uaB)),
             abi.encodeCall(NormalToken.mintToUA, (uaB, 1)),
-            abi.encodeCall(MetaTokenBase.payWithFeeToUA, (uaB, 1, FeeMode.NONE, 0, address(0), bytes32("ref"))),
+            abi.encodeCall(MetaTokenBase.payWithFeeToUA, (uaB, 1, FeeMode.NONE, 0, address(0), PayMetaKit.ref(bytes32("ref")), PayMetaKit.meta(bytes32("ref")))),
             abi.encodeWithSignature("addReserve(address,uint256)", address(und), 1),
             abi.encodeCall(IERC20.approve, (address(this), 1)),
             abi.encodeWithSelector(ITradeToken.mtxTrade.selector)

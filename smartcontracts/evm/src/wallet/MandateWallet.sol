@@ -128,8 +128,10 @@ contract MandateWallet is UAMetaTxBase, IERC1271 {
     ///         mandate is live, the payee approved, `0 < amount ≤ maxPerPayment`, the period total `≤ maxPerPeriod`,
     ///         `entryRef` unused. Periods are fixed windows of `periodSeconds` on the grid of `periodStart` (CTR-ACC-06):
     ///         at most `2 · maxPerPeriod` across one boundary, at boundaries the owner can compute.
-    function payUnderMandate(address token, bytes32 payee, uint256 amount, bytes32 entryRef, uint64 epoch_)
-        external nonReentrant
+    ///         `meta` (last, unsigned) is the token's `PayMeta`, bound by the signed `entryRef` (the token refuses any other,
+    ///         pay-meta-tax spec §2.4); `refUsed` is this wallet's rule, not the token's.
+    function payUnderMandate(address token, bytes32 payee, uint256 amount, bytes32 entryRef, uint64 epoch_,
+        MetaTxLib.PayMeta calldata meta) external nonReentrant
     {
         Mandate storage md = mandates[token];
         if (md.delegate == 0) revert NoMandate();
@@ -149,8 +151,9 @@ contract MandateWallet is UAMetaTxBase, IERC1271 {
         md.spentInPeriod = uint128(spent);
         refUsed[entryRef] = true;
         bool paid = UAKinds.inNativeSpace(payee)
-            ? IERC20Payment(token).payWithFee(address(uint160(uint256(payee))), amount, FeeMode.NONE, 0, address(0), entryRef)
-            : IMetaTokenV2(token).payWithFeeToUA(payee, amount, FeeMode.NONE, 0, address(0), entryRef);
+            ? IERC20Payment(token).payWithFee(address(uint160(uint256(payee))), amount, FeeMode.NONE, 0, address(0), entryRef,
+                meta)
+            : IMetaTokenV2(token).payWithFeeToUA(payee, amount, FeeMode.NONE, 0, address(0), entryRef, meta);
         if (!paid) revert PayFailed();
         emit PaidUnderMandate(token, payee, amount, entryRef);
     }
@@ -190,12 +193,14 @@ contract MandateWallet is UAMetaTxBase, IERC1271 {
         return _namedUA(_UA_REVOKE_MANDATE_TYPEHASH, _REVOKE_OWNER, e, abi.encode(token), auth);
     }
 
-    /// @notice The delegate's signed `payUnderMandate`: struct `UAPayUnderMandate`, bound to `epoch_` (CTR-ACC-07).
+    /// @notice The delegate's signed `payUnderMandate`: struct `UAPayUnderMandate`, bound to `epoch_` (CTR-ACC-07);
+    ///         `meta` last, outside the struct (its commitment is the signed `entryRef`, spec §2.4).
     function mtxPayUnderMandate(MetaTxLib.UAEnvelope calldata e, address token, bytes32 payee, uint256 amount,
-        bytes32 entryRef, uint64 epoch_, IUARegistry.UASig calldata auth) external nonReentrant returns (bytes memory)
+        bytes32 entryRef, uint64 epoch_, IUARegistry.UASig calldata auth, MetaTxLib.PayMeta calldata meta)
+        external nonReentrant returns (bytes memory)
     {
-        return _namedUA(_UA_PAY_UNDER_MANDATE_TYPEHASH, MandateWallet.payUnderMandate.selector, e,
-            abi.encode(token, payee, amount, entryRef, epoch_), auth);
+        return _namedCallUA(_UA_PAY_UNDER_MANDATE_TYPEHASH, e, abi.encode(token, payee, amount, entryRef, epoch_),
+            abi.encodeCall(MandateWallet.payUnderMandate, (token, payee, amount, entryRef, epoch_, meta)), auth);
     }
 
     /// @notice The delegate's signed `revoke(token, epoch)`: struct `UADelegateRevoke`, bound to `epoch_` (CTR-ACC-07).
@@ -273,7 +278,7 @@ contract MandateWallet is UAMetaTxBase, IERC1271 {
 
     /// @dev A native subject reads `_mtxRule` (B): the six wallet operations and the base `cancelNonce`.
     function _mtxRule(bytes4 sel) internal view override returns (MtxRule memory) {
-        if (sel == MandateWallet.payUnderMandate.selector) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 164);
+        if (sel == MandateWallet.payUnderMandate.selector) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 0); // `PayMeta`: dynamic
         if (sel == _REVOKE_SIGNED) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 68);
         if (sel == MandateWallet.setMandate.selector) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 196);
         if (sel == MandateWallet.setPayee.selector) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 100);
