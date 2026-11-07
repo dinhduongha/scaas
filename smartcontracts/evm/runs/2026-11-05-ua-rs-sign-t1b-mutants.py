@@ -3,7 +3,8 @@
 """ua-rs-sign T1b: each check of the clientkeys KEM key, encapsulation / decapsulation, seal / open, container acceptance, link window,
 backup generation and seed vault can fail. One change per run on a clean tree, the suite run, the file restored byte for byte after it;
 a mutant that does not load is reported as such (it kills nothing); a mutant that passes is a finding (exit 1).
-  python3 -I smartcontracts/evm/runs/2026-11-05-ua-rs-sign-t1b-mutants.py [first last]   (from the worktree root, foreground)"""
+  python3 -I smartcontracts/evm/runs/2026-11-05-ua-rs-sign-t1b-mutants.py [first last]   (from the worktree root, foreground)
+  python3 -I smartcontracts/evm/runs/2026-11-05-ua-rs-sign-t1b-mutants.py check           (every replacement found once, no run)"""
 import sys
 import os
 import subprocess
@@ -63,6 +64,11 @@ M = [
 ]
 bad = 0
 assert len({m[0] for m in M}) == len(M)
+if sys.argv[1:] == ["check"]:  # T20: every replacement found once at this commit, no run
+    for name, f, a, _ in M:
+        assert open(f, encoding="utf-8").read().count(a) == 1, (name, f, a)
+    print(f"{len(M)} mutants, every replacement found once")
+    raise SystemExit(0)
 lo, hi = (int(sys.argv[1]), int(sys.argv[2])) if len(sys.argv) == 3 else (1, len(M))
 for n, (name, f, a, b) in enumerate(M[lo - 1:hi], lo):
     src = open(f, encoding="utf-8").read()

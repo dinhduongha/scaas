@@ -5,7 +5,8 @@ nested.json / pq_signatures.json msig rows rebuilt and verified by ua8.rs, the m
 key against its member, the single-key forms) catch a change in what they test. One mutant per run on a clean tree (one or more
 replacements in one file), the suite run, the file restored byte for byte after it; a mutant that does not compile is reported as
 such (it kills nothing); a mutant that passes is a finding (exit 1).
-  python3 -I smartcontracts/evm/runs/2026-11-05-ua-rs-sign-t3d-mutants.py [first last]   (from the worktree root, foreground)"""
+  python3 -I smartcontracts/evm/runs/2026-11-05-ua-rs-sign-t3d-mutants.py [first last]   (from the worktree root, foreground)
+  python3 -I smartcontracts/evm/runs/2026-11-05-ua-rs-sign-t3d-mutants.py check           (every replacement found once, no run)"""
 import sys
 import os
 import re
@@ -20,35 +21,47 @@ M = [
     # the plan's T3d list
     ("minimal check skipped (level 1)", U, [(L1, "if false && " + L1[3:])]),
     ("minimal check skipped (level 2)", U, [(L2, "if false && " + L2[3:])]),
+    # M3, M4, M8, M11, M13 (T20 refresh): T4 d423f3ca gave the leaves the member and the call's native record (sign(.., &native)),
+    # is_member returns on `ok`, and the native record is chosen between the plans and the signing
     ("memberDigest over the wrong structure (level 1: the member's id, not the msig's)", U, [
-        ("leaf(*key, p.member.kind, ua, msg)?", "leaf(*key, p.member.kind, &p.member.id, msg)?")]),
+        ("leaf(*key, &p.member, ua, msg)?", "leaf(*key, &p.member, &p.member.id, msg)?")]),
     ("memberDigest over the wrong structure (level 2: the outer msig, not the inner)", U, [
-        ("leaf(*key, m.kind, &p.member.id, &inner_msg)?", "leaf(*key, m.kind, ua, &inner_msg)?")]),
+        ("leaf(*key, m, &p.member.id, &inner_msg)?", "leaf(*key, m, ua, &inner_msg)?")]),
     ("memberDigest over the wrong structure (level 2: the inner message without the outer memberDigest)", U, [
         ("&purpose_tag(\"member\")?, &member_digest(ua, msg))?", "&purpose_tag(\"member\")?, msg)?")]),
     ("slots unsorted (level 1: sorted before the check, emitted as given)", U, [
         (L1, "if !msig_slots_minimal(key_data, &{ let mut v = slots.iter().map(Slot::index).collect::<Vec<_>>(); v.sort(); v })? {")]),
     ("slots unsorted (level 2: sorted before the check, emitted as given)", U, [
         (L2, "if !msig_slots_minimal(&d, &{ let mut v = members.iter().map(|(j, _)| *j).collect::<Vec<_>>(); v.sort(); v })? {")]),
-    ("slots unsorted (emitted in reverse)", U, [("plans.iter().map(|p| sign(p, &ua, &msg))", "plans.iter().rev().map(|p| sign(p, &ua, &msg))")]),
+    ("slots unsorted (emitted in reverse)", U, [("plans.iter().map(|p| sign(p, &ua, &msg, &native))", "plans.iter().rev().map(|p| sign(p, &ua, &msg, &native))")]),
     # the controller's additions
     ("membership digest of (member, msig)", U, [("&membership_digest(&ua, &p.member.id)", "&membership_digest(&p.member.id, &ua)")]),
     ("acceptance under the purpose member", U, [("&purpose_tag(\"membership\")?", "&purpose_tag(\"member\")?")]),
-    ("slot key not checked against its member", U, [("        _ => Err(Error::Argument),\n    }\n}", "        _ => Ok(()),\n    }\n}")]),
+    ("slot key not checked against its member", U, [("    if ok {\n        Ok(())\n    } else {", "    if ok || true {\n        Ok(())\n    } else {")]),
     ("inner key data not checked against the member id", U, [
         ("            if derive_ua(MSIG, &d, false).ok() != Some(member.id) {", "            if false {")]),
     ("each slot signed as it is checked (a refused set signs)", U, [
-        ("    let plans = slots.iter().map(|s| plan(&structure, s, inner)).collect::<Result<Vec<_>>>()?;\n"
-         "    let msg = ua_message(MSIG, purpose, digest)?;\n"
-         "    let members = plans.iter().map(|p| sign(p, &ua, &msg)).collect::<Result<Vec<_>>>()?;\n",
-         "    let msg = ua_message(MSIG, purpose, digest)?;\n"
-         "    let members = slots.iter().map(|s| sign(&plan(&structure, s, inner)?, &ua, &msg)).collect::<Result<Vec<_>>>()?;\n")]),
+        # the slots before the first refused one are signed, then the refusal is returned
+        ("    let plans = slots.iter().map(|s| plan(&structure, s, inner)).collect::<Result<Vec<_>>>()?;\n",
+         "    let mut refused = None;\n"
+         "    let plans = slots.iter().map_while(|s| plan(&structure, s, inner).map_err(|e| refused = Some(e)).ok()).collect::<Vec<_>>();\n"),
+        ("    let members = plans.iter().map(|p| sign(p, &ua, &msg, &native)).collect::<Result<Vec<_>>>()?;\n",
+         "    let members = plans.iter().map(|p| sign(p, &ua, &msg, &native)).collect::<Result<Vec<_>>>()?;\n"
+         "    if let Some(e) = refused {\n        return Err(e);\n    }\n")]),
     ("ua_sig keeps keyData for a stored kind", U, [("let bare = stored(kind) || ", "let bare = ")]),
     ("ua_sig keeps keyData for the portable purposes", U, [("stored(kind) || is_portable_purpose(purpose) || ", "stored(kind) || ")]),
     ("ua_sig drops keyData for every kind", U, [("key_data: if bare { vec![] } else { key_data }", "key_data: vec![]")]),
 ]
 bad = 0
 assert len({m[0] for m in M}) == len(M)
+if sys.argv[1:] == ["check"]:  # T20: every replacement found once at this commit, no run
+    for name, f, reps in M:
+        s = open(f, encoding="utf-8").read()
+        for a, b in reps:
+            assert s.count(a) == 1, (name, f, a, s.count(a))
+            s = s.replace(a, b)
+    print(f"{len(M)} mutants, every replacement found once")
+    raise SystemExit(0)
 lo, hi = (int(sys.argv[1]), int(sys.argv[2])) if len(sys.argv) == 3 else (1, len(M))
 for n, (name, f, reps) in enumerate(M[lo - 1:hi], lo):
     src = open(f, encoding="utf-8").read()

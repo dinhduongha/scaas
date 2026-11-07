@@ -5,7 +5,8 @@ release randomness, signed bytes per scheme, the arena form, rs_signatures.json;
 tests/pq.rs and tests/ua8.rs: the verifiers on the vendored PQClean) catch a change in what they test. One mutant per run on a
 clean tree (one or more replacements in one file), the suite run, the file restored byte for byte after it; a mutant that does
 not compile is reported as such (it kills nothing); a mutant that passes is a finding (exit 1).
-  python3 -I smartcontracts/evm/runs/2026-11-05-ua-rs-sign-t3b-mutants.py [first last]   (from the worktree root, foreground)"""
+  python3 -I smartcontracts/evm/runs/2026-11-05-ua-rs-sign-t3b-mutants.py [first last]   (from the worktree root, foreground)
+  python3 -I smartcontracts/evm/runs/2026-11-05-ua-rs-sign-t3b-mutants.py check           (every replacement found once, no run)"""
 import sys
 import os
 import re
@@ -38,6 +39,14 @@ M = [
 ]
 bad = 0
 assert len({m[0] for m in M}) == len(M)
+if sys.argv[1:] == ["check"]:  # T20: every replacement found once at this commit, no run
+    for name, f, reps in M:
+        s = open(f, encoding="utf-8").read()
+        for a, b in reps:
+            assert s.count(a) == 1, (name, f, a, s.count(a))
+            s = s.replace(a, b)
+    print(f"{len(M)} mutants, every replacement found once")
+    raise SystemExit(0)
 lo, hi = (int(sys.argv[1]), int(sys.argv[2])) if len(sys.argv) == 3 else (1, len(M))
 for n, (name, f, reps) in enumerate(M[lo - 1:hi], lo):
     src = open(f, encoding="utf-8").read()

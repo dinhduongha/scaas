@@ -23,3 +23,9 @@ killed   | M20 member purpose wrong | src/wallet/sign.rs | rc=101 | 1 failed: si
 killed   | M21 key-proof prefix changed | src/wallet/sign.rs | rc=101 | 1 failed: native_key_proof_and_raw_digest
 killed   | M22 ed25519 native signed as secp256k1 | src/wallet/sign.rs | rc=101 | 1 failed: native_key_proof_and_raw_digest
 mutants M1-M22 of 22: 22 killed, 0 survived, 0 not loaded
+# T20 re-run (2026-11-08): `check` (new at T20) failed at f6c91730 (M5, M6, M11: T6 303f6114 moved the UaMsg request into the
+# free fn ua_request, shared with the UASig builder and WebAuthn); the strings brought to HEAD, run again, one per call:
+killed   | M5 purpose tag v1 for pop v2 | src/wallet/sign.rs | rc=101 | 2 failed: sign_json_ua_rows, vectors::role_follows_the_registry_rule | at f6c91730 | rc=0, git diff --exit-code 0
+killed   | M6 another kind's TAG | src/wallet/sign.rs | rc=101 | 6 failed: bip340_release_aux_is_random, chain_separation_rows, locked_wallet_handles_sign_nothing, sign_json_ua_rows, vectors::kind_no_of_another_kind_refused, vectors::r | at f6c91730 | rc=0, git diff --exit-code 0
+killed   | M11 role ignored (always authorization) | src/wallet/sign.rs | rc=101 | 1 failed: vectors::role_follows_the_registry_rule | at f6c91730 | rc=0, git diff --exit-code 0
+# T20 re-run: 3 killed, 0 survived, 0 not loaded (0 superseded; the other mutants above stand, every string checked at HEAD)

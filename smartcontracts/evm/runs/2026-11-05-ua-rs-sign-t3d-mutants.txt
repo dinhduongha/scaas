@@ -15,3 +15,12 @@ killed   | M14 ua_sig keeps keyData for a stored kind | src/wallet/uasig.rs | rc
 killed   | M15 ua_sig keeps keyData for the portable purposes | src/wallet/uasig.rs | rc=101 | 1 failed: single_key_uasig_forms
 killed   | M16 ua_sig drops keyData for every kind | src/wallet/uasig.rs | rc=101 | 1 failed: single_key_uasig_forms
 mutants M1-M16 of 16, survived or not loaded: 0
+# T20 re-run (2026-11-08): `check` (new at T20) failed at f6c91730 (M3, M4, M8, M11, M13: T4 d423f3ca gave each leaf its member
+# and the call's native record, made is_member return on `ok`, and chose the native record between the plans and the signing);
+# the strings brought to HEAD (M13: the slots before the first refused one signed, then the refusal), run again, one per call:
+killed   | M3 memberDigest over the wrong structure (level 1: the member's id, not the msig's) | src/wallet/uasig.rs | rc=101 | 5 failed: native_slot_needs_its_typed_data, nested_json_msig_rows, portable_json_msig_rows, pq_signatures_json_treasury, sign_json_msig_rows | at f6c91730 | rc=0, git diff --exit-code 0
+killed   | M4 memberDigest over the wrong structure (level 2: the outer msig, not the inner) | src/wallet/uasig.rs | rc=101 | 3 failed: native_slot_needs_its_typed_data, nested_json_msig_rows, sign_json_msig_rows | at f6c91730 | rc=0, git diff --exit-code 0
+killed   | M8 slots unsorted (emitted in reverse) | src/wallet/uasig.rs | rc=101 | 6 failed: native_slot_needs_its_typed_data, nested_json_msig_rows, portable_json_msig_rows, pq_signatures_json_treasury, sign_json_msig_rows, slots_sorted | at f6c91730 | rc=0, git diff --exit-code 0
+killed   | M11 slot key not checked against its member | src/wallet/uasig.rs | rc=101 | 1 failed: slot_must_match_its_member | at f6c91730 | rc=0, git diff --exit-code 0
+killed   | M13 each slot signed as it is checked (a refused set signs) | src/wallet/uasig.rs | rc=101 | 1 failed: slot_must_match_its_member | at f6c91730 | rc=0, git diff --exit-code 0
+# T20 re-run: 5 killed, 0 survived, 0 not loaded (0 superseded; the other mutants above stand, every string checked at HEAD)
