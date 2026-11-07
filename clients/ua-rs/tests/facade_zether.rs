@@ -192,9 +192,13 @@ fn a_key_field_in_command_json_is_refused() {
         assert_eq!(ZetherCmd::from_json(cmd, top.to_string().as_bytes()).err(), Some(Error::Argument), "{cmd}: top-level key");
         assert_eq!(call(&k, cmd, &top).err(), Some(Error::Argument), "{cmd}: call with key");
     }
-    let mut nested = t.clone();
-    nested["acc"]["key"] = secret_key.clone();
-    assert_eq!(ZetherCmd::from_json("proveTransfer", nested.to_string().as_bytes()).err(), Some(Error::Argument), "key inside acc");
+    // T18: `acc` is the request form's (`rawProveTransfer`, feature `vectors`; its positive control is the loop's); the words
+    // form `proveTransfer` refuses `acc` whatever is inside it
+    if cfg!(feature = "vectors") {
+        let mut nested = t.clone();
+        nested["acc"]["key"] = secret_key.clone();
+        assert_eq!(ZetherCmd::from_json("rawProveTransfer", nested.to_string().as_bytes()).err(), Some(Error::Argument), "key inside acc");
+    }
     let mut msg = json!({"op": "ZetherRollOver", "chainId": 1, "chainUid": t["chainUid"], "token": t["token"], "message": {"key": secret_key}});
     assert_eq!(ZetherCmd::from_json("typedDigest", msg.to_string().as_bytes()).err(), Some(Error::Argument), "key inside message");
     msg["message"] = json!({"ua": t["chainUid"]});
@@ -207,26 +211,42 @@ fn a_key_field_in_command_json_is_refused() {
 fn fields_outside_the_allow_list_are_refused() {
     unlock();
     let t = request("transfer_bls12381.json");
-    for (cmd, f, x) in [
+    // T18: since T14b `proveTransfer` is the words form, which refuses the request form's `acc` whatever else is in it; the
+    // request form is `rawProveTransfer` (feature `vectors`). Positive controls: every base below is accepted as it is, so
+    // each refusal is the named field's.
+    let vectors = cfg!(feature = "vectors");
+    let base = |cmd: &str| if cmd == "rawProveTransfer" { t.clone() } else { json!({}) };
+    let rows = [
         ("proveTransfer", "includeWitness", json!(true)),
+        ("rawProveTransfer", "includeWitness", json!(true)),
         ("proveTransferMulti", "includeWitness", json!(true)),
         ("proveBurn", "includeWitness", json!(true)),
         ("pop", "revealSecret", json!(true)),
         ("proveTransfer", "x", json!("0x01")),
+        ("rawProveTransfer", "x", json!("0x01")),
         ("proveTransfer", "seed", json!("0x01")),
+        ("rawProveTransfer", "seed", json!("0x01")),
         ("checkBalance", "yTo", json!("0x01")),
         ("encrypt", "acc", json!({"C": "0x", "D": "0x"})),
-    ] {
-        let mut r = if cmd == "proveTransfer" { t.clone() } else { json!({}) };
+    ];
+    for (cmd, f, x) in rows.into_iter().filter(|r| vectors || !r.0.starts_with("raw")) {
+        assert!(ZetherCmd::from_json(cmd, base(cmd).to_string().as_bytes()).is_ok(), "{cmd}: positive control");
+        let mut r = base(cmd);
         r[f] = x;
         assert_eq!(ZetherCmd::from_json(cmd, r.to_string().as_bytes()).err(), Some(Error::Argument), "{cmd} with {f}");
     }
-    let mut c = t.clone();
-    c["acc"]["E"] = json!("0x00");
-    assert_eq!(ZetherCmd::from_json("proveTransfer", c.to_string().as_bytes()).err(), Some(Error::Argument), "acc with E");
-    let mut bn = t.clone();
-    bn["curve"] = json!("bn254");
-    assert_eq!(ZetherCmd::from_json("proveTransfer", bn.to_string().as_bytes()).err(), Some(Error::Argument), "bn254");
+    if vectors {
+        let mut c = t.clone();
+        c["acc"]["E"] = json!("0x00");
+        assert_eq!(ZetherCmd::from_json("rawProveTransfer", c.to_string().as_bytes()).err(), Some(Error::Argument), "acc with E");
+    }
+    for cmd in ["proveTransfer", "rawProveTransfer"].into_iter().filter(|c| vectors || !c.starts_with("raw")) {
+        let mut bn = base(cmd);
+        bn["curve"] = json!("bls12381");
+        assert!(ZetherCmd::from_json(cmd, bn.to_string().as_bytes()).is_ok(), "{cmd}: bls12381 (positive control)");
+        bn["curve"] = json!("bn254");
+        assert_eq!(ZetherCmd::from_json(cmd, bn.to_string().as_bytes()).err(), Some(Error::Argument), "{cmd}: bn254");
+    }
     for cmd in ["keygen", "verifyTransfer", "verifyBurn", "verifyTransferMulti", "vectors", ""] {
         assert_eq!(ZetherCmd::from_json(cmd, b"{}").err(), Some(Error::Argument), "{cmd}");
     }
