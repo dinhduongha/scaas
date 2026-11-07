@@ -224,10 +224,10 @@ rustc 1.90); Node `node --test` (`clients/clientkeys`); `zether-prover`; `ua-rs`
 | Regulated | T24 → T25 → T26 → T27 → T28 → T29 → T30 → T31 → T32 → T33; T34 beside T33; T35 after T33, T34; T36 after T33, beside T34–T35 | after T18, before T19 (owner 2026-11-05); contracts sequential in this worktree; T27 measures kinds 9 and 13 before T28 fills the bodies |
 | Pay meta, tax (3e) | T37 → T38 → T39 → T40; T41 after T40; T42 after T41; T43 after T40, beside T41–T42 | after T36, before 3c (owner 2026-11-06); contracts sequential in this worktree; T37 and T40 measure kind 13 first |
 | Versioned PQZ keys (3g) | T51 → T52 → T53; T54 after T53; T55 after T54; T56 after T53, beside T54–T55; T57 beside, lands in T19 | after T43, before 3f (owner 2026-11-07: 3g before 3f); contracts sequential in this worktree; T51 measures the registry's deploy gas, T52 measures kind 13 first (from what T43 leaves); T66b's rebalance comes after T53; the OFFCHAIN items go to 3f |
-| PQZ verifier mode (3f) | T44 → T45; T46 after T45; T47 after T46; T48 and T49 after T45, beside T46–T47; T50 beside, lands in T19 | after T57 (3g), before 3h (owner 2026-11-07); contracts sequential in this worktree; T45 measures kind 13 first (from what T57 leaves); OFFCHAIN built over versioned keys (3g §5) |
+| Factory index, chain-neutral releases | T67 → T71 → T70 → T72 → T73 → T74 → T68; T76 after T71, before T68; T69 and T75 beside, land in T19 | **owner approved the index and the extension (Q7–Q12 as recommended) 2026-11-07; the chain-neutral releases T71–T76 owner-approved 2026-11-07 (§10.3 as recommended, S3 = signing UA), pending the Fable review's fixes**; after T57, before 3f (owner 2026-11-07: 3e → 3g → factory index + chain-neutral → 3f → 3h → T66b → 3c); contracts sequential in this worktree (`src/factory/` only) |
+| PQZ verifier mode (3f) | T44 → T45; T46 after T45; T47 after T46; T48 and T49 after T45, beside T46–T47; T50 beside, lands in T19 | after T69 (the factory index group), before 3h (owner 2026-11-07); contracts sequential in this worktree; T45 measures kind 13 first (from what T57 leaves); OFFCHAIN built over versioned keys (3g §5) |
 | PQZ proof path (3h) | T58 → T59 → T60 → T61; T62 after T61; T63 after T62; T64 and T65 after T61, beside T62–T63; T66 beside, lands in T19 | after T50, before 3c (owner approved 2026-11-07); contracts sequential in this worktree; T58 measures kind 13 first; each format moves in the task that changes it; no task waits for `ua-rs-sign` |
-| Registry generation, library review, size (T66b) | T66b | after T66, before the factory index group and 3c (owner 2026-11-07): `requirePortable`, no KEM record for an `msig`, the `UARegistryLib` <-> `UARegistry` rebalance, then the review of every library and the size reduction to fit 60 M per deployed contract; sequential in this worktree |
-| Factory index, chain-neutral releases | T67 → T71 → T70 → T72 → T73 → T74 → T68; T76 after T71, before T68; T69 and T75 beside, land in T19 | **owner approved the index and the extension (Q7–Q12 as recommended) 2026-11-07; the chain-neutral releases T71–T76 owner-approved 2026-11-07 (§10.3 as recommended, S3 = signing UA), pending the Fable review's fixes**; after T66b, before 3c (owner 2026-11-07: 3e → 3g → 3f → 3h → T66b → factory index + chain-neutral → 3c); contracts sequential in this worktree (`src/factory/` only) |
+| Registry generation, library review, size (T66b) | T66b | after T66, before 3c (owner 2026-11-07): `requirePortable`, no KEM record for an `msig`, the `UARegistryLib` <-> `UARegistry` rebalance, then the review of every library and the size reduction to fit 60 M per deployed contract; sequential in this worktree |
 | Docs | T19 | drafts beside T14–T18, T24–T36, T37–T43, T51–T57, T67–T76, T44–T50 and T58–T66; lands after T66 and 3c (BUILT only with code and tests) |
 | Close | T21 → T22 → T23 | |
 | Next | TODO item 4 | SCaaS testnet reset 2 deploys the merged code (not this plan) |
@@ -1479,7 +1479,7 @@ fields `tax`, `tax_mode`, `tax_recipient`, `net`, `withheld_by`; alerts on `TaxR
 **Spec:** [`2026-11-06-attested-verify.md`](../specs/2026-11-06-attested-verify.md), revised after the Codex and Fable reviews
 ([Codex](../../research/attest-codex-review.md), [Fable](../../research/attest-fable-review.md)); rulings O1, O2, O5 and R1–R4
 (PQZ only, the verdict inline, unproven keys in OFFCHAIN mode, an immediate revocation); one question open (spec §12, Q1:
-revoking a fixed verifier, recommended no). **Place:** after T57 (3g; owner 2026-11-07: 3e → 3g → 3f → 3h → T66b → factory index + chain-neutral → 3c), before 3h, T66b (the registry generation) and 3c (`PqChat`); T19, T21,
+revoking a fixed verifier, recommended no). **Place:** after T69 (the factory index group, which follows 3g; owner 2026-11-07: 3e → 3g → factory index + chain-neutral → 3f → 3h → T66b → 3c), before 3h, T66b (the registry generation) and 3c (`PqChat`); T19, T21,
 T22, T23 cover the group. OFFCHAIN is built over 3g's versioned keys (3g §5, KV-12). **Order:** contracts T44 → T45, sequential in this worktree (shared `PqzCore`, `PqzLayer`,
 `size-baseline.json`); T46 (`clients/`, `smartcontracts/vectors/`) after T45 fixes the ABI; T47 (node) after T46; T48 (the
 reference PQZ verifier (off-chain), its own crate) and T49 (invariants, mutants) after T45, beside T46–T47; T50 (docs share) drafts beside
@@ -1491,7 +1491,7 @@ the first commit of each task that replaces a body.
 
 ### Task T44: the OFFCHAIN core in `PqzCore`, `PqzStateLib`, `PqzLayer`
 
-**Depends on:** T57 (3g; owner 2026-11-07). **Estimate:** 2.
+**Depends on:** T69 (the factory index group, after 3g; owner 2026-11-07). **Estimate:** 2.
 
 **Files:** `src/factory/IFactoryToken.sol` (`ConfidentialConfig`: `pqzVerifyMode`, `pqzVerifierUA`, `pqzVerifierFixed`) and the
 `TokenConfig` decode of every kind; `src/pqz/{PqzCore,PqzStateLib,PqzWrappedLib,PqzLayer,IPqzToken}.sol`; `src/ua/UAKinds.sol`
@@ -2027,7 +2027,7 @@ spec §5.5 note); the operator note's `own_tag` and `PROOF_STORE_OVER_LANE_CAP` 
 
 ### Task T66b: the registry generation, the library review and the size reduction, after 3h (owner 2026-11-07)
 
-**Depends on:** T66 (3g, 3f and 3h landed). **Before:** the factory index group (T67–T76) and 3c, whose `PqChat` needs `requirePortable`.
+**Depends on:** T66 (3g, 3f and 3h landed). **Before:** 3c, whose `PqChat` needs `requirePortable`.
 **Estimate:** parts 1 and 2 about 2.5, part 3 about 2; part 4 **not sized**: the owner's 60 M goal below is far larger than the 3
 first written for it, and Step 2's study sizes it.
 
@@ -2057,8 +2057,8 @@ each kind. Over the limit at `d2552671` (runtime B): kind `WrappedPqzRegulatedTo
 `WrappedPqzToken` 57,026, `NormalPqzRegulatedToken` 55,472, `WrappedZetherToken` 51,522, `WrappedRegulatedToken` 51,292,
 `NormalZetherRegulatedToken` 49,020, `NormalPqzToken` 47,714, `WrappedToken` 43,503, `NormalZetherToken` 41,076, `NormalRegulatedToken`
 40,638, and `UARegistryLib` 37,536 (part 3). Under it: `SCaaSDex` 33,704, `NormalToken` 32,870, `UARegistry` 31,438. A library counts as a
-deployed contract too. The factory index group after this task adds about 0.2–0.8 KB per kind (chain-neutral spec §7.1), so the target
-leaves that margin. T9's levers L and D were deprecated by the owner (2026-11-05): reusing either needs the owner's word.
+deployed contract too. The factory index group and 3f, 3h land before this task, so its figures include them; `PqChat` (3c) is its
+own release. T9's levers L and D were deprecated by the owner (2026-11-05): reusing either needs the owner's word.
 
 - [ ] **Step 1: Recompute** every kind's size (0-13, the router, the libraries) at the tip after 3h: `forge build src --sizes
       --json`, `size_gate.py`, deploy gas on the regulated spec's §6.2 method; a table old -> new against T40's figures.
@@ -2077,8 +2077,8 @@ leaves that margin. T9's levers L and D were deprecated by the owner (2026-11-05
 **Spec:** [`2026-11-07-factory-contract-index.md`](../specs/2026-11-07-factory-contract-index.md), **revised 2026-11-07**: the
 index (§1–§7) **approved by the owner 2026-11-07** (its §6 questions answered as recommended); the extension (§8: generic
 classes and kinds, `createInstance`, `PqChat` as class 3) **approved by the owner 2026-11-07** (direction, then Q7–Q12
-answered as recommended; T67 takes Q12's `uint16` ids). The creator is a `bytes32 creatorId` (chain-neutral S3, below). **Place (owner 2026-11-07):** after T66b, before 3c (the first task depends on
-T66b): 3e → 3g → 3f → 3h → T66b → factory index + chain-neutral → 3c. Independent of the registry and of every token body: only `src/factory/`, its
+answered as recommended; T67 takes Q12's `uint16` ids). The creator is a `bytes32 creatorId` (chain-neutral S3, below). **Place (owner 2026-11-07):** after 3g (T57), before 3f (T44 depends on
+T69): 3e → 3g → factory index + chain-neutral → 3f → 3h → T66b → 3c. Independent of the registry and of every token body: only `src/factory/`, its
 tests, `GovGas` and the deploy scripts move. **Order:** T67 → T70 → T68, sequential in this worktree; T69 (docs share) drafts
 beside them and lands in T19. **Estimate:** 6 agent-days (3 for the index, 3 for the extension). Each contracts task ends with the whole `forge test` green at the default set
 and the size gate; no PQZ file moves, so no per-set run. Red first, positive control first, one change at a time; mutants one at
@@ -2092,14 +2092,14 @@ every creation path) and B (chain-neutral releases); **T71–T76 owner-approved 
 `ChainEnv` appended to its clone code, read by `EXTCODECOPY`: no `initEnv`, no storage, no layout pin) **and the Fable review
 applied** (spec §11: `configureChain`'s reference block and the sibling order, the `creatorId` ABI round, the release list
 `smartcontracts/evm/releases.json`, `InstanceNotCreated`, the extra tests and mutants). **Place:** with the factory index group,
-after T66b, before 3c (owner 2026-11-07). **Order:** T67 → **T71 + T72 as one segment** (no task between them; gates at T72's end) → T70 → T73
+after 3g (T57), before 3f (owner 2026-11-07). **Order:** T67 → **T71 + T72 as one segment** (no task between them; gates at T72's end) → T70 → T73
 → T74 → T76 → T68; T75 (docs) beside, lands in T19. Tasks, files and sizes: spec §10.2 (T71 2, T72 3.5, T73 2, T74 3, T76 1.5,
 T75 1; T68 +0.5; total 13.5). T72 moves gas and size pins old → new and runs the four PQZ sets; T74 carries the ABI change to
 `clientkeys`, every `ua-*` binding, the node's `abi.rs` and indexer and `selector_audit.json`, with the operator note.
 
 ### Task T67: the record, the per-class lists, the paged views
 
-**Depends on:** T66b (owner 2026-11-07; the spec is approved). **Estimate:** 2.
+**Depends on:** T57 (owner 2026-11-07; the spec is approved). **Estimate:** 2.
 
 **Files:** `src/factory/{OpenFactory,IOpenFactory}.sol`; `test/v2/FactoryIndex.t.sol` (new); `test/v2/Factory.t.sol`,
 `test/governance/GovGas.t.sol` (a `createDex` row beside `createToken`); `legacy/ua-mtx-merge/factory-index/`.

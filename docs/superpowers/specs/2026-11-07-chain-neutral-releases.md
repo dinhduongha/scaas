@@ -546,9 +546,10 @@ guides' lines that say the factory's constructor takes `chain_uid`.
 
 ### 10.1 Place
 
-**With the factory index group, after T66b, before 3c** (owner 2026-11-07, moved from before 3f). Both rewrite the same
-creation paths (`_create`, `createDex`, `createInstance`, the record's creator field). The cost of the move: 3f and 3h are written
-against immutables and moved here, so T72 reads more code; T66b's size target leaves this group's growth as margin. **T71 and T72 land as one segment** (Fable): no other task between them, and the gates run at T72's
+**With the factory index group, after 3g, before 3f** (owner 2026-11-07, approved as recommended). Both rewrite the same
+creation paths (`_create`, `createDex`, `createInstance`, the record's creator field), and 3f (T44–T50) adds code to `PqzCore` /
+`PqzLayer` / the PQZ kinds that would otherwise be written against immutables and moved again. Kind 13's growth falls inside the
+size window that T66b closes. **T71 and T72 land as one segment** (Fable): no other task between them, and the gates run at T72's
 end, since T71 alone leaves every kind on the old constructor. Order: T67 → **T71 + T72** → T70 → **T73** → **T74** → **T76** →
 T68 (mutants, with this spec's), **T75** beside (docs, lands with T19).
 
