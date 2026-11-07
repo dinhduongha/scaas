@@ -1474,6 +1474,25 @@ fields `tax`, `tax_mode`, `tax_recipient`, `net`, `withheld_by`; alerts on `TaxR
 
 **Gates:** whole `forge test`, four sets.
 
+### Task T43b: what 3e and 3g left open (node, invariants, the "+0" finding)
+
+**Depends on:** T43 and T55. **Place:** beside the factory index group (node files and test files only; no contract source),
+or after it if the two heavy slots are busy. **Estimate:** not sized yet [estimate: 2–3].
+
+Items, each with a failing test first where it is code:
+1. **Node (3e, T42's report):** a `TAX_MISMATCH` pre-check with `expected` read from `taxConfig()` (today the simulation's named
+   revert covers it); alerts on `TaxRateSet`, `TaxRecipientSet`, `FeatureDisabled(23)`, `RoleRevoked(23)`; tests "never downgraded on
+   retry" and "landed elsewhere"; the mesh refusing a pay by name; `payNo + body` counted in the price quote; a pay-with-tax e2e on
+   anvil.
+2. **Node (3g, owner 2026-11-07):** `PQZ_KEY_ROTATED`'s "since intake" uses the block at which the node claimed the job from the
+   pull path, recorded in the node's `Sent` state, instead of the fixed `ROTATION_LOOKBACK` of 10,000 blocks (`submit.rs`); the
+   fixed window stays only for a job with no recorded claim block. Tests: a rotation before the claim is not `PQZ_KEY_ROTATED`, one
+   after it is.
+3. **Invariants (3e, T43's report):** PQZ handlers at the four sets and a relay-fee handler for J1–J8 (T43 ran kind 8 only); J6–J8
+   move into the suite or are stated as covered by their own files.
+4. **The "+0" mutant (T43):** an extra read of the regulated tax slot in the base `_uaMove` was killed only by gas pins, no
+   plus-zero slot test went red: find why and make the slot test catch it.
+
 ### PQZ verifier mode (3f, owner approved 2026-11-06; names renamed by the owner 2026-11-07): tasks T44–T50
 
 **Spec:** [`2026-11-06-attested-verify.md`](../specs/2026-11-06-attested-verify.md), revised after the Codex and Fable reviews
