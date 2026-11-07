@@ -1,7 +1,7 @@
-# `OpenFactory`: an on-chain index of every contract it creates (draft for the owner)
+# `OpenFactory`: an on-chain index of every contract it creates 
 
-**Status:** DRAFT, SPECIFIED, not approved. Nothing is built; the plan tasks T67–T69 of
-[`2026-11-04-ua-mtx-merge.md`](../plans/2026-11-04-ua-mtx-merge.md) are **not started until the owner approves this spec**.
+**Status:** SPECIFIED, **approved by the owner 2026-11-07** (the six questions of §6 answered as recommended). Nothing is
+built yet; the plan tasks T67–T69 of [`2026-11-04-ua-mtx-merge.md`](../plans/2026-11-04-ua-mtx-merge.md) start after 3g (T57).
 **Place (owner 2026-11-07):** after 3g (T51–T57), before 3f: work order 3e → 3g → factory index → 3f → 3h → 3c. Branch
 `ua-mtx-merge`.
 
@@ -142,6 +142,10 @@ paged views after history expiry); a mirror is a cache, never the source. Nothin
 `factory`) are unchanged.
 
 ## 6. Questions for the owner (each with a recommendation)
+
+**Owner 2026-11-07: all six answered as recommended:** (1) the owner list stays a claim, wallets filter on `version ≠ 0`
+and show the creator; (2) no list by current owner now; (3) releases are not indexed; (4) `ownerUA = 0` stays out of the
+owner lists; (5) lists per class only; (6) unregistered contracts are indexed, flagged by `version`.
 
 1. **The owner list is a claim** (§2.3): anyone may name any UA as owner. **Recommend:** accept; wallets show registered
    entries and the creator by default. A consent step (the owner UA signing the creation) is a separate signed creation path,
