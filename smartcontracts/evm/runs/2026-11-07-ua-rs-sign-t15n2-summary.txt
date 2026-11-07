@@ -1,0 +1,44 @@
+# 2026-11-07 ua-rs-sign T15n2: the T15n follow-up (CTR-UA-29). (1) The recipient's position: `pickDecoys` takes an optional
+# named `recipient` (the real one, excluded implicitly) and then answers `{decoys, legs}`, `legs` the full leg order uniformly
+# shuffled by the OS CSPRNG (Fisher-Yates, each index by rejection sampling); without it the answer is `{decoys}` as before;
+# `pqz-read --command decoys --recipient` and `zether-read-balance --decoy-count --recipient` pass it through; ua-libraries.md
+# states that callers use the `legs` order (or shuffle themselves) and that a fixed position names the recipient. (2) The
+# pre-existing zether-prover clippy --all-targets -D warnings findings cleaned in a separate commit, behaviour unchanged.
+# (3) The recency weight 2 / 1 kept as built, a documented choice (ua-libraries.md). Commits: f462c80c (zether-prover clippy:
+# src/api.rs needless_borrow x10, src/zether.rs manual_is_multiple_of x2, tests/recover.rs unused imports, tests/zether_proofs.rs
+# the constant assertion as a const block), 352e9386 (the recipient and the shuffled legs, tests, docs, plan, the T15n harness's
+# M10-M12 on the new text, the T15n2 harness, gates mutant-logs), the follow-up commit of this summary and the mutant record.
+# No contract, statement, transcript, byte format, C ABI call or status change; no new dependency, no lock changed.
+# All commands through scripts/capped, foreground, -j2, --locked, --offline; full logs in the scratch directory, not committed.
+# UNAUDITED.
+step | commit | rc | counts
+ua-rs test (default: zether + pqz n2304-kmax4096, the release cell) | 352e9386 tree | 0 | 36 suites, 330 passed, 0 failed, 3 ignored
+ua-rs test --test pqz_read --bin pqz-read -- --include-ignored (ANVIL=foundry's anvil 1.8.5, stopped by the tests) | 352e9386 tree | 0 | 1 + 4 passed (incl. decoys_against_anvil with --recipient, decoy_arguments); no anvil left
+ua-rs test --features vectors --lib --tests --bins | 352e9386 tree | 0 | 38 suites, 379 passed, 0 failed, 5 ignored
+ua-rs test --no-default-features --features wallet,mlock | 352e9386 tree | 0 | 27 suites, 256 passed, 1 ignored
+ua-rs test wallet,zether,mlock --lib --test facade_zether | 352e9386 tree | 0 | 2 suites, 19 passed
+ua-rs test wallet,zether,pqz,pqz-set-n2048-kmax1024,mlock --lib --bin pqz-read --test pqz_read | 352e9386 tree | 0 | 3 suites, 11 passed, 2 ignored (the anvil tests)
+ua-rs unit tests facade::decoys (incl. legs_recipient_position_uniform: 50,000 draws, chi-square 4 df < 18.47; shuffle_uniform: 60,000 shuffles, 6 orders, 5 df < 20.52, naive control > bound) | 352e9386 tree | 0 | 6 passed
+ua-rs clippy --all-targets -D warnings: default, vectors, --no-default-features, wallet,mlock, wallet,zether,mlock, wallet,pqz,n2048,mlock, + vectors | 352e9386 tree | 0 | 0 each (7 cells)
+zether-prover clippy --all-targets -D warnings, default and --features hazmat | 352e9386 tree | 0 | 0 / 0 (was 12 lib + 1 test + 2 test-import errors before f462c80c)
+zether-prover test default / --features hazmat | 352e9386 tree | 0 | 15 suites, 74 passed, 2 ignored / 15 suites, 88 passed, 2 ignored
+zether-prover test --test read_balance --bin zether-read-balance -- --include-ignored, default and hazmat (anvil) | 352e9386 tree | 0 | 1 + 5 / 1 + 6 passed; no anvil left
+ua-c cargo build, cargo test (header drift), clippy --all-targets -D warnings, python3 -m unittest tests.test_vectors | 352e9386 tree | 0 | 4 + 5 passed; 0; 89 tests OK (test_pick_decoys with recipient)
+ua-py tests.test_wallet (Zether/Pqz words_commands_on_the_forge_rows, Pqz no_oracle) on the release libscaas_ua_c; ua-go go test ./wallet -run WordsOnTheForgeRows | 352e9386 tree | 0 | 3 OK; ok
+check_test_features.py | 352e9386 tree | 0 | 57 manifests 0 findings; every graph 0 findings; positive controls found
+cargo tree --locked --offline -e normal: ua-rs, ua-c, ua-cxx, ua-qt, ua-dart-frb/rust, ua-rs/fuzz, zether-prover, scaas-node | 352e9386 tree | 0 | 8 of 8; no lock changed
+cargo deny --all-features check: ua-rs | 352e9386 tree | 0 | advisories ok, bans ok, licenses ok, sources ok
+docs: test_docs_check.py; docs_check.py check; docs_check.py paths | 352e9386 tree | 0 | ok; 0 errors (5 pre-existing budget warnings); 0 machine paths
+mutants: 2026-11-07-ua-rs-sign-t15n2-mutants.py, sixteen runs (one each), git diff --exit-code after each | 352e9386 | 0 | 16 killed, 0 survived, 0 not loaded (2026-11-07-ua-rs-sign-t15n2-mutants.txt)
+gates mutant-logs (every record ends with no survivor and every harness checks; T15n's M10-M12 follow the new text, T15n2 added) | 352e9386 tree | 0 | 12 of 12
+# Decisions (controller; the owner may override): (1) `recipient` is one optional named field of `pickDecoys` (one real
+# recipient, as asked); it is added to `exclude` inside the pick, and the reading layers also drop it from the candidates.
+# (2) `legs` is the pick's answer beside `decoys` (drawn order kept); pqz-read prints `legs` as UAs beside `decoys: [{ua, pk}]`
+# (the recipient's key is the caller's, not read); zether-read-balance only names it in the request (`pickDecoys` answers
+# `legs`). (3) The shuffle reuses the pick's `below` (rejection sampling); a seeded generator only in the unit tests (`draw`
+# is private; `pick` uses OsRng; T15n's M11 still kills a fixed seed). (4) The tests count positions from a fixed seed; the
+# facade test draws by the OS CSPRNG 50 times (the recipient first and last at least once each: chance of a false failure
+# about 1e-6). Residuals: the counts differ from T15n's summary for unchanged cells (suites counted from `test result` lines
+# here); a caller that omits `recipient` still owns the order (documented); the bindings ua-cxx, ua-qt, ua-dart-frb, ua-cs
+# not run (untouched; COMMANDS membership only); zether-prover `--features hazmat,bn254` still warns an unused `Bn254` import
+# in tests/recover.rs (the legacy feature, not in the gate). UNAUDITED.
