@@ -133,6 +133,7 @@ for _m in ("m-t1-credit-to-latest", "m-t1-migration-to-keyversion", "m-t2-counte
 
 def red_tests(log):
     forge = re.findall(r"\[FAIL[^\]]*\] (\w+)\(", log) + re.findall(r"\[FAIL[^\]]*\] (invariant_\w+)$", log, re.M)
+    forge += re.findall(r"^ (invariant_\w+)\(\) \(runs:", log, re.M)  # a failed invariant: its name on the line after the reason
     node = re.findall(r"^\u2716 (.+?) \(\d", log, re.M)  # node --test: "✖ <name> (<ms>)"
     node += re.findall(r"^test (\S+) \.\.\. FAILED$", log, re.M)  # cargo test
     return sorted(set(forge) | set(n for n in node if n != "failing tests:"))
@@ -140,6 +141,7 @@ def red_tests(log):
 
 def run(mid):
     task, path, old, new, match = MUTANTS[mid]
+    task = os.environ.get("MUTANTS_LOG_TASK", task)  # T56 re-runs an earlier task's mutants into its own table
     full = os.path.join(EVM, path)
     src = open(full).read()
     if src.count(old) != 1:
@@ -156,7 +158,7 @@ def run(mid):
                                      stdout=log, stderr=subprocess.STDOUT)
             else:
                 # only the test directory of the match is compiled, into its own out/ and cache/ (the tree's stay as they are)
-                d = match.split("/")[0] + "/" + match.split("/")[1] if match.count("/") > 1 else "test"
+                d = os.path.dirname(match) if match.count("/") > 1 else "test"
                 env = {**os.environ, "FOUNDRY_TEST": d, "FOUNDRY_OUT": "out/mutants", "FOUNDRY_CACHE_PATH": "cache/mutants"}
                 rc = subprocess.call([CAPPED, FORGE, "test", "--match-path", match], cwd=EVM, env=env, stdout=log,
                                      stderr=subprocess.STDOUT)

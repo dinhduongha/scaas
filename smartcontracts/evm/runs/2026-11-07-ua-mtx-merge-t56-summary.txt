@@ -1,0 +1,16 @@
+# ua-mtx-merge T56 gate summary (full output in git-ignored .log files, not committed)
+# T56 (group 3g, pqz-key-versions spec §13, §14): the key-version invariants J1-J10 and the mutant harness. UNAUDITED.
+# Base: 67cfab4d. Commits: this one (the suite, summary, mutants table, harness).
+step | commit | rc | counts
+t56-first-run | 67cfab4d + suite | 1 | invariant_pqzVersions red on the first ghost (a pendingCount per credit: two TRIVIAL shields join one tail entry); then an index overflow in the handler; both the suite's own, fixed before this commit
+t56-default | this | 0 | forge test --match-path 'test/pqz/invariant/*': invariant_pqzVersions (32 runs, 1,280 calls, 0 reverts) and test_handler_reachesEveryPath passed
+t56-at-set-n2048-kmax1024 | this | 0 | at-set.sh test --match-path 'test/pqz/invariant/*': 2 passed 0 failed; PqzSet.sol restored
+t56-at-set-n2304-kmax4096 | this | 0 | the same: 2 passed 0 failed; PqzSet.sol restored
+t56-at-set-n2560-kmax16384 | this | 0 | at-set.sh test --match-path 'test/{ua,pqz,as/confidential}/*' (T53-T56 at this set): 955 passed 0 failed 5 skipped, 98 suites; PqzSet.sol restored
+t56-at-set-n2816-kmax65536 | this | 0 | the same glob: 950 passed 0 failed 10 skipped, 98 suites (its tool notification was lost; the run had compiled and was in its tests when PqzSet.sol was restored by hand with at-set.sh's own git checkout; its rc and counts are from its own output)
+t56-mutants-invariant | this | 1 each | 8 of 8 killed against test/pqz/invariant/* (<id>@inv): M-T1 x2, M-T2, M-T4 (the control), M-T9, M-R3 x2, M-R5; the invariant itself red in 7 of 8 (M-T4's kept-for-migration only the control test)
+t56-mutants-rerun | this | 1 each | T52's 14 mutants re-run on the T56 tree (PqzCore / PqzLayer changed by T53 since their kill run): 14 of 14 killed; T51's (UARegistryLib) and T53's mutated files unchanged since their kill runs, every mutated text still found once (48 rows)
+#
+# Totals of the group's harness: T51 14, T52 14 (+ 14 re-run here), T53 1, T54 7, T55 4, T56 8: 48 mutants, every one killed,
+# none a compile error. M-T6's OFFCHAIN-token kill is T44's (3f); M-C1's Cartesian clause is ua-rs-sign's wallet recovery.
+# J7 / J8 are the vectors' (T54: portable.json v0 rows and the pqz statement vectors unchanged).

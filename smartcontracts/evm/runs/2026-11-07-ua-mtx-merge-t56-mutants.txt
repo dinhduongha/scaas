@@ -1,0 +1,22 @@
+m-t9-stale-rule-dropped@inv | invariant_pqzVersions, test_handler_reachesEveryPath | 1
+m-t1-credit-to-latest@inv | invariant_pqzVersions, test_handler_reachesEveryPath | 1
+m-t1-migration-to-keyversion@inv | invariant_pqzVersions, test_handler_reachesEveryPath | 1
+m-t2-counter-per-version@inv | invariant_pqzVersions, test_handler_reachesEveryPath | 1
+m-t4-selftransfer-kept-for-migration@inv | test_handler_reachesEveryPath | 1
+m-r3-current-at-setpqzkey@inv | invariant_pqzVersions, test_handler_reachesEveryPath | 1
+m-r3-late-proof-lowers@inv | invariant_pqzVersions | 1
+m-r5-list-per-version@inv | invariant_pqzVersions, test_handler_reachesEveryPath | 1
+m-t1-credit-to-latest | test_credit_afterRotation_lands_vPlus1 | 1
+m-t1-migration-to-keyversion | test_counter_sharedAcrossVersions, test_stale_migration_ok | 1
+m-t2-counter-per-version | test_counter_sharedAcrossVersions | 1
+m-t3-credit-read-twice | test_credit_readOnce | 1
+m-t4-selftransfer-dropped | test_selfTransfer_current_refused | 1
+m-t4-selftransfer-kept-for-migration | test_counter_sharedAcrossVersions, test_keyReused_migration, test_replay_afterMigration_refused, test_stale_migration_ok | 1
+m-t5-pkf-from-current | test_counter_sharedAcrossVersions, test_equalTrivial_accountSettled, test_keyVersion_unprovenStale_refused, test_replay_afterMigration_refused, test_stale_migration_ok | 1
+m-t6-pairwise-dropped-op1 | test_keyReused_auditor, test_keyReused_migration | 1
+m-t6-pairwise-dropped-op7 | test_keyReused_legs | 1
+m-t6-pkf-only | test_keyReused_auditor, test_keyReused_legs | 1
+m-t8-credited-without-version | test_credit_afterRotation_lands_vPlus1 | 1
+m-t8-debited-without-version | test_counter_sharedAcrossVersions | 1
+m-t9-stale-rule-dropped | test_stale_payment_refused | 1
+m-t10-rollover-static-68 | test_pqzNamedPrepareAccUA, test_pqzNamedRollOverUA, test_static_100ok, test_static_68refused, test_typedOpsVectors_UAPqzRollOver, test_typedOpsVectors_UAPrepareAcc | 1
