@@ -1,9 +1,12 @@
 # PqChat public topics: communities, posts, threaded replies and votes in contract state
 
 **Status:** SPECIFIED (2026-11-07). The owner ruled the design's choices the same day (D18–D22, §9; a Change on
-[CTR-CHAT-01](../../decisions.md#CTR-CHAT-01)); two small questions remain (§9, Q1–Q2), each with a recommendation.
-Nothing is built. Builds into `PqChat` in group 3c on branch `ua-mtx-merge` (TODO item 3c); the tasks are §10, the
-factory changes §11. UNAUDITED.
+[CTR-CHAT-01](../../decisions.md#CTR-CHAT-01)); its two remaining questions (§9, Q1–Q2) were answered as recommended
+the same day. **Factory (owner-approved 2026-11-07):** `PqChat` is class 3 on the factory's generic path (factory index spec
+§8, `2026-11-07-factory-contract-index.md` on branch `ua-mtx-merge`); the `PqChat`-specific factory code this spec first
+proposed (`createPqChat`, `deployPqChatImplementation`, `PQCHAT_DOMAIN`, `isPqChat`, task PF1) is replaced by that path,
+mapped in §11; `ChainEnv` (spec `2026-11-07-chain-neutral-releases.md`, same branch) applies to `PqChat` instances.
+Nothing is built. Builds into `PqChat` in group 3c on branch `ua-mtx-merge` (TODO item 3c); the tasks are §10. UNAUDITED.
 
 **Parent spec:** [`2026-10-25-ua7-pq-e2e-sessions.md`](2026-10-25-ua7-pq-e2e-sessions.md) version 2 (P1–P32, D1–D17,
 D22). This file continues its numbering (P33–P46) and reuses its domain, purpose tag, signature check, nonce bitmaps,
@@ -24,7 +27,7 @@ on chain is cheap, fine".
 
 ```mermaid
 flowchart TD
-  F["OpenFactory: createPqChat (D22)"] --> I["PqChat instance (owner UA): sessions + topics"]
+  F["OpenFactory: createInstance, class 3 (D22)"] --> I["PqChat instance (owner UA): sessions + topics"]
   I --> T["Topic (owner UA, writers, openReplies)"]
   T --> P1["Post: entry, parentId = 0, depth 0"]
   T --> P2["Post"]
@@ -123,7 +126,7 @@ any. An edit keeps the original's topic, parent, reference, votes and place in e
 id. Two edits racing for the same version: the first to land wins, the other is refused and re-signed (as the parent's P9).
 
 **P39 — Storage.** Each record's bytes, `abi.encode(<struct fields>, sigHash)`, go into SSTORE2 blobs of at most the
-release's declared code-size limit (parent P11), split across as many blobs as needed. As the parent's D11, the
+code-size limit (parent P11; a chain value, `ChainEnv.params[0]`, §11), split across as many blobs as needed. As the parent's D11, the
 signature's hash is in the blob and its bytes in the event: the contract checked the signature on the way in; a mirror
 copying the record elsewhere needs the bytes from the author, the event or an indexer. Content never depends on a log.
 **The only bound on a body is the transaction** (EIP-8037: regular + state gas within the chain's block limit, about
@@ -214,7 +217,8 @@ release. Measured in PT4 against the size gate; if the release then passes 64 Ki
 
 **P45 — Node.** Six new `call` rows (`createTopic`, `updateTopic`, `setTopicWriter`, `postEntry`, `editEntry`,
 `voteEntry`), equal to the release's entries both directions, named JSON fields per job, old hex forms refused
-(`HEX_ARGS_REFUSED`); the call target must be an instance the chain's factory lists as `PqChat` (parent P17, P32). The
+(`HEX_ARGS_REFUSED`); the call target must be an instance the chain's factory lists as `PqChat` (parent P17, P32): the
+generic `factory_class(3)` guard rule, `infoOf(target).contractClass == 3` and `version ≠ 0` (factory index §8.6). The
 rule and the rows go in `docs/node/job-api.md` for every consumer (PLANNED). The node's indexer **may** mirror topics for
 full-text search and feeds, reading the views (events only as a hint of what to read) and the factory index for the
 instances; the chain's state is the answer, and every mirrored item names its `(chain_uid, instance, list, index)` so a
@@ -271,8 +275,13 @@ the `ref` shape check, the nonce scope's `topicId` dimension, the list key (pare
   `chainUid`, instance address, entry id and an optional content hash; no bridging and no verification across chains.
 - **D21 — Votes.** Minimal up and down counts per entry, in state; one vote per UA per entry, changeable.
 - **D22 — `PqChat` is a factory kind** (parent §2.1 P32): many instances per chain, each with its own owner UA, sessions
-  and public topics; the factory index gets a `PQCHAT` class (§11).
+  and public topics; `PqChat` is class 3 on the factory's generic path (§11, factory index spec §8, owner-approved
+  2026-11-07).
 - **Cost:** the owner accepts the on-chain cost ("if storing on chain is cheap, fine"); §6 gives it per KiB.
+
+**Owner 2026-11-07: Q1 and Q2 answered as recommended** (a Change on CTR-CHAT-01): (Q1) no contract feature; the client
+posts the rest of a long text as replies by the same author, marked as continued; (Q2) an instance's owner UA has no power
+over sessions, topics, entries or votes; it is fixed at creation, with no transfer.
 
 **Q1 — Text longer than one transaction.** A body is bounded by the chain's block limit (≈ 38 KB at 60 M).
 **Recommendation:** no contract feature; the client posts the rest as replies by the same author, marked as a
@@ -285,52 +294,75 @@ A later release could add an owner-set name or a topic-creation allow-list if a 
 
 ## 10. Tasks for 3c (branch `ua-mtx-merge`)
 
-To be numbered into the merge plan; sizes in agent-days. The factory index tasks T67–T69 come before 3c in the work order
-(3e → 3g → factory index → 3f → 3h → 3c), so PF1 extends a built index.
+To be numbered into the merge plan; sizes in agent-days. The factory index tasks T67–T70 (T70: the generic catalogue and
+`createInstance`) and the chain-neutral tasks T71–T76 come before 3c in the work order (3e → 3g → factory index → 3f → 3h →
+3c), so `PqChat` is registered on a built generic path with no factory change. PF1 is dropped (§11).
 
 | # | Task | Files | Size |
 |---|---|---|---|
-| PF1 | Factory `PQCHAT` class (§11) | `src/factory/OpenFactory.sol`, `IOpenFactory.sol`, `test/factory/*`, `GovGas` row | 1–1.5 |
-| PC0 | `PqChat` as a release (parent P32): `initialize(creator, version, ownerUA)` once, by the factory only; `owner()`; ERC-7201 storage; immutables registry, `chain_uid`, factory, code-size limit; `homeContract` in `PqChatSession` and the home-instance check of P9; store-list `contract`; changes to UA-7 plan T5, T6, T8 (T8 becomes the release deploy in `DeployBase` plus one instance) | `src/pqchat/*`, `script/DeployBase.s.sol`, `test/pqchat/*` | +0.5–1 over T5–T8 |
+| ~~PF1~~ | **dropped** (owner-approved generic factory, §11): T70 builds the generic path; `PqChat`'s registration is three deploy-script calls in PC0 | — | 0 |
+| PC0 | `PqChat` as a release of class 3, kind 0 (parent P32, §11): `initialize(bytes32 ownerUA)` once, by the factory only (`ownerUA` 0 allowed, fixed, no transfer); `factoryInfo()`; `supportsInterface` (ERC-165, `type(IPqChat).interfaceId`); `owner()`; ERC-7201 storage; `initEnv` / `chainEnv()` (`ChainEnv`: `chainUid`, registry, code-size limit `params[0]`); constructor `(ReleaseId, factory_, implArgs)`; `DeployBase` publishes the class env, deploys release 1, enables `(3, 0)`, creates one instance; `homeContract` in `PqChatSession` and the home-instance check of P9; store-list `contract`; changes to UA-7 plan T5, T6, T8 (T8 becomes the release deploy in `DeployBase` plus one instance) | `src/pqchat/*`, `script/DeployBase.s.sol`, `test/pqchat/*` | +0.5–1 over T5–T8 |
 | PT1 | Vectors: six topic typehashes, `EntryRef`, ids, a record and blob per struct, the new `PqChatSession` typehash, non-zero values in every field | `clients/clientkeys` `src/pqchat.js`, `scripts/pqchat-vectors.mjs`, `smartcontracts/vectors/pqchat/topics.json` | 0.5–1 |
 | PT2 | Topics: structs, five entries (no votes), rights, edits, multi-blob bodies, `ref`, lists, views, events, errors; tests 1–4, 6–10 | `src/pqchat/PqChat.sol`, `PqChatTypes.sol`, `IPqChat.sol`, `test/pqchat/PqTopics.t.sol` | 2–3 |
 | PT3 | Votes: `voteEntry`, vote and score slots, views; test 5 | same | 0.5–1 |
-| PT4 | Gas rows of §6 (`--isolate`, new pins with figures), size-gate row, layout pin | `test/pqchat/PqChatGas.t.sol`, `size-baseline.json`, `test/v2/layout/` | 0.5 |
+| PT4 | Gas rows of §6 (`--isolate`, new pins with figures), a `createInstance` row with the `PqChat` release, size-gate row, layout pin | `test/pqchat/PqChatGas.t.sol`, `size-baseline.json`, `test/v2/layout/` | 0.5 |
 | PT5 | Mutants of §8 and their summary in the gate runner | `runs/<date>-ua7-pqchat-gates.sh` summary | 0.5–1 |
-| PT6 | Node: six topic rows, the instance check on every `PqChat` row (`isPqChat`), job shapes, allow-list both directions | `scaas-node` call table, `docs/node/job-api.md` | 0.5–1 |
+| PT6 | Node: six topic rows, the instance check on every `PqChat` row (the generic `factory_class(3)` guard rule, built with these rows), job shapes, allow-list both directions | `scaas-node` call table, `docs/node/job-api.md` | 0.5–1 |
 | PT7 | `ua-rs`: build and sign the six records, read the views, resolve a `ref`, vectors row by row | `clients/ua-rs` `pqchat` module | 1 |
 | PT8 | Docs: `docs/contracts/pqchat.md` sections for instances and public topics (SPECIFIED, then BUILT); `docs/contracts/` factory doc row for class 3 | docs | 0.5 |
-| | **Total** | | **7.5–11** |
+| | **Total** | | **6.5–9.5** |
 
-## 11. Changes the factory index needs (spec `2026-11-07-factory-contract-index.md`, branch `ua-mtx-merge`)
+## 11. The factory: the generic path (factory index spec §8, owner-approved 2026-11-07)
 
-Not edited here; for PF1. The index spec is approved with classes TOKEN = 1, DEX = 2 and 3–255 reserved for later classes.
+**Superseded proposal.** This section first proposed `PqChat`-specific factory code (a `CLASS_PQCHAT` constant, an env
+domain `PQCHAT_DOMAIN = 254`, `deployPqChatImplementation` and its views, `createPqChat`, `isPqChat`, task PF1). The owner
+approved instead a generic catalogue (factory index spec `2026-11-07-factory-contract-index.md` §8, branch `ua-mtx-merge`):
+`PqChat` is **class 3, kind 0**, registered by the registrar with no factory code. Mapping (index spec §8.8):
 
-1. **Class.** `uint8 public constant CLASS_PQCHAT = 3;` in the index's §2.1; `kind = 0`, `version` = the release version,
-   `ownerUA` = the instance's `owner()` after `initialize`. `ClassUnknown` stays for 0 and 4–255.
-2. **Environment domain.** `uint8 public constant PQCHAT_DOMAIN = 254` beside `DEX_DOMAIN = 255`, with `publishPqChatEnv`,
-   `pqChatEnvOf`, `latestPqChatEnvVersion`, as the DEX's (the env carries the factory and `chain_uid`; `implArgs` carries
-   the registry address and the declared code-size limit).
-3. **Catalogue.** `deployPqChatImplementation(uint64 version, uint16 envVersion, bytes initcode, bytes implArgs)`
-   (registrar only; `CREATE2` salt `keccak256(abi.encode("pqchat", version))`; checks `factory()` and `chainUid()` as for
-   a DEX release; the notice period applies), `pqChatReleaseOf`, `pqChatImplementationOf`, `deprecatePqChat`,
-   `isPqChatDeprecated`, `latestPqChatVersion`; events `PqChatImplementationDeployed`, `PqChatImplementationDeprecated`;
-   errors `PqChatVersionUnknown`, `PqChatVersionAlreadyRegistered`, `PqChatVersionDeprecated`, `PqChatVersionNotYetUsable`.
-4. **Creation.** `createPqChat(uint64 version, bytes32 ownerUA, bytes32 salt) returns (address pqchat)`: named parameters,
-   no `initArgs` bundle; clone by `CREATE2` with the creator-scoped salt, `initialize(msg.sender, version, ownerUA)`, the
-   index record (class 3) and its three list pushes, then `PqChatCreated(pqchat, creator, version, implementation,
-   ownerUA)`. `ownerUA` zero is accepted and kept out of the owner list (index Q4). `isPqChat(address)` reads
-   `contractClass == CLASS_PQCHAT` (for the node, as `isDex`).
-5. **Gas.** A creation: the clone's account and 45 B of code (≈ 0.25 M state), `initialize`'s owner slot (≈ 0.1 M), the
-   index (+5 slots steady, +7 first: ≈ 0.49–0.69 M): **≈ 0.85–1.05 M state gas**, plus ≈ 0.1 M regular. Measured in a
-   new `GovGas` `createPqChat` row.
-6. **Size.** The DEX block's pattern again: an estimated +2–3 KB on `OpenFactory` (15,821 B today, +2.5–4 KB from the
-   index), far below 64 KiB; the size-gate row moves old → new.
-7. **Tests.** The index tests of T67 that use class 3 as unknown move to class 4. New: a release deployed, usable after
-   the notice period, deprecated and then refused; a release whose `factory()` or `chainUid()` differs refused; a creation
-   by a relayer naming an owner UA lists under both; two instances by one creator, independent; `initialize` callable once
-   and only by the factory; `contractsPage(3, …)` and `contractsOfOwner(ua, 3, …)`; `isPqChat` true only for class 3;
-   the slot count (+5 / +7). Mutants: the class constant, the env domain, `initialize` before the salt check, `isPqChat`
-   answering for a DEX.
-8. **Formats.** A new `OpenFactory` build for the reset chain (all chains test-only); the deploy JSONs move with its init
-   code, as the index spec says. No token, DEX or `mtx*` typehash or selector changes.
+| First proposed here | Becomes |
+|---|---|
+| `uint8 CLASS_PQCHAT = 3`, `ClassUnknown` for 0 and 4–255 | class id 3 in the CTR-TOK-28 table, no factory constant; ids `uint16`; `ClassUnknown` for 0 and any generic class with no release; `ownerUA` from `factoryInfo()` |
+| `PQCHAT_DOMAIN = 254`, `publishPqChatEnv`, `pqChatEnvOf`, `latestPqChatEnvVersion` | `publishClassEnv(3, 0, …)`, `classEnvOf`, `latestClassEnvVersion` |
+| `deployPqChatImplementation`, `pqChatReleaseOf`, `pqChatImplementationOf`, `deprecatePqChat`, `isPqChatDeprecated`, `latestPqChatVersion`, `PqChat*` events and errors | `deployRelease(ReleaseId(3, 0, v), …)`, `classReleaseOf`, `deprecateRelease`, `latestClassVersion`, `ReleaseDeployed` / `ReleaseDeprecated`, the generic errors; checks by `factoryInfo()` instead of `factory()` / `chainUid()` |
+| `createPqChat(uint64 version, bytes32 ownerUA, bytes32 salt)`, `initialize(msg.sender, version, ownerUA)`, `PqChatCreated`, `isPqChat` | `createInstance(ReleaseId(3, 0, v), salt, abi.encodeCall(IPqChat.initialize, (ownerUA)))`; `initialize(bytes32 ownerUA)`; `InstanceCreated`; `infoOf(a).contractClass == 3 && version != 0` (node: `factory_class(3)`) |
+| gas: a `GovGas` `createPqChat` row | a `createInstance` row with the `PqChat` release (`PqChatGas`, PT4); the factory side measured once in T70 with the test kind |
+| size: +2–3 KB on `OpenFactory` | none for `PqChat`: the generic block is T70's |
+| tests: release usable after notice, deprecated, wrong factory / `chainUid`, relayer creator, `isPqChat`, slot count | the generic ones are T70's; `PqChat`'s own: `initialize` once and only by the factory, `factoryInfo()` fields, ERC-165, two instances independent, `contractsPage(3, …)` after a creation; its mutants: `initialize` without the factory check, `factoryInfo()` with a wrong class |
+| formats | unchanged: no factory format moves for `PqChat` |
+| PF1 (factory `PQCHAT` class, 1–1.5) | **dropped**: T70 builds the generic path before 3c; `PqChat`'s registration is three deploy-script calls in PC0 |
+| PC0 `initialize(creator, version, ownerUA)` | `initialize(bytes32 ownerUA)`, `factoryInfo()`, `supportsInterface`, constructor `(ReleaseId, factory_, implArgs)`; `DeployBase` publishes the class env, deploys release 1, enables `(3, 0)`, creates one instance |
+| PT6 node instance check `isPqChat` | the generic `factory_class(3)` guard rule (built with PT6's rows) |
+
+**What `PqChat` implements** (the generic initializer; index spec §8.8 with the chain-neutral spec's constructor):
+
+```solidity
+// constructor(IOpenFactory.ReleaseId id, address factory_, bytes implArgs)
+//   immutables: FACTORY = factory_, CLASS = 3, KIND = 0, VERSION = id.version; implArgs only values equal on every chain;
+//   the initializer and initEnv locked on the implementation
+function initEnv(ChainEnv calldata env) external;  // msg.sender == FACTORY, once (chain-neutral spec §2.1)
+function initialize(bytes32 ownerUA) external;     // msg.sender == FACTORY, once; ownerUA 0 allowed, fixed, no transfer (Q2)
+function factoryInfo() external view returns (IOpenFactory.FactoryInfo memory);
+function supportsInterface(bytes4 id) external view returns (bool);  // ERC-165 and type(IPqChat).interfaceId
+function owner() external view returns (bytes32);                    // names the instance, no power (Q2)
+```
+
+The creator is not an argument: it is in the factory index (`infoOf(this).creatorId`, the signing UA on a signed creation)
+and, during `initialize`, `IOpenFactory(FACTORY).creating()`.
+
+**`ChainEnv` applies** (chain-neutral spec, owner-approved 2026-11-07, pending its Fable review): the factory writes each
+instance's chain values into its own storage at creation (`initEnv`, before `initialize`): `chainUid`, the registry and
+the code-size limit as `ChainEnv.params[0]` (131,072 on the SCaaS testnet, 65,536 under EIP-7954); they are not immutables
+of the release, so one `PqChat` bytecode deploys at the same address on every chain, and an instance's address depends on
+the factory, its creator, class, kind and salt (CREATE3), not on the release.
+
+**Registration and creation** (deploy script, then anyone):
+
+```solidity
+factory.publishClassEnv(3, 0, 1, env);
+factory.deployRelease(ReleaseId(3, 0, 1), 1, IPqChat.initialize.selector, type(IPqChat).interfaceId, initcode, implArgs);
+factory.setClassKindEnabled(3, 0, true);  // after the notice period
+factory.createInstance(ReleaseId(3, 0, v), salt, abi.encodeCall(IPqChat.initialize, (ownerUA)));
+```
+
+The exact env and constructor arguments follow the factory index spec §8.2 as changed by the chain-neutral spec; this
+section does not restate them.

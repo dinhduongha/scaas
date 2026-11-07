@@ -119,22 +119,23 @@ is no TURN, SFU, libp2p bootstrap, libp2p relay or Waku node.
 SPECIFIED (owner 2026-11-07); nothing built.
 
 **P32 — Many instances per chain.** `OpenFactory` creates `PqChat` instances freely, as it creates tokens and DEXes:
-anyone calls `createPqChat`, the factory clones a catalogued release (EIP-1167, `CREATE2` with the salt scoped by the
-creator) and initialises it with its **owner UA** (`bytes32`, governance identity). Releases are versions in the factory's
+anyone calls the generic `createInstance` for class 3 (factory index spec §8, owner-approved 2026-11-07), the factory
+clones a catalogued release (EIP-1167, CREATE3 with the salt scoped by the creator) and initialises it with its **owner
+UA** (`bytes32`, governance identity) through `initialize(bytes32 ownerUA)`. Releases are versions in the factory's
 catalogue (deployed by the registrar from init code, a notice period before use, deprecable, never upgraded). Each
 instance has its own sessions, epochs, messages, stored messages and public topics, in its own ERC-7201 storage; nothing
-is shared between instances. The release's immutables (set from the factory environment and `implArgs` when the
-registrar deploys it) are the registry address, the chain's `chain_uid`, the factory and the declared code-size limit
-(P11); every clone of a release shares them. The owner UA has **no power** over sessions, topics or entries: it names the
-instance in the factory index and in `owner()`, nothing more. The factory index lists instances by class `PQCHAT`
-(the changes the index needs are in the sibling spec's §11).
+is shared between instances. The factory is a release immutable; the chain values (the registry address, the chain's
+`chain_uid`, the code-size limit of P11) are the instance's `ChainEnv`, written by the factory into each clone at creation
+(spec `2026-11-07-chain-neutral-releases.md`). The owner UA has **no power** over sessions, topics or entries: it names the
+instance in the factory index and in `owner()`, nothing more. The factory index lists instances by class 3
+(the mapping to the generic path is in the sibling spec's §11).
 
 **Where an instance replaces "the chain".** A record is still portable (domain `DS_C`: no chain id, no address, P7), so
 the same record may land in any instance on any chain, as a replica. Wherever this spec says **home chain**, read **home
 instance**: the pair `(homeChain, homeContract)` fixed in the session record (§4.2); the slot rule of P9 holds only where
 `chainUid() == homeChain` and `address(this) == homeContract`. A **chain store** (P27, P29) names an instance:
 `{"kind": "chain", "chainUid": …, "contract": <instance address>}`. `postMessage` needs the epoch in the instance it is
-sent to. A client and the node accept as a `PqChat` only an address the chain's factory lists as class `PQCHAT` with a
+sent to. A client and the node accept as a `PqChat` only an address the chain's factory lists as class 3 with a
 registered release (version ≠ 0).
 
 ## 3. Members, KEM keys, devices
