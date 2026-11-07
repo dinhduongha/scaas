@@ -18,7 +18,7 @@ operator), [CTR-PQZ-13](../../contracts/pq-zero-knowledge.md#CTR-PQZ-13), [CTR-P
 (proof systems, ids, the full-gate trigger), [CTR-PQZ-07](../../contracts/pq-zero-knowledge.md#CTR-PQZ-07) and the
 never-lose-ciphertext rule, [CTR-MTX-29](../../decisions.md#ctr-mtx-29--every-parameter-is-explicit) (explicit parameters); the 3e
 spec [2026-11-05-pay-meta-tax.md](2026-11-05-pay-meta-tax.md) (O18: the 64,512 B stop line, reduce, never `_above64KiB`); the 3f
-spec [2026-11-06-attested-verify.md](2026-11-06-attested-verify.md) (R3 / AV-6: ATTESTED tokens accept unproven keys). Background:
+spec [2026-11-06-attested-verify.md](2026-11-06-attested-verify.md) (R3 / AV-6: OFFCHAIN tokens accept unproven keys). Background:
 [pqz-threshold-decrypt-prove.md](../../research/pqz-threshold-decrypt-prove.md) §7 (research only). Where this design changes an
 existing rule, the change is listed in §10 for a `decisions.md` Change line in T19; nothing is resolved silently.
 
@@ -49,7 +49,7 @@ Written as given; not reopened.
 | # | Call | Where |
 |---|---|---|
 | C1 | **Every PQZ holder gets versions, single-key UAs too.** One rule, no kind branch. A single-key holder whose exported PQZ leaf leaked (CTR-PQZ-13: `pqz-cli`, a key oracle) rotates the PQZ key without a new UA; a leaked BIP-39 seed still means a new UA (the signing key is gone too). | KV-5 |
-| C2 | **Eligibility on a registry without the `0x0142` verifier** (the chains of 3f's ATTESTED tokens): stored with this build's set length **and its proof bytes stored** (F-1). Length is not proof validity, unique ownership or recoverability; the verifier service checks those (3f AV-6). With the verifier, eligibility is exactly O6's "proven". | KV-3, §5 |
+| C2 | **Eligibility on a registry without the `0x0142` verifier** (the chains of 3f's OFFCHAIN tokens): stored with this build's set length **and its proof bytes stored** (F-1). Length is not proof validity, unique ownership or recoverability; the PQZ verifier (off-chain) checks those (3f AV-6). With the verifier, eligibility is exactly O6's "proven". | KV-3, §5 |
 | C3 | **The views mirror `kemKeyOf` / `kemKeyAt`:** `pqzKeyOf(ua)` returns the current version first; `pqzKeyAt(ua, version)`; `pqzKeyLatest(ua)`; `pqzKeyUsed(ua, pqzKeyHash)`. | KV-3 |
 | C4 | **The entries mirror `setKemKey(ua, version, …)`:** `setPqzKey(ua, version, …)` and `storePqzPop(ua, version, pqzPop)`; version 0 keeps today's records, digests and `R_REG` messages byte for byte; versions ≥ 1 use two new typed structs. | KV-1, KV-2 |
 | C5 | **Migration is an op 1 self-transfer** from `(ua, v)` to `(ua, current)`, v < current; every key a statement names is pairwise distinct on chain (`KeyReused`). | KV-9 |
@@ -67,7 +67,7 @@ Written as given; not reopened.
 | Versioned PQZ key records in the next `UARegistry` / `UARegistryLib` generation; R-cross-set's replacement retired (R2) | §2 |
 | Per-version account state in the PQZ tokens (kinds 4, 5, 12, 13), new releases and their catalogue rows | §3 |
 | The statement-safety argument: no `proofSystemId`, statement, transcript or pqz-core vector change | §4 |
-| The ATTESTED mode of 3f with versions | §5 |
+| The OFFCHAIN mode of 3f with versions | §5 |
 | Placement, size, deploy gas, the per-rotation `R_REG` gas | §6 |
 | Vectors, `clientkeys`, every `ua-*`, node rows, jobs, indexer, operator note; the coordination with `ua-rs-sign` | §7 |
 
@@ -106,7 +106,7 @@ release.
   version of the UA stores a key, proven or not; a second version with the same bytes reverts `UAKeyInUse(pqzKeyHash, ua)`. On a
   host generation the check also reads the predecessor (`pqzKeyUsed(ua, h)` there). The marker is per UA, so nobody can squat
   another UA's key with it; the global `keyOwner` stays the proof-time check across UAs (KV-2). So no two versions of one UA ever
-  hold the same key, on any registry kind, before any proof or attestation exists.
+  hold the same key, on any registry kind, before any proof or verdict exists.
 - **Consent.** The UA's own `UASig` ([CTR-UA-36](../../contracts/accounts.md#CTR-UA-36)): the signer for a single-key holder, the
   m-of-n in minimal form for an `msig` (`_portableOk`, as `setKemKey` ≥ 1 and `setPqzKey` today), never `keyData`, over
   `uaMessage(kind, PURPOSE_PQZ_KEY, typed(UAPqzKeyVersionRecord))`. An operator who is not a quorum cannot add a version; a refusing
@@ -157,7 +157,7 @@ CTR-UA-32, held by construction for single-key holders and by the runbook for an
 | Registry | A version is **eligible** when | Why |
 |---|---|---|
 | slot `0x0142` has a verifier | it is `proven` (its bytes stored and verified) | O6 as stated |
-| slot `0x0142` is empty | its key has this build's `PqzSet.PK` length **and** its proof bytes are stored (hash matched) | C2, F-1: nothing can be proven there; 3f's verifier service refuses a key without stored bytes, so a key without them must not be current |
+| slot `0x0142` is empty | its key has this build's `PqzSet.PK` length **and** its proof bytes are stored (hash matched) | C2, F-1: nothing can be proven there; 3f's PQZ verifier (off-chain) refuses a key without stored bytes, so a key without them must not be current |
 
 - `current(ua)` = the highest eligible version, **0 when none is** (then version 0 is returned as stored, `proven = false`: today's
   answer for an unproven key). On both registry kinds `current` moves only inside `register` (with `pqzPop`) or `storePqzPop`:
@@ -240,7 +240,7 @@ The `Account` struct loses its `sendCounter` field (it sat alone in its slot, so
 statement's `pk_t` (or `pk_a`) and appends the pending entry: op 1's receiver, every op 7 leg, decoys included, the auditor copies
 (the auditor's key is `pqzKeyOf(auditorUA)`), `mtxShield`, `mtxWrapShield` and `shieldIn` (TRIVIAL entries, no key, the same queue
 rule). No parameter names a receiver or auditor version (R3). A proof built against `pk_v` of a receiver that reaches v+1 before
-the transaction lands fails `ProofRejected` (ATTESTED: `AttestationMismatch`): liveness only, never funds. Because `current` never
+the transaction lands fails `ProofRejected` (OFFCHAIN: `PqzVerdictMismatch`): liveness only, never funds. Because `current` never
 goes down, such a proof can never land once `current > v`, so the node may refuse it by name without ever calling it `dead` while it
 could still land.
 
@@ -258,7 +258,7 @@ of another set's length is not pending: it never becomes current here.)
 **KV-8.** `PqzTransferArgs`, `PqzMultiArgs` and `PqzBurnArgs` gain **`uint64 keyVersion`** after `fromUA`. The token reads
 `pqzKeyOf(from)` once (the current version, its key), and `pqzKeyAt(from, keyVersion)` when `keyVersion` differs; it **captures the
 selected key and account once**, builds `T` only from `acct[from][keyVersion]` and settles only that account (`acc`, `rolled`,
-`floor`, `cleared`, the deleted slots); `sendCounter[from]` advances. The key check of KV-12 applies (PRECOMPILE: proven; ATTESTED:
+`floor`, `cleared`, the deleted slots); `sendCounter[from]` advances. The key check of KV-12 applies (PRECOMPILE: proven; OFFCHAIN:
 the length). Then:
 
 | `keyVersion` | Allowed debits | Else |
@@ -342,9 +342,9 @@ key → balance = Σ over versions.
 
 - **Disclosure.** A leg's version is not stored (C6). The PQZ disclosure views take it after `kind`:
   `disclosureStatement(entryRef, leg, amount, kind, keyVersion)`, `verifyTransferAmount(entryRef, leg, amount, kind, keyVersion,
-  proof)` and 3f's attested form with `keyVersion` in the same place. `keyVersion` **selects which registered key the opening is
+  proof)` and 3f's OFFCHAIN form with `keyVersion` in the same place. `keyVersion` **selects which registered key the opening is
   checked against** (the leg owner's for `SENDER_S` and `RECEIVER_X`, the auditor's for `AUDITOR`); the verdict says whether the
-  leg opens to `amount` under that key. It does **not** attest which version the leg was encrypted for (Codex #3): for
+  leg opens to `amount` under that key. It does **not** prove which version the leg was encrypted for (Codex #3): for
   honestly generated independent keys a wrong version gives `false` with overwhelming probability [inference], but two registered
   keys with one short secret (`pk_0 = A·s + e_0`, `pk_1 = A·s + e_1`) can both open it. A version that is not stored reverts
   `KeyVersionUnknown(ua, keyVersion)`. The five-argument PQZ forms go to legacy; Zether's `ITransferDisclosure` form is untouched.
@@ -391,7 +391,7 @@ bug (Codex #3):
 
 | # | Property | Why it holds without a version word |
 |---|---|---|
-| 1 | **Domain separation between versions** | The statement carries the full key bytes `pk_f`, `pk_t`, `pk_a`, and the transcript absorbs the whole statement. Versions of one UA hold distinct keys **in every mode**: KV-1's per-UA marker refuses a repeated key at storage, before any proof or attestation exists (Codex #1's issue-before-rotation case cannot arise), and `keyOwner` adds the cross-UA rule where the verifier runs. So the statements for `(ua, v)` and `(ua, v′)` always differ in `pk_f`, even when their `T` coincide (two fresh accounts, or two equal TRIVIAL shields), and a proof, a `PqzAuth` or a 3f attestation (which binds `statementHash`) for one never verifies for the other. |
+| 1 | **Domain separation between versions** | The statement carries the full key bytes `pk_f`, `pk_t`, `pk_a`, and the transcript absorbs the whole statement. Versions of one UA hold distinct keys **in every mode**: KV-1's per-UA marker refuses a repeated key at storage, before any proof or verdict exists (Codex #1's issue-before-rotation case cannot arise), and `keyOwner` adds the cross-UA rule where the verifier runs. So the statements for `(ua, v)` and `(ua, v′)` always differ in `pk_f`, even when their `T` coincide (two fresh accounts, or two equal TRIVIAL shields), and a proof, a `PqzAuth` or a 3f verdict (which binds `statementHash`) for one never verifies for the other. |
 | 2 | **Single use** | `sendCounter` (header word 352) stays per UA and advances on every debit of any version, so a replay meets a stale counter whatever version it names; `entryRef` keeps its formula and stays unique. A per-version counter would have collided `entryRef` across versions: that is why it stays per UA. |
 | 3 | **The debit settles the account it was built from** | A structural rule, J1 plus the capture-once rule of KV-8: the token selects `(from, keyVersion)` and its key once, builds `T` only from that account and settles only that account; every entry of the account was written with `pk_{keyVersion}` in its statement (credits under KV-7 in the same call, `acc` from a debit whose `v_f` row 4 proves under `pk_f`, TRIVIAL entries key-free). **No cryptographic fail-closed is claimed** for a selection bug: two accounts can have identical `T` (both empty, or equal TRIVIAL shields), and keys with one short secret can decrypt each other's ciphertexts. Mutant M-T5 runs with equal TRIVIAL balances and asserts **which account changed**, not only a revert. |
 | 4 | **Masks under two keys of one UA** | A migration encrypts `v_t` under `pk_{v+1}` and `v_f` under `pk_v` with one `r`: `v_t − v_f = (pk_{v+1} − pk_v)^T r + Δ·(amount − balance′) + noise`. Equal keys would cancel the mask (the F-4 class); KV-9 refuses equal keys on chain. Distinct bytes are not enough for related keys: with `pk_{v+1} = A·s + e_1` and `pk_v = A·s + e_0` the difference `(e_1 − e_0)^T r` is short and the amount difference leaks. **Migration confidentiality assumes honestly generated, independent keys** (C8's derivation for a single key, a fresh seed per version for an `msig`), the same assumption and caveat as [§4.5](../../contracts/pq-zero-knowledge.md#45-shared-randomness-against-malicious-recipients)'s related keys: only the UA can register such a pair (each `R_REG` needs `s`), and what leaks is its own amounts. |
@@ -405,11 +405,11 @@ the one the statement was built from. It relies on three contract rules, each pi
 compare (M-R4, M-T6), the per-UA counter (M-T2), and the single read of `current` per credit and of the account per debit (M-T3,
 M-T5). Migration confidentiality additionally assumes honest independent keys (row 4). [inference; UNAUDITED]
 
-## 5. ATTESTED mode (3f) with versions — SPECIFIED
+## 5. OFFCHAIN mode (3f) with versions — SPECIFIED
 
 **KV-12.** The token's key check takes the version; the mode decides what it requires, exactly as 3f's AV-6:
 
-| Read | PRECOMPILE | ATTESTED |
+| Read | PRECOMPILE | OFFCHAIN |
 |---|---|---|
 | Debit: `pqzKeyOf(from)`, and `pqzKeyAt(from, keyVersion)` if stale | `proven` and `PqzCt.PK + 1` bytes of code, else `AccountNotRegistered(ua)` | the length only |
 | Credit: `pqzKeyOf(to)` (current) | the same | the same, length only |
@@ -417,18 +417,18 @@ M-T5). Migration confidentiality additionally assumes honest independent keys (r
 | Auditor at `init`: `pqzKeyOf(auditorUA)` | the same | the same, length only |
 
 - **One current per UA and registry generation, for both modes.** Tokens never pick a version: the registry's `current` (KV-3)
-  decides. On a registry with the verifier, an ATTESTED token credits the highest **proven** version, or version 0 unproven while
+  decides. On a registry with the verifier, an OFFCHAIN token credits the highest **proven** version, or version 0 unproven while
   none is proven (3f's R3 unchanged for a UA that never rotates); on a registry without it, the highest version of this set's length
-  **whose proof bytes are stored** (C2, F-1). So a rotation never moves `current` to a key the verifier service would refuse for
+  **whose proof bytes are stored** (C2, F-1). So a rotation never moves `current` to a key the PQZ verifier (off-chain) would refuse for
   missing bytes.
-- **The verifier service's obligations** (3f §6) apply per version: for each key the statement names, the `pqzPop` bytes of
+- **The PQZ verifier's (off-chain) obligations** (3f §6) apply per version: for each key the statement names, the `pqzPop` bytes of
   **that version** are stored and hash to its `pqzPopHash`; the proof verifies over that version's message (version 0: its two
   messages, as 3f; v ≥ 1: `uaMessage(0x0142, PURPOSE_PQZ_KEY, typed(UAPqzKeyVersion))`; one path is never evidence for another);
   single ownership across every UA **and every version**; the cache key becomes `(ua, version, pqzKeyHash)` (§10 row 11). The
-  on-chain guards KV-1 (per-UA marker) and KV-9 (pairwise compare) hold for outstanding attestations too: a later duplicate cannot
-  be stored, so an attestation issued before a rotation never fits another account.
-- `PqzAttest` is unchanged: it binds `statementHash`, which binds the version's keys and `T` (§4.2 row 1).
-- A rotation in flight makes the attestation of a credit to the rotated UA mismatch (`AttestationMismatch`), the same liveness
+  on-chain guards KV-1 (per-UA marker) and KV-9 (pairwise compare) hold for outstanding verdicts too: a later duplicate cannot
+  be stored, so a verdict issued before a rotation never fits another account.
+- `PqzVerdict` is unchanged: it binds `statementHash`, which binds the version's keys and `T` (§4.2 row 1).
+- A rotation in flight makes the verdict of a credit to the rotated UA mismatch (`PqzVerdictMismatch`), the same liveness
   case as KV-7, with the same mitigations.
 - On a registry without the verifier the `0x0142` list stays empty for these holders (KV-2); decoy discovery stays with 3f's
   service, which applies KV-7's pending filter too.
@@ -444,8 +444,8 @@ CTR-PQZ-12); mainnet 22776 (the owner's) gets this release or a later one, never
 5, 12, 13) with their factory catalogue rows (`OpenFactory` / `DeployBase` entries, release codehashes); nothing deployed is
 upgraded. Order in the branch (owner 2026-11-07: 3g before 3f): **3e (T37–T43) → 3g (T51–T57) → 3f (T44–T50) → 3h (T58–T66) → 3c** (its
 registry items, then the `UARegistryLib` ↔ `UARegistry` rebalance last, measured with 3g in) → T19–T23. Both 3g and 3f change
-`PqzCore._check` / `_keyPtr` and the PQZ entry signatures, so 3f builds its ATTESTED mode over versioned keys and takes §5's
-ATTESTED items (KV-12, the attested disclosure form with `keyVersion`, their tests); it precedes 3c because the rebalance must come after every PQZ contract change (TODO item 3c).
+`PqzCore._check` / `_keyPtr` and the PQZ entry signatures, so 3f builds its OFFCHAIN mode over versioned keys and takes §5's
+OFFCHAIN items (KV-12, the OFFCHAIN disclosure form with `keyVersion`, their tests); it precedes 3c because the rebalance must come after every PQZ contract change (TODO item 3c).
 
 ### 6.2 Registry size and deploy gas
 
@@ -546,7 +546,7 @@ Every language reads the same rows: `clientkeys`, `ua-rs` and the wrappers that 
 |---|---|
 | Jobs (NODE-JOB-23) | PQZ debit jobs carry the named field `key_version` (u64, as `p`); rollover and prepare jobs too; `call` rows for `setPqzKey(ua, version, …)` and `storePqzPop(ua, version, …)`; the node builds every byte from the named fields and refuses old forms (`HEX_ARGS_REFUSED`). `PqzTransferArgs` in `typed.rs` gains `keyVersion` after `fromUA` |
 | Allow-lists | `typed.rs` `TYPED` / `PLAIN` rows and `guard.rs`'s per-kind rules equal to the new `mtxSelectors`, `_uaAllowed`, the static calldata lengths (100 bytes for rollover and prepare) and `selector_audit.json`, both directions, for kinds 4, 5, 12, 13; the rollover row today shared by Zether and PQZ becomes separate per-kind rows (Zether keeps its form) |
-| Refusals by name | `PQZ_KEY_VERSION_UNKNOWN`; `PQZ_KEY_STALE` (a stale debit other than migration or refresh); `PQZ_KEY_REUSED`; at intake `PQZ_KEY_ROTATION_PENDING` (KV-7: a receiver, leg or auditor with a pending version); after the fact `PQZ_KEY_ROTATED`: a queued job whose re-simulation fails `ProofRejected` / `AttestationMismatch` after a `UAPqzKeyCurrent` of one of its parties since intake, the refusal carrying the actual simulation error (the event is evidence of the cause, not proof); never `dead` while it may land. The node does not refuse a self-transfer; the token does (`SelfTransfer` unless a stale-version migration) |
+| Refusals by name | `PQZ_KEY_VERSION_UNKNOWN`; `PQZ_KEY_STALE` (a stale debit other than migration or refresh); `PQZ_KEY_REUSED`; at intake `PQZ_KEY_ROTATION_PENDING` (KV-7: a receiver, leg or auditor with a pending version); after the fact `PQZ_KEY_ROTATED`: a queued job whose re-simulation fails `ProofRejected` / `PqzVerdictMismatch` after a `UAPqzKeyCurrent` of one of its parties since intake, the refusal carrying the actual simulation error (the event is evidence of the cause, not proof); never `dead` while it may land. The node does not refuse a self-transfer; the token does (`SelfTransfer` unless a stale-version migration) |
 | Indexer | `UAPqzKeyAdded`, `UAPqzPopStored` and `UAPqzKeyCurrent` with `version`; `Credited`, `Debited`, `PqzRolledOver` with `keyVersion`; feed rows "current version of a UA" and "pending version" |
 | Keeper | rollovers per `(ua, version)` for every version with a pending tail, not only current |
 | Operator note | the rotation runbook of §3.4's diagram and §7.2's first step; rotate on operator change and on any share holder leaving; in-flight credits to a rotating UA are refused by name and re-proved; a 60 M chain at `n2816-kmax65536` cannot rotate (KV-2) |
@@ -556,7 +556,7 @@ Every language reads the same rows: `clientkeys`, `ua-rs` and the wrappers that 
 The rule is family-neutral: a PQZ key record per `(ua, version)`, written once, strictly sequential, signed by the UA, distinct
 key bytes per UA; each version proven by its own `R_REG`, owned once; `current` = the highest eligible version, moving only when
 proof bytes are stored; nothing deleted; PQZ state per `(ua, version)` with the counter per UA; debits name the version and a stale
-version only migrates; credits go to current; the statement unchanged. PQZ runs only where its precompile exists or a 3f ATTESTED
+version only migrates; credits go to current; the statement unchanged. PQZ runs only where its precompile exists or a 3f OFFCHAIN
 token runs ([CTR-PQZ-01](../../contracts/pq-zero-knowledge.md#CTR-PQZ-01)).
 
 | Family | Registry today | What its round adds |
@@ -575,7 +575,7 @@ NEAR ≠ Algorand: separate rounds, separate storage. A family that later runs a
 | Doc | Change |
 |---|---|
 | `docs/contracts/accounts.md` | CTR-UA-13 (PQZ key versions are not a rotation of the UA), CTR-UA-15 (versions added, each once), CTR-UA-16 (versions, `current`, eligibility, `pqzKeyOf`'s shape, the per-UA marker, generations; R-cross-set's replacement retired, R2), CTR-UA-07's record table (the two structs), the `IUARegistry` block, CTR-UA-29 (one list entry per UA; the wallet's pending filter) |
-| `docs/contracts/pq-zero-knowledge.md` | CTR-PQZ-13 ("immutable" → versioned; the derivation suffix), §7.1 state per `(UA, version, token)`, §7.2's last two lines ("No rotation"), §7.4 (`keyVersion`, the stale rule, `SelfTransfer`, `KeyReused`), §7.6, §7.8 (events and views, restore from state), §7.9 (disclosure with `keyVersion`, what it does not attest), CTR-PQZ-19 / -23 (the debited version's seed; additive sender recovery), §4.5 (the related-key caveat covers migration), §14 (tests) |
+| `docs/contracts/pq-zero-knowledge.md` | CTR-PQZ-13 ("immutable" → versioned; the derivation suffix), §7.1 state per `(UA, version, token)`, §7.2's last two lines ("No rotation"), §7.4 (`keyVersion`, the stale rule, `SelfTransfer`, `KeyReused`), §7.6, §7.8 (events and views, restore from state), §7.9 (disclosure with `keyVersion`, what it does not prove), CTR-PQZ-19 / -23 (the debited version's seed; additive sender recovery), §4.5 (the related-key caveat covers migration), §14 (tests) |
 | `docs/decisions.md` | the entries of §12 and the Change lines of §10, R2's on R-cross-set included |
 | `docs/node/job-api.md`, `indexer-feeds.md`, `ops.md` | §7.3's rows and the runbook |
 | `docs/clients/signers-clientkeys.md`, `ua-libraries.md`, `app.md` | C8's derivation, vault keys and backup per version, k against m, the builders, the wallet rules |
@@ -597,7 +597,7 @@ NEAR ≠ Algorand: separate rounds, separate storage. A family that later runs a
 | 8 | KV-11 | [CTR-PQZ-14](../../contracts/pq-zero-knowledge.md#CTR-PQZ-14) / `ITransferDisclosure`: the five-argument `verifyTransferAmount`, four-argument `disclosureStatement` | PQZ's forms take `keyVersion` and do not attest historical use; Zether unchanged |
 | 9 | KV-6 | `PqzCore` storage layout pin (`test/v2/layout/`); `UAStore`'s pin named as `UARegistrySplit.t.sol`, a legacy file | both move old → new in T51 / T52; T51 adds an active `UAStoreLayout.t.sol` |
 | 10 | KV-8 | PQZ `UA*` typehash pins, `mtxSelectors()`, `selector_audit.json` | move old → new; `PqzAuth` unchanged (R1) |
-| 11 | KV-12 | 3f [AV-6](2026-11-06-attested-verify.md#6-keys-in-attested-mode-r3--specified): "cached by `(ua, pqzKeyHash)`"; `_keyPtr` reads `pqzKeyOf` | cache by `(ua, version, pqzKeyHash)`; debits read `pqzKeyOf` and, if stale, `pqzKeyAt(from, keyVersion)`; C2's eligibility on a registry without the verifier |
+| 11 | KV-12 | 3f [AV-6](2026-11-06-attested-verify.md#6-keys-in-offchain-mode-r3--specified): "cached by `(ua, pqzKeyHash)`"; `_keyPtr` reads `pqzKeyOf` | cache by `(ua, version, pqzKeyHash)`; debits read `pqzKeyOf` and, if stale, `pqzKeyAt(from, keyVersion)`; C2's eligibility on a registry without the verifier |
 | 12 | KV-3 | O6 / research Q13: "current = the highest proven version" | on a registry without the `0x0142` verifier, "proven" reads "this set's length and the proof bytes stored" (C2, F-1) |
 | 13 | §7.2 | `ua-rs-sign` T16a's "Why": "key rotation for an `msig` holder is **rejected**"; its share header `(msig ua, pqzKeyHash, k, n, index)` | rotation after (A) is built (O4); the header binds the version; shares only to current members |
 | 14 | §6.2 | TODO item 3c: the rebalance's "target ≤ 57 M each" | may be missed by about 0.4–1.8 KB plus 3c's own additions; the 60 M line holds and is accepted (R4) |
@@ -608,7 +608,7 @@ NEAR ≠ Algorand: separate rounds, separate storage. A family that later runs a
 | 19 | R1 | research [§7.3](../../research/pqz-threshold-decrypt-prove.md#73-the-minimal-versioned-model): "an explicit `keyVersion` field in `PqzAuth` follows the explicit-parameter rule" | not adopted (R1) |
 | 20 | O7 | O7's first wording "versions ship in the generation that first enables `0x0142`" | this release's generation on every chain, verifier or not (F-13) |
 | 21 | KV-10 | `IConfidentialToken`, the node's `PLAIN` rows: PQZ answers `mtxRollOver(bytes32,uint256)` / `mtxPrepareAcc(bytes32,uint256)` at 68 bytes | PQZ no longer answers them; the versioned forms at 100 bytes; Zether keeps its forms; interface ids and `selector_audit.json` move |
-| 22 | KV-3 | 3f R3, "an ATTESTED token accepts unproven keys": a key is usable from its storage | unchanged for keys, but on a registry without the verifier a version becomes current only when its proof bytes are stored (F-1) |
+| 22 | KV-3 | 3f R3, "an OFFCHAIN token accepts unproven keys": a key is usable from its storage | unchanged for keys, but on a registry without the verifier a version becomes current only when its proof bytes are stored (F-1) |
 | 23 | KV-8 | research [§7.2](../../research/pqz-threshold-decrypt-prove.md#72-path-a--rotation-near-term) step 5: "anything left under v stays spendable with `s_v`" | spendable through the migration (and a refresh) only; any other stale debit is refused (F-6) |
 
 ## 11. Questions answered by the owner
@@ -631,7 +631,7 @@ Each lands in `docs/decisions.md` in T19 with its commit; the local labels KV-n 
 |---|---|---|---|
 | KV-1 … KV-5 | CTR-UA-41 | PQZ key records per `(ua, version)`: version 0 as today and write-once (R2), v ≥ 1 strictly sequential, signed by the UA (m-of-n for an `msig`), distinct key bytes per UA at storage, each with its own `R_REG` (version in the message), `proven`, `keyOwner`; `current` = highest eligible (proven; without a verifier, this set's length with the proof bytes stored), moving only when proof bytes are stored, non-decreasing, `UAPqzKeyCurrent`; one list entry per UA; nothing deleted; every PQZ holder; the host rules | §2 |
 | KV-6 … KV-11 | CTR-PQZ-31 | PQZ account state per `(ua, version)`, `sendCounter` per UA, `entryRef` unchanged; credits to current in one read; debits name `keyVersion`, captured once, a stale version only migrates or refreshes; migration = op 1 self-transfer from a stale version; the keys of a statement pairwise distinct; rollovers, prepares and disclosures name `keyVersion`; additive sender recovery | §3 |
-| KV-12, KV-13 | CTR-PQZ-32 | No version word in the statement or transcript: same `proofSystemId`, no pqz-core vector, no full gate, by distinct keys per UA, the per-UA counter and the capture-once rule; migration confidentiality assumes honest independent keys; ATTESTED reads the same `current` and attests per version | §4, §5 |
+| KV-12, KV-13 | CTR-PQZ-32 | No version word in the statement or transcript: same `proofSystemId`, no pqz-core vector, no full gate, by distinct keys per UA, the per-UA counter and the capture-once rule; migration confidentiality assumes honest independent keys; OFFCHAIN reads the same `current` and attests per version | §4, §5 |
 | KV-14 | (in CTR-UA-41) | Versions ship in this release's generation on every chain; new releases only | §6.1 |
 | §7.3 | NODE-JOB-23 | `key_version` named on PQZ jobs; `PQZ_KEY_VERSION_UNKNOWN`, `PQZ_KEY_STALE`, `PQZ_KEY_REUSED`, `PQZ_KEY_ROTATION_PENDING` at intake, `PQZ_KEY_ROTATED` only after a `UAPqzKeyCurrent` since intake with the simulation error; keepers roll every version | §7.3 |
 | KV-15 | CLI-SGN-43 | Key material per version: single-key HKDF with `be64 version` for v ≥ 1, version 0 unchanged; `msig` fresh per version; vault and backups keyed `(ua, version, pqzKeyHash)`; k-of-n shares per version to current members, k = m by default or a stated read threshold; the decoy pending filter; the runbook's cross-chain first step | §7.2 |
@@ -672,13 +672,13 @@ write of a version the host holds (the accepted divergence) included; `register`
 emits `UAPqzKeyCurrent(ua, 0)`; every version-0 path otherwise equal to today's.
 
 **Token, at the four sets** (`script/pqz/at-set.sh <set> test --match-path 'test/{ua,pqz,as/confidential}/*'`): after a rotation a
-new credit lands in v+1; **a proof, `PqzAuth` and attestation issued for a receiver before its rotation and submitted after it
-fail** (PRECOMPILE `ProofRejected`, ATTESTED `AttestationMismatch`), and **a burn issued for version 0 cannot be retargeted to
+new credit lands in v+1; **a proof, `PqzAuth` and verdict issued for a receiver before its rotation and submitted after it
+fail** (PRECOMPILE `ProofRejected`, OFFCHAIN `PqzVerdictMismatch`), and **a burn issued for version 0 cannot be retargeted to
 version 1 by changing `keyVersion`** (the duplicate-key version cannot be stored; with distinct keys the statement differs)
 (Codex #1); a debit on v to another UA after the rotation refused `StaleKeyVersion`, likewise op 7 and a burn with an amount from
 v; a refresh on v works; the migration op 1 moves the balance with the books of J6; `from == to` at the current version and `from`
 as an op 7 leg refused `SelfTransfer`; two equal keys in one statement (an op 7 with two UAs that stored one key, a leg equal to the
-auditor's key, on an ATTESTED token over a registry without the verifier) refused `KeyReused`; `keyVersion` above current refused
+auditor's key, on an OFFCHAIN token over a registry without the verifier) refused `KeyReused`; `keyVersion` above current refused
 `KeyVersionUnknown`, an unproven stale one refused on PRECOMPILE; **M-T5's control: two versions with equal TRIVIAL balances, a
 debit on v changes `acct[ua][v]` and nothing of `acct[ua][v′]`**; a replay of v's debit after the migration refused (stale
 counter); debits on v and v+1 get counters 0 and 1 and distinct `entryRef`; rollover and prepare on a stale version, refused on a
@@ -729,7 +729,7 @@ Legacy copies are the first commit of each task that replaces a body.
 |---|---|---|---|
 | T51 | Registry: `UAStore` layout and the new active pin, `setPqzKey(ua, version, …)`, `storePqzPop(ua, version, …)`, the two typed structs and digests (pins), the per-UA key marker, eligibility and `current` (F-1), `UAPqzKeyCurrent`, per-version `keyOwner`, list once, the views of KV-3, the host rules 1–4, R-cross-set's replacement retired (R2), legacy moves, `IUARegistry`, `DeployBase` / `e2e.py` callers; sizes and the T10 deploy-gas rows at four sets (§6.2) | T43 | 3.5 |
 | T52 | Token: `acct[ua][version]`, `sendCounter[ua]` (layout pin), `keyVersion` in the three args structs (typehash pins), credits to current, the capture-once debit, the stale rule, migration, the pairwise `KeyReused`, rollover / prepare (100-byte static rule) / views / events, `mtxSelectors`, `selector_audit.json`, the factory catalogue rows, gas pins; **kind 13 measured first**, then 4, 5, 12 and the four libraries, stop rule and levers (§6.3) | T51 | 4 |
-| T53 | Disclosure with `keyVersion` (the PRECOMPILE form; the attested form and ATTESTED with versions, KV-12, are built in 3f's T44 / T45); the rotation scenario in `script/pqz/e2e.py` on a local chain with the PQZ precompile, brought up for the task (never the live testnet stack) | T52 | 2 |
+| T53 | Disclosure with `keyVersion` (the PRECOMPILE form; the OFFCHAIN form and OFFCHAIN mode with versions, KV-12, are built in 3f's T44 / T45); the rotation scenario in `script/pqz/e2e.py` on a local chain with the PQZ precompile, brought up for the task (never the live testnet stack) | T52 | 2 |
 | T54 | Vectors and clients: the three generators (§7.1), `clientkeys` builders, derivation, wallet rules (stale, pending decoy filter, repeated key) and additive recovery, every `ua-*` reading the rows (ten packages); `git diff --exit-code` | T53 | 4.5 |
 | T55 | Node: job fields, call rows, allow-lists both directions with static lengths and per-kind rollover rows, the five refusals, indexer events and feeds, keepers per version, operator-note draft; the whole suite with `CAPPED_MEM=6G` alone, clippy, e2e on anvil | T54 | 2 |
 | T56 | Invariants J1–J10 (handlers over credits, shields, debits of every version, rotations, proofs, the host) and the mutant harness of §14 (about thirty mutants, four sets) | T53; beside T54–T55 | 2.5 |
@@ -761,16 +761,16 @@ The first draft was reviewed by Codex ([copy](../../research/pqzver-codex-review
 
 | Item | Severity | Outcome | Where |
 |---|---|---|---|
-| Codex #1: an ATTESTED signature redirected between duplicate-key versions | high | adopted (R5): per-UA key marker at storage, every version, the predecessor included; pairwise `KeyReused`; the issue-before-rotation tests | KV-1, KV-9, §4.2 row 1, §14 |
+| Codex #1: an OFFCHAIN signature redirected between duplicate-key versions | high | adopted (R5): per-UA key marker at storage, every version, the predecessor included; pairwise `KeyReused`; the issue-before-rotation tests | KV-1, KV-9, §4.2 row 1, §14 |
 | Codex #2: R-cross-set's replacement strands version-0 state in host mode | high | closed by R2: the replacement retired, every record write-once | KV-1, §2.3, §10 row 3 |
-| Codex #3: the wrong-key fail-closed argument is stronger than the relations guarantee | medium | adopted (R5): account safety rests on J1 and capture-once; no fail-closed claim; M-T5 with equal TRIVIAL balances asserting the account; the honest-key assumption for migration; disclosure does not attest historical use | KV-8, KV-11, §4.2 rows 3–4 |
+| Codex #3: the wrong-key fail-closed argument is stronger than the relations guarantee | medium | adopted (R5): account safety rests on J1 and capture-once; no fail-closed claim; M-T5 with equal TRIVIAL balances asserting the account; the honest-key assumption for migration; disclosure does not prove historical use | KV-8, KV-11, §4.2 rows 3–4 |
 | Codex #4: sender recovery does not find all historical leg keys | medium | adopted (R5): additive per-leg and auditor matching, then the whole hash; receiver trial decryption for consumed credits; the audited op 7 test | KV-11, §14 |
 | Codex §10 row 5: update every counter read, increment and view together | — | adopted | KV-6 |
 | Codex §10 row 6: capture once before settlement; keep auditor-party and duplicate-recipient checks | — | adopted | KV-8, KV-9 |
 | Codex §10 row 7: the node's rollover row is shared with Zether | — | adopted: separate per-kind rows | §7.3 |
 | Codex §10 row 8: both 3f disclosure forms take the version; the verdict claim | — | adopted | KV-11 |
 | Codex §10 row 10: re-pin selectors with static calldata lengths; `PqzAuth` safe only after uniqueness | — | adopted: 68 → 100 bytes, `_pqzRule`; uniqueness by KV-1 | KV-10, §7.3 |
-| Codex §10 rows 11, 12: issuance-time checks do not protect outstanding attestations; length eligibility is not validity | — | adopted: KV-1's marker; C2 states what length does not mean | KV-12, C2 |
+| Codex §10 rows 11, 12: issuance-time checks do not protect outstanding verdicts; length eligibility is not validity | — | adopted: KV-1's marker; C2 states what length does not mean | KV-12, C2 |
 | Codex §10 row 14: the headroom is an estimate | — | adopted: T51 measures; R4 | §6.2 |
 | Codex: `UARegistrySplit.t.sol` is a legacy file, not a gate | — | adopted: a new active layout pin | §2.3, §10 row 9 |
 | Codex: the host must refuse a version resolved in either generation, keep host reads stable, verify a predecessor's bytes itself | — | adopted | §2.3 host rules 1–3 |

@@ -28,7 +28,7 @@ historical only (no per-leg proof exists here).
 [CTR-MTX-29](../../decisions.md#ctr-mtx-29--every-parameter-is-explicit) (explicit parameters);
 [CTR-GOV-10](../../decisions.md#ctr-gov-10--bit-bands-0-127-one-meaning-128-255-per-application-none-refused) (bit bands); the 3e
 spec [2026-11-05-pay-meta-tax.md](2026-11-05-pay-meta-tax.md) (bit 23 `TAX`, the router-op pattern, O18's 64,512 B stop line);
-the 3f spec [2026-11-06-attested-verify.md](2026-11-06-attested-verify.md) (`verifyMode` in `ConfidentialConfig` and slot 0 byte
+the 3f spec [2026-11-06-attested-verify.md](2026-11-06-attested-verify.md) (`pqzVerifyMode` in `ConfidentialConfig` and slot 0 byte
 22); the 3g spec [2026-11-06-pqz-key-versions.md](2026-11-06-pqz-key-versions.md) (`acct[ua][version]`, `sendCounter[ua]`,
 `Debited` with `keyVersion`, credits to `current`). Where this design changes a recorded rule, the change is listed in §12 for a
 `decisions.md` Change line in T19.
@@ -73,8 +73,8 @@ Written as given; not reopened.
 | C3 | One `memoHash` formula for every debit: `keccak256(memo ‖ ownTag)`, `memo` = `salt ‖ sealedMemo` on a commit-reveal (HASH) transfer, empty otherwise. | §3.3 |
 | C4 | **`ownTag` label `"PQZ/owntag/v1"`**, the HKDF `info` as for the memo key (CTR-PQZ-23's owner-approved `"PQZ/memo/v1"`, the closest analogue: a client-side key from `pqzKeySeed`), the label the no-oracle spec already reserved; `HKDF-SHA256` then `HMAC-SHA256`, pinned by one shared KAT row in `smartcontracts/vectors/ua/pq_kat.json` (Codex C8). | §3.1 |
 | C5 | The op blob tail is self-describing from its last byte (`… ‖ P(v_f) ‖ ownTag ‖ kv ‖ u8(n)`); one internal function `rOf` is the single place that reads or writes it. | §3.2 |
-| C7 | The header is the statement's first 640 bytes **as verified**, copied from the verified buffer; P is the calldata proof. In ATTESTED mode (3f) P is logged the same way; the attestation is not. | §4.2 |
-| C8 | `proofStore` is a field of `ConfidentialConfig` beside 3f's `verifyMode`, stored in `PqzStorage` slot 0 byte 23. A non-PQZ kind refuses a non-zero value where T44 refuses a set `verifyMode` (one shared config check; no Zether body changes). | §4.1 |
+| C7 | The header is the statement's first 640 bytes **as verified**, copied from the verified buffer; P is the calldata proof. In OFFCHAIN mode (3f) P is logged the same way; the verdict is not. | §4.2 |
+| C8 | `proofStore` is a field of `ConfidentialConfig` beside 3f's `pqzVerifyMode`, stored in `PqzStorage` slot 0 byte 23. A non-PQZ kind refuses a non-zero value where T44 refuses a set `pqzVerifyMode` (one shared config check; no Zether body changes). | §4.1 |
 | C9 | **Release discriminator:** a client tells a 3h release by probing `proofStore()` (absent before 3h); vector rows of moved formats carry `"release": "3h"`. No new field. | §9.3 |
 | C10 | Rule ids, next-free at writing: CTR-PQZ-33 (debit record), CTR-PQZ-34 (`ownTag` and the key-version tail), CTR-PQZ-35 (`proofStore`), CTR-GOV-22 (`PQZ_PROOF`), NODE-JOB-24 (the lane's cap); `docs_check.py` confirms at T66. | §12 |
 | C11 | The node does **not** index `PqzDebitProof`'s data (that would be an archive, O5). | §10 |
@@ -219,7 +219,7 @@ seed, still needs the P of the sealing debit itself (§9.6). A rollover seals no
 
 **PP-4.** `proofStore ∈ {0 NONE, 1 LOG}` (O9); any other value reverts `ProofStoreInvalid(uint8)`.
 
-- **Creation:** `IFactoryToken.ConfidentialConfig.proofStore` (`uint8`), beside 3f's `verifyMode`; `NONE` by default. A non-PQZ
+- **Creation:** `IFactoryToken.ConfidentialConfig.proofStore` (`uint8`), beside 3f's `pqzVerifyMode`; `NONE` by default. A non-PQZ
   kind refuses a non-zero value (C8). The `TokenConfig` encoding moves for every kind (the 3f ripple).
 - **Stored:** `PqzStorage` slot 0 byte 23, so a debit reads no new slot. View `proofStore() → uint8`.
 - **Changed** only through bit 24 (§5), at the next debit, in both directions (O10). Every record keeps the mode it was written
@@ -432,7 +432,7 @@ contracts task: whole `forge test` at the default set, `script/pqz/at-set.sh <se
 `test_kv_{op1,op1Auditor,op7,op7Rotated,auditorRotated}` (receivers and auditor rotated between debits: `kv` names the version
 read in the call), `test_rOf_{burn,op1,op7}`, `test_memoHash_{hash,bundle,burn}`, `test_ownTag_swapped_refused`,
 `test_transferEntry_unchanged`, `test_proofStore_{none,log}_{op1,op7,burn}` (`LOG`: exactly one event, `header` equals the
-statement's first 640 bytes, `proof` the calldata proof; `NONE`: no event), `test_proofStore_attested`,
+statement's first 640 bytes, `proof` the calldata proof; `NONE`: no event), `test_proofStore_offchain`,
 `test_proofStore_change_appliesNextDebit`, `test_proofStore_noneLogNone_creditsBetween` (Codex C3: each debit's record keeps its
 mode), `test_proofStore_invalid` (2 and above), `test_proofStore_zether_refused`, `test_bit24_{validKinds,otherKindsRefused,
 anyHolder,notDelayed,plainKindIssuerGrant}`, `test_disable24_freezesValue_{none,log}`, `test_setProofStore_{gated,noop}`,
@@ -462,7 +462,7 @@ Each must turn a test red: M1 the debit's delete loop restored; M2 the rollover'
 `ownTag`; M8 `ownTag` before `v_f`; M9 `rOf` ignoring `n`; M10 the record's `proofStore` always 0; M11 the `LOG` event with the
 buffer instead of the proof; M13 bit 24 accepted on a Zether kind; M14 bit 24 in `_delayedRelaxBits()`; M15 `setProofStore`
 ungated; M16 `_trivial`'s merge bound `lo = rolled` (merges into a consumed entry); M17 `rollOver` sets `floor` unconditionally; M18
-`w1` not written when only `shieldIn ≠ 0`; M20 `setProofStore` writes byte 22 (3f `verifyMode`); M21 `Δp` from `floor` instead of
+`w1` not written when only `shieldIn ≠ 0`; M20 `setProofStore` writes byte 22 (3f `pqzVerifyMode`); M21 `Δp` from `floor` instead of
 the previous `p`; M22 `kv` in key pointer order instead of statement order. (M12, M19 and M23 went with SSTORE2, Appendix A; the
 numbers are not reused.)
 
