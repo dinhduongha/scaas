@@ -1,0 +1,14 @@
+# ua-mtx-merge T55 gate summary (full output in git-ignored .log files, not committed)
+# T55 (group 3g, pqz-key-versions spec §7.3; NODE-JOB-23 draft): the node on the versioned PQZ API. UNAUDITED.
+# Base: e8df0e65. Commits: 5edf1d28 (legacy copies), 49477fd6 (implementation), this one (summary, mutants table).
+step | commit | rc | counts
+t55-first-run | 5edf1d28 + the work | 101 | cargo test --lib, first run with the new tests: 651 passed 6 failed (the PQZ rollover row on the vector's stray pqzAuth extra, a fake log's data, the revert text form, two row counts); fixed before 49477fd6
+t55-lib | 49477fd6 | 0 | CAPPED_MEM=6G cargo test --lib: 660 passed 0 failed (typed rollover_rows_per_kind, pqz_key_version_named, pqz_hex_refused; abi pqz_key_refusals_are_named; indexer indexer_current_feed; submit rotation_pending_refused_at_intake, rotated_after_event_not_dead, rotated_needs_event, stale_refused_by_name; the rows-equal-contract and selector-audit tests both directions)
+t55-all | 49477fd6 | 0 | CAPPED_MEM=6G cargo test (alone): 665 passed 0 failed 66 ignored
+t55-clippy | 49477fd6 | 0 | cargo clippy --all-targets -- -D warnings clean
+t55-e2e | 49477fd6 | 0 | cargo test --test e2e -- --ignored --test-threads=1 (anvil, Amsterdam, 200 M): 18 passed 0 failed, pqz_rotation_on_anvil included (fndsa512: register, versions 0 and 1 through the node, 1 pending then current, the feeds, pqz_key_current_since); no anvil left
+t55-e2e-ua8 | 49477fd6 | - | not run: tests/e2e_ua8.rs needs the local Soroban host (e2e-ua8-local.sh); its registry ABI is the versioned one
+t55-mutants | 49477fd6 | 101 each | 4 of 4 killed (runs/2026-11-07-ua-mtx-merge-t55-mutants.txt): M-N1 keyVersion dropped from the rebuilt args, PQZ_KEY_ROTATED reported dead, the UAPqzRollOver row missing (both directions), the intake pending check off; git diff --exit-code -- scaas-node/src clean after each
+#
+# Keepers per (ua, version): no rollover keeper exists in the node (docs/node/ops.md, SPECIFIED); in the T57 draft.
+# PQZ_KEY_ROTATED's "since intake" is a 10,000-block window (the pull path carries no intake block; a `ponytail:` note in submit.rs).
