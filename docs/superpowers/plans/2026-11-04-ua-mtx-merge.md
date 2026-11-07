@@ -1503,7 +1503,7 @@ constructor admits `releaseProofVerifier = 0`; PRECOMPILE init refuses it `SelfT
 init reads nothing from it (`psid = PqzSet.PQZL_ID`); `pqzVerifierUA` checked (§4.1: kinds, `PqzVerifierUnregistered`,
 `PqzVerifierKind`, the frozen shape); `_check(o, buf, proof, authSig, att, attSig)` with spec §5.3's OFFCHAIN branch, the
 `UAVerifyGas` `try`/`catch` shape, `PqzVerified`; `_keyPtr` / `_creditKey` without `proven` in OFFCHAIN mode, the set length
-kept, per key version as 3g's KV-12 OFFCHAIN column (built in T51–T53); the auditor rule; the bodies of `setPqzVerifier`, `cancelPqzVerifier`, `revokePqzVerifier` (owner, the factory's
+kept, per key version as 3g's KV-12 OFFCHAIN column (built in T51–T53); the auditor rule; the bodies of `pqzSetVerifier`, `pqzCancelVerifier`, `pqzRevokeVerifier` (owner, the factory's
 `noticePeriod()`, same proposer and owner generation, epoch bump, immediate revocation); `PqzVerdict` typehash pin.
 
 - [ ] **Step 1: Failing tests:** `test_pqzVerdict_positiveControl`, `test_pqzVerdict_wrong{Token,Chain,Psid,Epoch,Statement,Proof}`,
@@ -1534,9 +1534,9 @@ kept, per key version as 3g's KV-12 OFFCHAIN column (built in T51–T53); the au
 (direct and signed forms; twelve on 5, 13, ten on 4, 12), outside every `UA*` struct (no typehash moves); the struct fallback
 `PqzSignedVerdict` only if the legacy decoder runs out of stack; `verifyTransferAmount` five-argument form `PqzVerdictRequired()`
 in OFFCHAIN mode, seven-argument form, both with 3g's `keyVersion` after `kind` (3g KV-11; `test_disclosure_offchain_withVersion`
-moved from T53); stubs `setPqzVerifier(bytes32)`, `cancelPqzVerifier()`, `revokePqzVerifier()`,
-the view `pqzVerifyConfig()`; router `mtxSetPqzVerifier`, `mtxCancelPqzVerifier`, `mtxRevokePqzVerifier` over
-`UASetPqzVerifier`, `UACancelPqzVerifier`, `UARevokePqzVerifier`.
+moved from T53); stubs `pqzSetVerifier(bytes32)`, `pqzCancelVerifier()`, `pqzRevokeVerifier()`,
+the view `pqzVerifyConfig()`; router `mtxPqzSetVerifier`, `mtxPqzCancelVerifier`, `mtxPqzRevokeVerifier` over
+`UAPqzSetVerifier`, `UAPqzCancelVerifier`, `UAPqzRevokeVerifier`.
 
 - [ ] **Step 1: Failing tests:** `test_entry_{transfer,compact,single,singleCompact,unshield,refresh,unshieldUnwrap}_{direct,signed}_offchain`,
       the same `_precompile` with an empty verdict, `test_signedForms_typehashesUnchanged`, `test_pqzVerdictSwapByRelayer_harmless`,

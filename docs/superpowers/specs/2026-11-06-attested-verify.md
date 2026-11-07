@@ -17,7 +17,7 @@ unchanged). "Verdict" also keeps its older sense here: the precompile's (or `pqz
 | `PqzAttestation` (the struct-pair fallback) | `PqzSignedVerdict` |
 | `PqzAttestTypehashIsPinned` | `PqzVerdictTypehashIsPinned` |
 | `PURPOSE_PROOF_ATTEST`, `proof-attest` | `PURPOSE_PQZ_VERDICT`, `pqz-verdict` |
-| `setAttestVerifier`, `cancelAttestVerifier`, `revokeAttestVerifier` (and their `mtx*` / `UA*` router forms) | `setPqzVerifier`, `cancelPqzVerifier`, `revokePqzVerifier` |
+| `setAttestVerifier`, `cancelAttestVerifier`, `revokeAttestVerifier` (and their `mtx*` / `UA*` router forms) | `pqzSetVerifier`, `pqzCancelVerifier`, `pqzRevokeVerifier`; router `mtxPqz{Set,Cancel,Revoke}Verifier` over `UAPqz{Set,Cancel,Revoke}Verifier` (pqz first, owner 2026-11-07) |
 | `AttestVerifier{Unregistered,Kind,Fixed,Same,Changed,Revoked,NotReady,Pending,Proposed,Set,Cancelled}` | `PqzVerifier{…}` |
 | `AttestationRequired`, `AttestationRejected`, `AttestationMismatch` | `PqzVerdictRequired`, `PqzVerdictRejected`, `PqzVerdictMismatch` |
 | `AttestConfigInvalid`, `attestConfig()` / `AttestConfig` | `PqzVerifyConfigInvalid`, `pqzVerifyConfig()` / `PqzVerifyConfig` |
@@ -63,7 +63,7 @@ Written as given; not reopened. R1–R4 replace O3 and O4 and the first draft's 
 | R1 | **Zether is removed from 3f entirely.** Zether runs on chain where EIP-2537 exists; an off-chain verifier for it was only a gas saving and too complex. O4 is withdrawn; `ZetherAttestBook`, `ZetherProofAttest` (superseded draft names), the pure-Solidity curve and the first draft's T47, T48 are removed. **3f is PQZ only.** | §1 |
 | R2 | **No verdict book.** Every PQZ entry that carries a proof takes the verdict **inline as its last parameters**: the entries routed through `PqzCore._check` (transfer op 1 single, BUNDLE and COMPACT; op 7 multi; burn / unshield, unshield-unwrap included; refresh). The parameters are `PqzVerdict att, UASig attSig` (Fable (a)), outside the subject's typed struct, so no typehash moves. The verdict is empty or ignored in PRECOMPILE mode and required in OFFCHAIN mode. One `requireAuthorized` check in `PqzCore._check`, with the existing `UAVerifyGas` `try`/`catch` shape. The signed struct binds `verifierEpoch` (Codex #1). `verifyTransferAmount` takes an optional verdict; without one, in OFFCHAIN mode, it answers "cannot verify". Codex #3, #7 and Fable P1-4 close. | §5, AV-5 |
 | R3 | **An OFFCHAIN token accepts unproven PQZ keys.** The verifier checks off chain the `R_REG` proof of every key in the operation and its single ownership, with a cache keyed by `(ua, pqzKeyHash)`. Requirements: the `pqzPop` bytes are stored in the registry (hash matching); in OFFCHAIN mode `PqzStateLib.init`'s auditor check accepts an unproven auditor key. The first draft's §6.3, T46, CTR-UA-41, the 3c registry coupling and Q6 are dropped. | §6, AV-6 |
-| R4 | **An owner `revokePqzVerifier()`**: immediate, freeze only. After it every proof-carrying op refuses until a new verifier is in place through the notice-period transfer. A revocation is not a transfer, so it stays inside O2. The trust model states the maximum loss `min(totalShielded, maxShielded) · shieldScale` (Fable P1-2). | §2, §4.3 |
+| R4 | **An owner `pqzRevokeVerifier()`**: immediate, freeze only. After it every proof-carrying op refuses until a new verifier is in place through the notice-period transfer. A revocation is not a transfer, so it stays inside O2. The trust model states the maximum loss `min(totalShielded, maxShielded) · shieldScale` (Fable P1-2). | §2, §4.3 |
 
 ### 0.2 Controller calls (2026-11-06, the owner may override)
 
@@ -122,7 +122,7 @@ chain is test-only.
 
   | Configuration | On-chain answer to a dishonest verifier |
   |---|---|
-  | transferable, live owner | `revokePqzVerifier()` at once (freeze), then a new verifier after the notice period |
+  | transferable, live owner | `pqzRevokeVerifier()` at once (freeze), then a new verifier after the notice period |
   | fixed, or owner renounced (`owner() = 0`) | **none** on the plain kinds 4, 5 (no `PAUSE`); on 12, 13 the issuer's `PAUSE` / `FREEZE` **only if** those features were set at creation and their roles are live |
   | regulated 12, 13 with live controls | `PAUSE` / `FREEZE` at once, in addition to the above |
 
@@ -200,32 +200,32 @@ decodes it in `_init`, so the encoding moves for every kind (the regulated spec 
 
 **AV-4.**
 
-- **Fixed** (`pqzVerifierFixed = true`): `setPqzVerifier` reverts `PqzVerifierFixed()`.
-- **Transferable:** the token's governance **owner** (`_govSubject() == owner()`, identity by UA) calls `setPqzVerifier(bytes32
+- **Fixed** (`pqzVerifierFixed = true`): `pqzSetVerifier` reverts `PqzVerifierFixed()`.
+- **Transferable:** the token's governance **owner** (`_govSubject() == owner()`, identity by UA) calls `pqzSetVerifier(bytes32
   next)` twice. The first call proposes (`eta = now + noticePeriod`; the §4.1 checks; `next ≠ current`, else
   `PqzVerifierSame()`). The second call, by the **same proposer**, still the owner, in the **same owner generation**, with the same
   `next`, in `[eta, eta + noticePeriod]`, confirms: the verifier, its shape and `verifierEpoch + 1` (checked arithmetic) are
   written. Before `eta`: `PqzVerifierNotReady(eta)`; another value while one is live: `PqzVerifierPending(pending)`; another
-  caller: `NotProposer`; an owner change kills the pending (as `GovernanceLib`'s `ownerGeneration`, Codex). `cancelPqzVerifier()`
+  caller: `NotProposer`; an owner change kills the pending (as `GovernanceLib`'s `ownerGeneration`, Codex). `pqzCancelVerifier()`
   (owner) deletes a live pending. With `noticePeriod = 0` the first call applies at once (shown, may be 0 on a test chain).
 - **The period** is the factory's `noticePeriod()` (an immutable of `OpenFactory`, 3e Q9), stored at init, so nothing later can
   shorten it; never the creator's `grantDelay`.
 - **Off-chain guard against a typo (Fable P3-15):** the wizard and the node submit a proposal only with a signed probe verdict
   from `next` (a `PqzVerdict` over a fixed probe statement). Nothing on chain.
-- **Relayed** through the `GovernanceRouter` as `mtxSetPqzVerifier(UAEnvelope e, address target, bytes32 next, UASig auth)`,
-  `mtxCancelPqzVerifier(…)`, `mtxRevokePqzVerifier(…)` over `UASetPqzVerifier(bytes32 next)`, `UACancelPqzVerifier()`,
-  `UARevokePqzVerifier()`; fee mode `NONE`, relayable at fee 0.
+- **Relayed** through the `GovernanceRouter` as `mtxPqzSetVerifier(UAEnvelope e, address target, bytes32 next, UASig auth)`,
+  `mtxPqzCancelVerifier(…)`, `mtxPqzRevokeVerifier(…)` over `UAPqzSetVerifier(bytes32 next)`, `UAPqzCancelVerifier()`,
+  `UAPqzRevokeVerifier()`; fee mode `NONE`, relayable at fee 0.
 - **Why no bit.** A bit would make the trust root a delegable role apart from the owner; moving it is an ownership-level act like
   `transferOwnership`. The governance pending runs on `grantDelay`, not the notice the owner asked for. So no bit of the SCaaS band
   is taken (Q4 answered).
 
 ### 4.3 Revocation (R4)
 
-`revokePqzVerifier()` (owner, a transferable verifier, live owner): **at once** writes `verifier = 0`, `verifierEpoch + 1`, and
+`pqzRevokeVerifier()` (owner, a transferable verifier, live owner): **at once** writes `verifier = 0`, `verifierEpoch + 1`, and
 deletes any pending transfer. Every proof-carrying op then refuses `PqzVerifierRevoked()`, and the OFFCHAIN
 `verifyTransferAmount` answers false. A new verifier comes only through §4.2 (proposal, notice, confirm); the token stays frozen
 meanwhile. Revocation can only stop, never move, the trust root, so it needs no notice (inside O2). On a **fixed** verifier,
-`revokePqzVerifier` reverts `PqzVerifierFixed()` (owner 2026-11-06, Q1: no; keeps "fixed" meaning no
+`pqzRevokeVerifier` reverts `PqzVerifierFixed()` (owner 2026-11-06, Q1: no; keeps "fixed" meaning no
 owner power over the verifier). Events: `PqzVerifierProposed(bytes32 current, bytes32 next, uint64 eta)`,
 `PqzVerifierSet(bytes32 previous, bytes32 next, uint32 epoch)`, `PqzVerifierCancelled(bytes32 next)`,
 `PqzVerifierRevoked(bytes32 previous, uint32 epoch)`.
