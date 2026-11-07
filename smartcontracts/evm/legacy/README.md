@@ -306,3 +306,6 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   the shared `RolledOver`; `src/confidential/IConfidentialToken.sol` with `mtxRollOver(bytes32,uint256)` shared by both layers.
   Tests as they stood before their meaning changed: `test/pqz/{PqzPool,PqzTyped,PqzGuards}.t.sol`,
   `test/confidential/ConfidentialSelectors.t.sol`. Not built.
+  T53 (the PQZ disclosure by key version): the four-argument `disclosureStatement(entryRef, leg, amount, kind)` and the
+  five-argument `verifyTransferAmount(entryRef, leg, amount, kind, proof)` (checked against the owner's current key) are in the
+  T52 copies above (`src/pqz/{PqzCore,PqzViewLib,PqzLayer}.sol`, unchanged by T52); Zether's `ITransferDisclosure` forms stay.

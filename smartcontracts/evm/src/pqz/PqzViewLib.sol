@@ -90,17 +90,17 @@ library PqzViewLib {
 
     /// @notice The disclosure statement of leg `leg` of `ref`, `R` from the op blob (reverts as
     ///         `PqzCore.disclosureBuffer`).
-    function disclosureStatementOf(bytes32 ref, uint256 leg, uint256 amount, uint8 kind, PqzCore.Env memory e)
-        public view returns (bytes memory)
+    function disclosureStatementOf(bytes32 ref, uint256 leg, uint256 amount, uint8 kind, uint64 keyVersion,
+        PqzCore.Env memory e) public view returns (bytes memory)
     {
-        return PqzCore._stmtOf(PqzCore.disclosureBuffer(ref, leg, amount, kind, e, 0));
+        return PqzCore._stmtOf(PqzCore.disclosureBuffer(ref, leg, amount, kind, keyVersion, e, 0));
     }
 
     /// @notice The precompile's verdict on the disclosure of leg `leg` with `proof` (the token checked the shape).
-    function verifyAmountOf(bytes32 ref, uint256 leg, uint256 amount, uint8 kind, bytes calldata proof,
+    function verifyAmountOf(bytes32 ref, uint256 leg, uint256 amount, uint8 kind, uint64 keyVersion, bytes calldata proof,
         PqzCore.Env memory e) public view returns (bool)
     {
-        bytes memory buf = PqzCore.disclosureBuffer(ref, leg, amount, kind, e, proof.length);
+        bytes memory buf = PqzCore.disclosureBuffer(ref, leg, amount, kind, keyVersion, e, proof.length);
         uint256 off = PqzCore.DISCLOSE;
         assembly ("memory-safe") { calldatacopy(add(add(buf, 37), off), proof.offset, proof.length) }
         return PqzCore.verdict(PqzCore.$().pqz, buf);

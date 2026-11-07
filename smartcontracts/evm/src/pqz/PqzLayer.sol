@@ -159,27 +159,31 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
     }
 
     /// @notice The disclosure statement (§7.9) of leg `leg` of `entryRef` for `kind` (0 `SENDER_S`, 1 `RECEIVER_X`,
-    ///         2 `AUDITOR`); a single-recipient entry is leg 0. `R` is read from the entry's op blob (D11).
-    function disclosureStatement(bytes32 entryRef, uint256 leg, uint256 amount, uint8 kind)
+    ///         2 `AUDITOR`); a single-recipient entry is leg 0. `R` is read from the entry's op blob (D11). Group 3g (KV-11):
+    ///         `keyVersion` selects the registered key the opening is checked against (the leg owner's, the auditor's for
+    ///         `AUDITOR`); a version not stored: `KeyVersionUnknown`. It does not attest which version the leg was for.
+    function disclosureStatement(bytes32 entryRef, uint256 leg, uint256 amount, uint8 kind, uint64 keyVersion)
         external view returns (bytes memory)
     {
-        return PqzViewLib.disclosureStatementOf(entryRef, leg, amount, kind, _envOf(0));
+        return PqzViewLib.disclosureStatementOf(entryRef, leg, amount, kind, keyVersion, _envOf(0));
     }
 
     /// @notice CTR-PQZ-14 / -26: the precompile's verdict on `proof` for `amount` in leg `leg` of `entryRef` (`R` from
     ///         the op blob, D11). A view; no attestation. An empty proof, an unknown entry, no leg `leg`, `kind > 2`
     ///         and `amount ≥ 2^64` are false; a precompile call that fails (out of gas) reverts (C2-6).
-    function verifyTransferAmount(bytes32 entryRef, uint256 leg, uint256 amount, uint8 kind, bytes calldata proof)
-        external view returns (bool)
+    function verifyTransferAmount(bytes32 entryRef, uint256 leg, uint256 amount, uint8 kind, uint64 keyVersion,
+        bytes calldata proof) external view returns (bool)
     {
         if (proof.length == 0) return false;
         // C2-6: only the statement's shape errors (custom errors) read false; an empty revert (out of gas in the
-        // sub-call) is propagated, and a failed precompile call reverts in `verdict`
-        try this.disclosureStatement(entryRef, leg, amount, kind) {} catch (bytes memory err) {
-            if (err.length == 0) assembly ("memory-safe") { revert(0, 0) }
+        // sub-call) is propagated, and a failed precompile call reverts in `verdict`. KV-11: an unknown version reverts.
+        try this.disclosureStatement(entryRef, leg, amount, kind, keyVersion) {} catch (bytes memory err) {
+            if (err.length == 0 || bytes4(err) == KeyVersionUnknown.selector) assembly ("memory-safe") {
+                revert(add(err, 32), mload(err))
+            }
             return false;
         }
-        return PqzViewLib.verifyAmountOf(entryRef, leg, amount, kind, proof, _envOf(0));
+        return PqzViewLib.verifyAmountOf(entryRef, leg, amount, kind, keyVersion, proof, _envOf(0));
     }
 
     /// @notice CTR-PQZ-21, R36: the binding of every relayed proof on the merged entries and `mtxExecute`, tag

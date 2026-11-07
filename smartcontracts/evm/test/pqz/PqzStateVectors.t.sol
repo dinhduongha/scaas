@@ -200,11 +200,11 @@ contract PqzStateVectorsTest is PqzSlots {
         _blobRow(ptr, true);
         _w(", \"legs\": [");
         for (uint256 j; j < 8; ++j) {
-            try tok.disclosureStatement(x.ref, j, 0, 1) returns (bytes memory rx) {
+            try tok.disclosureStatement(x.ref, j, 0, 1, 0) returns (bytes memory rx) {
                 bytes32 owner = _ownerOf(ptr, j);
                 (bytes32 kr, address kp) = _keyRecord(owner);
                 string memory au = "\"\"";
-                try tok.disclosureStatement(x.ref, j, 0, 2) returns (bytes memory ax) {
+                try tok.disclosureStatement(x.ref, j, 0, 2, 0) returns (bytes memory ax) {
                     au = _hx(_slice(ax, 288 + PqzCt.PK, PqzCt.CT));
                 } catch {}
                 _w(string.concat(j == 0 ? "" : ",", "{\"leg\": ", vm.toString(j), ", \"ua\": ", _hx32(owner), ", \"keyRecord\": ",

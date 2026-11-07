@@ -655,20 +655,32 @@ library PqzCore {
     ///         2 `AUDITOR`) in its precompile buffer (CTR-PQZ-14, CTR-PQZ-26; a single entry is leg 0): `u_{g(j)}` and
     ///         `v_j` (or `v_{a,j}`), the key of `UA_j` (or the auditor), all read from the entry's op blob (D11; `u`, `v`
     ///         expanded from the packed blob into the statement). Reverts
-    ///         on an unknown entry, no leg `j`, `kind > 2`, `AUDITOR` without the copies, `amount ≥ 2^64`.
-    function disclosureBuffer(bytes32 ref, uint256 j, uint256 amount, uint8 kind, Env memory e, uint256 proofLen)
-        internal view returns (bytes memory buf)
+    ///         on an unknown entry, no leg `j`, `kind > 2`, `AUDITOR` without the copies, `amount ≥ 2^64`. Group 3g (KV-11):
+    ///         `keyVersion` selects which registered key of the owner the opening is checked against (`pqzKeyAt`; not stored:
+    ///         `KeyVersionUnknown`; the mode's key check); it does not attest which version the leg was encrypted for.
+    function disclosureBuffer(bytes32 ref, uint256 j, uint256 amount, uint8 kind, uint64 keyVersion, Env memory e,
+        uint256 proofLen) internal view returns (bytes memory buf)
     {
-        address ptr = $().entryPtr[ref];
-        if (ptr == address(0)) revert IPqzToken.UnknownEntry(ref);
-        bytes memory bundle = rOf(ptr);
+        bytes memory bundle = _bundleOf(ref);
         if (kind > 2 || amount >= VALUE_BOUND) revert IPqzToken.BadPayload(bundle.length);
         (uint256 uOff, uint256 vOff, bytes32 owner) = _legOf(bundle, j, kind);
         buf = _buffer(kind == 0 ? 4 : 5, DISCLOSE, proofLen);
         // the kind word `OpeningKind + 256·w` (R0-1, pqz-stmt DW_KIND): w = j mod S_AUD, the auditor copy's coefficient
         // window, for AUDITOR (the bundle has the copies: `_legOf`); 0 for SENDER_S / RECEIVER_X
         _discHead(buf, ref, amount, uint256(kind) + (kind == 2 ? 256 * (j % PqzSet.S_AUD) : 0), e);
-        _key(buf, 288, _keyPtr(e.registry, owner));
+        _key(buf, 288, _discKey(e.registry, owner, keyVersion));
+        _discCt(buf, bundle, uOff, vOff);
+    }
+
+    /// @dev `R` of the entry's op blob (`UnknownEntry` without one).
+    function _bundleOf(bytes32 ref) internal view returns (bytes memory) {
+        address ptr = $().entryPtr[ref];
+        if (ptr == address(0)) revert IPqzToken.UnknownEntry(ref);
+        return rOf(ptr);
+    }
+
+    /// @dev The leg's `u ‖ v` from the packed bundle into the statement after the key, expanded to 64-bit lanes.
+    function _discCt(bytes memory buf, bytes memory bundle, uint256 uOff, uint256 vOff) internal pure {
         (uint256 off, uint256 pkp, uint256 vp) = (288 + PqzCt.PK, PqzCt.PKP, PqzCt.VP);
         uint256 d;
         assembly ("memory-safe") {
@@ -677,6 +689,14 @@ library PqzCore {
             mcopy(add(d, pkp), add(add(bundle, 32), vOff), vp)
         }
         PqzCt.expandAt(d, PqzCt.CT / 32);
+    }
+
+    /// @dev The key of `(owner, keyVersion)` a disclosure checks against: `KeyVersionUnknown` when no such version is
+    ///      stored, else the mode's check (`_keyAt`).
+    function _discKey(address registry, bytes32 owner, uint64 keyVersion) internal view returns (address) {
+        (address p,,) = IUARegistry(registry).pqzKeyAt(owner, keyVersion);
+        if (p == address(0)) revert IPqzToken.KeyVersionUnknown(owner, keyVersion);
+        return _keyAt(registry, owner, keyVersion);
     }
 
     /// @dev Leg `j` of a (packed) bundle: the offsets of `u_{g(j)}` (`_groupOf`) and of `v_j` (`v_{a,j}` for `AUDITOR`),

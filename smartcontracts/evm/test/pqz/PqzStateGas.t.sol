@@ -929,7 +929,7 @@ contract PqzStatePinGasTest is PqzSlots {
     function _discRow(string memory sys, uint8 kd, bytes32 ref, uint256 leg, string memory entry) internal {
         string memory kn = kd == 0 ? "SENDER" : kd == 1 ? "RECEIVER" : "AUDITOR";
         string memory key = string.concat("DISCLOSE-", kn);
-        bytes memory d = abi.encodeCall(tok.verifyTransferAmount, (ref, leg, 1, kd, _pf(sys, key)));
+        bytes memory d = abi.encodeCall(tok.verifyTransferAmount, (ref, leg, 1, kd, uint64(0), _pf(sys, key)));
         _row(sys, key, string.concat("disclosure ", kn, ", ", entry, " (verifyTransferAmount)"), address(tok), d, false);
     }
 

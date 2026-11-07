@@ -149,12 +149,15 @@ if (a.fn === 'args') {
   const r = U.registrationArgs({ kind: a.kind, keyData: h('keyData'), pqzKey: o.pqzKey, pqzPop: h('pqzPop'), kemPk: o.kemPk,
     pop: Array.isArray(a.pop) ? a.pop : h('pop'), kemCommit: a.kemCommit });
   console.log(JSON.stringify({ ...r, length: U.registryCalldataLength(r.entry, r.args) }));
-} else console.log(B.hex(a.fn === 'typed' ? E.hashTypedData(E.OP_BUILDERS[a.op.replace(/^UA/, 'ua').replace(/^[A-Z]/, (c) => c.toLowerCase()) + 'TypedData'](a.at))
+} else console.log(B.hex(a.fn === 'typed' ? E.hashTypedData(E.OP_BUILDERS[(a.op === 'UARollOver' ? 'uaPqzRollOver' : a.op.replace(/^UA/, 'ua').replace(/^[A-Z]/, (c) => c.toLowerCase())) + 'TypedData'](a.at))
   : a.fn === 'msig' ? U.encodeMsig(a.threshold, a.members)
   : a.fn === 'reg' ? U.pqzRegMessage({ ...o, kind: a.kind })
   : a.fn === 'kem' ? U.kemRecordMessage(a.kind, { ua: o.ua, version: a.kemVersion, kemPk: o.kemPk })
   : a.fn === 'keyreg' ? U.uaMessage(0x0142, U.PQZ_KEY_TAG, U.pqzKeyDigest({ ua: o.ua, pqzKeyHash: U.keyHashOf(0x0142, o.pqzKey) }))
   : a.fn === 'keyrec' ? U.pqzKeyRecordMessage(a.kind, { ua: o.ua, pqzKey: o.pqzKey, pqzPopHash: h('pqzPopHash') }).message
+  : a.fn === 'keyverreg' ? U.uaMessage(0x0142, U.PQZ_KEY_TAG, U.pqzKeyVersionDigest({ ua: o.ua, version: a.version, pqzKeyHash: U.keyHashOf(0x0142, o.pqzKey) }))
+  : a.fn === 'keyverrec' ? U.uaMessage(a.kind, U.PQZ_KEY_TAG, U.pqzKeyVersionRecordDigest({ ua: o.ua, version: a.version,
+    pqzKeyHash: U.keyHashOf(0x0142, o.pqzKey), pqzPopHash: h('pqzPopHash') }))
   : U.holderPopMessage(a.kind, { ...o, keyData: h('keyData'), pqzPopHash: h('pqzPopHash') })[a.fn === 'popmd' ? 'memberDigest' : 'message']));
 """
 
@@ -246,12 +249,13 @@ def full_register_fits(to, data):
 # ------------------------------------------------------------------ the token API in one place (plan 5h Task 3b, spec
 # §5.11; typed-signing C4: the explicit parameters of Appendix X.3, `(args, proof, pqzAuth, accHint)`). Checked against the built
 # ABI (`abi_check`); the signed forms are `NAMED`.
-TRANSFER_S = "(uint64,uint256,uint256,bytes32,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes)"  # IPqzToken.PqzTransferArgs
-TRANSFER_T = ("t", ["w"] * 7 + ["b"] * 5)
-MULTI_S = "(uint64,uint256,uint256,bytes32,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes)"  # PqzMultiArgs, PqzLeg
-MULTI_T = ("t", ["w"] * 7 + [("a", "b"), ("a", ("t", ["w", "b", "b"])), "b", "b"])
-BURN_S = "(uint64,uint256,uint256,bytes32,bytes32,bytes,bytes)"  # PqzBurnArgs
-BURN_T = ("t", ["w"] * 5 + ["b", "b"])
+# group 3g T52: `uint64 keyVersion` after `fromUA` in the three args structs
+TRANSFER_S = "(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes)"  # IPqzToken.PqzTransferArgs
+TRANSFER_T = ("t", ["w"] * 8 + ["b"] * 5)
+MULTI_S = "(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes)"  # PqzMultiArgs, PqzLeg
+MULTI_T = ("t", ["w"] * 8 + [("a", "b"), ("a", ("t", ["w", "b", "b"])), "b", "b"])
+BURN_S = "(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes,bytes)"  # PqzBurnArgs
+BURN_T = ("t", ["w"] * 6 + ["b", "b"])
 AUTH_S, AUTH_T = f"bytes,{UASIG_S},bytes", ["b", UASIG_T, "b"]  # proof, pqzAuth, accHint: after the op's own parameters
 UNWRAP_S = "(address,bytes32,uint256,uint256)"  # IConfidentialWrappedToken.Unwrap(underlying, recipient, amount, minOut), a calldata struct
 UNWRAP = ("t", ["w", "w", "w", "w"])
@@ -262,15 +266,15 @@ API = dict(
     transferSingle=f"mtxConfidentialTransferSingle({TRANSFER_S},{AUTH_S})",  # op 1
     unshield=f"mtxUnshield({BURN_S},uint256,bytes32,{AUTH_S})",  # amount, recipient id (zero-padded address = native)
     unshieldUnwrap=f"mtxUnshieldUnwrap({BURN_S},{UNWRAP_S},{AUTH_S})",
-    rollOver="mtxRollOver(bytes32,uint256)",
-    prepareAcc="mtxPrepareAcc(bytes32,uint256)",
+    rollOver="mtxRollOver(bytes32,uint64,uint256)",  # group 3g T52: (ua, keyVersion, n), (ua, keyVersion, half)
+    prepareAcc="mtxPrepareAcc(bytes32,uint64,uint256)",
     # views (names kept by 3b); the recipient word of the burn statements is a bytes32 id since UA-5c (b)
     burnStmt=f"burnStatement({BURN_S},uint256,bytes32,bytes32)",
     unwrapStmt=f"unshieldUnwrapStatement({BURN_S},{UNWRAP_S},bytes32)",
     singleStmt=f"transferSingleStatement({TRANSFER_S},bytes32)",
     multiStmt=f"transferStatement({MULTI_S},bytes32)",
-    discStmt="disclosureStatement(bytes32,uint256,uint256,uint8)",
-    verifyAmt="verifyTransferAmount(bytes32,uint256,uint256,uint8,bytes)",
+    discStmt="disclosureStatement(bytes32,uint256,uint256,uint8,uint64)",  # group 3g T53: + keyVersion
+    verifyAmt="verifyTransferAmount(bytes32,uint256,uint256,uint8,uint64,bytes)",
     # events carrying the entry reference as topic 1 (as built, IConfidentialToken; only topic 0 is looked up here)
     ev_single=["ConfidentialTransfer(bytes32,bytes32,bytes32,bytes32,uint256,uint64,address)"],
     ev_multi=["ConfidentialTransferMulti(bytes32,bytes32,bytes32,uint256,uint64,bytes32[],uint8,address)"],
@@ -283,9 +287,9 @@ ACCT = ["pendingCount", "rolled", "floor", "cleared", "accBlob", "accUnits", "fl
 EVL_S, UEVL_S = "(address,uint256,uint256,uint256,uint32,address,uint256,address)", "(bytes32,uint256,uint256,uint256,uint32,address,uint256,address)"
 EVL_T = ("t", ["w"] * 8)
 EVL_F = "from batch nonce validUntil mode relayer fee feeRecipient".split()
-TRANSFER_F = "p validUntilBlock shieldIn fromUA toUA beneficiaryUA salt u vTo vFrom vAuditor sealedMemo".split()
-MULTI_F = "p validUntilBlock shieldIn fromUA beneficiaryUA decoyFee salt u legs vFrom sealedMemo".split()
-BURN_F = "p validUntilBlock shieldIn fromUA beneficiaryUA u vFrom".split()
+TRANSFER_F = "p validUntilBlock shieldIn fromUA keyVersion toUA beneficiaryUA salt u vTo vFrom vAuditor sealedMemo".split()
+MULTI_F = "p validUntilBlock shieldIn fromUA keyVersion beneficiaryUA decoyFee salt u legs vFrom sealedMemo".split()
+BURN_F = "p validUntilBlock shieldIn fromUA keyVersion beneficiaryUA u vFrom".split()
 UNWRAP_F = "underlying recipient amount minOut".split()
 ZERO = "0x" + "00" * 20
 ZERO32 = bytes(32)
@@ -312,8 +316,9 @@ def conf(names):
 NAMED = dict(
     Shield=("Shield", "bytes32,uint256", ["w", "w"], flat("toUA", "amount")),
     WrapShield=("WrapShield", "address,uint256,bytes32", ["w", "w", "w"], flat("underlying", "amountIn", "toUA")),
-    RollOver=("RollOver", "bytes32,uint256", ["w", "w"], flat("ua", "n")),
-    PrepareAcc=("PrepareAcc", "bytes32,uint256", ["w", "w"], flat("ua", "half")),
+    # group 3g T52 (KV-10): the PQZ rollover and prepare name the key version (typed_ops.json's `UARollOver@pqz` row)
+    RollOver=("RollOver", "bytes32,uint64,uint256", ["w", "w", "w"], flat("ua", "keyVersion", "n")),
+    PrepareAcc=("PrepareAcc", "bytes32,uint64,uint256", ["w", "w", "w"], flat("ua", "keyVersion", "half")),
     PqzTransferSingle=("ConfidentialTransferSingle", f"{TRANSFER_S},{AUTH_S}", [TRANSFER_T] + AUTH_T, conf(TRANSFER_F)),
     PqzTransferSingleCompact=("ConfidentialTransferSingleCompact", f"{TRANSFER_S},{AUTH_S}", [TRANSFER_T] + AUTH_T, conf(TRANSFER_F)),
     PqzTransfer=("ConfidentialTransfer", f"{MULTI_S},{AUTH_S}", [MULTI_T] + AUTH_T, conf(MULTI_F)),
@@ -725,16 +730,16 @@ class Client:
         self._next = {}
 
     def state(self, ua):
-        w = [int.from_bytes(x, "big") for x in words(call(self.tok, cd("pqzAccount(bytes32)", ["w"], ua.ua)), len(ACCT))]
+        w = [int.from_bytes(x, "big") for x in words(call(self.tok, cd("pqzAccount(bytes32,uint64)", ["w", "w"], ua.ua, kv_of(ua))), len(ACCT))]
         return dict(zip(ACCT, w))
 
     def hint(self, ua):
         """The optional `accHint` (D5): the materialised `acc` packed (P46), used by the token only while its keccak is
         `accHash`."""
-        return pack(dec_bytes(call(self.tok, cd("pqzAcc(bytes32)", ["w"], ua.ua)))) if self.state(ua)["flags"] & 1 else b""
+        return pack(dec_bytes(call(self.tok, cd("pqzAcc(bytes32,uint64)", ["w", "w"], ua.ua, kv_of(ua))))) if self.state(ua)["flags"] & 1 else b""
 
-    def set_next(self, bal=(), pub=(), acc=None, total=0):
-        self._next = dict(bal=list(bal), pub=list(pub), acc=acc or {}, total=total)
+    def set_next(self, bal=(), pub=(), acc=None, total=0, accv=0):
+        self._next = dict(bal=list(bal), pub=list(pub), acc=acc or {}, total=total, accv=accv)
 
     def commit(self):
         n = self._next
@@ -745,14 +750,14 @@ class Client:
             self.pub[u.ua] = self.pub.get(u.ua, 0) + d
         self.total += n["total"]
         for u, acc in n["acc"].items():
-            got = dec_bytes(call(self.tok, cd("pqzAcc(bytes32)", ["w"], u)))
+            got = dec_bytes(call(self.tok, cd("pqzAcc(bytes32,uint64)", ["w", "w"], u, n.get("accv", 0))))  # the debited version
             check(got == acc, f"{self.name} pqzAcc({u.hex()[:8]}…) = the new u' ‖ v_f after the debit")
         self._next = {}
 
 
 def pending_block(tok, ua, i):
     """The block of pending entry `i` (the low 64 bits of the raw slot, D2)."""
-    return int(call(tok, cd("pqzPending(bytes32,uint64)", ["w", "w"], ua.ua, i)), 16) & (2**64 - 1)
+    return int(call(tok, cd("pqzPending(bytes32,uint64,uint64)", ["w", "w", "w"], ua.ua, kv_of(ua), i)), 16) & (2**64 - 1)
 
 
 def wait_block(n):
@@ -772,15 +777,15 @@ def rollover(s, C, ua, n, what, signed=None):
         if not st["flags"] & (2 << half):
             label = f"{C.name} mtxPrepareAcc({ua.name}, {half})"
             if signed:
-                signed().send("PrepareAcc", [ua.ua, half], f"signed {label}")
+                signed().send("PrepareAcc", [ua.ua, kv_of(ua), half], f"signed {label}")
             else:
-                s.send(C.tok, cd(API["prepareAcc"], ["w", "w"], ua.ua, half), label)
+                s.send(C.tok, cd(API["prepareAcc"], ["w", "w", "w"], ua.ua, kv_of(ua), half), label)
     wait_block(pending_block(C.tok, ua, st["rolled"] + n - 1) + ROLL_AGE)
     label = f"{C.name} mtxRollOver({ua.name}, {n}): {what}"
     if signed:
-        signed().send("RollOver", [ua.ua, n], f"signed {label}")
+        signed().send("RollOver", [ua.ua, kv_of(ua), n], f"signed {label}")
     else:
-        s.send(C.tok, cd(API["rollOver"], ["w", "w"], ua.ua, n), label)
+        s.send(C.tok, cd(API["rollOver"], ["w", "w", "w"], ua.ua, kv_of(ua), n), label)
     st2 = C.state(ua)
     check(st2["rolled"] == st["rolled"] + n and st2["flags"] & 1 == 1 and st2["accUnits"] > st["accUnits"],
           f"{C.name} {ua.name} rolled {st['rolled']} → {st2['rolled']}, acc materialised, accUnits {st2['accUnits']}")
@@ -797,8 +802,8 @@ def restore(C, what):
         T = dec_bytes(call(C.tok, cd("pqzAcc(bytes32)", ["w"], ua_id)))
         kinds = []
         for i in range(st["rolled"], st["pendingCount"]):
-            T = K.ct_add(T, dec_bytes(call(C.tok, cd("pqzPendingCt(bytes32,uint64)", ["w", "w"], ua_id, i))))
-            w = int(call(C.tok, cd("pqzPending(bytes32,uint64)", ["w", "w"], ua_id, i)), 16)
+            T = K.ct_add(T, dec_bytes(call(C.tok, cd("pqzPendingCt(bytes32,uint64,uint64)", ["w", "w", "w"], ua_id, 0, i))))
+            w = int(call(C.tok, cd("pqzPending(bytes32,uint64,uint64)", ["w", "w", "w"], ua_id, 0, i)), 16)
             kinds.append("T" if (w >> 64) & 0xFFFF == 0 else "C")  # TRIVIAL (vOff = 0) or a proven credit
         got = bal(u.s, T)
         check(got == tracked, f"restore {C.name} {u.name}: acc + {st['pendingCount'] - st['rolled']} pending "
@@ -921,7 +926,8 @@ def named_rows():
     the digest of the struct `typed_digest` assembles from the same parameters, and the typed `PqzAuth`."""
     V = json.load(open(os.path.join(ROOT, "smartcontracts/vectors/typed/typed_ops.json")))
     methods, _ = abi_methods()
-    rows = {op: r for op, r in V["ops"].items() if op in BUILT}
+    # group 3g: the PQZ rollover's row is `UARollOver@pqz` (Zether keeps `UARollOver`)
+    rows = {op.removesuffix("@pqz"): r for op, r in V["ops"].items() if op.removesuffix("@pqz") in BUILT and "pqz" in r["domains"]}
     check(len(rows) == 10, f"typed_ops.json: {len(rows)} rows with a builder here, want 10")
     for op, r in rows.items():
         d = r["domains"]["pqz"]
@@ -1229,6 +1235,7 @@ def run(kd, kr, ke):
     check([int.from_bytes(x, "big") for x in words(call(reg, cd("checkedOf(bytes32)", ["w"], dave.ua)))] == [1, 1, 0],
           "dave checkedOf = (chain, chain, none)")
     check(pqz_key(dave.ua) == dpk, "dave: the key a PQZ token reads (pqzKeyOf, proven) is the added key")
+    dave.pk, dave.s, dave.e = dpk, ds, de  # version 0's key (group 3g: the rotation of §6c)
     # op 7 decoys (P6g op 7): five more PQZ holders
     DEC = [pqz_ua(f"decoy{i}", sk(f"pqz-decoy{i}"), sk(f"ml-decoy{i}")) for i in range(5)]
 
@@ -1313,7 +1320,7 @@ def run(kd, kr, ke):
     C1.set_next(bal=[(alice, 1_000)], total=1_000)
     C1.commit()
     st = C1.state(alice)
-    w0 = int(call(t1, cd("pqzPending(bytes32,uint64)", ["w", "w"], alice.ua, 0)), 16)
+    w0 = int(call(t1, cd("pqzPending(bytes32,uint64,uint64)", ["w", "w", "w"], alice.ua, 0, 0)), 16)
     check(st["pendingCount"] == 1 and (w0 >> 64) & 0xFFFF == 0 and (w0 >> 96) & (2**64 - 1) == 1000,
           "alice pending[0] is a TRIVIAL entry of 1,000 (raw slot: vOff 0, amount in the blob field)")
     check_public(C1, "after the shield")
@@ -1334,11 +1341,11 @@ def run(kd, kr, ke):
     log("disclosure of the first transfer (view, verifyTransferAmount; the opening is the proof alone, R from the op blob):")
     for kind, op, wit in ((0, 4, K.i8(enc1[0]) + K.i16(enc1[1]) + K.i16(enc1[2][0])),
                           (1, 5, K.i8(bob.s) + K.i16(bob.e)), (2, 5, K.i8(aud.s) + K.i16(aud.e))):
-        stmt = dec_bytes(call(t1, cd(API["discStmt"], ["w", "w", "w", "w"], ref1, 0, 300, kind)))
+        stmt = dec_bytes(call(t1, cd(API["discStmt"], ["w", "w", "w", "w", "w"], ref1, 0, 300, kind, 0)))
         proof = pq.prove(op, stmt, wit)
-        data = cd(API["verifyAmt"], ["w", "w", "w", "w", "b"], ref1, 0, 300, kind, proof)
+        data = cd(API["verifyAmt"], ["w", "w", "w", "w", "w", "b"], ref1, 0, 300, kind, 0, proof)
         okw = int(call(t1, data), 16)
-        bad = int(call(t1, cd(API["verifyAmt"], ["w", "w", "w", "w", "b"], ref1, 0, 301, kind, proof)), 16)
+        bad = int(call(t1, cd(API["verifyAmt"], ["w", "w", "w", "w", "w", "b"], ref1, 0, 301, kind, 0, proof)), 16)
         check(okw == 1 and bad == 0, f"verifyTransferAmount kind {kind} (op {op}): 300 ⇒ true, 301 ⇒ false; "
                                      f"eth_estimateGas {gas_of(t1, data):,}")
 
@@ -1350,11 +1357,11 @@ def run(kd, kr, ke):
                                             f"txFee 3 to carol, decoyFee {DEC_FEE} per leg")
     for kind, op, wit in ((0, 4, K.i8(enc7["rs"][0]) + K.i16(enc7["e1s"][0]) + K.i16(enc7["e2"][1])),
                           (1, 5, K.i8(bob.s) + K.i16(bob.e)), (2, 5, K.i8(aud.s) + K.i16(aud.e))):
-        stmt = dec_bytes(call(t1, cd(API["discStmt"], ["w", "w", "w", "w"], ref7, 1, 40, kind)))
+        stmt = dec_bytes(call(t1, cd(API["discStmt"], ["w", "w", "w", "w", "w"], ref7, 1, 40, kind, 0)))
         proof = pq.prove(op, stmt, wit)
-        okw = int(call(t1, cd(API["verifyAmt"], ["w", "w", "w", "w", "b"], ref7, 1, 40, kind, proof)), 16)
-        bad = int(call(t1, cd(API["verifyAmt"], ["w", "w", "w", "w", "b"], ref7, 1, 41, kind, proof)), 16)
-        other = int(call(t1, cd(API["verifyAmt"], ["w", "w", "w", "w", "b"], ref7, 0, 40, kind, proof)), 16)
+        okw = int(call(t1, cd(API["verifyAmt"], ["w", "w", "w", "w", "w", "b"], ref7, 1, 40, kind, 0, proof)), 16)
+        bad = int(call(t1, cd(API["verifyAmt"], ["w", "w", "w", "w", "w", "b"], ref7, 1, 41, kind, 0, proof)), 16)
+        other = int(call(t1, cd(API["verifyAmt"], ["w", "w", "w", "w", "w", "b"], ref7, 0, 40, kind, 0, proof)), 16)
         check(okw == 1 and bad == 0 and other == 0, f"op 7 leg 1 verifyTransferAmount kind {kind} (op {op}): 40 ⇒ true, "
                                                     f"41 ⇒ false, leg 0 ⇒ false")
     check_public(C1, "after op 7 (txFee to carol, decoyFee to every leg)")
@@ -1469,6 +1476,7 @@ def run(kd, kr, ke):
     check_public(C2, "after the named entries")
     restore(C2, "section 6b")
 
+    rotation(pq, sd, reg, C1, dave, alice, sk)
     log("\n## addresses")
     for k, v in {**D.libs, **D.addr}.items():
         log(f"      {k}: {v}")
@@ -1476,6 +1484,36 @@ def run(kd, kr, ke):
               else os.devnull, "w") as f:
         json.dump({**D.libs, **D.addr, "chain_uid": "0x" + uid.hex()}, f, indent=2)
     log(f"elapsed {time.time() - t0:.0f} s")
+
+
+# ------------------------------------------------------------------ group 3g: a PQZ key rotation (T53)
+
+def rotation(pq, s, reg, C, dave, payer, sk):
+    """Group 3g T53 (spec §3.4's runbook, single-key form): dave (an `mldsa65` holder, version 0 added by `setPqzKey`) adds
+    version 1 (a fresh key, `setPqzKey(ua, 1, …)` signed over typed `UAPqzKeyVersionRecord`, `storePqzPop(ua, 1, R_REG over typed
+    `UAPqzKeyVersion`)`); a credit after the rotation lands in (dave, 1); the migration (op 1 from (dave, 0) to dave, proved with
+    s_0) moves the version-0 balance; the receiver disclosure of the migration checks version 1's key (`keyVersion` 1). Real
+    proofs on the local chain; never the live testnet stack."""
+    log("\n## 6c. a PQZ key rotation (group 3g): version 1, a credit to it, the migration, the disclosure by version")
+    transfer(pq, s, C, payer, dave, ZERO32, 3, False, f"{payer.name}→dave 3 before the rotation (version 0)")
+    pk1, s1, e1, _ = K.keygen(sk("pqz-dave-v1"))
+    proof = pq.prove(3, K.build_register(portable("keyverreg", ua=dave.ua, pqzKey=pk1, version=1), pk1), K.i8(s1) + K.i16(e1))
+    ph = kc(proof)
+    sig = pq.ml_sign(65, dave.seed, kc(TAG[MLDSA65], portable("keyverrec", kind=MLDSA65, ua=dave.ua, pqzKey=pk1, pqzPopHash=ph, version=1)))
+    s.send(reg, cd(SET_PQZ, SET_PQZ_T, dave.ua, 1, pk1, ph, [b"", sig, []]), "setPqzKey dave version 1")
+    s.send(reg, cd("storePqzPop(bytes32,uint64,bytes)", ["w", "w", "b"], dave.ua, 1, proof), f"storePqzPop dave version 1 ({len(proof):,} B)")
+    w = words(call(reg, cd("pqzKeyOf(bytes32)", ["w"], dave.ua)))
+    check(int.from_bytes(w[0], "big") == 1 and int.from_bytes(w[3], "big") == 1, "dave pqzKeyOf: version 1 current, proven")
+    dave1 = UA(**{**dave.__dict__, "pk": pk1, "s": s1, "e": e1, "kv": 1, "name": "dave/v1"})
+    n0 = C.state(dave)["pendingCount"]
+    transfer(pq, s, C, payer, dave1, ZERO32, 4, False, f"{payer.name}→dave 4 after the rotation (lands in version 1)")
+    check(C.state(dave1)["pendingCount"] == 1 and C.state(dave)["pendingCount"] == n0, "the credit is in (dave, 1), (dave, 0) unchanged")
+    _, ref, _, _ = transfer(pq, s, C, dave, dave1, ZERO32, 3, False, "the migration: op 1 from (dave, 0) to dave (version 1), 3")
+    check(C.state(dave1)["pendingCount"] == 2, "the migration's credit is in (dave, 1)")
+    stmt = dec_bytes(call(C.tok, cd(API["discStmt"], ["w", "w", "w", "w", "w"], ref, 0, 3, 1, 1)))
+    dproof = pq.prove(5, stmt, K.i8(s1) + K.i16(e1))
+    okw = int(call(C.tok, cd(API["verifyAmt"], ["w", "w", "w", "w", "w", "b"], ref, 0, 3, 1, 1, dproof)), 16)
+    check(okw == 1, "verifyTransferAmount of the migration's leg, RECEIVER_X under version 1's key: true")
 
 
 # ------------------------------------------------------------------ ops
@@ -1504,7 +1542,7 @@ def transfer(pq, s, C, frm, to, ben, v, aud_on, what, binding=ZERO32, send=True,
     ben_ua = ben.ua if isinstance(ben, UA) else ben
     blen = K.CT_BYTES + K.V_BYTES * (2 if aud_on else 1)
     v3 = K.PK_BYTES + K.V_BYTES  # `out` = u ‖ v_t ‖ v_f ‖ [v_a]
-    hdr = lambda out: [p, 10**9, shield_in, frm.ua, to.ua, ben_ua, salt + bytes(16), out[:K.PK_BYTES], out[K.PK_BYTES:v3],  # noqa: E731
+    hdr = lambda out: [p, 10**9, shield_in, frm.ua, kv_of(frm), to.ua, ben_ua, salt + bytes(16), out[:K.PK_BYTES], out[K.PK_BYTES:v3],  # noqa: E731
                        out[v3:v3 + K.V_BYTES], out[v3 + K.V_BYTES:], sealed]
     view = lambda t: dec_bytes(call(tok, cd(API["singleStmt"], [TRANSFER_T, "w"], t, binding)))  # noqa: E731
     st0 = view(hdr(probe(blen)))
@@ -1534,7 +1572,7 @@ def transfer(pq, s, C, frm, to, ben, v, aud_on, what, binding=ZERO32, send=True,
         f"hint {len(hint)} B, proof {len(proof):,} B")
     # the client's next state: the sender's acc is the new reference u ‖ v_f; the credit is the recipient's
     C.set_next(bal=[(frm, shield_in - v - fee), (to, v)], pub=[(ben, FEE)] if fee else [], acc={frm.ua: u + vs[1]},
-               total=shield_in - fee)
+               total=shield_in - fee, accv=kv_of(frm))
     bundle = salt + pack(u + vs[0]) + (pack(vs[2]) if aud_on else b"") + to.ua  # R as stored (P46)
     if not send:
         return None, data, bundle, (r_, e1, e2)
@@ -1547,13 +1585,18 @@ def transfer(pq, s, C, frm, to, ben, v, aud_on, what, binding=ZERO32, send=True,
     return rc, ref, bundle, (r_, e1, e2)
 
 
-def multi_args(p, frm, ben, decoy, salt, uas, g, aud_on, out, sealed):
+def kv_of(u):
+    """The key version a debit, rollover or view of `u` names (group 3g): its `kv` once rotated, else 0."""
+    return getattr(u, "kv", 0) if u is not None else 0
+
+
+def multi_args(p, frm, ben, decoy, salt, uas, g, aud_on, out, sealed, kv=0):
     """`PqzMultiArgs` of `out` = u_0 … u_{G−1} ‖ v_0 … v_{M−1} ‖ v_f ‖ [v_{a,0} … v_{a,M−1}]; each leg its UA and parts."""
     pk, vb, m = K.PK_BYTES, K.V_BYTES, len(uas)
     us = [out[pk * i:pk * (i + 1)] for i in range(g)]
     o = pk * g
     legs = [[uas[j], out[o + vb * j:o + vb * (j + 1)], out[o + vb * (m + 1 + j):o + vb * (m + 2 + j)] if aud_on else b""] for j in range(m)]
-    return [p, 10**9, 0, frm, ben, decoy, salt + bytes(16), us, legs, out[o + vb * m:o + vb * (m + 1)], sealed]
+    return [p, 10**9, 0, frm, kv, ben, decoy, salt + bytes(16), us, legs, out[o + vb * m:o + vb * (m + 1)], sealed]
 
 
 def transfer_multi(pq, s, C, frm, legs, ben, aud_on, what, signed=None):
@@ -1573,7 +1616,7 @@ def transfer_multi(pq, s, C, frm, legs, ben, aud_on, what, signed=None):
     fee = (FEE if ben != b"\0" * 32 else 0) + m * DEC_FEE
     ben_ua = ben.ua if isinstance(ben, UA) else ben
     olen = K.PK_BYTES * g + K.V_BYTES * (m + 1) + (K.V_BYTES * m if aud_on else 0)
-    hdr = lambda out: multi_args(p, frm.ua, ben_ua, DEC_FEE, salt, [u.ua for u, _ in legs], g, aud_on, out, sealed)  # noqa: E731
+    hdr = lambda out: multi_args(p, frm.ua, ben_ua, DEC_FEE, salt, [u.ua for u, _ in legs], g, aud_on, out, sealed, kv_of(frm))  # noqa: E731
     view = lambda t: dec_bytes(call(tok, cd(API["multiStmt"], [MULTI_T, "w"], t, binding)))  # noqa: E731
     tOff = K.HEADER_BYTES + K.PK_BYTES * (1 + m + (1 if aud_on else 0))
     T = view(hdr(probe(olen)))[tOff:tOff + K.CT_BYTES]
@@ -1623,7 +1666,7 @@ def burn(pq, s, C, frm, amount, recipient, what, unwrap=None, signed=None):
     stt = C.state(frm)
     p = stt["pendingCount"]
     rcp = W(recipient) if recipient else b"\0" * 32
-    hdr = lambda out: [p, 10**9, 0, frm.ua, b"\0" * 32, out[:K.PK_BYTES], out[K.PK_BYTES:]]  # noqa: E731
+    hdr = lambda out: [p, 10**9, 0, frm.ua, kv_of(frm), b"\0" * 32, out[:K.PK_BYTES], out[K.PK_BYTES:]]  # noqa: E731
     if unwrap:
         x = [unwrap[0], rcp, amount, unwrap[1]]
         view = lambda t: dec_bytes(call(tok, cd(API["unwrapStmt"], [BURN_T, UNWRAP, "w"], t, x, binding)))  # noqa: E731

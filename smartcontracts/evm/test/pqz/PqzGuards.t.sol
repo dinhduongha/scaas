@@ -193,12 +193,12 @@ contract PqzGuardsTest is PqzFixture {
     function test_verifyTransferAmount_failedCallRevertsShapeErrorsAreFalse() public {
         _fund(tok, alice, 10);
         (bytes32 ref,) = _transfer(tok, alice, bob, bytes32(0), 5, true);
-        assertTrue(tok.verifyTransferAmount(ref, 0, 123, 0, hex"0a0b"));
-        assertFalse(tok.verifyTransferAmount(ref, 1, 123, 0, hex"0a0b"), "no leg 1");
-        assertFalse(tok.verifyTransferAmount(keccak256("x"), 0, 123, 0, hex"0a0b"), "unknown entry");
+        assertTrue(tok.verifyTransferAmount(ref, 0, 123, 0, 0, hex"0a0b"));
+        assertFalse(tok.verifyTransferAmount(ref, 1, 123, 0, 0, hex"0a0b"), "no leg 1");
+        assertFalse(tok.verifyTransferAmount(keccak256("x"), 0, 123, 0, 0, hex"0a0b"), "unknown entry");
         vm.mockCallRevert(PQZ, abi.encodePacked(uint8(4)), "");
         vm.expectRevert(UAKinds.UAVerifyGas.selector);
-        tok.verifyTransferAmount(ref, 0, 123, 0, hex"0a0b");
+        tok.verifyTransferAmount(ref, 0, 123, 0, 0, hex"0a0b");
     }
 
     // ------------------------------------------------------------------ C2-7: the views are in IPqzToken

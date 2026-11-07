@@ -349,7 +349,7 @@ contract PqzNormalTest is PqzFixture {
         assertEq(cpt.transferCiphertextHash(ref), keccak256(r));
         assertEq(cpt.pqzEntryBlob(ref), bytes.concat(r, _packed(_cut(out, PqzCt.CT, 128))), "the op blob: R || P(v_f)");
         // disclosure of a COMPACT entry reads R from the blob: no bundle argument
-        assertEq(_cut(cpt.disclosureStatement(ref, 0, 5, 1), O_DU, PqzCt.CT), _cut(out, 0, PqzCt.CT), "u || v_t");
+        assertEq(_cut(cpt.disclosureStatement(ref, 0, 5, 1, 0), O_DU, PqzCt.CT), _cut(out, 0, PqzCt.CT), "u || v_t");
         // BUNDLE token: the commit-reveal form, same hash
         ref = tok.mtxConfidentialTransferSingleCompact(_ts(_payload(0, 0, alice, bob, bytes32(0), out, memo)), hex"01", _pqAuth(), "");
         assertEq(tok.transferCiphertextHash(ref), keccak256(r));
@@ -370,28 +370,28 @@ contract PqzNormalTest is PqzFixture {
     /// proof alone.
     function test_disclosure() public {
         (bytes32 ref, bytes memory out) = _transfer(tok, alice, bob, bytes32(0), 95, true);
-        bytes memory st = tok.disclosureStatement(ref, 0, 123, 1);
+        bytes memory st = tok.disclosureStatement(ref, 0, 123, 1, 0);
         assertEq(st.length, ST_DISC);
         assertEq(_cut(st, 0, 288), abi.encode(PqzCore.OP_DR, PQZL_ID, block.chainid, PQZ_UID, address(tok), address(reg),
             ref, uint256(123), uint256(1)));
         assertEq(_cut(st, 288, PqzCt.PK), _cut(txStmt, O_PK1, PqzCt.PK), "pk_t (bob)");
         assertEq(_cut(st, O_DU, PqzCt.PK + 128), _cut(out, 0, PqzCt.CT), "u || v_t");
-        st = tok.disclosureStatement(ref, 0, 123, 2);
+        st = tok.disclosureStatement(ref, 0, 123, 2, 0);
         assertEq(_cut(st, 288, PqzCt.PK), _cut(txStmt, O_PK2, PqzCt.PK), "pk_a");
         assertEq(_cut(st, O_DV, 128), _cut(out, PqzCore.OUT_OFF, 128), "v_a");
         assertEq(bytes32(_cut(st, 0, 32)), PqzCore.OP_DA);
         bytes memory proof = hex"0a0b";
         vm.expectCall(PQZ, abi.encodePacked(uint8(5), uint32(ST_DISC), st, proof));
-        assertTrue(tok.verifyTransferAmount(ref, 0, 123, 2, proof));
-        assertTrue(tok.verifyTransferAmount(ref, 0, 123, 0, proof), "SENDER_S (op 4)");
+        assertTrue(tok.verifyTransferAmount(ref, 0, 123, 2, 0, proof));
+        assertTrue(tok.verifyTransferAmount(ref, 0, 123, 0, 0, proof), "SENDER_S (op 4)");
         _mockOp(5, 0);
-        assertFalse(tok.verifyTransferAmount(ref, 0, 123, 1, proof), "the precompile says no");
-        assertTrue(tok.verifyTransferAmount(ref, 0, 123, 0, proof));
-        assertFalse(tok.verifyTransferAmount(ref, 0, 123, 3, proof), "SENDER_CP / unknown kind");
-        assertFalse(tok.verifyTransferAmount(ref, 0, 1 << 64, 0, proof), "amount >= 2^64");
-        assertFalse(tok.verifyTransferAmount(keccak256("x"), 0, 123, 0, proof), "unknown entry");
-        assertFalse(tok.verifyTransferAmount(ref, 0, 123, 0, ""), "empty proof");
-        assertFalse(tok.verifyTransferAmount(ref, 1, 123, 0, proof), "no leg 1");
+        assertFalse(tok.verifyTransferAmount(ref, 0, 123, 1, 0, proof), "the precompile says no");
+        assertTrue(tok.verifyTransferAmount(ref, 0, 123, 0, 0, proof));
+        assertFalse(tok.verifyTransferAmount(ref, 0, 123, 3, 0, proof), "SENDER_CP / unknown kind");
+        assertFalse(tok.verifyTransferAmount(ref, 0, 1 << 64, 0, 0, proof), "amount >= 2^64");
+        assertFalse(tok.verifyTransferAmount(keccak256("x"), 0, 123, 0, 0, proof), "unknown entry");
+        assertFalse(tok.verifyTransferAmount(ref, 0, 123, 0, 0, ""), "empty proof");
+        assertFalse(tok.verifyTransferAmount(ref, 1, 123, 0, 0, proof), "no leg 1");
     }
 
     // ------------------------------------------------------------------ the factory gate (P6g D1, D2)

@@ -250,13 +250,13 @@ contract PqzMultiTest is PqzFixture {
         (bytes32 ref, bytes memory out) = _multi(tok, alice, bytes32(0), rec, 13, true);
         uint256 us = _groups(8, true) * PqzCt.PK;
         for (uint256 j; j < 8; ++j) {
-            bytes memory st = tok.disclosureStatement(ref, j, 77, 1);
+            bytes memory st = tok.disclosureStatement(ref, j, 77, 1, 0);
             assertEq(st.length, ST_DISC);
             assertEq(uint256(bytes32(_cut(st, 256, 32))), 1, "RECEIVER_X kind word: w = 0");
             assertEq(_cut(st, 288, PqzCt.PK), _keyOf(rec[j]), "the leg's key");
             assertEq(_cut(st, O_DU, PqzCt.PK), _cut(out, PqzCt.PK * (j / PqzSet.S_AUD), PqzCt.PK), "u of the leg's group");
             assertEq(_cut(st, O_DV, 128), _cut(out, us + PqzCt.V * j, PqzCt.V), "v_j");
-            st = tok.disclosureStatement(ref, j, 77, 2);
+            st = tok.disclosureStatement(ref, j, 77, 2, 0);
             assertEq(uint256(bytes32(_cut(st, 256, 32))), 2 + 256 * (j % PqzSet.S_AUD), "AUDITOR kind word: w = j mod S_AUD");
             assertEq(_cut(st, 288, PqzCt.PK), _keyOf(aud), "the auditor's key");
             assertEq(_cut(st, O_DU, PqzCt.PK), _cut(out, PqzCt.PK * (j / PqzSet.S_AUD), PqzCt.PK), "u of the leg's group");
@@ -265,16 +265,16 @@ contract PqzMultiTest is PqzFixture {
         // without the auditor: groups of 4, and no AUDITOR disclosure
         (bytes32 ref0, bytes memory out0) = _multi(tok, alice, bytes32(0), rec, 14, false);
         for (uint256 j; j < 8; ++j) {
-            bytes memory st = tok.disclosureStatement(ref0, j, 77, 1);
+            bytes memory st = tok.disclosureStatement(ref0, j, 77, 1, 0);
             assertEq(_cut(st, O_DU, PqzCt.PK), _cut(out0, PqzCt.PK * (j / 4), PqzCt.PK), "off: u of group j / 4");
         }
         vm.expectRevert();
-        tok.disclosureStatement(ref0, 0, 77, 2);
+        tok.disclosureStatement(ref0, 0, 77, 2, 0);
         bytes memory opening = hex"0a0b"; // the proof: `R` is read from the op blob (D11)
-        assertTrue(tok.verifyTransferAmount(ref, 5, 77, 1, opening));
-        assertFalse(tok.verifyTransferAmount(ref, 8, 77, 1, opening), "no leg 8");
+        assertTrue(tok.verifyTransferAmount(ref, 5, 77, 1, 0, opening));
+        assertFalse(tok.verifyTransferAmount(ref, 8, 77, 1, 0, opening), "no leg 8");
         _mockOp(5, 0);
-        assertFalse(tok.verifyTransferAmount(ref, 5, 77, 1, opening), "the precompile says no");
+        assertFalse(tok.verifyTransferAmount(ref, 5, 77, 1, 0, opening), "the precompile says no");
     }
 
     /// The vectors' op 7 disclosures as the oracle (`disclosures` of the set's `statement_transfer_multi.json`, the head
@@ -291,7 +291,7 @@ contract PqzMultiTest is PqzFixture {
             bytes memory head = vm.parseBytes(string.concat("0x", vm.parseJsonString(j, string.concat(r, ".head"))));
             uint256 word = uint256(bytes32(_cut(head, 256, 32)));
             (bytes32 ref,) = _multi(tok, alice, bytes32(0), _legsOf(m), 40 + i, true);
-            bytes memory st = tok.disclosureStatement(ref, leg, uint256(bytes32(_cut(head, 224, 32))), uint8(word & 0xff));
+            bytes memory st = tok.disclosureStatement(ref, leg, uint256(bytes32(_cut(head, 224, 32))), uint8(word & 0xff), 0);
             assertEq(_cut(st, 0, 32), _cut(head, 0, 32), "opTag");
             assertEq(_cut(st, 224, 64), _cut(head, 224, 64), "amount and kind words as the vector");
             if (word & 0xff == 2) assertEq(word >> 8, leg % PqzSet.S_AUD, "AUDITOR: w = leg mod S_AUD");
