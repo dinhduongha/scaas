@@ -252,3 +252,8 @@ required-features = ["pqz"]
 [[test]]
 name = "vectors_marker"
 required-features = ["vectors", "pqz", "zether"]
+
+# ua-rs-sign T17: the reference bench, release build, no test feature; the command and its record: runs/2026-11-07-ua-rs-sign-t17.md
+[[example]]
+name = "ua_bench"
+required-features = ["pqz"]
