@@ -1,0 +1,2323 @@
+diff --git a/smartcontracts/evm/src/FwdSpike.sol b/smartcontracts/evm/src/FwdSpike.sol
+new file mode 100644
+index 00000000..07d16843
+--- /dev/null
++++ b/smartcontracts/evm/src/FwdSpike.sol
+@@ -0,0 +1,16 @@
++// SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
++pragma solidity ^0.8.24;
++// fwd_spike (size study only): an entry's calldata to its library, unchanged; the return data back.
++address constant FWD_LIB = 0x00000000000000000000000000000000DeaDBeef;
++function fwdCall() {
++    address l = FWD_LIB;
++    assembly ("memory-safe") {
++        calldatacopy(0, 0, calldatasize())
++        let ok := delegatecall(gas(), l, 0, calldatasize(), 0, 0)
++        returndatacopy(0, 0, returndatasize())
++        if iszero(ok) { revert(0, returndatasize()) }
++        return(0, returndatasize())
++    }
++}
++function fwdView() view { function() f = fwdCall; function() view v; assembly ("memory-safe") { v := f } v(); }
++function fwdPure() pure { function() f = fwdCall; function() pure v; assembly ("memory-safe") { v := f } v(); }
+diff --git a/smartcontracts/evm/src/common/SaltedEIP712.sol b/smartcontracts/evm/src/common/SaltedEIP712.sol
+index 535f5d07..595e39e8 100644
+--- a/smartcontracts/evm/src/common/SaltedEIP712.sol
++++ b/smartcontracts/evm/src/common/SaltedEIP712.sol
+@@ -1,5 +1,6 @@
+ // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+ pragma solidity ^0.8.24;
++import {fwdCall, fwdView, fwdPure} from "../FwdSpike.sol";
+ 
+ import {IERC5267} from "@openzeppelin/contracts/interfaces/IERC5267.sol";
+ import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
+@@ -50,10 +51,7 @@ abstract contract SaltedEIP712 is IERC5267 {
+             bytes1 fields, string memory name, string memory version, uint256 chainId,
+             address verifyingContract, bytes32 salt, uint256[] memory extensions
+         )
+-    {
+-        return (hex"1f", _name.toString(), _version.toString(), block.chainid, address(this), CHAIN_UID,
+-            new uint256[](0));
+-    }
++    { fwdView(); }
+ 
+     function _domainSeparatorV4() internal view returns (bytes32) {
+         if (address(this) == _cachedThis && block.chainid == _cachedChainId) return _cachedDomainSeparator;
+diff --git a/smartcontracts/evm/src/governance/GovernanceBase.sol b/smartcontracts/evm/src/governance/GovernanceBase.sol
+index a630e4cb..77ea8c59 100644
+--- a/smartcontracts/evm/src/governance/GovernanceBase.sol
++++ b/smartcontracts/evm/src/governance/GovernanceBase.sol
+@@ -1,5 +1,6 @@
+ // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+ pragma solidity ^0.8.24;
++import {fwdCall, fwdView, fwdPure} from "../FwdSpike.sol";
+ 
+ import {IGovernance} from "./IGovernance.sol";
+ import {GovernanceLib} from "./GovernanceLib.sol";
+@@ -78,30 +79,22 @@ abstract contract GovernanceBase is IGovernance {
+         return parent == child;
+     }
+ 
+-    function features() external view returns (uint256) { return GovernanceLib.$().features; }
+-    function lockedFeatures() external view returns (uint256) { return GovernanceLib.$().lockedFeatures; }
+-    function owner() external view returns (bytes32) { return GovernanceLib.$().owner; }
+-    function pendingOwner() external view returns (bytes32) { return GovernanceLib.$().pendingOwner; }
+-    function hasRole(uint8 bit, bytes32 account) external view returns (bool) { return GovernanceLib.hasRole(bit, account); }
+-    function validBits() external pure returns (uint256) { return _validBits(); }
+-    function holderCount(uint8 bit) external view returns (uint256) { return GovernanceLib.$().counts[bit].holders; }
+-    function grantDelay() external view returns (uint64) { return GovernanceLib.$().grantDelay; }
+-    function lastProposedAt() external view returns (uint64) { return GovernanceLib.$().lastProposedAt; }
+-    function pendingGrant(uint8 bit, bytes32 account) external view returns (uint64, bytes32, bytes32, bool) {
+-        return GovernanceLib.pendingGrant(bit, account);
+-    }
+-    function grantOf(uint8 bit, bytes32 holder) external view returns (Grant memory) {
+-        return GovernanceLib.$().grants[bit][holder];
+-    }
++    function features() external view returns (uint256) { fwdView(); }
++    function lockedFeatures() external view returns (uint256) { fwdView(); }
++    function owner() external view returns (bytes32) { fwdView(); }
++    function pendingOwner() external view returns (bytes32) { fwdView(); }
++    function hasRole(uint8 bit, bytes32 account) external view returns (bool) { fwdView(); }
++    function validBits() external pure returns (uint256) { fwdPure(); }
++    function holderCount(uint8 bit) external view returns (uint256) { fwdView(); }
++    function grantDelay() external view returns (uint64) { fwdView(); }
++    function lastProposedAt() external view returns (uint64) { fwdView(); }
++    function pendingGrant(uint8 bit, bytes32 account) external view returns (uint64, bytes32, bytes32, bool) { fwdView(); }
++    function grantOf(uint8 bit, bytes32 holder) external view returns (Grant memory) { fwdView(); }
+ 
+     /// @notice Bits 128-255 only (CTR-GOV-10); a contract with no application bit answers with a refusal.
+-    function bitLabel(uint8 bit) external view virtual returns (BitType, bytes4, string memory) {
+-        revert FeatureInvalidForKind(bit);
+-    }
++    function bitLabel(uint8 bit) external view virtual returns (BitType, bytes4, string memory) { fwdView(); }
+ 
+-    function grantRole(uint8 bit, bytes32 account) external governed {
+-        GovernanceLib.grantRole(bit, account, _govSubject(), _roleBits(), _contractOnlyBits(), _uaRegistry());
+-    }
++    function grantRole(uint8 bit, bytes32 account) external governed { fwdCall(); }
+     /// @notice The owner sets any holder's grant, a widening in two calls (spec §1.6); a holder with a `delegable` grant sets
+     ///         a narrower leaf at once. Spent is carried.
+     function setGrant(uint8 bit, bytes32 holder, GrantTerms calldata terms) external governed {
+@@ -110,21 +103,11 @@ abstract contract GovernanceBase is IGovernance {
+         if (leaf && !_scopeNarrows(bit, parentScope, terms.scope)) revert GrantNotNarrower(7);
+     }
+ 
+-    function cancelGrant(uint8 bit, bytes32 account) external governed {
+-        GovernanceLib.cancelGrant(bit, account, _govSubject());
+-    }
+-    function revokeRole(uint8 bit, bytes32 account) external governed {
+-        GovernanceLib.revokeRole(bit, account, _govSubject(), _delayedRelaxBits());
+-    }
+-    function renounceRole(uint8 bit) external governed {
+-        GovernanceLib.renounceRole(bit, _govSubject(), _delayedRelaxBits());
+-    }
+-    function disableFeature(uint8 bit) external virtual governed {
+-        GovernanceLib.disableFeature(bit, _govSubject(), _delayedRelaxBits());
+-    }
+-    function transferOwnership(bytes32 newOwner) external governed {
+-        GovernanceLib.transferOwnership(newOwner, _govSubject());
+-    }
+-    function acceptOwnership() external governed { GovernanceLib.acceptOwnership(_govSubject()); }
+-    function renounceOwnership() external governed { GovernanceLib.renounceOwnership(_govSubject(), _roleBits()); }
++    function cancelGrant(uint8 bit, bytes32 account) external governed { fwdCall(); }
++    function revokeRole(uint8 bit, bytes32 account) external governed { fwdCall(); }
++    function renounceRole(uint8 bit) external governed { fwdCall(); }
++    function disableFeature(uint8 bit) external virtual governed { fwdCall(); }
++    function transferOwnership(bytes32 newOwner) external governed { fwdCall(); }
++    function acceptOwnership() external governed { fwdCall(); }
++    function renounceOwnership() external governed { fwdCall(); }
+ }
+diff --git a/smartcontracts/evm/src/metatx/ERC20MetaTx.sol b/smartcontracts/evm/src/metatx/ERC20MetaTx.sol
+index a867be30..4d6ab149 100644
+--- a/smartcontracts/evm/src/metatx/ERC20MetaTx.sol
++++ b/smartcontracts/evm/src/metatx/ERC20MetaTx.sol
+@@ -1,5 +1,6 @@
+ // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+ pragma solidity ^0.8.24;
++import {fwdCall, fwdView, fwdPure} from "../FwdSpike.sol";
+ 
+ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+@@ -52,54 +53,36 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBase, IERC20Payment, ITradeToken
+ 
+     // `UAMetaTxBase` holds these three and `IUALedger` / `IUALedgerViews` name them too: the join spelled out.
+ 
+-    function registry() public view override(IUALedger, UAMetaTxBase) returns (address) {
+-        return UAMetaTxBase.registry();
+-    }
++    function registry() public view override(IUALedger, UAMetaTxBase) returns (address) { fwdView(); }
+ 
+-    function mtxNonce(bytes32 from, uint256 batch) public view override(IUALedgerViews, UAMetaTxBase) returns (uint256) {
+-        return UAMetaTxBase.mtxNonce(from, batch);
+-    }
++    function mtxNonce(bytes32 from, uint256 batch) public view override(IUALedgerViews, UAMetaTxBase) returns (uint256) { fwdView(); }
+ 
+     function mtxDigest(MetaTxLib.UAMetaTransaction calldata m)
+         public view override(IUALedgerViews, UAMetaTxBase) returns (bytes32)
+-    {
+-        return UAMetaTxBase.mtxDigest(m);
+-    }
++    { fwdView(); }
+ 
+     /// @notice A native id reads the ERC-20 balance of its address; a derived UA its UA-ledger balance.
+     function balanceOfUA(bytes32 ua) public view returns (uint256) {
+         return UAKinds.inNativeSpace(ua) ? balanceOf(address(uint160(uint256(ua)))) : _ua().balance[ua];
+     }
+ 
+-    function mtxTransferDigest(MetaTxLib.UAMetaTransfer calldata t) external view returns (bytes32) {
+-        return MtxPipelineLib.transferDigest(_domainSeparatorV4(), t);
+-    }
++    function mtxTransferDigest(MetaTxLib.UAMetaTransfer calldata t) external view returns (bytes32) { fwdView(); }
+ 
+     // ------------------------------------------------------------------ trade orders (CTR-DEX-15, -25, -02)
+     // ua-mtx-merge T6 (R12, R38): one form, `UATradeOrder`, for every subject; the address `TradeOrder` entries and
+     // views (`mtxTrade(TradeOrder, bytes, …)`, `mtxCancelOrder(TradeOrder, bytes)`, `mtxInvalidateNonces(address, …)`,
+     // `restorePulled(TradeOrder, …)`, the address digests and `minNonce(address, …)`) are in legacy/ua-mtx-merge/.
+ 
+-    function tradeOrderDigest(UATradeOrder calldata o) public view returns (bytes32) {
+-        return _hashTypedDataV4(TradeLib.orderHash(o));
+-    }
++    function tradeOrderDigest(UATradeOrder calldata o) public view returns (bytes32) { fwdView(); }
+ 
+-    function cancelOrderDigest(UATradeOrder calldata o) public view returns (bytes32) {
+-        return _hashTypedDataV4(TradeLib.cancelHash(o));
+-    }
++    function cancelOrderDigest(UATradeOrder calldata o) public view returns (bytes32) { fwdView(); }
+ 
+-    function invalidateNoncesDigest(bytes32 from, uint256 batch, uint256 newMin) public view returns (bytes32) {
+-        return _hashTypedDataV4(keccak256(abi.encode(TradeLib.UA_INVALIDATE_NONCES_TYPEHASH, from, batch, newMin)));
+-    }
++    function invalidateNoncesDigest(bytes32 from, uint256 batch, uint256 newMin) public view returns (bytes32) { fwdView(); }
+ 
+-    function pulled(bytes32 orderHash) external view returns (uint256) {
+-        return TradeLib.$().pulled[orderHash];
+-    }
++    function pulled(bytes32 orderHash) external view returns (uint256) { fwdView(); }
+ 
+     /// @notice One floor per id (a native address zero-padded); a store apart from the meta-tx nonces.
+-    function minNonce(bytes32 from, uint256 batch) external view returns (uint256) {
+-        return TradeLib.$().minNonce[from][batch];
+-    }
++    function minNonce(bytes32 from, uint256 batch) external view returns (uint256) { fwdView(); }
+ 
+     /// @notice Only `o.dex` calls (a direct read of the caller, CTR-MTX-18); never allowlisted. Moves the fill from
+     ///         `o.from` to `o.dex` and nowhere else; the UA rule under purpose `trade` (a native id signs `h` itself,
+@@ -107,32 +90,18 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBase, IERC20Payment, ITradeToken
+     ///         `UATransfer`). A registry is needed only for a derived seller (C, R9: `authorize` refuses it
+     ///         `UALedgerOff` by name). The signature is checked once: a later fill of an order already pulled
+     ///         (`pulled[h] ≠ 0`, `h` binds every field) skips it (CTR-DEX-15 step 4).
+-    function mtxTrade(UATradeOrder calldata o, IUARegistry.UASig calldata auth, TradeFill calldata f) external nonReentrant {
+-        bytes32 h = tradeOrderDigest(o);
+-        UATradeOrder memory c = o;
+-        TradeLib.precheck(c, f, h, msg.sender, address(this));
+-        if (TradeLib.$().pulled[h] == 0) MtxPipelineLib.authorize(_mtxCtx(), o.from, UAKinds.PURPOSE_TRADE, h, auth);
+-        _uaMove(o.from, TradeLib.pad(o.dex), TradeLib.record(c, f, h, true));
+-    }
++    function mtxTrade(UATradeOrder calldata o, IUARegistry.UASig calldata auth, TradeFill calldata f) external nonReentrant { fwdCall(); }
+ 
+     /// @notice DX7: only `o.dex`, at most what it pulled for the order in this transaction (`TradeLib.restore`); a
+     ///         direct read of the caller, never allowlisted.
+-    function restorePulled(UATradeOrder calldata o, uint256 amount) external nonReentrant {
+-        TradeLib.restore(o, tradeOrderDigest(o), amount, msg.sender);
+-    }
++    function restorePulled(UATradeOrder calldata o, uint256 amount) external nonReentrant { fwdCall(); }
+ 
+     /// @notice Cancel signatures never expire (CTR-DEX-02); anyone may submit one. A native id needs no registry (C).
+-    function mtxCancelOrder(UATradeOrder calldata o, IUARegistry.UASig calldata auth) external nonReentrant {
+-        MtxPipelineLib.authorize(_mtxCtx(), o.from, UAKinds.PURPOSE_TRADE, cancelOrderDigest(o), auth);
+-        TradeLib.cancel(tradeOrderDigest(o), o.amount, o.from, true);
+-    }
++    function mtxCancelOrder(UATradeOrder calldata o, IUARegistry.UASig calldata auth) external nonReentrant { fwdCall(); }
+ 
+     function mtxInvalidateNonces(bytes32 from, uint256 batch, uint256 newMin, IUARegistry.UASig calldata auth)
+         external nonReentrant
+-    {
+-        MtxPipelineLib.authorize(_mtxCtx(), from, UAKinds.PURPOSE_TRADE, invalidateNoncesDigest(from, batch, newMin), auth);
+-        TradeLib.invalidate(from, batch, newMin, true);
+-    }
++    { fwdCall(); }
+ 
+     // ------------------------------------------------------------------ the generic pipeline on MtxPipelineLib
+ 
+@@ -228,21 +197,12 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBase, IERC20Payment, ITradeToken
+     ///         the registry and its UA-ledger balance.
+     function mtxExecuteTransfer(MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata auth)
+         external nonReentrant returns (bool)
+-    {
+-        _uaExecuteTransfer(t, 0, auth, 0, 0);
+-        return true;
+-    }
++    { fwdCall(); }
+ 
+     /// @notice Atomic, items in order; never mixed with `UAMetaTransaction`s (CTR-MTX-24).
+     function mtxBatchTransfer(MetaTxLib.UAMetaTransfer[] calldata ts, IUARegistry.UASig[] calldata auths)
+         external nonReentrant returns (bool)
+-    {
+-        uint256 n = ts.length;
+-        if (n == 0) revert MtxBatchEmpty();
+-        if (n != auths.length) revert MtxBatchLengthMismatch();
+-        for (uint256 i; i < n; ++i) _uaExecuteTransfer(ts[i], 0, auths[i], 0, 0);
+-        return true;
+-    }
++    { fwdCall(); }
+ 
+     /// @dev Step 6 of the UA path: the fee from the signer's ledger.
+     function _uaChargeFee(MetaTxLib.UAMetaTransaction memory m, address feeTo, uint256 fee) internal override {
+diff --git a/smartcontracts/evm/src/metatx/MetaTokenBase.sol b/smartcontracts/evm/src/metatx/MetaTokenBase.sol
+index 28c0bfaa..4b69152d 100644
+--- a/smartcontracts/evm/src/metatx/MetaTokenBase.sol
++++ b/smartcontracts/evm/src/metatx/MetaTokenBase.sol
+@@ -1,5 +1,6 @@
+ // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+ pragma solidity ^0.8.24;
++import {fwdCall, fwdView, fwdPure} from "../FwdSpike.sol";
+ 
+ import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
+ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+@@ -64,22 +65,10 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
+ 
+     /// @notice The factory calls it in the SAME call as CREATE2 (CTR-TOK-25). `initArgs = abi.encode(TokenConfig)`
+     ///         (the kinds of this repository). A UA registry must name this chain's `chain_uid` (CTR-UA-19).
+-    function initialize(address creator_, uint64 version_, bytes calldata initArgs) external {
+-        if (msg.sender != FACTORY) revert NotFactory();
+-        if (_REGISTRY != address(0)) {
+-            bytes32 u = IUARegistry(_REGISTRY).chainUid();
+-            if (u != CHAIN_UID) revert UARegistryChainUid(u, CHAIN_UID);
+-        }
+-        TokenStore.TokenStorage storage t = TokenStore.$();
+-        if (t.initialized) revert AlreadyInitialized();
+-        t.initialized = true;
+-        t.creator = creator_;
+-        t.version = version_;
+-        _initRaw(initArgs);
+-    }
++    function initialize(address creator_, uint64 version_, bytes calldata initArgs) external { fwdCall(); }
+ 
+     /// @notice No underlying (the `NORMAL*` kinds); `WrappedToken` lists its legs. Read by the factory's index.
+-    function underlyings() public view virtual returns (address[] memory us) {}
++    function underlyings() public view virtual returns (address[] memory us) { fwdView(); }
+ 
+     /// @dev The kind checks its fields of `cfg` (`ConfigFieldForOtherKind` for another kind's), calls `_setMetadata`
+     ///      and `GovernanceLib.init`.
+@@ -118,10 +107,10 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
+     function symbol() public view override returns (string memory) { return TokenStore.$().symbol; }
+     function decimals() public view override returns (uint8) { return TokenStore.$().decimals; }
+ 
+-    function factory() external view returns (address) { return FACTORY; }
+-    function implementation() external view returns (address) { return _SELF; }
+-    function creator() external view returns (address) { return TokenStore.$().creator; }
+-    function version() external view returns (uint64) { return TokenStore.$().version; }
++    function factory() external view returns (address) { fwdView(); }
++    function implementation() external view returns (address) { fwdView(); }
++    function creator() external view returns (address) { fwdView(); }
++    function version() external view returns (uint64) { fwdView(); }
+     /// @notice CTR-TOK-21 kind: 0 `NORMAL`, 1 `WRAPPED`, 2 `NORMAL_ZETHER`, 3 `WRAPPED_ZETHER`; a constant of the
+     ///         implementation, so the factory can check it before any clone exists.
+     function kind() public pure virtual returns (uint8);
+@@ -142,30 +131,18 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
+     function _uaRegistry() internal view override returns (address) { return _REGISTRY; }
+ 
+     /// @notice ERC-165; `IERC20Payment` only while `PAYABLE` is set, `IRescuable` only while `RESCUABLE` is.
+-    function supportsInterface(bytes4 id) public view virtual returns (bool) {
+-        return id == type(IERC165).interfaceId || id == type(IERC20).interfaceId || id == type(IMetaTx).interfaceId
+-            || id == type(IERC20MetaTx).interfaceId || id == type(IGovernance).interfaceId
+-            || (id == type(IERC20Payment).interfaceId && GovernanceLib.hasFeature(GovernanceBits.PAYABLE))
+-            || (id == type(IRescuable).interfaceId && GovernanceLib.hasFeature(GovernanceBits.RESCUABLE))
+-            || (id == type(IUALedger).interfaceId && _REGISTRY != address(0));
+-    }
++    function supportsInterface(bytes4 id) public view virtual returns (bool) { fwdView(); }
+ 
+     /// @notice CTR-GOV-06 (spec §6.2): one direct entry on every kind, anyone, not allowlisted; `NORMAL*` pays the whole
+     ///         balance (`GovernanceLib.rescue`), `WRAPPED*` overrides it with `WrappedLib.rescue`.
+-    function rescue(address asset) external virtual nonReentrant {
+-        GovernanceLib.rescue(asset);
+-    }
++    function rescue(address asset) external virtual nonReentrant { fwdCall(); }
+ 
+     /// @notice Immutable: set by `init` with bit 17, no writer after.
+-    function rescueTo() external view returns (address) {
+-        return GovernanceLib.$().rescueTo;
+-    }
++    function rescueTo() external view returns (address) { fwdView(); }
+ 
+     /// @notice A client convention, not enforced (pay-meta-tax spec O3): a client that wants one payment per request
+     ///         signs on this lane at nonce 0; the contract does not care.
+-    function payLane(bytes32 payId) public pure returns (uint256) {
+-        return uint256(keccak256(abi.encodePacked("scaas.pay.lane", payId)));
+-    }
++    function payLane(bytes32 payId) public pure returns (uint256) { fwdPure(); }
+ 
+     // ------------------------------------------------------------------ named functions (CTR-MTX-09, CTR-UA-26)
+ 
+@@ -173,56 +150,21 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
+     function mtxTransfer(
+         bytes32 from, bytes32 to, uint256 amount, uint256 batch, uint256 nonce, uint256 validUntil,
+         uint32 mode, address relayer, IUARegistry.UASig calldata auth
+-    ) external nonReentrant returns (bool) {
+-        if (mode & ~MetaTxLib.MODE_RESTRICT_RELAYER != 0) revert MtxModeShape(mode);
+-        MetaTxLib.UAMetaTransfer memory t;
+-        t.from = from;
+-        t.to = to;
+-        t.value = amount;
+-        t.batch = batch;
+-        t.nonce = nonce;
+-        t.validUntil = validUntil;
+-        t.mode = mode;
+-        t.relayer = relayer;
+-        _uaExecuteTransfer(t, 0, auth, 0, 0);
+-        return true;
+-    }
++    ) external nonReentrant returns (bool) { fwdCall(); }
+ 
+     function mtxTransferWithFee(
+         bytes32 from, bytes32 to, uint256 amount, uint256 batch, uint256 nonce, uint256 validUntil,
+         uint32 mode, address relayer, uint256 fee, address feeRecipient, IUARegistry.UASig calldata auth
+-    ) external nonReentrant returns (bool) {
+-        _requireFeeShape(mode, feeRecipient);
+-        MetaTxLib.UAMetaTransfer memory t;
+-        t.from = from;
+-        t.to = to;
+-        t.value = amount;
+-        t.batch = batch;
+-        t.nonce = nonce;
+-        t.validUntil = validUntil;
+-        t.mode = mode;
+-        t.relayer = relayer;
+-        t.fee = fee;
+-        t.feeRecipient = feeRecipient;
+-        _uaExecuteTransfer(t, 0, auth, 0, 0);
+-        return true;
+-    }
++    ) external nonReentrant returns (bool) { fwdCall(); }
+ 
+     /// @notice The payment `t` with its metadata (CTR-MTX-10, CTR-MTX-26; pay-meta-tax spec §2.1): any lane, the nonce
+     ///         space of `mtxExecuteTransfer` (O3); `t.entryRef == metaPayId(meta)` (O11), `PaymentMeta` first.
+     function mtxPay(MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata auth, MetaTxLib.PayMeta calldata meta)
+         external nonReentrant returns (bool)
+-    {
+-        GovernanceLib.requireFeature(GovernanceBits.PAYABLE);
+-        _payMeta(t.entryRef, meta);
+-        _uaExecuteTransfer(t, 0, auth, 0, 0);
+-        return true;
+-    }
++    { fwdCall(); }
+ 
+     /// @notice CTR-MTX-26 (spec §3.1): the commitment of a `PayMeta`, under the versioned tag `scaas.pay.meta.v2`.
+-    function metaPayId(MetaTxLib.PayMeta calldata meta) public pure returns (bytes32) {
+-        return MtxPipelineLib.metaPayId(meta);
+-    }
++    function metaPayId(MetaTxLib.PayMeta calldata meta) public pure returns (bytes32) { fwdPure(); }
+ 
+     /// @dev Spec §3.2, in order: a non-zero salt, `schema == 0` iff the body is empty, `payNo` at most 256 bytes,
+     ///      `entryRef == metaPayId(m)`; then `PaymentMeta`. Every pay entry calls it after its gates, before any signature.
+@@ -247,12 +189,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
+         MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata payerAuth,
+         uint256 fee, address feeRecipient, uint256 rfValidUntil, IUARegistry.UASig calldata payeeAuth,
+         MetaTxLib.PayMeta calldata meta
+-    ) external nonReentrant returns (bool) {
+-        GovernanceLib.requireFeature(GovernanceBits.PAYABLE);
+-        _payMeta(t.entryRef, meta); // `entryRef` ≠ 0 with it; any lane (spec §2.5, O3)
+-        _receiverFee(t, payerAuth, fee, feeRecipient, rfValidUntil, payeeAuth);
+-        return true;
+-    }
++    ) external nonReentrant returns (bool) { fwdCall(); }
+ 
+     /// @dev `mtxPayReceiverFee`'s body after `_payMeta` (its seven arguments leave no stack for the locals).
+     function _receiverFee(
+@@ -284,20 +221,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
+     ///         once, a call may be paid by several), fee `NONE`, `ref` = the router's `relayRef(target, callData)`.
+     function mtxRelayFee(bytes32 from, address target, bytes32 callDataHash, bytes32 payee, uint256 value, uint256 batch,
+         uint256 nonce, uint256 validUntil, IUARegistry.UASig calldata auth) external nonReentrant
+-    {
+-        _regFeeTo(payee, value);
+-        MetaTxLib.UAMetaTransfer memory t;
+-        t.from = from;
+-        t.to = payee;
+-        t.value = value;
+-        t.entryRef = _relayRef(target, callDataHash);
+-        t.batch = batch;
+-        t.nonce = nonce;
+-        t.validUntil = validUntil;
+-        t.mode = MetaTxLib.MODE_RESTRICT_RELAYER;
+-        t.relayer = msg.sender;
+-        _uaExecuteTransfer(t, _relayHash(t, target, callDataHash), auth, 0, 0);
+-    }
++    { fwdCall(); }
+ 
+     function _relayRef(address target, bytes32 callDataHash) private view returns (bytes32) {
+         return keccak256(abi.encodePacked("scaas.relayfee", block.chainid, target, callDataHash));
+@@ -327,38 +251,12 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
+     function payWithFee(
+         address to, uint256 amount, FeeMode feeMode, uint256 fee, address feeRecipient, bytes32 entryRef,
+         MetaTxLib.PayMeta calldata meta
+-    ) external nonReentrant returns (bool) {
+-        GovernanceLib.requireFeature(GovernanceBits.PAYABLE);
+-        _payMeta(entryRef, meta);
+-        address payer = _msgSender();
+-        uint256 feeAmount = FeePolicy.compute(feeMode, amount, fee);
+-        FeePolicy.validateRecipient(feeMode, feeRecipient);
+-        _regFeeTo(MetaTxLib.pad(feeRecipient), feeAmount);
+-        if (feeAmount != 0) {
+-            if (feeRecipient == to) revert FeeRecipientIsPayee();
+-            _transfer(payer, feeRecipient, feeAmount);
+-        }
+-        _transfer(payer, to, amount);
+-        emit PaymentSettled(payer, to, amount, feeAmount, feeRecipient, entryRef);
+-        return true;
+-    }
++    ) external nonReentrant returns (bool) { fwdCall(); }
+ 
+     /// @notice `payWithFee` to a derived payee (CTR-UA-28): the caller pays `amount` into `to`'s UA balance and the fee
+     ///         on top to `feeRecipient` (an address: never the payee; `UA_POOL` and the token are refused by `_update`).
+     function payWithFeeToUA(
+         bytes32 to, uint256 amount, FeeMode feeMode, uint256 fee, address feeRecipient, bytes32 entryRef,
+         MetaTxLib.PayMeta calldata meta
+-    ) external nonReentrant returns (bool) {
+-        GovernanceLib.requireFeature(GovernanceBits.PAYABLE);
+-        _payMeta(entryRef, meta);
+-        _requireDerivedReceiver(to);
+-        bytes32 payer = MetaTxLib.pad(_msgSender());
+-        uint256 feeAmount = FeePolicy.compute(feeMode, amount, fee);
+-        FeePolicy.validateRecipient(feeMode, feeRecipient);
+-        _regFeeTo(MetaTxLib.pad(feeRecipient), feeAmount);
+-        if (feeAmount != 0) _transfer(_msgSender(), feeRecipient, feeAmount);
+-        _uaMove(payer, to, amount);
+-        emit UAPaymentSettled(payer, to, amount, feeAmount, feeRecipient, entryRef);
+-        return true;
+-    }
++    ) external nonReentrant returns (bool) { fwdCall(); }
+ }
+diff --git a/smartcontracts/evm/src/metatx/MetaTxBase.sol b/smartcontracts/evm/src/metatx/MetaTxBase.sol
+index bc7333a6..9876a4e1 100644
+--- a/smartcontracts/evm/src/metatx/MetaTxBase.sol
++++ b/smartcontracts/evm/src/metatx/MetaTxBase.sol
+@@ -1,5 +1,6 @@
+ // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+ pragma solidity ^0.8.24;
++import {fwdCall, fwdView, fwdPure} from "../FwdSpike.sol";
+ 
+ import {Context} from "@openzeppelin/contracts/utils/Context.sol";
+ import {IMetaTx} from "./IMetaTx.sol";
+@@ -56,9 +57,7 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
+ 
+     // ------------------------------------------------------------------ views
+ 
+-    function chainUid() external view returns (bytes32) {
+-        return CHAIN_UID;
+-    }
++    function chainUid() external view returns (bytes32) { fwdView(); }
+ 
+     /// @notice `0x03`: flags only, fee mode `NONE`. A token (which charges the fee, `ERC20MetaTx`) returns `0xF3`.
+     function supportedModes() public view virtual returns (uint32) {
+@@ -68,31 +67,18 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
+     /// @notice The allowlist (CTR-MTX-19). An override returns the base entry first, then its own.
+     function mtxSelectors()
+         public view virtual returns (bytes4[] memory selectors, uint8[] memory feeClass, uint8[] memory amountArg)
+-    {
+-        selectors = new bytes4[](1);
+-        feeClass = new uint8[](1);
+-        amountArg = new uint8[](1);
+-        selectors[0] = IMetaTx.cancelNonce.selector;
+-        feeClass[0] = FEE_CLASS_ABSOLUTE;
+-    }
++    { fwdView(); }
+ 
+     // ------------------------------------------------------------------ entry points
+ 
+     /// @notice EIP-1776 alias of the address `mtxExecute` (CTR-MTX-17, R3: kept on tokens, `0x47aea5b5`); returns `true`.
+     function executeMetaTransaction(MetaTxLib.MetaTransaction calldata m, bytes calldata signature)
+         external nonReentrant returns (bool)
+-    {
+-        _execute(m, signature);
+-        return true;
+-    }
++    { fwdCall(); }
+ 
+     /// @notice Direct, or signed through `mtxExecute` on another lane (a subject without gas can cancel). A derived
+     ///         subject has no address lane: `_msgSender()` is `UA_POOL` for all of them, its cancel is `mtxCancelNonce`.
+-    function cancelNonce(uint256 batch) external nonReentrant {
+-        address from = _msgSender();
+-        if (from == MetaTxLib.UA_POOL) revert MtxSelectorNotAllowed(IMetaTx.cancelNonce.selector);
+-        emit MetaNonceCancelled(from, batch, _bumpNonce(MetaTxLib.pad(from), batch));
+-    }
++    function cancelNonce(uint256 batch) external nonReentrant { fwdCall(); }
+ 
+     // ------------------------------------------------------------------ pipeline (CTR-MTX-17)
+ 
+diff --git a/smartcontracts/evm/src/metatx/NormalToken.sol b/smartcontracts/evm/src/metatx/NormalToken.sol
+index 6e8c5b33..bcac5cc7 100644
+--- a/smartcontracts/evm/src/metatx/NormalToken.sol
++++ b/smartcontracts/evm/src/metatx/NormalToken.sol
+@@ -1,5 +1,6 @@
+ // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+ pragma solidity ^0.8.24;
++import {fwdCall, fwdView, fwdPure} from "../FwdSpike.sol";
+ 
+ import {MetaTokenBase} from "./MetaTokenBase.sol";
+ import {GovernanceLib} from "../governance/GovernanceLib.sol";
+@@ -42,41 +43,24 @@ contract NormalToken is MetaTokenBase {
+     }
+ 
+     /// @notice `MINTABLE` and the `minter` role; never allowlisted (a minter contract's caps run on its own call).
+-    function mint(address to, uint256 amount) external nonReentrant {
+-        GovernanceUse.use(GovernanceBits.MINTABLE, _govSubject(), amount);
+-        _mint(to, amount);
+-    }
++    function mint(address to, uint256 amount) external nonReentrant { fwdCall(); }
+ 
+     /// @notice `mint` into the registered SIGNING UA `to` (CTR-UA-28): the same flag and role; never allowlisted.
+-    function mintToUA(bytes32 to, uint256 amount) external nonReentrant {
+-        GovernanceUse.use(GovernanceBits.MINTABLE, _govSubject(), amount);
+-        _uaMint(to, amount);
+-    }
++    function mintToUA(bytes32 to, uint256 amount) external nonReentrant { fwdCall(); }
+ 
+     /// @notice Allowlisted `AMOUNT(0)` (CTR-MTX-19): gasless through `mtxExecute`.
+-    function burn(uint256 amount) external nonReentrant {
+-        GovernanceLib.requireFeature(GovernanceBits.BURNABLE);
+-        _burn(_msgSender(), amount);
+-    }
++    function burn(uint256 amount) external nonReentrant { fwdCall(); }
+ 
+     /// @notice The signed `burn(amount)` (TS-D14, ua-mtx-merge R23: today's `uaBurn` under this name), `AMOUNT(0)` as on
+     ///         the generic path: a native id by its own key with no registry, a derived UA through the registry.
+     function mtxBurn(MetaTxLib.UAEnvelope calldata e, uint256 amount, IUARegistry.UASig calldata auth)
+         external nonReentrant returns (bytes memory)
+-    {
+-        return _namedUA(UA_BURN_TYPEHASH, this.burn.selector, e, abi.encode(amount), auth);
+-    }
++    { fwdCall(); }
+ 
+     /// @notice The allowlist (CTR-MTX-19): `cancelNonce` (base), `burn(uint256)` `AMOUNT(0)`.
+     function mtxSelectors()
+         public pure virtual override(IMetaTx, MetaTxBase) returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
+-    {
+-        s = new bytes4[](2);
+-        c = new uint8[](2);
+-        a = new uint8[](2);
+-        (s[0], c[0]) = (this.cancelNonce.selector, FEE_CLASS_ABSOLUTE);
+-        (s[1], c[1]) = (this.burn.selector, FEE_CLASS_AMOUNT);
+-    }
++    { fwdPure(); }
+ 
+     /// @notice The UA allowlist (CTR-UA-26): `burn` (a derived signer burns its UA balance through `UA_POOL`).
+     function _uaAllowed(bytes4 sel) internal view virtual override returns (bool) {
+diff --git a/smartcontracts/evm/src/metatx/UAMetaTxBase.sol b/smartcontracts/evm/src/metatx/UAMetaTxBase.sol
+index e90f8af4..15e89e57 100644
+--- a/smartcontracts/evm/src/metatx/UAMetaTxBase.sol
++++ b/smartcontracts/evm/src/metatx/UAMetaTxBase.sol
+@@ -1,5 +1,6 @@
+ // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+ pragma solidity ^0.8.24;
++import {fwdCall, fwdView, fwdPure} from "../FwdSpike.sol";
+ 
+ import {MetaTxBase} from "./MetaTxBase.sol";
+ import {IMetaTx} from "./IMetaTx.sol";
+@@ -50,41 +51,24 @@ abstract contract UAMetaTxBase is MetaTxBase {
+ 
+     // ------------------------------------------------------------------ views
+ 
+-    function registry() public view virtual returns (address) {
+-        return _REGISTRY;
+-    }
++    function registry() public view virtual returns (address) { fwdView(); }
+ 
+     /// @notice The one nonce map (CTR-UA-26), keyed by id: a native address zero-padded, a derived UA as itself.
+-    function mtxNonce(bytes32 from, uint256 batch) public view virtual returns (uint256) {
+-        return _nonce(from, batch);
+-    }
++    function mtxNonce(bytes32 from, uint256 batch) public view virtual returns (uint256) { fwdView(); }
+ 
+-    function mtxDigest(MetaTxLib.UAMetaTransaction calldata m) public view virtual returns (bytes32) {
+-        return MtxPipelineLib.callDigest(_domainSeparatorV4(), MetaTxLib.UAMETATX_TYPEHASH, _uaEnvelopeOf(m));
+-    }
++    function mtxDigest(MetaTxLib.UAMetaTransaction calldata m) public view virtual returns (bytes32) { fwdView(); }
+ 
+     // ------------------------------------------------------------------ entry points
+ 
+     /// @notice The generic entry (R47: an explicit `UASig`, no packed `bytes auth`).
+     function mtxExecute(MetaTxLib.UAMetaTransaction calldata m, IUARegistry.UASig calldata auth)
+         public virtual nonReentrant returns (bytes memory)
+-    {
+-        return _uaExecute(m, auth);
+-    }
++    { fwdCall(); }
+ 
+     /// @notice Atomic: items run in order, each with a fresh ticket; any failure reverts all (CTR-MTX-11).
+     function mtxBatch(MetaTxLib.UAMetaTransaction[] calldata ms, IUARegistry.UASig[] calldata auths)
+         public virtual nonReentrant returns (bool)
+-    {
+-        uint256 n = ms.length;
+-        if (n == 0) revert MtxBatchEmpty();
+-        if (n != auths.length) revert MtxBatchLengthMismatch();
+-        for (uint256 i; i < n; ++i) {
+-            _requireBatchable(bytes4(ms[i].data));
+-            _uaExecute(ms[i], auths[i]);
+-        }
+-        return true;
+-    }
++    { fwdCall(); }
+ 
+     /// @notice The signed `cancelNonce(lane)` on ids (Q2, R19): `UACancelNonce(bytes32 from,uint256 lane,E)` run through
+     ///         `preNamedUA` like every named op, so nonce-ordered on its own lane `e.batch`, relayer-bound by the mode,
+@@ -92,19 +76,7 @@ abstract contract UAMetaTxBase is MetaTxBase {
+     ///         `e.from` itself: no self-call of `cancelNonce`, which refuses a derived subject (`UA_POOL` there).
+     function mtxCancelNonce(MetaTxLib.UAEnvelope calldata e, uint256 lane, IUARegistry.UASig calldata auth)
+         public virtual nonReentrant returns (bytes memory)
+-    {
+-        MetaTxLib.UAMetaTransaction memory m = _uaMetaOf(e, abi.encodeCall(IMetaTx.cancelNonce, (lane)));
+-        _regPre(m.from, IMetaTx.cancelNonce.selector, m.mode);
+-        // the facts of `cancelNonce(lane)`, fixed: no self-call follows, so no allowlist is asked (a derived id too)
+-        MtxPipelineLib.Out memory o = MtxPipelineLib.preNamedUA(_mtxCtx(), MetaTxLib.UA_CANCEL_NONCE_TYPEHASH,
+-            _uaEnvelopeOf(m, 0), abi.encode(lane), MtxPipelineLib.CallFacts(IMetaTx.cancelNonce.selector, 36,
+-            FEE_CLASS_ABSOLUTE, 0, 36, 0, true, supportedModes()), auth);
+-        _regFeeTo(MetaTxLib.pad(o.feeTo), o.fee);
+-        emit IUALedger.UANonceCancelled(e.from, lane, _bumpNonce(e.from, lane));
+-        if (o.fee != 0) _uaChargeFee(m, o.feeTo, o.fee);
+-        emit IUALedger.UAMetaTransactionExecuted(e.from, msg.sender, e.batch, e.nonce, o.digest, o.feeTo, o.fee);
+-        return "";
+-    }
++    { fwdCall(); }
+ 
+     // ------------------------------------------------------------------ the pipeline on MtxPipelineLib
+ 
+diff --git a/smartcontracts/evm/src/metatx/WrappedToken.sol b/smartcontracts/evm/src/metatx/WrappedToken.sol
+index d9217a62..99e0559d 100644
+--- a/smartcontracts/evm/src/metatx/WrappedToken.sol
++++ b/smartcontracts/evm/src/metatx/WrappedToken.sol
+@@ -1,5 +1,6 @@
+ // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+ pragma solidity ^0.8.24;
++import {fwdCall, fwdView, fwdPure} from "../FwdSpike.sol";
+ 
+ import {MetaTokenBase} from "./MetaTokenBase.sol";
+ import {GovernanceLib} from "../governance/GovernanceLib.sol";
+@@ -83,102 +84,65 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
+     // ------------------------------------------------------------------ wrap / unwrap / reserve
+ 
+     /// @notice Single-asset ABI. Mints the MEASURED amount received at the leg's rate, rounded down.
+-    function wrap(uint256 amount) external payable nonReentrant returns (uint256) {
+-        return _wrap(WrappedLib.sole(), amount, 0);
+-    }
++    function wrap(uint256 amount) external payable nonReentrant returns (uint256) { fwdCall(); }
+ 
+-    function wrap(address u, uint256 amount) external payable nonReentrant returns (uint256) {
+-        return _wrap(WrappedLib.indexOf(u), amount, 0);
+-    }
++    function wrap(address u, uint256 amount) external payable nonReentrant returns (uint256) { fwdCall(); }
+ 
+     /// @notice `wrap(u, amount)` minted into the registered SIGNING UA `to` (CTR-UA-28), the receiver checked first.
+     ///         Address allowlist `ABSOLUTE`: relayed, the native leg reverts (no coin in a self-call).
+-    function wrapToUA(address u, uint256 amount, bytes32 to) external payable nonReentrant returns (uint256) {
+-        _requireDerivedReceiver(to);
+-        return _wrap(WrappedLib.indexOf(u), amount, to);
+-    }
++    function wrapToUA(address u, uint256 amount, bytes32 to) external payable nonReentrant returns (uint256) { fwdCall(); }
+ 
+     /// @notice Single-asset ABI, `minOut = 0`; not allowlisted.
+-    function unwrap(uint256 wrapped, address recipient) external nonReentrant returns (uint256 out) {
+-        (out,) = _unwrap(WrappedLib.sole(), wrapped, recipient, 0);
+-    }
++    function unwrap(uint256 wrapped, address recipient) external nonReentrant returns (uint256 out) { fwdCall(); }
+ 
+-    function unwrap(uint256 wrapped, address recipient, uint256 minOut) external nonReentrant returns (uint256 out) {
+-        (out,) = _unwrap(WrappedLib.sole(), wrapped, recipient, minOut);
+-    }
++    function unwrap(uint256 wrapped, address recipient, uint256 minOut) external nonReentrant returns (uint256 out) { fwdCall(); }
+ 
+     function unwrap(address u, uint256 wrapped, address recipient, uint256 minOut)
+         external nonReentrant returns (uint256 out, uint256 burned)
+-    {
+-        return _unwrap(WrappedLib.indexOf(u), wrapped, recipient, minOut);
+-    }
++    { fwdCall(); }
+ 
+     /// @notice `unwrap(u, …)` paid into `to` in leg `u`'s UA ledger (CTR-UA-28): burns from the subject (a native, or a
+     ///         UA through `UA_POOL` under `mtxExecute`) before the one outside call, the leg's `transferToUA`.
+     function unwrapToUA(address u, uint256 wrapped, bytes32 to, uint256 minOut)
+         external nonReentrant returns (uint256 out, uint256 burned)
+-    {
+-        uint256 i = WrappedLib.indexOf(u);
+-        (out, burned) = WrappedLib.quoteUnwrapToUA(i, wrapped, minOut);
+-        address from = _msgSender();
+-        _burn(from, burned);
+-        WrappedLib.payOutToUA(i, to, out);
+-        emit UnwrappedToUA(from, u, to, burned, out);
+-    }
++    { fwdCall(); }
+ 
+     /// @notice Anyone; no mint. Over-collateralises before a rate decrease; otherwise a donation to every holder.
+-    function addReserve(address u, uint256 amount) external payable nonReentrant {
+-        address from = _msgSender();
+-        emit ReserveAdded(from, u, WrappedLib.addReserve(WrappedLib.indexOf(u), amount, from, msg.value));
+-    }
++    function addReserve(address u, uint256 amount) external payable nonReentrant { fwdCall(); }
+ 
+     // ------------------------------------------------------------------ named typed entries (TS-D14)
+ 
+     /// @notice The signed `wrap(amount)`, `ABSOLUTE` as on the generic path, like every wrap and `addReserve` below.
+     function mtxWrap(MetaTxLib.Envelope calldata e, uint256 amount, bytes calldata sig)
+         external nonReentrant returns (bytes memory)
+-    {
+-        return _named(WRAP_TYPEHASH, SEL_WRAP, e, abi.encode(amount), sig);
+-    }
++    { fwdCall(); }
+ 
+     function mtxWrapLeg(MetaTxLib.Envelope calldata e, address u, uint256 amount, bytes calldata sig)
+         external nonReentrant returns (bytes memory)
+-    {
+-        return _named(WRAP_LEG_TYPEHASH, SEL_WRAP_LEG, e, abi.encode(u, amount), sig);
+-    }
++    { fwdCall(); }
+ 
+     function mtxWrapToUA(MetaTxLib.Envelope calldata e, address u, uint256 amount, bytes32 to, bytes calldata sig)
+         external nonReentrant returns (bytes memory)
+-    {
+-        return _named(WRAP_TO_UA_TYPEHASH, SEL_WRAP_TO_UA, e, abi.encode(u, amount, to), sig);
+-    }
++    { fwdCall(); }
+ 
+     function mtxAddReserve(MetaTxLib.Envelope calldata e, address u, uint256 amount, bytes calldata sig)
+         external nonReentrant returns (bytes memory)
+-    {
+-        return _named(ADD_RESERVE_TYPEHASH, SEL_ADD_RESERVE, e, abi.encode(u, amount), sig);
+-    }
++    { fwdCall(); }
+ 
+     /// @notice The signed `unwrap(wrapped, recipient, minOut)`, `AMOUNT(0)` as on the generic path; the other unwraps
+     ///         `AMOUNT(1)`, the basis `wrapped`. ua-mtx-merge R23: today's `ua*` bodies under the `mtx*` names, for native
+     ///         and derived ids (a native one by its own key, no registry; a derived UA through the registry).
+     function mtxUnwrap(MetaTxLib.UAEnvelope calldata e, uint256 wrapped, address recipient, uint256 minOut,
+         IUARegistry.UASig calldata auth) external nonReentrant returns (bytes memory)
+-    {
+-        return _namedUA(UA_UNWRAP_TYPEHASH, SEL_UNWRAP_MIN, e, abi.encode(wrapped, recipient, minOut), auth);
+-    }
++    { fwdCall(); }
+ 
+     function mtxUnwrapLeg(MetaTxLib.UAEnvelope calldata e, address u, uint256 wrapped, address recipient, uint256 minOut,
+         IUARegistry.UASig calldata auth) external nonReentrant returns (bytes memory)
+-    {
+-        return _namedUA(UA_UNWRAP_LEG_TYPEHASH, SEL_UNWRAP_LEG, e, abi.encode(u, wrapped, recipient, minOut), auth);
+-    }
++    { fwdCall(); }
+ 
+     function mtxUnwrapToUA(MetaTxLib.UAEnvelope calldata e, address u, uint256 wrapped, bytes32 to, uint256 minOut,
+         IUARegistry.UASig calldata auth) external nonReentrant returns (bytes memory)
+-    {
+-        return _namedUA(UA_UNWRAP_TO_UA_TYPEHASH, SEL_UNWRAP_TO_UA, e, abi.encode(u, wrapped, to, minOut), auth);
+-    }
++    { fwdCall(); }
+ 
+     /// @notice Signature wrap of a SCaaS underlying by a `UAWrapOrder` (CTR-TOK-20, UA-5b; ua-mtx-merge R39: today's
+     ///         `uaWrapOrder` under this name): the underlying's `mtxTrade` checks the holder (a derived id under purpose
+@@ -187,18 +151,7 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
+     ///         direct read of the caller.
+     function mtxWrapOrder(address u, UAWrapOrder calldata o, IUARegistry.UASig calldata auth)
+         external nonReentrant returns (uint256 minted)
+-    {
+-        if (o.destination != 0 && o.destination != o.from) _regSender(o.from);
+-        uint256 received;
+-        uint256 fee;
+-        (received, minted, fee) = WrappedLib.wrapBySigUA(u, o, auth, msg.sender, totalSupply());
+-        _regFeeTo(MetaTxLib.pad(msg.sender), fee);
+-        bytes32 to = o.destination == 0 ? o.from : o.destination;
+-        if (UAKinds.inNativeSpace(to)) _mint(address(uint160(uint256(to))), minted - fee);
+-        else _uaMint(to, minted - fee);
+-        if (fee != 0) _mint(msg.sender, fee);
+-        emit UAWrapped(to, u, received, minted - fee);
+-    }
++    { fwdCall(); }
+ 
+     /// @dev `to == 0` is a sentinel, "mint to the caller", not a receiver; any other `to` is minted into that derived UA
+     ///      as a move from 0, unchecked here: a caller passing a `to` must validate it first (`wrapToUA`:
+@@ -228,47 +181,26 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
+ 
+     /// @notice `MINTABLE` and the `minter` role, under `maxSupply`, into a public balance; no reserve moves. Never
+     ///         allowlisted, as `NormalToken.mint`.
+-    function mint(address to, uint256 amount) external nonReentrant {
+-        GovernanceUse.use(GovernanceBits.MINTABLE, _govSubject(), amount);
+-        WrappedLib.checkMint(totalSupply(), amount);
+-        _mint(to, amount);
+-    }
++    function mint(address to, uint256 amount) external nonReentrant { fwdCall(); }
+ 
+     /// @notice `mint` into the registered SIGNING UA `to` (CTR-UA-28), its public UA balance.
+-    function mintToUA(bytes32 to, uint256 amount) external nonReentrant {
+-        GovernanceUse.use(GovernanceBits.MINTABLE, _govSubject(), amount);
+-        WrappedLib.checkMint(totalSupply(), amount);
+-        _uaMint(to, amount);
+-    }
++    function mintToUA(bytes32 to, uint256 amount) external nonReentrant { fwdCall(); }
+ 
+     /// @notice Spec §6.2 on `WRAPPED*`: a leg's surplus over its reserve, a foreign asset whole (`WrappedLib.rescue`).
+-    function rescue(address asset) external virtual override nonReentrant {
+-        WrappedLib.rescue(asset);
+-    }
++    function rescue(address asset) external virtual override nonReentrant { fwdCall(); }
+ 
+     // ------------------------------------------------------------------ roles: guardian, rate admin
+ 
+-    function disableWrap(address u, bytes32 reason) external nonReentrant {
+-        WrappedLib.disableWrap(u, reason, _govSubject());
+-    }
++    function disableWrap(address u, bytes32 reason) external nonReentrant { fwdCall(); }
+ 
+-    function proposeRate(address u, uint96 num, uint96 den) external nonReentrant {
+-        WrappedLib.proposeRate(u, num, den, _govSubject());
+-    }
++    function proposeRate(address u, uint96 num, uint96 den) external nonReentrant { fwdCall(); }
+ 
+-    function cancelRate() external nonReentrant {
+-        WrappedLib.cancelRate(_govSubject());
+-    }
++    function cancelRate() external nonReentrant { fwdCall(); }
+ 
+-    function executeRate() external virtual nonReentrant {
+-        WrappedLib.executeRate(_govSubject(), totalSupply());
+-    }
++    function executeRate() external virtual nonReentrant { fwdCall(); }
+ 
+     /// @notice `disableFeature(RATE_ADJUSTABLE)` also cancels a pending rate change (CTR-TOK-06), once the disable applied.
+-    function disableFeature(uint8 bit) external virtual override nonReentrant {
+-        bool applied = GovernanceLib.disableFeature(bit, _govSubject(), _delayedRelaxBits());
+-        if (applied && bit == GovernanceBits.RATE_ADJUSTABLE) WrappedLib.dropPending();
+-    }
++    function disableFeature(uint8 bit) external virtual override nonReentrant { fwdCall(); }
+ 
+     // ------------------------------------------------------------------ allowlist (CTR-MTX-19)
+ 
+@@ -279,19 +211,7 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
+     ///         second digest, no `minOut`).
+     function mtxSelectors()
+         public pure virtual override(IMetaTx, MetaTxBase) returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
+-    {
+-        s = new bytes4[](8);
+-        c = new uint8[](8);
+-        a = new uint8[](8);
+-        (s[0], c[0]) = (this.cancelNonce.selector, FEE_CLASS_ABSOLUTE);
+-        (s[1], c[1]) = (SEL_WRAP, FEE_CLASS_ABSOLUTE);
+-        (s[2], c[2]) = (SEL_UNWRAP_MIN, FEE_CLASS_AMOUNT);
+-        (s[3], c[3]) = (SEL_WRAP_LEG, FEE_CLASS_ABSOLUTE);
+-        (s[4], c[4], a[4]) = (SEL_UNWRAP_LEG, FEE_CLASS_AMOUNT, 1);
+-        (s[5], c[5]) = (SEL_ADD_RESERVE, FEE_CLASS_ABSOLUTE);
+-        (s[6], c[6]) = (SEL_WRAP_TO_UA, FEE_CLASS_ABSOLUTE);
+-        (s[7], c[7], a[7]) = (SEL_UNWRAP_TO_UA, FEE_CLASS_AMOUNT, 1);
+-    }
++    { fwdPure(); }
+ 
+     /// @notice The UA allowlist (CTR-UA-26): the two `unwrap`s with `minOut` and `unwrapToUA` (a derived signer burns
+     ///         its UA balance).
+@@ -313,61 +233,31 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
+     // ------------------------------------------------------------------ views
+ 
+     /// @notice The one underlying of a one-leg token (`address(0)` for the native coin); `address(0)` with more legs.
+-    function underlying() external view returns (address) {
+-        WrappedLib.WrappedStorage storage s = WrappedLib.$();
+-        return s.legCount == 1 ? s.legs[0].token : address(0);
+-    }
++    function underlying() external view returns (address) { fwdView(); }
+ 
+-    function underlyings() public view virtual override(IWrappedToken, MetaTokenBase) returns (address[] memory us) {
+-        WrappedLib.WrappedStorage storage s = WrappedLib.$();
+-        uint256 n = s.legCount;
+-        us = new address[](n);
+-        for (uint256 i; i < n; ++i) us[i] = s.legs[i].token;
+-    }
++    function underlyings() public view virtual override(IWrappedToken, MetaTokenBase) returns (address[] memory us) { fwdView(); }
+ 
+     function legOf(address u)
+         external view returns (uint96 num, uint96 den, uint256 reserve, uint8 decimals_, bool wrapEnabled)
+-    {
+-        WrappedLib.Leg storage L = WrappedLib.$().legs[WrappedLib.indexOf(u)];
+-        return (L.num, L.den, L.reserve, L.decimals, L.wrapEnabled);
+-    }
++    { fwdView(); }
+ 
+     /// @notice `Σ⌊reserve_i·num_i/den_i⌋`, saturating at `type(uint256).max` instead of overflowing.
+-    function collateralValue() external view returns (uint256) {
+-        return WrappedLib.collateralValue();
+-    }
++    function collateralValue() external view returns (uint256) { fwdView(); }
+ 
+-    function maxSupply() external view returns (uint256) {
+-        return WrappedLib.$().maxSupply;
+-    }
++    function maxSupply() external view returns (uint256) { fwdView(); }
+ 
+     /// @notice `(⌊amount·q⌋, ⌈minted/q⌉)`: clients round `amount` down to `used` so no dust stays in the reserve.
+     ///         Ignores fee-on-transfer (assumes `received == amount`).
+-    function previewWrap(address u, uint256 amount) external view returns (uint256 minted, uint256 used) {
+-        return WrappedLib.previewWrap(u, amount);
+-    }
++    function previewWrap(address u, uint256 amount) external view returns (uint256 minted, uint256 used) { fwdView(); }
+ 
+-    function previewUnwrap(address u, uint256 wrapped) external view returns (uint256 out, uint256 burned) {
+-        return WrappedLib.previewUnwrap(u, wrapped);
+-    }
++    function previewUnwrap(address u, uint256 wrapped) external view returns (uint256 out, uint256 burned) { fwdView(); }
+ 
+-    function rateAdjustable() external view returns (bool) {
+-        return GovernanceLib.hasFeature(GovernanceBits.RATE_ADJUSTABLE);
+-    }
++    function rateAdjustable() external view returns (bool) { fwdView(); }
+ 
+-    function rateDelay() external view returns (uint32) {
+-        return WrappedLib.$().rateDelay;
+-    }
++    function rateDelay() external view returns (uint32) { fwdView(); }
+ 
+-    function maxRateStepBps() external view returns (uint16) {
+-        return WrappedLib.$().maxRateStepBps;
+-    }
++    function maxRateStepBps() external view returns (uint16) { fwdView(); }
+ 
+     /// @notice All zero when nothing is pending or the pending change has expired.
+-    function pendingRate() external view returns (address u, uint96 num, uint96 den, uint64 eta) {
+-        if (!WrappedLib.isPending()) return (address(0), 0, 0, 0);
+-        WrappedLib.WrappedStorage storage s = WrappedLib.$();
+-        WrappedLib.PendingRate memory p = s.pending;
+-        return (s.legs[p.leg].token, p.num, p.den, p.eta);
+-    }
++    function pendingRate() external view returns (address u, uint96 num, uint96 den, uint64 eta) { fwdView(); }
+ }
+diff --git a/smartcontracts/evm/src/pqz/NormalPqzToken.sol b/smartcontracts/evm/src/pqz/NormalPqzToken.sol
+index 69b45c04..2340bbd1 100644
+--- a/smartcontracts/evm/src/pqz/NormalPqzToken.sol
++++ b/smartcontracts/evm/src/pqz/NormalPqzToken.sol
+@@ -1,5 +1,6 @@
+ // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+ pragma solidity ^0.8.24;
++import {fwdCall, fwdView, fwdPure} from "../FwdSpike.sol";
+ 
+ import {NormalToken} from "../metatx/NormalToken.sol";
+ import {MetaTokenBase} from "../metatx/MetaTokenBase.sol";
+@@ -76,21 +77,7 @@ contract NormalPqzToken is NormalToken, PqzLayer {
+     function mtxSelectors()
+         public pure virtual override(NormalToken, IMetaTx, MetaTxBase)
+         returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
+-    {
+-        s = new bytes4[](10);
+-        c = new uint8[](10);
+-        a = new uint8[](10);
+-        (s[0], c[0]) = (this.cancelNonce.selector, FEE_CLASS_ABSOLUTE);
+-        (s[1], c[1]) = (this.burn.selector, FEE_CLASS_AMOUNT);
+-        (s[2], c[2]) = (IConfidentialToken.mtxShield.selector, FEE_CLASS_ABSOLUTE);
+-        (s[3], c[3]) = (IPqzToken.mtxConfidentialTransfer.selector, FEE_CLASS_ABSOLUTE);
+-        (s[4], c[4]) = (IPqzToken.mtxConfidentialTransferCompact.selector, FEE_CLASS_ABSOLUTE);
+-        (s[5], c[5]) = (IPqzToken.mtxUnshield.selector, FEE_CLASS_ABSOLUTE);
+-        (s[6], c[6]) = (IPqzToken.mtxConfidentialTransferSingle.selector, FEE_CLASS_ABSOLUTE);
+-        (s[7], c[7]) = (IPqzToken.mtxConfidentialTransferSingleCompact.selector, FEE_CLASS_ABSOLUTE);
+-        (s[8], c[8]) = (IPqzToken.mtxRollOver.selector, FEE_CLASS_ABSOLUTE);
+-        (s[9], c[9]) = (IPqzToken.mtxPrepareAcc.selector, FEE_CLASS_ABSOLUTE);
+-    }
++    { fwdPure(); }
+ 
+     function _mtxRule(bytes4 sel) internal view virtual override(NormalToken, MetaTxBase) returns (MtxRule memory) {
+         if (_isPqzOp(sel)) return _pqzRule(sel);
+diff --git a/smartcontracts/evm/src/pqz/PqzLayer.sol b/smartcontracts/evm/src/pqz/PqzLayer.sol
+index cbd96d71..53c7323b 100644
+--- a/smartcontracts/evm/src/pqz/PqzLayer.sol
++++ b/smartcontracts/evm/src/pqz/PqzLayer.sol
+@@ -1,5 +1,6 @@
+ // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+ pragma solidity ^0.8.24;
++import {fwdCall, fwdView, fwdPure} from "../FwdSpike.sol";
+ 
+ import {ERC20MetaTx} from "../metatx/ERC20MetaTx.sol";
+ import {MetaTokenBase} from "../metatx/MetaTokenBase.sol";
+@@ -78,85 +79,54 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
+ 
+     // ------------------------------------------------------------------ views
+ 
+-    function verifier() external view returns (address) { return PQZ_VERIFIER; }
+-    function precompile() external view returns (address) { return PqzCore.$().pqz; }
+-    function proofSystemId() external view returns (bytes32) { return PqzCore.$().psid; }
+-    function shieldScale() external view returns (uint256) { return PqzCore.$().shieldScale; }
+-    function maxShielded() external view returns (uint256) { return PqzCore.$().maxShielded; }
+-    function confidentialFee() external view returns (uint256) { return PqzCore.$().confidentialFee; }
+-    function minDecoyFee() external view returns (uint256) { return PqzCore.$().minDecoyFee; }
+-    function auditorUA() external view returns (bytes32) { return PqzCore.$().auditorUA; }
+-    function auditorMode() external view returns (ZetherTypes.AuditorMode) { return PqzCore.$().auditorMode; }
+-    function disclosureMode() external view returns (ZetherTypes.DisclosureMode) { return PqzCore.$().disclosureMode; }
+-    function totalShielded() external view returns (uint256) { return PqzCore.$().totalShielded; }
++    function verifier() external view returns (address) { fwdView(); }
++    function precompile() external view returns (address) { fwdView(); }
++    function proofSystemId() external view returns (bytes32) { fwdView(); }
++    function shieldScale() external view returns (uint256) { fwdView(); }
++    function maxShielded() external view returns (uint256) { fwdView(); }
++    function confidentialFee() external view returns (uint256) { fwdView(); }
++    function minDecoyFee() external view returns (uint256) { fwdView(); }
++    function auditorUA() external view returns (bytes32) { fwdView(); }
++    function auditorMode() external view returns (ZetherTypes.AuditorMode) { fwdView(); }
++    function disclosureMode() external view returns (ZetherTypes.DisclosureMode) { fwdView(); }
++    function totalShielded() external view returns (uint256) { fwdView(); }
+ 
+     /// @notice The account of `(ua, keyVersion)` (D13; group 3g KV-6): counters, the `acc` reference, `accUnits`, flags, the
+     ///         UA's `sendCounter` (one for every version), `accHash`.
+-    function pqzAccount(bytes32 ua, uint64 keyVersion) external view override returns (AccountState memory) {
+-        PqzCore.PqzStorage storage s = PqzCore.$();
+-        PqzCore.Account storage a = s.acct[ua][keyVersion];
+-        return AccountState(a.pendingCount, a.rolled, a.floor, a.cleared, a.accBlob, a.accUnits, a.flags,
+-            s.sendCounter[ua], a.accHash);
+-    }
++    function pqzAccount(bytes32 ua, uint64 keyVersion) external view override returns (AccountState memory) { fwdView(); }
+ 
+     /// @notice Pending slot `i` of `(ua, keyVersion)` (plan 5h D2): `blob(160) ‖ uOff(16) ‖ vOff(16) ‖ block(64)`, `vOff =
+     ///         0` a TRIVIAL entry with its amount in the low 64 bits of the blob field; 0 once deleted.
+-    function pqzPending(bytes32 ua, uint64 keyVersion, uint64 i) external view override returns (uint256) {
+-        return PqzCore.$().acct[ua][keyVersion].pending[i];
+-    }
++    function pqzPending(bytes32 ua, uint64 keyVersion, uint64 i) external view override returns (uint256) { fwdView(); }
+ 
+     /// @notice The `acc` ciphertext of `(ua, keyVersion)` from state (restore from state, D13, §3.5).
+-    function pqzAcc(bytes32 ua, uint64 keyVersion) external view override returns (bytes memory) {
+-        return PqzStateLib.accOf(ua, keyVersion);
+-    }
++    function pqzAcc(bytes32 ua, uint64 keyVersion) external view override returns (bytes memory) { fwdView(); }
+ 
+     /// @notice Entry `i` of `(ua, keyVersion)` as a ciphertext from state (a TRIVIAL entry: `Trivial(digits(amount))`).
+-    function pqzPendingCt(bytes32 ua, uint64 keyVersion, uint64 i) external view override returns (bytes memory) {
+-        return PqzStateLib.pendingCt(ua, keyVersion, i);
+-    }
++    function pqzPendingCt(bytes32 ua, uint64 keyVersion, uint64 i) external view override returns (bytes memory) { fwdView(); }
+ 
+     /// @notice The op blob of a transfer as stored, `R ‖ v_f` packed at `PACK_BITS` (P46; `v_f` the trailing
+     ///         `PqzCt.VP` bytes; D1, D13; both storage modes), empty if unknown.
+-    function pqzEntryBlob(bytes32 entryRef) external view override returns (bytes memory) {
+-        address p = PqzCore.$().entryPtr[entryRef];
+-        return p == address(0) ? bytes("") : SSTORE2.read(p);
+-    }
++    function pqzEntryBlob(bytes32 entryRef) external view override returns (bytes memory) { fwdView(); }
+ 
+     /// @notice `keccak256(R)` of the entry over the stored (packed, P46) `R`, read from its op blob (0 = unknown).
+-    function transferCiphertextHash(bytes32 entryRef) external view returns (bytes32) {
+-        return PqzCore.ciphertextHash(entryRef);
+-    }
++    function transferCiphertextHash(bytes32 entryRef) external view returns (bytes32) { fwdView(); }
+ 
+     /// @notice The raw entry: `R` (BUNDLE), `keccak256(R) ‖ memo` (commit-reveal), empty (unknown).
+-    function transferEntry(bytes32 entryRef) external view returns (bytes memory) {
+-        PqzCore.PqzStorage storage s = PqzCore.$();
+-        address p = s.entryPtr[entryRef];
+-        if (p == address(0)) return "";
+-        bytes memory r = PqzCore.rOf(p);
+-        bytes memory m = s.memos[entryRef];
+-        return m.length == 0 ? r : abi.encodePacked(keccak256(r), m);
+-    }
++    function transferEntry(bytes32 entryRef) external view returns (bytes memory) { fwdView(); }
+ 
+     /// @notice The op 7 statement the token builds for `t`, after every cheap check; a `sealedMemo` reads as commit-reveal.
+     ///         `binding` 0 = a direct call, else the relayed call's envelope binding; the statement's word is either folded
+     ///         with the mode (W-A, D15).
+-    function transferStatement(PqzMultiArgs calldata t, bytes32 binding) external view returns (bytes memory) {
+-        return PqzViewLib.multiStatement(_envOf(binding), t);
+-    }
++    function transferStatement(PqzMultiArgs calldata t, bytes32 binding) external view returns (bytes memory) { fwdView(); }
+ 
+     /// @notice The op 1 statement of `t` (`mtxConfidentialTransferSingle*`; `binding` as above).
+-    function transferSingleStatement(PqzTransferArgs calldata t, bytes32 binding) external view returns (bytes memory) {
+-        return PqzViewLib.singleStatement(_envOf(binding), t);
+-    }
++    function transferSingleStatement(PqzTransferArgs calldata t, bytes32 binding) external view returns (bytes memory) { fwdView(); }
+ 
+     /// @notice The burn (`amount > 0`) or refresh (`amount = 0`, `recipient = 0`) statement.
+     function burnStatement(PqzBurnArgs calldata b, uint256 amount, bytes32 recipient, bytes32 binding)
+         external view returns (bytes memory)
+-    {
+-        PqzCore.Env memory e = _envOf(binding);
+-        (e.amount, e.recipient) = (amount, recipient);
+-        return PqzViewLib.burnStatement(e, b);
+-    }
++    { fwdView(); }
+ 
+     /// @notice The disclosure statement (§7.9) of leg `leg` of `entryRef` for `kind` (0 `SENDER_S`, 1 `RECEIVER_X`,
+     ///         2 `AUDITOR`); a single-recipient entry is leg 0. `R` is read from the entry's op blob (D11). Group 3g (KV-11):
+@@ -164,52 +134,31 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
+     ///         `AUDITOR`); a version not stored: `KeyVersionUnknown`. It does not attest which version the leg was for.
+     function disclosureStatement(bytes32 entryRef, uint256 leg, uint256 amount, uint8 kind, uint64 keyVersion)
+         external view returns (bytes memory)
+-    {
+-        return PqzViewLib.disclosureStatementOf(entryRef, leg, amount, kind, keyVersion, _envOf(0));
+-    }
++    { fwdView(); }
+ 
+     /// @notice CTR-PQZ-14 / -26: the precompile's verdict on `proof` for `amount` in leg `leg` of `entryRef` (`R` from
+     ///         the op blob, D11). A view; no attestation. An empty proof, an unknown entry, no leg `leg`, `kind > 2`
+     ///         and `amount ≥ 2^64` are false; a precompile call that fails (out of gas) reverts (C2-6).
+     function verifyTransferAmount(bytes32 entryRef, uint256 leg, uint256 amount, uint8 kind, uint64 keyVersion,
+         bytes calldata proof) external view returns (bool)
+-    {
+-        if (proof.length == 0) return false;
+-        // C2-6: only the statement's shape errors (custom errors) read false; an empty revert (out of gas in the
+-        // sub-call) is propagated, and a failed precompile call reverts in `verdict`. KV-11: an unknown version reverts.
+-        try this.disclosureStatement(entryRef, leg, amount, kind, keyVersion) {} catch (bytes memory err) {
+-            if (err.length == 0 || bytes4(err) == KeyVersionUnknown.selector) assembly ("memory-safe") {
+-                revert(add(err, 32), mload(err))
+-            }
+-            return false;
+-        }
+-        return PqzViewLib.verifyAmountOf(entryRef, leg, amount, kind, keyVersion, proof, _envOf(0));
+-    }
++    { fwdView(); }
+ 
+     /// @notice CTR-PQZ-21, R36: the binding of every relayed proof on the merged entries and `mtxExecute`, tag
+     ///         `SCAAS-PQZ-UA-ENVELOPE-V1`, `from` as `bytes32` (native ids zero-padded); every envelope field except `data`,
+     ///         plus `chainUid`. `executeMetaTransaction` keeps the address binding (`SCAAS-PQZ-ENVELOPE-V1` over its
+     ///         `MetaTransaction`), which clients compute; its view is in legacy/ua-mtx-merge/.
+-    function envelopeBinding(MetaTxLib.UAMetaTransaction calldata m) external view returns (bytes32) {
+-        return _uaEnvelopeBinding(m);
+-    }
++    function envelopeBinding(MetaTxLib.UAMetaTransaction calldata m) external view returns (bytes32) { fwdView(); }
+ 
+     // ------------------------------------------------------------------ shield (§7.3, P6g plan D1)
+ 
+     /// @notice Moves `amount · shieldScale` public units of the signer to `SHIELD_POOL` (D19) into a TRIVIAL entry of
+     ///         `toUA` (plan 5h D18); free, into any holder (owner 2026-10-20).
+-    function mtxShield(bytes32 toUA, uint256 amount) external nonReentrant {
+-        _regPayer();
+-        PqzStateLib.shield(toUA, amount, _msgSender(), _REGISTRY);
+-        _toPool(amount);
+-    }
++    function mtxShield(bytes32 toUA, uint256 amount) external nonReentrant { fwdCall(); }
+ 
+     /// @notice The signed `mtxShield` (TS-D14, TS-D16) over `UAShield`, an explicit `UASig` (R47).
+     function mtxShield(MetaTxLib.UAEnvelope calldata e, bytes32 toUA, uint256 amount, IUARegistry.UASig calldata auth)
+         external nonReentrant returns (bytes memory)
+-    {
+-        return _namedUA(MetaTxLib.UA_SHIELD_TYPEHASH, IConfidentialToken.mtxShield.selector, e, abi.encode(toUA, amount), auth);
+-    }
++    { fwdCall(); }
+ 
+     // ------------------------------------------------------------------ transfer (§7.4, CTR-PQZ-23, CTR-PQZ-25)
+ 
+@@ -219,28 +168,20 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
+     ///         returns 64-bit lanes), used only when it hashes to `accHash`, else ignored (plan 5h D5).
+     function mtxConfidentialTransfer(PqzMultiArgs calldata t, bytes calldata proof, IUARegistry.UASig calldata pqzAuth,
+         bytes calldata accHint) external nonReentrant returns (bytes32)
+-    {
+-        return _multi(_envTransfer(_defaultMode()), t, proof, pqzAuth, accHint);
+-    }
++    { fwdCall(); }
+ 
+     function mtxConfidentialTransferCompact(PqzMultiArgs calldata t, bytes calldata proof, IUARegistry.UASig calldata pqzAuth,
+         bytes calldata accHint) external nonReentrant returns (bytes32)
+-    {
+-        return _multi(_envTransfer(ZetherTypes.TransferMode.HASH), t, proof, pqzAuth, accHint);
+-    }
++    { fwdCall(); }
+ 
+     /// @notice The single-recipient transfer, op 1 `R_TX` / `R_TX0` (§7.4), in the token's default form.
+     function mtxConfidentialTransferSingle(PqzTransferArgs calldata t, bytes calldata proof, IUARegistry.UASig calldata pqzAuth,
+         bytes calldata accHint) external nonReentrant returns (bytes32)
+-    {
+-        return _single(_envTransfer(_defaultMode()), t, proof, pqzAuth, accHint);
+-    }
++    { fwdCall(); }
+ 
+     function mtxConfidentialTransferSingleCompact(PqzTransferArgs calldata t, bytes calldata proof,
+         IUARegistry.UASig calldata pqzAuth, bytes calldata accHint) external nonReentrant returns (bytes32)
+-    {
+-        return _single(_envTransfer(ZetherTypes.TransferMode.HASH), t, proof, pqzAuth, accHint);
+-    }
++    { fwdCall(); }
+ 
+     /// @notice The signed forms (TS-D14, TS-D16) over the `UA*` structs (R36: native and derived ids): `args`, `proof` and
+     ///         `accHint` by hash, as a wallet shows them; `pqzAuth` and `auth` are signatures, never in a signed struct
+@@ -248,34 +189,22 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
+     function mtxConfidentialTransfer(MetaTxLib.UAEnvelope calldata e, PqzMultiArgs calldata t, bytes calldata proof,
+         IUARegistry.UASig calldata pqzAuth, bytes calldata accHint, IUARegistry.UASig calldata auth)
+         external nonReentrant returns (bytes32)
+-    {
+-        (bytes memory words, bytes memory data) = _multiCall(IPqzToken.mtxConfidentialTransfer.selector, t, proof, pqzAuth, accHint);
+-        return _ref(_namedCallUA(UA_TRANSFER_TYPEHASH, e, words, data, auth));
+-    }
++    { fwdCall(); }
+ 
+     function mtxConfidentialTransferCompact(MetaTxLib.UAEnvelope calldata e, PqzMultiArgs calldata t, bytes calldata proof,
+         IUARegistry.UASig calldata pqzAuth, bytes calldata accHint, IUARegistry.UASig calldata auth)
+         external nonReentrant returns (bytes32)
+-    {
+-        (bytes memory words, bytes memory data) = _multiCall(IPqzToken.mtxConfidentialTransferCompact.selector, t, proof, pqzAuth, accHint);
+-        return _ref(_namedCallUA(UA_TRANSFER_COMPACT_TYPEHASH, e, words, data, auth));
+-    }
++    { fwdCall(); }
+ 
+     function mtxConfidentialTransferSingle(MetaTxLib.UAEnvelope calldata e, PqzTransferArgs calldata t, bytes calldata proof,
+         IUARegistry.UASig calldata pqzAuth, bytes calldata accHint, IUARegistry.UASig calldata auth)
+         external nonReentrant returns (bytes32)
+-    {
+-        (bytes memory words, bytes memory data) = _singleCall(IPqzToken.mtxConfidentialTransferSingle.selector, t, proof, pqzAuth, accHint);
+-        return _ref(_namedCallUA(UA_TRANSFER_SINGLE_TYPEHASH, e, words, data, auth));
+-    }
++    { fwdCall(); }
+ 
+     function mtxConfidentialTransferSingleCompact(MetaTxLib.UAEnvelope calldata e, PqzTransferArgs calldata t, bytes calldata proof,
+         IUARegistry.UASig calldata pqzAuth, bytes calldata accHint, IUARegistry.UASig calldata auth)
+         external nonReentrant returns (bytes32)
+-    {
+-        (bytes memory words, bytes memory data) = _singleCall(IPqzToken.mtxConfidentialTransferSingleCompact.selector, t, proof, pqzAuth, accHint);
+-        return _ref(_namedCallUA(UA_TRANSFER_SINGLE_COMPACT_TYPEHASH, e, words, data, auth));
+-    }
++    { fwdCall(); }
+ 
+     /// @dev Op 1 in the form of `e.mode`; the token pays what the library moved.
+     function _single(PqzCore.Env memory e, PqzTransferArgs calldata t, bytes calldata proof, IUARegistry.UASig calldata pqzAuth,
+@@ -346,10 +275,7 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
+     function mtxUnshield(MetaTxLib.UAEnvelope calldata e, PqzBurnArgs calldata b, Payout calldata p, bytes calldata proof,
+         IUARegistry.UASig calldata pqzAuth, bytes calldata accHint, IUARegistry.UASig calldata auth)
+         external nonReentrant returns (bytes memory)
+-    {
+-        (bytes memory words, bytes memory data) = _unshieldCall(b, p, proof, pqzAuth, accHint);
+-        return _namedCallUA(UA_UNSHIELD_TYPEHASH, e, words, data, auth);
+-    }
++    { fwdCall(); }
+ 
+     function _unshieldCall(PqzBurnArgs calldata b, Payout calldata p, bytes calldata proof, IUARegistry.UASig calldata pqzAuth,
+         bytes calldata accHint) private pure returns (bytes memory, bytes memory)
+@@ -374,27 +300,19 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
+ 
+     /// @notice Anyone: the next `min(n, K_MAX − 1 − accUnits)` entries of `(ua, keyVersion)` into its `acc`, in order, each
+     ///         at least `ROLL_AGE` blocks old; `1 ≤ n ≤ ROLL_MAX` (group 3g KV-10: any version whose key passes the check).
+-    function mtxRollOver(bytes32 ua, uint64 keyVersion, uint256 n) external nonReentrant {
+-        PqzStateLib.rollOver(ua, keyVersion, n);
+-    }
++    function mtxRollOver(bytes32 ua, uint64 keyVersion, uint256 n) external nonReentrant { fwdCall(); }
+ 
+     /// @notice Anyone, once per account and half (0, 1) before its first rollover (idempotent), per key version.
+-    function mtxPrepareAcc(bytes32 ua, uint64 keyVersion, uint256 half) external nonReentrant {
+-        PqzStateLib.prepareAcc(ua, keyVersion, half, _REGISTRY);
+-    }
++    function mtxPrepareAcc(bytes32 ua, uint64 keyVersion, uint256 half) external nonReentrant { fwdCall(); }
+ 
+     /// @notice The signed rollover and prepare, as `mtxShield`'s (`UARollOver`, `UAPrepareAcc` with `keyVersion`).
+     function mtxRollOver(MetaTxLib.UAEnvelope calldata e, bytes32 ua, uint64 keyVersion, uint256 n,
+         IUARegistry.UASig calldata auth) external nonReentrant returns (bytes memory)
+-    {
+-        return _namedUA(UA_ROLL_OVER_TYPEHASH, IPqzToken.mtxRollOver.selector, e, abi.encode(ua, keyVersion, n), auth);
+-    }
++    { fwdCall(); }
+ 
+     function mtxPrepareAcc(MetaTxLib.UAEnvelope calldata e, bytes32 ua, uint64 keyVersion, uint256 half,
+         IUARegistry.UASig calldata auth) external nonReentrant returns (bytes memory)
+-    {
+-        return _namedUA(UA_PREPARE_ACC_TYPEHASH, IPqzToken.mtxPrepareAcc.selector, e, abi.encode(ua, keyVersion, half), auth);
+-    }
++    { fwdCall(); }
+ 
+     // ------------------------------------------------------------------ internals
+ 
+diff --git a/smartcontracts/evm/src/pqz/WrappedPqzToken.sol b/smartcontracts/evm/src/pqz/WrappedPqzToken.sol
+index 3c7b41f2..15df4f90 100644
+--- a/smartcontracts/evm/src/pqz/WrappedPqzToken.sol
++++ b/smartcontracts/evm/src/pqz/WrappedPqzToken.sol
+@@ -1,5 +1,6 @@
+ // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+ pragma solidity ^0.8.24;
++import {fwdCall, fwdView, fwdPure} from "../FwdSpike.sol";
+ 
+ import {WrappedToken} from "../metatx/WrappedToken.sol";
+ import {MetaTokenBase} from "../metatx/MetaTokenBase.sol";
+@@ -50,9 +51,7 @@ contract WrappedPqzToken is WrappedToken, PqzLayer, IPqzWrappedToken {
+     }
+ 
+     /// @dev The legs (`WrappedToken`), restated for the second base.
+-    function underlyings() public view virtual override(WrappedToken, MetaTokenBase) returns (address[] memory) {
+-        return super.underlyings();
+-    }
++    function underlyings() public view virtual override(WrappedToken, MetaTokenBase) returns (address[] memory) { fwdView(); }
+ 
+     function kind() public pure virtual override(WrappedToken, MetaTokenBase) returns (uint8) {
+         return TokenStore.KIND_WRAPPED_PQZ;
+@@ -83,22 +82,12 @@ contract WrappedPqzToken is WrappedToken, PqzLayer, IPqzWrappedToken {
+     /// @notice Pulls `amountIn` of leg `underlying` (native: `msg.value`); the public-equivalent `minted`, a multiple of
+     ///         `shieldScale` (`AmountNotScaled`), is minted to `SHIELD_POOL` (D19) and becomes a TRIVIAL entry of
+     ///         `minted / shieldScale` for `toUA`.
+-    function mtxWrapShield(address underlying, uint256 amountIn, bytes32 toUA) external payable nonReentrant {
+-        _regPayer();
+-        address m = _msgSender();
+-        (,, uint256 minted) = WrappedLib.wrap(WrappedLib.indexOf(underlying), amountIn, m, msg.value, totalSupply());
+-        uint256 scale = PqzCore.$().shieldScale;
+-        if (minted % scale != 0) revert AmountNotScaled(minted, scale);
+-        PqzStateLib.shield(toUA, minted / scale, m, _REGISTRY);
+-        _poolMove(bytes32(0), MetaTxLib.pad(MetaTxLib.SHIELD_POOL), minted);
+-    }
++    function mtxWrapShield(address underlying, uint256 amountIn, bytes32 toUA) external payable nonReentrant { fwdCall(); }
+ 
+     /// @notice The signed `mtxWrapShield`; as on the generic path, relayed it takes no coin (the native leg reverts).
+     function mtxWrapShield(MetaTxLib.Envelope calldata e, address underlying, uint256 amountIn, bytes32 toUA, bytes calldata sig)
+         external nonReentrant returns (bytes memory)
+-    {
+-        return _named(WRAP_SHIELD_TYPEHASH, IConfidentialWrappedToken.mtxWrapShield.selector, e, abi.encode(underlying, amountIn, toUA), sig);
+-    }
++    { fwdCall(); }
+ 
+     /// @notice The burn of `x.amount` (statement: `amount`, `recipient`; `envelopeBinding` binds `x.underlying` and
+     ///         `x.minOut`, direct P6g D12, relayed folded with the envelope's D15), `amount · shieldScale` burnt from
+@@ -120,10 +109,7 @@ contract WrappedPqzToken is WrappedToken, PqzLayer, IPqzWrappedToken {
+     function mtxUnshieldUnwrap(MetaTxLib.UAEnvelope calldata e, PqzBurnArgs calldata b, Unwrap calldata x, bytes calldata proof,
+         IUARegistry.UASig calldata pqzAuth, bytes calldata accHint, IUARegistry.UASig calldata auth)
+         external nonReentrant returns (bytes memory)
+-    {
+-        (bytes memory words, bytes memory data) = _unwrapCall(b, x, proof, pqzAuth, accHint);
+-        return _namedCallUA(UA_UNSHIELD_UNWRAP_TYPEHASH, e, words, data, auth);
+-    }
++    { fwdCall(); }
+ 
+     /// @dev The words the struct hashes (TS-D17) and the op's call.
+     function _unwrapCall(PqzBurnArgs calldata b, Unwrap calldata x, bytes calldata proof, IUARegistry.UASig calldata pqzAuth,
+@@ -141,9 +127,7 @@ contract WrappedPqzToken is WrappedToken, PqzLayer, IPqzWrappedToken {
+     /// @notice The burn statement of `mtxUnshieldUnwrap` (`binding` 0 = direct, else the relayed call's envelope binding).
+     function unshieldUnwrapStatement(PqzBurnArgs calldata b, Unwrap calldata x, bytes32 binding)
+         external view returns (bytes memory)
+-    {
+-        return PqzViewLib.burnStatement(_envUnwrap(x, binding), b);
+-    }
++    { fwdView(); }
+ 
+     /// @dev The binding word: `unwrapBinding(u, minOut)` direct, `keccak256(abi.encode(envelope, unwrapBinding(u,
+     ///      minOut)))` relayed (plan 5h D15).
+@@ -154,20 +138,13 @@ contract WrappedPqzToken is WrappedToken, PqzLayer, IPqzWrappedToken {
+     }
+ 
+     /// @notice As `WrappedToken` (spec §6.2); restated for the second base.
+-    function rescue(address asset) external virtual override(WrappedToken, MetaTokenBase) nonReentrant {
+-        WrappedLib.rescue(asset);
+-    }
++    function rescue(address asset) external virtual override(WrappedToken, MetaTokenBase) nonReentrant { fwdCall(); }
+ 
+     /// @notice As `WrappedToken` (also cancels a pending rate change, CTR-TOK-06); restated for the second base.
+-    function disableFeature(uint8 bit) external virtual override(WrappedToken, GovernanceBase) nonReentrant {
+-        bool applied = GovernanceLib.disableFeature(bit, _govSubject(), _delayedRelaxBits());
+-        if (applied && bit == GovernanceBits.RATE_ADJUSTABLE) WrappedLib.dropPending();
+-    }
++    function disableFeature(uint8 bit) external virtual override(WrappedToken, GovernanceBase) nonReentrant { fwdCall(); }
+ 
+     /// @notice The collateral check of a rate change: `totalSupply()` (the shielded value sits in `SHIELD_POOL`, D19).
+-    function executeRate() external override nonReentrant {
+-        WrappedLib.executeRate(_govSubject(), totalSupply());
+-    }
++    function executeRate() external override nonReentrant { fwdCall(); }
+ 
+     // ------------------------------------------------------------------ the layer's hooks
+ 
+@@ -203,9 +180,7 @@ contract WrappedPqzToken is WrappedToken, PqzLayer, IPqzWrappedToken {
+     function mtxSelectors()
+         public pure virtual override(WrappedToken, IMetaTx, MetaTxBase)
+         returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
+-    {
+-        return PqzWrappedLib.selectors();
+-    }
++    { fwdPure(); }
+ 
+     function _mtxRule(bytes4 sel) internal view virtual override(WrappedToken, MetaTxBase) returns (MtxRule memory) {
+         if (sel == IConfidentialWrappedToken.mtxWrapShield.selector) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 100);
+diff --git a/smartcontracts/evm/src/regulated/NormalPqzRegulatedToken.sol b/smartcontracts/evm/src/regulated/NormalPqzRegulatedToken.sol
+index ec0e2254..e8afbc82 100644
+--- a/smartcontracts/evm/src/regulated/NormalPqzRegulatedToken.sol
++++ b/smartcontracts/evm/src/regulated/NormalPqzRegulatedToken.sol
+@@ -1,5 +1,6 @@
+ // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+ pragma solidity ^0.8.24;
++import {fwdCall, fwdView, fwdPure} from "../FwdSpike.sol";
+ 
+ import {NormalPqzToken} from "../pqz/NormalPqzToken.sol";
+ import {MetaTokenBase} from "../metatx/MetaTokenBase.sol";
+@@ -51,9 +52,7 @@ contract NormalPqzRegulatedToken is NormalPqzToken, RegulatedBase {
+     }
+ 
+     /// @notice The regulated mirror sync, only once the disable applied (Codex 3).
+-    function disableFeature(uint8 bit) external override(GovernanceBase, RegulatedBase) nonReentrant {
+-        if (GovernanceLib.disableFeature(bit, _govSubject(), _delayedRelaxBits())) _regDisabled(bit);
+-    }
++    function disableFeature(uint8 bit) external override(GovernanceBase, RegulatedBase) nonReentrant { fwdCall(); }
+ 
+     /// @dev The pre row of the confidential kinds (spec §3.2): fee-bearing ⇒ `P`, `F(from)`; not fee-bearing: nothing
+     ///      read (U4), so a frozen envelope `from` may submit another's proof at fee `NONE`.
+@@ -72,9 +71,7 @@ contract NormalPqzRegulatedToken is NormalPqzToken, RegulatedBase {
+         return super._delayedRelaxBits();
+     }
+ 
+-    function supportsInterface(bytes4 id) public view override(MetaTokenBase, RegulatedBase) returns (bool) {
+-        return super.supportsInterface(id);
+-    }
++    function supportsInterface(bytes4 id) public view override(MetaTokenBase, RegulatedBase) returns (bool) { fwdView(); }
+ 
+     function _regFeeTo(bytes32 feeTo, uint256 fee) internal view override(UAMetaTxBase, RegulatedBase) {
+         super._regFeeTo(feeTo, fee);
+@@ -102,9 +99,7 @@ contract NormalPqzRegulatedToken is NormalPqzToken, RegulatedBase {
+ 
+     function mtxSelectors()
+         public pure override(NormalPqzToken, IMetaTx, MetaTxBase) returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
+-    {
+-        return super.mtxSelectors();
+-    }
++    { fwdPure(); }
+ 
+     function _mtxRule(bytes4 sel) internal view override(NormalPqzToken, MetaTxBase) returns (MtxRule memory) {
+         return super._mtxRule(sel);
+diff --git a/smartcontracts/evm/src/regulated/NormalRegulatedToken.sol b/smartcontracts/evm/src/regulated/NormalRegulatedToken.sol
+index c5d996c8..addc54d9 100644
+--- a/smartcontracts/evm/src/regulated/NormalRegulatedToken.sol
++++ b/smartcontracts/evm/src/regulated/NormalRegulatedToken.sol
+@@ -1,5 +1,6 @@
+ // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+ pragma solidity ^0.8.24;
++import {fwdCall, fwdView, fwdPure} from "../FwdSpike.sol";
+ 
+ import {NormalToken} from "../metatx/NormalToken.sol";
+ import {MetaTokenBase} from "../metatx/MetaTokenBase.sol";
+@@ -53,14 +54,10 @@ contract NormalRegulatedToken is NormalToken, RegulatedBase {
+         return super._delayedRelaxBits();
+     }
+ 
+-    function supportsInterface(bytes4 id) public view override(MetaTokenBase, RegulatedBase) returns (bool) {
+-        return super.supportsInterface(id);
+-    }
++    function supportsInterface(bytes4 id) public view override(MetaTokenBase, RegulatedBase) returns (bool) { fwdView(); }
+ 
+     /// @notice The regulated mirror sync, only once the disable applied (Codex 3).
+-    function disableFeature(uint8 bit) external override(GovernanceBase, RegulatedBase) nonReentrant {
+-        if (GovernanceLib.disableFeature(bit, _govSubject(), _delayedRelaxBits())) _regDisabled(bit);
+-    }
++    function disableFeature(uint8 bit) external override(GovernanceBase, RegulatedBase) nonReentrant { fwdCall(); }
+ 
+     function _regPre(bytes32 from, bytes4 sel, uint32 mode) internal view override(UAMetaTxBase, RegulatedBase) {
+         super._regPre(from, sel, mode);
+@@ -92,9 +89,7 @@ contract NormalRegulatedToken is NormalToken, RegulatedBase {
+ 
+     function mtxSelectors()
+         public pure override(NormalToken, IMetaTx, MetaTxBase) returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
+-    {
+-        return super.mtxSelectors();
+-    }
++    { fwdPure(); }
+ 
+     function _mtxRule(bytes4 sel) internal view override(NormalToken, MetaTxBase) returns (MtxRule memory) {
+         return super._mtxRule(sel);
+diff --git a/smartcontracts/evm/src/regulated/NormalZetherRegulatedToken.sol b/smartcontracts/evm/src/regulated/NormalZetherRegulatedToken.sol
+index d1c7e337..f8fa458b 100644
+--- a/smartcontracts/evm/src/regulated/NormalZetherRegulatedToken.sol
++++ b/smartcontracts/evm/src/regulated/NormalZetherRegulatedToken.sol
+@@ -1,5 +1,6 @@
+ // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+ pragma solidity ^0.8.24;
++import {fwdCall, fwdView, fwdPure} from "../FwdSpike.sol";
+ 
+ import {NormalZetherToken} from "../zether/NormalZetherToken.sol";
+ import {ZetherLayer} from "../zether/ZetherLayer.sol";
+@@ -54,9 +55,7 @@ contract NormalZetherRegulatedToken is NormalZetherToken, RegulatedBase {
+     }
+ 
+     /// @notice The regulated mirror sync, only once the disable applied (Codex 3).
+-    function disableFeature(uint8 bit) external override(GovernanceBase, RegulatedBase) nonReentrant {
+-        if (GovernanceLib.disableFeature(bit, _govSubject(), _delayedRelaxBits())) _regDisabled(bit);
+-    }
++    function disableFeature(uint8 bit) external override(GovernanceBase, RegulatedBase) nonReentrant { fwdCall(); }
+ 
+     // ------------------------------------------------------------------ restated for the two bases (solc: a function both
+     // paths mention): the regulated layer's, then the base kind's
+@@ -69,9 +68,7 @@ contract NormalZetherRegulatedToken is NormalZetherToken, RegulatedBase {
+         return super._delayedRelaxBits();
+     }
+ 
+-    function supportsInterface(bytes4 id) public view override(MetaTokenBase, RegulatedBase) returns (bool) {
+-        return super.supportsInterface(id);
+-    }
++    function supportsInterface(bytes4 id) public view override(MetaTokenBase, RegulatedBase) returns (bool) { fwdView(); }
+ 
+     /// @dev The pre row of the confidential kinds (spec §3.2): fee-bearing ⇒ `P`, `F(from)`; not fee-bearing: nothing
+     ///      read (U4), so a frozen envelope `from` may submit another's proof at fee `NONE`.
+@@ -111,9 +108,7 @@ contract NormalZetherRegulatedToken is NormalZetherToken, RegulatedBase {
+ 
+     function mtxSelectors()
+         public pure override(NormalZetherToken, IMetaTx, MetaTxBase) returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
+-    {
+-        return super.mtxSelectors();
+-    }
++    { fwdPure(); }
+ 
+     function _mtxRule(bytes4 sel) internal view override(NormalZetherToken, MetaTxBase) returns (MtxRule memory) {
+         return super._mtxRule(sel);
+diff --git a/smartcontracts/evm/src/regulated/RegulatedBase.sol b/smartcontracts/evm/src/regulated/RegulatedBase.sol
+index 20a8b0eb..2abae808 100644
+--- a/smartcontracts/evm/src/regulated/RegulatedBase.sol
++++ b/smartcontracts/evm/src/regulated/RegulatedBase.sol
+@@ -1,5 +1,6 @@
+ // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+ pragma solidity ^0.8.24;
++import {fwdCall, fwdView, fwdPure} from "../FwdSpike.sol";
+ 
+ import {MetaTokenBase} from "../metatx/MetaTokenBase.sol";
+ import {GovernanceLib} from "../governance/GovernanceLib.sol";
+@@ -76,64 +77,38 @@ abstract contract RegulatedBase is MetaTokenBase, IRegulatedToken {
+     }
+ 
+     /// @notice Kinds 0-5's answer, and `IRegulatedToken` (M-10).
+-    function supportsInterface(bytes4 id) public view virtual override returns (bool) {
+-        return id == type(IRegulatedToken).interfaceId || super.supportsInterface(id);
+-    }
++    function supportsInterface(bytes4 id) public view virtual override returns (bool) { fwdView(); }
+ 
+     /// @notice The mirror (`controls`) follows `features` only when the disable applied (Codex 3): a proposal changes nothing.
+-    function disableFeature(uint8 bit) external virtual override nonReentrant {
+-        if (GovernanceLib.disableFeature(bit, _govSubject(), _delayedRelaxBits())) _regDisabled(bit);
+-    }
++    function disableFeature(uint8 bit) external virtual override nonReentrant { fwdCall(); }
+ 
+     // ------------------------------------------------------------------ the controls (spec §3.1): thin stubs
+ 
+-    function freeze(bytes32 account, bytes32 ref, bytes32 recordId) external nonReentrant {
+-        RegulatedLib.freeze(account, ref, recordId, _govSubject());
+-    }
++    function freeze(bytes32 account, bytes32 ref, bytes32 recordId) external nonReentrant { fwdCall(); }
+ 
+-    function unfreeze(bytes32 account, bytes32 ref) external nonReentrant {
+-        RegulatedLib.unfreeze(account, ref, _govSubject());
+-    }
++    function unfreeze(bytes32 account, bytes32 ref) external nonReentrant { fwdCall(); }
+ 
+     /// @notice The library checks the record and counts it; the token checks the beneficiary as a receiver (`R`, a derived
+     ///         one registered SIGNING) and moves the public balance on `_poolMove` (no hook: the subject is frozen,
+     ///         CTR-GOV-08 Change).
+-    function forceTransfer(bytes32 recordId, uint256 amount) external nonReentrant {
+-        (bytes32 from, bytes32 to) = RegulatedLib.forceTransfer(recordId, amount, _govSubject());
+-        _eligible(to);
+-        MtxPipelineLib._checkTo(_REGISTRY, to);
+-        _poolMove(from, to, amount);
+-    }
++    function forceTransfer(bytes32 recordId, uint256 amount) external nonReentrant { fwdCall(); }
+ 
+-    function pause(bytes32 ref, uint64 until) external nonReentrant {
+-        RegulatedLib.pause(ref, until, _govSubject());
+-    }
++    function pause(bytes32 ref, uint64 until) external nonReentrant { fwdCall(); }
+ 
+-    function unpause(bytes32 ref) external nonReentrant {
+-        RegulatedLib.unpause(ref, _govSubject());
+-    }
++    function unpause(bytes32 ref) external nonReentrant { fwdCall(); }
+ 
+     function recordOrder(bytes32 orderId, bytes32 documentHash, bytes32 subject, bytes32 beneficiary, uint256 maxAmount,
+         uint64 freezeUntil) external nonReentrant
+-    {
+-        RegulatedLib.recordOrder(orderId, documentHash, subject, beneficiary, maxAmount, freezeUntil, _govSubject());
+-    }
++    { fwdCall(); }
+ 
+-    function revokeOrder(bytes32 recordId, bytes32 reasonRef) external nonReentrant {
+-        RegulatedLib.revokeOrder(recordId, reasonRef, _govSubject());
+-    }
++    function revokeOrder(bytes32 recordId, bytes32 reasonRef) external nonReentrant { fwdCall(); }
+ 
+     /// @notice Bit 23 (pay-meta-tax spec §6.2): the one PERCENT rate; the factory's `noticePeriod()` read by the library
+     ///         from the `FACTORY` passed here, after the holder check (F-20).
+-    function setTaxRate(uint32 ratePpm) external nonReentrant {
+-        RegulatedLib.setTaxRate(ratePpm, FACTORY, _govSubject());
+-    }
++    function setTaxRate(uint32 ratePpm) external nonReentrant { fwdCall(); }
+ 
+     /// @notice Bit 23: the tax recipient, at once (Q4); the library's checks, then `R` here (F-15).
+-    function setTaxRecipient(bytes32 taxRecipient) external nonReentrant {
+-        RegulatedLib.setTaxRecipient(taxRecipient, _govSubject(), _REGISTRY);
+-        _eligible(taxRecipient);
+-    }
++    function setTaxRecipient(bytes32 taxRecipient) external nonReentrant { fwdCall(); }
+ 
+     /// @notice The payment `t` with its tax (pay-meta-tax spec §5.3, CTR-AS-18 proposed): the payer signs `UAPayWithTax`
+     ///         (`t`, `taxMode`, `tax`); `PAYABLE` and `TAX`; `PayMeta`; the tax checked (PERCENT against the effective rate,
+@@ -141,27 +116,13 @@ abstract contract RegulatedBase is MetaTokenBase, IRegulatedToken {
+     ///         payer -> payee `value - tax`, payer -> recipient `tax` (O13); `UAPaymentSettled` gross; `PaymentTaxed`.
+     function mtxPayWithTax(MetaTxLib.UAMetaTransfer calldata t, uint8 taxMode, uint256 tax, IUARegistry.UASig calldata auth,
+         MetaTxLib.PayMeta calldata meta) external nonReentrant returns (bool)
+-    {
+-        _taxGates(t.entryRef, meta);
+-        bytes32 r = _taxTo(t.to, t.value, taxMode, tax);
+-        bytes32 d = _uaExecuteTransfer(t, MtxPipelineLib.payWithTaxHash(t, taxMode, tax), auth, tax, r); // lever 6
+-        RegulatedLib.taxed(t.entryRef, t.to, r, t.from, taxMode, tax, d);
+-        return true;
+-    }
++    { fwdCall(); }
+ 
+     /// @notice The direct twin for a contract payer (spec §5.6, O13): the caller pays, no signature, nonce or fee; not on
+     ///         the generic self-call's allow-list (`mtxPayWithTax` is the relayed form).
+     function payWithTax(bytes32 to, uint256 amount, uint8 taxMode, uint256 tax, bytes32 entryRef,
+         MetaTxLib.PayMeta calldata meta) external nonReentrant returns (bool)
+-    {
+-        _taxGates(entryRef, meta);
+-        MtxPipelineLib._checkTo(_REGISTRY, to);
+-        bytes32 r = _taxTo(to, amount, taxMode, tax);
+-        bytes32 payer = MetaTxLib.pad(_msgSender());
+-        _uaSplit(payer, to, amount, tax, r);
+-        RegulatedLib.directTaxed(entryRef, to, r, payer, amount, taxMode, tax); // lever 8: the two events
+-        return true;
+-    }
++    { fwdCall(); }
+ 
+     function _taxGates(bytes32 entryRef, MetaTxLib.PayMeta calldata meta) private {
+         GovernanceLib.requireFeature(GovernanceBits.PAYABLE);
+@@ -176,49 +137,22 @@ abstract contract RegulatedBase is MetaTokenBase, IRegulatedToken {
+     }
+ 
+     /// @notice The library refuses and `use`s; the move is `_uaMove`, hooked, so `P`, `F(from)` and `R(to)` apply (§3.4).
+-    function operatorTransfer(bytes32 from, bytes32 to, uint256 amount, bytes32 ref) external nonReentrant {
+-        RegulatedLib.operatorTransfer(from, to, amount, ref, _govSubject(), _REGISTRY);
+-        _uaMove(from, to, amount);
+-    }
++    function operatorTransfer(bytes32 from, bytes32 to, uint256 amount, bytes32 ref) external nonReentrant { fwdCall(); }
+ 
+     // ------------------------------------------------------------------ views
+ 
+-    function regulatedConfig() external view returns (RegulatedConfig memory) {
+-        RegulatedLib.RegulatedStorage storage r = RegulatedLib.$();
+-        return RegulatedConfig(r.complianceRegistry, r.controls, r.requiredFlags, r.deniedFlags, r.termsHash, r.pausedUntil,
+-            r.pauseCooldownUntil);
+-    }
+-    function freezeOf(bytes32 account) external view returns (FreezeState memory) { return RegulatedLib.$().freezes[account]; }
++    function regulatedConfig() external view returns (RegulatedConfig memory) { fwdView(); }
++    function freezeOf(bytes32 account) external view returns (FreezeState memory) { fwdView(); }
+ 
+     /// @notice What a wallet and the node read to build and check a taxed payment (pay-meta-tax spec §6.2).
+-    function taxConfig() external view returns (TaxConfig memory c) {
+-        RegulatedLib.RegulatedStorage storage r = RegulatedLib.$();
+-        TaxRate memory t = r.taxRate;
+-        c = TaxConfig(r.taxRecipient, GovernanceLib.hasFeature(GovernanceBits.TAX), t.ratePpm, t.pendingPpm, t.eta,
+-            RegulatedLib.effectiveRate(), IOpenFactory(FACTORY).noticePeriod());
+-    }
+-    function isFrozen(bytes32 account) external view returns (bool) { return RegulatedLib.frozen(account); }
++    function taxConfig() external view returns (TaxConfig memory c) { fwdView(); }
++    function isFrozen(bytes32 account) external view returns (bool) { fwdView(); }
+ 
+     /// @notice `R(account)` with its reason (spec §3.1): 1 not attested or flags missing, 2 expired, 3 attester disabled,
+     ///         4 denied; (true, 0) when it may receive, and with both lists off, without a call. Two bounded calls
+     ///         (`attestationOf`, `attesterEnabled`); `ok` equals `hasFlags` on the same masks.
+-    function canReceive(bytes32 account) external view returns (bool ok, uint8 reason) {
+-        RegulatedLib.RegulatedStorage storage r = RegulatedLib.$();
+-        uint8 c = r.controls;
+-        if (c & RegulatedLib.C_LISTS == 0) return (true, 0);
+-        address reg = r.complianceRegistry;
+-        uint256[3] memory a = _regCall(reg, abi.encodeCall(IComplianceRegistry.attestationOf, (account)), 96);
+-        uint256 on = _regCall(reg, abi.encodeCall(IComplianceRegistry.attesterEnabled, (uint32(a[2]))), 32)[0];
+-        if (on > 1) revert RegistryUnavailable(reg);
+-        bool active = on == 1 && a[1] >= block.timestamp;
+-        uint256 req = c & RegulatedLib.C_ALLOW != 0 ? r.requiredFlags : 0;
+-        if (req != 0 && !(active && (a[0] & req == req || a[0] & ELIGIBLE_CONTRACT != 0))) {
+-            return (false, a[1] == 0 ? 1 : on == 0 ? 3 : !active ? 2 : 1);
+-        }
+-        if (c & RegulatedLib.C_DENY != 0 && active && a[0] & r.deniedFlags != 0) return (false, 4);
+-        return (true, 0);
+-    }
+-    function order(bytes32 recordId) external view returns (OrderRecord memory) { return RegulatedLib.$().orders[recordId]; }
++    function canReceive(bytes32 account) external view returns (bool ok, uint8 reason) { fwdView(); }
++    function order(bytes32 recordId) external view returns (OrderRecord memory) { fwdView(); }
+ 
+     // ------------------------------------------------------------------ the hooks (spec §2.2, the rows of §3.2)
+ 
+diff --git a/smartcontracts/evm/src/regulated/WrappedPqzRegulatedToken.sol b/smartcontracts/evm/src/regulated/WrappedPqzRegulatedToken.sol
+index 72a712bf..e4ffc19c 100644
+--- a/smartcontracts/evm/src/regulated/WrappedPqzRegulatedToken.sol
++++ b/smartcontracts/evm/src/regulated/WrappedPqzRegulatedToken.sol
+@@ -1,5 +1,6 @@
+ // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+ pragma solidity ^0.8.24;
++import {fwdCall, fwdView, fwdPure} from "../FwdSpike.sol";
+ 
+ import {WrappedToken} from "../metatx/WrappedToken.sol";
+ import {MetaTokenBase} from "../metatx/MetaTokenBase.sol";
+@@ -50,11 +51,7 @@ contract WrappedPqzRegulatedToken is WrappedPqzToken, RegulatedBase {
+     }
+ 
+     /// @notice As kind 9: the pending-rate drop and the mirror sync, each only once the disable applied.
+-    function disableFeature(uint8 bit) external override(WrappedPqzToken, RegulatedBase) nonReentrant {
+-        if (!GovernanceLib.disableFeature(bit, _govSubject(), _delayedRelaxBits())) return;
+-        if (bit == GovernanceBits.RATE_ADJUSTABLE) WrappedLib.dropPending();
+-        _regDisabled(bit);
+-    }
++    function disableFeature(uint8 bit) external override(WrappedPqzToken, RegulatedBase) nonReentrant { fwdCall(); }
+ 
+     /// @dev The pre row of the confidential kinds (spec §3.2): fee-bearing ⇒ `P`, `F(from)`; not fee-bearing: nothing
+     ///      read (U4), so a frozen envelope `from` may submit another's proof at fee `NONE`.
+@@ -73,9 +70,7 @@ contract WrappedPqzRegulatedToken is WrappedPqzToken, RegulatedBase {
+         return super._delayedRelaxBits();
+     }
+ 
+-    function supportsInterface(bytes4 id) public view override(MetaTokenBase, RegulatedBase) returns (bool) {
+-        return super.supportsInterface(id);
+-    }
++    function supportsInterface(bytes4 id) public view override(MetaTokenBase, RegulatedBase) returns (bool) { fwdView(); }
+ 
+     function _regFeeTo(bytes32 feeTo, uint256 fee) internal view override(UAMetaTxBase, RegulatedBase) {
+         super._regFeeTo(feeTo, fee);
+@@ -101,19 +96,13 @@ contract WrappedPqzRegulatedToken is WrappedPqzToken, RegulatedBase {
+         super._regReceiver(recipient);
+     }
+ 
+-    function underlyings() public view override(WrappedPqzToken, MetaTokenBase) returns (address[] memory) {
+-        return super.underlyings();
+-    }
++    function underlyings() public view override(WrappedPqzToken, MetaTokenBase) returns (address[] memory) { fwdView(); }
+ 
+-    function rescue(address asset) external override(WrappedPqzToken, MetaTokenBase) nonReentrant {
+-        WrappedLib.rescue(asset);
+-    }
++    function rescue(address asset) external override(WrappedPqzToken, MetaTokenBase) nonReentrant { fwdCall(); }
+ 
+     function mtxSelectors()
+         public pure override(WrappedPqzToken, IMetaTx, MetaTxBase) returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
+-    {
+-        return super.mtxSelectors();
+-    }
++    { fwdPure(); }
+ 
+     function _mtxRule(bytes4 sel) internal view override(WrappedPqzToken, MetaTxBase) returns (MtxRule memory) {
+         return super._mtxRule(sel);
+diff --git a/smartcontracts/evm/src/regulated/WrappedRegulatedToken.sol b/smartcontracts/evm/src/regulated/WrappedRegulatedToken.sol
+index 4b5ed8de..6d3c52ee 100644
+--- a/smartcontracts/evm/src/regulated/WrappedRegulatedToken.sol
++++ b/smartcontracts/evm/src/regulated/WrappedRegulatedToken.sol
+@@ -1,5 +1,6 @@
+ // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+ pragma solidity ^0.8.24;
++import {fwdCall, fwdView, fwdPure} from "../FwdSpike.sol";
+ 
+ import {WrappedToken} from "../metatx/WrappedToken.sol";
+ import {MetaTokenBase} from "../metatx/MetaTokenBase.sol";
+@@ -41,11 +42,7 @@ contract WrappedRegulatedToken is WrappedToken, RegulatedBase {
+     }
+ 
+     /// @notice `WrappedToken`'s pending-rate drop and the regulated mirror sync, each only once the disable applied.
+-    function disableFeature(uint8 bit) external override(WrappedToken, RegulatedBase) nonReentrant {
+-        if (!GovernanceLib.disableFeature(bit, _govSubject(), _delayedRelaxBits())) return;
+-        if (bit == GovernanceBits.RATE_ADJUSTABLE) WrappedLib.dropPending();
+-        _regDisabled(bit);
+-    }
++    function disableFeature(uint8 bit) external override(WrappedToken, RegulatedBase) nonReentrant { fwdCall(); }
+ 
+     // ------------------------------------------------------------------ restated for the two bases (solc: a function both
+     // paths mention): the regulated layer's, then the base kind's
+@@ -58,9 +55,7 @@ contract WrappedRegulatedToken is WrappedToken, RegulatedBase {
+         return super._delayedRelaxBits();
+     }
+ 
+-    function supportsInterface(bytes4 id) public view override(MetaTokenBase, RegulatedBase) returns (bool) {
+-        return super.supportsInterface(id);
+-    }
++    function supportsInterface(bytes4 id) public view override(MetaTokenBase, RegulatedBase) returns (bool) { fwdView(); }
+ 
+     function _regFeeTo(bytes32 feeTo, uint256 fee) internal view override(UAMetaTxBase, RegulatedBase) {
+         super._regFeeTo(feeTo, fee);
+@@ -86,19 +81,13 @@ contract WrappedRegulatedToken is WrappedToken, RegulatedBase {
+         super._regReceiver(recipient);
+     }
+ 
+-    function underlyings() public view override(WrappedToken, MetaTokenBase) returns (address[] memory) {
+-        return super.underlyings();
+-    }
++    function underlyings() public view override(WrappedToken, MetaTokenBase) returns (address[] memory) { fwdView(); }
+ 
+-    function rescue(address asset) external override(WrappedToken, MetaTokenBase) nonReentrant {
+-        WrappedLib.rescue(asset);
+-    }
++    function rescue(address asset) external override(WrappedToken, MetaTokenBase) nonReentrant { fwdCall(); }
+ 
+     function mtxSelectors()
+         public pure override(WrappedToken, IMetaTx, MetaTxBase) returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
+-    {
+-        return super.mtxSelectors();
+-    }
++    { fwdPure(); }
+ 
+     function _mtxRule(bytes4 sel) internal view override(WrappedToken, MetaTxBase) returns (MtxRule memory) {
+         return super._mtxRule(sel);
+diff --git a/smartcontracts/evm/src/regulated/WrappedZetherRegulatedToken.sol b/smartcontracts/evm/src/regulated/WrappedZetherRegulatedToken.sol
+index d76dd35b..b9f84f09 100644
+--- a/smartcontracts/evm/src/regulated/WrappedZetherRegulatedToken.sol
++++ b/smartcontracts/evm/src/regulated/WrappedZetherRegulatedToken.sol
+@@ -1,5 +1,6 @@
+ // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+ pragma solidity ^0.8.24;
++import {fwdCall, fwdView, fwdPure} from "../FwdSpike.sol";
+ 
+ import {WrappedZetherToken} from "../zether/WrappedZetherToken.sol";
+ import {ZetherLayer} from "../zether/ZetherLayer.sol";
+@@ -52,11 +53,7 @@ contract WrappedZetherRegulatedToken is WrappedZetherToken, RegulatedBase {
+     }
+ 
+     /// @notice As kind 9: the pending-rate drop and the mirror sync, each only once the disable applied.
+-    function disableFeature(uint8 bit) external override(WrappedZetherToken, RegulatedBase) nonReentrant {
+-        if (!GovernanceLib.disableFeature(bit, _govSubject(), _delayedRelaxBits())) return;
+-        if (bit == GovernanceBits.RATE_ADJUSTABLE) WrappedLib.dropPending();
+-        _regDisabled(bit);
+-    }
++    function disableFeature(uint8 bit) external override(WrappedZetherToken, RegulatedBase) nonReentrant { fwdCall(); }
+ 
+     // ------------------------------------------------------------------ restated for the two bases (solc: a function both
+     // paths mention): the regulated layer's, then the base kind's
+@@ -69,9 +66,7 @@ contract WrappedZetherRegulatedToken is WrappedZetherToken, RegulatedBase {
+         return super._delayedRelaxBits();
+     }
+ 
+-    function supportsInterface(bytes4 id) public view override(MetaTokenBase, RegulatedBase) returns (bool) {
+-        return super.supportsInterface(id);
+-    }
++    function supportsInterface(bytes4 id) public view override(MetaTokenBase, RegulatedBase) returns (bool) { fwdView(); }
+ 
+     /// @dev The pre row of the confidential kinds (spec §3.2): fee-bearing ⇒ `P`, `F(from)`; not fee-bearing: nothing
+     ///      read (U4), so a frozen envelope `from` may submit another's proof at fee `NONE`.
+@@ -109,19 +104,13 @@ contract WrappedZetherRegulatedToken is WrappedZetherToken, RegulatedBase {
+         super._regReceiver(recipient);
+     }
+ 
+-    function underlyings() public view override(WrappedZetherToken, MetaTokenBase) returns (address[] memory) {
+-        return super.underlyings();
+-    }
++    function underlyings() public view override(WrappedZetherToken, MetaTokenBase) returns (address[] memory) { fwdView(); }
+ 
+-    function rescue(address asset) external override(WrappedZetherToken, MetaTokenBase) nonReentrant {
+-        WrappedLib.rescue(asset);
+-    }
++    function rescue(address asset) external override(WrappedZetherToken, MetaTokenBase) nonReentrant { fwdCall(); }
+ 
+     function mtxSelectors()
+         public pure override(WrappedZetherToken, IMetaTx, MetaTxBase) returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
+-    {
+-        return super.mtxSelectors();
+-    }
++    { fwdPure(); }
+ 
+     function _mtxRule(bytes4 sel) internal view override(WrappedZetherToken, MetaTxBase) returns (MtxRule memory) {
+         return super._mtxRule(sel);
+diff --git a/smartcontracts/evm/src/zether/NormalZetherToken.sol b/smartcontracts/evm/src/zether/NormalZetherToken.sol
+index de867305..467602ed 100644
+--- a/smartcontracts/evm/src/zether/NormalZetherToken.sol
++++ b/smartcontracts/evm/src/zether/NormalZetherToken.sol
+@@ -1,5 +1,6 @@
+ // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+ pragma solidity ^0.8.24;
++import {fwdCall, fwdView, fwdPure} from "../FwdSpike.sol";
+ 
+ import {NormalToken} from "../metatx/NormalToken.sol";
+ import {MetaTokenBase} from "../metatx/MetaTokenBase.sol";
+@@ -75,9 +76,7 @@ contract NormalZetherToken is NormalToken, ZetherLayer {
+     function mtxSelectors()
+         public pure virtual override(NormalToken, IMetaTx, MetaTxBase)
+         returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
+-    {
+-        return ZetherLib.normalSelectors();
+-    }
++    { fwdPure(); }
+ 
+     function _mtxRule(bytes4 sel) internal view virtual override(NormalToken, MetaTxBase) returns (MtxRule memory) {
+         if (_isZetherOp(sel)) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 0);
+diff --git a/smartcontracts/evm/src/zether/WrappedZetherToken.sol b/smartcontracts/evm/src/zether/WrappedZetherToken.sol
+index bc62ed0f..3a760589 100644
+--- a/smartcontracts/evm/src/zether/WrappedZetherToken.sol
++++ b/smartcontracts/evm/src/zether/WrappedZetherToken.sol
+@@ -1,5 +1,6 @@
+ // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+ pragma solidity ^0.8.24;
++import {fwdCall, fwdView, fwdPure} from "../FwdSpike.sol";
+ 
+ import {WrappedToken} from "../metatx/WrappedToken.sol";
+ import {MetaTokenBase} from "../metatx/MetaTokenBase.sol";
+@@ -47,9 +48,7 @@ contract WrappedZetherToken is WrappedToken, ZetherLayer, IZetherWrappedToken {
+     {}
+ 
+     /// @dev The legs (`WrappedToken`), restated for the second base.
+-    function underlyings() public view virtual override(WrappedToken, MetaTokenBase) returns (address[] memory) {
+-        return super.underlyings();
+-    }
++    function underlyings() public view virtual override(WrappedToken, MetaTokenBase) returns (address[] memory) { fwdView(); }
+ 
+     function kind() public pure virtual override(WrappedToken, MetaTokenBase) returns (uint8) {
+         return TokenStore.KIND_WRAPPED_ZETHER;
+@@ -81,22 +80,12 @@ contract WrappedZetherToken is WrappedToken, ZetherLayer, IZetherWrappedToken {
+     /// @notice Pulls `amountIn` of leg `underlying` (native: `msg.value`) and credits the public-equivalent `minted`
+     ///         (the leg's rate on the measured delta) as `minted / shieldScale` shielded units to `toUA`, minting `minted`
+     ///         to `SHIELD_POOL`; `minted % shieldScale ≠ 0` ⇒ `AmountNotScaled` (the client sends an exact amount).
+-    function mtxWrapShield(address underlying, uint256 amountIn, bytes32 toUA) external payable nonReentrant {
+-        _regPayer();
+-        address m = _msgSender();
+-        (,, uint256 minted) = WrappedLib.wrap(WrappedLib.indexOf(underlying), amountIn, m, msg.value, totalSupply());
+-        uint256 scale = ZetherLib.$().shieldScale;
+-        if (minted % scale != 0) revert AmountNotScaled(minted, scale);
+-        ZetherLib.shield(ZetherTypes.UA.wrap(toUA), minted / scale, _REGISTRY, m);
+-        _poolMove(bytes32(0), MetaTxLib.pad(MetaTxLib.SHIELD_POOL), minted); // D19: minted to the pool
+-    }
++    function mtxWrapShield(address underlying, uint256 amountIn, bytes32 toUA) external payable nonReentrant { fwdCall(); }
+ 
+     /// @notice The signed `mtxWrapShield`; as on the generic path, relayed it takes no coin (the native leg reverts).
+     function mtxWrapShield(MetaTxLib.Envelope calldata e, address underlying, uint256 amountIn, bytes32 toUA, bytes calldata sig)
+         external nonReentrant returns (bytes memory)
+-    {
+-        return _named(WRAP_SHIELD_TYPEHASH, IConfidentialWrappedToken.mtxWrapShield.selector, e, abi.encode(underlying, amountIn, toUA), sig);
+-    }
++    { fwdCall(); }
+ 
+     /// @notice The unshield proof (`x.amount` and `x.recipient` in the statement; a direct call also binds
+     ///         `x.underlying` and `x.minOut`), then leg `x.underlying` pays `⌊amount·shieldScale·den/num⌋ ≥ minOut` from
+@@ -104,51 +93,23 @@ contract WrappedZetherToken is WrappedToken, ZetherLayer, IZetherWrappedToken {
+     ///         (`UALegNotLedger` otherwise, CTR-ZTH-51) — burning `amount·shieldScale` from `SHIELD_POOL`.
+     ///         The leg first (cheap), the proof and the debit, then the payout from the leg's reserve (CEI: the debit
+     ///         before the one outside call).
+-    function mtxUnshieldUnwrap(ZetherBurn calldata b, Unwrap calldata x, bytes calldata proof) external nonReentrant {
+-        proof;
+-        _regZetherSender(b.yFrom);
+-        _regName(b.beneficiaryUA);
+-        uint256 i = WrappedLib.indexOf(x.underlying);
+-        // a derived recipient: the leg's `transferToUA` checks it
+-        if (UAKinds.inNativeSpace(x.recipient)) _requirePayee(address(uint160(uint256(x.recipient))));
+-        uint256 wrapped = x.amount * ZetherLib.$().shieldScale;
+-        // the leg's quote before the proof: on a hybrid an empty reserve is ordinary (spec §5.4)
+-        WrappedLib.quoteTo(i, x.recipient, wrapped, x.minOut);
+-        // the binding and the proof: `ZetherWrappedLib`, from this call's own arguments (CTR-ZTH-94)
+-        uint256 fee = abi.decode(
+-            _lib(address(ZetherWrappedLib), ZetherWrappedLib.unshieldUnwrap.selector, abi.encode(_env())), (uint256));
+-        _poolMove(MetaTxLib.pad(MetaTxLib.SHIELD_POOL), bytes32(0), wrapped); // D19: burn from the pool
+-        _fromPool(ZetherTypes.UA.wrap(b.beneficiaryUA), fee);
+-        WrappedLib.payOutTo(i, x.recipient, wrapped, x.minOut);
+-    }
++    function mtxUnshieldUnwrap(ZetherBurn calldata b, Unwrap calldata x, bytes calldata proof) external nonReentrant { fwdCall(); }
+ 
+     /// @notice The signed form over `UAZetherUnshieldUnwrap` (R35: native and derived ids), the `Unwrap` leg a nested
+     ///         struct; `ZetherWrappedLib` builds the struct's words and the op's call from this call's own arguments
+     ///         (CTR-ZTH-94).
+     function mtxUnshieldUnwrap(MetaTxLib.UAEnvelope calldata e, ZetherBurn calldata b, Unwrap calldata x, bytes calldata proof,
+         IUARegistry.UASig calldata auth) external nonReentrant returns (bytes memory)
+-    {
+-        (b, x, proof);
+-        (bytes32 th, bytes memory words, bytes memory data) =
+-            _built(address(ZetherWrappedLib), ZetherWrappedLib.uaUnwrapCall.selector, false);
+-        return _namedCallUA(th, e, words, data, auth);
+-    }
++    { fwdCall(); }
+ 
+     /// @notice As `WrappedToken` (spec §6.2); restated for the second base.
+-    function rescue(address asset) external virtual override(WrappedToken, MetaTokenBase) nonReentrant {
+-        WrappedLib.rescue(asset);
+-    }
++    function rescue(address asset) external virtual override(WrappedToken, MetaTokenBase) nonReentrant { fwdCall(); }
+ 
+     /// @notice As `WrappedToken` (also cancels a pending rate change, CTR-TOK-06); restated for the second base.
+-    function disableFeature(uint8 bit) external virtual override(WrappedToken, GovernanceBase) nonReentrant {
+-        bool applied = GovernanceLib.disableFeature(bit, _govSubject(), _delayedRelaxBits());
+-        if (applied && bit == GovernanceBits.RATE_ADJUSTABLE) WrappedLib.dropPending();
+-    }
++    function disableFeature(uint8 bit) external virtual override(WrappedToken, GovernanceBase) nonReentrant { fwdCall(); }
+ 
+     /// @notice The collateral check of a rate change counts the shielded value too.
+-    function executeRate() external override nonReentrant {
+-        WrappedLib.executeRate(_govSubject(), totalSupply()); // the shielded value sits in SHIELD_POOL (D19)
+-    }
++    function executeRate() external override nonReentrant { fwdCall(); }
+ 
+     // ------------------------------------------------------------------ the layer's hooks
+ 
+@@ -175,9 +136,7 @@ contract WrappedZetherToken is WrappedToken, ZetherLayer, IZetherWrappedToken {
+     function mtxSelectors()
+         public pure virtual override(WrappedToken, IMetaTx, MetaTxBase)
+         returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
+-    {
+-        return ZetherWrappedLib.selectors();
+-    }
++    { fwdPure(); }
+ 
+     function _mtxRule(bytes4 sel) internal view virtual override(WrappedToken, MetaTxBase) returns (MtxRule memory) {
+         if (_isZetherOp(sel) || sel == IZetherWrappedToken.mtxUnshieldUnwrap.selector) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 0);
+diff --git a/smartcontracts/evm/src/zether/ZetherLayer.sol b/smartcontracts/evm/src/zether/ZetherLayer.sol
+index 9abb0a32..f40105b1 100644
+--- a/smartcontracts/evm/src/zether/ZetherLayer.sol
++++ b/smartcontracts/evm/src/zether/ZetherLayer.sol
+@@ -1,5 +1,6 @@
+ // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+ pragma solidity ^0.8.24;
++import {fwdCall, fwdView, fwdPure} from "../FwdSpike.sol";
+ 
+ import {ERC20MetaTx} from "../metatx/ERC20MetaTx.sol";
+ import {MetaTokenBase} from "../metatx/MetaTokenBase.sol";
+@@ -94,156 +95,90 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
+ 
+     // ------------------------------------------------------------------ views
+ 
+-    function verifier() external view returns (IZetherVerifier) { return TRANSFER_VERIFIER; }
+-    function burnVerifier() external view returns (IZetherBurnVerifier) { return BURN_VERIFIER; }
+-    function curve() external view returns (string memory) { return TRANSFER_VERIFIER.curveName(); }
+-    function disclosure() external view returns (ITransferDisclosure) { return _DISCLOSURE; }
+-    function shieldScale() external view returns (uint256) { return ZetherLib.$().shieldScale; }
+-    function maxDecryptableShielded() external view returns (uint256) { return ZetherLib.$().maxShielded; }
+-    function confidentialFee() external view returns (uint256) { return ZetherLib.$().confidentialFee; }
+-    function minDecoyFee() external view returns (uint256) { return ZetherLib.$().minDecoyFee; }
+-    function auditorKey() external view returns (bytes memory) { return ZetherLib.$().auditorKey; }
+-    function auditorMode() external view returns (ZetherTypes.AuditorMode) { return ZetherLib.$().auditorMode; }
+-    function disclosureMode() external view returns (ZetherTypes.DisclosureMode) { return ZetherLib.$().disclosureMode; }
+-    function totalShielded() external view returns (uint256) { return ZetherLib.$().totalShielded; }
++    function verifier() external view returns (IZetherVerifier) { fwdView(); }
++    function burnVerifier() external view returns (IZetherBurnVerifier) { fwdView(); }
++    function curve() external view returns (string memory) { fwdView(); }
++    function disclosure() external view returns (ITransferDisclosure) { fwdView(); }
++    function shieldScale() external view returns (uint256) { fwdView(); }
++    function maxDecryptableShielded() external view returns (uint256) { fwdView(); }
++    function confidentialFee() external view returns (uint256) { fwdView(); }
++    function minDecoyFee() external view returns (uint256) { fwdView(); }
++    function auditorKey() external view returns (bytes memory) { fwdView(); }
++    function auditorMode() external view returns (ZetherTypes.AuditorMode) { fwdView(); }
++    function disclosureMode() external view returns (ZetherTypes.DisclosureMode) { fwdView(); }
++    function totalShielded() external view returns (uint256) { fwdView(); }
+     /// @notice The record `R` for `disclosure()`, always from state: inline (BUNDLE, single) or read from its SSTORE2
+     ///         pointer (commit-reveal); empty for an unknown ref.
+-    function transferEntry(bytes32 entryRef) external view returns (bytes memory) {
+-        address ptr = ZetherLib.$().entryPtrs[entryRef];
+-        return ptr != address(0) ? SSTORE2.read(ptr) : ZetherLib.$().entries[entryRef];
+-    }
++    function transferEntry(bytes32 entryRef) external view returns (bytes memory) { fwdView(); }
+ 
+     /// @notice The sender memo of a commit-reveal entry (CTR-ZTH-50), empty otherwise.
+-    function transferMemo(bytes32 entryRef) external view returns (bytes memory) { return ZetherLib.$().memos[entryRef]; }
+-    function sendCounter(ZetherTypes.UA ua) external view returns (uint256) { return ZetherLib.$().acct[ua].sendCounter; }
++    function transferMemo(bytes32 entryRef) external view returns (bytes memory) { fwdView(); }
++    function sendCounter(ZetherTypes.UA ua) external view returns (uint256) { fwdView(); }
+ 
+     /// @notice Registered as this token's Zether kind (`registry.kindOf`, accounts.md §1.13).
+-    function registered(ZetherTypes.UA ua) external view returns (bool) {
+-        return ZetherLib.registeredOn(_REGISTRY, ua);
+-    }
++    function registered(ZetherTypes.UA ua) external view returns (bool) { fwdView(); }
+ 
+-    function accountState(ZetherTypes.UA ua) external view returns (AccountState memory) {
+-        ZetherLib.ZetherStorage storage s = ZetherLib.$();
+-        ZetherLib.Account storage a = s.acct[ua];
+-        uint256 p = s.p;
+-        return AccountState({
+-            accC: ZetherLib._pt(a.accC, p), accD: ZetherLib._pt(a.accD, p), pendingC: ZetherLib._pt(a.pendC, p),
+-            pendingD: ZetherLib._pt(a.pendD, p), accSeq: a.accSeq, pendingSeq: a.pendingSeq, sendCounter: a.sendCounter,
+-            modeNonce: a.modeNonce, mode: a.mode
+-        });
+-    }
++    function accountState(ZetherTypes.UA ua) external view returns (AccountState memory) { fwdView(); }
+ 
+     /// @notice CTR-ZTH-51, R35: the binding of every relayed proof on the merged entries, tag
+     ///         `SCAAS-ZETHER-UA-ENVELOPE-V1`, `from` as `bytes32` (native ids zero-padded); every envelope field except
+     ///         `data` (which carries the proof), plus `chainUid`. `executeMetaTransaction` keeps the address binding
+     ///         (`SCAAS-ZETHER-ENVELOPE-V1` over its `MetaTransaction`, CTR-ZTH-06), which clients compute; its view is in
+     ///         legacy/ua-mtx-merge/.
+-    function envelopeBinding(MetaTxLib.UAMetaTransaction calldata m) external view returns (bytes32) {
+-        return _uaEnvelopeBinding(m);
+-    }
++    function envelopeBinding(MetaTxLib.UAMetaTransaction calldata m) external view returns (bytes32) { fwdView(); }
+ 
+     // ------------------------------------------------------------------ shield (CTR-ZTH-35)
+ 
+     /// @notice Moves `amount · shieldScale` public units of the signer to `SHIELD_POOL` (D19: a transfer, not a burn);
+     ///         `pending[toUA] += [amount]G`. The Zether key is the UA (CTR-UA-30): `toUA` must be registered as this
+     ///         token's Zether kind. A derived UA signer pays from its UA-ledger balance.
+-    function mtxShield(bytes32 toUA, uint256 amount) external nonReentrant {
+-        _regPayer();
+-        address m = _msgSender();
+-        ZetherLib.shield(ZetherTypes.UA.wrap(toUA), amount, _REGISTRY, m);
+-        _poolMove(m == MetaTxLib.UA_POOL ? _ticketSubject() : MetaTxLib.pad(m), MetaTxLib.pad(MetaTxLib.SHIELD_POOL),
+-            amount * ZetherLib.$().shieldScale);
+-    }
++    function mtxShield(bytes32 toUA, uint256 amount) external nonReentrant { fwdCall(); }
+ 
+     /// @notice The signed `mtxShield` (TS-D14, TS-D16) over `UAShield`, an explicit `UASig` (R47).
+     function mtxShield(MetaTxLib.UAEnvelope calldata e, bytes32 toUA, uint256 amount, IUARegistry.UASig calldata auth)
+         external nonReentrant returns (bytes memory)
+-    {
+-        return _namedUA(MetaTxLib.UA_SHIELD_TYPEHASH, IConfidentialToken.mtxShield.selector, e, abi.encode(toUA, amount), auth);
+-    }
++    { fwdCall(); }
+ 
+     // ------------------------------------------------------------------ transfer (CTR-ZTH-37, CTR-ZTH-38)
+ 
+     /// @notice The token's default: the record stored (`BUNDLE` token) or commit-reveal (`COMPACT` token). The body is
+     ///         `ZetherLib`'s, which reads `t` and `proof` from this call's own arguments (CTR-ZTH-94).
+-    function mtxConfidentialTransfer(ZetherMulti calldata t, bytes calldata proof) external nonReentrant returns (bytes32) {
+-        proof;
+-        _regZetherSender(t.yFrom);
+-        _regName(t.beneficiaryUA);
+-        return _multi(t.beneficiaryUA, ZetherLib.defaultMode());
+-    }
++    function mtxConfidentialTransfer(ZetherMulti calldata t, bytes calldata proof) external nonReentrant returns (bytes32) { fwdCall(); }
+ 
+-    function mtxConfidentialTransferCompact(ZetherMulti calldata t, bytes calldata proof) external nonReentrant returns (bytes32) {
+-        proof;
+-        _regZetherSender(t.yFrom);
+-        _regName(t.beneficiaryUA);
+-        return _multi(t.beneficiaryUA, ZetherTypes.TransferMode.HASH);
+-    }
++    function mtxConfidentialTransferCompact(ZetherMulti calldata t, bytes calldata proof) external nonReentrant returns (bytes32) { fwdCall(); }
+ 
+-    function mtxConfidentialTransferSingle(ZetherSingle calldata t, bytes calldata proof) external nonReentrant returns (bytes32) {
+-        proof;
+-        _regZetherSender(t.yFrom);
+-        _regName(t.beneficiaryUA);
+-        (bytes32 ref, uint256 fee) = abi.decode(
+-            _lib(address(ZetherLib), ZetherLib.transferSingle.selector, abi.encode(_env())), (bytes32, uint256));
+-        _fromPool(ZetherTypes.UA.wrap(t.beneficiaryUA), fee);
+-        return ref;
+-    }
++    function mtxConfidentialTransferSingle(ZetherSingle calldata t, bytes calldata proof) external nonReentrant returns (bytes32) { fwdCall(); }
+ 
+     /// @notice The signed forms (TS-D14, TS-D16): the struct's `args` and `proof` by hash, as a wallet shows them;
+     ///         `ZetherLib` builds the struct's words and the op's call from this call's own arguments (CTR-ZTH-94).
+     function mtxConfidentialTransfer(MetaTxLib.UAEnvelope calldata e, ZetherMulti calldata t, bytes calldata proof,
+         IUARegistry.UASig calldata auth) external nonReentrant returns (bytes32)
+-    {
+-        (t, proof);
+-        return _ref(_namedZUA(ZetherLib.uaMultiCall.selector, false, e, auth));
+-    }
++    { fwdCall(); }
+ 
+     function mtxConfidentialTransferCompact(MetaTxLib.UAEnvelope calldata e, ZetherMulti calldata t, bytes calldata proof,
+         IUARegistry.UASig calldata auth) external nonReentrant returns (bytes32)
+-    {
+-        (t, proof);
+-        return _ref(_namedZUA(ZetherLib.uaMultiCall.selector, true, e, auth));
+-    }
++    { fwdCall(); }
+ 
+     function mtxConfidentialTransferSingle(MetaTxLib.UAEnvelope calldata e, ZetherSingle calldata t, bytes calldata proof,
+         IUARegistry.UASig calldata auth) external nonReentrant returns (bytes32)
+-    {
+-        (t, proof);
+-        return _ref(_namedZUA(ZetherLib.uaSingleCall.selector, false, e, auth));
+-    }
++    { fwdCall(); }
+ 
+     // ------------------------------------------------------------------ unshield
+ 
+     /// @notice The unshield statement binds `amount` and `recipient`; moves `amount · shieldScale` public units from
+     ///         `SHIELD_POOL` to `recipient` (D19): a padded address (not a pool) or a registered SIGNING UA, credited on
+     ///         the UA ledger (CTR-ZTH-51); then the fee to the beneficiary. The proof part is `ZetherLib`'s (CTR-ZTH-94).
+-    function mtxUnshield(ZetherBurn calldata b, uint256 amount, bytes32 recipient, bytes calldata proof) external nonReentrant {
+-        proof;
+-        _regZetherSender(b.yFrom);
+-        _regName(b.beneficiaryUA);
+-        if (amount != 0) _regReceiver(recipient);
+-        _requireRecipient(recipient);
+-        uint256 fee = abi.decode(_lib(address(ZetherLib), ZetherLib.unshield.selector, abi.encode(_env())), (uint256));
+-        _poolMove(MetaTxLib.pad(MetaTxLib.SHIELD_POOL), recipient, amount * ZetherLib.$().shieldScale);
+-        _fromPool(ZetherTypes.UA.wrap(b.beneficiaryUA), fee);
+-    }
++    function mtxUnshield(ZetherBurn calldata b, uint256 amount, bytes32 recipient, bytes calldata proof) external nonReentrant { fwdCall(); }
+ 
+     /// @notice The signed `mtxUnshield`: `amount` and `recipient` flat in the struct, as in the op.
+     function mtxUnshield(MetaTxLib.UAEnvelope calldata e, ZetherBurn calldata b, uint256 amount, bytes32 recipient,
+         bytes calldata proof, IUARegistry.UASig calldata auth) external nonReentrant returns (bytes memory)
+-    {
+-        (b, amount, recipient, proof);
+-        return _namedZUA(ZetherLib.uaUnshieldCall.selector, false, e, auth);
+-    }
++    { fwdCall(); }
+ 
+     // ------------------------------------------------------------------ roll-over (all four allowlisted, CTR-ZTH-34)
+ 
+     /// @notice The one aggregated pending of `ua` into `acc` for any `n ≥ 1` (`RollOverRange` for 0).
+-    function mtxRollOver(bytes32 ua, uint256 n) external nonReentrant {
+-        if (n == 0) revert RollOverRange(n);
+-        ZetherLib.rollOver(ZetherTypes.UA.wrap(ua));
+-    }
++    function mtxRollOver(bytes32 ua, uint256 n) external nonReentrant { fwdCall(); }
+ 
+     function mtxRollOverBatch(ZetherTypes.UA[] calldata uas) external nonReentrant {
+         ZetherLib.rollOverBatch(uas);
+@@ -269,31 +204,20 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
+     /// @notice The signed roll-overs; the owner's signature travels beside the struct, never in it (Appendix X.1).
+     function mtxRollOver(MetaTxLib.UAEnvelope calldata e, bytes32 ua, uint256 n, IUARegistry.UASig calldata auth)
+         external nonReentrant returns (bytes memory)
+-    {
+-        return _namedUA(UA_ROLL_OVER_TYPEHASH, IZetherToken.mtxRollOver.selector, e, abi.encode(ua, n), auth);
+-    }
++    { fwdCall(); }
+ 
+     function mtxRollOverBatch(MetaTxLib.UAEnvelope calldata e, ZetherTypes.UA[] calldata uas, IUARegistry.UASig calldata auth)
+         external nonReentrant returns (bytes memory)
+-    {
+-        (bytes memory words, bytes memory data) = _batchCall(uas);
+-        return _namedCallUA(UA_ROLL_OVER_BATCH_TYPEHASH, e, words, data, auth);
+-    }
++    { fwdCall(); }
+ 
+     function mtxRollOverSigned(MetaTxLib.UAEnvelope calldata e, ZetherTypes.UA ua, uint64 expectedPendingSeq, uint64 validUntilBlock,
+         IUARegistry.UASig calldata ownerSig, IUARegistry.UASig calldata auth) external nonReentrant returns (bytes memory)
+-    {
+-        (bytes memory words, bytes memory data) = _signedCall(ua, expectedPendingSeq, validUntilBlock, ownerSig);
+-        return _namedCallUA(UA_ROLL_OVER_SIGNED_TYPEHASH, e, words, data, auth);
+-    }
++    { fwdCall(); }
+ 
+     function mtxSetRollOverMode(MetaTxLib.UAEnvelope calldata e, ZetherTypes.UA ua, ZetherTypes.RollOverMode rollOverMode,
+         uint64 validUntilBlock, IUARegistry.UASig calldata ownerSig, IUARegistry.UASig calldata auth)
+         external nonReentrant returns (bytes memory)
+-    {
+-        (bytes memory words, bytes memory data) = _modeCall(ua, rollOverMode, validUntilBlock, ownerSig);
+-        return _namedCallUA(UA_SET_MODE_TYPEHASH, e, words, data, auth);
+-    }
++    { fwdCall(); }
+ 
+     // ------------------------------------------------------------------ internals
+ 
+diff --git a/smartcontracts/evm/src/zether/ZetherStatements.sol b/smartcontracts/evm/src/zether/ZetherStatements.sol
+index e0e09a88..eaf33841 100644
+--- a/smartcontracts/evm/src/zether/ZetherStatements.sol
++++ b/smartcontracts/evm/src/zether/ZetherStatements.sol
+@@ -1,5 +1,6 @@
+ // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+ pragma solidity ^0.8.24;
++import {fwdCall, fwdView, fwdPure} from "../FwdSpike.sol";
+ 
+ import {IMetaTx} from "../metatx/IMetaTx.sol";
+ import {IZetherToken} from "./IZetherToken.sol";
+@@ -24,20 +25,12 @@ contract ZetherStatements {
+         IZetherToken.ZetherMulti calldata t,
+         ZetherTypes.TransferMode mode,
+         bytes32 envelopeBinding
+-    ) external view returns (bytes memory) {
+-        ZetherLib.Ctx memory c = _ctx(token, ZetherLib.tagOf(envelopeBinding), envelopeBinding);
+-        ZetherLib.Acct memory a = _acct(token, ZetherLib.multiFrom(t));
+-        return ZetherLib.prepareMulti(c, a, t, mode).statement;
+-    }
++    ) external view returns (bytes memory) { fwdView(); }
+ 
+     /// @notice The single-recipient statement (`mtxConfidentialTransferSingle`).
+     function transferStatementSingle(address token, IZetherToken.ZetherSingle calldata t, bytes32 envelopeBinding)
+         external view returns (bytes memory)
+-    {
+-        ZetherLib.Ctx memory c = _ctx(token, ZetherLib.tagOf(envelopeBinding), envelopeBinding);
+-        ZetherLib.Acct memory a = _acct(token, ZetherLib.uaOf(t.yFrom));
+-        return ZetherLib.prepareSingle(c, a, t).statement;
+-    }
++    { fwdView(); }
+ 
+     /// @notice The unshield statement (`mtxUnshield`; built: `burnStatement`).
+     function unshieldStatement(
+@@ -46,9 +39,7 @@ contract ZetherStatements {
+         uint256 amount,
+         bytes32 recipient,
+         bytes32 envelopeBinding
+-    ) external view returns (bytes memory) {
+-        return _unshield(token, b, amount, recipient, ZetherLib.tagOf(envelopeBinding), envelopeBinding);
+-    }
++    ) external view returns (bytes memory) { fwdView(); }
+ 
+     /// @notice The statement of `mtxUnshieldUnwrap` on an `WRAPPED_ZETHER` token: relayed, the envelope binding;
+     ///         direct, `ZTX_V1_DIRECT` with the leg and `minOut` bound (`unwrapBinding`).
+@@ -60,17 +51,10 @@ contract ZetherStatements {
+         address u,
+         uint256 minOut,
+         bytes32 envelopeBinding
+-    ) external view returns (bytes memory) {
+-        if (envelopeBinding != bytes32(0)) {
+-            return _unshield(token, b, amount, recipient, ZetherLib.TAG_RELAYED, envelopeBinding);
+-        }
+-        return _unshield(token, b, amount, recipient, ZetherLib.TAG_DIRECT, unwrapBinding(u, minOut));
+-    }
++    ) external view returns (bytes memory) { fwdView(); }
+ 
+     /// @notice The binding word of a direct `mtxUnshieldUnwrap` (controller ruling, pending the owner).
+-    function unwrapBinding(address u, uint256 minOut) public pure returns (bytes32) {
+-        return ZetherLib.unwrapBinding(u, minOut);
+-    }
++    function unwrapBinding(address u, uint256 minOut) public pure returns (bytes32) { fwdPure(); }
+ 
+     function _unshield(
+         address token,

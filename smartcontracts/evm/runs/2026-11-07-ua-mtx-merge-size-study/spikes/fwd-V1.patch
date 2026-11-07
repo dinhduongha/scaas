@@ -1,0 +1,214 @@
+diff --git a/smartcontracts/evm/src/FwdSpike.sol b/smartcontracts/evm/src/FwdSpike.sol
+new file mode 100644
+index 00000000..07d16843
+--- /dev/null
++++ b/smartcontracts/evm/src/FwdSpike.sol
+@@ -0,0 +1,16 @@
++// SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
++pragma solidity ^0.8.24;
++// fwd_spike (size study only): an entry's calldata to its library, unchanged; the return data back.
++address constant FWD_LIB = 0x00000000000000000000000000000000DeaDBeef;
++function fwdCall() {
++    address l = FWD_LIB;
++    assembly ("memory-safe") {
++        calldatacopy(0, 0, calldatasize())
++        let ok := delegatecall(gas(), l, 0, calldatasize(), 0, 0)
++        returndatacopy(0, 0, returndatasize())
++        if iszero(ok) { revert(0, returndatasize()) }
++        return(0, returndatasize())
++    }
++}
++function fwdView() view { function() f = fwdCall; function() view v; assembly ("memory-safe") { v := f } v(); }
++function fwdPure() pure { function() f = fwdCall; function() pure v; assembly ("memory-safe") { v := f } v(); }
+diff --git a/smartcontracts/evm/src/metatx/MetaTokenBase.sol b/smartcontracts/evm/src/metatx/MetaTokenBase.sol
+index 28c0bfaa..59bc1e47 100644
+--- a/smartcontracts/evm/src/metatx/MetaTokenBase.sol
++++ b/smartcontracts/evm/src/metatx/MetaTokenBase.sol
+@@ -1,5 +1,6 @@
+ // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+ pragma solidity ^0.8.24;
++import {fwdCall, fwdView, fwdPure} from "../FwdSpike.sol";
+ 
+ import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
+ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+@@ -163,9 +164,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
+ 
+     /// @notice A client convention, not enforced (pay-meta-tax spec O3): a client that wants one payment per request
+     ///         signs on this lane at nonce 0; the contract does not care.
+-    function payLane(bytes32 payId) public pure returns (uint256) {
+-        return uint256(keccak256(abi.encodePacked("scaas.pay.lane", payId)));
+-    }
++    function payLane(bytes32 payId) public pure returns (uint256) { fwdPure(); }
+ 
+     // ------------------------------------------------------------------ named functions (CTR-MTX-09, CTR-UA-26)
+ 
+@@ -212,17 +211,10 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
+     ///         space of `mtxExecuteTransfer` (O3); `t.entryRef == metaPayId(meta)` (O11), `PaymentMeta` first.
+     function mtxPay(MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata auth, MetaTxLib.PayMeta calldata meta)
+         external nonReentrant returns (bool)
+-    {
+-        GovernanceLib.requireFeature(GovernanceBits.PAYABLE);
+-        _payMeta(t.entryRef, meta);
+-        _uaExecuteTransfer(t, 0, auth, 0, 0);
+-        return true;
+-    }
++    { fwdCall(); }
+ 
+     /// @notice CTR-MTX-26 (spec §3.1): the commitment of a `PayMeta`, under the versioned tag `scaas.pay.meta.v2`.
+-    function metaPayId(MetaTxLib.PayMeta calldata meta) public pure returns (bytes32) {
+-        return MtxPipelineLib.metaPayId(meta);
+-    }
++    function metaPayId(MetaTxLib.PayMeta calldata meta) public pure returns (bytes32) { fwdPure(); }
+ 
+     /// @dev Spec §3.2, in order: a non-zero salt, `schema == 0` iff the body is empty, `payNo` at most 256 bytes,
+     ///      `entryRef == metaPayId(m)`; then `PaymentMeta`. Every pay entry calls it after its gates, before any signature.
+@@ -247,12 +239,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
+         MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata payerAuth,
+         uint256 fee, address feeRecipient, uint256 rfValidUntil, IUARegistry.UASig calldata payeeAuth,
+         MetaTxLib.PayMeta calldata meta
+-    ) external nonReentrant returns (bool) {
+-        GovernanceLib.requireFeature(GovernanceBits.PAYABLE);
+-        _payMeta(t.entryRef, meta); // `entryRef` ≠ 0 with it; any lane (spec §2.5, O3)
+-        _receiverFee(t, payerAuth, fee, feeRecipient, rfValidUntil, payeeAuth);
+-        return true;
+-    }
++    ) external nonReentrant returns (bool) { fwdCall(); }
+ 
+     /// @dev `mtxPayReceiverFee`'s body after `_payMeta` (its seven arguments leave no stack for the locals).
+     function _receiverFee(
+@@ -284,20 +271,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
+     ///         once, a call may be paid by several), fee `NONE`, `ref` = the router's `relayRef(target, callData)`.
+     function mtxRelayFee(bytes32 from, address target, bytes32 callDataHash, bytes32 payee, uint256 value, uint256 batch,
+         uint256 nonce, uint256 validUntil, IUARegistry.UASig calldata auth) external nonReentrant
+-    {
+-        _regFeeTo(payee, value);
+-        MetaTxLib.UAMetaTransfer memory t;
+-        t.from = from;
+-        t.to = payee;
+-        t.value = value;
+-        t.entryRef = _relayRef(target, callDataHash);
+-        t.batch = batch;
+-        t.nonce = nonce;
+-        t.validUntil = validUntil;
+-        t.mode = MetaTxLib.MODE_RESTRICT_RELAYER;
+-        t.relayer = msg.sender;
+-        _uaExecuteTransfer(t, _relayHash(t, target, callDataHash), auth, 0, 0);
+-    }
++    { fwdCall(); }
+ 
+     function _relayRef(address target, bytes32 callDataHash) private view returns (bytes32) {
+         return keccak256(abi.encodePacked("scaas.relayfee", block.chainid, target, callDataHash));
+@@ -327,38 +301,12 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
+     function payWithFee(
+         address to, uint256 amount, FeeMode feeMode, uint256 fee, address feeRecipient, bytes32 entryRef,
+         MetaTxLib.PayMeta calldata meta
+-    ) external nonReentrant returns (bool) {
+-        GovernanceLib.requireFeature(GovernanceBits.PAYABLE);
+-        _payMeta(entryRef, meta);
+-        address payer = _msgSender();
+-        uint256 feeAmount = FeePolicy.compute(feeMode, amount, fee);
+-        FeePolicy.validateRecipient(feeMode, feeRecipient);
+-        _regFeeTo(MetaTxLib.pad(feeRecipient), feeAmount);
+-        if (feeAmount != 0) {
+-            if (feeRecipient == to) revert FeeRecipientIsPayee();
+-            _transfer(payer, feeRecipient, feeAmount);
+-        }
+-        _transfer(payer, to, amount);
+-        emit PaymentSettled(payer, to, amount, feeAmount, feeRecipient, entryRef);
+-        return true;
+-    }
++    ) external nonReentrant returns (bool) { fwdCall(); }
+ 
+     /// @notice `payWithFee` to a derived payee (CTR-UA-28): the caller pays `amount` into `to`'s UA balance and the fee
+     ///         on top to `feeRecipient` (an address: never the payee; `UA_POOL` and the token are refused by `_update`).
+     function payWithFeeToUA(
+         bytes32 to, uint256 amount, FeeMode feeMode, uint256 fee, address feeRecipient, bytes32 entryRef,
+         MetaTxLib.PayMeta calldata meta
+-    ) external nonReentrant returns (bool) {
+-        GovernanceLib.requireFeature(GovernanceBits.PAYABLE);
+-        _payMeta(entryRef, meta);
+-        _requireDerivedReceiver(to);
+-        bytes32 payer = MetaTxLib.pad(_msgSender());
+-        uint256 feeAmount = FeePolicy.compute(feeMode, amount, fee);
+-        FeePolicy.validateRecipient(feeMode, feeRecipient);
+-        _regFeeTo(MetaTxLib.pad(feeRecipient), feeAmount);
+-        if (feeAmount != 0) _transfer(_msgSender(), feeRecipient, feeAmount);
+-        _uaMove(payer, to, amount);
+-        emit UAPaymentSettled(payer, to, amount, feeAmount, feeRecipient, entryRef);
+-        return true;
+-    }
++    ) external nonReentrant returns (bool) { fwdCall(); }
+ }
+diff --git a/smartcontracts/evm/src/regulated/RegulatedBase.sol b/smartcontracts/evm/src/regulated/RegulatedBase.sol
+index 20a8b0eb..506a6e93 100644
+--- a/smartcontracts/evm/src/regulated/RegulatedBase.sol
++++ b/smartcontracts/evm/src/regulated/RegulatedBase.sol
+@@ -1,5 +1,6 @@
+ // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+ pragma solidity ^0.8.24;
++import {fwdCall, fwdView, fwdPure} from "../FwdSpike.sol";
+ 
+ import {MetaTokenBase} from "../metatx/MetaTokenBase.sol";
+ import {GovernanceLib} from "../governance/GovernanceLib.sol";
+@@ -125,15 +126,10 @@ abstract contract RegulatedBase is MetaTokenBase, IRegulatedToken {
+ 
+     /// @notice Bit 23 (pay-meta-tax spec §6.2): the one PERCENT rate; the factory's `noticePeriod()` read by the library
+     ///         from the `FACTORY` passed here, after the holder check (F-20).
+-    function setTaxRate(uint32 ratePpm) external nonReentrant {
+-        RegulatedLib.setTaxRate(ratePpm, FACTORY, _govSubject());
+-    }
++    function setTaxRate(uint32 ratePpm) external nonReentrant { fwdCall(); }
+ 
+     /// @notice Bit 23: the tax recipient, at once (Q4); the library's checks, then `R` here (F-15).
+-    function setTaxRecipient(bytes32 taxRecipient) external nonReentrant {
+-        RegulatedLib.setTaxRecipient(taxRecipient, _govSubject(), _REGISTRY);
+-        _eligible(taxRecipient);
+-    }
++    function setTaxRecipient(bytes32 taxRecipient) external nonReentrant { fwdCall(); }
+ 
+     /// @notice The payment `t` with its tax (pay-meta-tax spec §5.3, CTR-AS-18 proposed): the payer signs `UAPayWithTax`
+     ///         (`t`, `taxMode`, `tax`); `PAYABLE` and `TAX`; `PayMeta`; the tax checked (PERCENT against the effective rate,
+@@ -141,27 +137,13 @@ abstract contract RegulatedBase is MetaTokenBase, IRegulatedToken {
+     ///         payer -> payee `value - tax`, payer -> recipient `tax` (O13); `UAPaymentSettled` gross; `PaymentTaxed`.
+     function mtxPayWithTax(MetaTxLib.UAMetaTransfer calldata t, uint8 taxMode, uint256 tax, IUARegistry.UASig calldata auth,
+         MetaTxLib.PayMeta calldata meta) external nonReentrant returns (bool)
+-    {
+-        _taxGates(t.entryRef, meta);
+-        bytes32 r = _taxTo(t.to, t.value, taxMode, tax);
+-        bytes32 d = _uaExecuteTransfer(t, MtxPipelineLib.payWithTaxHash(t, taxMode, tax), auth, tax, r); // lever 6
+-        RegulatedLib.taxed(t.entryRef, t.to, r, t.from, taxMode, tax, d);
+-        return true;
+-    }
++    { fwdCall(); }
+ 
+     /// @notice The direct twin for a contract payer (spec §5.6, O13): the caller pays, no signature, nonce or fee; not on
+     ///         the generic self-call's allow-list (`mtxPayWithTax` is the relayed form).
+     function payWithTax(bytes32 to, uint256 amount, uint8 taxMode, uint256 tax, bytes32 entryRef,
+         MetaTxLib.PayMeta calldata meta) external nonReentrant returns (bool)
+-    {
+-        _taxGates(entryRef, meta);
+-        MtxPipelineLib._checkTo(_REGISTRY, to);
+-        bytes32 r = _taxTo(to, amount, taxMode, tax);
+-        bytes32 payer = MetaTxLib.pad(_msgSender());
+-        _uaSplit(payer, to, amount, tax, r);
+-        RegulatedLib.directTaxed(entryRef, to, r, payer, amount, taxMode, tax); // lever 8: the two events
+-        return true;
+-    }
++    { fwdCall(); }
+ 
+     function _taxGates(bytes32 entryRef, MetaTxLib.PayMeta calldata meta) private {
+         GovernanceLib.requireFeature(GovernanceBits.PAYABLE);
+@@ -191,12 +173,7 @@ abstract contract RegulatedBase is MetaTokenBase, IRegulatedToken {
+     function freezeOf(bytes32 account) external view returns (FreezeState memory) { return RegulatedLib.$().freezes[account]; }
+ 
+     /// @notice What a wallet and the node read to build and check a taxed payment (pay-meta-tax spec §6.2).
+-    function taxConfig() external view returns (TaxConfig memory c) {
+-        RegulatedLib.RegulatedStorage storage r = RegulatedLib.$();
+-        TaxRate memory t = r.taxRate;
+-        c = TaxConfig(r.taxRecipient, GovernanceLib.hasFeature(GovernanceBits.TAX), t.ratePpm, t.pendingPpm, t.eta,
+-            RegulatedLib.effectiveRate(), IOpenFactory(FACTORY).noticePeriod());
+-    }
++    function taxConfig() external view returns (TaxConfig memory c) { fwdView(); }
+     function isFrozen(bytes32 account) external view returns (bool) { return RegulatedLib.frozen(account); }
+ 
+     /// @notice `R(account)` with its reason (spec §3.1): 1 not attested or flags missing, 2 expired, 3 attester disabled,
