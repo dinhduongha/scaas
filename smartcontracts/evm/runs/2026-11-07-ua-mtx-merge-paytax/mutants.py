@@ -144,12 +144,30 @@ MUTANTS = {
                                  "test/as/invariant/PayTaxInvariants.t.sol"),
     "inv-rate-rises-at-once": ("t43", "src/regulated/RegulatedLib.sol", "return t.eta != 0 && block.timestamp >= t.eta",
                                "return t.eta != 0", "test/as/invariant/PayTaxInvariants.t.sol"),
+    # T42 (scaas-node, run with `cargo test --lib <filter>` under CAPPED_MEM=6G: the match is "cargo:<filter>")
+    "tax-signer-is-payee": ("t42", "../../scaas-node/src/typed.rs",
+                            'let payment_signer = if row.name == "UAPayWithTax" { 0 } else { 1 };', "let payment_signer = 1;",
+                            "cargo:tax_job_signer"),
+    "tax-inner-digest-is-job-id": ("t42", "../../scaas-node/src/typed.rs",
+                                   '.filter(|_| row.name == "UAReceiverFee")', "", "cargo:tax_job_signer"),
+    "pay-meta-mismatch-not-checked": ("t42", "../../scaas-node/src/typed.rs", "            if entry_ref != id {",
+                                      "            if entry_ref != id && false {", "cargo:pay_job_refusals"),
+    "node-checks-paylane": ("t42", "../../scaas-node/src/typed.rs",
+                            "        if let Some(m) = a.vals.get(\"meta\") {",
+                            "        if row.name == \"UAMetaTransfer\" && a.vals[\"batch\"].as_uint().map(|x| x.0) "
+                            "!= Some(crate::metatx::pay_lane(&a.vals[\"entryRef\"].as_fixed_bytes().map(|x| B256::from_slice(x.0)).unwrap())) {\n"
+                            "            bail!(\"PAY_LANE\");\n        }\n        if let Some(m) = a.vals.get(\"meta\") {",
+                            "cargo:pay_job_named_meta"),
+    "pay-downgraded-to-transfer": ("t42", "../../scaas-node/src/typed.rs",
+                                   '("UAMetaTransfer", "mtxPay", T,', '("UAMetaTransfer", "mtxExecuteTransfer", T,',
+                                   "cargo:pay_job_named_meta"),
 }
 
 
 def red_tests(log):
     forge = re.findall(r"\[FAIL[^\]]*\] (\w+)\(", log) + re.findall(r"\[FAIL[^\]]*\] (invariant_\w+)$", log, re.M)
     node = re.findall(r"^\u2716 (.+?) \(\d", log, re.M)  # node --test: "✖ <name> (<ms>)"
+    node += re.findall(r"^test (\S+) \.\.\. FAILED$", log, re.M)  # cargo test
     return sorted(set(forge) | set(n for n in node if n != "failing tests:"))
 
 
@@ -163,7 +181,10 @@ def run(mid):
     try:
         open(full, "w").write(src.replace(old, new))
         with open(logp, "w") as log:
-            if match.startswith("node:"):
+            if match.startswith("cargo:"):
+                rc = subprocess.call([CAPPED, "cargo", "test", "--lib", match[6:]], cwd=os.path.join(EVM, "../../scaas-node"),
+                                     env={**os.environ, "CAPPED_MEM": "6G"}, stdout=log, stderr=subprocess.STDOUT)
+            elif match.startswith("node:"):
                 rc = subprocess.call(["node", "--test", *match[5:].split()], cwd=os.path.join(EVM, "../../clients/clientkeys"),
                                      stdout=log, stderr=subprocess.STDOUT)
             else:
