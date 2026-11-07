@@ -78,7 +78,7 @@ abstract contract PqzReceiverSuite is PqzRegFixture {
         assertEq(_registryCalls(), 0, "no leg is asked R");
         (bool ok2,,) = _try(_opCall(2, 0, 0));
         assertTrue(ok2, "a single transfer to a denied account");
-        uint64 pc = tok.pqzAccount(bob).pendingCount;
+        uint64 pc = tok.pqzAccount(bob, 0).pendingCount;
         if (_isWrapped()) {
             usd.mint(address(this), 3 * SCALE);
             usd.approve(address(tok), 3 * SCALE);
@@ -87,7 +87,7 @@ abstract contract PqzReceiverSuite is PqzRegFixture {
             _pub(address(this), 3 * SCALE);
             tok.mtxShield(bob, 3);
         }
-        assertGe(tok.pqzAccount(bob).pendingCount, pc, "a shield to a denied account");
+        assertGe(tok.pqzAccount(bob, 0).pendingCount, pc, "a shield to a denied account");
         assertEq(tok.totalShielded(), BAL + 3, "credited");
     }
 

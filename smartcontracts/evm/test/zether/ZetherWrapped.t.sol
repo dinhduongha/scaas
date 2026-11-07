@@ -477,7 +477,7 @@ contract ZetherWrappedTest is ZetherFixture {
         bytes memory pl = _unshieldPayload(zt, alice);
         bytes memory st = stm.unshieldUnwrapStatement(address(z), _zBurn(pl, _none()), 2, bytes32(uint256(uint160(address(rc)))), address(0), 0, 0);
         bytes memory pr = _proveU(alice, st, 2, 3, _none(), zt);
-        rc.arm(address(z), abi.encodeCall(IConfidentialToken.mtxRollOver, (ZetherTypes.UA.unwrap(bob.ua), 1)), false);
+        rc.arm(address(z), abi.encodeCall(IZetherToken.mtxRollOver, (ZetherTypes.UA.unwrap(bob.ua), 1)), false);
         vm.expectRevert(IMetaTx.Reentrancy.selector);
         z.mtxUnshieldUnwrap(_zBurn(pl, _none()), IConfidentialWrappedToken.Unwrap(address(0), bytes32(uint256(uint160(address(rc)))), 2, 0), pr);
         rc.arm(address(0), "", true);
@@ -505,7 +505,7 @@ contract ZetherWrappedTest is ZetherFixture {
         hook.approve(address(z), 50 * SCALE);
         z.mtxWrapShield(address(hook), 30 * SCALE, ZetherTypes.UA.unwrap(alice.ua));
         z.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);
-        hook.arm(address(z), abi.encodeCall(IConfidentialToken.mtxRollOver, (ZetherTypes.UA.unwrap(bob.ua), 1)));
+        hook.arm(address(z), abi.encodeCall(IZetherToken.mtxRollOver, (ZetherTypes.UA.unwrap(bob.ua), 1)));
         vm.expectRevert(IMetaTx.Reentrancy.selector);
         z.mtxWrapShield(address(hook), SCALE, ZetherTypes.UA.unwrap(alice.ua));
         bytes memory pl = _unshieldPayload(ZetherLayer(address(z)), alice);
@@ -552,7 +552,7 @@ contract ZetherWrappedTest is ZetherFixture {
         assertEq(s[8], IZetherToken.mtxConfidentialTransferCompact.selector);
         assertEq(s[9], IZetherToken.mtxConfidentialTransferSingle.selector);
         assertEq(s[10], IZetherToken.mtxUnshield.selector);
-        assertEq(s[15], IConfidentialToken.mtxRollOver.selector);
+        assertEq(s[15], IZetherToken.mtxRollOver.selector);
         assertEq(s[16], IZetherToken.mtxRollOverBatch.selector);
         assertEq(s[17], IZetherToken.mtxRollOverSigned.selector);
         assertEq(s[18], IZetherToken.mtxSetRollOverMode.selector);
@@ -767,7 +767,7 @@ contract ZetherWrappedTest is ZetherFixture {
         vm.expectRevert(abi.encodeWithSelector(IUALedger.MetaTxUnknownOp.selector, bytes4(off)));
         w.mtxExecute(m, UACall.auth(m.from, auth));
         // the roll-over is on the UA allowlist of the kind (owner 2026-10-20), fee 0
-        m.data = abi.encodeCall(IConfidentialToken.mtxRollOver, (b, 1));
+        m.data = abi.encodeCall(IZetherToken.mtxRollOver, (b, 1));
         m.nonce = w.mtxNonce(b, 1);
         auth = _bobAuth(m);
         vm.prank(relayer);

@@ -147,8 +147,8 @@ abstract contract PqzFreezeSuite is PqzRegFixture {
         assertTrue(ok2, "a frozen leg of a multi transfer");
         _prepare(tok, bob);
         vm.roll(block.number + ROLL_AGE);
-        tok.mtxRollOver(bob, 1);
-        assertEq(tok.pqzAccount(bob).rolled, 1, "rolled over");
+        tok.mtxRollOver(bob, 0, 1);
+        assertEq(tok.pqzAccount(bob, 0).rolled, 1, "rolled over");
     }
 }
 

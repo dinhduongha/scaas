@@ -47,31 +47,31 @@ contract PqzNormalTest is PqzFixture {
     // ------------------------------------------------------------------ life cycle
 
     function _amt(PqzLayer t, bytes32 ua, uint64 i) internal view returns (uint256) {
-        return (t.pqzPending(ua, i) >> 96) & type(uint64).max;
+        return (t.pqzPending(ua, 0, i) >> 96) & type(uint64).max;
     }
 
     function test_lifecycle() public {
         _fund(tok, alice, 1000);
         assertEq(tok.balanceOf(address(this)), 0, "public units moved to the pool");
-        IPqzToken.AccountState memory a = tok.pqzAccount(alice);
+        IPqzToken.AccountState memory a = tok.pqzAccount(alice, 0);
         assertEq(a.pendingCount, 1, "a TRIVIAL entry");
         assertEq(_amt(tok, alice, 0), 1000);
-        assertEq(tok.pqzAcc(alice), new bytes(PqzCt.CT), "a new acc is Trivial(0)");
+        assertEq(tok.pqzAcc(alice, 0), new bytes(PqzCt.CT), "a new acc is Trivial(0)");
         assertEq(tok.totalShielded(), 1000);
         _assertConservation(tok);
 
         uint256 g = gasleft();
         (bytes32 ref, bytes memory out) = _transfer(tok, alice, bob, carol, 1, true);
         console2.log("mtxConfidentialTransfer (BUNDLE, auditor, fee, mocked proof) gas", g - gasleft());
-        a = tok.pqzAccount(alice);
-        assertEq(tok.pqzAcc(alice), accOf[alice], "acc = u || v_f");
+        a = tok.pqzAccount(alice, 0);
+        assertEq(tok.pqzAcc(alice, 0), accOf[alice], "acc = u || v_f");
         assertEq(a.sendCounter, 1);
         assertEq(a.accUnits, 1);
         assertEq(a.rolled, 1);
-        assertEq(tok.pqzAccount(bob).pendingCount, 1);
-        assertEq(tok.pqzPendingCt(bob, 0), _cut(out, 0, PqzCt.CT));
+        assertEq(tok.pqzAccount(bob, 0).pendingCount, 1);
+        assertEq(tok.pqzPendingCt(bob, 0, 0), _cut(out, 0, PqzCt.CT));
         assertEq(tok.balanceOfUA(carol), FEE * SCALE, "txFee: the beneficiary's public balance (D19)");
-        assertEq(tok.pqzAccount(carol).pendingCount, 0, "no TRIVIAL fee entry");
+        assertEq(tok.pqzAccount(carol, 0).pendingCount, 0, "no TRIVIAL fee entry");
         assertEq(ref, keccak256(abi.encode(keccak256("SCAAS-PQZ-ENTRY-V1"), block.chainid, PQZ_UID, address(tok), alice,
             uint256(0))), "entryRef");
         bytes memory r = _rOf(out, bob);
@@ -81,10 +81,10 @@ contract PqzNormalTest is PqzFixture {
         g = gasleft();
         _roll(tok, bob, 1);
         console2.log("mtxRollOver (1 credit, first after prepare) gas", g - gasleft());
-        assertEq(tok.pqzAcc(bob), accOf[bob]);
-        assertEq(tok.pqzAccount(bob).accUnits, 1);
+        assertEq(tok.pqzAcc(bob, 0), accOf[bob]);
+        assertEq(tok.pqzAccount(bob, 0).accUnits, 1);
         _transfer(tok, bob, alice, bytes32(0), 2, false);
-        assertEq(tok.pqzAccount(alice).pendingCount, 2);
+        assertEq(tok.pqzAccount(alice, 0).pendingCount, 2);
         _assertConservation(tok);
 
         // burn 100 from alice's pending credit (p = 2 ≥ rolled 1: one inline credit)
@@ -97,16 +97,16 @@ contract PqzNormalTest is PqzFixture {
         assertEq(tok.balanceOf(address(0xD00D)), 100 * SCALE);
         assertEq(tok.totalShielded(), 900 - 2 * FEE, "the burn and both fees left the pool");
         assertEq(tok.balanceOfUA(carol), 2 * FEE * SCALE, "the burn's txFee too");
-        assertEq(tok.pqzAccount(alice).rolled, 2);
-        assertEq(tok.pqzAccount(alice).sendCounter, 2);
-        assertEq(tok.pqzAcc(alice), nb, "acc = the burn's blob");
+        assertEq(tok.pqzAccount(alice, 0).rolled, 2);
+        assertEq(tok.pqzAccount(alice, 0).sendCounter, 2);
+        assertEq(tok.pqzAcc(alice, 0), nb, "acc = the burn's blob");
         _assertConservation(tok);
 
         // refresh: amount 0, recipient 0
         bytes memory nr = _blob(10, PqzCt.CT);
         pl = bytes.concat(abi.encode(uint256(2), block.number + 5, uint256(0), alice, bytes32(0)), nr);
         tok.mtxUnshield(_bs(pl), 0, bytes32(0), hex"c0de", _pqAuth(), "");
-        assertEq(tok.pqzAcc(alice), nr);
+        assertEq(tok.pqzAcc(alice, 0), nr);
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.RefreshRecipient.selector, address(1)));
         tok.mtxUnshield(_bs(pl), 0, bytes32(uint256(uint160(address(1)))), hex"c0de", _pqAuth(), "");
         _assertConservation(tok);
@@ -124,7 +124,7 @@ contract PqzNormalTest is PqzFixture {
         tok.mtxConfidentialTransferSingle(_ts(pl), hex"01", _pqAuth(), "");
         pend[alice].push(e);
         _roll(tok, alice, 1);
-        assertEq(tok.pqzAcc(alice), e);
+        assertEq(tok.pqzAcc(alice, 0), e);
         _public(tok, address(this), 1000 * SCALE);
         bytes memory out = _cut(txStmt, O_OUT, OUT_ON);
         pl = _payload(1, 1000, alice, bob, carol, out, "");
@@ -144,7 +144,7 @@ contract PqzNormalTest is PqzFixture {
         tok.mtxConfidentialTransferSingle(_ts(pl), proof, _pqAuth(), "");
         console2.log("mtxConfidentialTransfer of the vector statement (83,072 B, mocked proof) gas", g - gasleft());
         // the auth digest the registry saw is over this statement (a changed salt changes it, hence the proof)
-        assertEq(tok.pqzAccount(alice).sendCounter, 1);
+        assertEq(tok.pqzAccount(alice, 0).sendCounter, 1);
         assertEq(tok.balanceOf(address(this)), 0, "shieldIn taken from the signer");
         _assertConservation(tok);
     }
@@ -176,13 +176,13 @@ contract PqzNormalTest is PqzFixture {
     function test_inlineAboveRolled() public {
         _credits(alice, 3);
         (, bytes memory out) = _transfer(tok, alice, bob, bytes32(0), 50, true); // p = 3, inline = pending[0..3)
-        IPqzToken.AccountState memory a = tok.pqzAccount(alice);
+        IPqzToken.AccountState memory a = tok.pqzAccount(alice, 0);
         assertEq(a.rolled, 3);
         assertEq(a.floor, 3);
         assertEq(a.cleared, 3);
         assertEq(a.accUnits, 1);
-        assertEq(tok.pqzPending(alice, 0), 0, "dead slots deleted");
-        assertEq(tok.pqzAcc(alice), bytes.concat(_cut(out, 0, PqzCt.PK), _cut(out, PqzCt.CT, 128)));
+        assertEq(tok.pqzPending(alice, 0, 0), 0, "dead slots deleted");
+        assertEq(tok.pqzAcc(alice, 0), bytes.concat(_cut(out, 0, PqzCt.PK), _cut(out, PqzCt.CT, 128)));
     }
 
     /// Plan 5h D4: a debit at `p < rolled` un-rolls `[p, rolled)`; `acc` is the fresh `(u, v_f)` alone.
@@ -198,13 +198,13 @@ contract PqzNormalTest is PqzFixture {
         bytes memory t = ct.sum(_acc(alice), none, inl, 0);
         assertEq(_cut(st, O_T, PqzCt.CT), t, "T = acc - inline");
         tok.mtxConfidentialTransferSingle(_ts(pl), hex"01", _pqAuth(), "");
-        IPqzToken.AccountState memory a = tok.pqzAccount(alice);
-        assertEq(tok.pqzAcc(alice), bytes.concat(_cut(out, 0, PqzCt.PK), _cut(out, PqzCt.CT, 128)), "acc = (u, v_f)");
+        IPqzToken.AccountState memory a = tok.pqzAccount(alice, 0);
+        assertEq(tok.pqzAcc(alice, 0), bytes.concat(_cut(out, 0, PqzCt.PK), _cut(out, PqzCt.CT, 128)), "acc = (u, v_f)");
         assertEq(a.accUnits, 1);
         assertEq(a.rolled, 1, "un-rolled");
         assertEq(a.floor, 1);
         assertEq(a.cleared, 1);
-        assertEq(tok.pqzPendingCt(alice, 2), pend[alice][2], "pending again");
+        assertEq(tok.pqzPendingCt(alice, 0, 2), pend[alice][2], "pending again");
         // a later debit below floor is refused
         pl = _payload(0, 0, alice, bob, bytes32(0), _out(52, true), "");
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.PendingRange.selector, 0, 1, 3));
@@ -214,23 +214,23 @@ contract PqzNormalTest is PqzFixture {
     function test_rollover() public {
         _credits(bob, 17);
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.RollOverRange.selector, PqzCore.ROLL_MAX + 1));
-        tok.mtxRollOver(bob, PqzCore.ROLL_MAX + 1);
+        tok.mtxRollOver(bob, 0, PqzCore.ROLL_MAX + 1);
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.RollOverRange.selector, 0));
-        tok.mtxRollOver(bob, 0);
+        tok.mtxRollOver(bob, 0, 0);
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.AccNotPrepared.selector, bob));
-        tok.mtxRollOver(bob, 1);
+        tok.mtxRollOver(bob, 0, 1);
         _prepare(tok, bob);
         vm.roll(block.number + ROLL_AGE);
         uint256 g = gasleft();
         _roll(tok, bob, 16);
         console2.log("mtxRollOver (16 credits, first materialisation after prepare) gas", g - gasleft());
-        IPqzToken.AccountState memory a = tok.pqzAccount(bob);
+        IPqzToken.AccountState memory a = tok.pqzAccount(bob, 0);
         assertEq(a.rolled, 16);
         assertEq(a.accUnits, 16);
         assertEq(a.accHash, keccak256(_packed(accOf[bob])), "accHash: the packed acc (P46)");
-        assertEq(tok.pqzAcc(bob), accOf[bob]);
+        assertEq(tok.pqzAcc(bob, 0), accOf[bob]);
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.RollOverRange.selector, 2));
-        tok.mtxRollOver(bob, 2);
+        tok.mtxRollOver(bob, 0, 2);
     }
 
     // ------------------------------------------------------------------ the checks of §7.4
@@ -291,7 +291,7 @@ contract PqzNormalTest is PqzFixture {
         tok.mtxConfidentialTransferSingle(_ts(pl), hex"01", _pqAuth(), "");
         pl = _payload(16, 0, alice, bob, bytes32(0), _out(70, true), "");
         tok.mtxConfidentialTransferSingle(_ts(pl), hex"01", _pqAuth(), "");
-        assertEq(tok.pqzAccount(alice).rolled, 16);
+        assertEq(tok.pqzAccount(alice, 0).rolled, 16);
     }
 
     // ------------------------------------------------------------------ modes (CTR-PQZ-23 / -24)
@@ -440,7 +440,7 @@ contract PqzNormalTest is PqzFixture {
         assertEq(t2.proofSystemId(), PqzSet.PQZL_ID);
         _fund(t2, alice, 10);
         _transfer(t2, alice, bob, bytes32(0), 1, true);
-        assertEq(t2.pqzAccount(bob).pendingCount, 1, "the new release works");
+        assertEq(t2.pqzAccount(bob, 0).pendingCount, 1, "the new release works");
     }
 
     /// Review 5g-Z2 P2-3: the release env (`deps = [UAPqzVerifier]` with code, never Hedera) is checked by the
@@ -538,7 +538,7 @@ contract PqzNormalTest is PqzFixture {
         pl = _payloadFor(tok, alice, bob, bytes32(0), out);
         vm.prank(r);
         tok.mtxConfidentialTransferSingle(_ts(pl), hex"01", auth, "");
-        assertEq(tok.pqzAccount(alice).sendCounter, 1);
+        assertEq(tok.pqzAccount(alice, 0).sendCounter, 1);
         assertEq(tok.balanceOf(r), 10 * SCALE, "nothing pulled from the relayer");
     }
 

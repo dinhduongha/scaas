@@ -354,7 +354,7 @@ contract NamedShieldPqzTest is PqzFixture {
             shieldJson(h(u.from), alice, 10, 0, 0, u.validUntil)));
         vm.prank(relayer);
         w.mtxShield(u, alice, 10, UACall.auth(u.from, sig));
-        assertEq((w.pqzPending(alice, 0) >> 96) & type(uint64).max, 10, "a TRIVIAL entry");
+        assertEq((w.pqzPending(alice, 0, 0) >> 96) & type(uint64).max, 10, "a TRIVIAL entry");
         assertEq(w.balanceOf(signer), 90 * SCALE);
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
         w.mtxShield(u, alice, 10, UACall.auth(u.from, sig));
@@ -369,7 +369,7 @@ contract NamedShieldPqzTest is PqzFixture {
         vm.roll(block.number + 1); // a new pending entry, not the block's TRIVIAL one
         vm.prank(relayer);
         w.mtxShield(d, alice, 20, UACall.auth(d.from, _mlAuth()));
-        assertEq((w.pqzPending(alice, 1) >> 96) & type(uint64).max, 20);
+        assertEq((w.pqzPending(alice, 0, 1) >> 96) & type(uint64).max, 20);
         assertEq(w.balanceOfUA(from), 20 * SCALE);
         assertEq(w.mtxNonce(from, 0), 1);
     }
@@ -423,7 +423,7 @@ contract NamedShieldPqzTest is PqzFixture {
         vm.prank(u.relayer);
         w.mtxShield(u, toUA, amount, UACall.auth(u.from, sig));
         assertEq(w.mtxNonce(u.from, u.batch), 1);
-        assertEq((w.pqzPending(toUA, 0) >> 96) & type(uint64).max, amount);
+        assertEq((w.pqzPending(toUA, 0, 0) >> 96) & type(uint64).max, amount);
     }
 }
 

@@ -211,7 +211,7 @@ contract ZetherRelayTest is ZetherFixture {
             else if (s[i] == NormalToken.burn.selector) m.data = abi.encodeCall(NormalToken.burn, (7));
             else {
                 m.data = _zetherOpCall(s[i], bal, _addrBinding(tok, m));
-                if (s[i] != IConfidentialToken.mtxShield.selector && s[i] != IConfidentialToken.mtxRollOver.selector
+                if (s[i] != IConfidentialToken.mtxShield.selector && s[i] != IZetherToken.mtxRollOver.selector
                     && s[i] != IZetherToken.mtxRollOverBatch.selector) bal -= 10;
             }
             _exec(m, _sign(PAYER_PK, m));
@@ -279,7 +279,7 @@ contract ZetherRelayTest is ZetherFixture {
             IMetaTx.cancelNonce.selector, NormalToken.burn.selector, IConfidentialToken.mtxShield.selector,
             IZetherToken.mtxConfidentialTransfer.selector, IZetherToken.mtxConfidentialTransferCompact.selector,
             IZetherToken.mtxConfidentialTransferSingle.selector,
-            IZetherToken.mtxUnshield.selector, IConfidentialToken.mtxRollOver.selector, IZetherToken.mtxRollOverBatch.selector,
+            IZetherToken.mtxUnshield.selector, IZetherToken.mtxRollOver.selector, IZetherToken.mtxRollOverBatch.selector,
             IZetherToken.mtxRollOverSigned.selector, IZetherToken.mtxSetRollOverMode.selector
         ];
         assertEq(s.length, 11);

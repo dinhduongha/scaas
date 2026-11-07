@@ -271,7 +271,7 @@ contract ZetherUA5cTest is ZetherFixture {
     function test_relayedRollOver_addressEnvelope() public {
         _fund(tok, alice, 5);
         uint64 s = tok.accountState(alice.ua).accSeq;
-        _relayAddr(abi.encodeCall(IConfidentialToken.mtxRollOver, (_id(alice), 1)), 0);
+        _relayAddr(abi.encodeCall(IZetherToken.mtxRollOver, (_id(alice), 1)), 0);
         assertEq(tok.accountState(alice.ua).accSeq, s + 1, "rolled");
         assertEq(tok.balanceOf(relayer), 0, "fee 0");
         assertEq(tok.balanceOf(payer), 1000);
@@ -288,7 +288,7 @@ contract ZetherUA5cTest is ZetherFixture {
     function test_relayedRollOver_uaEnvelope() public {
         _fund(tok, alice, 5);
         uint64 s = tok.accountState(alice.ua).accSeq;
-        _relayUA(bob, abi.encodeCall(IConfidentialToken.mtxRollOver, (_id(alice), 1)), 0);
+        _relayUA(bob, abi.encodeCall(IZetherToken.mtxRollOver, (_id(alice), 1)), 0);
         assertEq(tok.accountState(alice.ua).accSeq, s + 1);
         assertEq(tok.balanceOfUA(_id(bob)), 10, "fee 0");
         _fund(tok, alice, 5);

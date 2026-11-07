@@ -48,8 +48,7 @@ library PqzCore {
         uint16 accV;
         uint32 accUnits;
         uint8 flags; // MAT | PREP0 | PREP1
-        uint64 sendCounter;
-        bytes32 accHash;
+        bytes32 accHash; // (group 3g: `sendCounter` left the account, `PqzStorage.sendCounter` per UA)
         mapping(uint64 => uint256) pending;
         // P46: `PqzCt.ACC_WORDS` slots, each `not(packed stream word)`; written non-zero (`ACC_MARK`) by `prepareAcc`, never
         // zeroed (D3: a reduced `acc` never stores 0, see `PqzCt.ACC_WORDS`)
@@ -68,10 +67,11 @@ library PqzCore {
         uint256 confidentialFee;
         uint256 totalShielded;
         bytes32 auditorUA;
-        mapping(bytes32 => Account) acct;
+        mapping(bytes32 => mapping(uint64 => Account)) acct; // group 3g (KV-6): per `(ua, key version)`
         mapping(bytes32 => address) entryPtr; // the op blob `R ‖ v_f` of a transfer, both storage modes (D11)
         mapping(bytes32 => bytes) memos; // commit-reveal: the sender memo
         uint256 minDecoyFee; // op 7: the least per-leg `decoyFee` (owner 2026-10-20), immutable
+        mapping(bytes32 => uint64) sendCounter; // group 3g (KV-6): one per UA, advanced by a debit of any version
     }
 
     /// @notice The token's immutables a call needs and the statement's `envelopeBinding` word (0 direct).
@@ -98,6 +98,9 @@ library PqzCore {
         bytes32 recipient;
         uint64 sendCounter;
         uint64 p;
+        uint64 kv; // the debited key version (`keyVersion`, KV-8), captured with its key once in `_common`
+        uint64 cur; // the sender's current version, read in the same call
+        uint64 verT; // op 1: the receiver's current version, read once with its key (KV-7)
         uint256 validUntil;
         uint256 auditorOn;
         uint256 shieldIn; // the same-call top-up from the signer's public balance (`plainUsed` before 5h, header word 480)
@@ -107,6 +110,7 @@ library PqzCore {
         address keyT;
         address keyA;
         address[] keys; // op 7: the legs' key pointers
+        uint64[] vers; // op 7: the legs' current versions, read once with their keys (KV-7)
         bytes32[] rec; // op 7: the legs' UAs
         uint256 legs; // op 7: M
         uint256 decoyFee; // op 7: the sender's per-leg fee `d`
@@ -219,14 +223,40 @@ library PqzCore {
         e.binding = keccak256(abi.encode(e.binding == 0 ? TAG_DIRECT_MODE : e.binding, uint8(e.mode)));
     }
 
-    /// @dev Not the sender; registered; the auditor's key when `auditorOn`, and then neither party is the auditor (F-4).
-    ///      No credit cap: credits are never refused (plan 5h D7).
+    /// @dev Not the sender, except the migration (KV-9: `to == from` from a stale version, the credit in `(from, current)`);
+    ///      a stale version pays no one else (KV-8, `StaleKeyVersion`); registered; the auditor's key when `auditorOn`, and
+    ///      then neither party is the auditor (F-4). The receiver's key and current version read once (KV-7). No credit cap:
+    ///      credits are never refused (plan 5h D7).
     function _receiver(Op memory o, Env memory e) internal view {
-        if (o.from == o.to) revert IPqzToken.SelfTransfer();
+        if (o.from == o.to) {
+            if (o.kv == o.cur) revert IPqzToken.SelfTransfer();
+        } else if (o.kv != o.cur) {
+            revert IPqzToken.StaleKeyVersion(o.from, o.kv, o.cur);
+        }
         _noAuditorParty(o, o.from);
         _noAuditorParty(o, o.to);
-        o.keyT = _creditKey(e.registry, o.to);
+        (o.keyT, o.verT) = _creditKey(e.registry, o.to);
         if (o.auditorOn == 1) o.keyA = _keyPtr(e.registry, $().auditorUA);
+        _distinct(o);
+    }
+
+    /// @dev KV-9 (Codex #1, F-7): the keys a statement names (`pk_f`, `pk_t` or every leg's, `pk_a`) pairwise distinct, by
+    ///      the code hash of their pointers (already read, warm): equal keys under one randomness cancel the masks. Reverts
+    ///      `KeyReused` naming the UA of the later key of the pair.
+    function _distinct(Op memory o) internal view {
+        uint256 m = o.op == 7 ? o.legs : 1;
+        uint256 n = 1 + m + o.auditorOn;
+        bytes32[] memory h = new bytes32[](n);
+        h[0] = o.keyF.codehash;
+        for (uint256 j; j < m; ++j) h[1 + j] = (o.op == 7 ? o.keys[j] : o.keyT).codehash;
+        if (o.auditorOn == 1) h[n - 1] = o.keyA.codehash;
+        for (uint256 i = 1; i < n; ++i) {
+            for (uint256 k; k < i; ++k) {
+                if (h[k] == h[i]) {
+                    revert IPqzToken.KeyReused(i > m ? $().auditorUA : o.op == 7 ? o.rec[i - 1] : o.to);
+                }
+            }
+        }
     }
 
     /// @dev F-4 (R0 review 2026-10-25): with the auditor copies on, the auditor UA is neither the sender nor a recipient
@@ -298,6 +328,7 @@ library PqzCore {
         o.mode = mode;
         o.op = 1;
         (o.p, o.validUntil, o.shieldIn, o.from) = (t.p, t.validUntilBlock, t.shieldIn, t.fromUA);
+        o.kv = t.keyVersion;
         o.to = t.toUA;
         o.ben = t.beneficiaryUA;
         o.salt = t.salt;
@@ -325,18 +356,19 @@ library PqzCore {
         address ptr = SSTORE2.write(blob);
         _debit(o, ptr, 16, len - PqzCt.VP);
         ref = _sent(o);
-        _credit(o.to, ptr, 16, 16 + PqzCt.PKP, ref);
+        _credit(o.to, o.verT, ptr, 16, 16 + PqzCt.PKP, ref);
         _entry(o, ref, ptr, t.sealedMemo);
         emit IConfidentialToken.ConfidentialTransfer(ref, o.from, o.to, o.ben, o.fee, o.sendCounter, ptr);
     }
 
-    /// @dev `pending[ua] ← (blob, uOff, vOff, block)` (D2); never refused (D7).
-    function _credit(bytes32 ua, address ptr, uint256 uOff, uint256 vOff, bytes32 ref) internal {
-        Account storage b = $().acct[ua];
+    /// @dev `pending[ua][v] ← (blob, uOff, vOff, block)` (D2), `v` the receiver's current version read with its key
+    ///      (KV-7); never refused (D7).
+    function _credit(bytes32 ua, uint64 v, address ptr, uint256 uOff, uint256 vOff, bytes32 ref) internal {
+        Account storage b = $().acct[ua][v];
         uint64 i = b.pendingCount;
         b.pending[i] = uint256(uint160(ptr)) << 96 | uOff << 80 | vOff << 64 | block.number;
         b.pendingCount = i + 1;
-        emit IPqzToken.Credited(ua, i, ref);
+        emit IPqzToken.Credited(ua, i, v, ref);
     }
 
     /// @dev A TRIVIAL entry `(amount, block)` (D18): merged into the tail when that is TRIVIAL, of this block and still
@@ -345,8 +377,8 @@ library PqzCore {
     ///      that predicted an entry of its own block and holds it in its window can have the debit reverted by a
     ///      same-block merge before it (`T` changes, the proof fails); wallets use the same-call `shieldIn` instead
     ///      (pinned by `test_trivial_sameBlockResidual`). Only shields write one (fees are public, D19).
-    function _trivial(bytes32 ua, uint256 amount, address from) internal {
-        Account storage b = $().acct[ua];
+    function _trivial(bytes32 ua, uint64 v, uint256 amount, address from) internal {
+        Account storage b = $().acct[ua][v];
         uint64 n = b.pendingCount;
         if (n != 0) {
             uint64 i = n - 1;
@@ -424,18 +456,21 @@ library PqzCore {
         if (a == 0 && s.auditorMode == ZetherTypes.AuditorMode.FULL) revert IPqzToken.AuditorRequired();
         o.outLen = PqzCt.PK * o.groups + PqzCt.V * (m * (1 + a) + 1);
         (o.p, o.validUntil, o.shieldIn, o.from) = (t.p, t.validUntilBlock, t.shieldIn, t.fromUA);
+        o.kv = t.keyVersion;
         o.ben = t.beneficiaryUA;
         o.salt = t.salt;
         o.to = keccak256(abi.encodePacked(o.rec)); // recipientsHash, header word 192
         if (memo != 0) o.memoHash = keccak256(abi.encodePacked(t.salt, t.sealedMemo));
     }
 
-    /// @dev Every leg: not the sender, pairwise distinct, a PQZ holder (its key); the auditor's key when `auditorOn`,
-    ///      and then neither the sender nor a leg is the auditor (F-4, `_noAuditorParty`).
+    /// @dev Every leg: not the sender (at any version), pairwise distinct, a PQZ holder (its key and current version, read
+    ///      once, KV-7); a stale version pays no one (KV-8); the auditor's key when `auditorOn`, and then neither the sender
+    ///      nor a leg is the auditor (F-4, `_noAuditorParty`); the statement's keys pairwise distinct (KV-9).
     function _legs(Op memory o, Env memory e) internal view {
         PqzStorage storage s = $();
         uint256 m = o.legs;
         o.keys = new address[](m);
+        o.vers = new uint64[](m);
         _noAuditorParty(o, o.from);
         for (uint256 j; j < m; ++j) {
             bytes32 ua = o.rec[j];
@@ -444,9 +479,11 @@ library PqzCore {
             for (uint256 k; k < j; ++k) {
                 if (o.rec[k] == ua) revert IPqzToken.DuplicateRecipient(ua);
             }
-            o.keys[j] = _creditKey(e.registry, ua);
+            (o.keys[j], o.vers[j]) = _creditKey(e.registry, ua);
         }
+        if (o.kv != o.cur) revert IPqzToken.StaleKeyVersion(o.from, o.kv, o.cur);
         if (o.auditorOn == 1) o.keyA = _keyPtr(e.registry, s.auditorUA);
+        _distinct(o);
     }
 
     /// @dev `header ‖ pk_f ‖ pk_0 … pk_{M−1} ‖ [pk_a] ‖ T ‖ out` (header word 192 `recipientsHash`, 320 `M`),
@@ -509,7 +546,7 @@ library PqzCore {
         uint256 us = 16 + PqzCt.PKP * o.groups;
         uint256 ls = 32 + PqzCt.VP * (1 + o.auditorOn);
         for (uint256 j; j < o.legs; ++j) {
-            _credit(o.rec[j], ptr, 16 + PqzCt.PKP * _groupOf(j, o.auditorOn), us + ls * j, ref);
+            _credit(o.rec[j], o.vers[j], ptr, 16 + PqzCt.PKP * _groupOf(j, o.auditorOn), us + ls * j, ref);
         }
     }
 
@@ -580,8 +617,11 @@ library PqzCore {
         o.amount = e.amount;
         o.recipient = e.recipient;
         (o.p, o.validUntil, o.shieldIn, o.from) = (b.p, b.validUntilBlock, b.shieldIn, b.fromUA);
+        o.kv = b.keyVersion;
         o.ben = b.beneficiaryUA;
         _common(o, e);
+        // KV-8: a stale version only refreshes (no amount leaves it to anyone)
+        if (o.kv != o.cur && e.amount != 0) revert IPqzToken.StaleKeyVersion(o.from, o.kv, o.cur);
         buf = _burnBuffer(o, e, b, hint, proofLen);
     }
 
@@ -731,13 +771,25 @@ library PqzCore {
         o.registry = e.registry;
         o.chainUid = e.chainUid;
         o.domainSeparator = e.domainSeparator;
-        o.keyF = _keyPtr(e.registry, o.from);
+        o.keyF = _debitKey(o, e.registry);
         if (o.ben != 0) {
             // C0-7 (owner option (1)): any registered UA-ledger receiver; the fee is a public credit, no PQZ key needed
             if (IUARegistry(e.registry).kindOf(o.ben) == 0) revert IPqzToken.AccountNotRegistered(o.ben);
             o.fee = s.confidentialFee;
         }
-        o.sendCounter = s.acct[o.from].sendCounter;
+        o.sendCounter = s.sendCounter[o.from];
+    }
+
+    /// @dev KV-8, the capture-once debit: the sender's current version and key from one `pqzKeyOf`, and, for a stale
+    ///      `keyVersion`, that version's from `pqzKeyAt`; the key passes the mode's check (PRECOMPILE: proven and
+    ///      `PqzCt.PK + 1` bytes of code, else `AccountNotRegistered`). `keyVersion` above current: `KeyVersionUnknown` (no
+    ///      credited state). `T` and the settled account are `acct[from][keyVersion]`'s only (`_total`, `_debit`).
+    function _debitKey(Op memory o, address registry) internal view returns (address ptr) {
+        bool proven;
+        (o.cur, ptr,, proven) = IUARegistry(registry).pqzKeyOf(o.from);
+        if (o.kv > o.cur) revert IPqzToken.KeyVersionUnknown(o.from, o.kv);
+        if (o.kv != o.cur) (ptr,, proven) = IUARegistry(registry).pqzKeyAt(o.from, o.kv);
+        if (!proven || ptr.code.length != PqzCt.PK + 1) revert IPqzToken.AccountNotRegistered(o.from);
     }
 
     /// @dev `T = acc ± Σ pending[min(p, rolled) .. max(p, rolled)) + Trivial(digits(shieldIn))`, everything read from
@@ -746,7 +798,7 @@ library PqzCore {
     ///      pendingCount]`, `|p − rolled| ≤ INLINE_MAX`, `unitsOf(T) = accUnits + (p − rolled) + 1 ≤ K_MAX`.
     ///      A rollover between prove and submit leaves `T` unchanged (D4 / D6, CTR-PQZ-08).
     function _total(Op memory o, bytes calldata hint) internal view returns (bytes memory t) {
-        Account storage a = $().acct[o.from];
+        Account storage a = $().acct[o.from][o.kv];
         uint64 r = a.rolled;
         uint64 p = o.p;
         if (p < a.floor || p > a.pendingCount) revert IPqzToken.PendingRange(p, a.floor, a.pendingCount);
@@ -856,19 +908,19 @@ library PqzCore {
     ///      the same public units into and out of `SHIELD_POOL`; checked, so a fee or burn above it reverts).
     function _debit(Op memory o, address ptr, uint256 uOff, uint256 vOff) internal {
         PqzStorage storage s = $();
-        Account storage a = s.acct[o.from];
+        Account storage a = s.acct[o.from][o.kv];
         uint64 p = o.p;
         (a.accBlob, a.accU, a.accV, a.accUnits, a.flags) = (ptr, uint16(uOff), uint16(vOff), 1, a.flags & ~MAT);
         (a.rolled, a.floor) = (p, p);
         for (uint64 i = a.cleared; i < p; ++i) delete a.pending[i];
         a.cleared = p;
         s.totalShielded = s.totalShielded + o.shieldIn - o.fee - o.amount;
-        emit IPqzToken.Debited(o.from, p, p, ptr);
+        emit IPqzToken.Debited(o.from, o.kv, p, p, ptr);
     }
 
-    /// @dev `sendCounter++`; the debit's `entryRef` (counter before the increment).
+    /// @dev `sendCounter[from]++` (one per UA, every version: J2); the debit's `entryRef` (counter before the increment).
     function _sent(Op memory o) internal returns (bytes32) {
-        $().acct[o.from].sendCounter = o.sendCounter + 1;
+        $().sendCounter[o.from] = o.sendCounter + 1;
         return entryRefOf(o.chainUid, o.from, o.sendCounter);
     }
 
@@ -881,8 +933,10 @@ library PqzCore {
     ///      token a single-key `mldsa44` / `mldsa65` / `fndsa512` / `mldsa87` / `fndsa1024` UA only (owner 2026-10-27, C0-2: the calldata of a
     ///      debit by any other holder, an `msig` quorum, may not fit one transaction). The fee beneficiary is exempt (a
     ///      public credit).
-    function _creditKey(address registry, bytes32 ua) internal view returns (address ptr) {
-        ptr = _keyPtr(registry, ua);
+    function _creditKey(address registry, bytes32 ua) internal view returns (address ptr, uint64 v) {
+        bool proven;
+        (v, ptr,, proven) = IUARegistry(registry).pqzKeyOf(ua); // KV-7: the key and its version, one read
+        if (!proven || ptr.code.length != PqzCt.PK + 1) revert IPqzToken.AccountNotRegistered(ua);
         if ($().psid == PqzSet.PQZH_ID) {
             uint16 k = IUARegistry(registry).kindOf(ua);
             if (k != UAKinds.MLDSA44 && k != UAKinds.MLDSA65 && k != UAKinds.FNDSA512 && k != UAKinds.MLDSA87
@@ -893,11 +947,18 @@ library PqzCore {
         }
     }
 
-    /// @dev The PQZ key pointer of a holder (`AccountNotRegistered` otherwise, for a key not proven on this chain
+    /// @dev The current PQZ key pointer of a holder (`AccountNotRegistered` otherwise, for a key not proven on this chain
     ///      (UA8-D9: `recordOf` lists unproven keys too), or for a key of another length).
     function _keyPtr(address registry, bytes32 ua) internal view returns (address ptr) {
         bool proven;
         (, ptr,, proven) = IUARegistry(registry).pqzKeyOf(ua);
+        if (!proven || ptr.code.length != PqzCt.PK + 1) revert IPqzToken.AccountNotRegistered(ua);
+    }
+
+    /// @dev Version `v`'s key pointer under the same check (KV-10: rollover and prepare of any version that passed it).
+    function _keyAt(address registry, bytes32 ua, uint64 v) internal view returns (address ptr) {
+        bool proven;
+        (ptr,, proven) = IUARegistry(registry).pqzKeyAt(ua, v);
         if (!proven || ptr.code.length != PqzCt.PK + 1) revert IPqzToken.AccountNotRegistered(ua);
     }
 

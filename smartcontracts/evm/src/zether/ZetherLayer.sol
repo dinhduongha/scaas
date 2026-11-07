@@ -270,7 +270,7 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
     function mtxRollOver(MetaTxLib.UAEnvelope calldata e, bytes32 ua, uint256 n, IUARegistry.UASig calldata auth)
         external nonReentrant returns (bytes memory)
     {
-        return _namedUA(UA_ROLL_OVER_TYPEHASH, IConfidentialToken.mtxRollOver.selector, e, abi.encode(ua, n), auth);
+        return _namedUA(UA_ROLL_OVER_TYPEHASH, IZetherToken.mtxRollOver.selector, e, abi.encode(ua, n), auth);
     }
 
     function mtxRollOverBatch(MetaTxLib.UAEnvelope calldata e, ZetherTypes.UA[] calldata uas, IUARegistry.UASig calldata auth)
@@ -431,7 +431,7 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
         return sel == IConfidentialToken.mtxShield.selector || sel == IZetherToken.mtxConfidentialTransfer.selector
             || sel == IZetherToken.mtxConfidentialTransferCompact.selector
             || sel == IZetherToken.mtxConfidentialTransferSingle.selector || sel == IZetherToken.mtxUnshield.selector
-            || sel == IConfidentialToken.mtxRollOver.selector || sel == IZetherToken.mtxRollOverBatch.selector
+            || sel == IZetherToken.mtxRollOver.selector || sel == IZetherToken.mtxRollOverBatch.selector
             || sel == IZetherToken.mtxRollOverSigned.selector || sel == IZetherToken.mtxSetRollOverMode.selector;
     }
 

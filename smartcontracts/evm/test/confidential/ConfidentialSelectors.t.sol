@@ -12,9 +12,14 @@ import {IPqzToken, IPqzWrappedToken} from "../../src/pqz/IPqzToken.sol";
 contract ConfidentialSelectorsTest is Test {
     string constant G1 = "(bytes32,bytes32,bytes32,bytes32)";
 
+    /// Group 3g T52, meaning: the rollovers take each layer's parameters (§10 row 21), so the shared interface is `mtxShield`
+    /// alone: its id 0x69d6bb06 -> `mtxShield`'s selector; Zether keeps `mtxRollOver(bytes32,uint256)` in `IZetherToken`, PQZ
+    /// answers `mtxRollOver(bytes32,uint64,uint256)` and `mtxPrepareAcc(bytes32,uint64,uint256)`.
     function test_sharedSelectorsEqualOnBothLayers() public pure {
-        assertEq(IConfidentialToken.mtxShield.selector ^ IConfidentialToken.mtxRollOver.selector, type(IConfidentialToken).interfaceId);
-        assertEq(type(IConfidentialToken).interfaceId, bytes4(0x69d6bb06));
+        assertEq(IConfidentialToken.mtxShield.selector, type(IConfidentialToken).interfaceId);
+        assertEq(IZetherToken.mtxRollOver.selector, bytes4(keccak256("mtxRollOver(bytes32,uint256)")));
+        assertEq(IPqzToken.mtxRollOver.selector, bytes4(keccak256("mtxRollOver(bytes32,uint64,uint256)")));
+        assertEq(IPqzToken.mtxPrepareAcc.selector, bytes4(keccak256("mtxPrepareAcc(bytes32,uint64,uint256)")));
         assertEq(IConfidentialWrappedToken.mtxWrapShield.selector, type(IConfidentialWrappedToken).interfaceId);
         assertEq(type(IPqzWrappedToken).interfaceId, IPqzWrappedToken.mtxUnshieldUnwrap.selector);
         assertEq(type(IZetherWrappedToken).interfaceId, IZetherWrappedToken.mtxUnshieldUnwrap.selector);
@@ -23,7 +28,6 @@ contract ConfidentialSelectorsTest is Test {
     /// The shared ABI, ids `bytes32`.
     function test_signaturesPinned() public pure {
         assertEq(IConfidentialToken.mtxShield.selector, bytes4(keccak256("mtxShield(bytes32,uint256)")));
-        assertEq(IConfidentialToken.mtxRollOver.selector, bytes4(keccak256("mtxRollOver(bytes32,uint256)")));
         assertEq(IConfidentialWrappedToken.mtxWrapShield.selector,
             bytes4(keccak256("mtxWrapShield(address,uint256,bytes32)")));
         assertEq(IConfidentialToken.Shielded.selector, keccak256("Shielded(bytes32,address,uint256,uint64)"));
@@ -35,9 +39,10 @@ contract ConfidentialSelectorsTest is Test {
     /// read from `typed_ops.json` in `PqzTyped.t.sol`.
     function test_pqzExplicitSignaturesPinned() public pure {
         string memory tail = ",bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes)";
-        string memory single = "(uint64,uint256,uint256,bytes32,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes)";
-        string memory multi = "(uint64,uint256,uint256,bytes32,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes)";
-        string memory burn = "(uint64,uint256,uint256,bytes32,bytes32,bytes,bytes)";
+        // group 3g T52: `uint64 keyVersion` after `fromUA` in the three args structs
+        string memory single = "(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes)";
+        string memory multi = "(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes)";
+        string memory burn = "(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes,bytes)";
         assertEq(IPqzToken.mtxConfidentialTransfer.selector, bytes4(keccak256(bytes(string.concat("mtxConfidentialTransfer(", multi, tail)))));
         assertEq(IPqzToken.mtxConfidentialTransferCompact.selector,
             bytes4(keccak256(bytes(string.concat("mtxConfidentialTransferCompact(", multi, tail)))));

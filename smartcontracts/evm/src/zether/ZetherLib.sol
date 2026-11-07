@@ -280,7 +280,7 @@ library ZetherLib {
         (s[4], c[4]) = (IZetherToken.mtxConfidentialTransferCompact.selector, abs);
         (s[5], c[5]) = (IZetherToken.mtxConfidentialTransferSingle.selector, abs);
         (s[6], c[6]) = (IZetherToken.mtxUnshield.selector, abs);
-        (s[7], c[7]) = (IConfidentialToken.mtxRollOver.selector, abs);
+        (s[7], c[7]) = (IZetherToken.mtxRollOver.selector, abs);
         (s[8], c[8]) = (IZetherToken.mtxRollOverBatch.selector, abs);
         (s[9], c[9]) = (IZetherToken.mtxRollOverSigned.selector, abs);
         (s[10], c[10]) = (IZetherToken.mtxSetRollOverMode.selector, abs);

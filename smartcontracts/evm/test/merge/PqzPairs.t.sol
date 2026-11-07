@@ -239,9 +239,9 @@ contract PqzPairsTest is PqzNamedBase {
     function _eachProofEntry(bytes32 from) internal {
         for (uint256 k; k < 2; ++k) {
             _refused(address(tok), _singleCd(from, k == 1, false), "single: address tag");
-            uint64 c = tok.pqzAccount(alice).sendCounter;
+            uint64 c = tok.pqzAccount(alice, 0).sendCounter;
             _settles(address(tok), _singleCd(from, k == 1, true), "single: UA tag");
-            assertEq(tok.pqzAccount(alice).sendCounter, c + 1, "single settled");
+            assertEq(tok.pqzAccount(alice, 0).sendCounter, c + 1, "single settled");
             _refused(address(tok), _multiCd(from, k == 1, false), "multi: address tag");
             _settles(address(tok), _multiCd(from, k == 1, true), "multi: UA tag");
         }
@@ -309,7 +309,7 @@ contract PqzPairsTest is PqzNamedBase {
         sig = ecdsa(PK, MtxDigest.metaTx(address(tok), m));
         vm.prank(relayer);
         assertTrue(tok.executeMetaTransaction(m, sig));
-        assertEq(tok.pqzAccount(alice).sendCounter, 1);
+        assertEq(tok.pqzAccount(alice, 0).sendCounter, 1);
     }
 
     function test_pqzMtxExecuteBindsUATag() public {
@@ -326,7 +326,7 @@ contract PqzPairsTest is PqzNamedBase {
         s.signature = ecdsa(PK, tok.mtxDigest(um));
         vm.prank(relayer);
         tok.mtxExecute(um, s);
-        assertEq(tok.pqzAccount(alice).sendCounter, 1);
+        assertEq(tok.pqzAccount(alice, 0).sendCounter, 1);
     }
 
     // ------------------------------------------------------------------ fee 0 on every merged entry (invariant 4)
@@ -365,21 +365,25 @@ contract PqzPairsTest is PqzNamedBase {
 
     /// The prepare and the rollover of `test_pqzFeeZero_everyMergedEntry` (bob holds the shield's and the transfers' credits).
     function _feeZeroStatics() internal {
-        string memory f = '{"name":"from","type":"bytes32"},{"name":"ua","type":"bytes32"},{"name":"half","type":"uint256"}';
+        // group 3g T52 (KV-10): `UAPrepareAcc` / `UARollOver` carry `uint64 keyVersion` after `ua` (version 0 here)
+        string memory f = '{"name":"from","type":"bytes32"},{"name":"ua","type":"bytes32"},{"name":"keyVersion","type":"uint64"},'
+            '{"name":"half","type":"uint256"}';
         MetaTxLib.UAEnvelope memory u = _u(nId, address(tok));
-        IUARegistry.UASig memory s = _auth(address(tok), u, "UAPrepareAcc", f, '', string.concat('"ua":', h(bob), ',"half":', n(0)));
+        IUARegistry.UASig memory s =
+            _auth(address(tok), u, "UAPrepareAcc", f, '', string.concat('"ua":', h(bob), ',"keyVersion":', n(0), ',"half":', n(0)));
         vm.prank(relayer);
-        IPqzMergedT5(address(tok)).mtxPrepareAcc(u, bob, 0, s);
-        assertEq(tok.pqzAccount(bob).flags & 2, 2, "prepareAcc");
-        tok.mtxPrepareAcc(bob, 1);
+        tok.mtxPrepareAcc(u, bob, 0, 0, s);
+        assertEq(tok.pqzAccount(bob, 0).flags & 2, 2, "prepareAcc");
+        tok.mtxPrepareAcc(bob, 0, 1);
         vm.roll(block.number + ROLL_AGE);
-        f = '{"name":"from","type":"bytes32"},{"name":"ua","type":"bytes32"},{"name":"n","type":"uint256"}';
+        f = '{"name":"from","type":"bytes32"},{"name":"ua","type":"bytes32"},{"name":"keyVersion","type":"uint64"},'
+            '{"name":"n","type":"uint256"}';
         u = _u(nId, address(tok));
-        s = _auth(address(tok), u, "UARollOver", f, '', string.concat('"ua":', h(bob), ',"n":', n(1)));
-        uint64 r = tok.pqzAccount(bob).rolled;
+        s = _auth(address(tok), u, "UARollOver", f, '', string.concat('"ua":', h(bob), ',"keyVersion":', n(0), ',"n":', n(1)));
+        uint64 r = tok.pqzAccount(bob, 0).rolled;
         vm.prank(relayer);
-        IPqzMergedT5(address(tok)).mtxRollOver(u, bob, 1, s);
-        assertEq(tok.pqzAccount(bob).rolled, r + 1, "rollOver");
+        tok.mtxRollOver(u, bob, 0, 1, s);
+        assertEq(tok.pqzAccount(bob, 0).rolled, r + 1, "rollOver");
     }
 
     // ------------------------------------------------------------------ never lose ciphertext
@@ -391,8 +395,8 @@ contract PqzPairsTest is PqzNamedBase {
         bytes memory blob = ref_.blobSingle(pl, false);
         bytes32 ref = abi.decode(_settles(address(tok), _singleCd(nId, false, true), "single"), (bytes32));
         assertEq(tok.pqzEntryBlob(ref), blob, "the op blob in state");
-        assertEq(tok.pqzPendingCt(bob, tok.pqzAccount(bob).pendingCount - 1), _cut(pl, T_OUT, PqzCt.CT), "the credit u || v_t");
-        assertEq(tok.pqzAcc(alice), bytes.concat(_cut(pl, T_OUT, PqzCt.PK), _cut(pl, T_OUT + PqzCt.CT, PqzCt.V)), "acc u || v_f");
+        assertEq(tok.pqzPendingCt(bob, 0, tok.pqzAccount(bob, 0).pendingCount - 1), _cut(pl, T_OUT, PqzCt.CT), "the credit u || v_t");
+        assertEq(tok.pqzAcc(alice, 0), bytes.concat(_cut(pl, T_OUT, PqzCt.PK), _cut(pl, T_OUT + PqzCt.CT, PqzCt.V)), "acc u || v_f");
 
         pl = _mPl(tok, alice, _legsN(2), true, _mem(2), 51);
         blob = ref_.blobMulti(pl, true);
@@ -461,8 +465,10 @@ contract PqzPairsTest is PqzNamedBase {
 
     /// The PQZ interfaces declare no signed entry and no binding view, so no id moves (R36).
     function test_pqzInterfaceIdsArePinned() public pure {
-        assertEq(type(IPqzToken).interfaceId, bytes4(0x5313635f), "IPqzToken");
-        assertEq(type(IConfidentialToken).interfaceId, bytes4(0x69d6bb06), "IConfidentialToken");
+        // group 3g T52: the three args structs gain `keyVersion`, the versioned rollover / prepare and views; the shared interface
+        // is `mtxShield` alone (§10 row 21): IPqzToken 0x5313635f -> 0xd37edfc5, IConfidentialToken 0x69d6bb06 -> mtxShield's
+        assertEq(type(IPqzToken).interfaceId, bytes4(0xd37edfc5), "IPqzToken");
+        assertEq(type(IConfidentialToken).interfaceId, IConfidentialToken.mtxShield.selector, "IConfidentialToken");
         assertEq(type(IPqzWrappedToken).interfaceId, IPqzWrappedToken.mtxUnshieldUnwrap.selector, "IPqzWrappedToken");
     }
 }

@@ -29,10 +29,10 @@ abstract contract PqzRefreshSuite is PqzRegFixture {
         (bool ok0, bytes memory r0) = address(tok).call(_opCall(4, 0, 0));
         assertFalse(ok0);
         assertEq(r0, abi.encodeWithSelector(IRegulatedToken.TokenPaused.selector, until), "control: the unshield is refused");
-        bytes memory before = tok.pqzAcc(alice);
+        bytes memory before = tok.pqzAcc(alice, 0);
         (bool ok,) = address(tok).call(_refresh(0, 90));
         assertTrue(ok, "the refresh is open under F and P");
-        assertTrue(keccak256(tok.pqzAcc(alice)) != keccak256(before), "the refresh's debit is written");
+        assertTrue(keccak256(tok.pqzAcc(alice, 0)) != keccak256(before), "the refresh's debit is written");
     }
 
     /// `shieldIn ≠ 0` on a refresh: `_regPayer()` (the caller) under `P` refused `TokenPaused`, frozen refused `Frozen`;

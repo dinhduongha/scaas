@@ -63,7 +63,7 @@ library ZetherWrappedLib {
         (s[12], c[12]) = (IZetherWrappedToken.mtxUnshieldUnwrap.selector, ABSOLUTE);
         (s[13], c[13]) = (bytes4(keccak256("wrapToUA(address,uint256,bytes32)")), ABSOLUTE);
         (s[14], c[14], a[14]) = (bytes4(keccak256("unwrapToUA(address,uint256,bytes32,uint256)")), AMOUNT, 1);
-        (s[15], c[15]) = (IConfidentialToken.mtxRollOver.selector, ABSOLUTE);
+        (s[15], c[15]) = (IZetherToken.mtxRollOver.selector, ABSOLUTE);
         (s[16], c[16]) = (IZetherToken.mtxRollOverBatch.selector, ABSOLUTE);
         (s[17], c[17]) = (IZetherToken.mtxRollOverSigned.selector, ABSOLUTE);
         (s[18], c[18]) = (IZetherToken.mtxSetRollOverMode.selector, ABSOLUTE);

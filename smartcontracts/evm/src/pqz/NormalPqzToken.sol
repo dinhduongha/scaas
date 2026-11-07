@@ -88,7 +88,7 @@ contract NormalPqzToken is NormalToken, PqzLayer {
         (s[5], c[5]) = (IPqzToken.mtxUnshield.selector, FEE_CLASS_ABSOLUTE);
         (s[6], c[6]) = (IPqzToken.mtxConfidentialTransferSingle.selector, FEE_CLASS_ABSOLUTE);
         (s[7], c[7]) = (IPqzToken.mtxConfidentialTransferSingleCompact.selector, FEE_CLASS_ABSOLUTE);
-        (s[8], c[8]) = (IConfidentialToken.mtxRollOver.selector, FEE_CLASS_ABSOLUTE);
+        (s[8], c[8]) = (IPqzToken.mtxRollOver.selector, FEE_CLASS_ABSOLUTE);
         (s[9], c[9]) = (IPqzToken.mtxPrepareAcc.selector, FEE_CLASS_ABSOLUTE);
     }
 

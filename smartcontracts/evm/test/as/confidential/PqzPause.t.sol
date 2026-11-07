@@ -59,10 +59,10 @@ abstract contract PqzPauseSuite is PqzRegFixture {
         _prepare(tok, alice);
         _prepare(tok, bob);
         vm.roll(block.number + ROLL_AGE);
-        tok.mtxRollOver(alice, 1);
-        tok.mtxRollOver(bob, 1);
-        assertEq(tok.pqzAccount(alice).rolled, 1);
-        assertEq(tok.pqzAccount(bob).rolled, 1);
+        tok.mtxRollOver(alice, 0, 1);
+        tok.mtxRollOver(bob, 0, 1);
+        assertEq(tok.pqzAccount(alice, 0).rolled, 1);
+        assertEq(tok.pqzAccount(bob, 0).rolled, 1);
     }
 }
 

@@ -42,8 +42,8 @@ contract PqzStateVectorsTest is PqzSlots {
     // ------------------------------------------------------------------ the state
 
     function _single(string memory name, bytes32 from, bytes32 to, uint256 seed, bool aud, bool hash) internal {
-        uint64 c = tok.pqzAccount(from).sendCounter;
-        bytes memory pl = _payload(tok.pqzAccount(from).pendingCount, 0, from, to, bytes32(0), _out(seed, aud), hash ? _memo() : bytes(""));
+        uint64 c = tok.pqzAccount(from, 0).sendCounter;
+        bytes memory pl = _payload(tok.pqzAccount(from, 0).pendingCount, 0, from, to, bytes32(0), _out(seed, aud), hash ? _memo() : bytes(""));
         bytes32 ref = hash
             ? tok.mtxConfidentialTransferSingleCompact(_ts(pl), hex"c0de", _pqAuth(), "")
             : tok.mtxConfidentialTransferSingle(_ts(pl), hex"c0de", _pqAuth(), "");
@@ -52,11 +52,11 @@ contract PqzStateVectorsTest is PqzSlots {
 
     function _mpl(bytes32 from, bytes32[] memory rec, uint256 seed, bool aud, bool hash) internal view returns (bytes memory) {
         bytes memory memo = hash ? bytes.concat(salt, _slice(_blob(seed + 1, 2 + 40 * rec.length + 32), 0, 2 + 40 * rec.length)) : bytes("");
-        return _mpayload(tok.pqzAccount(from).pendingCount, 0, from, bytes32(0), rec, _blob(seed, _outLen(rec.length, aud)), memo);
+        return _mpayload(tok.pqzAccount(from, 0).pendingCount, 0, from, bytes32(0), rec, _blob(seed, _outLen(rec.length, aud)), memo);
     }
 
     function _multi(string memory name, bytes32 from, bytes32[] memory rec, uint256 seed, bool aud, bool hash) internal {
-        uint64 c = tok.pqzAccount(from).sendCounter;
+        uint64 c = tok.pqzAccount(from, 0).sendCounter;
         IPqzToken.PqzMultiArgs memory t = _ms(_mpl(from, rec, seed, aud, hash));
         bytes32 ref = hash
             ? tok.mtxConfidentialTransferCompact(t, hex"c0de", _pqAuth(), "")
@@ -88,7 +88,7 @@ contract PqzStateVectorsTest is PqzSlots {
         _multi("op7 M=2 audited carol->[alice,bob]", carol, _legs(alice, bob), 21, true, false);
         _prepare(tok, alice);
         vm.roll(vm.getBlockNumber() + ROLL_AGE);
-        tok.mtxRollOver(alice, 3); // alice: acc materialised, entry 3 still pending
+        tok.mtxRollOver(alice, 0, 3); // alice: acc materialised, entry 3 still pending
         _single("op1 carol->alice", carol, alice, 12, false, false);
         _shield(alice, 5);
         _single("op1 carol->bob", carol, bob, 13, false, false);
@@ -155,7 +155,7 @@ contract PqzStateVectorsTest is PqzSlots {
     }
 
     function _account(string memory name, bytes32 ua, uint256 shieldIn, bool last) internal {
-        IPqzToken.AccountState memory a = tok.pqzAccount(ua);
+        IPqzToken.AccountState memory a = tok.pqzAccount(ua, 0);
         uint64 p = _p(a);
         (bytes32 kr, address kp) = _keyRecord(ua);
         _w(string.concat("{\"name\": ", _q(name), ", \"ua\": ", _hx32(ua), ", \"block\": ", vm.toString(block.number),
@@ -166,17 +166,18 @@ contract PqzStateVectorsTest is PqzSlots {
         _blobRow(kp, true);
         if (a.flags & 1 == 0 && a.accBlob != address(0)) _blobRow(a.accBlob, false);
         for (uint64 i = a.rolled; i < p; ++i) {
-            uint256 e = tok.pqzPending(ua, i);
+            uint256 e = tok.pqzPending(ua, 0, i);
             if (uint16(e >> 64) != 0) _blobRow(address(uint160(e >> 96)), false);
         }
         _w(string.concat("], \"T\": ", _hx(_tOf(ua, p, shieldIn)), "}", last ? "" : ","));
     }
 
-    /// The account struct's slots 0..3, the pending slots of `[rolled, p)`, the `acc` slots (materialised only).
+    /// The account struct's slots 0..2 of `(ua, version 0)` (group 3g T52: `sendCounter` left the struct, `sendCounter[ua]` is
+    /// its own field, the row's `sendCounter`), the pending slots of `[rolled, p)`, the `acc` slots (materialised only).
     function _words(bytes32 ua, IPqzToken.AccountState memory a, uint64 p) internal {
         uint256 base = _acctSlot(ua);
         _w(string.concat("\"account\": [", _hx32(_load(address(tok), base)), ", ", _hx32(_load(address(tok), base + 1)), ", ",
-            _hx32(_load(address(tok), base + 2)), ", ", _hx32(_load(address(tok), base + 3)), "],"));
+            _hx32(_load(address(tok), base + 2)), "],"));
         _w("\"pending\": [");
         for (uint64 i = a.rolled; i < p; ++i) {
             bytes32 e = vm.load(address(tok), _pendingSlot(ua, i));
@@ -184,7 +185,7 @@ contract PqzStateVectorsTest is PqzSlots {
         }
         _w("], \"accWords\": [");
         for (uint256 i; a.flags & 1 != 0 && i < PqzCt.ACC_WORDS; ++i) {
-            _w(string.concat(i == 0 ? "" : ",", _hx32(_load(address(tok), base + 5 + i))));
+            _w(string.concat(i == 0 ? "" : ",", _hx32(_load(address(tok), base + 4 + i))));
         }
     }
 
@@ -230,16 +231,16 @@ contract PqzStateVectorsTest is PqzSlots {
     /// The statements' `memoHash` word (header word 19): op 1 and op 7 HASH over `salt ‖ sealedMemo`, BUNDLE and a burn 0.
     function _memoHashes() internal {
         bytes memory memo = _memo();
-        bytes memory pl = _payload(tok.pqzAccount(carol).pendingCount, 0, carol, dave, bytes32(0), _out(31, false), memo);
+        bytes memory pl = _payload(tok.pqzAccount(carol, 0).pendingCount, 0, carol, dave, bytes32(0), _out(31, false), memo);
         bytes memory st = tok.transferSingleStatement(_ts(pl), 0);
         _w(string.concat("{\"op\": 1, \"mode\": \"HASH\", \"salt\": ", _hx(abi.encodePacked(salt)), ", \"sealedMemo\": ",
             _hx(_slice(memo, 16, PqzCore.SEALED)), ", \"memoHash\": ", _hx32(_word(st, 608)), "},"));
-        pl = _payload(tok.pqzAccount(carol).pendingCount, 0, carol, dave, bytes32(0), _out(31, false), "");
+        pl = _payload(tok.pqzAccount(carol, 0).pendingCount, 0, carol, dave, bytes32(0), _out(31, false), "");
         _w(string.concat("{\"op\": 1, \"mode\": \"BUNDLE\", \"memoHash\": ", _hx32(_word(tok.transferSingleStatement(_ts(pl), 0), 608)), "},"));
         IPqzToken.PqzMultiArgs memory t = _ms(_mpl(carol, _legs(alice, erin), 32, false, true));
         _w(string.concat("{\"op\": 7, \"mode\": \"HASH\", \"salt\": ", _hx(abi.encodePacked(t.salt)), ", \"sealedMemo\": ",
             _hx(t.sealedMemo), ", \"memoHash\": ", _hx32(_word(tok.transferStatement(t, 0), 608)), "},"));
-        bytes memory bl = bytes.concat(abi.encode(uint256(tok.pqzAccount(carol).pendingCount), block.number + 5, uint256(0), carol,
+        bytes memory bl = bytes.concat(abi.encode(uint256(tok.pqzAccount(carol, 0).pendingCount), block.number + 5, uint256(0), carol,
             bytes32(0)), _blob(78, PqzCt.CT));
         _w(string.concat("{\"op\": 2, \"mode\": \"\", \"memoHash\": ", _hx32(_word(tok.burnStatement(_bs(bl), 1, bytes32(uint256(5)), 0), 608)), "}"));
     }
@@ -268,9 +269,9 @@ contract PqzStateVectorsTest is PqzSlots {
     function test_stateVectors() public {
         _build();
         // the account kinds the rows must cover
-        assertEq(tok.pqzAccount(alice).flags & 1, 1, "alice: materialised");
-        assertTrue(tok.pqzAccount(bob).accBlob != address(0) && tok.pqzAccount(bob).flags & 1 == 0, "bob: a reference");
-        assertEq(tok.pqzAccount(dave).accBlob, address(0), "dave: never debited");
+        assertEq(tok.pqzAccount(alice, 0).flags & 1, 1, "alice: materialised");
+        assertTrue(tok.pqzAccount(bob, 0).accBlob != address(0) && tok.pqzAccount(bob, 0).flags & 1 == 0, "bob: a reference");
+        assertEq(tok.pqzAccount(dave, 0).accBlob, address(0), "dave: never debited");
         if (!vm.envOr("STATE_VECTORS", false)) return;
         path = string.concat(_vecDir(), "state.json");
         vm.writeFile(path, "");

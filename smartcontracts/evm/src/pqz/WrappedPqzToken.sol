@@ -37,7 +37,7 @@ contract WrappedPqzToken is WrappedToken, PqzLayer, IPqzWrappedToken {
         "WrapShield(address from,address underlying,uint256 amountIn,bytes32 toUA,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
     );
     bytes32 private constant UA_UNSHIELD_UNWRAP_TYPEHASH = keccak256(
-        "UAPqzUnshieldUnwrap(bytes32 from,PqzBurnArgs args,Unwrap unwrap,bytes proof,bytes accHint,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)PqzBurnArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,bytes32 beneficiaryUA,bytes u,bytes vFrom)Unwrap(address underlying,bytes32 recipient,uint256 amount,uint256 minOut)"
+        "UAPqzUnshieldUnwrap(bytes32 from,PqzBurnArgs args,Unwrap unwrap,bytes proof,bytes accHint,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)PqzBurnArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,bytes u,bytes vFrom)Unwrap(address underlying,bytes32 recipient,uint256 amount,uint256 minOut)"
     );
 
     /// @dev The factory's append (`OpenFactory.deployImplementation`, plan 5g-Z2): the release's `Env`, whose

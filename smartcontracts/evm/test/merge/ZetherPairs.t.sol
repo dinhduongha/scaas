@@ -597,8 +597,10 @@ contract ZetherPairsTest is ZetherFixture {
 
     /// `IZetherToken`'s id moves with its binding views (R35); `IConfidentialToken`'s and the wrapped one's do not.
     function test_zetherInterfaceIdsArePinned() public pure {
-        assertEq(type(IZetherToken).interfaceId, bytes4(0x66b526f6), "IZetherToken"); // 0xaefc54bc before T4
-        assertEq(type(IConfidentialToken).interfaceId, bytes4(0x69d6bb06), "IConfidentialToken");
+        // 0xaefc54bc before T4; group 3g T52: 0x66b526f6 -> 0xe65bc5f0 (`mtxRollOver(bytes32,uint256)` moved here from
+        // `IConfidentialToken`, the same selector; the PQZ rollover takes a key version)
+        assertEq(type(IZetherToken).interfaceId, bytes4(0xe65bc5f0), "IZetherToken");
+        assertEq(type(IConfidentialToken).interfaceId, IConfidentialToken.mtxShield.selector, "IConfidentialToken");
         assertEq(type(IZetherWrappedToken).interfaceId, IZetherWrappedToken.mtxUnshieldUnwrap.selector, "IZetherWrappedToken");
     }
 }

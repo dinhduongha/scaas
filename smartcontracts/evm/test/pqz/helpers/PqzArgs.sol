@@ -10,14 +10,14 @@ import {PqzSet} from "../../../src/pqz/PqzSet.sol";
 /// @notice The client's side of the explicit PQZ parameters (Appendix X.2), for the fixture and the invariant handlers.
 abstract contract PqzArgs {
     bytes32 internal constant TH_TRANSFER_ARGS = keccak256(
-        "PqzTransferArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes sealedMemo)"
+        "PqzTransferArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes sealedMemo)"
     );
     bytes32 internal constant TH_LEG = keccak256("PqzLeg(bytes32 ua,bytes v,bytes vAuditor)");
     bytes32 internal constant TH_MULTI_ARGS = keccak256(
-        "PqzMultiArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,bytes32 beneficiaryUA,uint256 decoyFee,bytes16 salt,bytes[] u,PqzLeg[] legs,bytes vFrom,bytes sealedMemo)PqzLeg(bytes32 ua,bytes v,bytes vAuditor)"
+        "PqzMultiArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,uint256 decoyFee,bytes16 salt,bytes[] u,PqzLeg[] legs,bytes vFrom,bytes sealedMemo)PqzLeg(bytes32 ua,bytes v,bytes vAuditor)"
     );
     bytes32 internal constant TH_BURN_ARGS = keccak256(
-        "PqzBurnArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,bytes32 beneficiaryUA,bytes u,bytes vFrom)"
+        "PqzBurnArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,bytes u,bytes vFrom)"
     );
 
     /// The offset of `out` in the packed payloads the tests keep as "today's bytes": op 1, op 7, a burn; op 1's whole memo.
@@ -123,7 +123,7 @@ abstract contract PqzArgs {
 
     function _hashT(IPqzToken.PqzTransferArgs memory t) internal pure returns (bytes32) {
         return keccak256(bytes.concat(
-            abi.encode(TH_TRANSFER_ARGS, t.p, t.validUntilBlock, t.shieldIn, t.fromUA, t.toUA, t.beneficiaryUA, t.salt),
+            abi.encode(TH_TRANSFER_ARGS, t.p, t.validUntilBlock, t.shieldIn, t.fromUA, t.keyVersion, t.toUA, t.beneficiaryUA, t.salt),
             abi.encode(keccak256(t.u), keccak256(t.vTo), keccak256(t.vFrom), keccak256(t.vAuditor), keccak256(t.sealedMemo))
         ));
     }
@@ -137,13 +137,13 @@ abstract contract PqzArgs {
             ls = bytes.concat(ls, keccak256(abi.encode(TH_LEG, l.ua, keccak256(l.v), keccak256(l.vAuditor))));
         }
         return keccak256(bytes.concat(
-            abi.encode(TH_MULTI_ARGS, t.p, t.validUntilBlock, t.shieldIn, t.fromUA, t.beneficiaryUA, t.decoyFee, t.salt),
+            abi.encode(TH_MULTI_ARGS, t.p, t.validUntilBlock, t.shieldIn, t.fromUA, t.keyVersion, t.beneficiaryUA, t.decoyFee, t.salt),
             abi.encode(keccak256(us), keccak256(ls), keccak256(t.vFrom), keccak256(t.sealedMemo))
         ));
     }
 
     function _hashB(IPqzToken.PqzBurnArgs memory b) internal pure returns (bytes32) {
-        return keccak256(abi.encode(TH_BURN_ARGS, b.p, b.validUntilBlock, b.shieldIn, b.fromUA, b.beneficiaryUA,
+        return keccak256(abi.encode(TH_BURN_ARGS, b.p, b.validUntilBlock, b.shieldIn, b.fromUA, b.keyVersion, b.beneficiaryUA,
             keccak256(b.u), keccak256(b.vFrom)));
     }
 }

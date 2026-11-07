@@ -46,7 +46,7 @@ contract PqzUA8Test is PqzFixture {
     function _assertAccount(bytes32 u) internal {
         _fund(tok, u, 5);
         _transfer(tok, carol, u, bytes32(0), 101, false);
-        assertEq(tok.pqzAccount(u).pendingCount, 2, "a shield and a credit");
+        assertEq(tok.pqzAccount(u, 0).pendingCount, 2, "a shield and a credit");
     }
 
     /// The proof stored later by a third party (`storePqzPop`, `R_REG` accepted by the verifier) makes the key proven:

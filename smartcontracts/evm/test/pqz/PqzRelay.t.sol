@@ -67,7 +67,7 @@ contract PqzRelayTest is PqzFixture {
         bytes memory sg = _sig(m);
         vm.prank(relayer);
         tok.executeMetaTransaction(m, sg);
-        assertEq((tok.pqzPending(alice, 0) >> 96) & type(uint64).max, 10, "a TRIVIAL entry");
+        assertEq((tok.pqzPending(alice, 0, 0) >> 96) & type(uint64).max, 10, "a TRIVIAL entry");
         assertEq(tok.balanceOf(relayer), 7, "outer fee after the op");
         assertEq(tok.balanceOf(signer), 0);
 
@@ -95,7 +95,7 @@ contract PqzRelayTest is PqzFixture {
         uint256 g = gasleft();
         tok.executeMetaTransaction(m, sg);
         console2.log("mtxConfidentialTransfer in a v1 envelope (mocked proof) gas", g - gasleft());
-        assertEq(tok.pqzAccount(alice).sendCounter, 1);
+        assertEq(tok.pqzAccount(alice, 0).sendCounter, 1);
     }
 
     function test_percentAndBatchRefused() public {
@@ -144,7 +144,7 @@ contract PqzRelayTest is PqzFixture {
         tok.mtxExecute(m, UACall.auth(m.from, _mlAuth()));
         assertEq(tok.balanceOfUA(fee), 0, "the UA's public units shielded, the fee paid");
         assertEq(tok.balanceOf(relayer), 5);
-        assertEq((tok.pqzPending(alice, 0) >> 96) & type(uint64).max, 20, "a TRIVIAL entry");
+        assertEq((tok.pqzPending(alice, 0, 0) >> 96) & type(uint64).max, 20, "a TRIVIAL entry");
         _assertConservation(tok);
 
         // a v3 transfer: the UA binding (its own tag) in the statement; `shieldIn` 2 from the fee UA's own balance
@@ -164,7 +164,7 @@ contract PqzRelayTest is PqzFixture {
         uint256 g = gasleft();
         tok.mtxExecute(m, UACall.auth(m.from, _mlAuth()));
         console2.log("mtxConfidentialTransfer in a v3 envelope (mldsa65 fee UA, mocked proof) gas", g - gasleft());
-        assertEq(tok.pqzAccount(alice).sendCounter, 1);
+        assertEq(tok.pqzAccount(alice, 0).sendCounter, 1);
         assertEq(tok.balanceOfUA(fee), 0, "shieldIn moved from the signing UA's ledger balance to the pool");
         assertEq(tok.totalShielded(), 22);
         _assertConservation(tok);
@@ -188,7 +188,7 @@ contract PqzRelayTest is PqzFixture {
         vm.mockCall(ML65, bytes(""), abi.encode(uint256(1)));
         tok.mtxExecute(h, UACall.auth(h.from, _mlAuth()));
         assertEq(tok.balanceOfUA(alice), 0, "alice's own signature shielded her units");
-        assertEq((tok.pqzPending(bob, 1) >> 96) & type(uint64).max, 3, "after alice's credit");
+        assertEq((tok.pqzPending(bob, 0, 1) >> 96) & type(uint64).max, 3, "after alice's credit");
         _assertConservation(tok);
         assertEq(UAKinds.PQZ_MLWE, 0x0142);
     }

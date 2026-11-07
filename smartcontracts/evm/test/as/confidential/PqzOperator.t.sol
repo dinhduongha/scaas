@@ -44,9 +44,9 @@ abstract contract PqzOperatorSuite is PqzRegFixture {
         assertGt(_pqzAccesses(alice, true), 0, "control: the diff sees the PQZ slots");
         vm.revertToState(snap);
 
-        IPqzToken.AccountState memory before = tok.pqzAccount(alice);
-        bytes memory acc = tok.pqzAcc(alice);
-        uint256 p0 = tok.pqzPending(alice, 0);
+        IPqzToken.AccountState memory before = tok.pqzAccount(alice, 0);
+        bytes memory acc = tok.pqzAcc(alice, 0);
+        uint256 p0 = tok.pqzPending(alice, 0, 0);
         uint256 shielded = tok.totalShielded();
         uint256 pool = tok.balanceOf(MetaTxLib.SHIELD_POOL);
         vm.startStateDiffRecording();
@@ -56,9 +56,9 @@ abstract contract PqzOperatorSuite is PqzRegFixture {
 
         assertEq(tok.balanceOfUA(alice), PUBLIC - 20_000, "the public balance");
         assertEq(tok.balanceOf(BENEFICIARY), 20_000);
-        assertEq(keccak256(abi.encode(tok.pqzAccount(alice))), keccak256(abi.encode(before)), "the Account unchanged");
-        assertEq(tok.pqzAcc(alice), acc, "acc unchanged");
-        assertEq(tok.pqzPending(alice, 0), p0, "the pending entry unchanged");
+        assertEq(keccak256(abi.encode(tok.pqzAccount(alice, 0))), keccak256(abi.encode(before)), "the Account unchanged");
+        assertEq(tok.pqzAcc(alice, 0), acc, "acc unchanged");
+        assertEq(tok.pqzPending(alice, 0, 0), p0, "the pending entry unchanged");
         assertEq(tok.totalShielded(), shielded);
         assertEq(tok.balanceOf(MetaTxLib.SHIELD_POOL), pool);
     }

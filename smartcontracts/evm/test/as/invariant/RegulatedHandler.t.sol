@@ -738,8 +738,8 @@ abstract contract RegPqzHandler is PqzRegFixture, RegCore {
 
     function _shieldViews() internal view override {
         for (uint256 k; k < 5; ++k) {
-            IPqzToken.AccountState memory a = tok.pqzAccount(cIds[k]);
-            if (a.pendingCount != 0) tok.pqzPendingCt(cIds[k], a.pendingCount - 1);
+            IPqzToken.AccountState memory a = tok.pqzAccount(cIds[k], 0);
+            if (a.pendingCount != 0) tok.pqzPendingCt(cIds[k], 0, a.pendingCount - 1);
         }
         tok.totalShielded();
     }
@@ -839,11 +839,11 @@ abstract contract RegPqzHandler is PqzRegFixture, RegCore {
     /// Prepare (both halves, once) and roll-over of a PQZ id: never refused (spec §4.2, §4.3).
     function pqRoll(uint256 j) external {
         bytes32 ua = cIds[j % 5];
-        uint8 fl = tok.pqzAccount(ua).flags;
-        if (fl & 2 == 0) _op(K_ROLL, address(this), abi.encodeCall(IPqzToken.mtxPrepareAcc, (ua, 0)));
-        if (fl & 4 == 0) _op(K_ROLL, address(this), abi.encodeCall(IPqzToken.mtxPrepareAcc, (ua, 1)));
+        uint8 fl = tok.pqzAccount(ua, 0).flags;
+        if (fl & 2 == 0) _op(K_ROLL, address(this), abi.encodeCall(IPqzToken.mtxPrepareAcc, (ua, uint64(0), 0)));
+        if (fl & 4 == 0) _op(K_ROLL, address(this), abi.encodeCall(IPqzToken.mtxPrepareAcc, (ua, uint64(0), 1)));
         vm.roll(block.number + 5);
-        _op(K_ROLL, address(this), abi.encodeCall(IConfidentialToken.mtxRollOver, (ua, 4)));
+        _op(K_ROLL, address(this), abi.encodeCall(IPqzToken.mtxRollOver, (ua, uint64(0), 4)));
     }
 
     /// Public units: this handler or the payee to any id (`transfer`, `transferToUA`).
@@ -940,7 +940,7 @@ abstract contract RegZetherHandler is ZetherRegFixture, RegCore {
     /// Roll-over: never refused (spec §4.3).
     function zRoll(uint256 i) external {
         i %= 3;
-        if (_op(K_ROLL, address(this), abi.encodeCall(IConfidentialToken.mtxRollOver, (_zid(i), 1)))) {
+        if (_op(K_ROLL, address(this), abi.encodeCall(IZetherToken.mtxRollOver, (_zid(i), 1)))) {
             zacc[i] += zpend[i];
             zpend[i] = 0;
         }

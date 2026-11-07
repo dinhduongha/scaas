@@ -65,7 +65,7 @@ abstract contract PqzRegFixture is PqzNamedBase {
     bytes internal constant PROOF = hex"c0de";
     /// keccak256(abi.encode(uint256(keccak256("scaas.pqz")) - 1)) & ~bytes32(uint256(0xff)) (PqzCore._STORAGE)
     bytes32 internal constant PQZ_SLOT = 0xda865ec17214f25b93cdb133d719c79392c290a4b9089fd0bba156256c521500;
-    uint256 internal constant FIELDS = 12; // pqz ‖ modes … minDecoyFee
+    uint256 internal constant FIELDS = 13; // pqz ‖ modes … minDecoyFee, sendCounter (group 3g)
     uint256 internal constant ACCT_FIELD = 8; // PqzStorage.acct
 
     address internal ownerA = address(0x0A11);
@@ -189,7 +189,7 @@ abstract contract PqzRegFixture is PqzNamedBase {
     function _single(bool compact, bytes32 to, bytes32 ben, uint256 shieldIn, uint256 seed)
         internal view returns (IPqzToken.PqzTransferArgs memory)
     {
-        return _ts(_payload(tok.pqzAccount(alice).pendingCount, shieldIn, alice, to, ben, _out(seed, true),
+        return _ts(_payload(tok.pqzAccount(alice, 0).pendingCount, shieldIn, alice, to, ben, _out(seed, true),
             compact ? _memo() : bytes("")));
     }
 
@@ -197,13 +197,13 @@ abstract contract PqzRegFixture is PqzNamedBase {
     function _multi(bool compact, bytes32[] memory rec, bytes32 ben, uint256 shieldIn, uint256 seed)
         internal view returns (IPqzToken.PqzMultiArgs memory)
     {
-        return _ms(_mpayload(tok.pqzAccount(alice).pendingCount, shieldIn, alice, ben, rec,
+        return _ms(_mpayload(tok.pqzAccount(alice, 0).pendingCount, shieldIn, alice, ben, rec,
             _blob(seed, _outLen(rec.length, true)), compact ? _mem(rec.length) : bytes("")));
     }
 
     /// A burn (or, with amount 0, a refresh) of `alice`, beneficiary `ben`, `shieldIn` from the caller's public balance.
     function _burnArgs(bytes32 ben, uint256 shieldIn, uint256 seed) internal view returns (IPqzToken.PqzBurnArgs memory) {
-        return _bs(bytes.concat(abi.encode(uint256(tok.pqzAccount(alice).pendingCount), block.number + 5, shieldIn, alice, ben),
+        return _bs(bytes.concat(abi.encode(uint256(tok.pqzAccount(alice, 0).pendingCount), block.number + 5, shieldIn, alice, ben),
             _blob(seed, PqzCt.CT)));
     }
 
@@ -308,10 +308,12 @@ abstract contract PqzRegFixture is PqzNamedBase {
         uint256 s = uint256(slot);
         uint256 base = uint256(PQZ_SLOT);
         if (fields && s >= base && s < base + FIELDS) return true;
-        uint256 acct = uint256(keccak256(abi.encode(ua, base + ACCT_FIELD)));
-        if (s >= acct && s < acct + 5 + PQZ_ACC_WORDS) return true;
-        uint256 pc = tok.pqzAccount(ua).pendingCount + 4;
-        for (uint256 i; i < pc; ++i) if (s == uint256(keccak256(abi.encode(uint64(i), acct + 4)))) return true;
+        // group 3g T52 (KV-6): `acct[ua][version 0]`; `pending` at +3, `accWords` from +4; `sendCounter[ua]` a field (+12)
+        uint256 acct = uint256(keccak256(abi.encode(uint64(0), keccak256(abi.encode(ua, base + ACCT_FIELD)))));
+        if (s >= acct && s < acct + 4 + PQZ_ACC_WORDS) return true;
+        if (s == uint256(keccak256(abi.encode(ua, base + 12)))) return true;
+        uint256 pc = tok.pqzAccount(ua, 0).pendingCount + 4;
+        for (uint256 i; i < pc; ++i) if (s == uint256(keccak256(abi.encode(uint64(i), acct + 3)))) return true;
         return false;
     }
 

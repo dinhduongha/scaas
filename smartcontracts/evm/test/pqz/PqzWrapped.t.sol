@@ -53,7 +53,7 @@ contract PqzWrappedTest is PqzFixture {
         uint256 g = gasleft();
         w.mtxWrapShield(address(usd), 1_000 * SCALE, alice);
         console2.log("mtxWrapShield gas", g - gasleft());
-        assertEq((w.pqzPending(alice, 0) >> 96) & type(uint64).max, 1_000, "the same TRIVIAL entry as a shield");
+        assertEq((w.pqzPending(alice, 0, 0) >> 96) & type(uint64).max, 1_000, "the same TRIVIAL entry as a shield");
         assertEq(w.totalSupply(), 1_000 * SCALE, "minted to SHIELD_POOL (D19)");
         assertEq(w.totalShielded(), 1_000);
         assertEq(usd.balanceOf(address(w)), 1_000 * SCALE);

@@ -112,7 +112,7 @@ contract PqzPackedRef {
     function _legs(PqzCore.Op memory o, PqzCore.Env memory e, bytes calldata payload) private view {
         o.keys = new address[](o.legs);
         for (uint256 j; j < o.legs; ++j) {
-            o.keys[j] = PqzCore._creditKey(e.registry, bytes32(payload[M_OUT + 32 * j:M_OUT + 32 * j + 32]));
+            (o.keys[j],) = PqzCore._creditKey(e.registry, bytes32(payload[M_OUT + 32 * j:M_OUT + 32 * j + 32]));
         }
         if (o.auditorOn == 1) o.keyA = PqzCore._keyPtr(e.registry, PqzCore.$().auditorUA);
     }

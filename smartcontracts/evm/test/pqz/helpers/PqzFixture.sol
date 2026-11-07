@@ -178,7 +178,7 @@ abstract contract PqzFixture is PqzRegistryBase, PqzArgs {
     /// the tail when it is TRIVIAL, of this block and at an index `≥ max(floor, rolled)`, else append; the token must
     /// agree. `pend` holds "" and `triv` the amount (16.5 KB of test storage per entry would cost ≈ 11 M gas).
     function _mirrorTrivial(PqzLayer t, bytes32 ua, uint256 amount) internal {
-        IPqzToken.AccountState memory a = t.pqzAccount(ua);
+        IPqzToken.AccountState memory a = t.pqzAccount(ua, 0);
         uint256 n = pend[ua].length;
         uint256 lo = a.floor > a.rolled ? a.floor : a.rolled;
         if (n != 0 && pend[ua][n - 1].length == 0 && trivBlk[ua][n - 1] == block.number && n - 1 >= lo) {
@@ -247,7 +247,7 @@ abstract contract PqzFixture is PqzRegistryBase, PqzArgs {
         internal view returns (bytes memory)
     {
         bytes memory memo = t.disclosureMode() == ZetherTypes.DisclosureMode.COMPACT ? _memo() : bytes("");
-        return _payload(t.pqzAccount(from).pendingCount, 0, from, to, ben, out, memo);
+        return _payload(t.pqzAccount(from, 0).pendingCount, 0, from, to, ben, out, memo);
     }
 
     /// The client's `acc` after any debit: `u ‖ v_f` (D4: a debit below `rolled` un-rolls, it keeps nothing).
@@ -257,18 +257,18 @@ abstract contract PqzFixture is PqzRegistryBase, PqzArgs {
 
     /// Both halves of the account's `acc` words (D8), once.
     function _prepare(PqzLayer t, bytes32 ua) internal {
-        uint8 f = t.pqzAccount(ua).flags;
-        if (f & 2 == 0) t.mtxPrepareAcc(ua, 0);
-        if (f & 4 == 0) t.mtxPrepareAcc(ua, 1);
+        uint8 f = t.pqzAccount(ua, 0).flags;
+        if (f & 2 == 0) t.mtxPrepareAcc(ua, 0, 0);
+        if (f & 4 == 0) t.mtxPrepareAcc(ua, 0, 1);
     }
 
     /// Anyone's rollover of up to `n` entries after `ROLL_AGE` blocks; the client's mirror adds what was rolled.
     function _roll(PqzLayer t, bytes32 ua, uint256 n) internal {
         _prepare(t, ua);
         vm.roll(block.number + ROLL_AGE);
-        uint256 r = t.pqzAccount(ua).rolled;
-        t.mtxRollOver(ua, n);
-        accOf[ua] = _sumRange(_acc(ua), ua, r, t.pqzAccount(ua).rolled, 0);
+        uint256 r = t.pqzAccount(ua, 0).rolled;
+        t.mtxRollOver(ua, 0, n);
+        accOf[ua] = _sumRange(_acc(ua), ua, r, t.pqzAccount(ua, 0).rolled, 0);
     }
 
     /// D19: shields, unshields and fees move public units to / from `SHIELD_POOL`; nothing is minted or burnt.

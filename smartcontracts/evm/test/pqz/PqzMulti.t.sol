@@ -54,7 +54,7 @@ contract PqzMultiTest is PqzFixture {
         internal view returns (bytes memory)
     {
         bytes memory memo = t.disclosureMode() == ZetherTypes.DisclosureMode.COMPACT ? _mmemo(rec.length) : bytes("");
-        return _mpayload(t.pqzAccount(from).pendingCount, 0, from, ben, rec, out, memo);
+        return _mpayload(t.pqzAccount(from, 0).pendingCount, 0, from, ben, rec, out, memo);
     }
 
     /// The client's mirror of an op 7: leg `j` credited `(u_{g(j)}, v_j)`, `g` by the auditor flag (R0-1).
@@ -119,7 +119,7 @@ contract PqzMultiTest is PqzFixture {
         vm.expectCall(PQZ, abi.encodePacked(uint8(7), uint32(st.length), st, proof));
         for (uint256 j; j < 4; ++j) {
             vm.expectEmit(true, true, false, true, address(tok));
-            emit IPqzToken.Credited(rec[j], 0, keccak256(abi.encode(keccak256("SCAAS-PQZ-ENTRY-V1"), block.chainid, PQZ_UID,
+            emit IPqzToken.Credited(rec[j], 0, 0, keccak256(abi.encode(keccak256("SCAAS-PQZ-ENTRY-V1"), block.chainid, PQZ_UID,
                 address(tok), alice, uint256(0))));
         }
         uint256 g = gasleft();
@@ -127,16 +127,16 @@ contract PqzMultiTest is PqzFixture {
         console2.log("mtxConfidentialTransfer op 7 M = 4 (BUNDLE, auditor, fee, mocked proof) gas", g - gasleft());
         _mirror(alice, rec, out, true);
 
-        IPqzToken.AccountState memory a = tok.pqzAccount(alice);
-        assertEq(tok.pqzAcc(alice), accOf[alice], "acc = u_0 || v_f");
+        IPqzToken.AccountState memory a = tok.pqzAccount(alice, 0);
+        assertEq(tok.pqzAcc(alice, 0), accOf[alice], "acc = u_0 || v_f");
         assertEq(a.sendCounter, 1);
         assertEq(a.accUnits, 1);
         for (uint256 j; j < 4; ++j) {
-            assertEq(tok.pqzAccount(rec[j]).pendingCount, 1);
-            assertEq(tok.pqzPendingCt(rec[j], 0), pend[rec[j]][0], "credit (u_g(j), v_j)");
+            assertEq(tok.pqzAccount(rec[j], 0).pendingCount, 1);
+            assertEq(tok.pqzPendingCt(rec[j], 0, 0), pend[rec[j]][0], "credit (u_g(j), v_j)");
         }
         assertEq(tok.balanceOfUA(carol), FEE * SCALE, "txFee once, to the beneficiary's public balance");
-        assertEq(tok.pqzAccount(carol).pendingCount, 0, "no TRIVIAL fee entry");
+        assertEq(tok.pqzAccount(carol, 0).pendingCount, 0, "no TRIVIAL fee entry");
         assertEq(tok.totalShielded(), 1000 - FEE, "the fee left the pool");
         assertEq(tok.transferEntry(ref), _bundleOn(out, rec), "BUNDLE stores R = salt || u_0..u_G-1 || (v_j || v_aj || UA_j)_j");
         _roll(tok, bob, 1);
@@ -150,14 +150,14 @@ contract PqzMultiTest is PqzFixture {
         uint256 g = gasleft();
         (bytes32 ref, bytes memory out) = _multi(tok, alice, bytes32(0), rec, 9, false);
         console2.log("mtxConfidentialTransfer op 7 M = 8 (BUNDLE, no auditor, mocked proof) gas", g - gasleft());
-        for (uint256 j; j < 8; ++j) assertEq(tok.pqzPendingCt(rec[j], 0), pend[rec[j]][0]);
+        for (uint256 j; j < 8; ++j) assertEq(tok.pqzPendingCt(rec[j], 0, 0), pend[rec[j]][0]);
         assertEq(_cut(pend[rec[5]][0], 0, PqzCt.PK), _cut(out, PqzCt.PK, PqzCt.PK), "leg 5 uses u_1");
         assertEq(tok.transferEntry(ref).length, 16 + 2 * PqzCt.PKP + (PqzCt.VP + 32) * 8, "R of M = 8, no auditor (packed)");
         _roll(tok, rec[7], 1);
         bytes32[] memory back = new bytes32[](1);
         back[0] = alice;
         _multi(tok, rec[7], bytes32(0), back, 10, false);
-        assertEq(tok.pqzAccount(alice).pendingCount, 2, "the shield's TRIVIAL entry and the credit");
+        assertEq(tok.pqzAccount(alice, 0).pendingCount, 2, "the shield's TRIVIAL entry and the credit");
     }
 
     /// For `M = 1` the multi bundle is the single transfer's bundle byte for byte, so disclosure reads both alike.
@@ -356,7 +356,7 @@ contract PqzMultiTest is PqzFixture {
         assertEq(t.balanceOfUA(carol), FEE * SCALE, "txFee to the beneficiary");
         for (uint256 j; j < 4; ++j) {
             assertEq(t.balanceOfUA(rec[j]), 5 * SCALE, "decoyFee to every leg, real recipient included");
-            assertEq(t.pqzAccount(rec[j]).pendingCount, 1, "the credit only, no TRIVIAL fee entry");
+            assertEq(t.pqzAccount(rec[j], 0).pendingCount, 1, "the credit only, no TRIVIAL fee entry");
         }
         assertEq(t.totalShielded(), 1000 - FEE - 20);
         _assertConservation(t);
@@ -451,7 +451,7 @@ contract PqzMultiTest is PqzFixture {
         // 11 credits to alice, then a debit at p = 11 needs 11 inline credits: refused on op 7, accepted on op 1
         _fund(h, bob, 1000);
         for (uint256 i; i < 11; ++i) _transferOn(h, bob, alice, 100 + i);
-        assertEq(h.pqzAccount(alice).pendingCount, 11);
+        assertEq(h.pqzAccount(alice, 0).pendingCount, 11);
         bytes32[] memory one = new bytes32[](1);
         one[0] = carol;
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.InlineTooFar.selector, 11));

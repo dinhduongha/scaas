@@ -77,10 +77,11 @@ contract NamespaceProbe is UAMetaTxBase {
             (A, ZetherTypes.DisclosureMode.COMPACT, ZetherTypes.AuditorMode.OPTIONAL, B);
         (q.psid, q.shieldScale, q.maxShielded, q.confidentialFee) = (bytes32(uint256(0xd1)), 0xd2, 0xd3, 0xd4);
         (q.totalShielded, q.auditorUA, q.minDecoyFee) = (0xd5, V, 0xd6);
-        PqzCore.Account storage qa = q.acct[U];
+        // group 3g T52 (KV-6): the account per `(ua, key version)`, `sendCounter` per UA
+        PqzCore.Account storage qa = q.acct[U][7];
         (qa.pendingCount, qa.rolled, qa.floor, qa.cleared) = (0xe1, 0xe2, 0xe3, 0xe4);
         (qa.accBlob, qa.accU, qa.accV, qa.accUnits, qa.flags) = (B, 0xe5, 0xe6, 0xe7, 0xe8);
-        (qa.sendCounter, qa.accHash) = (0xe9, bytes32(uint256(0xea)));
+        (q.sendCounter[U], qa.accHash) = (0xe9, bytes32(uint256(0xea)));
         qa.pending[3] = 0xeb;
         (qa.accWords[0], qa.accWords[1]) = (0xec, 0xed);
         q.entryPtr[V] = A;
@@ -245,24 +246,24 @@ contract LayoutTest is V2Fixture {
         f[7] = F("confidentialFee", 0, 0, 0xd4, 32);
         f[8] = F("totalShielded", 0, 0, 0xd5, 32);
         f[9] = F("auditorUA", 0, 0, v, 32);
-        f[10] = F("acct[U].pendingCount", u, 0, 0xe1, 8);
-        f[11] = F("acct[U].rolled", u, 0, 0xe2, 8);
-        f[12] = F("acct[U].floor", u, 0, 0xe3, 8);
-        f[13] = F("acct[U].cleared", u, 0, 0xe4, 8);
-        f[14] = F("acct[U].accBlob", u, 0, b, 20);
-        f[15] = F("acct[U].accU", u, 0, 0xe5, 2);
-        f[16] = F("acct[U].accV", u, 0, 0xe6, 2);
-        f[17] = F("acct[U].accUnits", u, 0, 0xe7, 4);
-        f[18] = F("acct[U].flags", u, 0, 0xe8, 1);
-        f[19] = F("acct[U].sendCounter", u, 0, 0xe9, 8);
-        f[20] = F("acct[U].accHash", u, 0, 0xea, 32);
-        f[21] = F("acct[U].pending[3]", u, 3, 0xeb, 32);
-        f[22] = F("acct[U].accWords[0]", u, 0, 0xec, 32);
-        f[23] = F("acct[U].accWords[1]", u, 0, 0xed, 32);
-        f[24] = F("entryPtr[V]", v, 0, a, 20);
-        f[25] = F("memos[V]", v, 0, 58, 32);
-        f[26] = F("memos[U]", u, 0, 21, 32);
-        f[27] = F("minDecoyFee", 0, 0, 0xd6, 32);
+        f[10] = F("acct[U][7].pendingCount", u, 0, 0xe1, 8);
+        f[11] = F("acct[U][7].rolled", u, 0, 0xe2, 8);
+        f[12] = F("acct[U][7].floor", u, 0, 0xe3, 8);
+        f[13] = F("acct[U][7].cleared", u, 0, 0xe4, 8);
+        f[14] = F("acct[U][7].accBlob", u, 0, b, 20);
+        f[15] = F("acct[U][7].accU", u, 0, 0xe5, 2);
+        f[16] = F("acct[U][7].accV", u, 0, 0xe6, 2);
+        f[17] = F("acct[U][7].accUnits", u, 0, 0xe7, 4);
+        f[18] = F("acct[U][7].flags", u, 0, 0xe8, 1);
+        f[19] = F("acct[U][7].accHash", u, 0, 0xea, 32);
+        f[20] = F("acct[U][7].pending[3]", u, 3, 0xeb, 32);
+        f[21] = F("acct[U][7].accWords[0]", u, 0, 0xec, 32);
+        f[22] = F("acct[U][7].accWords[1]", u, 0, 0xed, 32);
+        f[23] = F("entryPtr[V]", v, 0, a, 20);
+        f[24] = F("memos[V]", v, 0, 58, 32);
+        f[25] = F("memos[U]", u, 0, 21, 32);
+        f[26] = F("minDecoyFee", 0, 0, 0xd6, 32);
+        f[27] = F("sendCounter[U]", u, 0, 0xe9, 8);
         _ns(address(p), "pqz", "scaas.pqz", f);
         f = new F[](25);
         f[0] = F("verifier", 0, 0, a, 20);
@@ -318,6 +319,9 @@ contract LayoutTest is V2Fixture {
         q.inner = pin.readUintArray(string.concat(k, ".inner"));
         q.at = pin.readUintArray(string.concat(k, ".bytes"));
         q.enc = new string[](f.length);
+        q.ver = vm.keyExistsJson(pin, string.concat(k, ".keyVersions"))
+            ? pin.readUintArray(string.concat(k, ".keyVersions")) : new uint256[](f.length);
+        assertEq(q.ver.length, f.length, id);
         if (vm.keyExistsJson(pin, string.concat(k, ".encodings"))) {
             q.enc = pin.readStringArray(string.concat(k, ".encodings"));
             uint256[] memory widths = pin.readUintArray(string.concat(k, ".widths"));
@@ -333,6 +337,7 @@ contract LayoutTest is V2Fixture {
         uint256[] inner;
         uint256[] at;
         string[] enc;
+        uint256[] ver; // group 3g: `keyVersions`, the version key hashed after the first key (0 = none)
     }
 
     function _field(address p, uint256 root, Pin memory q, uint256 i, F memory f, string memory id) internal view {
@@ -340,6 +345,7 @@ contract LayoutTest is V2Fixture {
         bool member = keccak256(bytes(q.enc[i])) == keccak256("mapping");
         uint256 s = root + q.slots[i];
         if (f.k1 != 0 || f.k2 != 0) s = uint256(keccak256(abi.encode(f.k1, s)));
+        if (q.ver[i] != 0) s = uint256(keccak256(abi.encode(q.ver[i], s)));
         if (f.k2 != 0 && !member) s = uint256(keccak256(abi.encode(f.k2, s)));
         s += q.inner[i];
         if (member) s = uint256(keccak256(abi.encode(f.k2, s)));

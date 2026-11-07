@@ -122,9 +122,9 @@ contract PqzStatePinGasTest is PqzSlots {
         vm.roll(block.number + 100);
         for (uint256 k; k < 2; ++k) {
             bytes32 ua = k == 0 ? alice : dave;
-            tok.mtxPrepareAcc(ua, 0);
-            tok.mtxPrepareAcc(ua, 1);
-            tok.mtxRollOver(ua, PRE); // the first materialisation; the measured rollovers rewrite
+            tok.mtxPrepareAcc(ua, 0, 0);
+            tok.mtxPrepareAcc(ua, 0, 1);
+            tok.mtxRollOver(ua, 0, PRE); // the first materialisation; the measured rollovers rewrite
         }
         (discRef,) = _transfer(tok, carol, bob, bytes32(0), 1, true); // carol's acc: a fresh blob reference
         _fund(tok, bob, 1); // bob: an entry of an earlier block
@@ -211,9 +211,9 @@ contract PqzStatePinGasTest is PqzSlots {
     /// `ROLL_MAX` entries of `q − 1`: every coefficient is `q − 272`.
     function test_gas_rollMax() public {
         uint256 snap = vm.snapshotState();
-        uint256 g128 = _gas(abi.encodeCall(IConfidentialToken.mtxRollOver, (dave, LO)));
+        uint256 g128 = _gas(abi.encodeCall(IPqzToken.mtxRollOver, (dave, uint64(0), LO)));
         vm.revertToState(snap);
-        uint256 gMax = _gas(abi.encodeCall(IConfidentialToken.mtxRollOver, (alice, PqzCore.ROLL_MAX)));
+        uint256 gMax = _gas(abi.encodeCall(IPqzToken.mtxRollOver, (alice, uint64(0), PqzCore.ROLL_MAX)));
         uint256 next = gMax + (gMax - g128) * 16 / (PqzCore.ROLL_MAX - LO);
         _log("mtxRollOver ROLL_MAX / 2 (steady, distinct cold blobs)", g128);
         _log("mtxRollOver ROLL_MAX (steady, distinct cold blobs)", gMax);
@@ -221,7 +221,7 @@ contract PqzStatePinGasTest is PqzSlots {
         console2.log("per entry / fixed (fit)", (gMax - g128) / (PqzCore.ROLL_MAX - LO),
             g128 - (gMax - g128) * LO / (PqzCore.ROLL_MAX - LO));
         assertLe(gMax, CAP, "ROLL_MAX under 0.75 * 2^24");
-        bytes memory acc = tok.pqzAcc(alice);
+        bytes memory acc = tok.pqzAcc(alice, 0);
         uint256 want = PqzCt.Q - (PRE + PqzCore.ROLL_MAX);
         want = want << 192 | want << 128 | want << 64 | want;
         for (uint256 o; o < PqzCt.CT; o += 32) {
@@ -327,10 +327,10 @@ contract PqzStatePinGasTest is PqzSlots {
         string memory p = ua ? "uaExecute" : "mtxExecute";
         uint256 snap = vm.snapshotState();
         console2.log(string.concat("relayed mtxRollOver (", p, "), full transaction, fee 7, entries (fit point)"), LO);
-        (uint256 lo,) = _fullTxVia(ua, abi.encodeCall(IConfidentialToken.mtxRollOver, (dave, LO)), 7);
+        (uint256 lo,) = _fullTxVia(ua, abi.encodeCall(IPqzToken.mtxRollOver, (dave, uint64(0), LO)), 7);
         vm.revertToState(snap);
         console2.log(string.concat("relayed mtxRollOver (", p, "), full transaction, fee 7, entries"), PqzCore.ROLL_MAX);
-        (reg,) = _fullTxVia(ua, abi.encodeCall(IConfidentialToken.mtxRollOver, (alice, PqzCore.ROLL_MAX)), 7);
+        (reg,) = _fullTxVia(ua, abi.encodeCall(IPqzToken.mtxRollOver, (alice, uint64(0), PqzCore.ROLL_MAX)), 7);
         vm.revertToState(snap);
         next = reg + (reg - lo) * 16 / (PqzCore.ROLL_MAX - LO);
         console2.log(string.concat("ROLL_MAX + 16, relayed full transaction (", p, ", linear fit) / per entry"), next,
@@ -351,10 +351,10 @@ contract PqzStatePinGasTest is PqzSlots {
     function _prepareVia(uint256 half) internal {
         uint256 snap = vm.snapshotState();
         console2.log("relayed mtxPrepareAcc (mtxExecute), full transaction, fee 7, half", half);
-        (uint256 e,) = _fullTxVia(false, abi.encodeCall(IPqzToken.mtxPrepareAcc, (eve, half)), 7);
+        (uint256 e,) = _fullTxVia(false, abi.encodeCall(IPqzToken.mtxPrepareAcc, (eve, uint64(0), half)), 7);
         vm.revertToState(snap);
         console2.log("relayed mtxPrepareAcc (uaExecute), full transaction, fee 7, half", half);
-        (uint256 u,) = _fullTxVia(true, abi.encodeCall(IPqzToken.mtxPrepareAcc, (eve, half)), 7);
+        (uint256 u,) = _fullTxVia(true, abi.encodeCall(IPqzToken.mtxPrepareAcc, (eve, uint64(0), half)), 7);
         assertLe(e, CAP, "mtxExecute");
         assertLe(u, CAP, "uaExecute");
     }
@@ -362,45 +362,45 @@ contract PqzStatePinGasTest is PqzSlots {
     /// The same `ROLL_MAX` rollover relayed (owner rule 2026-10-20: every mtx* write is relayable). Plan 5h Task 7:
     /// `ROLL_MAX` is the largest multiple of 16 when this fails at `ROLL_MAX + 16` (built with that constant).
     function test_gas_rollMax_relayed() public {
-        uint256 g = _relayed(abi.encodeCall(IConfidentialToken.mtxRollOver, (alice, PqzCore.ROLL_MAX)));
+        uint256 g = _relayed(abi.encodeCall(IPqzToken.mtxRollOver, (alice, uint64(0), PqzCore.ROLL_MAX)));
         _log("relayed mtxRollOver ROLL_MAX (mtxExecute, fee 0)", g);
         assertLe(g, CAP, "relayed ROLL_MAX under 0.75 * 2^24");
     }
 
     function test_gas_roll128() public {
-        _log("mtxRollOver ROLL_MAX / 2 (steady, distinct cold blobs)", _gas(abi.encodeCall(IConfidentialToken.mtxRollOver, (dave, LO))));
+        _log("mtxRollOver ROLL_MAX / 2 (steady, distinct cold blobs)", _gas(abi.encodeCall(IPqzToken.mtxRollOver, (dave, uint64(0), LO))));
     }
 
     function test_gas_roll_1() public {
-        _log("mtxRollOver 1 (steady)", _gas(abi.encodeCall(IConfidentialToken.mtxRollOver, (alice, 1))));
+        _log("mtxRollOver 1 (steady)", _gas(abi.encodeCall(IPqzToken.mtxRollOver, (alice, uint64(0), 1))));
     }
 
     function test_gas_roll_16() public {
-        _log("mtxRollOver 16 (steady)", _gas(abi.encodeCall(IConfidentialToken.mtxRollOver, (alice, 16))));
+        _log("mtxRollOver 16 (steady)", _gas(abi.encodeCall(IPqzToken.mtxRollOver, (alice, uint64(0), 16))));
     }
 
     /// Each half of the first materialisation in a transaction of its own (D8; spec §5.3).
     function test_gas_prepareAcc_half0() public {
-        uint256 g = _gas(abi.encodeCall(IPqzToken.mtxPrepareAcc, (eve, 0)));
+        uint256 g = _gas(abi.encodeCall(IPqzToken.mtxPrepareAcc, (eve, uint64(0), 0)));
         _log("mtxPrepareAcc half 0", g);
         assertLe(g, CAP);
     }
 
     function test_gas_prepareAcc_half1() public {
-        uint256 g = _gas(abi.encodeCall(IPqzToken.mtxPrepareAcc, (eve, 1)));
+        uint256 g = _gas(abi.encodeCall(IPqzToken.mtxPrepareAcc, (eve, uint64(0), 1)));
         _log("mtxPrepareAcc half 1", g);
         assertLe(g, CAP);
     }
 
     /// Plan 5h Task 7: each half relayed (fee 0) stays under `0.75 · 2^24` too (every mtx* write is relayable).
     function test_gas_prepareAcc_half0_relayed() public {
-        uint256 g = _relayed(abi.encodeCall(IPqzToken.mtxPrepareAcc, (eve, 0)));
+        uint256 g = _relayed(abi.encodeCall(IPqzToken.mtxPrepareAcc, (eve, uint64(0), 0)));
         _log("relayed mtxPrepareAcc half 0 (mtxExecute, fee 0)", g);
         assertLe(g, CAP);
     }
 
     function test_gas_prepareAcc_half1_relayed() public {
-        uint256 g = _relayed(abi.encodeCall(IPqzToken.mtxPrepareAcc, (eve, 1)));
+        uint256 g = _relayed(abi.encodeCall(IPqzToken.mtxPrepareAcc, (eve, uint64(0), 1)));
         _log("relayed mtxPrepareAcc half 1 (mtxExecute, fee 0)", g);
         assertLe(g, CAP);
     }
@@ -417,7 +417,7 @@ contract PqzStatePinGasTest is PqzSlots {
 
     function test_gas_shield_merge() public {
         uint256 g = _gas(abi.encodeCall(IConfidentialToken.mtxShield, (frank, 5)));
-        assertEq(tok.pqzAccount(frank).pendingCount, 1, "merged");
+        assertEq(tok.pqzAccount(frank, 0).pendingCount, 1, "merged");
         _log("mtxShield, merge (TRIVIAL tail of this block)", g);
     }
 
@@ -481,12 +481,12 @@ contract PqzStatePinGasTest is PqzSlots {
     /// floor (853,760 at n2304, against 417 × 2,100 = 875,700 for the reads), so it saves gas only when the transaction is
     /// not floor-bound (PQZL with its precompile price: yes, the gas table; this test's 2-byte proof: no).
     function test_gas_op1_bundle_materialised_hint() public {
-        bytes memory h = _packed(tok.pqzAcc(alice));
+        bytes memory h = _packed(tok.pqzAcc(alice, 0));
         assertEq(h.length, PqzCt.CTP);
         uint256 snap = vm.snapshotState();
         uint256 e0 = meter.measure(address(tok), _op1(alice, PRE, true, ""));
         vm.revertToState(snap);
-        uint256 eu = meter.measure(address(tok), _op1(alice, PRE, true, tok.pqzAcc(alice)));
+        uint256 eu = meter.measure(address(tok), _op1(alice, PRE, true, tok.pqzAcc(alice, 0)));
         vm.revertToState(snap);
         uint256 eh = meter.measure(address(tok), _op1(alice, PRE, true, h));
         vm.revertToState(snap);
@@ -502,7 +502,7 @@ contract PqzStatePinGasTest is PqzSlots {
     }
 
     function test_gas_op1_bundle_16inline() public {
-        bytes memory h = _packed(tok.pqzAcc(alice));
+        bytes memory h = _packed(tok.pqzAcc(alice, 0));
         _log("op 1 BUNDLE, auditor, fee, 16 inline credits (cold blobs), hint", _gas(_op1(alice, PRE + 16, true, h)));
     }
 
@@ -658,7 +658,7 @@ contract PqzStatePinGasTest is PqzSlots {
     function _gasTable(string memory sys) internal {
         gj = vm.readFile(string.concat(vm.projectRoot(), "/test/vectors/pqz-gas/", PqzSet.NAME, ".json"));
         bool h = keccak256(bytes(sys)) == keccak256("pqzh");
-        bytes memory hint = _packed(tok.pqzAcc(alice));
+        bytes memory hint = _packed(tok.pqzAcc(alice, 0));
         address t = address(tok);
         _row(sys, "TRANSFER", "op 1, auditor, fresh ref", t, _op1p(carol, 0, true, "", _pf(sys, "TRANSFER")), true);
         _row(sys, "TRANSFER0", "op 1, no auditor, fresh ref", t, _op1p(carol, 0, false, "", _pf(sys, "TRANSFER0")), true);
@@ -1014,15 +1014,15 @@ contract PqzStateTrivialRollGasTest is PqzSlots {
         _mockOp(7, 1);
         tok = _newToken("gas");
         gina = _pqzUA(_pk(13), 13);
-        tok.mtxPrepareAcc(gina, 0);
-        tok.mtxPrepareAcc(gina, 1);
+        tok.mtxPrepareAcc(gina, 0, 0);
+        tok.mtxPrepareAcc(gina, 0, 1);
         _public(tok, address(this), TRIV * SCALE);
         for (uint256 i; i < TRIV; ++i) {
             tok.mtxShield(gina, 1);
             vm.roll(block.number + 1);
         }
         vm.roll(block.number + 30);
-        tok.mtxRollOver(gina, TRIV); // acc = Trivial(4): every u coefficient 0
+        tok.mtxRollOver(gina, 0, TRIV); // acc = Trivial(4): every u coefficient 0
         // ROLL_MAX credits after the TRIVIAL entries, each from its own cold blob, every coefficient q − 1
         bytes memory code = _blobCode();
         for (uint256 i; i < PqzCore.ROLL_MAX; ++i) {
@@ -1040,24 +1040,24 @@ contract PqzStateTrivialRollGasTest is PqzSlots {
     /// No `acc` slot is zero after the TRIVIAL-only rollover (D3), and the `u` half still reads as zero.
     function test_trivialRoll_noZeroSlot() public view {
         for (uint256 i; i < PqzCt.ACC_WORDS; ++i) {
-            assertTrue(vm.load(address(tok), bytes32(_acctSlot(gina) + 5 + i)) != 0, "acc slot zeroed");
+            assertTrue(vm.load(address(tok), bytes32(_acctSlot(gina) + 4 + i)) != 0, "acc slot zeroed");
         }
-        bytes memory acc = tok.pqzAcc(gina);
+        bytes memory acc = tok.pqzAcc(gina, 0);
         for (uint256 o; o < PqzCt.PK; o += 32) {
             uint256 x;
             assembly ("memory-safe") { x := mload(add(add(acc, 32), o)) }
             assertEq(x, 0, "u of Trivial(4)");
         }
-        assertEq(keccak256(PqzCt.packMem(acc)), tok.pqzAccount(gina).accHash, "accHash over the packed stream");
+        assertEq(keccak256(PqzCt.packMem(acc)), tok.pqzAccount(gina, 0).accHash, "accHash over the packed stream");
     }
 
     /// The regression pin: `ROLL_MAX` cold credits after the TRIVIAL-only rollover fit `0.75 · 2^24` (10.6 M for
     /// n = 1 and 20.9 M for `ROLL_MAX` when the slots were zeroed), and every `u` coefficient is `256 (q − 1) mod q`.
     function test_gas_rollMax_afterTrivialRoll() public {
-        uint256 g = _gas(abi.encodeCall(IConfidentialToken.mtxRollOver, (gina, PqzCore.ROLL_MAX)));
+        uint256 g = _gas(abi.encodeCall(IPqzToken.mtxRollOver, (gina, uint64(0), PqzCore.ROLL_MAX)));
         console2.log("mtxRollOver ROLL_MAX after a TRIVIAL-only rollover gas", g);
         assertLe(g, CAP, "ROLL_MAX under 0.75 * 2^24");
-        bytes memory acc = tok.pqzAcc(gina);
+        bytes memory acc = tok.pqzAcc(gina, 0);
         uint256 want = PqzCt.Q - PqzCore.ROLL_MAX;
         want = want << 192 | want << 128 | want << 64 | want;
         for (uint256 o; o < PqzCt.PK; o += 32) {
@@ -1065,6 +1065,6 @@ contract PqzStateTrivialRollGasTest is PqzSlots {
             assembly ("memory-safe") { x := mload(add(add(acc, 32), o)) }
             assertEq(x, want);
         }
-        assertEq(keccak256(PqzCt.packMem(acc)), tok.pqzAccount(gina).accHash);
+        assertEq(keccak256(PqzCt.packMem(acc)), tok.pqzAccount(gina, 0).accHash);
     }
 }

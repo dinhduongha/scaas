@@ -55,7 +55,7 @@ library PqzWrappedLib {
         (s[13], c[13]) = (IPqzWrappedToken.mtxUnshieldUnwrap.selector, ABSOLUTE);
         (s[14], c[14]) = (IPqzToken.mtxConfidentialTransferSingle.selector, ABSOLUTE);
         (s[15], c[15]) = (IPqzToken.mtxConfidentialTransferSingleCompact.selector, ABSOLUTE);
-        (s[16], c[16]) = (IConfidentialToken.mtxRollOver.selector, ABSOLUTE);
+        (s[16], c[16]) = (IPqzToken.mtxRollOver.selector, ABSOLUTE);
         (s[17], c[17]) = (IPqzToken.mtxPrepareAcc.selector, ABSOLUTE);
     }
 }
