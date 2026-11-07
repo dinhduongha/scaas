@@ -37,3 +37,11 @@ addresses, `PaymentMeta(bytes32, bytes)`, the eight-argument `relay`), `metatx.r
 the `payLane` / nonce-0 shape check), `typed.rs` (the receiver-fee and mandate rows without `PayMeta`, `UARelayFee` without
 `batch` / `nonce`), `guard.rs` (`mtxPay` in `NOT_ROWS`, the struct job's `mtxPayMeta`, the old counts), `submit.rs` (the `salt` +
 hex `meta` struct job), `indexer.rs` (`meta` hex on the joined row), `gateway.rs`, `e2e.rs`. Not built.
+
+## 3g (versioned PQZ keys, ua-mtx-merge T55), under `3g/`
+
+As they stood at 937b454f (before T55), before the node moved to the versioned PQZ API: `typed.rs` (the PQZ args structs without
+`keyVersion`, one `UARollOver` row on Zether and PQZ, `UAPrepareAcc` without `keyVersion`, `setPqzKey` / `storePqzPop` without a
+version), `abi.rs` (the unversioned registry calls), `guard.rs` and `submit.rs` (no intake pending check, no PQZ key-version
+refusals, the old row counts), `indexer.rs` (no key-version events), `e2e.rs`, `e2e_ua8.rs` (the unversioned registry ABI). Not
+built.
