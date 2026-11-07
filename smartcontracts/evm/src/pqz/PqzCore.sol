@@ -897,7 +897,7 @@ library PqzCore {
     ///      (UA8-D9: `recordOf` lists unproven keys too), or for a key of another length).
     function _keyPtr(address registry, bytes32 ua) internal view returns (address ptr) {
         bool proven;
-        (ptr,, proven) = IUARegistry(registry).pqzKeyOf(ua);
+        (, ptr,, proven) = IUARegistry(registry).pqzKeyOf(ua);
         if (!proven || ptr.code.length != PqzCt.PK + 1) revert IPqzToken.AccountNotRegistered(ua);
     }
 

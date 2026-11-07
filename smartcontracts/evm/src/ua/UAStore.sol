@@ -10,11 +10,12 @@ import {SSTORE2} from "../common/SSTORE2.sol";
 
 /// @title The registry's storage as one struct at slot 0, shared by `UARegistry` and `UARegistryLib` (which runs by
 ///        DELEGATECALL on it), and the helpers both need (typed-signing R2). `SaltedEIP712` has no storage (immutables
-///        only), so `Layout` starts at slot 0 and every field keeps its slot number; pinned by `UARegistrySplit.t.sol`.
+///        only), so `Layout` starts at slot 0 and every field keeps its slot number; pinned by `test/ua/UAStoreLayout.t.sol`
+///        (group 3g, T51: the active pin; `UARegistrySplit.t.sol` is a legacy file).
 library UAStore {
-    /// UA-6 / UA-8: the PQZ key's SSTORE2 pointer (0 = none; written once) and, in the same slot, whether the
-    /// slot-0x0142 verifier checked its proof (UA8-D8, D9; `pqzKeyOf` costs a PQZ token's `_keyPtr` two SLOADs) and
-    /// whether `setPqzKey` added it (ruling A1-I1: its `R_REG` message, and `registrationOf` leaves it out, A4-c3).
+    /// UA-6 / UA-8, per version since group 3g: a PQZ key version's SSTORE2 pointer (0 = none; written once) and, in the
+    /// same slot, whether the slot-0x0142 verifier checked its proof (UA8-D8, D9) and whether `setPqzKey` added it (ruling
+    /// A1-I1: version 0's `R_REG` message, and `registrationOf` leaves it out, A4-c3; every version ≥ 1 is added).
     struct PqzKey {
         address ptr;
         bool proven;
@@ -28,10 +29,19 @@ library UAStore {
         uint8 scheme;
     }
 
+    /// Group 3g (KV-3, §2.3): per UA, `latest` the highest version stored here, `current` the highest eligible one (0 when
+    /// none is: version 0 as stored), non-decreasing, moved only where proof bytes are stored; `listed`: on the `0x0142`
+    /// list (once per UA, at its first proven version, KV-2).
+    struct PqzVersions {
+        uint64 latest;
+        uint64 current;
+        bool listed;
+    }
+
     struct Layout {
         mapping(bytes32 ua => IUARegistry.Record) records; // 0
         mapping(bytes32 keyHash => bytes32) keyOwner; // 1
-        mapping(bytes32 ua => PqzKey) pqzKey; // 2
+        mapping(bytes32 ua => mapping(uint64 version => PqzKey)) pqzKey; // 2 (3g: per version)
         mapping(bytes32 ua => address[2]) ekPtr; // 3: ML-DSA expanded-key parts (SSTORE2), written once each
         mapping(uint16 kind => uint256) uaCount; // 4: per-kind list length (single-key kinds)
         mapping(uint16 kind => mapping(uint256 i => bytes32 ua)) uaAt; // 5
@@ -41,16 +51,16 @@ library UAStore {
         /// in `UAMemberSig`; "" for none). `keyData` = `SSTORE2.read(keyPtr) ‖
         /// keyRest`: stored once. (Before typed-signing R1 a third word, the KEM version, always 0.)
         mapping(bytes32 ua => address[]) reg;
-        mapping(bytes32 ua => bytes32) pqzPopHash; // 7: the PQZ key's proof hash (`attrs.pqzPopHash`)
-        mapping(bytes32 ua => address[]) pqzPop; // 8: the R_REG proof bytes, written once
-        mapping(bytes32 ua => address[]) pqzKeySig; // 9: `setPqzKey`'s signature, written once
+        mapping(bytes32 ua => mapping(uint64 version => bytes32)) pqzPopHash; // 7: a version's proof hash
+        mapping(bytes32 ua => mapping(uint64 version => address[])) pqzPop; // 8: a version's R_REG proof bytes, written once
+        mapping(bytes32 ua => mapping(uint64 version => address[])) pqzKeySig; // 9: `setPqzKey`'s signature, written once
         mapping(bytes32 ua => mapping(uint64 version => address[])) kem; // 10: `pk ‖ sig` (initial record: `sig` = "")
         mapping(bytes32 ua => uint64) kemMax; // 11: the highest stored KEM version (0: none, or the register key only)
         mapping(bytes32 ua => KemCommit) kemCommit; // 12
-        /// 13, 14. Ruling R-cross-set: the `register` PQZ key (pointer) and proof hash a `setPqzKey` replaced (a key of
-        /// another set's length, never provable here), kept so `registrationOf` still returns the `register` arguments.
-        mapping(bytes32 ua => address) regPqzKey;
-        mapping(bytes32 ua => bytes32) regPqzPopHash;
+        /// 13, 14. Retired by R2 (owner 2026-11-06): ruling R-cross-set's kept `register` key; never written, placeholders so
+        /// that 15 and 16 keep their numbers.
+        mapping(bytes32 ua => address) retiredRegPqzKey;
+        mapping(bytes32 ua => bytes32) retiredRegPqzPopHash;
         /// 15. CTR-UA-37: an `msig`'s accepted slots, bit `i` = member slot `i`: the slots of its `pop`, written at
         /// registration, then `acceptMembership`. It lives with the record (gen 2 reads gen 1's).
         mapping(bytes32 ua => uint256) accepted;
@@ -58,6 +68,11 @@ library UAStore {
         /// an `msig` member's `abi.encode(InnerSig[])`, written once with its bit: at registration for each slot of the `pop`, by
         /// `acceptMembership` for a slot that accepts later. The bytes are in that slot's `UAMemberSig`.
         mapping(bytes32 ua => mapping(uint256 index => bytes32)) memberSigHash;
+        /// 17. Group 3g: `latest`, `current`, `listed` of the UA's PQZ key versions.
+        mapping(bytes32 ua => PqzVersions) pqzVersions;
+        /// 18. Group 3g (KV-1, Codex #1): some version of the UA stores this key (proven or not): no two versions of one UA
+        /// hold the same key bytes, on any registry kind. Per UA, so nobody squats another UA's key with it.
+        mapping(bytes32 ua => mapping(bytes32 pqzKeyHash => bool)) pqzKeyUsed;
     }
 
     uint256 internal constant SMART_KEY_1271_GAS = 400_000;

@@ -312,10 +312,10 @@ contract UARegistryMembershipTest is UARegistryBase {
         bytes32 rd = UAKinds.pqzKeyRecordDigest(ua, UAKinds.keyHashOf(UAKinds.PQZ_MLWE, key), hash);
         IUARegistry.UASig memory s = _two(_mlSig(d, ml1, UAKinds.PURPOSE_PQZ_KEY, rd), _mlSig(d, ml3, UAKinds.PURPOSE_PQZ_KEY, rd));
         vm.expectRevert(_unauthorized(ua));
-        r.setPqzKey(ua, key, hash, s);
+        r.setPqzKey(ua, 0, key, hash, s);
         r.acceptMembership(ua, _acceptKeySig(d, ML, ml3));
-        r.setPqzKey(ua, key, hash, s);
-        (address ptr,,) = r.pqzKeyOf(ua);
+        r.setPqzKey(ua, 0, key, hash, s);
+        (, address ptr,,) = r.pqzKeyOf(ua);
         assertTrue(ptr != address(0));
     }
 
@@ -433,7 +433,7 @@ contract UARegistryMembershipTest is UARegistryBase {
         r.setKemKey(ua, 1, UACall.kem(pk), s);
         bytes memory key = new bytes(16_384);
         vm.expectRevert(_unauthorized(ua));
-        r.setPqzKey(ua, key, keccak256("proof"), s);
+        r.setPqzKey(ua, 0, key, keccak256("proof"), s);
         bytes32 rd = UAKinds.kemRecordDigest(ua, 1, pk);
         r.setKemKey(ua, 1, UACall.kem(pk), _two(_mlSig(d, ml1, UAKinds.PURPOSE_KEM, rd), _mlSig(d, ml2, UAKinds.PURPOSE_KEM, rd)));
         (uint64 v,,) = r.kemKeyOf(ua);
@@ -590,9 +590,9 @@ contract UARegistryMembershipTest is UARegistryBase {
         bytes32 rd = UAKinds.pqzKeyRecordDigest(ua, UAKinds.keyHashOf(UAKinds.PQZ_MLWE, key), hash);
         IUARegistry.UASig memory s = _two(_mlSig(d, ml1, UAKinds.PURPOSE_PQZ_KEY, rd), _mlSig(d, ml3, UAKinds.PURPOSE_PQZ_KEY, rd));
         vm.expectRevert(_unauthorized(ua));
-        g.setPqzKey(ua, key, hash, s);
+        g.setPqzKey(ua, 0, key, hash, s);
         r.acceptMembership(ua, _acceptKeySig(d, ML, ml3));
-        g.setPqzKey(ua, key, hash, s);
+        g.setPqzKey(ua, 0, key, hash, s);
     }
 
     // ----- starvation (T-AUTH-4: a starved caller sees `UAVerifyGas`, never a verdict) -----
@@ -607,9 +607,9 @@ contract UARegistryMembershipTest is UARegistryBase {
         IUARegistry.UASig memory s = _two(_mlSig(d, ml1, UAKinds.PURPOSE_PQZ_KEY, rd), _mlSig(d, ml2, UAKinds.PURPOSE_PQZ_KEY, rd));
         vm.mockCallRevert(address(r), abi.encodeWithSelector(IUARegistry.memberAccepted.selector), "");
         vm.expectRevert(UAKinds.UAVerifyGas.selector);
-        g.setPqzKey(ua, key, hash, s);
+        g.setPqzKey(ua, 0, key, hash, s);
         vm.clearMockedCalls();
-        g.setPqzKey(ua, key, hash, s);
+        g.setPqzKey(ua, 0, key, hash, s);
     }
 
     /// A member starved in its own check at `acceptMembership`: `UAVerifyGas`, the slot stays open, with gas it accepts.

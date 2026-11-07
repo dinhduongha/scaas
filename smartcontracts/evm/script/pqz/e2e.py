@@ -94,12 +94,12 @@ def probe(n):
 
 
 def pqz_key(ua):
-    """A holder's PQZ key as the token reads it (UA-8 UA8-D9, `PqzCore._keyPtr`): `pqzKeyOf(ua)` = (SSTORE2 pointer, proof
-    hash, proven), a proven key only (`recordOf` lists unproven keys too); the key is the pointer's code after its leading
-    0x00. `keyOf` is the UA's signing key."""
+    """A holder's PQZ key as the token reads it (UA-8 UA8-D9, `PqzCore._keyPtr`): `pqzKeyOf(ua)` = (current version, SSTORE2
+    pointer, proof hash, proven) (group 3g), a proven key only (`recordOf` lists unproven keys too); the key is the pointer's
+    code after its leading 0x00. `keyOf` is the UA's signing key."""
     w = words(call(REG[0], cd("pqzKeyOf(bytes32)", ["w"], ua)))
-    assert int.from_bytes(w[2], "big") == 1, f"pqz_key: {ua.hex()[:16]}… has no proven PQZ key"
-    ptr = "0x" + w[0][12:].hex()
+    assert int.from_bytes(w[3], "big") == 1, f"pqz_key: {ua.hex()[:16]}… has no proven PQZ key"
+    ptr = "0x" + w[1][12:].hex()
     k = bytes.fromhex(rpc("eth_getCode", [ptr, "latest"])[2:])[1:]
     assert len(k) == K.PK_BYTES, f"pqz_key: {len(k)} B at {ptr}, want {K.PK_BYTES} (a UA without a PQZ key?)"
     return k
@@ -135,7 +135,7 @@ REGISTER_T = ["w", "b", ATTRS_T, "b", "b"]  # kind, keyData, attrs, pop, pqzPop
 REGISTER_MSIG = f"registerMsig((uint16,(uint16,bytes32,uint16)[]),{ATTRS_S},{MEMBER_S}[],bytes)"
 REGISTER_MSIG_T = [("t", ["w", ("a", ("t", ["w", "w", "w"]))]), ATTRS_T, ("a", MEMBER_T), "b"]  # MsigStructure, attrs, MemberSig[], pqzPop
 SET_KEM, SET_KEM_T = f"setKemKey(bytes32,uint64,{KEM_S},{UASIG_S})", ["w", "w", KEM_T, UASIG_T]
-SET_PQZ, SET_PQZ_T = f"setPqzKey(bytes32,bytes,bytes32,{UASIG_S})", ["w", "b", "w", UASIG_T]
+SET_PQZ, SET_PQZ_T = f"setPqzKey(bytes32,uint64,bytes,bytes32,{UASIG_S})", ["w", "w", "b", "w", UASIG_T]  # group 3g: + version
 REQ_AUTH, REQ_AUTH_T = f"requireAuthorized(bytes32,bytes32,bytes32,{UASIG_S})", ["w", "w", "w", UASIG_T]
 # clientkeys (with its node_modules): this checkout's, else the main checkout's (as `PQ`)
 CK = (os.path.join(ROOT, "clients/clientkeys") if os.path.isdir(os.path.join(ROOT, "clients/clientkeys/node_modules"))
@@ -990,7 +990,7 @@ def self_test():
     qa = dict(ua=hb(q["ua"]), pqzKey=hb(q["pqzKey"]))
     check(portable("keyrec", kind=q["kind"], pqzPopHash=hb(q["pqzPopHash"]), **qa) == hb(q["message"])
           and portable("keyreg", **qa) == hb(q["pqzRegMessage"]), f"PQZ key record {q['name']}: setPqzKey and R_REG messages")
-    check(sel(SET_PQZ).hex() == "0052c1b5" and sel(REQ_AUTH).hex() == "9600639d", "setPqzKey / requireAuthorized selectors")
+    check(sel(SET_PQZ).hex() == "bd97b6a1" and sel(REQ_AUTH).hex() == "9600639d", "setPqzKey / requireAuthorized selectors")
     kem = at["kemPk"]
     ret = "0x" + encs(["w", KEM_T, "b"], [0, kem_key(kem), b"\x07"]).hex()
     none = "0x" + encs(["w", KEM_T, "b"], [0, [0, b"", bytes(32)], b""]).hex()
@@ -1166,7 +1166,7 @@ def run(kd, kr, ke):
                 f"{g['entry']} {name} ({kind:#06x} + pqz-mlwe key + KEM v0{' hash commit' if g['kemFill'] else ''}, R_REG "
                 f"{len(proof):,} B, {'one call' if full else 'proof by storePqzPop'})")
         if not full:
-            sd.send(reg, cd("storePqzPop(bytes32,bytes)", ["w", "b"], ua, proof), f"storePqzPop {name}")
+            sd.send(reg, cd("storePqzPop(bytes32,uint64,bytes)", ["w", "w", "b"], ua, 0, proof), f"storePqzPop {name}")
         if g["kemFill"]:
             f = g["kemFill"]
             sd.send(reg, cd(SET_KEM, SET_KEM_T, hb(f["ua"]), 0, kem_v(f["kem"]), sig_v(f["sig"])),
@@ -1174,7 +1174,8 @@ def run(kd, kr, ke):
         rec = words(call(reg, cd("recordOf(bytes32)", ["w"], ua)))
         check(int.from_bytes(rec[-1], "big") != 0, f"{name} = {ua.hex()[:16]}… recordOf: PQZ key pointer set")
         pk_of = words(call(reg, cd("pqzKeyOf(bytes32)", ["w"], ua)))
-        check(pk_of[1] == ph and int.from_bytes(pk_of[2], "big") == 1, f"{name} pqzKeyOf: proof hash set, proven")
+        check(pk_of[2] == ph and int.from_bytes(pk_of[3], "big") == 1 and int.from_bytes(pk_of[0], "big") == 0,
+              f"{name} pqzKeyOf: version 0 current, proof hash set, proven")
         check([int.from_bytes(w, "big") for w in words(call(reg, cd("checkedOf(bytes32)", ["w"], ua)))] == [1, 1, 1],
               f"{name} checkedOf = (chain, chain, chain)")
         check(kem_of_ret(call(reg, cd("kemKeyOf(bytes32)", ["w"], ua))) == (0, kem, b""), f"{name} kemKeyOf = (0, kem, \"\")")
@@ -1215,15 +1216,16 @@ def run(kd, kr, ke):
     dproof = pq.prove(3, K.build_register(portable("keyreg", ua=dave.ua, pqzKey=dpk), dpk), K.i8(ds) + K.i16(de))
     dph = kc(dproof)
     dsig = pq.ml_sign(65, dave.seed, kc(TAG[MLDSA65], portable("keyrec", kind=MLDSA65, ua=dave.ua, pqzKey=dpk, pqzPopHash=dph)))
-    sd.send(reg, cd(SET_PQZ, SET_PQZ_T, dave.ua, dpk, dph, [b"", dsig, []]),
+    sd.send(reg, cd(SET_PQZ, SET_PQZ_T, dave.ua, 0, dpk, dph, [b"", dsig, []]),
             "setPqzKey dave (ML-DSA-65 sig over PURPOSE_PQZ_KEY)")
     w = words(call(reg, cd("pqzKeyOf(bytes32)", ["w"], dave.ua)))
-    check(w[1] == dph and int.from_bytes(w[2], "big") == 0, "dave pqzKeyOf: the added key's proof hash, unproven")
-    check(dec_bytes(call(reg, cd("pqzKeySigOf(bytes32)", ["w"], dave.ua))) == dsig, "dave pqzKeySigOf = the setPqzKey signature")
-    sd.send(reg, cd("storePqzPop(bytes32,bytes)", ["w", "b"], dave.ua, dproof),
+    check(w[2] == dph and int.from_bytes(w[3], "big") == 0, "dave pqzKeyOf: the added key's proof hash, unproven")
+    check(dec_bytes(call(reg, cd("pqzKeySigOf(bytes32,uint64)", ["w", "w"], dave.ua, 0))) == dsig,
+          "dave pqzKeySigOf(0) = the setPqzKey signature")
+    sd.send(reg, cd("storePqzPop(bytes32,uint64,bytes)", ["w", "w", "b"], dave.ua, 0, dproof),
             f"storePqzPop dave (R_REG {len(dproof):,} B over PURPOSE_PQZ_KEY)")
     w = words(call(reg, cd("pqzKeyOf(bytes32)", ["w"], dave.ua)))
-    check(w[1] == dph and int.from_bytes(w[2], "big") == 1, "dave pqzKeyOf: proven")
+    check(w[2] == dph and int.from_bytes(w[3], "big") == 1, "dave pqzKeyOf: proven")
     check([int.from_bytes(x, "big") for x in words(call(reg, cd("checkedOf(bytes32)", ["w"], dave.ua)))] == [1, 1, 0],
           "dave checkedOf = (chain, chain, none)")
     check(pqz_key(dave.ua) == dpk, "dave: the key a PQZ token reads (pqzKeyOf, proven) is the added key")

@@ -480,8 +480,9 @@ contract GovDeployTest is Test {
         assertTrue(rf != 0xD5D8d5e1cD81f1E83C5B6c1a4Fd9AcfF02d89BB2, "not reset 1's MtxRelayFee");
         assertTrue(router != 0xB64D2D5f27D2d5eA951409773343D856e41Fb8E0, "not reset 1's GovernanceRouter");
         // pay-meta-tax T37: 0xaf843Ac33a5A73A2baf3E979F922Bd3c1feD6B43 -> 0x616AEe61C11e53a1a5104d448eba7574e5AE2a8b (the
-        // metadata hash: `MetaTxLib` gains `PayMeta`); T38: -> this (`relay` with `batch`, `nonce`)
-        assertEq(rf, 0xa615f3672E60a2e91F92463bB4Df8b4374245C8A, "MtxRelayFee");
+        // metadata hash: `MetaTxLib` gains `PayMeta`); T38: -> 0xa615f3672E60a2e91F92463bB4Df8b4374245C8A (`relay` with
+        // `batch`, `nonce`); 3g T51: -> this (the metadata hash: `IUARegistry`'s versioned PQZ key records)
+        assertEq(rf, 0xF1D87045dAef620300637Ed6DE7123B42f23f9aB, "MtxRelayFee");
         // ua-mtx-merge T24: 0x2AEfB2af419765600eC00a7D0CfC4dE30f2d3750 -> 0xAb151Df7DC7CbbD9755028a27Ad0bc55a34b5b53 (the
         // router's metadata hash: `IGovernance`); T26: -> this (the two empty hooks `UAMetaTxBase` adds, its
         // `mtxCancelNonce` seats); T32: 0xBc8Df1a828dA586e5ccB8Db8942bbCC9c130cC34 -> this (the eight regulated control ops)
@@ -489,8 +490,8 @@ contract GovDeployTest is Test {
         // metadata hash: `MetaTxLib.PayMeta`); T38: -> 0x2BEc911FA998177Eb0a56B94Fd4Dc5e5dae7e819 (the metadata hash:
         // `IERC20MetaTx.mtxRelayFee`); T39: -> 0xe6D87D56A2aB446F60Ec89CF75D9ab33f443C8B2 (`mtxSetTaxRate`,
         // `mtxSetTaxRecipient`); T40: -> this (the metadata hash: `IRegulatedToken`'s two tax entries; `MtxPipelineLib`'s
-        // levers 5 and 6)
-        assertEq(router, 0x9F9448a2e031D1d7055c7D7b6593EA8f752c7D91, "GovernanceRouter");
+        // levers 5 and 6); 3g T51: 0x9F9448a2e031D1d7055c7D7b6593EA8f752c7D91 -> this (the metadata hash: `IUARegistry`)
+        assertEq(router, 0x8C7beC80b3bD61A2920083C0617555a87A5fa7E5, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append, `abi.encode(envVersion, env, implArgs)`: the env names the real Zether

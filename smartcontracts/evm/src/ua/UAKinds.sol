@@ -83,6 +83,13 @@ library UAKinds {
     bytes32 internal constant UA_PQZ_KEY_TYPEHASH = keccak256("UAPqzKey(bytes32 ua,bytes32 pqzKeyHash)");
     bytes32 internal constant UA_PQZ_KEY_RECORD_TYPEHASH =
         keccak256("UAPqzKeyRecord(UAPqzKey key,bytes32 pqzPopHash)UAPqzKey(bytes32 ua,bytes32 pqzKeyHash)");
+    /// Group 3g (CTR-UA-41 draft, KV-1): a PQZ key version v ≥ 1 (`setPqzKey(ua, v, …)`, its `R_REG`) and its consent record;
+    /// version 0 keeps `UAPqzKey` / `UAPqzKeyRecord` byte for byte, so a version-0 signature or proof never serves a version ≥ 1.
+    bytes32 internal constant UA_PQZ_KEY_VERSION_TYPEHASH =
+        keccak256("UAPqzKeyVersion(bytes32 ua,uint64 version,bytes32 pqzKeyHash)");
+    bytes32 internal constant UA_PQZ_KEY_VERSION_RECORD_TYPEHASH = keccak256(
+        "UAPqzKeyVersionRecord(UAPqzKeyVersion key,bytes32 pqzPopHash)UAPqzKeyVersion(bytes32 ua,uint64 version,bytes32 pqzKeyHash)"
+    );
     bytes32 internal constant UA_MEMBERSHIP_TYPEHASH = keccak256("UAMembership(bytes32 ua,bytes32 member)");
     /// First byte of `kemPk` = the KEM scheme id (CTR-UA-32). Scheme 1 = ML-KEM-1024 + X25519; 2 (ML-KEM-1024 + HQC +
     /// X25519, after FIPS 207) is reserved and refused until enabled.
@@ -353,6 +360,23 @@ library UAKinds {
     /// typed(`UAPqzKeyRecord`): `setPqzKey`'s signature signs `uaMessage(kind, PURPOSE_PQZ_KEY, ·)`.
     function pqzKeyRecordDigest(bytes32 ua, bytes32 pqzKeyHash, bytes32 pqzPopHash) internal pure returns (bytes32) {
         return portableDigest(pqzKeyRecordHash(pqzKeyHash_(ua, pqzKeyHash), pqzPopHash));
+    }
+
+    /// typed(`UAPqzKeyVersion{ua, version, pqzKeyHash}`): version v ≥ 1's `R_REG` proves over `uaMessage(0x0142,
+    /// PURPOSE_PQZ_KEY, ·)` (group 3g, KV-2).
+    function pqzKeyVersionDigest(bytes32 ua, uint64 version, bytes32 pqzKeyHash) internal pure returns (bytes32) {
+        return portableDigest(keccak256(abi.encode(UA_PQZ_KEY_VERSION_TYPEHASH, ua, version, pqzKeyHash)));
+    }
+
+    /// typed(`UAPqzKeyVersionRecord{UAPqzKeyVersion{ua, version, pqzKeyHash}, pqzPopHash}`): the UA's consent to version
+    /// v ≥ 1, signed as `uaMessage(kind, PURPOSE_PQZ_KEY, ·)` (group 3g, KV-1).
+    function pqzKeyVersionRecordDigest(bytes32 ua, uint64 version, bytes32 pqzKeyHash, bytes32 pqzPopHash)
+        internal
+        pure
+        returns (bytes32)
+    {
+        bytes32 k = keccak256(abi.encode(UA_PQZ_KEY_VERSION_TYPEHASH, ua, version, pqzKeyHash));
+        return portableDigest(keccak256(abi.encode(UA_PQZ_KEY_VERSION_RECORD_TYPEHASH, k, pqzPopHash)));
     }
 
     /// typed(`UAMembership{ua, member}`): what `member` signs to accept its place in the `msig` `ua` (CTR-UA-37).

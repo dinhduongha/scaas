@@ -377,8 +377,8 @@ contract NamedShieldPqzTest is PqzFixture {
     /// C1: the row's `toUA` is `ZetherFixture`'s; here the registry answers for it as for `alice`: the signature is what is pinned.
     function _rowHolder(string memory j, string memory op, address from) internal returns (bytes32 toUA) {
         toUA = VM.parseJsonBytes32(j, msgField(op, "toUA"));
-        (address ptr, bytes32 keyHash, bool proven) = reg.pqzKeyOf(alice);
-        vm.mockCall(address(reg), abi.encodeCall(IUARegistry.pqzKeyOf, (toUA)), abi.encode(ptr, keyHash, proven));
+        (uint64 v, address ptr, bytes32 keyHash, bool proven) = reg.pqzKeyOf(alice);
+        vm.mockCall(address(reg), abi.encodeCall(IUARegistry.pqzKeyOf, (toUA)), abi.encode(v, ptr, keyHash, proven));
         usd.mint(from, 100 * SCALE);
         vm.startPrank(from);
         usd.approve(address(w), 100 * SCALE);

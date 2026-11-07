@@ -166,9 +166,9 @@ contract UARegistryNestedVectorsTest is UARegistryBase {
             string memory p = _p("pqzKeyRecords", i, "");
             if (keccak256(bytes(vm.parseJsonString(j, string.concat(p, ".set")))) != keccak256(bytes(PqzSet.NAME))) continue;
             bytes32 u = vm.parseJsonBytes32(j, string.concat(p, ".ua"));
-            r.setPqzKey(u, _bytes(string.concat(p, ".pqzKey")), vm.parseJsonBytes32(j, string.concat(p, ".pqzPopHash")),
+            r.setPqzKey(u, 0, _bytes(string.concat(p, ".pqzKey")), vm.parseJsonBytes32(j, string.concat(p, ".pqzPopHash")),
                 _sigOf(string.concat(p, ".args.sig")));
-            assertEq(r.pqzKeySigOf(u), _bytes(string.concat(p, ".sig")));
+            assertEq(r.pqzKeySigOf(u, 0), _bytes(string.concat(p, ".sig")));
             ran = true;
         }
         assertTrue(ran, "this set's row");

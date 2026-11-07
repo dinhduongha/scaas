@@ -127,10 +127,11 @@ contract PqzStateVectorsTest is PqzSlots {
         return vm.load(a, bytes32(slot));
     }
 
-    /// The registry's `pqzKey[ua]` word (`UAStore.Layout` slot 2) and its pointer, checked against `pqzKeyOf`.
+    /// The registry's `pqzKey[ua][0]` word (`UAStore.Layout` slot 2, per version since group 3g: the fixtures hold version
+    /// 0) and its pointer, checked against `pqzKeyOf`.
     function _keyRecord(bytes32 ua) internal view returns (bytes32 w, address ptr) {
-        w = _load(address(reg), uint256(keccak256(abi.encode(ua, uint256(2)))));
-        (ptr,,) = reg.pqzKeyOf(ua);
+        w = _load(address(reg), uint256(keccak256(abi.encode(uint64(0), keccak256(abi.encode(ua, uint256(2)))))));
+        (, ptr,,) = reg.pqzKeyOf(ua);
         assertEq(address(uint160(uint256(w))), ptr, "keyRecord: the pointer");
         assertEq(uint8(uint256(w) >> 160), 1, "keyRecord: proven");
     }
