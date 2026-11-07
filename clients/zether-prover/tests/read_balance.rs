@@ -342,6 +342,9 @@ fn decoy_arguments() {
     for (args, want) in [
         (with(&["--registry", &u[..42]]), "go with --decoy-count or --decoy-keys"),
         (with(&["--exclude", &u]), "go with --decoy-count or --decoy-keys"),
+        (with(&["--recipient", &u]), "go with --decoy-count or --decoy-keys"),
+        (with(&["--decoy-keys", &u, "--registry", &u[..42], "--recipient", &u]), "--decoy-count with --exclude"),
+        (with(&["--decoy-count", "1", "--registry", &u[..42], "--exclude", &u, "--recipient", "0x01"]), "--recipient: 32 bytes"),
         (with(&["--decoy-count", "2", "--exclude", &u]), "--rpc and --registry"),
         (with(&["--decoy-count", "2", "--registry", &u[..42]]), "--decoy-count with --exclude"),
         (with(&["--decoy-count", "2", "--registry", &u[..42], "--exclude", &u, "--window", "4"]), "--decoy-count with --exclude"),
@@ -492,6 +495,11 @@ fn decoys_against_anvil() {
     assert_eq!(out["request"], json!({"candidates": hs(2..8), "exclude": hs(0..2), "count": 3}), "the list up to the sync point");
     assert_eq!((&out["syncBlock"], &out["listCount"], &out["block"]), (&json!(1), &json!(8), &json!(21)));
     assert_eq!(run(reg, token, &["--decoy-count", "3", "--exclude", &ex]).unwrap()["request"]["candidates"], json!(hs(2..10)), "default: the read block");
+    // `--recipient`: excluded, and named to the pick (which then answers the shuffled `legs`)
+    let out = run(reg, token, &["--decoy-count", "3", "--exclude", &ex, "--recipient", &hx(&ua(4)), "--sync-block", "1"]).unwrap();
+    let (cands, excl) = ([hs(2..4), hs(5..8)].concat(), [hs(0..2), hs(4..5)].concat());
+    let want = json!({"candidates": cands, "exclude": excl, "count": 3, "recipient": hx(&ua(4))});
+    assert_eq!(out["request"], want, "--recipient");
     let f = |filter: &str| run(reg, token, &["--decoy-count", "1", "--exclude", &ex, "--decoy-filter", filter, "--window", "10"]).unwrap()["request"].clone();
     let act = f("activity");
     assert_eq!((&act["candidates"], &act["weights"]), (&json!(hs(2..5)), &json!([1, 2, 2])), "activity, by recency");

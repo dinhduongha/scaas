@@ -70,8 +70,8 @@ const HEADER: &[&str] =
 const RECOVERY: &[&str] = &["payload", "entry", "sendCounter", "memo", "chainId", "chainUid", "token"];
 
 /// The commands, in this order (the fuzz target `zether_cmd`, built with `vectors`, names them by index). `pickDecoys`
-/// `{candidates, exclude, count, weights?}` → `{decoys}` (T15n, CTR-UA-29: [`super::decoys`]; the multi-recipient
-/// transfer's decoys; the handle's key is not used).
+/// `{candidates, exclude, count, weights?, recipient?}` → `{decoys}`, with `recipient` `{decoys, legs}` (`legs` the shuffled leg
+/// order to use) (T15n, CTR-UA-29: [`super::decoys`]; the multi-recipient transfer's decoys; the handle's key is not used).
 ///
 /// ARCH-POS-13 ("never a decryption oracle", owner 2026-11-06; spec no-decryption-oracle §4.7, §4.8, T15c, T14b): a release
 /// build (no feature `vectors`) has no command that decrypts or opens a ciphertext its caller chose. The decrypting commands
@@ -166,7 +166,7 @@ fn allowed(cmd: &str, field: &str) -> bool {
         "rawOpenDisclosure" => has(&[
             "curve", "kind", "chainId", "chainUid", "token", "entryRef", "index", "amount", "Yt", "Cout", "Dout", "Ya", "Caud", "Daud",
         ]),
-        "pickDecoys" => has(&["candidates", "exclude", "count", "weights"]),
+        "pickDecoys" => has(&["candidates", "exclude", "count", "weights", "recipient"]),
         "pop" => field == "curve",
         "ownerAuth" => has(&["curve", "digest"]),
         "uaSig" => has(&["curve", "purpose", "digest"]),

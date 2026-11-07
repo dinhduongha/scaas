@@ -2007,6 +2007,9 @@ class WalletPqz(WalletCase):
         st_, out = self.call(k, 'pickDecoys', {'candidates': c, 'exclude': [c[0]], 'count': 2, 'weights': [9, 1, 0, 0, 3]})
         self.assertEqual((st_, sorted(out['decoys'])), (name_of(OK), [c[1], c[4]]))
         self.assertEqual(self.call(k, 'pickDecoys', {'candidates': c, 'exclude': [], 'count': 6}), ('UAArgument', None))
+        # T15n2: `recipient` (excluded implicitly) answers `legs`, the recipient once with the decoys, shuffled
+        st_, out = self.call(k, 'pickDecoys', {'candidates': c, 'exclude': [c[0]], 'count': 3, 'recipient': c[1]})
+        self.assertEqual((st_, sorted(out['legs']), c[1] in out['decoys']), (name_of(OK), c[1:], False))
 
     def test_words_commands_on_the_forge_rows(self):
         """T15g (ARCH-POS-13): `balance` through the C ABI on a forge row (smartcontracts/vectors/pqz/n2304-kmax4096/state.json):

@@ -51,7 +51,8 @@ step() {
     mutant-logs) local t bad=0
                  for t in 2026-11-06-ua-rs-sign-t15b 2026-11-06-ua-rs-sign-t15c 2026-11-07-ua-rs-sign-t15c2 2026-11-07-ua-rs-sign-t15e \
                           2026-11-07-ua-rs-sign-t14b 2026-11-07-ua-rs-sign-t15g 2026-11-07-ua-rs-sign-t15k 2026-11-07-ua-rs-sign-t15i \
-                          2026-11-07-ua-rs-sign-t15l 2026-11-07-ua-rs-sign-t15m 2026-11-07-ua-rs-sign-t15n; do
+                          2026-11-07-ua-rs-sign-t15l 2026-11-07-ua-rs-sign-t15m 2026-11-07-ua-rs-sign-t15n \
+                          2026-11-07-ua-rs-sign-t15n2; do
                    l=$(tail -n 1 smartcontracts/evm/runs/$t-mutants.txt); echo "$t: $l"
                    grep -Eq '(survived or not loaded: 0|0 survived, 0 not loaded)$|0 survived, 0 not loaded \(' <<< "$l" || bad=1
                    echo "$t check: $(python3 -I smartcontracts/evm/runs/$t-mutants.py check 2>&1 | tail -n 1)"

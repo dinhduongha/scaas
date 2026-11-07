@@ -195,8 +195,8 @@ pub fn enc(pks: &[Vec<u8>], values: &[u64]) -> Result<(Vec<u8>, Vec<Vec<u8>>)> {
 ///   (`keyRecord` `fromUA`'s, `legKeyRecord` the registry's `pqzKey[UA_j]` with its code in `blobs`) → `{stmt, proof, amount}`
 ///   (op 4 `SENDER_S`, the amount the entry's own);
 /// - `openMemo {chainId, entryRef, fromUA, sendCounter, entryPtr, memo}` on the sender's handle → `{auditorOn, legs}`;
-/// - `pickDecoys {candidates, exclude, count, weights?}` → `{decoys}` (T15n, CTR-UA-29: [`super::decoys`]; op 7's decoy legs;
-///   the handle's key is not used).
+/// - `pickDecoys {candidates, exclude, count, weights?, recipient?}` → `{decoys}`, with `recipient` `{decoys, legs}` (`legs` the
+///   shuffled leg order to use) (T15n, CTR-UA-29: [`super::decoys`]; op 7's decoy legs; the handle's key is not used).
 pub const COMMANDS: &[&str] = &[
     "enc",
     #[cfg(feature = "vectors")]
@@ -316,7 +316,7 @@ fn allowed(cmd: &str, field: &str) -> bool {
         "auditRead" => has(LOC) || has(ENTRY) || has(&["ua", "leg", "auditorMode", "auditorUA"]),
         "proveDisclose" => has(LOC) || has(ENTRY) || has(&["ua", "registry", "leg", "kind", "auditorMode", "auditorUA"]),
         "openMemo" => has(LOC) || has(ENTRY) || field == "memo",
-        "pickDecoys" => has(&["candidates", "exclude", "count", "weights"]),
+        "pickDecoys" => has(&["candidates", "exclude", "count", "weights", "recipient"]),
         _ => false,
     }
 }

@@ -237,18 +237,29 @@ counts. **The trade-off, stated to the holder:** registration is permissionless,
 UAs of the kind can recognise its own decoys in a ring (threat S30; a PQZ holder costs one PQ registration); the filter raises
 that to gas-level cost only (an observer keeps its UAs active), and it shrinks the anonymity set to the recently active.
 - **The pick** (`ua-rs` `facade::decoys`, pure and I/O-free; command `pickDecoys` of both facades, on any key handle, the key
-  unused): request `{candidates, exclude, count, weights?}`, named fields: `count` = `M − 1`, `exclude` the sender and every real
-  recipient, `weights` (the filter's, optional) one `u64` per candidate; answer `{decoys}`: `count` distinct candidates, never an
-  excluded one, drawn one at a time without replacement by the OS CSPRNG (rejection sampling, no modulo bias), uniform without
-  `weights`. Too few eligible candidates (not excluded, weight above 0), a candidate given twice, `weights` of another length or
+  unused): request `{candidates, exclude, count, weights?, recipient?}`, named fields: `count` = `M − 1`, `exclude` the sender
+  and every real recipient, `weights` (the filter's, optional) one `u64` per candidate, `recipient` (optional) the real
+  recipient, excluded implicitly; answer `{decoys}`: `count` distinct candidates, never an excluded one, drawn one at a time
+  without replacement by the OS CSPRNG (rejection sampling, no modulo bias), uniform without `weights`; with `recipient`
+  `{decoys, legs}`. Too few eligible candidates (not excluded, weight above 0), a candidate given twice, `weights` of another length or
   any other field: `Argument`. One command, not a field of `proveTransferMulti`: the pick comes before the decoys' keys are read
   (only the chosen keys are), and op 7's legs and the Zether recipients already take explicit keys.
+- **The recipient's position** (ua-rs-sign T15n follow-up): the legs of op 7 and of a Zether multi-recipient transfer are
+  public in their order, so **a fixed position of the real recipient (always first, always last, always after the decoys)
+  names it** to every observer, whatever the decoys. The safe choice is the default: with `recipient`, `legs` is the full leg
+  order (the recipient and the decoys, `M` UAs) shuffled uniformly by the OS CSPRNG (Fisher–Yates, each index by rejection
+  sampling). **Callers build the transfer's legs in the `legs` order**, or shuffle themselves with a uniform shuffle from a
+  CSPRNG; without `recipient` the answer is `{decoys}` as before and the order is the caller's duty.
+- **The recency weight** of the filter (2 for a candidate active in the newer half of the window, 1 for one active only in
+  the older half) is a documented choice, kept as built: a simple two-step recency preference; another shape (more steps, a
+  decay) is not a rule.
 - **The reading layers** (storage only, the list's length read at the sync point by block hash and everything else at the read
   block, every block re-checked after the last read; no key, no stdin): `pqz-read --command decoys --count <M−1> [--exclude …]
   [--sync-block <n>] [--decoy-filter activity|holder --window <blocks>]` reads the `0x0142` list, excludes `--ua` and `--exclude`,
   calls the pick in process and reads each chosen decoy's proven `pqzKey` record and key code: `{decoys: [{ua, pk}]}`, each an
-  op 7 leg with amount 0 (`--words` prints the pick's request). `zether-read-balance … --registry <address> --decoy-count <M−1>
-  --exclude …` prints the pick's request from the `0x0141` list (zether-prover does not link `ua-rs`); after `pickDecoys`,
+  op 7 leg with amount 0 (`--words` prints the pick's request); `--recipient <ua>` passes the real recipient to the pick and
+  adds its shuffled `legs`. `zether-read-balance … --registry <address> --decoy-count <M−1> --exclude … [--recipient <ua>]`
+  prints the pick's request from the `0x0141` list (zether-prover does not link `ua-rs`); after `pickDecoys`,
   `--decoy-keys <ua>,…` reads each chosen UA's record (kind `0x0141`, its list index below the sync point's count and the list
   entry at that index equal to it) and its `Y`, with `UA(Y)` equal to it: `{decoys: [{ua, yTo}]}`, each a recipient with amount
   0. The filter reads the account's counters at `block − window`, `block − window/2` and `block` (PQZ `pendingCount`, `rolled`,
@@ -261,8 +272,8 @@ that to gas-level cost only (an observer keeps its UAs active), and it shrinks t
   (`ua-mtx-merge` group 3g) is not on this branch; `--registry` must be the generation that lists the kind (a predecessor's list
   is not followed, the forwarding is in code); the PQZ key read is the unversioned `pqzKey[ua]`, and moves to the current
   version with 3g's versioned keys (a follow-up); a list longer than 50,000 UAs is refused (one storage read per UA); the
-  Zether steps are two reads at two read blocks, both bounded by the same sync point; the order of the legs in the transfer
-  (real recipient among the decoys) is the caller's. UNAUDITED.
+  Zether steps are two reads at two read blocks, both bounded by the same sync point; the order of the legs is the caller's
+  only when it omits `recipient` (it must then shuffle itself). UNAUDITED.
 
 **Not here.** Signing (`UAKey`, the per-kind signers), PoP signatures and group vectors, the registry contract, the UA ledger.
 Not built yet: the FRB layer as a Flutter plugin and its Android, iOS and web builds (the web build needs nightly Rust, wasm-bindgen-cli and COOP/COEP headers; whether `scaas-ua` compiles to wasm is open), and Qt packaging for Windows and macOS.

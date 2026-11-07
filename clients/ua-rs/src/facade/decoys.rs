@@ -9,14 +9,18 @@
 //! then weighted. The trade-off of the default, stated to the holder: registration is permissionless, so an observer can
 //! register UAs of the kind and recognise its own decoys in a ring (threat S30); the filter raises that to gas-level cost only.
 //!
-//! Request `{candidates, exclude, count, weights?}` (named fields; the facades' command `pickDecoys`): `candidates` and
-//! `exclude` arrays of 32-byte `0x` hex UAs (the sender and every real recipient in `exclude`), `count` a `u64`, `weights`
-//! (optional) one `u64` per candidate (0: never picked). Answer `{decoys}`: `count` distinct candidates, never an excluded
-//! one, in drawn order, each draw by the OS CSPRNG: sequential sampling without replacement, a candidate drawn with
-//! probability weight / remaining total (all weights 1 without `weights`: a uniform subset in uniform order); every index by
-//! rejection sampling (no modulo bias). `Argument` for a field not on the list, a missing one, a UA not 32 bytes, a
-//! candidate given twice, `weights` of another length, or fewer eligible candidates (not excluded, weight > 0) than `count`.
-//! The request is read by the bounded reader ([`MAX`] bytes, about 55,000 candidates). UNAUDITED.
+//! Request `{candidates, exclude, count, weights?, recipient?}` (named fields; the facades' command `pickDecoys`): `candidates`
+//! and `exclude` arrays of 32-byte `0x` hex UAs (the sender and every real recipient in `exclude`), `count` a `u64`, `weights`
+//! (optional) one `u64` per candidate (0: never picked), `recipient` (optional) the real recipient's UA, excluded implicitly.
+//! Answer `{decoys}`: `count` distinct candidates, never an excluded one, in drawn order, each draw by the OS CSPRNG:
+//! sequential sampling without replacement, a candidate drawn with probability weight / remaining total (all weights 1
+//! without `weights`: a uniform subset in uniform order); every index by rejection sampling (no modulo bias). With
+//! `recipient`: `{decoys, legs}`, `legs` the full leg order (the recipient and the decoys, `count + 1` UAs) uniformly
+//! shuffled by the OS CSPRNG (Fisher–Yates, each index by rejection sampling). **The caller uses the `legs` order** (or
+//! shuffles itself): a fixed position of the real recipient (always first, always last) names it to every observer.
+//! `Argument` for a field not on the list, a missing one, a UA not 32 bytes, a candidate given twice, `weights` of another
+//! length, or fewer eligible candidates (not excluded, weight > 0) than `count`. The request is read by the bounded reader
+//! ([`MAX`] bytes, about 55,000 candidates). UNAUDITED.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing, clippy::disallowed_methods)]
 
 use crate::wallet::{bounded, from_hex, to_hex, Error, Result};
@@ -29,12 +33,12 @@ const DEPTH: usize = 2;
 
 type Ua = [u8; 32];
 
+fn ua(x: &Value) -> Result<Ua> {
+    x.as_str().and_then(from_hex).and_then(|b| b.try_into().ok()).ok_or(Error::Argument)
+}
+
 fn uas(v: Option<&Value>) -> Result<Vec<Ua>> {
-    v.and_then(Value::as_array)
-        .ok_or(Error::Argument)?
-        .iter()
-        .map(|x| x.as_str().and_then(from_hex).and_then(|b| b.try_into().ok()).ok_or(Error::Argument))
-        .collect()
+    v.and_then(Value::as_array).ok_or(Error::Argument)?.iter().map(ua).collect()
 }
 
 /// A `pickDecoys` request, its named fields parsed (module doc).
@@ -44,12 +48,13 @@ pub struct Request {
     exclude: Vec<Ua>,
     count: u64,
     weights: Option<Vec<u64>>,
+    recipient: Option<Ua>,
 }
 
 impl Request {
     /// The request's fields, each on the list and of its type, else `Argument`.
     pub fn from_map(o: &Map<String, Value>) -> Result<Request> {
-        if !o.keys().all(|k| ["candidates", "exclude", "count", "weights"].contains(&k.as_str())) {
+        if !o.keys().all(|k| ["candidates", "exclude", "count", "weights", "recipient"].contains(&k.as_str())) {
             return Err(Error::Argument);
         }
         let weights = match o.get("weights") {
@@ -57,14 +62,34 @@ impl Request {
             Some(w) => Some(w.as_array().ok_or(Error::Argument)?.iter().map(|x| x.as_u64().ok_or(Error::Argument)).collect::<Result<_>>()?),
         };
         let count = o.get("count").and_then(Value::as_u64).ok_or(Error::Argument)?;
-        Ok(Request { candidates: uas(o.get("candidates"))?, exclude: uas(o.get("exclude"))?, count, weights })
+        let recipient = o.get("recipient").map(ua).transpose()?;
+        Ok(Request { candidates: uas(o.get("candidates"))?, exclude: uas(o.get("exclude"))?, count, weights, recipient })
     }
 
-    /// `{decoys}`, drawn by the OS CSPRNG.
+    /// `{decoys}`, or with `recipient` `{decoys, legs}` (module doc), drawn by the OS CSPRNG.
     pub fn pick(&self) -> Result<String> {
-        let d = pick(&self.candidates, &self.exclude, self.count, self.weights.as_deref(), &mut OsRng)?;
-        Ok(json!({"decoys": d.iter().map(|u| to_hex(u)).collect::<Vec<_>>()}).to_string())
+        Ok(self.draw(&mut OsRng)?.to_string())
     }
+
+    /// [`Request::pick`] by `rng` (a seeded one in the tests only).
+    fn draw(&self, rng: &mut impl RngCore) -> Result<Value> {
+        let exclude = [self.exclude.as_slice(), self.recipient.as_slice()].concat();
+        let d = pick(&self.candidates, &exclude, self.count, self.weights.as_deref(), rng)?;
+        let hex = |v: &[Ua]| v.iter().map(|u| to_hex(u)).collect::<Vec<_>>();
+        let Some(r) = self.recipient else { return Ok(json!({"decoys": hex(&d)})) };
+        let mut legs = [d.as_slice(), &[r]].concat();
+        shuffle(&mut legs, rng)?;
+        Ok(json!({"decoys": hex(&d), "legs": hex(&legs)}))
+    }
+}
+
+/// Fisher–Yates: a uniform permutation of `v`, each index by [`below`] (rejection sampling).
+fn shuffle(v: &mut [Ua], rng: &mut impl RngCore) -> Result<()> {
+    for i in (1..v.len()).rev() {
+        let j = below(rng, i as u128 + 1)? as usize;
+        v.swap(i, j);
+    }
+    Ok(())
 }
 
 /// A uniform integer in `[0, n)`, `n > 0`, by rejection sampling; `Rng` when the generator fails.
@@ -189,6 +214,60 @@ mod tests {
         assert!(!set.contains(&ua(3)));
     }
 
+    /// The recipient's position: over 50,000 draws of 4 decoys from 10 candidates less one excluded, the recipient itself a
+    /// candidate (so excluded implicitly), the recipient sits exactly once in the 5 legs, never among the decoys, no leg twice,
+    /// the legs the decoys and the recipient; its position passes chi-square at p = 0.001 (4 degrees of freedom: 18.47).
+    /// Without `recipient` the answer is `{decoys}` alone.
+    #[test]
+    fn legs_recipient_position_uniform() {
+        let h = |i: u8| to_hex(&ua(i));
+        let req = |r: Option<u8>| {
+            let mut v = json!({"candidates": (1..=10).map(h).collect::<Vec<_>>(), "exclude": [h(3)], "count": 4});
+            if let Some(r) = r {
+                v["recipient"] = json!(h(r));
+            }
+            Request::from_map(v.as_object().unwrap()).unwrap()
+        };
+        let strs = |v: &Value| -> Vec<String> { serde_json::from_value(v.clone()).unwrap() };
+        let mut rng = ChaCha20Rng::seed_from_u64(31);
+        let (n, q) = (50_000u64, req(Some(9)));
+        let mut pos = [0u64; 5];
+        for _ in 0..n {
+            let out = q.draw(&mut rng).unwrap();
+            let (d, legs) = (strs(&out["decoys"]), strs(&out["legs"]));
+            assert_eq!((d.len(), legs.len()), (4, 5));
+            assert_eq!(legs.iter().filter(|u| **u == h(9)).count(), 1, "the recipient exactly once");
+            assert!(!d.contains(&h(9)) && !legs.contains(&h(3)), "the recipient no decoy, never excluded");
+            assert_eq!(legs.iter().collect::<std::collections::BTreeSet<_>>().len(), 5, "no duplicates");
+            assert!(d.iter().all(|u| legs.contains(u)), "the legs are the decoys and the recipient");
+            pos[legs.iter().position(|u| *u == h(9)).unwrap()] += 1;
+        }
+        let x = chi2(&pos, &[n as f64 / 5.0; 5]);
+        assert!(x < 18.47, "chi-square {x}: {pos:?}");
+        let out = req(None).draw(&mut rng).unwrap();
+        assert_eq!(out.as_object().unwrap().keys().collect::<Vec<_>>(), ["decoys"], "unchanged without recipient");
+    }
+
+    /// The shuffle itself: over 60,000 shuffles of 3 legs each of the 6 orders passes chi-square at p = 0.001 (5 degrees of
+    /// freedom: 20.52); the control: the naive shuffle's expected counts (each index from the whole range, 27 paths over 6
+    /// orders) fail it.
+    #[test]
+    fn shuffle_uniform() {
+        let mut rng = ChaCha20Rng::seed_from_u64(5);
+        let n = 60_000u64;
+        let mut seen = std::collections::BTreeMap::new();
+        for _ in 0..n {
+            let mut v = [ua(0), ua(1), ua(2)];
+            shuffle(&mut v, &mut rng).unwrap();
+            *seen.entry(v.map(|u| u[0])).or_insert(0u64) += 1;
+        }
+        assert_eq!(seen.len(), 6);
+        let x = chi2(&seen.values().copied().collect::<Vec<_>>(), &[n as f64 / 6.0; 6]);
+        assert!(x < 20.52, "chi-square {x}: {seen:?}");
+        let naive = [4.0, 5.0, 5.0, 5.0, 4.0, 4.0].map(|f| (f * n as f64 / 27.0) as u64);
+        assert!(chi2(&naive, &[n as f64 / 6.0; 6]) > 20.52, "the test can fail");
+    }
+
     /// An RNG that yields `0xff` bytes first, then zeros.
     struct Stub(usize);
     impl RngCore for Stub {
@@ -238,6 +317,7 @@ mod tests {
             r#"{"candidates": [], "exclude": [], "count": 0, "key": "0x00"}"#,
             r#"{"candidates": [], "exclude": [], "count": 0, "weights": [-1]}"#,
             r#"{"candidates": [], "exclude": [], "count": -1}"#,
+            r#"{"candidates": [], "exclude": [], "count": 0, "recipient": "0x01"}"#,
             r#"[]"#,
         ] {
             assert_eq!(pick_json(bad.as_bytes()), Err(Error::Argument), "{bad}");

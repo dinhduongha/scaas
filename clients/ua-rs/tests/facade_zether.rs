@@ -418,6 +418,11 @@ fn pick_decoys() {
     let mut d: Vec<String> = serde_json::from_value(call(&k, "pickDecoys", &r).unwrap()["decoys"].clone()).unwrap();
     d.sort();
     assert_eq!(d, c[..4], "every eligible one, once");
+    // `recipient` (excluded implicitly): `legs` the recipient and the decoys, the recipient once
+    let o = call(&k, "pickDecoys", &json!({"candidates": c, "exclude": [c[4]], "count": 3, "recipient": c[0]})).unwrap();
+    let mut legs: Vec<String> = serde_json::from_value(o["legs"].clone()).unwrap();
+    legs.sort();
+    assert_eq!(legs, c[..4], "{o}");
     let mut more = r.clone();
     more["count"] = json!(5);
     assert_eq!(call(&k, "pickDecoys", &more).err(), Some(Error::Argument), "too few");

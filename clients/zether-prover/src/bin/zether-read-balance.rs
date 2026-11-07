@@ -8,7 +8,8 @@
 //!                       (feature `hazmat` only: --ct <C hex>:<D hex>)
 //!   zether-read-balance --curve bls12381 --rpc … --chain-id … --chain-uid … --factory … --token … (--depth <n> | --finalized)
 //!                       --registry <address> [--sync-block <n>]
-//!                       (--decoy-count <n> --exclude <ua>,… [--decoy-filter activity|holder --window <blocks>]
+//!                       (--decoy-count <n> --exclude <ua>,… [--recipient <ua>]
+//!                        [--decoy-filter activity|holder --window <blocks>]
 //!                        | --decoy-keys <ua>,…)                                       (decoys: no key, no stdin)
 //!
 //! The key is read from **stdin** as JSON, the `key` object of the prover API:
@@ -45,7 +46,8 @@
 //! (`uaAt(0x0141, i)`, `i < uaCount(0x0141)`), read from storage (`UAStore.Layout` slots 4 and 5) with R1–R5 as above; the
 //! list's length is read at the sync point (`--sync-block`, at most the read block; default the read block), so a UA
 //! registered later is never a candidate; everything else is read at the read block. `--decoy-count` prints `pickDecoys`'s
-//! request `{candidates, exclude, count, weights?}` (`--exclude`: the sender and every real recipient, named) with
+//! request `{candidates, exclude, count, weights?, recipient?}` (`--exclude`: the sender and every real recipient, named;
+//! `--recipient`: the real recipient, excluded too, so that `pickDecoys` answers `legs`, the shuffled leg order to use) with
 //! `syncBlock`, `listCount`, `block`, `blockHash`. Uniform by default; `--decoy-filter` (an option, off by default) keeps the
 //! candidates active in the token in the last `--window` blocks by the account's counters word at `block − window`,
 //! `block − window/2` and `block` (`activity`: any of `accSeq`, `pendingSeq`, `lastRolledPendingSeq`, `sendCounter` moved;
@@ -96,6 +98,7 @@ struct Args {
     decoy_count: Option<u64>,
     decoy_keys: Option<Vec<[u8; 32]>>,
     exclude: Option<Vec<[u8; 32]>>,
+    recipient: Option<[u8; 32]>,
     sync_block: Option<u64>,
     filter: Option<String>,
     window: Option<u64>,
@@ -137,6 +140,7 @@ fn parse() -> Result<Args, String> {
             "--decoy-count" => a.decoy_count = Some(val()?.parse().map_err(|_| "--decoy-count: integer")?),
             "--decoy-keys" => a.decoy_keys = Some(uas("--decoy-keys", &val()?)?),
             "--exclude" => a.exclude = Some(uas("--exclude", &val()?)?),
+            "--recipient" => a.recipient = Some(unhex(&val()?)?.try_into().map_err(|_| "--recipient: 32 bytes")?),
             "--sync-block" => a.sync_block = Some(val()?.parse().map_err(|_| "--sync-block: integer")?),
             "--decoy-filter" => {
                 a.filter = Some(val()?).filter(|v| v == "activity" || v == "holder").ok_or("--decoy-filter: activity or holder")?.into()
@@ -158,12 +162,12 @@ fn parse() -> Result<Args, String> {
             return Err("decoys: --rpc and --registry, no --cache-box, --pending or --ct".into());
         }
         let candidates = a.decoy_count.is_some() && a.decoy_keys.is_none() && a.exclude.is_some() && a.filter.is_some() == a.window.is_some();
-        let keys = a.decoy_keys.is_some() && a.decoy_count.is_none() && a.exclude.is_none() && a.filter.is_none() && a.window.is_none();
+        let keys = a.decoy_keys.is_some() && a.decoy_count.is_none() && a.exclude.is_none() && a.recipient.is_none() && a.filter.is_none() && a.window.is_none();
         if !candidates && !keys {
-            return Err("decoys: --decoy-count with --exclude (and --decoy-filter with --window, or neither), or --decoy-keys alone".into());
+            return Err("decoys: --decoy-count with --exclude (--recipient, and --decoy-filter with --window, or neither), or --decoy-keys alone".into());
         }
-    } else if a.registry.is_some() || a.exclude.is_some() || a.sync_block.is_some() || a.filter.is_some() || a.window.is_some() {
-        return Err("--registry, --exclude, --sync-block, --decoy-filter and --window go with --decoy-count or --decoy-keys".into());
+    } else if a.registry.is_some() || a.exclude.is_some() || a.recipient.is_some() || a.sync_block.is_some() || a.filter.is_some() || a.window.is_some() {
+        return Err("--registry, --exclude, --recipient, --sync-block, --decoy-filter and --window go with --decoy-count or --decoy-keys".into());
     }
     if pasted && (a.rpc.is_some() || a.cache_box.is_some()) {
         return Err("--ct goes alone".into());
@@ -387,7 +391,8 @@ fn decoys(a: &Args) -> Result<Value, String> {
         }
         json!({"decoys": legs})
     } else {
-        let exclude = a.exclude.clone().unwrap_or_default();
+        let mut exclude = a.exclude.clone().unwrap_or_default();
+        exclude.extend(a.recipient);
         let mut candidates: Vec<[u8; 32]> = Vec::new();
         for i in 0..n {
             let u = r.word(registry, &keccak256(&[be(i), list].concat()))?;
@@ -396,6 +401,9 @@ fn decoys(a: &Args) -> Result<Value, String> {
             }
         }
         let mut request = json!({"exclude": exclude.iter().map(|u| hx(u)).collect::<Vec<_>>(), "count": a.decoy_count});
+        if let Some(u) = a.recipient {
+            request["recipient"] = json!(hx(&u));
+        }
         if let Some(w) = a.window {
             let old = block.checked_sub(w).filter(|_| w >= 2).ok_or("--window: at least 2 and at most the read block")?;
             let (old, mid) = (pin(old)?, pin(block - w / 2)?);

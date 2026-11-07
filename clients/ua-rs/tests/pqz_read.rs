@@ -474,6 +474,8 @@ fn decoy_arguments() {
         (with(&["--depth", "0", "--command", "decoys", "--count", "1", "--for-op7", "true"]), "decoys needs --count"),
         (with(&["--depth", "0", "--command", "decoys", "--count", "1", "--decoy-filter", "recent", "--window", "4"]), "activity or holder"),
         (with(&["--depth", "0", "--command", "decoys", "--count", "1", "--exclude", "0x01"]), "--exclude: 32 bytes"),
+        (with(&["--depth", "0", "--command", "decoys", "--count", "1", "--recipient", "0x01"]), "--recipient: 32 bytes"),
+        (with(&["--depth", "0", "--for-op7", "false", "--recipient", &a32]), "go with --command decoys only"),
     ] {
         let e = cli(&args, None).unwrap_err();
         assert!(e.contains(want), "{args:?}: want {want}: {e}");
@@ -570,6 +572,16 @@ fn decoys_against_anvil() {
         assert_eq!(h(&l["pk"]), vec![i; st::PK_BYTES], "the decoy's registered key");
     }
     assert!(run(&reg, &tok, &["--count", "11", "--sync-block", "1"]).unwrap_err().contains("pickDecoys: Argument"), "too few");
+    // `--recipient`: excluded, named to the pick; `legs` the recipient once and the decoys, in the pick's shuffled order
+    let w = run(&reg, &tok, &["--count", "2", "--sync-block", "1", "--recipient", &hx(&ua(5)), "--words"]).unwrap();
+    let cands = [range(3..=4), range(6..=12)].concat();
+    let want = json!({"candidates": cands, "exclude": [hx(&ua(2)), hx(&ua(1)), hx(&ua(5))], "count": 2, "recipient": hx(&ua(5))});
+    assert_eq!(w["request"], want, "--recipient --words");
+    let d = run(&reg, &tok, &["--count", "9", "--sync-block", "1", "--recipient", &hx(&ua(5))]).unwrap();
+    let mut legs = uas(&d["legs"]);
+    legs.sort();
+    assert_eq!(legs, range(3..=12), "the recipient once with every decoy: {d}");
+    assert!(run(&reg, &tok, &["--count", "1"]).unwrap().get("legs").is_none(), "no legs without --recipient");
     for _ in 0..8 {
         let d = uas(&json!(run(&reg, &tok, &["--count", "4"]).unwrap()["decoys"].as_array().unwrap().iter().map(|l| l["ua"].clone()).collect::<Vec<_>>()));
         assert_eq!(d.iter().collect::<std::collections::BTreeSet<_>>().len(), 4, "distinct");

@@ -962,6 +962,17 @@ fn pick_decoys() {
         seen.extend(d);
     }
     assert_eq!(seen.len(), 6, "every eligible candidate drawn at some point");
+    // `recipient` (excluded implicitly): `legs` the recipient and the decoys, the recipient once, in a shuffled order
+    let (mut first, mut last) = (0, 0);
+    for _ in 0..50 {
+        let o = call(&k, "pickDecoys", &json!({"candidates": c, "exclude": ex, "count": 3, "recipient": c[2]})).unwrap();
+        let (d, legs): (Vec<String>, Vec<String>) = (serde_json::from_value(o["decoys"].clone()).unwrap(), serde_json::from_value(o["legs"].clone()).unwrap());
+        assert!(!d.contains(&c[2]) && legs.len() == 4 && legs.iter().filter(|u| **u == c[2]).count() == 1, "{o}");
+        assert!(d.iter().all(|u| legs.contains(u)));
+        first += usize::from(legs[0] == c[2]);
+        last += usize::from(legs[3] == c[2]);
+    }
+    assert!(first > 0 && last > 0 && first < 50 && last < 50, "the recipient's position varies: {first} first, {last} last");
     // the filter's weights: weight 0 never drawn; every positive one needed
     let d = call(&k, "pickDecoys", &json!({"candidates": c, "exclude": ex, "count": 2, "weights": [1, 1, 0, 5, 0, 0, 0, 0]})).unwrap();
     let mut d: Vec<String> = serde_json::from_value(d["decoys"].clone()).unwrap();

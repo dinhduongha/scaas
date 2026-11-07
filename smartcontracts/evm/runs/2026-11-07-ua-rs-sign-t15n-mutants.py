@@ -9,7 +9,8 @@ mutant whose command passes SURVIVED (a finding, exit 1). The CLIs run against a
   python3 -I smartcontracts/evm/runs/2026-11-07-ua-rs-sign-t15n-mutants.py [first last]   (from the worktree root, foreground)
   python3 -I smartcontracts/evm/runs/2026-11-07-ua-rs-sign-t15n-mutants.py check           (every replacement found once, no run)
   python3 -I smartcontracts/evm/runs/2026-11-07-ua-rs-sign-t15n-mutants.py count           (the number of mutants)
-UNAUDITED."""
+T15n2 (2026-11-07): M10, M11 and M12 follow the code's new text (the field list with `recipient`, `pick` through `draw`); the
+record (-mutants.txt) is of the code at b08b8a0d. UNAUDITED."""
 import os
 import re
 import subprocess
@@ -40,12 +41,12 @@ M = [
     ("weights of another length accepted", [(D, "    if weights.is_some_and(|w| w.len() != candidates.len()) {", "    if false {")], L),
     ("no rejection sampling (modulo bias)", [(D, "        if x < zone {", "        if zone > 0 || x < zone {")], L),
     ("a field off the list accepted",
-     [(D, '        if !o.keys().all(|k| ["candidates", "exclude", "count", "weights"].contains(&k.as_str())) {', "        if false {")], L),
+     [(D, '        if !o.keys().all(|k| ["candidates", "exclude", "count", "weights", "recipient"].contains(&k.as_str())) {', "        if false {")], L),
     ("a fixed seed instead of the OS CSPRNG",
-     [(D, "self.weights.as_deref(), &mut OsRng)?;",
-       "self.weights.as_deref(), &mut <rand_chacha::ChaCha20Rng as rand_chacha::rand_core::SeedableRng>::seed_from_u64(0))?;")], FP),
+     [(D, "        Ok(self.draw(&mut OsRng)?.to_string())",
+       "        Ok(self.draw(&mut <rand_chacha::ChaCha20Rng as rand_chacha::rand_core::SeedableRng>::seed_from_u64(0))?.to_string())")], FP),
     # the facades
-    ("PQZ: pickDecoys off the allow-list", [(QF, '        "pickDecoys" => has(&["candidates", "exclude", "count", "weights"]),\n', "")], FP),
+    ("PQZ: pickDecoys off the allow-list", [(QF, '        "pickDecoys" => has(&["candidates", "exclude", "count", "weights", "recipient"]),\n', "")], FP),
     ("Zether: pickDecoys not routed to the pick", [(ZF, '        if c.cmd == "pickDecoys" {', '        if c.cmd == "pickDecoys!" {')], FZ),
     # pqz-read --command decoys
     ("pqz-read: the sync point ignored", [(B, "    let sync = a.sync_block.unwrap_or(block);", "    let sync = a.sync_block.map_or(block, |_| block);")], PR),

@@ -7,8 +7,8 @@
 //!            [--command balance] --for-op7 <true|false>                                  (the holder's own balance)
 //!            --command auditRead --from-ua <bytes32> --send-counter <n> --leg <j>       (an audited leg, the token's auditor)
 //!            [--words]                                                                  (print the request read; no key)
-//!            --command decoys --count <n> [--exclude <ua>,…] [--sync-block <n>]          (op 7's decoys; no key, no stdin)
-//!            [--decoy-filter activity|holder --window <blocks>] [--words]
+//!            --command decoys --count <n> [--exclude <ua>,…] [--recipient <ua>] [--sync-block <n>]   (op 7's decoys; no key,
+//!            [--decoy-filter activity|holder --window <blocks>] [--words]                              no stdin)
 //!
 //! The key is read from **stdin** as JSON, `{"mnemonic": "…", "passphrase"?: "…", "account": n, "index": n}` (the handle
 //! `Wallet::pqz_key(account, index)`), piped from a file; a terminal on stdin is refused. It never leaves this process.
@@ -38,13 +38,16 @@
 //! the registry's PQZ-capable list (`uaAt(0x0142, i)`, `i < uaCount(0x0142)`), read from storage (`UAStore.Layout` slots 4
 //! and 5); the list's length is read at the sync point (`--sync-block`, at most the read block; default the read block), so a
 //! UA registered later is never a candidate; everything else is read at the read block. `--ua` and every `--exclude` (the real
-//! recipients) are excluded. By default the pick is uniform; `--decoy-filter` (an option, off by default) keeps only the
+//! recipients) are excluded; `--recipient` (the real recipient, excluded too) goes to the pick, which then shuffles the
+//! legs (below). By default the pick is uniform; `--decoy-filter` (an option, off by default) keeps only the
 //! candidates active in the token in the last `--window` blocks, by the account's counters at `block − window`,
 //! `block − window/2` and `block` (`activity`: `pendingCount`, `rolled` or `sendCounter` moved, i.e. a pending entry, a
 //! rollover or a debit; `holder`: `sendCounter` moved, a holder-authorised debit), weighted by recency (2 when active in the
 //! newer half, 1 when only in the older half); the node must hold the state of those blocks. The candidates go to `ua-rs`'s
 //! `pickDecoys` (`facade::decoys`, the OS CSPRNG), then each chosen decoy's key is read: `pqzKey[ua]` (proven) and its SSTORE2
-//! code. Prints `{decoys: [{ua, pk}], syncBlock, listCount, block, blockHash}` (each an op 7 leg with `amount` 0); `--words`
+//! code. Prints `{decoys: [{ua, pk}], syncBlock, listCount, block, blockHash}` (each an op 7 leg with `amount` 0), with
+//! `--recipient` also `legs`, the full leg order (the recipient and the decoys' UAs, uniformly shuffled by the OS CSPRNG): the
+//! caller builds op 7's legs in that order (a fixed position names the recipient); `--words`
 //! prints `pickDecoys`'s request instead (`{command, request, syncBlock, listCount, block, blockHash}`). Residuals: the
 //! registry's slots 2, 4 and 5 are hand-copied (no registry layout pin on this branch); `--registry` must be the generation
 //! that lists `0x0142` (a predecessor's list is not followed); with the versioned PQZ keys of `ua-mtx-merge` group 3g the key
@@ -99,6 +102,7 @@ struct Args {
     words: bool,
     count: Option<u64>,
     exclude: Vec<Word>,
+    recipient: Option<Word>,
     sync_block: Option<u64>,
     filter: Option<String>,
     window: Option<u64>,
@@ -148,6 +152,7 @@ fn parse() -> Result<Args, String> {
             "--words" => a.words = true,
             "--count" => a.count = Some(int(val()?)?),
             "--exclude" => a.exclude = val()?.split(',').map(|u| fixed("--exclude", u)).collect::<Result<_, _>>()?,
+            "--recipient" => a.recipient = Some(fixed("--recipient", &val()?)?),
             "--sync-block" => a.sync_block = Some(int(val()?)?),
             "--decoy-filter" => a.filter = Some(val()?).filter(|v| v == "activity" || v == "holder").ok_or("--decoy-filter: activity or holder")?.into(),
             "--window" => a.window = Some(int(val()?)?),
@@ -159,9 +164,9 @@ fn parse() -> Result<Args, String> {
         return Err("needs --rpc, --chain-id, --chain-uid, --factory, --registry, --token, --ua and one of --depth / --finalized (R1–R6)".into());
     }
     let entry = u8::from(a.from_ua.is_some()) + u8::from(a.send_counter.is_some()) + u8::from(a.leg.is_some());
-    let decoy = ["--count", "--exclude", "--sync-block", "--decoy-filter", "--window"].iter().any(|f| seen.contains(*f));
+    let decoy = ["--count", "--exclude", "--recipient", "--sync-block", "--decoy-filter", "--window"].iter().any(|f| seen.contains(*f));
     if decoy && a.command != "decoys" {
-        return Err("--count, --exclude, --sync-block, --decoy-filter and --window go with --command decoys only".into());
+        return Err("--count, --exclude, --recipient, --sync-block, --decoy-filter and --window go with --command decoys only".into());
     }
     match a.command.as_str() {
         "decoys" if a.for_op7.is_none() && entry == 0 && a.count.is_some() && a.filter.is_some() == a.window.is_some() => {}
@@ -471,6 +476,7 @@ fn decoys(a: &Args) -> Result<Value, String> {
     let list = keccak256(&[be(PQZ_LIST), be(REG_AT_SLOT)].concat());
     let mut exclude = a.exclude.clone();
     exclude.push(a.ua);
+    exclude.extend(a.recipient);
     let mut candidates: Vec<Word> = Vec::new();
     for i in 0..n {
         let u = r.word(&a.registry, &keccak256(&[be(i), list].concat()))?;
@@ -479,6 +485,9 @@ fn decoys(a: &Args) -> Result<Value, String> {
         }
     }
     let mut request = json!({"exclude": exclude.iter().map(|u| hx(u)).collect::<Vec<_>>(), "count": a.count});
+    if let Some(u) = a.recipient {
+        request["recipient"] = json!(hx(&u));
+    }
     if let Some(w) = a.window {
         let old = block.checked_sub(w).filter(|_| w >= 2).ok_or("--window: at least 2 and at most the read block")?;
         let (old, mid) = (pin(old)?, pin(block - w / 2)?);
@@ -526,7 +535,11 @@ fn decoys(a: &Args) -> Result<Value, String> {
                 _ => return Err(format!("the PQZ key of listed UA {} is not a proven key of this set", hx(&ua))),
             }
         }
-        json!({"decoys": legs})
+        let mut out = json!({"decoys": legs});
+        if a.recipient.is_some() {
+            out["legs"] = picked["legs"].clone();
+        }
+        out
     };
     for (n, h) in &pins {
         recheck(url, *n, h)?;
