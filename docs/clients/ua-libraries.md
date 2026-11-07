@@ -161,8 +161,8 @@ T15g, T15i, T15l):
    makes key handles only after a test-only marker. `scripts/check_test_features.py` (CI and the gates) fails when a manifest
    enables `vectors` or `hazmat` of `scaas-ua`, `zether-prover` or `pqz-ffi`, or `vectors` of `scaas-ct`, outside
    `[dev-dependencies]` or a test-only crate, or when `cargo tree -e features` of `ua-c` (the library `ua-py`, `ua-go` and
-   `ua-cs` load), `ua-cxx`, `ua-qt`, `ua-dart-frb`'s crate, `zether-prover` (`zether-read-balance`), `scaas-node` or
-   `pqz-core/ffi/wasm` shows one, transitive defaults included; each check has a positive control. The name `hazmat` follows the RustCrypto convention and is not a security boundary: the command set is.
+   `ua-cs` load), `ua-cxx`, `ua-qt`, `ua-dart-frb`'s crate, `zether-prover` (`zether-read-balance`), `scaas-node`,
+   `pqz-core/ffi/wasm` or `ua-rs` itself (`pqz-read`) shows one, transitive defaults included; each check has a positive control. The name `hazmat` follows the RustCrypto convention and is not a security boundary: the command set is.
 7. **Tests that can fail (both).** `clients/ua-rs/tests/no_oracle.rs`: the 8·K crafted PQZ queries recover `s` through the
    `vectors`-only raw `dec` (positive control) and are refused by every production command in every bare shape with the key
    unused; consistent fabricated words are decrypted (the residual control: authenticity is the reading layer's). `ua-py`
@@ -187,7 +187,7 @@ owner 2026-11-06). Reading the words from an untrusted RPC or indexer and passin
 layer's. Stated plainly (Fable review 2026-11-07, verdict 1): `ua-rs` decrypts **any internally consistent fabricated words**,
 so the **full key-recovery oracle** (8·K crafted PQZ queries recover the key `s`) exists for any app that breaks these
 requirements; the library's word checks stop a careless caller, never a forger. Zether has a reference reading layer
-(`zether-read-balance --rpc`, below); **PQZ has none yet**: the owner approved one (2026-11-07, plan task T15m, PLANNED). EVM assertions; another family states its own before its layout parser lands. Numbered as in the spec's §4.2.
+(`zether-read-balance --rpc`, below), and so has PQZ (`pqz-read`, below; owner 2026-11-07, plan task T15m). EVM assertions; another family states its own before its layout parser lands. Numbered as in the spec's §4.2.
 
 | # | Requirement | Checkable assertion |
 |---|---|---|
@@ -206,6 +206,26 @@ node trusts that operator. That trust is the holder's choice. `zether-read-balan
 layer for the holder's own Zether account: requirements 1 to 3, 5 and 6 checked against the configured node, storage words by
 block hash, every read before the key is used; it reads no entry, so the `codeHash` check of requirement 4 does not arise;
 without `--rpc` it reads the holder's own sealed cache box; a typed-in ciphertext (`--ct`) exists only under `hazmat`. BUILT.
+
+***The PQZ reference reading layer, `pqz-read`: BUILT*** (ua-rs-sign T15m, owner 2026-11-07; a binary of the `ua-rs` package,
+`clients/ua-rs/src/bin/pqz-read.rs`, never in the library). It reads the words of `balance` (the holder's own account, with
+`--for-op7`) and `auditRead` (an audited leg, on the token's auditor's key) and feeds them to `ua-rs`; it never parses a
+ciphertext or decrypts itself. Required: `--rpc` (requirement 1: the one source, a node the holder names; a second one refused),
+`--chain-id` and `--chain-uid` (2), `--depth` or `--finalized` (3: every read by block hash, EIP-1898 with `requireCanonical`;
+the node must answer the block asked for and the block must keep its hash until the last read), `--factory` (5: `_info[token]`
+`exists` with a PQZ kind), `--registry` and `--ua` (6: `pqzKey[ua]`'s code must hold the handle's key; for `auditRead`, `--ua`
+the token's `auditorUA` with `auditorMode` not NONE). Storage and code only (4), the token's slots by `STATE_LAYOUT` (the
+`scaas.pqz` pin) under the namespace's ERC-7201 root, the pending window `[rolled, p)` by the facade's own rule; every read,
+the block re-check included, before the key is used, nothing after it to the node (7). The key arrives as JSON on stdin, the
+URL and body go to `curl` on its stdin; `--words` prints the request read without a key. `clients/ua-rs/tests/pqz_read.rs`:
+against a local `anvil`, the words equal the forge rows byte for byte, the wallet rows and an audited op 1 decrypt with real
+keys, and each refusal of requirements 2, 3, 5 and 6 is named (mutants:
+`smartcontracts/evm/runs/2026-11-07-ua-rs-sign-t15m-mutants.txt`). **Residuals:** the `OpenFactory._info` offsets (slot 8,
+`kind` and `exists` bytes) are hand-copied, as in `zether-read-balance`, until the factory index on `ua-mtx-merge` pins them;
+the registry's `pqzKey` slot (`UAStore.Layout` slot 2) is hand-copied and `--registry` is the holder's configuration, not
+checked against the token's immutable `registry`; requirement 4's `codeHash` check is not made (no `eth_getProof`); the
+other words commands (`proveDisclose`, `proveDiscloseSender`, `openMemo`, the debits) are not wired; a debit request is not
+built. UNAUDITED.
 
 **Not here.** Signing (`UAKey`, the per-kind signers), PoP signatures and group vectors, the registry contract, the UA ledger.
 Not built yet: the FRB layer as a Flutter plugin and its Android, iOS and web builds (the web build needs nightly Rust, wasm-bindgen-cli and COOP/COEP headers; whether `scaas-ua` compiles to wasm is open), and Qt packaging for Windows and macOS.

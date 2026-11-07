@@ -237,6 +237,17 @@ required-features = ["pqz"]
 name = "wallet_external"
 required-features = ["vectors"]
 
+# ua-rs-sign T15m (ARCH-POS-13, spec no-decryption-oracle §4.2): the PQZ reference reading layer, a binary beside the library
+# (never in it; a production artifact, check_test_features.py), and its anvil test
+[[bin]]
+name = "pqz-read"
+path = "src/bin/pqz-read.rs"
+required-features = ["pqz"]
+
+[[test]]
+name = "pqz_read"
+required-features = ["pqz"]
+
 # ua-rs-sign T15c2 (Codex C1): a `vectors` build makes key handles only after the test-only marker (its own process)
 [[test]]
 name = "vectors_marker"

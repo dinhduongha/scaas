@@ -34,6 +34,7 @@ ARTIFACTS = [
     ("clients/zether-prover", []),  # zether-read-balance, zether-cli and the wasm library: the package's features
     ("scaas-node", []),  # the node (scaas-ua for the UA formats; T15l, Fable P3-4)
     ("pqz-core/ffi/wasm", []),  # pqz-ffi's wasm32 library (T15l, Fable P3-4)
+    ("clients/ua-rs", []),  # pqz-read, the PQZ reference reading layer (T15m): the package's default features
 ]
 DEP_TABLES = ("dependencies", "build-dependencies")
 
@@ -154,6 +155,11 @@ def main():
     print(f"positive control (graph): scaas-ct/vectors forced in zether-prover: {len(ct)} findings; scaas-ua in scaas-node's "
           f"graph {node}, pqz-ffi in pqz-core/ffi/wasm's {wasm}: {ok}")
     bad += [] if ok else ["positive control (graph, T15l rows) failed"]
+    # T15m: the ua-rs row is not vacuous: its own `vectors` forced is found
+    forced = check_graph("clients/ua-rs", ["--features", "vectors"])
+    ok = "clients/ua-rs" in rows and any('scaas-ua feature "vectors"' in x for x in forced)
+    print(f"positive control (graph): clients/ua-rs with vectors forced: {len(forced)} findings, scaas-ua found: {ok}")
+    bad += [] if ok else ["positive control (graph, ua-rs row) failed"]
     for b in bad:
         print(f"FINDING: {b}")
     print(f"check_test_features: {'FAIL' if bad else 'ok'}")

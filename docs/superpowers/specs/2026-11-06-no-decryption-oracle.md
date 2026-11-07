@@ -1,7 +1,7 @@
 # No decryption oracle: bringing the client libraries in line with ARCH-POS-13 — fix spec
 
 **Status:** built on `ua-rs-sign` (T15b … T15k, the fix wave T15l after the Fable review of 2026-11-07); the reading layer
-outside this repository SPECIFIED; a PQZ reference reading layer is plan task T15m (owner-approved 2026-11-07, not built).
+outside this repository SPECIFIED; the PQZ reference reading layer `pqz-read` built (plan task T15m, owner-approved 2026-11-07).
 First written SPECIFIED (2026-11-06). Revised twice the same day: after the Fable review (P1-1 … P3-3, accepted by
 the controller), then by **owner rulings 2026-11-06**: `ua-rs` contains no light client and no chain-state verifier; the check
 that words are real chain state belongs to the layer that reads the chain (the wallet layer and the app, as `ua-rs-sign` spec
@@ -279,9 +279,11 @@ byte-format change (T19c adds layout pins and tests only). `ua-rs` stays I/O-fre
   recover `s`; `auditRead` and `proveDisclose` give the same at their windows). The library makes the bare-ciphertext path
   impossible and the location explicit, and every word check refuses a careless caller; none makes words authentic. The
   residual control of §5 (`no_oracle.rs`) shows this on purpose. ARCH-POS-13 then binds the app.
-- **Reference reading layers.** Zether has one: `zether-read-balance --rpc` (R1 to R7, T14b). **PQZ has none yet**: an app
-  reading PQZ state for `ua-rs` builds its own; the owner approved a PQZ reference reading-layer CLI (2026-11-07, plan task
-  T15m, SPECIFIED, not built). Until it lands, the R1 to R7 assertions of §4.2 are the only guide.
+- **Reference reading layers.** Zether has one: `zether-read-balance --rpc` (R1 to R7, T14b). PQZ has `pqz-read` (a binary of
+  the `ua-rs` package, T15m, owner-approved 2026-11-07): `balance` and `auditRead` only; its residuals (hand-copied
+  `OpenFactory._info` offsets until the factory index pins them, the registry's `pqzKey` slot hand-copied and `--registry`
+  unchecked against the token's immutable, no `codeHash` check) in `docs/clients/ua-libraries.md#reading-layer`. An app
+  reading PQZ state for another command builds its own reading layer under the R1 to R7 assertions of §4.2.
 - **The reading layer's source:** see §4.2 (owner decision Q1b).
 - A stale read shows an old balance; a debit over it is refused on chain (T8 retry), revealing nothing about `s`.
 - A genuine state is composed partly by senders (credits, decoys); its decryption is the holder's own data and reveals
