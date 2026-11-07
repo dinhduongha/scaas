@@ -8,7 +8,7 @@ that words are real chain state belongs to the layer that reads the chain (the w
 §10.2 already places chain reading); `ua-rs` keeps the library duties of §4.3. The owner then decided Q1, Q1b and Q3 as
 recommended and recorded Q2 as moot for `ua-rs` (2026-11-06, §7). Revised again after independent Fable and Codex reviews
 (2026-11-06 / 07, all items accepted, §9). Fix spec for owner ruling ARCH-POS-13 "Never a
-decryption oracle" (`docs/decisions.md` on branch `ua-mtx-merge`, not yet on this branch, commit `62adb3d7`; also in
+decryption oracle" (`docs/decisions.md` on branch `ua-mtx-merge`, commit `62adb3d7`; on this branch since T19, the same text; also in
 `AGENTS.md`). The owner's words: **"NO oracle!"**: absolute, no exception, no opt-in. Plan tasks: appended to
 [`plans/2026-11-05-ua-rs-sign.md`](../plans/2026-11-05-ua-rs-sign.md) (section "ARCH-POS-13 rework"). Inputs: the read-only code
 audit of decrypt entry points (2026-11-06, findings F1 to F9 below) and the research note
@@ -282,7 +282,7 @@ byte-format change (T19c adds layout pins and tests only). `ua-rs` stays I/O-fre
 - **Reference reading layers.** Zether has one: `zether-read-balance --rpc` (R1 to R7, T14b). PQZ has `pqz-read` (a binary of
   the `ua-rs` package, T15m, owner-approved 2026-11-07): `balance` and `auditRead` only; its residuals (hand-copied
   `OpenFactory._info` offsets until the factory index pins them, the registry's `pqzKey` slot hand-copied and `--registry`
-  unchecked against the token's immutable, no `codeHash` check) in `docs/clients/ua-libraries.md#reading-layer`. An app
+  unchecked against the token's immutable, no `codeHash` check) in `docs/clients/ua-libraries.md#CLI-UAL-40`. An app
   reading PQZ state for another command builds its own reading layer under the R1 to R7 assertions of §4.2.
 - **The reading layer's source:** see §4.2 (owner decision Q1b).
 - A stale read shows an old balance; a debit over it is refused on chain (T8 retry), revealing nothing about `s`.

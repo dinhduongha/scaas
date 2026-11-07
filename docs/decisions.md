@@ -60,9 +60,10 @@ entries), **Why.**, **Cost if wrong.** and **Source.** Superseded entries keep o
 36. [Networks — Algorand](#36-networks--algorand)
 37. [Clients — signers and clientkeys](#37-clients--signers-and-clientkeys)
 38. [Clients — SCaaS app](#38-clients--scaas-app)
-39. [Integration — ERP](#39-integration--erp)
-40. [Integration — example connector](#40-integration--example-connector)
-41. [Alias index](#alias-index)
+39. [Clients — UA libraries](#39-clients--ua-libraries)
+40. [Integration — ERP](#40-integration--erp)
+41. [Integration — example connector](#41-integration--example-connector)
+42. [Alias index](#alias-index)
 
 ## 1. Architecture and register policy
 
@@ -240,6 +241,30 @@ longer holds alloy at 1.6, so its requirement does: `alloy = "~1.6"` (scaas-node
 0.22 sets from near-sdk's minimum protocol version; a newer version would split NEAR off.
 **Cost if wrong.** A crate that needs a newer compiler waits until NEAR's cap moves, or the repository moves together.
 **Source.** Owner rulings 2026-11-05 (toolchain; alloy held at `~1.6`).
+
+<a id="ARCH-POS-13"></a>
+### ARCH-POS-13 — Never a decryption oracle
+- old: — · status: current · owner: yes · date: 2026-11-06 · normative: decisions.md#ARCH-POS-13 · superseded-by: —
+
+**Rule.** No part of SCaaS ever acts as a decryption oracle, for PQZ or Zether: no wallet, client library, binding, CLI,
+service, node, MPC quorum or auditor tool decrypts, opens or test-decrypts a ciphertext chosen by anyone other than the
+key holder and lets that party learn anything about the result: the plaintext, success or failure, an error code,
+timing, or a later action that depends on it. A decryption result reaches only the key holder, or a viewer the key
+holder names. Where a ciphertext arrives from outside (an RPC or indexer response, a disclosure bundle, a peer message),
+nothing about its decryption is returned or signalled to that source. No exception, no opt-in.
+**Why.** PQZ encryption is IND-CPA, not CCA: a decryption oracle recovers the secret `s` with 8·K crafted queries (288 at
+`n2304-kmax4096`; research note on PQZ threshold decryption, §12.1). MPC does not
+help: inside a quorum the oracle hands one member the whole key (§12.5, open). Zether's ElGamal has no such key
+recovery, but one rule for every scheme keeps every decrypt path the same. Owner (2026-11-06): never use an oracle.
+It applies to every key holder, not only an MPC quorum: a single-holder wallet, the operator of option (A), and the
+auditor key of a token are all exposed the same way.
+The check that a ciphertext is real chain state lives in the layer that reads the chain (the wallet layer and the
+app), from a source the holder trusts; the signing library (`ua-rs`) holds no light client or state verifier, takes
+only named chain locations with the words that layer supplies, and offers no bare-ciphertext decrypt in release builds
+(owner 2026-11-06).
+**Cost if wrong.** A reachable decrypt path is a key-recovery attack on every account behind it. PQZ MPC quorums for
+account keys are not built while the in-quorum oracle is open; `msig` holders use option (A), the operator, meanwhile.
+**Source.** Owner ruling 2026-11-06; research note `research/pqz-threshold-decrypt-prove.md` (branch `ua-mtx-merge`) §12.1, §12.5; the code audit of decrypt entry points (2026-11-06, done): [no-oracle spec](superpowers/specs/2026-11-06-no-decryption-oracle.md) §2. Library rules: CLI-UAL-20 to CLI-UAL-27; the layer that reads the chain: CLI-UAL-30 to CLI-UAL-38.
 
 ### ARCH-POS-80 — EVM-only, META-only first scope
 - old: R1 · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: NET-ALL-02, CTR-ZTH-01, CTR-ZTH-18, CTR-ZTH-19, CTR-UA-02, CTR-UA-16, CTR-UA-22, INT-ERP-11, ARCH-POS-02
@@ -7974,6 +7999,46 @@ It said: Custody tier A/B, HSM or MPC; replaced by CLI-SGN-32.
 **Cost if wrong.** A type-string change regenerates `typed_ops.json` and the contract tests that read it.
 **Source.** plan `superpowers/plans/2026-10-31-typed-signing.md` (C1, C7).
 
+### CLI-SGN-43 — The UA KEM key is derived per UA and version; only `ss` reaches a caller
+- old: — · status: current · owner: yes · date: 2026-11-05 · normative: clients/signers-clientkeys.md#CLI-SGN-43 · superseded-by: —
+
+**Why.** Derivation (Q2) lets a user restore the key from the phrase like every other key, and makes CTR-UA-32's one-key-per-version rule hold by construction. `ss` to callers (Q6): a client core builds its own wrap KEK from it while `dk` and `sk_X` stay inside. `be64 version`: owner 2026-11-05.
+**Cost if wrong.** A deleted version can be regenerated, so deleting it bounds nothing; an owner who wants that needs a random key in the vault. The handle is a decapsulation oracle, so a binding must not expose it to page scripts.
+**Status.** BUILT: clientkeys T1b `f770b6b6`, vectors `kem.json`; `ua-rs` T7 `4629d4fa`; ACVP ML-KEM-1024 and RFC 7748 (T1c `68c585e4`). UNAUDITED.
+**Source.** [signer spec](superpowers/specs/2026-11-05-ua-rs-sign.md) §6.1, §6.2, §14 Q2, Q6.
+
+### CLI-SGN-44 — Seal is single-use HPKE-like; a container carries the sender's `UASig` under an off-chain purpose
+- old: — · status: current · owner: yes · date: 2026-11-05 · normative: clients/signers-clientkeys.md#CLI-SGN-44 · superseded-by: —
+
+**Why.** Seal AEAD (Q5): AES-256-GCM with a single-use key and a zero nonce, available in WebCrypto; GCM-SIV adds nothing when the key is never reused. `scaas.ua.purpose.seal.v1` (MD-10) is off-chain, so no contract list changes and no contract ever accepts a container signature. `sender.auth` is a full `UASig`, so an `msig` sender signs in the minimal form (owner 2026-11-05).
+**Cost if wrong.** A container format change regenerates `seal.json` and every reader.
+**Status.** BUILT: clientkeys T1b `f770b6b6`, `ua-rs` T8 `1da36807`, T9 `6e092199`, the existing device's `link_seal` `69a6ad74`. As built the purpose sits outside `PURPOSES` as `seal_purpose_tag()` (clientkeys `SEAL_TAG`); MD-10's text said `PURPOSES` with a mark. UNAUDITED.
+**Source.** [signer spec](superpowers/specs/2026-11-05-ua-rs-sign.md) §6.3, §14 Q5; [plan](superpowers/plans/2026-11-05-ua-rs-sign.md) MD-10.
+
+### CLI-SGN-45 — An `msig` UA has no KEM key, client side now; the registry and the record builders move in plan task T66b
+- old: — · status: current · owner: yes · date: 2026-11-05 · normative: clients/signers-clientkeys.md#CLI-SGN-45 · superseded-by: —
+
+**Why.** An `msig` has no single key to decapsulate with; sealing to it means sealing to each accepted member. Owner 2026-11-05; MD-11 option (c), owner 2026-11-06: `kem_key` and the seal callers now, the record builders with the registry's own refusal, because the generators, the contract e2e and four binding suites build those records through the same builders while the registry still accepts them. Owner 2026-11-07 moved that step from 3c to plan task T66b on `ua-mtx-merge` and confirmed the rule.
+**Cost if wrong.** Until T66b a registry can still store an `msig` KEM key, and the record builders still build one.
+**Status.** BUILT for `kem_key` (T7 `4629d4fa`) and the seal callers (T8 `1da36807`, `Recipient::ua`); PLANNED for the record builders and CTR-UA-32's registry refusal (T66b).
+**Source.** [signer spec](superpowers/specs/2026-11-05-ua-rs-sign.md) §6.1; [plan](superpowers/plans/2026-11-05-ua-rs-sign.md) MD-11; plan `2026-11-04-ua-mtx-merge.md` T66b on `ua-mtx-merge` (`d2552671`).
+
+### CLI-SGN-46 — The scaas Schnorr production nonce is hedged over the 512-bit map
+- old: — · status: current · owner: yes · date: 2026-11-05 · normative: clients/signers-clientkeys.md#CLI-SGN-46 · superseded-by: —
+
+**Why.** No production signer existed for `0x0104` and `0x0105` (Q7). A 256-bit `mod r` map has a bias of about 2.4 bits on bn254 and 1.1 on BLS12-381, enough for lattice key recovery; the signer calls the verifier's one `hashToScalar`, and `Y` is in the hash.
+**Cost if wrong.** A nonce rule change regenerates the fixed-`aux` rows.
+**Status.** BUILT: clientkeys T1a `1aabd765`, `ua-rs` T3c `b149726b`; `nonceMap` rows and the 256-bit-map mutant killed. UNAUDITED.
+**Source.** [signer spec](superpowers/specs/2026-11-05-ua-rs-sign.md) §3, §14 Q7.
+
+### CLI-SGN-47 — An `msig` PQZ holder's operator key: k-of-n `seed32` backup, a warning when absent, the rebuilt key persisted, direct members only
+- old: — · status: current · owner: yes · date: 2026-11-06 · normative: clients/signers-clientkeys.md#CLI-SGN-47 · superseded-by: —
+
+**Why.** Owner 2026-11-06, each as recommended: (1) build a k-of-n backup of the operator's PQZ `seed32`, client side, no contract change; key rotation for an `msig` holder is rejected as the remedy (it needs the old key to migrate the balance, so it does not help against an uncooperative operator); (2) a client **warning, not a refusal**, when a holder has no backup: the client still builds `register` / `setPqzKey`; (3) **the rebuilt key persists** in the rebuilder's encrypted vault and backup, as an imported key does, since `lock()` otherwise lost it, and the new operator should rotate to a new key version soon; (4) **direct members only**: an `msig` member holds no KEM key and its own members are not reached. Controller: Shamir per byte over GF(2^8), the share header in the container's plaintext, every refusal `Argument`, no new status, no vault version bump.
+**Cost if wrong.** An operator who never made the backup still strands the balance; that is why the warning exists. The old operator and every member who held `k` shares can read under the rebuilt version until it rotates.
+**Status.** BUILT in `ua-rs` and `ua-c`: T16a `4e734a7a`, T16b `a76814e7`. No other binding wraps the five C calls yet (stated in T16b's summary). UNAUDITED.
+**Source.** [plan](superpowers/plans/2026-11-05-ua-rs-sign.md) T16a, T16b; spec `2026-11-06-pqz-key-versions.md` §7.2 on `ua-mtx-merge`.
+
 ## 38. Clients — SCaaS app
 
 ### CLI-APP-01 — One SPA, two halves, one build
@@ -8160,7 +8225,433 @@ Change: the app never offers `approve` on a SCaaS token; spenders on outside tok
 **Why.** With an open factory anyone can deploy "USDC".
 **Source.** [history/specs/2026-10-06-scaas-app-design.md](history/specs/2026-10-06-scaas-app-design.md) line 133.
 
-## 39. Integration — ERP
+### CLI-APP-28 — The app is a layer that reads the chain for a confidential balance
+- old: — · status: current · owner: yes · date: 2026-11-06 · normative: clients/app.md#CLI-APP-28 · superseded-by: —
+
+**Why.** `config.json`'s `chains[].rpc` is an app default, which requirement 1 of CLI-UAL-30 excludes, so it serves a decryption only once the holder has selected that node explicitly; until then the balance comes from the holder's sealed cache and no word from it is decrypted.
+**Cost if wrong.** An app that decrypts words from its default endpoint is the key-recovery oracle of ARCH-POS-13.
+**Status.** SPECIFIED: the app's browser words commands wait for the browser binding (PLANNED).
+**Source.** [no-oracle spec](superpowers/specs/2026-11-06-no-decryption-oracle.md) §4.2; ua-rs-sign T15j `c2992438`.
+
+## 39. Clients — UA libraries
+
+Rules of the `ua-rs` wallet surface and its facades, then the records of the decisions behind them (CLI-UAL-50 to CLI-UAL-55). Everything here is UNAUDITED.
+
+### CLI-UAL-01 — `ua-rs` is the only signer; a secret leaves it only through a named export
+- old: — · status: current · owner: yes · date: 2026-11-05 · normative: clients/ua-libraries.md#CLI-UAL-01 · superseded-by: —
+
+**Why.** One signer and crypto core instead of one per client; rulings 1 to 3 of CLI-UAL-50. Clients over it never sign on their own and apps reach it through the bindings.
+**Cost if wrong.** A flaw in `ua-rs` reaches every client; a vector row is the only cross-check, so clientkeys stays an independent writer.
+**Status.** BUILT: T2 `b3e051a5`, T3a `82fbac3f`, T8 `1da36807`, T9 `6e092199`, T10 `b2c56d53`. UNAUDITED.
+**Source.** [signer spec](superpowers/specs/2026-11-05-ua-rs-sign.md) §1, §2, §8.4.
+
+### CLI-UAL-02 — No release signature takes randomness
+- old: — · status: current · owner: yes · date: 2026-11-05 · normative: clients/ua-libraries.md#CLI-UAL-02 · superseded-by: —
+
+**Why.** A caller-supplied RNG or nonce is how a fixed nonce reaches production (Fable F-01, P0).
+**Cost if wrong.** Deterministic entry points stay behind `vectors`, so CLI-UAL-25 must hold.
+**Status.** BUILT: T2 `b3e051a5` to T10 `b2c56d53` (compile-fail doc tests), T12 `b62cb2b4`.
+**Source.** [signer spec](superpowers/specs/2026-11-05-ua-rs-sign.md) §5.1, §9.1; [Fable review](research/ua-rs-sign-fable-review.md).
+
+### CLI-UAL-03 — Every outside input is bounded by length and depth
+- old: — · status: current · owner: yes · date: 2026-11-05 · normative: clients/ua-libraries.md#CLI-UAL-03 · superseded-by: —
+
+**Why.** A stack overflow or an allocation bomb aborts the host (the node's rule, F-44). Caps as built differ from the spec's first table: vault 2 MiB / depth 2, manifest depth 3, container 4 MiB / depth 7 (T11); members JSON 512 KiB and 64 UAs (owner 2026-11-06, about three ML-DSA-87 keys fit in 16 KiB); PQZ command 4 MiB (CLI-UAL-55).
+**Cost if wrong.** A cap too low refuses a real request; it shows as `Argument`, never as a wrong result.
+**Status.** BUILT: T11 `08edeea3`, `69a6ad74`, `e7d6349d`; fifteen fuzz targets; `fuzz_caps` in CI.
+**Source.** [signer spec](superpowers/specs/2026-11-05-ua-rs-sign.md) §9.3; plan T11, T12 follow-ups, T15e.
+
+### CLI-UAL-04 — Errors carry no input; no panic crosses the ABI
+- old: — · status: current · owner: yes · date: 2026-11-05 · normative: clients/ua-libraries.md#CLI-UAL-04 · superseded-by: —
+
+**Why.** An error string is the easiest leak of a word or a passphrase (F-47); `catch_unwind` does not help under `panic = "abort"` or on wasm32 (F-30).
+**Cost if wrong.** frost-core has two OS-RNG panics; no FROST call is exported.
+**Status.** BUILT: T12 `b62cb2b4`; `test_error_strings_never_contain_an_input`, `mnemonic_refusals_name_no_input`.
+**Source.** [signer spec](superpowers/specs/2026-11-05-ua-rs-sign.md) §9.2.
+
+### CLI-UAL-05 — Header rules of ABI 6: handles, and whose memory holds a secret
+- old: — · status: current · owner: yes · date: 2026-11-05 · normative: clients/ua-libraries.md#CLI-UAL-05 · superseded-by: —
+
+**Why.** The old rules ("no allocation crosses the ABI", "pure computation over immutable static tables") became false with handles. Rust cannot wipe caller memory, so the header says who does (F-31, F-32). **T13c follow-up (owner 2026-11-06, who asked for safe secrets):** flutter_rust_bridge's transfer buffers are freed unzeroed, so `ua-dart-frb` moved every secret to `SecretBytes`, which also supersedes T13c's decision that AEAD, HKDF and HMAC keys stay plain. No separate id.
+**Cost if wrong.** `SecretBytes` needs `dart:ffi`, so the package has no web build (it had none anywhere); a view kept past dispose reads freed memory.
+**Status.** BUILT: T12 `b62cb2b4` (v5 header kept, `a19922a7`); bindings T13a `208805e9`, T13b `02a1d7fb`, T13c `7dca925b`, follow-up `037d5a29`, T13d `877094b3`, T13e `a5bcd806`, T13f `24406793`.
+**Source.** [signer spec](superpowers/specs/2026-11-05-ua-rs-sign.md) §9.2.
+
+### CLI-UAL-06 — A facade adds key custody and the ABI, and no request field can carry a key
+- old: — · status: current · owner: yes · date: 2026-11-05 · normative: clients/ua-libraries.md#CLI-UAL-06 · superseded-by: —
+
+**Why.** Ruling 4 of CLI-UAL-50; an allow-list of fields per command, not a deny-list of secret names (F-35). Controller: the facade keeps only `seed32` for PQZ (32 bytes per key, not 6 KiB in the arena).
+**Cost if wrong.** zether-prover's and pqz-core's own copies of a key on their stacks stay residuals of those crates.
+**Status.** BUILT: T14 `2d8e1d11`, T15 `12b4577a`, fuzz targets `zether_cmd`, `pqz_cmd`.
+**Source.** [signer spec](superpowers/specs/2026-11-05-ua-rs-sign.md) §10; [plan](superpowers/plans/2026-11-05-ua-rs-sign.md) T14, T15.
+
+### CLI-UAL-07 — The external-key interface is fixed and tested; device implementations are phase 2
+- old: — · status: current · owner: yes · date: 2026-11-05 · normative: clients/ua-libraries.md#CLI-UAL-07 · superseded-by: —
+
+**Why.** Ruling 8 of CLI-UAL-50 and MD-13: phase 2 adds an implementation and one constructor and changes no signature.
+**Cost if wrong.** A change of `ScaasUaExternalSigner` or of `external_key_new` means ABI 7 in every binding.
+**Status.** Interface BUILT: T3a `82fbac3f`, T16 `bbe8803a` (C: `KIND_UNAVAILABLE` in every build, bit `external` clear). Device implementations PLANNED; no device exists to test them on yet.
+**Source.** [signer spec](superpowers/specs/2026-11-05-ua-rs-sign.md) §9.4; [plan](superpowers/plans/2026-11-05-ua-rs-sign.md) MD-13, T16.
+
+### CLI-UAL-08 — Every multiplication by a secret on an arkworks curve goes through `scaas_ct::secret_mul`
+- old: — · status: current · owner: yes · date: 2026-11-05 · normative: clients/ua-libraries.md#CLI-UAL-08 · superseded-by: —
+
+**Why.** Scalar blinding was erased by arkworks' reducing GLV path, and a wide integer panics there (Codex C-01). Owner 2026-11-05, option (c): a small shared crate, since `ua-rs` depends on `zether-prover` and neither can host it for the other. Blinding width 128 bits (owner 2026-11-05). T14b brought zether-prover's `x` paths onto it.
+**Cost if wrong.** The residual is stated in the rule: blinding narrows the leak; no constant-time BLS12-381 or bn254 exists in tree.
+**Status.** BUILT: T3c `b149726b`, zether-prover T14b `3b813d16`; structural test and `clippy.toml` positive control. UNAUDITED.
+**Source.** [signer spec](superpowers/specs/2026-11-05-ua-rs-sign.md) §12, §17; [Codex review](research/ua-rs-sign-codex-review.md).
+
+### CLI-UAL-09 — One secret store per wallet; `lock()` revokes every handle for good
+- old: — · status: current · owner: yes · date: 2026-11-05 · normative: clients/ua-libraries.md#CLI-UAL-09 · superseded-by: —
+
+**Why.** Handles that kept their own key bytes survived `lock()` (Codex C-02).
+**Cost if wrong.** `lock()` waits for a long operation such as a PQZ proof.
+**Status.** BUILT: T2 `b3e051a5`, T10 `b2c56d53`, `5b7eef3a` (`WalletMismatch`), T12 `b62cb2b4` (C, ASan).
+**Source.** [signer spec](superpowers/specs/2026-11-05-ua-rs-sign.md) §8.2; [Codex review](research/ua-rs-sign-codex-review.md).
+
+### CLI-UAL-10 — Memory protection covers the arena, not the object graph
+- old: — · status: current · owner: yes · date: 2026-11-05 · normative: clients/ua-libraries.md#CLI-UAL-10 · superseded-by: —
+
+**Why.** `mlock` and `MADV_DONTDUMP` apply to address ranges, so locking the `Wallet` allocation misses the handles and buffers (Codex C-09). `mlock` on by default: owner 2026-11-06.
+**Cost if wrong.** Best effort: the coverage gaps are listed in the rule.
+**Status.** BUILT: T2 `b3e051a5`, T10 `b2c56d53`, default `af4d1f57`.
+**Source.** [signer spec](superpowers/specs/2026-11-05-ua-rs-sign.md) §8.2; [Codex review](research/ua-rs-sign-codex-review.md).
+
+### CLI-UAL-11 — A container's sender is expected, never self-declared
+- old: — · status: current · owner: yes · date: 2026-11-05 · normative: clients/ua-libraries.md#CLI-UAL-11 · superseded-by: —
+
+**Why.** A valid signature proves only that some registered UA sealed it (Codex C-03). A derived UA id is the hash of its key, so the opener recomputes it and needs no trust in the carrier. An `msig` id binds its structure, not its members' consent, so the signers must be accepted (owner 2026-11-05).
+**Cost if wrong.** A caller who supplies a wrong anchor refuses a good container; it never accepts a bad one.
+**Status.** BUILT: clientkeys T1b `f770b6b6`, `ua-rs` T8 `1da36807`, T9 `6e092199`.
+**Source.** [signer spec](superpowers/specs/2026-11-05-ua-rs-sign.md) §6.3, §17; [Codex review](research/ua-rs-sign-codex-review.md).
+
+### CLI-UAL-12 — `open` gives no replay protection; link and restore carry their own
+- old: — · status: current · owner: yes · date: 2026-11-05 · normative: clients/ua-libraries.md#CLI-UAL-12 · superseded-by: —
+
+**Why.** A signature and a tag authenticate `created`; they do not make a container fresh (Codex C-11). Short code 8 digits, window 10 minutes, marker `AllowRollback`: owner 2026-11-05.
+**Cost if wrong.** A wrong clock refuses a link; the user pairs again.
+**Status.** BUILT: clientkeys T1b `f770b6b6`, `ua-rs` T8 `1da36807`, T9 `6e092199`.
+**Source.** [signer spec](superpowers/specs/2026-11-05-ua-rs-sign.md) §6.3; [Codex review](research/ua-rs-sign-codex-review.md).
+
+### CLI-UAL-13 — The EIP-712 hasher is faithful; the canonical step belongs to checked SCaaS records
+- old: — · status: current · owner: yes · date: 2026-11-05 · normative: clients/ua-libraries.md#CLI-UAL-13 · superseded-by: —
+
+**Why.** A generic canonical step rewrote arbitrary messages (Codex C-04). An allow-list of `(domain, primaryType)` alone would still sign a drain, so the `check*` ports are the gate (F-26, MD-9). Refuse, never zero, on the checked path: owner 2026-11-05.
+**Cost if wrong.** A check clientkeys adds later is ported with its rows.
+**Status.** BUILT: clientkeys T1a `1aabd765`, `ua-rs` T4 `d423f3ca`; `typed_ops.json` 112 structs, 24 policy rows.
+**Source.** [signer spec](superpowers/specs/2026-11-05-ua-rs-sign.md) §5.3, §5.4; [Codex review](research/ua-rs-sign-codex-review.md).
+
+### CLI-UAL-14 — The KEM key comes through the UA key's own store
+- old: — · status: current · owner: yes · date: 2026-11-05 · normative: clients/ua-libraries.md#CLI-UAL-14 · superseded-by: —
+
+**Why.** A `kem_key` with a wallet argument accepted a handle of another wallet (Codex C-05); losing the argument makes the case inexpressible.
+**Cost if wrong.** None known.
+**Status.** BUILT: T7 `4629d4fa`, T12 `b62cb2b4`.
+**Source.** [signer spec](superpowers/specs/2026-11-05-ua-rs-sign.md) §6.1, §17; [Codex review](research/ua-rs-sign-codex-review.md).
+
+### CLI-UAL-15 — EIP-2333 UA kinds have index 0 only
+- old: — · status: current · owner: yes · date: 2026-11-05 · normative: clients/ua-libraries.md#CLI-UAL-15 · superseded-by: —
+
+**Why.** The paths have no index level, so two indices aliased one key (Codex C-06). An index level is a change of the derivation rule in signers-clientkeys first, with regenerated vectors, never a Rust-only change.
+**Cost if wrong.** Several keys of such a kind take several `account` values.
+**Status.** BUILT: clientkeys T1a `1aabd765`, `ua-rs` T2 `b3e051a5`.
+**Source.** [signer spec](superpowers/specs/2026-11-05-ua-rs-sign.md) §4; [Codex review](research/ua-rs-sign-codex-review.md).
+
+### CLI-UAL-16 — A WebAuthn assertion is built against the requested challenge and verified before return
+- old: — · status: current · owner: yes · date: 2026-11-05 · normative: clients/ua-libraries.md#CLI-UAL-16 · superseded-by: —
+
+**Why.** The challenge inside the untrusted JSON cannot be the reference (Codex C-07); a layout a generic JSON parser accepts but the chains refuse must be refused here.
+**Cost if wrong.** None known.
+**Status.** BUILT: clientkeys T1a `1aabd765`, `ua-rs` T6 `303f6114`; the non-UTF-8 parity row T1a parity `5e502590`.
+**Source.** [signer spec](superpowers/specs/2026-11-05-ua-rs-sign.md) §5.6; [Codex review](research/ua-rs-sign-codex-review.md).
+
+### CLI-UAL-17 — The signature role is set inside `ua-rs`
+- old: — · status: current · owner: yes · date: 2026-11-05 · normative: clients/ua-libraries.md#CLI-UAL-17 · superseded-by: —
+
+**Why.** `ua_msg` alone does not carry the BLS SIG or POP domain (Codex C-08).
+**Cost if wrong.** Group registration PoPs are their own builder, not an ordinary request.
+**Status.** BUILT: T3a `82fbac3f`, T3c `b149726b`, T16 `bbe8803a`.
+**Source.** [signer spec](superpowers/specs/2026-11-05-ua-rs-sign.md) §9.4; [Codex review](research/ua-rs-sign-codex-review.md).
+
+### CLI-UAL-18 — A `seed` vault holds the BIP-39 entropy at its own length
+- old: — · status: current · owner: yes · date: 2026-11-05 · normative: clients/ua-libraries.md#CLI-UAL-18 · superseded-by: —
+
+**Why.** A fixed 32-byte payload broke 12 to 21-word imports (Codex C-10). Vault v1 in Rust (Q3): one format in every client, a JS vault opens in Rust and the reverse; scrypt is memory-hard at 128 MiB; Argon2id only as a later vault version for every client at once.
+**Cost if wrong.** scrypt at 128 MiB grows wasm32 linear memory past 160 MiB; unmeasured on a phone browser (CLI-UAL-43).
+**Status.** BUILT: clientkeys T1b `f770b6b6`, `ua-rs` T9 `6e092199`; `vault.json`, `rs_vault.json` both ways.
+**Source.** [signer spec](superpowers/specs/2026-11-05-ua-rs-sign.md) §8.1, §14 Q3; [Codex review](research/ua-rs-sign-codex-review.md).
+
+### CLI-UAL-19 — `rewrap_pin` is not a DEK rotation
+- old: — · status: current · owner: yes · date: 2026-11-05 · normative: clients/ua-libraries.md#CLI-UAL-19 · superseded-by: —
+
+**Why.** It rotates the passphrase KEK and keeps the DEK (Codex C-12).
+**Cost if wrong.** None known.
+**Status.** BUILT: T9 `6e092199`.
+**Source.** [signer spec](superpowers/specs/2026-11-05-ua-rs-sign.md) §8.1, §15; [Codex review](research/ua-rs-sign-codex-review.md).
+
+### CLI-UAL-20 — No bare ciphertext in a production artifact (library duty 1)
+- old: — · status: current · owner: yes · date: 2026-11-06 · normative: clients/ua-libraries.md#CLI-UAL-20 · superseded-by: —
+
+**Why.** ARCH-POS-13; the raw commands were the oracle (no-oracle F1 to F3, F6 to F8).
+**Cost if wrong.** Test code keeps the raw forms under `vectors`, so CLI-UAL-25 must hold.
+**Status.** BUILT: T15c `9ee9d76a`, `6978925b`, T15c2 `945e91d7`, `e32f03b7`, T15e `e7d6349d`, T14b `3b813d16`, T15l `8dc90183`. UNAUDITED.
+**Source.** [no-oracle spec](superpowers/specs/2026-11-06-no-decryption-oracle.md) §4.3, §4.5.
+
+### CLI-UAL-21 — A decrypting command takes a location and raw words; the facade parses and rebuilds (library duty 2)
+- old: — · status: current · owner: yes · date: 2026-11-06 · normative: clients/ua-libraries.md#CLI-UAL-21 · superseded-by: —
+
+**Why.** One parser in the facade beats one in every reading layer; explicit parameters still hold (every word in a named field; only code, memos and proofs are `bytes`).
+**Cost if wrong.** A contract layout change moves the pin file (T19c on `ua-mtx-merge`) and the forge state rows.
+**Status.** BUILT: T15e `e7d6349d` (PQZ), T14b `3b813d16` (Zether), forge rows `f9910a31`, `fe92dbf2` on `ua-mtx-merge`, C ABI and bindings T15g `8190e4c7`. Request shapes: CLI-UAL-55.
+**Source.** [no-oracle spec](superpowers/specs/2026-11-06-no-decryption-oracle.md) §4.3, §4.4, §4.7.
+
+### CLI-UAL-22 — Leg and role are bound to the handle before the key is used (library duty 3)
+- old: — · status: current · owner: yes · date: 2026-11-06 · normative: clients/ua-libraries.md#CLI-UAL-22 · superseded-by: —
+
+**Why.** The library's half of requirement 6 (Codex C5). It binds the role; it does not make words authentic.
+**Cost if wrong.** See ARCH-POS-13: fabricated consistent words still decrypt.
+**Status.** BUILT: T15e `e7d6349d`, T14b `3b813d16`.
+**Source.** [no-oracle spec](superpowers/specs/2026-11-06-no-decryption-oracle.md) §4.3.
+
+### CLI-UAL-23 — One refusal before the key; the list after it (library duty 4)
+- old: — · status: current · owner: yes · date: 2026-11-06 · normative: clients/ua-libraries.md#CLI-UAL-23 · superseded-by: —
+
+**Why.** A refusal with detail is the oracle bit. The complete list of post-key refusals is written out (Fable P3-8).
+**Cost if wrong.** Timing after the key depends on the holder's own genuine value: a privacy residual to a local observer, not a key leak.
+**Status.** BUILT: T15e `e7d6349d`, T14b `3b813d16`, T15l `c363e034`.
+**Source.** [no-oracle spec](superpowers/specs/2026-11-06-no-decryption-oracle.md) §4.3, §4.12.
+
+### CLI-UAL-24 — A Zether balance hint is the holder's sealed box (library duty 5)
+- old: — · status: current · owner: no · date: 2026-11-07 · normative: clients/ua-libraries.md#CLI-UAL-24 · superseded-by: —
+
+**Why.** A plain number made `checkBalance` a balance-equality test on the real `acc` (Claude self-review, Fable P3-1); no one without the key can make a box that opens, so the rule is code, not a caller's duty. Zether only; PQZ has no such hint.
+**Cost if wrong.** Fabricated words with the holder's real box are still a balance-equality test (ARCH-POS-13 binds the app).
+**Status.** BUILT: spec `8e3801a0`, code T15l `485130e1`; supersedes T14b's optional plaintext `balance`.
+**Source.** [no-oracle spec](superpowers/specs/2026-11-06-no-decryption-oracle.md) §4.7.
+
+### CLI-UAL-25 — No test feature in a production artifact (library duty 6): feature bit, binding load refusal, `check_test_features.py`
+- old: — · status: current · owner: no · date: 2026-11-07 · normative: clients/ua-libraries.md#CLI-UAL-25 · superseded-by: —
+
+**Why.** Cargo unifies features: any dependency that enables `scaas-ua/vectors` restores the raw commands in a release build (Codex C1, C7).
+**Cost if wrong.** A new artifact must join the check's `ARTIFACTS` list; it has a positive control per row.
+**Status.** BUILT: T15c2 `945e91d7` and one commit per binding, T15l `cdef088c` (`scaas-ct` guarded; `scaas-node`, `pqz-core/ffi/wasm` artifacts), T15m `6c6e81d0` (`ua-rs` itself), CI job `test-features`.
+**Source.** [no-oracle spec](superpowers/specs/2026-11-06-no-decryption-oracle.md) §4.8.
+
+### CLI-UAL-26 — Tests that can fail (library duty 7)
+- old: — · status: current · owner: no · date: 2026-11-07 · normative: clients/ua-libraries.md#CLI-UAL-26 · superseded-by: —
+
+**Why.** A green gate is not evidence: the 8·K queries recover `s` through the raw path as a positive control, the residual control shows the library decrypts fabricated words on purpose, and each guard has a killed mutant.
+**Cost if wrong.** Mutant harnesses drift with the code; the gate's `mutant-logs` step runs `check` on every harness from T4 on.
+**Status.** BUILT: T15i `ef8a04b5`, `ed92ec0b`, `8eb75c96`; T18 `999febad` (35 harnesses checked).
+**Source.** [no-oracle spec](superpowers/specs/2026-11-06-no-decryption-oracle.md) §5.
+
+### CLI-UAL-27 — `ua-rs` contains no light client and no chain-state verifier
+- old: — · status: current · owner: yes · date: 2026-11-06 · normative: clients/ua-libraries.md#CLI-UAL-27 · superseded-by: —
+
+**Why.** Owner ruling 2026-11-06, on the question of where the chain-state check lives: the layer that reads the chain makes it (ARCH-POS-13, `ua-mtx-merge` `92e589d1`). Plan tasks T15d and T15f were dropped. A proof path may come later; the requests are shaped so that nothing here blocks it.
+**Cost if wrong.** The library alone cannot tell chain state from forged words; stated plainly in CLI-UAL-30.
+**Status.** BUILT as a property of the library. The client side of the proof path (C-PP-1 to C-PP-10 there) is PLANNED.
+**Source.** [no-oracle spec](superpowers/specs/2026-11-06-no-decryption-oracle.md) §3, §4.13, §7; proof path, client side: spec `2026-11-06-pqz-proof-path.md` §13.3 on `ua-mtx-merge`.
+
+### CLI-UAL-30 — The layer that reads the chain owns the words' authenticity
+- old: — · status: current · owner: yes · date: 2026-11-06 · normative: clients/ua-libraries.md#CLI-UAL-30 · superseded-by: —
+
+**Why.** Owner ruling 2026-11-06: the reading layer's duty. Reading the words from an untrusted RPC or indexer and passing them on is the oracle, and the fault is that layer's.
+**Cost if wrong.** Any app that breaks these requirements exposes the full key-recovery oracle: 8·K fabricated PQZ queries recover `s` (Fable verdict 1, 2026-11-07).
+**Status.** SPECIFIED for layers outside this repository; reference layers in CLI-UAL-40. Requirements 1 to 7 are CLI-UAL-31 to CLI-UAL-37, in the spec's order.
+**Source.** [no-oracle spec](superpowers/specs/2026-11-06-no-decryption-oracle.md) §4.1, §4.2, §4.12.
+
+### CLI-UAL-31 — Requirement 1: one trusted source per request
+- old: — · status: current · owner: yes · date: 2026-11-06 · normative: clients/ua-libraries.md#CLI-UAL-31 · superseded-by: —
+
+**Why.** Owner decision Q1, 2026-11-06: the holder's own node, a node the holder configured explicitly, or a verifying light client in the reading layer; never an app default or a discovered endpoint. Several untrusted RPCs that must agree still trust their operators.
+**Cost if wrong.** The source's residual: CLI-UAL-38.
+**Status.** SPECIFIED; the reference layers take one `--rpc`, a second is refused.
+**Source.** [no-oracle spec](superpowers/specs/2026-11-06-no-decryption-oracle.md) §3, §4.2, §7.
+
+### CLI-UAL-32 — Requirement 2: known chain
+- old: — · status: current · owner: yes · date: 2026-11-06 · normative: clients/ua-libraries.md#CLI-UAL-32 · superseded-by: —
+
+**Why.** A chain the holder did not configure can serve any state.
+**Status.** SPECIFIED; the reference layers check it (mutants killed).
+**Source.** [no-oracle spec](superpowers/specs/2026-11-06-no-decryption-oracle.md) §4.2.
+
+### CLI-UAL-33 — Requirement 3: one final block
+- old: — · status: current · owner: yes · date: 2026-11-06 · normative: clients/ua-libraries.md#CLI-UAL-33 · superseded-by: —
+
+**Why.** Words from two blocks can compose a state that never existed; a chain without finality takes the holder's confirmation depth (NET-EVM-04).
+**Status.** SPECIFIED; the reference layers check it, every read by block hash.
+**Source.** [no-oracle spec](superpowers/specs/2026-11-06-no-decryption-oracle.md) §4.2.
+
+### CLI-UAL-34 — Requirement 4: real storage, not views
+- old: — · status: current · owner: yes · date: 2026-11-06 · normative: clients/ua-libraries.md#CLI-UAL-34 · superseded-by: —
+
+**Why.** A view is whatever the node answers; storage and code can be proven against a root.
+**Status.** SPECIFIED; the reference layers read storage and code only and do **not** make the `codeHash` check (stated residual, CLI-UAL-40).
+**Source.** [no-oracle spec](superpowers/specs/2026-11-06-no-decryption-oracle.md) §4.2.
+
+### CLI-UAL-35 — Requirement 5: catalogued token
+- old: — · status: current · owner: yes · date: 2026-11-06 · normative: clients/ua-libraries.md#CLI-UAL-35 · superseded-by: —
+
+**Why.** A fabricated token contract can hold any words.
+**Status.** SPECIFIED; the reference layers check `_info[token]` at hand-copied offsets until the factory index is pinned (T67 on `ua-mtx-merge`).
+**Source.** [no-oracle spec](superpowers/specs/2026-11-06-no-decryption-oracle.md) §4.2.
+
+### CLI-UAL-36 — Requirement 6: the selected leg belongs to the handle
+- old: — · status: current · owner: yes · date: 2026-11-06 · normative: clients/ua-libraries.md#CLI-UAL-36 · superseded-by: —
+
+**Why.** The registry words prove whose key a leg is for; the library repeats the comparison (CLI-UAL-22) but cannot tell where the words came from.
+**Status.** SPECIFIED; the reference layers check it.
+**Source.** [no-oracle spec](superpowers/specs/2026-11-06-no-decryption-oracle.md) §4.2.
+
+### CLI-UAL-37 — Requirement 7: nothing back
+- old: — · status: current · owner: yes · date: 2026-11-06 · normative: clients/ua-libraries.md#CLI-UAL-37 · superseded-by: —
+
+**Why.** Every outward action after a decryption is a signal; ARCH-POS-13 covers success, failure, timing and later actions.
+**Status.** SPECIFIED; reviewable in a layer's code, not tested by a probe in the reference layers.
+**Source.** [no-oracle spec](superpowers/specs/2026-11-06-no-decryption-oracle.md) §1, §4.2.
+
+### CLI-UAL-38 — The source's residual is the holder's chosen trust
+- old: — · status: current · owner: yes · date: 2026-11-06 · normative: clients/ua-libraries.md#CLI-UAL-38 · superseded-by: —
+
+**Why.** Owner decision Q1b, 2026-11-06. A light client trusts the chain's sealing keys, another operator's node trusts that operator; neither is hidden.
+**Cost if wrong.** One sealing key on a single-signer chain can seal a header over a fabricated `stateRoot`.
+**Status.** SPECIFIED; also to be stated in `zether.md` and `pq-zero-knowledge.md` (plan task T19b, `ua-mtx-merge`).
+**Source.** [no-oracle spec](superpowers/specs/2026-11-06-no-decryption-oracle.md) §4.2, §7.
+
+### CLI-UAL-39 — Another family needs a trusted node and a layout parser
+- old: — · status: current · owner: yes · date: 2026-11-06 · normative: clients/ua-libraries.md#CLI-UAL-39 · superseded-by: —
+
+**Why.** Owner decision Q2, recorded as moot for `ua-rs`: it has no chain adapters (T15f dropped), so nothing in it blocks Zether on Soroban, Algorand or Solana.
+**Cost if wrong.** Each such family needs its own Zether layout parser before its words are accepted.
+**Status.** SPECIFIED: EVM is the only parser built.
+**Source.** [no-oracle spec](superpowers/specs/2026-11-06-no-decryption-oracle.md) §7.
+
+### CLI-UAL-40 — Reference reading layers: `zether-read-balance --rpc` and `pqz-read`
+- old: — · status: current · owner: yes · date: 2026-11-07 · normative: clients/ua-libraries.md#CLI-UAL-40 · superseded-by: —
+
+**Why.** Owner 2026-11-07 approved `pqz-read` (T15m) after Fable's verdict that PQZ had no reference layer. Controller: a `[[bin]]` of the `ua-rs` package with required feature `pqz`, so it uses the facade's own `STATE_LAYOUT` and no crate is added; the library is unchanged; the key arrives on stdin, the URL and body go to `curl` on its stdin; `--registry` and `--ua` are the holder's configuration.
+**Cost if wrong.** Stated residuals: `_info` offsets and the registry's `pqzKey` slot hand-copied, `--registry` unchecked against the token's immutable, no `codeHash` check, disclosure, memo and debit commands not wired.
+**Status.** BUILT: `zether-read-balance` T14b `3b813d16`, `pqz-read` T15m `6c6e81d0`, against a local `anvil`. UNAUDITED.
+**Source.** [plan](superpowers/plans/2026-11-05-ua-rs-sign.md) T14b, T15m; [no-oracle spec](superpowers/specs/2026-11-06-no-decryption-oracle.md) §4.12.
+
+### CLI-UAL-41 — Decoys: `pickDecoys`, uniform by default, an optional activity filter, shuffled `legs`
+- old: — · status: current · owner: yes · date: 2026-11-07 · normative: clients/ua-libraries.md#CLI-UAL-41 · superseded-by: —
+
+**Why.** CTR-UA-29, Change of 2026-11-07 (owner, `ua-mtx-merge` `66ce4beb`): decoys are drawn uniformly up to the wallet's last sync point; the activity filter is an option, off by default, with the sybil trade-off stated to the holder. Owner 2026-11-07 approved T15n. Controller: one command in both facades (the pick comes before the chosen keys are read, so it cannot be a field of `proveTransferMulti`), sequential sampling without replacement by the OS CSPRNG, recency weight 2 / 1 kept as a documented choice. T15n2: an optional `recipient` makes the answer `{decoys, legs}`, the full order shuffled by Fisher–Yates, because a fixed position names the real recipient.
+**Cost if wrong.** Registration is permissionless, so with the default an observer can recognise its own decoys; the filter raises that only to gas-level cost and shrinks the set. A caller that omits `recipient` owns the order.
+**Status.** BUILT: T15n `b08b8a0d`, T15n2 `352e9386`; chi-square at fixed seeds, `anvil` tests. The registry slots stay hand-copied until the registry layout pin reaches this branch. UNAUDITED.
+**Source.** [plan](superpowers/plans/2026-11-05-ua-rs-sign.md) T15n; `docs/contracts/accounts.md` CTR-UA-29 on `ua-mtx-merge`.
+
+### CLI-UAL-42 — pqz-core `hazmat`, defence in depth, with a full-gate waiver
+- old: — · status: current · owner: yes · date: 2026-11-06 · normative: clients/ua-libraries.md#CLI-UAL-42 · superseded-by: —
+
+**Why.** Owner decision Q3, 2026-11-06: it lands with the next pqz-core change; the four-set full gate is waived for this `cfg`-only change and replaced by a build at all four sets plus `kat`. No transcript, relation or byte change.
+**Cost if wrong.** The name follows the RustCrypto convention and is not a boundary; `ua-rs` enables it for its private decrypt path.
+**Status.** PLANNED: T15h, not built. `check_test_features.py` already lists `scaas-node` and `pqz-core/ffi/wasm`.
+**Source.** [no-oracle spec](superpowers/specs/2026-11-06-no-decryption-oracle.md) §4.8, §7; [plan](superpowers/plans/2026-11-05-ua-rs-sign.md) T15h.
+
+### CLI-UAL-43 — A size ratchet per target and feature cell; timing only on an idle machine or on real devices
+- old: — · status: current · owner: yes · date: 2026-11-05 · normative: clients/ua-libraries.md#CLI-UAL-43 · superseded-by: —
+
+**Why.** MD-12; the facades grow mobile builds (`pqzh` in every set but `n2816-kmax65536`). Sizes are not timing, so they need no ask. Controller (T17): a 1 % tolerance, because another host's C compiler and checkout path move the bytes with no change of code; growth inside it is printed and the baseline moves only by hand, so it cannot accumulate. Owner 2026-11-07: a reference timing on this machine may run, alone, once it is idle; device timing waits, the owner has no devices yet.
+**Cost if wrong.** CTR-PQZ-18's budget (≤ 15 s, ≤ 128 MiB) is unmeasured on a device, and wasm32 scrypt at `N = 2^17` is unmeasured on a phone browser. The tolerance could hide a growth below 1 % per change; the printed growth and the manual baseline are the guard.
+**Status.** Sizes BUILT: T17 `45af3d84` (34 cells: x86-64, aarch64-android, wasm32; `selftest` 11 cases, 8 of 8 mutants killed); aarch64-ios not measured (no Xcode). The bench `ua_bench` BUILT (`12fac582`). Reference timing pending an idle machine; device timing pending, no devices. No timing figure is recorded.
+**Source.** [plan](superpowers/plans/2026-11-05-ua-rs-sign.md) MD-12, T17; run record `clients/ua-rs/runs/2026-11-07-ua-rs-sign-t17.md`.
+
+<a id="CLI-UAL-50"></a>
+### CLI-UAL-50 — Owner rulings of the signer work, 2026-11-05
+- old: — · status: current · owner: yes · date: 2026-11-05 · normative: decisions.md#CLI-UAL-50 · superseded-by: —
+
+**Rule.** Each as the owner stated it; status beside it.
+1. `ua-rs` is the only signer; client cores and wallet modules sign through it, neither depends on the other; apps reach it through `ua-c`, `ua-cxx`, `ua-qt`, `ua-dart-frb`, and `ua-py`, `ua-go`, `ua-cs` over the C ABI. BUILT (CLI-UAL-01; bindings T13a to T13f).
+2. Scope: derivation exactly as clientkeys; single-key signing for every kind; `UASig` and the `msig` minimal form; EIP-712 records; the group signers stay; the UA KEM key and its combiner; AEAD and HKDF by wrapping RustCrypto crates; a generic seal and open. A client's own key schedule, ratchet, envelope and padding stay outside. BUILT (T2 to T9).
+3. Secret keys never leave `ua-rs`: zeroized, no export except an explicit backup API. BUILT (CLI-UAL-01, T10 `b2c56d53`).
+4. `ua-rs` gives clients `pqz-core`'s and `zether-prover`'s client-side crypto through the same API and ABI as a facade: no proof, transcript or statement code in `ua-rs`. BUILT (CLI-UAL-06).
+5. The facades are on by default; an app that needs neither builds with `--no-default-features`. BUILT (MD-5).
+6. Fable counter-review, "follow the advice, revise the spec": every P0 and P1 applied, P2 as rules or tasks, P3 as notes. Applied (spec §16).
+7. An `msig` UA has no KEM key of its own. Client side BUILT, the rest T66b (CLI-SGN-45).
+8. External keys are phase 2, the interface fixed now. Interface BUILT, devices PLANNED (CLI-UAL-07).
+9. `ua-rs` moves to Rust 1.97.1 with the repo-wide sync. BUILT (`rust-sync` `1e76710b`, merged `0e7675f2`; ARCH-POS-12).
+10. Codex security review, "fix the spec per the points": every confirmed finding applied. Applied (spec §17; CLI-UAL-08 to CLI-UAL-19).
+**Source.** [signer spec](superpowers/specs/2026-11-05-ua-rs-sign.md) §1, §16, §17; [Fable review](research/ua-rs-sign-fable-review.md); [Codex review](research/ua-rs-sign-codex-review.md).
+
+<a id="CLI-UAL-51"></a>
+### CLI-UAL-51 — Owner answers on the signer spec and at T0, 2026-11-05
+- old: — · status: current · owner: yes · date: 2026-11-05 · normative: decisions.md#CLI-UAL-51 · superseded-by: —
+
+**Rule.** All as recommended, each with its status.
+On the revision: (1) the `msig` KEM rule is enforced by clients now, the registry later: CLI-SGN-45; (2) the off-chain purpose `scaas.ua.purpose.seal.v1` is accepted: CLI-SGN-44; (3) the clientkeys `vault.js` scrypt-bounds bug is fixed now in its own small PR: BUILT, PR #16 `b3650dbf`, merged `8b59b666` (CLI-SGN-21); (4) signing calls take a `ScaasUaKey` handle, `alloy-rlp` is a dependency, the decoder caps and the 1 MiB plaintext limit stand: BUILT (T12 `b62cb2b4`, T5 `636d6c28`, CLI-UAL-03).
+On T1b: (1) the KEM `info` carries the version as `be64`; (2) `sender.auth` is a full `UASig`, an `msig` signs in the minimal form, the opener verifies it against the expected sender; (3) the link short code is 8 decimal digits; (4) the `BackupPayload` field order `{v, generation, entropy, secrets, manifest: {entries: [{kind, account, index, ua}]}}`, malformed is `Argument`; (5) the rollback opt-in is `allowRollback: true` in JS and the marker `AllowRollback` in Rust; (6) on the checked path a non-zero unbound `relayer` / `feeRecipient` is refused, not zeroed. All BUILT: `f770b6b6`, T4 `d423f3ca`, T8 `1da36807`, T9 `6e092199`.
+On the container sender: (1) the container carries no kind, the opener tries the derived kinds, at most one matches; (2) an `msig` sender must pass member acceptance at both levels. BUILT (CLI-UAL-11).
+On the UA tree: purpose `7622'` became `22776'` (CLI-SGN-30), and `sign.json` carries chain-separation rows. BUILT in T1a's follow-ups.
+After T0: link window 10 minutes, one use; blinder width 128 bits; `secret_mul` in a small shared crate (option (c), `clients/scaas-ct`), zether-prover moved onto it by T14b; Q1, see CLI-UAL-52.
+Advisories: RUSTSEC-2026-0387 (`crypto-bigint` 0.5.5): T3a moved `k256` and `p256` to 0.14 on `crypto-bigint` 0.7.10; the path left through `frost-secp256k1` =3.0.0 is ignored with its reason (option (a)), and `ua-c` and `scaas-node` lock the old crate through alloy: a follow-up. RUSTSEC-2026-0162, -0163, -0165 (`pqcrypto-*`): gone, T3b vendored PQClean Falcon (`1ce2b70e`). RUSTSEC-2024-0436 (`paste`): ignored, build-time only.
+**Source.** [signer spec](superpowers/specs/2026-11-05-ua-rs-sign.md) status lines; [plan](superpowers/plans/2026-11-05-ua-rs-sign.md) "Owner answers"; T0 `e79af3a1`.
+
+<a id="CLI-UAL-52"></a>
+### CLI-UAL-52 — The signer spec's questions Q1 to Q10, answered 2026-11-05
+- old: — · status: current · owner: yes · date: 2026-11-05 · normative: decisions.md#CLI-UAL-52 · superseded-by: —
+
+**Rule.** Every question as recommended, with its outcome.
+- **Q1 Falcon keys from the seed:** T0 compares PQClean's seeded keygen with noble 0.7.1. Outcome: equal byte for byte (102 comparisons, 0 differ, negative control red; `e79af3a1`), so `ua-rs` calls a vendored PQClean (`clients/ua-rs/vendor/pqclean-falcon-seeded/`, T3b `1ce2b70e`) and the Falcon vector rows stay. BUILT.
+- **Q2 KEM key from the seed:** derived; a random key stays possible for an owner who wants deletion to bound something. BUILT (CLI-SGN-43).
+- **Q3 keystore KDF:** scrypt in the clientkeys vault v1 format. BUILT (CLI-UAL-18).
+- **Q4 browsers:** a wasm32 binding of `ua-rs` after the size and speed numbers; browsers sign with clientkeys until then. PLANNED.
+- **Q5 seal AEAD:** AES-256-GCM, a single-use key, a zero nonce. BUILT (CLI-SGN-44).
+- **Q6 `ss` to callers:** `decaps` returns the zeroizing 32-byte `ss`; the handle is thus a decapsulation oracle and bindings never expose it to page scripts. BUILT (CLI-SGN-43).
+- **Q7 production nonces:** hedged over the 512-bit map, `Y` in the hash; BIP-340 from the OS RNG. BUILT (CLI-SGN-46).
+- **Q8 PQZ set per build:** one set per build with the run-time check `PqzSetMismatch`; a wallet serving two sets ships two builds. BUILT (T15 `12b4577a`).
+- **Q9 PQZ statement assembly:** the facade wraps `pqz-ffi` `prove` and the `pqz-stmt` structs; when a client prover crate lands in `pqz-core` the facade wraps it instead; reading chain state stays with the wallet layer that reads the chain. BUILT for the wrap.
+- **Q10 `slh-dsa` is a release candidate:** sign with the same pin through `slh_sign_internal`, so a later release that changes `sign` is caught by the vectors. BUILT (T3b).
+**Source.** [signer spec](superpowers/specs/2026-11-05-ua-rs-sign.md) §14.
+
+<a id="CLI-UAL-53"></a>
+### CLI-UAL-53 — Plan decisions MD-1 to MD-14 of the signer work
+- old: — · status: current · owner: yes · date: 2026-11-05 · normative: decisions.md#CLI-UAL-53 · superseded-by: —
+
+**Rule.** The controller's, accepted by the owner as proposed (2026-11-05), the owner may override any.
+- **MD-1 Task split:** clientkeys first in three parts, `ua-rs` signing in four kind groups, KEM apart from seal, the C ABI once the Rust API is final. Applied, plus the tasks added later (T13a to T13f, T15b to T15n, T16a, T16b).
+- **MD-2 Toolchain:** `rust-version = "1.97.1"` set by the merge of `rust-sync`. BUILT (ARCH-POS-12).
+- **MD-3 Bindings in this work:** `ua-c` (ABI 6), `ua-cxx`, `ua-qt`, `ua-dart-frb`, `ua-py`, `ua-go`, `ua-cs` move; `ua-dart` stays identity-only; the wasm-bindgen binding is next. BUILT but for that one (T12, T13a to T13f).
+- **MD-4 Legacy:** nothing removed; the v5 header at `clients/ua-c/legacy/ua-rs-sign/scaas_ua.v5.h`. BUILT (`a19922a7`).
+- **MD-5 Features:** `default = wallet, zether, pqz, pqz-set-n2304-kmax4096`; `mlock` added to it by the owner 2026-11-06 (`af4d1f57`), `vectors` never in a release build. BUILT.
+- **MD-6 Module layout:** `src/wallet/`, `src/facade/`; existing modules called, not copied. BUILT; beyond the list: `store.rs`, `facade/{decoys, pqz_backup, pqz_pack}.rs`, and `secret_mul` in `clients/scaas-ct`.
+- **MD-7 Where vectors live:** `smartcontracts/vectors/ua/{keys, sign, kem, seal, vault}.json` from `clients/clientkeys/scripts/ua-wallet-vectors.mjs`; externals in `pq_external.json` and `sign.json`; `rs_signatures.json` written by `ua-rs`. BUILT (T1a to T1c, T3b); `zether.json` and `rs_vault.json` added by T14 and T9.
+- **MD-8 Falcon keys:** the equal branch. BUILT (CLI-UAL-52, Q1).
+- **MD-9 Signing policy port:** `Expect` has one variant per clientkeys check, plus `Any(AllowAnyTypedData)`. BUILT (T4 `d423f3ca`, CLI-UAL-13).
+- **MD-10 Off-chain purpose:** BUILT (CLI-SGN-44), outside `PURPOSES` as built.
+- **MD-11 `msig` has no KEM key, client side:** option (c), then T66b. CLI-SGN-45.
+- **MD-12 Size ratchet:** CLI-UAL-43.
+- **MD-13 External keys in this work:** interface only. BUILT (CLI-UAL-07).
+- **MD-14 Review:** Claude lenses, then Fable; Codex only on the owner's word; named as AI review; everything stays UNAUDITED. The no-oracle rework had its reviews (Fable and Codex 2026-11-06 / 07, the Claude self-review T15i, Fable 2026-11-07); the closing review of the whole is plan task T21, open.
+**Source.** [plan](superpowers/plans/2026-11-05-ua-rs-sign.md) "Plan decisions".
+
+<a id="CLI-UAL-54"></a>
+### CLI-UAL-54 — Later owner decisions on the wallet and the facades, 2026-11-06
+- old: — · status: current · owner: yes · date: 2026-11-06 · normative: decisions.md#CLI-UAL-54 · superseded-by: —
+
+**Rule.** (1) `mlock` on by default for native builds: BUILT `af4d1f57`. (2) T12 follow-ups: `Wallet::link_seal`, so an existing device can make a link container; `members_json` 16 KiB to 512 KiB, depth 4; `scaas_ua_wallet_imported_key` and the label-vault calls, because an imported key was unreachable through the ABI after `unlock`; the ASan smoke's `RUSTC_BOOTSTRAP=1` accepted, test build only: BUILT `69a6ad74`. (3) The PQZ memo mode (`HASH` or `BUNDLE`) is an explicit named request field with no default, and the facade computes `memoHash` exactly as the contract does per mode: op 7 BUILT T15b `997fb015`; op 1, burn and refresh after `ua-mtx-merge` T36a, BUILT T15k `2163b9f8`. (4) `SecretBytes`: CLI-UAL-05. (5) The PQZ seed backup: CLI-SGN-47.
+**Source.** [plan](superpowers/plans/2026-11-05-ua-rs-sign.md) T12 follow-ups, T13c follow-up, T15b, T15k; [no-oracle spec](superpowers/specs/2026-11-06-no-decryption-oracle.md) §4.10.
+
+<a id="CLI-UAL-55"></a>
+### CLI-UAL-55 — Controller decisions of the no-oracle rework
+- old: — · status: current · owner: no · date: 2026-11-07 · normative: decisions.md#CLI-UAL-55 · superseded-by: —
+
+**Rule.** The owner may override any.
+- **Request shapes.** PQZ (T15e `e7d6349d`): location `chainUid`, `token`, `block`, `psid` (plus `chainId`, `registry` where the statement or `entryRef` needs them); words `account` (four slots), `pending` `[{index, word}]`, `accWords`, `blobs` `[{address, code}]` (every SSTORE2 code, the key's too), `keyRecord`, `entryPtr`, `memo`, `auditorMode`, `auditorUA`; `ua` names the holder of an entry read. Zether (T14b `3b813d16`): location `family`, `chainId`, `chainUid`, `token`, `block`, `psid`, `ua`; words `account` (six slots), `accountData` and `entryWords` `[{slot, word}]`, `entryPtr`, `blob`, `memoWords`, `modes`, `auditorKeyWords`; an entry by `fromUA` and `sendCounter`, `entryRef` recomputed. Debit answers add `p`, `proveDisclose` adds `amount`. BUILT.
+- **The facade's `p`:** `min(pendingCount, rolled + INLINE_MAX (10 for op 7 of a PQZH token), rolled + K_MAX − 1 − accUnits)`. BUILT `e7d6349d`.
+- **PQZ command cap 1 MiB to 4 MiB:** 16 pending 8-leg audited blobs, `acc` and the key in hex reach about 2.3 MiB at `n2816-kmax65536`. Zether stays 1 MiB. BUILT `e7d6349d`.
+- **The layout pin is compared through the forge rows,** not by a file copied here; the Zether parser lives in zether-prover `state` (`prepare` with no key, then `run`), shared by the facade and `zether-read-balance`. BUILT.
+- **Zether balance only through the sealed cache box:** T14b's optional plaintext `balance` hint is gone; `checkBalance` and a debit take `cacheBox`, its entry used only at the words' `accSeq`. BUILT `8e3801a0`, `485130e1`; CLI-UAL-24.
+- **No `COMMANDS` export in the ABI** (T15g): a binding test reads `pub const COMMANDS` from the facade source and asserts membership, never equality, so a later proof path can add commands. BUILT `8190e4c7`.
+- **Wallet rows file and generator** (T15i): the forge rows carry mocked keys, so `smartcontracts/vectors/pqz/n2304-kmax4096/wallet_state.json` holds `balance` words for `pq_kat`'s `pqz_key(0, 0)` (750, `acc` a reference into an op 1 blob) and `pqz_key(0, 1)` (257, a pending credit and a TRIVIAL entry), written by `gen_wallet_state.sh` on `ua-rs`'s simulated chain; every reader decrypts each row; `ua-qt` wraps neither facade. BUILT `ef8a04b5`, `ed92ec0b`.
+- **`proveDiscloseSender` words form** (T15l): the previous form took a caller's statement, a plaintext-equality test on the holder's sent amounts; now location, `fromUA` (its key the handle's), `sendCounter`, `entryPtr` and blob, `leg`, `registry`, `legKeyRecord`; the amount is the entry's own, the statement built inside; the statement form stays as `rawProveDiscloseSender` under `vectors`. BUILT `8dc90183`, `66065adf`.
+- **`forOp7`** (T15l): `balance` takes a named boolean with no default, the `p` and value an op 7 would use (`INLINE_MAX_PQZH` on a PQZH token). BUILT `8dc90183`.
+- **Deferred:** the OpenFactory `_info` layout pin (Fable P3-3) waits for `ua-mtx-merge`.
+**Source.** [no-oracle spec](superpowers/specs/2026-11-06-no-decryption-oracle.md) §4.5 to §4.7, §9; [plan](superpowers/plans/2026-11-05-ua-rs-sign.md) T15e, T14b, T15g, T15i, T15l; per-task summaries in `smartcontracts/evm/runs/`.
+
+## 40. Integration — ERP
 
 ### INT-ERP-01 — 24 h cooling-off for new receiving wallets
 - old: R22 · status: current · owner: no · date: 2026-10-03 · normative: integration.md#INT-ERP-01 · superseded-by: —
@@ -8353,7 +8844,7 @@ Change (2026-10-08): on the exchange path the record is `ExchangeLegSettled`; th
 **Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 45.
 
 <!-- example:odoo -->
-## 40. Integration — example connector
+## 41. Integration — example connector
 
 ### INT-ODOO-01 — Deploy job precedes pay via prerequisite
 - old: RS4-6 · status: current · owner: no · date: 2026-10-06 · normative: integration-odoo-example.md#INT-ODOO-01 · superseded-by: —
