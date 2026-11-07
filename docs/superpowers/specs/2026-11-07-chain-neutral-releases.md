@@ -572,6 +572,10 @@ list (T73), and more negatives (+3).
 
 ### 10.3 Questions for the owner (each with a recommendation)
 
+**Owner 2026-11-07, consequences accepted:** (1) on a chain id shared by several live chains, the deploy gate configures
+every sibling (each with its own block reference) before any other registrar transaction there; (2) the deterministic
+deployer `0x4e59…956c` is a chain requirement, so mainnet 22776's genesis `alloc` must carry it.
+
 **Owner 2026-11-07: all eight answered as recommended:** (1) S3: the signing UA is the creator, `creatorId` `bytes32` in the
 index, T76 in; (2) the cost of B accepted; (3) the registrar at the same address on every chain, an EOA or a deterministically
 deployed contract, the gate checks its code hash; (4) the wrong-`chainUid` risk accepted, with the gate's dry run and quorum
