@@ -1,0 +1,41 @@
+# 2026-11-07 ua-rs-sign T15m: `pqz-read`, the PQZ reference reading layer (ARCH-POS-13; spec no-decryption-oracle §4.2 R1-R7,
+# §4.12; plan "T15m", owner-approved 2026-11-07). Commits: 6c6e81d0 (the binary clients/ua-rs/src/bin/pqz-read.rs, its test
+# tests/pqz_read.rs, Cargo.toml [[bin]] / [[test]] with required feature pqz, check_test_features.py's ua-rs row, ua-libraries.md,
+# spec §4.12, plan, the mutant harness), e7764808 (mutant record; gates.sh mutant-logs checks the T15m harness), the follow-up
+# commit of this summary. No contract, statement, transcript, C ABI or library API change; no new dependency, no lock changed.
+# All commands through scripts/capped, foreground, -j2, --locked, --offline; full logs in the scratch directory, not committed.
+# UNAUDITED.
+step | commit | rc | counts
+ua-rs test (default: zether + pqz n2304-kmax4096, the release cell) | 6c6e81d0 | 0 | 36 suites, 321 passed, 2 ignored (the rows' generator, the anvil test)
+ua-rs test --test pqz_read --bin pqz-read -- --include-ignored (ANVIL=foundry's anvil 1.8.5, stopped by the test) | 6c6e81d0 | 0 | 1 + 2 passed, 15 s; no anvil of ours left
+ua-rs test --features vectors --lib --tests --bins | 6c6e81d0 | 0 | 38 suites, 370 passed, 4 ignored (pqz_read: a vectors build makes no key handle, checked)
+ua-rs test --no-default-features --features wallet,mlock (pqz-read not built: required feature pqz) | 6c6e81d0 | 0 | 27 suites, 256 passed, 1 ignored
+ua-rs test at pqz-set-n2048-kmax1024 (wallet,zether,pqz,mlock) --bin pqz-read --test pqz_read | 6c6e81d0 | 0 | 1 + 1 passed, 1 ignored (the anvil test runs at the rows' set n2304-kmax4096 only)
+ua-rs clippy --all-targets -D warnings: default, vectors, --no-default-features, wallet,mlock, wallet,zether,mlock, wallet,pqz,n2048,mlock (+ vectors) | 6c6e81d0 | 0 | 0 of ours each (7 cells); pqzl's 2 deprecated GenericArray warnings
+check_test_features.py (gates step test-features, with the forced positive control) | e7764808 | 0 | 57 manifests 0 findings; graphs ua-c, ua-cxx, ua-qt, ua-dart-frb/rust, zether-prover, scaas-node, pqz-core/ffi/wasm, ua-rs 0 findings; new control: ua-rs with vectors forced found (3); forced ua-c control rc=1
+cargo tree --locked --offline -e normal: ua-rs, ua-c, ua-cxx, ua-qt, ua-dart-frb/rust, ua-rs/fuzz, zether-prover, scaas-node | 6c6e81d0 | 0 | 8 of 8
+cargo deny --all-features check: ua-rs | 6c6e81d0 | 0 | advisories ok, bans ok, licenses ok, sources ok
+docs: test_docs_check.py; docs_check.py check; docs_check.py paths | 6c6e81d0 | 0 | ok; 0 errors (5 pre-existing budget warnings); 0 machine paths
+mutants: 2026-11-07-ua-rs-sign-t15m-mutants.py n n, git diff --exit-code after each | 6c6e81d0 | 0 | 21 killed, 0 survived, 0 not loaded (2026-11-07-ua-rs-sign-t15m-mutants.txt)
+gates mutant-logs (every record ends with no survivor and every harness checks, T15m added) | e7764808 | 0 | 10 of 10
+# Decisions (controller; the owner may override): (1) Where: a [[bin]] of the ua-rs package (required feature pqz), so it uses
+# the facade's own STATE_LAYOUT, ACC_WORDS, K_MAX and PQZH_ID and no crate is added; the library is unchanged, and
+# check_test_features.py gains the package as an artifact row (with a positive control). (2) Name `pqz-read` (it reads balances
+# and audited legs). (3) Commands: `balance` (--for-op7 true|false, named, no default) and `auditRead` (--from-ua,
+# --send-counter, --leg on the auditor's key); `--words` prints the request read without reading a key (public data). (4) Key
+# on stdin `{mnemonic, passphrase?, account, index}` -> Wallet::pqz_key; a terminal refused; strings wiped (best effort).
+# (5) --registry and --ua are the holder's configuration (PQZ UAs are registry identities, not derived from the key; the
+# registry is a token immutable with no storage word). (6) R3: EIP-1898 with requireCanonical, the answered block's number
+# compared with the one asked for, and the same number's hash re-read after the last word (refused on change); R1: a flag given
+# twice is refused. (7) The namespace root computed from "scaas.pqz" by ERC-7201 (a unit test equals the pin's root).
+# Test fixture: anvil_setStorageAt / anvil_setCode from the forge rows (n2304 state.json at contract b40d7589: words byte for
+# byte, five accounts incl. a materialised acc, an audited entry), the wallet rows (pq_kat keys decrypt 750 and 257) and
+# tests/pqz_chain (an audited op 1 to pq_kat pqz_key(0, 2): amount 250; 18 pending: INLINE_MAX 265, INLINE_MAX_PQZH 259; a
+# PQZH twin token). No forge run was needed. A local proxy in the test lies about the block (R3 negatives, with a pass-through
+# positive control).
+# Residuals: OpenFactory._info (slot 8, kind byte 20 and exists byte 29) hand-copied, as zether-read-balance's, until the factory
+# index on ua-mtx-merge (T67) pins it; UAStore.Layout.pqzKey (registry slot 2) hand-copied, and --registry not checked against
+# the token's immutable registry; R4's keccak256(code) == codeHash not checked (no eth_getProof); proveDisclose,
+# proveDiscloseSender, openMemo and the debits are not wired (the same reads plus memo bytes and legKeyRecord); no debit request
+# is built; R7 is reviewable in the code (every read, the re-check included, before PqzKey::call), not tested by a probe; one
+# curl process per word (a materialised acc is ~417 reads at n2304).
