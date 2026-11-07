@@ -43,6 +43,8 @@ JOBS = {
     'pqz': ['pqz-core/pqzl/', 'pqz-core/ffi/', 'pqz-core/stmt/', 'pqz-core/pqzh/', 'pqz-core/params/', 'pqz-core/fuzz/',
             'smartcontracts/vectors/pqz/'] + RT,
     'zether-prover': ['clients/zether-prover/', 'clients/scaas-ct/', 'smartcontracts/evm/', 'smartcontracts/vectors/'] + RT,
+    # secret_mul's own tests (ua-rs-sign T3c; T15o closes the gap T20 found: ua-rs and zether-prover only build the crate)
+    'scaas-ct': ['clients/scaas-ct/'] + RT,
     'ua-rs': UARS + ['smartcontracts/'],
     'ua-cxx': ['clients/ua-cxx/', 'smartcontracts/vectors/'] + UARS,
     'ua-c': ['clients/ua-c/', 'smartcontracts/vectors/'] + UARS,
@@ -64,7 +66,7 @@ JOBS = {
 GROUPS = {
     'ci-full-contracts': [j for j in JOBS if j.startswith('contract-')],
     'ci-full-node': ['node'],
-    'ci-full-clients': ['clientkeys', 'zether-prover', 'test-features'] + [j for j in JOBS if j.startswith('ua-')],
+    'ci-full-clients': ['clientkeys', 'zether-prover', 'scaas-ct', 'test-features'] + [j for j in JOBS if j.startswith('ua-')],
     'ci-full-pqz': ['pqz'],
     'ci-full': list(JOBS),
 }
@@ -139,7 +141,7 @@ if __name__ == '__main__':
         assert needed(['docs/x.md'], [g]) == {j: j == 'docs' or j in js for j in JOBS}, g
     assert set(GROUPS['ci-full-contracts']) == {f'contract-{f}' for f in
                                                 'evm soroban solana near algorand aptos sui cosmos ton'.split()}
-    assert set(GROUPS['ci-full-clients']) == {'clientkeys', 'zether-prover', 'ua-rs', 'ua-cxx', 'ua-c', 'ua-qt', 'ua-py',
+    assert set(GROUPS['ci-full-clients']) == {'clientkeys', 'zether-prover', 'scaas-ct', 'ua-rs', 'ua-cxx', 'ua-c', 'ua-qt', 'ua-py',
                                               'ua-go', 'ua-cs', 'ua-dart-frb', 'ua-dart', 'test-features', 'ua-deps'}
     assert all(needed(['docs/x.md'], ['ci-full']).values())
     assert needed(['docs/x.md'], ['bug', 'ci-full-node']) == needed(['docs/x.md'], ['ci-full-node'])  # other labels ignored
@@ -156,7 +158,7 @@ if __name__ == '__main__':
         assert needed([p]) == {j: j == 'docs' or j in js for j in JOBS}, p
     assert {j for j, r in needed(['rust-toolchain.toml']).items() if r} == {
         'docs', 'contract-soroban', 'contract-solana', 'contract-near', 'contract-cosmos', 'node', 'pqz', 'zether-prover',
-        'ua-rs', 'ua-cxx', 'ua-c', 'ua-qt', 'ua-dart-frb', 'test-features', 'ua-py', 'ua-go', 'ua-cs', 'ua-deps'}
+        'scaas-ct', 'ua-rs', 'ua-cxx', 'ua-c', 'ua-qt', 'ua-dart-frb', 'test-features', 'ua-py', 'ua-go', 'ua-cs', 'ua-deps'}
     # ua-rs-sign T18: every job over ua-rs reads the crates ua-rs builds; the bindings over libscaas_ua_c read ua-c and ua-rs
     over = ['ua-rs', 'ua-c', 'ua-cxx', 'ua-qt', 'ua-dart-frb', 'ua-py', 'ua-go', 'ua-cs']
     for p in ('pqz-core/ffi/src/lib.rs', 'pqz-core/pqzl/rust/src/lib.rs', 'pqz-core/pqzl/x.c', 'pqz-core/stmt/src/lib.rs',
@@ -167,6 +169,8 @@ if __name__ == '__main__':
         assert all(needed([p])[j] for j in ('ua-py', 'ua-go', 'ua-cs', 'ua-deps')), p
     assert not any(needed(['pqz-core/fuzz/run.sh'])[j] for j in over)  # a directory only the pqz job reads
     assert needed(['clients/scaas-ct/src/lib.rs'])['zether-prover'] and needed(['scaas-node/Cargo.lock'])['ua-deps']
+    assert {j for j, r in needed(['clients/scaas-ct/src/lib.rs']).items() if r} >= {'scaas-ct', 'ua-rs', 'zether-prover'}
+    assert not needed(['clients/ua-rs/src/lib.rs'])['scaas-ct']  # its own directory only
     assert not needed(['scaas-node/src/main.rs'])['ua-deps'] and not needed(['clients/ua-py/x.py'])['ua-c']
     assert needed(['smartcontracts/evm/foundry.txt'])['contract-evm']  # a .txt outside runs/ counts
     assert needed(['scaas-node/runs/a.txt', 'scaas-node/src/x.rs'])['node']

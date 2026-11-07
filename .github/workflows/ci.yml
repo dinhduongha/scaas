@@ -37,7 +37,10 @@
 #   clients/ua-c:          cargo clippy --locked --all-targets -- -D warnings; cargo build --locked; cargo test --locked (header drift); cc ... tests/smoke.c (C99 smoke); python3 -m unittest -v tests.test_vectors;
 #                          tests/asan-smoke.sh (smoke.c and the staticlib under AddressSanitizer: RUSTC_BOOTSTRAP=1 for -Zsanitizer, test build in target/asan only, owner 2026-11-06)
 #   clients/ua-qt:         cmake -S . -B build -G Ninja (QMAKE, CMAKE_PREFIX_PATH set) && cmake --build build && QT_QPA_PLATFORM=offscreen ctest
-#   clients/ua-dart-frb:   dart pub get --enforce-lockfile; cargo build --locked --manifest-path rust/Cargo.toml; dart test
+#   clients/scaas-ct:      cargo clippy --locked --all-targets --features vectors -- -D warnings; cargo test --locked; cargo test --locked --features vectors
+#                          (secret_mul's own tests: ua-rs and zether-prover only build the crate; ua-rs-sign T15o)
+#   clients/ua-dart-frb:   dart pub get --enforce-lockfile; cargo build --locked --manifest-path rust/Cargo.toml; cargo test --locked --manifest-path rust/Cargo.toml
+#                          (the binding's own Rust tests: secrets never cross frb's codec; T15o); dart test
 #   clients/ua-dart:       dart analyze; dart test; dart test -p node; dart run test/vectors_test.dart (asserts off)
 #   test-features:         python3 scripts/check_test_features.py (ARCH-POS-13: no `vectors` / `hazmat` of scaas-ua, zether-prover, pqz-ffi
 #                          in a production manifest or in the cargo tree -e features graph of ua-c, ua-cxx, ua-qt, ua-dart-frb, zether-prover)
@@ -95,6 +98,7 @@ jobs:
       clientkeys: ${{ steps.f.outputs.clientkeys }}
       pqz: ${{ steps.f.outputs.pqz }}
       zether_prover: ${{ steps.f.outputs.zether_prover }}
+      scaas_ct: ${{ steps.f.outputs.scaas_ct }}
       ua_rs: ${{ steps.f.outputs.ua_rs }}
       ua_cxx: ${{ steps.f.outputs.ua_cxx }}
       ua_c: ${{ steps.f.outputs.ua_c }}
@@ -456,6 +460,29 @@ jobs:
           sed -i 's/--offline //' fuzz/build.sh
           fuzz/build.sh
           for t in precompile mutate codec; do fuzz/run.sh "$t" 60 ci; done
+
+  scaas-ct:
+    needs: changes
+    if: needs.changes.outputs.scaas_ct == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/scaas-ct
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: clients/scaas-ct
+      - name: clippy (vectors exposes the ladder trace)
+        run: cargo clippy --locked --all-targets --features vectors -- -D warnings
+      - name: tests (release and vectors)
+        run: |
+          cargo test --locked
+          cargo test --locked --features vectors
 
   zether-prover:
     needs: changes
@@ -842,6 +869,7 @@ jobs:
           sdk: 3.12.2
       - run: dart pub get --enforce-lockfile
       - run: cargo build --locked --manifest-path rust/Cargo.toml
+      - run: cargo test --locked --manifest-path rust/Cargo.toml
       - run: dart test
       # optional drift guard: cargo install flutter_rust_bridge_codegen --version 2.13.0 --locked
       #   && flutter_rust_bridge_codegen generate && git diff --exit-code
