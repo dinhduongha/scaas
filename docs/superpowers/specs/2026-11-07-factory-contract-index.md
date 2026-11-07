@@ -1,7 +1,10 @@
 # `OpenFactory`: an on-chain index of every contract it creates 
 
-**Status:** SPECIFIED, **approved by the owner 2026-11-07** (the six questions of §6 answered as recommended). Nothing is
-built yet; the plan tasks T67–T69 of [`2026-11-04-ua-mtx-merge.md`](../plans/2026-11-04-ua-mtx-merge.md) start after 3g (T57).
+**Status:** SPECIFIED, **revised 2026-11-07**. The index (§1–§7) is **approved by the owner 2026-11-07** (the six questions
+of §6 answered as recommended). The **extension** (§8, an extensible catalogue: generic classes and kinds, `createInstance`,
+`PqChat` as class 3) has its **direction approved by the owner 2026-11-07**; its detailed questions (§8.11, Q7–Q12) await the
+owner, among them one change to the approved index (Q12: class and kind ids `uint16`, written into §2 below). Nothing is
+built yet; the plan tasks T67–T70 of [`2026-11-04-ua-mtx-merge.md`](../plans/2026-11-04-ua-mtx-merge.md) start after 3g (T57).
 **Place (owner 2026-11-07):** after 3g (T51–T57), before 3f: work order 3e → 3g → factory index → 3f → 3h → 3c. Branch
 `ua-mtx-merge`.
 
@@ -33,23 +36,26 @@ every chain: a factory of another family carries the same index when it is built
 ### 2.1 Record
 
 ```solidity
-uint8 public constant CLASS_TOKEN = 1;   // kind = TokenKind
-uint8 public constant CLASS_DEX = 2;     // kind = 0
-// 0 = not made here; 3..255 for the classes a later factory version creates (a new catalogue entry, never an upgrade)
+uint16 public constant CLASS_TOKEN = 1;  // kind = TokenKind
+uint16 public constant CLASS_DEX = 2;    // kind = 0
+// 0 = not made here; 3..65535 are generic classes, registered by the registrar without a factory change (§8);
+// 3 = PqChat (§8.8)
 
 struct Created {
     address addr;          // the clone
     address creator;       // msg.sender of the creating call
-    bytes32 ownerUA;       // owner() of the clone right after initialize (a UA id; 0 = no administration ever)
-    uint8 contractClass;   // CLASS_TOKEN, CLASS_DEX
-    uint8 kind;            // TokenKind for a token, 0 for a DEX: the class-specific id
+    bytes32 ownerUA;       // owner() of the clone right after initialize (a generic class: factoryInfo().ownerUA, §8.4)
+                           // (a UA id; 0 = no administration ever)
+    uint16 contractClass;  // CLASS_TOKEN, CLASS_DEX, a generic class (revision Q12: was uint8)
+    uint16 kind;           // TokenKind for a token, 0 for a DEX, the class's own id for a generic class (was uint8)
     uint64 version;        // the release version (0 = createTokenUnregistered)
     uint64 createdBlock;   // block.number
     uint64 createdAt;      // block.timestamp
 }
 ```
 
-Stored as three slots per address (`addr` is the key): `creator ‖ contractClass ‖ kind ‖ version`, `ownerUA`,
+Stored as three slots per address (`addr` is the key): `creator ‖ contractClass ‖ kind ‖ version` (20 + 2 + 2 + 8 = 32 B,
+still one slot with the `uint16` ids), `ownerUA`,
 `createdBlock ‖ createdAt`. The record **replaces** `_info` and `_dexVersion` (one source); the existing views keep their
 answers exactly (`isToken`, `isRegisteredToken`, `creatorOf`, `versionOf` for class TOKEN only, so `creatorOf(dex)` stays 0;
 `isDex`, `dexVersionOf` for class DEX), and `SaltAlreadyUsed` checks `contractClass != 0`. `_wrappers` and `_byUnderlying`
@@ -62,19 +68,19 @@ reference time.
 ### 2.2 Lists and views
 
 ```solidity
-mapping(uint8 => address[]) _all;                                   // per class
-mapping(bytes32 => mapping(uint8 => address[])) _byOwner;           // ownerUA at creation, per class; never for ownerUA 0
-mapping(address => mapping(uint8 => address[])) _byCreator;         // per class
+mapping(uint16 => address[]) _all;                                  // per class
+mapping(bytes32 => mapping(uint16 => address[])) _byOwner;          // ownerUA at creation, per class; never for ownerUA 0
+mapping(address => mapping(uint16 => address[])) _byCreator;        // per class
 
 uint256 public constant MAX_PAGE = 100;
 function infoOf(address c) external view returns (Created memory);                     // contractClass 0: not made here
-function contractsPage(uint8 contractClass, uint256 from, uint256 n)
+function contractsPage(uint16 contractClass, uint256 from, uint256 n)
     external view returns (Created[] memory page, uint256 total);
-function contractsOfOwner(bytes32 ownerUA, uint8 contractClass, uint256 from, uint256 n)
+function contractsOfOwner(bytes32 ownerUA, uint16 contractClass, uint256 from, uint256 n)
     external view returns (Created[] memory page, uint256 total);
-function contractsOfCreator(address creator, uint8 contractClass, uint256 from, uint256 n)
+function contractsOfCreator(address creator, uint16 contractClass, uint256 from, uint256 n)
     external view returns (Created[] memory page, uint256 total);
-error ClassUnknown(uint8 contractClass);   // 0 or a class this factory does not create
+error ClassUnknown(uint16 contractClass);  // 0, or a generic class with no release yet (§8.2)
 error PageTooLarge(uint256 n);             // n > MAX_PAGE
 ```
 
@@ -175,3 +181,296 @@ owner lists; (5) lists per class only; (6) unregistered contracts are indexed, f
 - **Mutants (T68):** the owner push dropped; the creator push keyed by `tx.origin`; `ownerUA` read before `initialize`; class
   swapped; `from` / `n` off by one; the zero-owner skip removed; the record written before the salt check; `creatorOf(dex)`
   answering non-zero.
+
+## 8. Extension: an extensible catalogue (direction approved by the owner 2026-11-07)
+
+**Owner, 2026-11-07:** "OpenFactory must be built so that later the admin can easily add another kind / implementation."
+Same day: `PqChat` becomes a factory-made contract (anyone creates instances, as tokens and DEXes; EIP-1167 clones of
+catalogued releases). **Direction approved by the owner 2026-11-07:** a generic class / kind catalogue registered by the
+registrar under the existing notice period; one generic creation entry calling the release's catalogued, typed initializer
+and reading back `factoryInfo()`; the token and DEX entries kept; `PqChat` the first generic class (id 3); the acceptance
+test adds a kind end to end without changing factory code. Proposed rule **CTR-TOK-28** (`docs_check.py resolve` reports the
+id unknown, so it is free; it lands with T69).
+
+**What it means.** Adding a kind or a whole class = the registrar publishes an env, deploys a release from init code, and
+enables the kind after the notice period. No factory code, no factory version, no upgrade: the factory is deployed once per
+chain and stays immutable ([CTR-GEN-02](../../contracts/README.md#CTR-GEN-02)); what grows is its append-only catalogue, as
+token versions grow today. One rule on every chain: class and kind ids are the same on every family; a factory of another
+family, when one is built, carries the same catalogue.
+
+### 8.1 Ids
+
+| Class | Name | Kinds | Creation entry |
+|---|---|---|---|
+| 0 | not made here | | |
+| 1 | `TOKEN` | `TokenKind` 0–5, 8–13 (compiled enum, CTR-TOK-25) | `createToken`, `createTokenUnregistered` (unchanged) |
+| 2 | `DEX` | 0 | `createDex` (unchanged) |
+| 3 | `PQCHAT` | 0 = `PqChat` | `createInstance` (§8.4) |
+| 4–65535 | assigned by the registrar, next free | 0–65535, per class | `createInstance` |
+
+Classes 1 and 2 keep their typed paths and are refused on the generic entries (`ClassReserved`). For a generic class the
+chain is the authority: `classes()` and `kindsOf(class)` list what has a release, in order of first release; the names live in
+the CTR-TOK-28 table in `docs/contracts/token-wrappers.md`. A generic class exists once its first release is deployed: until
+then the index views answer `ClassUnknown` for it (§2.2). The factory holds no constant for class 3 or later.
+
+### 8.2 Catalogue (registrar only, `onlyRegistrar` as today: `NotRegistrar`, `CallerDelegated`)
+
+```solidity
+struct ReleaseId { uint16 contractClass; uint16 kind; uint64 version; }   // version from 1
+struct ClassRelease {
+    address implementation;
+    uint16 envVersion;
+    bytes32 envHash;
+    uint64 usableFrom;      // deployment + noticePeriod, as Release
+    bool deprecated;        // immediate, never undone, as Release
+    bytes4 initSelector;    // the only call createInstance makes on a fresh clone
+    bytes4 interfaceId;     // the class's ERC-165 interface id the implementation answers true
+}
+/// What every generic release and each of its clones answers (§8.5). Seven static words, 224 B.
+struct FactoryInfo {
+    address factory; bytes32 chainUid; uint16 contractClass; uint16 kind; uint64 version;
+    bytes32 ownerUA;        // the clone's owner UA after initialize; 0 on the implementation
+    bool initialized;       // true on the implementation (locked by its constructor) and on a clone after initialize
+}
+
+function publishClassEnv(uint16 contractClass, uint16 kind, uint16 envVersion, IFactoryToken.Env calldata env) external;
+function deployRelease(ReleaseId calldata id, uint16 envVersion, bytes4 initSelector, bytes4 interfaceId,
+    bytes calldata initcode, bytes calldata implArgs) external returns (address implementation);
+function deprecateRelease(ReleaseId calldata id, string calldata reason) external;
+function setClassKindEnabled(uint16 contractClass, uint16 kind, bool on) external;
+
+function classEnvOf(uint16 contractClass, uint16 kind, uint16 envVersion) external view returns (IFactoryToken.Env memory);
+function latestClassEnvVersion(uint16 contractClass, uint16 kind) external view returns (uint16);
+function classReleaseOf(ReleaseId calldata id) external view returns (ClassRelease memory);
+function latestClassVersion(uint16 contractClass, uint16 kind) external view returns (uint64);  // may be deprecated
+function classKindEnabled(uint16 contractClass, uint16 kind) external view returns (bool);
+function classes() external view returns (uint16[] memory);                     // generic classes, first-release order
+function kindsOf(uint16 contractClass) external view returns (uint16[] memory);  // kinds with a release, same order
+
+event ClassEnvPublished(uint16 indexed contractClass, uint16 indexed kind, uint16 indexed envVersion, bytes32 envHash);
+event ReleaseDeployed(uint16 indexed contractClass, uint16 indexed kind, uint64 indexed version, address implementation,
+    uint16 envVersion, bytes32 envHash, bytes32 initcodeHash, bytes32 codeHash, bytes4 initSelector, bytes4 interfaceId,
+    uint64 usableFrom);
+event ReleaseDeprecated(uint16 indexed contractClass, uint16 indexed kind, uint64 indexed version, string reason);
+event ClassKindEnabled(uint16 indexed contractClass, uint16 indexed kind, bool enabled);
+```
+
+- **Env.** The same `IFactoryToken.Env` and the same `_publish` checks (append-only, version 0 refused, `factory` /
+  `chainUid` this factory's, library pins non-empty). Internally the env and release maps are keyed by a `uint32` domain
+  `class << 16 | kind` (≥ `3 << 16`, so never equal to a token kind 0–13 or `DEX_DOMAIN` 255); the token and DEX maps,
+  entries, views and events stay as they are.
+- **`deployRelease`.** Refuses class 0–2 (`ClassReserved`), version 0 and a taken version (`ReleaseUnknown`,
+  `ReleaseAlreadyRegistered`), `initSelector == 0` (`InitSelectorZero`), an unknown env (`EnvUnknown`). The shared `_deploy`
+  checks the library code hashes and `CREATE2`s (salt `keccak256(abi.encode("release", id))`)
+  `initcode ‖ abi.encode(id, envVersion, env, implArgs)`: the constructor receives its own `ReleaseId`, so class, kind and
+  version are immutables of the code. Then, each by `staticcall`: `SigCheck.isContract`; `factoryInfo()` exactly 224 B with
+  `factory == this`, `chainUid`, class, kind, version equal to `id`, `ownerUA == 0`, `initialized == true`
+  (`ReleaseInfoMismatch`); `supportsInterface(0x01ffc9a7)` and `supportsInterface(interfaceId)` true,
+  `supportsInterface(0xffffffff)` false (`InterfaceNotSupported`). The first release of a class pushes it to `classes()`,
+  the first of a kind to `kindsOf`.
+- **Enabled.** A new `(class, kind)` starts **off** (Q7); the registrar turns it on after reading the notice period's
+  feedback. Off is reversible and stops creation of every version of the kind at once (the emergency stop); deprecation is
+  per version and permanent. Neither touches existing instances.
+
+### 8.3 Why one typed init call (explicit parameters)
+
+`createInstance` takes `initCall`: one ABI-encoded call to the implementation's own typed initializer, selector first,
+for `PqChat` `abi.encodeCall(IPqChat.initialize, (ownerUA))`. Weighed against the rule "named, typed parameters, no packed
+`bytes` holding several fields":
+
+- A per-class typed entry (`createPqChat(uint64 version, bytes32 ownerUA, bytes32 salt)`) is the most explicit form, but it
+  is factory code per class: every new class would be a new factory build, which is what the owner ruled out.
+- An opaque `initArgs` blob (today's `createToken`) is a bundle the factory never types.
+- The init call is neither: its parameters are named and typed in the implementation's ABI, published with the release
+  (`interfaceId`, the class's spec); the factory pins which function it is (`initSelector`, refused otherwise:
+  `InitSelectorMismatch`), and the implementation decodes its own typed arguments (a malformed call reverts in its ABI
+  decoder). It is the one form that keeps the factory generic and the parameters typed. The factory never forwards it to
+  anything but the fresh clone, and never as a `DELEGATECALL`.
+
+### 8.4 `createInstance`
+
+```solidity
+function createInstance(ReleaseId calldata id, bytes32 salt, bytes calldata initCall) external returns (address instance);
+function creating() external view returns (address creator);   // the creator of the creation in progress, 0 outside one
+event InstanceCreated(address indexed instance, address indexed creator, uint16 indexed contractClass, uint16 kind,
+    uint64 version, address implementation, bytes32 owner);
+```
+
+In order, in one call (as `createDex`):
+
+1. The release `id` exists, is not deprecated, is usable (`ReleaseUnknown`, `ReleaseDeprecated`, `ReleaseNotYetUsable`), its
+   `(class, kind)` is on (`ClassKindDisabled`); class 0–2 cannot have a release.
+2. `initCall.length ≥ 4` and `bytes4(initCall) == initSelector` (`InitSelectorMismatch(expected, got)`).
+3. Salt scoped by the creator (`_salt(msg.sender, salt)`, unchanged); the predicted address has no code and no record
+   (`SaltAlreadyUsed`). `predictAddress(implementation, creator, salt)` is unchanged.
+4. `Clones.cloneDeterministic`; the transient creator saved, set to `msg.sender` (EIP-1153), `instance.call(initCall)` with
+   value 0 (a revert bubbled as the constructor's is), the previous creator restored (a nested creation inside an `initialize`
+   sees its own creator, then the outer one again). `creating()` reads it (Q8).
+5. `factoryInfo()` read from the clone by `staticcall`: exactly 224 B, `factory`, `chainUid`, class, kind, version equal to the
+   release, `initialized == true` (`InstanceInfoMismatch`). `ownerUA` is the value the index records.
+6. The record and the three list pushes of §2, then `InstanceCreated`. The record is class `id.contractClass`, kind
+   `id.kind`, version `id.version`; never version 0 (no unregistered generic path, Q9).
+
+**Relayable.** As every creation today (§4): no signature, no `mtx*` form; anyone submits it, a relayer included, and the
+submitter is the creator. `createInstance` is not a node job (§8.6, Q11).
+
+**Existing kinds stay on their typed paths** (Q10): the token path carries kind-specific safety the generic path does not
+know (`underlyings()`, `_wrappers`, `_byUnderlying`, `MAX_LEGS`, `createTokenUnregistered` for plain kinds, the
+`TokenCreated` fields `features` / `lockedFeatures`, the `TokenKind` ABI the node and clients use), and the DEX path is
+built and pinned. Moving them buys nothing now and would change formats on every client. Revisit only with a reason.
+
+### 8.5 Safety: what the factory enforces, what it cannot know
+
+| The factory enforces, for every generic kind | How |
+|---|---|
+| Registered code only | a release the registrar deployed from init code, under a published env; no `createInstance` from a caller's address |
+| The public's window | `usableFrom = deployment + noticePeriod` (≤ `MAX_NOTICE_PERIOD`); the kind off until enabled (Q7) |
+| The release is what it says | implementation's `factoryInfo()` names this factory, `chainUid`, its own `ReleaseId`; `initialized` (locked by its constructor); ERC-165 for `interfaceId` |
+| Only the catalogued initializer is called | `initSelector` match; one `CALL`, value 0, to the fresh clone only |
+| Initialized in the creating call | clone and init in one call; `factoryInfo().initialized == true` after it, else the whole creation reverts |
+| An owner is reported | `factoryInfo().ownerUA`, recorded in the index (a claim, as §2.3) |
+| One record per address | salt check before the clone, record after init; the index is append-only |
+| No `DELEGATECALL` by the factory | the factory never delegatecalls; a clone's `DELEGATECALL` goes only to its implementation (EIP-1167) |
+
+| The factory cannot know (the kind's spec, implementation and release review) | |
+|---|---|
+| The kind's own rules and what its init arguments mean | the class's spec; the implementation validates its arguments |
+| A second `initialize` refused, and any caller but the factory | the implementation's rule (`msg.sender == FACTORY`, a stored lock), its tests |
+| No `SELFDESTRUCT` (EIP-6780: a clone could delete itself in its creating transaction), no `DELEGATECALL` or `CALLCODE` to an address a caller supplies | release review; the registrar's deploy script disassembles the runtime and refuses those opcodes before `deployRelease` (an on-chain scan cannot tell code from `PUSH` data cheaply) |
+| Storage layout, gas, code size | the kind's layout pin (`test/v2/layout/`), gas pins and `size-baseline.json` row in its own task; a runtime over the chain's ceiling (CTR-GOV-19) fails `CREATE2` (`DeployFailed`) |
+| Whether the owner UA exists or consents | as §2.3: a claim; wallets filter |
+
+The registrar's key stays the trust root for code, now for every class (a multisig / UA msig before mainnet, as today).
+Reentrancy: an `initialize` may call the factory: a nested creation is allowed and appended first (§2.2); the registrar's
+entries refuse it; the factory holds no value and writes nothing between the clone and the post-init check that a nested
+call could corrupt (`creating()` is restored, step 4).
+
+### 8.6 Node, clients, vectors
+
+- **NODE-JOB-01 unchanged:** the factory is never a `call` target, so `createInstance` is not a job; creators submit it
+  themselves (Q11).
+- **The instance check is generic.** A new guard rule `factory_class(class)` (`guard.rs`): the target's `infoOf(target)` has
+  `contractClass == class` and `version != 0` on the chain's `token_factory`. The index never changes, so the answer is
+  cacheable forever. The node learns new **instances** from state, with no config.
+- **A kind's entries are per-kind rows.** Each entry of a new kind is a call-table row built from named fields
+  (`typed.rs`), as for every contract today; the rows equal the implementation's state-changing entries both directions
+  through its `selector_audit.json` artifact. A catalogued kind with no node rows is refused by the node (fail closed) until a
+  node release adds them; a direct submission still works. A generic row built from an on-chain signature is not specified:
+  the chain holds no parameter names, and named JSON fields need them.
+- **Clients and vectors:** no signed byte format changes (no typehash, no `mtx*`); token and DEX formats unchanged; the
+  deploy JSONs move with the factory's init code (§4). A client builds `createInstance` calldata and reads `infoOf`,
+  `classes`, `kindsOf` in the round that first uses a generic class (`PqChat`'s `ua-rs` task). No vector rows in T67–T70.
+
+### 8.7 Gas and size, on paper
+
+- **`createInstance`** against `createDex`: the same clone (account and 45 B of code, ≈ 0.25 M state gas) and the index's
+  +5 / +7 slots (§3, ≈ 0.49–0.69 M state gas); added regular gas: the `factoryInfo()` `staticcall` (warm clone and
+  implementation, ≈ 3–5 k), four transient accesses (≈ 0.4 k), the selector compare; minus `owner()`. No loop. The kind's own
+  `initialize` is the creator's. Measured by a `GovGas` `createInstance` row with the test kind of §8.9.
+- **`deployRelease`:** `deployImplementation` plus four `staticcall`s and, the first time, one or two list pushes;
+  registrar-only, once per release.
+- **Size:** the generic block (four registrar entries, seven views, two structs, the checks) ≈ +3–5 KB runtime on top of the
+  index's +2.5–4 KB: `OpenFactory` ≈ 22–25 KB against 15,821 B today, far below 64 KiB. T70 records old → new in
+  `size-baseline.json`. A new kind's implementation is its own artifact with its own size row.
+
+### 8.8 `PqChat`: the first generic class (class 3, kind 0)
+
+The `PqChat` specs ([`2026-10-25-ua7-pq-e2e-sessions.md`](2026-10-25-ua7-pq-e2e-sessions.md) §2.1 P32,
+`2026-11-07-pqchat-public-topics.md` §10–§11, branch `ua7-research`) need instances with an owner UA, release immutables
+(registry, `chain_uid`, factory, code-size limit), a notice period, deprecation, the index, and a node check that a target is
+a registered instance. Every one of them is the generic path; the factory gets no `PqChat` code.
+
+**What `PqChat` implements** (the first generic initializer):
+
+```solidity
+// constructor(IOpenFactory.ReleaseId id, uint16 envVersion, IFactoryToken.Env env, bytes implArgs)
+//   immutables: FACTORY = env.factory, CHAIN_UID = env.chainUid, the registry, the code-size limit (implArgs, P11),
+//   CLASS = id.contractClass (3), KIND = id.kind (0), VERSION = id.version; the initializer locked on the implementation
+function initialize(bytes32 ownerUA) external;  // msg.sender == FACTORY, once; ownerUA 0 allowed, fixed, no transfer
+function factoryInfo() external view returns (IOpenFactory.FactoryInfo memory);
+function supportsInterface(bytes4 id) external view returns (bool);   // ERC-165 and type(IPqChat).interfaceId
+function owner() external view returns (bytes32);                      // P32: names the instance, no power
+```
+
+`creator` and `version` are not arguments: the version is an immutable of the release, and the creator is in the index
+(`infoOf(this).creator`) and, during `initialize`, `IOpenFactory(FACTORY).creating()`.
+
+**Registration and creation** (deploy script and anyone):
+
+```solidity
+factory.publishClassEnv(3, 0, 1, env);   // env.registry, env.factory, env.chainUid; implArgs carries the code-size limit
+factory.deployRelease(ReleaseId(3, 0, 1), 1, IPqChat.initialize.selector, type(IPqChat).interfaceId, initcode, implArgs);
+factory.setClassKindEnabled(3, 0, true);  // after the notice period
+factory.createInstance(ReleaseId(3, 0, v), salt, abi.encodeCall(IPqChat.initialize, (ownerUA)));
+```
+
+**What the `PqChat` spec must change** (its §11 proposes `PqChat`-specific factory code; map each item):
+
+| `pqchat-public-topics.md` §11 / §10 | Becomes |
+|---|---|
+| §11.1 `uint8 CLASS_PQCHAT = 3`, `ClassUnknown` for 0 and 4–255 | class id 3 assigned in the CTR-TOK-28 table, no factory constant; ids `uint16`; `ClassUnknown` for 0 and any generic class with no release; `ownerUA` from `factoryInfo()` |
+| §11.2 `PQCHAT_DOMAIN = 254`, `publishPqChatEnv`, `pqChatEnvOf`, `latestPqChatEnvVersion` | `publishClassEnv(3, 0, …)`, `classEnvOf`, `latestClassEnvVersion` |
+| §11.3 `deployPqChatImplementation`, `pqChatReleaseOf`, `pqChatImplementationOf`, `deprecatePqChat`, `isPqChatDeprecated`, `latestPqChatVersion`, `PqChat*` events and errors | `deployRelease(ReleaseId(3, 0, v), …)`, `classReleaseOf`, `deprecateRelease`, `latestClassVersion`, `ReleaseDeployed` / `ReleaseDeprecated`, the generic errors; checks by `factoryInfo()` instead of `factory()` / `chainUid()` |
+| §11.4 `createPqChat(uint64 version, bytes32 ownerUA, bytes32 salt)`, `initialize(msg.sender, version, ownerUA)`, `PqChatCreated`, `isPqChat` | `createInstance(ReleaseId(3, 0, v), salt, abi.encodeCall(IPqChat.initialize, (ownerUA)))`; `initialize(bytes32 ownerUA)`; `InstanceCreated`; `infoOf(a).contractClass == 3 && version != 0` (node: `factory_class(3)`) |
+| §11.5 gas, a `GovGas` `createPqChat` row | a `createInstance` row with the `PqChat` release (`PqChatGas`, PT4); the factory side measured once in T70 with the test kind |
+| §11.6 size +2–3 KB on `OpenFactory` | none for `PqChat`: the generic block is T70's |
+| §11.7 tests (release usable after notice, deprecated, wrong factory / `chainUid`, relayer creator, `isPqChat`, slot count) | the generic ones are T70's; `PqChat`'s own: `initialize` once and only by the factory, `factoryInfo()` fields, ERC-165, two instances independent, `contractsPage(3, …)` after a creation; its mutants: `initialize` without the factory check, `factoryInfo()` with a wrong class |
+| §11.8 formats | unchanged: no factory format moves for `PqChat` |
+| §10 PF1 (factory `PQCHAT` class, 1–1.5) | **dropped**: T70 builds the generic path before 3c; `PqChat`'s registration is three deploy-script calls in PC0 |
+| §10 PC0 `initialize(creator, version, ownerUA)` | `initialize(bytes32 ownerUA)`, `factoryInfo()`, `supportsInterface`, constructor `(ReleaseId, uint16, Env, bytes)`; `DeployBase` publishes the class env, deploys release 1, enables `(3, 0)`, creates one instance |
+| §10 PT6 node instance check `isPqChat` | the generic `factory_class(3)` guard rule (built with PT6's rows) |
+
+### 8.9 Tests and mutants (T70; mutants in T68)
+
+**The acceptance test** (`test/v2/FactoryGenericKind.t.sol`): on a factory deployed before the kinds exist, with
+`OpenFactory`'s runtime code hash asserted unchanged before and after, two test-only implementations under `test/v2/mocks/`
+(no `src/` file): `NoteKind` (class 4, kind 0, `initialize(bytes32 ownerUA, string note)`) and `RosterKind` (class 5, kind 1,
+`initialize(bytes32 ownerUA, uint64 start, address[] members)`, a dynamic argument). For each: `publishClassEnv` →
+`deployRelease` → before the notice period `ReleaseNotYetUsable` → after it, off: `ClassKindDisabled` → enable →
+`createInstance` by an EOA and by a relayer naming another owner UA → `infoOf` every field, `contractsPage`,
+`contractsOfOwner`, `contractsOfCreator` under the class, `classes() == [4, 5]`, `kindsOf(5) == [1]`, `creating()` seen inside
+`initialize` and 0 after → version 2 deployed, version 1 deprecated: the old instance still answers, creation of v1 refused,
+v2 created; a second kind added to class 4.
+
+**Negatives**, each with its positive control: class 0, 1, 2 on every generic entry (`ClassReserved`); version 0 and a taken
+version; `initSelector` 0; env unknown; a release whose `factoryInfo()` names another factory, another `chainUid`, another
+class, kind or version, `initialized == false`, `ownerUA ≠ 0`, a 192 B or 256 B answer, no answer; ERC-165 false for
+`interfaceId`, true for `0xffffffff`; an `initCall` of 0–3 bytes and one with another selector; an initializer that leaves
+`initialized` false or reports another class after init; an initializer that reverts (bubbled); `SaltAlreadyUsed`; a nested
+`createInstance` from `initialize` (order and both creators right); non-registrar and delegated registrar refused; a disabled
+kind stops every version and enabling restores it; the token and DEX tests of T67 unchanged. **Slot count:** +5 / +7 as §3.
+
+**Mutants** (T68, one at a time, each must turn a T70 test red): the selector check dropped; the post-init `factoryInfo()`
+check dropped; class compared with kind; the version not compared; `initialized` not checked (at registration, after init);
+the enabled check dropped; the `usableFrom` check dropped; `ClassReserved` accepting 2; the transient creator not restored;
+`ownerUA` read before `initialize`; the 224 B length check relaxed; `classes()` pushed on every release instead of the first.
+
+### 8.10 Tasks (plan [`2026-11-04-ua-mtx-merge.md`](../plans/2026-11-04-ua-mtx-merge.md))
+
+| # | Task | Change | Size (agent-days) |
+|---|---|---|---|
+| T67 | the record, per-class lists, paged views | ids `uint16` (Q12); otherwise as approved | 2 (unchanged) |
+| T70 | **new:** generic catalogue and `createInstance` (§8.2–§8.5), the acceptance test (§8.9), `GovGas` `createInstance` row, size row | after T67 | 2 |
+| T68 | mutants, deploy dry run, factory address | + the generic mutants of §8.9; the dry run also registers `NoteKind` and creates one | 0.5 → 1 |
+| T69 | docs share | + CTR-TOK-28 (class table, the generic path, §8.5's two lists), a PLANNED `factory_class` guard line in `docs/node/job-api.md` | 0.5 → 1 |
+| | **Total** | | **3 → 6** |
+
+Order T67 → T70 → T68; T69 beside, lands in T19; T44 (3f) now depends on T69 after T70. `PqChat`'s own release is 3c
+(PC0); its PF1 is dropped (§8.8).
+
+### 8.11 Questions for the owner (each with a recommendation)
+
+7. **A new `(class, kind)` starts off.** **Recommend:** yes. Fail closed: the registrar enables it as an explicit second step
+   after the notice period, and the same switch is the reversible stop for every version of a kind.
+8. **`creating()`, the transient creator view.** **Recommend:** yes. About 0.4 k gas per creation and a few lines; without it a
+   later kind that needs its creator inside `initialize` needs a new factory build, the thing the extension avoids. `PqChat`
+   does not need it.
+9. **No unregistered generic path** (no `createInstance` from a caller's own implementation). **Recommend:** yes, none.
+   `createTokenUnregistered` stays for the plain token kinds only; every generic instance has `version ≠ 0`.
+10. **Existing token and DEX kinds onto the generic path.** **Recommend:** not now (§8.4): their kind-specific index and
+    events stay in the typed entries; no gain, formats would move on every client.
+11. **The node relaying `createInstance`.** **Recommend:** not now; NODE-JOB-01 unchanged. A creation is a one-off the creator
+    submits and pays; a lane paying for unsigned creations is a spam vector. A signed, fee-paid creation is a later entry if
+    a consumer needs it.
+12. **Class and kind ids `uint16`** (the one change to the approved index, §2): **Recommend:** yes. Open-ended ids without a
+    compiled enum; the record stays three slots (`creator ‖ class ‖ kind ‖ version` is 32 B); no other format moves.
