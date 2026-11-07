@@ -330,3 +330,194 @@ fn rpc_reading_layer_against_anvil() {
     }
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+/// ua-rs-sign T15n (CTR-UA-29, owner 2026-11-07): the decoy steps' own arguments (no key, no stdin): `--decoy-count` with
+/// `--exclude` and `--registry`, `--decoy-filter` with `--window`, `--decoy-keys` alone; the decoy flags only in those steps.
+#[test]
+fn decoy_arguments() {
+    let u = format!("0x{}", "ab".repeat(32));
+    let base = ["--curve", "bls12381", "--rpc", "http://127.0.0.1:1", "--chain-id", "1", "--chain-uid", &u, "--factory",
+        "0x00000000000000000000000000000000000000aa", "--token", "0x00000000000000000000000000000000000000aa", "--depth", "0"];
+    let with = |x: &[&str]| -> Vec<String> { base.iter().chain(x).map(|s| s.to_string()).collect() };
+    for (args, want) in [
+        (with(&["--registry", &u[..42]]), "go with --decoy-count or --decoy-keys"),
+        (with(&["--exclude", &u]), "go with --decoy-count or --decoy-keys"),
+        (with(&["--decoy-count", "2", "--exclude", &u]), "--rpc and --registry"),
+        (with(&["--decoy-count", "2", "--registry", &u[..42]]), "--decoy-count with --exclude"),
+        (with(&["--decoy-count", "2", "--registry", &u[..42], "--exclude", &u, "--window", "4"]), "--decoy-count with --exclude"),
+        (with(&["--decoy-keys", &u, "--registry", &u[..42], "--exclude", &u]), "--decoy-count with --exclude"),
+        (with(&["--decoy-keys", &u, "--decoy-count", "1", "--registry", &u[..42]]), "--decoy-count with --exclude"),
+        (with(&["--decoy-keys", "0x01", "--registry", &u[..42]]), "32 bytes each"),
+        (with(&["--decoy-count", "1", "--registry", &u[..42], "--exclude", &u, "--decoy-filter", "x", "--window", "4"]), "activity or holder"),
+    ] {
+        let e = read_balance(&args.iter().map(String::as_str).collect::<Vec<_>>(), &json!({})).unwrap_err();
+        assert!(e.contains(want), "{args:?}: want {want}: {e}");
+    }
+}
+
+/// T15n: a one-connection-at-a-time JSON-RPC proxy in front of `upstream` that answers the fourth non-genesis
+/// `eth_getBlockByNumber` with another hash when `lie` (R3: the re-check of every block read); else a pass-through.
+fn liar(upstream: String, lie: bool) -> String {
+    use std::io::{BufRead, BufReader, Read};
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}", l.local_addr().unwrap());
+    std::thread::spawn(move || {
+        let mut n = 0;
+        for c in l.incoming() {
+            let Ok(mut c) = c else { continue };
+            let mut r = BufReader::new(c.try_clone().unwrap());
+            let mut len = 0usize;
+            loop {
+                let mut line = String::new();
+                if r.read_line(&mut line).unwrap_or(0) == 0 || line == "\r\n" {
+                    break;
+                }
+                if let Some(v) = line.to_ascii_lowercase().strip_prefix("content-length:") {
+                    len = v.trim().parse().unwrap();
+                }
+            }
+            let mut body = vec![0u8; len];
+            r.read_exact(&mut body).unwrap();
+            let req: Value = serde_json::from_slice(&body).unwrap();
+            let mut res = rpc(&upstream, req["method"].as_str().unwrap(), req["params"].clone());
+            if req["method"] == "eth_getBlockByNumber" && req["params"][0] != "0x0" {
+                n += 1;
+                if lie && n == 4 {
+                    res["hash"] = json!(hx(&[0x5a; 32]));
+                }
+            }
+            let out = json!({"jsonrpc": "2.0", "id": 1, "result": res}).to_string();
+            let _ = write!(c, "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{out}", out.len());
+        }
+    });
+    url
+}
+
+/// ua-rs-sign T15n: the decoy steps against a local `anvil` (capped; stopped by the test). The registry's `0x0141` list,
+/// records and SSTORE2 codes of real Zether keys, and the token's counters words, written by `anvil_setStorageAt` over 21
+/// blocks. `--decoy-count`: `pickDecoys`'s request, the list up to the sync point (UAs listed later never candidates), less
+/// the excluded; every listed UA by default (no filter); the activity filter's candidates and recency weights (`activity`,
+/// `holder`). `--decoy-keys`: each chosen UA's `Y` (`UA(Y)` equal to it); a UA listed after the sync point, an unlisted UA and
+/// a record whose `Y` is another UA's refused; R5 still checked.
+#[test]
+#[ignore]
+fn decoys_against_anvil() {
+    use zether_prover::curve::keccak256;
+    let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let url = format!("http://127.0.0.1:{port}");
+    let bin = std::env::var("ANVIL").unwrap_or_else(|_| "anvil".into());
+    let _anvil = Anvil(Command::new(bin).args(["--port", &port.to_string(), "--silent"]).stdout(Stdio::null()).spawn().unwrap());
+    assert!((0..100).any(|_| {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        rpc(&url, "eth_chainId", json!([])).is_string()
+    }), "anvil did not start");
+    let chain_id = u64::from_str_radix(rpc(&url, "eth_chainId", json!([])).as_str().unwrap().trim_start_matches("0x"), 16).unwrap();
+    let genesis = rpc(&url, "eth_getBlockByNumber", json!(["0x0", false]))["hash"].as_str().unwrap().to_string();
+    let set = |addr: &str, slot: &[u8; 32], w: &[u8; 32]| {
+        assert_eq!(rpc(&url, "anvil_setStorageAt", json!([addr, hx(slot), hx(w)])), json!(true));
+    };
+    let be = |n: u64| {
+        let mut w = [0u8; 32];
+        w[24..].copy_from_slice(&n.to_be_bytes());
+        w
+    };
+    let k2 = |a: &[u8; 32], b: &[u8; 32]| keccak256(&[*a, *b].concat());
+    let (factory, token, pqz_token, reg, reg2) = ("0x00000000000000000000000000000000000fac70", "0x0000000000000000000000000000000000002e7a",
+        "0x0000000000000000000000000000000000002e7c", "0x000000000000000000000000000000000000dec0", "0x000000000000000000000000000000000000dec2");
+    let reg3 = "0x000000000000000000000000000000000000dec3";
+    for (t, kind) in [(token, 2u8), (pqz_token, 4)] {
+        let mut k = [0u8; 32];
+        k[12..].copy_from_slice(&hex::decode(&t[2..]).unwrap());
+        let mut info = [0u8; 32];
+        info[2] = 1;
+        info[11] = kind;
+        set(factory, &k2(&k, &be(8)), &info);
+    }
+    let seed = zether_prover::keys::seed_from_mnemonic(MNEMONIC, "").unwrap();
+    let keys: Vec<_> = (0..10).map(|a| zether_prover::keys::ZetherKey::<Bls12381>::conf(&seed[..], 60, a).unwrap()).collect();
+    let ua = |i: usize| keys[i].ua();
+    let y = |i: usize| encode_point::<Bls12381>(&keys[i].y);
+    // `uaAt(0x0141, index) = ua` and its record `kind ‖ registeredAt ‖ keyPtr ‖ index` with the code `0x00 ‖ Y` of key `key`
+    let register = |r: &str, index: u64, ua: [u8; 32], key: usize| {
+        let ptr = format!("0x{:040x}", 0xc0de00 + index + if r == reg2 { 0x100 } else if r == reg3 { 0x200 } else { 0 });
+        let mut rec = [0u8; 32];
+        rec[..5].copy_from_slice(&index.to_be_bytes()[3..]);
+        rec[5..25].copy_from_slice(&hex::decode(&ptr[2..]).unwrap());
+        rec[30..].copy_from_slice(&[0x01, 0x41]);
+        set(r, &k2(&ua, &be(0)), &rec);
+        set(r, &k2(&be(index), &k2(&be(0x0141), &be(5))), &ua);
+        rpc(&url, "anvil_setCode", json!([ptr, hx(&[vec![0u8], y(key)].concat())]));
+        set(r, &k2(&be(0x0141), &be(4)), &be(index + 1));
+    };
+    // the counters word `accSeq ‖ pendingSeq ‖ lastRolledPendingSeq ‖ sendCounter` (low end first) of `ua(i)`
+    let root = zether_prover::state::ROOT;
+    let counters = |i: usize, pending: u64, sent: u64| {
+        let mut w = be(1);
+        w[16..24].copy_from_slice(&pending.to_be_bytes());
+        w[..8].copy_from_slice(&sent.to_be_bytes());
+        set(token, &add(&k2(&ua(i), &add(&root, 8)), 4), &w);
+    };
+    let mine = |b: u64| rpc(&url, "anvil_mine", json!([format!("0x{b:x}")]));
+    (0..8).for_each(|i| register(reg, i as u64, ua(i), i));
+    register(reg2, 0, [0xbb; 32], 2); // a record whose Y is another UA's
+    register(reg3, 0, ua(2), 2);
+    let mut other_kind = [0u8; 32]; // the same record, of kind 0x0142
+    other_kind[5..25].copy_from_slice(&hex::decode(format!("{:040x}", 0xc0de00 + 0x200)).unwrap());
+    other_kind[30..].copy_from_slice(&[0x01, 0x42]);
+    set(reg3, &k2(&ua(2), &be(0)), &other_kind);
+    (2..=5).for_each(|i| counters(i, 1, 1));
+    // `anvil_setStorageAt` writes the head block's state: a write at head `h` is seen from block `h` on
+    mine(1); // 1: the sync point, eight listed
+    mine(1);
+    (8..10).for_each(|i| register(reg, i as u64, ua(i), i)); // at block 2
+    counters(5, 2, 1); // ua5 active at block 2, before the window
+    mine(10);
+    counters(2, 1, 2); // ua2: a debit at block 12, the older half
+    mine(5);
+    counters(3, 2, 1); // ua3: a credit at block 17, the newer half
+    counters(4, 1, 2); // ua4: a debit
+    mine(4);
+    assert_eq!(rpc(&url, "eth_blockNumber", json!([])), json!("0x15"));
+
+    let cid = chain_id.to_string();
+    let run = |r: &str, tok: &str, x: &[&str]| {
+        let mut a = ["--curve", "bls12381", "--rpc", &url, "--chain-id", &cid, "--chain-uid", &genesis, "--factory", factory, "--token", tok,
+            "--depth", "0", "--registry", r].map(String::from).to_vec();
+        a.extend(x.iter().map(|s| s.to_string()));
+        read_balance(&a.iter().map(String::as_str).collect::<Vec<_>>(), &json!({}))
+    };
+    let hs = |r: std::ops::Range<usize>| r.map(|i| hx(&ua(i))).collect::<Vec<_>>();
+    let ex = format!("{},{}", hx(&ua(0)), hx(&ua(1)));
+    let out = run(reg, token, &["--decoy-count", "3", "--exclude", &ex, "--sync-block", "1"]).unwrap();
+    assert_eq!(out["request"], json!({"candidates": hs(2..8), "exclude": hs(0..2), "count": 3}), "the list up to the sync point");
+    assert_eq!((&out["syncBlock"], &out["listCount"], &out["block"]), (&json!(1), &json!(8), &json!(21)));
+    assert_eq!(run(reg, token, &["--decoy-count", "3", "--exclude", &ex]).unwrap()["request"]["candidates"], json!(hs(2..10)), "default: the read block");
+    let f = |filter: &str| run(reg, token, &["--decoy-count", "1", "--exclude", &ex, "--decoy-filter", filter, "--window", "10"]).unwrap()["request"].clone();
+    let act = f("activity");
+    assert_eq!((&act["candidates"], &act["weights"]), (&json!(hs(2..5)), &json!([1, 2, 2])), "activity, by recency");
+    let hold = f("holder");
+    assert_eq!((&hold["candidates"], &hold["weights"]), (&json!([hx(&ua(2)), hx(&ua(4))]), &json!([1, 2])), "holder: sendCounter only");
+    // the chosen decoys' keys
+    let d = run(reg, token, &["--decoy-keys", &format!("{},{}", hx(&ua(7)), hx(&ua(2))), "--sync-block", "1"]).unwrap();
+    assert_eq!(d["decoys"], json!([{"ua": hx(&ua(7)), "yTo": hx(&y(7))}, {"ua": hx(&ua(2)), "yTo": hx(&y(2))}]));
+    assert!(run(reg, token, &["--decoy-keys", &hx(&ua(8))]).is_ok(), "listed by the read block (positive control of the next)");
+    let no = |r: &str, u: &str, x: &[&str], want: &str| {
+        let e = run(r, token, &[&["--decoy-keys", u][..], x].concat()).unwrap_err();
+        assert!(e.contains(want), "want {want}: {e}");
+    };
+    no(reg, &hx(&ua(8)), &["--sync-block", "1"], "on the 0x0141 list up to the sync point");
+    no(reg, &hx(&[0xcc; 32]), &[], "is not a registered Zether UA");
+    no(reg2, &hx(&[0xbb; 32]), &[], "is not a registered Zether UA");
+    no(reg3, &hx(&ua(2)), &[], "is not a registered Zether UA"); // kind 0x0142
+    no(reg, &hx(&ua(2)), &["--sync-block", "22"], "past the read block");
+    assert!(run(reg, pqz_token, &["--decoy-keys", &hx(&ua(2))]).unwrap_err().contains("R5"), "R5");
+    assert!(run(reg, token, &["--decoy-count", "1", "--exclude", &ex, "--decoy-filter", "holder", "--window", "1"]).unwrap_err().contains("--window"));
+    // R3: every block read re-checked after the last read (here the sync block, on its re-check); the proxy alone changes nothing
+    let via = |proxy: String| {
+        let a = ["--curve", "bls12381", "--rpc", &proxy, "--chain-id", &cid, "--chain-uid", &genesis, "--factory", factory, "--token", token,
+            "--depth", "0", "--registry", reg, "--decoy-keys", &hx(&ua(2)), "--sync-block", "1"];
+        read_balance(&a, &json!({}))
+    };
+    assert!(via(liar(url.clone(), false)).is_ok());
+    assert!(via(liar(url.clone(), true)).unwrap_err().contains("R3: the block changed"), "the sync block re-checked");
+}

@@ -194,7 +194,9 @@ pub fn enc(pks: &[Vec<u8>], values: &[u64]) -> Result<(Vec<u8>, Vec<Vec<u8>>)> {
 /// - `proveDiscloseSender {chainId, registry, entryRef, fromUA, sendCounter, entryPtr, leg, legKeyRecord}` on the sender's handle
 ///   (`keyRecord` `fromUA`'s, `legKeyRecord` the registry's `pqzKey[UA_j]` with its code in `blobs`) → `{stmt, proof, amount}`
 ///   (op 4 `SENDER_S`, the amount the entry's own);
-/// - `openMemo {chainId, entryRef, fromUA, sendCounter, entryPtr, memo}` on the sender's handle → `{auditorOn, legs}`.
+/// - `openMemo {chainId, entryRef, fromUA, sendCounter, entryPtr, memo}` on the sender's handle → `{auditorOn, legs}`;
+/// - `pickDecoys {candidates, exclude, count, weights?}` → `{decoys}` (T15n, CTR-UA-29: [`super::decoys`]; op 7's decoy legs;
+///   the handle's key is not used).
 pub const COMMANDS: &[&str] = &[
     "enc",
     #[cfg(feature = "vectors")]
@@ -224,6 +226,7 @@ pub const COMMANDS: &[&str] = &[
     "openMemo",
     #[cfg(feature = "vectors")]
     "rawProveDiscloseSender",
+    "pickDecoys",
 ];
 
 /// The storage layout the words commands parse (`ua-mtx-merge`, `PqzCore.Account` / `PqzStorage` in the ERC-7201 namespace
@@ -313,6 +316,7 @@ fn allowed(cmd: &str, field: &str) -> bool {
         "auditRead" => has(LOC) || has(ENTRY) || has(&["ua", "leg", "auditorMode", "auditorUA"]),
         "proveDisclose" => has(LOC) || has(ENTRY) || has(&["ua", "registry", "leg", "kind", "auditorMode", "auditorUA"]),
         "openMemo" => has(LOC) || has(ENTRY) || field == "memo",
+        "pickDecoys" => has(&["candidates", "exclude", "count", "weights"]),
         _ => false,
     }
 }
@@ -794,6 +798,8 @@ enum Req {
     Disclose { stmt: Vec<u8> },
     /// A rebuilt leg: `auditRead` (`form` `None`) or `proveDisclose` (op 5 `words`, the amount filled after decryption).
     Leg { form: Option<Form>, words: [Word; DISC_WORDS], ct: Vec<u8>, window: usize },
+    /// `pickDecoys` (T15n): op 7's decoys from the reading layer's candidates; no key.
+    PickDecoys(super::decoys::Request),
     /// `expect`: the entry's `(auditorOn, UA_j)` the opened memo must name (`None` only for the raw form).
     OpenMemo { chain_uid: Word, token: [u8; 20], from_ua: Word, send_counter: u64, memo: Vec<u8>, expect: Option<(bool, Vec<Word>)> },
 }
@@ -824,6 +830,7 @@ fn req(cmd: &str, f: &Fields<'_>) -> Result<(Req, Option<Vec<u8>>)> {
         Ok((id, o, h))
     };
     Ok(match cmd {
+        "pickDecoys" => (Req::PickDecoys(super::decoys::Request::from_map(f.0)?), None),
         "enc" => {
             let pks = f.list("pks")?.iter().map(|p| pk(hex(p)?)).collect::<Result<_>>()?;
             let values = f.list("values")?.iter().map(|v| v.as_u64().ok_or(Error::Argument));
@@ -1364,6 +1371,8 @@ impl PqzKey {
             return Err(Error::Argument);
         }
         let out = match &c.req {
+            // no key (CTR-UA-29: the reading layer's candidates, the OS CSPRNG)
+            Req::PickDecoys(r) => return r.pick(),
             Req::Enc { pks, values } => {
                 let (u, vs) = enc(pks, values)?;
                 json!({"u": to_hex(&u), "vs": vs.iter().map(|v| to_hex(v)).collect::<Vec<_>>()})

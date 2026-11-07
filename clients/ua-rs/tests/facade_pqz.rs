@@ -258,6 +258,7 @@ fn base_request(k: &PqzKey, cmd: &str) -> Value {
         "rawProveDiscloseSender" => json!({"stmt": sstmt, "fromUA": hx(&[1; 32]), "sendCounter": 1, "salt": hx(&[5; 16]), "auditorOn": true}),
         "rawProveDisclose" => json!({"stmt": stmt}),
         "rawOpenMemo" => json!({"chainUid": hx(&[1; 32]), "token": hx(&[2; 20]), "fromUA": hx(&[3; 32]), "sendCounter": 1, "memo": hx(&[0; 58])}),
+        "pickDecoys" => json!({"candidates": [hx(&[1; 32]), hx(&[2; 32])], "exclude": [hx(&[1; 32])], "count": 1}),
         _ => words_request(k, cmd),
     }
 }
@@ -304,11 +305,11 @@ const RAW: [&str; 8] =
 fn release_has_no_raw_decrypt() {
     unlock();
     let release = ["enc", "proveRegister", "proveKeyRecord", "proveDiscloseSender", "balance", "proveTransfer", "proveBurn", "proveRefresh",
-        "proveTransferMulti", "auditRead", "proveDisclose", "openMemo"];
+        "proveTransferMulti", "auditRead", "proveDisclose", "openMemo", "pickDecoys"];
     let want: Vec<&str> = if cfg!(feature = "vectors") {
         ["enc", "dec", "proveRegister", "proveKeyRecord", "rawProveTransfer", "rawProveBurn", "rawProveRefresh", "rawProveTransferMulti",
             "proveDiscloseSender", "rawProveDisclose", "rawOpenMemo", "balance", "proveTransfer", "proveBurn", "proveRefresh",
-            "proveTransferMulti", "auditRead", "proveDisclose", "openMemo", "rawProveDiscloseSender"].to_vec()
+            "proveTransferMulti", "auditRead", "proveDisclose", "openMemo", "rawProveDiscloseSender", "pickDecoys"].to_vec()
     } else {
         release.to_vec()
     };
@@ -938,4 +939,37 @@ mod vectors {
         assert_eq!(n, want_rows);
         eprintln!("proof rows through the facade: {n}");
     }
+}
+
+/// T15n (CTR-UA-29, owner 2026-11-07): `pickDecoys` through the PQZ facade, op 7's decoys from the reading layer's candidates
+/// (the `0x0142` list up to the sync point): `count` distinct candidates, never an excluded UA, uniform by default and weighted
+/// by the optional activity filter's `weights`; too few is `Argument`; no key (a revoked handle still answers). The
+/// distribution is `facade::decoys`'s unit tests (chi-square at a fixed seed).
+#[test]
+fn pick_decoys() {
+    unlock();
+    let w = wallet();
+    let k = w.pqz_key(0, 0).unwrap();
+    let c: Vec<String> = (1u8..=8).map(|i| hx(&[i; 32])).collect();
+    let ex = [c[0].clone(), c[5].clone()];
+    let mut seen = std::collections::BTreeSet::new();
+    for _ in 0..50 {
+        let d = call(&k, "pickDecoys", &json!({"candidates": c, "exclude": ex, "count": 3})).unwrap()["decoys"].clone();
+        let d: Vec<String> = serde_json::from_value(d).unwrap();
+        assert_eq!(d.len(), 3);
+        assert_eq!(d.iter().collect::<std::collections::BTreeSet<_>>().len(), 3, "no duplicates");
+        assert!(d.iter().all(|u| c.contains(u) && !ex.contains(u)), "candidates only, never excluded");
+        seen.extend(d);
+    }
+    assert_eq!(seen.len(), 6, "every eligible candidate drawn at some point");
+    // the filter's weights: weight 0 never drawn; every positive one needed
+    let d = call(&k, "pickDecoys", &json!({"candidates": c, "exclude": ex, "count": 2, "weights": [1, 1, 0, 5, 0, 0, 0, 0]})).unwrap();
+    let mut d: Vec<String> = serde_json::from_value(d["decoys"].clone()).unwrap();
+    d.sort();
+    assert_eq!(d, [c[1].clone(), c[3].clone()]);
+    assert_eq!(call(&k, "pickDecoys", &json!({"candidates": c, "exclude": ex, "count": 7})).err(), Some(Error::Argument), "too few");
+    assert_eq!(call(&k, "pickDecoys", &json!({"candidates": c, "count": 1})).err(), Some(Error::Argument), "exclude is named");
+    w.lock();
+    assert_eq!(call(&k, "pickDecoys", &json!({"candidates": c, "exclude": ex, "count": 6})).unwrap()["decoys"].as_array().unwrap().len(), 6,
+        "no key used");
 }

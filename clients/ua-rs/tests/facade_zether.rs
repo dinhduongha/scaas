@@ -121,7 +121,7 @@ fn release_has_no_raw_decrypt() {
     let raw = ["decrypt", "decryptPending", "rawCheckBalance", "rawProveTransfer", "rawProveTransferMulti", "rawProveBurn", "rawOpenMemo",
         "rawRecoverTransfer", "rawOpenDisclosure"];
     let release = ["encrypt", "pop", "ownerAuth", "uaSig", "shieldCalldata", "envelope", "typedDigest", "namedCall", "balance",
-        "pendingBalance", "checkBalance", "proveTransfer", "proveTransferMulti", "proveBurn", "openMemo", "recoverTransfer", "openDisclosure"];
+        "pendingBalance", "checkBalance", "proveTransfer", "proveTransferMulti", "proveBurn", "openMemo", "recoverTransfer", "openDisclosure", "pickDecoys"];
     for cmd in release {
         assert!(COMMANDS.contains(&cmd), "{cmd}");
     }
@@ -403,4 +403,29 @@ fn zether_prover_vectors_through_the_facade() {
         let p = run(&w.zether_key(60, account, 7).unwrap(), "pop", &json!({}), &mut pop_rng);
         assert_eq!(p["pop"], r33["bls12381"]["keys"][i]["pop"]["pop"], "pop of account {account}");
     }
+}
+
+/// T15n (CTR-UA-29, owner 2026-11-07): `pickDecoys` through the Zether facade, the multi-recipient transfer's decoys from the
+/// reading layer's candidates (the `0x0141` list up to the sync point): distinct, never excluded, too few refused; the
+/// allow-list and shapes as every command; no key (a revoked handle still answers).
+#[test]
+fn pick_decoys() {
+    unlock();
+    let w = wallet();
+    let k = w.zether_key(60, 0, 7).unwrap();
+    let c: Vec<String> = (1u8..=5).map(|i| format!("0x{}", hex::encode([i; 32]))).collect();
+    let r = json!({"candidates": c, "exclude": [c[4]], "count": 4});
+    let mut d: Vec<String> = serde_json::from_value(call(&k, "pickDecoys", &r).unwrap()["decoys"].clone()).unwrap();
+    d.sort();
+    assert_eq!(d, c[..4], "every eligible one, once");
+    let mut more = r.clone();
+    more["count"] = json!(5);
+    assert_eq!(call(&k, "pickDecoys", &more).err(), Some(Error::Argument), "too few");
+    for (f, x) in [("weights", json!([1, "2"])), ("candidates", json!([{"ua": c[0]}])), ("count", json!(1.5)), ("key", json!({}))] {
+        let mut bad = r.clone();
+        bad[f] = x;
+        assert_eq!(call(&k, "pickDecoys", &bad).err(), Some(Error::Argument), "{f}");
+    }
+    w.lock();
+    assert!(call(&k, "pickDecoys", &r).is_ok(), "no key used");
 }

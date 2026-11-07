@@ -6,6 +6,10 @@
 //!                        (--depth <n> | --finalized)]
 //!                       [--cache-box <file> --token <address>]
 //!                       (feature `hazmat` only: --ct <C hex>:<D hex>)
+//!   zether-read-balance --curve bls12381 --rpc … --chain-id … --chain-uid … --factory … --token … (--depth <n> | --finalized)
+//!                       --registry <address> [--sync-block <n>]
+//!                       (--decoy-count <n> --exclude <ua>,… [--decoy-filter activity|holder --window <blocks>]
+//!                        | --decoy-keys <ua>,…)                                       (decoys: no key, no stdin)
 //!
 //! The key is read from **stdin** as JSON, the `key` object of the prover API:
 //! `{"x": "0x…"}` or `{"mnemonic": "…", "passphrase"?: "…", "coin": n, "account": n}` — piped from a
@@ -35,6 +39,23 @@
 //! 2^(bound − table) giant steps. `--table-file` loads and verifies a saved baby table (public data), or writes one after
 //! generating it. Prints `{"balance": "<decimal>", "accSeq": n|null, "block": n|null, "source": "rpc"|"cache"|"cache+rpc"|"pasted"}`;
 //! `accSeq` is what the wallet cache stores.
+//!
+//! **Decoys** (CTR-UA-29, owner 2026-11-07; ua-rs-sign T15n) of a multi-recipient transfer on `--token`, in two steps around
+//! `ua-rs`'s `pickDecoys` (this crate does not link `ua-rs`). The candidates are the registry's classical Zether list
+//! (`uaAt(0x0141, i)`, `i < uaCount(0x0141)`), read from storage (`UAStore.Layout` slots 4 and 5) with R1–R5 as above; the
+//! list's length is read at the sync point (`--sync-block`, at most the read block; default the read block), so a UA
+//! registered later is never a candidate; everything else is read at the read block. `--decoy-count` prints `pickDecoys`'s
+//! request `{candidates, exclude, count, weights?}` (`--exclude`: the sender and every real recipient, named) with
+//! `syncBlock`, `listCount`, `block`, `blockHash`. Uniform by default; `--decoy-filter` (an option, off by default) keeps the
+//! candidates active in the token in the last `--window` blocks by the account's counters word at `block − window`,
+//! `block − window/2` and `block` (`activity`: any of `accSeq`, `pendingSeq`, `lastRolledPendingSeq`, `sendCounter` moved;
+//! `holder`: `sendCounter` moved), weighted by recency (2 in the newer half, 1 in the older half only); the node must hold
+//! those blocks' state. `--decoy-keys` (the UAs `pickDecoys` chose, with the same `--sync-block`) prints `{decoys: [{ua, yTo}]}`
+//! (each a recipient with `amount` 0): each UA's record of kind `0x0141` (registry slot 0) with its list index below the
+//! sync point's count and `uaAt` at that index equal to it, its `Y` from the record's SSTORE2 code, and `UA(Y)` equal to it.
+//! Residuals: the registry's slots 0, 4 and 5 are hand-copied (no registry layout pin on this branch); `--registry` must be
+//! the generation that lists `0x0141` (a predecessor's list is not followed); the two steps are two reads (each pinned to its
+//! own block; the sync point bounds both).
 
 use std::io::{IsTerminal, Read};
 use std::process::{Command, ExitCode, Stdio};
@@ -71,6 +92,24 @@ struct Args {
     depth: Option<u64>,
     finalized: bool,
     cache_box: Option<String>,
+    registry: Option<String>,
+    decoy_count: Option<u64>,
+    decoy_keys: Option<Vec<[u8; 32]>>,
+    exclude: Option<Vec<[u8; 32]>>,
+    sync_block: Option<u64>,
+    filter: Option<String>,
+    window: Option<u64>,
+}
+
+impl Args {
+    fn decoys(&self) -> bool {
+        self.decoy_count.is_some() || self.decoy_keys.is_some()
+    }
+}
+
+/// A comma-separated list of 32-byte UAs.
+fn uas(f: &str, v: &str) -> Result<Vec<[u8; 32]>, String> {
+    v.split(',').map(|u| unhex(u)?.try_into().map_err(|_| format!("{f}: 32 bytes each"))).collect()
 }
 
 fn parse() -> Result<Args, String> {
@@ -94,6 +133,15 @@ fn parse() -> Result<Args, String> {
             "--depth" => a.depth = Some(val()?.parse().map_err(|_| "--depth: integer")?),
             "--finalized" => a.finalized = true,
             "--cache-box" => a.cache_box = Some(val()?),
+            "--registry" => a.registry = Some(val()?),
+            "--decoy-count" => a.decoy_count = Some(val()?.parse().map_err(|_| "--decoy-count: integer")?),
+            "--decoy-keys" => a.decoy_keys = Some(uas("--decoy-keys", &val()?)?),
+            "--exclude" => a.exclude = Some(uas("--exclude", &val()?)?),
+            "--sync-block" => a.sync_block = Some(val()?.parse().map_err(|_| "--sync-block: integer")?),
+            "--decoy-filter" => {
+                a.filter = Some(val()?).filter(|v| v == "activity" || v == "holder").ok_or("--decoy-filter: activity or holder")?.into()
+            }
+            "--window" => a.window = Some(val()?.parse().map_err(|_| "--window: integer")?),
             _ => return Err(format!("unknown argument {f}")),
         }
     }
@@ -105,6 +153,18 @@ fn parse() -> Result<Args, String> {
     let pasted = a.ct.is_some();
     #[cfg(not(feature = "hazmat"))]
     let pasted = false;
+    if a.decoys() {
+        if a.rpc.is_none() || a.registry.is_none() || a.cache_box.is_some() || a.pending || pasted {
+            return Err("decoys: --rpc and --registry, no --cache-box, --pending or --ct".into());
+        }
+        let candidates = a.decoy_count.is_some() && a.decoy_keys.is_none() && a.exclude.is_some() && a.filter.is_some() == a.window.is_some();
+        let keys = a.decoy_keys.is_some() && a.decoy_count.is_none() && a.exclude.is_none() && a.filter.is_none() && a.window.is_none();
+        if !candidates && !keys {
+            return Err("decoys: --decoy-count with --exclude (and --decoy-filter with --window, or neither), or --decoy-keys alone".into());
+        }
+    } else if a.registry.is_some() || a.exclude.is_some() || a.sync_block.is_some() || a.filter.is_some() || a.window.is_some() {
+        return Err("--registry, --exclude, --sync-block, --decoy-filter and --window go with --decoy-count or --decoy-keys".into());
+    }
     if pasted && (a.rpc.is_some() || a.cache_box.is_some()) {
         return Err("--ct goes alone".into());
     }
@@ -191,6 +251,9 @@ struct Reader<'a> {
 }
 
 impl Reader<'_> {
+    fn code(&self, address: &[u8]) -> Result<Vec<u8>, String> {
+        unhex(rpc(self.url, "eth_getCode", json!([hx(address), {"blockHash": self.hash}]))?.as_str().ok_or("eth_getCode: not bytes")?)
+    }
     fn word(&self, address: &str, slot: &[u8; 32]) -> Result<[u8; 32], String> {
         let w = rpc(self.url, "eth_getStorageAt", json!([address, hx(slot), {"blockHash": self.hash}]))?;
         let b = unhex(w.as_str().ok_or("eth_getStorageAt: not a word")?)?;
@@ -202,9 +265,8 @@ impl Reader<'_> {
     }
 }
 
-/// R1–R6: the words of `acct[ua]` of `token`, read at one final block of the configured chain from the one node, with the
-/// location fields of `zether_prover::state`.
-fn read_words(a: &Args, ua: &[u8; 32]) -> Result<Value, String> {
+/// R1, R2, R3 and R5: the configured chain's read block, the token catalogued with a Zether kind.
+fn open(a: &Args) -> Result<Reader<'_>, String> {
     let (url, token, factory) =
         (a.rpc.as_deref().ok_or("--rpc")?, a.token.as_deref().ok_or("--token")?, a.factory.as_deref().ok_or("--factory")?);
     let chain_uid = unhex(a.chain_uid.as_deref().ok_or("--chain-uid")?)?;
@@ -235,6 +297,16 @@ fn read_words(a: &Args, ua: &[u8; 32]) -> Result<Value, String> {
     if info[2] != 1 || !ZETHER_KINDS.contains(&info[11]) {
         return Err("R5: the token is not a Zether token catalogued by this factory".into());
     }
+    Ok(r)
+}
+
+/// R1–R6: the words of `acct[ua]` of `token`, read at one final block of the configured chain from the one node, with the
+/// location fields of `zether_prover::state`.
+fn read_words(a: &Args, ua: &[u8; 32]) -> Result<Value, String> {
+    let r = open(a)?;
+    let token = a.token.as_deref().ok_or("--token")?;
+    let chain_uid = unhex(a.chain_uid.as_deref().ok_or("--chain-uid")?)?;
+    let t: [u8; 20] = unhex(token)?.try_into().map_err(|_| "--token: 20 bytes")?;
     // R4, R6: the account of this key
     let psid = r.word(token, &add(&state::ROOT, 6))?;
     let base = keccak256(&[*ua, add(&state::ROOT, 8)].concat());
@@ -253,6 +325,109 @@ fn read_words(a: &Args, ua: &[u8; 32]) -> Result<Value, String> {
     }
     Ok(json!({"family": "evm", "chainId": a.chain_id, "chainUid": hx(&chain_uid), "token": hx(&t), "block": r.block, "psid": hx(&psid),
         "ua": hx(ua), "account": account, "accountData": data}))
+}
+
+/// `UAStore.Layout` (the registry's storage at slot 0): `records` (slot 0), `uaCount` (slot 4), `uaAt` (slot 5); the classical
+/// Zether list's key; the longest list read.
+const REG_RECORDS_SLOT: u64 = 0;
+const REG_COUNT_SLOT: u64 = 4;
+const REG_AT_SLOT: u64 = 5;
+const ZETHER_LIST: u64 = 0x0141;
+const MAX_LIST: u64 = 50_000;
+
+/// R3: block `n` still has `hash` (no reorg, a consistent node).
+fn recheck(url: &str, n: u64, hash: &str) -> Result<(), String> {
+    let again = rpc(url, "eth_getBlockByNumber", json!([format!("0x{n:x}"), false]))?;
+    if again["hash"].as_str() != Some(hash) {
+        return Err("R3: the block changed during the read (a reorg or an inconsistent node)".into());
+    }
+    Ok(())
+}
+
+/// Decoys (module doc): `pickDecoys`'s request (`--decoy-count`), or the chosen decoys' keys (`--decoy-keys`). No key.
+fn decoys(a: &Args) -> Result<Value, String> {
+    let (url, token, registry) = (a.rpc.as_deref().ok_or("--rpc")?, a.token.as_deref().ok_or("--token")?, a.registry.as_deref().ok_or("--registry")?);
+    let r = open(a)?;
+    let block = r.block;
+    let mut pins = vec![(block, r.hash.clone())];
+    // another block of the same chain, by hash, the node's answer checked (R3); re-checked after the last read
+    let mut pin = |n: u64| -> Result<Reader<'_>, String> {
+        let b = rpc(url, "eth_getBlockByNumber", json!([format!("0x{n:x}"), false]))?;
+        if qty(&b["number"])? != n {
+            return Err("R3: the node answered another block than the one asked for".into());
+        }
+        let hash = b["hash"].as_str().ok_or("R3: no block hash")?.to_string();
+        pins.push((n, hash.clone()));
+        Ok(Reader { url, block: n, hash })
+    };
+    let sync = a.sync_block.unwrap_or(block);
+    if sync > block {
+        return Err("--sync-block is past the read block".into());
+    }
+    let n = pin(sync)?.word(registry, &keccak256(&[be(ZETHER_LIST), be(REG_COUNT_SLOT)].concat()))?;
+    let n = (n[..24] == [0; 24]).then(|| u64::from_be_bytes(n[24..].try_into().unwrap_or_default())).filter(|n| *n <= MAX_LIST)
+        .ok_or("the registry's list is longer than this tool reads")?;
+    let list = keccak256(&[be(ZETHER_LIST), be(REG_AT_SLOT)].concat());
+    let mut out = if let Some(keys) = &a.decoy_keys {
+        let mut legs = Vec::new();
+        for ua in keys {
+            // `Record`: `kind(16) ‖ registeredAt(40) ‖ keyPtr(160) ‖ index(40)` from the low end; the code `0x00 ‖ Y`
+            let rec = r.word(registry, &keccak256(&[*ua, be(REG_RECORDS_SLOT)].concat()))?;
+            let index = rec[..5].iter().fold(0u64, |x, b| x << 8 | u64::from(*b));
+            let listed = rec[30..] == [0x01, 0x41] && index < n && r.word(registry, &keccak256(&[be(index), list].concat()))? == *ua;
+            let code = if listed { r.code(&rec[5..25])? } else { Vec::new() };
+            let y = match code.split_first() {
+                Some((0, y)) => zether_prover::curve::decode_point::<Bls12381>(y).ok().filter(|p| zether_prover::curve::ua_of::<Bls12381>(p) == *ua),
+                _ => None,
+            };
+            if y.is_none() {
+                return Err(format!("{} is not a registered Zether UA on the 0x0141 list up to the sync point", hx(ua)));
+            }
+            legs.push(json!({"ua": hx(ua), "yTo": hx(&code[1..])}));
+        }
+        json!({"decoys": legs})
+    } else {
+        let exclude = a.exclude.clone().unwrap_or_default();
+        let mut candidates: Vec<[u8; 32]> = Vec::new();
+        for i in 0..n {
+            let u = r.word(registry, &keccak256(&[be(i), list].concat()))?;
+            if !candidates.contains(&u) && !exclude.contains(&u) {
+                candidates.push(u);
+            }
+        }
+        let mut request = json!({"exclude": exclude.iter().map(|u| hx(u)).collect::<Vec<_>>(), "count": a.decoy_count});
+        if let Some(w) = a.window {
+            let old = block.checked_sub(w).filter(|_| w >= 2).ok_or("--window: at least 2 and at most the read block")?;
+            let (old, mid) = (pin(old)?, pin(block - w / 2)?);
+            let (_, _, inner, byte, width) = *state::LAYOUT.iter().find(|l| l.0 == "acct[U].sendCounter").ok_or("layout")?;
+            let sent = |w: &[u8; 32]| w[32 - byte - width..32 - byte].to_vec();
+            // the counters word (`accSeq ‖ pendingSeq ‖ lastRolledPendingSeq ‖ sendCounter`): any move, or `holder`: `sendCounter`
+            let moved = |x: &Reader, y: &Reader, slot: &[u8; 32]| -> Result<bool, String> {
+                let (x, y) = (x.word(token, slot)?, y.word(token, slot)?);
+                Ok(if a.filter.as_deref() == Some("holder") { sent(&x) != sent(&y) } else { x != y })
+            };
+            let (mut kept, mut weights) = (Vec::new(), Vec::new());
+            for u in candidates {
+                let slot = add(&keccak256(&[u, add(&state::ROOT, 8)].concat()), inner);
+                let w = if moved(&mid, &r, &slot)? { 2 } else if moved(&old, &mid, &slot)? { 1 } else { 0 };
+                if w > 0 {
+                    kept.push(u);
+                    weights.push(w);
+                }
+            }
+            candidates = kept;
+            request["weights"] = json!(weights);
+        }
+        request["candidates"] = json!(candidates.iter().map(|u| hx(u)).collect::<Vec<_>>());
+        json!({"request": request})
+    };
+    for (b, h) in &pins {
+        recheck(url, *b, h)?;
+    }
+    for (k, v) in [("syncBlock", json!(sync)), ("listCount", json!(n)), ("block", json!(block)), ("blockHash", json!(r.hash))] {
+        out[k] = v;
+    }
+    Ok(out)
 }
 
 /// The holder's cache entry `<UA>:<token>` of the box file (clientkeys `openBalanceCache`; `state::open_cache_entry`):
@@ -342,6 +517,9 @@ fn run(a: &Args, req: &Value) -> Result<Value, String> {
 
 fn main() -> ExitCode {
     let res = parse().and_then(|a| {
+        if a.decoys() {
+            return decoys(&a);
+        }
         if std::io::stdin().is_terminal() {
             return Err("pipe the key JSON on stdin (zether-read-balance … < key.json); a terminal would echo it".into());
         }

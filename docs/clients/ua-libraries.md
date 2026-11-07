@@ -227,5 +227,42 @@ checked against the token's immutable `registry`; requirement 4's `codeHash` che
 other words commands (`proveDisclose`, `proveDiscloseSender`, `openMemo`, the debits) are not wired; a debit request is not
 built. UNAUDITED.
 
+<a id="decoys"></a>***Decoy selection for PQZ op 7 and classical Zether multi-recipient transfers: BUILT*** (ua-rs-sign T15n;
+rule [CTR-UA-29](../contracts/accounts.md#CTR-UA-29), Change of 2026-11-07, owner). The candidates are the registry's per-kind list
+of the token's family: `0x0142` (every holder with a proven PQZ key, one anonymity set across the signer kinds) for PQZ, `0x0141`
+for classical Zether, up to the wallet's **last sync point**: a UA listed after it is never a candidate. **Default: uniform**
+over the candidates. **Option, off by default:** the token-activity filter keeps only the candidates active in the token within
+a look-back window and weights them by recency; with the stricter variant only holder-authorised activity (a `sendCounter` move)
+counts. **The trade-off, stated to the holder:** registration is permissionless, so with the default an observer that registers
+UAs of the kind can recognise its own decoys in a ring (threat S30; a PQZ holder costs one PQ registration); the filter raises
+that to gas-level cost only (an observer keeps its UAs active), and it shrinks the anonymity set to the recently active.
+- **The pick** (`ua-rs` `facade::decoys`, pure and I/O-free; command `pickDecoys` of both facades, on any key handle, the key
+  unused): request `{candidates, exclude, count, weights?}`, named fields: `count` = `M − 1`, `exclude` the sender and every real
+  recipient, `weights` (the filter's, optional) one `u64` per candidate; answer `{decoys}`: `count` distinct candidates, never an
+  excluded one, drawn one at a time without replacement by the OS CSPRNG (rejection sampling, no modulo bias), uniform without
+  `weights`. Too few eligible candidates (not excluded, weight above 0), a candidate given twice, `weights` of another length or
+  any other field: `Argument`. One command, not a field of `proveTransferMulti`: the pick comes before the decoys' keys are read
+  (only the chosen keys are), and op 7's legs and the Zether recipients already take explicit keys.
+- **The reading layers** (storage only, the list's length read at the sync point by block hash and everything else at the read
+  block, every block re-checked after the last read; no key, no stdin): `pqz-read --command decoys --count <M−1> [--exclude …]
+  [--sync-block <n>] [--decoy-filter activity|holder --window <blocks>]` reads the `0x0142` list, excludes `--ua` and `--exclude`,
+  calls the pick in process and reads each chosen decoy's proven `pqzKey` record and key code: `{decoys: [{ua, pk}]}`, each an
+  op 7 leg with amount 0 (`--words` prints the pick's request). `zether-read-balance … --registry <address> --decoy-count <M−1>
+  --exclude …` prints the pick's request from the `0x0141` list (zether-prover does not link `ua-rs`); after `pickDecoys`,
+  `--decoy-keys <ua>,…` reads each chosen UA's record (kind `0x0141`, its list index below the sync point's count and the list
+  entry at that index equal to it) and its `Y`, with `UA(Y)` equal to it: `{decoys: [{ua, yTo}]}`, each a recipient with amount
+  0. The filter reads the account's counters at `block − window`, `block − window/2` and `block` (PQZ `pendingCount`, `rolled`,
+  `sendCounter`; Zether the counters word): moved in the newer half weight 2, only in the older half weight 1, else dropped;
+  `holder` compares `sendCounter` only. The node must hold those blocks' state.
+- Tests: the pick's distribution by chi-square at a fixed seed (unit tests only), no duplicates, exclusions, too few, the
+  facades and the C ABI; each tool against a local `anvil` (UAs listed after the sync point never chosen, the filter on and off,
+  its weights, the keys, the refusals); mutants `smartcontracts/evm/runs/2026-11-07-ua-rs-sign-t15n-mutants.txt`.
+- **Residuals:** the registry's slots (`records` 0, `pqzKey` 2, `uaCount` 4, `uaAt` 5) are hand-copied: the registry layout pin
+  (`ua-mtx-merge` group 3g) is not on this branch; `--registry` must be the generation that lists the kind (a predecessor's list
+  is not followed, the forwarding is in code); the PQZ key read is the unversioned `pqzKey[ua]`, and moves to the current
+  version with 3g's versioned keys (a follow-up); a list longer than 50,000 UAs is refused (one storage read per UA); the
+  Zether steps are two reads at two read blocks, both bounded by the same sync point; the order of the legs in the transfer
+  (real recipient among the decoys) is the caller's. UNAUDITED.
+
 **Not here.** Signing (`UAKey`, the per-kind signers), PoP signatures and group vectors, the registry contract, the UA ledger.
 Not built yet: the FRB layer as a Flutter plugin and its Android, iOS and web builds (the web build needs nightly Rust, wasm-bindgen-cli and COOP/COEP headers; whether `scaas-ua` compiles to wasm is open), and Qt packaging for Windows and macOS.

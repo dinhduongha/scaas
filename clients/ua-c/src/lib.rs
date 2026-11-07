@@ -2302,7 +2302,7 @@ pub extern "C" fn scaas_ua_zether_public(k: *const ScaasUaZetherKey, y128: *mut 
 
 /// zether-prover's command `cmd` (encrypt, pop, ownerAuth, uaSig, shieldCalldata, envelope, typedDigest, namedCall, and the
 /// words commands balance, pendingBalance, checkBalance, proveTransfer, proveTransferMulti, proveBurn, openMemo,
-/// recoverTransfer, openDisclosure) on `request_json` (named fields, at most 1 MiB, depth 8) with the handle's key: its JSON
+/// recoverTransfer, openDisclosure; pickDecoys: decoys, no key, T15n) on `request_json` (named fields, at most 1 MiB, depth 8) with the handle's key: its JSON
 /// answer into `out_json`. Every field is checked against the command's allow-list: a `key` object, `revealSecret`,
 /// `includeWitness`, an unknown field or another curve is SCAAS_UA_ERR_ARGUMENT, and so is a refusal of the prover (no
 /// detail: it could name a request value). A size query runs the command again (a proof is made again, with new randomness).
@@ -2430,7 +2430,7 @@ pub extern "C" fn scaas_ua_pqz_public(k: *const ScaasUaPqzKey, out: *mut u8, out
 }
 
 /// PQZ command `cmd` (enc, proveRegister, proveKeyRecord and, on raw storage words, balance, proveTransfer, proveBurn,
-/// proveRefresh, proveTransferMulti, auditRead, proveDisclose, proveDiscloseSender, openMemo) on `request_json` (named fields, bytes "0x"
+/// proveRefresh, proveTransferMulti, auditRead, proveDisclose, proveDiscloseSender, openMemo; pickDecoys: decoys, no key, T15n) on `request_json` (named fields, bytes "0x"
 /// hex, u64 numbers; at most 4 MiB, depth 8) with the handle's key: its JSON answer into `out_json`. Every field is checked against
 /// the command's allow-list: a `key`, `seed32` or any other field not on it is SCAAS_UA_ERR_ARGUMENT, a `proofSystemId` or `psid`
 /// of another set SCAAS_UA_ERR_PQZ_SET_MISMATCH, a prover refusal SCAAS_UA_ERR_ARGUMENT (no detail). Pass `out_json` of

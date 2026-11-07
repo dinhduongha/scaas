@@ -69,7 +69,9 @@ const HEADER: &[&str] =
 #[cfg(feature = "vectors")]
 const RECOVERY: &[&str] = &["payload", "entry", "sendCounter", "memo", "chainId", "chainUid", "token"];
 
-/// The commands, in this order (the fuzz target `zether_cmd`, built with `vectors`, names them by index).
+/// The commands, in this order (the fuzz target `zether_cmd`, built with `vectors`, names them by index). `pickDecoys`
+/// `{candidates, exclude, count, weights?}` → `{decoys}` (T15n, CTR-UA-29: [`super::decoys`]; the multi-recipient
+/// transfer's decoys; the handle's key is not used).
 ///
 /// ARCH-POS-13 ("never a decryption oracle", owner 2026-11-06; spec no-decryption-oracle §4.7, §4.8, T15c, T14b): a release
 /// build (no feature `vectors`) has no command that decrypts or opens a ciphertext its caller chose. The decrypting commands
@@ -112,6 +114,7 @@ pub const COMMANDS: &[&str] = &[
     "openMemo",
     "recoverTransfer",
     "openDisclosure",
+    "pickDecoys",
 ];
 
 /// The words commands: zether-prover's `state` (its allow-lists, `prepare` before the key, `run` with it).
@@ -163,6 +166,7 @@ fn allowed(cmd: &str, field: &str) -> bool {
         "rawOpenDisclosure" => has(&[
             "curve", "kind", "chainId", "chainUid", "token", "entryRef", "index", "amount", "Yt", "Cout", "Dout", "Ya", "Caud", "Daud",
         ]),
+        "pickDecoys" => has(&["candidates", "exclude", "count", "weights"]),
         "pop" => field == "curve",
         "ownerAuth" => has(&["curve", "digest"]),
         "uaSig" => has(&["curve", "purpose", "digest"]),
@@ -211,6 +215,8 @@ fn shape(field: &str, x: &Value) -> bool {
         }
         "blob" => flat(x, &["address", "code"]),
         "cacheBox" => flat(x, &["iv", "ct"]),
+        "candidates" | "exclude" => x.as_array().is_some_and(|a| a.iter().all(Value::is_string)),
+        "weights" => x.as_array().is_some_and(|a| a.iter().all(Value::is_u64)),
         "recipients" => x.as_array().is_some_and(|a| a.iter().all(|r| flat(r, &["yTo", "amount"]))),
         "meta" => flat(x, &["from", "data", "batch", "nonce", "validUntil", "mode", "relayer", "fee", "feeRecipient"]),
         "env" => flat(x, &["from", "batch", "nonce", "validUntil", "mode", "relayer", "fee", "feeRecipient"]),
@@ -334,6 +340,10 @@ impl ZetherKey {
 
     fn run<Rn: RngCore + CryptoRng>(&self, cmd: &str, request_json: &[u8], rng: &mut Rn) -> Result<String> {
         let c = ZetherCmd::from_json(cmd, request_json)?;
+        if c.cmd == "pickDecoys" {
+            // T15n (CTR-UA-29): the multi-recipient transfer's decoys, by the OS CSPRNG; the key is not used
+            return super::decoys::Request::from_map(&c.v)?.pick();
+        }
         let v = Value::Object(c.v);
         if words(c.cmd) {
             // the words parsed, checked, bound to this handle's `Y` and rebuilt before the key is touched (ARCH-POS-13)

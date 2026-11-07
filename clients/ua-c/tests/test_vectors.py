@@ -1818,6 +1818,15 @@ class WalletZether(WalletCase):
                          ('decrypt', {'ct': t['acc']}), ('recoverTransfer', {})]:
             self.assertEqual(self.call(k, cmd, req), ('UAArgument', None), cmd)
 
+    def test_pick_decoys(self):
+        """T15n (CTR-UA-29, owner 2026-11-07): `pickDecoys` through the C ABI (in COMMANDS): distinct decoys, never an
+        excluded UA, too few refused (UAArgument); no key."""
+        self.assertIn('pickDecoys', commands('zether')[0])
+        c = ['0x' + bytes([i]).hex() * 32 for i in range(1, 6)]
+        st_, out = self.call(self.zk(self.zw()), 'pickDecoys', {'candidates': c, 'exclude': [c[0]], 'count': 4})
+        self.assertEqual((st_, sorted(out['decoys'])), (name_of(OK), c[1:]))
+        self.assertEqual(self.call(self.zk(self.zw()), 'pickDecoys', {'candidates': c, 'exclude': [c[0]], 'count': 5}), ('UAArgument', None))
+
     def test_words_commands_on_the_forge_rows(self):
         """T15g (ARCH-POS-13): the words commands through the C ABI on the forge rows (smartcontracts/vectors/zether/state.json;
         the holders are r33_keys.json's): each in COMMANDS, the balances the contract's; another holder's words refused before
@@ -1988,6 +1997,16 @@ class WalletPqz(WalletCase):
         box = text(L.pqz_seal_balance_cache, k, b'{"v":1}', 7)
         self.assertEqual(var(L.pqz_open_balance_cache, k, box.encode()), b'{"v":1}')
         self.assertEqual(sig_of(L.pqz_open_balance_cache, self.qk(w, 0, 1), box.encode()), ('UAAead', None))
+
+    def test_pick_decoys(self):
+        """T15n (CTR-UA-29, owner 2026-11-07): `pickDecoys` through the C ABI (in COMMANDS), op 7's decoys: weight 0 never
+        drawn, never an excluded UA, too few refused (UAArgument); no key."""
+        self.assertIn('pickDecoys', commands('pqz')[0])
+        c = ['0x' + bytes([i]).hex() * 32 for i in range(1, 6)]
+        k = self.qk(self.qw())
+        st_, out = self.call(k, 'pickDecoys', {'candidates': c, 'exclude': [c[0]], 'count': 2, 'weights': [9, 1, 0, 0, 3]})
+        self.assertEqual((st_, sorted(out['decoys'])), (name_of(OK), [c[1], c[4]]))
+        self.assertEqual(self.call(k, 'pickDecoys', {'candidates': c, 'exclude': [], 'count': 6}), ('UAArgument', None))
 
     def test_words_commands_on_the_forge_rows(self):
         """T15g (ARCH-POS-13): `balance` through the C ABI on a forge row (smartcontracts/vectors/pqz/n2304-kmax4096/state.json):

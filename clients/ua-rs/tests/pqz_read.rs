@@ -204,7 +204,8 @@ impl Node {
 }
 
 /// A one-connection-at-a-time JSON-RPC proxy in front of `upstream` that lies about the read block (R3): `number` answers the
-/// first non-genesis `eth_getBlockByNumber` with the next block's number, `hash` the second one with another hash.
+/// first non-genesis `eth_getBlockByNumber` with the next block's number, `hash` the second one with another hash, `hash4` the
+/// fourth (T15n: `decoys`' re-check of its sync block).
 fn liar(upstream: String, mode: &'static str) -> String {
     let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let url = format!("http://{}", l.local_addr().unwrap());
@@ -233,7 +234,7 @@ fn liar(upstream: String, mode: &'static str) -> String {
                     let num = u64::from_str_radix(res["number"].as_str().unwrap().trim_start_matches("0x"), 16).unwrap();
                     res["number"] = json!(format!("0x{:x}", num + 1));
                 }
-                if mode == "hash" && n == 2 {
+                if (mode == "hash" && n == 2) || (mode == "hash4" && n == 4) {
                     res["hash"] = json!(hx(&[0x5a; 32]));
                 }
             }
@@ -452,4 +453,153 @@ fn reading_layer_against_anvil() {
     let mut leg1 = audit(on(CW_TOKEN, CW_REG, &saud), &sa, "0");
     *leg1.last_mut().unwrap() = "1".into();
     no(leg1, Some(2), "ua-rs refused the words: Argument");
+}
+
+// ------------------------------------------------------------------------------------------------------------------------------
+// T15n: decoys (CTR-UA-29, owner 2026-11-07)
+// ------------------------------------------------------------------------------------------------------------------------------
+
+/// `--command decoys`'s own fields: only with `decoys`, `--count` named, `--decoy-filter` with `--window`, one of two filters.
+#[test]
+fn decoy_arguments() {
+    let (a20, a32) = ("0x00000000000000000000000000000000000000aa", format!("0x{}", "ab".repeat(32)));
+    let base = s(&["--rpc", "http://127.0.0.1:1", "--chain-id", "31337", "--chain-uid", &a32, "--factory", a20, "--registry", a20, "--token",
+        a20, "--ua", &a32]);
+    let with = |x: &[&str]| [base.clone(), s(x)].concat();
+    for (args, want) in [
+        (with(&["--depth", "0", "--for-op7", "false", "--count", "1"]), "go with --command decoys only"),
+        (with(&["--depth", "0", "--command", "decoys"]), "decoys needs --count"),
+        (with(&["--depth", "0", "--command", "decoys", "--count", "1", "--decoy-filter", "activity"]), "decoys needs --count"),
+        (with(&["--depth", "0", "--command", "decoys", "--count", "1", "--window", "4"]), "decoys needs --count"),
+        (with(&["--depth", "0", "--command", "decoys", "--count", "1", "--for-op7", "true"]), "decoys needs --count"),
+        (with(&["--depth", "0", "--command", "decoys", "--count", "1", "--decoy-filter", "recent", "--window", "4"]), "activity or holder"),
+        (with(&["--depth", "0", "--command", "decoys", "--count", "1", "--exclude", "0x01"]), "--exclude: 32 bytes"),
+    ] {
+        let e = cli(&args, None).unwrap_err();
+        assert!(e.contains(want), "{args:?}: want {want}: {e}");
+    }
+}
+
+/// `pqz-read --command decoys` against a local `anvil` (capped; stopped by the test): the registry's `0x0142` list and keys, the
+/// token's account counters written by `anvil_setStorageAt` over 21 blocks. The sync point bounds the list (UAs listed after it
+/// are never candidates, never chosen); `--ua` and `--exclude` never chosen; the default is every listed UA (no filter); the
+/// activity filter's candidates and recency weights (`activity`, `holder`), and its pick; too few refused; each chosen decoy's
+/// proven key; an unproven key, a sync point past the read block, a short window and an uncatalogued token refused.
+#[test]
+#[ignore]
+fn decoys_against_anvil() {
+    let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let url = format!("http://127.0.0.1:{port}");
+    let bin = std::env::var("ANVIL").unwrap_or_else(|_| "anvil".into());
+    let _anvil = Anvil(Command::new(bin).args(["--port", &port.to_string(), "--silent"]).stdout(Stdio::null()).spawn().unwrap());
+    assert!((0..100).any(|_| {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        rpc(&url, "eth_chainId", json!([])).is_string()
+    }), "anvil did not start");
+    let chain_id = u64::from_str_radix(rpc(&url, "eth_chainId", json!([])).as_str().unwrap().trim_start_matches("0x"), 16).unwrap();
+    let genesis = rpc(&url, "eth_getBlockByNumber", json!(["0x0", false]))["hash"].as_str().unwrap().to_string();
+    let root = w32(&json!("0xda865ec17214f25b93cdb133d719c79392c290a4b9089fd0bba156256c521500"));
+    let n = Node { url: url.clone(), root, chain_id, uid: w32(&json!(genesis)) };
+    let (factory, token, reg, reg2) = (a20(FACTORY), a20("0x000000000000000000000000000000000000dec1"),
+        a20("0x000000000000000000000000000000000000dec0"), a20("0x000000000000000000000000000000000000dec2"));
+    n.catalogue(&factory, &token, 4, true);
+    let mine = |b: u64| rpc(&url, "anvil_mine", json!([format!("0x{b:x}")]));
+    let head = || u64::from_str_radix(rpc(&url, "eth_blockNumber", json!([])).as_str().unwrap().trim_start_matches("0x"), 16).unwrap();
+    let ua = |i: u8| [i; 32];
+    let list = |r: &[u8; 20], from: u64, uas: std::ops::RangeInclusive<u8>, proven: u8| {
+        for (j, i) in uas.clone().enumerate() {
+            n.set(r, &k(&be(from + j as u64), &k(&be(0x0142), &be(5))), &ua(i));
+            let ptr = a20(&format!("0x{:040x}", 0xc0de00 + u64::from(i)));
+            let mut rec = word_of(&ptr);
+            rec[11] = proven;
+            n.set(r, &k(&ua(i), &be(2)), &rec);
+            n.code(&ptr, &json!(hx(&[vec![0u8], vec![i; st::PK_BYTES]].concat())));
+        }
+        n.set(r, &k(&be(0x0142), &be(4)), &be(from + uas.len() as u64));
+    };
+    // the account counters of `ua(i)`: word 0 `pendingCount ‖ rolled` (low end first), word 2 `sendCounter`
+    let acct = |i: u8, pending: u64, rolled: u64, sent: u64| {
+        let base = k(&ua(i), &add(&root, 8));
+        let mut w0 = be(pending);
+        w0[16..24].copy_from_slice(&rolled.to_be_bytes());
+        n.set(&token, &base, &w0);
+        n.set(&token, &add(&base, 2), &be(sent));
+    };
+    list(&reg, 0, 1..=12, 1);
+    list(&reg2, 0, 9..=9, 0);
+    (3..=8).for_each(|i| acct(i, 1, 0, 1));
+    // `anvil_setStorageAt` writes the head block's state: a write at head `h` is seen from block `h` on
+    mine(1);
+    let sync = head(); // 1: twelve listed
+    mine(1);
+    list(&reg, 12, 13..=16, 1); // at block 2
+    acct(7, 2, 0, 1); // u7 active at block 2, before the window
+    mine(10); // 11 = block − window
+    acct(3, 1, 0, 2); // u3: a debit at block 12, the older half
+    mine(5); // 16 = block − window / 2
+    acct(4, 2, 0, 1); // u4: a credit at block 17, the newer half
+    acct(5, 1, 1, 1); // u5: a rollover
+    acct(6, 1, 0, 2); // u6: a debit
+    mine(4);
+    assert_eq!((sync, head()), (1, 21));
+
+    let cid = chain_id.to_string();
+    let run = |r: &[u8; 20], tok: &str, x: &[&str]| {
+        let mut a = s(&["--rpc", &url, "--chain-id", &cid, "--chain-uid", &genesis, "--factory", FACTORY, "--registry", &hx(r), "--token", tok,
+            "--ua", &hx(&ua(1)), "--depth", "0", "--command", "decoys", "--exclude", &hx(&ua(2))]);
+        a.extend(s(x));
+        cli(&a, None)
+    };
+    let tok = hx(&token);
+    let uas = |v: &Value| -> Vec<String> { serde_json::from_value(v.clone()).unwrap() };
+    let range = |r: std::ops::RangeInclusive<u8>| r.map(|i| hx(&ua(i))).collect::<Vec<_>>();
+
+    // the candidates (`--words`: pickDecoys's request): the list up to the sync point, less --ua and --exclude; no filter
+    let w = run(&reg, &tok, &["--count", "3", "--sync-block", "1", "--words"]).unwrap();
+    assert_eq!(w["request"], json!({"candidates": range(3..=12), "exclude": [hx(&ua(2)), hx(&ua(1))], "count": 3}), "sync 1");
+    assert_eq!((&w["syncBlock"], &w["listCount"], &w["block"]), (&json!(1), &json!(12), &json!(21)));
+    let w = run(&reg, &tok, &["--count", "3", "--words"]).unwrap();
+    assert_eq!(uas(&w["request"]["candidates"]), range(3..=16), "the read block's list (default sync point)");
+    // every candidate up to the sync point, exactly, when all are needed; one more is too few
+    let d = run(&reg, &tok, &["--count", "10", "--sync-block", "1"]).unwrap();
+    let mut got: Vec<String> = d["decoys"].as_array().unwrap().iter().map(|l| l["ua"].as_str().unwrap().to_string()).collect();
+    got.sort();
+    assert_eq!(got, range(3..=12), "never a UA listed after the sync point, never --ua or --exclude");
+    for l in d["decoys"].as_array().unwrap() {
+        let i = h(&l["ua"])[0];
+        assert_eq!(h(&l["pk"]), vec![i; st::PK_BYTES], "the decoy's registered key");
+    }
+    assert!(run(&reg, &tok, &["--count", "11", "--sync-block", "1"]).unwrap_err().contains("pickDecoys: Argument"), "too few");
+    for _ in 0..8 {
+        let d = uas(&json!(run(&reg, &tok, &["--count", "4"]).unwrap()["decoys"].as_array().unwrap().iter().map(|l| l["ua"].clone()).collect::<Vec<_>>()));
+        assert_eq!(d.iter().collect::<std::collections::BTreeSet<_>>().len(), 4, "distinct");
+        assert!(d.iter().all(|u| range(3..=16).contains(u)), "candidates only");
+    }
+    // the option: active in the token in the last 10 blocks, weighted by recency
+    let f = |filter: &str| run(&reg, &tok, &["--count", "1", "--decoy-filter", filter, "--window", "10", "--words"]).unwrap()["request"].clone();
+    let act = f("activity");
+    assert_eq!((uas(&act["candidates"]), &act["weights"]), (range(3..=6), &json!([1, 2, 2, 2])), "activity");
+    let hold = f("holder");
+    assert_eq!((uas(&hold["candidates"]), &hold["weights"]), (vec![hx(&ua(3)), hx(&ua(6))], &json!([1, 2])), "holder: sendCounter only");
+    let d = run(&reg, &tok, &["--count", "4", "--decoy-filter", "activity", "--window", "10"]).unwrap();
+    let mut got: Vec<String> = d["decoys"].as_array().unwrap().iter().map(|l| l["ua"].as_str().unwrap().to_string()).collect();
+    got.sort();
+    assert_eq!(got, range(3..=6), "the filter's pick");
+    assert!(run(&reg, &tok, &["--count", "5", "--decoy-filter", "activity", "--window", "10"]).unwrap_err().contains("Argument"), "too few active");
+    // refusals
+    assert!(run(&reg2, &tok, &["--count", "0"]).is_ok(), "count 0 (positive control of the next)");
+    assert!(run(&reg2, &tok, &["--count", "1"]).unwrap_err().contains("is not a proven key"), "an unproven key");
+    assert!(run(&reg, &tok, &["--count", "1", "--sync-block", "22"]).unwrap_err().contains("past the read block"));
+    assert!(run(&reg, &tok, &["--count", "1", "--decoy-filter", "activity", "--window", "1"]).unwrap_err().contains("--window"));
+    assert!(run(&reg, &tok, &["--count", "1", "--decoy-filter", "activity", "--window", "22"]).unwrap_err().contains("--window"));
+    assert!(run(&reg, UNLISTED, &["--count", "1"]).unwrap_err().contains("R5"), "the token catalogued");
+    // R3: every block read re-checked after the last read (the read block, the sync block), through a proxy that changes the
+    // sync block's hash on its re-check; the proxy alone changes nothing (positive control)
+    let via = |proxy: String| {
+        let a = s(&["--rpc", &proxy, "--chain-id", &cid, "--chain-uid", &genesis, "--factory", FACTORY, "--registry", &hx(&reg), "--token",
+            &tok, "--ua", &hx(&ua(1)), "--depth", "0", "--command", "decoys", "--count", "1", "--sync-block", "1", "--words"]);
+        cli(&a, None)
+    };
+    assert!(via(liar(url.clone(), "none")).is_ok());
+    assert!(via(liar(url.clone(), "hash4")).unwrap_err().contains("R3: the block changed"), "the sync block re-checked");
 }

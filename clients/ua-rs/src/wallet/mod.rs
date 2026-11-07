@@ -58,7 +58,7 @@ mod webauthn;
 
 pub use aead::{aead_open, aead_seal, hkdf_expand_sha256, hkdf_sha256, hmac_sha256, Alg};
 pub use eip712::{scaas_typed_data, TypedData};
-#[cfg(feature = "pqz")]
+#[cfg(any(feature = "zether", feature = "pqz"))]
 pub(crate) use eip712::{from_hex, to_hex};
 pub use kem::{is_kem_holder, kem_encaps, KemKeyPair};
 #[cfg(feature = "vectors")]

@@ -7,6 +7,8 @@
 //!            [--command balance] --for-op7 <true|false>                                  (the holder's own balance)
 //!            --command auditRead --from-ua <bytes32> --send-counter <n> --leg <j>       (an audited leg, the token's auditor)
 //!            [--words]                                                                  (print the request read; no key)
+//!            --command decoys --count <n> [--exclude <ua>,…] [--sync-block <n>]          (op 7's decoys; no key, no stdin)
+//!            [--decoy-filter activity|holder --window <blocks>] [--words]
 //!
 //! The key is read from **stdin** as JSON, `{"mnemonic": "…", "passphrase"?: "…", "account": n, "index": n}` (the handle
 //! `Wallet::pqz_key(account, index)`), piped from a file; a terminal on stdin is refused. It never leaves this process.
@@ -31,10 +33,27 @@
 //! The token's slots come from `ua-rs`'s [`STATE_LAYOUT`] (T19c's pin of `scaas.pqz`, compared with the pin by the facade's
 //! tests) under the ERC-7201 root of `scaas.pqz`; the words read are exactly those [`STATE_LAYOUT`] lists for the command.
 //! Prints `ua-rs`'s answer with `block` and `blockHash` (`--words`: `{command, request, block, blockHash}`).
+//!
+//! **`decoys`** (CTR-UA-29, owner 2026-11-07; ua-rs-sign T15n): the decoys of an op 7 by `--ua` on `--token`. The candidates are
+//! the registry's PQZ-capable list (`uaAt(0x0142, i)`, `i < uaCount(0x0142)`), read from storage (`UAStore.Layout` slots 4
+//! and 5); the list's length is read at the sync point (`--sync-block`, at most the read block; default the read block), so a
+//! UA registered later is never a candidate; everything else is read at the read block. `--ua` and every `--exclude` (the real
+//! recipients) are excluded. By default the pick is uniform; `--decoy-filter` (an option, off by default) keeps only the
+//! candidates active in the token in the last `--window` blocks, by the account's counters at `block − window`,
+//! `block − window/2` and `block` (`activity`: `pendingCount`, `rolled` or `sendCounter` moved, i.e. a pending entry, a
+//! rollover or a debit; `holder`: `sendCounter` moved, a holder-authorised debit), weighted by recency (2 when active in the
+//! newer half, 1 when only in the older half); the node must hold the state of those blocks. The candidates go to `ua-rs`'s
+//! `pickDecoys` (`facade::decoys`, the OS CSPRNG), then each chosen decoy's key is read: `pqzKey[ua]` (proven) and its SSTORE2
+//! code. Prints `{decoys: [{ua, pk}], syncBlock, listCount, block, blockHash}` (each an op 7 leg with `amount` 0); `--words`
+//! prints `pickDecoys`'s request instead (`{command, request, syncBlock, listCount, block, blockHash}`). Residuals: the
+//! registry's slots 2, 4 and 5 are hand-copied (no registry layout pin on this branch); `--registry` must be the generation
+//! that lists `0x0142` (a predecessor's list is not followed); with the versioned PQZ keys of `ua-mtx-merge` group 3g the key
+//! read moves to the current version (a follow-up).
 
 use std::io::{IsTerminal, Read};
 use std::process::{Command, ExitCode, Stdio};
 
+use pqz_ffi::pqzl::PK_BYTES;
 use pqz_ffi::stmt::{K_MAX, PQZH_ID};
 use scaas_ua::facade::pqz::STATE_LAYOUT;
 use scaas_ua::facade::pqz_pack::ACC_WORDS;
@@ -54,6 +73,12 @@ const INLINE_MAX: u64 = 16;
 const INLINE_MAX_PQZH: u64 = 10;
 /// A node's answer is at most this long (a blob's code is far below).
 const MAX_ANSWER: u64 = 16 << 20;
+/// `UAStore.Layout` (the registry's storage at slot 0): `uaCount` (slot 4), `uaAt` (slot 5); the PQZ-capable list's key.
+const REG_COUNT_SLOT: u64 = 4;
+const REG_AT_SLOT: u64 = 5;
+const PQZ_LIST: u64 = 0x0142;
+/// The longest list read (one word per UA; `facade::decoys::MAX` holds about 55,000).
+const MAX_LIST: u64 = 50_000;
 
 #[derive(Default)]
 struct Args {
@@ -72,6 +97,11 @@ struct Args {
     send_counter: Option<u64>,
     leg: Option<u64>,
     words: bool,
+    count: Option<u64>,
+    exclude: Vec<Word>,
+    sync_block: Option<u64>,
+    filter: Option<String>,
+    window: Option<u64>,
 }
 
 fn unhex(s: &str) -> Result<Vec<u8>, String> {
@@ -116,6 +146,11 @@ fn parse() -> Result<Args, String> {
             "--send-counter" => a.send_counter = Some(int(val()?)?),
             "--leg" => a.leg = Some(int(val()?)?),
             "--words" => a.words = true,
+            "--count" => a.count = Some(int(val()?)?),
+            "--exclude" => a.exclude = val()?.split(',').map(|u| fixed("--exclude", u)).collect::<Result<_, _>>()?,
+            "--sync-block" => a.sync_block = Some(int(val()?)?),
+            "--decoy-filter" => a.filter = Some(val()?).filter(|v| v == "activity" || v == "holder").ok_or("--decoy-filter: activity or holder")?.into(),
+            "--window" => a.window = Some(int(val()?)?),
             _ => return Err(format!("unknown argument {f}")),
         }
     }
@@ -124,12 +159,18 @@ fn parse() -> Result<Args, String> {
         return Err("needs --rpc, --chain-id, --chain-uid, --factory, --registry, --token, --ua and one of --depth / --finalized (R1–R6)".into());
     }
     let entry = u8::from(a.from_ua.is_some()) + u8::from(a.send_counter.is_some()) + u8::from(a.leg.is_some());
+    let decoy = ["--count", "--exclude", "--sync-block", "--decoy-filter", "--window"].iter().any(|f| seen.contains(*f));
+    if decoy && a.command != "decoys" {
+        return Err("--count, --exclude, --sync-block, --decoy-filter and --window go with --command decoys only".into());
+    }
     match a.command.as_str() {
+        "decoys" if a.for_op7.is_none() && entry == 0 && a.count.is_some() && a.filter.is_some() == a.window.is_some() => {}
+        "decoys" => return Err("decoys needs --count, --decoy-filter with --window or neither, and no --for-op7 or entry fields".into()),
         "balance" if a.for_op7.is_some() && entry == 0 => {}
         "balance" => return Err("balance needs --for-op7 <true|false> and no entry fields".into()),
         "auditRead" if a.for_op7.is_none() && entry == 3 => {}
         "auditRead" => return Err("auditRead needs --from-ua, --send-counter and --leg (no --for-op7)".into()),
-        c => return Err(format!("--command {c}: balance or auditRead")),
+        c => return Err(format!("--command {c}: balance or auditRead, or decoys")),
     }
     Ok(a)
 }
@@ -266,7 +307,8 @@ struct Words {
     key_code: Vec<u8>,
 }
 
-fn read(a: &Args) -> Result<Words, String> {
+/// R2, R3 and R5: the configured chain, its read block (by hash), the token catalogued with a PQZ kind.
+fn open(a: &Args) -> Result<(Reader<'_>, u64), String> {
     let url = a.rpc.as_str();
     // R2
     if qty(&rpc(url, "eth_chainId", json!([]))?)? != a.chain_id {
@@ -296,6 +338,21 @@ fn read(a: &Args) -> Result<Words, String> {
     if info[2] != 1 || !PQZ_KINDS.contains(&info[11]) {
         return Err("R5: the token is not a PQZ token catalogued by this factory".into());
     }
+    Ok((r, block))
+}
+
+/// R3: block `n` still has `hash` (no reorg, a consistent node).
+fn recheck(url: &str, n: u64, hash: &str) -> Result<(), String> {
+    let again = rpc(url, "eth_getBlockByNumber", json!([format!("0x{n:x}"), false]))?;
+    if again["hash"].as_str() != Some(hash) {
+        return Err("R3: the block changed during the read (a reorg or an inconsistent node)".into());
+    }
+    Ok(())
+}
+
+fn read(a: &Args) -> Result<Words, String> {
+    let url = a.rpc.as_str();
+    let (r, block) = open(a)?;
     // R4, R6: the token's words by the pinned layout, the registry's key record of --ua
     let root = erc7201("scaas.pqz");
     let tok = |label: &str| -> Result<Word, String> { r.word(&a.token, &add(&root, at(label)?.0)) };
@@ -389,7 +446,102 @@ fn key(v: &Value) -> Result<(scaas_ua::wallet::Wallet, scaas_ua::facade::pqz::Pq
     Ok((w, k))
 }
 
+/// `decoys` (module doc): the candidates up to the sync point, the optional activity filter, `pickDecoys`, the chosen keys.
+fn decoys(a: &Args) -> Result<Value, String> {
+    let url = a.rpc.as_str();
+    let (r, block) = open(a)?;
+    // another block of the same chain, by hash, the node's answer checked (R3); re-checked after the last read
+    let mut pins = vec![(block, r.hash.clone())];
+    let mut pin = |n: u64| -> Result<Reader<'_>, String> {
+        let b = rpc(url, "eth_getBlockByNumber", json!([format!("0x{n:x}"), false]))?;
+        if qty(&b["number"])? != n {
+            return Err("R3: the node answered another block than the one asked for".into());
+        }
+        let hash = b["hash"].as_str().ok_or("R3: no block hash")?.to_string();
+        pins.push((n, hash.clone()));
+        Ok(Reader { url, hash })
+    };
+    let sync = a.sync_block.unwrap_or(block);
+    if sync > block {
+        return Err("--sync-block is past the read block".into());
+    }
+    let n = pin(sync)?.word(&a.registry, &keccak256(&[be(PQZ_LIST), be(REG_COUNT_SLOT)].concat()))?;
+    let n = (n[..24] == [0; 24]).then(|| u64::from_be_bytes(n[24..].try_into().unwrap_or_default())).filter(|n| *n <= MAX_LIST)
+        .ok_or("the registry's list is longer than this tool reads")?;
+    let list = keccak256(&[be(PQZ_LIST), be(REG_AT_SLOT)].concat());
+    let mut exclude = a.exclude.clone();
+    exclude.push(a.ua);
+    let mut candidates: Vec<Word> = Vec::new();
+    for i in 0..n {
+        let u = r.word(&a.registry, &keccak256(&[be(i), list].concat()))?;
+        if !candidates.contains(&u) && !exclude.contains(&u) {
+            candidates.push(u);
+        }
+    }
+    let mut request = json!({"exclude": exclude.iter().map(|u| hx(u)).collect::<Vec<_>>(), "count": a.count});
+    if let Some(w) = a.window {
+        let old = block.checked_sub(w).filter(|_| w >= 2).ok_or("--window: at least 2 and at most the read block")?;
+        let (old, mid) = (pin(old)?, pin(block - w / 2)?);
+        let root = erc7201("scaas.pqz");
+        let (s0, s2) = (at("acct[U].pendingCount")?.1, at("acct[U].sendCounter")?.1);
+        // the counters an account's activity moves: `pendingCount`, `rolled` (word 0) and `sendCounter` (word 2); `holder`: the last
+        let moved = |x: &Reader, y: &Reader, base: &Word| -> Result<bool, String> {
+            let (x2, y2) = (x.word(&a.token, &add(base, s2))?, y.word(&a.token, &add(base, s2))?);
+            let debit = field(&x2, "acct[U].sendCounter")? != field(&y2, "acct[U].sendCounter")?;
+            if a.filter.as_deref() == Some("holder") || debit {
+                return Ok(debit);
+            }
+            let (x0, y0) = (x.word(&a.token, &add(base, s0))?, y.word(&a.token, &add(base, s0))?);
+            Ok(field(&x0, "acct[U].pendingCount")? != field(&y0, "acct[U].pendingCount")?
+                || field(&x0, "acct[U].rolled")? != field(&y0, "acct[U].rolled")?)
+        };
+        let (mut kept, mut weights) = (Vec::new(), Vec::new());
+        for u in candidates {
+            let base = keccak256(&[u, add(&root, at("acct[U].pendingCount")?.0)].concat());
+            let w = if moved(&mid, &r, &base)? { 2 } else if moved(&old, &mid, &base)? { 1 } else { 0 };
+            if w > 0 {
+                kept.push(u);
+                weights.push(w);
+            }
+        }
+        candidates = kept;
+        request["weights"] = json!(weights);
+    }
+    request["candidates"] = json!(candidates.iter().map(|u| hx(u)).collect::<Vec<_>>());
+    let out = if a.words {
+        json!({"command": "decoys", "request": request})
+    } else {
+        let picked: Value = serde_json::from_str(
+            &scaas_ua::facade::decoys::pick_json(request.to_string().as_bytes()).map_err(|e| format!("pickDecoys: {e:?}"))?,
+        )
+        .map_err(|_| "pickDecoys: not JSON")?;
+        let mut legs = Vec::new();
+        for u in picked["decoys"].as_array().ok_or("pickDecoys: no decoys")? {
+            let ua: Word = fixed("decoy", u.as_str().ok_or("pickDecoys: a UA")?)?;
+            // `pqzKey[ua]`: `ptr(160) ‖ proven(8) ‖ added(8)`; the code `0x00 ‖ pk`
+            let rec = r.word(&a.registry, &keccak256(&[ua, be(REG_PQZ_KEY_SLOT)].concat()))?;
+            let code = r.code(&low_addr(&rec, 0))?;
+            match code.split_first() {
+                Some((0, pk)) if rec[11] == 1 && pk.len() == PK_BYTES => legs.push(json!({"ua": hx(&ua), "pk": hx(pk)})),
+                _ => return Err(format!("the PQZ key of listed UA {} is not a proven key of this set", hx(&ua))),
+            }
+        }
+        json!({"decoys": legs})
+    };
+    for (n, h) in &pins {
+        recheck(url, *n, h)?;
+    }
+    let mut out = out;
+    for (k, v) in [("syncBlock", json!(sync)), ("listCount", json!(n)), ("block", json!(block)), ("blockHash", json!(r.hash))] {
+        out[k] = v;
+    }
+    Ok(out)
+}
+
 fn run(a: &Args) -> Result<Value, String> {
+    if a.command == "decoys" {
+        return decoys(a);
+    }
     if a.words {
         let r = read(a)?;
         return Ok(json!({"command": a.command, "request": r.request, "block": r.block, "blockHash": r.hash}));
