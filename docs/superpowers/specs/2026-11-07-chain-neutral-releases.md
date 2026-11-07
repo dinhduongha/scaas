@@ -1,8 +1,9 @@
 # Chain-neutral releases: the same factory, release and instance addresses on every chain
 
-**Status:** draft for the owner; **decisions A and B taken by the owner 2026-11-07**. Nothing is built. Companion of the factory
-index spec [`2026-11-07-factory-contract-index.md`](2026-11-07-factory-contract-index.md) (index §1–§7 approved, extension §8
-direction approved): this spec changes its creation paths (§2.1 `creator`, §8.4 step 3, `predictAddress`) and every
+**Status:** SPECIFIED, **approved by the owner 2026-11-07, pending the Fable review** (decisions A and B, then the eight
+questions of §10.3 answered as recommended; the Fable review's fixes come next). Nothing is built. Companion of the factory
+index spec [`2026-11-07-factory-contract-index.md`](2026-11-07-factory-contract-index.md) (index §1–§7 and extension §8
+approved; S3's `creatorId` written into it): this spec changes its creation paths (§2.1 `creator`, §8.4 step 3, `predictAddress`) and every
 factory-made kind. Branch `ua-mtx-merge`. Proposed rule **CTR-TOK-29** (`docs_check.py resolve` reports it unknown; CTR-TOK-28
 is §8's) and a change of [NET-ALL-22](../../networks/README.md#NET-ALL-22) (draft in §9). **Everything cryptographic here is
 UNAUDITED.**
@@ -216,7 +217,7 @@ copy say so wherever the shared address is shown.
 
 ### 4.4 Creator identity (owner question S3): the signing UA
 
-**Recommend the UA that signed.** `creatorId` is a `bytes32` UA id ([CTR-UA-03](../../contracts/accounts.md#CTR-UA-03)): a
+**Owner 2026-11-07: the UA that signed** (as recommended; T76 is in). `creatorId` is a `bytes32` UA id ([CTR-UA-03](../../contracts/accounts.md#CTR-UA-03)): a
 native caller is `pad(msg.sender)`; a derived UA (a PQ key, an `msig`) is its registered id. The factory learns it two ways only:
 
 1. **Direct call:** `creatorId = bytes32(uint256(uint160(msg.sender)))`.
@@ -440,7 +441,8 @@ that say the factory's constructor takes `chain_uid`.
 `createInstance`, the record's creator field), so building CREATE3 and `creatorId` before T70 avoids writing the generic path
 twice; and 3f (T44–T50) adds code to `PqzCore` / `PqzLayer` / the PQZ kinds that would otherwise be written against immutables
 and moved again. Kind 13's growth falls inside the size window that T66b closes. Order: T67 → **T71** → T70 → **T72** → **T73**
-→ **T74** → T68 (mutants, with this spec's), **T75** beside (docs, lands with T19), **T76** only if S3 is answered "signing UA".
+→ **T74** → T68 (mutants, with this spec's), **T75** beside (docs, lands with T19), **T76** after T71, before T68 (S3 answered
+"signing UA", so T76 is in). **Owner 2026-11-07:** approved as recommended.
 
 ### 10.2 Tasks (plan [`2026-11-04-ua-mtx-merge.md`](../plans/2026-11-04-ua-mtx-merge.md); T71–T76 are free)
 
@@ -456,6 +458,13 @@ and moved again. Kind 13's growth falls inside the size window that T66b closes.
 | | **Total** | **11** |
 
 ### 10.3 Questions for the owner (each with a recommendation)
+
+**Owner 2026-11-07: all eight answered as recommended:** (1) S3: the signing UA is the creator, `creatorId` `bytes32` in the
+index, T76 in; (2) the cost of B accepted; (3) the registrar at the same address on every chain, an EOA or a deterministically
+deployed contract, the gate checks its code hash; (4) the wrong-`chainUid` risk accepted, with the gate's dry run and quorum
+check and the genesis check; (5) `ChainEnv` in instance storage (S); (6) the registry, router, subject account factory and
+verifiers keep per-chain addresses this round; (7) Hedera checked in T74, the owner rules on any exception before T72 ends;
+(8) `ChainEnv.params` for a generic class's chain values, first user `PqChat`'s code-size limit.
 
 1. **S3, the creator identity:** the signing UA (via the router, §4.4) or the submitter. **Recommend the signing UA**; it also
    changes the approved index's `creator` to a `bytes32 creatorId` (three slots kept) and `initialize`'s creator argument.

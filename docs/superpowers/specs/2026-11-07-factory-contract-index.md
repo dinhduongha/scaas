@@ -2,16 +2,17 @@
 
 **Status:** SPECIFIED, **revised 2026-11-07**. The index (§1–§7) is **approved by the owner 2026-11-07** (the six questions
 of §6 answered as recommended). The **extension** (§8, an extensible catalogue: generic classes and kinds, `createInstance`,
-`PqChat` as class 3) has its **direction approved by the owner 2026-11-07**; its detailed questions (§8.11, Q7–Q12) await the
-owner, among them one change to the approved index (Q12: class and kind ids `uint16`, written into §2 below). Nothing is
-built yet; the plan tasks T67–T70 of [`2026-11-04-ua-mtx-merge.md`](../plans/2026-11-04-ua-mtx-merge.md) start after 3g (T57).
+`PqChat` as class 3) is **approved by the owner 2026-11-07** (direction first, then Q7–Q12 of §8.11 answered as
+recommended, among them the one change to the approved index: Q12, class and kind ids `uint16`, written into §2 below).
+Nothing is built yet; the plan tasks T67–T70 of [`2026-11-04-ua-mtx-merge.md`](../plans/2026-11-04-ua-mtx-merge.md) start after 3g (T57).
 **Place (owner 2026-11-07):** after 3g (T51–T57), before 3f: work order 3e → 3g → factory index → 3f → 3h → 3c. Branch
 `ua-mtx-merge`.
 **Same addresses on every chain (owner decisions A and B, 2026-11-07):** CREATE3 on every creation path, chain-neutral
-releases, the chain values written into each instance by the factory: draft spec
-[`2026-11-07-chain-neutral-releases.md`](2026-11-07-chain-neutral-releases.md). Where it lands it changes this spec's creation
-salt and `predictAddress` (§8.4 step 3), the release constructor (§8.2, §8.8) and, if its S3 recommendation is taken, the
-record's `creator` (§2.1, a `bytes32` UA id, still three slots).
+releases, the chain values written into each instance by the factory: spec
+[`2026-11-07-chain-neutral-releases.md`](2026-11-07-chain-neutral-releases.md) (approved by the owner 2026-11-07, pending the
+Fable review). It changes this spec's creation salt and `predictAddress` (§8.4 step 3) and the release constructor (§8.2,
+§8.8); those details live there. **S3 answered "the signing UA" (owner 2026-11-07):** the creator is a `bytes32 creatorId`
+(chain-neutral spec §4.4), written into §2.1, §2.2, §2.3 and §8.4 below; the record stays three slots.
 
 **Owner, 2026-11-07:** an owner or creator must be able to list the contracts they made (for example the owner creates many
 gift-card tokens and needs their list) from contract **state**, not from events ("không lọc event, vì mất": logs and history
@@ -48,7 +49,8 @@ uint16 public constant CLASS_DEX = 2;    // kind = 0
 
 struct Created {
     address addr;          // the clone
-    address creator;       // msg.sender of the creating call
+    bytes32 creatorId;     // the creator's UA id (S3, chain-neutral spec §4.4): pad(msg.sender) on a direct call,
+                           // the router's verified subject() on a signed creation
     bytes32 ownerUA;       // owner() of the clone right after initialize (a generic class: factoryInfo().ownerUA, §8.4)
                            // (a UA id; 0 = no administration ever)
     uint16 contractClass;  // CLASS_TOKEN, CLASS_DEX, a generic class (revision Q12: was uint8)
@@ -59,12 +61,12 @@ struct Created {
 }
 ```
 
-Stored as three slots per address (`addr` is the key): `creator ‖ contractClass ‖ kind ‖ version` (20 + 2 + 2 + 8 = 32 B,
-still one slot with the `uint16` ids), `ownerUA`,
-`createdBlock ‖ createdAt`. The record **replaces** `_info` and `_dexVersion` (one source); the existing views keep their
-answers exactly (`isToken`, `isRegisteredToken`, `creatorOf`, `versionOf` for class TOKEN only, so `creatorOf(dex)` stays 0;
+Stored as three slots per address (`addr` is the key): `creatorId`, `ownerUA`,
+`contractClass ‖ kind ‖ version ‖ createdBlock ‖ createdAt` (2 + 2 + 8 + 8 + 8 = 28 B, one slot with the `uint16` ids). The record **replaces** `_info` and `_dexVersion` (one source); the existing views keep their
+answers exactly (`isToken`, `isRegisteredToken`, `creatorOf` (the address for a native `creatorId`, 0 for a derived one),
+`versionOf` for class TOKEN only, so `creatorOf(dex)` stays 0;
 `isDex`, `dexVersionOf` for class DEX), and `SaltAlreadyUsed` checks `contractClass != 0`. `_wrappers` and `_byUnderlying`
-are unchanged.
+are keyed by `bytes32 creatorId` (S3).
 
 `ownerUA` is the value the creating call already reads for `TokenCreated` / `DexCreated` (one `owner()` call, used twice).
 `createdBlock` is whatever the chain returns (no assumption about block time or Hedera's record numbering); `createdAt` is the
@@ -75,7 +77,7 @@ reference time.
 ```solidity
 mapping(uint16 => address[]) _all;                                  // per class
 mapping(bytes32 => mapping(uint16 => address[])) _byOwner;          // ownerUA at creation, per class; never for ownerUA 0
-mapping(address => mapping(uint16 => address[])) _byCreator;        // per class
+mapping(bytes32 => mapping(uint16 => address[])) _byCreator;        // creatorId, per class (S3)
 
 uint256 public constant MAX_PAGE = 100;
 function infoOf(address c) external view returns (Created memory);                     // contractClass 0: not made here
@@ -83,7 +85,7 @@ function contractsPage(uint16 contractClass, uint256 from, uint256 n)
     external view returns (Created[] memory page, uint256 total);
 function contractsOfOwner(bytes32 ownerUA, uint16 contractClass, uint256 from, uint256 n)
     external view returns (Created[] memory page, uint256 total);
-function contractsOfCreator(address creator, uint16 contractClass, uint256 from, uint256 n)
+function contractsOfCreator(bytes32 creatorId, uint16 contractClass, uint256 from, uint256 n)
     external view returns (Created[] memory page, uint256 total);
 error ClassUnknown(uint16 contractClass);  // 0, or a generic class with no release yet (§8.2)
 error PageTooLarge(uint256 n);             // n > MAX_PAGE
@@ -99,8 +101,10 @@ error PageTooLarge(uint256 n);             // n > MAX_PAGE
 
 ### 2.3 What the lists mean
 
-- **By creator** is authenticated: `msg.sender` made it. A creation submitted by a relayer, a backend or a smart account is
-  listed under that sender, not under the customer.
+- **By creator** is authenticated: `pad(msg.sender)` on a direct call, or the UA that signed a creation the chain's
+  `GovernanceRouter` verified (`mtxCreateToken` / `mtxCreateDex` / `mtxCreateInstance`, S3, chain-neutral spec §4.4, T76). A
+  direct creation submitted by a relayer, a backend or a smart account is listed under that sender; a signed one under the
+  customer's UA.
 - **By owner** is a claim, not consent: any creator may name any UA as `owner` in `TokenConfig` / `DexConfig`, and an
   unregistered implementation's `owner()` returns what its code likes. Anyone can therefore append to a UA's owner list
   (spam, look-alike gift cards). It costs the victim nothing (reads are paged) and every entry carries `creator` and
@@ -136,8 +140,8 @@ limit (inclusion is regular + state, EIP-8037).
 - **Layout pins:** none. `test/v2/layout/` pins the ERC-7201 namespaces of clones; the factory is not a proxy, is never
   upgraded and is never a DELEGATECALL target, so its sequential layout protects nothing. Its slot use is pinned by T67's
   slot-count test instead.
-- **Formats:** `TokenCreated`, `DexCreated`, `TokenConfig`, `DexConfig`, every typehash and selector of a token or the DEX
-  unchanged. No vector, `clientkeys` or `ua-*` change. A new factory init code moves the factory's deterministic address in the
+- **Formats:** the index itself moves no format of a token or the DEX (`TokenCreated`, `DexCreated`, `TokenConfig`,
+  `DexConfig`, typehashes, selectors); the chain-neutral spec's S3 and CREATE3 changes move some, listed there. No vector, `clientkeys` or `ua-*` change. A new factory init code moves the factory's deterministic address in the
   deploy JSONs (`DeployBase`, Hedera, `script/pqz/e2e.py`), regenerated at the SCaaS testnet reset; T68 checks that no KAT holds
   it.
 - **Nothing deployed is upgraded:** a new `OpenFactory` build for the reset chain (all chains are test-only). After mainnet a
@@ -175,7 +179,7 @@ owner lists; (5) lists per class only; (6) unregistered contracts are indexed, f
 - **Every class and kind:** a token of each kind (0–5 and the regulated 8–13 built in T24–T36, each release published and the kind enabled), a
   `createTokenUnregistered` token (version 0), a DEX; `infoOf` returns every field; the old views give their old answers.
 - **Creator ≠ owner:** created by a relayer EOA and by a contract caller naming a derived UA (non-native id) as owner: the
-  owner list holds it, the creator list holds it under the relayer, `infoOf.creator` is the relayer.
+  owner list holds it, the creator list holds it under the relayer, `infoOf.creatorId` is `pad(relayer)`; a signed router creation (T76) lists under the signing UA.
 - **Paging bounds:** `n = 0`, `n = MAX_PAGE`, `MAX_PAGE + 1` (`PageTooLarge`), the last partial page, `from = total`,
   `from > total`, class 0 and 3 (`ClassUnknown`), a page across both classes for one owner returning only the class asked.
 - **Negatives:** `SaltAlreadyUsed` on the record; `ownerUA = 0` not listed; owner moved after creation: the index keeps the
@@ -296,8 +300,8 @@ for `PqChat` `abi.encodeCall(IPqChat.initialize, (ownerUA))`. Weighed against th
 
 ```solidity
 function createInstance(ReleaseId calldata id, bytes32 salt, bytes calldata initCall) external returns (address instance);
-function creating() external view returns (address creator);   // the creator of the creation in progress, 0 outside one
-event InstanceCreated(address indexed instance, address indexed creator, uint16 indexed contractClass, uint16 kind,
+function creating() external view returns (bytes32 creatorId); // the creator of the creation in progress, 0 outside one
+event InstanceCreated(address indexed instance, bytes32 indexed creatorId, uint16 indexed contractClass, uint16 kind,
     uint64 version, address implementation, bytes32 owner);
 ```
 
@@ -306,9 +310,9 @@ In order, in one call (as `createDex`):
 1. The release `id` exists, is not deprecated, is usable (`ReleaseUnknown`, `ReleaseDeprecated`, `ReleaseNotYetUsable`), its
    `(class, kind)` is on (`ClassKindDisabled`); class 0–2 cannot have a release.
 2. `initCall.length ≥ 4` and `bytes4(initCall) == initSelector` (`InitSelectorMismatch(expected, got)`).
-3. Salt scoped by the creator (`_salt(msg.sender, salt)`, unchanged); the predicted address has no code and no record
-   (`SaltAlreadyUsed`). `predictAddress(implementation, creator, salt)` is unchanged.
-4. `Clones.cloneDeterministic`; the transient creator saved, set to `msg.sender` (EIP-1153), `instance.call(initCall)` with
+3. Salt scoped by the creator; the predicted address has no code and no record (`SaltAlreadyUsed`). The salt and
+   `predictAddress` are the chain-neutral spec's (§4.1–§4.2: CREATE3, `s` over `creatorId`, class, kind and salt).
+4. The clone; the transient creator saved, set to `creatorId` (EIP-1153), `instance.call(initCall)` with
    value 0 (a revert bubbled as the constructor's is), the previous creator restored (a nested creation inside an `initialize`
    sees its own creator, then the outer one again). `creating()` reads it (Q8).
 5. `factoryInfo()` read from the clone by `staticcall`: exactly 224 B, `factory`, `chainUid`, class, kind, version equal to the
@@ -316,8 +320,9 @@ In order, in one call (as `createDex`):
 6. The record and the three list pushes of §2, then `InstanceCreated`. The record is class `id.contractClass`, kind
    `id.kind`, version `id.version`; never version 0 (no unregistered generic path, Q9).
 
-**Relayable.** As every creation today (§4): no signature, no `mtx*` form; anyone submits it, a relayer included, and the
-submitter is the creator. `createInstance` is not a node job (§8.6, Q11).
+**Relayable.** A direct call has no signature; anyone submits it, a relayer included, and the submitter is the creator. A
+creation in a customer's name is the router's signed `mtxCreateInstance` (S3, chain-neutral spec §4.4, T76), relayable at
+fee 0. `createInstance` is not a node job (§8.6, Q11).
 
 **Existing kinds stay on their typed paths** (Q10): the token path carries kind-specific safety the generic path does not
 know (`underlyings()`, `_wrappers`, `_byUnderlying`, `MAX_LEGS`, `createTokenUnregistered` for plain kinds, the
@@ -398,7 +403,7 @@ function owner() external view returns (bytes32);                      // P32: n
 ```
 
 `creator` and `version` are not arguments: the version is an immutable of the release, and the creator is in the index
-(`infoOf(this).creator`) and, during `initialize`, `IOpenFactory(FACTORY).creating()`.
+(`infoOf(this).creatorId`) and, during `initialize`, `IOpenFactory(FACTORY).creating()`.
 
 **Registration and creation** (deploy script and anyone):
 
@@ -464,6 +469,10 @@ Order T67 → T70 → T68; T69 beside, lands in T19; T44 (3f) now depends on T69
 (PC0); its PF1 is dropped (§8.8).
 
 ### 8.11 Questions for the owner (each with a recommendation)
+
+**Owner 2026-11-07: Q7–Q12 answered as recommended:** (7) a new `(class, kind)` starts off: yes; (8) `creating()`: yes;
+(9) no unregistered generic path: yes, none; (10) token and DEX kinds onto the generic path: not now; (11) the node relaying
+`createInstance`: not now; (12) class and kind ids `uint16`: yes.
 
 7. **A new `(class, kind)` starts off.** **Recommend:** yes. Fail closed: the registrar enables it as an explicit second step
    after the notice period, and the same switch is the reversible stop for every version of a kind.
