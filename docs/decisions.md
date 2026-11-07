@@ -241,6 +241,7 @@ longer holds alloy at 1.6, so its requirement does: `alloy = "~1.6"` (scaas-node
 **Cost if wrong.** A crate that needs a newer compiler waits until NEAR's cap moves, or the repository moves together.
 **Source.** Owner rulings 2026-11-05 (toolchain; alloy held at `~1.6`).
 
+<a id="ARCH-POS-13"></a>
 ### ARCH-POS-13 — Never a decryption oracle
 - old: — · status: current · owner: yes · date: 2026-11-06 · normative: decisions.md#ARCH-POS-13 · superseded-by: —
 
@@ -262,7 +263,7 @@ only named chain locations with the words that layer supplies, and offers no bar
 (owner 2026-11-06).
 **Cost if wrong.** A reachable decrypt path is a key-recovery attack on every account behind it. PQZ MPC quorums for
 account keys are not built while the in-quorum oracle is open; `msig` holders use option (A), the operator, meanwhile.
-**Source.** Owner ruling 2026-11-06; [research/pqz-threshold-decrypt-prove.md](research/pqz-threshold-decrypt-prove.md) §12.1, §12.5; the code audit of decrypt entry points (2026-11-06, pending).
+**Source.** Owner ruling 2026-11-06; [research/pqz-threshold-decrypt-prove.md](research/pqz-threshold-decrypt-prove.md) §12.1, §12.5; the code audit of decrypt entry points (2026-11-06, done; the fix spec and the library rules are on branch `ua-rs-sign`).
 
 ### ARCH-POS-80 — EVM-only, META-only first scope
 - old: R1 · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: NET-ALL-02, CTR-ZTH-01, CTR-ZTH-18, CTR-ZTH-19, CTR-UA-02, CTR-UA-16, CTR-UA-22, INT-ERP-11, ARCH-POS-02
