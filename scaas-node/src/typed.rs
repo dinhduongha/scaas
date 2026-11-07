@@ -58,10 +58,11 @@ const NESTED: &[(&str, &str)] = &[
     ("ZetherLeg", "G1 yTo,G1 cOut,G1 cAud,G1 dAud"),
     ("ZetherMulti", "uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes16 salt,bytes32 beneficiaryUA,uint256 decoyFee,G1 yFrom,G1 dOut,G1 cDeb,ZetherLeg[] legs,bytes sealedMemo"),
     ("ZetherBurn", "uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes32 beneficiaryUA,G1 yFrom"),
-    ("PqzTransferArgs", "uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes sealedMemo"),
+    // group 3g (KV-8): every PQZ debit names its key version after `fromUA`
+    ("PqzTransferArgs", "uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes sealedMemo"),
     ("PqzLeg", "bytes32 ua,bytes v,bytes vAuditor"),
-    ("PqzMultiArgs", "uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,bytes32 beneficiaryUA,uint256 decoyFee,bytes16 salt,bytes[] u,PqzLeg[] legs,bytes vFrom,bytes sealedMemo"),
-    ("PqzBurnArgs", "uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,bytes32 beneficiaryUA,bytes u,bytes vFrom"),
+    ("PqzMultiArgs", "uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,uint256 decoyFee,bytes16 salt,bytes[] u,PqzLeg[] legs,bytes vFrom,bytes sealedMemo"),
+    ("PqzBurnArgs", "uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,bytes u,bytes vFrom"),
     ("Unwrap", "address underlying,bytes32 recipient,uint256 amount,uint256 minOut"),
     ("MetaTransfer", "address from,address to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient"),
     ("UAMetaTransfer", "bytes32 from,bytes32 to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient"),
@@ -118,8 +119,11 @@ const TYPED: &[(&str, &str, &[&str], &str, &str)] = &[
     ("UAUnwrapToUA", "mtxUnwrapToUA", T, "bytes32 from,address underlying,uint256 wrapped,bytes32 to,uint256 minOut,E", ""),
     ("UAShield", "mtxShield", ZP, "bytes32 from,bytes32 toUA,uint256 amount,E", ""),
     ("WrapShield", "mtxWrapShield", ZP, "address from,address underlying,uint256 amountIn,bytes32 toUA,E", ""),
-    ("UARollOver", "mtxRollOver", ZP, "bytes32 from,bytes32 ua,uint256 n,E", ""),
-    ("UAPrepareAcc", "mtxPrepareAcc", P, "bytes32 from,bytes32 ua,uint256 half,E", ""),
+    // group 3g (KV-10): the rollover is one row per kind: Zether keeps its form; the PQZ one (`UAPqzRollOver`, its EIP-712 struct
+    // `UARollOver`, [`primary_of`]) and the prepare name the key version, 100 bytes of static arguments
+    ("UARollOver", "mtxRollOver", Z, "bytes32 from,bytes32 ua,uint256 n,E", ""),
+    ("UAPqzRollOver", "mtxRollOver", P, "bytes32 from,bytes32 ua,uint64 keyVersion,uint256 n,E", ""),
+    ("UAPrepareAcc", "mtxPrepareAcc", P, "bytes32 from,bytes32 ua,uint64 keyVersion,uint256 half,E", ""),
     // the mandate wallets in the merged form (Q6, MD-11): owner and delegate are ids
     ("UASetMandate", "mtxSetMandate", W, "bytes32 from,address token,bytes32 delegate,uint128 maxPerPayment,uint128 maxPerPeriod,uint64 periodSeconds,uint64 expiry,E", ""),
     ("UASetPayee", "mtxSetPayee", W, "bytes32 from,address token,bytes32 payee,bool allowed,E", ""),
@@ -217,8 +221,9 @@ const PLAIN: &[(&str, &[&str], &str)] = &[
     ("registerMuSig2", REG, "uint16 kind,MuSig2Key key,UAAttrs attrs,bytes pop,bytes pqzPop"),
     ("registerFrost", REG, "uint16 kind,FrostKey key,UAAttrs attrs,bytes pop,bytes pqzPop"),
     ("setKemKey", REG, "bytes32 ua,uint64 version,KemKey kem,UASig sig"),
-    ("storePqzPop", REG, "bytes32 ua,bytes pqzPop"),
-    ("setPqzKey", REG, "bytes32 ua,bytes pqzKey,bytes32 pqzPopHash,UASig sig"),
+    // group 3g (KV-1): the PQZ key record of `version` (0: the key registered without one, R2 write-once)
+    ("storePqzPop", REG, "bytes32 ua,uint64 version,bytes pqzPop"),
+    ("setPqzKey", REG, "bytes32 ua,uint64 version,bytes pqzKey,bytes32 pqzPopHash,UASig sig"),
     ("acceptMembership", REG, "bytes32 ua,MemberSig memberSig"),
     ("mtxSettle", D, "Settlement[] s"),
     ("mtxExchange", D, "ExchangePlan p,Interaction[] interactions"),
@@ -280,7 +285,7 @@ impl Row {
 
     /// The EIP-712 `encodeType` string.
     pub fn type_string(&self) -> String {
-        type_string(self.name, &self.fields)
+        type_string(primary_of(self.name), &self.fields)
     }
 }
 
@@ -427,6 +432,15 @@ fn deps(fields: &[(String, String)], out: &mut BTreeSet<&'static str>) {
                 deps(f, out);
             }
         }
+    }
+}
+
+/// The EIP-712 primary type of a row: its name, except a per-kind row of one struct name (group 3g: `UAPqzRollOver` signs
+/// `UARollOver`, the PQZ form with `keyVersion`; typed_ops.json's `primaryType`).
+pub fn primary_of(name: &str) -> &str {
+    match name {
+        "UAPqzRollOver" => "UARollOver",
+        n => n,
     }
 }
 
@@ -795,7 +809,7 @@ pub fn assemble(row: &Row, envelope: Option<&Value>, args: &Value, sig: Option<&
             normalize(&NESTED_MAP[pty.as_str()], t, fee_recipient)?;
         }
     }
-    let struct_hash = row.typed.then(|| hash_tuple(row.name, &row.fields, &vals));
+    let struct_hash = row.typed.then(|| hash_tuple(primary_of(row.name), &row.fields, &vals));
     let mut map: HashMap<String, Val> = row.fields.iter().map(|f| f.1.clone()).zip(vals).collect();
     for (n, ty) in ext {
         let p = format!("args.{n}");
@@ -850,6 +864,11 @@ pub struct Typed {
     pub derived_side: bool,
     /// A pay entry's `payNo + body` bytes (pay-meta-tax spec §7.1, `max_pay_meta_bytes`); 0 for any other op.
     pub pay_meta_len: usize,
+    /// Group 3g (KV-7): a PQZ debit's receivers (op 1's `toUA`, every op 7 leg's `ua`), the parties whose pending version the
+    /// intake refuses (`PQZ_KEY_ROTATION_PENDING`) and whose `UAPqzKeyCurrent` makes a `ProofRejected` `PQZ_KEY_ROTATED`.
+    pub pqz_parties: Vec<B256>,
+    /// The debit carries auditor copies: the token's `auditorUA()` is a party too.
+    pub pqz_auditor: bool,
 }
 
 impl Typed {
@@ -1048,9 +1067,30 @@ impl Op {
             false => token,
         };
         let pay_meta_len = a.vals.get("meta").and_then(pay_meta_of).map_or(0, |m| m.payNo.len() + m.body.len());
+        let (pqz_parties, pqz_auditor) = pqz_parties(row, &a.vals);
         let typed = Typed { contract, domain_of, struct_hash: a.struct_hash, lane_hash, signer, payee, digest: None, derived_signer, derived_side,
-            pay_meta_len };
+            pay_meta_len, pqz_parties, pqz_auditor };
         Ok(Op { row, to, data: data.into(), typed, lane, valid_until })
+    }
+}
+
+/// Group 3g (KV-7): the receivers of a PQZ debit's `args` and whether it has auditor copies; none for any other op (a burn has no
+/// receiver and no copies).
+fn pqz_parties(row: &Row, vals: &HashMap<String, Val>) -> (Vec<B256>, bool) {
+    let Some(ty) = pos(&row.fields, "args").map(|i| row.fields[i].0.as_str()) else { return (vec![], false) };
+    let (Some(f), Some(t)) = (nested(ty), vals.get("args").and_then(Val::as_tuple)) else { return (vec![], false) };
+    let field = |n: &str| pos(f, n).and_then(|i| t.get(i));
+    let non_empty = |v: Option<&Val>| v.and_then(Val::as_bytes).is_some_and(|b| !b.is_empty());
+    match ty {
+        "PqzTransferArgs" => (field("toUA").and_then(word_of).into_iter().collect(), non_empty(field("vAuditor"))),
+        "PqzMultiArgs" => {
+            let legs = field("legs").and_then(Val::as_array).unwrap_or_default();
+            fn leg(l: &Val, i: usize) -> Option<&Val> {
+                l.as_tuple().and_then(|x| x.get(i))
+            }
+            (legs.iter().filter_map(|l| leg(l, 0).and_then(word_of)).collect(), legs.iter().any(|l| non_empty(leg(l, 2))))
+        }
+        _ => (vec![], false),
     }
 }
 
@@ -1235,7 +1275,7 @@ mod tests {
     }
 
     fn typed(contract: &'static str, domain_of: Address, h: B256) -> Typed {
-        Typed { pay_meta_len: 0, contract, domain_of, struct_hash: Some(h), lane_hash: None, signer: None, payee: None, digest: None, derived_signer: false, derived_side: false }
+        Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, contract, domain_of, struct_hash: Some(h), lane_hash: None, signer: None, payee: None, digest: None, derived_signer: false, derived_side: false }
     }
 
     /// Every row and domain of `typed_ops.json`: encodeType, struct hash, digest, entry selector, calldata; the signature
@@ -1270,11 +1310,68 @@ mod tests {
         }
         // plan T34: (68, 101, 100) -> (76, 109, 108), the router's eight regulated controls' vector rows; pay-meta-tax T41 / T42:
         // -> (79, 114, 113), UAPayWithTax (three domains) and the router's two tax ops
-        assert_eq!((structs, domains, calldata), (79, 114, 113), "every row was walked");
+        // group 3g T54 / T55: -> (80, 114, 113), the rollover's two domains on two rows (`UARollOver` Zether, `UAPqzRollOver` PQZ)
+        assert_eq!((structs, domains, calldata), (80, 114, 113), "every row was walked");
         // plan T32: 70 -> 78, the router's eight regulated controls; pay-meta-tax T42: -> 82, + UAPayWithTax, the two tax ops and
         // mtxPay (its struct `UAMetaTransfer`, no row of the vector file: paymeta.json and pay_job_named_meta_builds_body pin it)
-        assert_eq!(rows().iter().filter(|r| r.typed).count(), 82, "79 vector rows, mtxPay, the two invalidations (DEX, token)");
+        // group 3g T55: -> 83, `UAPqzRollOver`
+        assert_eq!(rows().iter().filter(|r| r.typed).count(), 83, "80 vector rows, mtxPay, the two invalidations (DEX, token)");
         assert_eq!(rows().iter().filter(|r| !r.typed).count(), 18, "the wallet's three flat builders are gone (MD-11 (a))");
+    }
+
+    /// Group 3g (KV-10): the rollover is one row per kind (Zether's form kept; the PQZ one with `keyVersion`, its EIP-712 struct
+    /// `UARollOver`), the prepare names the version; a job's entry and kind pick the row.
+    #[test]
+    fn rollover_rows_per_kind() {
+        let on = |kind: &str| rows().iter().filter(|r| r.entry == "mtxRollOver" && r.contracts.contains(&kind)).map(|r| r.name).collect::<Vec<_>>();
+        assert_eq!((on("zether"), on("pqz")), (vec!["UARollOver"], vec!["UAPqzRollOver"]));
+        let (z, p) = (row_of("UARollOver", "zether"), row_of("UAPqzRollOver", "pqz"));
+        assert!(z.type_string().starts_with("UARollOver(bytes32 from,bytes32 ua,uint256 n,uint256 batch,"), "{}", z.type_string());
+        assert!(p.type_string().starts_with("UARollOver(bytes32 from,bytes32 ua,uint64 keyVersion,uint256 n,uint256 batch,"), "{}", p.type_string());
+        assert_ne!(z.selector, p.selector, "two entries of one name");
+        let prep = row_of("UAPrepareAcc", "pqz");
+        assert!(prep.type_string().starts_with("UAPrepareAcc(bytes32 from,bytes32 ua,uint64 keyVersion,uint256 half,"), "{}", prep.type_string());
+        // a job names the entry and the kind: each kind its own row, never the other's
+        let v = vectors();
+        for (name, kind) in [("UARollOver", "zether"), ("UAPqzRollOver", "pqz")] {
+            let mut o = op_of(name, kind, &v).unwrap();
+            o.as_object_mut().unwrap().remove("struct");
+            assert_eq!(Op::parse(&o, FEE).unwrap().row.name, name, "{kind}");
+        }
+    }
+
+    /// Group 3g (KV-8, spec §7.3): every PQZ debit's `keyVersion` is a named field after `fromUA`, rebuilt into the calldata at its
+    /// word; a job without it, or with the args as hex, is refused by name.
+    #[test]
+    fn pqz_key_version_named() {
+        let v = vectors();
+        for (name, word) in [("UAPqzTransferSingle", 4), ("UAPqzTransfer", 4), ("UAPqzUnshield", 4)] {
+            let good = op_of(name, "pqz", &v).unwrap();
+            let mut o = good.clone();
+            o["args"]["args"]["keyVersion"] = json!("7");
+            let a = Op::parse(&o, FEE).unwrap();
+            // the args struct is the first dynamic argument after the 8-word envelope: its offset, then its words
+            let d = &a.data[4..];
+            let at = usize::try_from(U256::from_be_slice(&d[8 * 32..9 * 32])).unwrap();
+            assert_eq!(U256::from_be_slice(&d[at + 32 * word..at + 32 * (word + 1)]), U256::from(7), "{name}: keyVersion at word {word}");
+            assert_ne!(a.data, Op::parse(&good, FEE).unwrap().data, "{name}: the version is in the bytes");
+            let mut o = good.clone();
+            o["args"]["args"].as_object_mut().unwrap().remove("keyVersion");
+            assert!(Op::parse(&o, FEE).unwrap_err().to_string().starts_with("BAD_PAYLOAD"), "{name}: no keyVersion");
+        }
+    }
+
+    #[test]
+    fn pqz_hex_refused() {
+        let v = vectors();
+        let good = op_of("UAPqzTransferSingle", "pqz", &v).unwrap();
+        let mut o = good.clone();
+        o["args"]["args"] = json!("0x1234");
+        let e = Op::parse(&o, FEE).unwrap_err().to_string();
+        assert!(e.starts_with("HEX_ARGS_REFUSED") || e.starts_with("BAD_PAYLOAD"), "{e}");
+        let mut o = good;
+        o["args"]["data"] = json!("0x1234");
+        assert!(Op::parse(&o, FEE).unwrap_err().to_string().starts_with("HEX_DATA_REFUSED"));
     }
 
     /// ua-mtx-merge T14 (Q2, R19): the `mtxCancelNonce` row is per kind: the ordered `UACancelNonce` (`bytes32 from`, `UASig`) on the

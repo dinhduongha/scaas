@@ -2118,3 +2118,82 @@ async fn regulated_transfer_refused_frozen() {
     assert_eq!(report(&state, 2)["chain_state"], "mined", "the refused job landed after the unfreeze: {}", report(&state, 2));
     assert_eq!(balance(&rpc, token, to).await, U256::from(5u8));
 }
+
+/// Group 3g (spec 2026-11-06-pqz-key-versions §7.3, T55): a PQZ key rotation's registry half through the node on anvil (no PQZ
+/// precompile here, so the registry has no `0x0142` verifier: a version is eligible by this build's set length with its proof
+/// bytes stored, KV-2). portable.json's `fndsa512` (a Falcon key, verified on chain): `register` without a PQZ key, then version 0
+/// (`setPqzKey(ua, 0, …)`, `storePqzPop(ua, 0, …)`) and version 1 as `call` jobs from named fields, the version a field; version
+/// 1 stored without its proof is the pending version (latest 1, current 0); its proof moves current to 1. The indexer's rows
+/// carry the pending and the current feed, and the node finds the `UAPqzKeyCurrent` a `PQZ_KEY_ROTATED` needs. UNAUDITED.
+#[tokio::test]
+#[ignore]
+async fn pqz_rotation_on_anvil() {
+    use scaas_node::abi::IUARegistry;
+    let chain_id = 31916;
+    let (_anvil, rpc) = start_anvil(chain_id, 31916).await;
+    let dep = deploy(&rpc, chain_id, key(DEPLOYER).address());
+    let registry: Address = dep["ua_registry"].as_str().unwrap().parse().unwrap();
+    let p: Value = serde_json::from_str(&std::fs::read_to_string(format!("{}/../vectors/ua/portable.json", sc())).unwrap()).unwrap();
+    let named = |table: &str, name: &str| p[table].as_array().unwrap().iter().find(|r| r["name"] == name).unwrap().clone();
+    let set = "n2304-kmax4096"; // the committed PqzSet.sol the deploy built
+    let (reg, v0, v1) = (named("registrations", "fndsa512"), named("pqzKeyRecords", &format!("fndsa512/{set}")),
+        named("pqzKeyVersions", &format!("fndsa512/v1/{set}")));
+    let ua: B256 = reg["ua"].as_str().unwrap().parse().unwrap();
+
+    let state = Arc::new(Mutex::new(FakeOdoo::default()));
+    let odoo = odoo_at(start_fake(state.clone()).await);
+    let mut cfg = chain_cfg(chain_id, &rpc, None);
+    cfg.ua_registry = Some(registry);
+    cfg.max_gas_per_tx = 64_000_000; // a Falcon registration with its KEM key, the SCaaS testnet's relayer cap
+    let mut s = Submitter::start(Chain::with_signer(&cfg, key(RELAYER)).unwrap(), odoo, cfg.clone(), "e2e-pqzver".into(), Default::default())
+        .await
+        .unwrap();
+    let until = (now() + 300).to_string();
+    let mut id = 0;
+    let mut job = |entry: &str, args: Value| {
+        id += 1;
+        let mut a = args;
+        a.as_object_mut().unwrap().remove("entry");
+        state.lock().unwrap().jobs.push(json!({"id": id, "kind": "call", "op": {"entry": entry, "token": format!("{registry:#x}"),
+            "validUntil": until, "args": a}}));
+        id
+    };
+    let last = |id: i64| state.lock().unwrap().reports.iter().rev().find(|r| r["job_id"] == id).cloned().unwrap_or_default();
+    let mined = |id: i64| last(id)["chain_state"] == "mined";
+    let key_of = || async { view(&rpc, registry, IUARegistry::pqzKeyOfCall { ua }).await };
+    let latest = || async { view(&rpc, registry, IUARegistry::pqzKeyLatestCall { ua }).await };
+
+    let r = job("register", reg["args"].clone());
+    run_outbox(&mut s).await;
+    assert!(mined(r), "register fndsa512: {}", last(r));
+    let mut a0 = v0["args"].clone();
+    a0["version"] = json!("0");
+    let (k0, s0) = (job("setPqzKey", a0), job("storePqzPop", json!({"ua": format!("{ua:#x}"), "version": "0",
+        "pqzPop": named("registrations", &format!("mldsa65/{set}"))["pqzPop"]})));
+    run_outbox(&mut s).await;
+    assert!(mined(k0) && mined(s0), "version 0 through the node: {} {}", last(k0), last(s0));
+    assert_eq!((key_of().await.version, latest().await), (0, 0), "version 0 current");
+    let mut a1 = v1["args"].clone();
+    a1["version"] = json!("1"); // the node's uint64 is a decimal string (job-api.md), the vector's a number
+    let k1 = job("setPqzKey", a1);
+    run_outbox(&mut s).await;
+    assert!(mined(k1), "version 1 through the node: {}", last(k1));
+    let (c, l) = (key_of().await, latest().await);
+    assert_eq!((c.version, l), (0, 1), "version 1 stored without its proof: pending, current stays 0");
+    let at = view(&rpc, registry, IUARegistry::pqzKeyAtCall { ua, version: 1 }).await;
+    let chain = Chain::with_signer(&cfg, key(RELAYER)).unwrap();
+    assert_eq!(chain.code_len(at.ptr).await.unwrap(), chain.code_len(c.ptr).await.unwrap(), "the pending version has this set's length");
+    let s1 = job("storePqzPop", json!({"ua": format!("{ua:#x}"), "version": "1", "pqzPop": v1["pqzPop"]}));
+    run_outbox(&mut s).await;
+    assert!(mined(s1), "version 1's proof through the node: {}", last(s1));
+    assert_eq!(key_of().await.version, 1, "version 1 current");
+    assert!(chain.pqz_key_current_since(registry, &[ua], 100).await.unwrap(), "the UAPqzKeyCurrent a PQZ_KEY_ROTATED reads");
+    assert!(!chain.pqz_key_current_since(registry, &[B256::repeat_byte(7)], 100).await.unwrap(), "another UA has none");
+    // the indexer's rows of the registry's events
+    let pr = ProviderBuilder::new().connect_http(rpc.parse().unwrap());
+    let head = pr.get_block_number().await.unwrap();
+    let logs = pr.get_logs(&scaas_node::indexer::pay_filter_with(0, head, &mut vec![], None, Some(registry))).await.unwrap();
+    let rows = scaas_node::indexer::pqz_key_origin(scaas_node::indexer::pay_events(&logs, None), Some(registry));
+    let feed = |f: &str| rows.iter().filter(|r| r["feed"] == f && r["ua"] == json!(format!("{ua:#x}"))).map(|r| r["version"].clone()).collect::<Vec<_>>();
+    assert_eq!((feed("pqz_pending"), feed("pqz_current")), (vec![json!(0), json!(1)], vec![json!(0), json!(1)]), "{rows:?}");
+}

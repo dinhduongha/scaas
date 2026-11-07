@@ -9,7 +9,7 @@ use alloy::sol_types::SolEvent;
 use serde_json::{json, Value};
 use tracing::{info, warn};
 
-use crate::abi::{IGovernance, IMtxRelayFee, IRegulatedToken, IToken, IUALedger};
+use crate::abi::{IGovernance, IMtxRelayFee, IPqzToken, IRegulatedToken, IToken, IUALedger, IUARegistry};
 use crate::chain::Chain;
 use crate::finality::{next_range, quorum_ok, safe_head, Mode};
 use crate::odoo::Odoo;
@@ -119,10 +119,71 @@ pub fn encode_event(log: &Log) -> Option<Value> {
         v["digest"] = json!(format!("{:#x}", e.digest));
         v["fee_recipient"] = json!(format!("{:#x}", e.feeRecipient));
         v["fee"] = json!(e.fee.to_string());
-    } else if !regulated_event(log, topic0, &mut v) {
+    } else if !regulated_event(log, topic0, &mut v) && !pqz_key_event(log, topic0, &mut v) {
         return None;
     }
     Some(v)
+}
+
+/// The topics of [`pqz_key_event`] (group 3g, spec §7.3): the registry's version events and a PQZ token's per-version state events.
+pub const PQZ_KEY_TOPICS: [B256; 6] = [
+    IUARegistry::UAPqzKeyAdded::SIGNATURE_HASH, IUARegistry::UAPqzPopStored::SIGNATURE_HASH, IUARegistry::UAPqzKeyCurrent::SIGNATURE_HASH,
+    IPqzToken::Credited::SIGNATURE_HASH, IPqzToken::Debited::SIGNATURE_HASH, IPqzToken::PqzRolledOver::SIGNATURE_HASH,
+];
+
+/// The registry's version events only from the registry, a token's per-version events only from a token (never the registry).
+pub fn pqz_key_origin(events: Vec<Value>, registry: Option<Address>) -> Vec<Value> {
+    let reg = registry.map(|r| format!("{r:#x}"));
+    let ours = |v: &Value| {
+        let from_reg = reg.as_deref().is_some_and(|r| v["contract"].as_str() == Some(r));
+        match v["event"].as_str() {
+            Some("UAPqzKeyAdded" | "UAPqzPopStored" | "UAPqzKeyCurrent") => from_reg,
+            Some("Credited" | "Debited" | "PqzRolledOver") => !from_reg,
+            _ => true,
+        }
+    };
+    events.into_iter().filter(ours).collect()
+}
+
+/// Group 3g: a PQZ key-version event into `v`, ids as `bytes32` hex. Feed rows: `UAPqzKeyCurrent` is "current version of a UA"
+/// (`feed = "pqz_current"`; credits go to it from this log position on); a `UAPqzKeyAdded` is the UA's latest stored version, pending
+/// until a `UAPqzKeyCurrent` of that version (`feed = "pqz_pending"`; KV-7's on-chain sign of a rotation: a version of another set's
+/// length never becomes current here, the reader compares with the token's key length). The token's events carry `key_version`.
+fn pqz_key_event(log: &Log, topic0: B256, v: &mut Value) -> bool {
+    use IPqzToken as T;
+    use IUARegistry as R;
+    let h = |b: B256| json!(format!("{b:#x}"));
+    if topic0 == R::UAPqzKeyAdded::SIGNATURE_HASH {
+        let Ok(e) = log.log_decode::<R::UAPqzKeyAdded>() else { return false };
+        let e = e.inner.data;
+        (v["event"], v["feed"], v["ua"], v["version"]) = (json!("UAPqzKeyAdded"), json!("pqz_pending"), h(e.ua), json!(e.version));
+        (v["pqz_key_hash"], v["pqz_pop_hash"]) = (h(e.pqzKeyHash), h(e.pqzPopHash));
+    } else if topic0 == R::UAPqzPopStored::SIGNATURE_HASH {
+        let Ok(e) = log.log_decode::<R::UAPqzPopStored>() else { return false };
+        let e = e.inner.data;
+        (v["event"], v["ua"], v["version"], v["checked"]) = (json!("UAPqzPopStored"), h(e.ua), json!(e.version), json!(e.checkedPqzPop));
+    } else if topic0 == R::UAPqzKeyCurrent::SIGNATURE_HASH {
+        let Ok(e) = log.log_decode::<R::UAPqzKeyCurrent>() else { return false };
+        let e = e.inner.data;
+        (v["event"], v["feed"], v["ua"], v["version"]) = (json!("UAPqzKeyCurrent"), json!("pqz_current"), h(e.ua), json!(e.version));
+    } else if topic0 == T::Credited::SIGNATURE_HASH {
+        let Ok(e) = log.log_decode::<T::Credited>() else { return false };
+        let e = e.inner.data;
+        (v["event"], v["ua"], v["index"], v["key_version"]) = (json!("Credited"), h(e.ua), json!(e.index), json!(e.keyVersion));
+        v["entry_ref"] = h(e.entryRef);
+    } else if topic0 == T::Debited::SIGNATURE_HASH {
+        let Ok(e) = log.log_decode::<T::Debited>() else { return false };
+        let e = e.inner.data;
+        (v["event"], v["ua"], v["key_version"], v["rolled"], v["floor"]) =
+            (json!("Debited"), h(e.ua), json!(e.keyVersion), json!(e.rolled), json!(e.floor));
+    } else if topic0 == T::PqzRolledOver::SIGNATURE_HASH {
+        let Ok(e) = log.log_decode::<T::PqzRolledOver>() else { return false };
+        let e = e.inner.data;
+        (v["event"], v["ua"], v["key_version"], v["rolled"]) = (json!("PqzRolledOver"), h(e.ua), json!(e.keyVersion), json!(e.rolled));
+    } else {
+        return false;
+    }
+    true
 }
 
 /// The events an alert goes out on (regulated-kinds spec §7, M-08; asset-suite A2: a compromised `compliance` records fake
@@ -291,7 +352,13 @@ pub fn join_pay_events(mut events: Vec<Value>) -> Vec<Value> {
 /// The token events the indexer reads (the UA ledger's `UAPaymentSettled` / `UAMetaTransactionExecuted` too; with a
 /// router, its `RelayFeePaid`), decoded and joined.
 pub fn pay_filter(from: u64, to: u64, mut addrs: Vec<Address>, router: Option<Address>) -> Filter {
+    pay_filter_with(from, to, &mut addrs, router, None)
+}
+
+/// [`pay_filter`] with the chain's UA registry (`ua_registry`), whose PQZ key-version events ([`PQZ_KEY_TOPICS`]) it reads too.
+pub fn pay_filter_with(from: u64, to: u64, addrs: &mut Vec<Address>, router: Option<Address>, registry: Option<Address>) -> Filter {
     addrs.extend(router);
+    addrs.extend(registry);
     let mut topics = vec![
         IToken::PaymentSettled::SIGNATURE_HASH,
         IToken::MetaTransactionExecuted::SIGNATURE_HASH,
@@ -302,7 +369,8 @@ pub fn pay_filter(from: u64, to: u64, mut addrs: Vec<Address>, router: Option<Ad
         IUALedger::UAMetaTransactionExecuted::SIGNATURE_HASH,
     ];
     topics.extend(REGULATED_TOPICS);
-    Filter::new().from_block(from).to_block(to).address(addrs).event_signature(topics)
+    topics.extend(PQZ_KEY_TOPICS);
+    Filter::new().from_block(from).to_block(to).address(addrs.clone()).event_signature(topics)
 }
 
 /// `pay_filter`'s logs ⇒ Odoo's events: a `RelayFeePaid` only from the router, a token event only from a token.
@@ -334,10 +402,10 @@ const DRIFT_ERR_BACKOFF: Duration = Duration::from_secs(300);
 
 /// Vòng indexer. Drift C chạy TRONG vòng này, giữa hai bước ingest: cursor đứng yên trong lúc đọc số dư nên
 /// `height == indexed_block` luôn đúng (review S1-2: task riêng đua với indexer và có thể không bao giờ ghi được).
-pub async fn run(chain: Arc<Chain>, odoo: Odoo, poll: Duration, chain_key: String, router: Option<Address>) {
+pub async fn run(chain: Arc<Chain>, odoo: Odoo, poll: Duration, chain_key: String, router: Option<Address>, registry: Option<Address>) {
     let mut drift_due = std::time::Instant::now();
     loop {
-        match step(&chain, &odoo, router).await {
+        match step_with(&chain, &odoo, router, registry).await {
             Ok(true) => continue, // còn tồn đọng: đi tiếp ngay
             Ok(false) => {}
             Err(e) => warn!(chain = chain.number, "indexer: {e:#}"),
@@ -358,6 +426,11 @@ pub async fn run(chain: Arc<Chain>, odoo: Odoo, poll: Duration, chain_key: Strin
 
 /// Một vòng: đọc cursor + token từ Odoo, tính vùng final, kiểm quorum, gửi. `true` = đã tiến.
 pub async fn step(chain: &Chain, odoo: &Odoo, router: Option<Address>) -> anyhow::Result<bool> {
+    step_with(chain, odoo, router, None).await
+}
+
+/// [`step`] reading the registry's PQZ key-version events too (group 3g).
+pub async fn step_with(chain: &Chain, odoo: &Odoo, router: Option<Address>, registry: Option<Address>) -> anyhow::Result<bool> {
     let nc = odoo.node_config(chain.number, None).await?;
     // Không token nào đăng ký: không ai lọc được vùng này ⇒ giữ con trỏ (recipe M1), đọc lại khi có token.
     let addrs: Vec<Address> = nc.tokens.iter().filter_map(crate::odoo::TokenCfg::evm).collect();
@@ -378,7 +451,8 @@ pub async fn step(chain: &Chain, odoo: &Odoo, router: Option<Address>) -> anyhow
         warn!(chain = chain.number, block = to, "quorum not reached; not advancing");
         return Ok(false);
     }
-    let mut events = pay_events(&chain.primary().get_logs(&pay_filter(from, to, addrs, router)).await?, router);
+    let mut events = pqz_key_origin(
+        pay_events(&chain.primary().get_logs(&pay_filter_with(from, to, &mut addrs.clone(), router, registry)).await?, router), registry);
     let pairs = receiving_pairs(&nc);
     if !pairs.is_empty() {
         let tokens: Vec<Address> = pairs.iter().map(|p| p.0).collect();
@@ -542,6 +616,41 @@ mod tests {
     fn log_at(address: Address, tx: u8, log_index: u64, data: LogData) -> Log {
         Log { inner: alloy::primitives::Log { address, data }, transaction_hash: Some(B256::repeat_byte(tx)), log_index: Some(log_index),
               ..log_of(LogData::new_unchecked(vec![], Default::default())) }
+    }
+
+    /// Group 3g (spec §7.3): the registry's version events and the token's per-version events reach the client as rows, the
+    /// current and the pending feed by name, each event only from its own contract; the filter reads the registry.
+    #[test]
+    fn indexer_current_feed() {
+        let (reg, tok, ua) = (Address::repeat_byte(0x5e), Address::repeat_byte(0x70), B256::repeat_byte(0xd1));
+        let ev = |at: Address, i: u64, d: LogData| log_at(at, 3, i, d);
+        let logs = vec![
+            ev(reg, 0, IUARegistry::UAPqzKeyAdded { ua, version: 1, pqzKeyHash: B256::repeat_byte(1), pqzPopHash: B256::repeat_byte(2),
+                pqzKey: vec![7; 4].into(), sig: vec![].into() }.encode_log_data()),
+            ev(reg, 1, IUARegistry::UAPqzPopStored { ua, version: 1, checkedPqzPop: 2, pqzPop: vec![9].into() }.encode_log_data()),
+            ev(reg, 2, IUARegistry::UAPqzKeyCurrent { ua, version: 1 }.encode_log_data()),
+            ev(tok, 3, IPqzToken::Credited { ua, index: 4, keyVersion: 1, entryRef: B256::repeat_byte(3) }.encode_log_data()),
+            ev(tok, 4, IPqzToken::Debited { ua, keyVersion: 0, rolled: 2, floor: 2, blob: Address::ZERO }.encode_log_data()),
+            ev(tok, 5, IPqzToken::PqzRolledOver { ua, keyVersion: 0, rolled: 3, accUnits: 1, accHash: B256::ZERO }.encode_log_data()),
+            // a registry event from a token, a token event from the registry: dropped
+            ev(tok, 6, IUARegistry::UAPqzKeyCurrent { ua, version: 9 }.encode_log_data()),
+            ev(reg, 7, IPqzToken::Credited { ua, index: 9, keyVersion: 9, entryRef: B256::ZERO }.encode_log_data()),
+        ];
+        let rows = pqz_key_origin(pay_events(&logs, None), Some(reg));
+        let got: Vec<(String, Value, Value)> = rows.iter().map(|r| (r["event"].as_str().unwrap().to_string(),
+            r["version"].clone(), r["key_version"].clone())).collect();
+        let n = |e: &str, v: Value, k: Value| (e.to_string(), v, k);
+        assert_eq!(got, vec![n("UAPqzKeyAdded", json!(1), Value::Null), n("UAPqzPopStored", json!(1), Value::Null),
+            n("UAPqzKeyCurrent", json!(1), Value::Null), n("Credited", Value::Null, json!(1)), n("Debited", Value::Null, json!(0)),
+            n("PqzRolledOver", Value::Null, json!(0))]);
+        assert_eq!((rows[0]["feed"].as_str(), rows[2]["feed"].as_str()), (Some("pqz_pending"), Some("pqz_current")));
+        assert!(rows.iter().all(|r| r["ua"] == json!(format!("{ua:#x}"))));
+        assert_eq!(rows[3]["entry_ref"], json!(format!("{:#x}", B256::repeat_byte(3))));
+        let f = pay_filter_with(0, 9, &mut vec![tok], None, Some(reg));
+        assert!(f.address.iter().any(|a| *a == reg) && f.address.iter().any(|a| *a == tok), "the registry is read");
+        for t in PQZ_KEY_TOPICS {
+            assert!(f.topics[0].iter().any(|x| *x == t), "{t:#x}");
+        }
     }
 
     /// T17 (G): `PaymentMeta` joins its `PaymentSettled` (same token, transaction and payId, the next one), a

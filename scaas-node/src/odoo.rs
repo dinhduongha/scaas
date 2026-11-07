@@ -267,12 +267,15 @@ mod tests {
     #[test]
     fn call_job_payload_decodes() {
         let raw = r#"{"id": 9, "kind": "call", "op": {"entry": "storePqzPop", "token": "0xbabababababababababababababababababababa",
-            "validUntil": "1800000300", "args": {"pqzPop": "0xdeadbeef",
+            "validUntil": "1800000300", "args": {"pqzPop": "0xdeadbeef", "version": "1",
             "ua": "0x0000000000000000000000000000000000000000000000000000000000000042"}}}"#;
         let job: Job = serde_json::from_str(raw).unwrap();
         assert!(job.metatx.is_none());
         let w = crate::submit::work_from_job(&job, None).unwrap();
         assert_eq!(w.data[..4], crate::abi::IUARegistry::storePqzPopCall::SELECTOR);
+        // group 3g: the version a named field, word 2 of the rebuilt call
+        let c = <crate::abi::IUARegistry::storePqzPopCall as alloy::sol_types::SolCall>::abi_decode(&w.data).unwrap();
+        assert_eq!((c.version, c.pqzPop.to_vec()), (1, vec![0xde, 0xad, 0xbe, 0xef]));
         assert_eq!(w.valid_until, 1_800_000_300);
     }
 

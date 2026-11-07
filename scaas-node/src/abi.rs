@@ -331,12 +331,36 @@ sol! {
         function registerMuSig2(uint16 kind, MuSig2Key key, UAAttrs attrs, bytes pop, bytes pqzPop) external returns (bytes32);
         function registerFrost(uint16 kind, FrostKey key, UAAttrs attrs, bytes pop, bytes pqzPop) external returns (bytes32);
         function setKemKey(bytes32 ua, uint64 version, KemKey kem, UASig sig) external;
-        function storePqzPop(bytes32 ua, bytes pqzPop) external;
-        function setPqzKey(bytes32 ua, bytes pqzKey, bytes32 pqzPopHash, UASig sig) external;
+        // group 3g (KV-1): the record of a key version; version 0 the key registered later, v >= 1 a rotation
+        function storePqzPop(bytes32 ua, uint64 version, bytes pqzPop) external;
+        function setPqzKey(bytes32 ua, uint64 version, bytes pqzKey, bytes32 pqzPopHash, UASig sig) external;
+        /// Group 3g (KV-3): the current version (the highest eligible), any version, the latest stored.
+        function pqzKeyOf(bytes32 ua) external view returns (uint64 version, address ptr, bytes32 pqzPopHash, bool proven);
+        function pqzKeyAt(bytes32 ua, uint64 version) external view returns (address ptr, bytes32 pqzPopHash, bool proven);
+        function pqzKeyLatest(bytes32 ua) external view returns (uint64);
+        event UAPqzPopStored(bytes32 indexed ua, uint64 indexed version, uint8 checkedPqzPop, bytes pqzPop);
+        event UAPqzKeyAdded(bytes32 indexed ua, uint64 indexed version, bytes32 pqzKeyHash, bytes32 pqzPopHash, bytes pqzKey, bytes sig);
+        event UAPqzKeyCurrent(bytes32 indexed ua, uint64 indexed version);
         function acceptMembership(bytes32 ua, MemberSig memberSig) external;
         /// A derived id's authorization under a purpose (CTR-UA-07): reverts `UAUnauthorized(ua)` when it is not one; the venue
         /// asks it for a derived seller's order, as the token's `authorize` does.
         function requireAuthorized(bytes32 ua, bytes32 purposeTag, bytes32 digest, UASig auth) external view;
+    }
+
+    /// A PQZ token's key-version surface (group 3g, spec 2026-11-06-pqz-key-versions §3, §7.3): the errors the node names
+    /// (`PQZ_KEY_STALE`, `PQZ_KEY_VERSION_UNKNOWN`, `PQZ_KEY_REUSED`, `PQZ_KEY_ROTATED` over `ProofRejected`), the auditor a
+    /// debit's copies go to, and the version events the indexer reads.
+    #[derive(Debug)]
+    interface IPqzToken {
+        function auditorUA() external view returns (bytes32);
+        event Credited(bytes32 indexed ua, uint64 indexed index, uint64 keyVersion, bytes32 entryRef);
+        event Debited(bytes32 indexed ua, uint64 keyVersion, uint64 rolled, uint64 floor, address blob);
+        event PqzRolledOver(bytes32 indexed ua, uint64 indexed keyVersion, uint64 rolled, uint32 accUnits, bytes32 accHash);
+        error SelfTransfer();
+        error ProofRejected();
+        error KeyReused(bytes32 ua);
+        error StaleKeyVersion(bytes32 ua, uint64 keyVersion, uint64 current);
+        error KeyVersionUnknown(bytes32 ua, uint64 keyVersion);
     }
 
     /// `MandateWallet` errors (CTR-ACC-06/07, CTR-ACC-12 in the merged form: ids): a job's revert reason names them, so the
@@ -497,6 +521,31 @@ pub fn regulated_refusal(reason: &str) -> Option<&'static str> {
     LIFTABLE.into_iter().find(|n| *n == name)
 }
 
+/// What a PQZ token's key-version refusal means for a job (group 3g, spec §7.3), from a `decode_revert` string.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PqzRefusal {
+    /// `StaleKeyVersion`: a stale version pays no one else; `current` never goes down, so it never lands: `PQZ_KEY_STALE`.
+    Stale,
+    /// `KeyVersionUnknown`: a version above current, which may become current (its proof stored): `PQZ_KEY_VERSION_UNKNOWN`,
+    /// back in the queue.
+    Unknown,
+    /// `KeyReused`: two equal keys in one statement, never valid: `PQZ_KEY_REUSED`.
+    Reused,
+    /// `ProofRejected`: a proof built for a party's key before its rotation is `PQZ_KEY_ROTATED` only after an indexed
+    /// `UAPqzKeyCurrent` of that party since intake ([`crate::submit`]); otherwise the plain revert.
+    ProofRejected,
+}
+
+pub fn pqz_refusal(reason: &str) -> Option<PqzRefusal> {
+    Some(match reason.split(['(', ' ', '{']).next().unwrap_or_default() {
+        "StaleKeyVersion" => PqzRefusal::Stale,
+        "KeyVersionUnknown" => PqzRefusal::Unknown,
+        "KeyReused" => PqzRefusal::Reused,
+        "ProofRejected" => PqzRefusal::ProofRejected,
+        _ => return None,
+    })
+}
+
 /// Readable error name for `last_error` on the client; raw hex when it is none of ours.
 pub fn decode_revert(data: &[u8]) -> String {
     if let Ok(e) = IToken::ITokenErrors::abi_decode(data) {
@@ -521,6 +570,9 @@ pub fn decode_revert(data: &[u8]) -> String {
         return format!("{e:?}");
     }
     if let Ok(e) = IComplianceRegistry::IComplianceRegistryErrors::abi_decode(data) {
+        return format!("{e:?}");
+    }
+    if let Ok(e) = IPqzToken::IPqzTokenErrors::abi_decode(data) {
         return format!("{e:?}");
     }
     format!("revert 0x{}", alloy::hex::encode(data))
@@ -555,6 +607,24 @@ mod tests {
     #[test]
     fn regulated_interface_id_is_the_xor_of_its_functions() {
         assert_eq!(regulated_interface_id(), [0xaf, 0x56, 0x83, 0xea]);
+    }
+
+    /// Group 3g (spec §7.3): the PQZ key-version reverts decode by name and classify; another revert is none of them.
+    #[test]
+    fn pqz_key_refusals_are_named() {
+        let a = alloy::primitives::B256::repeat_byte(0xa1);
+        for (data, name, want) in [
+            (IPqzToken::StaleKeyVersion { ua: a, keyVersion: 1, current: 2 }.abi_encode(), "StaleKeyVersion", PqzRefusal::Stale),
+            (IPqzToken::KeyVersionUnknown { ua: a, keyVersion: 3 }.abi_encode(), "KeyVersionUnknown", PqzRefusal::Unknown),
+            (IPqzToken::KeyReused { ua: a }.abi_encode(), "KeyReused", PqzRefusal::Reused),
+            (IPqzToken::ProofRejected {}.abi_encode(), "ProofRejected", PqzRefusal::ProofRejected),
+        ] {
+            let r = decode_revert(&data);
+            assert!(r.starts_with(name), "{r}");
+            assert_eq!(pqz_refusal(&r), Some(want), "{r}");
+        }
+        assert_eq!(pqz_refusal(&decode_revert(&IPqzToken::SelfTransfer {}.abi_encode())), None);
+        assert_eq!(pqz_refusal("KeyReusedX(..)"), None);
     }
 
     /// Regulated-kinds spec §7: every §3.1 error and `NotProposer` decoded by name; the six a later block may lift are the

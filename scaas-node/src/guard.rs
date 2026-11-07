@@ -25,7 +25,7 @@ use alloy::primitives::{Address, Bytes, B256};
 use alloy::sol_types::{SolCall, SolValue};
 use tracing::warn;
 
-use crate::abi::{IMtxIds, IMtxRelayFee, ISCaaSDex, IToken, IUALedger};
+use crate::abi::{IMtxIds, IMtxRelayFee, IPqzToken, ISCaaSDex, IToken, IUALedger, IUARegistry};
 use crate::chain::{BlockGas, Chain, SimError};
 use crate::config::ChainCfg;
 use crate::metatx::{Mtx, UaMtx};
@@ -74,6 +74,70 @@ pub fn rule_of(contract: &str) -> Option<Rule> {
 /// (the token's `mtxRelayFee` only ever runs under the router). Anything else is refused.
 pub fn row(sel: [u8; 4], contract: &str) -> Option<&'static typed::Row> {
     typed::rows().iter().find(|r| r.sent == sel && !r.entry.is_empty() && r.contracts.contains(&contract))
+}
+
+/// The parties of a PQZ debit (group 3g, KV-7): its receivers and, with auditor copies, the token's `auditorUA()`; `None` for
+/// any other job.
+async fn pqz_parties(chain: &Chain, w: &Work) -> Result<Option<(Address, Vec<B256>)>, SimError> {
+    let Some(t) = w.typed.as_ref().filter(|t| t.contract == "pqz" && (!t.pqz_parties.is_empty() || t.pqz_auditor)) else {
+        return Ok(None);
+    };
+    let registry = chain.call_view(w.to, IUALedger::registryCall {}).await?;
+    let mut parties = t.pqz_parties.clone();
+    if t.pqz_auditor {
+        parties.push(chain.call_view(w.to, IPqzToken::auditorUACall {}).await?);
+    }
+    Ok((registry != Address::ZERO).then_some((registry, parties)))
+}
+
+/// Group 3g (KV-7, R3, spec §7.3): at intake, a PQZ debit naming a receiver, a leg or the auditor with a **pending** version is
+/// refused by name, `PQZ_KEY_ROTATION_PENDING`, before the sender pays for a transaction that would fail. Pending: the UA's latest
+/// stored version is above its current one and has the current key's length (this set's; a version of another set's length never
+/// becomes current here). A read the registry refuses leaves the decision to the simulation; a transport error is transient.
+async fn no_pending_party(chain: &Chain, w: &Work) -> Result<(), Refusal> {
+    let read = |what: &'static str| move |e: SimError| match e {
+        SimError::Transport(e) => Some(Refusal::Transport(format!("{what}: {e}"))),
+        SimError::Revert(_) => None,
+    };
+    let (registry, parties) = match pqz_parties(chain, w).await {
+        Ok(Some(x)) => x,
+        Ok(None) => return Ok(()),
+        Err(e) => return read("PQZ parties")(e).map_or(Ok(()), Err),
+    };
+    for ua in parties {
+        let cur = match chain.call_view(registry, IUARegistry::pqzKeyOfCall { ua }).await {
+            Ok(c) => c,
+            Err(e) => match read("pqzKeyOf")(e) { Some(r) => return Err(r), None => continue },
+        };
+        let latest = match chain.call_view(registry, IUARegistry::pqzKeyLatestCall { ua }).await {
+            Ok(l) => l,
+            Err(e) => match read("pqzKeyLatest")(e) { Some(r) => return Err(r), None => continue },
+        };
+        if latest <= cur.version || cur.ptr == Address::ZERO {
+            continue;
+        }
+        let at = match chain.call_view(registry, IUARegistry::pqzKeyAtCall { ua, version: latest }).await {
+            Ok(a) => a,
+            Err(e) => match read("pqzKeyAt")(e) { Some(r) => return Err(r), None => continue },
+        };
+        let len = |a| async move { chain.code_len(a).await };
+        let (l, c) = match (len(at.ptr).await, len(cur.ptr).await) {
+            (Ok(l), Ok(c)) => (l, c),
+            (Err(e), _) | (_, Err(e)) => match read("eth_getCode")(e) { Some(r) => return Err(r), None => continue },
+        };
+        if l == c {
+            return Err(Refusal::Policy(format!("PQZ_KEY_ROTATION_PENDING: {ua:#x} has version {latest} stored and not yet current \
+                (current {}); prove against its current key once version {latest} is current", cur.version)));
+        }
+    }
+    Ok(())
+}
+
+/// Group 3g (spec §7.3): a PQZ debit's `ProofRejected` is `PQZ_KEY_ROTATED` only after an indexed `UAPqzKeyCurrent` of one of its
+/// parties in the last `lookback` blocks (the event is evidence of the cause, not proof); `Ok(false)` for any other job.
+pub async fn pqz_rotated(chain: &Chain, w: &Work, lookback: u64) -> anyhow::Result<bool> {
+    let Some((registry, parties)) = pqz_parties(chain, w).await.map_err(|e| anyhow::anyhow!("{e:?}"))? else { return Ok(false) };
+    chain.pqz_key_current_since(registry, &parties, lookback).await
 }
 
 /// The refusal of a relayed PQ registration (`register` with its `R_REG` proof) whose gas estimate is over the
@@ -527,9 +591,9 @@ impl Guard {
             self.require_bound(chain, w.to).await?;
             // R44 (step 7a): only a derived `from` or `to` needs the UA ledger; an all-native merged entry runs at `registry() == 0`
             if w.typed.as_ref().is_some_and(|t| t.derived_side) {
-                return self.require_ua_ledger(chain, w.to).await;
+                self.require_ua_ledger(chain, w.to).await?;
             }
-            return Ok(());
+            return no_pending_party(chain, w).await;
         }
         let facts = Facts {
             token: self.tokens.read().map(|t| t.contains(&w.to)).unwrap_or(true),
@@ -902,7 +966,8 @@ mod tests {
         // -> (110, 3, 110), UAPayWithTax's three domains and the router's two tax ops
         assert_eq!((sent, relayed, refused), (110, 3, 110), "the walk reached every row with an entry; the relay fees: submit.rs");
         // plan T32: 87 -> 95, the router's eight regulated controls; pay-meta-tax T42: -> 99, mtxPay, mtxPayWithTax, the two tax ops
-        assert_eq!(typed::rows().iter().filter(|r| !r.entry.is_empty()).count(), 99, "table rows: 81 typed with an entry, 18 plain");
+        // group 3g T55: -> 100, the rollover one row per kind (`UARollOver` Zether, `UAPqzRollOver` PQZ with `keyVersion`)
+        assert_eq!(typed::rows().iter().filter(|r| !r.entry.is_empty()).count(), 100, "table rows: 82 typed with an entry, 18 plain");
         // selectors with no row: refused on every kind, on a target that would otherwise pass
         let target = Address::repeat_byte(0x31);
         let g = Guard::new(&ChainCfg { dex: Some(target), governance_routers: vec![target], ..cfg.clone() }, Arc::new(RwLock::new(vec![target]))).unwrap();
@@ -932,7 +997,7 @@ mod tests {
             "grantRole(uint8,bytes32)", "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
             "transferOwnership(bytes32)", "setListedOnly(bool)"] {
             for kind in ["token", "zether", "pqz", "wallet", "account", "dex", "registry", "factory", "gov_router"] {
-                let t = typed::Typed { pay_meta_len: 0, contract: kind, domain_of: target, struct_hash: None, lane_hash: None, signer: None, payee: None, digest: None,
+                let t = typed::Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, contract: kind, domain_of: target, struct_hash: None, lane_hash: None, signer: None, payee: None, digest: None,
                     derived_signer: false, derived_side: false };
                 let w = Work { job_id: Some(1), to: target, data: cast(s).into(), valid_until: 0, meta: None, entry: true, typed: Some(t) };
                 let e = g.check(&chain, &w).await.unwrap_err();
@@ -1385,7 +1450,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
                 value: alloy::primitives::U256::from(1), batch: alloy::primitives::U256::from(7), nonce: alloy::primitives::U256::ZERO,
                 validUntil: alloy::primitives::U256::from(4_000_000_000u64),
                 auth: crate::abi::UASig { keyData: Bytes::new(), signature: Bytes::new(), members: vec![] } }.abi_encode();
-            let t = typed::Typed { pay_meta_len: 0, contract: "token", domain_of: token, struct_hash: None, lane_hash: None, signer: None, payee: None, digest: None,
+            let t = typed::Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, contract: "token", domain_of: token, struct_hash: None, lane_hash: None, signer: None, payee: None, digest: None,
                 derived_signer: false, derived_side: false };
             Work { job_id: Some(1), to: rf, data: data.into(), valid_until: 0, meta: None, entry: true, typed: Some(t) }
         };

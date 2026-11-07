@@ -260,6 +260,23 @@ impl Chain {
         Ok(None)
     }
 
+    /// The byte length of `a`'s code (a PQZ key's SSTORE2 pointer: its key length plus the STOP byte).
+    pub async fn code_len(&self, a: Address) -> std::result::Result<usize, SimError> {
+        self.primary().get_code_at(a).await.map(|c| c.len()).map_err(|e| classify(&e))
+    }
+
+    /// Group 3g (spec §7.3): a `UAPqzKeyCurrent` of one of `uas` on `registry` in the last `lookback` blocks.
+    pub async fn pqz_key_current_since(&self, registry: Address, uas: &[B256], lookback: u64) -> Result<bool> {
+        let latest = self.primary().get_block_number().await?;
+        let filter = Filter::new()
+            .address(registry)
+            .event_signature(crate::abi::IUARegistry::UAPqzKeyCurrent::SIGNATURE_HASH)
+            .topic1(uas.to_vec())
+            .from_block(latest.saturating_sub(lookback))
+            .to_block(latest);
+        Ok(!self.primary().get_logs(&filter).await?.is_empty())
+    }
+
     /// Ký EIP-1559; trả bytes thô và hash — hash biết TRƯỚC khi gửi (journal, review F5).
     pub async fn sign(&self, nonce: u64, to: Address, data: Bytes, gas: u64, fees: (u128, u128)) -> Result<(Bytes, B256)> {
         let tx = TransactionRequest::default()

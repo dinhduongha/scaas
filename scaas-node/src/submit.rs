@@ -16,6 +16,7 @@ use anyhow::Result;
 use tokio::sync::mpsc;
 use tracing::{info, warn};
 
+use crate::abi::PqzRefusal;
 use crate::breaker::Breaker;
 use crate::chain::{Chain, SimError};
 use crate::config::ChainCfg;
@@ -33,6 +34,10 @@ const SAMPLE_EVERY: Duration = Duration::from_secs(15);
 /// §8.5: số khối gần nhất tìm `MetaTransactionExecuted` khi phân loại một meta-tx đã bị tiêu thụ.
 /// ponytail: cửa sổ cố định; ghi khối lúc claim vào `Sent` nếu tx kẹt lâu hay ra `unknown`.
 const CLASSIFY_LOOKBACK: u64 = 1_000;
+/// Group 3g: how far back a party's `UAPqzKeyCurrent` counts as "since intake" for `PQZ_KEY_ROTATED`.
+// ponytail: a fixed window, not the job's own intake block (the pull path carries none); a job older than this window that
+// meets a rotation is reported `dead` with `ProofRejected`; use the job's claim block once the node's own queue carries it
+const ROTATION_LOOKBACK: u64 = 10_000;
 
 /// `scaas_submit_bump_skipped_consumed_total`: lần `track()` KHÔNG bump vì meta-tx đã bị tiêu thụ (R80).
 pub static BUMP_SKIPPED_CONSUMED: AtomicU64 = AtomicU64::new(0);
@@ -244,7 +249,7 @@ pub fn transfer_typed(contract: Option<&str>, token: Address, struct_hash: B256,
         "pqz" => "pqz",
         c => anyhow::bail!("BAD_PAYLOAD: contract {c:?} (token | zether | pqz)"),
     };
-    Ok(Typed { pay_meta_len: 0, contract, domain_of: token, struct_hash: Some(struct_hash), lane_hash: None, signer, payee: None, digest: None,
+    Ok(Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, contract, domain_of: token, struct_hash: Some(struct_hash), lane_hash: None, signer, payee: None, digest: None,
         derived_signer: false, derived_side: false })
 }
 
@@ -632,7 +637,19 @@ impl Submitter {
             Ok(false) if crate::abi::regulated_refusal(&reason).is_some() => {
                 self.requeue(w, format!("REGULATED_REFUSED: {reason}")).await
             }
-            Ok(false) => self.fail(w, reason).await,
+            // group 3g (spec §7.3): the PQZ key-version reverts by name; a stale debit or two equal keys never land, a version
+            // above current may become current, a proof built before a party's rotation is `PQZ_KEY_ROTATED`, never `dead`
+            Ok(false) => match crate::abi::pqz_refusal(&reason) {
+                Some(PqzRefusal::Stale) => self.fail(w, format!("PQZ_KEY_STALE: {reason}")).await,
+                Some(PqzRefusal::Reused) => self.fail(w, format!("PQZ_KEY_REUSED: {reason}")).await,
+                Some(PqzRefusal::Unknown) => self.requeue(w, format!("PQZ_KEY_VERSION_UNKNOWN: {reason}")).await,
+                Some(PqzRefusal::ProofRejected) => match guard::pqz_rotated(&self.chain, w, ROTATION_LOOKBACK).await {
+                    Ok(true) => self.requeue(w, format!("PQZ_KEY_ROTATED: {reason}")).await,
+                    Ok(false) => self.fail(w, reason).await,
+                    Err(e) => self.requeue(w, format!("PQZ_KEY_ROTATED read: {e:#}; {reason}")).await,
+                },
+                None => self.fail(w, reason).await,
+            },
             Err(e) => self.requeue(w, format!("mtxNonce: {e:#}")).await,
         }
     }
@@ -985,7 +1002,15 @@ pub(crate) mod tests {
         l1_fee: Option<u64>,
         /// `eth_getTransactionByHash` also answers this `maxFeePerGas`.
         tx_max_fee: Option<u128>,
+        /// Group 3g: `pqzKeyLatest(ua)` of every UA (current is version 0, key `PQZ_KEY0`; `pqzKeyAt` answers `PQZ_KEY1`).
+        pqz_latest: u64,
+        /// `PQZ_KEY1`'s code is one byte longer than `PQZ_KEY0`'s (a version of another set's length).
+        pqz_other_len: bool,
+        /// `eth_getLogs` for `UAPqzKeyCurrent` answers one log (a party rotated).
+        pqz_rotated: bool,
     }
+    const PQZ_KEY0: Address = Address::repeat_byte(0xe0);
+    const PQZ_KEY1: Address = Address::repeat_byte(0xe1);
     type Rpc = Arc<Mutex<Evm>>;
 
     fn err(code: i64, message: &str, data: Option<String>) -> Value {
@@ -1017,6 +1042,13 @@ pub(crate) mod tests {
                 "eth_feeHistory" => Ok(json!({"oldestBlock": "0x1", "baseFeePerGas": ["0x3b9aca00", "0x3b9aca00"],
                     "gasUsedRatio": [0.5], "reward": [["0x3b9aca00"]]})),
                 "eth_blockNumber" => Ok(json!("0x10")),
+                "eth_getLogs" if e.pqz_rotated && p[0]["topics"][0] == json!(format!("{:#x}",
+                    <crate::abi::IUARegistry::UAPqzKeyCurrent as alloy::sol_types::SolEvent>::SIGNATURE_HASH)) => Ok(json!([{
+                    "address": p[0]["address"].clone(), "topics": [p[0]["topics"][0].clone(), format!("{:#x}", B256::repeat_byte(1)),
+                        format!("{:#x}", B256::from(U256::from(1)))],
+                    "data": "0x", "blockNumber": "0x9", "blockHash": format!("{:#x}", B256::repeat_byte(9)),
+                    "transactionHash": format!("{:#x}", B256::repeat_byte(8)), "transactionIndex": "0x0", "logIndex": "0x0",
+                    "removed": false}])),
                 "eth_getLogs" => Ok(json!([])),
                 "eth_getBalance" => Ok(json!("0xde0b6b3a7640000")),
                 "eth_getBlockByNumber" if p[0] == "latest" => {
@@ -1032,7 +1064,8 @@ pub(crate) mod tests {
                 "eth_getBlockByNumber" => Ok(Value::Null),
                 "eth_getCode" => {
                     let a: Address = p[0].as_str().unwrap().parse().unwrap();
-                    Ok(json!(if e.designator == Some(a) { format!("0xef0100{}", "55".repeat(20)) }
+                    Ok(json!(if a == PQZ_KEY0 || a == PQZ_KEY1 { format!("0x00{}", "42".repeat(4 + usize::from(e.pqz_other_len && a == PQZ_KEY1))) }
+                             else if e.designator == Some(a) { format!("0xef0100{}", "55".repeat(20)) }
                              else if e.contract_signer || e.code_only == Some(a) { "0x6001".into() } else { "0x".into() }))
                 }
                 "eth_call" => {
@@ -1061,6 +1094,16 @@ pub(crate) mod tests {
                     } else if sel == crate::abi::IGasPriceOracle::getL1FeeCall::SELECTOR {
                         assert_eq!(p[0]["to"].as_str().map(str::to_lowercase), Some(format!("{:#x}", guard::GAS_PRICE_ORACLE)));
                         e.l1_fee.map(|f| word(U256::from(f))).ok_or_else(|| err(3, "execution reverted", Some("0x".into())))
+                    } else if sel == crate::abi::IUARegistry::pqzKeyOfCall::SELECTOR {
+                        Ok(json!(format!("0x{}", alloy::hex::encode(crate::abi::IUARegistry::pqzKeyOfCall::abi_encode_returns(
+                            &crate::abi::IUARegistry::pqzKeyOfReturn { version: 0, ptr: PQZ_KEY0, pqzPopHash: B256::ZERO, proven: true })))))
+                    } else if sel == crate::abi::IUARegistry::pqzKeyLatestCall::SELECTOR {
+                        Ok(word(U256::from(e.pqz_latest)))
+                    } else if sel == crate::abi::IUARegistry::pqzKeyAtCall::SELECTOR {
+                        Ok(json!(format!("0x{}", alloy::hex::encode(crate::abi::IUARegistry::pqzKeyAtCall::abi_encode_returns(
+                            &crate::abi::IUARegistry::pqzKeyAtReturn { ptr: PQZ_KEY1, pqzPopHash: B256::ZERO, proven: false })))))
+                    } else if sel == crate::abi::IPqzToken::auditorUACall::SELECTOR {
+                        Ok(json!(format!("{:#x}", B256::repeat_byte(0xa7))))
                     } else if sel == crate::abi::IUALedger::registryCall::SELECTOR {
                         Ok(word(U256::from(if e.ua_off { 0 } else { 0x5ca0_0001u64 })))
                     } else if sel == crate::abi::IMtxIds::mtxNonceCall::SELECTOR {
@@ -1088,6 +1131,17 @@ pub(crate) mod tests {
                             Some("registry_unavailable") => {
                                 let data = crate::abi::IRegulatedToken::RegistryUnavailable { registry: Address::repeat_byte(0xc0) };
                                 let data = alloy::sol_types::SolError::abi_encode(&data);
+                                Err(err(3, "execution reverted", Some(format!("0x{}", alloy::hex::encode(data)))))
+                            }
+                            // group 3g: a PQZ token's key-version reverts
+                            Some(k @ ("proof_rejected" | "stale" | "reused" | "unknown")) => {
+                                let ua = B256::repeat_byte(0xab);
+                                let data = match k {
+                                    "proof_rejected" => alloy::sol_types::SolError::abi_encode(&crate::abi::IPqzToken::ProofRejected {}),
+                                    "stale" => alloy::sol_types::SolError::abi_encode(&crate::abi::IPqzToken::StaleKeyVersion { ua, keyVersion: 0, current: 1 }),
+                                    "reused" => alloy::sol_types::SolError::abi_encode(&crate::abi::IPqzToken::KeyReused { ua }),
+                                    _ => alloy::sol_types::SolError::abi_encode(&crate::abi::IPqzToken::KeyVersionUnknown { ua, keyVersion: 2 }),
+                                };
                                 Err(err(3, "execution reverted", Some(format!("0x{}", alloy::hex::encode(data)))))
                             }
                             // Nethermind 2.2.0's answer for a call over 2^24 regular gas (EIP-7825 under EIP-8037)
@@ -1846,7 +1900,7 @@ pub(crate) mod tests {
         // any simulation; 261,909 B still goes
         let af = Address::repeat_byte(0x32);
         // (named fields pad to 32 B: the nearest lengths around the 261,910 B limit, 261,924 and 261,892 B)
-        let deploy = |n: usize| crate::abi::IUARegistry::storePqzPopCall { ua: B256::repeat_byte(1), pqzPop: vec![0u8; n - 100].into() }.abi_encode();
+        let deploy = |n: usize| crate::abi::IUARegistry::storePqzPopCall { ua: B256::repeat_byte(1), version: 0, pqzPop: vec![0u8; n - 132].into() }.abi_encode();
         assert_eq!((deploy(261_924).len(), deploy(261_892).len()), (261_924, 261_892));
         let fac = move |c: &mut ChainCfg| { c.max_gas_per_tx = 64_000_000; c.ua_registry = Some(af); };
         let (r, rpc) = outcomes(ok(), vec![call_job(9, af, deploy(261_924))], fac).await;
@@ -1876,7 +1930,7 @@ pub(crate) mod tests {
         assert_eq!(rpc.lock().unwrap().gas, vec![18_000_000]);
         // Osaka: no Amsterdam calldata floor (261,910 B is not refused by the node; the chain's own rules apply)
         let af = Address::repeat_byte(0x32);
-        let big = crate::abi::IUARegistry::storePqzPopCall { ua: B256::repeat_byte(1), pqzPop: vec![0u8; 261_824].into() }.abi_encode();
+        let big = crate::abi::IUARegistry::storePqzPopCall { ua: B256::repeat_byte(1), version: 0, pqzPop: vec![0u8; 261_792].into() }.abi_encode();
         let fac = move |c: &mut ChainCfg| { c.max_gas_per_tx = 64_000_000; c.ua_registry = Some(af); };
         let (r, _) = outcomes(Evm { osaka: true, ..ok() }, vec![call_job(9, af, big)], fac).await;
         assert_eq!(states_of(&r).last().copied(), Some("broadcast"), "{r:?}");
@@ -2084,8 +2138,10 @@ pub(crate) mod tests {
             registerCall { kind: 0x0131, keyData: b(1952, 1), attrs: attrs(), pop: b(3309, 5), pqzPop: b(pqz_pop, 12) }
                 .abi_encode(),
             setKemKeyCall { ua, version: 2, kem: kem(6), sig: sig(3309, 7) }.abi_encode(),
-            storePqzPopCall { ua, pqzPop: b(30_381, 8) }.abi_encode(),
-            setPqzKeyCall { ua, pqzKey: b(18_432, 9), pqzPopHash: B256::repeat_byte(10), sig: sig(3309, 11) }.abi_encode(),
+            storePqzPopCall { ua, version: 0, pqzPop: b(30_381, 8) }.abi_encode(),
+            setPqzKeyCall { ua, version: 0, pqzKey: b(18_432, 9), pqzPopHash: B256::repeat_byte(10), sig: sig(3309, 11) }.abi_encode(),
+            storePqzPopCall { ua, version: 1, pqzPop: b(30_381, 8) }.abi_encode(),
+            setPqzKeyCall { ua, version: 1, pqzKey: b(18_432, 9), pqzPopHash: B256::repeat_byte(10), sig: sig(3309, 11) }.abi_encode(),
             // CTR-UA-37: an `msig` member accepts its place; anyone submits, so the member needs no gas
             acceptMembershipCall { ua, memberSig: crate::abi::MemberSig { index: 3, members: vec![], sig: b(3309, 36) } }.abi_encode(),
             registerMsigCall { structure: MsigStructure { threshold: 2, members: members(2) }, attrs: attrs(), pop: pops(2),
@@ -2116,8 +2172,10 @@ pub(crate) mod tests {
         assert_eq!(registerMuSig2Call::SELECTOR, [0xe1, 0xed, 0xdc, 0xdf]);
         assert_eq!(registerFrostCall::SELECTOR, [0x7b, 0xd6, 0x34, 0x10]);
         assert_eq!(setKemKeyCall::SELECTOR, [0x6a, 0x33, 0x18, 0xf9]);
-        assert_eq!(storePqzPopCall::SELECTOR, [0x7f, 0xac, 0x16, 0x1a]);
-        assert_eq!(setPqzKeyCall::SELECTOR, [0x00, 0x52, 0xc1, 0xb5]);
+        // group 3g (KV-1): the versioned entries, the contract's pins (test_ua8_writeSelectorsPinned): 0x7fac161a -> 0x9f7be2a3,
+        // 0x0052c1b5 -> 0xbd97b6a1
+        assert_eq!(storePqzPopCall::SELECTOR, [0x9f, 0x7b, 0xe2, 0xa3]);
+        assert_eq!(setPqzKeyCall::SELECTOR, [0xbd, 0x97, 0xb6, 0xa1]);
         assert_eq!(acceptMembershipCall::SIGNATURE, "acceptMembership(bytes32,(uint16,(uint16,bytes)[],bytes))");
         assert_eq!(acceptMembershipCall::SELECTOR, [0x2c, 0x1a, 0xc9, 0x86]);
         let ok = || Evm { mtx_nonce: Some(0), ..Default::default() };
@@ -2171,6 +2229,63 @@ pub(crate) mod tests {
         let store = ua8_writes(0).remove(2);
         let (r, _) = outcomes(Evm { estimate: Some(64_000_001), ..ok() }, vec![call_job(9, reg, store)], tn).await;
         assert!(r[0].0 == "dead" && !r[0].1.contains("UA_REGISTER_SPLIT"), "{r:?}");
+    }
+
+    /// A PQZ op 1 job (group 3g) from typed_ops.json's `UAPqzTransferSingle` row, its subject a derived UA (no local signature
+    /// check), on `TOKEN`.
+    fn pqz_job(id: i64) -> Value {
+        let v = crate::typed::testkit::vectors();
+        let row = crate::typed::testkit::row_of("UAPqzTransferSingle", "pqz");
+        let (env, args, sig) = crate::typed::testkit::split(row, "UAPqzTransferSingle", "pqz", &v);
+        let mut env = env.unwrap();
+        env["from"] = json!(format!("{:#x}", B256::repeat_byte(0xab)));
+        json!({"id": id, "kind": "ua_metatx", "op": {"entry": row.entry, "contract": "pqz", "token": format!("{TOKEN:#x}"),
+            "envelope": env, "args": args, "auth": sig.unwrap()}})
+    }
+
+    /// Group 3g (KV-7, spec §7.3): a receiver (or the auditor) whose latest stored version is above its current one, with the
+    /// current key's length, is pending: the debit is refused `PQZ_KEY_ROTATION_PENDING` at intake, nothing simulated or sent.
+    /// The controls: no newer version, a newer version of another set's length.
+    #[tokio::test]
+    async fn rotation_pending_refused_at_intake() {
+        let ok = || Evm { mtx_nonce: Some(0), ..Default::default() };
+        let (r, rpc) = outcomes(Evm { pqz_latest: 1, ..ok() }, vec![pqz_job(7)], |_| {}).await;
+        assert!(r.len() == 1 && r[0].0 == "dead" && r[0].1.starts_with("PQZ_KEY_ROTATION_PENDING: "), "{r:?}");
+        assert!(rpc.lock().unwrap().sent.is_empty());
+        assert!(!rpc.lock().unwrap().calls.iter().any(|m| m == "eth_estimateGas"), "refused before any simulation");
+        for e in [ok(), Evm { pqz_latest: 1, pqz_other_len: true, ..ok() }] {
+            let (r, _) = outcomes(e, vec![pqz_job(7)], |_| {}).await;
+            assert_eq!(states_of(&r), ["signed", "broadcast"], "{r:?}");
+        }
+    }
+
+    /// Group 3g (spec §7.3): `ProofRejected` after an indexed `UAPqzKeyCurrent` of a party is `PQZ_KEY_ROTATED`, the simulation
+    /// error carried, back in the queue, never `dead`; without the event it is the plain revert.
+    #[tokio::test]
+    async fn rotated_after_event_not_dead() {
+        let e = Evm { mtx_nonce: Some(0), sim: Some("proof_rejected"), pqz_rotated: true, ..Default::default() };
+        let (r, rpc) = outcomes(e, vec![pqz_job(7)], |_| {}).await;
+        assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("PQZ_KEY_ROTATED: ProofRejected"), "{r:?}");
+        assert!(rpc.lock().unwrap().sent.is_empty());
+    }
+
+    #[tokio::test]
+    async fn rotated_needs_event() {
+        let e = Evm { mtx_nonce: Some(0), sim: Some("proof_rejected"), ..Default::default() };
+        let (r, _) = outcomes(e, vec![pqz_job(7)], |_| {}).await;
+        assert!(r.len() == 1 && r[0].0 == "dead" && r[0].1.starts_with("ProofRejected"), "{r:?}");
+    }
+
+    /// Group 3g (spec §7.3): the token's key-version reverts by name: a stale debit and two equal keys `dead`, a version above
+    /// current back in the queue (it may become current).
+    #[tokio::test]
+    async fn stale_refused_by_name() {
+        for (sim, state, code) in [("stale", "dead", "PQZ_KEY_STALE: StaleKeyVersion"), ("reused", "dead", "PQZ_KEY_REUSED: KeyReused"),
+            ("unknown", "queued", "PQZ_KEY_VERSION_UNKNOWN: KeyVersionUnknown")] {
+            let (r, rpc) = outcomes(Evm { mtx_nonce: Some(0), sim: Some(sim), ..Default::default() }, vec![pqz_job(7)], |_| {}).await;
+            assert!(r.len() == 1 && r[0].0 == state && r[0].1.starts_with(code), "{sim}: {r:?}");
+            assert!(rpc.lock().unwrap().sent.is_empty());
+        }
     }
 
     /// `max_pay_meta_bytes` (default 2,048, spec §7.1) caps `payNo + body` of a pay job; the config raises it.
