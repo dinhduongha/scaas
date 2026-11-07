@@ -27,12 +27,12 @@ CHK = (".", ["python3", "-I", CTF])
 M = [
     # P2-1: op 4 on the entry's words
     ("op 4: a caller's amount on the allow-list",
-     [(Q, '"proveDiscloseSender" => has(LOC) || has(ENTRY) || has(&["registry", "leg", "legKeyRecord"]),',
-       '"proveDiscloseSender" => has(LOC) || has(ENTRY) || has(&["registry", "leg", "legKeyRecord", "amount"]),')],
+     [(Q, '"proveDiscloseSender" => has(LOC) || has(ENTRY) || has(&["registry", "leg", "legKeyRecords"]),',
+       '"proveDiscloseSender" => has(LOC) || has(ENTRY) || has(&["registry", "leg", "legKeyRecords", "amount"]),')],
      PQ("sender_disclosure_negatives")),
     ("op 4: the leg's v not compared with the re-derivation (u only)",
-     [(Q, "        if !bool::from(c.0.u[..].ct_eq(u) & v_eq) {\n            return Err(Error::Argument);\n        }\n        *words",
-       "        if !bool::from(c.0.u[..].ct_eq(u)) {\n            return Err(Error::Argument);\n        }\n        *words")],
+     [(Q, "            if bool::from(v_eq) {\n                found = Some((x, pk_t, c, i, amount));",
+       "            if true {\n                let _ = v_eq;\n                found = Some((x, pk_t, c, i, amount));")],
      PQ("sender_disclosure_negatives")),
     # (M3 and M4 first tried an M = 1 entry as op 1 only / op 7 only: both survived, because op 1 IS op 7's encryption at
     # M = 1, so the two re-derivations were one; the code now makes one, and these two mutants test the group arithmetic)
@@ -42,8 +42,9 @@ M = [
      PQ("sender_disclosure_over_rebuilt_words")),
     ("op 4: the digit count off by one", [(Q, "let k = (1..16u64).fold(", "let k = (0..16u64).fold(")],
      PQ("sender_disclosure_over_rebuilt_words")),
-    ("op 4: the leg owner's key taken from the sender's record", [(Q, 'let pk_t = registered_key(&f.word("legKeyRecord")?, &mut blobs)?;',
-                                                                  'let pk_t = { registered_key(&f.word("legKeyRecord")?, &mut blobs)?; key.clone() };')],
+    ("op 4: the leg owner's key taken from the sender's record",
+     [(Q, 'let pk_ts = records.iter().map(|r| registered_key(r, &mut blobs)).collect::<Result<Vec<_>>>()?;',
+       'let pk_ts = { records.iter().map(|r| registered_key(r, &mut blobs)).collect::<Result<Vec<_>>>()?; vec![key.clone()] };')],
      PQ("sender_disclosure_over_rebuilt_words")),
     # P3-2: the opened memo compared in constant time
     ("openMemo: the opened values compared with `!=` / `Iterator::ne`",

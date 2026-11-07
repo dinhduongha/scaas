@@ -55,7 +55,7 @@ M = [
     ("pqz-read: --exclude ignored", [(B, "    let mut exclude = a.exclude.clone();", "    let mut exclude: Vec<Word> = Vec::new();")], PR),
     ("pqz-read: an unproven key accepted",
      [(B, "                Some((0, pk)) if rec[11] == 1 && pk.len() == PK_BYTES =>", "                Some((0, pk)) if pk.len() == PK_BYTES =>")], PR),
-    ("pqz-read: no recency weight", [(B, "            let w = if moved(&mid, &r, &base)? { 2 } else", "            let w = if moved(&mid, &r, &base)? { 1 } else")], PR),
+    ("pqz-read: no recency weight", [(B, "            let w = if moved(&mid, &r, &base, &ctr)? { 2 } else", "            let w = if moved(&mid, &r, &base, &ctr)? { 1 } else")], PR),
     ("pqz-read: holder counts every activity", [(B, '            if a.filter.as_deref() == Some("holder") || debit {', "            if debit {")], PR),
     ("pqz-read: a window below 2 accepted", [(B, "let old = block.checked_sub(w).filter(|_| w >= 2).ok_or(", "let old = block.checked_sub(w).ok_or(")], PR),
     ("pqz-read: the blocks not re-checked", [(B, "    for (n, h) in &pins {\n        recheck(url, *n, h)?;", "    for (n, h) in &pins {\n        let _ = (url, n, h);")], PR),

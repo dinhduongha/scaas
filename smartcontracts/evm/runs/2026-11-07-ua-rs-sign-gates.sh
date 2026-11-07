@@ -14,7 +14,8 @@
 # ua-wallet-vectors.mjs (each read only when its sha256 is the pinned one); QT (ua-qt, ua-sizes); ANDROID_NDK_HOME (ua-sizes).
 # The T15i / T15l mutant runs (mutant-<n>, l-mutant-<n>, then rebuild) are not closing steps: mutant-logs checks their records and
 # harnesses. One re-runs as `STEPS=mutant-3 smartcontracts/evm/runs/2026-11-07-ua-rs-sign-gates.sh --only mutant-3`.
-P=2026-11-08-ua-rs-sign
+# GATES_P names another round's re-run (its own logs and summary; T15o: GATES_P=2026-11-08-ua-rs-sign-t15o), T20's stay.
+P=${GATES_P:-2026-11-08-ua-rs-sign}
 LOGEXT=log # step logs are git-ignored (*.log); only <P>-summary.txt is committed (owner 2026-11-02)
 STEPS=${STEPS-"docs clientkeys vectors-check forge-ua ua-rs-nodefault ua-rs-wallet ua-rs ua-rs-pq ua-rs-signers ua-rs-json ua-rs-vectors ua-rs-zether ua-rs-pqz ua-rs-pqz-n2048 ua-deny ua-fuzz ua-sizes ua-c ua-cxx ua-qt ua-dart-frb ua-py ua-go ua-cs ua-dart cargo-zether-prover wasm-zether-prover scaas-ct no-oracle no-oracle-n2048 no-oracle-ua-py wallet-rows test-features mutant-logs pqz-read read-balance named-tests summary"}
 # the base runner's steps this round runs as its CI cells (.github/workflows/ci.yml, T18)
@@ -143,7 +144,7 @@ print("baseline cells not measured:", miss or "none"); sys.exit(1 if miss else 0
                           2026-11-06-ua-rs-sign-t15b 2026-11-06-ua-rs-sign-t15c 2026-11-07-ua-rs-sign-t15c2 2026-11-07-ua-rs-sign-t15e \
                           2026-11-07-ua-rs-sign-t14b 2026-11-07-ua-rs-sign-t15g 2026-11-07-ua-rs-sign-t15k 2026-11-07-ua-rs-sign-t15i \
                           2026-11-07-ua-rs-sign-t15l 2026-11-07-ua-rs-sign-t15m 2026-11-07-ua-rs-sign-t15n \
-                          2026-11-07-ua-rs-sign-t15n2; do
+                          2026-11-07-ua-rs-sign-t15n2 ${MUTANT_LOGS_EXTRA:-}; do
                    l=$(tail -n 1 smartcontracts/evm/runs/$t-mutants.txt); echo "$t: $l"
                    grep -Eq '(survived or not loaded: 0|0 survived, 0 not loaded)$|0 survived, 0 not loaded \(' <<< "$l" || bad=1
                    echo "$t check: $(python3 -I smartcontracts/evm/runs/$t-mutants.py check 2>&1 | tail -n 1)"
@@ -780,6 +781,25 @@ cargo-zether-prover|cargo|entries_rebuild_and_open_for_the_receiver_and_the_audi
 cargo-zether-prover|cargo|debits_over_rebuilt_words_verify
 cargo-zether-prover|cargo|word_location_and_role_negatives_are_refused_before_the_key
 cargo-zether-prover|cargo|the_sender_recovers_its_own_entries_from_words
+clientkeys|node|pqzKeyVersions: two holders, versions 1 and 2, every set; digests by hand; a member signature over the record; the args
+clientkeys|node|verifyPqzKeyVersionRecord accepts every row and refuses a flipped byte, version 0, the other version's consent
+clientkeys|node|pqzKeyVersionNegatives: every row by its table, the signature cases by the verifier, the state cases by the builder
+clientkeys|node|C8: version 0 keeps the info without a suffix, version v >= 1 appends be64(v); the rows by hand
+clientkeys|node|the builder refuses a version-0 replacement, a gap, no version 0, a repeated key; the control passes
+clientkeys|node|KV-7: a pending version is the latest of this set's length, not eligible; the decoy filter drops only those
+clientkeys|node|F-14: a vault or backup key names (ua, version, pqzKeyHash): two keys at one number stay apart
+ua-rs-pq|cargo|pqz_key_version_vectors
+ua-rs|cargo|pqz_key_versions_are_the_pq_kat_rows
+ua-rs|cargo|key_versions_stale_rule_migration_and_additive_recovery
+ua-c|unittest|test_pqz_key_versions_are_the_pq_kat_rows
+ua-py|unittest|test_pqz_key_versions
+ua-py|unittest|test_pqz_key_versions_are_the_pq_kat_rows
+ua-go|go|TestPqzKeyVersions
+ua-cs|cs|PqzKeyVersionVectors
+ua-cs|cs|PqzKeyVersionsAreThePqKatRows
+ua-cxx|ctest|wallet_pqz_key_versions
+ua-dart-frb|dart|pqz_key_versions
+ua-dart|dart|pqz key versions
 NAMES
 )
 . "$(dirname "$0")/2026-10-27-metatx-split-gates.sh"

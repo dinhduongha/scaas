@@ -51,7 +51,7 @@ M = [
         "            rnd32: [0; 32],\n            seed_enc: None,")], facade("two_proofs_differ")),
     ("set mismatch accepted (any proofSystemId)", [(FP, "    if *id == PQZL_ID || (pqz_ffi::PQZH && *id == PQZH_ID) {", "    if true {")],
      facade("set_mismatch_refused")),
-    ("TAG(kind) for utf8(tag) in the PQZ HKDF", [(FP, "        let seed32 = hkdf_pq(seed, TAG, account, index, 32)?;",
+    ("TAG(kind) for utf8(tag) in the PQZ HKDF", [(FP, "        let seed32 = hkdf_pq_version(seed, TAG, account, index, version, 32)?;",
         "        let seed32 = " + TAG_KIND + ";")], facade("pqz_key_is_the_ua_pq_rule")),
     # the controller's
     ("a deployed set of another build accepted", [(FP, "    if *deployed == pqz_set() {", "    if deployed.name == pqz_set().name {")],
