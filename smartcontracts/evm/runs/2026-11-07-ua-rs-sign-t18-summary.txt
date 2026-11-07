@@ -1,0 +1,58 @@
+# 2026-11-07 ua-rs-sign T18: every gate the branch relies on in CI, and the stale mutant harnesses refreshed. Commits: 96bbe4e6
+# (tests/facade_zether.rs: the vacuous allow-list rows the refresh found), 999febad (harnesses, records, gates mutant-logs),
+# 53be5b0a (ci.yml, ci_changes.py, plan), the follow-up commit of this summary. No push: THE JOBS ARE UNVERIFIED ON GITHUB until
+# the owner's push and a `ci-full-clients` run. Commands through scripts/capped, foreground, -j2, --locked, --offline here (CI:
+# --locked only); step logs git-ignored (smartcontracts/evm/runs/*.log). UNAUDITED.
+step | commit | rc | counts
+red: the plan's two needed() asserts on the old mapping | 999febad | n/a | pqz-core/ffi -> ua-rs False; ua-rs -> ua-py False
+python3 .github/ci_changes.py (self-asserts, the two above and the new rows) | 53be5b0a | 0 | all hold; 25 jobs
+actionlint 1.7.7 .github/workflows/ci.yml (no shellcheck on this host: `run:` scripts not shell-checked) | 53be5b0a tree | 0 | 0 findings; the old file too
+YAML parse; changes.outputs == ci_changes.JOBS; every job gated on an output | 53be5b0a tree | 0 | 27 workflow jobs, 0 unmatched
+cargo tree --locked --offline -e normal: ua-rs, ua-c, ua-cxx, ua-qt, ua-dart-frb/rust, ua-rs/fuzz, zether-prover, scaas-node | 53be5b0a tree | 0 | 8 of 8; no lock changed
+cargo deny --all-features check (ua-rs); --config ../ua-rs/deny.toml check (ua-c, zether-prover; first form tried, `check --config`, is refused by 0.20.2, fixed) | 53be5b0a tree | 0 | advisories, bans, licenses, sources ok, 3 of 3
+cargo audit with deny.toml's two ignores: ua-rs, ua-c, zether-prover | 53be5b0a tree | 0 | 3 of 3, 186 / 206 / 116 crates
+CI cell pqz-n2048 tests, the command as composed | 53be5b0a tree | 0 | 7 suites, 51 passed, 2 ignored (the anvil tests, the default set only)
+CI cell pqz-n2048-vectors tests, the command as composed | 53be5b0a tree | 0 | 4 suites, 56 passed
+clippy --all-targets -D warnings: signers, json, pq, pqz-n2048, pqz-n2048-vectors | 53be5b0a tree | 0 | 5 of 5
+clippy --all-targets -D warnings: default, vectors (after the test fix) | 96bbe4e6 tree | 0 | 2 of 2
+tests/facade_zether.rs, release and vectors | 96bbe4e6 tree | 0 | 11 of 11; 13 of 13
+wallet_state.json step: write_wallet_rows, git diff --exit-code | 53be5b0a tree | 0 | writer 1 passed; file unchanged
+ua-c tests/asan-smoke.sh | 53be5b0a tree | 0 | smoke ok
+wasm32-unknown-unknown cargo build --lib: ua-rs default, --no-default-features, signers, json, pq, wallet, zether, pqz at n2048; ua-c default | 53be5b0a tree | 0 | 9 of 9
+aarch64-linux-android cargo build --lib, NDK 29 clang API 24: ua-rs --no-default-features | 53be5b0a tree | 0 | 1 of 9; the other 8 NOT RUN by this task (stopped waiting for a capped slot beside T17's size builds, which build libscaas_ua_c for this target: T17's record); CI's first run is their first run here
+aarch64-apple-ios | n/a | not run | no Xcode on this host; CI's first run is its first run
+gates mutant-logs (every record ends with no survivor, every harness `check`s) | 53be5b0a | 0 | 35 of 35 (was 12); positive control: one t9 string broken, the step rc 1, restored, tree clean
+mutants, re-run one per call, git diff --exit-code after each | 96bbe4e6 and 760119d8 trees | 0 | 18 killed (17 refreshed + new t14 M25), 0 survived at the end, 3 superseded (each record's dated T18 section)
+docs: test_docs_check.py; docs_check.py check; docs_check.py paths | 53be5b0a | 0 | ok; 0 errors (5 pre-existing budget warnings); 0 machine paths
+# Not re-run at this HEAD (no source change since, 96bbe4e6 changed one test file; last green in the T15n2 summary, 352e9386 tree):
+# ua-rs default, vectors, wallet-mlock, zether-only cell tests, pqz_read and read_balance against anvil, zether-prover tests and
+# clippy, ua-c tests, the binding suites. The ua-py / ua-go / ua-cs jobs as CI runs them (a fresh release build first, then the
+# whole suite) have no local run in this form.
+#
+# CI, as built (.github/workflows/ci.yml, its header lists each job's commands):
+# - ua-rs: matrix of ten cells, each clippy and tests: default, vectors, verify-only, signers, json, pq, wallet-mlock, zether-only,
+#   pqz-n2048, pqz-n2048-vectors. no_oracle runs in default, vectors and both n2048 cells (no_oracle-ua-py: ua-py's tests.test_wallet).
+#   default adds pqz_read against anvil (foundry v1.8.5, as the other jobs); vectors adds the wallet_state.json generator.
+# - ua-rs-targets (new): compile only, wasm32 / Android / iOS. ua-deps (new): cargo tree, cargo deny, cargo audit.
+# - zether-prover: clippy default + hazmat, read_balance against anvil default + hazmat. ua-c: ASan smoke.
+# - ua-py (+ tests.test_wallet), ua-go, ua-cs: build clients/ua-c --release first. test-features: kept.
+# - ci_changes.py: ua-rs and every job over it read scaas-ct, zether-prover, pqz-core/{ffi,pqzl,pqzh,stmt,params}/; ua-py, ua-go, ua-cs
+#   read ua-c and ua-rs; zether-prover reads scaas-ct. As the plan states, pqzl whole: a change in its C core also runs the ua-* jobs.
+# Left out on purpose: the T20 runner's vectors-check, ua-fuzz (fuzz_caps in the vectors cell reads the regress inputs; the campaigns
+# stay local), ua-sizes (T17); the mutants (local gate only).
+#
+# Mutant harnesses. `check` failed at 760119d8 on t4 (not in the task's list, found by the same check), t9, t10, t12, t12fu, t13a,
+# t13c, t14, t15: 20 mutants with a stale string (999febad's message says 21: that counts the new M25), only the first of each
+# harness shown by `check`, all listed by a scratch script.
+# t4 M4 (T16: free fn); t9 M23, M24 (T10: seed_entropy), M33 (T16b: install_held); t10 M14 (5b7eef3a: manifest check in between);
+# t12 M4 (T15c2: VECTORS bit last); t12fu M4 (T16b: held(m)); t13a M4, M5 (T15c2: `f`, vectors refused); t13c M1, M5 (T13c follow-up,
+# T15c2); t14 M3, M22; t15 M1, M12, M15, M21: strings at HEAD, killed. t13c M2, M4, M10: superseded by 037d5a29 (SecretBytes replaced
+# the Dart _secret wipe; their class is t13c-secrets, 8 killed). New: t14 M25 (the words form's list, state::allowed), killed.
+# t8 and parity: `check` passed, their records ended on a comment line: a closing line appended, no re-run.
+# FINDING: t14 M3 SURVIVED on both allow-lists. Since T14b `proveTransfer` is the words form and refuses transfer_bls12381.json's
+# `acc`, so five rows of fields_outside_the_allow_list_are_refused and "key inside acc" passed for the wrong reason, for any
+# flag. Fixed in 96bbe4e6 (rows on rawProveTransfer, words-form rows on an empty base, positive controls). The PQZ facade's rows
+# were read for the same class: they already name the raw form and carry controls (T15e). No product code changed.
+# Process note: the first `check` loop began at T1a, which has no `check` mode (nor T1b-T3d): it treated the argument as a real run,
+# wrote its first mutant into clients/clientkeys/src/pq.js and started its suite. Stopped within two minutes, the file restored by
+# git checkout, nothing committed, no process left. Those eight harnesses are not in mutant-logs; a `check` argument still runs them.
