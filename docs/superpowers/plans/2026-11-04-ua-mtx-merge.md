@@ -224,7 +224,7 @@ rustc 1.90); Node `node --test` (`clients/clientkeys`); `zether-prover`; `ua-rs`
 | Regulated | T24 → T25 → T26 → T27 → T28 → T29 → T30 → T31 → T32 → T33; T34 beside T33; T35 after T33, T34; T36 after T33, beside T34–T35 | after T18, before T19 (owner 2026-11-05); contracts sequential in this worktree; T27 measures kinds 9 and 13 before T28 fills the bodies |
 | Pay meta, tax (3e) | T37 → T38 → T39 → T40; T41 after T40; T42 after T41; T43 after T40, beside T41–T42 | after T36, before 3c (owner 2026-11-06); contracts sequential in this worktree; T37 and T40 measure kind 13 first |
 | Versioned PQZ keys (3g) | T51 → T52 → T53; T54 after T53; T55 after T54; T56 after T53, beside T54–T55; T57 beside, lands in T19 | after T43, before 3f (owner 2026-11-07: 3g before 3f); contracts sequential in this worktree; T51 measures the registry's deploy gas, T52 measures kind 13 first (from what T43 leaves); 3c's rebalance comes after T53; the ATTESTED items go to 3f |
-| Factory index | T67 → T68; T69 beside, lands in T19 | **not started until the owner approves its spec**; after T57, before 3f (owner 2026-11-07: 3e → 3g → factory index → 3f → 3h → 3c); contracts sequential in this worktree (`src/factory/` only) |
+| Factory index | T67 → T68; T69 beside, lands in T19 | **owner approved the spec 2026-11-07**; after T57, before 3f (owner 2026-11-07: 3e → 3g → factory index → 3f → 3h → 3c); contracts sequential in this worktree (`src/factory/` only) |
 | Attested PQZ (3f) | T44 → T45; T46 after T45; T47 after T46; T48 and T49 after T45, beside T46–T47; T50 beside, lands in T19 | after T69 (the factory index), before 3h (owner 2026-11-07: 3g, then the factory index, before 3f); contracts sequential in this worktree; T45 measures kind 13 first (from what T57 leaves); ATTESTED built over versioned keys (3g §5) |
 | PQZ proof path (3h) | T58 → T59 → T60 → T61; T62 after T61; T63 after T62; T64 and T65 after T61, beside T62–T63; T66 beside, lands in T19 | after T50, before 3c (owner approved 2026-11-07); contracts sequential in this worktree; T58 measures kind 13 first; each format moves in the task that changes it; no task waits for `ua-rs-sign` |
 | Size (T66b) | T66b | after T66, before 3c (owner 2026-11-07); one task, sequential in this worktree |
@@ -2044,8 +2044,8 @@ pinned temporarily in `_above64KiB` ("owner 2026-11-07, removed by T66b"; see th
 
 ### Factory contract index (owner 2026-11-07): tasks T67–T69
 
-**Spec:** [`2026-11-07-factory-contract-index.md`](../specs/2026-11-07-factory-contract-index.md), DRAFT. **Not started until the
-owner approves the spec** (its §6 questions answered). **Place (owner 2026-11-07):** after 3g (T57), before 3f (T44 depends on
+**Spec:** [`2026-11-07-factory-contract-index.md`](../specs/2026-11-07-factory-contract-index.md), **approved by the owner
+2026-11-07** (its §6 questions answered as recommended). **Place (owner 2026-11-07):** after 3g (T57), before 3f (T44 depends on
 T69): 3e → 3g → factory index → 3f → 3h → 3c. Independent of the registry and of every token body: only `src/factory/`, its
 tests, `GovGas` and the deploy scripts move. **Order:** T67 → T68, sequential in this worktree; T69 (docs share) drafts beside
 them and lands in T19. **Estimate:** 3 agent-days. Each contracts task ends with the whole `forge test` green at the default set
