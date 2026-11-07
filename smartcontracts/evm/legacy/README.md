@@ -291,3 +291,10 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   (`UAPayUnderMandate`'s row finding no entry), `test/ua/{UAMetaTx3Pq,UAMetaTx3Vectors}.t.sol` (the receiver-fee rows refused
   `PayMetaMismatch`, the two-`mldsa65` run waiting for a commitment row). The vector copies: `smartcontracts/vectors/typed/legacy/
   ua-mtx-merge/3e/typed_ops.json`, `smartcontracts/vectors/ua/legacy/ua-mtx-merge/3e/{metatx3,pq_signatures}.json`. Not built.
+  Group 3g (versioned PQZ keys; spec `2026-11-06-pqz-key-versions.md`), under `ua-mtx-merge/3g/`. T51 (the registry's
+  versioned PQZ key records), as they stood at 55347848 (the 3e tip): `src/ua/{UARegistryLib,UARegistry,IUARegistry,UAStore}.sol`
+  with the four-argument `setPqzKey(ua, pqzKey, pqzPopHash, sig)`, the two-argument `storePqzPop(ua, pqzPop)`, one PQZ key per
+  UA (`UAStore` slots 2, 7, 8, 9 keyed by UA alone), ruling R-cross-set's replacement (`_pqzKeyFree`, the kept `register`
+  key in slots 13 and 14, `registrationOf`'s fallback to it) and the three-word `pqzKeyOf`; `test/ua/UARegistryUA8.t.sol` as
+  it stood before its meaning changed (`test_ua8_crossSetKeyReplaced`, `test_ua8_crossSetGen2ReplacesGen1Key`: the
+  replacement, retired by R2). Not built.
