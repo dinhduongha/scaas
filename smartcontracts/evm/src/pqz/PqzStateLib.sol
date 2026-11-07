@@ -75,11 +75,11 @@ library PqzStateLib {
     ///         (`RollTooYoung`), the account prepared (`AccNotPrepared`); the sum is packed (P46) and written to the
     ///         `acc` slots as `not(stream word)` (never 0, so none is zeroed; D3) with `accHash = keccak256(packed
     ///         stream)`; the slots below `rolled − INLINE_MAX` are deleted (`floor` follows `cleared`). Group 3g (KV-10): the
-    ///         account of key version `v`, a version whose key passes the mode's check (`AccountNotRegistered`), stale
-    ///         versions included; `PqzRolledOver` names it.
-    function rollOver(bytes32 ua, uint64 v, uint256 n, address registry) public {
+    ///         account of key version `v`, stale versions included; `PqzRolledOver` names it. The version's key check is
+    ///         `prepareAcc`'s (a rollover needs both prepared halves, `AccNotPrepared`, and a key once eligible stays so), not
+    ///         repeated here: the registry read would put `ROLL_MAX` at n2560-kmax16384 over its 0.75 · 2^24 bound.
+    function rollOver(bytes32 ua, uint64 v, uint256 n) public {
         if (n == 0 || n > PqzCore.ROLL_MAX) revert IPqzToken.RollOverRange(n);
-        PqzCore._keyAt(registry, ua, v);
         (uint64 nr, uint32 units, bytes32 h) = _roll(PqzCore.$().acct[ua][v], ua, n);
         emit IPqzToken.PqzRolledOver(ua, v, nr, units, h);
     }

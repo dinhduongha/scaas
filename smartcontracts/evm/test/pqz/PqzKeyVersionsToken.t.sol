@@ -399,12 +399,13 @@ contract PqzKeyVersionsTokenTest is PqzFixture {
         assertEq(tok.pqzAccount(alice, 1).rolled, 0);
     }
 
-    /// A version that never passed the key check (stored, unproven): rollover and prepare refused.
+    /// A version that never passed the key check (stored, unproven): the prepare is refused, so the rollover too (it needs
+    /// both prepared halves; the key check is the prepare's).
     function test_rollover_neverChecked() public {
         _addVersion(alice, 1, _pk(34));
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.AccountNotRegistered.selector, alice));
         tok.mtxPrepareAcc(alice, 1, 0);
-        vm.expectRevert(abi.encodeWithSelector(IPqzToken.AccountNotRegistered.selector, alice));
+        vm.expectRevert(abi.encodeWithSelector(IPqzToken.AccNotPrepared.selector, alice));
         tok.mtxRollOver(alice, 1, 1);
     }
 

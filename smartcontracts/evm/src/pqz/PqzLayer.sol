@@ -371,7 +371,7 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
     /// @notice Anyone: the next `min(n, K_MAX − 1 − accUnits)` entries of `(ua, keyVersion)` into its `acc`, in order, each
     ///         at least `ROLL_AGE` blocks old; `1 ≤ n ≤ ROLL_MAX` (group 3g KV-10: any version whose key passes the check).
     function mtxRollOver(bytes32 ua, uint64 keyVersion, uint256 n) external nonReentrant {
-        PqzStateLib.rollOver(ua, keyVersion, n, _REGISTRY);
+        PqzStateLib.rollOver(ua, keyVersion, n);
     }
 
     /// @notice Anyone, once per account and half (0, 1) before its first rollover (idempotent), per key version.
