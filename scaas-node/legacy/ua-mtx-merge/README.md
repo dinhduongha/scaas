@@ -29,3 +29,11 @@ What these copies hold and the live code no longer does:
   address `MetaTransfer` / `MetaTransaction` and a `bytes` signature, `POST /v1/metatx` on a token, `TradeOrder` legs for a SCaaS
   sell token, the address cancel / invalidate digests, the flat wallet rows, `PaymentSettled` asserted on every payment), and
   the Hedera vector reader on the address `MetaTransfer` (`hedera_kat.json` before T8: 20-byte long-zero `from`, no `type_hash`).
+
+## 3e (pay-meta-tax, ua-mtx-merge T42), under `3e/`
+
+As they stood at f2cc725d (the T43 tip), before the node moved to the pay entries' `PayMeta`: `abi.rs` (`mtxPayMeta` on ids and
+addresses, `PaymentMeta(bytes32, bytes)`, the eight-argument `relay`), `metatx.rs` (`meta_pay_id(salt, meta)`, `pay_meta_calldata`,
+the `payLane` / nonce-0 shape check), `typed.rs` (the receiver-fee and mandate rows without `PayMeta`, `UARelayFee` without
+`batch` / `nonce`), `guard.rs` (`mtxPay` in `NOT_ROWS`, the struct job's `mtxPayMeta`, the old counts), `submit.rs` (the `salt` +
+hex `meta` struct job), `indexer.rs` (`meta` hex on the joined row), `gateway.rs`, `e2e.rs`. Not built.
