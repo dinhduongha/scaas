@@ -3,7 +3,9 @@
 **Status:** version 2, **accepted by the owner 2026-11-04** (revised the same day; the open items O1–O7 and the round name
 answered the same day, §14; HCS added as the third transport by the owner 2026-11-05, D14; per-session stores, `storeMessage`
 and Matrix optional the same day, D15; libp2p for call signalling the same day, D16; Waku as a message store, the relay
-policy for unsigned writes and an optional Matrix id on the contact card the same day, D17). Version 1 (controller, 2026-10-25, with the
+policy for unsigned writes and an optional Matrix id on the contact card the same day, D17; `PqChat` a factory kind with
+many instances, owner 2026-11-07, D22, §2.1; public topics in each instance the same day, D18–D21, in the sibling spec
+[`2026-11-07-pqchat-public-topics.md`](2026-11-07-pqchat-public-topics.md)). Version 1 (controller, 2026-10-25, with the
 owner's answers of that day) is in this file's git history. Nothing is built. Version 2 applies the owner's thirteen
 decisions of 2026-11-04 (D1–D13) and of 2026-11-05 (D14–D17) (§15, register entry
 [CTR-CHAT-01](../../decisions.md#CTR-CHAT-01)) and the corrections of the architecture study
@@ -57,6 +59,7 @@ is missing, extra and needed for sessions, metadata, chat features, security, an
 | C7 Matrix as the channel (D1: primary) | a per-session list of stores inside `sealedInfo` (Matrix room, HCS topic, chains), every message sent to each; Matrix optional; `storeMessage` keeps the opaque envelope in state without checks (P27–P29) | D15 |
 | C7 call signalling on Matrix only (D1) | libp2p peer to peer for call signalling, listed in the store list, rendezvous from the epoch key; no stored messages (P30) | D16 |
 | — | Waku as a message store kind, content topic from the epoch hint, retention the operators' (P31) | D17 |
+| one `PqChat` per chain, deployed once | a factory kind: many instances, each with an owner UA; a session's home and a chain store name an instance (§2.1, P32); public topics in each instance (sibling spec) | D18–D22 |
 
 ## 2. Architecture
 
@@ -70,7 +73,7 @@ flowchart LR
   subgraph STORES["data plane: the stores the session lists in sealedInfo (D15), each gets every message"]
     ROOM["Matrix room (optional): net.scaas.pqchat.v1 events; media; MatrixRTC"]
     TOPIC["HCS topic: the same envelope, ordered, public"]
-    CS["PqChat storeMessage on chain 1..n (any chain_uid with PqChat): the same envelope in state"]
+    CS["PqChat storeMessage in instance 1..n (chain_uid + address, D22): the same envelope in state"]
     WAKU["Waku content topic (D17): the same payload; Relay live, Store history kept by operators, not durable"]
   end
   BLOB["blob store (IPFS or HTTP, content-addressed): encrypted attachments"]
@@ -110,6 +113,29 @@ still holds on every chain. Peer to peer: 1:1 call media (§10) and, when the li
 (§7.5, P30), which is not a message store. `scaas-node`: relays `PqChat`
 writes as `call` jobs and, PLANNED, HCS messages as a Hedera job (§7.4); it stores, gossips or pushes no chat traffic and
 is no TURN, SFU, libp2p bootstrap, libp2p relay or Waku node.
+
+### 2.1 Instances: `PqChat` is a factory kind (D22)
+
+SPECIFIED (owner 2026-11-07); nothing built.
+
+**P32 — Many instances per chain.** `OpenFactory` creates `PqChat` instances freely, as it creates tokens and DEXes:
+anyone calls `createPqChat`, the factory clones a catalogued release (EIP-1167, `CREATE2` with the salt scoped by the
+creator) and initialises it with its **owner UA** (`bytes32`, governance identity). Releases are versions in the factory's
+catalogue (deployed by the registrar from init code, a notice period before use, deprecable, never upgraded). Each
+instance has its own sessions, epochs, messages, stored messages and public topics, in its own ERC-7201 storage; nothing
+is shared between instances. The release's immutables (set from the factory environment and `implArgs` when the
+registrar deploys it) are the registry address, the chain's `chain_uid`, the factory and the declared code-size limit
+(P11); every clone of a release shares them. The owner UA has **no power** over sessions, topics or entries: it names the
+instance in the factory index and in `owner()`, nothing more. The factory index lists instances by class `PQCHAT`
+(the changes the index needs are in the sibling spec's §11).
+
+**Where an instance replaces "the chain".** A record is still portable (domain `DS_C`: no chain id, no address, P7), so
+the same record may land in any instance on any chain, as a replica. Wherever this spec says **home chain**, read **home
+instance**: the pair `(homeChain, homeContract)` fixed in the session record (§4.2); the slot rule of P9 holds only where
+`chainUid() == homeChain` and `address(this) == homeContract`. A **chain store** (P27, P29) names an instance:
+`{"kind": "chain", "chainUid": …, "contract": <instance address>}`. `postMessage` needs the epoch in the instance it is
+sent to. A client and the node accept as a `PqChat` only an address the chain's factory lists as class `PQCHAT` with a
+registered release (version ≠ 0).
 
 ## 3. Members, KEM keys, devices
 
@@ -170,7 +196,7 @@ minimal form, CTR-UA-07). The contract verifies it through the registry's portab
 |---|---|
 | `MemberKey` | `MemberKey(bytes32 ua,uint64 keyId,bytes32 via)` |
 | `Wrap` | `Wrap(bytes32 member,uint64 keyId,bytes mlkemCt,bytes32 x25519Eph,bytes sealedKey)` |
-| `PqChatSession` | `PqChatSession(bytes32 creator,uint64 nonce,bytes32 homeChain,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo)MemberKey(bytes32 ua,uint64 keyId,bytes32 via)` |
+| `PqChatSession` | `PqChatSession(bytes32 creator,uint64 nonce,bytes32 homeChain,address homeContract,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo)MemberKey(bytes32 ua,uint64 keyId,bytes32 via)` |
 | `PqChatEpoch` | `PqChatEpoch(bytes32 sessionId,bytes32 author,uint64 nonce,uint64 epoch,bytes32 parentEpochId,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo)MemberKey(bytes32 ua,uint64 keyId,bytes32 via)` |
 | `PqChatLeave` | `PqChatLeave(bytes32 sessionId,bytes32 epochId,bytes32 member,uint64 nonce)` |
 | `PqChatMessage` | `PqChatMessage(bytes32 sessionId,bytes32 epochId,bytes32 sender,uint32 device,uint64 counter,bytes32[] parents,bytes ciphertext)` |
@@ -183,14 +209,16 @@ minimal form, CTR-UA-07). The contract verifies it through the registry's portab
   it, so wraps may arrive in chunks (P11).
 - `Wrap.mlkemCt` 1,568 B, `x25519Eph` the X25519 ephemeral public key, `sealedKey` 48 B (`K` under the KEK, with its tag).
 - `homeChain` = the `chain_uid` of the chain that orders this session's epochs (the family-neutral id the factory already
-  uses); fixed for the session's life.
+  uses), and `homeContract` = the address of the `PqChat` instance on it that orders them (D22, P32); both fixed for the
+  session's life.
 - `sealedInfo` = AES-256-GCM-SIV under `HKDF(K, "scaas/pqchat/v1/info" ‖ sessionId ‖ epochId)`, a random 96-bit nonce
   prepended, over the padded (§6.5) canonical JSON `{"stores": [<store>, …], "name", "topic", "matrix": {<ua>: <Matrix
   user id>}}`, the store list of P27, each entry one of `{"kind": "matrix", "room": <Matrix room id>}`,
-  `{"kind": "hcs", "topic": "shard.realm.num"}` (§7.3), `{"kind": "chain", "chainUid": <chain_uid>}` (P29),
+  `{"kind": "hcs", "topic": "shard.realm.num"}` (§7.3), `{"kind": "chain", "chainUid": <chain_uid>, "contract": <PqChat
+  instance address>}` (P29, P32),
   `{"kind": "waku", "contentTopic": <content topic>}` (P31) and `{"kind": "libp2p"}` (call signalling only, P30), at
   least one entry that is a message store (Matrix, HCS, chain or Waku; a `libp2p` entry does not count), at most one
-  Matrix, one HCS, one Waku and one `libp2p` entry, chain entries distinct; `matrix`
+  Matrix, one HCS, one Waku and one `libp2p` entry, chain entries distinct by `(chainUid, contract)`; `matrix`
   (the user ids) present only when a Matrix store is listed.
   **The store list, the room id, the HCS topic id and Matrix user ids never appear on chain in the clear** (D10, D14,
   D15).
@@ -253,11 +281,12 @@ Anyone may create a session with any UA (owner answer 2); consent is in clients 
 
 **P9 — Epochs** (D3). `rekey` is accepted when: the signature is the author's; the parent epoch is stored and **complete**;
 `e.epoch == parent.epoch + 1` (`PqChatEpochNumber`); the author's rights hold (P10); every member holds `keyId` here. A
-child is **complete** when every wrap has landed. **On the home chain** (`chain_uid == homeChain`), the first child of a
+child is **complete** when every wrap has landed. **On the home instance** (`chain_uid == homeChain` and
+`address(this) == homeContract`, P32), the first child of a
 parent to become complete takes the parent's child slot; any other child of that parent is refused or can no longer
 complete (`PqChatEpochTaken`). An incomplete child never takes the slot, so nobody can lock a session by starting an
-epoch and never finishing it; anyone may finish it with `addWraps` (the signed hashes fix the bytes). **On every other
-chain** records are replicas: each complete child is stored, `childOf` reads zero, and clients follow the home chain's
+epoch and never finishing it; anyone may finish it with `addWraps` (the signed hashes fix the bytes). **In every other
+instance**, on this chain or another, records are replicas: each complete child is stored, `childOf` reads zero, and clients follow the home chain's
 `childOf`. A new `K` is always fresh randomness, never derived from the old one, so a removed member cannot read the next
 epoch.
 
@@ -283,7 +312,8 @@ member of the parent. An admin that is an `msig` signs its epoch records by its 
 KEM key only if it is also a member.
 
 **P11 — Chunks** (no block-limit assumption). The contract assumes no block or code-size limit: wraps are stored in SSTORE2
-blobs of at most the chain's code-size limit, declared at deployment (a constructor argument; the EVM has no opcode for it) (one wrap is 1,680 B with its member id;
+blobs of at most the chain's code-size limit, declared when the registrar deploys the release (an immutable of the
+release, shared by its clones, P32; the EVM has no opcode for it) (one wrap is 1,680 B with its member id;
 14 per blob under 24,576 B, 39 under 64 KiB); a client puts as many wraps per transaction as fit its chain's limits
 (EIP-8037: regular + state gas ≤ block limit) and sends the rest by `addWraps`. Group size has no protocol bound; cost grows
 by ≈ 2.6 M gas per member per epoch (§11).
@@ -365,8 +395,9 @@ SPECIFIED (D15–D17); nothing built.
 
 **P27 — The session's stores** (D15–D17). A session lists where its messages go in `sealedInfo` (§4.2), so the list is
 encrypted and nothing new appears on chain in the clear: any subset, **at least one**, of a Matrix room (§7.1), an HCS
-topic (§7.3), one or more chains by `chain_uid`: **any EVM chain** where `PqChat` is deployed (one rule on every chain, owner
-2026-11-06; other families in their own rounds), each written through
+topic (§7.3), one or more chain stores, each a `PqChat` **instance** named by `chain_uid` and address (P32) on **any EVM
+chain** whose factory creates `PqChat` (one rule on every chain, owner 2026-11-06; other families in their own rounds),
+each written through
 `storeMessage` (P29), and a Waku content topic (§7.6, P31). The list may also name **libp2p** (§7.5, P30) for call signalling; it stores no message, receives
 no replicated message and does not count toward "at least one". **Matrix is optional**: when listed it is the default (read first; its media and MatrixRTC
 available, P28). The client sends every message to **every listed store** (replication), as the same envelope of P15;
@@ -443,8 +474,8 @@ sequenceDiagram
 
 **P29 — `storeMessage`: the chain as a store** (D15). `storeMessage(uint8 v, bytes8 hint, bytes env)` takes the fields of
 the HCS payload of P25, `v`, `hint` and `env` exactly as P15 (`hint` the same 8-byte epoch hint, no second hint), and
-appends `abi.encode(v, hint, env)`, the same bytes as that HCS payload, as one SSTORE2 blob to an append list keyed by
-`hint` (never only an event). `env` is one crypto object, so one `bytes` (explicit parameters). It checks **no signature,
+appends `abi.encode(v, hint, env)`, the same bytes as that HCS payload, as one SSTORE2 blob to the instance's append list
+keyed by `hint` (never only an event; each instance its own lists, P32). `env` is one crypto object, so one `bytes` (explicit parameters). It checks **no signature,
 no membership, no nonce**: only `v == 1` and that the blob fits the declared code-size limit (P11; `PqChatShape`
 otherwise). It emits `PqChatStored(hint, index)`; views `storedCount(hint)` and `storedAt(hint, index)` return the list.
 Anyone may call it; spam pays its own gas and clients drop it. Clients check exactly as for HCS (P25): open the envelope,
@@ -502,7 +533,8 @@ client says so plainly when the user picks HCS: public, kept by mirror nodes onl
 
 **P17 — Relay only** (D1). `scaas-node` relays `createSession`, `rekey`, `addWraps`, `leave`, `postMessage` and
 `storeMessage` (D15) as `call` jobs: six rows in its call table, kept equal to the contract's entries (NODE-JOB-01), named JSON fields per job
-(NODE-JOB-20 style), no fee form (owner answer 4). The rule and the rows go in the node's own spec (`docs/node/job-api.md`
+(NODE-JOB-20 style), no fee form (owner answer 4); the call target must be a `PqChat` instance the chain's factory lists
+(class `PQCHAT`, version ≠ 0; P32), as a DEX target is checked by `isDex`. The rule and the rows go in the node's own spec (`docs/node/job-api.md`
 call table), for every consumer. **Unsigned writes** (owner 2026-11-05): `storeMessage` and `addWraps` carry no signature, so the node
 relays them only when paid through `MtxRelayFee` or under the operator's lane policy, and by default never pays gas for
 unsigned spam; this is the rule's intent, and the job rule itself goes in `docs/node/job-api.md` (PLANNED). The node
@@ -673,7 +705,7 @@ Estimates (architecture study §8): EIP-8037 1,530 gas per state byte, new slot 
 | message over Waku (P31) | 0 gas, no fee | bandwidth; an RLN membership, if the network requires one, is the user's | | |
 
 `storeMessage` (P29): about 2.4 KB (FN-DSA-512) or 5.1 KB (ML-DSA-65) of blob at 1,530 gas per state byte, plus the
-blob's new account and two slots, no signature check; each listed chain pays it once. A test chain (for example Sepolia) costs
+blob's new account and two slots, no signature check; each listed chain store (an instance, P32) pays it once. A test chain (for example Sepolia) costs
 its test token only.
 
 HCS (P25), estimates of 2026-11-05 in USD (Hedera fees are fixed in USD and paid in HBAR), from
@@ -714,7 +746,7 @@ Version 2 left seven items and the round name to the owner, each with a proposal
    signature over `uaMessage(kind, purposeTag, typedDigest)`: a single key, or an `msig` in minimal form over two levels,
    native members over the typed digest) **in the same registry generation as `mldsa87` / `fndsa1024`** (branch `mldsa87`,
    not merged on 2026-11-04), so the registry changes once; if that branch has merged before the build reaches this task,
-   in the next registry generation. `PqChat` deploys only on a registry that has it.
+   in the next registry generation. A `PqChat` release is deployed only against a registry that has it (P32).
 2. **O2 — The child slot taken by a plain rekey.** Any member may author a plain rekey (D4), so a member can take a parent's
    slot before an admin's membership change. **Answer: accepted.** A plain rekey may take the child slot first; the griefer
    pays its gas (≈ 2.6 M per member each time); the admin rekeys again from the new epoch. No precedence rule for admins.
@@ -824,6 +856,17 @@ required, is the user's. **Rulings of the same day, with it:** the node relays t
 default (P17; the job rule in the node's spec, PLANNED); the O7 contact card's Matrix user id is optional (§14 O7); any
 Matrix homeserver works, public or self-hosted, SCaaS runs none, with the costs of a public one stated in P15.
 
+**Decisions of 2026-11-07** (owner, relayed by the coordinator; a Change on
+[CTR-CHAT-01](../../decisions.md#CTR-CHAT-01)): **D22** — `PqChat` is a factory kind: `OpenFactory` creates instances
+freely from catalogued releases (EIP-1167 clones, versions in the catalogue, nothing deployed upgraded), each with its own
+owner UA, sessions and public topics; the home of a session is an instance `(homeChain, homeContract)`, a chain store
+names an instance (§2.1, P32). **D18–D21** — public topics in each instance: no hiding and no moderation on chain;
+replies open by default (a per-topic flag); bodies stored in full on chain, with an optional named reference to an entry
+on another chain; per-entry up and down counts, one vote per UA. They are stated in the sibling spec
+[`2026-11-07-pqchat-public-topics.md`](2026-11-07-pqchat-public-topics.md) §9. Why: anyone runs a chat or a community
+service of their own on the same audited code, as with tokens and DEXes; the owner keeps content public and permanent.
+Cost: a session record names its instance (the `PqChatSession` typehash gains `homeContract`); one more factory class.
+
 ## 16. Work
 
 For the plan (`docs/superpowers/plans/2026-11-04-ua7-pqchat.md`); EVM first, other families in their own rounds.
@@ -831,7 +874,8 @@ For the plan (`docs/superpowers/plans/2026-11-04-ua7-pqchat.md`); EVM first, oth
 1. Registry: the portable check view `requirePortable` (O1), on the registry generation of branch `mldsa87` (the next
    generation if that branch has merged first).
 2. Vectors (§12) from `clientkeys`, before any contract code.
-3. `PqChat.sol` (§4–§5, §7.2): structs and typehashes, entries, chunks, home-chain slot, roles, leave, messages with the
+3. `PqChat.sol` as a factory release (P32: `initialize(owner UA)`, ERC-7201 storage, release immutables; the factory's
+   `PQCHAT` class and `createPqChat`, sibling spec §11) (§4–§5, §7.2): structs and typehashes, entries, chunks, home-chain slot, roles, leave, messages with the
    signature hash, `storeMessage` (P29); forge tests (red first): records in any order, a copied record on a second chain, the P9 removal
    attack refused, an incomplete child never blocks, `addWraps` by a stranger, a racing nonce, a forged signature, an
    `msig` admin, a stranger's `storeMessage` stored and listed by `hint`; gas per wrap, epoch, message and stored message
