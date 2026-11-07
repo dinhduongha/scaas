@@ -17,13 +17,25 @@
 #   scaas-node:    cargo test; cargo clippy --all-targets -- -D warnings; cargo test --test e2e -- --ignored
 #   docs:          python3 scripts/test_docs_check.py; python3 scripts/docs_check.py check; ... facts check; ... paths
 #   clients/clientkeys:    npm ci --ignore-scripts; npm test
-#   clients/zether-prover: cargo test; cargo test --features hazmat (ARCH-POS-13: the raw commands, test-only); ./wasm-smoke.sh (wasm32 build + wasm-bindgen + node smoke: the shipped wasm refuses the raw commands) and ZETHER_HAZMAT=1 ./wasm-smoke.sh (the prover in wasm); zether-cli --features hazmat against the tokens (ZetherProverCross)
-#   clients/ua-rs:         cargo test; cargo clippy --all-targets -- -D warnings (default = wallet, ua-rs-sign MD-5); the same with --no-default-features (the verify-only layer), --features signers (groups.json signers + regeneration), --features json (the JSON shim the wrappers call), --features pq (the off-chain verifier's PQ kinds, ua8::check_*) and --features vectors (the wallet's test hooks: keys.json, BIP-32 / SLIP-10 / EIP-2333)
-#   clients/ua-py:         python3 -m unittest tests.test_vectors
-#   clients/ua-go:         go vet ./...; go test ./...
-#   clients/ua-cs:         dotnet test Scaas.Ua.Tests
+#   clients/zether-prover: cargo clippy --all-targets -- -D warnings, default and --features hazmat; cargo test; cargo test --features hazmat (ARCH-POS-13: the raw commands, test-only); ./wasm-smoke.sh (wasm32 build + wasm-bindgen + node smoke: the shipped wasm refuses the raw commands) and ZETHER_HAZMAT=1 ./wasm-smoke.sh (the prover in wasm); zether-cli --features hazmat against the tokens (ZetherProverCross);
+#                          cargo test --test read_balance --bin zether-read-balance -- --include-ignored, default and hazmat (the reading layer against anvil, ANVIL = foundry's)
+#   clients/ua-rs:         one matrix cell per feature set (ua-rs-sign MD-5, T18), each: cargo clippy --locked --all-targets <features> -- -D warnings; cargo test --locked <features> [<tests>]:
+#                          default (wallet + zether + pqz at n2304-kmax4096, the release cell; no_oracle, pqz_wallet_rows; then pqz_read --bin pqz-read -- --include-ignored against anvil),
+#                          vectors (--features vectors: the test hooks, the vector rows both ways, no_oracle's positive control), verify-only (--no-default-features),
+#                          signers (--test groups), json (--test json), pq (--test pq --test ua8), wallet-mlock (wallet,mlock), zether-only (wallet,zether,mlock: --lib --test facade_zether),
+#                          pqz-n2048 (wallet,zether,pqz,pqz-set-n2048-kmax1024,mlock: --lib --bin pqz-read --test pqz_read facade_pqz_state facade_pqz pqz_backup no_oracle) and the same + vectors
+#                          (facade_pqz_state facade_pqz pqz_backup no_oracle); the vectors cell also: cargo test --features vectors --test pqz_wallet_rows -- --ignored --exact write_wallet_rows; git diff --exit-code (wallet_state.json stays what its generator writes)
+#   ua-rs-targets:         compile only, no run (MD-5, plan T0 / T18), wasm32-unknown-unknown, aarch64-linux-android (NDK clang, API 24), aarch64-apple-ios (macOS): cargo build --locked --lib --target <t> <cell> in ua-rs
+#                          for the default, --no-default-features, signers, json, pq, wallet, zether, pqz at n2048-kmax1024; then cargo build --locked --lib --target <t> in ua-c
+#   ua-deps:               cargo tree --locked -e normal for ua-rs, ua-c, ua-cxx, ua-qt, ua-dart-frb/rust, ua-rs/fuzz, zether-prover, scaas-node (no lockfile moves);
+#                          cargo deny --all-features check in ua-rs; cargo deny --all-features --config ../ua-rs/deny.toml check in ua-c and zether-prover (cargo-deny 0.20.2);
+#                          cargo audit --ignore <each ignore of ua-rs/deny.toml> in the same three (cargo-audit 0.22.2)
+#   clients/ua-py:         (cd clients/ua-c && cargo build --release --locked); python3 -m unittest tests.test_vectors tests.test_wallet (the wallet over libscaas_ua_c, no_oracle included)
+#   clients/ua-go:         (cd clients/ua-c && cargo build --release --locked); go vet ./...; go test ./... (wallet/ links clients/ua-c/target/release)
+#   clients/ua-cs:         (cd clients/ua-c && cargo build --release --locked); dotnet test Scaas.Ua.Tests
 #   clients/ua-cxx:        cargo clippy --locked --all-targets -- -D warnings; cmake -S . -B build -G Ninja && cmake --build build && ctest --test-dir build
-#   clients/ua-c:          cargo clippy --locked --all-targets -- -D warnings; cargo build --locked; cargo test --locked (header drift); cc ... tests/smoke.c (C99 smoke); python3 -m unittest -v tests.test_vectors
+#   clients/ua-c:          cargo clippy --locked --all-targets -- -D warnings; cargo build --locked; cargo test --locked (header drift); cc ... tests/smoke.c (C99 smoke); python3 -m unittest -v tests.test_vectors;
+#                          tests/asan-smoke.sh (smoke.c and the staticlib under AddressSanitizer: RUSTC_BOOTSTRAP=1 for -Zsanitizer, test build in target/asan only, owner 2026-11-06)
 #   clients/ua-qt:         cmake -S . -B build -G Ninja (QMAKE, CMAKE_PREFIX_PATH set) && cmake --build build && QT_QPA_PLATFORM=offscreen ctest
 #   clients/ua-dart-frb:   dart pub get --enforce-lockfile; cargo build --locked --manifest-path rust/Cargo.toml; dart test
 #   clients/ua-dart:       dart analyze; dart test; dart test -p node; dart run test/vectors_test.dart (asserts off)
@@ -91,6 +103,7 @@ jobs:
       ua_go: ${{ steps.f.outputs.ua_go }}
       ua_cs: ${{ steps.f.outputs.ua_cs }}
       ua_dart_frb: ${{ steps.f.outputs.ua_dart_frb }}
+      ua_deps: ${{ steps.f.outputs.ua_deps }}
       ua_dart: ${{ steps.f.outputs.ua_dart }}
       test_features: ${{ steps.f.outputs.test_features }}
     steps:
@@ -457,6 +470,7 @@ jobs:
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
           targets: wasm32-unknown-unknown
+          components: clippy
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: clients/zether-prover
@@ -466,6 +480,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: clippy (default, hazmat)
+        run: |
+          cargo clippy --locked --all-targets -- -D warnings
+          cargo clippy --locked --all-targets --features hazmat -- -D warnings
       - name: unit tests and vectors
         run: cargo test
       - name: unit tests and vectors with the raw commands (hazmat, ARCH-POS-13)
@@ -483,11 +501,48 @@ jobs:
           cd ../../smartcontracts/evm
           ../../scripts/evm_libs.sh install
           ZETHER_CLI=$PWD/../../clients/zether-prover/target/release/zether-cli forge test --ffi --match-path test/zether/ZetherProverCross.t.sol
+      # zether-read-balance --rpc, the reading layer (R1-R7), against a local anvil the tests start and stop (ANVIL, default on PATH)
+      - name: reading layer against anvil (default, hazmat)
+        run: |
+          cargo test --locked --test read_balance --bin zether-read-balance -- --include-ignored
+          cargo test --locked --features hazmat --test read_balance --bin zether-read-balance -- --include-ignored
 
+  # One cell per feature set (ua-rs-sign MD-5): its clippy and its tests. The default cell is the release build (zether + pqz at
+  # n2304-kmax4096) and also runs the PQZ reading layer against anvil; pqz-n2048 is the other PQZ set, release and vectors.
   ua-rs:
     needs: changes
     if: needs.changes.outputs.ua_rs == 'true'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - cell: default
+            features: ''
+          - cell: vectors
+            features: --features vectors
+          - cell: verify-only
+            features: --no-default-features
+          - cell: signers
+            features: --no-default-features --features signers
+            tests: --test groups
+          - cell: json
+            features: --no-default-features --features json
+            tests: --test json
+          - cell: pq
+            features: --no-default-features --features pq
+            tests: --test pq --test ua8
+          - cell: wallet-mlock
+            features: --no-default-features --features wallet,mlock
+          - cell: zether-only
+            features: --no-default-features --features wallet,zether,mlock
+            tests: --lib --test facade_zether
+          - cell: pqz-n2048
+            features: --no-default-features --features wallet,zether,pqz,pqz-set-n2048-kmax1024,mlock
+            tests: --lib --bin pqz-read --test pqz_read --test facade_pqz_state --test facade_pqz --test pqz_backup --test no_oracle
+          - cell: pqz-n2048-vectors
+            features: --no-default-features --features wallet,zether,pqz,pqz-set-n2048-kmax1024,mlock,vectors
+            tests: --test facade_pqz_state --test facade_pqz --test pqz_backup --test no_oracle
     defaults:
       run:
         working-directory: clients/ua-rs
@@ -500,30 +555,109 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: clients/ua-rs
-      - name: clippy
-        run: cargo clippy --all-targets -- -D warnings
-      - name: clippy (no default features)
-        run: cargo clippy --all-targets --no-default-features -- -D warnings
-      - name: clippy (signers)
-        run: cargo clippy --all-targets --no-default-features --features signers -- -D warnings
-      - name: clippy (json)
-        run: cargo clippy --all-targets --no-default-features --features json -- -D warnings
-      - name: clippy (pq)
-        run: cargo clippy --all-targets --no-default-features --features pq -- -D warnings
-      - name: clippy (vectors)
-        run: cargo clippy --all-targets --features vectors -- -D warnings
-      - name: vectors
-        run: cargo test
-      - name: vectors (verify-only layer)
-        run: cargo test --no-default-features
-      - name: groups.json (signers, byte-for-byte regeneration, BIP-327 / RFC 9591 vectors)
-        run: cargo test --no-default-features --features signers --test groups
-      - name: JSON shim (feature json)
-        run: cargo test --no-default-features --features json --test json
-      - name: Off-chain verifier (feature pq; ua8::check_*, UA8-D24)
-        run: cargo test --no-default-features --features pq --test pq --test ua8
-      - name: wallet core (feature vectors; keys.json, BIP-32 / SLIP-10 / EIP-2333, the secret store)
-        run: cargo test --features vectors --test wallet_keys
+          key: ${{ matrix.cell }}
+      - name: clippy (${{ matrix.cell }})
+        run: cargo clippy --locked --all-targets ${{ matrix.features }} -- -D warnings
+      - name: test (${{ matrix.cell }})
+        run: cargo test --locked ${{ matrix.features }} ${{ matrix.tests }}
+      # the rows every binding decrypts (smartcontracts/vectors/pqz/gen_wallet_state.sh without capped): fixed draws, the same bytes
+      - name: wallet_state.json is what its generator writes
+        if: matrix.cell == 'vectors'
+        run: |
+          cargo test --locked --features vectors --test pqz_wallet_rows -- --ignored --exact write_wallet_rows
+          git diff --exit-code -- ../../smartcontracts/vectors/pqz/n2304-kmax4096/wallet_state.json
+      - uses: foundry-rs/foundry-toolchain@v1
+        if: matrix.cell == 'default'
+        with:
+          version: v1.8.5
+      # pqz-read, the PQZ reading layer (R1-R7), against a local anvil the tests start and stop (ANVIL, default on PATH)
+      - name: pqz-read against anvil
+        if: matrix.cell == 'default'
+        run: cargo test --locked --test pqz_read --bin pqz-read -- --include-ignored
+
+  # Compile only (no run; plan T0 had no NDK or Xcode, so Android and iOS are built here first). Falcon's C is skipped on wasm32
+  # (KIND_UNAVAILABLE there), compiled by the NDK's clang and by Xcode.
+  ua-rs-targets:
+    needs: changes
+    if: needs.changes.outputs.ua_rs == 'true'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: wasm32-unknown-unknown
+            os: ubuntu-latest
+          - target: aarch64-linux-android
+            os: ubuntu-latest
+          - target: aarch64-apple-ios
+            os: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            clients/ua-rs
+            clients/ua-c
+          key: ${{ matrix.target }}
+      # the NDK the runner image carries; API 24
+      - name: NDK clang
+        if: matrix.target == 'aarch64-linux-android'
+        run: |
+          b="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          {
+            echo "CC_aarch64_linux_android=$b/aarch64-linux-android24-clang"
+            echo "AR_aarch64_linux_android=$b/llvm-ar"
+            echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$b/aarch64-linux-android24-clang"
+          } >> "$GITHUB_ENV"
+      - name: ua-rs, every feature cell
+        working-directory: clients/ua-rs
+        run: |
+          for f in "" "--no-default-features" "--no-default-features --features signers" "--no-default-features --features json" \
+                   "--no-default-features --features pq" "--no-default-features --features wallet" "--no-default-features --features zether" \
+                   "--no-default-features --features pqz,pqz-set-n2048-kmax1024"; do
+            echo "== ${{ matrix.target }} [$f]"
+            # shellcheck disable=SC2086 # $f is a list of flags
+            cargo build --locked --lib --target ${{ matrix.target }} $f
+          done
+      - name: ua-c (libscaas_ua_c, the default build)
+        working-directory: clients/ua-c
+        run: cargo build --locked --lib --target ${{ matrix.target }}
+
+  # Every lockfile over ua-rs resolves as committed; cargo deny (advisories, bans, licenses, sources) by clients/ua-rs/deny.toml;
+  # cargo audit (the RustSec database again, the plan's second reader) with deny.toml's exceptions, one list.
+  ua-deps:
+    needs: changes
+    if: needs.changes.outputs.ua_deps == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny@0.20.2,cargo-audit@0.22.2
+      - name: cargo tree --locked
+        run: |
+          for m in clients/ua-rs clients/ua-c clients/ua-cxx clients/ua-qt clients/ua-dart-frb/rust clients/ua-rs/fuzz clients/zether-prover scaas-node; do
+            cargo tree --locked -e normal --manifest-path "$m/Cargo.toml" > /dev/null || { echo "cargo tree --locked failed: $m"; exit 1; }
+          done
+      - name: cargo deny (ua-rs; ua-c and zether-prover by ua-rs's deny.toml)
+        run: |
+          (cd clients/ua-rs && cargo deny --all-features check)
+          (cd clients/ua-c && cargo deny --all-features --config ../ua-rs/deny.toml check)
+          (cd clients/zether-prover && cargo deny --all-features --config ../ua-rs/deny.toml check)
+      - name: cargo audit (the same three, deny.toml's ignores)
+        run: |
+          ignore=$(python3 -c 'import tomllib; print(" ".join("--ignore " + a["id"] for a in tomllib.load(open("clients/ua-rs/deny.toml", "rb"))["advisories"]["ignore"]))')
+          for d in clients/ua-rs clients/ua-c clients/zether-prover; do
+            # shellcheck disable=SC2086 # $ignore is a list of flags
+            (cd "$d" && cargo audit $ignore)
+          done
 
   ua-cxx:
     needs: changes
@@ -579,6 +713,8 @@ jobs:
           c++ -fsyntax-only -x c++ include/scaas_ua.h
       - name: vectors (ctypes)
         run: python3 -m unittest -v tests.test_vectors
+      - name: C smoke under AddressSanitizer
+        run: tests/asan-smoke.sh
 
   ua-qt:
     needs: changes
@@ -615,13 +751,23 @@ jobs:
         working-directory: clients/ua-py
     steps:
       - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: clients/ua-c
+      # the wallet surface: libscaas_ua_c (release), where the binding looks for it (clients/ua-c/target/release)
+      - name: libscaas_ua_c
+        working-directory: clients/ua-c
+        run: cargo build --release --locked
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
       - name: install
         run: pip install -r requirements.txt
-      - name: vectors
-        run: python -m unittest -v tests.test_vectors
+      - name: vectors and the wallet
+        run: python -m unittest -v tests.test_vectors tests.test_wallet
 
   ua-go:
     needs: changes
@@ -632,6 +778,16 @@ jobs:
         working-directory: clients/ua-go
     steps:
       - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: clients/ua-c
+      # the wallet surface: libscaas_ua_c (release), where the binding looks for it (clients/ua-c/target/release)
+      - name: libscaas_ua_c
+        working-directory: clients/ua-c
+        run: cargo build --release --locked
       - uses: actions/setup-go@v5
         with:
           go-version: '1.25'
@@ -650,6 +806,16 @@ jobs:
         working-directory: clients/ua-cs/Scaas.Ua.Tests
     steps:
       - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: clients/ua-c
+      # the wallet surface: libscaas_ua_c (release), where the binding looks for it (clients/ua-c/target/release)
+      - name: libscaas_ua_c
+        working-directory: clients/ua-c
+        run: cargo build --release --locked
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'

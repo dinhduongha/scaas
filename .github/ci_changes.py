@@ -20,6 +20,10 @@ import subprocess
 SC = ['smartcontracts/scripts/', 'smartcontracts/vectors/']
 # the root rust-toolchain.toml: the one Rust toolchain of every crate (ARCH-POS-12)
 RT = ['rust-toolchain.toml']
+# ua-rs and every crate it builds (ua-rs-sign T18): scaas-ct, zether-prover (the Zether facade), pqz-ffi, pqzl, pqz-stmt, Ligero
+# and the parameter sets (the PQZ facade, MD-5); a job over ua-rs reads them all
+UARS = ['clients/ua-rs/', 'clients/scaas-ct/', 'clients/zether-prover/', 'pqz-core/ffi/', 'pqz-core/pqzl/', 'pqz-core/stmt/',
+        'pqz-core/pqzh/', 'pqz-core/params/'] + RT
 JOBS = {
     'contract-evm': ['smartcontracts/evm/'] + SC + ['pqz-core/params/', 'scripts/size_gate.py', 'scripts/evm_libs.sh'],
     'contract-soroban': ['smartcontracts/soroban/'] + SC + RT,
@@ -38,15 +42,19 @@ JOBS = {
     # scripts, the C# plugin), artifact/, glic/, research/, runs/ and the top-level gate scripts are run on the owner's machine
     'pqz': ['pqz-core/pqzl/', 'pqz-core/ffi/', 'pqz-core/stmt/', 'pqz-core/pqzh/', 'pqz-core/params/', 'pqz-core/fuzz/',
             'smartcontracts/vectors/pqz/'] + RT,
-    'zether-prover': ['clients/zether-prover/', 'smartcontracts/evm/', 'smartcontracts/vectors/'] + RT,
-    'ua-rs': ['clients/ua-rs/', 'smartcontracts/'] + RT,
-    'ua-cxx': ['clients/ua-cxx/', 'clients/ua-rs/', 'smartcontracts/vectors/'] + RT,
-    'ua-c': ['clients/ua-c/', 'clients/ua-rs/', 'smartcontracts/vectors/'] + RT,
-    'ua-qt': ['clients/ua-qt/', 'clients/ua-rs/', 'smartcontracts/vectors/', 'smartcontracts/near/', 'smartcontracts/algorand/'] + RT,
-    'ua-py': ['clients/ua-py/', 'smartcontracts/vectors/'],
-    'ua-go': ['clients/ua-go/', 'smartcontracts/vectors/', 'smartcontracts/evm/'],
-    'ua-cs': ['clients/ua-cs/', 'smartcontracts/vectors/'],
-    'ua-dart-frb': ['clients/ua-dart-frb/', 'clients/ua-rs/', 'smartcontracts/vectors/'] + RT,
+    'zether-prover': ['clients/zether-prover/', 'clients/scaas-ct/', 'smartcontracts/evm/', 'smartcontracts/vectors/'] + RT,
+    'ua-rs': UARS + ['smartcontracts/'],
+    'ua-cxx': ['clients/ua-cxx/', 'smartcontracts/vectors/'] + UARS,
+    'ua-c': ['clients/ua-c/', 'smartcontracts/vectors/'] + UARS,
+    'ua-qt': ['clients/ua-qt/', 'smartcontracts/vectors/', 'smartcontracts/near/', 'smartcontracts/algorand/'] + UARS,
+    # ua-py, ua-go, ua-cs load libscaas_ua_c (the wallet surface, MD-3): the job builds clients/ua-c first
+    'ua-py': ['clients/ua-py/', 'clients/ua-c/', 'smartcontracts/vectors/'] + UARS,
+    'ua-go': ['clients/ua-go/', 'clients/ua-c/', 'smartcontracts/vectors/', 'smartcontracts/evm/'] + UARS,
+    'ua-cs': ['clients/ua-cs/', 'clients/ua-c/', 'smartcontracts/vectors/'] + UARS,
+    'ua-dart-frb': ['clients/ua-dart-frb/', 'smartcontracts/vectors/'] + UARS,
+    # every lockfile over ua-rs (cargo tree --locked); cargo deny and cargo audit of ua-rs, ua-c, zether-prover (clients/ua-rs/deny.toml)
+    'ua-deps': ['clients/', 'pqz-core/ffi/', 'pqz-core/pqzl/', 'pqz-core/stmt/', 'pqz-core/pqzh/', 'scaas-node/Cargo.toml',
+                'scaas-node/Cargo.lock'] + RT,
     'ua-dart': ['clients/ua-dart/', 'smartcontracts/vectors/', 'smartcontracts/evm/'],
     # ARCH-POS-13 (ua-rs-sign T15c2): no test feature in a production artifact; every manifest that can reach scaas-ua,
     # zether-prover or pqz-ffi
@@ -110,7 +118,7 @@ def main():
 
 if __name__ == '__main__':
     assert all(needed(None).values())
-    assert needed(['pqz-core/pqzl/x.c']) == {j: j in ('pqz', 'docs') for j in JOBS}
+    assert needed(['pqz-core/fuzz/run.sh']) == {j: j in ('pqz', 'docs') for j in JOBS}
     for p in ('pqz-core/ffi/src/x.rs', 'pqz-core/stmt/src/x.rs', 'pqz-core/pqzh/ligero/src/x.rs', 'pqz-core/fuzz/run.sh'):
         assert needed([p])['pqz'], p
     for p in ('pqz-core/nethermind/chain/patch-chainspec.py', 'pqz-core/nethermind/Nethermind.Pqz/X.cs', 'pqz-core/gate.sh',
@@ -132,7 +140,7 @@ if __name__ == '__main__':
     assert set(GROUPS['ci-full-contracts']) == {f'contract-{f}' for f in
                                                 'evm soroban solana near algorand aptos sui cosmos ton'.split()}
     assert set(GROUPS['ci-full-clients']) == {'clientkeys', 'zether-prover', 'ua-rs', 'ua-cxx', 'ua-c', 'ua-qt', 'ua-py',
-                                              'ua-go', 'ua-cs', 'ua-dart-frb', 'ua-dart', 'test-features'}
+                                              'ua-go', 'ua-cs', 'ua-dart-frb', 'ua-dart', 'test-features', 'ua-deps'}
     assert all(needed(['docs/x.md'], ['ci-full']).values())
     assert needed(['docs/x.md'], ['bug', 'ci-full-node']) == needed(['docs/x.md'], ['ci-full-node'])  # other labels ignored
     assert needed([''], ['ci-full-pqz']) == {j: j in ('pqz', 'docs') for j in JOBS}  # manual run
@@ -148,7 +156,18 @@ if __name__ == '__main__':
         assert needed([p]) == {j: j == 'docs' or j in js for j in JOBS}, p
     assert {j for j, r in needed(['rust-toolchain.toml']).items() if r} == {
         'docs', 'contract-soroban', 'contract-solana', 'contract-near', 'contract-cosmos', 'node', 'pqz', 'zether-prover',
-        'ua-rs', 'ua-cxx', 'ua-c', 'ua-qt', 'ua-dart-frb', 'test-features'}
+        'ua-rs', 'ua-cxx', 'ua-c', 'ua-qt', 'ua-dart-frb', 'test-features', 'ua-py', 'ua-go', 'ua-cs', 'ua-deps'}
+    # ua-rs-sign T18: every job over ua-rs reads the crates ua-rs builds; the bindings over libscaas_ua_c read ua-c and ua-rs
+    over = ['ua-rs', 'ua-c', 'ua-cxx', 'ua-qt', 'ua-dart-frb', 'ua-py', 'ua-go', 'ua-cs']
+    for p in ('pqz-core/ffi/src/lib.rs', 'pqz-core/pqzl/rust/src/lib.rs', 'pqz-core/pqzl/x.c', 'pqz-core/stmt/src/lib.rs',
+              'pqz-core/pqzh/ligero/src/x.rs', 'pqz-core/params/sets/a', 'clients/zether-prover/src/api.rs',
+              'clients/scaas-ct/src/lib.rs'):
+        assert all(needed([p])[j] for j in over), p
+    for p in ('clients/ua-rs/src/lib.rs', 'clients/ua-c/src/lib.rs'):
+        assert all(needed([p])[j] for j in ('ua-py', 'ua-go', 'ua-cs', 'ua-deps')), p
+    assert not any(needed(['pqz-core/fuzz/run.sh'])[j] for j in over)  # a directory only the pqz job reads
+    assert needed(['clients/scaas-ct/src/lib.rs'])['zether-prover'] and needed(['scaas-node/Cargo.lock'])['ua-deps']
+    assert not needed(['scaas-node/src/main.rs'])['ua-deps'] and not needed(['clients/ua-py/x.py'])['ua-c']
     assert needed(['smartcontracts/evm/foundry.txt'])['contract-evm']  # a .txt outside runs/ counts
     assert needed(['scaas-node/runs/a.txt', 'scaas-node/src/x.rs'])['node']
     assert needed(['smartcontracts/evm/runs/a.txt'], ['ci-full-contracts'])['contract-evm']  # a label still forces

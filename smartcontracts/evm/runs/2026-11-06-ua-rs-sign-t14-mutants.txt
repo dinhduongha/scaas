@@ -40,3 +40,5 @@ killed     | M3 includeWitness on rawProveTransfer's allow-list | clients/ua-rs/
 killed     | M25 includeWitness on the words-form proveTransfer's allow-list (zether-prover state::allowed) | clients/zether-prover/src/state.rs | rc=101 | 1 failed: fields_outside_the_allow_list_are_refused | at 96bbe4e6 | rc=0, git diff --exit-code 0
 killed     | M22 ua-c: zether not in the default build | clients/ua-c/Cargo.toml | rc=1 | 1 failed: test_zether_feature_in_the_default_build | at 96bbe4e6 | rc=0, git diff --exit-code 0
 # T18 re-run: 3 killed, 0 survived, 0 not loaded (0 superseded; M3's two survivals closed by 96bbe4e6; the other mutants above stand, every string checked at HEAD)
+# T18 note (2026-11-07): M3 and M25 above ran on the tree of 96bbe4e6 before that commit's second hunk (the "key inside acc" row of another test, a_key_field_in_command_json_is_refused); the killing test, fields_outside_the_allow_list_are_refused, is the committed one. Not re-run: another task was building in this worktree.
+# T18 re-run: 3 killed, 0 survived, 0 not loaded (0 superseded; M3's two survivals closed by 96bbe4e6; the other mutants above stand, every string checked at HEAD)
