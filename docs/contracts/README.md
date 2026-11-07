@@ -184,16 +184,15 @@ token's own `MINTABLE` holders only, never a balance power; a hybrid's minted un
 
 <a id="unaudited"></a>
 
-No contract of this repository has had a third-party audit. Every value-holding contract family (Solidity, Move,
-Soroban, CosmWasm, Tact, Solana) needs an independent audit before it holds real funds; the factory registrar moves
-to a multisig before mainnet; real deployments are recorded in `deployments/<chain>.json`. The confidential-token
-families carry stronger gates, enforced in code:
+<a id="audit-labels"></a>Audit labels and rounds: [ARCH-POS-14](../decisions.md#ARCH-POS-14) (an AI audit, `AI-AUDITED` or `UNAUDITED`).
+Every value-holding contract family needs its AI audit round before it holds real funds; the factory registrar moves to a
+multisig before mainnet; real deployments are recorded in `deployments/<chain>.json`. The confidential-token families carry stronger gates, enforced in code:
 
 | Gate | Rule | Status |
 |---|---|---|
 | Classical Zether chain gate | none by chain id (owner ruling 2026-10-31): open on every chain with the BLS12-381 precompiles `0x0b`–`0x10`; a chain without them fails the verifier deploy and `initialize` (`VerifierUnsupportedOnThisChain`); `OpenFactory.kindEnabled` starts `false` for kinds 2–3 (`setKindEnabled`, registrar; plan 5g-Z2), enabling is an admin act per chain; `createToken` of kinds 2–3 reverts when the kind is off, `createTokenUnregistered` always; never on Hedera ([CTR-ZTH-52](zether.md#CTR-ZTH-52)) | **BUILT** |
 | Production curve for classical Zether | bn254 vs BLS12-381; BLS12-381 is more secure and **not** cheaper ([CTR-ZTH-32](zether.md#CTR-ZTH-32)) | open |
-| Cryptographic audit | independent audit of the Σ-Bulletproofs protocol, the transcript, the inner-product argument and the registry PoP **before** production funds | open |
+| Cryptographic audit | AI audit ([audit labels](#audit-labels)) of the Σ-Bulletproofs protocol, the transcript, the inner-product argument and the registry PoP **before** production funds | open |
 | Gas before public chains | the bn254 transfer (3.33 M execution gas) exceeds the 2.5 M per-transfer kill criterion; optimization is required before a public chain | open |
 | PQ Zether gate | no chain-id allowlist (owner ruling 2026-10-31): the constructor / `initialize` precompile self-test on any chain id; `OpenFactory.kindEnabled` starts `false` for kinds 4–5; release gates: **G-LIC** (licences/patents) and audit ([CTR-PQZ-01](pq-zero-knowledge.md#CTR-PQZ-01)) | **SPECIFIED** |
 | Clients | every Zether and PQ Zether contract carries **UNAUDITED** in its NatSpec; client chain/token screens show an UNAUDITED warning | **BUILT** (NatSpec) |

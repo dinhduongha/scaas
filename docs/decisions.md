@@ -267,6 +267,24 @@ only named chain locations with the words that layer supplies, and offers no bar
 account keys are not built while the in-quorum oracle is open; `msig` holders use option (A), the operator, meanwhile.
 **Source.** Owner ruling 2026-11-06; [research/pqz-threshold-decrypt-prove.md](research/pqz-threshold-decrypt-prove.md) §12.1, §12.5; the code audit of decrypt entry points (2026-11-06, done; the fix spec and the library rules are on branch `ua-rs-sign`).
 
+<a id="ARCH-POS-14"></a>
+### ARCH-POS-14 — The audit is an AI audit; labels AI-AUDITED and UNAUDITED
+- old: — · status: current · owner: yes · date: 2026-11-08 · normative: decisions.md#ARCH-POS-14 · superseded-by: —
+
+**Rule.** Owner 2026-11-08: the audit of this repository is an AI audit by Fable, Opus, GPT-6.1-Sol and Gemini 4 Argon, named as such, never called independent or external; it is enough for the cryptographic-audit gate, including the one before SCaaS mainnet 22776. Code an AI audit round covers at its current commit carries `AI-AUDITED (Fable, Opus, GPT-6.1-Sol, Gemini 4 Argon)` with the round and commit; everything else carries `UNAUDITED`; code changed after its round is `UNAUDITED` again; a round's last step relabels what it covered. The rounds are listed once, here:
+
+<a id="audit-rounds"></a>
+
+| Round | Scope | Reviewers (as run) | Target | Status |
+|---|---|---|---|---|
+| Core review 2026-10-25 | `pqz-core`: part 0 (design) to part 4 (transcript and code) (`pqz-core/research/code-review-2026-10-25/`) | Codex, agy, Claude workflow; Fable on part 0 | `008e196c` | done; the part-0 fixes a + b merged. Files changed since `008e196c` are `UNAUDITED` |
+| Contracts audit (EVM) | every EVM contract on `main` after the EVM freeze (its plan under `research/contracts-audit-2026-11/`) | Codex, agy, Claude workflow, Fable | — | PLANNED |
+| `ua-rs-sign` T21 | `clients/ua-rs`, `ua-c` and the bindings, at audit grade | Codex, agy, Claude lenses, Fable | the pushed SHA | PLANNED |
+
+**Why.** Owner 2026-11-02: an AI audit is better than a human one; a label tied to a round and a commit cannot claim more than was reviewed.
+**Cost if wrong.** A label on code its round did not cover would overstate; the commit in the label and the "changed after its round" rule prevent it.
+**Source.** owner 2026-11-08 (chat): "crypto là AI AUDITED (Fable, Opus, GPT-6.1-Sol, Gemini 4 Argon)", "NOT YET AI-AUDITED => UNAUDITED", the 22776 gate "đủ".
+
 ### ARCH-POS-80 — EVM-only, META-only first scope
 - old: R1 · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: NET-ALL-02, CTR-ZTH-01, CTR-ZTH-18, CTR-ZTH-19, CTR-UA-02, CTR-UA-16, CTR-UA-22, INT-ERP-11, ARCH-POS-02
 
@@ -3175,6 +3193,8 @@ Change (2026-10-19): controller proposal (owner may override) — **on-chain rev
 **Why.** The owner wants full classical Zether now (identity visible, amounts hidden), built and unaudited, with bn254 and BLS12-381 verifiers (BLS12-381 only since UA-6, CTR-ZTH-32); until 2026-10-31 it was gated to dev chains (CTR-ZTH-02), since the owner ruling of 2026-10-31 it is open on every chain with the curve's precompiles (CTR-ZTH-52). The curve is a property of each token (chosen by its verifier address), not a system setting: bn254 uses the Byzantium (2017) precompiles 0x06/0x07/0x08 with 64-byte G1 points; BLS12-381 needs the Prague precompiles 0x0b to 0x10 and 128-byte G1 points (measured with `eth_call` to 0x0b on Gnosis). rollOver is `PUBLIC` by default and `OWNER_ONLY` by opt-in, per `(account, token)`: owner signing protects only if it covers every path that advances the account sequence, so per account `accSeq[a]` advances without the owner's consent exactly when `mode[a] == PUBLIC`. The `PUBLIC` branch is safe because rollOver is a no-op when `pendingSeq[a] == lastRolledPendingSeq[a]`, so a griefer must fund the victim before each attempt.
 **Cost if wrong.** Unaudited cryptography on a public chain could mint; the dev-chain allowlist (CTR-ZTH-02) prevented that until the owner opened classical Zether on every chain (CTR-ZTH-52), so the guard now is the per-chain kind gate `setKindEnabled` (an admin act) and the UNAUDITED warning.
 **Source.** `history/specs/2026-10-03-blockchain-round3-design.md:546`, `research/_USER-DECISIONS.md:463`, `research/_USER-DECISIONS.md:483`, `research/_USER-DECISIONS.md:508`, `research/_USER-DECISIONS.md:537`, `research/_USER-DECISIONS.md:691`, `research/_USER-DECISIONS.md:860`, `research/_USER-DECISIONS.md:1060`, `research/_USER-DECISIONS.md:1093`, `research/_USER-DECISIONS.md:2630`, `research/_USER-DECISIONS.md:2638`, `research/_USER-DECISIONS.md:2653`, `research/_USER-DECISIONS.md:859`, `research/_USER-DECISIONS.md:864`
+
+Change (2026-11-08, owner, [ARCH-POS-14](#ARCH-POS-14)): `UNAUDITED` stays the label of code no AI audit round covers at its current commit; code a round covers carries `AI-AUDITED (Fable, Opus, GPT-6.1-Sol, Gemini 4 Argon)` with the round and commit; the audit gate is met by an AI audit, 22776 included.
 
 ### CTR-ZTH-02 — Classical Zether gated to dev chains 31337/1337
 - old: RS2-1 · status: superseded · owner: no · date: 2026-10-07 · normative: — · superseded-by: CTR-ZTH-52
