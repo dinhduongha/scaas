@@ -4,8 +4,8 @@
 of §6 answered as recommended). The **extension** (§8, an extensible catalogue: generic classes and kinds, `createInstance`,
 `PqChat` as class 3) is **approved by the owner 2026-11-07** (direction first, then Q7–Q12 of §8.11 answered as
 recommended, among them the one change to the approved index: Q12, class and kind ids `uint16`, written into §2 below).
-Nothing is built yet; the plan tasks T67–T70 of [`2026-11-04-ua-mtx-merge.md`](../plans/2026-11-04-ua-mtx-merge.md) start after 3g (T57).
-**Place (owner 2026-11-07):** after 3g (T51–T57), before 3f: work order 3e → 3g → factory index → 3f → 3h → 3c. Branch
+Nothing is built yet; the plan tasks T67–T70 of [`2026-11-04-ua-mtx-merge.md`](../plans/2026-11-04-ua-mtx-merge.md) start after T66b.
+**Place (owner 2026-11-07):** after T66b, before 3c: work order 3e → 3g → 3f → 3h → T66b → factory index + chain-neutral → 3c. Branch
 `ua-mtx-merge`.
 **Same addresses on every chain (owner decisions A and B, 2026-11-07):** CREATE3 on every creation path, chain-neutral
 releases, the chain values written into each instance by the factory: spec
@@ -466,7 +466,7 @@ the enabled check dropped; the `usableFrom` check dropped; `ClassReserved` accep
 | T69 | docs share | + CTR-TOK-28 (class table, the generic path, §8.5's two lists), a PLANNED `factory_class` guard line in `docs/node/job-api.md` | 0.5 → 1 |
 | | **Total** | | **3 → 6** |
 
-Order T67 → T70 → T68; T69 beside, lands in T19; T44 (3f) now depends on T69 after T70. `PqChat`'s own release is 3c
+Order T67 → T70 → T68; T69 beside, lands in T19; T67 depends on T66b (owner 2026-11-07). `PqChat`'s own release is 3c
 (PC0); its PF1 is dropped (§8.8).
 
 ### 8.11 Questions for the owner (each with a recommendation)
