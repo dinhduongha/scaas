@@ -1,0 +1,15 @@
+# ua-mtx-merge T53 gate summary (full output in git-ignored .log files, not committed)
+# T53 (group 3g, pqz-key-versions spec §3.6 KV-11, §10 row 8): the PQZ disclosure names the key version it checks
+# (PRECOMPILE form; ATTESTED is 3f's), the e2e script's versioned API and the rotation scenario. UNAUDITED.
+# Base: 839f2675. Commits: 455f3e04 (implementation; no new legacy copies: the T52 copies cover PqzCore / PqzLayer /
+# PqzViewLib), this one (summary, mutants table).
+step | commit | rc | counts
+t53-red | 839f2675 + tests only | 1 | compile error: disclosureStatement / verifyTransferAmount take no keyVersion (test/pqz/PqzKeyVersionsDisclosure.t.sol)
+t53-green | 455f3e04 | 0 | test/pqz/PqzKeyVersionsDisclosure.t.sol 2 passed (test_disclosure_right, test_disclosure_unknown)
+t53-forge-touched | 455f3e04 | 0 | test/{pqz,as,research,merge}: 525 passed 0 failed 9 skipped, 69 suites (default set n2304-kmax4096)
+t53-size-gate | 455f3e04 | 0 | 0 errors; above 65,536 B: none; kind 13 64,922 -> 64,996 B (init 67,760 -> 67,834), owner's size window, no _above64KiB row
+t53-mutants | 455f3e04 | 1 | 1 of 1 killed (runs/2026-11-07-ua-mtx-merge-t53-mutants.txt): M-T7 disclosure checks the current key; git diff --exit-code -- src clean after
+t53-e2e-self-test | 455f3e04 | - | not run green here: e2e.py --self-test reads typed_ops.json's PQZ rows (keyVersion, UARollOver@pqz), regenerated in T54; runs there
+t53-rotation-chain-run | - | - | NOT RUN: §6c needs a local chain with the PQZ precompile (scaas/nethermind-pqz image) and the pqz_prove ffi build; the scenario code exists, untested on a chain
+#
+# at-set (four sets) for T53's src change runs at the T54 tip together with n2048-kmax1024's test_pqzhN2048FitsBothPaths.
