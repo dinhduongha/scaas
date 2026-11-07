@@ -21,6 +21,8 @@ QT=${QT:-$HOME/usr/Qt/6.12.0/gcc_64}
 export CAPPED_SLOTS=${CAPPED_SLOTS:-2} CAPPED_MEM=${CAPPED_MEM:-3G}
 
 run_step() { # the command of one step (runs in a subshell, rc = the step's rc)
+  # OWN_STEPS: steps of this runner a wrapper's extra_step runs its own way (ua-rs-sign T20: the CI cells of this round)
+  case " ${OWN_STEPS:-} " in *" $1 "*) extra_step "$1"; return ;; esac
   case $1 in
     forge-isolate) cd smartcontracts/evm && ../../scripts/capped forge test --isolate --match-path 'test/ua/{UAGas,UARegistryGroups}.t.sol' ;;
     forge-n[0-9]*-kmax[0-9]*) scripts/capped smartcontracts/evm/script/pqz/at-set.sh "${1#forge-}" test ;; # other forge-* steps: extra_step
