@@ -147,6 +147,8 @@ journal-before-broadcast local, without an ERP round trip.
 schedule bounds the delay.
 **Source.** [history/specs/2026-10-06-node-independence-design.md](history/specs/2026-10-06-node-independence-design.md) line 109; [history/SCaaS-2026-10-07.md](history/SCaaS-2026-10-07.md) line 37.
 
+Change (2026-11-08, owner, status: decided, PLANNED for node round P4): "the node never calls a client" gains one exception, the optional doorbell of [NODE-IDX-09](node/indexer-feeds.md#NODE-IDX-09): a signed ping per API key with no job or event data, after which the client reads the feeds. Data webhooks and callbacks stay refused; the feeds stay the only source of truth.
+
 <a id="ARCH-POS-06"></a>
 ### ARCH-POS-06 — Three use cases from the first wave
 - old: UD:§1:use-cases, UD:§15:D12, canon:D12 · status: current · owner: yes · date: 2026-08-30 · normative: decisions.md#ARCH-POS-06 · superseded-by: —
@@ -845,6 +847,14 @@ It said: six-member Family enum.
 **Why.** History expiry drops logs; without a keeper a copy of an `msig` record has no bytes to send.
 **Cost if wrong.** A copy needs another archive of the logs, or the members sign again.
 **Source.** owner 2026-11-03, relayed by the coordinator; spec `superpowers/specs/2026-11-02-msig-nested.md` N15.
+
+### NODE-IDX-09 — Doorbell: a signed, content-free ping per API key
+- old: — · status: current · owner: yes · date: 2026-11-08 · normative: node/indexer-feeds.md#NODE-IDX-09 · superseded-by: —
+
+**Rule.** Owner 2026-11-08: an API key may register one `https` URL; when a feed of its namespace gains items the node sends a ping `{namespace, feed, head_seq, at}` signed by HMAC with that key, carrying no job or event data; the client then reads `/v1/jobs` and `/v1/events` from its cursor. The feeds stay the only source of truth. Outbound guard fails closed: `https` only, no loopback, link-local, private or multicast address after DNS, no redirects, short timeouts, a per-namespace rate limit, its own worker. PLANNED (node round P4).
+**Why.** Clients get low latency without a polling worker, while a lost ping loses nothing and a ping leaks nothing; the guard keeps a client's URL from reaching the operator's internal network (SSRF).
+**Cost if wrong.** Planned. Without the guard, a tenant could make the node call internal services; with data in the ping, a wrong URL would leak job state.
+**Source.** owner 2026-11-08 (chat), Change on ARCH-POS-05.
 
 ### NODE-IDX-80 — Quorum on one block hash
 - old: R11(quorum) · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: NODE-IDX-01
