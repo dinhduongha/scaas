@@ -1,0 +1,5 @@
+plus-zero-tax-slot-read | test_plusZero_mtxTransfer_wrappedZether, test_plusZero_uaExecuteTransfer_normalZether, test_plusZero_uaExecuteTransfer_wrappedZether | 1
+inv-paymentmeta-skipped | invariant_J1_payMetaBeforeSettled | 1
+inv-tax-leg-from-payee | invariant_J1_payMetaBeforeSettled, invariant_J2_oneLanding, invariant_J3_books, invariant_J4_rate, invariant_J5_taxLeg, invariant_supply | 1
+inv-payee-credited-gross | invariant_J1_payMetaBeforeSettled, invariant_J2_oneLanding, invariant_J3_books, invariant_J4_rate, invariant_J5_taxLeg, invariant_supply | 1
+inv-rate-rises-at-once | invariant_J4_rate | 1

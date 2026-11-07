@@ -130,11 +130,25 @@ MUTANTS = {
     "metapayid-old-tag": ("t41", "../../clients/clientkeys/src/evm.js",
                           "utf8ToBytes('scaas.pay.meta.v2')", "utf8ToBytes('scaas.pay.meta')",
                           "node:test/paymeta.test.js test/paytax.test.js"),
+    # T43: spec §14's "+0" row (a tax slot read in the base `_uaMove`, J6 / J7) and the invariant suite's own kills (J1, J3, J4)
+    "plus-zero-tax-slot-read": ("t43", "src/metatx/ERC20MetaTx.sol", "        _regMove(from, to, value);\n        _poolMove(from, to, value);",
+                                "        _regMove(from, to, value);\n        assembly { pop(sload(0xb2c09f76d73c73fd19cb676c5bc2ea2b05d0674d12ed1b6dc6508457a3913d05)) }\n"
+                                "        _poolMove(from, to, value);",
+                                "test/{governance/PlusZero,as/confidential/TaxConfidential}.t.sol"),
+    "inv-paymentmeta-skipped": ("t43", "src/metatx/MtxPipelineLib.sol",
+                                "        emit IMetaTokenV2.PaymentMeta(id, m.payNo, m.schema, m.body);", "",
+                                "test/as/invariant/PayTaxInvariants.t.sol"),
+    "inv-tax-leg-from-payee": ("t43", "src/metatx/ERC20MetaTx.sol", "if (withheld != 0) _uaMove(from, withheldTo, withheld);",
+                               "if (withheld != 0) _uaMove(to, withheldTo, withheld);", "test/as/invariant/PayTaxInvariants.t.sol"),
+    "inv-payee-credited-gross": ("t43", "src/metatx/ERC20MetaTx.sol", "_uaMove(from, to, value - withheld);", "_uaMove(from, to, value);",
+                                 "test/as/invariant/PayTaxInvariants.t.sol"),
+    "inv-rate-rises-at-once": ("t43", "src/regulated/RegulatedLib.sol", "return t.eta != 0 && block.timestamp >= t.eta",
+                               "return t.eta != 0", "test/as/invariant/PayTaxInvariants.t.sol"),
 }
 
 
 def red_tests(log):
-    forge = re.findall(r"\[FAIL[^\]]*\] (\w+)\(", log)
+    forge = re.findall(r"\[FAIL[^\]]*\] (\w+)\(", log) + re.findall(r"\[FAIL[^\]]*\] (invariant_\w+)$", log, re.M)
     node = re.findall(r"^\u2716 (.+?) \(\d", log, re.M)  # node --test: "✖ <name> (<ms>)"
     return sorted(set(forge) | set(n for n in node if n != "failing tests:"))
 
