@@ -846,20 +846,20 @@ pub fn call_with_key<Rn: RngCore + CryptoRng>(cmd: &str, v: &Value, key: &Zether
 fn keyless(cmd: &str, v: &Value) -> R<Value> {
     Ok(match cmd {
         "envelope" => {
-            let (chain, uid, token) = (num(&v, "chainId")?, fixed::<32>(&v, "chainUid")?, fixed::<20>(&v, "token")?);
-            let m = meta(&v)?;
+            let (chain, uid, token) = (num(v, "chainId")?, fixed::<32>(v, "chainUid")?, fixed::<20>(v, "token")?);
+            let m = meta(v)?;
             json!({"binding": hx(&envelope::envelope_binding(chain, &uid, &token, &m)),
                    "digest": hx(&envelope::digest(chain, &uid, &token, &m))})
         }
         // typed-signing C7: the typed digest of any Zether op (`typed::OPS`: transfers, unshield, roll-overs, owner ops, ...);
         // `ownerAuth` signs the owner ones, the subject's ECDSA / UA signature the rest. `message` is the struct, named fields.
         "typedDigest" => {
-            let op = get(&v, "op")?.as_str().ok_or("`op` must be a string")?;
-            typed::typed_digest(op, num(&v, "chainId")?, &fixed::<32>(&v, "chainUid")?, &fixed::<20>(&v, "token")?, get(&v, "message")?)?
+            let op = get(v, "op")?.as_str().ok_or("`op` must be a string")?;
+            typed::typed_digest(op, num(v, "chainId")?, &fixed::<32>(v, "chainUid")?, &fixed::<20>(v, "token")?, get(v, "message")?)?
         }
         // typed-signing C7: a prover build as a named relayed entry (`mtxConfidentialTransferSingle(Envelope, ZetherSingle, proof, sig)`, ...):
         // the typed `message`, the `digest` the wallet signs and, with `sig`, the `calldata`. The generic `envelope` path stays.
-        "namedCall" => typed::named_call(&v)?,
+        "namedCall" => typed::named_call(v)?,
         _ => return Err(format!("unknown command `{cmd}`")),
     })
 }

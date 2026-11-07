@@ -662,7 +662,7 @@ pub fn open_memo<C: ZCurve>(
     from_ua: &[u8; 32],
     memo: &[u8],
 ) -> Result<([u8; 16], bool, Vec<MemoLeg>), ZError> {
-    if memo.len() < memo_len(1) || (memo.len() - 17) % 40 != 0 {
+    if memo.len() < memo_len(1) || !(memo.len() - 17).is_multiple_of(40) {
         return Err(ZError::BadStatement("memo length"));
     }
     let salt: [u8; 16] = memo[..16].try_into().unwrap();
@@ -1018,7 +1018,7 @@ impl<C: ZCurve> MultiTransferStatement<C> {
         if self.legs.is_empty() || self.legs.len() > MAX_RECIPIENTS {
             return Err(ZError::BadStatement("recipient count"));
         }
-        if h.beneficiary == [0u8; 32] && h.fee % self.legs.len() as u64 != 0 {
+        if h.beneficiary == [0u8; 32] && !h.fee.is_multiple_of(self.legs.len() as u64) {
             return Err(ZError::BadStatement("fee without beneficiary is not M · decoyFee"));
         }
         if (h.memo_hash != [0u8; 32]) != (self.mode == TransferMode::Hash) {
