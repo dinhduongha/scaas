@@ -138,7 +138,9 @@ step after the proof check, `debitRec[from][k]` with `k` the counter before the 
 
 - `prevBlob` = `acct[from][keyVersion].accBlob` before the overwrite (C2). `p` = the debit's `p`. `Δp = p − p_prev`, with `p_prev`
   the `p` of the same account's previous debit (0 for its first): `Δp ≤ K_MAX − 2 = 65,534` at `n2816-kmax65536` by the units rule,
-  so it fits 16 bits at every set. `proofStore` = the token's setting at this debit (§4.1). `prevCounter` = the old `lastDebit − 1`.
+  so it fits 16 bits at every set (owner 2026-11-07: 16 bits kept; T58 adds a check generated from each set's `K_MAX` that
+  `K_MAX − 2 ≤ 65,535`, so a future set beyond it fails the build instead of wrapping). It counts only the entries one debit
+  absorbs; the queue index `p` itself is 64 bits, so an account may receive any number of credits. `proofStore` = the token's setting at this debit (§4.1). `prevCounter` = the old `lastDebit − 1`.
   `shieldIn < 2^62` (`maxShielded`); `keyVersion` the 3g version debited.
 - Written once, never changed. Storage: `mapping(bytes32 => mapping(uint64 => DebitRecord)) debitRec`, `struct DebitRecord {
   uint256 w0; uint256 w1; }`, appended to `PqzStorage` (§6).
