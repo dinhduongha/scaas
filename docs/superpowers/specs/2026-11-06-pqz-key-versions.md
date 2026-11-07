@@ -626,7 +626,7 @@ No question is open. Q1–Q4 of the first draft were answered on 2026-11-06 as r
 **Questions from the build, answered by the owner 2026-11-07 as recommended:** (B1) the rollover does not read the key itself
 and relies on the prepare's key check, to stay under the `n2560-kmax16384` gas bound: KV-10's wording changes accordingly (T52
 `612971bd`); (B2) `PQZ_KEY_ROTATED`'s "since intake" is a fixed look-back of 10,000 blocks until the node has its own queue (the
-pull path gives no intake block; `submit.rs`); (B3) node jobs name the field `keyVersion`, as the struct does (like `fromUA`), not
+pull path gives no intake block; `submit.rs`); the owner keeps it as is, no interim change; (B3) node jobs name the field `keyVersion`, as the struct does (like `fromUA`), not
 `key_version`; (B4) `PQZ_KEY_ROTATION_PENDING` is reported `dead`: the debit is refused at intake, before simulation, so nothing can
 land.
 
