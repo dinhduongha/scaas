@@ -13,6 +13,8 @@ import {IMetaTokenV2} from "../../src/metatx/IMetaTokenV2.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {WrappedPqzToken} from "../../src/pqz/WrappedPqzToken.sol";
 import {WrappedZetherToken} from "../../src/zether/WrappedZetherToken.sol";
+import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
+import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {plainEnv, Catalogue, pqzEnv} from "../helpers/Catalogue.sol";
 import {PqzFixture} from "../pqz/helpers/PqzFixture.sol";
@@ -123,6 +125,28 @@ contract GovGasNormal is GovRows {
         c.features = 3; // PAYABLE | MINTABLE
         c.lockedFeatures = 2; // no owner: the minter survives creation on a locked bit (B-06)
         c.roles.minter = nid(G_MINTER);
+    }
+}
+
+/// Factory index spec §3 (plan T67): `createDex` beside `createToken`, steady state (the creator and the owner each have a
+/// DEX already, so the row pays the record and the list elements, not a first list length).
+contract GovGasDex is GovRows {
+    bytes32 constant UID = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464;
+    OpenFactory f;
+
+    function setUp() public {
+        vm.warp(1_800_000_000);
+        f = new OpenFactory(address(this), UID, 0);
+        Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
+        f.createDex(1, abi.encode(_dexConfig()), "d0");
+    }
+
+    function _dexConfig() internal pure returns (ISCaaSDex.DexConfig memory) {
+        return ISCaaSDex.DexConfig(nid(G_TO), 0, G_TO, false, 0, address(0));
+    }
+
+    function test_createDex() public {
+        _row("SCaaSDex createDex", address(f), address(this), abi.encodeCall(OpenFactory.createDex, (1, abi.encode(_dexConfig()), "d1")));
     }
 }
 

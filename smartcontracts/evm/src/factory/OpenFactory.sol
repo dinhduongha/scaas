@@ -21,14 +21,23 @@ import {SigCheck} from "../common/SigCheck.sol";
 ///         calls `initialize(creator, version, initArgs)` in the same call; `initArgs` and every kind-specific check
 ///         (flags, legs, the Zether / PQZ verifier and chain gates) are the implementation's. The registrar's key is the
 ///         trust root for code (a multisig / UA msig before mainnet). **Zether is UNAUDITED.**
+///         The index (CTR-TOK-27, factory index spec §2): one record per created contract and three append-only lists per
+///         class (all, by owner UA at creation, by creator), written in the creating call, read by paged views.
 contract OpenFactory is IOpenFactory {
-    struct Info {
-        address creator;
-        TokenKind kind;
+    /// @dev `Created` without `addr` (the key), three slots: creator, owner, class ‖ kind ‖ version ‖ block ‖ time.
+    struct Rec {
+        bytes32 creatorId;
+        bytes32 ownerUA;
+        uint16 contractClass;
+        uint16 kind;
         uint64 version;
-        bool exists;
+        uint64 createdBlock;
+        uint64 createdAt;
     }
 
+    uint16 public constant CLASS_TOKEN = 1;
+    uint16 public constant CLASS_DEX = 2;
+    uint256 public constant MAX_PAGE = 100;
     uint256 internal constant MAX_LEGS = 8;
     uint8 public constant DEX_DOMAIN = type(uint8).max;
     /// @dev The longest notice period (review 5g-Z2 P2-4): the period is immutable, and near `2^64` every
@@ -48,10 +57,13 @@ contract OpenFactory is IOpenFactory {
     uint64 private _latestDex;
     /// @dev Bit `kind` set = creation enabled; the plain kinds start on.
     uint256 private _enabled = 3;
-    mapping(address => Info) private _info;
+    /// @dev Slot 8, where the record's predecessor `_info` was (the Zether state vectors read it).
+    mapping(address => Rec) private _rec; // contractClass 0 = not made here
     mapping(address => mapping(address => address[])) private _wrappers;
     mapping(address => address[]) private _byUnderlying;
-    mapping(address => uint64) private _dexVersion; // 0 = not a DEX made here
+    mapping(uint16 => address[]) private _all;
+    mapping(bytes32 => mapping(uint16 => address[])) private _byOwner; // never for ownerUA 0
+    mapping(bytes32 => mapping(uint16 => address[])) private _byCreator;
 
     /// @param noticePeriod_ seconds between a release's deployment and its first use (7622: minutes, 22776: days).
     constructor(address registrar_, bytes32 chainUid_, uint64 noticePeriod_) {
@@ -168,17 +180,23 @@ contract OpenFactory is IOpenFactory {
 
     // ------------------------------------------------------------------ provenance
 
-    function isToken(address token) external view returns (bool) { return _info[token].exists; }
+    function isToken(address token) external view returns (bool) { return _rec[token].contractClass == CLASS_TOKEN; }
 
     function isRegisteredToken(address token) external view returns (bool) {
-        return _info[token].exists && _info[token].version != 0;
+        Rec storage r = _rec[token];
+        return r.contractClass == CLASS_TOKEN && r.version != 0;
     }
 
-    function creatorOf(address token) external view returns (address) { return _info[token].creator; }
+    /// @notice A token's creator as an address: its native `creatorId`; 0 for a derived one (`infoOf`) or a non-token.
+    function creatorOf(address token) external view returns (address) {
+        Rec storage r = _rec[token];
+        bytes32 c = r.creatorId;
+        return r.contractClass == CLASS_TOKEN && uint256(c) >> 160 == 0 ? address(uint160(uint256(c))) : address(0);
+    }
 
     function versionOf(address token) external view returns (TokenKind kind, uint64 version) {
-        Info storage i = _info[token];
-        return (i.kind, i.version);
+        Rec storage r = _rec[token];
+        if (r.contractClass == CLASS_TOKEN) return (TokenKind(r.kind), r.version);
     }
 
     function getWrapper(address creator, address underlying) external view returns (address) {
@@ -248,16 +266,42 @@ contract OpenFactory is IOpenFactory {
         if (block.timestamp < r.usableFrom) revert DexVersionNotYetUsable(version, r.usableFrom);
         bytes32 s = _salt(msg.sender, salt);
         address predicted = Clones.predictDeterministicAddress(impl, s);
-        if (predicted.code.length != 0 || _dexVersion[predicted] != 0) revert SaltAlreadyUsed(predicted);
+        if (predicted.code.length != 0 || _rec[predicted].contractClass != 0) revert SaltAlreadyUsed(predicted);
         dex = Clones.cloneDeterministic(impl, s);
         ISCaaSDex(dex).initialize(msg.sender, version, initArgs);
-        _dexVersion[dex] = version;
-        emit DexCreated(dex, msg.sender, version, impl, IGovernance(dex).owner());
+        bytes32 owner = IGovernance(dex).owner();
+        _index(dex, owner, CLASS_DEX, 0, version);
+        emit DexCreated(dex, msg.sender, version, impl, owner);
     }
 
-    function isDex(address dex) external view returns (bool) { return _dexVersion[dex] != 0; }
+    function isDex(address dex) external view returns (bool) { return _rec[dex].contractClass == CLASS_DEX; }
 
-    function dexVersionOf(address dex) external view returns (uint64) { return _dexVersion[dex]; }
+    function dexVersionOf(address dex) external view returns (uint64) {
+        Rec storage r = _rec[dex];
+        return r.contractClass == CLASS_DEX ? r.version : 0;
+    }
+
+    // ------------------------------------------------------------------ the index (CTR-TOK-27)
+
+    function infoOf(address c) external view returns (Created memory) { return _created(c); }
+
+    function contractsPage(uint16 contractClass, uint256 from, uint256 n)
+        external view returns (Created[] memory, uint256)
+    {
+        return _page(_all[_known(contractClass)], from, n);
+    }
+
+    function contractsOfOwner(bytes32 ownerUA, uint16 contractClass, uint256 from, uint256 n)
+        external view returns (Created[] memory, uint256)
+    {
+        return _page(_byOwner[ownerUA][_known(contractClass)], from, n);
+    }
+
+    function contractsOfCreator(bytes32 creatorId, uint16 contractClass, uint256 from, uint256 n)
+        external view returns (Created[] memory, uint256)
+    {
+        return _page(_byCreator[creatorId][_known(contractClass)], from, n);
+    }
 
     // ------------------------------------------------------------------ internal
 
@@ -317,6 +361,39 @@ contract OpenFactory is IOpenFactory {
         if (!ok || bytes32(got) != chainUid) revert ChainUidMismatch(chainUid, ok ? bytes32(got) : bytes32(0));
     }
 
+    /// @dev The record of a creation (after `initialize`, so `ownerUA` is the contract's own answer) and the three pushes;
+    ///      `ownerUA` 0 goes to no owner list. The creator is the direct caller.
+    function _index(address c, bytes32 ownerUA, uint16 contractClass, uint16 kind, uint64 version) private {
+        bytes32 creatorId = bytes32(uint256(uint160(msg.sender)));
+        _rec[c] = Rec(creatorId, ownerUA, contractClass, kind, version, uint64(block.number), uint64(block.timestamp));
+        _all[contractClass].push(c);
+        if (ownerUA != 0) _byOwner[ownerUA][contractClass].push(c);
+        _byCreator[creatorId][contractClass].push(c);
+    }
+
+    function _created(address c) private view returns (Created memory x) {
+        Rec storage r = _rec[c];
+        if (r.contractClass == 0) return x;
+        return Created(c, r.creatorId, r.ownerUA, r.contractClass, r.kind, r.version, r.createdBlock, r.createdAt);
+    }
+
+    /// @dev `contractClass` if this factory makes it, else `ClassUnknown`.
+    function _known(uint16 contractClass) private pure returns (uint16) {
+        if (contractClass != CLASS_TOKEN && contractClass != CLASS_DEX) revert ClassUnknown(contractClass);
+        return contractClass;
+    }
+
+    function _page(address[] storage l, uint256 from, uint256 n)
+        private view returns (Created[] memory page, uint256 total)
+    {
+        if (n > MAX_PAGE) revert PageTooLarge(n);
+        total = l.length;
+        uint256 m = from >= total ? 0 : total - from;
+        if (m > n) m = n;
+        page = new Created[](m);
+        for (uint256 i; i < m; ++i) page[i] = _created(l[from + i]);
+    }
+
     function _word(address target, bytes4 sel) private view returns (bool ok, uint256 w) {
         bytes memory ret;
         (ok, ret) = target.staticcall(abi.encodeWithSelector(sel));
@@ -328,8 +405,8 @@ contract OpenFactory is IOpenFactory {
         return keccak256(abi.encode(creator, salt));
     }
 
-    /// @dev The generic gate (the kind enabled), the clone, `initialize` with the creator's `initArgs`, then the index
-    ///      and the event from the token's own views.
+    /// @dev The generic gate (the kind enabled), the clone, `initialize` with the creator's `initArgs`, then the record and
+    ///      its lists, the leg index and the event from the token's own views (`owner()` read once, after `initialize`).
     function _create(TokenKind kind, uint64 version, address impl, bytes calldata initArgs, bytes32 salt)
         private returns (address token)
     {
@@ -337,17 +414,18 @@ contract OpenFactory is IOpenFactory {
         bytes32 s = _salt(msg.sender, salt);
         address predicted = Clones.predictDeterministicAddress(impl, s);
         // a registered clone is never deleted; an unregistered implementation could self-destruct its clone in `initialize`
-        if (_info[predicted].exists || predicted.code.length != 0) revert SaltAlreadyUsed(predicted);
+        if (_rec[predicted].contractClass != 0 || predicted.code.length != 0) revert SaltAlreadyUsed(predicted);
         token = Clones.cloneDeterministic(impl, s);
         IFactoryToken(token).initialize(msg.sender, version, initArgs);
-        _info[token] = Info({creator: msg.sender, kind: kind, version: version, exists: true});
+        IGovernance t = IGovernance(token);
+        bytes32 owner = t.owner();
+        _index(token, owner, CLASS_TOKEN, uint16(kind), version);
         address[] memory us = IFactoryToken(token).underlyings();
         if (us.length > MAX_LEGS) revert UnderlyingCountInvalid(us.length);
         for (uint256 i; i < us.length; ++i) {
             _wrappers[msg.sender][us[i]].push(token);
             _byUnderlying[us[i]].push(token);
         }
-        IGovernance t = IGovernance(token);
-        emit TokenCreated(token, msg.sender, kind, version, impl, t.features(), t.lockedFeatures(), t.owner(), us);
+        emit TokenCreated(token, msg.sender, kind, version, impl, t.features(), t.lockedFeatures(), owner, us);
     }
 }

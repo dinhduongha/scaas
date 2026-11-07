@@ -42,6 +42,23 @@ interface IOpenFactory {
         bool deprecated;
     }
 
+    /// @notice Factory index spec §2.1 (CTR-TOK-27, owner 2026-11-07): one record per contract this factory created, in
+    ///         its own state, never changed or deleted. `creatorId` the creator's UA id (a direct call: `pad(msg.sender)`);
+    ///         `ownerUA` the contract's `owner()` right after `initialize` (a claim, 0 = no administration ever);
+    ///         `contractClass` `CLASS_TOKEN` (`kind` a `TokenKind`) or `CLASS_DEX` (`kind` 0), 0 = not made here; `version`
+    ///         the release (0 = `createTokenUnregistered`); `createdBlock` / `createdAt` the chain's `block.number` /
+    ///         `block.timestamp`.
+    struct Created {
+        address addr;
+        bytes32 creatorId;
+        bytes32 ownerUA;
+        uint16 contractClass;
+        uint16 kind;
+        uint64 version;
+        uint64 createdBlock;
+        uint64 createdAt;
+    }
+
     /// @notice An env domain: a `TokenKind` value, or `DEX_DOMAIN` for the DEX.
     event EnvPublished(uint8 indexed domain, uint16 indexed envVersion, bytes32 envHash);
     /// @notice The release hashes (owner 2026-10-20): the env's, the init code's (without the appended arguments, a
@@ -103,6 +120,10 @@ interface IOpenFactory {
     ///         exceptional halt of the factory's call frame instead: the registrar's call consumes all its gas and
     ///         fails without `DeployFailed`.
     error DeployFailed();
+    /// @notice A list view of class 0 or of a class this factory does not make.
+    error ClassUnknown(uint16 contractClass);
+    /// @notice A page of more than `MAX_PAGE` records.
+    error PageTooLarge(uint256 n);
 
     function registrar() external view returns (address);
     function chainUid() external view returns (bytes32);
@@ -182,4 +203,22 @@ interface IOpenFactory {
     /// @notice Advisory (clients and the node); tokens never consult it (CTR-DEX-19).
     function isDex(address dex) external view returns (bool);
     function dexVersionOf(address dex) external view returns (uint64);
+
+    // ------------------------------------------------------------------ the index (factory index spec §2, CTR-TOK-27)
+
+    function CLASS_TOKEN() external view returns (uint16);
+    function CLASS_DEX() external view returns (uint16);
+    function MAX_PAGE() external view returns (uint256);
+    /// @notice The record of `c`; `contractClass == 0` when this factory did not create it.
+    function infoOf(address c) external view returns (Created memory);
+    /// @notice Every contract of `contractClass`, in creation order (oldest first), `n` (≤ `MAX_PAGE`) records from
+    ///         `from`, and the list's length. `from ≥ total` is an empty page; `n = 0` answers only `total`.
+    function contractsPage(uint16 contractClass, uint256 from, uint256 n)
+        external view returns (Created[] memory page, uint256 total);
+    /// @notice The contracts that named `ownerUA` as owner at their creation (a claim; never for `ownerUA` 0).
+    function contractsOfOwner(bytes32 ownerUA, uint16 contractClass, uint256 from, uint256 n)
+        external view returns (Created[] memory page, uint256 total);
+    /// @notice The contracts `creatorId` created (authenticated: the direct caller).
+    function contractsOfCreator(bytes32 creatorId, uint16 contractClass, uint256 from, uint256 n)
+        external view returns (Created[] memory page, uint256 total);
 }

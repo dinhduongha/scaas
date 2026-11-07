@@ -18,7 +18,8 @@ import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 ///         struct's six slots, the data slots of its `bytes` points) with the contract's own `accountState` view and the
 ///         plaintexts; per entry the words of `entries`, `entryPtrs`, `memos` and the SSTORE2 code with the contract's own
 ///         `transferEntry` / `transferMemo` / `transferCiphertext` views; the token's words (`psid`, slot 0 with the modes,
-///         `auditorKey`), the factory's `_info[token]` word (slot 8) and T19c's `scaas.zether` pin. `STATE_VECTORS=1` writes
+///         `auditorKey`), the factory's index record `_rec[token]` (three words from slot 8's mapping; factory index spec §2.1,
+///         plan T67: it replaced the one-word `_info[token]`) and T19c's `scaas.zether` pin. `STATE_VECTORS=1` writes
 ///         `smartcontracts/vectors/zether/state.json` (the commit in `CONTRACT_COMMIT`); ua-rs reproduces every ciphertext from
 ///         the words (`tests/facade_zether_state.rs`). UNAUDITED.
 contract ZetherStateVectorsTest is ZetherFixture {
@@ -28,8 +29,8 @@ contract ZetherStateVectorsTest is ZetherFixture {
     uint256 internal constant XB = 0x63a37d32de25c85eafe97a566343e5cae9bf7b957229c247f3ab2c8dc20b1c5a; // m/12381/60/1/7
     uint256 internal constant XD = 0x2592aae4a72ff35d24196d8aa5fbf03bb270d3a83056fa7a6b31fb8700bb882e; // m/12381/60/1/8
     uint256 internal constant ROOT = 0xd1eef6cbeb7b383e0a92b3cb723053d5c39c76707d89da6b14ff91b83198ce00;
-    /// `OpenFactory._info` (no namespace: the eighth state variable, slot 8)
-    uint256 internal constant INFO = 8;
+    /// `OpenFactory._rec` (no namespace: slot 8, where `_info` was)
+    uint256 internal constant REC = 8;
 
     User internal dave;
     string internal path;
@@ -215,10 +216,14 @@ contract ZetherStateVectorsTest is ZetherFixture {
         _build();
         assertEq(bytes32(ROOT), vm.parseJsonBytes32(vm.readFile(string.concat(vm.projectRoot(), "/test/v2/layout/namespaces.json")),
             ".zether.root"), "the namespace root");
-        bytes32 info = vm.load(address(factory), keccak256(abi.encode(address(tok), INFO)));
-        assertEq(address(uint160(uint256(info))), address(this), "_info[token].creator (slot 8)");
-        assertEq(uint8(uint256(info) >> 160), uint8(IOpenFactory.TokenKind.NORMAL_ZETHER), "_info[token].kind");
-        assertEq(uint8(uint256(info) >> 232), 1, "_info[token].exists");
+        uint256 base = uint256(keccak256(abi.encode(address(tok), REC)));
+        (bytes32 r0, bytes32 r1, bytes32 r2) = (vm.load(address(factory), bytes32(base)),
+            vm.load(address(factory), bytes32(base + 1)), vm.load(address(factory), bytes32(base + 2)));
+        assertEq(r0, bytes32(uint256(uint160(address(this)))), "_rec[token].creatorId (slot 8)");
+        assertEq(r1, bytes32(0), "_rec[token].ownerUA (no owner)");
+        assertEq(uint16(uint256(r2)), 1, "_rec[token].contractClass (TOKEN)");
+        assertEq(uint16(uint256(r2) >> 16), uint16(uint8(IOpenFactory.TokenKind.NORMAL_ZETHER)), "_rec[token].kind");
+        assertEq(uint64(uint256(r2) >> 32), 1, "_rec[token].version");
         assertTrue(_holds(tok, alice, aliceBal, true), "alice's acc");
         if (!vm.envOr("STATE_VECTORS", false)) return;
         path = string.concat(vm.projectRoot(), "/../vectors/zether/state.json");
@@ -228,7 +233,7 @@ contract ZetherStateVectorsTest is ZetherFixture {
         _w(string.concat("\"file\": \"state.json\", \"contractCommit\": ", _q(vm.envString("CONTRACT_COMMIT")), ", \"family\": \"evm\", \"chainId\": ",
             vm.toString(block.chainid), ", \"chainUid\": ", _hx32(tok.chainUid()), ", \"token\": ", _q(vm.toString(abi.encodePacked(address(tok)))),
             ", \"block\": ", vm.toString(block.number), ","));
-        _w(string.concat("\"factory\": ", _q(vm.toString(abi.encodePacked(address(factory)))), ", \"info\": ", _hx32(info), ", \"psid\": ",
+        _w(string.concat("\"factory\": ", _q(vm.toString(abi.encodePacked(address(factory)))), ", \"record\": [", _hx32(r0), ", ", _hx32(r1), ", ", _hx32(r2), "], \"psid\": ",
             _hx32(_load(ROOT + 6)), ", \"modes\": ", _hx32(_load(ROOT)), ", \"p\": ", _hx32(_load(ROOT + 7)), ", \"auditorKeyWords\": [",
             _bytesWords(ROOT + 5, true), "], \"auditorY\": ", _hx(tok.auditorKey()), ", \"confidentialFee\": ", vm.toString(FEE), ","));
         _layout();
