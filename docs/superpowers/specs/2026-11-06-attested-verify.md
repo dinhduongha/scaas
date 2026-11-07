@@ -27,7 +27,7 @@ unchanged). "Verdict" also keeps its older sense here: the precompile's (or `pqz
 | `vectors/pqz/attest.json` | `vectors/pqz/verdict.json` |
 | `verifierShape`, `verifierEpoch`, `pendingVerifier`, `proposer`, `proposerGeneration` (storage, struct fields) | `pqzVerifierShape`, `pqzVerifierEpoch`, `pqzPendingVerifier`, `pqzProposer`, `pqzProposerGeneration` |
 | `VerifyModeInvalid`, node `VERIFIER_UNREACHABLE` | `PqzVerifyModeInvalid`, `PQZ_VERIFIER_UNREACHABLE` |
-| parameters `att`, `attSig` | `verdict`, `verdictSig` |
+| parameters `att`, `attSig` | `pqzVerdict`, `pqzVerdictSig` |
 
 Every new name above is owner-approved (2026-11-07), the derived ones included (`PqzSignedVerdict`, `PqzVerdictMismatch`,
 `pqzVerifyConfig()` / `PqzVerifyConfig`, `PQZ_VERDICT_*`, `pqz_verdict`, `[pqz_verifier]`, `scaas-pqz-verifier`,
@@ -68,7 +68,7 @@ Written as given; not reopened. R1–R4 replace O3 and O4 and the first draft's 
 | O4 | ~~Zether: the same off-chain verifier mode on chains without EIP-2537.~~ **Withdrawn by R1.** | — |
 | O5 | **Group 3f** goes in `ua-mtx-merge`, before the EVM freeze, after 3e. | §16 |
 | R1 | **Zether is removed from 3f entirely.** Zether runs on chain where EIP-2537 exists; an off-chain verifier for it was only a gas saving and too complex. O4 is withdrawn; `ZetherAttestBook`, `ZetherProofAttest` (superseded draft names), the pure-Solidity curve and the first draft's T47, T48 are removed. **3f is PQZ only.** | §1 |
-| R2 | **No verdict book.** Every PQZ entry that carries a proof takes the verdict **inline as its last parameters**: the entries routed through `PqzCore._check` (transfer op 1 single, BUNDLE and COMPACT; op 7 multi; burn / unshield, unshield-unwrap included; refresh). The parameters are `PqzVerdict verdict, UASig verdictSig` (Fable (a)), outside the subject's typed struct, so no typehash moves. The verdict is empty or ignored in PRECOMPILE mode and required in OFFCHAIN mode. One `requireAuthorized` check in `PqzCore._check`, with the existing `UAVerifyGas` `try`/`catch` shape. The signed struct binds `pqzVerifierEpoch` (Codex #1). `verifyTransferAmount` takes an optional verdict; without one, in OFFCHAIN mode, it answers "cannot verify". Codex #3, #7 and Fable P1-4 close. | §5, AV-5 |
+| R2 | **No verdict book.** Every PQZ entry that carries a proof takes the verdict **inline as its last parameters**: the entries routed through `PqzCore._check` (transfer op 1 single, BUNDLE and COMPACT; op 7 multi; burn / unshield, unshield-unwrap included; refresh). The parameters are `PqzVerdict pqzVerdict, UASig pqzVerdictSig` (Fable (a)), outside the subject's typed struct, so no typehash moves. The verdict is empty or ignored in PRECOMPILE mode and required in OFFCHAIN mode. One `requireAuthorized` check in `PqzCore._check`, with the existing `UAVerifyGas` `try`/`catch` shape. The signed struct binds `pqzVerifierEpoch` (Codex #1). `verifyTransferAmount` takes an optional verdict; without one, in OFFCHAIN mode, it answers "cannot verify". Codex #3, #7 and Fable P1-4 close. | §5, AV-5 |
 | R3 | **An OFFCHAIN token accepts unproven PQZ keys.** The verifier checks off chain the `R_REG` proof of every key in the operation and its single ownership, with a cache keyed by `(ua, pqzKeyHash)`. Requirements: the `pqzPop` bytes are stored in the registry (hash matching); in OFFCHAIN mode `PqzStateLib.init`'s auditor check accepts an unproven auditor key. The first draft's §6.3, T46, CTR-UA-41, the 3c registry coupling and Q6 are dropped. | §6, AV-6 |
 | R4 | **An owner `pqzRevokeVerifier()`**: immediate, freeze only. After it every proof-carrying op refuses until a new verifier is in place through the notice-period transfer. A revocation is not a transfer, so it stays inside O2. The trust model states the maximum loss `min(totalShielded, maxShielded) · shieldScale` (Fable P1-2). | §2, §4.3 |
 
@@ -250,7 +250,7 @@ governance entries are in `PqzStateLib` (already linked); the token keeps thin s
 ### 5.1 The struct
 
 **AV-5.** Typed EIP-712 in the **token's own domain** (`"SCaaS PqzToken"`, as `PqzAuth`), signed by the verifier through
-`IUARegistry.requireAuthorized(verifier, PURPOSE_PQZ_VERDICT, digest, verdictSig)` with the new purpose `PURPOSE_PQZ_VERDICT =
+`IUARegistry.requireAuthorized(verifier, PURPOSE_PQZ_VERDICT, digest, pqzVerdictSig)` with the new purpose `PURPOSE_PQZ_VERDICT =
 keccak256("scaas.ua.purpose.pqz-verdict.v1")` (the registry takes any purpose; no registry change):
 
 ```
@@ -294,28 +294,28 @@ dispatching on the outer field alone.
 ### 5.3 The check in `PqzCore._check`
 
 ```
-_check(o, buf, proof, authSig, verdict, verdictSig):
+_check(o, buf, proof, authSig, pqzVerdict, pqzVerdictSig):
   the subject's authorization (unchanged)
-  if pqzVerifyMode == PRECOMPILE: verdict($().pqz, buf) as today; verdict and verdictSig are ignored
+  if pqzVerifyMode == PRECOMPILE: verdict($().pqz, buf) as today; pqzVerdict and pqzVerdictSig are ignored
   else:
     v = pqzVerifierUA;            v == 0                      → PqzVerifierRevoked()
     shape(v) != pqzVerifierShape                                   → PqzVerifierChanged()
-    verdict.token != this, verdict.chainId != chainid, verdict.proofSystemId != psid,
-    verdict.pqzVerifierEpoch != pqzVerifierEpoch, verdict.validUntil < now,
-    verdict.statementHash != keccak256(statement), verdict.proofHash != keccak256(proof) → PqzVerdictMismatch(uint8 field)
-    try registry.requireAuthorized(v, PURPOSE_PQZ_VERDICT, digest(verdict), verdictSig) {}
+    pqzVerdict.token != this, pqzVerdict.chainId != chainid, pqzVerdict.proofSystemId != psid,
+    pqzVerdict.pqzVerifierEpoch != pqzVerifierEpoch, pqzVerdict.validUntil < now,
+    pqzVerdict.statementHash != keccak256(statement), pqzVerdict.proofHash != keccak256(proof) → PqzVerdictMismatch(uint8 field)
+    try registry.requireAuthorized(v, PURPOSE_PQZ_VERDICT, digest(pqzVerdict), pqzVerdictSig) {}
     catch: UAVerifyGas (its own, or the frame out of gas: no data, < g/63 left)  → UAVerifyGas()
            else                                                  → PqzVerdictRejected()
     emit PqzVerified(statementHash, proofHash, v, pqzVerifierEpoch)
 ```
 
-- **The twelve entries** (ten on 4 and 12, which have no `mtxUnshieldUnwrap`) take `PqzVerdict calldata verdict, IUARegistry.UASig calldata verdictSig` as their **last** parameters: the direct
+- **The twelve entries** (ten on 4 and 12, which have no `mtxUnshieldUnwrap`) take `PqzVerdict calldata pqzVerdict, IUARegistry.UASig calldata pqzVerdictSig` as their **last** parameters: the direct
   `mtxConfidentialTransfer`, `…Compact`, `…Single`, `…SingleCompact`, `mtxUnshield` (burn and refresh), `mtxUnshieldUnwrap` (5, 13),
   and the six signed `UAEnvelope` forms. The signed forms hash `args`, `proof` and `accHint` into their `UA*` structs as today and
-  pass `verdict, verdictSig` on to the self-call outside them: **no typehash moves**, `PqzAuth` is untouched. The verdict is an unbound
+  pass `pqzVerdict, pqzVerdictSig` on to the self-call outside them: **no typehash moves**, `PqzAuth` is untouched. The verdict is an unbound
   field like `relayer` / `feeRecipient`: a relayer may swap it for another valid one over the same hashes, harmlessly.
 - **Stack:** with `via_ir` off a signed form has eight parameters; if the legacy decoder runs out of stack, T45 passes the pair as
-  one named struct `PqzSignedVerdict { PqzVerdict verdict; UASig sig; }` (the 3e `RelayPay` fallback precedent), still explicit.
+  one named struct `PqzSignedVerdict { PqzVerdict pqzVerdict; UASig sig; }` (the 3e `RelayPay` fallback precedent), still explicit.
 - **One transaction, nothing stored:** no book, no record, no epoch machinery beyond one counter, no ordering, no orphan, no second
   payer. A failed op reverts the event with it.
 - The library entry points (`PqzTransferLib.transfer` / `transferMulti`, `PqzBurnLib`) gain the two parameters; `mtxSelectors()`,
@@ -326,7 +326,7 @@ _check(o, buf, proof, authSig, verdict, verdictSig):
 - The five-argument `verifyTransferAmount(entryRef, leg, amount, kind, proof)` keeps its ABI (`ITransferDisclosure`). PRECOMPILE:
   unchanged. **OFFCHAIN: "cannot verify"**, the named revert `PqzVerdictRequired()` — a `bool` view has no third value, and `false`
   would read "the amount is wrong" (C2-6's rule: a failed check is never a verdict).
-- A seven-argument PQZ form `verifyTransferAmount(entryRef, leg, amount, kind, proof, PqzVerdict verdict, UASig verdictSig)`: PRECOMPILE
+- A seven-argument PQZ form `verifyTransferAmount(entryRef, leg, amount, kind, proof, PqzVerdict pqzVerdict, UASig pqzVerdictSig)`: PRECOMPILE
   ignores the verdict (the precompile's verdict); OFFCHAIN checks the verdict as §5.3 against `disclosureStatement(…)` and the
   proof, returns `true` when every check passes, `false` on a mismatch, a refused signature, a revoked or changed verifier; a starved
   call `UAVerifyGas`. Nothing is recorded ([CTR-PQZ-14](../../contracts/pq-zero-knowledge.md#CTR-PQZ-14)).
@@ -439,7 +439,7 @@ or putting the verdict inside the `proof` bytes (CTR-MTX-29).
 | 2 | O1 | [CTR-PQZ-10](../../contracts/pq-zero-knowledge.md#CTR-PQZ-10) and its §9 table: the off-chain co-processor "(quorum of verifiers signs ML-DSA attestations; contract checks t-of-n) … The later path for customer-run private chains (owner); **rejected on the SCaaS testnet**" | this group is that path, open on every chain, the SCaaS testnet included; the quorum is one verifier UA (usually an `msig`) of §4.1's kinds, classical or post-quantum, disclosed as such |
 | 3 | O2 | W-B, the rule PQZ's release `verifier` follows (as [CTR-ZTH-20](../../contracts/zether.md#CTR-ZTH-20)): "the creator never names a verifier", because a fake one drains the escrow | code stays canonical; the creator now names a verifier **UA** that can approve a false proof — the same drain, by a named party, disclosed with AV-1's maximum loss |
 | 4 | R3 | [CTR-UA-16](../../contracts/accounts.md#CTR-UA-16): "**PQZ tokens accept only proven keys**"; `accounts.md` §1.13: a key on a chain without the verifier is "a directory entry that PQZ tokens do not accept" | PRECOMPILE tokens unchanged; OFFCHAIN tokens accept unproven keys of the set length, checked off chain by their verifier (§6) |
-| 5 | R2 | [CTR-PQZ-14](../../contracts/pq-zero-knowledge.md#CTR-PQZ-14): `verifyTransferAmount` "takes the proof alone as the opening"; a failed precompile call reverts `UAVerifyGas`, "only the statement's shape errors read `false`" | the five-argument form answers `PqzVerdictRequired()` in OFFCHAIN mode; a seven-argument form takes the verdict. Nothing is recorded, so "no on-chain verdict" (CTR-PQZ-14, CTR-ZTH-39) still holds |
+| 5 | R2 | [CTR-PQZ-14](../../contracts/pq-zero-knowledge.md#CTR-PQZ-14): `verifyTransferAmount` "takes the proof alone as the opening"; a failed precompile call reverts `UAVerifyGas`, "only the statement's shape errors read `false`" | the five-argument form answers `PqzVerdictRequired()` in OFFCHAIN mode; a seven-argument form takes the pqzVerdict. Nothing is recorded, so "no on-chain verdict" (CTR-PQZ-14, CTR-ZTH-39) still holds |
 | 6 | R2 | [CTR-PQZ-15](../../contracts/pq-zero-knowledge.md#CTR-PQZ-15) "no new kind" (`job-api.md`) | **applied, not changed**: the verdict is a named sub-object of the existing named entries; no `pqz_verdict_*` job kind (Fable P2-9 (i) closes with R2) |
 | 7 | AV-1 | `pq-zero-knowledge.md` §12 threats: soundness rests on the on-chain verifier | a threat row "dishonest, censoring or compromised verifier UA" (drain up to the maximum loss, selective delay, freeze), with AV-1's containment table |
 | 8 | R2 | [CTR-PQZ-11](../../contracts/pq-zero-knowledge.md#CTR-PQZ-11)'s measured gas tables, `PqzSet.PQZ_DEBIT_MIN_GAS` and the gas pins of every PQZ entry | the twelve entries' calldata grows in both modes: the pins move old → new in T45's commit, with their comments naming the mode they measure; OFFCHAIN rows added; the `UAPqzHolder` bound keeps the precompile-inclusive figure (Fable P2-9 (ii)) |
@@ -534,7 +534,7 @@ Each lands in `docs/decisions.md` in T19 (T19 confirms the ids are still next-fr
 Red first; **positive control first** (the same call with a valid verdict by the current verifier), then one change at a time.
 Negatives, each able to fail:
 
-- **Wrong token / chain:** `verdict.token` another token ⇒ `PqzVerdictMismatch(token)`; `verdict.chainId` another ⇒ `(chainId)`; a
+- **Wrong token / chain:** `pqzVerdict.token` another token ⇒ `PqzVerdictMismatch(token)`; `pqzVerdict.chainId` another ⇒ `(chainId)`; a
   signature in another token's domain ⇒ `PqzVerdictRejected`.
 - **Expired:** `validUntil = now − 1` ⇒ `PqzVerdictMismatch(validUntil)`; `now` passes.
 - **Statement swap:** a verdict over S1, the op builds S2 (another `fee`, `beneficiary`, `p`, `salt`, `envelopeBinding`, a replaced key) ⇒
@@ -568,7 +568,7 @@ Negatives, each able to fail:
 
 | Area | Mutants |
 |---|---|
-| Binding | `verdict.token != address(this)` unchecked; `verdict.chainId` unchecked; `verdict.proofSystemId` unchecked; `proofHash` not compared; `statementHash` over the buffer with its prefix; `pqzVerifierEpoch` unchecked; `validUntil` unchecked |
+| Binding | `pqzVerdict.token != address(this)` unchecked; `pqzVerdict.chainId` unchecked; `pqzVerdict.proofSystemId` unchecked; `proofHash` not compared; `statementHash` over the buffer with its prefix; `pqzVerifierEpoch` unchecked; `validUntil` unchecked |
 | Verifier | the verifier read from calldata instead of storage; revocation not checked; the shape not recomputed; the kind check skipped at proposal; `mldsa87` in the allow-list; the notice not waited; confirm by any owner rather than the proposer; the owner generation ignored; `pqzVerifierFixed` ignored; the epoch not bumped on transfer or revocation |
 | Mode | a setter writing the mode; OFFCHAIN calling the precompile when present; PRECOMPILE reading the verdict |
 | Keys | OFFCHAIN dropping the length check; PRECOMPILE accepting an unproven key; the auditor rule applied in PRECOMPILE |
