@@ -1501,7 +1501,7 @@ the layout pin.
 **Interfaces:** spec §3–§6: `pqzVerifyMode` in byte 22 of `PqzStorage` slot 0; the verifier state appended (§4.4); `PqzLayer`'s
 constructor admits `releaseProofVerifier = 0`; PRECOMPILE init refuses it `SelfTestFailed(address(0))` before any call, OFFCHAIN
 init reads nothing from it (`psid = PqzSet.PQZL_ID`); `pqzVerifierUA` checked (§4.1: kinds, `PqzVerifierUnregistered`,
-`PqzVerifierKind`, the frozen shape); `_check(o, buf, proof, authSig, verdict, verdictSig)` with spec §5.3's OFFCHAIN branch, the
+`PqzVerifierKind`, the frozen shape); `_check(o, buf, proof, authSig, pqzVerdict, pqzVerdictSig)` with spec §5.3's OFFCHAIN branch, the
 `UAVerifyGas` `try`/`catch` shape, `PqzVerified`; `_keyPtr` / `_creditKey` without `proven` in OFFCHAIN mode, the set length
 kept, per key version as 3g's KV-12 OFFCHAIN column (built in T51–T53); the auditor rule; the bodies of `pqzSetVerifier`, `pqzCancelVerifier`, `pqzRevokeVerifier` (owner, the factory's
 `noticePeriod()`, same proposer and owner generation, epoch bump, immediate revocation); `PqzVerdict` typehash pin.
@@ -1530,7 +1530,7 @@ kept, per key version as 3g's KV-12 OFFCHAIN column (built in T51–T53); the au
 `test/vectors/selector_audit.json`; gas and layout pins; `size-baseline.json`; `runs/<date>-ua-mtx-merge-pqz-verifier-sizes.txt`
 (summary).
 
-**Interfaces:** spec §5.3–§5.4: `PqzVerdict calldata verdict, IUARegistry.UASig calldata verdictSig` last on every proof-carrying entry
+**Interfaces:** spec §5.3–§5.4: `PqzVerdict calldata pqzVerdict, IUARegistry.UASig calldata pqzVerdictSig` last on every proof-carrying entry
 (direct and signed forms; twelve on 5, 13, ten on 4, 12), outside every `UA*` struct (no typehash moves); the struct fallback
 `PqzSignedVerdict` only if the legacy decoder runs out of stack; `verifyTransferAmount` five-argument form `PqzVerdictRequired()`
 in OFFCHAIN mode, seven-argument form, both with 3g's `keyVersion` after `kind` (3g KV-11; `test_disclosure_offchain_withVersion`
@@ -2058,11 +2058,14 @@ copy of `OpenFactory.sol` / `IOpenFactory.sol` (MD-4, `legacy/ua-mtx-merge/facto
 ### Chain-neutral releases (owner 2026-11-07): tasks T71–T76
 
 **Spec:** [`2026-11-07-chain-neutral-releases.md`](../specs/2026-11-07-chain-neutral-releases.md): decisions A (CREATE3 on
-every creation path) and B (chain-neutral releases, `ChainEnv` written into each instance); **T71–T76 owner-approved
-2026-11-07** (§10.3's eight questions answered as recommended; S3 = the signing UA, so T76 is in), pending the Fable review's
-fixes to the spec. **Place:** with the factory index group, after 3g (T57), before 3f. **Order:** T67 → T71 → T70 → T72 → T73
-→ T74 → T68; T76 after T71, before T68; T75 (docs) beside, lands in T19. Tasks, files and sizes: spec §10.2 (T71 1.5, T72 3,
-T73 1.5, T74 2, T76 1.5, T75 1; T68 +0.5). T72 moves layout, gas and size pins old → new and runs the four PQZ sets.
+every creation path) and B (chain-neutral releases); **T71–T76 owner-approved 2026-11-07, option I** (each instance's
+`ChainEnv` appended to its clone code, read by `EXTCODECOPY`: no `initEnv`, no storage, no layout pin) **and the Fable review
+applied** (spec §11: `configureChain`'s reference block and the sibling order, the `creatorId` ABI round, the release list
+`smartcontracts/evm/releases.json`, `InstanceNotCreated`, the extra tests and mutants). **Place:** with the factory index group,
+after 3g (T57), before 3f. **Order:** T67 → **T71 + T72 as one segment** (no task between them; gates at T72's end) → T70 → T73
+→ T74 → T76 → T68; T75 (docs) beside, lands in T19. Tasks, files and sizes: spec §10.2 (T71 2, T72 3.5, T73 2, T74 3, T76 1.5,
+T75 1; T68 +0.5; total 13.5). T72 moves gas and size pins old → new and runs the four PQZ sets; T74 carries the ABI change to
+`clientkeys`, every `ua-*` binding, the node's `abi.rs` and indexer and `selector_audit.json`, with the operator note.
 
 ### Task T67: the record, the per-class lists, the paged views
 
@@ -2091,7 +2094,7 @@ returning `(Created[] page, uint256 total)`; `ClassUnknown`, `PageTooLarge`. The
 
 ### Task T70: the generic catalogue and `createInstance` (spec §8)
 
-**Depends on:** T67 and T71 (spec §8.11 Q7–Q12 answered as recommended, owner 2026-11-07). **Estimate:** 2.
+**Depends on:** T67 and the T71 + T72 segment (spec §8.11 Q7–Q12 answered as recommended, owner 2026-11-07). **Estimate:** 2.
 
 **Files:** `src/factory/{OpenFactory,IOpenFactory}.sol`; `test/v2/FactoryGenericKind.t.sol` (new), `test/v2/mocks/{NoteKind,
 RosterKind}.sol` and the negative mocks (test-only, no `src/` kind); `test/governance/GovGas.t.sol` (a `createInstance` row);

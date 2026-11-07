@@ -9,8 +9,8 @@ Nothing is built yet; the plan tasks T67–T70 of [`2026-11-04-ua-mtx-merge.md`]
 `ua-mtx-merge`.
 **Same addresses on every chain (owner decisions A and B, 2026-11-07):** CREATE3 on every creation path, chain-neutral
 releases, the chain values written into each instance by the factory: spec
-[`2026-11-07-chain-neutral-releases.md`](2026-11-07-chain-neutral-releases.md) (approved by the owner 2026-11-07, pending the
-Fable review). It changes this spec's creation salt and `predictAddress` (§8.4 step 3) and the release constructor (§8.2,
+[`2026-11-07-chain-neutral-releases.md`](2026-11-07-chain-neutral-releases.md) (approved by the owner 2026-11-07, option I:
+each instance's `ChainEnv` appended to its clone code, read by `EXTCODECOPY`; Fable review applied). It changes this spec's creation salt and `predictAddress` (§8.4 step 3) and the release constructor (§8.2,
 §8.8); those details live there. **S3 answered "the signing UA" (owner 2026-11-07):** the creator is a `bytes32 creatorId`
 (chain-neutral spec §4.4), written into §2.1, §2.2, §2.3 and §8.4 below; the record stays three slots.
 
@@ -393,9 +393,10 @@ a registered instance. Every one of them is the generic path; the factory gets n
 **What `PqChat` implements** (the first generic initializer):
 
 ```solidity
-// constructor(IOpenFactory.ReleaseId id, uint16 envVersion, IFactoryToken.Env env, bytes implArgs)
-//   immutables: FACTORY = env.factory, CHAIN_UID = env.chainUid, the registry, the code-size limit (implArgs, P11),
-//   CLASS = id.contractClass (3), KIND = id.kind (0), VERSION = id.version; the initializer locked on the implementation
+// constructor(IOpenFactory.ReleaseId id, address factory_, bytes implArgs)   (chain-neutral spec §2.1)
+//   immutables: FACTORY = factory_, CLASS = id.contractClass (3), KIND = id.kind (0), VERSION = id.version;
+//   chain values (chain_uid, the registry, the code-size limit as params[0], P11) read from the clone's appended ChainEnv;
+//   the initializer locked on the implementation
 function initialize(bytes32 ownerUA) external;  // msg.sender == FACTORY, once; ownerUA 0 allowed, fixed, no transfer
 function factoryInfo() external view returns (IOpenFactory.FactoryInfo memory);
 function supportsInterface(bytes4 id) external view returns (bool);   // ERC-165 and type(IPqChat).interfaceId
@@ -408,7 +409,7 @@ function owner() external view returns (bytes32);                      // P32: n
 **Registration and creation** (deploy script and anyone):
 
 ```solidity
-factory.publishClassEnv(3, 0, 1, env);   // env.registry, env.factory, env.chainUid; implArgs carries the code-size limit
+factory.publishClassEnv(3, 0, 1, env);   // env.registry, env.params[0] = the code-size limit; the factory adds chain_uid
 factory.deployRelease(ReleaseId(3, 0, 1), 1, IPqChat.initialize.selector, type(IPqChat).interfaceId, initcode, implArgs);
 factory.setClassKindEnabled(3, 0, true);  // after the notice period
 factory.createInstance(ReleaseId(3, 0, v), salt, abi.encodeCall(IPqChat.initialize, (ownerUA)));
