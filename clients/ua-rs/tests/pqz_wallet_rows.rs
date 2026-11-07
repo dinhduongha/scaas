@@ -5,8 +5,10 @@
 //! draws; `smartcontracts/vectors/pqz/gen_wallet_state.sh`) from the `pq_kat` mnemonic of `smartcontracts/vectors/ua/keys.json`
 //! on the simulated chain of `tests/pqz_chain` (`PqzCore`'s stored form, tied to the contract by the forge rows): `A` =
 //! `pqz_key(0, 0)` shields 1,000 and pays `B` = `pqz_key(0, 1)` 250 (op 1, verified with the precompile before settling), `B`
-//! shields 7. Row `A`: `acc` the reference into op 1's blob (`v_f`), 750; row `B`: a pending credit and a TRIVIAL entry, 257.
-//! `wallet_rows_decrypt` reads the committed file as every binding does. Default set only (the bindings' set). UNAUDITED.
+//! shields 7; then (group 3g, T15o) `A` rotates to key version 1 (`pqz_key_version(0, 0, 1)`) and migrates 700 from its stale
+//! version 0 (op 1 to itself, verified). Row `A v0`: `acc` the reference into the migration's blob (`v_f`), 50; row `A v1`: the
+//! migrated credit pending, 700; row `B`: a pending credit and a TRIVIAL entry, 257. Each row names its `account`, `index` and
+//! `version`. `wallet_rows_decrypt` reads the committed file as every binding does. Default set only (the bindings' set). UNAUDITED.
 #[cfg(feature = "vectors")]
 mod pqz_chain;
 use pqz_ffi::stmt as st;
@@ -52,7 +54,7 @@ fn write_wallet_rows() {
     assert_eq!(st::SET, SET, "the bindings' set");
     unlock();
     let w = wallet();
-    let (ka, kb) = (w.pqz_key(0, 0).unwrap(), w.pqz_key(0, 1).unwrap());
+    let (ka, kb, ka1) = (w.pqz_key(0, 0).unwrap(), w.pqz_key(0, 1).unwrap(), w.pqz_key_version(0, 0, 1).unwrap());
     let mut c = Chain::new();
     c.register(A, &ka.pk());
     c.register(B, &kb.pk());
@@ -70,16 +72,36 @@ fn write_wallet_rows() {
     assert_eq!(pqz_ffi::precompile(&st::input(1, &stmt, &proof)), Ok(pqz_ffi::VALID), "op 1 verifies");
     c.settle1(&stmt, None);
     c.shield(&B, 7);
-    let row = |name: &str, index: u32, ua: &[u8; 32], value: u64| {
-        json!({"name": name, "account": 0, "index": index, "command": "balance", "request": c.bal(ua), "value": value})
+    // A's key version 1, current at once; the migration of 700 from version 0 (stale: op 1 to itself only)
+    c.add_version(A, &ka1.pk(), true);
+    let req = merge(
+        merge(c.own_at(&A, 0, 16), c.debit_fields()),
+        json!({"toUA": hx(&A), "pkT": hx(&ka1.pk()), "amount": 700, "mode": "BUNDLE"}),
+    );
+    let p: Value = serde_json::from_str(
+        &ka.vectors_call("proveTransfer", req.to_string().as_bytes(), &Draw::vectors([0x74; 32], Some([0x75; 32]), Some([0x76; 16]), None))
+            .unwrap(),
+    )
+    .unwrap();
+    let (stmt, proof) = (h(&p["stmt"]), h(&p["proof"]));
+    assert_eq!(pqz_ffi::precompile(&st::input(1, &stmt, &proof)), Ok(pqz_ffi::VALID), "the migration verifies");
+    c.settle1(&stmt, None);
+    let row = |name: &str, index: u32, version: u64, ua: &[u8; 32], value: u64| {
+        let request = merge(c.own_at(ua, version, 16), json!({"forOp7": false}));
+        json!({"name": name, "account": 0, "index": index, "version": version, "command": "balance", "request": request, "value": value})
     };
     let out = json!({
         "set": SET,
         "mnemonic": "pq_kat",
         "generator": "smartcontracts/vectors/pqz/gen_wallet_state.sh (clients/ua-rs tests/pqz_wallet_rows.rs write_wallet_rows)",
-        "note": "PQZ balance words for wallet keys (pqz_key(account, index) of the pq_kat mnemonic) on ua-rs's simulated chain \
-                 (tests/pqz_chain: PqzCore's stored form); every binding decrypts each row's request to its value. UNAUDITED.",
-        "rows": [row("A: acc the reference into op 1's blob (v_f)", 0, &A, 750), row("B: a pending credit and a TRIVIAL entry", 1, &B, 257)],
+        "note": "PQZ balance words for wallet keys (pqz_key_version(account, index, version) of the pq_kat mnemonic) on ua-rs's \
+                 simulated chain (tests/pqz_chain: PqzCore's stored form, accounts per key version); every binding decrypts each \
+                 row's request to its value. UNAUDITED.",
+        "rows": [
+            row("A v0: acc the reference into the migration's blob (v_f)", 0, 0, &A, 50),
+            row("A v1: the migrated credit pending", 0, 1, &A, 700),
+            row("B: a pending credit and a TRIVIAL entry", 1, 0, &B, 257),
+        ],
     });
     std::fs::write(rows_path(), serde_json::to_string_pretty(&out).unwrap() + "\n").unwrap();
 }
@@ -94,12 +116,13 @@ fn wallet_rows_decrypt() {
     let rows: Value = serde_json::from_str(&std::fs::read_to_string(rows_path()).unwrap()).unwrap();
     let w = wallet();
     let rows = rows["rows"].as_array().unwrap();
-    assert_eq!(rows.len(), 2);
+    assert_eq!(rows.len(), 3);
     for r in rows {
-        let index = r["index"].as_u64().unwrap() as u32;
-        let k = w.pqz_key(0, index).unwrap();
+        let (index, version) = (r["index"].as_u64().unwrap() as u32, r["version"].as_u64().unwrap());
+        let k = w.pqz_key_version(0, index, version).unwrap();
         assert_eq!(balance(&k, &r["request"]), Ok(r["value"].as_u64().unwrap()), "{}", r["name"]);
-        let other = w.pqz_key(0, 1 - index).unwrap();
-        assert_eq!(balance(&other, &r["request"]), Err(Error::Argument), "{}: another handle", r["name"]);
+        for other in [w.pqz_key_version(0, 1 - index, version).unwrap(), w.pqz_key_version(0, index, 1 - version).unwrap()] {
+            assert_eq!(balance(&other, &r["request"]), Err(Error::Argument), "{}: another handle", r["name"]);
+        }
     }
 }

@@ -114,6 +114,30 @@ fn pqz_key_is_the_ua_pq_rule() {
     }
 }
 
+/// Group 3g C8 (T15o): `pqz_key_version(account, index, v)` is `pq_kat.json`'s `pqzSeeds` row (clientkeys `pqzKeySeed`): version
+/// 0 is `pqz_key`'s (the `info` without a suffix), v ≥ 1 appends `be64(v)`; each version its own key and its own store slot.
+#[test]
+fn pqz_key_versions_are_the_pq_kat_rows() {
+    unlock();
+    let kat: Value = serde_json::from_str(&std::fs::read_to_string(format!("{}/../../smartcontracts/vectors/ua/pq_kat.json", env!("CARGO_MANIFEST_DIR"))).unwrap()).unwrap();
+    let w = Wallet::from_mnemonic(kat["mnemonic"].as_str().unwrap(), "").unwrap();
+    let rows = kat["pqzSeeds"].as_array().unwrap();
+    assert_eq!(rows.iter().map(|r| r["version"].as_u64().unwrap()).collect::<Vec<_>>(), [0, 1, 2]);
+    let mut pks = Vec::new();
+    for r in rows {
+        let (a, i, v) = (r["account"].as_u64().unwrap() as u32, r["index"].as_u64().unwrap() as u32, r["version"].as_u64().unwrap());
+        let leaf = w.export_pqz_leaf_raw_version(a, i, v, AllowSecretExport).unwrap();
+        assert_eq!(hx(&*leaf), r["seed32"], "v{v}");
+        let k = w.pqz_key_version(a, i, v).unwrap();
+        assert_eq!(k.pk(), pqz_ffi::pqzl::keygen(&leaf).unwrap().pk.to_vec(), "v{v}");
+        pks.push(k.pk());
+    }
+    assert_eq!(pks[0], w.pqz_key(0, 0).unwrap().pk(), "version 0 is pqz_key's");
+    assert_eq!(*w.export_pqz_leaf_raw(0, 0, AllowSecretExport).unwrap(), *w.export_pqz_leaf_raw_version(0, 0, 0, AllowSecretExport).unwrap());
+    assert!(pks[0] != pks[1] && pks[1] != pks[2] && pks[0] != pks[2], "one key per version");
+    assert_eq!(w.pqz_key_version(1 << 31, 0, 1).err(), Some(Error::Argument));
+}
+
 /// `rnd32` comes from the OS RNG: the same statement and witness proved twice give two different proofs, each valid.
 #[test]
 fn two_proofs_differ() {
@@ -154,7 +178,7 @@ fn set_mismatch_refused() {
     let w = wallet();
     let k = w.pqz_key(0, 0).unwrap();
     #[cfg_attr(not(feature = "vectors"), allow(unused_mut))]
-    let mut cmds = vec![("proveRegister", json!({"kind": 0x0131, "ua": hx(&[1; 32])})), ("proveKeyRecord", json!({"ua": hx(&[1; 32])}))];
+    let mut cmds = vec![("proveRegister", json!({"kind": 0x0131, "ua": hx(&[1; 32])})), ("proveKeyRecord", json!({"ua": hx(&[1; 32]), "version": 0}))];
     #[cfg(feature = "vectors")]
     let t = balance(&k, 1000);
     #[cfg(feature = "vectors")]
@@ -250,7 +274,7 @@ fn base_request(k: &PqzKey, cmd: &str) -> Value {
         "enc" => json!({"pks": [pk], "values": [1]}),
         "dec" => json!({"ct": t}),
         "proveRegister" => json!({"proofSystemId": id, "kind": 0x0131, "ua": hx(&[1; 32])}),
-        "proveKeyRecord" => json!({"proofSystemId": id, "ua": hx(&[1; 32])}),
+        "proveKeyRecord" => json!({"proofSystemId": id, "ua": hx(&[1; 32]), "version": 0}),
         "rawProveTransfer" => merge(header(1), json!({"proofSystemId": id, "toUA": hx(&[2; 32]), "pkT": pk, "T": t, "amount": 1, "memoHash": hx(&[0; 32])})),
         "rawProveBurn" => merge(header(1), json!({"proofSystemId": id, "amount": 1, "recipient": hx(&[3; 32]), "T": t, "memoHash": hx(&[0; 32])})),
         "rawProveRefresh" => merge(header(1), json!({"proofSystemId": id, "T": t, "memoHash": hx(&[0; 32])})),
@@ -277,7 +301,8 @@ fn words_request(k: &PqzKey, cmd: &str) -> Value {
     let er = entry_ref(&ua, 0);
     c.entries.insert(er, Ent { ptr, from: ua, ctr: 0, memo: vec![] });
     let debit = merge(c.own(&ua, 16), c.debit_fields());
-    let pk = hx(&k.pk());
+    // another key than the sender's (group 3g: the keys of a statement are distinct)
+    let pk = hx(&pqz_ffi::pqzl::keygen(&[7; 32]).unwrap().pk[..]);
     match cmd {
         "balance" => merge(c.own(&ua, 16), json!({"forOp7": false})),
         "proveTransfer" => merge(debit, json!({"toUA": hx(&[2; 32]), "pkT": pk, "amount": 1, "mode": "HASH"})),
@@ -288,7 +313,7 @@ fn words_request(k: &PqzKey, cmd: &str) -> Value {
         "proveDisclose" => merge(c.entry(&er, &ua), json!({"ua": hx(&ua), "leg": 0, "kind": "RECEIVER_X", "registry": hx(&REG)})),
         "openMemo" => merge(c.entry(&er, &ua), json!({"memo": hx(&[[0x5a; 16].as_slice(), &[0; 42]].concat())})),
         "proveDiscloseSender" => {
-            merge(c.entry(&er, &ua), json!({"leg": 0, "registry": hx(&REG), "legKeyRecord": hx(&c.key_record(&ua))}))
+            merge(c.entry(&er, &ua), json!({"leg": 0, "registry": hx(&REG), "legKeyRecords": [hx(&c.key_record(&ua))]}))
         }
         _ => panic!("{cmd}: no base request"),
     }
@@ -636,17 +661,29 @@ fn multi_without_mode_refused() {
 }
 
 /// The `setPqzKey` `R_REG` (`ua_message(0x0142, PURPOSE_PQZ_KEY, pqzKeyDigest(ua, pqzKeyHash))`, ua8's `pqz_reg_message`
-/// field) verifies.
+/// field) verifies; group 3g (T15o): version v ≥ 1 of the key `pqz_key_version(0, 0, v)` over `UAPqzKeyVersion{ua, v,
+/// pqzKeyHash}` (ua8's version record), a proof of one version is not the other's, and `version` has no default.
 #[test]
 fn key_record_register_verifies() {
     unlock();
     let w = wallet();
     let k = w.pqz_key(0, 0).unwrap();
     let ua = [0x42; 32];
-    let p = call(&k, "proveKeyRecord", &json!({"proofSystemId": hx(&PQZL_ID), "ua": hx(&ua)})).unwrap();
-    let rec = scaas_ua::ua8::pqz_key_record_message(0x0131, &ua, &w.ua_key(0x0131, 0, 0).unwrap().key_data(), &k.pk(), None, Some(&[9; 32]), false).unwrap();
+    let p = call(&k, "proveKeyRecord", &json!({"proofSystemId": hx(&PQZL_ID), "ua": hx(&ua), "version": 0})).unwrap();
+    let kd = w.ua_key(0x0131, 0, 0).unwrap().key_data();
+    let rec = scaas_ua::ua8::pqz_key_record_message(0x0131, &ua, &kd, &k.pk(), None, Some(&[9; 32]), false).unwrap();
     assert_eq!(p["message"], hx(&rec.pqz_reg_message));
     assert!(verify(3, &h(&p["stmt"]), &h(&p["proof"])));
+    let k1 = w.pqz_key_version(0, 0, 1).unwrap();
+    let stored = [(0, scaas_ua::key_hash_of(scaas_ua::PQZ_SCHEME, &k.pk()).unwrap().unwrap())];
+    let v1 = scaas_ua::ua8::pqz_key_version_record_message(0x0131, &ua, &kd, 1, &k1.pk(), None, Some(&[9; 32]), &stored, &|_| None).unwrap();
+    let p1 = call(&k1, "proveKeyRecord", &json!({"proofSystemId": hx(&PQZL_ID), "ua": hx(&ua), "version": 1})).unwrap();
+    assert_eq!(p1["message"], hx(&v1.pqz_reg_message), "version 1");
+    assert_ne!(p1["message"], p["message"]);
+    assert!(verify(3, &h(&p1["stmt"]), &h(&p1["proof"])));
+    let p2 = call(&k1, "proveKeyRecord", &json!({"proofSystemId": hx(&PQZL_ID), "ua": hx(&ua), "version": 2})).unwrap();
+    assert_ne!(p2["message"], p1["message"], "the version is in the message");
+    assert_eq!(call(&k1, "proveKeyRecord", &json!({"proofSystemId": hx(&PQZL_ID), "ua": hx(&ua)})).err(), Some(Error::Argument), "no default");
 }
 
 /// The cache box: AES-256-GCM under `HKDF-SHA256(seed32, no salt, "scaas-pqz-balance-cache-v1", 32)`, AAD `pqz-cache:<set>`,

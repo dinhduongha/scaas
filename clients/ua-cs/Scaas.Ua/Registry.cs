@@ -43,6 +43,8 @@ public static partial class UA
     }
 
     public sealed record SetPqzKeyArgs(byte[] UA, byte[] PqzKey, byte[] PqzPopHash, UASig Sig);
+    /// <summary>Group 3g: <c>setPqzKey(ua, version, pqzKey, pqzPopHash, sig)</c>; version 0 is <see cref="SetPqzKeyArgs"/>' row.</summary>
+    public sealed record SetPqzKeyVersionArgs(byte[] UA, ulong Version, byte[] PqzKey, byte[] PqzPopHash, UASig Sig);
 
     /// <summary>One registry call: register (Kind, KeyData), registerMsig (Structure), registerWebAuthn (Key) or registerMuSig2 /
     /// registerFrost (Kind, Key). <c>Pop</c>: byte[], or MemberSig[] for registerMsig.</summary>
@@ -177,6 +179,10 @@ public static partial class UA
     /// <summary><c>setPqzKey(ua, pqzKey, pqzPopHash, sig)</c>.</summary>
     public static SetPqzKeyArgs NewSetPqzKeyArgs(byte[] ua, byte[] pqzKey, byte[] pqzPopHash, UASig sig) =>
         new(Sized(ua, 32, "ua"), pqzKey, Sized(pqzPopHash, 32, "pqzPopHash"), sig);
+
+    /// <summary>Group 3g: <c>setPqzKey(ua, version, pqzKey, pqzPopHash, sig)</c>.</summary>
+    public static SetPqzKeyVersionArgs NewSetPqzKeyVersionArgs(byte[] ua, ulong version, byte[] pqzKey, byte[] pqzPopHash, UASig sig) =>
+        new(Sized(ua, 32, "ua"), version, pqzKey, Sized(pqzPopHash, 32, "pqzPopHash"), sig);
 
     /// <summary>The registry call of a registration (TS-D10 … TS-D13), as clientkeys registrationArgs. The KEM key is version 0 (owner
     /// 2026-10-31): in full, or, only when the full call is over <see cref="RegisterCalldataLimit"/> (X0: PQZH n2560-kmax16384 with a PQZ

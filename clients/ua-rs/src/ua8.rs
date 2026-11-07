@@ -47,12 +47,15 @@ pub const PORTABLE_DOMAIN_SEPARATOR: [u8; 32] = [
     0xef, 0x22, 0xea, 0x79, 0x1b, 0xce, 0xa9, 0xef, 0xc6, 0x4c, 0xa1,
 ];
 /// The portable structs' EIP-712 `encodeType` (primary, then the referenced types sorted by name); `kind` is `uint16`.
-pub const PORTABLE_TYPES: [(&str, &str); 6] = [
+pub const PORTABLE_TYPES: [(&str, &str); 8] = [
     ("UAKemRecord", "UAKemRecord(bytes32 ua,uint64 version,uint8 scheme,bytes32 kemPkHash)"),
     ("UAPortableRecord", "UAPortableRecord(bytes32 ua,uint16 kind,bytes32 pqzKeyHash,UAKemRecord kem)UAKemRecord(bytes32 ua,uint64 version,uint8 scheme,bytes32 kemPkHash)"),
     ("UARegistration", "UARegistration(UAPortableRecord record,bytes32 pqzPopHash)UAKemRecord(bytes32 ua,uint64 version,uint8 scheme,bytes32 kemPkHash)UAPortableRecord(bytes32 ua,uint16 kind,bytes32 pqzKeyHash,UAKemRecord kem)"),
     ("UAPqzKey", "UAPqzKey(bytes32 ua,bytes32 pqzKeyHash)"),
     ("UAPqzKeyRecord", "UAPqzKeyRecord(UAPqzKey key,bytes32 pqzPopHash)UAPqzKey(bytes32 ua,bytes32 pqzKeyHash)"),
+    // group 3g (KV-1): a PQZ key version v >= 1 and the UA's consent to it; version 0 keeps `UAPqzKey` / `UAPqzKeyRecord`
+    ("UAPqzKeyVersion", "UAPqzKeyVersion(bytes32 ua,uint64 version,bytes32 pqzKeyHash)"),
+    ("UAPqzKeyVersionRecord", "UAPqzKeyVersionRecord(UAPqzKeyVersion key,bytes32 pqzPopHash)UAPqzKeyVersion(bytes32 ua,uint64 version,bytes32 pqzKeyHash)"),
     ("UAMembership", "UAMembership(bytes32 ua,bytes32 member)"),
 ];
 /// `keccak256(encodeType)` of a portable struct by name (panics on another name).
@@ -292,6 +295,84 @@ pub fn pqz_key_record_message_with(
         record_digest,
         message,
         pqz_reg_message: ua_message(PQZ_SCHEME, &tag, &key_digest)?,
+        member_digest: (kind == 0x0120).then(|| member_digest(ua, &message)),
+    })
+}
+
+fn pqz_key_version_hash(ua: &[u8; 32], version: u64, pqz_key_hash: &[u8; 32]) -> [u8; 32] {
+    let mut w = [0u8; 32];
+    w[24..].copy_from_slice(&version.to_be_bytes());
+    keccak(&[&portable_typehash("UAPqzKeyVersion"), ua, &w, pqz_key_hash])
+}
+/// Group 3g: the typed `UAPqzKeyVersion{ua, version, pqzKeyHash}` digest: what version v >= 1's `R_REG` proves over.
+pub fn pqz_key_version_digest(ua: &[u8; 32], version: u64, pqz_key_hash: &[u8; 32]) -> [u8; 32] {
+    typed(&pqz_key_version_hash(ua, version, pqz_key_hash))
+}
+/// Group 3g: the typed `UAPqzKeyVersionRecord{UAPqzKeyVersion{ua, version, pqzKeyHash}, pqzPopHash}` digest: what the UA signs for
+/// version v >= 1 under `ua_message(kind, PURPOSE_PQZ_KEY, ·)`.
+pub fn pqz_key_version_record_digest(ua: &[u8; 32], version: u64, pqz_key_hash: &[u8; 32], pqz_pop_hash: &[u8; 32]) -> [u8; 32] {
+    typed(&keccak(&[&portable_typehash("UAPqzKeyVersionRecord"), &pqz_key_version_hash(ua, version, pqz_key_hash), pqz_pop_hash]))
+}
+
+/// PQZ key version v >= 1 of `setPqzKey(ua, version, ...)`, see [`pqz_key_version_record_message`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PqzKeyVersionRecord {
+    pub pqz_key_hash: [u8; 32],
+    pub pqz_pop_hash: [u8; 32],
+    /// typed `UAPqzKeyVersion{ua, version, pqzKeyHash}`.
+    pub version_digest: [u8; 32],
+    /// typed `UAPqzKeyVersionRecord{key, pqzPopHash}`; a native msig member signs it itself (TS-D4).
+    pub record_digest: [u8; 32],
+    /// `ua_message(kind, PURPOSE_PQZ_KEY, record_digest)`: what the UA signs.
+    pub message: [u8; 32],
+    /// `ua_message(0x0142, PURPOSE_PQZ_KEY, version_digest)`: what the key's `R_REG` proves over.
+    pub pqz_reg_message: [u8; 32],
+    pub member_digest: Option<[u8; 32]>,
+}
+
+/// Group 3g (KV-1): the record of version `version`, from the UA's stored versions `(version, pqzKeyHash)` (the chain's `pqzKeyAt`):
+/// version 0 is `PqzKeySet` (a new key gets a new version), a version other than `latest + 1` or no version 0 `PqzKeyVersion`, a key
+/// a stored version holds `KeyInUse`. The holder rules of [`holder_pop_message`]; `inner` gives an `msig` member's key data.
+#[allow(clippy::too_many_arguments)]
+pub fn pqz_key_version_record_message(
+    kind: u16, ua: &[u8; 32], key_data: &[u8], version: u64, pqz_key: &[u8], pqz_pop: Option<&[u8]>, pqz_pop_hash: Option<&[u8; 32]>,
+    stored: &[(u64, [u8; 32])], inner: &Inner,
+) -> Result<PqzKeyVersionRecord> {
+    if !holds(kind, key_data, inner)? {
+        return Err(UAError::PqzHolder(kind));
+    }
+    if version == 0 {
+        return Err(UAError::PqzKeySet);
+    }
+    let latest = stored.iter().map(|s| s.0).max();
+    if !stored.iter().any(|s| s.0 == 0) || latest.map(|l| l.checked_add(1)) != Some(Some(version)) {
+        return Err(UAError::PqzKeyVersion);
+    }
+    let pqz_key_hash = pqz_key_hash_of(pqz_key)?;
+    if stored.iter().any(|s| s.1 == pqz_key_hash) {
+        return Err(UAError::KeyInUse);
+    }
+    pqz_key_version_record_of(kind, ua, version, pqz_key_hash, pqz_pop, pqz_pop_hash)
+}
+
+fn pqz_key_version_record_of(
+    kind: u16, ua: &[u8; 32], version: u64, pqz_key_hash: [u8; 32], pqz_pop: Option<&[u8]>, pqz_pop_hash: Option<&[u8; 32]>,
+) -> Result<PqzKeyVersionRecord> {
+    let pop_hash = proof_hash_of(pqz_pop, pqz_pop_hash)?;
+    if pop_hash == [0; 32] {
+        return Err(UAError::PqzPopHash);
+    }
+    let version_digest = pqz_key_version_digest(ua, version, &pqz_key_hash);
+    let record_digest = pqz_key_version_record_digest(ua, version, &pqz_key_hash, &pop_hash);
+    let tag = purpose_tag("pqz-key")?;
+    let message = ua_message(kind, &tag, &record_digest)?;
+    Ok(PqzKeyVersionRecord {
+        pqz_key_hash,
+        pqz_pop_hash: pop_hash,
+        version_digest,
+        record_digest,
+        message,
+        pqz_reg_message: ua_message(PQZ_SCHEME, &tag, &version_digest)?,
         member_digest: (kind == 0x0120).then(|| member_digest(ua, &message)),
     })
 }
@@ -997,6 +1078,26 @@ pub fn check_pqz_key_record_with(
     }
     let r = pqz_key_record_message_with(kind, ua, key_data, pqz_key, None, Some(pqz_pop_hash), false, &inner_of(members))?;
     let bits = Bits::new(accepted);
+    bits.verdict(signature_ok(kind, key_data, ua, &purpose_tag("pqz-key")?, &r.record_digest, sig, members, &bits)?, UAError::Unauthorized)
+}
+
+/// A PQZ key version record as `setPqzKey(ua, version, ...)` checks it, without its state (the sequence and the per-UA marker are the
+/// chain's): `ua` the id of `key_data`, a holder, version >= 1, the key's length, the proof hash, `sig` over the record digest.
+#[allow(clippy::too_many_arguments)]
+pub fn check_pqz_key_version_record(
+    kind: u16, key_data: &[u8], ua: &[u8; 32], version: u64, pqz_key: &[u8], pqz_pop_hash: &[u8; 32], sig: &[u8], members: &Members,
+) -> Result<()> {
+    if !is_record_of(kind, key_data, ua)? {
+        return Err(UAError::Unauthorized);
+    }
+    if !holds(kind, key_data, &inner_of(members))? {
+        return Err(UAError::PqzHolder(kind));
+    }
+    if version == 0 {
+        return Err(UAError::PqzKeySet);
+    }
+    let r = pqz_key_version_record_of(kind, ua, version, pqz_key_hash_of(pqz_key)?, None, Some(pqz_pop_hash))?;
+    let bits = Bits::new(None);
     bits.verdict(signature_ok(kind, key_data, ua, &purpose_tag("pqz-key")?, &r.record_digest, sig, members, &bits)?, UAError::Unauthorized)
 }
 

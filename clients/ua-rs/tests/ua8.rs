@@ -162,6 +162,8 @@ fn portable_typehashes_pinned() {
         ("UARegistration", "0xc78b548ceb2fadf1f0a895f79f88b517327c120f0f9ab345f02981441048c87e"),
         ("UAPqzKey", "0x827d90728b100bc830d06b04dd2b9b5f7853adaa05502b4082875f881d925a00"),
         ("UAPqzKeyRecord", "0xaba20a80603724f71232573a76d2506ae38f60f39ea9cd8e71f4b64775dd7567"),
+        ("UAPqzKeyVersion", "0x56bb760a3968427f1aa06b0497de42c05374beae46765175b61976c12e38b158"),
+        ("UAPqzKeyVersionRecord", "0x2e00b7c0ff5cfbca3f50e0445bcd02bb227e0154c239c812b38d9b8fa6e7d6e5"),
         ("UAMembership", "0x2ffb61cab130ef54f9af88d7255ca81c570651b2562c2c368286a1f43bfe5cb4"),
     ];
     assert_eq!(PORTABLE_TYPES.map(|(n, _)| n), want.map(|(n, _)| n));
@@ -968,6 +970,66 @@ fn check_kem_record_vectors() {
     assert_eq!(got, Err(UAError::Unauthorized), "not the key data's id");
     assert_eq!(flips, 3 * 12 + 3 * 2 * 3, "3 per signature: 12 single keys, 3 msig of 2 slots");
     println!("15 KEM records, {flips} flipped signatures refused");
+}
+
+#[cfg(feature = "pq")]
+/// Group 3g: portable.json `pqzKeyVersions` by digest, message and verdict; the builder's refusals on `pqzKeyVersionNegatives`.
+#[test]
+fn pqz_key_version_vectors() {
+    let p = load("portable.json");
+    let vers = arr(&p, "pqzKeyVersions");
+    assert_eq!(vers.len(), 16);
+    let stored = |r: &Value, versions: &[u64]| -> Vec<(u64, [u8; 32])> {
+        let name = r["name"].as_str().unwrap();
+        let (base, set) = (name.split('/').next().unwrap(), r["set"].as_str().unwrap());
+        versions.iter().map(|&v| {
+            let row = if v == 0 {
+                find(&p, "pqzKeyRecords", "name", &format!("{base}/{set}").into())
+            } else {
+                find(&p, "pqzKeyVersions", "name", &format!("{base}/v{v}/{set}").into())
+            };
+            (v, b32(&row["pqzKeyHash"]))
+        }).collect()
+    };
+    for r in vers {
+        let (name, kind, ua, h, v) = (&r["name"], num(&r["kind"]) as u16, b32(&r["ua"]), b32(&r["pqzPopHash"]), num(&r["version"]));
+        let kd = bytes(&find(&p, "registrations", "ua", &r["ua"])["keyData"]);
+        let held = stored(r, if v == 2 { &[0, 1] } else { &[0] });
+        let g = pqz_key_version_record_message(kind, &ua, &kd, v, &bytes(&r["pqzKey"]), None, Some(&h), &held, &|_| None).unwrap();
+        assert_eq!(hx(&g.pqz_key_hash), r["pqzKeyHash"], "{name}");
+        assert_eq!(hx(&g.version_digest), r["versionDigest"], "{name}");
+        assert_eq!(hx(&g.record_digest), r["recordDigest"], "{name}");
+        assert_eq!(hx(&g.message), r["message"], "{name}");
+        assert_eq!(hx(&g.pqz_reg_message), r["pqzRegMessage"], "{name}");
+        assert_eq!(g.member_digest.map(|m| hx(&m)).map(Value::from).unwrap_or(Value::Null), r["memberDigest"], "{name}");
+        assert_eq!(pqz_key_version_digest(&ua, v, &g.pqz_key_hash), g.version_digest);
+        let sig = bytes(&r["sig"]);
+        assert_eq!(check_pqz_key_version_record(kind, &kd, &ua, v, &bytes(&r["pqzKey"]), &h, &sig, &keys(&p)), Ok(()), "{name}: the control");
+        assert_eq!(check_pqz_key_version_record(kind, &kd, &ua, v + 1, &bytes(&r["pqzKey"]), &h, &sig, &keys(&p)), Err(UAError::Unauthorized), "{name}: another version");
+        assert_eq!(check_pqz_key_version_record(kind, &kd, &ua, 0, &bytes(&r["pqzKey"]), &h, &sig, &keys(&p)), Err(UAError::PqzKeySet), "{name}: version 0");
+    }
+    let (mut builder, mut verdict) = (0, 0);
+    for x in arr(&p, "pqzKeyVersionNegatives") {
+        let (name, m) = (&x["name"], &x["mutation"]);
+        let r = find(&p, "pqzKeyVersions", "name", &m["row"]);
+        let (kind, h, v) = (num(&r["kind"]) as u16, b32(&r["pqzPopHash"]), num(&r["version"]));
+        let kd = bytes(&find(&p, "registrations", "ua", &r["ua"])["keyData"]);
+        if x["error"] == "UAUnauthorized" {
+            let ua = if m["set"]["ua"].is_string() { b32(&m["set"]["ua"]) } else { b32(&r["ua"]) };
+            let reg = find(&p, "registrations", "ua", &hx(&ua).into());
+            let sig = if m["set"]["sig"].is_string() { bytes(&m["set"]["sig"]) } else { bytes(&r["sig"]) };
+            let got = check_pqz_key_version_record(num(&reg["kind"]) as u16, &bytes(&reg["keyData"]), &ua, v, &bytes(&r["pqzKey"]), &h, &sig, &keys(&p));
+            assert_eq!(got, Err(UAError::Unauthorized), "{name}");
+            verdict += 1;
+            continue;
+        }
+        let versions: Vec<u64> = m["stored"].as_array().unwrap().iter().map(|n| n.as_u64().unwrap()).collect();
+        let key = if m["set"]["pqzKey"].is_string() { bytes(&m["set"]["pqzKey"]) } else { bytes(&r["pqzKey"]) };
+        let got = pqz_key_version_record_message(kind, &b32(&r["ua"]), &kd, v, &key, None, Some(&h), &stored(r, &versions), &|_| None);
+        assert_eq!(got.unwrap_err().code(), x["error"], "{name}");
+        builder += 1;
+    }
+    assert_eq!((builder, verdict), (16, 12));
 }
 
 #[cfg(feature = "pq")]

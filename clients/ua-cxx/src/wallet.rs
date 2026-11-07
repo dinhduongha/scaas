@@ -119,6 +119,8 @@ mod ffi {
         fn wallet_zether_key(w: &Wallet, coin: u32, account: u32, key_use: u32) -> Result<Box<ZetherKey>>;
         fn wallet_pqz_key(w: &Wallet, account: u32, index: u32) -> Result<Box<PqzKey>>;
         fn wallet_export_pqz_leaf_raw(w: &Wallet, account: u32, index: u32) -> Result<Vec<u8>>;
+        fn wallet_pqz_key_version(w: &Wallet, account: u32, index: u32, version: u64) -> Result<Box<PqzKey>>;
+        fn wallet_export_pqz_leaf_raw_version(w: &Wallet, account: u32, index: u32, version: u64) -> Result<Vec<u8>>;
 
         fn seed_backup_reveal(b: &SeedBackup) -> Result<Vec<u8>>;
         fn seed_backup_challenge(b: &SeedBackup) -> Result<Vec<u32>>;
@@ -508,6 +510,13 @@ fn wallet_pqz_key(w: &Wallet, account: u32, index: u32) -> R<Box<PqzKey>> {
 }
 fn wallet_export_pqz_leaf_raw(w: &Wallet, account: u32, index: u32) -> R<Vec<u8>> {
     guard(|| Ok(w.0.export_pqz_leaf_raw(account, index, fpqz::AllowSecretExport)?.to_vec()))
+}
+/// Group 3g (T15o): the PQZ key and leaf of a key version.
+fn wallet_pqz_key_version(w: &Wallet, account: u32, index: u32, version: u64) -> R<Box<PqzKey>> {
+    guard(|| Ok(Box::new(PqzKey(w.0.pqz_key_version(account, index, version)?, Live::new()))))
+}
+fn wallet_export_pqz_leaf_raw_version(w: &Wallet, account: u32, index: u32, version: u64) -> R<Vec<u8>> {
+    guard(|| Ok(w.0.export_pqz_leaf_raw_version(account, index, version, fpqz::AllowSecretExport)?.to_vec()))
 }
 
 // --- seed backup -----------------------------------------------------------------------------------------------------------

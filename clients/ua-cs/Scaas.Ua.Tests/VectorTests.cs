@@ -272,6 +272,8 @@ public class VectorTests
             ["UARegistration"] = "0xc78b548ceb2fadf1f0a895f79f88b517327c120f0f9ab345f02981441048c87e",
             ["UAPqzKey"] = "0x827d90728b100bc830d06b04dd2b9b5f7853adaa05502b4082875f881d925a00",
             ["UAPqzKeyRecord"] = "0xaba20a80603724f71232573a76d2506ae38f60f39ea9cd8e71f4b64775dd7567",
+            ["UAPqzKeyVersion"] = "0x56bb760a3968427f1aa06b0497de42c05374beae46765175b61976c12e38b158",
+            ["UAPqzKeyVersionRecord"] = "0x2e00b7c0ff5cfbca3f50e0445bcd02bb227e0154c239c812b38d9b8fa6e7d6e5",
             ["UAMembership"] = "0x2ffb61cab130ef54f9af88d7255ca81c570651b2562c2c368286a1f43bfe5cb4",
         };
         Assert.Equal(pinned.Count, ty.GetProperty("types").EnumerateObject().Count());
@@ -446,6 +448,57 @@ public class VectorTests
         // known answers shared with ua-rs / ua-py / ua-go: the 8-byte version word and the decimal "evm:" chain key
         Assert.Equal("0xa0063a84b56d80c83688d8caf5aeb4be8fb4556928e8bc649686449573938f07", Hx(UA.KemRecordDigest(u, ulong.MaxValue, Kem(1601))));
         Assert.Equal("0x6e45d591a544f53396f6e86d49f5809196c5725f9d99dbd2ca97f9925c7ce950", Hx(UA.ChainKeyHash((1UL << 40) + 7))); // keccak256("evm:1099511627783")
+    }
+
+    /// Group 3g: portable.json pqzKeyVersions by digest, message and args; the builder's refusals on pqzKeyVersionNegatives.
+    [Fact]
+    public void PqzKeyVersionVectors()
+    {
+        var p = Load("portable.json");
+        var regs = p.GetProperty("registrations").EnumerateArray().ToList();
+        var zero = p.GetProperty("pqzKeyRecords").EnumerateArray().ToDictionary(r => r.GetProperty("name").GetString()!);
+        var vers = p.GetProperty("pqzKeyVersions").EnumerateArray().ToDictionary(r => r.GetProperty("name").GetString()!);
+        Assert.Equal(16, vers.Count);
+        byte[] KeyData(JsonElement r) => B(regs.First(x => x.GetProperty("ua").GetString() == r.GetProperty("ua").GetString()).GetProperty("keyData"));
+        List<(ulong, byte[])> Stored(JsonElement r, IEnumerable<ulong> versions)
+        {
+            var (name, set) = (r.GetProperty("name").GetString()!.Split('/')[0], r.GetProperty("set").GetString()!);
+            return versions.Select(v => (v, B((v == 0 ? zero[$"{name}/{set}"] : vers[$"{name}/v{v}/{set}"]).GetProperty("pqzKeyHash")))).ToList();
+        }
+        foreach (var r in vers.Values)
+        {
+            var (ua, h, ph, v, key) = (B(r.GetProperty("ua")), B(r.GetProperty("pqzKeyHash")), B(r.GetProperty("pqzPopHash")), r.GetProperty("version").GetUInt64(), B(r.GetProperty("pqzKey")));
+            var name = r.GetProperty("name").GetString();
+            var g = UA.PqzKeyVersionRecordMessage(Kind(r), ua, KeyData(r), v, key, pqzPopHash: ph, stored: Stored(r, v == 2 ? [0UL, 1UL] : [0UL]));
+            Assert.Equal(r.GetProperty("pqzKeyHash").GetString(), Hx(g.PqzKeyHash));
+            Assert.Equal(r.GetProperty("versionDigest").GetString(), Hx(g.VersionDigest));
+            Assert.Equal(r.GetProperty("recordDigest").GetString(), Hx(g.RecordDigest));
+            Assert.Equal(r.GetProperty("message").GetString(), Hx(g.Message));
+            Assert.Equal(r.GetProperty("pqzRegMessage").GetString(), Hx(g.PqzRegMessage));
+            Assert.Equal(r.TryGetProperty("memberDigest", out var md) ? md.GetString() : null, g.MemberDigest is null ? null : Hx(g.MemberDigest));
+            Assert.Equal(r.GetProperty("versionDigest").GetString(), Hx(UA.PqzKeyVersionDigest(ua, v, h)));
+            Assert.Equal(r.GetProperty("recordDigest").GetString(), HashTypedData(r.GetProperty("typedData")));
+            var sig = r.GetProperty("args").GetProperty("sig");
+            var built = Kind(r) == 0x0120 ? new UA.UASig(members: SlotsOf(sig.GetProperty("members"))) : new UA.UASig(signature: B(sig.GetProperty("signature")));
+            SameJson(UA.NewSetPqzKeyVersionArgs(ua, v, key, ph, built), r.GetProperty("args"));
+        }
+        var n = 0;
+        foreach (var x in p.GetProperty("pqzKeyVersionNegatives").EnumerateArray())
+        {
+            var err = x.GetProperty("error").GetString();
+            if (err == "UAUnauthorized") continue; // a signature's verdict, not the builder's
+            var m = x.GetProperty("mutation");
+            var r = vers[m.GetProperty("row").GetString()!];
+            var stored = Stored(r, m.GetProperty("stored").EnumerateArray().Select(e => e.GetUInt64()));
+            var key = m.GetProperty("set").TryGetProperty("pqzKey", out var k) ? B(k) : B(r.GetProperty("pqzKey"));
+            Assert.Equal(err, Assert.Throws<UAException>(() => UA.PqzKeyVersionRecordMessage(Kind(r), B(r.GetProperty("ua")), KeyData(r), r.GetProperty("version").GetUInt64(), key,
+                pqzPopHash: B(r.GetProperty("pqzPopHash")), stored: stored)).Code);
+            n++;
+        }
+        Assert.Equal(16, n);
+        var r0 = vers.Values.First();
+        Assert.Equal("UAPqzKeySet", Assert.Throws<UAException>(() => UA.PqzKeyVersionRecordMessage(Kind(r0), B(r0.GetProperty("ua")), KeyData(r0), 0, B(r0.GetProperty("pqzKey")),
+            pqzPopHash: B(r0.GetProperty("pqzPopHash")))).Code);
     }
 
     [Fact]

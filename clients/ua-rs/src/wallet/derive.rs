@@ -178,7 +178,14 @@ pub fn eip2333<F: PrimeField>(seed: &[u8], path: &[u32], salt: &[u8]) -> Result<
 
 /// The PQ seed of `tag` (pq.js `pqSeed`).
 pub fn hkdf_pq(seed: &[u8], tag: &str, account: u32, index: u32, len: usize) -> Result<Zeroizing<Vec<u8>>> {
-    let info = [tag.as_bytes(), &account.to_be_bytes(), &index.to_be_bytes()].concat();
+    hkdf_pq_version(seed, tag, account, index, 0, len)
+}
+
+/// [`hkdf_pq`] of key version `version` (CTR-PQZ-13 with group 3g's C8; pq.js `pqzKeySeed`): version 0 is [`hkdf_pq`]'s `info`,
+/// every version v ≥ 1 appends `be64(v)` (the map stays injective, today's keys stay).
+pub fn hkdf_pq_version(seed: &[u8], tag: &str, account: u32, index: u32, version: u64, len: usize) -> Result<Zeroizing<Vec<u8>>> {
+    let v = version.to_be_bytes();
+    let info = [tag.as_bytes(), &account.to_be_bytes(), &index.to_be_bytes(), if version == 0 { &[] } else { &v[..] }].concat();
     let mut out = Zeroizing::new(vec![0u8; len]);
     Hkdf::<Sha256>::new(Some(PQ_SALT), seed).expand(&info, &mut out).map_err(|_| Error::Argument)?;
     Ok(out)

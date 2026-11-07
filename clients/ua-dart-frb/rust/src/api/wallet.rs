@@ -499,6 +499,14 @@ impl UaWallet {
     pub fn export_pqz_leaf_raw(&self, account: u32, index: u32) -> R<SecretBytes> {
         out(&*self.0.export_pqz_leaf_raw(account, index, fpqz::AllowSecretExport)?)
     }
+    /// Group 3g (T15o): the PQZ key of `account` / `index` at key `version` (0 the info without a suffix, v >= 1 with be64(v)).
+    pub fn pqz_key_version(&self, account: u32, index: u32, version: u64) -> R<UaPqzKey> {
+        Ok(UaPqzKey(self.0.pqz_key_version(account, index, version)?, Live::new()))
+    }
+    /// The PQZ leaf `seed32` of a key version: the explicit export (spec §8.4).
+    pub fn export_pqz_leaf_raw_version(&self, account: u32, index: u32, version: u64) -> R<SecretBytes> {
+        out(&*self.0.export_pqz_leaf_raw_version(account, index, version, fpqz::AllowSecretExport)?)
+    }
 }
 
 impl UaSeedBackup {
@@ -741,7 +749,7 @@ mod tests {
                 assert!(["&SecretBytes", "Option<Secret>", "Vec<SecretBytes>", "Option<&'a SecretBytes>"].iter().any(|t| ty.starts_with(t)), "{p} crosses the codec");
             }
         }
-        for f in ["fn decaps(", "fn open(", "fn open_container(", "fn aead_open(", "fn hkdf_sha256(", "fn export_pqz_leaf_raw(",
+        for f in ["fn decaps(", "fn open(", "fn open_container(", "fn aead_open(", "fn hkdf_sha256(", "fn export_pqz_leaf_raw(", "fn export_pqz_leaf_raw_version(",
                   "fn reveal(", "fn take(", "fn open_balance_cache("] {
             for at in src.match_indices(f).map(|(i, _)| i) {
                 let sig = &src[at..at + src[at..].find('{').unwrap()];

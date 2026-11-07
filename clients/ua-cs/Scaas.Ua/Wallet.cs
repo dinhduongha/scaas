@@ -205,6 +205,8 @@ internal static unsafe class Native
     [DllImport(L)] internal static extern int scaas_ua_pqz_set(byte* o, ref nuint n);
     [DllImport(L)] internal static extern int scaas_ua_pqz_check_set(byte* deployed);
     [DllImport(L)] internal static extern int scaas_ua_export_pqz_leaf_raw(WalletHandle w, uint account, uint index, byte* o);
+    [DllImport(L)] internal static extern int scaas_ua_wallet_pqz_key_version(WalletHandle w, uint account, uint index, ulong version, out PqzHandle k);
+    [DllImport(L)] internal static extern int scaas_ua_export_pqz_leaf_raw_version(WalletHandle w, uint account, uint index, ulong version, byte* o);
 }
 #pragma warning restore SYSLIB1054
 
@@ -691,18 +693,21 @@ public sealed unsafe class Wallet : IDisposable
         return new ZetherKey(k);
     }
 
-    public PqzKey PqzKey(uint account, uint index)
+    /// <summary>The PQZ key of account / index at key <paramref name="version"/> (group 3g: version 0 the info without a suffix,
+    /// v &gt;= 1 with be64(v)).</summary>
+    public PqzKey PqzKey(uint account, uint index, ulong version = 0)
     {
-        UaLib.Check(Native.scaas_ua_wallet_pqz_key(H, account, index, out var k));
+        UaLib.Check(Native.scaas_ua_wallet_pqz_key_version(H, account, index, version, out var k));
         return new PqzKey(k);
     }
 
-    /// <summary>WARNING: a secret in the clear, the 32-byte PQZ leaf seed32 (a pinned array): wipe it with <see cref="UaLib.Wipe"/>.</summary>
-    public byte[] ExportPqzLeafRaw(uint account, uint index)
+    /// <summary>WARNING: a secret in the clear, the 32-byte PQZ leaf seed32 of key <paramref name="version"/> (a pinned array): wipe
+    /// it with <see cref="UaLib.Wipe"/>.</summary>
+    public byte[] ExportPqzLeafRaw(uint account, uint index, ulong version = 0)
     {
         var leaf = GC.AllocateArray<byte>(32, pinned: true);
         using var a = new Args();
-        UaLib.Check(Native.scaas_ua_export_pqz_leaf_raw(H, account, index, a.Pin(leaf)));
+        UaLib.Check(Native.scaas_ua_export_pqz_leaf_raw_version(H, account, index, version, a.Pin(leaf)));
         return leaf;
     }
 

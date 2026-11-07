@@ -269,6 +269,9 @@ export const PORTABLE_TYPES = Object.freeze({
   UARegistration: Object.freeze([field('record', 'UAPortableRecord'), field('pqzPopHash', 'bytes32')]),
   UAPqzKey: Object.freeze([field('ua', 'bytes32'), field('pqzKeyHash', 'bytes32')]),
   UAPqzKeyRecord: Object.freeze([field('key', 'UAPqzKey'), field('pqzPopHash', 'bytes32')]),
+  // group 3g (KV-1): a PQZ key version v ≥ 1 and the UA's consent to it; version 0 keeps `UAPqzKey` / `UAPqzKeyRecord`
+  UAPqzKeyVersion: Object.freeze([field('ua', 'bytes32'), field('version', 'uint64'), field('pqzKeyHash', 'bytes32')]),
+  UAPqzKeyVersionRecord: Object.freeze([field('key', 'UAPqzKeyVersion'), field('pqzPopHash', 'bytes32')]),
   UAMembership: Object.freeze([field('ua', 'bytes32'), field('member', 'bytes32')]),
 });
 /** `keccak256(encodeType(T))` per struct (primary type, then the referenced types sorted by name). */
@@ -334,6 +337,21 @@ export const pqzKeyDigest = (key) => typed(pqzKeyHash_(key));
 /** The typed `UAPqzKeyRecord{UAPqzKey{ua, pqzKeyHash}, pqzPopHash}` digest: what `setPqzKey`'s signature signs. */
 export const pqzKeyRecordDigest = ({ ua, pqzKeyHash, pqzPopHash }) =>
   typed(keccak_256(concatBytes(TH.UAPqzKeyRecord, pqzKeyHash_({ ua, pqzKeyHash }), sized(pqzPopHash, 32, 'pqzPopHash'))));
+
+const u64 = (v, what) => {
+  let n;
+  try { n = BigInt(v); } catch { fail('UAPqzKeyVersion', `${what}: ${v}`); }
+  if (n < 0n || n >= 1n << 64n) fail('UAPqzKeyVersion', `${what}: ${v}`);
+  return n;
+};
+const pqzKeyVersionHash_ = ({ ua, version, pqzKeyHash }) => keccak_256(concatBytes(TH.UAPqzKeyVersion, sized(ua, 32, 'ua'),
+  word(u64(version, 'version')), sized(pqzKeyHash, 32, 'pqzKeyHash')));
+/** Group 3g: the typed `UAPqzKeyVersion{ua, version, pqzKeyHash}` digest, what version v ≥ 1's R_REG proves over. */
+export const pqzKeyVersionDigest = (key) => typed(pqzKeyVersionHash_(key));
+/** Group 3g: the typed `UAPqzKeyVersionRecord{UAPqzKeyVersion{ua, version, pqzKeyHash}, pqzPopHash}` digest, what the UA signs
+ *  for version v ≥ 1 (`setPqzKey(ua, version, …)`). */
+export const pqzKeyVersionRecordDigest = ({ ua, version, pqzKeyHash, pqzPopHash }) =>
+  typed(keccak_256(concatBytes(TH.UAPqzKeyVersionRecord, pqzKeyVersionHash_({ ua, version, pqzKeyHash }), sized(pqzPopHash, 32, 'pqzPopHash'))));
 
 /** The exact JSON a wallet signs with `eth_signTypedData_v4` for a portable record: `{ domain: { name, version }, types:
  *  { EIP712Domain, <primaryType>, <referenced types> }, primaryType, message }`; its `hashTypedData` is the record's digest. */
@@ -436,6 +454,60 @@ export function pqzKeyRecordMessage(kind, { ua, keyData, pqzKey, pqzPop, pqzPopH
   return { pqzKeyHash, pqzPopHash: popHash, pqzKeyDigest: keyDigest, recordDigest, message,
     pqzRegMessage: uaMessage(0x0142, PQZ_KEY_TAG, keyDigest), typedData, ...(kind === 0x0120 ? { memberDigest: memberDigest(ua, message) } : {}) };
 }
+
+/**
+ * Group 3g (CTR-UA-41 draft, KV-1): PQZ key version `version` ≥ 1 of `setPqzKey(ua, version, pqzKey, pqzPopHash, sig)`.
+ * `stored`: the UA's stored versions as `{ version, pqzKeyHash }` (the chain's `pqzKeyAt` / `UAPqzKeyAdded`), read first:
+ * version 0 is refused here (`UAPqzKeySet` once stored: R2, a new key gets a new version; version 0 is `pqzKeyRecordMessage`),
+ * a version other than `latest + 1` (`UAPqzKeyVersion`), a key equal to a stored version's (`UAKeyInUse`: the wallet never signs
+ * one, the chain refuses it at storage). Returns `{ pqzKeyHash, pqzPopHash, versionDigest, recordDigest, message, pqzRegMessage,
+ * typedData }` (+ `memberDigest` for an msig): `message = uaMessage(kind, PURPOSE_PQZ_KEY, recordDigest)`, `pqzRegMessage =
+ * uaMessage(0x0142, PURPOSE_PQZ_KEY, versionDigest)`.
+ */
+export function pqzKeyVersionRecordMessage(kind, { stored = [], ...record } = {}) {
+  if (!holds(kind, record.keyData, record.inner)) fail('UAPqzHolder', `0x${Number(kind).toString(16).padStart(4, '0')} may not hold a PQZ key`);
+  const v = u64(record.version, 'version');
+  if (v === 0n) fail('UAPqzKeySet', 'version 0 is write-once: a new key gets a new version');
+  const versions = stored.map((r) => u64(r.version, 'stored version'));
+  if (!versions.includes(0n) || v !== versions.reduce((m, x) => (x > m ? x : m), 0n) + 1n) fail('UAPqzKeyVersion', String(v));
+  const pqzKeyHash = pqzKeyHashOf(record.pqzKey);
+  if (stored.some((r) => hex(sized(r.pqzKeyHash, 32, 'pqzKeyHash')) === hex(pqzKeyHash))) fail('UAKeyInUse', 'a stored version holds this key');
+  return pqzKeyVersionRecordOf(kind, record);
+}
+
+/** `pqzKeyVersionRecordMessage` without the chain's state (no sequence, no marker): what `ua-verify.js` re-checks of a stored row. */
+export function pqzKeyVersionRecordOf(kind, { ua, keyData, version, pqzKey, pqzPop, pqzPopHash, inner } = {}) {
+  if (!holds(kind, keyData, inner)) fail('UAPqzHolder', `0x${Number(kind).toString(16).padStart(4, '0')} may not hold a PQZ key`);
+  const v = u64(version, 'version');
+  if (v === 0n) fail('UAPqzKeySet', 'version 0 is write-once: a new key gets a new version');
+  const pqzKeyHash = pqzKeyHashOf(pqzKey);
+  const popHash = proofHashOf(pqzPop, pqzPopHash);
+  if (popHash === Z32) fail('UAPqzPopHash', 'a PQZ key needs its proof hash');
+  const versionDigest = pqzKeyVersionDigest({ ua, version: v, pqzKeyHash });
+  const recordDigest = pqzKeyVersionRecordDigest({ ua, version: v, pqzKeyHash, pqzPopHash: popHash });
+  const message = uaMessage(kind, PQZ_KEY_TAG, recordDigest);
+  const typedData = portableTypedData('UAPqzKeyVersionRecord',
+    { key: { ua: h32(ua, 'ua'), version: v.toString(), pqzKeyHash: hex(pqzKeyHash) }, pqzPopHash: hex(popHash) });
+  return { pqzKeyHash, pqzPopHash: popHash, versionDigest, recordDigest, message, pqzRegMessage: uaMessage(0x0142, PQZ_KEY_TAG, versionDigest),
+    typedData, ...(kind === 0x0120 ? { memberDigest: memberDigest(ua, message) } : {}) };
+}
+
+/** KV-7 (R3, F-2): a UA's version is pending on a chain when its latest stored version has this build's PQZ key length and is not
+ *  yet eligible (its proof bytes are missing): the on-chain sign of an imminent rotation. A latest version of another set's length
+ *  is not pending: it never becomes current here. `latest`: the key byte length and eligibility of `pqzKeyAt(ua, pqzKeyLatest(ua))`. */
+export const pqzKeyPending = (latest, pkLength) => latest.length === pkLength && !latest.eligible;
+
+/** CTR-UA-29's selection with KV-7's filter: never a UA with a pending version as a decoy; UAs without a `UAPqzKeyCurrent` in the
+ *  look-back window come first. `candidates`: `{ ua, latest: { length, eligible }, rotatedRecently }`. */
+export const pqzDecoyCandidates = (candidates, pkLength) => {
+  const open = candidates.filter((c) => !pqzKeyPending(c.latest, pkLength));
+  return [...open.filter((c) => !c.rotatedRecently), ...open.filter((c) => c.rotatedRecently)];
+};
+
+/** F-14: the key of a vault entry or backup of a PQZ key, `(ua, version, pqzKeyHash)`, so two keys at one number (a rule broken
+ *  across chains) never overwrite each other. */
+export const pqzVaultKey = ({ ua, version, pqzKeyHash }) =>
+  `${h32(ua, 'ua')}/${u64(version, 'version')}/${hex(sized(pqzKeyHash, 32, 'pqzKeyHash'))}`;
 
 /** The typed `UAMembership{ua, member}` digest: what `member` signs to accept its slot in the `msig` `ua` (CTR-UA-37). */
 export const membershipDigest = ({ ua, member }) => typed(keccak_256(concatBytes(TH.UAMembership, sized(ua, 32, 'ua'), sized(member, 32, 'member'))));

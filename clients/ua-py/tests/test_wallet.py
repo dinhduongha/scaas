@@ -861,6 +861,19 @@ class Pqz(Case):
             self.assertEqual(len(self.keep(w.pqz_key(a, i)).public()), 18432)
         self.assertEqual(code(lambda: w.export_pqz_leaf_raw(1 << 31, 0)), 'UAArgument')
 
+    def test_pqz_key_versions_are_the_pq_kat_rows(self):
+        """Group 3g C8 (T15o): ``pqz_key`` / ``export_pqz_leaf_raw`` at a key version give pq_kat.json's ``pqzSeeds``."""
+        rows = json.loads((STATE / 'ua' / 'pq_kat.json').read_text())['pqzSeeds']
+        w = self.new_wallet('pq_kat')
+        pks = []
+        for r in rows:
+            leaf = w.export_pqz_leaf_raw(r['account'], r['index'], r['version'])
+            self.assertEqual('0x' + bytes(leaf).hex(), r['seed32'], r['version'])
+            W.wipe(leaf)
+            pks.append(self.keep(w.pqz_key(r['account'], r['index'], r['version'])).public())
+        self.assertEqual(pks[0], self.keep(w.pqz_key()).public(), 'version 0 is the default')
+        self.assertEqual(len(set(pks)), 3, 'one key per version')
+
     def test_register_set_mismatch_and_key_field(self):
         k = self.keep(self.new_wallet('pq_kat').pqz_key())
         out = json.loads(k.call('proveRegister', self.REQ))
@@ -891,7 +904,10 @@ class Pqz(Case):
         rows = json.loads((STATE / 'pqz' / 'n2304-kmax4096' / 'state.json').read_text())
         a = rows['accounts'][0]
         words = dict({f: rows[f] for f in ('chainUid', 'token', 'psid')},
-                     **{f: a[f] for f in ('ua', 'block', 'account', 'pending', 'accWords', 'blobs', 'keyRecord')}, forOp7=False)
+                     **{f: a[f] for f in ('ua', 'block', 'account', 'pending', 'accWords', 'blobs', 'keyRecord')}, forOp7=False,
+                     # group 3g (T15o): the UA's sendCounter word, version 0, pqzVersions (latest 0, current 0, listed)
+                     sendCounterWord='0x' + a['sendCounter'].to_bytes(32, 'big').hex(), keyVersion=0,
+                     keyVersions='0x' + (1 << 128).to_bytes(32, 'big').hex())
         k = self.keep(self.new_wallet('pq_kat').pqz_key())
         self.assertEqual(code(lambda: k.call('balance', words)), 'UAArgument')
         self.assertEqual(code(lambda: k.call('balance', dict(words, psid='0x' + PQZL_ID['n2048-kmax1024']))), 'UAPqzSetMismatch')
@@ -901,7 +917,7 @@ class Pqz(Case):
         # under `vectors`, gen_wallet_state.sh): each row's own handle decrypts its balance
         w = self.new_wallet('pq_kat')
         for r in json.loads((STATE / 'pqz' / 'n2304-kmax4096' / 'wallet_state.json').read_text())['rows']:
-            q = self.keep(w.pqz_key(r['account'], r['index']))
+            q = self.keep(w.pqz_key(r['account'], r['index'], r['version']))
             self.assertEqual(json.loads(q.call('balance', r['request']))['value'], r['value'], r['name'])
 
     def test_no_oracle(self):

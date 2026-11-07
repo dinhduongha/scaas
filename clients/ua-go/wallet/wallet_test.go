@@ -1390,6 +1390,10 @@ func TestPqzWordsOnTheForgeRows(t *testing.T) {
 		words[f] = a[f]
 	}
 	words["forOp7"] = false
+	// group 3g (T15o): the UA's sendCounter word, version 0, pqzVersions (latest 0, current 0, listed)
+	words["sendCounterWord"] = fmt.Sprintf("0x%064x", uint64(a["sendCounter"].(float64)))
+	words["keyVersion"] = 0
+	words["keyVersions"] = "0x" + strings.Repeat("00", 15) + "01" + strings.Repeat("00", 16)
 	f := newFix(t)
 	k := must(f.fresh("pq_kat").PqzKey(0, 0))
 	defer k.Close()
@@ -1409,7 +1413,7 @@ func TestPqzWordsOnTheForgeRows(t *testing.T) {
 	// `vectors`, gen_wallet_state.sh): each row's own handle decrypts its balance
 	w := f.fresh("pq_kat")
 	for _, r := range rows(vec(t, "smartcontracts/vectors/pqz/n2304-kmax4096/wallet_state.json")["rows"]) {
-		q := must(w.PqzKey(uint32(r["account"].(float64)), uint32(r["index"].(float64))))
+		q := must(w.PqzKeyVersion(uint32(r["account"].(float64)), uint32(r["index"].(float64)), uint64(r["version"].(float64))))
 		out := must(q.Call("balance", js(r["request"])))
 		q.Close()
 		var got obj
@@ -1458,6 +1462,24 @@ func TestPqz(t *testing.T) {
 	if _, err := w.ExportPqzLeafRaw(1<<31, 0); code(err) != "UAArgument" {
 		t.Fatal(err)
 	}
+	// group 3g C8 (T15o): each key version's leaf is pq_kat.json's pqzSeeds row; version 0 is PqzKey's key; one key per version
+	pks := map[string]bool{}
+	for _, r := range rows(vec(t, "smartcontracts/vectors/ua/pq_kat.json")["pqzSeeds"]) {
+		a, i, v := uint32(r["account"].(float64)), uint32(r["index"].(float64)), uint64(r["version"].(float64))
+		leaf := must(w.ExportPqzLeafRawVersion(a, i, v))
+		if fmt.Sprintf("0x%x", leaf) != r["seed32"] {
+			t.Fatal("seed32 of version", v)
+		}
+		Wipe(leaf)
+		q := must(w.PqzKeyVersion(a, i, v))
+		pks[fmt.Sprintf("%x", must(q.PublicKey()))] = true
+		q.Close()
+	}
+	q0 := must(w.PqzKey(0, 0))
+	if len(pks) != 3 || !pks[fmt.Sprintf("%x", must(q0.PublicKey()))] {
+		t.Fatal("one key per version, version 0 PqzKey's")
+	}
+	q0.Close()
 	k := must(w.PqzKey(0, 0))
 	defer k.Close()
 	pk := must(k.PublicKey())

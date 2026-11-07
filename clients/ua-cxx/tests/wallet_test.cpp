@@ -12,6 +12,7 @@
 #include <iterator>
 #include <set>
 #include <sstream>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -846,6 +847,12 @@ static void pqz_words() {
     json words = {{"chainUid", st["chainUid"]}, {"token", st["token"]}, {"psid", st["psid"]}};
     for (auto f : {"ua", "block", "account", "pending", "accWords", "blobs", "keyRecord"}) words[f] = a[f];
     words["forOp7"] = false;
+    // group 3g (T15o): the UA's sendCounter word, version 0, pqzVersions (latest 0, current 0, listed)
+    char ctr[67];
+    std::snprintf(ctr, sizeof ctr, "0x%064llx", static_cast<unsigned long long>(a["sendCounter"].get<uint64_t>()));
+    words["sendCounterWord"] = ctr;
+    words["keyVersion"] = 0;
+    words["keyVersions"] = "0x" + std::string(30, '0') + "01" + std::string(32, '0');
     Wallet w = wallet_of("pq_kat");
     PqzKey k = w.pqzKey(0, 0);
     CHECK(code_of([&] { k.call("balance", words.dump()); }) == "UAArgument", "a forge row: no wallet key");
@@ -856,9 +863,24 @@ static void pqz_words() {
     // `vectors`, gen_wallet_state.sh): each row's own handle decrypts its balance
     json ws = load_json(std::string(SCAAS_UA_VECTORS_DIR) + "/../pqz/n2304-kmax4096/wallet_state.json");
     for (auto& r : ws["rows"]) {
-        PqzKey q = w.pqzKey(r["account"].get<uint32_t>(), r["index"].get<uint32_t>());
+        PqzKey q = w.pqzKey(r["account"].get<uint32_t>(), r["index"].get<uint32_t>(), r["version"].get<uint64_t>());
         CHECK(json::parse(q.call("balance", r["request"].dump()))["value"] == r["value"], r["name"].get<std::string>());
     }
+}
+
+// Group 3g C8 (T15o): pqzKey / exportPqzLeafRaw at a key version give pq_kat.json's pqzSeeds; version 0 is the default; one key
+// per version.
+static void pqz_key_versions() {
+    json kat = load_json(std::string(SCAAS_UA_VECTORS_DIR) + "/pq_kat.json");
+    Wallet w = wallet_of("pq_kat");
+    std::set<Bytes> pks;
+    for (auto& r : kat["pqzSeeds"]) {
+        auto [a, i, v] = std::tuple{r["account"].get<uint32_t>(), r["index"].get<uint32_t>(), r["version"].get<uint64_t>()};
+        Secret leaf = w.exportPqzLeafRaw(a, i, v);
+        CHECK(hx(leaf.copy()) == r["seed32"].get<std::string>(), "seed32 of a version");
+        pks.insert(w.pqzKey(a, i, v).pk());
+    }
+    CHECK(pks.size() == 3 && pks.count(w.pqzKey(0, 0).pk()), "one key per version, version 0 the default");
 }
 
 // --- PQZ facade ------------------------------------------------------------------------------------------------------------
@@ -918,7 +940,8 @@ int main(int argc, char** argv) {
         {"zether_facade", zether_facade},
         {"pqz_facade", pqz_facade},
         {"zether_words", zether_words},
-        {"pqz_words", pqz_words}};
+        {"pqz_words", pqz_words},
+        {"pqz_key_versions", pqz_key_versions}};
     if (argc != 2 || !tests.count(argv[1])) {
         std::fprintf(stderr, "usage: wallet_test <name>\n");
         return 2;

@@ -395,7 +395,7 @@ T15g, T15i, T15l):
    unpacked by `facade::pqz_pack`. Zether: `family` names the layout parser (EVM only; another family is refused until its
    parser exists), the account slots are those of the reader's own `acct[UA(Y)]`.
 3. <a id="CLI-UAL-22"></a>**CLI-UAL-22 — Leg and role bound to the handle (both).** Before the key is used: the handle's key equals the registered key the words
-   carry (PQZ: the registry's `pqzKey[ua]` record, `proven`, its SSTORE2 code; Zether: the leg's `Y_t` or the token's auditor
+   carry (PQZ: the registry's `pqzKey[ua][v]` record of the key version read, `proven`, its SSTORE2 code; Zether: the leg's `Y_t` or the token's auditor
    key); the selected leg's owner is the reader; an auditor read needs the token's auditor mode not NONE and an auditor copy
    on that leg. These checks stop a careless caller; they never make words authentic.
 4. <a id="CLI-UAL-23"></a>**CLI-UAL-23 — One refusal before the key (both).** Every refusal before the key is used is `Argument` (C: `SCAAS_UA_ERR_ARGUMENT`)
@@ -480,13 +480,17 @@ block hash, every read before the key is used; it reads no entry, so the `codeHa
 without `--rpc` it reads the holder's own sealed cache box; a typed-in ciphertext (`--ct`) exists only under `hazmat`. BUILT.
 
 ***The PQZ reference reading layer, `pqz-read`: BUILT*** (ua-rs-sign T15m, owner 2026-11-07; a binary of the `ua-rs` package,
-`clients/ua-rs/src/bin/pqz-read.rs`, never in the library). It reads the words of `balance` (the holder's own account, with
-`--for-op7`) and `auditRead` (an audited leg, on the token's auditor's key) and feeds them to `ua-rs`; it never parses a
+`clients/ua-rs/src/bin/pqz-read.rs`, never in the library). It reads the words of `balance` (the holder's own account of key
+version `--key-version`, with `--for-op7`) and `auditRead` (an audited leg, on the token's auditor's key of `--key-version`)
+and feeds them to `ua-rs`; it never parses a
 ciphertext or decrypts itself. Required: `--rpc` (requirement 1: the one source, a node the holder names; a second one refused),
 `--chain-id` and `--chain-uid` (2), `--depth` or `--finalized` (3: every read by block hash, EIP-1898 with `requireCanonical`;
 the node must answer the block asked for and the block must keep its hash until the last read), `--factory` (5: `_info[token]`
-`exists` with a PQZ kind), `--registry` and `--ua` (6: `pqzKey[ua]`'s code must hold the handle's key; for `auditRead`, `--ua`
-the token's `auditorUA` with `auditorMode` not NONE). Storage and code only (4), the token's slots by `STATE_LAYOUT` (the
+`exists` with a PQZ kind), `--registry` and `--ua` (6: `pqzKey[ua][--key-version]`'s code must hold the handle's key; for
+`auditRead`, `--ua` the token's `auditorUA` with `auditorMode` not NONE). Group 3g (ua-rs-sign T15o, spec
+`2026-11-06-pqz-key-versions.md` on `ua-mtx-merge`): the account is `acct[ua][v]`, the counter `sendCounter[ua]`, the request
+carries `keyVersion` and the registry's `pqzVersions[ua]` word; `ua-rs` refuses a version above `current`, and a debit of a
+stale one other than the migration (op 1 to its own UA) or a refresh; a balance over every version is one call per version. Storage and code only (4), the token's slots by `STATE_LAYOUT` (the
 `scaas.pqz` pin) under the namespace's ERC-7201 root, the pending window `[rolled, p)` by the facade's own rule; every read,
 the block re-check included, before the key is used, nothing after it to the node (7). The key arrives as JSON on stdin, the
 URL and body go to `curl` on its stdin; `--words` prints the request read without a key. `clients/ua-rs/tests/pqz_read.rs`:
@@ -540,10 +544,13 @@ that to gas-level cost only (an observer keeps its UAs active), and it shrinks t
 - Tests: the pick's distribution by chi-square at a fixed seed (unit tests only), no duplicates, exclusions, too few, the
   facades and the C ABI; each tool against a local `anvil` (UAs listed after the sync point never chosen, the filter on and off,
   its weights, the keys, the refusals); mutants `smartcontracts/evm/runs/2026-11-07-ua-rs-sign-t15n-mutants.txt`.
-- **Residuals:** the registry's slots (`records` 0, `pqzKey` 2, `uaCount` 4, `uaAt` 5) are hand-copied: the registry layout pin
-  (`ua-mtx-merge` group 3g) is not on this branch; `--registry` must be the generation that lists the kind (a predecessor's list
-  is not followed, the forwarding is in code); the PQZ key read is the unversioned `pqzKey[ua]`, and moves to the current
-  version with 3g's versioned keys (a follow-up); a list longer than 50,000 UAs is refused (one storage read per UA); the
+- **Group 3g (T15o):** `pqz-read --command decoys` never draws a UA with a pending key version (its latest version has this
+  set's key length and is not current: a credit to it would fail), and reads each chosen decoy's key at its current version
+  (`pqzKey[ua][current]`).
+- **Residuals:** the registry's slots (`records` 0, `pqzKey` 2, `uaCount` 4, `uaAt` 5, `pqzVersions` 17) are hand-copied: the
+  registry layout pin (`ua-mtx-merge` group 3g, `UAStoreLayout.t.sol`) is not on this branch; `--registry` must be the generation
+  that lists the kind (a predecessor's list is not followed, the forwarding is in code); clientkeys' preference for UAs without a
+  recent `UAPqzKeyCurrent` is not applied (storage only, no event read); a list longer than 50,000 UAs is refused (one storage read per UA); the
   Zether steps are two reads at two read blocks, both bounded by the same sync point; the order of the legs is the caller's
   only when it omits `recipient` (it must then shuffle itself). UNAUDITED.
 

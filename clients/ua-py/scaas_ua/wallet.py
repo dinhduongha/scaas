@@ -107,6 +107,7 @@ _SIGNATURES = [
     ('wallet_pqz_key', st, [P, u32, u32, P]), ('pqz_key_free', None, [P]), ('pqz_public', st, [P, P, P]),
     ('pqz_call', st, [P, P, P, P, P]), ('pqz_seal_balance_cache', st, [P, P, sz, P, P]), ('pqz_open_balance_cache', st, [P, P, P, P]),
     ('pqz_set', st, [P, P]), ('pqz_check_set', st, [P]), ('export_pqz_leaf_raw', st, [P, u32, u32, P]),
+    ('wallet_pqz_key_version', st, [P, u32, u32, u64, P]), ('export_pqz_leaf_raw_version', st, [P, u32, u32, u64, P]),
 ]
 
 _lib = None
@@ -421,15 +422,17 @@ class Wallet(_Handle):
         with _hold(self) as (w,):
             return _new(ZetherKey, _c('wallet_zether_key'), w, coin, account, use)
 
-    def pqz_key(self, account=0, index=0):
+    def pqz_key(self, account=0, index=0, version=0):
+        """The PQZ key of ``account`` / ``index`` at key ``version`` (group 3g: version 0 the info without a suffix, v >= 1 with
+        be64(v))."""
         with _hold(self) as (w,):
-            return _new(PqzKey, _c('wallet_pqz_key'), w, account, index)
+            return _new(PqzKey, _c('wallet_pqz_key_version'), w, account, index, version)
 
-    def export_pqz_leaf_raw(self, account, index):
-        """WARNING: the 32-byte PQZ leaf seed32 in the clear (``bytearray``): wipe it with ``wipe()`` after use."""
+    def export_pqz_leaf_raw(self, account, index, version=0):
+        """WARNING: the 32-byte PQZ leaf seed32 (of key ``version``) in the clear (``bytearray``): wipe it with ``wipe()`` after use."""
         with _Secrets() as s, _hold(self) as (w,):
             out = s.buf(32)
-            _ok(_c('export_pqz_leaf_raw')(w, account, index, out))
+            _ok(_c('export_pqz_leaf_raw_version')(w, account, index, version, out))
             return s.out(out, 32)
 
     @staticmethod

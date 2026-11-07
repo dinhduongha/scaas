@@ -171,11 +171,11 @@ std::string Wallet::linkSeal(const Key& sender, const Bytes& sessionKemPk, const
 ZetherKey Wallet::zetherKey(uint32_t coin, uint32_t account, uint32_t keyUse) const {
     return call([&] { return adopt<ZetherKey>(ffi::wallet_zether_key(ffi(), coin, account, keyUse)); });
 }
-PqzKey Wallet::pqzKey(uint32_t account, uint32_t index) const {
-    return call([&] { return adopt<PqzKey>(ffi::wallet_pqz_key(ffi(), account, index)); });
+PqzKey Wallet::pqzKey(uint32_t account, uint32_t index, uint64_t version) const {
+    return call([&] { return adopt<PqzKey>(ffi::wallet_pqz_key_version(ffi(), account, index, version)); });
 }
-Secret Wallet::exportPqzLeafRaw(uint32_t account, uint32_t index) const {
-    return call([&] { return secret(ffi::wallet_export_pqz_leaf_raw(ffi(), account, index)); });
+Secret Wallet::exportPqzLeafRaw(uint32_t account, uint32_t index, uint64_t version) const {
+    return call([&] { return secret(ffi::wallet_export_pqz_leaf_raw_version(ffi(), account, index, version)); });
 }
 
 // --- SeedBackup ------------------------------------------------------------------------------------------------------------

@@ -65,7 +65,7 @@ class ScaasUa extends BaseEntrypoint<ScaasUaApi, ScaasUaApiImpl, ScaasUaWire> {
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => 97025785;
+  int get rustContentHash => 1236861545;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -203,6 +203,13 @@ abstract class ScaasUaApi extends BaseApi {
     required int index,
   });
 
+  Future<SecretBytes> crateApiWalletUaWalletExportPqzLeafRawVersion({
+    required UaWallet that,
+    required int account,
+    required int index,
+    required BigInt version,
+  });
+
   Future<UaKey> crateApiWalletUaWalletImportedKey({
     required UaWallet that,
     required String networkName,
@@ -235,6 +242,13 @@ abstract class ScaasUaApi extends BaseApi {
     required UaWallet that,
     required int account,
     required int index,
+  });
+
+  Future<UaPqzKey> crateApiWalletUaWalletPqzKeyVersion({
+    required UaWallet that,
+    required int account,
+    required int index,
+    required BigInt version,
   });
 
   Future<UaKey> crateApiWalletUaWalletUaKey({
@@ -1820,6 +1834,49 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
       );
 
   @override
+  Future<SecretBytes> crateApiWalletUaWalletExportPqzLeafRawVersion({
+    required UaWallet that,
+    required int account,
+    required int index,
+    required BigInt version,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+            that,
+            serializer,
+          );
+          sse_encode_u_32(account, serializer);
+          sse_encode_u_32(index, serializer);
+          sse_encode_u_64(version, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 32,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData:
+              sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecretBytes,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletUaWalletExportPqzLeafRawVersionConstMeta,
+        argValues: [that, account, index, version],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletUaWalletExportPqzLeafRawVersionConstMeta =>
+      const TaskConstMeta(
+        debugName: "UaWallet_export_pqz_leaf_raw_version",
+        argNames: ["that", "account", "index", "version"],
+      );
+
+  @override
   Future<UaKey> crateApiWalletUaWalletImportedKey({
     required UaWallet that,
     required String networkName,
@@ -1838,7 +1895,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 32,
+            funcId: 33,
             port: port_,
           );
         },
@@ -1884,7 +1941,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 33,
+            funcId: 34,
             port: port_,
           );
         },
@@ -1915,7 +1972,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
             that,
             serializer,
           );
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 34)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 35)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -1941,7 +1998,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
             that,
             serializer,
           );
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 35)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 36)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -1972,7 +2029,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
             that,
             serializer,
           );
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 36)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 37)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_ua_memory_protection,
@@ -2012,7 +2069,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 37,
+            funcId: 38,
             port: port_,
           );
         },
@@ -2053,7 +2110,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 38,
+            funcId: 39,
             port: port_,
           );
         },
@@ -2073,6 +2130,49 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
       const TaskConstMeta(
         debugName: "UaWallet_pqz_key",
         argNames: ["that", "account", "index"],
+      );
+
+  @override
+  Future<UaPqzKey> crateApiWalletUaWalletPqzKeyVersion({
+    required UaWallet that,
+    required int account,
+    required int index,
+    required BigInt version,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaWallet(
+            that,
+            serializer,
+          );
+          sse_encode_u_32(account, serializer);
+          sse_encode_u_32(index, serializer);
+          sse_encode_u_64(version, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 40,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData:
+              sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerUaPqzKey,
+          decodeErrorData: sse_decode_ua_error,
+        ),
+        constMeta: kCrateApiWalletUaWalletPqzKeyVersionConstMeta,
+        argValues: [that, account, index, version],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiWalletUaWalletPqzKeyVersionConstMeta =>
+      const TaskConstMeta(
+        debugName: "UaWallet_pqz_key_version",
+        argNames: ["that", "account", "index", "version"],
       );
 
   @override
@@ -2096,7 +2196,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 39,
+            funcId: 41,
             port: port_,
           );
         },
@@ -2139,7 +2239,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 40,
+            funcId: 42,
             port: port_,
           );
         },
@@ -2180,7 +2280,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 41,
+            funcId: 43,
             port: port_,
           );
         },
@@ -2218,7 +2318,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 42,
+            funcId: 44,
             port: port_,
           );
         },
@@ -2260,7 +2360,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 43,
+            funcId: 45,
             port: port_,
           );
         },
@@ -2291,7 +2391,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
             that,
             serializer,
           );
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 44)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 46)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_list_prim_u_8_strict,
@@ -2317,7 +2417,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
             that,
             serializer,
           );
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 45)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 47)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_list_prim_u_8_strict,
@@ -2339,7 +2439,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 46)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 48)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_u_32,
@@ -2378,7 +2478,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 47,
+            funcId: 49,
             port: port_,
           );
         },
@@ -2425,7 +2525,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 48,
+            funcId: 50,
             port: port_,
           );
         },
@@ -2452,7 +2552,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(text, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 49)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 51)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -2475,7 +2575,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_i_64(chainId, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 50)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 52)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_u_8_array_32,
@@ -2504,7 +2604,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           sse_encode_i_64(kind, serializer);
           sse_encode_list_prim_u_8_loose(keyData, serializer);
           sse_encode_bool(hederaNative, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 51)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 53)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_u_8_array_32,
@@ -2533,7 +2633,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_i_64(threshold, serializer);
           sse_encode_list_record_i_64_u_8_array_32_i_64(members, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 52)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 54)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_list_prim_u_8_strict,
@@ -2557,7 +2657,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 53)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 55)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_u_64,
@@ -2580,7 +2680,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_i_64(bit, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 54)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 56)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -2603,7 +2703,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(group, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 55)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 57)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_opt_u_8_array_32,
@@ -2626,7 +2726,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(group, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 56)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 58)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_opt_String,
@@ -2663,7 +2763,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 57,
+            funcId: 59,
             port: port_,
           );
         },
@@ -2701,7 +2801,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 58,
+            funcId: 60,
             port: port_,
           );
         },
@@ -2742,7 +2842,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           sse_encode_opt_list_prim_u_8_strict(pqzPop, serializer);
           sse_encode_opt_list_prim_u_8_strict(pqzPopHash, serializer);
           sse_encode_opt_list_prim_u_8_strict(kemPk, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 59)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 61)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_holder_pop,
@@ -2791,7 +2891,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           sse_encode_opt_list_prim_u_8_strict(pqzPopHash, serializer);
           sse_encode_opt_list_prim_u_8_strict(kemPk, serializer);
           sse_encode_String(inner, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 60)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 62)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_holder_pop,
@@ -2835,7 +2935,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_u_8_array_32(id, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 61)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 63)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
@@ -2862,7 +2962,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_i_64(kind, serializer);
           sse_encode_bool(hederaNative, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 62)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 64)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
@@ -2887,7 +2987,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_i_64(kind, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 63)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 65)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
@@ -2910,7 +3010,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_u_8_array_32(tag, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 64)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 66)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
@@ -2933,7 +3033,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_i_64(kind, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 65)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 67)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
@@ -2956,7 +3056,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_i_64(kind, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 66)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 68)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
@@ -2979,7 +3079,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_i_64(kind, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 67)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 69)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
@@ -3002,7 +3102,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_list_prim_u_8_loose(data, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 68)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 70)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_u_8_array_32,
@@ -3028,7 +3128,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 69,
+            funcId: 71,
             port: port_,
           );
         },
@@ -3055,7 +3155,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 70,
+            funcId: 72,
             port: port_,
           );
         },
@@ -3087,7 +3187,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           sse_encode_u_8_array_32(ua, serializer);
           sse_encode_u_64(version, serializer);
           sse_encode_list_prim_u_8_loose(kemPk, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 71)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 73)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_u_8_array_32,
@@ -3118,7 +3218,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           sse_encode_u_8_array_32(ua, serializer);
           sse_encode_u_64(version, serializer);
           sse_encode_list_prim_u_8_loose(kemPk, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 72)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 74)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_u_8_array_32,
@@ -3151,7 +3251,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           sse_encode_u_8_array_32(ua, serializer);
           sse_encode_u_64(version, serializer);
           sse_encode_list_prim_u_8_loose(kemPk, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 73)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 75)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_u_8_array_32,
@@ -3180,7 +3280,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_i_64(kind, serializer);
           sse_encode_list_prim_u_8_loose(keyData, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 74)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 76)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_opt_u_8_array_32,
@@ -3215,7 +3315,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 75,
+            funcId: 77,
             port: port_,
           );
         },
@@ -3243,7 +3343,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 76,
+            funcId: 78,
             port: port_,
           );
         },
@@ -3269,7 +3369,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_i_64(kind, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 77)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 79)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_kind_info,
@@ -3292,7 +3392,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_i_64(kind, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 78)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 80)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -3317,7 +3417,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 79,
+            funcId: 81,
             port: port_,
           );
         },
@@ -3342,7 +3442,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 80)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 82)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_i_64,
@@ -3369,7 +3469,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_u_8_array_32(structureUa, serializer);
           sse_encode_u_8_array_32(uaMsg, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 81)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 83)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_u_8_array_32,
@@ -3398,7 +3498,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_u_8_array_32(ua, serializer);
           sse_encode_u_8_array_32(member, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 82)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 84)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_u_8_array_32,
@@ -3422,7 +3522,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 83)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 85)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_u_8_array_32,
@@ -3445,7 +3545,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_list_prim_u_8_loose(keyData, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 84)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 86)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
@@ -3474,7 +3574,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_list_prim_u_8_loose(keyData, serializer);
           sse_encode_String(inner, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 85)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 87)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
@@ -3504,7 +3604,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_i_64(kind, serializer);
           sse_encode_list_prim_u_8_loose(raw, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 86)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 88)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_u_8_array_32,
@@ -3526,7 +3626,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 87)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 89)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_u_8_array_32,
@@ -3557,7 +3657,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           sse_encode_i_64(kind, serializer);
           sse_encode_u_8_array_32(pqzKeyHash, serializer);
           sse_encode_u_8_array_32(kemRecordHash, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 88)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 90)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_u_8_array_32,
@@ -3586,7 +3686,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 89,
+            funcId: 91,
             port: port_,
           );
         },
@@ -3617,7 +3717,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_u_8_array_32(ua, serializer);
           sse_encode_u_8_array_32(pqzKeyHash, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 90)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 92)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_u_8_array_32,
@@ -3648,7 +3748,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           sse_encode_u_8_array_32(ua, serializer);
           sse_encode_u_8_array_32(pqzKeyHash, serializer);
           sse_encode_u_8_array_32(pqzPopHash, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 91)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 93)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_u_8_array_32,
@@ -3688,7 +3788,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           sse_encode_opt_list_prim_u_8_strict(pqzPop, serializer);
           sse_encode_opt_list_prim_u_8_strict(pqzPopHash, serializer);
           sse_encode_bool(alreadySet, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 92)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 94)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_pqz_key_record,
@@ -3738,7 +3838,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           sse_encode_opt_list_prim_u_8_strict(pqzPopHash, serializer);
           sse_encode_bool(alreadySet, serializer);
           sse_encode_String(inner, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 93)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 95)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_pqz_key_record,
@@ -3790,7 +3890,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           sse_encode_u_8_array_32(ua, serializer);
           sse_encode_list_prim_u_8_loose(pqzKey, serializer);
           sse_encode_opt_list_prim_u_8_strict(kemPk, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 94)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 96)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_u_8_array_32,
@@ -3817,7 +3917,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 95,
+            funcId: 97,
             port: port_,
           );
         },
@@ -3842,7 +3942,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(purpose, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 96)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 98)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_u_8_array_32,
@@ -3869,7 +3969,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(purpose, serializer);
           sse_encode_i_64(version, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 97)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 99)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_u_8_array_32,
@@ -3894,7 +3994,11 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(input, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 98)!;
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 100,
+          )!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -3927,7 +4031,11 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           sse_encode_u_8_array_32(pqzKeyHash, serializer);
           sse_encode_u_8_array_32(kemRecordHash, serializer);
           sse_encode_u_8_array_32(pqzPopHash, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 99)!;
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 101,
+          )!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_u_8_array_32,
@@ -3962,7 +4070,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 100,
+            funcId: 102,
           )!;
         },
         codec: SseCodec(
@@ -4003,7 +4111,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 101,
+            funcId: 103,
             port: port_,
           );
         },
@@ -4033,7 +4141,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 102,
+            funcId: 104,
           )!;
         },
         codec: SseCodec(
@@ -4071,7 +4179,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 103,
+            funcId: 105,
             port: port_,
           );
         },
@@ -4102,7 +4210,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 104,
+            funcId: 106,
           )!;
         },
         codec: SseCodec(
@@ -4129,7 +4237,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 105,
+            funcId: 107,
           )!;
         },
         codec: SseCodec(
@@ -4156,7 +4264,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 106,
+            funcId: 108,
           )!;
         },
         codec: SseCodec(
@@ -4191,7 +4299,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 107,
+            funcId: 109,
           )!;
         },
         codec: SseCodec(
@@ -4220,7 +4328,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 108,
+            funcId: 110,
           )!;
         },
         codec: SseCodec(
@@ -4256,7 +4364,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 109,
+            funcId: 111,
           )!;
         },
         codec: SseCodec(
@@ -4289,7 +4397,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 110,
+            funcId: 112,
           )!;
         },
         codec: SseCodec(
@@ -4323,7 +4431,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 111,
+            funcId: 113,
             port: port_,
           );
         },
@@ -4359,7 +4467,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 112,
+            funcId: 114,
           )!;
         },
         codec: SseCodec(
@@ -4404,7 +4512,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 113,
+            funcId: 115,
             port: port_,
           );
         },
@@ -4441,7 +4549,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 114,
+            funcId: 116,
             port: port_,
           );
         },
@@ -4484,7 +4592,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 115,
+            funcId: 117,
             port: port_,
           );
         },
@@ -4527,7 +4635,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 116,
+            funcId: 118,
             port: port_,
           );
         },
@@ -4576,7 +4684,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 117,
+            funcId: 119,
             port: port_,
           );
         },
@@ -4632,7 +4740,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 118,
+            funcId: 120,
             port: port_,
           );
         },
@@ -4663,7 +4771,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 119,
+            funcId: 121,
             port: port_,
           );
         },
@@ -4704,7 +4812,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 120,
+            funcId: 122,
             port: port_,
           );
         },
@@ -4753,7 +4861,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 121,
+            funcId: 123,
             port: port_,
           );
         },
@@ -4801,7 +4909,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 122,
+            funcId: 124,
             port: port_,
           );
         },
@@ -4851,7 +4959,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 123,
+            funcId: 125,
             port: port_,
           );
         },
@@ -4920,7 +5028,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 124,
+            funcId: 126,
             port: port_,
           );
         },
@@ -4991,7 +5099,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 125,
+            funcId: 127,
             port: port_,
           );
         },
@@ -5051,7 +5159,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 126,
+            funcId: 128,
             port: port_,
           );
         },
@@ -5092,7 +5200,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 127,
+            funcId: 129,
             port: port_,
           );
         },
@@ -5145,7 +5253,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 128,
+            funcId: 130,
             port: port_,
           );
         },
@@ -5187,7 +5295,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 129,
+            funcId: 131,
             port: port_,
           );
         },
@@ -5229,7 +5337,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 130,
+            funcId: 132,
             port: port_,
           );
         },
@@ -7943,6 +8051,18 @@ class UaWalletImpl extends RustOpaque implements UaWallet {
     index: index,
   );
 
+  /// The PQZ leaf `seed32` of a key version: the explicit export (spec §8.4).
+  Future<SecretBytes> exportPqzLeafRawVersion({
+    required int account,
+    required int index,
+    required BigInt version,
+  }) => ScaasUa.instance.api.crateApiWalletUaWalletExportPqzLeafRawVersion(
+    that: this,
+    account: account,
+    index: index,
+    version: version,
+  );
+
   Future<UaKey> importedKey({required String networkName, required int n}) =>
       ScaasUa.instance.api.crateApiWalletUaWalletImportedKey(
         that: this,
@@ -7985,6 +8105,18 @@ class UaWalletImpl extends RustOpaque implements UaWallet {
       .instance
       .api
       .crateApiWalletUaWalletPqzKey(that: this, account: account, index: index);
+
+  /// Group 3g (T15o): the PQZ key of `account` / `index` at key `version` (0 the info without a suffix, v >= 1 with be64(v)).
+  Future<UaPqzKey> pqzKeyVersion({
+    required int account,
+    required int index,
+    required BigInt version,
+  }) => ScaasUa.instance.api.crateApiWalletUaWalletPqzKeyVersion(
+    that: this,
+    account: account,
+    index: index,
+    version: version,
+  );
 
   Future<UaKey> uaKey({
     required int kind,

@@ -263,9 +263,9 @@ pub(crate) enum KeyId {
     /// The Zether key `m/12381/<coin>/<account>/<use>` (spec §10.1, feature `zether`).
     #[cfg(feature = "zether")]
     Zether(u32, u32, u32),
-    /// The PQZ leaf `seed32` of `account` / `index` (spec §10.2, feature `pqz`).
+    /// The PQZ leaf `seed32` of `account` / `index` / key version (spec §10.2, group 3g C8; feature `pqz`).
     #[cfg(feature = "pqz")]
-    Pqz(u32, u32),
+    Pqz(u32, u32, u64),
     /// A PQZ `seed32` rebuilt from an `msig`'s k-of-n backup, by its key hash (T16a, feature `pqz`).
     #[cfg(feature = "pqz")]
     PqzHeld([u8; 32]),
@@ -549,7 +549,14 @@ impl Wallet {
     /// utf8("scaas.ua.pqz-mlwe.v1") ‖ be32(account) ‖ be32(index))` → `pqzl::keygen`; `seed32` stays in this wallet's arena
     /// (`lock()` revokes the handle), `pk` comes out. `WalletLocked` while locked.
     pub fn pqz_key(&self, account: u32, index: u32) -> Result<crate::facade::pqz::PqzKey> {
-        crate::facade::pqz::derive(&self.store, account, index)
+        self.pqz_key_version(account, index, 0)
+    }
+
+    /// The PQZ key of `account` / `index` at key version `version` (group 3g C8, ua-rs-sign T15o): version 0 is
+    /// [`Wallet::pqz_key`]'s, every version v ≥ 1 appends `be64(v)` to the HKDF `info` (a single-key holder's rotation; an
+    /// `msig` operator draws each version's `seed32` fresh instead, never from this). `WalletLocked` while locked.
+    pub fn pqz_key_version(&self, account: u32, index: u32, version: u64) -> Result<crate::facade::pqz::PqzKey> {
+        crate::facade::pqz::derive(&self.store, account, index, version)
     }
 
     /// The PQZ key of an `msig` rebuilt from its k-of-n backup (T16a, owner 2026-11-06; [`crate::facade::pqz_backup`]): the
@@ -590,9 +597,16 @@ impl Wallet {
     /// The 32-byte PQZ leaf `seed32` of `account` / `index` in the clear, for `pqz-cli` or a key oracle (spec §8.4,
     /// CTR-PQZ-13): the only call that returns a secret, so it takes the marker value. The caller wipes it (`Zeroizing`).
     pub fn export_pqz_leaf_raw(
-        &self, account: u32, index: u32, _: crate::facade::pqz::AllowSecretExport,
+        &self, account: u32, index: u32, marker: crate::facade::pqz::AllowSecretExport,
     ) -> Result<Zeroizing<[u8; 32]>> {
-        crate::facade::pqz::derive(&self.store, account, index)?.leaf()
+        self.export_pqz_leaf_raw_version(account, index, 0, marker)
+    }
+
+    /// [`Wallet::export_pqz_leaf_raw`] of key version `version` ([`Wallet::pqz_key_version`]; T15o).
+    pub fn export_pqz_leaf_raw_version(
+        &self, account: u32, index: u32, version: u64, _: crate::facade::pqz::AllowSecretExport,
+    ) -> Result<Zeroizing<[u8; 32]>> {
+        crate::facade::pqz::derive(&self.store, account, index, version)?.leaf()
     }
 }
 

@@ -635,6 +635,34 @@ func (w *Wallet) PqzKey(account, index uint32) (*PqzKey, error) {
 	return track(&PqzKey{h: handle{p: unsafe.Pointer(k), free: func(p unsafe.Pointer) { C.scaas_ua_pqz_key_free((*C.ScaasUaPqzKey)(p)) }}}), nil
 }
 
+// PqzKeyVersion is the PQZ key of account / index at key version (group 3g: version 0 is PqzKey's, v >= 1 appends be64(v) to
+// the HKDF info).
+func (w *Wallet) PqzKeyVersion(account, index uint32, version uint64) (*PqzKey, error) {
+	var k *C.ScaasUaPqzKey
+	if err := w.h.use(func(p unsafe.Pointer) error {
+		return call(func() C.ScaasUaStatus {
+			return C.scaas_ua_wallet_pqz_key_version(wp(p), C.uint32_t(account), C.uint32_t(index), C.uint64_t(version), &k)
+		})
+	}); err != nil {
+		return nil, err
+	}
+	return track(&PqzKey{h: handle{p: unsafe.Pointer(k), free: func(p unsafe.Pointer) { C.scaas_ua_pqz_key_free((*C.ScaasUaPqzKey)(p)) }}}), nil
+}
+
+// ExportPqzLeafRawVersion returns a secret in the clear: the 32-byte PQZ leaf seed32 of key version (PqzKeyVersion's). The
+// caller wipes it (Wipe).
+func (w *Wallet) ExportPqzLeafRawVersion(account, index uint32, version uint64) ([]byte, error) {
+	leaf := make([]byte, 32)
+	if err := w.h.use(func(p unsafe.Pointer) error {
+		return call(func() C.ScaasUaStatus {
+			return C.scaas_ua_export_pqz_leaf_raw_version(wp(p), C.uint32_t(account), C.uint32_t(index), C.uint64_t(version), u8(leaf))
+		})
+	}); err != nil {
+		return nil, err
+	}
+	return leaf, nil
+}
+
 // ExportPqzLeafRaw returns a secret in the clear: the 32-byte PQZ leaf seed32. The caller wipes it (Wipe).
 func (w *Wallet) ExportPqzLeafRaw(account, index uint32) ([]byte, error) {
 	leaf := make([]byte, 32)

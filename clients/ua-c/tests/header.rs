@@ -87,7 +87,10 @@ fn every_export_is_guarded() {
 #[test]
 fn export_pqz_leaf_raw_is_warned() {
     let h = header();
-    let at = h.find("scaas_ua_export_pqz_leaf_raw(").unwrap();
-    let doc = &h[h[..at].rfind("*/").unwrap().saturating_sub(600)..at];
-    assert!(doc.contains("WARNING: returns a secret in the clear") && doc.contains("The caller zeroizes"), "{doc}");
+    // T15o: the key version's export too
+    for f in ["scaas_ua_export_pqz_leaf_raw(", "scaas_ua_export_pqz_leaf_raw_version("] {
+        let at = h.find(f).unwrap();
+        let doc = &h[h[..at].rfind("*/").unwrap().saturating_sub(600)..at];
+        assert!(doc.contains("WARNING: returns a secret in the clear") && doc.contains("The caller zeroizes"), "{f}: {doc}");
+    }
 }

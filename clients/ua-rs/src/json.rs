@@ -205,3 +205,13 @@ pub fn set_pqz_key_args_json(t: &str) -> JsonResult<String> {
     let sig = sig_json(&sig_in(&v["sig"])?);
     Ok(json!({ "ua": hx(&ua), "pqzKey": hx(&unhex(&v["pqzKey"])?), "pqzPopHash": hx(&hash), "sig": sig }).to_string())
 }
+
+/// Group 3g: `setPqzKey(ua, version, pqzKey, pqzPopHash, UASig)`'s named arguments; version 0 is [`set_pqz_key_args_json`]'s row.
+pub fn set_pqz_key_version_args_json(t: &str) -> JsonResult<String> {
+    let v = parse(t)?;
+    let ua = ua_in(&v["ua"])?;
+    let version = v["version"].as_u64().ok_or(Argument)?;
+    let hash: [u8; 32] = unhex(&v["pqzPopHash"])?.try_into().map_err(|_| UAError::PqzPopHash)?;
+    let sig = sig_json(&sig_in(&v["sig"])?);
+    Ok(json!({ "ua": hx(&ua), "version": version, "pqzKey": hx(&unhex(&v["pqzKey"])?), "pqzPopHash": hx(&hash), "sig": sig }).to_string())
+}

@@ -4,13 +4,14 @@
 //! default `anvil` on the PATH; `--ignored`, under `scripts/capped`; the anvil is killed when the test ends): PQZ state
 //! written into storage and code with `anvil_setStorageAt` / `anvil_setCode` from three sources: the forge rows
 //! (`state.json`, `PqzStateVectors.t.sol`: the words the tool reads equal the contract's byte for byte), the wallet rows
-//! (`wallet_state.json`: real `pq_kat` keys decrypt their balances, the positive control) and `tests/pqz_chain` (an audited
-//! op 1 to a real auditor key, a pending window past `INLINE_MAX`, a PQZH twin). Each refusal of R2, R3, R5 and R6 named.
+//! (`wallet_state.json`: real `pq_kat` keys decrypt their balances, the positive control; group 3g: a key version 1 read by
+//! `--key-version`) and `tests/pqz_chain` (an audited op 1 to a real auditor key, a pending window past `INLINE_MAX`, a PQZH
+//! twin). Each refusal of R2, R3, R5 and R6 named.
 //! The default set only (the rows' set). UNAUDITED.
 #![cfg_attr(feature = "vectors", allow(dead_code, unused_imports))]
 mod pqz_chain;
 
-use pqz_chain::{h, hx, merge, Chain};
+use pqz_chain::{forge_versions, h, hx, merge, Chain};
 use pqz_ffi::stmt::{self as st, Word};
 use serde_json::{json, Value};
 use std::io::{BufRead, BufReader, Read, Write};
@@ -61,7 +62,7 @@ fn the_holders_configuration_is_required() {
     let url = format!("http://{}", std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap());
     let (a20, a32) = ("0x00000000000000000000000000000000000000aa", format!("0x{}", "ab".repeat(32)));
     let full = s(&["--rpc", &url, "--chain-id", "31337", "--chain-uid", &a32, "--factory", a20, "--registry", a20, "--token", a20, "--ua",
-        &a32, "--depth", "1", "--for-op7", "false"]);
+        &a32, "--depth", "1", "--key-version", "0", "--for-op7", "false"]);
     for missing in ["--rpc", "--chain-id", "--chain-uid", "--factory", "--registry", "--token", "--ua", "--depth"] {
         let mut a = full.clone();
         let i = a.iter().position(|x| x == missing).unwrap();
@@ -73,6 +74,8 @@ fn the_holders_configuration_is_required() {
     assert!(cli(&both, None).unwrap_err().contains("needs --rpc"), "one of --depth / --finalized");
     let without_op7 = full[..full.len() - 2].to_vec();
     assert!(cli(&without_op7, None).unwrap_err().contains("--for-op7"), "balance: --for-op7 named, no default");
+    let without_version = [&full[..full.len() - 4], &full[full.len() - 2..]].concat();
+    assert!(cli(&without_version, None).unwrap_err().contains("--key-version"), "balance: --key-version named, no default (group 3g)");
     let mut audit = without_op7.clone();
     audit.extend(s(&["--command", "auditRead", "--from-ua", &a32, "--send-counter", "0"]));
     assert!(cli(&audit, None).unwrap_err().contains("auditRead needs"), "auditRead: the entry's three fields");
@@ -166,22 +169,25 @@ impl Node {
         info[11] = kind;
         self.set(factory, &k(&word_of(token), &be(8)), &info);
     }
-    /// A words request's account (`balance`'s shape: the forge rows, the wallet rows, `Chain::bal`) into `token`'s storage,
-    /// its key record into `registry`'s, its codes.
+    /// A words request's account (`balance`'s shape: the forge rows with [`forge_versions`], the wallet rows, `Chain::bal`)
+    /// into `token`'s storage at its key version (group 3g: `acct[ua][v]`, `sendCounter[ua]`), its key record and version word
+    /// into `registry`'s (`pqzKey[ua][v]`, `pqzVersions[ua]`), its codes.
     fn account(&self, token: &[u8; 20], registry: &[u8; 20], psid: &Value, r: &Value) {
-        let ua = w32(&r["ua"]);
+        let (ua, v) = (w32(&r["ua"]), be(r["keyVersion"].as_u64().unwrap()));
         self.set(token, &add(&self.root, 2), &w32(psid));
-        let base = k(&ua, &add(&self.root, 8));
+        let base = k(&v, &k(&ua, &add(&self.root, 8)));
         for (i, w) in r["account"].as_array().unwrap().iter().enumerate() {
             self.set(token, &add(&base, i as u64), &w32(w));
         }
         for e in r["pending"].as_array().unwrap() {
-            self.set(token, &k(&be(e["index"].as_u64().unwrap()), &add(&base, 4)), &w32(&e["word"]));
+            self.set(token, &k(&be(e["index"].as_u64().unwrap()), &add(&base, 3)), &w32(&e["word"]));
         }
         for (i, w) in r["accWords"].as_array().unwrap().iter().enumerate() {
-            self.set(token, &add(&base, 5 + i as u64), &w32(w));
+            self.set(token, &add(&base, 4 + i as u64), &w32(w));
         }
-        self.set(registry, &k(&ua, &be(2)), &w32(&r["keyRecord"]));
+        self.set(token, &k(&ua, &add(&self.root, 12)), &w32(&r["sendCounterWord"]));
+        self.set(registry, &k(&v, &k(&ua, &be(2))), &w32(&r["keyRecord"]));
+        self.set(registry, &k(&ua, &be(17)), &w32(&r["keyVersions"]));
         for b in r["blobs"].as_array().unwrap() {
             self.code(&a20(b["address"].as_str().unwrap()), &b["code"]);
         }
@@ -198,7 +204,7 @@ impl Node {
         self.code(&ptr, &blob["code"]);
         self.set(token, &self.root, &w32(&aud["auditorMode"]));
         self.set(token, &add(&self.root, 7), &w32(&aud["auditorUA"]));
-        self.set(registry, &k(&w32(&aud["auditorUA"]), &be(2)), &w32(&aud["keyRecord"]));
+        self.set(registry, &k(&be(0), &k(&w32(&aud["auditorUA"]), &be(2))), &w32(&aud["keyRecord"])); // the auditor's version 0
         self.code(&a20(aud["key"]["address"].as_str().unwrap()), &aud["key"]["code"]);
     }
 }
@@ -289,7 +295,7 @@ fn reading_layer_against_anvil() {
     let (ft, fr) = (a20(forge["token"].as_str().unwrap()), a20(forge["registry"].as_str().unwrap()));
     n.catalogue(&factory, &ft, 4, true);
     for a in forge["accounts"].as_array().unwrap() {
-        n.account(&ft, &fr, &forge["psid"], a);
+        n.account(&ft, &fr, &forge["psid"], &merge(a.clone(), forge_versions(a)));
     }
     let fe = forge["entries"].as_array().unwrap().iter().find(|e| e["name"] == "op1 carol->alice audited").unwrap();
     let faud = json!({"auditorMode": forge["auditorMode"], "auditorUA": forge["auditorUA"], "keyRecord": forge["auditorKeyRecord"],
@@ -340,7 +346,7 @@ fn reading_layer_against_anvil() {
         n.account(&cwh, &creg, &json!(hx(&st::PQZH_ID)), &full);
     }
     let ent = &c.entries[&er];
-    let aud_ptr = c.keys[&ua_aud];
+    let aud_ptr = c.key_ptr(&ua_aud);
     let cw_aud = merge(c.auditor_words(1), json!({"keyRecord": hx(&c.key_record(&ua_aud)),
         "key": {"address": hx(&aud_ptr), "code": hx(&c.blobs[&aud_ptr])}}));
     n.entry(&cw, &creg, &ent.from, ent.ctr, &json!({"address": hx(&ent.ptr), "code": hx(&c.blobs[&ent.ptr])}), &cw_aud);
@@ -362,10 +368,11 @@ fn reading_layer_against_anvil() {
             "--ua", ua, "--depth", depth])
     };
     let on = |token: &str, reg: &str, ua: &str| base(&url, &cid, &genesis, token, reg, ua, "2");
-    let bal = |mut a: Vec<String>, op7: bool| {
-        a.extend(s(&["--for-op7", if op7 { "true" } else { "false" }]));
+    let balv = |mut a: Vec<String>, version: u64, op7: bool| {
+        a.extend(s(&["--key-version", &version.to_string(), "--for-op7", if op7 { "true" } else { "false" }]));
         a
     };
+    let bal = |a: Vec<String>, op7: bool| balv(a, 0, op7);
     let words = |mut a: Vec<String>| {
         a.push("--words".into());
         cli(&a, None).unwrap()
@@ -379,12 +386,16 @@ fn reading_layer_against_anvil() {
         for f in ["account", "pending", "accWords", "blobs", "keyRecord"] {
             assert_eq!(r[f], a[f], "{}: {f}", a["name"]);
         }
+        let fv = forge_versions(a);
+        for f in ["sendCounterWord", "keyVersion", "keyVersions"] {
+            assert_eq!(r[f], fv[f], "{}: {f}", a["name"]);
+        }
         assert_eq!((&r["psid"], &r["ua"], &r["forOp7"]), (&forge["psid"], &a["ua"], &json!(false)), "{}", a["name"]);
     }
     assert!(forge["accounts"].as_array().unwrap().iter().any(|a| !a["accWords"].as_array().unwrap().is_empty()), "a materialised acc");
     // auditRead's words of the forge entry
     let mut ar = on(ft_s, fr_s, forge["auditorUA"].as_str().unwrap());
-    ar.extend(s(&["--command", "auditRead", "--from-ua", fe["fromUA"].as_str().unwrap(), "--send-counter", &fe["sendCounter"].to_string(),
+    ar.extend(s(&["--command", "auditRead", "--key-version", "0", "--from-ua", fe["fromUA"].as_str().unwrap(), "--send-counter", &fe["sendCounter"].to_string(),
         "--leg", "0"]));
     let r = words(ar.clone())["request"].clone();
     assert_eq!((&r["entryPtr"], &r["auditorMode"], &r["auditorUA"], &r["keyRecord"]),
@@ -394,13 +405,18 @@ fn reading_layer_against_anvil() {
     assert_eq!(r["entryRef"], json!(hx(&n.entry_ref(&ft, &w32(&fe["fromUA"]), fe["sendCounter"].as_u64().unwrap()))));
     assert_eq!((&r["chainId"], &r["chainUid"], &r["token"]), (&json!(chain_id), &json!(genesis), &json!(hx(&ftw[12..]))));
 
-    // the positive control: the wallet rows' balances with their own keys
+    // the positive control: the wallet rows' balances with their own keys, each at its key version (group 3g: A's version 1
+    // is `pqz_key_version(0, 0, 1)` on `acct[A][1]`, its version 0 the stale rest)
     let wt_s = rows[0]["request"]["token"].as_str().unwrap();
-    for (r, i) in rows.iter().zip(0u32..) {
-        let out = cli(&bal(on(wt_s, WALLET_REG, r["request"]["ua"].as_str().unwrap()), false), Some(&kat(i))).unwrap();
+    for r in rows {
+        let (i, v) = (r["index"].as_u64().unwrap() as u32, r["version"].as_u64().unwrap());
+        let out = cli(&balv(on(wt_s, WALLET_REG, r["request"]["ua"].as_str().unwrap()), v, false), Some(&kat(i))).unwrap();
         assert_eq!(out["value"], r["value"], "{}", r["name"]);
         assert!(out["block"].is_u64() && out["blockHash"].is_string());
     }
+    assert!(rows.iter().any(|r| r["version"] == 1), "a version-1 row");
+    let w2 = cli(&balv(on(wt_s, WALLET_REG, rows[0]["request"]["ua"].as_str().unwrap()), 2, false), Some(&kat(0))).unwrap_err();
+    assert!(w2.contains("R6"), "a version the registry does not hold: {w2}");
     // R3: the head's state is not read at depth 2, and is at depth 0 (positive control)
     let ua_wa = rows[0]["request"]["ua"].as_str().unwrap();
     let head = |mut a: Vec<String>| {
@@ -421,7 +437,7 @@ fn reading_layer_against_anvil() {
     assert_eq!(v(bal(on(CW_PQZH, CW_REG, &sb), false), 1)["value"], json!(250 + 15), "op 1 on a PQZH token: INLINE_MAX");
     let audit = |a: Vec<String>, from: &str, ctr: &str| {
         let mut a = a;
-        a.extend(s(&["--command", "auditRead", "--from-ua", from, "--send-counter", ctr, "--leg", "0"]));
+        a.extend(s(&["--command", "auditRead", "--key-version", "0", "--from-ua", from, "--send-counter", ctr, "--leg", "0"]));
         a
     };
     let out = v(audit(on(CW_TOKEN, CW_REG, &saud), &sa, "0"), 2);
@@ -440,7 +456,7 @@ fn reading_layer_against_anvil() {
     no(bal(base(&liar(url.clone(), "number"), &cid, &genesis, wt_s, WALLET_REG, ua_wa, "2"), false), Some(0), "R3: the node answered another block");
     no(bal(base(&liar(url.clone(), "hash"), &cid, &genesis, wt_s, WALLET_REG, ua_wa, "2"), false), Some(0), "R3: the block changed");
     assert_eq!(cli(&bal(base(&liar(url.clone(), "none"), &cid, &genesis, wt_s, WALLET_REG, ua_wa, "2"), false), Some(&kat(0))).unwrap()["value"],
-        json!(750), "the proxy alone changes nothing (positive control)");
+        rows[0]["value"], "the proxy alone changes nothing (positive control)");
     for t in [UNLISTED, NOT_EXISTS, ZETHER_TOKEN] {
         no(bal(on(t, WALLET_REG, ua_wa), false), Some(0), "R5: the token is not a PQZ token");
     }
@@ -472,6 +488,7 @@ fn decoy_arguments() {
         (with(&["--depth", "0", "--command", "decoys", "--count", "1", "--decoy-filter", "activity"]), "decoys needs --count"),
         (with(&["--depth", "0", "--command", "decoys", "--count", "1", "--window", "4"]), "decoys needs --count"),
         (with(&["--depth", "0", "--command", "decoys", "--count", "1", "--for-op7", "true"]), "decoys needs --count"),
+        (with(&["--depth", "0", "--command", "decoys", "--count", "1", "--key-version", "0"]), "decoys needs --count"),
         (with(&["--depth", "0", "--command", "decoys", "--count", "1", "--decoy-filter", "recent", "--window", "4"]), "activity or holder"),
         (with(&["--depth", "0", "--command", "decoys", "--count", "1", "--exclude", "0x01"]), "--exclude: 32 bytes"),
         (with(&["--depth", "0", "--command", "decoys", "--count", "1", "--recipient", "0x01"]), "--recipient: 32 bytes"),
@@ -514,18 +531,29 @@ fn decoys_against_anvil() {
             let ptr = a20(&format!("0x{:040x}", 0xc0de00 + u64::from(i)));
             let mut rec = word_of(&ptr);
             rec[11] = proven;
-            n.set(r, &k(&ua(i), &be(2)), &rec);
+            n.set(r, &k(&be(0), &k(&ua(i), &be(2))), &rec);
             n.code(&ptr, &json!(hx(&[vec![0u8], vec![i; st::PK_BYTES]].concat())));
         }
         n.set(r, &k(&be(0x0142), &be(4)), &be(from + uas.len() as u64));
     };
-    // the account counters of `ua(i)`: word 0 `pendingCount ‖ rolled` (low end first), word 2 `sendCounter`
+    // the account counters of `ua(i)`: `acct[ua][0]` word 0 `pendingCount ‖ rolled` (low end first), the UA's `sendCounter`
     let acct = |i: u8, pending: u64, rolled: u64, sent: u64| {
-        let base = k(&ua(i), &add(&root, 8));
+        let base = k(&be(0), &k(&ua(i), &add(&root, 8)));
         let mut w0 = be(pending);
         w0[16..24].copy_from_slice(&rolled.to_be_bytes());
         n.set(&token, &base, &w0);
-        n.set(&token, &add(&base, 2), &be(sent));
+        n.set(&token, &k(&ua(i), &add(&root, 12)), &be(sent));
+    };
+    // group 3g (KV-7): `ua(i)`'s version 1 with a key of `len` bytes, `current` its version; latest 1
+    let version1 = |i: u8, len: usize, current: u64| {
+        let ptr = a20(&format!("0x{:040x}", 0xc1de00 + u64::from(i)));
+        let mut rec = word_of(&ptr);
+        rec[11] = 1;
+        n.set(&reg, &k(&be(1), &k(&ua(i), &be(2))), &rec);
+        n.code(&ptr, &json!(hx(&[vec![0u8], vec![0xF0 | i; len]].concat())));
+        let mut vw = be(1);
+        vw[16..24].copy_from_slice(&current.to_be_bytes());
+        n.set(&reg, &k(&ua(i), &be(17)), &vw);
     };
     list(&reg, 0, 1..=12, 1);
     list(&reg2, 0, 9..=9, 0);
@@ -535,6 +563,9 @@ fn decoys_against_anvil() {
     let sync = head(); // 1: twelve listed
     mine(1);
     list(&reg, 12, 13..=16, 1); // at block 2
+    version1(14, st::PK_BYTES, 0); // pending: this set's key, not current
+    version1(15, st::PK_BYTES - 32, 0); // another set's length: never current here, not pending
+    version1(16, st::PK_BYTES, 1); // rotated: its decoy key is version 1's
     acct(7, 2, 0, 1); // u7 active at block 2, before the window
     mine(10); // 11 = block − window
     acct(3, 1, 0, 2); // u3: a debit at block 12, the older half
@@ -561,7 +592,18 @@ fn decoys_against_anvil() {
     assert_eq!(w["request"], json!({"candidates": range(3..=12), "exclude": [hx(&ua(2)), hx(&ua(1))], "count": 3}), "sync 1");
     assert_eq!((&w["syncBlock"], &w["listCount"], &w["block"]), (&json!(1), &json!(12), &json!(21)));
     let w = run(&reg, &tok, &["--count", "3", "--words"]).unwrap();
-    assert_eq!(uas(&w["request"]["candidates"]), range(3..=16), "the read block's list (default sync point)");
+    let listed = [range(3..=13), range(15..=16)].concat();
+    assert_eq!(uas(&w["request"]["candidates"]), listed, "the read block's list (default sync point), never the pending ua(14)");
+    let d = run(&reg, &tok, &["--count", "13"]).unwrap();
+    let mut got: Vec<String> = d["decoys"].as_array().unwrap().iter().map(|l| l["ua"].as_str().unwrap().to_string()).collect();
+    got.sort();
+    assert_eq!(got, listed, "every candidate but the pending one");
+    for l in d["decoys"].as_array().unwrap() {
+        let i = h(&l["ua"])[0];
+        let want = if i == 16 { vec![0xF0 | i; st::PK_BYTES] } else { vec![i; st::PK_BYTES] };
+        assert_eq!(h(&l["pk"]), want, "ua({i}): the key of its current version");
+    }
+    assert!(run(&reg, &tok, &["--count", "14"]).unwrap_err().contains("pickDecoys: Argument"), "the pending UA never fills the count");
     // every candidate up to the sync point, exactly, when all are needed; one more is too few
     let d = run(&reg, &tok, &["--count", "10", "--sync-block", "1"]).unwrap();
     let mut got: Vec<String> = d["decoys"].as_array().unwrap().iter().map(|l| l["ua"].as_str().unwrap().to_string()).collect();
@@ -585,7 +627,7 @@ fn decoys_against_anvil() {
     for _ in 0..8 {
         let d = uas(&json!(run(&reg, &tok, &["--count", "4"]).unwrap()["decoys"].as_array().unwrap().iter().map(|l| l["ua"].clone()).collect::<Vec<_>>()));
         assert_eq!(d.iter().collect::<std::collections::BTreeSet<_>>().len(), 4, "distinct");
-        assert!(d.iter().all(|u| range(3..=16).contains(u)), "candidates only");
+        assert!(d.iter().all(|u| listed.contains(u)), "candidates only");
     }
     // the option: active in the token in the last 10 blocks, weighted by recency
     let f = |filter: &str| run(&reg, &tok, &["--count", "1", "--decoy-filter", filter, "--window", "10", "--words"]).unwrap()["request"].clone();

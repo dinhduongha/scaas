@@ -498,6 +498,16 @@ typedef struct {
  */
 #define SCAAS_UA_ERR_PQZ_SET_MISMATCH 40
 
+/**
+ * "UAPqzKeyVersion": a PQZ key version other than `latest + 1`, or no version 0 stored (group 3g, KV-1; T15o: appended, ABI 6 kept).
+ */
+#define SCAAS_UA_ERR_PQZ_KEY_VERSION 41
+
+/**
+ * "UAKeyInUse": a stored version of the UA holds this PQZ key (group 3g, KV-1; T15o).
+ */
+#define SCAAS_UA_ERR_KEY_IN_USE 42
+
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus
@@ -1559,6 +1569,16 @@ ScaasUaStatus scaas_ua_wallet_pqz_key(const ScaasUaWallet *w,
                                       uint32_t index,
                                       ScaasUaPqzKey **out);
 
+/**
+ * The PQZ key of `account` / `index` at key version `version` (group 3g C8, ua-rs-sign T15o): version 0 is
+ * scaas_ua_wallet_pqz_key's key, every version v >= 1 appends be64(v) to the HKDF info. Otherwise as scaas_ua_wallet_pqz_key.
+ */
+ScaasUaStatus scaas_ua_wallet_pqz_key_version(const ScaasUaWallet *w,
+                                              uint32_t account,
+                                              uint32_t index,
+                                              uint64_t version,
+                                              ScaasUaPqzKey **out);
+
 void scaas_ua_pqz_key_free(ScaasUaPqzKey *k);
 
 /**
@@ -1624,6 +1644,17 @@ ScaasUaStatus scaas_ua_export_pqz_leaf_raw(const ScaasUaWallet *w,
                                            uint32_t account,
                                            uint32_t index,
                                            uint8_t *out32);
+
+/**
+ * WARNING: returns a secret in the clear. The 32-byte PQZ leaf seed32 of `account` / `index` at key version `version`
+ * (scaas_ua_wallet_pqz_key_version's; T15o) into `out32`, as scaas_ua_export_pqz_leaf_raw. The caller zeroizes `out32`.
+ * SCAAS_UA_ERR_WALLET_LOCKED while locked.
+ */
+ScaasUaStatus scaas_ua_export_pqz_leaf_raw_version(const ScaasUaWallet *w,
+                                                   uint32_t account,
+                                                   uint32_t index,
+                                                   uint64_t version,
+                                                   uint8_t *out32);
 
 /**
  * The k-of-n backup of the PQZ key `k`'s seed32 as the PQZ key of record `version` of the `msig` `msig_key_data` (its

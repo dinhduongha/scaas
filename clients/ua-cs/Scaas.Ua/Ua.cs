@@ -213,6 +213,7 @@ public static partial class UA
     const string KemType = "UAKemRecord(bytes32 ua,uint64 version,uint8 scheme,bytes32 kemPkHash)";
     const string RecordType = "UAPortableRecord(bytes32 ua,uint16 kind,bytes32 pqzKeyHash,UAKemRecord kem)";
     const string PqzKeyType = "UAPqzKey(bytes32 ua,bytes32 pqzKeyHash)";
+    const string PqzKeyVersionType = "UAPqzKeyVersion(bytes32 ua,uint64 version,bytes32 pqzKeyHash)";
 
     /// <summary>The EIP-712 <c>encodeType</c> of each portable struct (primary, then the referenced types sorted by name).</summary>
     public static readonly IReadOnlyDictionary<string, string> PortableTypes = new Dictionary<string, string>
@@ -222,6 +223,8 @@ public static partial class UA
         ["UARegistration"] = "UARegistration(UAPortableRecord record,bytes32 pqzPopHash)" + KemType + RecordType,
         ["UAPqzKey"] = PqzKeyType,
         ["UAPqzKeyRecord"] = "UAPqzKeyRecord(UAPqzKey key,bytes32 pqzPopHash)" + PqzKeyType,
+        ["UAPqzKeyVersion"] = PqzKeyVersionType,
+        ["UAPqzKeyVersionRecord"] = "UAPqzKeyVersionRecord(UAPqzKeyVersion key,bytes32 pqzPopHash)" + PqzKeyVersionType,
         ["UAMembership"] = "UAMembership(bytes32 ua,bytes32 member)",
     };
 
@@ -352,6 +355,38 @@ public static partial class UA
         var tag = PurposeTag("pqz-key");
         var msg = UAMessage(kind, tag, recordDigest);
         return new(keyHash, popHash, keyDigest, recordDigest, msg, UAMessage(0x0142, tag, keyDigest), kind == 0x0120 ? MemberDigest(ua, msg) : null);
+    }
+
+    /// <summary>Group 3g: the typed <c>UAPqzKeyVersion{ua, version, pqzKeyHash}</c>, what version v &gt;= 1's R_REG proves over.</summary>
+    public static byte[] PqzKeyVersionDigest(byte[] ua, ulong version, byte[] pqzKeyHash) => Typed(HashStruct("UAPqzKeyVersion", ua, Word(version), pqzKeyHash));
+
+    /// <summary>Group 3g: the typed <c>UAPqzKeyVersionRecord{UAPqzKeyVersion{ua, version, pqzKeyHash}, pqzPopHash}</c>, what the UA signs for
+    /// version v &gt;= 1 under <c>UAMessage(kind, PURPOSE_PQZ_KEY, ·)</c>.</summary>
+    public static byte[] PqzKeyVersionRecordDigest(byte[] ua, ulong version, byte[] pqzKeyHash, byte[] pqzPopHash) =>
+        Typed(HashStruct("UAPqzKeyVersionRecord", HashStruct("UAPqzKeyVersion", ua, Word(version), pqzKeyHash), pqzPopHash));
+
+    /// <summary>PQZ key version v &gt;= 1 of <c>setPqzKey(ua, version, ...)</c>: <c>Message</c> is what the UA signs, <c>PqzRegMessage</c> what the key's R_REG proves over.</summary>
+    public sealed record PqzKeyVersionRecord(byte[] PqzKeyHash, byte[] PqzPopHash, byte[] VersionDigest, byte[] RecordDigest, byte[] Message,
+        byte[] PqzRegMessage, byte[]? MemberDigest);
+
+    /// <summary>Group 3g (KV-1). <paramref name="stored"/>: the UA's stored versions (the chain's <c>pqzKeyAt</c>). Refuses version 0 (UAPqzKeySet: a
+    /// new key gets a new version), a version other than latest + 1 or no version 0 (UAPqzKeyVersion), a key a stored version holds (UAKeyInUse).</summary>
+    public static PqzKeyVersionRecord PqzKeyVersionRecordMessage(ushort kind, byte[] ua, byte[] keyData, ulong version, byte[] pqzKey, byte[]? pqzPop = null,
+        byte[]? pqzPopHash = null, IReadOnlyList<(ulong Version, byte[] PqzKeyHash)>? stored = null, Func<byte[], byte[]?>? inner = null)
+    {
+        if (!Holds(kind, keyData, inner)) throw new UAException("UAPqzHolder", $"0x{kind:x4} may not hold a PQZ key");
+        if (version == 0) throw new UAException("UAPqzKeySet", "version 0 is write-once: a new key gets a new version");
+        stored ??= [];
+        if (!stored.Any(s => s.Version == 0) || version != stored.Max(s => s.Version) + 1) throw new UAException("UAPqzKeyVersion", version.ToString());
+        var keyHash = PqzKeyHashOf(pqzKey);
+        if (stored.Any(s => s.PqzKeyHash.SequenceEqual(keyHash))) throw new UAException("UAKeyInUse", "a stored version holds this key");
+        var popHash = ProofHashOf(pqzPop, pqzPopHash);
+        if (popHash.All(b => b == 0)) throw new UAException("UAPqzPopHash", "required");
+        var versionDigest = PqzKeyVersionDigest(ua, version, keyHash);
+        var recordDigest = PqzKeyVersionRecordDigest(ua, version, keyHash, popHash);
+        var tag = PurposeTag("pqz-key");
+        var msg = UAMessage(kind, tag, recordDigest);
+        return new(keyHash, popHash, versionDigest, recordDigest, msg, UAMessage(0x0142, tag, versionDigest), kind == 0x0120 ? MemberDigest(ua, msg) : null);
     }
 
     /// <summary>The message R_REG proves over: <c>UAMessage(0x0142, POP_V2, PortableRecordDigest(ua, kind, keyHash(0x0142, pqzKey),

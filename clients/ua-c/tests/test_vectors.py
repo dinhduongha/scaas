@@ -888,7 +888,7 @@ FEATURE = {n: 1 << i for i, n in enumerate(FEATURES)}
 STATUS = {n: i for i, n in enumerate(['SealOpen', 'SealVersion', 'KemCheck', 'Aead', 'VaultOpen', 'VaultParams', 'VaultVersion',
                                       'RawDigestRefused', 'PolicyRefused', 'ExternalSignature', 'WalletLocked', 'KeyRevoked',
                                       'ContainerSender', 'ContainerReplay', 'BackupRollback', 'WebAuthnAssertion', 'KindUnavailable',
-                                      'WalletMismatch', 'Rng', 'PqzSetMismatch'], 21)}
+                                      'WalletMismatch', 'Rng', 'PqzSetMismatch', 'PqzKeyVersion', 'KeyInUse'], 21)}
 # deterministic in a release build (RFC 6979, ed25519, BLS): byte-equal; the others are randomized: the length only
 DETERMINISTIC = {0x0101, 0x0102, 0x0106, 0x0107, 0x0108}
 
@@ -939,6 +939,7 @@ for name, res, args in [
     ('pqz_call', st, [P, u8, u8, P, P]), ('pqz_seal_balance_cache', st, [P, u8, sz, P, P]),
     ('pqz_open_balance_cache', st, [P, u8, P, P]), ('pqz_set', st, [P, P]), ('pqz_check_set', st, [u8]),
     ('export_pqz_leaf_raw', st, [P, u32, u32, P]),
+    ('wallet_pqz_key_version', st, [P, u32, u32, u64, P]), ('export_pqz_leaf_raw_version', st, [P, u32, u32, u64, P]),
     ('pqz_seed_backup', st, [P, P, u8, sz, u64, C.c_uint8, P, sz, P, P]),
     ('pqz_share_reseal', st, [P, u8, u8, u8, u8, P, P, P, P]),
     ('wallet_pqz_reconstruct', st, [P, P, u8, u8, u8, u8, u8, u64, u8, P]),
@@ -1071,7 +1072,7 @@ class WalletAbi(WalletCase):
         for n, v in STATUS.items():
             self.assertEqual(L.status_name(v).decode(), 'UA' + n)
         self.assertEqual(L.status_name(12).decode(), 'UAKemHolder')
-        self.assertEqual(L.status_name(41).decode(), 'UAStatusUnknown')  # T15: 40 -> 41 (UAPqzSetMismatch appended)
+        self.assertEqual(L.status_name(43).decode(), 'UAStatusUnknown')  # T15: 40 -> 41 (UAPqzSetMismatch appended); T15o: 41 -> 43
         self.assertNotEqual(STATUS['KindUnavailable'], 3)
 
     def test_free_null_is_a_noop(self):
@@ -1920,8 +1921,8 @@ class WalletPqz(WalletCase):
         self.addCleanup(L.wallet_free, w)
         return w
 
-    def qk(self, w, account=0, index=0):
-        k = handle(L.wallet_pqz_key, w, account, index)
+    def qk(self, w, account=0, index=0, version=None):
+        k = handle(L.wallet_pqz_key, w, account, index) if version is None else handle(L.wallet_pqz_key_version, w, account, index, version)
         self.addCleanup(L.pqz_key_free, k)
         return k
 
@@ -1974,6 +1975,23 @@ class WalletPqz(WalletCase):
         self.assertEqual(name_of(L.export_pqz_leaf_raw(w, 1 << 31, 0, C.create_string_buffer(32))), 'UAArgument')
         self.assertEqual(name_of(L.export_pqz_leaf_raw(w, 0, 0, None)), 'UAArgument')
 
+    def test_pqz_key_versions_are_the_pq_kat_rows(self):
+        """Group 3g C8 (T15o): scaas_ua_wallet_pqz_key_version / scaas_ua_export_pqz_leaf_raw_version give pq_kat.json's
+        `pqzSeeds` (version 0 the info without a suffix, v >= 1 with be64(v)); version 0 is scaas_ua_wallet_pqz_key's key."""
+        rows = json.loads((STATE / 'ua' / 'pq_kat.json').read_text())['pqzSeeds']
+        self.assertEqual([r['version'] for r in rows], [0, 1, 2])
+        w = self.qw()
+        pks = []
+        for r in rows:
+            leaf = C.create_string_buffer(32)
+            ok(L.export_pqz_leaf_raw_version(w, r['account'], r['index'], r['version'], leaf))
+            self.assertEqual('0x' + leaf.raw.hex(), r['seed32'], r['version'])
+            pks.append(var(L.pqz_public, self.qk(w, r['account'], r['index'], r['version'])))
+        self.assertEqual(pks[0], var(L.pqz_public, self.qk(w)))
+        self.assertEqual(len(set(pks)), 3, 'one key per version')
+        self.assertEqual(name_of(L.wallet_pqz_key_version(w, 1 << 31, 0, 1, C.byref(P()))), 'UAArgument')
+        self.assertEqual(name_of(L.export_pqz_leaf_raw_version(w, 0, 0, 1, None)), 'UAArgument')
+
     def test_register_set_mismatch_and_key_field(self):
         k = self.qk(self.qw())
         req = {'proofSystemId': '0x' + PQZL_ID['n2304-kmax4096'], 'kind': 0x0131, 'ua': '0x' + '11' * 32}
@@ -2022,7 +2040,10 @@ class WalletPqz(WalletCase):
         rows = json.loads((STATE / 'pqz' / 'n2304-kmax4096' / 'state.json').read_text())
         a = rows['accounts'][0]
         words = dict({f: rows[f] for f in ('chainUid', 'token', 'psid')},
-                     **{f: a[f] for f in ('ua', 'block', 'account', 'pending', 'accWords', 'blobs', 'keyRecord')}, forOp7=False)
+                     **{f: a[f] for f in ('ua', 'block', 'account', 'pending', 'accWords', 'blobs', 'keyRecord')}, forOp7=False,
+                     # group 3g (T15o): the UA's sendCounter word, version 0, pqzVersions (latest 0, current 0, listed)
+                     sendCounterWord='0x' + a['sendCounter'].to_bytes(32, 'big').hex(), keyVersion=0,
+                     keyVersions='0x' + (1 << 128).to_bytes(32, 'big').hex())
         k = self.qk(self.qw())
         self.assertEqual(self.call(k, 'balance', words), ('UAArgument', None))
         self.assertEqual(self.call(k, 'balance', dict(words, psid='0x' + PQZL_ID['n2048-kmax1024'])), ('UAPqzSetMismatch', None))
@@ -2032,7 +2053,7 @@ class WalletPqz(WalletCase):
         # under `vectors`, gen_wallet_state.sh): each row's own handle decrypts its balance through the C ABI
         w = self.qw()
         for r in json.loads((STATE / 'pqz' / 'n2304-kmax4096' / 'wallet_state.json').read_text())['rows']:
-            st_, out = self.call(self.qk(w, r['account'], r['index']), 'balance', r['request'])
+            st_, out = self.call(self.qk(w, r['account'], r['index'], r['version']), 'balance', r['request'])
             self.assertEqual((st_, out and out['value']), (name_of(OK), r['value']), r['name'])
 
     def test_pqz_handle_after_lock_and_free_is_KEY_REVOKED(self):

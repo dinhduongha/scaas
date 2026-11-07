@@ -142,7 +142,7 @@ def pqz_seeds():
     out = [qc("enc", {"pks": [h(pk_t)], "values": [123456]}), qc("dec", {"ct": h(t)}), qc("dec", {"ct": h(t), "window": 3}),
            qc("proveRegister", {"proofSystemId": pqzl, "kind": 0x0131, "ua": h(bytes(range(32)))}),
            qc("proveRegister", {"proofSystemId": pqzl, "kind": 0x0130, "ua": h(bytes(32)), "kemPk": "0x01" + "00" * 1600}),
-           qc("proveKeyRecord", {"proofSystemId": pqzl, "ua": h(bytes(range(32)))}),
+           qc("proveKeyRecord", {"proofSystemId": pqzl, "ua": h(bytes(range(32))), "version": 1}),
            qc("rawProveTransfer", {**header(tr), "proofSystemId": pqzl, "toUA": word(tr["header"]["toUA"]), "pkT": h(pk_t), "pkA": h(pk_a),
                                 "T": h(t), "amount": 123456, "memoHash": word(tr["header"]["memoHash"])})]
     for f, cmd, extra in (("statement_burn.json", "rawProveBurn", lambda r: {"amount": r["header"]["amount"], "recipient": word(r["header"]["recipient"])}),
@@ -170,7 +170,9 @@ def pqz_seeds():
     loc = {k: sv[k] for k in ("chainUid", "token", "psid")}
     for a in sv["accounts"][:2]:
         w = {**loc, "ua": a["ua"], "block": a["block"], "account": a["account"], "pending": a["pending"], "accWords": a["accWords"],
-             "blobs": a["blobs"], "keyRecord": a["keyRecord"]}
+             "blobs": a["blobs"], "keyRecord": a["keyRecord"],
+             # group 3g (T15o): the UA's sendCounter word, version 0, pqzVersions (latest 0, current 0, listed)
+             "sendCounterWord": h(a["sendCounter"].to_bytes(32, "big")), "keyVersion": 0, "keyVersions": h((1 << 128).to_bytes(32, "big"))}
         out.append(qc("balance", {**w, "forOp7": False}))
         out.append(qc("proveRefresh", {**w, "chainId": sv["chainId"], "registry": sv["registry"], "fee": 0, "validUntilBlock": 1 << 40,
                                        "shieldIn": a["shieldIn"], "envelopeBinding": h(bytes(32))}))
@@ -181,7 +183,7 @@ def pqz_seeds():
                                     "blobs": [e["blob"], e["legs"][0]["key"]], "keyRecord": e["legs"][0]["keyRecord"]}))
     snd = next(x for x in sv["accounts"] if x["ua"] == e["fromUA"])
     out.append(qc("proveDiscloseSender", {**base, "registry": sv["registry"], "blobs": [e["blob"], snd["blobs"][0], e["legs"][0]["key"]],
-                                          "keyRecord": snd["keyRecord"], "legKeyRecord": e["legs"][0]["keyRecord"]}))
+                                          "keyRecord": snd["keyRecord"], "legKeyRecords": [e["legs"][0]["keyRecord"]]}))
     out.append(qc("auditRead", {**base, "ua": sv["auditorUA"], "auditorMode": sv["auditorMode"], "auditorUA": sv["auditorUA"],
                                 "blobs": [e["blob"], sv["auditorKey"]], "keyRecord": sv["auditorKeyRecord"]}))
     out.append(bytes([QBOX]) + js({"iv": "AAAAAAAAAAAAAAAA", "ct": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}))

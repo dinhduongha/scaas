@@ -827,6 +827,10 @@ public class WalletTests : IDisposable
         foreach (var f in new[] { "chainUid", "token", "psid" }) words[f] = JsonNode.Parse(st.GetProperty(f).GetRawText());
         foreach (var f in new[] { "ua", "block", "account", "pending", "accWords", "blobs", "keyRecord" }) words[f] = JsonNode.Parse(a.GetProperty(f).GetRawText());
         words["forOp7"] = false;
+        // group 3g (T15o): the UA's sendCounter word, version 0, pqzVersions (latest 0, current 0, listed)
+        words["sendCounterWord"] = "0x" + a.GetProperty("sendCounter").GetUInt64().ToString("x64");
+        words["keyVersion"] = 0;
+        words["keyVersions"] = "0x" + new string('0', 30) + "01" + new string('0', 32);
         var k = Keep(Fresh("pq_kat").PqzKey(0, 0));
         Assert.Equal("UAArgument", Code(() => k.Call("balance", words.ToJsonString())));
         words["psid"] = Pqzl2048;
@@ -837,10 +841,29 @@ public class WalletTests : IDisposable
         var w = Fresh("pq_kat");
         foreach (var r in Rows(Load("smartcontracts/vectors/pqz/n2304-kmax4096/wallet_state.json"), "rows"))
         {
-            var q = Keep(w.PqzKey(r.GetProperty("account").GetUInt32(), r.GetProperty("index").GetUInt32()));
+            var q = Keep(w.PqzKey(r.GetProperty("account").GetUInt32(), r.GetProperty("index").GetUInt32(), r.GetProperty("version").GetUInt64()));
             var got = JsonDocument.Parse(q.Call("balance", r.GetProperty("request").GetRawText())).RootElement.GetProperty("value");
             Assert.True(got.GetUInt64() == r.GetProperty("value").GetUInt64(), S(r, "name"));
         }
+    }
+
+    /// <summary>Group 3g C8 (T15o): <c>PqzKey</c> / <c>ExportPqzLeafRaw</c> at a key version give pq_kat.json's <c>pqzSeeds</c>;
+    /// version 0 is the default; one key per version.</summary>
+    [Fact]
+    public void PqzKeyVersionsAreThePqKatRows()
+    {
+        var w = Fresh("pq_kat");
+        var pks = new HashSet<string>();
+        foreach (var r in Rows(Load("smartcontracts/vectors/ua/pq_kat.json"), "pqzSeeds"))
+        {
+            var (a, i, v) = (r.GetProperty("account").GetUInt32(), r.GetProperty("index").GetUInt32(), r.GetProperty("version").GetUInt64());
+            var leaf = w.ExportPqzLeafRaw(a, i, v);
+            Assert.Equal(S(r, "seed32"), "0x" + Convert.ToHexString(leaf).ToLowerInvariant());
+            UaLib.Wipe(leaf);
+            pks.Add(Convert.ToHexString(Keep(w.PqzKey(a, i, v)).PublicKey()));
+        }
+        Assert.Equal(3, pks.Count);
+        Assert.Contains(Convert.ToHexString(Keep(w.PqzKey(0, 0)).PublicKey()), pks);
     }
 
     // --- the PQZ facade ---

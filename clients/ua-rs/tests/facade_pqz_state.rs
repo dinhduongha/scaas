@@ -181,8 +181,8 @@ fn state_rows_reproduce_the_contract() {
     let mut n = 0;
     for a in r["accounts"].as_array().unwrap() {
         let name = a["name"].as_str().unwrap();
-        let mut words = merge(loc.clone(), json!({"ua": a["ua"], "block": a["block"], "account": a["account"], "pending": a["pending"],
-            "accWords": a["accWords"], "blobs": a["blobs"], "keyRecord": a["keyRecord"]}));
+        let mut words = merge(merge(loc.clone(), json!({"ua": a["ua"], "block": a["block"], "account": a["account"], "pending": a["pending"],
+            "accWords": a["accWords"], "blobs": a["blobs"], "keyRecord": a["keyRecord"]})), forge_versions(a));
         words.as_object_mut().unwrap().remove("chainId");
         words.as_object_mut().unwrap().remove("registry");
         let key = hx(&h(&a["blobs"][0]["code"])[1..]);
@@ -212,10 +212,10 @@ fn state_rows_reproduce_the_contract() {
             // T15l: the sender's op 4 of the same leg (its key record the sender account's row)
             let from = r["accounts"].as_array().unwrap().iter().find(|a| a["ua"] == e["fromUA"]).unwrap();
             let ds = merge(base.clone(), json!({"leg": l["leg"], "blobs": [e["blob"], from["blobs"][0], l["key"]], "keyRecord": from["keyRecord"],
-                "legKeyRecord": l["keyRecord"]}));
+                "legKeyRecords": [l["keyRecord"]]}));
             let b = rebuilt("proveDiscloseSender", &ds);
             assert_eq!((&b["ct"], &b["words"][6], &b["words"][0]), (&l["ct"], &e["entryRef"], &json!(hx(&Form::DiscloseSender.op_tag()))), "{name}: op 4");
-            assert_eq!((&b["legKey"], &b["key"]), (&json!(hx(&h(&l["key"]["code"])[1..])), &json!(hx(&h(&from["blobs"][0]["code"])[1..]))), "{name}: op 4 keys");
+            assert_eq!((&b["legKeys"][0], &b["key"]), (&json!(hx(&h(&l["key"]["code"])[1..])), &json!(hx(&h(&from["blobs"][0]["code"])[1..]))), "{name}: op 4 keys");
             if l["auditorCt"] != "" {
                 let j = l["leg"].as_u64().unwrap();
                 let au = merge(base.clone(), json!({"ua": r["auditorUA"], "leg": j, "blobs": [e["blob"], r["auditorKey"]],
@@ -417,6 +417,15 @@ fn word_negatives_refused_before_the_key() {
     neg("the account short of a slot", k, &ok, &|r| { r["account"].as_array_mut().unwrap().pop(); }, Error::Argument);
     neg("an extra account slot", k, &ok, &|r| r["account"].as_array_mut().unwrap().push(json!(hx(&[0; 32]))), Error::Argument);
     neg("bits above the packed fields", k, &ok, &|r| set_word(r, &["account", "1"], |w| w[0] = 1), Error::Argument);
+    // group 3g (T15o): the UA's sendCounter word and the registry's version word
+    neg("bits above sendCounter", k, &ok, &|r| set_word(r, &["sendCounterWord"], |w| w[23] = 1), Error::Argument);
+    neg("no sendCounterWord", k, &ok, &|r| { r.as_object_mut().unwrap().remove("sendCounterWord"); }, Error::Argument);
+    neg("no keyVersion", k, &ok, &|r| { r.as_object_mut().unwrap().remove("keyVersion"); }, Error::Argument);
+    neg("no keyVersions", k, &ok, &|r| { r.as_object_mut().unwrap().remove("keyVersions"); }, Error::Argument);
+    neg("keyVersion above current", k, &ok, &|r| r["keyVersion"] = json!(1), Error::Argument);
+    neg("current above latest", k, &ok, &|r| set_word(r, &["keyVersions"], |w| w[23] = 1), Error::Argument);
+    neg("listed not a bool", k, &ok, &|r| set_word(r, &["keyVersions"], |w| w[15] = 2), Error::Argument);
+    neg("bits above the version fields", k, &ok, &|r| set_word(r, &["keyVersions"], |w| w[14] = 1), Error::Argument);
     neg("cleared above floor", k, &ok, &|r| set_word(r, &["account", "0"], |w| w[7] = 9), Error::Argument);
     neg("more than K_MAX units", k, &ok, &|r| set_word(r, &["account", "1"], |w| w[4..8].copy_from_slice(&(st::K_MAX as u32).to_be_bytes())), Error::Argument);
     neg("more than K_MAX units, nothing pending", k, &ok, &|r| {
@@ -432,7 +441,7 @@ fn word_negatives_refused_before_the_key() {
     neg("the key not proven", k, &ok, &|r| set_word(r, &["keyRecord"], |w| w[11] = 0), Error::Argument);
     neg("another account's key record", k, &ok, &|r| {
         r["keyRecord"] = json!(hx(&wd.c.key_record(&A)));
-        r["blobs"][0] = wd.c.blobs_json(&[wd.c.keys[&A]])[0].clone();
+        r["blobs"][0] = wd.c.blobs_json(&[wd.c.key_ptr(&A)])[0].clone();
     }, Error::Argument);
     neg("acc not hashing to accHash", ka, &oka, &|r| set_word(r, &["accWords", "7"], |w| w[5] ^= 1), Error::Argument);
     neg("an acc slot missing", ka, &oka, &|r| { r["accWords"].as_array_mut().unwrap().pop(); }, Error::Argument);
@@ -504,6 +513,11 @@ fn entry_and_role_negatives_refused_before_the_key() {
     }
 }
 
+#[cfg(feature = "vectors")]
+fn sender_trials() -> usize {
+    scaas_ua::facade::pqz::vectors_sender_trials()
+}
+
 fn prover_calls() -> usize {
     #[cfg(feature = "vectors")]
     return scaas_ua::facade::pqz::vectors_prover_calls();
@@ -562,8 +576,9 @@ fn sender_disclosure_negatives() {
     refused("entryRef not recomputing", ka, "proveDiscloseSender", &merge(ok.clone(), json!({"sendCounter": 7})), Error::Argument);
     refused("a leg outside the entry", ka, "proveDiscloseSender", &merge(ok.clone(), json!({"leg": 1})), Error::Argument);
     let mut no_owner = ok.clone();
-    no_owner.as_object_mut().unwrap().remove("legKeyRecord");
-    refused("no legKeyRecord", ka, "proveDiscloseSender", &no_owner, Error::Argument);
+    no_owner.as_object_mut().unwrap().remove("legKeyRecords");
+    refused("no legKeyRecords", ka, "proveDiscloseSender", &no_owner, Error::Argument);
+    refused("an empty legKeyRecords", ka, "proveDiscloseSender", &merge(ok.clone(), json!({"legKeyRecords": []})), Error::Argument);
     let mut no_code = ok.clone();
     no_code["blobs"].as_array_mut().unwrap().pop();
     refused("the leg owner's key code missing", ka, "proveDiscloseSender", &no_code, Error::Argument);
@@ -575,7 +590,7 @@ fn sender_disclosure_negatives() {
     // Z's entry, asked on Alice's handle with Alice's own record: entryRef recomputes, the re-derivation (Alice's seed) does not
     let mut theirs = wd.c.sender_leg(&ez, 0, &BOB);
     theirs["keyRecord"] = json!(hx(&wd.c.key_record(&A)));
-    theirs["blobs"] = json!(wd.c.blobs_json(&[wd.c.entries[&ez].ptr, wd.c.keys[&A], wd.c.keys[&BOB]]));
+    theirs["blobs"] = json!(wd.c.blobs_json(&[wd.c.entries[&ez].ptr, wd.c.key_ptr(&A), wd.c.key_ptr(&BOB)]));
     assert_eq!(call(ka, "proveDiscloseSender", &theirs).err(), Some(Error::Argument), "another sender's entry");
     assert_eq!(prover_calls(), calls, "refused before the prover");
 }
@@ -702,11 +717,107 @@ fn forge_rows_on_another_handle_are_refused_before_the_key() {
     let k = w.pqz_key(0, 0).unwrap();
     for a in r["accounts"].as_array().unwrap() {
         let name = a["name"].as_str().unwrap();
-        let words = json!({"chainUid": r["chainUid"], "token": r["token"], "psid": r["psid"], "ua": a["ua"], "block": a["block"],
+        let words = merge(json!({"chainUid": r["chainUid"], "token": r["token"], "psid": r["psid"], "ua": a["ua"], "block": a["block"],
             "account": a["account"], "pending": a["pending"], "accWords": a["accWords"], "blobs": a["blobs"], "keyRecord": a["keyRecord"],
-            "forOp7": false});
+            "forOp7": false}), forge_versions(a));
         assert!(PqzCmd::from_json("balance", words.to_string().as_bytes()).is_ok(), "{name}: the words parse (control)");
         refused(name, &k, "balance", &words, Error::Argument);
         refused(name, &k, "balance", &merge(words, json!({"psid": other["psid"]})), Error::PqzSetMismatch);
     }
+}
+
+/// Group 3g (T15o; spec 2026-11-06-pqz-key-versions KV-6 to KV-9, KV-11): Alice rotates to version 1 (`pqz_key_version(0, 0, 1)`)
+/// and credits land there; version 0 is stale: it only migrates (op 1 to Alice, `pkT` her version-1 key) or refreshes, every
+/// other debit refused before the key; the current version never pays itself (`SelfTransfer`); the keys of a statement are
+/// pairwise distinct (`KeyReused`); the migration verifies and settles (version 0 keeps the rest, version 1 the moved amount);
+/// the sender finds each leg's version additively: the entry's `u` names the sender's version (another one refused before any
+/// leg key and before the prover), then the leg owner's listed versions are tried one by one (`legKey` the match).
+#[test]
+fn key_versions_stale_rule_migration_and_additive_recovery() {
+    let mut wd = World::new();
+    wd.c.shield(&A, 1000);
+    let e_old = wd.pay(&A, &BOB, 300, false);
+    let (ka, kb) = (wd._w.pqz_key(0, 0).unwrap(), wd._w.pqz_key(1, 0).unwrap());
+    let (a1, b1) = (wd._w.pqz_key_version(0, 0, 1).unwrap(), wd._w.pqz_key_version(1, 0, 1).unwrap());
+    let (pa, pb, pz) = (wd.pk(&A), wd.pk(&BOB), wd.pk(&Z));
+    assert_ne!(a1.pk(), ka.pk(), "a new key per version");
+    let leg = |pk: &str, ua: &Word, amount: u64| json!({"pk": pk, "ua": hx(ua), "amount": amount});
+    let mut c = std::mem::take(&mut wd.c);
+    c.add_version(A, &a1.pk(), true);
+    let calls = prover_calls();
+    for (what, cmd, extra) in [
+        ("a stale payment", "proveTransfer", json!({"toUA": hx(&BOB), "pkT": pb, "amount": 1, "mode": "BUNDLE"})),
+        ("a stale burn", "proveBurn", json!({"amount": 0, "recipient": hx(&[0; 32])})),
+        ("a stale op 7", "proveTransferMulti", json!({"legs": [leg(&pb, &BOB, 1), leg(&pz, &Z, 0)], "mode": "BUNDLE"})),
+        ("a migration to the stale key itself", "proveTransfer", json!({"toUA": hx(&A), "pkT": pa, "amount": 1, "mode": "BUNDLE"})),
+    ] {
+        refused(what, &ka, cmd, &debit_at(&c, &A, 0, extra), Error::Argument);
+    }
+    assert_eq!(prover_calls(), calls, "refused before the prover");
+    let r = call(&ka, "proveRefresh", &debit_at(&c, &A, 0, json!({}))).unwrap();
+    assert!(verify(2, &h(&r["stmt"]), &h(&r["proof"])), "a stale version refreshes");
+    let m = call(&ka, "proveTransfer", &debit_at(&c, &A, 0, json!({"toUA": hx(&A), "pkT": hx(&a1.pk()), "amount": 650, "mode": "BUNDLE"}))).unwrap();
+    let ms = h(&m["stmt"]);
+    assert!(verify(1, &ms, &h(&m["proof"])), "the migration verifies");
+    c.settle1(&ms, None);
+    assert_eq!((bal_at(&c, &ka, &A, 0), bal_at(&c, &a1, &A, 1)), (50, 650), "the migration moved 650 from version 0 to version 1");
+    assert_eq!(call(&a1, "balance", &merge(c.own_at(&A, 0, 16), json!({"forOp7": false}))).err(), Some(Error::Argument), "v0's words, v1's key");
+    // the current version: no payment to itself, every statement's keys distinct
+    for (what, cmd, extra) in [
+        ("SelfTransfer at the current version", "proveTransfer", json!({"toUA": hx(&A), "pkT": pb, "amount": 1, "mode": "BUNDLE"})),
+        ("pkT the sender's key", "proveTransfer", json!({"toUA": hx(&BOB), "pkT": hx(&a1.pk()), "amount": 1, "mode": "BUNDLE"})),
+        ("pkA the receiver's key", "proveTransfer", json!({"toUA": hx(&BOB), "pkT": pb, "pkA": pb, "amount": 1, "mode": "BUNDLE"})),
+        ("a leg key twice", "proveTransferMulti", json!({"legs": [leg(&pb, &BOB, 1), leg(&pb, &BOB, 0)], "mode": "BUNDLE"})),
+        ("pkA a leg's key", "proveTransferMulti", json!({"legs": [leg(&pb, &BOB, 1), leg(&pz, &Z, 0)], "pkA": pz, "mode": "BUNDLE"})),
+    ] {
+        refused(what, &a1, cmd, &debit_at(&c, &A, 1, extra), Error::Argument);
+    }
+    // Bob rotates; Alice (version 1) pays his version 1
+    c.add_version(BOB, &b1.pk(), true);
+    let p = call(&a1, "proveTransfer", &debit_at(&c, &A, 1, json!({"toUA": hx(&BOB), "pkT": hx(&b1.pk()), "amount": 40, "mode": "BUNDLE"}))).unwrap();
+    let ps = h(&p["stmt"]);
+    assert!(verify(1, &ps, &h(&p["proof"])));
+    let e_new = c.settle1(&ps, None);
+    assert_eq!((bal_at(&c, &kb, &BOB, 0), bal_at(&c, &b1, &BOB, 1), bal_at(&c, &a1, &A, 1)), (300, 40, 610));
+    // additive sender recovery: the sender's version by `u`, each leg's version on its own
+    #[cfg(feature = "vectors")]
+    let t0 = sender_trials();
+    let got = call(&a1, "proveDiscloseSender", &sender_at(&c, &e_new, 1, &[0, 1])).unwrap();
+    assert_eq!((&got["legKey"], &got["amount"]), (&json!(1), &json!(40)), "the new entry: Bob's version 1");
+    #[cfg(feature = "vectors")]
+    assert_eq!(sender_trials() - t0, 2, "one trial per listed version up to the match");
+    assert!(verify(4, &h(&got["stmt"]), &h(&got["proof"])));
+    let got = call(&ka, "proveDiscloseSender", &sender_at(&c, &e_old, 0, &[1, 0])).unwrap();
+    assert_eq!((&got["legKey"], &got["amount"]), (&json!(1), &json!(300)), "the old entry: Bob's version 0, second in the list");
+    let calls = prover_calls();
+    // (the key is used: `u` is re-derived from the sender's seed; refused at the first leg key, before the others and the prover:
+    // the work is the sum of the version lists, never their product)
+    #[cfg(feature = "vectors")]
+    let t0 = sender_trials();
+    assert_eq!(call(&ka, "proveDiscloseSender", &sender_at(&c, &e_new, 0, &[0, 1])).err(), Some(Error::Argument), "the sender's other version");
+    #[cfg(feature = "vectors")]
+    assert_eq!(sender_trials() - t0, 1, "the sender's other version stops at the first leg key");
+    assert_eq!(call(&ka, "proveDiscloseSender", &sender_at(&c, &e_old, 0, &[1])).err(), Some(Error::Argument), "no listed version is the leg's");
+    assert_eq!(prover_calls(), calls, "refused before the prover");
+}
+
+/// A debit request of `ua`'s account of version `v`.
+fn debit_at(c: &Chain, ua: &Word, v: u64, extra: Value) -> Value {
+    merge(merge(c.own_at(ua, v, 16), c.debit_fields()), extra)
+}
+
+/// `ua`'s balance of version `v` on handle `k`.
+fn bal_at(c: &Chain, k: &PqzKey, ua: &Word, v: u64) -> u64 {
+    call(k, "balance", &merge(c.own_at(ua, v, 16), json!({"forOp7": false}))).unwrap()["value"].as_u64().unwrap()
+}
+
+/// `proveDiscloseSender` of leg 0 of `er` (Alice to Bob) on Alice's version `av`, Bob's versions `bv` listed.
+fn sender_at(c: &Chain, er: &Word, av: u64, bv: &[u64]) -> Value {
+    let mut v = c.entry(er, &A);
+    v["keyRecord"] = json!(hx(&c.key_record_at(&A, av)));
+    let mut ptrs = vec![c.entries[er].ptr, c.keys[&(A, av)]];
+    ptrs.extend(bv.iter().map(|x| c.keys[&(BOB, *x)]));
+    v["blobs"] = json!(c.blobs_json(&ptrs));
+    let recs: Vec<String> = bv.iter().map(|x| hx(&c.key_record_at(&BOB, *x))).collect();
+    merge(v, json!({"leg": 0, "registry": hx(&REG), "legKeyRecords": recs}))
 }

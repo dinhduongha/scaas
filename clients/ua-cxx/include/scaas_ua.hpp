@@ -344,8 +344,9 @@ public:
     std::vector<std::string> backupSeal(const Key& sender, const std::vector<Recipient>& recipients) const;  // container JSONs
     std::string linkSeal(const Key& sender, const Bytes& sessionKemPk, const std::string& shortCode) const;
     ZetherKey zetherKey(uint32_t coin, uint32_t account, uint32_t keyUse) const;
-    PqzKey pqzKey(uint32_t account, uint32_t index) const;
-    Secret exportPqzLeafRaw(uint32_t account, uint32_t index) const;  // the explicit export (spec §8.4)
+    // the PQZ key of account / index at key `version` (group 3g: 0 the info without a suffix, v >= 1 with be64(v))
+    PqzKey pqzKey(uint32_t account, uint32_t index, uint64_t version = 0) const;
+    Secret exportPqzLeafRaw(uint32_t account, uint32_t index, uint64_t version = 0) const;  // the explicit export (spec §8.4)
 };
 
 class SeedBackup : public Handle<ffi::SeedBackup> {

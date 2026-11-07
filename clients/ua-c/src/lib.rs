@@ -110,6 +110,10 @@ pub const SCAAS_UA_ERR_WALLET_MISMATCH: ScaasUaStatus = 38;
 pub const SCAAS_UA_ERR_RNG: ScaasUaStatus = 39;
 /// "UAPqzSetMismatch": a PQZ call whose `proofSystemId` or deployed parameter set (`scaas_ua_pqz_check_set`) is not this build's.
 pub const SCAAS_UA_ERR_PQZ_SET_MISMATCH: ScaasUaStatus = 40;
+/// "UAPqzKeyVersion": a PQZ key version other than `latest + 1`, or no version 0 stored (group 3g, KV-1; T15o: appended, ABI 6 kept).
+pub const SCAAS_UA_ERR_PQZ_KEY_VERSION: ScaasUaStatus = 41;
+/// "UAKeyInUse": a stored version of the UA holds this PQZ key (group 3g, KV-1; T15o).
+pub const SCAAS_UA_ERR_KEY_IN_USE: ScaasUaStatus = 42;
 
 /// One row of the kind table. `name` and `group` are static NUL-terminated strings (never freed); `group` is NULL when
 /// the kind has no group. `lengths[0..lengths_len]` are the accepted key-data lengths; `lengths_len == 0` means variable
@@ -152,6 +156,8 @@ impl From<ua::UAError> for Fail {
             KemKeyLength => SCAAS_UA_ERR_KEM_KEY_LENGTH,
             PqzPopHash => SCAAS_UA_ERR_PQZ_POP_HASH,
             PqzKeySet => SCAAS_UA_ERR_PQZ_KEY_SET,
+            PqzKeyVersion => SCAAS_UA_ERR_PQZ_KEY_VERSION,
+            KeyInUse => SCAAS_UA_ERR_KEY_IN_USE,
             KemScheme => SCAAS_UA_ERR_KEM_SCHEME,
             MemberUnknown => SCAAS_UA_ERR_MEMBER_UNKNOWN,
             Pop => SCAAS_UA_ERR_POP,
@@ -362,6 +368,8 @@ fn status_cstr(status: ScaasUaStatus) -> &'static CStr {
         SCAAS_UA_ERR_WALLET_MISMATCH => c"UAWalletMismatch",
         SCAAS_UA_ERR_RNG => c"UARng",
         SCAAS_UA_ERR_PQZ_SET_MISMATCH => c"UAPqzSetMismatch",
+        SCAAS_UA_ERR_PQZ_KEY_VERSION => c"UAPqzKeyVersion",
+        SCAAS_UA_ERR_KEY_IN_USE => c"UAKeyInUse",
         _ => c"UAStatusUnknown",
     }
 }
@@ -2410,6 +2418,26 @@ pub extern "C" fn scaas_ua_wallet_pqz_key(w: *const ScaasUaWallet, account: u32,
     })
 }
 
+/// The PQZ key of `account` / `index` at key version `version` (group 3g C8, ua-rs-sign T15o): version 0 is
+/// scaas_ua_wallet_pqz_key's key, every version v >= 1 appends be64(v) to the HKDF info. Otherwise as scaas_ua_wallet_pqz_key.
+#[no_mangle]
+pub extern "C" fn scaas_ua_wallet_pqz_key_version(
+    w: *const ScaasUaWallet, account: u32, index: u32, version: u64, out: *mut *mut ScaasUaPqzKey,
+) -> ScaasUaStatus {
+    run(|| {
+        if out.is_null() {
+            return Err(argument("NULL"));
+        }
+        #[cfg(feature = "pqz")]
+        return give(out, ScaasUaPqzKey(handle(w)?.0.pqz_key_version(account, index, version)?));
+        #[cfg(not(feature = "pqz"))]
+        {
+            let _ = (w, account, index, version);
+            Err(fail(SCAAS_UA_ERR_KIND_UNAVAILABLE))
+        }
+    })
+}
+
 #[no_mangle]
 pub extern "C" fn scaas_ua_pqz_key_free(k: *mut ScaasUaPqzKey) {
     free(k)
@@ -2539,6 +2567,27 @@ pub extern "C" fn scaas_ua_export_pqz_leaf_raw(w: *const ScaasUaWallet, account:
         #[cfg(not(feature = "pqz"))]
         {
             let _ = (w, account, index, out32);
+            Err(fail(SCAAS_UA_ERR_KIND_UNAVAILABLE))
+        }
+    })
+}
+
+/// WARNING: returns a secret in the clear. The 32-byte PQZ leaf seed32 of `account` / `index` at key version `version`
+/// (scaas_ua_wallet_pqz_key_version's; T15o) into `out32`, as scaas_ua_export_pqz_leaf_raw. The caller zeroizes `out32`.
+/// SCAAS_UA_ERR_WALLET_LOCKED while locked.
+#[no_mangle]
+pub extern "C" fn scaas_ua_export_pqz_leaf_raw_version(
+    w: *const ScaasUaWallet, account: u32, index: u32, version: u64, out32: *mut u8,
+) -> ScaasUaStatus {
+    run(|| {
+        #[cfg(feature = "pqz")]
+        return put(
+            out32.cast::<[u8; 32]>(),
+            *handle(w)?.0.export_pqz_leaf_raw_version(account, index, version, ua::facade::pqz::AllowSecretExport)?,
+        );
+        #[cfg(not(feature = "pqz"))]
+        {
+            let _ = (w, account, index, version, out32);
             Err(fail(SCAAS_UA_ERR_KIND_UNAVAILABLE))
         }
     })

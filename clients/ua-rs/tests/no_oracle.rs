@@ -176,13 +176,14 @@ fn a_crafted_query_beside_real_words_is_refused() {
     let ptr = c.put(blob);
     let er = entry_ref(&A, 0);
     c.entries.insert(er, Ent { ptr, from: A, ctr: 0, memo: vec![] });
-    let pk = format!("0x{}", hex::encode(k.pk()));
+    // another UA and key than the holder's (group 3g: no payment to itself at the current version, a statement's keys distinct)
+    let pk = format!("0x{}", hex::encode(&pqz_ffi::pqzl::keygen(&[7; 32]).unwrap().pk[..]));
     let reqs = [
         ("balance", c.bal(&A)),
         ("proveRefresh", debit.clone()),
         ("proveBurn", merge(debit.clone(), json!({"amount": 1, "recipient": hx(&[0x0B; 32])}))),
-        ("proveTransfer", merge(debit.clone(), json!({"toUA": hx(&A), "pkT": pk, "amount": 1, "mode": "BUNDLE"}))),
-        ("proveTransferMulti", merge(debit, json!({"legs": [{"pk": pk, "ua": hx(&A), "amount": 1}], "mode": "BUNDLE"}))),
+        ("proveTransfer", merge(debit.clone(), json!({"toUA": hx(&[0xB0; 32]), "pkT": pk, "amount": 1, "mode": "BUNDLE"}))),
+        ("proveTransferMulti", merge(debit, json!({"legs": [{"pk": pk, "ua": hx(&[0xB0; 32]), "amount": 1}], "mode": "BUNDLE"}))),
         ("proveDiscloseSender", c.sender_leg(&er, 0, &A)),
     ];
     let before = key_uses();

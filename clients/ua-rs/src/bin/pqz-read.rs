@@ -4,14 +4,17 @@
 //!
 //!   pqz-read --rpc <url> --chain-id <n> --chain-uid <genesis hash> --factory <address> --registry <address> --token <address>
 //!            --ua <bytes32> (--depth <n> | --finalized)
-//!            [--command balance] --for-op7 <true|false>                                  (the holder's own balance)
-//!            --command auditRead --from-ua <bytes32> --send-counter <n> --leg <j>       (an audited leg, the token's auditor)
+//!            [--command balance] --key-version <v> --for-op7 <true|false>               (the holder's own balance of version v)
+//!            --command auditRead --key-version <v> --from-ua <bytes32> --send-counter <n> --leg <j>
+//!                                                                     (an audited leg, the token's auditor at its version v)
 //!            [--words]                                                                  (print the request read; no key)
 //!            --command decoys --count <n> [--exclude <ua>,…] [--recipient <ua>] [--sync-block <n>]   (op 7's decoys; no key,
 //!            [--decoy-filter activity|holder --window <blocks>] [--words]                              no stdin)
 //!
 //! The key is read from **stdin** as JSON, `{"mnemonic": "…", "passphrase"?: "…", "account": n, "index": n}` (the handle
-//! `Wallet::pqz_key(account, index)`), piped from a file; a terminal on stdin is refused. It never leaves this process.
+//! `Wallet::pqz_key_version(account, index, --key-version)`), piped from a file; a terminal on stdin is refused. It never
+//! leaves this process. Group 3g (ua-rs-sign T15o): `--key-version` names the PQZ key version read, no default; a balance over
+//! every version is the sum of one call per version (`pqzVersions[--ua].latest` says how many), the debited version a debit's.
 //!
 //! This tool reads the raw storage words a `ua-rs` PQZ words command takes and feeds them to `ua-rs` (it never parses a
 //! ciphertext or decrypts itself), as a reading layer meeting R1 to R7:
@@ -26,8 +29,10 @@
 //! - **R5** the token is catalogued by `--factory` with a PQZ kind (`OpenFactory._info[token]`, slot 8: `exists` set, `kind`
 //!   NORMAL_PQZ, WRAPPED_PQZ, NORMAL_PQZ_REGULATED or WRAPPED_PQZ_REGULATED). The `_info` offsets are hand-copied (as
 //!   `zether-read-balance`'s): there is no OpenFactory layout pin yet (it comes with the factory index on `ua-mtx-merge`).
-//! - **R6** `keyRecord` is `--registry`'s `pqzKey[--ua]` (`UAStore.Layout` slot 2) and its code must hold this handle's key;
-//!   for `auditRead` `--ua` must be the token's `auditorUA` and its `auditorMode` not NONE (`ua-rs` checks the entry's copy).
+//! - **R6** `keyRecord` is `--registry`'s `pqzKey[--ua][--key-version]` (`UAStore.Layout` slot 2, per version) and its code
+//!   must hold this handle's key; `keyVersions` its `pqzVersions[--ua]` (slot 17: `latest ‖ current ‖ listed`, which `ua-rs`
+//!   checks against `--key-version`); for `auditRead` `--ua` must be the token's `auditorUA` and its `auditorMode` not NONE
+//!   (`ua-rs` checks the entry's copy; a copy made under another auditor version is found by trying each).
 //! - **R7** every read, the R3 re-check included, happens before the key is used; nothing after it goes back to the node.
 //!
 //! The token's slots come from `ua-rs`'s [`STATE_LAYOUT`] (T19c's pin of `scaas.pqz`, compared with the pin by the facade's
@@ -43,15 +48,18 @@
 //! candidates active in the token in the last `--window` blocks, by the account's counters at `block − window`,
 //! `block − window/2` and `block` (`activity`: `pendingCount`, `rolled` or `sendCounter` moved, i.e. a pending entry, a
 //! rollover or a debit; `holder`: `sendCounter` moved, a holder-authorised debit), weighted by recency (2 when active in the
-//! newer half, 1 when only in the older half); the node must hold the state of those blocks. The candidates go to `ua-rs`'s
-//! `pickDecoys` (`facade::decoys`, the OS CSPRNG), then each chosen decoy's key is read: `pqzKey[ua]` (proven) and its SSTORE2
-//! code. Prints `{decoys: [{ua, pk}], syncBlock, listCount, block, blockHash}` (each an op 7 leg with `amount` 0), with
+//! newer half, 1 when only in the older half); the node must hold the state of those blocks. **Never a UA with a pending key
+//! version** (group 3g KV-7, R3, F-2; T15o): a candidate whose `pqzVersions.latest` is above `current` with a key of this set's
+//! length (its proof bytes are missing: an imminent rotation, a credit to it would fail) is dropped before the pick, as
+//! clientkeys `pqzDecoyCandidates`. The candidates go to `ua-rs`'s `pickDecoys` (`facade::decoys`, the OS CSPRNG), then each
+//! chosen decoy's key is read at its current version: `pqzKey[ua][current]` (proven) and its SSTORE2 code. Prints `{decoys: [{ua, pk}], syncBlock, listCount, block, blockHash}` (each an op 7 leg with `amount` 0), with
 //! `--recipient` also `legs`, the full leg order (the recipient and the decoys' UAs, uniformly shuffled by the OS CSPRNG): the
 //! caller builds op 7's legs in that order (a fixed position names the recipient); `--words`
 //! prints `pickDecoys`'s request instead (`{command, request, syncBlock, listCount, block, blockHash}`). Residuals: the
-//! registry's slots 2, 4 and 5 are hand-copied (no registry layout pin on this branch); `--registry` must be the generation
-//! that lists `0x0142` (a predecessor's list is not followed); with the versioned PQZ keys of `ua-mtx-merge` group 3g the key
-//! read moves to the current version (a follow-up).
+//! registry's slots 2, 4, 5 and 17 are hand-copied (their pin, `test/ua/UAStoreLayout.t.sol`, is on `ua-mtx-merge`); `--registry`
+//! must be the generation that lists `0x0142` (a predecessor's list and records are not followed); the activity filter reads
+//! each candidate's account at its current version of the read block; clientkeys' preference for UAs without a recent
+//! `UAPqzKeyCurrent` is not applied (no event reads: storage only, R4).
 
 use std::io::{IsTerminal, Read};
 use std::process::{Command, ExitCode, Stdio};
@@ -69,8 +77,10 @@ type Word = [u8; 32];
 /// `OpenFactory._info` (slot 8): `creator(160) ‖ kind(8) ‖ version(64) ‖ exists(8)`; the PQZ kinds (`IOpenFactory.TokenKind`).
 const INFO_SLOT: u64 = 8;
 const PQZ_KINDS: [u8; 4] = [4, 5, 12, 13];
-/// `UAStore.Layout.pqzKey` (the registry's slot 2): `ptr(160) ‖ proven(8) ‖ added(8)`.
+/// `UAStore.Layout.pqzKey` (the registry's slot 2, keyed `(ua, version)` since group 3g): `ptr(160) ‖ proven(8) ‖ added(8)`;
+/// `pqzVersions` (slot 17): `latest(64) ‖ current(64) ‖ listed(8)`.
 const REG_PQZ_KEY_SLOT: u64 = 2;
+const REG_PQZ_VERSIONS_SLOT: u64 = 17;
 /// `PqzCore.INLINE_MAX`, `INLINE_MAX_PQZH` (op 7 of a PQZH token): the facade's `p` rule (CTR-PQZ-06).
 const INLINE_MAX: u64 = 16;
 const INLINE_MAX_PQZH: u64 = 10;
@@ -96,6 +106,7 @@ struct Args {
     finalized: bool,
     command: String,
     for_op7: Option<bool>,
+    key_version: Option<u64>,
     from_ua: Option<Word>,
     send_counter: Option<u64>,
     leg: Option<u64>,
@@ -146,6 +157,7 @@ fn parse() -> Result<Args, String> {
             "--finalized" => a.finalized = true,
             "--command" => a.command = val()?,
             "--for-op7" => a.for_op7 = Some(val()?.parse().map_err(|_| "--for-op7: true or false")?),
+            "--key-version" => a.key_version = Some(int(val()?)?),
             "--from-ua" => a.from_ua = Some(fixed("--from-ua", &val()?)?),
             "--send-counter" => a.send_counter = Some(int(val()?)?),
             "--leg" => a.leg = Some(int(val()?)?),
@@ -169,12 +181,12 @@ fn parse() -> Result<Args, String> {
         return Err("--count, --exclude, --recipient, --sync-block, --decoy-filter and --window go with --command decoys only".into());
     }
     match a.command.as_str() {
-        "decoys" if a.for_op7.is_none() && entry == 0 && a.count.is_some() && a.filter.is_some() == a.window.is_some() => {}
-        "decoys" => return Err("decoys needs --count, --decoy-filter with --window or neither, and no --for-op7 or entry fields".into()),
-        "balance" if a.for_op7.is_some() && entry == 0 => {}
-        "balance" => return Err("balance needs --for-op7 <true|false> and no entry fields".into()),
-        "auditRead" if a.for_op7.is_none() && entry == 3 => {}
-        "auditRead" => return Err("auditRead needs --from-ua, --send-counter and --leg (no --for-op7)".into()),
+        "decoys" if a.for_op7.is_none() && a.key_version.is_none() && entry == 0 && a.count.is_some() && a.filter.is_some() == a.window.is_some() => {}
+        "decoys" => return Err("decoys needs --count, --decoy-filter with --window or neither, and no --for-op7, --key-version or entry fields".into()),
+        "balance" if a.for_op7.is_some() && a.key_version.is_some() && entry == 0 => {}
+        "balance" => return Err("balance needs --key-version <v>, --for-op7 <true|false> and no entry fields".into()),
+        "auditRead" if a.for_op7.is_none() && a.key_version.is_some() && entry == 3 => {}
+        "auditRead" => return Err("auditRead needs --key-version, --from-ua, --send-counter and --leg (no --for-op7)".into()),
         c => return Err(format!("--command {c}: balance or auditRead, or decoys")),
     }
     Ok(a)
@@ -266,6 +278,24 @@ fn low_addr(w: &Word, byte: usize) -> [u8; 20] {
     let mut a = [0u8; 20];
     a.copy_from_slice(&w[32 - byte - 20..32 - byte]);
     a
+}
+
+/// `acct[ua][v]` of `scaas.pqz` (group 3g KV-6): `keccak256(v ‖ keccak256(ua ‖ root + slot))`.
+fn acct_base(root: &Word, ua: &Word, v: u64) -> Result<Word, String> {
+    Ok(keccak256(&[be(v), keccak256(&[*ua, add(root, at("acct[U][7].pendingCount")?.0)].concat())].concat()))
+}
+
+/// `sendCounter[ua]` of `scaas.pqz` (one per UA since group 3g).
+fn counter_slot(root: &Word, ua: &Word) -> Result<Word, String> {
+    Ok(keccak256(&[*ua, add(root, at("sendCounter[U]")?.0)].concat()))
+}
+
+/// The registry's `pqzKey[ua][v]` and `pqzVersions[ua]`.
+fn pqz_key_slot(ua: &Word, v: u64) -> Word {
+    keccak256(&[be(v), keccak256(&[*ua, be(REG_PQZ_KEY_SLOT)].concat())].concat())
+}
+fn versions_slot(ua: &Word) -> Word {
+    keccak256(&[*ua, be(REG_PQZ_VERSIONS_SLOT)].concat())
 }
 
 /// The words of one block (R3), by hash (EIP-1898), storage and code only (R4), from the one source (R1).
@@ -362,21 +392,22 @@ fn read(a: &Args) -> Result<Words, String> {
     let root = erc7201("scaas.pqz");
     let tok = |label: &str| -> Result<Word, String> { r.word(&a.token, &add(&root, at(label)?.0)) };
     let psid = tok("psid")?;
-    let key_record = r.word(&a.registry, &keccak256(&[a.ua, be(REG_PQZ_KEY_SLOT)].concat()))?;
+    let v = a.key_version.ok_or("--key-version")?;
+    let key_record = r.word(&a.registry, &pqz_key_slot(&a.ua, v))?;
     let key_ptr = low_addr(&key_record, 0);
     let mut request = json!({"chainUid": hx(&a.chain_uid), "token": hx(&a.token), "block": block, "psid": hx(&psid),
         "keyRecord": hx(&key_record), "ua": hx(&a.ua)});
     let blobs = if a.command == "balance" {
-        let base = keccak256(&[a.ua, add(&root, at("acct[U].pendingCount")?.0)].concat());
-        let account = (0..4).map(|i| r.word(&a.token, &add(&base, i))).collect::<Result<Vec<_>, _>>()?;
+        let base = acct_base(&root, &a.ua, v)?;
+        let account = (0..3).map(|i| r.word(&a.token, &add(&base, i))).collect::<Result<Vec<_>, _>>()?;
         let (s0, s1) = (&account[0], &account[1]);
-        let (count, rolled) = (field(s0, "acct[U].pendingCount")?, field(s0, "acct[U].rolled")?);
-        let (units, flags) = (field(s1, "acct[U].accUnits")?, field(s1, "acct[U].flags")?);
-        let acc_blob = low_addr(s1, at("acct[U].accBlob")?.2);
+        let (count, rolled) = (field(s0, "acct[U][7].pendingCount")?, field(s0, "acct[U][7].rolled")?);
+        let (units, flags) = (field(s1, "acct[U][7].accUnits")?, field(s1, "acct[U][7].flags")?);
+        let acc_blob = low_addr(s1, at("acct[U][7].accBlob")?.2);
         let mut ptrs = vec![key_ptr];
         let mut acc_words = Vec::new();
         if flags & 1 != 0 {
-            let first = add(&base, at("acct[U].accWords[0]")?.1);
+            let first = add(&base, at("acct[U][7].accWords[0]")?.1);
             for i in 0..ACC_WORDS as u64 {
                 acc_words.push(json!(hx(&r.word(&a.token, &add(&first, i))?)));
             }
@@ -387,7 +418,7 @@ fn read(a: &Args) -> Result<Words, String> {
         let room = (K_MAX as u64).checked_sub(units + 1).ok_or("the account's accUnits are past K_MAX")?;
         let inline = if a.for_op7 == Some(true) && psid == PQZH_ID { INLINE_MAX_PQZH } else { INLINE_MAX };
         let p = count.min(rolled.saturating_add(inline.min(room)));
-        let map = add(&base, at("acct[U].pending[3]")?.1);
+        let map = add(&base, at("acct[U][7].pending[3]")?.1);
         let mut pending = Vec::new();
         for i in rolled..p {
             let e = r.word(&a.token, &keccak256(&[be(i), map].concat()))?;
@@ -400,6 +431,9 @@ fn read(a: &Args) -> Result<Words, String> {
         request["account"] = json!(account.iter().map(|w| hx(w)).collect::<Vec<_>>());
         request["pending"] = json!(pending);
         request["accWords"] = json!(acc_words);
+        request["sendCounterWord"] = json!(hx(&r.word(&a.token, &counter_slot(&root, &a.ua)?)?));
+        request["keyVersion"] = json!(v);
+        request["keyVersions"] = json!(hx(&r.word(&a.registry, &versions_slot(&a.ua))?));
         request["forOp7"] = json!(a.for_op7 == Some(true));
         r.blobs(&ptrs)?
     } else {
@@ -435,8 +469,8 @@ fn read(a: &Args) -> Result<Words, String> {
     Ok(Words { request, block, hash: r.hash, key_code: key_code.unwrap_or_default() })
 }
 
-/// The key handle of the stdin JSON `{mnemonic, passphrase?, account, index}`.
-fn key(v: &Value) -> Result<(scaas_ua::wallet::Wallet, scaas_ua::facade::pqz::PqzKey), String> {
+/// The wallet and the key's `account`, `index` of the stdin JSON `{mnemonic, passphrase?, account, index}`.
+fn key(v: &Value) -> Result<(scaas_ua::wallet::Wallet, u32, u32), String> {
     let o = v.as_object().ok_or("stdin: a JSON object")?;
     if !o.keys().all(|k| ["mnemonic", "passphrase", "account", "index"].contains(&k.as_str())) {
         return Err("stdin: only mnemonic, passphrase, account, index".into());
@@ -447,8 +481,7 @@ fn key(v: &Value) -> Result<(scaas_ua::wallet::Wallet, scaas_ua::facade::pqz::Pq
         o.get("passphrase").map_or(Some(""), Value::as_str).ok_or("stdin: passphrase")?,
     )
     .map_err(|e| format!("the wallet: {e:?}"))?;
-    let k = w.pqz_key(n("account")?, n("index")?).map_err(|e| format!("the key: {e:?}"))?;
-    Ok((w, k))
+    Ok((w, n("account")?, n("index")?))
 }
 
 /// `decoys` (module doc): the candidates up to the sync point, the optional activity filter, `pickDecoys`, the chosen keys.
@@ -477,12 +510,24 @@ fn decoys(a: &Args) -> Result<Value, String> {
     let mut exclude = a.exclude.clone();
     exclude.push(a.ua);
     exclude.extend(a.recipient);
+    // each candidate's `(latest, current)`; a UA whose latest version of this set's length is not yet current is pending (KV-7)
     let mut candidates: Vec<Word> = Vec::new();
+    let mut current = std::collections::BTreeMap::new();
     for i in 0..n {
         let u = r.word(&a.registry, &keccak256(&[be(i), list].concat()))?;
-        if !candidates.contains(&u) && !exclude.contains(&u) {
-            candidates.push(u);
+        if candidates.contains(&u) || exclude.contains(&u) {
+            continue;
         }
+        let vw = r.word(&a.registry, &versions_slot(&u))?;
+        let (latest, cur) = (u64::from_be_bytes(vw[24..].try_into().unwrap_or_default()), u64::from_be_bytes(vw[16..24].try_into().unwrap_or_default()));
+        if latest > cur {
+            let rec = r.word(&a.registry, &pqz_key_slot(&u, latest))?;
+            if r.code(&low_addr(&rec, 0))?.len() == 1 + PK_BYTES {
+                continue;
+            }
+        }
+        current.insert(u, cur);
+        candidates.push(u);
     }
     let mut request = json!({"exclude": exclude.iter().map(|u| hx(u)).collect::<Vec<_>>(), "count": a.count});
     if let Some(u) = a.recipient {
@@ -492,22 +537,24 @@ fn decoys(a: &Args) -> Result<Value, String> {
         let old = block.checked_sub(w).filter(|_| w >= 2).ok_or("--window: at least 2 and at most the read block")?;
         let (old, mid) = (pin(old)?, pin(block - w / 2)?);
         let root = erc7201("scaas.pqz");
-        let (s0, s2) = (at("acct[U].pendingCount")?.1, at("acct[U].sendCounter")?.1);
-        // the counters an account's activity moves: `pendingCount`, `rolled` (word 0) and `sendCounter` (word 2); `holder`: the last
-        let moved = |x: &Reader, y: &Reader, base: &Word| -> Result<bool, String> {
-            let (x2, y2) = (x.word(&a.token, &add(base, s2))?, y.word(&a.token, &add(base, s2))?);
-            let debit = field(&x2, "acct[U].sendCounter")? != field(&y2, "acct[U].sendCounter")?;
+        let s0 = at("acct[U][7].pendingCount")?.1;
+        // the counters an account's activity moves: `pendingCount`, `rolled` (the current version's word 0) and the UA's
+        // `sendCounter`; `holder`: the last
+        let moved = |x: &Reader, y: &Reader, base: &Word, ctr: &Word| -> Result<bool, String> {
+            let (x2, y2) = (x.word(&a.token, ctr)?, y.word(&a.token, ctr)?);
+            let debit = field(&x2, "sendCounter[U]")? != field(&y2, "sendCounter[U]")?;
             if a.filter.as_deref() == Some("holder") || debit {
                 return Ok(debit);
             }
             let (x0, y0) = (x.word(&a.token, &add(base, s0))?, y.word(&a.token, &add(base, s0))?);
-            Ok(field(&x0, "acct[U].pendingCount")? != field(&y0, "acct[U].pendingCount")?
-                || field(&x0, "acct[U].rolled")? != field(&y0, "acct[U].rolled")?)
+            Ok(field(&x0, "acct[U][7].pendingCount")? != field(&y0, "acct[U][7].pendingCount")?
+                || field(&x0, "acct[U][7].rolled")? != field(&y0, "acct[U][7].rolled")?)
         };
         let (mut kept, mut weights) = (Vec::new(), Vec::new());
         for u in candidates {
-            let base = keccak256(&[u, add(&root, at("acct[U].pendingCount")?.0)].concat());
-            let w = if moved(&mid, &r, &base)? { 2 } else if moved(&old, &mid, &base)? { 1 } else { 0 };
+            // ponytail: the current version of the read block; a rotation inside the window reads the new account's counters
+            let (base, ctr) = (acct_base(&root, &u, current[&u])?, counter_slot(&root, &u)?);
+            let w = if moved(&mid, &r, &base, &ctr)? { 2 } else if moved(&old, &mid, &base, &ctr)? { 1 } else { 0 };
             if w > 0 {
                 kept.push(u);
                 weights.push(w);
@@ -527,8 +574,8 @@ fn decoys(a: &Args) -> Result<Value, String> {
         let mut legs = Vec::new();
         for u in picked["decoys"].as_array().ok_or("pickDecoys: no decoys")? {
             let ua: Word = fixed("decoy", u.as_str().ok_or("pickDecoys: a UA")?)?;
-            // `pqzKey[ua]`: `ptr(160) ‖ proven(8) ‖ added(8)`; the code `0x00 ‖ pk`
-            let rec = r.word(&a.registry, &keccak256(&[ua, be(REG_PQZ_KEY_SLOT)].concat()))?;
+            // `pqzKey[ua][current]`: `ptr(160) ‖ proven(8) ‖ added(8)`; the code `0x00 ‖ pk`
+            let rec = r.word(&a.registry, &pqz_key_slot(&ua, current.get(&ua).copied().ok_or("pickDecoys: not a candidate")?))?;
             let code = r.code(&low_addr(&rec, 0))?;
             match code.split_first() {
                 Some((0, pk)) if rec[11] == 1 && pk.len() == PK_BYTES => legs.push(json!({"ua": hx(&ua), "pk": hx(pk)})),
@@ -567,7 +614,8 @@ fn run(a: &Args) -> Result<Value, String> {
     let mut kv: Value = serde_json::from_str(&input).map_err(|_| "stdin: key JSON expected".to_string())?;
     let handle = key(&kv);
     wipe(&mut kv);
-    let (_wallet, k) = handle?;
+    let (wallet, account, index) = handle?;
+    let k = wallet.pqz_key_version(account, index, a.key_version.ok_or("--key-version")?).map_err(|e| format!("the key: {e:?}"))?;
     let r = read(a)?;
     // R6: the registry's key of --ua is this handle's (SSTORE2: `0x00 ‖ pk`); ua-rs checks it again, with `proven`
     if r.key_code.split_first() != Some((&0, k.pk().as_slice())) {

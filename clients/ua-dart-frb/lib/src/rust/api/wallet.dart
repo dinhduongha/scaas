@@ -489,6 +489,13 @@ abstract class UaWallet implements RustOpaqueInterface {
     required int index,
   });
 
+  /// The PQZ leaf `seed32` of a key version: the explicit export (spec §8.4).
+  Future<SecretBytes> exportPqzLeafRawVersion({
+    required int account,
+    required int index,
+    required BigInt version,
+  });
+
   Future<UaKey> importedKey({required String networkName, required int n});
 
   Future<String> linkSeal({
@@ -511,6 +518,13 @@ abstract class UaWallet implements RustOpaqueInterface {
   });
 
   Future<UaPqzKey> pqzKey({required int account, required int index});
+
+  /// Group 3g (T15o): the PQZ key of `account` / `index` at key `version` (0 the info without a suffix, v >= 1 with be64(v)).
+  Future<UaPqzKey> pqzKeyVersion({
+    required int account,
+    required int index,
+    required BigInt version,
+  });
 
   Future<UaKey> uaKey({
     required int kind,

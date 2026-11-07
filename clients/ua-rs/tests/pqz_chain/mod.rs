@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! ua-rs-sign T15e: a PQZ token's storage as the contract writes it (`PqzCore` on `ua-mtx-merge`: `_credit`, `_trivial`,
 //! `_settleTransfer`, `_bundleMulti`, `_settleBurn`, `_debit`, `rollOver`; the stored form P46), and a reading layer that reads
-//! the raw words a words command takes. The test's own code, not the facade's: the packer here, the facade's unpacker and
+//! the raw words a words command takes. Group 3g (T15o): accounts per `(ua, key version)`, `sendCounter` per UA, the registry's
+//! records per version and `(latest, current)` per UA; credits go to `current`, a debit settles the version whose key is the
+//! statement's `pk_f` (the contract selects it by `keyVersion` and checks that key). The test's own code, not the facade's: the packer here, the facade's unpacker and
 //! rebuild there; the forge rows (`state.json`) tie both to the contract. Proofs come from the facade and verify with pqz-ffi's
 //! precompile before a settlement. UNAUDITED.
 #![allow(dead_code)]
@@ -70,16 +72,15 @@ pub struct Acct {
     pub acc_v: u64,
     pub units: u64,
     pub flags: u8,
-    pub ctr: u64,
     pub acc_hash: Word,
     pub pending: BTreeMap<u64, Word>,
     pub acc_words: Vec<Word>,
 }
 
 impl Acct {
-    /// The struct's slots 0..3 as solc packs them (the first field in the low bytes).
-    pub fn slots(&self) -> [Word; 4] {
-        let mut s = [[0u8; 32]; 4];
+    /// The struct's slots 0..2 as solc packs them (the first field in the low bytes).
+    pub fn slots(&self) -> [Word; 3] {
+        let mut s = [[0u8; 32]; 3];
         for (i, v) in [self.cleared, self.floor, self.rolled, self.count].iter().enumerate() {
             s[0][8 * i..8 * i + 8].copy_from_slice(&v.to_be_bytes());
         }
@@ -88,10 +89,17 @@ impl Acct {
         s[1][8..10].copy_from_slice(&(self.acc_v as u16).to_be_bytes());
         s[1][10..12].copy_from_slice(&(self.acc_u as u16).to_be_bytes());
         s[1][12..].copy_from_slice(&self.acc_blob);
-        s[2][24..].copy_from_slice(&self.ctr.to_be_bytes());
-        s[3] = self.acc_hash;
+        s[2] = self.acc_hash;
         s
     }
+}
+
+/// The version words a forge row (`state.json`, version 0 of every UA) leaves to its reader (group 3g): the UA's
+/// `sendCounter[ua]` word from the row's `sendCounter`, `keyVersion` 0, `pqzVersions` `(latest 0, current 0, listed)`.
+pub fn forge_versions(a: &Value) -> Value {
+    let mut v = [0u8; 32];
+    v[15] = 1;
+    json!({"sendCounterWord": hx(&st::u64_word(a["sendCounter"].as_u64().unwrap())), "keyVersion": 0, "keyVersions": hx(&v)})
 }
 
 /// An entry: its op blob's pointer, the sender's counter, the memo (commit-reveal).
@@ -106,8 +114,12 @@ pub struct Ent {
 #[derive(Default)]
 pub struct Chain {
     pub blobs: BTreeMap<[u8; 20], Vec<u8>>,
-    pub accts: BTreeMap<Word, Acct>,
-    pub keys: BTreeMap<Word, [u8; 20]>,
+    pub accts: BTreeMap<(Word, u64), Acct>,
+    pub keys: BTreeMap<(Word, u64), [u8; 20]>,
+    /// `(latest, current)` per UA (the registry's `pqzVersions`).
+    pub vers: BTreeMap<Word, (u64, u64)>,
+    /// `sendCounter[ua]`.
+    pub ctrs: BTreeMap<Word, u64>,
     pub entries: BTreeMap<Word, Ent>,
     pub block: u64,
     pub auditor: Option<Word>,
@@ -125,19 +137,55 @@ impl Chain {
         self.blobs.insert(a, [vec![0u8], data].concat());
         a
     }
+    /// Version 0 of `ua`, proven and current.
     pub fn register(&mut self, ua: Word, pk: &[u8]) {
         let a = self.put(pk.to_vec());
-        self.keys.insert(ua, a);
+        self.keys.insert((ua, 0), a);
+        self.vers.insert(ua, (0, 0));
     }
-    /// The registry's `pqzKey[ua]` word: `ptr ‖ proven ‖ added`.
+    /// The next version of `ua` (`setPqzKey`), current at once when `eligible` (its proof stored), else pending.
+    pub fn add_version(&mut self, ua: Word, pk: &[u8], eligible: bool) -> u64 {
+        let a = self.put(pk.to_vec());
+        let (latest, current) = self.vers[&ua];
+        self.keys.insert((ua, latest + 1), a);
+        self.vers.insert(ua, (latest + 1, if eligible { latest + 1 } else { current }));
+        latest + 1
+    }
+    pub fn cur(&self, ua: &Word) -> u64 {
+        self.vers[ua].1
+    }
+    /// The SSTORE2 pointer of `ua`'s current key.
+    pub fn key_ptr(&self, ua: &Word) -> [u8; 20] {
+        self.keys[&(*ua, self.cur(ua))]
+    }
+    /// The registry's `pqzKey[ua][current]` word: `ptr ‖ proven ‖ added`.
     pub fn key_record(&self, ua: &Word) -> Word {
+        self.key_record_at(ua, self.cur(ua))
+    }
+    pub fn key_record_at(&self, ua: &Word, v: u64) -> Word {
         let mut w = [0u8; 32];
-        w[12..].copy_from_slice(&self.keys[ua]);
+        w[12..].copy_from_slice(&self.keys[&(*ua, v)]);
         w[11] = 1;
+        w[10] = (v > 0) as u8;
         w
     }
+    /// The registry's `pqzVersions[ua]` word: `latest(64) ‖ current(64) ‖ listed(8)`.
+    pub fn versions_word(&self, ua: &Word) -> Word {
+        let (latest, current) = self.vers[ua];
+        let mut w = [0u8; 32];
+        w[24..].copy_from_slice(&latest.to_be_bytes());
+        w[16..24].copy_from_slice(&current.to_be_bytes());
+        w[15] = 1;
+        w
+    }
+    /// `ua`'s account at its current version (where credits land).
     pub fn acct(&mut self, ua: &Word) -> &mut Acct {
-        self.accts.entry(*ua).or_default()
+        let v = self.cur(ua);
+        self.accts.entry((*ua, v)).or_default()
+    }
+    /// The version of `ua` whose key is `pk`.
+    fn version_of(&self, ua: &Word, pk: &[u8]) -> u64 {
+        self.keys.iter().find(|((u, _), a)| u == ua && &self.blobs[*a][1..] == pk).expect("a key of the UA").0 .1
     }
     /// `PqzCore._trivial` (a new block each time: always appended).
     pub fn shield(&mut self, ua: &Word, amount: u64) {
@@ -160,16 +208,16 @@ impl Chain {
         a.pending.insert(a.count, w);
         a.count += 1;
     }
-    /// `PqzCore._debit` and `_sent`: `acc` the reference, `rolled = floor = cleared = p`, `sendCounter++`.
-    fn debit(&mut self, from: &Word, ptr: [u8; 20], u_off: usize, v_off: usize, p: u64) {
-        let a = self.acct(from);
+    /// `PqzCore._debit` and `_sent` of version `v`: `acc` the reference, `rolled = floor = cleared = p`, `sendCounter[from]++`.
+    fn debit(&mut self, from: &Word, v: u64, ptr: [u8; 20], u_off: usize, v_off: usize, p: u64) {
+        *self.ctrs.entry(*from).or_default() += 1;
+        let a = self.accts.entry((*from, v)).or_default();
         (a.acc_blob, a.acc_u, a.acc_v, a.units, a.flags) = (ptr, u_off as u64, v_off as u64, 1, a.flags & !1);
         (a.rolled, a.floor) = (p, p);
         for i in a.cleared..p {
             a.pending.remove(&i);
         }
         a.cleared = a.cleared.max(p);
-        a.ctr += 1;
     }
     fn data(&self, a: &[u8; 20]) -> &[u8] {
         &self.blobs[a][1..]
@@ -178,9 +226,9 @@ impl Chain {
         let d = self.data(a);
         [unpack(&d[u_off..u_off + PKP]).unwrap(), unpack(&d[v_off..v_off + VP]).unwrap()].concat()
     }
-    /// `acc` as the contract reads it (`_accOf`).
+    /// `acc` as the contract reads it (`_accOf`), at the current version.
     pub fn acc_ct(&self, ua: &Word) -> Vec<u8> {
-        let a = &self.accts[ua];
+        let a = &self.accts[&(*ua, self.cur(ua))];
         if a.flags & 1 != 0 {
             let s: Vec<u8> = a.acc_words.iter().flat_map(|w| w.map(|b| !b)).take(CTP).collect();
             unpack(&s).unwrap()
@@ -193,7 +241,7 @@ impl Chain {
     /// `rollOver(ua, n)`: `acc += Σ pending[rolled, rolled + n)` written as `not(packed stream)`, `accHash`, `MAT`.
     pub fn roll(&mut self, ua: &Word, n: u64) {
         let mut c = lanes(&self.acc_ct(ua));
-        let a = self.accts[ua].clone();
+        let a = self.accts[&(*ua, self.cur(ua))].clone();
         let delta = st::DELTA.unsigned_abs();
         for i in a.rolled..a.rolled + n {
             let e = a.pending[&i];
@@ -222,15 +270,20 @@ impl Chain {
         a.units += n;
     }
     /// The facade's `p` rule (CTR-PQZ-06), as a reading layer computes it to know which pending slots to read.
-    pub fn p_of(&self, ua: &Word, inline: u64) -> u64 {
-        let a = &self.accts[ua];
+    pub fn p_of(&self, ua: &Word, v: u64, inline: u64) -> u64 {
+        let a = &self.accts[&(*ua, v)];
         a.count.min(a.rolled + inline.min(K_MAX as u64 - 1 - a.units))
     }
-    /// A words request for `ua`'s own account (`balance` and the debits): the reading layer's words at the inline window.
+    /// A words request for `ua`'s own account at its current version (`balance` and the debits).
     pub fn own(&self, ua: &Word, inline: u64) -> Value {
-        let a = &self.accts[ua];
-        let p = self.p_of(ua, inline);
-        let mut blobs = vec![self.keys[ua]];
+        self.own_at(ua, self.cur(ua), inline)
+    }
+    /// A words request for `ua`'s own account of version `v`: the reading layer's words at the inline window.
+    pub fn own_at(&self, ua: &Word, v: u64, inline: u64) -> Value {
+        let empty = Acct::default();
+        let a = self.accts.get(&(*ua, v)).unwrap_or(&empty);
+        let p = a.count.min(a.rolled + inline.min(K_MAX as u64 - 1 - a.units));
+        let mut blobs = vec![self.keys[&(*ua, v)]];
         if a.flags & 1 == 0 && a.acc_blob != [0; 20] {
             blobs.push(a.acc_blob);
         }
@@ -246,7 +299,8 @@ impl Chain {
         let acc_words: Vec<String> = if a.flags & 1 != 0 { a.acc_words.iter().map(|w| hx(w)).collect() } else { vec![] };
         json!({"chainUid": hx(&UID), "token": hx(&TOKEN), "ua": hx(ua), "block": self.block, "psid": hx(&st::PQZL_ID),
             "account": a.slots().iter().map(|w| hx(w)).collect::<Vec<_>>(), "pending": pending, "accWords": acc_words,
-            "blobs": self.blobs_json(&blobs), "keyRecord": hx(&self.key_record(ua))})
+            "sendCounterWord": hx(&st::u64_word(self.ctrs.get(ua).copied().unwrap_or(0))), "keyVersion": v,
+            "keyVersions": hx(&self.versions_word(ua)), "blobs": self.blobs_json(&blobs), "keyRecord": hx(&self.key_record_at(ua, v))})
     }
     /// A `balance` request for `ua` (op 1 / op 2's `p`: `forOp7` false).
     pub fn bal(&self, ua: &Word) -> Value {
@@ -257,8 +311,8 @@ impl Chain {
     pub fn sender_leg(&self, er: &Word, j: usize, owner: &Word) -> Value {
         let e = &self.entries[er];
         let mut v = self.entry(er, &e.from);
-        v["blobs"] = json!(self.blobs_json(&[e.ptr, self.keys[&e.from], self.keys[owner]]));
-        merge(v, json!({"leg": j, "registry": hx(&REG), "legKeyRecord": hx(&self.key_record(owner))}))
+        v["blobs"] = json!(self.blobs_json(&[e.ptr, self.key_ptr(&e.from), self.key_ptr(owner)]));
+        merge(v, json!({"leg": j, "registry": hx(&REG), "legKeyRecords": [hx(&self.key_record(owner))]}))
     }
     pub fn blobs_json(&self, list: &[[u8; 20]]) -> Vec<Value> {
         let mut seen = Vec::new();
@@ -279,7 +333,7 @@ impl Chain {
         ptr[12..].copy_from_slice(&e.ptr);
         json!({"chainId": CHAIN_ID, "chainUid": hx(&UID), "token": hx(&TOKEN), "entryRef": hx(er), "fromUA": hx(&e.from),
             "sendCounter": e.ctr, "entryPtr": hx(&ptr), "block": self.block, "psid": hx(&st::PQZL_ID),
-            "blobs": self.blobs_json(&[e.ptr, self.keys[holder]]), "keyRecord": hx(&self.key_record(holder))})
+            "blobs": self.blobs_json(&[e.ptr, self.key_ptr(holder)]), "keyRecord": hx(&self.key_record(holder))})
     }
     /// The token's `auditorMode` (slot 0: `pqz ‖ disclosureMode ‖ auditorMode`, OPTIONAL) and `auditorUA` words.
     pub fn auditor_words(&self, mode: u8) -> Value {
@@ -304,7 +358,8 @@ impl Chain {
         let len = blob.len();
         self.block += 1;
         let ptr = self.put(blob);
-        self.debit(&from, ptr, 16, len - VP, p);
+        let v = self.version_of(&from, d.pk_f);
+        self.debit(&from, v, ptr, 16, len - VP, p);
         self.credit(&to, ptr, 16, 16 + PKP);
         let er = entry_ref(&from, ctr);
         self.entries.insert(er, Ent { ptr, from, ctr, memo: memo.map(<[u8]>::to_vec).unwrap_or_default() });
@@ -333,7 +388,8 @@ impl Chain {
         let len = blob.len();
         self.block += 1;
         let ptr = self.put(blob);
-        self.debit(&from, ptr, 16, len - VP, p);
+        let v = self.version_of(&from, m.pk_f);
+        self.debit(&from, v, ptr, 16, len - VP, p);
         let (us, ls) = (16 + PKP * g, 32 + VP * (1 + aud as usize));
         for (j, ua) in uas.iter().enumerate() {
             self.credit(ua, ptr, 16 + PKP * (j / st::legs_per_group(aud)), us + ls * j);
@@ -349,7 +405,8 @@ impl Chain {
         let p = st::word_u64(&hd[st::H_P]).unwrap();
         self.block += 1;
         let ptr = self.put([pack(d.u), pack(d.v_f)].concat());
-        self.debit(&hd[st::H_FROM], ptr, 0, PKP, p);
+        let v = self.version_of(&hd[st::H_FROM], d.pk_f);
+        self.debit(&hd[st::H_FROM], v, ptr, 0, PKP, p);
     }
 }
 

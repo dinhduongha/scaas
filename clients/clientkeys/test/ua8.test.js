@@ -14,7 +14,7 @@ import { hashStruct, hashTypedData } from '../src/evm.js';
 import { personalSignDigest } from '../legacy/typed-signing/ua-portable-raw.js';
 import { portableJson } from '../scripts/ua-portable-vectors.mjs';
 import * as signers from '../scripts/ua-signers.mjs';
-import { B, nativeOk, bytesAt, sigOk, memberSigs, msigOk, SECP_N, verifyRegistration, verifyKemRecord, verifyPqzKeyRecord, verifyMembership, decodeMemberSigs,
+import { B, nativeOk, bytesAt, sigOk, memberSigs, msigOk, SECP_N, verifyRegistration, verifyKemRecord, verifyPqzKeyRecord, verifyPqzKeyVersionRecord, verifyMembership, decodeMemberSigs,
   encodeMemberSigs, kindVerify } from './ua-verify.js';
 
 import { dir } from './ua-vectors-dir.js';
@@ -32,6 +32,7 @@ const DS_P = '0x9a2c390d4dc940ccdb5fa6b21e673e87159bdd99aeef22ea791bcea9efc64ca1
 const KEM_T = 'UAKemRecord(bytes32 ua,uint64 version,uint8 scheme,bytes32 kemPkHash)';
 const REC_T = 'UAPortableRecord(bytes32 ua,uint16 kind,bytes32 pqzKeyHash,UAKemRecord kem)';
 const PK_T = 'UAPqzKey(bytes32 ua,bytes32 pqzKeyHash)';
+const PKV_T = 'UAPqzKeyVersion(bytes32 ua,uint64 version,bytes32 pqzKeyHash)';
 const TYPES = {
   UAKemRecord: [KEM_T, '0x0ab7989827627b89c268e88a0a0b06b62aefa70b0a466014931ca44acfa9a201'],
   UAPortableRecord: [REC_T + KEM_T, '0x0c1553cfab3c35326558484df79963dced75ead85272d2a85985f264757bfe7f'],
@@ -39,6 +40,9 @@ const TYPES = {
     '0xc78b548ceb2fadf1f0a895f79f88b517327c120f0f9ab345f02981441048c87e'],
   UAPqzKey: [PK_T, '0x827d90728b100bc830d06b04dd2b9b5f7853adaa05502b4082875f881d925a00'],
   UAPqzKeyRecord: ['UAPqzKeyRecord(UAPqzKey key,bytes32 pqzPopHash)' + PK_T, '0xaba20a80603724f71232573a76d2506ae38f60f39ea9cd8e71f4b64775dd7567'],
+  // group 3g: the contract's pins (test/ua/PqzKeyVersions.t.sol)
+  UAPqzKeyVersion: [PKV_T, '0x56bb760a3968427f1aa06b0497de42c05374beae46765175b61976c12e38b158'],
+  UAPqzKeyVersionRecord: ['UAPqzKeyVersionRecord(UAPqzKeyVersion key,bytes32 pqzPopHash)' + PKV_T, '0x2e00b7c0ff5cfbca3f50e0445bcd02bb227e0154c239c812b38d9b8fa6e7d6e5'],
   UAMembership: ['UAMembership(bytes32 ua,bytes32 member)', '0x2ffb61cab130ef54f9af88d7255ca81c570651b2562c2c368286a1f43bfe5cb4'],
 };
 const TH = Object.fromEntries(Object.entries(TYPES).map(([k, [, t]]) => [k, B(t)]));
@@ -878,6 +882,62 @@ test('verifyPqzKeyRecord accepts every row and refuses a flipped byte', () => {
   const k = P.pqzKeyRecords[0];
   refuses(() => verifyPqzKeyRecord(pqzRow(k, { ua: s.ua }), keysOf), 'UAPqzHolder', 'the control');
   refuses(() => verifyPqzKeyRecord(pqzRow(k), () => keysOf(s.ua)), 'UAUnauthorized', 'not the key data\'s id');
+});
+
+// --- group 3g (KV-1, KV-2): the version records ---
+const kvRow = (k, over = {}) => ({ ua: k.ua, version: k.version, pqzKey: k.pqzKey, pqzPopHash: k.pqzPopHash, sig: k.sig, ...over });
+
+test('pqzKeyVersions: two holders, versions 1 and 2, every set; digests by hand; a member signature over the record; the args', () => {
+  assert.equal(P.pqzKeyVersions.length, 2 * 2 * SETS.length);
+  assert.deepEqual([...new Set(P.pqzKeyVersions.map((k) => k.name.split('/')[0]))], ['fndsa512', 'msig-pq-native']);
+  const hashes = new Set();
+  for (const k of P.pqzKeyVersions) {
+    const vh = keccak_256(concatBytes(TH.UAPqzKeyVersion, B(k.ua), word(k.version), B(k.pqzKeyHash)));
+    assert.equal(k.versionDigest, hex(typedHand(vh)), k.name);
+    assert.equal(k.recordDigest, hex(typedHand(keccak_256(concatBytes(TH.UAPqzKeyVersionRecord, vh, B(k.pqzPopHash))))), k.name);
+    assert.equal(k.message, hex(ua.uaMessage(k.kind, ua.PQZ_KEY_TAG, B(k.recordDigest))), k.name);
+    assert.equal(k.pqzRegMessage, hex(ua.uaMessage(0x0142, ua.PQZ_KEY_TAG, B(k.versionDigest))), k.name);
+    assert.equal(k.pqzKeyHash, hex(keccak_256(concatBytes(h('scaas.ua.group.pqz-mlwe.v1'), B(k.pqzKey)))), k.name);
+    assert.equal(k.pqzPopHash, hex(keccak_256(B(k.pqzPop))), k.name);
+    assert.equal(hex(hashTypedData(k.typedData)), k.recordDigest, k.name);
+    assert.deepEqual(k.args, { ua: k.ua, version: k.version, pqzKey: k.pqzKey, pqzPopHash: k.pqzPopHash,
+      sig: ua.uaSig(k.kind === 0x0120 ? { members: memberList(k.sig) } : { signature: k.sig }) }, k.name);
+    assert.ok(!hashes.has(k.pqzKeyHash), `${k.name}: every version its own key`);
+    hashes.add(k.pqzKeyHash);
+    assert.ok(!P.pqzKeyRecords.some((r) => r.pqzKeyHash === k.pqzKeyHash), `${k.name}: not version 0's key`);
+  }
+});
+
+test('verifyPqzKeyVersionRecord accepts every row and refuses a flipped byte, version 0, the other version\'s consent', () => {
+  for (const k of P.pqzKeyVersions) {
+    verifyPqzKeyVersionRecord(kvRow(k), keysOf);
+    for (const bad of flipped(k.kind, k.sig)) refuses(() => verifyPqzKeyVersionRecord(kvRow(k, { sig: bad }), keysOf), 'UAUnauthorized', k.name);
+    refuses(() => verifyPqzKeyVersionRecord(kvRow(k, { version: k.version + 1 }), keysOf), 'UAUnauthorized', `${k.name}: another version`);
+    refuses(() => verifyPqzKeyVersionRecord(kvRow(k, { version: 0 }), keysOf), 'UAPqzKeySet', `${k.name}: version 0`);
+    refuses(() => verifyPqzKeyVersionRecord(kvRow(k, { pqzPopHash: Z }), keysOf), 'UAPqzPopHash', k.name);
+    refuses(() => verifyPqzKeyVersionRecord(kvRow(k, { pqzKey: flipAt(k.pqzKey, 0) }), keysOf), 'UAUnauthorized', k.name);
+  }
+});
+
+test('pqzKeyVersionNegatives: every row by its table, the signature cases by the verifier, the state cases by the builder', () => {
+  assert.equal(P.pqzKeyVersionNegatives.length, 7 * SETS.length);
+  const refused = {};
+  for (const x of P.pqzKeyVersionNegatives) {
+    const k = P.pqzKeyVersions.find((y) => y.name === x.mutation.row) ?? assert.fail(x.name);
+    const zero = rec(`fndsa512/${k.set}`);
+    assert.equal(k.name.split('/')[0], 'fndsa512', x.name);
+    const set = x.mutation.set;
+    const key = set.pqzKey ?? k.pqzKey;
+    if (x.error === 'UAUnauthorized') {
+      refuses(() => verifyPqzKeyVersionRecord(kvRow(k, set), keysOf), x.error, x.name);
+    } else {
+      const known = (v) => (v === 0 ? zero : P.pqzKeyVersions.find((y) => y.name === `fndsa512/v${v}/${k.set}`));
+      refuses(() => ua.pqzKeyVersionRecordMessage(k.kind, { ua: k.ua, keyData: keysOf(k.ua).keyData, version: k.version, pqzKey: key, pqzPopHash: k.pqzPopHash,
+        stored: x.mutation.stored.map((v) => ({ version: v, pqzKeyHash: known(v).pqzKeyHash })) }), x.error, x.name);
+    }
+    refused[x.error] = (refused[x.error] ?? 0) + 1;
+  }
+  assert.deepEqual(refused, { UAPqzKeyVersion: 3 * SETS.length, UAKeyInUse: SETS.length, UAUnauthorized: 3 * SETS.length });
 });
 
 test('verify* fail closed: each case one field off a row that passes (ua-rs check_fails_closed)', () => {

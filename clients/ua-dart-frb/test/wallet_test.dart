@@ -645,6 +645,10 @@ void main() {
       for (final f in ['chainUid', 'token', 'psid']) f: st[f],
       for (final f in ['ua', 'block', 'account', 'pending', 'accWords', 'blobs', 'keyRecord']) f: a[f],
       'forOp7': false,
+      // group 3g (T15o): the UA's sendCounter word, version 0, pqzVersions (latest 0, current 0, listed)
+      'sendCounterWord': '0x${(a['sendCounter'] as int).toRadixString(16).padLeft(64, '0')}',
+      'keyVersion': 0,
+      'keyVersions': '0x${'0' * 30}01${'0' * 32}',
     };
     final k = await (await walletOf('pq_kat')).pqzKey(account: 0, index: 0);
     expect(await code(() => k.call(cmd: 'balance', requestJson: jsonEncode(words))), 'UAArgument');
@@ -657,9 +661,25 @@ void main() {
     // `vectors`, gen_wallet_state.sh): each row's own handle decrypts its balance
     final w = await walletOf('pq_kat');
     for (final r in load_('../pqz/n2304-kmax4096/wallet_state.json')['rows']) {
-      final q = await w.pqzKey(account: r['account'], index: r['index']);
+      final q = await w.pqzKeyVersion(account: r['account'], index: r['index'], version: BigInt.from(r['version']));
       expect(jsonDecode(await q.call(cmd: 'balance', requestJson: jsonEncode(r['request'])))['value'], r['value'], reason: r['name']);
     }
+  });
+
+  // Group 3g C8 (T15o): pqzKeyVersion / exportPqzLeafRawVersion give pq_kat.json's pqzSeeds; version 0 is pqzKey's; one key per
+  // version.
+  test('pqz_key_versions', () async {
+    final w = await walletOf('pq_kat');
+    final pks = <String>{};
+    for (final r in load_('pq_kat.json')['pqzSeeds']) {
+      final v = BigInt.from(r['version']);
+      final leaf = await w.exportPqzLeafRawVersion(account: r['account'], index: r['index'], version: v);
+      expect(hx(view(leaf)), r['seed32'], reason: 'version $v');
+      leaf.dispose();
+      pks.add(hx((await w.pqzKeyVersion(account: r['account'], index: r['index'], version: v)).pk()));
+    }
+    expect(pks.length, 3, reason: 'one key per version');
+    expect(pks, contains(hx((await w.pqzKey(account: 0, index: 0)).pk())), reason: 'version 0 is pqzKey');
   });
 
   test('pqz_facade', () async {

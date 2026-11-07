@@ -403,5 +403,25 @@
         }
       ]
     }
-  }
+  },
+  "pqzSeeds": [
+    {
+      "account": 0,
+      "index": 0,
+      "version": 0,
+      "seed32": "0xd69f7b996c31f9d2aee03031009841a2df511325166027efc5c20e61da0b0900"
+    },
+    {
+      "account": 0,
+      "index": 0,
+      "version": 1,
+      "seed32": "0x53c5e8d5fce2743698bd676e62d5ecae8eb1c0007d80e355ac225b515a284768"
+    },
+    {
+      "account": 0,
+      "index": 0,
+      "version": 2,
+      "seed32": "0xc4e356ba35190663c70d20a015521bac8ce43e96e1c470166d88339e410f8b1e"
+    }
+  ]
 }
