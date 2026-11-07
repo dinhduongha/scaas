@@ -22,6 +22,12 @@ DATE = "2026-11-07"
 LIB = "src/ua/UARegistryLib.sol"
 T51 = "test/ua/PqzKeyVersions.t.sol"
 CORE = "src/pqz/PqzCore.sol"
+CK_UA = "../../clients/clientkeys/src/ua.js"
+CK_PQ = "../../clients/clientkeys/src/pq.js"
+CK_EVM = "../../clients/clientkeys/src/evm.js"
+NODE_TYPED = "../../scaas-node/src/typed.rs"
+NODE_SUBMIT = "../../scaas-node/src/submit.rs"
+NODE_GUARD = "../../scaas-node/src/guard.rs"
 T52 = "test/pqz/PqzKeyVersionsToken.t.sol"
 
 # id: (task, file, old, new, --match-path glob)
@@ -89,8 +95,41 @@ MUTANTS = {
                                  "sel == IPqzToken.mtxPrepareAcc.selector) ? 68 : 0);", "test/pqz/PqzTyped.t.sol"),
     "m-t7-disclosure-current-key": ("t53", CORE, "        _key(buf, 288, _discKey(e.registry, owner, keyVersion));",
                                     "        _key(buf, 288, _keyPtr(e.registry, owner));", "test/pqz/PqzKeyVersionsDisclosure.t.sol"),
+
+    # ---- T54: clientkeys (M-C1, and the wallet rules of §7.2); `node:` runs node --test in clients/clientkeys
+    "m-c1-v0-digest-changed": ("t54", CK_UA, "  const keyDigest = pqzKeyDigest({ ua, pqzKeyHash });\n",
+                               "  const keyDigest = pqzKeyVersionDigest({ ua, version: 0, pqzKeyHash });\n", "node:test/ua8.test.js"),
+    "m-c1-be64-at-v0": ("t54", CK_PQ, "v === 0n ? new Uint8Array(0) : be64", "be64", "node:test/pqz-versions.test.js test/pq.test.js"),
+    "m-c-sequence-off": ("t54", CK_UA, "  if (!versions.includes(0n) || v !== versions.reduce((m, x) => (x > m ? x : m), 0n) + 1n) fail('UAPqzKeyVersion', String(v));\n",
+                         "", "node:test/pqz-versions.test.js test/ua8.test.js"),
+    "m-c-repeated-key-signed": ("t54", CK_UA, "  if (stored.some((r) => hex(sized(r.pqzKeyHash, 32, 'pqzKeyHash')) === hex(pqzKeyHash))) fail('UAKeyInUse', 'a stored version holds this key');\n",
+                                "", "node:test/pqz-versions.test.js test/ua8.test.js"),
+    "m-c-decoy-pending-kept": ("t54", CK_UA, "  const open = candidates.filter((c) => !pqzKeyPending(c.latest, pkLength));",
+                               "  const open = candidates;", "node:test/pqz-versions.test.js"),
+    "m-c-stale-debit-signed": ("t54", CK_EVM, "  return refuse(`StaleKeyVersion: version ${v} is stale (current ${cur}): migrate it first`);",
+                               "  return { ...debit, kind: 'debit', show: `debits version ${v}` };", "node:test/pqz-versions.test.js"),
+    "m-c-vault-key-without-hash": ("t54", CK_UA, "`${h32(ua, 'ua')}/${u64(version, 'version')}/${hex(sized(pqzKeyHash, 32, 'pqzKeyHash'))}`",
+                                   "`${h32(ua, 'ua')}/${u64(version, 'version')}`", "node:test/pqz-versions.test.js"),
+
+    # ---- T55: the node (M-N1); `cargo:` runs `cargo test --lib <filter>` in scaas-node
+    "m-n1-key-version-dropped": ("t55", NODE_TYPED, "bytes32 fromUA,uint64 keyVersion,bytes32 toUA,", "bytes32 fromUA,bytes32 toUA,",
+                                 "cargo:typed::"),
+    "m-n1-rotated-dead": ("t55", NODE_SUBMIT, "Ok(true) => self.requeue(w, format!(\"PQZ_KEY_ROTATED: {reason}\")).await,",
+                          "Ok(true) => self.fail(w, format!(\"PQZ_KEY_ROTATED: {reason}\")).await,", "cargo:submit::tests::rotated"),
+    "m-n1-rollover-row-missing": ("t55", NODE_TYPED,
+                                  "    (\"UAPqzRollOver\", \"mtxRollOver\", P, \"bytes32 from,bytes32 ua,uint64 keyVersion,uint256 n,E\", \"\"),\n", "",
+                                  "cargo:guard::"),
+    "m-n1-pending-off": ("t55", NODE_GUARD, "            return no_pending_party(chain, w).await;", "            return Ok(());",
+                         "cargo:submit::tests::rotation_pending"),
 }
 
+
+# ---- T56: the invariant suite J1-J10 (test/pqz/invariant/) re-runs the token and registry mutants it covers
+INV = "test/pqz/invariant/*"
+for _m in ("m-t1-credit-to-latest", "m-t1-migration-to-keyversion", "m-t2-counter-per-version", "m-t4-selftransfer-kept-for-migration",
+           "m-t9-stale-rule-dropped", "m-r3-current-at-setpqzkey", "m-r3-late-proof-lowers", "m-r5-list-per-version"):
+    _t, _f, _o, _n, _ = MUTANTS[_m]
+    MUTANTS[_m + "@inv"] = ("t56", _f, _o, _n, INV)
 
 def red_tests(log):
     forge = re.findall(r"\[FAIL[^\]]*\] (\w+)\(", log) + re.findall(r"\[FAIL[^\]]*\] (invariant_\w+)$", log, re.M)
