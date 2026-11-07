@@ -314,3 +314,23 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   `src/factory/{OpenFactory,IOpenFactory}.sol` with the per-token `Info {creator, kind, version, exists}` (`_info`) and the DEX
   version map `_dexVersion`, which the record `Created` replaces; no list of the contracts of an owner or a creator (a log
   only). Not built.
+  Chain-neutral releases (spec `2026-11-07-chain-neutral-releases.md`, option I), under `ua-mtx-merge/chain-neutral/`. T71 +
+  T72 (one segment: the factory's constructor `(registrar)` and `configureChain`, CREATE3 on every creation path, the
+  creator a `bytes32 creatorId`; every kind's chain values in its clone's code), as they stood at 846167ba (the T67 tip):
+  `src/factory/{OpenFactory,IOpenFactory,IFactoryToken}.sol` with the constructor `(registrar, chainUid, noticePeriod)`, the
+  published `Env` carrying `factory`, `chainUid` and `govRouter`, releases `CREATE2`d with `abi.encode(envVersion, env,
+  implArgs)` appended (per-chain code), clones by `Clones.cloneDeterministic` over `keccak256(abi.encode(creator, salt))`,
+  `predictAddress(implementation, creator, salt)`, `getWrapper*(address creator, …)`, `TokenCreated` / `DexCreated` with
+  `address indexed creator`, `initialize(address creator, …)`; `src/common/SaltedEIP712.sol`, `src/metatx/{MetaTxBase,
+  UAMetaTxBase,ERC20MetaTx,MetaTokenBase,NormalToken,WrappedToken}.sol`, `src/governance/GovernanceBase.sol`,
+  `src/zether/{ZetherLayer,ZetherLib,NormalZetherToken,WrappedZetherToken}.sol` (the transfer verifier copied into storage
+  at `init`), `src/pqz/{PqzLayer,PqzStateLib,NormalPqzToken,WrappedPqzToken}.sol`, `src/regulated/{RegulatedBase,Normal,
+  Wrapped,NormalZether,WrappedZether,NormalPqz,WrappedPqz}RegulatedToken.sol` (the six kinds' files), `src/dex/{SCaaSDex,
+  ISCaaSDex}.sol` with the chain values as constructor immutables (`CHAIN_UID`, `_REGISTRY`, `IS_HEDERA`,
+  `_SMART_KEY_CLONE_CODEHASH`, `SMART_KEY_ACCOUNT_IMPL`, `GOV_ROUTER`, the Zether and PQZ verifiers) and the env checks in
+  the constructors; `script/DeployBase.sol` and `script/pqz/e2e.py` with that factory. Tests as they stood before their meaning changed:
+  `test/v2/{Factory,Base,Dex,FactoryZether,Tier2}.t.sol`, `test/ua/{UALedger,UADeploy}.t.sol`,
+  `test/governance/{GovIdentity,GovDeploy}.t.sol`, `test/zether/{ZetherRevertPaths,ZetherDeploy,ZetherModes}.t.sol`,
+  `test/pqz/PqzNormal.t.sol`;
+  `test/vectors/legacy/ua-mtx-merge/chain-neutral/selector_audit.json` with the `initialize(address,uint64,bytes)` rows.
+  Not built.
