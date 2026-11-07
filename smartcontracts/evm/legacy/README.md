@@ -309,3 +309,8 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   T53 (the PQZ disclosure by key version): the four-argument `disclosureStatement(entryRef, leg, amount, kind)` and the
   five-argument `verifyTransferAmount(entryRef, leg, amount, kind, proof)` (checked against the owner's current key) are in the
   T52 copies above (`src/pqz/{PqzCore,PqzViewLib,PqzLayer}.sol`, unchanged by T52); Zether's `ITransferDisclosure` forms stay.
+  Factory index and extensible catalogue (spec `2026-11-07-factory-contract-index.md`), under `ua-mtx-merge/factory-index/`.
+  T67 (the record, the per-class lists, the paged views), as they stood at e1336e60 (the 3g tip):
+  `src/factory/{OpenFactory,IOpenFactory}.sol` with the per-token `Info {creator, kind, version, exists}` (`_info`) and the DEX
+  version map `_dexVersion`, which the record `Created` replaces; no list of the contracts of an owner or a creator (a log
+  only). Not built.
