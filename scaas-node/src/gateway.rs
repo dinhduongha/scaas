@@ -759,7 +759,8 @@ mod tests {
         let relay = json!({"entry": "mtxRelayFee", "contract": "token", "token": format!("{token:#x}"),
             "call": crate::typed::testkit::op_of("UABurn", "token", &v).unwrap(),
             "auth": {"keyData": "0x", "signature": format!("0x{}", "11".repeat(65)), "members": []},
-            "args": {"from": z, "payee": z, "value": "1", "validUntil": until, "relayer": format!("{:#x}", Address::repeat_byte(0xf4))}});
+            "args": {"from": z, "payee": z, "value": "1", "batch": "7", "nonce": "0", "validUntil": until,
+                "relayer": format!("{:#x}", Address::repeat_byte(0xf4))}});
         // a GovernanceRouter op (spec 2026-11-02-governance §12.7) is a job of a namespace with the grant, never a door-A request
         let governance = crate::typed::testkit::op_of("UAGrantRole", "gov_router", &v).unwrap();
         // ua-mtx-merge T15: the door takes merged entries (R44), so the relay fee and the router op meet the token rule again

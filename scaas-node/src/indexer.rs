@@ -62,10 +62,24 @@ pub fn encode_event(log: &Log) -> Option<Value> {
         v["amount"] = json!(e.value.to_string());
     } else if topic0 == IToken::PaymentMeta::SIGNATURE_HASH {
         // joined to its PaymentSettled, never sent alone (`join_pay_events`)
+        // pay-meta-tax spec §3.2: named fields (the old `PaymentMeta(bytes32, bytes)` is in legacy/ua-mtx-merge/3e/indexer.rs)
         let e = log.log_decode::<IToken::PaymentMeta>().ok()?.inner.data;
         v["event"] = json!("PaymentMeta");
         v["entry_ref"] = json!(format!("{:#x}", e.payId));
-        v["meta"] = json!(format!("0x{}", alloy::hex::encode(&e.meta)));
+        v["pay_no"] = json!(e.payNo);
+        v["meta_schema"] = json!(e.schema);
+        v["meta_body"] = json!(format!("0x{}", alloy::hex::encode(&e.body)));
+    } else if topic0 == crate::abi::IRegulatedToken::PaymentTaxed::SIGNATURE_HASH {
+        // joined to its PaymentSettled (spec §5.4), never sent alone
+        let e = log.log_decode::<crate::abi::IRegulatedToken::PaymentTaxed>().ok()?.inner.data;
+        v["event"] = json!("PaymentTaxed");
+        v["entry_ref"] = json!(format!("{:#x}", e.entryRef));
+        put_id(&mut v, "from", e.from);
+        put_id(&mut v, "to", e.payee);
+        v["tax_recipient"] = json!(format!("{:#x}", e.taxRecipient));
+        v["tax_mode"] = json!(e.taxMode);
+        v["tax"] = json!(e.tax.to_string());
+        v["digest"] = json!(format!("{:#x}", e.digest));
     } else if topic0 == IUALedger::UAPaymentSettled::SIGNATURE_HASH {
         // the UA ledger's payment is a `PaymentSettled` row with ids, as on NEAR and Algorand
         let e = log.log_decode::<IUALedger::UAPaymentSettled>().ok()?.inner.data;
@@ -226,7 +240,33 @@ pub fn join_pay_events(mut events: Vec<Value>) -> Vec<Value> {
         }).min_by_key(|&j| at(&events[j]));
         if let Some(j) = j {
             taken[j] = true;
-            events[j]["meta"] = m["meta"].clone();
+            // EVM: the named fields (spec §3.2); the non-EVM families' decoders keep `meta` hex until their round (spec §8)
+            for k in ["meta", "pay_no", "meta_schema", "meta_body"].into_iter().filter(|k| !m[*k].is_null()) {
+                events[j][k] = m[k].clone();
+            }
+        }
+    }
+    // spec §5.4: a `PaymentTaxed` joins the `PaymentSettled` before it of the same token, transaction, `entryRef`, `from` and payee;
+    // the row then carries `tax`, `tax_mode`, `tax_recipient`, `net = amount - tax`, `withheld_by = from`
+    let taxes = of(&events, "PaymentTaxed");
+    let mut taxed = vec![false; events.len()];
+    for i in taxes {
+        let t = events[i].clone();
+        let j = settled.iter().copied().filter(|&j| {
+            let p = &events[j];
+            !taxed[j] && key(p, "tx_hash") == key(&t, "tx_hash") && key(p, "contract") == key(&t, "contract")
+                && key(p, "entry_ref") == key(&t, "entry_ref") && at(p) < at(&t) && who(p, "from") == who(&t, "from")
+                && who(p, "to") == who(&t, "to")
+        }).max_by_key(|&j| at(&events[j]));
+        if let Some(j) = j {
+            taxed[j] = true;
+            let amount = events[j]["amount"].as_str().and_then(|a| a.parse::<alloy::primitives::U256>().ok()).unwrap_or_default();
+            let tax = t["tax"].as_str().and_then(|a| a.parse::<alloy::primitives::U256>().ok()).unwrap_or_default();
+            events[j]["tax"] = t["tax"].clone();
+            events[j]["tax_mode"] = t["tax_mode"].clone();
+            events[j]["tax_recipient"] = t["tax_recipient"].clone();
+            events[j]["net"] = json!(amount.saturating_sub(tax).to_string());
+            events[j]["withheld_by"] = events[j]["from"].clone();
         }
     }
     for i in fees {
@@ -244,7 +284,7 @@ pub fn join_pay_events(mut events: Vec<Value>) -> Vec<Value> {
             }
         }
     }
-    events.retain(|v| v["event"] != "PaymentMeta" && v["event"] != "RelayFeePaid");
+    events.retain(|v| v["event"] != "PaymentMeta" && v["event"] != "RelayFeePaid" && v["event"] != "PaymentTaxed");
     events
 }
 
@@ -256,6 +296,7 @@ pub fn pay_filter(from: u64, to: u64, mut addrs: Vec<Address>, router: Option<Ad
         IToken::PaymentSettled::SIGNATURE_HASH,
         IToken::MetaTransactionExecuted::SIGNATURE_HASH,
         IToken::PaymentMeta::SIGNATURE_HASH,
+        crate::abi::IRegulatedToken::PaymentTaxed::SIGNATURE_HASH,
         IMtxRelayFee::RelayFeePaid::SIGNATURE_HASH,
         IUALedger::UAPaymentSettled::SIGNATURE_HASH,
         IUALedger::UAMetaTransactionExecuted::SIGNATURE_HASH,
@@ -513,7 +554,7 @@ mod tests {
         let (p, r) = (B256::repeat_byte(4), B256::repeat_byte(5));
         let settled = |from: Address, to: Address, amount: u64, entry_ref: B256| IToken::PaymentSettled { from, to,
             amount: U256::from(amount), feeAmount: U256::ZERO, feeRecipient: Address::ZERO, entryRef: entry_ref }.encode_log_data();
-        let meta = IToken::PaymentMeta { payId: p, meta: vec![0xab, 0xcd].into() }.encode_log_data();
+        let meta = IToken::PaymentMeta { payId: p, payNo: "INV-1".into(), schema: 1, body: vec![0xab, 0xcd].into() }.encode_log_data();
         let fee_by = |token: Address, payer: Address, amount: u64| IMtxRelayFee::RelayFeePaid { r#ref: r, target: shop, token,
             payer: payer.into_word(), payee: Address::repeat_byte(0x1a).into_word(), amount: U256::from(amount) }.encode_log_data();
         let fee = |token: Address, amount: u64| fee_by(token, alice, amount);
@@ -545,10 +586,10 @@ mod tests {
         assert!(out.iter().all(client_ingest_accepts));
         let names: Vec<&str> = out.iter().map(|v| v["event"].as_str().unwrap()).collect();
         assert_eq!(names, ["PaymentSettled"; 8], "PaymentMeta / RelayFeePaid never reach Odoo as rows");
-        let with_meta: Vec<(&str, u64)> = out.iter().filter(|v| !v["meta"].is_null())
+        let with_meta: Vec<(&str, u64)> = out.iter().filter(|v| !v["meta_body"].is_null())
             .map(|v| (v["tx_hash"].as_str().unwrap(), v["log_index"].as_u64().unwrap())).collect();
         assert_eq!(with_meta, [(format!("{:#x}", B256::repeat_byte(1)).as_str(), 2)], "only the payment right after its meta");
-        assert_eq!(out[1]["meta"], "0xabcd");
+        assert_eq!((out[1]["meta_body"].as_str(), out[1]["pay_no"].as_str(), out[1]["meta_schema"].as_u64()), (Some("0xabcd"), Some("INV-1"), Some(1)));
         assert_eq!(out[1]["from"], format!("{alice:#x}"));
         let relayed: Vec<&str> = out.iter().filter(|v| !v["relay_payee"].is_null()).map(|v| v["tx_hash"].as_str().unwrap()).collect();
         assert_eq!(relayed, [format!("{:#x}", B256::repeat_byte(4))], "the expected token's payment, same (from, ref), amount and payee or router");
@@ -566,6 +607,37 @@ mod tests {
         ["contract", "from", "to", "fee_recipient", "relayer"].iter().all(|k| row[*k].is_null() || addr(&row[*k]))
     }
 
+    /// pay-meta-tax T42 (`indexer_joins_payment_taxed`, spec §5.4): a `PaymentTaxed` joins the `PaymentSettled` before it of the
+    /// same token, transaction, `entryRef`, payer and payee; the row carries `tax`, `tax_mode`, `tax_recipient`, `net` and
+    /// `withheld_by`; another payer's or a later payment's `PaymentTaxed` joins nothing; the event is never a row.
+    #[test]
+    fn indexer_joins_payment_taxed() {
+        use crate::abi::{IRegulatedToken, IUALedger};
+        let token = Address::repeat_byte(9);
+        let (payer, shop, authority) = (Address::repeat_byte(0xaa).into_word(), Address::repeat_byte(0xbb).into_word(), B256::repeat_byte(0x7a));
+        let p = B256::repeat_byte(4);
+        let settled = |from: B256, amount: u64| IUALedger::UAPaymentSettled { from, to: shop, amount: U256::from(amount),
+            feeAmount: U256::ZERO, feeRecipient: Address::ZERO, entryRef: p }.encode_log_data();
+        let taxed = |from: B256, tax: u64| IRegulatedToken::PaymentTaxed { entryRef: p, payee: shop, taxRecipient: authority, from,
+            taxMode: 2, tax: U256::from(tax), digest: B256::repeat_byte(0xd1) }.encode_log_data();
+        let logs = vec![
+            log_at(token, 1, 0, settled(payer, 1_000)),
+            log_at(token, 1, 1, taxed(payer, 100)),
+            log_at(token, 2, 0, settled(payer, 500)),
+            log_at(token, 2, 1, taxed(Address::repeat_byte(0xcc).into_word(), 50)),
+            log_at(token, 3, 0, taxed(payer, 7)),
+            log_at(token, 3, 1, settled(payer, 70)),
+        ];
+        let out = pay_events(&logs, None);
+        assert!(out.iter().all(|v| v["event"] == "PaymentSettled"), "PaymentTaxed is never a row: {out:?}");
+        assert_eq!(out.len(), 3);
+        assert_eq!((out[0]["tax"].as_str(), out[0]["tax_mode"].as_u64(), out[0]["net"].as_str()), (Some("100"), Some(2), Some("900")));
+        assert_eq!(out[0]["tax_recipient"], format!("{authority:#x}"));
+        assert_eq!(out[0]["withheld_by"], out[0]["from"]);
+        assert!(out[1]["tax"].is_null(), "another payer's PaymentTaxed joins nothing");
+        assert!(out[2]["tax"].is_null(), "a PaymentTaxed before its payment joins nothing");
+    }
+
     /// The UA ledger's payment (`UAPaymentSettled`) and execution (`UAMetaTransactionExecuted`) are the same rows as the
     /// address path's; a native id is its address, a derived UA is `UA_POOL` (the holder ERC-20 observers see for every
     /// UA move) with the id in `from_ua` / `to_ua` (fix 1, review C1: the client's ingest takes 20-byte addresses only).
@@ -580,7 +652,7 @@ mod tests {
         assert_eq!(crate::metatx::ua_pool(), Address::from_word(alloy::primitives::keccak256("scaas.ua.pool.v1")), "MetaTxLib.UA_POOL");
         let settled = |from: B256, to: B256, amount: u64, entry_ref: B256| IUALedger::UAPaymentSettled { from, to,
             amount: U256::from(amount), feeAmount: U256::from(1u64), feeRecipient: lane, entryRef: entry_ref }.encode_log_data();
-        let meta = IToken::PaymentMeta { payId: p, meta: vec![0xab].into() }.encode_log_data();
+        let meta = IToken::PaymentMeta { payId: p, payNo: String::new(), schema: 1, body: vec![0xab].into() }.encode_log_data();
         let fee = |payer: B256, payee: B256| IMtxRelayFee::RelayFeePaid { r#ref: r, target: token, token, payer, payee,
             amount: U256::from(5u64) }.encode_log_data();
         let exec = IUALedger::UAMetaTransactionExecuted { from: ua, relayer: lane, batch: U256::from(7u64), nonce: U256::ZERO,
@@ -608,7 +680,7 @@ mod tests {
         let id = |b: B256| format!("{b:#x}");
         assert_eq!((out[0]["from"].as_str(), out[0]["to"].as_str()), (Some(pool.as_str()), Some(pool.as_str())));
         assert_eq!((out[0]["from_ua"].as_str(), out[0]["to_ua"].as_str()), (Some(id(ua).as_str()), Some(id(shop).as_str())));
-        assert_eq!((out[0]["amount"].as_str(), out[0]["fee"].as_str(), out[0]["meta"].as_str()), (Some("100"), Some("1"), Some("0xab")));
+        assert_eq!((out[0]["amount"].as_str(), out[0]["fee"].as_str(), out[0]["meta_body"].as_str()), (Some("100"), Some("1"), Some("0xab")));
         assert_eq!((out[1]["from"].as_str(), out[1]["from_ua"].as_str(), out[1]["digest"].as_str()),
             (Some(pool.as_str()), Some(id(ua).as_str()), Some(id(B256::repeat_byte(0xd1)).as_str())));
         assert_eq!(out[2]["to"], format!("{router:#x}"), "a native id is its address");
@@ -651,7 +723,7 @@ mod tests {
         let settled = |to: Address, amount: u64, entry_ref: B256| IUALedger::UAPaymentSettled { from: eoa.into_word(), to: to.into_word(),
             amount: U256::from(amount), feeAmount: U256::ZERO, feeRecipient: Address::ZERO, entryRef: entry_ref }.encode_log_data();
         let logs = vec![
-            log_at(token, 1, 0, IToken::PaymentMeta { payId: p, meta: vec![0xab].into() }.encode_log_data()),
+            log_at(token, 1, 0, IToken::PaymentMeta { payId: p, payNo: String::new(), schema: 1, body: vec![0xab].into() }.encode_log_data()),
             log_at(token, 1, 1, settled(shop, 100, p)),
             log_at(token, 2, 0, settled(router, 5, r)),
             log_at(router, 2, 1, IMtxRelayFee::RelayFeePaid { r#ref: r, target: shop, token, payer: eoa.into_word(), payee: lane.into_word(),
@@ -659,7 +731,7 @@ mod tests {
         ];
         let out = pay_events(&logs, Some(router));
         assert_eq!(out.len(), 2);
-        assert_eq!((out[0]["entry_ref"].as_str(), out[0]["meta"].as_str(), out[0]["from"].as_str()),
+        assert_eq!((out[0]["entry_ref"].as_str(), out[0]["meta_body"].as_str(), out[0]["from"].as_str()),
             (Some(format!("{p:#x}").as_str()), Some("0xab"), Some(format!("{eoa:#x}").as_str())));
         assert_eq!((out[1]["entry_ref"].as_str(), out[1]["relay_payee"].as_str()), (Some(format!("{r:#x}").as_str()), Some(format!("{lane:#x}").as_str())));
     }

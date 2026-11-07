@@ -472,20 +472,15 @@ impl Guard {
         if !self.registered(w.to) {
             return Err(Self::not_served(w.to));
         }
-        let (payee, pay_meta) = if ua {
-            (match UaMtx::from_calldata(&w.data) { Some((UaMtx::Transfer(t), _)) => Some(t.to), _ => None },
-             IMtxIds::mtxPayMetaCall::abi_decode(&w.data).ok().map(|c| c.meta.len()))
+        let payee = if ua {
+            match UaMtx::from_calldata(&w.data) { Some((UaMtx::Transfer(t), _)) => Some(t.to), _ => None }
         } else {
-            (match Mtx::from_calldata(&w.data) { Some((Mtx::Transfer(t), _)) => Some(t.to.into_word()), _ => None },
-             IToken::mtxPayMetaCall::abi_decode(&w.data).ok().map(|c| c.meta.len()))
+            match Mtx::from_calldata(&w.data) { Some((Mtx::Transfer(t), _)) => Some(t.to.into_word()), _ => None }
         };
         if payee.is_none() {
             return Err(Refusal::Policy("CALL_TARGET_REFUSED: not a transfer".into()));
         }
         self.check_payee(payee)?;
-        if let Some(n) = pay_meta.filter(|n| *n > self.max_pay_meta_bytes) {
-            return Err(Refusal::Policy(format!("PAY_META_TOO_LONG: meta is {n} B, above max_pay_meta_bytes {}", self.max_pay_meta_bytes)));
-        }
         self.require_bound(chain, w.to).await?;
         if ua && w.typed.as_ref().is_some_and(|t| t.derived_side) {
             // no published UA allowlist to read: the UA path's fee class and kind are the simulation's
@@ -520,6 +515,11 @@ impl Guard {
         }
         let Some(rule) = rule_of(contract) else { return Err(refused(format!("unknown contract kind {contract:?}"))) };
         self.check_payee(w.typed.as_ref().and_then(|t| t.payee))?;
+        // pay-meta-tax spec §7.1: `payNo + body` of a pay entry's `PayMeta`, before any read or simulation
+        if let Some(n) = w.typed.as_ref().map(|t| t.pay_meta_len).filter(|n| *n > self.max_pay_meta_bytes) {
+            return Err(Refusal::Policy(format!("PAY_META_TOO_LONG: payNo + body is {n} B, above max_pay_meta_bytes {}",
+                self.max_pay_meta_bytes)));
+        }
         if rule == Rule::Token {
             if !self.registered(w.to) {
                 return Err(Self::not_served(w.to));
@@ -817,8 +817,8 @@ mod tests {
             assert!(row(cast(gone), "wallet").is_none(), "{gone}");
         }
         let ua_sig = "(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])";
-        // ua-mtx-merge T2 (R28): one `relay` on ids, the old `uaRelay`'s shape (0xa4e8bb8c then) under this name
-        assert_eq!(R::relayCall::SELECTOR, cast(&format!("relay(address,bytes,address,bytes32,bytes32,uint256,uint256,{ua_sig})")));
+        // ua-mtx-merge T2 (R28): one `relay` on ids; pay-meta-tax T38: with the payer's `batch`, `nonce`
+        assert_eq!(R::relayCall::SELECTOR, cast(&format!("relay(address,bytes,address,bytes32,bytes32,uint256,uint256,uint256,uint256,{ua_sig})")));
         assert_eq!(SEL_TOKEN_INVALIDATE_NONCES, cast(&format!("mtxInvalidateNonces(bytes32,uint256,uint256,{ua_sig})")));
         assert_eq!(SEL_MTX_INVALIDATE_NONCES, cast("mtxInvalidateNonces(address,uint256,uint256,bytes)"));
         assert_eq!(rule_of("registry"), Some(Rule::UaRegistry));
@@ -898,10 +898,11 @@ mod tests {
                 refused += 1;
             }
         }
-        // plan T34: (97, 3, 97) -> (105, 3, 105), the router's eight regulated controls' vector rows walked
-        assert_eq!((sent, relayed, refused), (105, 3, 105), "the walk reached every row with an entry; the relay fees: submit.rs");
-        // plan T32: 87 -> 95, the router's eight regulated controls
-        assert_eq!(typed::rows().iter().filter(|r| !r.entry.is_empty()).count(), 95, "table rows: 77 typed with an entry, 18 plain");
+        // plan T34: (97, 3, 97) -> (105, 3, 105), the router's eight regulated controls' vector rows walked; pay-meta-tax T42:
+        // -> (110, 3, 110), UAPayWithTax's three domains and the router's two tax ops
+        assert_eq!((sent, relayed, refused), (110, 3, 110), "the walk reached every row with an entry; the relay fees: submit.rs");
+        // plan T32: 87 -> 95, the router's eight regulated controls; pay-meta-tax T42: -> 99, mtxPay, mtxPayWithTax, the two tax ops
+        assert_eq!(typed::rows().iter().filter(|r| !r.entry.is_empty()).count(), 99, "table rows: 81 typed with an entry, 18 plain");
         // selectors with no row: refused on every kind, on a target that would otherwise pass
         let target = Address::repeat_byte(0x31);
         let g = Guard::new(&ChainCfg { dex: Some(target), governance_routers: vec![target], ..cfg.clone() }, Arc::new(RwLock::new(vec![target]))).unwrap();
@@ -915,6 +916,9 @@ mod tests {
             "mtxRelayFee(address,address,bytes32,address,uint256,uint256,bytes)",
             "uaRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
             "mtxRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+            // pay-meta-tax T37 / T38: the retired pay and relay forms
+            "mtxPayMeta(bytes32,bytes32,uint256,bytes32,bytes,uint256,uint32,address,uint256,address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+            "relay(address,bytes,address,bytes32,bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
             "executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)",
             "uaExecute((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)",
             "uaBatch((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address)[],bytes[])",
@@ -928,7 +932,7 @@ mod tests {
             "grantRole(uint8,bytes32)", "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
             "transferOwnership(bytes32)", "setListedOnly(bool)"] {
             for kind in ["token", "zether", "pqz", "wallet", "account", "dex", "registry", "factory", "gov_router"] {
-                let t = typed::Typed { contract: kind, domain_of: target, struct_hash: None, lane_hash: None, signer: None, payee: None, digest: None,
+                let t = typed::Typed { pay_meta_len: 0, contract: kind, domain_of: target, struct_hash: None, lane_hash: None, signer: None, payee: None, digest: None,
                     derived_signer: false, derived_side: false };
                 let w = Work { job_id: Some(1), to: target, data: cast(s).into(), valid_until: 0, meta: None, entry: true, typed: Some(t) };
                 let e = g.check(&chain, &w).await.unwrap_err();
@@ -1040,7 +1044,6 @@ mod tests {
         ("mtxBatchTransfer", "((bytes32,bytes32,", "a transfer relays as one mtxExecuteTransfer (ua_metatx struct job)"),
         ("mtxTransfer", "(bytes32,bytes32,", "the flat transfer: the same UAMetaTransfer as mtxExecuteTransfer"),
         ("mtxTransferWithFee", "(bytes32,bytes32,", "the flat transfer with a fee: as mtxTransfer"),
-        ("mtxPay", "(bytes32,bytes32,", "the flat payment: as mtxPayMeta's UAMetaTransfer"),
         ("mtxTrade", "((bytes32,address,", "the DEX's pull (NotDex for any other caller)"),
         ("restorePulled", "((bytes32,address,", "the DEX's (NotDex)"),
         ("exchangeOne", "((bytes32,", "the DEX's own self-call (NotSelf)"),
@@ -1068,12 +1071,7 @@ mod tests {
             nonce: alloy::primitives::U256::ZERO, validUntil: alloy::primitives::U256::from(1), mode: 0, relayer: Address::ZERO,
             fee: alloy::primitives::U256::ZERO, feeRecipient: Address::ZERO });
         let auth = crate::abi::UASig { keyData: Bytes::new(), signature: Bytes::new(), members: vec![] };
-        let (salt, meta) = (B256::ZERO, Bytes::from_static(b"m"));
-        let id = crate::metatx::meta_pay_id(&salt, &meta);
-        let paid = match &m { crate::metatx::UaMtx::Transfer(t) => crate::metatx::UaMtx::Transfer(crate::metatx::UAMetaTransfer {
-            entryRef: id, batch: crate::metatx::pay_lane(&id), ..t.clone() }), _ => unreachable!() };
-        let struct_jobs: HashSet<[u8; 4]> = [m.calldata(auth.clone())[..4].try_into().unwrap(),
-            paid.pay_meta_calldata(salt, meta, auth, true).unwrap()[..4].try_into().unwrap()].into_iter().collect();
+        let struct_jobs: HashSet<[u8; 4]> = [m.calldata(auth)[..4].try_into().unwrap()].into_iter().collect();
         let (mut rowed, mut exempt, mut governed) = (0, 0, 0);
         for kind in ["token", "zether", "pqz", "dex", "gov_router"] {
             let entries: Vec<&serde_json::Value> = AUDIT_KINDS.iter().filter(|(_, k)| *k == kind)
@@ -1109,7 +1107,7 @@ mod tests {
         }
         let router: HashSet<[u8; 4]> = audit["GovernanceRouter"].as_array().unwrap().iter().filter(|r| r["class"] == "SIGNED")
             .map(|r| sel(r["sig"].as_str().unwrap())).collect();
-        assert_eq!(router.len(), 28, "19 ops, the eight regulated controls (plan T32) and the ordered cancel");
+        assert_eq!(router.len(), 30, "19 ops, the eight regulated controls (plan T32), the ordered cancel, the two tax ops (pay-meta-tax T39)");
         let ours: HashSet<[u8; 4]> = typed::rows().iter().filter(|r| !r.entry.is_empty() && r.contracts.contains(&"gov_router")).map(|r| r.sent).collect();
         assert_eq!(ours, router, "the router's allow-list, both directions");
         assert_eq!((rowed, exempt, governed), (ROWED, EXEMPT, GOVERNED), "every SIGNED entry was walked");
@@ -1151,17 +1149,25 @@ mod tests {
         let signed = |m: &std::collections::BTreeMap<String, String>| -> std::collections::BTreeSet<String> {
             m.iter().filter(|(_, c)| *c == "SIGNED").map(|(s, _)| s.clone()).collect()
         };
-        assert_eq!(signed(&k), signed(&b), "{kind}: SIGNED entries are {base}'s, both directions");
+        // pay-meta-tax T40: + `mtxPayWithTax`, the regulated kinds' own signed entry (a node row on each kind's class)
+        const PAY_WITH_TAX: &str = "mtxPayWithTax((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,\
+address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,string,uint16,bytes))";
+        let mut want = signed(&b);
+        want.insert(PAY_WITH_TAX.to_string());
+        assert_eq!(signed(&k), want, "{kind}: SIGNED entries are {base}'s and mtxPayWithTax, both directions");
         for (s, c) in &b {
             assert_eq!(k.get(s), Some(c), "{kind}: {s} keeps {base}'s class");
         }
         let added: std::collections::BTreeMap<&String, &String> = k.iter().filter(|(s, _)| !b.contains_key(*s)).collect();
         let controls = ["freeze(bytes32,bytes32,bytes32)", "unfreeze(bytes32,bytes32)", "forceTransfer(bytes32,uint256)",
             "pause(bytes32,uint64)", "unpause(bytes32)", "recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64)",
-            "revokeOrder(bytes32,bytes32)", "operatorTransfer(bytes32,bytes32,uint256,bytes32)"];
+            "revokeOrder(bytes32,bytes32)", "operatorTransfer(bytes32,bytes32,uint256,bytes32)",
+            // pay-meta-tax T39 / T40: bit 23's two powers, the direct payWithTax (the caller's own balance), mtxPayWithTax
+            "setTaxRate(uint32)", "setTaxRecipient(bytes32)", "payWithTax(bytes32,uint256,uint8,uint256,bytes32,(bytes32,string,uint16,bytes))",
+            PAY_WITH_TAX];
         assert_eq!(added.keys().map(|s| s.as_str()).collect::<std::collections::BTreeSet<_>>(), controls.into_iter().collect(), "{kind}");
-        for (s, c) in &added {
-            assert!(c.starts_with("BIT("), "{kind}: {s} is {c}");
+        for (s, c) in added.iter().filter(|(s, _)| s.as_str() != PAY_WITH_TAX) {
+            assert!(c.starts_with("BIT(") || (c.as_str() == "OWN_BALANCE" && s.starts_with("payWithTax(")), "{kind}: {s} is {c}");
             for nk in ["token", "zether", "pqz", "wallet", "account", "dex", "registry", "factory", "gov_router"] {
                 assert!(row(sel(s), nk).is_none(), "{kind}: the control {s} is a {nk} row");
             }
@@ -1172,9 +1178,10 @@ mod tests {
             typed::rows().iter().filter(|r| !r.entry.is_empty() && r.contracts.contains(&node_kind) && s.contains(&r.selector))
                 .map(|r| r.name).collect()
         };
-        let (rk, rb) = (rows_on(&k), rows_on(&b));
+        let (rk, mut rb) = (rows_on(&k), rows_on(&b));
         assert!(!rk.is_empty(), "{kind}: no {node_kind} row");
-        assert_eq!(rk, rb, "{kind}: the {node_kind} rows are {base}'s, both directions");
+        rb.insert("UAPayWithTax");
+        assert_eq!(rk, rb, "{kind}: the {node_kind} rows are {base}'s and UAPayWithTax, both directions");
         for s in signed(&k) {
             if let Some(r) = typed::rows().iter().find(|r| !r.entry.is_empty() && r.contracts.contains(&node_kind) && r.selector == sel(&s)) {
                 assert!(row(r.sent, node_kind).is_some(), "{kind}: the guard refuses {}", r.name);
@@ -1212,9 +1219,11 @@ mod tests {
     /// invalidation); 91 governance entries. Plan T32: (127, 102, 91) -> (234, 202, 217): + the router's eight regulated
     /// controls (rowed) and the six regulated kinds 8-13 (their base kind's entries again, and eight `BIT` controls each):
     /// 436 `SIGNED` entries of the fourteen contracts, 217 governance entries (python over `selector_audit.json`).
-    const ROWED: usize = 234;
-    const EXEMPT: usize = 202;
-    const GOVERNED: usize = 217;
+    // pay-meta-tax T42: (234, 202, 217) -> (254, 178, 229), measured: mtxPay a row (no longer in NOT_ROWS), mtxPayWithTax on the
+    // six regulated kinds, the router's two tax ops, the six kinds' two bit-23 powers governed (12)
+    const ROWED: usize = 254;
+    const EXEMPT: usize = 178;
+    const GOVERNED: usize = 229;
 
     /// As [`bound`], `registry()` answering `registry` (`Address::ZERO`: the UA ledger off, R9).
     async fn bound_with_registry(uid: B256, registry: Address) -> ChainCfg {
@@ -1340,6 +1349,7 @@ mod tests {
         let inner = |name: &str, kind: &str| crate::typed::Op::parse(&op_of(name, kind, &v).unwrap(), None).unwrap().data;
         let relay = |to: Address, call: Bytes| IMtxRelayFee::relayCall { target: to, callData: call, token: Address::repeat_byte(1),
             from: B256::repeat_byte(2), payee: B256::repeat_byte(3), value: alloy::primitives::U256::from(1),
+            batch: alloy::primitives::U256::from(7), nonce: alloy::primitives::U256::ZERO,
             validUntil: alloy::primitives::U256::from(4_000_000_000u64),
             auth: crate::abi::UASig { keyData: Bytes::new(), signature: Bytes::new(), members: vec![] } }.abi_encode();
         let grant = inner("UAGrantRole", "gov_router");
@@ -1372,9 +1382,10 @@ mod tests {
         let grant = crate::typed::Op::parse(&op_of("UAGrantRole", "gov_router", &v).unwrap(), None).unwrap().data;
         let work = |target: Address| {
             let data = IMtxRelayFee::relayCall { target, callData: grant.clone(), token, from: B256::repeat_byte(2), payee: rf.into_word(),
-                value: alloy::primitives::U256::from(1), validUntil: alloy::primitives::U256::from(4_000_000_000u64),
+                value: alloy::primitives::U256::from(1), batch: alloy::primitives::U256::from(7), nonce: alloy::primitives::U256::ZERO,
+                validUntil: alloy::primitives::U256::from(4_000_000_000u64),
                 auth: crate::abi::UASig { keyData: Bytes::new(), signature: Bytes::new(), members: vec![] } }.abi_encode();
-            let t = typed::Typed { contract: "token", domain_of: token, struct_hash: None, lane_hash: None, signer: None, payee: None, digest: None,
+            let t = typed::Typed { pay_meta_len: 0, contract: "token", domain_of: token, struct_hash: None, lane_hash: None, signer: None, payee: None, digest: None,
                 derived_signer: false, derived_side: false };
             Work { job_id: Some(1), to: rf, data: data.into(), valid_until: 0, meta: None, entry: true, typed: Some(t) }
         };

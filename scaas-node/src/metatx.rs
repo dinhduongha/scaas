@@ -18,9 +18,28 @@ pub const MODE_RESTRICT_FEE_RECIPIENT: u32 = 0x02;
 pub const MODE_FEE_MASK: u32 = 0xF0;
 pub const MODE_KNOWN_MASK: u32 = 0xF3;
 
-/// CTR-MTX-26: `metaPayId(salt, meta) = keccak256("scaas.pay.meta" ‖ salt ‖ keccak256(meta))`.
-pub fn meta_pay_id(salt: &B256, meta: &[u8]) -> B256 {
-    keccak256([&b"scaas.pay.meta"[..], salt.as_slice(), keccak256(meta).as_slice()].concat())
+/// pay-meta-tax spec §3.1 (CTR-MTX-26 Change): `metaPayId(m) = keccak256("scaas.pay.meta.v2" ‖ salt ‖ keccak256(abi.encode(
+/// string payNo, uint16 schema, bytes body)))`. The old `(salt, meta)` form is in `legacy/ua-mtx-merge/3e/metatx.rs`; the
+/// non-EVM adapters keep their own until their family round (spec §8).
+pub fn meta_pay_id(m: &crate::abi::PayMeta) -> B256 {
+    use alloy::sol_types::SolValue;
+    let inner = (m.payNo.clone(), m.schema, m.body.clone()).abi_encode_params();
+    keccak256([&b"scaas.pay.meta.v2"[..], m.salt.as_slice(), keccak256(inner).as_slice()].concat())
+}
+
+/// `payNo`'s bound (spec §3.1, owner 2026-11-06).
+pub const PAY_NO_MAX: usize = 256;
+
+/// The contract's `_payMeta` shape (spec §3.2), by name before any encoding or simulation: a non-zero salt, `schema == 0` iff
+/// the body is empty (`PAY_META_SHAPE`), `payNo` at most 256 bytes (`PAY_NO_TOO_LONG`).
+pub fn check_pay_meta(m: &crate::abi::PayMeta) -> Result<()> {
+    if m.salt.is_zero() || (m.schema == 0) != m.body.is_empty() {
+        bail!("PAY_META_SHAPE: a non-zero salt, schema 0 iff the body is empty");
+    }
+    if m.payNo.len() > PAY_NO_MAX {
+        bail!("PAY_NO_TOO_LONG: payNo is {} B, above {PAY_NO_MAX}", m.payNo.len());
+    }
+    Ok(())
 }
 
 /// CTR-MTX-10: `payLane(payId) = uint256(keccak256("scaas.pay.lane" ‖ payId))`.
@@ -331,43 +350,13 @@ impl Mtx {
         }
     }
 
-    /// A pay-meta job (CTR-MTX-26): the signed `MetaTransfer` must be the payment `mtxPayMeta` builds from
-    /// `(salt, meta)` — `entryRef = metaPayId(salt, meta)`, `batch = payLane(entryRef)`, `nonce = 0` — checked before any
-    /// simulation. The relayed calldata is `mtxPayMeta` (on-chain meta) or, for an off-chain meta, the plain
-    /// `mtxExecuteTransfer` of the same struct.
-    pub fn pay_meta_calldata(&self, salt: B256, meta: Bytes, signature: Bytes, on_chain: bool) -> Result<Bytes> {
-        let Self::Transfer(t) = self else { bail!("a pay-meta job is a transfer struct") };
-        pay_meta_shape(t.entryRef, t.batch, t.nonce, &salt, &meta)?;
-        if !on_chain {
-            return Ok(self.calldata(signature));
-        }
-        Ok(IToken::mtxPayMetaCall { from: t.from, to: t.to, amount: t.value, salt, meta, validUntil: t.validUntil,
-            mode: t.mode, relayer: t.relayer, fee: t.fee, feeRecipient: t.feeRecipient, signature }.abi_encode().into())
-    }
-
-    /// Inverse of `calldata` (and of `pay_meta_calldata`: `mtxPayMeta` is its `MetaTransfer`): `(mtx, signature)`,
-    /// `None` for any other call.
+    /// Inverse of `calldata`: `(mtx, signature)`, `None` for any other call.
     pub fn from_calldata(data: &[u8]) -> Option<(Self, Bytes)> {
         if let Ok(c) = IToken::mtxExecuteCall::abi_decode(data) {
             return Some((Self::Call(c.m), c.signature));
         }
-        if let Ok(c) = IToken::mtxPayMetaCall::abi_decode(data) {
-            let id = meta_pay_id(&c.salt, &c.meta);
-            let t = MetaTransfer { from: c.from, to: c.to, value: c.amount, entryRef: id, batch: pay_lane(&id), nonce: U256::ZERO,
-                validUntil: c.validUntil, mode: c.mode, relayer: c.relayer, fee: c.fee, feeRecipient: c.feeRecipient };
-            return Some((Self::Transfer(t), c.signature));
-        }
         IToken::mtxExecuteTransferCall::abi_decode(data).ok().map(|c| (Self::Transfer(c.t), c.signature))
     }
-}
-
-/// CTR-MTX-26: the signed payment is the one `mtxPayMeta` builds from `(salt, meta)`.
-fn pay_meta_shape(entry_ref: B256, batch: U256, nonce: U256, salt: &B256, meta: &[u8]) -> Result<()> {
-    let id = meta_pay_id(salt, meta);
-    if entry_ref != id || batch != pay_lane(&id) || !nonce.is_zero() {
-        bail!("pay-meta: entryRef / batch / nonce are not metaPayId(salt, meta) / payLane(entryRef) / 0");
-    }
-    Ok(())
 }
 
 /// `MetaTxLib.UA_POOL`: the one ERC-20 holder of every derived UA's balance.
@@ -527,28 +516,14 @@ impl UaMtx {
         }
     }
 
-    /// A pay-meta job (CTR-MTX-26) as [`Mtx::pay_meta_calldata`]: `mtxPayMeta` on ids, or for an off-chain meta the plain
-    /// `mtxExecuteTransfer` of the same struct.
-    pub fn pay_meta_calldata(&self, salt: B256, meta: Bytes, auth: UASig, on_chain: bool) -> Result<Bytes> {
-        let Self::Transfer(t) = self else { bail!("a pay-meta job is a transfer struct") };
-        pay_meta_shape(t.entryRef, t.batch, t.nonce, &salt, &meta)?;
-        if !on_chain {
-            return Ok(self.calldata(auth));
-        }
-        Ok(IMtxIds::mtxPayMetaCall { from: t.from, to: t.to, amount: t.value, salt, meta, validUntil: t.validUntil,
-            mode: t.mode, relayer: t.relayer, fee: t.fee, feeRecipient: t.feeRecipient, auth }.abi_encode().into())
-    }
-
-    /// Inverse of `calldata` and `pay_meta_calldata`: `(mtx, auth)`, `None` for any other call.
+    /// Inverse of `calldata`, and of a pay entry's `mtxPay(t, auth, meta)` (pay-meta-tax spec §2.1: its `UAMetaTransfer` is
+    /// the transfer): `(mtx, auth)`, `None` for any other call.
     pub fn from_calldata(data: &[u8]) -> Option<(Self, UASig)> {
         if let Ok(c) = IMtxIds::mtxExecuteCall::abi_decode(data) {
             return Some((Self::Call(c.m), c.auth));
         }
-        if let Ok(c) = IMtxIds::mtxPayMetaCall::abi_decode(data) {
-            let id = meta_pay_id(&c.salt, &c.meta);
-            let t = UAMetaTransfer { from: c.from, to: c.to, value: c.amount, entryRef: id, batch: pay_lane(&id), nonce: U256::ZERO,
-                validUntil: c.validUntil, mode: c.mode, relayer: c.relayer, fee: c.fee, feeRecipient: c.feeRecipient };
-            return Some((Self::Transfer(t), c.auth));
+        if let Ok(c) = IMtxIds::mtxPayCall::abi_decode(data) {
+            return Some((Self::Transfer(c.t), c.auth));
         }
         IMtxIds::mtxExecuteTransferCall::abi_decode(data).ok().map(|c| (Self::Transfer(c.t), c.auth))
     }
@@ -742,29 +717,32 @@ mod tests {
         assert_eq!(free.digest(&d), before, "the digest is unchanged");
     }
 
-    /// CTR-MTX-26 on ids: `mtxPayMeta` of `(salt, meta)` only for its payment (ref, lane, nonce 0), decoded back to that
-    /// `UAMetaTransfer`; an off-chain meta relays the plain `mtxExecuteTransfer`.
+    /// pay-meta-tax T42: `mtxPay(t, auth, meta)` decodes to its `UAMetaTransfer`; `metaPayId` v2 of the paymeta.json rows; the
+    /// shape and `payNo` bound refused by name.
     #[test]
-    fn ua_pay_meta_calldata_checks_the_payment() {
-        let (salt, meta) = (B256::repeat_byte(0x51), Bytes::from_static(b"invoice 42"));
-        let id = meta_pay_id(&salt, &meta);
-        let t = UAMetaTransfer { from: B256::repeat_byte(0xaa), to: B256::repeat_byte(0x5e), value: U256::from(10), entryRef: id,
-            batch: pay_lane(&id), nonce: U256::ZERO, validUntil: U256::from(1_800_000_300u64), mode: MODE_RESTRICT_RELAYER,
+    fn mtx_pay_decodes_and_meta_pay_id_v2_rows() {
+        let t = UAMetaTransfer { from: B256::repeat_byte(0xaa), to: B256::repeat_byte(0x5e), value: U256::from(10), entryRef: B256::ZERO,
+            batch: U256::from(7), nonce: U256::ZERO, validUntil: U256::from(1_800_000_300u64), mode: MODE_RESTRICT_RELAYER,
             relayer: Address::repeat_byte(2), fee: U256::ZERO, feeRecipient: Address::ZERO };
-        let m = UaMtx::Transfer(t.clone());
         let auth = UASig { keyData: Bytes::new(), signature: Bytes::from_static(&[7; 65]), members: vec![] };
-        let on = m.pay_meta_calldata(salt, meta.clone(), auth.clone(), true).unwrap();
-        assert_eq!(on[..4], IMtxIds::mtxPayMetaCall::SELECTOR);
-        assert_eq!(UaMtx::from_calldata(&on), Some((m.clone(), auth.clone())), "mtxPayMeta is its UAMetaTransfer");
-        assert_eq!(m.pay_meta_calldata(salt, meta.clone(), auth.clone(), false).unwrap(), m.calldata(auth.clone()));
-        for bad in [UAMetaTransfer { entryRef: B256::ZERO, ..t.clone() }, UAMetaTransfer { batch: U256::ZERO, ..t.clone() },
-                    UAMetaTransfer { nonce: U256::from(1), ..t.clone() }] {
-            assert!(UaMtx::Transfer(bad).pay_meta_calldata(salt, meta.clone(), auth.clone(), true).is_err());
+        let meta = crate::abi::PayMeta { salt: B256::repeat_byte(0x51), payNo: "INV-1".into(), schema: 0, body: Bytes::new() };
+        let cd = IMtxIds::mtxPayCall { t: t.clone(), auth: auth.clone(), meta: meta.clone() }.abi_encode();
+        assert_eq!(UaMtx::from_calldata(&cd), Some((UaMtx::Transfer(t), auth)));
+        let rows: Vec<serde_json::Value> =
+            serde_json::from_str(include_str!("../../smartcontracts/vectors/metatx/paymeta.json")).unwrap();
+        assert_eq!(rows.len(), 9);
+        for r in &rows {
+            let h = |k: &str| alloy::hex::decode(r[k].as_str().unwrap().trim_start_matches("0x")).unwrap();
+            let m = crate::abi::PayMeta { salt: B256::from_slice(&h("salt")), payNo: r["payNo"].as_str().unwrap().into(),
+                schema: r["schema"].as_u64().unwrap() as u16, body: h("body").into() };
+            if r["accepted"].as_bool().unwrap() {
+                check_pay_meta(&m).unwrap();
+                assert_eq!(meta_pay_id(&m), B256::from_slice(&h("payId")), "{}", r["name"]);
+            } else {
+                assert!(check_pay_meta(&m).unwrap_err().to_string().starts_with("PAY_NO_TOO_LONG"), "{}", r["name"]);
+            }
         }
-        let call = UaMtx::Call(UAMetaTransaction { from: t.from, data: Bytes::new(), batch: U256::ZERO, nonce: U256::ZERO,
-            validUntil: t.validUntil, mode: 0, relayer: Address::ZERO, fee: U256::ZERO, feeRecipient: Address::ZERO });
-        assert!(call.pay_meta_calldata(salt, meta, auth.clone(), true).is_err(), "a call struct is no pay-meta");
-        assert_eq!(UaMtx::from_calldata(&call.calldata(auth.clone())).map(|x| x.0), Some(call.clone()));
-        assert!(UaMtx::from_calldata(&IToken::mtxNonceCall { from: Address::ZERO, batch: U256::ZERO }.abi_encode()).is_none());
+        assert!(check_pay_meta(&crate::abi::PayMeta { salt: B256::ZERO, ..meta.clone() }).unwrap_err().to_string().starts_with("PAY_META_SHAPE"));
+        assert!(check_pay_meta(&crate::abi::PayMeta { body: Bytes::from_static(b"x"), ..meta }).unwrap_err().to_string().starts_with("PAY_META_SHAPE"));
     }
 }

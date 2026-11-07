@@ -506,14 +506,14 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
     assert_eq!(of(6)["chain_state"], "mined", "{}", of(6));
     assert_eq!(view(&rpc, token, IMtxIds::mtxNonceCall { from: payer.address().into_word(), batch: U256::from(99) }).await, U256::from(1u64));
 
-    // T17 (CTR-MTX-26) on the real token: a pay-meta job relays `mtxPayMeta`, and the indexer gives the meta to its
-    // PaymentSettled (never a row of its own)
-    let (salt, meta) = (B256::repeat_byte(0x51), alloy::hex::decode("00000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000000568656c6c6f000000000000000000000000000000000000000000000000000000").unwrap());
-    let pid = scaas_node::metatx::meta_pay_id(&salt, &meta);
-    let pm = payment(payer.address(), shop, 1_000, pid, scaas_node::metatx::pay_lane(&pid), MODE_RESTRICT_RELAYER, relayer.address(), 0, Address::ZERO);
-    let mut j = job(7, token, &pm, "0x", sign(&payer, &d, &pm));
-    (j["salt"], j["meta"]) = (json!(format!("{salt:#x}")), json!(format!("0x{}", alloy::hex::encode(&meta))));
-    state.lock().unwrap().jobs.push(j);
+    // pay-meta-tax T42 (`pay_with_meta_on_anvil`): a pay job is the named entry `mtxPay(t, auth, meta)`, `meta` named per
+    // schema (the node builds the body), on a free lane; the indexer gives `PaymentMeta`'s fields to its PaymentSettled
+    let named = json!({"salt": format!("{:#x}", B256::repeat_byte(0x51)), "payNo": "INV-77", "schema": 1, "body": {"note": "hello"}});
+    let pid = scaas_node::metatx::meta_pay_id(&scaas_node::typed::pay_meta_of(&scaas_node::typed::parse("PayMeta", &named, "meta").unwrap()).unwrap());
+    let pm = payment(payer.address(), shop, 1_000, pid, U256::from(41), MODE_RESTRICT_RELAYER, relayer.address(), 0, Address::ZERO);
+    let pay = signed_op(&payer, json!({"entry": "mtxPay", "contract": "token", "token": format!("{token:#x}"),
+        "args": {"t": pm.to_wire().1, "meta": named}}), chain_id, d.salt);
+    state.lock().unwrap().jobs.push(json!({"id": 7, "kind": "ua_metatx", "op": pay}));
     s.poll_outbox().await;
     for _ in 0..50 {
         s.track().await;
@@ -529,7 +529,8 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
     let ingested = state.lock().unwrap().ingested.clone();
     assert!(ingested.iter().all(|e| e["event"] != "PaymentMeta"), "never a row");
     let paid = ingested.iter().find(|e| e["event"] == "PaymentSettled" && e["entry_ref"] == format!("{pid:#x}")).expect("pay-meta settled");
-    assert_eq!((paid["amount"].as_str(), paid["meta"].as_str()), (Some("1000"), Some(format!("0x{}", alloy::hex::encode(&meta)).as_str())));
+    assert_eq!((paid["amount"].as_str(), paid["pay_no"].as_str(), paid["meta_body"].as_str()),
+        (Some("1000"), Some("INV-77"), Some(format!("0x{}", alloy::hex::encode(b"hello")).as_str())));
 
     // T17 (CTR-MTX-27) on the real router: a fee-less `cancelNonce(77)` of the payer, its fee of 10 in open mode; the
     // node relays `relay` (call-table row MtxRelayFee.relay, the `UARelayFee` of the payer's padded id), the fee reaches the
@@ -544,7 +545,7 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
     let inner_digest = parsed.typed.digest_on(chain_id, d.salt).unwrap();
     let relay = signed_op(&payer, json!({"entry": "mtxRelayFee", "contract": "token", "token": format!("{token:#x}"), "call": inner,
         "args": {"from": format!("{:#x}", payer.address().into_word()), "payee": format!("{:#x}", router.into_word()), "value": "10",
-            "validUntil": (now() + 300).to_string(), "relayer": format!("{router:#x}")}}), chain_id, d.salt);
+            "batch": "9", "nonce": "0", "validUntil": (now() + 300).to_string(), "relayer": format!("{router:#x}")}}), chain_id, d.salt);
     let mut rcfg = cfg.clone();
     rcfg.params = toml::toml! { relay_fee = { min_amount = 10 } };
     rcfg.params["relay_fee"].as_table_mut().unwrap().insert("router".into(), format!("{router:#x}").into());
@@ -1361,28 +1362,23 @@ async fn ua_pay_meta_and_relay_fee_jobs_on_anvil() {
         .await
         .unwrap();
     let d = token_domain(&dep, chain_id, token);
-    let ua_job = |id: i64, m: &UaMtx, auth: &Value| {
-        let (kind, wire) = m.to_wire();
-        json!({"id": id, "kind": "ua_metatx", "token": format!("{token:#x}"), "digest": format!("{:#x}", m.digest(&d)),
-               "struct": kind, "m": wire, "auth": auth})
-    };
     let last = |id: i64| state.lock().unwrap().reports.iter().rev().find(|r| r["job_id"] == id).cloned().unwrap();
     let signed = |id: i64| state.lock().unwrap().reports.iter().find(|r| r["job_id"] == id && r["chain_state"] == "signed")
         .map(|r| r["tx_hash"].as_str().unwrap().to_string()).unwrap();
     let eth = || async { p.get_balance(relayer.address()).await.unwrap() };
 
-    // (1) UA pay-meta: mtxPayMeta on ids, the node's digest is the token's
+    // (1) a UA's pay (pay-meta-tax T42): the named entry mtxPay with its PayMeta, the node's digest is the token's
     let shop = Address::repeat_byte(0x5e);
-    let (salt, meta) = (B256::repeat_byte(0x52), b"invoice 77".to_vec());
-    let pid = meta_pay_id(&salt, &meta);
+    let named = json!({"salt": format!("{:#x}", B256::repeat_byte(0x52)), "payNo": "invoice 77"});
+    let pid = meta_pay_id(&scaas_node::typed::pay_meta_of(&scaas_node::typed::parse("PayMeta", &named, "meta").unwrap()).unwrap());
     let t = UAMetaTransfer { from: ua, to: shop.into_word(), value: U256::from(1_000u64), entryRef: pid, batch: pay_lane(&pid),
         nonce: U256::ZERO, validUntil: U256::from(now() + 300), mode: MODE_RESTRICT_RELAYER, relayer: relayer.address(),
         fee: U256::ZERO, feeRecipient: Address::ZERO };
     let m = UaMtx::Transfer(t.clone());
     assert_eq!(view(&rpc, token, IMtxIds::mtxTransferDigestCall { t }).await, m.digest(&d), "mtxTransferDigest");
-    let mut j = ua_job(1, &m, &ua_auth(&rpc, registry, &owner, b"scaas.ua.purpose.metatx.v1", m.digest(&d)).await);
-    (j["salt"], j["meta"]) = (json!(format!("{salt:#x}")), json!(format!("0x{}", alloy::hex::encode(&meta))));
-    state.lock().unwrap().jobs.push(j);
+    let pay = json!({"entry": "mtxPay", "contract": "token", "token": format!("{token:#x}"), "args": {"t": m.to_wire().1, "meta": named},
+        "auth": ua_auth(&rpc, registry, &owner, b"scaas.ua.purpose.metatx.v1", m.digest(&d)).await});
+    state.lock().unwrap().jobs.push(json!({"id": 1, "kind": "ua_metatx", "op": pay}));
     run_outbox(&mut s).await;
     assert_eq!(last(1)["chain_state"], "mined", "{}", last(1));
     assert_eq!(balance(&rpc, token, shop).await, U256::from(1_000u64), "the UA paid the shop");
@@ -1390,10 +1386,11 @@ async fn ua_pay_meta_and_relay_fee_jobs_on_anvil() {
     // (2) UA relay fee for the payer's fee-less merged cancelNonce(55) (its native id), open mode
     let inner = signed_op(&payer, cancel_op(payer.address(), token, 55, 12), chain_id, d.salt);
     let r = relay_ref(chain_id, token, &scaas_node::typed::Op::parse(&inner, None).unwrap().data);
-    let relay_job = |id: i64, value: u64, inner: Value| {
+    // pay-meta-tax T38: the UA payer's own relay-fee lane 12, at `nonce`
+    let relay_job = |id: i64, value: u64, inner: Value, nonce: u64| {
         let mut op = json!({"entry": "mtxRelayFee", "contract": "token", "token": format!("{token:#x}"), "call": inner,
             "args": {"from": format!("{ua:#x}"), "payee": format!("{:#x}", router.into_word()), "value": value.to_string(),
-                "validUntil": (now() + 300).to_string(), "relayer": format!("{router:#x}")},
+                "batch": "12", "nonce": nonce.to_string(), "validUntil": (now() + 300).to_string(), "relayer": format!("{router:#x}")},
             "auth": {"keyData": "0x", "signature": "0x", "members": []}});
         let digest = scaas_node::typed::Op::parse(&op, None).unwrap().typed.digest_on(chain_id, d.salt).unwrap();
         let (rpc, owner) = (rpc.clone(), owner.clone());
@@ -1404,14 +1401,14 @@ async fn ua_pay_meta_and_relay_fee_jobs_on_anvil() {
     };
     // a fee of 1 is worth 10^11 wei, under the quote: nothing signed, retried later (the quote follows the fees)
     let n0 = p.get_transaction_count(relayer.address()).await.unwrap();
-    let j = relay_job(2, 1, inner.clone()).await;
+    let j = relay_job(2, 1, inner.clone(), 0).await;
     state.lock().unwrap().jobs.push(j);
     run_outbox(&mut s).await;
     let l = last(2);
     assert!(l["chain_state"] == "queued" && l["error"].as_str().unwrap().starts_with("RELAY_FEE_REFUSED"), "{l}");
     assert_eq!(p.get_transaction_count(relayer.address()).await.unwrap(), n0, "nothing signed or sent");
     // a fee of 1,000 (10^14 wei at the price) covers it
-    let j = relay_job(3, 1_000, inner.clone()).await;
+    let j = relay_job(3, 1_000, inner.clone(), 0).await;
     state.lock().unwrap().jobs.push(j);
     let (b0, f0) = (eth().await, balance(&rpc, token, relayer.address()).await);
     run_outbox(&mut s).await;
@@ -1434,7 +1431,7 @@ async fn ua_pay_meta_and_relay_fee_jobs_on_anvil() {
     let paid = ingested.iter().find(|e| e["event"] == "PaymentSettled" && e["entry_ref"] == format!("{pid:#x}")).expect("UA pay-meta settled");
     assert_eq!((paid["from"].as_str(), paid["from_ua"].as_str(), paid["to"].as_str(), paid["amount"].as_str()),
         (Some(pool.as_str()), Some(uid.as_str()), Some(format!("{shop:#x}").as_str()), Some("1000")));
-    assert_eq!(paid["meta"], format!("0x{}", alloy::hex::encode(&meta)));
+    assert_eq!(paid["pay_no"], "invoice 77");
     let fee = ingested.iter().find(|e| e["event"] == "PaymentSettled" && e["entry_ref"] == format!("{r:#x}")).expect("UA relay fee settled");
     assert_eq!((fee["from_ua"].as_str(), fee["relay_target"].as_str(), fee["relay_payee"].as_str()),
         (Some(uid.as_str()), Some(format!("{token:#x}").as_str()), Some(format!("{:#x}", relayer.address()).as_str())));
@@ -1451,7 +1448,7 @@ async fn ua_pay_meta_and_relay_fee_jobs_on_anvil() {
         .await
         .unwrap();
     let _: Value = p.raw_request("evm_setAutomine".into(), (false,)).await.unwrap();
-    let j = relay_job(4, 1_000, inner).await;
+    let j = relay_job(4, 1_000, inner, 1).await;
     state.lock().unwrap().jobs.push(j);
     let b0 = eth().await;
     s2.poll_outbox().await;
@@ -1848,10 +1845,11 @@ async fn mandate_payment_relayed_by_an_eoa_delegate() {
     }
     let epoch = view(&rpc, wallet, epochCall { token }).await;
     assert_eq!(epoch, 1);
-    // the delegate's payment on the lane of its entryRef, nonce 0
-    let entry_ref = keccak256(b"invoice 9");
+    // the delegate's payment on the lane of its entryRef, nonce 0; pay-meta-tax T42: its `PayMeta` last, `entryRef` the commitment
+    let named = json!({"salt": format!("{:#x}", keccak256(b"invoice 9")), "payNo": "invoice 9"});
+    let entry_ref = scaas_node::metatx::meta_pay_id(&scaas_node::typed::pay_meta_of(&scaas_node::typed::parse("PayMeta", &named, "meta").unwrap()).unwrap());
     let pay = |entry: &str| signed_op(&delegate, w(entry, json!({"token": t, "payee": format!("{:#x}", shop.into_word()), "amount": "300000",
-        "entryRef": format!("{entry_ref:#x}"), "epoch": epoch.to_string()}), delegate.address(),
+        "entryRef": format!("{entry_ref:#x}"), "epoch": epoch.to_string(), "meta": named.clone()}), delegate.address(),
         scaas_node::typed::mandate_pay_lane(entry_ref.as_slice())), chain_id, uid);
     let n0 = p.get_transaction_count(key(RELAYER).address()).await.unwrap();
     state.lock().unwrap().jobs.push(json!({"id": 3, "kind": "ua_metatx", "op": pay("mtxPayUnderMandate")}));

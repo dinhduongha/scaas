@@ -244,7 +244,7 @@ pub fn transfer_typed(contract: Option<&str>, token: Address, struct_hash: B256,
         "pqz" => "pqz",
         c => anyhow::bail!("BAD_PAYLOAD: contract {c:?} (token | zether | pqz)"),
     };
-    Ok(Typed { contract, domain_of: token, struct_hash: Some(struct_hash), lane_hash: None, signer, payee: None, digest: None,
+    Ok(Typed { pay_meta_len: 0, contract, domain_of: token, struct_hash: Some(struct_hash), lane_hash: None, signer, payee: None, digest: None,
         derived_signer: false, derived_side: false })
 }
 
@@ -271,25 +271,11 @@ pub fn work_of_op(job_id: Option<i64>, op: &serde_json::Value, fee_recipient: Op
     Ok((Work { job_id, to: p.to, data: p.data, valid_until: p.valid_until, meta, entry: true, typed: Some(p.typed) }, ua))
 }
 
-fn hex_bytes(s: &str) -> Result<Bytes> {
-    Ok(alloy::hex::decode(s.strip_prefix("0x").unwrap_or(s))?.into())
-}
-
-/// A pay-meta job's `(salt, meta, on chain)` (CTR-MTX-26); `None` for a plain job, an error for half of one.
-fn pay_meta(job: &Job) -> Result<Option<(B256, Bytes, bool)>> {
-    match (&job.salt, &job.meta) {
-        (None, None) => Ok(None),
-        (Some(salt), Some(pm)) => {
-            let salt = B256::try_from(&hex_bytes(salt)?[..]).map_err(|_| anyhow::anyhow!("salt is 32 bytes"))?;
-            Ok(Some((salt, hex_bytes(pm)?, job.meta_offchain != Some(true))))
-        }
-        _ => anyhow::bail!("a pay-meta job carries both salt and meta"),
-    }
-}
-
-/// A `ua_metatx` struct job (job-api.md, CTR-UA-26, CTR-MTX-30): `{token, m, auth}` (+ `salt` / `meta` for `mtxPayMeta`), relayed
-/// as `mtxExecuteTransfer` / `mtxPayMeta` of the normalized struct on ids; `auth` the `UASig` object. A native `from` and `to`
-/// run at `registry() == 0` (R9); a derived side needs the UA ledger (R44, the guard).
+/// A `ua_metatx` struct job (job-api.md, CTR-UA-26, CTR-MTX-30): `{token, m, auth}`, relayed as `mtxExecuteTransfer` of the
+/// normalized struct on ids (pay-meta-tax O12: the generic path, any `entryRef`, no metadata); `auth` the `UASig` object. A
+/// pay with its `PayMeta` is the named entry `mtxPay` (`{op}`, spec §7.1): the old `salt` + hex `meta` form is refused
+/// `HEX_ARGS_REFUSED` (`legacy/ua-mtx-merge/3e/submit.rs`). A native `from` and `to` run at `registry() == 0` (R9); a derived
+/// side needs the UA ledger (R44, the guard).
 fn ua_work(job: &Job, fee_recipient: Option<Address>) -> Result<Work> {
     if job.metatx.is_some() || job.signature.is_some() {
         anyhow::bail!("a ua_metatx job is {{token, m, auth}} or {{op}}: no metatx or signature");
@@ -307,10 +293,11 @@ fn ua_work(job: &Job, fee_recipient: Option<Address>) -> Result<Work> {
     typed.derived_signer = crate::metatx::native(&m.from()).is_none();
     typed.derived_side = typed.derived_signer || to.is_some_and(|t| crate::metatx::native(&t).is_none());
     let typed = Some(typed);
-    let data = match pay_meta(job)? {
-        None => m.calldata(auth),
-        Some((salt, pm, on_chain)) => m.pay_meta_calldata(salt, pm, auth, on_chain)?,
-    };
+    if job.salt.is_some() || job.meta.is_some() || job.meta_offchain.is_some() {
+        anyhow::bail!("HEX_ARGS_REFUSED: salt / meta: a pay goes as its named entry {{op: {{entry: \"mtxPay\", args: {{…, meta: \
+            {{salt, payNo, schema, body: named fields}}}}}}}}, never a hex meta");
+    }
+    let data = m.calldata(auth);
     let meta = Some(MetaRef::of_ua(token, &m, None));
     Ok(Work { job_id: Some(job.id), to: token, data, valid_until: m.valid_until().saturating_to(), meta, entry: false, typed })
 }
@@ -1510,7 +1497,8 @@ pub(crate) mod tests {
             // one `relay` on ids (R28): a native payer's own key (the `0x11…` sentinel [`resign`] replaces), a derived one's 96 bytes
             let c = crate::abi::IMtxRelayFee::relayCall::abi_decode(&data).unwrap();
             let args = json!({"from": format!("{:#x}", c.from), "payee": format!("{:#x}", c.payee), "value": c.value.to_string(),
-                "validUntil": c.validUntil.to_string(), "relayer": format!("{target:#x}")});
+                "batch": c.batch.to_string(), "nonce": c.nonce.to_string(), "validUntil": c.validUntil.to_string(),
+                "relayer": format!("{target:#x}")});
             let sig = if crate::metatx::native(&c.from).is_some() { "11".repeat(65) } else { "22".repeat(96) };
             return json!({"id": id, "kind": "ua_metatx", "op": {"entry": "mtxRelayFee", "contract": "token", "token": format!("{:#x}", c.token),
                 "args": args, "call": inner_op(), "auth": {"keyData": "0x", "signature": format!("0x{sig}"), "members": []}}});
@@ -1633,8 +1621,9 @@ pub(crate) mod tests {
                 n += 1;
             }
         }
-        // plan T34 added the router's eight regulated control rows to typed_ops.json (97 -> 105); T34 ran typed:: and guard:: only
-        assert_eq!(n, 105, "every row with an entry, but the relay fees (relay_fee_call_object)");
+        // plan T34 added the router's eight regulated control rows to typed_ops.json (97 -> 105); pay-meta-tax T41: -> 110
+        // (UAPayWithTax's three domains, the router's two tax ops)
+        assert_eq!(n, 110, "every row with an entry, but the relay fees (relay_fee_call_object)");
     }
 
     /// `EvmAdapter::call_key`, which the Hedera adapter delegates to (`the_hedera_lane_skips_bytes_already_in_flight` is the
@@ -2001,71 +1990,77 @@ pub(crate) mod tests {
 
     // ------------------------------------------------------------------ CTR-MTX-26 / -27 on EVM (T17)
 
-    fn vector(i: usize) -> (B256, Vec<u8>) {
-        let v: Value = serde_json::from_str(include_str!("../../smartcontracts/vectors/metatx/paymeta.json")).unwrap();
-        let h = |k: &str| alloy::hex::decode(&v[i][k].as_str().unwrap()[2..]).unwrap();
-        (B256::from_slice(&h("salt")), h("meta"))
-    }
-
-    fn pay_meta_job(id: i64, salt: B256, pm: &[u8], tweak: impl FnOnce(&mut UAMetaTransfer)) -> Value {
-        let p = crate::metatx::meta_pay_id(&salt, pm);
+    /// A pay job (pay-meta-tax spec §7.1): `{op: {entry: "mtxPay", token, args: {t, meta}, auth}}`, `meta` named per schema; the
+    /// payment's `entryRef` the commitment of that `meta` (`tweak` edits the payment, `meta` the meta).
+    fn pay_job(id: i64, pm: Value, tweak: impl FnOnce(&mut UAMetaTransfer)) -> Value {
         let UaMtx::Transfer(mut t) = meta(7) else { unreachable!() };
-        (t.entryRef, t.batch) = (p, crate::metatx::pay_lane(&p));
+        t.entryRef = op_meta_id(&pm);
         tweak(&mut t);
-        let mut j = job(id);
-        j["m"] = UaMtx::Transfer(t).to_wire().1;
-        j["salt"] = json!(format!("{salt:#x}"));
-        j["meta"] = json!(format!("0x{}", alloy::hex::encode(pm)));
-        j
+        let (_, wire) = UaMtx::Transfer(t).to_wire();
+        json!({"id": id, "kind": "ua_metatx", "op": {"entry": "mtxPay", "contract": "token", "token": format!("{TOKEN:#x}"),
+            "args": {"t": wire, "meta": pm}, "auth": {"keyData": "0x", "signature": format!("0x{}", "11".repeat(65)), "members": []}}})
     }
 
-    /// CTR-MTX-26 on EVM (spec §9): the node checks `entryRef == metaPayId(salt, meta)`, `batch == payLane(entryRef)`,
-    /// `nonce == 0` before any simulation, then relays `mtxPayMeta` (or, off-chain, `mtxExecuteTransfer`) of the signed
-    /// struct; the shared vectors' hashes are the node's.
+    /// `metaPayId` of a job's named `meta`, as the node builds it.
+    fn op_meta_id(meta: &Value) -> B256 {
+        let v = crate::typed::parse("PayMeta", meta, "meta").unwrap();
+        crate::metatx::meta_pay_id(&crate::typed::pay_meta_of(&v).unwrap())
+    }
+
+    fn structured() -> Value {
+        json!({"salt": format!("{:#x}", B256::repeat_byte(0x51)), "payNo": "INV-2026-0042", "schema": 2,
+            "body": {"creditorRef": "RF18539007547034", "dueDate": "1830297600"}})
+    }
+
+    /// pay-meta-tax T42 (`pay_job_named_meta_builds_body`, `pay_job_free_lane_accepted`): the named meta's schema 2 body is
+    /// `abi.encode(string creditorRef, uint64 dueDate)` and its commitment the paymeta.json row's; the pay is relayed as
+    /// `mtxPay(t, auth, meta)` on any lane (O3: lane 7, nonce 3 too, no `payLane` check).
     #[tokio::test]
-    async fn pay_meta_job_checks_commitment_lane_nonce() {
+    async fn pay_job_named_meta_builds_body() {
         let v: Value = serde_json::from_str(include_str!("../../smartcontracts/vectors/metatx/paymeta.json")).unwrap();
-        for r in v.as_array().unwrap() {
-            let h = |k: &str| alloy::hex::decode(&r[k].as_str().unwrap()[2..]).unwrap();
-            let p = crate::metatx::meta_pay_id(&B256::from_slice(&h("salt")), &h("meta"));
-            assert_eq!(p.as_slice(), &h("payId")[..], "{}", r["name"]);
-            assert_eq!(crate::metatx::pay_lane(&p).to_be_bytes::<32>().as_slice(), &h("payLane")[..], "{}", r["name"]);
-        }
+        let row = v.as_array().unwrap().iter().find(|r| r["name"] == "structured_reference").unwrap();
+        let named = json!({"salt": row["salt"], "payNo": row["payNo"], "schema": 2,
+            "body": {"creditorRef": "RF18539007547034", "dueDate": "1830297600"}});
+        assert_eq!(format!("{:#x}", op_meta_id(&named)), row["payId"].as_str().unwrap(), "the forge row's commitment");
         let ok = || Evm { mtx_nonce: Some(0), ..Default::default() };
-        let (salt, pm) = vector(0);
-        let (r, rpc) = outcomes(ok(), vec![pay_meta_job(7, salt, &pm, |_| {})], |_| {}).await;
+        let (r, rpc) = outcomes(ok(), vec![pay_job(7, named.clone(), |_| {})], |_| {}).await;
         assert_eq!(states_of(&r), ["signed", "broadcast"], "{r:?}");
         let sent = rpc.lock().unwrap().sent[0].2.clone();
-        let c = crate::abi::IMtxIds::mtxPayMetaCall::abi_decode(&sent).unwrap();
-        assert_eq!((c.salt, c.meta.to_vec()), (salt, pm.clone()));
-        let (UaMtx::Transfer(t), _) = UaMtx::from_calldata(&sent).unwrap() else { panic!() };
-        assert_eq!((t.entryRef, t.nonce), (crate::metatx::meta_pay_id(&salt, &pm), U256::ZERO), "mtxPayMeta is its UAMetaTransfer");
-        // off-chain meta: the same checks, the plain mtxExecuteTransfer of the same struct
-        let mut off = pay_meta_job(7, salt, &pm, |_| {});
-        off["meta_offchain"] = json!(true);
-        let (r, rpc) = outcomes(ok(), vec![off], |_| {}).await;
-        assert_eq!(states_of(&r), ["signed", "broadcast"], "{r:?}");
-        assert_eq!(rpc.lock().unwrap().sent[0].2[..4], crate::abi::IMtxIds::mtxExecuteTransferCall::SELECTOR);
-        // a struct that is not the payment of (salt, meta): refused before any RPC
-        let bad: [fn(&mut UAMetaTransfer); 3] = [
-            |t| t.entryRef = B256::repeat_byte(0x42),
-            |t| t.batch += U256::from(1),
-            |t| t.nonce = U256::from(1),
-        ];
-        for (i, tweak) in bad.into_iter().enumerate() {
-            let (r, rpc) = outcomes(ok(), vec![pay_meta_job(7, salt, &pm, tweak)], |_| {}).await;
-            assert!(r[0].0 == "dead" && r[0].1.contains("pay-meta"), "{i}: {r:?}");
-            assert!(rpc.lock().unwrap().sent.is_empty());
-        }
-        let mut half = pay_meta_job(7, salt, &pm, |_| {});
-        half.as_object_mut().unwrap().remove("meta");
-        assert_eq!(outcomes(ok(), vec![half], |_| {}).await.0[0].0, "dead", "salt without meta");
-        let (kind, wire) = UaMtx::Call(crate::abi::UAMetaTransaction { from: payer().into_word(),
-            data: Bytes::from_static(&[0xcf, 0xdd, 0x7a, 0xea]), batch: U256::from(7), nonce: U256::ZERO,
-            validUntil: U256::from(now() + 600), mode: 0, relayer: Address::ZERO, fee: U256::ZERO, feeRecipient: Address::ZERO }).to_wire();
-        let mut call = job(7);
-        (call["struct"], call["m"], call["salt"], call["meta"]) = (json!(kind), wire, json!(format!("{salt:#x}")), json!("0x"));
-        assert!(outcomes(ok(), vec![call], |_| {}).await.0[0].1.contains("HEX_DATA_REFUSED"), "a call struct is no pay-meta");
+        let c = crate::abi::IMtxIds::mtxPayCall::abi_decode(&sent).unwrap();
+        assert_eq!(format!("0x{}", alloy::hex::encode(&c.meta.body)), row["body"].as_str().unwrap());
+        assert_eq!((c.meta.payNo.as_str(), c.meta.schema), ("INV-2026-0042", 2));
+        assert_eq!(c.t.entryRef, op_meta_id(&named));
+        let (r, _) = outcomes(Evm { mtx_nonce: Some(3), ..Default::default() }, vec![pay_job(7, named, |t| t.nonce = U256::from(3))],
+            |_| {}).await;
+        assert_eq!(states_of(&r), ["signed", "broadcast"], "a free lane: nonce 3, no payLane check: {r:?}");
+    }
+
+    /// `pay_job_hex_meta_refused`, `pay_job_payno_257_refused`, `PAY_META_MISMATCH`, `ENTRY_RETIRED`: refused by name before any
+    /// RPC; the old `salt` + hex `meta` struct job too.
+    #[tokio::test]
+    async fn pay_job_refusals_by_name() {
+        let ok = || Evm { mtx_nonce: Some(0), ..Default::default() };
+        let refused = |r: &[(String, String)], what: &str| assert!(r[0].0 == "dead" && r[0].1.contains(what), "{what}: {r:?}");
+        let mut hexed = structured();
+        hexed["body"] = json!("0x1234");
+        let mut bad = pay_job(7, structured(), |_| {});
+        bad["op"]["args"]["meta"] = hexed;
+        let (r, rpc) = outcomes(ok(), vec![bad], |_| {}).await;
+        refused(&r, "HEX_ARGS_REFUSED");
+        assert!(rpc.lock().unwrap().sent.is_empty());
+        let mut long = structured();
+        long["payNo"] = json!("A".repeat(257));
+        let mut bad = pay_job(7, structured(), |_| {});
+        bad["op"]["args"]["meta"] = long;
+        refused(&outcomes(ok(), vec![bad], |_| {}).await.0, "PAY_NO_TOO_LONG");
+        refused(&outcomes(ok(), vec![pay_job(7, structured(), |t| t.entryRef = B256::repeat_byte(0x42))], |_| {}).await.0,
+            "PAY_META_MISMATCH");
+        let mut retired = pay_job(7, structured(), |_| {});
+        retired["op"]["entry"] = json!("mtxPayMeta");
+        refused(&outcomes(ok(), vec![retired], |_| {}).await.0, "ENTRY_RETIRED");
+        let mut old = job(7);
+        (old["salt"], old["meta"]) = (json!(format!("{:#x}", B256::repeat_byte(3))), json!("0x0001"));
+        refused(&outcomes(ok(), vec![old], |_| {}).await.0, "HEX_ARGS_REFUSED");
         let mut other = job(7);
         other["kind"] = json!("signed_op");
         assert!(outcomes(ok(), vec![other], |_| {}).await.0[0].1.contains("unknown job kind"), "one job-kind rule");
@@ -2178,17 +2173,17 @@ pub(crate) mod tests {
         assert!(r[0].0 == "dead" && !r[0].1.contains("UA_REGISTER_SPLIT"), "{r:?}");
     }
 
-    /// `max_pay_meta_bytes` (default 2,048, spec §9) caps the `meta` a pay-meta job relays; the config raises it.
+    /// `max_pay_meta_bytes` (default 2,048, spec §7.1) caps `payNo + body` of a pay job; the config raises it.
     #[tokio::test]
     async fn pay_meta_cap_refused() {
         let ok = || Evm { mtx_nonce: Some(0), ..Default::default() };
-        let salt = B256::repeat_byte(3);
-        let (r, _) = outcomes(ok(), vec![pay_meta_job(7, salt, &[7; 2048], |_| {})], |_| {}).await;
+        let note = |n: usize| json!({"salt": format!("{:#x}", B256::repeat_byte(3)), "payNo": "", "schema": 1, "body": {"note": "x".repeat(n)}});
+        let (r, _) = outcomes(ok(), vec![pay_job(7, note(2048), |_| {})], |_| {}).await;
         assert_eq!(states_of(&r), ["signed", "broadcast"], "{r:?}");
-        let (r, rpc) = outcomes(ok(), vec![pay_meta_job(7, salt, &[7; 2049], |_| {})], |_| {}).await;
+        let (r, rpc) = outcomes(ok(), vec![pay_job(7, note(2049), |_| {})], |_| {}).await;
         assert!(r[0].0 == "dead" && r[0].1.starts_with("PAY_META_TOO_LONG"), "{r:?}");
         assert!(rpc.lock().unwrap().sent.is_empty());
-        let (r, _) = outcomes(ok(), vec![pay_meta_job(7, salt, &[7; 2049], |_| {})],
+        let (r, _) = outcomes(ok(), vec![pay_job(7, note(2049), |_| {})],
             |c| { c.params.insert("max_pay_meta_bytes".into(), 4096.into()); }).await;
         assert_eq!(states_of(&r), ["signed", "broadcast"], "{r:?}");
     }
@@ -2210,7 +2205,7 @@ pub(crate) mod tests {
     fn relay_data(to: Address, value: u64) -> Vec<u8> {
         let call: Bytes = IToken::mtxNonceCall { from: Address::ZERO, batch: U256::ZERO }.abi_encode().into();
         crate::abi::IMtxRelayFee::relayCall { target: TARGET, callData: call, token: TOKEN, from: payer().into_word(), payee: to.into_word(),
-            value: U256::from(value), validUntil: U256::from(now() + 600),
+            value: U256::from(value), batch: U256::from(7), nonce: U256::ZERO, validUntil: U256::from(now() + 600),
             auth: UASig { keyData: Bytes::new(), signature: Bytes::from(vec![0x11; 65]), members: vec![] } }.abi_encode()
     }
 
@@ -2224,8 +2219,8 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn relay_fee_row_requires_router_and_registered_token() {
         let sig = |s: &str| -> [u8; 4] { alloy::primitives::keccak256(s)[..4].try_into().unwrap() };
-        assert_eq!(crate::abi::IMtxIds::mtxPayMetaCall::SELECTOR,
-            sig("mtxPayMeta(bytes32,bytes32,uint256,bytes32,bytes,uint256,uint32,address,uint256,address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))"));
+        assert_eq!(crate::abi::IMtxIds::mtxPayCall::SELECTOR, sig("mtxPay((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,\
+address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,string,uint16,bytes))"));
         let mut cfg = test_cfg("http://127.0.0.1:9");
         relay_params(&mut cfg, &[]);
         let rf = guard::RelayFee::from_cfg(&cfg).unwrap().unwrap();
@@ -2347,20 +2342,10 @@ pub(crate) mod tests {
         assert_eq!(w.valid_until, m.valid_until().saturating_to::<u64>());
         assert_eq!(w.data[..4], IMtxIds::mtxExecuteTransferCall::SELECTOR);
         assert_eq!(UaMtx::from_calldata(&w.data).map(|x| x.1), Some(auth.clone()), "auth is the UASig, field by field");
-        // a UA pay-meta job: mtxPayMeta on ids, or the plain mtxExecuteTransfer for an off-chain meta
-        let (salt, pm) = (B256::repeat_byte(3), vec![9u8; 40]);
-        let p = crate::metatx::meta_pay_id(&salt, &pm);
-        let UaMtx::Transfer(mut t) = ua_meta(0) else { unreachable!() };
-        (t.entryRef, t.batch) = (p, crate::metatx::pay_lane(&p));
-        let mut j = ua_job(9, &UaMtx::Transfer(t.clone()));
-        (j["salt"], j["meta"]) = (json!(format!("{salt:#x}")), json!(format!("0x{}", alloy::hex::encode(&pm))));
-        let w = work(j.clone()).unwrap();
-        let c = IMtxIds::mtxPayMetaCall::abi_decode(&w.data).unwrap();
-        assert_eq!((c.from, c.salt, c.meta.to_vec()), (UA, salt, pm.clone()));
-        j["meta_offchain"] = json!(true);
-        assert_eq!(work(j.clone()).unwrap().data[..4], IMtxIds::mtxExecuteTransferCall::SELECTOR);
-        j["meta"] = json!("0x00");
-        assert!(work(j).is_err(), "the payment of (salt, meta) only");
+        // pay-meta-tax T42: the old `salt` + hex `meta` struct job is refused by name (a pay is the named entry mtxPay)
+        let mut j = ua_job(9, &ua_meta(0));
+        (j["salt"], j["meta"]) = (json!(format!("{:#x}", B256::repeat_byte(3))), json!("0x0909"));
+        assert!(work(j).unwrap_err().to_string().starts_with("HEX_ARGS_REFUSED"));
         // refused shapes: the address body or fields in a UA job, a UA body in a metatx job, an address `from`
         let mut addr = ua_job(10, &ua_meta(7));
         addr["signature"] = json!("0x22");
@@ -2411,21 +2396,13 @@ pub(crate) mod tests {
             let (r, _) = outcomes(ok(), vec![ua_job(7, &crate::metatx::UaMtx::Transfer(t))], |c| relay_params(c, &[])).await;
             assert!(r[0].0 == "dead" && r[0].1.starts_with("PAYEE_REFUSED"), "{r:?}");
         }
-        let salt = B256::repeat_byte(3);
-        let p = crate::metatx::meta_pay_id(&salt, &[7; 2049]);
-        let crate::metatx::UaMtx::Transfer(mut t) = ua_meta(0) else { unreachable!() };
-        (t.entryRef, t.batch) = (p, crate::metatx::pay_lane(&p));
-        let mut j = ua_job(7, &crate::metatx::UaMtx::Transfer(t));
-        (j["salt"], j["meta"]) = (json!(format!("{salt:#x}")), json!(format!("0x{}", "07".repeat(2049))));
-        let (r, _) = outcomes(ok(), vec![j], |_| {}).await;
-        assert!(r[0].0 == "dead" && r[0].1.starts_with("PAY_META_TOO_LONG"), "{r:?}");
     }
 
     /// `relay` for a derived payer `UA`: its `UARelayFee` of `value` to `to` for `TARGET`'s call.
     fn ua_relay_data(to: B256, value: u64) -> Vec<u8> {
         let call: Bytes = IToken::mtxNonceCall { from: Address::ZERO, batch: U256::ZERO }.abi_encode().into();
         crate::abi::IMtxRelayFee::relayCall { target: TARGET, callData: call, token: TOKEN, from: UA, payee: to, value: U256::from(value),
-            validUntil: U256::from(now() + 600), auth: UASig { keyData: Bytes::new(), signature: Bytes::from(vec![0x22; 96]), members: vec![] } }.abi_encode()
+            batch: U256::from(7), nonce: U256::ZERO, validUntil: U256::from(now() + 600), auth: UASig { keyData: Bytes::new(), signature: Bytes::from(vec![0x22; 96]), members: vec![] } }.abi_encode()
     }
 
     /// CTR-MTX-27 for a derived payer: the call-table row `MtxRelayFee.relay` takes the router's shape on ids (payee never
@@ -2437,7 +2414,7 @@ pub(crate) mod tests {
     async fn ua_relay_fee_needs_a_price_and_covers_the_quote() {
         let sig = |s: &str| -> [u8; 4] { alloy::primitives::keccak256(s)[..4].try_into().unwrap() };
         assert_eq!(crate::abi::IMtxRelayFee::relayCall::SELECTOR,
-            sig("relay(address,bytes,address,bytes32,bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))"));
+            sig("relay(address,bytes,address,bytes32,bytes32,uint256,uint256,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))"));
         let mut cfg = test_cfg("http://127.0.0.1:9");
         relay_params(&mut cfg, &[]);
         let rf = guard::RelayFee::from_cfg(&cfg).unwrap().unwrap();

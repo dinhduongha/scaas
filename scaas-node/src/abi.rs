@@ -38,6 +38,13 @@ sol! {
         uint32 mode; address relayer; uint256 fee; address feeRecipient;
     }
 
+    /// `MetaTxLib.PayMeta` (pay-meta-tax spec §3.1): the last parameter of every pay entry, unsigned; its commitment
+    /// `metaPayId` is the signed `entryRef`.
+    #[derive(Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+    struct PayMeta {
+        bytes32 salt; string payNo; uint16 schema; bytes body;
+    }
+
     /// `ITradeToken.TradeOrder` (CTR-DEX-13): signed in the sell token's domain (a `DexOrder` for an outside token).
     #[derive(Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
     struct TradeOrder {
@@ -173,10 +180,9 @@ sol! {
         function mtxTransferDigest(MetaTransfer t) external view returns (bytes32);
         function mtxExecute(MetaTransaction m, bytes signature) external returns (bytes);
         function mtxExecuteTransfer(MetaTransfer t, bytes signature) external returns (bool);
-        /// CTR-MTX-26 (`IMetaTokenV2`): `mtxPay` with `payId = metaPayId(salt, meta)`; `PaymentMeta` first.
-        function mtxPayMeta(address from, address to, uint256 amount, bytes32 salt, bytes meta, uint256 validUntil,
-            uint32 mode, address relayer, uint256 fee, address feeRecipient, bytes signature) external returns (bool);
-        event PaymentMeta(bytes32 indexed payId, bytes meta);
+        /// pay-meta-tax spec §3.2 (`IMetaTokenV2`): emitted by every pay entry before the payment's events; the old
+        /// `PaymentMeta(bytes32, bytes)` and the address `mtxPayMeta` are in `legacy/ua-mtx-merge/3e/abi.rs`.
+        event PaymentMeta(bytes32 indexed payId, string payNo, uint16 schema, bytes body);
         function mtxSelectors() external view returns (bytes4[] selectors, uint8[] feeClass, uint8[] amountArg);
         function chainUid() external view returns (bytes32);
         function supportedModes() external view returns (uint32);
@@ -236,6 +242,10 @@ sol! {
         error EscrowFillShape(bytes32 orderHash);
         error MinNonceNotIncreasing(uint256 current, uint256 requested);
         error MinNonceAboveCap(uint256 requested);
+        /// `IMetaTokenV2`'s `PayMeta` refusals (pay-meta-tax spec §3.2)
+        error PayMetaShape();
+        error PayNoTooLong(uint256 length);
+        error PayMetaMismatch(bytes32 entryRef, bytes32 payId);
     }
 
     /// `IUALedger` (CTR-UA-18/19/26): the UA ledger of every SCaaS token, off while `registry()` is 0 (a derived side then reverts
@@ -272,9 +282,10 @@ sol! {
         function mtxTransferDigest(UAMetaTransfer t) external view returns (bytes32);
         function mtxExecute(UAMetaTransaction m, UASig auth) external returns (bytes);
         function mtxExecuteTransfer(UAMetaTransfer t, UASig auth) external returns (bool);
-        /// CTR-MTX-26 (`IMetaTokenV2`): `mtxPay` with `payId = metaPayId(salt, meta)`; `PaymentMeta` first.
-        function mtxPayMeta(bytes32 from, bytes32 to, uint256 amount, bytes32 salt, bytes meta, uint256 validUntil,
-            uint32 mode, address relayer, uint256 fee, address feeRecipient, UASig auth) external returns (bool);
+        /// pay-meta-tax spec §2.1 (`IMetaTokenV2`): the payment `t`, its `PayMeta` last; `entryRef == metaPayId(meta)`.
+        function mtxPay(UAMetaTransfer t, UASig auth, PayMeta meta) external returns (bool);
+        /// pay-meta-tax spec §5.3 (kinds 8-13): the payer signs `UAPayWithTax{payment, taxMode, tax}`.
+        function mtxPayWithTax(UAMetaTransfer t, uint8 taxMode, uint256 tax, UASig auth, PayMeta meta) external returns (bool);
         /// `ITradeToken.mtxInvalidateNonces` on ids (R12, R38); the DEX's keeps addresses and `bytes`.
         function mtxInvalidateNonces(bytes32 from, uint256 batch, uint256 newMin, UASig auth) external;
     }
@@ -284,7 +295,7 @@ sol! {
     #[derive(Debug)]
     interface IMtxRelayFee {
         function relay(address target, bytes callData, address token, bytes32 from, bytes32 payee, uint256 value,
-            uint256 validUntil, UASig auth) external;
+            uint256 batch, uint256 nonce, uint256 validUntil, UASig auth) external;
         function relayRef(address target, bytes callData) external view returns (bytes32);
         function EXECUTOR() external view returns (address);
         event RelayFeePaid(bytes32 indexed ref, address indexed target, address indexed token, bytes32 payer,
@@ -356,6 +367,9 @@ sol! {
             bytes32 termsHash; uint64 pausedUntil; uint64 pauseCooldownUntil; }
         struct FreezeState { uint64 until; uint64 episodeStart; uint64 issuerCooldownUntil; bool recordBacked; bytes32 recordId; }
         struct OrderRecord { bytes32 subject; bytes32 beneficiary; uint64 freezeUntil; bool revoked; uint256 maxAmount; uint256 executed; }
+        /// pay-meta-tax spec §6.2: `taxConfig()`, what the node reads to check a PERCENT tax before simulating.
+        struct TaxConfig { bytes32 taxRecipient; bool enabled; uint32 ratePpm; uint32 pendingPpm; uint64 eta; uint32 effectivePpm;
+            uint64 noticePeriod; }
         event AccountFrozen(bytes32 indexed account, bytes32 indexed ref, bytes32 recordId, uint64 until);
         event AccountUnfrozen(bytes32 indexed account, bytes32 indexed ref);
         event ForcedTransfer(bytes32 indexed recordId, bytes32 indexed from, bytes32 indexed to, uint256 amount);
@@ -365,6 +379,10 @@ sol! {
             uint256 maxAmount, uint64 freezeUntil, bytes32 documentHash);
         event OrderRevoked(bytes32 indexed recordId, bytes32 reasonRef);
         event OperatorTransfer(bytes32 indexed from, bytes32 indexed to, uint256 amount, bytes32 indexed ref);
+        event TaxRateSet(uint32 ratePpm, uint64 effectiveAt);
+        event TaxRecipientSet(bytes32 indexed taxRecipient);
+        event PaymentTaxed(bytes32 indexed entryRef, bytes32 indexed payee, bytes32 indexed taxRecipient, bytes32 from,
+            uint8 taxMode, uint256 tax, bytes32 digest);
         error Frozen(bytes32 account);
         error TokenPaused(uint64 until);
         error NotEligible(bytes32 account, uint8 reason);
@@ -391,6 +409,12 @@ sol! {
         error OperatorTargetRefused(bytes32 account);
         error AmountZero();
         error NotPaused();
+        error TaxRateInvalid(uint32 ratePpm);
+        error TaxRecipientInvalid(bytes32 taxRecipient);
+        error TaxModeInvalid(uint8 taxMode);
+        error TaxExceedsAmount(uint256 tax, uint256 amount);
+        error TaxMismatch(uint256 expected, uint256 got);
+        error TaxRecipientIsPayee();
         function freeze(bytes32 account, bytes32 ref, bytes32 recordId) external;
         function unfreeze(bytes32 account, bytes32 ref) external;
         function forceTransfer(bytes32 recordId, uint256 amount) external;
@@ -400,6 +424,12 @@ sol! {
             uint64 freezeUntil) external;
         function revokeOrder(bytes32 recordId, bytes32 reasonRef) external;
         function operatorTransfer(bytes32 from, bytes32 to, uint256 amount, bytes32 ref) external;
+        function setTaxRate(uint32 ratePpm) external;
+        function setTaxRecipient(bytes32 taxRecipient) external;
+        function taxConfig() external view returns (TaxConfig);
+        function mtxPayWithTax(UAMetaTransfer t, uint8 taxMode, uint256 tax, UASig auth, PayMeta meta) external returns (bool);
+        function payWithTax(bytes32 to, uint256 amount, uint8 taxMode, uint256 tax, bytes32 entryRef, PayMeta meta)
+            external returns (bool);
         function regulatedConfig() external view returns (RegulatedConfig);
         function freezeOf(bytes32 account) external view returns (FreezeState);
         function isFrozen(bytes32 account) external view returns (bool);
@@ -511,12 +541,20 @@ mod tests {
         let e = IToken::MinNonceNotIncreasing { current: U256::from(5), requested: U256::from(5) }.abi_encode();
         assert!(decode_revert(&e).starts_with("MinNonceNotIncreasing("));
         assert!(decode_revert(&[1, 2, 3]).starts_with("revert 0x"));
+        // pay-meta-tax T42 (`tax_mismatch_after_rate_change_refused_by_name`): the pay and tax refusals are named
+        let e = IRegulatedToken::TaxMismatch { expected: U256::from(50), got: U256::from(100) }.abi_encode();
+        assert!(decode_revert(&e).starts_with("TaxMismatch"), "{}", decode_revert(&e));
+        let e = IToken::PayMetaMismatch { entryRef: alloy::primitives::B256::ZERO, payId: alloy::primitives::B256::ZERO }.abi_encode();
+        assert!(decode_revert(&e).starts_with("PayMetaMismatch"), "{}", decode_revert(&e));
+        assert!(decode_revert(&IToken::PayNoTooLong { length: U256::from(257) }.abi_encode()).starts_with("PayNoTooLong"));
+        assert!(decode_revert(&IRegulatedToken::TaxRecipientIsPayee {}.abi_encode()).starts_with("TaxRecipientIsPayee"));
     }
 
-    /// `type(IRegulatedToken).interfaceId`: the XOR of the thirteen `cast sig` selectors (0xf35dd87a, cast 1.8.5).
+    /// `type(IRegulatedToken).interfaceId`: the XOR of its eighteen selectors (pay-meta-tax T39 / T40: + setTaxRate,
+    /// setTaxRecipient, taxConfig, mtxPayWithTax, payWithTax; 0xf35dd87a -> 0xaf5683ea, the forge artifact's methodIdentifiers).
     #[test]
     fn regulated_interface_id_is_the_xor_of_its_functions() {
-        assert_eq!(regulated_interface_id(), [0xf3, 0x5d, 0xd8, 0x7a]);
+        assert_eq!(regulated_interface_id(), [0xaf, 0x56, 0x83, 0xea]);
     }
 
     /// Regulated-kinds spec §7: every §3.1 error and `NotProposer` decoded by name; the six a later block may lift are the

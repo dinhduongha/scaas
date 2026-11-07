@@ -124,7 +124,8 @@ const TYPED: &[(&str, &str, &[&str], &str, &str)] = &[
     ("UASetMandate", "mtxSetMandate", W, "bytes32 from,address token,bytes32 delegate,uint128 maxPerPayment,uint128 maxPerPeriod,uint64 periodSeconds,uint64 expiry,E", ""),
     ("UASetPayee", "mtxSetPayee", W, "bytes32 from,address token,bytes32 payee,bool allowed,E", ""),
     ("UARevokeMandate", "mtxRevokeMandate", W, "bytes32 from,address token,E", ""),
-    ("UAPayUnderMandate", "mtxPayUnderMandate", W, "bytes32 from,address token,bytes32 payee,uint256 amount,bytes32 entryRef,uint64 epoch,E", ""),
+    // pay-meta-tax spec §2.4: the wallet's pay takes the `PayMeta` its signed `entryRef` commits to, last and unsigned
+    ("UAPayUnderMandate", "mtxPayUnderMandate", W, "bytes32 from,address token,bytes32 payee,uint256 amount,bytes32 entryRef,uint64 epoch,E", "E token payee amount entryRef epoch @ meta:PayMeta"),
     ("UADelegateRevoke", "mtxDelegateRevoke", W, "bytes32 from,address token,uint64 epoch,E", ""),
     ("UAExecute", "mtxExecute", W, "bytes32 from,address target,uint256 value,bytes data,E", ""),
     ("AddKey", "mtxAddKey", A, "address from,uint8 kind,bytes32 x,bytes32 y,bytes32 rpIdHash,bytes32 originHash,E", ""),
@@ -147,8 +148,13 @@ const TYPED: &[(&str, &str, &[&str], &str, &str)] = &[
     ("UARollOverSigned", "mtxRollOverSigned", Z, "bytes32 from,bytes32 ua,uint64 expectedPendingSeq,uint64 validUntilBlock,E", OWNER_ROLL_PLAN),
     ("UASetRollOverMode", "mtxSetRollOverMode", Z, "bytes32 from,bytes32 ua,uint8 rollOverMode,uint64 validUntilBlock,E", OWNER_MODE_PLAN),
     ("UARollOverBatch", "mtxRollOverBatch", Z, "bytes32 from,bytes32[] uas,E", ""),
-    ("UAReceiverFee", "mtxPayReceiverFee", T, "UAMetaTransfer payment,uint256 fee,address feeRecipient,uint256 validUntil", "payment payerSig:UASig fee feeRecipient validUntil @"),
-    ("UARelayFee", "mtxRelayFee", T, "bytes32 from,address target,bytes32 callDataHash,bytes32 payee,uint256 value,uint256 validUntil,address relayer", "from target callDataHash payee value validUntil @"),
+    // the pay entries (pay-meta-tax spec §2.1, §5.3): `PayMeta` last (spec §7.1: `meta` named per schema, the node builds the body);
+    // `mtxPay` signs the payment `UAMetaTransfer` itself (its fields the envelope's and `to`, `value`, `entryRef`)
+    ("UAMetaTransfer", "mtxPay", T, "bytes32 from,bytes32 to,uint256 value,bytes32 entryRef,E", "$ @ meta:PayMeta"),
+    ("UAReceiverFee", "mtxPayReceiverFee", T, "UAMetaTransfer payment,uint256 fee,address feeRecipient,uint256 validUntil", "payment payerSig:UASig fee feeRecipient validUntil @ meta:PayMeta"),
+    ("UAPayWithTax", "mtxPayWithTax", T, "UAMetaTransfer payment,uint8 taxMode,uint256 tax", "payment taxMode tax @ meta:PayMeta"),
+    // pay-meta-tax spec §4 (O4): the payer's own lane
+    ("UARelayFee", "mtxRelayFee", T, "bytes32 from,address target,bytes32 callDataHash,bytes32 payee,uint256 value,uint256 batch,uint256 nonce,uint256 validUntil,address relayer", "from target callDataHash payee value batch nonce validUntil @"),
     ("UAWrapOrder", "mtxWrapOrder", T, "bytes32 from,address wrappedToken,uint256 amount,uint256 minMinted,uint256 minFill,uint256 fee,address relayer,bytes32 destination,uint8 flags,uint256 batch,uint256 nonce,uint256 validUntil", "underlying:address $ @"),
     ("CancelUAOrder", "mtxCancelOrder", T, "UATradeOrder order", "order @"),
     ("CancelUAWrapOrder", "mtxCancelOrder", T, "UAWrapOrder order", "wrap!order @"),
@@ -186,6 +192,9 @@ const TYPED: &[(&str, &str, &[&str], &str, &str)] = &[
     ("UARecordOrder", "mtxRecordOrder", GR, "bytes32 from,address target,bytes32 orderId,bytes32 documentHash,bytes32 subject,bytes32 beneficiary,uint256 maxAmount,uint64 freezeUntil,E", ""),
     ("UARevokeOrder", "mtxRevokeOrder", GR, "bytes32 from,address target,bytes32 recordId,bytes32 reasonRef,E", ""),
     ("UAOperatorTransfer", "mtxOperatorTransfer", GR, "bytes32 from,address target,bytes32 account,bytes32 to,uint256 amount,bytes32 ref,E", ""),
+    // bit 23 `TAX` (pay-meta-tax spec §6.2): the one PERCENT rate, the recipient
+    ("UASetTaxRate", "mtxSetTaxRate", GR, "bytes32 from,address target,uint32 ratePpm,E", ""),
+    ("UASetTaxRecipient", "mtxSetTaxRecipient", GR, "bytes32 from,address target,bytes32 taxRecipient,E", ""),
     // not rows of the vector file: the DEX's (`dex_order_kat.json`) and the token's on ids (`uatrade_kat.json`), one name per kind
     ("InvalidateNonces", "mtxInvalidateNonces", D, "address from,uint256 batch,uint256 minNonce", "from batch minNonce @"),
     ("UAInvalidateNonces", "mtxInvalidateNonces", T, "bytes32 from,uint256 batch,uint256 minNonce", "from batch minNonce @"),
@@ -315,6 +324,9 @@ fn tok(t: &str, sig: Sig) -> Tok {
 fn abi_type(ty: &str) -> String {
     if let Some(el) = ty.strip_suffix("[]") {
         return format!("{}[]", abi_type(el));
+    }
+    if ty == "PayMeta" {
+        return PAY_META_ABI.into();
     }
     match nested(ty) {
         Some(f) => format!("({})", f.iter().map(|x| abi_type(&x.0)).collect::<Vec<_>>().join(",")),
@@ -498,8 +510,12 @@ pub fn parse(ty: &str, j: &Value, path: &str) -> Result<Val> {
         let o = j.as_object().ok_or_else(|| bad("not an object"))?;
         return Ok(Val::Tuple(take(f, o, path)?));
     }
+    if ty == "PayMeta" {
+        return pay_meta(j, path);
+    }
     Ok(match ty {
         "address" => Val::Address(addr(text()?).map_err(|e| bad(&e.to_string()))?),
+        "string" => Val::String(text()?.to_string()),
         "bool" => Val::Bool(j.as_bool().ok_or_else(|| bad("not a bool"))?),
         "bytes" => Val::Bytes(hex()?),
         _ => {
@@ -524,6 +540,109 @@ pub fn parse(ty: &str, j: &Value, path: &str) -> Result<Val> {
     })
 }
 
+const PAY_META_ABI: &str = "(bytes32,string,uint16,bytes)";
+
+/// A job's `meta` (pay-meta-tax spec §7.1): `{salt, payNo, schema, body}`, `body` **named per schema** (0 absent, 1 `{note}`,
+/// 2 `{creditorRef, dueDate}`, 3 `{chainId, target, callHash}`, 4 `{ciphertext}` hex, the one crypto object); the node builds
+/// the bytes (spec §3.1). A hex `body` is refused `HEX_ARGS_REFUSED`; the shape and the `payNo` bound by name (`check_pay_meta`).
+fn pay_meta(j: &Value, path: &str) -> Result<Val> {
+    let o = j.as_object().ok_or_else(|| anyhow!("BAD_PAYLOAD: {path}: not an object"))?;
+    if let Some(k) = o.keys().find(|k| !matches!(k.as_str(), "salt" | "payNo" | "schema" | "body")) {
+        bail!("BAD_PAYLOAD: {path}.{k}: unknown field");
+    }
+    let salt = parse("bytes32", o.get("salt").ok_or_else(|| anyhow!("BAD_PAYLOAD: {path}.salt: missing"))?, &format!("{path}.salt"))?;
+    let pay_no = match o.get("payNo") {
+        None => String::new(),
+        Some(v) => v.as_str().ok_or_else(|| anyhow!("BAD_PAYLOAD: {path}.payNo: not a string"))?.to_string(),
+    };
+    if pay_no.len() > crate::metatx::PAY_NO_MAX {
+        bail!("PAY_NO_TOO_LONG: {path}.payNo is {} B, above {}", pay_no.len(), crate::metatx::PAY_NO_MAX);
+    }
+    let schema = match o.get("schema") {
+        None => 0u16,
+        Some(v) => v.as_u64().and_then(|n| u16::try_from(n).ok()).ok_or_else(|| anyhow!("BAD_PAYLOAD: {path}.schema: not a uint16"))?,
+    };
+    let body = o.get("body").filter(|b| !b.is_null());
+    if body.is_some_and(Value::is_string) {
+        bail!("HEX_ARGS_REFUSED: {path}.body: named fields per schema, the node builds the bytes");
+    }
+    let f = |k: &str| body.and_then(|b| b.get(k)).ok_or_else(|| anyhow!("BAD_PAYLOAD: {path}.body.{k}: missing"));
+    let only = |keys: &[&str]| -> Result<()> {
+        match body.and_then(Value::as_object) {
+            Some(b) => match b.keys().find(|k| !keys.contains(&k.as_str())) {
+                Some(k) => bail!("BAD_PAYLOAD: {path}.body.{k}: unknown field"),
+                None => Ok(()),
+            },
+            None if keys.is_empty() => Ok(()),
+            None => bail!("BAD_PAYLOAD: {path}.body: missing"),
+        }
+    };
+    let bytes = match schema {
+        0 => {
+            only(&[])?;
+            Vec::new()
+        }
+        1 => {
+            only(&["note"])?;
+            f("note")?.as_str().ok_or_else(|| anyhow!("BAD_PAYLOAD: {path}.body.note: not a string"))?.as_bytes().to_vec()
+        }
+        2 => {
+            only(&["creditorRef", "dueDate"])?;
+            let c = parse("string", f("creditorRef")?, &format!("{path}.body.creditorRef"))?;
+            let d = parse("uint64", f("dueDate")?, &format!("{path}.body.dueDate"))?;
+            Val::Tuple(vec![c, d]).abi_encode_params()
+        }
+        3 => {
+            only(&["chainId", "target", "callHash"])?;
+            let v: Result<Vec<Val>> = [("chainId", "uint256"), ("target", "bytes32"), ("callHash", "bytes32")].iter()
+                .map(|(k, t)| parse(t, f(k)?, &format!("{path}.body.{k}"))).collect();
+            Val::Tuple(v?).abi_encode_params()
+        }
+        4 => {
+            only(&["ciphertext"])?;
+            match parse("bytes", f("ciphertext")?, &format!("{path}.body.ciphertext"))? {
+                Val::Bytes(b) => b,
+                _ => unreachable!(),
+            }
+        }
+        n => bail!("BAD_PAYLOAD: {path}.schema {n}: not one of 0-4"),
+    };
+    let m = crate::abi::PayMeta { salt: salt.as_fixed_bytes().map(|x| B256::from_slice(x.0)).unwrap_or_default(), payNo: pay_no,
+        schema, body: bytes.into() };
+    crate::metatx::check_pay_meta(&m)?;
+    Ok(Val::Tuple(vec![salt, Val::String(m.payNo), Val::Uint(U256::from(m.schema), 16), Val::Bytes(m.body.to_vec())]))
+}
+
+/// The parsed `PayMeta` value as `abi::PayMeta`.
+pub fn pay_meta_of(v: &Val) -> Option<crate::abi::PayMeta> {
+    let t = v.as_tuple()?;
+    Some(crate::abi::PayMeta { salt: B256::from_slice(t[0].as_fixed_bytes()?.0), payNo: t[1].as_str()?.to_string(),
+        schema: t[2].as_uint()?.0.saturating_to(), body: t[3].as_bytes()?.to_vec().into() })
+}
+
+/// The inverse of [`pay_meta`]: the body decoded to its named fields (an undecodable body as `null`).
+fn pay_meta_json(v: &Val) -> Option<Value> {
+    let m = pay_meta_of(v)?;
+    let w = |i: usize| m.body.get(32 * i..32 * i + 32);
+    let body = match m.schema {
+        0 => Value::Null,
+        1 => json!({"note": String::from_utf8(m.body.to_vec()).ok()?}),
+        2 => {
+            let t = DynSolType::Tuple(vec![DynSolType::String, DynSolType::Uint(64)]).abi_decode_params(&m.body).ok()?;
+            let t = t.as_tuple()?;
+            json!({"creditorRef": t[0].as_str()?, "dueDate": t[1].as_uint()?.0.to_string()})
+        }
+        3 => json!({"chainId": U256::from_be_slice(w(0)?).to_string(), "target": format!("0x{}", alloy::hex::encode(w(1)?)),
+            "callHash": format!("0x{}", alloy::hex::encode(w(2)?))}),
+        _ => json!({"ciphertext": format!("0x{}", alloy::hex::encode(&m.body))}),
+    };
+    let mut o = json!({"salt": format!("{:#x}", m.salt), "payNo": m.payNo, "schema": m.schema});
+    if !body.is_null() {
+        o["body"] = body;
+    }
+    Some(o)
+}
+
 fn take(fields: &[(String, String)], o: &Map<String, Value>, path: &str) -> Result<Vec<Val>> {
     if let Some(k) = o.keys().find(|k| pos(fields, k).is_none()) {
         bail!("BAD_PAYLOAD: {path}.{k}: unknown field");
@@ -536,6 +655,9 @@ fn take(fields: &[(String, String)], o: &Map<String, Value>, path: &str) -> Resu
 
 /// The inverse of [`parse`]: a value as the explicit JSON of its type.
 pub fn to_json(ty: &str, v: &Val) -> Value {
+    if ty == "PayMeta" {
+        return pay_meta_json(v).unwrap_or(Value::Null);
+    }
     if let Some(el) = ty.strip_suffix("[]") {
         return Value::Array(v.as_array().unwrap_or_default().iter().map(|x| to_json(el, x)).collect());
     }
@@ -550,6 +672,7 @@ pub fn to_json(ty: &str, v: &Val) -> Value {
         Val::FixedBytes(w, n) => json!(format!("0x{}", alloy::hex::encode(&w[..*n]))),
         Val::Uint(u, bits) if *bits <= 32 => json!(u.saturating_to::<u64>()),
         Val::Uint(u, _) => json!(u.to_string()),
+        Val::String(t) => json!(t),
         _ => Value::Null,
     }
 }
@@ -691,12 +814,12 @@ pub fn assemble(row: &Row, envelope: Option<&Value>, args: &Value, sig: Option<&
 }
 
 /// The relay-fee router's call of an assembled `RelayFee` / `UARelayFee` (CTR-MTX-27): `relay` / `uaRelay(target, callData,
-/// token, from, payee, value, validUntil, sig)`.
+/// token, from, payee, value, batch, nonce, validUntil, sig)` (pay-meta-tax spec §4: the payer's own lane).
 pub fn router_call(row: &Row, a: &Assembled, target: Address, call_data: Bytes, token: Address) -> Result<Vec<u8>> {
     let tail = Val::Tuple(vec![
         Val::Address(target), Val::Bytes(call_data.to_vec()), Val::Address(token),
-        a.vals["from"].clone(), a.vals["payee"].clone(), a.vals["value"].clone(), a.vals["validUntil"].clone(),
-        a.sig.clone().ok_or_else(|| anyhow!("BAD_PAYLOAD: no signature"))?,
+        a.vals["from"].clone(), a.vals["payee"].clone(), a.vals["value"].clone(), a.vals["batch"].clone(), a.vals["nonce"].clone(),
+        a.vals["validUntil"].clone(), a.sig.clone().ok_or_else(|| anyhow!("BAD_PAYLOAD: no signature"))?,
     ]);
     Ok([&row.sent[..], &tail.abi_encode_sequence().unwrap_or_default()].concat())
 }
@@ -725,6 +848,8 @@ pub struct Typed {
     /// A derived `from` or `to` (the subject, a `to`, a payment's payer or payee): the token's UA ledger must be on (R44, step
     /// 7a); an all-native op runs at `registry() == 0` (R9).
     pub derived_side: bool,
+    /// A pay entry's `payNo + body` bytes (pay-meta-tax spec §7.1, `max_pay_meta_bytes`); 0 for any other op.
+    pub pay_meta_len: usize,
 }
 
 impl Typed {
@@ -811,10 +936,36 @@ impl Op {
         }
         let text = |k: &str| o.get(k).map(|v| v.as_str().ok_or_else(|| anyhow!("BAD_PAYLOAD: op.{k} is not a string"))).transpose();
         let entry = text("entry")?.ok_or_else(|| anyhow!("BAD_PAYLOAD: op.entry missing"))?;
+        if entry == "mtxPayMeta" {
+            bail!("ENTRY_RETIRED: mtxPayMeta: a pay is mtxPay(t, auth, meta) with its PayMeta (pay-meta-tax spec §7.1)");
+        }
         let (row, contract) = find(entry, text("contract")?, text("struct")?)?;
         let token = addr(text("token")?.ok_or_else(|| anyhow!("BAD_PAYLOAD: op.token missing"))?).map_err(|e| anyhow!("BAD_PAYLOAD: op.token: {e}"))?;
         let empty = json!({});
         let mut args = o.get("args").unwrap_or(&empty).clone();
+        let mut envelope = o.get("envelope").cloned();
+        // spec §7.1: a pay entry's signed payment is `args.t`: the `payment` member, or `mtxPay`'s envelope and fields
+        if let Some(t) = args.as_object_mut().and_then(|a| a.remove("t")) {
+            if pos(&row.fields, "payment").is_some() {
+                args["payment"] = t;
+            } else if row.name == "UAMetaTransfer" {
+                if envelope.is_some() {
+                    bail!("BAD_PAYLOAD: mtxPay takes args.t or an envelope, not both");
+                }
+                let t = t.as_object().ok_or_else(|| anyhow!("BAD_PAYLOAD: args.t is not an object"))?;
+                let mut e = Map::new();
+                for (k, v) in t {
+                    if k == "from" || ENV.contains(&k.as_str()) {
+                        e.insert(k.clone(), v.clone());
+                    } else {
+                        args[k] = v.clone();
+                    }
+                }
+                envelope = Some(Value::Object(e));
+            } else {
+                bail!("BAD_PAYLOAD: args.t: {entry} takes no payment struct");
+            }
+        }
         let sig = o.get(if row.sig == Some(Sig::Bytes) { "signature" } else { "auth" });
         if o.contains_key(if row.sig == Some(Sig::Bytes) { "auth" } else { "signature" }) {
             bail!("BAD_PAYLOAD: {entry} takes its signature as {}", if row.sig == Some(Sig::Bytes) { "signature" } else { "auth" });
@@ -838,7 +989,18 @@ impl Op {
             (false, Some(_)) => bail!("BAD_PAYLOAD: {entry} takes no op.call"),
             (false, None) => None,
         };
-        let a = assemble(row, o.get("envelope"), &args, sig, fee_recipient)?;
+        let a = assemble(row, envelope.as_ref(), &args, sig, fee_recipient)?;
+        if let Some(m) = a.vals.get("meta") {
+            // spec §7.1: `entryRef == metaPayId(meta)` before any simulation (`PAY_META_MISMATCH`), the contract's own check
+            let id = crate::metatx::meta_pay_id(&pay_meta_of(m).ok_or_else(|| anyhow!("BAD_PAYLOAD: meta"))?);
+            let entry_ref = a.vals.get("entryRef").cloned()
+                .or_else(|| a.vals.get("payment").and_then(|p| p.as_tuple().and_then(|t| t.get(3).cloned())))
+                .and_then(|v| v.as_fixed_bytes().map(|x| B256::from_slice(x.0)))
+                .ok_or_else(|| anyhow!("BAD_PAYLOAD: no entryRef"))?;
+            if entry_ref != id {
+                bail!("PAY_META_MISMATCH: entryRef {entry_ref:#x} is not metaPayId(meta) {id:#x}");
+            }
+        }
         let (data, to) = match &inner {
             Some(c) => {
                 let router = a.vals["relayer"].as_address().expect("address");
@@ -854,9 +1016,11 @@ impl Op {
             Some(x @ (Val::Address(_) | Val::FixedBytes(..))) if row.name != "CancelDexOrder" => Some(x),
             _ => at(t, 1).and_then(|x| at(&x, 0)),
         });
+        // spec §7.1 (C2): `UAPayWithTax`'s signer is the payer `payment.from`; `UAReceiverFee`'s the payee `payment.to`
+        let payment_signer = if row.name == "UAPayWithTax" { 0 } else { 1 };
         let who = a.vals.get("from").cloned().or_else(|| a.vals.get("ua").filter(|_| !row.enveloped).cloned())
             .or_else(|| order_from.clone())
-            .or_else(|| a.vals.get("payment").and_then(|p| at(p, 1)));
+            .or_else(|| a.vals.get("payment").and_then(|p| at(p, payment_signer)));
         let native_sig = match (row.sig, a.sig.as_ref()) {
             (Some(Sig::Bytes), Some(Val::Bytes(b))) => Some(Bytes::from(b.clone())),
             (Some(Sig::Ua), Some(Val::Tuple(t))) if t[0] == Val::Bytes(vec![]) && t[2] == Val::Array(vec![]) =>
@@ -870,7 +1034,8 @@ impl Op {
         let derived_signer = derived(a.vals.get("from").cloned()) || derived(order_from)
             || derived(a.vals.get("payment").and_then(|p| at(p, 0)));
         let derived_side = derived_signer || derived(a.vals.get("to").cloned()) || payee.is_some_and(|w| native(&w).is_none());
-        let lane_hash = pos(&row.fields, "payment").and_then(|i| {
+        // the outer digest is the job's identity for `UAPayWithTax` (spec §7.1, Codex #1); a receiver fee reports its payment's
+        let lane_hash = pos(&row.fields, "payment").filter(|_| row.name == "UAReceiverFee").and_then(|i| {
             let ty = row.fields[i].0.as_str();
             Some(hash_tuple(ty, nested(ty)?, a.vals["payment"].as_tuple()?))
         });
@@ -882,7 +1047,9 @@ impl Op {
             true => a.vals["underlying"].as_address().expect("address"),
             false => token,
         };
-        let typed = Typed { contract, domain_of, struct_hash: a.struct_hash, lane_hash, signer, payee, digest: None, derived_signer, derived_side };
+        let pay_meta_len = a.vals.get("meta").and_then(pay_meta_of).map_or(0, |m| m.payNo.len() + m.body.len());
+        let typed = Typed { contract, domain_of, struct_hash: a.struct_hash, lane_hash, signer, payee, digest: None, derived_signer, derived_side,
+            pay_meta_len };
         Ok(Op { row, to, data: data.into(), typed, lane, valid_until })
     }
 }
@@ -963,6 +1130,10 @@ pub mod testkit {
         if let Some(x) = d.get("extra").and_then(Value::as_object) {
             args.extend(x.iter().map(|(k, v)| (k.clone(), v.clone())));
         }
+        // clientkeys writes a pay row's `PayMeta` with its body as hex; a job names the body's fields (spec §7.1)
+        if let Some(m) = args.get("meta").cloned() {
+            args.insert("meta".into(), named_meta(&m));
+        }
         if row.name == "UAReceiverFee" {
             let s = args["payerSig"].clone();
             args.insert("payerSig".into(), json!({"keyData": "0x", "signature": s, "members": []}));
@@ -977,6 +1148,14 @@ pub mod testkit {
             Sig::Account => json!({"keyIndex": "0", "proof": [], "signature": s}),
         });
         (row.enveloped.then_some(Value::Object(env)), Value::Object(args), sig)
+    }
+
+    /// A `PayMeta` `{salt, payNo, schema, body: hex}` (the vectors' form) as a job's named one.
+    pub fn named_meta(m: &Value) -> Value {
+        let h = |k: &str| alloy::hex::decode(m[k].as_str().unwrap().trim_start_matches("0x")).unwrap();
+        let v = Val::Tuple(vec![fixed(&h("salt")), Val::String(m["payNo"].as_str().unwrap_or("").into()),
+            Val::Uint(U256::from(m["schema"].as_u64().unwrap()), 16), Val::Bytes(h("body"))]);
+        pay_meta_json(&v).unwrap()
     }
 
     /// A vector row as a job's `op`; `None`: no entry (`PqzAuth`) or the router's rows (`relay_fee_call_object`).
@@ -1056,7 +1235,7 @@ mod tests {
     }
 
     fn typed(contract: &'static str, domain_of: Address, h: B256) -> Typed {
-        Typed { contract, domain_of, struct_hash: Some(h), lane_hash: None, signer: None, payee: None, digest: None, derived_signer: false, derived_side: false }
+        Typed { pay_meta_len: 0, contract, domain_of, struct_hash: Some(h), lane_hash: None, signer: None, payee: None, digest: None, derived_signer: false, derived_side: false }
     }
 
     /// Every row and domain of `typed_ops.json`: encodeType, struct hash, digest, entry selector, calldata; the signature
@@ -1089,10 +1268,12 @@ mod tests {
                 calldata += 1;
             }
         }
-        // plan T34: (68, 101, 100) -> (76, 109, 108), the router's eight regulated controls' vector rows
-        assert_eq!((structs, domains, calldata), (76, 109, 108), "every row was walked");
-        // plan T32: 70 -> 78, the router's eight regulated controls (their vector rows plan T34's)
-        assert_eq!(rows().iter().filter(|r| r.typed).count(), 78, "76 vector rows, the two invalidations (DEX, token)");
+        // plan T34: (68, 101, 100) -> (76, 109, 108), the router's eight regulated controls' vector rows; pay-meta-tax T41 / T42:
+        // -> (79, 114, 113), UAPayWithTax (three domains) and the router's two tax ops
+        assert_eq!((structs, domains, calldata), (79, 114, 113), "every row was walked");
+        // plan T32: 70 -> 78, the router's eight regulated controls; pay-meta-tax T42: -> 82, + UAPayWithTax, the two tax ops and
+        // mtxPay (its struct `UAMetaTransfer`, no row of the vector file: paymeta.json and pay_job_named_meta_builds_body pin it)
+        assert_eq!(rows().iter().filter(|r| r.typed).count(), 82, "79 vector rows, mtxPay, the two invalidations (DEX, token)");
         assert_eq!(rows().iter().filter(|r| !r.typed).count(), 18, "the wallet's three flat builders are gone (MD-11 (a))");
     }
 
@@ -1537,7 +1718,8 @@ mod tests {
             "relayer": s("relayer"), "fee": s("fee"), "feeRecipient": s("fee_recipient")},
             "args": {"token": format!("{token:#x}", token = Address::from_slice(&word(p, 0)[12..])), "payee": format!("0x{}", alloy::hex::encode(word(p, 1))),
                 "amount": U256::from_be_slice(&word(p, 2)).to_string(), "entryRef": format!("0x{}", alloy::hex::encode(word(p, 3))),
-                "epoch": U256::from_be_slice(&word(p, 4)).to_string()},
+                "epoch": U256::from_be_slice(&word(p, 4)).to_string(),
+                "meta": named_meta(&json!({"salt": p["meta_salt"], "payNo": p["meta_pay_no"], "schema": p["meta_schema"], "body": p["meta_body"]}))},
             "auth": {"keyData": "0x", "signature": s("signature"), "members": []}});
         let built = Op::parse(&op, FEE).unwrap();
         assert_eq!(format!("0x{}", alloy::hex::encode(&built.data)), s("calldata"), "forge's calldata");
@@ -1692,6 +1874,30 @@ mod tests {
             let s = Op::parse(&op, FEE).unwrap_or_else(|e| panic!("{name}: {e:#}")).typed.signer;
             assert_eq!(s.as_ref().map(|x| x.0), who, "{name}");
         }
+    }
+
+    /// pay-meta-tax T42 (spec §7.1, C2, Codex #1): `tax_job_signer_is_payer_distinct_payee`, `tax_job_outer_digest_is_job_id`: the
+    /// `UAPayWithTax` row's signer is the payment's `from` (never the receiver-fee fallback to `payment.to`), its job identity
+    /// the outer struct (no inner lane hash); a receiver fee keeps its payment's; the relay fee's router call carries the
+    /// payer's `batch`, `nonce` (`relay_fee_job_batch_nonce`).
+    #[test]
+    fn tax_job_signer_is_payer_and_outer_digest_is_job_id() {
+        let v = vectors();
+        let key: Address = v["key"]["address"].as_str().unwrap().parse().unwrap();
+        let m = &v["ops"]["UAPayWithTax"]["message"]["payment"];
+        assert_ne!(m["from"], m["to"], "a distinct payee");
+        for kind in ["token", "zether", "pqz"] {
+            let p = Op::parse(&op_of("UAPayWithTax", kind, &v).unwrap(), FEE).unwrap();
+            assert_eq!(p.typed.signer.as_ref().map(|x| x.0), Some(key), "{kind}: the payer signs");
+            assert_eq!(p.typed.lane_hash, None, "{kind}: the outer digest is the job's identity");
+            assert_eq!(format!("{:#x}", p.typed.struct_hash.unwrap()), v["ops"]["UAPayWithTax"]["structHash"].as_str().unwrap());
+            assert_eq!(p.typed.payee.map(|w| format!("{w:#x}")), m["to"].as_str().map(str::to_string));
+        }
+        let rf = Op::parse(&op_of("UAReceiverFee", "token", &v).unwrap(), FEE).unwrap();
+        assert!(rf.typed.lane_hash.is_some(), "a receiver fee is matched by its payment's digest");
+        let d = &v["ops"]["UARelayFee"]["domains"]["token"];
+        let c = IMtxRelayFee::relayCall::abi_decode(&hex(&d["routerCalldata"])).unwrap();
+        assert_eq!((c.batch, c.nonce), (U256::from(7), U256::ZERO), "the payer's lane in the router call");
     }
 
     /// A venue job is named JSON and encodes back to the same bytes.
