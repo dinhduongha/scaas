@@ -2292,8 +2292,9 @@ outside the repo).
       code and the specs (the merge spec, the regulated-kinds spec with its invariants I0–I13, and the pay-meta-tax spec with J1–J8), not this plan's conclusions: security (invariants 1–7, review focus 1–9), rules (each R row against its
       doc and the code), blast radius (every caller of a retired form: contracts, scripts, node, clients, docs), wallet display
       (§6 and T20's note). Same-class rule: a finding on one kind, family or language is checked on every other.
-- [ ] **Step 2: Fable, then Codex** on security, signatures and EIP-712 (spec §2, §5, §6, §8, the merged bodies, the node's digest
-      reproduction), as for the spec; Codex only on the owner's word (credits).
+- [ ] **Step 2: Fable** on security, signatures and EIP-712 (spec §2, §5, §6, §8, the merged bodies, the node's digest
+      reproduction). **No Codex or agy here (owner 2026-11-08):** they run in the contracts audit on `main` after the EVM freeze,
+      which covers this branch's contracts; this review covers the node and client parts in full, since that audit does not.
 - [ ] **Step 3: Fix wave:** each confirmed finding with a failing test first, in its owning task's files; commits
       `ua-mtx-merge fix: …`. A finding that changes an R row, a Q answer or an MD goes to the controller (owner rows to the owner).
 - [ ] **Step 4:** Re-run T21's steps whose inputs changed; commit the summary; re-review the fixes only, until "ready". The review
