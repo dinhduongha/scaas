@@ -227,7 +227,7 @@ rustc 1.90); Node `node --test` (`clients/clientkeys`); `zether-prover`; `ua-rs`
 | Factory index, chain-neutral releases | T67 → T71 → T70 → T72 → T73 → T74 → T68; T76 after T71, before T68; T69 and T75 beside, land in T19 | **owner approved the index and the extension (Q7–Q12 as recommended) 2026-11-07; the chain-neutral releases T71–T76 owner-approved 2026-11-07 (§10.3 as recommended, S3 = signing UA), pending the Fable review's fixes**; after T57, before 3f (owner 2026-11-07: 3e → 3g → factory index → 3f → 3h → 3c); contracts sequential in this worktree (`src/factory/` only) |
 | PQZ verifier mode (3f) | T44 → T45; T46 after T45; T47 after T46; T48 and T49 after T45, beside T46–T47; T50 beside, lands in T19 | after T69 (the factory index), before 3h (owner 2026-11-07: 3g, then the factory index, before 3f); contracts sequential in this worktree; T45 measures kind 13 first (from what T57 leaves); OFFCHAIN built over versioned keys (3g §5) |
 | PQZ proof path (3h) | T58 → T59 → T60 → T61; T62 after T61; T63 after T62; T64 and T65 after T61, beside T62–T63; T66 beside, lands in T19 | after T50, before 3c (owner approved 2026-11-07); contracts sequential in this worktree; T58 measures kind 13 first; each format moves in the task that changes it; no task waits for `ua-rs-sign` |
-| Size (T66b) | T66b | after T66, before 3c (owner 2026-11-07); one task, sequential in this worktree |
+| Registry generation, size (T66b) | T66b | after T66, before 3c (owner 2026-11-07): `requirePortable`, no KEM record for an `msig`, the `UARegistryLib` <-> `UARegistry` rebalance, then the size reduction; sequential in this worktree |
 | Docs | T19 | drafts beside T14–T18, T24–T36, T37–T43, T51–T57, T67–T76, T44–T50 and T58–T66; lands after T66 and 3c (BUILT only with code and tests) |
 | Close | T21 → T22 → T23 | |
 | Next | TODO item 4 | SCaaS testnet reset 2 deploys the merged code (not this plan) |
@@ -686,7 +686,7 @@ ED25519, alias for ECDSA) (R42).
 **Deferred (owner 2026-11-04): not part of the M round; the owner decides D (and L) after M's PR.** T10 and later tasks run without it.
 **Deprecated (owner 2026-11-05): no lever L or D is built.** The token releases keep their size; a public chain with
 EIP-8037 takes the releases whose release transaction fits its block (T10's deploy-gas summary, `RELEASE_GAS_GATE=public`);
-Sepolia (200 M) and the SCaaS testnet take all. The `UARegistryLib` ↔ `UARegistry` rebalance (3c) is separate and stays.
+Sepolia (200 M) and the SCaaS testnet take all. The `UARegistryLib` ↔ `UARegistry` rebalance (T66b, owner 2026-11-07; was 3c) is separate and stays.
 
 **Depends on:** T8 **and the owner's Q3 answer** to T0's report. If the answer is "no lever", this task records that and ends.
 
@@ -1249,7 +1249,7 @@ reopens on `Unpaused` or at `pausedUntil`; `TokenPaused` never grief-scored.
 
 **Spec:** [`2026-11-05-pay-meta-tax.md`](../specs/2026-11-05-pay-meta-tax.md), revised after the Codex and Fable reviews
 ([Codex](../../research/paytax-codex-review.md), [Fable](../../research/paytax-fable-review.md)); rulings O1–O17, every
-question answered (spec §11). **Place:** after T36, before 3c (`PqChat` and the registry generation); T19, T21, T22, T23 cover
+question answered (spec §11). **Place:** after T36, before T66b (the registry generation) and 3c (`PqChat`); T19, T21, T22, T23 cover
 the group. **Order:** contracts T37 → T38 → T39 → T40, sequential in this worktree (shared `MetaTokenBase`, `ERC20MetaTx`,
 `RegulatedLib`, `size-baseline.json`); T41 (`clients/`, `smartcontracts/vectors/`) after T40 fixes the ABI; T42 (node) after T41;
 T43 (invariants, mutants) after T40, beside T41–T42. **Estimate:** 14.5 agent-days, plus 0.5 on T19 (15 in all). Every contracts
@@ -1646,7 +1646,7 @@ switch), `indexer-feeds.md`; the operator note's OFFCHAIN-mode rows.
 ([Codex](../../research/pqzver-codex-review.md), [Fable](../../research/pqzver-fable-review.md)); rulings O1–O7 and R1–R5 (no
 `keyVersion` in `PqzAuth`; R-cross-set's version-0 replacement retired; receiver and auditor versions not named, with the decoy
 filter and the intake refusal; 60 M accepted if 57 M is missed; every other finding adopted); no question open. **Place:** after
-T43, before 3f (owner 2026-11-07: 3g before 3f) and 3c, with 3c's registry generation (3c's rebalance after T53, measured with 3g in); T19, T21, T22, T23 cover the group.
+T43, before 3f (owner 2026-11-07: 3g before 3f) and 3c, with T66b's registry generation (its rebalance after T53, measured with 3g in; owner 2026-11-07 moved it from 3c); T19, T21, T22, T23 cover the group.
 **Order:** contracts T51 → T52 → T53, sequential in this worktree (shared `UARegistryLib`, `UAStore`, `PqzCore`, `PqzLayer`,
 `size-baseline.json`); T54 (`clients/`, `smartcontracts/vectors/`) after T53 fixes the ABI; T55 (node) after T54; T56 (invariants,
 mutants) after T53, beside T54–T55; T57 (docs share) drafts beside them and lands in T19. The `ua-rs-sign` items (T15
@@ -2025,9 +2025,24 @@ spec §5.5 note); the operator note's `own_tag` and `PROOF_STORE_OVER_LANE_CAP` 
 - [ ] **Step 1:** Write each change; figures quoted from T58–T65 logs; BUILT only where code and tests exist.
 - [ ] **Step 2:** `docs_check.py check`, `paths`, `resolve` on each new id: rc 0. Committed with T19.
 
-### Task T66b: kind 13 size reduction after 3h (owner 2026-11-07)
+### Task T66b: the registry generation and the size reduction, after 3h (owner 2026-11-07)
 
-**Depends on:** T66 (3g, 3f and 3h landed). **Before:** 3c. **Estimate:** 3 (with the short spec and its review).
+**Depends on:** T66 (3g, 3f and 3h landed). **Before:** 3c, whose `PqChat` needs `requirePortable`. **Estimate:** 7.5 [estimate]:
+parts 1 and 2 about 2.5, part 3 about 2, part 4 3 (with the short spec and its review).
+
+**Owner 2026-11-07:** four items move here as one group, in this order, because they share one registry generation and the
+rebalance must be measured after every PQZ contract change:
+
+1. **`requirePortable`** (UA-7 O1, spec `2026-10-25-ua7-pq-e2e-sessions.md` on branch `ua7-research`; UA-7 plan T3): the registry's
+   portable check view, used by `PqChat`.
+2. **An `msig` has no KEM key** (CTR-UA-32, owner 2026-11-05, confirmed 2026-11-07; MD-11 option (c) of the `ua-rs-sign` plan): the
+   registry refuses a KEM record for an `msig`; in the same step `clients/clientkeys/src/ua.js`, `e2e.py` `msig_ua`, the
+   `portable.json` `msig-pq` / `kemRecords` rows and the ua-c, ua-cxx, ua-qt, ua-dart-frb vector tests move to refusal rows
+   (`ua-rs` `ua8.rs` on `ua-rs-sign`: list what it needs). Senders seal to each accepted member's own KEM key.
+3. **The `UARegistryLib` <-> `UARegistry` rebalance** (was in 3c; 3g's R4: if both still miss 57 M, 60 M is accepted).
+4. **Kind 13 and every kind over the stop line** (below).
+
+3c then holds only the `PqChat` contract and its public topics.
 
 **Why:** T40 left kind 13 at 64,522 B, 10 B over the 64,512 B stop line, with every lever of the 3e spec §6.4 tried (owner
 2026-11-07: accepted for now). Until this task, kinds pushed up by 3e, 3g, 3f or 3h may exceed the stop line and 65,536 B,

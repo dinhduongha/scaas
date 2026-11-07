@@ -1,11 +1,11 @@
 # Versioned PQZ keys (group 3g) — design
 
-**Status:** **approved by the owner 2026-11-06; build after T43, before 3f (owner 2026-11-07: 3g before 3f), with 3c's registry generation.** SPECIFIED; nothing is built.
+**Status:** **approved by the owner 2026-11-06; build after T43, before 3f (owner 2026-11-07: 3g before 3f), with T66b's registry generation (owner 2026-11-07: `requirePortable`, the `msig` KEM refusal and the rebalance moved from 3c to plan task T66b).** SPECIFIED; nothing is built.
 Revised after the Codex and Fable reviews of the first draft ([Codex](../../research/pqzver-codex-review.md): 2 high, 2 medium;
 [Fable](../../research/pqzver-fable-review.md): 0 P0, 0 P1, 5 P2, 10 P3, verdicts on Q1–Q4, a missing-items list) and the
 owner's rulings R1–R5 of 2026-11-06; every finding's outcome is in §17. Work-order group **3g** of branch `ua-mtx-merge`: tasks
-**T51–T57** after 3e (T37–T43) and before 3f (T44–T50, owner 2026-11-07) and 3c (`PqChat` and the registry generation, whose `UARegistryLib` ↔ `UARegistry`
-rebalance comes last, after every PQZ contract change), so the round's docs (T19), gates (T21), review (T22) and PR (T23) cover it
+**T51–T57** after 3e (T37–T43) and before 3f (T44–T50, owner 2026-11-07) and T66b (the registry generation, whose `UARegistryLib` ↔ `UARegistry`
+rebalance comes after every PQZ contract change) and 3c (`PqChat`), so the round's docs (T19), gates (T21), review (T22) and PR (T23) cover it
 and the EVM freeze and audit include it. **PQZ only:** no Zether contract, statement or vector changes. **Everything here is
 UNAUDITED.**
 
@@ -40,7 +40,7 @@ Written as given; not reopened.
 | R1 | (2026-11-06, Q1) **No `keyVersion` in `PqzAuth`.** Reason (Fable's caveat): with distinct keys per version, enforced in every mode (KV-1, KV-9), `bodyHash` names the version, and the version changes **neither amount nor recipient**: a debit under any version of one UA spends that UA's own funds to the recipient it signed, and a stale version can only migrate to itself (KV-8). The relayed forms sign `keyVersion` in their args. | §3.3, §4.2 |
 | R2 | (2026-11-06, Q2) **R-cross-set's version-0 replacement is retired; every PQZ record becomes write-once.** A key of another set's length stays at its version; this chain's set gets a new version. This changes the owner ruling R-cross-set of 2026-10-30 (Change line, §10 row 3) and closes Codex #2. | KV-1, §2.3 |
 | R3 | (2026-11-06, Q3) **Debits do not name the receiver's or the auditor's versions.** Fable F-2's two mitigations, with no contract change: the wallet's decoy filter excludes a UA whose latest version is pending, and the node refuses such a job by name at intake. **Activation is permissionless:** once a version's record and proof are public, anyone may replay them on any chain (CTR-UA-07), so an `msig`'s wallets register and prove v+1 on every chain the UA uses in one sitting. | §3.2, §7.2, §7.3 |
-| R4 | (2026-11-06, Q4) **If both registry contracts still miss 57 M after 3c's rebalance, 60 M is accepted**, pinned with T10's public-gate formula (`asked = (regular + state) × 1.05 ≤ 60 M` and `regular × 1.05 < 2^24`). Recorded (Fable): 60 M is already the `storePqzPop` ceiling at `n2816-kmax65536`, so a 60 M chain is in practice an `n2304-kmax4096` chain. | §6.2 |
+| R4 | (2026-11-06, Q4) **If both registry contracts still miss 57 M after T66b's rebalance, 60 M is accepted**, pinned with T10's public-gate formula (`asked = (regular + state) × 1.05 ≤ 60 M` and `regular × 1.05 < 2^24`). Recorded (Fable): 60 M is already the `storePqzPop` ceiling at `n2816-kmax65536`, so a 60 M chain is in practice an `n2304-kmax4096` chain. | §6.2 |
 | R5 | (2026-11-06) **Every remaining finding of both reviews is adopted** (§17), among them: distinct keys per UA enforced at storage in every mode and pairwise in every statement (Codex #1); the structural, not cryptographic, account-safety argument and the related-key assumption (Codex #3); additive sender recovery (Codex #4); eligibility needs the proof bytes (F-1); the host-mode rules (F-3); the per-rotation `R_REG` gas (F-4); member departure as a rotation trigger and k against m (F-5); a stale version only migrates (F-6); the realistic estimates (F-12, F-15). | §2–§7 |
 | R6 | (2026-11-06) **Confirmed by the owner:** the stale-version rule as written (a stale version may only migrate or refresh; no unshield, not even to the UA itself, before migrating; `StaleKeyVersion`); the k-of-n backup default k = m (research Q12); §6.2's note that the 57 M target sits in the main checkout's `TODO.md`. | §3.3 (KV-8), §12, §6.2 |
 
