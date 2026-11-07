@@ -1501,7 +1501,7 @@ the layout pin.
 **Interfaces:** spec §3–§6: `pqzVerifyMode` in byte 22 of `PqzStorage` slot 0; the verifier state appended (§4.4); `PqzLayer`'s
 constructor admits `releaseProofVerifier = 0`; PRECOMPILE init refuses it `SelfTestFailed(address(0))` before any call, OFFCHAIN
 init reads nothing from it (`psid = PqzSet.PQZL_ID`); `pqzVerifierUA` checked (§4.1: kinds, `PqzVerifierUnregistered`,
-`PqzVerifierKind`, the frozen shape); `_check(o, buf, proof, authSig, att, attSig)` with spec §5.3's OFFCHAIN branch, the
+`PqzVerifierKind`, the frozen shape); `_check(o, buf, proof, authSig, verdict, verdictSig)` with spec §5.3's OFFCHAIN branch, the
 `UAVerifyGas` `try`/`catch` shape, `PqzVerified`; `_keyPtr` / `_creditKey` without `proven` in OFFCHAIN mode, the set length
 kept, per key version as 3g's KV-12 OFFCHAIN column (built in T51–T53); the auditor rule; the bodies of `pqzSetVerifier`, `pqzCancelVerifier`, `pqzRevokeVerifier` (owner, the factory's
 `noticePeriod()`, same proposer and owner generation, epoch bump, immediate revocation); `PqzVerdict` typehash pin.
@@ -1530,7 +1530,7 @@ kept, per key version as 3g's KV-12 OFFCHAIN column (built in T51–T53); the au
 `test/vectors/selector_audit.json`; gas and layout pins; `size-baseline.json`; `runs/<date>-ua-mtx-merge-pqz-verifier-sizes.txt`
 (summary).
 
-**Interfaces:** spec §5.3–§5.4: `PqzVerdict calldata att, IUARegistry.UASig calldata attSig` last on every proof-carrying entry
+**Interfaces:** spec §5.3–§5.4: `PqzVerdict calldata verdict, IUARegistry.UASig calldata verdictSig` last on every proof-carrying entry
 (direct and signed forms; twelve on 5, 13, ten on 4, 12), outside every `UA*` struct (no typehash moves); the struct fallback
 `PqzSignedVerdict` only if the legacy decoder runs out of stack; `verifyTransferAmount` five-argument form `PqzVerdictRequired()`
 in OFFCHAIN mode, seven-argument form, both with 3g's `keyVersion` after `kind` (3g KV-11; `test_disclosure_offchain_withVersion`
@@ -1574,11 +1574,11 @@ creation fields); `clients/ua-rs` and `ua-c`, `ua-cxx`, `ua-qt`, `ua-dart-frb` (
 **Files:** `scaas-node/src/{typed,guard,submit,indexer,gateway,adapter}.rs`, the error table, `node.example.toml` (endpoint names
 and the shield-refusal switch, no secret), `tests/e2e.rs` (ignored, anvil); `docs/node/` drafts for T50.
 
-**Interfaces:** spec §11.1: the named `pqz_verdict: {verifierEpoch, validUntil, auth}` on the PQZ entries; `PqzVerdict` rebuilt by the
+**Interfaces:** spec §11.1: the named `pqz_verdict: {pqzVerifierEpoch, validUntil, auth}` on the PQZ entries; `PqzVerdict` rebuilt by the
 node from the token, the chain, `proofSystemId()`, the simulated statement and the job's proof; `PQZ_VERDICT_MISSING`,
 `PQZ_VERDICT_NOT_EXPECTED`, `HEX_ARGS_REFUSED`; fetching from `[pqz_verifier] endpoints` with the bounded `UASig` decoder, a size limit
 and a timeout; the indexer's `pqzLastVerdictAt`, epoch and revoked state; `[pqz_verifier] refuse_shield_when_unserved` (off by default)
-and `VERIFIER_UNREACHABLE`; alerts on `PqzVerifierProposed` and `PqzVerifierRevoked`; `PQZ_KEY_ROTATED` (T55) also on an `PqzVerdictMismatch`
+and `PQZ_VERIFIER_UNREACHABLE`; alerts on `PqzVerifierProposed` and `PqzVerifierRevoked`; `PQZ_KEY_ROTATED` (T55) also on an `PqzVerdictMismatch`
 simulation error. The node holds no verifier key.
 
 - [ ] **Step 1: Failing tests:** `pqz_verdict_subobject_builds_struct`, `pqz_verdict_hex_refused`, `offchain_job_without_pqz_verdict_fetches_or_refuses`,
@@ -1598,7 +1598,7 @@ simulation error. The node holds no verifier key.
 **Files:** a new crate and binary `scaas-pqz-verifier/` (never linked into `scaas-node`), its example config (keystore name only, no
 secret), its tests; `docs/node/ops.md` draft (a separately operated trust role).
 
-**Interfaces:** spec §11.2: `POST /v1/pqz-verdict` `{token, chainId, op, statement, proof, verifierEpoch}`, the set-derived body limit,
+**Interfaces:** spec §11.2: `POST /v1/pqz-verdict` `{token, chainId, op, statement, proof, pqzVerifierEpoch}`, the set-derived body limit,
 depth ≤ 4; release address → set; statement rebuilt from state and compared; `pqz-ffi`'s `pqz_precompile`; spec §6's key checks
 (stored `pqzPop` bytes, the `R_REG` message per path and per key version, single ownership across UAs and versions) cached by
 `(ua, version, pqzKeyHash)` (3g KV-12); signs only on verdict 1;
