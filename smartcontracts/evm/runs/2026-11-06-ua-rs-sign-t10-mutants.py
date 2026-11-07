@@ -56,8 +56,9 @@ M = [
         "            locked: a.chunks.len(),")], CUSTODY),
     ("generation check skipped in Handle::derive (an old UA handle's kem_key)", [(ST, DERIVE,
         "        let mut g = self.store.write();\n        let arena = g.arena.as_mut().ok_or(Error::KeyRevoked)?;\n        self.store.key_in")], CUSTODY),
-    ("unlock of an unlocked wallet replaces its arena", [(ST, "        if g.arena.is_some() {\n            return Err(Error::Argument);\n        }\n        g.arena = Some(",
-        "        g.arena = Some(")], CUSTODY),
+    # M14 (T18 refresh): 5b7eef3a put the manifest check between the guard and the install
+    ("unlock of an unlocked wallet replaces its arena", [(ST, "        if g.arena.is_some() {\n            return Err(Error::Argument);\n        }\n        if let Some(e) = g.manifest",
+        "        if let Some(e) = g.manifest")], CUSTODY),
     ("dropping the wallet does not lock it", [(W, "impl Drop for Wallet {\n    fn drop(&mut self) {\n        self.store.lock();",
         "impl Drop for Wallet {\n    fn drop(&mut self) {\n        let _ = &self.store;")], CUSTODY),
     ("unlock skips the seed label check", [(V, "    if vault.label != \"seed\" {\n        return Err(Error::Argument);\n    }\n    let entropy = vault.open(unlock)?;",

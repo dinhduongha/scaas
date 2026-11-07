@@ -32,9 +32,9 @@ M = [
         "    Ok(SignRequest::Eip712 { domain_separator: td.domain_separator()?, struct_hash: td.struct_hash()?, typed_data: Box::new(td.clone()) })")]),
     ("the checked path zeroes a non-zero unbound field instead of refusing it", [
         (E, "\n// --- the SCaaS structs", ZEROED + "\n// --- the SCaaS structs"),
-        (P, "        let req = eip712::request(td)?;",
-            "        let z = if matches!(expect, Expect::Any(_)) { td.clone() } else { eip712::zeroed(td)? };\n"
-            "        let req = eip712::request(&z)?;\n        let td = &z;")]),
+        (P, "    let req = eip712::request(td)?;",  # T16: sign_typed_by, a free function (one indent less)
+            "    let z = if matches!(expect, Expect::Any(_)) { td.clone() } else { eip712::zeroed(td)? };\n"
+            "    let req = eip712::request(&z)?;\n    let td = &z;")]),
     ("policy check skipped", [(P, "if !matches!(expect, Expect::Any(AllowAnyTypedData)) && check(td, &expect)? != digest {",
         "if false && check(td, &expect)? != digest {")]),
     ("EIP712Domain field order changed (version before name)", [(E,

@@ -46,8 +46,9 @@ TAG_KIND = ("{ let info = [&crate::tag(0x0142)?[..], &account.to_be_bytes(), &in
             ".map_err(|_| Error::Argument)?; o }")
 M = [
     # the plan's T15 list
-    ("rnd32 fixed in a release build", [(FP, "        Ok(Draw { rnd32: os32()?, seed_enc: None, salt: None, memo_key: None })",
-        "        Ok(Draw { rnd32: [0; 32], seed_enc: None, salt: None, memo_key: None })")], facade("two_proofs_differ")),
+    # M1 (T18 refresh): 945e91d7 (T15c2) split Draw's literal over lines (salt / memo_key only under vectors)
+    ("rnd32 fixed in a release build", [(FP, "            rnd32: os32()?,\n            seed_enc: None,",
+        "            rnd32: [0; 32],\n            seed_enc: None,")], facade("two_proofs_differ")),
     ("set mismatch accepted (any proofSystemId)", [(FP, "    if *id == PQZL_ID || (pqz_ffi::PQZH && *id == PQZH_ID) {", "    if true {")],
      facade("set_mismatch_refused")),
     ("TAG(kind) for utf8(tag) in the PQZ HKDF", [(FP, "        let seed32 = hkdf_pq(seed, TAG, account, index, 32)?;",
@@ -71,13 +72,16 @@ M = [
         "        [b\"zether-cache:\", pqz_ffi::stmt::SET.as_bytes()].concat()")], facade("cache_box_key_and_label")),
     ("cache key info changed (v2)", [(FP, "const CACHE_INFO: &[u8] = b\"scaas-pqz-balance-cache-v1\";",
         "const CACHE_INFO: &[u8] = b\"scaas-pqz-balance-cache-v2\";")], facade("cache_box_key_and_label")),
-    ("the memo sealed under another key", [(FP, "            None => seed32,\n        };\n        let memo", "            None => &[0u8; 32],\n        };\n        let memo")],
+    # M12 (T18 refresh): 945e91d7 (T15c2) moved the memo key choice into Draw::memo_key
+    ("the memo sealed under another key", [(FP, "        let memo_key = d.memo_key(seed32);", "        let memo_key: &[u8] = &[0u8; 32];")],
      facade("transfer_multi_memo_and_sender_disclosure")),
     ("recipientsHash not over the legs' UAs", [(FP, "crate::keccak256(&legs.iter().flat_map(|l| l.1).collect::<Vec<u8>>())", "[0u8; 32]")],
      facade("transfer_multi_memo_and_sender_disclosure")),
     ("the receiver disclosure's own-key check skipped", [(FP, "                if s.pk != &self.pk[..] {", "                if false {")],
      facade("transfer_and_disclosures_verify")),
-    ("the sender disclosure's u / v check skipped", [(FP, "        if c.0.u[..] != *u || c.0.vs.get(i).map(|x| &x[..]) != Some(v) {", "        if false {")],
+    # M15 (T18 refresh): e7d6349d (T15e, Fable P3-1) compares u / v in constant time; the statement path (disclose_sender)
+    ("the sender disclosure's u / v check skipped", [(FP, "x[..].ct_eq(v));\n        if !bool::from(c.0.u[..].ct_eq(u) & v_eq) {",
+        "x[..].ct_eq(v));\n        if false && !bool::from(c.0.u[..].ct_eq(u) & v_eq) {")],
      facade("transfer_and_disclosures_verify", "transfer_multi_memo_and_sender_disclosure")),
     ("the balance check wrapping (an overdraft reaches the prover)", [(FP,
         "        let rest = debit.and_then(|x| bal.checked_sub(x)).ok_or(Error::Argument)?;",
@@ -88,7 +92,8 @@ M = [
     ("a float amount read as u64", [(FP, ".map(|v| v.as_u64().ok_or(Error::Argument));", ".map(|v| v.as_f64().map(|x| x as u64).ok_or(Error::Argument));")],
      facade("command_json_is_bounded_and_typed")),
     ("command JSON depth 9 read", [(FP, "pub const CMD_DEPTH: usize = 8;", "pub const CMD_DEPTH: usize = 9;")], CAPS),
-    ("command JSON past 1 MiB read", [(FP, "pub const CMD_MAX: usize = 1 << 20;", "pub const CMD_MAX: usize = 2 << 20;")],
+    # M21 (T18 refresh): T15e e7d6349d raised the cap to 4 MiB (the raw words of a debit); the mutant doubles it
+    ("command JSON past 4 MiB read", [(FP, "pub const CMD_MAX: usize = 4 << 20;", "pub const CMD_MAX: usize = 8 << 20;")],
      CAPS + facade("command_json_is_bounded_and_typed")),
     ("cache box JSON past 2 MiB read", [(FP, "pub const BOX_MAX: usize = 2 << 20;", "pub const BOX_MAX: usize = 4 << 20;")], CAPS),
     ("cache box JSON depth 2 read", [(FP, "pub const BOX_DEPTH: usize = 1;", "pub const BOX_DEPTH: usize = 2;")], CAPS),

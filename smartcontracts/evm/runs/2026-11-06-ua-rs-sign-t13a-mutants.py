@@ -33,10 +33,12 @@ M = [
     ("a handle freed twice: the move leaves the source owning", [(HPP, "    Handle(Handle&& o) noexcept : p_(std::exchange(o.p_, nullptr)) {}",
                                                                   "    Handle(Handle&& o) noexcept : p_(o.p_) {}")], cases(ONCE)),
     # the controller's
-    ("load: the features check skipped", [(CPP, '    if ((detail::reportedFeatures() & kRequiredFeatures) != kRequiredFeatures) throw Error("UAAbiMismatch", "features");\n', "")],
-     cases(LOAD)),
-    ("load: any required bit passes", [(CPP, "if ((detail::reportedFeatures() & kRequiredFeatures) != kRequiredFeatures)",
-                                        "if ((detail::reportedFeatures() & kRequiredFeatures) == 0)")], cases(LOAD)),
+    # M4, M5 (T18 refresh): 9dc7fba7 (T15c2) reads the bits once into `f` and also refuses a vectors build; the required-bits
+    # half of the condition is mutated, the vectors half (T15c2's own mutants) kept
+    ("load: the features check skipped", [(CPP, "if ((f & kRequiredFeatures) != kRequiredFeatures || (f & feature::kVectors))",
+                                           "if ((f & feature::kVectors))")], cases(LOAD)),
+    ("load: any required bit passes", [(CPP, "if ((f & kRequiredFeatures) != kRequiredFeatures || (f & feature::kVectors))",
+                                        "if ((f & kRequiredFeatures) == 0 || (f & feature::kVectors))")], cases(LOAD)),
     ("load: a factory runs without it (fromMnemonic)", [(CPP, "Wallet Wallet::fromMnemonic(Secret& words, Secret& bip39Passphrase) {\n    load();\n",
                                                           "Wallet Wallet::fromMnemonic(Secret& words, Secret& bip39Passphrase) {\n")], cases(LOAD)),
     ("a secret wiped on success only", [(RS, "    wipe(&mut [words, bip39_passphrase]);\n    r\n",

@@ -42,3 +42,4 @@ mutants M1-M35 of 35, survived or not loaded: 0
 #   new msig_member_msig_with_own_sig_refused (the nested row with slot 0's sig set; control: the row opens unchanged).
 # M35 (container JSON bound 4 -> 64 MiB): 5 MiB of spaces is malformed JSON, Argument either way; container_json_bounds
 #   now pads a valid container to exactly 4 MiB (reads, control) and one byte past it (Argument).
+# T18 (2026-11-07): the run above stands, no re-run (check at HEAD: every replacement found once): mutants M1-M35 of 35, survived or not loaded: 0

@@ -14,3 +14,7 @@ killed     | M10 ua-c: open_label_vault opens nothing | clients/ua-c/src/lib.rs 
 killed     | M11 ua-c: seal_label_vault seals the manifest whatever the label | clients/ua-c/src/lib.rs | rc=1 | 1 failed: test_imported_key_after_unlock
 killed     | M12 asan-smoke.sh without RUSTC_BOOTSTRAP=1 | clients/ua-c/tests/asan-smoke.sh | rc=101 | rustc: -Z only on nightly | 0 failed: 
 mutants M1-M12 of 12: 12 killed, 0 survived, 0 not loaded
+# T18 re-run (2026-11-07): `check` failed at 760119d8 (M4: T16b a76814e7 builds the payload's secrets from held(m), imports and
+# rebuilt PQZ keys); the mutant now filters held(m) by `raise` (a link payload without them), run again:
+killed     | M4 the link payload without the imported keys | clients/ua-rs/src/wallet/manifest.rs | rc=101 | 1 failed: link_seal_then_from_link_installs | at 760119d8 | rc=0, git diff --exit-code 0
+# T18 re-run: 1 killed, 0 survived, 0 not loaded (0 superseded; the other mutants above stand, every string checked at HEAD)

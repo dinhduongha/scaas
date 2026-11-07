@@ -55,8 +55,9 @@ M = [
         "        let p = BackupPayload")], SUITE),
     ("backup sealed with another wallet's key", [(F, "is_sender_kind(sender.kind) && sender.secret.of_store(&self.store)", "is_sender_kind(sender.kind)")], SUITE),
     ("lock wipes the manifest", [(ST, "        g.arena = None;\n        g.generation += 1;", "        g.arena = None;\n        g.manifest = Manifest::default();\n        g.generation += 1;")], SUITE),
-    ("open_vault label not checked", [(V, "        if vault.label != \"seed\" {\n            return Err(Error::Argument);\n        }\n", "")], SUITE),
-    ("seed payload length not checked on open", [(V, "        if !SEED_LENGTHS.contains(&entropy.len()) {\n            return Err(Error::VaultOpen);\n        }\n", "")], SUITE),
+    # M23, M24 (T18 refresh): T10 b2c56d53 moved both checks into the free fn seed_entropy (one indent less)
+    ("open_vault label not checked", [(V, "    if vault.label != \"seed\" {\n        return Err(Error::Argument);\n    }\n", "")], SUITE),
+    ("seed payload length not checked on open", [(V, "    if !SEED_LENGTHS.contains(&entropy.len()) {\n        return Err(Error::VaultOpen);\n    }\n", "")], SUITE),
     ("discovery past index 0 for EIP-2333 kinds", [(F, "        let n = if (0x0104..=0x0107).contains(&kind) { gap.min(1) } else { gap };", "        let n = gap;")], SUITE),
     ("link installs the entropy only", [(F, "    install(BackupPayload::from_json(pt)?, bip39_passphrase)",
         "    Wallet::from_entropy(&BackupPayload::from_json(pt)?.entropy, bip39_passphrase)")], SUITE),
@@ -67,7 +68,8 @@ M = [
         "        Vault::seal(&self.label, &gcm_open(&dek, &self.data, &aad(&self.label, \"data\"))?, new, None)")], SUITE),
     ("KEM key not written to the manifest", [(K, "        secret.note(|m| m.add_kem(ua, version));\n", "")], SUITE),
     ("payload field order changed (generation before v)", [(F, r'{{\"v\":1,\"generation\":{},', r'{{\"generation\":{},\"v\":1,')], SUITE),
-    ("restored imports dropped", [(F, "    for (e, secret) in &p.secrets {\n        w.import_at(*e, secret)?;\n    }\n", "    let _ = &p.secrets;\n")], SUITE),
+    # M33 (T18 refresh): T16b a76814e7 installs every held secret (imports and rebuilt PQZ keys) through install_held
+    ("restored imports dropped", [(F, "    for (h, secret) in &p.secrets {\n        w.install_held(*h, secret)?;\n    }\n", "    let _ = &p.secrets;\n")], SUITE),
     ("restored generation not set", [(F, "        m.backup_generation = p.generation;\n", "")], SUITE),
     ("bounds check: r and p not checked (N still bounded)", [(V, LOGN, LOGN.replace(' && p.r == 8 && p.p == 1', ''))], SUITE),
 ]

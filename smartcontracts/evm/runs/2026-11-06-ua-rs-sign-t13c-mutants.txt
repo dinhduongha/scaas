@@ -15,3 +15,13 @@ killed     | M8 unlock: the passphrase tried first when both are given | clients
 killed     | M9 the UA prefix of a wallet error code dropped | clients/ua-dart-frb/rust/src/api/wallet.rs | rc=1 | 12 failed: aead_hkdf_hmac, backup_link_restore, custody, kem_json, keys_json, pqz_facade, seal_json, secret_buffer_wiped_after_call, seed_backup_sequence, sign_json, vault_json and rs_vault_json, zether_facade | +22 -12
 killed     | M10 the seed-backup answers not wiped | clients/ua-dart-frb/lib/src/wallet.dart | rc=1 | 1 failed: seed_backup_sequence | +33 -1
 mutants M1-M10 of 10, survived or not loaded: 0
+# T18 re-run (2026-11-07): `check` failed at 760119d8. 037d5a29 (T13c follow-up, owner 2026-11-06) replaced the Dart-side _secret
+# wipe by SecretBytes (Rust-owned memory zeroed on dispose): M2, M4, M10 are superseded, their class is
+# 2026-11-06-ua-rs-sign-t13c-secrets-mutants.py (8 killed). M1 keeps its first replacement (_loaded, the one wrapper that
+# runs load()); M5: 22d978ce (T15c2) reads the bits into `f`. Run again, restored:
+killed     | M1 the load check skipped (every entry point) | clients/ua-dart-frb/lib/src/wallet.dart | rc=1 | 1 failed: load_refuses_wrong_abi_or_features | +35 -1 | at 760119d8 | rc=0, git diff --exit-code 0
+superseded | M2 a secret buffer not wiped (superseded by 037d5a29: SecretBytes, t13c-secrets) | at 760119d8 | rc=0, git diff --exit-code 0
+superseded | M4 secrets wiped on success only (superseded by 037d5a29: SecretBytes, t13c-secrets) | at 760119d8 | rc=0, git diff --exit-code 0
+killed     | M5 load: any required feature bit passes | clients/ua-dart-frb/lib/src/wallet.dart | rc=1 | 1 failed: load_refuses_wrong_abi_or_features | +35 -1 | at 760119d8 | rc=0, git diff --exit-code 0
+superseded | M10 the seed-backup answers not wiped (superseded by 037d5a29: SecretBytes, t13c-secrets) | at 760119d8 | rc=0, git diff --exit-code 0
+# T18 re-run: 2 killed, 0 survived, 0 not loaded (3 superseded; the other mutants above stand, every string checked at HEAD)

@@ -22,3 +22,7 @@ killed   | M17 unlock skips the entropy length check | src/wallet/vault.rs | rc=
 killed   | M18 Debug on KemKeyPair | src/wallet/kem.rs | rc=101 | 1 failed: src/wallet/mod.rs - wallet::Wallet (line 396)
 killed   | M19 a secret accessor in a release build | src/wallet/mod.rs | rc=101 | 1 failed: src/wallet/mod.rs - wallet::Wallet (line 405)
 mutants M1-M19 of 19, survived or not loaded: 0
+# T18 re-run (2026-11-07): `check` failed at 760119d8 (M14: 5b7eef3a put the manifest check between the guard and the install);
+# the string brought to HEAD, run again:
+killed   | M14 unlock of an unlocked wallet replaces its arena | src/wallet/store.rs | rc=101 | 1 failed: unlock_reopens_the_vault | at 760119d8 | rc=0, git diff --exit-code 0
+# T18 re-run: 1 killed, 0 survived, 0 not loaded (0 superseded; the other mutants above stand, every string checked at HEAD)

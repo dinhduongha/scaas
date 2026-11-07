@@ -28,3 +28,15 @@ killed     | M22 ua-c: zether not in the default build | clients/ua-c/Cargo.toml
 killed     | M23 ua-c: zether_public writes a zero UA | clients/ua-c/src/lib.rs | rc=1 | 1 failed: test_r33_keys
 killed     | M24 ua-c: a zether_call error echoes its request | clients/ua-c/src/lib.rs | rc=1 | 1 failed: test_error_strings_never_contain_an_input
 mutants M1-M24 of 24: 24 killed, 0 survived, 0 not loaded
+# T18 re-run (2026-11-07): `check` failed at 760119d8 (M3: T14b 3b813d16 renamed the request form rawProveTransfer and moved the
+# words form's list to zether-prover state::allowed; M22: T15 12b4577a added pqz to ua-c's default). A FINDING on the way: M3
+# SURVIVED twice, on both lists, because the test rows still named proveTransfer over transfer_bls12381.json, which the words
+# form refuses for its `acc` whatever the flag (the rows passed for the wrong reason):
+SURVIVED   | M3 includeWitness on proveTransfer's allow-list (state::allowed, the words form) | clients/zether-prover/src/state.rs | rc=0 | 0 failed | at 760119d8
+SURVIVED   | M3 includeWitness on rawProveTransfer's allow-list | clients/ua-rs/src/facade/zether.rs | rc=0 | 0 failed | at 760119d8
+# fixed by 96bbe4e6 (tests/facade_zether.rs: the request-form rows name rawProveTransfer, words-form rows on an empty base, each with
+# a positive control); M3 targets rawProveTransfer's list, new M25 the words form's; run again:
+killed     | M3 includeWitness on rawProveTransfer's allow-list | clients/ua-rs/src/facade/zether.rs | rc=101 | 1 failed: fields_outside_the_allow_list_are_refused | at 96bbe4e6 | rc=0, git diff --exit-code 0
+killed     | M25 includeWitness on the words-form proveTransfer's allow-list (zether-prover state::allowed) | clients/zether-prover/src/state.rs | rc=101 | 1 failed: fields_outside_the_allow_list_are_refused | at 96bbe4e6 | rc=0, git diff --exit-code 0
+killed     | M22 ua-c: zether not in the default build | clients/ua-c/Cargo.toml | rc=1 | 1 failed: test_zether_feature_in_the_default_build | at 96bbe4e6 | rc=0, git diff --exit-code 0
+# T18 re-run: 3 killed, 0 survived, 0 not loaded (0 superseded; M3's two survivals closed by 96bbe4e6; the other mutants above stand, every string checked at HEAD)

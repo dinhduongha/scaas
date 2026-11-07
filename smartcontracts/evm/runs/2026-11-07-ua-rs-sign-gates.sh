@@ -1,6 +1,6 @@
 #!/bin/bash
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-# ua-rs-sign T15i (T15l: the fix wave's mutants, `l-mutant-<n>`; every harness `check`ed by `mutant-logs`): the closing mechanical gates of the ARCH-POS-13 rework ("never a decryption oracle"; spec
+# ua-rs-sign T15i (T15l: the fix wave's mutants, `l-mutant-<n>`; every harness `check`ed by `mutant-logs`, T18: from T4 on): the closing mechanical gates of the ARCH-POS-13 rework ("never a decryption oracle"; spec
 # no-decryption-oracle §4.8, §5). From the worktree root, foreground, one step per call:
 #   smartcontracts/evm/runs/2026-11-07-ua-rs-sign-gates.sh <step>      GATES_FRESH=1 re-runs a step that passed
 #   smartcontracts/evm/runs/2026-11-07-ua-rs-sign-gates.sh steps       (the step list)
@@ -47,9 +47,15 @@ step() {
                    [ $r = 1 ] && git diff --exit-code ;;
     # the mutant records of the earlier tasks of the rework: each ends with no survivor, and (T15l, Fable P3-5) every harness
     # still applies at this commit (`check`: each replacement string found once), so a later change cannot leave a record that
-    # no longer tests anything
+    # no longer tests anything. T18: every harness of the round with a `check` mode (T4 on; T1a-T3d have none), refreshed at T18
     mutant-logs) local t bad=0
-                 for t in 2026-11-06-ua-rs-sign-t15b 2026-11-06-ua-rs-sign-t15c 2026-11-07-ua-rs-sign-t15c2 2026-11-07-ua-rs-sign-t15e \
+                 for t in 2026-11-05-ua-rs-sign-t4 2026-11-05-ua-rs-sign-t5 2026-11-05-ua-rs-sign-t6 2026-11-05-ua-rs-sign-t7 \
+                          2026-11-06-ua-rs-sign-t8 2026-11-06-ua-rs-sign-t9 2026-11-06-ua-rs-sign-t10 2026-11-06-ua-rs-sign-t11 \
+                          2026-11-06-ua-rs-sign-parity 2026-11-06-ua-rs-sign-t12 2026-11-06-ua-rs-sign-t12fu 2026-11-06-ua-rs-sign-t13a \
+                          2026-11-06-ua-rs-sign-t13b 2026-11-06-ua-rs-sign-t13c 2026-11-06-ua-rs-sign-t13c-secrets 2026-11-06-ua-rs-sign-t13d \
+                          2026-11-06-ua-rs-sign-t13e 2026-11-06-ua-rs-sign-t13f 2026-11-06-ua-rs-sign-t14 2026-11-06-ua-rs-sign-t15 \
+                          2026-11-06-ua-rs-sign-t16 2026-11-06-ua-rs-sign-t16a 2026-11-06-ua-rs-sign-t16b \
+                          2026-11-06-ua-rs-sign-t15b 2026-11-06-ua-rs-sign-t15c 2026-11-07-ua-rs-sign-t15c2 2026-11-07-ua-rs-sign-t15e \
                           2026-11-07-ua-rs-sign-t14b 2026-11-07-ua-rs-sign-t15g 2026-11-07-ua-rs-sign-t15k 2026-11-07-ua-rs-sign-t15i \
                           2026-11-07-ua-rs-sign-t15l 2026-11-07-ua-rs-sign-t15m 2026-11-07-ua-rs-sign-t15n \
                           2026-11-07-ua-rs-sign-t15n2; do

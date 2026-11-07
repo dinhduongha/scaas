@@ -47,7 +47,8 @@ M = [
          "        let _ = (key_ref_json, cb, out);\n        Err(fail(SCAAS_UA_ERR_KIND_UNKNOWN))")], py("WalletAbi")),
     ("the catch_unwind wrapper dropped from one export (scaas_ua_features)", [
         (LIB, "pub extern \"C\" fn scaas_ua_features() -> u64 {\n    safe(0, || {", "pub extern \"C\" fn scaas_ua_features() -> u64 {\n    (|| {"),
-        (LIB, "            | on(b::MLOCK, SCAAS_UA_FEATURE_MLOCK)\n    })\n}", "            | on(b::MLOCK, SCAAS_UA_FEATURE_MLOCK)\n    })()\n}")], HEADER),
+        # T18 refresh: 945e91d7 (T15c2) added the VECTORS bit as the last line
+        (LIB, "            | on(b::VECTORS, SCAAS_UA_FEATURE_VECTORS)\n    })\n}", "            | on(b::VECTORS, SCAAS_UA_FEATURE_VECTORS)\n    })()\n}")], HEADER),
     ("wallet_free frees the store under live children", [(W, FREE, FREE +
         "        for _ in 1..std::sync::Arc::strong_count(&self.store) {\n"
         "            unsafe { std::sync::Arc::decrement_strong_count(std::sync::Arc::as_ptr(&self.store)) };\n        }\n")], ASAN),

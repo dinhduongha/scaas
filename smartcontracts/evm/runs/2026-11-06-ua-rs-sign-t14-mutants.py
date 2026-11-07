@@ -54,8 +54,11 @@ M = [
     ("cache AAD label changed (zether-cache:bn254)", [(FZ, "const CACHE_AAD: &[u8] = b\"zether-cache:bls12381\";",
         "const CACHE_AAD: &[u8] = b\"zether-cache:bn254\";")], facade("cache_box_equals_clientkeys")),
     # the controller's
-    ("includeWitness on proveTransfer's allow-list", [(FZ, "\"proveTransfer\" => has(HEADER) || has(&[\"curve\", \"disclosureMode\",",
-        "\"proveTransfer\" => has(HEADER) || has(&[\"includeWitness\", \"curve\", \"disclosureMode\",")],
+    # M3 (T18 refresh): T14b 3b813d16 renamed the request-form command rawProveTransfer (vectors only); its allow-list is the
+    # guard this mutant meant. The test rows still named proveTransfer (now the words form, which refuses `acc` whatever the
+    # flag): the row was vacuous, fixed in tests/facade_zether.rs by T18
+    ("includeWitness on rawProveTransfer's allow-list", [(FZ, "\"rawProveTransfer\" => has(HEADER) || has(&[\"curve\", \"disclosureMode\",",
+        "\"rawProveTransfer\" => has(HEADER) || has(&[\"includeWitness\", \"curve\", \"disclosureMode\",")],
      facade("fields_outside_the_allow_list_are_refused")),
     ("the ciphertext objects not shape-checked", [(FZ, "        \"acc\" | \"ct\" | \"pending\" => flat(x, &[\"C\", \"D\"]),",
         "        \"acc\" | \"ct\" | \"pending\" => x.is_object(),")], facade("a_key_field_in_command_json_is_refused")),
@@ -95,7 +98,8 @@ M = [
     ("ua-c: zether_key_free frees nothing (a leaked handle)", [(LIB, "pub extern \"C\" fn scaas_ua_zether_key_free(k: *mut ScaasUaZetherKey) {\n    free(k)\n}",
         "pub extern \"C\" fn scaas_ua_zether_key_free(k: *mut ScaasUaZetherKey) {\n    free(std::ptr::null_mut::<ScaasUaZetherKey>());\n    let _ = k;\n}")],
      ASAN),
-    ("ua-c: zether not in the default build", [(C + "Cargo.toml", "default = [\"mlock\", \"zether\"]", "default = [\"mlock\"]")],
+    # M22 (T18 refresh): T15 12b4577a added pqz and its set to ua-c's default
+    ("ua-c: zether not in the default build", [(C + "Cargo.toml", "default = [\"mlock\", \"zether\", \"pqz\",", "default = [\"mlock\", \"pqz\",")],
      py("WalletZether.test_zether_feature_in_the_default_build")),
     ("ua-c: zether_public writes a zero UA", [(LIB, "            put(ua32.cast(), k.ua())", "            put(ua32.cast(), [0u8; 32])")],
      py("WalletZether.test_r33_keys")),
@@ -103,6 +107,11 @@ M = [
         "        return write_str(out_json, out_len, &zether(k)?.call(text(cmd)?, cstr(request_json)?)?);",
         "        return write_str(out_json, out_len, &zether(k)?.call(text(cmd)?, cstr(request_json)?).map_err(|e| Fail(Fail::from(e).0, "
         "String::from_utf8_lossy(cstr(request_json).unwrap_or_default()).into_owned()))?);")], py("WalletErrors")),
+    # T18: the words form's allow-list (T14b, zether-prover state::allowed), now reached by the fixed test rows
+    ("includeWitness on the words-form proveTransfer's allow-list (zether-prover state::allowed)", [(ZP + "src/state.rs",
+        "\"proveTransfer\" => debit(&[\"yTo\", \"yAud\", \"amount\"]),",
+        "\"proveTransfer\" => debit(&[\"includeWitness\", \"yTo\", \"yAud\", \"amount\"]),")],
+     facade("fields_outside_the_allow_list_are_refused")),
 ]
 
 if sys.argv[1:] == ["check"]:

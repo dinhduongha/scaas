@@ -22,3 +22,8 @@ killed     | M16 restore over a wallet ignores it (no rollback refusal) | client
 killed     | M17 raw digest on a UA key: Argument, not RawDigestRefused | clients/ua-cxx/src/wallet.rs | rc=8 | 1 failed: wallet_sign_json | code_of([&] { uak.signDigestRaw(Bytes(32)); }) == "UARawDigestRefused" [raw dige
 killed     | M18 a wallet error loses its UA prefix | clients/ua-cxx/src/wallet.rs | rc=8 | 1 failed: wallet_custody | code_of([&] { child->signUa(metatx, Bytes(32)); }) == "UAKeyRevoked" [child afte; code_of([&] { ik.signDigestRaw(d); }) == "UAKeyRevoked" [the old handle stays re
 mutants M1-M18 of 18: 18 killed, 0 survived, 0 not loaded
+# T18 re-run (2026-11-07): `check` failed at 760119d8 (M4, M5: 9dc7fba7, T15c2, reads the bits once into `f` and also refuses a
+# vectors build); the required-bits half of the condition mutated, the vectors half kept (T15c2's own mutants), run again:
+killed     | M4 load: the features check skipped | clients/ua-cxx/src/wallet.cpp | rc=8 | 1 failed: wallet_load_refuses_wrong_abi_or_features | at 760119d8 | rc=0, git diff --exit-code 0
+killed     | M5 load: any required bit passes | clients/ua-cxx/src/wallet.cpp | rc=8 | 1 failed: wallet_load_refuses_wrong_abi_or_features | at 760119d8 | rc=0, git diff --exit-code 0
+# T18 re-run: 2 killed, 0 survived, 0 not loaded (0 superseded; the other mutants above stand, every string checked at HEAD)

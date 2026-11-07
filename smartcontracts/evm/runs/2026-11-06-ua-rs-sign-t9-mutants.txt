@@ -40,3 +40,9 @@ mutants M1-M35 of 35, survived or not loaded: 0
 # M3 kills by a crash, not an assertion: with no bound the N = 2^31 row of vault_json_refusals asks scrypt for a 2 TiB buffer and
 #   the test binary aborts (rc 101, no test reached its assertion). M35 keeps N bounded and drops r / p: the r = 16 and p = 2 rows
 #   then run scrypt at r = 8, p = 1 and answer VaultOpen, not VaultParams (an assertion kill).
+# T18 re-run (2026-11-07): `check` failed at 760119d8 (M23, M24: T10 b2c56d53 moved both checks into the free fn seed_entropy;
+# M33: T16b a76814e7 restores every held secret through install_held); the strings brought to HEAD, run again, one per call:
+killed   | M23 open_vault label not checked | src/wallet/vault.rs | rc=101 | 1 failed: vault_json_refusals | at 760119d8 | rc=0, git diff --exit-code 0
+killed   | M24 seed payload length not checked on open | src/wallet/vault.rs | rc=101 | 2 failed: seed_payload_of_31_bytes_refused, vault_json_refusals | at 760119d8 | rc=0, git diff --exit-code 0
+killed   | M33 restored imports dropped | src/wallet/manifest.rs | rc=101 | 3 failed: backup_restores_manifest_and_secrets, link_installs_manifest_and_secrets, seal_json_restore_rows | at 760119d8 | rc=0, git diff --exit-code 0
+# T18 re-run: 3 killed, 0 survived, 0 not loaded (0 superseded; the other mutants above stand, every string checked at HEAD)

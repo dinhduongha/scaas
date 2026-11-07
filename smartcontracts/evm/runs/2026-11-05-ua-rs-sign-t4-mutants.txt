@@ -26,3 +26,7 @@ killed   | M22 native leaf UAAuth over the member's own id as the structure | sr
 killed   | M23 native record not checked against the digest | src/wallet/uasig.rs | rc=101 | 1 failed: native_slot_needs_its_typed_data
 killed   | M24 native UASig in a portable purpose | src/wallet/uasig.rs | rc=101 | 1 failed: native_ua_sig_r17
 mutants M1-M24 of 24: 24 killed, 0 survived, 0 not loaded
+# T18 re-run (2026-11-07): `check` failed at 760119d8 (M4's policy.rs line: T16 bbe8803a made sign_typed_by a free function, one
+# indent less); the string brought to HEAD, that mutant run again, one per call, restored:
+killed   | M4 the checked path zeroes a non-zero unbound field instead of refusing it | src/wallet/eip712.rs, src/wallet/policy.rs | rc=101 | 2 failed: checked_path_refuses_nonzero_unbound_relayer_and_fee_recipient, sign_json_policy_rows | at 760119d8 | rc=0, git diff --exit-code 0
+# T18 re-run: 1 killed, 0 survived, 0 not loaded (0 superseded; the other mutants above stand, every string checked at HEAD)

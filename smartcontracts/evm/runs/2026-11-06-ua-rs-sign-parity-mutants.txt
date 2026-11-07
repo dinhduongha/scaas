@@ -7,3 +7,4 @@ killed   | M3 clientkeys: the UTF-8 check with a lossy decoder (fatal: false) | 
 killed   | M4 ua-rs: webauthn_assertion UTF-8 check removed | clients/ua-rs/src/wallet/webauthn.rs | rc=101 | 2 failed: non_utf8_client_data_refused; sign_json_refusals
 killed   | M5 ua-rs: chainId wraps mod 2^64 (types 0-3) | clients/ua-rs/src/wallet/tx.rs | rc=101 | 1 failed: sign_json_tx_refusals
 # 5 killed, 0 survived, 0 not loaded. A first run had M5 (chainId read mod 2^64) SURVIVED against rows at 2^64 only: 2^64 wraps to chain 0, which is refused anyway; the row "chainId 2^64 + 1" was added and kills it.
+# T18 (2026-11-07): the run above stands, no re-run (check at HEAD: every replacement found): 5 killed, 0 survived, 0 not loaded

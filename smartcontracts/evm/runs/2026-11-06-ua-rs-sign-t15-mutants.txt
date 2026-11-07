@@ -32,3 +32,11 @@ killed     | M27 ua-c: PqzSetMismatch folded into Internal | clients/ua-c/src/li
 killed     | M28 ua-c: the leaf export writes zeros | clients/ua-c/src/lib.rs | rc=1 | 1 failed: test_leaf_is_the_ua_pq_rule
 killed     | M29 ua-c: a pqz_call error echoes its request | clients/ua-c/src/lib.rs | rc=1 | 1 failed: test_error_strings_never_contain_an_input
 mutants M1-M29 of 29, survived or not loaded: 0
+# T18 re-run (2026-11-07): `check` failed at 760119d8 (M1: 945e91d7, T15c2, split Draw's literal; M12: 945e91d7 moved the memo key
+# into Draw::memo_key; M15: e7d6349d, T15e / Fable P3-1, compares u / v in constant time, the statement path disclose_sender;
+# M21: e7d6349d raised CMD_MAX to 4 MiB, the mutant doubles it); the strings brought to HEAD, run again, one per call:
+killed     | M1 rnd32 fixed in a release build | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: two_proofs_differ | at 96bbe4e6 | rc=0, git diff --exit-code 0
+killed     | M12 the memo sealed under another key | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: transfer_multi_memo_and_sender_disclosure | at 96bbe4e6 | rc=0, git diff --exit-code 0
+killed     | M15 the sender disclosure's u / v check skipped | clients/ua-rs/src/facade/pqz.rs | rc=101 | 2 failed: transfer_and_disclosures_verify, transfer_multi_memo_and_sender_disclosure | at 96bbe4e6 | rc=0, git diff --exit-code 0
+killed     | M21 command JSON past 4 MiB read | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: pqz_inputs_past_their_caps_are_refused_unparsed | at 96bbe4e6 | rc=0, git diff --exit-code 0
+# T18 re-run: 4 killed, 0 survived, 0 not loaded (0 superseded; the other mutants above stand, every string checked at HEAD)

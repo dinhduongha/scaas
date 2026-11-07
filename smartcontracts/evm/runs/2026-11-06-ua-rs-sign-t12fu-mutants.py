@@ -51,8 +51,9 @@ M = [
     ("the payload's sender not checked to be this wallet's", [(MAN,
         "        let ua = sender.ua.filter(|_| is_sender_kind(sender.kind) && sender.secret.of_store(&self.store)).ok_or(Error::Argument)?;",
         "        let ua = sender.ua.filter(|_| is_sender_kind(sender.kind)).ok_or(Error::Argument)?;")], link("link_seal_takes_a_container_key_of_this_wallet")),
-    ("the link payload without the imported keys", [(MAN, "            let secrets = m\n                .imports\n                .iter()\n",
-        "            let secrets = m\n                .imports\n                .iter()\n                .filter(|_| raise)\n")], link("link_seal_then_from_link_installs")),
+    # M4 (T18 refresh): T16b a76814e7 builds the secrets from held(m) (imports and rebuilt PQZ keys)
+    ("the link payload without the imported keys", [(MAN, "            let secrets = held(m).map(",
+        "            let secrets = held(m).filter(|_| raise).map(")], link("link_seal_then_from_link_installs")),
     ("ua-c: link_seal under a fixed short code", [(LIB,
         "        let c = handle(w)?.0.link_seal(ua_key(handle(sender)?)?, bytes(session_kem_pk, session_kem_pk_len)?, text(short_code)?)?;",
         "        let _ = text(short_code)?;\n        let c = handle(w)?.0.link_seal(ua_key(handle(sender)?)?, bytes(session_kem_pk, session_kem_pk_len)?, \"00000000\")?;")],

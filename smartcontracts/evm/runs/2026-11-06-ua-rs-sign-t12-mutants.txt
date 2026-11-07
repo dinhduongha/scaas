@@ -25,3 +25,7 @@ killed     | M20 UASig request depth 7 read | clients/ua-rs/src/wallet/uasig.rs 
 killed     | M21 expect_json read past an unknown key | clients/ua-rs/src/wallet/seal.rs | rc=101 | 1 failed: container_json_inputs_read_the_vector_rows
 killed     | M22 UASig request: msig slots in another order than given (sorted) | clients/ua-rs/src/wallet/uasig.rs | rc=1 | 1 failed: test_sign_json_msig_rows_through_uasig
 mutants M1-M22 of 22: 22 killed, 0 survived, 0 not loaded
+# T18 re-run (2026-11-07): `check` failed at 760119d8 (M4: 945e91d7, T15c2, added the VECTORS bit as scaas_ua_features' last line);
+# the string brought to HEAD, run again:
+killed     | M4 the catch_unwind wrapper dropped from one export (scaas_ua_features) | clients/ua-c/src/lib.rs | rc=101 | 1 failed: every_export_is_guarded | at 760119d8 | rc=0, git diff --exit-code 0
+# T18 re-run: 1 killed, 0 survived, 0 not loaded (0 superseded; the other mutants above stand, every string checked at HEAD)

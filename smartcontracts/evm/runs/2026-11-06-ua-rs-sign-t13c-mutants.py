@@ -24,19 +24,21 @@ KEY_DEC = ("RustAutoOpaqueInnerUaKey(\n        ptr: *const std::ffi::c_void,\n  
            "        MoiArc::<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<UaKey>>::decrement_strong_count(ptr as _);\n")
 M = [
     # the plan's three
+    # M1 (T18 refresh): 037d5a29 (T13c follow-up) dropped _secret; _loaded is the one wrapper that runs load()
     ("the load check skipped (every entry point)", [(DW, "Future<T> _loaded<T>(Future<T> Function() f) async {\n  load();\n",
-                                                     "Future<T> _loaded<T>(Future<T> Function() f) async {\n"),
-                                                    (DW, "  try {\n    load();\n    return await f();", "  try {\n    return await f();")]),
-    ("a secret buffer not wiped", [(DW, "  } finally {\n    secrets.forEach(wipe);\n  }", "  } finally {}")]),
+                                                     "Future<T> _loaded<T>(Future<T> Function() f) async {\n")]),
+    # M2, M4, M10 superseded by 037d5a29 (T13c follow-up): secrets are Rust-owned SecretBytes zeroed on dispose, the Dart-side
+    # wipe of _secret is gone; its mutants are 2026-11-06-ua-rs-sign-t13c-secrets-mutants.py
+    ("a secret buffer not wiped (superseded by 037d5a29: SecretBytes, t13c-secrets)", []),
     ("a handle freed twice (the generated native UaKey release decrements twice)",
      [(GEN, "pub extern \"C\" fn frbgen_scaas_ua_frb_rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generated" + KEY_DEC,
        "pub extern \"C\" fn frbgen_scaas_ua_frb_rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generated" + KEY_DEC
        + "        MoiArc::<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<UaKey>>::decrement_strong_count(ptr as _);\n")]),
     # the controller's
-    ("secrets wiped on success only", [(DW, "  try {\n    load();\n    return await f();\n  } finally {\n    secrets.forEach(wipe);\n  }",
-                                        "  load();\n  final r = await f();\n  secrets.forEach(wipe);\n  return r;")]),
-    ("load: any required feature bit passes", [(DW, "if (UaLoadHook.reportedFeatures() & kRequiredFeatures != kRequiredFeatures)",
-                                                "if (UaLoadHook.reportedFeatures() & kRequiredFeatures == BigInt.zero)")]),
+    ("secrets wiped on success only (superseded by 037d5a29: SecretBytes, t13c-secrets)", []),
+    # M5 (T18 refresh): 22d978ce (T15c2) reads the bits once into `f` and also refuses a vectors build
+    ("load: any required feature bit passes", [(DW, "if (f & kRequiredFeatures != kRequiredFeatures ||",
+                                                "if (f & kRequiredFeatures == BigInt.zero ||")]),
     ("kemEphemeral runs without the load check", [(DW, "Future<g.UaKemKey> kemEphemeral() => _loaded(g.kemEphemeral);",
                                                    "Future<g.UaKemKey> kemEphemeral() => g.kemEphemeral();")]),
     ("a version outside u64 not refused before frb wraps it", [(DW, "    v.isNegative || v.bitLength > 64 ? throw const UAError(code: 'UAArgument', reason: '') : v;",
@@ -46,8 +48,7 @@ M = [
                                                                  "    if let Some(p) = prf32 {\n")]),
     ("the UA prefix of a wallet error code dropped", [(RW, "e => UAError { code: format!(\"UA{}\", e.code()), reason: String::new() },",
                                                         "e => UAError { code: e.code().to_string(), reason: String::new() },")]),
-    ("the seed-backup answers not wiped", [(DW, "    _secret(answers, () => g.seedBackupVerify(b: b, answers: answers));",
-                                            "    _secret(const [], () => g.seedBackupVerify(b: b, answers: answers));")]),
+    ("the seed-backup answers not wiped (superseded by 037d5a29: SecretBytes, t13c-secrets)", []),
 ]
 
 if sys.argv[1:] == ["check"]:
@@ -67,6 +68,9 @@ def run(cmd_cwd):
 bad = 0
 lo, hi = (int(sys.argv[1]), int(sys.argv[2])) if len(sys.argv) == 3 else (1, len(M))
 for n, (name, reps) in enumerate(M[lo - 1:hi], lo):
+    if not reps:
+        print(f"superseded | M{n} {name}", flush=True)
+        continue
     orig = {f: open(f, encoding="utf-8").read() for f, _, _ in reps}
     new = dict(orig)
     for f, a, b in reps:
