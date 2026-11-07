@@ -7,6 +7,11 @@ owner, among them one change to the approved index (Q12: class and kind ids `uin
 built yet; the plan tasks T67–T70 of [`2026-11-04-ua-mtx-merge.md`](../plans/2026-11-04-ua-mtx-merge.md) start after 3g (T57).
 **Place (owner 2026-11-07):** after 3g (T51–T57), before 3f: work order 3e → 3g → factory index → 3f → 3h → 3c. Branch
 `ua-mtx-merge`.
+**Same addresses on every chain (owner decisions A and B, 2026-11-07):** CREATE3 on every creation path, chain-neutral
+releases, the chain values written into each instance by the factory: draft spec
+[`2026-11-07-chain-neutral-releases.md`](2026-11-07-chain-neutral-releases.md). Where it lands it changes this spec's creation
+salt and `predictAddress` (§8.4 step 3), the release constructor (§8.2, §8.8) and, if its S3 recommendation is taken, the
+record's `creator` (§2.1, a `bytes32` UA id, still three slots).
 
 **Owner, 2026-11-07:** an owner or creator must be able to list the contracts they made (for example the owner creates many
 gift-card tokens and needs their list) from contract **state**, not from events ("không lọc event, vì mất": logs and history
