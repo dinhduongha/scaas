@@ -1,26 +1,29 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {IOpenFactory} from "./IOpenFactory.sol";
 import {IFactoryToken} from "./IFactoryToken.sol";
+import {ChainEnvCode} from "./ChainEnvCode.sol";
+import {Create3} from "./Create3.sol";
 import {ISCaaSDex} from "../dex/ISCaaSDex.sol";
 import {IGovernance} from "../governance/IGovernance.sol";
 import {SigCheck} from "../common/SigCheck.sol";
 
-/// @title `OpenFactory` (CTR-TOK-03, CTR-TOK-25): the one token factory of a chain (plan 5g-Z2).
-/// @notice Anyone creates tokens and DEXes; the registrar publishes deployment environments (`publishEnv`, versioned
-///         per kind, never changed), deploys releases from init code (`deployImplementation`, `deployDexImplementation`:
-///         the factory's own `CREATE2`, the env version the registrar names appended as constructor arguments, so the
-///         dependencies — Zether and PQZ verifiers included, CTR-ZTH-20 — are immutables of the code by construction;
-///         each linked library checked by code hash), enables kinds and deprecates releases: it has no power over any
-///         token or DEX.
-///         A release must answer `kind()`, `factory() == this` and `chainUid() == chainUid` (CTR-GEN-05); the catalogue
-///         is append-only; a release is usable `noticePeriod` seconds after its deployment, and a deprecated one is no
-///         longer creatable (owner 2026-10-20). Creation clones by `CREATE2` with the salt scoped by the creator and
-///         calls `initialize(creator, version, initArgs)` in the same call; `initArgs` and every kind-specific check
-///         (flags, legs, the Zether / PQZ verifier and chain gates) are the implementation's. The registrar's key is the
-///         trust root for code (a multisig / UA msig before mainnet). **Zether is UNAUDITED.**
+/// @title `OpenFactory` (CTR-TOK-03, CTR-TOK-25, CTR-TOK-29): the one token factory of a chain (plan 5g-Z2), at the same
+///        address on every chain.
+/// @notice Anyone creates tokens and DEXes; the registrar configures the chain once (`configureChain`: `chain_uid`, the
+///         notice period, the router), publishes deployment environments (`publishEnv`, versioned per kind, never
+///         changed), deploys releases from init code (`deployImplementation`, `deployDexImplementation`: the factory's own
+///         `CREATE2` of chain-neutral code, `abi.encode(factory, implArgs)` appended, so a release has the same address on
+///         every chain; each linked library checked by code hash; the env checked by the release's `validateEnv`), enables
+///         kinds and deprecates releases: it has no power over any token or DEX.
+///         The catalogue is append-only; a release is usable `noticePeriod` seconds after its deployment, and a deprecated
+///         one is no longer creatable (owner 2026-10-20). Creation is CREATE3 (chain-neutral spec §4) with the salt
+///         `keccak256(abi.encode(creatorId, class, kind, salt))`: an EIP-1167 clone of the release with the instance's
+///         `ChainEnv` appended to its code (`ChainEnvCode`), `initialize(creatorId, version, initArgs)` in the same call,
+///         then `chainUid()` must be this factory's. `initArgs` and every kind-specific check (flags, legs, the Zether /
+///         PQZ verifier and chain gates) are the implementation's. The registrar's key is the trust root for code (a
+///         multisig / UA msig before mainnet). **Zether and PQZ are UNAUDITED.**
 ///         The index (CTR-TOK-27, factory index spec §2): one record per created contract and three append-only lists per
 ///         class (all, by owner UA at creation, by creator), written in the creating call, read by paged views.
 contract OpenFactory is IOpenFactory {
@@ -40,13 +43,13 @@ contract OpenFactory is IOpenFactory {
     uint256 public constant MAX_PAGE = 100;
     uint256 internal constant MAX_LEGS = 8;
     uint8 public constant DEX_DOMAIN = type(uint8).max;
-    /// @dev The longest notice period (review 5g-Z2 P2-4): the period is immutable, and near `2^64` every
-    ///      `deployImplementation` would overflow `usableFrom` and brick the catalogue.
+    /// @dev The longest notice period (review 5g-Z2 P2-4): near `2^64` every `deployImplementation` would overflow
+    ///      `usableFrom` and brick the catalogue.
     uint64 public constant MAX_NOTICE_PERIOD = 30 days;
+    /// @dev EIP-2935's history contract, queried with a raw 32-byte block number (chain-neutral spec §3.1, Fable P3-2).
+    address internal constant HISTORY = 0x0000F90827F1C53a10cb7A02335B175320002935;
 
     address public immutable registrar;
-    bytes32 public immutable chainUid;
-    uint64 public immutable noticePeriod;
 
     mapping(uint8 => mapping(uint16 => IFactoryToken.Env)) private _envs;
     mapping(uint8 => mapping(uint16 => bytes32)) private _envHash;
@@ -59,19 +62,21 @@ contract OpenFactory is IOpenFactory {
     uint256 private _enabled = 3;
     /// @dev Slot 8, where the record's predecessor `_info` was (the Zether state vectors read it).
     mapping(address => Rec) private _rec; // contractClass 0 = not made here
-    mapping(address => mapping(address => address[])) private _wrappers;
+    mapping(bytes32 => mapping(address => address[])) private _wrappers;
     mapping(address => address[]) private _byUnderlying;
     mapping(uint16 => address[]) private _all;
     mapping(bytes32 => mapping(uint16 => address[])) private _byOwner; // never for ownerUA 0
     mapping(bytes32 => mapping(uint16 => address[])) private _byCreator;
+    /// @notice This chain's values, written once by `configureChain` (chain-neutral spec §3.1); 0 until then. After the
+    ///         maps, so the record stays at slot 8.
+    bytes32 public chainUid;
+    uint64 public noticePeriod;
+    address public govRouter;
 
-    /// @param noticePeriod_ seconds between a release's deployment and its first use (7622: minutes, 22776: days).
-    constructor(address registrar_, bytes32 chainUid_, uint64 noticePeriod_) {
-        if (chainUid_ == bytes32(0)) revert ChainUidZero();
-        if (noticePeriod_ > MAX_NOTICE_PERIOD) revert NoticePeriodTooLong(noticePeriod_);
+    /// @param registrar_ the only constructor argument, the same on every chain (an EOA, or a contract deployed
+    ///        deterministically with its owners in its init code: chain-neutral spec §3.4).
+    constructor(address registrar_) {
         registrar = registrar_;
-        chainUid = chainUid_;
-        noticePeriod = noticePeriod_;
     }
 
     modifier onlyRegistrar() {
@@ -80,13 +85,46 @@ contract OpenFactory is IOpenFactory {
         _;
     }
 
+    /// @dev Every creation, publish and deploy entry: nothing before `configureChain`.
+    modifier configured() {
+        if (chainUid == bytes32(0)) revert ChainNotConfigured();
+        _;
+    }
+
+    // ------------------------------------------------------------------ the chain (chain-neutral spec §3.1)
+
+    /// @notice Registrar only, once. `chainUid_` must equal the genesis hash whenever the EVM can prove it
+    ///         (`BLOCKHASH(0)` within 256 blocks, else EIP-2935; no answer is nothing to compare); a reference block
+    ///         `refBlock ≠ 0` must have the hash `refHash` on this chain (no answer is a mismatch), which ties the
+    ///         transaction to this chain against a sibling with the same chain id (Fable P1-1); a router names the same
+    ///         `chainUid()`.
+    function configureChain(bytes32 chainUid_, uint64 noticePeriod_, address govRouter_, uint256 refBlock, bytes32 refHash)
+        external onlyRegistrar
+    {
+        if (chainUid != bytes32(0)) revert ChainAlreadyConfigured();
+        if (chainUid_ == bytes32(0)) revert ChainUidZero();
+        if (noticePeriod_ > MAX_NOTICE_PERIOD) revert NoticePeriodTooLong(noticePeriod_);
+        bytes32 g = block.number <= 256 ? blockhash(0) : _history(0);
+        if (g != bytes32(0) && g != chainUid_) revert ChainUidNotGenesis(chainUid_, g);
+        if (refBlock != 0) {
+            bytes32 a = blockhash(refBlock);
+            if (a == bytes32(0)) a = _history(refBlock);
+            if (a == bytes32(0) || a != refHash) revert RefBlockMismatch(refBlock, refHash, a);
+        }
+        if (govRouter_ != address(0)) _requireChainUid(govRouter_, chainUid_);
+        (chainUid, noticePeriod, govRouter) = (chainUid_, noticePeriod_, govRouter_);
+        emit ChainConfigured(chainUid_, noticePeriod_, govRouter_);
+    }
+
     // ------------------------------------------------------------------ environments
 
-    function publishEnv(TokenKind kind, uint16 envVersion, IFactoryToken.Env calldata env) external onlyRegistrar {
+    function publishEnv(TokenKind kind, uint16 envVersion, IFactoryToken.Env calldata env)
+        external onlyRegistrar configured
+    {
         _publish(uint8(kind), envVersion, env);
     }
 
-    function publishDexEnv(uint16 envVersion, IFactoryToken.Env calldata env) external onlyRegistrar {
+    function publishDexEnv(uint16 envVersion, IFactoryToken.Env calldata env) external onlyRegistrar configured {
         _publish(DEX_DOMAIN, envVersion, env);
     }
 
@@ -110,15 +148,15 @@ contract OpenFactory is IOpenFactory {
         uint16 envVersion,
         bytes calldata initcode,
         bytes calldata implArgs
-    ) external onlyRegistrar returns (address implementation) {
+    ) external onlyRegistrar configured returns (address implementation) {
         if (kind == TokenKind.RETIRED_6 || kind == TokenKind.RETIRED_7) revert KindRetired(kind);
         if (version == 0) revert VersionUnknown(kind, 0);
         address existing = _releases[kind][version].implementation;
         if (existing != address(0)) revert VersionAlreadyRegistered(kind, version, existing);
         Release memory r;
-        (implementation, r) =
-            _deploy(uint8(kind), envVersion, keccak256(abi.encode(kind, version)), initcode, implArgs);
-        _checkImplementation(kind, implementation);
+        (implementation, r) = _deploy(uint8(kind), envVersion, keccak256(abi.encode(kind, version)), initcode,
+            abi.encode(address(this), implArgs));
+        _checkImplementation(kind, implementation, _chainEnv(uint8(kind), envVersion));
         _releases[kind][version] = r;
         if (version > _latest[kind]) _latest[kind] = version;
         emit ImplementationDeployed(kind, version, implementation, r.envVersion, r.envHash, keccak256(initcode),
@@ -156,26 +194,33 @@ contract OpenFactory is IOpenFactory {
     // ------------------------------------------------------------------ create
 
     function createToken(TokenKind kind, uint64 version, bytes calldata initArgs, bytes32 salt)
-        external returns (address)
+        external configured returns (address)
     {
         Release storage r = _releases[kind][version];
         address impl = r.implementation;
         if (impl == address(0)) revert VersionUnknown(kind, version);
         if (r.deprecated) revert VersionDeprecated(kind, version);
         if (block.timestamp < r.usableFrom) revert VersionNotYetUsable(kind, version, r.usableFrom);
-        return _create(kind, version, impl, initArgs, salt);
+        return _create(kind, version, impl, r.envVersion, initArgs, salt);
     }
 
+    /// @notice The clone carries the kind's latest published env (the registrar's values for this chain).
     function createTokenUnregistered(TokenKind kind, address implementation, bytes calldata initArgs, bytes32 salt)
-        external returns (address)
+        external configured returns (address)
     {
         if (uint8(kind) >= uint8(TokenKind.NORMAL_ZETHER)) revert UnregisteredConfidentialKind(kind);
-        _checkImplementation(kind, implementation);
-        return _create(kind, 0, implementation, initArgs, salt);
+        uint16 v = _latestEnv[uint8(kind)];
+        if (v == 0) revert EnvUnknown(uint8(kind), 0);
+        _checkImplementation(kind, implementation, _chainEnv(uint8(kind), v));
+        return _create(kind, 0, implementation, v, initArgs, salt);
     }
 
-    function predictAddress(address implementation, address creator, bytes32 salt) public view returns (address) {
-        return Clones.predictDeterministicAddress(implementation, _salt(creator, salt));
+    /// @notice Where `creatorId`'s creation of `(contractClass, kind)` with `salt` is, on every chain (CREATE3): neither
+    ///         the version, the implementation nor the env moves it (chain-neutral spec §4.2, §4.3).
+    function predictAddress(bytes32 creatorId, uint16 contractClass, uint16 kind, bytes32 salt)
+        external view returns (address)
+    {
+        return Create3.addressOf(address(this), _s(creatorId, contractClass, kind, salt));
     }
 
     // ------------------------------------------------------------------ provenance
@@ -199,17 +244,17 @@ contract OpenFactory is IOpenFactory {
         if (r.contractClass == CLASS_TOKEN) return (TokenKind(r.kind), r.version);
     }
 
-    function getWrapper(address creator, address underlying) external view returns (address) {
-        address[] storage w = _wrappers[creator][underlying];
+    function getWrapper(bytes32 creatorId, address underlying) external view returns (address) {
+        address[] storage w = _wrappers[creatorId][underlying];
         return w.length == 0 ? address(0) : w[0];
     }
 
-    function getWrapperCount(address creator, address underlying) external view returns (uint256) {
-        return _wrappers[creator][underlying].length;
+    function getWrapperCount(bytes32 creatorId, address underlying) external view returns (uint256) {
+        return _wrappers[creatorId][underlying].length;
     }
 
-    function getWrapperAt(address creator, address underlying, uint256 index) external view returns (address) {
-        return _wrappers[creator][underlying][index];
+    function getWrapperAt(bytes32 creatorId, address underlying, uint256 index) external view returns (address) {
+        return _wrappers[creatorId][underlying][index];
     }
 
     function deployCountFor(address underlying) external view returns (uint256) {
@@ -223,19 +268,18 @@ contract OpenFactory is IOpenFactory {
     // ------------------------------------------------------------------ DEX (CTR-DEX-24)
 
     function deployDexImplementation(uint64 version, uint16 envVersion, bytes calldata initcode, bytes calldata implArgs)
-        external onlyRegistrar returns (address implementation)
+        external onlyRegistrar configured returns (address implementation)
     {
         if (version == 0) revert DexVersionUnknown(0);
         address existing = _dexReleases[version].implementation;
         if (existing != address(0)) revert DexVersionAlreadyRegistered(version, existing);
         Release memory r;
-        (implementation, r) =
-            _deploy(DEX_DOMAIN, envVersion, keccak256(abi.encode("dex", version)), initcode, implArgs);
+        (implementation, r) = _deploy(DEX_DOMAIN, envVersion, keccak256(abi.encode("dex", version)), initcode,
+            abi.encode(address(this), implArgs));
         if (!SigCheck.isContract(implementation)) revert ImplementationNotAContract(implementation);
         (bool ok, uint256 got) = _word(implementation, bytes4(keccak256("factory()")));
         if (!ok || got != uint256(uint160(address(this)))) revert ImplementationFactoryMismatch(implementation);
-        (ok, got) = _word(implementation, bytes4(keccak256("chainUid()")));
-        if (!ok || bytes32(got) != chainUid) revert ChainUidMismatch(chainUid, ok ? bytes32(got) : bytes32(0));
+        _validateEnv(implementation, _chainEnv(DEX_DOMAIN, envVersion));
         _dexReleases[version] = r;
         if (version > _latestDex) _latestDex = version;
         emit DexImplementationDeployed(version, implementation, r.envVersion, r.envHash, keccak256(initcode),
@@ -258,20 +302,19 @@ contract OpenFactory is IOpenFactory {
 
     function latestDexVersion() external view returns (uint64) { return _latestDex; }
 
-    function createDex(uint64 version, bytes calldata initArgs, bytes32 salt) external returns (address dex) {
+    function createDex(uint64 version, bytes calldata initArgs, bytes32 salt) external configured returns (address dex) {
         Release storage r = _dexReleases[version];
         address impl = r.implementation;
         if (impl == address(0)) revert DexVersionUnknown(version);
         if (r.deprecated) revert DexVersionDeprecated(version);
         if (block.timestamp < r.usableFrom) revert DexVersionNotYetUsable(version, r.usableFrom);
-        bytes32 s = _salt(msg.sender, salt);
-        address predicted = Clones.predictDeterministicAddress(impl, s);
-        if (predicted.code.length != 0 || _rec[predicted].contractClass != 0) revert SaltAlreadyUsed(predicted);
-        dex = Clones.cloneDeterministic(impl, s);
-        ISCaaSDex(dex).initialize(msg.sender, version, initArgs);
+        bytes32 creatorId = _creatorId();
+        dex = _instance(creatorId, CLASS_DEX, 0, salt, impl, _chainEnv(DEX_DOMAIN, r.envVersion));
+        ISCaaSDex(dex).initialize(creatorId, version, initArgs);
+        _requireChainUid(dex, chainUid);
         bytes32 owner = IGovernance(dex).owner();
-        _index(dex, owner, CLASS_DEX, 0, version);
-        emit DexCreated(dex, msg.sender, version, impl, owner);
+        _index(dex, creatorId, owner, CLASS_DEX, 0, version);
+        emit DexCreated(dex, creatorId, version, impl, owner);
     }
 
     function isDex(address dex) external view returns (bool) { return _rec[dex].contractClass == CLASS_DEX; }
@@ -308,14 +351,15 @@ contract OpenFactory is IOpenFactory {
     function _publish(uint8 domain, uint16 envVersion, IFactoryToken.Env calldata env) private {
         if (envVersion == 0) revert EnvUnknown(domain, 0);
         if (_envHash[domain][envVersion] != bytes32(0)) revert EnvAlreadyPublished(domain, envVersion);
-        if (env.factory != address(this) || env.chainUid != chainUid || env.libs.length != env.libCodeHashes.length) {
-            revert EnvInvalid();
-        }
+        if (env.libs.length != env.libCodeHashes.length || env.deps.length > ChainEnvCode.MAX_DEPS
+            || env.params.length > ChainEnvCode.MAX_PARAMS) revert EnvInvalid();
         // An empty pin (0: no account; keccak256(""): no code) checks nothing (review 5g-Z2 P2-1).
         for (uint256 i; i < env.libCodeHashes.length; ++i) {
             bytes32 h = env.libCodeHashes[i];
             if (h == bytes32(0) || h == keccak256("")) revert EnvInvalid();
         }
+        // the registry names this chain (once per env; it was `initialize`'s check per creation, Fable P3-1)
+        if (env.registry != address(0)) _requireChainUid(env.registry, chainUid);
         _envs[domain][envVersion] = env;
         bytes32 envHash = keccak256(abi.encode(env));
         _envHash[domain][envVersion] = envHash;
@@ -323,9 +367,16 @@ contract OpenFactory is IOpenFactory {
         emit EnvPublished(domain, envVersion, envHash);
     }
 
+    /// @dev The instance env of `domain`'s env `v`: this factory's `chainUid` and router, the registrar's values.
+    function _chainEnv(uint8 domain, uint16 v) private view returns (IFactoryToken.ChainEnv memory c) {
+        IFactoryToken.Env storage e = _envs[domain][v];
+        return IFactoryToken.ChainEnv(chainUid, e.registry, govRouter, e.smartKeyAccountImpl, e.hedera, e.deps, e.params);
+    }
+
     /// @dev The domain's env `v` (named by the registrar): every linked library's code hash, then `CREATE2` of
-    ///      `initcode ‖ abi.encode(v, env, implArgs)`; a constructor's revert is bubbled, an empty failure is `DeployFailed`.
-    function _deploy(uint8 domain, uint16 v, bytes32 salt, bytes calldata initcode, bytes calldata implArgs)
+    ///      `initcode ‖ args` (chain-neutral: no env in it); a constructor's revert is bubbled, an empty failure is
+    ///      `DeployFailed`.
+    function _deploy(uint8 domain, uint16 v, bytes32 salt, bytes calldata initcode, bytes memory args)
         private returns (address at, Release memory r)
     {
         if (_envHash[domain][v] == bytes32(0)) revert EnvUnknown(domain, v);
@@ -334,7 +385,7 @@ contract OpenFactory is IOpenFactory {
             bytes32 got = env.libs[i].codehash;
             if (got != env.libCodeHashes[i]) revert LibraryCodeHashMismatch(env.libs[i], env.libCodeHashes[i], got);
         }
-        bytes memory code = bytes.concat(initcode, abi.encode(v, env, implArgs));
+        bytes memory code = bytes.concat(initcode, args);
         assembly ("memory-safe") {
             at := create2(0, add(code, 32), mload(code), salt)
             if iszero(at) {
@@ -349,22 +400,73 @@ contract OpenFactory is IOpenFactory {
         r = Release(at, v, _envHash[domain][v], uint64(block.timestamp) + noticePeriod, false);
     }
 
-    /// @dev Code, `kind()`, `factory()`, `chainUid()`: each read by staticcall, a missing or short answer refused.
-    function _checkImplementation(TokenKind kind, address implementation) private view {
+    /// @dev Code, `kind()`, `factory()`, each read by staticcall (a missing or short answer refused), then
+    ///      `validateEnv(env)`.
+    function _checkImplementation(TokenKind kind, address implementation, IFactoryToken.ChainEnv memory env)
+        private view
+    {
         if (!SigCheck.isContract(implementation)) revert ImplementationNotAContract(implementation);
         (bool ok, uint256 got) = _word(implementation, IFactoryToken.kind.selector);
         if (!ok) got = type(uint256).max;
         if (got != uint256(kind)) revert VersionKindMismatch(kind, got);
         (ok, got) = _word(implementation, bytes4(keccak256("factory()")));
         if (!ok || got != uint256(uint160(address(this)))) revert ImplementationFactoryMismatch(implementation);
-        (ok, got) = _word(implementation, bytes4(keccak256("chainUid()")));
-        if (!ok || bytes32(got) != chainUid) revert ChainUidMismatch(chainUid, ok ? bytes32(got) : bytes32(0));
+        _validateEnv(implementation, env);
+    }
+
+    /// @dev The release's own checks of the env (`validateEnv`, by staticcall): its revert bubbled, an empty one
+    ///      `EnvRefused`.
+    function _validateEnv(address implementation, IFactoryToken.ChainEnv memory env) private view {
+        (bool ok, bytes memory ret) = implementation.staticcall(abi.encodeCall(IFactoryToken.validateEnv, (env)));
+        if (ok) return;
+        if (ret.length == 0) revert EnvRefused(implementation);
+        assembly ("memory-safe") {
+            revert(add(ret, 32), mload(ret))
+        }
+    }
+
+    /// @dev `target.chainUid()` is `expected` (`ChainUidMismatch`, `got` 0 when it does not answer one word).
+    function _requireChainUid(address target, bytes32 expected) private view {
+        (bool ok, uint256 got) = _word(target, bytes4(keccak256("chainUid()")));
+        if (!ok || bytes32(got) != expected) revert ChainUidMismatch(expected, ok ? bytes32(got) : bytes32(0));
+    }
+
+    /// @dev EIP-2935's answer for block `n`: a revert or a return of another length is no answer (0).
+    function _history(uint256 n) private view returns (bytes32 h) {
+        (bool ok, bytes memory r) = HISTORY.staticcall(abi.encode(n));
+        if (ok && r.length == 32) h = abi.decode(r, (bytes32));
+    }
+
+    /// @dev The creator's UA id (S3): the direct caller.
+    function _creatorId() private view returns (bytes32) {
+        return bytes32(uint256(uint160(msg.sender)));
+    }
+
+    function _s(bytes32 creatorId, uint16 contractClass, uint16 kind, bytes32 salt) private pure returns (bytes32) {
+        return keccak256(abi.encode(creatorId, contractClass, kind, salt));
+    }
+
+    /// @dev The CREATE3 instance of `(creatorId, contractClass, kind, salt)`: a clone of `impl` with `env` appended.
+    ///      Salt used (`SaltAlreadyUsed`): the proxy exists, the address has a record or code. `InstanceNotCreated`: the
+    ///      proxy's `CREATE` failed (it answers success there, Fable P2-5).
+    function _instance(bytes32 creatorId, uint16 contractClass, uint16 kind, bytes32 salt, address impl,
+        IFactoryToken.ChainEnv memory env) private returns (address c)
+    {
+        bytes32 s = _s(creatorId, contractClass, kind, salt);
+        address proxy = Create3.proxyOf(address(this), s);
+        address predicted = Create3.instanceOf(proxy);
+        if (proxy.code.length != 0 || _rec[predicted].contractClass != 0 || predicted.code.length != 0) {
+            revert SaltAlreadyUsed(predicted);
+        }
+        c = Create3.deploy(s, ChainEnvCode.initCode(impl, ChainEnvCode.encode(env)));
+        if (c == address(0)) revert InstanceNotCreated();
     }
 
     /// @dev The record of a creation (after `initialize`, so `ownerUA` is the contract's own answer) and the three pushes;
-    ///      `ownerUA` 0 goes to no owner list. The creator is the direct caller.
-    function _index(address c, bytes32 ownerUA, uint16 contractClass, uint16 kind, uint64 version) private {
-        bytes32 creatorId = bytes32(uint256(uint160(msg.sender)));
+    ///      `ownerUA` 0 goes to no owner list.
+    function _index(address c, bytes32 creatorId, bytes32 ownerUA, uint16 contractClass, uint16 kind, uint64 version)
+        private
+    {
         _rec[c] = Rec(creatorId, ownerUA, contractClass, kind, version, uint64(block.number), uint64(block.timestamp));
         _all[contractClass].push(c);
         if (ownerUA != 0) _byOwner[ownerUA][contractClass].push(c);
@@ -401,31 +503,27 @@ contract OpenFactory is IOpenFactory {
         if (ok) w = abi.decode(ret, (uint256));
     }
 
-    function _salt(address creator, bytes32 salt) private pure returns (bytes32) {
-        return keccak256(abi.encode(creator, salt));
-    }
-
-    /// @dev The generic gate (the kind enabled), the clone, `initialize` with the creator's `initArgs`, then the record and
-    ///      its lists, the leg index and the event from the token's own views (`owner()` read once, after `initialize`).
-    function _create(TokenKind kind, uint64 version, address impl, bytes calldata initArgs, bytes32 salt)
+    /// @dev The generic gate (the kind enabled), the CREATE3 clone with its env, `initialize` with the creator's
+    ///      `initArgs`, the `chainUid()` post-check (an unregistered implementation's code is unvetted: what it reports as
+    ///      its domain salt must be this factory's), then the record and its lists, the leg index and the event from the
+    ///      token's own views (`owner()` read once, after `initialize`).
+    function _create(TokenKind kind, uint64 version, address impl, uint16 envVersion, bytes calldata initArgs, bytes32 salt)
         private returns (address token)
     {
         if (!kindEnabled(kind)) revert KindDisabled(kind);
-        bytes32 s = _salt(msg.sender, salt);
-        address predicted = Clones.predictDeterministicAddress(impl, s);
-        // a registered clone is never deleted; an unregistered implementation could self-destruct its clone in `initialize`
-        if (_rec[predicted].contractClass != 0 || predicted.code.length != 0) revert SaltAlreadyUsed(predicted);
-        token = Clones.cloneDeterministic(impl, s);
-        IFactoryToken(token).initialize(msg.sender, version, initArgs);
+        bytes32 creatorId = _creatorId();
+        token = _instance(creatorId, CLASS_TOKEN, uint16(kind), salt, impl, _chainEnv(uint8(kind), envVersion));
+        IFactoryToken(token).initialize(creatorId, version, initArgs);
+        _requireChainUid(token, chainUid);
         IGovernance t = IGovernance(token);
         bytes32 owner = t.owner();
-        _index(token, owner, CLASS_TOKEN, uint16(kind), version);
+        _index(token, creatorId, owner, CLASS_TOKEN, uint16(kind), version);
         address[] memory us = IFactoryToken(token).underlyings();
         if (us.length > MAX_LEGS) revert UnderlyingCountInvalid(us.length);
         for (uint256 i; i < us.length; ++i) {
-            _wrappers[msg.sender][us[i]].push(token);
+            _wrappers[creatorId][us[i]].push(token);
             _byUnderlying[us[i]].push(token);
         }
-        emit TokenCreated(token, msg.sender, kind, version, impl, t.features(), t.lockedFeatures(), owner, us);
+        emit TokenCreated(token, creatorId, kind, version, impl, t.features(), t.lockedFeatures(), owner, us);
     }
 }

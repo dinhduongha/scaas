@@ -3,10 +3,12 @@ pragma solidity ^0.8.24;
 
 import {IFactoryToken} from "./IFactoryToken.sol";
 
-/// @title The one token factory of a chain (CTR-TOK-03, CTR-TOK-25; plan 5g-Z2): an append-only catalogue of releases
-///        per kind and of DEX releases, each the factory's own `CREATE2` of the registrar's init code with a published,
-///        versioned deployment environment (`IFactoryToken.Env`) appended; EIP-1167 clones initialised in the same call
-///        with the creator's opaque `initArgs`; no power over any token or DEX it created.
+/// @title The one token factory of a chain (CTR-TOK-03, CTR-TOK-25, CTR-TOK-29; plan 5g-Z2): an append-only catalogue of
+///        releases per kind and of DEX releases, each the factory's own `CREATE2` of the registrar's chain-neutral init
+///        code, under a published, versioned deployment environment (`IFactoryToken.Env`); CREATE3 instances (EIP-1167
+///        clones with the instance's `ChainEnv` appended) initialised in the same call with the creator's opaque
+///        `initArgs`; no power over any token or DEX it created. Chain-neutral spec: the factory, every release and every
+///        instance have the same address on every chain; the chain's values are written once (`configureChain`).
 interface IOpenFactory {
     /// @notice CTR-TOK-21, a fresh enum (nothing deployed): the value equals the implementation's `kind()`.
     ///         `NORMAL_PQZ` / `WRAPPED_PQZ` are built (P6g); ids 6 and 7 (the dropped
@@ -45,6 +47,7 @@ interface IOpenFactory {
     /// @notice Factory index spec §2.1 (CTR-TOK-27, owner 2026-11-07): one record per contract this factory created, in
     ///         its own state, never changed or deleted. `creatorId` the creator's UA id (a direct call: `pad(msg.sender)`);
     ///         `ownerUA` the contract's `owner()` right after `initialize` (a claim, 0 = no administration ever);
+    ///         (a signed creation through the router: the signing UA, S3);
     ///         `contractClass` `CLASS_TOKEN` (`kind` a `TokenKind`) or `CLASS_DEX` (`kind` 0), 0 = not made here; `version`
     ///         the release (0 = `createTokenUnregistered`); `createdBlock` / `createdAt` the chain's `block.number` /
     ///         `block.timestamp`.
@@ -70,19 +73,33 @@ interface IOpenFactory {
     event KindEnabled(TokenKind indexed kind, bool enabled);
     /// @notice The one event of a creation; `features`, `lockedFeatures`, `owner`, `underlyings` read from the token after
     ///         `initialize`.
+    ///         `creatorId` the creator's UA id (S3; a native creator's topic is its padded address).
     event TokenCreated(
-        address indexed token, address indexed creator, TokenKind indexed kind, uint64 version, address implementation,
+        address indexed token, bytes32 indexed creatorId, TokenKind indexed kind, uint64 version, address implementation,
         uint256 features, uint256 lockedFeatures, bytes32 owner, address[] underlyings);
     event DexImplementationDeployed(
         uint64 indexed version, address indexed implementation, uint16 envVersion, bytes32 envHash, bytes32 initcodeHash,
         bytes32 codeHash, uint64 usableFrom);
     event DexImplementationDeprecated(uint64 indexed version, string reason);
-    event DexCreated(address indexed dex, address indexed creator, uint64 version, address implementation, bytes32 owner);
+    event DexCreated(address indexed dex, bytes32 indexed creatorId, uint64 version, address implementation, bytes32 owner);
+    /// @notice The chain's one-time values (chain-neutral spec §3.1).
+    event ChainConfigured(bytes32 indexed chainUid, uint64 noticePeriod, address govRouter);
 
     error NotRegistrar();
     error ChainUidZero();
-    /// @notice The constructor's notice period exceeds `MAX_NOTICE_PERIOD` (30 days).
+    /// @notice `configureChain`'s notice period exceeds `MAX_NOTICE_PERIOD` (30 days).
     error NoticePeriodTooLong(uint64 noticePeriod);
+    /// @notice Every creation, publish and deploy entry before `configureChain`.
+    error ChainNotConfigured();
+    error ChainAlreadyConfigured();
+    /// @notice The chain can prove its genesis hash (`BLOCKHASH(0)`, EIP-2935) and `given` is not it.
+    error ChainUidNotGenesis(bytes32 given, bytes32 provable);
+    /// @notice The reference block's hash on this chain is not `given` (`actual` 0: the chain cannot answer).
+    error RefBlockMismatch(uint256 refBlock, bytes32 given, bytes32 actual);
+    /// @notice The CREATE3 proxy's `CREATE` of the instance failed (it answers success there, Fable P2-5).
+    error InstanceNotCreated();
+    /// @notice A release's `validateEnv` reverted without data (it has none, or it failed without a reason).
+    error EnvRefused(address implementation);
     /// @notice Creation of a kind the registrar has not enabled (plain kinds on from the start, confidential ones off).
     error KindDisabled(TokenKind kind);
     error VersionAlreadyRegistered(TokenKind kind, uint64 version, address existing);
@@ -110,8 +127,8 @@ interface IOpenFactory {
     /// @notice No env `envVersion` published for the domain (version 0 included).
     error EnvUnknown(uint8 domain, uint16 envVersion);
     error EnvAlreadyPublished(uint8 domain, uint16 envVersion);
-    /// @notice `factory` / `chainUid` not the factory's, `libs` and `libCodeHashes` of different lengths, or a library
-    ///         code hash that pins nothing (`0` or `keccak256("")`).
+    /// @notice `libs` and `libCodeHashes` of different lengths, a library code hash that pins nothing (`0` or
+    ///         `keccak256("")`), more than 4 `deps` or 2 `params`.
     error EnvInvalid();
     /// @notice A linked library of the env does not have its published code hash (checked at each release deployment).
     error LibraryCodeHashMismatch(address library_, bytes32 expected, bytes32 got);
@@ -126,15 +143,24 @@ interface IOpenFactory {
     error PageTooLarge(uint256 n);
 
     function registrar() external view returns (address);
+    /// @notice Registrar only, once (chain-neutral spec §3.1): this chain's `chain_uid` (≠ 0; its genesis hash whenever the
+    ///         EVM can prove it: `ChainUidNotGenesis`), the notice period (≤ `MAX_NOTICE_PERIOD`), the router (0 = none;
+    ///         its `chainUid()` must be `chainUid_`) and a reference block (`refBlock ≠ 0`: its hash on this chain must be
+    ///         `refHash`, `RefBlockMismatch`; 0 on a chain whose `BLOCKHASH` is not its own block hash).
+    function configureChain(bytes32 chainUid_, uint64 noticePeriod_, address govRouter_, uint256 refBlock, bytes32 refHash)
+        external;
+    /// @notice 0 until `configureChain`.
     function chainUid() external view returns (bytes32);
     /// @notice Seconds between a release's deployment and its first use (chain-configured: minutes on 7622, days on
     ///         22776; 0 on the dev chains and in tests).
     function noticePeriod() external view returns (uint64);
+    /// @notice This chain's `GovernanceRouter` (0 = none): every instance's `ChainEnv.govRouter`.
+    function govRouter() external view returns (address);
     /// @notice The env domain of the DEX (`type(uint8).max`).
     function DEX_DOMAIN() external view returns (uint8);
 
-    /// @notice Registrar only: publishes env `envVersion` (from 1, append-only, never changed) of a kind's releases.
-    ///         `env.factory` / `env.chainUid` must be this factory's (`EnvInvalid`).
+    /// @notice Registrar only: publishes env `envVersion` (from 1, append-only, never changed) of a kind's releases. A
+    ///         `registry ≠ 0` must name this factory's `chainUid` (`ChainUidMismatch`).
     function publishEnv(TokenKind kind, uint16 envVersion, IFactoryToken.Env calldata env) external;
     function publishDexEnv(uint16 envVersion, IFactoryToken.Env calldata env) external;
     function envOf(TokenKind kind, uint16 envVersion) external view returns (IFactoryToken.Env memory);
@@ -144,10 +170,11 @@ interface IOpenFactory {
 
     /// @notice Registrar only: on the kind's published env `envVersion` (named explicitly, `EnvUnknown` otherwise —
     ///         interim rule, controller proposal 2026-10-20, until the governance-matrix spec), checks each
-    ///         `env.libs[i].codehash`, `CREATE2`s (salt `keccak256(abi.encode(kind, version))`)
-    ///         `initcode ‖ abi.encode(envVersion, env, implArgs)`, checks `kind()`, `factory()`, `chainUid()`, records
-    ///         the release with its env version and hash (usable after `noticePeriod`). Append-only, version 0 refused;
-    ///         the same init code may be deployed again as a later version on another env.
+    ///         `env.libs[i].codehash`, `CREATE2`s (salt `keccak256(abi.encode(kind, version))`) the chain-neutral
+    ///         `initcode ‖ abi.encode(address(this), implArgs)` (the same address on every chain), checks `kind()`,
+    ///         `factory()` and the release's `validateEnv` of the instance env, records the release with its env version
+    ///         and hash (usable after `noticePeriod`). Append-only, version 0 refused; the same init code may be deployed
+    ///         again as a later version on another env.
     function deployImplementation(
         TokenKind kind,
         uint64 version,
@@ -169,26 +196,31 @@ interface IOpenFactory {
     ///         this repository `abi.encode(IFactoryToken.TokenConfig)`), validated by the implementation.
     function createToken(TokenKind kind, uint64 version, bytes calldata initArgs, bytes32 salt)
         external returns (address token);
-    /// @notice Plain kinds only (`UnregisteredConfidentialKind`): any implementation of `kind` for this factory and chain,
-    ///         recorded with `version == 0` — unvetted code: clients and the gateway trust `isRegisteredToken` only.
+    /// @notice Plain kinds only (`UnregisteredConfidentialKind`): any implementation of `kind` for this factory, on the
+    ///         kind's latest env, recorded with `version == 0` — unvetted code: clients and the gateway trust
+    ///         `isRegisteredToken` only.
     function createTokenUnregistered(TokenKind kind, address implementation, bytes calldata initArgs, bytes32 salt)
         external returns (address token);
 
-    function predictAddress(address implementation, address creator, bytes32 salt) external view returns (address);
+    /// @notice CREATE3 (chain-neutral spec §4.2): one view for every path; the address says nothing about the version,
+    ///         the code or the configuration on a chain (read `infoOf` and the instance per chain).
+    function predictAddress(bytes32 creatorId, uint16 contractClass, uint16 kind, bytes32 salt)
+        external view returns (address);
     function isToken(address token) external view returns (bool);
     /// @notice Made by this factory from a release (`version ≠ 0`).
     function isRegisteredToken(address token) external view returns (bool);
+    /// @notice The creator's address for a native `creatorId`, 0 for a derived one (`infoOf`) or a non-token.
     function creatorOf(address token) external view returns (address);
     function versionOf(address token) external view returns (TokenKind kind, uint64 version);
-    /// @notice First token `creator` made over `underlying`; it may have several legs: read `underlyings()`.
-    function getWrapper(address creator, address underlying) external view returns (address);
-    function getWrapperCount(address creator, address underlying) external view returns (uint256);
-    function getWrapperAt(address creator, address underlying, uint256 index) external view returns (address);
+    /// @notice First token `creatorId` made over `underlying`; it may have several legs: read `underlyings()`.
+    function getWrapper(bytes32 creatorId, address underlying) external view returns (address);
+    function getWrapperCount(bytes32 creatorId, address underlying) external view returns (uint256);
+    function getWrapperAt(bytes32 creatorId, address underlying, uint256 index) external view returns (address);
     function deployCountFor(address underlying) external view returns (uint256);
     function deployedFor(address underlying, uint256 index) external view returns (address);
 
     /// @notice Registrar only: as `deployImplementation` for the DEX (salt `keccak256(abi.encode("dex", version))`, DEX
-    ///         env `envVersion`); the release must answer `factory()` and `chainUid()`.
+    ///         env `envVersion`); the release must answer `factory()` and accept the env (`validateEnv`).
     function deployDexImplementation(uint64 version, uint16 envVersion, bytes calldata initcode, bytes calldata implArgs)
         external returns (address implementation);
     function dexReleaseOf(uint64 version) external view returns (Release memory);
