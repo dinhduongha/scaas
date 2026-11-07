@@ -49,6 +49,10 @@ pub const SCAAS_UA_ERR_KEM_KEY_LENGTH: ScaasUaStatus = 14;
 pub const SCAAS_UA_ERR_PQZ_POP_HASH: ScaasUaStatus = 15;
 /// "UAPqzKeySet": `setPqzKey` on a registration that already has a PQZ key (write-once).
 pub const SCAAS_UA_ERR_PQZ_KEY_SET: ScaasUaStatus = 16;
+/// "UAPqzKeyVersion": a PQZ key version other than `latest + 1`, or no version 0 stored (group 3g, KV-1).
+pub const SCAAS_UA_ERR_PQZ_KEY_VERSION: ScaasUaStatus = 21;
+/// "UAKeyInUse": a stored version of the UA holds this PQZ key (group 3g, KV-1).
+pub const SCAAS_UA_ERR_KEY_IN_USE: ScaasUaStatus = 22;
 /// "UAKemScheme": the first byte of a KEM key is not an enabled KEM scheme id (only 1; 2 is reserved).
 pub const SCAAS_UA_ERR_KEM_SCHEME: ScaasUaStatus = 17;
 /// "UAMemberUnknown": an `msig` member's record is needed and was not given: key data alone does not show an `msig` member's eligibility.
@@ -100,6 +104,8 @@ impl From<ua::UAError> for Fail {
             KemKeyLength => SCAAS_UA_ERR_KEM_KEY_LENGTH,
             PqzPopHash => SCAAS_UA_ERR_PQZ_POP_HASH,
             PqzKeySet => SCAAS_UA_ERR_PQZ_KEY_SET,
+            PqzKeyVersion => SCAAS_UA_ERR_PQZ_KEY_VERSION,
+            KeyInUse => SCAAS_UA_ERR_KEY_IN_USE,
             KemScheme => SCAAS_UA_ERR_KEM_SCHEME,
             MemberUnknown => SCAAS_UA_ERR_MEMBER_UNKNOWN,
             Pop => SCAAS_UA_ERR_POP,
@@ -241,6 +247,8 @@ pub extern "C" fn scaas_ua_status_name(status: ScaasUaStatus) -> *const c_char {
         SCAAS_UA_ERR_KEM_KEY_LENGTH => c"UAKemKeyLength",
         SCAAS_UA_ERR_PQZ_POP_HASH => c"UAPqzPopHash",
         SCAAS_UA_ERR_PQZ_KEY_SET => c"UAPqzKeySet",
+        SCAAS_UA_ERR_PQZ_KEY_VERSION => c"UAPqzKeyVersion",
+        SCAAS_UA_ERR_KEY_IN_USE => c"UAKeyInUse",
         SCAAS_UA_ERR_KEM_SCHEME => c"UAKemScheme",
         SCAAS_UA_ERR_MEMBER_UNKNOWN => c"UAMemberUnknown",
         SCAAS_UA_ERR_POP => c"UAPoP",

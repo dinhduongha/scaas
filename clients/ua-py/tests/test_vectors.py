@@ -221,6 +221,8 @@ class Vectors(unittest.TestCase):
                   'UARegistration': '0xc78b548ceb2fadf1f0a895f79f88b517327c120f0f9ab345f02981441048c87e',
                   'UAPqzKey': '0x827d90728b100bc830d06b04dd2b9b5f7853adaa05502b4082875f881d925a00',
                   'UAPqzKeyRecord': '0xaba20a80603724f71232573a76d2506ae38f60f39ea9cd8e71f4b64775dd7567',
+                  'UAPqzKeyVersion': '0x56bb760a3968427f1aa06b0497de42c05374beae46765175b61976c12e38b158',
+                  'UAPqzKeyVersionRecord': '0x2e00b7c0ff5cfbca3f50e0445bcd02bb227e0154c239c812b38d9b8fa6e7d6e5',
                   'UAMembership': '0x2ffb61cab130ef54f9af88d7255ca81c570651b2562c2c368286a1f43bfe5cb4'}
         self.assertEqual(set(t['types']), set(pinned))
         self.assertEqual(set(ua.PORTABLE_TYPES), set(pinned))
@@ -269,6 +271,48 @@ class Vectors(unittest.TestCase):
             self.assertEqual(hx(ua.pqz_key_digest(u, h)), r['pqzKeyDigest'], r['name'])
             n += 1
         self.assertEqual(n, len(P['registrations']) + len(P['kemRecords']) + len(P['pqzKeyRecords']))
+
+    def test_pqz_key_versions(self):
+        """Group 3g: portable.json ``pqzKeyVersions`` by digest and message, and the builder's refusals."""
+        reg = {r['ua']: r for r in P['registrations']}
+        zero = {(r['ua'], r['set']): r for r in P['pqzKeyRecords']}
+        self.assertEqual(len(P['pqzKeyVersions']), 16)
+        at = {r['name']: r for r in P['pqzKeyVersions']}
+        for r in P['pqzKeyVersions']:
+            u, h, ph, v, kind = b(r['ua']), b(r['pqzKeyHash']), b(r['pqzPopHash']), r['version'], r['kind']
+            self.assertEqual(hx(hash_typed_data(r['typedData'])), r['recordDigest'], r['name'])
+            base, name = reg[r['ua']], r['name'].split('/')[0]
+            stored = [(0, b(zero[(r['ua'], r['set'])]['pqzKeyHash']))]
+            if v == 2:
+                stored.append((1, b(at[f"{name}/v1/{r['set']}"]['pqzKeyHash'])))
+            m = ua.pqz_key_version_record_message(kind, u, b(base['keyData']), v, b(r['pqzKey']), pqz_pop_hash=ph, stored=stored)
+            self.assertEqual((hx(m.pqz_key_hash), hx(m.version_digest), hx(m.record_digest), hx(m.message), hx(m.pqz_reg_message)),
+                             (r['pqzKeyHash'], r['versionDigest'], r['recordDigest'], r['message'], r['pqzRegMessage']), r['name'])
+            self.assertEqual(hx(m.member_digest) if m.member_digest else None, r.get('memberDigest'), r['name'])
+            self.assertEqual(hx(ua.pqz_key_version_digest(u, v, h)), r['versionDigest'], r['name'])
+            self.assertEqual(ua.set_pqz_key_version_args(u, v, b(r['pqzKey']), ph, r['args']['sig']), r['args'], r['name'])
+            self.assertEqual(hx(ua.pqz_key_version_record_digest(u, v, h, ph)), r['recordDigest'], r['name'])
+        self.assertEqual(len(P['pqzKeyVersionNegatives']), 28)
+        n = 0
+        for x in P['pqzKeyVersionNegatives']:
+            if x['error'] == 'UAUnauthorized':
+                continue  # a signature's verdict, not the builder's
+            r = at[x['mutation']['row']]
+            known = {0: zero[(r['ua'], r['set'])]['pqzKeyHash']}
+            known.update({v: at[f"fndsa512/v{v}/{r['set']}"]['pqzKeyHash'] for v in (1, 2)})
+            stored = [(v, b(known[v])) for v in x['mutation']['stored']]
+            key = b(x['mutation']['set'].get('pqzKey', r['pqzKey']))
+            with self.assertRaises(ua.UAError) as e:
+                ua.pqz_key_version_record_message(r['kind'], b(r['ua']), b(reg[r['ua']]['keyData']), r['version'], key,
+                                                  pqz_pop_hash=b(r['pqzPopHash']), stored=stored)
+            self.assertEqual(e.exception.code, x['error'], x['name'])
+            n += 1
+        self.assertEqual(n, 16)
+        with self.assertRaises(ua.UAError) as e:
+            r = at[f"fndsa512/v1/{P['pqzKeyVersions'][0]['set']}"]
+            ua.pqz_key_version_record_message(r['kind'], b(r['ua']), b(reg[r['ua']]['keyData']), 0, b(r['pqzKey']), pqz_pop_hash=b(r['pqzPopHash']),
+                                              stored=[(0, bytes(32))])
+        self.assertEqual(e.exception.code, 'UAPqzKeySet')
 
     def test_portable(self):
         t = P['tags']

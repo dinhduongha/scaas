@@ -163,12 +163,13 @@ const STRUCTS = Object.fromEntries(Object.entries({
   UAWrapOrder: wrapOrderOf('bytes32'),
   // the token's typed transfer and payment (CTR-MTX-23); `entryRef = 0` is a transfer, else a payment (CTR-UA-26 on ids)
   UAMetaTransfer: transferOf('bytes32'),
-  PqzTransferArgs: 'uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,'
+  // group 3g (KV-8): `keyVersion`, the debited key version of `fromUA`, after it in the three args structs
+  PqzTransferArgs: 'uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,'
     + 'bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes sealedMemo',
   PqzLeg: 'bytes32 ua,bytes v,bytes vAuditor',
-  PqzMultiArgs: 'uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,bytes32 beneficiaryUA,uint256 decoyFee,bytes16 salt,'
+  PqzMultiArgs: 'uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,uint256 decoyFee,bytes16 salt,'
     + 'bytes[] u,PqzLeg[] legs,bytes vFrom,bytes sealedMemo',
-  PqzBurnArgs: 'uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,bytes32 beneficiaryUA,bytes u,bytes vFrom',
+  PqzBurnArgs: 'uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,bytes u,bytes vFrom',
   Unwrap: 'address underlying,bytes32 recipient,uint256 amount,uint256 minOut',
   G1: 'bytes32 x0,bytes32 x1,bytes32 y0,bytes32 y1',
   ZetherSingle: 'uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes16 salt,bytes32 beneficiaryUA,'
@@ -257,8 +258,11 @@ const OPS = {
   // R47: `mtxShield` takes `UASig` (the C0 spike's `bytes auth` is legacy)
   UAShield: { fields: 'bytes32 toUA,uint256 amount', on: CONFIDENTIAL },
   WrapShield: { fields: 'address underlying,uint256 amountIn,bytes32 toUA', on: WRAPPED_CONFIDENTIAL },
-  UARollOver: { fields: 'bytes32 ua,uint256 n', on: CONFIDENTIAL },
-  UAPrepareAcc: { fields: 'bytes32 ua,uint256 half', on: PQZ },
+  // group 3g (KV-10, §10 row 21): Zether keeps `UARollOver(…,bytes32 ua,uint256 n,…)`; the PQZ rollover and prepare name the
+  // key version, one row per kind (the PQZ struct keeps the name `UARollOver`; its builders `uaPqzRollOver*`)
+  UARollOver: { fields: 'bytes32 ua,uint256 n', on: ZETHER },
+  UAPqzRollOver: { primary: 'UARollOver', builder: 'uaPqzRollOver', fields: 'bytes32 ua,uint64 keyVersion,uint256 n', on: PQZ },
+  UAPrepareAcc: { fields: 'bytes32 ua,uint64 keyVersion,uint256 half', on: PQZ },
   // MandateWallet (Q6, MD-11; spec §2.7): the owner's three, the delegate's two (CTR-ACC-07), the arbitrary call; ids `bytes32`
   UASetMandate: { fields: 'address token,bytes32 delegate,uint128 maxPerPayment,uint128 maxPerPeriod,uint64 periodSeconds,uint64 expiry', on: WALLET },
   UASetPayee: { fields: 'address token,bytes32 payee,bool allowed', on: WALLET },
@@ -368,9 +372,12 @@ const abiValue = (t, v) => {
   return STRUCTS[t] ? STRUCTS[t].map((f) => abiValue(f.type, v[f.name])) : v;
 };
 
+const opName = (primary) => primary.replace(/^UA/, 'ua').replace(/^[A-Z]/, (c) => c.toLowerCase());
+
 /** One signed struct (`UA<Op>`: the merged entry on ids): its type string and typehash, and `call(td, sig, extra)` → the
  *  entry's `{abi, data}`. */
-function defineOp(primary, def) {
+function defineOp(name, def) {
+  const primary = def.primary ?? name;
   const ua = !def.raw && primary.startsWith('UA');
   const own = fields(def.raw ?? [`${ua ? 'bytes32' : 'address'} from`, def.fields, E].filter(Boolean).join(','));
   const types = { EIP712Domain: SALTED_DOMAIN_TYPE, [primary]: own };
@@ -394,9 +401,14 @@ function defineOp(primary, def) {
     const abi = `${entry}(${abiTypes.join(',')})`;
     return { abi, data: abiCall(abi, abiTypes, params.map(([t, v]) => abiValue(t, v))) };
   };
-  return { primary, typeString, typehash: hex(keccak_256(utf8ToBytes(typeString))), types, fields: own, on: def.on, ua,
+  return { primary, builder: def.builder ?? opName(primary), typeString, typehash: hex(keccak_256(utf8ToBytes(typeString))), types,
+    fields: own, on: def.on, ua,
     envelope: !def.raw, amount: def.amount, entry, domains: [...new Set(def.on.map((c) => DOMAIN_OF[c]))], call: entry ? call : null };
 }
+
+/** The PQZ debits by primary type (`checkPqzDebit`): op 1, op 7, the burn; the unwrap form is never a refresh. */
+const PQZ_DEBITS = Object.freeze({ UAPqzTransferSingle: 'single', UAPqzTransferSingleCompact: 'single', UAPqzTransfer: 'multi',
+  UAPqzTransferCompact: 'multi', UAPqzUnshield: 'burn', UAPqzUnshieldUnwrap: 'unwrap' });
 
 /** Every signed struct by name: {typeString, typehash, types, fields, on, entry, domains, call}. */
 export const TYPED_OPS = Object.freeze(Object.fromEntries(Object.entries(OPS).map(([name, def]) => [name, defineOp(name, def)])));
@@ -479,19 +491,19 @@ function rebuilt(op, opts) {
   }
 }
 
-const opName = (primary) => primary.replace(/^UA/, 'ua').replace(/^[A-Z]/, (c) => c.toLowerCase());
 /** `<op>TypedData({name, contract, chainId, chainUid, message})` and `<op>Calldata(td, sig, extra)` of every struct
  *  (`extra`: `pqzAuth`, `ownerSig`, `payerSig` where the entry takes one); exported by name below and from zether.js,
  *  the `GovernanceRouter`'s (`grantRoleTypedData`, `uaSetGrantCalldata`, …) from here only. */
 export const OP_BUILDERS = Object.freeze(Object.fromEntries(Object.values(TYPED_OPS).flatMap((op) => [
-  [`${opName(op.primary)}TypedData`, (o) => opTypedData(op, o)],
-  ...(op.call ? [[`${opName(op.primary)}Calldata`, (td, sig, x) => op.call(td, sig, x).data]] : [])])));
+  [`${op.builder}TypedData`, (o) => opTypedData(op, o)],
+  ...(op.call ? [[`${op.builder}Calldata`, (td, sig, x) => op.call(td, sig, x).data]] : [])])));
 export const {
   cancelNonceTypedData, cancelNonceCalldata, uaCancelNonceTypedData, uaCancelNonceCalldata, uaBurnTypedData, uaBurnCalldata,
   wrapTypedData, wrapCalldata, wrapLegTypedData, wrapLegCalldata, uaUnwrapTypedData, uaUnwrapCalldata,
   uaUnwrapLegTypedData, uaUnwrapLegCalldata, addReserveTypedData, addReserveCalldata,
   wrapToUATypedData, wrapToUACalldata, uaUnwrapToUATypedData, uaUnwrapToUACalldata,
   uaShieldTypedData, uaShieldCalldata, wrapShieldTypedData, wrapShieldCalldata, uaRollOverTypedData, uaRollOverCalldata,
+  uaPqzRollOverTypedData, uaPqzRollOverCalldata,
   uaPrepareAccTypedData, uaPrepareAccCalldata,
   uaSetMandateTypedData, uaSetMandateCalldata, uaSetPayeeTypedData, uaSetPayeeCalldata, uaRevokeMandateTypedData, uaRevokeMandateCalldata,
   uaPayUnderMandateTypedData, uaPayUnderMandateCalldata, uaDelegateRevokeTypedData, uaDelegateRevokeCalldata,
@@ -1032,7 +1044,7 @@ export function checkOp(td, { op, contract, chainId, chainUid, message, maxFee, 
   now = Math.floor(Date.now() / 1000), maxWindow = 3600 }) {
   if (op === 'UAWrapOrder') refuse('a wrap order is checked by checkWrapOrder (CLI-SGN-36)');
   const o = TYPED_OPS[op];
-  if (!o || !td || td.primaryType !== op) refuse('this is not the operation you asked for');
+  if (!o || !td || td.primaryType !== o.primary) refuse('this is not the operation you asked for');
   const m = td.message || {};
   const d = td.domain || {};
   if (!same(d.verifyingContract, contract)) refuse('the operation is not on the contract you chose');
@@ -1049,6 +1061,28 @@ export function checkOp(td, { op, contract, chainId, chainUid, message, maxFee, 
   const digest = digestOf(rebuilt(o, { name: d.name, contract, chainId, chainUid, message: { ...server, ...message } }));
   if (hex(digestOf(td)) !== hex(digest)) refuse('this is not the operation you asked for');
   return { digest, op, entry: o.entry, ...fee };
+}
+
+/** Group 3g (KV-8, KV-9): what a wallet checks of a PQZ debit against the debited UA's current version (`pqzKeyOf(fromUA)`), before
+ *  it signs. `keyVersion == current`: every debit, a self-transfer refused (`SelfTransfer`). Stale: only the migration (op 1 to
+ *  itself) and a refresh (a burn of 0 with no recipient) (`StaleKeyVersion`). Above current: `KeyVersionUnknown`. Returns
+ *  `{ kind: 'debit' | 'migration' | 'refresh', keyVersion, current, show }`, `show` what the wallet shows. */
+export function checkPqzDebit(td, { current }) {
+  const op = PQZ_DEBITS[td?.primaryType];
+  if (!op) refuse('this is not a PQZ debit');
+  const { fromUA, toUA, keyVersion } = td.message.args;
+  const [v, cur] = [BigInt(keyVersion), BigInt(current)];
+  if (v > cur) refuse(`KeyVersionUnknown: version ${v} is above the current version ${cur}`);
+  const debit = { keyVersion: v, current: cur };
+  if (op === 'single' && same(fromUA, toUA)) {
+    if (v === cur) refuse('SelfTransfer: a transfer to yourself at the current version');
+    return { ...debit, kind: 'migration', show: `moves the balance of version ${v} to version ${cur}` };
+  }
+  if (v === cur) return { ...debit, kind: 'debit', show: `debits version ${v}` };
+  if (op === 'burn' && BigInt(td.message.amount) === 0n && BigInt(td.message.recipient) === 0n) {
+    return { ...debit, kind: 'refresh', show: `refreshes version ${v}` };
+  }
+  return refuse(`StaleKeyVersion: version ${v} is stale (current ${cur}): migrate it first`);
 }
 
 /** A self-call `MetaTransaction` (CTR-MTX-17), the generic path (TS-D14: a mixed batch, an op with no named entry), that is exactly the call the client built, `call = {contract, data}`:

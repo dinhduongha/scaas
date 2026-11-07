@@ -26,6 +26,9 @@ const lower = (s) => s.replace(/^UA/, 'ua').replace(/^[A-Z]/, (c) => c.toLowerCa
 const domainOf = (r, d) => ({ name: d.domain.name, contract: d.domain.verifyingContract, chainId: d.domain.chainId,
   chainUid: d.domain.salt });
 const rows = () => Object.entries(V.ops);
+// group 3g: a per-kind row (`UAPqzRollOver`) names its primary type and its builders
+const prim = (name) => TYPED_OPS[name].primary;
+const bld = (name) => TYPED_OPS[name].builder;
 const domains = (r) => Object.entries(r.domains);
 
 // The plan's Part C tables, truncated as they are printed there (`Execute`: `cast keccak` of its type string).
@@ -37,7 +40,7 @@ const PLAN = {
   UAUnwrapLeg: '0xdbbb5d3f…f7cc1a48', AddReserve: '0x189280a9…a2162dfe',
   WrapToUA: '0x3a2ec74d…25895dcde', UAUnwrapToUA: '0x8bb1bc05…af2d9a04',
   UAShield: '0xf86740a1…efb08337', WrapShield: '0x9188b9d0…b011ef',
-  UARollOver: '0xd5ad0bcf…0465fd', UAPrepareAcc: '0x33e99b3c…c460e5',
+  UARollOver: '0xd5ad0bcf…0465fd', UAPqzRollOver: '0x900621af…44e200a9bb75', UAPrepareAcc: '0xe173bbc7…ef43cc',
   AddKey: '0x9d156f1f…7244a6bb', RemoveKey: '0xcef46d27…618280b3', RotateKey: '0x5b8f8761…64fb0777',
   SetGuardian: '0xd2603850…6b967689f6', CancelRecovery: '0x3df995dd…1213adda', Execute: '0xe0b649e9…c6053f1df7',
   UAReceiverFee: '0xb12d2a08…7c75021a', UARelayFee: '0x220269b9…e493e43ea5', UAWrapOrder: '0x2a01cb57…fc04533c',
@@ -56,10 +59,10 @@ const PLAN = {
 
 // Appendix X.4, the nested strings verbatim.
 const E = 'uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient';
-const TA = 'PqzTransferArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes sealedMemo)';
+const TA = 'PqzTransferArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes sealedMemo)';
 const LEG = 'PqzLeg(bytes32 ua,bytes v,bytes vAuditor)';
-const MA = 'PqzMultiArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,bytes32 beneficiaryUA,uint256 decoyFee,bytes16 salt,bytes[] u,PqzLeg[] legs,bytes vFrom,bytes sealedMemo)';
-const BA = 'PqzBurnArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,bytes32 beneficiaryUA,bytes u,bytes vFrom)';
+const MA = 'PqzMultiArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,uint256 decoyFee,bytes16 salt,bytes[] u,PqzLeg[] legs,bytes vFrom,bytes sealedMemo)';
+const BA = 'PqzBurnArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,bytes u,bytes vFrom)';
 const UW = 'Unwrap(address underlying,bytes32 recipient,uint256 amount,uint256 minOut)';
 const G1 = 'G1(bytes32 x0,bytes32 x1,bytes32 y0,bytes32 y1)';
 const ZS = 'ZetherSingle(uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes16 salt,bytes32 beneficiaryUA,G1 yFrom,G1 yTo,G1 cOut,G1 dOut,G1 cDeb,G1 cAud)';
@@ -146,7 +149,7 @@ test('every typehash pinned: the plan\'s truncated value, keccak256(typeString),
     assert.equal(r.typeString, TYPED_OPS[name].typeString, name);
     assert.equal(r.typehash, TYPED_OPS[name].typehash, name);
     assert.equal(hex(keccak_256(utf8ToBytes(r.typeString))), r.typehash, name);
-    assert.equal(encodeType(r.types, name), r.typeString, name);
+    assert.equal(encodeType(r.types, prim(name)), r.typeString, name);
   }
 });
 
@@ -178,8 +181,9 @@ test('the table covers every allowlisted entry of every contract, one row per op
   // envelope op now (Q2)
   // T34: + the router's eight regulated controls (regulated-kinds spec §3.1): 76, 67 envelope ops
   // pay-meta-tax T41: + `UAPayWithTax` (a raw struct) and the router's `UASetTaxRate`, `UASetTaxRecipient`: 79, 69
-  assert.equal(Object.keys(TYPED_OPS).length, 79);
-  assert.equal(Object.values(TYPED_OPS).filter((o) => o.envelope).length, 69);
+  // group 3g T54: the rollover one row per kind (`UARollOver` Zether, `UAPqzRollOver` PQZ with `keyVersion`): 80, 70
+  assert.equal(Object.keys(TYPED_OPS).length, 80);
+  assert.equal(Object.values(TYPED_OPS).filter((o) => o.envelope).length, 70);
   for (const o of Object.values(TYPED_OPS)) {
     if (o.envelope) assert.ok(o.entry.startsWith('mtx'), o.primary);
     if (o.ua) assert.equal(o.fields[0].type, 'bytes32', o.primary);
@@ -192,10 +196,10 @@ test('hashTypedData(td) == row.digest; the builder rebuilds the wallet\'s JSON; 
   for (const [name, r] of rows()) {
     assert.ok(domains(r).length > 0, name);
     for (const [kind, d] of domains(r)) {
-      const td = builders[`${lower(name)}TypedData`]({ ...domainOf(r, d), message: r.message });
+      const td = builders[`${bld(name)}TypedData`]({ ...domainOf(r, d), message: r.message });
       assert.deepEqual(td.message, r.message, `${name} ${kind}`);
       assert.equal(hex(hashTypedData(td)), d.digest, `${name} ${kind}`);
-      assert.equal(hex(hashStruct(td.types, name, td.message)), r.structHash, `${name} ${kind}`);
+      assert.equal(hex(hashStruct(td.types, prim(name), td.message)), r.structHash, `${name} ${kind}`);
       assert.equal(hex(hashStruct(td.types, 'EIP712Domain', td.domain)), d.domainSeparator, `${name} ${kind}`);
       const digest = hashTypedData(td);
       const sig = fromHex(d.signature);
@@ -213,8 +217,8 @@ test('calldata decodes to the message: selector of the full signature, every par
       const data = fromHex(d.calldata);
       assert.equal(hex(data.subarray(0, 4)), sel(d.abi), `${name} ${kind}`);
       assert.equal(d.selector, sel(d.abi));
-      const td = builders[`${lower(name)}TypedData`]({ ...domainOf(r, d), message: r.message });
-      const again = builders[`${lower(name)}Calldata`](td, d.signature, d.extra);
+      const td = builders[`${bld(name)}TypedData`]({ ...domainOf(r, d), message: r.message });
+      const again = builders[`${bld(name)}Calldata`](td, d.signature, d.extra);
       assert.equal(hex(again), d.calldata, `${name} ${kind}`);
       const got = decodeList(paramTypes(d.abi), data.subarray(4));
       assert.deepEqual(norm(got), norm(expectedCall(name, r, d)), `${name} ${kind}`);
@@ -345,7 +349,7 @@ test('the eight regulated router ops: from the signer, target, the direct entry\
     const d = r.domains.gov_router;
     assert.deepEqual(Object.keys(r.domains), ['gov_router'], name);
     const at = domainOf(r, d);
-    const build = (m) => builders[`${lower(name)}TypedData`]({ ...at, message: m });
+    const build = (m) => builders[`${bld(name)}TypedData`]({ ...at, message: m });
     // the row's own mode (1: relayer bound, fee recipient unbound) with a non-zero fee recipient
     assert.equal(r.message.mode, 1, name);
     const given = build({ ...r.message, feeRecipient: JUNK });
@@ -388,7 +392,7 @@ test('checkOp refuses every changed field; the server supplies only the envelope
     if (name.endsWith('WrapOrder') && !name.startsWith('Cancel')) continue; // checkWrapOrder, below
     for (const [kind, d] of domains(r)) {
       const at = { contract: d.domain.verifyingContract, chainId: d.domain.chainId, chainUid: d.domain.salt };
-      const td = builders[`${lower(name)}TypedData`]({ ...domainOf(r, d), message: r.message });
+      const td = builders[`${bld(name)}TypedData`]({ ...domainOf(r, d), message: r.message });
       const want = { op: name, ...at, message: r.message, maxFee: 2n ** 255n, now: NOW, maxWindow: 86400 * 365,
         feeRecipient: r.message.feeRecipient, relayer: r.message.relayer };
       const ok = checkOp(td, want);
@@ -484,7 +488,7 @@ test('an unbound relayer or feeRecipient is signed as 0 and shown as unbound: ev
     for (const [kind, d] of domains(r)) {
       const mode = BigInt(r.message.mode);
       const given = { ...r.message, relayer: mode & 1n ? r.message.relayer : JUNK, feeRecipient: mode & 2n ? r.message.feeRecipient : JUNK };
-      const td = builders[`${lower(name)}TypedData`]({ ...domainOf(r, d), message: given });
+      const td = builders[`${bld(name)}TypedData`]({ ...domainOf(r, d), message: given });
       assert.equal(hex(hashTypedData(td)), d.digest, `${name} ${kind}`);
       if (!(mode & 1n)) { assert.equal(td.message.relayer, ZERO, `${name} ${kind}`); relayerOpen++; }
       if (!(mode & 2n)) { assert.equal(td.message.feeRecipient, ZERO, `${name} ${kind}`); feeToOpen++; }
@@ -715,14 +719,14 @@ test('calldata refuses what the entry cannot verify: the missing signature, an e
   const one = (name) => Object.values(row(name).domains)[0];
   const tdOf = (name) => {
     const d = one(name);
-    return builders[`${lower(name)}TypedData`]({ ...domainOf(row(name), d), message: row(name).message });
+    return builders[`${bld(name)}TypedData`]({ ...domainOf(row(name), d), message: row(name).message });
   };
   for (const name of ['UAPqzTransferSingle', 'UAPqzTransfer', 'UAPqzUnshield', 'UAPqzUnshieldUnwrap']) {
-    assert.throws(() => builders[`${lower(name)}Calldata`](tdOf(name), one(name).signature), /Refusing to sign: pqzAuth is required/, name);
-    assert.throws(() => builders[`${lower(name)}Calldata`](tdOf(name), one(name).signature, { pqzAuth: {} }), /pqzAuth is required/, name);
+    assert.throws(() => builders[`${bld(name)}Calldata`](tdOf(name), one(name).signature), /Refusing to sign: pqzAuth is required/, name);
+    assert.throws(() => builders[`${bld(name)}Calldata`](tdOf(name), one(name).signature, { pqzAuth: {} }), /pqzAuth is required/, name);
   }
   for (const name of ['UARollOverSigned', 'UASetRollOverMode']) {
-    assert.throws(() => builders[`${lower(name)}Calldata`](tdOf(name), one(name).signature), /Refusing to sign: ownerSig is required/, name);
+    assert.throws(() => builders[`${bld(name)}Calldata`](tdOf(name), one(name).signature), /Refusing to sign: ownerSig is required/, name);
   }
   assert.throws(() => evm.uaReceiverFeeCalldata(tdOf('UAReceiverFee'), one('UAReceiverFee').signature), /payerSig is required/);
   assert.throws(() => evm.uaUnwrapCalldata(tdOf('UAUnwrap')), /signature is required/);

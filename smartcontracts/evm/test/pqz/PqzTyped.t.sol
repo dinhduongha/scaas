@@ -1033,6 +1033,7 @@ contract PqzTypedRowsTest is PqzNamedBase {
         b.validUntilBlock = j.readUint(string.concat(q, ".validUntilBlock"));
         b.shieldIn = j.readUint(string.concat(q, ".shieldIn"));
         b.fromUA = j.readBytes32(string.concat(q, ".fromUA"));
+        b.keyVersion = uint64(j.readUint(string.concat(q, ".keyVersion")));
         b.beneficiaryUA = j.readBytes32(string.concat(q, ".beneficiaryUA"));
         b.u = j.readBytes(string.concat(q, ".u"));
         b.vFrom = j.readBytes(string.concat(q, ".vFrom"));
@@ -1115,9 +1116,8 @@ contract PqzTypedRowsTest is PqzNamedBase {
         _rowHasNoEntry(op, address(w), built);
     }
 
-    /// Group 3g T52, meaning (as pay-meta-tax T37 did for its rows): the PQZ rows of `typed_ops.json` (and its legacy copy)
-    /// carry no `keyVersion` in their argument structs, so their own calldata finds no function on this ABI; T54 regenerates
-    /// the rows (`keyVersion` after `fromUA`, after `ua` in `UARollOver` / `UAPrepareAcc`) and runs them again.
+    /// Group 3g T52, meaning (as pay-meta-tax T37 did for its rows): the retired rows of the legacy copy carry no `keyVersion` in
+    /// their argument structs, so their own calldata finds no function on this ABI.
     function _rowWithoutKeyVersion(string memory op, bool both) internal {
         bytes memory cd = j.readBytes(domainField(op, "pqz", "calldata"));
         if (both) _rowHasNoEntry(op, address(tok), cd);
@@ -1135,7 +1135,7 @@ contract PqzTypedRowsTest is PqzNamedBase {
     function test_typedOpsVectors_UAPqzTransferSingle() public {
         for (uint256 k; k < 2; ++k) {
             string memory op = k == 0 ? "UAPqzTransferSingle" : "UAPqzTransferSingleCompact";
-            _rowWithoutKeyVersion(op, true);
+            _bothRenamed(op, abi.encodeWithSignature(_head(op), _uaE(op), _single(op), _proofOf(op), _pa(op), _hint(op), _auth(op)), IPqzToken.BadPayload.selector);
         }
     }
 
@@ -1150,7 +1150,7 @@ contract PqzTypedRowsTest is PqzNamedBase {
     function test_typedOpsVectors_UAPqzTransfer() public {
         for (uint256 k; k < 2; ++k) {
             string memory op = k == 0 ? "UAPqzTransfer" : "UAPqzTransferCompact";
-            _rowWithoutKeyVersion(op, true);
+            _bothRenamed(op, abi.encodeWithSignature(_head(op), _uaE(op), _multiOf(op), _proofOf(op), _pa(op), _hint(op), _auth(op)), IPqzToken.BadPayload.selector);
         }
     }
 
@@ -1162,7 +1162,7 @@ contract PqzTypedRowsTest is PqzNamedBase {
 
     function test_typedOpsVectors_UAPqzUnshield() public {
         string memory op = "UAPqzUnshield";
-        _rowWithoutKeyVersion(op, true);
+        _bothRenamed(op, abi.encodeWithSignature(_head(op), _uaE(op), _burn(op), _payout(op), _proofOf(op), _pa(op), _hint(op), _auth(op)), IUALedger.UANotRegistered.selector);
     }
 
     /// governance T9 (spec §5.4): the leg's quote runs before the burn, so the row's underlying, no leg of `w`, is the op's
@@ -1175,7 +1175,7 @@ contract PqzTypedRowsTest is PqzNamedBase {
 
     function test_typedOpsVectors_UAPqzUnshieldUnwrap() public {
         string memory op = "UAPqzUnshieldUnwrap";
-        _rowWithoutKeyVersion(op, false);
+        _reachRenamed(op, address(w), abi.encodeWithSignature(_head(op), _uaE(op), _burn(op), _unwrap(op), _proofOf(op), _pa(op), _hint(op), _auth(op)), IWrappedToken.UnknownUnderlying.selector);
     }
 
     function test_typedOpsVectors_WrapShield() public {
@@ -1190,9 +1190,11 @@ contract PqzTypedRowsTest is PqzNamedBase {
         _noneOnBoth(op, abi.encodeWithSignature(_head(op), rowEnvelope(j, op), j.readBytes32(_p(op, "ua")), j.readUint(_p(op, "n")), _sig(op)));
     }
 
-    function test_typedOpsVectors_UARollOver() public {
-        string memory op = "UARollOver";
-        _rowWithoutKeyVersion(op, true);
+    /// Group 3g (KV-10): the PQZ rollover's own row, `UAPqzRollOver` (primary type `UARollOver`, with `keyVersion`); Zether keeps
+    /// `UARollOver` (`ZetherTyped.t.sol`).
+    function test_typedOpsVectors_UAPqzRollOver() public {
+        string memory op = "UAPqzRollOver";
+        _bothRenamed(op, abi.encodeWithSignature(_head(op), _uaE(op), j.readBytes32(_p(op, "ua")), uint64(j.readUint(_p(op, "keyVersion"))), j.readUint(_p(op, "n")), _auth(op)), IPqzToken.RollOverRange.selector);
     }
 
     function test_typedOpsVectors_PrepareAccRowHasNoEntry() public {
@@ -1203,6 +1205,6 @@ contract PqzTypedRowsTest is PqzNamedBase {
 
     function test_typedOpsVectors_UAPrepareAcc() public {
         string memory op = "UAPrepareAcc";
-        _rowWithoutKeyVersion(op, true);
+        _bothRenamed(op, abi.encodeWithSignature(_head(op), _uaE(op), j.readBytes32(_p(op, "ua")), uint64(j.readUint(_p(op, "keyVersion"))), j.readUint(_p(op, "half")), _auth(op)), IPqzToken.BadPayload.selector);
     }
 }

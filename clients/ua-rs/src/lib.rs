@@ -43,6 +43,10 @@ pub enum UAError {
     PqzPopHash,
     /// `setPqzKey` on a registration that already has a PQZ key (write-once).
     PqzKeySet,
+    /// Group 3g (KV-1): a PQZ key version other than `latest + 1`, or no version 0 stored.
+    PqzKeyVersion,
+    /// Group 3g (KV-1): a stored version of the UA holds this PQZ key.
+    KeyInUse,
     /// `ua8::check_registration`: the `pop` is not a valid signature of the record.
     Pop,
     /// `ua8::check_kem_record`, `ua8::check_pqz_key_record`: the signature is not the UA's over the record.
@@ -70,6 +74,8 @@ impl UAError {
             UAError::KemScheme => "UAKemScheme",
             UAError::PqzPopHash => "UAPqzPopHash",
             UAError::PqzKeySet => "UAPqzKeySet",
+            UAError::PqzKeyVersion => "UAPqzKeyVersion",
+            UAError::KeyInUse => "UAKeyInUse",
             UAError::Pop => "UAPoP",
             UAError::Unauthorized => "UAUnauthorized",
             UAError::MemberUnknown => "UAMemberUnknown",

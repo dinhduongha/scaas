@@ -5,7 +5,7 @@ use zether_prover::api::call;
 
 /// Rows of the vector the Zether prover does not build, each with its reason: another contract kind's domain (the row has no
 /// `zether` domain), so a Zether key never signs it. Any other row without a `zether` domain fails the test.
-const NOT_ZETHER: [&str; 51] = [
+const NOT_ZETHER: [&str; 52] = [
     // the token kind's own (non-Zether) accounts: UA prepare is a NormalToken / WrappedToken entry
     "UAPrepareAcc",
     // SmartKeyAccount: signed by its owner's keys, not by a Zether key
@@ -14,7 +14,7 @@ const NOT_ZETHER: [&str; 51] = [
     "UASetMandate", "UASetPayee", "UARevokeMandate", "UAPayUnderMandate", "UADelegateRevoke", "UAExecute",
     // PQZ tokens: no PQZ builder in this package (PqzAuth is built by clientkeys, e2e.py and the node)
     "UAPqzTransferSingle", "UAPqzTransferSingleCompact", "UAPqzTransfer", "UAPqzTransferCompact", "UAPqzUnshield",
-    "UAPqzUnshieldUnwrap", "PqzAuth",
+    "UAPqzUnshieldUnwrap", "PqzAuth", "UAPqzRollOver",
     // the DEX's domain
     "CancelDexOrder",
     // the GovernanceRouter's domain (governance spec §3.2): the closed table on its merged entries; signed by an owner's or

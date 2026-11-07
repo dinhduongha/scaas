@@ -2,10 +2,10 @@
 // own `types` and `message`, with no code of src/: test/typed-ops.test.js (its own decoder) and scripts/typed-ops-cast-check.mjs
 // (`cast`) compare decoded calldata with this, so a swapped parameter cannot pass as a round trip.
 const G = (p) => [p.x0, p.x1, p.y0, p.y1];
-const pqzArgsSingle = (t) => [t.p, t.validUntilBlock, t.shieldIn, t.fromUA, t.toUA, t.beneficiaryUA, t.salt, t.u, t.vTo, t.vFrom, t.vAuditor, t.sealedMemo];
-const pqzArgsMulti = (t) => [t.p, t.validUntilBlock, t.shieldIn, t.fromUA, t.beneficiaryUA, t.decoyFee, t.salt, t.u,
+const pqzArgsSingle = (t) => [t.p, t.validUntilBlock, t.shieldIn, t.fromUA, t.keyVersion, t.toUA, t.beneficiaryUA, t.salt, t.u, t.vTo, t.vFrom, t.vAuditor, t.sealedMemo];
+const pqzArgsMulti = (t) => [t.p, t.validUntilBlock, t.shieldIn, t.fromUA, t.keyVersion, t.beneficiaryUA, t.decoyFee, t.salt, t.u,
   t.legs.map((l) => [l.ua, l.v, l.vAuditor]), t.vFrom, t.sealedMemo];
-const pqzBurn = (t) => [t.p, t.validUntilBlock, t.shieldIn, t.fromUA, t.beneficiaryUA, t.u, t.vFrom];
+const pqzBurn = (t) => [t.p, t.validUntilBlock, t.shieldIn, t.fromUA, t.keyVersion, t.beneficiaryUA, t.u, t.vFrom];
 const zSingle = (t) => [t.accSeq, t.sendCounter, t.validUntilBlock, t.salt, t.beneficiaryUA, G(t.yFrom), G(t.yTo), G(t.cOut), G(t.dOut), G(t.cDeb), G(t.cAud)];
 const zMulti = (t) => [t.accSeq, t.sendCounter, t.validUntilBlock, t.salt, t.beneficiaryUA, t.decoyFee, G(t.yFrom), G(t.dOut), G(t.cDeb),
   t.legs.map((l) => [G(l.yTo), G(l.cOut), G(l.cAud), G(l.dAud)]), t.sealedMemo];
@@ -57,9 +57,11 @@ const ACCOUNT = new Set(['AddKey', 'RemoveKey', 'RotateKey', 'SetGuardian', 'Can
 export function expectedCall(name, r, d) {
   const m = r.message;
   if (OTHER[name]) return OTHER[name](m, d.signature, d);
-  const base = name.replace(/^UA/, '');
-  const ua = name !== base;
-  const own = CONF[base] ? CONF[base](m, d.extra) : r.types[name].slice(1, -7).map((f) => m[f.name]);
+  // group 3g: a per-kind row (`UAPqzRollOver`) names its primary type
+  const primary = r.primaryType ?? name;
+  const base = primary.replace(/^UA/, '');
+  const ua = primary !== base;
+  const own = CONF[base] ? CONF[base](m, d.extra) : r.types[primary].slice(1, -7).map((f) => m[f.name]);
   const account = ACCOUNT.has(name) || (name === 'Execute' && d.domain.name === 'SCaaS SmartKeyAccount');
   // ua-mtx-merge (R47): every merged entry takes `UASig`, `mtxShield` too; a native id's is `{0x, signature, []}` (R17)
   const sig = account ? ['0', [], d.signature] : ua ? ['0x', d.signature, []] : d.signature;

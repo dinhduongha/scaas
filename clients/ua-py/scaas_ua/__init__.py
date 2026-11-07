@@ -252,6 +252,7 @@ PORTABLE_DOMAIN_SEPARATOR = keccak256(keccak256(PORTABLE_DOMAIN_TYPE.encode()), 
 _KEM_TYPE = 'UAKemRecord(bytes32 ua,uint64 version,uint8 scheme,bytes32 kemPkHash)'
 _RECORD_TYPE = 'UAPortableRecord(bytes32 ua,uint16 kind,bytes32 pqzKeyHash,UAKemRecord kem)'
 _PQZ_KEY_TYPE = 'UAPqzKey(bytes32 ua,bytes32 pqzKeyHash)'
+_PQZ_KEY_VERSION_TYPE = 'UAPqzKeyVersion(bytes32 ua,uint64 version,bytes32 pqzKeyHash)'
 # encodeType of each portable struct: primary, then the referenced types sorted by name
 PORTABLE_TYPES = {
     'UAKemRecord': _KEM_TYPE,
@@ -259,6 +260,8 @@ PORTABLE_TYPES = {
     'UARegistration': 'UARegistration(UAPortableRecord record,bytes32 pqzPopHash)' + _KEM_TYPE + _RECORD_TYPE,
     'UAPqzKey': _PQZ_KEY_TYPE,
     'UAPqzKeyRecord': 'UAPqzKeyRecord(UAPqzKey key,bytes32 pqzPopHash)' + _PQZ_KEY_TYPE,
+    'UAPqzKeyVersion': _PQZ_KEY_VERSION_TYPE,
+    'UAPqzKeyVersionRecord': 'UAPqzKeyVersionRecord(UAPqzKeyVersion key,bytes32 pqzPopHash)' + _PQZ_KEY_VERSION_TYPE,
     'UAMembership': 'UAMembership(bytes32 ua,bytes32 member)',
 }
 
@@ -427,6 +430,47 @@ def pqz_key_record_message(kind, ua, key_data, pqz_key, pqz_pop=None, pqz_pop_ha
     tag = purpose_tag('pqz-key')
     msg = ua_message(kind, tag, rd)
     return PqzKeyRecord(kh, pop_hash, kd, rd, msg, ua_message(0x0142, tag, kd), member_digest(ua, msg) if kind == 0x0120 else None)
+
+
+def pqz_key_version_digest(ua, version, pqz_key_hash):
+    """Group 3g: the typed ``UAPqzKeyVersion{ua, version, pqzKeyHash}``, what version v >= 1's R_REG proves over."""
+    return _typed(hash_struct('UAPqzKeyVersion', ua, _word(version), pqz_key_hash))
+
+
+def pqz_key_version_record_digest(ua, version, pqz_key_hash, pqz_pop_hash):
+    """Group 3g: the typed ``UAPqzKeyVersionRecord{UAPqzKeyVersion{ua, version, pqzKeyHash}, pqzPopHash}``, what the UA signs for
+    version v >= 1 under ``ua_message(kind, PURPOSE_PQZ_KEY, ·)``."""
+    return _typed(hash_struct('UAPqzKeyVersionRecord', hash_struct('UAPqzKeyVersion', ua, _word(version), pqz_key_hash), pqz_pop_hash))
+
+
+PqzKeyVersionRecord = namedtuple('PqzKeyVersionRecord', 'pqz_key_hash pqz_pop_hash version_digest record_digest message pqz_reg_message '
+                                 'member_digest')
+
+
+def pqz_key_version_record_message(kind, ua, key_data, version, pqz_key, pqz_pop=None, pqz_pop_hash=None, stored=(), inner=None):
+    """Group 3g (KV-1): PQZ key version ``version`` >= 1 of ``setPqzKey(ua, version, ...)``: a PqzKeyVersionRecord. ``stored``: the UA's
+    stored versions as ``(version, pqz_key_hash)`` (the chain's ``pqzKeyAt``), read first: version 0 (UAPqzKeySet: a new key gets a new
+    version), a version other than latest + 1 or no version 0 (UAPqzKeyVersion), a key a stored version holds (UAKeyInUse)."""
+    if not _holds(kind, key_data, inner):
+        raise UAError('UAPqzHolder', f'0x{kind:04x} may not hold a PQZ key')
+    if not 0 <= version < 1 << 64:
+        raise UAError('UAPqzKeyVersion', str(version))
+    if version == 0:
+        raise UAError('UAPqzKeySet', 'version 0 is write-once: a new key gets a new version')
+    versions = [v for v, _ in stored]
+    if 0 not in versions or version != max(versions) + 1:
+        raise UAError('UAPqzKeyVersion', str(version))
+    kh = _pqz_key_hash_of(pqz_key)
+    if any(bytes(h) == kh for _, h in stored):
+        raise UAError('UAKeyInUse', 'a stored version holds this key')
+    pop_hash = _proof_hash_of(pqz_pop, pqz_pop_hash)
+    if not any(pop_hash):
+        raise UAError('UAPqzPopHash', 'a PQZ key record needs its proof hash')
+    vd = pqz_key_version_digest(ua, version, kh)
+    rd = pqz_key_version_record_digest(ua, version, kh, pop_hash)
+    tag = purpose_tag('pqz-key')
+    msg = ua_message(kind, tag, rd)
+    return PqzKeyVersionRecord(kh, pop_hash, vd, rd, msg, ua_message(0x0142, tag, vd), member_digest(ua, msg) if kind == 0x0120 else None)
 
 
 def is_portable_purpose(purpose_tag_bytes):
@@ -838,6 +882,12 @@ def set_pqz_key_args(ua, pqz_key, pqz_pop_hash, sig):
     """``setPqzKey(ua, pqzKey, pqzPopHash, UASig)``."""
     return {'ua': _hx(_sized(ua, 32, 'ua')), 'pqzKey': _hx(_bytes(pqz_key)), 'pqzPopHash': _hx(_sized(pqz_pop_hash, 32, 'pqzPopHash')),
             'sig': sig}
+
+
+def set_pqz_key_version_args(ua, version, pqz_key, pqz_pop_hash, sig):
+    """Group 3g: ``setPqzKey(ua, version, pqzKey, pqzPopHash, UASig)``; version 0 is set_pqz_key_args' row."""
+    return {'ua': _hx(_sized(ua, 32, 'ua')), 'version': version, 'pqzKey': _hx(_bytes(pqz_key)),
+            'pqzPopHash': _hx(_sized(pqz_pop_hash, 32, 'pqzPopHash')), 'sig': sig}
 
 
 def _tail(h):  # a `bytes` tail: length word + data padded to 32

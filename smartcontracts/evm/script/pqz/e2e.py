@@ -316,7 +316,7 @@ def conf(names):
 NAMED = dict(
     Shield=("Shield", "bytes32,uint256", ["w", "w"], flat("toUA", "amount")),
     WrapShield=("WrapShield", "address,uint256,bytes32", ["w", "w", "w"], flat("underlying", "amountIn", "toUA")),
-    # group 3g T52 (KV-10): the PQZ rollover and prepare name the key version (typed_ops.json's `UARollOver@pqz` row)
+    # group 3g T52 (KV-10): the PQZ rollover and prepare name the key version (typed_ops.json's `UAPqzRollOver` row)
     RollOver=("RollOver", "bytes32,uint64,uint256", ["w", "w", "w"], flat("ua", "keyVersion", "n")),
     PrepareAcc=("PrepareAcc", "bytes32,uint64,uint256", ["w", "w", "w"], flat("ua", "keyVersion", "half")),
     PqzTransferSingle=("ConfidentialTransferSingle", f"{TRANSFER_S},{AUTH_S}", [TRANSFER_T] + AUTH_T, conf(TRANSFER_F)),
@@ -729,8 +729,9 @@ class Client:
         self.bal, self.acc, self.pub, self.uas, self.total = {}, {}, {}, {}, 0
         self._next = {}
 
-    def state(self, ua):
-        w = [int.from_bytes(x, "big") for x in words(call(self.tok, cd("pqzAccount(bytes32,uint64)", ["w", "w"], ua.ua, kv_of(ua))), len(ACCT))]
+    def state(self, ua, version=None):
+        v = kv_of(ua) if version is None else version
+        w = [int.from_bytes(x, "big") for x in words(call(self.tok, cd("pqzAccount(bytes32,uint64)", ["w", "w"], ua.ua, v)), len(ACCT))]
         return dict(zip(ACCT, w))
 
     def hint(self, ua):
@@ -798,16 +799,18 @@ def restore(C, what):
     log(f"wallet restore from the views ({what}):")
     for ua_id, tracked in C.bal.items():
         u = C.uas[ua_id]
-        st = C.state(u)
-        T = dec_bytes(call(C.tok, cd("pqzAcc(bytes32)", ["w"], ua_id)))
-        kinds = []
-        for i in range(st["rolled"], st["pendingCount"]):
-            T = K.ct_add(T, dec_bytes(call(C.tok, cd("pqzPendingCt(bytes32,uint64,uint64)", ["w", "w", "w"], ua_id, 0, i))))
-            w = int(call(C.tok, cd("pqzPending(bytes32,uint64,uint64)", ["w", "w", "w"], ua_id, 0, i)), 16)
-            kinds.append("T" if (w >> 64) & 0xFFFF == 0 else "C")  # TRIVIAL (vOff = 0) or a proven credit
-        got = bal(u.s, T)
-        check(got == tracked, f"restore {C.name} {u.name}: acc + {st['pendingCount'] - st['rolled']} pending "
-                              f"[{''.join(kinds)}] decrypt to {got}, tracked {tracked} (rolled {st['rolled']}, "
+        # group 3g (KV-6): the balance is the sum over the UA's versions, each with its own key
+        got, kinds, st = 0, [], None
+        for v in range(kv_of(u) + 1):
+            st = C.state(u, v)
+            T = dec_bytes(call(C.tok, cd("pqzAcc(bytes32,uint64)", ["w", "w"], ua_id, v)))
+            for i in range(st["rolled"], st["pendingCount"]):
+                T = K.ct_add(T, dec_bytes(call(C.tok, cd("pqzPendingCt(bytes32,uint64,uint64)", ["w", "w", "w"], ua_id, v, i))))
+                w = int(call(C.tok, cd("pqzPending(bytes32,uint64,uint64)", ["w", "w", "w"], ua_id, v, i)), 16)
+                kinds.append("T" if (w >> 64) & 0xFFFF == 0 else "C")  # TRIVIAL (vOff = 0) or a proven credit
+            got += bal(key_at(u, v).s, T)
+        check(got == tracked, f"restore {C.name} {u.name}: acc + pending over {kv_of(u) + 1} version(s) "
+                              f"[{''.join(kinds)}] decrypt to {got}, tracked {tracked} (latest: rolled {st['rolled']}, "
                               f"pendingCount {st['pendingCount']}, floor {st['floor']}, flags {st['flags']})")
 
 
@@ -926,8 +929,9 @@ def named_rows():
     the digest of the struct `typed_digest` assembles from the same parameters, and the typed `PqzAuth`."""
     V = json.load(open(os.path.join(ROOT, "smartcontracts/vectors/typed/typed_ops.json")))
     methods, _ = abi_methods()
-    # group 3g: the PQZ rollover's row is `UARollOver@pqz` (Zether keeps `UARollOver`)
-    rows = {op.removesuffix("@pqz"): r for op, r in V["ops"].items() if op.removesuffix("@pqz") in BUILT and "pqz" in r["domains"]}
+    # group 3g: the PQZ rollover's row is `UAPqzRollOver` (Zether keeps `UARollOver`)
+    named = lambda op: "UARollOver" if op == "UAPqzRollOver" else op
+    rows = {named(op): r for op, r in V["ops"].items() if named(op) in BUILT and "pqz" in r["domains"]}
     check(len(rows) == 10, f"typed_ops.json: {len(rows)} rows with a builder here, want 10")
     for op, r in rows.items():
         d = r["domains"]["pqz"]
@@ -1505,6 +1509,8 @@ def rotation(pq, s, reg, C, dave, payer, sk):
     w = words(call(reg, cd("pqzKeyOf(bytes32)", ["w"], dave.ua)))
     check(int.from_bytes(w[0], "big") == 1 and int.from_bytes(w[3], "big") == 1, "dave pqzKeyOf: version 1 current, proven")
     dave1 = UA(**{**dave.__dict__, "pk": pk1, "s": s1, "e": e1, "kv": 1, "name": "dave/v1"})
+    dave1.prior = {0: dave}
+    C.uas[dave.ua] = dave1  # the restore reads both versions (KV-6)
     n0 = C.state(dave)["pendingCount"]
     transfer(pq, s, C, payer, dave1, ZERO32, 4, False, f"{payer.name}→dave 4 after the rotation (lands in version 1)")
     check(C.state(dave1)["pendingCount"] == 1 and C.state(dave)["pendingCount"] == n0, "the credit is in (dave, 1), (dave, 0) unchanged")
@@ -1588,6 +1594,11 @@ def transfer(pq, s, C, frm, to, ben, v, aud_on, what, binding=ZERO32, send=True,
 def kv_of(u):
     """The key version a debit, rollover or view of `u` names (group 3g): its `kv` once rotated, else 0."""
     return getattr(u, "kv", 0) if u is not None else 0
+
+
+def key_at(u, v):
+    """The holder of version `v` of `u`: `u` itself at its own version, else the form it rotated from (`rotation`)."""
+    return u if v == kv_of(u) else u.prior[v]
 
 
 def multi_args(p, frm, ben, decoy, salt, uas, g, aud_on, out, sealed, kv=0):

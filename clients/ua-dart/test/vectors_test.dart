@@ -98,7 +98,8 @@ Uint8List _hashStructJson(Map types, String name, Map data) {
       _ when types.containsKey(ft) => _hashStructJson(types, ft, v as Map),
       'string' => keccak256([_utf8(v as String)]),
       'bytes32' => _b(v),
-      'uint8' || 'uint16' || 'uint64' => _word(v as int),
+      // a uint64 above 32 bits is a decimal string (UAPqzKeyVersion.version)
+      'uint8' || 'uint16' || 'uint64' => _word(v is String ? int.parse(v) : v as int),
       _ => throw StateError('field type $ft'),
     });
   }
@@ -339,6 +340,8 @@ void main() {
       'UARegistration': '0xc78b548ceb2fadf1f0a895f79f88b517327c120f0f9ab345f02981441048c87e',
       'UAPqzKey': '0x827d90728b100bc830d06b04dd2b9b5f7853adaa05502b4082875f881d925a00',
       'UAPqzKeyRecord': '0xaba20a80603724f71232573a76d2506ae38f60f39ea9cd8e71f4b64775dd7567',
+      'UAPqzKeyVersion': '0x56bb760a3968427f1aa06b0497de42c05374beae46765175b61976c12e38b158',
+      'UAPqzKeyVersionRecord': '0x2e00b7c0ff5cfbca3f50e0445bcd02bb227e0154c239c812b38d9b8fa6e7d6e5',
       'UAMembership': '0x2ffb61cab130ef54f9af88d7255ca81c570651b2562c2c368286a1f43bfe5cb4',
     };
     expect([types.length, portableTypes.length], [pinned.length, pinned.length]);
@@ -472,6 +475,46 @@ void main() {
     // known answer shared with ua-rs: pins the 8-byte version word
     expect(_hx(kemRecordDigest(u, (BigInt.one << 64) - BigInt.one, _kem(1601))), '0xa0063a84b56d80c83688d8caf5aeb4be8fb4556928e8bc649686449573938f07');
     expect(_hx(chainKeyHash(0x10000000007)), '0x6e45d591a544f53396f6e86d49f5809196c5725f9d99dbd2ca97f9925c7ce950'); // keccak256("evm:1099511627783")
+  });
+
+  // Group 3g: portable.json pqzKeyVersions by digest, message and args; the builder's refusals on pqzKeyVersionNegatives.
+  test('pqz key versions', () {
+    final vers = (p['pqzKeyVersions'] as List).cast<Map>(), zero = (p['pqzKeyRecords'] as List).cast<Map>();
+    expect(vers.length, 16);
+    List<(int, Uint8List)> storedOf(Map r, List<int> versions) {
+      final base = (r['name'] as String).split('/')[0], set = r['set'];
+      return [
+        for (final v in versions)
+          (v, _b(v == 0 ? byKey(zero, 'name', '$base/$set')['pqzKeyHash'] : byKey(vers, 'name', '$base/v$v/$set')['pqzKeyHash']))
+      ];
+    }
+
+    for (final r in vers) {
+      final ua = _b(r['ua']), h = _b(r['pqzKeyHash']), ph = _b(r['pqzPopHash']), key = _b(r['pqzKey']), v = r['version'] as int;
+      final g = pqzKeyVersionRecordMessage(_kind(r), ua, _b(byKey(regs, 'ua', r['ua'])['keyData']), v, key,
+          pqzPopHash: ph, stored: storedOf(r, v == 2 ? [0, 1] : [0]));
+      expect([_hx(g.pqzKeyHash), _hx(g.versionDigest), _hx(g.recordDigest), _hx(g.message), _hx(g.pqzRegMessage)],
+          [r['pqzKeyHash'], r['versionDigest'], r['recordDigest'], r['message'], r['pqzRegMessage']],
+          reason: r['name']);
+      expect(g.memberDigest == null ? null : _hx(g.memberDigest!), r['memberDigest'], reason: r['name']);
+      expect(_hx(pqzKeyVersionDigest(ua, v, h)), r['versionDigest']);
+      expect(_hashTypedData(r['typedData']), r['recordDigest'], reason: r['name']);
+      expect(setPqzKeyVersionArgs(ua, v, key, ph, r['args']['sig'].cast<String, Object?>()), r['args'], reason: r['name']);
+    }
+    var n = 0;
+    for (final x in (p['pqzKeyVersionNegatives'] as List).cast<Map>()) {
+      if (x['error'] == 'UAUnauthorized') continue; // a signature's verdict, not the builder's
+      final m = x['mutation'] as Map, r = byKey(vers, 'name', m['row']);
+      final key = _b((m['set'] as Map)['pqzKey'] ?? r['pqzKey']);
+      final e = _err(() => pqzKeyVersionRecordMessage(_kind(r), _b(r['ua']), _b(byKey(regs, 'ua', r['ua'])['keyData']), r['version'], key,
+          pqzPopHash: _b(r['pqzPopHash']), stored: storedOf(r, (m['stored'] as List).cast<int>())));
+      expect(e.code, x['error'], reason: x['name']);
+      n++;
+    }
+    expect(n, 16);
+    final r = vers.first;
+    expect(_err(() => pqzKeyVersionRecordMessage(_kind(r), _b(r['ua']), _b(byKey(regs, 'ua', r['ua'])['keyData']), 0, _b(r['pqzKey']),
+        pqzPopHash: _b(r['pqzPopHash']))).code, 'UAPqzKeySet');
   });
 
   test('pqz key record', () {

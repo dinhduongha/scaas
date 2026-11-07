@@ -169,6 +169,16 @@ typedef struct {
 #define SCAAS_UA_ERR_PQZ_KEY_SET 16
 
 /**
+ * "UAPqzKeyVersion": a PQZ key version other than `latest + 1`, or no version 0 stored (group 3g, KV-1).
+ */
+#define SCAAS_UA_ERR_PQZ_KEY_VERSION 21
+
+/**
+ * "UAKeyInUse": a stored version of the UA holds this PQZ key (group 3g, KV-1).
+ */
+#define SCAAS_UA_ERR_KEY_IN_USE 22
+
+/**
  * "UAKemScheme": the first byte of a KEM key is not an enabled KEM scheme id (only 1; 2 is reserved).
  */
 #define SCAAS_UA_ERR_KEM_SCHEME 17

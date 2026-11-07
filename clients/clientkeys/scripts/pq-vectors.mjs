@@ -8,7 +8,7 @@
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { shake256 } from '@noble/hashes/sha3.js';
 import { seedFromWords } from '../src/seed.js';
-import { PQ_KINDS, pqKeygen, kindTag, uaMessage, signedMessage, signUA, verifyUA, purposeTag, mldsaExpandedKey } from '../src/pq.js';
+import { PQ_KINDS, pqKeygen, kindTag, uaMessage, signedMessage, signUA, verifyUA, purposeTag, mldsaExpandedKey, pqzKeySeed } from '../src/pq.js';
 import { hex, keccak_256, utf8ToBytes, concatBytes } from '../src/bytes.js';
 
 const M = 'bench hurt jump file august wise shallow faculty impulse spring exact slush thunder author '
@@ -65,6 +65,9 @@ for (const name of Object.keys(PQ_KINDS)) {
   }
   out.kinds[name] = k;
 }
+// group 3g (C8, CTR-PQZ-13): a single-key holder's PQZ key seed of (account 0, index 0) at versions 0, 1, 2; version 0 is the
+// `info` without a suffix (today's), v ≥ 1 appends be64(v)
+out.pqzSeeds = [0, 1, 2].map((version) => ({ account: 0, index: 0, version, seed32: hex(pqzKeySeed(seed, 0, 0, version)) }));
 mkdirSync(new URL('../../../smartcontracts/vectors/ua/', import.meta.url), { recursive: true });
 writeFileSync(new URL('../../../smartcontracts/vectors/ua/pq_kat.json', import.meta.url), JSON.stringify(out, null, 2) + '\n');
 console.log('wrote smartcontracts/vectors/ua/pq_kat.json');

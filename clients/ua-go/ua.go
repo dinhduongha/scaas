@@ -357,7 +357,10 @@ var (
 		"UARegistration":   "UARegistration(UAPortableRecord record,bytes32 pqzPopHash)" + kemType + recordType,
 		"UAPqzKey":         pqzKeyType,
 		"UAPqzKeyRecord":   "UAPqzKeyRecord(UAPqzKey key,bytes32 pqzPopHash)" + pqzKeyType,
-		"UAMembership":     "UAMembership(bytes32 ua,bytes32 member)",
+		// group 3g (KV-1): a PQZ key version v >= 1 and the UA's consent to it
+		"UAPqzKeyVersion":       pqzKeyVersionType,
+		"UAPqzKeyVersionRecord": "UAPqzKeyVersionRecord(UAPqzKeyVersion key,bytes32 pqzPopHash)" + pqzKeyVersionType,
+		"UAMembership":          "UAMembership(bytes32 ua,bytes32 member)",
 	}
 )
 
@@ -591,6 +594,88 @@ func PqzKeyRecordDigest(ua, pqzKeyHash, pqzPopHash [32]byte) [32]byte {
 // native member this digest itself, a derived member MemberDigest(ua, UAMessage(MSIG, PURPOSE_MEMBERSHIP, ·)) under member.
 func MembershipDigest(ua, member [32]byte) [32]byte {
 	return typed(HashStruct("UAMembership", ua, member))
+}
+
+const pqzKeyVersionType = "UAPqzKeyVersion(bytes32 ua,uint64 version,bytes32 pqzKeyHash)"
+
+// PqzKeyVersionDigest (group 3g) is the typed UAPqzKeyVersion{ua, version, pqzKeyHash}: what version v >= 1's R_REG proves over.
+func PqzKeyVersionDigest(ua [32]byte, version uint64, pqzKeyHash [32]byte) [32]byte {
+	return typed(pqzKeyVersionHash(ua, version, pqzKeyHash))
+}
+
+func pqzKeyVersionHash(ua [32]byte, version uint64, pqzKeyHash [32]byte) [32]byte {
+	return HashStruct("UAPqzKeyVersion", ua, [32]byte(word(version)), pqzKeyHash)
+}
+
+// PqzKeyVersionRecordDigest (group 3g) is the typed UAPqzKeyVersionRecord{UAPqzKeyVersion{ua, version, pqzKeyHash}, pqzPopHash}:
+// what the UA signs for version v >= 1 under UAMessage(kind, PURPOSE_PQZ_KEY, ·).
+func PqzKeyVersionRecordDigest(ua [32]byte, version uint64, pqzKeyHash, pqzPopHash [32]byte) [32]byte {
+	return typed(HashStruct("UAPqzKeyVersionRecord", pqzKeyVersionHash(ua, version, pqzKeyHash), pqzPopHash))
+}
+
+// StoredPqzKey is one stored version of a UA (the chain's pqzKeyAt).
+type StoredPqzKey struct {
+	Version    uint64
+	PqzKeyHash [32]byte
+}
+
+// PqzKeyVersionRecord is PQZ key version v >= 1 of setPqzKey(ua, version, ...), see PqzKeyVersionRecordMessage.
+type PqzKeyVersionRecord struct {
+	PqzKeyHash, PqzPopHash, VersionDigest, RecordDigest, Message, PqzRegMessage [32]byte
+	MemberDigest                                                                *[32]byte
+}
+
+// PqzKeyVersionRecordMessage (group 3g, KV-1) refuses, from the UA's stored versions: version 0 (UAPqzKeySet: a new key gets a new
+// version), a version other than latest + 1 or no version 0 (UAPqzKeyVersion), a key a stored version holds (UAKeyInUse). The holder
+// rules of HolderPopMessage; inner gives an msig member's key data (nil: none). Message is what the UA signs, PqzRegMessage what the
+// key's R_REG proves over.
+func PqzKeyVersionRecordMessage(kind uint16, ua [32]byte, keyData []byte, version uint64, pqzKey, pqzPop, pqzPopHash []byte, stored []StoredPqzKey, inner Inner) (*PqzKeyVersionRecord, error) {
+	ok, err := holds(kind, keyData, inner)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, fail("UAPqzHolder", fmt.Sprintf("0x%04x may not hold a PQZ key", kind))
+	}
+	if version == 0 {
+		return nil, fail("UAPqzKeySet", "version 0 is write-once: a new key gets a new version")
+	}
+	hasZero, latest := false, uint64(0)
+	for _, s := range stored {
+		hasZero = hasZero || s.Version == 0
+		latest = max(latest, s.Version)
+	}
+	if !hasZero || version != latest+1 {
+		return nil, fail("UAPqzKeyVersion", fmt.Sprint(version))
+	}
+	r := &PqzKeyVersionRecord{}
+	if r.PqzKeyHash, err = pqzKeyHashOf(pqzKey); err != nil {
+		return nil, err
+	}
+	for _, s := range stored {
+		if s.PqzKeyHash == r.PqzKeyHash {
+			return nil, fail("UAKeyInUse", "a stored version holds this key")
+		}
+	}
+	if r.PqzPopHash, err = proofHashOf(pqzPop, pqzPopHash); err != nil {
+		return nil, err
+	}
+	if r.PqzPopHash == ([32]byte{}) {
+		return nil, fail("UAPqzPopHash", "a PQZ key record needs its proof hash")
+	}
+	r.VersionDigest = PqzKeyVersionDigest(ua, version, r.PqzKeyHash)
+	r.RecordDigest = PqzKeyVersionRecordDigest(ua, version, r.PqzKeyHash, r.PqzPopHash)
+	if r.Message, err = UAMessage(kind, pqzKeyPurpose, r.RecordDigest); err != nil {
+		return nil, err
+	}
+	if r.PqzRegMessage, err = UAMessage(0x0142, pqzKeyPurpose, r.VersionDigest); err != nil {
+		return nil, err
+	}
+	if kind == 0x0120 {
+		m := MemberDigest(ua, r.Message)
+		r.MemberDigest = &m
+	}
+	return r, nil
 }
 
 // PqzKeyRecord is the PQZ key record of setPqzKey (ruling A1-I1), see PqzKeyRecordMessage. Message is what the UA signs,

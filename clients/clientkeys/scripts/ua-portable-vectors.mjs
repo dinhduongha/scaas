@@ -160,6 +160,26 @@ const pqzKeyRecord = (s, set, signerOf = s) => {
     args: { ua: reg.ua, pqzKey: hex(pqzKey), pqzPopHash: hex(m.pqzPopHash), sig: ua.uaSig(list ? { members: list } : { signature: sig }) } };
 };
 const pqzKeyRecords = [fn, nativeMsig, ...LEVEL5].flatMap((s) => SETS.map((set) => pqzKeyRecord(s, set)));
+// --- group 3g (KV-1, KV-2): PQZ key versions 1 and 2 of a single-key holder (fndsa512) and of an msig (msig-pq-native) at every
+// set, after the version 0 of `pqzKeyRecords`: setPqzKey(ua, version, key, popHash, sig) over typed UAPqzKeyVersionRecord, the
+// R_REG message over typed UAPqzKeyVersion; each version's own key and proof fillers ---
+const pqzVersionKey = (s, set, v) => pqzKeyOf(set, `${PQZ_LABEL[s.name]} v${v}`);
+const pqzVersionPop = (set, v) => pqzPopOf(set, ` v${v}`);
+const storedOf = (s, set, upTo) => [0, ...Array.from({ length: upTo - 1 }, (_, i) => i + 1)]
+  .map((v) => ({ version: v, pqzKeyHash: ua.keyHashOf(0x0142, v === 0 ? pqzKeyOf(set, PQZ_LABEL[s.name]) : pqzVersionKey(s, set, v)) }));
+const pqzKeyVersion = (s, set, v) => {
+  const pqzKey = pqzVersionKey(s, set, v);
+  const m = ua.pqzKeyVersionRecordMessage(s.kind, { ua: s.ua, keyData: s.keyData, version: v, pqzKey, pqzPop: pqzVersionPop(set, v),
+    inner: s.inner, stored: storedOf(s, set, v) });
+  const list = s.kind === 0x0120 ? s.memberList(m.memberDigest, m.recordDigest, [0, 1]) : null;
+  const sig = list ? encodeMemberSigs(list) : s.sign(m.message);
+  return { name: `${s.name}/v${v}/${set}`, set, kind: s.kind, ua: hex(s.ua), version: v, pqzKey: hex(pqzKey), pqzKeyHash: hex(m.pqzKeyHash),
+    pqzPopHash: hex(m.pqzPopHash), pqzPop: hex(pqzVersionPop(set, v)), versionDigest: hex(m.versionDigest), recordDigest: hex(m.recordDigest),
+    message: hex(m.message), ...(m.memberDigest ? { memberDigest: hex(m.memberDigest) } : {}), sig: hex(sig),
+    pqzRegMessage: hex(m.pqzRegMessage), typedData: m.typedData,
+    args: { ua: hex(s.ua), version: v, pqzKey: hex(pqzKey), pqzPopHash: hex(m.pqzPopHash), sig: ua.uaSig(list ? { members: list } : { signature: sig }) } };
+};
+const pqzKeyVersions = [fn, nativeMsig].flatMap((s) => SETS.flatMap((set) => [1, 2].map((v) => pqzKeyVersion(s, set, v))));
 // --- acceptMembership(ua, MemberSig{index, [], sig}) (CTR-UA-37): each member of two structures; digest = typed(UAMembership{ua,
 // member}), a native member over it, a derived member over uaMessage(memberKind, member, memberDigest) ---
 const membership = (s, m) => {
@@ -172,6 +192,29 @@ const memberships = [classicalMsig, nativeMsig].flatMap((s) => s.members.map((m)
 /** A valid signature of `s` over the PQZ key record (ua of s, the fndsa512 row's key and proof hash), for the setPqzKey negatives. */
 const recordSigBy = (s, r) => s.sign(ua.uaMessage(s.kind, ua.PQZ_KEY_TAG,
   ua.pqzKeyRecordDigest({ ua: s.ua, pqzKeyHash: r.pqzKeyHash, pqzPopHash: r.pqzPopHash })));
+
+/** Group 3g: setPqzKey version negatives on a `pqzKeyVersions` row of fndsa512; `stored`: the versions of that UA stored before the
+ *  call (version 0 = its `pqzKeyRecords` row, v >= 1 = its `pqzKeyVersions` row). */
+const versionNegatives = (set) => {
+  const v1 = pqzKeyVersion(fn, set, 1);
+  const v2 = pqzKeyVersion(fn, set, 2);
+  const rec = (version, pqzKeyHash) => ua.uaMessage(fn.kind, ua.PQZ_KEY_TAG,
+    ua.pqzKeyVersionRecordDigest({ ua: fn.ua, version, pqzKeyHash, pqzPopHash: B(v1.pqzPopHash) }));
+  const v0Struct = ua.uaMessage(fn.kind, ua.PQZ_KEY_TAG, ua.pqzKeyRecordDigest({ ua: fn.ua, pqzKeyHash: B(v1.pqzKeyHash), pqzPopHash: B(v1.pqzPopHash) }));
+  return [
+    neg(`pqz-key-version-gap/${set}`, 'setPqzKey', v2.name, {}, 'UAPqzKeyVersion', { stored: [0], note: 'v2 with latest 0 (v1 not stored)' }),
+    neg(`pqz-key-version-without-v0/${set}`, 'setPqzKey', v1.name, {}, 'UAPqzKeyVersion', { stored: [], note: 'v1 on a UA without version 0' }),
+    neg(`pqz-key-version-twice/${set}`, 'setPqzKey', v1.name, {}, 'UAPqzKeyVersion', { stored: [0, 1], note: 'v1 again after v1' }),
+    neg(`pqz-key-version-repeated-key/${set}`, 'setPqzKey', v1.name, { pqzKey: hex(pqzKeyOf(set, PQZ_LABEL.fndsa512)) }, 'UAKeyInUse',
+      { stored: [0], note: "v1 with version 0's key bytes, refused at storage before the signature" }),
+    neg(`pqz-key-version-v0-struct/${set}`, 'setPqzKey', v1.name, { sig: hex(fn.sign(v0Struct)) }, 'UAUnauthorized',
+      { stored: [0], note: 'the version-0 UAPqzKeyRecord signed for version 1' }),
+    neg(`pqz-key-version-for-v2/${set}`, 'setPqzKey', v1.name, { sig: hex(fn.sign(rec(2, B(v1.pqzKeyHash)))) }, 'UAUnauthorized',
+      { stored: [0], note: "version 2's consent offered for version 1" }),
+    neg(`pqz-key-version-other-ua/${set}`, 'setPqzKey', v1.name, { ua: hex(ml.ua) }, 'UAUnauthorized',
+      { stored: [0], note: "fndsa512's version-1 consent replayed for another UA (mldsa65, with version 0 from its registrations row)" }),
+  ];
+};
 
 // --- negatives: a row with fields replaced (`set`), refused with `error`; the row's table by entry point (see the note) ---
 // Attribute errors (holder, PQZ key length, proof hash, KEM version, KEM key length) are checked before the PoP; a UAPoP row
@@ -186,6 +229,8 @@ const DIGEST = keccak_256(utf8ToBytes('scaas.ua.vectors.sig.digest')); // signat
 const metatxMd = ua.memberDigest(nativeMsig.ua, ua.uaMessage(0x0120, ua.purposeTag('metatx'), DIGEST));
 const nm = registrations.find((r) => r.name === 'msig-pq-native');
 const uaAuthMd = (md) => ua.uaAuthDigest({ generation: 1, ...contexts.A }, nativeUa, MEMBER, md);
+// group 3g (KV-1, F-11): their own table, so `negatives` keeps its rows and order
+const pqzKeyVersionNegatives = SETS.flatMap(versionNegatives);
 const negatives = [
   ...SETS.flatMap((set) => {
     const row = `mldsa65/${set}`;
@@ -459,9 +504,16 @@ const note = [
   + 'typedKey; no row here).',
   'Rows: registrations[i] = register(kind, keyData, attrs, pop, pqzPop); kemRecords[i] = setKemKey(ua, version, kemPk, sig) '
   + '(id = name/vN, versions 1-3, each its own key; version 0 is the registration\'s key, stored by register, never by setKemKey: '
-  + 'UAKemVersion; every version is write-once); pqzKeyRecords[i] = setPqzKey(ua, pqzKey, pqzPopHash, sig) '
+  + 'UAKemVersion; every version is write-once); pqzKeyRecords[i] = setPqzKey(ua, 0, pqzKey, pqzPopHash, sig) (group 3g: version 0) '
   + 'for a UA registered without a PQZ key (its proof bytes for storePqzPop: the set\'s filler, registrations '
   + '"mldsa65/<set>".pqzPop). pqzPop rows are filler of a real R_REG proof\'s length per set, not proofs.',
+  'Group 3g (spec 2026-11-06-pqz-key-versions, KV-1, KV-2): pqzKeyVersions[i] = setPqzKey(ua, version, pqzKey, pqzPopHash, sig) for '
+  + 'version 1, then 2, after the UA\'s pqzKeyRecords row (version 0), each version its own key and proof filler (pqzPop, for '
+  + 'storePqzPop(ua, version, pqzPop)): sig over uaMessage(kind, PURPOSE_PQZ_KEY, recordDigest), recordDigest = typed('
+  + 'UAPqzKeyVersionRecord{ua, version, pqzKeyHash, pqzPopHash}), versionDigest = typed(UAPqzKeyVersion{ua, version, pqzKeyHash}) and '
+  + 'pqzRegMessage = uaMessage(0x0142, PURPOSE_PQZ_KEY, versionDigest) (the R_REG message). Version 0 keeps UAPqzKey / UAPqzKeyRecord. '
+  + 'pqzKeyVersionNegatives: setPqzKey of the pqzKeyVersions row mutation.row with mutation.set replaced, on the state where exactly '
+  + 'the versions mutation.stored of that UA are stored (0: its pqzKeyRecords row), refused with error.',
   'negatives: mutation.row names a row of registrations (entry register, storePqzPop, requireAuthorized), kemRecords by id '
   + '(setKemKey) or pqzKeyRecords (setPqzKey); mutation.set replaces fields (attrs.<field>, pqzPop, pop, ua, sig, pqzPopHash, '
   + 'purposeTag, digest, auth); mutation.registerWith gives the register call that precedes a storePqzPop row; mutation.otherKind '
@@ -480,7 +532,8 @@ const build = () => ({
   tags: { PURPOSE_POP_V2: tag('scaas.ua.purpose.pop.v2'), PURPOSE_KEM: tag('scaas.ua.purpose.kem.v1'),
     PURPOSE_PQZ_KEY: tag('scaas.ua.purpose.pqz-key.v1'), PURPOSE_MEMBERSHIP: tag('scaas.ua.purpose.membership.v1'),
     PQZ_KEY_GROUP: tag('scaas.ua.group.pqz-mlwe.v1') },
-  checked: ua.CHECKED, kemScheme: ua.KEM_SCHEME.mlkem1024X25519, kemPkLength: ua.KEM_PK_LENGTH, sets: PQZ_SETS, registrations, kemRecords, pqzKeyRecords, memberships, negatives,
+  checked: ua.CHECKED, kemScheme: ua.KEM_SCHEME.mlkem1024X25519, kemPkLength: ua.KEM_PK_LENGTH, sets: PQZ_SETS, registrations, kemRecords, pqzKeyRecords, pqzKeyVersions, memberships, negatives,
+  pqzKeyVersionNegatives,
 });
 
 /** portable.json's exact text. */

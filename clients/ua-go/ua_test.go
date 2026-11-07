@@ -9,6 +9,7 @@ import (
 	"os"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -397,7 +398,15 @@ func hashStructJSON(types obj, name string, data obj) [32]byte {
 		case ft == "bytes32":
 			w = b32(v)
 		case ft == "uint8" || ft == "uint16" || ft == "uint64":
-			copy(w[:], word(uint64(v.(float64))))
+			if s, ok := v.(string); ok { // a uint64 above 32 bits is a decimal string (UAPqzKeyVersion.version)
+				n, err := strconv.ParseUint(s, 10, 64)
+				if err != nil {
+					panic(err)
+				}
+				copy(w[:], word(n))
+			} else {
+				copy(w[:], word(uint64(v.(float64))))
+			}
 		default:
 			panic("field type " + ft)
 		}
@@ -440,12 +449,14 @@ func TestPortableTyped(t *testing.T) {
 		t.Fatal("domain")
 	}
 	pinned := map[string]string{
-		"UAKemRecord":      "0x0ab7989827627b89c268e88a0a0b06b62aefa70b0a466014931ca44acfa9a201",
-		"UAPortableRecord": "0x0c1553cfab3c35326558484df79963dced75ead85272d2a85985f264757bfe7f",
-		"UARegistration":   "0xc78b548ceb2fadf1f0a895f79f88b517327c120f0f9ab345f02981441048c87e",
-		"UAPqzKey":         "0x827d90728b100bc830d06b04dd2b9b5f7853adaa05502b4082875f881d925a00",
-		"UAPqzKeyRecord":   "0xaba20a80603724f71232573a76d2506ae38f60f39ea9cd8e71f4b64775dd7567",
-		"UAMembership":     "0x2ffb61cab130ef54f9af88d7255ca81c570651b2562c2c368286a1f43bfe5cb4",
+		"UAKemRecord":           "0x0ab7989827627b89c268e88a0a0b06b62aefa70b0a466014931ca44acfa9a201",
+		"UAPortableRecord":      "0x0c1553cfab3c35326558484df79963dced75ead85272d2a85985f264757bfe7f",
+		"UARegistration":        "0xc78b548ceb2fadf1f0a895f79f88b517327c120f0f9ab345f02981441048c87e",
+		"UAPqzKey":              "0x827d90728b100bc830d06b04dd2b9b5f7853adaa05502b4082875f881d925a00",
+		"UAPqzKeyRecord":        "0xaba20a80603724f71232573a76d2506ae38f60f39ea9cd8e71f4b64775dd7567",
+		"UAPqzKeyVersion":       "0x56bb760a3968427f1aa06b0497de42c05374beae46765175b61976c12e38b158",
+		"UAPqzKeyVersionRecord": "0x2e00b7c0ff5cfbca3f50e0445bcd02bb227e0154c239c812b38d9b8fa6e7d6e5",
+		"UAMembership":          "0x2ffb61cab130ef54f9af88d7255ca81c570651b2562c2c368286a1f43bfe5cb4",
 	}
 	types := ty["types"].(obj)
 	if len(types) != len(pinned) || len(PortableTypes) != len(pinned) {
@@ -659,6 +670,78 @@ func TestKemRecord(t *testing.T) {
 	}
 	if c := ChainKeyHash(1<<40 + 7); hx(c[:]) != "0x6e45d591a544f53396f6e86d49f5809196c5725f9d99dbd2ca97f9925c7ce950" { // keccak256("evm:1099511627783")
 		t.Fatal("chain key hash")
+	}
+}
+
+// Group 3g: portable.json pqzKeyVersions by digest, message and args; the builder's refusals on pqzKeyVersionNegatives.
+func TestPqzKeyVersions(t *testing.T) {
+	p := load(t, "portable.json")
+	regs, zero, vers := rows(p, "registrations"), rows(p, "pqzKeyRecords"), rows(p, "pqzKeyVersions")
+	if len(vers) != 16 {
+		t.Fatal("rows")
+	}
+	storedOf := func(r obj, versions []uint64) (s []StoredPqzKey) {
+		base := strings.Split(r["name"].(string), "/")[0]
+		for _, v := range versions {
+			name := fmt.Sprintf("%s/%v", base, r["set"])
+			src := zero
+			if v > 0 {
+				name, src = fmt.Sprintf("%s/v%d/%v", base, v, r["set"]), vers
+			}
+			s = append(s, StoredPqzKey{v, b32(find(src, "name", name)["pqzKeyHash"])})
+		}
+		return
+	}
+	for _, r := range vers {
+		ua, h, ph, v, k := b32(r["ua"]), b32(r["pqzKeyHash"]), b32(r["pqzPopHash"]), uint64(r["version"].(float64)), kind(r["kind"])
+		kd := bs(find(regs, "ua", r["ua"])["keyData"])
+		want := []uint64{0}
+		if v == 2 {
+			want = []uint64{0, 1}
+		}
+		g, err := PqzKeyVersionRecordMessage(k, ua, kd, v, bs(r["pqzKey"]), nil, ph[:], storedOf(r, want), nil)
+		if err != nil {
+			t.Fatalf("%v: %v", r["name"], err)
+		}
+		if hx(g.PqzKeyHash[:]) != r["pqzKeyHash"] || hx(g.VersionDigest[:]) != r["versionDigest"] || hx(g.RecordDigest[:]) != r["recordDigest"] ||
+			hx(g.Message[:]) != r["message"] || hx(g.PqzRegMessage[:]) != r["pqzRegMessage"] || hxp(g.MemberDigest) != opt(r, "memberDigest") ||
+			g.VersionDigest != PqzKeyVersionDigest(ua, v, h) || g.RecordDigest != PqzKeyVersionRecordDigest(ua, v, h, ph) ||
+			hashTypedData(r["typedData"].(obj)) != r["recordDigest"] {
+			t.Fatalf("%v", r["name"])
+		}
+		sameJSON(t, r["name"].(string), NewSetPqzKeyVersionArgs(ua, v, bs(r["pqzKey"]), ph, recordSig(r)), r["args"])
+	}
+	negs, n := rows(p, "pqzKeyVersionNegatives"), 0
+	if len(negs) != 28 {
+		t.Fatal("negatives")
+	}
+	for _, x := range negs {
+		if x["error"] == "UAUnauthorized" {
+			continue // a signature's verdict, not the builder's
+		}
+		m := x["mutation"].(obj)
+		r := find(vers, "name", m["row"])
+		var versions []uint64
+		for _, v := range m["stored"].([]any) {
+			versions = append(versions, uint64(v.(float64)))
+		}
+		key := bs(r["pqzKey"])
+		if o, ok := m["set"].(obj)["pqzKey"]; ok {
+			key = bs(o)
+		}
+		_, err := PqzKeyVersionRecordMessage(kind(r["kind"]), b32(r["ua"]), bs(find(regs, "ua", r["ua"])["keyData"]), uint64(r["version"].(float64)), key, nil,
+			bs(r["pqzPopHash"]), storedOf(r, versions), nil)
+		if code(err) != x["error"] {
+			t.Fatalf("%v: %v", x["name"], err)
+		}
+		n++
+	}
+	if n != 16 {
+		t.Fatalf("builder rows %d", n)
+	}
+	r := vers[0]
+	if _, err := PqzKeyVersionRecordMessage(kind(r["kind"]), b32(r["ua"]), bs(find(regs, "ua", r["ua"])["keyData"]), 0, bs(r["pqzKey"]), nil, bs(r["pqzPopHash"]), nil, nil); code(err) != "UAPqzKeySet" {
+		t.Fatal("version 0")
 	}
 }
 

@@ -147,7 +147,8 @@ const OWNER_SIG = { keyData: '0x', signature: filler('ownerSig', 160), members: 
 const nativeSig = (digest) => hex(ecdsa(nativeSk, digest));
 
 function extraOf(name, td, at) {
-  const base = name.replace(/^UA/, '');
+  // group 3g: a per-kind row (`UAPqzRollOver`) by its struct (`UARollOver`): the rollover takes no `pqzAuth`
+  const base = (TYPED_OPS[name]?.primary ?? name).replace(/^UA/, '');
   if (base.startsWith('Pqz') && base !== 'PqzAuth') return { pqzAuth: PQZ_AUTH };
   if (base === 'RollOverSigned' || base === 'SetRollOverMode') return { ownerSig: OWNER_SIG };
   if (base === 'ReceiverFee') {
@@ -159,8 +160,9 @@ function extraOf(name, td, at) {
 
 const ops = {};
 for (const [name, op] of Object.entries(TYPED_OPS)) {
-  const lower = name.replace(/^UA/, 'ua').replace(/^[A-Z]/, (c) => c.toLowerCase());
-  const row = { typeString: op.typeString, typehash: op.typehash, on: op.on, types: op.types, domains: {} };
+  // a per-kind row of one struct name (group 3g: `UAPqzRollOver`) names its EIP-712 primary type
+  const row = { ...(op.primary !== name ? { primaryType: op.primary } : {}), typeString: op.typeString, typehash: op.typehash,
+    on: op.on, types: op.types, domains: {} };
   const message = sample(name, op);
   const relay = name === 'UARelayFee' ? { token: CONTRACT.token, chainId: contexts.A.chainId, chainUid: contexts.A.chainUid, router: ROUTER,
     executor: EXECUTOR, target: TARGET, from: hex(nativeUa), amount: 25, batch: 7, nonce: 0, validUntil: VALID_UNTIL } : null;
@@ -169,9 +171,9 @@ for (const [name, op] of Object.entries(TYPED_OPS)) {
     const kind = KIND[dn];
     const at = { name: dn, contract: CONTRACT[kind], chainId: contexts.A.chainId, chainUid: contexts.A.chainUid };
     const plan = relay && buildRelayFee({ ...relay, name: dn, token: CONTRACT[kind] }).payment(callData);
-    const td = plan ? plan.typedData : OP_BUILDERS[`${lower}TypedData`]({ ...at, message });
+    const td = plan ? plan.typedData : OP_BUILDERS[`${op.builder}TypedData`]({ ...at, message });
     row.message = td.message;
-    row.structHash = hex(hashStruct(td.types, name, td.message));
+    row.structHash = hex(hashStruct(td.types, op.primary, td.message));
     const digest = hashTypedData(td);
     const signature = nativeSig(digest);
     const extra = extraOf(name, td, at);

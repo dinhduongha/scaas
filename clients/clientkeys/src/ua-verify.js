@@ -328,6 +328,14 @@ export function verifyPqzKeyRecord(row, members, accepted) {
   const a = acceptance(accepted);
   verdict(signatureOk(kind, keyData, B(row.ua), ua.PQZ_KEY_TAG, recordDigest, row.sig, members, a), a, 'UAUnauthorized', row.ua);
 }
+/** A PQZ key version row `{ ua, version, pqzKey, pqzPopHash, sig }` (group 3g, v >= 1) as `setPqzKey` checks it, without its state:
+ *  the sequence (`UAPqzKeyVersion`) and the per-UA marker (`UAKeyInUse`) are the chain's. */
+export function verifyPqzKeyVersionRecord(row, members, accepted) {
+  const { kind, keyData } = recordOf(row, members);
+  const { recordDigest } = ua.pqzKeyVersionRecordOf(kind, { ua: row.ua, keyData, version: row.version, pqzKey: row.pqzKey, pqzPopHash: row.pqzPopHash, inner: innerOf(members) });
+  const a = acceptance(accepted);
+  verdict(signatureOk(kind, keyData, B(row.ua), ua.PQZ_KEY_TAG, recordDigest, row.sig, members, a), a, 'UAUnauthorized', row.ua);
+}
 /** An `msig` row `{ ua, purposeTag, digest, sig }` (`sig` = `abi.encode(MemberSig[])`) as `requireAuthorized(ua, purposeTag, digest,
  *  UASig{0x, 0x, members})` checks it (UARegistry `_msig`, ua-rs `check_authorization`): at both levels strictly increasing accepted slots that
  *  stop at the threshold, no minimal rule, no eligibility; an `msig` slot by its list one level down over `innerDigest(id, md)`, no `sig`; a

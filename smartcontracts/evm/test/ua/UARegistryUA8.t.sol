@@ -1738,6 +1738,191 @@ contract UARegistryUA8Test is UARegistryBase {
         }
     }
 
+    // ----- group 3g (KV-1, KV-2): portable.json `pqzKeyVersions` and `pqzKeyVersionNegatives` -----
+
+    struct KeyVer {
+        KeyRec r;
+        uint64 version;
+        bytes32 pqzKeyHash;
+        bytes pqzPop;
+        bytes32 versionDigest;
+        bytes32 recordDigest;
+    }
+
+    struct VerNeg {
+        string name;
+        string row;
+        string err;
+        uint256[] stored;
+        string[] keys;
+        bytes[] values;
+    }
+
+    function loadKeyVersions() external view returns (KeyVer[] memory vs) {
+        string memory j = vm.readFile(PJ);
+        uint256 n;
+        while (_jx(j, string.concat(".pqzKeyVersions[", vm.toString(n), "]"))) ++n;
+        vs = new KeyVer[](n);
+        for (uint256 i; i < n; ++i) {
+            string memory p = string.concat(".pqzKeyVersions[", vm.toString(i), "]");
+            KeyVer memory v = vs[i];
+            v.r = KeyRec(_js(j, string.concat(p, ".name")), _js(j, string.concat(p, ".set")), uint16(_ju(j, string.concat(p, ".kind"))),
+                _jw(j, string.concat(p, ".ua")), _jb(j, string.concat(p, ".pqzKey")), _jw(j, string.concat(p, ".pqzPopHash")),
+                _jw(j, string.concat(p, ".message")), _jb(j, string.concat(p, ".sig")), _jw(j, string.concat(p, ".pqzRegMessage")));
+            v.version = uint64(_ju(j, string.concat(p, ".version")));
+            v.pqzKeyHash = _jw(j, string.concat(p, ".pqzKeyHash"));
+            v.pqzPop = _jb(j, string.concat(p, ".pqzPop"));
+            v.versionDigest = _jw(j, string.concat(p, ".versionDigest"));
+            v.recordDigest = _jw(j, string.concat(p, ".recordDigest"));
+        }
+    }
+
+    function loadVersionNegs() external view returns (VerNeg[] memory negs) {
+        string memory j = vm.readFile(PJ);
+        uint256 n;
+        while (_jx(j, string.concat(".pqzKeyVersionNegatives[", vm.toString(n), "]"))) ++n;
+        negs = new VerNeg[](n);
+        for (uint256 i; i < n; ++i) {
+            string memory p = string.concat(".pqzKeyVersionNegatives[", vm.toString(i), "]");
+            VerNeg memory g = negs[i];
+            g.name = _js(j, string.concat(p, ".name"));
+            g.row = _js(j, string.concat(p, ".mutation.row"));
+            g.err = _js(j, string.concat(p, ".error"));
+            g.stored = vm.parseJsonUintArray(j, string.concat(p, ".mutation.stored"));
+            g.keys = vm.parseJsonKeys(j, string.concat(p, ".mutation.set"));
+            g.values = new bytes[](g.keys.length);
+            for (uint256 k; k < g.keys.length; ++k) g.values[k] = _jb(j, string.concat(p, ".mutation.set['", g.keys[k], "']"));
+        }
+    }
+
+    function _keyVer(KeyVer[] memory vs, string memory name) internal pure returns (KeyVer memory) {
+        for (uint256 i; i < vs.length; ++i) {
+            if (_eq(vs[i].r.name, name)) return vs[i];
+        }
+        revert(string.concat("no key version ", name));
+    }
+
+    /// Every portable.json `pqzKeyVersions` row, on a registry with the `0x0142` verifier, after its UA's version 0 (four sets): the
+    /// registry's own digests equal the row's; v1, then v2, stored by a third party, not current until proven, proven over the row's
+    /// `pqzRegMessage`; `keyOwner` per version, the list once.
+    function test_ua8_pqzKeyVersionsFromVectors() public {
+        Row[] memory rows = _rows();
+        _allowAll(rows);
+        KeyRec[] memory ks = _keyRecs();
+        KeyVer[] memory vs = this.loadKeyVersions();
+        assertEq(vs.length, 16, "two holders, two versions, four sets");
+        UARegistry p = _deploy(address(0x5ceba), chainUidA, address(0), false, BUDGET, address(0), true, _vcfg(0, true));
+        _members(p, rows);
+        for (uint256 i; i < vs.length; i += 2) {
+            (KeyVer memory v1, KeyVer memory v2) = (vs[i], vs[i + 1]);
+            (bytes32 ua, string memory set) = (v1.r.ua, v1.r.set);
+            assertEq(abi.encode(v1.version, v2.version), abi.encode(uint64(1), uint64(2)), v1.r.name);
+            Row memory base = _byUa(rows, ua);
+            KeyRec memory k0 = _firstRecOf(ks, ua, set);
+            _allowRecord(rows, base, k0);
+            uint256 snap = vm.snapshotState();
+            _reg(p, base);
+            p.setPqzKey(ua, 0, k0.pqzKey, k0.pqzPopHash, UACall.sig(k0.sig));
+            _addVersion(p, rows, base, v1);
+            _addVersion(p, rows, base, v2);
+            vm.revertToState(snap);
+        }
+    }
+
+    /// The row's version added by a third party and proven over its `pqzRegMessage`, the registry's digests equal to the row's.
+    function _addVersion(UARegistry p, Row[] memory rows, Row memory base, KeyVer memory v) internal {
+        KeyRec memory k = v.r;
+        bytes32 ua = k.ua;
+        _allowRecord(rows, base, k);
+        assertEq(p.pqzKeyVersionDigest(ua, v.version, v.pqzKeyHash), v.versionDigest, k.name);
+        assertEq(p.pqzKeyVersionRecordDigest(ua, v.version, v.pqzKeyHash, k.pqzPopHash), v.recordDigest, k.name);
+        assertEq(UAKinds.uaMessage(k.kind, UAKinds.PURPOSE_PQZ_KEY, v.recordDigest), k.message, k.name);
+        assertEq(UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_PQZ_KEY, v.versionDigest), k.pqzRegMessage, k.name);
+        assertEq(_h(k.pqzKey), v.pqzKeyHash, k.name);
+        assertEq(keccak256(v.pqzPop), k.pqzPopHash, k.name);
+        vm.prank(address(0xBEEF), address(0xBEEF));
+        p.setPqzKey(ua, v.version, k.pqzKey, k.pqzPopHash, UACall.sig(k.sig));
+        assertEq(p.pqzKeyLatest(ua), v.version, k.name);
+        vm.mockCall(rreg, abi.encodeCall(IUAPopVerifier.verifyPop, (k.pqzKey, k.pqzRegMessage, v.pqzPop)), abi.encode(uint256(1)));
+        vm.prank(address(0x7111D), address(0x7111D));
+        p.storePqzPop(ua, v.version, v.pqzPop);
+        (uint64 cur, address ptr,, bool proven) = p.pqzKeyOf(ua);
+        assertEq(cur, v.version, k.name);
+        assertTrue(proven, k.name);
+        assertEq(SSTORE2.read(ptr), k.pqzKey, k.name);
+        assertEq(p.keyOwner(v.pqzKeyHash), ua, k.name);
+        assertEq(p.pqzKeySigOf(ua, v.version), k.sig, k.name);
+    }
+
+    function _firstRecOf(KeyRec[] memory ks, bytes32 ua, string memory set) internal pure returns (KeyRec memory) {
+        for (uint256 i; i < ks.length; ++i) {
+            if (ks[i].ua == ua && _eq(ks[i].set, set)) return ks[i];
+        }
+        revert("no version 0 record");
+    }
+
+    /// portable.json `pqzKeyVersionNegatives` (seven per set), on the state each row names: one field changed, one refusal. The
+    /// control of each is the row itself, applied as named (`test_ua8_pqzKeyVersionsFromVectors`).
+    function test_ua8_pqzKeyVersionNegatives() public {
+        Row[] memory rows = _rows();
+        _allowAll(rows);
+        KeyRec[] memory ks = _keyRecs();
+        KeyVer[] memory vs = this.loadKeyVersions();
+        VerNeg[] memory negs = this.loadVersionNegs();
+        assertEq(negs.length, 28, "seven per set");
+        UARegistry a = _regA(false);
+        _members(a, rows);
+        uint256[3] memory counts;
+        for (uint256 i; i < negs.length; ++i) {
+            uint256 snap = vm.snapshotState();
+            ++counts[_versionNeg(a, rows, ks, vs, negs[i])];
+            vm.revertToState(snap);
+        }
+        assertEq(abi.encode(counts), abi.encode([uint256(12), 4, 12]), "the rows by error");
+    }
+
+    /// One `pqzKeyVersionNegatives` row: the state it names, its fields changed, its refusal; returns the error's index.
+    function _versionNeg(UARegistry a, Row[] memory rows, KeyRec[] memory ks, KeyVer[] memory vs, VerNeg memory g)
+        internal
+        returns (uint256 which)
+    {
+        KeyVer memory v = _keyVer(vs, g.row);
+        _reg(a, _byUa(rows, v.r.ua));
+        for (uint256 s; s < g.stored.length; ++s) _store(a, ks, vs, v.r, g.stored[s]);
+        (bytes32 ua, bytes memory key, bytes memory sig) = (v.r.ua, v.r.pqzKey, v.r.sig);
+        for (uint256 f; f < g.keys.length; ++f) {
+            if (_eq(g.keys[f], "ua")) ua = bytes32(g.values[f]);
+            else if (_eq(g.keys[f], "pqzKey")) key = g.values[f];
+            else if (_eq(g.keys[f], "sig")) sig = g.values[f];
+            else revert(string.concat(g.name, ": unknown mutation ", g.keys[f]));
+        }
+        if (ua != v.r.ua) _reg(a, _find(rows, string.concat("mldsa65/", v.r.set))); // the other UA, with its version 0
+        bytes memory err;
+        if (_eq(g.err, "UAPqzKeyVersion")) {
+            err = abi.encodeWithSelector(IUARegistry.UAPqzKeyVersion.selector, ua, v.version);
+        } else if (_eq(g.err, "UAKeyInUse")) {
+            err = abi.encodeWithSelector(IUARegistry.UAKeyInUse.selector, _h(key), ua);
+            which = 1;
+        } else {
+            assertEq(g.err, "UAUnauthorized", g.name);
+            err = abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua);
+            which = 2;
+        }
+        vm.expectRevert(err);
+        a.setPqzKey(ua, v.version, key, v.r.pqzPopHash, UACall.sig(sig));
+    }
+
+    /// The stored version `n` of the row's UA: version 0's `pqzKeyRecords` row, else its `pqzKeyVersions` row.
+    function _store(UARegistry a, KeyRec[] memory ks, KeyVer[] memory vs, KeyRec memory at, uint256 n) internal {
+        if (n == 0) {
+            KeyRec memory k0 = _firstRecOf(ks, at.ua, at.set);
+            a.setPqzKey(at.ua, 0, k0.pqzKey, k0.pqzPopHash, UACall.sig(k0.sig));
+            return;
+        }
+        KeyVer memory held = _keyVer(vs, string.concat("fndsa512/v", vm.toString(n), "/", at.set));
+        a.setPqzKey(at.ua, held.version, held.r.pqzKey, held.r.pqzPopHash, UACall.sig(held.r.sig));
+    }
+
     /// Ruling A4-c2's order on portable.json's `setPqzKey` negatives (four sets): a non-holder (`UAPqzHolder`), a
     /// record that has a PQZ key (`UAPqzKeySet`, before the signature), another UA's signature (`UAUnauthorized`); then
     /// an unregistered id (`UAUnauthorized`), a key of no set's length (`UAKeyData(0x0142)`, before the signature), a
