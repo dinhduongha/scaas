@@ -1,0 +1,63 @@
+# 2026-11-07 ua-rs-sign T15l: the fix wave after the independent Fable review of the ARCH-POS-13 rework (spec
+# no-decryption-oracle §4.5-§4.7, §4.12; plan "T15l"). Commits: 485130e1 (Zether: the balance hint is the holder's sealed box,
+# P3-1), 8dc90183 (PQZ: op 4 on the entry's words P2-1, constant-time memo compare P3-2, balance forOp7 P3-6; the bindings'
+# forge-row requests, the wallet rows, the fuzz seeds), cdef088c (check_test_features: scaas-ct, scaas-node, pqz-core/ffi/wasm,
+# P3-4), e398ff77 (mutant harnesses at HEAD's strings, the gate checks every harness, P3-5), c363e034 (spec, plan, ua-libraries:
+# P3-7, P3-8, verdict 1; T15m owner-approved), 66065adf (one op 4 re-derivation, tests closing two survivors), 088e5f2c (mutant
+# records), the follow-up commit of this summary. Deferred: P3-3 (the OpenFactory `_info` layout pin) waits for ua-mtx-merge.
+# All commands through scripts/capped, foreground, -j2, --locked, --offline; step logs git-ignored (smartcontracts/evm/runs/*.log).
+# UNAUDITED.
+step | commit | rc | counts
+ua-rs test (default: zether + pqz n2304-kmax4096, the release cell) | c363e034 | 0 | 34 suites, 319 passed, 1 ignored
+ua-rs test --features vectors (--lib --tests, then --doc) | c363e034 | 0 | 36 suites, 368 passed, 4 ignored; doc 25 passed
+ua-rs test --no-default-features --features wallet,mlock | c363e034 | 0 | 27 suites, 256 passed, 1 ignored
+ua-rs facade_pqz_state + facade_pqz + pqz_backup + no_oracle at pqz-set-n2048-kmax1024, release then vectors | c363e034 | 0 | 8 suites, 94 passed
+ua-rs facade_pqz_state (release, vectors) + facade_pqz (vectors) after the op 4 simplification | 66065adf tree | 0 | 14 / 15 / 23 passed
+ua-rs clippy --all-targets -D warnings: default, vectors, --no-default-features, wallet,mlock, wallet,zether,mlock (+ vectors), wallet,pqz,n2048,mlock (+ vectors) | c363e034 (default, vectors again at 66065adf) | 0 | 0 of ours each (8 cells); pqzl's 2 deprecated GenericArray warnings
+zether-prover cargo test -- --include-ignored (default; the anvil reading-layer test, ANVIL=foundry's anvil, stopped by the test) | c363e034 | 0 | 15 suites, 74 passed; no anvil left
+zether-prover cargo test --features hazmat | c363e034 | 0 | 15 suites, 87 passed, 1 ignored (anvil)
+zether-prover ./wasm-smoke.sh / ZETHER_HAZMAT=1 ./wasm-smoke.sh | c363e034 | 0 | 3 checks / 9 checks passed
+zether-prover clippy --all-targets --features hazmat (not a CI gate) | c363e034 | 0 (warnings) | none in state.rs, the CLI or the changed tests; pre-existing: api.rs (10), zether.rs (2), tests/recover.rs (2), tests/zether_proofs.rs (1)
+ua-c clippy -D warnings; cargo build (debug, release); cargo test (lib + header drift) | c363e034 | 0 | 0; built; 9 passed
+ua-c C smoke (cc -std=c99 -Wall -Wextra -Werror) + c++ -fsyntax-only; test_vectors.py | c363e034 | 0 | smoke ok; 87 tests OK
+ua-py unittest tests.test_wallet tests.test_vectors | c363e034 | 0 | 86 OK
+ua-go go vet; go test -count=1 ./... | c363e034 | 0 | vet clean; 54 passed
+ua-cs dotnet test Scaas.Ua.Tests (then dotnet build-server shutdown) | c363e034 | 0 | 53 passed
+ua-cxx cmake --build build; ctest | c363e034 | 0 | 37 of 37
+ua-dart-frb cargo build (rust/); dart test wallet_test.dart vectors_test.dart | c363e034 | 0 | 36 passed
+ua-rs/fuzz cargo check; seeds.py --regress twice | c363e034 | 0 | builds; pqz_cmd/box-over-depth-2.bin regenerated (COMMANDS grew: rawProveDiscloseSender appended), stable on the second run
+check_test_features.py (gates step test-features, with the forced positive control) | 088e5f2c | 0 | 57 manifests 0 findings; graphs ua-c, ua-cxx, ua-qt, ua-dart-frb/rust, zether-prover, scaas-node, pqz-core/ffi/wasm 0 findings; controls: scaas-ua + scaas-ct manifests found, ua-c forced 3 findings, scaas-ct/vectors forced in zether-prover 1 finding, both new rows in ARTIFACTS with their guarded crate; forced ua-c manifest: rc 1; tree clean
+cargo tree --locked --offline -e normal: ua-rs, ua-c, ua-cxx, ua-qt, ua-dart-frb/rust, ua-rs/fuzz, zether-prover, scaas-node | c363e034 | 0 | 8 of 8; no lock changed
+cargo deny --all-features check: ua-rs; ua-c and zether-prover (--config ../ua-rs/deny.toml) | c363e034 | 0 | advisories ok, bans ok, licenses ok, sources ok each
+docs: test_docs_check.py; docs_check.py check; docs_check.py paths | 088e5f2c | 0 | ok; 0 errors (5 pre-existing budget warnings); 0 machine paths
+gates no-oracle (release, vectors) / no-oracle-n2048 / no-oracle-ua-py | 088e5f2c | 0 | 11 passed, 1 ignored (the rows' generator) / 9 passed / 1 OK
+gates wallet-rows: gen_wallet_state.sh twice, git diff --exit-code | 088e5f2c | 0 | sha256 3ce7c002... both runs, equal to the committed file (the requests now name forOp7)
+gates mutant-logs: every record ends with no survivor AND every harness `check`s at this commit (T15b, T15c, T15c2, T15e, T14b, T15g, T15k, T15i, T15l) | 088e5f2c | 0 | 9 of 9; positive control: at c2992438 `check` failed on T15b (3 strings), T15c (6), T15c2 (1), T15e (2), the drift this step now catches
+gates mutant-1 .. mutant-12 (T15i harness, after its strings moved: dec's import, balance's allow-list) | 088e5f2c | 0 | 12 killed, 0 survived, 0 not loaded; git diff --exit-code after each
+T15l mutants (2026-11-07-ua-rs-sign-t15l-mutants.py n n; git diff --exit-code after each) | 66065adf | 0 | 16 killed, 0 survived, 0 not loaded (first run at c363e034: 4 survived, closed in 66065adf; 2026-11-07-ua-rs-sign-t15l-mutants.txt)
+re-run of the stale entries: T15e M1, M2, M16; T15c2 M13; T15b M3, M5, M6; T15c M4-M6, M8, M9 (M3 superseded by T14b's reading layer); T14b M1 | c363e034 | 0 | 13 killed, 0 survived (each record's last line)
+gates rebuild: libscaas_ua_c release + debug, ua-cxx, ua-dart-frb from the clean tree | 088e5f2c | 0 | built; tree clean
+# What changed, per review item:
+# P2-1 PQZ proveDiscloseSender {location, fromUA (keyRecord the handle's), sendCounter, entryPtr + blob, leg, registry,
+#   legKeyRecord}: the op 4 statement built inside; the amount read from the entry (the leg's v less the sender's re-encryption
+#   of zero, Δ·digit per coefficient counted branch-free, then an exact constant-time compare of u and v). No amount or
+#   statement field. Op 1 is op 7's encryption at M = 1 (found by two surviving mutants), so one re-derivation serves both. The
+#   statement form stays as rawProveDiscloseSender under `vectors` (the KAT rows), appended to COMMANDS (fuzz indices kept).
+#   no_oracle.rs: a statement or amount beside real words is refused by the allow-list while the words alone parse.
+# P3-1 Zether checkBalance / a debit's hint take `cacheBox` {iv, ct}: `state::open_cache_entry` opens it under the key, its
+#   entry <UA>:<token> used only at the words' accSeq (stale: BSGS), checked against the rebuilt acc; zether-read-balance
+#   --cache-box uses the same function (its own copy of the box code removed).
+# P3-2 openMemo: auditorOn and the opened UAs compared by subtle (a source assertion test).
+# P3-4 check_test_features.py: scaas-ct guarded; scaas-node and pqz-core/ffi/wasm artifacts; controls as above.
+# P3-5 harness strings at HEAD; the mutant-logs step runs `check` on every harness; the T15l mutants are gate steps l-mutant-<n>.
+# P3-6 balance's named boolean forOp7 (no default; psid compared first, so another set's psid stays PqzSetMismatch).
+# P3-7, P3-8, verdict 1: spec §4.7 / §4.12, ua-libraries duty 4 (every post-key refusal, all Argument), the reading-layer
+#   section (ua-rs decrypts any consistent fabricated words: the full key-recovery oracle for an app that breaks R1-R7; PQZ has
+#   no reference reading layer yet).
+# Residuals: the library still cannot tell chain state from consistent fabricated words (unchanged, now stated plainly); with
+#   fabricated words, the holder's real cache box makes checkBalance a balance-equality test (spec §4.7); the Zether per-transfer
+#   secrets on arkworks variable time (a leak reveals that transfer's amounts, never x); a box that does not open inside a
+#   command is Argument (open_balance_cache keeps Aead); zether-read-balance R5 reads OpenFactory `_info` at hand-copied offsets
+#   until ua-mtx-merge pins it (P3-3); pqz-core hazmat waits for T15h; no PQZ reference reading layer until T15m.
+# Owner decision recorded (2026-11-07): T15m, a PQZ reference reading-layer CLI mirroring zether-read-balance --rpc, after
+#   T15l, 3-4 agent-days, SPECIFIED, not built here.
