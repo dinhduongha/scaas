@@ -298,3 +298,11 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   key in slots 13 and 14, `registrationOf`'s fallback to it) and the three-word `pqzKeyOf`; `test/ua/UARegistryUA8.t.sol` as
   it stood before its meaning changed (`test_ua8_crossSetKeyReplaced`, `test_ua8_crossSetGen2ReplacesGen1Key`: the
   replacement, retired by R2). Not built.
+  T52 (the PQZ token's per-version state), as they stood at 28a099a1 (the T51 tip): `src/pqz/{PqzCore,PqzStateLib,
+  PqzTransferLib,PqzBurnLib,PqzViewLib,PqzLayer,IPqzToken,WrappedPqzToken,NormalPqzToken,PqzWrappedLib}.sol` with one account per
+  UA (`acct[ua]`, `sendCounter` a field of it), the args structs without `keyVersion`, the two-argument `mtxRollOver(ua, n)` /
+  `mtxPrepareAcc(ua, half)` (direct and signed, `UARollOver` / `UAPrepareAcc` without `keyVersion`, 68-byte static shape), the
+  views `pqzAccount(ua)`, `pqzPending(ua, i)`, `pqzAcc(ua)`, `pqzPendingCt(ua, i)`, `Credited` / `Debited` without the version,
+  the shared `RolledOver`; `src/confidential/IConfidentialToken.sol` with `mtxRollOver(bytes32,uint256)` shared by both layers.
+  Tests as they stood before their meaning changed: `test/pqz/{PqzPool,PqzTyped,PqzGuards}.t.sol`,
+  `test/confidential/ConfidentialSelectors.t.sol`. Not built.
