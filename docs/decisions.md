@@ -1844,6 +1844,8 @@ Both on means: known, and not denied. `ELIGIBLE_CONTRACT` satisfies `requiredFla
 **Cost if wrong.** Above 65,536 B every jump widens, about 4.7 KB at once (inferred), and deploy gas grows with the runtime. A customer chain has one more setting to change.
 **Source.** Owner 2026-11-03, two statements; `research/governance/prototype/RESULTS.md`; measured options on branch `token-core`.
 
+Change (2026-11-07, owner, status: decided, to be built in plan task T66b part 4 of branch `ua-mtx-merge`; research `research/evm-library-organisation.md`): every deployed contract, PQZ kinds included where possible ("if not possible, that is still OK"), fits one transaction of 60 M on T10's formula, about 35.3 KB runtime for a token released through the factory and 35.7 KB for a library. The owner allows **lever L in its forward form** (reverses the 2026-11-05 deprecation for this form only): every body but the ERC-20 core moves into DELEGATECALL body modules compiled on the token's own bases, the token keeps every typed entry point and the one `nonReentrant` (variant A of 2026-10-21 kept); the release cost of 1 + 3–5 transactions per kind per chain is accepted; the `UARegistryLib` ↔ `UARegistry` pair is rebalanced first (R4's 60 M); the extra calldata copies of proof-carrying PQZ operations (+0.2 % to +4.8 % gas) are accepted. Lever D stays deprecated.
+
 ### CTR-GOV-20 — OPERATOR_TRANSFER: bit 22, any holder, the regulated kinds
 - old: — · status: current · owner: yes · date: 2026-11-05 · normative: decisions.md#CTR-GOV-20 · superseded-by: —
 

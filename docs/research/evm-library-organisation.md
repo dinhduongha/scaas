@@ -388,6 +388,9 @@ Parts 1–3 keep the plan's estimates (2.5 + 2). Part 3's rebalance should take 
 
 ## 11. Owner questions
 
+**Owner 2026-11-07: all four answered as recommended** (lever L in its forward form allowed; per-kind modules and their
+release cost accepted; the registry pair rebalanced first; the PQZ calldata cost accepted). Recorded on CTR-GOV-19.
+
 1. **Reuse lever L in its forward form?** T9's levers L and D were deprecated on 2026-11-05; the measured way to 60 M for 11 of the
    12 kinds is L's large form: every body but the ERC-20 core in DELEGATECALL body modules, behind typed stubs (variant A
    kept), the modules contracts on the token's own bases pinned like libraries. **Recommendation: yes.** The alternative is to

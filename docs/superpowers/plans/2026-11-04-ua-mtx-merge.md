@@ -2058,7 +2058,11 @@ each kind. Over the limit at `d2552671` (runtime B): kind `WrappedPqzRegulatedTo
 `NormalZetherRegulatedToken` 49,020, `NormalPqzToken` 47,714, `WrappedToken` 43,503, `NormalZetherToken` 41,076, `NormalRegulatedToken`
 40,638, and `UARegistryLib` 37,536 (part 3). Under it: `SCaaSDex` 33,704, `NormalToken` 32,870, `UARegistry` 31,438. A library counts as a
 deployed contract too. The factory index group and 3f, 3h land before this task, so its figures include them; `PqChat` (3c) is its
-own release. T9's levers L and D were deprecated by the owner (2026-11-05): reusing either needs the owner's word.
+own release. **Owner 2026-11-07:** lever L is allowed in its forward form (every body but the ERC-20 core in DELEGATECALL body modules, typed
+stubs and the one `nonReentrant` kept); per-kind modules and their release cost accepted; the registry pair rebalanced first; the PQZ
+calldata cost (+0.2 % to +4.8 %) accepted; lever D stays deprecated. Design and sizes: research `evm-library-organisation.md`
+(`db93393b`), part 4 estimated 17–20.5 agent-days there; the spec of Step 2 is reviewed by Fable before building (DELEGATECALL to a
+module is security-relevant).
 
 - [ ] **Step 1: Recompute** every kind's size (0-13, the router, the libraries) at the tip after 3h: `forge build src --sizes
       --json`, `size_gate.py`, deploy gas on the regulated spec's §6.2 method; a table old -> new against T40's figures.
