@@ -278,8 +278,11 @@ account keys are not built while the in-quorum oracle is open; `msig` holders us
 - old: — · status: current · owner: yes · date: 2026-11-08 · normative: decisions.md#ARCH-POS-15 · superseded-by: —
 
 **Rule.** Owner 2026-11-08: anything that reads or writes a chain through an RPC (the node, scaas-wallet, the app, the client
-libraries' reading layers, the reference readers, CLIs and operator tools) accepts a **list** of RPC endpoints, one or more, every
-one named by its operator or holder (never a default or a discovered endpoint). **Reads:** by default **failover** in the order
+libraries' reading layers, the reference readers, CLIs and operator tools) accepts a **list** of RPC endpoints, one or more. An
+endpoint is **named** (by the operator or holder), a **default** (in the release's own reviewed list, from public RPC information;
+trusted like a named one) or **discovered** (found at run time); all three are allowed everywhere (owner 2026-11-08). **Reads that
+feed a decryption** (PQZ, Zether; ARCH-POS-13): named and default endpoints may serve alone, a discovered one only under the
+agreement option with at least three nodes, so one unknown node can never put a ciphertext of its choice into a decryption. **Reads:** by default **failover** in the order
 given: one read is answered completely by one node, never mixing answers of different nodes, and the next node starts over when
 one fails or is inconsistent; with the **agreement option** a **strict majority** of the named nodes (⌊n/2⌋ + 1) must return the
 same complete answer at the same block (by hash), agreement counted per node over the whole read, else the read is refused.
