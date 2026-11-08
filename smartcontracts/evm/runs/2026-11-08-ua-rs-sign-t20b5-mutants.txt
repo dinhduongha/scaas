@@ -1,0 +1,15 @@
+# ua-rs-sign T20b third-sync mutants (2026-11-08-ua-rs-sign-t20b5-mutants.py: after 3f and T66a, pqz-verdict, the PqzVerdict builder, the router's verifier rows, NOT_ZETHER, the C header's holder rule), one per run on a clean tree at 0653d030, thirteen foreground runs (M1-M13, one each), git diff --exit-code 0 after each run; positive control: every command passes on the clean tree first. UNAUDITED.
+killed     | M1 ua-rs: pqz-verdict not in PURPOSES | clients/ua-rs/src/lib.rs | rc=101 | 2 failed: messages, table_groups_purposes_constants | called `Result::unwrap()` on an `Err` value: PurposeUnknown | at 0653d030
+killed     | M2 clientkeys: pqz-verdict not in PURPOSES | clients/clientkeys/src/ua.js | rc=1 | 2 failed: test/pqz-verdict.test.js, test/ua.test.js | at 0653d030
+killed     | M3 ua-py: pqz-verdict not in PURPOSES | clients/ua-py/scaas_ua/__init__.py | rc=1 | 1 failed: test_table_groups_purposes_constants | at 0653d030
+killed     | M4 ua-go: pqz-verdict not in Purposes | clients/ua-go/ua.go | rc=1 | 1 failed: TestTableGroupsPurposesConstants | at 0653d030
+killed     | M5 pqz_verdict_typed_data: the token check skipped | clients/ua-rs/src/wallet/eip712.rs | rc=101 | 1 failed: pqz_verdict_builder_rules | assertion `left == right` failed | at 0653d030
+killed     | M6 pqz_verdict_typed_data: the chainId check skipped | clients/ua-rs/src/wallet/eip712.rs | rc=101 | 1 failed: pqz_verdict_builder_rules | assertion `left == right` failed | at 0653d030
+killed     | M7 PqzVerdict: pqzVerifierEpoch uint64 | clients/ua-rs/src/wallet/eip712.rs | rc=101 | 2 failed: pqz_verdict_builder_rules, verdict_json_rows | assertion `left == right` failed | at 0653d030
+killed     | M8 PqzVerdict: signed in the MetaToken domain | clients/ua-rs/src/wallet/eip712.rs | rc=101 | 2 failed: pqz_verdict_builder_rules, verdict_json_rows | assertion `left == right` failed | at 0653d030
+killed     | M9 UAPqzSetVerifier without next | clients/ua-rs/src/wallet/eip712.rs | rc=101 | 2 failed: pqz_verifier_router_ops_canon, typed_ops_json_rows | called `Result::unwrap()` on an `Err` value: Argument | at 0653d030
+killed     | M10 UAPqzRevokeVerifier in the PQZ token's domain | clients/ua-rs/src/wallet/eip712.rs | rc=101 | 2 failed: pqz_verifier_router_ops_canon, typed_ops_json_rows | called `Result::unwrap()` on an `Err` value: Argument | at 0653d030
+killed     | M11 UAPqzCancelVerifier dropped | clients/ua-rs/src/wallet/eip712.rs | rc=101 | 2 failed: pqz_verifier_router_ops_canon, typed_ops_json_rows | called `Result::unwrap()` on an `Err` value: Argument | at 0653d030
+killed     | M12 zether-prover: UAPqzSetVerifier not listed | clients/zether-prover/tests/typed_ops.rs | rc=101 | 1 failed: every_zether_row_digest_equals_the_vector | assertion `left == right` failed: a row left out must be listed in NOT_ZETHER with its reason | at 0653d030
+killed     | M13 C header: the msig KEM rule unstated | clients/ua-c/include/scaas_ua.h, clients/ua-c/src/lib.rs | rc=101 | 1 failed: header_states_its_rules | header rule missing: an msig never holds a KEM key | at 0653d030
+mutants M1-M13 of 13: 13 killed, 0 survived, 0 not loaded
