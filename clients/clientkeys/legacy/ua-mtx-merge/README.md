@@ -20,3 +20,6 @@ EVM builders onto the merged entries (CTR-MTX-30: one signed entry per operation
 - `test/{typed-ops,evm,relayfee,paymeta,ua-metatx3,seed}.test.js`: the tests whose meaning T11 changes.
 
 Not exported, not tested, not bundled.
+- `router-create/{src/evm.js,scripts/typed-ops-vectors.mjs}` (plan T76): as they stood before the router's three creation
+  rows (`UACreateToken`, `UACreateDex`, `UACreateInstance`; chain-neutral spec §4.4); their vector copy:
+  `smartcontracts/vectors/typed/legacy/ua-mtx-merge/router-create/typed_ops.json`.
