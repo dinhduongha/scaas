@@ -27,7 +27,7 @@
   "wasm32-unknown-unknown/ua-c/n2048-kmax1024/cdylib": 5342356,
   "wasm32-unknown-unknown/ua-c/n2560-kmax16384/cdylib": 5412694,
   "wasm32-unknown-unknown/ua-c/n2816-kmax65536/cdylib": 4951262,
-  "wasm32-unknown-unknown/ua-c/no-default/cdylib": 3153460,
+  "wasm32-unknown-unknown/ua-c/no-default/cdylib": 3196892,
   "x86_64-unknown-linux-gnu/ua-c/default/cdylib": 5799856,
   "x86_64-unknown-linux-gnu/ua-c/default/staticlib": 33006962,
   "x86_64-unknown-linux-gnu/ua-c/n2048-kmax1024/cdylib": 5776472,
