@@ -290,18 +290,19 @@ contract UARegistryMembershipTest is UARegistryBase {
         r.requireAuthorized(ua, UAKinds.PURPOSE_METATX, TX_DIGEST, s);
     }
 
-    /// `setKemKey`: the same record signed with the unaccepted slot is refused, and lands after it accepts.
-    function test_membershipUnacceptedRefusedSetKemKey() public {
+    /// A portable record (`requirePortable`): the same record signed with the unaccepted slot is refused, and passes after it accepts.
+    /// T66a: was `setKemKey`'s, which an `msig` no longer reaches (CTR-UA-32: `UAKemHolder` whatever its slots).
+    function test_membershipUnacceptedRefusedPortable() public {
         (bytes memory d, bytes32 ua) = _pqRegistered(r);
         bytes memory pk = _kemPk(1);
         bytes32 rd = UAKinds.kemRecordDigest(ua, 1, pk);
         IUARegistry.UASig memory s = _two(_mlSig(d, ml1, UAKinds.PURPOSE_KEM, rd), _mlSig(d, ml3, UAKinds.PURPOSE_KEM, rd));
         vm.expectRevert(_unauthorized(ua));
-        r.setKemKey(ua, 1, UACall.kem(pk), s);
+        r.requirePortable(ua, UAKinds.PURPOSE_KEM, rd, s);
         r.acceptMembership(ua, _acceptKeySig(d, ML, ml3));
+        r.requirePortable(ua, UAKinds.PURPOSE_KEM, rd, s);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKemHolder.selector, ua));
         r.setKemKey(ua, 1, UACall.kem(pk), s);
-        (uint64 v,,) = r.kemKeyOf(ua);
-        assertEq(v, 1);
     }
 
     /// `setPqzKey`: the same.
@@ -429,15 +430,13 @@ contract UARegistryMembershipTest is UARegistryBase {
         r.acceptMembership(ua, _acceptKeySig(d, ML, ml2));
         assertTrue(r.memberAccepted(ua, i2));
         bytes memory pk = _kemPk(2);
+        bytes32 rd = UAKinds.kemRecordDigest(ua, 1, pk);
         vm.expectRevert(_unauthorized(ua));
-        r.setKemKey(ua, 1, UACall.kem(pk), s);
+        r.requirePortable(ua, UAKinds.PURPOSE_KEM, rd, s); // T66a: the KEM record's signature, checked by the portable view
         bytes memory key = new bytes(16_384);
         vm.expectRevert(_unauthorized(ua));
         r.setPqzKey(ua, 0, key, keccak256("proof"), s);
-        bytes32 rd = UAKinds.kemRecordDigest(ua, 1, pk);
-        r.setKemKey(ua, 1, UACall.kem(pk), _two(_mlSig(d, ml1, UAKinds.PURPOSE_KEM, rd), _mlSig(d, ml2, UAKinds.PURPOSE_KEM, rd)));
-        (uint64 v,,) = r.kemKeyOf(ua);
-        assertEq(v, 1);
+        r.requirePortable(ua, UAKinds.PURPOSE_KEM, rd, _two(_mlSig(d, ml1, UAKinds.PURPOSE_KEM, rd), _mlSig(d, ml2, UAKinds.PURPOSE_KEM, rd)));
     }
 
     /// Non-empty `keyData`, native and derived (CTR-UA-33).
@@ -664,7 +663,7 @@ contract UARegistryMembershipTest is UARegistryBase {
         bytes32 rd = UAKinds.kemRecordDigest(ua, 1, pk);
         IUARegistry.UASig memory s = _two(_mlSig(d, ml1, UAKinds.PURPOSE_KEM, rd), _mlSig(d, ml2, UAKinds.PURPOSE_KEM, rd));
         vm.startStateDiffRecording();
-        r.setKemKey(ua, 1, UACall.kem(pk), s);
-        assertEq(_reads(vm.stopAndReturnStateDiff(), slot), 1, "setKemKey");
+        r.requirePortable(ua, UAKinds.PURPOSE_KEM, rd, s); // T66a: a stored record's signature, as setKemKey checked it
+        assertEq(_reads(vm.stopAndReturnStateDiff(), slot), 1, "requirePortable");
     }
 }

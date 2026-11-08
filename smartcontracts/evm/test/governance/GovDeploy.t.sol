@@ -485,7 +485,8 @@ contract GovDeployTest is Test {
         // metadata hash: `MetaTxLib` gains `PayMeta`); T38: -> 0xa615f3672E60a2e91F92463bB4Df8b4374245C8A (`relay` with
         // `batch`, `nonce`); 3g T51: 0xF1D87045dAef620300637Ed6DE7123B42f23f9aB (the metadata hash: `IUARegistry`'s versioned PQZ
         // key records); T66a item 1: -> this (the metadata hash: `IUARegistry.requirePortable`)
-        assertEq(rf, 0xC9C1aC557303551b16d78DBce193f02e414CAA39, "MtxRelayFee");
+        // T66a item 2 (the metadata hash: IUARegistry's KEM holder docs): 0xC9C1aC557303551b16d78DBce193f02e414CAA39 -> this
+        assertEq(rf, 0x3d0DB1d457Ac07B199e8Bd65676AFF7fF127330E, "MtxRelayFee");
         // ua-mtx-merge T24: 0x2AEfB2af419765600eC00a7D0CfC4dE30f2d3750 -> 0xAb151Df7DC7CbbD9755028a27Ad0bc55a34b5b53 (the
         // router's metadata hash: `IGovernance`); T26: -> this (the two empty hooks `UAMetaTxBase` adds, its
         // `mtxCancelNonce` seats); T32: 0xBc8Df1a828dA586e5ccB8Db8942bbCC9c130cC34 -> this (the eight regulated control ops)
@@ -499,7 +500,8 @@ contract GovDeployTest is Test {
         // T76: 0x773A627eD1C1CCF588DCB81799c1BFB52E5d9d57 (the router's three creation ops, S3); 3f T45: -> this (the
         // three PQZ verifier ops `mtxPqz{Set,Cancel,Revoke}Verifier`): 0x5A6E6681A1Ec31741438D863ffCC138C186FB933; T66a item 1: -> this
         // (the metadata hash: `IUARegistry.requirePortable`)
-        assertEq(router, 0x0240966987610aC882D8501247EF3Ce2AC2c477B, "GovernanceRouter");
+        // T66a item 2 (the metadata hash: IUARegistry's KEM holder docs): 0x0240966987610aC882D8501247EF3Ce2AC2c477B -> this
+        assertEq(router, 0xbf24455f26b2cB0a343fc47a546Fd68F4b5CAEAD, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append: chain-neutral releases (plan T72), `abi.encode(factory, implArgs)`;

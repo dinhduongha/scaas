@@ -319,7 +319,10 @@ export function kemRecordDigest({ ua, version, kemPk }) {
 }
 /** What the UA signs for a KEM record: `uaMessage(kind, PURPOSE_KEM, kemRecordDigest(ua, version, kemPk))`; an `msig`'s
  *  derived members sign `memberDigest(ua, ·)` of it under `member`, a native member the typed digest itself. */
-export const kemRecordMessage = (kind, record) => uaMessage(kind, KEM_TAG, kemRecordDigest(record));
+export const kemRecordMessage = (kind, record) => {
+  if (!isKemHolder(kind)) fail('UAKemHolder', `0x${Number(kind).toString(16).padStart(4, '0')} may not hold a KEM key`);
+  return uaMessage(kind, KEM_TAG, kemRecordDigest(record));
+};
 
 /** The `UAPortableRecord` message: `{ ua, kind, pqzKeyHash, kem }`, `kem` a `kemRecordStruct`. */
 export const portableRecordStruct = ({ ua, kind, pqzKeyHash = Z32, kem }) =>
@@ -367,10 +370,13 @@ export function portableTypedData(primaryType, message) {
   return { domain: { ...PORTABLE_DOMAIN }, types, primaryType, message };
 }
 
-/** A PQZ / KEM holder (UA-6 U3, UA-8 P7): mldsa44, mldsa65, fndsa512, mldsa87, fndsa1024, or an `msig` whose `keyData` is PQ-eligible (`inner`: see
+/** A PQZ key holder (UA-6 U3, UA-8 P7): mldsa44, mldsa65, fndsa512, mldsa87, fndsa1024, or an `msig` whose `keyData` is PQ-eligible (`inner`: see
  *  `msigPqzEligible`). */
 export const isKeyHolder = (kind, keyData, inner) => isPqzHolder(kind) || (kind === 0x0120 && present(keyData) && msigPqzEligible(keyData, inner));
 const holds = isKeyHolder;
+/** A KEM key holder (CTR-UA-32; owner 2026-11-05, MD-11 (c), T66a): the single PQ kinds mldsa44, mldsa65, fndsa512, mldsa87, fndsa1024
+ *  only. An `msig` holds no KEM key (`UAKemHolder`, as the registry): a sender seals to each accepted member's own key. */
+export const isKemHolder = (kind) => isPqzHolder(kind);
 
 /**
  * The portable PoP of a registration (UA-8 P1, P2; typed-signing TS-D3): `{ pqzKeyHash, pqzPopHash, kemRecordHash,
@@ -379,15 +385,16 @@ const holds = isKeyHolder;
  * uaMessage(kind, POP_V2, registrationDigest)` (every kind signs it; an `msig` also returns `memberDigest = memberDigest(ua,
  * message)`, what each derived member signs under `member`; a native member signs `registrationDigest` itself, TS-D4). The
  * attributes: `pqzKey` with its proof `pqzPop` (or only its hash `pqzPopHash`), and the initial KEM key `kemPk` (its record is
- * always version 0, owner 2026-10-31; no version input); absent = omitted / empty. Only holders may carry them (`UAPqzHolder`, `UAKemHolder`; an `msig` needs
- * `keyData` to show it is PQ-eligible); a PQZ key always comes with its proof hash and only with it (`UAPqzPopHash`).
+ * always version 0, owner 2026-10-31; no version input); absent = omitted / empty. Only holders may carry them (`UAPqzHolder`: an `msig` needs
+ * `keyData` to show it is PQ-eligible; `UAKemHolder`: a single PQ kind only, CTR-UA-32, never an `msig`); a PQZ key always comes with its proof
+ * hash and only with it (`UAPqzPopHash`).
  */
 export function holderPopMessage(kind, { ua, keyData, pqzKey, pqzPop, pqzPopHash, kemPk, inner } = {}) {
   const hasPqz = present(pqzKey);
   const hasKem = present(kemPk);
   const k = `0x${Number(kind).toString(16).padStart(4, '0')}`;
   if (hasPqz && !holds(kind, keyData, inner)) fail('UAPqzHolder', `${k} may not hold a PQZ key`);
-  if (hasKem && !holds(kind, keyData, inner)) fail('UAKemHolder', `${k} may not hold a KEM key`);
+  if (hasKem && !isKemHolder(kind)) fail('UAKemHolder', `${k} may not hold a KEM key`);
   const popHash = proofHashOf(pqzPop, pqzPopHash);
   if (hasPqz !== (popHash !== Z32)) fail('UAPqzPopHash', hasPqz ? 'a PQZ key needs its proof hash' : 'a proof hash without a PQZ key');
   const pqzKeyHash = hasPqz ? pqzKeyHashOf(pqzKey) : Z32;
@@ -410,7 +417,7 @@ export function registrationAttrsDigest(kind, { ua, keyData, attrs: a, pqzPop, i
   const pqz = present(a.pqzKey);
   const kemPk = commit ? null : a.kem ? kemPkOf(a.kem) : orEmpty(a.kemPk);
   if (pqz && !holds(kind, keyData, inner)) fail('UAPqzHolder', String(kind));
-  if ((commit || kemPk.length !== 0) && !holds(kind, keyData, inner)) fail('UAKemHolder', String(kind));
+  if ((commit || kemPk.length !== 0) && !isKemHolder(kind)) fail('UAKemHolder', String(kind));
   const popHash = a.pqzPopHash === undefined ? Z32 : sized(a.pqzPopHash, 32, 'pqzPopHash');
   if (pqz === popHash.every((b) => b === 0) || hex(popHash) === EMPTY_PROOF_HASH
     || (present(pqzPop) && hex(keccak_256(bytes(pqzPop))) !== hex(popHash))) fail('UAPqzPopHash', 'attrs');
@@ -689,6 +696,7 @@ export function registryCalldataLength(entry, a) {
 export function registrationArgs({ kind, keyData, pqzKey, pqzPopHash, pqzPop, kemPk, pop, kemCommit, inner } = {}) {
   const k = Number(kind);
   const hasPqz = present(pqzKey);
+  if (present(kemPk) && !isKemHolder(k)) fail('UAKemHolder', `0x${k.toString(16).padStart(4, '0')} may not hold a KEM key`);
   const attrs = { pqzKey: hex(orEmpty(pqzKey)), pqzPopHash: hex(hasPqz || present(pqzPopHash) ? proofHashOf(pqzPop, pqzPopHash) : Z32),
     kem: kemKeyOf(kemPk), kemPkHash: ZW };
   const msig = k === 0x0120;

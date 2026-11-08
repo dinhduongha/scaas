@@ -107,7 +107,11 @@ test('the minimal rule at both levels', () => {
 });
 
 test('records and acceptances: every row verifies, a flipped leaf byte is refused', () => {
-  assert.equal(N.kemRecords.length, 1);
+  // CTR-UA-32 (T66a): an msig holds no KEM key, so no KEM record; a well-formed one is refused before its signature
+  assert.equal(N.kemRecords.length, 0);
+  const pq = N.registrations.find((x) => x.name === 'msig-nested-pq');
+  assert.throws(() => verifyKemRecord({ ua: pq.ua, version: 1, kemPk: hex(new Uint8Array(1601).fill(1, 0, 1)), sig: '0x' }, records, atRegistration),
+    code('UAKemHolder'));
   assert.equal(N.pqzKeyRecords.length, 4);
   for (const r of N.kemRecords) {
     verifyKemRecord(r, records, atRegistration);
@@ -180,11 +184,9 @@ test('inner acceptance: accepted(id, index) read at the inner level always, unch
   assert.throws(() => verifyRegistration(after, records, atRegistration), code('UAPoP'), 'before the memberships rows');
   assert.throws(() => verifyRegistration(after, records), code('UANotVerifiable'));
   verifyRegistration(after, records, afterMemberships);
-  // a record's own bits, outside its pop, when they are given (setKemKey, setPqzKey)
-  const [k] = N.kemRecords;
-  assert.throws(() => verifyKemRecord(k, records, (id, i) => id !== k.ua && atRegistration(id, i)), code('UAUnauthorized'));
-  assert.throws(() => verifyKemRecord(k, records), code('UANotVerifiable'));
+  // a record's own bits, outside its pop, when they are given (setPqzKey; CTR-UA-32: an msig has no KEM record)
   const p = N.pqzKeyRecords[0];
+  assert.throws(() => verifyPqzKeyRecord(p, records, (id, i) => id !== p.ua && atRegistration(id, i)), code('UAUnauthorized'));
   assert.throws(() => verifyPqzKeyRecord(p, records), code('UANotVerifiable'));
   // an msig slot's acceptance: its list counts only the inner's accepted slots
   const m = N.memberships.find((x) => x.members.length);

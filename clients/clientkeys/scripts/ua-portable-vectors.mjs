@@ -124,7 +124,8 @@ const registrations = [
   ...SETS.map((set) => registration(ml, { set, kem: true })),
   registration(fn, { kem: true }), registration(pq('slhdsa128s')),
   registration(classicalMsig),
-  ...SETS.map((set) => registration(pqMsig, { set, kem: true })),
+  // CTR-UA-32 (owner 2026-11-05, T66a): an `msig` holds no KEM key; its refusal rows are `msig-with-kem/<set>`, `msig-kem-record`
+  ...SETS.map((set) => registration(pqMsig, { set })),
   registration(nativeMsig),
   ...LEVEL5.map((s) => registration(s, { kem: true })),
 ];
@@ -144,7 +145,13 @@ const kemRecord = (s, name) => (kemPk, i) => {
     sig: hex(sig), typedData: ua.portableTypedData('UAKemRecord', ua.kemRecordStruct(record)),
     args: { ua: hex(s.ua), version, kem: ua.kemKeyOf(kemPk), sig: ua.uaSig(list ? { members: list } : { signature: sig }) } };
 };
-const kemRecords = [[ml, 'mldsa65'], [fn, 'fndsa512'], [pqMsig, 'msig-pq'], ...LEVEL5.map((s) => [s, s.name])].flatMap(([s, name]) => KEM[name].slice(1).map(kemRecord(s, name)));
+const kemRecords = [[ml, 'mldsa65'], [fn, 'fndsa512'], ...LEVEL5.map((s) => [s, s.name])].flatMap(([s, name]) => KEM[name].slice(1).map(kemRecord(s, name)));
+/** CTR-UA-32 (T66a): the m-of-n signature an `msig` would give its KEM record `{ua, version, kemPk}` (what a builder before T66a signed),
+ *  abi.encode(MemberSig[]); the registry refuses the record by its holder check (`UAKemHolder`) before any signature. */
+const msigKemSig = (s, version, kemPk) => {
+  const digest = ua.kemRecordDigest({ ua: s.ua, version, kemPk });
+  return encodeMemberSigs(s.memberList(ua.memberDigest(s.ua, ua.uaMessage(s.kind, ua.KEM_TAG, digest)), digest, [0, 1]));
+};
 
 // --- PQZ key records (setPqzKey, ruling A1-I1): a holder registered without a PQZ key attaches one later, at every set ---
 const pqzKeyRecord = (s, set, signerOf = s) => {
@@ -245,7 +252,8 @@ const negatives = [
       neg(`pqz-key-wrong-length/${set}`, 'register', row, { 'attrs.pqzKey': hex(new Uint8Array(32).fill(0x42)), pqzPop: '0x' }, 'UAKeyData'),
       neg(`non-holder-with-pqz-key/${set}`, 'register', 'slhdsa128s',
         { 'attrs.pqzKey': hex(pqzKeyOf(set)), 'attrs.pqzPopHash': hex(keccak_256(pqzPopOf(set))) }, 'UAPqzHolder'),
-      neg(`msig-swapped-kem-pk/${set}`, 'register', `msig-pq/${set}`, { 'attrs.kemPk': hex(KEM['msig-pq'][1]), pqzPop: '0x' }, 'UAPoP'),
+      // CTR-UA-32 (T66a): a PQ-eligible msig with a KEM key is refused by the holder check, before the PoP
+      neg(`msig-with-kem/${set}`, 'register', `msig-pq/${set}`, { 'attrs.kemPk': hex(KEM['msig-pq'][0]), pqzPop: '0x' }, 'UAKemHolder'),
       neg(`store-pqz-pop-other-bytes/${set}`, 'storePqzPop', row, { pqzPop: hex(pqzPopOf(set, ' other')) }, 'UAPqzPopHash',
         { registerWith: { pqzPop: '0x' } }),
       neg(`pqz-key-record-already-set/${set}`, 'setPqzKey', fr.name, { ua: hex(ml.ua), sig: hex(recordSigBy(ml, fr)) }, 'UAPqzKeySet'),
@@ -274,6 +282,9 @@ const negatives = [
     'UAKemHolder'),
   neg('kem-sig-of-other-version', 'setKemKey', 'mldsa65/v3', { sig: kemRecords.find((k) => k.id === 'mldsa65/v2').sig }, 'UAUnauthorized'),
   neg('kem-record-of-other-ua', 'setKemKey', 'fndsa512/v2', { ua: hex(ml.ua) }, 'UAUnauthorized'),
+  // CTR-UA-32 (T66a): an msig's KEM record (its m-of-n signature over it) on the registered msig-pq/<set>: UAKemHolder, no signature reached
+  neg('msig-kem-record', 'setKemKey', 'fndsa512/v1', { ua: hex(pqMsig.ua), kemPk: hex(KEM['msig-pq'][1]),
+    sig: hex(msigKemSig(pqMsig, 1, KEM['msig-pq'][1])) }, 'UAKemHolder', { kind: pqMsig.kind }),
   // TS-D4 (C7, ruling A1-I2): a native member's portable signature framed as UAAuth is refused; personal_sign outside the
   // portable purposes is refused (UAAuth there, CTR-MTX-14)
   neg('native-uaauth-in-portable-pop', 'register', 'msig-pq-native',
@@ -330,17 +341,17 @@ const heavyInner = msig('msig-inner-heavy', 2, byId([f0, f1]).map((m, i) => [m, 
 const heavyInnerOuter = msig('msig-nested-heavy-inner', 2, [[heavyInner, 1], [f2, 1]]);
 const heavyOuter = msig('msig-nested-heavy-outer', 2, [[pqInner, 2], [f2, 1]]);
 const innerIndex = (s) => s.members.findIndex((m) => m.kind === 0x0120);
-KEM['msig-nested-pq'] = kemKeys('msig-nested-pq');
 const nestedRows = [
   registration(p256), registration(ed), registration(f0), registration(f1), registration(f2),
   registration(pqInner), registration(nativeInner), registration(nativeInner2), registration(classicalInner), registration(heavyInner, { signers: [1] }),
-  registration(nestedPq, { kem: true }), registration(nestedNative), registration(nestedTwice), registration(nestedClassical),
+  registration(nestedPq), registration(nestedNative), registration(nestedTwice), registration(nestedClassical),
   registration(heavyInnerOuter), registration(heavyOuter, { signers: [innerIndex(heavyOuter)] }),
 ];
 // a `pop` with a slot of an inner that accepted by `acceptMembership`: registers after that acceptance, on a copy after its replay
 const afterMsig = msig('msig-nested-after-acceptance', 2, [[classicalInner, 1], [f2, 1]]);
 const afterAcceptance = [registration(afterMsig)];
-const nestedKem = KEM['msig-nested-pq'].slice(1, 2).map(kemRecord(nestedPq, 'msig-nested-pq'));
+// CTR-UA-32 (T66a): an msig holds no KEM key, so nested.json has no KEM record (the refusal: portable.json `msig-kem-record`)
+const nestedKem = [];
 const nestedPqzKey = SETS.map((set) => pqzKeyRecord(nestedNative, set));
 /** An inner slot's acceptance: a threshold of its own accepted slots signs for it (spec §4); a leaf's as `membership`. */
 const nestedMembership = (s, m) => {
@@ -436,7 +447,7 @@ const nestedNote = 'Generated by clients/clientkeys/scripts/ua-portable-vectors.
   + 'MemberSig{index, members: InnerSig{index, sig}[], sig: 0x}, a signing slot MemberSig{index, [], sig}. md_I = keccak256(I | ua_msg(0x0120, member, md_U)): '
   + 'innerDigests[j].memberDigest, for the row\'s memberDigest md_U; a derived leaf of I signs under member over md_I, a native leaf the row\'s typed digest '
   + 'in the portable purposes and UAAuth(id, member, md_I) elsewhere (context A of structures.json, gen 1). msig-nested-twice: one native signature serves both '
-  + 'slots of that record (N5). kemRecords, pqzKeyRecords: as portable.json\'s. memberships: acceptMembership(ua, MemberSig{index, members, sig}) in the order '
+  + 'slots of that record (N5). kemRecords: none (CTR-UA-32: an msig holds no KEM key). pqzKeyRecords: as portable.json\'s. memberships: acceptMembership(ua, MemberSig{index, members, sig}) in the order '
   + 'they run, a member of msig kind by its accepted slots over innerDigest(member, memberDigest) (sig 0x); stored: the bytes UAMemberSig then '
   + 'carries, sig, or abi.encode(InnerSig[]) for an msig member; storedHash = keccak256(stored), what memberSigHashOf(ua, index) then returns '
   + '(owner 2026-11-03: state keeps the hash, the event the bytes). afterAcceptance: a registration whose pop uses a slot accepted by a memberships row: on another '
@@ -503,7 +514,8 @@ const note = [
   + '...) is refused); MuSig2 / FROST keys register by registerMuSig2 / registerFrost(kind, key, attrs, pop, pqzPop) (clientkeys '
   + 'typedKey; no row here).',
   'Rows: registrations[i] = register(kind, keyData, attrs, pop, pqzPop); kemRecords[i] = setKemKey(ua, version, kemPk, sig) '
-  + '(id = name/vN, versions 1-3, each its own key; version 0 is the registration\'s key, stored by register, never by setKemKey: '
+  + '(id = name/vN, versions 1-3, each its own key; the KEM holders are the single PQ kinds only: CTR-UA-32, an msig holds no KEM key, '
+  + 'its register with one (msig-with-kem/<set>) and its record (msig-kem-record) are UAKemHolder; version 0 is the registration\'s key, stored by register, never by setKemKey: '
   + 'UAKemVersion; every version is write-once); pqzKeyRecords[i] = setPqzKey(ua, 0, pqzKey, pqzPopHash, sig) (group 3g: version 0) '
   + 'for a UA registered without a PQZ key (its proof bytes for storePqzPop: the set\'s filler, registrations '
   + '"mldsa65/<set>".pqzPop). pqzPop rows are filler of a real R_REG proof\'s length per set, not proofs.',
@@ -515,7 +527,8 @@ const note = [
   + 'pqzKeyVersionNegatives: setPqzKey of the pqzKeyVersions row mutation.row with mutation.set replaced, on the state where exactly '
   + 'the versions mutation.stored of that UA are stored (0: its pqzKeyRecords row), refused with error.',
   'negatives: mutation.row names a row of registrations (entry register, storePqzPop, requireAuthorized), kemRecords by id '
-  + '(setKemKey) or pqzKeyRecords (setPqzKey); mutation.set replaces fields (attrs.<field>, pqzPop, pop, ua, sig, pqzPopHash, '
+  + '(setKemKey; mutation.kind: the kind of the record mutation.set.ua names, when not the row\'s) or pqzKeyRecords (setPqzKey); '
+  + 'mutation.set replaces fields (attrs.<field>, pqzPop, pop, ua, kemPk, sig, pqzPopHash, '
   + 'purposeTag, digest, auth); mutation.registerWith gives the register call that precedes a storePqzPop row; mutation.otherKind '
   + '(record-kind-mismatch) is the kind the pop\'s record names instead of the row\'s. Attribute checks run '
   + 'before the PoP; error is the registry\'s. A proof hash of keccak256("") (an empty proof) is UAPqzPopHash wherever a proof hash is '

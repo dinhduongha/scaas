@@ -236,8 +236,8 @@ interface IUARegistry is IERC5267 {
     /// A derived kind by its key data (every derived kind but `msig`, `registerMsig` only, `UAKeyData(kind)` here;
     /// `webauthn-p256`, MuSig2 and FROST also through `registerWebAuthn` / `registerMuSig2` / `registerFrost`). `pop`: the
     /// kind's signature over `uaMessage(kind, PURPOSE_POP_V2, registrationDigest(ua, kind, pqzKeyHash, kemRecordHash,
-    /// attrs.pqzPopHash))`. `attrs`: only a holder
-    /// (`mldsa44`, `mldsa65`, `fndsa512`, `mldsa87`, `fndsa1024`, a PQ-eligible `msig`; UA-6 U3, UA8-D12) carries a PQZ key or a KEM record.
+    /// attrs.pqzPopHash))`. `attrs`: only a holder carries a PQZ key (`mldsa44`, `mldsa65`, `fndsa512`, `mldsa87`, `fndsa1024`, a
+    /// PQ-eligible `msig`; UA-6 U3, UA8-D12) or a KEM record (the same single kinds, never an `msig`: CTR-UA-32, plan T66a).
     /// `pqzPop`: the `R_REG` proof over `uaMessage(0x0142, PURPOSE_POP_V2, portableRecordDigest(...))`, optional (empty: the
     /// key is stored unproven, `storePqzPop` later; also unproven where the `0x0142` slot is empty, UA8-D8). The attribute
     /// checks (holder, proof hash, PQZ key length, KEM key length) come before the PoP (portable.json `negatives`). Anyone
@@ -312,7 +312,7 @@ interface IUARegistry is IERC5267 {
     /// one key) and no revocation (P7). Stored `kemPk ‖ sig` (SSTORE2 chunks; `sig` = `signature`, or `abi.encode(members)`),
     /// `kemKeyOf` follows the highest version, `UAKemKeySet`. Check order: an id this registry does not hold
     /// (`UAUnauthorized`: an unregistered id, and on gen 2 a gen-1 record, which goes to gen 1, UA8-D11) → holder
-    /// (`UAKemHolder`: `mldsa44`, `mldsa65`, `fndsa512`, `mldsa87`, `fndsa1024`, a PQ-eligible `msig`; UA8-D12) → a stored version, or version 0
+    /// (`UAKemHolder`: `mldsa44`, `mldsa65`, `fndsa512`, `mldsa87`, `fndsa1024`; never an `msig`, CTR-UA-32) → a stored version, or version 0
     /// not committed (`UAKemVersion`) → the key: scheme 1 (`UAKemScheme`), 1,601 B assembled (`UAKemKeyLength`) →
     /// signature (`UAUnauthorized`; version 0: a non-empty `sig`) / version 0 the committed hash (`UAKemKeyHash`).
     function setKemKey(bytes32 ua, uint64 version, KemKey calldata kem, UASig calldata sig) external;

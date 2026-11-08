@@ -152,13 +152,13 @@ contract UARegistryNestedVectorsTest is UARegistryBase {
 
     function test_nestedVectors_records() public {
         _registerUpTo("");
-        string memory k = _p("kemRecords", 0, "");
-        bytes32 ua = vm.parseJsonBytes32(j, string.concat(k, ".ua"));
-        bytes memory kemPk = _bytes(string.concat(k, ".kemPk"));
-        r.setKemKey(ua, 1, UACall.kem(kemPk), _sigOf(string.concat(k, ".args.sig")));
-        (IUARegistry.KemKey memory got, bytes memory sig) = r.kemKeyAt(ua, 1);
-        assertEq(UACall.kemPk(got), kemPk);
-        assertEq(sig, _bytes(string.concat(k, ".sig")), "stored as abi.encode(members)");
+        // CTR-UA-32 (T66a): no KEM record, and a nested msig's is refused before its signature
+        assertEq(_count(".kemRecords"), 0);
+        bytes32 ua = vm.parseJsonBytes32(j, string.concat(_row("msig-nested-pq"), ".ua"));
+        bytes memory kemPk = new bytes(1601);
+        kemPk[0] = 0x01;
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKemHolder.selector, ua));
+        r.setKemKey(ua, 1, UACall.kem(kemPk), IUARegistry.UASig("", "", new IUARegistry.MemberSig[](0)));
         uint256 n = _count(".pqzKeyRecords");
         assertEq(n, 4);
         bool ran;
@@ -304,18 +304,20 @@ contract UARegistryNestedVectorsTest is UARegistryBase {
         }
     }
 
-    /// A holder passes the holder check and stops at the signature, a classical-dominant `msig` at the holder check.
+    /// A PQZ holder passes the holder check and stops at the signature, a classical-dominant `msig` at the holder check. T66a: probed
+    /// by `setPqzKey` (was `setKemKey`, whose holder check no `msig` passes now, CTR-UA-32).
     function test_nestedVectors_eligibility() public {
         _registerUpTo("");
         uint256 n = _count(".eligibility");
         assertEq(n, 3);
-        IUARegistry.KemKey memory kem = UACall.kem(_bytes(_p("kemRecords", 0, ".kemPk")));
+        string memory k = _p("pqzKeyRecords", 0, "");
+        (bytes memory key, bytes32 ph) = (_bytes(string.concat(k, ".pqzKey")), vm.parseJsonBytes32(j, string.concat(k, ".pqzPopHash")));
         for (uint256 i; i < n; ++i) {
             string memory e = _p("eligibility", i, "");
             bytes32 ua = UAKinds.uaOf(UAKinds.MSIG, _bytes(string.concat(e, ".keyData")));
             bool eligible = vm.parseJsonBool(j, string.concat(e, ".eligible"));
-            vm.expectRevert(abi.encodeWithSelector(eligible ? IUARegistry.UAUnauthorized.selector : IUARegistry.UAKemHolder.selector, ua));
-            r.setKemKey(ua, 2, kem, IUARegistry.UASig("", "", new IUARegistry.MemberSig[](0)));
+            vm.expectRevert(abi.encodeWithSelector(eligible ? IUARegistry.UAUnauthorized.selector : IUARegistry.UAPqzHolder.selector, ua));
+            r.setPqzKey(ua, 0, key, ph, IUARegistry.UASig("", "", new IUARegistry.MemberSig[](0)));
         }
     }
 }

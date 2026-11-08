@@ -325,7 +325,7 @@ library UARegistryLib {
         bytes memory kemPk = UAKinds.kemPk(attrs.kem);
         bool commit = attrs.kemPkHash != 0;
         if (pqz) _pqzHolder(kind, d, ua, false);
-        if ((commit || kemPk.length != 0) && !_holder(kind, d)) revert IUARegistry.UAKemHolder(ua);
+        if ((commit || kemPk.length != 0) && !_kemHolder(kind)) revert IUARegistry.UAKemHolder(ua);
         if (pqz != (attrs.pqzPopHash != 0) || attrs.pqzPopHash == EMPTY_PROOF_HASH) revert IUARegistry.UAPqzPopHash(ua);
         if (pqzPop.length != 0 && keccak256(pqzPop) != attrs.pqzPopHash) revert IUARegistry.UAPqzPopHash(ua);
         if (pqz) h = _pqzKeyHash(attrs.pqzKey);
@@ -341,12 +341,16 @@ library UARegistryLib {
         record = UAKinds.portableRecordHash(ua, kind, h, kh);
     }
 
-    /// A PQZ / KEM holder (UA-6 U3, UA8-D12): `mldsa44`, `mldsa65`, `fndsa512`, `mldsa87` (CTR-UA-39 Q2), `fndsa1024` (CTR-UA-40 Q2),
-    /// a PQ-eligible `msig`.
+    /// A PQZ key holder (UA-6 U3, UA8-D12): a KEM holder, or a PQ-eligible `msig`.
     function _holder(uint16 kind, bytes memory d) private view returns (bool) {
+        return _kemHolder(kind) || (kind == UAKinds.MSIG && _pqEligible(d));
+    }
+
+    /// A KEM key holder (CTR-UA-32; owner 2026-11-05, confirmed 2026-11-07; plan T66a): `mldsa44`, `mldsa65`, `fndsa512`, `mldsa87`
+    /// (CTR-UA-39 Q2), `fndsa1024` (CTR-UA-40 Q2). Never an `msig`, PQ-eligible or not: a sender seals to each accepted member's own key.
+    function _kemHolder(uint16 kind) private pure returns (bool) {
         return kind == UAKinds.MLDSA44 || kind == UAKinds.MLDSA65 || kind == UAKinds.FNDSA512 || kind == UAKinds.MLDSA87
-            || kind == UAKinds.FNDSA1024
-            || (kind == UAKinds.MSIG && _pqEligible(d));
+            || kind == UAKinds.FNDSA1024;
     }
 
     /// May `ua` (`kind`, key data `d`) hold a PQZ key here (`register`, `setPqzKey`)? `UAKindDisabled(0x0142)` on a gen 2
@@ -627,8 +631,8 @@ library UARegistryLib {
         IUARegistry.Record memory r = s.records[ua];
         // UA8-D11 before `_sigOk`: its gen-1 fallback would verify a gen-1 holder's record here (A6 re-review)
         if (r.kind == 0) revert IUARegistry.UAUnauthorized(ua);
+        if (!_kemHolder(r.kind)) revert IUARegistry.UAKemHolder(ua); // CTR-UA-32: an `msig` holds no KEM key
         (bytes memory d,) = UAStore.registration(ua, r.keyPtr);
-        if (!_holder(r.kind, d)) revert IUARegistry.UAKemHolder(ua);
         // owner 2026-10-31: never overwrite (every version write-once); version 0 only to fill the `register` commit
         if (s.kem[ua][version].length != 0) revert IUARegistry.UAKemVersion(ua, version);
         bytes32 committed = version == 0 ? s.kemCommit[ua].kemPkHash : bytes32(0);

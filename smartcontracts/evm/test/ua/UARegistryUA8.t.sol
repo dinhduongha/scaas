@@ -900,15 +900,19 @@ contract UARegistryUA8Test is UARegistryBase {
         assertEq(UACall.register(a, UAKinds.MSIG, m.keyData, m.attrs, abi.encode(two), ""), m.ua);
     }
 
+    /// CTR-UA-32 (plan T66a): the same `msig`'s KEM record is `UAKemHolder` whatever its slots, the minimal one included, before the
+    /// signature. meaning: was the minimal rule on a KEM record (both slots `UAUnauthorized`, the weight-2 slot landing); the rule
+    /// stays on the PQZ key record below and on `requirePortable` (`test_requirePortable_msigNotMinimal`).
     function test_msigKemSigNotMinimalRefused() public {
         (UARegistry a, Row[] memory rows, bytes memory d, bytes32 ua,) = _notMinimalRegistered();
         bytes memory pk = _kemPk(41);
         bytes memory sig = _msigSigs(rows, d, ua, UAKinds.PURPOSE_KEM, UAKinds.kemRecordDigest(ua, 1, pk), 0, 1, 0);
-        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKemHolder.selector, ua));
         a.setKemKey(ua, 1, UACall.kem(pk), UACall.sig(sig));
         bytes memory one = abi.encode(_one(UACall.memberSigs(sig)[1]));
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKemHolder.selector, ua));
         a.setKemKey(ua, 1, UACall.kem(pk), UACall.sig(one));
-        _assertKemAt(a, ua, 1, pk, one);
+        _assertKemAt(a, ua, 1, "", "");
     }
 
     /// The PQZ key record of the same `msig`: both slots are `UAUnauthorized`, the weight-2 slot lands.
@@ -1013,7 +1017,8 @@ contract UARegistryUA8Test is UARegistryBase {
     /// with error `UAPoP`) is `UAPoP`.
     function test_ua8_popCoversAttrs() public {
         // + native-member-personal-sign, record-kind-mismatch, kem-record-as-registration (typed-signing P1)
-        assertEq(_runNegatives(_errs("UAPoP", "", "", "")), 22, "UAPoP negatives");
+        // T66a: msig-swapped-kem-pk at four sets left (an msig KEM key is msig-with-kem, UAKemHolder)
+        assertEq(_runNegatives(_errs("UAPoP", "", "", "")), 18, "UAPoP negatives");
     }
 
     /// The attribute shape: a PQZ key with its proof hash and only with it, proof bytes hashing to it, a PQZ key of a
@@ -1035,7 +1040,7 @@ contract UARegistryUA8Test is UARegistryBase {
     /// Only the PQ holders carry a PQZ key or a KEM record (UA-6 U3, UA8-D12): portable.json's holder negatives, and
     /// `slhdsa128s` with a KEM record.
     function test_ua8_nonHolderAttrsRefused() public {
-        assertEq(_runNegatives(_errs("UAPqzHolder", "UAKemHolder", "", "")), 6);
+        assertEq(_runNegatives(_errs("UAPqzHolder", "UAKemHolder", "", "")), 10); // + msig-with-kem at four sets (CTR-UA-32, T66a)
         Row[] memory rows = _rows();
         UARegistry a = _deploy(address(0x5ce61), chainUidA, address(0), false, BUDGET, address(0), true, _vcfg(0, false));
         Row memory s = rows[SLH_ROW];
@@ -2364,7 +2369,7 @@ contract UARegistryUA8Test is UARegistryBase {
 
     function _kemRecs() internal view returns (KemRec[] memory recs) {
         recs = this.loadKemRecs();
-        assertEq(recs.length, 15, "kemRecords: v1-v3 of mldsa65, fndsa512, msig-pq, mldsa87, fndsa1024");
+        assertEq(recs.length, 12, "kemRecords: v1-v3 of mldsa65, fndsa512, mldsa87, fndsa1024 (CTR-UA-32: no msig record)");
         for (uint256 i; i < recs.length; ++i) {
             KemRec memory k = recs[i];
             assertEq(k.digest, UAKinds.kemRecordDigest(k.ua, k.version, k.kemPk), k.id);
@@ -2379,9 +2384,9 @@ contract UARegistryUA8Test is UARegistryBase {
         revert(string.concat("no KEM record ", id));
     }
 
-    /// The registration row of a KEM record's UA (this build's set for `mldsa65` / `msig-pq`, the set-free row otherwise).
+    /// The registration row of a KEM record's UA (this build's set for `mldsa65`, the set-free row otherwise).
     function _kemBase(Row[] memory rows, KemRec memory k) internal pure returns (Row memory) {
-        return _eq(k.name, "mldsa65") || _eq(k.name, "msig-pq") ? _find(rows, string.concat(k.name, "/", _setName())) : _find(rows, k.name);
+        return _eq(k.name, "mldsa65") ? _find(rows, string.concat(k.name, "/", _setName())) : _find(rows, k.name);
     }
 
     /// The mocked `mldsa65` / `mldsa87` precompile accepts the record's signature (`msig`: each `mldsa65` member's, under `member`).
@@ -2485,7 +2490,7 @@ contract UARegistryUA8Test is UARegistryBase {
             }
         }
         vm.chainId(31337);
-        assertEq(written, 30, "v1, v2 and v3 of five UAs on two registries");
+        assertEq(written, 24, "v1, v2 and v3 of four UAs on two registries (T66a: no msig KEM record)");
         for (uint256 i; i < ks.length; ++i) {
             (IUARegistry.KemKey memory pa, bytes memory sa) = a.kemKeyAt(ks[i].ua, ks[i].version);
             (IUARegistry.KemKey memory pb, bytes memory sb) = b.kemKeyAt(ks[i].ua, ks[i].version);
@@ -2601,30 +2606,55 @@ contract UARegistryUA8Test is UARegistryBase {
         a.setKemKey(none, 1, UACall.kem(pk), UACall.sig(""));
     }
 
-    /// The m-of-n record signature (U5; rulings C7, A1-I2): portable.json's `msig-pq` v2 (2-of-2 `mldsa65` members)
-    /// lands, one member alone does not. A 2-of-3 PQ-eligible `msig` (two `mldsa65` members, one code-less native
-    /// member signing the typed `UAKemRecord` digest) takes every 2-member subset and refuses a single member,
-    /// out-of-order members and the native member's UAAuth (EIP-712) signature.
-    function test_ua8_kemMsigMofN() public {
+    /// CTR-UA-32 (owner 2026-11-05, confirmed 2026-11-07; plan T66a): an `msig` holds no KEM key. portable.json's `msig-kem-record`
+    /// (the registered 2-of-2 `msig-pq` and its members' valid signature over the record), a 2-of-3 PQ-eligible `msig` with a native
+    /// member signing the typed `UAKemRecord` digest, and the hash-commit form at `register` are `UAKemHolder`, nothing stored; both
+    /// `msig`s still hold a PQZ key (the row's `register` stored it). meaning: was `test_ua8_kemMsigMofN`, the m-of-n KEM record landing
+    /// (U5); the m-of-n portable signature (subsets, order, the native member's UAAuth refused) is `requirePortable`'s now
+    /// (`UARegistryPortable.t.sol`).
+    function test_ua8_kemMsigRefused() public {
         Row[] memory rows = _rows();
-        KemRec[] memory ks = _kemRecs();
+        _allowAll(rows);
         UARegistry a = _regA(false);
-        _kemSetup(a, rows, ks);
-        KemRec memory k = _kemRec(ks, "msig-pq/v2");
-        IUARegistry.MemberSig[] memory s = UACall.memberSigs(k.sig);
-        assertEq(s.length, 2);
-        IUARegistry.MemberSig[] memory one = new IUARegistry.MemberSig[](1);
-        one[0] = s[0];
-        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, k.ua));
-        a.setKemKey(k.ua, 2, UACall.kem(k.kemPk), UACall.sig(abi.encode(one)));
-        a.setKemKey(k.ua, 2, UACall.kem(k.kemPk), UACall.sig(k.sig));
-        _assertKemAt(a, k.ua, 2, k.kemPk, k.sig);
-        // 2-of-3 with a native member
+        _members(a, rows);
+        Row memory m = _find(rows, string.concat("msig-pq/", _setName()));
+        assertEq(m.kemPk.length, 0, "the msig row carries no KEM key");
+        IUARegistry.UAAttrs memory c = UACall.commit(UACall.attrs(m.attrs.pqzKey, m.attrs.pqzPopHash, _kemPk(31)));
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKemHolder.selector, m.ua));
+        UACall.register(a, m.kind, m.keyData, c, m.pop, m.pqzPop);
+        _reg(a, m);
+        (, address pqzPtr) = a.recordOf(m.ua);
+        assertTrue(pqzPtr != address(0), "a PQZ holder still");
+        Neg memory g = _neg("msig-kem-record");
+        assertEq(g.err, "UAKemHolder");
+        (bytes32 ua, bytes memory pk, bytes memory sig) = (bytes32(0), "", "");
+        for (uint256 f; f < g.keys.length; ++f) {
+            if (_eq(g.keys[f], "ua")) ua = bytes32(g.values[f]);
+            else if (_eq(g.keys[f], "kemPk")) pk = g.values[f];
+            else if (_eq(g.keys[f], "sig")) sig = g.values[f];
+        }
+        assertEq(ua, m.ua);
+        assertEq(UACall.memberSigs(sig).length, 2, "a full m-of-n signature");
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKemHolder.selector, ua));
+        a.setKemKey(ua, 1, UACall.kem(pk), UACall.sig(sig));
+        _assertKemAt(a, ua, 1, "", "");
+        _checkedEq(a, ua, 1, 0, 0); // no 0x0142 verifier here: the PQZ key unproven; no KEM key
+        _kemMsig2of3Refused(a, rows);
+    }
+
+    /// A 2-of-3 with a native member: each 2-member subset's valid signature over the KEM record is `UAKemHolder`.
+    function _kemMsig2of3Refused(UARegistry a, Row[] memory rows) internal {
         uint256 sk = _nativeSk();
-        (bytes memory d, bytes32 ua) = _msig2of3(a, rows, sk);
-        bytes memory pk = _kemPk(23);
-        _kemSubsets(a, rows, d, ua, pk, sk);
-        _kemNativeUAAuth(a, rows, d, ua, pk, sk);
+        (bytes memory d, bytes32 u3) = _msig2of3(a, rows, sk);
+        bytes memory pk3 = _kemPk(23);
+        bytes32 kd = UAKinds.kemRecordDigest(u3, 1, pk3);
+        uint8[2][3] memory pairs = [[0, 1], [0, 2], [1, 2]];
+        for (uint256 i; i < 3; ++i) {
+            bytes memory s3 = _msigSigs(rows, d, u3, UAKinds.PURPOSE_KEM, kd, pairs[i][0], pairs[i][1], sk);
+            vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKemHolder.selector, u3));
+            a.setKemKey(u3, 1, UACall.kem(pk3), UACall.sig(s3));
+        }
+        _assertKemOf(a, u3, 0, "", "");
     }
 
     /// A 2-of-3 PQ-eligible `msig` of `mldsa65#1`, `mldsa65#2` and the native `sk`, registered on `a`.
@@ -2638,56 +2668,6 @@ contract UARegistryUA8Test is UARegistryBase {
         bytes memory pop = _msigSigs(rows, d, ua, UAKinds.PURPOSE_POP_V2, _regDigest(ua, UAKinds.MSIG), 0, 1, sk);
         assertEq(UACall.register(a, UAKinds.MSIG, d, _none(), pop, ""), ua);
         _acceptSlot(a, rows, d, ua, 2, sk); // the third slot, outside the `pop`
-    }
-
-    /// Versions 1–3 signed by each 2-member subset land; one member, and two out of order, are refused.
-    function _kemSubsets(UARegistry a, Row[] memory rows, bytes memory d, bytes32 ua, bytes memory pk, uint256 sk)
-        internal
-    {
-        uint8[2][3] memory pairs = [[0, 1], [0, 2], [1, 2]];
-        for (uint64 v = 1; v <= 3; ++v) {
-            bytes32 kd = UAKinds.kemRecordDigest(ua, v, pk);
-            bytes memory sig = _msigSigs(rows, d, ua, UAKinds.PURPOSE_KEM, kd, pairs[v - 1][0], pairs[v - 1][1], sk);
-            IUARegistry.MemberSig[] memory p = UACall.memberSigs(sig);
-            IUARegistry.MemberSig[] memory bad = new IUARegistry.MemberSig[](1);
-            bad[0] = p[1];
-            vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
-            a.setKemKey(ua, v, UACall.kem(pk), UACall.sig(abi.encode(bad))); // one member: below the threshold
-            bad = new IUARegistry.MemberSig[](2);
-            bad[0] = p[1];
-            bad[1] = p[0];
-            vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
-            a.setKemKey(ua, v, UACall.kem(pk), UACall.sig(abi.encode(bad))); // out of order
-            a.setKemKey(ua, v, UACall.kem(pk), UACall.sig(sig));
-            _assertKemAt(a, ua, v, pk, sig);
-        }
-    }
-
-    /// The native member's UAAuth signature (chain-bound) and its `personal_sign` of `memberDigest` (the pre-typed form)
-    /// instead of its signature over the typed `UAKemRecord` digest are refused; the typed signature lands (TS-D4).
-    function _kemNativeUAAuth(UARegistry a, Row[] memory rows, bytes memory d, bytes32 ua, bytes memory pk, uint256 sk)
-        internal
-    {
-        uint256 ni;
-        for (uint256 i; i < 3; ++i) {
-            (uint16 kind,) = _member(d, i);
-            if (kind == UAKinds.EVM_EOA) ni = i;
-        }
-        bytes32 kd = UAKinds.kemRecordDigest(ua, 4, pk);
-        bytes32 md = UAKinds.memberDigest(ua, UAKinds.uaMessage(UAKinds.MSIG, UAKinds.PURPOSE_KEM, kd));
-        uint256 other = ni == 0 ? 1 : 0;
-        IUARegistry.MemberSig[] memory q = UACall.memberSigs(_msigSigs(rows, d, ua, UAKinds.PURPOSE_KEM, kd, other < ni ? other : ni, other < ni ? ni : other, sk));
-        uint256 qn = q[0].index == ni ? 0 : 1;
-        bytes memory typedSig = q[qn].sig;
-        q[qn].sig = _nativeSig(a, sk, UAKinds.PURPOSE_MEMBER, md);
-        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
-        a.setKemKey(ua, 4, UACall.kem(pk), UACall.sig(abi.encode(q)));
-        q[qn].sig = _ecdsa(sk, MessageHashUtils.toEthSignedMessageHash(md));
-        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
-        a.setKemKey(ua, 4, UACall.kem(pk), UACall.sig(abi.encode(q)));
-        q[qn].sig = typedSig;
-        a.setKemKey(ua, 4, UACall.kem(pk), UACall.sig(abi.encode(q)));
-        _assertKemOf(a, ua, 4, pk, abi.encode(q));
     }
 
     /// The `MemberSig[]` of members `i < j` of the `msig` `d` over the portable record's typed digest `typed` under
@@ -2730,7 +2710,7 @@ contract UARegistryUA8Test is UARegistryBase {
         uint256 n;
         for (uint256 i; i < negs.length; ++i) {
             Neg memory g = negs[i];
-            if (!_eq(g.entry, "setKemKey")) continue;
+            if (!_eq(g.entry, "setKemKey") || _eq(g.err, "UAKemHolder")) continue; // msig-kem-record: test_ua8_kemMsigRefused
             assertEq(g.err, "UAUnauthorized");
             KemRec memory k0 = _kemRec(ks, g.row);
             (bytes32 ua, bytes memory sig) = (k0.ua, k0.sig);
@@ -2785,8 +2765,8 @@ contract UARegistryUA8Test is UARegistryBase {
         KemRec[] memory ks = _kemRecs();
         UARegistry a = _regA(false);
         _kemSetup(a, rows, ks);
-        string[5] memory ids = [string("fndsa512/v2"), "mldsa65/v2", "msig-pq/v2", "mldsa87/v2", "fndsa1024/v2"];
-        for (uint256 i; i < 5; ++i) {
+        string[4] memory ids = [string("fndsa512/v2"), "mldsa65/v2", "mldsa87/v2", "fndsa1024/v2"]; // CTR-UA-32: no msig record
+        for (uint256 i; i < 4; ++i) {
             KemRec memory k = _kemRec(ks, ids[i]);
             vm.recordLogs();
             vm.expectEmit(true, true, false, true, address(a));
@@ -2808,8 +2788,7 @@ contract UARegistryUA8Test is UARegistryBase {
 
     /// UA8-D11 (A6 re-review note): gen 2 refuses a KEM record for a record gen 1 holds (`UAUnauthorized`: it goes to
     /// gen 1), even where `_sigOk` could verify it — a holder kind gen 2 does not enable falls back to gen 1's
-    /// `requireAuthorized` (accepted here), an `msig` hands its members to gen 1 (the same bytes land on gen 2 for a
-    /// record gen 2 holds) — and even on a gen 2 that holds gen-1 records' PQZ attachments (ruling A6-I1). Gen 1 takes
+    /// `requireAuthorized` (accepted here) — and even on a gen 2 that holds gen-1 records' PQZ attachments (ruling A6-I1). Gen 1 takes
     /// the record; gen 2 forwards `kemKeyOf` / `kemKeyAt`.
     function test_ua8_kemGen2RecordElsewhereRefused() public {
         Row[] memory rows = _rows();
@@ -2818,8 +2797,8 @@ contract UARegistryUA8Test is UARegistryBase {
         UARegistry g1 = _regA(false);
         _members(g1, rows);
         UARegistry g2 = _gen2Pqz(address(0x5cebe), g1);
-        string[2] memory ids = [string("fndsa512/v2"), "msig-pq/v2"];
-        for (uint256 i; i < 2; ++i) {
+        string[1] memory ids = [string("fndsa512/v2")]; // CTR-UA-32 (T66a): the msig-pq/v2 case went with the msig KEM record
+        for (uint256 i; i < 1; ++i) {
             KemRec memory k = _kemRec(ks, ids[i]);
             Row memory base = _kemBase(rows, k);
             _allowKem(rows, base, k);
@@ -3073,29 +3052,28 @@ contract UARegistryUA8Test is UARegistryBase {
             assertEq(a[i].fillVersion, 0, x.name);
             ++commits;
         }
-        assertEq(commits, 11, "fndsa512, mldsa65 and msig-pq at four sets, mldsa87, fndsa1024");
+        assertEq(commits, 7, "fndsa512, mldsa65 at four sets, mldsa87, fndsa1024 (CTR-UA-32: no msig KEM key)");
     }
 
-    /// The KEM holder rows of this build: fndsa512, mldsa65/<set>, msig-pq/<set> (members registered).
-    function _kemHolders(UARegistry a, Row[] memory rows) internal returns (Row[3] memory h) {
+    /// The KEM holder rows of this build: fndsa512, mldsa65/<set> (members registered; CTR-UA-32, T66a: no msig).
+    function _kemHolders(UARegistry a, Row[] memory rows) internal returns (Row[2] memory h) {
         _allowAll(rows);
         _members(a, rows);
-        h = [_find(rows, "fndsa512"), _find(rows, string.concat("mldsa65/", _setName())),
-            _find(rows, string.concat("msig-pq/", _setName()))];
-        for (uint256 i; i < 3; ++i) assertEq(h[i].kemPk.length, 1601, h[i].name);
+        h = [_find(rows, "fndsa512"), _find(rows, string.concat("mldsa65/", _setName()))];
+        for (uint256 i; i < 2; ++i) assertEq(h[i].kemPk.length, 1601, h[i].name);
     }
 
     /// Owner 2026-10-31 (KEM items 2, 3): `register` with the KEM record's hash only (`kem` = the scheme, `kemPkHash`)
     /// verifies the row's own pop — both forms sign `UAKemRecord{ua, 0, scheme, kemPkHash}` — and stores no key:
     /// `kemKeyOf` / `kemKeyAt(ua, 0)` return nothing, `checkedOf` kem is NONE. Anyone then fills version 0 with
     /// `setKemKey(ua, 0, key, UASig())` (no signature): the key reads back, kem is CHAIN, `UAKemKeySet(ua, 0, …, "")`,
-    /// and `registrationOf` still returns the committed `register` arguments. A single key, `mldsa65` with a PQZ key and
-    /// a PQ-eligible `msig`.
+    /// and `registrationOf` still returns the committed `register` arguments. A single key and `mldsa65` with a PQZ key
+    /// (T66a: the PQ-eligible `msig` row left, CTR-UA-32).
     function test_kemHashCommitThenFill() public {
         Row[] memory rows = _rows();
         UARegistry a = _regA(false);
-        Row[3] memory h = _kemHolders(a, rows);
-        for (uint256 i; i < 3; ++i) {
+        Row[2] memory h = _kemHolders(a, rows);
+        for (uint256 i; i < 2; ++i) {
             Row memory x = h[i];
             IUARegistry.UAAttrs memory c = UACall.commit(x.attrs);
             assertEq(c.kem.mlkemEk.length, 0);
@@ -3119,36 +3097,39 @@ contract UARegistryUA8Test is UARegistryBase {
     }
 
     /// PRV L7, `_kemHash`'s commit branch for a record here: `storePqzPop` after a hash-committed `register` proves over the
-    /// row's own `pqzRegMessage` (the committed record is the same record), the key not filled yet (`mldsa65`) or filled
-    /// (a PQ-eligible `msig`). The stand-in verifier accepts exactly that message.
+    /// row's own `pqzRegMessage` (the committed record is the same record), the `mldsa65` key not filled yet, then (from the
+    /// same state) filled (T66a: the filled case was the PQ-eligible `msig`'s, CTR-UA-32). The stand-in accepts exactly that message.
     function test_storePqzPopAfterKemHashCommit() public {
         Row[] memory rows = _rows();
         UARegistry a = _regA(true);
-        Row[3] memory h = _kemHolders(a, rows);
-        for (uint256 i = 1; i < 3; ++i) {
-            Row memory x = h[i];
+        Row memory x = _kemHolders(a, rows)[1];
+        for (uint256 filled; filled < 2; ++filled) {
+            uint256 snap = vm.snapshotState();
             assertEq(UACall.register(a, x.kind, x.keyData, UACall.commit(x.attrs), x.pop, ""), x.ua, x.name);
-            if (i == 2) a.setKemKey(x.ua, 0, x.attrs.kem, _noSig());
+            if (filled == 1) a.setKemKey(x.ua, 0, x.attrs.kem, _noSig());
             _allowPqz(x);
             a.storePqzPop(x.ua, 0, x.pqzPop);
             assertTrue(_proven(a, x.ua), x.name);
+            vm.revertToState(snap);
         }
     }
 
     /// PRV L7, `_kemHash`'s commit branch on a gen-2 host: gen 2 proves a gen-1 record's hash-committed `register` key, the
-    /// commit read from gen 1's `registrationOf`, unfilled (`mldsa65`) or filled there (a PQ-eligible `msig`).
+    /// commit read from gen 1's `registrationOf`, `mldsa65` unfilled, then (from the same state) filled there (T66a: the filled case
+    /// was the PQ-eligible `msig`'s, CTR-UA-32).
     function test_storePqzPopAfterKemHashCommitGen2Host() public {
         Row[] memory rows = _rows();
         UARegistry g1 = _regA(false);
-        Row[3] memory h = _kemHolders(g1, rows);
+        Row memory x = _kemHolders(g1, rows)[1];
         UARegistry g2 = _gen2Pqz(address(0x5cebd), g1);
-        for (uint256 i = 1; i < 3; ++i) {
-            Row memory x = h[i];
+        for (uint256 filled; filled < 2; ++filled) {
+            uint256 snap = vm.snapshotState();
             assertEq(UACall.register(g1, x.kind, x.keyData, UACall.commit(x.attrs), x.pop, ""), x.ua, x.name);
-            if (i == 2) g1.setKemKey(x.ua, 0, x.attrs.kem, _noSig());
+            if (filled == 1) g1.setKemKey(x.ua, 0, x.attrs.kem, _noSig());
             _allowPqz(x);
             g2.storePqzPop(x.ua, 0, x.pqzPop);
             assertTrue(_proven(g2, x.ua), x.name);
+            vm.revertToState(snap);
         }
     }
 
@@ -3458,9 +3439,6 @@ contract UARegistryUA8Test is UARegistryBase {
         if (h == keccak256("popOf (the blob setKemKey decodes) mldsa65/v2 n2048-kmax1024")) return (15294, 0);
         if (h == keccak256("setKemKey fndsa512/v2 n2048-kmax1024")) return (2516006, 3947400);
         if (h == keccak256("popOf (the blob setKemKey decodes) fndsa512/v2 n2048-kmax1024")) return (13355, 0);
-        if (h == keccak256("setKemKey msig-pq/v2 n2048-kmax1024")) return (594840, 13797540);
-        if (h == keccak256("popOf (the blob setKemKey decodes) msig-pq/v2 n2048-kmax1024")) return (12970, 0);
-        if (h == keccak256("setKemKey msig-12-slhdsa128s (96,832 B pop)")) return (6337432, 151930530);
         if (h == keccak256("popOf (the blob setKemKey decodes) msig-12-slhdsa128s (32 B: keccak256 of its 96,832 B pop)")) return (13137, 0);
         if (h == keccak256("popOf unregistered (view baseline)")) return (2856, 0);
         if (h == keccak256("register mldsa65 with pqzPop n2048-kmax1024")) return (3341208, 81513810);
@@ -3478,8 +3456,6 @@ contract UARegistryUA8Test is UARegistryBase {
         if (h == keccak256("popOf (the blob setKemKey decodes) mldsa65/v2 n2304-kmax4096")) return (15294, 0);
         if (h == keccak256("setKemKey fndsa512/v2 n2304-kmax4096")) return (2516060, 3947400);
         if (h == keccak256("popOf (the blob setKemKey decodes) fndsa512/v2 n2304-kmax4096")) return (13355, 0);
-        if (h == keccak256("setKemKey msig-pq/v2 n2304-kmax4096")) return (594840, 13797540);
-        if (h == keccak256("popOf (the blob setKemKey decodes) msig-pq/v2 n2304-kmax4096")) return (12970, 0);
         if (h == keccak256("register mldsa65 with pqzPop n2304-kmax4096")) return (3613592, 87997950);
         if (h == keccak256("register mldsa65 without pqzPop n2304-kmax4096")) return (1667992, 40742370);
         if (h == keccak256("storePqzPop mldsa65 n2304-kmax4096")) return (1969048, 47255580);
@@ -3495,8 +3471,6 @@ contract UARegistryUA8Test is UARegistryBase {
         if (h == keccak256("popOf (the blob setKemKey decodes) mldsa65/v2 n2560-kmax16384")) return (15294, 0);
         if (h == keccak256("setKemKey fndsa512/v2 n2560-kmax16384")) return (2516006, 3947400);
         if (h == keccak256("popOf (the blob setKemKey decodes) fndsa512/v2 n2560-kmax16384")) return (13355, 0);
-        if (h == keccak256("setKemKey msig-pq/v2 n2560-kmax16384")) return (594840, 13797540);
-        if (h == keccak256("popOf (the blob setKemKey decodes) msig-pq/v2 n2560-kmax16384")) return (12970, 0);
         if (h == keccak256("register mldsa65 with pqzPop n2560-kmax16384")) return (3881880, 94433130);
         if (h == keccak256("register mldsa65 without pqzPop n2560-kmax16384")) return (1799064, 43875810);
         if (h == keccak256("storePqzPop mldsa65 n2560-kmax16384")) return (2106264, 50557320);
@@ -3512,8 +3486,6 @@ contract UARegistryUA8Test is UARegistryBase {
         if (h == keccak256("popOf (the blob setKemKey decodes) mldsa65/v2 n2816-kmax65536")) return (15294, 0);
         if (h == keccak256("setKemKey fndsa512/v2 n2816-kmax65536")) return (2516006, 3947400);
         if (h == keccak256("popOf (the blob setKemKey decodes) fndsa512/v2 n2816-kmax65536")) return (13355, 0);
-        if (h == keccak256("setKemKey msig-pq/v2 n2816-kmax65536")) return (594840, 13797540);
-        if (h == keccak256("popOf (the blob setKemKey decodes) msig-pq/v2 n2816-kmax65536")) return (12970, 0);
         if (h == keccak256("register mldsa65 with pqzPop n2816-kmax65536")) return (4201368, 102347820);
         if (h == keccak256("register mldsa65 without pqzPop n2816-kmax65536")) return (1930136, 47009250);
         if (h == keccak256("storePqzPop mldsa65 n2816-kmax65536")) return (2294680, 55338570);
@@ -3605,8 +3577,8 @@ contract UARegistryUA8Test is UARegistryBase {
         KemRec[] memory ks = _kemRecs();
         UARegistry a = _regA(false);
         _kemSetup(a, rows, ks);
-        string[3] memory ids = ["mldsa65/v2", "fndsa512/v2", "msig-pq/v2"];
-        for (uint256 i; i < 3; ++i) {
+        string[2] memory ids = ["mldsa65/v2", "fndsa512/v2"]; // CTR-UA-32 (T66a): no msig KEM record
+        for (uint256 i; i < 2; ++i) {
             KemRec memory k = _kemRec(ks, ids[i]);
             a.setKemKey(k.ua, 2, UACall.kem(k.kemPk), UACall.sig(k.sig));
             _gas(string.concat("setKemKey ", ids[i], " ", _setName()));
@@ -3627,8 +3599,9 @@ contract UARegistryUA8Test is UARegistryBase {
         bytes memory d = _msigKey(12, m12); // threshold 12: the KEM signature is as large as the pop (calldata-floor bound)
         bytes32 ua = UACall.register(big, UAKinds.MSIG, d, _none(), abi.encode(s), "");
         emit log_named_uint("msig 12 x slhdsa128s pop bytes", abi.encode(s).length);
+        // T66a (CTR-UA-32): an msig's KEM record is refused before the blob is read; the row "setKemKey msig-12-slhdsa128s" left
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKemHolder.selector, ua));
         big.setKemKey(ua, 1, UACall.kem(_kemPk(12)), UACall.sig(abi.encode(s)));
-        _gas("setKemKey msig-12-slhdsa128s (96,832 B pop)");
         big.popOf(ua);
         _gas("popOf (the blob setKemKey decodes) msig-12-slhdsa128s (32 B: keccak256 of its 96,832 B pop)");
         big.popOf(bytes32(uint256(1))); // unregistered: no blob read, the view's own cost (intrinsic gas) alone

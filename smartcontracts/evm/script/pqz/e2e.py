@@ -1277,7 +1277,7 @@ def run(kd, kr, ke):
         full_cd = build(g["args"])
         full = not SPLIT and full_register_fits(reg, full_cd)
         sd.send(reg, full_cd if full else build(g["args"], b""),
-                f"{g['entry']} {name} ({kind:#06x} + pqz-mlwe key + KEM v0{' hash commit' if g['kemFill'] else ''}, R_REG "
+                f"{g['entry']} {name} ({kind:#06x} + pqz-mlwe key{(' + KEM v0' + (' hash commit' if g['kemFill'] else '')) if kem else ''}, R_REG "
                 f"{len(proof):,} B, {'one call' if full else 'proof by storePqzPop'})")
         if not full:
             sd.send(reg, cd("storePqzPop(bytes32,uint64,bytes)", ["w", "w", "b"], ua, 0, proof), f"storePqzPop {name}")
@@ -1290,23 +1290,31 @@ def run(kd, kr, ke):
         pk_of = words(call(reg, cd("pqzKeyOf(bytes32)", ["w"], ua)))
         check(pk_of[2] == ph and int.from_bytes(pk_of[3], "big") == 1 and int.from_bytes(pk_of[0], "big") == 0,
               f"{name} pqzKeyOf: version 0 current, proof hash set, proven")
-        check([int.from_bytes(w, "big") for w in words(call(reg, cd("checkedOf(bytes32)", ["w"], ua)))] == [1, 1, 1],
-              f"{name} checkedOf = (chain, chain, chain)")
+        check([int.from_bytes(w, "big") for w in words(call(reg, cd("checkedOf(bytes32)", ["w"], ua)))] == [1, 1, 1 if kem else 0],
+              f"{name} checkedOf = (chain, chain, {'chain' if kem else 'none'})")
         check(kem_of_ret(call(reg, cd("kemKeyOf(bytes32)", ["w"], ua))) == (0, kem, b""), f"{name} kemKeyOf = (0, kem, \"\")")
         check(int.from_bytes(words(call(reg, cd("kindOf(bytes32)", ["w"], ua)))[0], "big") == kind, f"{name} kindOf {kind:#06x}")
 
     def msig_ua(name, seed):
         """A PQZ holder that is an msig (UA-8, TS-D10): 2-of-2 over two new ML-DSA-65 UAs, sorted by id, `registerMsig` with their
-        PoP signatures; both sign its `UASig`s."""
+        PoP signatures; both sign its `UASig`s. No KEM key (CTR-UA-32, plan T66a: an msig holds none; a sender seals to each
+        member's own key): the registry refuses one, `UAKemHolder`, checked here before the registration."""
         ms = sorted((ml_ua(f"{name}-m{i}", MLDSA65, sk(f"ml-{name}{i}")) for i in range(2)), key=lambda u: u.ua)
         keyData = hb(_ck("msig", threshold=2, members=[dict(kind=MLDSA65, id=js(m.ua), weight=1) for m in ms]))
         ua = words(call(reg, cd("uaOf(uint16,bytes)", ["w", "b"], MSIG, keyData)))[0]
         pk, s, e, _ = K.keygen(seed)
-        kem = b"\x01" + (kc("kem", seed) * 50)[:1600]
-        proof = pq.prove(3, K.build_register(portable("reg", kind=MSIG, ua=ua, pqzKey=pk, kemPk=kem), pk), K.i8(s) + K.i16(e))
-        md = hb(_ck("popmd", kind=MSIG, ua=ua, keyData=keyData, pqzKey=pk, pqzPopHash=kc(proof), kemPk=kem))
+        proof = pq.prove(3, K.build_register(portable("reg", kind=MSIG, ua=ua, pqzKey=pk, kemPk=b""), pk), K.i8(s) + K.i16(e))
+        md = hb(_ck("popmd", kind=MSIG, ua=ua, keyData=keyData, pqzKey=pk, pqzPopHash=kc(proof), kemPk=b""))
         pop = [dict(index=i, sig=js(ml_sig(pq, m, P_MEMBER, md)[1])) for i, m in enumerate(ms)]
-        register_holder(name, ua, reg_args(MSIG, keyData, pqzKey=pk, pqzPop=proof, kemPk=kem, pop=pop), proof, kem, MSIG, register_msig_cd)
+        g = reg_args(MSIG, keyData, pqzKey=pk, pqzPop=proof, kemPk=b"", pop=pop)
+        k = b"\x01" + (kc("kem", seed) * 50)[:1600]
+        with_kem = dict(g["args"], attrs=dict(g["args"]["attrs"], kem={"scheme": 1, "mlkemEk": "0x" + k[1:-32].hex(), "x25519": "0x" + k[-32:].hex()}))
+        try:
+            call(reg, register_msig_cd(with_kem, b""))
+            check(False, f"{name}: registerMsig with a KEM key is refused (UAKemHolder)")
+        except RuntimeError:
+            check(True, f"{name}: registerMsig with a KEM key is refused (UAKemHolder, CTR-UA-32)")
+        register_holder(name, ua, g, proof, b"", MSIG, register_msig_cd)
         w = words(call(reg, cd("msigOf(bytes32)", ["w"], ua)))  # head offset, threshold, array offset, n, (kind, id, weight) ...
         check(int.from_bytes(w[1], "big") == 2 and [w[5], w[8]] == [m.ua for m in ms], f"{name} msigOf: 2-of-2, the members in index order")
         return UA(name=name, kind=MSIG, pk=pk, s=s, e=e, ua=ua, members=ms)
