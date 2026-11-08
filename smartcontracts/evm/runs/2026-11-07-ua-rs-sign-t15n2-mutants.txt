@@ -16,3 +16,6 @@ killed     | M14 zether: --recipient not passed to the pick | clients/zether-pro
 killed     | M15 zether: --recipient not excluded from the candidates | clients/zether-prover/src/bin/zether-read-balance.rs | rc=101 | 1 failed: decoys_against_anvil | assertion `left == right` failed: --recipient | at 352e9386
 killed     | M16 zether: --recipient with --decoy-keys | clients/zether-prover/src/bin/zether-read-balance.rs | rc=101 | 1 failed: decoy_arguments | ["--curve", "bls12381", "--rpc", "http://127.0.0.1:1", "--chain-id", "1", "--chain-uid", "0xabababababababababababababababababababababababababababababababab", " | at 352e9386
 mutants M1-M16 of 16, survived or not loaded: 0
+# T20b several-node re-run (2026-11-08, the decoy steps split per node: the string moved): the replacement strings brought to HEAD, those mutants run again:
+killed     | M11 pqz-read: the legs not printed | clients/ua-rs/src/bin/pqz-read.rs | rc=101 | 1 failed: decoys_against_anvil | called `Result::unwrap()` on an `Err` value: Error("invalid type: null, expected a sequence", line: 0, column: 0) | at 7bde6bd9
+# T20b several-node re-run: 1 killed, 0 survived, 0 not loaded (the other mutants above stand, every string checked at HEAD)

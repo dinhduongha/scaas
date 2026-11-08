@@ -25,3 +25,6 @@ killed     | M23 clientkeys: the suffix on version 0 too | clients/clientkeys/sr
 killed     | M24 ua8: a key a stored version holds accepted | clients/ua-rs/src/ua8.rs | rc=101 | 1 failed: pqz_key_version_vectors | called `Result::unwrap_err()` on an `Ok` value: PqzKeyVersionRecord { pqz_key_hash: [255, 253, 94, 119, 148, 204, 142, 255, 138, 2, 124, 52, 38, 125, 95, 27, 11 | at 8d1449c3
 killed     | M25 ua-py: the version not passed | clients/ua-py/scaas_ua/wallet.py | rc=1 | 1 failed: test_pqz_key_versions_are_the_pq_kat_rows | at 8d1449c3
 mutants M1-M25 of 25: 25 killed, 0 survived, 0 not loaded
+# T20b several-node re-run (2026-11-08, the decoy steps split per node: the string moved): the replacement strings brought to HEAD, those mutants run again:
+killed     | M20 pqz-read: a decoy's key at version 0 | clients/ua-rs/src/bin/pqz-read.rs | rc=101 | 1 failed: decoys_against_anvil | assertion `left == right` failed: ua(16): the key of its current version | at 7bde6bd9
+# T20b several-node re-run: 1 killed, 0 survived, 0 not loaded (the other mutants above stand, every string checked at HEAD)

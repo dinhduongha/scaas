@@ -37,3 +37,8 @@ mutants M1-M33 of 33: 33 killed, 0 survived, 0 not loaded
 # (8d1449c3), each run again alone on a clean tree:
 killed     | M19 pqz-read: no recency weight | clients/ua-rs/src/bin/pqz-read.rs | rc=101 | 1 failed: decoys_against_anvil | assertion `left == right` failed: activity | at 8d1449c3 | rc=0, git diff --exit-code 0
 # T15o re-run: 1 killed, 0 survived, 0 not loaded (0 superseded; the other mutants above stand, every string checked at HEAD)
+# T20b several-node re-run (2026-11-08, the decoy steps split per node (failover, --rpc-agree): the strings moved): the replacement strings brought to HEAD, those mutants run again:
+killed     | M18 pqz-read: an unproven key accepted | clients/ua-rs/src/bin/pqz-read.rs | rc=101 | 1 failed: decoys_against_anvil | called `Result::unwrap_err()` on an `Ok` value: Object {"decoys": Array [Object {"ua": String("0x090909090909090909090909090909090909090909090909090909090909090 | at 7bde6bd9
+killed     | M22 pqz-read: the blocks not re-checked | clients/ua-rs/src/bin/pqz-read.rs | rc=101 | 1 failed: decoys_against_anvil | called `Result::unwrap_err()` on an `Ok` value: Object {"command": String("decoys"), "request": Object {"exclude": Array [String("0x0101010101010101010101010101 | at 7bde6bd9
+killed     | M32 zether: the blocks not re-checked | clients/zether-prover/src/bin/zether-read-balance.rs | rc=101 | 1 failed: decoys_against_anvil | called `Result::unwrap_err()` on an `Ok` value: Object {"block": Number(21), "blockHash": String("0x66b369fb247e706de36e0e198d8520931edecdc75218f27c2ce3134c1f7d | at 7bde6bd9
+# T20b several-node re-run: 3 killed, 0 survived, 0 not loaded (the other mutants above stand, every string checked at HEAD)

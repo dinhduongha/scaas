@@ -27,3 +27,7 @@ killed     | M9 R5: the catalogue not read | clients/ua-rs/src/bin/pqz-read.rs |
 killed     | M10 R5: exists not checked | clients/ua-rs/src/bin/pqz-read.rs | rc=101 | 1 failed: reading_layer_against_anvil | want R5: the token is not a PQZ token: error: ua-rs refused the words: PqzSetMismatch | at b3033535
 killed     | M11 R5: a Zether kind accepted | clients/ua-rs/src/bin/pqz-read.rs | rc=101 | 1 failed: reading_layer_against_anvil | want R5: the token is not a PQZ token: error: ua-rs refused the words: PqzSetMismatch | at b3033535
 # T20b second-sync re-run: 3 killed, 0 survived, 0 not loaded (the other mutants above stand, every string checked at HEAD)
+# T20b several-node re-run (2026-11-08, `--rpc` repeated (owner 2026-11-08): M1's rule is now one node named once; the R6 key check moved into each node's read): the replacement strings brought to HEAD, those mutants run again:
+killed     | M1 R1: the same --rpc twice accepted | clients/ua-rs/src/bin/pqz-read.rs | rc=101 | 2 failed: reading_layer_against_anvil, the_holders_configuration_is_required | one node named twice | at 7bde6bd9
+killed     | M12 R6: the registered key not compared with the handle's | clients/ua-rs/src/bin/pqz-read.rs | rc=101 | 1 failed: reading_layer_against_anvil | a version the registry does not hold: error: ua-rs refused the words: Argument | at 7bde6bd9
+# T20b several-node re-run: 2 killed, 0 survived, 0 not loaded (the other mutants above stand, every string checked at HEAD)
