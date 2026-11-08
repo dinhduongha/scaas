@@ -465,7 +465,7 @@ vault stores `{family, account, owner, key_index}` next to the phrase (optional)
   `sui_getLatestCheckpointSequenceNumber`, `suix_getDynamicFieldObject`). The public fullnodes of testnet and mainnet now refuse
   every JSON-RPC method ("JSON-RPC on public fullnodes has been deprecated"; read data through gRPC or GraphQL). A local
   `sui start` (Sui 1.81) still serves JSON-RPC, so the local tests pass, but the node cannot use a public fullnode until the
-  adapter moves to gRPC (or GraphQL for reads). PLANNED.
+  adapter moves to gRPC (or GraphQL for reads). PLANNED for the Sui UA round `ua-sui` (owner 2026-11-08).
 - Key rotation per subject (`Keys`), `prune`, `forward_signed`, immutable deploy, journal in the store and the mesh
   signature check are SPECIFIED; the DEX `min_nonce` cap ships with the same new package.
 - Rotating the owner is invisible to a client that sees only the first key's address; the mesh `from` is that address.
