@@ -53,3 +53,10 @@ As they stood at 134560c1, before the node moved to the PQZ entries' trailing `P
 (no verdict fill, no verifier refusals), `guard.rs` (no shield switch, the old counts), `gateway.rs`, `adapters/evm.rs` (no verdict
 fill), `indexer.rs` (no `PqzVerified` join, no verifier alerts), `abi.rs` (no verdict ABI), `config.rs` (no `[pqz_verifier]`). Not
 built.
+
+## 3f, the single verdict (ua-mtx-merge T45 fix, owner 2026-11-08), under `3f-array/`
+
+As they stood at d0e0d0a9, before the PQZ entries' trailing verdict became `PqzSignedVerdict[]` (empty on a `PRECOMPILE` token,
+exactly one on an `OFFCHAIN` one) and the job's `pqz_verdict` sub-object the array `pqzVerdicts`: `typed.rs` (the single
+`PqzSignedVerdict` plan token, `pqz_verdict`), `pqz.rs` (the single verdict built), `abi.rs` (no `PqzVerdictCount`), `submit.rs`,
+`guard.rs` (the single-verdict ABI in the tests), `e2e.rs` (`pqz_verdict` jobs). Not built.
