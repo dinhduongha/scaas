@@ -46,7 +46,7 @@ contract Tier1Test is V2Fixture {
 
     /// P1c: "zero minter means fixed supply" is now "no `MINTABLE` flag".
     function test_noMintableMeansFixedSupply() public {
-        normalImpl = address(new NormalToken(1, plainEnv(address(this), address(0), UID_, address(0), false), ""));
+        normalImpl = address(new NormalToken(address(this), ""));
         IFactoryToken.TokenConfig memory c = normalInit("Points", "PTS", 0, 100, address(this), address(0));
         c.features &= ~uint256(1 << 1); // no MINTABLE
         NormalToken t = NormalToken(_clone(normalImpl, address(this), new address[](0), abi.encode(c)));
@@ -99,7 +99,7 @@ contract Tier1Test is V2Fixture {
     }
 
     function test_initRefusesUnderlyings() public {
-        normalImpl = address(new NormalToken(1, plainEnv(address(this), address(0), UID_, address(0), false), ""));
+        normalImpl = address(new NormalToken(address(this), ""));
         address[] memory us = new address[](1);
         us[0] = address(0x1234);
         // E5/E6: the underlyings are the config's `legs`, a field of another kind for NORMAL

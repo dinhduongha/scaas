@@ -611,7 +611,7 @@ contract DexHybridTest is UADexBase {
     /// against the same floor); the harness runs `_takerSoldCheck` itself: 900 sold for a floor of 1600 is below the
     /// limit 1800 per 1000 (900 · 1800 > 1600 · 1000); 1620 is exactly at it.
     function test_hybrid_refund_worsePrice_priceLimit() public {
-        HybridHarness hh = new HybridHarness(plainEnv(address(f), address(0), chainUidA, address(0), false));
+        HybridHarness hh = new HybridHarness(address(f));
         ITradeToken.UATradeOrder memory o = _ua(uaP, address(B), 1000, 1800, 0);
         o.minFill = 900;
         bytes32 h = keccak256("taker");

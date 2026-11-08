@@ -30,10 +30,12 @@ import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {UACall} from "../ua/UACall.sol";
 import {IConfidentialToken} from "../../src/confidential/IConfidentialToken.sol";
+import {nid} from "../helpers/Ids.sol";
+import {instanceEnv} from "../helpers/Catalogue.sol";
 
 /// `NORMAL_ZETHER` with one guarded call-out to the caller (`reenter`): a frame that holds the guard.
 contract GuardHarness is NormalZetherToken {
-    constructor(Env memory env) NormalZetherToken(1, env, "") {}
+    constructor(address f) NormalZetherToken(f, "") {}
 
     function holdGuard(bytes calldata data) external nonReentrant {
         ZetherRevertPathsTest(msg.sender).reenter(data);
@@ -165,7 +167,7 @@ contract ZetherRevertPathsTest is ZetherFixture {
     /// guarded frame, so a harness (this implementation plus one guarded call-out) is etched over the implementation:
     /// a call back into any entry point from that frame hits the guard before its body.
     function test_everyEntryPointNonReentrant() public {
-        vm.etch(address(normalImpl), address(new GuardHarness(_zenv())).code);
+        vm.etch(address(normalImpl), address(new GuardHarness(address(factory))).code);
         ZetherTypes.UA n = _none();
         bytes[9] memory calls = [
             abi.encodeCall(IConfidentialToken.mtxShield, (ZetherTypes.UA.unwrap(alice.ua), 1)),
@@ -244,10 +246,10 @@ contract ZetherRevertPathsTest is ZetherFixture {
     function test_initializeRevertPaths() public {
         IFactoryToken.TokenConfig memory c = _cfg(false, uint256(1) << 40);
         vm.expectRevert(MetaTokenBase.NotFactory.selector);
-        normalImpl.initialize(address(this), 1, abi.encode(c));
+        normalImpl.initialize(nid(address(this)), 1, abi.encode(c));
         vm.prank(address(factory));
         vm.expectRevert(MetaTokenBase.AlreadyInitialized.selector);
-        NormalZetherToken(address(tok)).initialize(address(this), 1, abi.encode(c));
+        NormalZetherToken(address(tok)).initialize(nid(address(this)), 1, abi.encode(c));
         IFactoryToken.TokenConfig[6] memory bad;
         for (uint256 i; i < 6; ++i) bad[i] = _cfg(false, uint256(1) << 40);
         bad[0].conf.shieldScale = 0;
@@ -283,7 +285,9 @@ contract ZetherRevertPathsTest is ZetherFixture {
     }
 
     /// The release's `Env.deps` (plan 5g-Z2, CTR-ZTH-20): four entries with code, a registry, the two verifiers of one
-    /// proof system, both fixed to the env's inner-product verifier, each in its role; never on Hedera.
+    /// proof system, both fixed to the env's inner-product verifier, each in its role; never on Hedera. Chain-neutral
+    /// releases (plan T72): the constructor's checks are the release's `validateEnv` (`ZetherLib`), which the factory
+    /// calls at every release deployment.
     function test_constructorNeedsTheEnvDependencies() public {
         bytes memory code = type(NormalZetherToken).creationCode;
         address ip = address(ZetherVerifierBase(address(ver)).innerProduct());
@@ -309,15 +313,26 @@ contract ZetherRevertPathsTest is ZetherFixture {
         (bad[7].deps[0], bad[7].deps[1]) = (address(burnVer), address(ver)); // swapped
         bad[8].deps[1] = address(ver);                                   // the transfer verifier twice
         bad[9].deps[1] = address(copy);                                  // two transfer verifiers
+        bytes32 uid = factory.chainUid(); // read before `expectRevert`: an argument's call is the "next call"
         for (uint256 i; i < bad.length; ++i) {
+            IFactoryToken.ChainEnv memory ce = instanceEnv(bad[i], uid, address(0));
             vm.expectRevert(IZetherToken.BadInit.selector);
-            new NormalZetherToken(1, bad[i], "");
+            normalImpl.validateEnv(ce);
         }
+        normalImpl.validateEnv(instanceEnv(_zenv(), uid, address(0))); // positive control
+        // the factory runs it at the release's deployment: a swapped pair is refused there (the env itself publishes)
+        vm.prank(registrar);
+        factory.publishEnv(IOpenFactory.TokenKind.NORMAL_ZETHER, 9, pinned(bad[7], IOpenFactory.TokenKind.NORMAL_ZETHER));
+        vm.prank(registrar);
+        vm.expectRevert(IZetherToken.BadInit.selector);
+        factory.deployImplementation(IOpenFactory.TokenKind.NORMAL_ZETHER, 9, 9, code, "");
         // an honest copy of the transfer verifier on the same inner-product verifier is a different (valid) release
         IFactoryToken.Env memory e = _zenv();
         e.deps[0] = address(copy);
-        assertEq(address(NormalZetherToken(Catalogue.release(factory, IOpenFactory.TokenKind.NORMAL_ZETHER, 2, e, code))
-            .verifier()), address(copy));
+        Catalogue.release(factory, IOpenFactory.TokenKind.NORMAL_ZETHER, 2, e, code);
+        // chain-neutral releases (plan T72): the verifier is the clone's env dependency, so a token of the release reads it
+        address t = factory.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 2, abi.encode(_cfg(false, 1 << 40)), "copy");
+        assertEq(address(NormalZetherToken(t).verifier()), address(copy));
     }
 
     /// Plan 5g-Z2: the chain / verifier gate moved from the factory into the implementation's `initialize`
@@ -350,7 +365,7 @@ contract ZetherRevertPathsTest is ZetherFixture {
         // a hand-made clone around the factory is no factory token (and the implementation refuses a non-factory caller)
         address cl = Clones.clone(address(normalImpl));
         vm.expectRevert(MetaTokenBase.NotFactory.selector);
-        NormalZetherToken(cl).initialize(address(this), 1, abi.encode(_cfg(false, 1 << 40)));
+        NormalZetherToken(cl).initialize(nid(address(this)), 1, abi.encode(_cfg(false, 1 << 40)));
         assertFalse(factory.isToken(cl));
         // unregistered confidential: refused before any check
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.UnregisteredConfidentialKind.selector,
@@ -369,7 +384,8 @@ contract ZetherRevertPathsTest is ZetherFixture {
         assertEq(address(tok.disclosure()), address(dis));
         assertEq(tok.curve(), "bls12-381");
         bytes32 ns = 0xd1eef6cbeb7b383e0a92b3cb723053d5c39c76707d89da6b14ff91b83198ce00;
-        assertEq(address(uint160(uint256(vm.load(address(tok), ns)))), address(ver), "the library's copy");
+        // chain-neutral spec §2.2: the library's storage copy is dropped, it reads the clone's code
+        assertEq(address(uint160(uint256(vm.load(address(tok), ns)))), address(0), "no copy in storage");
         assertTrue(factory.isRegisteredToken(address(tok)));
         IOpenFactory.Release memory rel = factory.releaseOf(IOpenFactory.TokenKind.NORMAL_ZETHER, 1);
         assertEq(rel.implementation, address(normalImpl));
@@ -457,7 +473,9 @@ contract ZetherRevertPathsTest is ZetherFixture {
         bytes32 ns = 0xd1eef6cbeb7b383e0a92b3cb723053d5c39c76707d89da6b14ff91b83198ce00;
         assertEq(ns, keccak256(abi.encode(uint256(keccak256("scaas.zether")) - 1)) & ~bytes32(uint256(0xff)));
         uint256 w0 = uint256(vm.load(address(tok), ns));
-        assertEq(address(uint160(w0)), address(ver));
+        // chain-neutral releases (plan T72): the verifier is read from the clone's code (`verifier()`), not this slot
+        assertEq(address(uint160(w0)), address(0), "no verifier copy");
+        assertEq(address(tok.verifier()), address(ver));
         // review T2 m5: disclosureMode at byte 20, auditorMode at byte 21 (this token: BUNDLE, NONE), nothing above
         assertEq(w0 >> 160, 0, "modes BUNDLE / NONE, packed after the verifier");
         assertEq(uint256(vm.load(address(tok), bytes32(uint256(ns) + 1))), SCALE);

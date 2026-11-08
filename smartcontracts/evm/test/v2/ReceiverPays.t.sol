@@ -17,6 +17,8 @@ import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {normalInit} from "./helpers/V2Fixture.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
+import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// Receiver-pays (CTR-MTX-05, CTR-MTX-06): the payer's `UAMetaTransfer` runs untouched, the payee's co-signed
 /// `UAReceiverFee` moves `fee` from the payee in the same transaction. ua-mtx-merge T2: the one `mtxPayReceiverFee`
@@ -38,9 +40,9 @@ contract ReceiverPaysTest is Test {
     function setUp() public {
         vm.chainId(7622);
         vm.warp(1_800_000_000);
-        address impl = address(new NormalToken(1, plainEnv(address(this), address(0), UID, address(0), false), ""));
-        t = NormalToken(Clones.clone(impl));
-        t.initialize(address(this), 1, abi.encode(normalInit("Points", "PTS", 6, 0, address(this), address(this))));
+        address impl = address(new NormalToken(address(this), ""));
+        t = NormalToken(EnvKit.clone(impl, EnvKit.env(UID, address(0), address(0), false)));
+        t.initialize(nid(address(this)), 1, abi.encode(normalInit("Points", "PTS", 6, 0, address(this), address(this))));
         t.mint(payer, 1_000e6);
     }
 

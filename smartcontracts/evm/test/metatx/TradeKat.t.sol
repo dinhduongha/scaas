@@ -8,6 +8,8 @@ import {TradeLib} from "../../src/trade/TradeLib.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
+import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// KATs of the token-side DEX structs (CTR-DEX-13, CTR-DEX-02, CTR-DEX-25) on a real token. ua-mtx-merge T6 (R12,
 /// R38): a SCaaS token's order is a `UATradeOrder`, so this suite reads the native signer's row of
@@ -27,11 +29,10 @@ contract TradeKatTest is Test {
         vm.warp(1_800_000_000);
         address at = vm.parseJsonAddress(vj, ".tokenA");
         // no registry: a native signer's row needs none (C), and the domain does not name it
-        address impl = address(new NormalToken(1, plainEnv(address(this), address(0), vm.parseJsonBytes32(vj, ".chainUid"),
-            address(0), false), ""));
-        vm.etch(at, abi.encodePacked(hex"363d3d373d3d3d363d73", impl, hex"5af43d82803e903d91602b57fd5bf3"));
+        address impl = address(new NormalToken(address(this), ""));
+        vm.etch(at, EnvKit.runtime(impl, EnvKit.env(vm.parseJsonBytes32(vj, ".chainUid"), address(0), address(0), false)));
         tok = NormalToken(at);
-        tok.initialize(address(this), 1, abi.encode(normalInit("T", "T", 6, 0, address(this), address(this))));
+        tok.initialize(nid(address(this)), 1, abi.encode(normalInit("T", "T", 6, 0, address(this), address(this))));
     }
 
     function _order(string memory p) internal view returns (ITradeToken.UATradeOrder memory o) {

@@ -11,6 +11,8 @@ import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
 import {MockHederaAccountService} from "./HederaMocks.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
+import {nid} from "../helpers/Ids.sol";
 
 /// The Hedera vector (NET-HED-03, CTR-TOK-23; ua-mtx-merge T8, R42): `MetaOp` v1 is the token's `UAMetaTransfer`, here a
 /// payment of the Hedera ED25519 account 0.0.1234567, its `from` the account's long-zero EVM address zero-padded to
@@ -33,8 +35,8 @@ contract HederaKatTest is Test {
 
     function setUp() public {
         vm.chainId(296);
-        tok = NormalToken(Clones.clone(address(new NormalToken(1, plainEnv(address(this), address(0), UID, address(0), true), ""))));
-        tok.initialize(address(this), 1, abi.encode(normalInit("HBUSD", "HBUSD", 6, 0, address(this), address(this))));
+        tok = NormalToken(EnvKit.clone(address(new NormalToken(address(this), "")), EnvKit.env(UID, address(0), address(0), true)));
+        tok.initialize(nid(address(this)), 1, abi.encode(normalInit("HBUSD", "HBUSD", 6, 0, address(this), address(this))));
     }
 
     function _transfer() internal view returns (MetaTxLib.UAMetaTransfer memory) {

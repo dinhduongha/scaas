@@ -11,6 +11,8 @@ import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
+import {nid} from "../helpers/Ids.sol";
 
 /// KATs of the two signed structs of a token's relayed path on a real token (metatx.md "One rule, four places"; ua-mtx-merge
 /// T2: the UA structs, signed by an EOA with its own key, ids padded): `metatx_kat.json` (`UAMetaTransaction`,
@@ -34,8 +36,8 @@ contract TokenKatTest is Test {
     function setUp() public {
         vm.chainId(7622);
         vm.warp(1_800_000_000);
-        tok = NormalToken(Clones.clone(address(new NormalToken(1, plainEnv(address(this), address(0), UID, address(0), false), ""))));
-        tok.initialize(address(this), 1, abi.encode(normalInit("Points", "PTS", 6, 0, address(this), address(this))));
+        tok = NormalToken(EnvKit.clone(address(new NormalToken(address(this), "")), EnvKit.env(UID, address(0), address(0), false)));
+        tok.initialize(nid(address(this)), 1, abi.encode(normalInit("Points", "PTS", 6, 0, address(this), address(this))));
         tok.mint(vm.addr(ALICE_PK), 1_000e6);
     }
 

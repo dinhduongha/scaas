@@ -364,6 +364,16 @@ const OPS = {
   UASetExchangeTarget: { fields: 'address target,address exchangeTarget,bool listed', on: ROUTER },
   UASetListedOnly: { fields: 'address target,bool on', on: ROUTER },
   UASetFeeSplit: { fields: 'address target,uint32 relayerSharePpm,address treasury', on: ROUTER },
+  // The factory's creations (chain-neutral spec §4.4, S3; ua-mtx-merge T76): `target` the chain's `OpenFactory`, the signing
+  // UA the creator; `initHash = keccak256(initArgs)` (`initCall` for an instance) is signed, the bytes go in `extra`.
+  UACreateToken: { fields: 'address target,uint8 kind,uint64 version,bytes32 initHash,bytes32 salt', on: ROUTER,
+    args: (m, x) => [['address', m.target], ['uint8', m.kind], ['uint64', m.version], ['bytes', initOf(m, x, 'initArgs')],
+      ['bytes32', m.salt]] },
+  UACreateDex: { fields: 'address target,uint64 version,bytes32 initHash,bytes32 salt', on: ROUTER,
+    args: (m, x) => [['address', m.target], ['uint64', m.version], ['bytes', initOf(m, x, 'initArgs')], ['bytes32', m.salt]] },
+  UACreateInstance: { fields: 'address target,uint16 contractClass,uint16 kind,uint64 version,bytes32 initHash,bytes32 salt',
+    on: ROUTER, args: (m, x) => [['address', m.target], ['uint16', m.contractClass], ['uint16', m.kind], ['uint64', m.version],
+      ['bytes', initOf(m, x, 'initCall')], ['bytes32', m.salt]] },
   // The regulated kinds' controls (regulated-kinds spec §3.1, ua-mtx-merge T32 / T34): the direct entry's params after
   // `target`; in `UAOperatorTransfer` the moved account is `account`, `from` the signer (CTR-GOV-20 Change, owner 2026-11-06).
   UAFreeze: { fields: 'address target,bytes32 account,bytes32 ref,bytes32 recordId', on: ROUTER },
@@ -383,6 +393,14 @@ const OPS = {
     + 'uint256 fee,uint256 amount,bytes32 recipient,uint64 sendCounter,uint64 p,uint256 validUntilBlock,bool auditorOn,uint256 shieldIn,'
     + 'bytes32 chainUid,bytes32 binding,uint128 salt,bytes32 memoHash,bytes32 bodyHash', on: PQZ },
 };
+
+/** The creation's init bytes from `extra[name]`, refused unless their keccak256 is the signed `initHash`. */
+function initOf(m, x, name) {
+  const b = x?.[name];
+  if (b === undefined) refuse(`the creation needs extra.${name}`);
+  if (!same(hex(keccak_256(asBytes(b))), m.initHash)) refuse(`extra.${name} is not the signed initHash`);
+  return hex(asBytes(b));
+}
 
 const abiType = (t) => {
   if (t.endsWith('[]')) return `${abiType(elementType(t))}[]`;

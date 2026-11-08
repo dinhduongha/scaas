@@ -18,6 +18,7 @@ import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {UALedgerBase} from "./UALedgerBase.sol";
 import {plainEnv, Catalogue} from "../helpers/Catalogue.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// Pulls `amountIn` of `tIn` from the caller under its allowance and pays `amountOut` of `tOut` to `to`.
 contract UARouter {
@@ -44,7 +45,7 @@ abstract contract UADexBase is UALedgerBase {
     function setUp() public virtual override {
         super.setUp();
         dave = vm.addr(DAVE_PK);
-        f = new OpenFactory(address(this), chainUidA, 0);
+        f = EnvKit.factory(address(this), chainUidA, 0);
         Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, REG_L, address(0), false);
         Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 2, type(NormalToken).creationCode, address(0), address(0), false);
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));

@@ -1,0 +1,15 @@
+# ua-mtx-merge T76 gate summary (full output in git-ignored .log files, not committed)
+# T76 (chain-neutral spec §4.4, S3; owner 2026-11-07: the UA that signed; Fable P3-6): the router's three creations and the
+# factory's router path. UNAUDITED.
+# Base: 7d4e3753. Commits: f79ec2d9 (legacy copies), e8ca069b (implementation), this one (summary).
+step | commit | rc | counts
+t76-red | - | - | not a separate run: GovRouterCreate.t.sol, the typehash pins and the router rows name mtxCreateToken / mtxCreateDex / mtxCreateInstance, UA_CREATE_* and RouterSubjectZero, none of which 7d4e3753 has; the T68 mutants (the router path dropped, any caller's subject, a zero subject) are the evidence they can fail
+t76-clientkeys | e8ca069b | 0 | node scripts/typed-ops-vectors.mjs: typed_ops.json + the three rows (363 lines added, none changed); node --test test/*.test.js: 276 tests, 273 passed, 0 failed, 3 skipped (counts 80 -> 83 structs, 70 -> 73 envelopes, router pins 30 -> 33; the initHash binding test)
+t76-node | e8ca069b | 0 | cargo test --lib: 660 passed 0 failed (first run 657 passed 3 failed: three walkers met the vector's new rows; testkit::vectors() now leaves the three creations out in one place); cargo clippy --all-targets -D warnings clean
+t76-zether-prover | e8ca069b | 0 | cargo test --test typed_ops: 6 passed (NOT_ZETHER 52 -> 55)
+t76-forge-suites | e8ca069b | 0 | GovRouterCreate, GovRouterTypehash, SelectorAudit, TypedOps, GovDeploy, GovRouter: 194 passed 1 failed (the router's CREATE2 address pin, moved), then GovRouterCreate + GovDeploy 24 passed; the replay negatives pinned to MetaTxBadSignature / MetaTxBadNonce(1, 0)
+t76-forge-full | e8ca069b | 0 | 3130 passed 2 failed 14 skipped, 304 suites: test_sizes (OpenFactory 28,438 > 28,236) and PlusZero mtxMint_router (100,107 != 100,129), both pins then moved by their generators; PlusZero, Factory, HederaV2: 74 passed
+t76-size | e8ca069b | 0 | size_gate.py: 0 errors, 99 contracts; OpenFactory 28,236 -> 28,438 B (init 28,457 -> 28,659); GovernanceRouter 13,391 -> 14,886 B (no baseline row: it fits)
+t76-cast | e8ca069b | 0 | clientkeys typed-ops-cast-check (cast 1.8.5): 83 structs, 117 digests and 116 calldatas equal to cast's
+t76-readers | e8ca069b | 0 | ua-rs cargo test --all-features --test regulated --test pay: 10 passed; script/pqz/e2e.py --self-test: 0 failures
+t76-mutants | see T68 | - | the router-path mutants run in T68

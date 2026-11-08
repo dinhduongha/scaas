@@ -1,0 +1,12 @@
+# ua-mtx-merge T73 gate summary (full output in git-ignored .log files, not committed)
+# T73 (chain-neutral spec §3.1, §3.3, §6.2; Fable P1-1, P2-4, P3-5): the deploy scripts on the chain-neutral factory, the
+# release list, the sibling order. UNAUDITED.
+# Base: 90db7c09 (T70 tip). Commits: bbcbbe85 (the scripts' old copies under legacy/ua-mtx-merge/release-list/ and the
+# implementation, one commit), this one (summary).
+step | commit | rc | counts
+t73-red | - | - | not a separate run: test/governance/ReleaseList.t.sol names DeployHarness.setReleases / writeReleases and the release list rows, which 90db7c09 has not; the T68 mutants (the code-hash and address checks dropped) are the evidence it can fail
+t73-build | bbcbbe85 | 0 | forge build per directory: script, test/governance, test/ua, test/metatx, test/zether, test/pqz, test/v2 (everything that imports DeployBase)
+t73-release-list | bbcbbe85 | 0 | ReleaseList, GovDeploy, CodeCeiling: 23 passed (the second chain at the listed addresses passes the reader; another code hash, another factory address refused by name)
+t73-deploy-suites | bbcbbe85 | 0 | every DeployHarness suite: ZetherDeploy, LinkClosure, UADeploy, UARegistryPqzBound, MtxRelayFee: 59 passed 0 failed
+t73-anvil | see T68 | - | Deploy.s.sol on two anvils (the list written on one, read on the other) runs in T68's dry run
+t73-hedera | - | - | DeployHedera.s.sol takes _writeReleases; no Hedera network or local node here (T74 / owner)

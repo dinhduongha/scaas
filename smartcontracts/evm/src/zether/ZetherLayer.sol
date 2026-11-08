@@ -11,26 +11,20 @@ import {ITransferDisclosure} from "./ITransferDisclosure.sol";
 import {ZetherTypes} from "./ZetherTypes.sol";
 import {ZetherLib} from "./ZetherLib.sol";
 import {SSTORE2} from "../common/SSTORE2.sol";
-import {SigCheck} from "../common/SigCheck.sol";
 import {UAKinds} from "../ua/UAKinds.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
-import {
-    ENV_ZETHER_TRANSFER, ENV_ZETHER_BURN, ENV_ZETHER_INNER_PRODUCT, ENV_ZETHER_DISCLOSURE
-} from "../factory/IFactoryToken.sol";
-
-/// @dev What the layer reads from a transfer / burn verifier besides `IZetherVerifierCommon`.
-interface IInnerProductBound {
-    function innerProduct() external view returns (address);
-}
+import {ENV_ZETHER_TRANSFER, ENV_ZETHER_BURN, ENV_ZETHER_DISCLOSURE} from "../factory/IFactoryToken.sol";
+import {ChainEnvCode} from "../factory/ChainEnvCode.sol";
 
 /// @title The Zether layer of the kinds `NORMAL_ZETHER` and `WRAPPED_ZETHER` (CTR-ZTH-44): the entry points of
 ///        CTR-ZTH-45 and the views; the state and the logic are `ZetherLib` (`scaas.zether`).
 /// @notice **UNAUDITED.** Open on every chain (owner ruling 2026-10-31; the factory kind gate stays). A layer over the
 ///         public ERC-20 balance: `mtxShield` moves public units to `SHIELD_POOL`, `mtxUnshield` moves them back (D19: no
 ///         burn, no mint; to an address or a signing UA, CTR-ZTH-51); the confidential layer
-///         keeps no underlying of its own. The registry (the base's, `ERC20MetaTx`), the disclosure contract and the
-///         curve's transfer and burn verifiers are implementation immutables (CTR-ZTH-20: `OpenFactory` registers an
-///         implementation only on its canonical verifiers), so the curve is an attribute of the release (`curve()`); the
+///         keeps no underlying of its own. The registry, the disclosure contract and the curve's transfer and burn
+///         verifiers are the instance's env (CTR-ZTH-20, CTR-TOK-29: the release's published env, appended to the clone's
+///         code by `OpenFactory`, checked once per release by `validateEnv`), so the curve is an attribute of the release
+///         and the chain (`curve()`); the
 ///         auditor key and the two modes (`disclosureMode`, `auditorMode`) are chosen at creation and never change.
 ///         Every entry point is `nonReentrant`. The direct ops take explicit parameters and the proof, the only authority
 ///         (`IZetherToken`, TS-D17); each has one signed overload (`UAEnvelope` first, `UASig` last, ua-mtx-merge R35)
@@ -52,39 +46,19 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
     // The typehashes of the transfer and unshield entries are `ZetherLib`'s (CTR-ZTH-94). The address forms of every
     // signed entry are in legacy/ua-mtx-merge/ (R35): the `UA*` structs are the one signed form, native ids included.
 
-    ITransferDisclosure private immutable _DISCLOSURE;
-    /// @dev The transfer verifier (transfer proofs, the group operations; `init` copies it into `ZetherLib`'s storage,
-    ///      the library cannot read immutables) and the burn verifier (unshield proofs, through `ZetherLib.Env`).
-    IZetherVerifier internal immutable TRANSFER_VERIFIER;
-    IZetherBurnVerifier internal immutable BURN_VERIFIER;
-
-    /// @dev Runs after `MetaTokenBase`'s constructor, which set `_REGISTRY`: a Zether kind needs a registry. The release's
-    ///      `Env.deps` (plan 5g-Z2): `ENV_ZETHER_TRANSFER`, `ENV_ZETHER_BURN`, `ENV_ZETHER_INNER_PRODUCT` (fixed inside the
-    ///      two, checked here), `ENV_ZETHER_DISCLOSURE`; the two verifiers must be of one proof system (one curve), and
-    ///      each in its role (review 5g-Z2 P2-2): two addresses, the transfer verifier answers `ringSize()` and the burn
-    ///      verifier does not (a swapped or duplicated pair would accept shields and lock them).
-    constructor(Env memory env) {
-        address[] memory d = env.deps;
-        if (d.length != 4 || env.hedera || !SigCheck.isContract(_REGISTRY)) revert BadInit(); // never on Hedera
-        IZetherVerifier t = IZetherVerifier(d[ENV_ZETHER_TRANSFER]);
-        IZetherBurnVerifier b = IZetherBurnVerifier(d[ENV_ZETHER_BURN]);
-        address ip = d[ENV_ZETHER_INNER_PRODUCT];
-        if (!SigCheck.isContract(address(t)) || !SigCheck.isContract(address(b)) || !SigCheck.isContract(d[ENV_ZETHER_DISCLOSURE])
-            || t.proofSystemId() != b.proofSystemId() || ip == address(0)
-            || IInnerProductBound(address(t)).innerProduct() != ip || IInnerProductBound(address(b)).innerProduct() != ip
-            || address(t) == address(b) || !_answers(address(t), IZetherVerifier.ringSize.selector)
-            || _answers(address(b), IZetherVerifier.ringSize.selector)) {
-            revert BadInit();
-        }
-        _DISCLOSURE = ITransferDisclosure(d[ENV_ZETHER_DISCLOSURE]);
-        TRANSFER_VERIFIER = t;
-        BURN_VERIFIER = b;
+    /// @dev The env's dependencies (`ENV_ZETHER_*`, chain-neutral spec §2.2): the transfer verifier (transfer proofs, the
+    ///      group operations; `ZetherLib` reads it from the code too), the burn verifier (unshield proofs, through
+    ///      `ZetherLib.Env`), the disclosure contract. The env's checks are `ZetherLib.validateEnv`.
+    function _transferVerifier() internal view returns (IZetherVerifier) {
+        return IZetherVerifier(ChainEnvCode.dep(ENV_ZETHER_TRANSFER));
     }
 
-    /// @dev `target` answers `sel()` with one word (constructor only).
-    function _answers(address target, bytes4 sel) private view returns (bool) {
-        (bool ok, bytes memory r) = target.staticcall(abi.encodeWithSelector(sel));
-        return ok && r.length == 32;
+    function _burnVerifier() internal view returns (IZetherBurnVerifier) {
+        return IZetherBurnVerifier(ChainEnvCode.dep(ENV_ZETHER_BURN));
+    }
+
+    function _validateEnv(ChainEnv calldata env) internal view virtual override {
+        ZetherLib.validateEnv(env.deps, env.hedera, env.registry);
     }
 
     /// @notice CTR-MTX-02: confidential tokens sign under `"SCaaS ZetherToken"`.
@@ -94,10 +68,12 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
 
     // ------------------------------------------------------------------ views
 
-    function verifier() external view returns (IZetherVerifier) { return TRANSFER_VERIFIER; }
-    function burnVerifier() external view returns (IZetherBurnVerifier) { return BURN_VERIFIER; }
-    function curve() external view returns (string memory) { return TRANSFER_VERIFIER.curveName(); }
-    function disclosure() external view returns (ITransferDisclosure) { return _DISCLOSURE; }
+    function verifier() external view returns (IZetherVerifier) { return _transferVerifier(); }
+    function burnVerifier() external view returns (IZetherBurnVerifier) { return _burnVerifier(); }
+    function curve() external view returns (string memory) { return _transferVerifier().curveName(); }
+    function disclosure() external view returns (ITransferDisclosure) {
+        return ITransferDisclosure(ChainEnvCode.dep(ENV_ZETHER_DISCLOSURE));
+    }
     function shieldScale() external view returns (uint256) { return ZetherLib.$().shieldScale; }
     function maxDecryptableShielded() external view returns (uint256) { return ZetherLib.$().maxShielded; }
     function confidentialFee() external view returns (uint256) { return ZetherLib.$().confidentialFee; }
@@ -119,7 +95,7 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
 
     /// @notice Registered as this token's Zether kind (`registry.kindOf`, accounts.md §1.13).
     function registered(ZetherTypes.UA ua) external view returns (bool) {
-        return ZetherLib.registeredOn(_REGISTRY, ua);
+        return ZetherLib.registeredOn(_registry(), ua);
     }
 
     function accountState(ZetherTypes.UA ua) external view returns (AccountState memory) {
@@ -150,7 +126,7 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
     function mtxShield(bytes32 toUA, uint256 amount) external nonReentrant {
         _regPayer();
         address m = _msgSender();
-        ZetherLib.shield(ZetherTypes.UA.wrap(toUA), amount, _REGISTRY, m);
+        ZetherLib.shield(ZetherTypes.UA.wrap(toUA), amount, _registry(), m);
         _poolMove(m == MetaTxLib.UA_POOL ? _ticketSubject() : MetaTxLib.pad(m), MetaTxLib.pad(MetaTxLib.SHIELD_POOL),
             amount * ZetherLib.$().shieldScale);
     }
@@ -404,7 +380,9 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
     ///      the two paths fails on the other's tag.
     function _env() internal view returns (ZetherLib.Env memory) {
         bytes32 b = _ticketBinding();
-        return ZetherLib.Env(_REGISTRY, CHAIN_UID, ZetherLib.tagOf(b), b, BURN_VERIFIER, _domainSeparatorV4());
+        ChainEnvCode.Head memory h = ChainEnvCode.head();
+        if (h.chainUid == bytes32(0)) revert ChainUidZero();
+        return ZetherLib.Env(h.registry, h.chainUid, ZetherLib.tagOf(b), b, _burnVerifier(), _separator(h.chainUid));
     }
 
     /// @dev The base stores it in the ticket for the self-call of every `executeMetaTransaction` on this token (R3).
@@ -419,7 +397,7 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
     {
         address r = (m.mode & MetaTxLib.MODE_RESTRICT_RELAYER) != 0 ? m.relayer : address(0);
         address f = (m.mode & MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT) != 0 ? m.feeRecipient : address(0);
-        return keccak256(abi.encode(ZetherLib.TAG_UA_ENVELOPE, block.chainid, CHAIN_UID, address(this), m.from, m.batch,
+        return keccak256(abi.encode(ZetherLib.TAG_UA_ENVELOPE, block.chainid, _chainUid(), address(this), m.from, m.batch,
             m.nonce, m.validUntil, m.mode, r, m.fee, f));
     }
 
@@ -442,7 +420,7 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
     function _zetherBinding(MetaTxLib.MetaTransaction memory m) internal view returns (bytes32) {
         (address r, address f) = MetaTxLib.canon(m);
         return keccak256(abi.encode(
-            ZetherLib.TAG_ENVELOPE, block.chainid, CHAIN_UID, address(this), m.from, m.batch, m.nonce, m.validUntil,
+            ZetherLib.TAG_ENVELOPE, block.chainid, _chainUid(), address(this), m.from, m.batch, m.nonce, m.validUntil,
             m.mode, r, m.fee, f
         ));
     }

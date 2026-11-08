@@ -13,35 +13,49 @@ uint256 constant ENV_ZETHER_INNER_PRODUCT = 2;
 uint256 constant ENV_ZETHER_DISCLOSURE = 3;
 uint256 constant ENV_PQZ_VERIFIER = 0;
 
-/// @title What `OpenFactory` needs from every token implementation (CTR-TOK-25, plan 5g-Z2): the release's deployment
-///        environment `Env`, one generic `initialize(creator, version, initArgs)` the factory calls in the SAME call as
-///        the clone's `CREATE2`, and `kind()`. The factory also reads `factory()`, `chainUid()` (`IMetaTx`) at deployment
-///        and `features()`, `lockedFeatures()`, `owner()`, `underlyings()` after `initialize` (provenance, the index).
-///        The kinds of this repository take `initArgs = abi.encode(TokenConfig)`; a later version may take another
-///        encoding without a factory change.
+/// @title What `OpenFactory` needs from every token implementation (CTR-TOK-25, CTR-TOK-29; plan 5g-Z2, chain-neutral spec
+///        §2): chain-neutral code (`constructor(address factory_, bytes implArgs)`: the same bytes and address on every
+///        chain), the instance's chain values in its own code (`ChainEnv`, appended to the clone by the factory and exposed
+///        by `chainEnv()`), one generic `initialize(creatorId, version, initArgs)` the factory calls in the SAME call as
+///        the clone's creation, `kind()` and `validateEnv`. The factory also reads `factory()` at deployment and
+///        `chainUid()`, `features()`, `lockedFeatures()`, `owner()`, `underlyings()` after `initialize` (the post-check,
+///        provenance, the index). The kinds of this repository take `initArgs = abi.encode(TokenConfig)`; a later version
+///        may take another encoding without a factory change.
 interface IFactoryToken {
-    /// @notice The deployment environment of a release (owner 2026-10-20, CTR-ZTH-20): the system dependencies the
-    ///         factory publishes per kind and version (`OpenFactory.publishEnv`) and appends to every implementation's
-    ///         init code as `abi.encode(envVersion, env, implArgs)`, so they are constructor immutables of the code by
-    ///         construction. `factory` and `chainUid` are the factory's own; `registry` the UA registry (0 = none);
-    ///         `deps` the kind's dependencies by position (`*_ZETHER`: `ENV_ZETHER_*`; `*_PQZ`: `ENV_PQZ_VERIFIER`; plain
-    ///         kinds and the DEX: none); `libs` the linked libraries of the code, each checked against
-    ///         `libCodeHashes` (`extcodehash`) when a release is deployed. Generic on purpose: a dependency is an
-    ///         address with a documented position, not a named verifier field.
+    /// @notice The registrar's deployment environment of a release (owner 2026-10-20, CTR-ZTH-20; chain-neutral spec §2.1):
+    ///         the chain values the factory publishes per kind and version (`OpenFactory.publishEnv`), never changed.
+    ///         `registry` the UA registry (0 = none; its `chainUid()` must be the factory's); `deps` the kind's dependencies
+    ///         by position (`*_ZETHER`: `ENV_ZETHER_*`; `*_PQZ`: `ENV_PQZ_VERIFIER`; plain kinds and the DEX: none; at most
+    ///         4); `params` a generic class's chain values by documented position (at most 2); `libs` the linked
+    ///         libraries of the code, each checked against `libCodeHashes` (`extcodehash`) when a release is deployed.
+    ///         The factory's own values (`chainUid`, the router, its address) are not in it: it fills them.
     struct Env {
-        address factory;
-        bytes32 chainUid;
         address registry;
         address smartKeyAccountImpl;
         bool hedera;
         address[] deps;
+        bytes32[] params;
         address[] libs;
         bytes32[] libCodeHashes;
-        /// This chain's `GovernanceRouter` (0 = none): every governed contract of the release takes it as `GOV_ROUTER`
-        /// (CTR-GOV-01 Change, owner 2026-11-04).
-        address govRouter;
     }
 
+    /// @notice The chain values of one instance (CTR-TOK-29): the factory composes it from its own `chainUid` and
+    ///         `govRouter` and the release's `Env`, and appends it to the clone's runtime code (`ChainEnvCode`); never a
+    ///         parameter of an entry a caller reaches. `govRouter` this chain's `GovernanceRouter` (0 = none): a call
+    ///         from it acts for the UA it authenticated.
+    struct ChainEnv {
+        bytes32 chainUid;
+        address registry;
+        address govRouter;
+        address smartKeyAccountImpl;
+        bool hedera;
+        address[] deps;
+        bytes32[] params;
+    }
+
+    /// @notice `initialize` on code that is not a clone with a well-formed env (counts within the bounds, the length
+    ///         exact, `chainUid` not 0): the implementation, or a clone made outside the factory (Fable P3-4).
+    error EnvMissing();
 
     /// @notice One leg of an `WRAPPED*` kind: `underlying` (`address(0)` = the native coin, CTR-TOK-26), rate
     ///         `num/den` (CTR-TOK-04). `uint256` so a value `≥ 2^96` reverts `RateInvalid` instead of failing to decode.
@@ -115,9 +129,10 @@ interface IFactoryToken {
     ///         6 reg).
     error ConfigFieldForOtherKind(uint8 field);
 
-    /// @notice Called by the factory only, in the same call as the clone's `CREATE2`; `initArgs` is the creator's,
-    ///         opaque to the factory (here `abi.encode(TokenConfig)`), decoded and validated by the implementation.
-    function initialize(address creator, uint64 version, bytes calldata initArgs) external;
+    /// @notice Called by the factory only, in the same call as the clone's creation, on a clone carrying its env
+    ///         (`EnvMissing`); `creatorId` the creator's UA id (S3); `initArgs` is the creator's, opaque to the factory
+    ///         (here `abi.encode(TokenConfig)`), decoded and validated by the implementation.
+    function initialize(bytes32 creatorId, uint64 version, bytes calldata initArgs) external;
 
     /// @notice The token's underlyings in leg order, empty for the `NORMAL*` kinds: the factory's index reads it after
     ///         `initialize`.
@@ -125,6 +140,13 @@ interface IFactoryToken {
 
     /// @notice CTR-TOK-21 kind of the implementation (and of every clone).
     function kind() external view returns (uint8);
+
+    /// @notice This instance's env, decoded from its code; all zero on the implementation.
+    function chainEnv() external view returns (ChainEnv memory);
+
+    /// @notice The kind's checks of an env (the constructor checks before chain-neutral releases): reverts (`BadInit`)
+    ///         unless this code can run on `env`. The factory calls it by `staticcall` once per release and chain.
+    function validateEnv(ChainEnv calldata env) external view;
 }
 
 /// @dev Regulated-kinds spec §2.4: a plain kind (0-5) refuses a set `reg` with `ConfigFieldForOtherKind(6)`; a regulated kind

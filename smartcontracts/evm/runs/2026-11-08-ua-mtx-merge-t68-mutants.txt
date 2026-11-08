@@ -1,0 +1,60 @@
+m-i1-owner-push-dropped | test_index_classFilter, test_index_derivedOwnerUA, test_index_dex, test_index_everyKind_0, test_index_everyKind_1, test_index_everyKind_10, test_index_everyKind_11, test_index_everyKind_12, test_index_everyKind_13, test_index_everyKind_2, test_index_everyKind_3, test_index_everyKind_4, test_index_everyKind_5, test_index_everyKind_8, test_index_everyKind_9, test_index_ownerMovedKeepsCreationOwner, test_index_ownerZeroNotListed, test_index_page_fromPastTotal, test_index_page_lastPartial, test_index_page_maxPage, test_index_page_nZero, test_index_relayerCreatorNotOwner, test_index_slotCount_first, test_index_slotCount_steady, test_index_spamClaimListedWithCreator, test_index_unregisteredVersionZero | 1
+m-i2-creator-push-txorigin | test_index_classFilter, test_index_derivedOwnerUA, test_index_dex, test_index_everyKind_0, test_index_everyKind_1, test_index_everyKind_10, test_index_everyKind_11, test_index_everyKind_12, test_index_everyKind_13, test_index_everyKind_2, test_index_everyKind_3, test_index_everyKind_4, test_index_everyKind_5, test_index_everyKind_8, test_index_everyKind_9, test_index_ownerZeroNotListed, test_index_page_fromAtTotal, test_index_page_maxPage, test_index_page_nZero, test_index_relayerCreatorNotOwner, test_index_slotCount_first, test_index_unregisteredVersionZero | 1
+m-i3-owner-read-before-init | test_index_classFilter, test_index_derivedOwnerUA, test_index_everyKind_0, test_index_everyKind_1, test_index_everyKind_10, test_index_everyKind_11, test_index_everyKind_12, test_index_everyKind_13, test_index_everyKind_2, test_index_everyKind_3, test_index_everyKind_4, test_index_everyKind_5, test_index_everyKind_8, test_index_everyKind_9, test_index_ownerMovedKeepsCreationOwner, test_index_ownerZeroNotListed, test_index_page_fromPastTotal, test_index_page_lastPartial, test_index_page_maxPage, test_index_page_nZero, test_index_relayerCreatorNotOwner, test_index_slotCount_first, test_index_slotCount_steady, test_index_spamClaimListedWithCreator | 1
+m-i4-class-swapped | test_index_classFilter, test_index_derivedOwnerUA, test_index_everyKind_0, test_index_everyKind_1, test_index_everyKind_10, test_index_everyKind_11, test_index_everyKind_12, test_index_everyKind_13, test_index_everyKind_2, test_index_everyKind_3, test_index_everyKind_4, test_index_everyKind_5, test_index_everyKind_8, test_index_everyKind_9, test_index_nestedCreationOrder, test_index_oldViewsUnchanged, test_index_ownerMovedKeepsCreationOwner, test_index_ownerZeroNotListed, test_index_page_fromAtTotal, test_index_page_fromPastTotal, test_index_page_lastPartial, test_index_page_maxPage, test_index_page_nZero, test_index_relayerCreatorNotOwner, test_index_saltAlreadyUsed, test_index_spamClaimListedWithCreator, test_index_unregisteredVersionZero | 1
+m-i5a-from-off-by-one | test_index_nestedCreationOrder, test_index_page_lastPartial, test_index_page_maxPage, test_index_spamClaimListedWithCreator | 1
+m-i5b-n-off-by-one | test_index_page_maxPage, test_index_page_nZero | 1
+m-i6-zero-owner-skip-removed | test_index_ownerZeroNotListed, test_index_slotCount_steady | 1
+m-i7-record-before-salt-check | test_index_classFilter, test_index_derivedOwnerUA, test_index_dex, test_index_everyKind_0, test_index_everyKind_1, test_index_everyKind_10, test_index_everyKind_11, test_index_everyKind_12, test_index_everyKind_13, test_index_everyKind_2, test_index_everyKind_3, test_index_everyKind_4, test_index_everyKind_5, test_index_everyKind_8, test_index_everyKind_9, test_index_nestedCreationOrder, test_index_oldViewsUnchanged, test_index_ownerMovedKeepsCreationOwner, test_index_ownerRevertRevertsCreation, test_index_ownerZeroNotListed, test_index_page_fromAtTotal, test_index_page_fromPastTotal, test_index_page_lastPartial, test_index_page_maxPage, test_index_page_nZero, test_index_page_overMax, test_index_relayerCreatorNotOwner, test_index_saltAlreadyUsed, test_index_slotCount_first, test_index_slotCount_steady, test_index_spamClaimListedWithCreator, test_index_unregisteredVersionZero | 1
+m-i8-creatorOf-dex-nonzero | test_index_dex | 1
+m-c1-instance-not-created-dropped | test_create3_instanceNotCreated | 1
+m-c2-proxy-check-dropped | test_create3_saltCheckedOnTheProxy | 1
+m-c3-configure-not-registrar-only | test_configureChain_onceAndRegistrarOnly | 1
+m-c4-configure-twice | test_configureChain_onceAndRegistrarOnly | 1
+m-c5-reference-unchecked | test_configureChain_referenceBlock | 1
+m-c6-genesis-inverted | setUp | 1
+m-c7-history-revert-is-failure | test_configureChain_genesisByHistory, test_configureChain_referenceBlock | 1
+m-c8-s-without-creator | test_create3_instanceNotCreated, test_create3_predictAddressIsTheCreation, test_create3_saltCheckedOnTheProxy, test_createDex_create3AndEnv | 1
+m-c9-s-without-kind | test_create3_predictAddressIsTheCreation | 1
+m-c10-s-with-implementation | test_create3_instanceNotCreated, test_create3_predictAddressIsTheCreation, test_create3_saltCheckedOnTheProxy, test_create3_versionImplementationEnvNotInTheAddress, test_createDex_create3AndEnv | 1
+m-c11-proxy-initcode-byte | test_cloneCode_isProxyAndTheFactorysEnv, test_create3_instanceNotCreated, test_create3_predictAddressIsTheCreation, test_create3_saltCheckedOnTheProxy, test_create3_versionImplementationEnvNotInTheAddress, test_createDex_create3AndEnv, test_getWrapper_byCreatorId, test_tokenCreated_creatorId | 1
+m-c12-predict-off-formula | test_create3_predictAddressIsTheCreation | 1
+m-c13-creator-txorigin | test_create3_instanceNotCreated, test_create3_predictAddressIsTheCreation, test_create3_saltCheckedOnTheProxy, test_createDex_create3AndEnv, test_getWrapper_byCreatorId, test_tokenCreated_creatorId | 1
+m-c14-validateEnv-skipped | test_deployImplementation_checksKindFactoryAndChainUid | 1
+m-c15-publish-registry-unchecked | test_publishEnv | 1
+m-c16-env-encodes-registrar-uid | test_cloneCode_isProxyAndTheFactorysEnv, test_create3_instanceNotCreated, test_create3_predictAddressIsTheCreation, test_create3_saltCheckedOnTheProxy, test_create3_versionImplementationEnvNotInTheAddress, test_createDex_create3AndEnv, test_getWrapper_byCreatorId, test_tokenCreated_creatorId | 1
+m-c17-postcheck-dropped | test_createTokenUnregistered_isCheckedAndRecordedAsVersion0 | 1
+m-c18-deps-unbounded-publish | test_publishEnv | 1
+m-k1-chainuid-zero-not-reverted | test_dex_readsItsEnvAndItsReleaseSignsNothing, test_implementation_readsAZeroEnvAndSignsNothing | 1
+m-k2-reader-without-clone-check | test_dex_readsItsEnvAndItsReleaseSignsNothing, test_implementation_readsAZeroEnvAndSignsNothing, test_reader_decidesFromTheCode | 1
+m-k3-initialize-without-env-check | test_initialize_refusedWithoutAWellFormedEnv | 1
+m-k4-initialize-without-factory-check | test_initialize_onlyTheFactoryAndOnce | 1
+m-k5-initialize-without-lock | test_initialize_onlyTheFactoryAndOnce | 1
+m-k6-reader-offset | setUp | 1
+m-k7-deps-count-unbounded | test_initialize_refusedWithoutAWellFormedEnv | 1
+m-k8-domain-salt-differs | test_eip712Domain_saltIsTheDigests | 1
+m-g1-reserved-class-open | test_generic_reservedClassesRefusedOnEveryEntry | 1
+m-g2-selector-unchecked | test_generic_creationChecks | 1
+m-g3-release-info-unchecked | test_generic_releaseChecks | 1
+m-g4-interface-unchecked | test_generic_releaseChecks | 1
+m-g5-all-interfaces-accepted | test_generic_releaseChecks | 1
+m-g6-creating-not-restored | none | 0
+m-g7-instance-info-unchecked | none | 0
+m-g8-instance-chain-unchecked | test_generic_creationChecks | 1
+m-g9-disabled-kind-open | test_generic_addKindWithoutFactoryChange, test_generic_disabledKindStopsEveryVersion | 1
+m-g10-deprecated-usable | test_generic_addKindWithoutFactoryChange | 1
+m-g11-class-listed-twice | test_generic_addKindWithoutFactoryChange | 1
+m-g12-class-compared-with-kind | test_generic_addKindWithoutFactoryChange, test_generic_creationChecks, test_generic_disabledKindStopsEveryVersion, test_generic_nestedCreation, test_generic_slotCount | 1
+m-g13-initialized-unchecked-after-init | test_generic_creationChecks | 1
+m-g14-usableFrom-unchecked | test_generic_addKindWithoutFactoryChange | 1
+m-g15-reserved-accepts-2 | test_generic_reservedClassesRefusedOnEveryEntry | 1
+m-g16-info-length-relaxed | test_generic_releaseChecks | 1
+m-g17-post-init-check-dropped | test_generic_creationChecks | 1
+m-r1-codehash-unchecked | test_releaseList_anotherCodeHashOrAddressRefused | 1
+m-r2-address-unchecked | test_releaseList_anotherCodeHashOrAddressRefused | 1
+m-t1-env-without-chainuid | test_replayedConfigureChain, test_twoChains_sameAddresses_ownCode_signaturesBound | 1
+m-s1-subject-from-any-caller | test_create_nativeSigner_sameAddressAsItsDirectCall, test_create_reentrantInitialize, test_create_subjectZeroRefused_nonRouterSubjectIgnored | 1
+m-s2-subject-zero-accepted | test_create_subjectZeroRefused_nonRouterSubjectIgnored | 1
+m-s3-router-ignored | test_create_derivedSigners, test_create_dexAndInstance, test_create_nativeSigner_sameAddressAsItsDirectCall, test_create_reentrantInitialize, test_create_subjectZeroRefused_nonRouterSubjectIgnored | 1
+m-g6-creating-not-restored | test_generic_nestedCreation | 1
+m-g7-instance-info-unchecked | test_generic_creationChecks | 1

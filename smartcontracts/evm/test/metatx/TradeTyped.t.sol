@@ -38,6 +38,7 @@ import {ZetherFixture} from "../zether/helpers/ZetherFixture.sol";
 import {VM, TYPED_OPS, TYPED_OPS_LEGACY, checkRow, onChain, domainOf, domainField, ecdsa, rowKey, rowEnvelope2} from "./NamedEntry.t.sol";
 import {swap, tryRowAs, UA_CANCEL_NONCE, rowMeta} from "./TypedOps.t.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// The address `WrapOrder` (R39: in legacy/ua-mtx-merge/ after T3), kept here to encode its retired row.
 struct LegacyWrapOrder {
@@ -391,8 +392,8 @@ contract OrderRowsTokenTest is OrderRows, UALedgerBase {
 
     /// A fresh clone: `vm.copyStorage` copies what this test has touched, not `setUp`'s account.
     function _normalKind() internal override returns (NormalToken t) {
-        t = NormalToken(Clones.clone(address(new NormalToken(1, plainEnv(address(this), address(0), chainUidA, REG_L, false), ""))));
-        t.initialize(address(this), 1, abi.encode(normalInit("Points", "PTS", 6, 1_000_000, alice, address(this))));
+        t = NormalToken(EnvKit.clone(address(new NormalToken(address(this), "")), EnvKit.env(chainUidA, REG_L, address(0), false)));
+        t.initialize(nid(address(this)), 1, abi.encode(normalInit("Points", "PTS", 6, 1_000_000, alice, address(this))));
     }
 
     function _wrappedKind(address leg) internal override returns (WrappedToken) {
@@ -403,8 +404,8 @@ contract OrderRowsTokenTest is OrderRows, UALedgerBase {
     function test_typedOpsVectors_CancelDexOrderRow() public {
         j = vm.readFile(TYPED_OPS);
         string memory op = "CancelDexOrder";
-        SCaaSDex dex = SCaaSDex(Clones.clone(address(new SCaaSDex(1, plainEnv(address(this), address(0), chainUidA, address(0), false), ""))));
-        dex.initialize(address(this), 1, abi.encode(ISCaaSDex.DexConfig(nid(address(this)), 200_000, address(0x7EA5), false, 0, address(0))));
+        SCaaSDex dex = SCaaSDex(EnvKit.clone(address(new SCaaSDex(address(this), "")), EnvKit.env(chainUidA, address(0), address(0), false)));
+        dex.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(nid(address(this)), 200_000, address(0x7EA5), false, 0, address(0))));
         string memory p = ".ops.CancelDexOrder.message.order.";
         address sell = vm.parseJsonAddress(j, string.concat(p, "sellToken"));
         string memory q = string.concat(p, "order.");

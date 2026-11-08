@@ -29,11 +29,13 @@ function regArgs() pure returns (bytes memory) {
     return abi.encode(keccak256(type(ComplianceRegistry).runtimeCode));
 }
 
-/// @notice A plain release environment (plan 5g-Z2): no dependencies, no pinned libraries.
-function plainEnv(address factory, address ska, bytes32 uid, address registry, bool hedera)
+/// @notice A plain release environment (plan 5g-Z2): no dependencies, no pinned libraries. Chain-neutral releases (plan
+///         T71): the factory and `chain_uid` are the factory's own, not the env's; `factory` and `uid` stay as
+///         arguments for the callers that also build the instance env (`instanceEnv`).
+function plainEnv(address, /* factory */ address ska, bytes32, /* uid */ address registry, bool hedera)
     pure returns (IFactoryToken.Env memory e)
 {
-    (e.factory, e.chainUid, e.registry, e.smartKeyAccountImpl, e.hedera) = (factory, uid, registry, ska, hedera);
+    (e.registry, e.smartKeyAccountImpl, e.hedera) = (registry, ska, hedera);
 }
 
 /// @notice A `*_ZETHER` environment: `deps` = transfer, burn, inner-product verifier, disclosure (CTR-ZTH-20).
@@ -53,6 +55,13 @@ function pqzEnv(address factory, bytes32 uid, address registry, address verifier
     e = plainEnv(factory, address(0), uid, registry, false);
     e.deps = new address[](1);
     e.deps[0] = verifier;
+}
+
+/// @notice The instance env a factory on chain `uid` with router `govRouter` composes from `e` (chain-neutral spec §3.2).
+function instanceEnv(IFactoryToken.Env memory e, bytes32 uid, address govRouter)
+    pure returns (IFactoryToken.ChainEnv memory c)
+{
+    return IFactoryToken.ChainEnv(uid, e.registry, govRouter, e.smartKeyAccountImpl, e.hedera, e.deps, e.params);
 }
 
 /// @notice The transitive link closure of `kind`'s implementation (metatx-split §4, R5), each library with its code
@@ -154,12 +163,12 @@ library Catalogue {
         return f.deployDexImplementation(version, v, code, "");
     }
 
-    /// @dev Where `deployImplementation(kind, version, latest env, code, "")` puts the release.
+    /// @dev Where `deployImplementation(kind, version, any env, code, "")` puts the release: chain-neutral, the env is not
+    ///      in its init code (chain-neutral spec §6.1).
     function predict(OpenFactory f, IOpenFactory.TokenKind kind, uint64 version, bytes memory code)
-        internal view returns (address)
+        internal pure returns (address)
     {
-        uint16 v = f.latestEnvVersion(kind);
         return vm.computeCreate2Address(keccak256(abi.encode(kind, version)),
-            keccak256(bytes.concat(code, abi.encode(v, f.envOf(kind, v), bytes("")))), address(f));
+            keccak256(bytes.concat(code, abi.encode(address(f), bytes("")))), address(f));
     }
 }

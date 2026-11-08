@@ -15,6 +15,8 @@ import {UACall} from "../ua/UACall.sol";
 import {Mock1271Wallet} from "../helpers/WalletMocks.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
 import {normalInit} from "../v2/helpers/V2Fixture.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
+import {nid} from "../helpers/Ids.sol";
 
 /// The merged entries of ua-mtx-merge T1, called by selector: these tests compile on the tree before T1 too, so each
 /// one is red there on its own (plan T1 step 3).
@@ -43,8 +45,8 @@ abstract contract MergeBase is UALedgerBase {
 
     function setUp() public virtual override {
         super.setUp();
-        tok0 = NormalToken(Clones.clone(address(new NormalToken(1, plainEnv(address(this), address(0), chainUidA, address(0), false), ""))));
-        tok0.initialize(address(this), 1, abi.encode(normalInit("Zero", "ZRO", 6, 1_000_000, alice, address(this))));
+        tok0 = NormalToken(EnvKit.clone(address(new NormalToken(address(this), "")), EnvKit.env(chainUidA, address(0), address(0), false)));
+        tok0.initialize(nid(address(this)), 1, abi.encode(normalInit("Zero", "ZRO", 6, 1_000_000, alice, address(this))));
         assertEq(tok0.registry(), address(0));
     }
 

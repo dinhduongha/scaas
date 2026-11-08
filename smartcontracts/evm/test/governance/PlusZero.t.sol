@@ -38,6 +38,8 @@ import {DexLegs} from "../helpers/DexLegs.sol";
 import {plainEnv, pqzEnv} from "../helpers/Catalogue.sol";
 import {normalInit, wrappedInit, Rate} from "../v2/helpers/V2Fixture.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
+import {nid} from "../helpers/Ids.sol";
 
 /// @notice "+0" (CTR-GOV-11, spec §10.2, B-33): on every kind, `transfer`, `mtxTransfer`, `transferToUA`
 ///         (native → UA) and `mtxExecuteTransfer` (UA → UA, the `_uaMove` branch that skips `ERC20._update`) read and
@@ -361,7 +363,7 @@ abstract contract Armed {
 }
 
 contract NormalProbe is NormalToken, Armed {
-    constructor(uint16 v, Env memory env, bytes memory a) NormalToken(v, env, a) {}
+    constructor(address f_, bytes memory a) NormalToken(f_, a) {}
     function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override { _seat(H_PRE, f, bytes32(s), m); }
     function _regFeeTo(bytes32 t, uint256 f) internal view override { _seat(H_FEE, t, 0, f); }
     function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override { _seat(H_MOVE, f, t, v); }
@@ -372,7 +374,7 @@ contract NormalProbe is NormalToken, Armed {
 }
 
 contract WrappedProbe is WrappedToken, Armed {
-    constructor(uint16 v, Env memory env, bytes memory a) WrappedToken(v, env, a) {}
+    constructor(address f_, bytes memory a) WrappedToken(f_, a) {}
     function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override { _seat(H_PRE, f, bytes32(s), m); }
     function _regFeeTo(bytes32 t, uint256 f) internal view override { _seat(H_FEE, t, 0, f); }
     function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override { _seat(H_MOVE, f, t, v); }
@@ -383,7 +385,7 @@ contract WrappedProbe is WrappedToken, Armed {
 }
 
 contract NormalZetherProbe is NormalZetherToken, Armed {
-    constructor(uint16 v, Env memory env, bytes memory a) NormalZetherToken(v, env, a) {}
+    constructor(address f_, bytes memory a) NormalZetherToken(f_, a) {}
     function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override { _seat(H_PRE, f, bytes32(s), m); }
     function _regFeeTo(bytes32 t, uint256 f) internal view override { _seat(H_FEE, t, 0, f); }
     function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override { _seat(H_MOVE, f, t, v); }
@@ -395,7 +397,7 @@ contract NormalZetherProbe is NormalZetherToken, Armed {
 }
 
 contract WrappedZetherProbe is WrappedZetherToken, Armed {
-    constructor(uint16 v, Env memory env, bytes memory a) WrappedZetherToken(v, env, a) {}
+    constructor(address f_, bytes memory a) WrappedZetherToken(f_, a) {}
     function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override { _seat(H_PRE, f, bytes32(s), m); }
     function _regFeeTo(bytes32 t, uint256 f) internal view override { _seat(H_FEE, t, 0, f); }
     function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override { _seat(H_MOVE, f, t, v); }
@@ -407,7 +409,7 @@ contract WrappedZetherProbe is WrappedZetherToken, Armed {
 }
 
 contract NormalPqzProbe is NormalPqzToken, Armed {
-    constructor(uint16 v, Env memory env, bytes memory a) NormalPqzToken(v, env, a) {}
+    constructor(address f_, bytes memory a) NormalPqzToken(f_, a) {}
     function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override { _seat(H_PRE, f, bytes32(s), m); }
     function _regFeeTo(bytes32 t, uint256 f) internal view override { _seat(H_FEE, t, 0, f); }
     function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override { _seat(H_MOVE, f, t, v); }
@@ -418,7 +420,7 @@ contract NormalPqzProbe is NormalPqzToken, Armed {
 }
 
 contract WrappedPqzProbe is WrappedPqzToken, Armed {
-    constructor(uint16 v, Env memory env, bytes memory a) WrappedPqzToken(v, env, a) {}
+    constructor(address f_, bytes memory a) WrappedPqzToken(f_, a) {}
     function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override { _seat(H_PRE, f, bytes32(s), m); }
     function _regFeeTo(bytes32 t, uint256 f) internal view override { _seat(H_FEE, t, 0, f); }
     function _regMove(bytes32 f, bytes32 t, uint256 v) internal view override { _seat(H_MOVE, f, t, v); }
@@ -457,14 +459,14 @@ contract HookSeatsPlainTest is UALedgerBase, SeatExpect {
 
     function setUp() public override {
         super.setUp();
-        np = NormalProbe(Clones.clone(address(new NormalProbe(1, plainEnv(address(this), address(0), chainUidA, REG_L, false), ""))));
-        np.initialize(address(this), 1, abi.encode(normalInit("Probe", "PRB", 6, 1_000_000, alice, address(this))));
-        wp = WrappedProbe(payable(Clones.clone(address(new WrappedProbe(1, plainEnv(address(this), address(0), chainUidA, REG_L, false), "")))));
+        np = NormalProbe(EnvKit.clone(address(new NormalProbe(address(this), "")), EnvKit.env(chainUidA, REG_L, address(0), false)));
+        np.initialize(nid(address(this)), 1, abi.encode(normalInit("Probe", "PRB", 6, 1_000_000, alice, address(this))));
+        wp = WrappedProbe(payable(EnvKit.clone(address(new WrappedProbe(address(this), "")), EnvKit.env(chainUidA, REG_L, address(0), false))));
         address[] memory us = new address[](1);
         uint256[] memory one = new uint256[](1);
         (us[0], one[0]) = (address(tok), 1);
         Rate memory fixedRate;
-        wp.initialize(address(this), 1, abi.encode(wrappedInit(us, one, one, 6, fixedRate, address(0), address(0))));
+        wp.initialize(nid(address(this)), 1, abi.encode(wrappedInit(us, one, one, 6, fixedRate, address(0), address(0))));
         vm.prank(alice);
         np.transferToUA(uaP, 100);
     }

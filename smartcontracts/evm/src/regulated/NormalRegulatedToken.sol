@@ -17,8 +17,8 @@ import {RegulatedBase} from "./RegulatedBase.sol";
 /// @notice **UNAUDITED.** `_initRaw` runs `RegulatedLib.init` before `NormalToken`'s init, so before the initial-supply mint.
 contract NormalRegulatedToken is NormalToken, RegulatedBase {
     /// @dev `implArgs = abi.encode(REGISTRY_CODEHASH)` (plan T29).
-    constructor(uint16 envVersion, Env memory env, bytes memory implArgs)
-        NormalToken(envVersion, env, implArgs)
+    constructor(address factory_, bytes memory implArgs)
+        NormalToken(factory_, implArgs)
         RegulatedBase(implArgs)
     {}
 

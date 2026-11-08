@@ -25,6 +25,7 @@ import {UALedgerBase} from "../ua/UALedgerBase.sol";
 import {ZetherFixture} from "../zether/helpers/ZetherFixture.sol";
 import {PqzFixture} from "../pqz/helpers/PqzFixture.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// @notice Hybrid underlying (spec §5; CTR-GOV-12, CTR-TOK-05; C1, C2): a wrapped token with `maxSupply != 0`, whose issuer
 ///         mints under the cap. One cap on every path that raises `totalSupply()`; redemption until the reserve is empty,
@@ -62,14 +63,14 @@ contract GovHybridTest is UALedgerBase {
     }
 
     function _clone() internal returns (WrappedToken) {
-        if (impl == address(0)) impl = address(new WrappedToken(1, plainEnv(address(this), address(0), chainUidA, REG_L, false), ""));
-        return WrappedToken(payable(Clones.clone(impl)));
+        if (impl == address(0)) impl = address(new WrappedToken(address(this), ""));
+        return WrappedToken(payable(EnvKit.clone(impl, EnvKit.env(chainUidA, REG_L, address(0), false))));
     }
 
     function _make(IFactoryToken.TokenConfig memory c) internal returns (WrappedToken w) {
         if (c.roles.rateAdmin != 0) c.roles.rateAdmin = nid(address(this));
         w = _clone();
-        w.initialize(address(this), 1, abi.encode(c));
+        w.initialize(nid(address(this)), 1, abi.encode(c));
     }
 
     function _hybrid(address leg, uint256 cap) internal returns (WrappedToken) {
@@ -103,7 +104,7 @@ contract GovHybridTest is UALedgerBase {
         c.maxSupply = 0;
         WrappedToken w = _clone();
         vm.expectRevert(IWrappedToken.MaxSupplyInvalid.selector);
-        w.initialize(address(this), 1, abi.encode(c));
+        w.initialize(nid(address(this)), 1, abi.encode(c));
         assertEq(_hybrid(address(und), CAP).maxSupply(), CAP); // positive control: both
     }
 
@@ -112,7 +113,7 @@ contract GovHybridTest is UALedgerBase {
         c.maxSupply = CAP;
         WrappedToken w = _clone();
         vm.expectRevert(IWrappedToken.MaxSupplyInvalid.selector);
-        w.initialize(address(this), 1, abi.encode(c));
+        w.initialize(nid(address(this)), 1, abi.encode(c));
         assertEq(_make(_cfg(_legs(address(und)), 0, 0)).maxSupply(), 0); // positive control: neither, fully backed
     }
 

@@ -18,6 +18,7 @@ import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {Catalogue} from "../helpers/Catalogue.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// A third-party application on the base, v2 §1.6 shape: bit 128, the scope is a branch, the contract applies the predicate.
 contract BranchApp is GovernanceBase {
@@ -56,7 +57,8 @@ contract LyingLeg {
     }
 
     function kind() external pure returns (uint8) { return 0; }
-    function initialize(address, uint64, bytes calldata) external {}
+    function validateEnv(IFactoryToken.ChainEnv calldata) external pure {}
+    function initialize(bytes32, uint64, bytes calldata) external {}
     function underlyings() external pure returns (address[] memory) {}
     function features() external pure returns (uint256) { return 1; } // PAYABLE only: no bit 6, no bit 9
     function lockedFeatures() external pure returns (uint256) { return 1; }
@@ -89,7 +91,7 @@ contract GovAttackV2Test is Test {
 
     function setUp() public {
         vm.warp(1_800_000_000);
-        f = new OpenFactory(address(this), UID, 0);
+        f = EnvKit.factory(address(this), UID, 0);
         Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0), false);
         Catalogue.plain(f, IOpenFactory.TokenKind.WRAPPED, 1, type(WrappedToken).creationCode, address(0), address(0), false);
         t = _token("t", 0, OWNER);
@@ -216,7 +218,7 @@ contract GovAttackV2Test is Test {
 
     /// B-03, stated: a token of a second factory stays an outside leg to the first's `isToken`, whatever its bits.
     function test_stated_aSecondFactorysTokenIsOutsideToTheFirst() public {
-        OpenFactory f2 = new OpenFactory(address(this), UID, 0);
+        OpenFactory f2 = EnvKit.factory(address(this), UID, 0);
         Catalogue.plain(f2, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0), false);
         address other = f2.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(_config(0, OWNER)), "x");
         assertTrue(f2.isToken(other)); // positive control

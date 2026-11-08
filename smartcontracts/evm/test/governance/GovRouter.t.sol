@@ -26,6 +26,8 @@ import {UACall} from "../ua/UACall.sol";
 import {NormalRegulatedToken} from "../../src/regulated/NormalRegulatedToken.sol";
 import {IRegulatedToken} from "../../src/regulated/IRegulatedToken.sol";
 import {regArgs} from "../helpers/Catalogue.sol";
+import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// Reads the router's subject on behalf of a contract that is not the router's live target.
 contract SubjectPeek {
@@ -223,24 +225,24 @@ abstract contract GovRouterFixture is UARegistryBase {
         return 0;
     }
 
-    function _env() internal view returns (IFactoryToken.Env memory e) {
-        e = plainEnv(address(this), address(0), chainUidA, PREG, false);
-        e.govRouter = address(router);
+    /// The clones' env (chain-neutral spec §2.1): this chain, the registry, the router.
+    function _cenv() internal view returns (IFactoryToken.ChainEnv memory) {
+        return EnvKit.env(chainUidA, PREG, address(0), false, address(router));
     }
 
     function _normal(bytes32 owner_, bytes32 minter, uint64 delay) internal returns (NormalToken t) {
-        if (normalImpl == address(0)) normalImpl = address(new NormalToken(1, _env(), ""));
-        t = NormalToken(Clones.clone(normalImpl));
+        if (normalImpl == address(0)) normalImpl = address(new NormalToken(address(this), ""));
+        t = NormalToken(EnvKit.clone(normalImpl, _cenv()));
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.decimals, c.features, c.owner, c.grantDelay) =
             ("G", "G", 6, 1 | (uint256(1) << MINT), owner_, delay);
         c.roles.minter = minter;
-        t.initialize(address(this), 1, abi.encode(c));
+        t.initialize(nid(address(this)), 1, abi.encode(c));
     }
 
     function _wrapped(bytes32 owner_, bytes32 guardian, bytes32 rateAdmin) internal returns (WrappedToken w) {
-        if (wrappedImpl == address(0)) wrappedImpl = address(new WrappedToken(1, _env(), ""));
-        w = WrappedToken(payable(Clones.clone(wrappedImpl)));
+        if (wrappedImpl == address(0)) wrappedImpl = address(new WrappedToken(address(this), ""));
+        w = WrappedToken(payable(EnvKit.clone(wrappedImpl, _cenv())));
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.decimals, c.features, c.owner) =
             ("W", "W", 6, 1 | (uint256(1) << RATE) | (uint256(1) << WRAPOFF), owner_);
@@ -248,13 +250,13 @@ abstract contract GovRouterFixture is UARegistryBase {
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
         c.rate = IFactoryToken.RateConfig(2 days, 1000);
-        w.initialize(address(this), 1, abi.encode(c));
+        w.initialize(nid(address(this)), 1, abi.encode(c));
     }
 
     function _dex(bytes32 owner_) internal returns (SCaaSDex d) {
-        if (dexImpl == address(0)) dexImpl = address(new SCaaSDex(1, _env(), ""));
-        d = SCaaSDex(Clones.clone(dexImpl));
-        d.initialize(address(this), 1, abi.encode(ISCaaSDex.DexConfig(owner_, 0, TREASURY, false, 0, address(0))));
+        if (dexImpl == address(0)) dexImpl = address(new SCaaSDex(address(this), ""));
+        d = SCaaSDex(EnvKit.clone(dexImpl, _cenv()));
+        d.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(owner_, 0, TREASURY, false, 0, address(0))));
     }
 
     function _limited(uint128 total) internal pure returns (IGovernance.GrantTerms memory g) {
@@ -831,8 +833,8 @@ contract GovRouterRegulatedTest is GovRouterFixture {
 
     /// Kind 8 with `FREEZE`, `FORCE`, `PAUSE`, `RECORD`, `OPERATOR_TRANSFER`; owner `eoa`, no grant delay; `BOB` holds 1,000.
     function _regulated(bytes32 issuer, bytes32 compliance, bytes32 operator) internal returns (NormalRegulatedToken t) {
-        if (regImpl == address(0)) regImpl = address(new NormalRegulatedToken(1, _env(), regArgs()));
-        t = NormalRegulatedToken(Clones.clone(regImpl));
+        if (regImpl == address(0)) regImpl = address(new NormalRegulatedToken(address(this), regArgs()));
+        t = NormalRegulatedToken(EnvKit.clone(regImpl, _cenv()));
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.decimals, c.owner) = ("R", "R", 6, eoa);
         c.features = 1 | (uint256(1) << 5) | (uint256(1) << 6) | (uint256(1) << 7) | (uint256(1) << 10)
@@ -841,7 +843,7 @@ contract GovRouterRegulatedTest is GovRouterFixture {
         (c.roles.issuer, c.roles.compliance) = (issuer, compliance);
         (c.initialSupply, c.initialHolder) = (1000, BOB);
         c.reg.termsHash = keccak256("terms");
-        t.initialize(address(this), 1, abi.encode(c));
+        t.initialize(nid(address(this)), 1, abi.encode(c));
         vm.prank(address(uint160(uint256(eoa))));
         t.grantRole(GovernanceBits.OPERATOR_TRANSFER, operator);
         if (operator != issuer) {

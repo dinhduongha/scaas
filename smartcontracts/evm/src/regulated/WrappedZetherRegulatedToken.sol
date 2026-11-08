@@ -26,11 +26,16 @@ import {RegulatedBase} from "./RegulatedBase.sol";
 ///         proof; `x.recipient` gets another asset, unchecked). No confidential selector is pause-open (RK-7).
 contract WrappedZetherRegulatedToken is WrappedZetherToken, RegulatedBase {
     /// @dev `implArgs = abi.encode(REGISTRY_CODEHASH)` (plan T29).
-    constructor(uint16 envVersion, Env memory env, bytes memory implArgs)
-        WrappedZetherToken(envVersion, env, implArgs)
+    constructor(address factory_, bytes memory implArgs)
+        WrappedZetherToken(factory_, implArgs)
         RegulatedBase(implArgs)
     {}
 
+
+    /// @dev The base kind's env checks, restated for the second base.
+    function _validateEnv(ChainEnv calldata env) internal view override(MetaTokenBase, WrappedZetherToken) {
+        WrappedZetherToken._validateEnv(env);
+    }
     function kind() public pure override(WrappedZetherToken, MetaTokenBase) returns (uint8) {
         return TokenStore.KIND_WRAPPED_ZETHER_REGULATED;
     }

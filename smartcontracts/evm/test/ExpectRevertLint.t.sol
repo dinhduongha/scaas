@@ -2,8 +2,8 @@
 pragma solidity ^0.8.24;
 
 import {Test, Vm} from "forge-std/Test.sol";
-import {OpenFactory} from "../src/factory/OpenFactory.sol";
-import {IOpenFactory} from "../src/factory/IOpenFactory.sol";
+import {GovernanceRouter} from "../src/governance/GovernanceRouter.sol";
+import {SaltedEIP712} from "../src/common/SaltedEIP712.sol";
 
 /// A deploy right after `vm.expectRevert` must be a real CREATE one frame down, so the test goes on after it (audit
 /// 2026-11-04). With Foundry's dynamic test linking, `new <src contract>` in a test becomes `vm.deployCode`, whose
@@ -18,10 +18,11 @@ contract ExpectRevertLintTest is Test {
         assertEq(ret, abi.encodeWithSignature("Error(string)", "tail reached"), "the tail after expectRevert ran");
     }
 
-    /// As `test/v2/Factory.t.sol` `test_constructor_refusesZeroChainUid`: a src contract whose constructor reverts.
+    /// A src contract whose constructor reverts (the router's `chain_uid` 0; chain-neutral releases moved the factory's
+    /// to `configureChain`, plan T71).
     function probeTail() external {
-        vm.expectRevert(IOpenFactory.ChainUidZero.selector);
-        new OpenFactory(address(1), bytes32(0), 0);
+        vm.expectRevert(SaltedEIP712.ChainUidZero.selector);
+        new GovernanceRouter(bytes32(0), address(0), address(0), false);
         revert("tail reached");
     }
 

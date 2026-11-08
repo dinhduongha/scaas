@@ -1486,7 +1486,10 @@ Items, each with a failing test first where it is code:
    anvil.
 2. **Invariants (3e, T43's report):** PQZ handlers at the four sets and a relay-fee handler for J1–J8 (T43 ran kind 8 only); J6–J8
    move into the suite or are stated as covered by their own files.
-3. **The "+0" mutant (T43):** an extra read of the regulated tax slot in the base `_uaMove` was killed only by gas pins, no
+3. **`selector_audit.json` and the factory (T68 report):** spec §6.3 of the chain-neutral spec lists rows for `configureChain`,
+   `predictAddress` and `getWrapper*`, but the audit test does not scan the factory's artifact: add `OpenFactory` to the scanned
+   artifacts and its rows, both directions.
+4. **The "+0" mutant (T43):** an extra read of the regulated tax slot in the base `_uaMove` was killed only by gas pins, no
    plus-zero slot test went red: find why and make the slot test catch it.
 
 ### PQZ verifier mode (3f, owner approved 2026-11-06; names renamed by the owner 2026-11-07): tasks T44–T50

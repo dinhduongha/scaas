@@ -18,6 +18,8 @@ import {normalInit, wrappedInit, Rate} from "./helpers/V2Fixture.sol";
 import {FeePolicy} from "../../src/common/FeePolicy.sol";
 import {IGovernance} from "../../src/governance/IGovernance.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
+import {nid} from "../helpers/Ids.sol";
 
 /// Underlying whose `transferFrom` re-enters the wrapper while the self-call is live.
 contract ReenteringERC20 is MockERC20 {
@@ -62,30 +64,30 @@ contract AllowlistTest is Test {
         vm.warp(1_800_000_000);
         u = new MockERC20("U", "U", 6);
         u2 = new MockERC20("U2", "U2", 6);
-        none = NormalToken(Clones.clone(address(new NormalToken(1, plainEnv(address(this), address(0), UID, address(0), false), ""))));
-        none.initialize(address(this), 1, abi.encode(normalInit("P", "P", 6, 0, address(this), address(this))));
+        none = NormalToken(EnvKit.clone(address(new NormalToken(address(this), "")), EnvKit.env(UID, address(0), address(0), false)));
+        none.initialize(nid(address(this)), 1, abi.encode(normalInit("P", "P", 6, 0, address(this), address(this))));
         stub = new StubUARegistry(UID);
         single = WrappedToken(
-            Clones.clone(address(new WrappedToken(1, plainEnv(address(this), address(0), UID, address(stub), false), ""))));
+            EnvKit.clone(address(new WrappedToken(address(this), "")), EnvKit.env(UID, address(stub), address(0), false)));
         Rate memory cfg;
         address[] memory one = new address[](1);
         one[0] = address(u);
         uint256[] memory r1 = new uint256[](1);
         r1[0] = 1;
-        single.initialize(address(this), 1, abi.encode(wrappedInit(one, r1, r1, 6, cfg, address(0), address(0))));
+        single.initialize(nid(address(this)), 1, abi.encode(wrappedInit(one, r1, r1, 6, cfg, address(0), address(0))));
         multi = WrappedToken(
-            Clones.clone(address(new WrappedToken(1, plainEnv(address(this), address(0), UID, address(stub), false), ""))));
+            EnvKit.clone(address(new WrappedToken(address(this), "")), EnvKit.env(UID, address(stub), address(0), false)));
         address[] memory two = new address[](2);
         (two[0], two[1]) = (address(u), address(u2));
         uint256[] memory r = new uint256[](2);
         (r[0], r[1]) = (1, 1);
-        multi.initialize(address(this), 1, abi.encode(wrappedInit(two, r, r, 6, cfg, address(0), address(0))));
-        pts = NormalToken(Clones.clone(address(new NormalToken(1, plainEnv(address(this), address(0), UID, address(stub), false), ""))));
-        pts.initialize(address(this), 1, abi.encode(normalInit("PTS", "PTS", 6, 0, address(this), address(this))));
+        multi.initialize(nid(address(this)), 1, abi.encode(wrappedInit(two, r, r, 6, cfg, address(0), address(0))));
+        pts = NormalToken(EnvKit.clone(address(new NormalToken(address(this), "")), EnvKit.env(UID, address(stub), address(0), false)));
+        pts.initialize(nid(address(this)), 1, abi.encode(normalInit("PTS", "PTS", 6, 0, address(this), address(this))));
         ledgered = WrappedToken(
-            Clones.clone(address(new WrappedToken(1, plainEnv(address(this), address(0), UID, address(stub), false), ""))));
+            EnvKit.clone(address(new WrappedToken(address(this), "")), EnvKit.env(UID, address(stub), address(0), false)));
         one[0] = address(pts);
-        ledgered.initialize(address(this), 1, abi.encode(wrappedInit(one, r1, r1, 6, cfg, address(0), address(0))));
+        ledgered.initialize(nid(address(this)), 1, abi.encode(wrappedInit(one, r1, r1, 6, cfg, address(0), address(0))));
         pts.mint(address(this), 10e6); // this fixture is a contract, so it may approve (CTR-TOK-01)
         pts.approve(address(ledgered), 10e6);
         ledgered.wrap(10e6);
@@ -338,13 +340,13 @@ contract AllowlistTest is Test {
     function test_reentryFromUnderlyingHook_reverts() public {
         ReenteringERC20 bad = new ReenteringERC20();
         WrappedToken w = WrappedToken(
-            Clones.clone(address(new WrappedToken(1, plainEnv(address(this), address(0), UID, address(0), false), ""))));
+            EnvKit.clone(address(new WrappedToken(address(this), "")), EnvKit.env(UID, address(0), address(0), false)));
         Rate memory cfg;
         address[] memory one = new address[](1);
         one[0] = address(bad);
         uint256[] memory r1 = new uint256[](1);
         r1[0] = 1;
-        w.initialize(address(this), 1, abi.encode(wrappedInit(one, r1, r1, 6, cfg, address(0), address(0))));
+        w.initialize(nid(address(this)), 1, abi.encode(wrappedInit(one, r1, r1, 6, cfg, address(0), address(0))));
         bad.mint(alice, 10e6);
         vm.prank(alice);
         bad.approve(address(w), 10e6);

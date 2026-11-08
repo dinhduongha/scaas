@@ -1113,6 +1113,9 @@ mod tests {
         ("restorePulled", "((bytes32,address,", "the DEX's (NotDex)"),
         ("exchangeOne", "((bytes32,", "the DEX's own self-call (NotSelf)"),
         ("settleOne", "((bytes32,", "the DEX's own self-call (NotSelf)"),
+        ("mtxCreateToken", "((bytes32,uint256,", "the factory's creations through the router (S3, plan T76): no node row until relaying creations is decided (chain-neutral spec §6.3, index spec §8.11 Q11); anyone submits them, fee 0"),
+        ("mtxCreateDex", "((bytes32,uint256,", "the factory's creations through the router (S3, plan T76): no node row until relaying creations is decided (chain-neutral spec §6.3, index spec §8.11 Q11); anyone submits them, fee 0"),
+        ("mtxCreateInstance", "((bytes32,uint256,", "the factory's creations through the router (S3, plan T76): no node row until relaying creations is decided (chain-neutral spec §6.3, index spec §8.11 Q11); anyone submits them, fee 0"),
     ];
     const ENV_UA: &str = "((bytes32,uint256,uint256,uint256,uint32,address,uint256,address)";
     const ENV_ADDR: &str = "((address,uint256,uint256,uint256,uint32,address,uint256,address)";
@@ -1170,9 +1173,10 @@ mod tests {
                 governed += usize::from(class.starts_with("BIT") || class == "OWNER" || class == "HOLDER_OWN");
             }
         }
+        let creation = |s: &str| s.starts_with("mtxCreateToken(") || s.starts_with("mtxCreateDex(") || s.starts_with("mtxCreateInstance(");
         let router: HashSet<[u8; 4]> = audit["GovernanceRouter"].as_array().unwrap().iter().filter(|r| r["class"] == "SIGNED")
-            .map(|r| sel(r["sig"].as_str().unwrap())).collect();
-        assert_eq!(router.len(), 30, "19 ops, the eight regulated controls (plan T32), the ordered cancel, the two tax ops (pay-meta-tax T39)");
+            .map(|r| r["sig"].as_str().unwrap()).filter(|s| !creation(s)).map(sel).collect();
+        assert_eq!(router.len(), 30, "19 ops, the eight regulated controls (plan T32), the ordered cancel, the two tax ops (pay-meta-tax T39); the three creations (T76) in NOT_ROWS");
         let ours: HashSet<[u8; 4]> = typed::rows().iter().filter(|r| !r.entry.is_empty() && r.contracts.contains(&"gov_router")).map(|r| r.sent).collect();
         assert_eq!(ours, router, "the router's allow-list, both directions");
         assert_eq!((rowed, exempt, governed), (ROWED, EXEMPT, GOVERNED), "every SIGNED entry was walked");
@@ -1287,7 +1291,8 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
     // pay-meta-tax T42: (234, 202, 217) -> (254, 178, 229), measured: mtxPay a row (no longer in NOT_ROWS), mtxPayWithTax on the
     // six regulated kinds, the router's two tax ops, the six kinds' two bit-23 powers governed (12)
     const ROWED: usize = 254;
-    const EXEMPT: usize = 178;
+    // ua-mtx-merge T76: EXEMPT 178 -> 181, the router's three creations (NOT_ROWS)
+    const EXEMPT: usize = 181;
     const GOVERNED: usize = 229;
 
     /// As [`bound`], `registry()` answering `registry` (`Address::ZERO`: the UA ledger off, R9).

@@ -192,8 +192,9 @@ interface ISCaaSDex {
     error TargetNotListed(address target);
     error InsufficientOutput(address token);
 
-    /// @notice Factory only, in the clone's creating call; `initArgs = abi.encode(DexConfig)` (plan 5g-Z2).
-    function initialize(address creator, uint64 version, bytes calldata initArgs) external;
+    /// @notice Factory only, in the clone's creating call, on a clone carrying its env (`IFactoryToken.EnvMissing`);
+    ///         `creatorId` the creator's UA id (S3); `initArgs = abi.encode(DexConfig)` (plan 5g-Z2).
+    function initialize(bytes32 creatorId, uint64 version, bytes calldata initArgs) external;
     function setMarket(address base, address quote, bool listed) external;
     function setFeeSplit(uint32 relayerSharePpm, address treasury) external;
     function mtxSettle(Settlement[] calldata s) external returns (bool[] memory ok);

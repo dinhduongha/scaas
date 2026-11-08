@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {IGovernanceRouter} from "../../src/governance/IGovernanceRouter.sol";
+import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 import {IMetaTxAddress} from "../../src/metatx/IMetaTxAddress.sol";
@@ -44,6 +46,8 @@ import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
 import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
 import {VM, TYPED_OPS, TYPED_OPS_LEGACY, SALTED_DOMAIN, checkRow, onChain, domainOf, rowEnvelope, rowEnvelope2, msgField, domainField} from
     "./NamedEntry.t.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
+import {nid} from "../helpers/Ids.sol";
 
 /// `built` (the entry's call from the message's fields) is the row's calldata under `kind`; that calldata runs on `c` from
 /// the row's relayer, the signature replaced by the one under `c`'s domain.
@@ -219,10 +223,10 @@ contract TypedOpsTest is UALedgerBase {
 
     /// A SCaaS ledger token at a row's address, its supply here.
     function _tokenAt(address at) internal returns (NormalToken l) {
-        address impl = address(new NormalToken(1, plainEnv(address(this), address(0), chainUidA, REG_L, false), ""));
-        vm.etch(at, abi.encodePacked(hex"363d3d373d3d3d363d73", impl, hex"5af43d82803e903d91602b57fd5bf3"));
+        address impl = address(new NormalToken(address(this), ""));
+        vm.etch(at, EnvKit.runtime(impl, EnvKit.env(chainUidA, REG_L, address(0), false)));
         l = NormalToken(at);
-        l.initialize(address(this), 1, abi.encode(normalInit("Leg", "LEG", 6, SUPPLY, address(this), address(this))));
+        l.initialize(nid(address(this)), 1, abi.encode(normalInit("Leg", "LEG", 6, SUPPLY, address(this), address(this))));
     }
 
     // ------------------------------------------------------------------ test_typedOpsVectors_<op>
@@ -1105,9 +1109,8 @@ contract TypedOpsTest is UALedgerBase {
         string memory op = "UABurn";
         MetaTxLib.UAEnvelope memory e = _uaEnv(op);
         uint256 amount = _uint(op, "amount");
-        NormalToken other = NormalToken(Clones.clone(address(new NormalToken(1,
-            plainEnv(address(this), address(0), chainUidA, REG_L, false), ""))));
-        other.initialize(address(this), 1, abi.encode(normalInit("Other", "OTH", 6, SUPPLY,
+        NormalToken other = NormalToken(EnvKit.clone(address(new NormalToken(address(this), "")), EnvKit.env(chainUidA, REG_L, address(0), false)));
+        other.initialize(nid(address(this)), 1, abi.encode(normalInit("Other", "OTH", 6, SUPPLY,
             address(uint160(uint256(e.from))), address(this))));
         IUARegistry.UASig memory sig;
         sig.signature = onChain(j, op, address(tok));
@@ -1284,6 +1287,43 @@ contract ConfidentialRowsZetherTest is ConfidentialRows, ZetherFixture {
     }
 }
 
+/// Stands in for the factory at a creation row's `target` (plan T76): records the router's call and its `subject()`.
+contract CreateSink {
+    bytes32 public subject;
+    uint256 public calls;
+    bytes public init;
+    bytes32 public salt;
+    uint64 public version;
+    uint16 public contractClass;
+    bytes4 public selector;
+
+    function _seen(bytes calldata init_, bytes32 salt_, uint64 version_) internal {
+        subject = IGovernanceRouter(msg.sender).subject();
+        ++calls;
+        (init, salt, version, selector) = (init_, salt_, version_, msg.sig);
+    }
+
+    function createToken(IOpenFactory.TokenKind, uint64 version_, bytes calldata initArgs, bytes32 salt_)
+        external returns (address)
+    {
+        _seen(initArgs, salt_, version_);
+        return address(this);
+    }
+
+    function createDex(uint64 version_, bytes calldata initArgs, bytes32 salt_) external returns (address) {
+        _seen(initArgs, salt_, version_);
+        return address(this);
+    }
+
+    function createInstance(IOpenFactory.ReleaseId calldata id, bytes32 salt_, bytes calldata initCall)
+        external returns (address)
+    {
+        _seen(initCall, salt_, id.version);
+        contractClass = id.contractClass;
+        return address(this);
+    }
+}
+
 /// governance T12 (spec §3.2; CTR-GOV-15 Change): every `GovernanceRouter` row of `typed_ops.json` runs verbatim on a real
 /// router deployed at the row's `verifyingContract` (context A: chain id 31337, `chain_uid` A), so the row's own signature
 /// is the router's: no re-signing. Each op's `target` is a real `NormalToken`, `WrappedToken` or `SCaaSDex` cloned at the
@@ -1314,11 +1354,9 @@ contract TypedOpsRouterTest is UALedgerBase {
         assertEq(me, bytes32(uint256(uint160(signer))), "the key's UA is its native id");
         router = vm.parseJsonAddress(j, domainField("UAGrantRole", K, "domain.verifyingContract"));
         deployCodeTo("GovernanceRouter.sol:GovernanceRouter", abi.encode(chainUidA, REG_L, address(0), false), router);
-        IFactoryToken.Env memory e = plainEnv(address(this), address(0), chainUidA, REG_L, false);
-        e.govRouter = router;
-        normalImpl = address(new NormalToken(1, e, ""));
-        wrappedImpl = address(new WrappedToken(1, e, ""));
-        dexImpl = address(new SCaaSDex(1, e, ""));
+        normalImpl = address(new NormalToken(address(this), ""));
+        wrappedImpl = address(new WrappedToken(address(this), ""));
+        dexImpl = address(new SCaaSDex(address(this), ""));
     }
 
     // ------------------------------------------------------------------ the row, the targets
@@ -1358,8 +1396,9 @@ contract TypedOpsRouterTest is UALedgerBase {
         assertEq(GovernanceRouter(router).mtxNonce(me, _uint(op, "batch")), 1, op);
     }
 
+    /// A clone of `impl` at `at` with the env the factory would append (this chain, the registry, the router).
     function _clone(address impl, address at) internal {
-        vm.etch(at, abi.encodePacked(hex"363d3d373d3d3d363d73", impl, hex"5af43d82803e903d91602b57fd5bf3"));
+        vm.etch(at, EnvKit.runtime(impl, EnvKit.env(chainUidA, REG_L, address(0), false, router)));
     }
 
     function _normalAt(string memory op, bytes32 owner_, bytes32 minter, uint64 delay) internal returns (NormalToken t) {
@@ -1368,7 +1407,7 @@ contract TypedOpsRouterTest is UALedgerBase {
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.decimals, c.features, c.owner, c.grantDelay) = ("G", "G", 6, 1 | (uint256(1) << MINT), owner_, delay);
         c.roles.minter = minter;
-        t.initialize(address(this), 1, abi.encode(c));
+        t.initialize(nid(address(this)), 1, abi.encode(c));
     }
 
     /// Owner, guardian and rate admin the key. `RATE_ADJUSTABLE` is contract-only, so its holder has code at the grant
@@ -1385,14 +1424,14 @@ contract TypedOpsRouterTest is UALedgerBase {
         c.legs[0] = IFactoryToken.Leg(leg, 1, 1);
         c.rate = IFactoryToken.RateConfig(2 days, 1000);
         vm.etch(signer, hex"00");
-        w.initialize(address(this), 1, abi.encode(c));
+        w.initialize(nid(address(this)), 1, abi.encode(c));
         vm.etch(signer, "");
     }
 
     function _dexAt(string memory op) internal returns (SCaaSDex d) {
         d = SCaaSDex(_addr(op, "target"));
         _clone(dexImpl, address(d));
-        d.initialize(address(this), 1, abi.encode(ISCaaSDex.DexConfig(me, 0, address(0x7EA5), false, 0, address(0))));
+        d.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(me, 0, address(0x7EA5), false, 0, address(0))));
     }
 
     /// ua-mtx-merge T7, meaning: one form per op, the `UA<Op>` row on the merged entry (was both the address `<Op>` row and
@@ -1407,6 +1446,48 @@ contract TypedOpsRouterTest is UALedgerBase {
             "AcceptOwnership", "RenounceOwnership", "RenounceRole", "Mint", "MintToUA", "DisableWrap", "ProposeRate",
             "CancelRate", "ExecuteRate", "SetMarket", "SetExchangeTarget", "SetListedOnly", "SetFeeSplit"];
         for (uint256 i; i < ops.length; ++i) _noEntry(ops[i], me, _uint(ops[i], "batch"));
+    }
+
+    // ------------------------------------------------------------------ the factory's creations (S3, plan T76)
+
+    /// The three creation rows verbatim, `target` a sink in the factory's place that records what the router hands it and
+    /// the subject it names: the router authenticated the key's id, and passed the row's `extra` bytes whose keccak256 is
+    /// the signed `initHash`.
+    function _sinkAt(string memory op) internal returns (CreateSink s) {
+        s = CreateSink(_addr(op, "target"));
+        deployCodeTo("TypedOps.t.sol:CreateSink", "", address(s));
+    }
+
+    function test_routerRow_CreateToken() public {
+        CreateSink s = _sinkAt("UACreateToken");
+        _row("UACreateToken");
+        bytes memory initArgs = vm.parseJsonBytes(j, domainField("UACreateToken", K, "extra.initArgs"));
+        assertEq(s.subject(), me, "the signing UA");
+        assertEq(s.calls(), 1);
+        assertEq(keccak256(s.init()), _b32("UACreateToken", "initHash"));
+        assertEq(s.init(), initArgs);
+        assertEq(s.salt(), _b32("UACreateToken", "salt"));
+        assertEq(s.version(), _uint("UACreateToken", "version"));
+        assertEq(s.selector(), OpenFactory.createToken.selector);
+    }
+
+    function test_routerRow_CreateDex() public {
+        CreateSink s = _sinkAt("UACreateDex");
+        _row("UACreateDex");
+        assertEq(s.subject(), me);
+        assertEq(keccak256(s.init()), _b32("UACreateDex", "initHash"));
+        assertEq(s.salt(), _b32("UACreateDex", "salt"));
+        assertEq(s.selector(), OpenFactory.createDex.selector);
+    }
+
+    function test_routerRow_CreateInstance() public {
+        CreateSink s = _sinkAt("UACreateInstance");
+        _row("UACreateInstance");
+        assertEq(s.subject(), me);
+        assertEq(keccak256(s.init()), _b32("UACreateInstance", "initHash"));
+        assertEq(s.salt(), _b32("UACreateInstance", "salt"));
+        assertEq(s.contractClass(), _uint("UACreateInstance", "contractClass"));
+        assertEq(s.selector(), OpenFactory.createInstance.selector);
     }
 
     // ------------------------------------------------------------------ the owner and a holder
@@ -1700,9 +1781,7 @@ contract TypedOpsRouterTest is UALedgerBase {
     function _regAt(string memory op, bool keyIsIssuer) internal returns (NormalRegulatedToken t) {
         vm.warp(REG_NOW);
         if (regImpl == address(0)) {
-            IFactoryToken.Env memory e = plainEnv(address(this), address(0), chainUidA, REG_L, false);
-            e.govRouter = router;
-            regImpl = address(new NormalRegulatedToken(1, e, regArgs()));
+            regImpl = address(new NormalRegulatedToken(address(this), regArgs()));
             regOther = address(new Holder());
         }
         t = NormalRegulatedToken(_addr(op, "target"));
@@ -1717,7 +1796,7 @@ contract TypedOpsRouterTest is UALedgerBase {
         (c.initialSupply, c.initialHolder) = (1000, address(uint160(uint256(_b32("UARecordOrder", "subject")))));
         c.reg.termsHash = keccak256("terms");
         vm.etch(signer, hex"00");
-        t.initialize(address(this), 1, abi.encode(c));
+        t.initialize(nid(address(this)), 1, abi.encode(c));
         vm.etch(signer, "");
         t.grantRole(GovernanceBits.OPERATOR_TRANSFER, me);
     }

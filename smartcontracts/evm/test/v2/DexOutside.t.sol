@@ -22,6 +22,7 @@ import {Sweeper} from "../metatx/Sweeper7702.t.sol";
 import {UID_, normalInit} from "./helpers/V2Fixture.sol";
 import {plainEnv, Catalogue} from "../helpers/Catalogue.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// ERC-1271 wallet that needs ~100 k gas to say "valid": passes under 400 k (a `SmartKeyAccount` clone), not under 50 k.
 contract Work1271 {
@@ -152,7 +153,7 @@ contract DexOutsideTest is Test {
 
     function setUp() public {
         work = address(new Work1271());
-        f = new OpenFactory(address(this), UID_, 0);
+        f = EnvKit.factory(address(this), UID_, 0);
         Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), work, false);
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, work);
         a = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("A", "A", 0, 1e6, alice, address(0))), "a"));

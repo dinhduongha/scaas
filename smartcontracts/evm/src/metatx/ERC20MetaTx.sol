@@ -34,6 +34,7 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBase, IERC20Payment, ITradeToken
     using MetaTxLib for MetaTxLib.UAMetaTransaction;
     using MetaTxLib for MetaTxLib.UAMetaTransfer;
 
+    /// @dev A factory-made token (`MetaTokenBase`, CTR-TOK-29) passes 0s and reads its clone's code instead.
     constructor(bytes32 chainUid_, address registry_, address smartKeyAccountImpl_, bool hedera_)
         ERC20("", "") UAMetaTxBase(_domainName(), chainUid_, registry_, smartKeyAccountImpl_, hedera_)
     {}
@@ -280,7 +281,7 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBase, IERC20Payment, ITradeToken
     function _requireDerivedReceiver(bytes32 to) internal view {
         _uaOn();
         if (UAKinds.inNativeSpace(to)) revert UANotRegistered(to);
-        MtxPipelineLib._checkTo(_REGISTRY, to); // the one receiver rule (internal: inlined, no DELEGATECALL)
+        MtxPipelineLib._checkTo(_registry(), to); // the one receiver rule (internal: inlined, no DELEGATECALL)
     }
 
     /// @dev A mint into a derived UA (CTR-UA-28): a UA-ledger move from 0, `Transfer(0, UA_POOL)` and `UATransfer(0, to)`.

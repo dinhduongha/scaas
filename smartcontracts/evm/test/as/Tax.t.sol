@@ -22,6 +22,7 @@ import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {Catalogue, plainEnv, regArgs} from "../helpers/Catalogue.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// @notice Pay-meta-tax spec §6 (T39; PT-5, PT-6, O9, O10, Q4, Q5): bit 23 `TAX` on kinds 8 and 9 (the six regulated
 ///         kinds share `RegulatedBase` and `RegulatedLib`; 10-13 in `test/as/confidential/TaxConfidential.t.sol`), the one
@@ -39,7 +40,7 @@ contract TaxTest is RegFixture {
     function setUp() public override {
         super.setUp();
         t8t = f.createToken(IOpenFactory.TokenKind.NORMAL_REGULATED, 1, abi.encode(_taxCfg8(nid(taxTo))), "tax8");
-        fN = new OpenFactory(address(this), UID, NOTICE);
+        fN = EnvKit.factory(address(this), UID, NOTICE);
         Catalogue.release(fN, IOpenFactory.TokenKind.NORMAL_REGULATED, 1, plainEnv(address(fN), address(0), UID,
             address(ureg), false), type(NormalRegulatedToken).creationCode, regArgs());
         fN.setKindEnabled(IOpenFactory.TokenKind.NORMAL_REGULATED, true);

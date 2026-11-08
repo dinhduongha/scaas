@@ -20,6 +20,10 @@ import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {MockWallet} from "./UARegistryBase.sol";
 import {UALedgerBase} from "./UALedgerBase.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
+import {nid} from "../helpers/Ids.sol";
+import {OpenFactory} from "../../src/factory/OpenFactory.sol";
+import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 
 /// accounts.md CTR-UA-18 (the ledger, `UA_POOL`, events), CTR-UA-19 (structs, domain, `initialize` check), CTR-UA-24
 /// (the native path), CTR-UA-26 (pipelines, receivers, allowlist, one nonce map, `uaCancelNonce`); T-V3-1 (the shared
@@ -460,8 +464,8 @@ contract UALedgerTest is UALedgerBase {
     // ----- registry binding (CTR-UA-19) -----
 
     function test_registryOff() public {
-        NormalToken off = NormalToken(Clones.clone(address(new NormalToken(1, plainEnv(address(this), address(0), chainUidA, address(0), false), ""))));
-        off.initialize(address(this), 1, abi.encode(normalInit("Off", "OFF", 6, 100, alice, address(this))));
+        NormalToken off = NormalToken(EnvKit.clone(address(new NormalToken(address(this), "")), EnvKit.env(chainUidA, address(0), address(0), false)));
+        off.initialize(nid(address(this)), 1, abi.encode(normalInit("Off", "OFF", 6, 100, alice, address(this))));
         assertEq(off.registry(), address(0));
         assertFalse(off.supportsInterface(type(IUALedger).interfaceId));
         assertTrue(tok.supportsInterface(type(IUALedger).interfaceId));
@@ -483,12 +487,15 @@ contract UALedgerTest is UALedgerBase {
         off.mtxExecuteTransfer(t, UACall.auth(t.from, ""));
     }
 
+    /// Chain-neutral spec §2.1 (Fable P3-1): the registry's `chain_uid` is the factory's check, once per env, no longer
+    /// each `initialize`'s: a factory on another chain refuses an env naming this registry.
     function test_initialize_registryChainUid() public {
         bytes32 other = keccak256("other genesis");
-        address impl = address(new NormalToken(1, plainEnv(address(this), address(0), other, REG_L, false), ""));
-        NormalToken c = NormalToken(Clones.clone(impl));
-        vm.expectRevert(abi.encodeWithSelector(IUALedger.UARegistryChainUid.selector, chainUidA, other));
-        c.initialize(address(this), 1, abi.encode(normalInit("X", "X", 6, 0, address(0), address(this))));
+        OpenFactory g = EnvKit.factory(address(this), other, 0);
+        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ChainUidMismatch.selector, other, chainUidA));
+        g.publishEnv(IOpenFactory.TokenKind.NORMAL, 1, plainEnv(address(g), address(0), other, REG_L, false));
+        OpenFactory h = EnvKit.factory(address(this), chainUidA, 0); // positive control: this chain's factory
+        h.publishEnv(IOpenFactory.TokenKind.NORMAL, 1, plainEnv(address(h), address(0), chainUidA, REG_L, false));
     }
 
     function test_uaDigest_domainAndTypehash() public view {

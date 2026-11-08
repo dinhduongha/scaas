@@ -17,6 +17,7 @@ import {SmartKeyAccount, SubjectKey, KeyKind} from "../../src/account/SmartKeyAc
 import {SmartKeyAccountFactory} from "../../src/account/SmartKeyAccountFactory.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
 import {SigCheck} from "../../src/common/SigCheck.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// Software authenticator: a fixed P-256 key, authenticatorData/clientDataJSON in the WebAuthn format (L3 §5.8.1.1),
 /// the signature normalised to low-s as clients do.
@@ -107,7 +108,8 @@ contract SmartKeyAccountTest is WebAuthnSoft {
         vm.chainId(7622);
         vm.warp(1_800_000_000);
         fac = new SmartKeyAccountFactory(UID_);
-        NormalToken impl = new NormalToken(1, plainEnv(address(this), fac.IMPLEMENTATION(), UID_, address(0), false), "");
+        NormalToken impl = NormalToken(_envFor(address(new NormalToken(address(this), "")),
+            EnvKit.env(UID_, address(0), fac.IMPLEMENTATION(), false)));
         t = NormalToken(_clone(address(impl), address(this), new address[](0),
             abi.encode(normalInit("Points", "PTS", 0, 0, address(this), address(this)))));
         acct = SmartKeyAccount(payable(fac.deploy(_passkey(PASSKEY), GUARDIAN)));

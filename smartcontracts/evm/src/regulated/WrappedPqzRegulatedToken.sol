@@ -24,11 +24,16 @@ import {RegulatedBase} from "./RegulatedBase.sol";
 ///         is outside the kind's mask (CTR-GOV-17).
 contract WrappedPqzRegulatedToken is WrappedPqzToken, RegulatedBase {
     /// @dev `implArgs = abi.encode(REGISTRY_CODEHASH)` (plan T29).
-    constructor(uint16 envVersion, Env memory env, bytes memory implArgs)
-        WrappedPqzToken(envVersion, env, implArgs)
+    constructor(address factory_, bytes memory implArgs)
+        WrappedPqzToken(factory_, implArgs)
         RegulatedBase(implArgs)
     {}
 
+
+    /// @dev The base kind's env checks, restated for the second base.
+    function _validateEnv(ChainEnv calldata env) internal view override(MetaTokenBase, WrappedPqzToken) {
+        WrappedPqzToken._validateEnv(env);
+    }
     function kind() public pure override(WrappedPqzToken, MetaTokenBase) returns (uint8) {
         return TokenStore.KIND_WRAPPED_PQZ_REGULATED;
     }

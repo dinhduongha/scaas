@@ -26,13 +26,21 @@ library GovernanceUse {
 ///        through `GovernanceUse.use`; `hasRole` is a view (listed, not able to act). Every identity is a UA id
 ///        (`bytes32`, CTR-GOV-01 Change, owner 2026-11-04), and `_govSubject()` names the caller.
 abstract contract GovernanceBase is IGovernance {
-    /// @notice This chain's `GovernanceRouter` (0 = none on this chain), from the release's `Env`: a call from it acts for
-    ///         the UA it authenticated (spec `2026-11-04-governance-ua-identity.md` §2).
-    address public immutable GOV_ROUTER;
+    /// @dev This chain's router, a constructor immutable; 0 on a factory-made contract, which reads its clone's code.
+    address private immutable _GOV_ROUTER;
 
     constructor(address govRouter) {
-        GOV_ROUTER = govRouter;
+        _GOV_ROUTER = govRouter;
     }
+
+    /// @notice This chain's `GovernanceRouter` (0 = none on this chain): a call from it acts for the UA it authenticated
+    ///         (spec `2026-11-04-governance-ua-identity.md` §2). Factory-made: the instance's `ChainEnv.govRouter`, from its
+    ///         clone's code (CTR-TOK-29; the name of the immutable it was).
+    function GOV_ROUTER() external view returns (address) {
+        return _govRouter();
+    }
+
+    function _govRouter() internal view virtual returns (address) { return _GOV_ROUTER; }
 
     /// @dev The contract's guard (`MetaTxBase` on a token, the transient guard's check on the DEX).
     modifier governed() {
@@ -47,11 +55,12 @@ abstract contract GovernanceBase is IGovernance {
     /// @dev The caller as this contract authenticates it (`_msgSender()` on a token).
     function _caller() internal view virtual returns (address);
 
-    /// @dev The subject of every governance check and every power's entry: from `GOV_ROUTER`, the UA it authenticated for
-    ///      this call (0 outside a live call, which every check refuses); from any other caller, its native id. `GOV_ROUTER`
+    /// @dev The subject of every governance check and every power's entry: from the router, the UA it authenticated for
+    ///      this call (0 outside a live call, which every check refuses); from any other caller, its native id. A router
     ///      0 is no router: no caller is asked for a subject. No signature is verified here.
     function _govSubject() internal view returns (bytes32) {
-        if (GOV_ROUTER != address(0) && msg.sender == GOV_ROUTER) return IGovernanceRouter(msg.sender).subject();
+        address r = _govRouter();
+        if (r != address(0) && msg.sender == r) return IGovernanceRouter(msg.sender).subject();
         return MetaTxLib.pad(_caller());
     }
 

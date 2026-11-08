@@ -61,12 +61,22 @@ contract DeployHarness is DeployBase {
     {
         salt = keccak256("scaas.deploy.v1");
         uid = uid_;
+        // the chain this harness stands for: its genesis hash, by BLOCKHASH(0) and by EIP-2935 (forge's history contract)
+        if (block.number >= 1 && block.number <= 256) vm.setBlockhash(0, uid_);
+        address history = 0x0000F90827F1C53a10cb7A02335B175320002935;
+        if (history.code.length != 0) vm.store(history, bytes32(0), uid_);
         deployZether = zether;
         f = _deployTokenFactory(address(this), true, ska, hedera);
         json = vm.serializeBytes32("deploy", "chain_uid", uid);
     }
 
     function gasNeed(string calldata name) external view returns (uint256) { return _releaseGasNeed(name); }
+
+    /// `RELEASES_JSON` / `RELEASES_WRITE` for the next `deploy` (chain-neutral spec §6.2, plan T73); `writeReleases` as
+    /// `run()` ends.
+    function setReleases(string calldata path, bool write) external { (releasesPath, releasesWrite) = (path, write); }
+
+    function writeReleases() external { _writeReleases(); }
 
     function checkGas(string calldata name, uint256 limit) external view { _checkReleaseGas(name, limit); }
 

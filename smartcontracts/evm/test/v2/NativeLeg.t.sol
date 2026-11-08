@@ -11,6 +11,7 @@ import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// Has no `receive`: refuses the native coin.
 contract CoinRefuser {}
@@ -267,7 +268,7 @@ contract NativeLegTest is V2Fixture {
     }
 
     function test_native_decimalsOnHederaAre8() public {
-        WrappedToken h = WrappedToken(_clone(address(new WrappedToken(1, plainEnv(address(this), address(0), UID_, address(0), true), "")),
+        WrappedToken h = WrappedToken(_clone(_envFor(address(new WrappedToken(address(this), "")), EnvKit.env(UID_, address(0), address(0), true)),
             address(this), _one(address(0)), _singleInit(address(0), 8, 1, 1, _fixedRate())));
         (,,, uint8 dec,) = h.legOf(address(0));
         assertEq(dec, 8);

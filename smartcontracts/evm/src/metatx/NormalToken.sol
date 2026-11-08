@@ -20,9 +20,9 @@ contract NormalToken is MetaTokenBase {
         "UABurn(bytes32 from,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
     );
 
-    /// @dev The factory's append (`OpenFactory.deployImplementation`, plan 5g-Z2): the release's `Env`; this kind takes
-    ///      no `implArgs`.
-    constructor(uint16, Env memory env, bytes memory) MetaTokenBase(env) {}
+    /// @dev The factory's append (`OpenFactory.deployImplementation`, chain-neutral spec §2.1): its address; this kind
+    ///      takes no `implArgs`.
+    constructor(address factory_, bytes memory) MetaTokenBase(factory_) {}
 
     function kind() public pure virtual override returns (uint8) {
         return TokenStore.KIND_NORMAL;
@@ -37,7 +37,7 @@ contract NormalToken is MetaTokenBase {
         _setMetadata(cfg.name, cfg.symbol, cfg.decimals);
         // 5-9 are not in the kind's mask: `init` refuses each with `FeatureInvalidForKind` (regulated-kinds spec Q3)
         GovernanceLib.init(cfg.features, cfg.lockedFeatures, cfg.owner, cfg.grantDelay, cfg.rescueTo, cfg.roles,
-            _validBits(), _roleBits(), _contractOnlyBits(), _REGISTRY);
+            _validBits(), _roleBits(), _contractOnlyBits(), _registry());
         if (cfg.initialSupply != 0) _mint(cfg.initialHolder, cfg.initialSupply);
     }
 

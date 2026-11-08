@@ -131,6 +131,26 @@ contract GovRouterTypehashTest is Test {
         assertEq(T.UA_SET_FEE_SPLIT, 0x6b852244442b250d05068e09239a3187da2ac9c9c3d2b8bfc89f77de52466649);
     }
 
+    // ---- plan T76 (chain-neutral spec §4.4, S3; owner 2026-11-07): the factory's creations, the signing UA the creator
+
+    function test_uaCreateTokenTypehashIsPinned() public pure {
+        assertEq(T.UA_CREATE_TOKEN, keccak256(
+                "UACreateToken(bytes32 from,address target,uint8 kind,uint64 version,bytes32 initHash,bytes32 salt,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_CREATE_TOKEN, 0xca5fac97c5abc5819d18898d601178a55e746af3b2cda3a218b9a983346cb67b);
+    }
+
+    function test_uaCreateDexTypehashIsPinned() public pure {
+        assertEq(T.UA_CREATE_DEX, keccak256(
+                "UACreateDex(bytes32 from,address target,uint64 version,bytes32 initHash,bytes32 salt,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_CREATE_DEX, 0x44661a0581e2cf084c0fcdefcdad74bcd019e428202ed1d2bf13ffc377cd2a51);
+    }
+
+    function test_uaCreateInstanceTypehashIsPinned() public pure {
+        assertEq(T.UA_CREATE_INSTANCE, keccak256(
+                "UACreateInstance(bytes32 from,address target,uint16 contractClass,uint16 kind,uint64 version,bytes32 initHash,bytes32 salt,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_CREATE_INSTANCE, 0xbe31ccf5dc917e095cb52e23ebce86c15150159b8b9f145eef2a2c94573b8ba1);
+    }
+
     // ---- plan T32 (regulated-kinds spec §3.1; owner 2026-11-05, CTR-GOV-20): the eight controls of the regulated kinds
 
     function test_uaFreezeTypehashIsPinned() public pure {

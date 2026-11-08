@@ -26,6 +26,8 @@ import {UID_, normalInit} from "./helpers/V2Fixture.sol";
 import {ZetherFixture} from "../zether/helpers/ZetherFixture.sol";
 import {PqzFixture} from "../pqz/helpers/PqzFixture.sol";
 import {PQZ_UID} from "../pqz/helpers/PqzRegistryBase.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
+import {ChainEnvCode} from "../../src/factory/ChainEnvCode.sol";
 
 /// A contract id for the regulated contract-only bits (`_check` reads its code only).
 contract IxHolder {}
@@ -46,6 +48,7 @@ contract IndexImpl {
     function kind() external pure returns (uint8) { return 0; }
     function factory() external view returns (address) { return F; }
     function chainUid() external view returns (bytes32) { return U; }
+    function validateEnv(IFactoryToken.ChainEnv calldata) external pure {}
     function features() external pure returns (uint256) { return 0; }
     function lockedFeatures() external pure returns (uint256) { return 0; }
     function underlyings() external pure returns (address[] memory) {}
@@ -56,14 +59,14 @@ contract IndexImpl {
         return IndexImpl(_impl()).ownerClaim();
     }
 
-    function initialize(address, uint64, bytes calldata) external {
+    function initialize(bytes32, uint64, bytes calldata) external {
         address n = IndexImpl(_impl()).nestedImpl();
         if (n != address(0)) IOpenFactory(F).createTokenUnregistered(IOpenFactory.TokenKind.NORMAL, n, "", "nested");
     }
 
     /// The EIP-1167 clone's implementation (bytes 10..30 of its code), or this contract itself.
     function _impl() internal view returns (address i) {
-        if (address(this).code.length != 45) return address(this);
+        if (!ChainEnvCode.isClone()) return address(this);
         bytes memory c = address(this).code;
         assembly ("memory-safe") { i := shr(96, mload(add(c, 42))) }
     }
@@ -147,7 +150,7 @@ contract FactoryIndexTest is IndexAsserts {
     function setUp() public {
         vm.warp(1_800_000_000);
         vm.roll(77);
-        f = new OpenFactory(registrar, UID_, 0);
+        f = EnvKit.factory(registrar, UID_, 0);
         ureg = new StubUARegistry(UID_);
         Catalogue.plain(f, NORMAL, 1, type(NormalToken).creationCode, address(ureg), address(0), false);
         Catalogue.plain(f, WRAPPED, 1, type(WrappedToken).creationCode, address(ureg), address(0), false);
@@ -216,7 +219,7 @@ contract FactoryIndexTest is IndexAsserts {
         address t = _token(bob, WRAPPED, _wrapped(nid(alice)), "k1");
         _assertIndexed(f, t, nid(bob), nid(alice), TOKEN, 1, 1);
         _assertOldViews(f, t, bob, 1, 1);
-        assertEq(f.getWrapper(bob, address(usd)), t, "the leg index unchanged");
+        assertEq(f.getWrapper(nid(bob), address(usd)), t, "the leg index (by creatorId since T71)");
     }
 
     function test_index_everyKind_8() public {

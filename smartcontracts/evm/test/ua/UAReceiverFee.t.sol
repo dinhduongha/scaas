@@ -23,6 +23,8 @@ import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {MockWallet} from "./UARegistryBase.sol";
 import {UALedgerBase} from "./UALedgerBase.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
+import {nid} from "../helpers/Ids.sol";
 
 /// Receiver-pays on the UA path (metatx.md CTR-MTX-05/06, the `mtxPayReceiverFee` paragraph): the payer's
 /// `UAMetaTransfer` runs untouched through the typed UA pipeline, then the payee — a native id signing the token's
@@ -231,10 +233,10 @@ contract UAReceiverFeeTest is UALedgerBase {
         _runRevert(t, 11, FEE_TO, until, abi.encodeWithSelector(IMetaTokenV2.ReceiverFeeAmount.selector, 11, 10));
         // `PAYABLE` off
         NormalToken np =
-            NormalToken(Clones.clone(address(new NormalToken(1, plainEnv(address(this), address(0), chainUidA, REG_L, false), ""))));
+            NormalToken(EnvKit.clone(address(new NormalToken(address(this), "")), EnvKit.env(chainUidA, REG_L, address(0), false)));
         IFactoryToken.TokenConfig memory c = normalInit("NP", "NP", 6, 0, address(0), address(this));
         c.features = (1 << GovernanceBits.MINTABLE) | (1 << GovernanceBits.BURNABLE);
-        np.initialize(address(this), 1, abi.encode(c));
+        np.initialize(nid(address(this)), 1, abi.encode(c));
         np.mintToUA(uaP, 10);
         t = _pay(uaP, uaE, 10);
         t.batch = np.payLane(t.entryRef);
@@ -333,8 +335,8 @@ contract UAReceiverFeeTest is UALedgerBase {
         MockWallet impl = new MockWallet(bob, 0, 100_000, address(0)); // ECDSA by bob after burning 100 k gas
         address payee = Clones.clone(address(impl));
         NormalToken t400 =
-            NormalToken(Clones.clone(address(new NormalToken(1, plainEnv(address(this), address(impl), chainUidA, REG_L, false), ""))));
-        t400.initialize(address(this), 1, abi.encode(normalInit("S", "S", 6, 0, address(0), address(this))));
+            NormalToken(EnvKit.clone(address(new NormalToken(address(this), "")), EnvKit.env(chainUidA, REG_L, address(impl), false)));
+        t400.initialize(nid(address(this)), 1, abi.encode(normalInit("S", "S", 6, 0, address(0), address(this))));
         t400.mintToUA(uaP, 2 * N);
         NormalToken[2] memory ts = [tok, t400];
         _fund(uaP, N);

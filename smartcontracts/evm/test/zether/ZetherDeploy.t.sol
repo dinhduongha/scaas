@@ -24,6 +24,7 @@ import {NormalZetherToken} from "../../src/zether/NormalZetherToken.sol";
 import {WrappedZetherToken} from "../../src/zether/WrappedZetherToken.sol";
 import {ZUID} from "./helpers/ZetherFixture.sol";
 import {zetherEnv} from "../helpers/Catalogue.sol";
+import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
 
 /// @notice `DeployBase` with `DEPLOY_ZETHER` deploys and registers the Zether stack (kinds 2 and 3, the gate on) on any
 ///         chain but Hedera (owner ruling 2026-10-31: no dev-chain allowlist); without it (the default) none of it.
@@ -70,10 +71,11 @@ contract ZetherDeployTest is Test {
         assertEq(vm.parseJsonAddress(json, string.concat(".zether_burn_verifier_", key)), bv);
         assertEq(vm.parseJsonAddress(json, string.concat(".zether_inner_product_verifier_", key)), ip);
         for (uint8 k = 2; k <= 3; ++k) {
+            // chain-neutral releases (plan T72): a release carries no env (its `curve()` has no verifier to ask); the
+            // published env names the verifiers, every clone reads them from its code
             ZetherLayer rel = ZetherLayer(f.implementationOf(IOpenFactory.TokenKind(k), c + 1));
-            assertEq(rel.curve(), "bls12-381");
-            assertEq(address(rel.verifier()), tv);
-            assertEq(address(rel.burnVerifier()), bv);
+            assertEq(address(rel.verifier()), address(0));
+            assertEq(address(rel.burnVerifier()), address(0));
         }
         assertEq(vm.parseJsonAddress(json, string.concat(".implementation_normal_zether_", key)),
             f.implementationOf(IOpenFactory.TokenKind.NORMAL_ZETHER, c + 1));
@@ -100,10 +102,13 @@ contract ZetherDeployTest is Test {
         assertEq(IUARegistry(reg).chainUid(), ZUID);
         assertEq(IUARegistry(reg).verifyBudget(), 12_000_000);
         address dis = _at(h, type(ZetherDisclosure).creationCode);
-        assertEq(none.registry(), reg);
-        assertEq(address(und.disclosure()), dis);
-        assertEq(none.SMART_KEY_ACCOUNT_IMPL(), ska);
-        assertEq(und.SMART_KEY_ACCOUNT_IMPL(), ska);
+        // chain-neutral releases (plan T72): the releases carry no env; the published envs name them, every clone reads them
+        assertEq(none.registry(), address(0), "a release carries no env");
+        assertEq(f.envOf(IOpenFactory.TokenKind.NORMAL_ZETHER, 1).registry, reg);
+        assertEq(f.envOf(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1).deps[3], dis);
+        assertEq(f.envOf(IOpenFactory.TokenKind.NORMAL_ZETHER, 1).smartKeyAccountImpl, ska);
+        assertEq(f.envOf(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1).smartKeyAccountImpl, ska);
+        assertEq(address(und.disclosure()), address(0));
         // the JSON keys the node and Odoo read
         assertEq(vm.parseJsonAddress(json, ".zether_disclosure"), dis);
         assertEq(vm.parseJsonAddress(json, ".zether_statements"), _at(h, type(ZetherStatements).creationCode));
@@ -114,7 +119,11 @@ contract ZetherDeployTest is Test {
         c.conf = IFactoryToken.ConfidentialConfig("", 1, 1 << 40, 0, 0, 0, 0);
         ZetherLayer t = ZetherLayer(f.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), "z"));
         assertEq(address(t.verifier()), tv);
+        assertEq(t.curve(), "bls12-381");
         assertEq(t.chainUid(), ZUID);
+        assertEq(t.registry(), reg, "the clone's env");
+        assertEq(address(t.disclosure()), dis);
+        assertEq(MetaTokenBase(address(t)).SMART_KEY_ACCOUNT_IMPL(), ska);
         // minDecoyFee on both layers (owner 2026-10-20): a Zether token takes a non-zero one (bounds: ZetherMulti)
         c.conf.minDecoyFee = 1;
         assertEq(ZetherLayer(f.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), "z2")).minDecoyFee(), 1);
@@ -202,11 +211,8 @@ contract ZetherDeployTest is Test {
     function test_zetherStack_fitsOneOsakaTx() public {
         address ip = address(new ZetherInnerProductVerifierBls12381());
         bytes memory ipArg = abi.encode(ip);
-        // the factory's append (plan 5g-Z2): abi.encode(envVersion, env, implArgs)
-        bytes memory zArgs = abi.encode(uint16(1), zetherEnv(address(this), ZUID, address(this),
-            address(new ZetherTransferVerifierBls12381(ZetherInnerProductVerifierBls12381(ip))),
-            address(new ZetherBurnVerifierBls12381(ZetherInnerProductVerifierBls12381(ip))), ip,
-            address(new ZetherDisclosure())), bytes(""));
+        // the factory's append (chain-neutral releases, plan T72): abi.encode(factory, implArgs); the env is the clones'
+        bytes memory zArgs = abi.encode(address(this), bytes(""));
         bytes[7] memory codes = [
             type(ZetherDisclosure).creationCode,
             type(ZetherStatements).creationCode,

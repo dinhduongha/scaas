@@ -27,6 +27,8 @@ import {PqzFixture} from "../pqz/helpers/PqzFixture.sol";
 import {NormalRegulatedToken} from "../../src/regulated/NormalRegulatedToken.sol";
 import {WrappedRegulatedToken} from "../../src/regulated/WrappedRegulatedToken.sol";
 import {regArgs} from "../helpers/Catalogue.sol";
+import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// governance T13, the selector audit (spec §10.1; CTR-GOV-11; GD-6). Every external that writes state on the six kinds,
 /// `SCaaSDex`, `DexPuller` and `GovernanceRouter`, read from its ABI in `FOUNDRY_OUT` (else `./out`), is a row of
@@ -322,26 +324,25 @@ contract SelectorAuditPlainTest is SelectorAuditRows, UALedgerBase {
     function setUp() public override {
         super.setUp();
         router = new GovernanceRouter(chainUidA, REG_L, address(0), false);
-        IFactoryToken.Env memory e = plainEnv(address(this), address(0), chainUidA, REG_L, false);
-        e.govRouter = address(router);
+        IFactoryToken.ChainEnv memory e = EnvKit.env(chainUidA, REG_L, address(0), false, address(router));
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.decimals) = ("N", "N", 6);
         _govern(c, address(0));
-        nt = NormalToken(Clones.clone(address(new NormalToken(1, e, ""))));
-        nt.initialize(address(this), 1, abi.encode(c));
+        nt = NormalToken(EnvKit.clone(address(new NormalToken(address(this), "")), e));
+        nt.initialize(nid(address(this)), 1, abi.encode(c));
         IFactoryToken.TokenConfig memory w;
         (w.name, w.symbol, w.decimals) = ("W", "W", 6);
         _govern(w, address(new MockERC20("Leg", "LEG", 6)));
-        wt = WrappedToken(payable(Clones.clone(address(new WrappedToken(1, e, "")))));
-        wt.initialize(address(this), 1, abi.encode(w));
-        dex = SCaaSDex(Clones.clone(address(new SCaaSDex(1, e, ""))));
-        dex.initialize(address(this), 1, abi.encode(ISCaaSDex.DexConfig(OWNER_ID, 0, address(0x7EA5), false, 0, address(0))));
+        wt = WrappedToken(payable(EnvKit.clone(address(new WrappedToken(address(this), "")), e)));
+        wt.initialize(nid(address(this)), 1, abi.encode(w));
+        dex = SCaaSDex(EnvKit.clone(address(new SCaaSDex(address(this), "")), e));
+        dex.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(OWNER_ID, 0, address(0x7EA5), false, 0, address(0))));
         _regulate(c);
-        nr = NormalRegulatedToken(Clones.clone(address(new NormalRegulatedToken(1, e, regArgs()))));
-        nr.initialize(address(this), 1, abi.encode(c));
+        nr = NormalRegulatedToken(EnvKit.clone(address(new NormalRegulatedToken(address(this), regArgs())), e));
+        nr.initialize(nid(address(this)), 1, abi.encode(c));
         _regulate(w);
-        wr = WrappedRegulatedToken(payable(Clones.clone(address(new WrappedRegulatedToken(1, e, regArgs())))));
-        wr.initialize(address(this), 1, abi.encode(w));
+        wr = WrappedRegulatedToken(payable(EnvKit.clone(address(new WrappedRegulatedToken(address(this), regArgs())), e)));
+        wr.initialize(nid(address(this)), 1, abi.encode(w));
     }
 
     /// The regulated controls on (5, 6, 7, 10, 22, 23): the issuer the test, the compliance holder another contract; bit 22

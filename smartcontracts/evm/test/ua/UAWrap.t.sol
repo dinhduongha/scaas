@@ -13,6 +13,8 @@ import {UACall} from "./UACall.sol";
 import {wrappedInit, Rate} from "../v2/helpers/V2Fixture.sol";
 import {UALedgerBase} from "./UALedgerBase.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
+import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// token-wrappers.md CTR-TOK-20 `mtxWrapOrder` (UA-5b; ua-mtx-merge R39: today's `uaWrapOrder` under this name): a holder
 /// (derived, or a native id) of a SCaaS ledger underlying wraps by a `UAWrapOrder` pulled by the underlying's `uaTrade`;
@@ -145,13 +147,13 @@ contract UAWrapTest is UALedgerBase {
 
     /// A wrapper whose own ledger is off mints to a native destination, and refuses a derived one (`UALedgerOff`).
     function test_ledgerOffWrapper() public {
-        WrappedToken w = WrappedToken(Clones.clone(address(
-            new WrappedToken(1, plainEnv(address(this), address(0), chainUidA, address(0), false), ""))));
+        WrappedToken w = WrappedToken(EnvKit.clone(address(new WrappedToken(address(this), "")),
+            EnvKit.env(chainUidA, address(0), address(0), false)));
         address[] memory us = new address[](1);
         uint256[] memory one = new uint256[](1);
         (us[0], one[0]) = (address(tok), 1);
         Rate memory fixedRate;
-        w.initialize(address(this), 1, abi.encode(wrappedInit(us, one, one, 6, fixedRate, address(0), address(0))));
+        w.initialize(nid(address(this)), 1, abi.encode(wrappedInit(us, one, one, 6, fixedRate, address(0), address(0))));
         ITradeToken.UAWrapOrder memory o = _o(w, uaP, 1000, 1000, 0);
         _wrapReverts(w, address(tok), o, abi.encodeWithSelector(IUALedger.UALedgerOff.selector));
         o.destination = _pad(bob);

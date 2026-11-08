@@ -23,6 +23,8 @@ import {FeeMode} from "../../src/common/FeePolicy.sol";
 import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {UALedgerBase} from "./UALedgerBase.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
+import {nid} from "../helpers/Ids.sol";
 
 /// accounts.md CTR-UA-26 as grown by UA-5a (CTR-UA-27 "allowlist or dedicated function"): `burn` (`NORMAL*`) and
 /// `unwrapToUA` (the wrappers) run under `uaExecute` / `uaBatch`; under a derived ticket each debits exactly the subject
@@ -67,10 +69,10 @@ contract UAAllowlist5aTest is UALedgerBase {
             abi.encodeWithSelector(IUALedger.UAInsufficientBalance.selector, uaP, 596, 597));
         // `BURNABLE` off: the feature error of `burn`
         NormalToken nb =
-            NormalToken(Clones.clone(address(new NormalToken(1, plainEnv(address(this), address(0), chainUidA, REG_L, false), ""))));
+            NormalToken(EnvKit.clone(address(new NormalToken(address(this), "")), EnvKit.env(chainUidA, REG_L, address(0), false)));
         IFactoryToken.TokenConfig memory c = normalInit("NB", "NB", 6, 0, address(0), address(this));
         c.features = (1 << GovernanceBits.PAYABLE) | (1 << GovernanceBits.MINTABLE);
-        nb.initialize(address(this), 1, abi.encode(c));
+        nb.initialize(nid(address(this)), 1, abi.encode(c));
         nb.mintToUA(uaP, 10);
         _exec(address(nb), _m(address(nb), uaP, abi.encodeCall(NormalToken.burn, (1))),
             abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, GovernanceBits.BURNABLE));

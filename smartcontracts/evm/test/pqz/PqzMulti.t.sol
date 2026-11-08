@@ -14,6 +14,7 @@ import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {NormalPqzToken} from "../../src/pqz/NormalPqzToken.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {Catalogue, pqzEnv} from "../helpers/Catalogue.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// Op 7, the multi-recipient transfer (CTR-PQZ-25 / -26; P6g op 7): `mtxConfidentialTransfer*` with `M` legs (decoys included),
 /// the statement against pq-zero-knowledge.md §8.1 op 7, the effects per leg, the bundle (for `M = 1` the single
@@ -438,7 +439,7 @@ contract PqzMultiTest is PqzFixture {
         if (!PqzSet.PQZH_VALUE) return; // no PQZH value token at this set (init refuses it: PqzGuards test_init_pqzhRefusedWithoutValueSets)
         // a PQZH release: its verifier is the env's, an immutable (CTR-ZTH-20)
         pqv = _newPqzVerifier(PQZH_ID);
-        factory = new OpenFactory(registrar, PQZ_UID, 0);
+        factory = EnvKit.factory(registrar, PQZ_UID, 0);
         Catalogue.release(factory, IOpenFactory.TokenKind.NORMAL_PQZ, 1,
             pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv)), type(NormalPqzToken).creationCode);
         vm.prank(registrar);

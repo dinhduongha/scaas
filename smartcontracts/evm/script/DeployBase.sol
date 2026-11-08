@@ -6,6 +6,7 @@ import {Vm, VmSafe} from "forge-std/Vm.sol";
 import {OpenFactory} from "../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../src/factory/IFactoryToken.sol";
+import {ChainEnvCode} from "../src/factory/ChainEnvCode.sol";
 import {GovernanceLib} from "../src/governance/GovernanceLib.sol";
 import {GovernanceBits} from "../src/governance/GovernanceBits.sol";
 import {GovernanceRouter} from "../src/governance/GovernanceRouter.sol";
@@ -101,8 +102,20 @@ abstract contract DeployBase is Script {
     ///         default and floor 3 days; 7622 defaults to 10 minutes, the other test / dev chains to 0. At most 30 days
     ///         (`MAX_NOTICE_PERIOD`, the factory's).
     uint64 internal noticePeriod;
-    /// @notice This chain's `GovernanceRouter` (`_deployGovRouter`), every release's `Env.govRouter`; 0 until deployed.
+    /// @notice This chain's `GovernanceRouter` (`_deployGovRouter`), the factory's one-time `govRouter`; 0 until deployed.
     address internal govRouter;
+    /// @notice The release list (chain-neutral spec §6.2, Fable P3-5): `RELEASES_JSON` (default `./releases.json`).
+    ///         `RELEASES_WRITE=true` writes it from this deployment (the first chain's); otherwise, when the file exists, the
+    ///         deploy refuses a factory, library, release or registrar whose address or code hash differs from its row.
+    string internal releasesPath;
+    bool internal releasesWrite;
+    string internal releasesJson;
+    uint256 internal releaseRows;
+    /// @notice Set by `_configureChain` on a chain id `chain-uids.json` lists more than once while `SIBLINGS_CONFIGURED`
+    ///         is not set: the registrar's run stops after `configureChain` (the sibling order, chain-neutral spec §3.3).
+    bool internal configureOnly;
+    /// @notice How many `chain-uids.json` rows name this chain id (`_setup`; a test harness leaves it 0).
+    uint256 internal chainSiblings;
 
     /// @notice `UA_VERIFY_BUDGET = min(12 M, ⌊0.7 × the chain's per-transaction gas cap⌋)` (CTR-UA-23): EIP-7825
     ///         chains (16,777,216) 12 M, Hedera (15 M) 10.5 M.
@@ -270,6 +283,11 @@ abstract contract DeployBase is Script {
         complianceAdmin = vm.envOr("COMPLIANCE_ADMIN", address(0));
         noticePeriod = _checkedNotice(block.chainid, vm.envOr("NOTICE_PERIOD", _defaultNotice(block.chainid)));
         uid = _chainUid();
+        releasesPath = vm.envOr("RELEASES_JSON", string("./releases.json"));
+        releasesWrite = vm.envOr("RELEASES_WRITE", false);
+        bool listedUid;
+        (chainSiblings, listedUid) = _chainUidListed();
+        require(chainSiblings == 0 || listedUid, "chain_uid is not chain-uids.json's for this chain id (NET-ALL-22)");
         require(CREATE2_FACTORY.code.length != 0,
             "no deterministic CREATE2 deployer at 0x4e59b44847b379578588920ca78fbf26c0b4956c (runbook NET-EVM-05)");
     }
@@ -331,22 +349,26 @@ abstract contract DeployBase is Script {
             (bool bls,) = _precompiles(); // fail before deploying anything (CTR-ZTH-52: the only chain requirement)
             require(bls, "DEPLOY_ZETHER: the chain has no EIP-2537 (BLS12-381 precompiles)");
         }
-        f = new OpenFactory{salt: salt}(registrar, uid, noticePeriod);
+        // chain-neutral releases (plan T71, T72): the registrar is the factory's only constructor argument; this chain's
+        // values are its one-time `configureChain`, after the router it names (T73: the deterministic deployer, the
+        // reference block and the dry run)
+        f = new OpenFactory{salt: salt}(registrar);
         UARegistry reg = _deployUARegistry(smartKeyAccountImpl, isHedera);
         _deployGovRouter(address(reg), smartKeyAccountImpl, isHedera); // before every release: its address is in the env
         _deployRelayFee();
         if (deployRegulated) _deployComplianceRegistry();
-        _gate(address(f));
+        if (register) _configureChain(f, registrar);
         vm.serializeAddress("deploy", "token_factory", address(f));
-        if (register) {
+        if (register && !configureOnly) {
             // the link closure of NormalToken (task 6): MtxPipelineLib, which links HederaLib
             address[] memory libs = new address[](4);
             (libs[0], libs[1], libs[2], libs[3]) =
                 (address(GovernanceLib), address(HederaLib), address(TradeLib), address(MtxPipelineLib));
             f.publishEnv(IOpenFactory.TokenKind.NORMAL, 1,
                 _env(f, address(reg), smartKeyAccountImpl, isHedera, new address[](0), libs));
+            _libRows(libs);
             address none = _release(f, IOpenFactory.TokenKind.NORMAL, "NormalToken", type(NormalToken).creationCode);
-            _gate(none);
+            _gateInstance(f, none, f.envOf(IOpenFactory.TokenKind.NORMAL, 1)); // one instance's chainUid (§6.2)
             vm.serializeAddress("deploy", "implementation_normal", none);
             // The DEX release (CTR-DEX-24): clones come from `createDex`; DEX version 1.
             address[] memory dexLibs = new address[](2);
@@ -355,12 +377,13 @@ abstract contract DeployBase is Script {
             bytes memory dexCode = type(SCaaSDex).creationCode;
             _requireReleaseGas("SCaaSDex", address(f), abi.encodeCall(f.deployDexImplementation, (1, 1, dexCode, "")));
             address dexImpl = f.deployDexImplementation(1, 1, dexCode, "");
-            _gate(dexImpl);
+            _releaseRow("SCaaSDex", 2, 0, 1, dexImpl, keccak256(abi.encodePacked(dexCode, abi.encode(address(f), ""))),
+                keccak256(""));
             vm.serializeAddress("deploy", "dex_implementation", dexImpl);
         }
-        if (deployWrapped && register) _deployWrapped(f, address(reg), smartKeyAccountImpl, isHedera);
-        if (deployRegulated && register) _deployRegulated(f, address(reg), smartKeyAccountImpl, isHedera);
-        if (deployZether) _deployZether(f, register, smartKeyAccountImpl, address(reg));
+        if (deployWrapped && register && !configureOnly) _deployWrapped(f, address(reg), smartKeyAccountImpl, isHedera);
+        if (deployRegulated && register && !configureOnly) _deployRegulated(f, address(reg), smartKeyAccountImpl, isHedera);
+        if (deployZether && !configureOnly) _deployZether(f, register, smartKeyAccountImpl, address(reg));
         vm.serializeBytes32("deploy", "chain_uid", uid);
     }
 
@@ -374,7 +397,6 @@ abstract contract DeployBase is Script {
             (address(GovernanceLib), address(HederaLib), address(TradeLib), address(MtxPipelineLib), address(WrappedLib));
         f.publishEnv(IOpenFactory.TokenKind.WRAPPED, 1, _env(f, reg, smartKeyAccountImpl, isHedera, new address[](0), libs));
         address w = _release(f, IOpenFactory.TokenKind.WRAPPED, "WrappedToken", type(WrappedToken).creationCode);
-        _gate(w);
         vm.serializeAddress("deploy", "implementation_wrapped", w);
     }
 
@@ -395,7 +417,6 @@ abstract contract DeployBase is Script {
         bytes memory implArgs = abi.encode(_registryCodehash());
         address n = _release(f, IOpenFactory.TokenKind.NORMAL_REGULATED, "NormalRegulatedToken",
             type(NormalRegulatedToken).creationCode, implArgs);
-        _gate(n);
         vm.serializeAddress("deploy", "implementation_normal_regulated", n);
         libs = new address[](6);
         (libs[0], libs[1], libs[2], libs[3], libs[4], libs[5]) = (address(GovernanceLib), address(HederaLib),
@@ -404,7 +425,6 @@ abstract contract DeployBase is Script {
             _env(f, reg, smartKeyAccountImpl, isHedera, new address[](0), libs));
         address w = _release(f, IOpenFactory.TokenKind.WRAPPED_REGULATED, "WrappedRegulatedToken",
             type(WrappedRegulatedToken).creationCode, implArgs);
-        _gate(w);
         vm.serializeAddress("deploy", "implementation_wrapped_regulated", w);
         f.setKindEnabled(IOpenFactory.TokenKind.NORMAL_REGULATED, true);
         f.setKindEnabled(IOpenFactory.TokenKind.WRAPPED_REGULATED, true);
@@ -461,17 +481,110 @@ abstract contract DeployBase is Script {
         bytes memory implArgs) internal returns (address)
     {
         _requireReleaseGas(name, address(f), abi.encodeCall(f.deployImplementation, (kind, 1, 1, code, implArgs)));
-        return f.deployImplementation(kind, 1, 1, code, implArgs);
+        address at = f.deployImplementation(kind, 1, 1, code, implArgs);
+        _releaseRow(name, 1, uint8(kind), 1, at, keccak256(abi.encodePacked(code, abi.encode(address(f), implArgs))),
+            keccak256(implArgs));
+        return at;
     }
 
-    /// @notice A release environment of this chain's factory `f` (plan 5g-Z2), each library's current code hash, and the
-    ///         chain's `GovernanceRouter` (`govRouter`, deployed first by `_deployTokenFactory`).
-    function _env(OpenFactory f, address reg, address ska, bool hedera, address[] memory deps, address[] memory libs)
+    /// @notice Chain-neutral spec §3.1, §3.3 (Fable P1-1): this chain's values, once, the registrar's transaction on the
+    ///         factory: `chain_uid` (the RPC's genesis hash, `_chainUid`), the notice period, the router, and a reference block (the head's parent and
+    ///         its hash as this chain's RPC reports it; `_setup` checked the genesis hash against `chain-uids.json`), so the transaction is void on a sibling with the same chain id;
+    ///         `NO_REF_BLOCK=true` on a chain whose `BLOCKHASH` is not its own block's (a pseudo-blockhash). `forge script`
+    ///         without `--broadcast` is the dry run (the same call by `eth_call` against the RPC). On a chain id
+    ///         `chain-uids.json` lists more than once (siblings), the run stops after this step until `SIBLINGS_CONFIGURED`
+    ///         is set: the operator configures every sibling, each with its own reference, before any other registrar
+    ///         transaction on any of them. Then the gate: the factory's `chainUid()` the genesis hash, its address and the
+    ///         registrar's code hash the release list's.
+    function _configureChain(OpenFactory f, address registrar) internal {
+        uint256 ref = vm.envOr("NO_REF_BLOCK", false) || block.number < 2 ? 0 : block.number - 1;
+        f.configureChain(uid, noticePeriod, govRouter, ref, ref == 0 ? bytes32(0) : blockhash(ref));
+        _gate(address(f));
+        _releaseRow("OpenFactory", 0, 0, 0, address(f), keccak256(abi.encodePacked(type(OpenFactory).creationCode,
+            abi.encode(registrar))), keccak256(abi.encode(registrar)));
+        _releaseRow("registrar", 0, 0, 0, registrar, bytes32(0), bytes32(0));
+        if (chainSiblings > 1 && !vm.envOr("SIBLINGS_CONFIGURED", false)) {
+            configureOnly = true;
+            console.log("chain id shared by siblings (chain-uids.json): configure every one, then SIBLINGS_CONFIGURED=true");
+        }
+    }
+
+    /// @notice How many `chain-uids.json` rows name this chain id, and whether one of them has this `chain_uid`.
+    function _chainUidListed() internal view returns (uint256 n, bool match_) {
+        string memory path = "./chain-uids.json";
+        if (!vm.exists(path)) return (0, false);
+        string memory j = vm.readFile(path);
+        for (uint256 i;; ++i) {
+            string memory p = string.concat(".chains[", vm.toString(i), "]");
+            if (!vm.keyExistsJson(j, p)) break;
+            if (vm.parseJsonUint(j, string.concat(p, ".chainId")) != block.chainid) continue;
+            ++n;
+            if (vm.parseJsonBytes32(j, string.concat(p, ".chainUid")) == uid) match_ = true;
+        }
+    }
+
+    /// @notice One instance of `implementation` on this chain answers this chain's `chainUid()` (§6.2): its clone code
+    ///         (the EIP-1167 proxy with the env the factory appends: its `chain_uid` and router, the release's env)
+    ///         etched at a scratch address in this script's EVM only, never sent.
+    function _gateInstance(OpenFactory f, address implementation, IFactoryToken.Env memory e) internal {
+        bytes memory env = ChainEnvCode.encode(IFactoryToken.ChainEnv(f.chainUid(), e.registry, f.govRouter(),
+            e.smartKeyAccountImpl, e.hedera, e.deps, e.params));
+        address probe = address(uint160(uint256(keccak256(abi.encode("scaas.deploy.instance-probe", implementation)))));
+        vm.etch(probe, abi.encodePacked(hex"363d3d373d3d3d363d73", implementation, hex"5af43d82803e903d91602b57fd5bf3", env));
+        _gate(probe);
+        vm.etch(probe, "");
+    }
+
+    /// @notice The linked libraries' rows (address and code hash).
+    function _libRows(address[] memory libs) internal {
+        for (uint256 i; i < libs.length; ++i) {
+            _releaseRow(string.concat("lib-", vm.toString(libs[i])), 0, 0, 0, libs[i], bytes32(0), bytes32(0));
+        }
+    }
+
+    /// @notice One row of the release list (§6.2): `class`, `kind`, `version`, `address`, `codeHash` (the runtime's),
+    ///         `initcodeHash`, `implArgsHash`; written with `RELEASES_WRITE`, else checked against the file when it exists
+    ///         and lists `name` (a later chain may add a release the file does not list yet: it is reported).
+    function _releaseRow(string memory name, uint16 cls, uint16 kind, uint64 version, address at, bytes32 initHash,
+        bytes32 argsHash) internal
+    {
+        string memory k = string.concat("releases.", name);
+        vm.serializeUint(k, "class", cls);
+        vm.serializeUint(k, "kind", kind);
+        vm.serializeUint(k, "version", version);
+        vm.serializeAddress(k, "address", at);
+        vm.serializeBytes32(k, "initcodeHash", initHash);
+        vm.serializeBytes32(k, "implArgsHash", argsHash);
+        string memory row = vm.serializeBytes32(k, "codeHash", at.codehash);
+        releasesJson = vm.serializeString("releases", name, row);
+        ++releaseRows;
+        if (releasesWrite || bytes(releasesPath).length == 0 || !vm.exists(releasesPath)) return;
+        string memory file = vm.readFile(releasesPath);
+        string memory p = string.concat(".", name);
+        if (!vm.keyExistsJson(file, p)) {
+            console.log(string.concat("release list: ", name, " not listed (a release the first chain has not)"));
+            return;
+        }
+        require(vm.parseJsonAddress(file, string.concat(p, ".address")) == at,
+            string.concat("release list: ", name, " at another address"));
+        require(vm.parseJsonBytes32(file, string.concat(p, ".codeHash")) == at.codehash,
+            string.concat("release list: ", name, " with another code hash"));
+    }
+
+    /// @notice Writes the release list (`RELEASES_WRITE`), after every row; call last in `run()`.
+    function _writeReleases() internal {
+        if (releasesWrite && releaseRows != 0) vm.writeJson(releasesJson, releasesPath);
+    }
+
+    /// @notice A release environment of this chain's factory (plan 5g-Z2): the registry, the `SmartKeyAccount`
+    ///         implementation, Hedera, the deps, each library's current code hash. Chain-neutral releases (plan T71): the
+    ///         factory fills its own `chain_uid` and router (`configureChain`), they are not in the env.
+    function _env(OpenFactory, address reg, address ska, bool hedera, address[] memory deps, address[] memory libs)
         internal view returns (IFactoryToken.Env memory e)
     {
         bytes32[] memory h = new bytes32[](libs.length);
         for (uint256 i; i < libs.length; ++i) h[i] = libs[i].codehash;
-        e = IFactoryToken.Env(address(f), uid, reg, ska, hedera, deps, libs, h, govRouter);
+        e = IFactoryToken.Env(reg, ska, hedera, deps, new bytes32[](0), libs, h);
     }
 
     /// @notice UA registry generation 1 (accounts.md §1.8, CTR-UA-22) on every chain, with per-chain enablement (§1.9):
@@ -658,8 +771,6 @@ abstract contract DeployBase is Script {
                 type(NormalZetherToken).creationCode);
             address und = _release(f, IOpenFactory.TokenKind.WRAPPED_ZETHER, "WrappedZetherToken",
                 type(WrappedZetherToken).creationCode);
-            _gate(none);
-            _gate(und);
             vm.serializeAddress("deploy", "implementation_normal_zether_bls12381", none);
             vm.serializeAddress("deploy", "implementation_wrapped_zether_bls12381", und);
             f.setKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER, true);
@@ -686,8 +797,6 @@ abstract contract DeployBase is Script {
             type(NormalZetherRegulatedToken).creationCode, implArgs);
         address w = _release(f, IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, "WrappedZetherRegulatedToken",
             type(WrappedZetherRegulatedToken).creationCode, implArgs);
-        _gate(n);
-        _gate(w);
         vm.serializeAddress("deploy", "implementation_normal_zether_regulated_bls12381", n);
         vm.serializeAddress("deploy", "implementation_wrapped_zether_regulated_bls12381", w);
         f.setKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, true);

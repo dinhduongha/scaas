@@ -12,6 +12,7 @@ import {NormalRegulatedToken} from "../../../src/regulated/NormalRegulatedToken.
 import {GovernanceBits} from "../../../src/governance/GovernanceBits.sol";
 import {Catalogue, plainEnv, regArgs} from "../../helpers/Catalogue.sol";
 import {nid} from "../../helpers/Ids.sol";
+import {EnvKit} from "../../helpers/EnvKit.sol";
 
 /// @notice Pay-meta-tax spec §13 (plan T43) over `PayTaxHandler` on kind 8 with `TAX` and a 3-day notice: J1 every landed
 ///         pay entry carries one `PaymentMeta` for its `entryRef`, before its settled event; J2 a pay signature never
@@ -29,7 +30,7 @@ contract PayTaxInvariants is RegFixture {
 
     function setUp() public override {
         super.setUp();
-        OpenFactory fN = new OpenFactory(address(this), UID, NOTICE);
+        OpenFactory fN = EnvKit.factory(address(this), UID, NOTICE);
         Catalogue.release(fN, IOpenFactory.TokenKind.NORMAL_REGULATED, 1, plainEnv(address(fN), address(0), UID,
             address(ureg), false), type(NormalRegulatedToken).creationCode, regArgs());
         fN.setKindEnabled(IOpenFactory.TokenKind.NORMAL_REGULATED, true);

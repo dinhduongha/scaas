@@ -19,8 +19,8 @@ import {RegulatedBase} from "./RegulatedBase.sol";
 ///         (T28). The wrap payer and the wrap order reach the regulated hooks through `WrappedToken`'s seats.
 contract WrappedRegulatedToken is WrappedToken, RegulatedBase {
     /// @dev `implArgs = abi.encode(REGISTRY_CODEHASH)` (plan T29).
-    constructor(uint16 envVersion, Env memory env, bytes memory implArgs)
-        WrappedToken(envVersion, env, implArgs)
+    constructor(address factory_, bytes memory implArgs)
+        WrappedToken(factory_, implArgs)
         RegulatedBase(implArgs)
     {}
 

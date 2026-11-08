@@ -24,14 +24,14 @@ import {PQZ_UID} from "../pqz/helpers/PqzRegistryBase.sol";
 
 /// Test only: the five masks of a regulated kind, as `GovernanceLib` receives them.
 contract WrappedRegulatedMasks is WrappedRegulatedToken {
-    constructor(uint16 v, Env memory env, bytes memory a) WrappedRegulatedToken(v, env, a) {}
+    constructor(address f_, bytes memory a) WrappedRegulatedToken(f_, a) {}
     function masks() external pure returns (uint256, uint256, uint256, uint256, uint256) {
         return (_validBits(), _roleBits(), _contractOnlyBits(), _scalarBits(), _delayedRelaxBits());
     }
 }
 
 contract WrappedPqzRegulatedMasks is WrappedPqzRegulatedToken {
-    constructor(uint16 v, Env memory env, bytes memory a) WrappedPqzRegulatedToken(v, env, a) {}
+    constructor(address f_, bytes memory a) WrappedPqzRegulatedToken(f_, a) {}
     function masks() external pure returns (uint256, uint256, uint256, uint256, uint256) {
         return (_validBits(), _roleBits(), _contractOnlyBits(), _scalarBits(), _delayedRelaxBits());
     }
@@ -84,7 +84,7 @@ contract RegulatedSkeletonTest is PqzFixture {
     /// Spec §2.1 and bit 22 (CTR-GOV-20): base | 5-10, 21, 22 (9) or base | 5-7, 9, 10, 21, 22 (13); roles | 5, 6, 7, 10, 21,
     /// 22; contract-only | 5, 6, 7, 10, 21 (never 22); scalar 1 | 6, 21, 22; delayed relax 5, 6, 7.
     function test_masks() public {
-        (uint256 v, uint256 r, uint256 c, uint256 s, uint256 d) = new WrappedRegulatedMasks(1, plain, regArgs()).masks();
+        (uint256 v, uint256 r, uint256 c, uint256 s, uint256 d) = new WrappedRegulatedMasks(address(factory), regArgs()).masks();
         // pay-meta-tax T39: + bit 23 `TAX` (valid, any holder, never contract-only, never delay-relaxed)
         uint256 reg = (1 << 5) | (1 << 6) | (1 << 7) | (1 << 8) | (1 << 9) | (1 << 10) | (1 << 21) | (1 << 22) | (1 << 23);
         assertEq(v, GovernanceBits.WRAPPED_BITS | reg, "9 valid");
@@ -94,7 +94,7 @@ contract RegulatedSkeletonTest is PqzFixture {
         assertEq(d, (1 << 5) | (1 << 6) | (1 << 7), "9 delayed relax");
         assertEq(r9.validBits(), v, "9 validBits()");
 
-        (v, r, c, s, d) = new WrappedPqzRegulatedMasks(1, pqz, regArgs()).masks();
+        (v, r, c, s, d) = new WrappedPqzRegulatedMasks(address(factory), regArgs()).masks();
         assertEq(v, GovernanceBits.WRAPPED_BITS | (reg & ~uint256(1 << 8)), "13 valid: no ALLOWLIST");
         assertEq(r, GovernanceBits.WRAPPED_ROLES | REG_ROLES, "13 roles");
         assertEq(c, GovernanceBits.WRAPPED_CONTRACT_ONLY | REG_CONTRACT_ONLY, "13 contract-only");

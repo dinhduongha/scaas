@@ -224,7 +224,8 @@ abstract contract ZetherModesSuite is ZetherFixture {
         tok = _newToken(true, "pack", 0);
         bytes32 ns = 0xd1eef6cbeb7b383e0a92b3cb723053d5c39c76707d89da6b14ff91b83198ce00;
         uint256 w = uint256(vm.load(address(tok), ns));
-        assertEq(address(uint160(w)), address(ver));
+        // chain-neutral releases (plan T72): the verifier is the clone's env, no longer copied into this slot
+        assertEq(address(uint160(w)), address(0), "no verifier copy");
         assertEq((w >> 160) & 0xff, COMPACT, "disclosureMode, byte 20");
         assertEq((w >> 168) & 0xff, OPTIONAL, "auditorMode, byte 21");
         assertEq(w >> 176, 0);

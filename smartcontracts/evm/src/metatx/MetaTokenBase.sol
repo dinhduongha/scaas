@@ -11,6 +11,7 @@ import {GovernanceBase} from "../governance/GovernanceBase.sol";
 import {IGovernance} from "../governance/IGovernance.sol";
 import {IRescuable} from "../governance/IRescuable.sol";
 import {IMetaTx} from "./IMetaTx.sol";
+import {MetaTxBase} from "./MetaTxBase.sol";
 import {IERC20MetaTx} from "./IERC20MetaTx.sol";
 import {IERC20Payment} from "./IERC20Payment.sol";
 import {MtxPipelineLib} from "./MtxPipelineLib.sol";
@@ -18,6 +19,7 @@ import {IMetaTokenV2} from "./IMetaTokenV2.sol";
 import {IUALedger} from "./IUALedger.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
 import {IFactoryToken, requireRegOfKind} from "../factory/IFactoryToken.sol";
+import {ChainEnvCode} from "../factory/ChainEnvCode.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {FeePolicy, FeeMode} from "../common/FeePolicy.sol";
 import {UAKinds} from "../ua/UAKinds.sol";
@@ -28,8 +30,11 @@ import {UAKinds} from "../ua/UAKinds.sol";
 ///         `ua*` bodies under the `mtx*` names, the address bodies in legacy/ua-mtx-merge/). Features, owner and roles
 ///         (CTR-GOV-01) live in `GovernanceBase`, init and provenance in the ERC-7201 namespace `scaas.token`. Pay
 ///         (`mtxPay`, `payWithFee`, `payWithFeeToUA`, `mtxPayReceiverFee`, each with `PayMeta` last) works only with `PAYABLE`; a
-///         `UAMetaTransfer` through `mtxExecuteTransfer` (with or without `entryRef`) is never gated. Hedera is the immutable
-///         `IS_HEDERA` (CTR-TOK-23): HIP-632 signatures through `MtxPipelineLib` (which calls `HederaLib`).
+///         `UAMetaTransfer` through `mtxExecuteTransfer` (with or without `entryRef`) is never gated. Chain-neutral code
+///         (CTR-TOK-29): the chain values (`chain_uid`, the UA registry, the router, the `SmartKeyAccount` implementation,
+///         Hedera, the dependencies) are the instance's `ChainEnv`, appended to its clone's code by the factory and read
+///         from there (`ChainEnvCode`); the implementation reads an all-zero env and can sign nothing. Hedera
+///         (`IS_HEDERA()`, CTR-TOK-23): HIP-632 signatures through `MtxPipelineLib` (which calls `HederaLib`).
 abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IERC165, GovernanceBase, IRescuable {
     /// @dev Pay-meta-tax spec §4 (O4): the payer's own lane `(from, batch)` and `nonce`; the struct without them is in
     ///      legacy/ua-mtx-merge/3e/.
@@ -37,11 +42,9 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
         "UARelayFee(bytes32 from,address target,bytes32 callDataHash,bytes32 payee,uint256 value,uint256 batch,uint256 nonce,uint256 validUntil,address relayer)"
     );
 
+    /// @notice The factory, at the same address on every chain (chain-neutral spec §2.1): a chain-neutral immutable.
     address public immutable FACTORY;
     address private immutable _SELF;
-    /// @notice SmartKeyAccount implementation of this chain (0 = none). Only its EIP-1167 clones get 400k gas for
-    ///         ERC-1271; every other contract wallet 50k.
-    address public immutable SMART_KEY_ACCOUNT_IMPL;
 
     error NotFactory();
     error AlreadyInitialized();
@@ -49,33 +52,82 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
     /// @notice Wrong underlying count for the tier (0 / 1 / 2–8).
     error UnderlyingCountInvalid(uint256 n);
 
-    /// @dev Runs ONCE on the implementation and locks it, so nobody can `initialize` it. `env` is the release's
-    ///      deployment environment (plan 5g-Z2, `OpenFactory.deployImplementation` appends it): the factory, `chain_uid`,
-    ///      the chain's UA registry (0 = no UA ledger), the `SmartKeyAccount` implementation, Hedera.
-    constructor(Env memory env)
-        ERC20MetaTx(env.chainUid, env.registry, env.smartKeyAccountImpl, env.hedera)
-        GovernanceBase(env.govRouter)
-    {
-        FACTORY = env.factory;
+    /// @dev Runs ONCE on the implementation and locks it, so nobody can `initialize` it. Chain-neutral (chain-neutral spec
+    ///      §2.1, plan T72): the factory's address and `implArgs` (values the same on every chain; plain kinds take none)
+    ///      are the only arguments `OpenFactory.deployImplementation` appends.
+    constructor(address factory_) ERC20MetaTx(bytes32(0), address(0), address(0), false) GovernanceBase(address(0)) {
+        FACTORY = factory_;
         _SELF = address(this);
-        SMART_KEY_ACCOUNT_IMPL = env.smartKeyAccountImpl;
         TokenStore.$().initialized = true;
     }
 
-    /// @notice The factory calls it in the SAME call as CREATE2 (CTR-TOK-25). `initArgs = abi.encode(TokenConfig)`
-    ///         (the kinds of this repository). A UA registry must name this chain's `chain_uid` (CTR-UA-19).
-    function initialize(address creator_, uint64 version_, bytes calldata initArgs) external {
+    /// @notice The factory calls it in the SAME call as the clone's creation (CTR-TOK-25), on a clone carrying its env
+    ///         (`EnvMissing`, Fable P3-4). `creatorId` the creator's UA id; `creator()` keeps an address, 0 for a derived
+    ///         creator (whose id is in the factory's record; spec §4.4, Fable P2-3). `initArgs = abi.encode(TokenConfig)`
+    ///         (the kinds of this repository). The registry's `chain_uid` is the factory's check, once per env (P3-1).
+    function initialize(bytes32 creatorId_, uint64 version_, bytes calldata initArgs) external {
         if (msg.sender != FACTORY) revert NotFactory();
-        if (_REGISTRY != address(0)) {
-            bytes32 u = IUARegistry(_REGISTRY).chainUid();
-            if (u != CHAIN_UID) revert UARegistryChainUid(u, CHAIN_UID);
-        }
+        ChainEnvCode.requirePresent();
         TokenStore.TokenStorage storage t = TokenStore.$();
         if (t.initialized) revert AlreadyInitialized();
         t.initialized = true;
-        t.creator = creator_;
+        if (uint256(creatorId_) >> 160 == 0) t.creator = address(uint160(uint256(creatorId_)));
         t.version = version_;
         _initRaw(initArgs);
+    }
+
+    // ------------------------------------------------------------------ the chain environment (CTR-TOK-29)
+
+    /// @notice This instance's env, decoded from its code; all zero on the implementation.
+    function chainEnv() external view returns (ChainEnv memory) {
+        return ChainEnvCode.decode();
+    }
+
+    /// @notice The kind's checks of an env, by the factory at release deployment (the constructor checks of before).
+    function validateEnv(ChainEnv calldata env) external view {
+        _validateEnv(env);
+    }
+
+    /// @notice SmartKeyAccount implementation of this chain (0 = none). Only its EIP-1167 clones get 400k gas for
+    ///         ERC-1271; every other contract wallet 50k.
+    function SMART_KEY_ACCOUNT_IMPL() external view returns (address) {
+        return ChainEnvCode.smartKeyAccountImpl();
+    }
+
+    /// @dev Plain kinds check nothing; a confidential layer overrides it (its library holds the body).
+    function _validateEnv(ChainEnv calldata env) internal view virtual {}
+
+    function _chainUidInCode() internal pure override returns (bool) { return true; }
+
+    function _chainUidRaw() internal view override returns (bytes32) { return ChainEnvCode.chainUid(); }
+
+    /// @notice This instance's `chain_uid`; 0 on the implementation (a view: no revert).
+    function chainUid() external view override(IMetaTx, MetaTxBase) returns (bytes32) { return ChainEnvCode.chainUid(); }
+
+    /// @notice ERC-5267 under the clone's `chain_uid` (`ChainUidZero` on the implementation): the salt every digest uses.
+    function eip712Domain() public view override returns (
+        bytes1, string memory, string memory, uint256, address, bytes32, uint256[] memory
+    ) {
+        return _eip712DomainUnder(_chainUid());
+    }
+
+    /// @dev No cache (chain-neutral spec §2.4): rebuilt under the clone's `chain_uid` on every call.
+    function _domainSeparatorV4() internal view override returns (bytes32) { return _separator(_chainUid()); }
+
+    function _registry() internal view override returns (address) { return ChainEnvCode.registry(); }
+
+    function _hedera() internal view override returns (bool) { return ChainEnvCode.hedera(); }
+
+    function _govRouter() internal view override returns (address) { return ChainEnvCode.govRouter(); }
+
+    /// @dev The one reader of the pipeline's values: the head once, the separator under its `chain_uid` (0: the
+    ///      implementation, `ChainUidZero`), the `SmartKeyAccount` clone code hash recomputed (chain-neutral spec §2.2).
+    function _mtxCtx() internal view override returns (MtxPipelineLib.Ctx memory) {
+        ChainEnvCode.Head memory h = ChainEnvCode.head();
+        if (h.chainUid == bytes32(0)) revert ChainUidZero();
+        address ska = h.smartKeyAccountImpl;
+        return MtxPipelineLib.Ctx(_separator(h.chainUid), h.registry, ska == address(0) ? bytes32(0) : keccak256(
+            abi.encodePacked(hex"363d3d373d3d3d363d73", ska, hex"5af43d82803e903d91602b57fd5bf3")), h.hedera);
     }
 
     /// @notice No underlying (the `NORMAL*` kinds); `WrappedToken` lists its legs. Read by the factory's index.
@@ -139,7 +191,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
     function _contractOnlyBits() internal pure virtual override returns (uint256) { return 0; }
     function _scalarBits() internal pure virtual override returns (uint256) { return GovernanceBits.TOKEN_SCALAR; }
     function _scopeBits() internal pure override returns (uint256) { return 0; }
-    function _uaRegistry() internal view override returns (address) { return _REGISTRY; }
+    function _uaRegistry() internal view override returns (address) { return _registry(); }
 
     /// @notice ERC-165; `IERC20Payment` only while `PAYABLE` is set, `IRescuable` only while `RESCUABLE` is.
     function supportsInterface(bytes4 id) public view virtual returns (bool) {
@@ -147,7 +199,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
             || id == type(IERC20MetaTx).interfaceId || id == type(IGovernance).interfaceId
             || (id == type(IERC20Payment).interfaceId && GovernanceLib.hasFeature(GovernanceBits.PAYABLE))
             || (id == type(IRescuable).interfaceId && GovernanceLib.hasFeature(GovernanceBits.RESCUABLE))
-            || (id == type(IUALedger).interfaceId && _REGISTRY != address(0));
+            || (id == type(IUALedger).interfaceId && _registry() != address(0));
     }
 
     /// @notice CTR-GOV-06 (spec §6.2): one direct entry on every kind, anyone, not allowlisted; `NORMAL*` pays the whole

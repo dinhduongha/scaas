@@ -69,7 +69,7 @@ abstract contract RegulatedBase is MetaTokenBase, IRegulatedToken {
 
     /// @dev `RegulatedLib.init` (spec §2.4) before the kind's own init, so before any mint.
     function _initRaw(bytes calldata initArgs) internal virtual override {
-        RegulatedLib.init(initArgs, _validBits(), REGISTRY_CODEHASH, _REGISTRY);
+        RegulatedLib.init(initArgs, _validBits(), REGISTRY_CODEHASH, _registry());
         bytes32 r = RegulatedLib.$().taxRecipient;
         if (r != 0) _eligible(r); // `R` at creation too (pay-meta-tax spec §6.2, B-5)
         super._initRaw(initArgs);
@@ -101,7 +101,7 @@ abstract contract RegulatedBase is MetaTokenBase, IRegulatedToken {
     function forceTransfer(bytes32 recordId, uint256 amount) external nonReentrant {
         (bytes32 from, bytes32 to) = RegulatedLib.forceTransfer(recordId, amount, _govSubject());
         _eligible(to);
-        MtxPipelineLib._checkTo(_REGISTRY, to);
+        MtxPipelineLib._checkTo(_registry(), to);
         _poolMove(from, to, amount);
     }
 
@@ -131,7 +131,7 @@ abstract contract RegulatedBase is MetaTokenBase, IRegulatedToken {
 
     /// @notice Bit 23: the tax recipient, at once (Q4); the library's checks, then `R` here (F-15).
     function setTaxRecipient(bytes32 taxRecipient) external nonReentrant {
-        RegulatedLib.setTaxRecipient(taxRecipient, _govSubject(), _REGISTRY);
+        RegulatedLib.setTaxRecipient(taxRecipient, _govSubject(), _registry());
         _eligible(taxRecipient);
     }
 
@@ -155,7 +155,7 @@ abstract contract RegulatedBase is MetaTokenBase, IRegulatedToken {
         MetaTxLib.PayMeta calldata meta) external nonReentrant returns (bool)
     {
         _taxGates(entryRef, meta);
-        MtxPipelineLib._checkTo(_REGISTRY, to);
+        MtxPipelineLib._checkTo(_registry(), to);
         bytes32 r = _taxTo(to, amount, taxMode, tax);
         bytes32 payer = MetaTxLib.pad(_msgSender());
         _uaSplit(payer, to, amount, tax, r);
@@ -177,7 +177,7 @@ abstract contract RegulatedBase is MetaTokenBase, IRegulatedToken {
 
     /// @notice The library refuses and `use`s; the move is `_uaMove`, hooked, so `P`, `F(from)` and `R(to)` apply (§3.4).
     function operatorTransfer(bytes32 from, bytes32 to, uint256 amount, bytes32 ref) external nonReentrant {
-        RegulatedLib.operatorTransfer(from, to, amount, ref, _govSubject(), _REGISTRY);
+        RegulatedLib.operatorTransfer(from, to, amount, ref, _govSubject(), _registry());
         _uaMove(from, to, amount);
     }
 

@@ -14,6 +14,7 @@ import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {NormalPqzToken} from "../../src/pqz/NormalPqzToken.sol";
 import {Catalogue, pqzEnv} from "../helpers/Catalogue.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// A registry frame that runs out of gas: `INVALID` spends all the gas it was given and reverts with no data.
 contract OutOfGas {
@@ -38,7 +39,7 @@ contract PqzGuardsTest is PqzFixture {
     /// A release (and one token) of the PQZH verifier at this set.
     function _pqzh(bytes32 salt_) internal returns (PqzLayer) {
         pqv = _newPqzVerifier(PQZH_ID);
-        factory = new OpenFactory(registrar, PQZ_UID, 0);
+        factory = EnvKit.factory(registrar, PQZ_UID, 0);
         Catalogue.release(factory, IOpenFactory.TokenKind.NORMAL_PQZ, 1,
             pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv)), type(NormalPqzToken).creationCode);
         vm.prank(registrar);
@@ -55,7 +56,7 @@ contract PqzGuardsTest is PqzFixture {
     function test_init_pqzhRefusedWithoutValueSets() public {
         vm.skip(!PqzSet.HAS_PQZH || PqzSet.PQZH_VALUE);
         pqv = _newPqzVerifier(PQZH_ID);
-        factory = new OpenFactory(registrar, PQZ_UID, 0);
+        factory = EnvKit.factory(registrar, PQZ_UID, 0);
         Catalogue.release(factory, IOpenFactory.TokenKind.NORMAL_PQZ, 1,
             pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv)), type(NormalPqzToken).creationCode);
         vm.prank(registrar);

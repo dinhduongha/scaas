@@ -1549,8 +1549,10 @@ alloy::sol! {
     struct TokenConfig { string name; string symbol; uint8 decimals; uint256 features; uint256 lockedFeatures; bytes32 owner; Roles roles;
         uint256 initialSupply; address initialHolder; Leg[] legs; RateConfig rate; ConfidentialConfig conf; uint64 grantDelay;
         address rescueTo; uint256 maxSupply; RegulatedParams reg; }
-    struct FactoryEnv { address factory; bytes32 chainUid; address registry; address smartKeyAccountImpl; bool hedera; address[] deps;
-        address[] libs; bytes32[] libCodeHashes; address govRouter; }
+    // chain-neutral releases (CTR-TOK-29, plan T71 / T74): the factory fills its own `chainUid` and router; `params` the
+    // class's chain values
+    struct FactoryEnv { address registry; address smartKeyAccountImpl; bool hedera; address[] deps; bytes32[] params;
+        address[] libs; bytes32[] libCodeHashes; }
     function envOf(uint8 kind, uint16 envVersion) external view returns (FactoryEnv);
     function publishEnv(uint8 kind, uint16 envVersion, FactoryEnv env) external;
     function deployImplementation(uint8 kind, uint64 version, uint16 envVersion, bytes initcode, bytes implArgs) external returns (address);
