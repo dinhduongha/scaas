@@ -29,6 +29,7 @@ contract DeployHedera is DeployBase {
         string memory out = vm.serializeString("deploy", "network", "hedera");
         vm.createDir("./deployments", true);
         vm.writeJson(out, string.concat("./deployments/hedera-", vm.toString(block.chainid), ".json"));
+        _writeReleases();
         console.log(out);
     }
 }

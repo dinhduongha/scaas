@@ -338,3 +338,6 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   `src/factory/{OpenFactory,IOpenFactory}.sol` as they stood at 612981b9 (the T72 tip), the env maps keyed by a `uint8`
   domain (a `TokenKind` or `DEX_DOMAIN`) and `EnvUnknown` / `EnvAlreadyPublished` taking it; no generic class, no
   `createInstance`, no `creating()`. Not built.
+  The deploy scripts before the release list (chain-neutral spec §6.2, plan T73), under `ua-mtx-merge/release-list/`:
+  `script/{DeployBase,Deploy.s}.sol` and `script/hedera/DeployHedera.s.sol` as they stood at the T70 tip, `configureChain`
+  without a reference block, no `chain-uids.json` check, no sibling order, no release list. Not built.

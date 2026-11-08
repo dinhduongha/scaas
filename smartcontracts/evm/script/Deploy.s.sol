@@ -43,6 +43,7 @@ contract Deploy is DeployBase {
         string memory out = vm.serializeAddress(k, "smart_key_account_implementation", accounts.IMPLEMENTATION());
         vm.createDir("./deployments", true);
         vm.writeJson(out, string.concat("./deployments/", vm.toString(block.chainid), ".json"));
+        _writeReleases();
         console.log(out);
     }
 }

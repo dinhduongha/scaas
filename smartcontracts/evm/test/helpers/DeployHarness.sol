@@ -72,6 +72,12 @@ contract DeployHarness is DeployBase {
 
     function gasNeed(string calldata name) external view returns (uint256) { return _releaseGasNeed(name); }
 
+    /// `RELEASES_JSON` / `RELEASES_WRITE` for the next `deploy` (chain-neutral spec §6.2, plan T73); `writeReleases` as
+    /// `run()` ends.
+    function setReleases(string calldata path, bool write) external { (releasesPath, releasesWrite) = (path, write); }
+
+    function writeReleases() external { _writeReleases(); }
+
     function checkGas(string calldata name, uint256 limit) external view { _checkReleaseGas(name, limit); }
 
     function requireGas(string calldata name) external view { _requireReleaseGas(name); }
