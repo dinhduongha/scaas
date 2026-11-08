@@ -4214,6 +4214,8 @@ Registration state grows (every field stored; a PQ registration with a stored pr
 families and order); plan `superpowers/plans/2026-10-30-ua8-portable-registrations.md` (Part A, tasks A1–A13). Status: decided; step 1 (EVM) built on branch `ua8`
 (`6f72d0ba` … `5a970b4c`, tasks A1–A11; A12 docs), not merged; step 2 (Soroban) was waiting for the Soroban UA base; **Change (2026-11-01):** it is built on branch `ua8-soroban` (ua8-soroban M3, B1 to B9a), local end-to-end passed, done only after B10, the Stellar testnet run (NET-SOR-27, CTR-UA-34).
 
+Change (2026-11-08, owner, status: decided): the family order becomes EVM → Soroban → **Cosmos → NEAR** → Sui / Aptos / Solana → Algorand → TON (Cosmos moves before NEAR); the Sui round also moves the node's Sui adapter off JSON-RPC to gRPC.
+
 ### CTR-UA-32 — KEM (chat) key records: signed, versioned, write-once in any order, never revoked
 - old: — · status: current · owner: yes · date: 2026-10-25 · normative: contracts/accounts.md#CTR-UA-32 · superseded-by: —
 
