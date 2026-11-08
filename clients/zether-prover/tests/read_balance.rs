@@ -383,6 +383,16 @@ fn rpc_reading_layer_against_anvil() {
     let counted = hits();
     let unused = node(url.clone(), counted.clone(), lie(0xa1));
     let future = node(url.clone(), hits(), |m, _, r, _| Some(if m == "eth_blockNumber" { json!("0xffffff") } else { r }));
+    let blocks = hits();
+    let late = {
+        let b = blocks.clone();
+        node(url.clone(), hits(), move |m, p, mut r, _| {
+            if m == "eth_getBlockByNumber" && p[0] != "0x0" && b.fetch_add(1, Ordering::SeqCst) >= 1 {
+                r["hash"] = json!(hx(&[0x5b; 32])); // the read's own look passes, the one after every node's read does not
+            }
+            Some(r)
+        })
+    };
     let (dead, dead2) = ("http://127.0.0.1:1", "http://127.0.0.1:2");
     let bal = |v: Result<Value, String>| v.unwrap()["balance"].clone();
     assert_eq!(bal(multi(&[dead, &url], false)), json!("42"), "failover skips a dead first node");
@@ -394,7 +404,8 @@ fn rpc_reading_layer_against_anvil() {
     assert_eq!(bal(multi(&[dead, &url, &same], true)), json!("42"), "3 nodes, one dead");
     assert_eq!(bal(multi(&[&url, &same, &future], true)), json!("42"), "a far-future block does not move the number");
     for (urls, what) in [(&[&url[..], &lie_a, &lie_b][..], "3 nodes, all differing"), (&[&url[..], &lie_a][..], "2 nodes differing"),
-        (&[&url[..], &same, &lie_a, &lie_a2][..], "4 nodes split 2-2"), (&[&url[..], dead][..], "2 nodes, one dead")]
+        (&[&url[..], &same, &lie_a, &lie_a2][..], "4 nodes split 2-2"), (&[&url[..], dead][..], "2 nodes, one dead"),
+        (&[&url[..], &late][..], "a node whose block changes after the reads (R3 after every node)")]
     {
         let e = multi(urls, true).unwrap_err();
         assert!(e.contains("R1: no strict majority"), "{what}: {e}");
