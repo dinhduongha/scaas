@@ -7,3 +7,7 @@ M6-record-bit-dropped | test_lastDebit_interleaved, test_record_burn, test_recor
 M17-rollover-floor-unconditional | test_rollover_floorOnlyRises | 1
 M18-w1-not-for-shieldIn | test_record_wide_shieldIn | 1
 M21-deltaP-from-floor | test_record_deltaP_afterRollover | 1
+M7-memoHash-without-ownTag | test_memoHash_bundle, test_memoHash_burn, test_memoHash_equalsClientkeys, test_memoHash_hash, test_ownTag_swapped_refused | 1
+M8-ownTag-before-vf | test_ownTag_inBlob_op1, test_rOf_op1 | 1
+M9-rOf-ignores-n | test_rOf_op1, test_rOf_op7, test_transferEntry_unchanged | 1
+M22-kv-key-pointer-order | test_kv_op7Rotated | 1
