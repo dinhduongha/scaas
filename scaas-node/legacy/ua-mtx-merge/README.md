@@ -55,3 +55,5 @@ fill), `indexer.rs` (no `PqzVerified` join, no verifier alerts), `abi.rs` (no ve
 built.
 Group 3h (T59, spec 2026-11-06-pqz-proof-path §3.2), under `3h/`, as they stood at e35d1d16: `typed.rs` (the three PQZ args
 structs without `ownTag`), `e2e.rs` (its op 1 args without `ownTag`). Not built.
+Group 3h (T63, spec §10, NODE-JOB-24), under `3h/`, as they stood at 77e9ddf4 (T62's tip): `submit.rs` (a PQZ debit over the lane's
+cap refused like any job, no `proofStore()` read), `indexer.rs` (no `ProofStoreSet` row or alert). Not built.
