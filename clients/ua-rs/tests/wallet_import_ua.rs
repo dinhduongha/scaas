@@ -239,11 +239,10 @@ fn seal_json_imported_rows() {
     for r in rows {
         let c = SealedContainer::from_json(r["container"].to_string().as_bytes()).unwrap();
         let sender = b32(&r["expect"]["sender"]["ua"]);
-        let pt = h(&r["pt"]);
         if let Some(e) = r["error"].as_str() {
             assert_eq!(code(restore(&c, sender)), e, "{}", r["id"]);
             #[cfg(feature = "vectors")]
-            assert_eq!(code(scaas_ua::wallet::vectors_backup_payload(&pt)), e, "{}", r["id"]);
+            assert_eq!(code(scaas_ua::wallet::vectors_backup_payload(&h(&r["pt"]))), e, "{}", r["id"]);
             refused += 1;
             continue;
         }
@@ -265,7 +264,7 @@ fn seal_json_imported_rows() {
             assert_eq!(k.ua(), Some(e.ua), "{}", r["id"]);
         }
         #[cfg(feature = "vectors")]
-        assert_eq!(scaas_ua::wallet::vectors_backup_payload(&pt).unwrap().as_bytes(), &pt[..], "{}", r["id"]);
+        assert_eq!(scaas_ua::wallet::vectors_backup_payload(&h(&r["pt"])).unwrap().as_bytes(), &h(&r["pt"])[..], "{}", r["id"]);
         ok += 1;
     }
     assert_eq!((ok, refused), (2, 5));
