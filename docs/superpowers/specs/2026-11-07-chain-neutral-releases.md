@@ -492,7 +492,7 @@ instance per path.
   (Q7).
   **Result (2026-11-08, owner: the public Hedera testnet instead of a local node):** all three hold in `eth_call` simulation on
   chain 296, and CREATE2 through `0x4e59` gives the expected address (`smartcontracts/evm/runs/2026-11-08-ua-mtx-merge-hedera-probe/`);
-  one real deployment from a funded testnet account is still to confirm it.
+  confirmed by one real deployment the same day (tx `0xcbf2d331…262e`, block 42,805,771).
 - **Gas and size:** `GovGas` / `UAGas` rows old → new (§7.2); `size-baseline.json` old → new with the reason; the four PQZ sets
   (`at-set.sh`); layout pins regenerated where `creatorId` moved a factory-side struct (none in the kinds).
 - **Mutants** (one at a time, each must turn a test red): `_chainUid()` returning 0 instead of reverting (Fable P2-1); the
