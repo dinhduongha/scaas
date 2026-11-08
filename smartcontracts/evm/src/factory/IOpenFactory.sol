@@ -124,9 +124,10 @@ interface IOpenFactory {
     error DexVersionNotYetUsable(uint64 version, uint64 usableFrom);
     /// @notice `createTokenUnregistered` is for the plain kinds only (owner 2026-10-19).
     error UnregisteredConfidentialKind(TokenKind kind);
-    /// @notice No env `envVersion` published for the domain (version 0 included).
-    error EnvUnknown(uint8 domain, uint16 envVersion);
-    error EnvAlreadyPublished(uint8 domain, uint16 envVersion);
+    /// @notice No env `envVersion` published for the domain (version 0 included): a `TokenKind`, `DEX_DOMAIN`, or a
+    ///         generic `class << 16 | kind` (T70: `uint32`).
+    error EnvUnknown(uint32 domain, uint16 envVersion);
+    error EnvAlreadyPublished(uint32 domain, uint16 envVersion);
     /// @notice `libs` and `libCodeHashes` of different lengths, a library code hash that pins nothing (`0` or
     ///         `keccak256("")`), more than 4 `deps` or 2 `params`.
     error EnvInvalid();
@@ -253,4 +254,98 @@ interface IOpenFactory {
     /// @notice The contracts `creatorId` created (authenticated: the direct caller).
     function contractsOfCreator(bytes32 creatorId, uint16 contractClass, uint256 from, uint256 n)
         external view returns (Created[] memory page, uint256 total);
+
+    // ------------------------------------------------------------------ the generic catalogue (factory index spec §8, CTR-TOK-28)
+
+    /// @notice A generic release's id: class (3..65535, the registrar's), kind (per class), version (from 1).
+    struct ReleaseId {
+        uint16 contractClass;
+        uint16 kind;
+        uint64 version;
+    }
+
+    /// @notice A generic release: as `Release`, with the one initializer `createInstance` may call on a fresh clone and the
+    ///         class's ERC-165 interface id the implementation answers true.
+    struct ClassRelease {
+        address implementation;
+        uint16 envVersion;
+        bytes32 envHash;
+        uint64 usableFrom;
+        bool deprecated;
+        bytes4 initSelector;
+        bytes4 interfaceId;
+    }
+
+    /// @notice What every generic release and each of its clones answers (`factoryInfo()`), seven static words (224 B):
+    ///         the factory, the instance's `chain_uid` (0 on the implementation: chain-neutral releases), its release id,
+    ///         its owner UA after `initialize` (0 on the implementation), and whether it is initialized (true on the
+    ///         implementation, locked by its constructor).
+    struct FactoryInfo {
+        address factory;
+        bytes32 chainUid;
+        uint16 contractClass;
+        uint16 kind;
+        uint64 version;
+        bytes32 ownerUA;
+        bool initialized;
+    }
+
+    event ClassEnvPublished(uint16 indexed contractClass, uint16 indexed kind, uint16 indexed envVersion, bytes32 envHash);
+    event ReleaseDeployed(uint16 indexed contractClass, uint16 indexed kind, uint64 indexed version, address implementation,
+        uint16 envVersion, bytes32 envHash, bytes32 initcodeHash, bytes32 codeHash, bytes4 initSelector, bytes4 interfaceId,
+        uint64 usableFrom);
+    event ReleaseDeprecated(uint16 indexed contractClass, uint16 indexed kind, uint64 indexed version, string reason);
+    event ClassKindEnabled(uint16 indexed contractClass, uint16 indexed kind, bool enabled);
+    event InstanceCreated(address indexed instance, bytes32 indexed creatorId, uint16 indexed contractClass, uint16 kind,
+        uint64 version, address implementation, bytes32 owner);
+
+    /// @notice A generic entry for class 0 (not made here), 1 (`TOKEN`) or 2 (`DEX`): those keep their typed paths.
+    error ClassReserved(uint16 contractClass);
+    error ReleaseUnknown(uint16 contractClass, uint16 kind, uint64 version);
+    error ReleaseAlreadyRegistered(uint16 contractClass, uint16 kind, uint64 version, address existing);
+    /// @notice `createInstance` of a deprecated release (the event of the deprecation is `ReleaseDeprecated`; an error
+    ///         cannot share its name).
+    error ReleaseIsDeprecated(uint16 contractClass, uint16 kind, uint64 version);
+    error ReleaseNotYetUsable(uint16 contractClass, uint16 kind, uint64 version, uint64 usableFrom);
+    error ClassKindDisabled(uint16 contractClass, uint16 kind);
+    error InitSelectorZero();
+    error InitSelectorMismatch(bytes4 expected, bytes4 got);
+    /// @notice The release's `factoryInfo()` is not 224 B naming this factory, its own id, owner 0, initialized.
+    error ReleaseInfoMismatch(address implementation);
+    error InterfaceNotSupported(address implementation, bytes4 interfaceId);
+    /// @notice After `initCall`, the clone's `factoryInfo()` is not 224 B naming this factory, the release's id,
+    ///         initialized.
+    error InstanceInfoMismatch(address instance);
+
+    /// @notice Registrar only: env `envVersion` of a generic `(contractClass, kind)` (`ClassReserved` for 0-2), as
+    ///         `publishEnv`.
+    function publishClassEnv(uint16 contractClass, uint16 kind, uint16 envVersion, IFactoryToken.Env calldata env) external;
+    /// @notice Registrar only: the release `id` from chain-neutral init code, `initcode ‖ abi.encode(id, factory, implArgs)`
+    ///         `CREATE2`d (salt `keccak256(abi.encode("release", id))`) on env `envVersion`; checked: code, `factoryInfo()`,
+    ///         ERC-165 (`0x01ffc9a7`, `interfaceId`, not `0xffffffff`), `validateEnv`. The first release of a class lists it in
+    ///         `classes()`, the first of a kind in `kindsOf`. Usable after `noticePeriod`; a new `(class, kind)` starts off.
+    function deployRelease(ReleaseId calldata id, uint16 envVersion, bytes4 initSelector, bytes4 interfaceId,
+        bytes calldata initcode, bytes calldata implArgs) external returns (address implementation);
+    /// @notice Registrar only: immediate, never undone; existing instances untouched.
+    function deprecateRelease(ReleaseId calldata id, string calldata reason) external;
+    /// @notice Registrar only: the reversible stop of every version of a `(class, kind)`.
+    function setClassKindEnabled(uint16 contractClass, uint16 kind, bool on) external;
+    function classEnvOf(uint16 contractClass, uint16 kind, uint16 envVersion) external view returns (IFactoryToken.Env memory);
+    function latestClassEnvVersion(uint16 contractClass, uint16 kind) external view returns (uint16);
+    function classReleaseOf(ReleaseId calldata id) external view returns (ClassRelease memory);
+    /// @notice May name a deprecated or not yet usable release.
+    function latestClassVersion(uint16 contractClass, uint16 kind) external view returns (uint64);
+    function classKindEnabled(uint16 contractClass, uint16 kind) external view returns (bool);
+    /// @notice The generic classes with a release, in the order of their first release.
+    function classes() external view returns (uint16[] memory);
+    /// @notice The kinds of `contractClass` with a release, in the order of their first release.
+    function kindsOf(uint16 contractClass) external view returns (uint16[] memory);
+
+    /// @notice A CREATE3 instance of the usable, non-deprecated release `id` of an enabled `(class, kind)`, its env appended,
+    ///         and one call: `initCall`, the release's catalogued initializer (`initSelector`, its own typed arguments), value
+    ///         0, to the fresh clone only; then `factoryInfo()` must name this factory, the release and `initialized`, its
+    ///         `chainUid` this factory's; the record and the lists. The submitter is the creator.
+    function createInstance(ReleaseId calldata id, bytes32 salt, bytes calldata initCall) external returns (address instance);
+    /// @notice The creator of the creation in progress (EIP-1153), 0 outside one; a nested creation sees its own.
+    function creating() external view returns (bytes32 creatorId);
 }

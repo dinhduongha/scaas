@@ -22,6 +22,7 @@ import {PQZ_UID} from "../pqz/helpers/PqzRegistryBase.sol";
 import {ZetherFixture} from "../zether/helpers/ZetherFixture.sol";
 import {nid} from "../helpers/Ids.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
+import {NoteKind, INoteKind} from "../v2/mocks/GenericKinds.sol";
 
 /// @notice Plain `transfer` and `mtxTransfer` per kind, for the governance prototype (D1, D2; before and after,
 ///         `docs/research/governance/prototype/`). One row per test, so each measures from a fresh `setUp`. Written against
@@ -148,6 +149,28 @@ contract GovGasDex is GovRows {
 
     function test_createDex() public {
         _row("SCaaSDex createDex", address(f), address(this), abi.encodeCall(OpenFactory.createDex, (1, abi.encode(_dexConfig()), "d1")));
+    }
+}
+
+/// Factory index spec §8.7 (plan T70): `createInstance` of the test kind `NoteKind` (class 4, kind 0), steady state (the
+/// creator and the owner each have an instance already), beside `createDex`.
+contract GovGasInstance is GovRows {
+    bytes32 constant UID = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464;
+    OpenFactory f;
+
+    function setUp() public {
+        vm.warp(1_800_000_000);
+        f = EnvKit.factory(address(this), UID, 0);
+        f.publishClassEnv(4, 0, 1, plainEnv(address(f), address(0), UID, address(0), false));
+        f.deployRelease(IOpenFactory.ReleaseId(4, 0, 1), 1, INoteKind.initialize.selector, type(INoteKind).interfaceId,
+            type(NoteKind).creationCode, "");
+        f.setClassKindEnabled(4, 0, true);
+        f.createInstance(IOpenFactory.ReleaseId(4, 0, 1), "i0", abi.encodeCall(INoteKind.initialize, (nid(G_TO), "n")));
+    }
+
+    function test_createInstance() public {
+        _row("NoteKind createInstance", address(f), address(this), abi.encodeCall(OpenFactory.createInstance,
+            (IOpenFactory.ReleaseId(4, 0, 1), "i1", abi.encodeCall(INoteKind.initialize, (nid(G_TO), "n")))));
     }
 }
 

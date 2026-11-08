@@ -51,9 +51,11 @@ contract OpenFactory is IOpenFactory {
 
     address public immutable registrar;
 
-    mapping(uint8 => mapping(uint16 => IFactoryToken.Env)) private _envs;
-    mapping(uint8 => mapping(uint16 => bytes32)) private _envHash;
-    mapping(uint8 => uint16) private _latestEnv;
+    /// @dev Keyed by domain: a `TokenKind`, `DEX_DOMAIN`, or a generic `class << 16 | kind` (T70; `>= 3 << 16`, so never
+    ///      a token kind or the DEX). A `uint32` key hashes as the `uint8` one did: the slots did not move.
+    mapping(uint32 => mapping(uint16 => IFactoryToken.Env)) private _envs;
+    mapping(uint32 => mapping(uint16 => bytes32)) private _envHash;
+    mapping(uint32 => uint16) private _latestEnv;
     mapping(TokenKind => mapping(uint64 => Release)) private _releases;
     mapping(TokenKind => uint64) private _latest;
     mapping(uint64 => Release) private _dexReleases;
@@ -72,6 +74,15 @@ contract OpenFactory is IOpenFactory {
     bytes32 public chainUid;
     uint64 public noticePeriod;
     address public govRouter;
+    /// @dev The generic catalogue (T70), keyed by domain `class << 16 | kind`.
+    mapping(uint32 => mapping(uint64 => ClassRelease)) private _classReleases;
+    mapping(uint32 => uint64) private _latestClass;
+    mapping(uint32 => bool) private _classKindOn;
+    mapping(uint32 => bool) private _kindListed;
+    mapping(uint16 => uint16[]) private _kinds;
+    uint16[] private _classes;
+    /// @dev EIP-1153: the creator of the generic creation in progress (`creating()`).
+    bytes32 private constant _CREATING = 0xfb6648c4edba346670e48ab59d9f85fccdaa57cff45f53cfe24389cb1a67d992; // keccak256("scaas.factory.creating")
 
     /// @param registrar_ the only constructor argument, the same on every chain (an EOA, or a contract deployed
     ///        deterministically with its owners in its init code: chain-neutral spec §3.4).
@@ -121,11 +132,11 @@ contract OpenFactory is IOpenFactory {
     function publishEnv(TokenKind kind, uint16 envVersion, IFactoryToken.Env calldata env)
         external onlyRegistrar configured
     {
-        _publish(uint8(kind), envVersion, env);
+        emit EnvPublished(uint8(kind), envVersion, _publish(uint8(kind), envVersion, env));
     }
 
     function publishDexEnv(uint16 envVersion, IFactoryToken.Env calldata env) external onlyRegistrar configured {
-        _publish(DEX_DOMAIN, envVersion, env);
+        emit EnvPublished(DEX_DOMAIN, envVersion, _publish(DEX_DOMAIN, envVersion, env));
     }
 
     function envOf(TokenKind kind, uint16 envVersion) external view returns (IFactoryToken.Env memory) {
@@ -324,6 +335,160 @@ contract OpenFactory is IOpenFactory {
         return r.contractClass == CLASS_DEX ? r.version : 0;
     }
 
+    // ------------------------------------------------------------------ the generic catalogue (index spec §8, CTR-TOK-28)
+
+    function publishClassEnv(uint16 contractClass, uint16 kind, uint16 envVersion, IFactoryToken.Env calldata env)
+        external onlyRegistrar configured
+    {
+        uint32 d = _domain(contractClass, kind);
+        bytes32 h = _publish(d, envVersion, env);
+        emit ClassEnvPublished(contractClass, kind, envVersion, h);
+    }
+
+    function classEnvOf(uint16 contractClass, uint16 kind, uint16 envVersion)
+        external view returns (IFactoryToken.Env memory)
+    {
+        return _envs[_domainOf(contractClass, kind)][envVersion];
+    }
+
+    function latestClassEnvVersion(uint16 contractClass, uint16 kind) external view returns (uint16) {
+        return _latestEnv[_domainOf(contractClass, kind)];
+    }
+
+    function deployRelease(ReleaseId calldata id, uint16 envVersion, bytes4 initSelector, bytes4 interfaceId,
+        bytes calldata initcode, bytes calldata implArgs) external onlyRegistrar configured returns (address implementation)
+    {
+        uint32 d = _domain(id.contractClass, id.kind);
+        if (id.version == 0) revert ReleaseUnknown(id.contractClass, id.kind, 0);
+        address existing = _classReleases[d][id.version].implementation;
+        if (existing != address(0)) revert ReleaseAlreadyRegistered(id.contractClass, id.kind, id.version, existing);
+        if (initSelector == bytes4(0)) revert InitSelectorZero();
+        Release memory r = _newRelease(d, id, envVersion, interfaceId, initcode, implArgs);
+        _register(d, id, r, initSelector, interfaceId, keccak256(initcode));
+        return r.implementation;
+    }
+
+    /// @dev The generic release `id`: `CREATE2` of `initcode ‖ abi.encode(id, factory, implArgs)` under the salt
+    ///      `keccak256(abi.encode("release", id))`, then its checks (`_checkRelease`).
+    function _newRelease(uint32 d, ReleaseId calldata id, uint16 envVersion, bytes4 interfaceId, bytes calldata initcode,
+        bytes calldata implArgs) private returns (Release memory r)
+    {
+        {
+            bytes memory args = abi.encode(id, address(this), implArgs);
+            (, r) = _deploy(d, envVersion, keccak256(abi.encode("release", id)), initcode, args);
+        }
+        IFactoryToken.ChainEnv memory e = _chainEnv(d, envVersion);
+        _checkRelease(id, r.implementation, interfaceId, e);
+    }
+
+    /// @dev A checked generic release into the catalogue: its row, the latest version, the class and kind lists.
+    function _register(uint32 d, ReleaseId calldata id, Release memory r, bytes4 initSelector, bytes4 interfaceId,
+        bytes32 initcodeHash) private
+    {
+        _classReleases[d][id.version] =
+            ClassRelease(r.implementation, r.envVersion, r.envHash, r.usableFrom, false, initSelector, interfaceId);
+        if (id.version > _latestClass[d]) _latestClass[d] = id.version;
+        if (_kinds[id.contractClass].length == 0) _classes.push(id.contractClass);
+        if (!_kindListed[d]) {
+            _kindListed[d] = true;
+            _kinds[id.contractClass].push(id.kind);
+        }
+        emit ReleaseDeployed(id.contractClass, id.kind, id.version, r.implementation, r.envVersion, r.envHash,
+            initcodeHash, r.implementation.codehash, initSelector, interfaceId, r.usableFrom);
+    }
+
+    function deprecateRelease(ReleaseId calldata id, string calldata reason) external onlyRegistrar {
+        ClassRelease storage r = _classReleases[_domain(id.contractClass, id.kind)][id.version];
+        if (r.implementation == address(0)) revert ReleaseUnknown(id.contractClass, id.kind, id.version);
+        r.deprecated = true;
+        emit ReleaseDeprecated(id.contractClass, id.kind, id.version, reason);
+    }
+
+    function setClassKindEnabled(uint16 contractClass, uint16 kind, bool on) external onlyRegistrar {
+        _classKindOn[_domain(contractClass, kind)] = on;
+        emit ClassKindEnabled(contractClass, kind, on);
+    }
+
+    function classReleaseOf(ReleaseId calldata id) external view returns (ClassRelease memory) {
+        return _classReleases[_domainOf(id.contractClass, id.kind)][id.version];
+    }
+
+    function latestClassVersion(uint16 contractClass, uint16 kind) external view returns (uint64) {
+        return _latestClass[_domainOf(contractClass, kind)];
+    }
+
+    function classKindEnabled(uint16 contractClass, uint16 kind) external view returns (bool) {
+        return _classKindOn[_domainOf(contractClass, kind)];
+    }
+
+    function classes() external view returns (uint16[] memory) { return _classes; }
+
+    function kindsOf(uint16 contractClass) external view returns (uint16[] memory) { return _kinds[contractClass]; }
+
+    function createInstance(ReleaseId calldata id, bytes32 salt, bytes calldata initCall)
+        external configured returns (address instance)
+    {
+        (address impl, IFactoryToken.ChainEnv memory e) = _usableRelease(id, initCall);
+        bytes32 creatorId = _creatorId();
+        instance = _instance(creatorId, id.contractClass, id.kind, salt, impl, e);
+        _initInstance(instance, creatorId, initCall);
+        _recordInstance(instance, creatorId, id, impl);
+    }
+
+    /// @dev Steps 1-2 of index spec §8.4: the release exists, is not deprecated, is usable, its `(class, kind)` on; the
+    ///      call is its catalogued initializer.
+    function _usableRelease(ReleaseId calldata id, bytes calldata initCall)
+        private view returns (address impl, IFactoryToken.ChainEnv memory e)
+    {
+        uint32 d = _domain(id.contractClass, id.kind);
+        ClassRelease storage r = _classReleases[d][id.version];
+        impl = r.implementation;
+        if (impl == address(0)) revert ReleaseUnknown(id.contractClass, id.kind, id.version);
+        if (r.deprecated) revert ReleaseIsDeprecated(id.contractClass, id.kind, id.version);
+        if (block.timestamp < r.usableFrom) revert ReleaseNotYetUsable(id.contractClass, id.kind, id.version, r.usableFrom);
+        if (!_classKindOn[d]) revert ClassKindDisabled(id.contractClass, id.kind);
+        bytes4 sel = r.initSelector;
+        bytes4 got = initCall.length < 4 ? bytes4(0) : bytes4(initCall[:4]);
+        if (got != sel || initCall.length < 4) revert InitSelectorMismatch(sel, got);
+        e = _chainEnv(d, r.envVersion);
+    }
+
+    /// @dev Step 4: `initCall` to the fresh clone, value 0, with `creating()` the creator for its duration (EIP-1153; the
+    ///      previous value restored: a nested creation sees its own creator, then the outer one again); a revert bubbled.
+    function _initInstance(address instance, bytes32 creatorId, bytes calldata initCall) private {
+        bytes32 prev;
+        assembly ("memory-safe") {
+            prev := tload(_CREATING)
+            tstore(_CREATING, creatorId)
+        }
+        (bool ok, bytes memory ret) = instance.call(initCall);
+        assembly ("memory-safe") {
+            tstore(_CREATING, prev)
+        }
+        if (!ok) {
+            assembly ("memory-safe") {
+                revert(add(ret, 32), mload(ret))
+            }
+        }
+    }
+
+    /// @dev Steps 5-6: the clone's `factoryInfo()` names this factory, this chain, the release and `initialized`; then the
+    ///      record with its owner and `InstanceCreated`.
+    function _recordInstance(address instance, bytes32 creatorId, ReleaseId calldata id, address impl) private {
+        (bool got, FactoryInfo memory fi) = _factoryInfo(instance);
+        if (!got || !fi.initialized || fi.factory != address(this) || fi.contractClass != id.contractClass
+            || fi.kind != id.kind || fi.version != id.version) revert InstanceInfoMismatch(instance);
+        if (fi.chainUid != chainUid) revert ChainUidMismatch(chainUid, fi.chainUid);
+        _index(instance, creatorId, fi.ownerUA, id.contractClass, id.kind, id.version);
+        emit InstanceCreated(instance, creatorId, id.contractClass, id.kind, id.version, impl, fi.ownerUA);
+    }
+
+    function creating() external view returns (bytes32 c) {
+        assembly ("memory-safe") {
+            c := tload(_CREATING)
+        }
+    }
+
     // ------------------------------------------------------------------ the index (CTR-TOK-27)
 
     function infoOf(address c) external view returns (Created memory) { return _created(c); }
@@ -348,7 +513,7 @@ contract OpenFactory is IOpenFactory {
 
     // ------------------------------------------------------------------ internal
 
-    function _publish(uint8 domain, uint16 envVersion, IFactoryToken.Env calldata env) private {
+    function _publish(uint32 domain, uint16 envVersion, IFactoryToken.Env calldata env) private returns (bytes32 envHash) {
         if (envVersion == 0) revert EnvUnknown(domain, 0);
         if (_envHash[domain][envVersion] != bytes32(0)) revert EnvAlreadyPublished(domain, envVersion);
         if (env.libs.length != env.libCodeHashes.length || env.deps.length > ChainEnvCode.MAX_DEPS
@@ -361,14 +526,13 @@ contract OpenFactory is IOpenFactory {
         // the registry names this chain (once per env; it was `initialize`'s check per creation, Fable P3-1)
         if (env.registry != address(0)) _requireChainUid(env.registry, chainUid);
         _envs[domain][envVersion] = env;
-        bytes32 envHash = keccak256(abi.encode(env));
+        envHash = keccak256(abi.encode(env));
         _envHash[domain][envVersion] = envHash;
         if (envVersion > _latestEnv[domain]) _latestEnv[domain] = envVersion;
-        emit EnvPublished(domain, envVersion, envHash);
     }
 
     /// @dev The instance env of `domain`'s env `v`: this factory's `chainUid` and router, the registrar's values.
-    function _chainEnv(uint8 domain, uint16 v) private view returns (IFactoryToken.ChainEnv memory c) {
+    function _chainEnv(uint32 domain, uint16 v) private view returns (IFactoryToken.ChainEnv memory c) {
         IFactoryToken.Env storage e = _envs[domain][v];
         return IFactoryToken.ChainEnv(chainUid, e.registry, govRouter, e.smartKeyAccountImpl, e.hedera, e.deps, e.params);
     }
@@ -376,7 +540,7 @@ contract OpenFactory is IOpenFactory {
     /// @dev The domain's env `v` (named by the registrar): every linked library's code hash, then `CREATE2` of
     ///      `initcode ‖ args` (chain-neutral: no env in it); a constructor's revert is bubbled, an empty failure is
     ///      `DeployFailed`.
-    function _deploy(uint8 domain, uint16 v, bytes32 salt, bytes calldata initcode, bytes memory args)
+    function _deploy(uint32 domain, uint16 v, bytes32 salt, bytes calldata initcode, bytes memory args)
         private returns (address at, Release memory r)
     {
         if (_envHash[domain][v] == bytes32(0)) revert EnvUnknown(domain, v);
@@ -479,10 +643,55 @@ contract OpenFactory is IOpenFactory {
         return Created(c, r.creatorId, r.ownerUA, r.contractClass, r.kind, r.version, r.createdBlock, r.createdAt);
     }
 
-    /// @dev `contractClass` if this factory makes it, else `ClassUnknown`.
-    function _known(uint16 contractClass) private pure returns (uint16) {
-        if (contractClass != CLASS_TOKEN && contractClass != CLASS_DEX) revert ClassUnknown(contractClass);
+    /// @dev `contractClass` if this factory makes it (the token and DEX classes; a generic class once it has a release),
+    ///      else `ClassUnknown`.
+    function _known(uint16 contractClass) private view returns (uint16) {
+        if (contractClass != CLASS_TOKEN && contractClass != CLASS_DEX && _kinds[contractClass].length == 0) {
+            revert ClassUnknown(contractClass);
+        }
         return contractClass;
+    }
+
+    /// @dev The env and release domain of a generic `(class, kind)`; the token and DEX classes and 0 are reserved.
+    function _domain(uint16 contractClass, uint16 kind) private pure returns (uint32) {
+        if (contractClass <= CLASS_DEX) revert ClassReserved(contractClass);
+        return uint32(contractClass) << 16 | kind;
+    }
+
+    /// @dev The same key for the views, without the refusal (a reserved class reads empty).
+    function _domainOf(uint16 contractClass, uint16 kind) private pure returns (uint32) {
+        return uint32(contractClass) << 16 | kind;
+    }
+
+    /// @dev A generic release's checks (index spec §8.2; chain-neutral: no `chain_uid` on a release): code;
+    ///      `factoryInfo()` 224 B naming this factory, its own id, owner 0, initialized; ERC-165 for `0x01ffc9a7` and
+    ///      `interfaceId`, not `0xffffffff`; `validateEnv`.
+    function _checkRelease(ReleaseId calldata id, address impl, bytes4 interfaceId, IFactoryToken.ChainEnv memory env)
+        private view
+    {
+        if (!SigCheck.isContract(impl)) revert ImplementationNotAContract(impl);
+        (bool ok, FactoryInfo memory fi) = _factoryInfo(impl);
+        if (!ok || fi.factory != address(this) || fi.contractClass != id.contractClass || fi.kind != id.kind
+            || fi.version != id.version || fi.ownerUA != bytes32(0) || !fi.initialized) revert ReleaseInfoMismatch(impl);
+        if (!_supports(impl, 0x01ffc9a7)) revert InterfaceNotSupported(impl, 0x01ffc9a7);
+        if (!_supports(impl, interfaceId)) revert InterfaceNotSupported(impl, interfaceId);
+        if (_supports(impl, 0xffffffff)) revert InterfaceNotSupported(impl, 0xffffffff);
+        _validateEnv(impl, env);
+    }
+
+    /// @dev `factoryInfo()` by staticcall: exactly seven words, else `ok` false.
+    function _factoryInfo(address target) private view returns (bool ok, FactoryInfo memory fi) {
+        bytes memory ret;
+        (ok, ret) = target.staticcall(abi.encodeWithSelector(bytes4(keccak256("factoryInfo()"))));
+        ok = ok && ret.length == 224;
+        if (ok) fi = abi.decode(ret, (FactoryInfo));
+    }
+
+    /// @dev ERC-165 by staticcall (30,000 gas, EIP-165): one word, true.
+    function _supports(address target, bytes4 interfaceId) private view returns (bool) {
+        (bool ok, bytes memory ret) =
+            target.staticcall{gas: 30_000}(abi.encodeWithSelector(0x01ffc9a7, interfaceId));
+        return ok && ret.length == 32 && abi.decode(ret, (uint256)) == 1;
     }
 
     function _page(address[] storage l, uint256 from, uint256 n)

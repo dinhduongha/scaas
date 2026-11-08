@@ -616,7 +616,9 @@ contract FactoryTest is Test {
         // on the wrapped kind (`mtxUnwrap`, `_named`)
         // governance T7 (GD-18): past 39,945 B, the literal reads the baseline, so the ratchet is one number
         assertLe(address(normalImpl).code.length, vm.parseJsonUint(vm.readFile("./size-baseline.json"), ".NormalToken"));
-        assertLe(address(f).code.length, 24_576);
+        // the factory: 24,576 B until T70; the generic catalogue (index spec §8, T70) takes it to 28,236 B, so the bound
+        // reads its baseline row (the ceiling is 65,536 B, owner 2026-10-21)
+        assertLe(address(f).code.length, vm.parseJsonUint(vm.readFile("./size-baseline.json"), ".OpenFactory"));
         // Transitional (P1d D2): over EIP-170 until the size work (the only ceiling: 65,536 B, owner 2026-10-21); +973 B:
         // typed-signing R1's `UAKinds.uaSig`, as above
         assertLe(address(wrappedImpl).code.length, vm.parseJsonUint(vm.readFile("./size-baseline.json"), ".WrappedToken"));
