@@ -3637,6 +3637,34 @@ contract UARegistryUA8Test is UARegistryBase {
         assertEq(idx.length + h.length, 0, "an empty pop: no pop slot, whatever accepted later");
     }
 
+    /// A `pop` whose slots do not start at 0 (the same 2-of-3, its `pop` signed by slots 1 and 2, slot 0 accepting later): `popSlotsOf` is
+    /// [1, 2] with those slots' hashes, never slot 0's (each hash read at its own index, not at its place in the list).
+    function test_popSlotsOfGapInPop() public {
+        Row[] memory rows = _rows();
+        _allowAll(rows);
+        UARegistry a = _regA(false);
+        _members(a, rows);
+        uint256 sk = _nativeSk();
+        Member[] memory mm = new Member[](3);
+        mm[0] = Member(UAKinds.MLDSA65, rows[ML65_1].ua, 1);
+        mm[1] = Member(UAKinds.MLDSA65, rows[ML65_1 + 1].ua, 1);
+        mm[2] = Member(UAKinds.EVM_EOA, _pad(vm.addr(sk)), 1);
+        bytes memory d = _msigKey(2, mm);
+        bytes32 ua = UAKinds.uaOf(UAKinds.MSIG, d);
+        bytes memory pop = _msigSigs(rows, d, ua, UAKinds.PURPOSE_POP_V2, _regDigest(ua, UAKinds.MSIG), 1, 2, sk);
+        assertEq(UACall.register(a, UAKinds.MSIG, d, _none(), pop, ""), ua);
+        _acceptSlot(a, rows, d, ua, 0, sk);
+        (uint16[] memory idx, bytes32[] memory h) = a.popSlotsOf(ua);
+        assertEq(idx.length, 2);
+        assertEq(uint256(idx[0]) * 16 + idx[1], 18, "slots 1 and 2");
+        assertTrue(a.memberSigHashOf(ua, 0) != 0 && a.memberSigHashOf(ua, 0) != h[0], "slot 0's later acceptance is no pop slot");
+        assertEq(h[0], a.memberSigHashOf(ua, 1));
+        assertEq(h[1], a.memberSigHashOf(ua, 2));
+        IUARegistry.MemberSig[] memory p = UACall.memberSigs(pop);
+        assertEq(h[0], keccak256(p[0].sig), "the pop's own slot bytes");
+        assertEq(h[1], keccak256(p[1].sig));
+    }
+
     /// `setKemKey` (version 2) for `mldsa65`, `fndsa512`, the PQ-eligible `msig` (2 `mldsa65` members), and a PQ-eligible
     /// 12-of-12 `msig` of `slhdsa128s` members whose registration pop is 94 KB (over 64 KiB: three code blobs; the
     /// verifier accepts everything): `setKemKey` decodes the whole registration blob (A7 m2), so the second row against the first
