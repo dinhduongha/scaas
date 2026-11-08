@@ -2093,6 +2093,13 @@ module is security-relevant).
       entry (CTR-GOV-19's ceiling).
 - [ ] **Step 4:** whole `forge test`, the four PQZ sets, size gate, gas pins old -> new, deploy-gas table for every contract against
       60 M, mutants of each split.
+- [ ] **Step 5: the full Hedera testnet deploy (owner 2026-11-08):** after Step 4, `script/hedera/DeployHedera.s.sol` in full on the
+      public Hedera testnet (chain 296) from the testnet-only account (`SCAAS_TESTNET_MNEMONIC_FILE`, never a key in a file of the
+      repo). Each transaction within Hedera's 15 M gas per transaction (Hedera charges at least 80 % of the limit: estimate + 20 %);
+      HBAR from the faucet first (several hundred at 1,330 gwei-equivalent). Then the HIP-632 checks of `docs/networks/hedera.md`
+      (one pay with an ED25519 account, one with an ECDSA alias, `msg.sender` of an alias, the relay's Hedera codes). Record
+      addresses, tx hashes and costs in a runs note; the T74 probe (`runs/2026-11-08-ua-mtx-merge-hedera-probe/`) already
+      confirmed CREATE3, `EXTCODECOPY` and `0x4e59` there.
 
 ### Factory contract index and extensible catalogue (owner 2026-11-07): tasks T67–T70
 
