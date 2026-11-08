@@ -5,7 +5,7 @@ use zether_prover::api::call;
 
 /// Rows of the vector the Zether prover does not build, each with its reason: another contract kind's domain (the row has no
 /// `zether` domain), so a Zether key never signs it. Any other row without a `zether` domain fails the test.
-const NOT_ZETHER: [&str; 58] = [
+const NOT_ZETHER: [&str; 59] = [
     // the token kind's own (non-Zether) accounts: UA prepare is a NormalToken / WrappedToken entry
     "UAPrepareAcc",
     // SmartKeyAccount: signed by its owner's keys, not by a Zether key
@@ -30,6 +30,8 @@ const NOT_ZETHER: [&str; 58] = [
     "UACreateToken", "UACreateDex", "UACreateInstance",
     // group 3f: the PQZ verifier UA of the PQZ kinds on the router (PQZ verifier mode spec §4.2, §4.3); no Zether token has one
     "UAPqzSetVerifier", "UAPqzCancelVerifier", "UAPqzRevokeVerifier",
+    // group 3h T61: bit 24's router op
+    "UASetProofStore",
 ];
 
 fn vector() -> Value {

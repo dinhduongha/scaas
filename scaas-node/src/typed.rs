@@ -210,6 +210,8 @@ const TYPED: &[(&str, &str, &[&str], &str, &str)] = &[
     ("UAPqzSetVerifier", "mtxPqzSetVerifier", GR, "bytes32 from,address target,bytes32 next,E", ""),
     ("UAPqzCancelVerifier", "mtxPqzCancelVerifier", GR, "bytes32 from,address target,E", ""),
     ("UAPqzRevokeVerifier", "mtxPqzRevokeVerifier", GR, "bytes32 from,address target,E", ""),
+    // group 3h (PQZ proof path spec §5): bit 24 `PQZ_PROOF`, a holder's `NONE` / `LOG` from the next debit
+    ("UASetProofStore", "mtxSetProofStore", GR, "bytes32 from,address target,uint8 next,E", ""),
     // not rows of the vector file: the DEX's (`dex_order_kat.json`) and the token's on ids (`uatrade_kat.json`), one name per kind
     ("InvalidateNonces", "mtxInvalidateNonces", D, "address from,uint256 batch,uint256 minNonce", "from batch minNonce @"),
     ("UAInvalidateNonces", "mtxInvalidateNonces", T, "bytes32 from,uint256 batch,uint256 minNonce", "from batch minNonce @"),
@@ -1469,12 +1471,13 @@ mod tests {
         // -> (79, 114, 113), UAPayWithTax (three domains) and the router's two tax ops
         // group 3g T54 / T55: -> (80, 114, 113), the rollover's two domains on two rows (`UARollOver` Zether, `UAPqzRollOver` PQZ)
         // group 3f T46 / T47: -> (83, 117, 116), the router's three verifier ops (`UAPqz{Set,Cancel,Revoke}Verifier`)
-        assert_eq!((structs, domains, calldata), (83, 117, 116), "every row was walked (the three creations left out by vectors())");
+        // group 3h T61: -> (84, 118, 117), the router's `UASetProofStore` (bit 24)
+        assert_eq!((structs, domains, calldata), (84, 118, 117), "every row was walked (the three creations left out by vectors())");
         // plan T32: 70 -> 78, the router's eight regulated controls; pay-meta-tax T42: -> 82, + UAPayWithTax, the two tax ops and
         // mtxPay (its struct `UAMetaTransfer`, no row of the vector file: paymeta.json and pay_job_named_meta_builds_body pin it)
         // group 3g T55: -> 83, `UAPqzRollOver`
-        // group 3f T47: -> 86, the router's three verifier ops
-        assert_eq!(rows().iter().filter(|r| r.typed).count(), 86, "83 vector rows, mtxPay, the two invalidations (DEX, token)");
+        // group 3f T47: -> 86, the router's three verifier ops; group 3h T61: -> 87, `UASetProofStore`
+        assert_eq!(rows().iter().filter(|r| r.typed).count(), 87, "84 vector rows, mtxPay, the two invalidations (DEX, token)");
         assert_eq!(rows().iter().filter(|r| !r.typed).count(), 18, "the wallet's three flat builders are gone (MD-11 (a))");
     }
 

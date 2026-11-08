@@ -55,12 +55,12 @@ contract WrappedPqzToken is WrappedToken, PqzLayer, IPqzWrappedToken {
     }
 
     function _validBits() internal pure virtual override(WrappedToken, GovernanceBase) returns (uint256) {
-        return GovernanceBits.WRAPPED_BITS;
+        return GovernanceBits.WRAPPED_BITS | GovernanceBits.PQZ_KIND_BITS; // bit 24 (group 3h, PQZ proof path spec §5)
     }
 
     /// @dev `WrappedToken`'s masks, restated for the second base.
     function _roleBits() internal pure virtual override(WrappedToken, MetaTokenBase) returns (uint256) {
-        return GovernanceBits.WRAPPED_ROLES;
+        return GovernanceBits.WRAPPED_ROLES | GovernanceBits.PQZ_KIND_BITS;
     }
 
     function _contractOnlyBits() internal pure virtual override(WrappedToken, MetaTokenBase) returns (uint256) {

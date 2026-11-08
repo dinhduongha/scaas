@@ -203,6 +203,13 @@ contract GovRouterTypehashTest is Test {
         assertEq(T.UA_PQZ_REVOKE_VERIFIER, 0xb395011f54af6f642333ddf8e664418b27c5ddeea94d7750852501c6d640a6d6);
     }
 
+    /// Group 3h T61 (PQZ proof path spec §5): bit 24 `PQZ_PROOF`'s router op.
+    function test_UASetProofStoreTypehashIsPinned() public pure {
+        assertEq(T.UA_SET_PROOF_STORE, keccak256(
+                "UASetProofStore(bytes32 from,address target,uint8 next,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_SET_PROOF_STORE, 0xcd4ab7150dc9686c7487ea24b688ec51c778304d95fa7690b26c39c447a9203d);
+    }
+
     function test_uaPauseTypehashIsPinned() public pure {
         assertEq(T.UA_PAUSE, keccak256(
                 "UAPause(bytes32 from,address target,bytes32 ref,uint64 until,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));

@@ -95,8 +95,9 @@ contract RegulatedSkeletonTest is PqzFixture {
         assertEq(r9.validBits(), v, "9 validBits()");
 
         (v, r, c, s, d) = new WrappedPqzRegulatedMasks(address(factory), regArgs()).masks();
-        assertEq(v, GovernanceBits.WRAPPED_BITS | (reg & ~uint256(1 << 8)), "13 valid: no ALLOWLIST");
-        assertEq(r, GovernanceBits.WRAPPED_ROLES | REG_ROLES, "13 roles");
+        // group 3h T61: + bit 24 `PQZ_PROOF` on 13, not on 9 (valid, any holder, never contract-only, never delay-relaxed)
+        assertEq(v, GovernanceBits.WRAPPED_BITS | (reg & ~uint256(1 << 8)) | (1 << 24), "13 valid: no ALLOWLIST, bit 24");
+        assertEq(r, GovernanceBits.WRAPPED_ROLES | REG_ROLES | (1 << 24), "13 roles");
         assertEq(c, GovernanceBits.WRAPPED_CONTRACT_ONLY | REG_CONTRACT_ONLY, "13 contract-only");
         assertEq(s, (1 << 1) | (1 << 6) | (1 << 21) | (1 << 22), "13 scalar");
         assertEq(d, (1 << 5) | (1 << 6) | (1 << 7), "13 delayed relax");

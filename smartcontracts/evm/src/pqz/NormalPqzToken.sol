@@ -34,8 +34,13 @@ contract NormalPqzToken is NormalToken, PqzLayer {
         return TokenStore.KIND_NORMAL_PQZ;
     }
 
+    /// @dev `NormalToken`'s masks and bit 24 `PQZ_PROOF` (any holder; group 3h, PQZ proof path spec §5).
     function _validBits() internal pure virtual override(NormalToken, GovernanceBase) returns (uint256) {
-        return GovernanceBits.NORMAL_BITS;
+        return GovernanceBits.NORMAL_BITS | GovernanceBits.PQZ_KIND_BITS;
+    }
+
+    function _roleBits() internal pure virtual override returns (uint256) {
+        return GovernanceBits.NORMAL_ROLES | GovernanceBits.PQZ_KIND_BITS;
     }
 
     function _init(TokenConfig memory cfg) internal override(NormalToken, MetaTokenBase) {

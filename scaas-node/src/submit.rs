@@ -1752,7 +1752,8 @@ pub(crate) mod tests {
         }
         // plan T34 added the router's eight regulated control rows to typed_ops.json (97 -> 105); pay-meta-tax T41: -> 110
         // (UAPayWithTax's three domains, the router's two tax ops); group 3f T46 / T47: -> 113, the router's three verifier ops
-        assert_eq!(n, 113, "every row with an entry, but the relay fees (relay_fee_call_object)");
+        // group 3h T61: -> 114, the router's `UASetProofStore`
+        assert_eq!(n, 114, "every row with an entry, but the relay fees (relay_fee_call_object)");
     }
 
     /// `EvmAdapter::call_key`, which the Hedera adapter delegates to (`the_hedera_lane_skips_bytes_already_in_flight` is the

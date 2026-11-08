@@ -505,8 +505,9 @@ contract GovDeployTest is Test {
         // T66a item 5 (the metadata hash: IUARegistry.popSlotsOf): 0xbf24455f26b2cB0a343fc47a546Fd68F4b5CAEAD -> 0x3A893f1938bA3E34339D3d4b85CC13a5983A7149
         // 3h T58 (the metadata hash: IPqzToken's debit record view and `lastDebit`): -> 0x942f489e2f453AaEd2Be4B3DFb8b5dA441Fa6BdA
         // 3h T59 (the metadata hash: IPqzToken's args with `ownTag`; found by T60's suite): -> 0xA4Ab7e0673548a32B96d7164b6e81B9D6Ce29C4b
-        // 3h T60 (the metadata hash: `proofStore`'s error, event and view; `ConfidentialConfig.proofStore`): -> this
-        assertEq(router, 0xB95B3fA6EDD80605484A95ffBa63B6e2e873C0C6, "GovernanceRouter");
+        // 3h T60 (the metadata hash: `proofStore`'s error, event and view; `ConfidentialConfig.proofStore`): ->
+        // 0xB95B3fA6EDD80605484A95ffBa63B6e2e873C0C6; T61 (`mtxSetProofStore`, bit 24): -> this
+        assertEq(router, 0x8D4632FcCd353fb46400D356B79A7171eE44d2d0, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append: chain-neutral releases (plan T72), `abi.encode(factory, implArgs)`;

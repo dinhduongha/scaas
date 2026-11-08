@@ -39,11 +39,11 @@ contract WrappedPqzRegulatedToken is WrappedPqzToken, RegulatedBase {
     }
 
     function _validBits() internal pure override(WrappedPqzToken, GovernanceBase) returns (uint256) {
-        return GovernanceBits.WRAPPED_BITS | REG_BITS_CONFIDENTIAL;
+        return GovernanceBits.WRAPPED_BITS | REG_BITS_CONFIDENTIAL | GovernanceBits.PQZ_KIND_BITS;
     }
 
     function _roleBits() internal pure override(WrappedPqzToken, MetaTokenBase) returns (uint256) {
-        return GovernanceBits.WRAPPED_ROLES | REG_ROLES;
+        return GovernanceBits.WRAPPED_ROLES | REG_ROLES | GovernanceBits.PQZ_KIND_BITS;
     }
 
     function _contractOnlyBits() internal pure override(WrappedPqzToken, MetaTokenBase) returns (uint256) {

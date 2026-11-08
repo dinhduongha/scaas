@@ -23,6 +23,7 @@ STATE = "src/pqz/PqzStateLib.sol"
 REC = "test/pqz/PqzDebitRecord.t.sol"
 TAG = "test/pqz/PqzOwnTag.t.sol"
 STORE = "test/pqz/PqzProofStore.t.sol"
+BIT24 = "test/governance/GovProofBit.t.sol"
 
 # id: (file, old, new, test file)
 MUTANTS = {
@@ -59,6 +60,15 @@ MUTANTS = {
     # ---- T60: proofStore NONE / LOG (spec §4)
     "M10-record-proofStore-zero": (CORE, "| uint256(s.proofStore) << 8 |", "|", STORE),
     "M11-log-buffer-not-proof": (CORE, "o.from, o.sendCounter, h, proof);", "o.from, o.sendCounter, h, buf);", STORE),
+    # ---- T61: bit 24 PQZ_PROOF (spec §5)
+    "M13-bit24-on-zether": ("src/zether/NormalZetherToken.sol", "        return GovernanceBits.NORMAL_BITS;\n",
+                            "        return GovernanceBits.NORMAL_BITS | GovernanceBits.PQZ_KIND_BITS;\n", BIT24),
+    "M14-bit24-delay-relaxed": ("src/regulated/RegulatedBase.sol",
+                                "~((uint256(1) << GovernanceBits.TAX) | (uint256(1) << GovernanceBits.PQZ_PROOF))",
+                                "~(uint256(1) << GovernanceBits.TAX)", BIT24),
+    "M15-setProofStore-ungated": ("src/pqz/PqzLayer.sol", "        GovernanceUse.use(GovernanceBits.PQZ_PROOF, _govSubject(), 0);\n", "",
+                                  BIT24),
+    "M20-setProofStore-byte22": (STATE, "        s.proofStore = next;\n", "        s.pqzVerifyMode = next;\n", BIT24),
 }
 
 

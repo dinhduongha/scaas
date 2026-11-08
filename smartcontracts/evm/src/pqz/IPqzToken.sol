@@ -220,6 +220,8 @@ interface IPqzToken is IConfidentialToken {
     /// @notice Group 3h (spec §4.2, PP-4, C7): under `proofStore` `LOG`, each debit's verified statement header (its first 640
     ///         bytes) and the calldata proof, `blob` the debit's op blob, `sendCounter` its counter (the record's key).
     event PqzDebitProof(address indexed blob, bytes32 indexed ua, uint64 indexed sendCounter, bytes header, bytes proof);
+    /// @notice Group 3h (spec §5, O10): a holder of bit 24 changed the mode, effective from the next debit.
+    event ProofStoreSet(uint8 previous, uint8 next);
 
     // ---- group 3f, PQZ verifier mode (spec §3-§5; CTR-PQZ-27..29 drafts)
     /// @notice An accepted proof in `OFFCHAIN` mode: the verifier's verdict over `statementHash` and `proofHash` at its epoch.
@@ -288,6 +290,9 @@ interface IPqzToken is IConfidentialToken {
     /// @notice Group 3h (PP-4): the `proofStore` the next debit runs under, 0 `NONE` or 1 `LOG` (absent before 3h: the release
     ///         probe, C9).
     function proofStore() external view returns (uint8);
+    /// @notice Group 3h (spec §5, O10): a holder of bit 24 `PQZ_PROOF` sets the mode the next debit runs under, `NONE` <->
+    ///         `LOG`; the current value is a no-op (no event). Through the router as `mtxSetProofStore`.
+    function setProofStore(uint8 next) external;
     /// @notice Pending slot `i` of `(ua, keyVersion)`: `blob(160) ‖ uOff(16) ‖ vOff(16) ‖ block(64)`, for every `i <
     ///         pendingCount` (group 3h PP-1: kept for good); 0 for an unwritten index.
     function pqzPending(bytes32 ua, uint64 keyVersion, uint64 i) external view returns (uint256);

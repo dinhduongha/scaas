@@ -18,6 +18,8 @@ import {SSTORE2} from "../common/SSTORE2.sol";
 import {SigCheck} from "../common/SigCheck.sol";
 import {UAKinds} from "../ua/UAKinds.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
+import {GovernanceUse} from "../governance/GovernanceBase.sol";
+import {GovernanceBits} from "../governance/GovernanceBits.sol";
 
 /// @title The PQZ layer of the kinds `NORMAL_PQZ` and `WRAPPED_PQZ` (CTR-PQZ-15, CTR-PQZ-22; P6g plan D1): the entry
 ///        points and views of pq-zero-knowledge.md §9.4; the state and the logic are the four libraries (`scaas.pqz`; D14).
@@ -243,6 +245,13 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
     /// @notice The owner's immediate revocation of a transferable verifier (freeze only, spec §4.3).
     function pqzRevokeVerifier() external nonReentrant {
         PqzStateLib.revokeVerifier(_govSubject());
+    }
+
+    /// @notice Group 3h (spec §5): bit 24 `PQZ_PROOF`'s power, `use(24)` (no scalar; disabling the bit freezes the value:
+    ///         `FeatureNotSet`), then `PqzStateLib.setProofStore`; through the router as `mtxSetProofStore`.
+    function setProofStore(uint8 next) external nonReentrant {
+        GovernanceUse.use(GovernanceBits.PQZ_PROOF, _govSubject(), 0);
+        PqzStateLib.setProofStore(next);
     }
 
     /// @notice Spec §4.4: mode, verifier, fixed, epoch, a live pending and its `eta`, the notice period.

@@ -158,6 +158,19 @@ library PqzStateLib {
         emit PqzVerifierRevoked(previous, e);
     }
 
+    /// @notice Group 3h (PQZ proof path spec §5, O10): the body of bit 24's power, after the token's `use(24)` (in
+    ///         `PqzLayer`, so this library makes no DELEGATECALL into `GovernanceLib`): `next` 0 `NONE` or 1 `LOG`
+    ///         (`ProofStoreInvalid` otherwise), slot 0 byte 23, read by the next debit in either direction; the current value
+    ///         is a no-op without an event.
+    function setProofStore(uint8 next) public {
+        if (next > PqzCore.LOG) revert IPqzToken.ProofStoreInvalid(next);
+        PqzCore.PqzStorage storage s = PqzCore.$();
+        uint8 previous = s.proofStore;
+        if (previous == next) return;
+        s.proofStore = next;
+        emit IPqzToken.ProofStoreSet(previous, next);
+    }
+
     /// @notice `pqzVerifyConfig()` (spec §4.4): a dead pending reads as none.
     function verifyConfig() public view returns (IPqzToken.PqzVerifyConfig memory c) {
         PqzCore.PqzStorage storage s = PqzCore.$();

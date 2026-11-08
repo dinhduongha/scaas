@@ -98,6 +98,8 @@ const ROW = {
   UASetTaxRecipient: { taxRecipient: padId('0x00000000000000000000000000000000000007a0') },
   // group 3f (T46): a native EOA as the next verifier (no registration needed, spec §4.1)
   UAPqzSetVerifier: { next: padId('0x5ca00000000000000000000000000000000000f1') },
+  // group 3h (T61): LOG
+  UASetProofStore: { next: 1 },
 };
 ROW.UAWrapOrder = wrapOrder(hex(nativeUa), NO_ID);
 ROW.CancelUAOrder = { order: order(hex(nativeUa), NO_ID) };
