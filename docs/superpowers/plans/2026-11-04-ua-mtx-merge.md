@@ -2060,6 +2060,14 @@ rebalance must be measured after every PQZ contract change:
    (`ua-rs` `ua8.rs` on `ua-rs-sign`: list what it needs). Senders seal to each accepted member's own KEM key.
 3. **The `UARegistryLib` <-> `UARegistry` rebalance** (was in 3c; 3g's R4: if both still miss 57 M, 60 M is accepted).
 4. **Review every library and fit every deployed contract in 60 M** (owner 2026-11-07, below).
+5. **Review `popSlotsOf` and the `pop` slot bitmap again** (owner 2026-11-08; declined 2026-11-03 in the `msig-nested` round, CTR-UA-33 A /
+   CTR-UA-37): on EVM an `msig` record keeps only hashes (`popOf` = `keccak256(pop)`, `memberSigHashOf(ua, index)`,
+   `memberAccepted`), the bytes only in `UAMemberSig` logs (node keeper NODE-IDX-08), so state alone cannot tell which slots signed
+   the `pop` at `register` and which accepted later; a copier (CTR-UA-31) rebuilds that set from logs. The option: one word per `msig`
+   (a bitmap of the `pop` slots, written at `register`) and a typed view `popSlotsOf(ua) → (uint16[] index, bytes32[] hash)`;
+   `popOf` unchanged. Weigh with part 3: the registry pair has about 0.9–1.6 KB of room under 60 M (library study), and the word is
+   one more state slot per `msig` `register`. Decide with the owner before building; the same rule on every family (Soroban's twin).
+
 
 3c then holds only the `PqChat` contract and its public topics.
 
