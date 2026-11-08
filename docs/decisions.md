@@ -7955,7 +7955,9 @@ derived kind of its own scheme** (CTR-UA-06's "a MetaMask key registers `secp256
 (0x0108), an ed25519 seed as `ed25519` (0x0102), id `keccak256(TAG(kind) ‖ key_data)`, a separate account from the native id.
 Only that kind: never a second scheme on the key (`bip340`, Schnorr; the registry's `UAKeyInUse` refuses it too), and still no
 generic sign-this-digest call: `ua-rs` builds `ua_msg` from the typed fields itself. Replaces the spec §8.3 clause "refused for
-any UA kind" for those two kinds only.
+any UA kind" for those two kinds only. **Not pursued (owner 2026-11-08):** a one-member `msig` over a native EOA as the way to keep
+the key only in a browser wallet: a native member has no KEM record (CTR-UA-32 seals to each member's own KEM key), so that UA
+could sign portable records but never receive a sealed message.
 **Source.** owner 2026-11-08 (chat): "Có thêm task cho ua-rs-sign để đăng ký kind dẫn xuất (0x0108 / 0x0102) từ khóa … đã nhập vào ví" — "có".
 
 ### CLI-SGN-30 — EOA path EOA-only; role tree m/7622
