@@ -748,6 +748,15 @@ contract PqzStatePinGasTest is PqzSlots {
 
     function _fits(string memory key, string memory what, address to, bytes memory data) internal {
         uint256 g = _row("pqzh", key, string.concat(viaUA ? "mldsa65 fee UA " : "EOA ", what), to, data, false);
+        // Group 3f, owner 2026-11-08: a known limit of n2048-kmax1024 (a set not recommended, owner 2026-10-25). With the
+        // verdict pair last on every proof entry (its empty encoding: 480 B of calldata, +30,720 at the EIP-7976 floor of 64
+        // per byte), op 7 COMPACT with M = 4 and no auditor copies, its fee paid by an `mldsa65` UA, needs 16,786,328 >
+        // 2^24 (16,755,608 before 3f: the same floor less 480 x 64): published as M <= 3 for that combination at this set;
+        // every other row fits.
+        if (viaUA && keccak256(bytes(what)) == keccak256("PqzTransferCompact M = 4, no auditor")) {
+            assertGe(g, TX_CAP, string.concat(what, ": the recorded limit (owner 2026-11-08) no longer holds"));
+            return;
+        }
         assertLt(g, TX_CAP, what);
     }
 

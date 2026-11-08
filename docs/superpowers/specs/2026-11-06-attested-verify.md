@@ -431,6 +431,20 @@ one `nonReentrant` around the entry, `LinkClosure` pins and codehashes old → n
 **Not levers without the owner's word:** a views-behind-`fallback` module, `optimizer_runs`, `via_ir`, dropping an entry or a ruling,
 or putting the verdict inside the `proof` bytes (CTR-MTX-29).
 
+**Measured in T45, rulings (owner 2026-11-08).** The verdict travels as the stack fallback `PqzSignedVerdict { PqzVerdict pqzVerdict;
+UASig sig; }`, one parameter `pqzVerdict` last on every proof-carrying entry (the pair ran the legacy code generator out of stack on the
+signed forms); its empty encoding on a `PRECOMPILE` debit is 480 B of calldata, not §7's 0.1–0.2 KB. The owner keeps it (an empty-array
+form `PqzSignedVerdict[]` was considered and withdrawn the same day) and rules on its two effects:
+
+- **The split-overhead bounds** of `MtxSplitOverhead.t.sol` (the relayed envelope's per-byte overhead): PQZL 8,000 → **9,000**
+  (measured 8,608 at `n2048-kmax1024`, before 3f 5,909 at `n2304-kmax4096`), PQZH 10,000 → **13,000** (measured 12,673 at
+  `n2304-kmax4096` for an EOA fee payer, before 3f 9,213).
+- **A known limit of `n2048-kmax1024`** (the one PQZH value-token set, not recommended, owner 2026-10-25): a PQZH op 7 in the
+  commit-reveal form with `M = 4` and no auditor copies, its fee paid by an `mldsa65` UA, needs 16,786,328 gas (the EIP-7976 floor
+  binds: 16,755,608 before 3f plus 480 × 64) > 2^24, so it does not fit one transaction; that combination is published as **M ≤ 3**
+  at that set; every other row fits (`test_pqzhN2048FitsBothPaths` asserts exactly this).
+
+
 ## 10. Conflicts with existing rules (for Change lines in T19; none resolved here)
 
 | # | Source | Rule and what it says today | Change needed |

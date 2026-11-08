@@ -17,8 +17,9 @@ import {IPqzToken} from "../../src/pqz/IPqzToken.sol";
 /// largest built one (PQZL op 7 M = 8 with the auditor; at a PQZH set also the largest PQZH debit, op 7 M = 4), exactly as
 /// `PqzStateGas.t.sol`'s gas table does (the precompile at the set's row price, ML-DSA-65 68,006, `fndsa512` 2.3 M
 /// stand-ins). The pre-split figures are the same test run on 2ceda92d (`test/vectors/metatx-overhead-presplit.json`).
-/// Asserted: (largest − pre-split) − (smallest − pre-split) <= 8,000 per kind on PQZL, <= 10,000 on PQZH (owner 2026-11-01: the
-/// relayed path's per-byte cost on PQZH's larger envelope, measured 8,938–9,807). `MTX_OV_PRESPLIT=1`: log only.
+/// Asserted: (largest − pre-split) − (smallest − pre-split) <= 9,000 per kind on PQZL, <= 13,000 on PQZH (owner 2026-11-01: the
+/// relayed path's per-byte cost on PQZH's larger envelope, measured 8,938–9,807; owner 2026-11-08: raised for group 3f's
+/// empty verdict pair, see the constants). `MTX_OV_PRESPLIT=1`: log only.
 /// typed-signing C4 review: the largest op's own cost moved with its explicit parameters, so its overhead is what the relayed
 /// call costs above the same op called directly on the same state (`_direct`), now and on 2ceda92d (the JSON's `direct|<id>`):
 /// `(largest − direct) − (pre-split largest − pre-split direct)`. The pre-split side runs from
@@ -26,8 +27,12 @@ import {IPqzToken} from "../../src/pqz/IPqzToken.sol";
 /// Run: `scripts/capped smartcontracts/evm/script/pqz/at-set.sh <set> test --match-contract MtxSplitOverheadTest -vv`
 /// (log: runs/2026-10-27-metatx-split-overhead.txt). It inherits `PqzStatePinGasTest`'s tests; select this contract.
 contract MtxSplitOverheadTest is PqzStatePinGasTest {
-    uint256 internal constant BOUND = 8_000;
-    uint256 internal constant BOUND_PQZH = 10_000;
+    // Group 3f, owner 2026-11-08: 8,000 -> 9,000 (PQZL; measured 8,608 at n2048-kmax1024) and 10,000 -> 13,000 (PQZH; measured
+    // 12,673 at n2304-kmax4096): the relayed envelope's data carries the empty verdict pair of every proof entry (480 B; the
+    // generic relayed path's memory grows quadratically with the large envelopes). Before 3f: PQZL 5,909 / PQZH 9,213 at
+    // n2304-kmax4096.
+    uint256 internal constant BOUND = 9_000;
+    uint256 internal constant BOUND_PQZH = 13_000;
     string internal pre;
     bytes32 internal fnFee2;
 
