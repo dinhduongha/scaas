@@ -21,7 +21,7 @@ import {PqzStateLib} from "./PqzStateLib.sol";
 import {PqzViewLib} from "./PqzViewLib.sol";
 import {PqzWrappedLib} from "./PqzWrappedLib.sol";
 import {IConfidentialWrappedToken} from "../confidential/IConfidentialToken.sol";
-import {IPqzWrappedToken} from "./IPqzToken.sol";
+import {IPqzToken, IPqzWrappedToken} from "./IPqzToken.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
 
 /// @title Kind `WRAPPED_PQZ` (CTR-TOK-21, CTR-PQZ-22): the wrapper of 1–8 legs with the PQZ layer (P6g plan D1).
@@ -71,7 +71,8 @@ contract WrappedPqzToken is WrappedToken, PqzLayer, IPqzWrappedToken {
     function _init(TokenConfig memory) internal override(WrappedToken, MetaTokenBase) {}
 
     function _initRaw(bytes calldata initArgs) internal virtual override {
-        PqzWrappedLib.init(initArgs, _registry(), _pqzVerifier(), kind(), _validBits(), _roleBits(), _contractOnlyBits());
+        PqzWrappedLib.init(initArgs, _registry(), _pqzVerifier(), FACTORY, kind(), _validBits(), _roleBits(),
+            _contractOnlyBits());
     }
 
     // ------------------------------------------------------------------ wrap-shield / unshield-unwrap (CTR-PQZ-22)
@@ -102,31 +103,31 @@ contract WrappedPqzToken is WrappedToken, PqzLayer, IPqzWrappedToken {
     ///         minOut` to `x.recipient`: an address, or a derived UA through the leg's `transferToUA` (`UALegNotLedger`
     ///         otherwise).
     function mtxUnshieldUnwrap(PqzBurnArgs calldata b, Unwrap calldata x, bytes calldata proof,
-        IUARegistry.UASig calldata pqzAuth, bytes calldata accHint) external nonReentrant
+        IUARegistry.UASig calldata pqzAuth, bytes calldata accHint, IPqzToken.PqzSignedVerdict calldata pqzVerdict) external nonReentrant
     {
         uint256 i = WrappedLib.indexOf(x.underlying);
         uint256 wrapped = x.amount * PqzCore.$().shieldScale;
         WrappedLib.quoteTo(i, x.recipient, wrapped, x.minOut); // before the proof (spec §5.4)
-        _burn(_envUnwrap(x, _ticketBinding()), b, proof, pqzAuth, accHint);
+        _burn(_envUnwrap(x, _ticketBinding()), b, proof, pqzAuth, accHint, pqzVerdict);
         _poolMove(MetaTxLib.pad(MetaTxLib.SHIELD_POOL), bytes32(0), wrapped);
         WrappedLib.payOutTo(i, x.recipient, wrapped, x.minOut);
     }
 
     /// @notice The signed form over `UAPqzUnshieldUnwrap` (R36: native and derived ids), the `Unwrap` leg a nested struct.
     function mtxUnshieldUnwrap(MetaTxLib.UAEnvelope calldata e, PqzBurnArgs calldata b, Unwrap calldata x, bytes calldata proof,
-        IUARegistry.UASig calldata pqzAuth, bytes calldata accHint, IUARegistry.UASig calldata auth)
-        external nonReentrant returns (bytes memory)
+        IUARegistry.UASig calldata pqzAuth, bytes calldata accHint, IUARegistry.UASig calldata auth,
+        IPqzToken.PqzSignedVerdict calldata pqzVerdict) external nonReentrant returns (bytes memory)
     {
-        (bytes memory words, bytes memory data) = _unwrapCall(b, x, proof, pqzAuth, accHint);
+        (bytes memory words, bytes memory data) = _unwrapCall(b, x, proof, pqzAuth, accHint, pqzVerdict);
         return _namedCallUA(UA_UNSHIELD_UNWRAP_TYPEHASH, e, words, data, auth);
     }
 
     /// @dev The words the struct hashes (TS-D17) and the op's call.
     function _unwrapCall(PqzBurnArgs calldata b, Unwrap calldata x, bytes calldata proof, IUARegistry.UASig calldata pqzAuth,
-        bytes calldata accHint) private pure returns (bytes memory, bytes memory)
+        bytes calldata accHint, IPqzToken.PqzSignedVerdict calldata pqzVerdict) private pure returns (bytes memory, bytes memory)
     {
         return (abi.encode(PqzViewLib.hashBurn(b), PqzViewLib.hashUnwrap(x), keccak256(proof), keccak256(accHint)),
-            abi.encodeCall(IPqzWrappedToken.mtxUnshieldUnwrap, (b, x, proof, pqzAuth, accHint)));
+            abi.encodeCall(IPqzWrappedToken.mtxUnshieldUnwrap, (b, x, proof, pqzAuth, accHint, pqzVerdict)));
     }
 
     /// @notice The `envelopeBinding` word of a direct `mtxUnshieldUnwrap` (P6g plan D12).

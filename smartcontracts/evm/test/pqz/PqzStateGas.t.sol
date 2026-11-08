@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {noVerdict} from "./helpers/PqzVerdicts.sol";
 import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {console2, Vm} from "forge-std/Test.sol";
 import {PqzSlots} from "./PqzState.t.sol";
@@ -149,7 +150,7 @@ contract PqzStatePinGasTest is PqzSlots {
         bytes memory r;
         for (uint256 j; j < 8; ++j) r = bytes.concat(r, ys[j]);
         discRef7 = tok.mtxConfidentialTransfer(_ms(bytes.concat(abi.encode(uint256(0), block.number + 100, uint256(0), gus,
-            alice, uint256(8), uint256(0)), salt, r, _blob(99, _outLen(8, true)))), hex"c0de", _pqAuth(), "");
+            alice, uint256(8), uint256(0)), salt, r, _blob(99, _outLen(8, true)))), hex"c0de", _pqAuth(), "", noVerdict());
         meter = new GasMeter();
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](2);
         k[0] = UARegistry.KindConfig(UAKinds.MLDSA65, address(mlv), 100_000);
@@ -430,7 +431,7 @@ contract PqzStatePinGasTest is PqzSlots {
     function _op1p(bytes32 from, uint256 p, bool aud, bytes memory hint, bytes memory proof)
         internal view returns (bytes memory)
     {
-        return abi.encodeCall(IPqzToken.mtxConfidentialTransferSingle, (_ts(_payload(p, 0, from, bob, carol, _out(77, aud), "")), proof, _pqAuth(), hint));
+        return abi.encodeCall(IPqzToken.mtxConfidentialTransferSingle, (_ts(_payload(p, 0, from, bob, carol, _out(77, aud), "")), proof, _pqAuth(), hint, noVerdict()));
     }
 
     /// `n` pseudo-random proof bytes (the calldata a real proof of that length costs: almost no zero bytes).
@@ -507,12 +508,12 @@ contract PqzStatePinGasTest is PqzSlots {
     }
 
     function test_gas_op1_compact() public {
-        bytes memory d = abi.encodeCall(IPqzToken.mtxConfidentialTransferSingleCompact, (_ts(_payload(0, 0, carol, bob, alice, _out(78, true), _memo())), hex"c0de", _pqAuth(), ""));
+        bytes memory d = abi.encodeCall(IPqzToken.mtxConfidentialTransferSingleCompact, (_ts(_payload(0, 0, carol, bob, alice, _out(78, true), _memo())), hex"c0de", _pqAuth(), "", noVerdict()));
         _log("op 1 COMPACT (HASH), auditor, fee, fresh ref", _gas(d));
     }
 
     function test_gas_op1_shieldIn() public {
-        bytes memory d = abi.encodeCall(IPqzToken.mtxConfidentialTransferSingle, (_ts(_payload(0, 100, carol, bob, alice, _out(80, true), "")), hex"c0de", _pqAuth(), ""));
+        bytes memory d = abi.encodeCall(IPqzToken.mtxConfidentialTransferSingle, (_ts(_payload(0, 100, carol, bob, alice, _out(80, true), "")), hex"c0de", _pqAuth(), "", noVerdict()));
         _log("op 1 BUNDLE, auditor, fee, shieldIn 100, fresh ref", _gas(d));
     }
 
@@ -529,7 +530,7 @@ contract PqzStatePinGasTest is PqzSlots {
         for (uint256 j; j < m; ++j) r = bytes.concat(r, xs[j]);
         bytes memory out = _blob(81 + m, _outLen(m, aud));
         return abi.encodeCall(IPqzToken.mtxConfidentialTransfer, (_ms(bytes.concat(abi.encode(uint256(0), block.number + 100, uint256(0),
-            carol, alice, m, uint256(0)), salt, r, out)), proof, _pqAuth(), ""));
+            carol, alice, m, uint256(0)), salt, r, out)), proof, _pqAuth(), "", noVerdict()));
     }
 
     function test_gas_op7_M4() public {
@@ -590,7 +591,7 @@ contract PqzStatePinGasTest is PqzSlots {
 
     function _burnP(uint256 amount, address to, bytes memory proof) internal view returns (bytes memory) {
         bytes memory pl = bytes.concat(abi.encode(uint256(0), block.number + 5, uint256(0), carol, alice), _blob(5, PqzCt.CT));
-        return abi.encodeCall(IPqzToken.mtxUnshield, (_bs(pl), amount, bytes32(uint256(uint160(to))), proof, _pqAuth(), ""));
+        return abi.encodeCall(IPqzToken.mtxUnshield, (_bs(pl), amount, bytes32(uint256(uint160(to))), proof, _pqAuth(), "", noVerdict()));
     }
 
     function test_gas_refresh() public {
@@ -860,7 +861,7 @@ contract PqzStatePinGasTest is PqzSlots {
 
     function _burnH(bytes32 from, bytes memory auth, bytes memory proof) internal view returns (bytes memory) {
         bytes memory pl = bytes.concat(abi.encode(uint256(0), block.number + 5, uint256(0), from, alice), _blob(5, PqzCt.CT));
-        return abi.encodeCall(IPqzToken.mtxUnshield, (_bs(pl), 1, bytes32(uint256(uint160(0xD00D))), proof, UACall.auth(from, auth), ""));
+        return abi.encodeCall(IPqzToken.mtxUnshield, (_bs(pl), 1, bytes32(uint256(uint160(0xD00D))), proof, UACall.auth(from, auth), "", noVerdict()));
     }
 
     /// The cheapest debit (burn 1) of a 2-of-2 / 3-of-3 `mldsa65` `msig` holder on both relay paths, and of the
@@ -929,7 +930,8 @@ contract PqzStatePinGasTest is PqzSlots {
     function _discRow(string memory sys, uint8 kd, bytes32 ref, uint256 leg, string memory entry) internal {
         string memory kn = kd == 0 ? "SENDER" : kd == 1 ? "RECEIVER" : "AUDITOR";
         string memory key = string.concat("DISCLOSE-", kn);
-        bytes memory d = abi.encodeCall(tok.verifyTransferAmount, (ref, leg, 1, kd, uint64(0), _pf(sys, key)));
+        bytes memory d = abi.encodeWithSignature("verifyTransferAmount(bytes32,uint256,uint256,uint8,uint64,bytes)", ref, leg, 1, kd,
+            uint64(0), _pf(sys, key));
         _row(sys, key, string.concat("disclosure ", kn, ", ", entry, " (verifyTransferAmount)"), address(tok), d, false);
     }
 

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {noVerdict} from "../../pqz/helpers/PqzVerdicts.sol";
 import {PayMetaKit} from "../../helpers/PayMetaKit.sol";
 import {Test} from "forge-std/Test.sol";
 import {Vm, VmSafe} from "forge-std/Vm.sol";
@@ -793,11 +794,12 @@ abstract contract RegPqzHandler is PqzRegFixture, RegCore {
             pDecoys.push(leg0);
             pDecoys.push(leg1);
             cd = abi.encodeWithSelector(form == 0 ? IPqzToken.mtxConfidentialTransfer.selector
-                : IPqzToken.mtxConfidentialTransferCompact.selector, _multi(form == 1, rec, ben, top, ++seed), PROOF, _pqAuth(), "");
+                : IPqzToken.mtxConfidentialTransferCompact.selector, _multi(form == 1, rec, ben, top, ++seed), PROOF, _pqAuth(), "",
+                noVerdict());
         } else {
             cd = abi.encodeWithSelector(form == 2 ? IPqzToken.mtxConfidentialTransferSingle.selector
                 : IPqzToken.mtxConfidentialTransferSingleCompact.selector, _single(form == 3, bob, ben, top, ++seed), PROOF,
-                _pqAuth(), "");
+                _pqAuth(), "", noVerdict());
         }
         pExpect = !_paused() && !_fz(alice) && (top == 0 || !_fz(nid(address(this)))) && _benOk(ben);
         _conf();
@@ -812,7 +814,7 @@ abstract contract RegPqzHandler is PqzRegFixture, RegCore {
         bytes32 to = [nid(PAYEE), bob, nid(address(this)), carol][r % 4];
         _conf();
         _op(K_MOVE, address(this), abi.encodeWithSelector(IPqzToken.mtxUnshield.selector, _burnArgs(ben, 0, ++seed),
-            bound(a, 1, tok.totalShielded() - fee), to, PROOF, _pqAuth(), bytes("")));
+            bound(a, 1, tok.totalShielded() - fee), to, PROOF, _pqAuth(), bytes(""), noVerdict()));
     }
 
     /// A refresh (amount 0, recipient 0): never refused without `shieldIn` (spec §4.2); with it, the payer's `P` and `F`.
@@ -820,7 +822,7 @@ abstract contract RegPqzHandler is PqzRegFixture, RegCore {
         top = bound(top, 0, 2);
         _conf();
         _op(top == 0 ? K_ROLL : K_MOVE, address(this), abi.encodeWithSelector(IPqzToken.mtxUnshield.selector,
-            _burnArgs(0, top, ++seed), 0, bytes32(0), PROOF, _pqAuth(), bytes("")));
+            _burnArgs(0, top, ++seed), 0, bytes32(0), PROOF, _pqAuth(), bytes(""), noVerdict()));
     }
 
     function pqUnshieldUnwrap(uint256 a, uint256 b) external {
@@ -833,7 +835,7 @@ abstract contract RegPqzHandler is PqzRegFixture, RegCore {
             IConfidentialWrappedToken.Unwrap(address(usd), MetaTxLib.pad(PAYEE), a, a * SCALE);
         _conf();
         _op(K_MOVE, address(this), abi.encodeCall(IPqzWrappedToken.mtxUnshieldUnwrap, (_burnArgs(ben, 0, ++seed), x, PROOF,
-            _pqAuth(), bytes(""))));
+            _pqAuth(), bytes(""), noVerdict())));
     }
 
     /// Prepare (both halves, once) and roll-over of a PQZ id: never refused (spec §4.2, §4.3).

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {noVerdict} from "./helpers/PqzVerdicts.sol";
 import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {UACall} from "../ua/UACall.sol";
 import {console2} from "forge-std/Test.sol";
@@ -74,7 +75,7 @@ contract PqzRelayTest is PqzFixture {
         // a transfer inside an envelope: the statement carries envelopeBinding(m)
         bytes memory out = _out(1, true);
         bytes memory pl = _payload(1, 0, alice, bob, bytes32(0), out, "");
-        bytes memory data = abi.encodeCall(IPqzToken.mtxConfidentialTransferSingle, (_ts(pl), hex"c0de", _pqAuth(), bytes("")));
+        bytes memory data = abi.encodeCall(IPqzToken.mtxConfidentialTransferSingle, (_ts(pl), hex"c0de", _pqAuth(), bytes(""), noVerdict()));
         m = _m(data, 1, 0);
         bytes32 b = _addrBinding(tok, m); // the client formula (R36: no address view)
         assertTrue(b != 0);
@@ -86,7 +87,7 @@ contract PqzRelayTest is PqzFixture {
         _mockOp(1, 0);
         vm.mockCall(PQZ, abi.encodePacked(uint8(1), uint32(ST_TX), st, hex"c0de"), abi.encode(uint256(1)));
         vm.expectRevert(IPqzToken.ProofRejected.selector);
-        tok.mtxConfidentialTransferSingle(_ts(pl), hex"c0de", _pqAuth(), ""); // stripped out of its envelope: the direct binding
+        tok.mtxConfidentialTransferSingle(_ts(pl), hex"c0de", _pqAuth(), "", noVerdict()); // stripped out of its envelope: the direct binding
         MetaTxLib.MetaTransaction memory other = _m(data, 2, 0); // another nonce: another binding
         sg = _sig(other);
         vm.expectRevert(); // MetaTxBadNonce first; with nonce 1 used elsewhere the binding would differ
@@ -151,7 +152,7 @@ contract PqzRelayTest is PqzFixture {
         NormalPqzToken(address(tok)).mintToUA(fee, 2 * SCALE);
         minted += 2 * SCALE;
         bytes memory pl = _payload(1, 2, alice, bob, bytes32(0), _out(2, false), "");
-        m.data = abi.encodeCall(IPqzToken.mtxConfidentialTransferSingle, (_ts(pl), hex"c0de", _pqAuth(), bytes("")));
+        m.data = abi.encodeCall(IPqzToken.mtxConfidentialTransferSingle, (_ts(pl), hex"c0de", _pqAuth(), bytes(""), noVerdict()));
         m.nonce = 1;
         m.mode = 0;
         m.fee = 0;

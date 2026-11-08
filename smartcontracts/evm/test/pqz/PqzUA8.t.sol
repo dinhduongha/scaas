@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {noVerdict} from "./helpers/PqzVerdicts.sol";
 import {PqzFixture} from "./helpers/PqzFixture.sol";
 import {IPqzToken} from "../../src/pqz/IPqzToken.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
@@ -32,10 +33,10 @@ contract PqzUA8Test is PqzFixture {
         bytes memory out = _out(60, true);
         bytes memory pl = _payload(1, 0, alice, u, bytes32(0), out, "");
         vm.expectRevert(err); // credit to `u`
-        tok.mtxConfidentialTransferSingle(_ts(pl), hex"01", _pqAuth(), "");
+        tok.mtxConfidentialTransferSingle(_ts(pl), hex"01", _pqAuth(), "", noVerdict());
         pl = _payload(0, 0, u, bob, bytes32(0), out, "");
         vm.expectRevert(err); // `u` as sender
-        tok.mtxConfidentialTransferSingle(_ts(pl), hex"01", _pqAuth(), "");
+        tok.mtxConfidentialTransferSingle(_ts(pl), hex"01", _pqAuth(), "", noVerdict());
     }
 
     function test_ua8_pqzTokenRefusesUnproven() public {

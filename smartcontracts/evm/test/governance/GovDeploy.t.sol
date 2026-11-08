@@ -299,9 +299,10 @@ contract GovDeployTest is Test {
         // T2: 51,436 -> 46,804 B; T3: 46,804 -> 45,140 B; T6: 45,140 -> 42,669 B; T24: 42,669 -> 42,985 B;
         // T25: 42,985 -> 43,333 B; T26: 43,333 -> 43,552 B; pay-meta-tax T37: 43,552 -> 43,667 B; T38: 43,667 -> 43,714 B;
         // T39: 43,714 -> 43,711 B; T40: 43,711 -> 43,503 B (lever 5: `_payMeta` in `MtxPipelineLib`); chain-neutral T72:
-        // 43,503 -> 44,456 B (the env read from the clone's code, `chainEnv`, `validateEnv`)
-        h.limitCode(44_455);
-        vm.expectRevert(bytes("WrappedToken runtime 44456 B > chain code limit 44455 B (CHAIN_CODE_LIMIT, CTR-GOV-19)"));
+        // 43,503 -> 44,456 B (the env read from the clone's code, `chainEnv`, `validateEnv`); 3f T44: 44,456 -> 44,610 B (the
+        // three PQZ verifier fields refused by `_requireUnused`)
+        h.limitCode(44_609);
+        vm.expectRevert(bytes("WrappedToken runtime 44610 B > chain code limit 44609 B (CHAIN_CODE_LIMIT, CTR-GOV-19)"));
         h.deploy(ZUID, false, ska);
     }
 
@@ -494,8 +495,9 @@ contract GovDeployTest is Test {
         // levers 5 and 6); 3g T51: 0x9F9448a2e031D1d7055c7D7b6593EA8f752c7D91 -> 0x8C7beC80b3bD61A2920083C0617555a87A5fa7E5
         // (the metadata hash: `IUARegistry`); chain-neutral T72: -> this (the metadata hash: `SaltedEIP712`'s virtual
         // domain, `UAMetaTxBase`'s immutables behind `_registry()` / `_hedera()`) 0x77826623be224e298A4Ad0edd07b520e342523A2;
-        // T76: -> this (the router's three creation ops, S3)
-        assertEq(router, 0x773A627eD1C1CCF588DCB81799c1BFB52E5d9d57, "GovernanceRouter");
+        // T76: 0x773A627eD1C1CCF588DCB81799c1BFB52E5d9d57 (the router's three creation ops, S3); 3f T45: -> this (the
+        // three PQZ verifier ops `mtxPqz{Set,Cancel,Revoke}Verifier`)
+        assertEq(router, 0x5A6E6681A1Ec31741438D863ffCC138C186FB933, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append: chain-neutral releases (plan T72), `abi.encode(factory, implArgs)`;

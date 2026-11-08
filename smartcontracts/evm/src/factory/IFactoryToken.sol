@@ -71,7 +71,7 @@ interface IFactoryToken {
         uint16 maxRateStepBps;
     }
 
-    /// @notice `*_ZETHER` kinds only; every other kind requires it empty. `maxShielded` (the total cap, `≤ 2^54`) and
+    /// @notice The confidential kinds (`*_ZETHER`, `*_PQZ`) only; every other kind requires it empty. `maxShielded` (the total cap, `≤ 2^54`) and
     ///         `confidentialFee` (the inner fee, `< 2^64` and `< maxShielded`) are per token (CTR-ZTH-04, CTR-ZTH-05).
     ///         The two modes are fixed for the token's life (CTR-ZTH-38, CTR-ZTH-42): `disclosureMode` 0 `BUNDLE` (the
     ///         default: every transfer entry, `mtxConfidentialTransfer` stores the record) or 1 `COMPACT` (commit-reveal only);
@@ -90,6 +90,14 @@ interface IFactoryToken {
         /// (PQZ op 7, CTR-PQZ-25; Zether `mtxConfidentialTransfer*` multi); the sender's `decoyFee` goes to every leg's
         /// public balance. Immutable; 0 allowed (the default).
         uint256 minDecoyFee;
+        /// `*_PQZ` kinds only (group 3f, PQZ verifier mode spec §3, AV-2; every other kind requires the three empty):
+        /// `pqzVerifyMode` 0 `PRECOMPILE` (the default, the precompile's verdict) or 1 `OFFCHAIN` (a verdict signed by
+        /// `pqzVerifierUA`), any other value `PqzVerifyModeInvalid`; `pqzVerifierUA` 0 in `PRECOMPILE`, the verifier UA in
+        /// `OFFCHAIN`; `pqzVerifierFixed` false in `PRECOMPILE`, in `OFFCHAIN` true = fixed for ever, false = transferable
+        /// with the factory's notice. A field set against the mode: `PqzVerifyConfigInvalid`. Immutable mode.
+        uint8 pqzVerifyMode;
+        bytes32 pqzVerifierUA;
+        bool pqzVerifierFixed;
     }
 
     /// @notice Regulated-kinds spec §2.4: the regulated kinds' (8-13) only; a plain kind (0-5) refuses any set field

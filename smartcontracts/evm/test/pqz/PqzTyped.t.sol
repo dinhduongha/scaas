@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {noVerdict} from "./helpers/PqzVerdicts.sol";
 import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {UACall} from "../ua/UACall.sol";
 import {stdJson} from "forge-std/StdJson.sol";
@@ -274,7 +275,7 @@ contract PqzAuthDigestTest is PqzNamedBase {
         ));
         assertEq(d, ref_.digest(1, st, domainOf(address(tok))), "the code's digest of the statement");
         vm.expectCall(address(reg), abi.encodeCall(IUARegistry.requireAuthorized, (alice, UAKinds.PURPOSE_ZETHER_AUTH, d, _pqAuth())));
-        tok.mtxConfidentialTransferSingle(_ts(pl), hex"c0de", _pqAuth(), "");
+        tok.mtxConfidentialTransferSingle(_ts(pl), hex"c0de", _pqAuth(), "", noVerdict());
     }
 
     function _domainJson() internal view returns (string memory) {
@@ -383,14 +384,14 @@ contract PqzExplicitStatementTest is PqzNamedBase {
     function test_pqzStoredCiphertextUnchanged() public {
         bytes memory pl = _sPl(tok, alice, true, "", 21);
         bytes memory blob = ref_.blobSingle(pl, false);
-        bytes32 ref = tok.mtxConfidentialTransferSingle(_ts(pl), hex"01", _pqAuth(), "");
+        bytes32 ref = tok.mtxConfidentialTransferSingle(_ts(pl), hex"01", _pqAuth(), "", noVerdict());
         assertEq(tok.pqzEntryBlob(ref), blob, "op 1 BUNDLE auditor");
         assertEq(tok.pqzPendingCt(bob, 0, tok.pqzAccount(bob, 0).pendingCount - 1), _cut(_ct(pl, T_OUT), 0, PqzCt.CT), "the credit is u || v_t");
         assertEq(tok.pqzAcc(alice, 0), bytes.concat(_cut(pl, T_OUT, PqzCt.PK), _cut(pl, T_OUT + PqzCt.CT, PqzCt.V)), "acc is u || v_f");
 
         pl = _sPl(tok, alice, false, _memo(), 22);
         blob = ref_.blobSingle(pl, true);
-        ref = tok.mtxConfidentialTransferSingleCompact(_ts(pl), hex"01", _pqAuth(), "");
+        ref = tok.mtxConfidentialTransferSingleCompact(_ts(pl), hex"01", _pqAuth(), "", noVerdict());
         assertEq(tok.pqzEntryBlob(ref), blob, "op 1 HASH");
         bytes memory r = _slice(blob, 0, blob.length - PqzCt.VP);
         assertEq(tok.transferEntry(ref), bytes.concat(keccak256(r), _memo()), "hash || memo");
@@ -400,13 +401,13 @@ contract PqzExplicitStatementTest is PqzNamedBase {
             (bool aud, bool hash) = (k & 1 == 0, k >= 2);
             pl = _mPl(tok, alice, _legsN(m), aud, hash ? _mem(m) : bytes(""), 30 + k);
             blob = ref_.blobMulti(pl, hash);
-            ref = hash ? tok.mtxConfidentialTransferCompact(_ms(pl), hex"01", _pqAuth(), "") : tok.mtxConfidentialTransfer(_ms(pl), hex"01", _pqAuth(), "");
+            ref = hash ? tok.mtxConfidentialTransferCompact(_ms(pl), hex"01", _pqAuth(), "", noVerdict()) : tok.mtxConfidentialTransfer(_ms(pl), hex"01", _pqAuth(), "", noVerdict());
             assertEq(tok.pqzEntryBlob(ref), blob, "op 7");
             if (hash) assertEq(_cut(tok.transferEntry(ref), 32, 18 + 40 * m), _mem(m), "the memo");
         }
 
         pl = _bPl(tok, alice, 40);
-        tok.mtxUnshield(_bs(pl), 0, bytes32(0), hex"01", _pqAuth(), "");
+        tok.mtxUnshield(_bs(pl), 0, bytes32(0), hex"01", _pqAuth(), "", noVerdict());
         assertEq(tok.pqzAcc(alice, 0), _cut(pl, B_OUT, PqzCt.CT), "a burn's u' || v_f");
     }
 
@@ -451,8 +452,8 @@ contract PqzNamedTest is PqzNamedBase {
         bytes memory st = tok.transferSingleStatement(t, _uaBindingOf(tok, u));
         vm.expectCall(PQZ, abi.encodePacked(uint8(1), uint32(st.length), st, proof));
         vm.prank(relayer);
-        bytes32 ref = compact ? tok.mtxConfidentialTransferSingleCompact(u, t, proof, _pqAuth(), hint, _uaSig(sig))
-            : tok.mtxConfidentialTransferSingle(u, t, proof, _pqAuth(), hint, _uaSig(sig));
+        bytes32 ref = compact ? tok.mtxConfidentialTransferSingleCompact(u, t, proof, _pqAuth(), hint, _uaSig(sig), noVerdict())
+            : tok.mtxConfidentialTransferSingle(u, t, proof, _pqAuth(), hint, _uaSig(sig), noVerdict());
         assertEq(ref, _entryRef(tok, 0), "the entry's reference");
         assertEq(tok.pqzAccount(alice, 0).sendCounter, 1);
         assertEq(tok.mtxNonce(u.from, LANE), 1);
@@ -466,8 +467,8 @@ contract PqzNamedTest is PqzNamedBase {
     function _callSingle(bool compact, MetaTxLib.UAEnvelope memory u, IPqzToken.PqzTransferArgs memory t, bytes memory proof,
         bytes memory hint, bytes memory sig) internal
     {
-        if (compact) tok.mtxConfidentialTransferSingleCompact(u, t, proof, _pqAuth(), hint, _uaSig(sig));
-        else tok.mtxConfidentialTransferSingle(u, t, proof, _pqAuth(), hint, _uaSig(sig));
+        if (compact) tok.mtxConfidentialTransferSingleCompact(u, t, proof, _pqAuth(), hint, _uaSig(sig), noVerdict());
+        else tok.mtxConfidentialTransferSingle(u, t, proof, _pqAuth(), hint, _uaSig(sig), noVerdict());
     }
 
     /// ua-mtx-merge T5, meaning (R36): the next call presents a wallet's signature over the retired address struct (`from`
@@ -530,8 +531,8 @@ contract PqzNamedTest is PqzNamedBase {
         bytes memory st = tok.transferStatement(t, _uaBindingOf(tok, u));
         vm.expectCall(PQZ, abi.encodePacked(uint8(7), uint32(st.length), st, proof));
         vm.prank(relayer);
-        bytes32 ref = compact ? tok.mtxConfidentialTransferCompact(u, t, proof, _pqAuth(), "", _uaSig(sig))
-            : tok.mtxConfidentialTransfer(u, t, proof, _pqAuth(), "", _uaSig(sig));
+        bytes32 ref = compact ? tok.mtxConfidentialTransferCompact(u, t, proof, _pqAuth(), "", _uaSig(sig), noVerdict())
+            : tok.mtxConfidentialTransfer(u, t, proof, _pqAuth(), "", _uaSig(sig), noVerdict());
         assertEq(ref, _entryRef(tok, 0));
         for (uint256 j; j < 4; ++j) assertEq(tok.pqzAccount(rec[j], 0).pendingCount, 1, "a credit per leg");
         assertEq(tok.mtxNonce(u.from, LANE), 1);
@@ -541,8 +542,8 @@ contract PqzNamedTest is PqzNamedBase {
     function _callMulti(bool compact, MetaTxLib.UAEnvelope memory u, IPqzToken.PqzMultiArgs memory t, bytes memory proof, bytes memory hint,
         bytes memory sig) internal
     {
-        if (compact) tok.mtxConfidentialTransferCompact(u, t, proof, _pqAuth(), hint, _uaSig(sig));
-        else tok.mtxConfidentialTransfer(u, t, proof, _pqAuth(), hint, _uaSig(sig));
+        if (compact) tok.mtxConfidentialTransferCompact(u, t, proof, _pqAuth(), hint, _uaSig(sig), noVerdict());
+        else tok.mtxConfidentialTransfer(u, t, proof, _pqAuth(), hint, _uaSig(sig), noVerdict());
     }
 
     /// As `_bindsSingle`: the salt, the hint, a leg's `v`.
@@ -591,13 +592,13 @@ contract PqzNamedTest is PqzNamedBase {
         bytes memory sig = _unshieldSig(ua, e.validUntil, b, p, proof);
         if (!ua) {
             _refusedAt(relayer);
-            tok.mtxUnshield(u, b, p, proof, _pqAuth(), "", _uaSig(sig));
+            tok.mtxUnshield(u, b, p, proof, _pqAuth(), "", _uaSig(sig), noVerdict());
             return;
         }
         bytes memory st = tok.burnStatement(b, p.amount, p.recipient, _uaBindingOf(tok, u));
         vm.expectCall(PQZ, abi.encodePacked(uint8(2), uint32(st.length), st, proof));
         vm.prank(relayer);
-        tok.mtxUnshield(u, b, p, proof, _pqAuth(), "", _uaSig(sig));
+        tok.mtxUnshield(u, b, p, proof, _pqAuth(), "", _uaSig(sig), noVerdict());
         assertEq(tok.balanceOf(address(0xD00D)), 5 * SCALE, "the amount reached the recipient");
     }
 
@@ -625,13 +626,13 @@ contract PqzNamedTest is PqzNamedBase {
         bytes memory sig = _unwrapSig(ua, e.validUntil, b, x, proof);
         if (!ua) {
             _refusedAt(relayer);
-            w.mtxUnshieldUnwrap(u, b, x, proof, _pqAuth(), "", _uaSig(sig));
+            w.mtxUnshieldUnwrap(u, b, x, proof, _pqAuth(), "", _uaSig(sig), noVerdict());
             return;
         }
         bytes memory st = w.unshieldUnwrapStatement(b, x, _uaBindingOf(w, u));
         vm.expectCall(PQZ, abi.encodePacked(uint8(2), uint32(st.length), st, proof));
         vm.prank(relayer);
-        w.mtxUnshieldUnwrap(u, b, x, proof, _pqAuth(), "", _uaSig(sig));
+        w.mtxUnshieldUnwrap(u, b, x, proof, _pqAuth(), "", _uaSig(sig), noVerdict());
         assertEq(usd.balanceOf(address(0xD00D)), 40 * SCALE, "the leg paid");
     }
 
@@ -807,8 +808,8 @@ contract PqzPartLengthsTest is PqzNamedBase {
 
     function _t(IPqzToken.PqzTransferArgs memory t, uint256 len, bool compact) internal {
         _expect(len);
-        if (compact) tok.mtxConfidentialTransferSingleCompact(t, hex"01", _pqAuth(), "");
-        else tok.mtxConfidentialTransferSingle(t, hex"01", _pqAuth(), "");
+        if (compact) tok.mtxConfidentialTransferSingleCompact(t, hex"01", _pqAuth(), "", noVerdict());
+        else tok.mtxConfidentialTransferSingle(t, hex"01", _pqAuth(), "", noVerdict());
     }
 
     function test_partLengths_op1() public {
@@ -834,7 +835,7 @@ contract PqzPartLengthsTest is PqzNamedBase {
             t.sealedMemo = "";
         }
         _t(t, 0, true); // commit-reveal without the memo
-        tok.mtxConfidentialTransferSingle(t, hex"01", _pqAuth(), "");
+        tok.mtxConfidentialTransferSingle(t, hex"01", _pqAuth(), "", noVerdict());
         assertEq(tok.pqzAccount(alice, 0).sendCounter, 1, "the unchanged struct passes");
     }
 
@@ -845,14 +846,14 @@ contract PqzPartLengthsTest is PqzNamedBase {
         t.sealedMemo = new bytes(41);
         _t(t, 41, true);
         t.sealedMemo = new bytes(2 + 40 * 1);
-        tok.mtxConfidentialTransferSingleCompact(t, hex"01", _pqAuth(), "");
+        tok.mtxConfidentialTransferSingleCompact(t, hex"01", _pqAuth(), "", noVerdict());
         assertEq(tok.pqzAccount(alice, 0).sendCounter, 1, "the 42-byte sealed memo passes");
     }
 
     function _m(IPqzToken.PqzMultiArgs memory t, uint256 len, bool compact) internal {
         _expect(len);
-        if (compact) tok.mtxConfidentialTransferCompact(t, hex"01", _pqAuth(), "");
-        else tok.mtxConfidentialTransfer(t, hex"01", _pqAuth(), "");
+        if (compact) tok.mtxConfidentialTransferCompact(t, hex"01", _pqAuth(), "", noVerdict());
+        else tok.mtxConfidentialTransfer(t, hex"01", _pqAuth(), "", noVerdict());
     }
 
     function test_partLengths_op7() public {
@@ -889,7 +890,7 @@ contract PqzPartLengthsTest is PqzNamedBase {
         _m(t, 0, false);
         t.u = us;
         _m(t, 0, true); // commit-reveal without the memo
-        tok.mtxConfidentialTransfer(t, hex"01", _pqAuth(), "");
+        tok.mtxConfidentialTransfer(t, hex"01", _pqAuth(), "", noVerdict());
         assertEq(tok.pqzAccount(alice, 0).sendCounter, 1, "the unchanged struct passes");
     }
 
@@ -899,14 +900,14 @@ contract PqzPartLengthsTest is PqzNamedBase {
         for (uint256 i; i < 4; ++i) {
             (x, b.u) = (b.u, new bytes(_bad(PqzCt.PK)[i]));
             _expect(b.u.length);
-            tok.mtxUnshield(b, 0, 0, hex"01", _pqAuth(), "");
+            tok.mtxUnshield(b, 0, 0, hex"01", _pqAuth(), "", noVerdict());
             b.u = x;
             (x, b.vFrom) = (b.vFrom, new bytes(_bad(PqzCt.V)[i]));
             _expect(b.vFrom.length);
-            tok.mtxUnshield(b, 0, 0, hex"01", _pqAuth(), "");
+            tok.mtxUnshield(b, 0, 0, hex"01", _pqAuth(), "", noVerdict());
             b.vFrom = x;
         }
-        tok.mtxUnshield(b, 0, 0, hex"01", _pqAuth(), "");
+        tok.mtxUnshield(b, 0, 0, hex"01", _pqAuth(), "", noVerdict());
         assertEq(tok.pqzAccount(alice, 0).sendCounter, 1, "the unchanged struct passes");
     }
 
@@ -928,16 +929,16 @@ contract PqzPartLengthsTest is PqzNamedBase {
     function test_rawCalldata_pAndSaltOutOfType() public {
         bytes32 tooBig = bytes32(uint256(1) << 64);
         bytes32 dirty = bytes32(uint256(bytes32(salt)) | 1);
-        bytes memory cd = abi.encodeCall(IPqzToken.mtxConfidentialTransferSingle, (_ts(_sPl(tok, alice, true, "", 73)), hex"01", _pqAuth(), ""));
+        bytes memory cd = abi.encodeCall(IPqzToken.mtxConfidentialTransferSingle, (_ts(_sPl(tok, alice, true, "", 73)), hex"01", _pqAuth(), "", noVerdict()));
         // group 3g T52: `keyVersion` (a `uint64`, word 4) after `fromUA`; `salt` moved from word 6 to 7
         _refusedRaw(_patched(cd, 0, 0, tooBig));
         _refusedRaw(_patched(cd, 0, 4, tooBig));
         _refusedRaw(_patched(cd, 0, 7, dirty));
-        bytes memory cm = abi.encodeCall(IPqzToken.mtxConfidentialTransfer, (_ms(_mPl(tok, alice, _legsN(2), true, "", 74)), hex"01", _pqAuth(), ""));
+        bytes memory cm = abi.encodeCall(IPqzToken.mtxConfidentialTransfer, (_ms(_mPl(tok, alice, _legsN(2), true, "", 74)), hex"01", _pqAuth(), "", noVerdict()));
         _refusedRaw(_patched(cm, 0, 0, tooBig));
         _refusedRaw(_patched(cm, 0, 4, tooBig));
         _refusedRaw(_patched(cm, 0, 7, dirty));
-        bytes memory cb = abi.encodeCall(IPqzToken.mtxUnshield, (_bs(_bPl(tok, alice, 75)), 0, 0, hex"01", _pqAuth(), ""));
+        bytes memory cb = abi.encodeCall(IPqzToken.mtxUnshield, (_bs(_bPl(tok, alice, 75)), 0, 0, hex"01", _pqAuth(), "", noVerdict()));
         _refusedRaw(_patched(cb, 0, 0, tooBig));
         _refusedRaw(_patched(cb, 0, 4, tooBig));
         // the same calldata with the words in type passes: `_patched` hit the field
@@ -1135,7 +1136,7 @@ contract PqzTypedRowsTest is PqzNamedBase {
     function test_typedOpsVectors_UAPqzTransferSingle() public {
         for (uint256 k; k < 2; ++k) {
             string memory op = k == 0 ? "UAPqzTransferSingle" : "UAPqzTransferSingleCompact";
-            _bothRenamed(op, abi.encodeWithSignature(_head(op), _uaE(op), _single(op), _proofOf(op), _pa(op), _hint(op), _auth(op)), IPqzToken.BadPayload.selector);
+            _bothRenamed(op, abi.encodeWithSignature(_head(op), _uaE(op), _single(op), _proofOf(op), _pa(op), _hint(op), _auth(op), noVerdict()), IPqzToken.BadPayload.selector);
         }
     }
 
@@ -1150,7 +1151,7 @@ contract PqzTypedRowsTest is PqzNamedBase {
     function test_typedOpsVectors_UAPqzTransfer() public {
         for (uint256 k; k < 2; ++k) {
             string memory op = k == 0 ? "UAPqzTransfer" : "UAPqzTransferCompact";
-            _bothRenamed(op, abi.encodeWithSignature(_head(op), _uaE(op), _multiOf(op), _proofOf(op), _pa(op), _hint(op), _auth(op)), IPqzToken.BadPayload.selector);
+            _bothRenamed(op, abi.encodeWithSignature(_head(op), _uaE(op), _multiOf(op), _proofOf(op), _pa(op), _hint(op), _auth(op), noVerdict()), IPqzToken.BadPayload.selector);
         }
     }
 
@@ -1162,7 +1163,7 @@ contract PqzTypedRowsTest is PqzNamedBase {
 
     function test_typedOpsVectors_UAPqzUnshield() public {
         string memory op = "UAPqzUnshield";
-        _bothRenamed(op, abi.encodeWithSignature(_head(op), _uaE(op), _burn(op), _payout(op), _proofOf(op), _pa(op), _hint(op), _auth(op)), IUALedger.UANotRegistered.selector);
+        _bothRenamed(op, abi.encodeWithSignature(_head(op), _uaE(op), _burn(op), _payout(op), _proofOf(op), _pa(op), _hint(op), _auth(op), noVerdict()), IUALedger.UANotRegistered.selector);
     }
 
     /// governance T9 (spec §5.4): the leg's quote runs before the burn, so the row's underlying, no leg of `w`, is the op's
@@ -1175,7 +1176,7 @@ contract PqzTypedRowsTest is PqzNamedBase {
 
     function test_typedOpsVectors_UAPqzUnshieldUnwrap() public {
         string memory op = "UAPqzUnshieldUnwrap";
-        _reachRenamed(op, address(w), abi.encodeWithSignature(_head(op), _uaE(op), _burn(op), _unwrap(op), _proofOf(op), _pa(op), _hint(op), _auth(op)), IWrappedToken.UnknownUnderlying.selector);
+        _reachRenamed(op, address(w), abi.encodeWithSignature(_head(op), _uaE(op), _burn(op), _unwrap(op), _proofOf(op), _pa(op), _hint(op), _auth(op), noVerdict()), IWrappedToken.UnknownUnderlying.selector);
     }
 
     function test_typedOpsVectors_WrapShield() public {

@@ -143,7 +143,7 @@ abstract contract ZetherFixture is Test {
         c.conf = IFactoryToken.ConfidentialConfig(
             auditor ? ZetherKeys.pub(X_AUD, bls) : bytes(""), SCALE, maxShielded, FEE, dMode,
             auditor ? aMode : 0, minDecoy
-        );
+        , 0, bytes32(0), false);
     }
 
     function _newToken(bool auditor, bytes32 salt) internal virtual returns (ZetherLayer) {

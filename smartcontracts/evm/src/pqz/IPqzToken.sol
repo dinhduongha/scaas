@@ -4,6 +4,11 @@ pragma solidity ^0.8.24;
 import {IConfidentialToken, IConfidentialWrappedToken} from "../confidential/IConfidentialToken.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
 
+/// @notice Group 3f (PQZ verifier mode spec §4.3): the owner revoked a transferable verifier at once (`previous` the old
+///         one, `pqzVerifierEpoch` the new epoch). At file level because the error of the same name, every proof-carrying
+///         op's refusal after it, is `IPqzToken`'s (one name for both, spec §4.3).
+event PqzVerifierRevoked(bytes32 previous, uint32 pqzVerifierEpoch);
+
 /// @title Events, errors, the account view and the PQZ-only entry points of the PQZ layer (pq-zero-knowledge.md §7.1,
 ///        §7.8, §9.4); the shared entry points and events are `IConfidentialToken`'s (plan 5h D20).
 /// @notice **UNAUDITED.** `bytes32` ids are signing UAs holding a PQZ key (UA-6 U7). The debits take explicit parameters
@@ -63,6 +68,42 @@ interface IPqzToken is IConfidentialToken {
         bytes32 beneficiaryUA;
         bytes u;
         bytes vFrom;
+    }
+
+    /// @notice Group 3f (PQZ verifier mode spec §5.1, AV-5): what the token's verifier UA signs, typed EIP-712 in the token's
+    ///         own domain under `PURPOSE_PQZ_VERDICT`: the statement the token built (`statementHash = keccak256` of the
+    ///         bytes its statement views return) and the exact proof (`proofHash = keccak256(proof)`), the token, the chain,
+    ///         the release's `proofSystemId`, the verifier epoch (a signature dies at every verifier change, A -> B -> A
+    ///         included) and `validUntil` (unix seconds, the verifier's own life). Empty (every field 0, an empty `UASig`)
+    ///         on a `PRECOMPILE` token, which never reads it.
+    struct PqzVerdict {
+        address token;
+        uint256 chainId;
+        bytes32 proofSystemId;
+        bytes32 statementHash;
+        bytes32 proofHash;
+        uint32 pqzVerifierEpoch;
+        uint64 validUntil;
+    }
+
+    /// @notice The verdict and the verifier's signature over it, last on every proof-carrying entry and the verdict form of
+    ///         `verifyTransferAmount` (spec §5.3: one named struct, the legacy code generator's stack; still explicit).
+    struct PqzSignedVerdict {
+        PqzVerdict pqzVerdict;
+        IUARegistry.UASig sig;
+    }
+
+    /// @notice `pqzVerifyConfig()` (spec §4.4), for wallets and the node: the mode, the verifier (0: revoked, or a
+    ///         `PRECOMPILE` token), fixed or transferable, the epoch, a pending transfer and its `eta`, the notice period
+    ///         stored at init (the factory's `noticePeriod()`).
+    struct PqzVerifyConfig {
+        uint8 pqzVerifyMode;
+        bytes32 verifier;
+        bool fixed_;
+        uint32 pqzVerifierEpoch;
+        bytes32 pending;
+        uint64 eta;
+        uint64 noticePeriod;
     }
 
     /// @notice `amount` and `recipient` of the signed `mtxUnshield`: one calldata struct keeps those two
@@ -148,23 +189,65 @@ interface IPqzToken is IConfidentialToken {
     /// @notice Group 3g (KV-8, KV-11): a key version above current (a debit), or not stored (a disclosure).
     error KeyVersionUnknown(bytes32 ua, uint64 keyVersion);
 
-    /// @notice Multi-recipient, in the token's default storage mode.
+    // ---- group 3f, PQZ verifier mode (spec §3-§5; CTR-PQZ-27..29 drafts)
+    /// @notice An accepted proof in `OFFCHAIN` mode: the verifier's verdict over `statementHash` and `proofHash` at its epoch.
+    event PqzVerified(bytes32 statementHash, bytes32 proofHash, bytes32 verifier, uint32 pqzVerifierEpoch);
+    /// @notice A transfer of the verifier proposed by the owner; confirmable by its proposer in `[eta, eta + noticePeriod]`.
+    event PqzVerifierProposed(bytes32 current, bytes32 next, uint64 eta);
+    /// @notice The verifier, its shape and its epoch written (a confirmed transfer, or at once with a notice period 0).
+    event PqzVerifierSet(bytes32 previous, bytes32 next, uint32 pqzVerifierEpoch);
+    /// @notice A live pending transfer deleted by the owner.
+    event PqzVerifierCancelled(bytes32 next);
+
+    /// @notice `ConfidentialConfig.pqzVerifyMode` neither 0 `PRECOMPILE` nor 1 `OFFCHAIN`.
+    error PqzVerifyModeInvalid(uint8 mode);
+    /// @notice A verifier field set against the mode (`PRECOMPILE` with a verifier or fixed, `OFFCHAIN` without one), or a
+    ///         verifier op on a `PRECOMPILE` token.
+    error PqzVerifyConfigInvalid();
+    /// @notice A derived verifier not registered on this chain's registry (`kindOf = 0`).
+    error PqzVerifierUnregistered(bytes32 ua);
+    /// @notice A verifier (or an `msig` verifier's member) of a kind outside spec §4.1's table: `mldsa87`, the EIP-2537 and
+    ///         bn254 kinds, `zether-bls12381`, a native id with code (`EVM_CONTRACT`), a nested `msig`, ...
+    error PqzVerifierKind(uint16 kind);
+    /// @notice A fixed verifier: no transfer, no revocation (owner 2026-11-06, Q1).
+    error PqzVerifierFixed();
+    /// @notice A transfer to the current verifier.
+    error PqzVerifierSame();
+    /// @notice The verifier's shape (a native id's code, an `msig`'s structure, accepted slots, native members' code) is not
+    ///         the one frozen at its assignment: every `OFFCHAIN` proof refuses until a transfer re-assigns.
+    error PqzVerifierChanged();
+    /// @notice The verifier was revoked: every proof-carrying op refuses until a transfer sets a new one.
+    error PqzVerifierRevoked();
+    /// @notice The confirm of a transfer before its `eta`.
+    error PqzVerifierNotReady(uint64 eta);
+    /// @notice Another verifier proposed while `pending` is live.
+    error PqzVerifierPending(bytes32 pending);
+    /// @notice The five-argument disclosure (`verifyTransferAmount` without a verdict) on an `OFFCHAIN` token: cannot verify.
+    error PqzVerdictRequired();
+    /// @notice The verifier's signature over the verdict refused by the registry.
+    error PqzVerdictRejected();
+    /// @notice A verdict field not the token's: `field` its index in `PqzVerdict` (0 token, 1 chainId, 2 proofSystemId,
+    ///         3 statementHash, 4 proofHash, 5 pqzVerifierEpoch, 6 validUntil: below the block's timestamp).
+    error PqzVerdictMismatch(uint8 field);
+
+    /// @notice Multi-recipient, in the token's default storage mode. Every proof-carrying entry takes the verdict pair last
+    ///         (group 3f, spec §5.3): empty and never read on a `PRECOMPILE` token, required on an `OFFCHAIN` one.
     function mtxConfidentialTransfer(PqzMultiArgs calldata t, bytes calldata proof, IUARegistry.UASig calldata pqzAuth,
-        bytes calldata accHint) external returns (bytes32 entryRef);
+        bytes calldata accHint, PqzSignedVerdict calldata pqzVerdict) external returns (bytes32 entryRef);
     /// @notice Multi-recipient, commit-reveal on every token.
     function mtxConfidentialTransferCompact(PqzMultiArgs calldata t, bytes calldata proof,
-        IUARegistry.UASig calldata pqzAuth, bytes calldata accHint) external returns (bytes32 entryRef);
+        IUARegistry.UASig calldata pqzAuth, bytes calldata accHint, PqzSignedVerdict calldata pqzVerdict) external returns (bytes32 entryRef);
     /// @notice Single-recipient, in the token's default storage mode.
     function mtxConfidentialTransferSingle(PqzTransferArgs calldata t, bytes calldata proof,
-        IUARegistry.UASig calldata pqzAuth, bytes calldata accHint) external returns (bytes32 entryRef);
+        IUARegistry.UASig calldata pqzAuth, bytes calldata accHint, PqzSignedVerdict calldata pqzVerdict) external returns (bytes32 entryRef);
     /// @notice Single-recipient, commit-reveal on every token.
     function mtxConfidentialTransferSingleCompact(PqzTransferArgs calldata t, bytes calldata proof,
-        IUARegistry.UASig calldata pqzAuth, bytes calldata accHint) external returns (bytes32 entryRef);
+        IUARegistry.UASig calldata pqzAuth, bytes calldata accHint, PqzSignedVerdict calldata pqzVerdict) external returns (bytes32 entryRef);
     /// @notice `amount` shielded units out as `amount · shieldScale` public units from `SHIELD_POOL` to `recipient`: a
     ///         native address as its zero-padded id, or a registered SIGNING UA (credited on the UA ledger); the pools
     ///         are refused. PQZ: `amount = 0` with `recipient = 0` is a refresh.
     function mtxUnshield(PqzBurnArgs calldata b, uint256 amount, bytes32 recipient, bytes calldata proof,
-        IUARegistry.UASig calldata pqzAuth, bytes calldata accHint) external;
+        IUARegistry.UASig calldata pqzAuth, bytes calldata accHint, PqzSignedVerdict calldata pqzVerdict) external;
     /// @notice The account of `(ua, keyVersion)` (pq-zero-knowledge.md §9.4): counters, the `acc` reference, `accUnits`, flags,
     ///         the UA's `sendCounter`, `accHash`.
     function pqzAccount(bytes32 ua, uint64 keyVersion) external view returns (AccountState memory);
@@ -181,6 +264,12 @@ interface IPqzToken is IConfidentialToken {
     function mtxRollOver(bytes32 ua, uint64 keyVersion, uint256 n) external;
     /// @notice Anyone, once per account and half (0, 1) before its first rollover (idempotent; plan 5h D8), per key version.
     function mtxPrepareAcc(bytes32 ua, uint64 keyVersion, uint256 half) external;
+    /// @notice Group 3f (spec §4.2-§4.4): the owner's verifier transfer (propose, confirm after the notice), its cancel,
+    ///         the immediate revocation; the verifier's configuration.
+    function pqzSetVerifier(bytes32 next) external;
+    function pqzCancelVerifier() external;
+    function pqzRevokeVerifier() external;
+    function pqzVerifyConfig() external view returns (PqzVerifyConfig memory);
 }
 
 /// @title `mtxUnshieldUnwrap` of `WRAPPED_PQZ`, its explicit form (typed-signing Appendix X.3).
@@ -189,5 +278,5 @@ interface IPqzWrappedToken is IConfidentialWrappedToken {
     ///         to `x.recipient`: a native address, or a derived UA in the leg's own UA ledger (`transferToUA`;
     ///         `UALegNotLedger` otherwise).
     function mtxUnshieldUnwrap(IPqzToken.PqzBurnArgs calldata b, Unwrap calldata x, bytes calldata proof,
-        IUARegistry.UASig calldata pqzAuth, bytes calldata accHint) external;
+        IUARegistry.UASig calldata pqzAuth, bytes calldata accHint, IPqzToken.PqzSignedVerdict calldata pqzVerdict) external;
 }

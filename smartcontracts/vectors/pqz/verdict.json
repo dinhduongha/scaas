@@ -1,0 +1,273 @@
+{
+  "description": "Group 3f (PQZ verifier mode spec 5.1, 11.3): PqzVerdict struct hashes and digests in a PqzToken domain over the (stmt_keccak, proof_keccak) pairs of proof_pqzl.json (REGISTER left out), and the EOA verifier's 65-byte ECDSA UASig.signature over the registry's uaAuthDigest(ua, PURPOSE_PQZ_VERDICT, digest). statementHash = keccak256 of the statement bytes the token's views return; proofHash = keccak256 of the proof bytes. UNAUDITED.",
+  "domain": {
+    "chainId": 7622,
+    "name": "SCaaS PqzToken",
+    "salt": "0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464",
+    "separator": "0x6509732416e825fc329aaf0fd9e32e39914f6b9cade6fdb3db8ffd9225495460",
+    "verifyingContract": "0x7A7a7A7a7a7a7a7A7a7a7a7A7a7A7A7A7A7A7a7A",
+    "version": "1"
+  },
+  "file": "pqz/verdict.json",
+  "generator": "smartcontracts/evm/test/pqz/PqzVerdictVectors.t.sol (WRITE_VERDICT_VECTORS=true)",
+  "proofSystemId": "0xef1ffbcbd05394f8276e50a6c254022edf53bbd08a56e22aadddac2b9b90336e",
+  "purpose": "scaas.ua.purpose.pqz-verdict.v1",
+  "purposeTag": "0x6e2771f5777618fa67e04937826da046b89915d6f2f052c799d38b94df7d89bc",
+  "registryDomain": {
+    "chainId": 7622,
+    "name": "SCaaS UARegistry",
+    "salt": "0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464",
+    "separator": "0xa5bde032d82e6c3f7b5043e00b157824a197691b2fe73606d2a4d6db111e8a7f",
+    "verifyingContract": "0x5ca5000000000000000000000000000000000001",
+    "version": "1"
+  },
+  "rows": [
+    {
+      "digest": "0xc1db1f493d403c0f6a4d6ffd55036c07b49f96ead4341e67bd78c8b3039eecbf",
+      "form": "TRANSFER",
+      "pqzVerifierEpoch": 0,
+      "proofHash": "0xbceefa4994f684d2cb38ffd7002930f3f7a96d241c7789c71000cea97558d24d",
+      "signature": "0xfc54250d06b052d8c7bbb2c4675a487f169d35ba1a024a3f391ad282e2607a6a616c926c6fa9979a75e75a4f7ec189d2824386ee7c00385e2792dc2a1c18ad221b",
+      "statementHash": "0x2c5e07bc946a9b814bf166b6120c3c58c102db957838f939ae5280bd917ee2ab",
+      "structHash": "0x12fc4b184fc16d4b56e0dfb6a81d0886fa3148237faf9b40588f7f5e7500ceaf",
+      "uaAuthDigest": "0x7b7e2f35ca3ded5976ddbe87a9b2d2acc1233c82e8c673ebdecbe913c620a0f9",
+      "validUntil": 1800000000
+    },
+    {
+      "digest": "0x0fe9e053956d81c9693d337d50dc599710c0a99e62659afb1d1bc23114abce68",
+      "form": "TRANSFER0",
+      "pqzVerifierEpoch": 1,
+      "proofHash": "0x549e17d9dddf232ded68b8d955a108f79c0115f06eb64fb179d94f5206f9f237",
+      "signature": "0x82b00a910615160fb926e7a9efb3024870625dfe12f5f9c95b04a15ef7f2c71745dc17439c9dc541f943087dc8cbdd5cb0dcd7dd48c133b44aa0ec5320fa18851b",
+      "statementHash": "0xb1c04e8f410f7b1bcd0b5334bee9f92adeb1e0d9e4b71fb969bfc60f108db8f2",
+      "structHash": "0x8ababb435a58ca7ce2f7ae85a18d45aa06a435128f20ecaa71d1092ab88b0575",
+      "uaAuthDigest": "0x94ad40e18caa8ebef7f23ff00d4600a404c3d4e8a3ad66f3a21b0289262448f4",
+      "validUntil": 1800000001
+    },
+    {
+      "digest": "0x2a812f329f50b19205207765705c4214dbd02af3db120c9010e1e9c86539a82b",
+      "form": "BURN",
+      "pqzVerifierEpoch": 2,
+      "proofHash": "0x37c6f5d972ab76d572f92c6bf79bf03e7350a9ad0e9d16bc8844485ed8eea976",
+      "signature": "0xcb41de5431b38798e96d2488550373a88a5992dae2fbe1708fb46eade95df76a6275152b80765a1f80e164f0c46585d069b7e425e794ad0183c0ce4f36c22c1c1b",
+      "statementHash": "0xd91bd66621ceffbf0388f1a0c917823a17ca5a8a542c6ff5930be758b13fc900",
+      "structHash": "0x1d0ac44ef7b4289cd2e95e25d932229b8f93ccc63e1c1f234a7367c58d15b04c",
+      "uaAuthDigest": "0x0289cd7d55cff5c632cc972ca4485628cd30e0252c07cf7250ec71191fefd6d6",
+      "validUntil": 1800000002
+    },
+    {
+      "digest": "0x5e003f91de3372f183a442cc6b1f23bf60e95f75f93dd80fd76277a889ef36d7",
+      "form": "REFRESH",
+      "pqzVerifierEpoch": 0,
+      "proofHash": "0xcd897f99dc1668c0cbd73f51f165d3486a259a8cff41ba7523157822d9f54f4b",
+      "signature": "0x5b48a70c90482ea1cee4ed5337235da4ee7564f3c99991af9c56862674ebcfde1be7f1a58931da23d751f57c6400603ad7de21e663295cdfe97af7ea41eb906b1c",
+      "statementHash": "0xfdcdf961c4cf8644f5e0f7f9f4876c7e2f53f06c333c56c6f5efe6a57aba87a3",
+      "structHash": "0xaa52e20f869b93dd6f84f90d4512ed4b555b922d4ca0619d5ad63bd0085f7203",
+      "uaAuthDigest": "0x6ce2c1a777f4ed493ffda597031dd21475d4a53ac758837c0b99046a24fa5517",
+      "validUntil": 1800000003
+    },
+    {
+      "digest": "0x10f90d96a31d1de3095363ee92d96b48d53236c39360ecea218e1e38e7b87efd",
+      "form": "DISCLOSE-SENDER",
+      "pqzVerifierEpoch": 1,
+      "proofHash": "0xd79ebec1493489ce136aea7682c3cac7872aa3642a67274b44d6dd18feb92eee",
+      "signature": "0xc5b8fd32fa34c371fa679534f43ebfc69ad50831f9b4e015c6e20727f6e75a1901e99825ee7ea0f39c15378aec274b5e0bec7b5ca7850f6c4aedc6b8412fcc861c",
+      "statementHash": "0xb060004c06b9daaeb159b5fd23fb593d7019af0148ce7cc36a34c53fe1d35a3c",
+      "structHash": "0x7b4eddcb86c4aef0a2c1b42932ac752b67cc1af9e0c8de58025e1c12f71a157d",
+      "uaAuthDigest": "0x4731de2fe4fe26383e510657fb883b1fe717c2c8ef8bd5895788838f75eca29d",
+      "validUntil": 1800000005
+    },
+    {
+      "digest": "0x89c42255ccc2c4f163d0ad38e9b69314c11ca7f4ab4e80414d641d5bff97e9b0",
+      "form": "DISCLOSE-RECEIVER",
+      "pqzVerifierEpoch": 2,
+      "proofHash": "0x465fddabd8d7007b3788ec62fcf6675efc5447a7813021060c2d35ce504efa21",
+      "signature": "0x01df6cc97e910d6b243ac194477b6ff19abc221410034abd1f1ae7a19cad7e197be0f92ef3dc55bd69e65193b7dcded61e700c2c96a05f5f7bf066cbe00e7fb11b",
+      "statementHash": "0x0ca648302f1b0c6a64eb92a31d380573d5e86cce41c2cf21d9a860d3e9d00ec8",
+      "structHash": "0x217a40bfa90f7899c2fbd159ea3b3b5299a3df60d973f4f9eaf04586717d3e84",
+      "uaAuthDigest": "0x3177907c0094031b694aab6b498ba69ff0c28708903a2cc25a48e9872592448f",
+      "validUntil": 1800000006
+    },
+    {
+      "digest": "0xfdbff74910bc2fb469843df9e7249a5a2d7f961a45db294d8049748770f0376a",
+      "form": "DISCLOSE-AUDITOR",
+      "pqzVerifierEpoch": 0,
+      "proofHash": "0x32d6a6eb0cd127b23ed7dcaaaff5c21e13b8f7c514ed5513eb65fd4e7c8be5cc",
+      "signature": "0x86b8fa4110da0e0c32a1a1f20bd8d8439dde4e23ee9499d40cb3f61b7f4279203f92bc41f685fcc3bca2bc8e03eef9066d4ad6a977cdc3b38d0ceb742c8c6b1c1b",
+      "statementHash": "0x6cae9c10d6728ca75a28550ae4582d43c6dc8a2c1e091a7efba3860169a11b65",
+      "structHash": "0x3c06fdeae66b8f10c7b8f41f83de816f5ff33c8b8067958ceec285f163870a96",
+      "uaAuthDigest": "0x38ea0e8c73427a8f24bf736979c8f2db000f57c9f92f28a5fd05bfb2f7b37829",
+      "validUntil": 1800000007
+    },
+    {
+      "digest": "0x76f5b9e8e29342e361840c12b1fc896ea5429ce036f3dccf9001846946ffb97d",
+      "form": "TRANSFER-MULTI",
+      "pqzVerifierEpoch": 1,
+      "proofHash": "0x24830c4f8dbc18ddccfac2571780286d2d9f504542b712dedfc400bfa13f6831",
+      "signature": "0x7546ef7e9d5f48542c339f0b067e1c838031023a05a43277240303d5964a905a640a5a2c7bae7ccc66ee5ba672ab532723ea50826a68073e15a131c38fb0edf31c",
+      "statementHash": "0x5af81afdcbeb54d4b5e7e70c865e99375f812a063e70eb17e64abbb282d64496",
+      "structHash": "0x6487ac6d0ab6fd5dccfc263c0b50a19b2765e13447d9c9548a03bf6ff0a48c0c",
+      "uaAuthDigest": "0xe5adacc6bbdcca0b13bd7704de88f036ebe956bf923c00b83ff64cc80fea06e7",
+      "validUntil": 1800000008
+    },
+    {
+      "digest": "0x7e2da918996ca6b1986a679b1b196baf1658ca482eda36c456279fbc60cbf6e1",
+      "form": "TRANSFER-MULTI",
+      "pqzVerifierEpoch": 2,
+      "proofHash": "0x348ff6c31f4191707d67e06e27e3f4ab0a4a63dd7ffb957676791173625bf493",
+      "signature": "0x5e001526e35c1e3d791614399073f21c1d0ae0bb293633492e00df10c2ea386b042e37c3bd74d66fca12f6b8775d02d4088618cb71767476b25e8a98857889551c",
+      "statementHash": "0xd92a51f0597f4fac9eff3114b68e886e686e7dc825bb98d748cd0444ebc9770c",
+      "structHash": "0x6a06857fb3df8b6028066759492da5da278565789abd796296a61b0758531025",
+      "uaAuthDigest": "0x968b87a9a79a0f7c37ac0752167a92497b0bb164405089e6e94577c0a8bdcfff",
+      "validUntil": 1800000009
+    },
+    {
+      "digest": "0x01f36d7938f4081554d17e5ce10e742c3582e6c754989b253d41a1a376d7ffa0",
+      "form": "TRANSFER-MULTI",
+      "pqzVerifierEpoch": 0,
+      "proofHash": "0xd1264ee43dee8d2fda8594dfb5c0bc55ebbf92283c6952667ea4ae1c14249626",
+      "signature": "0x656f65e07cf7993637594f8e470f103305f54a7c27618c201f4e211e4a55d02e0e4bccdc30fb44da1f6cf9a63b781521c2d466cf4bcfb0d5f66f0801695b253e1b",
+      "statementHash": "0x71c70a98aea2f471230575add2bb38b88cac012c0a8ab4b0e5b308ac56f4261f",
+      "structHash": "0x35956ef2ce29917aac3909f953dedded08773990e2f06ebc9cc5140b93dec5f4",
+      "uaAuthDigest": "0x38598e43aaeddaafe361cb8169d75aa115ffb3c8f607e06743d2d613d42dce7b",
+      "validUntil": 1800000010
+    },
+    {
+      "digest": "0xe147af793853667311374aa6b1092274d4705874e358b00d44eb1c3197f61f7d",
+      "form": "TRANSFER-MULTI",
+      "pqzVerifierEpoch": 1,
+      "proofHash": "0x70210d8cfb3dcc11a791e1ac331179eb0266f385c27b03b761c16988c4b32dd1",
+      "signature": "0xbba620a0eaa4c45d25c86234e059b9c1a88c04a8cc116cd1fc3bbf3a67f115ff42949e379d81d4f3499148fae35e1edd53830f398521054383a235c40d8155c61c",
+      "statementHash": "0x21e2e3886daa1ab3982c43f41807025d6eeff8c6f5a8b1ca3df8eb0cac25c24b",
+      "structHash": "0x2695111dba368bd32afa73a26ada5b13ee8af18e4e7c46292a4f68aa8a97e5dc",
+      "uaAuthDigest": "0x959601d2751457e9f1a91046b5dfaccef5a7d40cb8cd66c40d2fde73bebe0702",
+      "validUntil": 1800000011
+    },
+    {
+      "digest": "0xb6e1b78de8417cbfeb0546c20f307fdfc753e62ad0c43d28e9a8993d89b9b00a",
+      "form": "TRANSFER-MULTI",
+      "pqzVerifierEpoch": 2,
+      "proofHash": "0x02c2b78cf8c8c353c18c3fca3fb05337f7d3b1dea1af1c48e73c86035bc462e2",
+      "signature": "0xae9803f85877a2f5533a44fecec3d483cf104fef0c2435b12ba4b0c0e225039f57c38bd5dd8c485103bc1cc8f8949602c0c8bb0b802bc629f31a22e334c13a961b",
+      "statementHash": "0x7766ab57358c90befe1bcf5c466b7e42b88d07dbd543b36b4179334cef45a59b",
+      "structHash": "0xc2082bc6bfa1347be3ee999683c874f1faefa7b7b31c208a8dc2d8b99e5c7de2",
+      "uaAuthDigest": "0x0b029eeee2628a07e731a5cdb6aa84d30cdae958bd7a54cba056374f23fec905",
+      "validUntil": 1800000012
+    },
+    {
+      "digest": "0x4464c39a28fa7847c7ee7d39302c349148785b582ce00cb4bc33e19283d02e47",
+      "form": "TRANSFER-MULTI",
+      "pqzVerifierEpoch": 0,
+      "proofHash": "0x285ebc73be05450320449dccb54013ae8cae6213d2aeebc366e8873f61e91e94",
+      "signature": "0xae9678eaf00092fb8681380c6aaa5b8d952a3f933e6d875bdd5d437a579465e34083860d5ae80ea590b281ea0c13e86f98f0e8ee12f4f7e8addfc19919ea3cf81c",
+      "statementHash": "0x4ae290c88f21a18a804edc270b82b66112b6cfc4167ad9e9be962d7dcb4bb40a",
+      "structHash": "0x6440ada42a269bea21d00b50610a6e650df0e74cd8fcaf41c2ac016e929b4ab4",
+      "uaAuthDigest": "0x5f802504e156937e4f9c29b3928a0e5bb58a38652d5929bb531a3f392fe2be19",
+      "validUntil": 1800000013
+    },
+    {
+      "digest": "0xba0b094a9dcd847b9a93e98f62000618915c779a28b0339498ec616c60031aee",
+      "form": "TRANSFER-MULTI",
+      "pqzVerifierEpoch": 1,
+      "proofHash": "0x29970a5bd7d33fd58e55fe32080735231e8f9a728b6478a6fa84426981e0d732",
+      "signature": "0x59d43a7c4abb055fa852f6af6b0d8016b756f9e503bb87044040e73386db8051510ec330a994bf5d49bed17a3198155202222057cbe6c13fa47f9fd96e8430a21c",
+      "statementHash": "0xd3335e552ee50438cc470452877b8f6bd8e45514b932d3bffa254fdb01b18c9d",
+      "structHash": "0x228a633ae39b642b447df5a57ec7e1eeb8a313f94a0ec849fb6457778f77e716",
+      "uaAuthDigest": "0x5655b62872544facf1da9a7c4214fa421b74d632291b4f41ba02c7678811d6cd",
+      "validUntil": 1800000014
+    },
+    {
+      "digest": "0xa10481dbab5353be10bff932c3593fc613e8afee4d96e6ff88bb2c696bf1754d",
+      "form": "TRANSFER-MULTI",
+      "pqzVerifierEpoch": 2,
+      "proofHash": "0xcc1e55719d93ecb850e03bc2ba640e3e4562658dad23dbc65662c93b8b5370b6",
+      "signature": "0xfc6b0a80919a2db9c1009b864e7ea0d627403f407a9cc83182c763869f2c03a2215ad97b23c5de6a80800a21eefe2df55f0b920edb307d3b27d2ee62a395a89b1b",
+      "statementHash": "0xae403a0f8d731685eaf8e9f6b4fea9f5312a7f61b19aabc450074df66ee65a2a",
+      "structHash": "0xeb79d313329d7d1a7b89c0af92ac4542516557b0921324710cbee01165f832fd",
+      "uaAuthDigest": "0xb820996268a08807f305233180a292f30ef5a4388efa5e703789b94aa3ff6d6f",
+      "validUntil": 1800000015
+    },
+    {
+      "digest": "0x7d1ed00d84b80a77d00d5018147b50c843d2ab093ecddde696a9a0e8e484320f",
+      "form": "TRANSFER-MULTI",
+      "pqzVerifierEpoch": 0,
+      "proofHash": "0xeb111b769323c08ea6349efa83571633a745e1bd249ed27f3b32b082f6dcaa1a",
+      "signature": "0xd07763c73e41943a73b3c73410078c2f2de6f9a256eb2116c4298a9eb7bbd66804bca97a0223a6e5c79992dcd7acf5dd238641f9690599069f6682750d3d3d001b",
+      "statementHash": "0x539eaf186dd07c88808402bf373959255bc363b21b9759a43eb1c4e57948e706",
+      "structHash": "0x04077304d82061ed93f9746a09d9881a7d6dd8590b567f62bfa0ffd86a17973a",
+      "uaAuthDigest": "0x42933c2706505bebb6d2a92452cd17873da2e2c217dbbc98351363be0b1a2373",
+      "validUntil": 1800000016
+    },
+    {
+      "digest": "0x9091fc29e23298c666a8232e0f58c094643a0ddcd932bfb2566bcac179002114",
+      "form": "TRANSFER-MULTI",
+      "pqzVerifierEpoch": 1,
+      "proofHash": "0xb00813812db4272574bda1d4b0e0b76063ef66ee523726ba5573da4b9f9a64d6",
+      "signature": "0x120b79eabc9e282c1ab41901e1268b59ad9945bad1ec3f372cca91cbb6c1a5dc4d64c5a165f3f17b6a1bbf223e9748c6817f25eb9f5b49f59562cd750ad27b671c",
+      "statementHash": "0x4832cf881fdc8ca2dd463f30b956ba760b6fe5f2481bfd29270045206c2a5c5f",
+      "structHash": "0xa5c5eef0c6e0ebfcd454920be6e814cde5c18cb5ec44efa862bf20e100fd2982",
+      "uaAuthDigest": "0x9fc322f39be0eca22af789b7e0516fcec439b53c5bc2a786e7e8d1c54d427869",
+      "validUntil": 1800000017
+    },
+    {
+      "digest": "0xd15980817e22bb9be80e61a2c2b814b04d1017911e07fb9574cfd56488fded4f",
+      "form": "TRANSFER-MULTI",
+      "pqzVerifierEpoch": 2,
+      "proofHash": "0x29f8b4447dfcf23c327ef05c972cc464da1fd3a6b3d00a4db97841d873a2cf6f",
+      "signature": "0xb71ee9dbfc31c3c983b89877b6f70850cbfcfcfd2f4b840cb7f469929a4114e81513a6440c37648828da00ad84183d2413f7cc7780c12b71da8a20f972da96be1c",
+      "statementHash": "0x670b1a8ee720dfd36e8968ef4494389035cfd2e6eb44d9786310e9558b1632e4",
+      "structHash": "0x7bea8010764ff0edc1894ff1806fb6a12f311978cb40b7a401a4f9b2d3f281cb",
+      "uaAuthDigest": "0x2c2890ed39773faaf8816e023a927ee57089a9cb1a60a88afbb20a3d147fa94d",
+      "validUntil": 1800000018
+    },
+    {
+      "digest": "0xb503137db39c1ef3192cb97edfd6dcd1fae38b2e0879383559419ad2ee19fe1a",
+      "form": "DISCLOSE-AUDITOR",
+      "pqzVerifierEpoch": 0,
+      "proofHash": "0xce131aa4e837f921cf92afaff9a414fecafd50a13e78d4de13270d66a2e6f595",
+      "signature": "0xb3fca1900caaf3b1e377d14e3c09ce5b56b986bd0caeb84084f9b6eedab379c658c897c03c96ab412aae07b9812eeb83ff7be0ff445be66087c119b3768f66281c",
+      "statementHash": "0x14472b085cc69097012aef35cc11ebcdc8f1f90380bb468d7eb2ea699cff68c9",
+      "structHash": "0x645288443908701fe18515830373ee03594a15fc4ce35060fee1d85b3dc2d053",
+      "uaAuthDigest": "0xe11ee372775943f0906a68c39c320cbafbbe8af290b35792b46ca9878de8b2db",
+      "validUntil": 1800000019
+    },
+    {
+      "digest": "0xc7e0454a9300c53f006c3de9fb861129f396a3b9b911d42e262fc0a3968cfef6",
+      "form": "DISCLOSE-AUDITOR",
+      "pqzVerifierEpoch": 1,
+      "proofHash": "0x3af05608039ab50105f9cea51fde3680f6868a199a943f52a4bc11687e76576f",
+      "signature": "0x016e3d7d76810b65943beff636f912c51ced94d967d9756e6b748127e348ce7f76cf1ba8d133ee5609b48c5bbd091c93c01fc2f3eb5ef414c7e97a856196b4f61c",
+      "statementHash": "0xe18deb1ce9bf4cb2566edaa8306f3c100dd8ec1f60495ff3d243624ad0581f9f",
+      "structHash": "0xe90072b20a52556f5f31cfd46a472a8159956f5d86c1967eedb2294c25e963e5",
+      "uaAuthDigest": "0x5be7b3cbcc1c56a08b70a1b69c2db79f1a9e633122d99ae3cbc0a483ba201930",
+      "validUntil": 1800000020
+    },
+    {
+      "digest": "0xe80db4bbfde6f4fcb1b39939a74d19ae33a606343a97c7f277142a334a8ed9ed",
+      "form": "DISCLOSE-AUDITOR",
+      "pqzVerifierEpoch": 2,
+      "proofHash": "0x331dc0799703432df901153bce2486f7e0b5852bad72d543ba610a2932d7a4e2",
+      "signature": "0xab99958f9ed68aceeaafd89f64b73d7041cfe88a8a8bdb58a9dd059c11d05db52cb5c5026d79e20dd345fa5b9106e60528ff4819d18fbdcf9aa7d252d342c3051c",
+      "statementHash": "0xaff689ccd06ab2fa962b7482a978b7d967b1532a98b5e51482bc90d33156fc4f",
+      "structHash": "0x7538440af505a822103d79cd04feb626f3e830bcbee559fe6a50f367b91c28f3",
+      "uaAuthDigest": "0xbce226b9758dada3f6eb85690161c01a1e7702dcadf260943840474832e7d7dc",
+      "validUntil": 1800000021
+    },
+    {
+      "digest": "0x5742a7469e7e4db5b17c8fe36af02e91c1a807cb88929303e6fc2ee4713b640e",
+      "form": "DISCLOSE-RECEIVER",
+      "pqzVerifierEpoch": 0,
+      "proofHash": "0x042f327489260f73a9e21b0ddbb5fb4a2816dc1979a0dc6b7c71d473a8d5d3f0",
+      "signature": "0xc528723d4aff82567fe3f39a46d8c3c886a7f3369ad6fad77dbd21d0e39afc914e082fa264eb8876f50609006480ee910e40199a5d42c90de1fdc6ad014a18991b",
+      "statementHash": "0x2a99d57a0817c239a5f6cc2d63b36b0d32a5c0da92930b94bf92cd8b5a6718f7",
+      "structHash": "0x7d0ab67ed9c8dc36a0bb59878b10616bfc3c0d428f95ee7abc0f4eb0e74f3d16",
+      "uaAuthDigest": "0xa2f9b627d5088c9e07b3d947e1a75f30362205bbcd68b221f06c75e891eb29ab",
+      "validUntil": 1800000022
+    }
+  ],
+  "set": "n2304-kmax4096",
+  "typeString": "PqzVerdict(address token,uint256 chainId,bytes32 proofSystemId,bytes32 statementHash,bytes32 proofHash,uint32 pqzVerifierEpoch,uint64 validUntil)",
+  "typehash": "0x18a510364af2f51c138ef32b05cda5a4ebabb81bc0a964b911044a3983d1ff88",
+  "verifierKey": 10976855,
+  "verifierUA": "0x000000000000000000000000501d9b198010bc786d8b0dac53ac700c8acdc02d"
+}

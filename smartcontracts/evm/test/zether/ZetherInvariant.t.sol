@@ -54,7 +54,7 @@ contract ZetherHandler is ZetherFixture {
         c.legs = new IFactoryToken.Leg[](2);
         c.legs[0] = IFactoryToken.Leg(address(leg[0]), 1, 1);
         c.legs[1] = IFactoryToken.Leg(address(leg[1]), 3, 7);
-        c.conf = IFactoryToken.ConfidentialConfig("", SCALE, MAX, FEE, 0, 0, MIN_DECOY);
+        c.conf = IFactoryToken.ConfidentialConfig("", SCALE, MAX, FEE, 0, 0, MIN_DECOY, 0, bytes32(0), false);
         w = WrappedZetherToken(payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, abi.encode(c), "inv")));
         tok = ZetherLayer(address(w));
         _users();

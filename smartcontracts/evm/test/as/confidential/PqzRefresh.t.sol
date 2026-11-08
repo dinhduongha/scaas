@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {noVerdict} from "../../pqz/helpers/PqzVerdicts.sol";
 import {PqzRegFixture} from "./PqzRegFixture.sol";
 import {IRegulatedToken} from "../../../src/regulated/IRegulatedToken.sol";
 import {IPqzToken} from "../../../src/pqz/IPqzToken.sol";
@@ -18,7 +19,7 @@ abstract contract PqzRefreshSuite is PqzRegFixture {
 
     function _refresh(uint256 shieldIn, uint256 seed) internal view returns (bytes memory) {
         return abi.encodeWithSelector(IPqzToken.mtxUnshield.selector, _burnArgs(0, shieldIn, seed), 0, bytes32(0), PROOF,
-            _pqAuth(), bytes(""));
+            _pqAuth(), bytes(""), noVerdict());
     }
 
     /// The refresh of a frozen `alice` passes under `P` (its debit is written: a new `acc`); the control: the same account's

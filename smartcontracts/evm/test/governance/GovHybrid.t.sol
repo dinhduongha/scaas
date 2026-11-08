@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {noVerdict} from "../pqz/helpers/PqzVerdicts.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
@@ -471,7 +472,7 @@ contract GovHybridPqzTest is PqzFixture {
             _blob(21, PqzCt.CT));
         IConfidentialWrappedToken.Unwrap memory x =
             IConfidentialWrappedToken.Unwrap(address(usd), bytes32(uint256(uint160(address(0xD00D)))), 10, 0);
-        try w.mtxUnshieldUnwrap(_bs(pl), x, hex"c0de", _pqAuth(), "") {
+        try w.mtxUnshieldUnwrap(_bs(pl), x, hex"c0de", _pqAuth(), "", noVerdict()) {
             ok = true;
         } catch (bytes memory e) {
             ret = e;

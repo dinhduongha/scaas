@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {noVerdict} from "./helpers/PqzVerdicts.sol";
 import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {UACall} from "../ua/UACall.sol";
 import {PqzFixture} from "./helpers/PqzFixture.sol";
@@ -57,7 +58,7 @@ contract PqzSharedTest is PqzFixture {
             "a native recipient: the padded address, as before");
         vm.expectEmit(true, true, false, false, address(tok));
         emit IConfidentialToken.Unshielded(alice, 40, fan, address(0));
-        tok.mtxUnshield(_bs(pl), 40, fan, hex"c0de", _pqAuth(), "");
+        tok.mtxUnshield(_bs(pl), 40, fan, hex"c0de", _pqAuth(), "", noVerdict());
         assertEq(tok.balanceOfUA(fan), 40 * SCALE);
         assertEq(tok.balanceOf(MetaTxLib.SHIELD_POOL), 60 * SCALE);
         assertEq(tok.totalShielded(), 60);
@@ -70,11 +71,11 @@ contract PqzSharedTest is PqzFixture {
         bytes memory pl = _burnPl(3, bytes32(0));
         bytes32 ghost = bytes32(uint256(1) << 200);
         vm.expectRevert(abi.encodeWithSelector(IUALedger.UANotRegistered.selector, ghost));
-        tok.mtxUnshield(_bs(pl), 40, ghost, hex"c0de", _pqAuth(), "");
+        tok.mtxUnshield(_bs(pl), 40, ghost, hex"c0de", _pqAuth(), "", noVerdict());
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.RefreshRecipient.selector, fan));
-        tok.mtxUnshield(_bs(pl), 0, fan, hex"c0de", _pqAuth(), "");
+        tok.mtxUnshield(_bs(pl), 0, fan, hex"c0de", _pqAuth(), "", noVerdict());
         vm.expectRevert(IPqzToken.ZeroRecipient.selector);
-        tok.mtxUnshield(_bs(pl), 40, bytes32(0), hex"c0de", _pqAuth(), "");
+        tok.mtxUnshield(_bs(pl), 40, bytes32(0), hex"c0de", _pqAuth(), "", noVerdict());
     }
 
     /// The unshield-unwrap to a UA pays it in a SCaaS ledger leg (`transferToUA`); an outside ERC-20 leg reverts
@@ -98,11 +99,11 @@ contract PqzSharedTest is PqzFixture {
         usd.approve(address(w), type(uint256).max);
         w.mtxWrapShield(address(usd), 100 * SCALE, alice);
         bytes memory pl = _burnPl(3, bytes32(0));
-        w.mtxUnshieldUnwrap(_bs(pl), IConfidentialWrappedToken.Unwrap(address(legTok), fan, 40, 0), hex"c0de", _pqAuth(), "");
+        w.mtxUnshieldUnwrap(_bs(pl), IConfidentialWrappedToken.Unwrap(address(legTok), fan, 40, 0), hex"c0de", _pqAuth(), "", noVerdict());
         assertEq(legTok.balanceOfUA(fan), 40 * SCALE, "the leg's own UA ledger");
         assertEq(w.totalSupply(), 160 * SCALE, "burnt from the pool");
         vm.expectRevert(abi.encodeWithSelector(IUALedger.UALegNotLedger.selector, address(usd)));
-        w.mtxUnshieldUnwrap(_bs(pl), IConfidentialWrappedToken.Unwrap(address(usd), fan, 10, 0), hex"c0de", _pqAuth(), "");
+        w.mtxUnshieldUnwrap(_bs(pl), IConfidentialWrappedToken.Unwrap(address(usd), fan, 10, 0), hex"c0de", _pqAuth(), "", noVerdict());
         // the UA allowlist of the kind: not `mtxWrapShield` (a UA wrap-shields in two steps)
         _uaRefused(PqzLayer(address(w)), abi.encodeCall(IConfidentialWrappedToken.mtxWrapShield, (address(usd), SCALE, alice)));
         (bytes4[] memory s, uint8[] memory cl,) = w.mtxSelectors();

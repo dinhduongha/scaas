@@ -93,6 +93,14 @@ library GovernanceRouterTypes {
         "UASetTaxRate(bytes32 from,address target,uint32 ratePpm,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     bytes32 internal constant UA_SET_TAX_RECIPIENT = keccak256(
         "UASetTaxRecipient(bytes32 from,address target,bytes32 taxRecipient,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    // ---- the PQZ verifier UA of the PQZ kinds 4, 5, 12, 13 (group 3f, PQZ verifier mode spec §4.2, §4.3): the owner's,
+    //      no bit; fee mode `NONE`
+    bytes32 internal constant UA_PQZ_SET_VERIFIER = keccak256(
+        "UAPqzSetVerifier(bytes32 from,address target,bytes32 next,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_PQZ_CANCEL_VERIFIER = keccak256(
+        "UAPqzCancelVerifier(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_PQZ_REVOKE_VERIFIER = keccak256(
+        "UAPqzRevokeVerifier(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     bytes32 internal constant UA_OPERATOR_TRANSFER = keccak256(
         "UAOperatorTransfer(bytes32 from,address target,bytes32 account,bytes32 to,uint256 amount,bytes32 ref,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
 }

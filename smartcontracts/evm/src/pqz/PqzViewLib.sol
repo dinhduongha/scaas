@@ -96,6 +96,13 @@ library PqzViewLib {
         return PqzCore._stmtOf(PqzCore.disclosureBuffer(ref, leg, amount, kind, keyVersion, e, 0));
     }
 
+    /// @notice Group 3f (spec §5.4): the `OFFCHAIN` disclosure's answer, spec §5.3 against the statement's and the proof's
+    ///         hashes (`UAVerifyGas` reverts).
+    function verdictOk(bytes32 sh, bytes32 ph, IPqzToken.PqzSignedVerdict calldata pqzVerdict, PqzCore.Env memory e) public view returns (bool)
+    {
+        return PqzCore.verdictStatus(sh, ph, pqzVerdict, e.registry, e.domainSeparator) == 0;
+    }
+
     /// @notice The precompile's verdict on the disclosure of leg `leg` with `proof` (the token checked the shape).
     function verifyAmountOf(bytes32 ref, uint256 leg, uint256 amount, uint8 kind, uint64 keyVersion, bytes calldata proof,
         PqzCore.Env memory e) public view returns (bool)

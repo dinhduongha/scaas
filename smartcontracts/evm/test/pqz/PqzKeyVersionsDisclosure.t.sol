@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {noVerdict} from "./helpers/PqzVerdicts.sol";
 import {PqzFixture} from "./helpers/PqzFixture.sol";
 import {PqzCt} from "../../src/pqz/PqzCt.sol";
 import {IPqzToken} from "../../src/pqz/IPqzToken.sol";
@@ -31,7 +32,7 @@ contract PqzKeyVersionsDisclosureTest is PqzFixture {
         _public(tok, address(this), 100 * SCALE);
         tok.mtxShield(alice, 100);
         bytes32 ref = tok.mtxConfidentialTransferSingle(_ts(_payload(1, 0, alice, bob, bytes32(0), _out(5, false), "")),
-            hex"c0de", _pqAuth(), "");
+            hex"c0de", _pqAuth(), "", noVerdict());
         bytes memory proof = abi.encodePacked("pqzver", bob, uint64(1));
         reg.setPqzKey(bob, 1, _pk(51), keccak256(proof), UACall.sig(new bytes(ML65_SIG)));
         reg.storePqzPop(bob, 1, proof);
@@ -50,7 +51,7 @@ contract PqzKeyVersionsDisclosureTest is PqzFixture {
         _public(tok, address(this), 100 * SCALE);
         tok.mtxShield(alice, 100);
         bytes32 ref = tok.mtxConfidentialTransferSingle(_ts(_payload(1, 0, alice, bob, bytes32(0), _out(5, false), "")),
-            hex"c0de", _pqAuth(), "");
+            hex"c0de", _pqAuth(), "", noVerdict());
         tok.disclosureStatement(ref, 0, 7, 1, 0); // control
         bytes memory err = abi.encodeWithSelector(IPqzToken.KeyVersionUnknown.selector, bob, uint64(1));
         vm.expectRevert(err);

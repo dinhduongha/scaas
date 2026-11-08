@@ -38,7 +38,10 @@ contract ConfidentialSelectorsTest is Test {
     /// The PQZ layer's explicit entries (Appendix X.3); `IPqzToken` has the direct forms only, the signed ones are `PqzLayer`'s,
     /// read from `typed_ops.json` in `PqzTyped.t.sol`.
     function test_pqzExplicitSignaturesPinned() public pure {
-        string memory tail = ",bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes)";
+        // group 3f T45 (PQZ verifier mode spec §5.3): the verdict last, `PqzSignedVerdict` (the stack's struct fallback for
+        // `pqzVerdict, pqzVerdictSig`): op 7 0xe680f327 -> 0xff93a099 (the old rows in test/vectors/legacy/ua-mtx-merge/3f/)
+        string memory tail = string.concat(",bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,",
+            "((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))");
         // group 3g T52: `uint64 keyVersion` after `fromUA` in the three args structs
         string memory single = "(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes)";
         string memory multi = "(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes)";

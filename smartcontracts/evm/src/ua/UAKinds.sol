@@ -68,6 +68,9 @@ library UAKinds {
     /// A derived `msig` member's acceptance of its slot (`acceptMembership`, CTR-UA-37): never a `pop`, `kem` or `pqz-key`
     /// signature, and the reverse.
     bytes32 internal constant PURPOSE_MEMBERSHIP = keccak256("scaas.ua.purpose.membership.v1");
+    /// Group 3f (PQZ verifier mode spec §5.1, AV-5): a PQZ verifier UA's `PqzVerdict` over a statement and its proof, in the
+    /// token's own domain (`requireAuthorized`, no registry change); never any other purpose's signature.
+    bytes32 internal constant PURPOSE_PQZ_VERDICT = keccak256("scaas.ua.purpose.pqz-verdict.v1");
     /// typed-signing TS-D1 (owner 2026-10-31 decisions 2 + 8): the portable domain `EIP712Domain(string name,string
     /// version)` = ("SCaaS UA Portable", "1"), no chain id, verifying contract or salt (a record registers a UA on every
     /// chain, CTR-UA-07); `kind` is `uint16` (its name: `name(kind)`, the registry's `kindName`).

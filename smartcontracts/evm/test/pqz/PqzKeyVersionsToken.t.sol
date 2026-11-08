@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {noVerdict} from "./helpers/PqzVerdicts.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {PqzFixture} from "./helpers/PqzFixture.sol";
 import {PqzLayer} from "../../src/pqz/PqzLayer.sol";
@@ -129,7 +130,7 @@ contract PqzKeyVersionsTokenTest is PqzFixture {
         _rotate(bob, 1, _pk(31));
         _addVersion(bob, 2, _pk(35)); // the latest stored version, not current: no credit goes there (M-T1)
         vm.recordLogs();
-        tok.mtxConfidentialTransferSingle(_op1(alice, 0, bob, 1, 5), PROOF, _pqAuth(), "");
+        tok.mtxConfidentialTransferSingle(_op1(alice, 0, bob, 1, 5), PROOF, _pqAuth(), "", noVerdict());
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bool seen;
         for (uint256 i; i < logs.length; ++i) {
@@ -153,14 +154,14 @@ contract PqzKeyVersionsTokenTest is PqzFixture {
         _shield(alice, 100);
         _rotate(bob, 1, _pk(31));
         vm.expectCall(address(reg), abi.encodeCall(IUARegistry.pqzKeyOf, (bob)), 1);
-        tok.mtxConfidentialTransferSingle(_op1(alice, 0, bob, 1, 5), PROOF, _pqAuth(), "");
+        tok.mtxConfidentialTransferSingle(_op1(alice, 0, bob, 1, 5), PROOF, _pqAuth(), "", noVerdict());
     }
 
     /// Decoy legs to a rotated UA land on its current version (op 7).
     function test_decoys_landOnCurrent() public {
         _shield(alice, 100);
         _rotate(carol, 1, _pk(32));
-        tok.mtxConfidentialTransfer(_op7(alice, 0, _two(bob, carol), 1, 6), PROOF, _pqAuth(), "");
+        tok.mtxConfidentialTransfer(_op7(alice, 0, _two(bob, carol), 1, 6), PROOF, _pqAuth(), "", noVerdict());
         assertEq(_pending(carol, 1), 1);
         assertEq(_pending(carol, 0), 0);
         assertEq(_pending(bob, 0), 1);
@@ -173,11 +174,11 @@ contract PqzKeyVersionsTokenTest is PqzFixture {
         IPqzToken.PqzTransferArgs memory t = _op1(alice, 0, bob, 1, 5);
         _exactOnly(1, tok.transferSingleStatement(t, 0));
         uint256 snap = vm.snapshotState();
-        tok.mtxConfidentialTransferSingle(t, PROOF, _pqAuth(), "");
+        tok.mtxConfidentialTransferSingle(t, PROOF, _pqAuth(), "", noVerdict());
         vm.revertToState(snap);
         _rotate(bob, 1, _pk(31));
         vm.expectRevert(IPqzToken.ProofRejected.selector);
-        tok.mtxConfidentialTransferSingle(t, PROOF, _pqAuth(), "");
+        tok.mtxConfidentialTransferSingle(t, PROOF, _pqAuth(), "", noVerdict());
     }
 
     /// An auditor rotation: new copies go under the auditor's new key; a debit proven with the old copies is refused.
@@ -190,7 +191,7 @@ contract PqzKeyVersionsTokenTest is PqzFixture {
         _rotate(aud, 1, _pk(33));
         assertEq(_slice(tok.transferSingleStatement(t, 0), 640 + 2 * PqzCt.PK, PqzCt.PK), _pk(33), "pk_a: version 1");
         vm.expectRevert(IPqzToken.ProofRejected.selector);
-        tok.mtxConfidentialTransferSingle(t, PROOF, _pqAuth(), "");
+        tok.mtxConfidentialTransferSingle(t, PROOF, _pqAuth(), "", noVerdict());
     }
 
     // ----- debits name their version; a stale version only migrates or refreshes (KV-8) -----
@@ -204,41 +205,41 @@ contract PqzKeyVersionsTokenTest is PqzFixture {
         _exactOnly(2, st);
         _rotate(alice, 1, _pk(34));
         vm.expectRevert(_staleErr(alice, 0, 1));
-        tok.mtxUnshield(b, 10, D00D, PROOF, _pqAuth(), "");
+        tok.mtxUnshield(b, 10, D00D, PROOF, _pqAuth(), "", noVerdict());
         b.keyVersion = 1;
         bytes memory st1 = tok.burnStatement(b, 10, D00D, 0);
         assertEq(_slice(st1, 640 + PqzCt.PK, PqzCt.CT), _slice(st, 640 + PqzCt.PK, PqzCt.CT), "the same T");
         vm.expectRevert(IPqzToken.ProofRejected.selector);
-        tok.mtxUnshield(b, 10, D00D, PROOF, _pqAuth(), "");
+        tok.mtxUnshield(b, 10, D00D, PROOF, _pqAuth(), "", noVerdict());
     }
 
     function test_stale_payment_refused() public {
         _shield(alice, 100);
         _rotate(alice, 1, _pk(34));
         vm.expectRevert(_staleErr(alice, 0, 1));
-        tok.mtxConfidentialTransferSingle(_op1(alice, 0, bob, 1, 5), PROOF, _pqAuth(), "");
-        tok.mtxConfidentialTransferSingle(_op1(alice, 1, bob, 0, 5), PROOF, _pqAuth(), ""); // control: the current version
+        tok.mtxConfidentialTransferSingle(_op1(alice, 0, bob, 1, 5), PROOF, _pqAuth(), "", noVerdict());
+        tok.mtxConfidentialTransferSingle(_op1(alice, 1, bob, 0, 5), PROOF, _pqAuth(), "", noVerdict()); // control: the current version
     }
 
     function test_stale_op7_refused() public {
         _shield(alice, 100);
         _rotate(alice, 1, _pk(34));
         vm.expectRevert(_staleErr(alice, 0, 1));
-        tok.mtxConfidentialTransfer(_op7(alice, 0, _two(bob, carol), 1, 6), PROOF, _pqAuth(), "");
+        tok.mtxConfidentialTransfer(_op7(alice, 0, _two(bob, carol), 1, 6), PROOF, _pqAuth(), "", noVerdict());
     }
 
     function test_stale_burnAmount_refused() public {
         _shield(alice, 100);
         _rotate(alice, 1, _pk(34));
         vm.expectRevert(_staleErr(alice, 0, 1));
-        tok.mtxUnshield(_burnArgs(alice, 0, 1, 9), 10, D00D, PROOF, _pqAuth(), "");
+        tok.mtxUnshield(_burnArgs(alice, 0, 1, 9), 10, D00D, PROOF, _pqAuth(), "", noVerdict());
     }
 
     /// A refresh (amount 0, no recipient) of a stale version works and settles that version.
     function test_stale_refresh_ok() public {
         _shield(alice, 100);
         _rotate(alice, 1, _pk(34));
-        tok.mtxUnshield(_burnArgs(alice, 0, 1, 9), 0, bytes32(0), PROOF, _pqAuth(), "");
+        tok.mtxUnshield(_burnArgs(alice, 0, 1, 9), 0, bytes32(0), PROOF, _pqAuth(), "", noVerdict());
         assertEq(tok.pqzAccount(alice, 0).rolled, 1);
         assertEq(tok.pqzAcc(alice, 0), _blob(9, PqzCt.CT), "acc = the refresh's blob");
         assertEq(tok.pqzAccount(alice, 1).rolled, 0);
@@ -249,7 +250,7 @@ contract PqzKeyVersionsTokenTest is PqzFixture {
         _shield(alice, 100);
         _rotate(alice, 1, _pk(34));
         uint256 total = tok.totalShielded();
-        tok.mtxConfidentialTransferSingle(_op1(alice, 0, alice, 1, 5), PROOF, _pqAuth(), "");
+        tok.mtxConfidentialTransferSingle(_op1(alice, 0, alice, 1, 5), PROOF, _pqAuth(), "", noVerdict());
         assertEq(_pending(alice, 1), 1, "credited to (alice, 1)");
         assertEq(tok.pqzAccount(alice, 0).rolled, 1, "debited (alice, 0)");
         assertEq(tok.totalShielded(), total, "nothing left the pool");
@@ -260,29 +261,29 @@ contract PqzKeyVersionsTokenTest is PqzFixture {
     function test_selfTransfer_current_refused() public {
         _shield(alice, 100);
         vm.expectRevert(IPqzToken.SelfTransfer.selector);
-        tok.mtxConfidentialTransferSingle(_op1(alice, 0, alice, 1, 5), PROOF, _pqAuth(), "");
+        tok.mtxConfidentialTransferSingle(_op1(alice, 0, alice, 1, 5), PROOF, _pqAuth(), "", noVerdict());
         _rotate(alice, 1, _pk(34));
         vm.expectRevert(IPqzToken.SelfTransfer.selector);
-        tok.mtxConfidentialTransferSingle(_op1(alice, 1, alice, 0, 5), PROOF, _pqAuth(), "");
+        tok.mtxConfidentialTransferSingle(_op1(alice, 1, alice, 0, 5), PROOF, _pqAuth(), "", noVerdict());
     }
 
     function test_selfTransfer_op7Leg_refused() public {
         _shield(alice, 100);
         vm.expectRevert(IPqzToken.SelfTransfer.selector);
-        tok.mtxConfidentialTransfer(_op7(alice, 0, _two(bob, alice), 1, 6), PROOF, _pqAuth(), "");
+        tok.mtxConfidentialTransfer(_op7(alice, 0, _two(bob, alice), 1, 6), PROOF, _pqAuth(), "", noVerdict());
         _rotate(alice, 1, _pk(34));
         vm.expectRevert(IPqzToken.SelfTransfer.selector);
-        tok.mtxConfidentialTransfer(_op7(alice, 0, _two(bob, alice), 1, 6), PROOF, _pqAuth(), "");
+        tok.mtxConfidentialTransfer(_op7(alice, 0, _two(bob, alice), 1, 6), PROOF, _pqAuth(), "", noVerdict());
     }
 
     /// `keyVersion` above current: `KeyVersionUnknown`; a stale version that never passed the key check: refused.
     function test_keyVersion_above_refused() public {
         _shield(alice, 100);
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.KeyVersionUnknown.selector, alice, uint64(1)));
-        tok.mtxConfidentialTransferSingle(_op1(alice, 1, bob, 1, 5), PROOF, _pqAuth(), "");
+        tok.mtxConfidentialTransferSingle(_op1(alice, 1, bob, 1, 5), PROOF, _pqAuth(), "", noVerdict());
         _addVersion(alice, 1, _pk(34)); // stored, not proven: not current
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.KeyVersionUnknown.selector, alice, uint64(1)));
-        tok.mtxConfidentialTransferSingle(_op1(alice, 1, bob, 1, 5), PROOF, _pqAuth(), "");
+        tok.mtxConfidentialTransferSingle(_op1(alice, 1, bob, 1, 5), PROOF, _pqAuth(), "", noVerdict());
     }
 
     function test_keyVersion_unprovenStale_refused() public {
@@ -290,7 +291,7 @@ contract PqzKeyVersionsTokenTest is PqzFixture {
         _addVersion(u, 0, _pk(40)); // version 0 unproven
         _rotate(u, 1, _pk(41));
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.AccountNotRegistered.selector, u));
-        tok.mtxUnshield(_burnArgs(u, 0, 0, 9), 0, bytes32(0), PROOF, _pqAuth(), "");
+        tok.mtxUnshield(_burnArgs(u, 0, 0, 9), 0, bytes32(0), PROOF, _pqAuth(), "", noVerdict());
     }
 
     /// M-T5's control (Codex #3): two versions with equal TRIVIAL balances; a debit on version 0 names version 0's key,
@@ -304,7 +305,7 @@ contract PqzKeyVersionsTokenTest is PqzFixture {
         bytes memory st = tok.burnStatement(b, 0, 0, 0);
         assertEq(_slice(st, 640, PqzCt.PK), _keyAt(alice, 0), "pk_f: version 0's key");
         assertEq(_slice(st, 640 + PqzCt.PK, PqzCt.CT), _trivCt(5), "T: (alice, 0)'s");
-        tok.mtxUnshield(b, 0, bytes32(0), PROOF, _pqAuth(), "");
+        tok.mtxUnshield(b, 0, bytes32(0), PROOF, _pqAuth(), "", noVerdict());
         IPqzToken.AccountState memory a0 = tok.pqzAccount(alice, 0);
         assertEq(abi.encode(a0.rolled, a0.floor, a0.cleared), abi.encode(uint64(1), uint64(1), uint64(1)), "(alice, 0) settled");
         IPqzToken.AccountState memory a1 = tok.pqzAccount(alice, 1);
@@ -320,9 +321,9 @@ contract PqzKeyVersionsTokenTest is PqzFixture {
         _rotate(alice, 1, _pk(34));
         IPqzToken.PqzTransferArgs memory t = _op1(alice, 0, alice, 1, 5);
         _exactOnly(1, tok.transferSingleStatement(t, 0));
-        tok.mtxConfidentialTransferSingle(t, PROOF, _pqAuth(), "");
+        tok.mtxConfidentialTransferSingle(t, PROOF, _pqAuth(), "", noVerdict());
         vm.expectRevert(IPqzToken.ProofRejected.selector);
-        tok.mtxConfidentialTransferSingle(t, PROOF, _pqAuth(), "");
+        tok.mtxConfidentialTransferSingle(t, PROOF, _pqAuth(), "", noVerdict());
     }
 
     /// One counter per UA across versions: debits on version 0 and version 1 get counters 0 and 1 and distinct entryRefs
@@ -330,9 +331,9 @@ contract PqzKeyVersionsTokenTest is PqzFixture {
     function test_counter_sharedAcrossVersions() public {
         _shield(alice, 100);
         _rotate(alice, 1, _pk(34));
-        bytes32 r0 = tok.mtxConfidentialTransferSingle(_op1(alice, 0, alice, 1, 5), PROOF, _pqAuth(), "");
+        bytes32 r0 = tok.mtxConfidentialTransferSingle(_op1(alice, 0, alice, 1, 5), PROOF, _pqAuth(), "", noVerdict());
         vm.recordLogs();
-        bytes32 r1 = tok.mtxConfidentialTransferSingle(_op1(alice, 1, bob, 1, 6), PROOF, _pqAuth(), "");
+        bytes32 r1 = tok.mtxConfidentialTransferSingle(_op1(alice, 1, bob, 1, 6), PROOF, _pqAuth(), "", noVerdict());
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bool seen;
         for (uint256 i; i < logs.length; ++i) {
@@ -355,12 +356,12 @@ contract PqzKeyVersionsTokenTest is PqzFixture {
         _shield(alice, 100);
         IPqzToken.PqzMultiArgs memory t = _op7(alice, 0, _two(bob, carol), 1, 6);
         uint256 snap = vm.snapshotState();
-        tok.mtxConfidentialTransfer(t, PROOF, _pqAuth(), "");
+        tok.mtxConfidentialTransfer(t, PROOF, _pqAuth(), "", noVerdict());
         vm.revertToState(snap);
         (uint64 v, address p, bytes32 ph, bool pr) = reg.pqzKeyOf(bob);
         vm.mockCall(address(reg), abi.encodeCall(IUARegistry.pqzKeyOf, (carol)), abi.encode(v, p, ph, pr));
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.KeyReused.selector, carol));
-        tok.mtxConfidentialTransfer(t, PROOF, _pqAuth(), "");
+        tok.mtxConfidentialTransfer(t, PROOF, _pqAuth(), "", noVerdict());
     }
 
     /// A leg equal to the auditor's key: `KeyReused`.
@@ -370,7 +371,7 @@ contract PqzKeyVersionsTokenTest is PqzFixture {
         (uint64 v, address p, bytes32 ph, bool pr) = reg.pqzKeyOf(aud);
         vm.mockCall(address(reg), abi.encodeCall(IUARegistry.pqzKeyOf, (bob)), abi.encode(v, p, ph, pr));
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.KeyReused.selector, aud));
-        tok.mtxConfidentialTransferSingle(t, PROOF, _pqAuth(), "");
+        tok.mtxConfidentialTransferSingle(t, PROOF, _pqAuth(), "", noVerdict());
     }
 
     /// A migration whose two versions hold one key (refused at storage by the registry; mocked here): `KeyReused`.
@@ -380,7 +381,7 @@ contract PqzKeyVersionsTokenTest is PqzFixture {
         (, address p, bytes32 ph, bool pr) = reg.pqzKeyOf(alice);
         vm.mockCall(address(reg), abi.encodeCall(IUARegistry.pqzKeyAt, (alice, uint64(0))), abi.encode(p, ph, pr));
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.KeyReused.selector, alice));
-        tok.mtxConfidentialTransferSingle(_op1(alice, 0, alice, 1, 5), PROOF, _pqAuth(), "");
+        tok.mtxConfidentialTransferSingle(_op1(alice, 0, alice, 1, 5), PROOF, _pqAuth(), "", noVerdict());
     }
 
     // ----- rollover, prepare, views (KV-10) -----

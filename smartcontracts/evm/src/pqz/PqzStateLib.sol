@@ -12,16 +12,23 @@ import {PqzSafety} from "./PqzSafety.sol";
 import {UAPqzVerifier} from "./UAPqzVerifier.sol";
 import {PqzCore} from "./PqzCore.sol";
 import {PqzSet, PQZ_ACC_WORDS} from "./PqzSet.sol";
+import {PqzVerifierRevoked} from "./IPqzToken.sol";
+import {GovernanceLib} from "../governance/GovernanceLib.sol";
+import {IGovernance} from "../governance/IGovernance.sol";
+import {IOpenFactory} from "../factory/IOpenFactory.sol";
 
 /// @title init, shield, rollover, prepare-acc and the state views (the account state; D14): one of the four `DELEGATECALL` libraries of the PQZ release (plan 5h D14), in the ERC-7201
 ///        namespace `scaas.pqz`; the shared steps are `internal` in `PqzCore`, compiled into each.
 /// @notice **UNAUDITED.** `address(this)` is the token.
 library PqzStateLib {
     /// @notice The PQZ kinds' checks of an instance env (CTR-ZTH-20 / CTR-PQZ-10; the constructors' before chain-neutral
-    ///         releases, now `validateEnv`, which the factory calls once per release and chain): one dep, the release's
-    ///         `UAPqzVerifier` (`ENV_PQZ_VERIFIER`) with code, never Hedera, a registry with code.
+    ///         releases, now `validateEnv`, which the factory calls once per release and chain): exactly one dep, the
+    ///         release's `UAPqzVerifier` (`ENV_PQZ_VERIFIER`) with code or 0 (group 3f, spec §3, C6: the zero-dep release of
+    ///         a chain where it cannot be deployed; only an `OFFCHAIN` token initialises on it), never Hedera, a registry
+    ///         with code. The mode is never inferred from a missing dependency.
     function validateEnv(address[] calldata d, bool hedera, address registry) public view {
-        if (d.length != 1 || hedera || !SigCheck.isContract(d[ENV_PQZ_VERIFIER]) || !SigCheck.isContract(registry)) {
+        if (d.length != 1 || hedera || (d[ENV_PQZ_VERIFIER] != address(0) && !SigCheck.isContract(d[ENV_PQZ_VERIFIER]))
+            || !SigCheck.isContract(registry)) {
             revert IPqzToken.BadInit();
         }
     }
@@ -30,7 +37,12 @@ library PqzStateLib {
     ///         chooses one; precompile and proof system: exactly `PqzSafety.PQZ`, PQZL or PQZH,
     ///         the self-test passing now; review W-B), `auditorKey` empty or the auditor's 32-byte `pqz-mlwe` UA, cap
     ///         `≤ 2^62`, `confidentialFee + 8 · minDecoyFee` `< 2^64` and `< cap` (no chain-level floor, owner 2026-10-20).
-    function init(IFactoryToken.ConfidentialConfig memory c, address registry, address verifier) public {
+    ///         Group 3f (spec §3, §4): the mode, written here only (I1). `PRECOMPILE`: no verifier field set, a release
+    ///         verifier 0 refused `SelfTestFailed(address(0))` before any call, then the reads and the self-test as before.
+    ///         `OFFCHAIN`: a verifier UA of spec §4.1 (`verifierShape` strict), its shape, fixed or transferable, the
+    ///         factory's `noticePeriod()` stored (nothing later shortens it); `psid` the build's PQZL id; nothing read
+    ///         from the release verifier, the precompile never called. The auditor's key passes the mode's check.
+    function init(IFactoryToken.ConfidentialConfig memory c, address registry, address verifier, address factory) public {
         bytes memory aud = c.auditorKey;
         if (c.shieldScale == 0 || c.maxShielded == 0 || c.maxShielded > PqzCore.MAX_TOTAL_SHIELDED
             || c.confidentialFee >= PqzCore.VALUE_BOUND || c.confidentialFee >= c.maxShielded
@@ -45,17 +57,33 @@ library PqzStateLib {
             revert IPqzToken.BadAuditorMode(c.auditorMode);
         }
         bytes32 a = aud.length == 32 ? bytes32(aud) : bytes32(0);
-        // C2-3 / C2-4: an auditor is required whenever the mode is not NONE, and its key must be usable (`_keyPtr`;
-        // the zero id is never registered)
-        if (aud.length == 32) PqzCore._keyPtr(registry, a);
+        uint8 m = c.pqzVerifyMode;
+        if (m > PqzCore.OFFCHAIN) revert IPqzToken.PqzVerifyModeInvalid(m);
+        bool off = m == PqzCore.OFFCHAIN;
+        if (off ? c.pqzVerifierUA == 0 : (c.pqzVerifierUA != 0 || c.pqzVerifierFixed)) {
+            revert IPqzToken.PqzVerifyConfigInvalid();
+        }
+        if (!off && verifier == address(0)) revert PqzSafety.SelfTestFailed(address(0));
         PqzCore.PqzStorage storage s = PqzCore.$();
-        UAPqzVerifier v = UAPqzVerifier(verifier);
-        s.pqz = v.PRECOMPILE();
-        s.psid = v.PROOF_SYSTEM_ID();
-        PqzSafety.requirePqz(s.pqz, s.psid); // the token's verdicts come from `s.pqz`, never from the verifier (W-B)
-        // C2-1 (owner 2026-10-27, C0-2): a PQZH value token only where its debits fit one transaction; registration
-        // and disclosure through `UAPqzVerifier` stay at every set that has PQZH
-        if (s.psid == PqzSet.PQZH_ID && !PqzSet.PQZH_VALUE) revert IPqzToken.PqzhValueUnsupported();
+        s.pqzVerifyMode = m;
+        // C2-3 / C2-4: an auditor is required whenever the mode is not NONE, and its key must be usable (`_keyPtr`, the
+        // mode's check; the zero id is never registered)
+        if (aud.length == 32) PqzCore._keyPtr(registry, a);
+        if (off) {
+            s.psid = PqzSet.PQZL_ID;
+            s.pqzVerifierUA = c.pqzVerifierUA;
+            s.pqzVerifierShape = PqzCore.verifierShape(registry, c.pqzVerifierUA, true);
+            s.pqzVerifierFixed = c.pqzVerifierFixed;
+            s.noticePeriod = IOpenFactory(factory).noticePeriod();
+        } else {
+            UAPqzVerifier v = UAPqzVerifier(verifier);
+            s.pqz = v.PRECOMPILE();
+            s.psid = v.PROOF_SYSTEM_ID();
+            PqzSafety.requirePqz(s.pqz, s.psid); // the token's verdicts come from `s.pqz`, never from the verifier (W-B)
+            // C2-1 (owner 2026-10-27, C0-2): a PQZH value token only where its debits fit one transaction; registration
+            // and disclosure through `UAPqzVerifier` stay at every set that has PQZH
+            if (s.psid == PqzSet.PQZH_ID && !PqzSet.PQZH_VALUE) revert IPqzToken.PqzhValueUnsupported();
+        }
         s.verifier = verifier;
         s.disclosureMode = ZetherTypes.DisclosureMode(c.disclosureMode);
         s.auditorMode = ZetherTypes.AuditorMode(c.auditorMode);
@@ -64,6 +92,107 @@ library PqzStateLib {
         s.confidentialFee = c.confidentialFee;
         s.minDecoyFee = c.minDecoyFee;
         s.auditorUA = a;
+    }
+
+    // ------------------------------------------------------------------ the verifier UA (group 3f, spec §4.2, §4.3)
+
+    /// @notice The owner's transfer of a transferable `OFFCHAIN` verifier (spec §4.2, AV-4; no bit, C4): a first call
+    ///         proposes `next` (owner; not the current, `PqzVerifierSame`; spec §4.1's kinds, `verifierShape` strict; none
+    ///         live, else `PqzVerifierPending`) with `eta = now + noticePeriod`; the second, with the same `next`, by the
+    ///         same proposer, still the owner, in the same owner generation and in `[eta, eta + noticePeriod]`, confirms
+    ///         (before `eta`: `PqzVerifierNotReady`): the verifier, its shape and `pqzVerifierEpoch + 1` written. An owner
+    ///         change, or the window passed, leaves the pending dead. A notice period 0 applies the first call at once.
+    ///         After the owner check: `PRECOMPILE` `PqzVerifyConfigInvalid`, fixed `PqzVerifierFixed`. A confirm by
+    ///         another caller than the proposer: `NotProposer` (no bit: 0, `account` the pending verifier).
+    function setVerifier(bytes32 next, bytes32 caller, address registry) public {
+        PqzCore.PqzStorage storage s = PqzCore.$();
+        GovernanceLib.GovernanceStorage storage g = GovernanceLib.$();
+        bool live = _live(s, g);
+        bool confirm = live && next == s.pqzPendingVerifier;
+        if (confirm && caller != s.pqzProposer) revert IGovernance.NotProposer(0, next, s.pqzProposer);
+        _owner(caller, g);
+        _transferable(s);
+        if (confirm) {
+            if (block.timestamp < s.eta) revert IPqzToken.PqzVerifierNotReady(s.eta);
+            _assign(s, next, registry);
+            return;
+        }
+        if (live) revert IPqzToken.PqzVerifierPending(s.pqzPendingVerifier);
+        if (next == s.pqzVerifierUA) revert IPqzToken.PqzVerifierSame();
+        PqzCore.verifierShape(registry, next, true);
+        uint64 eta = uint64(block.timestamp) + s.noticePeriod;
+        emit IPqzToken.PqzVerifierProposed(s.pqzVerifierUA, next, eta);
+        if (s.noticePeriod == 0) {
+            _assign(s, next, registry);
+            return;
+        }
+        (s.pqzPendingVerifier, s.pqzProposer, s.pqzProposerGeneration, s.eta) = (next, caller, g.ownerGeneration, eta);
+    }
+
+    /// @notice The owner deletes a live pending transfer (`PqzVerifierCancelled`); none live: nothing happens.
+    function cancelVerifier(bytes32 caller) public {
+        PqzCore.PqzStorage storage s = PqzCore.$();
+        GovernanceLib.GovernanceStorage storage g = GovernanceLib.$();
+        _owner(caller, g);
+        _transferable(s);
+        if (!_live(s, g)) return;
+        emit IPqzToken.PqzVerifierCancelled(s.pqzPendingVerifier);
+        _dropPending(s);
+    }
+
+    /// @notice The owner's immediate revocation (spec §4.3, R4; freeze only): verifier 0, `pqzVerifierEpoch + 1`, any pending
+    ///         deleted; every proof-carrying op then refuses `PqzVerifierRevoked` until a transfer sets a new verifier.
+    function revokeVerifier(bytes32 caller) public {
+        PqzCore.PqzStorage storage s = PqzCore.$();
+        _owner(caller, GovernanceLib.$());
+        _transferable(s);
+        bytes32 previous = s.pqzVerifierUA;
+        s.pqzVerifierUA = 0;
+        s.pqzVerifierShape = 0;
+        uint32 e = s.pqzVerifierEpoch + 1;
+        s.pqzVerifierEpoch = e;
+        _dropPending(s);
+        emit PqzVerifierRevoked(previous, e);
+    }
+
+    /// @notice `pqzVerifyConfig()` (spec §4.4): a dead pending reads as none.
+    function verifyConfig() public view returns (IPqzToken.PqzVerifyConfig memory c) {
+        PqzCore.PqzStorage storage s = PqzCore.$();
+        bool live = _live(s, GovernanceLib.$());
+        c = IPqzToken.PqzVerifyConfig(s.pqzVerifyMode, s.pqzVerifierUA, s.pqzVerifierFixed, s.pqzVerifierEpoch,
+            live ? s.pqzPendingVerifier : bytes32(0), live ? s.eta : 0, s.noticePeriod);
+    }
+
+    /// @dev The owner first (a stranger learns nothing of the configuration), then an `OFFCHAIN` token with a transferable
+    ///      verifier.
+    function _owner(bytes32 caller, GovernanceLib.GovernanceStorage storage g) private view {
+        if (caller == 0 || caller != g.owner) revert IGovernance.NotOwner(caller);
+    }
+
+    function _transferable(PqzCore.PqzStorage storage s) private view {
+        if (s.pqzVerifyMode != PqzCore.OFFCHAIN) revert IPqzToken.PqzVerifyConfigInvalid();
+        if (s.pqzVerifierFixed) revert IPqzToken.PqzVerifierFixed();
+    }
+
+    /// @dev A pending transfer still confirmable: proposed in this owner generation, its window `[eta, eta + notice]` not
+    ///      passed.
+    function _live(PqzCore.PqzStorage storage s, GovernanceLib.GovernanceStorage storage g) private view returns (bool) {
+        return s.pqzPendingVerifier != 0 && s.pqzProposerGeneration == g.ownerGeneration
+            && block.timestamp <= uint256(s.eta) + s.noticePeriod;
+    }
+
+    function _assign(PqzCore.PqzStorage storage s, bytes32 next, address registry) private {
+        bytes32 previous = s.pqzVerifierUA;
+        s.pqzVerifierUA = next;
+        s.pqzVerifierShape = PqzCore.verifierShape(registry, next, true);
+        uint32 e = s.pqzVerifierEpoch + 1;
+        s.pqzVerifierEpoch = e;
+        _dropPending(s);
+        emit IPqzToken.PqzVerifierSet(previous, next, e);
+    }
+
+    function _dropPending(PqzCore.PqzStorage storage s) private {
+        (s.pqzPendingVerifier, s.pqzProposer, s.pqzProposerGeneration, s.eta) = (0, 0, 0, 0);
     }
 
     /// @notice The proof-free shield (plan 5h D18): `totalShielded += amount` within the cap and a TRIVIAL entry
