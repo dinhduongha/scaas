@@ -8320,7 +8320,7 @@ Change: the app never offers `approve` on a SCaaS token; spenders on outside tok
 
 ## 39. Clients — UA libraries
 
-Rules of the `ua-rs` wallet surface and its facades, then the records of the decisions behind them (CLI-UAL-50 to CLI-UAL-57). Everything here is UNAUDITED.
+Rules of the `ua-rs` wallet surface and its facades, then the records of the decisions behind them (CLI-UAL-50 to CLI-UAL-58). Everything here is UNAUDITED.
 
 ### CLI-UAL-01 — `ua-rs` is the only signer; a secret leaves it only through a named export
 - old: — · status: current · owner: yes · date: 2026-11-05 · normative: clients/ua-libraries.md#CLI-UAL-01 · superseded-by: —
@@ -8779,6 +8779,21 @@ of 3f) into `ua-rs-sign`, and the size ratchet of the first sync:
 - **Not built:** the clone's `ChainEnv` layout has no reader here: binding `--registry` to the token's env `registry` (the stated
   residual of both reference layers) is a question for the controller, not done.
 **Source.** [plan](superpowers/plans/2026-11-05-ua-rs-sign.md) T20b; `smartcontracts/evm/runs/2026-11-08-ua-rs-sign-t20b2-summary.txt`.
+
+<a id="CLI-UAL-58"></a>
+### CLI-UAL-58 — The reference readers check `--registry` against the token's `ChainEnv` (owner 2026-11-08)
+- old: — · status: current · owner: yes · date: 2026-11-08 · normative: decisions.md#CLI-UAL-58 · superseded-by: —
+
+**Rule.** `pqz-read` and `zether-read-balance` read the token's code at the read block (`eth_getCode`) and take its `ChainEnv`
+at the fixed offsets of a clone of a chain-neutral release (the 45-byte EIP-1167 proxy, then `chainUid ‖ registry ‖ govRouter ‖
+smartKeyAccountImpl ‖ hedera ‖ nDeps ‖ deps ‖ nParams ‖ params`, chain-neutral spec §2, the layout `create3_kat.json` pins): a
+code that is not exactly such a clone is refused (requirement 5), a `--registry` other than the env's `registry` is refused
+(requirement 6), each with the readers' one refusal, before any key is used.
+**Why.** Owner 2026-11-08, closing the stated residual "`--registry` unchecked against the token's registry": since the
+chain-neutral releases the registry is in the token's code env, readable at one block like any word.
+**Status.** BUILT: `ua-rs` `factory::clone_env` (`tests/factory.rs` `chain_env_kat_rows`), `pqz-read`, `zether-read-balance`
+(`clone_registry_is_the_kat_layout`); the `anvil` tests write real clones with their env. UNAUDITED.
+**Source.** owner 2026-11-08 (chat, through the controller); [plan](superpowers/plans/2026-11-05-ua-rs-sign.md) T20b.
 
 ## 40. Integration — ERP
 

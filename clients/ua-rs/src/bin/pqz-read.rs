@@ -28,8 +28,9 @@
 //!   checked: no `eth_getProof`; a residual, as in `zether-read-balance`.)
 //! - **R5** the token is catalogued by `--factory` with a PQZ kind (`OpenFactory._rec[token]`, the factory index's record at
 //!   slot 8: `contractClass` TOKEN, `kind` NORMAL_PQZ, WRAPPED_PQZ, NORMAL_PQZ_REGULATED or WRAPPED_PQZ_REGULATED), its slot
-//!   and packing held to their pin, ua-mtx-merge's `test/zether/ZetherStateVectors.t.sol` (T20b, T15m2).
-//! - **R6** `keyRecord` is `--registry`'s `pqzKey[--ua][--key-version]` (`UAStore.Layout` slot 2, per version) and its code
+//!   and packing held to their pin, ua-mtx-merge's `test/zether/ZetherStateVectors.t.sol` (T20b, T15m2); and its code is a clone
+//!   of a chain-neutral release, the EIP-1167 proxy with its `ChainEnv` (owner 2026-11-08; `factory::clone_env`).
+//! - **R6** `--registry` is the registry the token's `ChainEnv` names (owner 2026-11-08); `keyRecord` is `--registry`'s `pqzKey[--ua][--key-version]` (`UAStore.Layout` slot 2, per version) and its code
 //!   must hold this handle's key; `keyVersions` its `pqzVersions[--ua]` (slot 17: `latest ‖ current ‖ listed`, which `ua-rs`
 //!   checks against `--key-version`); for `auditRead` `--ua` must be the token's `auditorUA` and its `auditorMode` not NONE
 //!   (`ua-rs` checks the entry's copy; a copy made under another auditor version is found by trying each).
@@ -375,6 +376,14 @@ fn open(a: &Args) -> Result<(Reader<'_>, u64), String> {
     let rec = r.word(&a.factory, &add(&keccak256(&[addr_word(&a.token), be(REC_SLOT)].concat()), 2))?;
     if !catalogued(&rec) {
         return Err("R5: the token is not a PQZ token catalogued by this factory".into());
+    }
+    // R5, R6 (owner 2026-11-08): the token's code is a clone of a chain-neutral release, and `--registry` is the one its
+    // `ChainEnv` names
+    let Some((_, env)) = scaas_ua::factory::clone_env(&r.code(&a.token)?) else {
+        return Err("R5: the token is not a clone of a chain-neutral release".into());
+    };
+    if env.registry != a.registry {
+        return Err("R6: --registry is not the token's registry".into());
     }
     Ok((r, block))
 }

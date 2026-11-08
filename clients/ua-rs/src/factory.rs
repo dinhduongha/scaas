@@ -43,3 +43,68 @@ pub fn create3_address(factory: &[u8; 20], creator_id: &[u8; 32], contract_class
     let instance = last20(keccak(&[&[0xd6, 0x94], &proxy, &[0x01]]));
     Create3 { s, proxy, instance }
 }
+
+/// The EIP-1167 proxy every clone of a chain-neutral release starts with: `363d3d373d3d3d363d73 ‖ implementation ‖
+/// 5af43d82803e903d91602b57fd5bf3`, 45 bytes; its `ChainEnv` follows (chain-neutral spec §2; `create3_kat.json` pins both).
+pub const PROXY_HEAD: [u8; 10] = [0x36, 0x3d, 0x3d, 0x37, 0x3d, 0x3d, 0x3d, 0x36, 0x3d, 0x73];
+pub const PROXY_TAIL: [u8; 15] = [0x5a, 0xf4, 0x3d, 0x82, 0x80, 0x3e, 0x90, 0x3d, 0x91, 0x60, 0x2b, 0x57, 0xfd, 0x5b, 0xf3];
+const MAX_DEPS: usize = 4;
+const MAX_PARAMS: usize = 2;
+
+/// A clone's `ChainEnv`: `chainUid ‖ registry ‖ govRouter ‖ smartKeyAccountImpl ‖ hedera ‖ nDeps ‖ deps ‖ nParams ‖ params`
+/// (at most 4 deps, 2 params). The reference readers check `--registry` against `registry` (owner 2026-11-08).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ChainEnv {
+    pub chain_uid: [u8; 32],
+    pub registry: [u8; 20],
+    pub gov_router: [u8; 20],
+    pub smart_key_account_impl: [u8; 20],
+    pub hedera: bool,
+    pub deps: Vec<[u8; 20]>,
+    pub params: Vec<[u8; 32]>,
+}
+
+/// The env's bytes as the factory appends them (clientkeys `chainEnvBytes`).
+pub fn env_bytes(e: &ChainEnv) -> Vec<u8> {
+    let mut b = [&e.chain_uid[..], &e.registry, &e.gov_router, &e.smart_key_account_impl, &[u8::from(e.hedera), e.deps.len() as u8]].concat();
+    e.deps.iter().for_each(|d| b.extend_from_slice(d));
+    b.push(e.params.len() as u8);
+    e.params.iter().for_each(|p| b.extend_from_slice(p));
+    b
+}
+
+/// A clone's runtime: the proxy of `implementation`, then the env (clientkeys `cloneRuntime`).
+pub fn clone_runtime(implementation: &[u8; 20], e: &ChainEnv) -> Vec<u8> {
+    [&PROXY_HEAD[..], implementation, &PROXY_TAIL, &env_bytes(e)].concat()
+}
+
+/// A runtime's implementation and `ChainEnv` when it is exactly a clone of a chain-neutral release: the proxy, then one env
+/// within its bounds (`hedera` 0 or 1, at most 4 deps and 2 params) and nothing after; `None` for any other code.
+pub fn clone_env(runtime: &[u8]) -> Option<([u8; 20], ChainEnv)> {
+    let take = |at: &mut usize, n: usize| -> Option<&[u8]> {
+        let s = runtime.get(*at..at.checked_add(n)?)?;
+        *at += n;
+        Some(s)
+    };
+    let mut at = 0;
+    (take(&mut at, 10)? == PROXY_HEAD).then_some(())?;
+    let implementation: [u8; 20] = take(&mut at, 20)?.try_into().ok()?;
+    (take(&mut at, 15)? == PROXY_TAIL).then_some(())?;
+    let chain_uid = take(&mut at, 32)?.try_into().ok()?;
+    let registry = take(&mut at, 20)?.try_into().ok()?;
+    let gov_router = take(&mut at, 20)?.try_into().ok()?;
+    let smart_key_account_impl = take(&mut at, 20)?.try_into().ok()?;
+    let hedera = match take(&mut at, 1)? {
+        [0] => false,
+        [1] => true,
+        _ => return None,
+    };
+    let n_deps = usize::from(*take(&mut at, 1)?.first()?);
+    (n_deps <= MAX_DEPS).then_some(())?;
+    let deps = (0..n_deps).map(|_| take(&mut at, 20)?.try_into().ok()).collect::<Option<Vec<[u8; 20]>>>()?;
+    let n_params = usize::from(*take(&mut at, 1)?.first()?);
+    (n_params <= MAX_PARAMS).then_some(())?;
+    let params = (0..n_params).map(|_| take(&mut at, 32)?.try_into().ok()).collect::<Option<Vec<[u8; 32]>>>()?;
+    (at == runtime.len()).then_some(())?;
+    Some((implementation, ChainEnv { chain_uid, registry, gov_router, smart_key_account_impl, hedera, deps, params }))
+}

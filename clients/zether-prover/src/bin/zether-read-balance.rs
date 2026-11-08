@@ -26,8 +26,9 @@
 //!   (`--finalized`) or `head − depth` (`--depth`, the holder's confirmation depth on a chain without finality,
 //!   NET-EVM-04); every read names that block by hash (EIP-1898). R4: storage words only (`eth_getStorageAt`), no view.
 //!   R5: the token is catalogued by `--factory` (`OpenFactory._rec[token]`, the factory index's record at slot 8: `contractClass`
-//!   TOKEN, `kind` a Zether kind; slot and packing held to ua-mtx-merge's pin `test/zether/ZetherStateVectors.t.sol`, T20b).
-//!   R6: the account read is `acct[UA(Y)]` of this key, computed here. R7: every read happens before the key is used,
+//!   TOKEN, `kind` a Zether kind; slot and packing held to ua-mtx-merge's pin `test/zether/ZetherStateVectors.t.sol`, T20b),
+//!   and its code is a clone of a chain-neutral release with its `ChainEnv` (owner 2026-11-08). R6: the account read is
+//!   `acct[UA(Y)]` of this key, computed here; a `--registry` (the decoy steps) is the one the token's `ChainEnv` names. R7: every read happens before the key is used,
 //!   and nothing after it goes back to the node. The URL and body go to `curl` on its stdin (`--config -`, `-q` first),
 //!   never in argv. The words are parsed and rebuilt by `zether_prover::state` (the layout pinned by T19c).
 //! - **`--cache-box`**: the box `{iv, ct}` of clientkeys `sealBalanceCache` (AES-256-GCM under `HKDF-SHA256(x,
@@ -305,7 +306,30 @@ fn open(a: &Args) -> Result<Reader<'_>, String> {
     if !catalogued(&rec) {
         return Err("R5: the token is not a Zether token catalogued by this factory".into());
     }
+    // R5, R6 (owner 2026-11-08): the token's code is a clone of a chain-neutral release; a `--registry` (the decoy steps) is the
+    // one its `ChainEnv` names
+    let env_registry = clone_registry(&r.code(&t)?).ok_or("R5: the token is not a clone of a chain-neutral release")?;
+    if let Some(reg) = a.registry.as_deref() {
+        if unhex(reg)? != env_registry {
+            return Err("R6: --registry is not the token's registry".into());
+        }
+    }
     Ok(r)
+}
+
+/// The `registry` of a clone's `ChainEnv` when the code is exactly a clone of a chain-neutral release (chain-neutral spec §2;
+/// ua-rs `factory::clone_env`, this crate does not link ua-rs): the 45-byte EIP-1167 proxy, `chainUid(32) ‖ registry(20) ‖
+/// govRouter(20) ‖ smartKeyAccountImpl(20) ‖ hedera(1, 0 or 1) ‖ nDeps(1, ≤ 4) ‖ deps ‖ nParams(1, ≤ 2) ‖ params`, nothing after;
+/// `None` for any other code. Held to `create3_kat.json` by `clone_registry_is_the_kat_layout`.
+fn clone_registry(code: &[u8]) -> Option<[u8; 20]> {
+    const HEAD: [u8; 10] = [0x36, 0x3d, 0x3d, 0x37, 0x3d, 0x3d, 0x3d, 0x36, 0x3d, 0x73];
+    const TAIL: [u8; 15] = [0x5a, 0xf4, 0x3d, 0x82, 0x80, 0x3e, 0x90, 0x3d, 0x91, 0x60, 0x2b, 0x57, 0xfd, 0x5b, 0xf3];
+    (code.get(..10)? == HEAD && code.get(30..45)? == TAIL && *code.get(137)? <= 1).then_some(())?;
+    let deps = usize::from(*code.get(138)?);
+    let at = 139 + 20 * deps;
+    let params = usize::from(*code.get(at)?);
+    (deps <= 4 && params <= 2 && code.len() == at + 1 + 32 * params).then_some(())?;
+    code.get(77..97)?.try_into().ok()
 }
 
 /// `_rec[token]` word 2 names a token (class TOKEN; 0 is "not made here") of a Zether kind: `contractClass` the low 16 bits,
@@ -626,6 +650,37 @@ mod tests {
         let mut old = [0u8; 32];
         (old[2], old[11]) = (1, ZETHER_KINDS[0]); // `_info`: exists, kind
         assert!(!catalogued(&old), "the old one-word packing");
+    }
+
+    /// Owner 2026-11-08: the `ChainEnv` layout of `create3_kat.json`: each KAT clone (its init code less the 10-byte prefix) gives
+    /// its env's registry; another proxy byte, a byte short or long, five deps or the proxy alone give none.
+    #[test]
+    fn clone_registry_is_the_kat_layout() {
+        let kat: Value = serde_json::from_str(&std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"),
+            "/../../smartcontracts/vectors/factory/create3_kat.json")).unwrap()).unwrap();
+        for e in kat["envs"].as_array().unwrap() {
+            let init = unhex(e["cloneInitCode"].as_str().unwrap()).unwrap();
+            let env = unhex(e["env"].as_str().unwrap()).unwrap();
+            let rt = &init[10..];
+            assert_eq!(clone_registry(rt).map(|r| r.to_vec()), Some(env[32..52].to_vec()), "{}", e["name"]);
+            let mut x = rt.to_vec();
+            x[0] ^= 1;
+            assert_eq!(clone_registry(&x), None, "another head");
+            let mut x = rt.to_vec();
+            x[44] ^= 1;
+            assert_eq!(clone_registry(&x), None, "another tail");
+            assert_eq!(clone_registry(&rt[..rt.len() - 1]), None, "a byte short");
+            assert_eq!(clone_registry(&[rt, &[0][..]].concat()), None, "a byte long");
+            assert_eq!(clone_registry(&rt[..45]), None, "the proxy alone");
+        }
+        let rt = &unhex(kat["envs"][0]["cloneInitCode"].as_str().unwrap()).unwrap()[10..];
+        let mut five = rt.to_vec();
+        five[138] = 5;
+        five.splice(139..139, [0u8; 100]);
+        assert_eq!(clone_registry(&five), None, "five deps");
+        let mut hedera = rt.to_vec();
+        hedera[137] = 2;
+        assert_eq!(clone_registry(&hedera), None, "hedera 2");
     }
 
     /// The slot the registry's layout pin gives `field`: its probe writes one field per slot, `s.<field>…; // <slot>`.

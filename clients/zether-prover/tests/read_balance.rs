@@ -242,6 +242,14 @@ fn pin_slot((file, field): (&str, &str)) -> u64 {
         })
         .unwrap_or_else(|| panic!("{field}: not in {file}"))
 }
+/// A token's code as the factory makes it (chain-neutral spec §2): the EIP-1167 proxy of implementation `0x11…11`, then its
+/// `ChainEnv` `chainUid ‖ registry ‖ govRouter (0x33…) ‖ smartKeyAccountImpl (0x44…) ‖ hedera 0 ‖ 0 deps ‖ 0 params`; with
+/// `create3_kat.json`'s chain uid and registry it is that file's plain clone (checked in the reading-layer test).
+fn clone_code(chain_uid: &[u8; 32], registry: &[u8; 20]) -> Vec<u8> {
+    let head = hex::decode("363d3d373d3d3d363d73").unwrap();
+    let tail = hex::decode("5af43d82803e903d91602b57fd5bf3").unwrap();
+    [&head[..], &[0x11; 20], &tail, chain_uid, registry, &[0x33; 20], &[0x44; 20], &[0, 0, 0]].concat()
+}
 /// `_rec[token]` word 2 (T67), from the low end `contractClass(16) ‖ kind(16) ‖ version(64)`: class TOKEN, version 1.
 fn record(kind: u8) -> [u8; 32] {
     let mut w = [0u8; 32];
@@ -303,6 +311,16 @@ fn rpc_reading_layer_against_anvil() {
     };
     catalogue(token, 2);
     catalogue(pqz_token, 4);
+    // the clone's code with its env (owner 2026-11-08), a catalogued Zether token with none
+    let kat: Value = serde_json::from_str(&std::fs::read_to_string(format!("{}/../../smartcontracts/vectors/factory/create3_kat.json",
+        env!("CARGO_MANIFEST_DIR"))).unwrap()).unwrap();
+    let plain = hex::decode(&kat["envs"][0]["cloneInitCode"].as_str().unwrap()[2..]).unwrap();
+    let kenv = hex::decode(&kat["envs"][0]["env"].as_str().unwrap()[2..]).unwrap();
+    assert_eq!(clone_code(&kenv[..32].try_into().unwrap(), &kenv[32..52].try_into().unwrap()), plain[10..], "the fixture's clone is the KAT's");
+    let uid: [u8; 32] = hex::decode(&genesis[2..]).unwrap().try_into().unwrap();
+    rpc(&url, "anvil_setCode", json!([token, hx(&clone_code(&uid, &[0xde; 20]))]));
+    let bare = "0x0000000000000000000000000000000000002e7d";
+    catalogue(bare, 2);
     let root = zether_prover::state::ROOT;
     set(token, &add(&root, 6), &proof_system_id::<Bls12381>());
     let seed = zether_prover::keys::seed_from_mnemonic(MNEMONIC, "").unwrap();
@@ -342,6 +360,7 @@ fn rpc_reading_layer_against_anvil() {
     assert!(run(args(&cid, &genesis, token, "100")).unwrap_err().contains("R3"), "a depth past the head");
     assert!(run(args(&cid, &genesis, other_token, "2")).unwrap_err().contains("R5"), "not catalogued");
     assert!(run(args(&cid, &genesis, pqz_token, "2")).unwrap_err().contains("R5"), "catalogued as PQZ");
+    assert!(run(args(&cid, &genesis, bare, "2")).unwrap_err().contains("R5: the token is not a clone of a chain-neutral release"), "no env");
     // the cache box checked against the state
     let dir = std::env::temp_dir().join(format!("zrb-anvil-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
@@ -454,10 +473,14 @@ fn decoys_against_anvil() {
     let (factory, token, pqz_token, reg, reg2) = ("0x00000000000000000000000000000000000fac70", "0x0000000000000000000000000000000000002e7a",
         "0x0000000000000000000000000000000000002e7c", "0x000000000000000000000000000000000000dec0", "0x000000000000000000000000000000000000dec2");
     let reg3 = "0x000000000000000000000000000000000000dec3";
-    for (t, kind) in [(token, 2u8), (pqz_token, 4)] {
+    // reg2's and reg3's tokens (owner 2026-11-08: `--registry` is the one the token's env names)
+    let (token2, token3) = ("0x0000000000000000000000000000000000002e8a", "0x0000000000000000000000000000000000002e8b");
+    let uid: [u8; 32] = hex::decode(&genesis[2..]).unwrap().try_into().unwrap();
+    for (t, kind, r) in [(token, 2u8, reg), (pqz_token, 4, reg), (token2, 2, reg2), (token3, 2, reg3)] {
         let mut k = [0u8; 32];
         k[12..].copy_from_slice(&hex::decode(&t[2..]).unwrap());
         set(factory, &add(&k2(&k, &be(pin_slot(REC))), 2), &record(kind));
+        rpc(&url, "anvil_setCode", json!([t, hx(&clone_code(&uid, &hex::decode(&r[2..]).unwrap().try_into().unwrap()))]));
     }
     let seed = zether_prover::keys::seed_from_mnemonic(MNEMONIC, "").unwrap();
     let keys: Vec<_> = (0..10).map(|a| zether_prover::keys::ZetherKey::<Bls12381>::conf(&seed[..], 60, a).unwrap()).collect();
@@ -532,8 +555,9 @@ fn decoys_against_anvil() {
     let d = run(reg, token, &["--decoy-keys", &format!("{},{}", hx(&ua(7)), hx(&ua(2))), "--sync-block", "1"]).unwrap();
     assert_eq!(d["decoys"], json!([{"ua": hx(&ua(7)), "yTo": hx(&y(7))}, {"ua": hx(&ua(2)), "yTo": hx(&y(2))}]));
     assert!(run(reg, token, &["--decoy-keys", &hx(&ua(8))]).is_ok(), "listed by the read block (positive control of the next)");
+    let tok_of = |r: &str| if r == reg2 { token2 } else if r == reg3 { token3 } else { token };
     let no = |r: &str, u: &str, x: &[&str], want: &str| {
-        let e = run(r, token, &[&["--decoy-keys", u][..], x].concat()).unwrap_err();
+        let e = run(r, tok_of(r), &[&["--decoy-keys", u][..], x].concat()).unwrap_err();
         assert!(e.contains(want), "want {want}: {e}");
     };
     no(reg, &hx(&ua(8)), &["--sync-block", "1"], "on the 0x0141 list up to the sync point");
@@ -541,6 +565,8 @@ fn decoys_against_anvil() {
     no(reg2, &hx(&[0xbb; 32]), &[], "is not a registered Zether UA");
     no(reg3, &hx(&ua(2)), &[], "is not a registered Zether UA"); // kind 0x0142
     no(reg, &hx(&ua(2)), &["--sync-block", "22"], "past the read block");
+    let e = run(reg2, token, &["--decoy-keys", &hx(&ua(2))]).unwrap_err();
+    assert!(e.contains("R6: --registry is not the token's registry"), "reg2 is not token's: {e}");
     assert!(run(reg, pqz_token, &["--decoy-keys", &hx(&ua(2))]).unwrap_err().contains("R5"), "R5");
     assert!(run(reg, token, &["--decoy-count", "1", "--exclude", &ex, "--decoy-filter", "holder", "--window", "1"]).unwrap_err().contains("--window"));
     // R3: every block read re-checked after the last read (here the sync block, on its re-check); the proxy alone changes nothing

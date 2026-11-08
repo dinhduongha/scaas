@@ -193,6 +193,15 @@ impl Node {
         w[27] = 1; // version 1
         self.set(factory, &add(&k(&word_of(token), &be(rec_slot())), 2), &w);
     }
+    /// `token`'s code: a clone of a chain-neutral release (the EIP-1167 proxy of `implementation` with its `ChainEnv` appended;
+    /// chain-neutral spec §2, the layout `create3_kat.json` pins), its env naming `registry` (owner 2026-11-08: the reader checks
+    /// `--registry` against it).
+    fn clone_of(&self, token: &[u8; 20], registry: &[u8; 20]) {
+        use scaas_ua::factory::{clone_runtime, ChainEnv};
+        let env = ChainEnv { chain_uid: self.uid, registry: *registry, gov_router: [0x33; 20], smart_key_account_impl: [0x44; 20],
+            hedera: false, deps: vec![[0x55; 20]], params: vec![] };
+        self.code(token, &json!(hx(&clone_runtime(&[0x11; 20], &env))));
+    }
     /// A words request's account (`balance`'s shape: the forge rows with [`forge_versions`], the wallet rows, `Chain::bal`)
     /// into `token`'s storage at its key version (group 3g: `acct[ua][v]`, `sendCounter[ua]`), its key record and version word
     /// into `registry`'s (`pqzKey[ua][v]`, `pqzVersions[ua]`), its codes.
@@ -283,6 +292,8 @@ const WALLET_REG: &str = "0x2222222222222222222222222222222222222222";
 const CW_TOKEN: &str = "0x00000000000000000000000000000000000c0de1";
 const CW_PQZH: &str = "0x00000000000000000000000000000000000c0de2";
 const CW_REG: &str = "0x00000000000000000000000000000000000c0de3";
+const NO_CODE: &str = "0x00000000000000000000000000000000000c0de4";
+const BARE_PROXY: &str = "0x00000000000000000000000000000000000c0de5";
 
 /// `pqz-read` against a local `anvil`: R2, R3 (the block of `head − depth` by hash, a node that answers another block or whose
 /// block changes during the read), R5 (uncatalogued, not `exists`, a Zether kind), R6 (another key, not the auditor, no
@@ -318,6 +329,7 @@ fn reading_layer_against_anvil() {
     // the forge rows: five accounts and the audited op 1 entry, at the rows' token and registry
     let (ft, fr) = (a20(forge["token"].as_str().unwrap()), a20(forge["registry"].as_str().unwrap()));
     n.catalogue(&factory, &ft, 4, true);
+    n.clone_of(&ft, &fr);
     for a in forge["accounts"].as_array().unwrap() {
         n.account(&ft, &fr, &forge["psid"], &merge(a.clone(), forge_versions(a)));
     }
@@ -331,6 +343,7 @@ fn reading_layer_against_anvil() {
     let rows = wallet["rows"].as_array().unwrap();
     let wt = a20(rows[0]["request"]["token"].as_str().unwrap());
     n.catalogue(&factory, &wt, 12, true);
+    n.clone_of(&wt, &a20(WALLET_REG));
     for r in rows {
         n.account(&wt, &a20(WALLET_REG), &r["request"]["psid"], &r["request"]);
     }
@@ -364,6 +377,14 @@ fn reading_layer_against_anvil() {
     let (cw, cwh, creg) = (a20(CW_TOKEN), a20(CW_PQZH), a20(CW_REG));
     n.catalogue(&factory, &cw, 5, true);
     n.catalogue(&factory, &cwh, 13, true);
+    n.clone_of(&cw, &creg);
+    n.clone_of(&cwh, &creg);
+    // catalogued PQZ tokens whose code is no clone with an env (owner 2026-11-08): none, and the bare proxy
+    n.catalogue(&factory, &a20(NO_CODE), 4, true);
+    n.catalogue(&factory, &a20(BARE_PROXY), 4, true);
+    n.code(&a20(BARE_PROXY), &json!(hx(&scaas_ua::factory::clone_runtime(&[0x11; 20], &scaas_ua::factory::ChainEnv {
+        chain_uid: n.uid, registry: a20(WALLET_REG), gov_router: [0; 20], smart_key_account_impl: [0; 20], hedera: false, deps: vec![],
+        params: vec![] })[..45])));
     for ua in [ua_a, ua_b] {
         let full = c.own(&ua, 1 << 20); // every pending slot, so the tool's window is its own
         n.account(&cw, &creg, &json!(hx(&st::PQZL_ID)), &full);
@@ -485,6 +506,12 @@ fn reading_layer_against_anvil() {
         no(bal(on(t, WALLET_REG, ua_wa), false), Some(0), "R5: the token is not a PQZ token");
     }
     no(wa(), Some(1), "R6: the registry's PQZ key of --ua is not this key");
+    // owner 2026-11-08: the token is a clone with a `ChainEnv`, and `--registry` is the registry it names
+    for t in [NO_CODE, BARE_PROXY] {
+        no(bal(on(t, WALLET_REG, ua_wa), false), Some(0), "R5: the token is not a clone of a chain-neutral release");
+    }
+    no(bal(on(wt_s, CW_REG, ua_wa), false), Some(0), "R6: --registry is not the token's registry");
+    no(audit(on(CW_TOKEN, WALLET_REG, &saud), &sa, "0"), Some(2), "R6: --registry is not the token's registry");
     no(audit(on(CW_TOKEN, CW_REG, &sb), &sa, "0"), Some(1), "R6: --ua is not the token's auditor");
     no(audit(head(on(CW_TOKEN, CW_REG, &saud)), &sa, "0"), Some(2), "R6: --ua is not the token's auditor");
     no(audit(on(CW_TOKEN, CW_REG, &saud), &sa, "1"), Some(2), "no entry of --from-ua");
@@ -546,6 +573,11 @@ fn decoys_against_anvil() {
     let (factory, token, reg, reg2) = (a20(FACTORY), a20("0x000000000000000000000000000000000000dec1"),
         a20("0x000000000000000000000000000000000000dec0"), a20("0x000000000000000000000000000000000000dec2"));
     n.catalogue(&factory, &token, 4, true);
+    n.clone_of(&token, &reg);
+    // reg2's token (owner 2026-11-08: `--registry` is the token's): the same kind, its env naming reg2
+    let token2 = a20("0x000000000000000000000000000000000000dec3");
+    n.catalogue(&factory, &token2, 4, true);
+    n.clone_of(&token2, &reg2);
     let mine = |b: u64| rpc(&url, "anvil_mine", json!([format!("0x{b:x}")]));
     let head = || u64::from_str_radix(rpc(&url, "eth_blockNumber", json!([])).as_str().unwrap().trim_start_matches("0x"), 16).unwrap();
     let ua = |i: u8| [i; 32];
@@ -607,7 +639,7 @@ fn decoys_against_anvil() {
         a.extend(s(x));
         cli(&a, None)
     };
-    let tok = hx(&token);
+    let (tok, tok2) = (hx(&token), hx(&token2));
     let uas = |v: &Value| -> Vec<String> { serde_json::from_value(v.clone()).unwrap() };
     let range = |r: std::ops::RangeInclusive<u8>| r.map(|i| hx(&ua(i))).collect::<Vec<_>>();
 
@@ -665,8 +697,9 @@ fn decoys_against_anvil() {
     assert_eq!(got, range(3..=6), "the filter's pick");
     assert!(run(&reg, &tok, &["--count", "5", "--decoy-filter", "activity", "--window", "10"]).unwrap_err().contains("Argument"), "too few active");
     // refusals
-    assert!(run(&reg2, &tok, &["--count", "0"]).is_ok(), "count 0 (positive control of the next)");
-    assert!(run(&reg2, &tok, &["--count", "1"]).unwrap_err().contains("is not a proven key"), "an unproven key");
+    assert!(run(&reg2, &tok2, &["--count", "0"]).is_ok(), "count 0 (positive control of the next)");
+    assert!(run(&reg2, &tok2, &["--count", "1"]).unwrap_err().contains("is not a proven key"), "an unproven key");
+    assert!(run(&reg2, &tok, &["--count", "0"]).unwrap_err().contains("R6: --registry is not the token's registry"), "reg2 is not tok's");
     assert!(run(&reg, &tok, &["--count", "1", "--sync-block", "22"]).unwrap_err().contains("past the read block"));
     assert!(run(&reg, &tok, &["--count", "1", "--decoy-filter", "activity", "--window", "1"]).unwrap_err().contains("--window"));
     assert!(run(&reg, &tok, &["--count", "1", "--decoy-filter", "activity", "--window", "22"]).unwrap_err().contains("--window"));
