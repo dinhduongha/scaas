@@ -354,3 +354,7 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   `src/governance/{GovernanceRouter,GovernanceRouterBase}.sol` (no `mtxPqz*Verifier` ops), `src/metatx/MetaTokenBase.sol` and
   `src/zether/ZetherLib.sol` (the config checks without the three fields), `script/pqz/e2e.py` (no zero-dep release);
   `test/vectors/legacy/ua-mtx-merge/3f/selector_audit.json`. Not built.
+  The registry block (plan T66a, owner 2026-11-08: `requirePortable`, no KEM key for an `msig`, the `pop` slot bitmap and
+  `popSlotsOf`), under `ua-mtx-merge/t66a/`: the files as they stood at 05f23be2 (3f's tip): `src/ua/{IUARegistry,UARegistry,
+  UARegistryLib,UAStore,UAKinds}.sol` (no portable check view, a PQ-eligible `msig` a KEM holder, no `pop` slot word),
+  `script/pqz/e2e.py` (its `msig` holder registered with a KEM key). Not built.
