@@ -66,6 +66,7 @@ library PqzCore {
         ZetherTypes.DisclosureMode disclosureMode;
         ZetherTypes.AuditorMode auditorMode;
         uint8 pqzVerifyMode; // group 3f (spec §3): byte 22 of slot 0, `PRECOMPILE` 0 / `OFFCHAIN` 1, written by `init` only
+        uint8 proofStore; // group 3h (PP-4, C8): byte 23 of slot 0, `NONE` 0 / `LOG` 1 for the next debit (`init`, bit 24's setter)
         address verifier;
         bytes32 psid;
         uint256 shieldScale;
@@ -215,6 +216,9 @@ library PqzCore {
     ///      D3, final review I1).
     uint256 internal constant ACC_MARK = 1 << 255;
     uint8 internal constant RECORD = 1; // a debit record's `flags`: written
+    /// @notice `proofStore` (group 3h, spec §4, PP-4): calldata only, or also a `PqzDebitProof` event per debit.
+    uint8 internal constant NONE = 0;
+    uint8 internal constant LOG = 1;
     uint8 internal constant WIDE = 2; // a debit record's `flags`: `w1` written
     uint256 internal constant MAX_TOTAL_SHIELDED = 1 << 62;
     uint256 internal constant VALUE_BOUND = 1 << 64;
@@ -1133,7 +1137,7 @@ library PqzCore {
     /// @dev PP-2: `debitRec[from][k]` (`k` the counter before the increment) and `lastDebit = k + 1`, before `accBlob`
     ///      is overwritten: `prevBlob` the account's blob of its previous debit (a rollover never changes it; 0 for the
     ///      first), `Δp = p − p_prev` (`p_prev` from the previous record, 0 for the first; within `PqzSet.DELTA_P_MAX` by
-    ///      the units rule), `prevCounter = lastDebit − 1`; `w1` per R1. `proofStore` 0 (T60).
+    ///      the units rule), `prevCounter = lastDebit − 1`; `w1` per R1; `proofStore` the setting in force at this debit (T60).
     function _record(PqzStorage storage s, Account storage a, Op memory o) internal {
         uint64 k = o.sendCounter;
         uint64 last = a.lastDebit;
@@ -1142,9 +1146,21 @@ library PqzCore {
         uint64 prev = last == 0 ? 0 : last - 1;
         bool wide = o.shieldIn != 0 || o.kv != 0 || (last != 0 && prev + 1 != k);
         rec[k].w0 = uint256(uint160(a.accBlob)) << 96 | uint256(o.p) << 32 | uint256(uint16(o.p - pPrev)) << 16
-            | (wide ? RECORD | WIDE : RECORD);
+            | uint256(s.proofStore) << 8 | (wide ? RECORD | WIDE : RECORD);
         if (wide) rec[k].w1 = o.shieldIn << 192 | uint256(o.kv) << 128 | uint256(prev) << 64;
         a.lastDebit = k + 1;
+    }
+
+    /// @dev Group 3h (spec §4.2, PP-4, C7): under `LOG`, after the debit settled (its proof checked in either verify mode), the
+    ///      event `PqzDebitProof(blob, from, sendCounter, header, proof)`: `header` the verified statement's first 640 bytes,
+    ///      copied from the buffer the proof was checked over, `proof` the calldata proof; under `NONE` nothing. Every debit
+    ///      form and both proof systems; `blob` the debit's op blob (`Debited`'s, the account's `accBlob` now).
+    function _logProof(Op memory o, bytes memory buf, bytes calldata proof) internal {
+        PqzStorage storage s = $();
+        if (s.proofStore != LOG) return;
+        bytes memory h = new bytes(HEADER);
+        assembly ("memory-safe") { mcopy(add(h, 32), add(buf, 37), 640) }
+        emit IPqzToken.PqzDebitProof(s.acct[o.from][o.kv].accBlob, o.from, o.sendCounter, h, proof);
     }
 
     /// @dev `sendCounter[from]++` (one per UA, every version: J2); the debit's `entryRef` (counter before the increment).

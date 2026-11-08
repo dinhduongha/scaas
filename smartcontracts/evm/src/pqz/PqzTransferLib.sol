@@ -30,6 +30,7 @@ library PqzTransferLib {
         (PqzCore.Op memory o, bytes memory buf) = PqzCore.prepareTransfer(e, t, hint, proof.length);
         PqzCore._check(o, buf, proof, authSig, pqzVerdict);
         ref = PqzCore._settleTransfer(o, t);
+        PqzCore._logProof(o, buf, proof);
         paid = PqzCore._paid(o);
     }
 
@@ -47,6 +48,7 @@ library PqzTransferLib {
         (PqzCore.Op memory o, bytes memory buf) = PqzCore.prepareMulti(e, t, hint, proof.length);
         PqzCore._check(o, buf, proof, authSig, pqzVerdict);
         ref = PqzCore._settleMulti(o, t);
+        PqzCore._logProof(o, buf, proof);
         paid = PqzCore._paid(o);
     }
 }

@@ -66,6 +66,9 @@ library PqzStateLib {
         if (!off && verifier == address(0)) revert PqzSafety.SelfTestFailed(address(0));
         PqzCore.PqzStorage storage s = PqzCore.$();
         s.pqzVerifyMode = m;
+        // group 3h (PP-4): `NONE` or `LOG`, any other value refused
+        if (c.proofStore > PqzCore.LOG) revert IPqzToken.ProofStoreInvalid(c.proofStore);
+        s.proofStore = c.proofStore;
         // C2-3 / C2-4: an auditor is required whenever the mode is not NONE, and its key must be usable (`_keyPtr`, the
         // mode's check; the zero id is never registered)
         if (aud.length == 32) PqzCore._keyPtr(registry, a);

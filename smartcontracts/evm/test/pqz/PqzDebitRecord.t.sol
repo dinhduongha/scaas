@@ -477,10 +477,10 @@ contract PqzDebitRecordTest is PqzFixture {
                 uint256 word = uint256(vm.load(address(tok), bytes32(sl + inner[i])));
                 uint256 mask = widths[i] == 32 ? type(uint256).max : (uint256(1) << (8 * widths[i])) - 1;
                 assertEq((word >> (8 * at[i])) & mask, value[j], want[j]);
+                if (j != 0) assertEq(slots[i], REC_SLOT, "debitRec's slot, after every 3f and 3g field");
                 ++found;
             }
         }
         assertEq(found, 3, "the three rows pinned");
-        assertEq(slots[labels.length - 1], REC_SLOT, "debitRec appended last");
     }
 }

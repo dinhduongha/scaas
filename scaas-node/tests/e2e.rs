@@ -1539,9 +1539,10 @@ alloy::sol! {
     #[derive(Default)]
     struct RateConfig { uint32 rateDelay; uint16 maxRateStepBps; }
     #[derive(Default)]
-    // group 3f (spec §3, AV-2): `pqzVerifyMode`, `pqzVerifierUA`, `pqzVerifierFixed` appended (0, 0, false for every other kind)
+    // group 3f (spec §3, AV-2): `pqzVerifyMode`, `pqzVerifierUA`, `pqzVerifierFixed` appended (0, 0, false for every other kind);
+    // group 3h T60 (pqz-proof-path spec §4.1): `proofStore` (0 NONE, 1 LOG; 0 for every other kind)
     struct ConfidentialConfig { bytes auditorKey; uint256 shieldScale; uint256 maxShielded; uint256 confidentialFee; uint8 disclosureMode;
-        uint8 auditorMode; uint256 minDecoyFee; uint8 pqzVerifyMode; bytes32 pqzVerifierUA; bool pqzVerifierFixed; }
+        uint8 auditorMode; uint256 minDecoyFee; uint8 pqzVerifyMode; bytes32 pqzVerifierUA; bool pqzVerifierFixed; uint8 proofStore; }
     /// Regulated-kinds spec §2.4 (plan T25): the regulated kinds' (8-13) only; a plain kind refuses any set field.
     #[derive(Default)]
     struct RegulatedParams { address complianceRegistry; uint64 requiredFlags; uint64 deniedFlags; bytes32 termsHash;

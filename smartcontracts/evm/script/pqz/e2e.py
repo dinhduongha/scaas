@@ -71,6 +71,7 @@ FAILS, LOG = [], []
 RPC = None
 SPLIT = False  # --split: force the register + storePqzPop path
 ZERO_DEP = False  # --zero-dep: the PQZ releases on deps = [0x0], the PQZ tokens OFFCHAIN (group 3f, spec §3 C6)
+PROOF_STORE = 0  # --proof-store log: the PQZ tokens created with proofStore LOG (group 3h T60, pqz-proof-path spec §4.1)
 VERDICT_LIFE = 600  # a verdict's `validUntil`: now + this many seconds (the verifier's own short life, spec §5.1)
 # DeployBase's deterministic CREATE2 deployer (forge-std CREATE2_FACTORY, NET-EVM-05) and salt (`DEPLOY_SALT` env, default
 # keccak256("scaas.deploy.v1")): the GovernanceRouter goes the same way (governance spec §3.1)
@@ -489,9 +490,9 @@ UMTX_S = "(bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address)
 # T39: taxRecipient; empty on
 # the PQZ kinds 4, 5); `owner` and the five `roles` are UA ids (bytes32, a native account's address padded: the same word as
 # the address it was, CTR-GOV-01 Change)
-# (group 3f: `conf` ends pqzVerifyMode, pqzVerifierUA, pqzVerifierFixed)
+# (group 3f: `conf` ends pqzVerifyMode, pqzVerifierUA, pqzVerifierFixed; group 3h T60: then proofStore)
 CFG = ("t", ["b", "b", "w", "w", "w", "w", ("t", ["w"] * 5), "w", "w", ("a", ("t", ["w", "w", "w"])), ("t", ["w", "w"]),
-             ("t", ["b"] + ["w"] * 9), "w", "w", "w", ("t", ["w"] * 5)])
+             ("t", ["b"] + ["w"] * 10), "w", "w", "w", ("t", ["w"] * 5)])
 # IFactoryToken.Env (plan 5g-Z2; chain-neutral releases, plan T71: the factory fills its own chainUid and router):
 # registry, smartKeyAccountImpl, hedera, deps, params, libs, libCodeHashes
 ENV = ("t", ["w", "w", "w", ("a", "w"), ("a", "w"), ("a", "w"), ("a", "w")])
@@ -1126,12 +1127,14 @@ def self_test():
 
 
 def main():
-    global RPC, SPLIT, ZERO_DEP
+    global RPC, SPLIT, ZERO_DEP, PROOF_STORE
     ap = argparse.ArgumentParser()
     ap.add_argument("--rpc", default="http://127.0.0.1:8545")
     ap.add_argument("--log", default=os.path.join(EVM, "runs/2026-10-16-p6g-7622.txt"))
     ap.add_argument("--keys", default="1,2,3")
     ap.add_argument("--split", action="store_true", help="always register without the proof, then storePqzPop")
+    ap.add_argument("--proof-store", choices=["none", "log"], default="none",
+                    help="the PQZ tokens' proofStore at creation (group 3h): NONE (calldata only) or LOG (a PqzDebitProof event per debit)")
     ap.add_argument("--zero-dep", action="store_true",
                     help="PQZ releases on deps = [0x0], the PQZ tokens OFFCHAIN, the deployer EOA their verifier")
     ap.add_argument("--self-test", action="store_true", help="no chain: messages, registry args and calldata vs portable.json")
@@ -1144,6 +1147,7 @@ def main():
         log(f"self-test: {len(FAILS)} failure(s)")
         sys.exit(1 if FAILS else 0)
     RPC, SPLIT, ZERO_DEP = a.rpc, a.split, a.zero_dep
+    PROOF_STORE = 1 if a.proof_store == "log" else 0
     kd, kr, ke = (int(x) for x in a.keys.split(","))
     try:
         run(kd, kr, ke)
@@ -1425,8 +1429,9 @@ def run(kd, kr, ke):
         # group 3f (AV-2): pqzVerifyMode, pqzVerifierUA, pqzVerifierFixed: PRECOMPILE (0, 0, false), or with --zero-dep
         # OFFCHAIN with the deployer EOA (a native id, its padded address) as a transferable verifier
         mode = [1, pad(sd.addr), 0] if ZERO_DEP else [0, 0, 0]
+        mode += [PROOF_STORE]  # group 3h T60: proofStore, NONE unless --proof-store log
         c = [name, sym, 6, feat, 0, sd.addr, [sd.addr if feat & 2 else 0, 0, 0, 0, 0], supply, holder, legs, [0, 0],
-             [aud_key, SCALE, MAXS, FEE, dmode, amode, MIN_DECOY] + mode if conf else [b""] + [0] * 9, 0, 0, 0, [0, 0, 0, 0, 0]]
+             [aud_key, SCALE, MAXS, FEE, dmode, amode, MIN_DECOY] + mode if conf else [b""] + [0] * 10, 0, 0, 0, [0, 0, 0, 0, 0]]
         # plan 5g-Z2: initArgs = abi.encode(TokenConfig), opaque to the factory; the verifier is the release's
         data = cd("createToken(uint8,uint64,bytes,bytes32)", ["w", "w", "b", "w"], kind, 1, encs([CFG], [c]), kc(salt))
         r = sd.send(fac, data, f"createToken {sym} (kind {kind})")

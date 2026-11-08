@@ -300,9 +300,9 @@ contract GovDeployTest is Test {
         // T25: 42,985 -> 43,333 B; T26: 43,333 -> 43,552 B; pay-meta-tax T37: 43,552 -> 43,667 B; T38: 43,667 -> 43,714 B;
         // T39: 43,714 -> 43,711 B; T40: 43,711 -> 43,503 B (lever 5: `_payMeta` in `MtxPipelineLib`); chain-neutral T72:
         // 43,503 -> 44,456 B (the env read from the clone's code, `chainEnv`, `validateEnv`); 3f T44: 44,456 -> 44,610 B (the
-        // three PQZ verifier fields refused by `_requireUnused`)
-        h.limitCode(44_609);
-        vm.expectRevert(bytes("WrappedToken runtime 44610 B > chain code limit 44609 B (CHAIN_CODE_LIMIT, CTR-GOV-19)"));
+        // three PQZ verifier fields refused by `_requireUnused`); 3h T60: 44,610 -> 44,635 B (`proofStore` refused there too)
+        h.limitCode(44_634);
+        vm.expectRevert(bytes("WrappedToken runtime 44635 B > chain code limit 44634 B (CHAIN_CODE_LIMIT, CTR-GOV-19)"));
         h.deploy(ZUID, false, ska);
     }
 
@@ -503,8 +503,10 @@ contract GovDeployTest is Test {
         // (the metadata hash: `IUARegistry.requirePortable`)
         // T66a item 2 (the metadata hash: IUARegistry's KEM holder docs): 0x0240966987610aC882D8501247EF3Ce2AC2c477B -> this
         // T66a item 5 (the metadata hash: IUARegistry.popSlotsOf): 0xbf24455f26b2cB0a343fc47a546Fd68F4b5CAEAD -> 0x3A893f1938bA3E34339D3d4b85CC13a5983A7149
-        // 3h T58 (the metadata hash: IPqzToken's debit record view and `lastDebit`): -> this
-        assertEq(router, 0x942f489e2f453AaEd2Be4B3DFb8b5dA441Fa6BdA, "GovernanceRouter");
+        // 3h T58 (the metadata hash: IPqzToken's debit record view and `lastDebit`): -> 0x942f489e2f453AaEd2Be4B3DFb8b5dA441Fa6BdA
+        // 3h T59 (the metadata hash: IPqzToken's args with `ownTag`; found by T60's suite): -> 0xA4Ab7e0673548a32B96d7164b6e81B9D6Ce29C4b
+        // 3h T60 (the metadata hash: `proofStore`'s error, event and view; `ConfidentialConfig.proofStore`): -> this
+        assertEq(router, 0xB95B3fA6EDD80605484A95ffBa63B6e2e873C0C6, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append: chain-neutral releases (plan T72), `abi.encode(factory, implArgs)`;

@@ -665,7 +665,7 @@ contract ZetherTypedWrappedTest is ZetherNamedBase {
         c.features = 1 << GovernanceBits.PAYABLE;
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
-        c.conf = IFactoryToken.ConfidentialConfig(bytes(""), SCALE, uint256(1) << 40, FEE, dMode, 0, 0, 0, bytes32(0), false);
+        c.conf = IFactoryToken.ConfidentialConfig(bytes(""), SCALE, uint256(1) << 40, FEE, dMode, 0, 0, 0, bytes32(0), false, 0);
         w = WrappedZetherToken(payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, abi.encode(c), "zw")));
         tok = ZetherLayer(address(w));
         _users();
@@ -975,7 +975,7 @@ contract ZetherTypedRowsTest is ZetherNamedBase {
         c.features = 1 << GovernanceBits.PAYABLE;
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(new MockERC20("USD", "USD", 6)), 1, 1);
-        c.conf = IFactoryToken.ConfidentialConfig(bytes(""), SCALE, uint256(1) << 40, FEE, dMode, 0, 0, 0, bytes32(0), false);
+        c.conf = IFactoryToken.ConfidentialConfig(bytes(""), SCALE, uint256(1) << 40, FEE, dMode, 0, 0, 0, bytes32(0), false, 0);
         w = WrappedZetherToken(payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, abi.encode(c), "zw")));
     }
 

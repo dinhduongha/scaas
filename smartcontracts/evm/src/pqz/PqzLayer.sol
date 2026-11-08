@@ -92,6 +92,7 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
     function auditorMode() external view returns (ZetherTypes.AuditorMode) { return PqzCore.$().auditorMode; }
     function disclosureMode() external view returns (ZetherTypes.DisclosureMode) { return PqzCore.$().disclosureMode; }
     function totalShielded() external view returns (uint256) { return PqzCore.$().totalShielded; }
+    function proofStore() external view returns (uint8) { return PqzCore.$().proofStore; }
 
     /// @notice The account of `(ua, keyVersion)` (D13; group 3g KV-6): counters, the `acc` reference, `accUnits`, flags, the
     ///         UA's `sendCounter` (one for every version), `accHash`, `lastDebit` (group 3h PP-2).

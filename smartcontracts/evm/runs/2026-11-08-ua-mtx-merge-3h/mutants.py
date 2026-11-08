@@ -22,6 +22,7 @@ CORE = "src/pqz/PqzCore.sol"
 STATE = "src/pqz/PqzStateLib.sol"
 REC = "test/pqz/PqzDebitRecord.t.sol"
 TAG = "test/pqz/PqzOwnTag.t.sol"
+STORE = "test/pqz/PqzProofStore.t.sol"
 
 # id: (file, old, new, test file)
 MUTANTS = {
@@ -55,6 +56,9 @@ MUTANTS = {
                                  "        address[] memory ks = new address[](m);\n        for (uint256 j; j < m; ++j) (ks[j], kv[j]) = (o.keys[j], o.vers[j]);\n"
                                  "        for (uint256 x = 1; x < m; ++x) for (uint256 y = x; y > 0 && ks[y] < ks[y - 1]; --y) {\n"
                                  "            (ks[y], ks[y - 1]) = (ks[y - 1], ks[y]);\n            (kv[y], kv[y - 1]) = (kv[y - 1], kv[y]);\n        }\n", TAG),
+    # ---- T60: proofStore NONE / LOG (spec §4)
+    "M10-record-proofStore-zero": (CORE, "| uint256(s.proofStore) << 8 |", "|", STORE),
+    "M11-log-buffer-not-proof": (CORE, "o.from, o.sendCounter, h, proof);", "o.from, o.sendCounter, h, buf);", STORE),
 }
 
 

@@ -27,6 +27,7 @@ library PqzBurnLib {
         (PqzCore.Op memory o, bytes memory buf) = PqzCore.prepareBurn(e, b, hint, proof.length);
         PqzCore._check(o, buf, proof, authSig, pqzVerdict);
         PqzCore._settleBurn(o, b);
+        PqzCore._logProof(o, buf, proof);
         paid = PqzCore._paid(o);
     }
 }

@@ -90,6 +90,7 @@ contract NamespaceProbe is UAMetaTxBase {
         (qa.accWords[0], qa.accWords[1]) = (0xec, 0xed);
         // group 3h T58 (pqz-proof-path spec §2.2, §6): the account's `lastDebit`, the debit record appended
         (qa.lastDebit, q.debitRec[U][7]) = (0xdd, PqzCore.DebitRecord(0xde, 0xdf));
+        q.proofStore = 1; // group 3h T60: byte 23 of slot 0
         q.entryPtr[V] = A;
         (q.memos[V], q.memos[U]) = (NamespaceProbeIds.blob(58), NamespaceProbeIds.blob(21));
         ZetherLib.ZetherStorage storage z = ZetherLib.$();
@@ -283,6 +284,7 @@ contract LayoutTest is V2Fixture {
         f = _more(f, F("pqzProposerGeneration", 0, 0, 0xdc, 4));
         f = _more(f, F("debitRec[U][7].w0", u, 0, 0xde, 32));
         f = _more(f, F("debitRec[U][7].w1", u, 0, 0xdf, 32));
+        f = _more(f, F("proofStore", 0, 0, 1, 1));
         _ns(address(p), "pqz", "scaas.pqz", f);
         f = new F[](25);
         f[0] = F("verifier", 0, 0, a, 20);
