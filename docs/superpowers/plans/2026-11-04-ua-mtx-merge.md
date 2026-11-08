@@ -2066,7 +2066,11 @@ rebalance must be measured after every PQZ contract change:
    the `pop` at `register` and which accepted later; a copier (CTR-UA-31) rebuilds that set from logs. The option: one word per `msig`
    (a bitmap of the `pop` slots, written at `register`) and a typed view `popSlotsOf(ua) → (uint16[] index, bytes32[] hash)`;
    `popOf` unchanged. Weigh with part 3: the registry pair has about 0.9–1.6 KB of room under 60 M (library study), and the word is
-   one more state slot per `msig` `register`. Decide with the owner before building; the same rule on every family (Soroban's twin).
+   one more state slot per `msig` `register`. **Owner 2026-11-08: build it.** The same rule on every family: Soroban's registry
+   (`smartcontracts/soroban/contracts/ua-registry`) gets its twin in this part; NEAR and Algorand in their own UA rounds. Red tests:
+   the bitmap equals the `pop`'s signing slots after `register` (nested `msig` included), a later `acceptMembership` never sets a
+   `pop` bit, `popSlotsOf` hashes equal `memberSigHashOf`, a non-`msig` UA answers empty; vectors and every reader of the record
+   (clientkeys, node indexer, `ua-rs` through T20b) follow; layout and gas pins old → new.
 
 
 3c then holds only the `PqChat` contract and its public topics.
