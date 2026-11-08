@@ -358,3 +358,7 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   `popSlotsOf`), under `ua-mtx-merge/t66a/`: the files as they stood at 05f23be2 (3f's tip): `src/ua/{IUARegistry,UARegistry,
   UARegistryLib,UAStore,UAKinds}.sol` (no portable check view, a PQ-eligible `msig` a KEM holder, no `pop` slot word),
   `script/pqz/e2e.py` (its `msig` holder registered with a KEM key). Not built.
+  The PQZ proof path, contract side (group 3h, spec 2026-11-06-pqz-proof-path.md; plan T58-T61), under `ua-mtx-merge/3h/`: the
+  files as they stood at 7558a364 (the T66a block's tip), each copied by the first task of 3h that replaces it: T58
+  `src/pqz/{PqzCore,PqzStateLib,PqzViewLib,PqzLayer,IPqzToken}.sol` (pending slots deleted by a debit and a rollover, no debit
+  record, no `lastDebit`). Not built.
