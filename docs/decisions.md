@@ -7950,6 +7950,13 @@ Change (2026-11-02, typed-signing CD; controller calls, owner may override; stat
 
 **Why.** ECDSA and Schnorr over one secp256k1 key leak through nonce relations; a Schnorr signing oracle on an ElGamal key is a decryption-adjacent oracle; untagged digests replay across protocols. Owner decision.
 **Source.** [history/specs/2026-10-06-universal-account-design.md](history/specs/2026-10-06-universal-account-design.md) line 166.
+Change (2026-11-08, owner; status: PLANNED, plan `ua-rs-sign` T20c): **an imported native key may register and sign as the
+derived kind of its own scheme** (CTR-UA-06's "a MetaMask key registers `secp256k1`"): a secp256k1 secret as `secp256k1`
+(0x0108), an ed25519 seed as `ed25519` (0x0102), id `keccak256(TAG(kind) ‖ key_data)`, a separate account from the native id.
+Only that kind: never a second scheme on the key (`bip340`, Schnorr; the registry's `UAKeyInUse` refuses it too), and still no
+generic sign-this-digest call: `ua-rs` builds `ua_msg` from the typed fields itself. Replaces the spec §8.3 clause "refused for
+any UA kind" for those two kinds only.
+**Source.** owner 2026-11-08 (chat): "Có thêm task cho ua-rs-sign để đăng ký kind dẫn xuất (0x0108 / 0x0102) từ khóa … đã nhập vào ví" — "có".
 
 ### CLI-SGN-30 — EOA path EOA-only; role tree m/7622
 - old: R300, S4F:Q1, UA:Q6 · status: current · owner: yes · date: 2026-10-07 · normative: clients/signers-clientkeys.md#CLI-SGN-30 · superseded-by: —
