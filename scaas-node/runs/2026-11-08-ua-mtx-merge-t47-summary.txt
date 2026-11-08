@@ -1,0 +1,18 @@
+ua-mtx-merge T47 (group 3f, PQZ verifier mode: the node), scaas-node gate summary. Full outputs in the git-ignored
+runs/2026-11-08-ua-mtx-merge-t47-*.log. rustc 1.97.1; every heavy run through scripts/capped at the default 4 GB, -j2; the
+suite in parts (--lib, then each integration target alone), no raised CAPPED_MEM. UNAUDITED.
+
+step | commit | rc | counts
+legacy copies (MD-4) | 75ddccc4 | - | 3f/{abi,config,gateway,guard,indexer,submit,typed}.rs, 3f/adapters/evm.rs; 3f/e2e.rs in fd2dfb2f
+red: the plan's tests on the skeleton, before the code | 75ddccc4 + tests | 101 | 13 failed, 1 passed (shield_sent_when_disabled: off by default is today's behaviour)
+cargo test --lib | e50251b4 | 0 | 680 passed, 0 failed
+cargo test --test fuzz | fd2dfb2f | 0 | 4 passed
+cargo test --test mesh_vectors | fd2dfb2f | 0 | 1 passed, 1 ignored
+cargo test --test e2e (compile; every test ignored) | e50251b4 | 0 | 0 passed, 20 ignored
+cargo test --test e2e_ua8, e2e_algorand, e2e_aptos, e2e_cosmos, e2e_hedera, e2e_near, e2e_solana, e2e_soroban, e2e_soroban_ua, e2e_sui, e2e_ton | fd2dfb2f | 0 | 0 passed; 10, 8, 1, 1, 1, 12, 1, 1, 10, 1, 1 ignored
+cargo clippy --all-targets -- -D warnings | e50251b4 | 0 | 0 warnings
+mutants, spec §15 Node row (runs/2026-11-08-ua-mtx-merge-t47-mutants.txt) | e50251b4 | - | 4 of 4 killed, tree clean after
+e2e pqz_offchain_transfer_on_anvil, pqz_revoked_verifier_on_anvil | - | - | not run yet: after the T44 + T45 commit (out/ final, the base stack by the deploy script)
+
+Inputs read from the working tree: smartcontracts/evm/test/vectors/selector_audit.json (the controller's T45 rows, not yet
+committed at e50251b4), smartcontracts/vectors/pqz/verdict.json (22 rows), smartcontracts/vectors/typed/typed_ops.json (e452b88f).
