@@ -410,6 +410,16 @@ interface IUARegistry is IERC5267 {
     /// The stored part pointers (0 = not yet), this generation only.
     function expandedKeyOf(bytes32 ua) external view returns (address[2] memory);
 
+    /// UA-7 O1 (owner 2026-11-04; plan T66a): the portable check, chain-free. Reverts `UAUnauthorized(ua)` unless `auth` is the UA's
+    /// portable signature over `uaMessage(kind, purposeTag, typedDigest)`, `typedDigest` a portable record's typed digest: a single key
+    /// `signature` only, by the kind's verifier as `setKemKey` checks it; an `msig` `members` only, over two levels, minimal
+    /// (T - min(weight) < N at each level), accepted slots only (CTR-UA-37), derived members over `memberDigest` under `member`,
+    /// native members over `typedDigest` itself (TS-D4: an EOA by ECDSA with its own key, a contract by ERC-1271), never `UAAuth`.
+    /// `purposeTag`: a portable purpose (`PURPOSE_KEM`, `PURPOSE_PQZ_KEY`, `PURPOSE_PQCHAT`); `PURPOSE_POP_V2` (the registration's own
+    /// check) and every chain-bound purpose are `UAUnauthorized`, so are a native id (it signs chain-bound only) and an unregistered
+    /// one. Gen 2 forwards a gen-1 record (UA8-D11). `UAVerifyGas` when too little gas is left for a verifier's cap.
+    function requirePortable(bytes32 ua, bytes32 purposeTag, bytes32 typedDigest, UASig calldata auth) external view;
+
     /// Reverts UAUnauthorized unless `auth` authorizes `digest` for `ua` under `purposeTag` (typed-signing TS-D12).
     /// Native ids (ua >> 160 == 0): `auth.signature` only, ECDSA low-s (EOA) or ERC-1271 (50 k cap; 400 k for
     ///   SmartKeyAccount clones, by the immutable clone codehash) over uaAuthDigest(ua, purposeTag, digest) — never over

@@ -600,6 +600,28 @@ library UARegistryLib {
 
     // ----- KEM records (P4, P5, P7; UA8-D3–D5, D11, D12) -----
 
+    // ----- the portable check (UA-7 O1, owner 2026-11-04; plan T66a) -----
+
+    /// `IUARegistry.requirePortable` on a record held here (the registry forwards a gen-1 record to gen 1 first): a single key by
+    /// `_portableOk`, the path `setKemKey` and `setPqzKey` take; an `msig` by `_msig` over its accepted slots, minimal, whatever its PQ
+    /// weight (`_sigOk`'s empty `pop` of a classical-dominant `msig` is the registration's rule, never a signature). No write: the registry
+    /// runs it inside its view.
+    function requirePortable(bytes32 ua, bytes32 purposeTag, bytes32 typedDigest, IUARegistry.UASig calldata auth) external {
+        IUARegistry.Record memory r = UAStore.layout().records[ua];
+        // the registration's `pop` is `register`'s own check (its slots need no acceptance): never a view's
+        if (r.kind == 0 || purposeTag == UAKinds.PURPOSE_POP_V2) revert IUARegistry.UAUnauthorized(ua);
+        (bytes memory d,) = UAStore.registration(ua, r.keyPtr);
+        bool ok;
+        if (r.kind != UAKinds.MSIG) {
+            ok = _portableOk(r.kind, d, ua, purposeTag, typedDigest, auth);
+        } else {
+            _portablePurpose(ua, purposeTag);
+            bytes32 md = UAKinds.memberDigest(ua, UAKinds.uaMessage(UAKinds.MSIG, purposeTag, typedDigest));
+            ok = auth.keyData.length == 0 && auth.signature.length == 0 && _msig(ua, md, typedDigest, false, d, auth.members);
+        }
+        if (!ok) revert IUARegistry.UAUnauthorized(ua);
+    }
+
     function setKemKey(bytes32 ua, uint64 version, IUARegistry.KemKey calldata kem, IUARegistry.UASig calldata sig) external {
         UAStore.Layout storage s = UAStore.layout();
         IUARegistry.Record memory r = s.records[ua];
@@ -670,9 +692,8 @@ library UARegistryLib {
     /// Step 6 (and `setKemKey`, `setPqzKey`): a portable record's signature over `uaMessage(kind, purpose, digest)`.
     /// `msig`: no signature unless PQ-eligible, then the m-of-n `members` (under `member`, U5; a native member over the
     /// typed `digest` itself, by ECDSA or ERC-1271), `sig` empty; single keys: `sig` by the kind's
-    /// verifier (`verifyPop`), no `members`. Only the portable purposes (POP_V2, KEM, PQZ_KEY; rulings A1-f1, A5-m3)
-    /// reach this chain-free path; any other purpose reverts `UAUnauthorized` (writes stay on `requireAuthorized`, UAAuth
-    /// for native members). `cfg`: the registry's `_cfg(kind)`. `internal` for `SigOkHarness` (ruling A5-m3).
+    /// verifier (`verifyPop`), no `members`. Only the portable purposes reach this chain-free path (`_portablePurpose`).
+    /// `cfg`: the registry's `_cfg(kind)`. `internal` for `SigOkHarness` (ruling A5-m3).
     function _sigOk(
         uint256 cfg,
         uint16 kind,
@@ -683,9 +704,7 @@ library UARegistryLib {
         bytes memory sig,
         IUARegistry.MemberSig[] memory members
     ) internal view returns (bool) {
-        if (purpose != UAKinds.PURPOSE_POP_V2 && purpose != UAKinds.PURPOSE_KEM && purpose != UAKinds.PURPOSE_PQZ_KEY) {
-            revert IUARegistry.UAUnauthorized(ua);
-        }
+        _portablePurpose(ua, purpose);
         if (kind == UAKinds.MSIG) {
             if (sig.length != 0) return false;
             if (!_pqEligible(d)) return members.length == 0;
@@ -708,7 +727,16 @@ library UARegistryLib {
         return UAStore.capped(address(uint160(cfg)), cfg >> 160, data, 1, true);
     }
 
-    /// accounts.md §1.9 `msig` row, a portable record's signature (`_sigOk` only — never `requireAuthorized`; rulings C7 /
+    /// The portable purposes (POP_V2, KEM, PQZ_KEY; rulings A1-f1, A5-m3; PQCHAT, UA-7 O1): any other purpose reverts `UAUnauthorized`
+    /// (writes stay on `requireAuthorized`, UAAuth for native members).
+    function _portablePurpose(bytes32 ua, bytes32 purpose) private pure {
+        if (
+            purpose != UAKinds.PURPOSE_POP_V2 && purpose != UAKinds.PURPOSE_KEM && purpose != UAKinds.PURPOSE_PQZ_KEY
+                && purpose != UAKinds.PURPOSE_PQCHAT
+        ) revert IUARegistry.UAUnauthorized(ua);
+    }
+
+    /// accounts.md §1.9 `msig` row, a portable record's signature (`_sigOk` and `requirePortable` only — never `requireAuthorized`; rulings C7 /
     /// A1-I2 / A1-f1, owner 2026-10-30): strictly increasing member indexes, stop at the threshold (a MemberSig after it
     /// fails, which keeps the registration bound sound), `member_digest = keccak256(ua ‖ ua_msg)`. A native member signs
     /// the record's typed digest `digest` itself (typed-signing TS-D4, owner decision 4: `eth_signTypedData_v4`; an EOA:

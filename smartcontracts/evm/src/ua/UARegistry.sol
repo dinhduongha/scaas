@@ -84,6 +84,9 @@ import {UAMldsaVerifier} from "./MlDsa.sol";
 ///         views and `requireAuthorized` stay here. The library's address is in this contract's code, so it is part of the
 ///         registry's CREATE2 address.
 ///
+///         UA-7 O1 (plan T66a): `requirePortable`, the portable check view a `PqChat` record takes, runs `UARegistryLib`'s
+///         portable path by DELEGATECALL inside the view (`_libView`; the library entry writes nothing).
+///
 ///         CTR-UA-37 (owner 2026-11-02): listing in an `msig` is no consent. A member accepts its slot (`acceptMembership`, a portable
 ///         `UAMembership`, in `UARegistryLib`); `memberAccepted` reads it, the slots of the `pop` are accepted at registration, and
 ///         every verification but that `pop` counts accepted slots only: one read of one word, here and in `UARegistryLib._msig`.
@@ -621,6 +624,24 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
 
     function acceptMembership(bytes32 ua, MemberSig calldata memberSig) external {
         _lib(UARegistryLib.acceptMembership.selector, 0);
+    }
+
+    /// UA-7 O1 (plan T66a): gen 2 forwards a record it does not hold (UA8-D11: gen 1's verdict, its revert as it is), else the
+    /// library's check on this record.
+    function requirePortable(bytes32 ua, bytes32 purposeTag, bytes32 typedDigest, UASig calldata auth) external view {
+        if (_elsewhere(ua)) IUARegistry(predecessor).requirePortable(ua, purposeTag, typedDigest, auth);
+        else _libView(UARegistryLib.requirePortable.selector, _s.records[ua].kind);
+    }
+
+    /// `_lib` inside a view (`requirePortable`): the library entry writes nothing, so it runs in a STATICCALL frame too. Solidity
+    /// types no DELEGATECALL as `view`; the function pointer is cast.
+    function _libView(bytes4 sel, uint16 kind) private view {
+        function(bytes4, uint16) f = _lib;
+        function(bytes4, uint16) view v;
+        assembly {
+            v := f
+        }
+        v(sel, kind);
     }
 
     // ----- requireAuthorized -----
