@@ -1528,3 +1528,55 @@ func TestPqz(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// T20c (owner 2026-11-08): keys.json / sign.json `imported`: the UA of an imported key, its scheme's derived kind only.
+func TestImportedUAKeyRows(t *testing.T) {
+	f := newFix(t)
+	sign := map[string]obj{}
+	for _, x := range rows(uaVec(t, "sign.json")["imported"].(obj)["rows"]) {
+		sign[x["id"].(string)] = x
+	}
+	imp := uaVec(t, "keys.json")["imported"].(obj)
+	for _, r := range rows(imp["rows"]) {
+		net := r["network"].(string)
+		w := f.fresh("twelve_words")
+		must(w.ImportNativeKey(network(net), b(r["secret"]))).Close()
+		k := must(w.ImportedUAKey(network(net), 0, uint16(n32(r["kind"]))))
+		t.Cleanup(k.Close)
+		if hx(must(k.KeyData())) != r["keyData"] {
+			t.Fatal(net, "key data")
+		}
+		var m struct {
+			ImportedUas []struct{ Ua string } `json:"importedUas"`
+		}
+		must0(json.Unmarshal([]byte(must(w.ManifestJSON())), &m))
+		if len(m.ImportedUas) != 1 || m.ImportedUas[0].Ua != r["ua"] {
+			t.Fatal(net, "importedUas", m)
+		}
+		for _, what := range []string{"pop", "metatx"} {
+			if x, ok := sign[net+" "+what]; ok {
+				if hx(must(k.SignUA(b32(x["purposeTag"]), b32(x["digest"])))) != x["signature"] {
+					t.Fatal(x["id"])
+				}
+			}
+		}
+		if _, err := k.KemKey(0); code(err) != "UAKemHolder" {
+			t.Fatal(net, "KEM key:", err)
+		}
+	}
+	for _, x := range rows(imp["refusals"]) {
+		var r obj
+		for _, y := range rows(imp["rows"]) {
+			if y["network"] == x["network"] {
+				r = y
+			}
+		}
+		net := network(r["network"].(string))
+		w := f.fresh("twelve_words")
+		must(w.ImportNativeKey(net, b(r["secret"]))).Close()
+		if _, err := w.ImportedUAKey(net, 0, uint16(n32(x["kind"]))); code(err) != "UAArgument" {
+			t.Fatal(x["reason"], err)
+		}
+		must(w.ImportedUAKey(net, 0, uint16(n32(r["kind"])))).Close()
+	}
+}

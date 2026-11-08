@@ -63,7 +63,7 @@ pub(crate) use eip712::{from_hex, to_hex};
 pub use kem::{is_kem_holder, kem_encaps, KemKeyPair};
 #[cfg(feature = "vectors")]
 pub use manifest::vectors_backup_payload;
-pub use manifest::{AllowRollback, ImportEntry, KemEntry, Manifest, ManifestEntry, NativeEntry, PqzHeldEntry};
+pub use manifest::{AllowRollback, ImportEntry, ImportedUaEntry, KemEntry, Manifest, ManifestEntry, NativeEntry, PqzHeldEntry};
 pub use pairing::{FrostSession, Musig2Session};
 pub use policy::{sign_typed_by, AllowAnyTypedData, AllowRow, Expect, Invalidate, SubjectKey};
 #[cfg(feature = "pqz")]
@@ -233,6 +233,15 @@ impl Network {
     }
     fn ed25519(self) -> bool {
         !matches!(self, Network::Evm | Network::Cosmos | Network::HederaEcdsa)
+    }
+    /// The derived UA kind of this network's scheme, the one kind an imported key of it may take (T20c, owner 2026-11-08):
+    /// `ed25519` (`0x0102`) or `secp256k1` (`0x0108`).
+    pub fn scheme_kind(self) -> u16 {
+        if self.ed25519() {
+            0x0102
+        } else {
+            0x0108
+        }
     }
     /// The SLIP-44 path of key `i`; element 1 is the coin type.
     fn path(self, i: u32) -> Vec<u32> {
@@ -515,7 +524,7 @@ impl Wallet {
         if let Some(ua) = ua {
             self.store.note(|m| m.add_ua(kind, account, index, ua));
         }
-        Ok(UaKey { kind, account, index, key_data, ua, secret })
+        Ok(UaKey { kind, account, index, key_data, ua, secret, imported: false })
     }
 
     /// Key `index` of `network` (clientkeys `deriveKey`), `coin_type` in place of the network's (Pi Network: `Stellar`,
@@ -638,6 +647,8 @@ pub struct UaKey {
     key_data: Vec<u8>,
     ua: Option<[u8; 32]>,
     secret: Handle,
+    /// The UA of an imported key ([`Wallet::imported_ua_key`], T20c): never a backup or link sender, never in `entries`.
+    imported: bool,
 }
 
 impl UaKey {

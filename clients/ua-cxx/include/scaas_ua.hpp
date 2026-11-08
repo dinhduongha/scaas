@@ -350,6 +350,9 @@ public:
     Key nativeKey(const std::string& network, uint32_t index, uint32_t coinType = kCoinDefault) const;
     Key importNativeKey(const std::string& network, Secret& secret) const;
     Key importedKey(const std::string& network, uint32_t n) const;
+    // T20c (owner 2026-11-08): the UA of imported key n, kind the derived kind of its own scheme (0x0108 secp256k1, 0x0102
+    // ed25519), any other UAArgument; a UA key (signUa / signMember only), no KEM key, never a backup or link sender
+    Key importedUaKey(const std::string& network, uint32_t n, uint16_t kind) const;
     std::string sealLabelVault(const std::string& label, Secret& vaultPassphrase) const;
     void openLabelVault(const std::string& vaultJson, Secret& vaultPassphrase, Secret& prf32) const;
     std::string manifestJson() const;

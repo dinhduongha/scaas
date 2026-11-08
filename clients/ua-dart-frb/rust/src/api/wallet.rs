@@ -475,6 +475,11 @@ impl UaWallet {
     pub fn imported_key(&self, network_name: String, n: u32) -> R<UaKey> {
         Ok(key(KeyInner::Native(self.0.imported_key(network(&network_name)?, n)?)))
     }
+    /// T20c (owner 2026-11-08): the UA of imported key `n`, `kind` the derived kind of its own scheme (0x0108 secp256k1, 0x0102
+    /// ed25519), any other `UAArgument`; a UA key (`sign_ua` / `sign_member`), no KEM key, never a backup or link sender.
+    pub fn imported_ua_key(&self, network_name: String, n: u32, kind: u16) -> R<UaKey> {
+        Ok(key(KeyInner::Ua(self.0.imported_ua_key(network(&network_name)?, n, kind)?)))
+    }
     #[frb(sync)]
     pub fn manifest_json(&self) -> String {
         self.0.manifest().to_json()

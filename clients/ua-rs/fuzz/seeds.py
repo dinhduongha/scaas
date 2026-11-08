@@ -58,8 +58,11 @@ def unhex(s):
 
 sign, seal, kem, keys = load("sign.json"), load("seal.json"), load("kem.json"), load("keys.json")
 manifest = {"v": 1, "entries": [{"kind": r["kind"], "account": r["account"], "index": r["index"], "ua": r["ua"]} for r in kem["keys"]],
-            "natives": [], "kem": [], "imports": [], "pqzHeld": [], "backupGeneration": 0, "backupSenders": []}
-payloads = [unhex(c["pt"]) for c in seal["containers"] if c["container"]["purpose"] in ("scaas/backup/v1", "scaas/link/v1")]
+            "natives": [], "kem": [], "imports": [{"network": "evm", "n": 0}],
+            "importedUas": [{"kind": 264, "source": "native-import:evm:0", "ua": keys["imported"]["rows"][0]["ua"]}], "pqzHeld": [],
+            "backupGeneration": 0, "backupSenders": []}
+# the backup payloads, T20c's with manifest.importedUas among them
+payloads = [unhex(c["pt"]) for c in seal["containers"] + seal["imported"] if c["container"]["purpose"] in ("scaas/backup/v1", "scaas/link/v1")]
 opens = [r for k in ("containers", "acceptance", "replay") for r in seal[k]]
 nested = next(r for r in sign["msig"] if r["case"].startswith("nested minimal"))
 

@@ -99,6 +99,8 @@ mod ffi {
         fn wallet_native_key(w: &Wallet, network: &str, index: u32, coin_type: u32) -> Result<Box<Key>>;
         fn wallet_import_native_key(w: &Wallet, network: &str, secret: &mut [u8]) -> Result<Box<Key>>;
         fn wallet_imported_key(w: &Wallet, network: &str, n: u32) -> Result<Box<Key>>;
+        // T20c: the UA of an imported key, `kind` its scheme's derived kind (0x0108 / 0x0102) only
+        fn wallet_imported_ua_key(w: &Wallet, network: &str, n: u32, kind: u16) -> Result<Box<Key>>;
         fn wallet_seal_label_vault(w: &Wallet, label: &str, vault_passphrase: &mut [u8]) -> Result<String>;
         fn wallet_open_label_vault(w: &Wallet, vault_json: &str, vault_passphrase: &mut [u8], prf32: &mut [u8]) -> Result<()>;
         fn wallet_manifest_json(w: &Wallet) -> String;
@@ -414,6 +416,9 @@ fn wallet_import_native_key(w: &Wallet, net: &str, secret: &mut [u8]) -> R<Box<K
 }
 fn wallet_imported_key(w: &Wallet, net: &str, n: u32) -> R<Box<Key>> {
     guard(|| Ok(key(KeyInner::Native(w.0.imported_key(network(net)?, n)?))))
+}
+fn wallet_imported_ua_key(w: &Wallet, net: &str, n: u32, kind: u16) -> R<Box<Key>> {
+    guard(|| Ok(key(KeyInner::Ua(w.0.imported_ua_key(network(net)?, n, kind)?))))
 }
 fn wallet_seal_label_vault(w: &Wallet, label: &str, vault_passphrase: &mut [u8]) -> R<String> {
     let r = guard(|| Ok(w.0.seal_label_vault(label, text(vault_passphrase)?, None)?.to_json()));

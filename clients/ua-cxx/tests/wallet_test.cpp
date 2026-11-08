@@ -920,6 +920,39 @@ static void pqz_facade() {
     CHECK(k.pk() == pk, "public data stays readable");
 }
 
+// T20c (owner 2026-11-08): keys.json / sign.json `imported`: the UA of an imported key, its scheme's derived kind only
+static void imported_ua_key() {
+    json S = vec("sign.json");
+    std::map<std::string, json> sign;
+    for (auto& x : S["imported"]["rows"]) sign[x["id"].get<std::string>()] = x;
+    for (auto& r : KEYS["imported"]["rows"]) {
+        std::string net = r["network"].get<std::string>();
+        Wallet w = wallet_of("twelve_words");
+        Secret sk(bytes(r["secret"]));
+        w.importNativeKey(net, sk);
+        Key k = w.importedUaKey(net, 0, uint16_t(r["kind"].get<int>()));
+        CHECK(hx(k.keyData()) == r["keyData"].get<std::string>(), net + ": key data");
+        CHECK(json::parse(w.manifestJson())["importedUas"][0]["ua"] == r["ua"], net + ": importedUas");
+        for (const char* what : {"pop", "metatx"}) {
+            auto it = sign.find(net + " " + what);
+            if (it == sign.end()) continue;
+            CHECK(hx(k.signUa(bytes(it->second["purposeTag"]), bytes(it->second["digest"]))) == it->second["signature"].get<std::string>(),
+                  it->first);
+        }
+        CHECK(code_of([&] { k.kemKey(0); }) == "UAKemHolder", net + ": no KEM key");
+    }
+    for (auto& x : KEYS["imported"]["refusals"]) {
+        std::string net = x["network"].get<std::string>();
+        json r;
+        for (auto& y : KEYS["imported"]["rows"]) if (y["network"] == x["network"]) r = y;
+        Wallet w = wallet_of("twelve_words");
+        Secret sk(bytes(r["secret"]));
+        w.importNativeKey(net, sk);
+        CHECK(code_of([&] { w.importedUaKey(net, 0, uint16_t(x["kind"].get<int>())); }) == "UAArgument", x["reason"].get<std::string>());
+        CHECK(code_of([&] { w.importedUaKey(net, 0, uint16_t(r["kind"].get<int>())); }).empty(), "positive control");
+    }
+}
+
 int main(int argc, char** argv) {
     std::map<std::string, void (*)()> tests{
         {"load_refuses_wrong_abi_or_features", load_refuses_wrong_abi_or_features},
@@ -941,7 +974,8 @@ int main(int argc, char** argv) {
         {"pqz_facade", pqz_facade},
         {"zether_words", zether_words},
         {"pqz_words", pqz_words},
-        {"pqz_key_versions", pqz_key_versions}};
+        {"pqz_key_versions", pqz_key_versions},
+        {"imported_ua_key", imported_ua_key}};
     if (argc != 2 || !tests.count(argv[1])) {
         std::fprintf(stderr, "usage: wallet_test <name>\n");
         return 2;

@@ -16,8 +16,8 @@
 # harnesses. One re-runs as `STEPS=mutant-3 smartcontracts/evm/runs/2026-11-07-ua-rs-sign-gates.sh --only mutant-3`.
 # GATES_P names another round's re-run (its own logs and summary; T15o: GATES_P=2026-11-08-ua-rs-sign-t15o; T20b's first sync with
 # ua-mtx-merge: GATES_P=2026-11-08-ua-rs-sign-t20b1, the second: 2026-11-08-ua-rs-sign-t20b2; the readers' ChainEnv check and
-# several nodes, owner 2026-11-08: 2026-11-08-ua-rs-sign-t20b3; the third sync, after 3f and T66a: 2026-11-08-ua-rs-sign-t20b4),
-# T20's stay.
+# several nodes, owner 2026-11-08: 2026-11-08-ua-rs-sign-t20b3; the third sync, after 3f and T66a: 2026-11-08-ua-rs-sign-t20b4;
+# T20c, an imported key registers its own derived kind (owner 2026-11-08): 2026-11-08-ua-rs-sign-t20c), T20's stay.
 P=${GATES_P:-2026-11-08-ua-rs-sign}
 LOGEXT=log # step logs are git-ignored (*.log); only <P>-summary.txt is committed (owner 2026-11-02)
 STEPS=${STEPS-"docs clientkeys vectors-check forge-ua ua-rs-nodefault ua-rs-wallet ua-rs ua-rs-pq ua-rs-signers ua-rs-json ua-rs-vectors ua-rs-zether ua-rs-pqz ua-rs-pqz-n2048 ua-deny ua-fuzz ua-sizes ua-c ua-cxx ua-qt ua-dart-frb ua-py ua-go ua-cs ua-dart cargo-zether-prover wasm-zether-prover scaas-ct no-oracle no-oracle-n2048 no-oracle-ua-py wallet-rows test-features mutant-logs pqz-read read-balance named-tests summary"}
@@ -149,7 +149,7 @@ print("baseline cells not measured:", miss or "none"); sys.exit(1 if miss else 0
                           2026-11-07-ua-rs-sign-t15l 2026-11-07-ua-rs-sign-t15m 2026-11-07-ua-rs-sign-t15n \
                           2026-11-07-ua-rs-sign-t15n2 2026-11-08-ua-rs-sign-t15o 2026-11-08-ua-rs-sign-t20b1 \
                           2026-11-08-ua-rs-sign-t20b2 2026-11-08-ua-rs-sign-t20b3 2026-11-08-ua-rs-sign-t20b4 \
-                          2026-11-08-ua-rs-sign-t20b5 ${MUTANT_LOGS_EXTRA:-}; do
+                          2026-11-08-ua-rs-sign-t20b5 2026-11-08-ua-rs-sign-t20c ${MUTANT_LOGS_EXTRA:-}; do
                    l=$(tail -n 1 smartcontracts/evm/runs/$t-mutants.txt); echo "$t: $l"
                    grep -Eq '(survived or not loaded: 0|0 survived, 0 not loaded)$|0 survived, 0 not loaded \(' <<< "$l" || bad=1
                    echo "$t check: $(python3 -I smartcontracts/evm/runs/$t-mutants.py check 2>&1 | tail -n 1)"
@@ -819,6 +819,29 @@ cargo-zether-prover|cargo|clone_registry_is_the_kat_layout
 ua-rs|cargo|verdict_json_rows
 ua-rs|cargo|pqz_verdict_builder_rules
 ua-rs|cargo|pqz_verifier_router_ops_canon
+clientkeys|node|keys.json imported: the UA of an imported key per network, separate from its native id; every other kind refused
+clientkeys|node|importedUAKey: no raw-digest call, no KEM key (KemHolder), 32-byte secrets only
+clientkeys|node|sign.json imported: pop v2, a meta-transaction (unbound relayer / feeRecipient zeroed) and a member signature, byte-equal
+clientkeys|node|sign.json imported separation: a native signature is no UA signature and a UA signature fails the native check
+clientkeys|node|seal.json imported: a backup with its importedUas restores; one secret under two sources; refusals Argument
+clientkeys|node|encodeBackup: importedUas after entries, written only when not empty; a present empty list is refused
+forge-ua|forge|test_ImportedRowsVerify
+forge-ua|forge|test_ImportedSeparation
+ua-rs|cargo|keys_json_imported_rows
+ua-rs|cargo|imported_ua_holds_no_kem_key
+ua-rs|cargo|sign_json_imported_rows
+ua-rs|cargo|sign_json_imported_separation
+ua-rs|cargo|seal_json_imported_rows
+ua-rs|cargo|backup_and_link_keep_the_imported_ua
+ua-rs|cargo|imported_ua_is_no_sender_and_entries_stay_readable
+ua-rs|cargo|manifest_json_imported_uas
+ua-rs-vectors|cargo|manifest_listing_is_no_trust_anchor
+ua-c|unittest|test_imported_ua_key_rows
+ua-cxx|ctest|wallet_imported_ua_key
+ua-py|unittest|test_imported_ua_key_rows
+ua-go|go|TestImportedUAKeyRows
+ua-cs|cs|ImportedUAKeyRows
+ua-dart-frb|dart|imported_ua_key: keys.json / sign.json imported, the scheme kind only (T20c)
 NAMES
 )
 . "$(dirname "$0")/2026-10-27-metatx-split-gates.sh"

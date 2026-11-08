@@ -1505,6 +1505,28 @@ pub extern "C" fn scaas_ua_wallet_imported_key(w: *const ScaasUaWallet, network:
     })
 }
 
+/// The UA of imported key `n` of `network` (ua-rs-sign T20c, owner 2026-11-08): `kind` must be the derived kind of its own scheme,
+/// secp256k1 (0x0108) for evm, cosmos, hedera_ecdsa, ed25519 (0x0102) for the others; any other kind (bip340 included) is
+/// SCAAS_UA_ERR_ARGUMENT, as an import the wallet does not list or hold. Its id is keccak256(TAG(kind) || key_data), a separate
+/// account from the native id, recomputed from the secret and listed in the manifest's `importedUas`. The handle is a UA key:
+/// scaas_ua_sign_ua and scaas_ua_sign_member only (no raw digest), no KEM key (SCAAS_UA_ERR_KEM_HOLDER), never a backup or link
+/// sender (SCAAS_UA_ERR_ARGUMENT). SCAAS_UA_ERR_WALLET_LOCKED while locked.
+#[no_mangle]
+pub extern "C" fn scaas_ua_wallet_imported_ua_key(
+    w: *const ScaasUaWallet,
+    network: u32,
+    n: u32,
+    kind: u16,
+    out: *mut *mut ScaasUaKey,
+) -> ScaasUaStatus {
+    run(|| {
+        if out.is_null() {
+            return Err(argument("NULL"));
+        }
+        give(out, ScaasUaKey(Key::Ua(handle(w)?.0.imported_ua_key(self::network(network)?, n, kind)?)))
+    })
+}
+
 /// A vault of label `manifest` (the manifest JSON), `native-import:<network>:<n>` (that imported key) or
 /// `pqz-held:<ua>:<version>:<pqzKeyHash>` (a PQZ key rebuilt by `scaas_ua_wallet_pqz_reconstruct`, its seed32) under
 /// `vault_passphrase` (the new-passphrase policy), as `scaas_ua_wallet_seal_vault`; SCAAS_UA_ERR_ARGUMENT for another label or a
@@ -1540,7 +1562,8 @@ pub extern "C" fn scaas_ua_wallet_open_label_vault(
     })
 }
 
-/// The public manifest JSON `{v, entries, natives, kem, imports, pqzHeld, backupGeneration, backupSenders}` (kept by lock).
+/// The public manifest JSON `{v, entries, natives, kem, imports, importedUas, pqzHeld, backupGeneration, backupSenders}` (kept by
+/// lock).
 #[no_mangle]
 pub extern "C" fn scaas_ua_wallet_manifest_json(w: *const ScaasUaWallet, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
     run(|| write_str(out, out_len, &handle(w)?.0.manifest().to_json()))

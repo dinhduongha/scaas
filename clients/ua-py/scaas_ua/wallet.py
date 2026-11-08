@@ -80,6 +80,7 @@ _SIGNATURES = [
     ('wallet_free', None, [P]), ('wallet_memory_protection', st, [P, P]), ('wallet_ua_key', st, [P, u16, u32, u32, P]),
     ('wallet_native_key', st, [P, u32, u32, u32, P]), ('wallet_import_native_key', st, [P, u32, P, sz, P]),
     ('wallet_imported_key', st, [P, u32, u32, P]), ('wallet_seal_label_vault', st, [P, P, P, P, P]),
+    ('wallet_imported_ua_key', st, [P, u32, u32, u16, P]),
     ('wallet_open_label_vault', st, [P, P, P, P]), ('wallet_manifest_json', st, [P, P, P]),
     ('wallet_discover_candidates', st, [P, u16, u32, u32, P, P]), ('wallet_backup_seal', st, [P, P, P, sz, P, P]),
     ('wallet_restore_backup', st, [P, P, P, P, P, P, P, P, P]),
@@ -385,6 +386,12 @@ class Wallet(_Handle):
     def imported_key(self, network, n):
         with _hold(self) as (w,):
             return _new(Key, _c('wallet_imported_key'), w, _network(network), n)
+
+    def imported_ua_key(self, network, n, kind):
+        """T20c (owner 2026-11-08): the UA of imported key `n`, `kind` the derived kind of its own scheme (0x0108 secp256k1,
+        0x0102 ed25519), any other UAArgument; a UA key (sign_ua / sign_member), no KEM key, never a backup or link sender."""
+        with _hold(self) as (w,):
+            return _new(Key, _c('wallet_imported_ua_key'), w, _network(network), n, kind)
 
     def seal_label_vault(self, label, passphrase):
         with _Secrets() as s, _hold(self) as (w,):

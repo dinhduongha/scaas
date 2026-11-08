@@ -143,6 +143,7 @@ internal static unsafe class Native
     [DllImport(L)] internal static extern int scaas_ua_wallet_native_key(WalletHandle w, uint network, uint index, uint coin, out KeyHandle k);
     [DllImport(L)] internal static extern int scaas_ua_wallet_import_native_key(WalletHandle w, uint network, byte* secret, nuint len, out KeyHandle k);
     [DllImport(L)] internal static extern int scaas_ua_wallet_imported_key(WalletHandle w, uint network, uint n, out KeyHandle k);
+    [DllImport(L)] internal static extern int scaas_ua_wallet_imported_ua_key(WalletHandle w, uint network, uint n, ushort kind, out KeyHandle k);
     [DllImport(L)] internal static extern int scaas_ua_wallet_seal_label_vault(WalletHandle w, byte* label, byte* pass, byte* o, ref nuint n);
     [DllImport(L)] internal static extern int scaas_ua_wallet_open_label_vault(WalletHandle w, byte* vault, byte* pass, byte* prf);
     [DllImport(L)] internal static extern int scaas_ua_wallet_manifest_json(WalletHandle w, byte* o, ref nuint n);
@@ -636,6 +637,15 @@ public sealed unsafe class Wallet : IDisposable
     public WalletKey ImportedKey(uint network, uint n)
     {
         UaLib.Check(Native.scaas_ua_wallet_imported_key(H, network, n, out var k));
+        return new WalletKey(k);
+    }
+
+    /// <summary>The UA of imported key <paramref name="n"/> (ua-rs-sign T20c, owner 2026-11-08): <paramref name="kind"/> the
+    /// derived kind of its own scheme (0x0108 secp256k1, 0x0102 ed25519), any other UAArgument; a UA key (SignUA / SignMember),
+    /// no KEM key, never a backup or link sender.</summary>
+    public WalletKey ImportedUAKey(uint network, uint n, ushort kind)
+    {
+        UaLib.Check(Native.scaas_ua_wallet_imported_ua_key(H, network, n, kind, out var k));
         return new WalletKey(k);
     }
 

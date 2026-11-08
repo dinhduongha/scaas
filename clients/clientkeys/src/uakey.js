@@ -16,7 +16,7 @@ import { shake256 } from '@noble/hashes/sha3.js';
 import { HDKey } from '@scure/bip32';
 import { keccak_256, concatBytes, utf8ToBytes, hex, fromHex, wipe, abiEncode } from './bytes.js';
 import * as ua from './ua.js';
-import { slip10 } from './seed.js';
+import { slip10, NETWORKS } from './seed.js';
 import { eip2333 } from './zether.js';
 import { PQ_KINDS, pqKeygen, pqMessage } from './pq.js';
 import { hashToScalar, mapToG1Bn254, clientDataOk, webauthnOk, encodeMemberSigs, P256_N } from './ua-verify.js';
@@ -166,8 +166,31 @@ export function deriveUAKey(seed, { kind, account = 0, index = 0 } = {}) {
     }
     keyData = PUBLIC[k](secret);
   }
+  // HKDF-Extract of this key's own seed: its KEM keys, nothing else (spec §6.1)
+  return uaKey(k, secret, keyData, { account, index, derivation, path }, isKemHolder(k) ? kemPrk(seed) : null);
+}
+
+/** The UA of an imported native key (ua-rs-sign T20c, owner 2026-11-08, the CLI-SGN-29 Change): `secp256k1` (0x0108) for the
+ *  secret of a secp256k1 network (`evm`, `cosmos`, `hedera_ecdsa`), `ed25519` (0x0102) for the seed of an ed25519 network; no
+ *  other kind (`Argument`), no KEM key (not a holder), no raw-digest call. Its id is keccak256(TAG(kind) ‖ key_data), a separate
+ *  account from the native id. `account` and `index` are null (no UA-tree position). The caller wipes `secret`. */
+export const importedKind = (network) => {
+  const net = Object.hasOwn(NETWORKS, network) ? NETWORKS[network] : fail('Argument', 'unknown network');
+  return net.curve === 'ed25519' ? 0x0102 : 0x0108;
+};
+export function importedUAKey({ network, secret, kind } = {}) {
+  const k = Number(kind);
+  if (k !== importedKind(network)) fail('Argument', 'an imported key takes the derived kind of its own scheme only');
+  if (!(secret instanceof Uint8Array) || secret.length !== 32) fail('Argument', 'an imported key is 32 bytes');
+  const sk = secret.slice();
+  let keyData;
+  try { keyData = PUBLIC[k](sk); } catch { wipe(sk); fail('Argument', 'not a valid secret'); }
+  return uaKey(k, sk, keyData, { account: null, index: null, derivation: 'native-import', path: null }, null);
+}
+
+function uaKey(k, secret, keyData, { account, index, derivation, path }, kemPrkOfSeed) {
   const id = PARTICIPANT.has(k) ? null : ua.deriveUA(k, keyData);
-  let prk = isKemHolder(k) ? kemPrk(seed) : null; // HKDF-Extract of this key's own seed: its KEM keys, nothing else (spec §6.1)
+  let prk = kemPrkOfSeed;
   const sign = (msg, role, rand) => signMsg(k, secret, keyData, msg, role, rand);
   const key = Object.freeze({
     kind: k, name: ua.kindInfo(k).name, account, index, derivation, path, keyData, ua: id,

@@ -141,6 +141,9 @@ Key Wallet::importNativeKey(const std::string& network, Secret& secret) const {
 Key Wallet::importedKey(const std::string& network, uint32_t n) const {
     return call([&] { return adopt<Key>(ffi::wallet_imported_key(ffi(), str(network), n)); });
 }
+Key Wallet::importedUaKey(const std::string& network, uint32_t n, uint16_t kind) const {
+    return call([&] { return adopt<Key>(ffi::wallet_imported_ua_key(ffi(), str(network), n, kind)); });
+}
 std::string Wallet::sealLabelVault(const std::string& label, Secret& vaultPassphrase) const {
     return call([&] { return std::string(ffi::wallet_seal_label_vault(ffi(), str(label), sec(vaultPassphrase))); });
 }

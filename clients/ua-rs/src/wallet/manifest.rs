@@ -4,7 +4,9 @@
 //! The [`Manifest`] is the wallet's public record: the UA keys, native keys and KEM keys written at their first use, the
 //! imported keys, `backup_generation` and `backup_senders`; `lock()` keeps it, it travels in the backup and link payloads (its
 //! `entries`) and in a vault of label `manifest`. It is never a trust anchor. An imported key ([`Wallet::import_native_key`])
-//! is tagged with its network (CLI-SGN-11: refused for any other) and stored as `native-import:<network>:<n>`. A PQZ key this
+//! is tagged with its network (CLI-SGN-11: refused for any other) and stored as `native-import:<network>:<n>`; as a UA it takes the
+//! derived kind of its own scheme only ([`Wallet::imported_ua_key`], T20c, owner 2026-11-08: `0x0108` / `0x0102`), listed in
+//! `importedUas` (never in `entries`) and carried by the backup payload's `manifest.importedUas`. A PQZ key this
 //! wallet rebuilt from an `msig`'s k-of-n backup (T16a; `Wallet::reconstruct_pqz_seed`, feature `pqz`) persists the same way
 //! (T16b, owner 2026-11-06): listed in the manifest's `pqzHeld`, its `seed32` in a vault of label
 //! `pqz-held:<ua>:<version>:<pqzKeyHash>` (keyed `(ua, version, pqzKeyHash)`, spec 3g §7.2 C8 / F-14) and in the backup's
@@ -62,6 +64,15 @@ pub struct ImportEntry {
     pub n: u32,
 }
 
+/// The UA of an imported key (T20c, owner 2026-11-08): `{kind, source, ua}`, `source` the import's label
+/// `native-import:<network>:<n>`, `kind` its network's scheme kind (`0x0108` / `0x0102`), `ua` the id its secret gives.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ImportedUaEntry {
+    pub kind: u16,
+    pub source: ImportEntry,
+    pub ua: [u8; 32],
+}
+
 /// A PQZ key rebuilt from the k-of-n backup of `msig` `ua`'s key of record `version` (T16a / T16b): its label
 /// `pqz-held:<ua>:<version>:<pqzKeyHash>`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -80,6 +91,8 @@ pub struct Manifest {
     pub natives: Vec<NativeEntry>,
     pub kem: Vec<KemEntry>,
     pub imports: Vec<ImportEntry>,
+    /// The UAs of imported keys (T20c): one entry per `source`, never in `entries`.
+    pub imported_uas: Vec<ImportedUaEntry>,
     /// The PQZ keys rebuilt from an `msig`'s k-of-n backup (T16b): public, the `seed32` is in the arena only.
     pub pqz_held: Vec<PqzHeldEntry>,
     /// The generation of the last backup this wallet sealed or restored (§6.3).
@@ -119,6 +132,13 @@ impl Manifest {
             self.kem.push(e);
         }
     }
+    /// `e` as the entry of its `source`: a listed entry of that source is replaced (the id is the secret's, never the manifest's).
+    fn set_imported_ua(&mut self, e: ImportedUaEntry) {
+        match self.imported_uas.iter_mut().find(|x| x.source == e.source) {
+            Some(x) => *x = e,
+            None => self.imported_uas.push(e),
+        }
+    }
     #[cfg(feature = "pqz")]
     pub(crate) fn add_pqz_held(&mut self, e: PqzHeldEntry) {
         if !self.pqz_held.contains(&e) {
@@ -126,7 +146,8 @@ impl Manifest {
         }
     }
 
-    /// `{v: 1, entries, natives, kem, imports, pqzHeld, backupGeneration, backupSenders}` (UAs and hashes `0x` hex).
+    /// `{v: 1, entries, natives, kem, imports, importedUas, pqzHeld, backupGeneration, backupSenders}` (UAs and hashes `0x` hex),
+    /// every list written, empty or not.
     pub fn to_json(&self) -> String {
         let list = |v: Vec<String>| v.join(",");
         let entries = list(self.entries.iter().map(entry_json).collect());
@@ -141,6 +162,7 @@ impl Manifest {
         );
         let kem = list(self.kem.iter().map(|k| format!("{{\"ua\":\"{}\",\"version\":{}}}", to_hex(&k.ua), k.version)).collect());
         let imports = list(self.imports.iter().map(|i| format!("{{\"network\":\"{}\",\"n\":{}}}", i.network.name(), i.n)).collect());
+        let imported_uas = list(self.imported_uas.iter().map(imported_ua_json).collect());
         let held = list(
             self.pqz_held
                 .iter()
@@ -149,14 +171,14 @@ impl Manifest {
         );
         let senders = list(self.backup_senders.iter().map(|u| format!("\"{}\"", to_hex(u))).collect());
         format!(
-            "{{\"v\":1,\"entries\":[{entries}],\"natives\":[{natives}],\"kem\":[{kem}],\"imports\":[{imports}],\"pqzHeld\":[{held}],\"backupGeneration\":{},\
+            "{{\"v\":1,\"entries\":[{entries}],\"natives\":[{natives}],\"kem\":[{kem}],\"imports\":[{imports}],\"importedUas\":[{imported_uas}],\"pqzHeld\":[{held}],\"backupGeneration\":{},\
              \"backupSenders\":[{senders}]}}",
             self.backup_generation
         )
     }
 
-    /// The named fields of a manifest JSON: `Argument` past 1 MiB or depth 3 or for a malformed field; an absent `pqzHeld` is
-    /// none (a manifest written before T16b).
+    /// The named fields of a manifest JSON: `Argument` past 1 MiB or depth 3 or for a malformed field; an absent `pqzHeld` or
+    /// `importedUas` is none (a manifest written before T16b / T20c).
     pub fn from_json(json: &[u8]) -> Result<Manifest> {
         let v = bounded::json(json, MANIFEST_JSON, MANIFEST_DEPTH)?;
         parse_manifest(&v).ok_or(Error::Argument)
@@ -165,6 +187,19 @@ impl Manifest {
 
 fn entry_json(e: &ManifestEntry) -> String {
     format!("{{\"kind\":{},\"account\":{},\"index\":{},\"ua\":\"{}\"}}", e.kind, e.account, e.index, to_hex(&e.ua))
+}
+fn imported_ua_json(e: &ImportedUaEntry) -> String {
+    format!("{{\"kind\":{},\"source\":\"{}\",\"ua\":\"{}\"}}", e.kind, Held::Import(e.source).label(), to_hex(&e.ua))
+}
+/// `{kind, source, ua}`: `source` a canonical `native-import:` label, `kind` its network's scheme kind, `ua` canonical.
+fn imported_ua_of(v: &Value) -> Option<ImportedUaEntry> {
+    let Held::Import(source) = Held::parse(v.get("source")?.as_str()?).ok()? else { return None };
+    let kind = u16::try_from(v.get("kind")?.as_u64()?).ok().filter(|k| *k == source.network.scheme_kind())?;
+    Some(ImportedUaEntry { kind, source, ua: ua_of(v.get("ua")?)? })
+}
+/// The UA the imported secret `s` gives under `kind` (CTR-UA-06: `keccak256(TAG(kind) ‖ key_data)`).
+fn imported_ua(kind: u16, s: &[u8]) -> Result<[u8; 32]> {
+    Ok(derive_ua(kind, &derive::ua_key_data(kind, s)?, false)?)
 }
 
 fn list<'a>(v: &'a Value, k: &str) -> Option<&'a [Value]> {
@@ -206,6 +241,11 @@ fn parse_manifest(v: &Value) -> Option<Manifest> {
         natives,
         kem: list(v, "kem")?.iter().map(|k| Some(KemEntry { ua: ua_of(k.get("ua")?)?, version: k.get("version")?.as_u64()? })).collect::<Option<_>>()?,
         imports: list(v, "imports")?.iter().map(|i| Some(ImportEntry { network: network_of(i)?, n: u32::try_from(i.get("n")?.as_u64()?).ok()? })).collect::<Option<_>>()?,
+        // absent in a manifest written before T20c: none
+        imported_uas: match v.get("importedUas") {
+            None => vec![],
+            Some(_) => list(v, "importedUas")?.iter().map(imported_ua_of).collect::<Option<_>>()?,
+        },
         // absent in a manifest written before T16b: none
         pqz_held: match v.get("pqzHeld") {
             None => vec![],
@@ -287,6 +327,8 @@ struct BackupPayload {
     entropy: Zeroizing<Vec<u8>>,
     secrets: Vec<(Held, Zeroizing<Vec<u8>>)>,
     entries: Vec<ManifestEntry>,
+    /// `manifest.importedUas` (T20c): written only when not empty.
+    imported_uas: Vec<ImportedUaEntry>,
 }
 
 impl BackupPayload {
@@ -306,12 +348,19 @@ impl BackupPayload {
         }
         s.push_str("],\"manifest\":{\"entries\":[");
         s.push_str(&self.entries.iter().map(entry_json).collect::<Vec<_>>().join(","));
+        if !self.imported_uas.is_empty() {
+            s.push_str("],\"importedUas\":[");
+            s.push_str(&self.imported_uas.iter().map(imported_ua_json).collect::<Vec<_>>().join(","));
+        }
         s.push_str("]}}");
         s
     }
 
     /// `Argument` for anything malformed (owner 2026-11-05): `v` ≠ 1, an entropy of other than 16, 20, 24, 28 or 32 bytes, a
-    /// secret of another label than `native-import:` or `pqz-held:`, an entry out of range. The JSON's strings are wiped after the read.
+    /// secret of another label than `native-import:` or `pqz-held:`, an entry out of range; an `importedUas` present but empty
+    /// (absent is the canonical form), an entry whose `source` names no `native-import:` secret of the payload, names one twice,
+    /// or whose `ua` is not the id that secret gives under `kind` (recomputed, never trusted; T20c). The JSON's strings are wiped
+    /// after the read.
     fn from_json(pt: &[u8]) -> Result<BackupPayload> {
         let mut v = bounded::json(pt, super::seal::MAX_PT, PAYLOAD_DEPTH)?;
         let p = parse_payload(&v);
@@ -334,8 +383,23 @@ fn parse_payload(v: &Value) -> Option<BackupPayload> {
             .map(|s| Some((Held::parse(s.get("label")?.as_str()?).ok()?, b64(s.get("bytes")?)?)))
             .collect::<Option<_>>()?,
     };
-    let entries = list(v.get("manifest")?, "entries")?.iter().map(entry_of).collect::<Option<_>>()?;
-    Some(BackupPayload { generation: v.get("generation")?.as_u64()?, entropy, secrets, entries })
+    let m = v.get("manifest")?;
+    let entries = list(m, "entries")?.iter().map(entry_of).collect::<Option<_>>()?;
+    let imported_uas: Vec<ImportedUaEntry> = match m.get("importedUas") {
+        None => vec![],
+        Some(_) => list(m, "importedUas")?.iter().map(imported_ua_of).collect::<Option<_>>()?,
+    };
+    if m.get("importedUas").is_some() && imported_uas.is_empty() {
+        return None;
+    }
+    for (i, e) in imported_uas.iter().enumerate() {
+        let (_, secret) = secrets.iter().find(|(h, _)| *h == Held::Import(e.source))?;
+        // one secret under two sources is two entries of one `ua` (allowed); one source twice is not
+        if imported_uas.iter().take(i).any(|x| x.source == e.source) || imported_ua(e.kind, secret).ok()? != e.ua {
+            return None;
+        }
+    }
+    Some(BackupPayload { generation: v.get("generation")?.as_u64()?, entropy, secrets, entries, imported_uas })
 }
 
 /// The UA `seed` derives at entry `e`'s `kind` / `account` / `index` (the secret dropped here).
@@ -401,6 +465,26 @@ impl Wallet {
         }
         let (secret, public_key) = self.store.key(KeyId::Import(n), |_| Err(Error::Argument))?;
         Ok(NativeKey { network, index: n, coin_type: None, public_key, secret })
+    }
+
+    /// The UA of imported key `n` of `network` (T20c, owner 2026-11-08, the CLI-SGN-29 Change): `kind` must be the derived kind of
+    /// its own scheme (`secp256k1` `0x0108` for `evm`, `cosmos`, `hedera_ecdsa`; `ed25519` `0x0102` for the others), every
+    /// other kind `Argument` (`bip340` included: one key, one scheme); the import must be listed and held, as
+    /// [`Wallet::imported_key`]. Its id is `keccak256(TAG(kind) ‖ key_data)` recomputed from the held secret (a separate account
+    /// from the native id), written to the manifest's `importedUas` under the import's label (replacing a listed entry of that
+    /// `source`), never to `entries`. The handle reads the import's slot (no second copy); `lock()` revokes it; account and index
+    /// `u32::MAX`; it signs `sign_ua` / `sign_member` only (no raw digest), holds no KEM key (`KemHolder`) and signs no backup or
+    /// link container (`Argument`). `WalletLocked` while locked.
+    pub fn imported_ua_key(&self, network: Network, n: u32, kind: u16) -> Result<UaKey> {
+        let source = ImportEntry { network, n };
+        if kind != network.scheme_kind() || !self.store.manifest().imports.contains(&source) {
+            return Err(Error::Argument);
+        }
+        let (secret, _) = self.store.key(KeyId::Import(n), |_| Err(Error::Argument))?;
+        let key_data = secret.with(|s| derive::ua_key_data(kind, s))??;
+        let ua = derive_ua(kind, &key_data, false)?;
+        self.store.note(|m| m.set_imported_ua(ImportedUaEntry { kind, source, ua }));
+        Ok(UaKey { kind, account: u32::MAX, index: u32::MAX, key_data, ua: Some(ua), secret, imported: true })
     }
 
     /// `secret` as import `e`: already held with the same bytes, a no-op; listed (a manifest vault opened first) and not held,
@@ -511,15 +595,29 @@ impl Wallet {
     /// The `BackupPayload` of this wallet with `sender` (a container key of this wallet) in its entries; `raise`: a backup
     /// raises `backup_generation` first.
     fn payload(&self, sender: &UaKey, raise: bool) -> Result<Zeroizing<String>> {
+        // an imported key's UA is never a sender (the restore derives the sender from the entropy) and never in `entries`
+        // (account and index u32::MAX would make the manifest's first entry unreadable at the next unlock): refused first (T20c)
+        if sender.imported {
+            return Err(Error::Argument);
+        }
         let ua = sender.ua.filter(|_| is_sender_kind(sender.kind) && sender.secret.of_store(&self.store)).ok_or(Error::Argument)?;
         self.store.with_all(|a, m| {
-            m.add_ua(sender.kind, sender.account, sender.index, ua);
             let secrets = held(m).map(|h| Ok((h, h.secret(a, m)?))).collect::<Result<Vec<_>>>()?;
+            // each listed imported UA with the id its secret gives (the manifest is never a trust anchor)
+            let imported_uas = m
+                .imported_uas
+                .iter()
+                .map(|e| {
+                    let (_, s) = secrets.iter().find(|(h, _)| *h == Held::Import(e.source)).ok_or(Error::Argument)?;
+                    Ok(ImportedUaEntry { ua: imported_ua(e.kind, s)?, ..*e })
+                })
+                .collect::<Result<Vec<_>>>()?;
             let entropy = Zeroizing::new(a.entropy()?.to_vec());
+            m.add_ua(sender.kind, sender.account, sender.index, ua);
             if raise {
                 m.backup_generation = m.backup_generation.checked_add(1).ok_or(Error::Argument)?;
             }
-            Ok(BackupPayload { generation: m.backup_generation, entropy, secrets, entries: m.entries.clone() }.to_json())
+            Ok(BackupPayload { generation: m.backup_generation, entropy, secrets, entries: m.entries.clone(), imported_uas }.to_json())
         })
     }
 
@@ -562,6 +660,7 @@ fn install(p: BackupPayload, bip39_passphrase: &str) -> Result<Wallet> {
     }
     w.store.note(|m| {
         m.entries = p.entries.clone();
+        m.imported_uas = p.imported_uas.clone();
         m.backup_generation = p.generation;
     });
     Ok(w)

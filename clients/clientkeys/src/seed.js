@@ -169,6 +169,17 @@ export function deriveKey(seed, network, i = 0, { coinType = null } = {}) {
   return { network, curve: net.curve, path, privateKey, ...describe(network, net.curve, privateKey) };
 }
 
+/** An existing key of `network` (ua-rs-sign T20c; ua-rs `import_native_key`): a 32-byte secp256k1 secret for `evm`, `cosmos`,
+ *  `hedera_ecdsa`, a 32-byte ed25519 seed for the others, described as `deriveKey` describes a derived one. Its native use is
+ *  that network's only; as a UA it takes the derived kind of its own scheme (uakey.js `importedUAKey`). Caller wipes `privateKey`. */
+export function importKey(network, secret) {
+  const net = Object.hasOwn(NETWORKS, network) ? NETWORKS[network] : null;
+  if (!net) throw new Error(`unknown network ${network}`);
+  if (!(secret instanceof Uint8Array) || secret.length !== 32) throw new Error('an imported key is 32 bytes');
+  const privateKey = secret.slice();
+  return { network, curve: net.curve, path: null, privateKey, ...describe(network, net.curve, privateKey) };
+}
+
 /** Sign EIP-712 typed data: the digest is computed here (`hashTypedData`, preimage `0x1901 ‖ …`), so it can never be
  *  an EIP-7702 authorization (`0x05 ‖ rlp(…)`) or a transaction hash. Check `td` first (`checkPayment`, `checkOp`, `checkCall`, …). */
 export function signTyped(key, td) {

@@ -911,4 +911,35 @@ public class WalletTests : IDisposable
         Assert.Equal(pk, k.PublicKey());
         Assert.Equal("UAWalletLocked", Code(() => w.ExportPqzLeafRaw(0, 0)));
     }
+    /// <summary>T20c (owner 2026-11-08): keys.json / sign.json <c>imported</c>: the UA of an imported key, its scheme's derived
+    /// kind only; no KEM key.</summary>
+    [Fact]
+    public void ImportedUAKeyRows()
+    {
+        var imp = Keys.GetProperty("imported");
+        var sign = Rows(Sign.GetProperty("imported"), "rows").ToDictionary(x => S(x, "id"));
+        foreach (var r in Rows(imp, "rows"))
+        {
+            var net = (uint)Array.IndexOf(UaLib.Networks, S(r, "network"));
+            var w = Fresh("twelve_words");
+            Keep(w.ImportNativeKey(net, B(r.GetProperty("secret"))));
+            var k = Keep(w.ImportedUAKey(net, 0, r.GetProperty("kind").GetUInt16()));
+            Assert.Equal(S(r, "keyData"), Hx(k.KeyData()));
+            var m = JsonDocument.Parse(w.ManifestJson()).RootElement.GetProperty("importedUas");
+            Assert.Equal(S(r, "ua"), S(m[0], "ua"));
+            foreach (var what in new[] { "pop", "metatx" })
+                if (sign.TryGetValue(S(r, "network") + " " + what, out var x))
+                    Assert.Equal(S(x, "signature"), Hx(k.SignUA(B(x.GetProperty("purposeTag")), B(x.GetProperty("digest")))));
+            Assert.Equal("UAKemHolder", Code(() => k.KemKey(0)));
+        }
+        foreach (var x in Rows(imp, "refusals"))
+        {
+            var r = Rows(imp, "rows").First(y => S(y, "network") == S(x, "network"));
+            var net = (uint)Array.IndexOf(UaLib.Networks, S(r, "network"));
+            var w = Fresh("twelve_words");
+            Keep(w.ImportNativeKey(net, B(r.GetProperty("secret"))));
+            Assert.Equal("UAArgument", Code(() => w.ImportedUAKey(net, 0, x.GetProperty("kind").GetUInt16())));
+            Keep(w.ImportedUAKey(net, 0, r.GetProperty("kind").GetUInt16()));
+        }
+    }
 }

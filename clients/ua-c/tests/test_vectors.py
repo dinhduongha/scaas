@@ -991,6 +991,7 @@ for name, res, args in [
     ('zether_open_balance_cache', st, [P, u8, P, P]),
     ('wallet_link_seal', st, [P, P, u8, sz, u8, P, P]), ('wallet_seal_label_vault', st, [P, u8, u8, P, P]),
     ('wallet_open_label_vault', st, [P, u8, u8, u8]), ('wallet_imported_key', st, [P, u32, u32, P]),
+    ('wallet_imported_ua_key', st, [P, u32, u32, u16, P]),
     ('wallet_pqz_key', st, [P, u32, u32, P]), ('pqz_key_free', None, [P]), ('pqz_public', st, [P, P, P]),
     ('pqz_call', st, [P, u8, u8, P, P]), ('pqz_seal_balance_cache', st, [P, u8, sz, P, P]),
     ('pqz_open_balance_cache', st, [P, u8, P, P]), ('pqz_set', st, [P, P]), ('pqz_check_set', st, [u8]),
@@ -1645,6 +1646,36 @@ class WalletCustody(WalletCase):
         self.assertEqual(sig_of(L.sign_digest_raw, k, d)[0], 'UAKeyRevoked', 'the old handle stays revoked')
         self.assertEqual(name_of(L.wallet_imported_key(w, 1, 0, C.byref(P()))), 'UAArgument', 'another network (CLI-SGN-11)')
         self.assertEqual(name_of(L.wallet_imported_key(w, 0, 1, C.byref(P()))), 'UAArgument', 'an unknown n')
+
+    def test_imported_ua_key_rows(self):
+        """T20c (owner 2026-11-08): keys.json / sign.json `imported`: an imported key's UA (0x0108 / 0x0102 only) has the row's id
+        and key data and signs the rows byte for byte; every other kind, another network, a KEM key, a backup sender refused."""
+        sign = {r['id']: r for r in SIGN['imported']['rows']}
+        for r in KEYS['imported']['rows']:
+            w = mnemonic_wallet('twelve_words')
+            self.addCleanup(L.wallet_free, w)
+            nk = handle(L.wallet_import_native_key, w, NETWORKS.index(r['network']), bytes.fromhex(r['secret'][2:]), 32)
+            self.addCleanup(L.key_free, nk)
+            k = handle(L.wallet_imported_ua_key, w, NETWORKS.index(r['network']), 0, r['kind'])
+            self.addCleanup(L.key_free, k)
+            self.assertEqual('0x' + var(L.key_data, k).hex(), r['keyData'], r['network'])
+            self.assertIn('"importedUas":[{"kind":%d,"source":"native-import:%s:0","ua":"%s"}]' % (r['kind'], r['network'], r['ua']),
+                          text(L.wallet_manifest_json, w), r['network'])
+            for what in ('pop', 'metatx'):
+                x = sign.get('%s %s' % (r['network'], what))
+                if x:
+                    got = var(L.sign_ua, k, bytes.fromhex(x['purposeTag'][2:]), bytes.fromhex(x['digest'][2:]))
+                    self.assertEqual('0x' + got.hex(), x['signature'], x['id'])
+            self.assertEqual(name_of(L.kem_key(k, 0, C.byref(P()))), 'UAKemHolder', r['network'])
+        for x in KEYS['imported']['refusals']:
+            r = next(y for y in KEYS['imported']['rows'] if y['network'] == x['network'])
+            w = mnemonic_wallet('twelve_words')
+            self.addCleanup(L.wallet_free, w)
+            nk = handle(L.wallet_import_native_key, w, NETWORKS.index(r['network']), bytes.fromhex(r['secret'][2:]), 32)
+            self.addCleanup(L.key_free, nk)
+            self.assertEqual(name_of(L.wallet_imported_ua_key(w, NETWORKS.index(r['network']), 0, x['kind'], C.byref(P()))), 'UAArgument', x['reason'])
+            self.assertEqual(name_of(L.wallet_imported_ua_key(w, NETWORKS.index(r['network']), 0, r['kind'], C.byref(P()))), '', 'positive control')
+        self.assertEqual(name_of(L.wallet_imported_ua_key(w, NETWORKS.index('cosmos'), 0, 0x0108, C.byref(P()))), 'UAArgument', 'another network')
 
     def test_unlock_with_another_wallets_vault_is_WalletMismatch(self):
         w = mnemonic_wallet('twelve_words')

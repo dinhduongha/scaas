@@ -661,6 +661,28 @@ class Custody(Case):
         self.assertEqual(self.keep(w.imported_key('evm', 0)).sign_digest_raw(bytes(range(32))), before)
         self.assertEqual(code(lambda: w.imported_key('cosmos', 0)), 'UAArgument', 'CLI-SGN-11')
 
+    def test_imported_ua_key_rows(self):
+        """T20c: keys.json / sign.json `imported`: the UA of an imported key, its scheme's derived kind only."""
+        sign = {x['id']: x for x in SIGN['imported']['rows']}
+        for r in KEYS['imported']['rows']:
+            w = self.new_wallet('twelve_words')
+            self.keep(w.import_native_key(r['network'], bytearray.fromhex(r['secret'][2:])))
+            k = self.keep(w.imported_ua_key(r['network'], 0, r['kind']))
+            self.assertEqual('0x' + k.key_data().hex(), r['keyData'], r['network'])
+            self.assertEqual(json.loads(w.manifest_json())['importedUas'][0]['ua'], r['ua'], r['network'])
+            for what in ('pop', 'metatx'):
+                x = sign.get('%s %s' % (r['network'], what))
+                if x:
+                    got = k.sign_ua(bytes.fromhex(x['purposeTag'][2:]), bytes.fromhex(x['digest'][2:]))
+                    self.assertEqual('0x' + got.hex(), x['signature'], x['id'])
+            self.assertEqual(code(lambda: k.kem_key(0)), 'UAKemHolder', r['network'])
+        for x in KEYS['imported']['refusals']:
+            r = next(y for y in KEYS['imported']['rows'] if y['network'] == x['network'])
+            w = self.new_wallet('twelve_words')
+            self.keep(w.import_native_key(r['network'], bytearray.fromhex(r['secret'][2:])))
+            self.assertEqual(code(lambda: w.imported_ua_key(r['network'], 0, x['kind'])), 'UAArgument', x['reason'])
+            self.keep(w.imported_ua_key(r['network'], 0, r['kind']))
+
     def test_unlock_with_another_wallets_vault_is_WalletMismatch(self):
         w = self.new_wallet('twelve_words')
         self.key(None, 0x0102, w=w)

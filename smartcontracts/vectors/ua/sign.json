@@ -7240,5 +7240,281 @@
     }
    ]
   }
+ },
+ "imported": {
+  "note": "ua-rs-sign T20c: an imported key's UA (keys.json imported rows by network). rows: signUA over uaMessage(kind, purposeTag, digest), deterministic (0x0108 RFC 6979, low-s; 0x0102 ed25519): pop = pop v2 over registrationDigest({ua, kind}) (no KEM record, no PQZ key: neither kind holds one), metatx = a UAMetaTransfer built from input (mode 0, non-zero relayer and feeRecipient, zeroed by the builder: the digest of typed.canon UAMetaTransfer), member = signMember(structureUa, structureUaMsg). separation: the key's native signature over an operation's own digest (EIP-712 signTyped, a type-2 transaction's sighash as r ‖ s ‖ 27 + yParity, the key proof keccak256(\"scaas-subject-key-proof-v1\" ‖ challenge)) does not verify as the UA over uaMessage(kind, metatx, digest), and the UA signature over that ua_msg does not verify under the operation's native check; a raw-hash check over ua_msg would recover the key (the S23 class, by design).",
+  "rows": [
+   {
+    "id": "evm pop",
+    "network": "evm",
+    "kind": 264,
+    "keyData": "0xb8ca5af35a62ce521035e9f9bf43a4f703f7637c2f63cd42eee43b5ea1682cfe9e833159bcd6785a5fb87fbff73b21e6cc27e60b69e85b2ad1ec3977ff40d052",
+    "ua": "0x1b7943eab607d8b75de989ec77840c982d1e75748002ca2c51abf646d1d37c6a",
+    "what": "pop",
+    "purposeTag": "0x0ffb2c52d2a16294393778508b3fff52351664d2c5bbe5deb3d3278f56281f93",
+    "digest": "0x05db2940a0ed8ff92d203c2dfe2f68eb64adbd2cde3255f1ee04948e12177bf2",
+    "uaMsg": "0x1e6fabf935c23f8d52741184d0de5841de39e4224e633705f193b84dafeca7fb",
+    "role": "pop",
+    "signature": "0x621fc486b628ab999eb35f43a5493778f3c435e15e0db012deed76a4736bd4e317f3aa9bcc512e683b44895c9e7961277761d219915a633c772f850165f451001b"
+   },
+   {
+    "id": "evm metatx",
+    "network": "evm",
+    "kind": 264,
+    "keyData": "0xb8ca5af35a62ce521035e9f9bf43a4f703f7637c2f63cd42eee43b5ea1682cfe9e833159bcd6785a5fb87fbff73b21e6cc27e60b69e85b2ad1ec3977ff40d052",
+    "ua": "0x1b7943eab607d8b75de989ec77840c982d1e75748002ca2c51abf646d1d37c6a",
+    "what": "metatx",
+    "purposeTag": "0x659f1188c729a1ac7e7f664f5bdf6be9f45677d902d8cc3cf2c018ac7449c18f",
+    "digest": "0x1610a4dd7d56f32a9222362fb8eca378c6b9a35440cb3b0cfe451109ca2d4936",
+    "uaMsg": "0x9a7d0702d7a4a390acb09973280c6c4b9ba7421daa0d1ad1af6a8f9120e09a0a",
+    "role": "authorization",
+    "signature": "0xff3d6fe0108ae6bebe84c32dce7484d3167fff583f4553a86062f7f3e851572f740df2e4efbf7a868e7114798c7681b2a04973c7650d989c1b19e6feb18225b71b",
+    "primaryType": "UAMetaTransfer",
+    "input": {
+     "name": "SCaaS MetaToken",
+     "contract": "0x5ca00000000000000000000000000000000000a1",
+     "chainId": 7622,
+     "chainUid": "0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464",
+     "message": {
+      "from": "0x000000000000000000000000acacacacacacacacacacacacacacacacacacacac",
+      "to": "0x0000000000000000000000005e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+      "value": "500",
+      "entryRef": "0x0909090909090909090909090909090909090909090909090909090909090909",
+      "batch": "3",
+      "nonce": "7",
+      "validUntil": "1800000300",
+      "mode": 0,
+      "relayer": "0x000000000000000000000000000000000000beef",
+      "fee": "0",
+      "feeRecipient": "0x0000000000000000000000000000000000000fee"
+     }
+    }
+   },
+   {
+    "id": "evm member",
+    "network": "evm",
+    "kind": 264,
+    "keyData": "0xb8ca5af35a62ce521035e9f9bf43a4f703f7637c2f63cd42eee43b5ea1682cfe9e833159bcd6785a5fb87fbff73b21e6cc27e60b69e85b2ad1ec3977ff40d052",
+    "ua": "0x1b7943eab607d8b75de989ec77840c982d1e75748002ca2c51abf646d1d37c6a",
+    "what": "member",
+    "purposeTag": "0xfbd8600564b68d09f75fe5d3e6acb8fe3c5a3a4cb20da6988723433beff5212a",
+    "digest": "0x1ec3bab4f29c27e5b93c62fb328fc76cb0a02bdeadb14b989a85b82d5163914e",
+    "uaMsg": "0x69e688b889b00c0aa9acff3574291707a5f5d40dc7cd19c1eba2a369e8fd793f",
+    "role": "authorization",
+    "signature": "0x5b47b39e80d7f1d256ff9f56de858ca7cfa192adf5b27fb11b56446b2124700e02744cd0f1cf09d37116a0f1146d7935dd1104486db9b41ca2abadaf5169d0e91c",
+    "structureUa": "0x0d2cf50c5b5036513b9faf6aed63a1328f449fa69a430e737cac0aba6a820d4f",
+    "structureUaMsg": "0x6da6841354caa9e39a37b7eb5b7d419cb0421eebceb8389440c297102450550b"
+   },
+   {
+    "id": "solana pop",
+    "network": "solana",
+    "kind": 258,
+    "keyData": "0xa54d52724378b22398a67d19297f5655022cb732e3166ddc7ea4a2d3f36d68a0",
+    "ua": "0x5443a5ee9321333a93e0b13ac43589005b09f4cbf13f57d1a34ae01dfef2a62f",
+    "what": "pop",
+    "purposeTag": "0x0ffb2c52d2a16294393778508b3fff52351664d2c5bbe5deb3d3278f56281f93",
+    "digest": "0xc79f58aa26ca92526d099adf0d03b3cf3dfef0f0a03e9955ae28ac3bd64f0843",
+    "uaMsg": "0x53d0515d9894742a2bd779440bd027b61bea5c9c1cfdc3c1f564c104773a9523",
+    "role": "pop",
+    "signature": "0x71a6c571d8989eb5d55225df603be02478f298d6a76bca4eb4ccee90ea318861551e50ee3916cdfe297bbcca004688247d49a9b95230e560f1487952a8682e06"
+   },
+   {
+    "id": "solana metatx",
+    "network": "solana",
+    "kind": 258,
+    "keyData": "0xa54d52724378b22398a67d19297f5655022cb732e3166ddc7ea4a2d3f36d68a0",
+    "ua": "0x5443a5ee9321333a93e0b13ac43589005b09f4cbf13f57d1a34ae01dfef2a62f",
+    "what": "metatx",
+    "purposeTag": "0x659f1188c729a1ac7e7f664f5bdf6be9f45677d902d8cc3cf2c018ac7449c18f",
+    "digest": "0x1610a4dd7d56f32a9222362fb8eca378c6b9a35440cb3b0cfe451109ca2d4936",
+    "uaMsg": "0x35191fb16ec8fa359cc0b6671df89d55638d01cab9b6177d4f2a45d1334e9d07",
+    "role": "authorization",
+    "signature": "0x6d9ca27c66835e997b3b88fe1f39a0fe6b23c1e57036efd2e73bb938adc2bf48f9f9f7fe8d2a04f3437c9d3b6e67a0a8a6c8a64fd5724fd90a91caa54429640e",
+    "primaryType": "UAMetaTransfer",
+    "input": {
+     "name": "SCaaS MetaToken",
+     "contract": "0x5ca00000000000000000000000000000000000a1",
+     "chainId": 7622,
+     "chainUid": "0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464",
+     "message": {
+      "from": "0x000000000000000000000000acacacacacacacacacacacacacacacacacacacac",
+      "to": "0x0000000000000000000000005e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+      "value": "500",
+      "entryRef": "0x0909090909090909090909090909090909090909090909090909090909090909",
+      "batch": "3",
+      "nonce": "7",
+      "validUntil": "1800000300",
+      "mode": 0,
+      "relayer": "0x000000000000000000000000000000000000beef",
+      "fee": "0",
+      "feeRecipient": "0x0000000000000000000000000000000000000fee"
+     }
+    }
+   },
+   {
+    "id": "solana member",
+    "network": "solana",
+    "kind": 258,
+    "keyData": "0xa54d52724378b22398a67d19297f5655022cb732e3166ddc7ea4a2d3f36d68a0",
+    "ua": "0x5443a5ee9321333a93e0b13ac43589005b09f4cbf13f57d1a34ae01dfef2a62f",
+    "what": "member",
+    "purposeTag": "0xfbd8600564b68d09f75fe5d3e6acb8fe3c5a3a4cb20da6988723433beff5212a",
+    "digest": "0x1ec3bab4f29c27e5b93c62fb328fc76cb0a02bdeadb14b989a85b82d5163914e",
+    "uaMsg": "0x6087aa0b21473bfbbf129305a378b1f47de13e7deb28e10b148cc55bf480e7fa",
+    "role": "authorization",
+    "signature": "0xe542cb781279efb5d84b310feb6d6bcf8a0ede28fbdda5d07a9e1709748845b12b5e97c5d67264360684f5e7e7290ccd043df5ba2cb8180e2a2ef070cb4be705",
+    "structureUa": "0x0d2cf50c5b5036513b9faf6aed63a1328f449fa69a430e737cac0aba6a820d4f",
+    "structureUaMsg": "0x6da6841354caa9e39a37b7eb5b7d419cb0421eebceb8389440c297102450550b"
+   }
+  ],
+  "separation": [
+   {
+    "id": "evm typed",
+    "network": "evm",
+    "kind": 264,
+    "op": "typed",
+    "td": {
+     "types": {
+      "EIP712Domain": [
+       {
+        "name": "name",
+        "type": "string"
+       },
+       {
+        "name": "version",
+        "type": "string"
+       },
+       {
+        "name": "chainId",
+        "type": "uint256"
+       },
+       {
+        "name": "verifyingContract",
+        "type": "address"
+       },
+       {
+        "name": "salt",
+        "type": "bytes32"
+       }
+      ],
+      "UAMetaTransfer": [
+       {
+        "name": "from",
+        "type": "bytes32"
+       },
+       {
+        "name": "to",
+        "type": "bytes32"
+       },
+       {
+        "name": "value",
+        "type": "uint256"
+       },
+       {
+        "name": "entryRef",
+        "type": "bytes32"
+       },
+       {
+        "name": "batch",
+        "type": "uint256"
+       },
+       {
+        "name": "nonce",
+        "type": "uint256"
+       },
+       {
+        "name": "validUntil",
+        "type": "uint256"
+       },
+       {
+        "name": "mode",
+        "type": "uint32"
+       },
+       {
+        "name": "relayer",
+        "type": "address"
+       },
+       {
+        "name": "fee",
+        "type": "uint256"
+       },
+       {
+        "name": "feeRecipient",
+        "type": "address"
+       }
+      ]
+     },
+     "primaryType": "UAMetaTransfer",
+     "domain": {
+      "name": "SCaaS MetaToken",
+      "version": "1",
+      "chainId": "7622",
+      "verifyingContract": "0x5ca00000000000000000000000000000000000a1",
+      "salt": "0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464"
+     },
+     "message": {
+      "from": "0x000000000000000000000000acacacacacacacacacacacacacacacacacacacac",
+      "to": "0x0000000000000000000000005e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+      "value": "500",
+      "entryRef": "0x0909090909090909090909090909090909090909090909090909090909090909",
+      "batch": "3",
+      "nonce": "7",
+      "validUntil": "1800000300",
+      "mode": 0,
+      "relayer": "0x0000000000000000000000000000000000000000",
+      "fee": "0",
+      "feeRecipient": "0x0000000000000000000000000000000000000000"
+     }
+    },
+    "digest": "0x1610a4dd7d56f32a9222362fb8eca378c6b9a35440cb3b0cfe451109ca2d4936",
+    "nativeSignature": "0x398abe0d78eeb427b7651b1bbe03a098346a99b173a927d1be186148b34148f24fa08fed9d3fb65ebfed8eaa86cbd074944ff39a083d059b752cf6e248f53a691c",
+    "uaMsg": "0x9a7d0702d7a4a390acb09973280c6c4b9ba7421daa0d1ad1af6a8f9120e09a0a",
+    "uaSignature": "0xff3d6fe0108ae6bebe84c32dce7484d3167fff583f4553a86062f7f3e851572f740df2e4efbf7a868e7114798c7681b2a04973c7650d989c1b19e6feb18225b71b"
+   },
+   {
+    "id": "evm tx",
+    "network": "evm",
+    "kind": 264,
+    "op": "tx",
+    "tx": {
+     "type": 2,
+     "chainId": "7622",
+     "nonce": "3",
+     "maxPriorityFeePerGas": "1000000000",
+     "maxFeePerGas": "30000000000",
+     "gasLimit": "100000",
+     "to": "0x5ca00000000000000000000000000000000000c0",
+     "value": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+     "data": "0xc05c2d686cfaf92b657bef87234ff2583ccc1c3805c337b638633edca4130924182a3fcef208f9a6385023a1ad2c289e8bc00f997ec8a3076f8f16a8644fc0ca8c80c137",
+     "accessList": []
+    },
+    "digest": "0x36cc2a07038c298c1bdb741fd02fdd36b30975062b655ccd9c5123b6ba489d8f",
+    "nativeSignature": "0xa1c12e17749dfbc14330db6ae113dd65af21d73864a53356fdd7917f29e36374603a56e11b2e848ce5bbc0ba28450a2fead94fccb23b0d34fcd82b5c609e01f31c",
+    "uaMsg": "0x94532a0259797128152b548dadc78f1aa7881001b70f9cd1919224e6bcae668d",
+    "uaSignature": "0x012aac78670cdf873d8284b1f3cd87df432abce3d1b6d06babb6885759fb928169911f7648d56142c64bc998e444783091cd463e553924867e2392d5aafb44301c"
+   },
+   {
+    "id": "evm keyProof",
+    "network": "evm",
+    "kind": 264,
+    "op": "keyProof",
+    "challenge": "scaas.ua-rs-sign.t20c.challenge",
+    "digest": "0x6127daa5ce53fdca9c4f729ab3ebb53bd58c7bddfb63cbb45bf61681732ff49c",
+    "nativeSignature": "0xca2bcf8be171a17a28fbd875eb14f6f98522b089bfbc4780880305bf53fc2b74404ada7efde079889c66a40f552974c1f14ba8687dedb2012be960b2c2b81d311b",
+    "uaMsg": "0xcb3f1205c51135ffe74684764062456b746f9f0ba9f839dde9d8caa415ab88a1",
+    "uaSignature": "0x083d3a598cabbf18ddafabf44edd80bf0e56dc34318863533cc1b03957dce04346bda72178fdc8ece5a9faa02578689c4fb3f6e11823686511f2636bb42f9cba1c"
+   },
+   {
+    "id": "solana keyProof",
+    "network": "solana",
+    "kind": 258,
+    "op": "keyProof",
+    "challenge": "scaas.ua-rs-sign.t20c.challenge",
+    "digest": "0x6127daa5ce53fdca9c4f729ab3ebb53bd58c7bddfb63cbb45bf61681732ff49c",
+    "nativeSignature": "0x7bd5ad7c3bb40805fb23738183d01829d40b2b4da54655a8ae76eab5590d9138272452374fd00f780f8acf3616a4b4f28bc85ac3571e7db36eeaa0b7cf9a7902",
+    "uaMsg": "0xad954686e90a2756c39b5ad2c0729ecc21019b2cedfd074b32e06d9ffc2057c3",
+    "uaSignature": "0x599212b866adf4073c572079a20a49ba841c8e48b52e551e77792787ca8c8e044c83d88b691f656296fb480bb2ec63f89e6d466259456e65c5e36d4d3eb56d01"
+   }
+  ]
  }
 }

@@ -3270,5 +3270,156 @@
    "error": "Argument",
    "reason": "coinType ≥ 2^31"
   }
- ]
+ ],
+ "imported": {
+  "note": "ua-rs-sign T20c (owner 2026-11-08, CLI-SGN-29 Change): uakey.js importedUAKey({network, secret, kind}). An imported secp256k1 secret (evm, cosmos, hedera_ecdsa) is a UA of kind secp256k1 (0x0108, key data x ‖ y), an imported ed25519 seed a UA of kind ed25519 (0x0102, key data pk); ua = keccak256(TAG(kind) ‖ key data), a separate account from the native id (native: seed.js importKey). secret: a test key (the evm row is the bip39_test mnemonic's EOA key 0; the others a fixed stream). refusals: any other kind on the key (Argument).",
+  "rows": [
+   {
+    "network": "evm",
+    "secret": "0xf9399e5d4ddb63856a95268e2806def3ea55c1fcac22f90a5de3a72667a9408c",
+    "kind": 264,
+    "name": "secp256k1",
+    "keyData": "0xb8ca5af35a62ce521035e9f9bf43a4f703f7637c2f63cd42eee43b5ea1682cfe9e833159bcd6785a5fb87fbff73b21e6cc27e60b69e85b2ad1ec3977ff40d052",
+    "ua": "0x1b7943eab607d8b75de989ec77840c982d1e75748002ca2c51abf646d1d37c6a",
+    "native": {
+     "publicKey": "02b8ca5af35a62ce521035e9f9bf43a4f703f7637c2f63cd42eee43b5ea1682cfe",
+     "address": "0x2b5D7A0E9d3EC34D629D07c6bDE5c41fb613c655"
+    }
+   },
+   {
+    "network": "cosmos",
+    "secret": "0x2c55f0e6db0537656fe55c9750b0d92a4a8fea58c396acee9b70a21aae598fe5",
+    "kind": 264,
+    "name": "secp256k1",
+    "keyData": "0x431e61364f3ae92dbf9a2af9fa48e5d9d697c6632514723613ab19a5e394116dc80bdaf4f901c7b1bca2467805ebfec855febd001f0aea0900242ae74829e970",
+    "ua": "0x3ef6886bac724779584c1d10f25c52391c7152ba4a5eddaebe00dc2aedc6faeb",
+    "native": {
+     "publicKey": "02431e61364f3ae92dbf9a2af9fa48e5d9d697c6632514723613ab19a5e394116d",
+     "address": "cosmos10wn3q5r6wrrauwpkwuf2uv7x8qsqr0f4jrv00e"
+    }
+   },
+   {
+    "network": "hedera_ecdsa",
+    "secret": "0x1cbba90c4f523e2f61034bfb8a78b690736a200a910c117d4713b6315f30d0c0",
+    "kind": 264,
+    "name": "secp256k1",
+    "keyData": "0xc420f5c093acc981ce12545520cbbc8d540a28d6ba324b771a999531b769c733a2dd4001bfa1afab518dcdb22af8f9b78c3e3a1ad60ac1e3f8629f28e45b45c4",
+    "ua": "0x6353bdb280adc041ce6550c38bdd696703040d6fdfec9ac96755a84a273680c1",
+    "native": {
+     "publicKey": "02c420f5c093acc981ce12545520cbbc8d540a28d6ba324b771a999531b769c733",
+     "address": "0x922d2F9B56D10063c5Dc21Ae05A1E7a4B76a2b78"
+    }
+   },
+   {
+    "network": "hedera_ed25519",
+    "secret": "0xf098f692180f25dc75693c577b279f5081ef7a1dfd77b0b69e6cafd3ea965e33",
+    "kind": 258,
+    "name": "ed25519",
+    "keyData": "0x68b0704b8d713c2b6cbca5d40ab79755a084b6c9327e67e1f2fd4cb44ff1f765",
+    "ua": "0xe8eb5df37f834f7db84a6cffac45bbe90214b02288b87d075d682383649e1fda",
+    "native": {
+     "publicKey": "68b0704b8d713c2b6cbca5d40ab79755a084b6c9327e67e1f2fd4cb44ff1f765",
+     "address": null
+    }
+   },
+   {
+    "network": "sui",
+    "secret": "0x331b5947cb0333c046a498e3c9355777ece0768ecbebb2c7383592fdb455fb83",
+    "kind": 258,
+    "name": "ed25519",
+    "keyData": "0x10e1ad12ee71069856104f1d73d9a667a3e4c86b90ce811c77bfb251cc580b18",
+    "ua": "0xfbdc4748e30929da40b25443c75f79ead9fa427d48858693fbf11677c3a81bd1",
+    "native": {
+     "publicKey": "10e1ad12ee71069856104f1d73d9a667a3e4c86b90ce811c77bfb251cc580b18",
+     "address": "0xa2540f5d3d47625d3d54a8d263d0b50e077795cf49eddd01fcc4249c95f8ea3f"
+    }
+   },
+   {
+    "network": "stellar",
+    "secret": "0xe718ded1884725f71794e36ba0c52ee49a1d4a3042c0ad0c8d6f091df09bf241",
+    "kind": 258,
+    "name": "ed25519",
+    "keyData": "0x7ff9397ac8a50e6541defe7f341b9df8908e63963015a965d50c43976c584f0b",
+    "ua": "0x098342e51d71433e0eeb6931e123910dce0e0c0924a07c2b7e89b4a2c9cf4ab1",
+    "native": {
+     "publicKey": "7ff9397ac8a50e6541defe7f341b9df8908e63963015a965d50c43976c584f0b",
+     "address": "GB77SOL2ZCSQ4ZKB337H6NA3TX4JBDTDSYYBLKLF2UGEHF3MLBHQWB7D"
+    }
+   },
+   {
+    "network": "ton",
+    "secret": "0xe4601f661f55c73c0f19e2da6aaa43bf03f38394f90ec89cad3e0751154e75dc",
+    "kind": 258,
+    "name": "ed25519",
+    "keyData": "0xf9685592258b325bc551e2e931904033dd3769046c8a0442f77b16630cc2e9fe",
+    "ua": "0x0884ddfe8146956b7b08983da9878c0cf96ea6cbcad77f1684827ec455815f16",
+    "native": {
+     "publicKey": "f9685592258b325bc551e2e931904033dd3769046c8a0442f77b16630cc2e9fe",
+     "address": null
+    }
+   },
+   {
+    "network": "aptos",
+    "secret": "0x13eb0a0844b2c0bb46edca43afd14dd06006faf64bd95cdde6fe169dc93a9f17",
+    "kind": 258,
+    "name": "ed25519",
+    "keyData": "0xbf12a338063fca0d9a0837043e81d8238cdc89872f1257ff07043837d98fc611",
+    "ua": "0xc0dade7c48b655bb8db098ee75449411a00091a6bf329d1e344a5116525c2f63",
+    "native": {
+     "publicKey": "bf12a338063fca0d9a0837043e81d8238cdc89872f1257ff07043837d98fc611",
+     "address": "0xd218ab20ec5d4f3828fd88381400b9c7182728166e8acda4d1bbfba3acfde59e"
+    }
+   },
+   {
+    "network": "solana",
+    "secret": "0xab23f4344e66ae24ce6a0a62d459aa9fc7e306cf4853ac465fe553f1fb9d8d04",
+    "kind": 258,
+    "name": "ed25519",
+    "keyData": "0xa54d52724378b22398a67d19297f5655022cb732e3166ddc7ea4a2d3f36d68a0",
+    "ua": "0x5443a5ee9321333a93e0b13ac43589005b09f4cbf13f57d1a34ae01dfef2a62f",
+    "native": {
+     "publicKey": "a54d52724378b22398a67d19297f5655022cb732e3166ddc7ea4a2d3f36d68a0",
+     "address": "C8GewZJjDsvq3KUFX5sE82YBiJXeSRTg7kmQrhcwVqbD"
+    }
+   }
+  ],
+  "refusals": [
+   {
+    "network": "evm",
+    "kind": 259,
+    "error": "Argument",
+    "reason": "bip340 (Schnorr) on a secp256k1 import: a second scheme on the key"
+   },
+   {
+    "network": "evm",
+    "kind": 257,
+    "error": "Argument",
+    "reason": "p256: another curve"
+   },
+   {
+    "network": "evm",
+    "kind": 1,
+    "error": "Argument",
+    "reason": "evm-eoa: a native kind, not a UA kind"
+   },
+   {
+    "network": "evm",
+    "kind": 258,
+    "error": "Argument",
+    "reason": "a secp256k1 import as ed25519"
+   },
+   {
+    "network": "solana",
+    "kind": 264,
+    "error": "Argument",
+    "reason": "an ed25519 import as secp256k1"
+   },
+   {
+    "network": "solana",
+    "kind": 259,
+    "error": "Argument",
+    "reason": "bip340 on an ed25519 import"
+   }
+  ]
+ }
 }

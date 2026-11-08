@@ -1,5 +1,5 @@
 {
-  "note": "Written by clients/ua-rs (tests/wallet_vault.rs, `cargo test --features vectors --test wallet_vault -- --ignored regenerate`; ua-rs-sign T9, MD-7); never edit by hand. Vaults sealed by ua-rs (Wallet::seal_vault: label seed, the BIP-39 entropy at its own length, scrypt N = 2^17, r = 8, p = 1, AES-256-GCM, AAD label|data / label|pin / label|prf; a PRF envelope by Vault::enable_prf's HKDF; a pin envelope replaced by rewrap_pin) and a backup container of Wallet::backup_seal (BackupPayload {v, generation, entropy, secrets, manifest: {entries}}, sealed to the opener's KEM key, signed by the sender's UA key); read by clientkeys (test/vault.test.js openSeedVault, test/seal.test.js restoreBackup), so a format both crates read the same wrong way cannot pass one-sided. A re-run keeps every row that still opens.",
+  "note": "Written by clients/ua-rs (tests/wallet_vault.rs, `cargo test --features vectors --test wallet_vault -- --ignored regenerate`; ua-rs-sign T9, MD-7); never edit by hand. Vaults sealed by ua-rs (Wallet::seal_vault: label seed, the BIP-39 entropy at its own length, scrypt N = 2^17, r = 8, p = 1, AES-256-GCM, AAD label|data / label|pin / label|prf; a PRF envelope by Vault::enable_prf's HKDF; a pin envelope replaced by rewrap_pin) and a backup container of Wallet::backup_seal (BackupPayload {v, generation, entropy, secrets, manifest: {entries}}; T20c: a second one whose manifest carries importedUas, the UA of the imported key, after entries), sealed to the opener's KEM key, signed by the sender's UA key); read by clientkeys (test/vault.test.js openSeedVault, test/seal.test.js restoreBackup), so a format both crates read the same wrong way cannot pass one-sided. A re-run keeps every row that still opens.",
   "vaults": [
     {
       "id": "ua-rs 24 words",
@@ -153,6 +153,59 @@
       "generation": 1,
       "secrets": [
         "native-import:evm:0"
+      ]
+    },
+    {
+      "id": "ua-rs backup, 12 words, the UA of an imported evm key",
+      "container": {
+        "v": 1,
+        "purpose": "scaas/backup/v1",
+        "recipient": {
+          "ua": "fjJS3h7JgfiGYWXDb4oa6GfuoBVbrVPvjABY5_2WiF4",
+          "version": 0
+        },
+        "created": 1794154758,
+        "sender": {
+          "ua": "ySb5o9bd8j3Sz9EL9pjFJx72-eCaOAWPPvDcBbKq4YY",
+          "auth": {
+            "keyData": "1EOs5mFjtF8qEFj96_cxyYG4G7MpkEq2rBXR75eIt4E",
+            "signature": "OQYoKeMuHnXAb0DTftEezgT05rM34fLTDmJUyO22_t_b6PoPKM24BDLJc_AGtBlBQF0dKJf7OyveZJoGQ22VDA",
+            "members": []
+          }
+        },
+        "sealed": {
+          "mlkemCt": "7m24MQaBkCwgmjTjjfOlw-DlhsXnjgK1KughI0Drokk9h1p8Vn_lgHj6jmvfIjoZpAYOHQXk4QEMorMnGPmIMMF9lcrE3ALlSZKZ1ZThCDp2Yp4mlyteOh7UUL5F_K07THPhbhED20t3qC7X6hf93JiPcRdRs_5aUajRUXDVs65-ysZ5kxsRwpqTsmziRST9TUV8Q4FA8Fqawe01qZjXQZUethcr7pcwWRqnHul5lcFY2qy4YWd6Kc6wfNB62WFit73p9gj6KuI2FoW5nUxzyAwfSgmRKdCm8ckbC1QWfvUrGWn0Wg5PU7cFW3DnYoOLct2rb1U5ogA8koXfrqyFKzwL-g0ttfTTuiO9E6V0Kml8hwapikL70IjEa_N4hiwpnEMfsaifN4FEDUsIKDx51ESSCbYlfG9CVT1i4E1cktvNgY9TP1RM-YuB0CqWbGHxpUy7gaqw_fuxmjK-nlD-8spmKmulkBAM_-kTxn7G87d9Gm19sa-cNmcyTMi0g81i3KDPcuDBi1YM0gdjJg6s92bKgmMVXsAds6oGXqggObHJ_LHnRhfu7gk6PcRD8zK3t5kvPlp7-bCnec6jONRjt6bjUhZvkqFzbPuu4bVt7pvwLztGFbZo0exjH7P_BjpIydXLn2kqlQC15-hWore9Lg7hIzclxyr5AJaTBJDm0puT9Y3fZgU17laGyQjxSOJC2mNQzgh_EPTeJ5TE2eauVoUilJG6KKN_Nkpt22b8GdQpAjO4qo8iyMrEY5hSogoPvws8vRSGnqlUAxA5wutKwLSnHaRk2l98ecXIuMwUUtXKppX3TAFJOWvF0BH6PMdsXQmQl6U4A-nyUcRNmbIZsDcXpo3MZAqSpggKMtbintE1k4f4vspQ8oQ-9Bf__D2Ex_R5wn0jYagjDAzOxmfWulMrP6DGxea2RjRQgnNJMpeDuu2Bphh2kqcn22Sy0ab6LdjdNo9UJujIcJsRf4o0VguG71QUkgWh7-flLuP3L2EHRY-O2W8lrJ-sIW0XrXF027y7L2CwS_br6PLK9qi6dd8Jnf7WzdIAIux1U138z38iEkIWNT-UXfCg9gFr0BaKibM5sORNg_g9smHD591BobvEEM7me7-pl7snVwNTHd-q_sK6VZgnrjVO9HUDYZjWJovFwuWhR6jSEAEl2lzZ8aW0wMFM0BNM2jPZmOlTXtpUFTNjd9ZuBuJ1nAifPbjvVK4oluuzvehxXmFZlHU4ylDEXyloXW2QtsIOcUR1Gw9eDx5rR2vab6PKI8aKEvwFmAE3UE7bLKHiX2k3BDFYqXzOEq1NOqzM4DX50Ml8CCK1b7682L5B5tOevSW3cvwJ_V-hMwQVHftJsIfe9FrmtJjpsZ6FPUyA8SAltuZSpXb2NM-yQUYQXLCtQFADoncmakt22WATf1WrAp02kBIaUmHbR2GLtwwmre60qHKEJzUiSLXobpRwAOpDsHwDG4uKTXkvX47oV66DIP5-1IRu3T6h84vMzfuNuEYP8lHTMmW4iUNwAkRUhDqqMASV_z-UkWEVYwaQ5-xAn6r1y9gAI8UmSc-mUX1KuxKfF9p9V7WRlaaQ6HCrn9-0wlUW2dcWGt4cPG_ph8HbsEOf2_EBXAp0RgiYqyzlyAbjDjV9eszVlc2OiYxIiOIppwnS1qIoDqRpWccNdCRKcOkVh_cMqJsYSIpU-AnCX0GU3UIY8I7l-c6mDsaGEvYbA6pDpTxTel6Ec8RB7pYJxQ4Sw_FMp5XX-f9vdVONg5wVqiIrRzYYboxd3Fgy82B-BsoCYA7eNVkwDQdu7yQe3EyUw7PWsVJBBl9dogs10ZjB8bmaxT5c7oGnYXRpQYsPX5NHRfpJh08g7lBB7ie0lFVn1GRo26GspRpzKE1wRfmWNc3jrWT-Hh9eWmNJhzmC07ToFp_ESWeai8nBGqQQ4ecffocZy5xnMDRoBMQBmEEeu4bWKltF0SW_HTa2NcEa-kOc3cVSKwgCYNpbALF9inEwZ0WEBheNTiSw6NL6E6j1LKEuMtI8DD808ibqCS05Nz2-jzpJzTflAN3Pm1iVZA_7g-OxoNepmvNkKz0Tx9PqpbhcWTw",
+          "x25519Eph": "BxTe_Nfo25Rytygii-OcvUrzjfbDtVYGakIdYgqYriI",
+          "ciphertext": "xZdO1KjWOsqGC_wIa3dTErhFAbEOVl_zHcmbVFuCRMpp65SU5hQvfX7_EiPJO8V7OVEA7hyeIO-qEqkODpTF87jiMFcn2yZR0HcBjUp7XmzL6MvJYYible9ohc1-3ABEC6fTvVQ-As4CxA_nGGh-ALNfrY6fZ4S3AdWLqMQp9ga84rfDZE1w7uzY8KVWBits_ZuLJhVrK6cEyfbCtkJk9WVTIwtFcvog_Tw7bkuDAHQuiLenVXUuj-M1N1uK5P9QlU872oik9uLkvsWIxDd8VJ8Dy1O0aciBM8SsqEJKfD-shXLOE0-tsAQkFItT3ivYFwL3q6g-SLhXqjPB8jYqinByY1w039beyOo2aOwO1maKGdpkqcJw2MjPw5F6w3CTSBYKUSJLg1F92XBqfEM2pokagF7gM_w8A0izR8pdPzgSTpQrsnw94w6iYgCMRp0SxGPj_ZTvzsYy-M_Z3IlGvRgxWtDRFgVYFqOklXlqSQqYQogNqy2YxCI1Z3D3iNn1m7xmueIF_mclwYYlpbwLNMiPembxRKGFqDFfrhwjPs7_rQvcNf_R2fu33vMY9QBsxAxR24asZw"
+        }
+      },
+      "senderUa": "0xc926f9a3d6ddf23dd2cfd10bf698c5271ef6f9e09a38058f3ef0dc05b2aae186",
+      "sender": {
+        "mnemonic": "twelve_words",
+        "kind": 258,
+        "account": 0,
+        "index": 0
+      },
+      "opener": {
+        "kem": {
+          "mnemonic": "pq_kat",
+          "kind": 304,
+          "account": 0,
+          "index": 0,
+          "version": 0
+        }
+      },
+      "entropy": "0x7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f",
+      "generation": 1,
+      "secrets": [
+        "native-import:evm:0"
+      ],
+      "importedUas": [
+        {
+          "kind": 264,
+          "source": "native-import:evm:0",
+          "ua": "0x594554a0530685162f947f19c77d8efaa41016828779a7e3b282dad2f3c1c5a5"
+        }
       ]
     }
   ]

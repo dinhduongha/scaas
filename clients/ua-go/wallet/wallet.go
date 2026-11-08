@@ -520,6 +520,15 @@ func (w *Wallet) ImportedKey(network, n uint32) (*Key, error) {
 	})
 }
 
+// ImportedUAKey is the UA of imported key n of network (ua-rs-sign T20c, owner 2026-11-08): kind the derived kind of its own
+// scheme (0x0108 secp256k1, 0x0102 ed25519), any other UAArgument; a UA key (SignUA / SignMember), no KEM key, never a backup
+// or link sender.
+func (w *Wallet) ImportedUAKey(network, n uint32, kind uint16) (*Key, error) {
+	return w.key(func(p unsafe.Pointer, k **C.ScaasUaKey) C.ScaasUaStatus {
+		return C.scaas_ua_wallet_imported_ua_key(wp(p), C.uint32_t(network), C.uint32_t(n), C.uint16_t(kind), k)
+	})
+}
+
 // SealLabelVault is a vault of label "manifest" or "native-import:<network>:<n>" under passphrase.
 func (w *Wallet) SealLabelVault(label string, passphrase []byte) (string, error) {
 	var a args

@@ -140,7 +140,7 @@ Claude), no external audit.
 | WebAuthn | `webauthn.rs` | `webauthn_challenge`, `webauthn_assertion` |
 | Factory addresses | `factory.rs` | `create3_salt`, `create3_address`: a creation's chain-neutral CREATE3 address (chain-neutral spec §4, `vectors/factory/create3_kat.json`), shown before a router create op |
 | KEM, seal, containers | `kem.rs`, `seal.rs`, `aead.rs` | `UaKey::kem_key`, `kem_encaps`, `KemKeyPair`, `seal`, `open_container`, `LinkSession`, `from_link`; AEAD, HKDF, HMAC ([§9.1](signers-clientkeys.md#91-the-ua-kem-key-seal-and-containers)) |
-| Vault, manifest, backup | `vault.rs`, `manifest.rs` | clientkeys vault v1 byte for byte, `discover_candidates`, `import_native_key`, `SeedBackup`, `backup_seal`, `link_seal`, `restore_backup`, label vaults |
+| Vault, manifest, backup | `vault.rs`, `manifest.rs` | clientkeys vault v1 byte for byte, `discover_candidates`, `import_native_key`, `imported_ua_key` (an imported key's own derived kind, [CLI-SGN-29](signers-clientkeys.md#CLI-SGN-29)), `SeedBackup`, `backup_seal`, `link_seal`, `restore_backup`, label vaults |
 | Facades | `facade/zether.rs`, `pqz.rs`, `pqz_pack.rs`, `pqz_backup.rs`, `decoys.rs` | `ZetherKey`, `PqzKey`, each one JSON `call` ([below](#confidential-token-facades-no-decryption-oracle)); `pqz_set`, `export_pqz_leaf_raw` |
 | Bounded readers | `wallet/bounded.rs` | [CLI-UAL-03](#CLI-UAL-03) |
 

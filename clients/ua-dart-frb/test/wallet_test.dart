@@ -494,6 +494,33 @@ void main() {
     }
   });
 
+  test('imported_ua_key: keys.json / sign.json imported, the scheme kind only (T20c)', () async {
+    final imp = keys['imported'] as Map<String, dynamic>;
+    final sign = {for (final x in load_('sign.json')['imported']['rows'] as List) x['id'] as String: x};
+    for (final r in imp['rows'] as List) {
+      final net = r['network'] as String;
+      final wl = await walletOf('twelve_words');
+      await walletImportNativeKey(w: wl, networkName: net, secretKey: sec(bytes(r['secret'])));
+      final k = await wl.importedUaKey(networkName: net, n: 0, kind: r['kind']);
+      expect(hx(k.keyData()), r['keyData'], reason: net);
+      expect(jsonDecode(wl.manifestJson())['importedUas'][0]['ua'], r['ua'], reason: net);
+      for (final what in ['pop', 'metatx']) {
+        final x = sign['$net $what'];
+        if (x == null) continue;
+        expect(hx(await k.signUa(purpose: bytes(x['purposeTag']), digest: bytes(x['digest']))), x['signature'], reason: x['id']);
+      }
+      expect(await code(() => keyKemKey(k: k, version: BigInt.zero)), 'UAKemHolder', reason: net);
+    }
+    for (final x in imp['refusals'] as List) {
+      final r = (imp['rows'] as List).firstWhere((y) => y['network'] == x['network']);
+      final net = r['network'] as String;
+      final wl = await walletOf('twelve_words');
+      await walletImportNativeKey(w: wl, networkName: net, secretKey: sec(bytes(r['secret'])));
+      expect(await code(() => wl.importedUaKey(networkName: net, n: 0, kind: x['kind'])), 'UAArgument', reason: x['reason']);
+      await wl.importedUaKey(networkName: net, n: 0, kind: r['kind']);
+    }
+  });
+
   test('custody', () async {
     final wl = await walletOf('twelve_words');
     final v = await walletSealVault(w: wl, vaultPassphrase: secs('correct horse 9'));

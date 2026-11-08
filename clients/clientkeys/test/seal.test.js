@@ -204,7 +204,7 @@ test('12-word wallet round trip (C-10): mnemonic, signing key and KEM key equal 
 test('rs_vault.json backups: a ua-rs backup restores here', async () => {
   const RS = json('rs_vault.json');
   assert.ok(RS, 'rs_vault.json');
-  assert.equal(RS.backups.length, 1);
+  assert.equal(RS.backups.length, 2);
   for (const r of RS.backups) {
     const R = kemOf(r.opener.kem);
     const expect = { purpose: SL.PURPOSE.backup, sender: { ua: r.senderUa }, recipient: R.recipient };
@@ -215,6 +215,9 @@ test('rs_vault.json backups: a ua-rs backup restores here', async () => {
     assert.deepEqual(payload.secrets.map((s) => s.label), r.secrets);
     assert.equal(hex(keyOf(r.sender).ua), r.senderUa);
     assert.ok(payload.manifest.entries.some((e) => e.ua === r.senderUa));
+    // T20c: the UA of the imported key, after entries, only when the wallet has one
+    assert.deepEqual(payload.manifest.importedUas, r.importedUas, r.id);
+    assert.equal(hex(SL.encodeBackup(payload)), hex(await SL.openContainer(R, r.container, expect)), `${r.id}: the same payload bytes`);
     // the generation check reads the ua-rs payload the same way
     const current = { ua: r.senderUa, generation: r.generation + 1 };
     assert.equal(await codeOf(() => SL.restoreBackup(R, r.container, expect, undefined, undefined, { current })), 'BackupRollback');

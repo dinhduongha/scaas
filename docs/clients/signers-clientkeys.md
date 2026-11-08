@@ -734,6 +734,15 @@ the registry, tagged messages and EOA rules are the other three layers ([CTR-UA-
 The registry layer keeps `keyOwner[keyHash] → ua` and refuses the same public key under another kind (`UAKeyInUse`). Why:
 ECDSA and Schnorr over one secp256k1 key leak through nonce relations; a Schnorr signing oracle on an ElGamal key is a
 decryption-adjacent oracle; untagged digests replay across protocols. Owner decision.
+Change (owner 2026-11-08): **an imported native key may register and sign as the derived kind of its own scheme**, a secp256k1
+secret (`evm`, `cosmos`, `hedera_ecdsa`) as `secp256k1` (0x0108), an ed25519 seed as `ed25519` (0x0102), id `keccak256(TAG(kind) ‖
+key_data)`, a separate account from the native id ([CTR-UA-06](../contracts/accounts.md#CTR-UA-06)); no other kind on that key
+(`bip340` included: `Argument`, and the registry's `UAKeyInUse`), no raw-digest call on it, no KEM key (not a holder), never a backup
+or link sender; listed in the manifest's `importedUas` (never in `entries`) and carried by the backup ([CLI-SGN-44](#CLI-SGN-44)). The
+key's native use is unchanged, its raw-digest opt-in included; the S23-class residual in both directions is in
+[accounts.md §1.14](../contracts/accounts.md#security). A key the wallet derives on a native path stays its network's alone
+([CLI-SGN-30](#CLI-SGN-30)). BUILT (ua-rs-sign T20c): clientkeys `importedUAKey`, ua-rs `Wallet::imported_ua_key`, C
+`scaas_ua_wallet_imported_ua_key`, and `ua-cxx`, `ua-dart-frb`, `ua-py`, `ua-go`, `ua-cs`.
 
 <a id="CLI-SGN-30"></a>**CLI-SGN-30** — **The EVM seed path is the EOA only; every subject-account key that is not the
 native owner and every derived kind comes from the UA tree `m/22776'/0'/<account>'/<kindNo>'/<i>'`.** The role `kindNo` is
@@ -834,6 +843,11 @@ the opener; `scaas/link/v1` appends `sha256(shortCode)`. `sender.auth` is a full
 `scaas.ua.purpose.seal.v1`, an **off-chain purpose**, never in a contract's list and outside `PURPOSES` (`seal_purpose_tag()`, clientkeys `SEAL_TAG`). Purposes
 today: `scaas/backup/v1`, `scaas/link/v1`, `scaas/pqz-share/v1`. Acceptance, trust anchors, replay and rollback: [CLI-UAL-11](ua-libraries.md#CLI-UAL-11),
 [CLI-UAL-12](ua-libraries.md#CLI-UAL-12). The backup payload: `{v, generation, entropy, secrets, manifest}` in this field order; malformed is `Argument`. BUILT.
+`manifest` is `{entries: [{kind, account, index, ua}]}`, then `importedUas: [{kind, source, ua}]` only when the wallet has the UA of an imported key
+(owner 2026-11-08, [CLI-SGN-29](#CLI-SGN-29)'s Change; absent otherwise, so earlier payloads keep their bytes): each entry names a `native-import:<network>:<n>`
+secret of the same payload once, with that network's scheme kind and the id the secret gives (recomputed on restore and link, never trusted); one secret
+under two sources is two entries of one `ua`; a present empty list or any mismatch is `Argument`. BUILT (ua-rs-sign T20c: clientkeys `encodeBackup` /
+`decodeBackup`, ua-rs `BackupPayload`).
 
 <a id="CLI-SGN-45"></a>**CLI-SGN-45** — **An `msig` UA has no KEM key of its own, client side.** Sealing to an `msig` means sealing to each of its
 accepted members ([CTR-UA-37](../contracts/accounts.md#CTR-UA-37)), two levels ([CTR-UA-38](../contracts/accounts.md#CTR-UA-38)), each a single-key UA with

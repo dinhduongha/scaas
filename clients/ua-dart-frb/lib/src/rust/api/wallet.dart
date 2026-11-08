@@ -498,6 +498,14 @@ abstract class UaWallet implements RustOpaqueInterface {
 
   Future<UaKey> importedKey({required String networkName, required int n});
 
+  /// T20c (owner 2026-11-08): the UA of imported key `n`, `kind` the derived kind of its own scheme (0x0108 secp256k1, 0x0102
+  /// ed25519), any other `UAArgument`; a UA key (`sign_ua` / `sign_member`), no KEM key, never a backup or link sender.
+  Future<UaKey> importedUaKey({
+    required String networkName,
+    required int n,
+    required int kind,
+  });
+
   Future<String> linkSeal({
     required UaKey sender,
     required List<int> sessionKemPk,

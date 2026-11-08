@@ -12,7 +12,7 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { concatBytes, utf8ToBytes, keccak_256, b64url, fromB64url, fromHex, hex, wipe } from './bytes.js';
 import * as ua from './ua.js';
 import { kemEncaps, kemEncapsVector, generateEphemeral, ephemeralVector } from './kem.js';
-import { deriveUAKey, signContainer } from './uakey.js';
+import { deriveUAKey, signContainer, importedUAKey } from './uakey.js';
 import { kindVerify, memberKeys } from './ua-verify.js';
 import { seedFromEntropy } from './seed.js';
 
@@ -268,12 +268,40 @@ export async function openLink(session, c, expect, members, accepted) {
 // --- backup ---
 
 /** `BackupPayload {v: 1, generation, entropy, secrets: [{label, bytes}], manifest}` as JSON (this key order, base64url bytes);
- *  `entropy` at its BIP-39 length; the BIP-39 passphrase is never in it. `manifest.entries`: `[{kind, account, index, ua}]`. */
+ *  `entropy` at its BIP-39 length; the BIP-39 passphrase is never in it. `manifest`: `{entries: [{kind, account, index, ua}]}`,
+ *  then `importedUas: [{kind, source, ua}]` only when not empty (ua-rs-sign T20c, owner 2026-11-08: the UAs of imported keys,
+ *  `source` the import's label `native-import:<network>:<n>`), as ua-rs writes it. */
 export function encodeBackup({ generation, entropy, secrets = [], manifest }) {
   if (!Number.isSafeInteger(generation) || generation < 0) fail('Argument', 'generation');
   if (!(entropy instanceof Uint8Array) || !ENTROPY.includes(entropy.length)) fail('Argument', 'entropy: 16, 20, 24, 28 or 32 bytes');
+  const { entries, importedUas } = manifest ?? {};
+  const m = importedUas?.length ? { entries, importedUas: importedUas.map(({ kind, source, ua: id }) => ({ kind, source, ua: id })) } : { entries };
   return utf8ToBytes(JSON.stringify({ v: 1, generation, entropy: b64url(entropy),
-    secrets: secrets.map((s) => ({ label: s.label, bytes: b64url(s.bytes) })), manifest }));
+    secrets: secrets.map((s) => ({ label: s.label, bytes: b64url(s.bytes) })), manifest: m }));
+}
+
+const IMPORT_LABEL = /^native-import:([a-z0-9_]+):(0|[1-9][0-9]{0,9})$/;
+/** `manifest.importedUas` (T20c): absent, or a non-empty list (an empty one present is not the canonical form) whose every entry
+ *  names a `native-import:` secret of the same payload once, with that network's scheme kind and the id the secret gives
+ *  (recomputed, never trusted); one secret under two sources is two entries of one `ua`, not an error. Else `Argument`. */
+function checkImportedUas(manifest, secrets) {
+  if (!Object.hasOwn(manifest, 'importedUas')) return;
+  const list = manifest.importedUas;
+  if (!Array.isArray(list) || list.length === 0) fail('Argument', 'importedUas: absent when empty');
+  const seen = new Set();
+  for (const e of list) {
+    const m = typeof e?.source === 'string' ? IMPORT_LABEL.exec(e.source) : null;
+    if (!m || Number(m[2]) > 0xffffffff || seen.has(e.source) || !Number.isInteger(e.kind)) fail('Argument', 'importedUas: an entry');
+    seen.add(e.source);
+    const s = secrets.find((x) => x.label === e.source) ?? fail('Argument', 'importedUas: a source with no secret');
+    let id;
+    try {
+      const k = importedUAKey({ network: m[1], secret: s.bytes, kind: e.kind });
+      id = hex(k.ua);
+      k.wipe();
+    } catch { fail('Argument', 'importedUas: not the scheme kind of its network'); }
+    if (e.ua !== id) fail('Argument', 'importedUas: not the id its secret gives');
+  }
 }
 
 export function decodeBackup(pt) {
@@ -282,8 +310,9 @@ export function decodeBackup(pt) {
   if (j?.v !== 1 || !Number.isSafeInteger(j.generation) || j.generation < 0 || !Array.isArray(j.manifest?.entries)) fail('Argument', 'backup payload');
   const entropy = fromB64url(j.entropy);
   if (!ENTROPY.includes(entropy.length)) fail('Argument', 'backup entropy: 16, 20, 24, 28 or 32 bytes');
-  return { generation: j.generation, entropy, secrets: (j.secrets ?? []).map((s) => ({ label: s.label, bytes: fromB64url(s.bytes) })),
-    manifest: j.manifest };
+  const secrets = (j.secrets ?? []).map((s) => ({ label: s.label, bytes: fromB64url(s.bytes) }));
+  checkImportedUas(j.manifest, secrets);
+  return { generation: j.generation, entropy, secrets, manifest: j.manifest };
 }
 
 /** A backup container (purpose `scaas/backup/v1`) of `payload` (encodeBackup) to `kemPk`, signed by the wallet's identity key. */

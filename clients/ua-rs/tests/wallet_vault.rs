@@ -686,17 +686,42 @@ mod regen {
                 "secrets": ["native-import:evm:0"],
             })
         });
+        // T20c: the same wallet's backup with the UA of its imported key (manifest.importedUas after entries)
+        let id2 = "ua-rs backup, 12 words, the UA of an imported evm key";
+        let still2 = kept("backups", id2).filter(|r| {
+            SealedContainer::from_json(r["container"].to_string().as_bytes())
+                .ok()
+                .and_then(|c| restore(&kk, &c, sender, None, None, "").ok().flatten())
+                .is_some_and(|w| w.manifest().imported_uas.len() == 1)
+        });
+        let backup2 = still2.unwrap_or_else(|| {
+            let w = wallet("twelve_words");
+            let key = w.ua_key(0x0102, 0, 0).unwrap();
+            let n = w.import_native_key(Network::Evm, &h("0x4c0883a69102937d6231471b5dbb6204fe5129617082792ae468d01a3f362318")).unwrap().index();
+            let iu = w.imported_ua_key(Network::Evm, n, 0x0108).unwrap();
+            let c = w.backup_seal(&key, &[recipient_of(&kk)]).unwrap().remove(0);
+            let cj: Value = serde_json::from_str(&c.to_json()).unwrap();
+            serde_json::json!({
+                "id": id2, "container": cj, "senderUa": format!("0x{}", hex::encode(sender)),
+                "sender": {"mnemonic": "twelve_words", "kind": 0x0102, "account": 0, "index": 0},
+                "opener": {"kem": {"mnemonic": "pq_kat", "kind": 0x0130, "account": 0, "index": 0, "version": 0}},
+                "entropy": format!("0x{}", hex::encode(&*w.vectors_entropy().unwrap())), "generation": 1,
+                "secrets": [format!("native-import:evm:{n}")],
+                "importedUas": [{"kind": 0x0108, "source": format!("native-import:evm:{n}"), "ua": format!("0x{}", hex::encode(iu.ua().unwrap()))}],
+            })
+        });
         let out = serde_json::json!({
             "note": "Written by clients/ua-rs (tests/wallet_vault.rs, `cargo test --features vectors --test wallet_vault -- --ignored \
                      regenerate`; ua-rs-sign T9, MD-7); never edit by hand. Vaults sealed by ua-rs (Wallet::seal_vault: label seed, \
                      the BIP-39 entropy at its own length, scrypt N = 2^17, r = 8, p = 1, AES-256-GCM, AAD label|data / label|pin / \
                      label|prf; a PRF envelope by Vault::enable_prf's HKDF; a pin envelope replaced by rewrap_pin) and a backup \
-                     container of Wallet::backup_seal (BackupPayload {v, generation, entropy, secrets, manifest: {entries}}, \
+                     container of Wallet::backup_seal (BackupPayload {v, generation, entropy, secrets, manifest: {entries}}; \
+                     T20c: a second one whose manifest carries importedUas, the UA of the imported key, after entries), \
                      sealed to the opener's KEM key, signed by the sender's UA key); read by clientkeys (test/vault.test.js \
                      openSeedVault, test/seal.test.js restoreBackup), so a format both crates read the same wrong way cannot pass \
                      one-sided. A re-run keeps every row that still opens.",
             "vaults": vaults,
-            "backups": [backup],
+            "backups": [backup, backup2],
         });
         std::fs::write(path("rs_vault.json"), serde_json::to_string_pretty(&out).unwrap() + "\n").unwrap();
     }
