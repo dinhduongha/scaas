@@ -1055,8 +1055,9 @@ pub(crate) mod tests {
     const STATEMENT: [u8; 40] = [0x5a; 40];
     /// The PQZ views of the fake token: `pqzVerifyConfig`, `proofSystemId`, `envelopeBinding`, the four statement views (the forge
     /// artifact's selectors, pinned in `pqz::tests::views_are_the_contracts`).
-    const PQZ_VIEWS: [[u8; 4]; 7] = [[0xdc, 0x59, 0xc6, 0x6e], [0x1f, 0x3b, 0x28, 0xf2], [0x35, 0xad, 0x08, 0xaa], [0x3a, 0x3b, 0xb4, 0x5a],
-        [0xff, 0xde, 0xe9, 0x09], [0x23, 0xa7, 0x26, 0x49], [0xf4, 0x83, 0x4c, 0xb9]];
+    // group 3h T59: the four statement views after `ownTag` (pqz.rs `views_are_the_contracts`)
+    const PQZ_VIEWS: [[u8; 4]; 7] = [[0xdc, 0x59, 0xc6, 0x6e], [0x1f, 0x3b, 0x28, 0xf2], [0x35, 0xad, 0x08, 0xaa], [0x93, 0x14, 0x15, 0xee],
+        [0x8a, 0x21, 0x61, 0xba], [0xda, 0x8c, 0x9e, 0xed], [0x8e, 0x4c, 0xcf, 0x2e]];
     const PQZ_KEY0: Address = Address::repeat_byte(0xe0);
     const PQZ_KEY1: Address = Address::repeat_byte(0xe1);
     type Rpc = Arc<Mutex<Evm>>;
@@ -2946,7 +2947,7 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
             pqzVerifierEpoch: 2, validUntil: until });
         assert_eq!(v.sig, ua_sig(&verdict_auth(0x7e)), "the job's signature, as it named it");
         // the statement view: the job's own `args` and the binding the token gave for its envelope
-        let st = e.views.iter().find(|i| i[..4] == [0x3a, 0x3b, 0xb4, 0x5a]).expect("transferSingleStatement asked");
+        let st = e.views.iter().find(|i| i[..4] == [0x93, 0x14, 0x15, 0xee]).expect("transferSingleStatement asked");
         let ty = alloy::dyn_abi::DynSolType::parse(&format!("({},bytes32)", crate::typed::abi_of("PqzTransferArgs"))).unwrap();
         let got = ty.abi_decode_params(&st[4..]).unwrap();
         let want = crate::typed::parse("PqzTransferArgs", &j["op"]["args"]["args"], "args").unwrap();
