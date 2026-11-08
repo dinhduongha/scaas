@@ -12,5 +12,5 @@ size | 2a1f9d5e | 0 | size_gate.py 0 errors, 99 contracts; old -> new in runs/20
 state vectors | - | - | not regenerated at T59 (memoHash rows and blob tails moved): regenerated once at T60's commit, which moves them again (proofStore)
 
 Mutants (runs/2026-11-08-ua-mtx-merge-3h/mutants.py, spec §11.3 M7, M8, M9, M22; one at a time in the second work tree at 0cc72669,
-restored, git diff clean): 4 of 4 killed. Table: runs/2026-11-08-ua-mtx-merge-3h/mutants.txt. clientkeys: pqzMemoHash without ownTag
-went red in test/pqz-proofpath.test.js (2a1f9d5e's message).
+restored, git diff clean): 4 of 4 killed. Table: runs/2026-11-08-ua-mtx-merge-3h/mutants.txt. clientkeys mutant (pqzMemoHash without
+ownTag, by hand on a clean tree, restored): test/pqz-proofpath.test.js's memoHash test went red (git-ignored log in clients/clientkeys).

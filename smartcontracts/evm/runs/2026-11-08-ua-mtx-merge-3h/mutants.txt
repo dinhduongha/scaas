@@ -11,3 +11,5 @@ M7-memoHash-without-ownTag | test_memoHash_bundle, test_memoHash_burn, test_memo
 M8-ownTag-before-vf | test_ownTag_inBlob_op1, test_rOf_op1 | 1
 M9-rOf-ignores-n | test_rOf_op1, test_rOf_op7, test_transferEntry_unchanged | 1
 M22-kv-key-pointer-order | test_kv_op7Rotated | 1
+M10-record-proofStore-zero | test_proofStore_log_burn, test_proofStore_log_op1, test_proofStore_log_op7, test_proofStore_noneLogNone_creditsBetween, test_proofStore_offchain | 1
+M11-log-buffer-not-proof | test_proofStore_log_burn, test_proofStore_log_op1, test_proofStore_log_op7, test_proofStore_noneLogNone_creditsBetween, test_proofStore_offchain | 1
