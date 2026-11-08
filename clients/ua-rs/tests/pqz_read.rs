@@ -82,11 +82,16 @@ fn the_holders_configuration_is_required() {
     let mut other = without_op7.clone();
     other.extend(s(&["--command", "dec"]));
     assert!(cli(&other, None).unwrap_err().contains("balance or auditRead"), "no other command");
-    for (f, v) in [("--rpc", "http://127.0.0.1:1"), ("--token", a20)] {
-        let mut twice = full.clone();
-        twice.extend(s(&[f, v]));
-        assert!(cli(&twice, None).unwrap_err().contains("given twice"), "{f}: R1, one source; one value each");
-    }
+    let mut twice = full.clone();
+    twice.extend(s(&["--token", a20]));
+    assert!(cli(&twice, None).unwrap_err().contains("given twice"), "one value each");
+    // R1 (owner 2026-11-08): `--rpc` once or more, each a distinct node the holder names; the same node twice is refused
+    let mut nodes = full.clone();
+    nodes.extend(s(&["--rpc", "http://127.0.0.1:1", "--rpc-agree"]));
+    assert!(cli(&nodes, None).unwrap_err().contains("key JSON"), "a second node and --rpc-agree accepted, before any request");
+    let mut same = full.clone();
+    same.extend(s(&["--rpc", &url]));
+    assert!(cli(&same, None).unwrap_err().contains("the same node twice"), "one node named twice");
     assert!(cli(&full, None).unwrap_err().contains("key JSON"), "the key on stdin, before any request");
     if cfg!(feature = "vectors") {
         // T15c2: a `vectors` build (never a release) makes no key handle without the test-only marker, before any request
@@ -240,6 +245,43 @@ impl Node {
         self.set(registry, &k(&be(0), &k(&w32(&aud["auditorUA"]), &be(reg_slot("pqzKey")))), &w32(&aud["keyRecord"])); // the auditor's version 0
         self.code(&a20(aud["key"]["address"].as_str().unwrap()), &aud["key"]["code"]);
     }
+}
+
+/// A node in front of `upstream` (R1, owner 2026-11-08): each answer passes `f(method, params, result, i)`, `i` this node's
+/// request number from 1; `None` drops the connection (a node that fails). `hits` counts the requests it received.
+fn node(upstream: String, hits: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    f: impl Fn(&str, &Value, Value, usize) -> Option<Value> + Send + 'static) -> String {
+    use std::io::{BufRead, BufReader, Read, Write};
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}", l.local_addr().unwrap());
+    std::thread::spawn(move || {
+        for c in l.incoming() {
+            let Ok(mut c) = c else { continue };
+            let mut r = BufReader::new(c.try_clone().unwrap());
+            let mut len = 0usize;
+            loop {
+                let mut line = String::new();
+                if r.read_line(&mut line).unwrap_or(0) == 0 || line == "\r\n" {
+                    break;
+                }
+                if let Some(v) = line.to_ascii_lowercase().strip_prefix("content-length:") {
+                    len = v.trim().parse().unwrap();
+                }
+            }
+            let mut body = vec![0u8; len];
+            if r.read_exact(&mut body).is_err() {
+                continue;
+            }
+            let req: Value = serde_json::from_slice(&body).unwrap();
+            let i = hits.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+            let res = rpc(&upstream, req["method"].as_str().unwrap(), req["params"].clone());
+            if let Some(res) = f(req["method"].as_str().unwrap(), &req["params"], res, i) {
+                let out = json!({"jsonrpc": "2.0", "id": 1, "result": res}).to_string();
+                let _ = write!(c, "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{out}", out.len());
+            }
+        }
+    });
+    url
 }
 
 /// A one-connection-at-a-time JSON-RPC proxy in front of `upstream` that lies about the read block (R3): `number` answers the
@@ -520,6 +562,76 @@ fn reading_layer_against_anvil() {
     let mut leg1 = audit(on(CW_TOKEN, CW_REG, &saud), &sa, "0");
     *leg1.last_mut().unwrap() = "1".into();
     no(leg1, Some(2), "ua-rs refused the words: Argument");
+    // R1 (owner 2026-11-08): several --rpc. Failover by default: a result's words are one node's, never a mix; `--rpc-agree`: a
+    // strict majority of the named nodes returns the same complete read. The nodes are proxies of this anvil, each with its lie.
+    use std::sync::{atomic::AtomicUsize, Arc};
+    let ua_s = rows[0]["request"]["ua"].as_str().unwrap();
+    let w0 = words(bal(on(wt_s, WALLET_REG, ua_s), false));
+    let multi = |urls: &[&str], agree: bool| {
+        let mut a: Vec<String> = urls.iter().flat_map(|u| s(&["--rpc", u])).collect();
+        a.extend(s(&["--chain-id", &cid, "--chain-uid", &genesis, "--factory", FACTORY, "--registry", WALLET_REG, "--token", wt_s, "--ua",
+            ua_s, "--depth", "2", "--key-version", "0", "--for-op7", "false", "--words"]));
+        if agree {
+            a.push("--rpc-agree".into());
+        }
+        cli(&a, None)
+    };
+    let hits = || Arc::new(AtomicUsize::new(0));
+    let psid_slot = hx(&add(&n.root, 2));
+    let lie = |byte: u8| {
+        let slot = psid_slot.clone();
+        move |m: &str, p: &Value, r: Value, _: usize| Some(if m == "eth_getStorageAt" && p[1] == json!(slot) { json!(hx(&[byte; 32])) } else { r })
+    };
+    let same = node(url.clone(), hits(), |_, _, r, _| Some(r));
+    let (lie_a, lie_a2, lie_b) = (node(url.clone(), hits(), lie(0xa1)), node(url.clone(), hits(), lie(0xa1)), node(url.clone(), hits(), lie(0xb2)));
+    let counted = hits();
+    let unused = node(url.clone(), counted.clone(), lie(0xa1));
+    // answers its first seven requests (R2, R3, R5, then the lying psid word), then fails
+    let dies = {
+        let l = lie(0xa1);
+        node(url.clone(), hits(), move |m, p, r, i| if i <= 7 { l(m, p, r, i) } else { None })
+    };
+    let future = node(url.clone(), hits(), |m, _, r, _| Some(if m == "eth_blockNumber" { json!("0xffffff") } else { r }));
+    let other_hash = node(url.clone(), hits(), |m, p, mut r, _| {
+        if m == "eth_getBlockByNumber" && p[0] != "0x0" {
+            r["hash"] = json!(hx(&[0x5a; 32]));
+        }
+        Some(r)
+    });
+    let blocks = hits();
+    let late = {
+        let b = blocks.clone();
+        node(url.clone(), hits(), move |m, p, mut r, _| {
+            if m == "eth_getBlockByNumber" && p[0] != "0x0" && b.fetch_add(1, std::sync::atomic::Ordering::SeqCst) >= 2 {
+                r["hash"] = json!(hx(&[0x5b; 32])); // the read's own two looks pass, the one after every node's read does not
+            }
+            Some(r)
+        })
+    };
+    let (dead, dead2) = ("http://127.0.0.1:1", "http://127.0.0.1:2");
+    let req = |v: Result<Value, String>| v.unwrap()["request"].clone();
+    // failover
+    assert_eq!(req(multi(&[dead, &url], false)), w0["request"], "failover skips a dead first node");
+    assert_eq!(req(multi(&[&url, &unused], false)), w0["request"], "the first node answered");
+    assert_eq!(counted.load(std::sync::atomic::Ordering::SeqCst), 0, "a second node is not consulted when the first succeeds");
+    assert_eq!(req(multi(&[&dies, &url], false)), w0["request"], "a node dying mid-read: the next re-reads everything, no mix");
+    assert!(multi(&[dead, dead2], false).unwrap_err().contains("R1: no --rpc answered the whole read"), "all fail");
+    assert!(multi(&[&url, &url], false).unwrap_err().contains("the same node twice"));
+    assert_eq!(req(multi(&[&url], true)), w0["request"], "one node: --rpc-agree changes nothing");
+    // --rpc-agree: a strict majority of the named nodes, each node over its whole read
+    assert_eq!(req(multi(&[&lie_a, &url, &same], true)), w0["request"], "3 nodes, one differing word: the majority's words");
+    assert_eq!(req(multi(&[dead, &url, &same], true)), w0["request"], "3 nodes, one dead");
+    assert_eq!(multi(&[&url, &same, &future], true).unwrap()["block"], w0["block"], "a far-future block does not move the number");
+    let refused = |urls: &[&str], what: &str| {
+        let e = multi(urls, true).unwrap_err();
+        assert!(e.contains("error: R1: no strict majority"), "{what}: {e}");
+    };
+    refused(&[&url, &lie_a, &lie_b], "3 nodes, all differing");
+    refused(&[&url, &lie_a], "2 nodes differing");
+    refused(&[&url, &same, &lie_a, &lie_a2], "4 nodes split 2-2");
+    refused(&[&url, dead], "2 nodes, one dead");
+    refused(&[&url, &other_hash], "a node answering another block hash");
+    refused(&[&url, &late], "a node whose block changes after the reads (R3 after every node)");
 }
 
 // ------------------------------------------------------------------------------------------------------------------------------
@@ -713,4 +825,26 @@ fn decoys_against_anvil() {
     };
     assert!(via(liar(url.clone(), "none")).is_ok());
     assert!(via(liar(url.clone(), "hash4")).unwrap_err().contains("R3: the block changed"), "the sync block re-checked");
+    // R1 (owner 2026-11-08): the decoys over several nodes, failover and a strict majority
+    let hits = || std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let same = node(url.clone(), hits(), |_, _, r, _| Some(r));
+    let lists = |urls: &[&str], agree: bool| {
+        let mut a: Vec<String> = urls.iter().flat_map(|u| s(&["--rpc", u])).collect();
+        a.extend(s(&["--chain-id", &cid, "--chain-uid", &genesis, "--factory", FACTORY, "--registry", &hx(&reg), "--token", &tok, "--ua",
+            &hx(&ua(1)), "--depth", "0", "--command", "decoys", "--exclude", &hx(&ua(2)), "--count", "3", "--sync-block", "1", "--words"]));
+        if agree {
+            a.push("--rpc-agree".into());
+        }
+        cli(&a, None)
+    };
+    let one = run(&reg, &tok, &["--count", "3", "--sync-block", "1", "--words"]).unwrap();
+    assert_eq!(lists(&["http://127.0.0.1:1", &url], false).unwrap()["request"], one["request"], "failover past a dead node");
+    assert_eq!(lists(&[&url, &same], true).unwrap()["request"], one["request"], "two agreeing nodes");
+    let d = {
+        let mut a: Vec<String> = [&url, &same].iter().flat_map(|u| s(&["--rpc", u])).collect();
+        a.extend(s(&["--chain-id", &cid, "--chain-uid", &genesis, "--factory", FACTORY, "--registry", &hx(&reg), "--token", &tok, "--ua",
+            &hx(&ua(1)), "--depth", "0", "--command", "decoys", "--exclude", &hx(&ua(2)), "--count", "4", "--rpc-agree"]));
+        cli(&a, None).unwrap()
+    };
+    assert_eq!(d["decoys"].as_array().unwrap().len(), 4, "one pick, the keys a majority returned: {d}");
 }

@@ -2,8 +2,8 @@
 //! pqz-read — the PQZ reference reading layer (ARCH-POS-13, "never a decryption oracle"; spec no-decryption-oracle §4.2 R1–R7,
 //! §4.3, §4.12; ua-rs-sign T15m, owner 2026-11-07). The PQZ twin of `zether-read-balance --rpc`. Native only. UNAUDITED.
 //!
-//!   pqz-read --rpc <url> --chain-id <n> --chain-uid <genesis hash> --factory <address> --registry <address> --token <address>
-//!            --ua <bytes32> (--depth <n> | --finalized)
+//!   pqz-read --rpc <url> [--rpc <url> … [--rpc-agree]] --chain-id <n> --chain-uid <genesis hash> --factory <address>
+//!            --registry <address> --token <address> --ua <bytes32> (--depth <n> | --finalized)
 //!            [--command balance] --key-version <v> --for-op7 <true|false>               (the holder's own balance of version v)
 //!            --command auditRead --key-version <v> --from-ua <bytes32> --send-counter <n> --leg <j>
 //!                                                                     (an audited leg, the token's auditor at its version v)
@@ -18,8 +18,15 @@
 //!
 //! This tool reads the raw storage words a `ua-rs` PQZ words command takes and feeds them to `ua-rs` (it never parses a
 //! ciphertext or decrypts itself), as a reading layer meeting R1 to R7:
-//! - **R1** `--rpc` is the one source of every word, a node the holder names here (their own, or one they configured): never a
-//!   default or a discovered endpoint. The URL and body go to `curl` on its stdin (`--config -`, `-q` first), never in argv.
+//! - **R1** every `--rpc` is a node the holder names here (their own, or one they configured); this tool takes named nodes only,
+//!   no default list and no discovery (ARCH-POS-15: a reader that adds them applies its rule). `--rpc` once or more (owner
+//!   2026-11-08), each node distinct: by default the nodes are **failover** in the order given, every word of a result from the
+//!   first node that answers the whole read (R2 to R6, the R3 re-check included), and after any failure the next node from
+//!   scratch, never a mix; with **`--rpc-agree`** every node reads the whole at one block number (the smallest the answering
+//!   nodes choose, so a far-future answer moves nothing), and a strict majority of the named nodes (⌊n/2⌋ + 1) must return the
+//!   same complete read, compared over the whole read, never word by word; that majority's words are the ones used, and its
+//!   nodes are re-checked (R3) after every read. All failing, or no majority: the refusal. The URL and body go to `curl` on
+//!   its stdin (`--config -`, `-q` first), never in argv.
 //! - **R2** `eth_chainId` and `eth_getBlockByNumber("0x0").hash` must equal `--chain-id` and `--chain-uid` (NET-ALL-22).
 //! - **R3** one block: the chain's `finalized` block (`--finalized`) or `head − depth` (`--depth`, NET-EVM-04); every read
 //!   names it by hash (EIP-1898, `requireCanonical`); the node must answer the block asked for, and the same number must still
@@ -34,7 +41,8 @@
 //!   must hold this handle's key; `keyVersions` its `pqzVersions[--ua]` (slot 17: `latest ‖ current ‖ listed`, which `ua-rs`
 //!   checks against `--key-version`); for `auditRead` `--ua` must be the token's `auditorUA` and its `auditorMode` not NONE
 //!   (`ua-rs` checks the entry's copy; a copy made under another auditor version is found by trying each).
-//! - **R7** every read, the R3 re-check included, happens before the key is used; nothing after it goes back to the node.
+//! - **R7** every read on every node, the R3 re-checks included, happens before the key is used; nothing after it goes back to
+//!   any node (a failover never follows a key use).
 //!
 //! The token's slots come from `ua-rs`'s [`STATE_LAYOUT`] (T19c's pin of `scaas.pqz`, compared with the pin by the facade's
 //! tests) under the ERC-7201 root of `scaas.pqz`; the words read are exactly those [`STATE_LAYOUT`] lists for the command.
@@ -100,7 +108,8 @@ const MAX_LIST: u64 = 50_000;
 
 #[derive(Default)]
 struct Args {
-    rpc: String,
+    rpc: Vec<String>,
+    agree: bool,
     chain_id: u64,
     chain_uid: Word,
     factory: [u8; 20],
@@ -145,13 +154,20 @@ fn parse() -> Result<Args, String> {
     let mut seen = std::collections::BTreeSet::new();
     let mut it = std::env::args().skip(1);
     while let Some(f) = it.next() {
-        if !seen.insert(f.clone()) {
+        if !seen.insert(f.clone()) && f != "--rpc" {
             return Err(format!("{f} given twice"));
         }
         let mut val = || it.next().ok_or(format!("{f} needs a value"));
         let int = |v: String| v.parse::<u64>().map_err(|_| format!("{f}: integer"));
         match f.as_str() {
-            "--rpc" => a.rpc = val()?,
+            "--rpc" => {
+                let u = val()?;
+                if a.rpc.contains(&u) {
+                    return Err("--rpc: the same node twice".into());
+                }
+                a.rpc.push(u);
+            }
+            "--rpc-agree" => a.agree = true,
             "--chain-id" => a.chain_id = int(val()?)?,
             "--chain-uid" => a.chain_uid = fixed("--chain-uid", &val()?)?,
             "--factory" => a.factory = fixed("--factory", &val()?)?,
@@ -207,7 +223,7 @@ fn curl_config(url: &str, body: &str) -> String {
     )
 }
 
-/// One JSON-RPC call to the one source (R1), through `curl`.
+/// One JSON-RPC call to one named node (R1), through `curl`.
 fn rpc(url: &str, method: &str, params: Value) -> Result<Value, String> {
     let body = json!({"jsonrpc": "2.0", "id": 1, "method": method, "params": params});
     let mut child = Command::new("curl")
@@ -303,7 +319,7 @@ fn versions_slot(ua: &Word) -> Word {
     keccak256(&[*ua, be(REG_PQZ_VERSIONS_SLOT)].concat())
 }
 
-/// The words of one block (R3), by hash (EIP-1898), storage and code only (R4), from the one source (R1).
+/// The words of one block (R3), by hash (EIP-1898), storage and code only (R4), from one named node (R1).
 struct Reader<'a> {
     url: &'a str,
     hash: String,
@@ -340,6 +356,7 @@ impl Reader<'_> {
 }
 
 /// The request's words, read under R1–R6 at one block (R3), with the registered key's code (for R6's key check).
+#[derive(PartialEq)]
 struct Words {
     request: Value,
     block: u64,
@@ -347,10 +364,8 @@ struct Words {
     key_code: Vec<u8>,
 }
 
-/// R2, R3 and R5: the configured chain, its read block (by hash), the token catalogued with a PQZ kind.
-fn open(a: &Args) -> Result<(Reader<'_>, u64), String> {
-    let url = a.rpc.as_str();
-    // R2
+/// R2 on node `url`: the configured chain.
+fn configured(a: &Args, url: &str) -> Result<(), String> {
     if qty(&rpc(url, "eth_chainId", json!([]))?)? != a.chain_id {
         return Err("R2: eth_chainId is not the configured chain".into());
     }
@@ -358,13 +373,30 @@ fn open(a: &Args) -> Result<(Reader<'_>, u64), String> {
     if unhex(genesis["hash"].as_str().ok_or("R2: no genesis hash")?)? != a.chain_uid {
         return Err("R2: the genesis hash is not the configured chain_uid".into());
     }
+    Ok(())
+}
+
+/// R2, then R3's number on node `url`: `head − depth`, or the `finalized` block's.
+fn chosen(a: &Args, url: &str) -> Result<u64, String> {
+    configured(a, url)?;
+    match a.depth {
+        Some(d) => qty(&rpc(url, "eth_blockNumber", json!([]))?)?.checked_sub(d).ok_or("R3: the chain is shorter than the confirmation depth".into()),
+        None => qty(&rpc(url, "eth_getBlockByNumber", json!(["finalized", false]))?["number"]),
+    }
+}
+
+/// R2, R3 and R5 on node `url`: the configured chain, its read block (by hash; `block_at`, the number `--rpc-agree` fixed, or this
+/// node's own `finalized` / `head − depth`), the token catalogued with a PQZ kind.
+fn open<'u>(a: &Args, url: &'u str, block_at: Option<u64>) -> Result<(Reader<'u>, u64), String> {
+    configured(a, url)?;
     // R3
-    let (tag, want) = match a.depth {
-        Some(d) => {
+    let (tag, want) = match (block_at, a.depth) {
+        (Some(n), _) => (format!("0x{n:x}"), Some(n)),
+        (None, Some(d)) => {
             let n = qty(&rpc(url, "eth_blockNumber", json!([]))?)?.checked_sub(d).ok_or("R3: the chain is shorter than the confirmation depth")?;
             (format!("0x{n:x}"), Some(n))
         }
-        None => ("finalized".to_string(), None),
+        (None, None) => ("finalized".to_string(), None),
     };
     let b = rpc(url, "eth_getBlockByNumber", json!([tag, false]))?;
     let block = qty(&b["number"])?;
@@ -405,9 +437,71 @@ fn recheck(url: &str, n: u64, hash: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn read(a: &Args) -> Result<Words, String> {
-    let url = a.rpc.as_str();
-    let (r, block) = open(a)?;
+/// R1, the default (owner 2026-11-08): failover over the named nodes in the order given. `read` runs whole on one node; after
+/// any failure the next node starts from scratch, so a result's words are always one node's; all failing is the refusal (one
+/// node: its own error, as before).
+fn failover<T>(a: &Args, read: impl Fn(&str) -> Result<T, String>) -> Result<T, String> {
+    let mut last = String::new();
+    for url in &a.rpc {
+        match read(url) {
+            Ok(t) => return Ok(t),
+            Err(e) => last = e,
+        }
+    }
+    Err(if a.rpc.len() == 1 { last } else { format!("R1: no --rpc answered the whole read (the last: {last})") })
+}
+
+/// `--rpc-agree` with two or more nodes.
+fn agreeing(a: &Args) -> bool {
+    a.agree && a.rpc.len() > 1
+}
+
+/// `--rpc-agree`: a strict majority of the named nodes.
+fn majority(a: &Args) -> usize {
+    a.rpc.len() / 2 + 1
+}
+
+/// `--rpc-agree`: the block number every node reads, the smallest the answering nodes choose (R2 on each).
+fn agreed_block(a: &Args) -> Result<u64, String> {
+    a.rpc.iter().filter_map(|u| chosen(a, u).ok()).min().ok_or_else(|| "R1: no --rpc answered".into())
+}
+
+/// `--rpc-agree`: `read` runs whole on every node of `urls`; the result is the one at least `need` of them returned identically,
+/// compared over the whole read (never word by word), with the nodes that returned it; a node that fails is outvoted.
+fn agree<'u, T: PartialEq>(urls: &[&'u str], need: usize, read: impl Fn(&str) -> Result<T, String>) -> Result<(T, Vec<&'u str>), String> {
+    let mut got: Vec<(&'u str, T)> = urls.iter().filter_map(|u| read(u).ok().map(|t| (*u, t))).collect();
+    let count = |t: &T| got.iter().filter(|g| g.1 == *t).count();
+    let best = (0..got.len()).max_by_key(|i| got.get(*i).map_or(0, |g| count(&g.1))).ok_or("R1: no --rpc answered the read")?;
+    let members: Vec<&'u str> = got.iter().filter(|g| Some(&g.1) == got.get(best).map(|b| &b.1)).map(|g| g.0).collect();
+    if members.len() < need {
+        return Err("R1: no strict majority of the --rpc nodes returned the same read".into());
+    }
+    Ok((got.swap_remove(best).1, members))
+}
+
+/// `--rpc-agree`, R3 after every node's read: at least `need` of the majority's nodes still carry every pinned block's hash.
+fn rechecked(members: &[&str], pins: &[(u64, String)], need: usize) -> Result<(), String> {
+    if members.iter().filter(|u| pins.iter().all(|(n, h)| recheck(u, *n, h).is_ok())).count() < need {
+        return Err("R1: no strict majority of the --rpc nodes kept the read block (R3)".into());
+    }
+    Ok(())
+}
+
+/// The request's words under R1–R6 (`pk`: the handle's key, R6's check, when a key is used), from the named nodes.
+fn read_words(a: &Args, pk: Option<&[u8]>) -> Result<Words, String> {
+    if !agreeing(a) {
+        return failover(a, |url| read(a, url, None, pk));
+    }
+    let n = agreed_block(a)?;
+    let urls: Vec<&str> = a.rpc.iter().map(String::as_str).collect();
+    let (w, members) = agree(&urls, majority(a), |url| read(a, url, Some(n), pk))?;
+    rechecked(&members, &[(w.block, w.hash.clone())], majority(a))?;
+    Ok(w)
+}
+
+/// The words on node `url` at its own block (`block_at`: the agreed number), the R6 key check when `pk` is given, the R3 re-check.
+fn read(a: &Args, url: &str, block_at: Option<u64>, pk: Option<&[u8]>) -> Result<Words, String> {
+    let (r, block) = open(a, url, block_at)?;
     // R4, R6: the token's words by the pinned layout, the registry's key record of --ua
     let root = erc7201("scaas.pqz");
     let tok = |label: &str| -> Result<Word, String> { r.word(&a.token, &add(&root, at(label)?.0)) };
@@ -486,7 +580,12 @@ fn read(a: &Args) -> Result<Words, String> {
     if again["hash"].as_str() != Some(r.hash.as_str()) {
         return Err("R3: the block changed during the read (a reorg or an inconsistent node)".into());
     }
-    Ok(Words { request, block, hash: r.hash, key_code: key_code.unwrap_or_default() })
+    let key_code = key_code.unwrap_or_default();
+    // R6: the registry's key of --ua is this handle's (SSTORE2: `0x00 ‖ pk`); ua-rs checks it again, with `proven`
+    if pk.is_some_and(|pk| key_code.split_first() != Some((&0, pk))) {
+        return Err("R6: the registry's PQZ key of --ua is not this key".into());
+    }
+    Ok(Words { request, block, hash: r.hash, key_code })
 }
 
 /// The wallet and the key's `account`, `index` of the stdin JSON `{mnemonic, passphrase?, account, index}`.
@@ -504,10 +603,22 @@ fn key(v: &Value) -> Result<(scaas_ua::wallet::Wallet, u32, u32), String> {
     Ok((w, n("account")?, n("index")?))
 }
 
-/// `decoys` (module doc): the candidates up to the sync point, the optional activity filter, `pickDecoys`, the chosen keys.
-fn decoys(a: &Args) -> Result<Value, String> {
-    let url = a.rpc.as_str();
-    let (r, block) = open(a)?;
+/// `decoys`' read before the pick on one node: `pickDecoys`'s request (candidates up to the sync point, exclusions, the
+/// optional filter's weights), each candidate's current version and the blocks read, each by hash.
+#[derive(PartialEq)]
+struct DecoyRead {
+    request: Value,
+    current: std::collections::BTreeMap<Word, u64>,
+    sync: u64,
+    count: u64,
+    block: u64,
+    hash: String,
+    pins: Vec<(u64, String)>,
+}
+
+/// The candidates on node `url` (`block_at`: the agreed number).
+fn decoy_read(a: &Args, url: &str, block_at: Option<u64>) -> Result<DecoyRead, String> {
+    let (r, block) = open(a, url, block_at)?;
     // another block of the same chain, by hash, the node's answer checked (R3); re-checked after the last read
     let mut pins = vec![(block, r.hash.clone())];
     let mut pin = |n: u64| -> Result<Reader<'_>, String> {
@@ -584,46 +695,78 @@ fn decoys(a: &Args) -> Result<Value, String> {
         request["weights"] = json!(weights);
     }
     request["candidates"] = json!(candidates.iter().map(|u| hx(u)).collect::<Vec<_>>());
-    let out = if a.words {
-        json!({"command": "decoys", "request": request})
-    } else {
-        let picked: Value = serde_json::from_str(
-            &scaas_ua::facade::decoys::pick_json(request.to_string().as_bytes()).map_err(|e| format!("pickDecoys: {e:?}"))?,
-        )
-        .map_err(|_| "pickDecoys: not JSON")?;
-        let mut legs = Vec::new();
-        for u in picked["decoys"].as_array().ok_or("pickDecoys: no decoys")? {
-            let ua: Word = fixed("decoy", u.as_str().ok_or("pickDecoys: a UA")?)?;
-            // `pqzKey[ua][current]`: `ptr(160) ‖ proven(8) ‖ added(8)`; the code `0x00 ‖ pk`
-            let rec = r.word(&a.registry, &pqz_key_slot(&ua, current.get(&ua).copied().ok_or("pickDecoys: not a candidate")?))?;
-            let code = r.code(&low_addr(&rec, 0))?;
-            match code.split_first() {
-                Some((0, pk)) if rec[11] == 1 && pk.len() == PK_BYTES => legs.push(json!({"ua": hx(&ua), "pk": hx(pk)})),
-                _ => return Err(format!("the PQZ key of listed UA {} is not a proven key of this set", hx(&ua))),
-            }
+    let hash = r.hash.clone();
+    Ok(DecoyRead { request, current, sync, count: n, block, hash, pins })
+}
+
+/// `pickDecoys` (`facade::decoys`, the OS CSPRNG) over the candidates: once per result, never per node.
+fn pick(d: &DecoyRead) -> Result<Value, String> {
+    serde_json::from_str(&scaas_ua::facade::decoys::pick_json(d.request.to_string().as_bytes()).map_err(|e| format!("pickDecoys: {e:?}"))?)
+        .map_err(|_| "pickDecoys: not JSON".into())
+}
+
+/// The chosen decoys' keys on node `url`, at the read block of `d`.
+fn decoy_legs(a: &Args, url: &str, d: &DecoyRead, picked: &Value) -> Result<Value, String> {
+    let r = Reader { url, hash: d.hash.clone() };
+    let mut legs = Vec::new();
+    for u in picked["decoys"].as_array().ok_or("pickDecoys: no decoys")? {
+        let ua: Word = fixed("decoy", u.as_str().ok_or("pickDecoys: a UA")?)?;
+        // `pqzKey[ua][current]`: `ptr(160) ‖ proven(8) ‖ added(8)`; the code `0x00 ‖ pk`
+        let rec = r.word(&a.registry, &pqz_key_slot(&ua, d.current.get(&ua).copied().ok_or("pickDecoys: not a candidate")?))?;
+        let code = r.code(&low_addr(&rec, 0))?;
+        match code.split_first() {
+            Some((0, pk)) if rec[11] == 1 && pk.len() == PK_BYTES => legs.push(json!({"ua": hx(&ua), "pk": hx(pk)})),
+            _ => return Err(format!("the PQZ key of listed UA {} is not a proven key of this set", hx(&ua))),
         }
-        let mut out = json!({"decoys": legs});
-        if a.recipient.is_some() {
-            out["legs"] = picked["legs"].clone();
-        }
-        out
-    };
-    for (n, h) in &pins {
-        recheck(url, *n, h)?;
     }
-    let mut out = out;
-    for (k, v) in [("syncBlock", json!(sync)), ("listCount", json!(n)), ("block", json!(block)), ("blockHash", json!(r.hash))] {
+    let mut out = json!({"decoys": legs});
+    if a.recipient.is_some() {
+        out["legs"] = picked["legs"].clone();
+    }
+    Ok(out)
+}
+
+/// `decoys` (module doc) over the named nodes (R1): failover runs the whole (candidates, pick, keys, R3 re-checks) on one node,
+/// from scratch on the next after a failure; `--rpc-agree` takes the candidates a strict majority returned identically, picks
+/// once, and the keys that majority's nodes return identically (each node counted over its whole read), then re-checks them.
+fn decoys(a: &Args) -> Result<Value, String> {
+    let words = |d: &DecoyRead| json!({"command": "decoys", "request": d.request});
+    let (d, mut out) = if !agreeing(a) {
+        failover(a, |url| {
+            let d = decoy_read(a, url, None)?;
+            let out = if a.words { words(&d) } else { decoy_legs(a, url, &d, &pick(&d)?)? };
+            for (n, h) in &d.pins {
+                recheck(url, *n, h)?;
+            }
+            Ok((d, out))
+        })?
+    } else {
+        let n = agreed_block(a)?;
+        let urls: Vec<&str> = a.rpc.iter().map(String::as_str).collect();
+        let (d, members) = agree(&urls, majority(a), |url| decoy_read(a, url, Some(n)))?;
+        let (out, members) = if a.words {
+            (words(&d), members)
+        } else {
+            let picked = pick(&d)?;
+            agree(&members, majority(a), |url| decoy_legs(a, url, &d, &picked))?
+        };
+        rechecked(&members, &d.pins, majority(a))?;
+        (d, out)
+    };
+    for (k, v) in [("syncBlock", json!(d.sync)), ("listCount", json!(d.count)), ("block", json!(d.block)), ("blockHash", json!(d.hash))] {
         out[k] = v;
     }
     Ok(out)
 }
+
+
 
 fn run(a: &Args) -> Result<Value, String> {
     if a.command == "decoys" {
         return decoys(a);
     }
     if a.words {
-        let r = read(a)?;
+        let r = read_words(a, None)?;
         return Ok(json!({"command": a.command, "request": r.request, "block": r.block, "blockHash": r.hash}));
     }
     if std::io::stdin().is_terminal() {
@@ -636,11 +779,7 @@ fn run(a: &Args) -> Result<Value, String> {
     wipe(&mut kv);
     let (wallet, account, index) = handle?;
     let k = wallet.pqz_key_version(account, index, a.key_version.ok_or("--key-version")?).map_err(|e| format!("the key: {e:?}"))?;
-    let r = read(a)?;
-    // R6: the registry's key of --ua is this handle's (SSTORE2: `0x00 ‖ pk`); ua-rs checks it again, with `proven`
-    if r.key_code.split_first() != Some((&0, k.pk().as_slice())) {
-        return Err("R6: the registry's PQZ key of --ua is not this key".into());
-    }
+    let r = read_words(a, Some(k.pk().as_slice()))?;
     // R7: no request after this line
     let out = k.call(&a.command, r.request.to_string().as_bytes()).map_err(|e| format!("ua-rs refused the words: {e:?}"))?;
     let mut v: Value = serde_json::from_str(&out).map_err(|_| "ua-rs: not JSON")?;

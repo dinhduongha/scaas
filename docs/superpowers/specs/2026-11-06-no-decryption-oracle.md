@@ -93,7 +93,7 @@ its own equivalent before its layout parser lands).
 
 | Id | Requirement | Checkable assertion |
 |---|---|---|
-| R1 | **One trusted source per request** (owner decision Q1, 2026-11-06, §7): the holder's own node, a node the holder configured explicitly, or a verifying light client in the reading layer; never an app default or a discovered endpoint. Every word of one request comes from that one source. | the request's words carry one source id from the holder's configuration; a second source in one request is refused by the reading layer |
+| R1 | **Trusted sources, one or several** (owner decision Q1, 2026-11-06, §7; Change owner 2026-11-08, ARCH-POS-15): every source is an RPC endpoint the holder **named** (their own node or one they configured), a **default** in the release's own reviewed list (from public RPC information, trusted like a named one), a **discovered** endpoint (found at run time), or a verifying light client in the reading layer. A layer may take several (a wallet layer and the app may; the reference readers do, named only: `--rpc` repeated, `--rpc-agree`): by default **failover** in the order given, every word of a request from the one source that answered the whole read and the next source from scratch after a failure, never a mix; with the **agreement option** a **strict majority** of the sources (⌊n/2⌋ + 1) must return the same complete read at one block, counted per source over the whole read, else the read is refused. A discovered endpoint serves a read that feeds a decryption only under the agreement option with at least three sources. | the request's words are one source's (failover) or the identical read of a strict majority (agreement); a discovered source alone, or under agreement with fewer than three sources, is refused by the reading layer |
 | R2 | **Known chain.** `(chainId, chain_uid)` from the holder's configuration (genesis hashes as pinned in `smartcontracts/evm/chain-uids.json`, [NET-ALL-22](../../networks/README.md#NET-ALL-22)). | `eth_chainId` and `eth_getBlockByNumber("0x0").hash` equal the configured pair |
 | R3 | **One final block.** All words from one block that is final by the chain's rule, or at the holder's configured confirmation depth where the chain has no finality (a single-signer chain, [NET-EVM-04](../../networks/evm.md#NET-EVM-04)). | every read names the same block number and hash; `head − block ≥ depth` or the block is at or below the chain's finalized tag |
 | R4 | **Real storage, not views.** Storage words by `eth_getStorageAt` / `eth_getProof` at that block; blob and key code by `eth_getCode`, whose `keccak256` equals the account's `codeHash` (proven where the source is a light client). `eth_call` views only from R1's own or configured node, never as the sole source of a word a light client verifies. | `keccak256(code) == codeHash` for each pointer; the storage method and block recorded per word |
@@ -344,7 +344,9 @@ On `ua-mtx-merge` (tasks T19b docs, T19c layout pins; not edited from here):
 ## 7. Owner decisions (2026-11-06; formerly the open questions)
 
 1. **Q1 — decided (owner 2026-11-06): R1's trusted source** is the holder's own node, a node the holder configured
-   explicitly, or a verifying light client in the reading layer; never an app default or a discovered endpoint.
+   explicitly, or a verifying light client in the reading layer. **Changed (owner 2026-11-08, ARCH-POS-15):** several sources
+   allowed (failover by default, a strict majority under the agreement option); named, default (the release's reviewed list)
+   and discovered endpoints allowed, a discovered one feeding a decryption only under the agreement option with three or more.
 2. **Q1b — decided (owner 2026-11-06): the residual of the chosen source** (a light client trusts the chain's sealing keys;
    another operator's node trusts that operator) is the holder's chosen trust. It is stated in `zether.md` and
    `pq-zero-knowledge.md` (T19b).

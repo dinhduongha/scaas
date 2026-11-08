@@ -2,8 +2,8 @@
 //! on a big account, zether-limits §4–§5). Native only. UNAUDITED.
 //!
 //!   zether-read-balance --curve bls12381 [--table-bits 24] [--bound-bits 54] [--table-file PATH] [--pending]
-//!                       [--rpc <url> --chain-id <n> --chain-uid <genesis hash> --factory <address> --token <address>
-//!                        (--depth <n> | --finalized)]
+//!                       [--rpc <url> [--rpc <url> … [--rpc-agree]] --chain-id <n> --chain-uid <genesis hash> --factory <address>
+//!                        --token <address> (--depth <n> | --finalized)]
 //!                       [--cache-box <file> --token <address>]
 //!                       (feature `hazmat` only: --ct <C hex>:<D hex>)
 //!   zether-read-balance --curve bls12381 --rpc … --chain-id … --chain-uid … --factory … --token … (--depth <n> | --finalized)
@@ -20,8 +20,13 @@
 //! ARCH-POS-13 ("never a decryption oracle", owner 2026-11-06; ua-rs-sign T14b, spec no-decryption-oracle §4.2, §4.7, Fable
 //! P3-4): this tool decrypts only a ciphertext it rebuilt from raw storage words it read itself, as a reading layer meeting
 //! R1 to R7, or reads the holder's own balance-cache box:
-//! - **`--rpc`** (R1) is the one source of every word, a node the holder names here (their own, or one they configured):
-//!   never a default or a discovered endpoint. R2: `eth_chainId` and `eth_getBlockByNumber("0x0").hash` must equal
+//! - **`--rpc`** (R1): every node one the holder names here (their own, or one they configured); this tool takes named nodes
+//!   only, no default list and no discovery (ARCH-POS-15: a reader that adds them applies its rule). Once or more (owner
+//!   2026-11-08), each node distinct: by default **failover** in the order given (every word of a result from the first node
+//!   that answers the whole read, R2 to R6 and the R3 re-check; after any failure the next node from scratch, never a mix);
+//!   with **`--rpc-agree`** every node reads the whole at one block number (the smallest the answering nodes choose) and a
+//!   strict majority of the named nodes (⌊n/2⌋ + 1) must return the same complete read, compared whole, never word by word;
+//!   that majority's words are used and its nodes re-checked (R3) after every read; all failing, or no majority: refused. R2: `eth_chainId` and `eth_getBlockByNumber("0x0").hash` must equal
 //!   `--chain-id` and `--chain-uid` (the genesis hash, NET-ALL-22). R3: one block, the chain's `finalized` block
 //!   (`--finalized`) or `head − depth` (`--depth`, the holder's confirmation depth on a chain without finality,
 //!   NET-EVM-04); every read names that block by hash (EIP-1898). R4: storage words only (`eth_getStorageAt`), no view.
@@ -91,7 +96,8 @@ struct Args {
     pending: bool,
     #[cfg(feature = "hazmat")]
     ct: Option<String>,
-    rpc: Option<String>,
+    rpc: Vec<String>,
+    agree: bool,
     chain_id: Option<u64>,
     chain_uid: Option<String>,
     factory: Option<String>,
@@ -133,7 +139,14 @@ fn parse() -> Result<Args, String> {
             "--pending" => a.pending = true,
             #[cfg(feature = "hazmat")]
             "--ct" => a.ct = Some(val()?),
-            "--rpc" => a.rpc = Some(val()?),
+            "--rpc" => {
+                let u = val()?;
+                if a.rpc.contains(&u) {
+                    return Err("--rpc: the same node twice".into());
+                }
+                a.rpc.push(u);
+            }
+            "--rpc-agree" => a.agree = true,
             "--chain-id" => a.chain_id = Some(val()?.parse().map_err(|_| "--chain-id: integer")?),
             "--chain-uid" => a.chain_uid = Some(val()?),
             "--factory" => a.factory = Some(val()?),
@@ -163,7 +176,7 @@ fn parse() -> Result<Args, String> {
     #[cfg(not(feature = "hazmat"))]
     let pasted = false;
     if a.decoys() {
-        if a.rpc.is_none() || a.registry.is_none() || a.cache_box.is_some() || a.pending || pasted {
+        if a.rpc.is_empty() || a.registry.is_none() || a.cache_box.is_some() || a.pending || pasted {
             return Err("decoys: --rpc and --registry, no --cache-box, --pending or --ct".into());
         }
         let candidates = a.decoy_count.is_some() && a.decoy_keys.is_none() && a.exclude.is_some() && a.filter.is_some() == a.window.is_some();
@@ -174,13 +187,13 @@ fn parse() -> Result<Args, String> {
     } else if a.registry.is_some() || a.exclude.is_some() || a.recipient.is_some() || a.sync_block.is_some() || a.filter.is_some() || a.window.is_some() {
         return Err("--registry, --exclude, --recipient, --sync-block, --decoy-filter and --window go with --decoy-count or --decoy-keys".into());
     }
-    if pasted && (a.rpc.is_some() || a.cache_box.is_some()) {
+    if pasted && (!a.rpc.is_empty() || a.cache_box.is_some()) {
         return Err("--ct goes alone".into());
     }
-    if !pasted && a.rpc.is_none() && a.cache_box.is_none() {
+    if !pasted && a.rpc.is_empty() && a.cache_box.is_none() {
         return Err("give --rpc (with --chain-id, --chain-uid, --factory, --token, --depth or --finalized) and/or --cache-box".into());
     }
-    if a.rpc.is_some()
+    if !a.rpc.is_empty()
         && (a.chain_id.is_none() || a.chain_uid.is_none() || a.factory.is_none() || a.token.is_none() || a.finalized == a.depth.is_some())
     {
         return Err("--rpc needs --chain-id, --chain-uid, --factory, --token and one of --depth / --finalized (R1–R5)".into());
@@ -188,7 +201,7 @@ fn parse() -> Result<Args, String> {
     if a.cache_box.is_some() && a.token.is_none() {
         return Err("--cache-box needs --token".into());
     }
-    if (a.rpc.is_some() || a.cache_box.is_some()) && a.curve != "bls12381" {
+    if (!a.rpc.is_empty() || a.cache_box.is_some()) && a.curve != "bls12381" {
         return Err("--rpc and --cache-box are bls12381 only".into());
     }
     Ok(a)
@@ -212,7 +225,7 @@ fn curl_config(url: &str, body: &str) -> String {
     )
 }
 
-/// One JSON-RPC call to the one source (R1), through `curl` (http and https without a TLS dependency here).
+/// One JSON-RPC call to one named node (R1), through `curl` (http and https without a TLS dependency here).
 fn rpc(url: &str, method: &str, params: Value) -> Result<Value, String> {
     let body = json!({"jsonrpc": "2.0", "id": 1, "method": method, "params": params});
     let mut child = Command::new("curl")
@@ -252,7 +265,7 @@ fn be(n: u64) -> [u8; 32] {
     w
 }
 
-/// The words of one block (R3), by hash (EIP-1898), storage only (R4), from the one source (R1).
+/// The words of one block (R3), by hash (EIP-1898), storage only (R4), from one named node (R1).
 struct Reader<'a> {
     url: &'a str,
     block: u64,
@@ -274,12 +287,9 @@ impl Reader<'_> {
     }
 }
 
-/// R1, R2, R3 and R5: the configured chain's read block, the token catalogued with a Zether kind.
-fn open(a: &Args) -> Result<Reader<'_>, String> {
-    let (url, token, factory) =
-        (a.rpc.as_deref().ok_or("--rpc")?, a.token.as_deref().ok_or("--token")?, a.factory.as_deref().ok_or("--factory")?);
+/// R2 on node `url`: the configured chain.
+fn configured(a: &Args, url: &str) -> Result<(), String> {
     let chain_uid = unhex(a.chain_uid.as_deref().ok_or("--chain-uid")?)?;
-    // R2
     if Some(qty(&rpc(url, "eth_chainId", json!([]))?)?) != a.chain_id {
         return Err("R2: eth_chainId is not the configured chain".into());
     }
@@ -287,16 +297,37 @@ fn open(a: &Args) -> Result<Reader<'_>, String> {
     if unhex(genesis["hash"].as_str().ok_or("R2: no genesis hash")?)? != chain_uid {
         return Err("R2: the genesis hash is not the configured chain_uid".into());
     }
+    Ok(())
+}
+
+/// R2, then R3's number on node `url`: `head − depth`, or the `finalized` block's.
+fn chosen(a: &Args, url: &str) -> Result<u64, String> {
+    configured(a, url)?;
+    match a.depth {
+        Some(d) => qty(&rpc(url, "eth_blockNumber", json!([]))?)?.checked_sub(d).ok_or("R3: the chain is shorter than the confirmation depth".into()),
+        None => qty(&rpc(url, "eth_getBlockByNumber", json!(["finalized", false]))?["number"]),
+    }
+}
+
+/// R1, R2, R3 and R5 on node `url`: the configured chain's read block (`at`: the number `--rpc-agree` fixed, else this node's
+/// own `finalized` / `head − depth`), the token catalogued with a Zether kind.
+fn open<'u>(a: &Args, url: &'u str, at: Option<u64>) -> Result<Reader<'u>, String> {
+    let (token, factory) = (a.token.as_deref().ok_or("--token")?, a.factory.as_deref().ok_or("--factory")?);
+    configured(a, url)?;
     // R3
-    let tag = match a.depth {
-        Some(d) => {
+    let tag = match (at, a.depth) {
+        (Some(n), _) => format!("0x{n:x}"),
+        (None, Some(d)) => {
             let head = qty(&rpc(url, "eth_blockNumber", json!([]))?)?;
             format!("0x{:x}", head.checked_sub(d).ok_or("R3: the chain is shorter than the confirmation depth")?)
         }
-        None => "finalized".into(),
+        (None, None) => "finalized".into(),
     };
     let b = rpc(url, "eth_getBlockByNumber", json!([tag, false]))?;
     let r = Reader { url, block: qty(&b["number"])?, hash: b["hash"].as_str().ok_or("R3: no block hash")?.to_string() };
+    if at.is_some_and(|n| n != r.block) {
+        return Err("R3: the node answered another block than the one asked for".into());
+    }
     // R5
     let t: [u8; 20] = unhex(token)?.try_into().map_err(|_| "--token: 20 bytes")?;
     let mut key = [0u8; 32];
@@ -340,10 +371,59 @@ fn catalogued(rec: &[u8; 32]) -> bool {
     class == CLASS_TOKEN && ZETHER_KINDS.iter().any(|k| u16::from(*k) == kind)
 }
 
-/// R1–R6: the words of `acct[ua]` of `token`, read at one final block of the configured chain from the one node, with the
+/// One node's read and the blocks it pinned (for the R3 re-checks).
+type Pinned = (Value, Vec<(u64, String)>);
+
+/// R1, the default (owner 2026-11-08): failover over the named nodes in the order given. `read` runs whole on one node; after
+/// any failure the next node starts from scratch, so a result's words are always one node's; all failing is the refusal (one
+/// node: its own error, as before).
+fn failover<T>(a: &Args, read: impl Fn(&str) -> Result<T, String>) -> Result<T, String> {
+    let mut last = String::new();
+    for url in &a.rpc {
+        match read(url) {
+            Ok(t) => return Ok(t),
+            Err(e) => last = e,
+        }
+    }
+    Err(if a.rpc.len() == 1 { last } else { format!("R1: no --rpc answered the whole read (the last: {last})") })
+}
+
+/// `--rpc-agree` (two or more nodes): the block number every node reads is the smallest the answering nodes choose (R2 on
+/// each); `read` runs whole on every node; the result is the one a strict majority of the named nodes returned identically,
+/// compared over the whole read (never word by word), a node that fails outvoted; that majority's nodes still carry every
+/// pinned block's hash after all the reads (R3). Else the refusal. One node, or no flag: [`failover`].
+fn on_nodes(a: &Args, read: impl Fn(&str, Option<u64>) -> Result<Pinned, String>) -> Result<Value, String> {
+    if !(a.agree && a.rpc.len() > 1) {
+        return failover(a, |url| {
+            let (v, pins) = read(url, None)?;
+            pins.iter().try_for_each(|(n, h)| recheck(url, *n, h))?;
+            Ok(v)
+        });
+    }
+    let need = a.rpc.len() / 2 + 1;
+    let n = a.rpc.iter().filter_map(|u| chosen(a, u).ok()).min().ok_or("R1: no --rpc answered")?;
+    let got: Vec<(&str, Pinned)> = a.rpc.iter().filter_map(|u| read(u, Some(n)).ok().map(|r| (u.as_str(), r))).collect();
+    let count = |r: &Pinned| got.iter().filter(|g| g.1 == *r).count();
+    let best = got.iter().max_by_key(|g| count(&g.1)).ok_or("R1: no --rpc answered the read")?;
+    let members: Vec<&str> = got.iter().filter(|g| g.1 == best.1).map(|g| g.0).collect();
+    if members.len() < need {
+        return Err("R1: no strict majority of the --rpc nodes returned the same read".into());
+    }
+    if members.iter().filter(|u| best.1 .1.iter().all(|(b, h)| recheck(u, *b, h).is_ok())).count() < need {
+        return Err("R1: no strict majority of the --rpc nodes kept the read block (R3)".into());
+    }
+    Ok(best.1 .0.clone())
+}
+
+/// R1–R6: the words of `acct[ua]` of `token`, read at one final block of the configured chain from the named nodes, with the
 /// location fields of `zether_prover::state`.
 fn read_words(a: &Args, ua: &[u8; 32]) -> Result<Value, String> {
-    let r = open(a)?;
+    on_nodes(a, |url, at| account_words(a, url, at, ua))
+}
+
+/// The words of `acct[ua]` on node `url` (`at`: the agreed number), with the block read pinned for its R3 re-check.
+fn account_words(a: &Args, url: &str, at: Option<u64>, ua: &[u8; 32]) -> Result<Pinned, String> {
+    let r = open(a, url, at)?;
     let token = a.token.as_deref().ok_or("--token")?;
     let chain_uid = unhex(a.chain_uid.as_deref().ok_or("--chain-uid")?)?;
     let t: [u8; 20] = unhex(token)?.try_into().map_err(|_| "--token: 20 bytes")?;
@@ -363,8 +443,9 @@ fn read_words(a: &Args, ua: &[u8; 32]) -> Result<Value, String> {
         }
         account.push(json!(hx(&w)));
     }
-    Ok(json!({"family": "evm", "chainId": a.chain_id, "chainUid": hx(&chain_uid), "token": hx(&t), "block": r.block, "psid": hx(&psid),
-        "ua": hx(ua), "account": account, "accountData": data}))
+    let words = json!({"family": "evm", "chainId": a.chain_id, "chainUid": hx(&chain_uid), "token": hx(&t), "block": r.block,
+        "psid": hx(&psid), "ua": hx(ua), "account": account, "accountData": data});
+    Ok((words, vec![(r.block, r.hash)]))
 }
 
 /// `UAStore.Layout` (the registry's storage at slot 0): `records` (slot 0), `uaCount` (slot 4), `uaAt` (slot 5); the classical
@@ -384,10 +465,16 @@ fn recheck(url: &str, n: u64, hash: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Decoys (module doc): `pickDecoys`'s request (`--decoy-count`), or the chosen decoys' keys (`--decoy-keys`). No key.
+/// Decoys (module doc): `pickDecoys`'s request (`--decoy-count`), or the chosen decoys' keys (`--decoy-keys`), from the named
+/// nodes (R1). No key.
 fn decoys(a: &Args) -> Result<Value, String> {
-    let (url, token, registry) = (a.rpc.as_deref().ok_or("--rpc")?, a.token.as_deref().ok_or("--token")?, a.registry.as_deref().ok_or("--registry")?);
-    let r = open(a)?;
+    on_nodes(a, |url, at| decoys_on(a, url, at))
+}
+
+/// The decoy read on node `url` (`at`: the agreed number), with every block read pinned for its R3 re-check.
+fn decoys_on(a: &Args, url: &str, at: Option<u64>) -> Result<Pinned, String> {
+    let (token, registry) = (a.token.as_deref().ok_or("--token")?, a.registry.as_deref().ok_or("--registry")?);
+    let r = open(a, url, at)?;
     let block = r.block;
     let mut pins = vec![(block, r.hash.clone())];
     // another block of the same chain, by hash, the node's answer checked (R3); re-checked after the last read
@@ -465,13 +552,10 @@ fn decoys(a: &Args) -> Result<Value, String> {
         request["candidates"] = json!(candidates.iter().map(|u| hx(u)).collect::<Vec<_>>());
         json!({"request": request})
     };
-    for (b, h) in &pins {
-        recheck(url, *b, h)?;
-    }
     for (k, v) in [("syncBlock", json!(sync)), ("listCount", json!(n)), ("block", json!(block)), ("blockHash", json!(r.hash))] {
         out[k] = v;
     }
-    Ok(out)
+    Ok((out, pins))
 }
 
 /// The holder's cache entry `<UA>:<token>` of the box file (clientkeys `openBalanceCache`; `state::open_cache_entry`):
@@ -507,7 +591,7 @@ fn run_state(a: &Args, key_json: &Value) -> Result<Value, String> {
         (Some(p), Some(t)) => Some(cache_entry(p, &k, t)?),
         _ => None,
     };
-    if a.rpc.is_none() {
+    if a.rpc.is_empty() {
         let (balance, acc_seq, _) = cached.ok_or("no source")?;
         if a.pending {
             return Err("--pending needs --rpc (the cache holds acc only)".into());

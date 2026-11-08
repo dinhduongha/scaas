@@ -274,6 +274,28 @@ account keys are not built while the in-quorum oracle is open; `msig` holders us
 
 **Rule.** Owner 2026-11-08: the audit of this repository is an AI audit by Fable, Opus, GPT-6.1-Sol and Gemini 4 Argon, named as such, never called independent or external; it is enough for the cryptographic-audit gate, including the one before SCaaS mainnet 22776. Code an AI audit round covers at its current commit carries `AI-AUDITED (Fable, Opus, GPT-6.1-Sol, Gemini 4 Argon)` with the round and commit; everything else carries `UNAUDITED`; code changed after its round is `UNAUDITED` again; a round's last step relabels what it covered. The rounds are listed once, here:
 
+<a id="ARCH-POS-15"></a>
+### ARCH-POS-15 — Every RPC consumer takes a list of nodes
+- old: — · status: current · owner: yes · date: 2026-11-08 · normative: decisions.md#ARCH-POS-15 · superseded-by: —
+
+**Rule.** Owner 2026-11-08: anything that reads or writes a chain through an RPC (the node, scaas-wallet, the app, the client
+libraries' reading layers, the reference readers, CLIs and operator tools) accepts a **list** of RPC endpoints, one or more. An
+endpoint is **named** (by the operator or holder), a **default** (in the release's own reviewed list, from public RPC information;
+trusted like a named one) or **discovered** (found at run time); all three are allowed everywhere (owner 2026-11-08). **Reads that
+feed a decryption** (PQZ, Zether; ARCH-POS-13): named and default endpoints may serve alone, a discovered one only under the
+agreement option with at least three nodes, so one unknown node can never put a ciphertext of its choice into a decryption. **Reads:** by default **failover** in the order
+given: one read is answered completely by one node, never mixing answers of different nodes, and the next node starts over when
+one fails or is inconsistent; with the **agreement option** a **strict majority** of the named nodes (⌊n/2⌋ + 1) must return the
+same complete answer at the same block (by hash), agreement counted per node over the whole read, else the read is refused.
+**Writes:** the same signed bytes go to one or more of the named nodes (never re-signed per node); the node keeps its own lane
+rules (journal before broadcast, one transaction per nonce). Built first in the reference readers `pqz-read` and
+`zether-read-balance` (`--rpc` repeated, `--rpc-agree`, branch `ua-rs-sign`); the node's indexer already takes `rpc_urls`
+with a quorum; every other consumer follows in its own round.
+**Why.** One node can lie, lag or fail; a list gives availability by failover and, with the majority option, a read that one
+dishonest or broken node cannot change.
+**Cost if wrong.** A single-endpoint consumer either stops when its node is down or trusts whatever that node answers.
+**Source.** owner 2026-11-08 (chat): several `--rpc`, an agreement option, "chỉ cần quá bán", and "ví, hoặc bất cứ thứ gì cần đọc/ghi rpc đều cần cho phép mảng nhiều rpc như vậy".
+
 <a id="audit-rounds"></a>
 
 | Round | Scope | Reviewers (as run) | Target | Status |
@@ -8551,8 +8573,15 @@ Rules of the `ua-rs` wallet surface and its facades, then the records of the dec
 
 **Why.** Owner decision Q1, 2026-11-06: the holder's own node, a node the holder configured explicitly, or a verifying light client in the reading layer; never an app default or a discovered endpoint. Several untrusted RPCs that must agree still trust their operators.
 **Cost if wrong.** The source's residual: CLI-UAL-38.
-**Status.** SPECIFIED; the reference layers take one `--rpc`, a second is refused.
-**Source.** [no-oracle spec](superpowers/specs/2026-11-06-no-decryption-oracle.md) §3, §4.2, §7.
+**Status.** SPECIFIED; the reference layers take several named `--rpc` (failover by default, `--rpc-agree`: a strict majority),
+BUILT in `pqz-read` and `zether-read-balance`.
+Change (2026-11-08, owner, ARCH-POS-15; status: BUILT in the reference readers): several sources allowed, by default failover in
+the order given (one source answers the whole read, the next from scratch after a failure, never a mix), with the agreement option
+a strict majority of the named sources (⌊n/2⌋ + 1) returning the same complete read at one block, counted per source over the whole
+read; named, default (the release's own reviewed list) and discovered endpoints all allowed, a discovered one feeding a decryption
+only under the agreement option with at least three sources. The reference readers take named endpoints only (no default list,
+no discovery, YAGNI); a wallet layer or app may take either behaviour. Replaces "never an app default or a discovered endpoint".
+**Source.** [no-oracle spec](superpowers/specs/2026-11-06-no-decryption-oracle.md) §3, §4.2, §7; owner 2026-11-08 (chat, through the controller).
 
 ### CLI-UAL-32 — Requirement 2: known chain
 - old: — · status: current · owner: yes · date: 2026-11-06 · normative: clients/ua-libraries.md#CLI-UAL-32 · superseded-by: —

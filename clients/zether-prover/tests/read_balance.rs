@@ -361,6 +361,44 @@ fn rpc_reading_layer_against_anvil() {
     assert!(run(args(&cid, &genesis, other_token, "2")).unwrap_err().contains("R5"), "not catalogued");
     assert!(run(args(&cid, &genesis, pqz_token, "2")).unwrap_err().contains("R5"), "catalogued as PQZ");
     assert!(run(args(&cid, &genesis, bare, "2")).unwrap_err().contains("R5: the token is not a clone of a chain-neutral release"), "no env");
+    // R1 (owner 2026-11-08): several --rpc; failover by default, a strict majority with --rpc-agree (proxies of this anvil)
+    use std::sync::{atomic::{AtomicUsize, Ordering}, Arc};
+    let multi = |urls: &[&str], agree: bool| {
+        let mut a: Vec<String> = ["--curve", "bls12381", "--table-bits", "20", "--bound-bits", "24"].map(String::from).to_vec();
+        a.extend(urls.iter().flat_map(|u| ["--rpc".to_string(), u.to_string()]));
+        a.extend(["--chain-id", &cid, "--chain-uid", &genesis, "--factory", factory, "--token", token, "--depth", "2"].map(String::from));
+        if agree {
+            a.push("--rpc-agree".into());
+        }
+        run(a)
+    };
+    let hits = || Arc::new(AtomicUsize::new(0));
+    let psid_slot = hx(&add(&zether_prover::state::ROOT, 6));
+    let lie = |byte: u8| {
+        let slot = psid_slot.clone();
+        move |m: &str, p: &Value, r: Value, _: usize| Some(if m == "eth_getStorageAt" && p[1] == json!(slot) { json!(hx(&[byte; 32])) } else { r })
+    };
+    let same = node(url.clone(), hits(), |_, _, r, _| Some(r));
+    let (lie_a, lie_a2, lie_b) = (node(url.clone(), hits(), lie(0xa1)), node(url.clone(), hits(), lie(0xa1)), node(url.clone(), hits(), lie(0xb2)));
+    let counted = hits();
+    let unused = node(url.clone(), counted.clone(), lie(0xa1));
+    let future = node(url.clone(), hits(), |m, _, r, _| Some(if m == "eth_blockNumber" { json!("0xffffff") } else { r }));
+    let (dead, dead2) = ("http://127.0.0.1:1", "http://127.0.0.1:2");
+    let bal = |v: Result<Value, String>| v.unwrap()["balance"].clone();
+    assert_eq!(bal(multi(&[dead, &url], false)), json!("42"), "failover skips a dead first node");
+    assert_eq!(bal(multi(&[&url, &unused], false)), json!("42"), "the first node answered");
+    assert_eq!(counted.load(Ordering::SeqCst), 0, "a second node is not consulted when the first succeeds");
+    assert!(multi(&[dead, dead2], false).unwrap_err().contains("R1: no --rpc answered the whole read"), "all fail");
+    assert!(multi(&[&url, &url], false).unwrap_err().contains("the same node twice"));
+    assert_eq!(bal(multi(&[&lie_a, &url, &same], true)), json!("42"), "3 nodes, one differing word: the majority's words");
+    assert_eq!(bal(multi(&[dead, &url, &same], true)), json!("42"), "3 nodes, one dead");
+    assert_eq!(bal(multi(&[&url, &same, &future], true)), json!("42"), "a far-future block does not move the number");
+    for (urls, what) in [(&[&url[..], &lie_a, &lie_b][..], "3 nodes, all differing"), (&[&url[..], &lie_a][..], "2 nodes differing"),
+        (&[&url[..], &same, &lie_a, &lie_a2][..], "4 nodes split 2-2"), (&[&url[..], dead][..], "2 nodes, one dead")]
+    {
+        let e = multi(urls, true).unwrap_err();
+        assert!(e.contains("R1: no strict majority"), "{what}: {e}");
+    }
     // the cache box checked against the state
     let dir = std::env::temp_dir().join(format!("zrb-anvil-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
@@ -405,6 +443,43 @@ fn decoy_arguments() {
 
 /// T15n: a one-connection-at-a-time JSON-RPC proxy in front of `upstream` that answers the fourth non-genesis
 /// `eth_getBlockByNumber` with another hash when `lie` (R3: the re-check of every block read); else a pass-through.
+/// A node in front of `upstream` (R1, owner 2026-11-08): each answer passes `f(method, params, result, i)`, `i` this node's
+/// request number from 1; `None` drops the connection (a node that fails). `hits` counts the requests it received.
+fn node(upstream: String, hits: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    f: impl Fn(&str, &Value, Value, usize) -> Option<Value> + Send + 'static) -> String {
+    use std::io::{BufRead, BufReader, Read, Write};
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}", l.local_addr().unwrap());
+    std::thread::spawn(move || {
+        for c in l.incoming() {
+            let Ok(mut c) = c else { continue };
+            let mut r = BufReader::new(c.try_clone().unwrap());
+            let mut len = 0usize;
+            loop {
+                let mut line = String::new();
+                if r.read_line(&mut line).unwrap_or(0) == 0 || line == "\r\n" {
+                    break;
+                }
+                if let Some(v) = line.to_ascii_lowercase().strip_prefix("content-length:") {
+                    len = v.trim().parse().unwrap();
+                }
+            }
+            let mut body = vec![0u8; len];
+            if r.read_exact(&mut body).is_err() {
+                continue;
+            }
+            let req: Value = serde_json::from_slice(&body).unwrap();
+            let i = hits.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+            let res = rpc(&upstream, req["method"].as_str().unwrap(), req["params"].clone());
+            if let Some(res) = f(req["method"].as_str().unwrap(), &req["params"], res, i) {
+                let out = json!({"jsonrpc": "2.0", "id": 1, "result": res}).to_string();
+                let _ = write!(c, "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{out}", out.len());
+            }
+        }
+    });
+    url
+}
+
 fn liar(upstream: String, lie: bool) -> String {
     use std::io::{BufRead, BufReader, Read};
     let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
