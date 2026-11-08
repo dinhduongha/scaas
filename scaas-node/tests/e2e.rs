@@ -2215,6 +2215,7 @@ mod pqz3f {
         function latestVersion(uint8 kind) external view returns (uint64);
         function uaAuthDigest(bytes32 ua, bytes32 purposeTag, bytes32 digest) external view returns (bytes32);
         function mtxShield(bytes32 toUA, uint256 amount) external;
+        function keyHashOf(uint16 kind, bytes keyData) external pure returns (bytes32);
     }
 }
 
@@ -2295,7 +2296,9 @@ impl PqHolder {
         let ua = view(rpc, registry, uaOfCall { kind: UA_FNDSA512, keyData: pk.clone().into() }).await;
         let no_kem = KemKey { scheme: 0, mlkemEk: Default::default(), x25519: B256::ZERO };
         let krh = view(rpc, registry, kemRecordHashCall { ua, version: 0, kem: no_kem.clone() }).await;
-        let (kh, ph) = (keccak256(&pqz_key), keccak256(&pqz_pop));
+        // the registry's own key hash of a PQZ key (`keyHashOf(pqz-mlwe, key)`, not its keccak)
+        let kh = view(rpc, registry, pqz3f::keyHashOfCall { kind: 0x0142, keyData: pqz_key.clone().into() }).await;
+        let ph = keccak256(&pqz_pop);
         let rd = view(rpc, registry, registrationDigestCall { ua, kind: UA_FNDSA512, pqzKeyHash: kh, kemRecordHash: krh, pqzPopHash: ph }).await;
         let me = Self { ua, pk, sk };
         let pop = me.sign(rpc, registry, b"scaas.ua.purpose.pop.v2", rd).await;
@@ -2313,9 +2316,10 @@ impl PqHolder {
         falcon::detached_sign(m.as_slice(), &self.sk).as_bytes().to_vec()
     }
 
+    /// Its `UASig`: a stored kind's carries the signature only (CTR-UA-17: `keyData` empty, the key from the record).
     async fn auth(&self, rpc: &str, registry: Address, purpose: &[u8], digest: B256) -> Value {
         let sig = self.sign(rpc, registry, purpose, digest).await;
-        json!({"keyData": format!("0x{}", alloy::hex::encode(&self.pk)), "signature": format!("0x{}", alloy::hex::encode(sig)), "members": []})
+        json!({"keyData": "0x", "signature": format!("0x{}", alloy::hex::encode(sig)), "members": []})
     }
 }
 
@@ -2374,8 +2378,9 @@ async fn offchain_stack(chain_id: u64) -> OffchainStack {
     // the holders: real PQZ keys of this set from portable.json (two different ones), the proof bytes stored unchecked
     let set = std::fs::read_to_string(format!("{}/src/pqz/PqzSet.sol", sc())).unwrap();
     let constant = |n: &str| -> usize {
-        let i = set.find(&format!("uint256 internal constant {n} = ")).unwrap_or_else(|| panic!("PqzSet.{n}")) + 28 + n.len();
-        set[i..i + set[i..].find(';').unwrap()].replace('_', "").parse().unwrap()
+        let at = format!("uint256 internal constant {n} = ");
+        let i = set.find(&at).unwrap_or_else(|| panic!("PqzSet.{n}")) + at.len();
+        set[i..i + set[i..].find(';').unwrap()].replace('_', "").trim().parse().unwrap()
     };
     let name = set.split("string internal constant NAME = \"").nth(1).unwrap().split('"').next().unwrap().to_string();
     let p: Value = serde_json::from_str(&std::fs::read_to_string(format!("{}/../vectors/ua/portable.json", sc())).unwrap()).unwrap();

@@ -12,7 +12,7 @@ cargo test --test e2e (compile; every test ignored) | e50251b4 | 0 | 0 passed, 2
 cargo test --test e2e_ua8, e2e_algorand, e2e_aptos, e2e_cosmos, e2e_hedera, e2e_near, e2e_solana, e2e_soroban, e2e_soroban_ua, e2e_sui, e2e_ton | fd2dfb2f | 0 | 0 passed; 10, 8, 1, 1, 1, 12, 1, 1, 10, 1, 1 ignored
 cargo clippy --all-targets -- -D warnings | e50251b4 | 0 | 0 warnings
 mutants, spec §15 Node row (runs/2026-11-08-ua-mtx-merge-t47-mutants.txt) | e50251b4 | - | 4 of 4 killed, tree clean after
-e2e pqz_offchain_transfer_on_anvil, pqz_revoked_verifier_on_anvil | - | - | not run yet: after the T44 + T45 commit (out/ final, the base stack by the deploy script)
+cargo test --test e2e pqz_ -- --ignored --test-threads=1 (anvil per test, started and stopped in it; contracts 2cce490d, out/ final) | e2e fixes on b3b31560 | 0 | 3 passed: pqz_offchain_transfer_on_anvil, pqz_revoked_verifier_on_anvil, pqz_rotation_on_anvil (3g)
+cargo clippy --test e2e -- -D warnings (after the e2e fixes) | e2e fixes | 0 | 0 warnings
 
-Inputs read from the working tree: smartcontracts/evm/test/vectors/selector_audit.json (the controller's T45 rows, not yet
-committed at e50251b4), smartcontracts/vectors/pqz/verdict.json (22 rows), smartcontracts/vectors/typed/typed_ops.json (e452b88f).
+Inputs read from the working tree: smartcontracts/evm/test/vectors/selector_audit.json (the controller's T45 rows; committed in 2cce490d), smartcontracts/vectors/pqz/verdict.json (22 rows), smartcontracts/vectors/typed/typed_ops.json (e452b88f).
