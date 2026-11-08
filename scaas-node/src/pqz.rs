@@ -111,12 +111,16 @@ impl Verifier {
         let psid = chain.call_view(w.to, IPqzToken::proofSystemIdCall {}).await.map_err(read("proofSystemId()"))?;
         let binding = chain.call_view(w.to, IPqzToken::envelopeBindingCall { m }).await.map_err(read("envelopeBinding()"))?;
         let (sig, names) = view_of(row.name).expect("a debit row has a statement view");
-        let (mut params, mut named) = (Vec::new(), Map::new());
+        // `op` as the reference verifier reads it (scaas-pqz-verifier `Op`): `args` the struct, `amount` / `recipient` or
+        // `unwrap` beside it, `binding`; the sol types' serde form (small uints as numbers)
+        let (mut params, mut op) = (Vec::new(), Map::new());
+        op.insert("entry".into(), json!(row.entry));
         for n in names {
             let (ty, v) = arg(n)?;
-            named.insert(n.to_string(), typed::to_json(&ty, &v));
+            op.insert(n.to_string(), typed::to_serde_json(&ty, &v));
             params.push(v);
         }
+        op.insert("binding".into(), json!(format!("{binding:#x}")));
         params.push(Val::FixedBytes(binding, 32));
         let call = [&keccak256(sig.as_bytes())[..4], &Val::Tuple(params).abi_encode_sequence().unwrap_or_default()].concat();
         let statement = match chain.call_raw(w.to, call.into()).await {
@@ -126,8 +130,7 @@ impl Verifier {
             Err(SimError::Transport(e)) => return Err(Refusal::Transport(format!("{sig}: {e}"))),
         };
         let proof = arg("proof")?.1.as_bytes().unwrap_or_default().to_vec();
-        let req = json!({"token": format!("{:#x}", w.to), "chainId": chain.number.to_string(),
-            "op": {"entry": row.entry, "args": Value::Object(named), "binding": format!("{binding:#x}")},
+        let req = json!({"token": format!("{:#x}", w.to), "chainId": chain.number, "op": Value::Object(op),
             "statement": hex(&statement), "proof": hex(&proof), "pqzVerifierEpoch": c.pqzVerifierEpoch});
         let usable = |v: &PqzVerdictArgs| v.epoch == c.pqzVerifierEpoch && v.valid_until >= now() + self.cfg.valid_margin_secs;
         // a fetch, and one re-fetch on a mismatch (spec §11.1); a job's own verdict is the first answer
@@ -173,8 +176,9 @@ impl Verifier {
         Err(errs.join("; "))
     }
 
-    /// One endpoint: a 2xx JSON answer of at most `max_response_bytes` (read in chunks, never buffered past it) naming
-    /// `{pqzVerifierEpoch, validUntil, auth}`, `auth` through the bounded `UASig` decoder (two levels, 16 slots).
+    /// One endpoint: a 2xx JSON answer of at most `max_response_bytes` (read in chunks, never buffered past it), the reference
+    /// verifier's `{pqzVerdict, pqzVerdictSig}`: of the verdict only its `pqzVerifierEpoch` and `validUntil` are read (the
+    /// node rebuilds the rest), the signature through the bounded `UASig` decoder (two levels, 16 slots).
     async fn ask(&self, endpoint: &str, body: &Value) -> Result<PqzVerdictArgs, String> {
         let url = format!("{}{ROUTE}", endpoint.trim_end_matches('/'));
         let mut r = self.http.post(url).json(body).send().await.map_err(|e| e.to_string())?;
@@ -194,10 +198,10 @@ impl Verifier {
             buf.extend_from_slice(&c);
         }
         let v: Value = serde_json::from_slice(&buf).map_err(|e| format!("not JSON: {e}"))?;
-        let o = v.as_object().ok_or("not an object")?;
-        let picked: Map<String, Value> = ["pqzVerifierEpoch", "validUntil", "auth"].iter()
-            .filter_map(|k| o.get(*k).map(|x| (k.to_string(), x.clone()))).collect();
-        typed::pqz_verdict_of(&Value::Object(picked), "answer").map_err(|e| format!("{e:#}"))
+        let (pv, sig) = (&v["pqzVerdict"], &v["pqzVerdictSig"]);
+        let until = pv["validUntil"].as_u64().map(|n| json!(n.to_string())).unwrap_or_else(|| pv["validUntil"].clone());
+        let picked = json!({"pqzVerifierEpoch": pv["pqzVerifierEpoch"], "validUntil": until, "auth": sig});
+        typed::pqz_verdict_of(&picked, "answer").map_err(|e| format!("{e:#}"))
     }
 
     /// `refuse_shield_when_unserved` (spec §11.1, C8): a shield or wrap-shield into an `OFFCHAIN` token whose verifier is revoked
@@ -217,18 +221,20 @@ impl Verifier {
         if c.verifier == B256::ZERO {
             return unserved(format!("its verifier is revoked (epoch {})", c.pqzVerifierEpoch));
         }
-        if !self.reachable().await {
-            return unserved("no [pqz_verifier] endpoint answers".into());
+        if !self.serves(chain, w.to).await {
+            return unserved("no [pqz_verifier] endpoint serves it (its probe)".into());
         }
         Ok(())
     }
 
-    /// Any configured endpoint answers HTTP at all (the route refuses `{}` by name, never with a signature).
+    /// Some configured endpoint serves `token`: its probe (`POST /v1/pqz-verdict/probe {token, chainId}`, spec §4.2, §11.2: a
+    /// verdict over the fixed probe statement) answers 2xx.
     // ponytail: one probe per shield job; keep each endpoint's last outcome if shields come often
-    async fn reachable(&self) -> bool {
+    async fn serves(&self, chain: &Chain, token: alloy::primitives::Address) -> bool {
+        let body = json!({"token": format!("{token:#x}"), "chainId": chain.number});
         for e in &self.cfg.endpoints {
-            let url = format!("{}{ROUTE}", e.trim_end_matches('/'));
-            if self.http.post(url).json(&json!({})).send().await.is_ok() {
+            let url = format!("{}{ROUTE}/probe", e.trim_end_matches('/'));
+            if self.http.post(url).json(&body).send().await.is_ok_and(|r| r.status().is_success()) {
                 return true;
             }
         }

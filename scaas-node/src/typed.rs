@@ -692,22 +692,32 @@ fn take(fields: &[(String, String)], o: &Map<String, Value>, path: &str) -> Resu
 
 /// The inverse of [`parse`]: a value as the explicit JSON of its type.
 pub fn to_json(ty: &str, v: &Val) -> Value {
+    json_of(ty, v, 32)
+}
+
+/// [`to_json`] with every `uint` of at most 64 bits a JSON number (the serde form of the sol types: a PQZ verifier's request,
+/// group 3f); wider ones decimal strings.
+pub fn to_serde_json(ty: &str, v: &Val) -> Value {
+    json_of(ty, v, 64)
+}
+
+fn json_of(ty: &str, v: &Val, number_bits: usize) -> Value {
     if ty == "PayMeta" {
         return pay_meta_json(v).unwrap_or(Value::Null);
     }
     if let Some(el) = ty.strip_suffix("[]") {
-        return Value::Array(v.as_array().unwrap_or_default().iter().map(|x| to_json(el, x)).collect());
+        return Value::Array(v.as_array().unwrap_or_default().iter().map(|x| json_of(el, x, number_bits)).collect());
     }
     if let Some(f) = nested(ty) {
         let t = v.as_tuple().unwrap_or_default();
-        return Value::Object(f.iter().zip(t).map(|((ty, n), x)| (n.clone(), to_json(ty, x))).collect());
+        return Value::Object(f.iter().zip(t).map(|((ty, n), x)| (n.clone(), json_of(ty, x, number_bits))).collect());
     }
     match v {
         Val::Address(a) => json!(format!("{a:#x}")),
         Val::Bool(b) => json!(b),
         Val::Bytes(b) => json!(format!("0x{}", alloy::hex::encode(b))),
         Val::FixedBytes(w, n) => json!(format!("0x{}", alloy::hex::encode(&w[..*n]))),
-        Val::Uint(u, bits) if *bits <= 32 => json!(u.saturating_to::<u64>()),
+        Val::Uint(u, bits) if *bits <= number_bits => json!(u.saturating_to::<u64>()),
         Val::Uint(u, _) => json!(u.to_string()),
         Val::String(t) => json!(t),
         _ => Value::Null,

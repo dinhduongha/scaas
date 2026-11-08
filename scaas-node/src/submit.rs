@@ -2864,6 +2864,14 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
         json!({"pqzVerifierEpoch": epoch, "validUntil": valid_until.to_string(), "auth": verdict_auth(tag)})
     }
 
+    /// The reference PQZ verifier's answer (scaas-pqz-verifier `Signed`): its verdict (the node reads the epoch and `validUntil`
+    /// only) and its signature.
+    fn answer_json(epoch: u32, valid_until: u64, tag: u8) -> Value {
+        let z = format!("{:#x}", B256::ZERO);
+        json!({"pqzVerdict": {"token": format!("{TOKEN:#x}"), "chainId": "0x7a69", "proofSystemId": z, "statementHash": z, "proofHash": z,
+            "pqzVerifierEpoch": epoch, "validUntil": valid_until}, "pqzVerdictSig": verdict_auth(tag)})
+    }
+
     fn with_verdict(mut j: Value, v: Value) -> Value {
         j["op"]["args"]["pqz_verdict"] = v;
         j
@@ -2886,7 +2894,8 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
             (axum::http::StatusCode::from_u16(if v.status == 0 { 200 } else { v.status }).unwrap(), v.answer.to_string())
         }
         let s: VerRef = Arc::new(Mutex::new(Ver { answer, ..Default::default() }));
-        let app = axum::Router::new().route("/v1/pqz-verdict", axum::routing::post(h)).with_state(s.clone());
+        let app = axum::Router::new().route("/v1/pqz-verdict", axum::routing::post(h)).route("/v1/pqz-verdict/probe", axum::routing::post(h))
+            .with_state(s.clone());
         let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let url = format!("http://{}", l.local_addr().unwrap());
         tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
@@ -2955,7 +2964,7 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
     #[tokio::test]
     async fn offchain_job_without_pqz_verdict_fetches_or_refuses() {
         let until = now() + 600;
-        let (url, ver) = fake_verifier(verdict_json(2, until, 0x7f)).await;
+        let (url, ver) = fake_verifier(answer_json(2, until, 0x7f)).await;
         let (r, rpc) = outcomes(offchain(), vec![pqz_job(7)], endpoints(vec![DEAD.into(), url.clone()])).await;
         assert_eq!(states_of(&r), ["signed", "broadcast"], "the second endpoint answers: {r:?}");
         let v = sent_verdict("UAPqzTransferSingle", &rpc.lock().unwrap().sent[0].2);
@@ -2964,21 +2973,24 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
         let req = ver.lock().unwrap().reqs[0].clone();
         let keys: Vec<&str> = req.as_object().unwrap().keys().map(String::as_str).collect();
         assert_eq!(keys, ["chainId", "op", "pqzVerifierEpoch", "proof", "statement", "token"], "named fields only: {req}");
-        assert_eq!((req["token"].as_str(), req["chainId"].as_str(), req["pqzVerifierEpoch"].as_u64()),
-            (Some(format!("{TOKEN:#x}").as_str()), Some("31337"), Some(2)));
+        assert_eq!((req["token"].as_str(), req["chainId"].as_u64(), req["pqzVerifierEpoch"].as_u64()),
+            (Some(format!("{TOKEN:#x}").as_str()), Some(31337), Some(2)));
         assert_eq!(req["statement"], json!(format!("0x{}", alloy::hex::encode(STATEMENT))));
         assert_eq!(req["proof"], pqz_job(7)["op"]["args"]["proof"]);
+        // `op` as the reference verifier's `Op` reads it: the entry, the args struct (the sol types' serde form), the binding
+        let op_keys: Vec<&str> = req["op"].as_object().unwrap().keys().map(String::as_str).collect();
+        assert_eq!(op_keys, ["args", "binding", "entry"], "the statement's inputs only: {}", req["op"]);
         assert_eq!((req["op"]["entry"].as_str(), req["op"]["binding"].as_str()),
             (Some("mtxConfidentialTransferSingle"), Some(format!("{BINDING:#x}").as_str())));
         let job_args = &pqz_job(7)["op"]["args"];
-        assert_eq!(req["op"]["args"]["args"], crate::typed::to_json("PqzTransferArgs",
+        assert_eq!(req["op"]["args"], crate::typed::to_serde_json("PqzTransferArgs",
             &crate::typed::parse("PqzTransferArgs", &job_args["args"], "args").unwrap()), "the job's named args");
-        assert!(req["op"]["args"].get("proof").is_none() && req["op"]["args"].get("pqzAuth").is_none(), "the statement's inputs only");
+        assert!(req["op"]["args"]["keyVersion"].is_u64() && req["op"]["args"]["validUntilBlock"].is_string(), "u64 numbers, u256 strings");
         // none answers: refused, a non-2xx, an answer above `max_response_bytes`, a UASig past the 16-slot bound
         let slot = json!({"index": 0, "members": [], "sig": "0x01"});
-        let wide = json!({"pqzVerifierEpoch": 2, "validUntil": until.to_string(),
-            "auth": {"keyData": "0x", "signature": "0x", "members": vec![slot; 17]}});
-        for (answer, cap, why) in [(Value::Null, 0, "not an object"), (verdict_json(2, until, 0x7f), 64, "above max_response_bytes"),
+        let mut wide = answer_json(2, until, 0x7f);
+        wide["pqzVerdictSig"]["members"] = json!(vec![slot; 17]);
+        for (answer, cap, why) in [(Value::Null, 0, "not an object"), (answer_json(2, until, 0x7f), 64, "above max_response_bytes"),
             (wide, 0, "17 slots")] {
             let (url, _) = fake_verifier(answer).await;
             let (r, rpc) = outcomes(offchain(), vec![pqz_job(7)], move |c| {
@@ -2990,7 +3002,7 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
             assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("PQZ_VERDICT_MISSING"), "{why}: {r:?}");
             assert!(rpc.lock().unwrap().sent.is_empty(), "{why}");
         }
-        let (url, ver) = fake_verifier(verdict_json(2, until, 0x7f)).await;
+        let (url, ver) = fake_verifier(answer_json(2, until, 0x7f)).await;
         ver.lock().unwrap().status = 500;
         let (r, rpc) = outcomes(offchain(), vec![pqz_job(7)], endpoints(vec![url])).await;
         assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("PQZ_VERDICT_MISSING"), "a 500 is no answer: {r:?}");
@@ -3007,7 +3019,7 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
     async fn precompile_job_with_pqz_verdict_refused() {
         let precompile = || Evm { mtx_nonce: Some(0), pqz_cfg: Some((0, B256::ZERO, 0)), ..Default::default() };
         let j = with_verdict(pqz_job(7), verdict_json(0, now() + 600, 0x7e));
-        let (url, ver) = fake_verifier(verdict_json(0, now() + 600, 0x7f)).await;
+        let (url, ver) = fake_verifier(answer_json(0, now() + 600, 0x7f)).await;
         for e in [precompile(), Evm { mtx_nonce: Some(0), ..Default::default() }] {
             let (r, rpc) = outcomes(e, vec![j.clone()], endpoints(vec![url.clone()])).await;
             assert!(r.len() == 1 && r[0].0 == "dead" && r[0].1.starts_with("PQZ_VERDICT_NOT_EXPECTED"), "{r:?}");
@@ -3032,12 +3044,12 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
     async fn pqz_verdict_epoch_mismatch_refetch_once() {
         let until = now() + 600;
         let stale = with_verdict(pqz_job(7), verdict_json(1, until, 0x7e));
-        let (url, ver) = fake_verifier(verdict_json(2, until, 0x7f)).await;
+        let (url, ver) = fake_verifier(answer_json(2, until, 0x7f)).await;
         let (r, rpc) = outcomes(offchain(), vec![stale.clone()], endpoints(vec![url])).await;
         assert_eq!(states_of(&r), ["signed", "broadcast"], "{r:?}");
         assert_eq!(sent_verdict("UAPqzTransferSingle", &rpc.lock().unwrap().sent[0].2).sig, ua_sig(&verdict_auth(0x7f)));
         assert_eq!(ver.lock().unwrap().reqs.len(), 1);
-        let (url, ver) = fake_verifier(verdict_json(1, until, 0x7f)).await;
+        let (url, ver) = fake_verifier(answer_json(1, until, 0x7f)).await;
         let (r, rpc) = outcomes(offchain(), vec![stale], endpoints(vec![url.clone()])).await;
         assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("PQZ_VERDICT_MISSING"), "{r:?}");
         assert!(rpc.lock().unwrap().sent.is_empty());
@@ -3046,7 +3058,7 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
         assert!(r.len() == 1 && r[0].0 == "queued", "{r:?}");
         assert_eq!(ver.lock().unwrap().reqs.len(), 3, "the fetch and one re-fetch");
         // an expiring verdict (inside `valid_margin_secs`) is no usable verdict either
-        let (url, ver) = fake_verifier(verdict_json(2, until, 0x7f)).await;
+        let (url, ver) = fake_verifier(answer_json(2, until, 0x7f)).await;
         let soon = with_verdict(pqz_job(7), verdict_json(2, now() + 5, 0x7e));
         let (r, _) = outcomes(offchain(), vec![soon], endpoints(vec![url])).await;
         assert_eq!(states_of(&r), ["signed", "broadcast"], "{r:?}");
@@ -3064,7 +3076,7 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
         assert!(rpc.lock().unwrap().sent.is_empty());
         let (r, _) = outcomes(Evm { sim: Some("verdict_mismatch"), pqz_rotated: true, ..offchain() }, vec![j.clone()], |_| {}).await;
         assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("PQZ_KEY_ROTATED: PqzVerdictMismatch"), "{r:?}");
-        let (url, ver) = fake_verifier(verdict_json(2, now() + 600, 0x7f)).await;
+        let (url, ver) = fake_verifier(answer_json(2, now() + 600, 0x7f)).await;
         let revoked = Evm { pqz_cfg: Some((1, B256::ZERO, 3)), ..offchain() };
         let (r, rpc) = outcomes(revoked, vec![pqz_job(7)], endpoints(vec![url])).await;
         assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.contains("PqzVerifierRevoked"), "{r:?}");
@@ -3102,28 +3114,33 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
     }
 
     /// Spec §11.1 (C8): with `refuse_shield_when_unserved` on, a shield or wrap-shield into an `OFFCHAIN` token whose verifier
-    /// is revoked (the endpoints answering) or whose endpoints none answers (the verifier set) is refused
-    /// `PQZ_VERIFIER_UNREACHABLE`, zero sends; the controls: the verifier set and an endpoint answering, a `PRECOMPILE` token.
+    /// is revoked (the endpoints serving) or whose endpoints none serves it (none answers, its probe refused, none configured;
+    /// the verifier set) is refused `PQZ_VERIFIER_UNREACHABLE`, zero sends; the controls: the verifier set and an endpoint whose
+    /// probe answers, a `PRECOMPILE` token.
     #[tokio::test]
     async fn shield_refused_when_unserved_and_enabled() {
-        let (url, _) = fake_verifier(json!({"error": "BAD_REQUEST"})).await;
+        let (url, ver) = fake_verifier(answer_json(2, now() + 600, 0x7f)).await;
+        let (refusing, r) = fake_verifier(json!({"error": "NOT_THIS_VERIFIER", "detail": "x"})).await;
+        r.lock().unwrap().status = 422;
         let on = |urls: Vec<String>| move |c: &mut ChainCfg| {
             endpoints(urls)(c);
             c.pqz_verifier.refuse_shield_when_unserved = true;
         };
         let revoked = Evm { pqz_cfg: Some((1, B256::ZERO, 3)), ..offchain() };
         for (e, urls, why) in [(revoked, vec![url.clone()], "revoked"), (offchain(), vec![DEAD.to_string()], "unreachable"),
-            (offchain(), vec![], "no endpoint")] {
+            (offchain(), vec![refusing.clone()], "probe refused"), (offchain(), vec![], "no endpoint")] {
             let (r, rpc) = outcomes(e, shield_jobs(), on(urls)).await;
             assert!(r.len() == 2 && r.iter().all(|x| x.0 == "dead" && x.1.starts_with("PQZ_VERIFIER_UNREACHABLE")), "{why}: {r:?}");
             assert!(rpc.lock().unwrap().sent.is_empty(), "{why}");
         }
         let precompile = Evm { mtx_nonce: Some(0), pqz_cfg: Some((0, B256::ZERO, 0)), ..Default::default() };
-        for (e, urls) in [(offchain(), vec![DEAD.to_string(), url.clone()]), (precompile, vec![])] {
+        for (e, urls) in [(offchain(), vec![DEAD.to_string(), refusing, url.clone()]), (precompile, vec![])] {
             let (r, rpc) = outcomes(e, shield_jobs(), on(urls)).await;
             assert_eq!(states_of(&r), ["signed", "broadcast", "signed", "broadcast"], "{r:?}");
             assert_eq!(rpc.lock().unwrap().sent.len(), 2);
         }
+        let probe = ver.lock().unwrap().reqs.last().cloned().unwrap();
+        assert_eq!((probe["token"].as_str(), probe["chainId"].as_u64()), (Some(format!("{TOKEN:#x}").as_str()), Some(31337)), "the probe");
     }
 
     /// The switch is off by default: a shield into a token whose verifier is revoked and that no endpoint serves is sent.

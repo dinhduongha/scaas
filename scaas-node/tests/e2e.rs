@@ -2468,8 +2468,9 @@ impl OffchainStack {
 }
 
 /// A PQZ verifier (off-chain) stand-in for the e2e: `POST /v1/pqz-verdict` signs, with the test's verifier EOA, a verdict over the
-/// request's own `statement` and `proof` at the request's epoch (the reference service also rebuilds and checks them; this one
-/// shows the node's request carries what a verifier needs).
+/// request's own `statement` and `proof` at the request's epoch and answers in the reference service's shape (`scaas-pqz-verifier`
+/// also rebuilds and checks them and runs `pqz-ffi`, which would refuse the e2e's dummy proof; this one shows the node's request
+/// carries what a verifier needs).
 async fn fake_pqz_verifier(stack: &OffchainStack) -> (String, Arc<Mutex<Vec<Value>>>) {
     let seen = Arc::new(Mutex::new(Vec::new()));
     let (rpc, registry, token, chain_id, uid, verifier) =
@@ -2493,8 +2494,10 @@ async fn fake_pqz_verifier(stack: &OffchainStack) -> (String, Arc<Mutex<Vec<Valu
             let ad = view(&rpc, registry, pqz3f::uaAuthDigestCall { ua: verifier.address().into_word(),
                 purposeTag: keccak256(b"scaas.ua.purpose.pqz-verdict.v1"), digest: d }).await;
             let sig = verifier.sign_hash_sync(&ad).unwrap().as_bytes().to_vec();
-            Json(json!({"pqzVerifierEpoch": epoch, "validUntil": until.to_string(),
-                "auth": {"keyData": "0x", "signature": format!("0x{}", alloy::hex::encode(sig)), "members": []}}))
+            // the reference verifier's answer (scaas-pqz-verifier `Signed`): the verdict and its signature
+            let mut pv = pv;
+            (pv["chainId"], pv["validUntil"]) = (json!(chain_id), json!(until));
+            Json(json!({"pqzVerdict": pv, "pqzVerdictSig": {"keyData": "0x", "signature": format!("0x{}", alloy::hex::encode(sig)), "members": []}}))
         }
     }));
     let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
