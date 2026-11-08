@@ -24,6 +24,11 @@ import {IPqzToken} from "../../src/pqz/IPqzToken.sol";
 /// call costs above the same op called directly on the same state (`_direct`), now and on 2ceda92d (the JSON's `direct|<id>`):
 /// `(largest − direct) − (pre-split largest − pre-split direct)`. The pre-split side runs from
 /// `runs/2026-11-01-typed-signing-c4-MtxSplitOverhead-at-2ceda92d.t.sol`, this test as it compiled there.
+/// Group 3h T58: the smallest op's own cost fell by 12,347 (its rollover deletes no pending slot any more, PP-1) while its
+/// relayed-minus-direct stayed 71,520 to the gas, so the smallest side keeps its own cost at the tree the bounds were set on
+/// (7558a364, owner 2026-11-08): `(smallest − direct S) − (pre-split smallest − direct S at 7558a364)`, which is the old
+/// `smallest − pre-split smallest` there exactly and stays it whatever a later task does to the rollover's own cost
+/// (`direct|S|7558a364`; runs/2026-11-08-ua-mtx-merge-3h/split-overhead.txt).
 /// Run: `scripts/capped smartcontracts/evm/script/pqz/at-set.sh <set> test --match-contract MtxSplitOverheadTest -vv`
 /// (log: runs/2026-10-27-metatx-split-overhead.txt). It inherits `PqzStatePinGasTest`'s tests; select this contract.
 contract MtxSplitOverheadTest is PqzStatePinGasTest {
@@ -39,6 +44,7 @@ contract MtxSplitOverheadTest is PqzStatePinGasTest {
 
     bool internal logOnly;
     uint256 internal sMeas; // the smallest envelope's relayed gas (this kind)
+    uint256 internal sDir; // the smallest envelope's op called directly (every kind)
     string internal kind;
 
     function test_splitOverhead_dataSizeBound() public {
@@ -60,6 +66,8 @@ contract MtxSplitOverheadTest is PqzStatePinGasTest {
             kind = k == 0 ? "ecdsa" : k == 1 ? "mldsa65" : "fndsa512";
             sMeas = _meas(abi.encodeCall(IPqzToken.mtxRollOver, (alice, uint64(0), 1)), 0);
             console2.log(string.concat("MEAS ", PqzSet.NAME, " ", kind, " S"), sMeas);
+            if (k == 0) sDir = _direct(abi.encodeCall(IPqzToken.mtxRollOver, (alice, uint64(0), 1)), 0);
+            if (k == 0) console2.log(string.concat("MEAS ", PqzSet.NAME, " direct S"), sDir);
             _large("pqzl", "M8-on", 8, BOUND);
             if (PqzSet.HAS_PQZH) _large("pqzh", "M4-on", 4, BOUND_PQZH);
         }
@@ -75,7 +83,7 @@ contract MtxSplitOverheadTest is PqzStatePinGasTest {
         console2.log(string.concat("MEAS ", PqzSet.NAME, " direct ", id), dir);
         uint256 preDir = vm.parseJsonUint(pre, string.concat(".", PqzSet.NAME, "['direct|", id, "']"));
         uint256 ovL = (l - dir) - (_pre(id, false) - preDir);
-        uint256 ovS = sMeas - _pre("", true);
+        uint256 ovS = (sMeas - sDir) - (_pre("", true) - vm.parseJsonUint(pre, string.concat(".", PqzSet.NAME, "['direct|S|7558a364']")));
         uint256 d = ovL > ovS ? ovL - ovS : 0;
         console2.log(string.concat("OVERHEAD ", PqzSet.NAME, " ", kind, " ", id, " smallest / largest / difference"), ovS, ovL, d);
         assertLe(d, bound, string.concat(kind, " ", id, ": overhead grows with data"));

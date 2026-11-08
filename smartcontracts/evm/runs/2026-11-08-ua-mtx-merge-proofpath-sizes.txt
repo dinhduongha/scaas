@@ -1,0 +1,9 @@
+# Group 3h (PQZ proof path, contract side; spec 2026-11-06-pqz-proof-path §8) sizes, runtime / init B, `forge build src --sizes
+# --json` (default set n2304-kmax4096), libraries from their artifacts (scripts/size_gate.py). Old = 7558a364, measured the same way in
+# a second work tree. One section per task. UNAUDITED.
+step | commit | rc | counts
+T58 kind 13 first | T58 | 0 | WrappedPqzRegulatedToken 72,402 -> 73,153 (init 74,044 -> 74,795): above 64,512 B and 65,536 B before T58 already, in `_above64KiB` (owner 2026-11-07, removed by T66b); lever 1 pulled (`pqzDebitRecord` a one-line forward into PqzViewLib); levers 2, 3 not pulled under that ruling
+T58 tokens | T58 | 0 | NormalPqzToken 50,804 -> 51,497 (init 52,313 -> 53,006); WrappedPqzToken 60,132 -> 60,837 (init 61,641 -> 62,346); NormalPqzRegulatedToken 58,361 -> 59,054 (init 59,998 -> 60,691)
+T58 libraries | T58 | 0 | PqzTransferLib 22,604 -> 23,037; PqzBurnLib 14,020 -> 14,457 (`_record` in both); PqzViewLib 23,319 -> 23,913 (the record view); PqzStateLib 13,763 -> 13,698 (the rollover's loop out); PqzWrappedLib 5,521 unchanged
+T58 size gate | T58 | 0 | size_gate.py: 0 errors, 99 contracts; above 65,536 B: WrappedPqzRegulatedToken 73,153 (pinned)
+T58 against the spec | - | - | tokens +693 to +751 B for T58 alone, over §8's +0.3 to +0.6 KB for all of 3h (the view's eight-field struct is decoded from the library's return data and re-encoded); PqzCore's step +0.43 KB per debit library (§8: +0.6 to +1.0 KB for all of 3h)

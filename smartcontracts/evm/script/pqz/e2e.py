@@ -295,7 +295,7 @@ API = dict(
     ev_single=["ConfidentialTransfer(bytes32,bytes32,bytes32,bytes32,uint256,uint64,address)"],
     ev_multi=["ConfidentialTransferMulti(bytes32,bytes32,bytes32,uint256,uint64,bytes32[],uint8,address)"],
 )
-ACCT = ["pendingCount", "rolled", "floor", "cleared", "accBlob", "accUnits", "flags", "sendCounter", "accHash"]  # pqzAccount
+ACCT = ["pendingCount", "rolled", "floor", "cleared", "accBlob", "accUnits", "flags", "sendCounter", "accHash", "lastDebit"]  # pqzAccount (3h T58: lastDebit)
 
 # The named signed entries (TS-D14, TS-D16, Appendix X.3): `mtx<entry>` / `ua<entry>`(Envelope, the op's parameters, sig). op (the
 # struct, its twin "UA" + op) -> (entry, the parameters' ABI, their encoders, the struct's fields from the parameters). `pqzAuth`

@@ -183,7 +183,7 @@ contract PqzNormalTest is PqzFixture {
         assertEq(a.floor, 3);
         assertEq(a.cleared, 3);
         assertEq(a.accUnits, 1);
-        assertEq(tok.pqzPending(alice, 0, 0), 0, "dead slots deleted");
+        assertTrue(tok.pqzPending(alice, 0, 0) != 0, "consumed slots kept for good (group 3h PP-1)");
         assertEq(tok.pqzAcc(alice, 0), bytes.concat(_cut(out, 0, PqzCt.PK), _cut(out, PqzCt.CT, 128)));
     }
 

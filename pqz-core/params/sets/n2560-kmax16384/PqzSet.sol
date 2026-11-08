@@ -48,6 +48,9 @@ library PqzSet {
     uint256 internal constant BUNDLE = 20_784;
     /// disclosure bundle, auditor off
     uint256 internal constant BUNDLE0 = 20_656;
+    /// the largest `deltaP` of a PQZ debit record, K_MAX - 1 (a first debit's p; later debits K_MAX - 2): a uint16, so a
+    /// set whose K_MAX - 1 exceeds 65,535 fails the build
+    uint16 internal constant DELTA_P_MAX = 16_383;
     /// PQZL's proofSystemId: keccak256("scaas/pqz/lnp22/mlwe-d64k40-q50l4/v5")
     bytes32 internal constant PQZL_ID = 0xeacf34a3a8b6b5aff9be26e24ec03176e2699784c4ff8a1b4c8921cb09276882;
     /// PQZH (Ligero) built at this set (set.toml pqzh; pqz-stmt HAS_PQZH): true

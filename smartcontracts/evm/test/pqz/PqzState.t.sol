@@ -18,13 +18,14 @@ abstract contract PqzSlots is PqzFixture {
     uint256 internal constant BASE = 0xda865ec17214f25b93cdb133d719c79392c290a4b9089fd0bba156256c521500;
 
     /// Group 3g T52 (KV-6): the account of `(ua, version 0)`, `acct` keyed `(ua, key version)`; the struct lost
-    /// `sendCounter` (`pending` at +3, `accWords` from +4; layout pin test/v2/layout/namespaces.json).
+    /// `sendCounter`; group 3h T58: `lastDebit` in its slot (+2), so `accHash` +3, `pending` at +4, `accWords` from +5
+    /// (layout pin test/v2/layout/namespaces.json).
     function _acctSlot(bytes32 ua) internal pure returns (uint256) {
         return uint256(keccak256(abi.encode(uint64(0), keccak256(abi.encode(ua, BASE + 8)))));
     }
 
     function _pendingSlot(bytes32 ua, uint256 i) internal pure returns (bytes32) {
-        return keccak256(abi.encode(uint256(i), _acctSlot(ua) + 3));
+        return keccak256(abi.encode(uint256(i), _acctSlot(ua) + 4));
     }
 
     /// `accUnits` (bits 192..224 of the account's slot 1) written directly.
@@ -185,9 +186,9 @@ contract PqzStateTest is PqzSlots {
         uint256 r = PqzCore.ROLL_MAX;
         assertEq(a.rolled, r);
         assertEq(a.accUnits, r);
-        assertEq(a.cleared, r - 16, "slots below rolled - INLINE_MAX deleted");
+        assertEq(a.cleared, r - 16, "cleared follows rolled - INLINE_MAX");
         assertEq(a.floor, r - 16);
-        assertEq(tok.pqzPending(alice, 0, uint64(r - 17)), 0);
+        assertTrue(tok.pqzPending(alice, 0, uint64(r - 17)) != 0, "below it kept for good (group 3h PP-1)");
         assertTrue(tok.pqzPending(alice, 0, uint64(r - 16)) != 0);
         assertEq(tok.pqzAcc(alice, 0), accOf[alice], "acc materialised = sum of the entries");
         // below the edge: refused
@@ -417,7 +418,7 @@ contract PqzStateTest is PqzSlots {
         _send(pl, ""); // spends entry 0 inline, same block
         _fund(tok, alice, 4);
         assertEq(tok.pqzAccount(alice, 0).pendingCount, 2, "appended, not merged into the spent entry");
-        assertEq(tok.pqzPending(alice, 0, 0), 0, "the spent entry deleted by the debit");
+        assertEq((tok.pqzPending(alice, 0, 0) >> 96) & type(uint64).max, 5, "the spent entry kept, unchanged (group 3h PP-1, P1')");
         assertEq((tok.pqzPending(alice, 0, 1) >> 96) & type(uint64).max, 4);
     }
 

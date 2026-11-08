@@ -94,16 +94,22 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
     function totalShielded() external view returns (uint256) { return PqzCore.$().totalShielded; }
 
     /// @notice The account of `(ua, keyVersion)` (D13; group 3g KV-6): counters, the `acc` reference, `accUnits`, flags, the
-    ///         UA's `sendCounter` (one for every version), `accHash`.
+    ///         UA's `sendCounter` (one for every version), `accHash`, `lastDebit` (group 3h PP-2).
     function pqzAccount(bytes32 ua, uint64 keyVersion) external view override returns (AccountState memory) {
         PqzCore.PqzStorage storage s = PqzCore.$();
         PqzCore.Account storage a = s.acct[ua][keyVersion];
         return AccountState(a.pendingCount, a.rolled, a.floor, a.cleared, a.accBlob, a.accUnits, a.flags,
-            s.sendCounter[ua], a.accHash);
+            s.sendCounter[ua], a.accHash, a.lastDebit);
+    }
+
+    /// @notice Group 3h (PP-2): the record of `ua`'s debit `counter` (`PqzViewLib.debitRecord`; spec §8 lever 1).
+    function pqzDebitRecord(bytes32 ua, uint64 counter) external view override returns (DebitRecordView memory) {
+        return PqzViewLib.debitRecord(ua, counter);
     }
 
     /// @notice Pending slot `i` of `(ua, keyVersion)` (plan 5h D2): `blob(160) ‖ uOff(16) ‖ vOff(16) ‖ block(64)`, `vOff =
-    ///         0` a TRIVIAL entry with its amount in the low 64 bits of the blob field; 0 once deleted.
+    ///         0` a TRIVIAL entry with its amount in the low 64 bits of the blob field; every `i < pendingCount` (group 3h
+    ///         PP-1: kept for good), 0 for an unwritten index.
     function pqzPending(bytes32 ua, uint64 keyVersion, uint64 i) external view override returns (uint256) {
         return PqzCore.$().acct[ua][keyVersion].pending[i];
     }

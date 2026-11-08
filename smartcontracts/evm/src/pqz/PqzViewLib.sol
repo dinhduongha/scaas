@@ -103,6 +103,22 @@ library PqzViewLib {
         return PqzCore.verdictStatus(sh, ph, pqzVerdict, e.registry, e.domainSeparator) == 0;
     }
 
+    /// @notice Group 3h (PP-2, `pqzDebitRecord`): the record's two words as named fields; no record (`w0 == 0`):
+    ///         `DebitRecordUnknown`. A narrow record with a predecessor has `prevCounter = counter − 1`.
+    function debitRecord(bytes32 ua, uint64 counter) public view returns (IPqzToken.DebitRecordView memory r) {
+        PqzCore.DebitRecord storage d = PqzCore.$().debitRec[ua][counter];
+        uint256 w0 = d.w0;
+        if (w0 == 0) revert IPqzToken.DebitRecordUnknown(ua, counter);
+        (r.prevBlob, r.p, r.deltaP, r.proofStore) = (address(uint160(w0 >> 96)), uint64(w0 >> 32), uint16(w0 >> 16), uint8(w0 >> 8));
+        r.hasPrev = r.prevBlob != address(0);
+        if (uint8(w0) & PqzCore.WIDE != 0) {
+            uint256 w1 = d.w1;
+            (r.shieldIn, r.keyVersion, r.prevCounter) = (uint64(w1 >> 192), uint64(w1 >> 128), uint64(w1 >> 64));
+        } else if (r.hasPrev) {
+            r.prevCounter = counter - 1;
+        }
+    }
+
     /// @notice The precompile's verdict on the disclosure of leg `leg` with `proof` (the token checked the shape).
     function verifyAmountOf(bytes32 ref, uint256 leg, uint256 amount, uint8 kind, uint64 keyVersion, bytes calldata proof,
         PqzCore.Env memory e) public view returns (bool)

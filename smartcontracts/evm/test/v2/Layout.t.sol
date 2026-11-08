@@ -88,6 +88,8 @@ contract NamespaceProbe is UAMetaTxBase {
         (q.sendCounter[U], qa.accHash) = (0xe9, bytes32(uint256(0xea)));
         qa.pending[3] = 0xeb;
         (qa.accWords[0], qa.accWords[1]) = (0xec, 0xed);
+        // group 3h T58 (pqz-proof-path spec §2.2, §6): the account's `lastDebit`, the debit record appended
+        (qa.lastDebit, q.debitRec[U][7]) = (0xdd, PqzCore.DebitRecord(0xde, 0xdf));
         q.entryPtr[V] = A;
         (q.memos[V], q.memos[U]) = (NamespaceProbeIds.blob(58), NamespaceProbeIds.blob(21));
         ZetherLib.ZetherStorage storage z = ZetherLib.$();
@@ -239,7 +241,7 @@ contract LayoutTest is V2Fixture {
         f = _more(f, F("taxRate.eta", 0, 0, 0xbf, 8));
         _ns(address(p), "regulated", "scaas.regulated", f);
         // plan T19c: a `bytes` row's value is its length; a `mapping` row's `k2` is the key of the struct member's mapping
-        f = new F[](28);
+        f = new F[](29);
         f[0] = F("pqz", 0, 0, a, 20);
         f[1] = F("disclosureMode", 0, 0, 1, 1);
         f[2] = F("auditorMode", 0, 0, 2, 1);
@@ -259,15 +261,16 @@ contract LayoutTest is V2Fixture {
         f[16] = F("acct[U][7].accV", u, 0, 0xe6, 2);
         f[17] = F("acct[U][7].accUnits", u, 0, 0xe7, 4);
         f[18] = F("acct[U][7].flags", u, 0, 0xe8, 1);
-        f[19] = F("acct[U][7].accHash", u, 0, 0xea, 32);
-        f[20] = F("acct[U][7].pending[3]", u, 3, 0xeb, 32);
-        f[21] = F("acct[U][7].accWords[0]", u, 0, 0xec, 32);
-        f[22] = F("acct[U][7].accWords[1]", u, 0, 0xed, 32);
-        f[23] = F("entryPtr[V]", v, 0, a, 20);
-        f[24] = F("memos[V]", v, 0, 58, 32);
-        f[25] = F("memos[U]", u, 0, 21, 32);
-        f[26] = F("minDecoyFee", 0, 0, 0xd6, 32);
-        f[27] = F("sendCounter[U]", u, 0, 0xe9, 8);
+        f[19] = F("acct[U][7].lastDebit", u, 0, 0xdd, 8);
+        f[20] = F("acct[U][7].accHash", u, 0, 0xea, 32);
+        f[21] = F("acct[U][7].pending[3]", u, 3, 0xeb, 32);
+        f[22] = F("acct[U][7].accWords[0]", u, 0, 0xec, 32);
+        f[23] = F("acct[U][7].accWords[1]", u, 0, 0xed, 32);
+        f[24] = F("entryPtr[V]", v, 0, a, 20);
+        f[25] = F("memos[V]", v, 0, 58, 32);
+        f[26] = F("memos[U]", u, 0, 21, 32);
+        f[27] = F("minDecoyFee", 0, 0, 0xd6, 32);
+        f[28] = F("sendCounter[U]", u, 0, 0xe9, 8);
         f = _more(f, F("pqzVerifyMode", 0, 0, 1, 1));
         f = _more(f, F("pqzVerifierUA", 0, 0, u, 32));
         f = _more(f, F("pqzVerifierShape", 0, 0, 0xd7, 32));
@@ -278,6 +281,8 @@ contract LayoutTest is V2Fixture {
         f = _more(f, F("pqzPendingVerifier", 0, 0, v, 32));
         f = _more(f, F("pqzProposer", 0, 0, 0xdb, 32));
         f = _more(f, F("pqzProposerGeneration", 0, 0, 0xdc, 4));
+        f = _more(f, F("debitRec[U][7].w0", u, 0, 0xde, 32));
+        f = _more(f, F("debitRec[U][7].w1", u, 0, 0xdf, 32));
         _ns(address(p), "pqz", "scaas.pqz", f);
         f = new F[](25);
         f[0] = F("verifier", 0, 0, a, 20);

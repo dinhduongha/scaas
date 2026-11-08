@@ -173,12 +173,13 @@ contract PqzStateVectorsTest is PqzSlots {
         _w(string.concat("], \"T\": ", _hx(_tOf(ua, p, shieldIn)), "}", last ? "" : ","));
     }
 
-    /// The account struct's slots 0..2 of `(ua, version 0)` (group 3g T52: `sendCounter` left the struct, `sendCounter[ua]` is
-    /// its own field, the row's `sendCounter`), the pending slots of `[rolled, p)`, the `acc` slots (materialised only).
+    /// The account struct's slots 0..3 of `(ua, version 0)` (group 3g T52: `sendCounter` left the struct, `sendCounter[ua]` is
+    /// its own field, the row's `sendCounter`; group 3h T58: slot 2 `lastDebit`, slot 3 `accHash`), the pending slots of
+    /// `[rolled, p)`, the `acc` slots (materialised only).
     function _words(bytes32 ua, IPqzToken.AccountState memory a, uint64 p) internal {
         uint256 base = _acctSlot(ua);
         _w(string.concat("\"account\": [", _hx32(_load(address(tok), base)), ", ", _hx32(_load(address(tok), base + 1)), ", ",
-            _hx32(_load(address(tok), base + 2)), "],"));
+            _hx32(_load(address(tok), base + 2)), ", ", _hx32(_load(address(tok), base + 3)), "],"));
         _w("\"pending\": [");
         for (uint64 i = a.rolled; i < p; ++i) {
             bytes32 e = vm.load(address(tok), _pendingSlot(ua, i));
@@ -186,7 +187,7 @@ contract PqzStateVectorsTest is PqzSlots {
         }
         _w("], \"accWords\": [");
         for (uint256 i; a.flags & 1 != 0 && i < PqzCt.ACC_WORDS; ++i) {
-            _w(string.concat(i == 0 ? "" : ",", _hx32(_load(address(tok), base + 4 + i))));
+            _w(string.concat(i == 0 ? "" : ",", _hx32(_load(address(tok), base + 5 + i))));
         }
     }
 

@@ -34,7 +34,8 @@ import {UAPqzVerifier} from "./UAPqzVerifier.sol";
 ///         PQZ account (`AccountNotRegistered`); there is no `authRef`.
 library PqzCore {
     /// @dev Plan 5h D2 / D3. Invariants: `cleared ≤ floor ≤ rolled ≤ pendingCount`; every index `≥ rolled` is pending,
-    ///      `[floor, rolled)` is inside `acc` (with the last debit's `(u, v_f)`), `pending[i]` exists for `i ≥ cleared`.
+    ///      `[floor, rolled)` is inside `acc` (with the last debit's `(u, v_f)`), `pending[i]` exists for every `i <
+    ///      pendingCount` (group 3h PP-1: no slot is ever deleted; `cleared` only marks where the contract stops reading).
     ///      `pending[i]` = `blob(160) ‖ uOff(16) ‖ vOff(16) ‖ block(64)` (`u` and `v` at those byte offsets of the blob's
     ///      data); `vOff = 0` is a TRIVIAL entry (D18) whose amount is the low 64 bits of the blob field. `acc` is
     ///      `(accBlob, accU, accV)` (0: `Trivial(0)`) unless `flags & MAT`: then `accWords`, with `accHash` the keccak of
@@ -49,7 +50,10 @@ library PqzCore {
         uint16 accV;
         uint32 accUnits;
         uint8 flags; // MAT | PREP0 | PREP1
-        bytes32 accHash; // (group 3g: `sendCounter` left the account, `PqzStorage.sendCounter` per UA)
+        // group 3h (PP-2): the counter + 1 of this account's last debit (0: never debited), in the slot 3g's `sendCounter`
+        // left (`PqzStorage.sendCounter` per UA)
+        uint64 lastDebit;
+        bytes32 accHash;
         mapping(uint64 => uint256) pending;
         // P46: `PqzCt.ACC_WORDS` slots, each `not(packed stream word)`; written non-zero (`ACC_MARK`) by `prepareAcc`, never
         // zeroed (D3: a reduced `acc` never stores 0, see `PqzCt.ACC_WORDS`)
@@ -85,6 +89,18 @@ library PqzCore {
         bytes32 pqzPendingVerifier;
         bytes32 pqzProposer;
         uint32 pqzProposerGeneration;
+        // group 3h (PP-2): one record per debit, keyed by the debiting UA and its counter before the increment; written
+        // once by the debit, never changed
+        mapping(bytes32 => mapping(uint64 => DebitRecord)) debitRec;
+    }
+
+    /// @dev Group 3h (pqz-proof-path spec §2.2, PP-2): `w0 = prevBlob(160) ‖ p(64) ‖ Δp(16) ‖ proofStore(8) ‖ flags(8)`
+    ///      (`flags` bit 0 `RECORD` always, so a written record is never the zero word; bit 1 `WIDE` = `w1` written);
+    ///      `w1 = shieldIn(64) ‖ keyVersion(64) ‖ prevCounter(64) ‖ 0(64)`, written only when `shieldIn ≠ 0`, `keyVersion
+    ///      ≠ 0` or the account's previous debit is not `k − 1` (R1).
+    struct DebitRecord {
+        uint256 w0;
+        uint256 w1;
     }
 
     /// @notice The token's immutables a call needs and the statement's `envelopeBinding` word (0 direct).
@@ -196,6 +212,8 @@ library PqzCore {
     ///      `not(packed word)`, never 0 for a reduced `acc` (a TRIVIAL-only `acc` has `u = 0`: its slots are all ones;
     ///      D3, final review I1).
     uint256 internal constant ACC_MARK = 1 << 255;
+    uint8 internal constant RECORD = 1; // a debit record's `flags`: written
+    uint8 internal constant WIDE = 2; // a debit record's `flags`: `w1` written
     uint256 internal constant MAX_TOTAL_SHIELDED = 1 << 62;
     uint256 internal constant VALUE_BOUND = 1 << 64;
     uint256 internal constant HEADER = 640;
@@ -1046,20 +1064,37 @@ library PqzCore {
         return MessageHashUtils.toTypedDataHash(domainSeparator, h);
     }
 
-    /// @dev Plan 5h D4: `acc` = the fresh reference `(blob, uOff, vOff)`, `accUnits = 1`, `rolled = floor = p` (a
-    ///      debit with `p < rolled` un-rolls `[p, rolled)`: pending again, rolled again later), the dead slots
-    ///      `[cleared, p)` deleted (≤ 2·`INLINE_MAX`); `totalShielded += shieldIn − fee − amount` (D19: the token moves
-    ///      the same public units into and out of `SHIELD_POOL`; checked, so a fee or burn above it reverts).
+    /// @dev Plan 5h D4: `acc` = the fresh reference `(blob, uOff, vOff)`, `accUnits = 1`, `rolled = floor = cleared = p`
+    ///      (a debit with `p < rolled` un-rolls `[p, rolled)`: pending again, rolled again later); no slot is deleted
+    ///      (group 3h PP-1); the debit record and `lastDebit` (PP-2, `_record`); `totalShielded += shieldIn − fee −
+    ///      amount` (D19: the token moves the same public units into and out of `SHIELD_POOL`; checked, so a fee or burn
+    ///      above it reverts).
     function _debit(Op memory o, address ptr, uint256 uOff, uint256 vOff) internal {
         PqzStorage storage s = $();
         Account storage a = s.acct[o.from][o.kv];
         uint64 p = o.p;
+        _record(s, a, o);
         (a.accBlob, a.accU, a.accV, a.accUnits, a.flags) = (ptr, uint16(uOff), uint16(vOff), 1, a.flags & ~MAT);
-        (a.rolled, a.floor) = (p, p);
-        for (uint64 i = a.cleared; i < p; ++i) delete a.pending[i];
-        a.cleared = p;
+        (a.rolled, a.floor, a.cleared) = (p, p, p);
         s.totalShielded = s.totalShielded + o.shieldIn - o.fee - o.amount;
         emit IPqzToken.Debited(o.from, o.kv, p, p, ptr);
+    }
+
+    /// @dev PP-2: `debitRec[from][k]` (`k` the counter before the increment) and `lastDebit = k + 1`, before `accBlob`
+    ///      is overwritten: `prevBlob` the account's blob of its previous debit (a rollover never changes it; 0 for the
+    ///      first), `Δp = p − p_prev` (`p_prev` from the previous record, 0 for the first; within `PqzSet.DELTA_P_MAX` by
+    ///      the units rule), `prevCounter = lastDebit − 1`; `w1` per R1. `proofStore` 0 (T60).
+    function _record(PqzStorage storage s, Account storage a, Op memory o) internal {
+        uint64 k = o.sendCounter;
+        uint64 last = a.lastDebit;
+        mapping(uint64 => DebitRecord) storage rec = s.debitRec[o.from];
+        uint64 pPrev = last == 0 ? 0 : uint64(rec[last - 1].w0 >> 32);
+        uint64 prev = last == 0 ? 0 : last - 1;
+        bool wide = o.shieldIn != 0 || o.kv != 0 || (last != 0 && prev + 1 != k);
+        rec[k].w0 = uint256(uint160(a.accBlob)) << 96 | uint256(o.p) << 32 | uint256(uint16(o.p - pPrev)) << 16
+            | (wide ? RECORD | WIDE : RECORD);
+        if (wide) rec[k].w1 = o.shieldIn << 192 | uint256(o.kv) << 128 | uint256(prev) << 64;
+        a.lastDebit = k + 1;
     }
 
     /// @dev `sendCounter[from]++` (one per UA, every version: J2); the debit's `entryRef` (counter before the increment).

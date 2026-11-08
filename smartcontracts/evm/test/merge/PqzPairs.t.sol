@@ -470,7 +470,8 @@ contract PqzPairsTest is PqzNamedBase {
         // is `mtxShield` alone (§10 row 21): IPqzToken 0x5313635f -> 0xd37edfc5, IConfidentialToken 0x69d6bb06 -> mtxShield's
         // group 3f T45: the verdict on the five direct proof entries, the three verifier ops and `pqzVerifyConfig`:
         // IPqzToken 0xd37edfc5 -> 0x4c91dc6a; IPqzWrappedToken moves with its `mtxUnshieldUnwrap`'s selector
-        assertEq(type(IPqzToken).interfaceId, bytes4(0x4c91dc6a), "IPqzToken");
+        // group 3h T58: `pqzDebitRecord`: IPqzToken 0x4c91dc6a -> 0x5037795c
+        assertEq(type(IPqzToken).interfaceId, bytes4(0x5037795c), "IPqzToken");
         assertEq(type(IConfidentialToken).interfaceId, IConfidentialToken.mtxShield.selector, "IConfidentialToken");
         assertEq(type(IPqzWrappedToken).interfaceId, IPqzWrappedToken.mtxUnshieldUnwrap.selector, "IPqzWrappedToken");
     }

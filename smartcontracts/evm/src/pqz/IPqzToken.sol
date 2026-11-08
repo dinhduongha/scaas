@@ -117,7 +117,8 @@ interface IPqzToken is IConfidentialToken {
     ///         the UA's, one for every version): the counters, the `acc` reference (`accBlob`,
     ///         0 for `Trivial(0)`; ignored while `flags & 1`, the materialised `acc`), `flags` (1 MATERIALISED, 2 / 4 the
     ///         prepared halves), `accHash` (the keccak of the materialised `acc`'s
-    ///         packed stream, P46: `PqzCt.CTP` bytes; stale once a debit clears flag 1).
+    ///         packed stream, P46: `PqzCt.CTP` bytes; stale once a debit clears flag 1), `lastDebit` (group 3h, PP-2: the
+    ///         counter + 1 of this account's last debit, 0 = none; `accBlob` is that debit's blob).
     struct AccountState {
         uint64 pendingCount;
         uint64 rolled;
@@ -128,6 +129,24 @@ interface IPqzToken is IConfidentialToken {
         uint8 flags;
         uint64 sendCounter;
         bytes32 accHash;
+        uint64 lastDebit;
+    }
+
+    /// @notice `pqzDebitRecord` (group 3h, pqz-proof-path spec §2.2, PP-2): the debit of `(ua, counter)` as recorded:
+    ///         `prevBlob` the same `(ua, keyVersion)` account's previous debit's blob (0 for its first), `p`, `deltaP = p −
+    ///         p_prev` (`p_prev` that debit's `p`, 0 for the first), the `proofStore` in force, `shieldIn`, the debited
+    ///         `keyVersion`, `prevCounter` the counter of that previous debit (`hasPrev` false: none, `prevCounter` 0).
+    ///         `T` of the debit is `prevBlob`'s `(u, v_f)` + `pending[ua][keyVersion][p − deltaP, p)` +
+    ///         `Trivial(digits(shieldIn))` (spec §2.3).
+    struct DebitRecordView {
+        address prevBlob;
+        uint64 p;
+        uint16 deltaP;
+        uint8 proofStore;
+        uint64 shieldIn;
+        uint64 keyVersion;
+        uint64 prevCounter;
+        bool hasPrev;
     }
 
     /// @notice Proven credit `index` of `(ua, keyVersion)` (group 3g: the receiver's current version); its bytes `u ‖ v_t`
@@ -188,6 +207,8 @@ interface IPqzToken is IConfidentialToken {
     error StaleKeyVersion(bytes32 ua, uint64 keyVersion, uint64 current);
     /// @notice Group 3g (KV-8, KV-11): a key version above current (a debit), or not stored (a disclosure).
     error KeyVersionUnknown(bytes32 ua, uint64 keyVersion);
+    /// @notice Group 3h (PP-2): no debit of `ua` with this counter (`counter ≥ sendCounter`).
+    error DebitRecordUnknown(bytes32 ua, uint64 counter);
 
     // ---- group 3f, PQZ verifier mode (spec §3-§5; CTR-PQZ-27..29 drafts)
     /// @notice An accepted proof in `OFFCHAIN` mode: the verifier's verdict over `statementHash` and `proofHash` at its epoch.
@@ -249,9 +270,12 @@ interface IPqzToken is IConfidentialToken {
     function mtxUnshield(PqzBurnArgs calldata b, uint256 amount, bytes32 recipient, bytes calldata proof,
         IUARegistry.UASig calldata pqzAuth, bytes calldata accHint, PqzSignedVerdict calldata pqzVerdict) external;
     /// @notice The account of `(ua, keyVersion)` (pq-zero-knowledge.md §9.4): counters, the `acc` reference, `accUnits`, flags,
-    ///         the UA's `sendCounter`, `accHash`.
+    ///         the UA's `sendCounter`, `accHash`, `lastDebit` (group 3h).
     function pqzAccount(bytes32 ua, uint64 keyVersion) external view returns (AccountState memory);
-    /// @notice Pending slot `i` of `(ua, keyVersion)`: `blob(160) ‖ uOff(16) ‖ vOff(16) ‖ block(64)`; 0 once deleted.
+    /// @notice Group 3h (PP-2): the record of `ua`'s debit with counter `counter` (`DebitRecordUnknown` without one).
+    function pqzDebitRecord(bytes32 ua, uint64 counter) external view returns (DebitRecordView memory);
+    /// @notice Pending slot `i` of `(ua, keyVersion)`: `blob(160) ‖ uOff(16) ‖ vOff(16) ‖ block(64)`, for every `i <
+    ///         pendingCount` (group 3h PP-1: kept for good); 0 for an unwritten index.
     function pqzPending(bytes32 ua, uint64 keyVersion, uint64 i) external view returns (uint256);
     /// @notice The `acc` ciphertext of `(ua, keyVersion)` from state.
     function pqzAcc(bytes32 ua, uint64 keyVersion) external view returns (bytes memory);
