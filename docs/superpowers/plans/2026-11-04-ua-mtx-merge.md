@@ -2309,6 +2309,10 @@ outside the repo).
 
 **Interfaces:**
 - `P=<date>-ua-mtx-merge`; `FORGE_DIRS="ua zether pqz governance v2 metatx as"`; `SETS="n2048-kmax1024 n2560-kmax16384 n2816-kmax65536"`.
+- **No whole-tree compile** (controller 2026-11-08, after T66a: a whole-tree `forge build` / `forge test` was OOM-killed at the 4 GB
+  `scripts/capped` cap): `build`, every `forge-*` and every `at-set-<set>` step compile one test directory at a time
+  (`FOUNDRY_TEST=<dir>`, its own `FOUNDRY_OUT` / `FOUNDRY_CACHE_PATH`), in the form of `runs/2026-11-08-ua-mtx-merge-t66a/forge-dirs.sh`;
+  `forge-rest` lists its directories explicitly, and the files directly in `test/` run in sparse mode.
 - `STEPS="build forge-ua forge-zether forge-pqz forge-governance forge-v2 forge-metatx forge-as forge-rest at-set-n2048-kmax1024
   at-set-n2560-kmax16384 at-set-n2816-kmax65536 forge-isolate sizes zether-cross clientkeys vectors-check cargo-zether-prover
   ua-rs ua-c ua-cxx ua-qt ua-dart-frb ua-py ua-go ua-cs ua-dart cargo-scaas-node node-e2e-anvil node-e2e-hedera zether-e2e docs
