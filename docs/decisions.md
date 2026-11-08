@@ -273,6 +273,25 @@ account keys are not built while the in-quorum oracle is open; `msig` holders us
 
 **Rule.** Owner 2026-11-08: the audit of this repository is an AI audit by Fable, Opus, GPT-6.1-Sol and Gemini 4 Argon, named as such, never called independent or external; it is enough for the cryptographic-audit gate, including the one before SCaaS mainnet 22776. Code an AI audit round covers at its current commit carries `AI-AUDITED (Fable, Opus, GPT-6.1-Sol, Gemini 4 Argon)` with the round and commit; everything else carries `UNAUDITED`; code changed after its round is `UNAUDITED` again; a round's last step relabels what it covered. The rounds are listed once, here:
 
+<a id="ARCH-POS-15"></a>
+### ARCH-POS-15 — Every RPC consumer takes a list of nodes
+- old: — · status: current · owner: yes · date: 2026-11-08 · normative: decisions.md#ARCH-POS-15 · superseded-by: —
+
+**Rule.** Owner 2026-11-08: anything that reads or writes a chain through an RPC (the node, scaas-wallet, the app, the client
+libraries' reading layers, the reference readers, CLIs and operator tools) accepts a **list** of RPC endpoints, one or more, every
+one named by its operator or holder (never a default or a discovered endpoint). **Reads:** by default **failover** in the order
+given: one read is answered completely by one node, never mixing answers of different nodes, and the next node starts over when
+one fails or is inconsistent; with the **agreement option** a **strict majority** of the named nodes (⌊n/2⌋ + 1) must return the
+same complete answer at the same block (by hash), agreement counted per node over the whole read, else the read is refused.
+**Writes:** the same signed bytes go to one or more of the named nodes (never re-signed per node); the node keeps its own lane
+rules (journal before broadcast, one transaction per nonce). Built first in the reference readers `pqz-read` and
+`zether-read-balance` (`--rpc` repeated, `--rpc-agree`, branch `ua-rs-sign`); the node's indexer already takes `rpc_urls`
+with a quorum; every other consumer follows in its own round.
+**Why.** One node can lie, lag or fail; a list gives availability by failover and, with the majority option, a read that one
+dishonest or broken node cannot change.
+**Cost if wrong.** A single-endpoint consumer either stops when its node is down or trusts whatever that node answers.
+**Source.** owner 2026-11-08 (chat): several `--rpc`, an agreement option, "chỉ cần quá bán", and "ví, hoặc bất cứ thứ gì cần đọc/ghi rpc đều cần cho phép mảng nhiều rpc như vậy".
+
 <a id="audit-rounds"></a>
 
 | Round | Scope | Reviewers (as run) | Target | Status |
