@@ -13,3 +13,7 @@ M9-rOf-ignores-n | test_rOf_op1, test_rOf_op7, test_transferEntry_unchanged | 1
 M22-kv-key-pointer-order | test_kv_op7Rotated | 1
 M10-record-proofStore-zero | test_proofStore_log_burn, test_proofStore_log_op1, test_proofStore_log_op7, test_proofStore_noneLogNone_creditsBetween, test_proofStore_offchain | 1
 M11-log-buffer-not-proof | test_proofStore_log_burn, test_proofStore_log_op1, test_proofStore_log_op7, test_proofStore_noneLogNone_creditsBetween, test_proofStore_offchain | 1
+M13-bit24-on-zether | test_bit24_otherKindsRefused | 1
+M14-bit24-delay-relaxed | test_bit24_notDelayed, test_bit24_validKinds_12, test_bit24_validKinds_13, test_disable24_freezesValue_log, test_disable24_freezesValue_none | 1
+M15-setProofStore-ungated | test_disable24_freezesValue_log, test_disable24_freezesValue_none, test_setProofStore_gated | 1
+M20-setProofStore-byte22 | test_bit24_anyHolder_contract, test_bit24_anyHolder_eoa, test_bit24_anyHolder_msig, test_bit24_anyHolder_singleKey, test_disable24_freezesValue_log, test_proofStore_change_appliesNextDebit, test_router_UASetProofStore, test_setProofStore_noop | 1
