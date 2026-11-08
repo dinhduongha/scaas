@@ -21,6 +21,7 @@ FORGE = os.path.expanduser("~/.foundry/bin/forge")
 CORE = "src/pqz/PqzCore.sol"
 STATE = "src/pqz/PqzStateLib.sol"
 REC = "test/pqz/PqzDebitRecord.t.sol"
+TAG = "test/pqz/PqzOwnTag.t.sol"
 
 # id: (file, old, new, test file)
 MUTANTS = {
@@ -40,6 +41,20 @@ MUTANTS = {
                                          "        a.floor = end;\n        if (end > a.cleared) {\n            a.cleared = end;\n", REC),
     "M18-w1-not-for-shieldIn": (CORE, "bool wide = o.shieldIn != 0 || o.kv != 0 ||", "bool wide = o.kv != 0 ||", REC),
     "M21-deltaP-from-floor": (CORE, "uint64 pPrev = last == 0 ? 0 : uint64(rec[last - 1].w0 >> 32);", "uint64 pPrev = a.floor;", REC),
+    # ---- T59: ownTag, the key-version tail, memoHash (spec §3)
+    "M7-memoHash-without-ownTag": (CORE, "return hash ? keccak256(abi.encodePacked(salt, sealedMemo, ownTag)) : keccak256(abi.encodePacked(ownTag));",
+                                   "return hash ? keccak256(abi.encodePacked(salt, sealedMemo)) : bytes32(0);", TAG),
+    "M8-ownTag-before-vf": (CORE, "        PqzCt.packCd(blob, q + 32, t.vFrom);\n        uint64[] memory kv = new uint64[](n);\n        kv[0] = o.verT;\n"
+                            "        if (o.auditorOn == 1) kv[1] = o.verA;\n        _putTail(blob, q + 32 + PqzCt.VP, o.ownTag, kv);\n",
+                            "        _put(blob, q + 32, abi.encodePacked(o.ownTag));\n        PqzCt.packCd(blob, q + 64, t.vFrom);\n"
+                            "        bytes memory tl;\n        tl = bytes.concat(tl, bytes8(o.verT));\n"
+                            "        if (o.auditorOn == 1) tl = bytes.concat(tl, bytes8(o.verA));\n"
+                            "        _put(blob, q + 64 + PqzCt.VP, bytes.concat(tl, bytes1(uint8(n))));\n", TAG),
+    "M9-rOf-ignores-n": (CORE, "        r = new bytes(_vfOf(len, n));", "        r = new bytes(_vfOf(len, 0));", TAG),
+    "M22-kv-key-pointer-order": (CORE, "        for (uint256 j; j < m; ++j) kv[j] = o.vers[j];\n",
+                                 "        address[] memory ks = new address[](m);\n        for (uint256 j; j < m; ++j) (ks[j], kv[j]) = (o.keys[j], o.vers[j]);\n"
+                                 "        for (uint256 x = 1; x < m; ++x) for (uint256 y = x; y > 0 && ks[y] < ks[y - 1]; --y) {\n"
+                                 "            (ks[y], ks[y - 1]) = (ks[y - 1], ks[y]);\n            (kv[y], kv[y - 1]) = (kv[y - 1], kv[y]);\n        }\n", TAG),
 }
 
 

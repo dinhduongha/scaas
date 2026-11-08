@@ -154,7 +154,8 @@ contract PqzOwnTagTest is PqzFixture {
         assertEq(abi.encode(kv), abi.encode(want), "every leg, then the auditor");
     }
 
-    /// A leg rotated before the debit: its current version, in leg order, not in key-pointer order (M22).
+    /// A leg rotated before the debit: its current version, in leg order, not in key-pointer order (M22): both leg orders, so
+    /// one of them differs from the pointers' order whatever addresses the keys got.
     function test_kv_op7Rotated() public {
         _shield(alice, 10);
         _rotate(carol, 1, _pk(32));
@@ -163,6 +164,10 @@ contract PqzOwnTagTest is PqzFixture {
         bytes32 ref = tok.mtxConfidentialTransfer(_op7(alice, _two(carol, bob), 1, false, TAG, 6), PROOF, _pqAuth(), "", noVerdict());
         (, uint64[] memory kv,) = _tail(tok.pqzEntryBlob(ref));
         assertEq(abi.encode(kv), abi.encode(_kv2(2, 1)), "carol 2, bob 1, as the legs");
+        _shield(alice, 3);
+        ref = tok.mtxConfidentialTransfer(_op7(alice, _two(bob, carol), 2, false, TAG, 7), PROOF, _pqAuth(), "", noVerdict());
+        (, kv,) = _tail(tok.pqzEntryBlob(ref));
+        assertEq(abi.encode(kv), abi.encode(_kv2(1, 2)), "bob 1, carol 2, as the legs");
     }
 
     /// The auditor rotated between two debits: each blob names the version read in its own call.
