@@ -178,84 +178,52 @@
     },
     {
       "checked": {
-        "kem": 1,
+        "kem": 0,
         "pop": 1,
         "pqzKey": 1,
         "pqzPop": 0
       },
-      "kemMaxAfter": [
-        3,
-        3,
-        3
-      ],
-      "kemOrder": [
-        3,
-        1,
-        2
-      ],
+      "kemMaxAfter": [],
+      "kemOrder": [],
       "kind": 288,
       "name": "msig-pq/n2048-kmax1024",
       "ua": "0xa8bef7f236ab68b1a7d5e0b27d60a0543b48cfaf5bb02a8070e5ea75ddeda4ee"
     },
     {
       "checked": {
-        "kem": 1,
+        "kem": 0,
         "pop": 1,
         "pqzKey": 1,
         "pqzPop": 0
       },
-      "kemMaxAfter": [
-        3,
-        3,
-        3
-      ],
-      "kemOrder": [
-        3,
-        1,
-        2
-      ],
+      "kemMaxAfter": [],
+      "kemOrder": [],
       "kind": 288,
       "name": "msig-pq/n2304-kmax4096",
       "ua": "0xa8bef7f236ab68b1a7d5e0b27d60a0543b48cfaf5bb02a8070e5ea75ddeda4ee"
     },
     {
       "checked": {
-        "kem": 1,
+        "kem": 0,
         "pop": 1,
         "pqzKey": 1,
         "pqzPop": 0
       },
-      "kemMaxAfter": [
-        3,
-        3,
-        3
-      ],
-      "kemOrder": [
-        3,
-        1,
-        2
-      ],
+      "kemMaxAfter": [],
+      "kemOrder": [],
       "kind": 288,
       "name": "msig-pq/n2560-kmax16384",
       "ua": "0xa8bef7f236ab68b1a7d5e0b27d60a0543b48cfaf5bb02a8070e5ea75ddeda4ee"
     },
     {
       "checked": {
-        "kem": 1,
+        "kem": 0,
         "pop": 1,
         "pqzKey": 1,
         "pqzPop": 0
       },
-      "kemMaxAfter": [
-        3,
-        3,
-        3
-      ],
-      "kemOrder": [
-        3,
-        1,
-        2
-      ],
+      "kemMaxAfter": [],
+      "kemOrder": [],
       "kind": 288,
       "name": "msig-pq/n2816-kmax65536",
       "ua": "0xa8bef7f236ab68b1a7d5e0b27d60a0543b48cfaf5bb02a8070e5ea75ddeda4ee"
