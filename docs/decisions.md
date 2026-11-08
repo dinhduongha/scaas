@@ -8320,7 +8320,7 @@ Change: the app never offers `approve` on a SCaaS token; spenders on outside tok
 
 ## 39. Clients — UA libraries
 
-Rules of the `ua-rs` wallet surface and its facades, then the records of the decisions behind them (CLI-UAL-50 to CLI-UAL-56). Everything here is UNAUDITED.
+Rules of the `ua-rs` wallet surface and its facades, then the records of the decisions behind them (CLI-UAL-50 to CLI-UAL-57). Everything here is UNAUDITED.
 
 ### CLI-UAL-01 — `ua-rs` is the only signer; a secret leaves it only through a named export
 - old: — · status: current · owner: yes · date: 2026-11-05 · normative: clients/ua-libraries.md#CLI-UAL-01 · superseded-by: —
@@ -8579,7 +8579,7 @@ Rules of the `ua-rs` wallet surface and its facades, then the records of the dec
 - old: — · status: current · owner: yes · date: 2026-11-06 · normative: clients/ua-libraries.md#CLI-UAL-35 · superseded-by: —
 
 **Why.** A fabricated token contract can hold any words.
-**Status.** SPECIFIED; the reference layers check `_info[token]` at hand-copied offsets until the factory index is pinned (T67 on `ua-mtx-merge`).
+**Status.** SPECIFIED; the reference layers check the factory index's `_rec[token]` (word 2: class TOKEN, the facade's kinds) at the slot and packing of its pin (T20b, CLI-UAL-57).
 **Source.** [no-oracle spec](superpowers/specs/2026-11-06-no-decryption-oracle.md) §4.2.
 
 ### CLI-UAL-36 — Requirement 6: the selected leg belongs to the handle
@@ -8754,10 +8754,31 @@ Advisories: RUSTSEC-2026-0387 (`crypto-bigint` 0.5.5): T3a moved `k256` and `p25
 - **Registry slots from the layout pin:** `pqz-read`'s registry slots (2, 4, 5, 17) and its `anvil` fixture read
   `smartcontracts/evm/test/ua/UAStoreLayout.t.sol` (the probe's slot comments, the packing of the two words decoded), no longer a
   hand copy. BUILT.
-- **Not in this sync:** the factory index's record (T67's `Rec` at slot 8 replaces `_info`) reaches `pqz-read` and
-  `zether-read-balance` with T15m2 at the next milestone (factory index + chain-neutral); `uaEnvelope`, zether-prover's new keyless
-  command, is not on the Zether facade's allow-list.
+- **Not in this sync:** the factory index's record (T67's `Rec` at slot 8 replaces `_info`) and `uaEnvelope` on the Zether
+  facade came with the second sync (CLI-UAL-57).
 **Source.** [plan](superpowers/plans/2026-11-05-ua-rs-sign.md) T15o, T20b; `smartcontracts/evm/runs/2026-11-08-ua-rs-sign-t20b1-summary.txt`.
+
+<a id="CLI-UAL-57"></a>
+### CLI-UAL-57 — Controller decisions of the second sync with `ua-mtx-merge` (T20b, 2026-11-08)
+- old: — · status: current · owner: no · date: 2026-11-08 · normative: decisions.md#CLI-UAL-57 · superseded-by: —
+
+**Rule.** The owner may override any. At the merge of `ua-mtx-merge` `4f6d8605` (the factory index and chain-neutral group, nothing
+of 3f) into `ua-rs-sign`, and the size ratchet of the first sync:
+- **Size baseline:** the five x86-64 cdylib rows grown past the 1 % tolerance and the Android no-default row that shrank moved
+  old → new by hand (`fc8ad35b`, the reason the merged code); `ua-sizes` rc 0 after. BUILT.
+- **The factory record (T15m2):** `pqz-read` and `zether-read-balance` read the factory index's `_rec[token]` (slot 8, word 2:
+  `contractClass` TOKEN, `kind` among the reader's kinds, from the low end) at the slot and packing of ua-mtx-merge's pin
+  `test/zether/ZetherStateVectors.t.sol`; their `anvil` fixtures write that layout from the pin; the old one-word `_info` is
+  refused. `zether-read-balance`'s registry slots are held to `UAStore.Layout`'s pin as `pqz-read`'s are. BUILT.
+- **The factory ABI and index views** (chain-neutral spec §6.3): no `ua-*` binding carries the factory ABI, and the reading layers
+  read the factory's storage words (CLI-UAL-34), not its views, so nothing changes there. `ua-rs` gains the CREATE3 predictor (`factory::create3_address`,
+  `create3_kat.json`), what a signer shows before a router create op; no ABI export or binding yet. BUILT.
+- **The router's create rows** `UACreateToken`, `UACreateDex`, `UACreateInstance` are in `ua-rs`'s op table (83 rows). BUILT.
+- **`uaEnvelope` on the Zether facade:** the merged entries' generic `mtxExecute(UAMetaTransaction, UASig)` needs its binding and
+  digest, so the facade passes zether-prover's keyless `uaEnvelope` with `envelope`'s fields. BUILT.
+- **Not built:** the clone's `ChainEnv` layout has no reader here: binding `--registry` to the token's env `registry` (the stated
+  residual of both reference layers) is a question for the controller, not done.
+**Source.** [plan](superpowers/plans/2026-11-05-ua-rs-sign.md) T20b; `smartcontracts/evm/runs/2026-11-08-ua-rs-sign-t20b2-summary.txt`.
 
 ## 40. Integration — ERP
 

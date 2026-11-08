@@ -221,6 +221,35 @@ impl Drop for Anvil {
     }
 }
 
+/// The pins this test writes storage by (T20b second sync, never a hand copy): `OpenFactory._rec`'s slot (ua-mtx-merge's
+/// `test/zether/ZetherStateVectors.t.sol`, `REC`) and the registry's `UAStore.Layout` slots (`test/ua/UAStoreLayout.t.sol`, the
+/// probe's `s.<field>…; // <slot>`).
+const REC: (&str, &str) = ("zether/ZetherStateVectors.t.sol", "REC");
+const RECORDS: (&str, &str) = ("ua/UAStoreLayout.t.sol", "records");
+const UA_COUNT: (&str, &str) = ("ua/UAStoreLayout.t.sol", "uaCount");
+const UA_AT: (&str, &str) = ("ua/UAStoreLayout.t.sol", "uaAt");
+fn pin_slot((file, field): (&str, &str)) -> u64 {
+    let pin = std::fs::read_to_string(format!("{}/../../smartcontracts/evm/test/{file}", env!("CARGO_MANIFEST_DIR"))).unwrap();
+    pin.lines()
+        .find_map(|l| {
+            let l = l.trim();
+            if let Some(v) = l.strip_prefix(&format!("uint256 internal constant {field} = ")) {
+                return v.strip_suffix(';')?.parse().ok();
+            }
+            let rest = l.strip_prefix("s.")?.strip_prefix(field)?;
+            rest.starts_with(['[', '.', ' ']).then_some(())?;
+            rest.rsplit_once("// ")?.1.split_whitespace().next()?.parse().ok()
+        })
+        .unwrap_or_else(|| panic!("{field}: not in {file}"))
+}
+/// `_rec[token]` word 2 (T67), from the low end `contractClass(16) ‖ kind(16) ‖ version(64)`: class TOKEN, version 1.
+fn record(kind: u8) -> [u8; 32] {
+    let mut w = [0u8; 32];
+    w[31] = 1;
+    w[29] = kind;
+    w[27] = 1;
+    w
+}
 fn add(a: &[u8; 32], i: u64) -> [u8; 32] {
     let mut o = *a;
     let mut c = u128::from(i);
@@ -234,7 +263,7 @@ fn add(a: &[u8; 32], i: u64) -> [u8; 32] {
 
 /// `zether-read-balance --rpc` as a reading layer (R1–R7, spec §4.2) against a local `anvil` (`ANVIL`, default `anvil` on the
 /// PATH; run with `--ignored` under `scripts/capped`): the state is written into storage with `anvil_setStorageAt` (a
-/// factory's `_info[token]`, the token's `psid` and two accounts), then read. R2: another chain id or chain_uid refused. R3:
+/// factory's `_rec[token]` (T67's record, from its pin), the token's `psid` and two accounts), then read. R2: another chain id or chain_uid refused. R3:
 /// a depth past the head refused; the words of the block at `head − depth`, not the head's. R5: a token the factory does not
 /// catalogue, or catalogues as a PQZ kind, refused. R6: this key's account, not the other one. The cache box checked against
 /// the state: a right entry is used without BSGS (`cache+rpc`), a stale one falls back to BSGS on the state.
@@ -270,10 +299,7 @@ fn rpc_reading_layer_against_anvil() {
     let catalogue = |t: &str, kind: u8| {
         let mut k = [0u8; 32];
         k[12..].copy_from_slice(&hex::decode(&t[2..]).unwrap());
-        let mut info = [0u8; 32];
-        info[2] = 1; // exists
-        info[11] = kind;
-        set(factory, &keccak256(&[k, be(8)].concat()), &info);
+        set(factory, &add(&keccak256(&[k, be(pin_slot(REC))].concat()), 2), &record(kind));
     };
     catalogue(token, 2);
     catalogue(pqz_token, 4);
@@ -431,10 +457,7 @@ fn decoys_against_anvil() {
     for (t, kind) in [(token, 2u8), (pqz_token, 4)] {
         let mut k = [0u8; 32];
         k[12..].copy_from_slice(&hex::decode(&t[2..]).unwrap());
-        let mut info = [0u8; 32];
-        info[2] = 1;
-        info[11] = kind;
-        set(factory, &k2(&k, &be(8)), &info);
+        set(factory, &add(&k2(&k, &be(pin_slot(REC))), 2), &record(kind));
     }
     let seed = zether_prover::keys::seed_from_mnemonic(MNEMONIC, "").unwrap();
     let keys: Vec<_> = (0..10).map(|a| zether_prover::keys::ZetherKey::<Bls12381>::conf(&seed[..], 60, a).unwrap()).collect();
@@ -447,10 +470,10 @@ fn decoys_against_anvil() {
         rec[..5].copy_from_slice(&index.to_be_bytes()[3..]);
         rec[5..25].copy_from_slice(&hex::decode(&ptr[2..]).unwrap());
         rec[30..].copy_from_slice(&[0x01, 0x41]);
-        set(r, &k2(&ua, &be(0)), &rec);
-        set(r, &k2(&be(index), &k2(&be(0x0141), &be(5))), &ua);
+        set(r, &k2(&ua, &be(pin_slot(RECORDS))), &rec);
+        set(r, &k2(&be(index), &k2(&be(0x0141), &be(pin_slot(UA_AT)))), &ua);
         rpc(&url, "anvil_setCode", json!([ptr, hx(&[vec![0u8], y(key)].concat())]));
-        set(r, &k2(&be(0x0141), &be(4)), &be(index + 1));
+        set(r, &k2(&be(0x0141), &be(pin_slot(UA_COUNT))), &be(index + 1));
     };
     // the counters word `accSeq ‖ pendingSeq ‖ lastRolledPendingSeq ‖ sendCounter` (low end first) of `ua(i)`
     let root = zether_prover::state::ROOT;
@@ -467,7 +490,7 @@ fn decoys_against_anvil() {
     let mut other_kind = [0u8; 32]; // the same record, of kind 0x0142
     other_kind[5..25].copy_from_slice(&hex::decode(format!("{:040x}", 0xc0de00 + 0x200)).unwrap());
     other_kind[30..].copy_from_slice(&[0x01, 0x42]);
-    set(reg3, &k2(&ua(2), &be(0)), &other_kind);
+    set(reg3, &k2(&ua(2), &be(pin_slot(RECORDS))), &other_kind);
     (2..=5).for_each(|i| counters(i, 1, 1));
     // `anvil_setStorageAt` writes the head block's state: a write at head `h` is seen from block `h` on
     mine(1); // 1: the sync point, eight listed

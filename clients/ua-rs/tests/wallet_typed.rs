@@ -54,11 +54,11 @@ const DOMAIN_NAMES: [&str; 7] = [
     "SCaaS GovernanceRouter",
 ];
 
-/// `typed/typed_ops.json`: every signed struct (80, ua-mtx-merge's merged-entry rows) in every domain it is signed in: `encodeType`,
-/// `structHash`, the domain separator and the digest from the row's typed data; the SCaaS builder of the row's primary type
-/// (`scaas_typed_data`, the op table) gives the same digest in each of its domains and, in every other SCaaS domain name, refuses
-/// or builds another struct (`UARollOver`: the Zether row and the PQZ row `UAPqzRollOver`, group 3g); each row's ECDSA signature
-/// recovers to the row's key over that digest.
+/// `typed/typed_ops.json`: every signed struct (83: ua-mtx-merge's merged-entry rows and T76's router creations) in every domain
+/// it is signed in: `encodeType`, `structHash`, the domain separator and the digest from the row's typed data; the SCaaS builder
+/// of the row's primary type (`scaas_typed_data`, the op table) gives the same digest in each of its domains and, in every other
+/// SCaaS domain name, refuses or builds another struct (`UARollOver`: the Zether row and the PQZ row `UAPqzRollOver`, group 3g);
+/// each row's ECDSA signature recovers to the row's key over that digest.
 #[test]
 fn typed_ops_json_rows() {
     let t = load("typed/typed_ops.json");
@@ -94,7 +94,7 @@ fn typed_ops_json_rows() {
             }
         }
     }
-    assert_eq!((ops, rows), (80, 114));
+    assert_eq!((ops, rows), (83, 117));
 }
 
 /// `ua/portable.json` and `ua/nested.json`: the typed data of every registration, KEM record, PQZ key record and acceptance hashes

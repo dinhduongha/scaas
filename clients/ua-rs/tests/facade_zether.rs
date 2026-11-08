@@ -120,7 +120,7 @@ fn release_has_no_raw_decrypt() {
     unlock();
     let raw = ["decrypt", "decryptPending", "rawCheckBalance", "rawProveTransfer", "rawProveTransferMulti", "rawProveBurn", "rawOpenMemo",
         "rawRecoverTransfer", "rawOpenDisclosure"];
-    let release = ["encrypt", "pop", "ownerAuth", "uaSig", "shieldCalldata", "envelope", "typedDigest", "namedCall", "balance",
+    let release = ["encrypt", "pop", "ownerAuth", "uaSig", "shieldCalldata", "envelope", "uaEnvelope", "typedDigest", "namedCall", "balance",
         "pendingBalance", "checkBalance", "proveTransfer", "proveTransferMulti", "proveBurn", "openMemo", "recoverTransfer", "openDisclosure", "pickDecoys"];
     for cmd in release {
         assert!(COMMANDS.contains(&cmd), "{cmd}");
@@ -453,4 +453,35 @@ fn pick_decoys() {
     }
     w.lock();
     assert!(call(&k, "pickDecoys", &r).is_ok(), "no key used");
+}
+
+/// T20b second sync: the merged entries' generic binding (`uaEnvelope`, zether-prover's keyless command since ua-mtx-merge T12, R35:
+/// `mtxExecute(UAMetaTransaction, UASig)`) passes the facade with `envelope`'s fields: the binding and digest zether-prover
+/// pins against `cast` (`ua_envelope_matches_cast`), for a padded native id and a derived id; a `key` field or a field off the
+/// list is refused before the prover, an address `from` by the prover.
+#[test]
+fn ua_envelope_through_the_facade() {
+    unlock();
+    let w = wallet();
+    let k = w.zether_key(60, 0, 7).unwrap();
+    let hx = |b: &[u8]| format!("0x{}", hex::encode(b));
+    let meta = |from: String| json!({
+        "chainId": 31337, "chainUid": hx(&[0x11; 32]), "token": hx(&[0x22; 20]),
+        "meta": {"from": from, "data": "0xdeadbeef", "batch": hx(&[1; 32]), "nonce": 7, "validUntil": 1_800_000_000u64,
+                 "mode": 1 | 0x20, "relayer": hx(&[0xbb; 20]), "fee": 1000, "feeRecipient": hx(&[0xcc; 20])},
+    });
+    let mut native = [0u8; 32];
+    native[12..].fill(0xaa);
+    let prover = |v: &Value| -> Value { serde_json::from_str(&zether_prover::api::call("uaEnvelope", &v.to_string()).unwrap()).unwrap() };
+    for from in [native, [0x7a; 32]] {
+        let v = meta(hx(&from));
+        assert_eq!(call(&k, "uaEnvelope", &v).unwrap(), prover(&v), "the prover's binding and digest of {}", hx(&from));
+    }
+    let mut keyed = meta(hx(&native));
+    keyed["key"] = json!({"x": "0x01"});
+    assert_eq!(call(&k, "uaEnvelope", &keyed).err(), Some(Error::Argument), "a key object");
+    let mut extra = meta(hx(&native));
+    extra["revealSecret"] = json!(true);
+    assert_eq!(call(&k, "uaEnvelope", &extra).err(), Some(Error::Argument), "a field off the list");
+    assert!(call(&k, "uaEnvelope", &meta(hx(&[0xaa; 20]))).is_err(), "an address from");
 }

@@ -103,6 +103,7 @@ pub const COMMANDS: &[&str] = &[
     "uaSig",
     "shieldCalldata",
     "envelope",
+    "uaEnvelope",
     "typedDigest",
     "namedCall",
     "balance",
@@ -170,7 +171,7 @@ fn allowed(cmd: &str, field: &str) -> bool {
         "pop" => field == "curve",
         "ownerAuth" => has(&["curve", "digest"]),
         "uaSig" => has(&["curve", "purpose", "digest"]),
-        "envelope" => has(&["chainId", "chainUid", "token", "meta"]),
+        "envelope" | "uaEnvelope" => has(&["chainId", "chainUid", "token", "meta"]),
         "typedDigest" => has(&["op", "chainId", "chainUid", "token", "message"]),
         "namedCall" => has(&[
             "op", "env", "payload", "proof", "beneficiary", "sig", "recipient", "amount", "unwrap", "chainId", "chainUid", "token",

@@ -161,6 +161,14 @@ fn reg_slot(field: &str) -> u64 {
         .unwrap_or_else(|| panic!("{field}: not in the registry's layout pin"))
 }
 
+/// `OpenFactory._rec`'s slot, read from the pin ua-mtx-merge keeps for it (`test/zether/ZetherStateVectors.t.sol`, `REC`; T20b
+/// second sync), never copied by hand.
+fn rec_slot() -> u64 {
+    let pin = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../smartcontracts/evm/test/zether/ZetherStateVectors.t.sol"))
+        .unwrap();
+    pin.lines().find_map(|l| l.trim().strip_prefix("uint256 internal constant REC = ")?.strip_suffix(';')?.parse().ok()).expect("REC")
+}
+
 struct Node {
     url: String,
     root: Word,
@@ -176,12 +184,14 @@ impl Node {
         rpc(&self.url, "anvil_setCode", json!([hx(addr), code]));
         assert_eq!(&rpc(&self.url, "eth_getCode", json!([hx(addr), "latest"])), code);
     }
-    /// `OpenFactory._info[token]`: `exists` and `kind`.
+    /// `OpenFactory._rec[token]` (the factory index, ua-mtx-merge T67; its slot from the layout pin): word 2, from the low end
+    /// `contractClass(16) ‖ kind(16) ‖ version(64)`; `exists` is class TOKEN (1), else 0 (not made here).
     fn catalogue(&self, factory: &[u8; 20], token: &[u8; 20], kind: u8, exists: bool) {
-        let mut info = [0u8; 32];
-        info[2] = exists as u8;
-        info[11] = kind;
-        self.set(factory, &k(&word_of(token), &be(8)), &info);
+        let mut w = [0u8; 32];
+        w[31] = exists as u8;
+        w[29] = kind;
+        w[27] = 1; // version 1
+        self.set(factory, &add(&k(&word_of(token), &be(rec_slot())), 2), &w);
     }
     /// A words request's account (`balance`'s shape: the forge rows with [`forge_versions`], the wallet rows, `Chain::bal`)
     /// into `token`'s storage at its key version (group 3g: `acct[ua][v]`, `sendCounter[ua]`), its key record and version word

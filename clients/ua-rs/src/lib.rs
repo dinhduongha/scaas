@@ -545,3 +545,5 @@ pub fn encode_msig(threshold: u16, members: &[(u16, [u8; 32], u16)]) -> Vec<u8> 
 /// ua-mtx-merge T34: the regulated kinds' router ops, `recordId`, the relaxation `commit`, `R` (regulated-kinds spec §3, §5).
 pub mod regulated;
 pub mod pay;
+/// T20b (ua-mtx-merge T71, T74): the factory's chain-neutral CREATE3 address of a creation (chain-neutral releases spec §4).
+pub mod factory;

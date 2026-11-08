@@ -740,6 +740,11 @@ const OPS: &[Op] = &[
     op("UASetExchangeTarget", "address target,address exchangeTarget,bool listed", &[ROUTER], None),
     op("UASetListedOnly", "address target,bool on", &[ROUTER], None),
     op("UASetFeeSplit", "address target,uint32 relayerSharePpm,address treasury", &[ROUTER], None),
+    // the factory's creations through the router (chain-neutral spec §4.4, S3; ua-mtx-merge T76): `target` the chain's
+    // `OpenFactory`, the signing UA the creator, `initHash = keccak256(initArgs)` (`initCall` for an instance) signed
+    op("UACreateToken", "address target,uint8 kind,uint64 version,bytes32 initHash,bytes32 salt", &[ROUTER], None),
+    op("UACreateDex", "address target,uint64 version,bytes32 initHash,bytes32 salt", &[ROUTER], None),
+    op("UACreateInstance", "address target,uint16 contractClass,uint16 kind,uint64 version,bytes32 initHash,bytes32 salt", &[ROUTER], None),
     // the regulated kinds' controls (regulated-kinds spec §3.1) and bit 23 `TAX` (pay-meta-tax spec §6.2)
     op("UAFreeze", "address target,bytes32 account,bytes32 ref,bytes32 recordId", &[ROUTER], None),
     op("UAUnfreeze", "address target,bytes32 account,bytes32 ref", &[ROUTER], None),

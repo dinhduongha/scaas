@@ -25,7 +25,8 @@
 //!   `--chain-id` and `--chain-uid` (the genesis hash, NET-ALL-22). R3: one block, the chain's `finalized` block
 //!   (`--finalized`) or `head − depth` (`--depth`, the holder's confirmation depth on a chain without finality,
 //!   NET-EVM-04); every read names that block by hash (EIP-1898). R4: storage words only (`eth_getStorageAt`), no view.
-//!   R5: the token is catalogued by `--factory` (`OpenFactory._info[token]`, slot 8: `exists` set, `kind` a Zether kind).
+//!   R5: the token is catalogued by `--factory` (`OpenFactory._rec[token]`, the factory index's record at slot 8: `contractClass`
+//!   TOKEN, `kind` a Zether kind; slot and packing held to ua-mtx-merge's pin `test/zether/ZetherStateVectors.t.sol`, T20b).
 //!   R6: the account read is `acct[UA(Y)]` of this key, computed here. R7: every read happens before the key is used,
 //!   and nothing after it goes back to the node. The URL and body go to `curl` on its stdin (`--config -`, `-q` first),
 //!   never in argv. The words are parsed and rebuilt by `zether_prover::state` (the layout pinned by T19c).
@@ -55,9 +56,9 @@
 //! those blocks' state. `--decoy-keys` (the UAs `pickDecoys` chose, with the same `--sync-block`) prints `{decoys: [{ua, yTo}]}`
 //! (each a recipient with `amount` 0): each UA's record of kind `0x0141` (registry slot 0) with its list index below the
 //! sync point's count and `uaAt` at that index equal to it, its `Y` from the record's SSTORE2 code, and `UA(Y)` equal to it.
-//! Residuals: the registry's slots 0, 4 and 5 are hand-copied (no registry layout pin on this branch); `--registry` must be
-//! the generation that lists `0x0141` (a predecessor's list is not followed); the two steps are two reads (each pinned to its
-//! own block; the sync point bounds both).
+//! The registry's slots 0, 4 and 5 are held to its layout pin, `test/ua/UAStoreLayout.t.sol` (T20b). Residuals:
+//! `--registry` must be the generation that lists `0x0141` (a predecessor's list is not followed); the two steps are two reads
+//! (each pinned to its own block; the sync point bounds both).
 
 use std::io::{IsTerminal, Read};
 use std::process::{Command, ExitCode, Stdio};
@@ -72,9 +73,12 @@ use zether_prover::keys::ZetherKey;
 use zether_prover::state;
 
 const TABLE_BITS_CLI: std::ops::RangeInclusive<u32> = 20..=27;
-/// `OpenFactory._info` (slot 8): `creator(160) ‖ kind(8) ‖ version(64) ‖ exists(8)`; the Zether kinds (`IOpenFactory.TokenKind`
+/// `OpenFactory._rec` (the factory index, ua-mtx-merge T67; slot 8, where `_info` was): three words `creatorId`, `ownerUA`,
+/// `contractClass(16) ‖ kind(16) ‖ version(64) ‖ createdBlock(64) ‖ createdAt(64)` from the low end; held to its pin,
+/// `test/zether/ZetherStateVectors.t.sol`, by `factory_record_is_the_layout_pin`. The Zether kinds (`IOpenFactory.TokenKind`
 /// NORMAL_ZETHER, WRAPPED_ZETHER, NORMAL_ZETHER_REGULATED, WRAPPED_ZETHER_REGULATED).
-const INFO_SLOT: u64 = 8;
+const REC_SLOT: u64 = 8;
+const CLASS_TOKEN: u16 = 1;
 const ZETHER_KINDS: [u8; 4] = [2, 3, 10, 11];
 
 #[derive(Default)]
@@ -296,12 +300,20 @@ fn open(a: &Args) -> Result<Reader<'_>, String> {
     let t: [u8; 20] = unhex(token)?.try_into().map_err(|_| "--token: 20 bytes")?;
     let mut key = [0u8; 32];
     key[12..].copy_from_slice(&t);
-    let info = r.word(factory, &keccak256(&[key, be(INFO_SLOT)].concat()))?;
-    // counted from the low end: `kind` byte 20, `exists` byte 29
-    if info[2] != 1 || !ZETHER_KINDS.contains(&info[11]) {
+    // `_rec[token]`'s word 2
+    let rec = r.word(factory, &add(&keccak256(&[key, be(REC_SLOT)].concat()), 2))?;
+    if !catalogued(&rec) {
         return Err("R5: the token is not a Zether token catalogued by this factory".into());
     }
     Ok(r)
+}
+
+/// `_rec[token]` word 2 names a token (class TOKEN; 0 is "not made here") of a Zether kind: `contractClass` the low 16 bits,
+/// `kind` the next 16.
+fn catalogued(rec: &[u8; 32]) -> bool {
+    let class = u16::from_be_bytes([rec[30], rec[31]]);
+    let kind = u16::from_be_bytes([rec[28], rec[29]]);
+    class == CLASS_TOKEN && ZETHER_KINDS.iter().any(|k| u16::from(*k) == kind)
 }
 
 /// R1–R6: the words of `acct[ua]` of `token`, read at one final block of the configured chain from the one node, with the
@@ -579,5 +591,60 @@ mod tests {
         assert_eq!(v["key"]["x"], json!(""));
         assert_eq!(v["key"]["n"][0], json!(""));
         assert_eq!(add(&[0xff; 32], 1), [0; 32]);
+    }
+
+    /// T20b second sync (T15m2): `OpenFactory._rec[token]` (the factory index, ua-mtx-merge T67) is read where its pin puts it,
+    /// `test/zether/ZetherStateVectors.t.sol`: slot `REC`, word 2 (`base + 2`), from the low end `contractClass(16) ‖ kind(16) ‖
+    /// version(64)`; R5 takes class TOKEN with one of this reader's kinds, never the old one-word `_info` packing.
+    #[test]
+    fn factory_record_is_the_layout_pin() {
+        let pin = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../smartcontracts/evm/test/zether/ZetherStateVectors.t.sol"))
+            .unwrap();
+        for a in [
+            &format!("uint256 internal constant REC = {REC_SLOT};")[..],
+            "uint256 base = uint256(keccak256(abi.encode(address(tok), REC)));",
+            "vm.load(address(factory), bytes32(base + 2)));",
+            r#"assertEq(uint16(uint256(r2)), 1, "_rec[token].contractClass (TOKEN)");"#,
+            "assertEq(uint16(uint256(r2) >> 16), ",
+            r#"assertEq(uint64(uint256(r2) >> 32), 1, "_rec[token].version");"#,
+        ] {
+            assert!(pin.contains(a), "the pin moved: {a}");
+        }
+        let word = |class: u8, kind: u8| {
+            let mut w = [0u8; 32];
+            (w[31], w[29], w[27]) = (class, kind, 1);
+            w
+        };
+        assert!(catalogued(&word(1, ZETHER_KINDS[0])), "positive control");
+        assert!(ZETHER_KINDS.iter().all(|k| catalogued(&word(1, *k))), "every kind of this reader");
+        assert!(!catalogued(&word(0, ZETHER_KINDS[0])), "class 0: not made here");
+        assert!(!catalogued(&word(2, ZETHER_KINDS[0])), "class DEX");
+        assert!(!catalogued(&word(1, 4)), "the other confidential family");
+        let mut wide = word(1, ZETHER_KINDS[0]);
+        wide[28] = 1; // kind 256 + k: a uint16 kind, not its low byte
+        assert!(!catalogued(&wide), "the kind's high byte");
+        let mut old = [0u8; 32];
+        (old[2], old[11]) = (1, ZETHER_KINDS[0]); // `_info`: exists, kind
+        assert!(!catalogued(&old), "the old one-word packing");
+    }
+
+    /// The slot the registry's layout pin gives `field`: its probe writes one field per slot, `s.<field>…; // <slot>`.
+    fn pin_slot(pin: &str, field: &str) -> Option<u64> {
+        pin.lines().find_map(|l| {
+            let rest = l.trim().strip_prefix("s.")?.strip_prefix(field)?;
+            rest.starts_with(['[', '.', ' ']).then_some(())?;
+            rest.rsplit_once("// ")?.1.split_whitespace().next()?.parse().ok()
+        })
+    }
+
+    /// T20b second sync: the registry slots of the decoy steps are the layout pin's (`UAStore.Layout`, ua-mtx-merge's
+    /// `test/ua/UAStoreLayout.t.sol`), as `pqz-read`'s are.
+    #[test]
+    fn registry_slots_are_the_layout_pin() {
+        let pin = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../smartcontracts/evm/test/ua/UAStoreLayout.t.sol"))
+            .unwrap();
+        for (field, slot) in [("records", REG_RECORDS_SLOT), ("uaCount", REG_COUNT_SLOT), ("uaAt", REG_AT_SLOT)] {
+            assert_eq!(pin_slot(&pin, field), Some(slot), "{field}");
+        }
     }
 }

@@ -100,6 +100,9 @@ def zether_seeds():
             for c in zload("disclosure_bls12381.json")["cases"]]
     e = zload("envelope.json")
     out += [zc("envelope", {k: e[k] for k in ("chainId", "chainUid", "token", "meta")})]
+    # T20b: the merged entries' `uaEnvelope`, `from` the 32-byte id (the native one padded)
+    out += [zc("uaEnvelope", {**{k: e[k] for k in ("chainId", "chainUid", "token")},
+                              "meta": {**e["meta"], "from": "0x" + "00" * 12 + e["meta"]["from"][2:]}})]
     # T14b: the words commands over the forge rows (smartcontracts/vectors/zether/state.json)
     with open(os.path.join(HERE, "../../../smartcontracts/vectors/zether/state.json"), encoding="utf-8") as f:
         st = json.load(f)

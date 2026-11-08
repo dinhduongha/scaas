@@ -26,9 +26,9 @@
 //!   carry the same hash after the last read (else the read is refused: a reorg or an inconsistent node).
 //! - **R4** storage only: `eth_getStorageAt` and `eth_getCode` at that block, no view. (`keccak256(code) == codeHash` is not
 //!   checked: no `eth_getProof`; a residual, as in `zether-read-balance`.)
-//! - **R5** the token is catalogued by `--factory` with a PQZ kind (`OpenFactory._info[token]`, slot 8: `exists` set, `kind`
-//!   NORMAL_PQZ, WRAPPED_PQZ, NORMAL_PQZ_REGULATED or WRAPPED_PQZ_REGULATED). The `_info` offsets are hand-copied (as
-//!   `zether-read-balance`'s): there is no OpenFactory layout pin yet (it comes with the factory index on `ua-mtx-merge`).
+//! - **R5** the token is catalogued by `--factory` with a PQZ kind (`OpenFactory._rec[token]`, the factory index's record at
+//!   slot 8: `contractClass` TOKEN, `kind` NORMAL_PQZ, WRAPPED_PQZ, NORMAL_PQZ_REGULATED or WRAPPED_PQZ_REGULATED), its slot
+//!   and packing held to their pin, ua-mtx-merge's `test/zether/ZetherStateVectors.t.sol` (T20b, T15m2).
 //! - **R6** `keyRecord` is `--registry`'s `pqzKey[--ua][--key-version]` (`UAStore.Layout` slot 2, per version) and its code
 //!   must hold this handle's key; `keyVersions` its `pqzVersions[--ua]` (slot 17: `latest ‖ current ‖ listed`, which `ua-rs`
 //!   checks against `--key-version`); for `auditRead` `--ua` must be the token's `auditorUA` and its `auditorMode` not NONE
@@ -74,8 +74,11 @@ use zeroize::{Zeroize, Zeroizing};
 
 type Word = [u8; 32];
 
-/// `OpenFactory._info` (slot 8): `creator(160) ‖ kind(8) ‖ version(64) ‖ exists(8)`; the PQZ kinds (`IOpenFactory.TokenKind`).
-const INFO_SLOT: u64 = 8;
+/// `OpenFactory._rec` (the factory index, ua-mtx-merge T67; slot 8, where `_info` was): three words `creatorId`, `ownerUA`,
+/// `contractClass(16) ‖ kind(16) ‖ version(64) ‖ createdBlock(64) ‖ createdAt(64)` from the low end; held to its pin,
+/// `test/zether/ZetherStateVectors.t.sol`, by `factory_record_is_the_layout_pin`. The PQZ kinds (`IOpenFactory.TokenKind`).
+const REC_SLOT: u64 = 8;
+const CLASS_TOKEN: u16 = 1;
 const PQZ_KINDS: [u8; 4] = [4, 5, 12, 13];
 /// `UAStore.Layout.pqzKey` (the registry's slot 2, keyed `(ua, version)` since group 3g): `ptr(160) ‖ proven(8) ‖ added(8)`;
 /// `pqzVersions` (slot 17): `latest(64) ‖ current(64) ‖ listed(8)`. These and `uaCount` / `uaAt` below are the registry's layout
@@ -368,13 +371,20 @@ fn open(a: &Args) -> Result<(Reader<'_>, u64), String> {
         return Err("R3: the node answered another block than the one asked for".into());
     }
     let r = Reader { url, hash: b["hash"].as_str().ok_or("R3: no block hash")?.to_string() };
-    // R5
-    let info = r.word(&a.factory, &keccak256(&[addr_word(&a.token), be(INFO_SLOT)].concat()))?;
-    // counted from the low end: `kind` byte 20, `exists` byte 29
-    if info[2] != 1 || !PQZ_KINDS.contains(&info[11]) {
+    // R5: `_rec[token]`'s word 2
+    let rec = r.word(&a.factory, &add(&keccak256(&[addr_word(&a.token), be(REC_SLOT)].concat()), 2))?;
+    if !catalogued(&rec) {
         return Err("R5: the token is not a PQZ token catalogued by this factory".into());
     }
     Ok((r, block))
+}
+
+/// `_rec[token]` word 2 names a token (class TOKEN; 0 is "not made here") of a PQZ kind: `contractClass` the low 16 bits, `kind`
+/// the next 16.
+fn catalogued(rec: &Word) -> bool {
+    let class = u16::from_be_bytes([rec[30], rec[31]]);
+    let kind = u16::from_be_bytes([rec[28], rec[29]]);
+    class == CLASS_TOKEN && PQZ_KINDS.iter().any(|k| u16::from(*k) == kind)
 }
 
 /// R3: block `n` still has `hash` (no reorg, a consistent node).
@@ -696,5 +706,40 @@ mod tests {
         assert_eq!(pin_slot(&pin, "pqzKeyUsed"), Some(18), "a longer name is another field");
         assert!(pin.contains(r#"uint256(0x73) | 1 << 160 | 1 << 168, "2 pqzKey[ua][version]: ptr, proven, added""#));
         assert!(pin.contains(r#"uint256(0x82) | uint256(0x83) << 64 | 1 << 128, "17 pqzVersions: latest, current, listed""#));
+    }
+
+    /// T20b second sync (T15m2): `OpenFactory._rec[token]` (the factory index, ua-mtx-merge T67) is read where its pin puts it,
+    /// `test/zether/ZetherStateVectors.t.sol`: slot `REC`, word 2 (`base + 2`), from the low end `contractClass(16) ‖ kind(16) ‖
+    /// version(64)`; R5 takes class TOKEN with one of this reader's kinds, never the old one-word `_info` packing.
+    #[test]
+    fn factory_record_is_the_layout_pin() {
+        let pin = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../smartcontracts/evm/test/zether/ZetherStateVectors.t.sol"))
+            .unwrap();
+        for a in [
+            &format!("uint256 internal constant REC = {REC_SLOT};")[..],
+            "uint256 base = uint256(keccak256(abi.encode(address(tok), REC)));",
+            "vm.load(address(factory), bytes32(base + 2)));",
+            r#"assertEq(uint16(uint256(r2)), 1, "_rec[token].contractClass (TOKEN)");"#,
+            "assertEq(uint16(uint256(r2) >> 16), ",
+            r#"assertEq(uint64(uint256(r2) >> 32), 1, "_rec[token].version");"#,
+        ] {
+            assert!(pin.contains(a), "the pin moved: {a}");
+        }
+        let word = |class: u8, kind: u8| {
+            let mut w = [0u8; 32];
+            (w[31], w[29], w[27]) = (class, kind, 1);
+            w
+        };
+        assert!(catalogued(&word(1, PQZ_KINDS[0])), "positive control");
+        assert!(PQZ_KINDS.iter().all(|k| catalogued(&word(1, *k))), "every kind of this reader");
+        assert!(!catalogued(&word(0, PQZ_KINDS[0])), "class 0: not made here");
+        assert!(!catalogued(&word(2, PQZ_KINDS[0])), "class DEX");
+        assert!(!catalogued(&word(1, 2)), "the other confidential family");
+        let mut wide = word(1, PQZ_KINDS[0]);
+        wide[28] = 1; // kind 256 + k: a uint16 kind, not its low byte
+        assert!(!catalogued(&wide), "the kind's high byte");
+        let mut old = [0u8; 32];
+        (old[2], old[11]) = (1, PQZ_KINDS[0]); // `_info`: exists, kind
+        assert!(!catalogued(&old), "the old one-word packing");
     }
 }

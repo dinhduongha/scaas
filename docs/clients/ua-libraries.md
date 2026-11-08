@@ -138,6 +138,7 @@ Claude), no external audit.
 | `UASig` and groups | `uasig.rs`, `pairing.rs` | `ua_sig`, `msig_sig`, `membership_sig` (`msig` sets minimal at both levels, `UAPoP` otherwise); MuSig2 and FROST sessions, a secret nonce used once |
 | EIP-712, policy, transactions | `eip712.rs`, `policy.rs`, `tx.rs` | `TypedData`, `scaas_typed_data`, `Expect`; `EvmTx` types 0 to 3 (`alloy-rlp`; type 4 has no variant, chain id 0 refused) |
 | WebAuthn | `webauthn.rs` | `webauthn_challenge`, `webauthn_assertion` |
+| Factory addresses | `factory.rs` | `create3_salt`, `create3_address`: a creation's chain-neutral CREATE3 address (chain-neutral spec §4, `vectors/factory/create3_kat.json`), shown before a router create op |
 | KEM, seal, containers | `kem.rs`, `seal.rs`, `aead.rs` | `UaKey::kem_key`, `kem_encaps`, `KemKeyPair`, `seal`, `open_container`, `LinkSession`, `from_link`; AEAD, HKDF, HMAC ([§9.1](signers-clientkeys.md#91-the-ua-kem-key-seal-and-containers)) |
 | Vault, manifest, backup | `vault.rs`, `manifest.rs` | clientkeys vault v1 byte for byte, `discover_candidates`, `import_native_key`, `SeedBackup`, `backup_seal`, `link_seal`, `restore_backup`, label vaults |
 | Facades | `facade/zether.rs`, `pqz.rs`, `pqz_pack.rs`, `pqz_backup.rs`, `decoys.rs` | `ZetherKey`, `PqzKey`, each one JSON `call` ([below](#confidential-token-facades-no-decryption-oracle)); `pqz_set`, `export_pqz_leaf_raw` |
@@ -326,7 +327,7 @@ generic hasher hashes the values supplied and never rewrites a field. `scaas_typ
 clientkeys check: `Payment`, `ReceiverFee`, `PayMeta`, `Op`, `Call`, `OwnerCall`, `Cancel`, `TradeOrder`, `WrapOrder`) **refuses** a
 non-zero unbound field (`PolicyRefused`), so what the user confirmed is what is hashed (owner 2026-11-05). `Expect::Any(AllowAnyTypedData)`, with its
 own C name `scaas_ua_sign_typed_any`, signs the standard digest of the values as supplied. An unrelated domain's struct with the
-same field names is untouched. Since the merge of `ua-mtx-merge` `aa898cf6` (T20b) the op table and the checks follow its merged-entry rows (`typed/typed_ops.json`, 80 structs): a payment, a receiver fee, a SCaaS sell token's order, a wrap order and their cancels are the `UA` structs between 32-byte ids, `PayMeta` is v2 (`{salt, payNo, schema, body}`), the PQZ debits name `keyVersion` and the PQZ `UARollOver` is its own row (`UAPqzRollOver`). BUILT.
+same field names is untouched. Since the merge of `ua-mtx-merge` `aa898cf6` (T20b) the op table and the checks follow its merged-entry rows (`typed/typed_ops.json`, 80 structs; 83 since `4f6d8605`, with the router's `UACreateToken`, `UACreateDex`, `UACreateInstance`): a payment, a receiver fee, a SCaaS sell token's order, a wrap order and their cancels are the `UA` structs between 32-byte ids, `PayMeta` is v2 (`{salt, payNo, schema, body}`), the PQZ debits name `keyVersion` and the PQZ `UARollOver` is its own row (`UAPqzRollOver`). BUILT.
 
 <a id="CLI-UAL-14"></a>**CLI-UAL-14** — **The KEM key comes through the UA key's own store.** `UaKey::kem_key(version)` has no wallet
 argument, so a handle cannot be combined with another wallet's seed and two wallets cannot make a second `(ek, pk_X)` for one
@@ -448,7 +449,7 @@ branch `ua-mtx-merge`; nothing here blocks it (requests carry slot words by inde
 | Facade (`COMMANDS`) | Decrypts nothing | Location and raw words | `vectors` only (raw) |
 |---|---|---|---|
 | PQZ (`facade::pqz`) | `enc`, `proveRegister`, `proveKeyRecord` | `balance` (with `forOp7`), `proveTransfer`, `proveBurn`, `proveRefresh`, `proveTransferMulti` (with `mode`), `auditRead` (the auditor's handle), `proveDisclose` (`RECEIVER_X` or `AUDITOR`), `proveDiscloseSender` and `openMemo` (the sender's handle) | `dec`, `rawProveTransfer`, `rawProveBurn`, `rawProveRefresh`, `rawProveTransferMulti`, `rawProveDisclose`, `rawOpenMemo`, `rawProveDiscloseSender` |
-| Zether (`facade::zether`) | `encrypt`, `pop`, `ownerAuth`, `uaSig`, `shieldCalldata`, `envelope`, `typedDigest`, `namedCall` | `balance`, `pendingBalance`, `checkBalance`, `proveTransfer`, `proveTransferMulti`, `proveBurn`, `openMemo`, `recoverTransfer`, `openDisclosure` | `decrypt`, `decryptPending`, `rawCheckBalance`, `rawProveTransfer`, `rawProveTransferMulti`, `rawProveBurn`, `rawOpenMemo`, `rawRecoverTransfer`, `rawOpenDisclosure` |
+| Zether (`facade::zether`) | `encrypt`, `pop`, `ownerAuth`, `uaSig`, `shieldCalldata`, `envelope`, `uaEnvelope`, `typedDigest`, `namedCall` | `balance`, `pendingBalance`, `checkBalance`, `proveTransfer`, `proveTransferMulti`, `proveBurn`, `openMemo`, `recoverTransfer`, `openDisclosure` | `decrypt`, `decryptPending`, `rawCheckBalance`, `rawProveTransfer`, `rawProveTransferMulti`, `rawProveBurn`, `rawOpenMemo`, `rawRecoverTransfer`, `rawOpenDisclosure` |
 
 The words each command reads are in its rustdoc (`facade::pqz::COMMANDS` and `STATE_LAYOUT`; zether-prover `state`). The C ABI
 carries them through `scaas_ua_pqz_call` and `scaas_ua_zether_call` (no new call or status). A binding test asserts that a
@@ -468,7 +469,7 @@ requirements; the library's word checks stop a careless caller, never a forger. 
 | 2 (<a id="CLI-UAL-32"></a>CLI-UAL-32) | **Known chain**: `(chainId, chain_uid)` from the holder's configuration (genesis hashes as pinned in `smartcontracts/evm/chain-uids.json`, [NET-ALL-22](../networks/README.md#NET-ALL-22)) | `eth_chainId` and `eth_getBlockByNumber("0x0").hash` equal the configured pair |
 | 3 (<a id="CLI-UAL-33"></a>CLI-UAL-33) | **One final block**: all words from one block final by the chain's rule, or at the holder's confirmation depth where the chain has no finality ([NET-EVM-04](../networks/evm.md#NET-EVM-04)) | every read names the same block number and hash; `head − block ≥ depth`, or the block is at or below the `finalized` tag |
 | 4 (<a id="CLI-UAL-34"></a>CLI-UAL-34) | **Real storage, not views**: storage words by `eth_getStorageAt` / `eth_getProof` at that block; blob and key code by `eth_getCode`, whose `keccak256` equals the account's `codeHash`; `eth_call` views only from requirement 1's own or configured node, never as the sole source of a word a light client verifies | `keccak256(code) == codeHash` for each pointer; the method and block recorded per word |
-| 5 (<a id="CLI-UAL-35"></a>CLI-UAL-35) | **Catalogued token**: catalogued by that chain's `OpenFactory` (its configured address) with a PQZ kind for the PQZ facade, a Zether kind for the Zether facade | `_info[token]` read as storage: `exists` set, `kind` among the facade's kinds |
+| 5 (<a id="CLI-UAL-35"></a>CLI-UAL-35) | **Catalogued token**: catalogued by that chain's `OpenFactory` (its configured address) with a PQZ kind for the PQZ facade, a Zether kind for the Zether facade | the factory index's `_rec[token]` read as storage (slot and packing from ua-mtx-merge's pin `test/zether/ZetherStateVectors.t.sol`): `contractClass` TOKEN, `kind` among the facade's kinds |
 | 6 (<a id="CLI-UAL-36"></a>CLI-UAL-36) | **The selected leg belongs to the handle**: the leg's recipient UA's registered key equals the handle's (PQZ: `pqzKeyOf(ua)` `proven`, its key hash the handle's; Zether: the registered `Y`); an auditor read: the account is the token's `auditorUA`, `auditorMode` not NONE, an auditor copy on that leg; a disclosure kind allowed by the token's `disclosureMode` | the registry and token words read as storage at the same block; the comparisons above |
 | 7 (<a id="CLI-UAL-37"></a>CLI-UAL-37) | **Nothing back**: no result, failure, error code, result-dependent timing, follow-up read or log line that depends on a decryption goes back to the source; a result goes to the holder or a viewer the holder names | no request to the source after a decryption depends on its outcome (reviewable in the layer's code) |
 
@@ -495,8 +496,8 @@ version `--key-version`, with `--for-op7`) and `auditRead` (an audited leg, on t
 and feeds them to `ua-rs`; it never parses a
 ciphertext or decrypts itself. Required: `--rpc` (requirement 1: the one source, a node the holder names; a second one refused),
 `--chain-id` and `--chain-uid` (2), `--depth` or `--finalized` (3: every read by block hash, EIP-1898 with `requireCanonical`;
-the node must answer the block asked for and the block must keep its hash until the last read), `--factory` (5: `_info[token]`
-`exists` with a PQZ kind), `--registry` and `--ua` (6: `pqzKey[ua][--key-version]`'s code must hold the handle's key; for
+the node must answer the block asked for and the block must keep its hash until the last read), `--factory` (5: `_rec[token]`
+class TOKEN with a PQZ kind), `--registry` and `--ua` (6: `pqzKey[ua][--key-version]`'s code must hold the handle's key; for
 `auditRead`, `--ua` the token's `auditorUA` with `auditorMode` not NONE). Group 3g (ua-rs-sign T15o, spec
 `2026-11-06-pqz-key-versions.md` on `ua-mtx-merge`): the account is `acct[ua][v]`, the counter `sendCounter[ua]`, the request
 carries `keyVersion` and the registry's `pqzVersions[ua]` word; `ua-rs` refuses a version above `current`, and a debit of a
@@ -506,10 +507,10 @@ the block re-check included, before the key is used, nothing after it to the nod
 URL and body go to `curl` on its stdin; `--words` prints the request read without a key. `clients/ua-rs/tests/pqz_read.rs`:
 against a local `anvil`, the words equal the forge rows byte for byte, the wallet rows and an audited op 1 decrypt with real
 keys, and each refusal of requirements 2, 3, 5 and 6 is named (mutants:
-`smartcontracts/evm/runs/2026-11-07-ua-rs-sign-t15m-mutants.txt`). **Residuals:** the `OpenFactory._info` offsets (slot 8,
-`kind` and `exists` bytes) are hand-copied, as in `zether-read-balance`, until the factory index on `ua-mtx-merge` pins them;
-the registry's `pqzKey` slot (`UAStore.Layout` slot 2) is hand-copied and `--registry` is the holder's configuration, not
-checked against the token's immutable `registry`; requirement 4's `codeHash` check is not made (no `eth_getProof`); the
+`smartcontracts/evm/runs/2026-11-07-ua-rs-sign-t15m-mutants.txt`). Since T20b the factory record (`_rec[token]`, slot 8,
+word 2) and the registry's slots (`UAStore.Layout` 2, 4, 5, 17) are read where their pins put them, in both reference layers.
+**Residuals:** `--registry` is the holder's configuration, not checked against the token's `registry` (since the chain-neutral
+releases it is in the token's code env, not an immutable); requirement 4's `codeHash` check is not made (no `eth_getProof`); the
 other words commands (`proveDisclose`, `proveDiscloseSender`, `openMemo`, the debits) are not wired; a debit request is not
 built. UNAUDITED.
 
