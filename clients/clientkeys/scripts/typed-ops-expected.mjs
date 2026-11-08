@@ -29,6 +29,10 @@ const CONF = {
   // the router's `setGrant`: the nested terms are the call's tuple (governance spec §3.2)
   SetGrant: (m) => [m.target, m.bit, m.holder, ['min', 'max', 'total', 'perWindow', 'window', 'validUntil', 'maxUses', 'delegable',
     'scope'].map((k) => m.terms[k])],
+  // the factory's creations (ua-mtx-merge T76): the struct signs `initHash`, the call takes the bytes (`extra`)
+  CreateToken: (m, x) => [m.target, m.kind, m.version, x.initArgs, m.salt],
+  CreateDex: (m, x) => [m.target, m.version, x.initArgs, m.salt],
+  CreateInstance: (m, x) => [m.target, m.contractClass, m.kind, m.version, x.initCall, m.salt],
 };
 const envelope = (m) => [m.from, m.batch, m.nonce, m.validUntil, m.mode, m.relayer, m.fee, m.feeRecipient];
 const tradeTuple = (o) => [o.from, o.receiveToken, o.amount, o.receiveAmount, o.minFill, o.fee, o.relayer, o.dex, o.destination,

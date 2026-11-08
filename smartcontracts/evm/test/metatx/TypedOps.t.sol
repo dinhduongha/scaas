@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {IGovernanceRouter} from "../../src/governance/IGovernanceRouter.sol";
+import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 import {IMetaTxAddress} from "../../src/metatx/IMetaTxAddress.sol";
@@ -1285,6 +1287,43 @@ contract ConfidentialRowsZetherTest is ConfidentialRows, ZetherFixture {
     }
 }
 
+/// Stands in for the factory at a creation row's `target` (plan T76): records the router's call and its `subject()`.
+contract CreateSink {
+    bytes32 public subject;
+    uint256 public calls;
+    bytes public init;
+    bytes32 public salt;
+    uint64 public version;
+    uint16 public contractClass;
+    bytes4 public selector;
+
+    function _seen(bytes calldata init_, bytes32 salt_, uint64 version_) internal {
+        subject = IGovernanceRouter(msg.sender).subject();
+        ++calls;
+        (init, salt, version, selector) = (init_, salt_, version_, msg.sig);
+    }
+
+    function createToken(IOpenFactory.TokenKind, uint64 version_, bytes calldata initArgs, bytes32 salt_)
+        external returns (address)
+    {
+        _seen(initArgs, salt_, version_);
+        return address(this);
+    }
+
+    function createDex(uint64 version_, bytes calldata initArgs, bytes32 salt_) external returns (address) {
+        _seen(initArgs, salt_, version_);
+        return address(this);
+    }
+
+    function createInstance(IOpenFactory.ReleaseId calldata id, bytes32 salt_, bytes calldata initCall)
+        external returns (address)
+    {
+        _seen(initCall, salt_, id.version);
+        contractClass = id.contractClass;
+        return address(this);
+    }
+}
+
 /// governance T12 (spec §3.2; CTR-GOV-15 Change): every `GovernanceRouter` row of `typed_ops.json` runs verbatim on a real
 /// router deployed at the row's `verifyingContract` (context A: chain id 31337, `chain_uid` A), so the row's own signature
 /// is the router's: no re-signing. Each op's `target` is a real `NormalToken`, `WrappedToken` or `SCaaSDex` cloned at the
@@ -1407,6 +1446,48 @@ contract TypedOpsRouterTest is UALedgerBase {
             "AcceptOwnership", "RenounceOwnership", "RenounceRole", "Mint", "MintToUA", "DisableWrap", "ProposeRate",
             "CancelRate", "ExecuteRate", "SetMarket", "SetExchangeTarget", "SetListedOnly", "SetFeeSplit"];
         for (uint256 i; i < ops.length; ++i) _noEntry(ops[i], me, _uint(ops[i], "batch"));
+    }
+
+    // ------------------------------------------------------------------ the factory's creations (S3, plan T76)
+
+    /// The three creation rows verbatim, `target` a sink in the factory's place that records what the router hands it and
+    /// the subject it names: the router authenticated the key's id, and passed the row's `extra` bytes whose keccak256 is
+    /// the signed `initHash`.
+    function _sinkAt(string memory op) internal returns (CreateSink s) {
+        s = CreateSink(_addr(op, "target"));
+        deployCodeTo("TypedOps.t.sol:CreateSink", "", address(s));
+    }
+
+    function test_routerRow_CreateToken() public {
+        CreateSink s = _sinkAt("UACreateToken");
+        _row("UACreateToken");
+        bytes memory initArgs = vm.parseJsonBytes(j, domainField("UACreateToken", K, "extra.initArgs"));
+        assertEq(s.subject(), me, "the signing UA");
+        assertEq(s.calls(), 1);
+        assertEq(keccak256(s.init()), _b32("UACreateToken", "initHash"));
+        assertEq(s.init(), initArgs);
+        assertEq(s.salt(), _b32("UACreateToken", "salt"));
+        assertEq(s.version(), _uint("UACreateToken", "version"));
+        assertEq(s.selector(), OpenFactory.createToken.selector);
+    }
+
+    function test_routerRow_CreateDex() public {
+        CreateSink s = _sinkAt("UACreateDex");
+        _row("UACreateDex");
+        assertEq(s.subject(), me);
+        assertEq(keccak256(s.init()), _b32("UACreateDex", "initHash"));
+        assertEq(s.salt(), _b32("UACreateDex", "salt"));
+        assertEq(s.selector(), OpenFactory.createDex.selector);
+    }
+
+    function test_routerRow_CreateInstance() public {
+        CreateSink s = _sinkAt("UACreateInstance");
+        _row("UACreateInstance");
+        assertEq(s.subject(), me);
+        assertEq(keccak256(s.init()), _b32("UACreateInstance", "initHash"));
+        assertEq(s.salt(), _b32("UACreateInstance", "salt"));
+        assertEq(s.contractClass(), _uint("UACreateInstance", "contractClass"));
+        assertEq(s.selector(), OpenFactory.createInstance.selector);
     }
 
     // ------------------------------------------------------------------ the owner and a holder

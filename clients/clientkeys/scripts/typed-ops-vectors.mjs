@@ -125,6 +125,14 @@ ROW.UAPause = { ref: REG_REF, until: REG_NOW + 3 * DAY };
 ROW.UAUnpause = { ref: REG_REF };
 ROW.UARevokeOrder = { recordId: RECORD, reasonRef: hex(hash('regulated.reason')) };
 ROW.UAOperatorTransfer = { account: ORDER.subject, to: ORDER.beneficiary, amount: 5, ref: REG_REF };
+// The factory's creations (ua-mtx-merge T76): the init bytes are fillers (the router passes them through; the factory's
+// release decodes them), `initHash` their keccak256, a class-4 instance.
+const INIT_ARGS = filler('create.initArgs', 96);
+const INIT_CALL = filler('create.initCall', 68);
+ROW.UACreateToken = { kind: 0, version: 1, initHash: hex(keccak_256(fromHex(INIT_ARGS))), salt: hex(hash('create.token.salt')) };
+ROW.UACreateDex = { version: 1, initHash: hex(keccak_256(fromHex(INIT_ARGS))), salt: hex(hash('create.dex.salt')) };
+ROW.UACreateInstance = { contractClass: 4, kind: 0, version: 1, initHash: hex(keccak_256(fromHex(INIT_CALL))),
+  salt: hex(hash('create.instance.salt')) };
 
 function sample(name, op) {
   const own = {};
@@ -155,6 +163,8 @@ function extraOf(name, td, at) {
     return { payerSig: nativeSig(hashTypedData(uaMetaTransferTypedData({ ...at, message: td.message.payment }))), meta: META };
   }
   if (base === 'PayWithTax' || base === 'PayUnderMandate') return { meta: META };
+  if (base === 'CreateToken' || base === 'CreateDex') return { initArgs: INIT_ARGS };
+  if (base === 'CreateInstance') return { initCall: INIT_CALL };
   return undefined;
 }
 

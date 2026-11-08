@@ -493,8 +493,9 @@ contract GovDeployTest is Test {
         // `mtxSetTaxRecipient`); T40: -> this (the metadata hash: `IRegulatedToken`'s two tax entries; `MtxPipelineLib`'s
         // levers 5 and 6); 3g T51: 0x9F9448a2e031D1d7055c7D7b6593EA8f752c7D91 -> 0x8C7beC80b3bD61A2920083C0617555a87A5fa7E5
         // (the metadata hash: `IUARegistry`); chain-neutral T72: -> this (the metadata hash: `SaltedEIP712`'s virtual
-        // domain, `UAMetaTxBase`'s immutables behind `_registry()` / `_hedera()`)
-        assertEq(router, 0x77826623be224e298A4Ad0edd07b520e342523A2, "GovernanceRouter");
+        // domain, `UAMetaTxBase`'s immutables behind `_registry()` / `_hedera()`) 0x77826623be224e298A4Ad0edd07b520e342523A2;
+        // T76: -> this (the router's three creation ops, S3)
+        assertEq(router, 0x773A627eD1C1CCF588DCB81799c1BFB52E5d9d57, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append: chain-neutral releases (plan T72), `abi.encode(factory, implArgs)`;

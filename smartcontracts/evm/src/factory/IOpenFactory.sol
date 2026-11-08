@@ -92,6 +92,8 @@ interface IOpenFactory {
     /// @notice Every creation, publish and deploy entry before `configureChain`.
     error ChainNotConfigured();
     error ChainAlreadyConfigured();
+    /// @notice A creation by the chain's router (S3) whose `subject()` is 0: the router names no signer.
+    error RouterSubjectZero();
     /// @notice The chain can prove its genesis hash (`BLOCKHASH(0)`, EIP-2935) and `given` is not it.
     error ChainUidNotGenesis(bytes32 given, bytes32 provable);
     /// @notice The reference block's hash on this chain is not `given` (`actual` 0: the chain cannot answer).

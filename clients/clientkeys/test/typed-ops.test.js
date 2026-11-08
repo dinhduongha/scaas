@@ -182,8 +182,9 @@ test('the table covers every allowlisted entry of every contract, one row per op
   // T34: + the router's eight regulated controls (regulated-kinds spec §3.1): 76, 67 envelope ops
   // pay-meta-tax T41: + `UAPayWithTax` (a raw struct) and the router's `UASetTaxRate`, `UASetTaxRecipient`: 79, 69
   // group 3g T54: the rollover one row per kind (`UARollOver` Zether, `UAPqzRollOver` PQZ with `keyVersion`): 80, 70
-  assert.equal(Object.keys(TYPED_OPS).length, 80);
-  assert.equal(Object.values(TYPED_OPS).filter((o) => o.envelope).length, 70);
+  // ua-mtx-merge T76: + the router's three creations (`UACreateToken`, `UACreateDex`, `UACreateInstance`): 83, 73
+  assert.equal(Object.keys(TYPED_OPS).length, 83);
+  assert.equal(Object.values(TYPED_OPS).filter((o) => o.envelope).length, 73);
   for (const o of Object.values(TYPED_OPS)) {
     if (o.envelope) assert.ok(o.entry.startsWith('mtx'), o.primary);
     if (o.ua) assert.equal(o.fields[0].type, 'bytes32', o.primary);
@@ -304,15 +305,15 @@ test('the cancel row is ordered and native-capable: UACancelNonce(bytes32 from,u
 // governance T12 (spec §3.2): the router's rows read from the contract's own pin, test/governance/GovRouterTypehash.t.sol
 // (literal strings and `cast keccak` hashes), apart from the table in src/evm.js: a mismatch is a stop-and-report.
 // ua-mtx-merge T7 / T11 (R14): 19 `UA<Op>` rows on the `mtx<Op>` entries; the 19 address rows retired.
-test('GovernanceRouter: 29 rows equal GovRouterTypehash.t.sol, target the first op word, fee mode NONE, the router domain only', () => {
+test('GovernanceRouter: 32 rows equal GovRouterTypehash.t.sol, target the first op word, fee mode NONE, the router domain only', () => {
   const sol = readFileSync(new URL('../../../smartcontracts/evm/test/governance/GovRouterTypehash.t.sol', import.meta.url), 'utf8');
   const pins = [...sol.matchAll(/keccak256\(\s*((?:"[^"]*"\s*)+)\)\);\s*assertEq\(T\.\w+, (0x[0-9a-f]{64})\)/g)]
     .map(([, lits, hash]) => [[...lits.matchAll(/"([^"]*)"/g)].map((x) => x[1]).join(''), hash]);
   // T32: + the eight regulated controls (regulated-kinds spec §3.1, CTR-GOV-20); T34 writes their rows
-  // pay-meta-tax T39 / T41: + `UASetTaxRate`, `UASetTaxRecipient`
-  assert.equal(pins.length, 30);
+  // pay-meta-tax T39 / T41: + `UASetTaxRate`, `UASetTaxRecipient`; ua-mtx-merge T76: + the three creations
+  assert.equal(pins.length, 33);
   const rows = pins.filter(([s]) => !s.startsWith('GrantTerms('));
-  assert.equal(rows.length, 29);
+  assert.equal(rows.length, 32);
   for (const [s, hash] of rows) {
     const name = s.slice(0, s.indexOf('('));
     const op = TYPED_OPS[name];
@@ -328,7 +329,7 @@ test('GovernanceRouter: 29 rows equal GovRouterTypehash.t.sol, target the first 
     assert.equal(r.domains.gov_router.domain.name, 'SCaaS GovernanceRouter', name);
     assert.deepEqual([r.message.mode, r.message.fee], [1, '0'], `${name}: fee mode NONE`);
   }
-  assert.equal(Object.values(TYPED_OPS).filter((o) => o.on.includes('GovernanceRouter')).length, 30);
+  assert.equal(Object.values(TYPED_OPS).filter((o) => o.on.includes('GovernanceRouter')).length, 33);
   assert.equal(V.ops.UACancelNonce.domains.gov_router.domain.name, 'SCaaS GovernanceRouter');
   assert.equal(V.ops.CancelNonce.domains.gov_router, undefined);
 });
@@ -769,5 +770,20 @@ test('typed-ops-cast-check: a swapped parameter is refused against the message, 
     assert.match(r.stderr, /UAUnwrap token: calldata/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ua-mtx-merge T76 (chain-neutral spec §4.4, S3): the router's creations sign `initHash = keccak256(initArgs)` (`initCall`
+// for an instance); the entry takes the bytes from `extra`, and bytes that are not the signed hash are refused.
+test('the router creations: initHash binds the extra bytes', () => {
+  for (const [name, field] of [['UACreateToken', 'initArgs'], ['UACreateDex', 'initArgs'], ['UACreateInstance', 'initCall']]) {
+    const op = TYPED_OPS[name];
+    const r = V.ops[name];
+    const d = r.domains.gov_router;
+    const td = { types: op.types, primaryType: op.primary, domain: d.domain, message: r.message };
+    assert.equal(hex(keccak_256(fromHex(d.extra[field]))), r.message.initHash, name);
+    assert.equal(hex(op.call(td, d.signature, d.extra).data), d.calldata, name);
+    assert.throws(() => op.call(td, d.signature, { [field]: '0x00' }), /not the signed initHash/, name);
+    assert.throws(() => op.call(td, d.signature, {}), new RegExp(`needs extra.${field}`), name);
   }
 });

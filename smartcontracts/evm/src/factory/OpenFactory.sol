@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {IGovernanceRouter} from "../governance/IGovernanceRouter.sol";
 import {IOpenFactory} from "./IOpenFactory.sol";
 import {IFactoryToken} from "./IFactoryToken.sol";
 import {ChainEnvCode} from "./ChainEnvCode.sol";
@@ -601,9 +602,15 @@ contract OpenFactory is IOpenFactory {
         if (ok && r.length == 32) h = abi.decode(r, (bytes32));
     }
 
-    /// @dev The creator's UA id (S3): the direct caller.
-    function _creatorId() private view returns (bytes32) {
-        return bytes32(uint256(uint160(msg.sender)));
+    /// @dev The creator's UA id (S3): the direct caller, `pad(msg.sender)`; from the chain's router (its one-time
+    ///      `govRouter`; chain-neutral spec §4.4, plan T76), the UA it authenticated for this call, `subject()`, read once
+    ///      at entry (0 refused): a native id is `pad(addr)`, the value of its direct call. A nested creation inside an
+    ///      `initialize` is called by the instance: `pad(instance)`.
+    function _creatorId() private view returns (bytes32 c) {
+        address r = govRouter;
+        if (r == address(0) || msg.sender != r) return bytes32(uint256(uint160(msg.sender)));
+        c = IGovernanceRouter(r).subject();
+        if (c == bytes32(0)) revert RouterSubjectZero();
     }
 
     function _s(bytes32 creatorId, uint16 contractClass, uint16 kind, bytes32 salt) private pure returns (bytes32) {

@@ -7,6 +7,7 @@ import {ISCaaSDex} from "../dex/ISCaaSDex.sol";
 import {IRegulatedToken} from "../regulated/IRegulatedToken.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
+import {IOpenFactory} from "../factory/IOpenFactory.sol";
 
 /// @title One per chain, CREATE2 at a predictable address (CTR-GOV-15 Change, owner 2026-11-04; spec
 ///        `2026-11-04-governance-ua-identity.md` §3): the closed table of governance spec §3.2 over every governed contract
@@ -146,5 +147,33 @@ contract GovernanceRouter is GovernanceRouterBase {
         IUARegistry.UASig calldata auth) external
     {
         _ua(T.UA_SET_FEE_SPLIT, e, target, ISCaaSDex.setFeeSplit.selector, abi.encode(relayerSharePpm, treasury), auth);
+    }
+
+    // ------------------------------------------------------------------ the factory's creations (S3)
+
+    /// @notice Chain-neutral spec §4.4 (S3, owner 2026-11-07; plan T76): the signing UA creates. `target` is the chain's
+    ///         `OpenFactory`, which reads `subject()` once at entry as the creator; `initHash = keccak256(initArgs)` is
+    ///         signed, the arguments go to the factory as they are.
+    function mtxCreateToken(MetaTxLib.UAEnvelope calldata e, address target, IOpenFactory.TokenKind kind, uint64 version,
+        bytes calldata initArgs, bytes32 salt, IUARegistry.UASig calldata auth) external
+    {
+        _uaCall(T.UA_CREATE_TOKEN, e, target, abi.encode(kind, version, keccak256(initArgs), salt),
+            abi.encodeCall(IOpenFactory.createToken, (kind, version, initArgs, salt)), auth);
+    }
+
+    function mtxCreateDex(MetaTxLib.UAEnvelope calldata e, address target, uint64 version, bytes calldata initArgs,
+        bytes32 salt, IUARegistry.UASig calldata auth) external
+    {
+        _uaCall(T.UA_CREATE_DEX, e, target, abi.encode(version, keccak256(initArgs), salt),
+            abi.encodeCall(IOpenFactory.createDex, (version, initArgs, salt)), auth);
+    }
+
+    /// @notice The generic class's creation (index spec §8.4): the release's three ids flat, `initHash = keccak256(initCall)`.
+    function mtxCreateInstance(MetaTxLib.UAEnvelope calldata e, address target, uint16 contractClass, uint16 kind,
+        uint64 version, bytes calldata initCall, bytes32 salt, IUARegistry.UASig calldata auth) external
+    {
+        _uaCall(T.UA_CREATE_INSTANCE, e, target, abi.encode(contractClass, kind, version, keccak256(initCall), salt),
+            abi.encodeCall(IOpenFactory.createInstance, (IOpenFactory.ReleaseId(contractClass, kind, version), salt,
+                initCall)), auth);
     }
 }

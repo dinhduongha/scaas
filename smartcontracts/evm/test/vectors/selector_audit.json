@@ -4208,6 +4208,21 @@
    "sig": "mtxUnpause((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
+  },
+  {
+   "sig": "mtxCreateToken((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,uint64,bytes,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxCreateDex((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint64,bytes,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxCreateInstance((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint16,uint16,uint64,bytes,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
   }
  ]
 }

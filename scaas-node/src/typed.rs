@@ -1146,9 +1146,19 @@ pub fn hex_refused(what: &str) -> anyhow::Error {
 pub mod testkit {
     use super::*;
 
+    /// ua-mtx-merge T76: the router's three creations have vector rows and no node row (chain-neutral spec §6.3: only when
+    /// relaying creations is decided, index spec §8.11 Q11; the guard test names them in `NOT_ROWS`). Every walker over the
+    /// vector sees the rows the node builds; the three must be in the file.
+    pub const NO_NODE_ROW: [&str; 3] = ["UACreateToken", "UACreateDex", "UACreateInstance"];
+
     pub fn vectors() -> Value {
         // ua-mtx-merge T14: the regenerated rows (MD-7 as amended: 68 structs; T34: 76); the old ones are in the vectors' legacy place
-        serde_json::from_str(include_str!("../../smartcontracts/vectors/typed/typed_ops.json")).unwrap()
+        let mut v: Value = serde_json::from_str(include_str!("../../smartcontracts/vectors/typed/typed_ops.json")).unwrap();
+        let ops = v["ops"].as_object_mut().unwrap();
+        for n in NO_NODE_ROW {
+            assert!(ops.remove(n).is_some(), "{n}: the vector's row");
+        }
+        v
     }
 
     pub fn row_of(name: &str, contract: &str) -> &'static Row {
@@ -1311,7 +1321,7 @@ mod tests {
         // plan T34: (68, 101, 100) -> (76, 109, 108), the router's eight regulated controls' vector rows; pay-meta-tax T41 / T42:
         // -> (79, 114, 113), UAPayWithTax (three domains) and the router's two tax ops
         // group 3g T54 / T55: -> (80, 114, 113), the rollover's two domains on two rows (`UARollOver` Zether, `UAPqzRollOver` PQZ)
-        assert_eq!((structs, domains, calldata), (80, 114, 113), "every row was walked");
+        assert_eq!((structs, domains, calldata), (80, 114, 113), "every row was walked (the three creations left out by vectors())");
         // plan T32: 70 -> 78, the router's eight regulated controls; pay-meta-tax T42: -> 82, + UAPayWithTax, the two tax ops and
         // mtxPay (its struct `UAMetaTransfer`, no row of the vector file: paymeta.json and pay_job_named_meta_builds_body pin it)
         // group 3g T55: -> 83, `UAPqzRollOver`

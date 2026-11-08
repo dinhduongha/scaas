@@ -39,6 +39,15 @@ library GovernanceRouterTypes {
     bytes32 internal constant UA_RENOUNCE_ROLE = keccak256(
         "UARenounceRole(bytes32 from,address target,uint8 bit,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
 
+    // ---- the factory's creations (chain-neutral spec §4.4, S3; plan T76): `target` the chain's `OpenFactory`, the
+    //      creation's named parameters, `initHash = keccak256(initArgs)` (`initCall` for an instance)
+    bytes32 internal constant UA_CREATE_TOKEN = keccak256(
+        "UACreateToken(bytes32 from,address target,uint8 kind,uint64 version,bytes32 initHash,bytes32 salt,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_CREATE_DEX = keccak256(
+        "UACreateDex(bytes32 from,address target,uint64 version,bytes32 initHash,bytes32 salt,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_CREATE_INSTANCE = keccak256(
+        "UACreateInstance(bytes32 from,address target,uint16 contractClass,uint16 kind,uint64 version,bytes32 initHash,bytes32 salt,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+
     // ---- the powers on the token kinds
     bytes32 internal constant UA_MINT = keccak256(
         "UAMint(bytes32 from,address target,address to,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
