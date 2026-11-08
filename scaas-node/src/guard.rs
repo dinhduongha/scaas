@@ -767,6 +767,13 @@ pub async fn fill_digest(chain: &Chain, w: &mut Work) -> Result<(), SimError> {
 /// reads that as a refusal). The estimate (regular + state, `eth_estimateGas`) must fit `max` (`max_gas_per_tx`) and
 /// the chain's block gas limit; `mtxSettle` is sized until every planned settlement settles; a contract signer's
 /// meta-tx gets at least the ERC-1271 floor.
+/// NODE-JOB-24: a refusal of [`gas`] for the lane's per-transaction cap (`max_gas_per_tx`, the block gas limit, 2^24 before
+/// Amsterdam), not for the calldata floor or a revert of the call itself.
+pub fn over_cap(reason: &str) -> bool {
+    reason.starts_with("gas ") && (reason.contains(" above max_gas_per_tx ") || reason.contains(" above the chain's block gas limit ")
+        || reason.contains(" above the 2^24 gas limit of a transaction"))
+}
+
 pub async fn gas(chain: &Chain, w: &Work, max: u64) -> Result<u64, SimError> {
     let block = chain.block_gas().await.map_err(|e| SimError::Transport(format!("block gas limit: {e:#}")))?;
     let floor = calldata_floor(w.data.len());
@@ -1408,6 +1415,33 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
             }
             assert!(router.contains(sig.as_str()), "{name}: {sig} is no SIGNED entry of the router in selector_audit.json");
             assert_eq!(v["ops"][*name]["typeString"].as_str(), Some(*ty), "{name}: typed_ops.json's row");
+        }
+    }
+
+    /// Group 3h T61 / T63 (spec §10): bit 24's router op both directions: `UASetProofStore` is a row of `gov_router` only, its
+    /// selector the forge artifact's and a `SIGNED` entry of the router in `selector_audit.json`; the token's own
+    /// `setProofStore(uint8)` (`BIT(24)` on the four PQZ kinds) is no row on any kind (relayed through the router only).
+    #[test]
+    fn proof_store_router_row_equal_contract() {
+        let sig = format!("mtxSetProofStore{ENV_UA},address,uint8,{UASIG_ABI})");
+        let r = typed::testkit::row_of("UASetProofStore", "gov_router");
+        assert_eq!((r.entry, r.contracts), ("mtxSetProofStore", &["gov_router"][..]));
+        assert_eq!(r.selector, [0xa6, 0x3e, 0x58, 0x86], "the forge artifact's {sig}");
+        assert_eq!(alloy::primitives::keccak256(sig.as_bytes())[..4], r.selector[..]);
+        assert_eq!(row(r.sent, "gov_router").map(|x| x.name), Some("UASetProofStore"));
+        let p = format!("{}/../smartcontracts/evm/test/vectors/selector_audit.json", env!("CARGO_MANIFEST_DIR"));
+        let audit: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
+        let class = |c: &str, s: &str| audit[c].as_array().unwrap().iter().find(|e| e["sig"] == s).map(|e| e["class"].as_str().unwrap().to_string());
+        assert_eq!(class("GovernanceRouter", &sig).as_deref(), Some("SIGNED"));
+        let direct = alloy::primitives::keccak256(b"setProofStore(uint8)");
+        for c in ["NormalPqzToken", "WrappedPqzToken", "NormalPqzRegulatedToken", "WrappedPqzRegulatedToken"] {
+            assert_eq!(class(c, "setProofStore(uint8)").as_deref(), Some("BIT(24)"), "{c}");
+        }
+        for k in ["token", "zether", "pqz", "wallet", "account", "dex", "registry", "factory", "gov_router"] {
+            assert!(row(direct[..4].try_into().unwrap(), k).is_none(), "setProofStore is a {k} row");
+            if k != "gov_router" {
+                assert!(row(r.sent, k).is_none(), "UASetProofStore is a {k} row");
+            }
         }
     }
 

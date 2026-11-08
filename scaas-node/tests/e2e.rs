@@ -2218,6 +2218,10 @@ mod pqz3f {
         function uaAuthDigest(bytes32 ua, bytes32 purposeTag, bytes32 digest) external view returns (bytes32);
         function mtxShield(bytes32 toUA, uint256 amount) external;
         function keyHashOf(uint16 kind, bytes keyData) external pure returns (bytes32);
+        // group 3h (T58, T63): the debit record's view
+        struct DebitRecordView { address prevBlob; uint64 p; uint16 deltaP; uint8 proofStore; uint64 shieldIn; uint64 keyVersion;
+            uint64 prevCounter; bool hasPrev; }
+        function pqzDebitRecord(bytes32 ua, uint64 counter) external view returns (DebitRecordView memory);
     }
 }
 
@@ -2399,12 +2403,17 @@ impl OffchainStack {
     /// Op 1 from `from` to `to` (nothing shielded: in `OFFCHAIN` mode the token never checks the proof, the verifier's verdict
     /// does), at the subject's next nonce: the job without `pqz_verdict`, the statement the token builds, the proof.
     async fn transfer_job(&self, id: i64, nonce: u64) -> (Value, Vec<u8>, Vec<u8>) {
+        self.transfer_job_tagged(id, nonce, B256::ZERO).await
+    }
+
+    /// `transfer_job` with the debit's `ownTag` (group 3h: a named field of the args).
+    async fn transfer_job_tagged(&self, id: i64, nonce: u64, own_tag: B256) -> (Value, Vec<u8>, Vec<u8>) {
         use scaas_node::abi::{IPqzToken, UAMetaTransaction};
         let pr = ProviderBuilder::new().connect_http(self.rpc.parse().unwrap());
         let block = pr.get_block_number().await.unwrap();
         let lanes = |n: usize, b: u8| -> Vec<u8> { (0..n / 8).flat_map(|_| { let mut w = [0u8; 8]; w[7] = b; w }).collect() };
         let t = pqz3f::PqzTransferArgs { p: 0, validUntilBlock: U256::from(block + 200), shieldIn: U256::ZERO, fromUA: self.from.ua,
-            keyVersion: 0, toUA: self.to.ua, beneficiaryUA: B256::ZERO, salt: alloy::primitives::FixedBytes([0x5a; 16]), ownTag: B256::ZERO,
+            keyVersion: 0, toUA: self.to.ua, beneficiaryUA: B256::ZERO, salt: alloy::primitives::FixedBytes([0x5a; 16]), ownTag: own_tag,
             u: lanes(self.pk_len, 1).into(), vTo: lanes(self.v_len, 1).into(), vFrom: lanes(self.v_len, 1).into(),
             vAuditor: Bytes::new(), sealedMemo: Bytes::new() };
         let until = now() + 600;
@@ -2417,7 +2426,7 @@ impl OffchainStack {
         let h = |b: &[u8]| format!("0x{}", alloy::hex::encode(b));
         let args = json!({"p": "0", "validUntilBlock": (block + 200).to_string(), "shieldIn": "0", "fromUA": format!("{:#x}", self.from.ua),
             "keyVersion": "0", "toUA": format!("{:#x}", self.to.ua), "beneficiaryUA": format!("{:#x}", B256::ZERO), "salt": h(&[0x5a; 16]),
-            "ownTag": format!("{:#x}", B256::ZERO), "u": h(&t.u), "vTo": h(&t.vTo), "vFrom": h(&t.vFrom), "vAuditor": "0x", "sealedMemo": "0x"});
+            "ownTag": format!("{own_tag:#x}"), "u": h(&t.u), "vTo": h(&t.vTo), "vFrom": h(&t.vFrom), "vAuditor": "0x", "sealedMemo": "0x"});
         let envelope = json!({"from": format!("{:#x}", self.from.ua), "batch": "0", "nonce": nonce.to_string(), "validUntil": until.to_string(),
             "mode": 0, "relayer": format!("{:#x}", Address::ZERO), "fee": "0", "feeRecipient": format!("{:#x}", Address::ZERO)});
         let mut op = json!({"entry": "mtxConfidentialTransferSingle", "contract": "pqz", "token": format!("{:#x}", self.token),
@@ -2557,6 +2566,43 @@ async fn pqz_offchain_transfer_on_anvil() {
     let chain = Chain::with_signer(&chain_cfg(st.chain_id, &st.rpc, None), key(RELAYER)).unwrap();
     let pqz: Address = "0x000000000000000000000000000000005caa0f01".parse().unwrap();
     assert!(!chain.is_contract_at(pqz).await.unwrap(), "no PQZ precompile on this chain");
+}
+
+/// Group 3h (pqz-proof-path spec §3.2, §10, T63), on anvil (the 3f `OFFCHAIN` stack: no PQZ precompile here): a PQZ debit job
+/// naming a non-zero `ownTag` goes through the node and is mined; the op blob's tail is `ownTag ‖ kv ‖ u8(n)` with that tag and
+/// the receiver's version 0; the token is on `NONE` and the debit's record is a narrow first one; no `PqzDebitProof` log is
+/// emitted and no such row is indexed. UNAUDITED.
+#[tokio::test]
+#[ignore]
+async fn pqz_debit_with_own_tag_on_anvil() {
+    let st = offchain_stack(31949).await;
+    let (url, _) = fake_pqz_verifier(&st).await;
+    let (state, mut s) = st.lane(scaas_node::config::PqzVerifierCfg { endpoints: vec![url], ..Default::default() }).await;
+    let last = |id: i64| state.lock().unwrap().reports.iter().rev().find(|r| r["job_id"] == id).cloned().unwrap_or_default();
+    let tag = B256::repeat_byte(0x7a);
+    let (j, _, _) = st.transfer_job_tagged(1, 0, tag).await;
+    assert_eq!(j["op"]["args"]["args"]["ownTag"], json!(format!("{tag:#x}")), "a named field of the job");
+    state.lock().unwrap().jobs.push(j);
+    run_outbox(&mut s).await;
+    assert_eq!(last(1)["chain_state"], "mined", "{}", last(1));
+    let rows = st.rows().await;
+    let row = rows.iter().find(|r| r["event"] == "ConfidentialTransfer").unwrap_or_else(|| panic!("no ConfidentialTransfer: {rows:?}"));
+    let blob: Address = row["blob"].as_str().unwrap().parse().unwrap();
+    let pr = ProviderBuilder::new().connect_http(st.rpc.parse().unwrap());
+    let code = pr.get_code_at(blob).await.unwrap();
+    let d = &code[1..]; // SSTORE2: a STOP byte, then the data
+    let n = usize::from(d[d.len() - 1]);
+    assert_eq!(n, 1, "op 1 without the auditor: one key version");
+    let at = d.len() - 1 - 8 * n - 32;
+    assert_eq!((&d[at..at + 32], &d[at + 32..at + 40]), (tag.as_slice(), &[0u8; 8][..]), "ownTag, then the receiver's version 0");
+    assert_eq!(view(&st.rpc, st.token, scaas_node::abi::IPqzToken::proofStoreCall {}).await, 0, "NONE");
+    let rec = view(&st.rpc, st.token, pqz3f::pqzDebitRecordCall { ua: st.from.ua, counter: 0 }).await;
+    assert_eq!((rec.proofStore, rec.hasPrev, rec.shieldIn, rec.keyVersion), (0, false, 0, 0), "a narrow first record under NONE");
+    let head = pr.get_block_number().await.unwrap();
+    let logs = pr.get_logs(&alloy::rpc::types::Filter::new().address(st.token).from_block(0).to_block(head)).await.unwrap();
+    let proof_event = <scaas_node::abi::IPqzToken::PqzDebitProof as alloy::sol_types::SolEvent>::SIGNATURE_HASH;
+    assert!(logs.iter().all(|l| l.topic0() != Some(&proof_event)), "NONE: no PqzDebitProof");
+    assert!(rows.iter().all(|r| r["event"] != "PqzDebitProof"));
 }
 
 /// Group 3f (spec §4.3, §11.1, T47), on anvil: the owner revokes the token's verifier at once; a debit with a verdict of the old

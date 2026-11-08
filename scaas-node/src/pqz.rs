@@ -43,6 +43,11 @@ async fn offchain_config(chain: &Chain, token: alloy::primitives::Address) -> Re
     }
 }
 
+/// Group 3h (NODE-JOB-24): `w` is a PQZ debit (its estimate depends on the token's `proofStore()`).
+pub fn is_debit(w: &Work) -> bool {
+    debit_row(w).is_some()
+}
+
 /// The row of a PQZ debit (one taking the verdict last), `None` for any other work.
 fn debit_row(w: &Work) -> Option<&'static Row> {
     w.typed.as_ref().filter(|t| t.contract == "pqz")?;

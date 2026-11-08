@@ -379,6 +379,10 @@ sol! {
         event PqzVerifierProposed(bytes32 current, bytes32 next, uint64 eta);
         event PqzVerifierSet(bytes32 previous, bytes32 next, uint32 pqzVerifierEpoch);
         event PqzVerifierCancelled(bytes32 next);
+        // group 3h (pqz-proof-path spec §4, §5, §9.2): the mode the next debit runs under, its change, the logged P
+        function proofStore() external view returns (uint8);
+        event ProofStoreSet(uint8 previous, uint8 next);
+        event PqzDebitProof(address indexed blob, bytes32 indexed ua, uint64 indexed sendCounter, bytes header, bytes proof);
         error PqzVerifyModeInvalid(uint8 mode);
         error PqzVerifyConfigInvalid();
         error PqzVerifierUnregistered(bytes32 ua);
@@ -581,6 +585,8 @@ pub enum PqzRefusal {
 
 /// `pqzVerifyMode` 1 (spec §3): proofs accepted on the verifier UA's `PqzVerdict`; 0 `PRECOMPILE`.
 pub const PQZ_OFFCHAIN: u8 = 1;
+/// Group 3h (pqz-proof-path spec §4): `proofStore()` `LOG`, each debit's proof as a `PqzDebitProof` event (0 `NONE`: calldata only).
+pub const PROOF_STORE_LOG: u8 = 1;
 
 /// Group 3f (spec §11.1): a PQZ verifier mode refusal by name, and whether the op may still land (`true`: another verdict, the
 /// verifier's next epoch, an `eta` reached, a registration: back in the queue, never `dead`) or never (`false`: the op's own
