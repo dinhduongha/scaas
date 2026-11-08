@@ -118,6 +118,10 @@ contract BadKind is GenericKindBase, INoteKind {
     uint8 internal constant INIT_REVERTS = 14;
     uint8 internal constant OTHER_CHAIN_AFTER_INIT = 15;
     uint8 internal constant NESTED = 16;
+    uint8 internal constant OTHER_VERSION_AFTER_INIT = 17;
+    /// `creating()` as `initialize` saw it after its nested creation (T68: the restore is visible only inside the
+    /// transaction; EIP-1153 clears it at the end).
+    bytes32 public seenAfter;
 
     constructor(IOpenFactory.ReleaseId memory id, address factory_, bytes memory implArgs) GenericKindBase(id, factory_) {
         MODE = abi.decode(implArgs, (uint8));
@@ -136,6 +140,7 @@ contract BadKind is GenericKindBase, INoteKind {
             // a nested creation from `initialize`: this clone is its creator
             IOpenFactory(FACTORY).createInstance(IOpenFactory.ReleaseId(4, 0, 1), "nested",
                 abi.encodeCall(INoteKind.initialize, (bytes32(uint256(0xBEEF)), "inner")));
+            seenAfter = IOpenFactory(FACTORY).creating();
         }
     }
 
@@ -145,7 +150,7 @@ contract BadKind is GenericKindBase, INoteKind {
         bool isClone = ChainEnvCode.isClone();
         if (MODE == OTHER_CLASS || (MODE == OTHER_CLASS_AFTER_INIT && isClone)) i.contractClass = CLASS + 1;
         if (MODE == OTHER_KIND) i.kind = KIND + 1;
-        if (MODE == OTHER_VERSION) i.version = VERSION + 1;
+        if (MODE == OTHER_VERSION || (MODE == OTHER_VERSION_AFTER_INIT && isClone)) i.version = VERSION + 1;
         if (MODE == OTHER_CHAIN_AFTER_INIT && isClone) i.chainUid = keccak256("another chain");
         if (MODE == NO_INFO) revert();
         if (MODE == SHORT_192 || MODE == LONG_256) {

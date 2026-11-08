@@ -185,6 +185,7 @@ contract GovRouterCreateTest is GovRouterFixture {
         assertEq(f.infoOf(outer).creatorId, eoa, "the outer creator: the signing UA");
         assertEq(f.infoOf(inner).creatorId, nid(outer), "the nested creator: the outer instance");
         assertEq(BadKind(outer).seenCreator(), eoa);
+        assertEq(BadKind(outer).seenAfter(), eoa, "creating() restored after the nested creation");
         assertEq(NoteKind(inner).seenCreator(), nid(outer));
         assertEq(f.creating(), bytes32(0), "restored");
         (IOpenFactory.Created[] memory p,) = f.contractsPage(4, 0, 10);

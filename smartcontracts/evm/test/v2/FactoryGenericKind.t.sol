@@ -220,7 +220,8 @@ contract FactoryGenericKindTest is Test {
     function test_generic_creationChecks() public {
         _publish(4, 0, 1);
         bytes memory code = type(BadKind).creationCode;
-        for (uint8 m = 12; m <= 15; ++m) {
+        for (uint8 m = 12; m <= 17; ++m) {
+            if (m == 16) continue; // NESTED: test_generic_nestedCreation
             vm.prank(registrar);
             f.deployRelease(_id(4, 0, uint64(m)), 1, INoteKind.initialize.selector, type(INoteKind).interfaceId, code,
                 abi.encode(m));
@@ -250,6 +251,10 @@ contract FactoryGenericKindTest is Test {
         // another chain_uid after init (chain-neutral spec §3.2)
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ChainUidMismatch.selector, UID_, keccak256("another chain")));
         f.createInstance(_id(4, 0, 15), "15", _noteCall(0, ""));
+        // another version after init (T68: the post-init version comparison)
+        address p17 = f.predictAddress(nid(address(this)), 4, 0, "17");
+        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.InstanceInfoMismatch.selector, p17));
+        f.createInstance(_id(4, 0, 17), "17", _noteCall(0, ""));
         // the salt once
         address ok = f.createInstance(_id(4, 0, 1), "s", _noteCall(0, "ok")); // positive control
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.SaltAlreadyUsed.selector, ok));
@@ -278,6 +283,7 @@ contract FactoryGenericKindTest is Test {
         assertEq(p[1].creatorId, nid(alice));
         assertEq(NoteKind(p[0].addr).seenCreator(), nid(outer));
         assertEq(BadKind(outer).seenCreator(), nid(alice));
+        assertEq(BadKind(outer).seenAfter(), nid(alice), "creating() restored after the nested creation");
         assertEq(f.creating(), bytes32(0));
     }
 
