@@ -182,6 +182,10 @@ name = "wallet_vault"
 required-features = ["wallet"]
 
 [[test]]
+name = "wallet_import_ua"
+required-features = ["wallet"]
+
+[[test]]
 name = "wallet_custody"
 required-features = ["wallet"]
 
