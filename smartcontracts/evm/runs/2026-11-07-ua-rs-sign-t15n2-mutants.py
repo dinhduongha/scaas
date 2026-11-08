@@ -46,7 +46,7 @@ M = [
      [(ZF, '"pickDecoys" => has(&["candidates", "exclude", "count", "weights", "recipient"]),', '"pickDecoys" => has(&["candidates", "exclude", "count", "weights"]),')], FZ),
     # pqz-read --command decoys --recipient
     ("pqz-read: --recipient not passed to the pick", [(B, '        request["recipient"] = json!(hx(&u));\n', "        let _ = u;\n")], PR),
-    ("pqz-read: the legs not printed", [(B, '            out["legs"] = picked["legs"].clone();', "            let _ = &picked;")], PR),
+    ("pqz-read: the legs not printed", [(B, '        out["legs"] = picked["legs"].clone();', "        let _ = &picked;")], PR),
     ("pqz-read: --recipient not excluded from the candidates", [(B, "    exclude.extend(a.recipient);\n", "")], PR),
     ("pqz-read: --recipient with another command", [(B, '"--count", "--exclude", "--recipient", "--sync-block"', '"--count", "--exclude", "--sync-block"')], PR),
     # zether-read-balance --decoy-count --recipient

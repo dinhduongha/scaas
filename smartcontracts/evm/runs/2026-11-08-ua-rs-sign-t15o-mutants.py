@@ -63,7 +63,7 @@ M = [
     ("pqz-read: the key record of version 0", [(B, "    let key_record = r.word(&a.registry, &pqz_key_slot(&a.ua, v))?;", "    let key_record = r.word(&a.registry, &pqz_key_slot(&a.ua, 0))?;")], PR),
     ("pqz-read: the UA's sendCounter from the account struct", [(B, "json!(hx(&r.word(&a.token, &counter_slot(&root, &a.ua)?)?));", "json!(hx(&r.word(&a.token, &add(&base, 2))?));")], PR),
     ("pqz-read: no pending filter", [(B, "            if r.code(&low_addr(&rec, 0))?.len() == 1 + PK_BYTES {\n                continue;\n            }", "            let _ = r.code(&low_addr(&rec, 0))?;")], PR),
-    ("pqz-read: a decoy's key at version 0", [(B, "&pqz_key_slot(&ua, current.get(&ua).copied().ok_or(\"pickDecoys: not a candidate\")?)", "&pqz_key_slot(&ua, 0)")], PR),
+    ("pqz-read: a decoy's key at version 0", [(B, "&pqz_key_slot(&ua, d.current.get(&ua).copied().ok_or(\"pickDecoys: not a candidate\")?)", "&pqz_key_slot(&ua, 0)")], PR),
     # the C ABI
     ("C: the version ignored", [(CLIB, "ScaasUaPqzKey(handle(w)?.0.pqz_key_version(account, index, version)?)", "ScaasUaPqzKey(handle(w)?.0.pqz_key(account, index)?)")],
      UACT("WalletPqz.test_pqz_key_versions_are_the_pq_kat_rows")),

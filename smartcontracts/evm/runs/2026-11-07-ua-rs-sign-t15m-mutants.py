@@ -24,7 +24,8 @@ CHK = (".", ["python3", "-I", CTF])
 
 M = [
     # R1: one source; the holder's configuration
-    ("R1: a second --rpc accepted", [(B, "        if !seen.insert(f.clone()) {", '        if !seen.insert(f.clone()) && f != "--rpc" {')], T),
+    # (T20b, owner 2026-11-08: `--rpc` once or more, each a distinct node; the rule this mutant guards is now "one node named once")
+    ("R1: the same --rpc twice accepted", [(B, "                if a.rpc.contains(&u) {", "                if false {")], T),
     ("--registry not required", [(B, '"--factory", "--registry", "--token", "--ua"];', '"--factory", "--token", "--ua"];')], T),
     # R2
     ("R2: chain id not compared", [(B, '    if qty(&rpc(url, "eth_chainId", json!([]))?)? != a.chain_id {', "    if false {")], T),
@@ -42,7 +43,7 @@ M = [
     ("R5: a Zether kind accepted", [(B, "const PQZ_KINDS: [u8; 4] = [4, 5, 12, 13];", "const PQZ_KINDS: [u8; 5] = [4, 5, 12, 13, 2];")], T),
     # R6
     ("R6: the registered key not compared with the handle's",
-     [(B, "    if r.key_code.split_first() != Some((&0, k.pk().as_slice())) {", "    if false {")], T),
+     [(B, "    if pk.is_some_and(|pk| key_code.split_first() != Some((&0, pk))) {", "    if false {")], T),
     ("R6: --ua not compared with auditorUA",
      [(B, "        if auditor_ua != a.ua || !matches!(field(&mode, \"auditorMode\")?, 1 | 2) {",
        "        if !matches!(field(&mode, \"auditorMode\")?, 1 | 2) {")], T),

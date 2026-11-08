@@ -54,11 +54,11 @@ M = [
     ("pqz-read: --ua not excluded", [(B, "    exclude.push(a.ua);\n", "")], PR),
     ("pqz-read: --exclude ignored", [(B, "    let mut exclude = a.exclude.clone();", "    let mut exclude: Vec<Word> = Vec::new();")], PR),
     ("pqz-read: an unproven key accepted",
-     [(B, "                Some((0, pk)) if rec[11] == 1 && pk.len() == PK_BYTES =>", "                Some((0, pk)) if pk.len() == PK_BYTES =>")], PR),
+     [(B, "            Some((0, pk)) if rec[11] == 1 && pk.len() == PK_BYTES =>", "            Some((0, pk)) if pk.len() == PK_BYTES =>")], PR),
     ("pqz-read: no recency weight", [(B, "            let w = if moved(&mid, &r, &base, &ctr)? { 2 } else", "            let w = if moved(&mid, &r, &base, &ctr)? { 1 } else")], PR),
     ("pqz-read: holder counts every activity", [(B, '            if a.filter.as_deref() == Some("holder") || debit {', "            if debit {")], PR),
     ("pqz-read: a window below 2 accepted", [(B, "let old = block.checked_sub(w).filter(|_| w >= 2).ok_or(", "let old = block.checked_sub(w).ok_or(")], PR),
-    ("pqz-read: the blocks not re-checked", [(B, "    for (n, h) in &pins {\n        recheck(url, *n, h)?;", "    for (n, h) in &pins {\n        let _ = (url, n, h);")], PR),
+    ("pqz-read: the blocks not re-checked", [(B, "            for (n, h) in &d.pins {\n                recheck(url, *n, h)?;", "            for (n, h) in &d.pins {\n                let _ = (url, n, h);")], PR),
     ("pqz-read: a sync point past the read block", [(B, "    if sync > block {\n        return Err(\"--sync-block is past", "    if sync > block + 1 {\n        return Err(\"--sync-block is past")], PR),
     ("pqz-read: decoy flags with another command", [(B, '    if decoy && a.command != "decoys" {', "    if false {")], PR),
     # zether-read-balance --decoy-count / --decoy-keys
@@ -69,7 +69,7 @@ M = [
     ("zether: --exclude ignored", [(Z, "            if !candidates.contains(&u) && !exclude.contains(&u) {", "            if !candidates.contains(&u) {")], ZR),
     ("zether: holder counts every move", [(Z, 'Ok(if a.filter.as_deref() == Some("holder") { sent(&x) != sent(&y) } else { x != y })', "Ok(x != y || sent(&x) != sent(&y))")], ZR),
     ("zether: no recency weight", [(Z, "                let w = if moved(&mid, &r, &slot)? { 2 } else", "                let w = if moved(&mid, &r, &slot)? { 1 } else")], ZR),
-    ("zether: the blocks not re-checked", [(Z, "    for (b, h) in &pins {\n        recheck(url, *b, h)?;", "    for (b, h) in &pins {\n        let _ = (url, b, h);")], ZR),
+    ("zether: the blocks not re-checked", [(Z, "            pins.iter().try_for_each(|(n, h)| recheck(url, *n, h))?;", "            let _ = (&pins, url);")], ZR),
     ("zether: --decoy-count without --exclude", [(Z, "a.decoy_keys.is_none() && a.exclude.is_some() && ", "a.decoy_keys.is_none() && ")], ZR),
 ]
 

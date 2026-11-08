@@ -15,7 +15,8 @@
 # The T15i / T15l mutant runs (mutant-<n>, l-mutant-<n>, then rebuild) are not closing steps: mutant-logs checks their records and
 # harnesses. One re-runs as `STEPS=mutant-3 smartcontracts/evm/runs/2026-11-07-ua-rs-sign-gates.sh --only mutant-3`.
 # GATES_P names another round's re-run (its own logs and summary; T15o: GATES_P=2026-11-08-ua-rs-sign-t15o; T20b's first sync with
-# ua-mtx-merge: GATES_P=2026-11-08-ua-rs-sign-t20b1, the second: 2026-11-08-ua-rs-sign-t20b2), T20's stay.
+# ua-mtx-merge: GATES_P=2026-11-08-ua-rs-sign-t20b1, the second: 2026-11-08-ua-rs-sign-t20b2; the readers' ChainEnv check and
+# several nodes, owner 2026-11-08: 2026-11-08-ua-rs-sign-t20b3), T20's stay.
 P=${GATES_P:-2026-11-08-ua-rs-sign}
 LOGEXT=log # step logs are git-ignored (*.log); only <P>-summary.txt is committed (owner 2026-11-02)
 STEPS=${STEPS-"docs clientkeys vectors-check forge-ua ua-rs-nodefault ua-rs-wallet ua-rs ua-rs-pq ua-rs-signers ua-rs-json ua-rs-vectors ua-rs-zether ua-rs-pqz ua-rs-pqz-n2048 ua-deny ua-fuzz ua-sizes ua-c ua-cxx ua-qt ua-dart-frb ua-py ua-go ua-cs ua-dart cargo-zether-prover wasm-zether-prover scaas-ct no-oracle no-oracle-n2048 no-oracle-ua-py wallet-rows test-features mutant-logs pqz-read read-balance named-tests summary"}
@@ -146,7 +147,7 @@ print("baseline cells not measured:", miss or "none"); sys.exit(1 if miss else 0
                           2026-11-07-ua-rs-sign-t14b 2026-11-07-ua-rs-sign-t15g 2026-11-07-ua-rs-sign-t15k 2026-11-07-ua-rs-sign-t15i \
                           2026-11-07-ua-rs-sign-t15l 2026-11-07-ua-rs-sign-t15m 2026-11-07-ua-rs-sign-t15n \
                           2026-11-07-ua-rs-sign-t15n2 2026-11-08-ua-rs-sign-t15o 2026-11-08-ua-rs-sign-t20b1 \
-                          2026-11-08-ua-rs-sign-t20b2 ${MUTANT_LOGS_EXTRA:-}; do
+                          2026-11-08-ua-rs-sign-t20b2 2026-11-08-ua-rs-sign-t20b3 2026-11-08-ua-rs-sign-t20b4 ${MUTANT_LOGS_EXTRA:-}; do
                    l=$(tail -n 1 smartcontracts/evm/runs/$t-mutants.txt); echo "$t: $l"
                    grep -Eq '(survived or not loaded: 0|0 survived, 0 not loaded)$|0 survived, 0 not loaded \(' <<< "$l" || bad=1
                    echo "$t check: $(python3 -I smartcontracts/evm/runs/$t-mutants.py check 2>&1 | tail -n 1)"
@@ -811,6 +812,8 @@ ua-rs|cargo|ua_envelope_through_the_facade
 ua-rs|cargo|factory_record_is_the_layout_pin
 cargo-zether-prover|cargo|factory_record_is_the_layout_pin
 cargo-zether-prover|cargo|registry_slots_are_the_layout_pin
+ua-rs|cargo|chain_env_kat_rows
+cargo-zether-prover|cargo|clone_registry_is_the_kat_layout
 NAMES
 )
 . "$(dirname "$0")/2026-10-27-metatx-split-gates.sh"
