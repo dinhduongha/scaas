@@ -108,9 +108,10 @@ impl ChainAdapter for EvmAdapter {
     }
 
     async fn build(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
-        let w = work_from_job(job, self.fee_recipient).map_err(|e| SimError::Revert(format!("bad payload: {e:#}")))?;
+        let mut w = work_from_job(job, self.fee_recipient).map_err(|e| SimError::Revert(format!("bad payload: {e:#}")))?;
         let chain = self.lane(lane).map_err(|e| SimError::Transport(e.to_string()))?;
         self.guard.check(chain, &w).await?;
+        self.guard.pqz_fill(chain, &mut w).await?; // group 3f: a PQZ debit's verdict, before the simulation
         let gas = guard::gas(chain, &w, self.max_gas).await?;
         let mut meta = json!({"to": format!("{:#x}", w.to), "gas": gas});
         if self.guard.relay_priced(chain.address(), &w)? {

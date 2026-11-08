@@ -212,6 +212,13 @@ async fn relay(c: &GwChain, mut w: Work) -> Reply {
             t => sim_reply(t),
         };
     }
+    // group 3f (spec §11.1): a PQZ debit's verdict, rebuilt as on the lane (which reuses it), before the simulation
+    if let Err(e) = c.guard.pqz_fill(&c.chain, &mut w).await {
+        return match SimError::from(e) {
+            SimError::Revert(r) => bad(r),
+            t => sim_reply(t),
+        };
+    }
     if let Err(e) = c.chain.simulate(w.to, w.data.clone()).await {
         return sim_reply(e);
     }

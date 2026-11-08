@@ -361,6 +361,49 @@ sol! {
         error KeyReused(bytes32 ua);
         error StaleKeyVersion(bytes32 ua, uint64 keyVersion, uint64 current);
         error KeyVersionUnknown(bytes32 ua, uint64 keyVersion);
+
+        // ---- group 3f, PQZ verifier mode (spec 2026-11-06-attested-verify §4-§5): what the node rebuilds a `PqzVerdict` from,
+        // the verifier's events, and its errors (named, [`pqz_verdict_refusal`])
+        #[derive(PartialEq, Eq)]
+        struct PqzVerdict { address token; uint256 chainId; bytes32 proofSystemId; bytes32 statementHash; bytes32 proofHash;
+            uint32 pqzVerifierEpoch; uint64 validUntil; }
+        #[derive(PartialEq, Eq)]
+        struct PqzSignedVerdict { PqzVerdict pqzVerdict; UASig sig; }
+        struct PqzVerifyConfig { uint8 pqzVerifyMode; bytes32 verifier; bool fixed_; uint32 pqzVerifierEpoch; bytes32 pending;
+            uint64 eta; uint64 noticePeriod; }
+        function pqzVerifyConfig() external view returns (PqzVerifyConfig memory);
+        function proofSystemId() external view returns (bytes32);
+        /// The relayed op's binding (`TAG_UA_ENVELOPE`, every envelope field but `data`): the `binding` of the statement views.
+        function envelopeBinding(UAMetaTransaction m) external view returns (bytes32);
+        event PqzVerified(bytes32 statementHash, bytes32 proofHash, bytes32 verifier, uint32 pqzVerifierEpoch);
+        event PqzVerifierProposed(bytes32 current, bytes32 next, uint64 eta);
+        event PqzVerifierSet(bytes32 previous, bytes32 next, uint32 pqzVerifierEpoch);
+        event PqzVerifierCancelled(bytes32 next);
+        error PqzVerifyModeInvalid(uint8 mode);
+        error PqzVerifyConfigInvalid();
+        error PqzVerifierUnregistered(bytes32 ua);
+        error PqzVerifierKind(uint16 kind);
+        error PqzVerifierFixed();
+        error PqzVerifierSame();
+        error PqzVerifierChanged();
+        error PqzVerifierRevoked();
+        error PqzVerifierNotReady(uint64 eta);
+        error PqzVerifierPending(bytes32 pending);
+        error PqzVerdictRequired();
+        error PqzVerdictRejected();
+        error PqzVerdictMismatch(uint8 field);
+    }
+
+    /// `IPqzToken.sol`'s file-level event (the error of the same name is `IPqzToken`'s) and the confidential op events
+    /// (`IConfidentialToken`) a `PqzVerified` joins (group 3f, spec §11.1).
+    #[derive(Debug)]
+    interface IPqzEvents {
+        event PqzVerifierRevoked(bytes32 previous, uint32 pqzVerifierEpoch);
+        event ConfidentialTransfer(bytes32 indexed entryRef, bytes32 indexed fromUA, bytes32 indexed toUA, bytes32 beneficiary,
+            uint256 fee, uint64 sendCounter, address blob);
+        event ConfidentialTransferMulti(bytes32 indexed entryRef, bytes32 indexed fromUA, bytes32 indexed beneficiary, uint256 fee,
+            uint64 sendCounter, bytes32[] recipients, uint8 mode, address blob);
+        event Unshielded(bytes32 indexed ua, uint256 amount, bytes32 indexed recipient, address blob);
     }
 
     /// `MandateWallet` errors (CTR-ACC-06/07, CTR-ACC-12 in the merged form: ids): a job's revert reason names them, so the
@@ -536,6 +579,21 @@ pub enum PqzRefusal {
     ProofRejected,
 }
 
+/// `pqzVerifyMode` 1 (spec §3): proofs accepted on the verifier UA's `PqzVerdict`; 0 `PRECOMPILE`.
+pub const PQZ_OFFCHAIN: u8 = 1;
+
+/// Group 3f (spec §11.1): a PQZ verifier mode refusal by name, and whether the op may still land (`true`: another verdict, the
+/// verifier's next epoch, an `eta` reached, a registration: back in the queue, never `dead`) or never (`false`: the op's own
+/// shape, a fixed verifier, the wrong mode). `reason` is a `decode_revert` string.
+pub fn pqz_verdict_refusal(reason: &str) -> Option<(&'static str, bool)> {
+    const LIFTABLE: [&str; 7] = ["PqzVerdictMismatch", "PqzVerdictRejected", "PqzVerifierRevoked", "PqzVerifierChanged",
+        "PqzVerifierNotReady", "PqzVerifierPending", "PqzVerifierUnregistered"];
+    const FINAL: [&str; 6] = ["PqzVerifierFixed", "PqzVerifierSame", "PqzVerifierKind", "PqzVerdictRequired", "PqzVerifyModeInvalid",
+        "PqzVerifyConfigInvalid"];
+    let name = reason.split(['(', ' ', '{']).next().unwrap_or_default();
+    LIFTABLE.into_iter().find(|n| *n == name).map(|n| (n, true)).or_else(|| FINAL.into_iter().find(|n| *n == name).map(|n| (n, false)))
+}
+
 pub fn pqz_refusal(reason: &str) -> Option<PqzRefusal> {
     Some(match reason.split(['(', ' ', '{']).next().unwrap_or_default() {
         "StaleKeyVersion" => PqzRefusal::Stale,
@@ -625,6 +683,34 @@ mod tests {
         }
         assert_eq!(pqz_refusal(&decode_revert(&IPqzToken::SelfTransfer {}.abi_encode())), None);
         assert_eq!(pqz_refusal("KeyReusedX(..)"), None);
+    }
+
+    /// Group 3f (spec §11.1): the thirteen PQZ verifier mode errors decode by name; the seven a later verdict, epoch, `eta` or
+    /// registration may lift are back in the queue (never `dead`), the six of the op's own shape are not.
+    #[test]
+    fn pqz_verdict_refusals_are_named() {
+        let a = alloy::primitives::B256::repeat_byte(0xa1);
+        for (data, name, liftable) in [
+            (IPqzToken::PqzVerdictMismatch { field: 5 }.abi_encode(), "PqzVerdictMismatch", true),
+            (IPqzToken::PqzVerdictRejected {}.abi_encode(), "PqzVerdictRejected", true),
+            (IPqzToken::PqzVerifierRevoked {}.abi_encode(), "PqzVerifierRevoked", true),
+            (IPqzToken::PqzVerifierChanged {}.abi_encode(), "PqzVerifierChanged", true),
+            (IPqzToken::PqzVerifierNotReady { eta: 9 }.abi_encode(), "PqzVerifierNotReady", true),
+            (IPqzToken::PqzVerifierPending { pending: a }.abi_encode(), "PqzVerifierPending", true),
+            (IPqzToken::PqzVerifierUnregistered { ua: a }.abi_encode(), "PqzVerifierUnregistered", true),
+            (IPqzToken::PqzVerifierFixed {}.abi_encode(), "PqzVerifierFixed", false),
+            (IPqzToken::PqzVerifierSame {}.abi_encode(), "PqzVerifierSame", false),
+            (IPqzToken::PqzVerifierKind { kind: 0x0132 }.abi_encode(), "PqzVerifierKind", false),
+            (IPqzToken::PqzVerdictRequired {}.abi_encode(), "PqzVerdictRequired", false),
+            (IPqzToken::PqzVerifyModeInvalid { mode: 2 }.abi_encode(), "PqzVerifyModeInvalid", false),
+            (IPqzToken::PqzVerifyConfigInvalid {}.abi_encode(), "PqzVerifyConfigInvalid", false),
+        ] {
+            let r = decode_revert(&data);
+            assert!(r.starts_with(name), "{r}");
+            assert_eq!(pqz_verdict_refusal(&r), Some((name, liftable)), "{r}");
+        }
+        assert_eq!(pqz_verdict_refusal(&decode_revert(&IPqzToken::ProofRejected {}.abi_encode())), None);
+        assert_eq!(pqz_verdict_refusal("PqzVerdictMismatchX(..)"), None);
     }
 
     /// Regulated-kinds spec §7: every §3.1 error and `NotProposer` decoded by name; the six a later block may lift are the

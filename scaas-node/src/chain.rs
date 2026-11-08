@@ -196,6 +196,12 @@ impl Chain {
         C::abi_decode_returns(&out).map_err(|e| SimError::Revert(format!("decode: {e}")))
     }
 
+    /// `eth_call` of calldata built by ABI type (group 3f: a PQZ token's statement views, `crate::pqz`).
+    pub async fn call_raw(&self, to: Address, data: Bytes) -> std::result::Result<Bytes, SimError> {
+        let tx = TransactionRequest::default().with_to(to).with_input(data);
+        self.primary().call(tx).await.map_err(|e| classify(&e))
+    }
+
     /// `eth_call` from the lane with exactly `gas` (sizing `mtxSettle`, `guard::settle_gas`).
     pub async fn call_with_gas(&self, to: Address, data: Bytes, gas: u64) -> std::result::Result<Bytes, SimError> {
         let tx = TransactionRequest::default().with_from(self.address).with_to(to).with_input(data).with_gas_limit(gas);

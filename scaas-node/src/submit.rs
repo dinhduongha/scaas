@@ -249,7 +249,7 @@ pub fn transfer_typed(contract: Option<&str>, token: Address, struct_hash: B256,
         "pqz" => "pqz",
         c => anyhow::bail!("BAD_PAYLOAD: contract {c:?} (token | zether | pqz)"),
     };
-    Ok(Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, contract, domain_of: token, struct_hash: Some(struct_hash), lane_hash: None, signer, payee: None, digest: None,
+    Ok(Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, pqz_verdict: None, contract, domain_of: token, struct_hash: Some(struct_hash), lane_hash: None, signer, payee: None, digest: None,
         derived_signer: false, derived_side: false })
 }
 
@@ -383,8 +383,15 @@ impl Submitter {
             // review T4 m2: a rebuilt payload is re-signed by `track`, so it passes the guard too; refused ⇒ that
             // nonce is only ever gap-filled
             let work = match work {
-                Some(w) => match me.guard.check(&me.chain, &w).await {
-                    Ok(()) => Some(w),
+                Some(mut w) => match me.guard.check(&me.chain, &w).await {
+                    // group 3f: a replacement re-signs the bytes, so a PQZ debit gets its verdict again; none ⇒ gap-filled only
+                    Ok(()) => match me.guard.pqz_fill(&me.chain, &mut w).await {
+                        Ok(()) => Some(w),
+                        Err(r) => {
+                            warn!(job = j.job_id, nonce = n, "tracked PQZ job without a verdict ({r:?}); its nonce is only gap-filled");
+                            None
+                        }
+                    },
                     Err(Refusal::Policy(r)) => {
                         warn!(job = j.job_id, nonce = n, "tracked job refused by the guard: {r}; its nonce is only gap-filled");
                         None
@@ -533,6 +540,12 @@ impl Submitter {
             Err(Refusal::Transport(reason)) => return self.requeue(&w, reason).await,
         }
         let mut w = w;
+        // group 3f (spec §11.1): a PQZ debit's verdict, rebuilt by the node, before the digest and any simulation
+        match self.guard.pqz_fill(&self.chain, &mut w).await {
+            Ok(()) => {}
+            Err(Refusal::Policy(reason)) => return self.fail(&w, reason).await,
+            Err(Refusal::Transport(reason)) => return self.requeue(&w, reason).await,
+        }
         match guard::fill_digest(&self.chain, &mut w).await {
             Ok(()) => {}
             Err(SimError::Revert(r)) => return self.fail(&w, r).await,
@@ -637,6 +650,8 @@ impl Submitter {
             Ok(false) if crate::abi::regulated_refusal(&reason).is_some() => {
                 self.requeue(w, format!("REGULATED_REFUSED: {reason}")).await
             }
+            // group 3f (spec §11.1): a PQZ verifier mode refusal by name, never `dead` while the op may land with another verdict
+            Ok(false) if crate::abi::pqz_verdict_refusal(&reason).is_some() => self.pqz_refused(w, reason).await,
             // group 3g (spec §7.3): the PQZ key-version reverts by name; a stale debit or two equal keys never land, a version
             // above current may become current, a proof built before a party's rotation is `PQZ_KEY_ROTATED`, never `dead`
             Ok(false) => match crate::abi::pqz_refusal(&reason) {
@@ -651,6 +666,24 @@ impl Submitter {
                 None => self.fail(w, reason).await,
             },
             Err(e) => self.requeue(w, format!("mtxNonce: {e:#}")).await,
+        }
+    }
+
+    /// Group 3f (spec §11.1): a verdict, epoch, `eta` or registration may lift it: back in the queue (`PQZ_KEY_ROTATED` for a
+    /// `PqzVerdictMismatch` after a party's indexed `UAPqzKeyCurrent`, T55); the op's own shape never lands: `dead`.
+    async fn pqz_refused(&self, w: &Work, reason: String) {
+        let Some((name, liftable)) = crate::abi::pqz_verdict_refusal(&reason) else { return self.fail(w, reason).await };
+        if name == "PqzVerdictMismatch" {
+            match guard::pqz_rotated(&self.chain, w, ROTATION_LOOKBACK).await {
+                Ok(true) => return self.requeue(w, format!("PQZ_KEY_ROTATED: {reason}")).await,
+                Ok(false) => {}
+                Err(e) => return self.requeue(w, format!("PQZ_KEY_ROTATED read: {e:#}; {reason}")).await,
+            }
+        }
+        if liftable {
+            self.requeue(w, format!("PQZ_VERDICT_REFUSED: {reason}")).await
+        } else {
+            self.fail(w, reason).await
         }
     }
 
@@ -1008,7 +1041,22 @@ pub(crate) mod tests {
         pqz_other_len: bool,
         /// `eth_getLogs` for `UAPqzKeyCurrent` answers one log (a party rotated).
         pqz_rotated: bool,
+        /// Group 3f: `pqzVerifyConfig()` answers `(mode, verifier, epoch)`; `None`: it reverts (a token without the view).
+        pqz_cfg: Option<(u8, B256, u32)>,
+        /// Group 3f: the input of every `eth_call` to a PQZ view (`pqzVerifyConfig`, `proofSystemId`, `envelopeBinding`, the
+        /// statement views), in order.
+        views: Vec<Vec<u8>>,
+        /// Every address whose code was asked (`eth_getCode`).
+        code_asked: Vec<Address>,
     }
+    /// Group 3f: what the fake token's views answer: its `proofSystemId()`, the relayed op's `envelopeBinding`, the statement.
+    const PSID: B256 = B256::repeat_byte(0x9d);
+    const BINDING: B256 = B256::repeat_byte(0xb1);
+    const STATEMENT: [u8; 40] = [0x5a; 40];
+    /// The PQZ views of the fake token: `pqzVerifyConfig`, `proofSystemId`, `envelopeBinding`, the four statement views (the forge
+    /// artifact's selectors, pinned in `pqz::tests::views_are_the_contracts`).
+    const PQZ_VIEWS: [[u8; 4]; 7] = [[0xdc, 0x59, 0xc6, 0x6e], [0x1f, 0x3b, 0x28, 0xf2], [0x35, 0xad, 0x08, 0xaa], [0x3a, 0x3b, 0xb4, 0x5a],
+        [0xff, 0xde, 0xe9, 0x09], [0x23, 0xa7, 0x26, 0x49], [0xf4, 0x83, 0x4c, 0xb9]];
     const PQZ_KEY0: Address = Address::repeat_byte(0xe0);
     const PQZ_KEY1: Address = Address::repeat_byte(0xe1);
     type Rpc = Arc<Mutex<Evm>>;
@@ -1064,6 +1112,7 @@ pub(crate) mod tests {
                 "eth_getBlockByNumber" => Ok(Value::Null),
                 "eth_getCode" => {
                     let a: Address = p[0].as_str().unwrap().parse().unwrap();
+                    e.code_asked.push(a);
                     Ok(json!(if a == PQZ_KEY0 || a == PQZ_KEY1 { format!("0x00{}", "42".repeat(4 + usize::from(e.pqz_other_len && a == PQZ_KEY1))) }
                              else if e.designator == Some(a) { format!("0xef0100{}", "55".repeat(20)) }
                              else if e.contract_signer || e.code_only == Some(a) { "0x6001".into() } else { "0x".into() }))
@@ -1102,6 +1151,26 @@ pub(crate) mod tests {
                     } else if sel == crate::abi::IUARegistry::pqzKeyAtCall::SELECTOR {
                         Ok(json!(format!("0x{}", alloy::hex::encode(crate::abi::IUARegistry::pqzKeyAtCall::abi_encode_returns(
                             &crate::abi::IUARegistry::pqzKeyAtReturn { ptr: PQZ_KEY1, pqzPopHash: B256::ZERO, proven: false })))))
+                    } else if PQZ_VIEWS.contains(&<[u8; 4]>::try_from(&sel[..]).unwrap()) {
+                        // group 3f: the views a PQZ debit's verdict is rebuilt from
+                        let input = alloy::hex::decode(&input[2..]).unwrap();
+                        e.views.push(input.clone());
+                        let s4: [u8; 4] = sel[..].try_into().unwrap();
+                        if s4 == crate::abi::IPqzToken::pqzVerifyConfigCall::SELECTOR {
+                            match e.pqz_cfg {
+                                None => Err(err(3, "execution reverted", Some("0x".into()))),
+                                Some((mode, verifier, epoch)) => Ok(json!(format!("0x{}", alloy::hex::encode(
+                                    crate::abi::IPqzToken::pqzVerifyConfigCall::abi_encode_returns(&crate::abi::IPqzToken::PqzVerifyConfig {
+                                        pqzVerifyMode: mode, verifier, fixed_: false, pqzVerifierEpoch: epoch, pending: B256::ZERO, eta: 0,
+                                        noticePeriod: 0 }))))),
+                            }
+                        } else if s4 == crate::abi::IPqzToken::proofSystemIdCall::SELECTOR {
+                            Ok(json!(format!("{PSID:#x}")))
+                        } else if s4 == crate::abi::IPqzToken::envelopeBindingCall::SELECTOR {
+                            Ok(json!(format!("{BINDING:#x}")))
+                        } else {
+                            Ok(json!(format!("0x{}", alloy::hex::encode(Bytes::from(STATEMENT.to_vec()).abi_encode()))))
+                        }
                     } else if sel == crate::abi::IPqzToken::auditorUACall::SELECTOR {
                         Ok(json!(format!("{:#x}", B256::repeat_byte(0xa7))))
                     } else if sel == crate::abi::IUALedger::registryCall::SELECTOR {
@@ -1142,6 +1211,11 @@ pub(crate) mod tests {
                                     "reused" => alloy::sol_types::SolError::abi_encode(&crate::abi::IPqzToken::KeyReused { ua }),
                                     _ => alloy::sol_types::SolError::abi_encode(&crate::abi::IPqzToken::KeyVersionUnknown { ua, keyVersion: 2 }),
                                 };
+                                Err(err(3, "execution reverted", Some(format!("0x{}", alloy::hex::encode(data)))))
+                            }
+                            // group 3f: the token refuses the verdict the node rebuilt (here: field 3, the statement moved)
+                            Some("verdict_mismatch") => {
+                                let data = alloy::sol_types::SolError::abi_encode(&crate::abi::IPqzToken::PqzVerdictMismatch { field: 3 });
                                 Err(err(3, "execution reverted", Some(format!("0x{}", alloy::hex::encode(data)))))
                             }
                             // Nethermind 2.2.0's answer for a call over 2^24 regular gas (EIP-7825 under EIP-8037)
@@ -1676,8 +1750,8 @@ pub(crate) mod tests {
             }
         }
         // plan T34 added the router's eight regulated control rows to typed_ops.json (97 -> 105); pay-meta-tax T41: -> 110
-        // (UAPayWithTax's three domains, the router's two tax ops)
-        assert_eq!(n, 110, "every row with an entry, but the relay fees (relay_fee_call_object)");
+        // (UAPayWithTax's three domains, the router's two tax ops); group 3f T46 / T47: -> 113, the router's three verifier ops
+        assert_eq!(n, 113, "every row with an entry, but the relay fees (relay_fee_call_object)");
     }
 
     /// `EvmAdapter::call_key`, which the Hedera adapter delegates to (`the_hedera_lane_skips_bytes_already_in_flight` is the
@@ -2770,5 +2844,295 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
         let mut c = test_cfg("http://127.0.0.1:9");
         c.params.insert("l1_fee".into(), "arbitrum".into());
         assert!(guard::Guard::new(&c, Default::default()).is_err());
+    }
+
+    // ---- group 3f, PQZ verifier mode (spec 2026-11-06-attested-verify §11.1): the node rebuilds the verdict, holds no key
+
+    /// The fake token's verifier UA (a native id) and an `OFFCHAIN` token at epoch 2.
+    const VERIFIER: B256 = B256::repeat_byte(0x0e);
+    fn offchain() -> Evm {
+        Evm { mtx_nonce: Some(0), pqz_cfg: Some((1, VERIFIER, 2)), ..Default::default() }
+    }
+
+    /// A verifier's `UASig` (a native id's 65 bytes), `tag` its first byte.
+    fn verdict_auth(tag: u8) -> Value {
+        json!({"keyData": "0x", "signature": format!("0x{}", format!("{tag:02x}").repeat(65)), "members": []})
+    }
+
+    /// A job's `pqz_verdict` sub-object, or a verifier's answer of that shape.
+    fn verdict_json(epoch: u32, valid_until: u64, tag: u8) -> Value {
+        json!({"pqzVerifierEpoch": epoch, "validUntil": valid_until.to_string(), "auth": verdict_auth(tag)})
+    }
+
+    fn with_verdict(mut j: Value, v: Value) -> Value {
+        j["op"]["args"]["pqz_verdict"] = v;
+        j
+    }
+
+    /// A fake PQZ verifier (off-chain): `POST /v1/pqz-verdict` answers `answer` with `status`, every request body kept.
+    #[derive(Default)]
+    struct Ver {
+        answer: Value,
+        status: u16,
+        reqs: Vec<Value>,
+    }
+    type VerRef = Arc<Mutex<Ver>>;
+
+    async fn fake_verifier(answer: Value) -> (String, VerRef) {
+        use axum::extract::State;
+        async fn h(State(s): State<VerRef>, body: axum::body::Bytes) -> (axum::http::StatusCode, String) {
+            let mut v = s.lock().unwrap();
+            v.reqs.push(serde_json::from_slice(&body).unwrap_or(Value::Null));
+            (axum::http::StatusCode::from_u16(if v.status == 0 { 200 } else { v.status }).unwrap(), v.answer.to_string())
+        }
+        let s: VerRef = Arc::new(Mutex::new(Ver { answer, ..Default::default() }));
+        let app = axum::Router::new().route("/v1/pqz-verdict", axum::routing::post(h)).with_state(s.clone());
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", l.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+        (url, s)
+    }
+
+    /// An endpoint nothing listens on (connection refused at once).
+    const DEAD: &str = "http://127.0.0.1:9";
+
+    fn endpoints(list: Vec<String>) -> impl FnOnce(&mut ChainCfg) {
+        move |c: &mut ChainCfg| {
+            c.pqz_verifier.endpoints = list;
+            c.pqz_verifier.timeout_ms = 2_000;
+        }
+    }
+
+    /// The trailing `PqzSignedVerdict` of a sent PQZ debit (`name`'s row).
+    fn sent_verdict(name: &str, data: &[u8]) -> crate::abi::IPqzToken::PqzSignedVerdict {
+        let row = crate::typed::testkit::row_of(name, "pqz");
+        let vals = crate::typed::call_values(row, data).unwrap();
+        let v = vals.last().unwrap().abi_encode();
+        <crate::abi::IPqzToken::PqzSignedVerdict as SolValue>::abi_decode(&v).unwrap()
+    }
+
+    fn ua_sig(v: &Value) -> UASig {
+        UASig::abi_decode(&crate::typed::parse("UASig", v, "auth").unwrap().abi_encode()).unwrap()
+    }
+
+    /// The job's proof bytes (`args.proof`).
+    fn proof_of(j: &Value) -> Vec<u8> {
+        crate::typed::testkit::hex(&j["op"]["args"]["proof"])
+    }
+
+    /// Spec §11.1: the job's `pqz_verdict` carries the verifier's epoch, `validUntil` and signature only; the node rebuilds the
+    /// `PqzVerdict` they sign from the token (the target), the chain id, `proofSystemId()`, the statement the token's own view
+    /// builds for the job's named `args` and the relayed envelope's binding, and the job's proof, and sends that struct with
+    /// the job's signature last. The views it asked: the config, the binding of the envelope, the statement of the job's args.
+    #[tokio::test]
+    async fn pqz_verdict_subobject_builds_struct() {
+        let until = now() + 600;
+        let j = with_verdict(pqz_job(7), verdict_json(2, until, 0x7e));
+        let (r, rpc) = outcomes(offchain(), vec![j.clone()], |_| {}).await;
+        assert_eq!(states_of(&r), ["signed", "broadcast"], "{r:?}");
+        let e = rpc.lock().unwrap();
+        let v = sent_verdict("UAPqzTransferSingle", &e.sent[0].2);
+        assert_eq!(v.pqzVerdict, crate::abi::IPqzToken::PqzVerdict { token: TOKEN, chainId: U256::from(31337), proofSystemId: PSID,
+            statementHash: alloy::primitives::keccak256(STATEMENT), proofHash: alloy::primitives::keccak256(proof_of(&j)),
+            pqzVerifierEpoch: 2, validUntil: until });
+        assert_eq!(v.sig, ua_sig(&verdict_auth(0x7e)), "the job's signature, as it named it");
+        // the statement view: the job's own `args` and the binding the token gave for its envelope
+        let st = e.views.iter().find(|i| i[..4] == [0x3a, 0x3b, 0xb4, 0x5a]).expect("transferSingleStatement asked");
+        let ty = alloy::dyn_abi::DynSolType::parse(&format!("({},bytes32)", crate::typed::abi_of("PqzTransferArgs"))).unwrap();
+        let got = ty.abi_decode_params(&st[4..]).unwrap();
+        let want = crate::typed::parse("PqzTransferArgs", &j["op"]["args"]["args"], "args").unwrap();
+        assert_eq!(got.as_tuple().unwrap()[0], want, "the job's named args");
+        assert_eq!(got.as_tuple().unwrap()[1], alloy::dyn_abi::DynSolValue::FixedBytes(BINDING, 32), "the envelope's binding");
+        let b = e.views.iter().find(|i| i[..4] == crate::abi::IPqzToken::envelopeBindingCall::SELECTOR).expect("envelopeBinding asked");
+        let m = crate::abi::IPqzToken::envelopeBindingCall::abi_decode(b).unwrap().m;
+        assert_eq!((m.from, m.data.len()), (B256::repeat_byte(0xab), 0), "the job's envelope, no data");
+    }
+
+    /// Spec §11.1: an `OFFCHAIN` job without `pqz_verdict` is sent to the configured endpoints in order (`POST /v1/pqz-verdict`
+    /// with named fields: the token, the chain, the job's named op, the statement and proof the node rebuilt, the epoch); the
+    /// first answer decoded with the bounded `UASig` decoder is used. None answers (refused, too long, a `UASig` past the bound, a
+    /// non-2xx) ⇒ `PQZ_VERDICT_MISSING` back in the queue, zero sends; no endpoint at all ⇒ `dead` by name, nothing asked.
+    #[tokio::test]
+    async fn offchain_job_without_pqz_verdict_fetches_or_refuses() {
+        let until = now() + 600;
+        let (url, ver) = fake_verifier(verdict_json(2, until, 0x7f)).await;
+        let (r, rpc) = outcomes(offchain(), vec![pqz_job(7)], endpoints(vec![DEAD.into(), url.clone()])).await;
+        assert_eq!(states_of(&r), ["signed", "broadcast"], "the second endpoint answers: {r:?}");
+        let v = sent_verdict("UAPqzTransferSingle", &rpc.lock().unwrap().sent[0].2);
+        assert_eq!((v.sig, v.pqzVerdict.pqzVerifierEpoch, v.pqzVerdict.validUntil), (ua_sig(&verdict_auth(0x7f)), 2, until));
+        assert_eq!(v.pqzVerdict.statementHash, alloy::primitives::keccak256(STATEMENT));
+        let req = ver.lock().unwrap().reqs[0].clone();
+        let keys: Vec<&str> = req.as_object().unwrap().keys().map(String::as_str).collect();
+        assert_eq!(keys, ["chainId", "op", "pqzVerifierEpoch", "proof", "statement", "token"], "named fields only: {req}");
+        assert_eq!((req["token"].as_str(), req["chainId"].as_str(), req["pqzVerifierEpoch"].as_u64()),
+            (Some(format!("{TOKEN:#x}").as_str()), Some("31337"), Some(2)));
+        assert_eq!(req["statement"], json!(format!("0x{}", alloy::hex::encode(STATEMENT))));
+        assert_eq!(req["proof"], pqz_job(7)["op"]["args"]["proof"]);
+        assert_eq!((req["op"]["entry"].as_str(), req["op"]["binding"].as_str()),
+            (Some("mtxConfidentialTransferSingle"), Some(format!("{BINDING:#x}").as_str())));
+        let job_args = &pqz_job(7)["op"]["args"];
+        assert_eq!(req["op"]["args"]["args"], crate::typed::to_json("PqzTransferArgs",
+            &crate::typed::parse("PqzTransferArgs", &job_args["args"], "args").unwrap()), "the job's named args");
+        assert!(req["op"]["args"].get("proof").is_none() && req["op"]["args"].get("pqzAuth").is_none(), "the statement's inputs only");
+        // none answers: refused, a non-2xx, an answer above `max_response_bytes`, a UASig past the 16-slot bound
+        let slot = json!({"index": 0, "members": [], "sig": "0x01"});
+        let wide = json!({"pqzVerifierEpoch": 2, "validUntil": until.to_string(),
+            "auth": {"keyData": "0x", "signature": "0x", "members": vec![slot; 17]}});
+        for (answer, cap, why) in [(Value::Null, 0, "not an object"), (verdict_json(2, until, 0x7f), 64, "above max_response_bytes"),
+            (wide, 0, "17 slots")] {
+            let (url, _) = fake_verifier(answer).await;
+            let (r, rpc) = outcomes(offchain(), vec![pqz_job(7)], move |c| {
+                endpoints(vec![DEAD.into(), url])(c);
+                if cap > 0 {
+                    c.pqz_verifier.max_response_bytes = cap;
+                }
+            }).await;
+            assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("PQZ_VERDICT_MISSING"), "{why}: {r:?}");
+            assert!(rpc.lock().unwrap().sent.is_empty(), "{why}");
+        }
+        let (url, ver) = fake_verifier(verdict_json(2, until, 0x7f)).await;
+        ver.lock().unwrap().status = 500;
+        let (r, rpc) = outcomes(offchain(), vec![pqz_job(7)], endpoints(vec![url])).await;
+        assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("PQZ_VERDICT_MISSING"), "a 500 is no answer: {r:?}");
+        assert!(rpc.lock().unwrap().sent.is_empty());
+        let (r, rpc) = outcomes(offchain(), vec![pqz_job(7)], |_| {}).await;
+        assert!(r.len() == 1 && r[0].0 == "dead" && r[0].1.starts_with("PQZ_VERDICT_MISSING"), "no endpoint: {r:?}");
+        assert!(rpc.lock().unwrap().sent.is_empty() && !rpc.lock().unwrap().calls.iter().any(|m| m == "eth_estimateGas"));
+    }
+
+    /// Spec §11.1: a `PRECOMPILE` token takes the empty verdict and never reads one, so a job naming `pqz_verdict` there is
+    /// refused `PQZ_VERDICT_NOT_EXPECTED`, zero sends; without it the job is sent with the empty verdict, no endpoint asked. A token
+    /// whose `pqzVerifyConfig()` reverts is no `OFFCHAIN` token: the same.
+    #[tokio::test]
+    async fn precompile_job_with_pqz_verdict_refused() {
+        let precompile = || Evm { mtx_nonce: Some(0), pqz_cfg: Some((0, B256::ZERO, 0)), ..Default::default() };
+        let j = with_verdict(pqz_job(7), verdict_json(0, now() + 600, 0x7e));
+        let (url, ver) = fake_verifier(verdict_json(0, now() + 600, 0x7f)).await;
+        for e in [precompile(), Evm { mtx_nonce: Some(0), ..Default::default() }] {
+            let (r, rpc) = outcomes(e, vec![j.clone()], endpoints(vec![url.clone()])).await;
+            assert!(r.len() == 1 && r[0].0 == "dead" && r[0].1.starts_with("PQZ_VERDICT_NOT_EXPECTED"), "{r:?}");
+            assert!(rpc.lock().unwrap().sent.is_empty());
+        }
+        for e in [precompile(), Evm { mtx_nonce: Some(0), ..Default::default() }] {
+            let (r, rpc) = outcomes(e, vec![pqz_job(7)], endpoints(vec![url.clone()])).await;
+            assert_eq!(states_of(&r), ["signed", "broadcast"], "{r:?}");
+            let v = sent_verdict("UAPqzTransferSingle", &rpc.lock().unwrap().sent[0].2);
+            let empty = crate::abi::IPqzToken::PqzSignedVerdict { pqzVerdict: crate::abi::IPqzToken::PqzVerdict { token: Address::ZERO,
+                chainId: U256::ZERO, proofSystemId: B256::ZERO, statementHash: B256::ZERO, proofHash: B256::ZERO, pqzVerifierEpoch: 0,
+                validUntil: 0 }, sig: UASig { keyData: Bytes::new(), signature: Bytes::new(), members: vec![] } };
+            assert_eq!(v, empty, "the empty verdict");
+        }
+        assert!(ver.lock().unwrap().reqs.is_empty(), "no endpoint asked for a PRECOMPILE token");
+    }
+
+    /// Spec §11.1: a verdict at another epoch than the token's is re-fetched once: the job's stale one ⇒ one request; the
+    /// endpoint's answer still stale ⇒ back in the queue, zero sends (never a second re-fetch); a job without a verdict ⇒ the
+    /// fetch and one re-fetch.
+    #[tokio::test]
+    async fn pqz_verdict_epoch_mismatch_refetch_once() {
+        let until = now() + 600;
+        let stale = with_verdict(pqz_job(7), verdict_json(1, until, 0x7e));
+        let (url, ver) = fake_verifier(verdict_json(2, until, 0x7f)).await;
+        let (r, rpc) = outcomes(offchain(), vec![stale.clone()], endpoints(vec![url])).await;
+        assert_eq!(states_of(&r), ["signed", "broadcast"], "{r:?}");
+        assert_eq!(sent_verdict("UAPqzTransferSingle", &rpc.lock().unwrap().sent[0].2).sig, ua_sig(&verdict_auth(0x7f)));
+        assert_eq!(ver.lock().unwrap().reqs.len(), 1);
+        let (url, ver) = fake_verifier(verdict_json(1, until, 0x7f)).await;
+        let (r, rpc) = outcomes(offchain(), vec![stale], endpoints(vec![url.clone()])).await;
+        assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("PQZ_VERDICT_MISSING"), "{r:?}");
+        assert!(rpc.lock().unwrap().sent.is_empty());
+        assert_eq!(ver.lock().unwrap().reqs.len(), 1, "one re-fetch on a mismatch");
+        let (r, _) = outcomes(offchain(), vec![pqz_job(7)], endpoints(vec![url])).await;
+        assert!(r.len() == 1 && r[0].0 == "queued", "{r:?}");
+        assert_eq!(ver.lock().unwrap().reqs.len(), 3, "the fetch and one re-fetch");
+        // an expiring verdict (inside `valid_margin_secs`) is no usable verdict either
+        let (url, ver) = fake_verifier(verdict_json(2, until, 0x7f)).await;
+        let soon = with_verdict(pqz_job(7), verdict_json(2, now() + 5, 0x7e));
+        let (r, _) = outcomes(offchain(), vec![soon], endpoints(vec![url])).await;
+        assert_eq!(states_of(&r), ["signed", "broadcast"], "{r:?}");
+        assert_eq!(ver.lock().unwrap().reqs.len(), 1);
+    }
+
+    /// Spec §11.1: the token's verdict refusals are named and never `dead` while the op may land with another verdict:
+    /// `PqzVerdictMismatch` in the simulation back in the queue; after an indexed `UAPqzKeyCurrent` of a party it is
+    /// `PQZ_KEY_ROTATED` (T55); a revoked verifier (`pqzVerifyConfig().verifier == 0`) back in the queue, nothing fetched.
+    #[tokio::test]
+    async fn pqz_verdict_mismatch_not_dead() {
+        let j = with_verdict(pqz_job(7), verdict_json(2, now() + 600, 0x7e));
+        let (r, rpc) = outcomes(Evm { sim: Some("verdict_mismatch"), ..offchain() }, vec![j.clone()], |_| {}).await;
+        assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("PQZ_VERDICT_REFUSED: PqzVerdictMismatch"), "{r:?}");
+        assert!(rpc.lock().unwrap().sent.is_empty());
+        let (r, _) = outcomes(Evm { sim: Some("verdict_mismatch"), pqz_rotated: true, ..offchain() }, vec![j.clone()], |_| {}).await;
+        assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("PQZ_KEY_ROTATED: PqzVerdictMismatch"), "{r:?}");
+        let (url, ver) = fake_verifier(verdict_json(2, now() + 600, 0x7f)).await;
+        let revoked = Evm { pqz_cfg: Some((1, B256::ZERO, 3)), ..offchain() };
+        let (r, rpc) = outcomes(revoked, vec![pqz_job(7)], endpoints(vec![url])).await;
+        assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.contains("PqzVerifierRevoked"), "{r:?}");
+        assert!(rpc.lock().unwrap().sent.is_empty() && ver.lock().unwrap().reqs.is_empty());
+    }
+
+    /// The node never asks for the PQZ precompile on an `OFFCHAIN` token's job (spec §3, O1: OFFCHAIN ignores whether a
+    /// precompile exists): sent on a chain where nothing has code at `0x…5caa0f01`.
+    #[tokio::test]
+    async fn offchain_job_not_refused_without_precompile() {
+        let j = with_verdict(pqz_job(7), verdict_json(2, now() + 600, 0x7e));
+        let (r, rpc) = outcomes(offchain(), vec![j], |_| {}).await;
+        assert_eq!(states_of(&r), ["signed", "broadcast"], "{r:?}");
+        let pqz: Address = "0x000000000000000000000000000000005caa0f01".parse().unwrap();
+        assert!(!rpc.lock().unwrap().code_asked.contains(&pqz));
+    }
+
+    /// A shield (`UAShield`) and a wrap-shield (`WrapShield`) job of the payer on the fake PQZ token.
+    fn shield_jobs() -> Vec<Value> {
+        let v = crate::typed::testkit::vectors();
+        let mut out = vec![];
+        for (id, name) in [(7, "UAShield"), (8, "WrapShield")] {
+            let mut op = crate::typed::testkit::op_of(name, "pqz", &v).unwrap();
+            op["token"] = json!(format!("{TOKEN:#x}"));
+            op["validUntil"] = json!((now() + 600).to_string());
+            let from = if name == "UAShield" { format!("{:#x}", payer().into_word()) } else { format!("{:#x}", payer()) };
+            op["envelope"]["from"] = json!(from);
+            op["envelope"]["validUntil"] = json!((now() + 600).to_string());
+            let sentinel = json!(format!("0x{}", "11".repeat(65)));
+            if name == "UAShield" { op["auth"]["signature"] = sentinel } else { op["signature"] = sentinel }
+            let kind = if name == "UAShield" { "ua_metatx" } else { "metatx" };
+            out.push(json!({"id": id, "kind": kind, "op": op}));
+        }
+        out
+    }
+
+    /// Spec §11.1 (C8): with `refuse_shield_when_unserved` on, a shield or wrap-shield into an `OFFCHAIN` token whose verifier
+    /// is revoked (the endpoints answering) or whose endpoints none answers (the verifier set) is refused
+    /// `PQZ_VERIFIER_UNREACHABLE`, zero sends; the controls: the verifier set and an endpoint answering, a `PRECOMPILE` token.
+    #[tokio::test]
+    async fn shield_refused_when_unserved_and_enabled() {
+        let (url, _) = fake_verifier(json!({"error": "BAD_REQUEST"})).await;
+        let on = |urls: Vec<String>| move |c: &mut ChainCfg| {
+            endpoints(urls)(c);
+            c.pqz_verifier.refuse_shield_when_unserved = true;
+        };
+        let revoked = Evm { pqz_cfg: Some((1, B256::ZERO, 3)), ..offchain() };
+        for (e, urls, why) in [(revoked, vec![url.clone()], "revoked"), (offchain(), vec![DEAD.to_string()], "unreachable"),
+            (offchain(), vec![], "no endpoint")] {
+            let (r, rpc) = outcomes(e, shield_jobs(), on(urls)).await;
+            assert!(r.len() == 2 && r.iter().all(|x| x.0 == "dead" && x.1.starts_with("PQZ_VERIFIER_UNREACHABLE")), "{why}: {r:?}");
+            assert!(rpc.lock().unwrap().sent.is_empty(), "{why}");
+        }
+        let precompile = Evm { mtx_nonce: Some(0), pqz_cfg: Some((0, B256::ZERO, 0)), ..Default::default() };
+        for (e, urls) in [(offchain(), vec![DEAD.to_string(), url.clone()]), (precompile, vec![])] {
+            let (r, rpc) = outcomes(e, shield_jobs(), on(urls)).await;
+            assert_eq!(states_of(&r), ["signed", "broadcast", "signed", "broadcast"], "{r:?}");
+            assert_eq!(rpc.lock().unwrap().sent.len(), 2);
+        }
+    }
+
+    /// The switch is off by default: a shield into a token whose verifier is revoked and that no endpoint serves is sent.
+    #[tokio::test]
+    async fn shield_sent_when_disabled() {
+        let revoked = Evm { pqz_cfg: Some((1, B256::ZERO, 3)), ..offchain() };
+        let (r, rpc) = outcomes(revoked, shield_jobs(), endpoints(vec![DEAD.into()])).await;
+        assert_eq!(states_of(&r), ["signed", "broadcast", "signed", "broadcast"], "{r:?}");
+        assert_eq!(rpc.lock().unwrap().sent.len(), 2);
+        assert!(!crate::config::PqzVerifierCfg::default().refuse_shield_when_unserved);
     }
 }

@@ -1539,8 +1539,9 @@ alloy::sol! {
     #[derive(Default)]
     struct RateConfig { uint32 rateDelay; uint16 maxRateStepBps; }
     #[derive(Default)]
+    // group 3f (spec §3, AV-2): `pqzVerifyMode`, `pqzVerifierUA`, `pqzVerifierFixed` appended (0, 0, false for every other kind)
     struct ConfidentialConfig { bytes auditorKey; uint256 shieldScale; uint256 maxShielded; uint256 confidentialFee; uint8 disclosureMode;
-        uint8 auditorMode; uint256 minDecoyFee; }
+        uint8 auditorMode; uint256 minDecoyFee; uint8 pqzVerifyMode; bytes32 pqzVerifierUA; bool pqzVerifierFixed; }
     /// Regulated-kinds spec §2.4 (plan T25): the regulated kinds' (8-13) only; a plain kind refuses any set field.
     #[derive(Default)]
     struct RegulatedParams { address complianceRegistry; uint64 requiredFlags; uint64 deniedFlags; bytes32 termsHash;
@@ -2198,4 +2199,405 @@ async fn pqz_rotation_on_anvil() {
     let rows = scaas_node::indexer::pqz_key_origin(scaas_node::indexer::pay_events(&logs, None), Some(registry));
     let feed = |f: &str| rows.iter().filter(|r| r["feed"] == f && r["ua"] == json!(format!("{ua:#x}"))).map(|r| r["version"].clone()).collect::<Vec<_>>();
     assert_eq!((feed("pqz_pending"), feed("pqz_current")), (vec![json!(0), json!(1)], vec![json!(0), json!(1)]), "{rows:?}");
+}
+
+
+// ------------------------------------------------------------------ group 3f: PQZ verifier mode, OFFCHAIN on anvil (T47)
+
+mod pqz3f {
+    alloy::sol! {
+        struct PqzTransferArgs { uint64 p; uint256 validUntilBlock; uint256 shieldIn; bytes32 fromUA; uint64 keyVersion; bytes32 toUA;
+            bytes32 beneficiaryUA; bytes16 salt; bytes u; bytes vTo; bytes vFrom; bytes vAuditor; bytes sealedMemo; }
+        function transferSingleStatement(PqzTransferArgs t, bytes32 binding) external view returns (bytes);
+        function pqzRevokeVerifier() external;
+        function setKindEnabled(uint8 kind, bool on) external;
+        function latestEnvVersion(uint8 kind) external view returns (uint16);
+        function latestVersion(uint8 kind) external view returns (uint64);
+        function uaAuthDigest(bytes32 ua, bytes32 purposeTag, bytes32 digest) external view returns (bytes32);
+        function mtxShield(bytes32 toUA, uint256 amount) external;
+    }
+}
+
+/// `UAKinds.FNDSA512`: Falcon-512 over the 32-byte `ua_msg` (pure Solidity, `UAFndsaVerifier`; no precompile).
+const UA_FNDSA512: u16 = 0x0132;
+
+/// A plain CREATE of `code` by `from`: the new contract.
+async fn deploy_code(rpc: &str, from: &PrivateKeySigner, code: Vec<u8>) -> Address {
+    use alloy::network::TransactionBuilder;
+    let p = ProviderBuilder::new().wallet(EthereumWallet::from(from.clone())).connect_http(rpc.parse().unwrap());
+    let r = p.send_transaction(TransactionRequest::default().with_deploy_code(code)).await.unwrap().get_receipt().await.unwrap();
+    assert!(r.status(), "CREATE reverted");
+    r.contract_address.unwrap()
+}
+
+/// The init code of `out/<name>.sol/<name>.json`, every library linked by placeholder: the base deploy's
+/// (`broadcast/Deploy.s.sol/<chain_id>/run-latest.json`) or `extra`'s; with the transitive library closure, leaf first.
+fn linked_closure(chain_id: u64, name: &str, extra: &BTreeMap<String, Address>) -> (Vec<u8>, Vec<Address>) {
+    let read = |p: String| -> Value { serde_json::from_str(&std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{p}: {e}"))).unwrap() };
+    let run = read(format!("{}/broadcast/Deploy.s.sol/{chain_id}/run-latest.json", sc()));
+    let mut libs: BTreeMap<String, Address> = run["libraries"].as_array().unwrap().iter().map(|l| {
+        let (path, addr) = l.as_str().unwrap().rsplit_once(':').unwrap();
+        (path.to_string(), addr.parse().unwrap())
+    }).collect();
+    libs.extend(extra.iter().map(|(k, v)| (k.clone(), *v)));
+    fn walk(file: &str, name: &str, libs: &BTreeMap<String, Address>, out: &mut Vec<Address>) -> Vec<u8> {
+        let p = format!("{}/out/{file}/{name}.json", sc());
+        let art: Value = serde_json::from_str(&std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{p}: {e}"))).unwrap();
+        let mut code = art["bytecode"]["object"].as_str().unwrap().trim_start_matches("0x").to_string();
+        for (path, by) in art["bytecode"]["linkReferences"].as_object().unwrap() {
+            for (lib, at) in by.as_object().unwrap() {
+                let a = *libs.get(&format!("{path}:{lib}")).unwrap_or_else(|| panic!("{path}:{lib} not deployed"));
+                walk(path.rsplit('/').next().unwrap(), lib, libs, out);
+                if !out.contains(&a) {
+                    out.push(a);
+                }
+                for o in at.as_array().unwrap() {
+                    let i = 2 * o["start"].as_u64().unwrap() as usize;
+                    code.replace_range(i..i + 40, &alloy::hex::encode(a));
+                }
+            }
+        }
+        alloy::hex::decode(code).unwrap()
+    }
+    let mut closure = Vec::new();
+    let code = walk(&format!("{name}.sol"), name, &libs, &mut closure);
+    (code, closure)
+}
+
+/// The typed `PqzAuth` digest of a debit statement (`PqzCore.authDigest`, pqz-core `pqz-vectors`'s `auth_digest`): the typehash,
+/// `op`, the 640 header bytes, `bodyHash = keccak256(stmt[640..])`, in the token's domain (the header's chainId, token, chainUid).
+fn pqz_auth_digest(op: u8, stmt: &[u8]) -> B256 {
+    const T: &[u8] = b"PqzAuth(uint8 op,bytes32 opTag,bytes32 psid,uint256 chainId,address token,address registry,bytes32 from,\
+bytes32 to,bytes32 beneficiary,uint256 fee,uint256 amount,bytes32 recipient,uint64 sendCounter,uint64 p,uint256 validUntilBlock,\
+bool auditorOn,uint256 shieldIn,bytes32 chainUid,bytes32 binding,uint128 salt,bytes32 memoHash,bytes32 bodyHash)";
+    let d = keccak256(b"EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)");
+    let domain = keccak256([&d[..], &keccak256(b"SCaaS PqzToken")[..], &keccak256(b"1")[..], &stmt[64..96], &stmt[96..128], &stmt[512..544]].concat());
+    let mut o = [0u8; 32];
+    o[31] = op;
+    let h = keccak256([&keccak256(T)[..], &o[..], &stmt[..640], &keccak256(&stmt[640..])[..]].concat());
+    keccak256([&[0x19, 0x01][..], &domain[..], &h[..]].concat())
+}
+
+/// A fresh `fndsa512` UA (the PQ signer a PQZ key needs, verified in Solidity on anvil) registered with an unproven PQZ key of the
+/// set's length and its proof bytes stored unchecked (no `pqz-mlwe` verifier on this registry; an `OFFCHAIN` token accepts it).
+struct PqHolder {
+    ua: B256,
+    pk: Vec<u8>,
+    sk: pqcrypto_falcon::falconpadded512::SecretKey,
+}
+
+impl PqHolder {
+    async fn register(rpc: &str, registry: Address, deployer: &PrivateKeySigner, pqz_key: Vec<u8>, pqz_pop: Vec<u8>) -> Self {
+        use pqcrypto_falcon::falconpadded512 as falcon;
+        use pqcrypto_traits::sign::PublicKey as _;
+        let (pk, sk) = falcon::keypair();
+        let pk = pk.as_bytes().to_vec();
+        let ua = view(rpc, registry, uaOfCall { kind: UA_FNDSA512, keyData: pk.clone().into() }).await;
+        let no_kem = KemKey { scheme: 0, mlkemEk: Default::default(), x25519: B256::ZERO };
+        let krh = view(rpc, registry, kemRecordHashCall { ua, version: 0, kem: no_kem.clone() }).await;
+        let (kh, ph) = (keccak256(&pqz_key), keccak256(&pqz_pop));
+        let rd = view(rpc, registry, registrationDigestCall { ua, kind: UA_FNDSA512, pqzKeyHash: kh, kemRecordHash: krh, pqzPopHash: ph }).await;
+        let me = Self { ua, pk, sk };
+        let pop = me.sign(rpc, registry, b"scaas.ua.purpose.pop.v2", rd).await;
+        send(rpc, deployer, registry, registerCall { kind: UA_FNDSA512, keyData: me.pk.clone().into(),
+            attrs: UAAttrs { pqzKey: pqz_key.into(), pqzPopHash: ph, kem: no_kem, kemPkHash: B256::ZERO }, pop: pop.into(),
+            pqzPop: pqz_pop.into() }.abi_encode()).await;
+        me
+    }
+
+    /// The Falcon signature over the registry's `uaMessage(fndsa512, purpose, digest)`.
+    async fn sign(&self, rpc: &str, registry: Address, purpose: &[u8], digest: B256) -> Vec<u8> {
+        use pqcrypto_falcon::falconpadded512 as falcon;
+        use pqcrypto_traits::sign::DetachedSignature as _;
+        let m = view(rpc, registry, uaMessageCall { kind: UA_FNDSA512, purposeTag: keccak256(purpose), digest }).await;
+        falcon::detached_sign(m.as_slice(), &self.sk).as_bytes().to_vec()
+    }
+
+    async fn auth(&self, rpc: &str, registry: Address, purpose: &[u8], digest: B256) -> Value {
+        let sig = self.sign(rpc, registry, purpose, digest).await;
+        json!({"keyData": format!("0x{}", alloy::hex::encode(&self.pk)), "signature": format!("0x{}", alloy::hex::encode(sig)), "members": []})
+    }
+}
+
+/// An `OFFCHAIN` NORMAL_PQZ token on anvil, from the artifacts (no PQZ precompile here, so only a zero-dep release works): the
+/// base stack by the deploy script; the four PQZ libraries and the release (kind 4, `deps = [0]`) on the base factory (notice 0
+/// on an e2e chain); the token's verifier the test EOA `verifier` (transferable), owner the deployer; two `fndsa512` holders.
+struct OffchainStack {
+    _anvil: Anvil,
+    rpc: String,
+    chain_id: u64,
+    uid: B256,
+    registry: Address,
+    token: Address,
+    verifier: PrivateKeySigner,
+    from: PqHolder,
+    to: PqHolder,
+    /// The set's ciphertext part lengths (`PqzSet.PK`, `PqzSet.V`).
+    pk_len: usize,
+    v_len: usize,
+}
+
+async fn offchain_stack(chain_id: u64) -> OffchainStack {
+    let deployer = key(DEPLOYER);
+    let (anvil, rpc) = start_anvil(chain_id, chain_id as u16).await;
+    let dep = deploy(&rpc, chain_id, deployer.address());
+    let at = |k: &str| -> Address { dep[k].as_str().unwrap_or_else(|| panic!("{k}")).parse().unwrap() };
+    let (factory, registry) = (at("token_factory"), at("ua_registry"));
+    let mut extra = BTreeMap::new();
+    for lib in ["PqzBurnLib", "PqzStateLib", "PqzTransferLib", "PqzViewLib"] {
+        let (code, _) = linked_closure(chain_id, lib, &BTreeMap::new());
+        extra.insert(format!("src/pqz/{lib}.sol:{lib}"), deploy_code(&rpc, &deployer, code).await);
+    }
+    let (code, libs) = linked_closure(chain_id, "NormalPqzToken", &extra);
+    let pr = ProviderBuilder::new().connect_http(rpc.parse().unwrap());
+    let mut hashes = Vec::new();
+    for l in &libs {
+        hashes.push(keccak256(pr.get_code_at(*l).await.unwrap()));
+    }
+    let mut env = view(&rpc, factory, envOfCall { kind: 0, envVersion: 1 }).await;
+    (env.deps, env.libs, env.libCodeHashes) = (vec![Address::ZERO], libs, hashes);
+    let ev = view(&rpc, factory, pqz3f::latestEnvVersionCall { kind: 4 }).await + 1;
+    send(&rpc, &deployer, factory, publishEnvCall { kind: 4, envVersion: ev, env }.abi_encode()).await;
+    let ver = view(&rpc, factory, pqz3f::latestVersionCall { kind: 4 }).await + 1;
+    send(&rpc, &deployer, factory, deployImplementationCall { kind: 4, version: ver, envVersion: ev, initcode: code.into(),
+        implArgs: Bytes::new() }.abi_encode()).await;
+    send(&rpc, &deployer, factory, pqz3f::setKindEnabledCall { kind: 4, on: true }.abi_encode()).await;
+    let verifier = small_key(0x3f47);
+    let c = TokenConfig { name: "SCaaS PQZ OFFCHAIN".into(), symbol: "pqOFF".into(), decimals: 6, features: U256::from(1u8), // PAYABLE
+        owner: deployer.address().into_word(), initialSupply: U256::from(1_000_000u64), initialHolder: deployer.address(),
+        conf: ConfidentialConfig { shieldScale: U256::from(1u8), maxShielded: U256::from(1u64 << 40), pqzVerifyMode: 1,
+            pqzVerifierUA: verifier.address().into_word(), pqzVerifierFixed: false, ..Default::default() }, ..Default::default() };
+    let token = create(&rpc, &deployer, factory, createTokenCall { kind: 4, version: ver, initArgs: c.abi_encode().into(),
+        salt: B256::repeat_byte(0x3f) }.abi_encode()).await;
+    let cfg = view(&rpc, token, scaas_node::abi::IPqzToken::pqzVerifyConfigCall {}).await;
+    assert_eq!((cfg.pqzVerifyMode, cfg.verifier, cfg.fixed_), (1, verifier.address().into_word(), false), "an OFFCHAIN token");
+    // the holders: real PQZ keys of this set from portable.json (two different ones), the proof bytes stored unchecked
+    let set = std::fs::read_to_string(format!("{}/src/pqz/PqzSet.sol", sc())).unwrap();
+    let constant = |n: &str| -> usize {
+        let i = set.find(&format!("uint256 internal constant {n} = ")).unwrap_or_else(|| panic!("PqzSet.{n}")) + 28 + n.len();
+        set[i..i + set[i..].find(';').unwrap()].replace('_', "").parse().unwrap()
+    };
+    let name = set.split("string internal constant NAME = \"").nth(1).unwrap().split('"').next().unwrap().to_string();
+    let p: Value = serde_json::from_str(&std::fs::read_to_string(format!("{}/../vectors/ua/portable.json", sc())).unwrap()).unwrap();
+    let row = |t: &str, n: &str| p[t].as_array().unwrap().iter().find(|r| r["name"] == n).unwrap_or_else(|| panic!("{t} {n}")).clone();
+    let hexb = |v: &Value| alloy::hex::decode(v.as_str().unwrap().trim_start_matches("0x")).unwrap();
+    let pop = hexb(&row("registrations", &format!("mldsa65/{name}"))["pqzPop"]);
+    let from = PqHolder::register(&rpc, registry, &deployer, hexb(&row("pqzKeyRecords", &format!("fndsa512/{name}"))["pqzKey"]), pop.clone()).await;
+    let to = PqHolder::register(&rpc, registry, &deployer, hexb(&row("pqzKeyRecords", &format!("mldsa87/{name}"))["pqzKey"]), pop).await;
+    let uid = pr.get_block_by_number(0.into()).await.unwrap().unwrap().header.hash;
+    OffchainStack { _anvil: anvil, rpc, chain_id, uid, registry, token, verifier, from, to, pk_len: constant("PK"), v_len: constant("V") }
+}
+
+impl OffchainStack {
+    /// Op 1 from `from` to `to` (nothing shielded: in `OFFCHAIN` mode the token never checks the proof, the verifier's verdict
+    /// does), at the subject's next nonce: the job without `pqz_verdict`, the statement the token builds, the proof.
+    async fn transfer_job(&self, id: i64, nonce: u64) -> (Value, Vec<u8>, Vec<u8>) {
+        use scaas_node::abi::{IPqzToken, UAMetaTransaction};
+        let pr = ProviderBuilder::new().connect_http(self.rpc.parse().unwrap());
+        let block = pr.get_block_number().await.unwrap();
+        let lanes = |n: usize, b: u8| -> Vec<u8> { (0..n / 8).flat_map(|_| { let mut w = [0u8; 8]; w[7] = b; w }).collect() };
+        let t = pqz3f::PqzTransferArgs { p: 0, validUntilBlock: U256::from(block + 200), shieldIn: U256::ZERO, fromUA: self.from.ua,
+            keyVersion: 0, toUA: self.to.ua, beneficiaryUA: B256::ZERO, salt: alloy::primitives::FixedBytes([0x5a; 16]),
+            u: lanes(self.pk_len, 1).into(), vTo: lanes(self.v_len, 1).into(), vFrom: lanes(self.v_len, 1).into(),
+            vAuditor: Bytes::new(), sealedMemo: Bytes::new() };
+        let until = now() + 600;
+        let m = UAMetaTransaction { from: self.from.ua, data: Bytes::new(), batch: U256::ZERO, nonce: U256::from(nonce),
+            validUntil: U256::from(until), mode: 0, relayer: Address::ZERO, fee: U256::ZERO, feeRecipient: Address::ZERO };
+        let binding = view(&self.rpc, self.token, IPqzToken::envelopeBindingCall { m }).await;
+        let stmt = view(&self.rpc, self.token, pqz3f::transferSingleStatementCall { t: t.clone(), binding }).await.to_vec();
+        let pqz_auth = self.from.auth(&self.rpc, self.registry, b"scaas.ua.purpose.zether-auth.v1", pqz_auth_digest(1, &stmt)).await;
+        let proof = vec![0x9f; 96];
+        let h = |b: &[u8]| format!("0x{}", alloy::hex::encode(b));
+        let args = json!({"p": "0", "validUntilBlock": (block + 200).to_string(), "shieldIn": "0", "fromUA": format!("{:#x}", self.from.ua),
+            "keyVersion": "0", "toUA": format!("{:#x}", self.to.ua), "beneficiaryUA": format!("{:#x}", B256::ZERO), "salt": h(&[0x5a; 16]),
+            "u": h(&t.u), "vTo": h(&t.vTo), "vFrom": h(&t.vFrom), "vAuditor": "0x", "sealedMemo": "0x"});
+        let envelope = json!({"from": format!("{:#x}", self.from.ua), "batch": "0", "nonce": nonce.to_string(), "validUntil": until.to_string(),
+            "mode": 0, "relayer": format!("{:#x}", Address::ZERO), "fee": "0", "feeRecipient": format!("{:#x}", Address::ZERO)});
+        let mut op = json!({"entry": "mtxConfidentialTransferSingle", "contract": "pqz", "token": format!("{:#x}", self.token),
+            "envelope": envelope, "args": {"args": args, "proof": h(&proof), "pqzAuth": pqz_auth, "accHint": "0x"},
+            "auth": {"keyData": "0x", "signature": "0x", "members": []}});
+        let (w, _) = scaas_node::submit::work_of_op(Some(id), &op, None).unwrap();
+        let digest = w.typed.unwrap().digest_on(self.chain_id, self.uid).unwrap();
+        op["auth"] = self.from.auth(&self.rpc, self.registry, b"scaas.ua.purpose.metatx.v1", digest).await;
+        (json!({"id": id, "kind": "ua_metatx", "op": op}), stmt, proof)
+    }
+
+    /// The verifier EOA's `pqz_verdict` over the token's own statement and the proof at the token's epoch: what a PQZ verifier
+    /// (off-chain) signs (spec §11.2); the test makes it, the node never signs.
+    async fn verdict(&self, stmt: &[u8], proof: &[u8]) -> Value {
+        use scaas_node::abi::IPqzToken;
+        let epoch = view(&self.rpc, self.token, IPqzToken::pqzVerifyConfigCall {}).await.pqzVerifierEpoch;
+        let psid = view(&self.rpc, self.token, IPqzToken::proofSystemIdCall {}).await;
+        let until = now() + 300;
+        let pv = json!({"token": format!("{:#x}", self.token), "chainId": self.chain_id.to_string(), "proofSystemId": format!("{psid:#x}"),
+            "statementHash": format!("{:#x}", keccak256(stmt)), "proofHash": format!("{:#x}", keccak256(proof)), "pqzVerifierEpoch": epoch,
+            "validUntil": until.to_string()});
+        let sh = scaas_node::typed::struct_hash_of("PqzVerdict", &scaas_node::typed::parse("PqzVerdict", &pv, "v").unwrap()).unwrap();
+        let sep = scaas_node::dex::domain("SCaaS PqzToken", self.chain_id, self.token, self.uid).separator();
+        let d = keccak256([&[0x19, 0x01][..], &sep[..], &sh[..]].concat());
+        let ua = self.verifier.address().into_word();
+        let ad = view(&self.rpc, self.registry, pqz3f::uaAuthDigestCall { ua, purposeTag: keccak256(b"scaas.ua.purpose.pqz-verdict.v1"),
+            digest: d }).await;
+        let sig = self.verifier.sign_hash_sync(&ad).unwrap().as_bytes().to_vec();
+        json!({"pqzVerifierEpoch": epoch, "validUntil": until.to_string(),
+            "auth": {"keyData": "0x", "signature": format!("0x{}", alloy::hex::encode(sig)), "members": []}})
+    }
+
+    /// A lane on a fake client serving the token, `[pqz_verifier]` as given.
+    async fn lane(&self, pqz: scaas_node::config::PqzVerifierCfg) -> (Arc<Mutex<FakeOdoo>>, Submitter) {
+        let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![format!("{:#x}", self.token)], ..Default::default() }));
+        let odoo = odoo_at(start_fake(state.clone()).await);
+        let mut cfg = chain_cfg(self.chain_id, &self.rpc, None);
+        cfg.ua_registry = Some(self.registry);
+        cfg.max_gas_per_tx = 64_000_000;
+        cfg.pqz_verifier = pqz;
+        let s = Submitter::start(Chain::with_signer(&cfg, key(RELAYER)).unwrap(), odoo, cfg.clone(), format!("e2e-3f-{}", self.chain_id),
+            Default::default()).await.unwrap();
+        (state, s)
+    }
+
+    /// The token's rows of the whole chain through the indexer's decoder and joins, with the health state stamped.
+    async fn rows(&self) -> Vec<Value> {
+        let pr = ProviderBuilder::new().connect_http(self.rpc.parse().unwrap());
+        let head = pr.get_block_number().await.unwrap();
+        let logs = pr.get_logs(&scaas_node::indexer::pay_filter(0, head, vec![self.token], None)).await.unwrap();
+        let mut rows = scaas_node::indexer::pay_events(&logs, None);
+        scaas_node::indexer::pqz_health(&mut Default::default(), &mut rows);
+        rows
+    }
+}
+
+/// A PQZ verifier (off-chain) stand-in for the e2e: `POST /v1/pqz-verdict` signs, with the test's verifier EOA, a verdict over the
+/// request's own `statement` and `proof` at the request's epoch (the reference service also rebuilds and checks them; this one
+/// shows the node's request carries what a verifier needs).
+async fn fake_pqz_verifier(stack: &OffchainStack) -> (String, Arc<Mutex<Vec<Value>>>) {
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let (rpc, registry, token, chain_id, uid, verifier) =
+        (stack.rpc.clone(), stack.registry, stack.token, stack.chain_id, stack.uid, stack.verifier.clone());
+    let s2 = seen.clone();
+    let app = Router::new().route("/v1/pqz-verdict", post(move |Json(req): Json<Value>| {
+        let (rpc, verifier, seen) = (rpc.clone(), verifier.clone(), s2.clone());
+        async move {
+            seen.lock().unwrap().push(req.clone());
+            let b = |k: &str| alloy::hex::decode(req[k].as_str().unwrap_or("0x").trim_start_matches("0x")).unwrap_or_default();
+            let (stmt, proof) = (b("statement"), b("proof"));
+            let epoch = req["pqzVerifierEpoch"].as_u64().unwrap_or(0);
+            let psid = view(&rpc, token, scaas_node::abi::IPqzToken::proofSystemIdCall {}).await;
+            let until = now() + 300;
+            let pv = json!({"token": format!("{token:#x}"), "chainId": chain_id.to_string(), "proofSystemId": format!("{psid:#x}"),
+                "statementHash": format!("{:#x}", keccak256(&stmt)), "proofHash": format!("{:#x}", keccak256(&proof)),
+                "pqzVerifierEpoch": epoch, "validUntil": until.to_string()});
+            let sh = scaas_node::typed::struct_hash_of("PqzVerdict", &scaas_node::typed::parse("PqzVerdict", &pv, "v").unwrap()).unwrap();
+            let sep = scaas_node::dex::domain("SCaaS PqzToken", chain_id, token, uid).separator();
+            let d = keccak256([&[0x19, 0x01][..], &sep[..], &sh[..]].concat());
+            let ad = view(&rpc, registry, pqz3f::uaAuthDigestCall { ua: verifier.address().into_word(),
+                purposeTag: keccak256(b"scaas.ua.purpose.pqz-verdict.v1"), digest: d }).await;
+            let sig = verifier.sign_hash_sync(&ad).unwrap().as_bytes().to_vec();
+            Json(json!({"pqzVerifierEpoch": epoch, "validUntil": until.to_string(),
+                "auth": {"keyData": "0x", "signature": format!("0x{}", alloy::hex::encode(sig)), "members": []}}))
+        }
+    }));
+    let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}", l.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+    (url, seen)
+}
+
+/// Group 3f (spec §11.1, T47), on anvil with no PQZ precompile: an `OFFCHAIN` token's op 1 through the node, twice. The first job
+/// names `pqz_verdict` (the verifier EOA's signature, made by the test); the second names none and the node fetches it from the
+/// configured endpoint, whose request carries the statement and proof the node rebuilt. The node rebuilds each `PqzVerdict`, the
+/// token accepts it (`PqzVerified` over exactly `keccak256(statement)`, `keccak256(proof)`), and the indexer joins it to the
+/// `ConfidentialTransfer` of the same transaction with its position. The node signs nothing and never reads the precompile.
+/// UNAUDITED.
+#[tokio::test]
+#[ignore]
+async fn pqz_offchain_transfer_on_anvil() {
+    let st = offchain_stack(31947).await;
+    let (url, seen) = fake_pqz_verifier(&st).await;
+    let (state, mut s) = st.lane(scaas_node::config::PqzVerifierCfg { endpoints: vec![url], ..Default::default() }).await;
+    let last = |id: i64| state.lock().unwrap().reports.iter().rev().find(|r| r["job_id"] == id).cloned().unwrap_or_default();
+    let (mut j1, stmt1, proof1) = st.transfer_job(1, 0).await;
+    j1["op"]["args"]["pqz_verdict"] = st.verdict(&stmt1, &proof1).await;
+    state.lock().unwrap().jobs.push(j1);
+    run_outbox(&mut s).await;
+    assert_eq!(last(1)["chain_state"], "mined", "the job's verdict: {}", last(1));
+    assert!(seen.lock().unwrap().is_empty(), "a usable job verdict: no endpoint asked");
+    let (j2, stmt2, proof2) = st.transfer_job(2, 1).await;
+    state.lock().unwrap().jobs.push(j2);
+    run_outbox(&mut s).await;
+    assert_eq!(last(2)["chain_state"], "mined", "the fetched verdict: {}", last(2));
+    let req = seen.lock().unwrap()[0].clone();
+    assert_eq!((req["statement"].as_str(), req["op"]["entry"].as_str()),
+        (Some(format!("0x{}", alloy::hex::encode(&stmt2)).as_str()), Some("mtxConfidentialTransferSingle")), "the statement the node rebuilt");
+    let rows = st.rows().await;
+    let pr = ProviderBuilder::new().connect_http(st.rpc.parse().unwrap());
+    for (id, stmt, proof) in [(1, &stmt1, &proof1), (2, &stmt2, &proof2)] {
+        let hash: B256 = last(id)["tx_hash"].as_str().unwrap_or_default().parse().unwrap_or_default();
+        let hash = if hash == B256::ZERO { tx_of(&state, id).parse().unwrap() } else { hash };
+        let rc = pr.get_transaction_receipt(hash).await.unwrap().unwrap();
+        let row = rows.iter().find(|r| r["event"] == "ConfidentialTransfer" && r["tx_hash"] == json!(format!("{hash:#x}")))
+            .unwrap_or_else(|| panic!("job {id}: no ConfidentialTransfer row: {rows:?}"));
+        assert_eq!(row["pqz_verified"]["statement_hash"], json!(format!("{:#x}", keccak256(stmt))), "job {id}");
+        assert_eq!(row["pqz_verified"]["proof_hash"], json!(format!("{:#x}", keccak256(proof))), "job {id}");
+        assert_eq!(row["pqz_verified"]["verifier"], json!(format!("{:#x}", st.verifier.address().into_word())), "job {id}");
+        assert_eq!(row["tx_index"].as_u64(), rc.transaction_index, "job {id}: the transaction's position");
+        assert_eq!(row["pqz_last_verdict_at"].as_u64(), rc.block_number, "job {id}: the health signal");
+    }
+    assert!(rows.iter().all(|r| r["event"] != "PqzVerified"), "joined, never a row of its own");
+    let chain = Chain::with_signer(&chain_cfg(st.chain_id, &st.rpc, None), key(RELAYER)).unwrap();
+    let pqz: Address = "0x000000000000000000000000000000005caa0f01".parse().unwrap();
+    assert!(!chain.is_contract_at(pqz).await.unwrap(), "no PQZ precompile on this chain");
+}
+
+/// Group 3f (spec §4.3, §11.1, T47), on anvil: the owner revokes the token's verifier at once; a debit with a verdict of the old
+/// epoch is back in the queue by name (`PqzVerifierRevoked`, never `dead`, zero sends); the indexer's `PqzVerifierRevoked` row is
+/// an alert and the health signal reads revoked; with `refuse_shield_when_unserved` a shield into the token is refused
+/// `PQZ_VERIFIER_UNREACHABLE`, without it the same shield is mined. UNAUDITED.
+#[tokio::test]
+#[ignore]
+async fn pqz_revoked_verifier_on_anvil() {
+    let st = offchain_stack(31948).await;
+    let deployer = key(DEPLOYER);
+    let (j1, stmt, proof) = st.transfer_job(1, 0).await;
+    let mut j1 = j1;
+    j1["op"]["args"]["pqz_verdict"] = st.verdict(&stmt, &proof).await;
+    send(&st.rpc, &deployer, st.token, pqz3f::pqzRevokeVerifierCall {}.abi_encode()).await;
+    let cfg = view(&st.rpc, st.token, scaas_node::abi::IPqzToken::pqzVerifyConfigCall {}).await;
+    assert_eq!(cfg.verifier, B256::ZERO, "revoked at once");
+    let (url, seen) = fake_pqz_verifier(&st).await;
+    let on = scaas_node::config::PqzVerifierCfg { endpoints: vec![url.clone()], refuse_shield_when_unserved: true, ..Default::default() };
+    let (state, mut s) = st.lane(on).await;
+    let last = |id: i64| state.lock().unwrap().reports.iter().rev().find(|r| r["job_id"] == id).cloned().unwrap_or_default();
+    state.lock().unwrap().jobs.push(j1);
+    // the deployer's shield of its public units into `from`: `UAShield`, its own key (a native id)
+    let shield = |id: i64, nonce: u64| {
+        let until = (now() + 600).to_string();
+        json!({"id": id, "kind": "ua_metatx", "op": {"entry": "mtxShield", "contract": "pqz", "token": format!("{:#x}", st.token),
+            "envelope": {"from": format!("{:#x}", deployer.address().into_word()), "batch": "0", "nonce": nonce.to_string(), "validUntil": until,
+                "mode": 0, "relayer": format!("{:#x}", Address::ZERO), "fee": "0", "feeRecipient": format!("{:#x}", Address::ZERO)},
+            "args": {"toUA": format!("{:#x}", st.from.ua), "amount": "5"}, "auth": {"keyData": "0x", "signature": "0x", "members": []}}})
+    };
+    let signed = |mut j: Value| {
+        let (w, _) = scaas_node::submit::work_of_op(Some(1), &j["op"], None).unwrap();
+        let d = w.typed.unwrap().digest_on(st.chain_id, st.uid).unwrap();
+        j["op"]["auth"]["signature"] = json!(format!("0x{}", alloy::hex::encode(deployer.sign_hash_sync(&d).unwrap().as_bytes())));
+        j
+    };
+    state.lock().unwrap().jobs.push(signed(shield(2, 0)));
+    run_outbox(&mut s).await;
+    let (r1, r2) = (last(1), last(2));
+    assert!(r1["chain_state"] == "queued" && r1["error"].as_str().unwrap_or_default().contains("PqzVerifierRevoked"), "{r1}");
+    assert!(r2["chain_state"] == "dead" && r2["error"].as_str().unwrap_or_default().starts_with("PQZ_VERIFIER_UNREACHABLE"), "{r2}");
+    assert!(seen.lock().unwrap().is_empty(), "nothing fetched for a revoked verifier");
+    let pr = ProviderBuilder::new().connect_http(st.rpc.parse().unwrap());
+    assert_eq!(pr.get_transaction_count(key(RELAYER).address()).await.unwrap(), 0, "zero sends");
+    let (state2, mut s2) = st.lane(scaas_node::config::PqzVerifierCfg { endpoints: vec![url], ..Default::default() }).await;
+    state2.lock().unwrap().jobs.push(signed(shield(3, 0)));
+    run_outbox(&mut s2).await;
+    let r3 = state2.lock().unwrap().reports.iter().rev().find(|r| r["job_id"] == 3).cloned().unwrap_or_default();
+    assert_eq!(r3["chain_state"], "mined", "the switch off: the shield is sent: {r3}");
+    let rows = st.rows().await;
+    let rv = rows.iter().find(|r| r["event"] == "PqzVerifierRevoked").unwrap_or_else(|| panic!("{rows:?}"));
+    assert_eq!((rv["alert"].as_bool(), rv["pqz_verifier_revoked"].as_bool(), rv["previous"].as_str()),
+        (Some(true), Some(true), Some(format!("{:#x}", st.verifier.address().into_word()).as_str())), "{rv}");
 }

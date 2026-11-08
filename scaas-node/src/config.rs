@@ -35,7 +35,51 @@ pub struct Config {
     pub keys: Option<KeysCfg>,
     #[serde(default)]
     pub modules: Modules,
+    /// Group 3f (spec 2026-11-06-attested-verify §11.1): the PQZ verifier (off-chain) endpoints and the shield switch, one section
+    /// for every chain (copied into each [`ChainCfg::pqz_verifier`] at load). No secret: endpoint URLs only.
+    #[serde(default)]
+    pub pqz_verifier: PqzVerifierCfg,
     pub chains: Vec<ChainCfg>,
+}
+
+/// `[pqz_verifier]` (group 3f, NODE-JOB-22 draft): where the node asks for a `PqzVerdict` signature an `OFFCHAIN` PQZ job does not
+/// carry (`POST {endpoint}/v1/pqz-verdict`, in order), the bounds of that answer, and the opt-in refusal of shields into a token
+/// nobody serves. The node holds no verifier key and signs nothing.
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct PqzVerifierCfg {
+    /// Base URLs of PQZ verifiers (off-chain), asked in order; empty: a job without `pqz_verdict` is `PQZ_VERDICT_MISSING`.
+    #[serde(default)]
+    pub endpoints: Vec<String>,
+    /// Refuse shield and wrap-shield jobs into an `OFFCHAIN` token whose verifier is revoked or whose endpoints none answers
+    /// (`PQZ_VERIFIER_UNREACHABLE`). Off by default.
+    #[serde(default)]
+    pub refuse_shield_when_unserved: bool,
+    /// One endpoint's whole request (connect, send, answer).
+    #[serde(default = "default_pqz_timeout_ms")]
+    pub timeout_ms: u64,
+    /// An answer above this is no answer (read in chunks, never buffered past it).
+    #[serde(default = "default_pqz_max_response")]
+    pub max_response_bytes: usize,
+    /// A verdict whose `validUntil` is within this many seconds of now is not sent (the expected inclusion plus the margin).
+    #[serde(default = "default_pqz_margin")]
+    pub valid_margin_secs: u64,
+}
+
+impl Default for PqzVerifierCfg {
+    fn default() -> Self {
+        Self { endpoints: vec![], refuse_shield_when_unserved: false, timeout_ms: default_pqz_timeout_ms(),
+            max_response_bytes: default_pqz_max_response(), valid_margin_secs: default_pqz_margin() }
+    }
+}
+
+fn default_pqz_timeout_ms() -> u64 {
+    5_000
+}
+fn default_pqz_max_response() -> usize {
+    256 * 1024
+}
+fn default_pqz_margin() -> u64 {
+    30
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -325,6 +369,9 @@ pub struct ChainCfg {
     pub gossip: bool,
     #[serde(default = "default_exclusive_ms")]
     pub exclusive_ms: u64,
+    /// The top-level `[pqz_verifier]`, set by [`Config::load`] (never read from a `[[chains]]` table).
+    #[serde(skip)]
+    pub pqz_verifier: PqzVerifierCfg,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -422,6 +469,7 @@ impl Default for ChainCfg {
             profile: private(),
             gossip: false,
             exclusive_ms: default_exclusive_ms(),
+            pqz_verifier: PqzVerifierCfg::default(),
         }
     }
 }
@@ -537,7 +585,10 @@ impl Config {
     }
     pub fn load(path: &Path) -> Result<Self> {
         let raw = std::fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
-        let cfg: Config = toml::from_str(&raw).context("parse config")?;
+        let mut cfg: Config = toml::from_str(&raw).context("parse config")?;
+        for c in &mut cfg.chains {
+            c.pqz_verifier = cfg.pqz_verifier.clone();
+        }
         cfg.validate()?;
         Ok(cfg)
     }
@@ -615,6 +666,13 @@ impl Config {
             if c.family == "soroban" && self.modules.submit && !c.params.get("max_resource_fee_per_job").and_then(|v| v.as_integer()).is_some_and(|n| n > 0) {
                 bail!("chain {key}: a soroban lane needs params.max_resource_fee_per_job above 0 (stroops; node.example.toml)");
             }
+        }
+        let v = &self.pqz_verifier;
+        if let Some(e) = v.endpoints.iter().find(|e| !(e.starts_with("https://") || e.starts_with("http://"))) {
+            bail!("pqz_verifier.endpoints: {e:?} is not an http(s) URL");
+        }
+        if v.timeout_ms == 0 || v.max_response_bytes == 0 {
+            bail!("pqz_verifier: timeout_ms and max_response_bytes above 0");
         }
         self.validate_store_sections(&seen)
     }
@@ -983,6 +1041,28 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
         c.validate().unwrap();
         assert!(c.modules.submit && c.modules.indexer && !c.modules.gateway);
         assert_eq!(c.chains[0].stuck_after_secs, 60);
+    }
+
+    /// Group 3f (spec §11.1): the top-level `[pqz_verifier]` reaches every chain at load (off and empty by default, no secret: URLs
+    /// only); an endpoint that is no http(s) URL, or a zero bound, is a startup error.
+    #[test]
+    fn pqz_verifier_section_reaches_every_chain() {
+        let load = |extra: &str| -> Result<Config> {
+            let p = std::env::temp_dir().join(format!("pqz-verifier-{}-{}.toml", std::process::id(), extra.len()));
+            std::fs::write(&p, format!("{OK}{extra}"))?;
+            let c = Config::load(&p);
+            let _ = std::fs::remove_file(&p);
+            c
+        };
+        let c = load("").unwrap();
+        assert_eq!(c.chains[0].pqz_verifier, PqzVerifierCfg::default());
+        assert!(!c.pqz_verifier.refuse_shield_when_unserved && c.pqz_verifier.endpoints.is_empty());
+        let c = load("[pqz_verifier]\nendpoints = [\"https://v.example\", \"http://127.0.0.1:7\"]\nrefuse_shield_when_unserved = true\n").unwrap();
+        assert_eq!((c.chains[0].pqz_verifier.endpoints.len(), c.chains[0].pqz_verifier.refuse_shield_when_unserved), (2, true));
+        assert_eq!(c.chains[0].pqz_verifier.timeout_ms, 5_000);
+        for bad in ["[pqz_verifier]\nendpoints = [\"v.example\"]\n", "[pqz_verifier]\ntimeout_ms = 0\n"] {
+            assert!(load(bad).unwrap_err().to_string().contains("pqz_verifier"), "{bad}");
+        }
     }
 
     /// Regulated-kinds spec §7: `compliance_registry` and its code hash are set together, or neither (no secret: an address and a

@@ -81,6 +81,17 @@ mnemonic = { keystore = "/etc/scaas/mnemonic.json", passphrase_env = "SCAAS_KEYS
 # bip39_passphrase_env = "SCAAS_BIP39_PASSPHRASE"
 # Create the keystore:  scaas-node keystore new --kind mnemonic --out /etc/scaas --name mnemonic.json < words.txt
 
+# PQZ verifier mode (group 3f, NODE-JOB-22 draft). An OFFCHAIN PQZ token accepts a proof when its verifier UA signs a
+# PqzVerdict; the node holds no verifier key and signs nothing. It relays the job's `pqz_verdict`, or asks these endpoints in
+# order (POST <endpoint>/v1/pqz-verdict) when a job carries none. A PQZ verifier (off-chain) is a separately operated trust role
+# (e.g. scaas-pqz-verifier), never this node. URLs only, no secret.
+[pqz_verifier]
+endpoints = []                                   # e.g. ["https://pqz-verifier.example.org"]
+refuse_shield_when_unserved = false              # true: refuse shields into an OFFCHAIN token whose verifier is revoked or unreachable
+# timeout_ms = 5000                              # one endpoint's whole request
+# max_response_bytes = 262144                    # a longer answer is no answer
+# valid_margin_secs = 30                         # a verdict expiring sooner than this is not sent
+
 [[chains]]
 family = "evm"
 evm_chain_number = 7622
