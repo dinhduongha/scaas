@@ -801,6 +801,11 @@ crates need **rustc ≥ 1.97.1** for the host test (the root `rust-toolchain.tom
 includes the secp256r1 precompile (`agave-precompiles` 4.3, feature `enable_secp256r1_precompile` on by default), so passkey
 tests (real vectors, high-S, origin, UV) run in LiteSVM. Builds are memory-heavy: `CARGO_BUILD_JOBS=2`, never in parallel
 with another heavy build. BUILT.
+Dev-only advisories: `agave-precompiles` pins `ed25519-dalek =1.0.1` in every release (Agave consensus; checked up to
+4.5.0-beta.0), which brings `curve25519-dalek` 3.2.0 and `rand` 0.7.3 into `Cargo.lock` through LiteSVM, a dev-dependency. None
+is in the on-chain program or a shipped artifact, and the precompile only verifies; the three Dependabot alerts (GHSA-w5vr-6qhr-36cc,
+GHSA-x4gp-pqpj-f43q, GHSA-cq8v-f236-94qc) were dismissed as tolerable risk on 2026-11-08 (owner). A LiteSVM release whose
+Agave crates drop `=1.0.1` is taken when it appears.
 
 ## 13. Conformance
 
