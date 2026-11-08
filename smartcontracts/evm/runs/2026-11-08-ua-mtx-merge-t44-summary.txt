@@ -1,0 +1,28 @@
+# ua-mtx-merge T44 + T45 gate summary (full output in git-ignored .log files, not committed)
+# Group 3f, PQZ verifier mode (spec 2026-11-06-attested-verify.md; owner approved 2026-11-06, names 2026-11-07). One segment:
+# T45's entries move with T44's library signatures. UNAUDITED.
+# Base: 8e756a47 (+ the T46-T48 commits, no src change). Commits: e5ea8d9f (legacy copies), 2cce490d (implementation), 8078dca7
+# (a test fix found at n2048), this one (summary, mutant tables).
+step | commit | rc | counts
+t44-red | - | - | not a separate run: the new tests name PqzVerdict, PqzSignedVerdict, pqzVerifyConfig, the verifier ops and errors, none of which the base has (nothing compiled); the mutants below are the evidence each can fail
+t44-new | 2cce490d | 0 | test/pqz/{PqzOffchainCore,PqzVerifier,PqzOffchainEntries,PqzVerdictVectors}.t.sol: 90 passed (first run 77 passed 12 failed: verdicts signed inside an expectRevert'd call, a mockFunction prefix, two TRIVIAL shields merged in one block, a PendingRange before the retarget check; all test-side); test/as/confidential/PqzVerdictKinds.t.sol 6 passed
+t44-vectors | 2cce490d | 0 | WRITE_VERDICT_VECTORS=true writes smartcontracts/vectors/pqz/verdict.json (22 rows, n2304-kmax4096); the pin run then 1 passed
+t44-forge-full-1 | the tree before the pin moves | 1 | 3217 passed 16 failed 14 skipped, 311 suites: the pins below, two test call orders, RegulatedHandler's two ternary PQZ encoders without the verdict (I9 caught them), the split-overhead bound
+t44-regen | 2cce490d | 0 | generators only: PLUS_ZERO_WRITE (-j1) plus_zero_gas.json (6 rows); WRITE_VERDICT_VECTORS verdict.json; selector_audit.json by reading (44 rows moved, 15 added)
+t44-forge-full-2 | 2cce490d | 1 | 3232 passed 1 failed 14 skipped, 311 suites: test_splitOverhead_dataSizeBound (owner, below)
+t44-size | 2cce490d | 0 | size_gate.py: 0 errors, 99 contracts after the rows moved; above 65,536 B: WrappedPqzRegulatedToken 72,402 (pinned); runs/2026-11-08-ua-mtx-merge-pqz-verifier-sizes.txt
+t45-deploy-gas | 2cce490d | 0 | GovDeploy test_releaseGasPerKind -vv, old in a worktree at the base: kind 13 118.41 M -> 121.70 M (x1.05), 12 95.04 -> 98.18 M, 5 97.93 -> 101.14 M, 4 82.23 -> 85.51 M, router 25.22 -> 25.73 M; all fit 200 M
+t44-e2e-py | 2cce490d | 0 | script/pqz/e2e.py --self-test: 0 failures, 286 checks (verdict.json: 22 rows, digests and the EOA signatures)
+t44-split-overhead | 2cce490d | 1 | MtxSplitOverhead -vv, base vs 3f (n2304-kmax4096, ecdsa): PQZL M8 d 5,909 -> 7,579 (bound 8,000), PQZH M4 d 9,213 -> 12,673 (bound 10,000: exceeded). The relayed envelope carries the empty verdict (480 B); the generic relayed path's quadratic memory on PQZH's large envelope. Bound not moved: owner question
+t44-at-n2048-kmax1024 | 2cce490d | 1 | at-set.sh per directory (FOUNDRY_TEST each, a worktree at 2cce490d): test/pqz 363 passed 3 failed 2 skipped (the split-overhead bound PQZL 8,608 > 8,000; test_pqzhN2048FitsBothPaths x2: its signed rows passed no verdict, fixed in 8078dca7, then the fit itself below); test/ua 595 passed; test/as/confidential 93 passed; PqzSet.sol restored
+t44-at-n2304-kmax4096 | 2cce490d | 1 | test/pqz 363 passed 1 failed 4 skipped (the split-overhead bound, as the default run); test/ua 595 passed; test/as/confidential 93 passed
+t44-at-n2560-kmax16384 | 2cce490d | 0 | test/pqz 362 passed 6 skipped; test/ua 595 passed; test/as/confidential 93 passed
+t44-at-n2816-kmax65536 | 2cce490d | 0 | test/pqz 357 passed 11 skipped; test/ua 595 passed; test/as/confidential 93 passed; PqzSet.sol restored (the script's trap)
+t45-pqzh-fit-n2048 | 8078dca7 | 1 | at-set.sh n2048-kmax1024 test_pqzhN2048FitsBothPaths -vv: every row fits 2^24 but the mldsa65-fee-UA path's PqzTransferCompact M = 4 without the auditor, regular 16,786,328 >= 16,777,216 (the EIP-7976 floor binds: 260 KB of calldata; the empty verdict adds 480 B, about 30 k at 64 gas per byte). Owner question; not moved
+t44-mutants | 2cce490d | - | runs/2026-11-08-ua-mtx-merge-pqz-verifier/mutants.py, one at a time on a clean tree (a worktree at 2cce490d), restored, git diff clean: 26 of 26 killed (runs/2026-11-08-ua-mtx-merge-t44-mutants.txt: Binding b1-b8, Verifier v2-v12, Mode m1-m3, Keys k1-k4); spec §15's "verifier read from calldata" has no source to mutate (the harness README)
+t45-mutants | 2cce490d | - | 3 of 3 killed (runs/2026-11-08-ua-mtx-merge-t45-mutants.txt: the five-argument form false, the verdict form ignoring its verdict, the signed form's verdict dropped before the self-call)
+# Sizes and deploy gas: runs/2026-11-08-ua-mtx-merge-pqz-verifier-sizes.txt.
+# Owner questions (not moved, not worked around): (1) test_splitOverhead_dataSizeBound, n2304 PQZH 12,673 > 10,000 and n2048
+# PQZL 8,608 > 8,000; (2) the n2048 PQZH fit row above. Both are the empty verdict's 480 B of calldata on every PRECOMPILE
+# debit (spec §7 estimated 0.1-0.2 KB). An encoding that is 64 B when empty (e.g. `PqzSignedVerdict[]`, length 0 or 1) would
+# remove most of it; that is an ABI shape for the owner to choose (clients, node and service follow).
