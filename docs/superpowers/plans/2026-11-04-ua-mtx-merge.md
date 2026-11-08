@@ -226,8 +226,9 @@ rustc 1.90); Node `node --test` (`clients/clientkeys`); `zether-prover`; `ua-rs`
 | Versioned PQZ keys (3g) | T51 → T52 → T53; T54 after T53; T55 after T54; T56 after T53, beside T54–T55; T57 beside, lands in T19 | after T43, before 3f (owner 2026-11-07: 3g before 3f); contracts sequential in this worktree; T51 measures the registry's deploy gas, T52 measures kind 13 first (from what T43 leaves); T66b's rebalance comes after T53; the OFFCHAIN items go to 3f |
 | Factory index, chain-neutral releases | T67 → T71 → T70 → T72 → T73 → T74 → T68; T76 after T71, before T68; T69 and T75 beside, land in T19 | **owner approved the index and the extension (Q7–Q12 as recommended) 2026-11-07; the chain-neutral releases T71–T76 owner-approved 2026-11-07 (§10.3 as recommended, S3 = signing UA), pending the Fable review's fixes**; after T57, before 3f (owner 2026-11-07: 3e → 3g → factory index + chain-neutral → 3f → 3h → T66b → 3c); contracts sequential in this worktree (`src/factory/` only) |
 | PQZ verifier mode (3f) | T44 → T45; T46 after T45; T47 after T46; T48 and T49 after T45, beside T46–T47; T50 beside, lands in T19 | after T69 (the factory index group), before 3h (owner 2026-11-07); contracts sequential in this worktree; T45 measures kind 13 first (from what T57 leaves); OFFCHAIN built over versioned keys (3g §5) |
-| PQZ proof path (3h) | T58 → T59 → T60 → T61; T62 after T61; T63 after T62; T64 and T65 after T61, beside T62–T63; T66 beside, lands in T19 | after T50, before 3c (owner approved 2026-11-07); contracts sequential in this worktree; T58 measures kind 13 first; each format moves in the task that changes it; no task waits for `ua-rs-sign` |
-| Registry generation, library review, size (T66b) | T66b | after T66, before 3c (owner 2026-11-07): `requirePortable`, no KEM record for an `msig`, the `UARegistryLib` <-> `UARegistry` rebalance, then the review of every library and the size reduction to fit 60 M per deployed contract; sequential in this worktree |
+| Registry block (T66a) | T66a | **after T50 (3f), before 3h (owner 2026-11-08)**: T66b parts 1 (`requirePortable`), 2 (no KEM record for an `msig`) and 5 (`popSlotsOf` and the `pop` slot bitmap, with Soroban's twin) built early, one registry generation; contracts sequential in this worktree |
+| PQZ proof path (3h) | T58 → T59 → T60 → T61; T62 after T61; T63 after T62; T64 and T65 after T61, beside T62–T63; T66 beside, lands in T19 | after T66a (owner 2026-11-08; was after T50), before 3c (owner approved 2026-11-07); contracts sequential in this worktree; T58 measures kind 13 first; each format moves in the task that changes it; no task waits for `ua-rs-sign` |
+| Registry generation, library review, size (T66b) | T66b | after T66, before 3c (owner 2026-11-07; parts 1, 2 and 5 moved to T66a, owner 2026-11-08): the `UARegistryLib` <-> `UARegistry` rebalance, then the review of every library and the size reduction to fit 60 M per deployed contract; sequential in this worktree |
 | Docs | T19 | drafts beside T14–T18, T24–T36, T37–T43, T51–T57, T67–T76, T44–T50 and T58–T66; lands after T66 and 3c (BUILT only with code and tests) |
 | Close | T21 → T22 → T23 | |
 | Next | TODO item 4 | SCaaS testnet reset 2 deploys the merged code (not this plan) |
@@ -2049,6 +2050,10 @@ spec §5.5 note); the operator note's `own_tag` and `PROOF_STORE_OVER_LANE_CAP` 
 **Estimate:** parts 1 and 2 about 2.5, part 3 about 2; part 4 **not sized**: the owner's 60 M goal below is far larger than the 3
 first written for it, and Step 2's study sizes it.
 
+**Owner 2026-11-08: parts 1, 2 and 5 are built early as T66a, right after 3f (T50) and before 3h,** so every reader of the
+registry record changes once and part 3 measures them in place; parts 3 and 4 and Step 5 stay here, after 3h. T66a's gates and
+commits follow this block's rules (`ua-mtx-merge T66a: …`).
+
 **Owner 2026-11-07:** four items move here as one group, in this order, because they share one registry generation and the
 rebalance must be measured after every PQZ contract change:
 
@@ -2119,7 +2124,7 @@ module is security-relevant).
 index (§1–§7) **approved by the owner 2026-11-07** (its §6 questions answered as recommended); the extension (§8: generic
 classes and kinds, `createInstance`, `PqChat` as class 3) **approved by the owner 2026-11-07** (direction, then Q7–Q12
 answered as recommended; T67 takes Q12's `uint16` ids). The creator is a `bytes32 creatorId` (chain-neutral S3, below). **Place (owner 2026-11-07):** after 3g (T57), before 3f (T44 depends on
-T69): 3e → 3g → factory index + chain-neutral → 3f → 3h → T66b → 3c. Independent of the registry and of every token body: only `src/factory/`, its
+T69): 3e → 3g → factory index + chain-neutral → 3f → T66a (registry block, owner 2026-11-08) → 3h → T66b → 3c. Independent of the registry and of every token body: only `src/factory/`, its
 tests, `GovGas` and the deploy scripts move. **Order:** T67 → T70 → T68, sequential in this worktree; T69 (docs share) drafts
 beside them and lands in T19. **Estimate:** 6 agent-days (3 for the index, 3 for the extension). Each contracts task ends with the whole `forge test` green at the default set
 and the size gate; no PQZ file moves, so no per-set run. Red first, positive control first, one change at a time; mutants one at
