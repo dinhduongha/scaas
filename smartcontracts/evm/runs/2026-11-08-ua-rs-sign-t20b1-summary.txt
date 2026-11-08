@@ -325,3 +325,5 @@ named-tests: named-tests: 634 names, 0 problem(s)
 # Inputs: PQ_DOWNLOADS held the 15 pinned downloads (not committed); Foundry 1.8.5 (anvil, stopped by the tests); Qt 6.12; NDK r29;
 #   frb 2.13.0 codegen for ua-dart-frb; smartcontracts/evm/lib at its pins (evm_libs.sh check). Machine load: another agent's
 #   forge jobs held the capped slots: wall times are not comparable. UNAUDITED.
+# ua-sizes re-run (controller 2026-11-08: move the baseline) at fc8ad35b, which moves the six rows old -> new (its commit
+#   message): rc 0, 0 failures, every baseline cell measured, 23 cells inside the tolerance. The row above is the first run's.
