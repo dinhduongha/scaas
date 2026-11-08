@@ -758,8 +758,8 @@ contract PqzStatePinGasTest is PqzSlots {
         bytes memory proof = _pf("pqzh", key);
         string memory op = compact ? "PqzTransferSingleCompact" : "PqzTransferSingle";
         IUARegistry.UASig memory sig = _signN(op, address(tok), abi.encode(_hashT(t), keccak256(proof), keccak256("")));
-        bytes memory d = viaUA ? abi.encodeWithSignature(_abiOf(string.concat("UA", op)), _uaEnvN(), t, proof, _pqAuth(), bytes(""), _feeAuth())
-            : abi.encodeWithSignature(_abiOf(string.concat("UA", op)), _envN(), t, proof, _pqAuth(), bytes(""), sig);
+        bytes memory d = viaUA ? abi.encodeWithSignature(_abiOf(string.concat("UA", op)), _uaEnvN(), t, proof, _pqAuth(), bytes(""), _feeAuth(), noVerdict())
+            : abi.encodeWithSignature(_abiOf(string.concat("UA", op)), _envN(), t, proof, _pqAuth(), bytes(""), sig, noVerdict());
         _fits(key, string.concat(op, aud ? ", auditor" : ", no auditor"), address(tok), d);
     }
 
@@ -772,8 +772,8 @@ contract PqzStatePinGasTest is PqzSlots {
         bytes memory proof = _pf("pqzh", key);
         string memory op = compact ? "PqzTransferCompact" : "PqzTransfer";
         IUARegistry.UASig memory sig = _signN(op, address(tok), abi.encode(_hashM(t), keccak256(proof), keccak256("")));
-        bytes memory d = viaUA ? abi.encodeWithSignature(_abiOf(string.concat("UA", op)), _uaEnvN(), t, proof, _pqAuth(), bytes(""), _feeAuth())
-            : abi.encodeWithSignature(_abiOf(string.concat("UA", op)), _envN(), t, proof, _pqAuth(), bytes(""), sig);
+        bytes memory d = viaUA ? abi.encodeWithSignature(_abiOf(string.concat("UA", op)), _uaEnvN(), t, proof, _pqAuth(), bytes(""), _feeAuth(), noVerdict())
+            : abi.encodeWithSignature(_abiOf(string.concat("UA", op)), _envN(), t, proof, _pqAuth(), bytes(""), sig, noVerdict());
         _fits(key, string.concat(op, " M = ", vm.toString(m), aud ? ", auditor" : ", no auditor"), address(tok), d);
     }
 
@@ -786,8 +786,8 @@ contract PqzStatePinGasTest is PqzSlots {
         IPqzToken.Payout memory p = IPqzToken.Payout(amount, to);
         bytes memory proof = _pf("pqzh", key);
         IUARegistry.UASig memory sig = _signN("PqzUnshield", address(tok), abi.encode(_hashB(b), amount, to, keccak256(proof), keccak256("")));
-        bytes memory d = viaUA ? abi.encodeWithSignature(_abiOf("UAPqzUnshield"), _uaEnvN(), b, p, proof, _pqAuth(), bytes(""), _feeAuth())
-            : abi.encodeWithSignature(_abiOf("UAPqzUnshield"), _envN(), b, p, proof, _pqAuth(), bytes(""), sig);
+        bytes memory d = viaUA ? abi.encodeWithSignature(_abiOf("UAPqzUnshield"), _uaEnvN(), b, p, proof, _pqAuth(), bytes(""), _feeAuth(), noVerdict())
+            : abi.encodeWithSignature(_abiOf("UAPqzUnshield"), _envN(), b, p, proof, _pqAuth(), bytes(""), sig, noVerdict());
         _fits(key, key, address(tok), d);
     }
 
@@ -798,8 +798,8 @@ contract PqzStatePinGasTest is PqzSlots {
         bytes memory proof = _pf("pqzh", "BURN");
         bytes32 xh = keccak256(abi.encode(keccak256("Unwrap(address underlying,bytes32 recipient,uint256 amount,uint256 minOut)"), x));
         IUARegistry.UASig memory sig = _signN("PqzUnshieldUnwrap", address(w), abi.encode(_hashB(b), xh, keccak256(proof), keccak256("")));
-        bytes memory d = viaUA ? abi.encodeWithSignature(_abiOf("UAPqzUnshieldUnwrap"), _uaEnvN(), b, x, proof, _pqAuth(), bytes(""), _feeAuth())
-            : abi.encodeWithSignature(_abiOf("UAPqzUnshieldUnwrap"), _envN(), b, x, proof, _pqAuth(), bytes(""), sig);
+        bytes memory d = viaUA ? abi.encodeWithSignature(_abiOf("UAPqzUnshieldUnwrap"), _uaEnvN(), b, x, proof, _pqAuth(), bytes(""), _feeAuth(), noVerdict())
+            : abi.encodeWithSignature(_abiOf("UAPqzUnshieldUnwrap"), _envN(), b, x, proof, _pqAuth(), bytes(""), sig, noVerdict());
         _fits("BURN", "PqzUnshieldUnwrap", address(w), d);
     }
 
