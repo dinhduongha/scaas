@@ -95,8 +95,12 @@ pub fn kem_record_digest(ua: &[u8; 32], version: u64, kem_pk: &[u8]) -> Result<[
     }
     Ok(typed(&kem_record_hash(ua, version, kem_pk)?))
 }
-/// What the UA signs for a KEM record: `ua_message(kind, PURPOSE_KEM, kem_record_digest)`.
+/// What the UA signs for a KEM record: `ua_message(kind, PURPOSE_KEM, kem_record_digest)`; a kind that holds no KEM key is
+/// `KemHolder` ([`is_kem_holder`]).
 pub fn kem_record_message(kind: u16, ua: &[u8; 32], version: u64, kem_pk: &[u8]) -> Result<[u8; 32]> {
+    if !is_kem_holder(kind) {
+        return Err(UAError::KemHolder(kind));
+    }
     ua_message(kind, &purpose_tag("kem")?, &kem_record_digest(ua, version, kem_pk)?)
 }
 
@@ -136,7 +140,7 @@ pub fn membership_digest(ua: &[u8; 32], member: &[u8; 32]) -> [u8; 32] {
 
 /// An `msig` member's key data by its id (see [`msig_pqz_eligible_with`]).
 pub type Inner<'a> = dyn Fn([u8; 32]) -> Option<Vec<u8>> + 'a;
-/// A PQZ / KEM holder: a single-key PQ kind, or an `msig` whose key data is PQ-eligible (`key_data` shows it, `inner` its `msig` members).
+/// A PQZ key holder: a single-key PQ kind, or an `msig` whose key data is PQ-eligible (`key_data` shows it, `inner` its `msig` members).
 /// Malformed `msig` key data is `UAKeyData` (as in the JS), not "not a holder".
 fn holds(kind: u16, key_data: &[u8], inner: &Inner) -> Result<bool> {
     if is_pqz_holder(kind) {
@@ -146,6 +150,11 @@ fn holds(kind: u16, key_data: &[u8], inner: &Inner) -> Result<bool> {
         return msig_pqz_eligible_with(key_data, inner);
     }
     Ok(false)
+}
+/// A KEM key holder (CTR-UA-32; owner 2026-11-05, MD-11 (c), T66a): the single PQ kinds only, as the registry's `UAKemHolder`. An `msig`
+/// holds no KEM key: a sender seals to each accepted member's own key.
+pub fn is_kem_holder(kind: u16) -> bool {
+    is_pqz_holder(kind)
 }
 /// `key_hash_of(0x0142, pqz_key)`; a key of no parameter set's length is `UAKeyData`.
 fn pqz_key_hash_of(pqz_key: &[u8]) -> Result<[u8; 32]> {
@@ -191,8 +200,9 @@ pub struct HolderPop {
 
 /// The portable PoP message of a registration. Attributes: `pqz_key` with its proof `pqz_pop` (or only its hash
 /// `pqz_pop_hash`; a relayer may hold only that) and the initial KEM key `kem_pk` (its record is always version 0, owner
-/// 2026-10-31: no version input); `None` / empty = absent. Only holders may carry them (`PqzHolder`, `KemHolder`; an `msig` needs `key_data` to show it is PQ-eligible); a
-/// PQZ key always comes with its proof hash and only with it (`PqzPopHash`).
+/// 2026-10-31: no version input); `None` / empty = absent. Only holders may carry them (`PqzHolder`: an `msig` needs `key_data` to show it
+/// is PQ-eligible; `KemHolder`: a single PQ kind only, CTR-UA-32, never an `msig`); a PQZ key always comes with its proof hash and only
+/// with it (`PqzPopHash`).
 pub fn holder_pop_message(
     kind: u16, ua: &[u8; 32], key_data: &[u8], pqz_key: Option<&[u8]>, pqz_pop: Option<&[u8]>, pqz_pop_hash: Option<&[u8; 32]>,
     kem_pk: Option<&[u8]>,
@@ -207,14 +217,11 @@ pub fn holder_pop_message_with(
 ) -> Result<HolderPop> {
     let pqz_key = pqz_key.filter(|k| !k.is_empty());
     let kem = kem_pk.filter(|pk| !pk.is_empty());
-    if pqz_key.is_some() || kem.is_some() {
-        let holder = holds(kind, key_data, inner)?;
-        if pqz_key.is_some() && !holder {
-            return Err(UAError::PqzHolder(kind));
-        }
-        if kem.is_some() && !holder {
-            return Err(UAError::KemHolder(kind));
-        }
+    if pqz_key.is_some() && !holds(kind, key_data, inner)? {
+        return Err(UAError::PqzHolder(kind));
+    }
+    if kem.is_some() && !is_kem_holder(kind) {
+        return Err(UAError::KemHolder(kind));
     }
     let pop_hash = proof_hash_of(pqz_pop, pqz_pop_hash)?;
     if pqz_key.is_some() != (pop_hash != [0; 32]) {
@@ -738,6 +745,9 @@ pub struct Registration {
 /// Some(true)` — as the hash commit with the fill `setKemKey(ua, 0, kem, UASig::default())` (no signature: the pop signed the
 /// same `UAKemRecord{ua, 0, scheme, kemPkHash}`; anyone may send it). `pqz_pop_hash` defaults to `keccak256(pqz_pop)`.
 pub fn registration_args(i: &RegistrationInput) -> Result<Registration> {
+    if !i.kem_pk.is_empty() && !is_kem_holder(i.kind) {
+        return Err(UAError::KemHolder(i.kind));
+    }
     let pqz_pop_hash = if i.pqz_key.is_empty() && zero32(&i.pqz_pop_hash) {
         [0; 32]
     } else {
@@ -1003,7 +1013,7 @@ fn registration_attrs(kind: u16, ua: &[u8; 32], d: &[u8], a: &Attrs, pqz_pop: &[
     if pqz && !holds(kind, d, inner)? {
         return Err(UAError::PqzHolder(kind));
     }
-    if (commit || !kem_pk.is_empty()) && !holds(kind, d, inner)? {
+    if (commit || !kem_pk.is_empty()) && !is_kem_holder(kind) {
         return Err(UAError::KemHolder(kind));
     }
     if pqz == zero32(&a.pqz_pop_hash) || a.pqz_pop_hash == keccak256(&[]) || (!pqz_pop.is_empty() && keccak256(pqz_pop) != a.pqz_pop_hash) {
@@ -1055,7 +1065,7 @@ pub fn check_kem_record_with(
     if !is_record_of(kind, key_data, ua)? {
         return Err(UAError::Unauthorized);
     }
-    if !holds(kind, key_data, &inner_of(members))? {
+    if !is_kem_holder(kind) {
         return Err(UAError::KemHolder(kind));
     }
     let digest = kem_record_digest(ua, version, kem_pk)?;

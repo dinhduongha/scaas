@@ -311,10 +311,15 @@ static void kem_record() {
         CHECK(hx(kemRecordHash(ua, v, pk)) == r["structHash"].get<std::string>(), id);
         CHECK(hx(m) == r["message"].get<std::string>(), id);
         CHECK(m == uaMessage(kind(r["kind"]), purposeTag("kem"), d), id);
-        if (kind(r["kind"]) == 0x0120) CHECK(hx(memberDigest(ua, m)) == r["memberDigest"].get<std::string>(), id);
+        CHECK(kind(r["kind"]) != 0x0120, id + ": CTR-UA-32, an msig holds no KEM key");
     }
+    CHECK(p["kemRecords"].size() == 12, "kemRecords");
     Bytes u(32, 1);
     auto kem = [](size_t n, uint8_t scheme = 1) { Bytes k(n); k[0] = scheme; return k; };  // scheme byte, zeros
+    // CTR-UA-32 (T66a): a PQ-eligible msig holds a PQZ key but no KEM key; the same record under a single PQ kind builds
+    Bytes mq = bytes(byName(p["registrations"], "name", "msig-pq/n2048-kmax1024")["ua"]);
+    CHECK(code_of([&] { kemRecordMessage(0x0120, mq, 1, kem(kKemPkLength)); }) == "UAKemHolder", "msig KEM record");
+    CHECK(kemRecordMessage(0x0131, mq, 1, kem(kKemPkLength)).size() == 32, "the control");
     CHECK(code_of([&] { kemRecordDigest(u, 0, kem(kKemPkLength)); }) == "UAKemVersion", "version 0");
     CHECK(code_of([&] { kemRecordDigest(u, 1, kem(kKemPkLength - 1)); }) == "UAKemKeyLength", "short key");
     CHECK(code_of([&] { kemRecordDigest(u, 1, kem(kKemPkLength + 1)); }) == "UAKemKeyLength", "long key");
@@ -416,6 +421,13 @@ static void holder_refusals() {
                                           std::nullopt, hash, holder["attrs"]["pqzKey"].get<std::string>() != "0x");
                   }) == err, name);
             ++run;
+        } else if (entry == "setKemKey" && err == "UAKemHolder") {
+            // CTR-UA-32 (msig-kem-record): an msig's KEM record is refused by its kind (the target's kind is the row's)
+            const json& k = byName(p["kemRecords"], "id", m["row"].get<std::string>());
+            const json& t = byName(regs, "ua", set["ua"].get<std::string>());
+            CHECK(t["kind"] == m["kind"], name);
+            CHECK(code_of([&] { kemRecordMessage(kind(t["kind"]), bytes(set["ua"]), k["version"].get<uint64_t>(), bytes(set["kemPk"])); }) == err, name);
+            ++run;
         } else if (entry == "setKemKey" && name == "kem-record-of-other-ua") {
             // the record of one UA offered for another: the signed message differs, so the signature cannot verify
             const json& k = byName(p["kemRecords"], "id", m["row"].get<std::string>());
@@ -451,6 +463,8 @@ static void holder_refusals() {
     CHECK(code_of([&] { holderPopMessage(0x0130, u, {}, std::nullopt, std::nullopt, std::nullopt, Bytes(kKemPkLength - 1, 1)); }) == "UAKemKeyLength", "kem key");
     CHECK(code_of([&] { holderPopMessage(0x0130, u, {}, std::nullopt, std::nullopt, std::nullopt, Bytes(kKemPkLength, 0)); }) == "UAKemScheme", "kem scheme 0");
     CHECK(code_of([&] { holderPopMessage(0x0101, u, {}, std::nullopt, std::nullopt, std::nullopt, Bytes(kKemPkLength, 1)); }) == "UAKemHolder", "kem holder");
+    Bytes mq = bytes(byName(regs, "name", "msig-pq/n2048-kmax1024")["keyData"]);  // a PQ-eligible msig holds no KEM key (CTR-UA-32)
+    CHECK(code_of([&] { holderPopMessage(0x0120, u, mq, std::nullopt, std::nullopt, std::nullopt, Bytes(kKemPkLength, 1)); }) == "UAKemHolder", "msig kem holder");
     CHECK(holderPopMessage(0x0130, u, {}).message == holderPopMessage(0x0130, u, {}, std::nullopt, std::nullopt, std::nullopt, Bytes{}).message, "empty KEM key is absent");
     // a zero-length proof hash is absent (same as no hash)
     CHECK(holderPopMessage(0x0130, u, {}).message == holderPopMessage(0x0130, u, {}, std::nullopt, std::nullopt, Bytes{}).message, "empty hash is absent");
@@ -510,7 +524,17 @@ static void nested_rows() {
         }
     }
     CHECK(rows == 17, "registration rows");
-    CHECK(n["kemRecords"].size() == 1 && n["pqzKeyRecords"].size() == 4, "record rows");
+    CHECK(n["kemRecords"].empty() && n["pqzKeyRecords"].size() == 4, "record rows");  // CTR-UA-32: an msig has no KEM record
+    {
+        const json& pq = byName(n["registrations"], "name", "msig-nested-pq");
+        Bytes kem(kKemPkLength);
+        kem[0] = 1;
+        CHECK(code_of([&] { kemRecordMessage(0x0120, bytes(pq["ua"]), 1, kem); }) == "UAKemHolder", "msig KEM record");
+        json i = regInput(pq);
+        i["inner"] = inner;
+        i["kemPk"] = hx(kem);
+        CHECK(code_of([&] { regArgs(i); }) == "UAKemHolder", "msig KEM key");
+    }
     for (auto& r : n["kemRecords"]) {
         Bytes ua = bytes(r["ua"]), pk = bytes(r["kemPk"]);
         uint64_t v = r["version"];
@@ -542,9 +566,9 @@ static void nested_rows() {
     for (auto& a : n["authorizations"]) {
         std::string name = a["name"];
         CHECK(hx(memberDigest(bytes(a["ua"]), uaMessage(0x0120, bytes(a["purposeTag"]), bytes(a["digest"])))) == str(a["memberDigest"]), name);
-        auto& k = n["kemRecords"][0];
-        json i = {{"ua", k["ua"]}, {"version", k["version"]}, {"kemPk", k["kemPk"]}, {"sig", a["uaSig"]}};
-        CHECK(json::parse(setKemKeyArgs(i.dump()))["sig"] == a["uaSig"], name);
+        auto& k = n["pqzKeyRecords"][0];  // (was kemRecords[0]: CTR-UA-32, an msig has no KEM record)
+        json i = {{"ua", k["ua"]}, {"pqzKey", k["pqzKey"]}, {"pqzPopHash", k["pqzPopHash"]}, {"sig", a["uaSig"]}};
+        CHECK(json::parse(setPqzKeyArgs(i.dump()))["sig"] == a["uaSig"], name);
     }
     // the builder's own refusal is the minimal rule at both levels; the others are the registry's, on the signatures
     const std::vector<std::string> minimal = {"inner-below-threshold", "inner-index-past-the-members", "inner-unsorted", "inner-not-minimal", "outer-not-minimal"};
@@ -578,7 +602,7 @@ static void nested_rows() {
     }
 }
 
-// The With forms with inner ({id: keyData}, the JSON calls' form): msig-nested-pq's eligibility and holder record, every eligibility row and
+// The With forms with inner ({id: keyData}, the JSON calls' form): msig-nested-pq's eligibility and record (no KEM key, CTR-UA-32), every eligibility row and
 // every nested PQZ key record reproduce; without inner they stay UAMemberUnknown, so does a third level. Every memberships row's stored
 // bytes turn back into its slot through replayedMemberSig.
 static void nested_inner() {
@@ -594,18 +618,24 @@ static void nested_inner() {
         for (auto& r : *list) {
             if (r["attrs"]["kemPk"] == "0x" && r["attrs"]["pqzKey"] == "0x") continue;
             ++holders;
-            std::string name = r["name"];
-            Bytes ua = bytes(r["ua"]), d = bytes(r["keyData"]), pk = bytes(r["attrs"]["kemPk"]);
-            CHECK(name == "msig-nested-pq" && msigPqzEligibleWith(d, all), name);
-            CHECK(code_of([&] { msigPqzEligible(d); }) == "UAMemberUnknown", name);
-            HolderPop h = holderPopMessageWith(0x0120, ua, d, all, std::nullopt, std::nullopt, std::nullopt, pk);
-            CHECK(hx(h.kemRecordHash) == str(r["kemRecordHash"]) && hx(h.portableRecordDigest) == str(r["portableRecordDigest"]), name);
-            CHECK(hx(h.registrationDigest) == str(r["registrationDigest"]) && hx(h.message) == str(r["popMessage"]), name);
-            CHECK(mh(h.memberDigest) == str(r["memberDigest"]), name);
-            CHECK(code_of([&] { holderPopMessageWith(0x0120, ua, d, "", std::nullopt, std::nullopt, std::nullopt, pk); }) == "UAMemberUnknown", name);
         }
     }
-    CHECK(holders == 1, "one nested holder row");
+    CHECK(holders == 0, "no nested holder row");  // CTR-UA-32 (T66a): msig-nested-pq registers without a KEM key (was the one row)
+    {
+        const json& r = byName(n["registrations"], "name", "msig-nested-pq");
+        std::string name = r["name"];
+        Bytes ua = bytes(r["ua"]), d = bytes(r["keyData"]), kem(kKemPkLength);
+        kem[0] = 1;
+        CHECK(msigPqzEligibleWith(d, all), name);
+        CHECK(code_of([&] { msigPqzEligible(d); }) == "UAMemberUnknown", name);
+        HolderPop h = holderPopMessageWith(0x0120, ua, d, all, std::nullopt, std::nullopt, std::nullopt, std::nullopt);
+        CHECK(hx(h.kemRecordHash) == str(r["kemRecordHash"]) && hx(h.portableRecordDigest) == str(r["portableRecordDigest"]), name);
+        CHECK(hx(h.registrationDigest) == str(r["registrationDigest"]) && hx(h.message) == str(r["popMessage"]), name);
+        CHECK(mh(h.memberDigest) == str(r["memberDigest"]), name);
+        // an msig holds no KEM key: refused by its kind, before its key data or inner is read
+        for (const std::string& i : {all, std::string()})
+            CHECK(code_of([&] { holderPopMessageWith(0x0120, ua, d, i, std::nullopt, std::nullopt, std::nullopt, kem); }) == "UAKemHolder", name);
+    }
     for (auto& r : n["eligibility"]) {
         std::string why = r["reason"];
         Bytes d = bytes(r["keyData"]);
@@ -717,7 +747,16 @@ static void registration_args() {
         CHECK(c["kemFillCalldataLength"] == 2020, name);
         ++commits;
     }
-    CHECK(commits == withCommit && commits > 0, "kemCommit rows");
+    CHECK(commits == withCommit && commits == 7, "kemCommit rows");  // CTR-UA-32: msig-pq/<set> registers without a KEM key
+    {  // CTR-UA-32 (T66a): a PQ-eligible msig holds no KEM key, in either form
+        json i = regInput(byName(p["registrations"], "name", "msig-pq/n2048-kmax1024"));
+        i["kemPk"] = p["kemRecords"][0]["kemPk"];
+        for (const json& c : {json(true), json(false), json()}) {
+            json o = i;
+            if (!c.is_null()) o["kemCommit"] = c;
+            CHECK(code_of([&] { regArgs(o); }) == "UAKemHolder", "msig KEM key " + c.dump());
+        }
+    }
     int typed = 0;
     for (auto& v : k["valid"]) {  // no attributes, a 32-byte pop (cast 1.8.5)
         uint16_t n = kind(v["kind"]);
@@ -755,7 +794,7 @@ static json recordSig(const json& r) {
 
 static void set_key_args() {
     json p = load("portable.json");
-    CHECK(p["kemRecords"].size() == 15, "kemRecords"); // + v1-v3 of mldsa87, fndsa1024
+    CHECK(p["kemRecords"].size() == 12, "kemRecords"); // + v1-v3 of mldsa87, fndsa1024; no msig (CTR-UA-32)
     for (auto& k : p["kemRecords"]) {
         json i = {{"ua", k["ua"]}, {"version", k["version"]}, {"kemPk", k["kemPk"]}, {"sig", recordSig(k)}};
         CHECK(json::parse(setKemKeyArgs(i.dump())) == k["args"], k["id"].get<std::string>());

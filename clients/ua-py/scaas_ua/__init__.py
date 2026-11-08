@@ -320,15 +320,22 @@ def registration_digest(ua, kind, pqz_key_hash, kem_record_hash_, pqz_pop_hash):
 
 
 def kem_record_message(kind, ua, version, kem_pk):
-    """What the UA signs for a KEM record: ``ua_message(kind, PURPOSE_KEM, kem_record_digest)``."""
+    """What the UA signs for a KEM record: ``ua_message(kind, PURPOSE_KEM, kem_record_digest)``; a KEM holder only (UAKemHolder)."""
+    if not is_kem_holder(kind):
+        raise UAError('UAKemHolder', f'0x{kind:04x} may not hold a KEM key')
     return ua_message(kind, purpose_tag('kem'), kem_record_digest(ua, version, kem_pk))
 
 
 def _holds(kind, key_data, inner=None):
-    """A PQZ / KEM holder: a single-key PQ kind, or an msig whose key data is PQ-eligible (malformed -> UAKeyData)."""
+    """A PQZ key holder: a single-key PQ kind, or an msig whose key data is PQ-eligible (malformed -> UAKeyData)."""
     if is_pqz_holder(kind):
         return True
     return kind == 0x0120 and len(_bytes(key_data)) > 0 and msig_pqz_eligible(key_data, inner)
+
+
+def is_kem_holder(kind):
+    """A KEM key holder (CTR-UA-32, T66a): the single PQ kinds only; an msig holds no KEM key (UAKemHolder, as the registry)."""
+    return is_pqz_holder(kind)
 
 
 def _pqz_key_hash_of(pqz_key):
@@ -365,14 +372,14 @@ UAPortableRecord, ``registration_digest`` the typed UARegistration. ``member_dig
 def holder_pop_message(kind, ua, key_data=b'', pqz_key=None, pqz_pop=None, pqz_pop_hash=None, kem_pk=None, inner=None):
     """The portable PoP of a registration (UA-8 P1, P2): a HolderPop. ``pqz_key`` with its proof ``pqz_pop`` (or only its hash
     ``pqz_pop_hash``) and the initial KEM key ``kem_pk`` (its record is always version 0, owner 2026-10-31); None / b'' = absent. Only holders
-    carry them (UAPqzHolder, UAKemHolder; an msig needs ``key_data`` to show it is PQ-eligible); a PQZ key always comes with
+    carry them (UAPqzHolder: an msig needs ``key_data`` to show it is PQ-eligible; UAKemHolder: a single PQ kind only, never an msig); a PQZ key always comes with
     its proof hash and only with it (UAPqzPopHash). ``inner``: see msig_pqz_eligible."""
     if pqz_key is not None and len(pqz_key) == 0:
         pqz_key = None
     kem = kem_pk if kem_pk is not None and len(kem_pk) else None
-    if (pqz_key is not None or kem is not None) and not _holds(kind, key_data, inner):
-        if pqz_key is not None:
-            raise UAError('UAPqzHolder', f'0x{kind:04x} may not hold a PQZ key')
+    if pqz_key is not None and not _holds(kind, key_data, inner):
+        raise UAError('UAPqzHolder', f'0x{kind:04x} may not hold a PQZ key')
+    if kem is not None and not is_kem_holder(kind):
         raise UAError('UAKemHolder', f'0x{kind:04x} may not hold a KEM key')
     pop_hash = _proof_hash_of(pqz_pop, pqz_pop_hash)
     if (pqz_key is not None) != any(pop_hash):
@@ -948,6 +955,8 @@ def registration_args(kind, key_data, pqz_key=None, pqz_pop_hash=None, pqz_pop=N
     forces the full key. ``pop``: the signer's signature bytes, or for an msig (index, inner, sig) member tuples."""
     key_data = _bytes(key_data)
     has = lambda v: v is not None and len(v) > 0
+    if has(kem_pk) and not is_kem_holder(kind):
+        raise UAError('UAKemHolder', f'0x{kind:04x} may not hold a KEM key')
     pop_hash = _proof_hash_of(pqz_pop, pqz_pop_hash) if has(pqz_key) or has(pqz_pop_hash) else bytes(32)
     attrs = {'pqzKey': _hx(pqz_key or b''), 'pqzPopHash': _hx(pop_hash), 'kem': kem_key_of(kem_pk), 'kemPkHash': _ZW}
     entry = _TYPED_ENTRY.get(kind, 'register')

@@ -222,12 +222,12 @@ mod verdicts {
         let n = nested();
         let keys = |id| key_of(&n, id);
         let (at, all): (&Accepted, &Accepted) = (&|id, i| popped(&n, id, i), &|id, i| after(&n, id, i));
-        for k in rows(&n, "kemRecords") {
-            let (ua, sig) = (b32(&k["ua"]), bytes(&k["sig"]));
-            let (kind, d) = key_of(&n, ua).unwrap();
-            assert_eq!(check_kem_record_with(kind, &d, &ua, 1, &bytes(&k["kemPk"]), &sig, &keys, Some(at)), Ok(()));
-            assert_eq!(check_kem_record_with(kind, &d, &ua, 1, &bytes(&k["kemPk"]), &flip(&sig), &keys, Some(at)), Err(UAError::Unauthorized));
-        }
+        // CTR-UA-32 (T66a): an msig holds no KEM key, so no KEM record; a well-formed one is refused before its signature
+        assert!(rows(&n, "kemRecords").is_empty());
+        let pq = row(&n, &"msig-nested-pq".into());
+        let (ua, d) = (b32(&pq["ua"]), bytes(&pq["keyData"]));
+        let kem_pk = [vec![1u8], vec![0; 1600]].concat();
+        assert_eq!(check_kem_record_with(0x0120, &d, &ua, 1, &kem_pk, &[], &keys, Some(at)), Err(UAError::KemHolder(0x0120)));
         for k in rows(&n, "pqzKeyRecords") {
             let (ua, sig) = (b32(&k["ua"]), bytes(&k["sig"]));
             let (kind, d) = key_of(&n, ua).unwrap();
@@ -277,16 +277,12 @@ mod verdicts {
         assert_eq!(check_on(&n, after_row, &pop, Some(at)), Err(UAError::Pop), "before the memberships rows");
         assert_eq!(check_on(&n, after_row, &pop, None), Err(UAError::NotVerifiable));
         assert_eq!(check_on(&n, after_row, &pop, Some(&|id, i| after(&n, id, i))), Ok(()));
-        let k = &rows(&n, "kemRecords")[0];
-        let (ua, sig) = (b32(&k["ua"]), bytes(&k["sig"]));
-        let (kind, d) = key_of(&n, ua).unwrap();
-        let kem = |acc: Option<&Accepted>| check_kem_record_with(kind, &d, &ua, 1, &bytes(&k["kemPk"]), &sig, &keys, acc);
-        assert_eq!(kem(Some(&|id, i| id != ua && popped(&n, id, i))), Err(UAError::Unauthorized), "the record's own bits");
-        assert_eq!(kem(None), Err(UAError::NotVerifiable));
+        // the record's own bits (setPqzKey; CTR-UA-32: an msig has no KEM record)
         let p = &rows(&n, "pqzKeyRecords")[0];
         let (ua, d) = (b32(&p["ua"]), key_of(&n, b32(&p["ua"])).unwrap().1);
-        let got = check_pqz_key_record_with(0x0120, &d, &ua, &bytes(&p["pqzKey"]), &b32(&p["pqzPopHash"]), &bytes(&p["sig"]), &keys, None);
-        assert_eq!(got, Err(UAError::NotVerifiable));
+        let pqz = |acc: Option<&Accepted>| check_pqz_key_record_with(0x0120, &d, &ua, &bytes(&p["pqzKey"]), &b32(&p["pqzPopHash"]), &bytes(&p["sig"]), &keys, acc);
+        assert_eq!(pqz(Some(&|id, i| id != ua && popped(&n, id, i))), Err(UAError::Unauthorized), "the record's own bits");
+        assert_eq!(pqz(None), Err(UAError::NotVerifiable));
         let m = rows(&n, "memberships").iter().find(|m| !m["members"].as_array().unwrap().is_empty()).unwrap();
         let (ua, d) = (b32(&m["ua"]), key_of(&n, b32(&m["ua"])).unwrap().1);
         let slot = typed(&serde_json::json!([{ "index": m["index"], "members": m["members"], "sig": m["sig"] }])).remove(0);

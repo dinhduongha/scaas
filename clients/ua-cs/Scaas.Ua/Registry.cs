@@ -193,6 +193,7 @@ public static partial class UA
         byte[]? pqzPop = null, byte[]? kemPk = null, byte[]? pop = null, MemberSig[]? members = null, bool? kemCommit = null)
     {
         byte[] Or(byte[]? b) => b ?? [];
+        if (kemPk is { Length: > 0 } && !IsKemHolder(kind)) throw new UAException("UAKemHolder", $"0x{kind:x4} may not hold a KEM key");
         var popHash = pqzKey is { Length: > 0 } || pqzPopHash is { Length: > 0 } ? ProofHashOf(pqzPop, pqzPopHash) : new byte[32];
         var attrs = new UAAttrs(Or(pqzKey), popHash, KemKeyOf(kemPk), new byte[32]);
         var key = TypedKey(kind, keyData);
