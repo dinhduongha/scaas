@@ -8584,7 +8584,7 @@ the order given (one source answers the whole read, the next from scratch after 
 a strict majority of the named sources (⌊n/2⌋ + 1) returning the same complete read at one block, counted per source over the whole
 read; named, default (the release's own reviewed list) and discovered endpoints all allowed, a discovered one feeding a decryption
 only under the agreement option with at least three sources. The reference readers take named endpoints only (no default list,
-no discovery, YAGNI); a wallet layer or app may take either behaviour. Replaces "never an app default or a discovered endpoint".
+no discovery, YAGNI; owner 2026-11-08: confirmed); the default list and discovery come with the wallet and app rounds. Replaces "never an app default or a discovered endpoint".
 **Source.** [no-oracle spec](superpowers/specs/2026-11-06-no-decryption-oracle.md) §3, §4.2, §7; owner 2026-11-08 (chat, through the controller).
 
 ### CLI-UAL-32 — Requirement 2: known chain
