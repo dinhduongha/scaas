@@ -1,6 +1,6 @@
 # PQZ proof path, contract side (group 3h) — design
 
-**Status:** **approved by the owner 2026-11-07; build after 3f (T50) per the work order (3e → 3g → 3f → 3h; owner 2026-11-07: 3g before 3f), before 3c.** SPECIFIED, nothing built. Written 2026-11-06; revised 2026-11-07 after two independent reviews (Codex: 1 P1, 6 P2,
+**Status:** **approved by the owner 2026-11-07; build after 3f (T50) and the registry block T66a (owner 2026-11-08) per the work order (3e → 3g → 3f → T66a → 3h; owner 2026-11-07: 3g before 3f), before 3c.** SPECIFIED, nothing built. Written 2026-11-06; revised 2026-11-07 after two independent reviews (Codex: 1 P1, 6 P2,
 1 P3; Fable: 1 P1, 4 P2, several P3; no P0), every item accepted (§15); **revised again 2026-11-07 for the owner's decisions O9–O12:
 `proofStore` has only `NONE` and `LOG`; SSTORE2 proof storage is dropped and its design kept in Appendix A**, and O13 (Q3). No
 owner question is open (§14). Work-order group **3h** of branch `ua-mtx-merge`: plan tasks **T58–T66** in

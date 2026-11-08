@@ -246,6 +246,10 @@ library ZetherLib {
     ///         `disclosureMode` BUNDLE or COMPACT (CTR-ZTH-48), `auditorMode` NONE without a key, FULL or OPTIONAL with
     ///         one (CTR-ZTH-49).
     function init(IFactoryToken.ConfidentialConfig memory c, IZetherVerifier v) public {
+        // group 3f (PQZ verifier mode spec §3, §9): the PQZ verifier fields are another kind's (Zether ≠ PQZ)
+        if (c.pqzVerifyMode != 0 || c.pqzVerifierUA != 0 || c.pqzVerifierFixed) {
+            revert IFactoryToken.ConfigFieldForOtherKind(4);
+        }
         // the release's verifier must run here (an absent precompile answers success with empty output; moved from the
         // factory's creation gate, plan 5g-Z2)
         (bool ok, bytes memory r) = address(v).staticcall(abi.encodeCall(v.isSupportedOnThisChain, ()));

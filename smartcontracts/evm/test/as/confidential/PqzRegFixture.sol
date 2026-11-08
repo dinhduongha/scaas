@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {noVerdict} from "../../pqz/helpers/PqzVerdicts.sol";
 import {Vm, VmSafe} from "forge-std/Vm.sol";
 // via PqzPairs.t.sol: it and PqzTyped.t.sol import each other, and entering at PqzTyped orders PqzPairsTest before its base
 import {PqzNamedBase, transferJson, multiJson, burnJson, T_TRANSFER, T_LEG, T_MULTI, T_BURN, T_UNWRAP} from "../../merge/PqzPairs.t.sol";
@@ -32,22 +33,22 @@ import {ComplianceRegistry} from "../../../src/regulated/ComplianceRegistry.sol"
 /// The signed PQZ entries alone (no overload), so `abi.encodeCall` can name each.
 interface IPqzSigned {
     function mtxConfidentialTransfer(MetaTxLib.UAEnvelope calldata e, IPqzToken.PqzMultiArgs calldata t, bytes calldata proof,
-        IUARegistry.UASig calldata pqzAuth, bytes calldata accHint, IUARegistry.UASig calldata auth) external returns (bytes32);
+        IUARegistry.UASig calldata pqzAuth, bytes calldata accHint, IUARegistry.UASig calldata auth, IPqzToken.PqzSignedVerdict calldata pqzVerdict) external returns (bytes32);
     function mtxConfidentialTransferCompact(MetaTxLib.UAEnvelope calldata e, IPqzToken.PqzMultiArgs calldata t,
-        bytes calldata proof, IUARegistry.UASig calldata pqzAuth, bytes calldata accHint, IUARegistry.UASig calldata auth)
+        bytes calldata proof, IUARegistry.UASig calldata pqzAuth, bytes calldata accHint, IUARegistry.UASig calldata auth, IPqzToken.PqzSignedVerdict calldata pqzVerdict)
         external returns (bytes32);
     function mtxConfidentialTransferSingle(MetaTxLib.UAEnvelope calldata e, IPqzToken.PqzTransferArgs calldata t,
-        bytes calldata proof, IUARegistry.UASig calldata pqzAuth, bytes calldata accHint, IUARegistry.UASig calldata auth)
+        bytes calldata proof, IUARegistry.UASig calldata pqzAuth, bytes calldata accHint, IUARegistry.UASig calldata auth, IPqzToken.PqzSignedVerdict calldata pqzVerdict)
         external returns (bytes32);
     function mtxConfidentialTransferSingleCompact(MetaTxLib.UAEnvelope calldata e, IPqzToken.PqzTransferArgs calldata t,
-        bytes calldata proof, IUARegistry.UASig calldata pqzAuth, bytes calldata accHint, IUARegistry.UASig calldata auth)
+        bytes calldata proof, IUARegistry.UASig calldata pqzAuth, bytes calldata accHint, IUARegistry.UASig calldata auth, IPqzToken.PqzSignedVerdict calldata pqzVerdict)
         external returns (bytes32);
     function mtxUnshield(MetaTxLib.UAEnvelope calldata e, IPqzToken.PqzBurnArgs calldata b, IPqzToken.Payout calldata p,
-        bytes calldata proof, IUARegistry.UASig calldata pqzAuth, bytes calldata accHint, IUARegistry.UASig calldata auth)
+        bytes calldata proof, IUARegistry.UASig calldata pqzAuth, bytes calldata accHint, IUARegistry.UASig calldata auth, IPqzToken.PqzSignedVerdict calldata pqzVerdict)
         external returns (bytes memory);
     function mtxUnshieldUnwrap(MetaTxLib.UAEnvelope calldata e, IPqzToken.PqzBurnArgs calldata b,
         IConfidentialWrappedToken.Unwrap calldata x, bytes calldata proof, IUARegistry.UASig calldata pqzAuth,
-        bytes calldata accHint, IUARegistry.UASig calldata auth) external returns (bytes memory);
+        bytes calldata accHint, IUARegistry.UASig calldata auth, IPqzToken.PqzSignedVerdict calldata pqzVerdict) external returns (bytes memory);
 }
 
 /// Plan T31's fixture (regulated-kinds spec §4.2, §4.3; PQZ only, Zether ≠ PQZ): the PQZ stack of `PqzFixture` (the gen-1
@@ -65,7 +66,7 @@ abstract contract PqzRegFixture is PqzNamedBase {
     bytes internal constant PROOF = hex"c0de";
     /// keccak256(abi.encode(uint256(keccak256("scaas.pqz")) - 1)) & ~bytes32(uint256(0xff)) (PqzCore._STORAGE)
     bytes32 internal constant PQZ_SLOT = 0xda865ec17214f25b93cdb133d719c79392c290a4b9089fd0bba156256c521500;
-    uint256 internal constant FIELDS = 13; // pqz ‖ modes … minDecoyFee, sendCounter (group 3g)
+    uint256 internal constant FIELDS = 19; // pqz ‖ modes … minDecoyFee, sendCounter (group 3g), the verifier state (3f)
     uint256 internal constant ACCT_FIELD = 8; // PqzStorage.acct
 
     address internal ownerA = address(0x0A11);
@@ -218,23 +219,23 @@ abstract contract PqzRegFixture is PqzNamedBase {
     function _opCall(uint256 k, bytes32 ben, uint256 shieldIn) internal view returns (bytes memory) {
         if (k < 2) {
             IPqzToken.PqzMultiArgs memory m = _multi(k == 1, _two(), ben, shieldIn, 70 + k);
-            return k == 0 ? abi.encodeWithSelector(IPqzToken.mtxConfidentialTransfer.selector, m, PROOF, _pqAuth(), bytes(""))
-                : abi.encodeWithSelector(IPqzToken.mtxConfidentialTransferCompact.selector, m, PROOF, _pqAuth(), bytes(""));
+            return k == 0 ? abi.encodeWithSelector(IPqzToken.mtxConfidentialTransfer.selector, m, PROOF, _pqAuth(), bytes(""), noVerdict())
+                : abi.encodeWithSelector(IPqzToken.mtxConfidentialTransferCompact.selector, m, PROOF, _pqAuth(), bytes(""), noVerdict());
         }
         if (k < 4) {
             IPqzToken.PqzTransferArgs memory t = _single(k == 3, bob, ben, shieldIn, 70 + k);
-            return k == 2 ? abi.encodeWithSelector(IPqzToken.mtxConfidentialTransferSingle.selector, t, PROOF, _pqAuth(), bytes(""))
-                : abi.encodeWithSelector(IPqzToken.mtxConfidentialTransferSingleCompact.selector, t, PROOF, _pqAuth(), bytes(""));
+            return k == 2 ? abi.encodeWithSelector(IPqzToken.mtxConfidentialTransferSingle.selector, t, PROOF, _pqAuth(), bytes(""), noVerdict())
+                : abi.encodeWithSelector(IPqzToken.mtxConfidentialTransferSingleCompact.selector, t, PROOF, _pqAuth(), bytes(""), noVerdict());
         }
         return abi.encodeWithSelector(IPqzToken.mtxUnshield.selector, _burnArgs(ben, shieldIn, 74), 5,
-            MetaTxLib.pad(address(0xD00D)), PROOF, _pqAuth(), bytes(""));
+            MetaTxLib.pad(address(0xD00D)), PROOF, _pqAuth(), bytes(""), noVerdict());
     }
 
     /// The direct unshield-unwrap (kind 13) of `amount` to `0xD00D` through leg `usd`.
     function _unwrapCall(uint256 amount, bytes32 ben) internal view returns (bytes memory) {
         IConfidentialWrappedToken.Unwrap memory x =
             IConfidentialWrappedToken.Unwrap(address(usd), MetaTxLib.pad(address(0xD00D)), amount, amount * SCALE);
-        return abi.encodeCall(IPqzWrappedToken.mtxUnshieldUnwrap, (_burnArgs(ben, 0, 75), x, PROOF, _pqAuth(), bytes("")));
+        return abi.encodeCall(IPqzWrappedToken.mtxUnshieldUnwrap, (_burnArgs(ben, 0, 75), x, PROOF, _pqAuth(), bytes(""), noVerdict()));
     }
 
     // ------------------------------------------------------------------ the signed entries (`signer`'s EOA, lane LANE)
@@ -261,16 +262,16 @@ abstract contract PqzRegFixture is PqzNamedBase {
             string memory mm = _msgOf(u, _argMsg(multiJson(m), "", PROOF, ""));
             IUARegistry.UASig memory s = _sig(typedDigest(address(tok), k == 1 ? "UAPqzTransferCompact" : "UAPqzTransfer",
                 _argFields(true, "PqzMultiArgs", ""), string.concat(',', T_LEG, ',', T_MULTI), mm), bad);
-            return k == 1 ? abi.encodeCall(IPqzSigned.mtxConfidentialTransferCompact, (u, m, PROOF, _pqAuth(), "", s))
-                : abi.encodeCall(IPqzSigned.mtxConfidentialTransfer, (u, m, PROOF, _pqAuth(), "", s));
+            return k == 1 ? abi.encodeCall(IPqzSigned.mtxConfidentialTransferCompact, (u, m, PROOF, _pqAuth(), "", s, noVerdict()))
+                : abi.encodeCall(IPqzSigned.mtxConfidentialTransfer, (u, m, PROOF, _pqAuth(), "", s, noVerdict()));
         }
         if (k < 4) {
             IPqzToken.PqzTransferArgs memory t = _single(k == 3, bob, 0, 0, 80 + k);
             string memory mt = _msgOf(u, _argMsg(transferJson(t), "", PROOF, ""));
             IUARegistry.UASig memory s = _sig(typedDigest(address(tok), k == 3 ? "UAPqzTransferSingleCompact" : "UAPqzTransferSingle",
                 _argFields(true, "PqzTransferArgs", ""), string.concat(',', T_TRANSFER), mt), bad);
-            return k == 3 ? abi.encodeCall(IPqzSigned.mtxConfidentialTransferSingleCompact, (u, t, PROOF, _pqAuth(), "", s))
-                : abi.encodeCall(IPqzSigned.mtxConfidentialTransferSingle, (u, t, PROOF, _pqAuth(), "", s));
+            return k == 3 ? abi.encodeCall(IPqzSigned.mtxConfidentialTransferSingleCompact, (u, t, PROOF, _pqAuth(), "", s, noVerdict()))
+                : abi.encodeCall(IPqzSigned.mtxConfidentialTransferSingle, (u, t, PROOF, _pqAuth(), "", s, noVerdict()));
         }
         IPqzToken.PqzBurnArgs memory b = _burnArgs(0, 0, 84);
         IPqzToken.Payout memory p = IPqzToken.Payout(5, MetaTxLib.pad(address(0xD00D)));
@@ -278,7 +279,7 @@ abstract contract PqzRegFixture is PqzNamedBase {
             h(p.recipient), ','), PROOF, ""));
         IUARegistry.UASig memory sb = _sig(typedDigest(address(tok), "UAPqzUnshield", _argFields(true, "PqzBurnArgs",
             '{"name":"amount","type":"uint256"},{"name":"recipient","type":"bytes32"},'), string.concat(',', T_BURN), mb), bad);
-        return abi.encodeCall(IPqzSigned.mtxUnshield, (u, b, p, PROOF, _pqAuth(), "", sb));
+        return abi.encodeCall(IPqzSigned.mtxUnshield, (u, b, p, PROOF, _pqAuth(), "", sb, noVerdict()));
     }
 
     /// The signed unshield-unwrap (kind 13) of `amount` to `0xD00D` through `usd`, bound to `u`.
@@ -291,7 +292,7 @@ abstract contract PqzRegFixture is PqzNamedBase {
         IUARegistry.UASig memory s = _sig(typedDigest(address(tok), "UAPqzUnshieldUnwrap", _argFields(true, "PqzBurnArgs",
             '{"name":"unwrap","type":"Unwrap"},'), string.concat(',', T_BURN, ',', T_UNWRAP), _msgOf(u, _argMsg(burnJson(b), xj,
             PROOF, ""))), false);
-        return abi.encodeCall(IPqzSigned.mtxUnshieldUnwrap, (u, b, x, PROOF, _pqAuth(), "", s));
+        return abi.encodeCall(IPqzSigned.mtxUnshieldUnwrap, (u, b, x, PROOF, _pqAuth(), "", s, noVerdict()));
     }
 
     // ------------------------------------------------------------------ probes

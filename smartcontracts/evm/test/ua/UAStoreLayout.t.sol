@@ -29,13 +29,15 @@ contract UAStoreProbe {
         s.memberSigHash[u][3] = bytes32(uint256(0x81)); // 16
         s.pqzVersions[u] = UAStore.PqzVersions(0x82, 0x83, true); // 17
         s.pqzKeyUsed[u][bytes32(uint256(0x84))] = true; // 18
+        s.popSlots[u] = 0x85; // 19 (CTR-UA-33 Change 2026-11-08, plan T66a)
     }
 }
 
 /// The active pin of the registry's storage (spec 2026-11-06-pqz-key-versions §2.3, Codex: `UARegistrySplit.t.sol`, which
 /// `UAStore`'s comment named, lives under `legacy/` and is no gate). Every slot number of `UAStore.Layout`, the nested
 /// PQZ mappings keyed `(ua, version)` (2, 7, 8, 9), the retired placeholders 13 and 14 (R2), `PqzVersions` (17: `latest`
-/// in bytes 0–7, `current` 8–15, `listed` byte 16) and `pqzKeyUsed` (18). Moves only old → new in a commit.
+/// in bytes 0–7, `current` 8–15, `listed` byte 16), `pqzKeyUsed` (18) and `popSlots` (19, plan T66a: slots 0–18 unmoved, 19 appended).
+/// Moves only old → new in a commit.
 contract UAStoreLayoutTest is Test {
     using stdJson for string;
 
@@ -77,6 +79,7 @@ contract UAStoreLayoutTest is Test {
         assertEq(_at(a, _mm(U, 3, 16)), 0x81, "16 memberSigHash");
         assertEq(_at(a, _m(U, 17)), uint256(0x82) | uint256(0x83) << 64 | 1 << 128, "17 pqzVersions: latest, current, listed");
         assertEq(_at(a, keccak256(abi.encode(uint256(0x84), _m(U, 18)))), 1, "18 pqzKeyUsed[ua][pqzKeyHash]");
+        assertEq(_at(a, _m(U, 19)), 0x85, "19 popSlots");
     }
 
     /// The registry keeps `UAStore.Layout` at slot 0 (its only state variable): the probe's slots are the registry's.

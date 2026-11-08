@@ -184,6 +184,25 @@ contract GovRouterTypehashTest is Test {
         assertEq(T.UA_SET_TAX_RECIPIENT, 0x35a73542fb90c355f539cf8ebee2a653d5a10216b659fc5304d32671e634750f);
     }
 
+    /// Group 3f (PQZ verifier mode spec §4.2): the PQZ verifier UA's three owner ops.
+    function test_uaPqzSetVerifierTypehashIsPinned() public pure {
+        assertEq(T.UA_PQZ_SET_VERIFIER, keccak256(
+                "UAPqzSetVerifier(bytes32 from,address target,bytes32 next,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_PQZ_SET_VERIFIER, 0xc7b836ae14938e0da524ac8a888c602948164c3e01c450a2d4a60d8b257a2aee);
+    }
+
+    function test_uaPqzCancelVerifierTypehashIsPinned() public pure {
+        assertEq(T.UA_PQZ_CANCEL_VERIFIER, keccak256(
+                "UAPqzCancelVerifier(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_PQZ_CANCEL_VERIFIER, 0x7f04a47d44fd0fc31c5bea71922bca3fdee4f3c7dbf0460b73526499ed942911);
+    }
+
+    function test_uaPqzRevokeVerifierTypehashIsPinned() public pure {
+        assertEq(T.UA_PQZ_REVOKE_VERIFIER, keccak256(
+                "UAPqzRevokeVerifier(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_PQZ_REVOKE_VERIFIER, 0xb395011f54af6f642333ddf8e664418b27c5ddeea94d7750852501c6d640a6d6);
+    }
+
     function test_uaPauseTypehashIsPinned() public pure {
         assertEq(T.UA_PAUSE, keccak256(
                 "UAPause(bytes32 from,address target,bytes32 ref,uint64 until,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));

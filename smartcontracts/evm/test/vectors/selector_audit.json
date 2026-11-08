@@ -1210,42 +1210,42 @@
    "error": ""
   },
   {
-   "sig": "mtxConfidentialTransfer((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxConfidentialTransfer((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxConfidentialTransfer((uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes)",
+   "sig": "mtxConfidentialTransfer((uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxConfidentialTransferCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxConfidentialTransferCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxConfidentialTransferCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes)",
+   "sig": "mtxConfidentialTransferCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxConfidentialTransferSingle((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxConfidentialTransferSingle((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxConfidentialTransferSingle((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes)",
+   "sig": "mtxConfidentialTransferSingle((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxConfidentialTransferSingleCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxConfidentialTransferSingleCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxConfidentialTransferSingleCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes)",
+   "sig": "mtxConfidentialTransferSingleCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
@@ -1325,12 +1325,12 @@
    "error": ""
   },
   {
-   "sig": "mtxUnshield((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes,bytes),(uint256,bytes32),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxUnshield((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes,bytes),(uint256,bytes32),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxUnshield((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes,bytes),uint256,bytes32,bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes)",
+   "sig": "mtxUnshield((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes,bytes),uint256,bytes32,bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
@@ -1343,6 +1343,21 @@
    "sig": "payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32,(bytes32,string,uint16,bytes))",
    "class": "OWN_BALANCE",
    "error": ""
+  },
+  {
+   "sig": "pqzCancelVerifier()",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "pqzRevokeVerifier()",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "pqzSetVerifier(bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
   },
   {
    "sig": "renounceOwnership()",
@@ -1492,42 +1507,42 @@
    "error": ""
   },
   {
-   "sig": "mtxConfidentialTransfer((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxConfidentialTransfer((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxConfidentialTransfer((uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes)",
+   "sig": "mtxConfidentialTransfer((uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxConfidentialTransferCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxConfidentialTransferCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxConfidentialTransferCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes)",
+   "sig": "mtxConfidentialTransferCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxConfidentialTransferSingle((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxConfidentialTransferSingle((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxConfidentialTransferSingle((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes)",
+   "sig": "mtxConfidentialTransferSingle((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxConfidentialTransferSingleCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxConfidentialTransferSingleCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxConfidentialTransferSingleCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes)",
+   "sig": "mtxConfidentialTransferSingleCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
@@ -1607,22 +1622,22 @@
    "error": ""
   },
   {
-   "sig": "mtxUnshield((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes,bytes),(uint256,bytes32),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxUnshield((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes,bytes),(uint256,bytes32),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxUnshield((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes,bytes),uint256,bytes32,bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes)",
+   "sig": "mtxUnshield((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes,bytes),uint256,bytes32,bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxUnshieldUnwrap((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes,bytes),(address,bytes32,uint256,uint256),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxUnshieldUnwrap((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes,bytes),(address,bytes32,uint256,uint256),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxUnshieldUnwrap((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes,bytes),(address,bytes32,uint256,uint256),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes)",
+   "sig": "mtxUnshieldUnwrap((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes,bytes),(address,bytes32,uint256,uint256),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
@@ -1680,6 +1695,21 @@
    "sig": "payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32,(bytes32,string,uint16,bytes))",
    "class": "OWN_BALANCE",
    "error": ""
+  },
+  {
+   "sig": "pqzCancelVerifier()",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "pqzRevokeVerifier()",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "pqzSetVerifier(bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
   },
   {
    "sig": "proposeRate(address,uint96,uint96)",
@@ -3232,42 +3262,42 @@
    "error": ""
   },
   {
-   "sig": "mtxConfidentialTransfer((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxConfidentialTransfer((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxConfidentialTransfer((uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes)",
+   "sig": "mtxConfidentialTransfer((uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxConfidentialTransferCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxConfidentialTransferCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxConfidentialTransferCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes)",
+   "sig": "mtxConfidentialTransferCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxConfidentialTransferSingle((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxConfidentialTransferSingle((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxConfidentialTransferSingle((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes)",
+   "sig": "mtxConfidentialTransferSingle((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxConfidentialTransferSingleCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxConfidentialTransferSingleCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxConfidentialTransferSingleCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes)",
+   "sig": "mtxConfidentialTransferSingleCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
@@ -3352,12 +3382,12 @@
    "error": ""
   },
   {
-   "sig": "mtxUnshield((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes,bytes),(uint256,bytes32),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxUnshield((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes,bytes),(uint256,bytes32),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxUnshield((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes,bytes),uint256,bytes32,bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes)",
+   "sig": "mtxUnshield((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes,bytes),uint256,bytes32,bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
@@ -3385,6 +3415,21 @@
    "sig": "payWithTax(bytes32,uint256,uint8,uint256,bytes32,(bytes32,string,uint16,bytes))",
    "class": "OWN_BALANCE",
    "error": ""
+  },
+  {
+   "sig": "pqzCancelVerifier()",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "pqzRevokeVerifier()",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "pqzSetVerifier(bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
   },
   {
    "sig": "recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64)",
@@ -3574,42 +3619,42 @@
    "error": ""
   },
   {
-   "sig": "mtxConfidentialTransfer((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxConfidentialTransfer((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxConfidentialTransfer((uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes)",
+   "sig": "mtxConfidentialTransfer((uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxConfidentialTransferCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxConfidentialTransferCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxConfidentialTransferCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes)",
+   "sig": "mtxConfidentialTransferCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxConfidentialTransferSingle((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxConfidentialTransferSingle((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxConfidentialTransferSingle((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes)",
+   "sig": "mtxConfidentialTransferSingle((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxConfidentialTransferSingleCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxConfidentialTransferSingleCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxConfidentialTransferSingleCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes)",
+   "sig": "mtxConfidentialTransferSingleCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
@@ -3694,22 +3739,22 @@
    "error": ""
   },
   {
-   "sig": "mtxUnshield((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes,bytes),(uint256,bytes32),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxUnshield((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes,bytes),(uint256,bytes32),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxUnshield((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes,bytes),uint256,bytes32,bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes)",
+   "sig": "mtxUnshield((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes,bytes),uint256,bytes32,bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxUnshieldUnwrap((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes,bytes),(address,bytes32,uint256,uint256),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxUnshieldUnwrap((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes,bytes),(address,bytes32,uint256,uint256),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxUnshieldUnwrap((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes,bytes),(address,bytes32,uint256,uint256),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes)",
+   "sig": "mtxUnshieldUnwrap((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes,bytes),(address,bytes32,uint256,uint256),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
@@ -3782,6 +3827,21 @@
    "sig": "payWithTax(bytes32,uint256,uint8,uint256,bytes32,(bytes32,string,uint16,bytes))",
    "class": "OWN_BALANCE",
    "error": ""
+  },
+  {
+   "sig": "pqzCancelVerifier()",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "pqzRevokeVerifier()",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "pqzSetVerifier(bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
   },
   {
    "sig": "proposeRate(address,uint96,uint96)",
@@ -4075,6 +4135,21 @@
    "error": ""
   },
   {
+   "sig": "mtxCreateDex((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint64,bytes,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxCreateInstance((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint16,uint16,uint64,bytes,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxCreateToken((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,uint64,bytes,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
    "sig": "mtxDisableFeature((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
@@ -4126,6 +4201,21 @@
   },
   {
    "sig": "mtxPause((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxPqzCancelVerifier((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxPqzRevokeVerifier((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxPqzSetVerifier((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
@@ -4206,21 +4296,6 @@
   },
   {
    "sig": "mtxUnpause((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-   "class": "SIGNED",
-   "error": ""
-  },
-  {
-   "sig": "mtxCreateToken((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,uint64,bytes,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-   "class": "SIGNED",
-   "error": ""
-  },
-  {
-   "sig": "mtxCreateDex((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint64,bytes,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
-   "class": "SIGNED",
-   "error": ""
-  },
-  {
-   "sig": "mtxCreateInstance((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint16,uint16,uint64,bytes,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   }

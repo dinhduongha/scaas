@@ -44,6 +44,9 @@ Follow a stated rule as stated; do not add assumptions or reopen it with options
 - **No EIP-7702.** An EOA signs with its own key and runs no code.
 - **No assumptions about a chain:** no gas price 0, no block limit of ours. The precompile may ship to customer chains.
 - **One rule on every chain.** Never split a rule by L1, L2 or chain kind.
+- **Every RPC consumer takes a list of nodes** ([ARCH-POS-15](docs/decisions.md#ARCH-POS-15)): named, default or discovered; reads
+  fail over by default, never mixing nodes; an option asks a strict majority to agree; writes send the same signed bytes; a read that
+  feeds a decryption uses a discovered node only under the majority option with at least three nodes.
 - **The node is open.** A guarantee of the node belongs in the node and its spec, never in one consumer. No consumer or client-specific
   names in contracts, node code, or current docs (`docs_check` refuses them).
 - **Nothing deployed is upgraded.** Contracts are immutable; versions live in the factory's catalogue.

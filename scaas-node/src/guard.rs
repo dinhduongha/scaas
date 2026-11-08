@@ -471,6 +471,8 @@ pub struct Guard {
     ua_ledger: Mutex<HashSet<Address>>,
     /// `params.l1_fee = "op-stack"`: relay-fee quotes add `GasPriceOracle.getL1Fee`.
     op_stack: bool,
+    /// Group 3f: the PQZ verifier mode's verdict fill and shield switch (`[pqz_verifier]`), one rule on every path.
+    pqz: crate::pqz::Verifier,
 }
 
 impl Guard {
@@ -491,6 +493,7 @@ impl Guard {
                 Some(v) if v.as_str() == Some("op-stack") => true,
                 Some(v) => anyhow::bail!("params.l1_fee must be \"op-stack\" (the chain charges an OP-stack L1 data fee), not {v}"),
             },
+            pqz: crate::pqz::Verifier::new(&cfg.pqz_verifier)?,
         })
     }
 
@@ -593,7 +596,9 @@ impl Guard {
             if w.typed.as_ref().is_some_and(|t| t.derived_side) {
                 self.require_ua_ledger(chain, w.to).await?;
             }
-            return no_pending_party(chain, w).await;
+            no_pending_party(chain, w).await?;
+            // group 3f (spec §11.1): `refuse_shield_when_unserved`, for every consumer
+            return self.pqz.check_shield(chain, w).await;
         }
         let facts = Facts {
             token: self.tokens.read().map(|t| t.contains(&w.to)).unwrap_or(true),
@@ -632,6 +637,13 @@ impl Guard {
             Ok(false) => Err(Refusal::Policy(format!("BAD_SIGNATURE: not {who:#x}'s over the typed digest {d:#x} ({} domain)", t.contract))),
             Err(e) => Err(Refusal::Transport(format!("eth_getCode: {e:#}"))),
         }
+    }
+
+    /// Group 3f (spec §11.1): a PQZ debit's trailing `PqzSignedVerdict`, rebuilt here after [`Guard::check`] and before any
+    /// simulation, on every path (lane, gateway, the generic lane runner): the empty verdict for a `PRECOMPILE` token, else the
+    /// `PqzVerdict` the node rebuilds with the job's or a fetched signature ([`crate::pqz::Verifier::fill`]).
+    pub async fn pqz_fill(&self, chain: &Chain, w: &mut Work) -> Result<(), Refusal> {
+        self.pqz.fill(chain, w).await
     }
 
     /// The subject a job can lower the balance of, as its hold key, and whether the job is a relay-fee job.
@@ -964,10 +976,12 @@ mod tests {
         }
         // plan T34: (97, 3, 97) -> (105, 3, 105), the router's eight regulated controls' vector rows walked; pay-meta-tax T42:
         // -> (110, 3, 110), UAPayWithTax's three domains and the router's two tax ops
-        assert_eq!((sent, relayed, refused), (110, 3, 110), "the walk reached every row with an entry; the relay fees: submit.rs");
+        // group 3f T46 / T47: -> (113, 3, 113), the router's three verifier ops' vector rows
+        assert_eq!((sent, relayed, refused), (113, 3, 113), "the walk reached every row with an entry; the relay fees: submit.rs");
         // plan T32: 87 -> 95, the router's eight regulated controls; pay-meta-tax T42: -> 99, mtxPay, mtxPayWithTax, the two tax ops
         // group 3g T55: -> 100, the rollover one row per kind (`UARollOver` Zether, `UAPqzRollOver` PQZ with `keyVersion`)
-        assert_eq!(typed::rows().iter().filter(|r| !r.entry.is_empty()).count(), 100, "table rows: 82 typed with an entry, 18 plain");
+        // group 3f T47: -> 103, the router's three verifier ops
+        assert_eq!(typed::rows().iter().filter(|r| !r.entry.is_empty()).count(), 103, "table rows: 85 typed with an entry, 18 plain");
         // selectors with no row: refused on every kind, on a target that would otherwise pass
         let target = Address::repeat_byte(0x31);
         let g = Guard::new(&ChainCfg { dex: Some(target), governance_routers: vec![target], ..cfg.clone() }, Arc::new(RwLock::new(vec![target]))).unwrap();
@@ -997,7 +1011,7 @@ mod tests {
             "grantRole(uint8,bytes32)", "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
             "transferOwnership(bytes32)", "setListedOnly(bool)"] {
             for kind in ["token", "zether", "pqz", "wallet", "account", "dex", "registry", "factory", "gov_router"] {
-                let t = typed::Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, contract: kind, domain_of: target, struct_hash: None, lane_hash: None, signer: None, payee: None, digest: None,
+                let t = typed::Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, pqz_verdict: None, contract: kind, domain_of: target, struct_hash: None, lane_hash: None, signer: None, payee: None, digest: None,
                     derived_signer: false, derived_side: false };
                 let w = Work { job_id: Some(1), to: target, data: cast(s).into(), valid_until: 0, meta: None, entry: true, typed: Some(t) };
                 let e = g.check(&chain, &w).await.unwrap_err();
@@ -1176,7 +1190,8 @@ mod tests {
         let creation = |s: &str| s.starts_with("mtxCreateToken(") || s.starts_with("mtxCreateDex(") || s.starts_with("mtxCreateInstance(");
         let router: HashSet<[u8; 4]> = audit["GovernanceRouter"].as_array().unwrap().iter().filter(|r| r["class"] == "SIGNED")
             .map(|r| r["sig"].as_str().unwrap()).filter(|s| !creation(s)).map(sel).collect();
-        assert_eq!(router.len(), 30, "19 ops, the eight regulated controls (plan T32), the ordered cancel, the two tax ops (pay-meta-tax T39); the three creations (T76) in NOT_ROWS");
+        // group 3f T45 / T47: 30 -> 33, the three verifier ops
+        assert_eq!(router.len(), 33, "19 ops, the eight regulated controls (plan T32), the ordered cancel, the two tax ops (pay-meta-tax T39), the three verifier ops (3f); the three creations (T76) in NOT_ROWS");
         let ours: HashSet<[u8; 4]> = typed::rows().iter().filter(|r| !r.entry.is_empty() && r.contracts.contains(&"gov_router")).map(|r| r.sent).collect();
         assert_eq!(ours, router, "the router's allow-list, both directions");
         assert_eq!((rowed, exempt, governed), (ROWED, EXEMPT, GOVERNED), "every SIGNED entry was walked");
@@ -1283,6 +1298,115 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
         regulated_kind_rows_equal_contract("WrappedPqzRegulatedToken", "WrappedPqzToken", "pqz", "pqz");
     }
 
+    /// Group 3f (spec §5.3): the `PqzSignedVerdict` ABI, last on every proof-carrying PQZ entry.
+    const VERDICT_ABI: &str = "((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))";
+    const UASIG_ABI: &str = "(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])";
+    const PQZ_PROOF_OPS: [&str; 6] = ["mtxConfidentialTransfer", "mtxConfidentialTransferCompact", "mtxConfidentialTransferSingle",
+        "mtxConfidentialTransferSingleCompact", "mtxUnshield", "mtxUnshieldUnwrap"];
+
+    /// Group 3f (spec §5.3, §11.1, §11.3), one PQZ kind against `selector_audit.json`, both directions: its proof-carrying entries
+    /// are the `SIGNED` ones that end with the verdict (`n`: ten on 4 and 12, twelve on 5 and 13), half the signed `UAEnvelope`
+    /// forms and half the direct forms they self-call, and no entry of a proof op is left without it (the pre-3f selectors gone);
+    /// the node's PQZ rows of those ops are exactly the signed forms (each taking the node-built verdict last, the guard allowing
+    /// it on a registered PQZ token), every direct form is the inner op of a row of its name and no row of any kind; the three
+    /// owner stubs are in the audit, not `SIGNED`, no row of any kind; the seven-argument `verifyTransferAmount` (a view, the
+    /// forge artifact's `0xe9748a12`) is no row of any kind.
+    fn pqz_verdict_rows_equal_contract(contract: &str, n: usize) {
+        let p = format!("{}/../smartcontracts/evm/test/vectors/selector_audit.json", env!("CARGO_MANIFEST_DIR"));
+        let audit: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
+        let sel = |s: &str| -> [u8; 4] { alloy::primitives::keccak256(s)[..4].try_into().unwrap() };
+        let entries = audit[contract].as_array().unwrap_or_else(|| panic!("{contract}"));
+        let name = |s: &str| s[..s.find('(').unwrap()].to_string();
+        let kinds = ["token", "zether", "pqz", "wallet", "account", "dex", "registry", "factory", "gov_router"];
+        let mut proof = vec![];
+        for e in entries.iter().filter(|e| PQZ_PROOF_OPS.contains(&name(e["sig"].as_str().unwrap()).as_str())) {
+            let s = e["sig"].as_str().unwrap();
+            assert_eq!(e["class"], "SIGNED", "{contract}: {s}");
+            assert!(s.ends_with(&format!(",{VERDICT_ABI})")), "{contract}: {s} without the verdict last (a pre-3f selector)");
+            proof.push(s);
+        }
+        assert_eq!(proof.len(), n, "{contract}: the proof-carrying entries");
+        let (signed, direct): (Vec<&str>, Vec<&str>) = proof.iter().copied().partition(|s| s[s.find('(').unwrap()..].starts_with(ENV_UA));
+        assert_eq!((signed.len(), direct.len()), (n / 2, n / 2), "{contract}");
+        let names: HashSet<String> = proof.iter().map(|s| name(s)).collect();
+        let ours: Vec<&typed::Row> = typed::rows().iter().filter(|r| r.contracts.contains(&"pqz") && names.contains(r.entry)).collect();
+        assert_eq!(ours.iter().map(|r| r.selector).collect::<HashSet<_>>(), signed.iter().map(|s| sel(s)).collect::<HashSet<_>>(),
+            "{contract}: the node's PQZ debit rows are the signed forms, both directions");
+        for r in &ours {
+            assert_eq!(typed::verdict_slot(r), Some(r.plan_len() - 1), "{}: the node-built verdict last", r.name);
+            assert_eq!(row(r.sent, "pqz").map(|x| x.name), Some(r.name), "{}: allowed on a PQZ token", r.name);
+        }
+        for d in &direct {
+            assert!(ours.iter().any(|r| r.entry == name(d)), "{contract}: {d} is the inner op of no row");
+            for k in kinds {
+                assert!(row(sel(d), k).is_none(), "{contract}: the direct {d} is a {k} row");
+            }
+        }
+        let class = |s: &str| entries.iter().find(|e| e["sig"] == s).map(|e| e["class"].as_str().unwrap().to_string());
+        let view = format!("verifyTransferAmount(bytes32,uint256,uint256,uint8,uint64,bytes,{VERDICT_ABI})");
+        assert_eq!(sel(&view), [0xe9, 0x74, 0x8a, 0x12], "the forge artifact's selector");
+        for s in ["pqzSetVerifier(bytes32)", "pqzCancelVerifier()", "pqzRevokeVerifier()", view.as_str()] {
+            if !s.starts_with("verifyTransferAmount") {
+                let c = class(s).unwrap_or_else(|| panic!("{contract}: {s} not in the audit"));
+                assert_ne!(c, "SIGNED", "{contract}: {s} is the owner's own call, relayed through the router only");
+            }
+            for k in kinds {
+                assert!(row(sel(s), k).is_none(), "{contract}: {s} is a {k} row");
+            }
+        }
+    }
+
+    #[test]
+    fn pqz_verdict_rows_equal_contract_4() {
+        pqz_verdict_rows_equal_contract("NormalPqzToken", 10);
+    }
+    #[test]
+    fn pqz_verdict_rows_equal_contract_5() {
+        pqz_verdict_rows_equal_contract("WrappedPqzToken", 12);
+    }
+    #[test]
+    fn pqz_verdict_rows_equal_contract_12() {
+        pqz_verdict_rows_equal_contract("NormalPqzRegulatedToken", 10);
+    }
+    #[test]
+    fn pqz_verdict_rows_equal_contract_13() {
+        pqz_verdict_rows_equal_contract("WrappedPqzRegulatedToken", 12);
+    }
+
+    /// Group 3f (spec §4.2): the router's three verifier ops are rows of `gov_router` only, over the `UA*` structs the brief names,
+    /// their selectors the forge artifact's and the router's `SIGNED` entries in `selector_audit.json`, their vectors in
+    /// `typed_ops.json` (struct hash, digest and calldata pinned by `typed_ops_kat_every_entry`); fee mode `NONE` like every router
+    /// op (`mode` an envelope field, nothing else to pay).
+    #[test]
+    fn router_pqz_verifier_rows() {
+        let env = format!("{ENV_UA},");
+        let want = [
+            ("UAPqzSetVerifier", "mtxPqzSetVerifier", "UAPqzSetVerifier(bytes32 from,address target,bytes32 next,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)",
+                format!("mtxPqzSetVerifier{env}address,bytes32,{UASIG_ABI})"), [0x06, 0x5b, 0xf7, 0xfd]),
+            ("UAPqzCancelVerifier", "mtxPqzCancelVerifier", "UAPqzCancelVerifier(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)",
+                format!("mtxPqzCancelVerifier{env}address,{UASIG_ABI})"), [0x68, 0x1a, 0xfa, 0x10]),
+            ("UAPqzRevokeVerifier", "mtxPqzRevokeVerifier", "UAPqzRevokeVerifier(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)",
+                format!("mtxPqzRevokeVerifier{env}address,{UASIG_ABI})"), [0x42, 0x24, 0x2a, 0xe3]),
+        ];
+        let p = format!("{}/../smartcontracts/evm/test/vectors/selector_audit.json", env!("CARGO_MANIFEST_DIR"));
+        let audit: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
+        let router: HashSet<&str> = audit["GovernanceRouter"].as_array().unwrap().iter().filter(|r| r["class"] == "SIGNED")
+            .map(|r| r["sig"].as_str().unwrap()).collect();
+        let v = typed::testkit::vectors();
+        for (name, entry, ty, sig, artifact) in &want {
+            let r = typed::testkit::row_of(name, "gov_router");
+            assert_eq!((r.entry, r.type_string().as_str(), r.contracts), (*entry, *ty, &["gov_router"][..]), "{name}");
+            assert_eq!(r.selector, *artifact, "{name}: the forge artifact's {sig}");
+            assert_eq!(alloy::primitives::keccak256(sig.as_bytes())[..4], r.selector[..], "{name}");
+            assert_eq!(row(r.sent, "gov_router").map(|x| x.name), Some(*name), "{name}: allowed on a router");
+            for k in ["token", "zether", "pqz", "wallet", "account", "dex", "registry", "factory"] {
+                assert!(row(r.sent, k).is_none(), "{name} is a {k} row");
+            }
+            assert!(router.contains(sig.as_str()), "{name}: {sig} is no SIGNED entry of the router in selector_audit.json");
+            assert_eq!(v["ops"][*name]["typeString"].as_str(), Some(*ty), "{name}: typed_ops.json's row");
+        }
+    }
+
     /// Counted from the two files outside this code (python over `selector_audit.json` and `typed_ops.json`): 229 `SIGNED` entries
     /// of the eight contracts, 127 of them rows (120 vector rows, the token's invalidation, the DEX's six plain entries and its
     /// invalidation); 91 governance entries. Plan T32: (127, 102, 91) -> (234, 202, 217): + the router's eight regulated
@@ -1290,10 +1414,13 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
     /// 436 `SIGNED` entries of the fourteen contracts, 217 governance entries (python over `selector_audit.json`).
     // pay-meta-tax T42: (234, 202, 217) -> (254, 178, 229), measured: mtxPay a row (no longer in NOT_ROWS), mtxPayWithTax on the
     // six regulated kinds, the router's two tax ops, the six kinds' two bit-23 powers governed (12)
-    const ROWED: usize = 254;
+    // group 3f T45 / T47: (254, 181, 229) -> (257, 181, 241), expected from the contracts: the router's three verifier ops rowed, the
+    // three owner stubs (`pqzSetVerifier`, `pqzCancelVerifier`, `pqzRevokeVerifier`) governed on each of the four PQZ kinds; the
+    // twelve proof entries of 5 and 13 (ten of 4 and 12) moved selector in place (rowed or exempt as before)
+    const ROWED: usize = 257;
     // ua-mtx-merge T76: EXEMPT 178 -> 181, the router's three creations (NOT_ROWS)
     const EXEMPT: usize = 181;
-    const GOVERNED: usize = 229;
+    const GOVERNED: usize = 241;
 
     /// As [`bound`], `registry()` answering `registry` (`Address::ZERO`: the UA ledger off, R9).
     async fn bound_with_registry(uid: B256, registry: Address) -> ChainCfg {
@@ -1455,7 +1582,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
                 value: alloy::primitives::U256::from(1), batch: alloy::primitives::U256::from(7), nonce: alloy::primitives::U256::ZERO,
                 validUntil: alloy::primitives::U256::from(4_000_000_000u64),
                 auth: crate::abi::UASig { keyData: Bytes::new(), signature: Bytes::new(), members: vec![] } }.abi_encode();
-            let t = typed::Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, contract: "token", domain_of: token, struct_hash: None, lane_hash: None, signer: None, payee: None, digest: None,
+            let t = typed::Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, pqz_verdict: None, contract: "token", domain_of: token, struct_hash: None, lane_hash: None, signer: None, payee: None, digest: None,
                 derived_signer: false, derived_side: false };
             Work { job_id: Some(1), to: rf, data: data.into(), valid_until: 0, meta: None, entry: true, typed: Some(t) }
         };

@@ -4226,15 +4226,28 @@ mod tests {
         flip(&mut bad["args"]["pop"][1]["sig"]);
         assert_eq!(ua8_check(&write(&bad), 0x0120, &key_data, &members), Err(UAError::Pop));
 
-        let k = row("kemRecords", "msig-pq/v1");
-        ua8_check(&write(&rec_op("set_kem_key", k, &NONE)), 0x0120, &key_data, &members).unwrap();
-        let mut bad = rec_op("set_kem_key", k, &NONE);
-        flip(&mut bad["args"]["sig"]["members"][0]["sig"]);
-        assert_eq!(ua8_check(&write(&bad), 0x0120, &key_data, &members), Err(UAError::Unauthorized));
-        // the contract's `sig_fields_ok`: an msig only `members`
-        let mut bad = rec_op("set_kem_key", k, &NONE);
+        // CTR-UA-32 (plan T66a): an msig holds no KEM key: portable.json's `msig-kem-record` (the fndsa512 v1 row with the msig's
+        // `ua` and its members' valid signature) is `KemHolder` before any signature, as the registry refuses it
+        let neg = portable()["negatives"].as_array().unwrap().iter().find(|x| x["name"] == "msig-kem-record").unwrap().clone();
+        let mut k = row("kemRecords", "fndsa512/v1").clone();
+        k["args"]["ua"] = neg["mutation"]["set"]["ua"].clone();
+        let pk = strip(&neg["mutation"]["set"]["kemPk"]);
+        k["args"]["kem"] = json!({"scheme": pk[0], "mlkemEk": format!("0x{}", alloy::hex::encode(&pk[1..pk.len() - 32])),
+            "x25519": format!("0x{}", alloy::hex::encode(&pk[pk.len() - 32..]))});
+        // a members list of the msig's own form (its pop's slots): the holder rule refuses before any signature is read
+        k["args"]["sig"] = json!({"keyData": "0x", "signature": "0x", "members": r["args"]["pop"]});
+        assert_eq!(strip(&k["args"]["ua"]), strip(&r["ua"]), "the msig-pq row's id");
+        assert_eq!(ua8_check(&write(&rec_op("set_kem_key", &k, &NONE)), 0x0120, &key_data, &members), Err(UAError::KemHolder(0x0120)));
+        // the contract's `sig_fields_ok`: an msig only `members` (on its PQZ key record now)
+        let p = row("pqzKeyRecords", "msig-pq-native/n2048-kmax1024");
+        let (nd, nk) = (strip(&row("registrations", "msig-pq-native")["keyData"]), 0x0120);
+        ua8_check(&write(&rec_op("set_pqz_key", p, &NONE)), nk, &nd, &members).unwrap();
+        let mut bad = rec_op("set_pqz_key", p, &NONE);
+        flip(&mut bad["args"]["sig"]["members"][1]["sig"]);
+        assert_eq!(ua8_check(&write(&bad), nk, &nd, &members), Err(UAError::Unauthorized));
+        let mut bad = rec_op("set_pqz_key", p, &NONE);
         bad["args"]["sig"]["signature"] = json!("0xab");
-        assert_eq!(ua8_check(&write(&bad), 0x0120, &key_data, &members), Err(UAError::Unauthorized));
+        assert_eq!(ua8_check(&write(&bad), nk, &nd, &members), Err(UAError::Unauthorized));
 
         // an evm-eoa slot, by its typed digest; a single key's `signature`; the same shape rule the other way
         let n = row("registrations", "msig-pq-native");

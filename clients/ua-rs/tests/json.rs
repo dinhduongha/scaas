@@ -96,14 +96,19 @@ fn registration_args_rows() {
             commits += 1;
         }
     }
-    assert_eq!(commits, 11); // + mldsa87, fndsa1024
+    assert_eq!(commits, 7); // + mldsa87, fndsa1024; msig-pq/<set> without a KEM key (CTR-UA-32)
+    // CTR-UA-32 (T66a): a PQ-eligible msig holds no KEM key
+    let mq = p["registrations"].as_array().unwrap().iter().find(|r| r["name"] == "msig-pq/n2048-kmax1024").unwrap();
+    let mut i: Value = serde_json::from_str(&reg_input(mq, None)).unwrap();
+    i["kemPk"] = p["kemRecords"][0]["kemPk"].clone();
+    assert_eq!(registration_args_json(&i.to_string()).unwrap_err(), JsonError::Ua(UAError::KemHolder(0x0120)));
 }
 
 #[test]
 fn set_key_args_rows() {
     let p = portable();
     let kem = p["kemRecords"].as_array().unwrap();
-    assert_eq!(kem.len(), 15);
+    assert_eq!(kem.len(), 12); // CTR-UA-32: no msig KEM record
     for k in kem {
         let i = json!({ "ua": k["ua"], "version": k["version"], "kemPk": k["kemPk"], "sig": record_sig(k) });
         assert_eq!(out(set_kem_key_args_json(&i.to_string())), k["args"], "{}", k["id"]);

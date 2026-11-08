@@ -315,7 +315,7 @@ export function verifyMembership(row, members, accepted) {
 /** A KEM record row `{ ua, version, kemPk, sig }` as `setKemKey` (version ≥ 1) checks it (ua-rs `check_kem_record`). */
 export function verifyKemRecord(row, members, accepted) {
   const { kind, keyData } = recordOf(row, members);
-  if (!ua.isKeyHolder(kind, keyData, innerOf(members))) refuse('UAKemHolder', row.ua);
+  if (!ua.isKemHolder(kind)) refuse('UAKemHolder', row.ua);
   const digest = ua.kemRecordDigest(row);
   const a = acceptance(accepted);
   verdict(signatureOk(kind, keyData, B(row.ua), ua.KEM_TAG, digest, row.sig, members, a), a, 'UAUnauthorized', row.ua);

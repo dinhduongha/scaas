@@ -442,9 +442,13 @@ public class VectorTests
             var m = UA.KemRecordMessage(Kind(r), ua, v, pk);
             Assert.Equal(r.GetProperty("message").GetString(), Hx(m));
             Assert.Equal(Hx(UA.UAMessage(Kind(r), UA.PurposeTag("kem"), d)), Hx(m));
-            if (Kind(r) == 0x0120) Assert.Equal(r.GetProperty("memberDigest").GetString(), Hx(UA.MemberDigest(ua, m)));
+            Assert.NotEqual(0x0120, Kind(r)); // CTR-UA-32: an msig holds no KEM key
         }
-        Assert.NotEqual(0, p.GetProperty("kemRecords").GetArrayLength());
+        Assert.Equal(12, p.GetProperty("kemRecords").GetArrayLength());
+        // CTR-UA-32 (T66a): the single PQ kinds only; an msig has no KEM record message
+        var mq = p.GetProperty("registrations").EnumerateArray().First(r => r.GetProperty("name").GetString() == "msig-pq/n2048-kmax1024");
+        Assert.Equal("UAKemHolder", Assert.Throws<UAException>(() => UA.KemRecordMessage(0x0120, B(mq.GetProperty("ua")), 1,
+            B(p.GetProperty("kemRecords")[0].GetProperty("kemPk")))).Code);
         var u = Enumerable.Repeat((byte)1, 32).ToArray();
         static byte[] Kem(int n, byte scheme = 1) { var k = new byte[n]; k[0] = scheme; return k; } // scheme byte, zeros
         Assert.Equal("UAKemVersion", Assert.Throws<UAException>(() => UA.KemRecordDigest(u, 0, Kem(1601))).Code);
@@ -630,9 +634,19 @@ public class VectorTests
                 Assert.NotEqual(k.GetProperty("message").GetString(), Hx(msg));
                 run++;
             }
+            else if (entry == "setKemKey" && err == "UAKemHolder")
+            {
+                // msig-kem-record (CTR-UA-32): a well-formed record of an msig is refused by its kind, before any signature
+                var k = p.GetProperty("kemRecords").EnumerateArray().First(r => r.GetProperty("id").GetString() == m.GetProperty("row").GetString());
+                var t = regs.First(r => r.GetProperty("ua").GetString() == set.First(o => o.Name == "ua").Value.GetString());
+                Assert.Equal(m.GetProperty("kind").GetInt32(), (int)Kind(t));
+                Assert.Equal(err, Assert.Throws<UAException>(() => UA.KemRecordMessage(Kind(t), B(set.First(o => o.Name == "ua").Value),
+                    ulong.Parse(k.GetProperty("version").ToString()), B(set.First(o => o.Name == "kemPk").Value))).Code);
+                run++;
+            }
             else sigLevel++; // signatures / native personal_sign / another record's pop: verified by the signature vectors
         }
-        Assert.Equal((57, p.GetProperty("negatives").GetArrayLength() - 58), (run, sigLevel)); // 58: 57 + the skipped msig-minimal row
+        Assert.Equal((58, p.GetProperty("negatives").GetArrayLength() - 59), (run, sigLevel)); // 59: 58 + the skipped msig-minimal row
         // single-key non-holders refuse a PQZ key
         var u = Enumerable.Repeat((byte)1, 32).ToArray();
         var key = new byte[16384];
@@ -648,6 +662,10 @@ public class VectorTests
         static byte[] Kem(int n, byte scheme = 1) { var k = new byte[n]; k[0] = scheme; return k; } // scheme byte, zeros
         Assert.Equal("UAKemKeyLength", Assert.Throws<UAException>(() => UA.HolderPopMessage(0x0130, u, [], kemPk: Kem(1600))).Code);
         Assert.Equal("UAKemScheme", Assert.Throws<UAException>(() => UA.HolderPopMessage(0x0130, u, [], kemPk: Kem(1601, 0))).Code);
+        // CTR-UA-32: a PQ-eligible msig holds a PQZ key but no KEM key, in the pop message and the registry call
+        var mq = regs.First(r => r.GetProperty("name").GetString() == "msig-pq/n2048-kmax1024");
+        Assert.Equal("UAKemHolder", Assert.Throws<UAException>(() => UA.HolderPopMessage(0x0120, B(mq.GetProperty("ua")), B(mq.GetProperty("keyData")), kemPk: Kem(1601))).Code);
+        Assert.Equal("UAKemHolder", Assert.Throws<UAException>(() => UA.RegistrationArgs(0x0120, B(mq.GetProperty("keyData")), kemPk: Kem(1601), kemCommit: false)).Code);
         // m-C5: a null KEM key is absent, as [] and in the other packages (also for a non-holder)
         Assert.Equal(Hx(UA.HolderPopMessage(0x0130, u, []).Message), Hx(UA.HolderPopMessage(0x0130, u, [], kemPk: []).Message));
         Assert.Equal(Hx(UA.HolderPopMessage(0x0101, u, new byte[64]).Message), Hx(UA.HolderPopMessage(0x0101, u, new byte[64], kemPk: []).Message));
@@ -776,7 +794,13 @@ public class VectorTests
     [Fact]
     public void NestedRecords()
     {
-        Assert.Equal(1, N.GetProperty("kemRecords").GetArrayLength());
+        // CTR-UA-32 (T66a): an msig holds no KEM key, so no KEM record; a well-formed one is refused by its kind
+        Assert.Equal(0, N.GetProperty("kemRecords").GetArrayLength());
+        var pq = N.GetProperty("registrations").EnumerateArray().First(r => r.GetProperty("name").GetString() == "msig-nested-pq");
+        var kem = new byte[1601];
+        kem[0] = 1;
+        Assert.Equal("UAKemHolder", Assert.Throws<UAException>(() => UA.KemRecordMessage(0x0120, B(pq.GetProperty("ua")), 1, kem)).Code);
+        Assert.Equal("UAKemHolder", Assert.Throws<UAException>(() => UA.HolderPopMessage(0x0120, B(pq.GetProperty("ua")), B(pq.GetProperty("keyData")), kemPk: kem, inner: NestedKey)).Code);
         Assert.Equal(4, N.GetProperty("pqzKeyRecords").GetArrayLength());
         foreach (var r in N.GetProperty("kemRecords").EnumerateArray())
         {
@@ -898,7 +922,7 @@ public class VectorTests
             SameJson(fill!, c.GetProperty("fill"));
             commits++;
         }
-        Assert.Equal(11, commits); // + mldsa87, fndsa1024
+        Assert.Equal(7, commits); // + mldsa87, fndsa1024; msig-pq/<set> without a KEM key (CTR-UA-32)
         foreach (var k in p.GetProperty("kemRecords").EnumerateArray())
             SameJson(UA.NewSetKemKeyArgs(B(k.GetProperty("ua")), k.GetProperty("version").GetUInt64(), B(k.GetProperty("kemPk")), RecordSig(k)), k.GetProperty("args"));
         foreach (var r in p.GetProperty("pqzKeyRecords").EnumerateArray())

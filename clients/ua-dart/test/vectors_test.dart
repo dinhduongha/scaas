@@ -451,9 +451,12 @@ void main() {
       final m = kemRecordMessage(_kind(r), ua, v, pk);
       expect(_hx(m), r['message']);
       expect(_hx(m), _hx(uaMessage(_kind(r), purposeTag('kem'), d)));
-      if (_kind(r) == 0x0120) expect(_hx(memberDigest(ua, m)), r['memberDigest']);
+      expect(_kind(r), isNot(0x0120)); // CTR-UA-32: an msig holds no KEM key
     }
-    expect((p['kemRecords'] as List), isNotEmpty);
+    expect((p['kemRecords'] as List).length, 12);
+    // CTR-UA-32 (T66a): the single PQ kinds only; an msig has no KEM record message
+    final mq = byKey((p['registrations'] as List).cast<Map>(), 'name', 'msig-pq/n2048-kmax1024');
+    expect(_err(() => kemRecordMessage(0x0120, _b(mq['ua']), BigInt.one, _b((p['kemRecords'] as List).first['kemPk']))).code, 'UAKemHolder');
     final u = Uint8List.fromList(List.filled(32, 1));
     expect(_err(() => kemRecordDigest(u, BigInt.zero, _kem(1601))).code, 'UAKemVersion');
     expect(_err(() => kemRecordDigest(u, BigInt.one << 64, _kem(1601))).code, 'UAKemVersion');
@@ -606,11 +609,19 @@ void main() {
         final msg = kemRecordMessage(_kind(t), _b(set['ua']), BigInt.from(k['version'] as int), _b(k['kemPk']));
         expect(_hx(msg), isNot(k['message']));
         run++;
+      } else if (entry == 'setKemKey' && err == 'UAKemHolder') {
+        // msig-kem-record (CTR-UA-32): a well-formed record of an msig is refused by its kind, before any signature
+        final k = byKey((p['kemRecords'] as List).cast<Map>(), 'id', m['row']);
+        final t = byKey(regs, 'ua', set['ua']);
+        expect(_kind(t), m['kind'], reason: '$name');
+        expect(_err(() => kemRecordMessage(_kind(t), _b(set['ua']), BigInt.from(k['version'] as int), _b(set['kemPk']))).code, err,
+            reason: '$name');
+        run++;
       } else {
         sigLevel++; // signatures / native personal_sign / another record's pop: verified by the signature vectors
       }
     }
-    expect([run, sigLevel], [57, (p['negatives'] as List).length - 58]); // 58: 57 + the skipped msig-minimal row
+    expect([run, sigLevel], [58, (p['negatives'] as List).length - 59]); // 59: 58 + the skipped msig-minimal row
     final u = Uint8List.fromList(List.filled(32, 1)), key = Uint8List(16384), proof = Uint8List.fromList(List.filled(32, 7));
     // malformed msig key data is UAKeyData, not "not a holder"; an msig without key data is not a holder
     for (final kd in [Uint8List.fromList([0, 2, 0]), Uint8List.fromList([0, 2, 0, 2, 9, 9])]) {
@@ -623,6 +634,10 @@ void main() {
     expect(_err(() => holderPopMessage(0x0130, u, kemPk: _kem(1600))).code, 'UAKemKeyLength');
     expect(_err(() => holderPopMessage(0x0130, u, kemPk: _kem(1601, 0))).code, 'UAKemScheme');
     expect(_err(() => holderPopMessage(0x0101, u, kemPk: _kem(1601))).code, 'UAKemHolder');
+    // CTR-UA-32: a PQ-eligible msig holds a PQZ key but no KEM key, in the pop message and the registry call
+    final mq = byKey(regs, 'name', 'msig-pq/n2048-kmax1024');
+    expect(_err(() => holderPopMessage(0x0120, _b(mq['ua']), keyData: _b(mq['keyData']), kemPk: _kem(1601))).code, 'UAKemHolder');
+    expect(_err(() => registrationArgs(0x0120, _b(mq['keyData']), kemPk: _kem(1601), kemCommit: false)).code, 'UAKemHolder');
     expect(_hx(holderPopMessage(0x0130, u, kemPk: Uint8List(0)).message), _hx(holderPopMessage(0x0130, u).message));
     // a zero-length proof hash is absent (same as no hash)
     expect(_hx(holderPopMessage(0x0130, u, pqzPopHash: Uint8List(0)).message), _hx(holderPopMessage(0x0130, u).message));
@@ -659,7 +674,7 @@ void main() {
       expect(fill2, c['fill'], reason: name);
       commits++;
     }
-    expect(commits, 11); // + mldsa87, fndsa1024
+    expect(commits, 7); // + mldsa87, fndsa1024; msig-pq/<set> without a KEM key (CTR-UA-32)
     for (final k in (p['kemRecords'] as List).cast<Map>()) {
       expect(setKemKeyArgs(_b(k['ua']), k['version'] as int, _b(k['kemPk']), recordSig(k)), k['args'], reason: k['id'] as String);
     }
@@ -811,7 +826,12 @@ void main() {
 
   test('nested records', () {
     final kem = (n['kemRecords'] as List).cast<Map>(), pqz = (n['pqzKeyRecords'] as List).cast<Map>();
-    expect([kem.length, pqz.length], [1, 4]);
+    // CTR-UA-32 (T66a): an msig holds no KEM key, so no KEM record; a well-formed one is refused by its kind
+    expect([kem.length, pqz.length], [0, 4]);
+    final pq = byKey((n['registrations'] as List).cast<Map>(), 'name', 'msig-nested-pq');
+    expect(_err(() => kemRecordMessage(0x0120, _b(pq['ua']), BigInt.one, _kem(1601))).code, 'UAKemHolder');
+    expect(_err(() => holderPopMessage(0x0120, _b(pq['ua']), keyData: _b(pq['keyData']), kemPk: _kem(1601), inner: nestedKey)).code,
+        'UAKemHolder');
     for (final r in kem) {
       final u = _b(r['ua']), v = BigInt.from(r['version'] as int), pk = _b(r['kemPk']);
       final m = kemRecordMessage(_kind(r), u, v, pk);

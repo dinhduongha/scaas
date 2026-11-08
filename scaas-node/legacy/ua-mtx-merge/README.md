@@ -45,3 +45,11 @@ As they stood at 937b454f (before T55), before the node moved to the versioned P
 version), `abi.rs` (the unversioned registry calls), `guard.rs` and `submit.rs` (no intake pending check, no PQZ key-version
 refusals, the old row counts), `indexer.rs` (no key-version events), `e2e.rs`, `e2e_ua8.rs` (the unversioned registry ABI). Not
 built.
+
+## 3f (PQZ verifier mode, ua-mtx-merge T47), under `3f/`
+
+As they stood at 134560c1, before the node moved to the PQZ entries' trailing `PqzSignedVerdict` (spec 2026-11-06-attested-verify
+§11.1): `typed.rs` (the six PQZ debit rows without the verdict, no `pqz_verdict` sub-object, no router verifier rows), `submit.rs`
+(no verdict fill, no verifier refusals), `guard.rs` (no shield switch, the old counts), `gateway.rs`, `adapters/evm.rs` (no verdict
+fill), `indexer.rs` (no `PqzVerified` join, no verifier alerts), `abi.rs` (no verdict ABI), `config.rs` (no `[pqz_verifier]`). Not
+built.

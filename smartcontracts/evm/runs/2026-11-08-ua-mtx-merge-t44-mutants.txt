@@ -1,0 +1,26 @@
+b1-token-unchecked | test_pqzVerdict_wrongToken | 1
+b2-chainid-unchecked | test_pqzVerdict_wrongChain | 1
+b3-psid-unchecked | test_pqzVerdict_wrongPsid | 1
+b4-proofhash-unchecked | test_pqzVerdict_wrongProof | 1
+b5-statement-with-prefix | test_ciphertexts_sameInBothModes, test_inflight_offchain_refused, test_keyReused_legs_offchain, test_keys_unproven_offchainAccepts, test_mode_immutable, test_offchain_neverCallsPrecompile, test_pqzVerdict_epochABA, test_pqzVerdict_expired, test_pqzVerdict_positiveControl, test_pqzVerdict_rejectedSignature, test_pqzVerdict_shapeChanged_nativeCode, test_pqzVerdict_starvedIsUAVerifyGas, test_pqzVerdict_wrongEpoch, test_pqzVerdict_wrongProof, test_pqzVerdict_wrongToken, test_release_zeroDep_offchainInits | 1
+b6-epoch-unchecked | test_pqzVerdict_epochABA, test_pqzVerdict_wrongEpoch | 1
+b7-validuntil-unchecked | test_pqzVerdict_expired | 1
+b8-statementhash-unchecked | test_inflight_offchain_refused, test_offchain_outstanding_notRetargetable, test_pqzVerdict_wrongStatement | 1
+v2-revocation-unchecked | test_pqzVerdict_revokedRefuses | 1
+v3-shape-not-recomputed | test_pqzVerdict_shapeChanged_msigMemberCode, test_pqzVerdict_shapeChanged_nativeCode, test_pqzVerdict_shapeChanged_slotAccepted, test_shape_reassignAccepts | 1
+v4-kind-skipped-at-proposal | test_verifierKind_unregistered | 1
+v5-mldsa87-allowed | test_verifierKind_refused, test_verifierKind_unregistered | 1
+v6-notice-not-waited | test_revoke_immediate, test_transfer_notReady | 1
+v7-any-owner-confirms | test_transfer_notProposer | 1
+v8-generation-ignored | test_transfer_ownerChanged | 1
+v9-fixed-ignored | test_revoke_fixedRefused, test_transfer_fixed | 1
+v10-epoch-not-bumped-transfer | test_pqzVerdict_epochABA, test_revoke_immediate, test_transfer_atEta, test_transfer_zeroNotice | 1
+v11-epoch-not-bumped-revoke | test_revoke_immediate | 1
+v12-zero-verifier-proposable | test_verifierKind_unregistered | 1
+m1-setter-writes-mode | test_shape_reassignAccepts, test_transfer_atEta, test_transfer_zeroNotice | 1
+m2-offchain-calls-precompile | test_ciphertexts_sameInBothModes, test_inflight_offchain_refused, test_keyReused_legs_offchain, test_keys_unproven_offchainAccepts, test_mode_immutable, test_offchain_neverCallsPrecompile, test_pqzVerdict_epochABA, test_pqzVerdict_expired, test_pqzVerdict_positiveControl, test_pqzVerdict_shapeChanged_nativeCode, test_release_zeroDep_offchainInits | 1
+m3-precompile-reads-verdict | test_ciphertexts_sameInBothModes, test_precompile_ignoresPqzVerdict | 1
+k1-offchain-length-dropped | test_keys_unproven_wrongLength | 1
+k2-precompile-unproven | test_auditor_unproven_precompile, test_keys_unproven_precompileRefuses | 1
+k3-auditor-rule-in-precompile | test_auditor_unproven_precompile | 1
+k4-pairwise-compare-dropped | test_keyReused_auditor_offchain, test_keyReused_legs_offchain, test_keyReused_migration_offchain | 1

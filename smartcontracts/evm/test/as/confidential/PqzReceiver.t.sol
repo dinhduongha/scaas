@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {noVerdict} from "../../pqz/helpers/PqzVerdicts.sol";
 import {PqzRegFixture} from "./PqzRegFixture.sol";
 import {IRegulatedToken} from "../../../src/regulated/IRegulatedToken.sol";
 import {IPqzToken} from "../../../src/pqz/IPqzToken.sol";
@@ -46,7 +47,7 @@ abstract contract PqzReceiverSuite is PqzRegFixture {
         vm.revertToState(snap);
         vm.startStateDiffRecording();
         (bool ok2,,) = _try(abi.encodeWithSelector(IPqzToken.mtxUnshield.selector, _burnArgs(0, 0, 92), 0, bytes32(0), PROOF,
-            _pqAuth(), bytes("")));
+            _pqAuth(), bytes(""), noVerdict()));
         assertTrue(ok2);
         assertEq(_registryCalls(), 0, "R is never asked of a refresh's zero recipient");
     }

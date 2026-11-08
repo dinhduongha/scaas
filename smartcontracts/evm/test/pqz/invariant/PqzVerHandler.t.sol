@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {noVerdict} from "../helpers/PqzVerdicts.sol";
 import {PqzFixture} from "../helpers/PqzFixture.sol";
 import {PqzLayer} from "../../../src/pqz/PqzLayer.sol";
 import {PqzCore} from "../../../src/pqz/PqzCore.sol";
@@ -109,7 +110,7 @@ contract PqzVerHandler is PqzFixture {
         uint64 p = tok.pqzAccount(from, kv).rolled;
         IPqzToken.PqzTransferArgs memory t = _ts(_payload(p, 0, from, to, bytes32(0), _out(nonce++, false), ""));
         t.keyVersion = kv;
-        try tok.mtxConfidentialTransferSingle(t, PROOF, _pqAuth(), "") {
+        try tok.mtxConfidentialTransferSingle(t, PROOF, _pqAuth(), "", noVerdict()) {
             if (!ok) ++bad;
             _landed(to, b, toCur);
             ++debits[from];
@@ -130,7 +131,7 @@ contract PqzVerHandler is PqzFixture {
         uint64 p = tok.pqzAccount(from, kv).rolled;
         IPqzToken.PqzMultiArgs memory t = _ms(_mpayload(p, 0, from, bytes32(0), legs, _blob(nonce++, _outLen(2, false)), ""));
         t.keyVersion = kv;
-        try tok.mtxConfidentialTransfer(t, PROOF, _pqAuth(), "") {
+        try tok.mtxConfidentialTransfer(t, PROOF, _pqAuth(), "", noVerdict()) {
             if (kv != cur) ++bad;
             _landed(a, sa, ca);
             _landed(b, sb, cb);
@@ -149,7 +150,7 @@ contract PqzVerHandler is PqzFixture {
         IPqzToken.PqzBurnArgs memory b =
             _bs(bytes.concat(abi.encode(uint256(p), block.number + 50, uint256(0), from, bytes32(0)), _blob(nonce++, PqzCt.CT)));
         b.keyVersion = kv;
-        try tok.mtxUnshield(b, amount, rcpt, PROOF, _pqAuth(), "") {
+        try tok.mtxUnshield(b, amount, rcpt, PROOF, _pqAuth(), "", noVerdict()) {
             if (kv != cur && amount != 0) ++bad;
             shielded -= amount;
             ++debits[from];

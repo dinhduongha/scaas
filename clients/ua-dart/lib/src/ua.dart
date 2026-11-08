@@ -227,14 +227,19 @@ Uint8List portableRecordDigest(Uint8List ua, int kind, Uint8List pqzKeyHash, Uin
 Uint8List registrationDigest(Uint8List ua, int kind, Uint8List pqzKeyHash, Uint8List kemRecordHash, Uint8List pqzPopHash) =>
     _typed(hashStruct('UARegistration', [portableRecordHash(ua, kind, pqzKeyHash, kemRecordHash), pqzPopHash]));
 
-/// What the UA signs for a KEM record: `uaMessage(kind, PURPOSE_KEM, kemRecordDigest)`.
-Uint8List kemRecordMessage(int kind, Uint8List ua, BigInt version, Uint8List kemPk) =>
-    uaMessage(kind, purposeTag('kem'), kemRecordDigest(ua, version, kemPk));
+/// What the UA signs for a KEM record: `uaMessage(kind, PURPOSE_KEM, kemRecordDigest)`; a KEM holder only (UAKemHolder).
+Uint8List kemRecordMessage(int kind, Uint8List ua, BigInt version, Uint8List kemPk) {
+  if (!isKemHolder(kind)) throw UAError('UAKemHolder', '${_kindHex(kind)} may not hold a KEM key');
+  return uaMessage(kind, purposeTag('kem'), kemRecordDigest(ua, version, kemPk));
+}
 
 /// The register KEM key's record: always version 0 (owner 2026-10-31); `null` / empty = the zero record.
 Uint8List _kemHash(Uint8List ua, Uint8List? kemPk) => kemRecordHash(ua, BigInt.zero, kemPk ?? Uint8List(0));
 
-/// A PQZ / KEM holder: a single-key PQ kind, or an `msig` whose key data is PQ-eligible (malformed key data is UAKeyData).
+/// A KEM key holder (CTR-UA-32, T66a): a single PQ kind only; an `msig` holds no KEM key (UAKemHolder, as the registry).
+bool isKemHolder(int kind) => isPqzHolder(kind);
+
+/// A PQZ key holder: a single-key PQ kind, or an `msig` whose key data is PQ-eligible (malformed key data is UAKeyData).
 bool _holds(int kind, Uint8List keyData, Uint8List? Function(Uint8List id)? inner) {
   if (isPqzHolder(kind)) return true;
   return kind == 0x0120 && keyData.isNotEmpty && msigPqzEligible(keyData, inner);
@@ -279,17 +284,15 @@ typedef HolderPop = ({
 /// The portable PoP message of a registration. Attributes: [pqzKey] with its proof [pqzPop] (or only its hash [pqzPopHash]; a
 /// relayer may hold only that) and the initial KEM key [kemPk] (its record is always version 0, owner 2026-10-31); null /
 /// empty = absent. Only
-/// holders may carry them (UAPqzHolder, UAKemHolder; an `msig` needs [keyData] to show it is PQ-eligible); a PQZ key always
+/// holders may carry them (UAPqzHolder: an `msig` needs [keyData] to show it is PQ-eligible; UAKemHolder: a single PQ kind only,
+/// never an `msig`); a PQZ key always
 /// comes with its proof hash and only with it (UAPqzPopHash).
 HolderPop holderPopMessage(int kind, Uint8List ua,
     {Uint8List? keyData, Object? pqzKey, Uint8List? pqzPop, Uint8List? pqzPopHash, Uint8List? kemPk, Uint8List? Function(Uint8List id)? inner}) {
   final hasKey = pqzKey != null && keyBytes(pqzKey).isNotEmpty;
   final hasKem = kemPk != null && kemPk.isNotEmpty;
-  if ((hasKey || hasKem) && !_holds(kind, keyData ?? Uint8List(0), inner)) {
-    throw hasKey
-        ? UAError('UAPqzHolder', '${_kindHex(kind)} may not hold a PQZ key')
-        : UAError('UAKemHolder', '${_kindHex(kind)} may not hold a KEM key');
-  }
+  if (hasKey && !_holds(kind, keyData ?? Uint8List(0), inner)) throw UAError('UAPqzHolder', '${_kindHex(kind)} may not hold a PQZ key');
+  if (hasKem && !isKemHolder(kind)) throw UAError('UAKemHolder', '${_kindHex(kind)} may not hold a KEM key');
   final popHash = _proofHashOf(pqzPop, pqzPopHash);
   if (hasKey != !_isZero(popHash)) throw UAError('UAPqzPopHash', 'a PQZ key comes with its proof hash and only with it');
   final kh = hasKey ? _pqzKeyHashOf(pqzKey) : Uint8List(32);
@@ -715,6 +718,7 @@ int registryCalldataLength(String entry, Map<String, Object?> a) {
     List<MemberSig> members = const [],
     bool? kemCommit}) {
   final d = keyBytes(keyData);
+  if ((kemPk?.isNotEmpty ?? false) && !isKemHolder(kind)) throw UAError('UAKemHolder', '${_kindHex(kind)} may not hold a KEM key');
   final popHash = (pqzKey?.isNotEmpty ?? false) || (pqzPopHash?.isNotEmpty ?? false) ? _proofHashOf(pqzPop, pqzPopHash) : Uint8List(32);
   final attrs = <String, Object?>{'pqzKey': _hexOf(pqzKey), 'pqzPopHash': _hexOf(popHash), 'kem': kemKeyOf(kemPk), 'kemPkHash': _zeroWord};
   final tail = <String, Object?>{'attrs': attrs, 'pqzPop': _hexOf(pqzPop)};

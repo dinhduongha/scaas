@@ -624,13 +624,16 @@ func TestKemRecord(t *testing.T) {
 			t.Fatalf("kem %v", r["id"])
 		}
 		if kind(r["kind"]) == 0x0120 {
-			if md := MemberDigest(ua, m); hx(md[:]) != r["memberDigest"] {
-				t.Fatalf("kem member %v", r["id"])
-			}
+			t.Fatalf("kem %v: an msig holds no KEM key (CTR-UA-32)", r["id"])
 		}
 	}
-	if len(rows(p, "kemRecords")) == 0 {
+	if len(rows(p, "kemRecords")) != 12 {
 		t.Fatal("kem count")
+	}
+	// CTR-UA-32 (T66a): the single PQ kinds only; an msig has no KEM record message
+	mq := find(rows(p, "registrations"), "name", "msig-pq/n2048-kmax1024")
+	if _, err := KemRecordMessage(0x0120, b32(mq["ua"]), 1, bs(rows(p, "kemRecords")[0]["kemPk"])); err == nil || code(err) != "UAKemHolder" {
+		t.Fatalf("msig kem record message: %v", err)
 	}
 	u := bytes.Repeat([]byte{1}, 32)
 	var ua [32]byte
@@ -891,14 +894,30 @@ func TestHolderRefusals(t *testing.T) {
 				t.Fatalf("%v", name)
 			}
 			run++
+		case entry == "setKemKey" && want == "UAKemHolder":
+			// msig-kem-record (CTR-UA-32): a well-formed record of an msig is refused by its kind, before any signature
+			k := find(rows(p, "kemRecords"), "id", m["row"])
+			target := find(regs, "ua", set["ua"])
+			if kind(target["kind"]) != kind(m["kind"]) {
+				t.Fatalf("%v: kind", name)
+			}
+			if _, err := KemRecordMessage(kind(target["kind"]), b32(set["ua"]), u64(k["version"]), bs(set["kemPk"])); err == nil || code(err) != want {
+				t.Fatalf("%v: want %v got %v", name, want, err)
+			}
+			run++
 		default:
 			sigLevel++ // signatures / native personal_sign / another record's pop: verified by the signature vectors
 		}
 	}
-	if run != 57 || sigLevel != len(rows(p, "negatives"))-58 { // 58: 57 + the skipped msig-minimal row
+	if run != 58 || sigLevel != len(rows(p, "negatives"))-59 { // 59: 58 + the skipped msig-minimal row
 		t.Fatalf("negatives %d digest-layer, %d signature-level", run, sigLevel)
 	}
 	u, key, proof := b32(hx(bytes.Repeat([]byte{1}, 32))), make([]byte, 16384), bytes.Repeat([]byte{7}, 32)
+	mq := find(regs, "name", "msig-pq/n2048-kmax1024")
+	no := false
+	if _, _, err := RegistrationArgs(RegistrationInput{Kind: 0x0120, KeyData: bs(mq["keyData"]), KemPk: kemKey(1601, 1), KemCommit: &no}); err == nil || code(err) != "UAKemHolder" {
+		t.Fatalf("msig registration args with a KEM key: %v", err)
+	}
 	// malformed msig key data is UAKeyData, not "not a holder"; an msig without key data is not a holder
 	for _, kd := range [][]byte{{0, 2, 0}, {0, 2, 0, 2, 9, 9}} {
 		if _, err := HolderPopMessage(0x0120, u, kd, key, nil, proof, nil); code(err) != "UAKeyData" {
@@ -918,8 +937,10 @@ func TestHolderRefusals(t *testing.T) {
 		{0x0130, nil, nil, nil, nil, kemKey(1600, 1), "UAKemKeyLength"},
 		{0x0130, nil, nil, nil, nil, kemKey(1601, 0), "UAKemScheme"},
 		{0x0101, nil, nil, nil, nil, kemKey(1601, 1), "UAKemHolder"},
+		// CTR-UA-32: a PQ-eligible msig holds a PQZ key but no KEM key
+		{0x0120, bs(mq["keyData"]), nil, nil, nil, kemKey(1601, 1), "UAKemHolder"},
 	} {
-		if _, err := HolderPopMessage(c.kind, u, c.kd, c.key, c.pop, c.hash, c.kemPk); code(err) != c.code {
+		if _, err := HolderPopMessage(c.kind, u, c.kd, c.key, c.pop, c.hash, c.kemPk); err == nil || code(err) != c.code {
 			t.Fatalf("refusal %+v: %v", c, err)
 		}
 	}
@@ -1020,7 +1041,7 @@ func TestRegistrationArgsTyped(t *testing.T) {
 		sameJSON(t, name, fill, c["fill"])
 		commits++
 	}
-	if commits != 11 { // + mldsa87, fndsa1024
+	if commits != 7 { // + mldsa87, fndsa1024; msig-pq/<set> without a KEM key (CTR-UA-32)
 		t.Fatal(commits)
 	}
 	for _, k := range rows(p, "kemRecords") {
@@ -1301,8 +1322,15 @@ func TestNestedRegistrations(t *testing.T) {
 func TestNestedRecords(t *testing.T) {
 	n := load(t, "nested.json")
 	kem, pqz := rows(n, "kemRecords"), rows(n, "pqzKeyRecords")
-	if len(kem) != 1 || len(pqz) != 4 {
+	if len(kem) != 0 || len(pqz) != 4 { // CTR-UA-32 (T66a): an msig holds no KEM key, so no KEM record
 		t.Fatal(len(kem), len(pqz))
+	}
+	pq := find(rows(n, "registrations"), "name", "msig-nested-pq")
+	if _, err := KemRecordMessage(0x0120, b32(pq["ua"]), 1, kemKey(1601, 1)); err == nil || code(err) != "UAKemHolder" {
+		t.Fatalf("nested msig kem record message: %v", err)
+	}
+	if _, err := HolderPopMessageWith(0x0120, b32(pq["ua"]), bs(pq["keyData"]), nil, nil, nil, kemKey(1601, 1), nestedKeys(n)); err == nil || code(err) != "UAKemHolder" {
+		t.Fatalf("nested msig holder pop with a KEM key: %v", err)
 	}
 	for _, r := range kem {
 		name, k, ua, v, pk := r["id"].(string), kind(r["kind"]), b32(r["ua"]), u64(r["version"]), bs(r["kemPk"])

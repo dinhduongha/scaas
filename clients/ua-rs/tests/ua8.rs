@@ -237,7 +237,8 @@ fn portable_rows_typed() {
         assert_eq!(hx(&pqz_key_digest(&ua, &h)), r["pqzKeyDigest"], "{}", r["name"]);
         n += 1;
     }
-    assert_eq!(n, 27 + 15 + 16); // + mldsa87, fndsa1024 (CTR-UA-39 / -40): a registration, KEM v1-v3, PQZ key records at four sets each
+    // + mldsa87, fndsa1024 (CTR-UA-39 / -40): a registration, KEM v1-v3, PQZ key records at four sets each; CTR-UA-32: no msig KEM record
+    assert_eq!(n, 27 + 12 + 16);
 }
 
 #[test]
@@ -296,13 +297,15 @@ fn kem_record_vectors() {
         let m = kem_record_message(kind, &ua, v, &pk).unwrap();
         assert_eq!(hx(&m), r["message"], "{}", r["id"]);
         assert_eq!(m, ua_message(kind, &purpose_tag("kem").unwrap(), &b32(&r["digest"])).unwrap());
-        if kind == 0x0120 {
-            assert_eq!(hx(&member_digest(&ua, &m)), r["memberDigest"], "{}", r["id"]);
-        }
+        assert_ne!(kind, 0x0120, "{}: CTR-UA-32, an msig holds no KEM key", r["id"]);
     }
-    assert_eq!(arr(&p, "kemRecords").len(), 15);
+    assert_eq!(arr(&p, "kemRecords").len(), 12);
     let ua = [1u8; 32];
     let kem = |scheme: u8, n: usize| [vec![scheme], vec![0u8; n - 1]].concat(); // scheme byte ‖ zeros, n bytes in all
+    // CTR-UA-32 (T66a): a PQ-eligible msig holds a PQZ key but no KEM key; the same record under a single PQ kind builds
+    let mq = b32(&find(&p, "registrations", "name", &"msig-pq/n2048-kmax1024".into())["ua"]);
+    assert_eq!(kem_record_message(0x0120, &mq, 1, &kem(1, 1601)), Err(UAError::KemHolder(0x0120)));
+    assert!(kem_record_message(0x0131, &mq, 1, &kem(1, 1601)).is_ok(), "the control");
     assert_eq!(kem_record_digest(&ua, 0, &kem(1, 1601)), Err(UAError::KemVersion));
     assert_eq!(kem_record_digest(&ua, 1, &kem(1, 1600)), Err(UAError::KemKeyLength));
     assert_eq!(kem_record_digest(&ua, 1, &kem(1, 1602)), Err(UAError::KemKeyLength));
@@ -406,6 +409,15 @@ fn negatives_refused() {
                 assert_eq!(got.err().map(|e| e.code()), Some(err), "{name}");
                 run += 1;
             }
+            "setKemKey" if err == "UAKemHolder" => {
+                // CTR-UA-32: an msig's KEM record is refused by its kind before any signature (the target's kind is the row's)
+                let k = find(&p, "kemRecords", "id", &m["row"]);
+                let t = find(&p, "registrations", "ua", &m["set"]["ua"]);
+                assert_eq!(t["kind"], m["kind"], "{name}");
+                let got = kem_record_message(num(&t["kind"]) as u16, &b32(&m["set"]["ua"]), num(&k["version"]), &bytes(&m["set"]["kemPk"]));
+                assert_eq!(got.err().map(|e| e.code()), Some(err), "{name}");
+                run += 1;
+            }
             "setKemKey" if m["row"] == "fndsa512/v2" => {
                 // the record of one UA offered for another: the signed message differs, so the signature cannot verify
                 let k = find(&p, "kemRecords", "id", &m["row"]);
@@ -458,7 +470,7 @@ fn negatives_refused() {
             _ => sig_level += 1, // PQ / classical signatures: verified by the signature vectors (no verifier in this crate)
         }
     }
-    assert_eq!((run, sig_level), (62, 5), "{} negatives", arr(&p, "negatives").len());
+    assert_eq!((run, sig_level), (63, 5), "{} negatives", arr(&p, "negatives").len()); // + msig-kem-record (T66a)
     println!("{run} digest-layer negatives refused, {sig_level} signature-level");
 }
 
@@ -532,7 +544,8 @@ fn malformed_msig_key_data() {
     for kd in [&[0u8, 2, 0][..], &[0, 2, 0, 2, 9, 9][..]] {
         let want = Err(UAError::KeyData("length"));
         assert_eq!(holder_pop_message(0x0120, &ua, kd, Some(&pk), None, Some(&proof), None).map(|_| ()), want);
-        assert_eq!(holder_pop_message(0x0120, &ua, kd, None, None, None, Some(&[0; 1600])).map(|_| ()), want);
+        // a KEM key is refused by the kind alone, the key data unread (CTR-UA-32: an msig holds no KEM key)
+        assert_eq!(holder_pop_message(0x0120, &ua, kd, None, None, None, Some(&[0; 1600])).map(|_| ()), Err(UAError::KemHolder(0x0120)));
         assert_eq!(pqz_key_record_message(0x0120, &ua, kd, &pk, None, Some(&proof), false).map(|_| ()), want);
     }
     // no attributes: key data is not consulted; an msig without key data is not a holder
@@ -585,7 +598,7 @@ fn portable_msig_rows_minimal() {
         assert_eq!(ua8::msig_slots_minimal(&kd_of(&k["ua"]), &sig_indexes(&bytes(&k["sig"]))), Ok(true), "{}", k);
         n += 1;
     }
-    assert_eq!(n, 12, "5 pops, 3 KEM records, 4 PQZ key records");
+    assert_eq!(n, 9, "5 pops, 4 PQZ key records (CTR-UA-32: no msig KEM record)");
     // the negative: 2-of-(1, 2) over the registered mldsa65#1 / #2 (lower id weight 1), both slots sign
     let neg = find(&p, "negatives", "name", &"msig-pop-not-minimal".into());
     assert_eq!((&neg["entry"], &neg["rule"], &neg["error"]), (&"register".into(), &"msig-minimal".into(), &"UAPoP".into()));
@@ -711,7 +724,14 @@ fn registration_args_typed() {
         assert_eq!(fill_json(c.kem_fill.as_ref().unwrap()), row["kemCommit"]["fill"], "{name}");
         commits += 1;
     }
-    assert_eq!(commits, 11); // + mldsa87, fndsa1024
+    assert_eq!(commits, 7); // + mldsa87, fndsa1024; msig-pq/<set> without a KEM key (CTR-UA-32)
+    // CTR-UA-32 (T66a): a PQ-eligible msig holds no KEM key, in either form
+    let mq = find(&p, "registrations", "name", &"msig-pq/n2048-kmax1024".into());
+    let kem_pk = bytes(&arr(&p, "kemRecords")[0]["kemPk"]);
+    for kem_commit in [Some(true), Some(false), None] {
+        let got = registration_args(&RegistrationInput { kem_pk: kem_pk.clone(), kem_commit, ..reg_input(mq) });
+        assert_eq!(got.map(|_| ()), Err(UAError::KemHolder(0x0120)), "{kem_commit:?}");
+    }
     for k in arr(&p, "kemRecords") {
         let sig = bytes(&k["sig"]);
         let s = if num(&k["kind"]) == 0x0120 { UASig { members: member_sigs(&sig), ..Default::default() } } else {
@@ -932,7 +952,7 @@ fn check_registration_vectors() {
         }
         n += 1;
     }
-    assert_eq!((n, commits), (27, 11));
+    assert_eq!((n, commits), (27, 7)); // CTR-UA-32: msig-pq/<set> without a KEM key
     println!("{n} registrations, {commits} hash commits, {flips} flipped signatures refused");
 }
 
@@ -968,8 +988,8 @@ fn check_kem_record_vectors() {
     // compare this is `KemHolder`, which a signature mismatch could not hide
     let got = check_kem_record(0x0133, &bytes(&s["keyData"]), &[9; 32], 1, &pk, &[0; 7856], &keys(&p));
     assert_eq!(got, Err(UAError::Unauthorized), "not the key data's id");
-    assert_eq!(flips, 3 * 12 + 3 * 2 * 3, "3 per signature: 12 single keys, 3 msig of 2 slots");
-    println!("15 KEM records, {flips} flipped signatures refused");
+    assert_eq!(flips, 3 * 12, "3 per signature: 12 single keys (CTR-UA-32: no msig KEM record)");
+    println!("12 KEM records, {flips} flipped signatures refused");
 }
 
 #[cfg(feature = "pq")]
@@ -1117,8 +1137,23 @@ fn check_refuses_negatives() {
                 }
             }
             "setKemKey" => {
-                let k = find(&p, "kemRecords", "id", &m["row"]);
-                let got = check_kem(&p, k, set.get("ua").unwrap_or(&k["ua"]), &bytes(set.get("sig").unwrap_or(&k["sig"])));
+                let mut k = find(&p, "kemRecords", "id", &m["row"]).clone();
+                if let Some(pk) = set.get("kemPk") {
+                    k["kemPk"] = pk.clone();
+                }
+                if err == "UAKemHolder" {
+                    // CTR-UA-32: every slot of the msig signs its own record, so only the holder rule can refuse it
+                    let ua = b32(&set["ua"]);
+                    let d = kem_record_digest(&ua, num(&k["version"]), &bytes(&k["kemPk"])).unwrap();
+                    let md = member_digest(&ua, &ua_message(0x0120, &purpose_tag("kem").unwrap(), &d).unwrap());
+                    let kd = MsigStructure::from_key_data(&bytes(&find(&p, "registrations", "ua", &set["ua"])["keyData"])).unwrap();
+                    for s in decode_member_sigs(&bytes(&set["sig"])).unwrap() {
+                        let mm = &kd.members[s.index as usize];
+                        let msg = ua_message(mm.kind, &purpose_tag("member").unwrap(), &md).unwrap();
+                        assert!(verify::verify(mm.kind, &keys(&p)(mm.id).unwrap().1, &msg, &s.sig, false), "{name}: slot {}", s.index);
+                    }
+                }
+                let got = check_kem(&p, &k, set.get("ua").unwrap_or(&k["ua"]), &bytes(set.get("sig").unwrap_or(&k["sig"])));
                 assert_eq!(code(got), Some(err), "{name}");
                 refused += 1;
             }
@@ -1126,7 +1161,7 @@ fn check_refuses_negatives() {
             e => panic!("{name}: {e}"),
         }
     }
-    assert_eq!((refused, stateful, other_entry), (63, 4, 1), "{} negatives", arr(&p, "negatives").len());
+    assert_eq!((refused, stateful, other_entry), (64, 4, 1), "{} negatives", arr(&p, "negatives").len()); // + msig-kem-record (T66a)
     println!("{refused} negatives refused by their error, {stateful} state-only, {other_entry} not a record");
 }
 

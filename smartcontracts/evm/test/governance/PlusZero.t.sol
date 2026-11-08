@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {noVerdict} from "../pqz/helpers/PqzVerdicts.sol";
 import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 import {Test} from "forge-std/Test.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
@@ -745,32 +746,32 @@ contract HookSeatsPqzTest is PqzFixture, SeatExpect {
         IPqzToken.PqzTransferArgs memory u;
         (u.fromUA, u.beneficiaryUA) = (alice, ben);
         _expect(address(np), H_SENDER, alice, 0, 0);
-        np.mtxConfidentialTransfer(t, "", none, "");
+        np.mtxConfidentialTransfer(t, "", none, "", noVerdict());
         _expect(address(np), H_NAME, ben, 0, 0);
-        np.mtxConfidentialTransferCompact(t, "", none, "");
+        np.mtxConfidentialTransferCompact(t, "", none, "", noVerdict());
         _expect(address(np), H_SENDER, alice, 0, 0);
-        np.mtxConfidentialTransferSingle(u, "", none, "");
+        np.mtxConfidentialTransferSingle(u, "", none, "", noVerdict());
         _expect(address(np), H_NAME, ben, 0, 0);
-        np.mtxConfidentialTransferSingleCompact(u, "", none, "");
-        _notSeat(address(np), H_PAYER, address(this), abi.encodeCall(IPqzToken.mtxConfidentialTransferSingle, (u, "", none, "")));
+        np.mtxConfidentialTransferSingleCompact(u, "", none, "", noVerdict());
+        _notSeat(address(np), H_PAYER, address(this), abi.encodeCall(IPqzToken.mtxConfidentialTransferSingle, (u, "", none, "", noVerdict())));
         (t.shieldIn, u.shieldIn) = (1, 1);
         _expect(address(np), H_PAYER, me, 0, 0);
-        np.mtxConfidentialTransfer(t, "", none, "");
+        np.mtxConfidentialTransfer(t, "", none, "", noVerdict());
         _expect(address(np), H_PAYER, me, 0, 0);
-        np.mtxConfidentialTransferSingleCompact(u, "", none, "");
+        np.mtxConfidentialTransferSingleCompact(u, "", none, "", noVerdict());
         // unshield: the recipient in the entry, sender, payer, beneficiary in `_burn`; a refresh names no sender
         IPqzToken.PqzBurnArgs memory b;
         (b.fromUA, b.beneficiaryUA, b.shieldIn) = (alice, ben, 1);
         bytes32 rcp = MetaTxLib.pad(address(0xB2));
         _expect(address(np), H_RECEIVER, rcp, 0, 0);
-        np.mtxUnshield(b, 1, rcp, "", none, "");
+        np.mtxUnshield(b, 1, rcp, "", none, "", noVerdict());
         _expect(address(np), H_SENDER, alice, 0, 0);
-        np.mtxUnshield(b, 1, rcp, "", none, "");
+        np.mtxUnshield(b, 1, rcp, "", none, "", noVerdict());
         _expect(address(np), H_PAYER, me, 0, 0);
-        np.mtxUnshield(b, 1, rcp, "", none, "");
+        np.mtxUnshield(b, 1, rcp, "", none, "", noVerdict());
         _expect(address(np), H_NAME, ben, 0, 0);
-        np.mtxUnshield(b, 0, 0, "", none, "");
-        bytes memory refresh = abi.encodeCall(IPqzToken.mtxUnshield, (b, 0, bytes32(0), "", none, ""));
+        np.mtxUnshield(b, 0, 0, "", none, "", noVerdict());
+        bytes memory refresh = abi.encodeCall(IPqzToken.mtxUnshield, (b, 0, bytes32(0), "", none, "", noVerdict()));
         _notSeat(address(np), H_SENDER, address(this), refresh);
         _notSeat(address(np), H_RECEIVER, address(this), refresh);
         // kind 13: wrap-shield's payer; unshield-unwrap's sender and beneficiary in `_burn`
@@ -778,9 +779,9 @@ contract HookSeatsPqzTest is PqzFixture, SeatExpect {
         wp.mtxWrapShield(address(usd), 1, alice);
         IConfidentialWrappedToken.Unwrap memory x = IConfidentialWrappedToken.Unwrap(address(usd), rcp, 1, 0);
         _expect(address(wp), H_SENDER, alice, 0, 0);
-        wp.mtxUnshieldUnwrap(b, x, "", none, "");
+        wp.mtxUnshieldUnwrap(b, x, "", none, "", noVerdict());
         _expect(address(wp), H_NAME, ben, 0, 0);
-        wp.mtxUnshieldUnwrap(b, x, "", none, "");
+        wp.mtxUnshieldUnwrap(b, x, "", none, "", noVerdict());
     }
 
     function test_hookSeatsCalledRelayed() public {

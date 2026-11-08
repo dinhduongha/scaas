@@ -346,3 +346,15 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   `mtxCreateDex`, `mtxCreateInstance`; `src/factory/{OpenFactory,IOpenFactory}.sol` with the creator always
   `pad(msg.sender)`; `test/vectors/legacy/ua-mtx-merge/router-create/selector_audit.json` and
   `../vectors/typed/legacy/ua-mtx-merge/router-create/typed_ops.json` without the three rows. Not built.
+  PQZ verifier mode (group 3f, spec 2026-11-06-attested-verify.md; plan T44, T45), under `ua-mtx-merge/3f/`: the files as they
+  stood at 8e756a47 (the factory index group's tip): `src/factory/IFactoryToken.sol` (`ConfidentialConfig` without
+  `pqzVerifyMode`, `pqzVerifierUA`, `pqzVerifierFixed`), `src/pqz/{PqzCore,PqzStateLib,PqzLayer,IPqzToken,PqzTransferLib,
+  PqzBurnLib,PqzViewLib,PqzWrappedLib,NormalPqzToken,WrappedPqzToken}.sol` (the precompile the only verdict, the proof-carrying
+  entries without the verdict pair, no verifier UA), `src/regulated/{NormalPqzRegulatedToken,WrappedPqzRegulatedToken}.sol`,
+  `src/governance/{GovernanceRouter,GovernanceRouterBase}.sol` (no `mtxPqz*Verifier` ops), `src/metatx/MetaTokenBase.sol` and
+  `src/zether/ZetherLib.sol` (the config checks without the three fields), `script/pqz/e2e.py` (no zero-dep release);
+  `test/vectors/legacy/ua-mtx-merge/3f/selector_audit.json`. Not built.
+  The registry block (plan T66a, owner 2026-11-08: `requirePortable`, no KEM key for an `msig`, the `pop` slot bitmap and
+  `popSlotsOf`), under `ua-mtx-merge/t66a/`: the files as they stood at 05f23be2 (3f's tip): `src/ua/{IUARegistry,UARegistry,
+  UARegistryLib,UAStore,UAKinds}.sol` (no portable check view, a PQ-eligible `msig` a KEM holder, no `pop` slot word),
+  `script/pqz/e2e.py` (its `msig` holder registered with a KEM key). Not built.

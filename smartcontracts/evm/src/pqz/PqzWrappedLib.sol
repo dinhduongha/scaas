@@ -23,14 +23,14 @@ library PqzWrappedLib {
     ///         plain kind, `legs`, the rate and `conf` are checked by the two libraries. `kind` and the masks are the token's
     ///         own (`kind()`, `_validBits()`, `_roleBits()`, `_contractOnlyBits()`; regulated-kinds spec §2.4), never fixed
     ///         here. Never on Hedera (`PqzLayer` refuses that env).
-    function init(bytes calldata initArgs, address registry, address verifier, uint8 kind, uint256 valid, uint256 roleBits,
-        uint256 contractOnly) public
+    function init(bytes calldata initArgs, address registry, address verifier, address factory, uint8 kind, uint256 valid,
+        uint256 roleBits, uint256 contractOnly) public
     {
         IFactoryToken.TokenConfig memory cfg = abi.decode(initArgs, (IFactoryToken.TokenConfig));
         if (cfg.initialSupply != 0 || cfg.initialHolder != address(0)) revert IFactoryToken.ConfigFieldForOtherKind(1);
         requireRegOfKind(kind, cfg.reg);
         WrappedLib.initToken(cfg, false, kind, valid, roleBits, contractOnly, registry);
-        PqzStateLib.init(cfg.conf, registry, verifier);
+        PqzStateLib.init(cfg.conf, registry, verifier, factory);
     }
 
     /// @notice `mtxSelectors()` of the kind: `WrappedToken`'s eight, then the PQZ ops and the two leg paths, each `ABSOLUTE`

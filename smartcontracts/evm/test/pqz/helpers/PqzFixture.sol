@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {noVerdict} from "./PqzVerdicts.sol";
 import {PqzRegistryBase, PQZ_UID, PQZL_ID} from "./PqzRegistryBase.sol";
 import {PqzCtHarness} from "./PqzCtHarness.sol";
 import {PqzArgs} from "./PqzArgs.sol";
@@ -50,6 +51,10 @@ abstract contract PqzFixture is PqzRegistryBase, PqzArgs {
     uint256 internal minted;
     uint256 internal minDecoy; // the token's `minDecoyFee` (op 7)
     uint256 internal decoy; // the sender's per-leg `decoyFee` in an op 7 payload
+    // group 3f (PQZ verifier mode spec §3): the next token's `pqzVerifyMode`, verifier UA and fixed flag (PRECOMPILE: 0)
+    uint8 internal vMode;
+    bytes32 internal vUA;
+    bool internal vFixed;
 
     /// the client's view of each account: `acc` and every entry ever appended (TRIVIAL amounts in `triv`)
     mapping(bytes32 => bytes) internal accOf;
@@ -87,7 +92,7 @@ abstract contract PqzFixture is PqzRegistryBase, PqzArgs {
         c.lockedFeatures = 1 << GovernanceBits.MINTABLE; // no owner: the minter survives creation on a locked bit (B-06, GD-14)
         bool withAud = aMode != uint8(ZetherTypes.AuditorMode.NONE);
         c.conf = IFactoryToken.ConfidentialConfig(
-            withAud ? abi.encode(aud) : bytes(""), SCALE, maxShielded, FEE, dMode, aMode, minDecoy
+            withAud ? abi.encode(aud) : bytes(""), SCALE, maxShielded, FEE, dMode, aMode, minDecoy, vMode, vUA, vFixed
         );
     }
 
@@ -238,7 +243,7 @@ abstract contract PqzFixture is PqzRegistryBase, PqzArgs {
     {
         out = _out(seed, withAud);
         bytes memory pl = _payloadFor(t, from, to, ben, out);
-        ref = t.mtxConfidentialTransferSingle(_ts(pl), hex"c0de", _pqAuth(), "");
+        ref = t.mtxConfidentialTransferSingle(_ts(pl), hex"c0de", _pqAuth(), "", noVerdict());
         _afterDebit(from, _cut(out, 0, PqzCt.PK), _cut(out, PqzCt.CT, PqzCt.V));
         pend[to].push(_cut(out, 0, PqzCt.CT));
         if (ben != 0) feeIn[ben] += t.confidentialFee(); // txFee: the beneficiary's public balance (D19)

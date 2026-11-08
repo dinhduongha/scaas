@@ -77,6 +77,10 @@ contract NamespaceProbe is UAMetaTxBase {
             (A, ZetherTypes.DisclosureMode.COMPACT, ZetherTypes.AuditorMode.OPTIONAL, B);
         (q.psid, q.shieldScale, q.maxShielded, q.confidentialFee) = (bytes32(uint256(0xd1)), 0xd2, 0xd3, 0xd4);
         (q.totalShielded, q.auditorUA, q.minDecoyFee) = (0xd5, V, 0xd6);
+        // group 3f (PQZ verifier mode spec §3, §4.4): the mode at byte 22 of slot 0, the verifier state appended
+        (q.pqzVerifyMode, q.pqzVerifierUA, q.pqzVerifierShape) = (1, U, bytes32(uint256(0xd7)));
+        (q.pqzVerifierEpoch, q.pqzVerifierFixed, q.noticePeriod, q.eta) = (0xd8, true, 0xd9, 0xda);
+        (q.pqzPendingVerifier, q.pqzProposer, q.pqzProposerGeneration) = (V, bytes32(uint256(0xdb)), 0xdc);
         // group 3g T52 (KV-6): the account per `(ua, key version)`, `sendCounter` per UA
         PqzCore.Account storage qa = q.acct[U][7];
         (qa.pendingCount, qa.rolled, qa.floor, qa.cleared) = (0xe1, 0xe2, 0xe3, 0xe4);
@@ -264,6 +268,16 @@ contract LayoutTest is V2Fixture {
         f[25] = F("memos[U]", u, 0, 21, 32);
         f[26] = F("minDecoyFee", 0, 0, 0xd6, 32);
         f[27] = F("sendCounter[U]", u, 0, 0xe9, 8);
+        f = _more(f, F("pqzVerifyMode", 0, 0, 1, 1));
+        f = _more(f, F("pqzVerifierUA", 0, 0, u, 32));
+        f = _more(f, F("pqzVerifierShape", 0, 0, 0xd7, 32));
+        f = _more(f, F("pqzVerifierEpoch", 0, 0, 0xd8, 4));
+        f = _more(f, F("pqzVerifierFixed", 0, 0, 1, 1));
+        f = _more(f, F("noticePeriod", 0, 0, 0xd9, 8));
+        f = _more(f, F("eta", 0, 0, 0xda, 8));
+        f = _more(f, F("pqzPendingVerifier", 0, 0, v, 32));
+        f = _more(f, F("pqzProposer", 0, 0, 0xdb, 32));
+        f = _more(f, F("pqzProposerGeneration", 0, 0, 0xdc, 4));
         _ns(address(p), "pqz", "scaas.pqz", f);
         f = new F[](25);
         f[0] = F("verifier", 0, 0, a, 20);

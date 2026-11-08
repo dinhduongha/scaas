@@ -243,6 +243,8 @@ export const {
   uaPqzUnshieldTypedData, uaPqzUnshieldCalldata, uaPqzUnshieldUnwrapTypedData, uaPqzUnshieldUnwrapCalldata,
   pqzAuthTypedData,
 } = OP_BUILDERS;
+// group 3f (PQZ verifier mode spec §5): the verdict a verifier UA signs, and the pair the PQZ entries take last
+export { pqzVerdictTypedData, pqzVerdictDigest, PQZ_VERDICT_TYPEHASH, EMPTY_PQZ_VERDICT, statementHash, proofHash } from './evm.js';
 
 /** The digest of `mtxRollOverSigned`: `ZetherRollOver` in the token's domain, signed under `zether-owner`. */
 export const zetherRollOverDigest = (opts) => hashTypedData(zetherRollOverTypedData(opts));

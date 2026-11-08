@@ -13,6 +13,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { hex, fromHex, keccak_256, utf8ToBytes, concatBytes } from '../src/bytes.js';
 import { TYPED_OPS, OP_BUILDERS, hashStruct, hashTypedData, uaMetaTransferTypedData, padId, payLane, buildRelayFee, payMeta, metaPayId,
+  EMPTY_PQZ_VERDICT,
 } from '../src/evm.js';
 import { confPublic, g1 } from '../src/zether.js';
 import { recordId } from '../src/regulated.js';
@@ -95,6 +96,8 @@ const ROW = {
   UAPayUnderMandate: { entryRef: META_ID },
   UASetTaxRate: { ratePpm: 50000 },
   UASetTaxRecipient: { taxRecipient: padId('0x00000000000000000000000000000000000007a0') },
+  // group 3f (T46): a native EOA as the next verifier (no registration needed, spec §4.1)
+  UAPqzSetVerifier: { next: padId('0x5ca00000000000000000000000000000000000f1') },
 };
 ROW.UAWrapOrder = wrapOrder(hex(nativeUa), NO_ID);
 ROW.CancelUAOrder = { order: order(hex(nativeUa), NO_ID) };
@@ -155,9 +158,10 @@ const OWNER_SIG = { keyData: '0x', signature: filler('ownerSig', 160), members: 
 const nativeSig = (digest) => hex(ecdsa(nativeSk, digest));
 
 function extraOf(name, td, at) {
-  // group 3g: a per-kind row (`UAPqzRollOver`) by its struct (`UARollOver`): the rollover takes no `pqzAuth`
+  // group 3g: a per-kind row (`UAPqzRollOver`) by its struct (`UARollOver`): the rollover takes no `pqzAuth`. Group 3f (T46):
+  // the six PQZ entries take the verdict last, the empty one here (a PRECOMPILE token); the router's `UAPqz*Verifier` neither.
   const base = (TYPED_OPS[name]?.primary ?? name).replace(/^UA/, '');
-  if (base.startsWith('Pqz') && base !== 'PqzAuth') return { pqzAuth: PQZ_AUTH };
+  if (/^Pqz(Transfer|Unshield)/.test(base)) return { pqzAuth: PQZ_AUTH, pqzVerdict: EMPTY_PQZ_VERDICT };
   if (base === 'RollOverSigned' || base === 'SetRollOverMode') return { ownerSig: OWNER_SIG };
   if (base === 'ReceiverFee') {
     return { payerSig: nativeSig(hashTypedData(uaMetaTransferTypedData({ ...at, message: td.message.payment }))), meta: META };
@@ -210,7 +214,8 @@ const out = {
     + 'vectors/typed/legacy/ua-mtx-merge/), `bytes` on the address entries left (the five wraps, `SmartKeyAccount`), '
     + '`AccountSig{0, [], signature}` on the account\'s own entries. An unbound `relayer` / `feeRecipient` is 0 in the message, '
     + 'as the contract hashes it. Field values not set by the generator are fillers (keccak256 of the field path), not valid '
-    + 'proofs or ciphertexts. `extra`: what the entry takes unsigned (`meta`: the `PayMeta` a pay entry takes last, pay-meta-tax T41).',
+    + 'proofs or ciphertexts. `extra`: what the entry takes unsigned (`meta`: the `PayMeta` a pay entry takes last, pay-meta-tax T41; '
+    + '`pqzVerdict`: the `PqzSignedVerdict` a PQZ entry takes last, after the signature, the empty one of a PRECOMPILE token, group 3f).',
   version: 1, context: 'A', key: { private: hex(be(nativeSk, 32)), address: FROM, ua: hex(nativeUa) }, ops,
 };
 mkdirSync(OUT, { recursive: true });

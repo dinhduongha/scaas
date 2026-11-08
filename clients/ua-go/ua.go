@@ -436,8 +436,11 @@ func RegistrationDigest(ua [32]byte, kind uint16, pqzKeyHash, kemRecordHash, pqz
 	return typed(HashStruct("UARegistration", PortableRecordHash(ua, kind, pqzKeyHash, kemRecordHash), pqzPopHash))
 }
 
-// KemRecordMessage is what the UA signs for a KEM record: UAMessage(kind, PURPOSE_KEM, KemRecordDigest).
+// KemRecordMessage is what the UA signs for a KEM record: UAMessage(kind, PURPOSE_KEM, KemRecordDigest); a KEM holder only (UAKemHolder).
 func KemRecordMessage(kind uint16, ua [32]byte, version uint64, kemPk []byte) ([32]byte, error) {
+	if !IsKemHolder(kind) {
+		return [32]byte{}, fail("UAKemHolder", fmt.Sprintf("0x%04x may not hold a KEM key", kind))
+	}
 	d, err := KemRecordDigest(ua, version, kemPk)
 	if err != nil {
 		return d, err
@@ -445,7 +448,10 @@ func KemRecordMessage(kind uint16, ua [32]byte, version uint64, kemPk []byte) ([
 	return UAMessage(kind, kemPurpose, d)
 }
 
-// holds: a PQZ / KEM holder is a single-key PQ kind, or an msig whose key data is PQ-eligible (malformed key data is UAKeyData).
+// IsKemHolder: a KEM key holder (CTR-UA-32, T66a) is a single PQ kind only; an msig holds no KEM key (UAKemHolder, as the registry).
+func IsKemHolder(kind uint16) bool { return IsPqzHolder(kind) }
+
+// holds: a PQZ key holder is a single-key PQ kind, or an msig whose key data is PQ-eligible (malformed key data is UAKeyData).
 func holds(kind uint16, keyData []byte, inner Inner) (bool, error) {
 	if IsPqzHolder(kind) {
 		return true, nil
@@ -516,7 +522,7 @@ type HolderPop struct {
 // HolderPopMessage is the portable PoP message of a registration. Attributes: pqzKey with its proof pqzPop (or only its hash
 // pqzPopHash; a relayer may hold only that) and the initial KEM key kemPk (its record is always version 0, owner 2026-10-31);
 // nil / empty = absent. Only holders may carry them
-// (UAPqzHolder, UAKemHolder; an msig needs keyData to show it is PQ-eligible); a PQZ key always comes with its proof hash and
+// (UAPqzHolder: an msig needs keyData to show it is PQ-eligible; UAKemHolder: a single PQ kind only, never an msig); a PQZ key always comes with its proof hash and
 // only with it (UAPqzPopHash).
 func HolderPopMessage(kind uint16, ua [32]byte, keyData, pqzKey, pqzPop, pqzPopHash, kemPk []byte) (*HolderPop, error) {
 	return HolderPopMessageWith(kind, ua, keyData, pqzKey, pqzPop, pqzPopHash, kemPk, nil)
@@ -524,18 +530,17 @@ func HolderPopMessage(kind uint16, ua [32]byte, keyData, pqzKey, pqzPop, pqzPopH
 
 // HolderPopMessageWith is HolderPopMessage for an msig with msig members: inner gives their key data.
 func HolderPopMessageWith(kind uint16, ua [32]byte, keyData, pqzKey, pqzPop, pqzPopHash, kemPk []byte, inner Inner) (*HolderPop, error) {
-	hasKem := len(kemPk) != 0
-	if len(pqzKey) > 0 || hasKem {
+	if len(pqzKey) > 0 {
 		ok, err := holds(kind, keyData, inner)
 		if err != nil {
 			return nil, err
 		}
-		if !ok && len(pqzKey) > 0 {
+		if !ok {
 			return nil, fail("UAPqzHolder", fmt.Sprintf("0x%04x may not hold a PQZ key", kind))
 		}
-		if !ok {
-			return nil, fail("UAKemHolder", fmt.Sprintf("0x%04x may not hold a KEM key", kind))
-		}
+	}
+	if len(kemPk) != 0 && !IsKemHolder(kind) {
+		return nil, fail("UAKemHolder", fmt.Sprintf("0x%04x may not hold a KEM key", kind))
 	}
 	popHash, err := proofHashOf(pqzPop, pqzPopHash)
 	if err != nil {

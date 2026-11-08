@@ -124,27 +124,25 @@ fn ua8_register_attrs_rows() {
         pqz += !r.attrs.pqz_key.is_empty() as u32;
         kem += (r.attrs.kem != KemKey::none(&env)) as u32;
         ms += (r.kind == 0x0120) as u32;
+        assert!(r.kind != 0x0120 || r.attrs.kem == KemKey::none(&env), "{name}: an `msig` has no KEM key (CTR-UA-32)");
     }
-    assert_eq!((all, pqz, kem, ms), (16, 8, 8, 5));
+    assert_eq!((all, pqz, kem, ms), (16, 8, 4, 5));
 }
 
 /// EVM's hash commit (`kemCommit`, the same `pop`): the scheme and hash stay in the record, version 0 stays empty until
 /// `set_kem_key(ua, 0, …)` (`ua8_kem_commit_filled_once`), `registration_of` returns the committed form; the commit's own
-/// rules.
+/// rules. An `msig`'s commit is `KemHolder` (`ua8_msig_kem_key_refused`).
 #[test]
 fn ua8_register_kem_commit() {
-    for name in [format!("mldsa65/{SET}"), format!("msig-pq/{SET}")] {
-        let (env, c) = setup();
-        let r = commit_of(&env, &name);
-        members(&env, &c, r.kind);
-        let pk_hash = r.attrs.kem_pk_hash.clone();
-        assert_eq!(r.on(&c), r.ua, "{name}");
-        assert_eq!(c.registration_of(&r.ua).unwrap().2, r.attrs, "{name}");
-        assert_eq!(entry::<Entry>(&env, &c, &Key::Kem(r.ua.clone(), 0)), None, "{name}");
-        assert_eq!(c.checked_of(&r.ua).2, Checked::None, "{name}: not filled");
-        let rec = c.record_of(&r.ua).unwrap();
-        assert_eq!((rec.attrs.kem.scheme, rec.attrs.kem_pk_hash), (1, pk_hash), "{name}");
-    }
+    let (env, c) = setup();
+    let r = commit_of(&env, &format!("mldsa65/{SET}"));
+    let pk_hash = r.attrs.kem_pk_hash.clone();
+    assert_eq!(r.on(&c), r.ua);
+    assert_eq!(c.registration_of(&r.ua).unwrap().2, r.attrs);
+    assert_eq!(entry::<Entry>(&env, &c, &Key::Kem(r.ua.clone(), 0)), None);
+    assert_eq!(c.checked_of(&r.ua).2, Checked::None, "not filled");
+    let rec = c.record_of(&r.ua).unwrap();
+    assert_eq!((rec.attrs.kem.scheme, rec.attrs.kem_pk_hash), (1, pk_hash));
     let (env, c) = setup();
     let base = || commit_of(&env, &format!("mldsa65/{SET}"));
     let mut r = base();
@@ -171,7 +169,7 @@ fn ua8_pqz_bytes_in_state() {
     let pqz = (r.attrs.pqz_key.clone(), none.clone(), Checked::Chain, r.attrs.pqz_pop_hash.clone());
     assert_eq!(entry::<PqzEntry>(&env, &c, &Key::PqzK(r.ua.clone())), Some(pqz));
     assert_eq!(entry::<Bytes>(&env, &c, &Key::PqzP(r.ua.clone())), Some(r.pqz_pop.clone()));
-    assert_eq!(entry::<Entry>(&env, &c, &Key::Kem(r.ua.clone(), 0)), Some((kem_pk(&env, &r.attrs.kem), none, Checked::Chain)));
+    assert_eq!(entry::<Entry>(&env, &c, &Key::Kem(r.ua.clone(), 0)), None, "an `msig` has no KEM key (CTR-UA-32)");
     assert_eq!(r.attrs.pqz_key.len(), 16_384);
     assert_eq!(r.pqz_pop.len(), 28_191);
 }
@@ -398,6 +396,68 @@ fn ua8_classical_msig_with_kem() {
     assert_eq!(err(c.try_register_msig(&m.s, &attrs, &SVec::new(&env), &Bytes::new(&env), &None)), Error::PqzHolder);
 }
 
+/// CTR-UA-32 (owner 2026-11-05, confirmed 2026-11-07): an `msig` has no KEM key, PQ-eligible or not; a sender seals to each
+/// accepted member's own key. `msig-pq/<set>` and `msig-pq-native` with a KEM key, whole (`msig-with-kem/<set>`'s) or
+/// hash-committed, are `KemHolder` before the `pop` is read, a relayer given or not, and nothing is stored. Positive control: the
+/// same row without one registers and holds its PQZ key (`msig-pq-native`'s by `set_pqz_key`).
+#[test]
+fn ua8_msig_kem_key_refused() {
+    let neg = derived(PORTABLE, "negatives", &format!("msig-with-kem/{SET}"));
+    assert_eq!((neg["mutation"]["row"].as_str().unwrap(), neg["error"].as_str().unwrap()), (format!("msig-pq/{SET}").as_str(), "UAKemHolder"));
+    let pk = hx(&neg["mutation"]["set"]["attrs.kemPk"]);
+    for name in [format!("msig-pq/{SET}"), "msig-pq-native".into()] {
+        let (env, c, by) = relayed();
+        let mut whole = portable(&env, &name);
+        members(&env, &c, whole.kind);
+        whole.attrs.kem = kem_key(&env, &pk);
+        let mut commit = portable(&env, &name);
+        commit.attrs.kem = KemKey { scheme: 1, ..KemKey::none(&env) };
+        commit.attrs.kem_pk_hash = env.crypto().keccak256(&b(&env, &pk)).into();
+        for (what, r) in [("whole", &whole), ("committed", &commit)] {
+            for relayer in [&None, &by] {
+                assert_eq!(err(r.tried_by(&c, relayer)), Error::KemHolder, "{name}: {what}");
+            }
+            assert_eq!(c.record_of(&r.ua), None, "{name}: {what}");
+            assert_eq!(entry::<Entry>(&env, &c, &Key::Kem(r.ua.clone(), 0)), None, "{name}: {what}");
+        }
+        let r = portable(&env, &name);
+        assert_eq!(r.on(&c), r.ua, "{name}: the row itself");
+        if r.attrs.pqz_key.is_empty() {
+            pqz_id(&env, &format!("{name}/{SET}")).set(&c);
+        }
+        assert!(c.pqz_key_of(&r.ua).is_some(), "{name}: a PQZ holder");
+        assert_eq!((c.kem_key_of(&r.ua), c.checked_of(&r.ua).2), (None, Checked::None), "{name}");
+    }
+}
+
+/// CTR-UA-32 at `set_kem_key`: `msig-kem-record` (the `kemRecords` row `fndsa512/v1` moved to `msig-pq/<set>`'s id with its
+/// members' signature of that record) is `KemHolder`, after `NotRegistered` and before the version, the key and the slots, a
+/// relayer given or not; nothing is stored. Positive control: the same `msig` holds its PQZ key.
+#[test]
+fn ua8_msig_kem_record_refused() {
+    let neg = derived(PORTABLE, "negatives", "msig-kem-record");
+    let (m, set) = (&neg["mutation"], &neg["mutation"]["set"]);
+    assert_eq!((m["kind"].as_u64(), neg["entry"].as_str(), neg["error"].as_str()), (Some(0x0120), Some("setKemKey"), Some("UAKemHolder")));
+    let (env, c, r) = registered(&format!("msig-pq/{SET}"));
+    let by = Some(c.relayers().get(0).unwrap());
+    let mut k = kem_id(&env, m["row"].as_str().unwrap());
+    k.ua = n32(&env, &set["ua"]);
+    k.kem = kem_key(&env, &hx(&set["kemPk"]));
+    k.sig = UaSig::msig(&env, test::members_of(&env, &b(&env, &hx(&set["sig"]))));
+    assert_eq!((k.ua.clone(), k.version, k.sig.members.len()), (r.ua.clone(), 1, 2), "the row's `msig`, version 1, both slots");
+    assert_eq!(err(KemRow { ua: n(&env, [0x42; 32]), ..k.clone() }.tried(&c)), Error::NotRegistered);
+    for relayer in [&None, &by] {
+        assert_eq!(err(k.tried_by(&c, relayer)), Error::KemHolder);
+    }
+    let none = UaSig::none(&env);
+    assert_eq!(err(KemRow { version: 0, sig: none.clone(), ..k.clone() }.tried(&c)), Error::KemHolder, "before the version");
+    assert_eq!(err(KemRow { kem: KemKey::none(&env), ..k.clone() }.tried(&c)), Error::KemHolder, "before the key");
+    assert_eq!(err(KemRow { sig: none, ..k.clone() }.tried(&c)), Error::KemHolder, "before the slots");
+    assert_eq!((c.kem_key_of(&r.ua), c.kem_key_at(&r.ua, &1), c.kem_key_at(&r.ua, &0)), (None, None, None));
+    assert_eq!((c.checked_of(&r.ua).2, entry::<u64>(&env, &c, &Key::KemMax(r.ua.clone()))), (Checked::None, None));
+    assert_eq!(c.pqz_key_of(&r.ua), Some((r.attrs.pqz_key.clone(), r.attrs.pqz_pop_hash.clone(), false, Checked::Chain)));
+}
+
 /// `KemKey.scheme` is a `u32` on Soroban: 0x101 would be scheme 1 in the assembled first byte.
 #[test]
 fn ua8_kem_scheme_above_a_byte_refused() {
@@ -417,17 +477,18 @@ fn ua8_checked_of_shape() {
     assert_eq!(c.checked_of(&n(&env, [0x42; 32])), (Checked::None, Checked::None, Checked::None));
 }
 
-/// U8S-D4: the largest row's events fit the 16,384 B limit; `UaRegistered`'s `attrs` hold no bytes; the hashes are logged.
+/// U8S-D4: the largest row's events fit the 16,384 B limit; `UaRegistered`'s `attrs` hold no bytes; the hashes are logged. The row
+/// is `mldsa65/n2816-kmax65536`, PQZ and KEM key at once (an `msig` has no KEM key since CTR-UA-32, and its events carry 76 B of key
+/// data against 1,952 B).
 #[test]
 fn ua8_events_fit_and_hash() {
     let (env, c) = setup();
-    let r = portable(&env, "msig-pq/n2816-kmax65536");
-    members(&env, &c, r.kind);
+    let r = portable(&env, "mldsa65/n2816-kmax65536");
     r.on(&c);
     let all = env.events().all();
     let evs = all.events();
     let size: usize = evs.iter().map(|e| e.to_xdr(Limits::none()).unwrap().len()).sum();
-    std::println!("register msig-pq/n2816-kmax65536: {} events, {size} B", evs.len());
+    std::println!("register mldsa65/n2816-kmax65536: {} events, {size} B", evs.len());
     assert!(size < 16_384, "{size}");
     let sig_hash: BytesN<32> = env.crypto().keccak256(&Bytes::new(&env)).into();
     let stored = UaAttrs { pqz_key: Bytes::new(&env), kem: KemKey::none(&env), ..r.attrs.clone() };
@@ -730,30 +791,28 @@ fn ua8_kem_any_order_write_once() {
     assert_eq!(err(c.try_set_kem_key(&plain.ua, &0, &whole, &none, &None)), Error::KemVersion, "nothing committed");
 }
 
-/// Every `kemRecords[]` row of a `Chain` holder from its typed arguments: an `msig`'s stored `sig` is the row's
-/// `abi.encode(MemberSig[])`, a single key's the signature; the `register` arguments do not move. `fndsa512` rows:
-/// `ua8_relayer_fndsa512_kem_and_pqz`.
+/// Every `kemRecords[]` row of a `Chain` holder from its typed arguments, the stored `sig` the row's signature; the `register`
+/// arguments do not move. `fndsa512` rows: `ua8_relayer_fndsa512_kem_and_pqz`. No row is an `msig`'s (CTR-UA-32:
+/// `ua8_msig_kem_record_refused`).
 #[test]
 fn ua8_kem_from_vectors() {
     let rows = json(PORTABLE)["kemRecords"].as_array().unwrap().clone();
     let mut seen = 0;
-    for name in [format!("mldsa65/{SET}"), format!("msig-pq/{SET}")] {
-        let (env, c, r) = registered(&name);
-        let before = c.registration_of(&r.ua);
-        for row in rows.iter().filter(|x| n32(&env, &x["ua"]) == r.ua) {
-            let k = kem_row(&env, row);
-            k.set(&c);
-            assert_eq!(c.kem_key_at(&r.ua, &k.version), Some(k.view()), "{}", row["id"]);
-            assert_eq!(c.kem_key_of(&r.ua).unwrap().0, k.version, "{}", row["id"]);
-            seen += 1;
-        }
-        assert_eq!(c.registration_of(&r.ua), before, "{name}");
+    let (env, c, r) = registered(&format!("mldsa65/{SET}"));
+    let before = c.registration_of(&r.ua);
+    for row in rows.iter().filter(|x| n32(&env, &x["ua"]) == r.ua) {
+        let k = kem_row(&env, row);
+        k.set(&c);
+        assert_eq!(c.kem_key_at(&r.ua, &k.version), Some(k.view()), "{}", row["id"]);
+        assert_eq!(c.kem_key_of(&r.ua).unwrap().0, k.version, "{}", row["id"]);
+        seen += 1;
     }
-    assert_eq!(seen, 6);
+    assert_eq!(c.registration_of(&r.ua), before);
+    assert_eq!(seen, 3);
     // the rest: fndsa512's (relayer-checked) and mldsa87's / fndsa1024's, whose UAs never register here (`KindDisabled`:
     // register_disabled_kind_refused, on their portable.json rows)
     let other = |k: u32| rows.iter().filter(|x| kind_of(&x["kind"]) == k).count();
-    assert_eq!((other(0x0134), other(0x0135)), (3, 3));
+    assert_eq!((other(0x0134), other(0x0135), other(0x0120)), (3, 3, 0));
     assert_eq!(other(0x0132) + other(0x0134) + other(0x0135) + seen, rows.len());
 }
 
@@ -761,25 +820,23 @@ fn ua8_kem_from_vectors() {
 /// must hash to the commit (`KemKeyHash`), and `registration_of` keeps the committed form, as EVM.
 #[test]
 fn ua8_kem_commit_filled_once() {
-    for name in [format!("mldsa65/{SET}"), format!("msig-pq/{SET}")] {
-        let (env, c) = setup();
-        let whole = portable(&env, &name).attrs.kem;
-        let r = commit_of(&env, &name);
-        members(&env, &c, r.kind);
-        r.on(&c);
-        let (none, no_sig) = (UaSig::none(&env), Bytes::new(&env));
-        let fill = |k: &KemKey, s: &UaSig| c.try_set_kem_key(&r.ua, &0, k, s, &None);
-        assert_eq!(err(fill(&kem_id(&env, "mldsa65/v1").kem, &none)), Error::KemKeyHash, "{name}");
-        assert_eq!(err(fill(&KemKey { scheme: 2, ..whole.clone() }, &none)), Error::KemScheme, "{name}");
-        assert_eq!(err(fill(&whole, &UaSig::single(&env, b(&env, &[1])))), Error::Unauthorized, "{name}");
-        assert_eq!(c.kem_key_of(&r.ua), None, "{name}");
-        fill(&whole, &none).unwrap().unwrap();
-        assert_eq!(c.kem_key_of(&r.ua), Some((0, whole.clone(), no_sig.clone(), Checked::Chain)), "{name}");
-        assert_eq!(c.kem_key_at(&r.ua, &0), Some((whole.clone(), no_sig, Checked::Chain)), "{name}");
-        assert_eq!(c.checked_of(&r.ua).2, Checked::Chain, "{name}");
-        assert_eq!(c.registration_of(&r.ua).unwrap().2, r.attrs, "{name}: the committed form, filled or not");
-        assert_eq!(err(fill(&whole, &none)), Error::KemVersion, "{name}");
-    }
+    let name = format!("mldsa65/{SET}");
+    let (env, c) = setup();
+    let whole = portable(&env, &name).attrs.kem;
+    let r = commit_of(&env, &name);
+    r.on(&c);
+    let (none, no_sig) = (UaSig::none(&env), Bytes::new(&env));
+    let fill = |k: &KemKey, s: &UaSig| c.try_set_kem_key(&r.ua, &0, k, s, &None);
+    assert_eq!(err(fill(&kem_id(&env, "mldsa65/v1").kem, &none)), Error::KemKeyHash);
+    assert_eq!(err(fill(&KemKey { scheme: 2, ..whole.clone() }, &none)), Error::KemScheme);
+    assert_eq!(err(fill(&whole, &UaSig::single(&env, b(&env, &[1])))), Error::Unauthorized);
+    assert_eq!(c.kem_key_of(&r.ua), None);
+    fill(&whole, &none).unwrap().unwrap();
+    assert_eq!(c.kem_key_of(&r.ua), Some((0, whole.clone(), no_sig.clone(), Checked::Chain)));
+    assert_eq!(c.kem_key_at(&r.ua, &0), Some((whole.clone(), no_sig, Checked::Chain)));
+    assert_eq!(c.checked_of(&r.ua).2, Checked::Chain);
+    assert_eq!(c.registration_of(&r.ua).unwrap().2, r.attrs, "the committed form, filled or not");
+    assert_eq!(err(fill(&whole, &none)), Error::KemVersion);
 }
 
 /// U8S-D5, D7 in EVM's check order: holder → version → key → signature; `portable.json`'s `setKemKey` negatives.
@@ -807,7 +864,8 @@ fn ua8_kem_rules() {
     assert_eq!(err(c.try_set_kem_key(&unknown, &1, &k.kem, &k.sig, &None)), Error::NotRegistered);
     k.set(&c);
     assert_eq!(refused(&KemKey::none(&env)), Error::KemVersion, "version before key");
-    for neg in negatives("setKemKey") {
+    // `msig-kem-record` (`mutation.kind` 288) names an `msig`: `ua8_msig_kem_record_refused`
+    for neg in negatives("setKemKey").into_iter().filter(|x| x["mutation"].get("kind").is_none()) {
         let (name, set) = (neg["name"].as_str().unwrap(), &neg["mutation"]["set"]);
         let mut k = kem_id(&env, neg["mutation"]["row"].as_str().unwrap());
         if let Some(sig) = set.get("sig") {
@@ -843,24 +901,28 @@ fn ua8_kem_by_third_party() {
 }
 
 /// U8S-D1: a stored `msig` signature is minimal; both slots verify and reach the threshold, but the weight-2 slot alone is
-/// enough: `Unauthorized`, on both writes. The weight-1 slot alone is short; the weight-2 slot alone is stored.
+/// enough: `Unauthorized`. The weight-1 slot alone is short; the weight-2 slot alone is stored. `set_kem_key` refuses this holder of a PQZ key whatever its slots:
+/// `KemHolder`, an `msig` has no KEM key (CTR-UA-32).
 #[test]
-fn msig_kem_sig_not_minimal_refused() {
+fn msig_pqz_sig_not_minimal_refused() {
     let (env, c) = setup();
     let (m, one, two) = msig_1_2(&env, &c);
     let kem = kem_id(&env, "mldsa65/v1").kem;
     let d = kem_record_digest(&env, &m.ua, 1, &kem_pk(&env, &kem)).to_bytes();
     let (s1, s2) = (m.slot(&env, &one, PURPOSE_KEM, &d), m.slot(&env, &two, PURPOSE_KEM, &d));
     let tried = |s: &[Slot]| c.try_set_kem_key(&m.ua, &1, &kem, &test::msig_auth(&env, s), &None);
-    assert_eq!(err(tried(&[s1.clone(), s2.clone()])), Error::Unauthorized);
-    assert_eq!(err(tried(&[s1])), Error::Unauthorized);
-    tried(&[s2]).unwrap().unwrap();
+    let every: [&[Slot]; 3] = [&[s1.clone(), s2.clone()], &[s1], &[s2]];
+    for s in every {
+        assert_eq!(err(tried(s)), Error::KemHolder);
+    }
+    assert_eq!(c.kem_key_of(&m.ua), None);
 
     let (key, ph) = (b(&env, &[7; 16_384]), n(&env, [9; 32]));
     let d = pqz_key_record_digest(&env, &m.ua, &pqz_key_hash(&env, &key), &ph).to_bytes();
     let (s1, s2) = (m.slot(&env, &one, PURPOSE_PQZ_KEY, &d), m.slot(&env, &two, PURPOSE_PQZ_KEY, &d));
     let tried = |s: &[Slot]| c.try_set_pqz_key(&m.ua, &key, &ph, &test::msig_auth(&env, s), &None);
     assert_eq!(err(tried(&[s1.clone(), s2.clone()])), Error::Unauthorized);
+    assert_eq!(err(tried(&[s1])), Error::Unauthorized);
     tried(&[s2]).unwrap().unwrap();
 }
 
@@ -877,11 +939,7 @@ fn ua8_portable_sig_fields() {
     for sig in [UaSig { key_data: b(&env, &[1]), ..k.sig.clone() }, UaSig { members: slot(), ..k.sig.clone() }, UaSig::none(&env)] {
         assert_eq!(err(KemRow { sig, ..k.clone() }.tried(&c)), Error::Unauthorized);
     }
-    let (env, c, _) = registered(&format!("msig-pq/{SET}"));
-    let k = kem_id(&env, "msig-pq/v1");
-    for sig in [UaSig { key_data: b(&env, &[1]), ..k.sig.clone() }, UaSig { signature: b(&env, &[1]), ..k.sig.clone() }, UaSig::none(&env)] {
-        assert_eq!(err(KemRow { sig, ..k.clone() }.tried(&c)), Error::Unauthorized);
-    }
+    // an `msig`: `set_pqz_key` (its `set_kem_key` is `KemHolder` before the fields, CTR-UA-32)
     let (env, c, _) = registered("msig-pq-native");
     let p = pqz_id(&env, &format!("msig-pq-native/{SET}"));
     for sig in [UaSig { key_data: b(&env, &[1]), ..p.sig.clone() }, UaSig { signature: b(&env, &[1]), ..p.sig.clone() }, UaSig::none(&env)] {
@@ -1097,11 +1155,12 @@ fn ua8_store_pqz_pop_negatives() {
     assert_eq!(err(c.try_store_pqz_pop(&n(&env, [0x42; 32]), &proof)), Error::NotRegistered);
 }
 
-/// U8S-D4: the three writes log hashes, the bytes are read from the views; an `msig` signature fits the events limit.
+/// U8S-D4: the three writes log hashes, the bytes are read from the views; an `msig` signature (`set_pqz_key`'s) fits the events
+/// limit.
 #[test]
 fn ua8_set_events_hash_only() {
-    let (env, c, r) = registered(&format!("msig-pq/{SET}"));
-    let k = kem_id(&env, "msig-pq/v1");
+    let (env, c, r) = registered(&format!("mldsa65/{SET}"));
+    let k = kem_id(&env, "mldsa65/v1");
     k.set(&c);
     let kem = UaKemKeySet {
         ua: r.ua.clone(),
@@ -1396,8 +1455,8 @@ fn ua8_relayer_mode_still_verifies_chain_parts() {
     assert_eq!(c.pqz_key_of(&r.ua).unwrap().3, Checked::Chain);
 }
 
-/// An `msig` with a `fndsa512` slot is `Relayer`, on all three writes, and its chain slot is still verified; all `mldsa65` is
-/// `Chain` and asks no relayer.
+/// An `msig` with a `fndsa512` slot is `Relayer`, on `register` and `set_pqz_key`, and its chain slot is still verified; all
+/// `mldsa65` is `Chain` and asks no relayer. `set_kem_key` is `KemHolder`, with a relayer or without (CTR-UA-32).
 #[test]
 fn ua8_relayer_msig_mixed_members() {
     let (env, c, by) = relayed();
@@ -1426,9 +1485,10 @@ fn ua8_relayer_msig_mixed_members() {
     let kem = kem_id(&env, "mldsa65/v1").kem;
     let d = kem_record_digest(&env, &m.ua, 1, &kem_pk(&env, &kem)).to_bytes();
     let s = test::msig_auth(&env, &sorted(vec![m.slot(&env, &q, PURPOSE_KEM, &d), attested(&m, &f.ua, 666)]));
-    assert_eq!(err(c.try_set_kem_key(&m.ua, &1, &kem, &s, &None)), Error::NotVerifiable);
-    c.set_kem_key(&m.ua, &1, &kem, &s, &by);
-    assert_eq!(c.kem_key_of(&m.ua).unwrap().3, m_by);
+    for r in [&None, &by] {
+        assert_eq!(err(c.try_set_kem_key(&m.ua, &1, &kem, &s, r)), Error::KemHolder);
+    }
+    assert_eq!(c.kem_key_of(&m.ua), None);
     let (key, ph) = (b(&env, &[7; 16_384]), n(&env, [9; 32]));
     let d = pqz_key_record_digest(&env, &m.ua, &pqz_key_hash(&env, &key), &ph).to_bytes();
     let s = test::msig_auth(&env, &sorted(vec![m.slot(&env, &q, PURPOSE_PQZ_KEY, &d), attested(&m, &f.ua, 666)]));
@@ -2068,7 +2128,7 @@ fn round_trip(env: &Env, c: &UaRegistryClient, row: &Value, order: &[u64], relay
 }
 
 /// C15: the `Chain` rows with their KEM records, a `fndsa512` through the relayer mode with KEM records 3 then 1, `msig-pq`
-/// with its minimal `pop` among the `Chain` rows. `checked` and the KEM order are pinned in `ua8-roundtrip.json`
+/// with its minimal `pop` and no KEM record among the `Chain` rows. `checked` and the KEM order are pinned in `ua8-roundtrip.json`
 /// (`UA8_WRITE=1` writes it, every other run compares), which `e2e_ua8` also takes its order from.
 #[test]
 fn ua8_record_bytes_round_trip() {
@@ -2083,7 +2143,8 @@ fn ua8_record_bytes_round_trip() {
     portable_row(&env, &row).on_by(&c, &by);
     rows.push(round_trip(&env, &c, &row, &[3, 1], &by));
     assert_eq!(rows.len(), 17);
-    assert_eq!(rows.iter().filter(|r| !r["kemOrder"].as_array().unwrap().is_empty()).count(), 9);
+    // `mldsa65/<set>` and `fndsa512`: an `msig` has no KEM record (CTR-UA-32)
+    assert_eq!(rows.iter().filter(|r| !r["kemOrder"].as_array().unwrap().is_empty()).count(), 5);
 
     let got = serde_json::json!({
         "note": "Generated by ua8_record_bytes_round_trip (UA8_WRITE=1), never edit by hand: what the registry answered for each row of portable.json. checked: 0 none, 1 chain, 2 relayer.",
@@ -2181,6 +2242,11 @@ fn set_row(env: &Env) -> Reg {
     portable(env, &format!("mldsa65/{SET}"))
 }
 
+/// `set_row`'s attributes without its KEM key: an `msig` has none (CTR-UA-32).
+fn msig_attrs(env: &Env) -> UaAttrs {
+    UaAttrs { kem: KemKey::none(env), ..set_row(env).attrs }
+}
+
 fn fndsa_write(env: &Env, _: &UaRegistryClient, by: &Option<Address>) -> Write {
     let (r, s) = (portable(env, "fndsa512"), set_row(env));
     Write::Register { kind: r.kind, key_data: r.kd, attrs: s.attrs, pop: r.pop, pqz_pop: s.pqz_pop, by: by.clone() }
@@ -2247,8 +2313,7 @@ fn msig_write_with_proof(env: &Env, c: &UaRegistryClient, by: &Option<Address>) 
     let Write::Msig { pop, .. } = msig_write(env, c, by) else { unreachable!() };
     let third = (0x0132u16, digest::ua_of(env, 0x0132, &b(env, &[0x72; 897])).to_array(), 2u16);
     let first: StdVec<_> = (0..2u8).map(|i| (0x0132u16, digest::ua_of(env, 0x0132, &b(env, &[0x70 + i; 897])).to_array(), 2u16)).collect();
-    let s = set_row(env);
-    Write::Msig { structure: msig(env, 4, &[first[0], first[1], third]).s, attrs: s.attrs, pop, pqz_pop: s.pqz_pop, by: by.clone() }
+    Write::Msig { structure: msig(env, 4, &[first[0], first[1], third]).s, attrs: msig_attrs(env), pop, pqz_pop: set_row(env).pqz_pop, by: by.clone() }
 }
 
 /// Every argument class of `register_msig`, a structure's fields and a slot's among them.
@@ -2275,7 +2340,7 @@ fn ua8_attest_binds_register_msig() {
             ids.sort_by_key(|x| x.1);
             *s = msig(e, 4, &ids).s;
         }),
-        ("attrs", |e, w, _| *attrs_of(w) = set_row(e).attrs),
+        ("attrs", |e, w, _| *attrs_of(w) = msig_attrs(e)),
         ("pop.sig", |e, w, _| if let Write::Msig { pop, .. } = w {
             let mut s = pop.get(0).unwrap();
             s.sig = flipped(e, &s.sig);

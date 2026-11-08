@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {noVerdict} from "../../pqz/helpers/PqzVerdicts.sol";
 import {PqzRegFixture} from "./PqzRegFixture.sol";
 import {IPqzToken} from "../../../src/pqz/IPqzToken.sol";
 import {IMetaTx} from "../../../src/metatx/IMetaTx.sol";
@@ -28,7 +29,7 @@ abstract contract PqzKeyVersionsKinds is PqzRegFixture {
         reg.storePqzPop(alice, 1, proof);
         IPqzToken.PqzTransferArgs memory t = _ts(_payload(1, 0, alice, bob, bytes32(0), _out(5, false), ""));
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.StaleKeyVersion.selector, alice, uint64(0), uint64(1)));
-        tok.mtxConfidentialTransferSingle(t, PROOF, _pqAuth(), "");
+        tok.mtxConfidentialTransferSingle(t, PROOF, _pqAuth(), "", noVerdict());
     }
 }
 

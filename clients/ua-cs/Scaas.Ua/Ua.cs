@@ -268,9 +268,13 @@ public static partial class UA
     public static byte[] RegistrationDigest(byte[] ua, ushort kind, byte[] pqzKeyHash, byte[] kemRecordHash, byte[] pqzPopHash) =>
         Typed(HashStruct("UARegistration", PortableRecordHash(ua, kind, pqzKeyHash, kemRecordHash), pqzPopHash));
 
-    /// <summary><c>UAMessage(kind, PURPOSE_KEM, KemRecordDigest(ua, version, kemPk))</c>: what the UA signs for <c>setKemKey</c>.</summary>
+    /// <summary><c>UAMessage(kind, PURPOSE_KEM, KemRecordDigest(ua, version, kemPk))</c>: what the UA signs for <c>setKemKey</c>; a KEM holder only (UAKemHolder).</summary>
     public static byte[] KemRecordMessage(ushort kind, byte[] ua, ulong version, byte[] kemPk) =>
-        UAMessage(kind, PurposeTag("kem"), KemRecordDigest(ua, version, kemPk));
+        IsKemHolder(kind) ? UAMessage(kind, PurposeTag("kem"), KemRecordDigest(ua, version, kemPk))
+            : throw new UAException("UAKemHolder", $"0x{kind:x4} may not hold a KEM key");
+
+    /// <summary>A KEM key holder (CTR-UA-32, T66a): a single PQ kind only; an <c>msig</c> holds no KEM key (UAKemHolder, as the registry).</summary>
+    public static bool IsKemHolder(ushort kind) => IsPqzHolder(kind);
 
     static bool Holds(ushort kind, byte[] keyData, Func<byte[], byte[]?>? inner) => IsPqzHolder(kind) || (kind == 0x0120 && keyData.Length > 0 && MsigPqzEligible(keyData, inner));
 
@@ -300,19 +304,15 @@ public static partial class UA
     /// <summary>The portable PoP message of a registration (UA-8 P1, P2). Attributes: <paramref name="pqzKey"/> with its proof
     /// <paramref name="pqzPop"/> (or only its hash; a relayer may hold only that) and the initial KEM key <paramref name="kemPk"/>
     /// (its record is always version 0, owner 2026-10-31); null / empty = absent.
-    /// Only holders may carry them (UAPqzHolder, UAKemHolder; an <c>msig</c> needs <paramref name="keyData"/> to show it is PQ-eligible);
+    /// Only holders may carry them (UAPqzHolder: an <c>msig</c> needs <paramref name="keyData"/> to show it is PQ-eligible; UAKemHolder: a single PQ kind only, never an <c>msig</c>);
     /// a PQZ key always comes with its proof hash and only with it (UAPqzPopHash).</summary>
     public static HolderPop HolderPopMessage(ushort kind, byte[] ua, byte[] keyData, byte[]? pqzKey = null, byte[]? pqzPop = null,
         byte[]? pqzPopHash = null, byte[]? kemPk = null, Func<byte[], byte[]?>? inner = null)
     {
         if (pqzKey is { Length: 0 }) pqzKey = null;
         var kem = kemPk is { Length: > 0 } ? kemPk : null; // null / [] = absent
-        if (pqzKey is not null || kem is not null)
-        {
-            var holder = Holds(kind, keyData, inner);
-            if (pqzKey is not null && !holder) throw new UAException("UAPqzHolder", $"0x{kind:x4} may not hold a PQZ key");
-            if (kem is not null && !holder) throw new UAException("UAKemHolder", $"0x{kind:x4} may not hold a KEM key");
-        }
+        if (pqzKey is not null && !Holds(kind, keyData, inner)) throw new UAException("UAPqzHolder", $"0x{kind:x4} may not hold a PQZ key");
+        if (kem is not null && !IsKemHolder(kind)) throw new UAException("UAKemHolder", $"0x{kind:x4} may not hold a KEM key");
         var popHash = ProofHashOf(pqzPop, pqzPopHash);
         if ((pqzKey is not null) != popHash.Any(b => b != 0)) throw new UAException("UAPqzPopHash", "key and proof hash go together");
         var keyHash = pqzKey is null ? new byte[32] : PqzKeyHashOf(pqzKey);

@@ -19,6 +19,7 @@ pub mod mesh;
 pub mod metatx;
 pub mod nonce;
 pub mod odoo;
+pub mod pqz;
 pub mod signer;
 pub mod store;
 pub mod submit;

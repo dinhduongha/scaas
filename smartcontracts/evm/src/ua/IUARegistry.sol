@@ -236,8 +236,8 @@ interface IUARegistry is IERC5267 {
     /// A derived kind by its key data (every derived kind but `msig`, `registerMsig` only, `UAKeyData(kind)` here;
     /// `webauthn-p256`, MuSig2 and FROST also through `registerWebAuthn` / `registerMuSig2` / `registerFrost`). `pop`: the
     /// kind's signature over `uaMessage(kind, PURPOSE_POP_V2, registrationDigest(ua, kind, pqzKeyHash, kemRecordHash,
-    /// attrs.pqzPopHash))`. `attrs`: only a holder
-    /// (`mldsa44`, `mldsa65`, `fndsa512`, `mldsa87`, `fndsa1024`, a PQ-eligible `msig`; UA-6 U3, UA8-D12) carries a PQZ key or a KEM record.
+    /// attrs.pqzPopHash))`. `attrs`: only a holder carries a PQZ key (`mldsa44`, `mldsa65`, `fndsa512`, `mldsa87`, `fndsa1024`, a
+    /// PQ-eligible `msig`; UA-6 U3, UA8-D12) or a KEM record (the same single kinds, never an `msig`: CTR-UA-32, plan T66a).
     /// `pqzPop`: the `R_REG` proof over `uaMessage(0x0142, PURPOSE_POP_V2, portableRecordDigest(...))`, optional (empty: the
     /// key is stored unproven, `storePqzPop` later; also unproven where the `0x0142` slot is empty, UA8-D8). The attribute
     /// checks (holder, proof hash, PQZ key length, KEM key length) come before the PoP (portable.json `negatives`). Anyone
@@ -312,7 +312,7 @@ interface IUARegistry is IERC5267 {
     /// one key) and no revocation (P7). Stored `kemPk ‖ sig` (SSTORE2 chunks; `sig` = `signature`, or `abi.encode(members)`),
     /// `kemKeyOf` follows the highest version, `UAKemKeySet`. Check order: an id this registry does not hold
     /// (`UAUnauthorized`: an unregistered id, and on gen 2 a gen-1 record, which goes to gen 1, UA8-D11) → holder
-    /// (`UAKemHolder`: `mldsa44`, `mldsa65`, `fndsa512`, `mldsa87`, `fndsa1024`, a PQ-eligible `msig`; UA8-D12) → a stored version, or version 0
+    /// (`UAKemHolder`: `mldsa44`, `mldsa65`, `fndsa512`, `mldsa87`, `fndsa1024`; never an `msig`, CTR-UA-32) → a stored version, or version 0
     /// not committed (`UAKemVersion`) → the key: scheme 1 (`UAKemScheme`), 1,601 B assembled (`UAKemKeyLength`) →
     /// signature (`UAUnauthorized`; version 0: a non-empty `sig`) / version 0 the committed hash (`UAKemKeyHash`).
     function setKemKey(bytes32 ua, uint64 version, KemKey calldata kem, UASig calldata sig) external;
@@ -347,6 +347,12 @@ interface IUARegistry is IERC5267 {
     /// accepted later from `acceptMembership`. The bytes are in that slot's `UAMemberSig`; a copy checks them against this hash. Zero for a slot
     /// not accepted and any other id. Gen 2 forwards gen-1 records.
     function memberSigHashOf(bytes32 ua, uint256 index) external view returns (bytes32);
+    /// CTR-UA-33 Change 2026-11-08 (owner; plan T66a): the slots that signed the `msig` `ua`'s `pop`, in index order, each with its
+    /// `memberSigHashOf` hash: one word per `msig` written at registration, never by `acceptMembership`, so state alone tells which slots
+    /// signed the `pop` and which accepted later (`memberAccepted`); a copy (CTR-UA-31) rebuilds the `pop` from these slots' `UAMemberSig`
+    /// bytes (or the node keeper, NODE-IDX-08). `popOf` stays `keccak256(pop)`. Empty for an empty `pop` and any other id. Gen 2 forwards
+    /// gen-1 records.
+    function popSlotsOf(bytes32 ua) external view returns (uint16[] memory index, bytes32[] memory hash);
     /// The EIP-1167 codehash of this registry's `SmartKeyAccount` clones, 0 for none: gen 2 gives a clone the 400 k cap in a gen-1 structure by it.
     function smartKeyCloneHash() external view returns (bytes32);
     /// The typed key of a `webauthn-p256` / MuSig2 / FROST UA (TS-D13); empty for any other id (gen 2 forwards gen-1
@@ -409,6 +415,16 @@ interface IUARegistry is IERC5267 {
     function cacheExpandedKey(uint16 kind, bytes calldata pk, uint256 part) external returns (bytes32 ua);
     /// The stored part pointers (0 = not yet), this generation only.
     function expandedKeyOf(bytes32 ua) external view returns (address[2] memory);
+
+    /// UA-7 O1 (owner 2026-11-04; plan T66a): the portable check, chain-free. Reverts `UAUnauthorized(ua)` unless `auth` is the UA's
+    /// portable signature over `uaMessage(kind, purposeTag, typedDigest)`, `typedDigest` a portable record's typed digest: a single key
+    /// `signature` only, by the kind's verifier as `setKemKey` checks it; an `msig` `members` only, over two levels, minimal
+    /// (T - min(weight) < N at each level), accepted slots only (CTR-UA-37), derived members over `memberDigest` under `member`,
+    /// native members over `typedDigest` itself (TS-D4: an EOA by ECDSA with its own key, a contract by ERC-1271), never `UAAuth`.
+    /// `purposeTag`: a portable purpose (`PURPOSE_KEM`, `PURPOSE_PQZ_KEY`, `PURPOSE_PQCHAT`); `PURPOSE_POP_V2` (the registration's own
+    /// check) and every chain-bound purpose are `UAUnauthorized`, so are a native id (it signs chain-bound only) and an unregistered
+    /// one. Gen 2 forwards a gen-1 record (UA8-D11). `UAVerifyGas` when too little gas is left for a verifier's cap.
+    function requirePortable(bytes32 ua, bytes32 purposeTag, bytes32 typedDigest, UASig calldata auth) external view;
 
     /// Reverts UAUnauthorized unless `auth` authorizes `digest` for `ua` under `purposeTag` (typed-signing TS-D12).
     /// Native ids (ua >> 160 == 0): `auth.signature` only, ECDSA low-s (EOA) or ERC-1271 (50 k cap; 400 k for

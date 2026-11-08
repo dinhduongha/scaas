@@ -493,7 +493,7 @@ contract UAKindsTest is Test {
         vm.pauseGasMetering(); // a 2.5 MB JSON string per cheatcode call; correctness test, not a gas test
         string memory j = _p();
         uint256 n = _count(j, "kemRecords");
-        assertEq(n, 15);
+        assertEq(n, 12); // T66a (CTR-UA-32): msig-pq v1-v3 left, an msig holds no KEM key
         for (uint256 i; i < n; ++i) {
             string memory r = _row("kemRecords", i);
             string memory id = vm.parseJsonString(j, string.concat(r, ".id"));

@@ -568,8 +568,9 @@ contract UARegistryNestedTest is UARegistryBase {
         pk[0] = 0x01;
     }
 
-    /// `setKemKey` on a nested `msig`: portable, minimal, stored with the inner list.
-    function test_setKemKeyNested() public {
+    /// A portable record of a nested `msig` (`requirePortable`), minimal over two levels; its KEM record is `UAKemHolder` (T66a,
+    /// CTR-UA-32). meaning: was `setKemKey` landing the record with the inner list stored.
+    function test_portableRecordNested() public {
         Pq memory p = _pqOuter();
         p.r.acceptMembership(p.iu, _acceptEoaSig(p.di, PK_A));
         IUARegistry.MemberSig[] memory s = _pqSigs(p, UAKinds.PURPOSE_POP_V2, p.rd,
@@ -581,10 +582,9 @@ contract UARegistryNestedTest is UARegistryBase {
         IUARegistry.UASig memory a;
         a.members = _pqSigs(p, UAKinds.PURPOSE_KEM, rd,
             _mixedLeaves(p.di, p.id, p.k, _pqMdi(p, UAKinds.PURPOSE_KEM, rd), _ecdsa(PK_A, rd)));
+        p.r.requirePortable(p.ua, UAKinds.PURPOSE_KEM, rd, a);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKemHolder.selector, p.ua));
         p.r.setKemKey(p.ua, 1, UACall.kem(pk), a);
-        (, bytes memory stored) = p.r.kemKeyAt(p.ua, 1);
-        bytes memory want = abi.encode(a.members);
-        assertEq(stored, want);
     }
 
     // ----- the encoding -----

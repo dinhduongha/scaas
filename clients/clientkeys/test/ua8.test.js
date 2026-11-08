@@ -228,7 +228,8 @@ test('registration digest covers the proof hash', () => {
 
 test('kem record digest matches the hand-built words', () => {
   // mldsa87 (CTR-UA-39 Q2), fndsa1024 (CTR-UA-40 Q2): holders, fndsa512's rows each
-  assert.deepEqual([...new Set(P.kemRecords.map((k) => k.name))], ['mldsa65', 'fndsa512', 'msig-pq', 'mldsa87', 'fndsa1024']);
+  // CTR-UA-32 (T66a): the single PQ kinds only, an msig holds no KEM key (its refusal: negatives msig-with-kem/<set>, msig-kem-record)
+  assert.deepEqual([...new Set(P.kemRecords.map((k) => k.name))], ['mldsa65', 'fndsa512', 'mldsa87', 'fndsa1024']);
   for (const k of P.kemRecords) {
     const sh = kemHand(k.ua, k.version, B(k.kemPk)[0], hex(keccak_256(B(k.kemPk))));
     assert.equal(hex(sh), k.structHash, `${k.name} v${k.version}`);
@@ -241,7 +242,7 @@ test('kem record digest matches the hand-built words', () => {
     assert.equal(B(k.kemPk).length, 1601);
     assert.equal(B(k.kemPk)[0], ua.KEM_SCHEME.mlkem1024X25519, 'scheme byte');
   }
-  for (const name of ['mldsa65', 'fndsa512', 'msig-pq', 'mldsa87', 'fndsa1024']) {
+  for (const name of ['mldsa65', 'fndsa512', 'mldsa87', 'fndsa1024']) {
     const ks = P.kemRecords.filter((k) => k.name === name);
     assert.deepEqual(ks.map((k) => k.version), [1, 2, 3], name);
     assert.equal(new Set(ks.map((k) => k.kemPk)).size, 3, `${name}: a key per version`);
@@ -282,6 +283,13 @@ test('holder refusals', () => {
   assert.throws(() => ua.holderPopMessage(0x0133, withPqz(row('slhdsa128s'))), code('UAPqzHolder'));
   assert.throws(() => ua.holderPopMessage(0x0133, withKem(row('slhdsa128s'))), code('UAKemHolder'));
   assert.throws(() => ua.holderPopMessage(0x0120, withKem(row('msig-classical'))), code('UAKemHolder'));
+  // CTR-UA-32 (T66a): a PQ-eligible msig holds a PQZ key but no KEM key, in every builder
+  const mq = row('msig-pq/n2048-kmax1024');
+  assert.ok(ua.isKeyHolder(0x0120, B(mq.keyData)) && !ua.isKemHolder(0x0120), 'a PQZ holder, no KEM holder');
+  assert.throws(() => ua.holderPopMessage(0x0120, withKem(mq)), code('UAKemHolder'));
+  assert.throws(() => ua.registrationArgs({ ...args(mq), kemPk: kem.kemPk, pop: [] }), code('UAKemHolder'));
+  assert.throws(() => ua.kemRecordMessage(0x0120, { ua: mq.ua, version: 1, kemPk: kem.kemPk }), code('UAKemHolder'));
+  assert.throws(() => ua.registrationAttrsDigest(0x0120, { ua: mq.ua, keyData: mq.keyData, attrs: { kemPk: kem.kemPk } }), code('UAKemHolder'));
   assert.throws(() => ua.holderPopMessage(0x0120, { ...withPqz(row('msig-pq/n2048-kmax1024')), keyData: undefined }), code('UAPqzHolder'));
   assert.throws(() => ua.holderPopMessage(0x0131, { ...args(mlz), pqzPopHash: undefined }), code('UAPqzPopHash'));
   assert.throws(() => ua.holderPopMessage(0x0131, { ...args(mlz), pqzKey: undefined }), code('UAPqzPopHash'));
@@ -357,7 +365,13 @@ test('holder refusals', () => {
       const k = P.kemRecords.find((x) => x.id === n.mutation.row);
       const target = set.ua ?? k.ua;
       const t = regOf(target);
-      const m = ua.kemRecordMessage(t.kind, { ua: target, version: set.version ?? k.version, kemPk: set.kemPk ?? k.kemPk });
+      const rec = { ua: target, version: set.version ?? k.version, kemPk: set.kemPk ?? k.kemPk };
+      if (n.error === 'UAKemHolder') {
+        assert.equal(t.kind, n.mutation.kind, n.name);
+        assert.throws(() => ua.kemRecordMessage(t.kind, rec), code('UAKemHolder'), n.name);
+        continue;
+      }
+      const m = ua.kemRecordMessage(t.kind, rec);
       assert.equal(n.error, 'UAUnauthorized', n.name);
       assert.equal(sigOk(t.kind, t.keyData, hex(m), set.sig ?? k.sig), false, n.name);
     } else if (n.entry === 'setPqzKey') {
@@ -605,7 +619,7 @@ test('portable.json msig rows are minimal', () => {
     assert.ok(ua.msigSlotsMinimal(regOf(k.ua).keyData, ix(k.sig)), k.id ?? k.name);
     n++;
   }
-  assert.equal(n, 12, '5 pops, 3 KEM records, 4 PQZ key records');
+  assert.equal(n, 9, '5 pops, 4 PQZ key records (CTR-UA-32: no msig KEM record)');
   // the negative: 2-of-(1, 2) over the registered mldsa65#1 / #2 (lower id weight 1), both slots sign
   const neg = P.negatives.find((x) => x.name === 'msig-pop-not-minimal') ?? assert.fail('no msig-pop-not-minimal');
   assert.deepEqual([neg.entry, neg.rule, neg.error], ['register', 'msig-minimal', 'UAPoP']);
@@ -778,7 +792,7 @@ const pqzRow = (k, over = {}) => ({ ua: k.ua, pqzKey: k.pqzKey, pqzPopHash: k.pq
 
 test('verifyRegistration accepts every row and refuses every negative', () => {
   const [n, commits] = [P.registrations.length, P.registrations.filter((r) => r.kemCommit).length];
-  assert.deepEqual([n, commits], [27, 11]); // + mldsa87, fndsa1024 (CTR-UA-39 / -40)
+  assert.deepEqual([n, commits], [27, 7]); // + mldsa87, fndsa1024 (CTR-UA-39 / -40); msig-pq/<set> without a KEM key (CTR-UA-32)
   for (const r of P.registrations) {
     verifyRegistration(r, keysOf);
     verifyRegistration({ ...r, pqzPop: '0x' }, keysOf); // the proof bytes are optional
@@ -833,7 +847,7 @@ test('verifyRegistration accepts every row and refuses every negative', () => {
       otherEntry++;
     }
   }
-  assert.deepEqual([refused, stateful, otherEntry], [63, 4, 1]);
+  assert.deepEqual([refused, stateful, otherEntry], [64, 4, 1]); // + msig-kem-record (T66a)
 });
 
 test('verifyMembership accepts every row and refuses a flipped byte (ua-rs check_membership_rows)', () => {
@@ -859,7 +873,7 @@ test('verifyKemRecord accepts every row and refuses a flipped byte', () => {
     refuses(() => verifyKemRecord(kemRow(k, { kemPk: '0x' }), keysOf), 'UAKemKeyLength', k.id);
     refuses(() => verifyKemRecord(kemRow(k, { kemPk: flipAt(k.kemPk, 0).replace(/^0x00/, '0x02') }), keysOf), 'UAKemScheme', k.id);
   }
-  assert.equal(flips, 3 * 12 + 3 * 2 * 3); // 3 per signature: 12 single keys, 3 msig of 2 slots
+  assert.equal(flips, 3 * 12); // 3 per signature: 12 single keys (CTR-UA-32: no msig KEM record)
   const s = row('slhdsa128s');
   refuses(() => verifyKemRecord(kemRow(P.kemRecords[0], { ua: s.ua, sig: s.pop }), keysOf), 'UAKemHolder', 'a valid signature cannot reach the signature check');
   // one field off: the record's `ua` is not the id of the key read. Key K must not sign for a victim's `ua`; a non-holder key, so

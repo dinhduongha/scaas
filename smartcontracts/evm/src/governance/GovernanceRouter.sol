@@ -8,12 +8,13 @@ import {IRegulatedToken} from "../regulated/IRegulatedToken.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
 import {IOpenFactory} from "../factory/IOpenFactory.sol";
+import {IPqzToken} from "../pqz/IPqzToken.sol";
 
 /// @title One per chain, CREATE2 at a predictable address (CTR-GOV-15 Change, owner 2026-11-04; spec
 ///        `2026-11-04-governance-ua-identity.md` §3): the closed table of governance spec §3.2 over every governed contract
 ///        of SCaaS whose `GOV_ROUTER` it is. The owner's and a holder's ops come from `GovernanceRouterBase`; here the powers
 ///        of the token kinds (`mint`, `mintToUA`, `disableWrap`, the rate entries; the eight controls of the regulated kinds
-///        8-13, plan T32) and of `SCaaSDex` (the market setters, `setFeeSplit`), each one `mtx<Op>(UAEnvelope, …, UASig)`
+///        8-13, plan T32; the PQZ verifier UA of the PQZ kinds, group 3f) and of `SCaaSDex` (the market setters, `setFeeSplit`), each one `mtx<Op>(UAEnvelope, …, UASig)`
 ///        (ua-mtx-merge T7). Domain
 ///        `("SCaaS GovernanceRouter", "1", chainId, router, chain_uid)`. **UNAUDITED.**
 contract GovernanceRouter is GovernanceRouterBase {
@@ -120,6 +121,24 @@ contract GovernanceRouter is GovernanceRouterBase {
         IUARegistry.UASig calldata auth) external
     {
         _ua(T.UA_SET_TAX_RECIPIENT, e, target, IRegulatedToken.setTaxRecipient.selector, abi.encode(taxRecipient), auth);
+    }
+
+    // ------------------------------------------------------------------ the PQZ verifier UA (group 3f, spec §4.2, §4.3)
+
+    /// @notice The owner proposes, then confirms after the notice period, `next` as a transferable `OFFCHAIN` token's
+    ///         verifier; fee mode `NONE`, relayable at fee 0.
+    function mtxPqzSetVerifier(MetaTxLib.UAEnvelope calldata e, address target, bytes32 next, IUARegistry.UASig calldata auth)
+        external
+    {
+        _ua(T.UA_PQZ_SET_VERIFIER, e, target, IPqzToken.pqzSetVerifier.selector, abi.encode(next), auth);
+    }
+
+    function mtxPqzCancelVerifier(MetaTxLib.UAEnvelope calldata e, address target, IUARegistry.UASig calldata auth) external {
+        _ua(T.UA_PQZ_CANCEL_VERIFIER, e, target, IPqzToken.pqzCancelVerifier.selector, "", auth);
+    }
+
+    function mtxPqzRevokeVerifier(MetaTxLib.UAEnvelope calldata e, address target, IUARegistry.UASig calldata auth) external {
+        _ua(T.UA_PQZ_REVOKE_VERIFIER, e, target, IPqzToken.pqzRevokeVerifier.selector, "", auth);
     }
 
     // ------------------------------------------------------------------ the powers on the DEX

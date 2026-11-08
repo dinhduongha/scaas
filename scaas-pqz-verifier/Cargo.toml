@@ -1,0 +1,38 @@
+[package]
+name = "scaas-pqz-verifier"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.97.1"
+publish = false
+license-file = "../LICENSE"
+description = "The reference PQZ verifier (off-chain): verifies public PQZ proofs and signs PqzVerdict (UNAUDITED)"
+
+# Its own crate and binary (3f spec §11.2, C7): never linked into scaas-node, never depending on it. pqz-ffi with its
+# default features: the Rust PQZL backend at n2304-kmax4096; `pqz_ffi::precompile` is byte for byte the precompile's verdict.
+[dependencies]
+alloy = { version = "~1.6", default-features = false, features = ["std", "provider-http", "rpc-types", "signer-local", "signer-keystore", "sol-types", "network", "reqwest", "json-rpc"] }
+anyhow = "1"
+async-trait = "0.1"
+axum = "0.8"
+pqz-ffi = { path = "../pqz-core/ffi" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+toml = "0.8"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+
+# the PQZL verifier is slow unoptimised; the tests verify real proofs
+[profile.dev.package.pqzl]
+opt-level = 3
+[profile.dev.package.pqz-stmt]
+opt-level = 3
+[profile.dev.package.pqz-ffi]
+opt-level = 3
+[profile.dev.package.sha3]
+opt-level = 3
+[profile.dev.package.keccak]
+opt-level = 3

@@ -299,9 +299,10 @@ contract GovDeployTest is Test {
         // T2: 51,436 -> 46,804 B; T3: 46,804 -> 45,140 B; T6: 45,140 -> 42,669 B; T24: 42,669 -> 42,985 B;
         // T25: 42,985 -> 43,333 B; T26: 43,333 -> 43,552 B; pay-meta-tax T37: 43,552 -> 43,667 B; T38: 43,667 -> 43,714 B;
         // T39: 43,714 -> 43,711 B; T40: 43,711 -> 43,503 B (lever 5: `_payMeta` in `MtxPipelineLib`); chain-neutral T72:
-        // 43,503 -> 44,456 B (the env read from the clone's code, `chainEnv`, `validateEnv`)
-        h.limitCode(44_455);
-        vm.expectRevert(bytes("WrappedToken runtime 44456 B > chain code limit 44455 B (CHAIN_CODE_LIMIT, CTR-GOV-19)"));
+        // 43,503 -> 44,456 B (the env read from the clone's code, `chainEnv`, `validateEnv`); 3f T44: 44,456 -> 44,610 B (the
+        // three PQZ verifier fields refused by `_requireUnused`)
+        h.limitCode(44_609);
+        vm.expectRevert(bytes("WrappedToken runtime 44610 B > chain code limit 44609 B (CHAIN_CODE_LIMIT, CTR-GOV-19)"));
         h.deploy(ZUID, false, ska);
     }
 
@@ -482,8 +483,11 @@ contract GovDeployTest is Test {
         assertTrue(router != 0xB64D2D5f27D2d5eA951409773343D856e41Fb8E0, "not reset 1's GovernanceRouter");
         // pay-meta-tax T37: 0xaf843Ac33a5A73A2baf3E979F922Bd3c1feD6B43 -> 0x616AEe61C11e53a1a5104d448eba7574e5AE2a8b (the
         // metadata hash: `MetaTxLib` gains `PayMeta`); T38: -> 0xa615f3672E60a2e91F92463bB4Df8b4374245C8A (`relay` with
-        // `batch`, `nonce`); 3g T51: -> this (the metadata hash: `IUARegistry`'s versioned PQZ key records)
-        assertEq(rf, 0xF1D87045dAef620300637Ed6DE7123B42f23f9aB, "MtxRelayFee");
+        // `batch`, `nonce`); 3g T51: 0xF1D87045dAef620300637Ed6DE7123B42f23f9aB (the metadata hash: `IUARegistry`'s versioned PQZ
+        // key records); T66a item 1: -> this (the metadata hash: `IUARegistry.requirePortable`)
+        // T66a item 2 (the metadata hash: IUARegistry's KEM holder docs): 0xC9C1aC557303551b16d78DBce193f02e414CAA39 -> this
+        // T66a item 5 (the metadata hash: IUARegistry.popSlotsOf): 0x3d0DB1d457Ac07B199e8Bd65676AFF7fF127330E -> this
+        assertEq(rf, 0x8B56809BBf5f6595351F648a499E194292B6100C, "MtxRelayFee");
         // ua-mtx-merge T24: 0x2AEfB2af419765600eC00a7D0CfC4dE30f2d3750 -> 0xAb151Df7DC7CbbD9755028a27Ad0bc55a34b5b53 (the
         // router's metadata hash: `IGovernance`); T26: -> this (the two empty hooks `UAMetaTxBase` adds, its
         // `mtxCancelNonce` seats); T32: 0xBc8Df1a828dA586e5ccB8Db8942bbCC9c130cC34 -> this (the eight regulated control ops)
@@ -494,8 +498,12 @@ contract GovDeployTest is Test {
         // levers 5 and 6); 3g T51: 0x9F9448a2e031D1d7055c7D7b6593EA8f752c7D91 -> 0x8C7beC80b3bD61A2920083C0617555a87A5fa7E5
         // (the metadata hash: `IUARegistry`); chain-neutral T72: -> this (the metadata hash: `SaltedEIP712`'s virtual
         // domain, `UAMetaTxBase`'s immutables behind `_registry()` / `_hedera()`) 0x77826623be224e298A4Ad0edd07b520e342523A2;
-        // T76: -> this (the router's three creation ops, S3)
-        assertEq(router, 0x773A627eD1C1CCF588DCB81799c1BFB52E5d9d57, "GovernanceRouter");
+        // T76: 0x773A627eD1C1CCF588DCB81799c1BFB52E5d9d57 (the router's three creation ops, S3); 3f T45: -> this (the
+        // three PQZ verifier ops `mtxPqz{Set,Cancel,Revoke}Verifier`): 0x5A6E6681A1Ec31741438D863ffCC138C186FB933; T66a item 1: -> this
+        // (the metadata hash: `IUARegistry.requirePortable`)
+        // T66a item 2 (the metadata hash: IUARegistry's KEM holder docs): 0x0240966987610aC882D8501247EF3Ce2AC2c477B -> this
+        // T66a item 5 (the metadata hash: IUARegistry.popSlotsOf): 0xbf24455f26b2cB0a343fc47a546Fd68F4b5CAEAD -> this
+        assertEq(router, 0x3A893f1938bA3E34339D3d4b85CC13a5983A7149, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append: chain-neutral releases (plan T72), `abi.encode(factory, implArgs)`;

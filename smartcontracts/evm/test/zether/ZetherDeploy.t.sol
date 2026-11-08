@@ -116,7 +116,7 @@ contract ZetherDeployTest is Test {
         // a token from the deployed catalogue, on the deployed verifier
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.decimals, c.features) = ("Z", "Z", 6, 1 << GovernanceBits.PAYABLE);
-        c.conf = IFactoryToken.ConfidentialConfig("", 1, 1 << 40, 0, 0, 0, 0);
+        c.conf = IFactoryToken.ConfidentialConfig("", 1, 1 << 40, 0, 0, 0, 0, 0, bytes32(0), false);
         ZetherLayer t = ZetherLayer(f.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), "z"));
         assertEq(address(t.verifier()), tv);
         assertEq(t.curve(), "bls12-381");
@@ -177,7 +177,7 @@ contract ZetherDeployTest is Test {
             assertTrue(IUARegistry(vm.parseJsonAddress(json, ".ua_registry")).kindEnabled(UAKinds.ZETHER_BLS12381));
             IFactoryToken.TokenConfig memory c;
             (c.name, c.symbol, c.decimals, c.features) = ("Z", "Z", 6, 1 << GovernanceBits.PAYABLE);
-            c.conf = IFactoryToken.ConfidentialConfig("", 1, 1 << 40, 0, 0, 0, 0);
+            c.conf = IFactoryToken.ConfidentialConfig("", 1, 1 << 40, 0, 0, 0, 0, 0, bytes32(0), false);
             assertTrue(f.isRegisteredToken(f.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), "z")));
         }
     }

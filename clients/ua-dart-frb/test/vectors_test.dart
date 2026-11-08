@@ -312,8 +312,13 @@ void main() {
       final m = kemRecordMessage(kind: r['kind'], ua: ua, version: v, kemPk: pk);
       expect(hx(m), r['message']);
       expect(hx(m), hx(uaMessage(kind: r['kind'], purpose: purposeTag(purpose: 'kem'), digest: d)));
-      if (r['kind'] == 0x0120) expect(hx(memberDigest(structureUa: ua, uaMsg: m)), r['memberDigest']);
+      expect(r['kind'], isNot(0x0120), reason: '${r['id']}: CTR-UA-32, an msig holds no KEM key');
     }
+    expect(rows(pv, 'kemRecords'), hasLength(12));
+    // CTR-UA-32 (T66a): a PQ-eligible msig holds a PQZ key but no KEM key; the same record under a single PQ kind builds
+    final mq = b32(byKey(regs, 'name', 'msig-pq/n2048-kmax1024')['ua']);
+    expect(errCode(() => kemRecordMessage(kind: 0x0120, ua: mq, version: BigInt.one, kemPk: _kem(1601))), 'UAKemHolder');
+    expect(errCode(() => kemRecordMessage(kind: 0x0131, ua: mq, version: BigInt.one, kemPk: _kem(1601))), isNull, reason: 'the control');
     final u = U8Array32(Uint8List.fromList(List.filled(32, 1)));
     expect(errCode(() => kemRecordDigest(ua: u, version: BigInt.zero, kemPk: _kem(1601))), 'UAKemVersion');
     // owner 2026-10-31: version 0 with a key is the register key's record (scheme != 0; its words against portable.json's
@@ -424,6 +429,16 @@ void main() {
                 pqzPopHash: hash, alreadySet: (holder['attrs'] as Map)['pqzKey'] != '0x')),
             err, reason: '$name');
         run++;
+      } else if (entry == 'setKemKey' && err == 'UAKemHolder') {
+        // CTR-UA-32 (msig-kem-record): an msig's KEM record is refused by its kind (the target's kind is the row's)
+        final k = byKey(rows(pv, 'kemRecords'), 'id', m['row']);
+        final t = byKey(regs, 'ua', set['ua']);
+        expect(t['kind'], m['kind'], reason: '$name');
+        expect(
+            errCode(() => kemRecordMessage(
+                kind: t['kind'], ua: b32(set['ua']), version: BigInt.from(k['version'] as int), kemPk: bytes(set['kemPk']))),
+            err, reason: '$name');
+        run++;
       } else if (entry == 'setKemKey' && name == 'kem-record-of-other-ua') {
         // the record of one UA offered for another: the signed message differs, so the signature cannot verify
         final k = byKey(rows(pv, 'kemRecords'), 'id', m['row']);
@@ -464,6 +479,8 @@ void main() {
     expect(errCode(() => holder(kind: 0x0130, kemPk: _kem(1600))), 'UAKemKeyLength');
     expect(errCode(() => holder(kind: 0x0130, kemPk: _kem(1601, 0))), 'UAKemScheme');
     expect(errCode(() => holder(kind: 0x0101, kemPk: _kem(1601))), 'UAKemHolder');
+    // a PQ-eligible msig holds no KEM key (CTR-UA-32)
+    expect(errCode(() => holder(kind: 0x0120, keyData: bytes(byKey(regs, 'name', 'msig-pq/n2048-kmax1024')['keyData']), kemPk: _kem(1601))), 'UAKemHolder');
     expect(hx(holder(kind: 0x0130, kemPk: Uint8List(0)).message), hx(holder(kind: 0x0130).message));
     // a zero-length proof hash is absent (same as no hash)
     expect(hx(holder(kind: 0x0130, pqzPopHash: Uint8List(0)).message), hx(holder(kind: 0x0130).message));
@@ -513,7 +530,10 @@ void main() {
         expect(hx(memberDigest(structureUa: b32(x['inner']), uaMsg: uaMessage(kind: 0x0120, purpose: memberTag, digest: md))), x['memberDigest'], reason: name);
       }
     }
-    expect([rows(n, 'kemRecords').length, rows(n, 'pqzKeyRecords').length], [1, 4]);
+    expect([rows(n, 'kemRecords').length, rows(n, 'pqzKeyRecords').length], [0, 4]); // CTR-UA-32: an msig has no KEM record
+    final pq = regs.firstWhere((r) => r['name'] == 'msig-nested-pq');
+    expect(errCode(() => kemRecordMessage(kind: 0x0120, ua: b32(pq['ua']), version: BigInt.one, kemPk: _kem(1601))), 'UAKemHolder');
+    expect(errCode(() => regArgs({...regInput(pq), 'inner': inner, 'kemPk': hx(_kem(1601))})), 'UAKemHolder');
     Map<String, dynamic> slots(Map r) => {'members': r['args']['sig']['members']};
     for (final r in rows(n, 'kemRecords').cast<Map>()) {
       final ua = b32(r['ua']), v = BigInt.from(r['version'] as int), pk = bytes(r['kemPk']);
@@ -542,13 +562,13 @@ void main() {
       expect([hx(d), hx(msg), hx(memberDigest(structureUa: ua, uaMsg: msg))], [m['digest'], m['message'], m['memberDigest']], reason: m['name'] as String);
     }
     expect(rows(n, 'authorizations').length, 5);
-    final k = rows(n, 'kemRecords').first as Map;
+    final k = rows(n, 'pqzKeyRecords').first as Map; // (was kemRecords.first: CTR-UA-32, an msig has no KEM record)
     for (final a in rows(n, 'authorizations').cast<Map>()) {
       final name = a['name'] as String;
       final md = memberDigest(structureUa: b32(a['ua']), uaMsg: uaMessage(kind: 0x0120, purpose: b32(a['purposeTag']), digest: b32(a['digest'])));
       expect(hx(md), a['memberDigest'], reason: name);
-      final i = {'ua': k['ua'], 'version': k['version'], 'kemPk': k['kemPk'], 'sig': a['uaSig']};
-      expect(jsonDecode(setKemKeyArgs(input: jsonEncode(i)))['sig'], a['uaSig'], reason: name);
+      final i = {'ua': k['ua'], 'pqzKey': k['pqzKey'], 'pqzPopHash': k['pqzPopHash'], 'sig': a['uaSig']};
+      expect(jsonDecode(setPqzKeyArgs(input: jsonEncode(i)))['sig'], a['uaSig'], reason: name);
     }
     // the builder's own refusal is the minimal rule at both levels; the others are the registry's, on the signatures
     const minimal = {'inner-below-threshold', 'inner-index-past-the-members', 'inner-unsorted', 'inner-not-minimal', 'outer-not-minimal'};
@@ -572,7 +592,7 @@ void main() {
     }
   });
 
-  // The With forms with inner ({id: keyData}, the JSON calls' form): msig-nested-pq's eligibility and holder record, every eligibility row
+  // The With forms with inner ({id: keyData}, the JSON calls' form): msig-nested-pq's eligibility and record (no KEM key, CTR-UA-32), every eligibility row
   // and every nested PQZ key record reproduce; without inner they stay UAMemberUnknown, so does a third level. Every memberships row's
   // stored bytes turn back into its slot through replayedMemberSig.
   test('nested inner', () {
@@ -584,16 +604,20 @@ void main() {
     final holders = [...regs, ...(n['afterAcceptance'] as List).cast<Map<String, dynamic>>()]
         .where((r) => r['attrs']['kemPk'] != '0x' || r['attrs']['pqzKey'] != '0x')
         .toList();
-    expect(holders.map((r) => r['name']), ['msig-nested-pq']);
-    for (final r in holders) {
-      final name = r['name'] as String, ua = b32(r['ua']), d = bytes(r['keyData']), pk = bytes(r['attrs']['kemPk']);
+    expect(holders, isEmpty); // CTR-UA-32 (T66a): msig-nested-pq registers without a KEM key (was the one row)
+    {
+      final r = regs.firstWhere((r) => r['name'] == 'msig-nested-pq');
+      final name = r['name'] as String, ua = b32(r['ua']), d = bytes(r['keyData']);
       expect(msigPqzEligibleWith(keyData: d, inner: all), isTrue, reason: name);
       expect(errCode(() => msigPqzEligible(keyData: d)), 'UAMemberUnknown', reason: name);
-      final h = holderPopMessageWith(kind: 0x0120, ua: ua, keyData: d, kemPk: pk, inner: all);
+      final h = holderPopMessageWith(kind: 0x0120, ua: ua, keyData: d, inner: all);
       expect([hx(h.kemRecordHash), hx(h.portableRecordDigest), hx(h.registrationDigest), hx(h.message), mh(h.memberDigest)],
           [r['kemRecordHash'], r['portableRecordDigest'], r['registrationDigest'], r['popMessage'], r['memberDigest']],
           reason: name);
-      expect(errCode(() => holderPopMessageWith(kind: 0x0120, ua: ua, keyData: d, kemPk: pk, inner: '')), 'UAMemberUnknown', reason: name);
+      // an msig holds no KEM key: refused by its kind, before its key data or inner is read
+      for (final i in [all, '']) {
+        expect(errCode(() => holderPopMessageWith(kind: 0x0120, ua: ua, keyData: d, kemPk: _kem(1601), inner: i)), 'UAKemHolder', reason: name);
+      }
     }
     for (final r in rows(n, 'eligibility').cast<Map>()) {
       final why = r['reason'] as String, d = bytes(r['keyData']);
@@ -602,7 +626,7 @@ void main() {
         expect(errCode(() => msigPqzEligibleWith(keyData: d, inner: none)), 'UAMemberUnknown', reason: why);
       }
     }
-    final third = rows(n, 'structures').first as Map, pq = holders.first['keyData'] as String;
+    final third = rows(n, 'structures').first as Map, pq = regs.firstWhere((r) => r['name'] == 'msig-nested-pq')['keyData'] as String;
     expect(errCode(() => msigPqzEligibleWith(keyData: bytes(third['keyData']), inner: jsonEncode({third['member']: pq}))), 'UAMemberUnknown',
         reason: 'a third level');
     for (final bad in ['not json', '[]', jsonEncode({'0x01': '0x'}), ' ' * 65537]) {
@@ -701,7 +725,12 @@ void main() {
       commits++;
     }
     expect(commits, regs.where((r) => (r as Map).containsKey('kemCommit')).length);
-    expect(commits, greaterThan(0));
+    expect(commits, 7); // CTR-UA-32: msig-pq/<set> registers without a KEM key
+    // CTR-UA-32 (T66a): a PQ-eligible msig holds no KEM key, in either form
+    final mq = byKey(regs, 'name', 'msig-pq/n2048-kmax1024');
+    for (final commit in [{'kemCommit': true}, {'kemCommit': false}, <String, Object>{}]) {
+      expect(errCode(() => regArgs({...regInput(mq), 'kemPk': rows(pv, 'kemRecords')[0]['kemPk'], ...commit})), 'UAKemHolder', reason: '$commit');
+    }
     const typed = {
       0x0100: ('registerWebAuthn', 580),
       0x0110: ('registerMuSig2', 1124),
@@ -748,7 +777,7 @@ void main() {
 
   test('set key args', () {
     final kems = rows(pv, 'kemRecords'), pqz = rows(pv, 'pqzKeyRecords');
-    expect(kems, hasLength(15)); // + v1-v3 of mldsa87, fndsa1024
+    expect(kems, hasLength(12)); // + v1-v3 of mldsa87, fndsa1024; no msig (CTR-UA-32)
     for (final k in kems) {
       final i = {'ua': k['ua'], 'version': k['version'], 'kemPk': k['kemPk'], 'sig': recordSig(k)};
       expect(jsonDecode(setKemKeyArgs(input: jsonEncode(i))), k['args'], reason: k['id']);

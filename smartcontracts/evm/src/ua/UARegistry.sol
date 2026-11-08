@@ -47,6 +47,7 @@ import {UAMldsaVerifier} from "./MlDsa.sol";
 ///         each `UAMldsaVerifier.expandedKeyPart(pk, part)` stored once with SSTORE2 under its id (`uaOf(kind, pk)`,
 ///         before or after `register`); once every part is there, PoP and verify go through `verifyCached` with the part
 ///         pointers. Refused where the verifier uses a precompile (a cached Solidity path would exceed its cap).
+///         KEM key (CTR-UA-32): the single PQ kinds only; an `msig` holds none (plan T66a), `UAKemHolder` at `register` and `setKemKey`.
 ///         PQZ key (UA-6, CTR-UA-30, CTR-PQZ-12/13): an attribute of a holder — `mldsa44`, `mldsa65`, `fndsa512`, `mldsa87`, `fndsa1024`, or an
 ///         `msig` whose members of kinds outside 0x0130–0x0135 weigh less than its threshold (PQ-eligible) — given in
 ///         its `register` (`attrs.pqzKey`, `attrs.pqzPopHash`) with the optional `R_REG` proof over the portable digest
@@ -83,6 +84,9 @@ import {UAMldsaVerifier} from "./MlDsa.sol";
 ///         `setKemKey` run in `UARegistryLib` by DELEGATECALL (`_lib`), on this contract's storage (`UAStore.Layout`); the
 ///         views and `requireAuthorized` stay here. The library's address is in this contract's code, so it is part of the
 ///         registry's CREATE2 address.
+///
+///         UA-7 O1 (plan T66a): `requirePortable`, the portable check view a `PqChat` record takes, runs `UARegistryLib`'s
+///         portable path by DELEGATECALL inside the view (`_libView`; the library entry writes nothing).
 ///
 ///         CTR-UA-37 (owner 2026-11-02): listing in an `msig` is no consent. A member accepts its slot (`acceptMembership`, a portable
 ///         `UAMembership`, in `UARegistryLib`); `memberAccepted` reads it, the slots of the `pop` are accepted at registration, and
@@ -376,6 +380,20 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         return _s.memberSigHash[ua][index];
     }
 
+    function popSlotsOf(bytes32 ua) external view returns (uint16[] memory index, bytes32[] memory hash) {
+        if (_elsewhere(ua)) return IUARegistry(predecessor).popSlotsOf(ua);
+        uint256 bits = _s.popSlots[ua];
+        uint256 n;
+        for (uint256 b = bits; b != 0; b &= b - 1) ++n;
+        (index, hash) = (new uint16[](n), new bytes32[](n));
+        n = 0;
+        for (uint256 i; bits >> i != 0; ++i) {
+            if (bits >> i & 1 == 0) continue;
+            (index[n], hash[n]) = (uint16(i), _s.memberSigHash[ua][i]);
+            ++n;
+        }
+    }
+
     function smartKeyCloneHash() external view returns (bytes32) {
         return _SMART_KEY_CLONE_CODEHASH;
     }
@@ -621,6 +639,24 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
 
     function acceptMembership(bytes32 ua, MemberSig calldata memberSig) external {
         _lib(UARegistryLib.acceptMembership.selector, 0);
+    }
+
+    /// UA-7 O1 (plan T66a): gen 2 forwards a record it does not hold (UA8-D11: gen 1's verdict, its revert as it is), else the
+    /// library's check on this record.
+    function requirePortable(bytes32 ua, bytes32 purposeTag, bytes32 typedDigest, UASig calldata auth) external view {
+        if (_elsewhere(ua)) IUARegistry(predecessor).requirePortable(ua, purposeTag, typedDigest, auth);
+        else _libView(UARegistryLib.requirePortable.selector, _s.records[ua].kind);
+    }
+
+    /// `_lib` inside a view (`requirePortable`): the library entry writes nothing, so it runs in a STATICCALL frame too. Solidity
+    /// types no DELEGATECALL as `view`; the function pointer is cast.
+    function _libView(bytes4 sel, uint16 kind) private view {
+        function(bytes4, uint16) f = _lib;
+        function(bytes4, uint16) view v;
+        assembly {
+            v := f
+        }
+        v(sel, kind);
     }
 
     // ----- requireAuthorized -----

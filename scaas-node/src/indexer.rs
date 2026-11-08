@@ -9,7 +9,7 @@ use alloy::sol_types::SolEvent;
 use serde_json::{json, Value};
 use tracing::{info, warn};
 
-use crate::abi::{IGovernance, IMtxRelayFee, IPqzToken, IRegulatedToken, IToken, IUALedger, IUARegistry};
+use crate::abi::{IGovernance, IMtxRelayFee, IPqzEvents, IPqzToken, IRegulatedToken, IToken, IUALedger, IUARegistry};
 use crate::chain::Chain;
 use crate::finality::{next_range, quorum_ok, safe_head, Mode};
 use crate::odoo::Odoo;
@@ -119,7 +119,7 @@ pub fn encode_event(log: &Log) -> Option<Value> {
         v["digest"] = json!(format!("{:#x}", e.digest));
         v["fee_recipient"] = json!(format!("{:#x}", e.feeRecipient));
         v["fee"] = json!(e.fee.to_string());
-    } else if !regulated_event(log, topic0, &mut v) && !pqz_key_event(log, topic0, &mut v) {
+    } else if !regulated_event(log, topic0, &mut v) && !pqz_key_event(log, topic0, &mut v) && !pqz_verifier_event(log, topic0, &mut v) {
         return None;
     }
     Some(v)
@@ -184,6 +184,122 @@ fn pqz_key_event(log: &Log, topic0: B256, v: &mut Value) -> bool {
         return false;
     }
     true
+}
+
+/// Group 3f (spec §11.1): the topics of [`pqz_verifier_event`]: the PQZ verifier mode's events and the op events a `PqzVerified`
+/// joins.
+pub const PQZ_VERIFIER_TOPICS: [B256; 8] = [
+    IPqzToken::PqzVerified::SIGNATURE_HASH, IPqzToken::PqzVerifierProposed::SIGNATURE_HASH, IPqzToken::PqzVerifierSet::SIGNATURE_HASH,
+    IPqzToken::PqzVerifierCancelled::SIGNATURE_HASH, IPqzEvents::PqzVerifierRevoked::SIGNATURE_HASH,
+    IPqzEvents::ConfidentialTransfer::SIGNATURE_HASH, IPqzEvents::ConfidentialTransferMulti::SIGNATURE_HASH,
+    IPqzEvents::Unshielded::SIGNATURE_HASH,
+];
+
+/// Group 3f: a PQZ verifier mode event or a confidential op event into `v`, ids as `bytes32` hex (never `from` / `to`, which the
+/// client's ingest reads as addresses), `tx_index` the transaction's position in its block (the audit replay, Codex #10); an
+/// `alert` on `PqzVerifierProposed` (with `eta`) and `PqzVerifierRevoked`. `false`: not one of them.
+fn pqz_verifier_event(log: &Log, topic0: B256, v: &mut Value) -> bool {
+    use IPqzEvents as C;
+    use IPqzToken as P;
+    let h = |w: B256| json!(format!("{w:#x}"));
+    if topic0 == P::PqzVerified::SIGNATURE_HASH {
+        let Ok(e) = log.log_decode::<P::PqzVerified>() else { return false };
+        let e = e.inner.data;
+        (v["event"], v["statement_hash"], v["proof_hash"], v["verifier"], v["pqz_verifier_epoch"]) =
+            (json!("PqzVerified"), h(e.statementHash), h(e.proofHash), h(e.verifier), json!(e.pqzVerifierEpoch));
+    } else if topic0 == P::PqzVerifierProposed::SIGNATURE_HASH {
+        let Ok(e) = log.log_decode::<P::PqzVerifierProposed>() else { return false };
+        let e = e.inner.data;
+        (v["event"], v["current"], v["next"], v["eta"]) = (json!("PqzVerifierProposed"), h(e.current), h(e.next), json!(e.eta));
+    } else if topic0 == P::PqzVerifierSet::SIGNATURE_HASH {
+        let Ok(e) = log.log_decode::<P::PqzVerifierSet>() else { return false };
+        let e = e.inner.data;
+        (v["event"], v["previous"], v["next"], v["pqz_verifier_epoch"]) = (json!("PqzVerifierSet"), h(e.previous), h(e.next), json!(e.pqzVerifierEpoch));
+    } else if topic0 == P::PqzVerifierCancelled::SIGNATURE_HASH {
+        let Ok(e) = log.log_decode::<P::PqzVerifierCancelled>() else { return false };
+        (v["event"], v["next"]) = (json!("PqzVerifierCancelled"), h(e.inner.data.next));
+    } else if topic0 == C::PqzVerifierRevoked::SIGNATURE_HASH {
+        let Ok(e) = log.log_decode::<C::PqzVerifierRevoked>() else { return false };
+        let e = e.inner.data;
+        (v["event"], v["previous"], v["pqz_verifier_epoch"]) = (json!("PqzVerifierRevoked"), h(e.previous), json!(e.pqzVerifierEpoch));
+    } else if topic0 == C::ConfidentialTransfer::SIGNATURE_HASH {
+        let Ok(e) = log.log_decode::<C::ConfidentialTransfer>() else { return false };
+        let e = e.inner.data;
+        (v["event"], v["entry_ref"], v["from_ua"], v["to_ua"], v["beneficiary"]) =
+            (json!("ConfidentialTransfer"), h(e.entryRef), h(e.fromUA), h(e.toUA), h(e.beneficiary));
+        (v["fee"], v["send_counter"], v["blob"]) = (json!(e.fee.to_string()), json!(e.sendCounter), json!(format!("{:#x}", e.blob)));
+    } else if topic0 == C::ConfidentialTransferMulti::SIGNATURE_HASH {
+        let Ok(e) = log.log_decode::<C::ConfidentialTransferMulti>() else { return false };
+        let e = e.inner.data;
+        (v["event"], v["entry_ref"], v["from_ua"], v["beneficiary"], v["fee"]) =
+            (json!("ConfidentialTransferMulti"), h(e.entryRef), h(e.fromUA), h(e.beneficiary), json!(e.fee.to_string()));
+        (v["send_counter"], v["recipients"], v["mode"], v["blob"]) = (json!(e.sendCounter),
+            json!(e.recipients.iter().map(|r| format!("{r:#x}")).collect::<Vec<_>>()), json!(e.mode), json!(format!("{:#x}", e.blob)));
+    } else if topic0 == C::Unshielded::SIGNATURE_HASH {
+        let Ok(e) = log.log_decode::<C::Unshielded>() else { return false };
+        let e = e.inner.data;
+        (v["event"], v["ua"], v["amount"], v["recipient"], v["blob"]) =
+            (json!("Unshielded"), h(e.ua), json!(e.amount.to_string()), h(e.recipient), json!(format!("{:#x}", e.blob)));
+    } else {
+        return false;
+    }
+    v["tx_index"] = json!(log.transaction_index);
+    if matches!(v["event"].as_str(), Some("PqzVerifierProposed" | "PqzVerifierRevoked")) {
+        v["alert"] = json!(true);
+    }
+    true
+}
+
+/// Group 3f (spec §11.1, Codex #10): a `PqzVerified` gives `pqz_verified` (`statement_hash`, `proof_hash`, `verifier`, the epoch)
+/// to the first later `ConfidentialTransfer`, `ConfidentialTransferMulti` or `Unshielded` of the same token in the same
+/// transaction (a PQZ op is never batched: one per transaction); it is never a row of its own, and one without its op event
+/// proves nothing (a failed op reverts it).
+pub fn join_pqz_verified(mut events: Vec<Value>) -> Vec<Value> {
+    let key = |v: &Value, k: &str| v[k].as_str().map(str::to_string);
+    let at = |v: &Value| v["log_index"].as_u64().unwrap_or(0);
+    const OPS: [&str; 3] = ["ConfidentialTransfer", "ConfidentialTransferMulti", "Unshielded"];
+    let verified: Vec<usize> = (0..events.len()).filter(|&i| events[i]["event"] == "PqzVerified").collect();
+    for i in verified {
+        let p = events[i].clone();
+        let j = (0..events.len()).filter(|&j| {
+            let o = &events[j];
+            OPS.iter().any(|e| o["event"] == *e) && o["pqz_verified"].is_null() && key(o, "tx_hash") == key(&p, "tx_hash")
+                && key(o, "contract") == key(&p, "contract") && at(o) > at(&p)
+        }).min_by_key(|&j| at(&events[j]));
+        if let Some(j) = j {
+            events[j]["pqz_verified"] = json!({"statement_hash": p["statement_hash"], "proof_hash": p["proof_hash"],
+                "verifier": p["verifier"], "pqz_verifier_epoch": p["pqz_verifier_epoch"]});
+        }
+    }
+    events.retain(|v| v["event"] != "PqzVerified");
+    events
+}
+
+/// Group 3f: per `OFFCHAIN` token (its address, `0x` hex), the verifier state the indexer keeps across ranges.
+pub type PqzHealth = std::collections::HashMap<String, Value>;
+
+/// Group 3f (spec §11.1, C8): the health signal. Per token, from its rows in order: `pqz_last_verdict_at` (the block of the last
+/// joined `PqzVerified`), `pqz_verifier_epoch` (the last verdict's, a transfer's or a revocation's) and `pqz_verifier_revoked`;
+/// stamped on the token's verified op rows and verifier rows, kept in `state` for the next range.
+pub fn pqz_health(state: &mut PqzHealth, rows: &mut [Value]) {
+    const KEYS: [&str; 3] = ["pqz_last_verdict_at", "pqz_verifier_epoch", "pqz_verifier_revoked"];
+    for r in rows.iter_mut() {
+        let ev = r["event"].as_str().unwrap_or_default().to_string();
+        let verified = !r["pqz_verified"].is_null();
+        let (Some(c), true) = (r["contract"].as_str().map(str::to_string), verified || ev.starts_with("PqzVerifier")) else { continue };
+        let s = state.entry(c).or_insert_with(|| json!({"pqz_last_verdict_at": null, "pqz_verifier_epoch": null, "pqz_verifier_revoked": false}));
+        if verified {
+            (s["pqz_last_verdict_at"], s["pqz_verifier_epoch"]) = (r["block_number"].clone(), r["pqz_verified"]["pqz_verifier_epoch"].clone());
+        }
+        match ev.as_str() {
+            "PqzVerifierRevoked" => (s["pqz_verifier_revoked"], s["pqz_verifier_epoch"]) = (json!(true), r["pqz_verifier_epoch"].clone()),
+            "PqzVerifierSet" => (s["pqz_verifier_revoked"], s["pqz_verifier_epoch"]) = (json!(false), r["pqz_verifier_epoch"].clone()),
+            _ => {}
+        }
+        for k in KEYS {
+            r[k] = s[k].clone();
+        }
+    }
 }
 
 /// The events an alert goes out on (regulated-kinds spec §7, M-08; asset-suite A2: a compromised `compliance` records fake
@@ -370,6 +486,7 @@ pub fn pay_filter_with(from: u64, to: u64, addrs: &mut Vec<Address>, router: Opt
     ];
     topics.extend(REGULATED_TOPICS);
     topics.extend(PQZ_KEY_TOPICS);
+    topics.extend(PQZ_VERIFIER_TOPICS);
     Filter::new().from_block(from).to_block(to).address(addrs.clone()).event_signature(topics)
 }
 
@@ -377,7 +494,7 @@ pub fn pay_filter_with(from: u64, to: u64, addrs: &mut Vec<Address>, router: Opt
 pub fn pay_events(logs: &[Log], router: Option<Address>) -> Vec<Value> {
     let rf = IMtxRelayFee::RelayFeePaid::SIGNATURE_HASH;
     let ours = |l: &&Log| (l.topic0() == Some(&rf)) == (Some(l.address()) == router);
-    join_pay_events(logs.iter().filter(ours).filter_map(encode_event).collect())
+    join_pqz_verified(join_pay_events(logs.iter().filter(ours).filter_map(encode_event).collect()))
 }
 
 /// Cặp (token, ví nhận) đã duyệt; Odoo gửi dạng chuẩn, cặp nào không parse được thì bỏ.
@@ -404,8 +521,9 @@ const DRIFT_ERR_BACKOFF: Duration = Duration::from_secs(300);
 /// `height == indexed_block` luôn đúng (review S1-2: task riêng đua với indexer và có thể không bao giờ ghi được).
 pub async fn run(chain: Arc<Chain>, odoo: Odoo, poll: Duration, chain_key: String, router: Option<Address>, registry: Option<Address>) {
     let mut drift_due = std::time::Instant::now();
+    let mut health = PqzHealth::default();
     loop {
-        match step_with(&chain, &odoo, router, registry).await {
+        match step_health(&chain, &odoo, router, registry, &mut health).await {
             Ok(true) => continue, // còn tồn đọng: đi tiếp ngay
             Ok(false) => {}
             Err(e) => warn!(chain = chain.number, "indexer: {e:#}"),
@@ -431,6 +549,13 @@ pub async fn step(chain: &Chain, odoo: &Odoo, router: Option<Address>) -> anyhow
 
 /// [`step`] reading the registry's PQZ key-version events too (group 3g).
 pub async fn step_with(chain: &Chain, odoo: &Odoo, router: Option<Address>, registry: Option<Address>) -> anyhow::Result<bool> {
+    step_health(chain, odoo, router, registry, &mut PqzHealth::default()).await
+}
+
+/// [`step_with`] keeping the PQZ verifier state (group 3f, [`pqz_health`]) across ranges in `health`.
+pub async fn step_health(chain: &Chain, odoo: &Odoo, router: Option<Address>, registry: Option<Address>, health: &mut PqzHealth)
+    -> anyhow::Result<bool>
+{
     let nc = odoo.node_config(chain.number, None).await?;
     // Không token nào đăng ký: không ai lọc được vùng này ⇒ giữ con trỏ (recipe M1), đọc lại khi có token.
     let addrs: Vec<Address> = nc.tokens.iter().filter_map(crate::odoo::TokenCfg::evm).collect();
@@ -466,8 +591,9 @@ pub async fn step_with(chain: &Chain, odoo: &Odoo, router: Option<Address>, regi
         let logs = chain.primary().get_logs(&f).await?;
         events.extend(inbound(logs.iter().filter_map(encode_event).collect(), &pairs));
     }
+    pqz_health(health, &mut events);
     for e in events.iter().filter(|e| e["alert"] == true) {
-        warn!(chain = chain.number, alert = %e["event"], contract = %e["contract"], tx = %e["tx_hash"], "regulated alert: {e}");
+        warn!(chain = chain.number, alert = %e["event"], contract = %e["contract"], tx = %e["tx_hash"], "alert: {e}");
     }
     let r = odoo.ingest(chain.number, from, to, &format!("{hash:#x}"), &events).await?;
     info!(chain = chain.number, from, to, created = r.created, "ingested");
@@ -855,5 +981,77 @@ mod tests {
         let chain = Chain::with_signer(&cfg, alloy::signers::local::PrivateKeySigner::random()).unwrap();
         assert!(!step(&chain, &odoo, None).await.unwrap());
         assert_eq!(o.lock().unwrap().ingests, 0, "cursor not advanced");
+    }
+
+    /// Group 3f (spec §11.1, Codex #10): a `PqzVerified` joins the op event after it of the same token and transaction
+    /// (`ConfidentialTransfer`, `ConfidentialTransferMulti`, `Unshielded`) as `pqz_verified`, with the transaction's position
+    /// in its block (`tx_index`) for the audit replay, and is never a row of its own; one of another token joins nothing; the
+    /// verifier's events are rows, `PqzVerifierProposed` (with `eta`) and `PqzVerifierRevoked` alerts; per token the state
+    /// (`pqz_last_verdict_at`: the block of the last `PqzVerified`, the epoch, revoked) is kept across ranges and stamped on its
+    /// rows; the filter asks for every one of them.
+    #[test]
+    fn indexer_joins_proof_offchain_with_position() {
+        use crate::abi::{IPqzEvents as C, IPqzToken as P};
+        let (tok, other) = (Address::repeat_byte(0x70), Address::repeat_byte(0x71));
+        let (sh, ph, ver, ua, next) = (B256::repeat_byte(1), B256::repeat_byte(2), B256::repeat_byte(0x0e), B256::repeat_byte(0xd1),
+            B256::repeat_byte(0x0f));
+        let blob = Address::repeat_byte(0xb0);
+        let verified = || P::PqzVerified { statementHash: sh, proofHash: ph, verifier: ver, pqzVerifierEpoch: 2 }.encode_log_data();
+        let at = |a: Address, tx: u8, i: u64, pos: u64, block: u64, d: LogData| {
+            let mut l = log_at(a, tx, i, d);
+            (l.transaction_index, l.block_number) = (Some(pos), Some(block));
+            l
+        };
+        let unshielded = || C::Unshielded { ua, amount: U256::from(9), recipient: B256::repeat_byte(0x99), blob }.encode_log_data();
+        let logs = vec![
+            at(tok, 1, 0, 4, 10, verified()),
+            at(tok, 1, 1, 4, 10, C::ConfidentialTransfer { entryRef: B256::repeat_byte(3), fromUA: ua, toUA: B256::repeat_byte(0xd2),
+                beneficiary: B256::ZERO, fee: U256::from(3), sendCounter: 5, blob }.encode_log_data()),
+            at(tok, 2, 0, 0, 11, verified()),
+            at(tok, 2, 1, 0, 11, C::ConfidentialTransferMulti { entryRef: B256::repeat_byte(4), fromUA: ua, beneficiary: B256::ZERO,
+                fee: U256::from(3), sendCounter: 6, recipients: vec![B256::repeat_byte(0xd2), B256::repeat_byte(0xd3)], mode: 1, blob }.encode_log_data()),
+            at(tok, 3, 0, 2, 12, verified()),
+            at(tok, 3, 1, 2, 12, unshielded()),
+            // another token's verdict beside this token's op: no join
+            at(other, 4, 0, 1, 12, verified()),
+            at(tok, 4, 1, 1, 12, unshielded()),
+            at(tok, 5, 0, 0, 13, P::PqzVerifierProposed { current: ver, next, eta: 1_800_000_000 }.encode_log_data()),
+            at(tok, 5, 1, 0, 13, P::PqzVerifierCancelled { next }.encode_log_data()),
+            at(tok, 6, 0, 0, 14, C::PqzVerifierRevoked { previous: ver, pqzVerifierEpoch: 3 }.encode_log_data()),
+            at(tok, 7, 0, 0, 15, P::PqzVerifierSet { previous: B256::ZERO, next, pqzVerifierEpoch: 4 }.encode_log_data()),
+        ];
+        let mut rows = pay_events(&logs, None);
+        assert!(rows.iter().all(client_ingest_accepts));
+        let names: Vec<&str> = rows.iter().map(|r| r["event"].as_str().unwrap()).collect();
+        assert_eq!(names, ["ConfidentialTransfer", "ConfidentialTransferMulti", "Unshielded", "Unshielded", "PqzVerifierProposed",
+            "PqzVerifierCancelled", "PqzVerifierRevoked", "PqzVerifierSet"], "PqzVerified is never a row of its own");
+        let h = |w: B256| json!(format!("{w:#x}"));
+        let joined = json!({"statement_hash": h(sh), "proof_hash": h(ph), "verifier": h(ver), "pqz_verifier_epoch": 2});
+        for (i, pos) in [(0, 4), (1, 0), (2, 2)] {
+            assert_eq!((&rows[i]["pqz_verified"], rows[i]["tx_index"].as_u64()), (&joined, Some(pos)), "{}", rows[i]);
+        }
+        assert!(rows[3]["pqz_verified"].is_null(), "another token's verdict joins nothing");
+        assert_eq!((rows[0]["entry_ref"].as_str(), rows[0]["from_ua"].as_str()), (Some(h(B256::repeat_byte(3)).as_str().unwrap()), Some(h(ua).as_str().unwrap())));
+        assert_eq!(rows[1]["recipients"], json!([h(B256::repeat_byte(0xd2)), h(B256::repeat_byte(0xd3))]));
+        assert_eq!((rows[2]["amount"].as_str(), rows[2]["recipient"].as_str()), (Some("9"), Some(h(B256::repeat_byte(0x99)).as_str().unwrap())));
+        assert_eq!((rows[4]["alert"].as_bool(), rows[4]["eta"].as_u64(), rows[4]["next"].as_str()), (Some(true), Some(1_800_000_000), Some(h(next).as_str().unwrap())));
+        assert_eq!((rows[6]["alert"].as_bool(), rows[6]["pqz_verifier_epoch"].as_u64()), (Some(true), Some(3)));
+        assert!(rows[5]["alert"].is_null() && rows[7]["alert"].is_null());
+        let mut state = PqzHealth::default();
+        pqz_health(&mut state, &mut rows);
+        let st = |r: &Value| (r["pqz_last_verdict_at"].as_u64(), r["pqz_verifier_epoch"].as_u64(), r["pqz_verifier_revoked"].as_bool());
+        assert_eq!(st(&rows[0]), (Some(10), Some(2), Some(false)));
+        assert_eq!(st(&rows[2]), (Some(12), Some(2), Some(false)));
+        assert_eq!(st(&rows[6]), (Some(12), Some(3), Some(true)), "revoked");
+        assert_eq!(st(&rows[7]), (Some(12), Some(4), Some(false)), "a new verifier");
+        let mut later = pay_events(&[at(tok, 8, 0, 0, 20, P::PqzVerifierCancelled { next }.encode_log_data())], None);
+        pqz_health(&mut state, &mut later);
+        assert_eq!(st(&later[0]), (Some(12), Some(4), Some(false)), "kept across ranges");
+        let f = pay_filter(1, 2, vec![tok], None);
+        for t in [P::PqzVerified::SIGNATURE_HASH, P::PqzVerifierProposed::SIGNATURE_HASH, P::PqzVerifierSet::SIGNATURE_HASH,
+            P::PqzVerifierCancelled::SIGNATURE_HASH, C::PqzVerifierRevoked::SIGNATURE_HASH, C::ConfidentialTransfer::SIGNATURE_HASH,
+            C::ConfidentialTransferMulti::SIGNATURE_HASH, C::Unshielded::SIGNATURE_HASH] {
+            assert!(f.topics[0].matches(&t), "{t:#x} not asked");
+        }
     }
 }

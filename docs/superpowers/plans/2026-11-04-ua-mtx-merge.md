@@ -226,8 +226,9 @@ rustc 1.90); Node `node --test` (`clients/clientkeys`); `zether-prover`; `ua-rs`
 | Versioned PQZ keys (3g) | T51 → T52 → T53; T54 after T53; T55 after T54; T56 after T53, beside T54–T55; T57 beside, lands in T19 | after T43, before 3f (owner 2026-11-07: 3g before 3f); contracts sequential in this worktree; T51 measures the registry's deploy gas, T52 measures kind 13 first (from what T43 leaves); T66b's rebalance comes after T53; the OFFCHAIN items go to 3f |
 | Factory index, chain-neutral releases | T67 → T71 → T70 → T72 → T73 → T74 → T68; T76 after T71, before T68; T69 and T75 beside, land in T19 | **owner approved the index and the extension (Q7–Q12 as recommended) 2026-11-07; the chain-neutral releases T71–T76 owner-approved 2026-11-07 (§10.3 as recommended, S3 = signing UA), pending the Fable review's fixes**; after T57, before 3f (owner 2026-11-07: 3e → 3g → factory index + chain-neutral → 3f → 3h → T66b → 3c); contracts sequential in this worktree (`src/factory/` only) |
 | PQZ verifier mode (3f) | T44 → T45; T46 after T45; T47 after T46; T48 and T49 after T45, beside T46–T47; T50 beside, lands in T19 | after T69 (the factory index group), before 3h (owner 2026-11-07); contracts sequential in this worktree; T45 measures kind 13 first (from what T57 leaves); OFFCHAIN built over versioned keys (3g §5) |
-| PQZ proof path (3h) | T58 → T59 → T60 → T61; T62 after T61; T63 after T62; T64 and T65 after T61, beside T62–T63; T66 beside, lands in T19 | after T50, before 3c (owner approved 2026-11-07); contracts sequential in this worktree; T58 measures kind 13 first; each format moves in the task that changes it; no task waits for `ua-rs-sign` |
-| Registry generation, library review, size (T66b) | T66b | after T66, before 3c (owner 2026-11-07): `requirePortable`, no KEM record for an `msig`, the `UARegistryLib` <-> `UARegistry` rebalance, then the review of every library and the size reduction to fit 60 M per deployed contract; sequential in this worktree |
+| Registry block (T66a) | T66a | **after T50 (3f), before 3h (owner 2026-11-08)**: T66b parts 1 (`requirePortable`), 2 (no KEM record for an `msig`) and 5 (`popSlotsOf` and the `pop` slot bitmap, with Soroban's twin) built early, one registry generation; contracts sequential in this worktree |
+| PQZ proof path (3h) | T58 → T59 → T60 → T61; T62 after T61; T63 after T62; T64 and T65 after T61, beside T62–T63; T66 beside, lands in T19 | after T66a (owner 2026-11-08; was after T50), before 3c (owner approved 2026-11-07); contracts sequential in this worktree; T58 measures kind 13 first; each format moves in the task that changes it; no task waits for `ua-rs-sign` |
+| Registry generation, library review, size (T66b) | T66b | after T66, before 3c (owner 2026-11-07; parts 1, 2 and 5 moved to T66a, owner 2026-11-08): the `UARegistryLib` <-> `UARegistry` rebalance, then the review of every library and the size reduction to fit 60 M per deployed contract; sequential in this worktree |
 | Docs | T19 | drafts beside T14–T18, T24–T36, T37–T43, T51–T57, T67–T76, T44–T50 and T58–T66; lands after T66 and 3c (BUILT only with code and tests) |
 | Close | T21 → T22 → T23 | |
 | Next | TODO item 4 | SCaaS testnet reset 2 deploys the merged code (not this plan) |
@@ -1492,6 +1493,25 @@ Items, each with a failing test first where it is code:
 4. **The "+0" mutant (T43):** an extra read of the regulated tax slot in the base `_uaMove` was killed only by gas pins, no
    plus-zero slot test went red: find why and make the slot test catch it.
 
+### Task T50b: what 3f left open (2026-11-08, T44–T50 report)
+
+**Place:** beside T66a or T43b (no contract source unless named). **Estimate:** not sized [estimate: 1–2].
+1. **`scaas-pqz-verifier` request bound:** the service accepts 1,244,672 B, spec 3f's formula gives 722,688 B: measure the largest
+   real request (PQZH op 7 M = 4 with the auditor, hex) and make the spec formula and the code one figure; state how JSON depth
+   is counted (nesting levels of objects and arrays, bounded) and test it.
+2. **The verifier's key-ownership record** (keys it checked off chain, KV-12 OFFCHAIN column) persists across restarts in the
+   service's own store; an unreadable store fails closed (no verdict), a lost store only costs re-checks.
+3. **`e2e.py --zero-dep` still deploys `UAPqzVerifier`** for the registration proofs: the zero-dependency release must run with no
+   PQ verifier on the chain (OFFCHAIN accepts unproven keys its verifier checks): drop the deploy there and register the keys
+   unproven; a failing run first.
+4. **ARCH-POS-15:** `scaas-pqz-verifier` takes a list of RPC endpoints (failover; the majority option for its reads).
+5. `NotProposer` before the owner check on a confirm tells a stranger who the proposer is: no change, `pqzProposer` is a public
+   view (controller 2026-11-08).
+6. **A k-of-n `msig` verifier (owner 2026-11-08):** the requester gathers the member signatures: the node's `/v1/pqz-verdict` fetch
+   sends the request to each member's `scaas-pqz-verifier`, collects k signatures over the one `PqzVerdict` and assembles the `msig`
+   `UASig`; each member's service signs only its own verdict and never contacts the others. Bounds, timeouts and the refusal when
+   fewer than k answer, in the node's spec; red tests first.
+
 ### PQZ verifier mode (3f, owner approved 2026-11-06; names renamed by the owner 2026-11-07): tasks T44–T50
 
 **Spec:** [`2026-11-06-attested-verify.md`](../specs/2026-11-06-attested-verify.md), revised after the Codex and Fable reviews
@@ -2049,6 +2069,10 @@ spec §5.5 note); the operator note's `own_tag` and `PROOF_STORE_OVER_LANE_CAP` 
 **Estimate:** parts 1 and 2 about 2.5, part 3 about 2; part 4 **not sized**: the owner's 60 M goal below is far larger than the 3
 first written for it, and Step 2's study sizes it.
 
+**Owner 2026-11-08: parts 1, 2 and 5 are built early as T66a, right after 3f (T50) and before 3h,** so every reader of the
+registry record changes once and part 3 measures them in place; parts 3 and 4 and Step 5 stay here, after 3h. T66a's gates and
+commits follow this block's rules (`ua-mtx-merge T66a: …`).
+
 **Owner 2026-11-07:** four items move here as one group, in this order, because they share one registry generation and the
 rebalance must be measured after every PQZ contract change:
 
@@ -2060,6 +2084,18 @@ rebalance must be measured after every PQZ contract change:
    (`ua-rs` `ua8.rs` on `ua-rs-sign`: list what it needs). Senders seal to each accepted member's own KEM key.
 3. **The `UARegistryLib` <-> `UARegistry` rebalance** (was in 3c; 3g's R4: if both still miss 57 M, 60 M is accepted).
 4. **Review every library and fit every deployed contract in 60 M** (owner 2026-11-07, below).
+5. **Review `popSlotsOf` and the `pop` slot bitmap again** (owner 2026-11-08; declined 2026-11-03 in the `msig-nested` round, CTR-UA-33 A /
+   CTR-UA-37): on EVM an `msig` record keeps only hashes (`popOf` = `keccak256(pop)`, `memberSigHashOf(ua, index)`,
+   `memberAccepted`), the bytes only in `UAMemberSig` logs (node keeper NODE-IDX-08), so state alone cannot tell which slots signed
+   the `pop` at `register` and which accepted later; a copier (CTR-UA-31) rebuilds that set from logs. The option: one word per `msig`
+   (a bitmap of the `pop` slots, written at `register`) and a typed view `popSlotsOf(ua) → (uint16[] index, bytes32[] hash)`;
+   `popOf` unchanged. Weigh with part 3: the registry pair has about 0.9–1.6 KB of room under 60 M (library study), and the word is
+   one more state slot per `msig` `register`. **Owner 2026-11-08: build it.** The same rule on every family: Soroban's registry
+   (`smartcontracts/soroban/contracts/ua-registry`) gets its twin in this part; NEAR and Algorand in their own UA rounds. Red tests:
+   the bitmap equals the `pop`'s signing slots after `register` (nested `msig` included), a later `acceptMembership` never sets a
+   `pop` bit, `popSlotsOf` hashes equal `memberSigHashOf`, a non-`msig` UA answers empty; vectors and every reader of the record
+   (clientkeys, node indexer, `ua-rs` through T20b) follow; layout and gas pins old → new.
+
 
 3c then holds only the `PqChat` contract and its public topics.
 
@@ -2093,6 +2129,13 @@ module is security-relevant).
       entry (CTR-GOV-19's ceiling).
 - [ ] **Step 4:** whole `forge test`, the four PQZ sets, size gate, gas pins old -> new, deploy-gas table for every contract against
       60 M, mutants of each split.
+- [ ] **Step 5: the full Hedera testnet deploy (owner 2026-11-08):** after Step 4, `script/hedera/DeployHedera.s.sol` in full on the
+      public Hedera testnet (chain 296) from the testnet-only account (`SCAAS_TESTNET_MNEMONIC_FILE`, never a key in a file of the
+      repo). Each transaction within Hedera's 15 M gas per transaction (Hedera charges at least 80 % of the limit: estimate + 20 %);
+      HBAR from the faucet first (several hundred at 1,330 gwei-equivalent). Then the HIP-632 checks of `docs/networks/hedera.md`
+      (one pay with an ED25519 account, one with an ECDSA alias, `msg.sender` of an alias, the relay's Hedera codes). Record
+      addresses, tx hashes and costs in a runs note; the T74 probe (`runs/2026-11-08-ua-mtx-merge-hedera-probe/`) already
+      confirmed CREATE3, `EXTCODECOPY` and `0x4e59` there.
 
 ### Factory contract index and extensible catalogue (owner 2026-11-07): tasks T67–T70
 
@@ -2100,7 +2143,7 @@ module is security-relevant).
 index (§1–§7) **approved by the owner 2026-11-07** (its §6 questions answered as recommended); the extension (§8: generic
 classes and kinds, `createInstance`, `PqChat` as class 3) **approved by the owner 2026-11-07** (direction, then Q7–Q12
 answered as recommended; T67 takes Q12's `uint16` ids). The creator is a `bytes32 creatorId` (chain-neutral S3, below). **Place (owner 2026-11-07):** after 3g (T57), before 3f (T44 depends on
-T69): 3e → 3g → factory index + chain-neutral → 3f → 3h → T66b → 3c. Independent of the registry and of every token body: only `src/factory/`, its
+T69): 3e → 3g → factory index + chain-neutral → 3f → T66a (registry block, owner 2026-11-08) → 3h → T66b → 3c. Independent of the registry and of every token body: only `src/factory/`, its
 tests, `GovGas` and the deploy scripts move. **Order:** T67 → T70 → T68, sequential in this worktree; T69 (docs share) drafts
 beside them and lands in T19. **Estimate:** 6 agent-days (3 for the index, 3 for the extension). Each contracts task ends with the whole `forge test` green at the default set
 and the size gate; no PQZ file moves, so no per-set run. Red first, positive control first, one change at a time; mutants one at
@@ -2266,6 +2309,10 @@ outside the repo).
 
 **Interfaces:**
 - `P=<date>-ua-mtx-merge`; `FORGE_DIRS="ua zether pqz governance v2 metatx as"`; `SETS="n2048-kmax1024 n2560-kmax16384 n2816-kmax65536"`.
+- **No whole-tree compile** (controller 2026-11-08, after T66a: a whole-tree `forge build` / `forge test` was OOM-killed at the 4 GB
+  `scripts/capped` cap): `build`, every `forge-*` and every `at-set-<set>` step compile one test directory at a time
+  (`FOUNDRY_TEST=<dir>`, its own `FOUNDRY_OUT` / `FOUNDRY_CACHE_PATH`), in the form of `runs/2026-11-08-ua-mtx-merge-t66a/forge-dirs.sh`;
+  `forge-rest` lists its directories explicitly, and the files directly in `test/` run in sparse mode.
 - `STEPS="build forge-ua forge-zether forge-pqz forge-governance forge-v2 forge-metatx forge-as forge-rest at-set-n2048-kmax1024
   at-set-n2560-kmax16384 at-set-n2816-kmax65536 forge-isolate sizes zether-cross clientkeys vectors-check cargo-zether-prover
   ua-rs ua-c ua-cxx ua-qt ua-dart-frb ua-py ua-go ua-cs ua-dart cargo-scaas-node node-e2e-anvil node-e2e-hedera zether-e2e docs

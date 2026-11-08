@@ -434,9 +434,13 @@ class Vectors(unittest.TestCase):
                 m = out32(L.kem_record_message, r['kind'], ua, v, pk, len(pk))
                 self.assertEqual(hx(m), r['message'])
                 self.assertEqual(m, out32(L.ua_message, r['kind'], out32(L.purpose_tag, b'kem'), d))
-                if r['kind'] == 0x0120:
-                    self.assertEqual(hx(out32(L.member_digest, ua, m)), r['memberDigest'])
+                self.assertNotEqual(r['kind'], 0x0120, 'CTR-UA-32: an msig holds no KEM key')
+        self.assertEqual(len(PV['kemRecords']), 12)
         u = bytes([1]) * 32
+        # CTR-UA-32 (T66a): a PQ-eligible msig holds a PQZ key but no KEM key; the same record under a single PQ kind builds
+        mq = b(next(x for x in PV['registrations'] if x['name'] == 'msig-pq/n2048-kmax1024')['ua'])
+        self.assertEqual(code_of(lambda: out32(L.kem_record_message, 0x0120, mq, 1, kem(KEM_PK), KEM_PK)), 'UAKemHolder')
+        self.assertEqual(len(out32(L.kem_record_message, 0x0131, mq, 1, kem(KEM_PK), KEM_PK)), 32)  # the control
         for v, pk, code in ((0, kem(KEM_PK), 'UAKemVersion'), (1, kem(KEM_PK - 1), 'UAKemKeyLength'),
                             (1, kem(KEM_PK + 1), 'UAKemKeyLength'), (1, b'', 'UAKemKeyLength'),
                             (1, kem(KEM_PK, 0), 'UAKemScheme'), (1, kem(KEM_PK, 2), 'UAKemScheme'),
@@ -510,7 +514,10 @@ class Vectors(unittest.TestCase):
                     want = out32(L.member_digest, b(x['inner']), out32(L.ua_message, 0x0120, member_tag, md))
                     self.assertEqual(hx(want), x['memberDigest'], r['name'])
         with self.subTest('records'):
-            self.assertEqual((len(NV['kemRecords']), len(NV['pqzKeyRecords'])), (1, 4))
+            self.assertEqual((len(NV['kemRecords']), len(NV['pqzKeyRecords'])), (0, 4))  # CTR-UA-32: an msig has no KEM record
+            pq = next(x for x in NV['registrations'] if x['name'] == 'msig-nested-pq')
+            self.assertEqual(code_of(lambda: out32(L.kem_record_message, 0x0120, b(pq['ua']), 1, kem(KEM_PK), KEM_PK)), 'UAKemHolder')
+            self.assertEqual(code_of(lambda: reg_args(reg_input(pq, inner=inner, kemPk=hx(kem(KEM_PK))))), 'UAKemHolder')
             for r in NV['kemRecords']:
                 ua, v, pk = b(r['ua']), r['version'], b(r['kemPk'])
                 m = out32(L.kem_record_message, r['kind'], ua, v, pk, len(pk))
@@ -540,9 +547,9 @@ class Vectors(unittest.TestCase):
             for a in NV['authorizations']:
                 md = out32(L.member_digest, b(a['ua']), out32(L.ua_message, 0x0120, b(a['purposeTag']), b(a['digest'])))
                 self.assertEqual(hx(md), a['memberDigest'], a['name'])
-                k = NV['kemRecords'][0]
-                i = {'ua': k['ua'], 'version': k['version'], 'kemPk': k['kemPk'], 'sig': a['uaSig']}
-                self.assertEqual(json.loads(text(L.set_kem_key_args, json.dumps(i).encode()))['sig'], a['uaSig'], a['name'])
+                k = NV['pqzKeyRecords'][0]  # (was kemRecords[0]: CTR-UA-32, an msig has no KEM record)
+                i = {'ua': k['ua'], 'pqzKey': k['pqzKey'], 'pqzPopHash': k['pqzPopHash'], 'sig': a['uaSig']}
+                self.assertEqual(json.loads(text(L.set_pqz_key_args, json.dumps(i).encode()))['sig'], a['uaSig'], a['name'])
         with self.subTest('negatives'):
             # the builder's own refusal is the minimal rule at both levels; the others are the registry's, on the signatures
             minimal = {'inner-below-threshold', 'inner-index-past-the-members', 'inner-unsorted', 'inner-not-minimal', 'outer-not-minimal'}
@@ -564,7 +571,7 @@ class Vectors(unittest.TestCase):
                 self.assertEqual(eligible(b(r['keyData'])), 'UAMemberUnknown', r['reason'])
 
     def test_nested_inner(self):
-        """The `_with` calls with `inner` ({id: keyData}, the JSON calls' form): msig-nested-pq's eligibility and holder record, every
+        """The `_with` calls with `inner` ({id: keyData}, the JSON calls' form): msig-nested-pq's eligibility and record (no KEM key, CTR-UA-32), every
         eligibility row and every nested PQZ key record reproduce; without `inner` they stay UAMemberUnknown, so does a third level. Every
         memberships row's `stored` turns back into its slot through scaas_ua_replayed_member_sig."""
         regs = NV['registrations']
@@ -596,14 +603,16 @@ class Vectors(unittest.TestCase):
         self.assertEqual(code_of(lambda: eligible(third, json.dumps({NV['structures'][0]['member']: pq['keyData']}).encode())),
                          'UAMemberUnknown', 'a third level')
         holders = [r for r in regs + NV['afterAcceptance'] if r['attrs']['kemPk'] != '0x' or r['attrs']['pqzKey'] != '0x']
-        self.assertEqual([r['name'] for r in holders], ['msig-nested-pq'])
-        for r in holders:
-            g = holder_with(r, inner)
-            self.assertEqual((hx(bytes(g.kem_record_hash)), hx(bytes(g.portable_record_digest)), hx(bytes(g.registration_digest)),
-                              hx(bytes(g.message)), mh(g)),
-                             (r['kemRecordHash'], r['portableRecordDigest'], r['registrationDigest'], r['popMessage'], r['memberDigest']))
-            self.assertEqual(code_of(lambda: holder_with(r, None)), 'UAMemberUnknown', r['name'])
-            self.assertEqual(code_of(lambda: register(r)), 'UAMemberUnknown', r['name'])
+        self.assertEqual(holders, [])  # CTR-UA-32 (T66a): msig-nested-pq registers without a KEM key (was its one holder row)
+        g = holder_with(pq, inner)
+        self.assertEqual((hx(bytes(g.kem_record_hash)), hx(bytes(g.portable_record_digest)), hx(bytes(g.registration_digest)),
+                          hx(bytes(g.message)), mh(g)),
+                         (pq['kemRecordHash'], pq['portableRecordDigest'], pq['registrationDigest'], pq['popMessage'], pq['memberDigest']))
+        # an msig holds no KEM key: refused by its kind, before its key data or `inner` is read
+        with_kem = {**pq, 'attrs': {**pq['attrs'], 'kemPk': hx(kem(KEM_PK))}}
+        for i in (inner, None):
+            self.assertEqual(code_of(lambda: holder_with(with_kem, i)), 'UAKemHolder', i)
+        self.assertEqual(code_of(lambda: register(with_kem)), 'UAKemHolder')
         self.assertEqual(len(NV['pqzKeyRecords']), 4)
         for r in NV['pqzKeyRecords']:
             g = key_record_with(r, inner)
@@ -650,7 +659,11 @@ class Vectors(unittest.TestCase):
                 self.assertEqual(c['kemFillCalldataLength'], 2020)
                 commits += 1
         self.assertEqual(commits, sum('kemCommit' in r for r in PV['registrations']))
-        self.assertGreater(commits, 0)
+        self.assertEqual(commits, 7)  # CTR-UA-32: msig-pq/<set> registers without a KEM key
+        # CTR-UA-32 (T66a): a PQ-eligible msig holds no KEM key, in either form
+        mq = next(x for x in PV['registrations'] if x['name'] == 'msig-pq/n2048-kmax1024')
+        for commit in ({'kemCommit': True}, {'kemCommit': False}, {}):
+            self.assertEqual(code_of(lambda: reg_args(reg_input(mq, kemPk=PV['kemRecords'][0]['kemPk'], **commit))), 'UAKemHolder', commit)
         typed = {0x0100: ('registerWebAuthn', 580), 0x0110: ('registerMuSig2', 1124), 0x0112: ('registerMuSig2', 1124),
                  0x0111: ('registerFrost', 2308), 0x0113: ('registerFrost', 2308)}
         rows = [v for v in K['valid'] if v['kind'] in typed]
@@ -674,7 +687,7 @@ class Vectors(unittest.TestCase):
         self.assertEqual(code_of(lambda: text(L.registration_args, None)), 'UAArgument')
 
     def test_set_key_args(self):
-        self.assertEqual(len(PV['kemRecords']), 15)  # + v1-v3 of mldsa87, fndsa1024 (CTR-UA-39 / -40)
+        self.assertEqual(len(PV['kemRecords']), 12)  # + v1-v3 of mldsa87, fndsa1024 (CTR-UA-39 / -40); no msig (CTR-UA-32)
         for k in PV['kemRecords']:
             i = {'ua': k['ua'], 'version': k['version'], 'kemPk': k['kemPk'], 'sig': record_sig(k)}
             self.assertEqual(json.loads(text(L.set_kem_key_args, json.dumps(i).encode())), k['args'], k['id'])
@@ -741,6 +754,14 @@ class Vectors(unittest.TestCase):
                 self.assertEqual(code_of(lambda: key_record(holder_row['kind'], b(ua_hex), b(holder_row['keyData']), b(rec['pqzKey']), b'',
                                                             b(s.get('pqzPopHash', rec['pqzPopHash'])), holder_row['attrs']['pqzKey'] != '0x')), err, n['name'])
                 run += 1
+            elif n['entry'] == 'setKemKey' and err == 'UAKemHolder':
+                # CTR-UA-32 (msig-kem-record): an msig's KEM record is refused by its kind (the target's kind is the row's)
+                k = next(x for x in PV['kemRecords'] if x['id'] == m['row'])
+                t = next(x for x in regs if x['ua'] == s['ua'])
+                self.assertEqual(t['kind'], m['kind'], n['name'])
+                pk = b(s['kemPk'])
+                self.assertEqual(code_of(lambda: out32(L.kem_record_message, t['kind'], b(s['ua']), int(k['version']), pk, len(pk))), err, n['name'])
+                run += 1
             elif n['entry'] == 'setKemKey' and n['name'] == 'kem-record-of-other-ua':
                 # the record of one UA offered for another: the signed message differs, so the signature cannot verify
                 k = next(x for x in PV['kemRecords'] if x['id'] == m['row'])
@@ -767,6 +788,7 @@ class Vectors(unittest.TestCase):
         self.assertEqual(run + sig_level + 1, len(PV['negatives']))  # + the skipped msig-minimal row
         self.assertTrue(run and sig_level)
         u, key, proof = bytes([1]) * 32, bytes(16384), bytes([7]) * 32
+        mq = b(next(x for x in regs if x['name'] == 'msig-pq/n2048-kmax1024')['keyData'])
         # malformed msig key data is UAKeyData, not "not a holder"; an msig without key data is not a holder
         for kdat in (bytes([0, 2, 0]), bytes([0, 2, 0, 2, 9, 9])):
             self.assertEqual(code_of(lambda: holder(0x0120, u, kdat, key, b'', proof)), 'UAKeyData')
@@ -775,7 +797,8 @@ class Vectors(unittest.TestCase):
                            ((0x0130, u, b'', bytes(100), b'', proof), 'UAKeyData'),
                            ((0x0130, u, b'', b'', b'', b'', kem(KEM_PK - 1)), 'UAKemKeyLength'),
                            ((0x0130, u, b'', b'', b'', b'', kem(KEM_PK, 0)), 'UAKemScheme'),
-                           ((0x0101, u, b'', b'', b'', b'', kem(KEM_PK)), 'UAKemHolder')):
+                           ((0x0101, u, b'', b'', b'', b'', kem(KEM_PK)), 'UAKemHolder'),
+                           ((0x0120, u, mq, b'', b'', b'', kem(KEM_PK)), 'UAKemHolder')):  # a PQ-eligible msig (CTR-UA-32)
             self.assertEqual(code_of(lambda: holder(*args)), code, args[:2])
         # a NULL / zero-length proof hash is absent (same as no hash); an empty proof is no proof
         self.assertEqual(bytes(holder(0x0130, u).message), bytes(holder(0x0130, u, b'', b'', b'', b'').message))

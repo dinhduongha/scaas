@@ -23,3 +23,6 @@ Not exported, not tested, not bundled.
 - `router-create/{src/evm.js,scripts/typed-ops-vectors.mjs}` (plan T76): as they stood before the router's three creation
   rows (`UACreateToken`, `UACreateDex`, `UACreateInstance`; chain-neutral spec §4.4); their vector copy:
   `smartcontracts/vectors/typed/legacy/ua-mtx-merge/router-create/typed_ops.json`.
+- `t66a/{src/ua.js,scripts/ua-portable-vectors.mjs}` (plan T66a, CTR-UA-32): as they stood at 05f23be2, a PQ-eligible `msig` a KEM
+  holder (`holds` for the KEM key, `kemRecordMessage` for any kind); their vector copy:
+  `smartcontracts/vectors/ua/legacy/ua-mtx-merge/t66a/{portable,nested}.json`.

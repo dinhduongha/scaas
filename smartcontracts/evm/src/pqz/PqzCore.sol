@@ -7,6 +7,7 @@ import {UAKinds} from "../ua/UAKinds.sol";
 import {IUALedger} from "../metatx/IUALedger.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {SSTORE2} from "../common/SSTORE2.sol";
+import {SigCheck} from "../common/SigCheck.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {ZetherTypes} from "../zether/ZetherTypes.sol";
 import {IPqzToken} from "./IPqzToken.sol";
@@ -60,6 +61,7 @@ library PqzCore {
         address pqz;
         ZetherTypes.DisclosureMode disclosureMode;
         ZetherTypes.AuditorMode auditorMode;
+        uint8 pqzVerifyMode; // group 3f (spec §3): byte 22 of slot 0, `PRECOMPILE` 0 / `OFFCHAIN` 1, written by `init` only
         address verifier;
         bytes32 psid;
         uint256 shieldScale;
@@ -72,6 +74,17 @@ library PqzCore {
         mapping(bytes32 => bytes) memos; // commit-reveal: the sender memo
         uint256 minDecoyFee; // op 7: the least per-leg `decoyFee` (owner 2026-10-20), immutable
         mapping(bytes32 => uint64) sendCounter; // group 3g (KV-6): one per UA, advanced by a debit of any version
+        // group 3f (spec §4.4), read on the `OFFCHAIN` branch only: the verifier UA (0: revoked), its shape frozen at
+        // assignment, then the epoch, fixed, the notice period stored at init and a pending transfer's `eta` in one slot
+        bytes32 pqzVerifierUA;
+        bytes32 pqzVerifierShape;
+        uint32 pqzVerifierEpoch;
+        bool pqzVerifierFixed;
+        uint64 noticePeriod;
+        uint64 eta;
+        bytes32 pqzPendingVerifier;
+        bytes32 pqzProposer;
+        uint32 pqzProposerGeneration;
     }
 
     /// @notice The token's immutables a call needs and the statement's `envelopeBinding` word (0 direct).
@@ -190,6 +203,13 @@ library PqzCore {
     uint256 internal constant OUT_OFF = PqzCt.CT + PqzCt.V;
     uint256 internal constant SEALED = 2 + 40 * 1; // op 1's memo after its clear salt: op 7's encoding, M = 1 (CTR-PQZ-23)
     uint256 internal constant DISCLOSE = PqzSet.STMT_DISCLOSE;
+    /// @notice `pqzVerifyMode` (spec §3, AV-2): the precompile's verdict, or a verdict signed by the token's verifier UA.
+    uint8 internal constant PRECOMPILE = 0;
+    uint8 internal constant OFFCHAIN = 1;
+    /// @notice Spec §5.1 (AV-5): the verifier's typed struct, in the token's domain, purpose `pqz-verdict`.
+    bytes32 internal constant VERDICT_TYPEHASH = keccak256(
+        "PqzVerdict(address token,uint256 chainId,bytes32 proofSystemId,bytes32 statementHash,bytes32 proofHash,uint32 pqzVerifierEpoch,uint64 validUntil)"
+    );
 
     function $() internal pure returns (PqzStorage storage s) {
         assembly ("memory-safe") { s.slot := _STORAGE }
@@ -809,7 +829,7 @@ library PqzCore {
         (o.cur, ptr,, proven) = IUARegistry(registry).pqzKeyOf(o.from);
         if (o.kv > o.cur) revert IPqzToken.KeyVersionUnknown(o.from, o.kv);
         if (o.kv != o.cur) (ptr,, proven) = IUARegistry(registry).pqzKeyAt(o.from, o.kv);
-        if (!proven || ptr.code.length != PqzCt.PK + 1) revert IPqzToken.AccountNotRegistered(o.from);
+        if (!_usable(proven, ptr)) revert IPqzToken.AccountNotRegistered(o.from);
     }
 
     /// @dev `T = acc ± Σ pending[min(p, rolled) .. max(p, rolled)) + Trivial(digits(shieldIn))`, everything read from
@@ -886,12 +906,24 @@ library PqzCore {
 
     /// @dev The authority (registry: the signing UA `from` itself over `authDigest`, purpose `zether-auth`; UA-6 U7),
     ///      then the proof. A starved registry is `UAVerifyGas`, never `AuthRejected` (T-AUTH-4, as `UAStore.via`): its own
-    ///      `UAVerifyGas`, or its frame out of gas (no revert data, at most the 1/64 kept here; review M5).
-    function _check(Op memory o, bytes memory buf, bytes calldata proof, IUARegistry.UASig calldata authSig)
-        internal view
+    ///      `UAVerifyGas`, or its frame out of gas (no revert data, at most the 1/64 kept here; review M5). The proof
+    ///      (group 3f, spec §5.3): `PRECOMPILE` the precompile's verdict, `pqzVerdict` never read;
+    ///      `OFFCHAIN` the verdict of the token's verifier over this statement and this proof (`requireVerdict`), the
+    ///      precompile never called.
+    function _check(Op memory o, bytes memory buf, bytes calldata proof, IUARegistry.UASig calldata authSig,
+        IPqzToken.PqzSignedVerdict calldata pqzVerdict) internal
     {
+        _auth(o, buf, authSig);
+        if ($().pqzVerifyMode == OFFCHAIN) return _offchain(o, buf, proof, pqzVerdict);
         uint256 len = o.stLen;
-        bytes32 d = authDigest(buf, len, o.domainSeparator);
+        assembly ("memory-safe") {
+            calldatacopy(add(add(buf, 37), len), proof.offset, proof.length)
+        }
+        if (!verdict($().pqz, buf)) revert IPqzToken.ProofRejected();
+    }
+
+    function _auth(Op memory o, bytes memory buf, IUARegistry.UASig calldata authSig) internal view {
+        bytes32 d = authDigest(buf, o.stLen, o.domainSeparator);
         uint256 g = gasleft();
         try IUARegistry(o.registry).requireAuthorized(o.from, UAKinds.PURPOSE_ZETHER_AUTH, d, authSig) {}
         catch (bytes memory err) {
@@ -900,10 +932,102 @@ library PqzCore {
             }
             revert IPqzToken.AuthRejected();
         }
-        assembly ("memory-safe") {
-            calldatacopy(add(add(buf, 37), len), proof.offset, proof.length)
+    }
+
+    /// @dev The `OFFCHAIN` proof: the statement hashed in place (`buf + 37`, `stLen`: exactly the statement views' bytes).
+    function _offchain(Op memory o, bytes memory buf, bytes calldata proof, IPqzToken.PqzSignedVerdict calldata pqzVerdict) internal
+    {
+        uint256 len = o.stLen;
+        bytes32 sh;
+        assembly ("memory-safe") { sh := keccak256(add(buf, 37), len) }
+        requireVerdict(sh, keccak256(proof), pqzVerdict, o.registry, o.domainSeparator);
+    }
+
+    // ------------------------------------------------------------------ the verifier (group 3f, spec §4, §5)
+
+    /// @notice The `OFFCHAIN` acceptance of a proof (spec §5.3): `verdictStatus` 0, else its named refusal; `PqzVerified`.
+    function requireVerdict(bytes32 sh, bytes32 ph, IPqzToken.PqzSignedVerdict calldata v, address registry,
+        bytes32 domainSeparator) internal
+    {
+        uint256 r = verdictStatus(sh, ph, v, registry, domainSeparator);
+        if (r == 1) revert IPqzToken.PqzVerifierRevoked();
+        if (r == 2) revert IPqzToken.PqzVerifierChanged();
+        if (r == 3) revert IPqzToken.PqzVerdictRejected();
+        if (r != 0) revert IPqzToken.PqzVerdictMismatch(uint8(r - 16));
+        PqzStorage storage s = $();
+        emit IPqzToken.PqzVerified(sh, ph, s.pqzVerifierUA, s.pqzVerifierEpoch);
+    }
+
+    /// @notice Spec §5.3 in order, against storage and what the token rebuilt (`sh` the statement's keccak, `ph` the
+    ///         proof's): 0 accepted; 1 revoked (verifier 0); 2 the shape changed; 16 + the first mismatching `PqzVerdict`
+    ///         field (`validUntil` below now); 3 the signature refused. A starved signature check reverts `UAVerifyGas`
+    ///         (its own, or its frame out of gas: no data, at most the 1/64 kept here), never a refusal.
+    function verdictStatus(bytes32 sh, bytes32 ph, IPqzToken.PqzSignedVerdict calldata sv, address registry,
+        bytes32 domainSeparator) internal view returns (uint256)
+    {
+        PqzStorage storage s = $();
+        bytes32 v = s.pqzVerifierUA;
+        if (v == 0) return 1;
+        if (verifierShape(registry, v, false) != s.pqzVerifierShape) return 2;
+        IPqzToken.PqzVerdict calldata pv = sv.pqzVerdict;
+        if (pv.token != address(this)) return 16;
+        if (pv.chainId != block.chainid) return 17;
+        if (pv.proofSystemId != s.psid) return 18;
+        if (pv.statementHash != sh) return 19;
+        if (pv.proofHash != ph) return 20;
+        if (pv.pqzVerifierEpoch != s.pqzVerifierEpoch) return 21;
+        if (pv.validUntil < block.timestamp) return 22;
+        bytes32 d = MessageHashUtils.toTypedDataHash(domainSeparator, keccak256(abi.encode(VERDICT_TYPEHASH, pv)));
+        uint256 g = gasleft();
+        try IUARegistry(registry).requireAuthorized(v, UAKinds.PURPOSE_PQZ_VERDICT, d, sv.sig) {}
+        catch (bytes memory err) {
+            if ((err.length == 4 && bytes4(err) == UAKinds.UAVerifyGas.selector) || (err.length == 0 && gasleft() < g / 63)) {
+                revert UAKinds.UAVerifyGas();
+            }
+            return 3;
         }
-        if (!verdict($().pqz, buf)) revert IPqzToken.ProofRejected();
+        return 0;
+    }
+
+    /// @notice The verifier's shape (spec §4.1, C3): `keccak256` of a native id's code hash (no code: `keccak256("")`,
+    ///         existing or not), a derived single key's kind, an `msig`'s structure with each slot's accepted flag and each
+    ///         native member's code hash. `strict` (init, a proposal, a confirm) also refuses what spec §4.1 does not list:
+    ///         an unregistered derived id `PqzVerifierUnregistered`, any other kind, a native id with code, an `msig`
+    ///         member of another kind (a nested `msig` included) `PqzVerifierKind`. Every `OFFCHAIN` check recomputes it.
+    function verifierShape(address registry, bytes32 v, bool strict) internal view returns (bytes32) {
+        if (strict && v == 0) revert IPqzToken.PqzVerifierUnregistered(v); // the zero id is no UA (a transfer to 0 is no revocation)
+        if (UAKinds.inNativeSpace(v)) return keccak256(abi.encode(UAKinds.EVM_EOA, _nativeCode(v, strict)));
+        uint16 k = IUARegistry(registry).kindOf(v);
+        if (strict && k == 0) revert IPqzToken.PqzVerifierUnregistered(v);
+        if (k != UAKinds.MSIG) {
+            if (strict && !_verifierKind(k)) revert IPqzToken.PqzVerifierKind(k);
+            return keccak256(abi.encode(k));
+        }
+        IUARegistry.MsigStructure memory m = IUARegistry(registry).msigOf(v);
+        bytes memory h = abi.encode(k, m.threshold, m.members.length);
+        for (uint256 i; i < m.members.length; ++i) {
+            IUARegistry.MsigMember memory x = m.members[i];
+            bytes32 code;
+            if (x.kind == UAKinds.EVM_EOA) code = _nativeCode(x.id, strict);
+            else if (strict && !_verifierKind(x.kind)) revert IPqzToken.PqzVerifierKind(x.kind);
+            h = bytes.concat(h, abi.encode(x.kind, x.id, x.weight, code, IUARegistry(registry).memberAccepted(v, i)));
+        }
+        return keccak256(h);
+    }
+
+    /// @dev Spec §4.1's derived kinds, each verifiable without a SCaaS precompile.
+    function _verifierKind(uint16 k) private pure returns (bool) {
+        return k == UAKinds.SECP256K1 || k == UAKinds.P256 || k == UAKinds.WEBAUTHN_P256 || k == UAKinds.MLDSA44
+            || k == UAKinds.MLDSA65;
+    }
+
+    /// @dev A native id's code hash, `keccak256("")` for an account without code; `strict`: real code (not the EIP-7702
+    ///      designator) is refused `PqzVerifierKind(EVM_CONTRACT)` (the registry would take ERC-1271 for it).
+    function _nativeCode(bytes32 id, bool strict) private view returns (bytes32 h) {
+        address a = address(uint160(uint256(id)));
+        if (strict && SigCheck.isContract(a)) revert IPqzToken.PqzVerifierKind(UAKinds.EVM_CONTRACT);
+        h = a.codehash;
+        if (h == 0) h = keccak256("");
     }
 
     /// @notice The EIP-712 digest of `PqzAuth` (TS-D19) of the statement in `buf`: `hashStruct` is the typehash, the op byte
@@ -956,7 +1080,7 @@ library PqzCore {
     function _creditKey(address registry, bytes32 ua) internal view returns (address ptr, uint64 v) {
         bool proven;
         (v, ptr,, proven) = IUARegistry(registry).pqzKeyOf(ua); // KV-7: the key and its version, one read
-        if (!proven || ptr.code.length != PqzCt.PK + 1) revert IPqzToken.AccountNotRegistered(ua);
+        if (!_usable(proven, ptr)) revert IPqzToken.AccountNotRegistered(ua);
         if ($().psid == PqzSet.PQZH_ID) {
             uint16 k = IUARegistry(registry).kindOf(ua);
             if (k != UAKinds.MLDSA44 && k != UAKinds.MLDSA65 && k != UAKinds.FNDSA512 && k != UAKinds.MLDSA87
@@ -972,14 +1096,21 @@ library PqzCore {
     function _keyPtr(address registry, bytes32 ua) internal view returns (address ptr) {
         bool proven;
         (, ptr,, proven) = IUARegistry(registry).pqzKeyOf(ua);
-        if (!proven || ptr.code.length != PqzCt.PK + 1) revert IPqzToken.AccountNotRegistered(ua);
+        if (!_usable(proven, ptr)) revert IPqzToken.AccountNotRegistered(ua);
     }
 
     /// @dev Version `v`'s key pointer under the same check (KV-10: rollover and prepare of any version that passed it).
     function _keyAt(address registry, bytes32 ua, uint64 v) internal view returns (address ptr) {
         bool proven;
         (ptr,, proven) = IUARegistry(registry).pqzKeyAt(ua, v);
-        if (!proven || ptr.code.length != PqzCt.PK + 1) revert IPqzToken.AccountNotRegistered(ua);
+        if (!_usable(proven, ptr)) revert IPqzToken.AccountNotRegistered(ua);
+    }
+
+    /// @dev The mode's key check (KV-12, spec §6 AV-6): `PRECOMPILE` a key proven on this chain, `OFFCHAIN` any stored key
+    ///      (its verifier checks `R_REG`, the stored proof bytes and single ownership off chain); both the set's exact
+    ///      length (`PqzCt.PK + 1` bytes of code). A proven key never reads the mode (slot 0, warm on every debit anyway).
+    function _usable(bool proven, address ptr) internal view returns (bool) {
+        return (proven || $().pqzVerifyMode == OFFCHAIN) && ptr.code.length == PqzCt.PK + 1;
     }
 
     // ------------------------------------------------------------------ the buffer `u8(op) ‖ be32(len) ‖ stmt ‖ proof`

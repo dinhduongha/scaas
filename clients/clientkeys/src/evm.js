@@ -207,6 +207,10 @@ const STRUCTS = Object.fromEntries(Object.entries({
   PayMeta: 'bytes32 salt,string payNo,uint16 schema,bytes body',
   // a holder's terms, nested in the router's `SetGrant` / `UASetGrant` (governance spec §3.2: `hashStruct` signed, the struct the argument)
   GrantTerms: 'uint128 min,uint128 max,uint128 total,uint128 perWindow,uint32 window,uint64 validUntil,uint32 maxUses,bool delegable,bytes32 scope',
+  // group 3f (PQZ verifier mode spec §5.1, §5.3): what a PQZ verifier UA signs in the token's domain (purpose `pqz-verdict`), and
+  // the pair every proof-carrying PQZ entry takes last, outside every `UA*` struct (unbound, like `relayer`)
+  PqzVerdict: 'address token,uint256 chainId,bytes32 proofSystemId,bytes32 statementHash,bytes32 proofHash,uint32 pqzVerifierEpoch,uint64 validUntil',
+  PqzSignedVerdict: 'PqzVerdict pqzVerdict,UASig sig',
 }).map(([name, list]) => [name, fields(list)]));
 
 const DOMAIN_OF = { NormalToken: 'SCaaS MetaToken', WrappedToken: 'SCaaS MetaToken', NormalZetherToken: 'SCaaS ZetherToken',
@@ -253,6 +257,9 @@ const pqzUnshield = (m, x) => [['PqzBurnArgs', m.args], ['Payout', m], ['bytes',
 const pqzUnwrap = (m, x) => [['PqzBurnArgs', m.args], ['Unwrap', m.unwrap], ['bytes', m.proof], pqzAuthOf(x), ['bytes', m.accHint]];
 const zetherOp = (args) => (m) => [[args, m.args], ['bytes', m.proof]];
 const PQZ_TAIL = 'bytes proof,bytes accHint';
+// group 3f (spec §5.3): the verdict after `auth` on the six signed PQZ entries, `x.pqzVerdict` (`EMPTY_PQZ_VERDICT` on a
+// PRECOMPILE token, which never reads it)
+const pqzVerdictTail = (m, x = {}) => [['PqzSignedVerdict', pqzSignedVerdictOf(x.pqzVerdict)]];
 // A pay entry's last parameter (pay-meta-tax spec §2.1): `x.meta`, checked by `payMeta` (never empty, O11).
 const payMetaTail = (m, x = {}) => [['PayMeta', payMeta(required(x.meta, 'the payment metadata'))]];
 
@@ -300,12 +307,18 @@ const OPS = {
   CancelRecovery: { fields: '', on: ACCOUNT, accountSig: true },
   Execute: { fields: 'address target,uint256 value,bytes data', on: ACCOUNT, accountSig: true },
   // PQZ (Appendix X.3; `Payout` as C0 found: the flat `amount, recipient` does not compile there, evm-size-levers.md §7)
-  UAPqzTransferSingle: { fields: `PqzTransferArgs args,${PQZ_TAIL}`, on: PQZ, entry: 'ConfidentialTransferSingle', args: pqzOp('PqzTransferArgs') },
-  UAPqzTransferSingleCompact: { fields: `PqzTransferArgs args,${PQZ_TAIL}`, on: PQZ, entry: 'ConfidentialTransferSingleCompact', args: pqzOp('PqzTransferArgs') },
-  UAPqzTransfer: { fields: `PqzMultiArgs args,${PQZ_TAIL}`, on: PQZ, entry: 'ConfidentialTransfer', args: pqzOp('PqzMultiArgs') },
-  UAPqzTransferCompact: { fields: `PqzMultiArgs args,${PQZ_TAIL}`, on: PQZ, entry: 'ConfidentialTransferCompact', args: pqzOp('PqzMultiArgs') },
-  UAPqzUnshield: { fields: `PqzBurnArgs args,uint256 amount,bytes32 recipient,${PQZ_TAIL}`, on: PQZ, entry: 'Unshield', args: pqzUnshield },
-  UAPqzUnshieldUnwrap: { fields: `PqzBurnArgs args,Unwrap unwrap,${PQZ_TAIL}`, on: ['WrappedPqzToken'], entry: 'UnshieldUnwrap', args: pqzUnwrap },
+  UAPqzTransferSingle: { fields: `PqzTransferArgs args,${PQZ_TAIL}`, on: PQZ, entry: 'ConfidentialTransferSingle', args: pqzOp('PqzTransferArgs'),
+    tail: pqzVerdictTail },
+  UAPqzTransferSingleCompact: { fields: `PqzTransferArgs args,${PQZ_TAIL}`, on: PQZ, entry: 'ConfidentialTransferSingleCompact',
+    args: pqzOp('PqzTransferArgs'), tail: pqzVerdictTail },
+  UAPqzTransfer: { fields: `PqzMultiArgs args,${PQZ_TAIL}`, on: PQZ, entry: 'ConfidentialTransfer', args: pqzOp('PqzMultiArgs'),
+    tail: pqzVerdictTail },
+  UAPqzTransferCompact: { fields: `PqzMultiArgs args,${PQZ_TAIL}`, on: PQZ, entry: 'ConfidentialTransferCompact', args: pqzOp('PqzMultiArgs'),
+    tail: pqzVerdictTail },
+  UAPqzUnshield: { fields: `PqzBurnArgs args,uint256 amount,bytes32 recipient,${PQZ_TAIL}`, on: PQZ, entry: 'Unshield', args: pqzUnshield,
+    tail: pqzVerdictTail },
+  UAPqzUnshieldUnwrap: { fields: `PqzBurnArgs args,Unwrap unwrap,${PQZ_TAIL}`, on: ['WrappedPqzToken'], entry: 'UnshieldUnwrap', args: pqzUnwrap,
+    tail: pqzVerdictTail },
   // Zether (Appendix X.3)
   UAZetherTransferSingle: { fields: 'ZetherSingle args,bytes proof', on: ZETHER, entry: 'ConfidentialTransferSingle', args: zetherOp('ZetherSingle') },
   UAZetherTransfer: { fields: 'ZetherMulti args,bytes proof', on: ZETHER, entry: 'ConfidentialTransfer', args: zetherOp('ZetherMulti') },
@@ -388,6 +401,10 @@ const OPS = {
   // bit 23 `TAX` (pay-meta-tax spec §6.2): the one PERCENT rate, the recipient
   UASetTaxRate: { fields: 'address target,uint32 ratePpm', on: ROUTER },
   UASetTaxRecipient: { fields: 'address target,bytes32 taxRecipient', on: ROUTER },
+  // the PQZ verifier UA of the PQZ kinds 4, 5, 12, 13 (group 3f, PQZ verifier mode spec §4.2, §4.3): the owner's, no bit
+  UAPqzSetVerifier: { fields: 'address target,bytes32 next', on: ROUTER },
+  UAPqzCancelVerifier: { fields: 'address target', on: ROUTER },
+  UAPqzRevokeVerifier: { fields: 'address target', on: ROUTER },
   // The statement's header words verbatim (purpose `zether-auth`); signed into `pqzAuth`, no entry of its own.
   PqzAuth: { raw: 'uint8 op,bytes32 opTag,bytes32 psid,uint256 chainId,address token,address registry,bytes32 from,bytes32 to,bytes32 beneficiary,'
     + 'uint256 fee,uint256 amount,bytes32 recipient,uint64 sendCounter,uint64 p,uint256 validUntilBlock,bool auditorOn,uint256 shieldIn,'
@@ -448,6 +465,41 @@ function defineOp(name, def) {
 /** The PQZ debits by primary type (`checkPqzDebit`): op 1, op 7, the burn; the unwrap form is never a refresh. */
 const PQZ_DEBITS = Object.freeze({ UAPqzTransferSingle: 'single', UAPqzTransferSingleCompact: 'single', UAPqzTransfer: 'multi',
   UAPqzTransferCompact: 'multi', UAPqzUnshield: 'burn', UAPqzUnshieldUnwrap: 'unwrap' });
+
+// ------------------------------------------------------------------ the PQZ verdict (group 3f, spec §5)
+
+const VERDICT_TYPES = { EIP712Domain: SALTED_DOMAIN_TYPE, PqzVerdict: STRUCTS.PqzVerdict };
+export const PQZ_VERDICT_TYPEHASH = hex(keccak_256(utf8ToBytes(encodeType(VERDICT_TYPES, 'PqzVerdict'))));
+/** The verdict of a `PRECOMPILE` token: every field 0 and an empty `UASig` (spec §5.1). */
+export const EMPTY_PQZ_VERDICT = Object.freeze({
+  pqzVerdict: Object.freeze({ token: ZERO_ADDRESS, chainId: '0', proofSystemId: ZERO_ID, statementHash: ZERO_ID, proofHash: ZERO_ID,
+    pqzVerifierEpoch: 0, validUntil: '0' }),
+  sig: Object.freeze({ keyData: '0x', signature: '0x', members: Object.freeze([]) }) });
+/** `keccak256(statement)`: the bytes the token's statement views return (`transferStatement`, …, `disclosureStatement`). */
+export const statementHash = (statement) => hex(keccak_256(asBytes(statement)));
+/** `keccak256(proof)`: the proof's exact calldata bytes. */
+export const proofHash = (proof) => hex(keccak_256(asBytes(proof)));
+
+/** The `PqzVerdict` a verifier UA signs, in the PQZ token's salted domain `("SCaaS PqzToken", "1", chainId, token, chainUid)`;
+ *  `message.token` and `message.chainId` repeat the domain (the token checks them equal). Signed under `pqz-verdict`
+ *  (`ua.PQZ_VERDICT_TAG`): a native verifier over the registry's `uaAuthDigest`, a derived one over `uaMessage`. */
+export function pqzVerdictTypedData({ contract, chainId, chainUid, message }) {
+  const m = canonical('PqzVerdict', message, VERDICT_TYPES);
+  if (!same(m.token, contract)) refuse('the verdict\'s token is not the domain\'s contract');
+  if (BigInt(m.chainId) !== BigInt(chainId)) refuse('the verdict\'s chainId is not the domain\'s chain');
+  return { types: VERDICT_TYPES, primaryType: 'PqzVerdict', domain: salted({ name: 'SCaaS PqzToken', contract, chainId, chainUid }), message: m };
+}
+export const pqzVerdictDigest = (o) => hashTypedData(pqzVerdictTypedData(o));
+
+/** `x.pqzVerdict = {pqzVerdict, sig}` as the entry takes it: required; a verdict needs its signature, an empty one has none. */
+function pqzSignedVerdictOf(v) {
+  if (v === undefined) refuse('the PQZ verdict is required (EMPTY_PQZ_VERDICT on a PRECOMPILE token)');
+  const pqzVerdict = canonical('PqzVerdict', v.pqzVerdict, STRUCTS);
+  if (!Object.values(pqzVerdict).every((x) => BigInt(x) === 0n)) return { pqzVerdict, sig: uaSigOf(v.sig, 'the verdict signature') };
+  const sig = { keyData: '0x', signature: '0x', members: [], ...(isRaw(v.sig ?? '0x') ? { signature: v.sig ?? '0x' } : v.sig) };
+  if (asBytes(sig.keyData).length || asBytes(sig.signature).length || sig.members.length) refuse('an empty verdict carries no signature');
+  return { pqzVerdict, sig };
+}
 
 /** Every signed struct by name: {typeString, typehash, types, fields, on, entry, domains, call}. */
 export const TYPED_OPS = Object.freeze(Object.fromEntries(Object.entries(OPS).map(([name, def]) => [name, defineOp(name, def)])));
@@ -1093,7 +1145,7 @@ export function checkOp(td, { op, contract, chainId, chainUid, message, maxFee, 
   const m = td.message || {};
   const d = td.domain || {};
   if (!same(d.verifyingContract, contract)) refuse('the operation is not on the contract you chose');
-  requireWhole(op, message, o.types, o.envelope, m.mode);
+  requireWhole(o.primary, message, o.types, o.envelope, m.mode); // the struct, not the row (`UAPqzRollOver` is `UARollOver`)
   let fee = {};
   let server = {};
   if (o.envelope) {

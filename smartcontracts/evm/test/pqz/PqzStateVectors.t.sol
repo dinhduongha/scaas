@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {noVerdict} from "./helpers/PqzVerdicts.sol";
 import {PqzSlots} from "./PqzState.t.sol";
 import {PqzLayer} from "../../src/pqz/PqzLayer.sol";
 import {IPqzToken} from "../../src/pqz/IPqzToken.sol";
@@ -45,8 +46,8 @@ contract PqzStateVectorsTest is PqzSlots {
         uint64 c = tok.pqzAccount(from, 0).sendCounter;
         bytes memory pl = _payload(tok.pqzAccount(from, 0).pendingCount, 0, from, to, bytes32(0), _out(seed, aud), hash ? _memo() : bytes(""));
         bytes32 ref = hash
-            ? tok.mtxConfidentialTransferSingleCompact(_ts(pl), hex"c0de", _pqAuth(), "")
-            : tok.mtxConfidentialTransferSingle(_ts(pl), hex"c0de", _pqAuth(), "");
+            ? tok.mtxConfidentialTransferSingleCompact(_ts(pl), hex"c0de", _pqAuth(), "", noVerdict())
+            : tok.mtxConfidentialTransferSingle(_ts(pl), hex"c0de", _pqAuth(), "", noVerdict());
         ents.push(Ent(name, ref, from, c));
     }
 
@@ -59,8 +60,8 @@ contract PqzStateVectorsTest is PqzSlots {
         uint64 c = tok.pqzAccount(from, 0).sendCounter;
         IPqzToken.PqzMultiArgs memory t = _ms(_mpl(from, rec, seed, aud, hash));
         bytes32 ref = hash
-            ? tok.mtxConfidentialTransferCompact(t, hex"c0de", _pqAuth(), "")
-            : tok.mtxConfidentialTransfer(t, hex"c0de", _pqAuth(), "");
+            ? tok.mtxConfidentialTransferCompact(t, hex"c0de", _pqAuth(), "", noVerdict())
+            : tok.mtxConfidentialTransfer(t, hex"c0de", _pqAuth(), "", noVerdict());
         ents.push(Ent(name, ref, from, c));
     }
 

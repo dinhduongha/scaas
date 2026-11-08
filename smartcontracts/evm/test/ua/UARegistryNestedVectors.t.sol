@@ -152,13 +152,13 @@ contract UARegistryNestedVectorsTest is UARegistryBase {
 
     function test_nestedVectors_records() public {
         _registerUpTo("");
-        string memory k = _p("kemRecords", 0, "");
-        bytes32 ua = vm.parseJsonBytes32(j, string.concat(k, ".ua"));
-        bytes memory kemPk = _bytes(string.concat(k, ".kemPk"));
-        r.setKemKey(ua, 1, UACall.kem(kemPk), _sigOf(string.concat(k, ".args.sig")));
-        (IUARegistry.KemKey memory got, bytes memory sig) = r.kemKeyAt(ua, 1);
-        assertEq(UACall.kemPk(got), kemPk);
-        assertEq(sig, _bytes(string.concat(k, ".sig")), "stored as abi.encode(members)");
+        // CTR-UA-32 (T66a): no KEM record, and a nested msig's is refused before its signature
+        assertEq(_count(".kemRecords"), 0);
+        bytes32 ua = vm.parseJsonBytes32(j, string.concat(_row("msig-nested-pq"), ".ua"));
+        bytes memory kemPk = new bytes(1601);
+        kemPk[0] = 0x01;
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKemHolder.selector, ua));
+        r.setKemKey(ua, 1, UACall.kem(kemPk), IUARegistry.UASig("", "", new IUARegistry.MemberSig[](0)));
         uint256 n = _count(".pqzKeyRecords");
         assertEq(n, 4);
         bool ran;
@@ -292,6 +292,31 @@ contract UARegistryNestedVectorsTest is UARegistryBase {
         }
     }
 
+    /// CTR-UA-33 Change 2026-11-08 (plan T66a): after every nested registration, `popSlotsOf` of each `msig` row is its `popSigners` with
+    /// its `memberSigHashes` (an inner `msig` slot's hash is that of its `abi.encode(InnerSig[])`), each = `memberSigHashOf`.
+    function test_nestedVectors_popSlotsOf() public {
+        vm.pauseGasMetering(); // a 700 KB JSON string per cheatcode call
+        _registerUpTo("");
+        uint256 rows;
+        for (uint256 i; i < _count(".registrations"); ++i) {
+            string memory row = _p("registrations", i, "");
+            if (_uint16(string.concat(row, ".kind")) != UAKinds.MSIG) continue;
+            bytes32 ua = vm.parseJsonBytes32(j, string.concat(row, ".ua"));
+            (uint16[] memory idx, bytes32[] memory h) = r.popSlotsOf(ua);
+            uint256 n = _count(string.concat(row, ".memberSigHashes"));
+            assertEq(idx.length, n, row);
+            assertEq(h.length, n, row);
+            for (uint256 k; k < n; ++k) {
+                string memory e = string.concat(row, ".memberSigHashes[", vm.toString(k), "]");
+                assertEq(idx[k], vm.parseJsonUint(j, string.concat(e, ".index")), row);
+                assertEq(h[k], vm.parseJsonBytes32(j, string.concat(e, ".hash")), row);
+                assertEq(h[k], r.memberSigHashOf(ua, idx[k]), row);
+            }
+            ++rows;
+        }
+        assertEq(rows, 11, "the nested msig rows, empty pops included");
+    }
+
     function test_nestedVectors_structures() public {
         _registerUpTo("");
         uint256 n = _count(".structures");
@@ -304,18 +329,20 @@ contract UARegistryNestedVectorsTest is UARegistryBase {
         }
     }
 
-    /// A holder passes the holder check and stops at the signature, a classical-dominant `msig` at the holder check.
+    /// A PQZ holder passes the holder check and stops at the signature, a classical-dominant `msig` at the holder check. T66a: probed
+    /// by `setPqzKey` (was `setKemKey`, whose holder check no `msig` passes now, CTR-UA-32).
     function test_nestedVectors_eligibility() public {
         _registerUpTo("");
         uint256 n = _count(".eligibility");
         assertEq(n, 3);
-        IUARegistry.KemKey memory kem = UACall.kem(_bytes(_p("kemRecords", 0, ".kemPk")));
+        string memory k = _p("pqzKeyRecords", 0, "");
+        (bytes memory key, bytes32 ph) = (_bytes(string.concat(k, ".pqzKey")), vm.parseJsonBytes32(j, string.concat(k, ".pqzPopHash")));
         for (uint256 i; i < n; ++i) {
             string memory e = _p("eligibility", i, "");
             bytes32 ua = UAKinds.uaOf(UAKinds.MSIG, _bytes(string.concat(e, ".keyData")));
             bool eligible = vm.parseJsonBool(j, string.concat(e, ".eligible"));
-            vm.expectRevert(abi.encodeWithSelector(eligible ? IUARegistry.UAUnauthorized.selector : IUARegistry.UAKemHolder.selector, ua));
-            r.setKemKey(ua, 2, kem, IUARegistry.UASig("", "", new IUARegistry.MemberSig[](0)));
+            vm.expectRevert(abi.encodeWithSelector(eligible ? IUARegistry.UAUnauthorized.selector : IUARegistry.UAPqzHolder.selector, ua));
+            r.setPqzKey(ua, 0, key, ph, IUARegistry.UASig("", "", new IUARegistry.MemberSig[](0)));
         }
     }
 }

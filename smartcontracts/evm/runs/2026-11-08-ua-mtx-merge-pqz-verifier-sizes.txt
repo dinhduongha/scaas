@@ -1,0 +1,46 @@
+# ua-mtx-merge T44 + T45 (group 3f, PQZ verifier mode spec §9): sizes old -> new, runtime and init code (B).
+# Tree: the T44 + T45 working tree before its commit (src as committed there). Forge 1.8.5, solc 0.8.37, Amsterdam, optimizer
+# 200, via_ir off, default set n2304-kmax4096. `forge build src --sizes --json`; old = size-baseline.json at the 3f base
+# (the ratchet: each row was the measured size). Measured kind 13 first, as the plan says; the size window (owner 2026-11-07:
+# over-limit kinds pinned in `_above64KiB` until T66b, hard limit 131,072 B) replaces the 64,512 B stop rule, so no lever ran.
+| Contract | runtime old | runtime new | delta | init old | init new | spec §9 estimate |
+|---|---:|---:|---:|---:|---:|---|
+| `WrappedPqzRegulatedToken` | 70437 | 72402 | +1,965 | 72072 | 74044 | +1.1 to +2.0 KB |
+| `NormalPqzRegulatedToken` | 56487 | 58361 | +1,874 | 58117 | 59998 | +1.1 to +2.0 KB |
+| `WrappedPqzToken` | 58219 | 60132 | +1,913 | 59721 | 61641 | +1.1 to +2.0 KB |
+| `NormalPqzToken` | 48846 | 50804 | +1,958 | 50348 | 52313 | +1.1 to +2.0 KB |
+| `WrappedZetherRegulatedToken` | 60724 | 60724 | +0 | 62357 | 62357 | +0.1 to +0.2 KB (the config check) |
+| `NormalZetherRegulatedToken` | 50030 | 50030 | +0 | 51663 | 51663 | +0.1 to +0.2 KB (the config check) |
+| `WrappedZetherToken` | 52709 | 52709 | +0 | 54214 | 54214 | +0.1 to +0.2 KB (the config check) |
+| `NormalZetherToken` | 42222 | 42222 | +0 | - | 43727 | +0.1 to +0.2 KB (the config check) |
+| `WrappedRegulatedToken` | 52123 | 52277 | +154 | 53730 | 53884 | +0.1 to +0.2 KB (the config check) |
+| `NormalRegulatedToken` | 41467 | 41559 | +92 | - | 43166 | +0.1 to +0.2 KB (the config check) |
+| `WrappedToken` | 44456 | 44610 | +154 | - | 46094 | +0.1 to +0.2 KB (the config check) |
+| `NormalToken` | 33795 | 33887 | +92 | - | 35371 | +0.1 to +0.2 KB (the config check) |
+| `GovernanceRouter` | (no row: fits) | 15190 |  | - | 16112 | +0.5 to +0.8 KB |
+| `OpenFactory` | 28438 | 28438 | +0 | - | 28659 |  |
+| `SCaaSDex` | 34929 | 34929 | +0 | - | 35820 |  |
+| `PqzTransferLib` | 19724 | 22604 | +2,880 | - | - | +0.4 to +0.7 KB |
+| `PqzBurnLib` | 10697 | 14020 | +3,323 | - | - | +0.4 to +0.7 KB |
+| `PqzStateLib` | 9460 | 13763 | +4,303 | - | - | +0.6 to +1.0 KB |
+| `PqzViewLib` | 19886 | 23319 | +3,433 | - | - | +0.3 to +0.5 KB |
+| `PqzWrappedLib` | 5357 | 5521 | +164 | - | - | (the factory read) |
+| `ZetherLib` | 26826 | 26954 | +128 | - | - | (the refusal of the three fields) |
+# Libraries (old from the 3f base's artifacts by size_gate.library_sizes): every debit and view library compiles its own copy
+# of `PqzCore.verdictStatus` and `verifierShape` (the msig walk), PqzStateLib also the transfer / revocation bodies; well over
+# spec §9's estimates, under EIP-170 (24,576 B) each. A shared copy behind one public library function would save about
+# 2 KB in three of them (not done: no lever of spec §9, and the size window holds).
+# Not in the baseline (they fit their limit, no row): GovernanceRouter 14,886 -> 15,190 B (+304, the three PQZ verifier ops);
+# PqzStateLib, PqzViewLib, PqzWrappedLib (rows above). Above 65,536 B: WrappedPqzRegulatedToken (pinned in `_above64KiB`).
+# size_gate.py: 0 errors, 99 contracts after the baseline rows moved (size-baseline.json `_comment`).
+# Deploy gas, the regulated spec's §6.2 method (GovDeploy.t.sol test_releaseGasPerKind -vv: each release its own CREATE2,
+# regular + EIP-8037 state, x 1.05; the 0.37 M factory frame not included). Old: the 3f base (8e756a47 src) in a worktree.
+| Release | runtime B old -> new | x1.05 old | x1.05 new | delta | fits |
+|---|---|---:|---:|---:|---|
+| `WrappedPqzRegulatedToken` | 70,437 -> 72,402 | 118,405,954 | 121,695,983 | +3,290,029 | 200 M (SCaaS testnet) |
+| `NormalPqzRegulatedToken` | 56,487 -> 58,361 | 95,042,822 | 98,180,107 | +3,137,285 | 200 M |
+| `WrappedPqzToken` | 58,219 -> 60,132 | 97,932,322 | 101,136,630 | +3,204,308 | 200 M |
+| `NormalPqzToken` | 48,846 -> 50,804 | 82,234,530 | 85,513,313 | +3,278,783 | 200 M |
+| `GovernanceRouter` | 14,886 -> 15,190 | 25,217,862 | 25,728,083 | +510,221 | 200 M |
+# About 1,680 gas per runtime byte as §6.2 predicts; within spec §9's size estimate times that rate (+1.8 to +3.4 M on kind
+# 13), so nothing more than 50 % over it to report.

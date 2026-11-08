@@ -21,10 +21,11 @@ library PqzBurnLib {
         IPqzToken.PqzBurnArgs calldata b,
         bytes calldata hint,
         bytes calldata proof,
-        IUARegistry.UASig calldata authSig
+        IUARegistry.UASig calldata authSig,
+        IPqzToken.PqzSignedVerdict calldata pqzVerdict
     ) public returns (PqzCore.Paid memory paid) {
         (PqzCore.Op memory o, bytes memory buf) = PqzCore.prepareBurn(e, b, hint, proof.length);
-        PqzCore._check(o, buf, proof, authSig);
+        PqzCore._check(o, buf, proof, authSig, pqzVerdict);
         PqzCore._settleBurn(o, b);
         paid = PqzCore._paid(o);
     }

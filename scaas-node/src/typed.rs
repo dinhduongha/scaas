@@ -64,6 +64,11 @@ const NESTED: &[(&str, &str)] = &[
     ("PqzMultiArgs", "uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,uint256 decoyFee,bytes16 salt,bytes[] u,PqzLeg[] legs,bytes vFrom,bytes sealedMemo"),
     ("PqzBurnArgs", "uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,bytes u,bytes vFrom"),
     ("Unwrap", "address underlying,bytes32 recipient,uint256 amount,uint256 minOut"),
+    // group 3f (spec §5.1, §11.1): the verdict the node rebuilds (never a job's), the pair every PQZ debit takes last, and a job's
+    // named `pqz_verdict` sub-object (the verifier's epoch, its `validUntil`, its signature; also a PQZ verifier's answer)
+    ("PqzVerdict", "address token,uint256 chainId,bytes32 proofSystemId,bytes32 statementHash,bytes32 proofHash,uint32 pqzVerifierEpoch,uint64 validUntil"),
+    ("PqzSignedVerdict", "PqzVerdict pqzVerdict,UASig sig"),
+    ("PqzVerdictJob", "uint32 pqzVerifierEpoch,uint64 validUntil,UASig auth"),
     ("MetaTransfer", "address from,address to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient"),
     ("UAMetaTransfer", "bytes32 from,bytes32 to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient"),
     ("TradeOrder", "address from,address receiveToken,uint256 amount,uint256 receiveAmount,uint256 minFill,uint256 fee,address relayer,address dex,address destination,uint8 flags,uint256 batch,uint256 nonce,uint256 validUntil"),
@@ -199,13 +204,20 @@ const TYPED: &[(&str, &str, &[&str], &str, &str)] = &[
     // bit 23 `TAX` (pay-meta-tax spec §6.2): the one PERCENT rate, the recipient
     ("UASetTaxRate", "mtxSetTaxRate", GR, "bytes32 from,address target,uint32 ratePpm,E", ""),
     ("UASetTaxRecipient", "mtxSetTaxRecipient", GR, "bytes32 from,address target,bytes32 taxRecipient,E", ""),
+    // group 3f (spec §4.2): the owner's verifier transfer of a PQZ token (propose, confirm after the notice), its cancel, the
+    // immediate revocation
+    ("UAPqzSetVerifier", "mtxPqzSetVerifier", GR, "bytes32 from,address target,bytes32 next,E", ""),
+    ("UAPqzCancelVerifier", "mtxPqzCancelVerifier", GR, "bytes32 from,address target,E", ""),
+    ("UAPqzRevokeVerifier", "mtxPqzRevokeVerifier", GR, "bytes32 from,address target,E", ""),
     // not rows of the vector file: the DEX's (`dex_order_kat.json`) and the token's on ids (`uatrade_kat.json`), one name per kind
     ("InvalidateNonces", "mtxInvalidateNonces", D, "address from,uint256 batch,uint256 minNonce", "from batch minNonce @"),
     ("UAInvalidateNonces", "mtxInvalidateNonces", T, "bytes32 from,uint256 batch,uint256 minNonce", "from batch minNonce @"),
 ];
-const PQZ_PLAN: &str = "E args proof pqzAuth:UASig accHint @";
-const PQZ_BURN_PLAN: &str = "E args (amount,recipient) proof pqzAuth:UASig accHint @";
-const PQZ_UNWRAP_PLAN: &str = "E args unwrap proof pqzAuth:UASig accHint @";
+// group 3f (spec §5.3): every PQZ debit takes the `PqzSignedVerdict` last, outside its `UA*` struct (no typehash moved): `verdict`,
+// built by the node (`crate::pqz`), never a job's field
+const PQZ_PLAN: &str = "E args proof pqzAuth:UASig accHint @ verdict";
+const PQZ_BURN_PLAN: &str = "E args (amount,recipient) proof pqzAuth:UASig accHint @ verdict";
+const PQZ_UNWRAP_PLAN: &str = "E args unwrap proof pqzAuth:UASig accHint @ verdict";
 const OWNER_ROLL_PLAN: &str = "E ua expectedPendingSeq validUntilBlock ownerSig:UASig @";
 const OWNER_MODE_PLAN: &str = "E ua rollOverMode validUntilBlock ownerSig:UASig @";
 
@@ -251,6 +263,8 @@ enum Tok {
     Whole,
     WrapAsTrade(String),
     Sign(Sig),
+    /// Group 3f: the `PqzSignedVerdict` the node builds (empty until `crate::pqz` fills it).
+    Verdict,
 }
 
 #[derive(Debug)]
@@ -279,6 +293,11 @@ impl Row {
         self.typed && (self.name.starts_with("UA") || self.name.starts_with("CancelUA"))
     }
 
+    /// The number of the entry's arguments.
+    pub fn plan_len(&self) -> usize {
+        self.plan.len()
+    }
+
     fn relay_fee(&self) -> bool {
         self.name == "UARelayFee"
     }
@@ -305,6 +324,9 @@ fn tok(t: &str, sig: Sig) -> Tok {
     }
     if t == "$" {
         return Tok::Whole;
+    }
+    if t == "verdict" {
+        return Tok::Verdict;
     }
     if let Some(n) = t.strip_prefix("wrap!") {
         return Tok::WrapAsTrade(n.into());
@@ -359,6 +381,7 @@ fn tok_abi(t: &Tok, fields: &[(String, String)]) -> String {
         // `TradeOrder` / `UATradeOrder`, 13 words: `dex` = the wrapper
         Tok::WrapAsTrade(n) => abi_type(if of(n).starts_with("(bytes32") { "UATradeOrder" } else { "TradeOrder" }),
         Tok::Sign(s) => abi_type(sig_type(*s)),
+        Tok::Verdict => abi_type("PqzSignedVerdict"),
     }
 }
 
@@ -669,22 +692,32 @@ fn take(fields: &[(String, String)], o: &Map<String, Value>, path: &str) -> Resu
 
 /// The inverse of [`parse`]: a value as the explicit JSON of its type.
 pub fn to_json(ty: &str, v: &Val) -> Value {
+    json_of(ty, v, 32)
+}
+
+/// [`to_json`] with every `uint` of at most 64 bits a JSON number (the serde form of the sol types: a PQZ verifier's request,
+/// group 3f); wider ones decimal strings.
+pub fn to_serde_json(ty: &str, v: &Val) -> Value {
+    json_of(ty, v, 64)
+}
+
+fn json_of(ty: &str, v: &Val, number_bits: usize) -> Value {
     if ty == "PayMeta" {
         return pay_meta_json(v).unwrap_or(Value::Null);
     }
     if let Some(el) = ty.strip_suffix("[]") {
-        return Value::Array(v.as_array().unwrap_or_default().iter().map(|x| to_json(el, x)).collect());
+        return Value::Array(v.as_array().unwrap_or_default().iter().map(|x| json_of(el, x, number_bits)).collect());
     }
     if let Some(f) = nested(ty) {
         let t = v.as_tuple().unwrap_or_default();
-        return Value::Object(f.iter().zip(t).map(|((ty, n), x)| (n.clone(), to_json(ty, x))).collect());
+        return Value::Object(f.iter().zip(t).map(|((ty, n), x)| (n.clone(), json_of(ty, x, number_bits))).collect());
     }
     match v {
         Val::Address(a) => json!(format!("{a:#x}")),
         Val::Bool(b) => json!(b),
         Val::Bytes(b) => json!(format!("0x{}", alloy::hex::encode(b))),
         Val::FixedBytes(w, n) => json!(format!("0x{}", alloy::hex::encode(&w[..*n]))),
-        Val::Uint(u, bits) if *bits <= 32 => json!(u.saturating_to::<u64>()),
+        Val::Uint(u, bits) if *bits <= number_bits => json!(u.saturating_to::<u64>()),
         Val::Uint(u, _) => json!(u.to_string()),
         Val::String(t) => json!(t),
         _ => Value::Null,
@@ -763,7 +796,18 @@ fn emit(t: &Tok, row: &Row, a: &Assembled) -> Result<Val> {
             Val::Tuple(w)
         }
         Tok::Sign(_) => a.sig.clone().ok_or_else(|| anyhow!("BAD_PAYLOAD: no signature"))?,
+        Tok::Verdict => empty_verdict(),
     })
+}
+
+/// Group 3f (spec §5.1): the empty verdict, every field 0 and an empty `UASig` (what a `PRECOMPILE` token takes).
+fn empty_verdict() -> Val {
+    let z = Val::FixedBytes(B256::ZERO, 32);
+    Val::Tuple(vec![
+        Val::Tuple(vec![Val::Address(Address::ZERO), Val::Uint(U256::ZERO, 256), z.clone(), z.clone(), z, Val::Uint(U256::ZERO, 32),
+            Val::Uint(U256::ZERO, 64)]),
+        Val::Tuple(vec![Val::Bytes(vec![]), Val::Bytes(vec![]), Val::Array(vec![])]),
+    ])
 }
 
 fn extras(row: &Row) -> Vec<(&str, &str)> {
@@ -869,6 +913,18 @@ pub struct Typed {
     pub pqz_parties: Vec<B256>,
     /// The debit carries auditor copies: the token's `auditorUA()` is a party too.
     pub pqz_auditor: bool,
+    /// Group 3f (spec §11.1): a PQZ debit's verdict as the job named it (`args.pqz_verdict`) or as fetched; the `PqzVerdict` it
+    /// signs is rebuilt by the node ([`crate::pqz`]), never taken from the job.
+    pub pqz_verdict: Option<PqzVerdictArgs>,
+}
+
+/// Group 3f: a job's named `pqz_verdict: {pqzVerifierEpoch, validUntil, auth}` (or a PQZ verifier's answer of that shape): the
+/// verifier's epoch, its `validUntil` (unix seconds) and its `UASig` over the `PqzVerdict` the node rebuilds.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PqzVerdictArgs {
+    pub epoch: u32,
+    pub valid_until: u64,
+    pub auth: crate::abi::UASig,
 }
 
 impl Typed {
@@ -985,6 +1041,21 @@ impl Op {
                 bail!("BAD_PAYLOAD: args.t: {entry} takes no payment struct");
             }
         }
+        // group 3f (spec §11.1): a PQZ debit's verdict is the named `pqz_verdict` sub-object, read into `Typed`, never into the
+        // bytes (the node rebuilds the `PqzVerdict` and appends it, `crate::pqz`); a hex verdict in either name is refused by name
+        for k in ["pqz_verdict", "pqzVerdict"] {
+            if args.get(k).is_some_and(Value::is_string) {
+                bail!("HEX_ARGS_REFUSED: args.{k}: a PQZ verdict is the named pqz_verdict {{pqzVerifierEpoch, validUntil, auth}}; the \
+                    node rebuilds the PqzVerdict it signs");
+            }
+        }
+        let pqz_verdict = match verdict_slot(row) {
+            Some(_) => match args.as_object_mut().and_then(|a| a.remove("pqz_verdict")) {
+                None | Some(Value::Null) => None,
+                Some(v) => Some(pqz_verdict_of(&v, "args.pqz_verdict")?),
+            },
+            None => None,
+        };
         let sig = o.get(if row.sig == Some(Sig::Bytes) { "signature" } else { "auth" });
         if o.contains_key(if row.sig == Some(Sig::Bytes) { "auth" } else { "signature" }) {
             bail!("BAD_PAYLOAD: {entry} takes its signature as {}", if row.sig == Some(Sig::Bytes) { "signature" } else { "auth" });
@@ -1069,7 +1140,7 @@ impl Op {
         let pay_meta_len = a.vals.get("meta").and_then(pay_meta_of).map_or(0, |m| m.payNo.len() + m.body.len());
         let (pqz_parties, pqz_auditor) = pqz_parties(row, &a.vals);
         let typed = Typed { contract, domain_of, struct_hash: a.struct_hash, lane_hash, signer, payee, digest: None, derived_signer, derived_side,
-            pay_meta_len, pqz_parties, pqz_auditor };
+            pay_meta_len, pqz_parties, pqz_auditor, pqz_verdict };
         Ok(Op { row, to, data: data.into(), typed, lane, valid_until })
     }
 }
@@ -1137,6 +1208,74 @@ fn deadline(o: &Map<String, Value>, a: &Assembled) -> Result<u64> {
     Ok(t.saturating_to())
 }
 
+/// `hashStruct` of a nested struct's value (`PqzVerdict`: what a verifier signs, the tests' and vectors' check).
+pub fn struct_hash_of(ty: &str, v: &Val) -> Option<B256> {
+    Some(hash_tuple(ty, nested(ty)?, v.as_tuple()?))
+}
+
+/// The ABI type of a field type or a nested struct (`PqzTransferArgs` as its tuple).
+pub fn abi_of(ty: &str) -> String {
+    abi_type(ty)
+}
+
+fn plan_abi(row: &Row) -> String {
+    format!("({})", row.plan.iter().map(|t| tok_abi(t, &row.fields)).collect::<Vec<_>>().join(","))
+}
+
+/// A row's calldata read back into its arguments, in plan order.
+pub fn call_values(row: &Row, data: &[u8]) -> Result<Vec<Val>> {
+    if data.get(..4) != Some(&row.selector[..]) {
+        bail!("BAD_PAYLOAD: not {}'s selector", row.entry);
+    }
+    let v = DynSolType::parse(&plan_abi(row))?.abi_decode_sequence(&data[4..])?;
+    Ok(v.as_tuple().ok_or_else(|| anyhow!("BAD_PAYLOAD: not a tuple"))?.to_vec())
+}
+
+/// The inverse of [`call_values`]: the row's calldata of `vals`.
+pub fn call_data(row: &Row, vals: Vec<Val>) -> Vec<u8> {
+    [&row.selector[..], &Val::Tuple(vals).abi_encode_sequence().unwrap_or_default()].concat()
+}
+
+/// Group 3f (spec §5.3): the plan position of a PQZ debit's trailing `PqzSignedVerdict`, which the node builds (never a job's
+/// field); `None` for any other row.
+pub fn verdict_slot(row: &Row) -> Option<usize> {
+    row.plan.iter().position(|t| *t == Tok::Verdict)
+}
+
+/// The value of argument `name` in a row's [`call_values`] (a field, a member of a tuple of fields, an envelope field) with its
+/// type.
+pub fn arg_of(row: &Row, vals: &[Val], name: &str) -> Option<(String, Val)> {
+    let ty = |n: &str| row.fields.iter().find(|f| f.1 == n).map(|f| f.0.clone());
+    for (t, v) in row.plan.iter().zip(vals) {
+        let at = match t {
+            Tok::Field(n) if n == name => return Some((ty(n)?, v.clone())),
+            Tok::Group(g) => g.iter().position(|n| n == name),
+            Tok::Env if name == "from" => Some(0),
+            Tok::Env => ENV.iter().position(|n| *n == name).map(|i| i + 1),
+            _ => None,
+        };
+        if let Some(j) = at {
+            return Some((ty(name)?, v.as_tuple()?.get(j)?.clone()));
+        }
+    }
+    None
+}
+
+/// A value of `ty` from its Solidity ABI encoding (`SolValue::abi_encode` of the struct of that name).
+pub fn value_of(ty: &str, abi: &[u8]) -> Result<Val> {
+    Ok(DynSolType::parse(&abi_type(ty))?.abi_decode(abi)?)
+}
+
+/// Group 3f (spec §11.1): a `pqz_verdict` sub-object `{pqzVerifierEpoch, validUntil, auth}`, strictly (every field, no other):
+/// `auth` through the bounded `UASig` decoder (two levels by type, 16 slots).
+pub fn pqz_verdict_of(v: &Value, path: &str) -> Result<PqzVerdictArgs> {
+    let t = parse("PqzVerdictJob", v, path)?;
+    let t = t.as_tuple().ok_or_else(|| anyhow!("BAD_PAYLOAD: {path}"))?;
+    let n = |i: usize| t[i].as_uint().map_or(U256::ZERO, |x| x.0);
+    let auth = <crate::abi::UASig as alloy::sol_types::SolValue>::abi_decode(&t[2].abi_encode())?;
+    Ok(PqzVerdictArgs { epoch: n(0).saturating_to(), valid_until: n(1).saturating_to(), auth })
+}
+
 /// Hex `data` / `calldata` outside a named field: the name of the refusal every job kind and the gateway share.
 pub fn hex_refused(what: &str) -> anyhow::Error {
     anyhow!("HEX_DATA_REFUSED: {what}: send a named op, the node builds the calldata")
@@ -1150,6 +1289,10 @@ pub mod testkit {
     /// relaying creations is decided, index spec §8.11 Q11; the guard test names them in `NOT_ROWS`). Every walker over the
     /// vector sees the rows the node builds; the three must be in the file.
     pub const NO_NODE_ROW: [&str; 3] = ["UACreateToken", "UACreateDex", "UACreateInstance"];
+
+    /// Group 3f: the six PQZ debit rows, each taking the node-built `PqzSignedVerdict` last (spec §5.3).
+    pub const PQZ_DEBITS: [&str; 6] = ["UAPqzTransferSingle", "UAPqzTransferSingleCompact", "UAPqzTransfer", "UAPqzTransferCompact",
+        "UAPqzUnshield", "UAPqzUnshieldUnwrap"];
 
     pub fn vectors() -> Value {
         // ua-mtx-merge T14: the regenerated rows (MD-7 as amended: 68 structs; T34: 76); the old ones are in the vectors' legacy place
@@ -1180,6 +1323,8 @@ pub mod testkit {
         if let Some(x) = d.get("extra").and_then(Value::as_object) {
             args.extend(x.iter().map(|(k, v)| (k.clone(), v.clone())));
         }
+        // group 3f: the vector's `PqzSignedVerdict` is the node's to build, never a job's argument
+        args.remove("pqzVerdict");
         // clientkeys writes a pay row's `PayMeta` with its body as hex; a job names the body's fields (spec §7.1)
         if let Some(m) = args.get("meta").cloned() {
             args.insert("meta".into(), named_meta(&m));
@@ -1262,6 +1407,7 @@ pub mod testkit {
                     _ => sig = Some(to_json("bytes", &list0(x))),
                 },
                 Tok::Sign(s) => sig = Some(to_json(sig_type(*s), x)),
+                Tok::Verdict => {}
             }
         }
         (row.enveloped.then_some(Value::Object(env)), Value::Object(args), sig)
@@ -1285,7 +1431,7 @@ mod tests {
     }
 
     fn typed(contract: &'static str, domain_of: Address, h: B256) -> Typed {
-        Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, contract, domain_of, struct_hash: Some(h), lane_hash: None, signer: None, payee: None, digest: None, derived_signer: false, derived_side: false }
+        Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, pqz_verdict: None, contract, domain_of, struct_hash: Some(h), lane_hash: None, signer: None, payee: None, digest: None, derived_signer: false, derived_side: false }
     }
 
     /// Every row and domain of `typed_ops.json`: encodeType, struct hash, digest, entry selector, calldata; the signature
@@ -1321,11 +1467,13 @@ mod tests {
         // plan T34: (68, 101, 100) -> (76, 109, 108), the router's eight regulated controls' vector rows; pay-meta-tax T41 / T42:
         // -> (79, 114, 113), UAPayWithTax (three domains) and the router's two tax ops
         // group 3g T54 / T55: -> (80, 114, 113), the rollover's two domains on two rows (`UARollOver` Zether, `UAPqzRollOver` PQZ)
-        assert_eq!((structs, domains, calldata), (80, 114, 113), "every row was walked (the three creations left out by vectors())");
+        // group 3f T46 / T47: -> (83, 117, 116), the router's three verifier ops (`UAPqz{Set,Cancel,Revoke}Verifier`)
+        assert_eq!((structs, domains, calldata), (83, 117, 116), "every row was walked (the three creations left out by vectors())");
         // plan T32: 70 -> 78, the router's eight regulated controls; pay-meta-tax T42: -> 82, + UAPayWithTax, the two tax ops and
         // mtxPay (its struct `UAMetaTransfer`, no row of the vector file: paymeta.json and pay_job_named_meta_builds_body pin it)
         // group 3g T55: -> 83, `UAPqzRollOver`
-        assert_eq!(rows().iter().filter(|r| r.typed).count(), 83, "80 vector rows, mtxPay, the two invalidations (DEX, token)");
+        // group 3f T47: -> 86, the router's three verifier ops
+        assert_eq!(rows().iter().filter(|r| r.typed).count(), 86, "83 vector rows, mtxPay, the two invalidations (DEX, token)");
         assert_eq!(rows().iter().filter(|r| !r.typed).count(), 18, "the wallet's three flat builders are gone (MD-11 (a))");
     }
 
@@ -1348,6 +1496,30 @@ mod tests {
             o.as_object_mut().unwrap().remove("struct");
             assert_eq!(Op::parse(&o, FEE).unwrap().row.name, name, "{kind}");
         }
+    }
+
+    /// ua-mtx-merge fix (the clientkeys `checkOp` finding, same class): a row whose struct name is not its row name
+    /// (`UAPqzRollOver` signs `UARollOver`) still needs every field of its own struct: an omitted one is refused by name, never
+    /// read as zero; its hash is the struct's (control: the vector's job parses to the vector's digest).
+    #[test]
+    fn row_named_apart_from_its_struct_refuses_an_omitted_field() {
+        let v = vectors();
+        let envelope: Vec<&str> = E_FIELDS.split(',').filter_map(|x| x.split(' ').nth(1)).chain(["from"]).collect();
+        let named: Vec<_> = rows().iter().filter(|r| primary_of(r.name) != r.name).collect();
+        assert!(named.iter().any(|r| r.name == "UAPqzRollOver"));
+        for r in named {
+            for kind in r.contracts.iter() {
+                let good = op_of(r.name, kind, &v).unwrap();
+                Op::parse(&good, FEE).unwrap();
+                for (_, f) in r.fields.iter().filter(|(_, f)| !envelope.contains(&f.as_str())) {
+                    let mut o = good.clone();
+                    assert!(o["args"].as_object_mut().unwrap().remove(f).is_some(), "{} {kind}: args.{f}", r.name);
+                    let e = Op::parse(&o, FEE).unwrap_err().to_string();
+                    assert!(e.contains(&format!("args.{f}: missing")), "{} {kind} without {f}: {e}", r.name);
+                }
+            }
+        }
+        assert_eq!(primary_of("UAPqzRollOver"), "UARollOver");
     }
 
     /// Group 3g (KV-8, spec §7.3): every PQZ debit's `keyVersion` is a named field after `fromUA`, rebuilt into the calldata at its
@@ -1382,6 +1554,66 @@ mod tests {
         let mut o = good;
         o["args"]["data"] = json!("0x1234");
         assert!(Op::parse(&o, FEE).unwrap_err().to_string().starts_with("HEX_DATA_REFUSED"));
+    }
+
+    /// Group 3f (spec §11.1): a PQZ debit's verdict is the named sub-object `pqz_verdict: {pqzVerifierEpoch, validUntil, auth}`,
+    /// read once into `Typed` and never into the bytes the parse builds (the node rebuilds the `PqzVerdict` and appends it); a hex
+    /// or packed verdict is `HEX_ARGS_REFUSED`; the struct itself (`pqzVerdict`, or its fields inside `pqz_verdict`) is refused
+    /// by name, never taken from the job; the signature takes the bounded `UASig` decoder; no other row takes one.
+    #[test]
+    fn pqz_verdict_hex_refused() {
+        use alloy::sol_types::SolValue;
+        let v = vectors();
+        let auth = json!({"keyData": "0x", "signature": format!("0x{}", "7e".repeat(65)), "members": []});
+        let sub = json!({"pqzVerifierEpoch": 7, "validUntil": "1800000000", "auth": auth.clone()});
+        for name in PQZ_DEBITS {
+            let good = op_of(name, "pqz", &v).unwrap();
+            let row = row_of(name, "pqz");
+            assert_eq!(verdict_slot(row), Some(row.plan.len() - 1), "{name}: the verdict last");
+            let plain = Op::parse(&good, FEE).unwrap_or_else(|e| panic!("{name}: {e:#}"));
+            assert_eq!(plain.typed.pqz_verdict, None);
+            let mut o = good.clone();
+            o["args"]["pqz_verdict"] = sub.clone();
+            let p = Op::parse(&o, FEE).unwrap();
+            let want = crate::abi::UASig::abi_decode(&parse("UASig", &auth, "auth").unwrap().abi_encode()).unwrap();
+            assert_eq!(p.typed.pqz_verdict, Some(PqzVerdictArgs { epoch: 7, valid_until: 1_800_000_000, auth: want }), "{name}");
+            assert_eq!((p.data, p.typed.struct_hash), (plain.data, plain.typed.struct_hash), "{name}: not signed, not in the parsed bytes");
+            let refused = |args: &dyn Fn(&mut Value)| {
+                let mut o = good.clone();
+                args(&mut o["args"]);
+                Op::parse(&o, FEE).unwrap_err().to_string()
+            };
+            for hex in [json!("0x1234"), json!(format!("0x{}", "00".repeat(224)))] {
+                let e = refused(&|a| a["pqz_verdict"] = hex.clone());
+                assert!(e.starts_with("HEX_ARGS_REFUSED"), "{name}: {e}");
+                let e = refused(&|a| a["pqzVerdict"] = hex.clone());
+                assert!(e.starts_with("HEX_ARGS_REFUSED"), "{name}: {e}");
+            }
+            let full = json!({"pqzVerdict": {"token": format!("{:#x}", Address::ZERO), "chainId": "1", "proofSystemId": format!("{:#x}", B256::ZERO),
+                "statementHash": format!("{:#x}", B256::ZERO), "proofHash": format!("{:#x}", B256::ZERO), "pqzVerifierEpoch": 7,
+                "validUntil": "1800000000"}, "sig": auth.clone()});
+            let e = refused(&|a| a["pqzVerdict"] = full.clone());
+            assert!(e.starts_with("BAD_PAYLOAD"), "{name}: the struct is the node's: {e}");
+            for k in ["statementHash", "proofHash", "token", "chainId", "proofSystemId"] {
+                let e = refused(&|a| { a["pqz_verdict"] = sub.clone(); a["pqz_verdict"][k] = json!(format!("{:#x}", B256::ZERO)); });
+                assert!(e.starts_with("BAD_PAYLOAD") && e.contains(k), "{name}: {k} is rebuilt, never the job's: {e}");
+            }
+            for k in ["pqzVerifierEpoch", "validUntil", "auth"] {
+                let e = refused(&|a| { a["pqz_verdict"] = sub.clone(); a["pqz_verdict"].as_object_mut().unwrap().remove(k); });
+                assert!(e.starts_with("BAD_PAYLOAD") && e.contains(k), "{name}: {e}");
+            }
+            let slot = json!({"index": 0, "members": [], "sig": "0x01"});
+            let e = refused(&|a| { a["pqz_verdict"] = sub.clone(); a["pqz_verdict"]["auth"]["members"] = json!(vec![slot.clone(); 17]); });
+            assert!(e.contains("more than 16 slots"), "{name}: {e}");
+            let e = refused(&|a| { a["pqz_verdict"] = sub.clone(); a["pqz_verdict"]["pqzVerifierEpoch"] = json!(1u64 << 32); });
+            assert!(e.starts_with("BAD_PAYLOAD"), "{name}: a uint32: {e}");
+        }
+        for (name, kind) in [("UAShield", "pqz"), ("UAPqzRollOver", "pqz"), ("UAZetherTransferSingle", "zether")] {
+            let mut o = op_of(name, kind, &v).unwrap();
+            assert_eq!(verdict_slot(row_of(name, kind)), None, "{name}");
+            o["args"]["pqz_verdict"] = sub.clone();
+            assert!(Op::parse(&o, FEE).unwrap_err().to_string().starts_with("BAD_PAYLOAD"), "{name} takes no verdict");
+        }
     }
 
     /// ua-mtx-merge T14 (Q2, R19): the `mtxCancelNonce` row is per kind: the ordered `UACancelNonce` (`bytes32 from`, `UASig`) on the
