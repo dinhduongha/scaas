@@ -1,0 +1,17 @@
+# ua-rs-sign T20b mutants (2026-11-08-ua-rs-sign-t20b1-mutants.py), one per run on a clean tree at f4b64a53 (code 5730f456), fifteen foreground runs (M1-M15, one each), git diff --exit-code 0 after each run. UNAUDITED.
+killed     | M1 keyVersion dropped from PqzTransferArgs | clients/ua-rs/src/wallet/eip712.rs | rc=101 | 1 failed: typed_ops_json_rows | UAPqzTransferSingle in SCaaS PqzToken: Argument | at f4b64a53
+killed     | M2 UAPrepareAcc without keyVersion | clients/ua-rs/src/wallet/eip712.rs | rc=101 | 1 failed: typed_ops_json_rows | UAPrepareAcc in SCaaS PqzToken: Argument | at f4b64a53
+killed     | M3 a primary type of two structs built without a domain | clients/ua-rs/src/wallet/eip712.rs | rc=101 | 1 failed: pqz_rollover_is_its_own_op | assertion `left == right` failed: UARollOver: no domain | at f4b64a53
+killed     | M4 checkOp builds by primary type | clients/ua-rs/src/wallet/policy.rs | rc=101 | 1 failed: pqz_rollover_is_its_own_op | assertion `left == right` failed: UARollOver does not approve UAPqzRollOver | at f4b64a53
+killed     | M5 checkOp compares the row name, not its primary type | clients/ua-rs/src/wallet/policy.rs | rc=101 | 1 failed: pqz_rollover_is_its_own_op | UAPqzRollOver: positive control | at f4b64a53
+killed     | M6 payment: the address MetaTransfer | clients/ua-rs/src/wallet/policy.rs | rc=101 | 1 failed: sign_json_policy_rows | "payment": PolicyRefused | at f4b64a53
+killed     | M7 receiver fee: the address ReceiverFee | clients/ua-rs/src/wallet/policy.rs | rc=101 | 1 failed: sign_json_policy_rows | "receiver fee": PolicyRefused | at f4b64a53
+killed     | M8 trade order: ua off by default | clients/ua-rs/src/wallet/policy.rs | rc=101 | 1 failed: trade_order_takes_the_ua_struct | positive control: ua by default | at f4b64a53
+killed     | M9 trade order: the address TradeOrder accepted | clients/ua-rs/src/wallet/policy.rs | rc=101 | 1 failed: trade_order_takes_the_ua_struct | assertion `left == right` failed: the address TradeOrder | at f4b64a53
+killed     | M10 PayMeta: the request's entryRef not compared | clients/ua-rs/src/wallet/policy.rs | rc=101 | 1 failed: pay_meta_v2_body_rules | assertion `left == right` failed: another request's id | at f4b64a53
+killed     | M11 PayMeta: the body not read | clients/ua-rs/src/wallet/policy.rs | rc=101 | 1 failed: pay_meta_v2_body_rules | assertion `left == right` failed: another offset | at f4b64a53
+killed     | M12 schema 1: no UTF-8 check | clients/ua-rs/src/wallet/policy.rs | rc=101 | 1 failed: pay_meta_v2_body_rules | assertion `left == right` failed: a note not UTF-8 | at f4b64a53
+killed     | M13 schema 2: no canonical form | clients/ua-rs/src/wallet/policy.rs | rc=101 | 1 failed: pay_meta_v2_body_rules | assertion `left == right` failed: trailing bytes | at f4b64a53
+killed     | M14 schema 3: any length | clients/ua-rs/src/wallet/policy.rs | rc=101 | 1 failed: pay_meta_v2_body_rules | assertion `left == right` failed: a bound call of 64 bytes | at f4b64a53
+killed     | M15 pqz-read: pqzVersions one slot off | clients/ua-rs/src/bin/pqz-read.rs | rc=101 | 1 failed: tests::registry_slots_are_the_layout_pin | assertion `left == right` failed: pqzVersions | at f4b64a53
+mutants M1-M15 of 15: 15 killed, 0 survived, 0 not loaded
