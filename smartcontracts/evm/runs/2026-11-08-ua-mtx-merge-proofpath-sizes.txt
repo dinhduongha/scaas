@@ -7,3 +7,6 @@ T58 tokens | T58 | 0 | NormalPqzToken 50,804 -> 51,497 (init 52,313 -> 53,006); 
 T58 libraries | T58 | 0 | PqzTransferLib 22,604 -> 23,037; PqzBurnLib 14,020 -> 14,457 (`_record` in both); PqzViewLib 23,319 -> 23,913 (the record view); PqzStateLib 13,763 -> 13,698 (the rollover's loop out); PqzWrappedLib 5,521 unchanged
 T58 size gate | T58 | 0 | size_gate.py: 0 errors, 99 contracts; above 65,536 B: WrappedPqzRegulatedToken 73,153 (pinned)
 T58 against the spec | - | - | tokens +693 to +751 B for T58 alone, over §8's +0.3 to +0.6 KB for all of 3h (the view's eight-field struct is decoded from the library's return data and re-encoded); PqzCore's step +0.43 KB per debit library (§8: +0.6 to +1.0 KB for all of 3h)
+T59 tokens | T59 | 0 | NormalPqzToken 51,497 -> 51,625 (init 53,006 -> 53,134); WrappedPqzToken 60,837 -> 60,973 (init 62,346 -> 62,482); NormalPqzRegulatedToken 59,054 -> 59,182 (init 60,691 -> 60,819); WrappedPqzRegulatedToken 73,153 -> 73,298 (init 74,795 -> 74,940, `_above64KiB`)
+T59 libraries | T59 | 0 | PqzTransferLib 23,037 -> 24,123 (the tail writer and kv arrays in both transfer steps, `rOf`'s tail read); PqzBurnLib 14,457 -> 15,065; PqzViewLib 23,913 -> 24,201; PqzStateLib 13,698 -> 13,709; PqzWrappedLib 5,521
+T59 size gate | T59 | 0 | 0 errors, 99 contracts; above 65,536 B: WrappedPqzRegulatedToken 73,298 (pinned)

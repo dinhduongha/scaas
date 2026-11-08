@@ -590,7 +590,8 @@ contract PqzStateTest is PqzSlots {
         assertEq(tok.transferEntry(ref), r);
         assertEq(tok.transferCiphertextHash(ref), keccak256(r));
         IPqzToken.AccountState memory a = tok.pqzAccount(alice, 0);
-        assertEq(a.accBlob.code.length, 1 + r.length + PqzCt.VP, "STOP, R, P(v_f)");
+        // group 3h (T59, C5): the tail `ownTag ‖ kv ‖ u8(n)`, here bob's version and the auditor's (n = 2)
+        assertEq(a.accBlob.code.length, 1 + r.length + PqzCt.VP + PqzCore._tailLen(2), "STOP, R, P(v_f), the tail");
         uint256 e = tok.pqzPending(bob, 0, 0);
         assertEq(address(uint160(e >> 96)), a.accBlob, "the credit points into the sender's blob");
     }

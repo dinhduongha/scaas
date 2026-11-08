@@ -374,10 +374,11 @@ contract PqzDebitRecordTest is PqzFixture {
 
     // ----- spec §2.3: `T` of any debit from its one record and state (invariant P2's unit form) -----
 
-    /// `(uOff, vOff)` of an op blob from its length: a burn's `u' ‖ v_f` is `CTP` bytes, a transfer's `salt ‖ u ‖ … ‖ v_f`.
+    /// `(uOff, vOff)` of an op blob from `R` (`rOf`, group 3h T59: the blob ends with its tail): a burn's `R` is `P(u')`, a
+    /// transfer's `salt ‖ u ‖ …`; `v_f` follows `R`.
     function _uv(address blob) internal view returns (uint256, uint256) {
-        uint256 n = blob.code.length - 1;
-        return n == PqzCt.CTP ? (0, PqzCt.PKP) : (16, n - PqzCt.VP);
+        uint256 r = PqzCore.rOf(blob).length;
+        return r == PqzCt.PKP ? (0, PqzCt.PKP) : (16, r);
     }
 
     /// `T_k` rebuilt from the record alone: `prevBlob`'s `(u, v_f)` + `Σ pending[p − Δp, p)` + `Trivial(digits(shieldIn))`.

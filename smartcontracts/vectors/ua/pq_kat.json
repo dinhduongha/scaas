@@ -423,5 +423,66 @@
       "version": 2,
       "seed32": "0xc4e356ba35190663c70d20a015521bac8ce43e96e1c470166d88339e410f8b1e"
     }
+  ],
+  "ownTag": [
+    {
+      "label": "PQZ/owntag/v1",
+      "version": 0,
+      "seed32": "0xd69f7b996c31f9d2aee03031009841a2df511325166027efc5c20e61da0b0900",
+      "chainUid": "0x070d362b176c62e4cd0144c1f9581dc960bcbcf842890364d19fa28ea3122268",
+      "token": "0x5ca00000000000000000000000000000000000a3",
+      "fromUA": "0xefbbcbe38ffccfaab42cf8dc56602b5b24c22783aef999fc7c92f285cba5a974",
+      "sendCounter": 0,
+      "ctHash": "0x6c8e79edaad03ff8911332f1c28975d992c3cd5983ead914e5e067e63cc2018c",
+      "key": "0xc5c944284d8cd3442fc77b11d574ec6cc67d72f1a30e035acc9a7bfbf4c5f185",
+      "message": "0x070d362b176c62e4cd0144c1f9581dc960bcbcf842890364d19fa28ea31222685ca00000000000000000000000000000000000a3efbbcbe38ffccfaab42cf8dc56602b5b24c22783aef999fc7c92f285cba5a974000000006c8e79edaad03ff8911332f1c28975d992c3cd5983ead914e5e067e63cc2018c",
+      "ownTag": "0xac8b77bea9124e7c0b6294bf6c2a055ccebc3d804e7f4170977dce9c77fd085f"
+    },
+    {
+      "label": "PQZ/owntag/v1",
+      "version": 0,
+      "seed32": "0xd69f7b996c31f9d2aee03031009841a2df511325166027efc5c20e61da0b0900",
+      "chainUid": "0x070d362b176c62e4cd0144c1f9581dc960bcbcf842890364d19fa28ea3122268",
+      "token": "0x5ca00000000000000000000000000000000000a3",
+      "fromUA": "0xefbbcbe38ffccfaab42cf8dc56602b5b24c22783aef999fc7c92f285cba5a974",
+      "sendCounter": 7,
+      "ctHash": "0x1c517d3c065466ba6089fea2b1b004af4d77df8fb0ba396c1001f80e3b4c3d82",
+      "key": "0xc5c944284d8cd3442fc77b11d574ec6cc67d72f1a30e035acc9a7bfbf4c5f185",
+      "message": "0x070d362b176c62e4cd0144c1f9581dc960bcbcf842890364d19fa28ea31222685ca00000000000000000000000000000000000a3efbbcbe38ffccfaab42cf8dc56602b5b24c22783aef999fc7c92f285cba5a974000000071c517d3c065466ba6089fea2b1b004af4d77df8fb0ba396c1001f80e3b4c3d82",
+      "ownTag": "0x1eff25fedced9a9f28e491520dd95ba3a7738caa4b167c981c8e3df7e1524328"
+    },
+    {
+      "label": "PQZ/owntag/v1",
+      "version": 1,
+      "seed32": "0x53c5e8d5fce2743698bd676e62d5ecae8eb1c0007d80e355ac225b515a284768",
+      "chainUid": "0x070d362b176c62e4cd0144c1f9581dc960bcbcf842890364d19fa28ea3122268",
+      "token": "0x5ca00000000000000000000000000000000000a3",
+      "fromUA": "0xefbbcbe38ffccfaab42cf8dc56602b5b24c22783aef999fc7c92f285cba5a974",
+      "sendCounter": 8,
+      "ctHash": "0x98c2edfa65198b78f1e1b8ef6526413e7f7a8a28aa48c9313db380c718ae3012",
+      "key": "0xffa7ecb64c870460cd52827b645ddb626eb8d4ea6a82f6011056cebece1ec276",
+      "message": "0x070d362b176c62e4cd0144c1f9581dc960bcbcf842890364d19fa28ea31222685ca00000000000000000000000000000000000a3efbbcbe38ffccfaab42cf8dc56602b5b24c22783aef999fc7c92f285cba5a9740000000898c2edfa65198b78f1e1b8ef6526413e7f7a8a28aa48c9313db380c718ae3012",
+      "ownTag": "0x01f7e1b56802d2f2261bfacb1d6eb2c970c754a841aa63c00138cce8a43cdec9"
+    }
+  ],
+  "memoHash": [
+    {
+      "form": "hash",
+      "memo": "0x09dd090a39a45f34305db7a51b347da0b8e9adcb10353f5658a6dcc1c21c1a4ee859ea32ea27d13b2b2c94a406cca450fc3838f9872680402bd2",
+      "ownTag": "0xac8b77bea9124e7c0b6294bf6c2a055ccebc3d804e7f4170977dce9c77fd085f",
+      "memoHash": "0x690be6b1d9045068aed8e176be5cf46813a0e0955fcf695dea12072e13b46182"
+    },
+    {
+      "form": "bundle",
+      "memo": "0x",
+      "ownTag": "0xac8b77bea9124e7c0b6294bf6c2a055ccebc3d804e7f4170977dce9c77fd085f",
+      "memoHash": "0xadf78f96f3e42caf046caf041c6d7adb612e4965ea99726ba0e8a781eeb471c3"
+    },
+    {
+      "form": "burn",
+      "memo": "0x",
+      "ownTag": "0xac8b77bea9124e7c0b6294bf6c2a055ccebc3d804e7f4170977dce9c77fd085f",
+      "memoHash": "0xadf78f96f3e42caf046caf041c6d7adb612e4965ea99726ba0e8a781eeb471c3"
+    }
   ]
 }

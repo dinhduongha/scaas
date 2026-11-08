@@ -58,11 +58,12 @@ const NESTED: &[(&str, &str)] = &[
     ("ZetherLeg", "G1 yTo,G1 cOut,G1 cAud,G1 dAud"),
     ("ZetherMulti", "uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes16 salt,bytes32 beneficiaryUA,uint256 decoyFee,G1 yFrom,G1 dOut,G1 cDeb,ZetherLeg[] legs,bytes sealedMemo"),
     ("ZetherBurn", "uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes32 beneficiaryUA,G1 yFrom"),
-    // group 3g (KV-8): every PQZ debit names its key version after `fromUA`
-    ("PqzTransferArgs", "uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes sealedMemo"),
+    // group 3g (KV-8): every PQZ debit names its key version after `fromUA`; group 3h (pqz-proof-path spec §3.2, §10): the holder's
+    // `ownTag` after `salt` (op 1, op 7) and after `beneficiaryUA` (the burn forms), a named field like every other
+    ("PqzTransferArgs", "uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,bytes32 ownTag,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes sealedMemo"),
     ("PqzLeg", "bytes32 ua,bytes v,bytes vAuditor"),
-    ("PqzMultiArgs", "uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,uint256 decoyFee,bytes16 salt,bytes[] u,PqzLeg[] legs,bytes vFrom,bytes sealedMemo"),
-    ("PqzBurnArgs", "uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,bytes u,bytes vFrom"),
+    ("PqzMultiArgs", "uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,uint256 decoyFee,bytes16 salt,bytes32 ownTag,bytes[] u,PqzLeg[] legs,bytes vFrom,bytes sealedMemo"),
+    ("PqzBurnArgs", "uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,bytes32 ownTag,bytes u,bytes vFrom"),
     ("Unwrap", "address underlying,bytes32 recipient,uint256 amount,uint256 minOut"),
     // group 3f (spec §5.1, §11.1): the verdict the node rebuilds (never a job's), the pair every PQZ debit takes last, and a job's
     // named `pqz_verdict` sub-object (the verifier's epoch, its `validUntil`, its signature; also a PQZ verifier's answer)

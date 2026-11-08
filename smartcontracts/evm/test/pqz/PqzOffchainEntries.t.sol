@@ -168,10 +168,10 @@ contract PqzOffchainEntriesTest is PqzOffchainBase {
     string internal constant VERDICT_T =
         "((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))";
     string internal constant TARGS_T =
-        "(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes)";
+        "(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes)";
     string internal constant MARGS_T =
-        "(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes)";
-    string internal constant BARGS_T = "(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes,bytes)";
+        "(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes32,bytes[],(bytes32,bytes,bytes)[],bytes,bytes)";
+    string internal constant BARGS_T = "(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes,bytes)";
     string internal SIG_SINGLE = string.concat("(", ENV_T, ",", TARGS_T, ",bytes,", SIG_T, ",bytes,", SIG_T, ",", VERDICT_T, ")");
     string internal SIG_MULTI = string.concat("(", ENV_T, ",", MARGS_T, ",bytes,", SIG_T, ",bytes,", SIG_T, ",", VERDICT_T, ")");
     string internal SIG_UNSHIELD = string.concat("(", ENV_T, ",", BARGS_T, ",(uint256,bytes32),bytes,", SIG_T, ",bytes,", SIG_T,
@@ -231,7 +231,7 @@ contract PqzOffchainEntriesTest is PqzOffchainBase {
     // ------------------------------------------------------------------ the signed struct, the relayer
 
     /// The native subject signs `UAPqzTransferSingle` over the pre-3f type string (legacy/ua-mtx-merge/3f/src/pqz/
-    /// PqzLayer.sol), the words `hashTransfer(args) ‖ keccak(proof) ‖ keccak(accHint)`: accepted, so no typehash moved and the
+    /// PqzLayer.sol; group 3h T59: with `bytes32 ownTag` after `salt`, the one change since), the words `hashTransfer(args) ‖ keccak(proof) ‖ keccak(accHint)`: accepted, so no typehash moved and the
     /// verdict is outside the struct; then a relayer swaps the verdict for another valid one over the same hashes (a
     /// later `validUntil`): the same signature lands (unbound, like `relayer`).
     function test_signedForms_typehashesUnchanged() public {
@@ -240,7 +240,7 @@ contract PqzOffchainEntriesTest is PqzOffchainBase {
         MetaTxLib.UAEnvelope memory u = _u(nId, address(off));
         bytes memory st = off.transferSingleStatement(a, _tag(address(off), u));
         bytes32 th = keccak256(
-            "UAPqzTransferSingle(bytes32 from,PqzTransferArgs args,bytes proof,bytes accHint,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)PqzTransferArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes sealedMemo)");
+            "UAPqzTransferSingle(bytes32 from,PqzTransferArgs args,bytes proof,bytes accHint,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)PqzTransferArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,bytes32 ownTag,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes sealedMemo)");
         bytes32 sh = keccak256(bytes.concat(abi.encode(th, u.from), abi.encode(_hashT(a), keccak256(VPROOF), keccak256("")),
             abi.encode(u.batch, u.nonce, u.validUntil, u.mode, address(0), u.fee, address(0))));
         (uint8 vv, bytes32 r, bytes32 ss) = vm.sign(NKEY, MessageHashUtils.toTypedDataHash(_sepOf(address(off)), sh));
@@ -257,7 +257,7 @@ contract PqzOffchainEntriesTest is PqzOffchainBase {
         uint256 snap = vm.snapshotState();
         vm.prank(address(0x4E1A));
         (bool ok,) = address(off).call(c1);
-        assertTrue(ok, "the pre-3f struct, verdict 1");
+        assertTrue(ok, "the pre-3f struct (3h: + ownTag), verdict 1");
         vm.revertToState(snap);
         vm.prank(address(0x4E1A));
         (ok,) = address(off).call(c2);

@@ -2,6 +2,8 @@
 import {
   keccak_256, sha256, concatBytes, utf8ToBytes, bytesToHex, fromHex, hex, word, boolWord, addressWord, abiEncode, bytes32,
 } from './bytes.js';
+import { hkdf } from '@noble/hashes/hkdf.js';
+import { hmac } from '@noble/hashes/hmac.js';
 
 export function checksumAddress(address) {
   const low = bytesToHex(fromHex(address));
@@ -163,13 +165,14 @@ const STRUCTS = Object.fromEntries(Object.entries({
   UAWrapOrder: wrapOrderOf('bytes32'),
   // the token's typed transfer and payment (CTR-MTX-23); `entryRef = 0` is a transfer, else a payment (CTR-UA-26 on ids)
   UAMetaTransfer: transferOf('bytes32'),
-  // group 3g (KV-8): `keyVersion`, the debited key version of `fromUA`, after it in the three args structs
+  // group 3g (KV-8): `keyVersion`, the debited key version of `fromUA`, after it in the three args structs; group 3h (pqz-proof-path
+  // spec §3.2, PP-3): `ownTag` after `salt` (op 1, op 7) and after `beneficiaryUA` (the burn forms), `pqzOwnTag` below
   PqzTransferArgs: 'uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,'
-    + 'bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes sealedMemo',
+    + 'bytes32 ownTag,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes sealedMemo',
   PqzLeg: 'bytes32 ua,bytes v,bytes vAuditor',
   PqzMultiArgs: 'uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,uint256 decoyFee,bytes16 salt,'
-    + 'bytes[] u,PqzLeg[] legs,bytes vFrom,bytes sealedMemo',
-  PqzBurnArgs: 'uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,bytes u,bytes vFrom',
+    + 'bytes32 ownTag,bytes[] u,PqzLeg[] legs,bytes vFrom,bytes sealedMemo',
+  PqzBurnArgs: 'uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,bytes32 ownTag,bytes u,bytes vFrom',
   Unwrap: 'address underlying,bytes32 recipient,uint256 amount,uint256 minOut',
   G1: 'bytes32 x0,bytes32 x1,bytes32 y0,bytes32 y1',
   ZetherSingle: 'uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes16 salt,bytes32 beneficiaryUA,'
@@ -1131,6 +1134,29 @@ export function checkOp(td, { op, contract, chainId, chainUid, message, maxFee, 
   const digest = digestOf(rebuilt(o, { name: d.name, contract, chainId, chainUid, message: { ...server, ...message } }));
   if (hex(digestOf(td)) !== hex(digest)) refuse('this is not the operation you asked for');
   return { digest, op, entry: o.entry, ...fee };
+}
+
+/** Group 3h (pqz-proof-path spec §3.1, PP-3, C4): a holder's tag of its own debit. `K = HKDF-SHA256(ikm = seed32, salt = "", info =
+ *  "PQZ/owntag/v1", 32)`, `seed32` the PQZ key seed of the version debited (`pqzKeySeed`); `ownTag = HMAC-SHA256(K, chainUid(32) ‖
+ *  token(20) ‖ fromUA(32) ‖ be32(sendCounter) ‖ keccak256(P(u) ‖ P(v_f)))`, `P` the stored packed form and `u` the debit's `u_0`
+ *  (op 1, op 7) or `u'` (burn, refresh, unwrap); `ctHash` may be given for `keccak256(P(u) ‖ P(v_f))`. Authorship, not inclusion:
+ *  a match says this seed wrote the bytes, never that they are the latest state. Returns `{ key, message, ownTag }` (hex). */
+export function pqzOwnTag({ seed32, chainUid, token, fromUA, sendCounter, pu, pvf, ctHash }) {
+  const n = BigInt(sendCounter);
+  if (n < 0n || n >= 1n << 32n) refuse('sendCounter: be32, below 2^32');
+  const ct = ctHash !== undefined ? asBytes(ctHash) : keccak_256(concatBytes(asBytes(pu), asBytes(pvf)));
+  if (fromHex(token).length !== 20 || ct.length !== 32) refuse('token is 20 bytes, the ciphertext hash 32');
+  const key = hkdf(sha256, asBytes(seed32), new Uint8Array(0), utf8ToBytes('PQZ/owntag/v1'), 32);
+  const be32 = new Uint8Array(4);
+  new DataView(be32.buffer).setUint32(0, Number(n));
+  const message = concatBytes(bytes32(chainUid), fromHex(token), bytes32(fromUA), be32, ct);
+  return { key: hex(key), message: hex(message), ownTag: hex(hmac(sha256, key, message)) };
+}
+
+/** Group 3h (spec §3.3, C3): a PQZ debit's `memoHash` (statement header word 608): `keccak256(memo ‖ ownTag)`, `memo = salt ‖
+ *  sealedMemo` on a commit-reveal (HASH) transfer, empty on BUNDLE, a burn, a refresh and an unwrap. */
+export function pqzMemoHash(memo, ownTag) {
+  return hex(keccak_256(concatBytes(asBytes(memo ?? '0x'), bytes32(ownTag))));
 }
 
 /** Group 3g (KV-8, KV-9): what a wallet checks of a PQZ debit against the debited UA's current version (`pqzKeyOf(fromUA)`), before

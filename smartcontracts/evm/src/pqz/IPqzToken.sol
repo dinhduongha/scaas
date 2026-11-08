@@ -17,7 +17,9 @@ event PqzVerifierRevoked(bytes32 previous, uint32 pqzVerifierEpoch);
 interface IPqzToken is IConfidentialToken {
     /// @notice The explicit parameters of op 1 (Appendix X.2): each `u`, `v` a ciphertext part of `PK` or `V` bytes in
     ///         64-bit lanes. `vAuditor` empty: auditor off. `sealedMemo` the memo after its clear salt, 41 bytes on
-    ///         commit-reveal (the memo is `salt ‖ sealedMemo`), else empty.
+    ///         commit-reveal (the memo is `salt ‖ sealedMemo`), else empty. `ownTag` (group 3h, pqz-proof-path spec §3,
+    ///         PP-3): the holder's tag of its own `(u, v_f)`, computed by its client, stored in the op blob's tail and bound
+    ///         by `memoHash = keccak256(memo ‖ ownTag)`; the contract checks no value.
     struct PqzTransferArgs {
         uint64 p;
         uint256 validUntilBlock;
@@ -27,6 +29,7 @@ interface IPqzToken is IConfidentialToken {
         bytes32 toUA;
         bytes32 beneficiaryUA;
         bytes16 salt;
+        bytes32 ownTag;
         bytes u;
         bytes vTo;
         bytes vFrom;
@@ -52,13 +55,15 @@ interface IPqzToken is IConfidentialToken {
         bytes32 beneficiaryUA;
         uint256 decoyFee;
         bytes16 salt;
+        bytes32 ownTag; // group 3h (PP-3), as `PqzTransferArgs.ownTag`
         bytes[] u;
         PqzLeg[] legs;
         bytes vFrom;
         bytes sealedMemo;
     }
 
-    /// @notice A burn, refresh or unshield-unwrap: the amount and the recipient are the entry's.
+    /// @notice A burn, refresh or unshield-unwrap: the amount and the recipient are the entry's. `ownTag` (group 3h, PP-3):
+    ///         as `PqzTransferArgs.ownTag`, over `(u', v_f)`.
     struct PqzBurnArgs {
         uint64 p;
         uint256 validUntilBlock;
@@ -66,6 +71,7 @@ interface IPqzToken is IConfidentialToken {
         bytes32 fromUA;
         uint64 keyVersion;
         bytes32 beneficiaryUA;
+        bytes32 ownTag;
         bytes u;
         bytes vFrom;
     }

@@ -164,9 +164,10 @@ test('the six signed PQZ entries take PqzSignedVerdict last, after auth; the row
     }
   }
   // the selectors of the contract's own signatures (IPqzToken / PqzLayer / WrappedPqzToken, spec §5.3)
-  const PA = '(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes)';
-  const MA = '(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes)';
-  const BA = '(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes,bytes)';
+  // group 3h (T59): `bytes32 ownTag` after `salt` (op 1, op 7) and after `beneficiaryUA` (the burn forms)
+  const PA = '(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes)';
+  const MA = '(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes32,bytes[],(bytes32,bytes,bytes)[],bytes,bytes)';
+  const BA = '(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes,bytes)';
   const tail = `bytes,${UA_SIG},bytes,${UA_SIG},${SIGNED_VERDICT})`;
   const abiOf = (name) => Object.values(V.ops[name].domains)[0].abi;
   assert.equal(abiOf('UAPqzTransferSingle'), `mtxConfidentialTransferSingle(${UA_ENV},${PA},${tail}`);

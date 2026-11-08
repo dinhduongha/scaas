@@ -256,13 +256,14 @@ def full_register_fits(to, data):
 # ------------------------------------------------------------------ the token API in one place (plan 5h Task 3b, spec
 # §5.11; typed-signing C4: the explicit parameters of Appendix X.3, `(args, proof, pqzAuth, accHint)`). Checked against the built
 # ABI (`abi_check`); the signed forms are `NAMED`.
-# group 3g T52: `uint64 keyVersion` after `fromUA` in the three args structs
-TRANSFER_S = "(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes)"  # IPqzToken.PqzTransferArgs
-TRANSFER_T = ("t", ["w"] * 8 + ["b"] * 5)
-MULTI_S = "(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes)"  # PqzMultiArgs, PqzLeg
-MULTI_T = ("t", ["w"] * 8 + [("a", "b"), ("a", ("t", ["w", "b", "b"])), "b", "b"])
-BURN_S = "(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes,bytes)"  # PqzBurnArgs
-BURN_T = ("t", ["w"] * 6 + ["b", "b"])
+# group 3g T52: `uint64 keyVersion` after `fromUA` in the three args structs; group 3h T59: `bytes32 ownTag` after `salt` (op 1,
+# op 7) and after `beneficiaryUA` (the burn forms)
+TRANSFER_S = "(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes)"  # IPqzToken.PqzTransferArgs
+TRANSFER_T = ("t", ["w"] * 9 + ["b"] * 5)
+MULTI_S = "(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes32,bytes[],(bytes32,bytes,bytes)[],bytes,bytes)"  # PqzMultiArgs, PqzLeg
+MULTI_T = ("t", ["w"] * 9 + [("a", "b"), ("a", ("t", ["w", "b", "b"])), "b", "b"])
+BURN_S = "(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes,bytes)"  # PqzBurnArgs
+BURN_T = ("t", ["w"] * 7 + ["b", "b"])
 AUTH_S, AUTH_T = f"bytes,{UASIG_S},bytes", ["b", UASIG_T, "b"]  # proof, pqzAuth, accHint: after the op's own parameters
 # group 3f (spec §5.1, §5.3): `PqzSignedVerdict{PqzVerdict pqzVerdict; UASig sig}`, last on every proof-carrying entry (direct:
 # after `accHint`; signed: after `auth`); PqzVerdict(token, chainId, proofSystemId, statementHash, proofHash, pqzVerifierEpoch,
@@ -303,9 +304,19 @@ ACCT = ["pendingCount", "rolled", "floor", "cleared", "accBlob", "accUnits", "fl
 EVL_S, UEVL_S = "(address,uint256,uint256,uint256,uint32,address,uint256,address)", "(bytes32,uint256,uint256,uint256,uint32,address,uint256,address)"
 EVL_T = ("t", ["w"] * 8)
 EVL_F = "from batch nonce validUntil mode relayer fee feeRecipient".split()
-TRANSFER_F = "p validUntilBlock shieldIn fromUA keyVersion toUA beneficiaryUA salt u vTo vFrom vAuditor sealedMemo".split()
-MULTI_F = "p validUntilBlock shieldIn fromUA keyVersion beneficiaryUA decoyFee salt u legs vFrom sealedMemo".split()
-BURN_F = "p validUntilBlock shieldIn fromUA keyVersion beneficiaryUA u vFrom".split()
+TRANSFER_F = "p validUntilBlock shieldIn fromUA keyVersion toUA beneficiaryUA salt ownTag u vTo vFrom vAuditor sealedMemo".split()
+MULTI_F = "p validUntilBlock shieldIn fromUA keyVersion beneficiaryUA decoyFee salt ownTag u legs vFrom sealedMemo".split()
+BURN_F = "p validUntilBlock shieldIn fromUA keyVersion beneficiaryUA ownTag u vFrom".split()
+# group 3h T59 (pqz-proof-path spec §3.1): the holder's tag of its own debit; the contract checks no value, so this script sends
+# the zero tag (ponytail: T65 computes each debit's from the holder's seed, `ownTag` of clients/clientkeys)
+OWN_TAG = bytes(32)
+
+
+def tail_of(blob):
+    """Group 3h C5: an op blob's tail `ownTag(32) ‖ kv(8·n) ‖ u8(n)`, read from its last byte: (the bytes before it, ownTag, kv)."""
+    n = blob[-1]
+    kv = [int.from_bytes(blob[len(blob) - 1 - 8 * (n - i):len(blob) - 1 - 8 * (n - i - 1)], "big") for i in range(n)]
+    return blob[:len(blob) - 33 - 8 * n], blob[len(blob) - 33 - 8 * n:len(blob) - 1 - 8 * n], kv
 UNWRAP_F = "underlying recipient amount minOut".split()
 ZERO = "0x" + "00" * 20
 ZERO32 = bytes(32)
@@ -1668,7 +1679,7 @@ def transfer(pq, s, C, frm, to, ben, v, aud_on, what, binding=ZERO32, send=True,
     ben_ua = ben.ua if isinstance(ben, UA) else ben
     blen = K.CT_BYTES + K.V_BYTES * (2 if aud_on else 1)
     v3 = K.PK_BYTES + K.V_BYTES  # `out` = u ‖ v_t ‖ v_f ‖ [v_a]
-    hdr = lambda out: [p, 10**9, shield_in, frm.ua, kv_of(frm), to.ua, ben_ua, salt + bytes(16), out[:K.PK_BYTES], out[K.PK_BYTES:v3],  # noqa: E731
+    hdr = lambda out: [p, 10**9, shield_in, frm.ua, kv_of(frm), to.ua, ben_ua, salt + bytes(16), OWN_TAG, out[:K.PK_BYTES], out[K.PK_BYTES:v3],  # noqa: E731
                        out[v3:v3 + K.V_BYTES], out[v3 + K.V_BYTES:], sealed]
     view = lambda t: dec_bytes(call(tok, cd(API["singleStmt"], [TRANSFER_T, "w"], t, binding)))  # noqa: E731
     st0 = view(hdr(probe(blen)))
@@ -1708,7 +1719,9 @@ def transfer(pq, s, C, frm, to, ben, v, aud_on, what, binding=ZERO32, send=True,
     C.commit()
     ref = sent_ref(rc, tok, API["ev_single"])
     blob = dec_bytes(call(tok, cd("pqzEntryBlob(bytes32)", ["w"], ref)))
-    check(blob == bundle + pack(vs[1]), f"{C.name} pqzEntryBlob(ref) = R ‖ v_f as built, packed ({len(blob):,} B)")
+    head, tag, kv = tail_of(blob)
+    check(head == bundle + pack(vs[1]) and tag == OWN_TAG and len(kv) == 1 + (1 if aud_on else 0),
+          f"{C.name} pqzEntryBlob(ref) = R ‖ v_f ‖ ownTag ‖ kv {kv} ‖ n as built, packed ({len(blob):,} B)")
     return rc, ref, bundle, (r_, e1, e2)
 
 
@@ -1728,7 +1741,7 @@ def multi_args(p, frm, ben, decoy, salt, uas, g, aud_on, out, sealed, kv=0):
     us = [out[pk * i:pk * (i + 1)] for i in range(g)]
     o = pk * g
     legs = [[uas[j], out[o + vb * j:o + vb * (j + 1)], out[o + vb * (m + 1 + j):o + vb * (m + 2 + j)] if aud_on else b""] for j in range(m)]
-    return [p, 10**9, 0, frm, kv, ben, decoy, salt + bytes(16), us, legs, out[o + vb * m:o + vb * (m + 1)], sealed]
+    return [p, 10**9, 0, frm, kv, ben, decoy, salt + bytes(16), OWN_TAG, us, legs, out[o + vb * m:o + vb * (m + 1)], sealed]
 
 
 def transfer_multi(pq, s, C, frm, legs, ben, aud_on, what, signed=None):
@@ -1787,7 +1800,9 @@ def transfer_multi(pq, s, C, frm, legs, ben, aud_on, what, signed=None):
     C.commit()
     ref = sent_ref(rc, tok, API["ev_multi"])
     blob = dec_bytes(call(tok, cd("pqzEntryBlob(bytes32)", ["w"], ref)))
-    check(blob == bundle + pack(e["v_f"]), f"{C.name} pqzEntryBlob(ref) = R ‖ v_f as built, packed ({len(blob):,} B)")
+    head, tag, kv = tail_of(blob)
+    check(head == bundle + pack(e["v_f"]) and tag == OWN_TAG and len(kv) == len(legs) + (1 if aud_on else 0),
+          f"{C.name} pqzEntryBlob(ref) = R ‖ v_f ‖ ownTag ‖ kv {kv} ‖ n as built, packed ({len(blob):,} B)")
     return rc, ref, bundle, e
 
 
@@ -1799,7 +1814,7 @@ def burn(pq, s, C, frm, amount, recipient, what, unwrap=None, signed=None):
     stt = C.state(frm)
     p = stt["pendingCount"]
     rcp = W(recipient) if recipient else b"\0" * 32
-    hdr = lambda out: [p, 10**9, 0, frm.ua, kv_of(frm), b"\0" * 32, out[:K.PK_BYTES], out[K.PK_BYTES:]]  # noqa: E731
+    hdr = lambda out: [p, 10**9, 0, frm.ua, kv_of(frm), b"\0" * 32, OWN_TAG, out[:K.PK_BYTES], out[K.PK_BYTES:]]  # noqa: E731
     if unwrap:
         x = [unwrap[0], rcp, amount, unwrap[1]]
         view = lambda t: dec_bytes(call(tok, cd(API["unwrapStmt"], [BURN_T, UNWRAP, "w"], t, x, binding)))  # noqa: E731

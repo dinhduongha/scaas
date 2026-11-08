@@ -2206,8 +2206,9 @@ async fn pqz_rotation_on_anvil() {
 
 mod pqz3f {
     alloy::sol! {
+        // group 3h (T59): `ownTag` after `salt`
         struct PqzTransferArgs { uint64 p; uint256 validUntilBlock; uint256 shieldIn; bytes32 fromUA; uint64 keyVersion; bytes32 toUA;
-            bytes32 beneficiaryUA; bytes16 salt; bytes u; bytes vTo; bytes vFrom; bytes vAuditor; bytes sealedMemo; }
+            bytes32 beneficiaryUA; bytes16 salt; bytes32 ownTag; bytes u; bytes vTo; bytes vFrom; bytes vAuditor; bytes sealedMemo; }
         function transferSingleStatement(PqzTransferArgs t, bytes32 binding) external view returns (bytes);
         function pqzRevokeVerifier() external;
         function setKindEnabled(uint8 kind, bool on) external;
@@ -2402,7 +2403,7 @@ impl OffchainStack {
         let block = pr.get_block_number().await.unwrap();
         let lanes = |n: usize, b: u8| -> Vec<u8> { (0..n / 8).flat_map(|_| { let mut w = [0u8; 8]; w[7] = b; w }).collect() };
         let t = pqz3f::PqzTransferArgs { p: 0, validUntilBlock: U256::from(block + 200), shieldIn: U256::ZERO, fromUA: self.from.ua,
-            keyVersion: 0, toUA: self.to.ua, beneficiaryUA: B256::ZERO, salt: alloy::primitives::FixedBytes([0x5a; 16]),
+            keyVersion: 0, toUA: self.to.ua, beneficiaryUA: B256::ZERO, salt: alloy::primitives::FixedBytes([0x5a; 16]), ownTag: B256::ZERO,
             u: lanes(self.pk_len, 1).into(), vTo: lanes(self.v_len, 1).into(), vFrom: lanes(self.v_len, 1).into(),
             vAuditor: Bytes::new(), sealedMemo: Bytes::new() };
         let until = now() + 600;
@@ -2415,7 +2416,7 @@ impl OffchainStack {
         let h = |b: &[u8]| format!("0x{}", alloy::hex::encode(b));
         let args = json!({"p": "0", "validUntilBlock": (block + 200).to_string(), "shieldIn": "0", "fromUA": format!("{:#x}", self.from.ua),
             "keyVersion": "0", "toUA": format!("{:#x}", self.to.ua), "beneficiaryUA": format!("{:#x}", B256::ZERO), "salt": h(&[0x5a; 16]),
-            "u": h(&t.u), "vTo": h(&t.vTo), "vFrom": h(&t.vFrom), "vAuditor": "0x", "sealedMemo": "0x"});
+            "ownTag": format!("{:#x}", B256::ZERO), "u": h(&t.u), "vTo": h(&t.vTo), "vFrom": h(&t.vFrom), "vAuditor": "0x", "sealedMemo": "0x"});
         let envelope = json!({"from": format!("{:#x}", self.from.ua), "batch": "0", "nonce": nonce.to_string(), "validUntil": until.to_string(),
             "mode": 0, "relayer": format!("{:#x}", Address::ZERO), "fee": "0", "feeRecipient": format!("{:#x}", Address::ZERO)});
         let mut op = json!({"entry": "mtxConfidentialTransferSingle", "contract": "pqz", "token": format!("{:#x}", self.token),

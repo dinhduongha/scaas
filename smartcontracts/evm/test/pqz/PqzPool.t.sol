@@ -185,7 +185,9 @@ contract PqzPoolTest is PqzFixture {
         assertEq(a.sendCounter, 1);
         bytes memory r = _rOf(out, bob);
         bytes memory blob = tok.pqzEntryBlob(ref);
-        assertEq(blob, bytes.concat(r, _packed(_cut(out, PqzCt.CT, PqzCt.V))), "R || P(v_f)");
+        // group 3h (T59, C5): then the tail, ownTag 0 (the fixture's) ‖ kv (bob 0, the auditor 0) ‖ u8(2)
+        assertEq(blob, bytes.concat(r, _packed(_cut(out, PqzCt.CT, PqzCt.V)), bytes32(0), bytes8(0), bytes8(0), bytes1(0x02)),
+            "R || P(v_f) || ownTag || kv || n");
         assertEq(a.accBlob.code, bytes.concat(hex"00", blob), "the acc reference is the op blob");
         assertEq(tok.transferCiphertextHash(ref), keccak256(r), "ciphertextHash: keccak of the packed R");
         assertEq(tok.pqzEntryBlob(bytes32(0)), "");

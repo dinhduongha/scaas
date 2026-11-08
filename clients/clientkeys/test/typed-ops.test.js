@@ -59,10 +59,10 @@ const PLAN = {
 
 // Appendix X.4, the nested strings verbatim.
 const E = 'uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient';
-const TA = 'PqzTransferArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes sealedMemo)';
+const TA = 'PqzTransferArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,bytes32 ownTag,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes sealedMemo)';
 const LEG = 'PqzLeg(bytes32 ua,bytes v,bytes vAuditor)';
-const MA = 'PqzMultiArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,uint256 decoyFee,bytes16 salt,bytes[] u,PqzLeg[] legs,bytes vFrom,bytes sealedMemo)';
-const BA = 'PqzBurnArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,bytes u,bytes vFrom)';
+const MA = 'PqzMultiArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,uint256 decoyFee,bytes16 salt,bytes32 ownTag,bytes[] u,PqzLeg[] legs,bytes vFrom,bytes sealedMemo)';
+const BA = 'PqzBurnArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,bytes32 ownTag,bytes u,bytes vFrom)';
 const UW = 'Unwrap(address underlying,bytes32 recipient,uint256 amount,uint256 minOut)';
 const G1 = 'G1(bytes32 x0,bytes32 x1,bytes32 y0,bytes32 y1)';
 const ZS = 'ZetherSingle(uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes16 salt,bytes32 beneficiaryUA,G1 yFrom,G1 yTo,G1 cOut,G1 dOut,G1 cDeb,G1 cAud)';
@@ -544,7 +544,11 @@ test('an unbound relayer or feeRecipient is signed as 0 and shown as unbound: ev
   assert.deepEqual([open.message.relayer, open.message.feeRecipient], [ZERO, ZERO]);
   assert.equal(hex(hashTypedData(open)), hex(hashTypedData(evm.uaBurnTypedData({ ...domainOf(r, d), message: { ...r.message, mode: 0, fee: 0,
     relayer: ZERO, feeRecipient: ZERO } }))));
-  assert.equal(relayerOpen, 0, 'every row binds its relayer: the open case is the mode-0 burn above');
+  // group 3h (plan T59): the six PQZ debit rows of release 3h leave both open (mode 0x20), given a non-zero relayer above; every
+  // other row binds its relayer (the open case of a token op is the mode-0 burn above)
+  const open3h = rows().filter(([, x]) => x.release === '3h').length;
+  assert.equal(open3h, 6, 'the six 3h rows');
+  assert.equal(relayerOpen, open3h, 'only the 3h rows leave the relayer open');
 });
 
 test('the builder refuses a field off the struct, a value out of range, a domain the op does not live in', () => {

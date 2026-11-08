@@ -230,21 +230,22 @@ contract PqzStateVectorsTest is PqzSlots {
         assembly ("memory-safe") { o := mload(add(add(r, 32), sub(end, 32))) }
     }
 
-    /// The statements' `memoHash` word (header word 19): op 1 and op 7 HASH over `salt ‖ sealedMemo`, BUNDLE and a burn 0.
+    /// The statements' `memoHash` word (header word 19): group 3h T59 (C3) `keccak256(memo ‖ ownTag)`, `memo` = `salt ‖ sealedMemo`
+    /// on op 1 and op 7 HASH, empty on BUNDLE and a burn; each row names its `ownTag` (0 here, the payloads').
     function _memoHashes() internal {
         bytes memory memo = _memo();
         bytes memory pl = _payload(tok.pqzAccount(carol, 0).pendingCount, 0, carol, dave, bytes32(0), _out(31, false), memo);
         bytes memory st = tok.transferSingleStatement(_ts(pl), 0);
         _w(string.concat("{\"op\": 1, \"mode\": \"HASH\", \"salt\": ", _hx(abi.encodePacked(salt)), ", \"sealedMemo\": ",
-            _hx(_slice(memo, 16, PqzCore.SEALED)), ", \"memoHash\": ", _hx32(_word(st, 608)), "},"));
+            _hx(_slice(memo, 16, PqzCore.SEALED)), ", \"ownTag\": ", _hx32(bytes32(0)), ", \"memoHash\": ", _hx32(_word(st, 608)), "},"));
         pl = _payload(tok.pqzAccount(carol, 0).pendingCount, 0, carol, dave, bytes32(0), _out(31, false), "");
-        _w(string.concat("{\"op\": 1, \"mode\": \"BUNDLE\", \"memoHash\": ", _hx32(_word(tok.transferSingleStatement(_ts(pl), 0), 608)), "},"));
+        _w(string.concat("{\"op\": 1, \"mode\": \"BUNDLE\", \"ownTag\": ", _hx32(bytes32(0)), ", \"memoHash\": ", _hx32(_word(tok.transferSingleStatement(_ts(pl), 0), 608)), "},"));
         IPqzToken.PqzMultiArgs memory t = _ms(_mpl(carol, _legs(alice, erin), 32, false, true));
         _w(string.concat("{\"op\": 7, \"mode\": \"HASH\", \"salt\": ", _hx(abi.encodePacked(t.salt)), ", \"sealedMemo\": ",
-            _hx(t.sealedMemo), ", \"memoHash\": ", _hx32(_word(tok.transferStatement(t, 0), 608)), "},"));
+            _hx(t.sealedMemo), ", \"ownTag\": ", _hx32(t.ownTag), ", \"memoHash\": ", _hx32(_word(tok.transferStatement(t, 0), 608)), "},"));
         bytes memory bl = bytes.concat(abi.encode(uint256(tok.pqzAccount(carol, 0).pendingCount), block.number + 5, uint256(0), carol,
             bytes32(0)), _blob(78, PqzCt.CT));
-        _w(string.concat("{\"op\": 2, \"mode\": \"\", \"memoHash\": ", _hx32(_word(tok.burnStatement(_bs(bl), 1, bytes32(uint256(5)), 0), 608)), "}"));
+        _w(string.concat("{\"op\": 2, \"mode\": \"\", \"ownTag\": ", _hx32(bytes32(0)), ", \"memoHash\": ", _hx32(_word(tok.burnStatement(_bs(bl), 1, bytes32(uint256(5)), 0), 608)), "}"));
     }
 
     function _uints(uint256[] memory v) internal pure returns (string memory r) {
