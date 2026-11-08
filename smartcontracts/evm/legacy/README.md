@@ -131,3 +131,206 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
 - `governance/`: `AdminLib.sol` and `ITokenAdmin.sol` as they stood at `main` (`db9f9d86`), before `GovernanceLib` /
   `IGovernance` replaced them (CTR-GOV-01, governance T3), and `RequireRole.sol.txt`, the prototype's
   `GovernanceLib.requireRole`, removed by spec G14 (B-31: it skipped a limited holder's grant). Not built.
+- `ua-mtx-merge/`: the files the `ua*` / `mtx*` merge round rewrites, copied whole as they stood at local tag
+  `ref/pre-ua-mtx-merge` (`9a4b8c5a`, spec `docs/superpowers/specs/2026-11-04-ua-mtx-merge.md`, CTR-MTX-30, plan MD-4).
+  T1 (the generic path): `src/metatx/{MetaTxBase,UAMetaTxBase,MtxPipelineLib,IMetaTx,IUALedger,ERC20MetaTx}.sol`,
+  `src/ua/UAKinds.sol`, `src/governance/GovernanceRouterBase.sol`, `src/zether/ZetherLayer.sol`, `src/pqz/PqzLayer.sol`:
+  the generic `uaExecute` / `uaBatch` with `bytes auth`, the `bytes auth` `_namedUA` overload and `uaShield`'s
+  `bytes auth`, `MtxPipelineLib`'s `bytes` `_authorize` and `UAKinds.uaAuthCall` (R47), the unordered
+  `uaCancelNonce` / `uaCancelDigest` and their `UACancelNonce(bytes32 ua,uint256 batch,uint256 validUntil)` (Q2; the
+  `cancelUsed` slot stays in `UALedgerStorage`), the registry guard on every `ua*` (C), the `_uaAllowed` check for a
+  native id (B), and the address `mtxNonce` / `mtxDigest` / `mtxExecute` / `mtxBatch` / `mtxCancelNonce` on tokens and
+  the router (now `MetaTxAddressBase`, the wallets only, MD-1). Tests: `test/metatx/MetaTxParity.t.sol` with
+  `test/vectors/legacy/ua-mtx-merge/metatx-parity.json` (the metatx split's replay, recorded on the pre-split code; its
+  seven token rigs live on in `test/metatx/helpers/KindRigs.sol`), `test/ua/UARegistryNested.t.sol` (its two
+  `uaAuthCall` tests), and `test/ua/UALedger.t.sol`, `test/metatx/{TypedOps,TradeTyped}.t.sol` as they stood before
+  their cancel tests and rows changed meaning (the unordered cancel, the address cancel on tokens and the router).
+  T2 (the transfer group, payments, receiver-pays, the relay fee): `src/metatx/{MetaTokenBase,MtxRelayFee,IERC20MetaTx,
+  IMetaTokenV2}.sol` and `src/common/MetaTxLib.sol` (and T1's `ERC20MetaTx.sol`, `MtxPipelineLib.sol`, `IUALedger.sol`):
+  the address `mtxTransfer`, `mtxTransferWithFee`, `mtxPay`, `mtxPayMeta`, `mtxPayReceiverFee`, `mtxRelayFee`,
+  `mtxExecuteTransfer`, `mtxBatchTransfer`, `mtxTransferDigest`, `receiverFeeDigest` over `MetaTransfer` (R1, R4, R20,
+  R21, R27, R28), `_executeTransfer`, `_pay`, `_payMeta`, `_padded`, `_notPool`, `MtxPipelineLib.preTransfer` and its
+  `ReceiverFee` typehash, the `RelayFee` typehash, `MtxRelayFee.relay(address …)`, `ReceiverFeePaid`, and
+  `MetaTxLib.MetaTransfer` with its typehash and `hashStruct` (R46; the test copy that signs the retired form is
+  `test/helpers/LegacyMetaTransfer.sol`). Their `ua*` bodies took the `mtx*` names. Tests as they stood before their
+  meaning changed: `test/metatx/{ERC20MetaTx,MtxRelayFee,PayMeta,TokenKat}.t.sol`, `test/v2/{Base,MetaTxGasV2,
+  ReceiverPays}.t.sol`; vectors `test/vectors/legacy/ua-mtx-merge/{metatx_kat,metatransfer_kat}.json` (the address
+  `MetaTransaction` / `MetaTransfer` KATs; the files of the same name now hold the UA structs).
+  T3 (the token kinds' own pairs): `src/metatx/{NormalToken,WrappedToken,WrappedLib,IWrappedToken}.sol` and
+  `src/trade/ITradeToken.sol`: the address `mtxBurn` over `Burn`, `mtxUnwrap` / `mtxUnwrapLeg` / `mtxUnwrapToUA` over
+  `Unwrap` / `UnwrapLeg` / `UnwrapToUA` with their typehashes (R23), and `mtxWrapOrder(address, WrapOrder, bytes)` with
+  the `WrapOrder` struct, `WrappedLib.wrapBySig` and `_tradeOf` (R39); their `ua*` bodies took the `mtx*` names. Tests as
+  they stood before their meaning changed: `test/v2/MtxWrap.t.sol` (the address wrap order), `test/metatx/NamedEntry.t.sol`
+  (the address `Unwrap` entry), `test/governance/GovHybrid.t.sol` (the cap on both wrap-order entries).
+  T3b (the mandate wallets, Q6, MD-11): `src/wallet/MandateWallet.sol` and `src/hedera/HederaMandateWallet.sol` on
+  `WalletExecute` with `address` ids: the address-form bodies and events, the named entries over `SetMandate`,
+  `SetPayee`, `RevokeMandate`, `PayUnderMandate`, `DelegateRevoke`, `Execute` with `bytes` signatures, the flat builders
+  `mtxPayUnderMandate(token, …)`, `mtxRevoke`, `mtxExecuteAsOwner` and Hedera's `mtxExecuteAsOwnerRaw` (MD-11 (a)), the
+  wallets' address generic path and `executeMetaTransaction`. Tests as they stood before their meaning changed:
+  `test/wallet/{MandateWallet,NamedWallets}.t.sol`, `test/account/AccountKat.t.sol` (the writer of the vectors
+  `test/vectors/legacy/ua-mtx-merge/{mandate_pay_kat,mandate_revoke_kat}.json`). Not built.
+  T4 (Zether, R35): `src/zether/{ZetherLib,ZetherWrappedLib,WrappedZetherToken,IZetherToken}.sol` (and `ZetherLayer.sol`,
+  copied at T1): the address signed entries `mtxShield`, `mtxConfidentialTransfer`, `mtxConfidentialTransferCompact`,
+  `mtxConfidentialTransferSingle`, `mtxUnshield`, `mtxUnshieldUnwrap`, `mtxRollOver`, `mtxRollOverBatch`,
+  `mtxRollOverSigned`, `mtxSetRollOverMode` over `Envelope` + `bytes sig`, their typehashes (`ZetherTransfer`,
+  `ZetherTransferCompact`, `ZetherTransferSingle`, `ZetherUnshield`, `ZetherUnshieldUnwrap`, `RollOver`, `RollOverBatch`,
+  `RollOverSigned`, `SetRollOverMode`) and builders (`ZetherLib.multiCall`, `singleCall`, `unshieldCall`,
+  `ZetherWrappedLib.unwrapCall`), and the public address `envelopeBinding(MetaTransaction)` view; their `ua*` bodies took
+  the `mtx*` names and `uaEnvelopeBinding` the name `envelopeBinding`. Tests as they stood before their meaning changed:
+  `test/zether/{ZetherTyped,ZetherUA5c,ZetherRelay,ZetherProverCross,ZetherGasLimit}.t.sol`. Not built.
+  T5 (PQZ, R36): `src/pqz/{WrappedPqzToken,IPqzToken}.sol` (and `PqzLayer.sol`, `src/common/MetaTxLib.sol`, copied
+  earlier): the address signed entries `mtxShield`, `mtxConfidentialTransfer`, `mtxConfidentialTransferCompact`,
+  `mtxConfidentialTransferSingle`, `mtxConfidentialTransferSingleCompact`, `mtxUnshield`, `mtxUnshieldUnwrap`,
+  `mtxRollOver`, `mtxPrepareAcc` over `Envelope` + `bytes sig`, their typehashes (`PqzTransfer`, `PqzTransferCompact`,
+  `PqzTransferSingle`, `PqzTransferSingleCompact`, `PqzUnshield`, `PqzUnshieldUnwrap`, `RollOver`, `PrepareAcc`,
+  `MetaTxLib.SHIELD_TYPEHASH` (`Shield`)), and the public address `envelopeBinding(MetaTransaction)` view; their `ua*`
+  bodies took the `mtx*` names and `uaEnvelopeBinding` the name `envelopeBinding`. Tests as they stood before their
+  meaning changed: `test/pqz/{PqzTyped,PqzRelay,PqzPool}.t.sol` (and `test/metatx/NamedEntry.t.sol`, copied earlier).
+  Not built.
+  T6 (DEX, R12, R38): `src/trade/TradeLib.sol`, `src/dex/{SCaaSDex,ISCaaSDex}.sol` (and `src/metatx/ERC20MetaTx.sol`,
+  `src/trade/ITradeToken.sol`, copied earlier): the token's address `TradeOrder` side — `mtxTrade(TradeOrder, bytes,
+  TradeFill)`, `mtxCancelOrder(TradeOrder, bytes)`, `mtxInvalidateNonces(address, …, bytes)`, `restorePulled(TradeOrder,
+  …)`, `tradeOrderDigest` / `cancelOrderDigest(TradeOrder)`, `invalidateNoncesDigest(address, …)`, `minNonce(address, …)`
+  — and the typehashes only that side read (`CancelOrder`, `WrapOrder`, `CancelWrapOrder`), the `ua` flag of
+  `TradeLib.orderHash` / `cancelHash`, and the DEX's shape-0 SCaaS leg; the `ua*` trade bodies took the `mtx*` / plain
+  names. `TradeOrder`, `DexOrder`, `InvalidateNonces` stay for the DEX's outside legs. Tests as they stood before their
+  meaning changed: `test/v2/{Trade,Dex,DexHybrid,DexModes,DexExchange,UniswapExecutor}.t.sol`,
+  `test/ua/{UADex,UATrade}.t.sol`, `test/metatx/TradeKat.t.sol`, `test/helpers/DexLegs.sol` (its `wire` made shape-0
+  legs); the vectors `test/vectors/legacy/ua-mtx-merge/{trade_kat,dex_order_kat}.json`. Not built.
+  T7 (`GovernanceRouter`, R14, Q2): `src/governance/GovernanceRouter.sol` (and `GovernanceRouterBase.sol`, copied
+  earlier): the 19 address signed entries `mtx<Op>(Envelope, …, bytes sig)` (`_mtxCall`: `GrantRole`, `RevokeRole`,
+  `SetGrant`, `CancelGrant`, `DisableFeature`, `TransferOwnership`, `AcceptOwnership`, `RenounceOwnership`,
+  `RenounceRole`, `Mint`, `MintToUA`, `DisableWrap`, `ProposeRate`, `CancelRate`, `ExecuteRate`, `SetMarket`,
+  `SetExchangeTarget`, `SetListedOnly`, `SetFeeSplit`) and their 19 address typehashes; the `ua<Op>` bodies (`_uaCall`)
+  took the `mtx<Op>` names. Tests as they stood before their meaning changed: `test/governance/{GovRouter,
+  GovRouterTypehash}.t.sol` (and `test/metatx/TypedOps.t.sol`, copied earlier). Not built.
+  T8 (Hedera, R42): `test/hedera/{HederaKat.t.sol,gen_hedera_kat.py}` and the vector
+  `test/vectors/legacy/ua-mtx-merge/hedera_kat.json`: the Hedera `MetaOp` v1 as the token's address `MetaTransfer`
+  (`from` an `address`); the file of the same name now holds `UAMetaTransfer` with the long-zero `from` padded to
+  `bytes32`. Not built.
+  T10 (deploy and scripts, Q4, R40): `script/DeployBase.sol` with one deploy gate on every chain, `runtime x 1,530 + 2^24`
+  (now the SCaaS testnet's; a public chain declares the measured gate); `script/ZetherE2E.s.sol` with the relayed
+  section on the prover's address `namedCall` forms and the address `envelopeBinding(MetaTransaction)` view;
+  `script/pqz/e2e.py` and `script/pqz/test_e2e_linked.py` with the address named entries and generic path (`mtxExecute`
+  over `MetaTransaction`, `mtxNonce(address,uint256)`, `envelopeBinding` / `mtxDigest` over `MetaTransaction`), the `ua*`
+  twins (`uaExecute` with `bytes auth`, `uaNonce`, `uaEnvelopeBinding`, `uaDigest`, the `ua<Op>` named entries) and
+  `uaShield`'s `bytes auth`. Not run.
+  T24 (regulated kinds: `GovernanceLib`'s relaxation state machine, `msig` holders, issuer and compliance roles; spec
+  `2026-11-05-regulated-kinds.md` §3.6, RK-1..3): `src/governance/{GovernanceLib,GovernanceBase,GovernanceBits,
+  IGovernance}.sol` with `PendingGrant.termsHash` (the terms' hash, 0 for a grant, no action and no proposer check),
+  `revokeRole` / `renounceRole` / `disableFeature` in one call on every bit, a void `disableFeature`, `init` refusing
+  `roles.issuer` / `roles.compliance` and 5-9 as `FeatureNotBuilt` on the plain kinds, contract-only bits for a native id
+  with code alone. Tests as they stood before their meaning changed: `test/governance/{GovRegulatedBits,GovDelay}.t.sol`,
+  `test/metatx/GovernanceLib.t.sol` with `test/metatx/helpers/GovernanceLibHarness.sol`, `test/v2/Features.t.sol`. Not built.
+  T25 (regulated kinds: `TokenConfig.reg`, the init ripple; spec `2026-11-05-regulated-kinds.md` §2.4), as they stood at
+  `5981f2c4`: `src/factory/IFactoryToken.sol` with `TokenConfig` of fifteen fields (no `reg`, `ConfigFieldForOtherKind`
+  fields 1-5) and `src/pqz/PqzWrappedLib.sol` whose `init` passes the fixed `KIND_WRAPPED_PQZ` and `GovernanceBits.WRAPPED_*`
+  masks (`ZetherWrappedLib` as it stood before the round is the T4 copy). Not built.
+  T26 (regulated kinds: the eight empty hooks at their seats; spec `2026-11-05-regulated-kinds.md` §2.2, §3.2, §4.1,
+  §4.2): no copy. It supersedes no body, typehash, struct, builder, row or handler: it adds calls of empty `internal view
+  virtual` hooks, makes `supportsInterface` `virtual` and names `_update`'s resolved sender in a local. Its eight files
+  (`src/metatx/{UAMetaTxBase,ERC20MetaTx,MetaTokenBase,WrappedToken}.sol`, `src/zether/{ZetherLayer,WrappedZetherToken}.sol`,
+  `src/pqz/{PqzLayer,WrappedPqzToken}.sol`) keep their pre-round copies above, not overwritten; as they stood before T26:
+  `d973a70d`.
+  T27 (regulated kinds: the skeleton of kinds 9 and 13, measured first; spec `2026-11-05-regulated-kinds.md` §2.1, §3.1,
+  §6.2): no copy. It adds `src/regulated/` and supersedes no body, typehash, struct, builder, row or handler: in the built
+  kinds it only marks `WrappedPqzToken`'s overrides and `MetaTokenBase._scalarBits` `virtual` and makes
+  `MetaTokenBase.supportsInterface` `public` (so a regulated kind can extend it with `super`); `DeployBase` gains a path.
+  The touched files keep their pre-round copies above; as they stood before T27: `a2325004`.
+  T28 (regulated kinds: `RegulatedLib`, `RegulatedBase`, kinds 8 and 9; spec `2026-11-05-regulated-kinds.md` §2.3, §2.4,
+  §3.1-§3.4): no copy. It replaces T27's placeholders (`RegulatedNotBuilt` bodies of a skeleton never deployed with value),
+  not a built body, typehash, struct, builder, row or handler; `RegulatedNotBuilt` stays for T29 / T32. New:
+  `src/regulated/NormalRegulatedToken.sol` and the `scaas.regulated` namespace. As they stood before T28: `59f18aae`.
+  T29 (the receiver check: `ComplianceRegistry`, the bounded registry call, the code pin; spec
+  `2026-11-05-regulated-kinds.md` §2.4, §5): no copy. It replaces T28's placeholders (`RegulatedBase._eligible` and
+  `canReceive` reverting `RegulatedNotBuilt`, `RegulatedLib.init` refusing any registry), not a built body, typehash,
+  struct, builder, row or handler; `RegulatedNotBuilt` stays for T32. `RegulatedLib.init` gains a parameter (the release's
+  `REGISTRY_CODEHASH`), each regulated kind's constructor passes `implArgs` to `RegulatedBase`. New:
+  `src/regulated/{ComplianceRegistry,IComplianceRegistry}.sol`. As they stood before T29: `70d0b751`.
+  T30 (the regulated Zether kinds 10 and 11; spec `2026-11-05-regulated-kinds.md` §4.1, §4.3): no copy. It supersedes no
+  built body, typehash, struct, builder, row or handler: `ZetherLayer`'s `_regZetherSender` seat (T26) keeps its empty
+  body on kinds 2 and 3; `NormalZetherToken` and `WrappedZetherToken` only mark their overrides `virtual` (same
+  runtime size, the metadata hash moves); `DeployBase._deployZether` gains `_deployZetherRegulated`. New:
+  `src/regulated/{NormalZetherRegulatedToken,WrappedZetherRegulatedToken}.sol`. As they stood before T30: `b0727dfc`.
+  Owner ruling 2026-11-06 (`ComplianceRegistry`: only the admin overwrites or revokes an admin-written slot; spec
+  `2026-11-05-regulated-kinds.md` §5): no copy. `attest` keeps its signature and body and gains one check before the write
+  (`AdminWrittenSlot`); no entry, struct, row or handler is dropped; the runtime hash moves. As it stood before: `4ba3decb`.
+  T31 (the regulated PQZ kinds 12 and 13; spec `2026-11-05-regulated-kinds.md` §4.2, §4.3): no copy. It supersedes no built
+  body, typehash, struct, builder, row or handler: the PQZ seats in `PqzLayer` and `WrappedPqzToken` (T26) and kind 13
+  (T27-T29) are unchanged; `NormalPqzToken` only marks its overrides `virtual` (same runtime size); `script/pqz/e2e.py`
+  publishes the releases 12 and 13 beside 0, 4 and 5. New: `src/regulated/NormalPqzRegulatedToken.sol`. As they stood
+  before T31: `024e143c`.
+  Group 3e (payment metadata, free pay lanes, tax; spec `2026-11-05-pay-meta-tax.md`), under `ua-mtx-merge/3e/` because the
+  pre-round copies of the same paths above stay as they are. T37 (pay entries with `PayMeta`, free pay lanes, the mandate
+  wallets), as they stood at `86751e34`: `src/metatx/{MetaTokenBase,IMetaTokenV2,IERC20Payment}.sol` with the flat
+  `mtxPay(bytes32 from, …, bytes32 payId, …)` on lane `payLane(payId)` at nonce 0, `mtxPayMeta`, `_uaPayMeta`, `_uaPay`,
+  `metaPayId(bytes32 salt, bytes meta)` under the tag `scaas.pay.meta`, `PaymentMeta(bytes32 indexed payId, bytes meta)`,
+  the six-argument `payWithFee` / `payWithFeeToUA` (any `entryRef`, 0 included) and the receiver-fee shape
+  `t.batch == payLane(t.entryRef)`, `t.nonce == 0`; `src/wallet/MandateWallet.sol` with `payUnderMandate` /
+  `mtxPayUnderMandate` without `PayMeta`. Tests as they stood before their meaning changed:
+  `test/metatx/PayMeta.t.sol`, `test/v2/{Base,ReceiverPays,MetaTxGasV2}.t.sol`, `test/ua/{UAReceiverFee,UALedgerNamed}.t.sol`,
+  `test/wallet/{MandateWallet,MandateWalletMerged}.t.sol`, `test/merge/TransferGroup.t.sol`, `test/account/AccountKat.t.sol`
+  and its vector `test/vectors/mandate_kat.json`; the shared vector `smartcontracts/vectors/metatx/paymeta.json` (the old
+  formula, which the non-EVM families keep until their rounds) is at `smartcontracts/vectors/metatx/legacy/ua-mtx-merge/`.
+  Not built.
+  T38 (the relay fee on free lanes), as they stood at 2ced92b5 (the T37 tip): `src/metatx/{MtxRelayFee,IERC20MetaTx}.sol` and
+  `MetaTokenBase.sol` (copied at T37) with `UARelayFee(bytes32 from,address target,bytes32 callDataHash,bytes32 payee,
+  uint256 value,uint256 validUntil,address relayer)`, the token's seven-argument `mtxRelayFee` on lane `payLane(ref)` at
+  nonce 0, `_relayHash` and the router's eight-argument `relay`; `test/metatx/{MtxRelayFee,TradeTyped}.t.sol` as they stood before their
+  meaning changed. Not built.
+  T39 (bit 23 `TAX`, the tax rate and recipient, router ops), as they stood at e273978e (the T38 tip):
+  `src/governance/GovernanceBits.sol` with `ISSUER_BITS` = 5, 6, 7; `src/regulated/{RegulatedLib,RegulatedBase,IRegulatedToken}.sol`
+  with `RegulatedLib.init(initArgs, valid, registryCodehash)`, `scaas.regulated` up to +4, `_delayedRelaxBits()` =
+  `ISSUER_BITS`; `src/factory/IFactoryToken.sol` with `RegulatedParams` of four fields. Tests as they stood before their
+  meaning changed: `test/as/RegulatedSkeleton.t.sol` (the masks without bit 23), `test/governance/GovBitsVector.t.sol` (rows
+  0-22). Not built.
+  T40 (`mtxPayWithTax` and `payWithTax` on kinds 8-13), as it stood at ff5f18f5 (the T39 tip): `src/metatx/ERC20MetaTx.sol`
+  with the three-argument `_uaExecuteTransfer(t, signed, auth)` (no withheld leg). `RegulatedBase`, `RegulatedLib` and
+  `IRegulatedToken` before T40 are the pre-T39 copies above plus T39's commit. Not built.
+  T41 (pay-meta and tax vectors, clientkeys and ua-rs rows), as they stood at bc6592b1 (the T40 tip): `test/metatx/TypedOps.t.sol`
+  (`UAPayUnderMandate`'s row finding no entry), `test/ua/{UAMetaTx3Pq,UAMetaTx3Vectors}.t.sol` (the receiver-fee rows refused
+  `PayMetaMismatch`, the two-`mldsa65` run waiting for a commitment row). The vector copies: `smartcontracts/vectors/typed/legacy/
+  ua-mtx-merge/3e/typed_ops.json`, `smartcontracts/vectors/ua/legacy/ua-mtx-merge/3e/{metatx3,pq_signatures}.json`. Not built.
+  Group 3g (versioned PQZ keys; spec `2026-11-06-pqz-key-versions.md`), under `ua-mtx-merge/3g/`. T51 (the registry's
+  versioned PQZ key records), as they stood at 55347848 (the 3e tip): `src/ua/{UARegistryLib,UARegistry,IUARegistry,UAStore}.sol`
+  with the four-argument `setPqzKey(ua, pqzKey, pqzPopHash, sig)`, the two-argument `storePqzPop(ua, pqzPop)`, one PQZ key per
+  UA (`UAStore` slots 2, 7, 8, 9 keyed by UA alone), ruling R-cross-set's replacement (`_pqzKeyFree`, the kept `register`
+  key in slots 13 and 14, `registrationOf`'s fallback to it) and the three-word `pqzKeyOf`; `test/ua/UARegistryUA8.t.sol` as
+  it stood before its meaning changed (`test_ua8_crossSetKeyReplaced`, `test_ua8_crossSetGen2ReplacesGen1Key`: the
+  replacement, retired by R2). Not built.
+  T52 (the PQZ token's per-version state), as they stood at 28a099a1 (the T51 tip): `src/pqz/{PqzCore,PqzStateLib,
+  PqzTransferLib,PqzBurnLib,PqzViewLib,PqzLayer,IPqzToken,WrappedPqzToken,NormalPqzToken,PqzWrappedLib}.sol` with one account per
+  UA (`acct[ua]`, `sendCounter` a field of it), the args structs without `keyVersion`, the two-argument `mtxRollOver(ua, n)` /
+  `mtxPrepareAcc(ua, half)` (direct and signed, `UARollOver` / `UAPrepareAcc` without `keyVersion`, 68-byte static shape), the
+  views `pqzAccount(ua)`, `pqzPending(ua, i)`, `pqzAcc(ua)`, `pqzPendingCt(ua, i)`, `Credited` / `Debited` without the version,
+  the shared `RolledOver`; `src/confidential/IConfidentialToken.sol` with `mtxRollOver(bytes32,uint256)` shared by both layers.
+  Tests as they stood before their meaning changed: `test/pqz/{PqzPool,PqzTyped,PqzGuards}.t.sol`,
+  `test/confidential/ConfidentialSelectors.t.sol`. Not built.
+  T53 (the PQZ disclosure by key version): the four-argument `disclosureStatement(entryRef, leg, amount, kind)` and the
+  five-argument `verifyTransferAmount(entryRef, leg, amount, kind, proof)` (checked against the owner's current key) are in the
+  T52 copies above (`src/pqz/{PqzCore,PqzViewLib,PqzLayer}.sol`, unchanged by T52); Zether's `ITransferDisclosure` forms stay.
+  Factory index and extensible catalogue (spec `2026-11-07-factory-contract-index.md`), under `ua-mtx-merge/factory-index/`.
+  T67 (the record, the per-class lists, the paged views), as they stood at e1336e60 (the 3g tip):
+  `src/factory/{OpenFactory,IOpenFactory}.sol` with the per-token `Info {creator, kind, version, exists}` (`_info`) and the DEX
+  version map `_dexVersion`, which the record `Created` replaces; no list of the contracts of an owner or a creator (a log
+  only). Not built.
+  Chain-neutral releases (spec `2026-11-07-chain-neutral-releases.md`, option I), under `ua-mtx-merge/chain-neutral/`. T71 +
+  T72 (one segment: the factory's constructor `(registrar)` and `configureChain`, CREATE3 on every creation path, the
+  creator a `bytes32 creatorId`; every kind's chain values in its clone's code), as they stood at 846167ba (the T67 tip):
+  `src/factory/{OpenFactory,IOpenFactory,IFactoryToken}.sol` with the constructor `(registrar, chainUid, noticePeriod)`, the
+  published `Env` carrying `factory`, `chainUid` and `govRouter`, releases `CREATE2`d with `abi.encode(envVersion, env,
+  implArgs)` appended (per-chain code), clones by `Clones.cloneDeterministic` over `keccak256(abi.encode(creator, salt))`,
+  `predictAddress(implementation, creator, salt)`, `getWrapper*(address creator, …)`, `TokenCreated` / `DexCreated` with
+  `address indexed creator`, `initialize(address creator, …)`; `src/common/SaltedEIP712.sol`, `src/metatx/{MetaTxBase,
+  UAMetaTxBase,ERC20MetaTx,MetaTokenBase,NormalToken,WrappedToken}.sol`, `src/governance/GovernanceBase.sol`,
+  `src/zether/{ZetherLayer,ZetherLib,NormalZetherToken,WrappedZetherToken}.sol` (the transfer verifier copied into storage
+  at `init`), `src/pqz/{PqzLayer,PqzStateLib,NormalPqzToken,WrappedPqzToken}.sol`, `src/regulated/{RegulatedBase,Normal,
+  Wrapped,NormalZether,WrappedZether,NormalPqz,WrappedPqz}RegulatedToken.sol` (the six kinds' files), `src/dex/{SCaaSDex,
+  ISCaaSDex}.sol` with the chain values as constructor immutables (`CHAIN_UID`, `_REGISTRY`, `IS_HEDERA`,
+  `_SMART_KEY_CLONE_CODEHASH`, `SMART_KEY_ACCOUNT_IMPL`, `GOV_ROUTER`, the Zether and PQZ verifiers) and the env checks in
+  the constructors; `script/DeployBase.sol` and `script/pqz/e2e.py` with that factory. Tests as they stood before their meaning changed:
+  `test/v2/{Factory,Base,Dex,FactoryZether,Tier2}.t.sol`, `test/ua/{UALedger,UADeploy}.t.sol`,
+  `test/governance/{GovIdentity,GovDeploy}.t.sol`, `test/zether/{ZetherRevertPaths,ZetherDeploy,ZetherModes}.t.sol`,
+  `test/pqz/PqzNormal.t.sol`;
+  `test/vectors/legacy/ua-mtx-merge/chain-neutral/selector_audit.json` with the `initialize(address,uint64,bytes)` rows.
+  Not built.

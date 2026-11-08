@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-import {IFactoryToken} from "../factory/IFactoryToken.sol";
+import {IFactoryToken, requireRegOfKind} from "../factory/IFactoryToken.sol";
 import {GovernanceLib} from "../governance/GovernanceLib.sol";
-import {GovernanceBits} from "../governance/GovernanceBits.sol";
-import {TokenStore} from "../metatx/TokenStore.sol";
 import {IMetaTx} from "../metatx/IMetaTx.sol";
 import {MtxPipelineLib} from "../metatx/MtxPipelineLib.sol";
 import {WrappedLib} from "../metatx/WrappedLib.sol";
@@ -24,21 +22,23 @@ import {IUARegistry} from "../ua/IUARegistry.sol";
 library ZetherWrappedLib {
     uint8 private constant ABSOLUTE = MtxPipelineLib.FEE_CLASS_ABSOLUTE;
     uint8 private constant AMOUNT = MtxPipelineLib.FEE_CLASS_AMOUNT;
-    /// @dev Moved from `WrappedZetherToken` (CTR-ZTH-94), unchanged.
-    bytes32 private constant UNSHIELD_UNWRAP_TYPEHASH = keccak256(
-        "ZetherUnshieldUnwrap(address from,ZetherBurn args,Unwrap unwrap,bytes proof,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)G1(bytes32 x0,bytes32 x1,bytes32 y0,bytes32 y1)Unwrap(address underlying,bytes32 recipient,uint256 amount,uint256 minOut)ZetherBurn(uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes32 beneficiaryUA,G1 yFrom)"
-    );
+    /// @dev Moved from `WrappedZetherToken` (CTR-ZTH-94), unchanged; the address `ZetherUnshieldUnwrap` is in
+    ///      legacy/ua-mtx-merge/ (R35).
     bytes32 private constant UA_UNSHIELD_UNWRAP_TYPEHASH = keccak256(
         "UAZetherUnshieldUnwrap(bytes32 from,ZetherBurn args,Unwrap unwrap,bytes proof,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)G1(bytes32 x0,bytes32 x1,bytes32 y0,bytes32 y1)Unwrap(address underlying,bytes32 recipient,uint256 amount,uint256 minOut)ZetherBurn(uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes32 beneficiaryUA,G1 yFrom)"
     );
 
-    /// @notice The kind's init from the factory's raw `initArgs`: `initialSupply` and `initialHolder` empty, `legs`, the
-    ///         rate and `conf` are checked by the two libraries. Never on Hedera (`ZetherLayer` refuses that env).
-    function init(bytes calldata initArgs, IZetherVerifier v) public {
+    /// @notice The kind's init from the factory's raw `initArgs`: `initialSupply` and `initialHolder` empty, `reg` too on a
+    ///         plain kind, `legs`, the rate and `conf` are checked by the two libraries. `kind` and the masks are the token's
+    ///         own (`kind()`, `_validBits()`, `_roleBits()`, `_contractOnlyBits()`; regulated-kinds spec §2.4), never fixed
+    ///         here. Never on Hedera (`ZetherLayer` refuses that env).
+    function init(bytes calldata initArgs, IZetherVerifier v, address registry, uint8 kind, uint256 valid, uint256 roleBits,
+        uint256 contractOnly) public
+    {
         IFactoryToken.TokenConfig memory cfg = abi.decode(initArgs, (IFactoryToken.TokenConfig));
         if (cfg.initialSupply != 0 || cfg.initialHolder != address(0)) revert IFactoryToken.ConfigFieldForOtherKind(1);
-        WrappedLib.initToken(cfg, false, TokenStore.KIND_WRAPPED_ZETHER, GovernanceBits.WRAPPED_BITS,
-            GovernanceBits.WRAPPED_ROLES, GovernanceBits.WRAPPED_CONTRACT_ONLY);
+        requireRegOfKind(kind, cfg.reg);
+        WrappedLib.initToken(cfg, false, kind, valid, roleBits, contractOnly, registry);
         ZetherLib.init(cfg.conf, v);
     }
 
@@ -63,7 +63,7 @@ library ZetherWrappedLib {
         (s[12], c[12]) = (IZetherWrappedToken.mtxUnshieldUnwrap.selector, ABSOLUTE);
         (s[13], c[13]) = (bytes4(keccak256("wrapToUA(address,uint256,bytes32)")), ABSOLUTE);
         (s[14], c[14], a[14]) = (bytes4(keccak256("unwrapToUA(address,uint256,bytes32,uint256)")), AMOUNT, 1);
-        (s[15], c[15]) = (IConfidentialToken.mtxRollOver.selector, ABSOLUTE);
+        (s[15], c[15]) = (IZetherToken.mtxRollOver.selector, ABSOLUTE);
         (s[16], c[16]) = (IZetherToken.mtxRollOverBatch.selector, ABSOLUTE);
         (s[17], c[17]) = (IZetherToken.mtxRollOverSigned.selector, ABSOLUTE);
         (s[18], c[18]) = (IZetherToken.mtxSetRollOverMode.selector, ABSOLUTE);
@@ -82,15 +82,8 @@ library ZetherWrappedLib {
         return ZetherLib.unshieldWith(b, proof, x.amount, x.recipient, env);
     }
 
-    /// @notice What the signed `mtxUnshieldUnwrap` signs and runs (as `ZetherLib.multiCall`): the `Unwrap` leg a nested
+    /// @notice What the signed `mtxUnshieldUnwrap` signs and runs (as `ZetherLib.uaMultiCall`): the `Unwrap` leg a nested
     ///         struct.
-    function unwrapCall(MetaTxLib.Envelope calldata, IZetherToken.ZetherBurn calldata b,
-        IConfidentialWrappedToken.Unwrap calldata x, bytes calldata proof, bytes calldata)
-        public pure returns (bytes32, bytes memory, bytes memory)
-    {
-        return (UNSHIELD_UNWRAP_TYPEHASH, _unwrapWords(b, x, proof), _unwrapOp(b, x, proof));
-    }
-
     function uaUnwrapCall(MetaTxLib.UAEnvelope calldata, IZetherToken.ZetherBurn calldata b,
         IConfidentialWrappedToken.Unwrap calldata x, bytes calldata proof, IUARegistry.UASig calldata)
         public pure returns (bytes32, bytes memory, bytes memory)

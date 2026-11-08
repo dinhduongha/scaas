@@ -1,0 +1,1 @@
+m-t7-disclosure-current-key | test_disclosure_right, test_disclosure_unknown | 1

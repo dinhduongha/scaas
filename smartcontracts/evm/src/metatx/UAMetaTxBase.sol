@@ -2,29 +2,29 @@
 pragma solidity ^0.8.24;
 
 import {MetaTxBase} from "./MetaTxBase.sol";
+import {IMetaTx} from "./IMetaTx.sol";
 import {IUALedger} from "./IUALedger.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {MtxPipelineLib} from "./MtxPipelineLib.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
-import {UAKinds} from "../ua/UAKinds.sol";
 
 /// @title The UA-signed call path on `MetaTxBase` (owner ruling 2026-11-01), for tokens and for contracts that are not.
-/// @notice `uaExecute` is a general entry: any contract on this base takes UA-signed calls of its `_uaAllowed` selectors
-///         through `MtxPipelineLib` (CTR-MTX-17 on a `bytes32` signer, CTR-UA-26). A contract without a ledger runs at
-///         fee mode `NONE` (`supportedModes()`, both paths), still relayable; `ERC20MetaTx` overrides `_uaChargeFee` with
-///         its UA ledger. An op body reads `_subject()`, since `_msgSender()` is `UA_POOL` for every derived subject; a
-///         derived signer cancels a lane with `uaCancelNonce`. The address path here takes the same `Ctx` signature rule.
-///         `MetaTxBase` stays free of this code: `SmartKeyAccount` and `MandateWallet` have no registry.
+/// @notice The one signed generic path of tokens, the router and the mandate wallets (ua-mtx-merge, CTR-MTX-30; Q6): `mtxExecute`, `mtxBatch`,
+///         `mtxCancelNonce` on `bytes32` ids through `MtxPipelineLib` (CTR-MTX-17 on an id, CTR-UA-26). A native id signs
+///         with its own key in `auth.signature` and reads `_mtxRule` (B); a derived UA is authorized by the registry and
+///         reads `_uaAllowed` only, since inside the self-call it is `UA_POOL`; a registry is needed only for a derived
+///         side (C). A contract without a ledger runs at fee mode `NONE` (`supportedModes()`), still relayable;
+///         `ERC20MetaTx` overrides `_uaChargeFee` with its UA ledger. An op body reads `_subject()`. The address path
+///         (`executeMetaTransaction`, R3) takes the same `Ctx` signature rule. `SmartKeyAccount` keeps the address entries
+///         (`MetaTxAddressBase`).
 abstract contract UAMetaTxBase is MetaTxBase {
     /// @custom:storage-location erc7201:scaas.ua.ledger
-    /// @dev `balance` is the UA ledger's (`ERC20MetaTx`); `cancelUsed` is every contract's on this base.
+    /// @dev `balance` is the UA ledger's (`ERC20MetaTx`). `cancelUsed` served the unordered `uaCancelNonce`
+    ///      (legacy/ua-mtx-merge/); unused since, kept because the layout is pinned (test/v2/layout/).
     struct UALedgerStorage {
         mapping(bytes32 ua => uint256) balance;
         mapping(bytes32 digest => bool) cancelUsed;
     }
-
-    bytes32 private constant _UA_CANCEL_NONCE_TYPEHASH =
-        keccak256("UACancelNonce(bytes32 ua,uint256 batch,uint256 validUntil)");
 
     // keccak256(abi.encode(uint256(keccak256("scaas.ua.ledger")) - 1)) & ~bytes32(uint256(0xff))
     bytes32 private constant _UA_STORAGE = 0x9e2def943e5a7ec3982e5d00524104579a6b98ce8b31343ac0092718cc04e900;
@@ -54,30 +54,26 @@ abstract contract UAMetaTxBase is MetaTxBase {
         return _REGISTRY;
     }
 
-    /// @notice The one nonce map (CTR-UA-26): `uaNonce(pad(a), b) == mtxNonce(a, b)`.
-    function uaNonce(bytes32 ua, uint256 batch) public view virtual returns (uint256) {
-        return _nonce(ua, batch);
+    /// @notice The one nonce map (CTR-UA-26), keyed by id: a native address zero-padded, a derived UA as itself.
+    function mtxNonce(bytes32 from, uint256 batch) public view virtual returns (uint256) {
+        return _nonce(from, batch);
     }
 
-    function uaDigest(MetaTxLib.UAMetaTransaction calldata m) public view virtual returns (bytes32) {
+    function mtxDigest(MetaTxLib.UAMetaTransaction calldata m) public view virtual returns (bytes32) {
         return MtxPipelineLib.callDigest(_domainSeparatorV4(), MetaTxLib.UAMETATX_TYPEHASH, _uaEnvelopeOf(m));
-    }
-
-    /// @notice The `metatx-cancel` digest (TS-D19): `UACancelNonce` in this contract's domain.
-    function uaCancelDigest(bytes32 ua, uint256 batch, uint256 validUntil) public view virtual returns (bytes32) {
-        return _hashTypedDataV4(keccak256(abi.encode(_UA_CANCEL_NONCE_TYPEHASH, ua, batch, validUntil)));
     }
 
     // ------------------------------------------------------------------ entry points
 
-    function uaExecute(MetaTxLib.UAMetaTransaction calldata m, bytes calldata auth)
+    /// @notice The generic entry (R47: an explicit `UASig`, no packed `bytes auth`).
+    function mtxExecute(MetaTxLib.UAMetaTransaction calldata m, IUARegistry.UASig calldata auth)
         public virtual nonReentrant returns (bytes memory)
     {
         return _uaExecute(m, auth);
     }
 
-    /// @notice Atomic, items in order, each with a fresh ticket (as `mtxBatch`).
-    function uaBatch(MetaTxLib.UAMetaTransaction[] calldata ms, bytes[] calldata auths)
+    /// @notice Atomic: items run in order, each with a fresh ticket; any failure reverts all (CTR-MTX-11).
+    function mtxBatch(MetaTxLib.UAMetaTransaction[] calldata ms, IUARegistry.UASig[] calldata auths)
         public virtual nonReentrant returns (bool)
     {
         uint256 n = ms.length;
@@ -90,20 +86,24 @@ abstract contract UAMetaTxBase is MetaTxBase {
         return true;
     }
 
-    /// @notice A derived UA's `cancelNonce`, signed under purpose `metatx-cancel`; each signature works once. Native ids
-    ///         use `cancelNonce` (the same map, `pad(sender)`).
-    function uaCancelNonce(bytes32 ua, uint256 batch, uint256 validUntil, IUARegistry.UASig calldata auth)
-        public virtual nonReentrant
+    /// @notice The signed `cancelNonce(lane)` on ids (Q2, R19): `UACancelNonce(bytes32 from,uint256 lane,E)` run through
+    ///         `preNamedUA` like every named op, so nonce-ordered on its own lane `e.batch`, relayer-bound by the mode,
+    ///         fee 0 or more, native and derived alike, under the named op's purpose (MD-5). The body bumps `lane` for
+    ///         `e.from` itself: no self-call of `cancelNonce`, which refuses a derived subject (`UA_POOL` there).
+    function mtxCancelNonce(MetaTxLib.UAEnvelope calldata e, uint256 lane, IUARegistry.UASig calldata auth)
+        public virtual nonReentrant returns (bytes memory)
     {
-        _uaOn();
-        if (UAKinds.inNativeSpace(ua)) revert IUALedger.UAKindNotAccepted(ua, 0);
-        if (block.timestamp > validUntil) revert MetaTxExpired(validUntil, block.timestamp);
-        bytes32 d = uaCancelDigest(ua, batch, validUntil);
-        UALedgerStorage storage $ = _ua();
-        if ($.cancelUsed[d]) revert IUALedger.UACancelUsed();
-        IUARegistry(_REGISTRY).requireAuthorized(ua, UAKinds.PURPOSE_METATX_CANCEL, d, auth);
-        $.cancelUsed[d] = true;
-        emit IUALedger.UANonceCancelled(ua, batch, _bumpNonce(ua, batch));
+        MetaTxLib.UAMetaTransaction memory m = _uaMetaOf(e, abi.encodeCall(IMetaTx.cancelNonce, (lane)));
+        _regPre(m.from, IMetaTx.cancelNonce.selector, m.mode);
+        // the facts of `cancelNonce(lane)`, fixed: no self-call follows, so no allowlist is asked (a derived id too)
+        MtxPipelineLib.Out memory o = MtxPipelineLib.preNamedUA(_mtxCtx(), MetaTxLib.UA_CANCEL_NONCE_TYPEHASH,
+            _uaEnvelopeOf(m, 0), abi.encode(lane), MtxPipelineLib.CallFacts(IMetaTx.cancelNonce.selector, 36,
+            FEE_CLASS_ABSOLUTE, 0, 36, 0, true, supportedModes()), auth);
+        _regFeeTo(MetaTxLib.pad(o.feeTo), o.fee);
+        emit IUALedger.UANonceCancelled(e.from, lane, _bumpNonce(e.from, lane));
+        if (o.fee != 0) _uaChargeFee(m, o.feeTo, o.fee);
+        emit IUALedger.UAMetaTransactionExecuted(e.from, msg.sender, e.batch, e.nonce, o.digest, o.feeTo, o.fee);
+        return "";
     }
 
     // ------------------------------------------------------------------ the pipeline on MtxPipelineLib
@@ -136,11 +136,14 @@ abstract contract UAMetaTxBase is MetaTxBase {
         if (s == 0) s = MetaTxLib.pad(_msgSender());
     }
 
-    /// @dev The generic UA pipeline (CTR-MTX-17 on a `bytes32` signer) on the library: `preCall(ua = true)` runs the
-    ///      ledger check, 1 envelope, 2 authorization, 3 the UA allowlist (`MetaTxUnknownOp`), the address path's shape
-    ///      and fee class and the fee amount, 4 nonce; then 5 self-call under the id, 6 the fee hook, 7 event.
-    function _uaExecute(MetaTxLib.UAMetaTransaction memory m, bytes calldata auth) internal returns (bytes memory) {
-        return _uaSettle(m, MtxPipelineLib.preCall(_mtxCtx(), _uaEnvelopeOf(m), _callFacts(m.data, true), true, auth));
+    /// @dev The generic pipeline on ids (CTR-MTX-17 on a `bytes32` signer) on the library: `preCallUA` runs 1 envelope,
+    ///      2 authorization, 3 the allowlist (`_uaAllowed` for a derived id, `MetaTxUnknownOp`; `_mtxRule` for every id),
+    ///      shape, fee class and the fee amount, 4 nonce; then 5 self-call under the id, 6 the fee hook, 7 event.
+    function _uaExecute(MetaTxLib.UAMetaTransaction memory m, IUARegistry.UASig calldata auth)
+        internal returns (bytes memory)
+    {
+        _regPre(m.from, bytes4(m.data), m.mode);
+        return _uaSettle(m, MtxPipelineLib.preCallUA(_mtxCtx(), _uaEnvelopeOf(m), _callFacts(m.data, true), auth));
     }
 
     /// @dev `_uaExecute` of a named `ua*` entry (TS-D14), the twin of `_named`.
@@ -155,17 +158,9 @@ abstract contract UAMetaTxBase is MetaTxBase {
         IUARegistry.UASig calldata auth) internal returns (bytes memory)
     {
         MetaTxLib.UAMetaTransaction memory m = _uaMetaOf(e, data);
+        _regPre(m.from, bytes4(data), m.mode);
         return _uaSettle(m, MtxPipelineLib.preNamedUA(
             _mtxCtx(), typehash, _uaEnvelopeOf(m, 0), words, _callFacts(m.data, true), auth));
-    }
-
-    /// @dev The same for `uaShield`, which keeps `bytes auth` (owner table, 2026-11-01).
-    function _namedUA(bytes32 typehash, bytes4 sel, MetaTxLib.UAEnvelope calldata e, bytes memory args, bytes calldata auth)
-        internal returns (bytes memory)
-    {
-        MetaTxLib.UAMetaTransaction memory m = _uaMetaOf(e, abi.encodePacked(sel, args));
-        return _uaSettle(m, MtxPipelineLib.preNamed(
-            _mtxCtx(), typehash, _uaEnvelopeOf(m, 0), args, _callFacts(m.data, true), true, auth));
     }
 
     /// @dev The `UAMetaTransaction` a named entry runs as (the binding hooks and the fee read it).
@@ -180,6 +175,7 @@ abstract contract UAMetaTxBase is MetaTxBase {
     function _uaSettle(MetaTxLib.UAMetaTransaction memory m, MtxPipelineLib.Out memory o)
         private returns (bytes memory ret)
     {
+        _regFeeTo(MetaTxLib.pad(o.feeTo), o.fee);
         ret = _selfCall(m.from, m.data, _uaEnvelopeBinding(m));                                         // 5
         if (o.fee != 0) _uaChargeFee(m, o.feeTo, o.fee);                                                // 6
         emit IUALedger.UAMetaTransactionExecuted(m.from, msg.sender, m.batch, m.nonce, o.digest, o.feeTo, o.fee); // 7
@@ -235,4 +231,18 @@ abstract contract UAMetaTxBase is MetaTxBase {
     function _uaAllowed(bytes4) internal view virtual returns (bool) {
         return false;
     }
+
+    // ------------------------------------------------------------------ regulated hooks (regulated-kinds spec §2.2)
+
+    /// @notice Empty here, so a plain kind and the router read nothing more (CTR-GOV-11, "+0" pinned by
+    ///         `test/governance/PlusZero.t.sol`); only a regulated kind overrides. Arguments are raw values the caller
+    ///         already holds (F-10). Before `MtxPipelineLib.pre*` on `_uaExecute`, `_namedCallUA`, `mtxCancelNonce`,
+    ///         `_execute`, `_namedCall` (`from` padded), `_uaExecuteTransfer` (`sel` 0): `sel` the inner op's selector,
+    ///         `mode` the envelope's.
+    function _regPre(bytes32 /* from */, bytes4 /* sel */, uint32 /* mode */) internal view virtual {}
+
+    /// @notice Empty here (as `_regPre`). After `pre*` and before the self-call or move of the same seats, with the
+    ///         pipeline's `feeTo` and `fee`; and the fee legs of `payWithFee`, `payWithFeeToUA`, `mtxPayReceiverFee`,
+    ///         `mtxRelayFee`, `mtxWrapOrder`.
+    function _regFeeTo(bytes32 /* feeTo */, uint256 /* fee */) internal view virtual {}
 }

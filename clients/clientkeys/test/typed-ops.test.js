@@ -2,6 +2,8 @@
 // typehashes and Appendix X.4's type strings are written out here on purpose, apart from the table in src/evm.js: a
 // mismatch is a stop-and-report, never a silent correction of either side. Forge pins the C0 entries against the same
 // rows (test/metatx/NamedEntry.t.sol); C2-C6 are written to the rest.
+// ua-mtx-merge T11 (CTR-MTX-30, plan MD-7): one signed entry per operation. A merged op has one row, `UA<Op>`, whose entry
+// is `mtx<Op>(UAEnvelope, …, UASig)`; the address rows of merged ops are in vectors/typed/legacy/ua-mtx-merge/.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -13,6 +15,7 @@ import * as evm from '../src/evm.js';
 import * as zether from '../src/zether.js';
 import { hex, fromHex, keccak_256, utf8ToBytes, concatBytes, abiEncode, word } from '../src/bytes.js';
 import { expectedCall, norm } from '../scripts/typed-ops-expected.mjs';
+import * as reg from '../src/regulated.js';
 
 const { TYPED_OPS, hashTypedData, hashStruct, checkOp, checkWrapOrder, checkUAWrapOrder, checkTradeOrder, checkCancel, encodeType } = evm;
 const V = JSON.parse(readFileSync(new URL('../../../smartcontracts/vectors/typed/typed_ops.json', import.meta.url)));
@@ -23,33 +26,43 @@ const lower = (s) => s.replace(/^UA/, 'ua').replace(/^[A-Z]/, (c) => c.toLowerCa
 const domainOf = (r, d) => ({ name: d.domain.name, contract: d.domain.verifyingContract, chainId: d.domain.chainId,
   chainUid: d.domain.salt });
 const rows = () => Object.entries(V.ops);
+// group 3g: a per-kind row (`UAPqzRollOver`) names its primary type and its builders
+const prim = (name) => TYPED_OPS[name].primary;
+const bld = (name) => TYPED_OPS[name].builder;
 const domains = (r) => Object.entries(r.domains);
 
 // The plan's Part C tables, truncated as they are printed there (`Execute`: `cast keccak` of its type string).
+// ua-mtx-merge T11: the address rows of merged ops left (MD-7); `UACancelNonce` is the ordered cancel (Q2) and the mandate
+// wallets' `UA<Op>` rows are new (Q6): their full typehashes from `cast keccak` of the contract's type strings.
 const PLAN = {
-  CancelNonce: '0x77d6b4d4…f857dbf4bc', Burn: '0x89bf2320…a925bbf925', UABurn: '0xeed13c9a…fe9238f540',
-  Wrap: '0xd2fe0a6e…b2adac31', WrapLeg: '0x5846a8b8…46912147', Unwrap: '0x7272e86d…4f4af742', UAUnwrap: '0x914311a4…84d3aa93',
-  UnwrapLeg: '0xaccc7271…0c972a58e2', UAUnwrapLeg: '0xdbbb5d3f…f7cc1a48', AddReserve: '0x189280a9…a2162dfe',
-  WrapToUA: '0x3a2ec74d…25895dcde', UnwrapToUA: '0x9df2319a…1cdb4732', UAUnwrapToUA: '0x8bb1bc05…af2d9a04',
-  Shield: '0x60bd57f6…3d165ad', UAShield: '0xf86740a1…efb08337', WrapShield: '0x9188b9d0…b011ef',
-  RollOver: '0xcd3e09a9…5e9df', UARollOver: '0xd5ad0bcf…0465fd', PrepareAcc: '0xf3726703…b16834',
-  UAPrepareAcc: '0x33e99b3c…c460e5', SetMandate: '0x826b6b56…df746275', SetPayee: '0x0c9b1692…fa8a5985',
-  RevokeMandate: '0x4e4e4b87…c4f9d14', PayUnderMandate: '0xe68ac74c…f2d82acf', DelegateRevoke: '0xd36a49f4…8d1983f9da',
+  CancelNonce: '0x77d6b4d4…f857dbf4bc', UABurn: '0xeed13c9a…fe9238f540',
+  Wrap: '0xd2fe0a6e…b2adac31', WrapLeg: '0x5846a8b8…46912147', UAUnwrap: '0x914311a4…84d3aa93',
+  UAUnwrapLeg: '0xdbbb5d3f…f7cc1a48', AddReserve: '0x189280a9…a2162dfe',
+  WrapToUA: '0x3a2ec74d…25895dcde', UAUnwrapToUA: '0x8bb1bc05…af2d9a04',
+  UAShield: '0xf86740a1…efb08337', WrapShield: '0x9188b9d0…b011ef',
+  UARollOver: '0xd5ad0bcf…0465fd', UAPqzRollOver: '0x900621af…44e200a9bb75', UAPrepareAcc: '0xe173bbc7…ef43cc',
   AddKey: '0x9d156f1f…7244a6bb', RemoveKey: '0xcef46d27…618280b3', RotateKey: '0x5b8f8761…64fb0777',
   SetGuardian: '0xd2603850…6b967689f6', CancelRecovery: '0x3df995dd…1213adda', Execute: '0xe0b649e9…c6053f1df7',
-  ReceiverFee: '0x7c08a6ca…28232305', UAReceiverFee: '0xb12d2a08…7c75021a', RelayFee: '0x8018f06a…302b7909f',
-  UARelayFee: '0x77fa32c7…cd3eb54d', WrapOrder: '0x07a267c8…29eb6555', UAWrapOrder: '0x2a01cb57…fc04533c',
-  CancelOrder: '0x29879342…42e789a5', CancelUAOrder: '0x47eb46c7…a1eaeba', CancelWrapOrder: '0xf2691001…e9ae399',
-  CancelUAWrapOrder: '0x7679e176…2326d9d', CancelDexOrder: '0xcc35e105…f433c6', UACancelNonce: '0xf5d81494…5ca227',
+  UAReceiverFee: '0xb12d2a08…7c75021a', UARelayFee: '0x220269b9…e493e43ea5', UAWrapOrder: '0x2a01cb57…fc04533c',
+  CancelUAOrder: '0x47eb46c7…a1eaeba', CancelUAWrapOrder: '0x7679e176…2326d9d', CancelDexOrder: '0xcc35e105…f433c6',
   ZetherRollOver: '0x52e2c8f8…71768b1e', ZetherSetRollOverMode: '0x5f5a4ffa…4d55e09d', PqzAuth: '0x380b0de6…42644e6f',
+  UACancelNonce: '0xcd17c2129240241748e841a7f0572558b9c5a900a47bc540170a8c258d291c54',
+  UASetMandate: '0x77cac4912d9b5ea899e4894cd527290f239809543c0a3604b89ef74796d88492',
+  UASetPayee: '0xf0fb362dece88eadf659a55ed5c2606877293dbd69f9bb7eba806da921a77dc4',
+  UARevokeMandate: '0x8ec86d41c994f21c46c1517876704534ac3d564d82e844ec73b07d6f4b07b8bc',
+  UAPayUnderMandate: '0xadbc54026c0db2f3af4387e08d6db8d717cb74af436468a089f09d377d6f0119',
+  UADelegateRevoke: '0x774892773810b24a4c22164980cf38c17d181e11c99acc17c7229238a11035e0',
+  UAExecute: '0x0d4d513cf9b5169c6422cb757a9af6c10be34ccd883caa3a1d18d165cf9ea413',
+  // pay-meta-tax T41: `UARelayFee` with batch, nonce (T38, MtxRelayFee.t.sol's pin); `UAPayWithTax` (paytax.json, forge-written)
+  UAPayWithTax: '0x4a5f25751af8f3abdc633328e8e9871ea0ebeb4084608bb83ae8140803a21857',
 };
 
 // Appendix X.4, the nested strings verbatim.
 const E = 'uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient';
-const TA = 'PqzTransferArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes sealedMemo)';
+const TA = 'PqzTransferArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes sealedMemo)';
 const LEG = 'PqzLeg(bytes32 ua,bytes v,bytes vAuditor)';
-const MA = 'PqzMultiArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,bytes32 beneficiaryUA,uint256 decoyFee,bytes16 salt,bytes[] u,PqzLeg[] legs,bytes vFrom,bytes sealedMemo)';
-const BA = 'PqzBurnArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,bytes32 beneficiaryUA,bytes u,bytes vFrom)';
+const MA = 'PqzMultiArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,uint256 decoyFee,bytes16 salt,bytes[] u,PqzLeg[] legs,bytes vFrom,bytes sealedMemo)';
+const BA = 'PqzBurnArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,bytes u,bytes vFrom)';
 const UW = 'Unwrap(address underlying,bytes32 recipient,uint256 amount,uint256 minOut)';
 const G1 = 'G1(bytes32 x0,bytes32 x1,bytes32 y0,bytes32 y1)';
 const ZS = 'ZetherSingle(uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes16 salt,bytes32 beneficiaryUA,G1 yFrom,G1 yTo,G1 cOut,G1 dOut,G1 cDeb,G1 cAud)';
@@ -73,16 +86,16 @@ const X4 = {
   RollOverBatch: ['bytes32[] uas', ''],
 };
 
-// `mtx` entries: the length of `mtxSelectors()`, read from the Solidity (the Zether and wrapped PQZ kinds: the table is in the library,
-// `ZetherLib.normalSelectors` since CTR-ZTH-94, size lever 1). `ua` entries: an expected count, by hand, since
-// `_uaAllowed` is an expression and states no count.
+// The named entries: one per op on `mtxSelectors()`, whose length is read from the Solidity (the Zether and wrapped PQZ kinds:
+// the table is in the library, `ZetherLib.normalSelectors` since CTR-ZTH-94, size lever 1). ua-mtx-merge T11: an address
+// row only where the op has no merged entry (the five wraps on tokens, CTR-MTX-30 §2.1; every op of `SmartKeyAccount`).
 const SOURCES = { NormalToken: 'metatx/NormalToken', WrappedToken: 'metatx/WrappedToken', NormalZetherToken: 'zether/ZetherLib',
   WrappedZetherToken: 'zether/ZetherWrappedLib', NormalPqzToken: 'pqz/NormalPqzToken', WrappedPqzToken: 'pqz/PqzWrappedLib',
   MandateWallet: 'wallet/MandateWallet', SmartKeyAccount: 'account/SmartKeyAccount' };
 const mtxSelectorCount = (contract) => Number(/new bytes4\[\]\((\d+)\)/.exec(
   readFileSync(new URL(`../../../smartcontracts/evm/src/${SOURCES[contract]}.sol`, import.meta.url), 'utf8'))[1]);
-const EXPECTED_UA_ENTRIES = { NormalToken: 1, WrappedToken: 3, NormalZetherToken: 10, WrappedZetherToken: 13, NormalPqzToken: 9,
-  WrappedPqzToken: 12, MandateWallet: 0, SmartKeyAccount: 0 };
+const ADDRESS_ENTRIES = { NormalToken: 0, WrappedToken: 4, NormalZetherToken: 0, WrappedZetherToken: 5, NormalPqzToken: 0,
+  WrappedPqzToken: 5, MandateWallet: 0, SmartKeyAccount: 7 };
 
 // A minimal strict ABI decoder, apart from the encoder in src/bytes.js.
 function tupleMembers(t) {
@@ -97,7 +110,7 @@ function tupleMembers(t) {
   out.push(t.slice(start, -1));
   return out;
 }
-const dyn = (t) => t === 'bytes' || t.endsWith('[]') || (t[0] === '(' && tupleMembers(t).some(dyn));
+const dyn = (t) => t === 'bytes' || t === 'string' || t.endsWith('[]') || (t[0] === '(' && tupleMembers(t).some(dyn));
 const size = (t) => (t[0] === '(' && !dyn(t) ? tupleMembers(t).reduce((n, m) => n + size(m), 0) : 32);
 function decodeList(types, b) {
   let at = 0;
@@ -114,6 +127,7 @@ function decodeOne(t, b) {
   }
   if (t[0] === '(') return decodeList(tupleMembers(t), b);
   if (t === 'bytes') return hex(b.subarray(32, 32 + Number(BigInt(hex(b.subarray(0, 32))))));
+  if (t === 'string') return new TextDecoder('utf-8', { fatal: true }).decode(b.subarray(32, 32 + Number(BigInt(hex(b.subarray(0, 32))))));
   if (t === 'address') return hex(b.subarray(12, 32));
   if (t === 'bytes32') return hex(b.subarray(0, 32));
   if (/^bytes\d+$/.test(t)) return hex(b.subarray(0, Number(t.slice(5))));
@@ -124,24 +138,25 @@ const paramTypes = (abi) => tupleMembers(abi.slice(abi.indexOf('(')));
 test('every typehash pinned: the plan\'s truncated value, keccak256(typeString), table = vector', () => {
   const mismatch = [];
   for (const [name, want] of Object.entries(PLAN)) {
-    const [a, b] = want.split('…');
-    const got = TYPED_OPS[name].typehash;
+    const [a, b = ''] = want.split('…');
+    const got = TYPED_OPS[name]?.typehash ?? 'no row';
     if (!(got.startsWith(a) && got.endsWith(b))) mismatch.push(`${name}: plan ${want}, table ${got}`);
   }
   assert.deepEqual(mismatch, []);
   assert.deepEqual(Object.keys(V.ops).sort(), Object.keys(TYPED_OPS).sort());
+  assert.deepEqual(Object.keys(TYPED_OPS).filter((n) => !PLAN[n] && !/^UA/.test(n)), [], 'a row with no pin');
   for (const [name, r] of rows()) {
     assert.equal(r.typeString, TYPED_OPS[name].typeString, name);
     assert.equal(r.typehash, TYPED_OPS[name].typehash, name);
     assert.equal(hex(keccak_256(utf8ToBytes(r.typeString))), r.typehash, name);
-    assert.equal(encodeType(r.types, name), r.typeString, name);
+    assert.equal(encodeType(r.types, prim(name)), r.typeString, name);
   }
 });
 
-test('Appendix X.4: every confidential type string and its UA twin, exactly; referenced types sorted', () => {
+test('Appendix X.4: every confidential type string, its UA form only (the address twin retired); referenced types sorted', () => {
   assert.equal(Object.keys(X4).length, 14);
   for (const [name, [own, nested]] of Object.entries(X4)) {
-    assert.equal(TYPED_OPS[name].typeString, `${name}(address from,${own},${E})${nested}`, name);
+    assert.equal(TYPED_OPS[name], undefined, `${name}: the address row retired (MD-7)`);
     assert.equal(TYPED_OPS[`UA${name}`].typeString, `UA${name}(bytes32 from,${own},${E})${nested}`, name);
   }
 });
@@ -151,20 +166,28 @@ test('kept unchanged: the type strings the plan freezes', () => {
     + `address relayer,address dex,${id} destination,uint8 flags,uint256 batch,uint256 nonce,uint256 validUntil)`;
   const transfer = (id) => `(${id} from,${id} to,uint256 value,bytes32 entryRef,${E})`;
   const nested = (name) => TYPED_OPS[name].typeString.slice(name.length);
-  assert.ok(nested('CancelOrder').endsWith(`TradeOrder${order('address')}`));
   assert.ok(nested('CancelUAOrder').endsWith(`UATradeOrder${order('bytes32')}`));
   assert.ok(nested('CancelDexOrder').endsWith(`DexOrder(address sellToken,TradeOrder order)TradeOrder${order('address')}`));
-  assert.ok(nested('ReceiverFee').endsWith(`MetaTransfer${transfer('address')}`));
   assert.ok(nested('UAReceiverFee').endsWith(`UAMetaTransfer${transfer('bytes32')}`));
 });
 
-test('the table covers every allowlisted entry of every contract, and only them', () => {
+test('the table covers every allowlisted entry of every contract, one row per op, and only them', () => {
   const count = (contract, ua) => Object.values(TYPED_OPS).filter((o) => o.envelope && o.ua === ua && o.on.includes(contract)).length;
-  for (const [contract, uaN] of Object.entries(EXPECTED_UA_ENTRIES)) {
-    assert.deepEqual([count(contract, false), count(contract, true)], [mtxSelectorCount(contract), uaN], contract);
+  for (const [contract, addressN] of Object.entries(ADDRESS_ENTRIES)) {
+    assert.equal(count(contract, false) + count(contract, true), mtxSelectorCount(contract), contract);
+    assert.equal(count(contract, false), addressN, contract);
   }
-  assert.equal(Object.keys(TYPED_OPS).length, 112); // 74 + the router's 38 (governance T12)
-  assert.equal(Object.values(TYPED_OPS).filter((o) => o.envelope).length, 97);
+  // ua-mtx-merge T11 (MD-7): 112 − 45 retired − the wallet's five address ops (Q6) + its six `UA<Op>` = 68; `UACancelNonce` an
+  // envelope op now (Q2)
+  // T34: + the router's eight regulated controls (regulated-kinds spec §3.1): 76, 67 envelope ops
+  // pay-meta-tax T41: + `UAPayWithTax` (a raw struct) and the router's `UASetTaxRate`, `UASetTaxRecipient`: 79, 69
+  // group 3g T54: the rollover one row per kind (`UARollOver` Zether, `UAPqzRollOver` PQZ with `keyVersion`): 80, 70
+  assert.equal(Object.keys(TYPED_OPS).length, 80);
+  assert.equal(Object.values(TYPED_OPS).filter((o) => o.envelope).length, 70);
+  for (const o of Object.values(TYPED_OPS)) {
+    if (o.envelope) assert.ok(o.entry.startsWith('mtx'), o.primary);
+    if (o.ua) assert.equal(o.fields[0].type, 'bytes32', o.primary);
+  }
 });
 
 test('hashTypedData(td) == row.digest; the builder rebuilds the wallet\'s JSON; the row signs natively', () => {
@@ -173,10 +196,10 @@ test('hashTypedData(td) == row.digest; the builder rebuilds the wallet\'s JSON; 
   for (const [name, r] of rows()) {
     assert.ok(domains(r).length > 0, name);
     for (const [kind, d] of domains(r)) {
-      const td = builders[`${lower(name)}TypedData`]({ ...domainOf(r, d), message: r.message });
+      const td = builders[`${bld(name)}TypedData`]({ ...domainOf(r, d), message: r.message });
       assert.deepEqual(td.message, r.message, `${name} ${kind}`);
       assert.equal(hex(hashTypedData(td)), d.digest, `${name} ${kind}`);
-      assert.equal(hex(hashStruct(td.types, name, td.message)), r.structHash, `${name} ${kind}`);
+      assert.equal(hex(hashStruct(td.types, prim(name), td.message)), r.structHash, `${name} ${kind}`);
       assert.equal(hex(hashStruct(td.types, 'EIP712Domain', td.domain)), d.domainSeparator, `${name} ${kind}`);
       const digest = hashTypedData(td);
       const sig = fromHex(d.signature);
@@ -194,8 +217,8 @@ test('calldata decodes to the message: selector of the full signature, every par
       const data = fromHex(d.calldata);
       assert.equal(hex(data.subarray(0, 4)), sel(d.abi), `${name} ${kind}`);
       assert.equal(d.selector, sel(d.abi));
-      const td = builders[`${lower(name)}TypedData`]({ ...domainOf(r, d), message: r.message });
-      const again = builders[`${lower(name)}Calldata`](td, d.signature, d.extra);
+      const td = builders[`${bld(name)}TypedData`]({ ...domainOf(r, d), message: r.message });
+      const again = builders[`${bld(name)}Calldata`](td, d.signature, d.extra);
       assert.equal(hex(again), d.calldata, `${name} ${kind}`);
       const got = decodeList(paramTypes(d.abi), data.subarray(4));
       assert.deepEqual(norm(got), norm(expectedCall(name, r, d)), `${name} ${kind}`);
@@ -203,32 +226,93 @@ test('calldata decodes to the message: selector of the full signature, every par
   }
 });
 
-test('the overloads: selectors from the full signature, the C0 shapes', () => {
+test('the overloads: selectors from the full signature; the merged entries take the mtx names, UAEnvelope and UASig', () => {
   const env = '(address,uint256,uint256,uint256,uint32,address,uint256,address)';
   const uaEnv = '(bytes32,uint256,uint256,uint256,uint32,address,uint256,address)';
   const uaSig = '(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])';
   const one = (name) => Object.values(V.ops[name].domains)[0];
-  assert.equal(one('Unwrap').abi, `mtxUnwrap(${env},uint256,address,uint256,bytes)`);
-  assert.equal(one('Shield').abi, `mtxShield(${env},bytes32,uint256,bytes)`);
-  assert.equal(one('UAShield').abi, `uaShield(${uaEnv},bytes32,uint256,bytes)`, 'C0 spike: `bytes auth` until C2 moves it to UASig');
-  assert.equal(one('SetMandate').abi, `mtxSetMandate(${env},address,address,uint128,uint128,uint64,uint64,bytes)`);
-  assert.equal(one('UAUnwrap').abi, `uaUnwrap(${uaEnv},uint256,address,uint256,${uaSig})`);
-  assert.notEqual(sel(one('Shield').abi), sel('mtxShield(bytes32,uint256)'));
+  assert.equal(one('UAUnwrap').abi, `mtxUnwrap(${uaEnv},uint256,address,uint256,${uaSig})`);
+  // R47: `mtxShield` takes `UASig` (the C0 spike's `bytes auth` is legacy)
+  assert.equal(one('UAShield').abi, `mtxShield(${uaEnv},bytes32,uint256,${uaSig})`);
+  assert.equal(one('UASetMandate').abi, `mtxSetMandate(${uaEnv},address,bytes32,uint128,uint128,uint64,uint64,${uaSig})`);
+  assert.equal(one('UACancelNonce').abi, `mtxCancelNonce(${uaEnv},uint256,${uaSig})`);
+  assert.equal(one('CancelNonce').abi, `mtxCancelNonce(${env},uint256,bytes)`, 'SmartKeyAccount keeps the address cancel');
+  assert.equal(one('Wrap').abi, `mtxWrap(${env},uint256,bytes)`, 'a no-twin entry keeps Envelope and bytes');
+  assert.notEqual(sel(one('UAShield').abi), sel('mtxShield(bytes32,uint256)'));
   // Payout on PQZ only: Appendix X.3's flat form does not compile there (evm-size-levers.md §7), the signed struct keeps both fields
-  assert.ok(one('PqzUnshield').abi.includes(',(uint256,bytes32),bytes,'));
-  assert.ok(one('ZetherUnshield').abi.includes(',uint256,bytes32,bytes,'));
-  assert.deepEqual(TYPED_OPS.PqzUnshield.fields.map((f) => f.name).slice(1, 3), ['args', 'amount']);
+  assert.ok(one('UAPqzUnshield').abi.includes(',(uint256,bytes32),bytes,'));
+  assert.ok(one('UAZetherUnshield').abi.includes(',uint256,bytes32,bytes,'));
+  assert.deepEqual(TYPED_OPS.UAPqzUnshield.fields.map((f) => f.name).slice(1, 3), ['args', 'amount']);
+  for (const [name, r] of rows()) {
+    for (const d of Object.values(r.domains)) assert.ok(!d.abi?.startsWith('ua'), `${name}: ${d.abi}`);
+  }
 });
 
-// governance T12 (spec §3.2): the router's 38 rows read from the contract's own pin, test/governance/GovRouterTypehash.t.sol
+test('a merged entry\'s calldata carries UASig{signature} for an EOA: empty keyData and members (R17, R47)', () => {
+  let n = 0;
+  for (const [name, r] of rows()) {
+    if (!TYPED_OPS[name].ua || !TYPED_OPS[name].envelope) continue;
+    for (const [kind, d] of domains(r)) {
+      const got = decodeList(paramTypes(d.abi), fromHex(d.calldata).subarray(4));
+      // pay-meta-tax T41: the mandate pay takes its `PayMeta` after the signature
+      assert.deepEqual(norm(got.at(name === 'UAPayUnderMandate' ? -2 : -1)), norm(['0x', d.signature, []]), `${name} ${kind}`);
+      assert.equal(got[0][0], V.key.ua, `${name} ${kind}: the EOA's id, its address zero-padded`);
+      n++;
+    }
+  }
+  assert.ok(n > 50, `${n} merged rows`);
+});
+
+test('the mandate wallet rows are UA structs with bytes32 from, delegate, payee (Q6, MD-11)', () => {
+  const W = {
+    UASetMandate: 'address token,bytes32 delegate,uint128 maxPerPayment,uint128 maxPerPeriod,uint64 periodSeconds,uint64 expiry',
+    UASetPayee: 'address token,bytes32 payee,bool allowed',
+    UARevokeMandate: 'address token',
+    UAPayUnderMandate: 'address token,bytes32 payee,uint256 amount,bytes32 entryRef,uint64 epoch',
+    UADelegateRevoke: 'address token,uint64 epoch',
+    UAExecute: 'address target,uint256 value,bytes data',
+  };
+  for (const [name, own] of Object.entries(W)) {
+    const op = TYPED_OPS[name];
+    assert.equal(op.typeString, `${name}(bytes32 from,${own},${E})`, name);
+    assert.deepEqual([op.on, op.domains, op.entry], [['MandateWallet'], ['SCaaS MandateWallet'], `mtx${name.slice(2)}`], name);
+    assert.deepEqual(Object.keys(V.ops[name].domains), ['wallet'], name);
+    assert.deepEqual([V.ops[name].message.mode, V.ops[name].message.fee], [1, '0'], `${name}: fee mode NONE`);
+  }
+  for (const name of ['SetMandate', 'SetPayee', 'RevokeMandate', 'PayUnderMandate', 'DelegateRevoke']) {
+    assert.equal(TYPED_OPS[name], undefined, `${name}: the address row retired`);
+  }
+  // `Execute` stays for `SmartKeyAccount` only; the wallet's cancel is the ordered `UACancelNonce`
+  assert.deepEqual(TYPED_OPS.Execute.on, ['SmartKeyAccount']);
+  assert.deepEqual(TYPED_OPS.CancelNonce.on, ['SmartKeyAccount']);
+  assert.ok(TYPED_OPS.UACancelNonce.on.includes('MandateWallet'));
+  assert.deepEqual(Object.keys(V.ops.CancelNonce.domains), ['account']);
+});
+
+test('the cancel row is ordered and native-capable: UACancelNonce(bytes32 from,uint256 lane,E) on mtxCancelNonce (Q2)', () => {
+  const op = TYPED_OPS.UACancelNonce;
+  assert.equal(op.typeString, `UACancelNonce(bytes32 from,uint256 lane,${E})`);
+  assert.deepEqual([op.envelope, op.ua, op.entry], [true, true, 'mtxCancelNonce']);
+  assert.deepEqual(op.on, ['NormalToken', 'NormalZetherToken', 'NormalPqzToken', 'WrappedToken', 'WrappedZetherToken', 'WrappedPqzToken',
+    'MandateWallet', 'GovernanceRouter']);
+  const r = V.ops.UACancelNonce;
+  assert.deepEqual(Object.keys(r.domains), ['token', 'zether', 'pqz', 'wallet', 'gov_router']);
+  assert.equal(r.message.from, V.key.ua, 'a native id: the EOA signs its own cancel');
+  assert.ok('nonce' in r.message && 'lane' in r.message, 'ordered: the envelope nonce, the lane it bumps');
+});
+
+// governance T12 (spec §3.2): the router's rows read from the contract's own pin, test/governance/GovRouterTypehash.t.sol
 // (literal strings and `cast keccak` hashes), apart from the table in src/evm.js: a mismatch is a stop-and-report.
-test('GovernanceRouter: 38 rows equal GovRouterTypehash.t.sol, target the first op word, fee mode NONE, the router domain only', () => {
+// ua-mtx-merge T7 / T11 (R14): 19 `UA<Op>` rows on the `mtx<Op>` entries; the 19 address rows retired.
+test('GovernanceRouter: 29 rows equal GovRouterTypehash.t.sol, target the first op word, fee mode NONE, the router domain only', () => {
   const sol = readFileSync(new URL('../../../smartcontracts/evm/test/governance/GovRouterTypehash.t.sol', import.meta.url), 'utf8');
   const pins = [...sol.matchAll(/keccak256\(\s*((?:"[^"]*"\s*)+)\)\);\s*assertEq\(T\.\w+, (0x[0-9a-f]{64})\)/g)]
     .map(([, lits, hash]) => [[...lits.matchAll(/"([^"]*)"/g)].map((x) => x[1]).join(''), hash]);
-  assert.equal(pins.length, 39);
+  // T32: + the eight regulated controls (regulated-kinds spec §3.1, CTR-GOV-20); T34 writes their rows
+  // pay-meta-tax T39 / T41: + `UASetTaxRate`, `UASetTaxRecipient`
+  assert.equal(pins.length, 30);
   const rows = pins.filter(([s]) => !s.startsWith('GrantTerms('));
-  assert.equal(rows.length, 38);
+  assert.equal(rows.length, 29);
   for (const [s, hash] of rows) {
     const name = s.slice(0, s.indexOf('('));
     const op = TYPED_OPS[name];
@@ -236,31 +320,69 @@ test('GovernanceRouter: 38 rows equal GovRouterTypehash.t.sol, target the first 
     assert.equal(op.typeString, s, name);
     assert.equal(op.typehash, hash, name);
     assert.deepEqual([op.on, op.domains, op.envelope], [['GovernanceRouter'], ['SCaaS GovernanceRouter'], true], name);
-    assert.equal(op.entry, `${op.ua ? 'ua' : 'mtx'}${name.replace(/^UA/, '')}`, name);
+    assert.equal(op.ua, true, name);
+    assert.equal(op.entry, `mtx${name.replace(/^UA/, '')}`, name);
     assert.deepEqual(op.fields[1], { name: 'target', type: 'address' }, `${name}: target is the first op word`);
     const r = V.ops[name];
     assert.deepEqual(Object.keys(r.domains), ['gov_router'], name);
     assert.equal(r.domains.gov_router.domain.name, 'SCaaS GovernanceRouter', name);
     assert.deepEqual([r.message.mode, r.message.fee], [1, '0'], `${name}: fee mode NONE`);
   }
-  assert.equal(Object.values(TYPED_OPS).filter((o) => o.on.includes('GovernanceRouter')).length, 40);
-  for (const n of ['CancelNonce', 'UACancelNonce']) assert.equal(V.ops[n].domains.gov_router.domain.name, 'SCaaS GovernanceRouter', n);
+  assert.equal(Object.values(TYPED_OPS).filter((o) => o.on.includes('GovernanceRouter')).length, 30);
+  assert.equal(V.ops.UACancelNonce.domains.gov_router.domain.name, 'SCaaS GovernanceRouter');
+  assert.equal(V.ops.CancelNonce.domains.gov_router, undefined);
+});
+
+// ua-mtx-merge T34 (regulated-kinds spec §3.1, §7; CTR-GOV-20 Change, owner 2026-11-06): the router's eight regulated controls.
+// Each digest with a non-zero relayer and fee recipient left unbound (mode 0, then the row's mode 1 with feeRecipient unbound)
+// equals the digest over the canonical 0, as `MetaTxLib.canon` hashes it, and differs from a hash of the raw message.
+const REGULATED = { UAFreeze: 'account,ref,recordId', UAUnfreeze: 'account,ref', UAForceTransfer: 'recordId,amount',
+  UAPause: 'ref,until', UAUnpause: 'ref', UARecordOrder: 'orderId,documentHash,subject,beneficiary,maxAmount,freezeUntil',
+  UARevokeOrder: 'recordId,reasonRef', UAOperatorTransfer: 'account,to,amount,ref' };
+test('the eight regulated router ops: from the signer, target, the direct entry\'s params; a non-zero unbound relayer or ' +
+  'feeRecipient signs as 0', () => {
+  const JUNK = '0x' + 'ba'.repeat(20);
+  for (const [name, params] of Object.entries(REGULATED)) {
+    const op = TYPED_OPS[name];
+    assert.deepEqual(op.fields.map((f) => f.name).slice(0, -7), ['from', 'target', ...params.split(',')], name);
+    const r = V.ops[name];
+    const d = r.domains.gov_router;
+    assert.deepEqual(Object.keys(r.domains), ['gov_router'], name);
+    const at = domainOf(r, d);
+    const build = (m) => builders[`${bld(name)}TypedData`]({ ...at, message: m });
+    // the row's own mode (1: relayer bound, fee recipient unbound) with a non-zero fee recipient
+    assert.equal(r.message.mode, 1, name);
+    const given = build({ ...r.message, feeRecipient: JUNK });
+    assert.equal(given.message.feeRecipient, ZERO, name);
+    assert.equal(hex(hashTypedData(given)), d.digest, name);
+    assert.notEqual(hex(hashStruct(given.types, name, { ...r.message, feeRecipient: JUNK })), r.structHash, `${name}: canon matters`);
+    // mode 0: both unbound, both non-zero, both signed as 0
+    const open = build({ ...r.message, mode: 0, relayer: JUNK, feeRecipient: JUNK });
+    assert.deepEqual([open.message.relayer, open.message.feeRecipient], [ZERO, ZERO], name);
+    assert.equal(hex(hashTypedData(open)), hex(hashTypedData(build({ ...r.message, mode: 0, relayer: ZERO, feeRecipient: ZERO }))), name);
+    assert.notEqual(hex(hashTypedData(open)), d.digest, `${name}: the mode is signed`);
+  }
+  // the owner's ruling: the moved account is `account`, the signer `from`
+  assert.ok(TYPED_OPS.UAOperatorTransfer.typeString.startsWith('UAOperatorTransfer(bytes32 from,address target,bytes32 account,bytes32 to,'));
+  assert.equal(V.ops.UAFreeze.message.recordId, reg.recordId(V.ops.UARecordOrder.message.orderId, V.ops.UARecordOrder.message.subject,
+    V.ops.UARecordOrder.message.beneficiary), 'one record across the rows');
 });
 
 test('a router row refuses a field off GrantTerms, a value out of range, a string bool, another domain; target is signed', () => {
   const B = evm.OP_BUILDERS;
   const at = { contract: '0x' + '7a'.repeat(20), chainId: 7622, chainUid: '0x' + 'c1'.repeat(32) };
-  assert.throws(() => B.setGrantTypedData({ ...at, message: { terms: { floor: 1 } } }), /floor is not a field of GrantTerms/);
+  assert.throws(() => B.uaSetGrantTypedData({ ...at, message: { terms: { floor: 1 } } }), /floor is not a field of GrantTerms/);
   assert.throws(() => B.uaSetGrantTypedData({ ...at, message: { terms: { delegable: 'true' } } }), /Refusing to sign: .*bool/);
-  assert.throws(() => B.setGrantTypedData({ ...at, message: { terms: { window: 2 ** 32 } } }), /uint32/);
-  assert.throws(() => B.grantRoleTypedData({ ...at, message: { bit: 256 } }), /uint8/);
-  assert.throws(() => B.grantRoleTypedData({ ...at, message: { generation: 1 } }), /generation is not a field/);
-  assert.throws(() => B.grantRoleTypedData({ ...at, name: 'SCaaS MetaToken', message: {} }), /domain/);
-  assert.throws(() => evm.burnTypedData({ ...at, name: 'SCaaS GovernanceRouter', message: {} }), /domain/);
+  assert.throws(() => B.uaSetGrantTypedData({ ...at, message: { terms: { window: 2 ** 32 } } }), /uint32/);
+  assert.throws(() => B.uaGrantRoleTypedData({ ...at, message: { bit: 256 } }), /uint8/);
+  assert.throws(() => B.uaGrantRoleTypedData({ ...at, message: { generation: 1 } }), /generation is not a field/);
+  assert.throws(() => B.uaGrantRoleTypedData({ ...at, name: 'SCaaS MetaToken', message: {} }), /domain/);
+  assert.throws(() => evm.uaBurnTypedData({ ...at, name: 'SCaaS GovernanceRouter', message: {} }), /domain/);
   assert.equal(B.uaMintToUATypedData({ ...at, message: {} }).domain.name, 'SCaaS GovernanceRouter');
-  assert.equal(evm.cancelNonceTypedData({ ...at, name: 'SCaaS GovernanceRouter', message: {} }).domain.name, 'SCaaS GovernanceRouter');
+  assert.equal(evm.uaCancelNonceTypedData({ ...at, name: 'SCaaS GovernanceRouter', message: {} }).domain.name, 'SCaaS GovernanceRouter');
+  assert.equal(B.grantRoleTypedData, undefined, 'the address router ops retired (R14)');
   const m = { target: '0x' + '11'.repeat(20), bit: 1, account: '0x' + '22'.repeat(32) };
-  const digest = (x) => hex(hashTypedData(B.grantRoleTypedData({ ...at, message: x })));
+  const digest = (x) => hex(hashTypedData(B.uaGrantRoleTypedData({ ...at, message: x })));
   assert.notEqual(digest(m), digest({ ...m, target: '0x' + '12'.repeat(20) }));
 });
 
@@ -270,7 +392,7 @@ test('checkOp refuses every changed field; the server supplies only the envelope
     if (name.endsWith('WrapOrder') && !name.startsWith('Cancel')) continue; // checkWrapOrder, below
     for (const [kind, d] of domains(r)) {
       const at = { contract: d.domain.verifyingContract, chainId: d.domain.chainId, chainUid: d.domain.salt };
-      const td = builders[`${lower(name)}TypedData`]({ ...domainOf(r, d), message: r.message });
+      const td = builders[`${bld(name)}TypedData`]({ ...domainOf(r, d), message: r.message });
       const want = { op: name, ...at, message: r.message, maxFee: 2n ** 255n, now: NOW, maxWindow: 86400 * 365,
         feeRecipient: r.message.feeRecipient, relayer: r.message.relayer };
       const ok = checkOp(td, want);
@@ -301,15 +423,15 @@ test('checkOp: the deadline, the fee policy, the contract, the chain, the operat
   const NOW = 1_800_000_000;
   const TOKEN = '0x' + '7a'.repeat(20);
   const UID = '0x' + 'c1'.repeat(32);
-  const ME = '0x' + '11'.repeat(20);
+  const ME = '0x' + '00'.repeat(12) + '11'.repeat(20);
   const RELAYER = '0x' + '22'.repeat(20);
   const FEE_TO = '0x' + '33'.repeat(20);
   const op = { wrapped: 1000000, recipient: '0x' + '44'.repeat(20), minOut: 990000, from: ME };
   const at = { name: 'SCaaS MetaToken', contract: TOKEN, chainId: 7622, chainUid: UID };
-  const server = (over = {}, a = at) => evm.unwrapTypedData({ ...a, message: { ...op, batch: 7, nonce: 3, validUntil: NOW + 600,
+  const server = (over = {}, a = at) => evm.uaUnwrapTypedData({ ...a, message: { ...op, batch: 7, nonce: 3, validUntil: NOW + 600,
     mode: 0x13, relayer: RELAYER, fee: 10000, feeRecipient: FEE_TO, ...over } });
   const { name: _n, ...where } = at;
-  const want = { op: 'Unwrap', ...where, message: op, maxFee: 10000, feeRecipient: FEE_TO, relayer: RELAYER, now: NOW };
+  const want = { op: 'UAUnwrap', ...where, message: op, maxFee: 10000, feeRecipient: FEE_TO, relayer: RELAYER, now: NOW };
   const ok = checkOp(server(), want);
   assert.deepEqual([ok.feeMode, ok.fee, ok.feeRecipient, ok.relayer, ok.entry], [1, 10000n, FEE_TO, RELAYER, 'mtxUnwrap']);
   checkOp(server({ nonce: 9, batch: 8 }), want); // lane, nonce and deadline are the server's unless the client pins them
@@ -320,46 +442,85 @@ test('checkOp: the deadline, the fee policy, the contract, the chain, the operat
   assert.throws(() => checkOp(server({ validUntil: NOW }), want), /deadline/);
   assert.throws(() => checkOp(server({ validUntil: NOW + 3601 }), want), /deadline/);
   assert.throws(() => checkOp(server({ fee: 10001 }), { ...want, maxFee: 10 ** 9 }), /above 1 %/);
-  assert.throws(() => checkOp(server(), { ...want, op: 'UnwrapLeg' }), /not the operation/);
+  assert.throws(() => checkOp(server(), { ...want, op: 'UAUnwrapLeg' }), /not the operation/);
+  assert.throws(() => checkOp(server(), { ...want, op: 'Unwrap' }), /not the operation/);
   assert.throws(() => checkOp(server(), { ...want, contract: '0x' + '7b'.repeat(20) }), /contract you chose/);
   assert.throws(() => checkOp(server(), { ...want, chainId: 1 }), /not the operation/);
   assert.throws(() => checkOp(server(), { ...want, chainUid: '0x' + '11'.repeat(32) }), /not the operation/);
   assert.throws(() => checkOp(undefined, want), /not the operation/);
   // PERCENT only on an AMOUNT op (CTR-MTX-20): `wrap` is ABSOLUTE
-  const wrap = evm.wrapTypedData({ ...at, message: { from: ME, amount: 5, validUntil: NOW + 60, mode: 0x10, fee: 1 } });
-  assert.throws(() => checkOp(wrap, { op: 'Wrap', ...where, message: { from: ME, amount: 5 }, maxFee: 10, now: NOW }), /percentage fee/);
+  const addr = '0x' + '11'.repeat(20);
+  const wrap = evm.wrapTypedData({ ...at, message: { from: addr, amount: 5, validUntil: NOW + 60, mode: 0x10, fee: 1 } });
+  assert.throws(() => checkOp(wrap, { op: 'Wrap', ...where, message: { from: addr, amount: 5 }, maxFee: 10, now: NOW }), /percentage fee/);
   // a signed field the server fills in is not the client's: a non-envelope op takes nothing from the server
   const nope = { ...server(), message: { ...server().message, batch: '-1' } };
   assert.throws(() => checkOp(nope, want), /Refusing to sign/);
 });
 
-test('canonical zero for an unbound relayer / fee recipient: envelope and nested MetaTransfer', () => {
+test('canonical zero for an unbound relayer / fee recipient: envelope and nested UAMetaTransfer', () => {
   const A = '0x' + '0a'.repeat(20);
   const B = '0x' + '0b'.repeat(20);
   const at = { name: 'SCaaS MetaToken', contract: '0x' + '7a'.repeat(20), chainId: 7622, chainUid: '0x' + 'c1'.repeat(32) };
-  const m = (mode) => evm.burnTypedData({ ...at, message: { from: A, amount: 1, mode, relayer: A, feeRecipient: B } }).message;
+  const m = (mode) => evm.uaBurnTypedData({ ...at, message: { from: '0x' + '0a'.repeat(32), amount: 1, mode, relayer: A, feeRecipient: B } }).message;
   assert.deepEqual([m(0).relayer, m(0).feeRecipient], [ZERO, ZERO]);
   assert.deepEqual([m(1).relayer, m(1).feeRecipient], [A, ZERO]);
   assert.deepEqual([m(2).relayer, m(2).feeRecipient], [ZERO, B]);
   assert.deepEqual([m(3).relayer, m(3).feeRecipient], [A, B]);
-  const open = evm.receiverFeeTypedData({ ...at, message: { payment: { from: A, to: B, value: 1, mode: 0, relayer: A, feeRecipient: B },
-    fee: 1, feeRecipient: B, validUntil: 9 } }).message.payment;
+  const open = evm.uaReceiverFeeTypedData({ ...at, message: { payment: { from: '0x' + '0a'.repeat(32), to: '0x' + '0b'.repeat(32), value: 1,
+    mode: 0, relayer: A, feeRecipient: B }, fee: 1, feeRecipient: B, validUntil: 9 } }).message.payment;
   assert.deepEqual([open.relayer, open.feeRecipient], [ZERO, ZERO]);
   const ua = evm.uaReceiverFeeTypedData({ ...at, message: { payment: { from: '0x' + '0a'.repeat(32), to: '0x' + '0b'.repeat(32), value: 1,
     mode: 1, relayer: A, feeRecipient: B }, fee: 1, feeRecipient: B, validUntil: 9 } }).message.payment;
   assert.deepEqual([ua.relayer, ua.feeRecipient], [A, ZERO]);
   // the order's `relayer` is no envelope field: it stays
-  assert.equal(evm.cancelOrderTypedData({ ...at, message: { order: { relayer: A } } }).message.order.relayer, A);
+  assert.equal(evm.cancelUAOrderTypedData({ ...at, message: { order: { relayer: A } } }).message.order.relayer, A);
+});
+
+// spec §6 (Codex medium 3): a wallet hashes what it is shown, so the message handed to it carries the canonical 0 in an unbound
+// field; the review shows the field as unbound. Every row, against its own digest, with a non-zero value in each unbound field.
+test('an unbound relayer or feeRecipient is signed as 0 and shown as unbound: every envelope row, a non-zero value given', () => {
+  const NOW = 1_800_000_000;
+  const JUNK = '0x' + 'ba'.repeat(20);
+  let relayerOpen = 0;
+  let feeToOpen = 0;
+  for (const [name, r] of rows()) {
+    if (!TYPED_OPS[name].envelope) continue;
+    for (const [kind, d] of domains(r)) {
+      const mode = BigInt(r.message.mode);
+      const given = { ...r.message, relayer: mode & 1n ? r.message.relayer : JUNK, feeRecipient: mode & 2n ? r.message.feeRecipient : JUNK };
+      const td = builders[`${bld(name)}TypedData`]({ ...domainOf(r, d), message: given });
+      assert.equal(hex(hashTypedData(td)), d.digest, `${name} ${kind}`);
+      if (!(mode & 1n)) { assert.equal(td.message.relayer, ZERO, `${name} ${kind}`); relayerOpen++; }
+      if (!(mode & 2n)) { assert.equal(td.message.feeRecipient, ZERO, `${name} ${kind}`); feeToOpen++; }
+      const { batch, nonce, validUntil, mode: _m, relayer, fee, feeRecipient, ...own } = r.message;
+      const ok = checkOp(td, { op: name, contract: d.domain.verifyingContract, chainId: d.domain.chainId, chainUid: d.domain.salt, message: own,
+        maxFee: 2n ** 255n, now: NOW, maxWindow: 86400 * 365, feeRecipient: r.message.feeRecipient, relayer: r.message.relayer });
+      assert.equal(hex(ok.digest), d.digest, `${name} ${kind}`);
+      assert.equal(ok.relayer, mode & 1n ? r.message.relayer : null, `${name} ${kind}: shown as any relayer`);
+      assert.equal(ok.feeRecipient, mode & 2n ? r.message.feeRecipient : null, `${name} ${kind}: shown as the submitter's choice`);
+    }
+  }
+  assert.ok(feeToOpen > 0, 'a row with an unbound fee recipient');
+  // a token row binds both (mode 0x13 / 0x23); the same op with mode 0: both unbound, both 0
+  const r = V.ops.UABurn;
+  const d = r.domains.token;
+  const open = evm.uaBurnTypedData({ ...domainOf(r, d), message: { ...r.message, mode: 0, fee: 0, relayer: JUNK, feeRecipient: JUNK } });
+  assert.deepEqual([open.message.relayer, open.message.feeRecipient], [ZERO, ZERO]);
+  assert.equal(hex(hashTypedData(open)), hex(hashTypedData(evm.uaBurnTypedData({ ...domainOf(r, d), message: { ...r.message, mode: 0, fee: 0,
+    relayer: ZERO, feeRecipient: ZERO } }))));
+  assert.equal(relayerOpen, 0, 'every row binds its relayer: the open case is the mode-0 burn above');
 });
 
 test('the builder refuses a field off the struct, a value out of range, a domain the op does not live in', () => {
   const at = { name: 'SCaaS MetaToken', contract: '0x' + '7a'.repeat(20), chainId: 7622, chainUid: '0x' + 'c1'.repeat(32) };
-  assert.throws(() => evm.burnTypedData({ ...at, message: { amountt: 1 } }), /amountt/);
-  assert.throws(() => evm.setMandateTypedData({ ...at, name: undefined, message: { periodSeconds: 2n ** 64n } }), /uint64/);
-  assert.throws(() => evm.burnTypedData({ ...at, name: 'SCaaS MandateWallet', message: {} }), /domain/);
-  assert.equal(evm.setMandateTypedData({ ...at, name: undefined, message: {} }).domain.name, 'SCaaS MandateWallet');
+  assert.throws(() => evm.uaBurnTypedData({ ...at, message: { amountt: 1 } }), /amountt/);
+  assert.throws(() => evm.uaSetMandateTypedData({ ...at, name: undefined, message: { periodSeconds: 2n ** 64n } }), /uint64/);
+  assert.throws(() => evm.uaSetMandateTypedData({ ...at, name: undefined, message: { delegate: '0x' + 'd2'.repeat(20) } }), /32 bytes/);
+  assert.throws(() => evm.uaBurnTypedData({ ...at, name: 'SCaaS MandateWallet', message: {} }), /domain/);
+  assert.throws(() => evm.uaSetMandateTypedData({ ...at, name: 'SCaaS MetaToken', message: {} }), /domain/, 'a wallet row in the token domain');
+  assert.equal(evm.uaSetMandateTypedData({ ...at, name: undefined, message: {} }).domain.name, 'SCaaS MandateWallet');
   assert.equal(evm.addKeyTypedData({ ...at, name: undefined, message: {} }).domain.name, 'SCaaS SmartKeyAccount');
-  assert.equal(evm.burnTypedData({ ...at, name: 'SCaaS PqzToken', message: {} }).domain.name, 'SCaaS PqzToken');
+  assert.equal(evm.uaBurnTypedData({ ...at, name: 'SCaaS PqzToken', message: {} }).domain.name, 'SCaaS PqzToken');
 });
 
 test('EIP-712 by the MetaMask v4 rules: bytes16 right-padded, arrays element by element, nested structs hashed', () => {
@@ -391,19 +552,19 @@ test('abiEncode: nested dynamic tuples, arrays of tuples, bytes16, bool (abi.enc
 
 const R_NOW = 1_800_000_000;
 const R_AT = { name: 'SCaaS MetaToken', contract: '0x' + '7a'.repeat(20), chainId: 7622, chainUid: '0x' + 'c1'.repeat(32) };
-const R_ME = '0x' + '11'.repeat(20);
+const R_ME = '0x' + '00'.repeat(12) + '11'.repeat(20);
 const R_RELAYER = '0x' + '22'.repeat(20);
 const R_FEE_TO = '0x' + '33'.repeat(20);
 const R_WRAPPER = '0x' + '44'.repeat(20);
 const R_OP = { from: R_ME, wrapped: 7, recipient: '0x' + '55'.repeat(20), minOut: 0 };
-const rUnwrap = (over = {}) => evm.unwrapTypedData({ ...R_AT, message: { ...R_OP, validUntil: R_NOW + 60, ...over } });
-const rWant = (message, over = {}) => ({ op: 'Unwrap', contract: R_AT.contract, chainId: R_AT.chainId, chainUid: R_AT.chainUid, message,
+const rUnwrap = (over = {}) => evm.uaUnwrapTypedData({ ...R_AT, message: { ...R_OP, validUntil: R_NOW + 60, ...over } });
+const rWant = (message, over = {}) => ({ op: 'UAUnwrap', contract: R_AT.contract, chainId: R_AT.chainId, chainUid: R_AT.chainUid, message,
   now: R_NOW, ...over });
 
-test('checkWrapOrder: CLI-SGN-35 / -36 on the real WrapOrder; the server supplies only the nonce and an in-window deadline', () => {
+test('checkWrapOrder: CLI-SGN-35 / -36 on the real UAWrapOrder; the server supplies only the nonce and an in-window deadline', () => {
   const order = { wrappedToken: R_WRAPPER, amount: 1000, minMinted: 990, minFill: 1000, fee: 3000, relayer: R_RELAYER, flags: 1, batch: 1,
     validUntil: R_NOW + 600 };
-  const server = (o = {}, nonce = 5) => evm.wrapOrderTypedData({ ...R_AT, message: { ...order, from: R_ME, nonce, ...o } });
+  const server = (o = {}, nonce = 5) => evm.uaWrapOrderTypedData({ ...R_AT, message: { ...order, from: R_ME, nonce, ...o } });
   const want = { account: R_ME, chainId: R_AT.chainId, chainUid: R_AT.chainUid, order, sellToken: R_AT.contract, wrappers: [R_WRAPPER], now: R_NOW };
   const ok = checkWrapOrder(server(), want);
   assert.equal(hex(ok.digest), hex(hashTypedData(server())));
@@ -426,54 +587,63 @@ test('checkWrapOrder: CLI-SGN-35 / -36 on the real WrapOrder; the server supplie
   // the wrapper can pull `amount`: the server may not name another, nor change a term
   no(server({ wrappedToken: '0x' + '45'.repeat(20) }), {}, /not the wrap order/);
   no(server({ minMinted: 1 }), {}, /not the wrap order/);
-  no(server({ destination: '0x' + '66'.repeat(20) }), {}, /not the wrap order/);
+  no(server({ destination: '0x' + '66'.repeat(32) }), {}, /not the wrap order/);
   no(server(), { sellToken: '0x' + '7b'.repeat(20) }, /not the wrap order/);
-  no(server(), { account: R_RELAYER }, /not the wrap order/);
+  no(server(), { account: '0x' + '00'.repeat(12) + '22'.repeat(20) }, /not the wrap order/);
   no(undefined, {}, /not the wrap order/);
-  no(evm.tradeOrderTypedData({ token: R_AT.contract, chainId: R_AT.chainId, chainUid: R_AT.chainUid, order: { from: R_ME, nonce: 5 } }), {},
+  no(evm.uaTradeOrderTypedData({ token: R_AT.contract, chainId: R_AT.chainId, chainUid: R_AT.chainUid, order: { from: R_ME, nonce: 5 } }), {},
     /not the wrap order/);
-  const away = { ...order, destination: '0x' + '66'.repeat(20), relayer: ZERO };
+  const away = { ...order, destination: '0x' + '66'.repeat(32), relayer: ZERO };
   assert.deepEqual(checkWrapOrder(server({ destination: away.destination, relayer: ZERO }), { ...want, order: away }).warnings,
     ['someone else receives the proceeds', 'any submitter may settle this order and earn the relayer share']);
-  // the UA twin: ids, and its own struct
-  const id = '0x' + '77'.repeat(32);
-  const uaOrder = { ...order, destination: id };
-  const ua = evm.uaWrapOrderTypedData({ ...R_AT, message: { ...uaOrder, from: id, nonce: 5 } });
-  assert.deepEqual(checkUAWrapOrder(ua, { ...want, account: id, order: uaOrder }).warnings, []);
-  assert.throws(() => checkWrapOrder(ua, { ...want, account: id, order: uaOrder }), /not the wrap order/);
-  assert.throws(() => checkUAWrapOrder(server(), want), /not the wrap order/);
+  // ua-mtx-merge T11 (R39): the address `WrapOrder` left the token; `checkUAWrapOrder` is the same check
+  assert.deepEqual(checkUAWrapOrder(server(), want).warnings, []);
+  assert.equal(evm.wrapOrderTypedData, undefined);
+  const legacyForm = { ...server(), primaryType: 'WrapOrder' };
+  assert.throws(() => checkWrapOrder(legacyForm, want), /not the wrap order/);
 });
 
 test('checkOp refuses a wrap order: its rules cannot be bypassed; the cancel of one still goes through checkCancel', () => {
-  for (const [op, build] of [['WrapOrder', evm.wrapOrderTypedData], ['UAWrapOrder', evm.uaWrapOrderTypedData]]) {
+  for (const [op, build] of [['UAWrapOrder', evm.uaWrapOrderTypedData]]) {
     const td = build({ ...R_AT, message: {} });
     assert.throws(() => checkOp(td, { op, contract: R_AT.contract, chainId: R_AT.chainId, chainUid: R_AT.chainUid, message: td.message }),
       /Refusing to sign: .*checkWrapOrder/);
   }
 });
 
-test('after C6 a wrap is only a WrapOrder: checkTradeOrder and checkCancel refuse the TradeOrder form', () => {
+test('after C6 a wrap is only a UAWrapOrder: checkTradeOrder and checkCancel refuse the UATradeOrder form', () => {
   const order = { receiveToken: R_WRAPPER, amount: 1000, receiveAmount: 990, minFill: 1000, fee: 3000, relayer: R_RELAYER, dex: R_WRAPPER,
     flags: 1, batch: 1, validUntil: R_NOW + 600 };
   const where = { account: R_ME, chainId: R_AT.chainId, chainUid: R_AT.chainUid };
-  const td = evm.tradeOrderTypedData({ token: R_AT.contract, ...where, order: { ...order, from: R_ME, nonce: 5 } });
-  // the wrapper on the DEX list changes nothing: the chain hashes `dex == receiveToken` as a WrapOrder
-  assert.throws(() => checkTradeOrder(td, { ...where, order, sellToken: R_AT.contract, dexes: [R_WRAPPER], now: R_NOW }), /a wrap by signature is a WrapOrder/);
+  const td = evm.uaTradeOrderTypedData({ token: R_AT.contract, ...where, order: { ...order, from: R_ME, nonce: 5 } });
+  // the wrapper on the DEX list changes nothing: the chain hashes `dex == receiveToken` as a wrap order
+  assert.throws(() => checkTradeOrder(td, { ...where, ua: true, order, sellToken: R_AT.contract, dexes: [R_WRAPPER], now: R_NOW }),
+    /a wrap by signature is a WrapOrder/);
   // the positive control: one field differs, `receiveToken`
   const buys = '0x' + '77'.repeat(20);
   const held = { ...order, receiveToken: buys };
-  checkTradeOrder(evm.tradeOrderTypedData({ token: R_AT.contract, ...where, order: { ...held, from: R_ME, nonce: 5 } }),
-    { ...where, order: held, sellToken: R_AT.contract, dexes: [R_WRAPPER], now: R_NOW });
+  checkTradeOrder(evm.uaTradeOrderTypedData({ token: R_AT.contract, ...where, order: { ...held, from: R_ME, nonce: 5 } }),
+    { ...where, ua: true, order: held, sellToken: R_AT.contract, dexes: [R_WRAPPER], now: R_NOW });
   const bare = { ...where, contract: R_AT.contract };
-  const cancel = evm.cancelOrderTypedData({ ...R_AT, message: { order: td.message } });
-  assert.throws(() => checkCancel(cancel, { ...bare, order: td.message }), /cancelled as a CancelWrapOrder/);
-  const plain = evm.cancelOrderTypedData({ ...R_AT, message: { order: { ...td.message, receiveToken: buys } } });
+  const cancel = evm.cancelUAOrderTypedData({ ...R_AT, message: { order: td.message } });
+  assert.throws(() => checkCancel(cancel, { ...bare, order: td.message }), /cancelled as a CancelUAWrapOrder/);
+  const plain = evm.cancelUAOrderTypedData({ ...R_AT, message: { order: { ...td.message, receiveToken: buys } } });
   assert.equal(hex(checkCancel(plain, { ...bare, order: plain.message.order })), hex(hashTypedData(plain)));
   // the wrap order's own cancel is taken
   const { receiveToken, receiveAmount, dex, ...rest } = td.message;
   const w = { ...rest, wrappedToken: receiveToken, minMinted: receiveAmount };
-  const wrapCancel = evm.cancelWrapOrderTypedData({ ...R_AT, message: { order: w } });
+  const wrapCancel = evm.cancelUAWrapOrderTypedData({ ...R_AT, message: { order: w } });
   assert.equal(hex(checkCancel(wrapCancel, { ...bare, order: wrapCancel.message.order })), hex(hashTypedData(wrapCancel)));
+  // ua-mtx-merge T11 (R12): the token's address `TradeOrder` and its cancels left; the DEX's `DexOrder` stays (outside tokens)
+  assert.equal(evm.cancelOrderTypedData, undefined);
+  assert.throws(() => evm.tradeOrderTypedData({ token: R_AT.contract, chainId: R_AT.chainId, chainUid: R_AT.chainUid, order: held }),
+    /a SCaaS sell token takes a UATradeOrder/);
+  const held5 = evm.uaTradeOrderTypedData({ token: R_AT.contract, ...where, order: { ...held, from: R_ME, nonce: 5 } });
+  assert.throws(() => checkTradeOrder({ ...held5, primaryType: 'TradeOrder' }, { ...where, order: held, sellToken: R_AT.contract,
+    dexes: [R_WRAPPER], now: R_NOW }), /not the trade order/);
+  assert.throws(() => checkTradeOrder(held5, { ...where, ua: false, order: held, sellToken: R_AT.contract, dexes: [R_WRAPPER], now: R_NOW }),
+    /a SCaaS sell token takes a UATradeOrder/);
+  assert.throws(() => checkCancel({ ...plain, primaryType: 'CancelOrder' }, { ...bare, order: plain.message.order }), /not the cancel/);
 });
 
 test('checkOp keeps a relayer or fee recipient the client named: refused when the mode bit would drop it', () => {
@@ -489,10 +659,11 @@ test('checkOp keeps a relayer or fee recipient the client named: refused when th
   checkOp(rUnwrap(), rWant({ ...msg, relayer: ZERO, feeRecipient: ZERO }));
   checkOp(rUnwrap(), rWant(msg));
   // nested too: a payment whose own mode would drop the relayer it names
-  const payment = { from: R_ME, to: R_RELAYER, value: 5, entryRef: '0x' + '09'.repeat(32), batch: 1, nonce: 0, validUntil: 9, mode: 0, relayer: R_RELAYER,
-    fee: 0, feeRecipient: ZERO };
+  const payment = { from: R_ME, to: '0x' + '22'.repeat(32), value: 5, entryRef: '0x' + '09'.repeat(32), batch: 1, nonce: 0, validUntil: 9, mode: 0,
+    relayer: R_RELAYER, fee: 0, feeRecipient: ZERO };
   const rf = { payment, fee: 1, feeRecipient: R_FEE_TO, validUntil: 9 };
-  assert.throws(() => checkOp(evm.receiverFeeTypedData({ ...R_AT, message: rf }), rWant(rf, { op: 'ReceiverFee' })), /relayer you named is not bound/);
+  assert.throws(() => checkOp(evm.uaReceiverFeeTypedData({ ...R_AT, message: rf }), rWant(rf, { op: 'UAReceiverFee' })),
+    /relayer you named is not bound/);
 });
 
 test('an omitted expectation is no "expect zero": every own field is the client\'s, in full', () => {
@@ -504,41 +675,43 @@ test('an omitted expectation is no "expect zero": every own field is the client\
   const { from, ...noFrom } = R_OP;
   assert.equal(from, R_ME);
   assert.throws(() => checkOp(rUnwrap(), rWant(noFrom)), miss);
-  const toUA = evm.wrapToUATypedData({ ...R_AT, message: { from: R_ME, amount: 1, underlying: R_WRAPPER, validUntil: R_NOW + 60 } });
-  assert.throws(() => checkOp(toUA, rWant({ from: R_ME, amount: 1, underlying: R_WRAPPER }, { op: 'WrapToUA' })), miss);
-  const zero = evm.cancelOrderTypedData({ ...R_AT, message: {} });
-  assert.throws(() => checkOp(zero, rWant(undefined, { op: 'CancelOrder' })), /Refusing to sign/);
-  assert.throws(() => checkOp(zero, rWant({}, { op: 'CancelOrder' })), miss);
-  assert.throws(() => checkOp(zero, rWant({ order: {} }, { op: 'CancelOrder' })), miss);
-  assert.throws(() => checkOp(zero, rWant({ order: { ...zero.message.order, flags: undefined } }, { op: 'CancelOrder' })), miss);
+  const addr = '0x' + '11'.repeat(20);
+  const toUA = evm.wrapToUATypedData({ ...R_AT, message: { from: addr, amount: 1, underlying: R_WRAPPER, validUntil: R_NOW + 60 } });
+  assert.throws(() => checkOp(toUA, rWant({ from: addr, amount: 1, underlying: R_WRAPPER }, { op: 'WrapToUA' })), miss);
+  const zero = evm.cancelUAOrderTypedData({ ...R_AT, message: {} });
+  assert.throws(() => checkOp(zero, rWant(undefined, { op: 'CancelUAOrder' })), /Refusing to sign/);
+  assert.throws(() => checkOp(zero, rWant({}, { op: 'CancelUAOrder' })), miss);
+  assert.throws(() => checkOp(zero, rWant({ order: {} }, { op: 'CancelUAOrder' })), miss);
+  assert.throws(() => checkOp(zero, rWant({ order: { ...zero.message.order, flags: undefined } }, { op: 'CancelUAOrder' })), miss);
   // arrays and nested structs too; the whole struct passes; `{op}` alone says Refusing, not a TypeError
-  const batch = evm.OP_BUILDERS.rollOverBatchTypedData({ ...R_AT, name: 'SCaaS ZetherToken', message: { from: R_ME, uas: [], validUntil: R_NOW + 60 } });
-  assert.throws(() => checkOp(batch, rWant({ from: R_ME }, { op: 'RollOverBatch' })), miss);
-  checkOp(zero, rWant(zero.message, { op: 'CancelOrder' }));
-  assert.throws(() => checkOp(rUnwrap(), { op: 'Unwrap', contract: R_AT.contract }), /Refusing to sign/);
-  assert.throws(() => checkOp(rUnwrap(), { op: 'Unwrap', contract: R_AT.contract, message: null }), /Refusing to sign/);
+  const batch = evm.OP_BUILDERS.uaRollOverBatchTypedData({ ...R_AT, name: 'SCaaS ZetherToken', message: { from: R_ME, uas: [], validUntil: R_NOW + 60 } });
+  assert.throws(() => checkOp(batch, rWant({ from: R_ME }, { op: 'UARollOverBatch' })), miss);
+  checkOp(zero, rWant(zero.message, { op: 'CancelUAOrder' }));
+  assert.throws(() => checkOp(rUnwrap(), { op: 'UAUnwrap', contract: R_AT.contract }), /Refusing to sign/);
+  assert.throws(() => checkOp(rUnwrap(), { op: 'UAUnwrap', contract: R_AT.contract, message: null }), /Refusing to sign/);
   // the empty string is no number
-  assert.throws(() => evm.burnTypedData({ ...R_AT, message: { amount: '' } }), /Refusing to sign/);
-  assert.throws(() => evm.burnTypedData({ ...R_AT, message: { amount: '   ' } }), /Refusing to sign/);
+  assert.throws(() => evm.uaBurnTypedData({ ...R_AT, message: { amount: '' } }), /Refusing to sign/);
+  assert.throws(() => evm.uaBurnTypedData({ ...R_AT, message: { amount: '   ' } }), /Refusing to sign/);
   assert.throws(() => checkOp(rUnwrap(), rWant({ ...R_OP, minOut: '' })), /Refusing to sign/);
   assert.throws(() => word(''), /not a number/);
   assert.throws(() => abiEncode(['uint256'], ['']), /not a number/);
-  assert.equal(evm.burnTypedData({ ...R_AT, message: { amount: '0x10' } }).message.amount, '16');
-  assert.equal(evm.burnTypedData({ ...R_AT, message: { amount: 16n } }).message.amount, '16');
+  assert.equal(evm.uaBurnTypedData({ ...R_AT, message: { amount: '0x10' } }).message.amount, '16');
+  assert.equal(evm.uaBurnTypedData({ ...R_AT, message: { amount: 16n } }).message.amount, '16');
 });
 
 test('a bool is true or false: \'false\' is no truth, in the builder, the hash or the calldata', () => {
-  assert.throws(() => evm.setPayeeTypedData({ ...R_AT, name: 'SCaaS MandateWallet', message: { allowed: 'false' } }), /Refusing to sign: .*bool/);
-  assert.throws(() => evm.setPayeeTypedData({ ...R_AT, name: 'SCaaS MandateWallet', message: { allowed: 1 } }), /Refusing to sign: .*bool/);
+  assert.throws(() => evm.uaSetPayeeTypedData({ ...R_AT, name: 'SCaaS MandateWallet', message: { allowed: 'false' } }), /Refusing to sign: .*bool/);
+  assert.throws(() => evm.uaSetPayeeTypedData({ ...R_AT, name: 'SCaaS MandateWallet', message: { allowed: 1 } }), /Refusing to sign: .*bool/);
   assert.throws(() => zether.pqzAuthTypedData({ ...R_AT, name: 'SCaaS PqzToken', message: { auditorOn: 'false' } }), /Refusing to sign: .*bool/);
-  assert.equal(evm.setPayeeTypedData({ ...R_AT, name: 'SCaaS MandateWallet', message: { allowed: false } }).message.allowed, false);
-  assert.equal(evm.setPayeeTypedData({ ...R_AT, name: 'SCaaS MandateWallet', message: {} }).message.allowed, false);
+  assert.equal(evm.uaSetPayeeTypedData({ ...R_AT, name: 'SCaaS MandateWallet', message: { allowed: false } }).message.allowed, false);
+  assert.equal(evm.uaSetPayeeTypedData({ ...R_AT, name: 'SCaaS MandateWallet', message: {} }).message.allowed, false);
   const types = { T: [{ name: 'ok', type: 'bool' }] };
   assert.throws(() => hashStruct(types, 'T', { ok: 'false' }), /bool/);
   assert.throws(() => abiEncode(['bool'], ['false']), /bool/);
-  const td = evm.setPayeeTypedData({ ...R_AT, name: 'SCaaS MandateWallet', message: { allowed: true, validUntil: R_NOW + 60 } });
+  const td = evm.uaSetPayeeTypedData({ ...R_AT, name: 'SCaaS MandateWallet', message: { allowed: true, validUntil: R_NOW + 60 } });
   td.message.allowed = 'false';
-  assert.throws(() => checkOp(td, rWant({ from: ZERO, token: ZERO, payee: ZERO, allowed: true }, { op: 'SetPayee' })), /Refusing to sign/);
+  const id0 = '0x' + '00'.repeat(32);
+  assert.throws(() => checkOp(td, rWant({ from: id0, token: ZERO, payee: id0, allowed: true }, { op: 'UASetPayee' })), /Refusing to sign/);
 });
 
 test('calldata refuses what the entry cannot verify: the missing signature, an encoded account blob; a shared op names its domain', () => {
@@ -546,16 +719,15 @@ test('calldata refuses what the entry cannot verify: the missing signature, an e
   const one = (name) => Object.values(row(name).domains)[0];
   const tdOf = (name) => {
     const d = one(name);
-    return builders[`${lower(name)}TypedData`]({ ...domainOf(row(name), d), message: row(name).message });
+    return builders[`${bld(name)}TypedData`]({ ...domainOf(row(name), d), message: row(name).message });
   };
-  for (const name of ['PqzTransferSingle', 'UAPqzTransfer', 'PqzUnshield', 'PqzUnshieldUnwrap']) {
-    assert.throws(() => builders[`${lower(name)}Calldata`](tdOf(name), one(name).signature), /Refusing to sign: pqzAuth is required/, name);
-    assert.throws(() => builders[`${lower(name)}Calldata`](tdOf(name), one(name).signature, { pqzAuth: {} }), /pqzAuth is required/, name);
+  for (const name of ['UAPqzTransferSingle', 'UAPqzTransfer', 'UAPqzUnshield', 'UAPqzUnshieldUnwrap']) {
+    assert.throws(() => builders[`${bld(name)}Calldata`](tdOf(name), one(name).signature), /Refusing to sign: pqzAuth is required/, name);
+    assert.throws(() => builders[`${bld(name)}Calldata`](tdOf(name), one(name).signature, { pqzAuth: {} }), /pqzAuth is required/, name);
   }
-  for (const name of ['RollOverSigned', 'UASetRollOverMode']) {
-    assert.throws(() => builders[`${lower(name)}Calldata`](tdOf(name), one(name).signature), /Refusing to sign: ownerSig is required/, name);
+  for (const name of ['UARollOverSigned', 'UASetRollOverMode']) {
+    assert.throws(() => builders[`${bld(name)}Calldata`](tdOf(name), one(name).signature), /Refusing to sign: ownerSig is required/, name);
   }
-  assert.throws(() => evm.receiverFeeCalldata(tdOf('ReceiverFee'), one('ReceiverFee').signature), /payerSig is required/);
   assert.throws(() => evm.uaReceiverFeeCalldata(tdOf('UAReceiverFee'), one('UAReceiverFee').signature), /payerSig is required/);
   assert.throws(() => evm.uaUnwrapCalldata(tdOf('UAUnwrap')), /signature is required/);
   assert.throws(() => evm.uaUnwrapCalldata(tdOf('UAUnwrap'), '0x'), /signature is required/);
@@ -570,9 +742,10 @@ test('calldata refuses what the entry cannot verify: the missing signature, an e
   // a shared op names its domain, a single-domain one need not
   const { name, ...unnamed } = R_AT;
   assert.equal(name, 'SCaaS MetaToken');
-  assert.throws(() => evm.unwrapTypedData({ ...unnamed, message: {} }), /Refusing to sign: .*name/);
-  assert.throws(() => evm.executeTypedData({ ...unnamed, message: {} }), /Refusing to sign: .*name/);
-  assert.equal(evm.setPayeeTypedData({ ...unnamed, message: {} }).domain.name, 'SCaaS MandateWallet');
+  assert.throws(() => evm.uaUnwrapTypedData({ ...unnamed, message: {} }), /Refusing to sign: .*name/);
+  assert.throws(() => evm.uaCancelNonceTypedData({ ...unnamed, message: {} }), /Refusing to sign: .*name/);
+  assert.equal(evm.uaSetPayeeTypedData({ ...unnamed, message: {} }).domain.name, 'SCaaS MandateWallet');
+  assert.equal(evm.executeTypedData({ ...unnamed, message: {} }).domain.name, 'SCaaS SmartKeyAccount');
 });
 
 const NO_CAST = spawnSync('cast', ['--version']).error ? 'no cast on PATH' : false;
@@ -585,15 +758,15 @@ test('typed-ops-cast-check: a swapped parameter is refused against the message, 
       writeFileSync(f, JSON.stringify({ key: V.key, ops }));
       return spawnSync(process.execPath, [script, f], { encoding: 'utf8' });
     };
-    assert.equal(run({ Unwrap: V.ops.Unwrap }).status, 0);
-    const swapped = structuredClone(V.ops.Unwrap);
+    assert.equal(run({ UAUnwrap: V.ops.UAUnwrap }).status, 0);
+    const swapped = structuredClone(V.ops.UAUnwrap);
     const d = Object.values(swapped.domains)[0];
     const words = d.calldata.slice(10).match(/.{64}/g);
     [words[8], words[10]] = [words[10], words[8]]; // `wrapped` and `minOut`, after the eight envelope words
     d.calldata = d.calldata.slice(0, 10) + words.join('');
-    const r = run({ Unwrap: swapped });
+    const r = run({ UAUnwrap: swapped });
     assert.notEqual(r.status, 0);
-    assert.match(r.stderr, /Unwrap token: calldata/);
+    assert.match(r.stderr, /UAUnwrap token: calldata/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

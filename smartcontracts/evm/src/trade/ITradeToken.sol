@@ -3,13 +3,17 @@ pragma solidity ^0.8.24;
 
 import {IUARegistry} from "../ua/IUARegistry.sol";
 
-/// @title The token's side of the DEX (CTR-DEX-13, CTR-DEX-15, CTR-DEX-02): a role-free signed `TradeOrder`, checked by
-///        the sell token against the fill figures its `dex` passes; funds move only into `dex`, never by allowance.
+/// @title The token's side of the DEX (CTR-DEX-13, CTR-DEX-15, CTR-DEX-25, CTR-DEX-02): a role-free signed `UATradeOrder`,
+///        checked by the sell token against the fill figures its `dex` passes; funds move only into `dex`, never by
+///        allowance. ua-mtx-merge T6 (R12, R38): a SCaaS token's order is a `UATradeOrder` for every subject (a native
+///        address zero-padded, by its own key, no registry; a derived UA through the registry); the address
+///        `TradeOrder` entries and views are in legacy/ua-mtx-merge/. `TradeOrder` stays for the DEX's outside legs.
 /// @notice Events and errors raised by `TradeLib` (an external library) are declared here so that they are in the
 ///         token ABI. Every error carries the order hash where it has one.
 interface ITradeToken {
-    /// @notice Signed in the sell token's own domain. `nonce` is not consumed per fill: it is the cancel handle of its
-    ///         lane (`batch`, distinct from the meta-tx lane of the same name).
+    /// @notice An outside token's order (CTR-DEX-18, R37): signed in the DEX's domain, nested in `DexOrder`; no SCaaS
+    ///         token takes it (T6). `nonce` is not consumed per fill: it is the cancel handle of its lane (`batch`,
+    ///         distinct from the meta-tx lane of the same name).
     struct TradeOrder {
         address from;          // signer; this token's balance is sold
         address receiveToken;  // what the signer receives
@@ -26,9 +30,11 @@ interface ITradeToken {
         uint256 validUntil;
     }
 
-    /// @notice A UA's order (CTR-DEX-25): `TradeOrder` with `from` and `destination` as ids (a native address
-    ///         zero-padded, or a registered SIGNING UA), signed in the sell token's domain under the UA purpose `trade`
-    ///         (a native id signs the digest itself). The same 13 ABI words as `TradeOrder`, in the same order.
+    /// @notice A SCaaS token's order (CTR-DEX-25, CTR-DEX-26 shape 1, R12): `TradeOrder` with `from` and `destination`
+    ///         as ids (a native address zero-padded, or a registered SIGNING UA), signed in the sell token's domain under
+    ///         the UA purpose `trade` (a native id signs the digest itself). The same 13 ABI words as `TradeOrder`, in
+    ///         the same order. `nonce` is not consumed per fill: it is the cancel handle of its lane `batch` (one
+    ///         `minNonce` per id, a store apart from the meta-tx nonces).
     struct UATradeOrder {
         bytes32 from;
         address receiveToken;
@@ -40,29 +46,14 @@ interface ITradeToken {
         address dex;
         bytes32 destination; // receives the proceeds in receiveToken (a derived id: by `transferToUA`); 0 = from
         uint8 flags;
-        uint256 batch;       // order lane: one `minNonce` per id across `TradeOrder` and `UATradeOrder`
+        uint256 batch;       // order lane: one `minNonce` per id
         uint256 nonce;
         uint256 validUntil;
     }
 
-    /// @notice A wrap by signature (CTR-TOK-20, TS-D19), signed in the underlying's domain: `TradeOrder` without `dex`, the
-    ///         wrapped token being both what the signer receives and the only contract that may pull.
-    struct WrapOrder {
-        address from;
-        address wrappedToken;  // receives `amount` of this token and mints
-        uint256 amount;
-        uint256 minMinted;     // signed price limit, gross of the fee
-        uint256 minFill;
-        uint256 fee;           // the submitter's part of the minted units, in ppm; <= 10 000 (1 %)
-        address relayer;       // the only submitter allowed (0 = anyone)
-        address destination;   // receives the minted units; 0 = from
-        uint8 flags;
-        uint256 batch;
-        uint256 nonce;
-        uint256 validUntil;
-    }
-
-    /// @notice `WrapOrder` with `from` and `destination` as ids, the same 12 ABI words in the same order.
+    /// @notice A wrap by signature (CTR-TOK-20, TS-D19, R39), signed in the underlying's domain: `UATradeOrder` without
+    ///         `dex`, the wrapped token being both what the signer receives and the only contract that may pull. The
+    ///         address `WrapOrder` is in legacy/ua-mtx-merge/.
     struct UAWrapOrder {
         bytes32 from;
         address wrappedToken;
@@ -86,11 +77,12 @@ interface ITradeToken {
         address submitter;
     }
 
+    /// @notice Raised by `TradeLib` on the DEX's outside legs only (no SCaaS token emits them after T6, R18).
     event TradeFilled(bytes32 indexed orderHash, address indexed from, uint256 sellFill, uint256 receiveFill,
         uint256 dexFee);
     event OrderCancelled(bytes32 indexed orderHash, address indexed from);
     event NoncesInvalidated(address indexed from, uint256 indexed batch, uint256 minNonce);
-    /// @notice The `UATradeOrder` twins (CTR-DEX-25), by entry point: a padded native signer gets these too.
+    /// @notice The token's trade events (R18): every subject, a native signer zero-padded.
     event UATradeFilled(bytes32 indexed orderHash, bytes32 indexed from, uint256 sellFill, uint256 receiveFill,
         uint256 dexFee);
     event UAOrderCancelled(bytes32 indexed orderHash, bytes32 indexed from);
@@ -123,39 +115,26 @@ interface ITradeToken {
     error MinNonceNotIncreasing(uint256 current, uint256 requested);
     error MinNonceAboveCap(uint256 requested);
 
-    /// @notice Verify `o` (signature, bounds) and move the fill from `o.from` to `o.dex`; only `o.dex` may call.
-    function mtxTrade(TradeOrder calldata o, bytes calldata sig, TradeFill calldata f) external;
-    /// @notice `CancelOrder(TradeOrder order)` (`CancelWrapOrder` for a wrap, `dex == receiveToken`) signed by `o.from`:
-    ///         closes the order forever; already closed = no-op.
-    function mtxCancelOrder(TradeOrder calldata o, bytes calldata sig) external;
-    /// @notice `InvalidateNonces(address from,uint256 batch,uint256 minNonce)` signed by `from`.
-    function mtxInvalidateNonces(address from, uint256 batch, uint256 newMin, bytes calldata sig) external;
-
-    /// @notice CTR-DEX-25: `mtxTrade` for a `UATradeOrder`; step 4 through the UA rule (a derived `from` by
-    ///         `requireAuthorized(from, trade, h, auth)`), skipped when `pulled[h] ≠ 0`; the fill moves by the UA ledger.
-    function uaTrade(UATradeOrder calldata o, IUARegistry.UASig calldata auth, TradeFill calldata f) external;
-    /// @notice `CancelUAOrder(UATradeOrder order)` (`CancelUAWrapOrder` for a wrap) under `trade`; never expires; already
-    ///         closed = no-op.
-    function uaCancelOrder(UATradeOrder calldata o, IUARegistry.UASig calldata auth) external;
+    /// @notice CTR-DEX-15, CTR-DEX-25 (R38): verify `o` and move the fill from `o.from` to `o.dex`; only `o.dex` may
+    ///         call. Step 4 through the UA rule under `trade` (a native id by its own key, no registry; a derived one by
+    ///         `requireAuthorized`, `UALedgerOff` at `registry() == 0`), skipped when `pulled[h] ≠ 0`.
+    function mtxTrade(UATradeOrder calldata o, IUARegistry.UASig calldata auth, TradeFill calldata f) external;
+    /// @notice `CancelUAOrder(UATradeOrder order)` (`CancelUAWrapOrder` for a wrap, `dex == receiveToken`) under
+    ///         `trade`: closes the order forever; never expires; already closed = no-op.
+    function mtxCancelOrder(UATradeOrder calldata o, IUARegistry.UASig calldata auth) external;
     /// @notice `UAInvalidateNonces(from, batch, minNonce)` under `trade`; raises the one floor of the id.
-    function uaInvalidateNonces(bytes32 from, uint256 batch, uint256 newMin, IUARegistry.UASig calldata auth) external;
+    function mtxInvalidateNonces(bytes32 from, uint256 batch, uint256 newMin, IUARegistry.UASig calldata auth) external;
 
     /// @notice DX7 (owner 2026-10-30): only `o.dex`, at most what it pulled for the order in THIS transaction (a
     ///         transient counter kept on every pull, EIP-1153); lowers `pulled[h]` by `amount` (the refunded part is
     ///         fillable again). An IOC order stays closed (`OrderClosed`); a cancel in the same transaction clears the
     ///         counter.
-    function restorePulled(TradeOrder calldata o, uint256 amount) external;
-    /// @notice `restorePulled` for a `UATradeOrder`.
     function restorePulled(UATradeOrder calldata o, uint256 amount) external;
 
-    /// @notice The order's digest, the key of `pulled`: a `TradeOrder`, or a `WrapOrder` when `dex == receiveToken`.
-    function tradeOrderDigest(TradeOrder calldata o) external view returns (bytes32);
-    function uaTradeOrderDigest(UATradeOrder calldata o) external view returns (bytes32);
-    function uaInvalidateNoncesDigest(bytes32 from, uint256 batch, uint256 newMin) external view returns (bytes32);
-    function uaMinNonce(bytes32 from, uint256 batch) external view returns (uint256);
-    function cancelOrderDigest(TradeOrder calldata o) external view returns (bytes32);
-    function cancelUAOrderDigest(UATradeOrder calldata o) external view returns (bytes32);
-    function invalidateNoncesDigest(address from, uint256 batch, uint256 newMin) external view returns (bytes32);
+    /// @notice The order's digest, the key of `pulled`: a `UATradeOrder`, or a `UAWrapOrder` when `dex == receiveToken`.
+    function tradeOrderDigest(UATradeOrder calldata o) external view returns (bytes32);
+    function cancelOrderDigest(UATradeOrder calldata o) external view returns (bytes32);
+    function invalidateNoncesDigest(bytes32 from, uint256 batch, uint256 newMin) external view returns (bytes32);
     function pulled(bytes32 orderHash) external view returns (uint256);
-    function minNonce(address from, uint256 batch) external view returns (uint256);
+    function minNonce(bytes32 from, uint256 batch) external view returns (uint256);
 }

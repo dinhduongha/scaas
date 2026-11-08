@@ -1,122 +1,152 @@
-// CTR-MTX-26 (metatx split T18): the payment id commits to its metadata. `paymeta.json` is written by forge
-// (test/metatx/PayMeta.t.sol) and read by every family; clientkeys rebuilds every row and the pay-meta envelopes.
+// CTR-MTX-26 (pay-meta-tax spec §3, T41): `PayMeta {salt, payNo, schema, body}`, the last parameter of every pay entry, and
+// its commitment under `scaas.pay.meta.v2`. `paymeta.json` is written by forge (test/metatx/PayMeta.t.sol); clientkeys
+// rebuilds every row, the bodies from named fields, and the pay entries' calldata. The non-EVM families read the old file
+// (vectors/metatx/legacy/ua-mtx-merge/paymeta.json, `metaPayIdV1`) until their round.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-  metaPayId, payLane, encodeMeta, decodeMeta, buildMtxPayMeta, buildUaPayMeta, checkPayMeta, hashTypedData,
-  metaTransferTypedData, padId,
+  metaPayId, metaPayIdV1, payMeta, checkPayNo, encodeMetaBody, decodeMetaBody, payMetaWarning, buildPay, buildPayReceiverFee,
+  checkPayMeta, hashTypedData, uaMetaTransferTypedData, padId, payLane, payWithFeeToUACalldata,
 } from '../src/evm.js';
-import { hex, fromHex, keccak_256, utf8ToBytes } from '../src/bytes.js';
+import { hex, fromHex, keccak_256, utf8ToBytes, abiEncode } from '../src/bytes.js';
 
 const V = JSON.parse(readFileSync(new URL('../../../smartcontracts/vectors/metatx/paymeta.json', import.meta.url)));
-const R = JSON.parse(readFileSync(new URL('../../../smartcontracts/vectors/metatx/relayref.json', import.meta.url)));
 const sel = (sig) => hex(keccak_256(utf8ToBytes(sig)).subarray(0, 4));
 const row = (name) => V.find((r) => r.name === name);
+const metaOf = (r) => ({ salt: r.salt, payNo: r.payNo, schema: r.schema, body: r.body });
 
 const TOKEN = '0x' + '7a'.repeat(20);
 const PAYER = '0x' + '11'.repeat(20);
 const PAYEE = '0x' + '22'.repeat(20);
 const LANE = '0x' + '33'.repeat(20);
+const FEE_TO = '0x' + '44'.repeat(20);
 const UID = '0x' + 'c1'.repeat(32);
 const NOW = 1_800_000_000;
-const base = { token: TOKEN, chainId: 7622, chainUid: UID, from: PAYER, to: PAYEE, amount: 1000n, validUntil: NOW + 600,
+const base = { token: TOKEN, chainId: 7622, chainUid: UID, from: padId(PAYER), to: padId(PAYEE), amount: 1000n, validUntil: NOW + 600,
   mode: 1, relayer: LANE };
+const SIG = '(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])';
+const PM = '(bytes32,string,uint16,bytes)';
+const UMT = '(bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address)';
 
-test('paymeta vectors', () => {
-  assert.equal(V.length, 6);
+test('paymeta.json v2: every accepted row is metaPayId(PayMeta); the 257-byte payNo refused; the old tag differs', () => {
+  assert.equal(V.length, 9);
   for (const r of V) {
-    assert.equal(metaPayId(r.salt, r.meta), r.payId, r.name);
-    assert.equal(payLane(r.payId), BigInt(r.payLane), r.name);
-    const d = decodeMeta(r.meta);
-    assert.equal(d.schema, r.schema, r.name);
-    assert.equal(hex(encodeMeta(d.schema, d.body)), r.meta, `${r.name}: canonical envelope`);
+    if (!r.accepted) {
+      assert.throws(() => metaPayId(metaOf(r)), /above 256/, r.name);
+      continue;
+    }
+    assert.equal(metaPayId(metaOf(r)), r.payId, r.name);
+    assert.equal(decodeMetaBody(r.schema, r.body) !== null, true);
   }
-  assert.deepEqual(decodeMeta(row('note_utf8').meta).shown, { note: 'Hóa đơn 2026-0042 — cảm ơn' });
-  assert.deepEqual(decodeMeta(row('empty_body').meta).shown, { note: '' });
-  assert.deepEqual(decodeMeta(row('structured_reference').meta).shown,
-    { creditorRef: 'RF18539007547034', invoiceNo: 'INV-2026-0042', dueDate: 1830297600n });
-  const bound = decodeMeta(row('bound_call').meta).shown;
-  const call = R.find((x) => x.name === 'cancel_nonce_7');
-  assert.deepEqual(bound, { chainId: 7622n, target: '0x' + '00'.repeat(29) + 'c0ffee', callHash: call.callHash },
-    'schema 3 commits to the relay-fee vector call');
-  assert.deepEqual(decodeMeta(row('encrypted_illustrative').meta).shown, { encrypted: 96 });
+  const old = row('payno_only');
+  assert.notEqual(old.oldTagPayId, old.payId);
+  assert.equal(hex(keccak_256(new Uint8Array([...utf8ToBytes('scaas.pay.meta'), ...fromHex(old.salt),
+    ...keccak_256(abiEncode(['string', 'uint16', 'bytes'], [old.payNo, old.schema, '0x']))]))), old.oldTagPayId, 'C1: the old tag');
+  assert.equal(utf8ToBytes(row('payno_256').payNo).length, 256);
+  assert.equal(utf8ToBytes(row('payno_utf8_256').payNo).length, 256, 'multi-byte UTF-8 ending at the bound');
 });
 
-test('decodeMeta refuses a non-canonical envelope or an unknown schema', () => {
-  const m = fromHex(row('note_utf8').meta);
-  const longer = new Uint8Array([...m, 0]);
-  assert.throws(() => decodeMeta(longer), /Refusing to sign/);
-  const offset = m.slice(); offset[63] = 0x60;
-  assert.throws(() => decodeMeta(offset), /Refusing to sign/);
-  assert.throws(() => decodeMeta(encodeMeta(9, new Uint8Array(0))), /unknown metadata schema/);
-  assert.throws(() => decodeMeta(encodeMeta(1, new Uint8Array([0xff, 0xfe]))), /UTF-8/);
+test('the bodies from named fields: each schema equals the forge row', () => {
+  assert.deepEqual(decodeMetaBody(1, row('note_utf8').body), { note: 'Hóa đơn 2026-0042 — cảm ơn' });
+  assert.equal(hex(encodeMetaBody(1, { note: 'Hóa đơn 2026-0042 — cảm ơn' })), row('note_utf8').body);
+  const sr = { creditorRef: 'RF18539007547034', dueDate: 1830297600n };
+  assert.deepEqual(decodeMetaBody(2, row('structured_reference').body), sr);
+  assert.equal(hex(encodeMetaBody(2, sr)), row('structured_reference').body, 'schema 2: (string creditorRef, uint64 dueDate), no invoiceNo');
+  const bc = decodeMetaBody(3, row('bound_call').body);
+  assert.equal(bc.chainId, 7622n);
+  assert.equal(hex(encodeMetaBody(3, bc)), row('bound_call').body);
+  assert.deepEqual(decodeMetaBody(4, row('encrypted_illustrative').body), { encrypted: 96 });
+  assert.equal(hex(encodeMetaBody(4, { ciphertext: row('encrypted_illustrative').body })), row('encrypted_illustrative').body);
+  const named = payMeta({ salt: row('structured_reference').salt, payNo: 'INV-2026-0042', schema: 2, fields: sr });
+  assert.equal(metaPayId(named), row('structured_reference').payId, 'built from fields, the same commitment');
+  assert.deepEqual(decodeMetaBody(9, '0x0102'), { opaque: 2 }, 'an unknown schema is opaque data, never facts');
 });
 
-test('refuses a payId that does not commit to meta', () => {
-  const r = row('note_utf8');
-  const other = row('empty_body').payId;
-  assert.throws(() => buildMtxPayMeta({ ...base, salt: r.salt, meta: r.meta, entryRef: other }), /does not commit/);
-  assert.throws(() => buildUaPayMeta({ ...base, from: padId(PAYER), to: padId(PAYEE), salt: r.salt, meta: r.meta,
-    entryRef: other }), /does not commit/);
-  // server typed data whose entryRef is another payId (a different meta, or the same meta with another salt)
-  const td = metaTransferTypedData({ contract: TOKEN, chainId: 7622, chainUid: UID, message: { from: PAYER, to: PAYEE,
-    value: 1000n, entryRef: other, batch: payLane(other), nonce: 0, validUntil: NOW + 600, mode: 1, relayer: LANE } });
-  const opts = { account: PAYER, chainId: 7622, chainUid: UID, amount: '1000', decimals: 0, payee: PAYEE,
-    expectedToken: TOKEN, now: NOW, salt: r.salt, meta: r.meta };
-  assert.throws(() => checkPayMeta(td, opts), /does not commit/);
-  assert.throws(() => checkPayMeta(td, { ...opts, salt: row('empty_body').salt }), /does not commit/);
+test('PayMeta shape and payNo text rules refuse before signing', () => {
+  const s = row('salt_only').salt;
+  assert.throws(() => payMeta({ salt: '0x' + '00'.repeat(32) }), /salt is 0/);
+  assert.throws(() => payMeta({ salt: s, schema: 0, body: '0x01' }), /schema 0 iff/);
+  assert.throws(() => payMeta({ salt: s, schema: 1, body: '0x' }), /schema 0 iff/);
+  assert.throws(() => encodeMetaBody(1, { note: '' }), /non-empty/);
+  assert.equal(checkPayNo('A'.repeat(256)).length, 256);
+  assert.throws(() => checkPayNo('A'.repeat(257)), /257 bytes, above 256/);
+  assert.throws(() => checkPayNo('INV‮1234'), /bidirectional/, 'a right-to-left override');
+  assert.throws(() => checkPayNo('INV⁦x⁩'), /bidirectional/, 'an isolate');
+  assert.throws(() => checkPayNo('INV\n1'), /control/);
+  assert.throws(() => checkPayNo('INV\u0085'), /control/, 'a C1 control');
+  assert.throws(() => checkPayNo('INV\ud800'), /UTF-8/, 'a lone surrogate');
+  assert.equal(checkPayNo('Hóa đơn 😀').length, 15, 'a pair of surrogates is one character');
+  const fresh = payMeta({});
+  assert.match(fresh.salt, /^0x[0-9a-f]{64}$/);
+  assert.notEqual(BigInt(fresh.salt), 0n, 'a CSPRNG salt when none is given');
 });
 
-test('mtxPayMeta: the payment is mtxPay with payId = metaPayId(salt, meta), lane payLane, nonce 0', () => {
+test('the clear-metadata warning: once per payee per session, none for schema 0 or 4 without a payNo', () => {
+  const session = new Set();
+  const clear = metaOf(row('structured_reference'));
+  assert.match(payMetaWarning(clear, padId(PAYEE), session), /in clear/);
+  assert.equal(payMetaWarning(clear, padId(PAYEE), session), null, 'once per payee');
+  assert.match(payMetaWarning(metaOf(row('note_utf8')), padId(PAYER), session), /in clear/, 'another payee');
+  assert.equal(payMetaWarning(metaOf(row('encrypted_illustrative')), padId(LANE), new Set()), null);
+  assert.equal(payMetaWarning(metaOf(row('salt_only')), padId(LANE), new Set()), null);
+  assert.match(payMetaWarning(metaOf(row('payno_only')), padId(LANE), new Set()), /in clear/);
+});
+
+test('buildPay: mtxPay(t, UASig, PayMeta) with entryRef = metaPayId(meta); any lane, the request lane by default', () => {
   const r = row('structured_reference');
-  const p = buildMtxPayMeta({ ...base, salt: r.salt, meta: r.meta, entryRef: r.payId });
+  const p = buildPay({ ...base, meta: metaOf(r), entryRef: r.payId });
   assert.equal(p.payId, r.payId);
-  assert.equal(p.lane, BigInt(r.payLane));
-  assert.equal(p.typedData.primaryType, 'MetaTransfer');
-  assert.equal(p.typedData.message.entryRef, r.payId);
-  assert.equal(p.typedData.message.batch, String(BigInt(r.payLane)));
-  assert.equal(p.typedData.message.nonce, '0');
-  assert.equal(p.typedData.message.relayer, LANE);
-  assert.equal(hex(p.digest), hex(hashTypedData(p.typedData)));
-  assert.equal(p.shown.invoiceNo, 'INV-2026-0042');
-  const sig = new Uint8Array(65).fill(7);
-  const cd = p.calldata(sig);
-  assert.equal(hex(cd.subarray(0, 4)),
-    sel('mtxPayMeta(address,address,uint256,bytes32,bytes,uint256,uint32,address,uint256,address,bytes)'));
-  assert.equal(hex(cd.subarray(4 + 32 * 3, 4 + 32 * 4)), r.salt, 'salt is the 4th argument');
-  // the off-chain variant: plain mtxPay with the same payId, the same digest; meta stays with the payee
-  const off = buildMtxPayMeta({ ...base, salt: r.salt, meta: r.meta, onChain: false });
-  assert.equal(hex(off.digest), hex(p.digest));
-  const ocd = off.calldata(sig);
-  assert.equal(hex(ocd.subarray(0, 4)),
-    sel('mtxPay(address,address,uint256,bytes32,uint256,uint32,address,uint256,address,bytes)'));
-  assert.equal(hex(ocd.subarray(4 + 32 * 3, 4 + 32 * 4)), r.payId);
-});
-
-test('uaPayMeta: UAMetaTransfer between ids, uaPayMeta / uaPay calldata', () => {
-  const r = row('note_utf8');
-  const p = buildUaPayMeta({ ...base, from: padId(PAYER), to: padId(PAYEE), salt: r.salt, meta: r.meta });
   assert.equal(p.typedData.primaryType, 'UAMetaTransfer');
-  assert.equal(p.typedData.message.from, padId(PAYER));
   assert.equal(p.typedData.message.entryRef, r.payId);
-  assert.equal(p.typedData.message.batch, String(BigInt(r.payLane)));
-  const cd = p.calldata(new Uint8Array(3));
-  assert.equal(hex(cd.subarray(0, 4)),
-    sel('uaPayMeta(bytes32,bytes32,uint256,bytes32,bytes,uint256,uint32,address,uint256,address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))'));
-  const off = buildUaPayMeta({ ...base, from: padId(PAYER), to: padId(PAYEE), salt: r.salt, meta: r.meta, onChain: false });
-  assert.equal(hex(off.calldata(new Uint8Array(3)).subarray(0, 4)),
-    sel('uaPay(bytes32,bytes32,uint256,bytes32,uint256,uint32,address,uint256,address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))'));
+  assert.equal(p.typedData.message.batch, String(payLane(r.payId)));
+  assert.equal(hex(p.digest), hex(hashTypedData(p.typedData)));
+  assert.equal(p.shown.payNo, 'INV-2026-0042');
+  assert.equal(p.shown.creditorRef, 'RF18539007547034');
+  const cd = p.calldata(new Uint8Array(65).fill(7));
+  assert.equal(hex(cd.subarray(0, 4)), sel(`mtxPay(${UMT},${SIG},${PM})`));
+  const free = buildPay({ ...base, meta: metaOf(r), batch: 7, nonce: 3 });
+  assert.equal(free.typedData.message.batch, '7', 'O3: a free lane');
+  assert.equal(free.typedData.message.nonce, '3');
+  assert.throws(() => buildPay({ ...base, meta: metaOf(r), entryRef: row('note_utf8').payId }), /does not commit/);
+  assert.throws(() => buildPay({ ...base, meta: { salt: r.salt, payNo: 'x'.repeat(257) } }), /above 256/, 'refused before signing');
+  assert.throws(() => buildPay({ ...base }), /payment metadata is required/, 'never empty (O11)');
 });
 
-test('checkPayMeta: server typed data for the committed payId passes and returns the decoded meta', () => {
+test('a digest with a non-zero unbound relayer / feeRecipient is the canonical one (MetaTxLib.canon)', () => {
+  const r = row('salt_only');
+  const unbound = buildPay({ ...base, mode: 0, relayer: '0x' + 'de'.repeat(20), feeRecipient: '0x' + 'be'.repeat(20), meta: metaOf(r) });
+  const zero = buildPay({ ...base, mode: 0, relayer: '0x' + '00'.repeat(20), meta: metaOf(r) });
+  assert.equal(hex(unbound.digest), hex(zero.digest));
+});
+
+test('buildPayReceiverFee: the payer\'s mode-1 payment, the payee\'s UAReceiverFee, PayMeta last', () => {
   const r = row('note_utf8');
-  const td = metaTransferTypedData({ contract: TOKEN, chainId: 7622, chainUid: UID, message: { from: PAYER, to: PAYEE,
-    value: 1000n, entryRef: r.payId, batch: payLane(r.payId), nonce: 0, validUntil: NOW + 600, mode: 1, relayer: LANE } });
-  const got = checkPayMeta(td, { account: PAYER, chainId: 7622, chainUid: UID, amount: '1000', decimals: 0, payee: PAYEE,
-    expectedToken: TOKEN, now: NOW, salt: r.salt, meta: r.meta });
-  assert.equal(got.entryRef, r.payId);
-  assert.equal(got.schema, 1);
-  assert.deepEqual(got.shown, { note: 'Hóa đơn 2026-0042 — cảm ơn' });
-  assert.equal(hex(got.digest), hex(hashTypedData(td)));
+  const p = buildPayReceiverFee({ ...base, meta: metaOf(r), fee: 30n, feeRecipient: FEE_TO, rfValidUntil: NOW + 60 });
+  assert.equal(p.typedData.primaryType, 'UAReceiverFee');
+  assert.equal(p.typedData.message.payment.entryRef, r.payId);
+  const cd = p.calldata(new Uint8Array(65).fill(1), new Uint8Array(65).fill(2));
+  assert.equal(hex(cd.subarray(0, 4)), sel(`mtxPayReceiverFee(${UMT},${SIG},uint256,address,uint256,${SIG},${PM})`));
+});
+
+test('payWithFeeToUA carries PayMeta; checkPayMeta refuses a server entryRef over another meta', () => {
+  const r = row('payno_only');
+  const cd = payWithFeeToUACalldata(padId(PAYEE), 5, 0, 0, '0x' + '00'.repeat(20), r.payId, metaOf(r));
+  assert.equal(hex(cd.subarray(0, 4)), sel(`payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32,${PM})`));
+  assert.throws(() => payWithFeeToUACalldata(padId(PAYEE), 5, 0, 0, '0x' + '00'.repeat(20), row('salt_only').payId, metaOf(r)),
+    /does not commit/);
+  const other = row('salt_only').payId;
+  const td = uaMetaTransferTypedData({ contract: TOKEN, chainId: 7622, chainUid: UID, message: { from: padId(PAYER), to: padId(PAYEE),
+    value: 1000n, entryRef: other, batch: payLane(other), nonce: 0, validUntil: NOW + 600, mode: 1, relayer: LANE } });
+  const opts = { account: padId(PAYER), chainId: 7622, chainUid: UID, amount: '1000', decimals: 0, payee: padId(PAYEE),
+    expectedToken: TOKEN, now: NOW, meta: metaOf(r) };
+  assert.throws(() => checkPayMeta(td, opts), /does not commit/);
+  const ok = uaMetaTransferTypedData({ contract: TOKEN, chainId: 7622, chainUid: UID, message: { ...td.message, entryRef: r.payId,
+    batch: payLane(r.payId) } });
+  assert.equal(checkPayMeta(ok, opts).payId, r.payId);
+});
+
+test('metaPayIdV1 stays for the non-EVM families: the legacy file still matches it', () => {
+  const L = JSON.parse(readFileSync(new URL('../../../smartcontracts/vectors/metatx/legacy/ua-mtx-merge/paymeta.json', import.meta.url)));
+  for (const r of L) assert.equal(metaPayIdV1(r.salt, r.meta), r.payId, r.name);
 });

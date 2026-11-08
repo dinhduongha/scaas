@@ -295,3 +295,39 @@ fn burn_recipient_address_or_ua() {
     let err = zether_prover::api::call("proveBurn", &req(hx(&[1; 21])).to_string()).unwrap_err();
     assert!(err.contains("20-byte address or a 32-byte UA id"), "{err}");
 }
+
+/// ua-mtx-merge T12 (R35, CTR-ZTH-51): the merged entries' binding `SCAAS-ZETHER-UA-ENVELOPE-V1` and the `UAMetaTransaction`
+/// digest (`mtxDigest(UAMetaTransaction)`), `from` a `bytes32` id, through the JSON API (`uaEnvelope`), against `cast`
+/// (tools/env_ref.sh) for a padded native id and a derived id. The address binding of `executeMetaTransaction` is
+/// `envelope_matches_cast`'s, unchanged.
+#[test]
+fn ua_envelope_matches_cast() {
+    use serde_json::{json, Value};
+    let hx = |b: &[u8]| format!("0x{}", hex::encode(b));
+    let meta = |from: String| json!({
+        "chainId": 31337, "chainUid": hx(&UID), "token": hx(&TOK),
+        "meta": {"from": from, "data": "0xdeadbeef", "batch": hx(&[1; 32]), "nonce": 7, "validUntil": 1_800_000_000u64,
+                 "mode": MODE_RESTRICT_RELAYER | MODE_FEE_FIXED, "relayer": hx(&[0xbb; 20]), "fee": 1000,
+                 "feeRecipient": hx(&[0xcc; 20])},
+    });
+    let run = |cmd: &str, v: &Value| -> Value { serde_json::from_str(&zether_prover::api::call(cmd, &v.to_string()).unwrap()).unwrap() };
+    let mut native = [0u8; 32];
+    native[12..].fill(0xaa);
+    for (from, binding, digest) in [
+        (native, "0xb8f7b9a52c6c76f58e213299b9cf32673896d46835e62c51b517743ffee8b7ad",
+            "0x1c4316ea302cab30542032c9adeed1bab06689e0349380daaaad9c00eba34ce8"),
+        ([0x7a; 32], "0x28c3b2e82310f89d8e0d0a48bfd2833e2eaa12fba8432b0829145df4d34708ed",
+            "0x2076bd3b06dcfcfa62e5ef3fe6776021ad8de768c76811490dc9f46d88107896"),
+    ] {
+        let out = run("uaEnvelope", &meta(hx(&from)));
+        assert_eq!(out["binding"], json!(binding), "UA binding of {}", hx(&from));
+        assert_eq!(out["digest"], json!(digest), "UAMetaTransaction digest of {}", hx(&from));
+    }
+    // the same native subject on `executeMetaTransaction` binds the address tag: a proof for one path fails on the other
+    let addr = run("envelope", &meta(hx(&[0xaa; 20])));
+    assert_eq!(addr["binding"], json!("0x29764986e75d275afefd0f799cae4e8ea5b1c9771e9ed9b43ffa9cc26d81350d"));
+    assert_ne!(addr["binding"], run("uaEnvelope", &meta(hx(&native)))["binding"]);
+    // `from` is the 32-byte id: an address is refused, not padded
+    let err = zether_prover::api::call("uaEnvelope", &meta(hx(&[0xaa; 20])).to_string()).unwrap_err();
+    assert!(err.contains("`from` must be 32 bytes"), "{err}");
+}

@@ -1,0 +1,26 @@
+mutant | test that went red | rc
+compact-multi-check-dropped | test_frozenSenderRefusedBeforeProof_direct, test_frozenSenderRefusedBeforeProof_signed, test_pauseStopsShieldTransfersUnshield, test_pauseStopsSignedTransfers | 1
+envelope-subject-as-sender | test_envelopeSubjectNeverTheSender, test_frozenSenderRefusedBeforeProof_direct, test_frozenSenderRefusedBeforeProof_signed, test_unshieldUnwrapFrozenRefused | 1
+check-after-proof-bundle | test_frozenSenderRefusedBeforeProof_direct, test_frozenSenderRefusedBeforeProof_signed | 1
+r-on-decoy-leg | test_frozenAndDeniedDecoysReceive | 1
+zether-hook-in-pqz-layer | test_zetherHookNotInPqz | 1
+check-after-proof-single | test_frozenSenderRefusedBeforeProof_direct, test_frozenSenderRefusedBeforeProof_signed | 1
+check-after-proof-unshield-unwrap | test_unshieldUnwrapFrozenRefused | 1
+frozen-sender-passes | test_frozenSenderRefusedBeforeProof_direct, test_frozenSenderRefusedBeforeProof_signed, test_unshieldUnwrapFrozenRefused | 1
+ring-member-read | test_frozenAndDeniedDecoysReceive, test_frozenReceivesAndRollsOver | 1
+force-writes-zether-state | test_forceMovesPublicOnly_zetherStateUntouched | 1
+force-reads-zether-state | test_forceMovesPublicOnly_zetherStateUntouched | 1
+frozen-beneficiary-passes | test_frozenAndDeniedDecoysReceive, test_frozenBeneficiaryRefused | 1
+unshield-check-dropped | test_frozenSenderRefusedBeforeProof_direct, test_pauseStopsShieldTransfersUnshield | 1
+unshield-recipient-unchecked | test_deniedUnshieldRecipientRefused | 1
+f-on-envelope-from-not-fee-bearing | test_envelopeSubjectNeverTheSender | 1
+fee-bearing-pre-row-dropped | test_envelopeSubjectNeverTheSender | 1
+shield-payer-unchecked | test_pauseStopsShieldTransfersUnshield | 1
+deploy-zether-regulated-dropped | test_deployZetherRegulatedPath | 1
+deploy-without-regulatedlib | test_deployZetherRegulatedPath | 1
+# First run (18 mutants): two survived, both invalid mutants, not test gaps. force-touches-zether-state wrote
+# `sstore(x, sload(x))`, which the optimizer removes (equivalent mutant); it is replaced by force-writes-zether-state (the
+# value changes) and force-reads-zether-state (the read feeds a branch). unshield-recipient-unchecked's edit matched a
+# trailing newline the anchor lacks, so it changed nothing; the anchor is fixed and t30_mutants.py now refuses an edit that
+# changes nothing. The three were rerun alone (ONLY=...): the rows above. The table parser also reads a FAIL reason holding
+# raw revert bytes (r-on-decoy-leg). 19 of 19 killed, none a compile error; src and script restored after each.

@@ -134,7 +134,7 @@ if __name__ == '__main__':
         r = needed([f'smartcontracts/{d}/x'])
         assert [j for j in r if j.startswith('contract-') and r[j]] == [f'contract-{fam}'], fam
     assert all(needed(['pqz-core/params/sets/a'])[j] for j in ('contract-evm', 'pqz'))
-    for p in ('smartcontracts/scripts/test.sh', 'smartcontracts/vectors/metatx/paymeta.json'):
+    for p in ('smartcontracts/scripts/test.sh', 'smartcontracts/vectors/metatx/legacy/ua-mtx-merge/paymeta.json'):
         assert all(needed([p])[j] for j in GROUPS['ci-full-contracts']), p
     # groups: a label on a docs-only pull request runs `docs` and that group, nothing else
     for g, js in GROUPS.items():

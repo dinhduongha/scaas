@@ -62,21 +62,30 @@ library PqzStateLib {
     ///         a leg's underlying (`mtxWrapShield`) into `SHIELD_POOL` (D19).
     function shield(bytes32 ua, uint256 amount, address from, address registry) public {
         PqzCore.PqzStorage storage s = PqzCore.$();
-        PqzCore._creditKey(registry, ua); // C2-4: the key is checked as every debit does; C0-2: a PQZH holder's kind
+        // C2-4: the key is checked as every debit does; C0-2: a PQZH holder's kind; KV-7: its current version, one read
+        (, uint64 v) = PqzCore._creditKey(registry, ua);
         uint256 room = s.maxShielded - s.totalShielded;
         if (amount == 0 || amount > room) revert IPqzToken.AmountOutOfRange(amount, room);
         s.totalShielded += amount;
-        PqzCore._trivial(ua, amount, from);
+        PqzCore._trivial(ua, v, amount, from);
     }
 
     /// @notice Anyone (plan 5h D8): `acc += Σ pending[rolled .. rolled + n')` strictly in order, `n' = min(n, K_MAX − 1 −
     ///         accUnits)` (`CapReached` at 0), `1 ≤ n ≤ ROLL_MAX`, each entry at least `ROLL_AGE` blocks old
     ///         (`RollTooYoung`), the account prepared (`AccNotPrepared`); the sum is packed (P46) and written to the
     ///         `acc` slots as `not(stream word)` (never 0, so none is zeroed; D3) with `accHash = keccak256(packed
-    ///         stream)`; the slots below `rolled − INLINE_MAX` are deleted (`floor` follows `cleared`).
-    function rollOver(bytes32 ua, uint256 n) public {
+    ///         stream)`; the slots below `rolled − INLINE_MAX` are deleted (`floor` follows `cleared`). Group 3g (KV-10): the
+    ///         account of key version `v`, stale versions included; `PqzRolledOver` names it. The version's key check is
+    ///         `prepareAcc`'s (a rollover needs both prepared halves, `AccNotPrepared`, and a key once eligible stays so), not
+    ///         repeated here: the registry read would put `ROLL_MAX` at n2560-kmax16384 over its 0.75 · 2^24 bound.
+    function rollOver(bytes32 ua, uint64 v, uint256 n) public {
         if (n == 0 || n > PqzCore.ROLL_MAX) revert IPqzToken.RollOverRange(n);
-        PqzCore.Account storage a = PqzCore.$().acct[ua];
+        (uint64 nr, uint32 units, bytes32 h) = _roll(PqzCore.$().acct[ua][v], ua, n);
+        emit IPqzToken.PqzRolledOver(ua, v, nr, units, h);
+    }
+
+    /// @dev `rollOver`'s body on the account (a frame of its own for the stack): the new `rolled`, `accUnits`, `accHash`.
+    function _roll(PqzCore.Account storage a, bytes32 ua, uint256 n) private returns (uint64, uint32, bytes32) {
         if (a.flags & PqzCore.PREP != PqzCore.PREP) revert IPqzToken.AccNotPrepared(ua);
         uint256 units = a.accUnits;
         if (units + 1 >= PqzCore.K_MAX) revert IPqzToken.CapReached(ua);
@@ -100,6 +109,12 @@ library PqzStateLib {
         a.rolled = nr;
         a.accUnits = uint32(units + n);
         a.flags |= PqzCore.MAT;
+        _clear(a, nr);
+        return (nr, uint32(units + n), h);
+    }
+
+    /// @dev The slots below `rolled − INLINE_MAX` deleted (`floor` follows `cleared`).
+    function _clear(PqzCore.Account storage a, uint64 nr) private {
         uint64 end = nr > PqzCore.INLINE_MAX ? nr - uint64(PqzCore.INLINE_MAX) : 0;
         uint64 c0 = a.cleared;
         if (end > c0) {
@@ -107,18 +122,18 @@ library PqzStateLib {
             a.cleared = end;
             if (end > a.floor) a.floor = end;
         }
-        emit IConfidentialToken.RolledOver(ua, nr, uint32(units + n), h);
     }
 
     /// @notice Permissionless, idempotent (plan 5h D8): writes the non-zero `ACC_MARK` into half `half` (0 or 1) of the
     ///         account's `acc` slots (`HALF_WORDS` and the rest of `PqzCt.ACC_WORDS`), so the first rollover rewrites
-    ///         instead of creating them; a no-op once done (a materialised `acc` has both).
-    function prepareAcc(bytes32 ua, uint256 half, address registry) public {
+    ///         instead of creating them; a no-op once done (a materialised `acc` has both). Group 3g (KV-10): the account
+    ///         of key version `v`, a version whose key passes the mode's check.
+    function prepareAcc(bytes32 ua, uint64 v, uint256 half, address registry) public {
         if (half > 1) revert IPqzToken.BadPayload(half);
-        PqzCore.Account storage a = PqzCore.$().acct[ua];
+        PqzCore.Account storage a = PqzCore.$().acct[ua][v];
         uint8 bit = uint8(2 << half);
         if (a.flags & bit != 0) return;
-        PqzCore._keyPtr(registry, ua); // C2-4
+        PqzCore._keyAt(registry, ua, v); // C2-4
         uint256[PQZ_ACC_WORDS] storage w = a.accWords;
         uint256 hw = PqzCore.HALF_WORDS;
         uint256 cnt = half == 0 ? hw : PqzCt.ACC_WORDS - hw;
@@ -131,14 +146,14 @@ library PqzStateLib {
     }
 
     /// @notice The account's `acc` bytes (D13 `pqzAcc`): the materialised words, or the reference's `u ‖ v`, or 0.
-    function accOf(bytes32 ua) public view returns (bytes memory) {
-        return PqzCore._accOf(PqzCore.$().acct[ua], msg.data[0:0]);
+    function accOf(bytes32 ua, uint64 v) public view returns (bytes memory) {
+        return PqzCore._accOf(PqzCore.$().acct[ua][v], msg.data[0:0]);
     }
 
     /// @notice Entry `i` of `ua` as a ciphertext (D13 `pqzPendingCt`): `u_g ‖ v_j` from its blob, or
     ///         `Trivial(digits(amount))` of a TRIVIAL entry; `Trivial(0)` for a deleted or unwritten index.
-    function pendingCt(bytes32 ua, uint64 i) public view returns (bytes memory c) {
-        uint256 e = PqzCore.$().acct[ua].pending[i];
+    function pendingCt(bytes32 ua, uint64 v, uint64 i) public view returns (bytes memory c) {
+        uint256 e = PqzCore.$().acct[ua][v].pending[i];
         c = new bytes(PqzCt.CT);
         if (uint16(e >> 64) == 0) PqzCt.addTrivial(c, uint64(e >> 96));
         else PqzCt.loadBlob(address(uint160(e >> 96)), uint16(e >> 80), uint16(e >> 64), c);

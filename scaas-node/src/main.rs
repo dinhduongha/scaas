@@ -246,8 +246,9 @@ async fn main() -> Result<()> {
             let idx = legacy(&cfg, false)?;
             let (c, key) = (shared.clone(), cc.chain_key());
             let router = scaas_node::guard::RelayFee::from_cfg(cc)?.map(|r| r.router);
+            let registry = cc.ua_registry;
             set.spawn(async move {
-                indexer::run(c, idx, poll, key, router).await;
+                indexer::run(c, idx, poll, key, router, registry).await;
                 Err(anyhow!("indexer loop ended"))
             });
         }

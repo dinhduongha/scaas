@@ -2,10 +2,10 @@
 // own `types` and `message`, with no code of src/: test/typed-ops.test.js (its own decoder) and scripts/typed-ops-cast-check.mjs
 // (`cast`) compare decoded calldata with this, so a swapped parameter cannot pass as a round trip.
 const G = (p) => [p.x0, p.x1, p.y0, p.y1];
-const pqzArgsSingle = (t) => [t.p, t.validUntilBlock, t.shieldIn, t.fromUA, t.toUA, t.beneficiaryUA, t.salt, t.u, t.vTo, t.vFrom, t.vAuditor, t.sealedMemo];
-const pqzArgsMulti = (t) => [t.p, t.validUntilBlock, t.shieldIn, t.fromUA, t.beneficiaryUA, t.decoyFee, t.salt, t.u,
+const pqzArgsSingle = (t) => [t.p, t.validUntilBlock, t.shieldIn, t.fromUA, t.keyVersion, t.toUA, t.beneficiaryUA, t.salt, t.u, t.vTo, t.vFrom, t.vAuditor, t.sealedMemo];
+const pqzArgsMulti = (t) => [t.p, t.validUntilBlock, t.shieldIn, t.fromUA, t.keyVersion, t.beneficiaryUA, t.decoyFee, t.salt, t.u,
   t.legs.map((l) => [l.ua, l.v, l.vAuditor]), t.vFrom, t.sealedMemo];
-const pqzBurn = (t) => [t.p, t.validUntilBlock, t.shieldIn, t.fromUA, t.beneficiaryUA, t.u, t.vFrom];
+const pqzBurn = (t) => [t.p, t.validUntilBlock, t.shieldIn, t.fromUA, t.keyVersion, t.beneficiaryUA, t.u, t.vFrom];
 const zSingle = (t) => [t.accSeq, t.sendCounter, t.validUntilBlock, t.salt, t.beneficiaryUA, G(t.yFrom), G(t.yTo), G(t.cOut), G(t.dOut), G(t.cDeb), G(t.cAud)];
 const zMulti = (t) => [t.accSeq, t.sendCounter, t.validUntilBlock, t.salt, t.beneficiaryUA, t.decoyFee, G(t.yFrom), G(t.dOut), G(t.cDeb),
   t.legs.map((l) => [G(l.yTo), G(l.cOut), G(l.cAud), G(l.dAud)]), t.sealedMemo];
@@ -36,20 +36,18 @@ const tradeTuple = (o) => [o.from, o.receiveToken, o.amount, o.receiveAmount, o.
 const wrapTuple = (o) => [o.from, o.wrappedToken, o.amount, o.minMinted, o.minFill, o.fee, o.relayer, o.destination, o.flags,
   o.batch, o.nonce, o.validUntil];
 const asTrade = (o) => ({ ...o, receiveToken: o.wrappedToken, receiveAmount: o.minMinted, dex: o.wrappedToken });
+// pay-meta-tax T41: a pay entry's last parameter, `PayMeta {salt, payNo, schema, body}`, unsigned
+const metaTuple = (x) => [x.salt, x.payNo, x.schema, x.body];
 const transferTuple = (t) => [t.from, t.to, t.value, t.entryRef, t.batch, t.nonce, t.validUntil, t.mode, t.relayer, t.fee, t.feeRecipient];
 const OTHER = {
-  ReceiverFee: (m, s, d) => [transferTuple(m.payment), d.extra.payerSig, m.fee, m.feeRecipient, m.validUntil, s],
-  UAReceiverFee: (m, s, d) => [transferTuple(m.payment), ['0x', d.extra.payerSig, []], m.fee, m.feeRecipient, m.validUntil, ['0x', s, []]],
-  RelayFee: (m, s) => [m.from, m.target, m.callDataHash, m.payee, m.value, m.validUntil, s],
-  UARelayFee: (m, s) => [m.from, m.target, m.callDataHash, m.payee, m.value, m.validUntil, ['0x', s, []]],
-  WrapOrder: (m, s, d) => [d.domain.verifyingContract, wrapTuple(m), s],
+  UAReceiverFee: (m, s, d) => [transferTuple(m.payment), ['0x', d.extra.payerSig, []], m.fee, m.feeRecipient, m.validUntil, ['0x', s, []],
+    metaTuple(d.extra.meta)],
+  UARelayFee: (m, s) => [m.from, m.target, m.callDataHash, m.payee, m.value, m.batch, m.nonce, m.validUntil, ['0x', s, []]],
+  UAPayWithTax: (m, s, d) => [transferTuple(m.payment), m.taxMode, m.tax, ['0x', s, []], metaTuple(d.extra.meta)],
   UAWrapOrder: (m, s, d) => [d.domain.verifyingContract, wrapTuple(m), ['0x', s, []]],
-  CancelOrder: (m, s) => [tradeTuple(m.order), s],
   CancelUAOrder: (m, s) => [tradeTuple(m.order), ['0x', s, []]],
-  CancelWrapOrder: (m, s) => [tradeTuple(asTrade(m.order)), s],
   CancelUAWrapOrder: (m, s) => [tradeTuple(asTrade(m.order)), ['0x', s, []]],
   CancelDexOrder: (m, s) => [[[m.order.sellToken, tradeTuple(m.order.order)]], [s]],
-  UACancelNonce: (m, s) => [m.ua, m.batch, m.validUntil, ['0x', s, []]],
   ZetherRollOver: (m, s) => [m.ua, m.expectedPendingSeq, m.validUntilBlock, ['0x', s, []]],
   ZetherSetRollOverMode: (m, s) => [m.ua, m.mode, m.validUntilBlock, ['0x', s, []]],
 };
@@ -59,12 +57,15 @@ const ACCOUNT = new Set(['AddKey', 'RemoveKey', 'RotateKey', 'SetGuardian', 'Can
 export function expectedCall(name, r, d) {
   const m = r.message;
   if (OTHER[name]) return OTHER[name](m, d.signature, d);
-  const base = name.replace(/^UA/, '');
-  const ua = name !== base;
-  const own = CONF[base] ? CONF[base](m, d.extra) : r.types[name].slice(1, -7).map((f) => m[f.name]);
+  // group 3g: a per-kind row (`UAPqzRollOver`) names its primary type
+  const primary = r.primaryType ?? name;
+  const base = primary.replace(/^UA/, '');
+  const ua = primary !== base;
+  const own = CONF[base] ? CONF[base](m, d.extra) : r.types[primary].slice(1, -7).map((f) => m[f.name]);
   const account = ACCOUNT.has(name) || (name === 'Execute' && d.domain.name === 'SCaaS SmartKeyAccount');
-  const sig = account ? ['0', [], d.signature] : ua && name !== 'UAShield' ? ['0x', d.signature, []] : d.signature;
-  return [envelope(m), ...own, sig];
+  // ua-mtx-merge (R47): every merged entry takes `UASig`, `mtxShield` too; a native id's is `{0x, signature, []}` (R17)
+  const sig = account ? ['0', [], d.signature] : ua ? ['0x', d.signature, []] : d.signature;
+  return [envelope(m), ...own, sig, ...(name === 'UAPayUnderMandate' ? [metaTuple(d.extra.meta)] : [])];
 }
 
 /** Decoded values and `expectedCall` on one form: lower-case hex, decimal strings. */

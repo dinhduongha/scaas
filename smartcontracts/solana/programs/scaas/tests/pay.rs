@@ -301,9 +301,9 @@ fn initialize_is_upgrade_authority_only_and_once() {
 
 // ------------------------------------------------------------------ CTR-MTX-26: relay_pay_meta
 
-/// `smartcontracts/vectors/metatx/paymeta.json`, shared with the EVM forge test, `clientkeys` and every family.
+/// `smartcontracts/vectors/metatx/legacy/ua-mtx-merge/paymeta.json`, shared with the EVM forge test, `clientkeys` and every family.
 fn meta_rows() -> Vec<serde_json::Value> {
-    serde_json::from_str(include_str!("../../../../vectors/metatx/paymeta.json")).unwrap()
+    serde_json::from_str(include_str!("../../../../vectors/metatx/legacy/ua-mtx-merge/paymeta.json")).unwrap()
 }
 
 fn h(v: &serde_json::Value) -> Vec<u8> {

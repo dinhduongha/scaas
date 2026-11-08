@@ -4,6 +4,10 @@
 //!
 //! Relayed flow: build `m` without data → `binding = envelope_binding(m)` → prove with
 //! `Binding::Relayed(binding)` → `m.data = transfer_call(...)` → sign `digest(m)`.
+//!
+//! ua-mtx-merge (CTR-MTX-30, R35, CTR-ZTH-51): a proof relayed through a merged entry (`mtx<Op>(UAEnvelope, …, UASig)`) or the
+//! generic `mtxExecute(UAMetaTransaction, UASig)` binds [`ua_envelope_binding`] (`SCAAS-ZETHER-UA-ENVELOPE-V1`, `from` a
+//! `bytes32` id: a padded native address or a derived UA); [`envelope_binding`] is `executeMetaTransaction`'s only.
 
 use crate::abi::{self, Tok};
 use crate::curve::keccak256;
@@ -39,9 +43,7 @@ fn u128w(v: u128) -> [u8; 32] {
 impl MetaTx {
     /// `MetaTxLib.canon`: unbound relayer / feeRecipient hash as `address(0)`.
     pub fn canon(&self) -> ([u8; 20], [u8; 20]) {
-        let r = if self.mode & MODE_RESTRICT_RELAYER != 0 { self.relayer } else { [0; 20] };
-        let f = if self.mode & MODE_RESTRICT_FEE_RECIPIENT != 0 { self.fee_recipient } else { [0; 20] };
-        (r, f)
+        canon(self.mode, &self.relayer, &self.fee_recipient)
     }
 
     pub fn struct_hash(&self) -> [u8; 32] {
@@ -62,6 +64,50 @@ impl MetaTx {
             .concat(),
         )
     }
+}
+
+/// `MetaTxLib.UAMetaTransaction` (CTR-UA-19/26): [`MetaTx`] with `from` the subject's `bytes32` id.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UAMetaTx {
+    pub from: [u8; 32],
+    pub data: Vec<u8>,
+    pub batch: [u8; 32],
+    pub nonce: u64,
+    pub valid_until: u64,
+    pub mode: u32,
+    pub relayer: [u8; 20],
+    pub fee: u128,
+    pub fee_recipient: [u8; 20],
+}
+
+pub const UA_METATX_TYPE: &str = "UAMetaTransaction(bytes32 from,bytes data,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)";
+
+impl UAMetaTx {
+    /// `MetaTxLib.hashStruct(UAMetaTransaction)`: unbound relayer / feeRecipient hash as `address(0)`.
+    pub fn struct_hash(&self) -> [u8; 32] {
+        let (r, f) = canon(self.mode, &self.relayer, &self.fee_recipient);
+        keccak256(
+            &[
+                keccak256(UA_METATX_TYPE.as_bytes()),
+                self.from,
+                keccak256(&self.data),
+                self.batch,
+                abi::u256(self.nonce),
+                abi::u256(self.valid_until),
+                abi::u256(self.mode as u64),
+                abi::addr(&r),
+                u128w(self.fee),
+                abi::addr(&f),
+            ]
+            .concat(),
+        )
+    }
+}
+
+fn canon(mode: u32, relayer: &[u8; 20], fee_recipient: &[u8; 20]) -> ([u8; 20], [u8; 20]) {
+    let r = if mode & MODE_RESTRICT_RELAYER != 0 { *relayer } else { [0; 20] };
+    let f = if mode & MODE_RESTRICT_FEE_RECIPIENT != 0 { *fee_recipient } else { [0; 20] };
+    (r, f)
 }
 
 /// The token's salted EIP-712 domain (CTR-MTX-02, CTR-GEN-05).
@@ -87,7 +133,38 @@ pub fn digest(chain_id: u64, chain_uid: &[u8; 32], token: &[u8; 20], m: &MetaTx)
     keccak256(&b)
 }
 
-/// `envelopeBinding` (CTR-ZTH-06) — every envelope field except `data`, plus `chainUid`.
+/// `mtxDigest(UAMetaTransaction)`: what the subject signs for the generic merged entry `mtxExecute(m, auth)`.
+pub fn ua_digest(chain_id: u64, chain_uid: &[u8; 32], token: &[u8; 20], m: &UAMetaTx) -> [u8; 32] {
+    let mut b = vec![0x19, 0x01];
+    b.extend(domain_separator(chain_id, chain_uid, token));
+    b.extend(m.struct_hash());
+    keccak256(&b)
+}
+
+/// The token's `envelopeBinding(UAMetaTransaction)` view (CTR-ZTH-51, R35): tag `SCAAS-ZETHER-UA-ENVELOPE-V1`, `from` the
+/// `bytes32` id, every other envelope field except `data`, plus `chainUid`. Every merged entry and `mtxExecute`.
+pub fn ua_envelope_binding(chain_id: u64, chain_uid: &[u8; 32], token: &[u8; 20], m: &UAMetaTx) -> [u8; 32] {
+    let (r, f) = canon(m.mode, &m.relayer, &m.fee_recipient);
+    keccak256(
+        &[
+            keccak256(b"SCAAS-ZETHER-UA-ENVELOPE-V1"),
+            abi::u256(chain_id),
+            *chain_uid,
+            abi::addr(token),
+            m.from,
+            m.batch,
+            abi::u256(m.nonce),
+            abi::u256(m.valid_until),
+            abi::u256(m.mode as u64),
+            abi::addr(&r),
+            u128w(m.fee),
+            abi::addr(&f),
+        ]
+        .concat(),
+    )
+}
+
+/// `executeMetaTransaction`'s binding (CTR-ZTH-06, the address tag) — every envelope field except `data`, plus `chainUid`.
 pub fn envelope_binding(chain_id: u64, chain_uid: &[u8; 32], token: &[u8; 20], m: &MetaTx) -> [u8; 32] {
     let (r, f) = m.canon();
     keccak256(
@@ -185,8 +262,50 @@ fn call(sig: &str, toks: &[Tok]) -> Vec<u8> {
     d
 }
 
-/// The signed fields of a named entry around the op (`MetaTxLib.Envelope`): `from, batch, nonce, validUntil, mode, relayer, fee, feeRecipient`.
-pub const ENV_TYPE: &str = "(address,uint256,uint256,uint256,uint32,address,uint256,address)";
+/// The signed fields of a merged entry around the op (`MetaTxLib.UAEnvelope`): `bytes32 from, batch, nonce, validUntil, mode,
+/// relayer, fee, feeRecipient`.
+pub const UA_ENV_TYPE: &str = "(bytes32,uint256,uint256,uint256,uint32,address,uint256,address)";
+
+/// `IUARegistry.UASig`: `(bytes keyData, bytes signature, MemberSig[] members)`, `MemberSig (uint16 index, InnerSig[] members,
+/// bytes sig)`, `InnerSig (uint16 index, bytes sig)`.
+pub const UA_SIG_TYPE: &str = "(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])";
+
+/// An `msig` slot's inner signature (CTR-UA-33).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct InnerSig {
+    pub index: u16,
+    pub sig: Vec<u8>,
+}
+
+/// One `msig` slot: a signing member's `sig`, or a nested `msig` member's `members`.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct MemberSig {
+    pub index: u16,
+    pub members: Vec<InnerSig>,
+    pub sig: Vec<u8>,
+}
+
+/// A UA's signature, explicit (TS-D12): a native id only `signature`; a derived single key `keyData` (empty for the stored
+/// kinds) + `signature`; an `msig` only `members`.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct UASig {
+    pub key_data: Vec<u8>,
+    pub signature: Vec<u8>,
+    pub members: Vec<MemberSig>,
+}
+
+/// `UASig` as one dynamic tuple token. An array of dynamic tuples is its length then the tuples `encode`d as one (offsets
+/// relative to the first element).
+pub fn ua_sig_tok(s: &UASig) -> Tok {
+    let tuple = |t: &[Tok]| Tok::Tuple(abi::encode(t));
+    let inner = |i: &InnerSig| tuple(&[Tok::Word(abi::u256(i.index.into())), Tok::Bytes(i.sig.clone())]);
+    let member = |m: &MemberSig| {
+        let inners: Vec<Tok> = m.members.iter().map(inner).collect();
+        tuple(&[Tok::Word(abi::u256(m.index.into())), Tok::Array(inners.len() as u64, abi::encode(&inners)), Tok::Bytes(m.sig.clone())])
+    };
+    let members: Vec<Tok> = s.members.iter().map(member).collect();
+    tuple(&[Tok::Bytes(s.key_data.clone()), Tok::Bytes(s.signature.clone()), Tok::Array(members.len() as u64, abi::encode(&members))])
+}
 
 /// Calldata of `mtxConfidentialTransferSingle(ZetherSingle t, bytes proof)` from the prover's packed `payload`
 /// (`head ‖ salt16 ‖ 6 points`): the direct call and, unchanged, the envelope's `data`. The proof alone authorizes the
@@ -197,12 +316,13 @@ pub fn transfer_single_call(payload: &[u8], proof: &[u8], beneficiary: &[u8; 32]
     call(&format!("mtxConfidentialTransferSingle({},bytes)", single_type()), &toks)
 }
 
-/// `mtxConfidentialTransferSingle(Envelope e, ZetherSingle t, bytes proof, bytes sig)`: the named relayed entry (TS-D14).
-pub fn named_transfer_single_call(env: &[Tok], payload: &[u8], proof: &[u8], beneficiary: &[u8; 32], sig: &[u8]) -> Vec<u8> {
+/// `mtxConfidentialTransferSingle(UAEnvelope e, ZetherSingle t, bytes proof, UASig auth)`: the merged relayed entry (R35);
+/// `env` the eight `UAEnvelope` words.
+pub fn named_transfer_single_call(env: &[Tok], payload: &[u8], proof: &[u8], beneficiary: &[u8; 32], auth: &UASig) -> Vec<u8> {
     let mut toks = env.to_vec();
     toks.extend(single_toks(payload, beneficiary));
-    toks.extend([Tok::Bytes(proof.to_vec()), Tok::Bytes(sig.to_vec())]);
-    call(&format!("mtxConfidentialTransferSingle({ENV_TYPE},{},bytes,bytes)", single_type()), &toks)
+    toks.extend([Tok::Bytes(proof.to_vec()), ua_sig_tok(auth)]);
+    call(&format!("mtxConfidentialTransferSingle({UA_ENV_TYPE},{},bytes,{UA_SIG_TYPE})", single_type()), &toks)
 }
 
 /// Calldata of `mtxConfidentialTransfer` / `…Compact` (`name`) `(ZetherMulti t, bytes proof)` from the packed `payload`.
@@ -210,11 +330,11 @@ pub fn transfer_multi_call(name: &str, payload: &[u8], proof: &[u8], beneficiary
     call(&format!("{name}({},bytes)", multi_type()), &[multi_tok(payload, beneficiary), Tok::Bytes(proof.to_vec())])
 }
 
-/// `{name}(Envelope e, ZetherMulti t, bytes proof, bytes sig)`.
-pub fn named_transfer_multi_call(name: &str, env: &[Tok], payload: &[u8], proof: &[u8], beneficiary: &[u8; 32], sig: &[u8]) -> Vec<u8> {
+/// `{name}(UAEnvelope e, ZetherMulti t, bytes proof, UASig auth)`.
+pub fn named_transfer_multi_call(name: &str, env: &[Tok], payload: &[u8], proof: &[u8], beneficiary: &[u8; 32], auth: &UASig) -> Vec<u8> {
     let mut toks = env.to_vec();
-    toks.extend([multi_tok(payload, beneficiary), Tok::Bytes(proof.to_vec()), Tok::Bytes(sig.to_vec())]);
-    call(&format!("{name}({ENV_TYPE},{},bytes,bytes)", multi_type()), &toks)
+    toks.extend([multi_tok(payload, beneficiary), Tok::Bytes(proof.to_vec()), ua_sig_tok(auth)]);
+    call(&format!("{name}({UA_ENV_TYPE},{},bytes,{UA_SIG_TYPE})", multi_type()), &toks)
 }
 
 /// `mtxUnshield(ZetherBurn b, uint256 amount, bytes32 recipient, bytes proof)` from the packed `payload` (`head ‖ Y_f`),
@@ -225,20 +345,20 @@ pub fn unshield_call(payload: &[u8], proof: &[u8], beneficiary: &[u8; 32], to: &
     call(&format!("mtxUnshield({},uint256,bytes32,bytes)", burn_type()), &toks)
 }
 
-/// `mtxUnshield(Envelope e, ZetherBurn b, uint256 amount, bytes32 recipient, bytes proof, bytes sig)`.
-pub fn named_unshield_call(env: &[Tok], payload: &[u8], proof: &[u8], beneficiary: &[u8; 32], to: &[u8; 32], amount: u64, sig: &[u8]) -> Vec<u8> {
+/// `mtxUnshield(UAEnvelope e, ZetherBurn b, uint256 amount, bytes32 recipient, bytes proof, UASig auth)`.
+pub fn named_unshield_call(env: &[Tok], payload: &[u8], proof: &[u8], beneficiary: &[u8; 32], to: &[u8; 32], amount: u64, auth: &UASig) -> Vec<u8> {
     let mut toks = env.to_vec();
     toks.extend(burn_toks(payload, beneficiary));
-    toks.extend([Tok::Word(abi::u256(amount)), Tok::Word(*to), Tok::Bytes(proof.to_vec()), Tok::Bytes(sig.to_vec())]);
-    call(&format!("mtxUnshield({ENV_TYPE},{},uint256,bytes32,bytes,bytes)", burn_type()), &toks)
+    toks.extend([Tok::Word(abi::u256(amount)), Tok::Word(*to), Tok::Bytes(proof.to_vec()), ua_sig_tok(auth)]);
+    call(&format!("mtxUnshield({UA_ENV_TYPE},{},uint256,bytes32,bytes,{UA_SIG_TYPE})", burn_type()), &toks)
 }
 
-/// `mtxUnshieldUnwrap(Envelope e, ZetherBurn b, Unwrap x, bytes proof, bytes sig)`, `Unwrap {address underlying; bytes32 recipient;
-/// uint256 amount; uint256 minOut}` (the proof binds it through `unwrap_binding`).
-pub fn named_unshield_unwrap_call(env: &[Tok], payload: &[u8], proof: &[u8], beneficiary: &[u8; 32], x: [[u8; 32]; 4], sig: &[u8]) -> Vec<u8> {
+/// `mtxUnshieldUnwrap(UAEnvelope e, ZetherBurn b, Unwrap x, bytes proof, UASig auth)`, `Unwrap {address underlying; bytes32
+/// recipient; uint256 amount; uint256 minOut}` (a direct call's proof binds it through `unwrap_binding`).
+pub fn named_unshield_unwrap_call(env: &[Tok], payload: &[u8], proof: &[u8], beneficiary: &[u8; 32], x: [[u8; 32]; 4], auth: &UASig) -> Vec<u8> {
     let mut toks = env.to_vec();
     toks.extend(burn_toks(payload, beneficiary));
     toks.extend(x.map(Tok::Word));
-    toks.extend([Tok::Bytes(proof.to_vec()), Tok::Bytes(sig.to_vec())]);
-    call(&format!("mtxUnshieldUnwrap({ENV_TYPE},{},(address,bytes32,uint256,uint256),bytes,bytes)", burn_type()), &toks)
+    toks.extend([Tok::Bytes(proof.to_vec()), ua_sig_tok(auth)]);
+    call(&format!("mtxUnshieldUnwrap({UA_ENV_TYPE},{},(address,bytes32,uint256,uint256),bytes,{UA_SIG_TYPE})", burn_type()), &toks)
 }

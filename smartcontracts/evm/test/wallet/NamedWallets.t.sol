@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 import {Hashes} from "@openzeppelin/contracts/utils/cryptography/Hashes.sol";
 import {UID_} from "../v2/helpers/V2Fixture.sol";
 import {MandateFixture} from "./MandateWallet.t.sol";
 import {WebAuthnSoft} from "../account/SmartKeyAccount.t.sol";
 import {VM, a, n, h, walletDigest} from "../metatx/NamedEntry.t.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
+import {IUALedger} from "../../src/metatx/IUALedger.sol";
+import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {MandateWallet} from "../../src/wallet/MandateWallet.sol";
 import {HederaMandateWallet} from "../../src/hedera/HederaMandateWallet.sol";
@@ -17,14 +20,16 @@ import {Mock1271Wallet} from "../helpers/WalletMocks.sol";
 
 // The fields of each struct before `E`, for the JSON a wallet is handed.
 string constant F_FROM = '{"name":"from","type":"address"}';
+string constant F_UA_FROM = '{"name":"from","type":"bytes32"}';
 string constant F_TOKEN = '{"name":"token","type":"address"}';
 string constant F_EPOCH = '{"name":"epoch","type":"uint64"}';
-string constant SET_PAYEE = string.concat(F_FROM, ",", F_TOKEN, ',{"name":"payee","type":"address"},{"name":"allowed","type":"bool"}');
-string constant REVOKE_MANDATE = string.concat(F_FROM, ",", F_TOKEN);
-string constant PAY = string.concat(F_FROM, ",", F_TOKEN, ',{"name":"payee","type":"address"},{"name":"amount","type":"uint256"},'
+string constant SET_PAYEE = string.concat(F_UA_FROM, ",", F_TOKEN, ',{"name":"payee","type":"bytes32"},{"name":"allowed","type":"bool"}');
+string constant REVOKE_MANDATE = string.concat(F_UA_FROM, ",", F_TOKEN);
+string constant PAY = string.concat(F_UA_FROM, ",", F_TOKEN, ',{"name":"payee","type":"bytes32"},{"name":"amount","type":"uint256"},'
     '{"name":"entryRef","type":"bytes32"},', F_EPOCH);
-string constant DELEGATE_REVOKE = string.concat(F_FROM, ",", F_TOKEN, ",", F_EPOCH);
+string constant DELEGATE_REVOKE = string.concat(F_UA_FROM, ",", F_TOKEN, ",", F_EPOCH);
 string constant EXECUTE = string.concat(F_FROM, ',{"name":"target","type":"address"},{"name":"value","type":"uint256"},{"name":"data","type":"bytes"}');
+string constant UA_EXECUTE_FIELDS = string.concat(F_UA_FROM, ',{"name":"target","type":"address"},{"name":"value","type":"uint256"},{"name":"data","type":"bytes"}');
 string constant KEY = '{"name":"kind","type":"uint8"},{"name":"x","type":"bytes32"},{"name":"y","type":"bytes32"},'
     '{"name":"rpIdHash","type":"bytes32"},{"name":"originHash","type":"bytes32"}';
 string constant ADD_KEY = string.concat(F_FROM, ",", KEY);
@@ -38,136 +43,164 @@ function env(address from, uint256 nonce, uint256 validUntil) pure returns (Meta
     return MetaTxLib.Envelope(from, LANE, nonce, validUntil, 0, address(0), 0, address(0));
 }
 
+/// The mandate wallet's envelope (ua-mtx-merge Q6): `from` an id.
+function uaEnv(address from, uint256 nonce, uint256 validUntil) pure returns (MetaTxLib.UAEnvelope memory) {
+    return MetaTxLib.UAEnvelope(MetaTxLib.pad(from), LANE, nonce, validUntil, 0, address(0), 0, address(0));
+}
+
 /// `E` as signed: an unbound relayer is the canonical zero.
 function tail(MetaTxLib.Envelope memory e) pure returns (string memory) {
-    address r = e.mode & MetaTxLib.MODE_RESTRICT_RELAYER != 0 ? e.relayer : address(0);
-    return string.concat('"batch":', n(e.batch), ',"nonce":', n(e.nonce), ',"validUntil":', n(e.validUntil), ',"mode":', n(e.mode),
-        ',"relayer":', a(r), ',"fee":', n(e.fee), ',"feeRecipient":', a(address(0)));
+    return tail(e.batch, e.nonce, e.validUntil, e.mode, e.relayer, e.fee);
 }
 
-function setPayeeDigest(address w, MetaTxLib.Envelope memory e, address token, address payee, bool allowed) view returns (bytes32) {
-    string memory m = string.concat('"from":', a(e.from), ',"token":', a(token), ',"payee":', a(payee));
+function tail(MetaTxLib.UAEnvelope memory e) pure returns (string memory) {
+    return tail(e.batch, e.nonce, e.validUntil, e.mode, e.relayer, e.fee);
+}
+
+function tail(uint256 batch, uint256 nonce, uint256 validUntil, uint32 mode, address relayer, uint256 fee)
+    pure returns (string memory)
+{
+    address r = mode & MetaTxLib.MODE_RESTRICT_RELAYER != 0 ? relayer : address(0);
+    return string.concat('"batch":', n(batch), ',"nonce":', n(nonce), ',"validUntil":', n(validUntil), ',"mode":', n(mode),
+        ',"relayer":', a(r), ',"fee":', n(fee), ',"feeRecipient":', a(address(0)));
+}
+
+function setPayeeDigest(address w, MetaTxLib.UAEnvelope memory e, address token, address payee, bool allowed) view returns (bytes32) {
+    string memory m = string.concat('"from":', h(e.from), ',"token":', a(token), ',"payee":', h(MetaTxLib.pad(payee)));
     m = string.concat(m, ',"allowed":', allowed ? "true" : "false", ",", tail(e));
-    return walletDigest(w, "SetPayee", SET_PAYEE, m);
+    return walletDigest(w, "UASetPayee", SET_PAYEE, m);
 }
 
-function revokeMandateDigest(address w, MetaTxLib.Envelope memory e, address token) view returns (bytes32) {
-    string memory m = string.concat('"from":', a(e.from), ',"token":', a(token), ",", tail(e));
-    return walletDigest(w, "RevokeMandate", REVOKE_MANDATE, m);
+function revokeMandateDigest(address w, MetaTxLib.UAEnvelope memory e, address token) view returns (bytes32) {
+    string memory m = string.concat('"from":', h(e.from), ',"token":', a(token), ",", tail(e));
+    return walletDigest(w, "UARevokeMandate", REVOKE_MANDATE, m);
 }
 
-function payDigest(address w, MetaTxLib.Envelope memory e, address token, address payee, uint256 amount, bytes32 ref, uint64 ep)
+function payDigest(address w, MetaTxLib.UAEnvelope memory e, address token, address payee, uint256 amount, bytes32 ref, uint64 ep)
     view returns (bytes32)
 {
-    string memory m = string.concat('"from":', a(e.from), ',"token":', a(token), ',"payee":', a(payee));
-    m = string.concat(m, ',"amount":', n(amount), ',"entryRef":', h(ref));
+    string memory m = string.concat('"from":', h(e.from), ',"token":', a(token), ',"payee":', h(MetaTxLib.pad(payee)));
+    m = string.concat(m, ',"amount":', n(amount), ',"entryRef":', h(PayMetaKit.ref(ref))); // pay-meta-tax T37: a commitment
     m = string.concat(m, ',"epoch":', n(ep), ",", tail(e));
-    return walletDigest(w, "PayUnderMandate", PAY, m);
+    return walletDigest(w, "UAPayUnderMandate", PAY, m);
 }
 
-function delegateRevokeDigest(address w, MetaTxLib.Envelope memory e, address token, uint64 ep) view returns (bytes32) {
-    string memory m = string.concat('"from":', a(e.from), ',"token":', a(token), ',"epoch":', n(ep), ",", tail(e));
-    return walletDigest(w, "DelegateRevoke", DELEGATE_REVOKE, m);
+function delegateRevokeDigest(address w, MetaTxLib.UAEnvelope memory e, address token, uint64 ep) view returns (bytes32) {
+    string memory m = string.concat('"from":', h(e.from), ',"token":', a(token), ',"epoch":', n(ep), ",", tail(e));
+    return walletDigest(w, "UADelegateRevoke", DELEGATE_REVOKE, m);
 }
 
+/// The account's `Execute` (`SmartKeyAccount`, unchanged).
 function executeDigest(address w, MetaTxLib.Envelope memory e, address target, uint256 value, bytes memory data) view returns (bytes32) {
     string memory m = string.concat('"from":', a(e.from), ',"target":', a(target), ',"value":', n(value));
     m = string.concat(m, ',"data":"', VM.toString(data), '",', tail(e));
     return walletDigest(w, "Execute", EXECUTE, m);
 }
 
-/// typed-signing C5 (TS-D14): the named typed entries of `MandateWallet`, on the digest a wallet computes from the JSON it is
-/// handed; the rows of `typed_ops.json` run in `TypedOps.t.sol`.
+/// The mandate wallet's `UAExecute`.
+function uaExecuteDigest(address w, MetaTxLib.UAEnvelope memory e, address target, uint256 value, bytes memory data)
+    view returns (bytes32)
+{
+    string memory m = string.concat('"from":', h(e.from), ',"target":', a(target), ',"value":', n(value));
+    m = string.concat(m, ',"data":"', VM.toString(data), '",', tail(e));
+    return walletDigest(w, "UAExecute", UA_EXECUTE_FIELDS, m);
+}
+
+/// typed-signing C5 (TS-D14), ua-mtx-merge T3b (Q6): the one signed entry per operation of `MandateWallet`, over its
+/// `UA<Op>` struct, on the digest a wallet computes from the JSON it is handed (`from`, `payee` as `bytes32`); the rows
+/// of `typed_ops.json` run in `TypedOps.t.sol` (T11, MD-7: the six `UA<Op>` rows; the retired address rows have no wallet entry).
 contract NamedMandateEntriesTest is MandateFixture {
-    function _env(address from, uint256 nonce) internal view returns (MetaTxLib.Envelope memory) {
-        return env(from, nonce, block.timestamp + 300);
+    function _env(address from, uint256 nonce) internal view returns (MetaTxLib.UAEnvelope memory) {
+        return uaEnv(from, nonce, block.timestamp + 300);
     }
 
-    function _paySig(MetaTxLib.Envelope memory e, uint256 amount, bytes32 ref, uint64 ep) internal view returns (bytes memory) {
-        return _sig(DELEGATE_PK, payDigest(address(w), e, address(t), npp, amount, ref, ep));
+    function _paySig(MetaTxLib.UAEnvelope memory e, uint256 amount, bytes32 ref, uint64 ep)
+        internal view returns (IUARegistry.UASig memory)
+    {
+        return _ua(DELEGATE_PK, payDigest(address(w), e, address(t), npp, amount, ref, ep));
     }
 
-    function _delegateRevokeSig(MetaTxLib.Envelope memory e, uint64 ep) internal view returns (bytes memory) {
-        return _sig(DELEGATE_PK, delegateRevokeDigest(address(w), e, address(t), ep));
+    function _delegateRevokeSig(MetaTxLib.UAEnvelope memory e, uint64 ep) internal view returns (IUARegistry.UASig memory) {
+        return _ua(DELEGATE_PK, delegateRevokeDigest(address(w), e, address(t), ep));
     }
 
     function _bumpEpochTwice() internal {
         vm.startPrank(owner);
         w.revoke(address(t));
-        w.setMandate(address(t), delegate, 1_000, 2_500, 1 days, uint64(block.timestamp + 30 days));
+        w.setMandate(address(t), _id(delegate), 1_000, 2_500, 1 days, uint64(block.timestamp + 30 days));
         vm.stopPrank();
     }
 
     function test_setPayeeTyped() public {
-        MetaTxLib.Envelope memory e = _env(owner, 0);
-        bytes memory sig = _sig(OWNER_PK, setPayeeDigest(address(w), e, address(t), stranger, true));
+        MetaTxLib.UAEnvelope memory e = _env(owner, 0);
+        IUARegistry.UASig memory sig = _ua(OWNER_PK, setPayeeDigest(address(w), e, address(t), stranger, true));
         vm.prank(relayer);
-        w.mtxSetPayee(e, address(t), stranger, true, sig);
-        assertTrue(w.payeeAllowed(address(t), stranger));
-        assertEq(w.mtxNonce(owner, LANE), 1);
+        w.mtxSetPayee(e, address(t), _id(stranger), true, sig);
+        assertTrue(w.payeeAllowed(address(t), _id(stranger)));
+        assertEq(w.mtxNonce(_id(owner), LANE), 1);
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
-        w.mtxSetPayee(e, address(t), stranger, true, sig);
+        w.mtxSetPayee(e, address(t), _id(stranger), true, sig);
 
         e.nonce = 1;
-        sig = _sig(OWNER_PK, setPayeeDigest(address(w), e, address(t), stranger, true));
+        sig = _ua(OWNER_PK, setPayeeDigest(address(w), e, address(t), stranger, true));
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector); // `allowed` is signed
-        w.mtxSetPayee(e, address(t), stranger, false, sig);
+        w.mtxSetPayee(e, address(t), _id(stranger), false, sig);
 
         // a valid signature of somebody else: the op reads the signer
         e = _env(delegate, 0);
-        sig = _sig(DELEGATE_PK, setPayeeDigest(address(w), e, address(t), stranger, false));
+        sig = _ua(DELEGATE_PK, setPayeeDigest(address(w), e, address(t), stranger, false));
         vm.expectRevert(MandateWallet.NotOwner.selector);
-        w.mtxSetPayee(e, address(t), stranger, false, sig);
+        w.mtxSetPayee(e, address(t), _id(stranger), false, sig);
     }
 
     function test_revokeMandateTyped() public {
-        MetaTxLib.Envelope memory e = _env(delegate, 0);
-        bytes memory sig = _sig(DELEGATE_PK, revokeMandateDigest(address(w), e, address(t)));
+        MetaTxLib.UAEnvelope memory e = _env(delegate, 0);
+        IUARegistry.UASig memory sig = _ua(DELEGATE_PK, revokeMandateDigest(address(w), e, address(t)));
         vm.expectRevert(MandateWallet.NotOwner.selector);
         w.mtxRevokeMandate(e, address(t), sig);
 
         e = _env(owner, 0);
-        sig = _sig(OWNER_PK, revokeMandateDigest(address(w), e, address(t)));
+        sig = _ua(OWNER_PK, revokeMandateDigest(address(w), e, address(t)));
         vm.expectEmit(true, true, true, true, address(w));
-        emit MandateWallet.MandateRevoked(address(t), owner);
+        emit MandateWallet.MandateRevoked(address(t), _id(owner));
         vm.prank(relayer);
         w.mtxRevokeMandate(e, address(t), sig);
         assertEq(w.epoch(address(t)), 2);
-        (address d,,,,,,) = w.mandates(address(t));
-        assertEq(d, address(0));
+        (bytes32 d,,,,,,) = w.mandates(address(t));
+        assertEq(d, bytes32(0));
     }
 
     function test_payUnderMandateTyped() public {
-        MetaTxLib.Envelope memory e = _env(delegate, 0);
-        bytes memory sig = _paySig(e, 700, "inv", 1);
+        MetaTxLib.UAEnvelope memory e = _env(delegate, 0);
+        IUARegistry.UASig memory sig = _paySig(e, 700, "inv", 1);
         vm.prank(relayer);
-        w.mtxPayUnderMandate(e, address(t), npp, 700, "inv", 1, sig);
+        w.mtxPayUnderMandate(e, address(t), _id(npp), 700, _ref("inv"), 1, sig, _meta("inv"));
         assertEq(t.balanceOf(npp), 700);
-        assertTrue(w.refUsed("inv"));
-        assertEq(w.mtxNonce(delegate, LANE), 1);
+        assertTrue(w.refUsed(_ref("inv")));
+        assertEq(w.mtxNonce(_id(delegate), LANE), 1);
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
-        w.mtxPayUnderMandate(e, address(t), npp, 700, "inv", 1, sig);
+        w.mtxPayUnderMandate(e, address(t), _id(npp), 700, _ref("inv"), 1, sig, _meta("inv"));
 
         e.nonce = 1;
         sig = _paySig(e, 10, "b", 1);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
-        w.mtxPayUnderMandate(e, address(t), npp, 11, "b", 1, sig);
+        w.mtxPayUnderMandate(e, address(t), _id(npp), 11, _ref("b"), 1, sig, _meta("b"));
         e = _env(owner, 0); // a valid signature of the wrong party
-        sig = _sig(OWNER_PK, payDigest(address(w), e, address(t), npp, 10, "b", 1));
+        sig = _ua(OWNER_PK, payDigest(address(w), e, address(t), npp, 10, "b", 1));
         vm.expectRevert(MandateWallet.NotDelegate.selector);
-        w.mtxPayUnderMandate(e, address(t), npp, 10, "b", 1, sig);
+        w.mtxPayUnderMandate(e, address(t), _id(npp), 10, _ref("b"), 1, sig, _meta("b"));
     }
 
     function test_delegateRevokeTyped() public {
-        MetaTxLib.Envelope memory e = _env(owner, 0);
-        bytes memory sig = _sig(OWNER_PK, delegateRevokeDigest(address(w), e, address(t), 1));
+        MetaTxLib.UAEnvelope memory e = _env(owner, 0);
+        IUARegistry.UASig memory sig = _ua(OWNER_PK, delegateRevokeDigest(address(w), e, address(t), 1));
         vm.expectRevert(MandateWallet.NotDelegate.selector);
         w.mtxDelegateRevoke(e, address(t), 1, sig);
 
         e = _env(delegate, 0);
         sig = _delegateRevokeSig(e, 1);
         vm.expectEmit(true, true, true, true, address(w));
-        emit MandateWallet.MandateRevoked(address(t), delegate);
+        emit MandateWallet.MandateRevoked(address(t), _id(delegate));
         vm.prank(relayer);
         w.mtxDelegateRevoke(e, address(t), 1, sig);
         assertEq(w.epoch(address(t)), 2);
@@ -175,62 +208,62 @@ contract NamedMandateEntriesTest is MandateFixture {
 
     /// CTR-ACC-07: a delegate's signature names the epoch, and no relayer can restamp it.
     function test_mandateEpochBound() public {
-        MetaTxLib.Envelope memory p = _env(delegate, 0);
-        bytes memory pay = _paySig(p, 10, "old", 1);
-        MetaTxLib.Envelope memory r = _env(delegate, 0);
+        MetaTxLib.UAEnvelope memory p = _env(delegate, 0);
+        IUARegistry.UASig memory pay = _paySig(p, 10, "old", 1);
+        MetaTxLib.UAEnvelope memory r = _env(delegate, 0);
         r.batch = LANE + 1;
-        bytes memory rev = _delegateRevokeSig(r, 1);
+        IUARegistry.UASig memory rev = _delegateRevokeSig(r, 1);
         _bumpEpochTwice();
         assertEq(w.epoch(address(t)), 3);
 
         vm.expectRevert(abi.encodeWithSelector(MandateWallet.StaleEpoch.selector, 3, 1));
-        w.mtxPayUnderMandate(p, address(t), npp, 10, "old", 1, pay);
+        w.mtxPayUnderMandate(p, address(t), _id(npp), 10, _ref("old"), 1, pay, _meta("old"));
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
-        w.mtxPayUnderMandate(p, address(t), npp, 10, "old", 3, pay);
+        w.mtxPayUnderMandate(p, address(t), _id(npp), 10, _ref("old"), 3, pay, _meta("old"));
         vm.expectRevert(abi.encodeWithSelector(MandateWallet.StaleEpoch.selector, 3, 1));
         w.mtxDelegateRevoke(r, address(t), 1, rev);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         w.mtxDelegateRevoke(r, address(t), 3, rev);
-        bytes memory ahead = _paySig(p, 10, "old", 4);
+        IUARegistry.UASig memory ahead = _paySig(p, 10, "old", 4);
         vm.expectRevert(abi.encodeWithSelector(MandateWallet.StaleEpoch.selector, 3, 4));
-        w.mtxPayUnderMandate(p, address(t), npp, 10, "old", 4, ahead);
+        w.mtxPayUnderMandate(p, address(t), _id(npp), 10, _ref("old"), 4, ahead, _meta("old"));
 
         pay = _paySig(p, 10, "old", 3);
-        w.mtxPayUnderMandate(p, address(t), npp, 10, "old", 3, pay);
+        w.mtxPayUnderMandate(p, address(t), _id(npp), 10, _ref("old"), 3, pay, _meta("old"));
         assertEq(t.balanceOf(npp), 10);
-        (address d,,,,,,) = w.mandates(address(t));
-        assertEq(d, delegate, "no old revoke took it");
+        (bytes32 d,,,,,,) = w.mandates(address(t));
+        assertEq(d, _id(delegate), "no old revoke took it");
     }
 
     /// The named entries' lanes float: the signer picks `batch`, and a signature cannot move lanes since `batch` is signed.
     /// `refUsed` and `epoch` stop a new signature by the delegate for the same payment or revoke, here or on the generic path.
     function test_mandateLanesFloatRefAndEpochGuard() public {
-        MetaTxLib.Envelope memory e = _env(delegate, 0);
-        w.mtxPayUnderMandate(e, address(t), npp, 10, "once", 1, _paySig(e, 10, "once", 1));
+        MetaTxLib.UAEnvelope memory e = _env(delegate, 0);
+        w.mtxPayUnderMandate(e, address(t), _id(npp), 10, _ref("once"), 1, _paySig(e, 10, "once", 1), _meta("once"));
         e.batch = 99;
-        bytes memory again = _paySig(e, 10, "once", 1);
-        vm.expectRevert(abi.encodeWithSelector(MandateWallet.RefAlreadyPaid.selector, bytes32("once")));
-        w.mtxPayUnderMandate(e, address(t), npp, 10, "once", 1, again);
-        MetaTxLib.MetaTransaction memory m = _payM(npp, 10, "once"); // the derived lane of the generic path
-        bytes memory generic = _sig(DELEGATE_PK, w.mtxDigest(m));
-        vm.expectRevert(abi.encodeWithSelector(MandateWallet.RefAlreadyPaid.selector, bytes32("once")));
+        IUARegistry.UASig memory again = _paySig(e, 10, "once", 1);
+        vm.expectRevert(abi.encodeWithSelector(MandateWallet.RefAlreadyPaid.selector, _ref("once")));
+        w.mtxPayUnderMandate(e, address(t), _id(npp), 10, _ref("once"), 1, again, _meta("once"));
+        MetaTxLib.UAMetaTransaction memory m = _payM(npp, 10, "once"); // the pay lane, on the generic path
+        IUARegistry.UASig memory generic = _ua(DELEGATE_PK, w.mtxDigest(m));
+        vm.expectRevert(abi.encodeWithSelector(MandateWallet.RefAlreadyPaid.selector, _ref("once")));
         w.mtxExecute(m, generic);
         assertEq(t.balanceOf(npp), 10);
 
         e = _env(delegate, 1);
         w.mtxDelegateRevoke(e, address(t), 1, _delegateRevokeSig(e, 1));
         vm.prank(owner);
-        w.setMandate(address(t), delegate, 1_000, 2_500, 1 days, uint64(block.timestamp + 30 days)); // the same delegate, epoch 3
+        w.setMandate(address(t), _id(delegate), 1_000, 2_500, 1 days, uint64(block.timestamp + 30 days)); // the same delegate, epoch 3
         e = _env(delegate, 2);
-        bytes memory other = _delegateRevokeSig(e, 1); // a fresh lane position, the old epoch
+        IUARegistry.UASig memory other = _delegateRevokeSig(e, 1); // a fresh lane position, the old epoch
         vm.expectRevert(abi.encodeWithSelector(MandateWallet.StaleEpoch.selector, 3, 1));
         w.mtxDelegateRevoke(e, address(t), 1, other);
     }
 
     function test_executeTyped() public {
         bytes memory data = abi.encodeCall(t.transfer, (owner, 100));
-        MetaTxLib.Envelope memory e = _env(owner, 0);
-        bytes memory sig = _sig(OWNER_PK, executeDigest(address(w), e, address(t), 0, data));
+        MetaTxLib.UAEnvelope memory e = _env(owner, 0);
+        IUARegistry.UASig memory sig = _ua(OWNER_PK, uaExecuteDigest(address(w), e, address(t), 0, data));
 
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector); // the inner `data`, `target` and `value` are all signed
         w.mtxExecute(e, address(t), 0, abi.encodeCall(t.transfer, (stranger, 100)), sig);
@@ -247,41 +280,42 @@ contract NamedMandateEntriesTest is MandateFixture {
 
         vm.deal(address(w), 5);
         e = _env(owner, 1);
-        w.mtxExecute(e, stranger, 5, "", _sig(OWNER_PK, executeDigest(address(w), e, stranger, 5, "")));
+        w.mtxExecute(e, stranger, 5, "", _ua(OWNER_PK, uaExecuteDigest(address(w), e, stranger, 5, "")));
         assertEq(stranger.balance, 5);
 
         // a delegate signing it: a valid signature, not the owner
         e = _env(delegate, 0);
-        sig = _sig(DELEGATE_PK, executeDigest(address(w), e, address(t), 0, data));
+        sig = _ua(DELEGATE_PK, uaExecuteDigest(address(w), e, address(t), 0, data));
         vm.expectRevert(MandateWallet.NotOwner.selector);
         w.mtxExecute(e, address(t), 0, data, sig);
     }
 
     function test_executeTypedFailureAndReentry() public {
-        bytes memory inner = abi.encodeCall(MandateWallet.setPayee, (address(t), stranger, true));
-        MetaTxLib.Envelope memory e = _env(owner, 0);
-        bytes memory sig = _sig(OWNER_PK, executeDigest(address(w), e, address(w), 0, inner));
+        bytes memory inner = abi.encodeCall(MandateWallet.setPayee, (address(t), _id(stranger), true));
+        MetaTxLib.UAEnvelope memory e = _env(owner, 0);
+        IUARegistry.UASig memory sig = _ua(OWNER_PK, uaExecuteDigest(address(w), e, address(w), 0, inner));
         vm.expectRevert(abi.encodeWithSelector(MandateWallet.CallFailed.selector, abi.encodeWithSelector(IMetaTx.Reentrancy.selector)));
         w.mtxExecute(e, address(w), 0, inner, sig);
-        assertEq(w.mtxNonce(owner, LANE), 0, "a failed op burns no nonce");
+        assertEq(w.mtxNonce(_id(owner), LANE), 0, "a failed op burns no nonce");
     }
 
-    /// Step 7: the event the node's indexer decodes, carrying the digest the wallet signed.
+    /// Step 7: the event the node's indexer decodes, carrying the digest the wallet signed (ua-mtx-merge T3b, R18: the
+    /// UA event of the merged path).
     function test_executeTypedEmitsExecuted() public {
-        MetaTxLib.Envelope memory e = _env(owner, 0);
-        bytes32 d = executeDigest(address(w), e, stranger, 0, "");
-        bytes memory sig = _sig(OWNER_PK, d);
+        MetaTxLib.UAEnvelope memory e = _env(owner, 0);
+        bytes32 d = uaExecuteDigest(address(w), e, stranger, 0, "");
+        IUARegistry.UASig memory sig = _ua(OWNER_PK, d);
         vm.expectEmit(true, true, true, true, address(w));
-        emit IMetaTx.MetaTransactionExecuted(owner, relayer, LANE, 0, d, relayer, 0);
+        emit IUALedger.UAMetaTransactionExecuted(_id(owner), relayer, LANE, 0, d, relayer, 0);
         vm.prank(relayer);
         w.mtxExecute(e, stranger, 0, "", sig);
     }
 
     /// The domain binds the wallet and the chain; a bound relayer and `validUntil` hold on `mtxExecute`.
     function test_executeTypedReplayAndEnvelope() public {
-        MandateWallet other = new MandateWallet(owner, UID_);
-        MetaTxLib.Envelope memory e = _env(owner, 0);
-        bytes memory sig = _sig(OWNER_PK, executeDigest(address(w), e, stranger, 0, ""));
+        MandateWallet other = new MandateWallet(_id(owner), UID_, address(0), false);
+        MetaTxLib.UAEnvelope memory e = _env(owner, 0);
+        IUARegistry.UASig memory sig = _ua(OWNER_PK, uaExecuteDigest(address(w), e, stranger, 0, ""));
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         other.mtxExecute(e, stranger, 0, "", sig);
         vm.chainId(7623);
@@ -291,7 +325,7 @@ contract NamedMandateEntriesTest is MandateFixture {
 
         e.mode = MetaTxLib.MODE_RESTRICT_RELAYER;
         e.relayer = relayer;
-        sig = _sig(OWNER_PK, executeDigest(address(w), e, stranger, 0, ""));
+        sig = _ua(OWNER_PK, uaExecuteDigest(address(w), e, stranger, 0, ""));
         vm.prank(stranger);
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxUnauthorizedRelayer.selector, relayer, stranger));
         w.mtxExecute(e, stranger, 0, "", sig);
@@ -302,17 +336,18 @@ contract NamedMandateEntriesTest is MandateFixture {
         vm.warp(e.validUntil);
         vm.prank(relayer);
         w.mtxExecute(e, stranger, 0, "", sig);
-        assertEq(w.mtxNonce(owner, LANE), 1);
+        assertEq(w.mtxNonce(_id(owner), LANE), 1);
     }
 
-    /// The same `(from, batch)` lane as the kept generic path; neither signature runs on the other entry.
+    /// The same `(from, batch)` lane as the generic path; neither signature runs on the other entry.
     function test_executeTypedAndGenericShareTheLane() public {
         bytes memory data = abi.encodeCall(t.transfer, (owner, 1));
-        MetaTxLib.Envelope memory e = _env(owner, 0);
-        bytes memory typed = _sig(OWNER_PK, executeDigest(address(w), e, address(t), 0, data));
-        MetaTxLib.MetaTransaction memory m;
-        (m.from, m.data, m.batch, m.validUntil) = (owner, abi.encodeCall(MandateWallet.execute, (address(t), 0, data)), LANE, e.validUntil);
-        bytes memory generic = _sig(OWNER_PK, w.mtxDigest(m));
+        MetaTxLib.UAEnvelope memory e = _env(owner, 0);
+        IUARegistry.UASig memory typed = _ua(OWNER_PK, uaExecuteDigest(address(w), e, address(t), 0, data));
+        MetaTxLib.UAMetaTransaction memory m =
+            _gen(_id(owner), abi.encodeCall(MandateWallet.execute, (address(t), 0, data)), LANE, 0);
+        m.validUntil = e.validUntil;
+        IUARegistry.UASig memory generic = _ua(OWNER_PK, w.mtxDigest(m));
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         w.mtxExecute(m, typed);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
@@ -324,45 +359,45 @@ contract NamedMandateEntriesTest is MandateFixture {
 
     /// A wallet takes fee mode `NONE` only (CTR-MTX-22), and is no signer of its own.
     function test_namedModesAndSelfSender() public {
-        MetaTxLib.Envelope memory e = _env(owner, 0);
+        MetaTxLib.UAEnvelope memory e = _env(owner, 0);
         e.mode = MetaTxLib.MODE_FEE_FIXED;
-        bytes memory sig = _sig(OWNER_PK, executeDigest(address(w), e, stranger, 0, ""));
+        IUARegistry.UASig memory sig = _ua(OWNER_PK, uaExecuteDigest(address(w), e, stranger, 0, ""));
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxUnknownMode.selector, e.mode));
         w.mtxExecute(e, stranger, 0, "", sig);
         e.mode = MetaTxLib.MODE_FEE_PERCENT;
-        sig = _sig(OWNER_PK, executeDigest(address(w), e, stranger, 0, ""));
+        sig = _ua(OWNER_PK, uaExecuteDigest(address(w), e, stranger, 0, ""));
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxFeeClass.selector, MandateWallet.execute.selector, e.mode));
         w.mtxExecute(e, stranger, 0, "", sig);
         e = _env(address(w), 0);
-        sig = _sig(OWNER_PK, executeDigest(address(w), e, stranger, 0, ""));
+        sig = _ua(OWNER_PK, uaExecuteDigest(address(w), e, stranger, 0, ""));
         vm.expectRevert(IMetaTx.SelfSender.selector);
         w.mtxExecute(e, stranger, 0, "", sig);
     }
 
     /// A named entry is no self-call target.
     function test_namedEntriesNotAllowlisted() public {
-        MetaTxLib.Envelope memory e;
-        bytes[5] memory calls = [
-            abi.encodeCall(MandateWallet.mtxSetPayee, (e, address(t), npp, true, "")),
-            abi.encodeCall(MandateWallet.mtxRevokeMandate, (e, address(t), "")),
-            abi.encodeCall(MandateWallet.mtxDelegateRevoke, (e, address(t), 1, "")),
-            abi.encodeWithSelector(bytes4(keccak256("mtxPayUnderMandate((address,uint256,uint256,uint256,uint32,address,uint256,address),address,address,uint256,bytes32,uint64,bytes)")),
-                e, address(t), npp, uint256(1), bytes32(0), uint64(1), bytes("")),
-            abi.encodeWithSelector(bytes4(keccak256("mtxExecute((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes,bytes)")),
-                e, npp, uint256(0), bytes(""), bytes(""))
+        MetaTxLib.UAEnvelope memory e;
+        IUARegistry.UASig memory none;
+        bytes[6] memory calls = [
+            abi.encodeCall(MandateWallet.mtxSetPayee, (e, address(t), _id(npp), true, none)),
+            abi.encodeCall(MandateWallet.mtxRevokeMandate, (e, address(t), none)),
+            abi.encodeCall(MandateWallet.mtxDelegateRevoke, (e, address(t), 1, none)),
+            abi.encodeCall(MandateWallet.mtxPayUnderMandate, (e, address(t), _id(npp), 1, _ref(0), 1, none, _meta(0))),
+            abi.encodeCall(MandateWallet.mtxSetMandate, (e, address(t), _id(npp), 1, 1, 1, 1, none)),
+            abi.encodeWithSelector(bytes4(keccak256("mtxExecute((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))")),
+                e, npp, uint256(0), bytes(""), none)
         ];
         for (uint256 i; i < calls.length; ++i) {
-            MetaTxLib.MetaTransaction memory m;
-            (m.from, m.data, m.batch, m.validUntil) = (owner, calls[i], 5, block.timestamp + 300);
-            bytes memory sig = _sig(OWNER_PK, w.mtxDigest(m));
+            MetaTxLib.UAMetaTransaction memory m = _gen(_id(owner), calls[i], 5, 0);
+            IUARegistry.UASig memory sig = _ua(OWNER_PK, w.mtxDigest(m));
             vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, bytes4(calls[i])));
             w.mtxExecute(m, sig);
         }
     }
 }
 
-/// NET-HED-03 on the named entries: the same `_requireValidSignature`, so a 64-byte signature from an address without code
-/// goes through HIP-632 over the entry's own digest.
+/// NET-HED-03 on the named entries through `IS_HEDERA`: a 64-byte signature from an address without code goes through
+/// HIP-632 over the entry's own digest.
 contract NamedHederaMandateTest is MandateFixture {
     address constant HAS = address(0x16a);
     uint256 constant ED_KEY = 0x0E1;
@@ -376,32 +411,32 @@ contract NamedHederaMandateTest is MandateFixture {
         vm.etch(HAS, type(MockHederaAccountService).runtimeCode);
         MockHederaAccountService(HAS).setEdKey(edOwner, vm.addr(ED_KEY));
         MockHederaAccountService(HAS).setEdKey(edDel, vm.addr(ED_DEL));
-        hw = new HederaMandateWallet(edOwner, UID_);
+        hw = new HederaMandateWallet(_id(edOwner), UID_, address(0));
         t.mint(address(hw), 1_000);
     }
 
-    function _ed(uint256 k, bytes32 d) internal pure returns (bytes memory) {
+    function _ed(uint256 k, bytes32 d) internal pure returns (IUARegistry.UASig memory s) {
         (bytes32 r, bytes32 vs) = vm.signCompact(k, d);
-        return abi.encodePacked(r, vs);
+        s.signature = abi.encodePacked(r, vs);
     }
 
-    function _env(address from, uint256 nonce) internal view returns (MetaTxLib.Envelope memory) {
-        return env(from, nonce, block.timestamp + 300);
+    function _env(address from, uint256 nonce) internal view returns (MetaTxLib.UAEnvelope memory) {
+        return uaEnv(from, nonce, block.timestamp + 300);
     }
 
     function _setPayee(uint256 nonce) internal {
-        MetaTxLib.Envelope memory e = _env(edOwner, nonce);
-        hw.mtxSetPayee(e, address(t), npp, true, _ed(ED_KEY, setPayeeDigest(address(hw), e, address(t), npp, true)));
+        MetaTxLib.UAEnvelope memory e = _env(edOwner, nonce);
+        hw.mtxSetPayee(e, address(t), _id(npp), true, _ed(ED_KEY, setPayeeDigest(address(hw), e, address(t), npp, true)));
     }
 
     function test_ed25519OwnerNamedEntries() public {
         _setPayee(0);
-        assertTrue(hw.payeeAllowed(address(t), npp));
+        assertTrue(hw.payeeAllowed(address(t), _id(npp)));
 
-        // pays by hand through `Execute`, the owner's only way (`isValidSignature` stays ECDSA)
+        // pays by hand through `UAExecute`, the owner's only way (`isValidSignature` stays ECDSA)
         bytes memory data = abi.encodeCall(t.transfer, (npp, 40));
-        MetaTxLib.Envelope memory e = _env(edOwner, 1);
-        bytes memory sig = _ed(ED_KEY, executeDigest(address(hw), e, address(t), 0, data));
+        MetaTxLib.UAEnvelope memory e = _env(edOwner, 1);
+        IUARegistry.UASig memory sig = _ed(ED_KEY, uaExecuteDigest(address(hw), e, address(t), 0, data));
         hw.mtxExecute(e, address(t), 0, data, sig);
         assertEq(t.balanceOf(npp), 40);
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 2, 1));
@@ -418,15 +453,15 @@ contract NamedHederaMandateTest is MandateFixture {
     function test_ed25519DelegateNamedEntries() public {
         _setPayee(0);
         vm.prank(edOwner);
-        hw.setMandate(address(t), edDel, 100, 300, 1 days, uint64(block.timestamp + 1 days));
-        MetaTxLib.Envelope memory e = _env(edDel, 0);
-        bytes memory sig = _ed(ED_DEL, payDigest(address(hw), e, address(t), npp, 50, "e", 1));
-        hw.mtxPayUnderMandate(e, address(t), npp, 50, "e", 1, sig);
+        hw.setMandate(address(t), _id(edDel), 100, 300, 1 days, uint64(block.timestamp + 1 days));
+        MetaTxLib.UAEnvelope memory e = _env(edDel, 0);
+        IUARegistry.UASig memory sig = _ed(ED_DEL, payDigest(address(hw), e, address(t), npp, 50, "e", 1));
+        hw.mtxPayUnderMandate(e, address(t), _id(npp), 50, _ref("e"), 1, sig, _meta("e"));
         assertEq(t.balanceOf(npp), 50);
         e = _env(edDel, 1);
         hw.mtxDelegateRevoke(e, address(t), 1, _ed(ED_DEL, delegateRevokeDigest(address(hw), e, address(t), 1)));
-        (address d,,,,,,) = hw.mandates(address(t));
-        assertEq(d, address(0));
+        (bytes32 d,,,,,,) = hw.mandates(address(t));
+        assertEq(d, bytes32(0));
     }
 
     /// A `from` with code never takes HIP-632, even when the account service would vouch for its 64-byte signature.
@@ -434,12 +469,12 @@ contract NamedHederaMandateTest is MandateFixture {
         Mock1271Wallet cw = new Mock1271Wallet(delegate);
         MockHederaAccountService(HAS).setEdKey(address(cw), vm.addr(ED_DEL));
         vm.prank(edOwner);
-        hw.setMandate(address(t), address(cw), 100, 300, 1 days, uint64(block.timestamp + 1 days));
+        hw.setMandate(address(t), _id(address(cw)), 100, 300, 1 days, uint64(block.timestamp + 1 days));
         _setPayee(0);
-        MetaTxLib.Envelope memory e = _env(address(cw), 0);
-        bytes memory sig = _ed(ED_DEL, payDigest(address(hw), e, address(t), npp, 50, "c", 1));
+        MetaTxLib.UAEnvelope memory e = _env(address(cw), 0);
+        IUARegistry.UASig memory sig = _ed(ED_DEL, payDigest(address(hw), e, address(t), npp, 50, "c", 1));
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
-        hw.mtxPayUnderMandate(e, address(t), npp, 50, "c", 1, sig);
+        hw.mtxPayUnderMandate(e, address(t), _id(npp), 50, _ref("c"), 1, sig, _meta("c"));
     }
 }
 

@@ -173,7 +173,7 @@ contract ZetherRevertPathsTest is ZetherFixture {
             abi.encodeCall(IZetherToken.mtxConfidentialTransferCompact, (_zMulti("", n), "")),
             abi.encodeCall(IZetherToken.mtxConfidentialTransferSingle, (_zSingle("", n), "")),
             abi.encodeCall(IZetherToken.mtxUnshield, (_zBurn("", n), 1, bytes32(uint256(uint160(address(0xD)))), "")),
-            abi.encodeCall(IConfidentialToken.mtxRollOver, (ZetherTypes.UA.unwrap(alice.ua), 1)),
+            abi.encodeCall(IZetherToken.mtxRollOver, (ZetherTypes.UA.unwrap(alice.ua), 1)),
             abi.encodeCall(IZetherToken.mtxRollOverBatch, (new ZetherTypes.UA[](0))),
             abi.encodeCall(IZetherToken.mtxRollOverSigned, (alice.ua, 1, 1, _noSig())),
             abi.encodeCall(IZetherToken.mtxSetRollOverMode, (alice.ua, ZetherTypes.RollOverMode.PUBLIC, 1, _noSig()))

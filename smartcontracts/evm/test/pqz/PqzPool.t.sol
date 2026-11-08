@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {Test, console2} from "forge-std/Test.sol";
 import {IConfidentialToken, IConfidentialWrappedToken} from "../../src/confidential/IConfidentialToken.sol";
 import {Vm} from "forge-std/Vm.sol";
@@ -67,7 +68,7 @@ contract PqzPoolTest is PqzFixture {
         _fund(tok, alice, 1000);
         _transfer(tok, alice, bob, carol, 1, true);
         assertEq(tok.balanceOfUA(carol), FEE * SCALE, "op 1 txFee");
-        assertEq(tok.pqzAccount(carol).pendingCount, 0, "no TRIVIAL entry");
+        assertEq(tok.pqzAccount(carol, 0).pendingCount, 0, "no TRIVIAL entry");
         assertEq(tok.totalShielded(), 1000 - FEE);
         _assertConservation(tok);
         bytes memory pl = bytes.concat(abi.encode(uint256(1), block.number + 5, uint256(0), alice, carol), _blob(3, PqzCt.CT));
@@ -123,9 +124,9 @@ contract PqzPoolTest is PqzFixture {
         bytes32 ref = keccak256(abi.encode(keccak256("SCAAS-PQZ-ENTRY-V1"), block.chainid, tok.chainUid(), address(tok),
             alice, uint256(0)));
         vm.expectEmit(true, false, false, true, address(tok));
-        emit IPqzToken.Debited(alice, 1, 1, blob);
+        emit IPqzToken.Debited(alice, 0, 1, 1, blob);
         vm.expectEmit(true, true, false, true, address(tok));
-        emit IPqzToken.Credited(bob, 0, ref);
+        emit IPqzToken.Credited(bob, 0, 0, ref);
         vm.expectEmit(true, true, true, true, address(tok));
         emit IConfidentialToken.ConfidentialTransfer(ref, alice, bob, carol, tok.confidentialFee(), 0, blob);
         tok.mtxConfidentialTransferSingle(_ts(pl), hex"01", _pqAuth(), "");
@@ -155,13 +156,16 @@ contract PqzPoolTest is PqzFixture {
         _prepare(tok, bob);
         vm.roll(block.number + ROLL_AGE);
         vm.recordLogs();
-        tok.mtxRollOver(bob, 2);
-        IPqzToken.AccountState memory a = tok.pqzAccount(bob);
+        tok.mtxRollOver(bob, 0, 2);
+        IPqzToken.AccountState memory a = tok.pqzAccount(bob, 0);
         assertEq(a.accUnits, 2); // bob never debited: 0 + 2
-        assertEq(a.accHash, keccak256(_packed(tok.pqzAcc(bob))), "accHash: the packed acc (P46)");
+        assertEq(a.accHash, keccak256(_packed(tok.pqzAcc(bob, 0))), "accHash: the packed acc (P46)");
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        assertEq(logs[0].topics[0], IConfidentialToken.RolledOver.selector);
+        // group 3g T52, meaning (KV-10): the PQZ rollover emits `PqzRolledOver(ua, keyVersion, ...)`, the shared `RolledOver` is
+        // Zether's
+        assertEq(logs[0].topics[0], IPqzToken.PqzRolledOver.selector);
         assertEq(logs[0].topics[1], bob);
+        assertEq(logs[0].topics[2], bytes32(0), "key version 0");
         assertEq(logs[0].data, abi.encode(uint64(2), uint32(2), a.accHash));
     }
 
@@ -170,7 +174,7 @@ contract PqzPoolTest is PqzFixture {
     function test_views() public {
         _fund(tok, alice, 100);
         (bytes32 ref, bytes memory out) = _transfer(tok, alice, bob, bytes32(0), 7, true);
-        IPqzToken.AccountState memory a = tok.pqzAccount(alice);
+        IPqzToken.AccountState memory a = tok.pqzAccount(alice, 0);
         assertEq(a.pendingCount, 1);
         assertEq(a.rolled, 1);
         assertEq(a.floor, 1);
@@ -185,8 +189,8 @@ contract PqzPoolTest is PqzFixture {
         assertEq(tok.transferCiphertextHash(ref), keccak256(r), "ciphertextHash: keccak of the packed R");
         assertEq(tok.pqzEntryBlob(bytes32(0)), "");
         assertEq(tok.minDecoyFee(), 0);
-        assertEq(tok.pqzPendingCt(bob, 0), _cut(out, 0, PqzCt.CT));
-        assertEq(tok.pqzAcc(alice), accOf[alice]);
+        assertEq(tok.pqzPendingCt(bob, 0, 0), _cut(out, 0, PqzCt.CT));
+        assertEq(tok.pqzAcc(alice, 0), accOf[alice]);
     }
 
     // ------------------------------------------------------------------ D15: the relayed mode binding (review L1)
@@ -205,7 +209,7 @@ contract PqzPoolTest is PqzFixture {
         bytes memory pl = _payload(0, 0, alice, bob, bytes32(0), _out(5, true), "");
         MetaTxLib.MetaTransaction memory m =
             _m(vm.addr(KEY), abi.encodeCall(IPqzToken.mtxConfidentialTransferSingle, (_ts(pl), hex"c0de", _pqAuth(), bytes(""))), 0);
-        bytes32 env = tok.envelopeBinding(m);
+        bytes32 env = _addrBinding(tok, m);
         bytes memory st = tok.transferSingleStatement(_ts(pl), env);
         assertEq(bytes32(_cut(st, 544, 32)), _relayed(env, ZetherTypes.TransferMode.BUNDLE), "mode folded in");
         _mockOp(1, 0);
@@ -213,10 +217,10 @@ contract PqzPoolTest is PqzFixture {
         _accept(_withBinding(st, env)); // a proof of the pre-D15 binding
         bytes memory sg = _sign(m);
         vm.expectRevert(IPqzToken.ProofRejected.selector);
-        tok.mtxExecute(m, sg);
+        tok.executeMetaTransaction(m, sg);
         _accept(st);
-        tok.mtxExecute(m, sg);
-        assertEq(tok.pqzAccount(alice).sendCounter, 1);
+        tok.executeMetaTransaction(m, sg);
+        assertEq(tok.pqzAccount(alice, 0).sendCounter, 1);
     }
 
     function _withBinding(bytes memory st, bytes32 b) internal pure returns (bytes memory x) {
@@ -230,7 +234,7 @@ contract PqzPoolTest is PqzFixture {
     }
 
     function _sign(MetaTxLib.MetaTransaction memory m) internal view returns (bytes memory) {
-        (uint8 v, bytes32 r, bytes32 s_) = vm.sign(KEY, tok.mtxDigest(m));
+        (uint8 v, bytes32 r, bytes32 s_) = vm.sign(KEY, MtxDigest.metaTx(address(tok), m));
         return abi.encodePacked(r, s_, v);
     }
 }
@@ -282,14 +286,14 @@ contract PqzPoolWrappedTest is PqzFixture {
         m.from = vm.addr(KEY);
         m.data = abi.encodeCall(IPqzWrappedToken.mtxUnshieldUnwrap, (_bs(pl), x, hex"c0de", _pqAuth(), bytes("")));
         m.validUntil = block.timestamp + 1 hours;
-        bytes32 env = w.envelopeBinding(m);
+        bytes32 env = _addrBinding(PqzLayer(address(w)), m);
         bytes32 want = keccak256(abi.encode(env, w.unwrapBinding(address(usd), 7)));
         bytes memory st = w.unshieldUnwrapStatement(_bs(pl), x, env);
         assertEq(bytes32(_cut(st, 544, 32)), want, "envelope and leg / minOut folded");
         _mockOp(2, 0);
         vm.mockCall(PQZ, abi.encodePacked(uint8(2), uint32(st.length), st, hex"c0de"), abi.encode(uint256(1)));
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(KEY, w.mtxDigest(m));
-        w.mtxExecute(m, abi.encodePacked(r, s, v));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(KEY, MtxDigest.metaTx(address(w), m));
+        w.executeMetaTransaction(m, abi.encodePacked(r, s, v));
         assertEq(usd.balanceOf(address(0xD00D)), 40 * SCALE);
     }
 }
@@ -333,7 +337,7 @@ contract PqzPoolHandler is Test, PqzArgs {
     }
 
     function _p() internal view returns (uint256) {
-        return w.pqzAccount(uas[0]).rolled; // always a legal cut with an empty window
+        return w.pqzAccount(uas[0], 0).rolled; // always a legal cut with an empty window
     }
 
     function _ben(uint256 sel) internal view returns (bytes32) {

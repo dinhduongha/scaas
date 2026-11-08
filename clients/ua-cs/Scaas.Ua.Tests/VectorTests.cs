@@ -126,6 +126,25 @@ public class VectorTests
         }
     }
 
+    /// <summary>ua-mtx-merge spec §6, MD-9: every row of id_display.json, and a row for every kind of the table.</summary>
+    [Fact]
+    public void IdDisplayRows()
+    {
+        var rows = Load("id_display.json").GetProperty("rows").EnumerateArray().ToArray();
+        foreach (var r in rows)
+        {
+            var (id, kind, name) = (r.GetProperty("id").GetString()!, Kind(r), r.GetProperty("name").GetString());
+            if (r.TryGetProperty("display", out var w))
+                Assert.True((w.TryGetProperty("address", out var a) ? a : w.GetProperty("urn")).GetString() == UA.IdDisplay(id, kind), name);
+            else
+                Assert.True(r.GetProperty("error").GetString() == Assert.Throws<UAException>(() => UA.IdDisplay(id, kind)).Code, name);
+        }
+        foreach (var k in UA.Kinds)
+            Assert.True(rows.Any(r => Kind(r) == k.Number && (k.Native
+                ? r.TryGetProperty("error", out var e) && e.GetString() == "UAKindNotDerived"
+                : r.TryGetProperty("display", out var d) && d.TryGetProperty("urn", out _))), $"no row for {k.Name}");
+    }
+
     [Fact]
     public void Messages()
     {

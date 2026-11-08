@@ -1,0 +1,30 @@
+== storing T itself (for comparison) and the debit-T log ==
+n2048-kmax1024: T in SSTORE2 16.76 M, T in fresh slots 33.19 M, log header||T 0.15 M
+n2304-kmax4096: T in SSTORE2 20.59 M, T in fresh slots 40.83 M, log header||T 0.16 M
+n2560-kmax16384: T in SSTORE2 24.82 M, T in fresh slots 49.35 M, log header||T 0.18 M
+n2816-kmax65536: T in SSTORE2 29.43 M, T in fresh slots 58.56 M, log header||T 0.20 M
+
+== direction 2: keep the pending slots, one record slot per debit ==
+n2048-kmax1024: debit +0.10 M state, regular +5,000 minus up to 32 skipped deletions (fit: -0.38 M regular at 32; payer net -0.13 M total at 32, 0.10 M at 0); + header-only log 0.01 M; rollover at ROLL_MAX: up to 1.16 M regular less (gross)
+n2304-kmax4096: debit +0.10 M state, regular +5,000 minus up to 32 skipped deletions (fit: -0.38 M regular at 32; payer net -0.13 M total at 32, 0.10 M at 0); + header-only log 0.01 M; rollover at ROLL_MAX: up to 0.97 M regular less (gross)
+n2560-kmax16384: debit +0.10 M state, regular +5,000 minus up to 32 skipped deletions (fit: -0.38 M regular at 32; payer net -0.13 M total at 32, 0.10 M at 0); + header-only log 0.01 M; rollover at ROLL_MAX: up to 0.77 M regular less (gross)
+n2816-kmax65536: debit +0.10 M state, regular +5,000 minus up to 32 skipped deletions (fit: -0.38 M regular at 32; payer net -0.13 M total at 32, 0.10 M at 0); + header-only log 0.01 M; rollover at ROLL_MAX: up to 0.39 M regular less (gross)
+
+== keeping the proof P in state as well (SSTORE2, chunks at the public 24,576 B code limit) ==
+n2048-kmax1024: op 1 aud 42,783 B -> +65.83 M state (2 chunks); burn/refresh 41,934 B -> +64.53 M state (2 chunks); op 7 M=8 aud 85,138 B -> +131.00 M state (4 chunks); op 1 aud tx.gas ~ 92.49 M (over a 60 M block, over the node's 64 M)
+n2304-kmax4096: op 1 aud 46,670 B -> +71.77 M state (2 chunks); burn/refresh 45,857 B -> +70.53 M state (2 chunks); op 7 M=8 aud 80,289 B -> +123.58 M state (4 chunks); op 1 aud tx.gas ~ 102.48 M (over a 60 M block, over the node's 64 M)
+n2560-kmax16384: op 1 aud 50,382 B -> +77.64 M state (3 chunks); burn/refresh 49,558 B -> +76.37 M state (3 chunks); op 7 M=8 aud 72,745 B -> +111.85 M state (3 chunks); op 1 aud tx.gas ~ 112.77 M (over a 60 M block, over the node's 64 M)
+n2816-kmax65536: op 1 aud 54,880 B -> +84.52 M state (3 chunks); burn/refresh 54,001 B -> +83.17 M state (3 chunks); op 7 M=8 aud 79,207 B -> +121.92 M state (4 chunks); op 1 aud tx.gas ~ 124.50 M (over a 60 M block, over the node's 64 M)
+PQZH debit at n2304-kmax4096 (~250,000 B): +384.52 M state
+
+== state growth ==
+n2048-kmax1024: op 1 aud blob 11,052 B per debit today; direction 2 adds 32 B per debit (record) and keeps 32 B per credit; with P: +42,783 B per op 1 (3.9x the blob)
+n2304-kmax4096: op 1 aud blob 13,572 B per debit today; direction 2 adds 32 B per debit (record) and keeps 32 B per credit; with P: +46,670 B per op 1 (3.4x the blob)
+n2560-kmax16384: op 1 aud blob 16,348 B per debit today; direction 2 adds 32 B per debit (record) and keeps 32 B per credit; with P: +50,382 B per op 1 (3.1x the blob)
+n2816-kmax65536: op 1 aud blob 19,380 B per debit today; direction 2 adds 32 B per debit (record) and keeps 32 B per credit; with P: +54,880 B per op 1 (2.8x the blob)
+
+== a wallet rebuilding a third party's T from state (no server) ==
+n2048-kmax1024: per entry ~10,836 B packed (or a shared blob); typical 1-16 entries 11-173 KB; worst K_MAX - 1 entries 11 MB
+n2304-kmax4096: per entry ~13,340 B packed (or a shared blob); typical 1-16 entries 13-213 KB; worst K_MAX - 1 entries 55 MB
+n2560-kmax16384: per entry ~16,100 B packed (or a shared blob); typical 1-16 entries 16-258 KB; worst K_MAX - 1 entries 264 MB
+n2816-kmax65536: per entry ~19,116 B packed (or a shared blob); typical 1-16 entries 19-306 KB; worst K_MAX - 1 entries 1253 MB

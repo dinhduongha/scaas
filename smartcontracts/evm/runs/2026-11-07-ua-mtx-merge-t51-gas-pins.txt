@@ -1,0 +1,82 @@
+# ua-mtx-merge T51 (group 3g): UARegistryUA8.t.sol gas pins, old -> new (regular / EIP-8037 state), from GAS_REPIN=1 runs of
+# test_T_GAS* at the four sets (forge 1.8.5, isolate; the mldsa65 verify and the 0x0142 verifier are stand-ins). Causes: the
+# per-UA key marker (+1 slot on every stored PQZ key: +97,920 state), `PqzVersions` (+1 slot at the first proof: +97,920 state),
+# the registry's larger dispatch (+22 to +56 regular on views and register), storePqzPop's version argument and record path.
+# name | old -> new
+register webauthn-p256 | 182,014 / 1,702,890 -> 182,048 / 1,702,890
+register p256 | 164,511 / 1,164,330 -> 164,567 / 1,164,330
+register ed25519 | 324,011 / 1,115,370 -> 324,067 / 1,115,370
+register bip340 | 161,305 / 1,115,370 -> 161,361 / 1,115,370
+register secp256k1 | 160,324 / 1,213,290 -> 160,380 / 1,213,290
+register schnorr-bn254 | 175,709 / 1,213,290 -> 175,765 / 1,213,290
+register schnorr-bls12381 | 202,844 / 1,409,130 -> 202,900 / 1,409,130
+register bls12381-minsig | 338,724 / 1,556,010 -> 338,780 / 1,556,010
+register bls-bn254-minsig | 353,498 / 1,262,250 -> 353,554 / 1,262,250
+register zether-bls12381 | 215,561 / 1,594,260 -> 215,617 / 1,594,260
+register mldsa44 | 4,348,585 / 6,881,940 -> 4,348,641 / 6,881,940
+register mldsa65/n2048-kmax1024 | 3,341,208 / 81,220,050 -> 3,341,208 / 81,415,890
+register fndsa512 | 2,746,717 / 6,384,690 -> 2,746,781 / 6,384,690
+register slhdsa128s | 1,123,293 / 13,246,740 -> 1,123,349 / 13,246,740
+register msig-classical | 166,319 / 1,115,370 -> 166,123 / 1,115,370
+register msig-pq/n2048-kmax1024 | 3,468,184 / 73,250,280 -> 3,468,184 / 73,446,120
+register msig-pq-native | 318,715 / 1,262,250 -> 318,569 / 1,262,250
+popOf (the blob setKemKey decodes) mldsa65/v2 n2048-kmax1024 | 15,272 / 0 -> 15,294 / 0
+setKemKey fndsa512/v2 n2048-kmax1024 | 2,515,999 / 3,947,400 -> 2,516,006 / 3,947,400
+popOf (the blob setKemKey decodes) fndsa512/v2 n2048-kmax1024 | 13,333 / 0 -> 13,355 / 0
+popOf (the blob setKemKey decodes) msig-pq/v2 n2048-kmax1024 | 12,948 / 0 -> 12,970 / 0
+popOf (the blob setKemKey decodes) msig-12-slhdsa128s (32 B: keccak256 of its 96,832 B pop) | 13,115 / 0 -> 13,137 / 0
+popOf unregistered (view baseline) | 2,834 / 0 -> 2,856 / 0
+register mldsa65 with pqzPop n2048-kmax1024 | 3,341,208 / 81,317,970 -> 3,341,208 / 81,513,810
+register mldsa65 without pqzPop n2048-kmax1024 | 1,536,920 / 37,511,010 -> 1,536,920 / 37,608,930
+storePqzPop mldsa65 n2048-kmax1024 | 1,825,688 / 43,806,960 -> 1,827,736 / 43,904,880
+storePqzPop again (no-op) n2048-kmax1024 | 1,825,688 / 0 -> 1,827,736 / 0
+storePqzPop msig-pq on gen 2 (gen 1 record) n2048-kmax1024 | 1,825,688 / 44,002,800 -> 1,827,736 / 44,100,720
+register msig-pq without pqzPop n2048-kmax1024 | 1,663,896 / 29,639,160 -> 1,663,896 / 29,737,080
+storePqzPop msig-pq on gen 1 n2048-kmax1024 | 1,825,688 / 43,806,960 -> 1,827,736 / 43,904,880
+registrationOf msig-pq on gen 2 (gen 1 record) n2048-kmax1024 | 121,154 / 0 -> 121,487 / 0
+registrationOf msig-pq on gen 1 n2048-kmax1024 | 86,260 / 0 -> 86,449 / 0
+register mldsa65/n2304-kmax4096 | 3,613,592 / 87,704,190 -> 3,613,592 / 87,900,030
+register msig-pq/n2304-kmax4096 | 3,740,568 / 79,734,420 -> 3,740,568 / 79,930,260
+popOf (the blob setKemKey decodes) mldsa65/v2 n2304-kmax4096 | 15,272 / 0 -> 15,294 / 0
+setKemKey fndsa512/v2 n2304-kmax4096 | 2,515,999 / 3,947,400 -> 2,516,006 / 3,947,400
+popOf (the blob setKemKey decodes) fndsa512/v2 n2304-kmax4096 | 13,333 / 0 -> 13,355 / 0
+popOf (the blob setKemKey decodes) msig-pq/v2 n2304-kmax4096 | 12,948 / 0 -> 12,970 / 0
+register mldsa65 with pqzPop n2304-kmax4096 | 3,613,592 / 87,802,110 -> 3,613,592 / 87,997,950
+register mldsa65 without pqzPop n2304-kmax4096 | 1,667,992 / 40,644,450 -> 1,667,992 / 40,742,370
+storePqzPop mldsa65 n2304-kmax4096 | 1,967,000 / 47,157,660 -> 1,969,048 / 47,255,580
+storePqzPop again (no-op) n2304-kmax4096 | 1,967,000 / 0 -> 1,969,048 / 0
+storePqzPop msig-pq on gen 2 (gen 1 record) n2304-kmax4096 | 1,967,000 / 47,353,500 -> 1,969,048 / 47,451,420
+register msig-pq without pqzPop n2304-kmax4096 | 1,794,968 / 32,772,600 -> 1,794,968 / 32,870,520
+storePqzPop msig-pq on gen 1 n2304-kmax4096 | 1,967,000 / 47,157,660 -> 1,969,048 / 47,255,580
+registrationOf msig-pq on gen 2 (gen 1 record) n2304-kmax4096 | 129,699 / 0 -> 130,032 / 0
+registrationOf msig-pq on gen 1 n2304-kmax4096 | 91,498 / 0 -> 91,687 / 0
+register mldsa65/n2560-kmax16384 | 3,881,880 / 94,139,370 -> 3,881,880 / 94,335,210
+register msig-pq/n2560-kmax16384 | 4,008,856 / 86,169,600 -> 4,008,856 / 86,365,440
+popOf (the blob setKemKey decodes) mldsa65/v2 n2560-kmax16384 | 15,272 / 0 -> 15,294 / 0
+setKemKey fndsa512/v2 n2560-kmax16384 | 2,515,999 / 3,947,400 -> 2,516,006 / 3,947,400
+popOf (the blob setKemKey decodes) fndsa512/v2 n2560-kmax16384 | 13,333 / 0 -> 13,355 / 0
+popOf (the blob setKemKey decodes) msig-pq/v2 n2560-kmax16384 | 12,948 / 0 -> 12,970 / 0
+register mldsa65 with pqzPop n2560-kmax16384 | 3,881,880 / 94,237,290 -> 3,881,880 / 94,433,130
+register mldsa65 without pqzPop n2560-kmax16384 | 1,799,064 / 43,777,890 -> 1,799,064 / 43,875,810
+storePqzPop mldsa65 n2560-kmax16384 | 2,104,216 / 50,459,400 -> 2,106,264 / 50,557,320
+storePqzPop again (no-op) n2560-kmax16384 | 2,104,216 / 0 -> 2,106,264 / 0
+storePqzPop msig-pq on gen 2 (gen 1 record) n2560-kmax16384 | 2,104,216 / 50,655,240 -> 2,106,264 / 50,753,160
+register msig-pq without pqzPop n2560-kmax16384 | 1,926,040 / 35,906,040 -> 1,926,040 / 36,003,960
+storePqzPop msig-pq on gen 1 n2560-kmax16384 | 2,104,216 / 50,459,400 -> 2,106,264 / 50,557,320
+registrationOf msig-pq on gen 2 (gen 1 record) n2560-kmax16384 | 138,638 / 0 -> 138,971 / 0
+registrationOf msig-pq on gen 1 n2560-kmax16384 | 96,960 / 0 -> 97,149 / 0
+register mldsa65/n2816-kmax65536 | 4,201,368 / 102,054,060 -> 4,201,368 / 102,249,900
+register msig-pq/n2816-kmax65536 | 4,328,344 / 94,084,290 -> 4,328,344 / 94,280,130
+popOf (the blob setKemKey decodes) mldsa65/v2 n2816-kmax65536 | 15,272 / 0 -> 15,294 / 0
+setKemKey fndsa512/v2 n2816-kmax65536 | 2,515,999 / 3,947,400 -> 2,516,006 / 3,947,400
+popOf (the blob setKemKey decodes) fndsa512/v2 n2816-kmax65536 | 13,333 / 0 -> 13,355 / 0
+popOf (the blob setKemKey decodes) msig-pq/v2 n2816-kmax65536 | 12,948 / 0 -> 12,970 / 0
+register mldsa65 with pqzPop n2816-kmax65536 | 4,201,368 / 102,151,980 -> 4,201,368 / 102,347,820
+register mldsa65 without pqzPop n2816-kmax65536 | 1,930,136 / 46,911,330 -> 1,930,136 / 47,009,250
+storePqzPop mldsa65 n2816-kmax65536 | 2,292,632 / 55,240,650 -> 2,294,680 / 55,338,570
+storePqzPop again (no-op) n2816-kmax65536 | 2,292,632 / 0 -> 2,294,680 / 0
+storePqzPop msig-pq on gen 2 (gen 1 record) n2816-kmax65536 | 2,292,632 / 55,436,490 -> 2,294,680 / 55,534,410
+register msig-pq without pqzPop n2816-kmax65536 | 2,057,112 / 39,039,480 -> 2,057,112 / 39,137,400
+storePqzPop msig-pq on gen 1 n2816-kmax65536 | 2,292,632 / 55,240,650 -> 2,294,680 / 55,338,570
+registrationOf msig-pq on gen 2 (gen 1 record) n2816-kmax65536 | 155,871 / 0 -> 156,204 / 0
+registrationOf msig-pq on gen 1 n2816-kmax65536 | 110,351 / 0 -> 110,540 / 0

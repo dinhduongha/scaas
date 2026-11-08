@@ -1,20 +1,21 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-import {MetaTxBase} from "../../src/metatx/MetaTxBase.sol";
+import {MetaTxAddressBase} from "../../src/metatx/MetaTxAddressBase.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 
-/// A registry-like contract on `MetaTxBase` (the "family-tree registry" of CTR-MTX-22): fee `NONE` only.
+/// A registry-like contract on `MetaTxAddressBase` (the "family-tree registry" of CTR-MTX-22; the address generic path,
+/// ua-mtx-merge MD-1): fee `NONE` only.
 /// Allowlist: `cancelNonce(uint256)` (base), `setName(string)` (dynamic, ABSOLUTE), `bump(uint256)` (static 36,
 /// AMOUNT(0)), `poke(address,bytes)` (dynamic, ABSOLUTE): a test-only probe that calls out from inside the
 /// self-call. A real allowlist never forwards calldata (CTR-MTX-16).
-contract MtxRegistryMock is MetaTxBase {
+contract MtxRegistryMock is MetaTxAddressBase {
     error ZeroBump();
 
     mapping(address => string) public nameOf;
     mapping(address => uint256) public count;
 
-    constructor(string memory domainName, bytes32 chainUid_) MetaTxBase(domainName, chainUid_) {}
+    constructor(string memory domainName, bytes32 chainUid_) MetaTxAddressBase(domainName, chainUid_) {}
 
     function setName(string calldata name) external nonReentrant {
         nameOf[_msgSender()] = name;

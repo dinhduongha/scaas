@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
+import {LegacyMetaTransfer} from "../helpers/LegacyMetaTransfer.sol";
 
 /// CTR-MTX-15: the generic `MetaTransaction` and its pinned typehash; canonical zeroing; `data` hashed.
 contract MetaTxLibTest is Test {
@@ -70,13 +71,15 @@ contract MetaTxLibTest is Test {
         assertTrue(_h(f, address(1), address(3)) != _h(f, address(1), address(4)));
     }
 
+    /// ua-mtx-merge T2 (R46): `MetaTransfer` left `MetaTxLib` for legacy/ua-mtx-merge/; the pin stays, on the test copy
+    /// that signs the retired form (`LegacyMetaTransfer`).
     function test_metaTransferTypehashIsPinned() public pure {
         assertEq(
-            MetaTxLib.METATRANSFER_TYPEHASH,
+            LegacyMetaTransfer.TYPEHASH,
             0xe76cb6dc9ab3eb734c6dc32ec8732764c97cf48f22aed55d73690e01d518086e
         );
         assertEq(
-            MetaTxLib.METATRANSFER_TYPEHASH,
+            LegacyMetaTransfer.TYPEHASH,
             keccak256("MetaTransfer(address from,address to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)")
         );
     }
@@ -92,6 +95,16 @@ contract MetaTxLibTest is Test {
         assertEq(
             MetaTxLib.UAMETATRANSFER_TYPEHASH,
             keccak256("UAMetaTransfer(bytes32 from,bytes32 to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)")
+        );
+    }
+
+    /// ua-mtx-merge Q2: the ordered cancel on ids, `CancelNonce`'s shape with `bytes32 from` (the type string of the
+    /// unordered `UACancelNonce(bytes32 ua,uint256 batch,uint256 validUntil)` it replaces changed, so its hash did).
+    function test_uaCancelNonceTypehashIsPinned() public pure {
+        assertEq(MetaTxLib.UA_CANCEL_NONCE_TYPEHASH, 0xcd17c2129240241748e841a7f0572558b9c5a900a47bc540170a8c258d291c54);
+        assertEq(
+            MetaTxLib.UA_CANCEL_NONCE_TYPEHASH,
+            keccak256("UACancelNonce(bytes32 from,uint256 lane,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)")
         );
     }
 

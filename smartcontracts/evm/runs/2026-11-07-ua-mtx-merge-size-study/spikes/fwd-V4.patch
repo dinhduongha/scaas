@@ -1,0 +1,106 @@
+diff --git a/smartcontracts/evm/src/FwdSpike.sol b/smartcontracts/evm/src/FwdSpike.sol
+new file mode 100644
+index 00000000..07d16843
+--- /dev/null
++++ b/smartcontracts/evm/src/FwdSpike.sol
+@@ -0,0 +1,16 @@
++// SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
++pragma solidity ^0.8.24;
++// fwd_spike (size study only): an entry's calldata to its library, unchanged; the return data back.
++address constant FWD_LIB = 0x00000000000000000000000000000000DeaDBeef;
++function fwdCall() {
++    address l = FWD_LIB;
++    assembly ("memory-safe") {
++        calldatacopy(0, 0, calldatasize())
++        let ok := delegatecall(gas(), l, 0, calldatasize(), 0, 0)
++        returndatacopy(0, 0, returndatasize())
++        if iszero(ok) { revert(0, returndatasize()) }
++        return(0, returndatasize())
++    }
++}
++function fwdView() view { function() f = fwdCall; function() view v; assembly ("memory-safe") { v := f } v(); }
++function fwdPure() pure { function() f = fwdCall; function() pure v; assembly ("memory-safe") { v := f } v(); }
+diff --git a/smartcontracts/evm/src/governance/GovernanceBase.sol b/smartcontracts/evm/src/governance/GovernanceBase.sol
+index a630e4cb..77ea8c59 100644
+--- a/smartcontracts/evm/src/governance/GovernanceBase.sol
++++ b/smartcontracts/evm/src/governance/GovernanceBase.sol
+@@ -1,5 +1,6 @@
+ // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+ pragma solidity ^0.8.24;
++import {fwdCall, fwdView, fwdPure} from "../FwdSpike.sol";
+ 
+ import {IGovernance} from "./IGovernance.sol";
+ import {GovernanceLib} from "./GovernanceLib.sol";
+@@ -78,30 +79,22 @@ abstract contract GovernanceBase is IGovernance {
+         return parent == child;
+     }
+ 
+-    function features() external view returns (uint256) { return GovernanceLib.$().features; }
+-    function lockedFeatures() external view returns (uint256) { return GovernanceLib.$().lockedFeatures; }
+-    function owner() external view returns (bytes32) { return GovernanceLib.$().owner; }
+-    function pendingOwner() external view returns (bytes32) { return GovernanceLib.$().pendingOwner; }
+-    function hasRole(uint8 bit, bytes32 account) external view returns (bool) { return GovernanceLib.hasRole(bit, account); }
+-    function validBits() external pure returns (uint256) { return _validBits(); }
+-    function holderCount(uint8 bit) external view returns (uint256) { return GovernanceLib.$().counts[bit].holders; }
+-    function grantDelay() external view returns (uint64) { return GovernanceLib.$().grantDelay; }
+-    function lastProposedAt() external view returns (uint64) { return GovernanceLib.$().lastProposedAt; }
+-    function pendingGrant(uint8 bit, bytes32 account) external view returns (uint64, bytes32, bytes32, bool) {
+-        return GovernanceLib.pendingGrant(bit, account);
+-    }
+-    function grantOf(uint8 bit, bytes32 holder) external view returns (Grant memory) {
+-        return GovernanceLib.$().grants[bit][holder];
+-    }
++    function features() external view returns (uint256) { fwdView(); }
++    function lockedFeatures() external view returns (uint256) { fwdView(); }
++    function owner() external view returns (bytes32) { fwdView(); }
++    function pendingOwner() external view returns (bytes32) { fwdView(); }
++    function hasRole(uint8 bit, bytes32 account) external view returns (bool) { fwdView(); }
++    function validBits() external pure returns (uint256) { fwdPure(); }
++    function holderCount(uint8 bit) external view returns (uint256) { fwdView(); }
++    function grantDelay() external view returns (uint64) { fwdView(); }
++    function lastProposedAt() external view returns (uint64) { fwdView(); }
++    function pendingGrant(uint8 bit, bytes32 account) external view returns (uint64, bytes32, bytes32, bool) { fwdView(); }
++    function grantOf(uint8 bit, bytes32 holder) external view returns (Grant memory) { fwdView(); }
+ 
+     /// @notice Bits 128-255 only (CTR-GOV-10); a contract with no application bit answers with a refusal.
+-    function bitLabel(uint8 bit) external view virtual returns (BitType, bytes4, string memory) {
+-        revert FeatureInvalidForKind(bit);
+-    }
++    function bitLabel(uint8 bit) external view virtual returns (BitType, bytes4, string memory) { fwdView(); }
+ 
+-    function grantRole(uint8 bit, bytes32 account) external governed {
+-        GovernanceLib.grantRole(bit, account, _govSubject(), _roleBits(), _contractOnlyBits(), _uaRegistry());
+-    }
++    function grantRole(uint8 bit, bytes32 account) external governed { fwdCall(); }
+     /// @notice The owner sets any holder's grant, a widening in two calls (spec §1.6); a holder with a `delegable` grant sets
+     ///         a narrower leaf at once. Spent is carried.
+     function setGrant(uint8 bit, bytes32 holder, GrantTerms calldata terms) external governed {
+@@ -110,21 +103,11 @@ abstract contract GovernanceBase is IGovernance {
+         if (leaf && !_scopeNarrows(bit, parentScope, terms.scope)) revert GrantNotNarrower(7);
+     }
+ 
+-    function cancelGrant(uint8 bit, bytes32 account) external governed {
+-        GovernanceLib.cancelGrant(bit, account, _govSubject());
+-    }
+-    function revokeRole(uint8 bit, bytes32 account) external governed {
+-        GovernanceLib.revokeRole(bit, account, _govSubject(), _delayedRelaxBits());
+-    }
+-    function renounceRole(uint8 bit) external governed {
+-        GovernanceLib.renounceRole(bit, _govSubject(), _delayedRelaxBits());
+-    }
+-    function disableFeature(uint8 bit) external virtual governed {
+-        GovernanceLib.disableFeature(bit, _govSubject(), _delayedRelaxBits());
+-    }
+-    function transferOwnership(bytes32 newOwner) external governed {
+-        GovernanceLib.transferOwnership(newOwner, _govSubject());
+-    }
+-    function acceptOwnership() external governed { GovernanceLib.acceptOwnership(_govSubject()); }
+-    function renounceOwnership() external governed { GovernanceLib.renounceOwnership(_govSubject(), _roleBits()); }
++    function cancelGrant(uint8 bit, bytes32 account) external governed { fwdCall(); }
++    function revokeRole(uint8 bit, bytes32 account) external governed { fwdCall(); }
++    function renounceRole(uint8 bit) external governed { fwdCall(); }
++    function disableFeature(uint8 bit) external virtual governed { fwdCall(); }
++    function transferOwnership(bytes32 newOwner) external governed { fwdCall(); }
++    function acceptOwnership() external governed { fwdCall(); }
++    function renounceOwnership() external governed { fwdCall(); }
+ }

@@ -9,6 +9,7 @@ TestCase {
 
     property var k: vectors.load("kinds.json")
     property var s: vectors.load("structures.json")
+    property var d: vectors.load("id_display.json")
 
     function hex(v) { return v === null ? "" : v }
 
@@ -71,6 +72,25 @@ TestCase {
         for (const r of k.invalid) {
             compare(UaKinds.validateKeyData(r.kind, r.keyData, r.hederaNative), false, r.reason)
             compare(UaKinds.lastError, r.error, r.reason)
+        }
+    }
+
+    // ua-mtx-merge spec §6, MD-9: every row of id_display.json, and a row for every kind of the table.
+    function test_id_display_rows() {
+        verify(d.rows.length > 0)
+        for (const r of d.rows) {
+            const got = UaKinds.idDisplay(r.id, r.kind)
+            if (r.display) {
+                compare(got, r.display.address ?? r.display.urn, r.name)
+                compare(UaKinds.lastError, "", r.name)
+            } else {
+                compare(got, "", r.name)
+                compare(UaKinds.lastError, r.error, r.name)
+            }
+        }
+        for (const t of k.kinds) {
+            const want = t.native ? (r => r.error === "UAKindNotDerived") : (r => !!(r.display && r.display.urn))
+            verify(d.rows.some(r => r.kind === t.kind && want(r)), "no row for " + t.name)
         }
     }
 
@@ -401,7 +421,7 @@ TestCase {
     }
 
     // metatx split T18: CTR-MTX-26 metaPayId / payLane and CTR-MTX-27 relayRef (EVM) against the forge-written vectors
-    property var pm: vectors.load("../metatx/paymeta.json")
+    property var pm: vectors.load("../metatx/legacy/ua-mtx-merge/paymeta.json")
     property var rr: vectors.load("../metatx/relayref.json")
 
     function test_meta_pay_id_vectors() {
@@ -744,17 +764,33 @@ TestCase {
         compare(UaKinds.lastError, "UAArgument")
     }
 
-    // governance T14: governanceBit against governance_bits.json on disk, every row; past bit 21 "" and UAArgument
+    // governance T14: governanceBit against governance_bits.json on disk, every row; past bit 23 "" and UAArgument
     function test_governance_bits_rows() {
         const v = vectors.load("../governance/governance_bits.json")
-        compare(v.bits.length, 22)
+        compare(v.bits.length, 24)
         for (const r of v.bits) {
             compare(JSON.parse(UaKinds.governanceBit(r.bit)), r, "bit " + r.bit)
             compare(UaKinds.lastError, "")
         }
-        for (const bit of [22, 127, 128, 255, 256, -1]) {
+        for (const bit of [24, 127, 128, 255, 256, -1]) {
             compare(UaKinds.governanceBit(bit), "", bit)
             compare(UaKinds.lastError, "UAArgument", bit)
         }
+    }
+
+    // pay-meta-tax T41: paymeta.json v2 rows (257 bytes refused) and paytax.json's UAPayWithTax digest row
+    function test_pay_rows() {
+        for (const r of vectors.load("../metatx/paymeta.json")) {
+            const o = UaKinds.metaPayIdV2(JSON.stringify({ salt: r.salt, payNo: r.payNo, schema: r.schema, body: r.body }))
+            if (r.accepted) compare(JSON.parse(o).payId, r.payId, r.name)
+            else { compare(o, "", r.name); compare(UaKinds.lastError, "UAArgument", r.name) }
+        }
+        const r = vectors.load("../metatx/paytax.json").find((x) => x.name === "digest_unbound_relayer_fee_recipient")
+        const payment = {}
+        for (const k of ["from", "to", "value", "entryRef", "batch", "nonce", "validUntil", "mode", "relayer", "fee", "feeRecipient"]) payment[k] = r[k]
+        const got = JSON.parse(UaKinds.payDigest(JSON.stringify({ struct: "UAPayWithTax", domain: r.domain,
+            message: { payment: payment, taxMode: r.taxMode, tax: r.tax } })))
+        compare(got.digest, r.digest)
+        compare(got.structHash, r.structHash)
     }
 }

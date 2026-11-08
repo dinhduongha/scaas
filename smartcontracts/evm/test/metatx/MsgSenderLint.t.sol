@@ -11,11 +11,19 @@ import {Test} from "forge-std/Test.sol";
 /// are `//` are skipped (block comments are not). A change here is deliberate: update the pin in the same commit and
 /// say why.
 contract MsgSenderLintTest is Test {
-    string[18] internal FILES = ["src/metatx/MetaTxBase.sol", "src/metatx/UAMetaTxBase.sol", "src/metatx/MtxPipelineLib.sol", "src/metatx/ERC20MetaTx.sol", "src/metatx/MetaTokenBase.sol",
+    // ua-mtx-merge MD-6: + MetaTxAddressBase (the address bodies moved out of MetaTxBase), MtxRelayFee, the PQZ token files,
+    // ZetherWrappedLib; `PqzLayer` and `SCaaSDex` read `this.` on purpose (pinned in `test_noExternalSelfCalls`)
+    // ua-mtx-merge T3b (MD-6's way): + the mandate wallets, on `UAMetaTxBase` (Q6)
+    // ua-mtx-merge T27: + the regulated layer and kinds (`src/regulated/`), none reading `msg.sender`; T28: + kind 8; T31: + kind 12
+    string[32] internal FILES = ["src/wallet/MandateWallet.sol", "src/hedera/HederaMandateWallet.sol", "src/metatx/MetaTxAddressBase.sol", "src/metatx/MtxRelayFee.sol", "src/pqz/NormalPqzToken.sol",
+        "src/pqz/WrappedPqzToken.sol", "src/pqz/PqzWrappedLib.sol", "src/zether/ZetherWrappedLib.sol", "src/metatx/MetaTxBase.sol", "src/metatx/UAMetaTxBase.sol", "src/metatx/MtxPipelineLib.sol", "src/metatx/ERC20MetaTx.sol", "src/metatx/MetaTokenBase.sol",
         "src/metatx/NormalToken.sol", "src/metatx/WrappedToken.sol", "src/metatx/WrappedLib.sol",
         "src/governance/GovernanceLib.sol", "src/hedera/HederaLib.sol", "src/trade/TradeLib.sol", "src/zether/ZetherLayer.sol",
         "src/zether/ZetherLib.sol", "src/zether/NormalZetherToken.sol", "src/zether/WrappedZetherToken.sol",
-        "src/governance/GovernanceBase.sol", "src/governance/GovernanceRouterBase.sol", "src/governance/GovernanceRouter.sol"];
+        "src/governance/GovernanceBase.sol", "src/governance/GovernanceRouterBase.sol", "src/governance/GovernanceRouter.sol",
+        "src/regulated/RegulatedBase.sol", "src/regulated/RegulatedLib.sol", "src/regulated/WrappedRegulatedToken.sol",
+        "src/regulated/WrappedPqzRegulatedToken.sol", "src/regulated/NormalRegulatedToken.sol",
+        "src/regulated/NormalPqzRegulatedToken.sol"];
 
     /// Occurrences of `pat` (not preceded by an identifier character); `exceptSelector` skips `pat<ident>.selector`.
     function _count(string memory path, bytes memory pat, bool exceptSelector) internal view returns (uint256 n) {
@@ -65,13 +73,32 @@ contract MsgSenderLintTest is Test {
         // metatx split T4: the fee defaults left with `_checkTransfer` / `_checkUATransfer` / `_callFee` (now in
         // MtxPipelineLib); the event of `_execute` came down from MetaTxBase in T3.
         // dex-round T4 (DX7): the two `restorePulled` overloads read their caller directly (`o.dex`), as `mtxTrade`.
-        assertEq(_count("src/metatx/ERC20MetaTx.sol", "msg.sender", false), 7,
-            "ERC20MetaTx: event relayer x3 (_execute, _executeTransfer, _uaExecuteTransfer), mtxTrade and uaTrade caller (CTR-DEX-15, -25), restorePulled caller x2 (DX7)");
-        assertEq(_count("src/metatx/UAMetaTxBase.sol", "msg.sender", false), 1, "UAMetaTxBase: event relayer (_uaSettle)");
-        assertEq(_count("src/metatx/MetaTokenBase.sol", "msg.sender", false), 4,
-            "MetaTokenBase: factory check in initialize; the relayer of mtxRelayFee, uaRelayFee (struct word x2, `_relayHash`), bound to the direct caller");
+        // ua-mtx-merge T2: 7 -> 6, the address `_executeTransfer` (its event relayer) left for legacy/ua-mtx-merge/
+        // ua-mtx-merge T6 (R12): 6 -> 4, the address `mtxTrade(TradeOrder, …)` and `restorePulled(TradeOrder, …)` left
+        // for legacy/ua-mtx-merge/ (the merged `mtxTrade` and the one `restorePulled` keep their direct caller reads)
+        assertEq(_count("src/metatx/ERC20MetaTx.sol", "msg.sender", false), 4,
+            "ERC20MetaTx: event relayer x2 (_settle, _uaExecuteTransfer), mtxTrade caller (CTR-DEX-15, -25), restorePulled caller (DX7)");
+        // ua-mtx-merge T1 (Q2): 1 -> 2, the ordered `mtxCancelNonce` emits its own `UAMetaTransactionExecuted` (no self-call)
+        assertEq(_count("src/metatx/UAMetaTxBase.sol", "msg.sender", false), 2,
+            "UAMetaTxBase: event relayer (_uaSettle, mtxCancelNonce)");
+        // ua-mtx-merge MD-6: the files the merge rewrites, at their base counts (MetaTxAddressBase: new, the address
+        // bodies moved out of MetaTxBase, which kept its 8)
+        assertEq(_count("src/metatx/MetaTxAddressBase.sol", "msg.sender", false), 0, "MetaTxAddressBase");
+        assertEq(_count("src/metatx/MtxRelayFee.sol", "msg.sender", false), 4,
+            "MtxRelayFee: ROUTER at construction, the router check, the open-mode payee x2 (pay and pad)");
+        assertEq(_count("src/pqz/PqzLayer.sol", "msg.sender", false), 0, "PqzLayer");
+        assertEq(_count("src/pqz/NormalPqzToken.sol", "msg.sender", false), 0, "NormalPqzToken");
+        assertEq(_count("src/pqz/WrappedPqzToken.sol", "msg.sender", false), 0, "WrappedPqzToken");
+        assertEq(_count("src/pqz/PqzWrappedLib.sol", "msg.sender", false), 0, "PqzWrappedLib");
+        assertEq(_count("src/zether/ZetherWrappedLib.sol", "msg.sender", false), 0, "ZetherWrappedLib");
+        assertEq(_count("src/dex/SCaaSDex.sol", "msg.sender", false), 14,
+            "SCaaSDex: the factory check, _msgSender x2 (with its designator refusal), the self-call guard x2, the submitter x9");
+        // ua-mtx-merge T2: 4 -> 3, the address `mtxRelayFee` (its struct's relayer) left for legacy/ua-mtx-merge/
+        assertEq(_count("src/metatx/MetaTokenBase.sol", "msg.sender", false), 3,
+            "MetaTokenBase: factory check in initialize; the relayer of mtxRelayFee (the payment's word and `_relayHash`), bound to the direct caller");
         assertEq(_count("src/metatx/NormalToken.sol", "msg.sender", false), 0, "NormalToken");
-        assertEq(_count("src/metatx/WrappedToken.sol", "msg.sender", false), 4, "WrappedToken: mtxWrapOrder and uaWrapOrder submitter x2 (CTR-TOK-20)");
+        // ua-mtx-merge T26: 2 -> 3, the submitter as the fee leg of `_regFeeTo` (regulated-kinds spec §2.2, §3.2)
+        assertEq(_count("src/metatx/WrappedToken.sol", "msg.sender", false), 3, "WrappedToken: mtxWrapOrder submitter x3 (CTR-TOK-20: the pull, the fee mint, the fee leg's hook; ua-mtx-merge T3: 4 -> 2, the address wrap order to legacy, R39)");
         // governance T8 (spec §6.1, GD-20): `_addLeg` asks the factory, `msg.sender` through the DELEGATECALL, `isRegisteredToken`
         assertEq(_count("src/metatx/WrappedLib.sol", "msg.sender", false), 1, "WrappedLib: the factory in _addLeg's leg check (CTR-GOV-05)");
         assertEq(_count("src/trade/TradeLib.sol", "msg.sender", false), 0, "TradeLib: the caller is a parameter");
@@ -85,9 +112,19 @@ contract MsgSenderLintTest is Test {
         // id, or, from the release's GOV_ROUTER, the UA the router names; the router names it only to its live target
         assertEq(_count("src/governance/GovernanceBase.sol", "msg.sender", false), 2,
             "GovernanceBase: _govSubject's router compare and the subject asked of it");
-        assertEq(_count("src/governance/GovernanceRouterBase.sol", "msg.sender", false), 3,
-            "GovernanceRouterBase: subject()'s target compare, the event relayer x2 (mtx, ua)");
+        assertEq(_count("src/governance/GovernanceRouterBase.sol", "msg.sender", false), 2,
+            "GovernanceRouterBase: subject()'s target compare, the event relayer (ua-mtx-merge T7: 3 -> 2, _mtxCall to legacy)");
         assertEq(_count("src/governance/GovernanceRouter.sol", "msg.sender", false), 0, "GovernanceRouter");
+        // ua-mtx-merge T3b (Q6): every authority check reads `_subject()` (CTR-ACC-12), none `msg.sender`
+        assertEq(_count("src/wallet/MandateWallet.sol", "msg.sender", false), 0, "MandateWallet");
+        assertEq(_count("src/hedera/HederaMandateWallet.sol", "msg.sender", false), 0, "HederaMandateWallet");
+        // ua-mtx-merge T27: the subject is `_govSubject()`, passed to `RegulatedLib` as a word (F-05)
+        assertEq(_count("src/regulated/RegulatedBase.sol", "msg.sender", false), 0, "RegulatedBase");
+        assertEq(_count("src/regulated/RegulatedLib.sol", "msg.sender", false), 0, "RegulatedLib");
+        assertEq(_count("src/regulated/WrappedRegulatedToken.sol", "msg.sender", false), 0, "WrappedRegulatedToken");
+        assertEq(_count("src/regulated/WrappedPqzRegulatedToken.sol", "msg.sender", false), 0, "WrappedPqzRegulatedToken");
+        assertEq(_count("src/regulated/NormalRegulatedToken.sol", "msg.sender", false), 0, "NormalRegulatedToken");
+        assertEq(_count("src/regulated/NormalPqzRegulatedToken.sol", "msg.sender", false), 0, "NormalPqzRegulatedToken");
     }
 
     /// CTR-MTX-18: an external self-call (`this.f(…)`) inside an allowlisted body would let a guarded callee consume
@@ -100,5 +137,9 @@ contract MsgSenderLintTest is Test {
             all += _count(FILES[i], "this.", false);
         }
         assertGt(all, 0);
+        // ua-mtx-merge MD-6: two files read `this.` outside a selector on purpose, outside any allowlisted body
+        assertEq(_count("src/pqz/PqzLayer.sol", "this.", true), 1, "PqzLayer: `try this.disclosureStatement` (a view)");
+        assertEq(_count("src/dex/SCaaSDex.sol", "this.", true), 2,
+            "SCaaSDex: `abi.encodeCall(this.settleOne / this.exchangeOne, ...)`, calldata for its own `_selfCall`");
     }
 }

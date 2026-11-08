@@ -4,7 +4,8 @@
 //!   zether-cli <command>          JSON request on stdin, JSON result on stdout
 //!
 //! Commands: keygen, encrypt, decrypt, proveTransfer, verifyTransfer, proveTransferMulti, verifyTransferMulti,
-//! proveBurn, verifyBurn, openMemo, recoverTransfer, pop, shieldCalldata, envelope, typedDigest, namedCall (typed-signing C7; see `zether_prover::api`).
+//! proveBurn, verifyBurn, openMemo, recoverTransfer, pop, shieldCalldata, envelope, uaEnvelope, typedDigest, namedCall
+//! (typed-signing C7, ua-mtx-merge T12; see `zether_prover::api`).
 //! The commands of `api::HAZMAT` (decrypt, the provers, openMemo, recoverTransfer, ...) run only in a build with the test-only
 //! feature `hazmat` (ARCH-POS-13, ua-rs-sign T15c): `cargo build --release --features hazmat --bin zether-cli`.
 

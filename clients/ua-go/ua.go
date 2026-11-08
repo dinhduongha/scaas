@@ -101,8 +101,8 @@ func Keccak256(parts ...[]byte) (out [32]byte) {
 
 var MsgTag = Keccak256([]byte("scaas.ua.msg.v1"))
 
-// GovernanceBit is a row of the governance bits 0-21 (spec 2026-11-02-governance §1.2). The disclosure sentences are read by the app from
-// smartcontracts/vectors/governance/governance_bits.json; bits 22-127 are free, 128-255 the application's bitLabel(bit).
+// GovernanceBit is a row of the governance bits 0-23 (spec 2026-11-02-governance §1.2). The disclosure sentences are read by the app from
+// smartcontracts/vectors/governance/governance_bits.json; bits 24-127 are free, 128-255 the application's bitLabel(bit).
 type GovernanceBit struct{ Name, Type string }
 
 // GovernanceBits is indexed by bit.
@@ -111,7 +111,7 @@ var GovernanceBits = []GovernanceBit{
 	{"WRAP_DISABLEABLE", "power"}, {"FREEZE", "power"}, {"FORCE", "power"}, {"PAUSE", "power"}, {"ALLOWLIST", "capability"},
 	{"DENYLIST", "capability"}, {"RECORD", "power"}, {"LISTING", "power"}, {"FEE_ROUTING", "power"}, {"", "unused"}, {"", "unused"},
 	{"ARBITRATE", "reserved"}, {"CORRECT", "reserved"}, {"RESCUABLE", "capability"}, {"PUBLISH", "power"}, {"DEPRECATE", "power"},
-	{"ENABLE_KIND", "power"}, {"MODERATE", "power"},
+	{"ENABLE_KIND", "power"}, {"MODERATE", "power"}, {"OPERATOR_TRANSFER", "power"}, {"TAX", "power"},
 }
 
 func KindInfo(kind uint16) (*Kind, error) {
@@ -774,6 +774,35 @@ func CanonicalID(text string) (string, error) {
 		h = h[24:]
 	}
 	return "0x" + h, nil
+}
+
+// IDDisplay is how a client shows a bytes32 id before the user signs (ua-mtx-merge spec §6, MD-9): the EIP-55 address of an id
+// in the native space (top 96 bits zero, CTR-UA-03), else the URN "urn:scaas:ua:v1:<kind name>:<hex32>" (NET-ALL-21) under kind,
+// the id's registry kind (0 = none known: refused, never an address). id is "0x" + 64 hex digits.
+func IDDisplay(id string, kind uint16) (string, error) {
+	h, ok := strings.CutPrefix(id, "0x")
+	if _, err := hex.DecodeString(h); !ok || len(h) != 64 || err != nil {
+		return "", fail("UAIdFormat", id)
+	}
+	h = strings.ToLower(h)
+	if strings.HasPrefix(h, strings.Repeat("0", 24)) {
+		a := []byte(h[24:])
+		d := Keccak256(a)
+		for i, c := range a {
+			if c >= 'a' && d[i/2]>>(4*(1-i%2))&0xf >= 8 {
+				a[i] = c - 32
+			}
+		}
+		return "0x" + string(a), nil
+	}
+	k, err := KindInfo(kind)
+	if err != nil {
+		return "", err
+	}
+	if k.Native {
+		return "", fail("UAKindNotDerived", k.Name)
+	}
+	return "urn:scaas:ua:v1:" + k.Name + ":" + h, nil
 }
 
 // Inner gives an msig member's key data by its id, nil if unknown.

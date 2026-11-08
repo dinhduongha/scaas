@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {MandateFixture} from "../wallet/MandateWallet.t.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {SigCheck} from "../../src/common/SigCheck.sol";
+import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {FeeMode} from "../../src/common/FeePolicy.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
@@ -66,15 +68,16 @@ contract Sweeper7702Test is MandateFixture {
     function test_sweeper_directCallsRefused() public {
         bytes32 tokenOwner = v.owner();
         _swept(address(v), abi.encodeCall(IERC20.transfer, (attacker, 1_000)));
-        _swept(address(v), abi.encodeCall(IERC20Payment.payWithFee, (attacker, 1_000, FeeMode.NONE, 0, address(0), 0)));
+        _swept(address(v), abi.encodeCall(IERC20Payment.payWithFee, (attacker, 1_000, FeeMode.NONE, 0, address(0),
+            PayMetaKit.ref(0), PayMetaKit.meta(0))));
         _swept(address(v), abi.encodeCall(IERC20.approve, (address(sweeper), 1_000)));
         _swept(address(v), abi.encodeCall(NormalToken.mint, (attacker, 1e9)));
         _swept(address(v), abi.encodeCall(IGovernance.transferOwnership, (nid(attacker))));
         _swept(address(v), abi.encodeCall(IMetaTx.cancelNonce, (0)));
         _swept(address(wt), abi.encodeWithSignature("unwrap(uint256,address)", 100, attacker));
         _swept(address(w), abi.encodeCall(MandateWallet.execute, (address(t), 0, abi.encodeCall(IERC20.transfer, (attacker, 10_000)))));
-        _swept(address(w), abi.encodeCall(MandateWallet.setMandate, (address(t), attacker, 10_000, 10_000, 1 days, uint64(block.timestamp + 1 days))));
-        _swept(address(w), abi.encodeCall(MandateWallet.setPayee, (address(t), attacker, true)));
+        _swept(address(w), abi.encodeCall(MandateWallet.setMandate, (address(t), _id(attacker), 10_000, 10_000, 1 days, uint64(block.timestamp + 1 days))));
+        _swept(address(w), abi.encodeCall(MandateWallet.setPayee, (address(t), _id(attacker), true)));
         assertEq(v.balanceOf(owner), 1_000);
         assertEq(v.owner(), tokenOwner);
         assertEq(wt.balanceOf(owner), 100);
@@ -84,20 +87,20 @@ contract Sweeper7702Test is MandateFixture {
 
     /// D1: the sweeper's ERC-1271 "yes" is never asked for a designator; the attacker's signature is just wrong.
     function test_sweeper_signaturesRefused() public {
-        MetaTxLib.MetaTransfer memory x = _tr(owner, attacker, 1_000, 0, 0, RR);
-        bytes memory s = _signTr(0xA77AC, address(v), x);
+        MetaTxLib.UAMetaTransfer memory x = _tr(owner, attacker, 1_000, 0, 0, RR);
+        IUARegistry.UASig memory s = _signTr(0xA77AC, address(v), x);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         vm.prank(relayer);
         v.mtxExecuteTransfer(x, s);
-        bytes memory data = abi.encodeCall(MandateWallet.setPayee, (address(t), attacker, true));
-        MetaTxLib.MetaTransaction memory m;
-        (m.from, m.data, m.validUntil) = (owner, data, block.timestamp + 300);
-        bytes memory sig = _sig(0xA77AC, w.mtxDigest(m));
+        // ua-mtx-merge T3b: the owner's call is the wallet's generic `mtxExecute` on ids (the flat builder is in legacy)
+        MetaTxLib.UAMetaTransaction memory m =
+            _gen(_id(owner), abi.encodeCall(MandateWallet.setPayee, (address(t), _id(attacker), true)), 0, 0);
+        IUARegistry.UASig memory a = _ua(0xA77AC, w.mtxDigest(m));
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         vm.prank(relayer);
-        w.mtxExecuteAsOwner(data, 0, m.validUntil, sig);
+        w.mtxExecute(m, a);
         // the victim's own key still moves its tokens, relayed (fee 0), while the delegation stands
-        x.to = stranger;
+        x.to = MetaTxLib.pad(stranger);
         _xfer(OWNER_PK, address(v), x);
         assertEq(v.balanceOf(stranger), 1_000);
     }
@@ -119,8 +122,8 @@ contract Sweeper7702Test is MandateFixture {
     function test_boundRelayerDelegatedRefused() public {
         vm.etch(owner, "");
         vm.etch(relayer, abi.encodePacked(hex"ef0100", address(sweeper)));
-        MetaTxLib.MetaTransfer memory x = _tr(owner, stranger, 10, 0, 0, RR);
-        bytes memory s = _signTr(OWNER_PK, address(v), x);
+        MetaTxLib.UAMetaTransfer memory x = _tr(owner, stranger, 10, 0, 0, RR);
+        IUARegistry.UASig memory s = _signTr(OWNER_PK, address(v), x);
         vm.expectRevert(abi.encodeWithSelector(SigCheck.CallerDelegated.selector, relayer));
         vm.prank(relayer);
         v.mtxExecuteTransfer(x, s);

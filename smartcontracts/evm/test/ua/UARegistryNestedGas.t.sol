@@ -458,7 +458,7 @@ contract UARegistryNestedGasTest is UARegistryBase {
         IUARegistry.UASig memory sig;
         sig.members = s;
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAPqzHolder.selector, ua));
-        g2.setPqzKey(ua, key, keccak256("proof"), sig);
+        g2.setPqzKey(ua, 0, key, keccak256("proof"), sig);
     }
 
     /// `{15 EOAs from key `from`, ml of weight 16}`, 16 of 16, and the `pop` of ml alone (weight 16 reaches the threshold).

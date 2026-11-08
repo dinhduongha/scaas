@@ -175,9 +175,9 @@ contract UATradeVectorsTest is UARegistryBase {
             string memory r = _row(i);
             ITradeToken.UATradeOrder memory o = _order(string.concat(r, "order.message."));
             bytes32 h = vm.parseJsonBytes32(vj, string.concat(r, "orderHash"));
-            assertEq(A.uaTradeOrderDigest(o), h);
-            assertEq(A.cancelUAOrderDigest(o), vm.parseJsonBytes32(vj, string.concat(r, "cancelDigest")));
-            assertEq(A.uaInvalidateNoncesDigest(o.from, 1, 5), vm.parseJsonBytes32(vj, string.concat(r, "invalidateDigest")));
+            assertEq(A.tradeOrderDigest(o), h);
+            assertEq(A.cancelOrderDigest(o), vm.parseJsonBytes32(vj, string.concat(r, "cancelDigest")));
+            assertEq(A.invalidateNoncesDigest(o.from, 1, 5), vm.parseJsonBytes32(vj, string.concat(r, "invalidateDigest")));
             uint256 snap = vm.snapshotState();
             if (o.from != makerId) {
                 _fund(A, o.from, 1000);
@@ -197,10 +197,10 @@ contract UATradeVectorsTest is UARegistryBase {
                 assertEq(B.balanceOfUA(o.from), 2000 - 6);
                 assertEq(A.pulled(h), 1000);
             }
-            A.uaCancelOrder(o, UACall.auth(o.from, vm.parseJsonBytes(vj, string.concat(r, "cancelAuth"))));
+            A.mtxCancelOrder(o, UACall.auth(o.from, vm.parseJsonBytes(vj, string.concat(r, "cancelAuth"))));
             assertEq(A.pulled(h), 1000);
-            A.uaInvalidateNonces(o.from, 1, 5, UACall.auth(o.from, vm.parseJsonBytes(vj, string.concat(r, "invalidateAuth"))));
-            assertEq(A.uaMinNonce(o.from, 1), 5);
+            A.mtxInvalidateNonces(o.from, 1, 5, UACall.auth(o.from, vm.parseJsonBytes(vj, string.concat(r, "invalidateAuth"))));
+            assertEq(A.minNonce(o.from, 1), 5);
             vm.revertToState(snap);
             ++n;
         }

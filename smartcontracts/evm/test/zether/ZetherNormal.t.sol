@@ -704,26 +704,26 @@ abstract contract ZetherNormalSuite is ZetherFixture {
         tok.transferToUA(a, 100 * SCALE);
         assertEq(tok.balanceOfUA(a), 100 * SCALE);
         MetaTxLib.UAMetaTransfer memory t = MetaTxLib.UAMetaTransfer({
-            from: a, to: b, value: 10 * SCALE, entryRef: 0, batch: 1, nonce: tok.uaNonce(a, 1),
+            from: a, to: b, value: 10 * SCALE, entryRef: 0, batch: 1, nonce: tok.mtxNonce(a, 1),
             validUntil: block.timestamp + 300, mode: MetaTxLib.MODE_RESTRICT_RELAYER, relayer: relayer, fee: 0,
             feeRecipient: address(0)
         });
-        bytes memory auth = _uaAuth(alice, UAKinds.PURPOSE_METATX, tok.uaTransferDigest(t));
+        bytes memory auth = _uaAuth(alice, UAKinds.PURPOSE_METATX, tok.mtxTransferDigest(t));
         vm.prank(relayer);
-        tok.uaExecuteTransfer(t, UACall.auth(t.from, auth));
+        tok.mtxExecuteTransfer(t, UACall.auth(t.from, auth));
         assertEq(tok.balanceOfUA(b), 10 * SCALE);
         MetaTxLib.UAMetaTransaction memory m = MetaTxLib.UAMetaTransaction({
-            from: a, data: abi.encodeCall(IConfidentialToken.mtxShield, (ZetherTypes.UA.unwrap(alice.ua), 40)), batch: 1, nonce: tok.uaNonce(a, 1),
+            from: a, data: abi.encodeCall(IConfidentialToken.mtxShield, (ZetherTypes.UA.unwrap(alice.ua), 40)), batch: 1, nonce: tok.mtxNonce(a, 1),
             validUntil: block.timestamp + 300, mode: MetaTxLib.MODE_RESTRICT_RELAYER, relayer: relayer, fee: 0,
             feeRecipient: address(0)
         });
-        auth = _uaAuth(bob, UAKinds.PURPOSE_METATX, tok.uaDigest(m)); // another key
+        auth = _uaAuth(bob, UAKinds.PURPOSE_METATX, tok.mtxDigest(m)); // another key
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, a));
         vm.prank(relayer);
-        tok.uaExecute(m, auth);
-        auth = _uaAuth(alice, UAKinds.PURPOSE_METATX, tok.uaDigest(m));
+        tok.mtxExecute(m, UACall.auth(m.from, auth));
+        auth = _uaAuth(alice, UAKinds.PURPOSE_METATX, tok.mtxDigest(m));
         vm.prank(relayer);
-        tok.uaExecute(m, auth);
+        tok.mtxExecute(m, UACall.auth(m.from, auth));
         assertEq(tok.balanceOfUA(a), 50 * SCALE);
         (, uint256 p) = _bal(alice);
         assertEq(p, 40, "the Zether UA shielded its own public units");

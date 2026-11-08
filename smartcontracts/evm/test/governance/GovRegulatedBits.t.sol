@@ -21,8 +21,8 @@ import {PqzFixture} from "../pqz/helpers/PqzFixture.sol";
 import {nid} from "../helpers/Ids.sol";
 
 /// @notice What lands now for the regulated round (spec §1.2, §4.2; CTR-GOV-03, -17, -18; GD-19): bits 5-9 refused on every
-///         kind of this release, with each kind's error (`FeatureNotBuilt` on `NORMAL` and `WRAPPED`, `FeatureInvalidForKind`
-///         on the four confidential kinds), and none of them in `validBits()`, so a wallet reads the truth.
+///         plain kind, `FeatureInvalidForKind` on all six (ua-mtx-merge T24, regulated-kinds spec Q3: `NORMAL` and `WRAPPED`
+///         refused them `FeatureNotBuilt` before), and none of them in `validBits()`, so a wallet reads the truth.
 abstract contract GovRegulatedRows is Test {
     uint256 internal constant REGULATED = (1 << 5) | (1 << 6) | (1 << 7) | (1 << 8) | (1 << 9);
 
@@ -59,6 +59,16 @@ abstract contract GovRegulatedRows is Test {
         _rCreate(wrapped, c, "c");
         c.rescueTo = address(0); // positive control
         _rCreate(wrapped, c, "c");
+    }
+
+    /// pay-meta-tax T39 (spec §5.1, O8): bit 23 `TAX` is valid on 8-13 only; each plain kind refuses it at creation.
+    function test_taxBit_plainKindRefuses() public {
+        for (uint256 w; w < 2; ++w) {
+            IFactoryToken.TokenConfig memory c = _rCfg(w == 1, 1 | (1 << 23));
+            vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, uint8(23)));
+            _rCreate(w == 1, c, "tax");
+            assertEq(IGovernance(_rCreate(w == 1, _rCfg(w == 1, 1), "ok23")).validBits() & (1 << 23), 0, "validBits");
+        }
     }
 
     function _noRegulatedValid(bool wrapped) internal {
@@ -116,9 +126,20 @@ contract GovRegulatedBitsTest is GovRegulatedRows {
         return f.createToken(wrapped ? IOpenFactory.TokenKind.WRAPPED : IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), salt);
     }
 
-    function test_regulatedBitsRefusedOnPlainKinds() public {
-        _refusesEach(false, IGovernance.FeatureNotBuilt.selector);
-        _refusesEach(true, IGovernance.FeatureNotBuilt.selector);
+    /// ua-mtx-merge T24 (Q3): was `test_regulatedBitsRefusedOnPlainKinds`, expecting `FeatureNotBuilt`.
+    function test_plainKindsRefuseRegulatedAsInvalid() public {
+        _refusesEach(false, IGovernance.FeatureInvalidForKind.selector);
+        _refusesEach(true, IGovernance.FeatureInvalidForKind.selector);
+    }
+
+    /// CTR-GOV-20 (owner 2026-11-05): bit 22 `OPERATOR_TRANSFER` is on the regulated kinds only; each plain kind refuses it.
+    function test_plainKindsRefuseOperatorTransfer() public {
+        for (uint256 w; w < 2; ++w) {
+            IFactoryToken.TokenConfig memory c = _rCfg(w == 1, 1 | (1 << 22));
+            vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, uint8(22)));
+            _rCreate(w == 1, c, "op");
+            _rCreate(w == 1, _rCfg(w == 1, 1), "ok"); // positive control
+        }
     }
 
     function test_validBitsHoldsNoRegulatedBit() public {

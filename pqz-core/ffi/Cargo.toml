@@ -88,6 +88,10 @@ required-features = ["prove", "test-hooks"]
 name = "verify_only"
 required-features = ["prove", "test-hooks"]
 
+[[test]]
+name = "recover_versions"
+required-features = ["prove"]
+
 [profile.release]
 debug = 1
 panic = "unwind"

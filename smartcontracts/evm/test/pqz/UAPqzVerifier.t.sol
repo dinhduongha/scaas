@@ -133,7 +133,7 @@ contract UAPqzVerifierTest is PqzRegistryBase {
         (, address ptr) = reg.recordOf(ua);
         assertEq(ptr.code, bytes.concat(hex"00", pk));
         assertEq(reg.keyOwner(h), ua);
-        (,, bool proven) = reg.pqzKeyOf(ua);
+        (,,, bool proven) = reg.pqzKeyOf(ua);
         assertTrue(proven);
         reg.requireAuthorized(ua, UAKinds.PURPOSE_ZETHER_AUTH, keccak256("d"), UACall.auth(ua, _mlAuth()));
     }

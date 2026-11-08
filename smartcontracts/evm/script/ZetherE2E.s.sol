@@ -29,9 +29,13 @@ import {MockERC20} from "../test/helpers/Mocks.sol";
 ///         skipped when already registered); a `NORMAL_ZETHER` token (BUNDLE, no auditor, scale 1): shield 1234 to
 ///         alice, roll-over, a single transfer alice → bob 100, a multi-recipient commit-reveal (Compact) transfer M = 4
 ///         (bob 50 + 3 decoys at 0), a multi-recipient BUNDLE transfer M = 2 (carol 25 + 1 decoy), bob's roll-over, an
-///         unshield of 200 to the deployer; the relayed named entries (typed-signing C8, `zether-cli namedCall`): a single
-///         transfer of 40 to bob, a Compact M = 2 of 30 to bob, an unshield of 20, each signed by a payer EOA of its own and
-///         submitted by the deployer for a fixed fee; then a test ERC-20 (`MockERC20`) and a `WRAPPED_ZETHER` token over it
+///         unshield of 200 to the deployer; three relayed proofs through the generic merged entry `mtxExecute(UAMetaTransaction,
+///         UASig)` (ua-mtx-merge R47; the proof bound to the UA binding the script computes, R35): a single transfer of 40
+///         to bob, a Compact M = 2 of 30 to bob, an unshield of 20, each signed by a payer EOA with its own key (no registry
+///         call) and submitted by the deployer for a fixed fee; the same three on the named merged entries
+///         (`mtxConfidentialTransferSingle(UAEnvelope, …, UASig)`, `…Compact`, `mtxUnshield`; ua-mtx-merge T12, the calldata
+///         from `zether-cli namedCall`): 15, 10 and 5; every UA binding also from `zether-cli uaEnvelope`, checked against the
+///         script's and the token's `envelopeBinding`; then a test ERC-20 (`MockERC20`) and a `WRAPPED_ZETHER` token over it
 ///         (1:1): wrap-shield 500 to alice, roll-over. Each step is checked by decryption (`zether-cli decrypt`) in the
 ///         simulation, and the single transfer by the disclosure view (`ZetherDisclosure.verifyTransferAmount`,
 ///         `SENDER_S`). Writes `deployments/<chainid>-zether-e2e.json` (tokens, entry refs, the sender's `s`).
@@ -47,10 +51,13 @@ contract ZetherE2E is Script {
     uint256 internal constant MULTI4 = 50; // to bob, M = 4 Compact
     uint256 internal constant MULTI2 = 25; // to carol, M = 2 BUNDLE
     uint256 internal constant UNSHIELD = 200;
-    uint256 internal constant NAMED_SINGLE = 40;
-    uint256 internal constant NAMED_MULTI = 30; // to bob, M = 2 Compact
-    uint256 internal constant NAMED_UNSHIELD = 20;
-    uint256 internal constant RELAY_FEE = 3; // to the deployer, per named entry
+    uint256 internal constant RELAYED_SINGLE = 40;
+    uint256 internal constant RELAYED_MULTI = 30; // to bob, M = 2 Compact
+    uint256 internal constant RELAYED_UNSHIELD = 20;
+    uint256 internal constant NAMED_SINGLE = 15;
+    uint256 internal constant NAMED_MULTI = 10; // to bob, M = 2 Compact
+    uint256 internal constant NAMED_UNSHIELD = 5;
+    uint256 internal constant RELAY_FEE = 3; // to the deployer, per relayed op
     uint256 internal constant PAYER_PK = uint256(keccak256("scaas.e2e.zether.payer"));
     uint256 internal constant WRAPPED = 500;
 
@@ -154,51 +161,45 @@ contract ZetherE2E is Script {
         console.log(string.concat("ok    ", label, " entryRef ", vm.toString(ref)));
     }
 
-    /// The envelope of the next named entry: the payer's, this script's sender bound, fixed fee.
-    function _envelope() internal view returns (MetaTxLib.MetaTransaction memory) {
-        address payer = vm.addr(PAYER_PK);
-        return MetaTxLib.MetaTransaction(payer, "", 7, ZetherLayer(t).mtxNonce(payer, 7), block.timestamp + 1 days,
+    /// The envelope of the next relayed op: the payer's (`from` its address zero-padded, R1), this script's sender bound,
+    /// fixed fee.
+    function _envelope() internal view returns (MetaTxLib.UAMetaTransaction memory m) {
+        bytes32 from = MetaTxLib.pad(vm.addr(PAYER_PK));
+        m = MetaTxLib.UAMetaTransaction(from, "", 7, ZetherLayer(t).mtxNonce(from, 7), block.timestamp + 1 days,
             MetaTxLib.MODE_RESTRICT_RELAYER | MetaTxLib.MODE_FEE_FIXED, me, RELAY_FEE, address(0));
     }
 
-    function _bindingOf(MetaTxLib.MetaTransaction memory m) internal view returns (string memory) {
-        return string.concat(",", _q("envelopeBinding", vm.toString(ZetherLayer(t).envelopeBinding(m))));
+    /// The UA binding of `m` (CTR-ZTH-51, R35: `SCAAS-ZETHER-UA-ENVELOPE-V1`, `from` as `bytes32`, every field but `data`, an
+    /// unbound relayer or fee recipient as 0), computed here as a client does and checked against the token's
+    /// `envelopeBinding` view and the prover's (`zether-cli uaEnvelope`); the prover takes it as `envelopeBinding`.
+    function _bindingOf(MetaTxLib.UAMetaTransaction memory m) internal returns (string memory) {
+        address r = (m.mode & MetaTxLib.MODE_RESTRICT_RELAYER) != 0 ? m.relayer : address(0);
+        address f = (m.mode & MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT) != 0 ? m.feeRecipient : address(0);
+        bytes32 b = keccak256(abi.encode(keccak256("SCAAS-ZETHER-UA-ENVELOPE-V1"), block.chainid, dep.readBytes32(".chain_uid"),
+            t, m.from, m.batch, m.nonce, m.validUntil, m.mode, r, m.fee, f));
+        require(b == IZetherToken(t).envelopeBinding(m), "the UA binding differs from the token's envelopeBinding");
+        string memory u = string.concat(
+            '{"chainId":', vm.toString(block.chainid), ",", _q("chainUid", vm.toString(dep.readBytes32(".chain_uid"))), ",",
+            _q("token", vm.toString(t)), ',"meta":{', _q("from", vm.toString(m.from)), ",", _q("batch", vm.toString(bytes32(m.batch))));
+        u = string.concat(u, ',"nonce":', vm.toString(m.nonce), ',"validUntil":', vm.toString(m.validUntil), ',"mode":', vm.toString(m.mode),
+            ",", _q("relayer", vm.toString(m.relayer)), ',"fee":', vm.toString(m.fee));
+        u = _cli("uaEnvelope", string.concat(u, ",", _q("feeRecipient", vm.toString(m.feeRecipient)), "}}"));
+        require(u.readBytes32(".binding") == b, "zether-cli uaEnvelope: the UA binding differs");
+        return string.concat(",", _q("envelopeBinding", vm.toString(b)));
     }
 
-    function _n(string memory k, uint256 v) internal pure returns (string memory) {
-        return string.concat('"', k, '":"', vm.toString(v), '"');
-    }
-
-    function _envJson(MetaTxLib.MetaTransaction memory m) internal pure returns (string memory) {
-        return string.concat(
-            '"env":{', _q("from", vm.toString(m.from)), ",", _n("batch", m.batch), ",", _n("nonce", m.nonce), ",", _n("validUntil", m.validUntil),
-            ",", _n("mode", m.mode), ",", _q("relayer", vm.toString(m.relayer)), ",", _n("fee", m.fee), ",",
-            _q("feeRecipient", vm.toString(m.feeRecipient)), "}"
-        );
-    }
-
-    function _namedReq(string memory op, MetaTxLib.MetaTransaction memory m, string memory out) internal view returns (string memory) {
-        string memory head = string.concat(
-            '{"op":"', op, '","chainId":', vm.toString(block.chainid), ",", _q("chainUid", vm.toString(dep.readBytes32(".chain_uid"))), ",",
-            _q("token", vm.toString(t)), ",", _envJson(m)
-        );
-        return string.concat(
-            head, ",", _q("payload", vm.toString(out.readBytes(".payload"))), ",", _q("proof", vm.toString(out.readBytes(".proof"))), ",",
-            _q("beneficiary", vm.toString(bytes32(0)))
-        );
-    }
-
-    /// `namedCall` of `op` through the real prover: its digest signed by the payer here, then the entry's calldata, submitted.
-    function _named(string memory op, MetaTxLib.MetaTransaction memory m, string memory out, string memory extra, string memory label)
+    /// The prover's direct call `out` relayed through the generic merged entry `mtxExecute(UAMetaTransaction, UASig)`
+    /// (R47): the payer signs the token's `mtxDigest` with its own key (an EOA: `UASig.signature`, no registry call, R1 / B),
+    /// the deployer submits. Returns the op's own return data.
+    function _relay(MetaTxLib.UAMetaTransaction memory m, string memory out, string memory label)
         internal returns (bytes memory ret)
     {
-        string memory q = string.concat(_namedReq(op, m, out), extra);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(PAYER_PK, _cli("namedCall", string.concat(q, "}")).readBytes32(".digest"));
-        bytes memory cd = _cli("namedCall", string.concat(q, ',"sig":"', vm.toString(abi.encodePacked(r, s, v)), '"}')).readBytes(".calldata");
-        bool ok;
-        (ok, ret) = t.call(cd);
-        require(ok, string.concat(label, " reverted"));
-        console.log(string.concat("ok    ", label, " (", op, ")"));
+        m.data = out.readBytes(".directCalldata");
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(PAYER_PK, ZetherLayer(t).mtxDigest(m));
+        IUARegistry.UASig memory auth;
+        auth.signature = abi.encodePacked(r, s, v);
+        ret = ZetherLayer(t).mtxExecute(m, auth);
+        console.log(string.concat("ok    ", label, " (mtxExecute, the payer's UASig)"));
     }
 
     function _conf() internal pure returns (IFactoryToken.ConfidentialConfig memory) {
@@ -318,49 +319,112 @@ contract ZetherE2E is Script {
         require(ZetherLayer(t).totalShielded() == SHIELDED - UNSHIELD, "totalShielded");
     }
 
-    /// The relayed named entries: every one a payer EOA's typed signature, the deployer the relayer (`_named`).
+    /// The relayed proofs: every one a payer EOA's signature, the deployer the relayer: three over the merged generic entry
+    /// (`_relay`), three on the named merged entries (`_named`).
     function _relayed() internal {
         address payer = vm.addr(PAYER_PK);
         uint256 before = IERC20(t).balanceOf(me);
-        IERC20(t).transfer(payer, 3 * RELAY_FEE);
+        IERC20(t).transfer(payer, 6 * RELAY_FEE);
+        _relayedSingle();
+        _relayedCompact();
+        _relayedUnshield();
         _namedSingle();
         _namedCompact();
         _namedUnshield();
-        require(IERC20(t).balanceOf(payer) == 0, "named: three fees from the payer");
-        require(IERC20(t).balanceOf(me) == before + NAMED_UNSHIELD, "named: the fees back to the deployer, the unshield");
-        require(ZetherLayer(t).totalShielded() == SHIELDED - UNSHIELD - NAMED_UNSHIELD, "named: totalShielded");
+        require(IERC20(t).balanceOf(payer) == 0, "relayed: six fees from the payer");
+        require(IERC20(t).balanceOf(me) == before + RELAYED_UNSHIELD + NAMED_UNSHIELD,
+            "relayed: the fees back to the deployer, the unshields");
+        require(ZetherLayer(t).totalShielded() == SHIELDED - UNSHIELD - RELAYED_UNSHIELD - NAMED_UNSHIELD, "relayed: totalShielded");
+    }
+
+    function _relayedSingle() internal {
+        MetaTxLib.UAMetaTransaction memory m = _envelope();
+        string memory out = _cli("proveTransfer", _req(t, bal, string.concat(_bindingOf(m), ',"uaSigner":"ecdsa",', _q("yTo", vm.toString(ys[1])),
+            ',"amount":', vm.toString(RELAYED_SINGLE))));
+        bytes memory ret = _relay(m, out, "relayed single transfer alice -> bob 40");
+        require(abi.decode(ret, (bytes32)) == out.readBytes32(".entryRef"), "relayed single: entryRef");
+        bal -= RELAYED_SINGLE;
+        _expect(t, 0, bal, 0, "alice after the relayed single transfer");
+        _expect(t, 1, SINGLE + MULTI4, RELAYED_SINGLE, "bob after the relayed single transfer");
+    }
+
+    function _relayedCompact() internal {
+        MetaTxLib.UAMetaTransaction memory m = _envelope();
+        uint256[] memory who = new uint256[](2);
+        uint256[] memory amt = new uint256[](2);
+        (who[0], who[1], amt[0]) = (1, 3, RELAYED_MULTI);
+        string memory out = _cli("proveTransferMulti", _req(t, bal, string.concat(',"mode":"compact"', _bindingOf(m), ',"uaSigner":"ecdsa"',
+            _recipients(who, amt))));
+        _relay(m, out, "relayed multi transfer Compact M = 2 (bob 30 + 1 decoy)");
+        bal -= RELAYED_MULTI;
+        _expect(t, 0, bal, 0, "alice after the relayed Compact transfer");
+        _expect(t, 1, SINGLE + MULTI4, RELAYED_SINGLE + RELAYED_MULTI, "bob after the relayed Compact transfer");
+    }
+
+    function _relayedUnshield() internal {
+        MetaTxLib.UAMetaTransaction memory m = _envelope();
+        uint256 pub = IERC20(t).balanceOf(me);
+        string memory out = _cli("proveBurn", _req(t, bal, string.concat(_bindingOf(m), ',"amount":20,', _q("recipient", vm.toString(me)))));
+        _relay(m, out, "relayed unshield 20 to the deployer");
+        bal -= RELAYED_UNSHIELD;
+        _expect(t, 0, bal, 0, "alice after the relayed unshield");
+        require(IERC20(t).balanceOf(me) == pub + RELAYED_UNSHIELD + RELAY_FEE, "relayed unshield: public balance and fee");
+    }
+
+    function _n(string memory k, uint256 v) internal pure returns (string memory) {
+        return string.concat('"', k, '":"', vm.toString(v), '"');
+    }
+
+    /// `namedCall` of `op` (a merged entry, R35) through the real prover: its digest signed by the payer here (a raw signature:
+    /// `UASig{signature}`), then the entry's calldata, submitted by the deployer.
+    function _named(string memory op, MetaTxLib.UAMetaTransaction memory m, string memory out, string memory extra, string memory label)
+        internal returns (bytes memory ret)
+    {
+        string memory q = string.concat(
+            '{"op":"', op, '","chainId":', vm.toString(block.chainid), ",", _q("chainUid", vm.toString(dep.readBytes32(".chain_uid"))), ",",
+            _q("token", vm.toString(t)), ',"env":{', _q("from", vm.toString(m.from)), ",", _n("batch", m.batch), ",", _n("nonce", m.nonce));
+        q = string.concat(q, ",", _n("validUntil", m.validUntil), ",", _n("mode", m.mode), ",", _q("relayer", vm.toString(m.relayer)), ",",
+            _n("fee", m.fee), ",", _q("feeRecipient", vm.toString(m.feeRecipient)), "},");
+        q = string.concat(q, _q("payload", vm.toString(out.readBytes(".payload"))), ",", _q("proof", vm.toString(out.readBytes(".proof"))),
+            ",", _q("beneficiary", vm.toString(bytes32(0))), extra);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(PAYER_PK, _cli("namedCall", string.concat(q, "}")).readBytes32(".digest"));
+        bytes memory cd = _cli("namedCall", string.concat(q, ',"sig":"', vm.toString(abi.encodePacked(r, s, v)), '"}')).readBytes(".calldata");
+        bool ok;
+        (ok, ret) = t.call(cd);
+        require(ok, string.concat(label, " reverted"));
+        console.log(string.concat("ok    ", label, " (", op, ", the payer's UASig)"));
     }
 
     function _namedSingle() internal {
-        MetaTxLib.MetaTransaction memory m = _envelope();
+        MetaTxLib.UAMetaTransaction memory m = _envelope();
         string memory out = _cli("proveTransfer", _req(t, bal, string.concat(_bindingOf(m), ',"uaSigner":"ecdsa",', _q("yTo", vm.toString(ys[1])),
             ',"amount":', vm.toString(NAMED_SINGLE))));
-        bytes memory ret = _named("ZetherTransferSingle", m, out, "", "named single transfer alice -> bob 40");
+        bytes memory ret = _named("UAZetherTransferSingle", m, out, "", "named single transfer alice -> bob 15");
         require(abi.decode(ret, (bytes32)) == out.readBytes32(".entryRef"), "named single: entryRef");
         bal -= NAMED_SINGLE;
         _expect(t, 0, bal, 0, "alice after the named single transfer");
-        _expect(t, 1, SINGLE + MULTI4, NAMED_SINGLE, "bob after the named single transfer");
+        _expect(t, 1, SINGLE + MULTI4, RELAYED_SINGLE + RELAYED_MULTI + NAMED_SINGLE, "bob after the named single transfer");
     }
 
     function _namedCompact() internal {
-        MetaTxLib.MetaTransaction memory m = _envelope();
+        MetaTxLib.UAMetaTransaction memory m = _envelope();
         uint256[] memory who = new uint256[](2);
         uint256[] memory amt = new uint256[](2);
         (who[0], who[1], amt[0]) = (1, 3, NAMED_MULTI);
         string memory out = _cli("proveTransferMulti", _req(t, bal, string.concat(',"mode":"compact"', _bindingOf(m), ',"uaSigner":"ecdsa"',
             _recipients(who, amt))));
-        _named("ZetherTransferCompact", m, out, "", "named multi transfer Compact M = 2 (bob 30 + 1 decoy)");
+        _named("UAZetherTransferCompact", m, out, "", "named multi transfer Compact M = 2 (bob 10 + 1 decoy)");
         bal -= NAMED_MULTI;
         _expect(t, 0, bal, 0, "alice after the named Compact transfer");
-        _expect(t, 1, SINGLE + MULTI4, NAMED_SINGLE + NAMED_MULTI, "bob after the named Compact transfer");
+        _expect(t, 1, SINGLE + MULTI4, RELAYED_SINGLE + RELAYED_MULTI + NAMED_SINGLE + NAMED_MULTI, "bob after the named Compact transfer");
     }
 
     function _namedUnshield() internal {
-        MetaTxLib.MetaTransaction memory m = _envelope();
+        MetaTxLib.UAMetaTransaction memory m = _envelope();
         uint256 pub = IERC20(t).balanceOf(me);
-        string memory out = _cli("proveBurn", _req(t, bal, string.concat(_bindingOf(m), ',"amount":20,', _q("recipient", vm.toString(me)))));
-        _named("ZetherUnshield", m, out, string.concat(',"amount":20,', _q("recipient", vm.toString(bytes32(uint256(uint160(me)))))),
-            "named unshield 20 to the deployer");
+        string memory out = _cli("proveBurn", _req(t, bal, string.concat(_bindingOf(m), ',"amount":5,', _q("recipient", vm.toString(me)))));
+        _named("UAZetherUnshield", m, out, string.concat(',"amount":5,', _q("recipient", vm.toString(MetaTxLib.pad(me)))),
+            "named unshield 5 to the deployer");
         bal -= NAMED_UNSHIELD;
         _expect(t, 0, bal, 0, "alice after the named unshield");
         require(IERC20(t).balanceOf(me) == pub + NAMED_UNSHIELD + RELAY_FEE, "named unshield: public balance and fee");
@@ -415,11 +479,12 @@ contract ZetherE2E is Script {
         for (uint256 i; i < N; ++i) (ys[i], uas[i],) = _pop(xs[i]);
         string memory e = vm.readFile(string.concat("./deployments/", vm.toString(block.chainid), "-zether-e2e.json"));
         (t, wt) = (e.readAddress(".normal_zether_token"), e.readAddress(".wrapped_zether_token"));
-        _expect(t, 0, SHIELDED - SINGLE - MULTI4 - MULTI2 - UNSHIELD - NAMED_SINGLE - NAMED_MULTI - NAMED_UNSHIELD, 0, "chain: alice");
-        _expect(t, 1, SINGLE + MULTI4, NAMED_SINGLE + NAMED_MULTI, "chain: bob");
+        _expect(t, 0, SHIELDED - SINGLE - MULTI4 - MULTI2 - UNSHIELD - RELAYED_SINGLE - RELAYED_MULTI - RELAYED_UNSHIELD - NAMED_SINGLE
+            - NAMED_MULTI - NAMED_UNSHIELD, 0, "chain: alice");
+        _expect(t, 1, SINGLE + MULTI4, RELAYED_SINGLE + RELAYED_MULTI + NAMED_SINGLE + NAMED_MULTI, "chain: bob");
         _expect(t, 2, 0, MULTI2, "chain: carol");
         for (uint256 i = 3; i < N; ++i) _expect(t, i, 0, 0, string.concat("chain: decoy ", vm.toString(i - 2)));
-        require(ZetherLayer(t).totalShielded() == SHIELDED - UNSHIELD - NAMED_UNSHIELD, "chain: totalShielded");
+        require(ZetherLayer(t).totalShielded() == SHIELDED - UNSHIELD - RELAYED_UNSHIELD - NAMED_UNSHIELD, "chain: totalShielded");
         _expect(wt, 0, WRAPPED, 0, "chain: alice (wrapped)");
         require(dis.verifyTransferAmount(t, e.readBytes32(".entry_single"), 0, SINGLE, ITransferDisclosure.OpeningKind.SENDER_S,
             abi.encode(e.readBytes32(".s_single"))), "chain: disclosure view");

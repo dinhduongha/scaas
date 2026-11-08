@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {PayMetaKit} from "../helpers/PayMetaKit.sol";
+import {IMetaTokenV2} from "../../src/metatx/IMetaTokenV2.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {UAMldsaVerifier} from "../../src/ua/MlDsa.sol";
 import {UAFndsaVerifier} from "../../src/ua/FnDsa.sol";
 import {UASlhdsaVerifier} from "../../src/ua/SlhDsa.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
+import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {UARegistryBase} from "./UARegistryBase.sol";
@@ -18,8 +21,8 @@ import {Eip8355Allowed} from "./UARegistryPq.t.sol";
 /// The UA ledger with PQ signers (P6c; accounts.md CTR-UA-26, §1.16): pq_signatures.json's `metatx3` rows — the
 /// metatx3.json structs and domain, one row per PQ kind — on a `NORMAL` clone at the vector token address, context A,
 /// the real PQ verifiers (ML-DSA on its cached expanded key). Every digest is recomputed by the token, every auth passes
-/// `requireAuthorized` under `metatx`, every `UAMetaTransfer` row executes. Gas of `uaExecuteTransfer` per kind is logged.
-/// UA-5a (metatx.md, the `uaPayReceiverFee` paragraph): receiver-pays with an `mldsa65` payer and an `mldsa65` payee
+/// `requireAuthorized` under `metatx`, every `UAMetaTransfer` row executes. Gas of `mtxExecuteTransfer` per kind is logged.
+/// UA-5a (metatx.md, the `mtxPayReceiverFee` paragraph): receiver-pays with an `mldsa65` payer and an `mldsa65` payee
 /// (two PQ verifies) fits one 16,777,216-gas transaction (EIP-7825), intrinsic and calldata included.
 contract UAMetaTx3PqTest is UARegistryBase {
     NormalToken internal tok;
@@ -130,7 +133,7 @@ contract UAMetaTx3PqTest is UARegistryBase {
             MetaTxLib.UAMetaTransaction memory m = _call(pj, r);
             bytes32 digest = vm.parseJsonBytes32(pj, string.concat(r, "digest"));
             assertEq(MetaTxLib.hashStruct(m), vm.parseJsonBytes32(pj, string.concat(r, "structHash")));
-            assertEq(tok.uaDigest(m), digest);
+            assertEq(tok.mtxDigest(m), digest);
             reg.requireAuthorized(m.from, UAKinds.PURPOSE_METATX, digest, UACall.auth(m.from, vm.parseJsonBytes(pj, string.concat(r, "auth"))));
             ++n;
         }
@@ -146,15 +149,15 @@ contract UAMetaTx3PqTest is UARegistryBase {
             MetaTxLib.UAMetaTransfer memory t = _transfer(pj, r);
             bytes32 digest = vm.parseJsonBytes32(pj, string.concat(r, "digest"));
             assertEq(MetaTxLib.hashStruct(t), vm.parseJsonBytes32(pj, string.concat(r, "structHash")));
-            assertEq(tok.uaTransferDigest(t), digest);
+            assertEq(tok.mtxTransferDigest(t), digest);
             bytes memory auth = vm.parseJsonBytes(pj, string.concat(r, "auth"));
             tok.mint(address(this), t.value + t.fee);
             tok.transferToUA(t.from, t.value + t.fee);
             vm.prank(t.relayer);
             uint256 g = gasleft();
-            tok.uaExecuteTransfer(t, UACall.auth(t.from, auth));
+            tok.mtxExecuteTransfer(t, UACall.auth(t.from, auth));
             g -= gasleft();
-            emit log_named_uint(string.concat("uaExecuteTransfer ", vm.parseJsonString(pj, string.concat(r, "name"))), g);
+            emit log_named_uint(string.concat("mtxExecuteTransfer ", vm.parseJsonString(pj, string.concat(r, "name"))), g);
             assertEq(tok.balanceOfUA(t.from), 0);
             ++n;
         }
@@ -166,9 +169,10 @@ contract UAMetaTx3PqTest is UARegistryBase {
 
     uint256 internal constant TX_GAS_CAP = 16_777_216; // EIP-7825; chain 7622's block gas limit is the same
 
-    /// `uaPayReceiverFee` with two `mldsa65` signatures (payer and payee) runs inside one capped transaction: the call
+    /// `mtxPayReceiverFee` with two `mldsa65` signatures (payer and payee) runs inside one capped transaction: the call
     /// is given exactly `TX_GAS_CAP − 21,000 − calldata` (the registry holds each verify's full cap first), and the
     /// transaction's gas — 21,000 + max(calldata + execution, the EIP-7623 floor) — stays under the cap (logged).
+    /// pay-meta-tax T41: the row carries its `PayMeta` (the entry's last parameter; `entryRef` its commitment).
     function test_receiverFee_twoMldsa65_underCap() public {
         (MetaTxLib.UAMetaTransfer memory t, uint256 fee, bytes memory cd) = _receiverFeeRow(_pj(), ".metatx3.receiverFee[0].");
         tok.mint(address(this), t.value);
@@ -188,15 +192,15 @@ contract UAMetaTx3PqTest is UARegistryBase {
         assertEq(tok.balanceOfUA(t.to), t.value - fee);
     }
 
-    /// The row's payment (digest checked), its fee, and the `uaPayReceiverFee` calldata (`ReceiverFee` digest checked).
+    /// The row's payment (digest checked), its fee, and the `mtxPayReceiverFee` calldata (`ReceiverFee` digest checked).
     function _receiverFeeRow(string memory pj, string memory r)
         internal view returns (MetaTxLib.UAMetaTransfer memory t, uint256 fee, bytes memory cd)
     {
         t = _transferAt(pj, string.concat(r, "transfer.message."));
         bytes32 d = vm.parseJsonBytes32(pj, string.concat(r, "paymentDigest"));
-        assertEq(tok.uaTransferDigest(t), d);
+        assertEq(tok.mtxTransferDigest(t), d);
         (uint256 f, address feeTo, uint256 until) = _rfFields(pj, r);
-        assertEq(tok.uaReceiverFeeDigest(t, f, feeTo, until), vm.parseJsonBytes32(pj, string.concat(r, "receiverFeeDigest")));
+        assertEq(tok.receiverFeeDigest(t, f, feeTo, until), vm.parseJsonBytes32(pj, string.concat(r, "receiverFeeDigest")));
         return (t, f, _rfCalldata(pj, r, t));
     }
 
@@ -209,10 +213,29 @@ contract UAMetaTx3PqTest is UARegistryBase {
     function _rfCalldata(string memory pj, string memory r, MetaTxLib.UAMetaTransfer memory t)
         internal view returns (bytes memory)
     {
-        bytes memory payerAuth = vm.parseJsonBytes(pj, string.concat(r, "payerAuth"));
-        bytes memory payeeAuth = vm.parseJsonBytes(pj, string.concat(r, "payeeAuth"));
-        (uint256 fee, address feeTo, uint256 until) = _rfFields(pj, r);
-        return abi.encodeCall(tok.uaPayReceiverFee, (t, UACall.auth(t.from, payerAuth), fee, feeTo, until, UACall.auth(t.to, payeeAuth)));
+        RfArgs memory a;
+        a.meta = _rowMeta(pj, string.concat(r, "meta."), t.entryRef);
+        a.payer = UACall.auth(t.from, vm.parseJsonBytes(pj, string.concat(r, "payerAuth")));
+        a.payee = UACall.auth(t.to, vm.parseJsonBytes(pj, string.concat(r, "payeeAuth")));
+        (a.fee, a.feeTo, a.until) = _rfFields(pj, r);
+        return abi.encodeCall(tok.mtxPayReceiverFee, (t, a.payer, a.fee, a.feeTo, a.until, a.payee, a.meta));
+    }
+
+    /// The receiver-fee call's arguments in one memory struct (the legacy decoder's stack).
+    struct RfArgs {
+        IUARegistry.UASig payer;
+        IUARegistry.UASig payee;
+        uint256 fee;
+        address feeTo;
+        uint256 until;
+        MetaTxLib.PayMeta meta;
+    }
+
+    /// The row's `PayMeta` (pay-meta-tax T41), its commitment checked against the payment's `entryRef`.
+    function _rowMeta(string memory pj, string memory p, bytes32 entryRef) internal pure returns (MetaTxLib.PayMeta memory m) {
+        m = MetaTxLib.PayMeta(vm.parseJsonBytes32(pj, string.concat(p, "salt")), vm.parseJsonString(pj, string.concat(p, "payNo")),
+            uint16(vm.parseJsonUint(pj, string.concat(p, "schema"))), vm.parseJsonBytes(pj, string.concat(p, "body")));
+        assertEq(PayMetaKit.id(m), entryRef, "the row's entryRef commits to its PayMeta");
     }
 
     /// EIP-2028 calldata gas (4 per zero byte, 16 otherwise) and the EIP-7623 floor (10 per token, 4 tokens per non-zero byte).

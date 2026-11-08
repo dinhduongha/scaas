@@ -11,7 +11,7 @@ use alloy::signers::local::PrivateKeySigner;
 use alloy::transports::TransportError;
 use anyhow::{anyhow, Result};
 
-use crate::abi::{decode_revert, IToken, IUALedger};
+use crate::abi::{decode_revert, IMtxIds, IToken, IUALedger};
 use crate::submit::MetaRef;
 use crate::config::ChainCfg;
 
@@ -82,6 +82,8 @@ pub struct Chain {
     /// `chain_uid` from the config, checked against the RPC's block 0 (NODE-GW-07).
     pinned_uid: Option<B256>,
     uid: tokio::sync::OnceCell<B256>,
+    /// `compliance_registry` and its pinned code hash (regulated-kinds spec §5, F-11).
+    compliance: Option<(Address, B256)>,
 }
 
 impl Chain {
@@ -107,6 +109,7 @@ impl Chain {
             address,
             pinned_uid: cfg.chain_uid,
             uid: Default::default(),
+            compliance: cfg.compliance_registry.zip(cfg.compliance_registry_codehash),
         })
     }
 
@@ -172,6 +175,20 @@ impl Chain {
             .copied()
     }
 
+    /// The configured `compliance_registry` once its runtime code hashes to the pinned `compliance_registry_codehash`
+    /// (regulated-kinds spec §5: one canonical code, no proxy); `Ok(None)` when none is configured. Another code, no code, or
+    /// an unreadable one is an error: the caller does not start (fail closed).
+    pub async fn compliance_registry(&self) -> Result<Option<Address>> {
+        let Some((a, pin)) = self.compliance else { return Ok(None) };
+        let code = self.primary().get_code_at(a).await.map_err(|e| anyhow!("chain {}: compliance_registry code: {e}", self.number))?;
+        let got = alloy::primitives::keccak256(&code);
+        if code.is_empty() || got != pin {
+            return Err(anyhow!("chain {}: compliance_registry {a:#x} code hash {got:#x} is not compliance_registry_codehash {pin:#x}",
+                self.number));
+        }
+        Ok(Some(a))
+    }
+
     /// A view call; a revert is the contract's answer (`SimError::Revert`), anything else the transport's.
     pub async fn call_view<C: SolCall>(&self, to: Address, call: C) -> std::result::Result<C::Return, SimError> {
         let tx = TransactionRequest::default().with_to(to).with_input(call.abi_encode());
@@ -210,13 +227,14 @@ impl Chain {
         Ok(C::abi_decode_returns(&self.primary().call(tx).await?)?)
     }
 
-    /// The subject's next nonce on its lane (R80): `mtxNonce(from, batch)`, shared by both structs (CTR-MTX-15), or
-    /// for a `ua_metatx` job `uaNonce(id, batch)` (the one nonce map, CTR-UA-26).
+    /// The subject's next nonce on its lane (R80), by the contract's kind (ua-mtx-merge plan T14): `mtxNonce(bytes32 id, batch)`
+    /// on a token, the router and a mandate wallet (one nonce map on ids, CTR-UA-26: an address envelope's `from` padded),
+    /// `mtxNonce(address, batch)` on `SmartKeyAccount`.
     pub async fn subject_nonce(&self, m: &MetaRef) -> Result<U256> {
-        if m.ua {
-            return self.view(m.token, IUALedger::uaNonceCall { ua: m.from, batch: m.batch }).await;
+        if m.addr_nonce {
+            return self.view(m.token, IToken::mtxNonceCall { from: Address::from_word(m.from), batch: m.batch }).await;
         }
-        self.view(m.token, IToken::mtxNonceCall { from: Address::from_word(m.from), batch: m.batch }).await
+        self.view(m.token, IMtxIds::mtxNonceCall { from: m.from, batch: m.batch }).await
     }
 
     /// `MetaTransactionExecuted` (a UA subject: `UAMetaTransactionExecuted`) of `(from, batch, nonce)` trong `lookback`
@@ -240,6 +258,23 @@ impl Chain {
             }
         }
         Ok(None)
+    }
+
+    /// The byte length of `a`'s code (a PQZ key's SSTORE2 pointer: its key length plus the STOP byte).
+    pub async fn code_len(&self, a: Address) -> std::result::Result<usize, SimError> {
+        self.primary().get_code_at(a).await.map(|c| c.len()).map_err(|e| classify(&e))
+    }
+
+    /// Group 3g (spec §7.3): a `UAPqzKeyCurrent` of one of `uas` on `registry` in the last `lookback` blocks.
+    pub async fn pqz_key_current_since(&self, registry: Address, uas: &[B256], lookback: u64) -> Result<bool> {
+        let latest = self.primary().get_block_number().await?;
+        let filter = Filter::new()
+            .address(registry)
+            .event_signature(crate::abi::IUARegistry::UAPqzKeyCurrent::SIGNATURE_HASH)
+            .topic1(uas.to_vec())
+            .from_block(latest.saturating_sub(lookback))
+            .to_block(latest);
+        Ok(!self.primary().get_logs(&filter).await?.is_empty())
     }
 
     /// Ký EIP-1559; trả bytes thô và hash — hash biết TRƯỚC khi gửi (journal, review F5).
@@ -278,14 +313,14 @@ impl Chain {
     }
 }
 
-/// The executions that spend `m`'s nonce: the address path's, the UA ledger's, or both for a native-id UA (one nonce
-/// map, `uaNonce(pad(a), b) == mtxNonce(a, b)`).
+/// The executions that spend `m`'s nonce: a native id's lane is spent by a merged entry (`UAMetaTransactionExecuted`, R18) or
+/// an address one (a wrap, `executeMetaTransaction`: `MetaTransactionExecuted`) alike, one nonce map; a derived UA's by the
+/// UA event only.
 pub fn executed_events(m: &MetaRef) -> Vec<B256> {
     let (ua, mtx) = (IUALedger::UAMetaTransactionExecuted::SIGNATURE_HASH, IToken::MetaTransactionExecuted::SIGNATURE_HASH);
-    match (m.ua, crate::metatx::native(&m.from).is_some()) {
-        (true, true) => vec![ua, mtx],
-        (true, false) => vec![ua],
-        (false, _) => vec![mtx],
+    match crate::metatx::native(&m.from) {
+        Some(_) => vec![ua, mtx],
+        None => vec![ua],
     }
 }
 
@@ -335,15 +370,110 @@ mod tests {
         assert!(c.uid.get().is_none());
     }
 
-    /// Fix 1 (review minor 5): a native-id UA job shares its nonce map with the address path, so its classification
-    /// reads both executions; a derived UA's only the UA one; an address job only the address one.
+    /// Regulated-kinds spec §5, §7: the configured registry is used only while its code hashes to the pin; another code, none, or
+    /// an unreachable RPC is an error (the venue does not start); none configured is `None`.
+    #[tokio::test]
+    async fn compliance_registry_code_hash_fails_closed() {
+        let code = vec![0x60u8, 0x00, 0x60, 0x00, 0xf3];
+        let c2 = code.clone();
+        let app = axum::Router::new().route("/", axum::routing::post(move |axum::Json(r): axum::Json<Value>| {
+            let c2 = c2.clone();
+            async move {
+                let at = r["params"][0].as_str().unwrap_or_default().to_lowercase();
+                let code = if at == format!("{:#x}", Address::repeat_byte(0xc0)) { c2 } else { vec![] };
+                axum::Json(json!({"jsonrpc": "2.0", "id": r["id"], "result": format!("0x{}", alloy::hex::encode(code))}))
+            }
+        }));
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", l.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+        let with = |url: &str, a: Option<Address>, h: Option<B256>| {
+            let cfg = ChainCfg { evm_chain_number: 296, rpc_urls: vec![url.into()], compliance_registry: a, compliance_registry_codehash: h,
+                ..Default::default() };
+            Chain::with_signer(&cfg, PrivateKeySigner::random()).unwrap()
+        };
+        let (reg, pin) = (Address::repeat_byte(0xc0), alloy::primitives::keccak256(&code));
+        assert_eq!(with(&url, Some(reg), Some(pin)).compliance_registry().await.unwrap(), Some(reg));
+        assert_eq!(with(&url, None, None).compliance_registry().await.unwrap(), None);
+        let e = with(&url, Some(reg), Some(B256::repeat_byte(1))).compliance_registry().await.unwrap_err().to_string();
+        assert!(e.contains("is not compliance_registry_codehash"), "{e}");
+        assert!(with(&url, Some(Address::repeat_byte(0xc1)), Some(alloy::primitives::keccak256([]))).compliance_registry().await.is_err(),
+            "no code is never the pin, even the empty code's hash");
+        assert!(with("http://127.0.0.1:9", Some(reg), Some(pin)).compliance_registry().await.is_err());
+    }
+
+    /// An RPC answering every `eth_call` with 5 and keeping each call's input.
+    async fn nonce_rpc() -> (String, std::sync::Arc<std::sync::Mutex<Vec<Vec<u8>>>>) {
+        let seen: std::sync::Arc<std::sync::Mutex<Vec<Vec<u8>>>> = Default::default();
+        let s2 = seen.clone();
+        let app = axum::Router::new().route("/", axum::routing::post(move |axum::Json(r): axum::Json<Value>| {
+            let s2 = s2.clone();
+            async move {
+                let input = r["params"][0]["input"].as_str().or(r["params"][0]["data"].as_str()).unwrap_or("0x").to_string();
+                s2.lock().unwrap().push(alloy::hex::decode(&input[2..]).unwrap());
+                axum::Json(json!({"jsonrpc": "2.0", "id": r["id"], "result": format!("0x{:064x}", 5)}))
+            }
+        }));
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", l.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+        (url, seen)
+    }
+
+    /// The view R80 reads for vector row `name` on `kind`: `(selector, the id word)` of the one `eth_call` made, and its answer.
+    async fn nonce_view_of(name: &str, kind: &str) -> ([u8; 4], B256, U256) {
+        let v = crate::typed::testkit::vectors();
+        let mut op = crate::typed::testkit::op_of(name, kind, &v).unwrap_or_else(|| panic!("{name}"));
+        if name == "UAPayUnderMandate" {
+            op["envelope"]["batch"] = json!(crate::typed::mandate_pay_lane(&crate::typed::testkit::hex(&op["args"]["entryRef"])).to_string());
+            op["envelope"]["nonce"] = json!("0");
+        }
+        let m = crate::submit::work_of_op(Some(1), &op, None).unwrap().0.meta.unwrap_or_else(|| panic!("{name}: no lane"));
+        let (url, seen) = nonce_rpc().await;
+        let n = chain(&url, None).subject_nonce(&m).await.unwrap();
+        let call = seen.lock().unwrap().pop().unwrap();
+        assert!(seen.lock().unwrap().is_empty(), "one read");
+        assert_eq!(call[36..68], m.batch.to_be_bytes::<32>(), "{name}: the lane");
+        (call[..4].try_into().unwrap(), B256::from_slice(&call[4..36]), n)
+    }
+
+    fn cast(s: &str) -> [u8; 4] {
+        alloy::primitives::keccak256(s)[..4].try_into().unwrap()
+    }
+
+    /// Plan T14, R80 by kind: the subject's nonce through `mtxNonce(bytes32 id, batch)` on a token (a merged row and an address
+    /// wrap alike: one nonce map, and the token has no address view left), the router and the mandate wallet; through
+    /// `mtxNonce(address, batch)` on `SmartKeyAccount`. The id is the envelope's `from`, padded for an address envelope.
+    #[tokio::test]
+    async fn nonce_view_by_kind() {
+        let key: Address = crate::typed::testkit::vectors()["key"]["address"].as_str().unwrap().parse().unwrap();
+        let ids = cast("mtxNonce(bytes32,uint256)");
+        for (name, kind) in [("UAUnwrap", "token"), ("Wrap", "token"), ("UAShield", "zether"), ("UAPrepareAcc", "pqz"),
+            ("UAGrantRole", "gov_router"), ("UACancelNonce", "token")] {
+            assert_eq!(nonce_view_of(name, kind).await, (ids, key.into_word(), U256::from(5)), "{name} on {kind}");
+        }
+        assert_eq!(nonce_view_of("AddKey", "account").await, (cast("mtxNonce(address,uint256)"), key.into_word(), U256::from(5)));
+        assert_eq!(nonce_view_of("CancelNonce", "account").await.0, cast("mtxNonce(address,uint256)"));
+    }
+
+    /// Q6: the mandate wallet is on `UAMetaTxBase`: its nonce view is `mtxNonce(bytes32)`, the delegate's payment lane too.
+    #[tokio::test]
+    async fn wallet_nonce_view_is_bytes32() {
+        for name in ["UASetPayee", "UAExecute", "UAPayUnderMandate", "UACancelNonce"] {
+            assert_eq!(nonce_view_of(name, "wallet").await.0, cast("mtxNonce(bytes32,uint256)"), "{name}");
+        }
+    }
+
+    /// Fix 1 (review minor 5), ua-mtx-merge: a native id's lane is one nonce map for the merged entries (`UA…` event, R18) and
+    /// the address ones left (a wrap: `MetaTransactionExecuted`), so its classification reads both executions, whichever
+    /// job spent it; a derived UA's only the UA one.
     #[test]
     fn a_native_ua_subject_is_classified_on_both_paths() {
-        let m = |from: B256, ua: bool| MetaRef { token: Address::ZERO, from, batch: U256::ZERO, nonce: U256::ZERO, digest: None, ua };
+        let m = |from: B256, ua: bool| MetaRef { token: Address::ZERO, from, batch: U256::ZERO, nonce: U256::ZERO, digest: None, ua, addr_nonce: false };
         let (ua_ev, mtx_ev) = (IUALedger::UAMetaTransactionExecuted::SIGNATURE_HASH, IToken::MetaTransactionExecuted::SIGNATURE_HASH);
         let native = Address::repeat_byte(1).into_word();
         assert_eq!(executed_events(&m(native, true)), vec![ua_ev, mtx_ev]);
         assert_eq!(executed_events(&m(B256::repeat_byte(1), true)), vec![ua_ev]);
-        assert_eq!(executed_events(&m(native, false)), vec![mtx_ev]);
+        assert_eq!(executed_events(&m(native, false)), vec![ua_ev, mtx_ev], "an address job's lane too");
     }
 }

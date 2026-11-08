@@ -263,7 +263,7 @@ fn origin_of_parity_vectors() {
     }
 }
 
-const PAYMETA: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../vectors/metatx/paymeta.json");
+const PAYMETA: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../vectors/metatx/legacy/ua-mtx-merge/paymeta.json");
 
 /// Spec §2 rows 3, 16 (R16): every `paymeta.json` row's `payId` / `payLane` through `env::keccak256`.
 #[test]

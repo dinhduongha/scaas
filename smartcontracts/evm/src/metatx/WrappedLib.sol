@@ -90,20 +90,23 @@ library WrappedLib {
     ///         flags/owner/roles of `kind` (`GovernanceLib.init` with the kind's masks, spec §1.2), the rate config, then
     ///         the legs in their given order (never changes).
     function initToken(IFactoryToken.TokenConfig memory c, bool isHedera, uint8 kind, uint256 valid, uint256 roleBits,
-        uint256 contractOnly) public
+        uint256 contractOnly, address uaRegistry) public
     {
         uint256 n = c.legs.length;
         if (n == 0 || n > MAX_LEGS) revert MetaTokenBase.UnderlyingCountInvalid(n);
-        TokenStore.TokenStorage storage t = TokenStore.$();
-        t.name = c.name;
-        t.symbol = c.symbol;
-        t.decimals = c.decimals;
-        t.kind = kind;
+        { // scoped: `init` below takes ten words (stack)
+            TokenStore.TokenStorage storage t = TokenStore.$();
+            t.name = c.name;
+            t.symbol = c.symbol;
+            t.decimals = c.decimals;
+            t.kind = kind;
+        }
         // spec §5.2: a hybrid is `maxSupply != 0`, and `MINTABLE` is set at creation iff it is one
-        bool capped = c.maxSupply != 0;
-        if (capped != (c.features & (uint256(1) << GovernanceBits.MINTABLE) != 0)) revert IWrappedToken.MaxSupplyInvalid();
+        if ((c.maxSupply != 0) != (c.features & (uint256(1) << GovernanceBits.MINTABLE) != 0)) {
+            revert IWrappedToken.MaxSupplyInvalid();
+        }
         GovernanceLib.init(c.features, c.lockedFeatures, c.owner, c.grantDelay, c.rescueTo, c.roles, valid, roleBits,
-            contractOnly);
+            contractOnly, uaRegistry);
         bool adjustable = GovernanceLib.hasFeature(GovernanceBits.RATE_ADJUSTABLE);
         WrappedStorage storage s = $();
         IFactoryToken.RateConfig memory rate = c.rate;
@@ -212,42 +215,33 @@ library WrappedLib {
         L.reserve = reserve + received;
     }
 
-    /// @notice `mtxWrapOrder` (CTR-TOK-20): the leg must accept a wrap (enabled, no pending change, no shortfall); the
-    ///         underlying's `mtxTrade` takes the order with `dex == receiveToken == wrappedToken` as the holder's
-    ///         `WrapOrder`: it checks the signature, that this token is the puller, the price (`minMinted <= minted`),
-    ///         the relayer (`submitter`) and the fee bound, and moves `o.amount` here.
+    /// @notice `mtxWrapOrder` (CTR-TOK-20, UA-5b, R39): the leg must accept a wrap (enabled, no pending change, no
+    ///         shortfall); the underlying's `mtxTrade` takes the holder's `UAWrapOrder` as the `UATradeOrder` with
+    ///         `dex == receiveToken == wrappedToken`: it checks the holder, that this token is the puller, the price
+    ///         (`minMinted <= minted`), the relayer (`submitter`) and the fee bound, and moves `o.amount` here. A ledger
+    ///         is asked of the underlying (`IUALedger` by ERC-165, as `payOutToUA`) only for a derived holder (C). A leg
+    ///         with no `mtxTrade` (an outside ERC-20) fails closed by name: a leg call that reverts without data is
+    ///         `UALegNotLedger` (ua-mtx-merge T6; a native holder asks no registry), any other revert is the leg's own.
     /// @return received the measured delta (must be `o.amount`)
     /// @return minted `⌊o.amount·num/den⌋`
     /// @return fee `⌈minted·o.fee/10⁶⌉`, the submitter's part of `minted`
-    function wrapBySig(address u, ITradeToken.WrapOrder calldata o, bytes calldata sig, address submitter, uint256 supply)
-        public returns (uint256 received, uint256 minted, uint256 fee)
-    {
-        Leg storage L = _wrapLeg(u, o.wrappedToken);
-        (minted, fee) = _sigQuote(L, o.amount, o.fee, supply);
-        received = _sigBefore(L); // the balance before, in the return slot (stack)
-        ITradeToken(u).mtxTrade(_tradeOf(o), sig, ITradeToken.TradeFill(o.amount, minted, fee, submitter));
-        received = _sigReceived(L, received, o.amount);
-    }
-
-    /// @notice `uaWrapOrder` (CTR-TOK-20, UA-5b): `wrapBySig` with the holder's `UAWrapOrder` pulled by the underlying's
-    ///         `uaTrade`; the underlying must be a SCaaS ledger token (`IUALedger` by ERC-165, as `payOutToUA`).
     function wrapBySigUA(address u, ITradeToken.UAWrapOrder calldata o, IUARegistry.UASig calldata auth, address submitter,
         uint256 supply) public returns (uint256 received, uint256 minted, uint256 fee)
     {
         Leg storage L = _wrapLeg(u, o.wrappedToken);
-        if (!ERC165Checker.supportsInterface(u, type(IUALedger).interfaceId)) revert IUALedger.UALegNotLedger(u);
+        if (!UAKinds.inNativeSpace(o.from) && !ERC165Checker.supportsInterface(u, type(IUALedger).interfaceId)) {
+            revert IUALedger.UALegNotLedger(u);
+        }
         (minted, fee) = _sigQuote(L, o.amount, o.fee, supply);
         received = _sigBefore(L); // the balance before, in the return slot (stack)
-        ITradeToken(u).uaTrade(_order(o), auth, ITradeToken.TradeFill(o.amount, minted, fee, submitter));
+        try ITradeToken(u).mtxTrade(_order(o), auth, ITradeToken.TradeFill(o.amount, minted, fee, submitter)) {}
+        catch (bytes memory r) {
+            // ponytail: an empty revert is read as "no `mtxTrade`"; a leg that ran out of gas inside gets the same name
+            // (the submitter's simulation shows it); probe the leg's code if a finer verdict is ever needed
+            if (r.length == 0) revert IUALedger.UALegNotLedger(u);
+            assembly ("memory-safe") { revert(add(r, 0x20), mload(r)) }
+        }
         received = _sigReceived(L, received, o.amount);
-    }
-
-    /// @dev `_order` of a `WrapOrder`: the same 12 words as a `UAWrapOrder`, ids zero-padded, into the 13 of a `TradeOrder`.
-    function _tradeOf(ITradeToken.WrapOrder memory w) private pure returns (ITradeToken.TradeOrder memory t) {
-        ITradeToken.UAWrapOrder memory u;
-        assembly ("memory-safe") { u := w }
-        ITradeToken.UATradeOrder memory c = _order(u);
-        assembly ("memory-safe") { t := c }
     }
 
     /// @dev The order the underlying checks: a wrap order is the `UATradeOrder` with `dex == receiveToken == wrappedToken`

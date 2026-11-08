@@ -337,7 +337,7 @@ fn relay_fee_relayer_must_sign() {
 #[test]
 fn adapter_ix_data_vectors() {
     use anchor_lang::InstructionData;
-    let rows: Vec<serde_json::Value> = serde_json::from_str(include_str!("../../../../vectors/metatx/paymeta.json")).unwrap();
+    let rows: Vec<serde_json::Value> = serde_json::from_str(include_str!("../../../../vectors/metatx/legacy/ua-mtx-merge/paymeta.json")).unwrap();
     let h = |v: &serde_json::Value| hexd(v.as_str().unwrap().trim_start_matches("0x"));
     let a = scaas::Auth { kind: A::KIND_RAW, key_index: 0, precompile_ix: 1, sig_index: 0, cdj: vec![] };
     let base = scaas::PayArgs { to: pk(V::BOB).to_bytes(), amount: 100, pay_ref: [0; 32], lane: [0; 32], nonce: 0, valid_until: 1000, relayer: [0; 32], extra: [0; 32] };

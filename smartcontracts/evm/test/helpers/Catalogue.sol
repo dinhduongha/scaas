@@ -20,6 +20,14 @@ import {PqzBurnLib} from "../../src/pqz/PqzBurnLib.sol";
 import {PqzViewLib} from "../../src/pqz/PqzViewLib.sol";
 import {PqzWrappedLib} from "../../src/pqz/PqzWrappedLib.sol";
 import {UARegistryLib} from "../../src/ua/UARegistryLib.sol";
+import {RegulatedLib} from "../../src/regulated/RegulatedLib.sol";
+import {ComplianceRegistry} from "../../src/regulated/ComplianceRegistry.sol";
+
+/// @notice A regulated release's `implArgs` (regulated-kinds spec §5, F-11; plan T29): the canonical `ComplianceRegistry`
+///         runtime's code hash, `REGISTRY_CODEHASH`.
+function regArgs() pure returns (bytes memory) {
+    return abi.encode(keccak256(type(ComplianceRegistry).runtimeCode));
+}
 
 /// @notice A plain release environment (plan 5g-Z2): no dependencies, no pinned libraries.
 function plainEnv(address factory, address ska, bytes32 uid, address registry, bool hedera)
@@ -50,6 +58,13 @@ function pqzEnv(address factory, bytes32 uid, address registry, address verifier
 /// @notice The transitive link closure of `kind`'s implementation (metatx-split §4, R5), each library with its code
 ///         hash. Checked against the artifacts' `linkReferences` by `LinkClosure.t.sol`.
 function closureLibs(IOpenFactory.TokenKind kind) view returns (address[] memory l) {
+    if (uint8(kind) >= 8) { // a regulated kind 8-13: its base kind's closure and `RegulatedLib` (regulated-kinds spec §6.1)
+        address[] memory base = closureLibs(IOpenFactory.TokenKind(uint8(kind) - 8));
+        l = new address[](base.length + 1);
+        for (uint256 i; i < base.length; ++i) l[i] = base[i];
+        l[base.length] = address(RegulatedLib);
+        return l;
+    }
     bool und = kind == IOpenFactory.TokenKind.WRAPPED || kind == IOpenFactory.TokenKind.WRAPPED_ZETHER
         || kind == IOpenFactory.TokenKind.WRAPPED_PQZ;
     bool zth = kind == IOpenFactory.TokenKind.NORMAL_ZETHER || kind == IOpenFactory.TokenKind.WRAPPED_ZETHER;
@@ -104,9 +119,16 @@ library Catalogue {
     function release(OpenFactory f, IOpenFactory.TokenKind kind, uint64 version, IFactoryToken.Env memory e,
         bytes memory code) internal returns (address)
     {
+        return release(f, kind, version, e, code, "");
+    }
+
+    /// @dev As above with the release's `implArgs` (a regulated kind 8-13: `regArgs()`, plan T29).
+    function release(OpenFactory f, IOpenFactory.TokenKind kind, uint64 version, IFactoryToken.Env memory e,
+        bytes memory code, bytes memory implArgs) internal returns (address)
+    {
         uint16 v = env(f, kind, e);
         vm.prank(f.registrar());
-        return f.deployImplementation(kind, version, v, code, "");
+        return f.deployImplementation(kind, version, v, code, implArgs);
     }
 
     /// @dev A plain release on `plainEnv(f, ska, f.chainUid(), registry, hedera)`.

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {PayMetaKit} from "../helpers/PayMetaKit.sol";
+import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {Test} from "forge-std/Test.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
@@ -11,6 +13,8 @@ import {IGovernance} from "../../src/governance/IGovernance.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
 import {IERC20Payment} from "../../src/metatx/IERC20Payment.sol";
+import {IUARegistry} from "../../src/ua/IUARegistry.sol";
+import {IUALedger} from "../../src/metatx/IUALedger.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {FeeMode} from "../../src/common/FeePolicy.sol";
 import {MockHederaAccountService} from "../hedera/HederaMocks.sol";
@@ -83,7 +87,8 @@ contract FeaturesTest is Test {
         NormalToken t = NormalToken(Clones.clone(impl));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, uint8(3)));
         t.initialize(address(this), 1, abi.encode(_cfg(1 << 3, 0, address(0), address(0), 0)));
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotBuilt.selector, uint8(7)));
+        // ua-mtx-merge T24 (regulated-kinds spec Q3): a plain kind refuses 5-9 as invalid, no longer `FeatureNotBuilt`
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, uint8(7)));
         t.initialize(address(this), 1, abi.encode(_cfg(1 << 7, 0, address(0), address(0), 0)));
     }
 
@@ -119,39 +124,42 @@ contract FeaturesTest is Test {
         MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction({from: alice,
             data: abi.encodeCall(NormalToken.burn, (1)), batch: 1, nonce: 0, validUntil: block.timestamp + 300,
             mode: RR, relayer: relayer, fee: 0, feeRecipient: address(0)});
-        bytes memory s = _sig(off.mtxDigest(m));
+        bytes memory s = _sig(MtxDigest.metaTx(address(off), m));
         vm.prank(relayer);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, uint8(2)));
-        off.mtxExecute(m, s);
+        off.executeMetaTransaction(m, s);
         NormalToken on = _token(impl, _cfg(BURNABLE, 0, address(0), address(0), 100));
-        s = _sig(on.mtxDigest(m));
+        s = _sig(MtxDigest.metaTx(address(on), m));
         vm.prank(relayer);
-        on.mtxExecute(m, s);
+        on.executeMetaTransaction(m, s);
         assertEq(on.balanceOf(alice), 99);
     }
 
     // ------------------------------------------------------------------ PAYABLE
 
+    /// ua-mtx-merge T2: the one typed struct is `UAMetaTransfer` (alice padded, her own signature) and the merged path
+    /// emits `UAPaymentSettled` (R18, R20; meaning: was `PaymentSettled`); the gate is unchanged.
     function test_payable_off_gatesThePayEntries_notMetaTransfer() public {
         NormalToken t = _token(impl, _cfg(0, 0, address(0), address(0), 100));
         bytes memory off = abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, uint8(0));
         vm.prank(alice);
         vm.expectRevert(off);
-        t.payWithFee(shop, 1, FeeMode.NONE, 0, address(0), bytes32("r"));
-        bytes32 ref = keccak256("r");
-        MetaTxLib.MetaTransfer memory x = MetaTxLib.MetaTransfer({from: alice, to: shop, value: 10, entryRef: ref,
-            batch: t.payLane(ref), nonce: 0, validUntil: block.timestamp + 300, mode: RR, relayer: relayer, fee: 0,
-            feeRecipient: address(0)});
-        bytes memory s = _sig(t.mtxTransferDigest(x));
+        t.payWithFee(shop, 1, FeeMode.NONE, 0, address(0), PayMetaKit.ref("r"), PayMetaKit.meta("r"));
+        bytes32 ref = PayMetaKit.ref("r");
+        MetaTxLib.UAMetaTransfer memory x = MetaTxLib.UAMetaTransfer({from: MetaTxLib.pad(alice), to: MetaTxLib.pad(shop),
+            value: 10, entryRef: ref, batch: t.payLane(ref), nonce: 0, validUntil: block.timestamp + 300, mode: RR,
+            relayer: relayer, fee: 0, feeRecipient: address(0)});
+        IUARegistry.UASig memory s;
+        s.signature = _sig(t.mtxTransferDigest(x));
         vm.prank(relayer);
         vm.expectRevert(off);
-        t.mtxPay(alice, shop, 10, ref, x.validUntil, RR, relayer, 0, address(0), s);
+        t.mtxPay(x, s, PayMetaKit.meta("r"));
         vm.prank(relayer);
         vm.expectRevert(off);
-        t.mtxPayReceiverFee(x, s, 1, address(0xFEE), block.timestamp, s);
+        t.mtxPayReceiverFee(x, s, 1, address(0xFEE), block.timestamp, s, PayMetaKit.meta("r"));
         vm.prank(relayer);
         vm.expectEmit(address(t));
-        emit IERC20Payment.PaymentSettled(alice, shop, 10, 0, relayer, ref); // a MetaTransfer payment is never gated
+        emit IUALedger.UAPaymentSettled(x.from, x.to, 10, 0, relayer, ref); // a typed payment is never gated
         t.mtxExecuteTransfer(x, s);
         assertEq(t.balanceOf(shop), 10);
     }
@@ -159,7 +167,7 @@ contract FeaturesTest is Test {
     function test_payable_on_payWithFeeWorks() public {
         NormalToken t = _token(impl, _cfg(PAYABLE, 0, address(0), address(0), 100));
         vm.prank(alice);
-        t.payWithFee(shop, 10, FeeMode.NONE, 0, address(0), bytes32("r"));
+        t.payWithFee(shop, 10, FeeMode.NONE, 0, address(0), PayMetaKit.ref("r"), PayMetaKit.meta("r"));
         assertEq(t.balanceOf(shop), 10);
     }
 
@@ -213,10 +221,10 @@ contract FeaturesTest is Test {
             MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction({from: alice,
                 data: abi.encodeWithSelector(sels[i]), batch: i, nonce: 0, validUntil: block.timestamp + 300,
                 mode: RR, relayer: relayer, fee: 0, feeRecipient: address(0)});
-            bytes memory s = _sig(t.mtxDigest(m));
+            bytes memory s = _sig(MtxDigest.metaTx(address(t), m));
             vm.prank(relayer);
             vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, sels[i]));
-            t.mtxExecute(m, s);
+            t.executeMetaTransaction(m, s);
         }
     }
 
@@ -262,16 +270,19 @@ contract FeaturesTest is Test {
         NormalToken h = _token(hImpl, cfg);
         NormalToken e = _token(impl, cfg);
         assertTrue(h.IS_HEDERA());
-        MetaTxLib.MetaTransfer memory x = MetaTxLib.MetaTransfer({from: native, to: shop, value: 10, entryRef: 0,
-            batch: 1, nonce: 0, validUntil: block.timestamp + 300, mode: RR, relayer: relayer, fee: 0,
-            feeRecipient: address(0)});
+        MetaTxLib.UAMetaTransfer memory x = MetaTxLib.UAMetaTransfer({from: MetaTxLib.pad(native),
+            to: MetaTxLib.pad(shop), value: 10, entryRef: 0, batch: 1, nonce: 0, validUntil: block.timestamp + 300,
+            mode: RR, relayer: relayer, fee: 0, feeRecipient: address(0)});
         (bytes32 rr, bytes32 vs) = vm.signCompact(edKey, h.mtxTransferDigest(x));
+        IUARegistry.UASig memory s;
+        s.signature = abi.encodePacked(rr, vs);
         vm.prank(relayer);
-        h.mtxExecuteTransfer(x, abi.encodePacked(rr, vs));
+        h.mtxExecuteTransfer(x, s);
         assertEq(h.balanceOf(shop), 10);
         (rr, vs) = vm.signCompact(edKey, e.mtxTransferDigest(x));
+        s.signature = abi.encodePacked(rr, vs);
         vm.prank(relayer);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
-        e.mtxExecuteTransfer(x, abi.encodePacked(rr, vs));
+        e.mtxExecuteTransfer(x, s);
     }
 }

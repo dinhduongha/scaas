@@ -33,34 +33,24 @@ interface IInnerProductBound {
 ///         implementation only on its canonical verifiers), so the curve is an attribute of the release (`curve()`); the
 ///         auditor key and the two modes (`disclosureMode`, `auditorMode`) are chosen at creation and never change.
 ///         Every entry point is `nonReentrant`. The direct ops take explicit parameters and the proof, the only authority
-///         (`IZetherToken`, TS-D17); each has a signed overload (`Envelope` first) and a `ua*` twin (TS-D14, TS-D16), which
-///         run it through the ticket self-call, so the op's body and the statement's binding are the generic path's.
+///         (`IZetherToken`, TS-D17); each has one signed overload (`UAEnvelope` first, `UASig` last, ua-mtx-merge R35)
+///         for native and derived ids, which runs it through the ticket self-call, so the op's body and the statement's
+///         binding are the generic path's.
 abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
-    bytes32 private constant ROLL_OVER_TYPEHASH = keccak256(
-        "RollOver(address from,bytes32 ua,uint256 n,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
-    );
     bytes32 private constant UA_ROLL_OVER_TYPEHASH = keccak256(
         "UARollOver(bytes32 from,bytes32 ua,uint256 n,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
-    );
-    bytes32 private constant ROLL_OVER_BATCH_TYPEHASH = keccak256(
-        "RollOverBatch(address from,bytes32[] uas,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
     );
     bytes32 private constant UA_ROLL_OVER_BATCH_TYPEHASH = keccak256(
         "UARollOverBatch(bytes32 from,bytes32[] uas,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
     );
-    bytes32 private constant ROLL_OVER_SIGNED_TYPEHASH = keccak256(
-        "RollOverSigned(address from,bytes32 ua,uint64 expectedPendingSeq,uint64 validUntilBlock,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
-    );
     bytes32 private constant UA_ROLL_OVER_SIGNED_TYPEHASH = keccak256(
         "UARollOverSigned(bytes32 from,bytes32 ua,uint64 expectedPendingSeq,uint64 validUntilBlock,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
-    );
-    bytes32 private constant SET_MODE_TYPEHASH = keccak256(
-        "SetRollOverMode(address from,bytes32 ua,uint8 rollOverMode,uint64 validUntilBlock,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
     );
     bytes32 private constant UA_SET_MODE_TYPEHASH = keccak256(
         "UASetRollOverMode(bytes32 from,bytes32 ua,uint8 rollOverMode,uint64 validUntilBlock,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
     );
-    // The typehashes of the transfer and unshield entries are `ZetherLib`'s (CTR-ZTH-94).
+    // The typehashes of the transfer and unshield entries are `ZetherLib`'s (CTR-ZTH-94). The address forms of every
+    // signed entry are in legacy/ua-mtx-merge/ (R35): the `UA*` structs are the one signed form, native ids included.
 
     ITransferDisclosure private immutable _DISCLOSURE;
     /// @dev The transfer verifier (transfer proofs, the group operations; `init` copies it into `ZetherLib`'s storage,
@@ -143,13 +133,12 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
         });
     }
 
-    /// @notice CTR-ZTH-06: every envelope field except `data` (which carries the proof), plus `chainUid`.
-    function envelopeBinding(MetaTxLib.MetaTransaction calldata m) external view returns (bytes32) {
-        return _zetherBinding(m);
-    }
-
-    /// @notice CTR-ZTH-51: the UA path's binding, tag `SCAAS-ZETHER-UA-ENVELOPE-V1` (distinct from the address path's).
-    function uaEnvelopeBinding(MetaTxLib.UAMetaTransaction calldata m) external view returns (bytes32) {
+    /// @notice CTR-ZTH-51, R35: the binding of every relayed proof on the merged entries, tag
+    ///         `SCAAS-ZETHER-UA-ENVELOPE-V1`, `from` as `bytes32` (native ids zero-padded); every envelope field except
+    ///         `data` (which carries the proof), plus `chainUid`. `executeMetaTransaction` keeps the address binding
+    ///         (`SCAAS-ZETHER-ENVELOPE-V1` over its `MetaTransaction`, CTR-ZTH-06), which clients compute; its view is in
+    ///         legacy/ua-mtx-merge/.
+    function envelopeBinding(MetaTxLib.UAMetaTransaction calldata m) external view returns (bytes32) {
         return _uaEnvelopeBinding(m);
     }
 
@@ -159,20 +148,15 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
     ///         `pending[toUA] += [amount]G`. The Zether key is the UA (CTR-UA-30): `toUA` must be registered as this
     ///         token's Zether kind. A derived UA signer pays from its UA-ledger balance.
     function mtxShield(bytes32 toUA, uint256 amount) external nonReentrant {
+        _regPayer();
         address m = _msgSender();
         ZetherLib.shield(ZetherTypes.UA.wrap(toUA), amount, _REGISTRY, m);
         _poolMove(m == MetaTxLib.UA_POOL ? _ticketSubject() : MetaTxLib.pad(m), MetaTxLib.pad(MetaTxLib.SHIELD_POOL),
             amount * ZetherLib.$().shieldScale);
     }
 
-    /// @notice The signed `mtxShield` (TS-D14, TS-D16).
-    function mtxShield(MetaTxLib.Envelope calldata e, bytes32 toUA, uint256 amount, bytes calldata sig)
-        external nonReentrant returns (bytes memory)
-    {
-        return _named(MetaTxLib.SHIELD_TYPEHASH, IConfidentialToken.mtxShield.selector, e, abi.encode(toUA, amount), sig);
-    }
-
-    function uaShield(MetaTxLib.UAEnvelope calldata e, bytes32 toUA, uint256 amount, bytes calldata auth)
+    /// @notice The signed `mtxShield` (TS-D14, TS-D16) over `UAShield`, an explicit `UASig` (R47).
+    function mtxShield(MetaTxLib.UAEnvelope calldata e, bytes32 toUA, uint256 amount, IUARegistry.UASig calldata auth)
         external nonReentrant returns (bytes memory)
     {
         return _namedUA(MetaTxLib.UA_SHIELD_TYPEHASH, IConfidentialToken.mtxShield.selector, e, abi.encode(toUA, amount), auth);
@@ -184,16 +168,22 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
     ///         `ZetherLib`'s, which reads `t` and `proof` from this call's own arguments (CTR-ZTH-94).
     function mtxConfidentialTransfer(ZetherMulti calldata t, bytes calldata proof) external nonReentrant returns (bytes32) {
         proof;
+        _regZetherSender(t.yFrom);
+        _regName(t.beneficiaryUA);
         return _multi(t.beneficiaryUA, ZetherLib.defaultMode());
     }
 
     function mtxConfidentialTransferCompact(ZetherMulti calldata t, bytes calldata proof) external nonReentrant returns (bytes32) {
         proof;
+        _regZetherSender(t.yFrom);
+        _regName(t.beneficiaryUA);
         return _multi(t.beneficiaryUA, ZetherTypes.TransferMode.HASH);
     }
 
     function mtxConfidentialTransferSingle(ZetherSingle calldata t, bytes calldata proof) external nonReentrant returns (bytes32) {
         proof;
+        _regZetherSender(t.yFrom);
+        _regName(t.beneficiaryUA);
         (bytes32 ref, uint256 fee) = abi.decode(
             _lib(address(ZetherLib), ZetherLib.transferSingle.selector, abi.encode(_env())), (bytes32, uint256));
         _fromPool(ZetherTypes.UA.wrap(t.beneficiaryUA), fee);
@@ -202,42 +192,21 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
 
     /// @notice The signed forms (TS-D14, TS-D16): the struct's `args` and `proof` by hash, as a wallet shows them;
     ///         `ZetherLib` builds the struct's words and the op's call from this call's own arguments (CTR-ZTH-94).
-    function mtxConfidentialTransfer(MetaTxLib.Envelope calldata e, ZetherMulti calldata t, bytes calldata proof, bytes calldata sig)
-        external nonReentrant returns (bytes32)
-    {
-        (t, proof);
-        return _ref(_namedZ(ZetherLib.multiCall.selector, false, e, sig));
-    }
-
-    function uaConfidentialTransfer(MetaTxLib.UAEnvelope calldata e, ZetherMulti calldata t, bytes calldata proof,
+    function mtxConfidentialTransfer(MetaTxLib.UAEnvelope calldata e, ZetherMulti calldata t, bytes calldata proof,
         IUARegistry.UASig calldata auth) external nonReentrant returns (bytes32)
     {
         (t, proof);
         return _ref(_namedZUA(ZetherLib.uaMultiCall.selector, false, e, auth));
     }
 
-    function mtxConfidentialTransferCompact(MetaTxLib.Envelope calldata e, ZetherMulti calldata t, bytes calldata proof,
-        bytes calldata sig) external nonReentrant returns (bytes32)
-    {
-        (t, proof);
-        return _ref(_namedZ(ZetherLib.multiCall.selector, true, e, sig));
-    }
-
-    function uaConfidentialTransferCompact(MetaTxLib.UAEnvelope calldata e, ZetherMulti calldata t, bytes calldata proof,
+    function mtxConfidentialTransferCompact(MetaTxLib.UAEnvelope calldata e, ZetherMulti calldata t, bytes calldata proof,
         IUARegistry.UASig calldata auth) external nonReentrant returns (bytes32)
     {
         (t, proof);
         return _ref(_namedZUA(ZetherLib.uaMultiCall.selector, true, e, auth));
     }
 
-    function mtxConfidentialTransferSingle(MetaTxLib.Envelope calldata e, ZetherSingle calldata t, bytes calldata proof,
-        bytes calldata sig) external nonReentrant returns (bytes32)
-    {
-        (t, proof);
-        return _ref(_namedZ(ZetherLib.singleCall.selector, false, e, sig));
-    }
-
-    function uaConfidentialTransferSingle(MetaTxLib.UAEnvelope calldata e, ZetherSingle calldata t, bytes calldata proof,
+    function mtxConfidentialTransferSingle(MetaTxLib.UAEnvelope calldata e, ZetherSingle calldata t, bytes calldata proof,
         IUARegistry.UASig calldata auth) external nonReentrant returns (bytes32)
     {
         (t, proof);
@@ -251,6 +220,9 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
     ///         the UA ledger (CTR-ZTH-51); then the fee to the beneficiary. The proof part is `ZetherLib`'s (CTR-ZTH-94).
     function mtxUnshield(ZetherBurn calldata b, uint256 amount, bytes32 recipient, bytes calldata proof) external nonReentrant {
         proof;
+        _regZetherSender(b.yFrom);
+        _regName(b.beneficiaryUA);
+        if (amount != 0) _regReceiver(recipient);
         _requireRecipient(recipient);
         uint256 fee = abi.decode(_lib(address(ZetherLib), ZetherLib.unshield.selector, abi.encode(_env())), (uint256));
         _poolMove(MetaTxLib.pad(MetaTxLib.SHIELD_POOL), recipient, amount * ZetherLib.$().shieldScale);
@@ -258,14 +230,7 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
     }
 
     /// @notice The signed `mtxUnshield`: `amount` and `recipient` flat in the struct, as in the op.
-    function mtxUnshield(MetaTxLib.Envelope calldata e, ZetherBurn calldata b, uint256 amount, bytes32 recipient,
-        bytes calldata proof, bytes calldata sig) external nonReentrant returns (bytes memory)
-    {
-        (b, amount, recipient, proof);
-        return _namedZ(ZetherLib.unshieldCall.selector, false, e, sig);
-    }
-
-    function uaUnshield(MetaTxLib.UAEnvelope calldata e, ZetherBurn calldata b, uint256 amount, bytes32 recipient,
+    function mtxUnshield(MetaTxLib.UAEnvelope calldata e, ZetherBurn calldata b, uint256 amount, bytes32 recipient,
         bytes calldata proof, IUARegistry.UASig calldata auth) external nonReentrant returns (bytes memory)
     {
         (b, amount, recipient, proof);
@@ -302,54 +267,27 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
     }
 
     /// @notice The signed roll-overs; the owner's signature travels beside the struct, never in it (Appendix X.1).
-    function mtxRollOver(MetaTxLib.Envelope calldata e, bytes32 ua, uint256 n, bytes calldata sig)
+    function mtxRollOver(MetaTxLib.UAEnvelope calldata e, bytes32 ua, uint256 n, IUARegistry.UASig calldata auth)
         external nonReentrant returns (bytes memory)
     {
-        return _named(ROLL_OVER_TYPEHASH, IConfidentialToken.mtxRollOver.selector, e, abi.encode(ua, n), sig);
+        return _namedUA(UA_ROLL_OVER_TYPEHASH, IZetherToken.mtxRollOver.selector, e, abi.encode(ua, n), auth);
     }
 
-    function uaRollOver(MetaTxLib.UAEnvelope calldata e, bytes32 ua, uint256 n, IUARegistry.UASig calldata auth)
-        external nonReentrant returns (bytes memory)
-    {
-        return _namedUA(UA_ROLL_OVER_TYPEHASH, IConfidentialToken.mtxRollOver.selector, e, abi.encode(ua, n), auth);
-    }
-
-    function mtxRollOverBatch(MetaTxLib.Envelope calldata e, ZetherTypes.UA[] calldata uas, bytes calldata sig)
-        external nonReentrant returns (bytes memory)
-    {
-        (bytes memory words, bytes memory data) = _batchCall(uas);
-        return _namedCall(ROLL_OVER_BATCH_TYPEHASH, e, words, data, sig);
-    }
-
-    function uaRollOverBatch(MetaTxLib.UAEnvelope calldata e, ZetherTypes.UA[] calldata uas, IUARegistry.UASig calldata auth)
+    function mtxRollOverBatch(MetaTxLib.UAEnvelope calldata e, ZetherTypes.UA[] calldata uas, IUARegistry.UASig calldata auth)
         external nonReentrant returns (bytes memory)
     {
         (bytes memory words, bytes memory data) = _batchCall(uas);
         return _namedCallUA(UA_ROLL_OVER_BATCH_TYPEHASH, e, words, data, auth);
     }
 
-    function mtxRollOverSigned(MetaTxLib.Envelope calldata e, ZetherTypes.UA ua, uint64 expectedPendingSeq, uint64 validUntilBlock,
-        IUARegistry.UASig calldata ownerSig, bytes calldata sig) external nonReentrant returns (bytes memory)
-    {
-        (bytes memory words, bytes memory data) = _signedCall(ua, expectedPendingSeq, validUntilBlock, ownerSig);
-        return _namedCall(ROLL_OVER_SIGNED_TYPEHASH, e, words, data, sig);
-    }
-
-    function uaRollOverSigned(MetaTxLib.UAEnvelope calldata e, ZetherTypes.UA ua, uint64 expectedPendingSeq, uint64 validUntilBlock,
+    function mtxRollOverSigned(MetaTxLib.UAEnvelope calldata e, ZetherTypes.UA ua, uint64 expectedPendingSeq, uint64 validUntilBlock,
         IUARegistry.UASig calldata ownerSig, IUARegistry.UASig calldata auth) external nonReentrant returns (bytes memory)
     {
         (bytes memory words, bytes memory data) = _signedCall(ua, expectedPendingSeq, validUntilBlock, ownerSig);
         return _namedCallUA(UA_ROLL_OVER_SIGNED_TYPEHASH, e, words, data, auth);
     }
 
-    function mtxSetRollOverMode(MetaTxLib.Envelope calldata e, ZetherTypes.UA ua, ZetherTypes.RollOverMode rollOverMode,
-        uint64 validUntilBlock, IUARegistry.UASig calldata ownerSig, bytes calldata sig) external nonReentrant returns (bytes memory)
-    {
-        (bytes memory words, bytes memory data) = _modeCall(ua, rollOverMode, validUntilBlock, ownerSig);
-        return _namedCall(SET_MODE_TYPEHASH, e, words, data, sig);
-    }
-
-    function uaSetRollOverMode(MetaTxLib.UAEnvelope calldata e, ZetherTypes.UA ua, ZetherTypes.RollOverMode rollOverMode,
+    function mtxSetRollOverMode(MetaTxLib.UAEnvelope calldata e, ZetherTypes.UA ua, ZetherTypes.RollOverMode rollOverMode,
         uint64 validUntilBlock, IUARegistry.UASig calldata ownerSig, IUARegistry.UASig calldata auth)
         external nonReentrant returns (bytes memory)
     {
@@ -419,13 +357,7 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
         }
     }
 
-    /// @dev A signed entry `ZetherLib` builds (`_built`), through the address path.
-    function _namedZ(bytes4 sel, bool compact, MetaTxLib.Envelope calldata e, bytes calldata sig) private returns (bytes memory) {
-        (bytes32 th, bytes memory words, bytes memory data) = _built(address(ZetherLib), sel, compact);
-        return _namedCall(th, e, words, data, sig);
-    }
-
-    /// @dev Likewise through the UA path.
+    /// @dev A signed entry `ZetherLib` builds (`_built`), through the UA path (native and derived ids).
     function _namedZUA(bytes4 sel, bool compact, MetaTxLib.UAEnvelope calldata e, IUARegistry.UASig calldata auth)
         private returns (bytes memory)
     {
@@ -433,7 +365,7 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
         return _namedCallUA(th, e, words, data, auth);
     }
 
-    // What a signed roll-over and its twin share: the words its struct hashes (TS-D17) and the op's call.
+    // What a signed roll-over hashes (TS-D17) and the op's call.
 
     function _batchCall(ZetherTypes.UA[] calldata uas) private pure returns (bytes memory, bytes memory) {
         return (abi.encode(keccak256(abi.encodePacked(uas))), abi.encodeCall(IZetherToken.mtxRollOverBatch, (uas)));
@@ -466,20 +398,22 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
         }
     }
 
-    /// @dev The statement binding of this call (CTR-ZTH-34, CTR-ZTH-51): the envelope's inside `mtxExecute` or
-    ///      `uaExecute` (`ZTX_V1_RELAYED`), else 0 (`ZTX_V1_DIRECT`), so a proof lifted out of a pending envelope fails
-    ///      as a direct call, and one lifted between the two paths fails on the other's tag.
+    /// @dev The statement binding of this call (CTR-ZTH-34, CTR-ZTH-51, R35): the envelope's inside a merged entry or
+    ///      `mtxExecute` (the UA tag) or `executeMetaTransaction` (the address tag), `ZTX_V1_RELAYED`; else 0
+    ///      (`ZTX_V1_DIRECT`), so a proof lifted out of a pending envelope fails as a direct call, and one lifted between
+    ///      the two paths fails on the other's tag.
     function _env() internal view returns (ZetherLib.Env memory) {
         bytes32 b = _ticketBinding();
         return ZetherLib.Env(_REGISTRY, CHAIN_UID, ZetherLib.tagOf(b), b, BURN_VERIFIER, _domainSeparatorV4());
     }
 
-    /// @dev The base stores it in the ticket for the self-call of every `mtxExecute` on this token.
+    /// @dev The base stores it in the ticket for the self-call of every `executeMetaTransaction` on this token (R3).
     function _envelopeBinding(MetaTxLib.MetaTransaction memory m) internal view virtual override returns (bytes32) {
         return _zetherBinding(m);
     }
 
-    /// @dev Likewise for every `uaExecute` (CTR-ZTH-51): `TAG_UA_ENVELOPE`, `from` as `bytes32`, never 0.
+    /// @dev Likewise for every merged entry and `mtxExecute` (CTR-ZTH-51, R35): `TAG_UA_ENVELOPE`, `from` as `bytes32`,
+    ///      never 0.
     function _uaEnvelopeBinding(MetaTxLib.UAMetaTransaction memory m)
         internal view virtual override returns (bytes32)
     {
@@ -497,9 +431,13 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
         return sel == IConfidentialToken.mtxShield.selector || sel == IZetherToken.mtxConfidentialTransfer.selector
             || sel == IZetherToken.mtxConfidentialTransferCompact.selector
             || sel == IZetherToken.mtxConfidentialTransferSingle.selector || sel == IZetherToken.mtxUnshield.selector
-            || sel == IConfidentialToken.mtxRollOver.selector || sel == IZetherToken.mtxRollOverBatch.selector
+            || sel == IZetherToken.mtxRollOver.selector || sel == IZetherToken.mtxRollOverBatch.selector
             || sel == IZetherToken.mtxRollOverSigned.selector || sel == IZetherToken.mtxSetRollOverMode.selector;
     }
+
+    /// @notice Regulated hook (regulated-kinds spec §2.2, §4.1), empty here ("+0"): each direct Zether transfer and
+    ///         unshield entry, before `_multi` or the library; the raw `yFrom` (the override computes `ZetherLib.uaOf`).
+    function _regZetherSender(G1 calldata /* yFrom */) internal view virtual {}
 
     function _zetherBinding(MetaTxLib.MetaTransaction memory m) internal view returns (bytes32) {
         (address r, address f) = MetaTxLib.canon(m);

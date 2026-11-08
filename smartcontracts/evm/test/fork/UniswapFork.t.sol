@@ -165,7 +165,7 @@ contract UniswapForkTest is Test {
     /// The signature of `o` selling `sell`: a `DexOrder` in the DEX's domain (outside token) or the token's own
     /// `TradeOrder` digest (TOK).
     function _sig(uint256 pk, address sell, ITradeToken.TradeOrder memory o) internal view returns (bytes memory) {
-        bytes32 h = sell == address(tok) ? tok.tradeOrderDigest(o) : dex.dexOrderDigest(sell, o);
+        bytes32 h = sell == address(tok) ? tok.tradeOrderDigest(DexLegs.ua(o)) : dex.dexOrderDigest(sell, o);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, h);
         return abi.encodePacked(r, s, v);
     }

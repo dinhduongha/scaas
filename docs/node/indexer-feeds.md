@@ -181,6 +181,13 @@ Further events, same object, same filters (decoders for a new kind ship before t
   `/v1/events` per canonical id; native ids keep today's form;
 - post-quantum Zether: `MetaTransactionExecuted`, `UAMetaTransactionExecuted`, `Transfer` and `UATransfer` of a PQZ
   token normalized like any meta token's, beside the `Pqz*` events ([contracts/pq-zero-knowledge.md](../contracts/pq-zero-knowledge.md));
+- regulated kinds 8–13 (BUILT on EVM, ua-mtx-merge T35, `indexer.rs`; regulated-kinds spec §7, M-08): `AccountFrozen`,
+  `AccountUnfrozen`, `ForcedTransfer`, `Paused`, `Unpaused`, `OrderRecorded`, `OrderRevoked`, `OperatorTransfer` and the
+  governance events `RelaxProposed`, `FeatureDisabled`, `RoleRevoked`, ids as `bytes32` hex but `from` / `to` in the address
+  form above (`UA_POOL` and `<k>_ua` for a derived id); `alert: true` on every `OrderRecorded`, `RelaxProposed`,
+  `AccountFrozen` and `Paused` (and a `warn` log line naming it); `derived` = `every_freeze_ended` on `FeatureDisabled(5)`,
+  `every_record_backed_freeze_ended` on `FeatureDisabled(10)`, `holder_lost_bit` on `RoleRevoked`. Test:
+  `indexer::tests::alert_on_relax_proposed`;
 - planned asset suite: `OrderRecorded`, `OrderRevoked`, `AccountFrozen`, `AccountUnfrozen`, `ForcedTransfer`, `Paused`,
   `Unpaused`, `FeatureDisabled`, `RoleGranted`, `RoleRevoked`, `Attested`, `AttesterSet`, `GrantCreated`, `Released`, `Revoked`,
   `RevocationRenounced`, `MilestoneApproved`, `ExcessSwept`, `DistributionCreated`, `Claimed`, `Cancelled`, `Swept`,
@@ -204,9 +211,21 @@ changes) and `GET /v1/events?cursor=` (`GET /v1/events?cursor=…`: index ranges
 filtered per namespace; every page carries `store_id`, `incarnation`, `restore_epoch`, `head_seq`; the client cursor
 rule is the bus overlap rule ([cursors](#cursors)); `wait ≤ 25 s` long-poll for clients that want it (an ERP cron uses
 `wait=0`, so no client worker is held). Cursor older than retention ⇒ `410 CURSOR_EXPIRED`. Results reach clients
-only through the feeds: the node never calls a client and never dials a callback URL taken from an intent. A client
+only through the feeds: the node never dials a callback URL taken from an intent, and its only outbound call to a client is
+the doorbell of [NODE-IDX-09](#NODE-IDX-09). A client
 that polls every minute, and every ~10 s while it has live pushed jobs, sees job states ≤ ~10 s after the node while
 jobs are live, ≤ 1 min otherwise ([INT-ERP-18](../integration.md#INT-ERP-18), [INT-ERP-20](../integration.md#INT-ERP-20)).
+
+<a id="NODE-IDX-09"></a>**NODE-IDX-09** — **Doorbell: a signed, content-free ping per API key** (owner 2026-11-08; PLANNED, node round P4). An
+API key may register one `https` URL (off by default). When a feed of its namespace gains items, the node sends at most one
+ping per interval: `POST {url}` with `{"namespace", "feed": "jobs" | "events", "head_seq", "at"}` and an HMAC signature by
+that key over the body and a timestamp header (the client refuses a stale or replayed ping). The ping carries no job or
+event data; the client then reads `/v1/jobs` and `/v1/events` from its cursor as before. **The feeds stay the only source of
+truth:** a lost, late or duplicated ping changes nothing, so the node keeps no delivery guarantee and retries only with a
+short backoff. Outbound guard (fail closed): `https` only, the resolved address is checked after DNS and refused when it is
+loopback, link-local, private, multicast or the node's own listeners; no redirects; a short connect and total timeout; a
+per-namespace rate limit; pings run on their own worker and never hold a lane, the indexer or the store. A refused or failing
+URL is reported on the key (`last_ping_error`) and in `/v1/ops`, never to a third party.
 
 `GET /v1/jobs?cursor=901&limit=200&wait=0`:
 

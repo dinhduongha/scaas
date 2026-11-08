@@ -66,7 +66,7 @@ KindInfo kindInfo(uint16_t kind);
 std::vector<KindInfo> kinds();  // the whole table, in order
 Bytes tag(uint16_t kind);
 std::string kindTagString(uint16_t kind);
-// governance_bits.json's row of `bit` as JSON {bit, name, type, sentences} (bits 0-21; any other throws UAArgument)
+// governance_bits.json's row of `bit` as JSON {bit, name, type, sentences} (bits 0-23; any other throws UAArgument)
 std::string governanceBit(uint8_t bit);
 std::optional<Bytes> groupTag(const std::string& group);
 std::optional<std::string> groupTagString(const std::string& group);
@@ -147,6 +147,9 @@ Bytes uaAuthDomainSeparator(const Domain& d);
 Bytes uaAuthDigest(const Domain& d, const Bytes& ua, const Bytes& purposeTag, const Bytes& digest);
 Bytes memberDigest(const Bytes& structureUa, const Bytes& uaMsg);
 std::string canonicalId(const std::string& text);
+// How a client shows a bytes32 id before the user signs (ua-mtx-merge spec §6): the EIP-55 address of a native-space id, else the
+// URN urn:scaas:ua:v1:<kind name>:<hex32> under kind, the id's registry kind (0 = none known: UAKindUnknown). id: "0x" + 64 hex.
+std::string idDisplay(const std::string& id, uint16_t kind);
 Bytes encodeMsig(uint16_t threshold, const std::vector<Member>& members);
 // The registry's explicit arguments of a registration, JSON in and out. In: {kind, keyData, pqzKey, pqzPopHash, pqzPop, kemPk, pop,
 // kemCommit, inner}: bytes as "0x…" hex, an absent field is empty, an msig's pop is [{index, members: [{index, sig}], sig}], inner
@@ -160,6 +163,12 @@ std::string registrationArgs(const std::string& input);
 std::string setKemKeyArgs(const std::string& input);
 // setPqzKey's explicit arguments, JSON in and out. In: {ua, pqzKey, pqzPopHash, sig}, sig as setKemKeyArgs. Out: the same fields, sig complete.
 std::string setPqzKeyArgs(const std::string& input);
+// What a payer signs (pay-meta-tax T41), JSON in and out: `{struct, domain: {name, chainId, verifyingContract, salt}, message}`,
+// `struct` `UAMetaTransfer`, `UAPayWithTax` (`{payment, taxMode, tax}`) or `UARelayFee`; out `{structHash, digest}`.
+std::string payDigest(const std::string& input);
+// `metaPayId` under `scaas.pay.meta.v2` (pay-meta-tax T41): in `{salt, payNo, schema, body}`, out `{payId}`; a refused shape or
+// `payNo` is `UAArgument`.
+std::string metaPayId(const std::string& input);
 
 
 // ---------------------------------------------------------------------------------------------------------------------------

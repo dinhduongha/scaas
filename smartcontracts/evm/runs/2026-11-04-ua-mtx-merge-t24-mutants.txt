@@ -1,0 +1,11 @@
+mutant | test that went red | rc
+proposer-not-compared | test_holderCannotConfirmOwnerRevoke | 1
+action-out-of-commit | test_eachWidenedWordTakesTwoCalls, test_finiteToUnboundedTakesTwoCalls, test_grantThenRevokeExclude, test_holderCannotConfirmOwnerRevoke, test_ownerCannotConfirmHolderRenounce, test_pendingGrantSaysLive, test_relaxDisableTakesTwoCalls, test_relaxRenounceTakesTwoCalls, test_relaxRevokeTakesTwoCalls, test_revokeThenGrantExclude, test_windowWithItsLimitRunsAtOnce | 1
+barred-at-propose | test_holderCannotConfirmOwnerRevoke, test_proposeChangesNothing | 1
+features-cleared-at-propose | test_acceptOwnershipKillsPendingRelax, test_disableReturnsAppliedOnlyAtConfirm, test_proposeChangesNothing, test_relaxDisableTakesTwoCalls | 1
+generation-not-read | test_aToBToAKillsThePending, test_acceptOwnershipKillsPendingRelax, test_afterRenounceNobodyConfirms, test_afterTransferTheNewOwnerProposesAgain | 1
+msig-on-rate-adjustable | test_msigRefusedForRateAdmin | 1
+any-derived-on-bit-5 | test_operatorTransferAnyHolderLimitedDaily, test_singleKeyDerivedIssuerRefused | 1
+roleconflict-skipped-on-leaf | test_roleConflictForceRecord_leaf | 1
+window-not-checked | test_afterTheWindowThePendingIsDead, test_cancelGrantLiveAndDead, test_confirmAfterWindowProposesAgain, test_pendingGrantSaysLive | 1
+applied-at-propose | test_disableReturnsAppliedOnlyAtConfirm | 1

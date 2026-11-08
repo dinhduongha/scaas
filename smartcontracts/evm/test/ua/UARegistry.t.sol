@@ -348,11 +348,11 @@ contract UARegistryTest is UARegistryBase {
         bytes memory pk = new bytes(1952);
         pk[0] = bytes1(seed);
         bytes32 ua = UACall.register(r, UAKinds.MLDSA65, pk, a, _pop(r, UAKinds.MLDSA65, pk, a), hex"07");
-        (address ptr, bytes32 ph, bool proven) = r.pqzKeyOf(ua);
+        (, address ptr, bytes32 ph, bool proven) = r.pqzKeyOf(ua);
         assertEq(ptr.code, bytes.concat(hex"00", a.pqzKey));
         assertEq(ph, keccak256(hex"07"));
         assertFalse(proven);
-        assertEq(r.pqzPopOf(ua), hex"07");
+        assertEq(r.pqzPopOf(ua, 0), hex"07");
     }
 
     /// Gen 2 may not enable a kind or keyHash group gen 1 enables, nor follow a registry of another chain or profile.

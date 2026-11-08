@@ -9,9 +9,12 @@ import {SaltedEIP712} from "../common/SaltedEIP712.sol";
 import {SigCheck} from "../common/SigCheck.sol";
 import {MtxPipelineLib} from "./MtxPipelineLib.sol";
 
-/// @title The generic meta-transaction base of every SCaaS contract (CTR-MTX-22).
+/// @title The generic meta-transaction core of every SCaaS contract (CTR-MTX-22; ua-mtx-merge MD-1).
 /// @notice The subject signs a `MetaTransaction` (CTR-MTX-15) whose `data` is one call of one of THIS contract's
-///         allowlisted functions; anyone submits it through `mtxExecute`, and the contract runs it on itself
+///         allowlisted functions; anyone submits it through `executeMetaTransaction` (and, on `SmartKeyAccount`,
+///         `MetaTxAddressBase`'s `mtxExecute`; on tokens, the router and the mandate wallets the `mtx*` entries take ids,
+///         `UAMetaTxBase`), and
+///         the contract runs it on itself
 ///         (CTR-MTX-16, CTR-MTX-17). The signer travels in a transient slot and one ticket admits exactly one
 ///         self-call (CTR-MTX-18). The allowlist is fixed per implementation (CTR-MTX-19): an implementation
 ///         overrides `_mtxRule` (ending in `return super._mtxRule(sel);`) and `mtxSelectors` (the base entry
@@ -30,10 +33,6 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
         uint8 amountArg;
         uint32 staticLen;
     }
-
-    bytes32 private constant _CANCEL_NONCE_TYPEHASH = keccak256(
-        "CancelNonce(address from,uint256 lane,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
-    );
 
     // Transient slots (CTR-MTX-18), written as literals: assembly takes no keccak256 constant.
     bytes32 private constant _GUARD = 0xf92fce36488cd980109789c37ce44669ca2ec8fc93bcd6d944c3a5544f9ce252; // keccak256("scaas.mtx.guard")
@@ -57,14 +56,6 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
 
     // ------------------------------------------------------------------ views
 
-    function mtxNonce(address from, uint256 batch) public view returns (uint256) {
-        return _nonce(MetaTxLib.pad(from), batch);
-    }
-
-    function mtxDigest(MetaTxLib.MetaTransaction calldata m) external view virtual returns (bytes32) {
-        return _hashTypedDataV4(MtxPipelineLib._structHash(MetaTxLib.METATX_TYPEHASH, _envelopeOf(m)));
-    }
-
     function chainUid() external view returns (bytes32) {
         return CHAIN_UID;
     }
@@ -87,13 +78,7 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
 
     // ------------------------------------------------------------------ entry points
 
-    function mtxExecute(MetaTxLib.MetaTransaction calldata m, bytes calldata signature)
-        external nonReentrant returns (bytes memory)
-    {
-        return _execute(m, signature);
-    }
-
-    /// @notice EIP-1776 alias of `mtxExecute` (CTR-MTX-17); returns `true`.
+    /// @notice EIP-1776 alias of the address `mtxExecute` (CTR-MTX-17, R3: kept on tokens, `0x47aea5b5`); returns `true`.
     function executeMetaTransaction(MetaTxLib.MetaTransaction calldata m, bytes calldata signature)
         external nonReentrant returns (bool)
     {
@@ -101,33 +86,12 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
         return true;
     }
 
-    /// @notice Atomic: items run in order, each with a fresh ticket; any failure reverts all (CTR-MTX-11).
-    function mtxBatch(MetaTxLib.MetaTransaction[] calldata ms, bytes[] calldata signatures)
-        external nonReentrant returns (bool)
-    {
-        uint256 n = ms.length;
-        if (n == 0) revert MtxBatchEmpty();
-        if (n != signatures.length) revert MtxBatchLengthMismatch();
-        for (uint256 i; i < n; ++i) {
-            _requireBatchable(bytes4(ms[i].data));
-            _execute(ms[i], signatures[i]);
-        }
-        return true;
-    }
-
     /// @notice Direct, or signed through `mtxExecute` on another lane (a subject without gas can cancel). A derived
-    ///         subject has no address lane: `_msgSender()` is `UA_POOL` for all of them, its cancel is `uaCancelNonce`.
+    ///         subject has no address lane: `_msgSender()` is `UA_POOL` for all of them, its cancel is `mtxCancelNonce`.
     function cancelNonce(uint256 batch) external nonReentrant {
         address from = _msgSender();
         if (from == MetaTxLib.UA_POOL) revert MtxSelectorNotAllowed(IMetaTx.cancelNonce.selector);
         emit MetaNonceCancelled(from, batch, _bumpNonce(MetaTxLib.pad(from), batch));
-    }
-
-    /// @notice The signed `cancelNonce(lane)` (TS-D14): `lane` is cancelled, `e.batch` is the lane of the cancel itself.
-    function mtxCancelNonce(MetaTxLib.Envelope calldata e, uint256 lane, bytes calldata sig)
-        external nonReentrant returns (bytes memory)
-    {
-        return _named(_CANCEL_NONCE_TYPEHASH, IMetaTx.cancelNonce.selector, e, abi.encode(lane), sig);
     }
 
     // ------------------------------------------------------------------ pipeline (CTR-MTX-17)
@@ -162,7 +126,7 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
     }
 
     /// @dev Step 1 on the shared lane space (CTR-MTX-15, CTR-UA-26): the common envelope of every signed struct
-    ///      (`MetaTransaction`, `MetaTransfer` and the UA ledger's two), `from` as an id. Not virtual: one lane, one
+    ///      (`MetaTransaction`, `UAMetaTransaction`, `UAMetaTransfer`), `from` as an id. Not virtual: one lane, one
     ///      nonce sequence.
     function _checkEnvelope(
         bytes32 from, uint256 batch, uint256 nonce, uint256 validUntil, uint32 mode, address relayer
@@ -179,7 +143,7 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
         MtxPipelineLib._useNonce(from, batch);
     }
 
-    /// @dev `cancelNonce` and the UA ledger's `uaCancelNonce`: the lane's next nonce, returned.
+    /// @dev `cancelNonce` and the signed `mtxCancelNonce` on ids: the lane's next nonce, returned.
     function _bumpNonce(bytes32 from, uint256 batch) internal returns (uint256 n) {
         unchecked { n = ++MtxPipelineLib._mtxStorage().nonce[from][batch]; }
     }
@@ -241,7 +205,7 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
         if (sel == IMetaTx.cancelNonce.selector) r = MtxRule(FEE_CLASS_ABSOLUTE, 0, 36);
     }
 
-    /// @notice Whether `sel` may run as a `mtxBatch` / `uaBatch` item; every allowlisted selector by default, the PQZ ops
+    /// @notice Whether `sel` may run as a `mtxBatch` item; every allowlisted selector by default, the PQZ ops
     ///         never (CTR-PQZ-21: one op is ≈ 3–11 M gas and up to ≈ 340 KB).
     function _batchable(bytes4) internal view virtual returns (bool) {
         return true;

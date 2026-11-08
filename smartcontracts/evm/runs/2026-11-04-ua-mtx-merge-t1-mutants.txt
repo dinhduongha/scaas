@@ -1,0 +1,16 @@
+mutant | test that went red | rc
+native-on-ua-list | test_cancelIsNonceOrdered_native, test_nativeRunsAddressAllowlist | 1
+derived-off-ua-list | test_derivedStaysOnUAAllowlist | 1
+no-signature-check | test_badSignatureRefused, test_boundFieldChangedRefused, test_clientSigningNonZeroUnboundIsRefused, test_designatorSignsWithItsOwnKey, test_erc1271Holder, test_noRegistry_badSignatureRefused | 1
+no-receiver-check | test_unregisteredReceiverRefused | 1
+registry-for-every-receiver | test_noRegistry_eoaToEoa | 1
+registry-read-for-native | test_eoaToEoa, test_eoaToUA | 1
+cancel-refuses-native | test_cancelBumpsLaneForTheSubject, test_cancelFeeZeroRelayable, test_cancelIsNonceOrdered_native, test_nativeSignedCancel, test_nativeUASigWithKeyDataRefused, test_nativeUASigWithMembersRefused, test_signedCancelIsOrdered | 1
+no-ua-credit | test_eoaToUA | 1
+r17-off | test_nativeKeyDataRefused, test_nativeUASigWithKeyDataRefused, test_nativeUASigWithMembersRefused | 1
+derived-ledger-off-guard-dropped | test_cancelFeeZeroRelayable, test_noRegistryDerivedIsLedgerOffByName, test_noRegistry_derivedSenderIsLedgerOff | 1
+stale-nonce-accepted | test_cancelBumpsLaneForTheSubject, test_cancelIsNonceOrdered_derived, test_cancelIsNonceOrdered_native, test_replayRefused, test_signedCancelIsOrdered, test_walletsByteIdentical | 1
+cancel-self-calls-cancelNonce | test_cancelBumpsLaneForTheSubject, test_cancelFeeZeroRelayable, test_derivedSignedCancel, test_oldUACancelNonceSignatureHasNoEntry | 1
+cancel-wrong-lane | test_cancelBumpsLaneForTheSubject, test_derivedSignedCancel, test_nativeSignedCancel, test_signedCancelIsOrdered | 1
+canon-binds-relayer-bit-off | test_clientSigningNonZeroUnboundIsRefused, test_unboundRelayerAndFeeRecipientNotSigned, test_walletsByteIdentical | 1
+native-test-from-shr160-lt-2 | test_derivedHighBitsAreNotTheEoa | 1

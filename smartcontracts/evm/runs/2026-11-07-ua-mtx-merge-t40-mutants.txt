@@ -1,0 +1,12 @@
+percent-rounds-up | test_payTaxVectors, test_payWithTax_percentExact | 1
+tax-above-amount-allowed | test_directPayWithTax_refusals, test_payTaxVectors, test_payWithTax_taxAboveAmount | 1
+tax-leg-from-payee | test_directPayWithTax_contractCaller, test_directPayWithTax_eoaCaller, test_payTaxVectors, test_payWithTax_amountAsSigned, test_payWithTax_books, test_payWithTax_frozenPayeePasses, test_payWithTax_percentExact, test_payWithTax_taxAboveAmount | 1
+payee-credited-gross | test_directPayWithTax_contractCaller, test_directPayWithTax_eoaCaller, test_payWithTax_amountAsSigned, test_payWithTax_books, test_payWithTax_frozenPayeePasses, test_payWithTax_percentExact | 1
+recipient-from-calldata | test_directPayWithTax_contractCaller, test_directPayWithTax_eoaCaller, test_directPayWithTax_frozenCaller, test_directPayWithTax_refusals, test_payTaxVectors, test_payWithTax_amountAsSigned, test_payWithTax_books, test_payWithTax_percentExact, test_payWithTax_recipientFrozen, test_payWithTax_recipientIsPayee, test_payWithTax_recipientUnattested, test_payWithTax_zeroTaxEmits | 1
+regfeeto-skipped | test_directPayWithTax_refusals, test_payTaxVectors, test_payWithTax_recipientFrozen | 1
+paymenttaxed-skipped-at-zero | test_payTaxVectors, test_payWithTax_zeroTaxEmits | 1
+paymenttaxed-without-from | test_payTaxVectors, test_payWithTax_zeroTaxEmits | 1
+paymenttaxed-direct-without-from | test_directPayWithTax_eoaCaller, test_payTaxVectors | 1
+recipient-hashed-into-struct | test_payTaxVectors, test_payWithTax_amountAsSigned, test_payWithTax_books, test_payWithTax_digestZeroesUnboundFields, test_payWithTax_frozenPayeePasses, test_payWithTax_percentExact, test_payWithTax_recipientFrozen, test_payWithTax_recipientUnattested, test_payWithTax_taxAboveAmount, test_payWithTax_zeroTaxEmits | 1
+paywithtax-payer-is-payee | test_directPayWithTax_contractCaller, test_directPayWithTax_eoaCaller, test_directPayWithTax_frozenCaller, test_directPayWithTax_refusals, test_payTaxVectors | 1
+percent-refused-confidential | test_payWithTax_on_10, test_payWithTax_on_11, test_payWithTax_on_12, test_payWithTax_on_13 | 1

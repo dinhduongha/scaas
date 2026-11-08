@@ -1,0 +1,7 @@
+m-c1-v0-digest-changed | portable.json reproduced byte for byte, pqz key record: signed, portable, write-once, only for a registration without a PQZ key (setPqzKey) | 1
+m-c1-be64-at-v0 | C8: version 0 keeps the info without a suffix, version v >= 1 appends be64(v); the rows by hand | 1
+m-c-sequence-off | pqzKeyVersionNegatives: every row by its table, the signature cases by the verifier, the state cases by the builder, the builder refuses a version-0 replacement, a gap, no version 0, a repeated key; the control passes | 1
+m-c-repeated-key-signed | pqzKeyVersionNegatives: every row by its table, the signature cases by the verifier, the state cases by the builder, the builder refuses a version-0 replacement, a gap, no version 0, a repeated key; the control passes | 1
+m-c-decoy-pending-kept | KV-7: a pending version is the latest of this set's length, not eligible; the decoy filter drops only those | 1
+m-c-stale-debit-signed | KV-8: at the current version every debit; a stale one only migrates or refreshes; above current none, KV-8: the refresh is a burn of 0 with no recipient, the unwrap form never, KV-9: op 1 to itself is the migration from a stale version, SelfTransfer at the current one | 1
+m-c-vault-key-without-hash | F-14: a vault or backup key names (ua, version, pqzKeyHash): two keys at one number stay apart | 1

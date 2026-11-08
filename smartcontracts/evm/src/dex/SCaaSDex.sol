@@ -44,11 +44,13 @@ import {MetaTxLib} from "../common/MetaTxLib.sol";
 ///         not call the DEX, the puller or any `mtxTrade` / `restorePulled`, nor call `increaseAllowance` or Permit2
 ///         `approve` (controller ruling, pending the owner; other allowance-raising calls are not tracked),
 ///         listed targets only when a leg or the `LISTING` holder asks (CTR-DEX-23), and every allowance an `approve` interaction
-///         grants is set back to 0 before the payout. UA legs (CTR-DEX-26): a leg is tagged — shape 0 a `TradeOrder`,
-///         shape 1 a `UATradeOrder` (ids as `bytes32`) — and read into one form (`UATradeOrder` in memory, a native
-///         id zero-padded); a shape-1 leg sells a SCaaS token with its UA ledger on, through the token's `uaTrade`; a
-///         derived party is paid and refunded by the token's `transferToUA` from the DEX's own balance; self-trade is
-///         over ids; a UA leg's starved verify (`UAVerifyGas`) reverts the whole `mtxSettle`. Hybrid (`mtxHybrid` /
+///         grants is set back to 0 before the payout. Legs (CTR-DEX-26; ua-mtx-merge T6, R12): a leg is tagged —
+///         shape 0 a `TradeOrder`, only on an outside token; shape 1 a `UATradeOrder` (ids as `bytes32`), only on a
+///         SCaaS token, native or derived — and read into one form (`UATradeOrder` in memory, a native id
+///         zero-padded); a SCaaS leg is pulled through the token's `mtxTrade` and emits `UALegSettled`, an outside one
+///         `LegSettled`; a registry is asked of the sell token only for a derived seller (C); a derived party is paid
+///         and refunded by the token's `transferToUA` from the DEX's own balance; self-trade is over ids; a UA leg's
+///         starved verify (`UAVerifyGas`) reverts the whole `mtxSettle`. Hybrid (`mtxHybrid` /
 ///         `mtxHybridVia`, spec §4): one listed-market taker against 0..n makers at their own price and the rest of
 ///         its sell routed outside, in one atomic plan; the taker alone gets the output above `outsideFloor`.
 contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient, GovernanceBase {
@@ -70,6 +72,11 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient, Governan
     ///      same transaction (an over-sell).
     bytes4 internal constant RESTORE_PULLED = 0x58c18f87;
     bytes4 internal constant UA_RESTORE_PULLED = 0x8c4a5df6;
+    /// @dev The retired trade entries (ua-mtx-merge T6, legacy/ua-mtx-merge/): the address `mtxTrade(TradeOrder,bytes,
+    ///      TradeFill)` and `uaTrade(UATradeOrder,UASig,TradeFill)`, refused on every interaction like the merged
+    ///      `mtxTrade`: a token of an earlier release keeps them, and the DEX is `o.dex` of every order.
+    bytes4 internal constant OLD_MTX_TRADE = 0xfe49c984;
+    bytes4 internal constant OLD_UA_TRADE = 0x6a4e2056;
     /// @dev ERC-1271 gas cap for this chain's `SmartKeyAccount` clones (CTR-ACC-05); other contracts get
     ///      `SigCheck.ERC1271_GAS` (50 000).
     uint256 internal constant SMART_KEY_1271_GAS = 400_000;
@@ -161,10 +168,10 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient, Governan
         s.initialized = true;
         GovernanceLib.Roles memory none;
         GovernanceLib.init(GovernanceBits.DEX_BITS, 0, cfg.owner, cfg.grantDelay, address(0), none, GovernanceBits.DEX_BITS,
-            GovernanceBits.DEX_BITS, 0);
+            GovernanceBits.DEX_BITS, 0, address(0)); // no contract-only bit: no registry read
         if (cfg.owner != 0) { // the owner holds both bits from creation (B-27: `grantRole` would only propose)
-            GovernanceLib.initHolder(GovernanceBits.LISTING, cfg.owner, GovernanceBits.DEX_BITS, 0);
-            GovernanceLib.initHolder(GovernanceBits.FEE_ROUTING, cfg.owner, GovernanceBits.DEX_BITS, 0);
+            GovernanceLib.initHolder(GovernanceBits.LISTING, cfg.owner, GovernanceBits.DEX_BITS, 0, address(0));
+            GovernanceLib.initHolder(GovernanceBits.FEE_ROUTING, cfg.owner, GovernanceBits.DEX_BITS, 0, address(0));
         }
         s.listedOnly = cfg.listedOnly;
         address p = address(new DexPuller(cfg.rescueTo)); // the DEX itself rescues nothing (CTR-DEX-20, spec §6.2)
@@ -419,17 +426,21 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient, Governan
     }
 
     /// @dev A leg's order in the one form, and its kind from the listing (never from the leg): shape 0 a `TradeOrder`
-    ///      (a native id is its address zero-padded, the same word), shape 1 a `UATradeOrder`, only on a SCaaS token whose
-    ///      UA ledger is on (a UA holds no other token, CTR-DEX-26).
+    ///      (a native id is its address zero-padded, the same word), only on an outside token (`LegShapeUnknown(0)` on a
+    ///      SCaaS token, R12); shape 1 a `UATradeOrder`, only on a SCaaS token, whose registry is asked only for a
+    ///      derived seller (C; a UA holds no other token, CTR-DEX-26).
     function _decode(address sellToken, uint8 shape, ITradeToken.TradeOrder calldata order,
         ITradeToken.UATradeOrder calldata uaOrder) private view returns (Calc memory c)
     {
         if (shape > 1) revert LegShapeUnknown(shape);
         c.outside = _s().kind[sellToken] != KIND_SCAAS;
         if (shape == 0) {
+            if (!c.outside) revert LegShapeUnknown(shape);
             c.o = TradeLib.core(order);
         } else {
-            if (!_ledgerOn(sellToken)) revert UALegNotLedger(sellToken);
+            if (c.outside || (!UAKinds.inNativeSpace(uaOrder.from) && IUALedger(sellToken).registry() == address(0))) {
+                revert UALegNotLedger(sellToken);
+            }
             c.ua = true;
             c.o = uaOrder;
         }
@@ -452,9 +463,8 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient, Governan
         ITradeToken.UATradeOrder memory o = c.o;
         if (o.relayer != address(0) && o.relayer != submitter) revert WrongRelayer(submitter);
         if (o.dex != address(this)) revert DexMismatch(o.dex);
-        if (c.ua) c.h = ITradeToken(sellToken).uaTradeOrderDigest(o);
-        else if (c.outside) c.h = _dexOrderDigest(sellToken, _native(o));
-        else c.h = ITradeToken(sellToken).tradeOrderDigest(_native(o));
+        if (c.ua) c.h = ITradeToken(sellToken).tradeOrderDigest(o);
+        else c.h = _dexOrderDigest(sellToken, _native(o));
         if (c.outside && o.flags & ESCROW != 0) revert BadFlags(c.h); // pulled exactly into the DEX: nothing to escrow
         c.sold = sold;
         c.recv = recv;
@@ -479,8 +489,7 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient, Governan
         ITradeToken.TradeFill memory f = o.flags & ESCROW != 0
             ? ITradeToken.TradeFill(o.amount, 0, 0, submitter)
             : ITradeToken.TradeFill(c.sold, c.recv, c.fee, submitter);
-        if (c.ua) return ITradeToken(sellToken).uaTrade(o, auth, f);
-        if (!c.outside) return ITradeToken(sellToken).mtxTrade(_native(o), sig, f);
+        if (c.ua) return ITradeToken(sellToken).mtxTrade(o, auth, f);
         // outside token: the DEX runs the token's checks on its own state (the signature once, CTR-DEX-15 step 4),
         // then pulls through the puller
         TradeLib.precheck(o, f, c.h, address(this), sellToken);
@@ -517,9 +526,9 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient, Governan
 
     // ------------------------------------------------------------------ exchange path (CTR-DEX-20, -21, -23)
 
-    /// @notice Path (a): the DEX makes each interaction (never on itself or its puller, never `mtxTrade`, `uaTrade`,
-    ///         `restorePulled`, `increaseAllowance` or Permit2 `approve` (controller ruling, pending the owner),
-    ///         listed when a leg or the `LISTING` holder asks); a failing one reverts the plan with `InteractionFailed` (index, target, at most 256 bytes of its data). Every allowance an `approve`
+    /// @notice Path (a): the DEX makes each interaction (never on itself or its puller, never `mtxTrade` (the retired
+    ///         `uaTrade` and address `mtxTrade` too), `restorePulled`, `increaseAllowance` or Permit2 `approve`
+    ///         (controller ruling, pending the owner), listed when a leg or the `LISTING` holder asks); a failing one reverts the plan with `InteractionFailed` (index, target, at most 256 bytes of its data). Every allowance an `approve`
     ///         interaction granted is set back to 0 after the last interaction (controller ruling: the DEX keeps no
     ///         allowance past the route).
     function mtxExchange(ExchangePlan calldata p, Interaction[] calldata xs) external nonReentrant {
@@ -576,8 +585,8 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient, Governan
     }
 
     /// @notice Path (b): the sold fills go to `executor` (listed when a leg or the `LISTING` holder asks), which must transfer at
-    ///         least the floors to the DEX inside `exchangeCallback`; re-entry hits `nonReentrant`, a `mtxTrade`,
-    ///         `uaTrade` or a puller call from it fails (it is neither `o.dex` nor the DEX).
+    ///         least the floors to the DEX inside `exchangeCallback`; re-entry hits `nonReentrant`, a `mtxTrade` or a
+    ///         puller call from it fails (it is neither `o.dex` nor the DEX).
     // At the stack limit (via_ir off): add no locals here; move _flows + hand-out + callback into a helper first.
     function mtxExchangeVia(ExchangePlan calldata p, address executor, bytes calldata data) external nonReentrant {
         (Tok[] memory t, Calc[] memory c, bool onlyListed) = _exchangeIn(p, msg.sender);
@@ -699,12 +708,11 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient, Governan
         if (TradeLib.mulGt(sold, o.receiveAmount, taker.recv, o.amount)) revert PriceLimit(taker.h);
     }
 
-    /// @dev DX7: the refunded leftover is fillable again — the token's `restorePulled`, or this DEX's own `TradeLib`
-    ///      state for an outside token.
+    /// @dev DX7: the refunded leftover is fillable again — the SCaaS token's `restorePulled`, or this DEX's own
+    ///      `TradeLib` state for an outside token.
     function _restorePulled(address tokenA, Calc memory c, uint256 amount) private {
         if (c.ua) ITradeToken(tokenA).restorePulled(c.o, amount);
-        else if (c.outside) TradeLib.restore(c.o, c.h, amount, address(this));
-        else ITradeToken(tokenA).restorePulled(_native(c.o), amount);
+        else TradeLib.restore(c.o, c.h, amount, address(this));
     }
 
     /// @dev Path (b)'s figures: per sold token Σ sellFill (the Path B remainders stay for the refunds), per receive
@@ -781,7 +789,7 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient, Governan
         DexStorage storage s = _s();
         if (x.target == address(this) || x.target == s.puller) revert ForbiddenTarget(x.target);
         sel = bytes4(x.data);
-        if (x.data.length < 4 || sel == ITradeToken.mtxTrade.selector || sel == ITradeToken.uaTrade.selector) {
+        if (x.data.length < 4 || sel == ITradeToken.mtxTrade.selector || sel == OLD_MTX_TRADE || sel == OLD_UA_TRADE) {
             revert ForbiddenSelector(x.target, sel);
         }
         // controller ruling: no allowance may be raised outside `approve` (reset after the route)

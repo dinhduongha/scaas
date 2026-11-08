@@ -69,7 +69,7 @@ impl TryFrom<UaDomain> for scaas_ua::Domain {
     }
 }
 
-/// `governance_bits.json`'s row of `bit` as JSON, `{bit, name, type, sentences}` (spec 2026-11-02-governance §1.2): bits 0-21,
+/// `governance_bits.json`'s row of `bit` as JSON, `{bit, name, type, sentences}` (spec 2026-11-02-governance §1.2): bits 0-23,
 /// any other `UAArgument`.
 #[frb(sync)]
 pub fn governance_bit(bit: i64) -> R<String> {
@@ -391,6 +391,12 @@ pub fn member_digest(structure_ua: [u8; 32], ua_msg: [u8; 32]) -> [u8; 32] {
 pub fn canonical_id(text: String) -> R<String> {
     Ok(scaas_ua::canonical_id(&text)?)
 }
+/// ua-mtx-merge spec §6: how a client shows a bytes32 id before the user signs: the EIP-55 address of a native-space id, else
+/// `urn:scaas:ua:v1:<kind name>:<hex32>` under `kind`, the id's registry kind (0 = none known: UAKindUnknown). `id`: "0x" + 64 hex.
+#[frb(sync)]
+pub fn id_display(id: String, kind: i64) -> R<String> {
+    Ok(scaas_ua::id_display(&id, k(kind)?)?.text().to_owned())
+}
 /// The registry's explicit arguments of a registration, JSON in and out. `input`: `{kind, keyData, pqzKey, pqzPopHash, pqzPop, kemPk,
 /// pop, kemCommit, inner}` (bytes as "0x…" hex, an absent field is empty, an msig's `pop` is `[{index, members: [{index, sig}], sig}]`,
 /// `inner` `{id: keyData}` its msig members' structures, `kemCommit` true / false forces the KEM form; absent: the hash commit only when
@@ -411,6 +417,18 @@ pub fn set_kem_key_args(input: String) -> R<String> {
 #[frb(sync)]
 pub fn set_pqz_key_args(input: String) -> R<String> {
     Ok(scaas_ua::json::set_pqz_key_args_json(&input)?)
+}
+/// What a payer signs (pay-meta-tax T41), JSON in and out: `{struct, domain: {name, chainId, verifyingContract, salt}, message}`,
+/// `struct` `UAMetaTransfer`, `UAPayWithTax` (`{payment, taxMode, tax}`) or `UARelayFee`; out `{structHash, digest}`.
+#[frb(sync)]
+pub fn pay_digest(input: String) -> R<String> {
+    Ok(scaas_ua::json::pay_digest_json(&input)?)
+}
+/// `metaPayId` under `scaas.pay.meta.v2` (pay-meta-tax T41): in `{salt, payNo, schema, body}`, out `{payId}`; a refused shape or
+/// `payNo` is `UAArgument`.
+#[frb(sync)]
+pub fn meta_pay_id(input: String) -> R<String> {
+    Ok(scaas_ua::json::meta_pay_id_json(&input)?)
 }
 /// Members are `(kind, id, weight)`; a kind outside 0..=0xFFFF is `UAKindUnknown`, a threshold or weight outside u16 (or
 /// more than 65535 members) is `UAArgument`.

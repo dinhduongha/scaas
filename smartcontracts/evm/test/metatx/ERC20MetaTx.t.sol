@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
 import {MtxFixture} from "../helpers/MtxFixture.sol";
 import {Puller} from "../helpers/WalletMocks.sol";
@@ -10,6 +11,7 @@ import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
 import {IERC20Payment} from "../../src/metatx/IERC20Payment.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
+import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {FeePolicy} from "../../src/common/FeePolicy.sol";
 
 /// `ERC20MetaTx` (CTR-MTX-07, -08, -13, -20, -23, -24; CTR-TOK-01) on a minimal harness.
@@ -30,42 +32,43 @@ contract ERC20MetaTxTest is MtxFixture {
 
     // ------------------------------------------------------------------ helpers
 
+    /// ua-mtx-merge T2: the token's one typed struct, `UAMetaTransfer`, alice and the payee as padded native ids.
     function _t(address to, uint256 value, bytes32 ref, uint256 batch, uint32 mode, uint256 fee, address feeTo)
-        internal view returns (MetaTxLib.MetaTransfer memory)
+        internal view returns (MetaTxLib.UAMetaTransfer memory)
     {
-        return MetaTxLib.MetaTransfer({
-            from: alice, to: to, value: value, entryRef: ref, batch: batch, nonce: t.mtxNonce(alice, batch),
+        return MetaTxLib.UAMetaTransfer({
+            from: MetaTxLib.pad(alice), to: MetaTxLib.pad(to), value: value, entryRef: ref, batch: batch, nonce: t.mtxNonce(MetaTxLib.pad(alice), batch),
             validUntil: block.timestamp + 300, mode: mode, relayer: relayer, fee: fee, feeRecipient: feeTo
         });
     }
 
-    function _signT(MetaTxLib.MetaTransfer memory x) internal view returns (bytes memory) {
+    function _signT(MetaTxLib.UAMetaTransfer memory x) internal view returns (IUARegistry.UASig memory a) {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, t.mtxTransferDigest(x));
-        return abi.encodePacked(r, s, v);
+        a.signature = abi.encodePacked(r, s, v);
     }
 
     function _call(bytes memory data, uint256 batch, uint32 mode, uint256 fee)
         internal view returns (MetaTxLib.MetaTransaction memory m)
     {
-        m = _m(alice, data, batch, t.mtxNonce(alice, batch));
+        m = _m(alice, data, batch, t.mtxNonce(MetaTxLib.pad(alice), batch));
         m.mode = mode;
         m.relayer = relayer;
         m.fee = fee;
     }
 
     function _signM(MetaTxLib.MetaTransaction memory m) internal view returns (bytes memory) {
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, t.mtxDigest(m));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, MtxDigest.metaTx(address(t), m));
         return abi.encodePacked(r, s, v);
     }
 
-    function _xfer(MetaTxLib.MetaTransfer memory x) internal {
-        bytes memory s = _signT(x);
+    function _xfer(MetaTxLib.UAMetaTransfer memory x) internal {
+        IUARegistry.UASig memory s = _signT(x);
         vm.prank(relayer);
         t.mtxExecuteTransfer(x, s);
     }
 
-    function _xferRevert(MetaTxLib.MetaTransfer memory x, bytes memory err) internal {
-        bytes memory s = _signT(x);
+    function _xferRevert(MetaTxLib.UAMetaTransfer memory x, bytes memory err) internal {
+        IUARegistry.UASig memory s = _signT(x);
         vm.prank(relayer);
         vm.expectRevert(err);
         t.mtxExecuteTransfer(x, s);
@@ -74,14 +77,14 @@ contract ERC20MetaTxTest is MtxFixture {
     function _exec(MetaTxLib.MetaTransaction memory m) internal {
         bytes memory s = _signM(m);
         vm.prank(relayer);
-        t.mtxExecute(m, s);
+        t.executeMetaTransaction(m, s);
     }
 
     function _execRevert(MetaTxLib.MetaTransaction memory m, bytes memory err) internal {
         bytes memory s = _signM(m);
         vm.prank(relayer);
         vm.expectRevert(err);
-        t.mtxExecute(m, s);
+        t.executeMetaTransaction(m, s);
     }
 
     // ------------------------------------------------------------------ domain, modes
@@ -101,21 +104,23 @@ contract ERC20MetaTxTest is MtxFixture {
     // ------------------------------------------------------------------ typed path
 
     function test_transfer_movesValueBumpsLaneEmits() public {
-        MetaTxLib.MetaTransfer memory x = _t(shop, 100e6, 0, 7, RR, 0, address(0));
+        MetaTxLib.UAMetaTransfer memory x = _t(shop, 100e6, 0, 7, RR, 0, address(0));
         bytes32 d = t.mtxTransferDigest(x);
         vm.expectEmit(address(t));
-        emit IMetaTx.MetaTransactionExecuted(alice, relayer, 7, 0, d, relayer, 0);
+        // ua-mtx-merge T2 (R18), meaning: the merged typed path emits the `UA…` event for a native signer
+        emit IUALedger.UAMetaTransactionExecuted(MetaTxLib.pad(alice), relayer, 7, 0, d, relayer, 0);
         _xfer(x);
         assertEq(t.balanceOf(shop), 100e6);
-        assertEq(t.mtxNonce(alice, 7), 1);
+        assertEq(t.mtxNonce(MetaTxLib.pad(alice), 7), 1);
         _xferRevert(x, abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
     }
 
+    /// ua-mtx-merge T2 (R18, R20), meaning: `UAPaymentSettled` (ids padded) on the merged path, not `PaymentSettled`.
     function test_payment_emitsPaymentSettledWithTheRealFee() public {
         bytes32 ref = keccak256("invoice-1");
-        MetaTxLib.MetaTransfer memory x = _t(shop, 200e6, ref, 9, RR | PCT, 5_000, address(0)); // 0.5 %
+        MetaTxLib.UAMetaTransfer memory x = _t(shop, 200e6, ref, 9, RR | PCT, 5_000, address(0)); // 0.5 %
         vm.expectEmit(address(t));
-        emit IERC20Payment.PaymentSettled(alice, shop, 200e6, 1e6, relayer, ref);
+        emit IUALedger.UAPaymentSettled(MetaTxLib.pad(alice), MetaTxLib.pad(shop), 200e6, 1e6, relayer, ref);
         _xfer(x);
         assertEq(t.balanceOf(shop), 200e6);
         assertEq(t.balanceOf(relayer), 1e6);
@@ -134,11 +139,11 @@ contract ERC20MetaTxTest is MtxFixture {
         _xferRevert(_t(address(t), 1, 0, 1, 0, 0, address(0)),
             abi.encodeWithSelector(IERC20MetaTx.TransferToSelf.selector));
         // the payee self-relays with a fee (recipient defaults to msg.sender == to)
-        MetaTxLib.MetaTransfer memory x = _t(relayer, 100e6, 0, 1, FIX, 1e5, address(0));
+        MetaTxLib.UAMetaTransfer memory x = _t(relayer, 100e6, 0, 1, FIX, 1e5, address(0));
         _xferRevert(x, abi.encodeWithSelector(IERC20MetaTx.FeeRecipientIsPayee.selector));
         _xferRevert(_t(shop, 1_000e6, 0, 1, FIX | RF, 1, feeTaker),
             abi.encodeWithSelector(IERC20MetaTx.MetaTxInsufficientForFee.selector, 1_000e6 + 1, 1_000e6));
-        assertEq(t.mtxNonce(alice, 1), 0); // nothing consumed
+        assertEq(t.mtxNonce(MetaTxLib.pad(alice), 1), 0); // nothing consumed
     }
 
     /// C5-3: the pools are refused at step 3 (before the balance check and the nonce), like the UA twin.
@@ -151,18 +156,18 @@ function test_C5_3_poolsRefusedAtStep3_typedPath() public {
             abi.encodeWithSelector(IUALedger.UAPoolNotPayable.selector));
         _xferRevert(_t(shop, 1_000e6, 0, 1, FIX | RF, 1, MetaTxLib.SHIELD_POOL),
             abi.encodeWithSelector(IUALedger.ShieldPoolNotPayable.selector));
-        assertEq(t.mtxNonce(alice, 1), 0);
+        assertEq(t.mtxNonce(MetaTxLib.pad(alice), 1), 0);
     }
 
 function test_feeToTheTokenRefused_typedPath() public {
         _xferRevert(_t(shop, 100e6, 0, 1, FIX | RF, 1e5, address(t)),
             abi.encodeWithSelector(IERC20MetaTx.TransferToSelf.selector));
-        assertEq(t.mtxNonce(alice, 1), 0);
+        assertEq(t.mtxNonce(MetaTxLib.pad(alice), 1), 0);
     }
 
     function test_restrictedRelayer_otherCallerRefused() public {
-        MetaTxLib.MetaTransfer memory x = _t(shop, 1, 0, 1, RR, 0, address(0));
-        bytes memory s = _signT(x);
+        MetaTxLib.UAMetaTransfer memory x = _t(shop, 1, 0, 1, RR, 0, address(0));
+        IUARegistry.UASig memory s = _signT(x);
         vm.prank(address(0xCAFE));
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxUnauthorizedRelayer.selector, relayer, address(0xCAFE)));
         t.mtxExecuteTransfer(x, s);
@@ -173,14 +178,14 @@ function test_feeToTheTokenRefused_typedPath() public {
         MetaTxLib.MetaTransaction memory m = _call(abi.encodeCall(ERC20MetaTxHarness.touch, ()), 5, RR, 0);
         assertEq(m.nonce, 1);
         _exec(m);                                                   // lane 5: nonce 1 → 2
-        MetaTxLib.MetaTransfer memory stale = _t(shop, 1e6, 0, 5, RR, 0, address(0));
+        MetaTxLib.UAMetaTransfer memory stale = _t(shop, 1e6, 0, 5, RR, 0, address(0));
         stale.nonce = 1;
         _xferRevert(stale, abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 2, 1));
     }
 
     function test_batchTransfer_atomic() public {
-        MetaTxLib.MetaTransfer[] memory xs = new MetaTxLib.MetaTransfer[](2);
-        bytes[] memory ss = new bytes[](2);
+        MetaTxLib.UAMetaTransfer[] memory xs = new MetaTxLib.UAMetaTransfer[](2);
+        IUARegistry.UASig[] memory ss = new IUARegistry.UASig[](2);
         xs[0] = _t(shop, 1e6, 0, 1, RR, 0, address(0));
         xs[1] = _t(feeTaker, 2e6, 0, 2, RR, 0, address(0));
         ss[0] = _signT(xs[0]);
@@ -197,12 +202,12 @@ function test_feeToTheTokenRefused_typedPath() public {
         vm.prank(relayer);
         vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.PayToZero.selector));
         t.mtxBatchTransfer(xs, ss);
-        assertEq(t.mtxNonce(alice, 3), 0);                          // first item rolled back
+        assertEq(t.mtxNonce(MetaTxLib.pad(alice), 3), 0);                          // first item rolled back
 
         vm.expectRevert(IMetaTx.MtxBatchEmpty.selector);
-        t.mtxBatchTransfer(new MetaTxLib.MetaTransfer[](0), new bytes[](0));
+        t.mtxBatchTransfer(new MetaTxLib.UAMetaTransfer[](0), new IUARegistry.UASig[](0));
         vm.expectRevert(IMetaTx.MtxBatchLengthMismatch.selector);
-        t.mtxBatchTransfer(xs, new bytes[](1));
+        t.mtxBatchTransfer(xs, new IUARegistry.UASig[](1));
     }
 
     // ------------------------------------------------------------------ fee of a self-call (CTR-MTX-20)
@@ -210,7 +215,7 @@ function test_feeToTheTokenRefused_typedPath() public {
     function test_amountClass_percentOnTheBasis_afterTheCall() public {
         MetaTxLib.MetaTransaction memory m =
             _call(abi.encodeCall(ERC20MetaTxHarness.burn, (100e6)), 1, RR | PCT, 10_000); // 1 % of 100e6
-        bytes32 d = t.mtxDigest(m);
+        bytes32 d = MtxDigest.metaTx(address(t), m);
         vm.expectEmit(address(t));
         emit IMetaTx.MetaTransactionExecuted(alice, relayer, 1, 0, d, relayer, 1e6);
         _exec(m);
@@ -236,7 +241,7 @@ function test_feeToTheTokenRefused_typedPath() public {
         _execRevert(_call(abi.encodeCall(ERC20MetaTxHarness.touch, ()), 1, RR | FIX | RF, 1e6)
             .withFeeRecipient(address(t)), abi.encodeWithSelector(IERC20MetaTx.TransferToSelf.selector));
         assertEq(t.balanceOf(alice), 1_000e6);
-        assertEq(t.mtxNonce(alice, 1), 0);
+        assertEq(t.mtxNonce(MetaTxLib.pad(alice), 1), 0);
     }
 
     function test_feeFailureAfterTheCall_revertsTheCall() public {
@@ -244,7 +249,7 @@ function test_feeToTheTokenRefused_typedPath() public {
         _execRevert(_call(abi.encodeCall(ERC20MetaTxHarness.burn, (1_000e6)), 1, RR | PCT, 100),
             abi.encodeWithSelector(IERC20Errors.ERC20InsufficientBalance.selector, alice, 0, 1e5));
         assertEq(t.balanceOf(alice), 1_000e6);
-        assertEq(t.mtxNonce(alice, 1), 0);
+        assertEq(t.mtxNonce(MetaTxLib.pad(alice), 1), 0);
     }
 
     function test_selfCallRunsAsTheSigner() public {
@@ -295,11 +300,13 @@ function test_feeToTheTokenRefused_typedPath() public {
     }
 
     function test_fromTheTokenItselfRefused() public {
-        MetaTxLib.MetaTransfer memory x = _t(shop, 1, 0, 1, RR, 0, address(0));
-        x.from = address(t);
+        MetaTxLib.UAMetaTransfer memory x = _t(shop, 1, 0, 1, RR, 0, address(0));
+        x.from = MetaTxLib.pad(address(t));
+        IUARegistry.UASig memory a;
+        a.signature = new bytes(65);
         vm.prank(relayer);
         vm.expectRevert(IMetaTx.SelfSender.selector);
-        t.mtxExecuteTransfer(x, new bytes(65));
+        t.mtxExecuteTransfer(x, a);
     }
 }
 

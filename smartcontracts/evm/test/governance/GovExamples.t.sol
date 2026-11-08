@@ -13,7 +13,7 @@ abstract contract ExampleApp is GovernanceBase {
 
     function _initApp(address owner_, uint64 delay, uint256 bits) internal {
         GovernanceLib.Roles memory none;
-        GovernanceLib.init(bits, 0, nid(owner_), delay, address(0), none, bits, bits, 0);
+        GovernanceLib.init(bits, 0, nid(owner_), delay, address(0), none, bits, bits, 0, address(0));
     }
 
     function _guardIn() internal pure override returns (bool) { return false; }

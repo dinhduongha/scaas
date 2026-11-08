@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {Vm} from "forge-std/Test.sol";
 import {ZetherFixture} from "./helpers/ZetherFixture.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
@@ -210,10 +211,10 @@ abstract contract ZetherModesSuite is ZetherFixture {
             batch: 3, nonce: 0, validUntil: block.timestamp + 300, mode: MetaTxLib.MODE_RESTRICT_RELAYER, relayer: relayer,
             fee: 0, feeRecipient: address(0)
         });
-        (uint8 v, bytes32 r, bytes32 s_) = vm.sign(pk, tok.mtxDigest(m));
+        (uint8 v, bytes32 r, bytes32 s_) = vm.sign(pk, MtxDigest.metaTx(address(tok), m));
         vm.prank(relayer);
         vm.expectRevert(IZetherToken.AuditorForbidden.selector);
-        tok.mtxExecute(m, abi.encodePacked(r, s_, v));
+        tok.executeMetaTransaction(m, abi.encodePacked(r, s_, v));
     }
 
     /// M3 (review T2 m5): `disclosureMode` at byte 20 and `auditorMode` at byte 21 of the verifier's slot (`ns`), nothing

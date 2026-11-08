@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {IUARegistry} from "../../src/ua/IUARegistry.sol";
+import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {console2} from "forge-std/Test.sol";
 import {stdJson} from "forge-std/StdJson.sol";
 import {ZetherFixture, ZUID} from "./helpers/ZetherFixture.sol";
@@ -39,47 +41,60 @@ contract ZetherRelayTest is ZetherFixture {
         internal view returns (MetaTxLib.MetaTransaction memory m)
     {
         m = MetaTxLib.MetaTransaction({
-            from: payer, data: data, batch: batch, nonce: tok.mtxNonce(payer, batch),
+            from: payer, data: data, batch: batch, nonce: tok.mtxNonce(MetaTxLib.pad(payer), batch),
             validUntil: block.timestamp + 300, mode: mode, relayer: relayer, fee: fee, feeRecipient: address(0)
         });
     }
 
-    function _sign(uint256 pk, MetaTxLib.MetaTransaction memory m) internal view returns (bytes memory) {
+    function _ua(MetaTxLib.MetaTransaction memory m) internal pure returns (MetaTxLib.UAMetaTransaction memory) {
+        return MetaTxLib.UAMetaTransaction(MetaTxLib.pad(m.from), m.data, m.batch, m.nonce, m.validUntil, m.mode, m.relayer,
+            m.fee, m.feeRecipient);
+    }
+
+    function _uaSign(uint256 pk, MetaTxLib.UAMetaTransaction memory m) internal view returns (IUARegistry.UASig memory a) {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, tok.mtxDigest(m));
+        a.signature = abi.encodePacked(r, s, v);
+    }
+
+    function _sign(uint256 pk, MetaTxLib.MetaTransaction memory m) internal view returns (bytes memory) {
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, MtxDigest.metaTx(address(tok), m));
         return abi.encodePacked(r, s, v);
     }
 
-    function _exec(MetaTxLib.MetaTransaction memory m, bytes memory sig) internal returns (bytes memory) {
+    function _exec(MetaTxLib.MetaTransaction memory m, bytes memory sig) internal returns (bool) {
         vm.prank(relayer);
-        return tok.mtxExecute(m, sig);
+        return tok.executeMetaTransaction(m, sig);
     }
 
-    /// The proof binds the envelope: build the statement with `envelopeBinding(m)` first, then sign `m` with the proof.
+    /// The proof binds the envelope: build the statement with the address binding of `m` first (`_addrBinding`, what
+    /// `executeMetaTransaction` binds), then sign `m` with the proof.
     function _relayedSingle(uint256 batch, uint256 fee) internal view returns (MetaTxLib.MetaTransaction memory m, Tx memory t) {
         m = _mt("", batch, RR | FIX, fee);
-        t = _proveTransfer(tok, alice, bob, 100, 500, carol.ua, tok.envelopeBinding(m));
+        t = _proveTransfer(tok, alice, bob, 100, 500, carol.ua, _addrBinding(tok, m));
         m.data = abi.encodeCall(IZetherToken.mtxConfidentialTransferSingle, (_zSingle(t.payload, carol.ua), t.proof));
     }
 
     function test_relayedTransferSingle_outerFeeFromPublicBalance_innerFeeToBeneficiary() public {
         (MetaTxLib.MetaTransaction memory m, Tx memory t) = _relayedSingle(uint256(keccak256("lane-1")), 25);
         // the statement of a relayed proof: tag ZTX_V1_RELAYED (word 5), the envelope binding (word 6)
-        bytes memory st = stm.transferStatementSingle(address(tok), _zSingle(t.payload, carol.ua), tok.envelopeBinding(m));
+        bytes memory st = stm.transferStatementSingle(address(tok), _zSingle(t.payload, carol.ua), _addrBinding(tok, m));
         (bytes32 tag, bytes32 binding) = abi.decode(_slice(st, 160, 64), (bytes32, bytes32));
         assertEq(tag, keccak256("ZTX_V1_RELAYED"));
-        assertEq(binding, tok.envelopeBinding(m));
+        assertEq(binding, _addrBinding(tok, m));
         bytes memory sig = _sign(PAYER_PK, m);
         uint256 g0 = gasleft();
-        bytes memory ret = _exec(m, sig);
+        assertTrue(_exec(m, sig));
         console2.log("bn254 relayed mtxConfidentialTransferSingle gas", g0 - gasleft());
-        assertEq(abi.decode(ret, (bytes32)), _ref(tok, alice, 0), "the self-call returns the entryRef");
+        // ua-mtx-merge T1, meaning: the address `mtxExecute` returned the self-call's entryRef; its alias
+        // `executeMetaTransaction` returns `true` (R3), so the entry is read at the expected ref instead
+        assertGt(tok.transferEntry(_ref(tok, alice, 0)).length, 0, "the entry at the entryRef");
         assertEq(tok.balanceOf(relayer), 25, "outer fee: public units to the relayer");
         assertEq(tok.balanceOf(payer), 975);
         assertEq(tok.balanceOfUA(ZetherTypes.UA.unwrap(carol.ua)), FEE * SCALE, "inner fee: public units to the beneficiary");
         assertEq(tok.accountState(carol.ua).pendingSeq, 0, "no pend_ben credit (D19)");
         assertTrue(_holds(tok, alice, 500 - 100 - FEE, true));
         assertTrue(_holds(tok, bob, 100, false));
-        assertEq(tok.mtxNonce(payer, m.batch), 1);
+        assertEq(tok.mtxNonce(MetaTxLib.pad(payer), m.batch), 1);
         _assertConservation(tok, 1100);
     }
 
@@ -90,14 +105,14 @@ contract ZetherRelayTest is ZetherFixture {
         (to[0], to[1]) = (bob, carol);
         uint256[] memory vs = new uint256[](2);
         (vs[0], vs[1]) = (40, 0);
-        Tx memory t = _proveMulti(tok, alice, to, vs, 500, _none(), ZetherTypes.TransferMode.HASH, tok.envelopeBinding(m));
+        Tx memory t = _proveMulti(tok, alice, to, vs, 500, _none(), ZetherTypes.TransferMode.HASH, _addrBinding(tok, m));
         m.data = abi.encodeCall(IZetherToken.mtxConfidentialTransferCompact, (_zMulti(t.payload, _none()), t.proof));
         _exec(m, _sign(PAYER_PK, m));
         assertTrue(_holds(tok, bob, 40, false));
         assertTrue(_holds(tok, alice, 460, true));
         // mtxUnshield, relayed: public units minted to the statement's recipient
         m = _mt("", 2, RR | FIX, 3);
-        (bytes memory pl, bytes memory pr) = _proveUnshield(tok, alice, 60, 460, address(0xB0C), carol.ua, tok.envelopeBinding(m));
+        (bytes memory pl, bytes memory pr) = _proveUnshield(tok, alice, 60, 460, address(0xB0C), carol.ua, _addrBinding(tok, m));
         m.data = abi.encodeCall(IZetherToken.mtxUnshield, (_zBurn(pl, carol.ua), 60, bytes32(uint256(uint160(address(0xB0C)))), pr));
         // lifted out and called directly: DIRECT statement ⇒ refused
         vm.expectRevert(IZetherToken.ProofRejected.selector);
@@ -133,7 +148,7 @@ contract ZetherRelayTest is ZetherFixture {
         uint256[] memory vs = new uint256[](2);
         vs[0] = 40;
         MetaTxLib.MetaTransaction memory m = _mt("", 1, RR | FIX, 3);
-        Tx memory t = _proveMulti(tok, alice, to, vs, 500, _none(), ZetherTypes.TransferMode.HASH, tok.envelopeBinding(m));
+        Tx memory t = _proveMulti(tok, alice, to, vs, 500, _none(), ZetherTypes.TransferMode.HASH, _addrBinding(tok, m));
         m.data = abi.encodeCall(IZetherToken.mtxConfidentialTransfer, (_zMulti(t.payload, _none()), t.proof));
         _exec(m, _sign(PAYER_PK, m));
         assertTrue(_holds(tok, bob, 40, false));
@@ -147,8 +162,8 @@ contract ZetherRelayTest is ZetherFixture {
         bytes memory sig = _sign(PAYER_PK, m);
         vm.prank(relayer);
         vm.expectRevert(IZetherToken.AuditorRequired.selector);
-        tok.mtxExecute(m, sig);
-        assertEq(tok.mtxNonce(payer, 2), 0, "nonce not consumed");
+        tok.executeMetaTransaction(m, sig);
+        assertEq(tok.mtxNonce(MetaTxLib.pad(payer), 2), 0, "nonce not consumed");
     }
 
     function test_proofLiftedOutOfEnvelopeRejected() public {
@@ -163,13 +178,13 @@ contract ZetherRelayTest is ZetherFixture {
         bytes memory sig = _sign(PAYER_PK, m);
         vm.prank(relayer);
         vm.expectRevert(IZetherToken.ProofRejected.selector);
-        tok.mtxExecute(m, sig);
+        tok.executeMetaTransaction(m, sig);
         (m,) = _relayedSingle(7, 25);
         m.fee = 26; // the fee is in the binding
         sig = _sign(PAYER_PK, m);
         vm.prank(relayer);
         vm.expectRevert(IZetherToken.ProofRejected.selector);
-        tok.mtxExecute(m, sig);
+        tok.executeMetaTransaction(m, sig);
         // the same lane, its next nonce: the nonce is in the binding
         (m,) = _relayedSingle(7, 25);
         MetaTxLib.MetaTransaction memory c = _mt(abi.encodeCall(IMetaTx.cancelNonce, (99)), 7, RR, 0);
@@ -178,7 +193,7 @@ contract ZetherRelayTest is ZetherFixture {
         sig = _sign(PAYER_PK, m);
         vm.prank(relayer);
         vm.expectRevert(IZetherToken.ProofRejected.selector);
-        tok.mtxExecute(m, sig);
+        tok.executeMetaTransaction(m, sig);
     }
 
     /// Every selector `mtxSelectors()` publishes runs relayed once: the enforced `_mtxRule` agrees with the published
@@ -195,13 +210,13 @@ contract ZetherRelayTest is ZetherFixture {
             if (s[i] == IMetaTx.cancelNonce.selector) m.data = abi.encodeCall(IMetaTx.cancelNonce, (55));
             else if (s[i] == NormalToken.burn.selector) m.data = abi.encodeCall(NormalToken.burn, (7));
             else {
-                m.data = _zetherOpCall(s[i], bal, tok.envelopeBinding(m));
-                if (s[i] != IConfidentialToken.mtxShield.selector && s[i] != IConfidentialToken.mtxRollOver.selector
+                m.data = _zetherOpCall(s[i], bal, _addrBinding(tok, m));
+                if (s[i] != IConfidentialToken.mtxShield.selector && s[i] != IZetherToken.mtxRollOver.selector
                     && s[i] != IZetherToken.mtxRollOverBatch.selector) bal -= 10;
             }
             _exec(m, _sign(PAYER_PK, m));
         }
-        assertEq(tok.mtxNonce(payer, 55), 1, "cancelNonce");
+        assertEq(tok.mtxNonce(MetaTxLib.pad(payer), 55), 1, "cancelNonce");
         assertEq(tok.balanceOf(payer), 1000 - 7, "burn; shield");
         assertTrue(_holds(tok, bob, 3 + 3 * 10, false), "shield; three transfers");
         assertTrue(_holds(tok, alice, bal, true));
@@ -217,7 +232,7 @@ contract ZetherRelayTest is ZetherFixture {
         bytes memory sig = _sign(PAYER_PK, m);
         vm.prank(relayer);
         vm.expectRevert(IZetherToken.ProofRejected.selector);
-        tok.mtxExecute(m, sig);
+        tok.executeMetaTransaction(m, sig);
         _direct(tok, t, carol.ua); // the same proof as a direct call passes
     }
 
@@ -228,7 +243,7 @@ contract ZetherRelayTest is ZetherFixture {
         bytes memory sig = _sign(PAYER_PK, m);
         vm.prank(relayer);
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxFeeClass.selector, IZetherToken.mtxConfidentialTransferSingle.selector, m.mode));
-        tok.mtxExecute(m, sig);
+        tok.executeMetaTransaction(m, sig);
     }
 
     /// The outer fee comes only from the signer's public balance; short ⇒ everything reverts (proof effects, nonce).
@@ -237,8 +252,8 @@ contract ZetherRelayTest is ZetherFixture {
         bytes memory sig = _sign(PAYER_PK, m);
         vm.prank(relayer);
         vm.expectRevert(abi.encodeWithSignature("ERC20InsufficientBalance(address,uint256,uint256)", payer, 1000, 1001));
-        tok.mtxExecute(m, sig);
-        assertEq(tok.mtxNonce(payer, 7), 0, "nonce not consumed");
+        tok.executeMetaTransaction(m, sig);
+        assertEq(tok.mtxNonce(MetaTxLib.pad(payer), 7), 0, "nonce not consumed");
         assertEq(tok.sendCounter(alice.ua), 0, "no confidential effect");
         assertTrue(_holds(tok, alice, 500, true));
     }
@@ -249,12 +264,12 @@ contract ZetherRelayTest is ZetherFixture {
         m.mode = RR | RF | FIX;
         m.feeRecipient = address(tok);
         // the binding covers the bound fee recipient: re-prove for this envelope
-        Tx memory t = _proveTransfer(tok, alice, bob, 100, 500, carol.ua, tok.envelopeBinding(m));
+        Tx memory t = _proveTransfer(tok, alice, bob, 100, 500, carol.ua, _addrBinding(tok, m));
         m.data = abi.encodeCall(IZetherToken.mtxConfidentialTransferSingle, (_zSingle(t.payload, carol.ua), t.proof));
         bytes memory sig = _sign(PAYER_PK, m);
         vm.prank(relayer);
         vm.expectRevert(IERC20MetaTx.TransferToSelf.selector);
-        tok.mtxExecute(m, sig);
+        tok.executeMetaTransaction(m, sig);
     }
 
     /// CTR-MTX-19: the published allowlist; the roll-over functions, `mint` and the trade entries are refused.
@@ -264,7 +279,7 @@ contract ZetherRelayTest is ZetherFixture {
             IMetaTx.cancelNonce.selector, NormalToken.burn.selector, IConfidentialToken.mtxShield.selector,
             IZetherToken.mtxConfidentialTransfer.selector, IZetherToken.mtxConfidentialTransferCompact.selector,
             IZetherToken.mtxConfidentialTransferSingle.selector,
-            IZetherToken.mtxUnshield.selector, IConfidentialToken.mtxRollOver.selector, IZetherToken.mtxRollOverBatch.selector,
+            IZetherToken.mtxUnshield.selector, IZetherToken.mtxRollOver.selector, IZetherToken.mtxRollOverBatch.selector,
             IZetherToken.mtxRollOverSigned.selector, IZetherToken.mtxSetRollOverMode.selector
         ];
         assertEq(s.length, 11);
@@ -288,26 +303,27 @@ contract ZetherRelayTest is ZetherFixture {
             bytes memory sig = _sign(PAYER_PK, m);
             vm.prank(relayer);
             vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, bytes4(refused[i])));
-            tok.mtxExecute(m, sig);
+            tok.executeMetaTransaction(m, sig);
         }
     }
 
     /// `mtxBatch`: each item has its own ticket and binding (a shield, then a relayed transfer on the next nonce).
+    /// (ua-mtx-merge T1: the merged `mtxBatch` on the payer's id; its items bind the UA envelope, R35.)
     function test_batch_eachItemItsOwnBinding() public {
         _public(tok, payer, 5 * SCALE);
-        MetaTxLib.MetaTransaction[] memory ms = new MetaTxLib.MetaTransaction[](2);
-        ms[0] = _mt(abi.encodeCall(IConfidentialToken.mtxShield, (ZetherTypes.UA.unwrap(carol.ua), 5)), 4, RR, 0);
-        ms[1] = _mt("", 4, RR | FIX, 2);
+        MetaTxLib.UAMetaTransaction[] memory ms = new MetaTxLib.UAMetaTransaction[](2);
+        ms[0] = _ua(_mt(abi.encodeCall(IConfidentialToken.mtxShield, (ZetherTypes.UA.unwrap(carol.ua), 5)), 4, RR, 0));
+        ms[1] = _ua(_mt("", 4, RR | FIX, 2));
         ms[1].nonce = 1;
         Tx memory t = _proveTransfer(tok, alice, bob, 100, 500, _none(), tok.envelopeBinding(ms[1]));
         ms[1].data = abi.encodeCall(IZetherToken.mtxConfidentialTransferSingle, (_zSingle(t.payload, _none()), t.proof));
-        bytes[] memory sigs = new bytes[](2);
-        (sigs[0], sigs[1]) = (_sign(PAYER_PK, ms[0]), _sign(PAYER_PK, ms[1]));
+        IUARegistry.UASig[] memory sigs = new IUARegistry.UASig[](2);
+        (sigs[0], sigs[1]) = (_uaSign(PAYER_PK, ms[0]), _uaSign(PAYER_PK, ms[1]));
         vm.prank(relayer);
         tok.mtxBatch(ms, sigs);
         assertTrue(_holds(tok, carol, 5, false));
         assertTrue(_holds(tok, bob, 100, false));
-        assertEq(tok.mtxNonce(payer, 4), 2);
+        assertEq(tok.mtxNonce(MetaTxLib.pad(payer), 4), 2);
     }
 
     /// An ERC-1271 signer (CTR-ZTH-21, the base's cap) relays its own shield.
@@ -319,13 +335,15 @@ contract ZetherRelayTest is ZetherFixture {
         m.from = address(w);
         bytes memory sig = _sign(ownerPk, m);
         vm.prank(relayer);
-        tok.mtxExecute(m, sig);
+        tok.executeMetaTransaction(m, sig);
         assertEq(tok.balanceOf(address(w)), 0);
         assertTrue(_holds(tok, bob, 3, false));
     }
 
     /// The envelope binding and digest equal the Rust prover's (`envelope.json`, CTR-ZTH-06/36) through the spec
-    /// formulas, and the token computes the same formulas for its own address.
+    /// formulas, and the fixture's client-side `_addrBinding` (what `executeMetaTransaction` binds) is that formula.
+    /// ua-mtx-merge T4, meaning: the token no longer answers the address binding (its `envelopeBinding` view is the UA
+    /// one, R35); the relayed tests below settle proofs bound to `_addrBinding` through `executeMetaTransaction`.
     function test_envelopeBindingAndDigestKat() public view {
         string memory j = vm.readFile("test/vectors/zether/s3/envelope.json");
         MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction({
@@ -338,8 +356,8 @@ contract ZetherRelayTest is ZetherFixture {
         address token = j.readAddress(".token");
         assertEq(_binding(m, chainId, uid, token), j.readBytes32(".binding"));
         assertEq(_digest(m, chainId, uid, token), j.readBytes32(".digest"));
-        assertEq(tok.envelopeBinding(m), _binding(m, block.chainid, ZUID, address(tok)));
-        assertEq(tok.mtxDigest(m), _digest(m, block.chainid, ZUID, address(tok)));
+        assertEq(_addrBinding(tok, m), _binding(m, block.chainid, ZUID, address(tok)));
+        assertEq(MtxDigest.metaTx(address(tok), m), _digest(m, block.chainid, ZUID, address(tok)));
     }
 
     function _slice(bytes memory a, uint256 off, uint256 len) internal pure returns (bytes memory out) {

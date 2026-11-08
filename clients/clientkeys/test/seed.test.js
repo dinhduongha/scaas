@@ -24,7 +24,7 @@ import {
   strkey, normalizeMnemonic, generateEntropy, slip10,
 } from '../src/seed.js';
 import { bytesToHex, concatBytes, fromHex, keccak_256 } from '../src/bytes.js';
-import { hashTypedData, keyProofMessage, metaTransferTypedData } from '../src/evm.js';
+import { hashTypedData, keyProofMessage, uaMetaTransferTypedData, padId } from '../src/evm.js';
 
 const trezor = JSON.parse(readFileSync(new URL('./vectors/bip39-trezor.json', import.meta.url)));
 const M = 'bench hurt jump file august wise shallow faculty impulse spring exact slush thunder author '
@@ -201,8 +201,8 @@ test('signing: a raw digest is refused without the opt-in; signTyped / signKeyPr
   const auth = keccak_256(concatBytes(new Uint8Array([0x05]), fromHex('d78094' + '00'.repeat(18) + 'dead80')));
   assert.throws(() => signDigest(evm, auth), /raw digest refused/);
   assert.throws(() => signDigest(evm, auth, { allowRawDigest: 1 }), /raw digest refused/, 'only literal true');
-  const td = metaTransferTypedData({ contract: '0x' + '11'.repeat(20), chainId: 7622, chainUid: '0x' + '22'.repeat(32),
-    message: { from: evm.address, to: '0x' + '33'.repeat(20), value: '1', validUntil: '9' } });
+  const td = uaMetaTransferTypedData({ contract: '0x' + '11'.repeat(20), chainId: 7622, chainUid: '0x' + '22'.repeat(32),
+    message: { from: padId(evm.address), to: padId('0x' + '33'.repeat(20)), value: '1', validUntil: '9' } });
   assert.deepEqual(signTyped(evm, td), signDigest(evm, hashTypedData(td), { allowRawDigest: true }));
   const ch = new Uint8Array(32).fill(7);
   assert.deepEqual(signKeyProof(evm, ch), signDigest(evm, keyProofMessage(ch), { allowRawDigest: true }));

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {console2, Vm} from "forge-std/Test.sol";
 import {IConfidentialToken} from "../../src/confidential/IConfidentialToken.sol";
 import {ZetherFixture} from "./helpers/ZetherFixture.sol";
@@ -320,13 +321,13 @@ abstract contract ZetherMultiSuite is ZetherFixture {
         uint256 pk = 0x9A7E5;
         MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction({
             from: vm.addr(pk), data: abi.encodeWithSelector(old, bytes(""), bytes(""), bytes(""), bytes32(0), bytes("")),
-            batch: 1, nonce: tok.mtxNonce(vm.addr(pk), 1), validUntil: block.timestamp + 300,
+            batch: 1, nonce: tok.mtxNonce(MetaTxLib.pad(vm.addr(pk)), 1), validUntil: block.timestamp + 300,
             mode: MetaTxLib.MODE_RESTRICT_RELAYER | MetaTxLib.MODE_FEE_FIXED, relayer: relayer, fee: 0, feeRecipient: address(0)
         });
-        (uint8 v, bytes32 r, bytes32 sg) = vm.sign(pk, tok.mtxDigest(m));
+        (uint8 v, bytes32 r, bytes32 sg) = vm.sign(pk, MtxDigest.metaTx(address(tok), m));
         vm.prank(relayer);
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, old));
-        tok.mtxExecute(m, abi.encodePacked(r, sg, v));
+        tok.executeMetaTransaction(m, abi.encodePacked(r, sg, v));
     }
 
     // ------------------------------------------------------------------ malformed calldata (CTR-ZTH-94)

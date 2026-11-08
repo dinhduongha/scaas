@@ -8,7 +8,7 @@ import {IUARegistry} from "../ua/IUARegistry.sol";
 ///        §7.8, §9.4); the shared entry points and events are `IConfidentialToken`'s (plan 5h D20).
 /// @notice **UNAUDITED.** `bytes32` ids are signing UAs holding a PQZ key (UA-6 U7). The debits take explicit parameters
 ///         (TS-D17); `pqzAuth` is the holder's own signature over the typed `PqzAuth` of the statement (TS-D19), and the
-///         signed overloads and `ua*` twins are `PqzLayer`'s (TS-D14, TS-D16).
+///         signed overloads (`UAEnvelope`, `UASig`; R36) are `PqzLayer`'s (TS-D14, TS-D16).
 interface IPqzToken is IConfidentialToken {
     /// @notice The explicit parameters of op 1 (Appendix X.2): each `u`, `v` a ciphertext part of `PK` or `V` bytes in
     ///         64-bit lanes. `vAuditor` empty: auditor off. `sealedMemo` the memo after its clear salt, 41 bytes on
@@ -18,6 +18,7 @@ interface IPqzToken is IConfidentialToken {
         uint256 validUntilBlock;
         uint256 shieldIn;
         bytes32 fromUA;
+        uint64 keyVersion; // group 3g (KV-8): the debited key version of `fromUA`
         bytes32 toUA;
         bytes32 beneficiaryUA;
         bytes16 salt;
@@ -42,6 +43,7 @@ interface IPqzToken is IConfidentialToken {
         uint256 validUntilBlock;
         uint256 shieldIn;
         bytes32 fromUA;
+        uint64 keyVersion;
         bytes32 beneficiaryUA;
         uint256 decoyFee;
         bytes16 salt;
@@ -57,19 +59,21 @@ interface IPqzToken is IConfidentialToken {
         uint256 validUntilBlock;
         uint256 shieldIn;
         bytes32 fromUA;
+        uint64 keyVersion;
         bytes32 beneficiaryUA;
         bytes u;
         bytes vFrom;
     }
 
-    /// @notice `amount` and `recipient` of the signed `mtxUnshield` and `uaUnshield`: one calldata struct keeps those two
+    /// @notice `amount` and `recipient` of the signed `mtxUnshield`: one calldata struct keeps those two
     ///         within the legacy code generator's stack (evm-size-levers.md §7); the signed struct keeps both fields flat.
     struct Payout {
         uint256 amount;
         bytes32 recipient;
     }
 
-    /// @notice `pqzAccount` (pq-zero-knowledge.md §9.4; plan 5h D2 / D3, D13): the counters, the `acc` reference (`accBlob`,
+    /// @notice `pqzAccount` (pq-zero-knowledge.md §9.4; plan 5h D2 / D3, D13; per key version since group 3g, `sendCounter`
+    ///         the UA's, one for every version): the counters, the `acc` reference (`accBlob`,
     ///         0 for `Trivial(0)`; ignored while `flags & 1`, the materialised `acc`), `flags` (1 MATERIALISED, 2 / 4 the
     ///         prepared halves), `accHash` (the keccak of the materialised `acc`'s
     ///         packed stream, P46: `PqzCt.CTP` bytes; stale once a debit clears flag 1).
@@ -85,11 +89,14 @@ interface IPqzToken is IConfidentialToken {
         bytes32 accHash;
     }
 
-    /// @notice Proven credit `index` of `ua`; its bytes `u ‖ v_t` are in state (`pqzPendingCt`, the op blob of
-    ///         `entryRef`; plan 5h D1 / D2).
-    event Credited(bytes32 indexed ua, uint64 indexed index, bytes32 entryRef);
-    /// @notice Every debit (D12, review N4): `rolled = floor = p`, `acc` now references `blob` (the op blob).
-    event Debited(bytes32 indexed ua, uint64 rolled, uint64 floor, address blob);
+    /// @notice Proven credit `index` of `(ua, keyVersion)` (group 3g: the receiver's current version); its bytes `u ‖ v_t`
+    ///         are in state (`pqzPendingCt`, the op blob of `entryRef`; plan 5h D1 / D2).
+    event Credited(bytes32 indexed ua, uint64 indexed index, uint64 keyVersion, bytes32 entryRef);
+    /// @notice Every debit (D12, review N4) of `(ua, keyVersion)`: `rolled = floor = p`, `acc` now references `blob` (the op
+    ///         blob).
+    event Debited(bytes32 indexed ua, uint64 keyVersion, uint64 rolled, uint64 floor, address blob);
+    /// @notice A rollover of `(ua, keyVersion)` (group 3g, in place of the shared `RolledOver`).
+    event PqzRolledOver(bytes32 indexed ua, uint64 indexed keyVersion, uint64 rolled, uint32 accUnits, bytes32 accHash);
 
     error BadInit();
     /// @notice `init` with the PQZH proof system at a set without PQZH value tokens (`PqzSet.PQZH_VALUE`): no debit of
@@ -134,6 +141,12 @@ interface IPqzToken is IConfidentialToken {
     error UnknownEntry(bytes32 entryRef);
     /// @notice An op 7 `decoyFee` below the token's `minDecoyFee`, or `≥ 2^64` (owner 2026-10-20).
     error DecoyFeeOutOfRange(uint256 decoyFee, uint256 minDecoyFee);
+    /// @notice Group 3g (KV-9): two keys a statement names are equal (`ua` the owner of the later one).
+    error KeyReused(bytes32 ua);
+    /// @notice Group 3g (KV-8): a debit of a stale version other than the migration (op 1 to itself) or a refresh.
+    error StaleKeyVersion(bytes32 ua, uint64 keyVersion, uint64 current);
+    /// @notice Group 3g (KV-8, KV-11): a key version above current (a debit), or not stored (a disclosure).
+    error KeyVersionUnknown(bytes32 ua, uint64 keyVersion);
 
     /// @notice Multi-recipient, in the token's default storage mode.
     function mtxConfidentialTransfer(PqzMultiArgs calldata t, bytes calldata proof, IUARegistry.UASig calldata pqzAuth,
@@ -152,18 +165,22 @@ interface IPqzToken is IConfidentialToken {
     ///         are refused. PQZ: `amount = 0` with `recipient = 0` is a refresh.
     function mtxUnshield(PqzBurnArgs calldata b, uint256 amount, bytes32 recipient, bytes calldata proof,
         IUARegistry.UASig calldata pqzAuth, bytes calldata accHint) external;
-    /// @notice The account (pq-zero-knowledge.md §9.4): counters, the `acc` reference, `accUnits`, flags, `sendCounter`, `accHash`.
-    function pqzAccount(bytes32 ua) external view returns (AccountState memory);
-    /// @notice Pending slot `i`: `blob(160) ‖ uOff(16) ‖ vOff(16) ‖ block(64)`; 0 once deleted.
-    function pqzPending(bytes32 ua, uint64 i) external view returns (uint256);
-    /// @notice The `acc` ciphertext from state.
-    function pqzAcc(bytes32 ua) external view returns (bytes memory);
-    /// @notice Entry `i` as a ciphertext from state.
-    function pqzPendingCt(bytes32 ua, uint64 i) external view returns (bytes memory);
+    /// @notice The account of `(ua, keyVersion)` (pq-zero-knowledge.md §9.4): counters, the `acc` reference, `accUnits`, flags,
+    ///         the UA's `sendCounter`, `accHash`.
+    function pqzAccount(bytes32 ua, uint64 keyVersion) external view returns (AccountState memory);
+    /// @notice Pending slot `i` of `(ua, keyVersion)`: `blob(160) ‖ uOff(16) ‖ vOff(16) ‖ block(64)`; 0 once deleted.
+    function pqzPending(bytes32 ua, uint64 keyVersion, uint64 i) external view returns (uint256);
+    /// @notice The `acc` ciphertext of `(ua, keyVersion)` from state.
+    function pqzAcc(bytes32 ua, uint64 keyVersion) external view returns (bytes memory);
+    /// @notice Entry `i` of `(ua, keyVersion)` as a ciphertext from state.
+    function pqzPendingCt(bytes32 ua, uint64 keyVersion, uint64 i) external view returns (bytes memory);
     /// @notice The op blob of a transfer as stored (empty if unknown).
     function pqzEntryBlob(bytes32 entryRef) external view returns (bytes memory);
-    /// @notice Anyone, once per account and half (0, 1) before its first rollover (idempotent; plan 5h D8).
-    function mtxPrepareAcc(bytes32 ua, uint256 half) external;
+    /// @notice Anyone: the next `n` entries (`1 ≤ n ≤ ROLL_MAX`) of `(ua, keyVersion)` into its `acc` (group 3g, KV-10;
+    ///         `IConfidentialToken`'s two-argument form is Zether's only).
+    function mtxRollOver(bytes32 ua, uint64 keyVersion, uint256 n) external;
+    /// @notice Anyone, once per account and half (0, 1) before its first rollover (idempotent; plan 5h D8), per key version.
+    function mtxPrepareAcc(bytes32 ua, uint64 keyVersion, uint256 half) external;
 }
 
 /// @title `mtxUnshieldUnwrap` of `WRAPPED_PQZ`, its explicit form (typed-signing Appendix X.3).

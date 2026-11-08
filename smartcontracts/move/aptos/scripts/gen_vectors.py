@@ -17,7 +17,7 @@ import types
 HERE = os.path.dirname(os.path.abspath(__file__))
 # `DMS_LIB` = thư mục `dms_blockchain/lib` (mặc định: repo anh em cạnh scaas).
 LIB = os.environ.get('DMS_LIB') or os.path.join(HERE, '..', '..', '..', '..', '..', 'dms_blockchain', 'lib')
-PAYMETA = os.path.join(HERE, '..', '..', '..', 'vectors', 'metatx', 'paymeta.json')
+PAYMETA = os.path.join(HERE, '..', '..', '..', 'vectors', 'metatx', 'legacy', 'ua-mtx-merge', 'paymeta.json')
 OUT = os.path.join(HERE, '..', 'tests', 'vectors.move')
 _pkg = types.ModuleType('aptlib')
 _pkg.__path__ = [LIB]            # nạp lib mà không chạy lib/__init__ (kéo Odoo)

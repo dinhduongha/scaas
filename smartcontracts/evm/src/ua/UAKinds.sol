@@ -83,6 +83,13 @@ library UAKinds {
     bytes32 internal constant UA_PQZ_KEY_TYPEHASH = keccak256("UAPqzKey(bytes32 ua,bytes32 pqzKeyHash)");
     bytes32 internal constant UA_PQZ_KEY_RECORD_TYPEHASH =
         keccak256("UAPqzKeyRecord(UAPqzKey key,bytes32 pqzPopHash)UAPqzKey(bytes32 ua,bytes32 pqzKeyHash)");
+    /// Group 3g (CTR-UA-41 draft, KV-1): a PQZ key version v ≥ 1 (`setPqzKey(ua, v, …)`, its `R_REG`) and its consent record;
+    /// version 0 keeps `UAPqzKey` / `UAPqzKeyRecord` byte for byte, so a version-0 signature or proof never serves a version ≥ 1.
+    bytes32 internal constant UA_PQZ_KEY_VERSION_TYPEHASH =
+        keccak256("UAPqzKeyVersion(bytes32 ua,uint64 version,bytes32 pqzKeyHash)");
+    bytes32 internal constant UA_PQZ_KEY_VERSION_RECORD_TYPEHASH = keccak256(
+        "UAPqzKeyVersionRecord(UAPqzKeyVersion key,bytes32 pqzPopHash)UAPqzKeyVersion(bytes32 ua,uint64 version,bytes32 pqzKeyHash)"
+    );
     bytes32 internal constant UA_MEMBERSHIP_TYPEHASH = keccak256("UAMembership(bytes32 ua,bytes32 member)");
     /// First byte of `kemPk` = the KEM scheme id (CTR-UA-32). Scheme 1 = ML-KEM-1024 + X25519; 2 (ML-KEM-1024 + HQC +
     /// X25519, after FIPS 207) is reserved and refused until enabled.
@@ -292,32 +299,8 @@ library UAKinds {
         return abi.encodePacked(k.scheme, k.mlkemEk, k.x25519);
     }
 
-    /// `TAG(msig)`: the tag of the only structure kind (the tokens' `uaSig` without the name table).
+    /// `TAG(msig)`: the tag of the only structure kind (R47 moved the tokens' `bytes auth` bridge `uaAuthCall` to legacy/ua-mtx-merge/).
     bytes32 internal constant MSIG_TAG = keccak256("scaas.ua.msig.v1");
-
-    /// typed-signing R1, for the tokens' generic `bytes auth` (TS-D14): the calldata of `requireAuthorized(ua, purposeTag, digest,
-    /// UASig)` for a derived id's `abi.encode(keyData, sig)` — `keyData` + `signature`, or, where `keyData` is the id's own `msig`
-    /// structure (`keccak256(TAG(msig) ‖ keyData) == ua`), `sig` = `abi.encode(MemberSig[])` as `members` (the structure itself is read
-    /// from the record). `sig` goes through as it came, past its one offset word: the registry's calldata decoder reads it, so nothing
-    /// here parses it (the legacy pipeline has no memory decoder for a list inside a list of structs: `Stack too deep`). A malformed
-    /// blob reverts with empty data, here or there.
-    function uaAuthCall(bytes32 ua, bytes32 purposeTag, bytes32 digest, bytes memory auth) internal pure returns (bytes memory) {
-        (bytes memory k, bytes memory sig) = abi.decode(auth, (bytes, bytes));
-        if (k.length == 0 || keccak256(abi.encodePacked(MSIG_TAG, k)) != ua) {
-            IUARegistry.UASig memory s;
-            (s.keyData, s.signature) = (k, sig);
-            return abi.encodeCall(IUARegistry.requireAuthorized, (ua, purposeTag, digest, s));
-        }
-        if (sig.length < 64 || _word(sig, 0) != 0x20) revert();
-        assembly ("memory-safe") {
-            mstore(add(sig, 32), sub(mload(sig), 32))
-            sig := add(sig, 32)
-        }
-        // the three heads of `UASig{"", "", members}`, its two empty lengths, then `members`
-        return bytes.concat(
-            abi.encodeWithSelector(IUARegistry.requireAuthorized.selector, ua, purposeTag, digest, 0x80, 0x60, 0x80, 0xa0, 0, 0), sig
-        );
-    }
 
     /// `hashStruct(UAPortableRecord{ua, kind, pqzKeyHash, kem})`, `kemHash = kemRecordHash` of the initial KEM record.
     function portableRecordHash(bytes32 ua, uint16 kind, bytes32 pqzKeyHash, bytes32 kemHash)
@@ -377,6 +360,23 @@ library UAKinds {
     /// typed(`UAPqzKeyRecord`): `setPqzKey`'s signature signs `uaMessage(kind, PURPOSE_PQZ_KEY, ·)`.
     function pqzKeyRecordDigest(bytes32 ua, bytes32 pqzKeyHash, bytes32 pqzPopHash) internal pure returns (bytes32) {
         return portableDigest(pqzKeyRecordHash(pqzKeyHash_(ua, pqzKeyHash), pqzPopHash));
+    }
+
+    /// typed(`UAPqzKeyVersion{ua, version, pqzKeyHash}`): version v ≥ 1's `R_REG` proves over `uaMessage(0x0142,
+    /// PURPOSE_PQZ_KEY, ·)` (group 3g, KV-2).
+    function pqzKeyVersionDigest(bytes32 ua, uint64 version, bytes32 pqzKeyHash) internal pure returns (bytes32) {
+        return portableDigest(keccak256(abi.encode(UA_PQZ_KEY_VERSION_TYPEHASH, ua, version, pqzKeyHash)));
+    }
+
+    /// typed(`UAPqzKeyVersionRecord{UAPqzKeyVersion{ua, version, pqzKeyHash}, pqzPopHash}`): the UA's consent to version
+    /// v ≥ 1, signed as `uaMessage(kind, PURPOSE_PQZ_KEY, ·)` (group 3g, KV-1).
+    function pqzKeyVersionRecordDigest(bytes32 ua, uint64 version, bytes32 pqzKeyHash, bytes32 pqzPopHash)
+        internal
+        pure
+        returns (bytes32)
+    {
+        bytes32 k = keccak256(abi.encode(UA_PQZ_KEY_VERSION_TYPEHASH, ua, version, pqzKeyHash));
+        return portableDigest(keccak256(abi.encode(UA_PQZ_KEY_VERSION_RECORD_TYPEHASH, k, pqzPopHash)));
     }
 
     /// typed(`UAMembership{ua, member}`): what `member` signs to accept its place in the `msig` `ua` (CTR-UA-37).

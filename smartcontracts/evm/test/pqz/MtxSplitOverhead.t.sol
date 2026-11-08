@@ -9,6 +9,7 @@ import {NormalPqzToken} from "../../src/pqz/NormalPqzToken.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UACall} from "../ua/UACall.sol";
 import {IConfidentialToken} from "../../src/confidential/IConfidentialToken.sol";
+import {IPqzToken} from "../../src/pqz/IPqzToken.sol";
 
 /// metatx-split T5 (spec §3.6, §10 R9; owner variant A 2026-10-21): the split's relayed overhead must not grow with the
 /// envelope's `data` size. For each accepted fee-UA kind (ECDSA address path, `mldsa65` and `fndsa512` on `uaExecute`) the
@@ -51,7 +52,7 @@ contract MtxSplitOverheadTest is PqzStatePinGasTest {
             feeUA = k == 2 ? fnFee2 : mlFee;
             feeSigLen = k == 2 ? 666 : ML65_SIG;
             kind = k == 0 ? "ecdsa" : k == 1 ? "mldsa65" : "fndsa512";
-            sMeas = _meas(abi.encodeCall(IConfidentialToken.mtxRollOver, (alice, 1)), 0);
+            sMeas = _meas(abi.encodeCall(IPqzToken.mtxRollOver, (alice, uint64(0), 1)), 0);
             console2.log(string.concat("MEAS ", PqzSet.NAME, " ", kind, " S"), sMeas);
             _large("pqzl", "M8-on", 8, BOUND);
             if (PqzSet.HAS_PQZH) _large("pqzh", "M4-on", 4, BOUND_PQZH);

@@ -10,16 +10,53 @@ use super::accept::ChainInfo;
 use super::envelope::Envelope;
 use super::Code;
 use crate::adapters::{aptos, solana, sui, ton};
-use crate::metatx::{Domain, Mtx, MODE_FEE_MASK, MODE_RESTRICT_FEE_RECIPIENT, MODE_RESTRICT_RELAYER};
+use crate::metatx::{native, Domain, Mtx, UASig, UaMtx, MODE_FEE_MASK, MODE_RESTRICT_FEE_RECIPIENT, MODE_RESTRICT_RELAYER};
 
 const METAOP_DOMAIN: &str = "scaas.metaop.v1";
+
+/// The signed struct of an EVM body (R45): a token's or a mandate wallet's UA struct with its `UASig` (`evm.ua_meta_tx`,
+/// NODE-MESH-18), or `SmartKeyAccount`'s address `MetaTransaction` (`evm.meta_tx`, Q6).
+#[derive(Debug, Clone)]
+pub enum Meta {
+    Address(Mtx),
+    Ua(UaMtx, UASig),
+}
+
+macro_rules! both {
+    ($m:expr, $f:ident $(, $a:expr)?) => {
+        match $m {
+            Meta::Address(m) => m.$f($($a)?),
+            Meta::Ua(m, _) => m.$f($($a)?),
+        }
+    };
+}
 
 /// Phần EVM mà L2 còn kiểm sau hạn (§7.2) và submitter dùng để dựng `Work`.
 #[derive(Debug, Clone)]
 pub struct Evm {
-    pub meta: Mtx,
+    pub meta: Meta,
+    /// Who signs: the address body's `from`, the UA body's native id as its address (MD-10: no derived `from`).
+    pub signer: Address,
+    /// The address body's `signature`, the UA body's `auth.signature`.
     pub signature: Bytes,
     pub eoa: bool,
+}
+
+impl Evm {
+    /// R84: the struct the submitter encodes, as its wire JSON: an unbound `relayer` 0, an unbound `feeRecipient`
+    /// `fee_recipient` (NODE-LANE-10); the digest is unchanged.
+    pub fn submit_wire(&self, fee_recipient: Option<Address>) -> (&'static str, Value) {
+        match self.meta.clone() {
+            Meta::Address(mut m) => {
+                m.normalize(fee_recipient);
+                m.to_wire()
+            }
+            Meta::Ua(mut m, _) => {
+                m.normalize(fee_recipient);
+                m.to_wire()
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -49,14 +86,22 @@ struct EvmName {
     version: String,
 }
 
-/// `evm` body (mesh.md §3.3): `struct` = `call` | `transfer` (absent = `transfer`), `meta_tx` its wire form.
+/// `evm` body (mesh.md §3.3): `struct` = `call` | `transfer` (absent = `transfer`) and either the UA body (`ua_meta_tx`, the
+/// wire `UAMetaTransaction` / `UAMetaTransfer` with `from` / `to` as ids, and `auth`, the `UASig` JSON; R45) or the address
+/// body (`meta_tx`, the wire `MetaTransaction`, and `signature`; `SmartKeyAccount`), never both.
 #[derive(Deserialize)]
 struct EvmBody {
     domain: EvmName,
     #[serde(default, rename = "struct")]
     struct_: Option<String>,
-    meta_tx: Value,
-    signature: String,
+    #[serde(default)]
+    meta_tx: Option<Value>,
+    #[serde(default)]
+    signature: Option<String>,
+    #[serde(default)]
+    ua_meta_tx: Option<Value>,
+    #[serde(default)]
+    auth: Option<Value>,
     sig_kind: String,
 }
 
@@ -104,10 +149,11 @@ fn bytes0x(s: &str) -> Result<Vec<u8>, Code> {
 /// `FeePolicy.compute` (NONE ⇒ 0, PERCENT ⇒ value × fee / 10^6, FIXED ⇒ fee); chặn trên khi tràn — mô phỏng phân xử.
 /// A PERCENT `MetaTransaction`'s basis is an argument of its selector (`mtxSelectors()`, NODE-JOB-20), which this pure
 /// layer does not read: it counts 0, so a `min_fee` floor never over-admits it.
-pub fn fee_effective(m: &Mtx) -> U256 {
-    match ((m.mode() & MODE_FEE_MASK) >> 4, m) {
-        (1, Mtx::Transfer(t)) => t.value.saturating_mul(t.fee) / U256::from(1_000_000u64),
-        (2, _) => m.fee(),
+/// `value` is a transfer's (`None` for a call).
+pub fn fee_effective(mode: u32, value: Option<U256>, fee: U256) -> U256 {
+    match ((mode & MODE_FEE_MASK) >> 4, value) {
+        (1, Some(v)) => v.saturating_mul(fee) / U256::from(1_000_000u64),
+        (2, _) => fee,
         _ => U256::ZERO,
     }
 }
@@ -156,13 +202,38 @@ pub fn decode(env: &Envelope, chain: &ChainInfo) -> Result<Decoded, Code> {
 
 fn evm(env: &Envelope, chain: &ChainInfo) -> Result<Decoded, Code> {
     let b: EvmBody = serde_json::from_value(env.body().clone()).map_err(|_| BAD)?;
-    let m = Mtx::from_wire(b.struct_.as_deref(), &b.meta_tx).map_err(|_| BAD)?; // MODE_KNOWN_MASK, nibble phí ≤ 2
     // The salt is the receiver's own `chain_uid`, never a value from the envelope (NODE-MESH-08).
     let salt = chain.chain_uid.ok_or(Code::UnknownChain)?;
     let contract: Address = env.contract.parse().map_err(|_| BAD)?;
     if format!("{contract:#x}") != env.contract {
         return Err(BAD);
     }
+    // MODE_KNOWN_MASK, nibble phí ≤ 2 (`from_wire`)
+    let (meta, signer, signature) = match (b.meta_tx, b.signature, b.ua_meta_tx, b.auth) {
+        (None, None, Some(m), Some(auth)) => {
+            if env.minor() < 3 {
+                return Err(BAD); // NODE-MESH-18: the UA body is scaas-intent/1.3
+            }
+            let m = UaMtx::from_wire(b.struct_.as_deref(), &m).map_err(|_| BAD)?;
+            let signer = native(&m.from()).ok_or(Code::DerivedFromUnsupported)?; // MD-10
+            let auth = crate::dex::ua_sig(&auth).map_err(|_| BAD)?; // bounded: the type's depth, 16 slots a level
+            if !auth.keyData.is_empty() || !auth.members.is_empty() {
+                return Err(Code::BadSignature); // R17: a native id signs with its own key, its signature only
+            }
+            let sig = auth.signature.clone();
+            (Meta::Ua(m, auth), signer, sig)
+        }
+        (Some(m), Some(sig), None, None) => {
+            let m = Mtx::from_wire(b.struct_.as_deref(), &m).map_err(|_| BAD)?;
+            // R45: no contract has an address `MetaTransfer` entry, a token no address entry (CTR-MTX-30)
+            if matches!(m, Mtx::Transfer(_)) || chain.tokens.contains(&env.contract) {
+                return Err(Code::OpKindMismatch);
+            }
+            let from = m.from();
+            (Meta::Address(m), from, bytes0x(&sig)?.into())
+        }
+        _ => return Err(BAD),
+    };
     let eoa = match b.sig_kind.as_str() {
         "eoa" => true,
         "erc1271" => false,
@@ -175,31 +246,38 @@ fn evm(env: &Envelope, chain: &ChainInfo) -> Result<Decoded, Code> {
         verifying_contract: contract,
         salt,
     };
-    let selector = match &m {
-        Mtx::Call(c) => hex0x(&c.data[..c.data.len().min(4)]),
-        Mtx::Transfer(t) if t.entryRef.is_zero() => "transfer".into(),
-        Mtx::Transfer(_) => "pay".into(),
+    let (data, transfer) = match &meta {
+        Meta::Address(Mtx::Call(c)) => (Some(&c.data), None),
+        Meta::Ua(UaMtx::Call(c), _) => (Some(&c.data), None),
+        Meta::Address(Mtx::Transfer(t)) => (None, Some((t.value, t.entryRef))),
+        Meta::Ua(UaMtx::Transfer(t), _) => (None, Some((t.value, t.entryRef))),
     };
+    let selector = match (data, transfer) {
+        (Some(d), _) => hex0x(&d[..d.len().min(4)]),
+        (_, Some((_, r))) if r.is_zero() => "transfer".into(),
+        _ => "pay".into(),
+    };
+    let mode = both!(&meta, mode);
     Ok(Decoded {
-        intent_id: m.digest(&domain).0,
-        from: format!("{:#x}", m.from()),
-        lane: m.batch().to_string(),
-        nonce: m.nonce().to_string(),
-        valid_until: u64::try_from(m.valid_until()).unwrap_or(u64::MAX),
-        relayer: (m.mode() & MODE_RESTRICT_RELAYER != 0).then(|| format!("{:#x}", m.relayer())),
-        fee_recipient: (m.mode() & MODE_RESTRICT_FEE_RECIPIENT != 0).then(|| format!("{:#x}", m.fee_recipient())),
-        fee_effective: fee_effective(&m),
+        intent_id: both!(&meta, digest, &domain).0,
+        from: format!("{signer:#x}"),
+        lane: both!(&meta, batch).to_string(),
+        nonce: both!(&meta, nonce).to_string(),
+        valid_until: u64::try_from(both!(&meta, valid_until)).unwrap_or(u64::MAX),
+        relayer: (mode & MODE_RESTRICT_RELAYER != 0).then(|| format!("{:#x}", both!(&meta, relayer))),
+        fee_recipient: (mode & MODE_RESTRICT_FEE_RECIPIENT != 0).then(|| format!("{:#x}", both!(&meta, fee_recipient))),
+        fee_effective: fee_effective(mode, transfer.map(|t| t.0), both!(&meta, fee)),
         selector,
         token: env.contract.clone(),
         account_ok: true,
-        evm: Some(Evm { signature: bytes0x(&b.signature)?.into(), meta: m, eoa }),
+        evm: Some(Evm { meta, signer, signature, eoa }),
     })
 }
 
 /// L2 EVM sau kiểm hạn (§4.4): relayer ràng buộc mà bằng 0 là intent chết; `eoa` ⇒ `ecrecover == from`, low-s,
 /// `v ∈ {27, 28}` như `ECDSA.tryRecover` của contract.
 pub fn check_evm(e: &Evm, intent_id: &[u8; 32]) -> Result<(), Code> {
-    if e.meta.mode() & MODE_RESTRICT_RELAYER != 0 && e.meta.relayer() == Address::ZERO {
+    if both!(&e.meta, mode) & MODE_RESTRICT_RELAYER != 0 && both!(&e.meta, relayer) == Address::ZERO {
         return Err(Code::RelayerBoundZero);
     }
     if !e.eoa {
@@ -209,7 +287,7 @@ pub fn check_evm(e: &Evm, intent_id: &[u8; 32]) -> Result<(), Code> {
     let ok = s.len() == 65
         && matches!(s[64], 27 | 28)
         && Signature::try_from(s.as_ref()).is_ok_and(|sig| {
-            sig.normalize_s().is_none() && sig.recover_address_from_prehash(&B256::from(*intent_id)).ok() == Some(e.meta.from())
+            sig.normalize_s().is_none() && sig.recover_address_from_prehash(&B256::from(*intent_id)).ok() == Some(e.signer)
         });
     ok.then_some(()).ok_or(Code::BadSignature)
 }
@@ -321,14 +399,16 @@ mod tests {
         let w = |mode: u32| serde_json::json!({"from": z, "to": z, "value": "2000000",
             "entryRef": format!("{:#x}", B256::ZERO), "batch": "0", "nonce": "0", "validUntil": "1", "mode": mode,
             "relayer": z, "fee": if mode == 0 { "1000000000000000000000000000000" } else { "2500" }, "feeRecipient": z});
-        let t = |mode| Mtx::from_wire(Some("transfer"), &w(mode)).unwrap();
-        assert_eq!(fee_effective(&t(0)), U256::ZERO, "NONE ignores fee");
-        assert_eq!(fee_effective(&t(0x10)), U256::from(5000u64), "PERCENT: 2e6 × 2500 / 1e6");
-        assert_eq!(fee_effective(&t(0x20)), U256::from(2500u64));
-        let call = |mode: u32| Mtx::from_wire(Some("call"), &serde_json::json!({"from": z, "data": "0x", "batch": "0",
-            "nonce": "0", "validUntil": "1", "mode": mode, "relayer": z, "fee": "2500", "feeRecipient": z})).unwrap();
-        assert_eq!(fee_effective(&call(0x10)), U256::ZERO, "a PERCENT call's basis is not read here");
-        assert_eq!(fee_effective(&call(0x20)), U256::from(2500u64));
+        let t = |mode| match Mtx::from_wire(Some("transfer"), &w(mode)).unwrap() {
+            Mtx::Transfer(t) => fee_effective(t.mode, Some(t.value), t.fee),
+            _ => unreachable!(),
+        };
+        assert_eq!(t(0), U256::ZERO, "NONE ignores fee");
+        assert_eq!(t(0x10), U256::from(5000u64), "PERCENT: 2e6 × 2500 / 1e6");
+        assert_eq!(t(0x20), U256::from(2500u64));
+        let call = |mode: u32| fee_effective(mode, None, U256::from(2500u64));
+        assert_eq!(call(0x10), U256::ZERO, "a PERCENT call's basis is not read here");
+        assert_eq!(call(0x20), U256::from(2500u64));
     }
 
     proptest! {

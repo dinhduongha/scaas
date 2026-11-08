@@ -135,6 +135,24 @@ void main() {
     }
   });
 
+  // ua-mtx-merge spec §6, MD-9: every row of id_display.json, and a row for every kind of the table.
+  test('id_display.json rows', () {
+    final d = rows(load('id_display.json'), 'rows');
+    for (final r in d) {
+      final w = r['display'] as Map?;
+      if (w != null) {
+        expect(idDisplay(id: r['id'], kind: r['kind']), w['address'] ?? w['urn'], reason: r['name']);
+      } else {
+        expect(errCode(() => idDisplay(id: r['id'], kind: r['kind'])), r['error'], reason: r['name']);
+      }
+    }
+    for (final t in rows(load('kinds.json'), 'kinds')) {
+      final info = kindInfo(kind: t['kind']);
+      bool want(Map r) => info.native ? r['error'] == 'UAKindNotDerived' : (r['display'] as Map?)?['urn'] != null;
+      expect(d.any((r) => r['kind'] == info.kind && want(r)), isTrue, reason: 'no row for ${info.name}');
+    }
+  });
+
   test('messages', () {
     for (final r in rows(load('kinds.json'), 'messages')) {
       final p = purposeTagV(purpose: r['purpose'], version: r['version']); // each row carries its purpose `version` (A4-c1)
@@ -758,16 +776,36 @@ void main() {
     }
   });
 
-  // governance T14: governanceBit against governance_bits.json on disk, every row; past bit 21 UAArgument
+  // governance T14: governanceBit against governance_bits.json on disk, every row; past bit 23 UAArgument
   test('governance bits rows', () {
     final v = jsonDecode(File('$vectors/../governance/governance_bits.json').readAsStringSync()) as Map;
     final rows = v['bits'] as List;
-    expect(rows.length, 22);
+    expect(rows.length, 24);
     for (final r in rows) {
       expect(jsonDecode(governanceBit(bit: r['bit'] as int)), r, reason: 'bit ${r['bit']}');
     }
-    for (final bit in [22, 127, 128, 255, 256, -1]) {
+    for (final bit in [24, 127, 128, 255, 256, -1]) {
       expect(errCode(() => governanceBit(bit: bit)), 'UAArgument', reason: '$bit');
     }
+  });
+
+  // pay-meta-tax T41: paymeta.json v2 rows (257 bytes refused) and paytax.json's UAPayWithTax digest row
+  test('pay rows', () {
+    final pm = jsonDecode(File('$vectors/../metatx/paymeta.json').readAsStringSync()) as List;
+    for (final r in pm) {
+      final i = jsonEncode({'salt': r['salt'], 'payNo': r['payNo'], 'schema': r['schema'], 'body': r['body']});
+      if (r['accepted'] as bool) {
+        expect((jsonDecode(metaPayId(input: i)) as Map)['payId'], r['payId'], reason: r['name'] as String);
+      } else {
+        expect(errCode(() => metaPayId(input: i)), 'UAArgument', reason: r['name'] as String);
+      }
+    }
+    final pt = jsonDecode(File('$vectors/../metatx/paytax.json').readAsStringSync()) as List;
+    final r = pt.firstWhere((x) => x['name'] == 'digest_unbound_relayer_fee_recipient') as Map;
+    final payment = {for (final k in ['from', 'to', 'value', 'entryRef', 'batch', 'nonce', 'validUntil', 'mode', 'relayer', 'fee', 'feeRecipient']) k: r[k]};
+    final got = jsonDecode(payDigest(input: jsonEncode({'struct': 'UAPayWithTax', 'domain': r['domain'],
+        'message': {'payment': payment, 'taxMode': r['taxMode'], 'tax': r['tax']}}))) as Map;
+    expect(got['digest'], r['digest']);
+    expect(got['structHash'], r['structHash']);
   });
 }

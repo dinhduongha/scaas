@@ -1,0 +1,58 @@
+# ua-mtx-merge T33 gate summary (full output in git-ignored .log files, not committed)
+# T33: the regulated releases 8-13, the canonical ComplianceRegistry deploy, sizes and deploy gas (regulated-kinds spec
+# §6.1, §6.2; F-21; CTR-AS-07, CTR-AS-16, CTR-GOV-19, NET-EVM-06).
+# Base: d08f5e9e (T32 tip). T33 commits: the build (DeployBase, e2e.py, tests, deploy.sh, node.example.toml; no legacy copy,
+# MD-4: no built body superseded), this one (deploy gas, size-baseline comment, harness, mutants, summary).
+step | commit | rc | counts
+t33-red | worktree (T33 tests, harness setter and the complianceAdmin field, no registry deploy) | 1 | GovDeploy + LinkClosure: 2 passed 7 failed (test_regulatedReleasesPublished_8..13, test_registryDeployedAndDexAttested: no compliance_registry in the JSON); test_linkClosureWithRegulatedLib passed (the closure built in T27-T31; its evidence is the mutants)
+t33-e2e-red | worktree (release_rows in --self-test, RELEASES not yet named) | 1 | e2e.py --self-test: 1 failure (NameError RELEASES)
+t33-green | build commit's tree | 0 | GovDeploy + LinkClosure: 2 suites, 22 passed 0 failed
+t33-forge-full | build commit's tree | 0 | forge test: 267 suites, 2851 passed 0 failed 14 skipped (T32: 267 suites, 2843 after its pin moves; + 8 T33 rows)
+t33-e2e-selftest | build commit | 0 | python3 -I script/pqz/e2e.py --self-test: 0 failures (releases 0, 4, 5, 12, 13; RegulatedLib linked on 12, 13 only; implArgs 32 B = Registry.t.sol's pin on 12, 13, empty on the others)
+t33-sizes | build commit | 0 | kind 13 measured first: 62,285 B (init 65,088), 2,227 B under 64,512; 12 52,626, 11 57,353, 10 46,717, 9 48,938, 8 38,257; RegulatedLib 8,201; ComplianceRegistry 2,538; all unchanged since T32 (no src change)
+t33-stop-rule | build commit | 0 | no regulated kind at or above 64,512 B: no lever; _above64KiB [] (no regulated kind)
+t33-sizegate | build commit | 0 | size_gate.py --self-test ok; 0 errors, 97 contracts, above 65536 B: none
+t33-deploy-gas | build commit | 0 | GovDeploy test_releaseGasPerKind -vv, asked = (regular x 64/63 + state) x 1.05 + 0.37 M: 8 64.99, 9 82.88, 10 79.26, 11 97.08, 12 89.10, 13 105.28 M; registry 4.59 M (no frame); 60 M: registry only; 70 M: registry, 8; SCaaS testnet need <= 112.07 M (runs/2026-11-04-ua-mtx-merge-regulated-deploy-gas.txt)
+t33-local-deploy | build commit | 0 | anvil 31990 (Amsterdam, 200 M, 131,072 B): deploy.sh evm DEPLOY_REGULATED=1 DEPLOY_ZETHER=1 COMPLIANCE_ADMIN=<a contract>: 61 transactions, 0 failed; registry code hash on chain = JSON = REGISTRY_CODEHASH of 8, 9, 10, 11; GOV_ROUTER of each = JSON governance_router; without COMPLIANCE_ADMIN: reverted in simulation, nonce 0, no JSON left; anvil stopped
+t33-e2e-zether | build commit | 0 | scripts/e2e-zether.sh on a fresh local anvil: 96 ok, 0 FAIL, "e2e-zether: passed"; no anvil left
+t33-isolate | build commit | 0 | forge test --isolate UAGas, UARegistryGroups: 22 passed 0 failed
+t33-node | build commit | 0 | cargo test --lib adapters:: config:: 342 passed (example_config_builds_every_family parses node.example.toml)
+t33-docs | build commit | 0 | docs_check check 0 errors, 5 warnings, 16 notes; paths 0
+t33-mutants | build commit | 1 each | 13 of 13 killed on the first run, none a compile error (runs/2026-11-04-ua-mtx-merge-t33-mutants.txt); script restored after each
+t33-at-set-n2048-kmax1024 | build commit | 0 | test/{ua,pqz,as}/**, GovDeploy, LinkClosure: 102 suites, 993 passed 0 failed 1 skipped
+t33-at-set-n2304-kmax4096 | build commit | 0 | the same: 102 suites, 990 passed 0 failed 4 skipped
+t33-at-set-n2560-kmax16384 | build commit | 0 | the same: 102 suites, 989 passed 0 failed 5 skipped
+t33-at-set-n2816-kmax65536 | build commit | 0 | the same: 102 suites, 984 passed 0 failed 10 skipped; src/pqz/PqzSet.sol restored (git status src clean)
+#
+# Pins, old -> new: none moved. size-baseline.json: the six regulated rows re-measured and unchanged, its _comment records
+# T33's final measurement. No gas pin, typehash, selector, layout, KAT, vector or GovernanceRouter address moved (T32's
+# 0xb7a8E5b24F6822cba41f77A6c4CdeEDAfA9399F1 stands), so no KAT reader (clientkeys, node) rerun.
+# Deployments JSON keys (DEPLOY_REGULATED=1): compliance_registry, compliance_registry_codehash (new, T33);
+# implementation_normal_regulated, implementation_wrapped_regulated (T27, T28); with DEPLOY_ZETHER=1
+# implementation_{normal,wrapped}_zether_regulated_bls12381 (T30). 12, 13: e2e.py's run (deployments/7622-pqz.json).
+#
+# Not run: the e2e.py chain run (it needs the PQZ and ML-DSA precompiles, only on the SCaaS testnet, not touched); node e2e
+# (no node source changed; the default deploy path writes the same keys as before); pqz-core gate (no core, statement or set).
+#
+# Conflicts with the plan / spec, and choices the text leaves open (none resolved silently):
+#   ELIGIBLE_CONTRACT attestations (spec §6.1, plan T33 "deploy.sh ... the ELIGIBLE_CONTRACT attestations of SCaaSDex and
+#   DexPuller"): not sent by the deploy. (1) The admin is a contract (CTR-AS-07) the script holds no key of, and a contract
+#   cannot send a transaction; only the admin's own wallet can call attest. (2) The deploy creates no DEX venue: it
+#   publishes the SCaaSDex implementation only; a venue and its DexPuller exist only after createDex, and attesting the
+#   implementation would let nothing trade. Built: the registry deploy, deploy.sh's text naming the admin's step
+#   (attest([venue, venue.puller()], [8, 8], [2^64-1, 2^64-1])), and test_registryDeployedAndDexAttested, which creates a
+#   venue on the deployed factory, shows an ALLOWLIST kind-8 token refused at the venue (NotEligible) and accepted after
+#   the admin's two rows. For the owner: keep it the admin's operator step, or have the deploy create a canonical venue
+#   and sign as an admin it controls (a deployer-keyed contract wallet).
+#   The registry is not a release: no chainUid(), so its gate is the code pin (codehash = REGISTRY_CODEHASH) after the
+#   CREATE2. Its address depends on COMPLIANCE_ADMIN (a constructor argument): one address per admin, not per chain.
+#   COMPLIANCE_ADMIN unset or an EOA is refused by the registry's own constructor (AdminNotContract), not by a second check
+#   in the script; under forge --silent the refusal prints as "EvmError: Revert". Nothing is sent either way.
+#   test_deployRegulatedPath now names its admin: DEPLOY_REGULATED requires one (a behaviour change, not a pin).
+#   test_regulatedReleasesPublished_12/13 publish as e2e.py does (base PQZ env + RegulatedLib, implArgs the pin, enable)
+#   through the factory in the test, with a contract standing in for the PQZ verifier (forge has no PQZ precompile).
+#   node.example.toml gains only the key's name, commented: the node has no compliance_registry config field yet (T35).
+#   Its governance_routers still lists reset 1's addresses: the reset-2 router address depends on the reset-2 UA
+#   registry's address, known only when the chain is deployed. The 7622 deployments JSON is git-ignored and live: not touched.
+#   e2e.py deploys no ComplianceRegistry (its run creates no regulated token, and the registry is deploy.sh's).
+#   Docs: spec §6.1's status and the F-21 row not edited (another session's sweep); no new rule, so no decisions entry.

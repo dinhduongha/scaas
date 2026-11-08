@@ -21,6 +21,7 @@ K = json.loads((VEC / 'kinds.json').read_text())
 S = json.loads((VEC / 'structures.json').read_text())
 PV = json.loads((VEC / 'portable.json').read_text())
 NV = json.loads((VEC / 'nested.json').read_text())
+D = json.loads((VEC / 'id_display.json').read_text())
 
 OK, ERR_KEY_DATA, ERR_ARGUMENT, ERR_BUFFER = 0, 1, 8, 9
 KEM_PK = 1601  # scheme byte + key
@@ -89,7 +90,7 @@ for name, res, args in [
     ('replayed_member_sig', st, [u8, sz, u16, u8, sz, P, P]),
     ('ua_auth_domain_separator', st, [u32, u64, u8, u8, P]),
     ('ua_auth_digest', st, [u32, u64, u8, u8, u8, u8, u8, P]), ('member_digest', st, [u8, u8, P]),
-    ('canonical_id', st, [u8, P, P]), ('encode_msig', st, [u16, P, sz, P, P]), ('registration_args', st, [u8, P, P]), ('set_kem_key_args', st, [u8, P, P]), ('set_pqz_key_args', st, [u8, P, P]),
+    ('canonical_id', st, [u8, P, P]), ('id_display', st, [u8, u16, P, P]), ('encode_msig', st, [u16, P, sz, P, P]), ('registration_args', st, [u8, P, P]), ('set_kem_key_args', st, [u8, P, P]), ('set_pqz_key_args', st, [u8, P, P]), ('pay_digest', st, [u8, P, P]), ('meta_pay_id', st, [u8, P, P]),
 ]:
     f = getattr(LIB, 'scaas_ua_' + name)
     f.restype, f.argtypes = res, args
@@ -308,6 +309,20 @@ class Vectors(unittest.TestCase):
                     self.assertEqual(text(L.canonical_id, t), r['canonical'])
                 else:
                     self.assertEqual(code_of(lambda: text(L.canonical_id, t)), r['error'])
+
+    def test_id_display_rows(self):
+        """ua-mtx-merge spec §6, MD-9: every row of id_display.json, and a row for every kind of the table."""
+        for r in D['rows']:
+            with self.subTest(r['name']):
+                t = r['id'].encode()
+                if 'display' in r:
+                    self.assertEqual(text(L.id_display, t, r['kind']), r['display'].get('address') or r['display']['urn'])
+                else:
+                    self.assertEqual(code_of(lambda: text(L.id_display, t, r['kind'])), r['error'])
+        for i in range(L.kind_count()):
+            k = kind_row(L.kind_at, i)
+            want = (lambda r: r.get('error') == 'UAKindNotDerived') if k.native else (lambda r: 'urn' in r.get('display', {}))
+            self.assertTrue(any(r['kind'] == k.kind and want(r) for r in D['rows']), k.name)
 
     def test_messages(self):
         for r in K['messages']:
@@ -865,13 +880,31 @@ class Abi(unittest.TestCase):
 
 class GovernanceBits(unittest.TestCase):
     def test_governance_bits_rows(self):
-        """governance T14: scaas_ua_governance_bit against governance_bits.json on disk, every row; past bit 21 UAArgument."""
+        """governance T14: scaas_ua_governance_bit against governance_bits.json on disk, every row; past bit 23 UAArgument."""
         v = json.loads((VEC.parent / 'governance' / 'governance_bits.json').read_text())
-        self.assertEqual(len(v['bits']), 22)
+        self.assertEqual(len(v['bits']), 24)
         for row in v['bits']:
             self.assertEqual(json.loads(text(L.governance_bit, row['bit'])), row, row['bit'])
-        for bit in (22, 127, 128, 255):
+        for bit in (24, 127, 128, 255):
             self.assertEqual(code_of(lambda: text(L.governance_bit, bit)), 'UAArgument', bit)
+
+    def test_pay_digest_and_meta_pay_id(self):
+        """pay-meta-tax T41: paymeta.json v2 rows (257 bytes refused) and paytax.json's UAPayWithTax digest row."""
+        meta = VEC.parent / 'metatx'
+        for r in json.loads((meta / 'paymeta.json').read_text()):
+            i = json.dumps({k: r[k] for k in ('salt', 'payNo', 'schema', 'body')}).encode()
+            if r['accepted']:
+                self.assertEqual(json.loads(text(L.meta_pay_id, i))['payId'], r['payId'], r['name'])
+            else:
+                self.assertEqual(code_of(lambda: text(L.meta_pay_id, i)), 'UAArgument', r['name'])
+        r = next(x for x in json.loads((meta / 'paytax.json').read_text()) if x['name'] == 'digest_unbound_relayer_fee_recipient')
+        payment = {k: r[k] for k in ('from', 'to', 'value', 'entryRef', 'batch', 'nonce', 'validUntil', 'mode', 'relayer', 'fee',
+                                     'feeRecipient')}
+        i = json.dumps({'struct': 'UAPayWithTax', 'domain': r['domain'],
+                        'message': {'payment': payment, 'taxMode': r['taxMode'], 'tax': r['tax']}}).encode()
+        got = json.loads(text(L.pay_digest, i))
+        self.assertEqual(got['structHash'], r['structHash'])
+        self.assertEqual(got['digest'], r['digest'])
 
 
 

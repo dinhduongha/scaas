@@ -21,6 +21,7 @@ import {PqzBurnLib} from "../../src/pqz/PqzBurnLib.sol";
 import {PqzViewLib} from "../../src/pqz/PqzViewLib.sol";
 import {PqzWrappedLib} from "../../src/pqz/PqzWrappedLib.sol";
 import {UARegistryLib} from "../../src/ua/UARegistryLib.sol";
+import {RegulatedLib} from "../../src/regulated/RegulatedLib.sol";
 import {SmartKeyAccountFactory} from "../../src/account/SmartKeyAccountFactory.sol";
 import {ZUID} from "../zether/helpers/ZetherFixture.sol";
 import {closureLibs, registryClosureLibs} from "../helpers/Catalogue.sol";
@@ -32,7 +33,7 @@ contract LinkClosureTest is Test {
     IOpenFactory.TokenKind constant NORMAL = IOpenFactory.TokenKind.NORMAL;
     string[] internal names = [
         "GovernanceLib", "HederaLib", "TradeLib", "MtxPipelineLib", "WrappedLib", "ZetherLib", "ZetherWrappedLib",
-        "PqzStateLib", "PqzTransferLib", "PqzBurnLib", "PqzViewLib", "PqzWrappedLib", "UARegistryLib"
+        "PqzStateLib", "PqzTransferLib", "PqzBurnLib", "PqzViewLib", "PqzWrappedLib", "UARegistryLib", "RegulatedLib"
     ];
 
     function _addr(string memory n) internal pure returns (address a) {
@@ -50,6 +51,7 @@ contract LinkClosureTest is Test {
         if (h == keccak256("PqzViewLib")) return address(PqzViewLib);
         if (h == keccak256("PqzWrappedLib")) return address(PqzWrappedLib);
         if (h == keccak256("UARegistryLib")) return address(UARegistryLib);
+        if (h == keccak256("RegulatedLib")) return address(RegulatedLib);
         revert(string.concat("unknown library ", n));
     }
 
@@ -106,15 +108,47 @@ contract LinkClosureTest is Test {
             f.envOf(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1));
         _assertEnvIsClosure("DeployBase DEX", "SCaaSDex", f.dexEnvOf(1));
 
-        string[6] memory impls = ["NormalToken", "WrappedToken", "NormalZetherToken",
-            "WrappedZetherToken", "NormalPqzToken", "WrappedPqzToken"];
-        for (uint8 k; k < 6; ++k) {
+        // plan T27: the regulated kinds 9 and 13 (their base kind's closure and `RegulatedLib`); T28: kind 8; T31: kind 12
+        string[14] memory impls = ["NormalToken", "WrappedToken", "NormalZetherToken",
+            "WrappedZetherToken", "NormalPqzToken", "WrappedPqzToken", "", "", "NormalRegulatedToken", "WrappedRegulatedToken",
+            "", "", "NormalPqzRegulatedToken", "WrappedPqzRegulatedToken"];
+        for (uint8 k; k < 14; ++k) {
+            if (bytes(impls[k]).length == 0) continue;
             IFactoryToken.Env memory e;
             e.libs = closureLibs(IOpenFactory.TokenKind(k));
             e.libCodeHashes = new bytes32[](e.libs.length);
             for (uint256 i; i < e.libs.length; ++i) e.libCodeHashes[i] = e.libs[i].codehash;
             _assertEnvIsClosure(impls[k], impls[k], e);
         }
+    }
+
+    /// Plan T33 (regulated-kinds spec §6.1): every regulated kind's env equals its implementation's link closure with
+    /// `RegulatedLib` in it, its code hash in `libCodeHashes`: the envs `DeployBase` publishes (8, 9 by `DEPLOY_REGULATED`,
+    /// 10, 11 by `DEPLOY_ZETHER`) and `closureLibs` for all six (12, 13 are `script/pqz/e2e.py`'s, its self-test checks them).
+    function test_linkClosureWithRegulatedLib() public {
+        DeployHarness h = new DeployHarness();
+        h.setRegulated(true);
+        h.setComplianceAdmin(address(this));
+        (OpenFactory f,) = h.deploy(ZUID, true, new SmartKeyAccountFactory(ZUID).IMPLEMENTATION());
+        string[6] memory impls = ["NormalRegulatedToken", "WrappedRegulatedToken", "NormalZetherRegulatedToken",
+            "WrappedZetherRegulatedToken", "NormalPqzRegulatedToken", "WrappedPqzRegulatedToken"];
+        for (uint8 i; i < 6; ++i) {
+            IOpenFactory.TokenKind k = IOpenFactory.TokenKind(8 + i);
+            IFactoryToken.Env memory e;
+            if (i < 4) e = f.envOf(k, 1);
+            else (e.libs, e.libCodeHashes) = (closureLibs(k), _pins(closureLibs(k)));
+            _assertEnvIsClosure(impls[i], impls[i], e);
+            bool lib;
+            for (uint256 j; j < e.libs.length; ++j) {
+                lib = lib || (e.libs[j] == address(RegulatedLib) && e.libCodeHashes[j] == address(RegulatedLib).codehash);
+            }
+            assertTrue(lib, string.concat(impls[i], ": RegulatedLib and its code hash"));
+        }
+    }
+
+    function _pins(address[] memory libs) internal view returns (bytes32[] memory h) {
+        h = new bytes32[](libs.length);
+        for (uint256 i; i < libs.length; ++i) h[i] = libs[i].codehash;
     }
 
     /// typed-signing R2: the registry's link closure is `UARegistryLib` alone, and that library links nothing. The deployed
@@ -150,8 +184,9 @@ contract LinkClosureTest is Test {
     /// R6: over every library of every closure, PUSH data skipped, from the start to the last `INVALID` (solc puts its
     /// trailing data and the CBOR metadata after it): no SELFDESTRUCT (0xff), no CALLCODE (0xf2); DELEGATECALL (0xf4)
     /// only in `MtxPipelineLib` (exactly 2, -> `HederaLib`), in `WrappedLib` (exactly 1, -> `GovernanceLib`, its own link
-    /// reference), in `ZetherWrappedLib` (exactly 2, -> `WrappedLib`, `ZetherLib`, its init: size lever 1, owner 2026-11-01)
-    /// and in `PqzWrappedLib` (exactly 2, -> `WrappedLib`, `PqzStateLib`, the same).
+    /// reference), in `ZetherWrappedLib` (exactly 2, -> `WrappedLib`, `ZetherLib`, its init: size lever 1, owner 2026-11-01),
+    /// in `PqzWrappedLib` (exactly 2, -> `WrappedLib`, `PqzStateLib`, the same) and in `RegulatedLib` (exactly 1, ->
+    /// `GovernanceLib.useLimited`, plan T28).
     function test_libraryOpcodes() public view {
         for (uint256 n; n < names.length; ++n) {
             string memory name = names[n];
@@ -160,9 +195,11 @@ contract LinkClosureTest is Test {
             assertFalse(destruct, string.concat(name, ": SELFDESTRUCT"));
             assertFalse(callcode, string.concat(name, ": CALLCODE"));
             bytes32 h = keccak256(bytes(name));
-            // WrappedLib: `GovernanceLib.init` and, since B-26, `GovernanceUse.use`'s one call to `useLimited` (1 -> 2)
+            // WrappedLib: `GovernanceLib.init` and, since B-26, `GovernanceUse.use`'s one call to `useLimited` (1 -> 2).
+            // RegulatedLib: plan T28's bodies inline `GovernanceUse.use`, whose one call to `GovernanceLib.useLimited` is
+            // its only DELEGATECALL (0 -> 1; its link reference, already in every regulated kind's closure)
             uint256 want = h == keccak256("MtxPipelineLib") || h == keccak256("ZetherWrappedLib") || h == keccak256("PqzWrappedLib")
-                || h == keccak256("WrappedLib") ? 2 : 0;
+                || h == keccak256("WrappedLib") ? 2 : h == keccak256("RegulatedLib") ? 1 : 0;
             assertEq(delegates, want, string.concat(name, ": DELEGATECALL count"));
         }
     }

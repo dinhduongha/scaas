@@ -10,6 +10,14 @@ library TokenStore {
     uint8 internal constant KIND_WRAPPED_ZETHER = 3;
     uint8 internal constant KIND_NORMAL_PQZ = 4;
     uint8 internal constant KIND_WRAPPED_PQZ = 5;
+    // 6 and 7 retired (the dropped `*_ZETHER_PQZ`); the regulated kinds, each its base kind plus the regulated hooks
+    // (CTR-GOV-16, regulated-kinds spec §2.1)
+    uint8 internal constant KIND_NORMAL_REGULATED = 8;
+    uint8 internal constant KIND_WRAPPED_REGULATED = 9;
+    uint8 internal constant KIND_NORMAL_ZETHER_REGULATED = 10;
+    uint8 internal constant KIND_WRAPPED_ZETHER_REGULATED = 11;
+    uint8 internal constant KIND_NORMAL_PQZ_REGULATED = 12;
+    uint8 internal constant KIND_WRAPPED_PQZ_REGULATED = 13;
 
     /// @custom:storage-location erc7201:scaas.token
     struct TokenStorage {

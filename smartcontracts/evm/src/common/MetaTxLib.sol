@@ -101,37 +101,8 @@ library MetaTxLib {
         ));
     }
 
-    /// @notice CTR-MTX-15/23 (tokens only): the typed transfer (`entryRef == 0`) or payment (`entryRef != 0`).
-    struct MetaTransfer {
-        address from;           // signer and payer
-        address to;             // payee
-        uint256 value;          // amount moved
-        bytes32 entryRef;       // 0 = transfer; != 0 = payment reference (PaymentSettled)
-        uint256 batch;          // lane, shared with MetaTransaction (one nonce space)
-        uint256 nonce;
-        uint256 validUntil;
-        uint32  mode;
-        address relayer;
-        uint256 fee;
-        address feeRecipient;
-    }
-
-    /// @dev Pinned by `test_metaTransferTypehashIsPinned` (test/metatx/MetaTxLib.t.sol).
-    bytes32 internal constant METATRANSFER_TYPEHASH = keccak256(
-        "MetaTransfer(address from,address to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
-    );
-
-    function canon(MetaTransfer memory t) internal pure returns (address r, address f) {
-        r = (t.mode & MODE_RESTRICT_RELAYER)       != 0 ? t.relayer      : address(0);
-        f = (t.mode & MODE_RESTRICT_FEE_RECIPIENT) != 0 ? t.feeRecipient : address(0);
-    }
-
-    function hashStruct(MetaTransfer memory t) internal pure returns (bytes32) {
-        (address r, address f) = canon(t);
-        return keccak256(abi.encode(
-            METATRANSFER_TYPEHASH, t.from, t.to, t.value, t.entryRef, t.batch, t.nonce, t.validUntil, t.mode, r, t.fee, f
-        ));
-    }
+    // The address `MetaTransfer`, its typehash and `hashStruct` are in legacy/ua-mtx-merge/src/common/MetaTxLib.sol
+    // (ua-mtx-merge R46): no EVM entry takes it; a token's typed transfer is the `UAMetaTransfer` below.
 
     // ------------------------------------------------------------------ the UA ledger (accounts.md CTR-UA-18/19/26)
 
@@ -187,6 +158,15 @@ library MetaTxLib {
         "UAMetaTransfer(bytes32 from,bytes32 to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
     );
 
+    /// @notice The payment metadata, the last parameter of every pay entry (CTR-MTX-26, pay-meta-tax spec §3.1, O2, O11):
+    ///         never empty; `entryRef == metaPayId(meta)`, which the contract checks and never parses further.
+    struct PayMeta {
+        bytes32 salt;    // 32 bytes from a CSPRNG; never 0
+        string  payNo;   // optional business document number; "" = none; at most 256 bytes
+        uint16  schema;  // 0 = no body; 1 note, 2 structured reference, 3 bound call, 4 encrypted
+        bytes   body;    // the schema's encoding; empty iff schema == 0
+    }
+
     function hashStruct(UAMetaTransaction memory m) internal pure returns (bytes32) {
         address r = (m.mode & MODE_RESTRICT_RELAYER) != 0 ? m.relayer : address(0);
         address f = (m.mode & MODE_RESTRICT_FEE_RECIPIENT) != 0 ? m.feeRecipient : address(0);
@@ -228,13 +208,17 @@ library MetaTxLib {
         address feeRecipient;
     }
 
-    /// @dev The struct of `mtxShield(Envelope, …)` on the Zether and PQZ kinds.
-    bytes32 internal constant SHIELD_TYPEHASH = keccak256(
-        "Shield(address from,bytes32 toUA,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
-    );
-
+    /// @dev The struct of the signed `mtxShield(UAEnvelope, …, UASig)` on the Zether and PQZ kinds (R35, R36); the address
+    ///      `Shield` struct is in legacy/ua-mtx-merge/.
     bytes32 internal constant UA_SHIELD_TYPEHASH = keccak256(
         "UAShield(bytes32 from,bytes32 toUA,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+    );
+
+    /// @dev The signed `cancelNonce(lane)` on ids (ua-mtx-merge Q2, CTR-MTX-30): `mtxCancelNonce(UAEnvelope, lane, UASig)`,
+    ///      nonce-ordered on its own lane `batch`. Pinned by `test_uaCancelNonceTypehashIsPinned` (test/metatx/MetaTxLib.t.sol);
+    ///      the unordered `UACancelNonce(bytes32 ua,uint256 batch,uint256 validUntil)` is in legacy/ua-mtx-merge/.
+    bytes32 internal constant UA_CANCEL_NONCE_TYPEHASH = keccak256(
+        "UACancelNonce(bytes32 from,uint256 lane,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
     );
 
     /// @notice Đọc cách tính phí từ nửa byte sau của `mode`.

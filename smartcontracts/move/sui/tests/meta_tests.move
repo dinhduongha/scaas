@@ -383,7 +383,7 @@ fun pay_meta(sc: &mut Scenario, owner: address, amount: u128, salt: vector<u8>, 
     sc.next_tx(s);
 }
 
-/// Rule 1: every row of `smartcontracts/vectors/metatx/paymeta.json` (`long_body_4096` included, as a hash only).
+/// Rule 1: every row of `smartcontracts/vectors/metatx/legacy/ua-mtx-merge/paymeta.json` (`long_body_4096` included, as a hash only).
 #[test]
 fun pay_meta_vectors_match() {
     let rows = v::pm_rows();

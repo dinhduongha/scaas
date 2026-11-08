@@ -152,9 +152,9 @@ fn unhex(s: &str) -> std::vec::Vec<u8> {
     (0..s.len()).step_by(2).map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap()).collect()
 }
 
-/// Shared vectors (`smartcontracts/vectors/metatx/paymeta.json`), the EVM suite's file.
+/// Shared vectors (`smartcontracts/vectors/metatx/legacy/ua-mtx-merge/paymeta.json`), the EVM suite's file.
 fn paymeta_rows() -> std::vec::Vec<serde_json::Value> {
-    serde_json::from_str(include_str!("../../../../vectors/metatx/paymeta.json")).unwrap()
+    serde_json::from_str(include_str!("../../../../vectors/metatx/legacy/ua-mtx-merge/paymeta.json")).unwrap()
 }
 
 fn row(env: &Env, r: &serde_json::Value) -> (BytesN<32>, Bytes, BytesN<32>, [u8; 32]) {

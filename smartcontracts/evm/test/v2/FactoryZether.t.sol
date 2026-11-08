@@ -30,7 +30,7 @@ contract MockNormalZether is NormalToken {
         _requireUnused(cfg, false, true, true, false);
         _setMetadata(cfg.name, cfg.symbol, cfg.decimals);
         GovernanceLib.init(cfg.features, cfg.lockedFeatures, cfg.owner, cfg.grantDelay, cfg.rescueTo, cfg.roles, _validBits(),
-            _roleBits(), _contractOnlyBits());
+            _roleBits(), _contractOnlyBits(), address(0));
     }
 }
 
@@ -43,7 +43,7 @@ contract MockWrappedZether is WrappedToken {
     function _init(TokenConfig memory cfg) internal override {
         _requireUnused(cfg, true, false, false, false);
         WrappedLib.initToken(cfg, IS_HEDERA, TokenStore.KIND_WRAPPED_ZETHER, GovernanceBits.WRAPPED_BITS, _roleBits(),
-            _contractOnlyBits());
+            _contractOnlyBits(), address(0));
     }
 }
 

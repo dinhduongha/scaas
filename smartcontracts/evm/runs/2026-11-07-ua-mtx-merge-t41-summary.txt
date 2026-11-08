@@ -1,0 +1,20 @@
+# ua-mtx-merge T41 gate summary (full output in git-ignored .log files, not committed)
+# T41 (pay-meta-tax spec §7.2, §7.3): typed_ops.json, metatx3.json / pq_signatures.json receiver-fee rows, the mandate KAT's
+# PayMeta, clientkeys PayMeta v2 and the pay / tax / relay-fee builders, ua-rs `pay` and its JSON surface in ua-c, ua-cxx, ua-qt,
+# ua-dart-frb, bit 23 in every native table, zether-prover's two rows; the forge rows that waited for T41 run again. UNAUDITED.
+# Base: e564f8f3. Commits: 96d747ff (legacy copies), 1fe4e145 (implementation), this one (summary, mutants table).
+step | commit | rc | counts
+t41-red | 96d747ff | 1 | clientkeys 10 failing (paymeta 6, mandate KAT, governance bits 2, router rows) before T41
+t41-vectors | 1fe4e145 | 0 | typed-ops-vectors.mjs: 79 rows; ua-sig-vectors.mjs: only the 12 receiverFee rows move (other files byte-identical); WRITE_KAT mandate_kat.json +4 fields
+t41-cast | 1fe4e145 | 0 | typed-ops-cast-check.mjs: 79 structs, 114 digests, 113 calldatas equal to cast's
+t41-clientkeys | 1fe4e145 | 0 | node --test: 257 passed 0 failed (260 with 3 skipped)
+t41-ua-rs | 1fe4e145 | 0 | cargo test (default, --features json); clippy -D warnings (default, json): clean; tests/pay.rs 6 of 6
+t41-wrappers | 1fe4e145 | 0 | ua-c clippy, build, header drift, 24 Python tests; ua-cxx clippy, ctest 20 of 20 (pay_rows new); ua-qt QML 29 of 29 (test_pay_rows new); ua-dart-frb codegen 2.13.0, dart test 21 of 21
+t41-natives | 1fe4e145 | 0 | ua-py unittest OK; ua-go vet + test ok; ua-dart 28 passed; ua-cs 27 passed (dotnet build-server shut down)
+t41-zether-prover | 1fe4e145 | 0 | cargo test all green (typed_ops: 28 Zether rows); clippy: 2 pre-existing `manual is_multiple_of` errors in src/zether.rs (file unchanged)
+t41-forge-green | 1fe4e145 | 0 | TypedOps, TradeTyped, UAMetaTx3Pq, UAMetaTx3Vectors, Tax, AccountKat, MtxCtx: 186 passed + the UAPayWithTax row, 0 failed
+t41-forge-full | 1fe4e145 - 2 | 1 | 2961 passed 2 failed: test_relayFeeRows (T41's own, made positive), test_wrappedReleaseIsGated (a T40 pin, fixed in e564f8f3); both pass on re-run
+t41-undercap | 1fe4e145 | 0 | two-mldsa65 receiver fee in one capped transaction: 12,331,151 gas < 16,777,216 (calldata 7,780 B / 112,324 gas, execution 12,197,827)
+t41-mutants | 1fe4e145 | 1 each | 4 of 4 killed (runs/2026-11-07-ua-mtx-merge-t41-mutants.txt): UARelayFee field order swapped, relayer not zeroed in the canonical digest, schema 2 with invoiceNo, the old tag in metaPayId; clients tree clean after
+#
+# Not run: ua-rs --features signers / pq (no file of theirs changed); ua-c's C99 smoke. Node: T42.

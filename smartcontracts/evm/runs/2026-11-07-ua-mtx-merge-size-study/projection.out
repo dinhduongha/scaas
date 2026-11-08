@@ -1,0 +1,62 @@
+60 M lines: token 35,289 B, library 35,689 B, module 35,510 B, plain 35,244 B
+
+| contract | HEAD B / asked | today's form + growth (hi) B / asked | V6 token + growth (hi) | V7 token + growth (lo-hi) B / asked |
+|---|---|---|---|---|
+| `NormalToken` (0) | 32,870 / 55.9 M yes | 33,894 / 57.7 M yes | 20,586 / 35.4 M yes | 12,898-13,000 / 22.7 M yes |
+| `WrappedToken` (1) | 43,503 / 73.8 M **no** | 44,527 / 75.5 M **no** | 24,426 / 41.8 M yes | 16,260-16,362 / 28.3 M yes |
+| `NormalZetherToken` (2) | 41,076 / 69.7 M **no** | 42,100 / 71.4 M **no** | 25,398 / 43.4 M yes | 17,248-17,350 / 29.9 M yes |
+| `WrappedZetherToken` (3) | 51,522 / 87.2 M **no** | 52,546 / 88.9 M **no** | 29,468 / 50.2 M yes | 20,734-20,836 / 35.8 M yes |
+| `NormalPqzToken` (4) | 47,714 / 80.8 M **no** | 51,196 / 86.6 M **no** | 27,992 / 47.8 M yes | 19,292-19,855 / 34.1 M yes |
+| `WrappedPqzToken` (5) | 57,026 / 96.4 M **no** | 60,508 / 102.2 M **no** | 33,274 / 56.6 M yes | 23,933-24,496 / 41.9 M yes |
+| `NormalRegulatedToken` (8) | 40,638 / 69.0 M **no** | 41,662 / 70.7 M **no** | 24,042 / 41.2 M yes | 16,048-16,150 / 27.9 M yes |
+| `WrappedRegulatedToken` (9) | 51,292 / 86.8 M **no** | 52,316 / 88.5 M **no** | 27,871 / 47.6 M yes | 19,372-19,474 / 33.5 M yes |
+| `NormalZetherRegulatedToken` (10) | 49,020 / 83.0 M **no** | 50,044 / 84.7 M **no** | 28,661 / 48.9 M yes | 20,175-20,277 / 34.9 M yes |
+| `WrappedZetherRegulatedToken` (11) | 59,678 / 100.9 M **no** | 60,702 / 102.6 M **no** | 32,898 / 56.0 M yes | 23,802-23,904 / 40.9 M yes |
+| `NormalPqzRegulatedToken` (12) | 55,472 / 93.8 M **no** | 58,954 / 99.6 M **no** | 31,351 / 53.4 M yes | 22,327-22,890 / 39.2 M yes |
+| `WrappedPqzRegulatedToken` (13) | 64,996 / 109.8 M **no** | 68,478 / 115.6 M **no** | 36,799 / 62.5 M **no** | 27,113-27,676 / 47.2 M yes |
+
+| contract | form | HEAD B / asked | + growth (hi) B / asked | growth |
+|---|---|---|---|---|
+| `SCaaSDex` | release | 33,704 / 57.3 M yes | 34,523 / 58.7 M yes | chain-neutral |
+| `UARegistry` | plain | 31,438 / 53.5 M yes | 32,155 / 54.8 M yes | T66b: requirePortable, the msig KEM refusal; before the rebalance |
+| `UARegistryLib` | library | 37,536 / 63.1 M **no** | 37,843 / 63.6 M **no** | T66b: the msig KEM refusal; before the rebalance |
+| `GovernanceRouter` | plain | 13,396 / 22.9 M yes | 14,727 / 25.2 M yes | 3f three ops 0.5-0.8, 3h bit 24 op 0.3-0.5 |
+| `OpenFactory` | plain | 15,821 / 27.0 M yes | 27,085 / 46.2 M yes | index 2.5-4, generic catalogue 3-5, chain-neutral 1.5-2 |
+| `MandateWallet` | plain | 17,704 / 30.2 M yes | 17,909 / 30.6 M yes |  |
+| `MtxPipelineLib` | library | 11,069 / 18.8 M yes | 11,479 / 19.5 M yes | chain-neutral reader if placed here |
+| `WrappedLib` | library | 17,029 / 28.7 M yes | 17,029 / 28.7 M yes |  |
+| `GovernanceLib` | library | 14,512 / 24.5 M yes | 14,717 / 24.9 M yes | 3h bit 24 |
+| `TradeLib` | library | 4,842 / 8.3 M yes | 4,842 / 8.3 M yes |  |
+| `RegulatedLib` | library | 10,337 / 17.5 M yes | 11,156 / 18.9 M yes | chain-neutral validateEnv + reader for 10-13 (spec 7.1) |
+| `ZetherLib` | library | 25,351 / 42.7 M yes | 26,170 / 44.1 M yes | chain-neutral validateEnv + reader for 10, 11 |
+| `ZetherWrappedLib` | library | 11,672 / 19.8 M yes | 11,672 / 19.8 M yes |  |
+| `PqzViewLib` | library | 19,886 / 33.5 M yes | 20,910 / 35.2 M yes | 3f 0.3-0.5, 3h 0.3-0.5 |
+| `PqzTransferLib` | library | 19,724 / 33.3 M yes | 21,465 / 36.2 M yes | 3f 0.4-0.7, 3h 0.6-1.0 |
+| `PqzBurnLib` | library | 10,697 / 18.1 M yes | 12,438 / 21.1 M yes | 3f 0.4-0.7, 3h 0.6-1.0 |
+| `PqzStateLib` | library | 9,050 / 15.4 M yes | 10,996 / 18.6 M yes | 3f 0.6-1.0, 3h 0.1, chain-neutral reader 0.3-0.8 for 12, 13 |
+| `PqzWrappedLib` | library | 5,357 / 9.2 M yes | 6,381 / 10.9 M yes | 3f 0.6-1.0 |
+| `HederaLib` | library | 767 / 1.5 M yes | 767 / 1.5 M yes |  |
+
+Modules per kind (proposal, V7 form): upper bound = the complement build less the forwarded stubs, + growth hi;
+lower bound = less the residue every complement build carries (the V8 build), + growth lo. Line: module 35,510 B.
+| kind | Transfer | Trade | Admin | Pqz | Wrapped+Reg | Zether | largest (upper) | release asked today+growth -> proposed (lower-upper) |
+|---|---|---|---|---|---|---|---|---|
+| `NormalToken` (0) | 16.9-24.1 KB | 5.0-9.0 KB | 14.6-19.2 KB |  |  |  | 24,633 yes | 58 M -> 87-114 M |
+| `WrappedToken` (1) | 17.5-24.9 KB | 6.8-11.0 KB | 9.8-14.7 KB |  | 14.4-18.9 KB |  | 25,507 yes | 75 M -> 113-150 M |
+| `NormalZetherToken` (2) | 17.2-26.1 KB | 4.3-10.0 KB | 13.1-19.4 KB |  |  | 12.7-18.7 KB | 26,738 yes | 71 M -> 113-159 M |
+| `WrappedZetherToken` (3) | 17.9-27.0 KB | 6.1-12.0 KB | 6.6-13.2 KB |  | 14.0-20.2 KB | 17.6-23.9 KB | 27,661 yes | 89 M -> 145-204 M |
+| `NormalPqzToken` (4) | 16.3-26.7 KB | 4.1-11.4 KB | 14.7-22.5 KB | 15.3-23.4 KB |  |  | 27,366 yes | 87 M -> 122-180 M |
+| `WrappedPqzToken` (5) | 17.0-28.4 KB | 5.0-13.3 KB | 6.8-15.6 KB | 20.5-29.6 KB | 13.0-21.5 KB |  | 30,280 yes | 102 M -> 150-230 M |
+| `NormalRegulatedToken` (8) | 19.4-27.9 KB | 5.1-10.4 KB | 15.0-20.9 KB |  | 4.8-10.4 KB |  | 28,560 yes | 71 M -> 106-149 M |
+| `WrappedRegulatedToken` (9) | 20.1-28.8 KB | 6.9-12.5 KB | 10.3-16.4 KB |  | 18.0-23.9 KB |  | 29,481 yes | 89 M -> 130-175 M |
+| `NormalZetherRegulatedToken` (10) | 19.8-30.0 KB | 4.4-11.4 KB | 13.5-21.1 KB |  | 4.7-12.0 KB | 13.4-20.7 KB | 30,694 yes | 85 M -> 133-201 M |
+| `WrappedZetherRegulatedToken` (11) | 20.5-30.9 KB | 6.2-13.4 KB | 7.0-14.9 KB |  | 18.3-25.8 KB | 17.6-25.2 KB | 31,682 yes | 103 M -> 163-233 M |
+| `NormalPqzRegulatedToken` (12) | 18.8-30.7 KB | 4.2-12.9 KB | 15.0-24.3 KB | 15.6-25.1 KB | 3.8-12.8 KB |  | 31,448 yes | 100 M -> 139-223 M |
+| `WrappedPqzRegulatedToken` (13) | 19.6-32.5 KB | 5.1-14.8 KB | 7.2-17.4 KB | 20.2-30.7 KB | 17.3-27.2 KB |  | 33,272 yes | 116 M -> 168-260 M |
+
+- Transfer (MA): pipeline, named transfers, pay; MtxPipelineLib inlined (+3-6 KB), the env reader
+- Trade (MB): trade entries, mtxWrapOrder
+- Admin (MC): governance, init, tables, metadata views, mint/burn; chain-neutral and 3f config bodies
+- Pqz (MD1): PQZ entries; 3f and 3h bodies
+- Wrapped+Reg (MD2): wrapped entries, regulated powers
+- Zether (MD3): Zether entries

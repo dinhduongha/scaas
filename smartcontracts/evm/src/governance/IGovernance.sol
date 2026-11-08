@@ -52,11 +52,15 @@ interface IGovernance {
     event GrantUsed(uint8 indexed bit, bytes32 indexed holder, uint256 scalar);
     event OwnershipTransferStarted(bytes32 indexed previousOwner, bytes32 indexed newOwner);
     event OwnershipTransferred(bytes32 indexed previousOwner, bytes32 indexed newOwner);
-    /// @notice The first of the owner's two calls (spec §1.6): `terms` for a wallet to compare with `termsHash`; `whole` is
-    ///         a `grantRole`, its terms empty.
+    /// @notice The first of the owner's two calls (spec §1.6): `terms` for a wallet to compare with the pending's
+    ///         `commit`; `whole` is a `grantRole`, its terms empty.
     event GrantProposed(uint8 indexed bit, bytes32 indexed account, bytes32 indexed proposer, uint64 eta, bool whole,
         GrantTerms terms);
     event GrantCancelled(uint8 indexed bit, bytes32 indexed account, bytes32 indexed by);
+    /// @notice The first call of a relaxation on a bit of the contract's `_delayedRelaxBits()` (spec
+    ///         `2026-11-05-regulated-kinds.md` §3.6, RK-2): `action` 3 revoke, 4 renounce, 5 disable (`account` 0). Nothing
+    ///         changes now (RK-3); `proposer` alone confirms, in `[eta, eta + grantDelay]` and the same owner generation.
+    event RelaxProposed(uint8 indexed bit, bytes32 indexed account, uint8 action, bytes32 proposer, uint64 eta);
 
     error FeatureInvalidForKind(uint8 bit);
     error FeatureNotBuilt(uint8 bit);
@@ -100,8 +104,13 @@ interface IGovernance {
     error GrantDelayTooLong(uint64 delay);
     /// @notice The confirm before `eta`.
     error GrantNotReady(uint8 bit, bytes32 account, uint64 eta);
-    /// @notice A live pending at `(bit, account)` holds other terms: cancel it, or let it die, and propose again.
+    /// @notice A live pending at `(bit, account)` commits to another action or other terms (spec §3.6): cancel it, or let it
+    ///         die, and propose again.
     error GrantTermsMismatch(uint8 bit, bytes32 account);
+    /// @notice The confirm of a live pending by another id than the one that proposed it (spec §3.6, RK-2).
+    error NotProposer(uint8 bit, bytes32 account, bytes32 proposer);
+    /// @notice One id would hold both `FORCE` (6) and `RECORD` (10) (CTR-AS-03): `bit` is the one being granted.
+    error RoleConflict(uint8 bit, bytes32 account);
 
     function features() external view returns (uint256);
     function lockedFeatures() external view returns (uint256);
@@ -113,9 +122,12 @@ interface IGovernance {
     function grantDelay() external view returns (uint64);
     function lastProposedAt() external view returns (uint64);
     /// @notice A pending at `(bit, account)`, dead ones too: `live` while `eta != 0`, the owner generation that proposed it
-    ///         is the current one and `now <= eta + grantDelay` (spec §1.6).
+    ///         is the current one and `now <= eta + grantDelay` (spec §1.6). `commit` is `keccak256(abi.encode(action, bit,
+    ///         account, argsHash))`: action 1 grant, 2 set (`argsHash` the terms' hash), 3 revoke, 4 renounce, 5 disable
+    ///         (`account` 0), `argsHash` 0 but for set (regulated-kinds spec §3.6).
     function pendingGrant(uint8 bit, bytes32 account)
-        external view returns (uint64 eta, bytes32 proposer, bytes32 termsHash, bool live);
+        external view returns (uint64 eta, bytes32 proposer, bytes32 commit, bool live);
+    /// @notice The owner, or the pending's proposer, deletes a pending of any action.
     function cancelGrant(uint8 bit, bytes32 account) external;
     function grantOf(uint8 bit, bytes32 holder) external view returns (Grant memory);
     function setGrant(uint8 bit, bytes32 holder, GrantTerms calldata terms) external;

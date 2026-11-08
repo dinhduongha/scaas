@@ -6,8 +6,8 @@ import {IUARegistry} from "../ua/IUARegistry.sol";
 
 /// @title The DEX side of `TradeOrder` and `UATradeOrder` (CTR-DEX-16, -17, -11, -03, -24, -18, -22, -08, -20, -21,
 ///        -23, -26): one taker against many makers per settlement, or a plan of orders against AMM routes (the exchange
-///        path); every leg pulled into the DEX (a SCaaS token through its `mtxTrade` or `uaTrade`, an outside token
-///        through the `DexPuller` against a `DexOrder`), every party, fee share, surplus and refund paid in the same
+///        path); every leg pulled into the DEX (a SCaaS token's `UATradeOrder` through its `mtxTrade`, an outside
+///        token's `TradeOrder` through the `DexPuller` against a `DexOrder`), every party, fee share, surplus and refund paid in the same
 ///        call (a derived UA by `transferToUA`), and the DEX's balance of every token unchanged at the end.
 interface ISCaaSDex {
     /// @notice Written once by `initialize` (CTR-DEX-24). `relayerSharePpm` of every fee goes to the submitter, the
@@ -24,9 +24,10 @@ interface ISCaaSDex {
     }
 
     /// @notice One order in one settlement; `fill` = its `sellFill` in this call (Path B: the matched part). Tagged
-    ///         (CTR-DEX-26): `shape` 0 = a `TradeOrder` in `order`, signed in `sig`; 1 = a `UATradeOrder` in `uaOrder`,
-    ///         authorized in `auth` (a derived signer's registry auth, a native id's own signature in `auth.signature`).
-    ///         The members of the other shape stay zero; nothing reads them (Appendix X row 20).
+    ///         (CTR-DEX-26; ua-mtx-merge T6, R12): `shape` 0 = an outside token's `TradeOrder` in `order`, signed as
+    ///         `DexOrder` in `sig`; 1 = a SCaaS token's `UATradeOrder` in `uaOrder`, authorized in `auth` (a derived
+    ///         signer's registry auth, a native id's own signature in `auth.signature`). The members of the other shape
+    ///         stay zero; nothing reads them (Appendix X row 20).
     struct DexLeg {
         address sellToken;
         uint8 shape;
@@ -99,7 +100,8 @@ interface ISCaaSDex {
     ///         and `relayerShare + treasuryShare == dexFee`. `destination` is where `received` went.
     event LegSettled(bytes32 indexed ref, bytes32 indexed orderHash, address indexed from, address destination,
         uint256 sold, uint256 received, uint256 dexFee, uint256 refund, uint256 relayerShare, uint256 treasuryShare);
-    /// @notice `LegSettled` of a shape-1 leg (CTR-DEX-26): ids; `destination` is where `received` went.
+    /// @notice `LegSettled` of a shape-1 leg, every SCaaS leg (CTR-DEX-26, R18): ids, a native signer zero-padded;
+    ///         `destination` is where `received` went. `LegSettled` is an outside leg's.
     event UALegSettled(bytes32 indexed ref, bytes32 indexed orderHash, bytes32 indexed from, bytes32 destination,
         uint256 sold, uint256 received, uint256 dexFee, uint256 refund, uint256 relayerShare, uint256 treasuryShare);
     /// @notice `reason` = the failed settlement's revert data, at most its first 256 bytes.
@@ -134,9 +136,11 @@ interface ISCaaSDex {
     error TokenMismatch();
     /// @notice Over ids: a native order and its zero-padded id are one party (CTR-DEX-26).
     error SelfTrade(bytes32 from);
-    /// @notice A leg tag other than 0 (`TradeOrder`) or 1 (`UATradeOrder`).
+    /// @notice A leg tag other than 0 (`TradeOrder`, an outside token) or 1 (`UATradeOrder`, a SCaaS token), or a
+    ///         shape-0 leg selling a SCaaS token (R12).
     error LegShapeUnknown(uint8 shape);
-    /// @notice A shape-1 leg whose sell token is not a SCaaS token with its UA ledger on (a UA holds no other token).
+    /// @notice A shape-1 leg whose sell token is not a SCaaS token, or a derived seller's on a SCaaS token whose UA
+    ///         ledger is off (a UA holds no other token; C).
     error UALegNotLedger(address token);
     /// @notice A payout or refund to a derived UA in a token that is not a SCaaS token with its UA ledger on.
     error UAReceiveNotLedger(address token);

@@ -102,6 +102,17 @@ other words fixed filler that the decoder accepts (D15). `rnd32`: `0x53…` for 
 repeated for the i-th form of `pqz-stmt`'s `FORMS`, `0x90…` for the worst-case debit. `fee0.json`: the same with fee
 0 and no beneficiary (`out` from `0x72…`, burn `0x74…`, refresh `0x75…`; `rnd32` `0xA0 + i`).
 
+### Token state (`state.json`; ua-rs-sign T15e)
+
+Not from `pqz-vectors`: the forge writer `smartcontracts/evm/test/pqz/PqzStateVectors.t.sol` (`STATE_VECTORS=1
+CONTRACT_COMMIT=<sha> forge test --match-path test/pqz/PqzStateVectors.t.sol`, another set through `script/pqz/at-set.sh`)
+writes the raw storage words of a token in several account states (`acc` never debited, a debit's blob, materialised; TRIVIAL
+and credit entries; op 1 and op 7 entries with and without the auditor copies, BUNDLE and HASH; proofs mocked), each account's
+`T` at the clients' `p` from the token's burn statement view, each entry leg's `u ‖ v` (and auditor copy) from its
+disclosure statement view, the statements' `memoHash` words, and T19c's `scaas.pqz` pin of the same contract commit. Two
+runs give the same bytes. `pqz_kat.py` rebuilds every `T`, `entryRef` and leg from the words (`check_state`); ua-rs's words
+commands reproduce them (`clients/ua-rs/tests/facade_pqz_state.rs`).
+
 ### Op 7 (`R_TXM`)
 
 Sender F, auditor A and `T` as the scenario (`T = Enc_F(1,000,000; 0x61…) + Trivial(1,000)`); recipient j = KeyGen(`0x60

@@ -18,7 +18,7 @@ const KINDS: &str = include_str!("../../../../vectors/ua/kinds.json");
 const SIGNATURES: &str = include_str!("../../../../vectors/ua/signatures.json");
 const PQ_SIGNATURES: &str = include_str!("../../../../vectors/ua/pq_signatures.json");
 const PORTABLE: &str = include_str!("../../../../vectors/ua/portable.json");
-const PAYMETA: &str = include_str!("../../../../vectors/metatx/paymeta.json");
+const PAYMETA: &str = include_str!("../../../../vectors/metatx/legacy/ua-mtx-merge/paymeta.json");
 
 /// The S3 kinds (spec §3).
 const S3: [u32; 7] = [0x0100, 0x0101, 0x0102, 0x0108, 0x0120, 0x0130, 0x0131];
@@ -244,7 +244,7 @@ fn op_digest_matches_token_cross_vector() {
     assert_eq!(d.to_array().iter().map(|x| std::format!("{x:02x}")).collect::<String>(), want);
 }
 
-/// `meta_pay_id` and `pay_lane` against `vectors/metatx/paymeta.json` (`payId`, `payLane = payLane(payId)`).
+/// `meta_pay_id` and `pay_lane` against `vectors/metatx/legacy/ua-mtx-merge/paymeta.json` (`payId`, `payLane = payLane(payId)`).
 #[test]
 fn pay_ids_match_paymeta_json() {
     let env = Env::default();

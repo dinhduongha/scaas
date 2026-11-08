@@ -181,6 +181,13 @@ std::string canonicalId(const std::string& t) {
         throw Error("UAIdFormat", "");
     }
 }
+std::string idDisplay(const std::string& id, uint16_t kind) {
+    try {
+        return call([&] { return std::string(ffi::id_display(id, kind)); });
+    } catch (const std::invalid_argument&) {
+        throw Error("UAIdFormat", "");
+    }
+}
 std::string registrationArgs(const std::string& input) {
     return jsonCall([&] { return ffi::registration_args(input); });
 }
@@ -189,6 +196,12 @@ std::string setKemKeyArgs(const std::string& input) {
 }
 std::string setPqzKeyArgs(const std::string& input) {
     return jsonCall([&] { return ffi::set_pqz_key_args(input); });
+}
+std::string payDigest(const std::string& input) {
+    return jsonCall([&] { return ffi::pay_digest(input); });
+}
+std::string metaPayId(const std::string& input) {
+    return jsonCall([&] { return ffi::meta_pay_id(input); });
 }
 Bytes encodeMsig(uint16_t th, const std::vector<Member>& ms) {
     std::vector<ffi::Member> v;

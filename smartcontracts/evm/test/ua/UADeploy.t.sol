@@ -257,8 +257,9 @@ contract UADeployTest is Test {
     }
 
     /// NET-EVM-06: the registry and `UARegistryLib` each have the gate of a release (typed-signing R2): the deploy refuses
-    /// one below each figure and reaches the next gate at it. Passing both reaches `NormalToken`'s, which binds a plain
-    /// deploy now; at that figure the deploy goes through.
+    /// one below each figure and reaches the next gate at it. ua-mtx-merge T2, meaning: `NormalToken` (35,289 B) now asks
+    /// less than `UARegistryLib` (36,192 B), so the library's figure binds a plain deploy (the DEX's is lower still); at
+    /// that figure the deploy goes through. Before T2 `NormalToken`'s gate came after the library's and bound it.
     function test_registryDeployGate() public {
         DeployHarness h = new DeployHarness();
         string memory base = vm.readFile("./size-baseline.json");
@@ -268,11 +269,11 @@ contract UADeployTest is Test {
         assertEq(need, vm.parseJsonUint(base, ".UARegistry") * 1530 + 16_777_216);
         assertEq(lib, vm.parseJsonUint(base, ".UARegistryLib") * 1530 + 16_777_216);
         assertLt(need, lib);
-        assertLt(lib, token);
+        assertLt(token, lib, "NormalToken's release now needs less than UARegistryLib's");
+        assertLt(h.gasNeed("SCaaSDex"), lib);
         _refused(h, need - 1, need, "UARegistry");
         _refused(h, need, lib, "UARegistryLib");
-        _refused(h, lib, token, "NormalToken");
-        h.limitBlockGas(token);
+        h.limitBlockGas(lib);
         h.deploy(UID, false, ska);
     }
 

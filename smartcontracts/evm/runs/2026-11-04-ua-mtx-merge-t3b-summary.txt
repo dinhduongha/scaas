@@ -1,0 +1,22 @@
+# ua-mtx-merge T3b gate summary (full output in git-ignored .log files, not committed)
+# T3b: the mandate wallets in the merged form (plan T3b, MD-11): MandateWallet on UAMetaTxBase, bytes32 ids, one signed
+# UA<Op> entry per operation, executeMetaTransaction refused; HederaMandateWallet = constructor only (IS_HEDERA).
+# The round's gate runner (T21) is not built yet: each command ran directly through scripts/capped.
+# Base: 289b31e8. T3b commits: 7f755154 (legacy copies), 62bab68c (the build), e42743cc (dex_order_kat.json MD-8, KAT reader paths).
+step | commit | rc | counts
+t3b-red | 7f755154 + test/wallet/MandateWalletMerged.t.sol | 1 | 24 failed 1 passed (the pass is test_smartKeyAccountByteIdentical, a guard of what does not move)
+t3b-lint-red | 7f755154 + MsgSenderLint rows | 1 then 0 | MandateWallet red at 99 ("0 != 99"), then measured 0 and 0 (MandateWallet, HederaMandateWallet)
+t3b-katwrite | 62bab68c | 0 | MandateWalletKatTest with WRITE_KAT=true (mandate_kat.json); mandate_pay_kat.json, mandate_revoke_kat.json to test/vectors/legacy/ua-mtx-merge/
+t3b-touched | 62bab68c | 0 | 204 passed 0 failed, 19 suites (MandateWallet, NamedWallets, MandateWalletMerged 25, NamedEntry, Sweeper7702, TypedOps, Invariants, MsgSenderLint, AccountKat)
+t3b-forge-first | 62bab68c | 1 | 2547 passed 1 failed 14 skipped, 217 suites (DexKatTest test_dexKat cancel_digest: token metadata moved by the NatSpec edits, MD-8)
+t3b-dex-kat | e42743cc | 0 | DexKatTest 2 passed with WRITE_KAT=true; with the clone address substituted every calldata differs only in its signatures; DEX address unchanged
+t3b-forge-full | e42743cc | 0 | 2548 passed 0 failed 14 skipped, 217 suites (forge, default set n2304-kmax4096)
+t3b-forge-isolate | e42743cc | 0 | 22 passed 0 failed (forge --isolate UAGas, UARegistryGroups)
+t3b-size-gate | e42743cc | 0 | 0 errors, 89 contracts, above 65536 B: none; no baseline row moves; size_gate --self-test ok
+t3b-sizes | 289b31e8 -> e42743cc | 0 | MandateWallet runtime 17,528 -> 17,326 (init 18,304 -> 18,296); HederaMandateWallet 17,977 -> 17,326 (init 18,758 -> 18,283); no ratchet row
+t3b-clientkeys-evm | e42743cc | 0 | 23 passed 0 failed (node --test test/evm.test.js; the mandate KATs from the legacy path, the regenerated dex_order_kat.json)
+t3b-docs-check | e42743cc | 0 | 0 errors, 5 warnings, 16 notes (docs_check check); paths 0; test_docs_check ok
+t3b-mutants | e42743cc | 1 each | 11 of 11 killed against test/wallet + test/merge, none a compile error (runs/2026-11-04-ua-mtx-merge-t3b-mutants.txt)
+#
+# Not run in T3b: the other three PQZ sets (T5 runs them); the scaas-node suite (src/typed.rs: a test path edit only;
+# its readers of dex_order_kat.json and the mandate KATs move in T14).

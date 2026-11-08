@@ -251,7 +251,7 @@ pub(crate) fn keccak(parts: &[&[u8]]) -> [u8; 32] {
 /// (`GovBitsVector.t.sol`), one row per line.
 pub const GOVERNANCE_BITS_JSON: &str = include_str!("../../../smartcontracts/vectors/governance/governance_bits.json");
 
-/// Governance bit `bit`'s row as the file's JSON object, `{bit, name, type, sentences}`: rows 0-21; `None` past them (bits 22-127
+/// Governance bit `bit`'s row as the file's JSON object, `{bit, name, type, sentences}`: rows 0-23; `None` past them (bits 24-127
 /// are free, bits 128-255 the application contract's own, labelled by its `bitLabel(bit)`).
 pub fn governance_bit(bit: u8) -> Option<&'static str> {
     let head = format!("{{\"bit\": {bit}, ");
@@ -488,6 +488,47 @@ pub fn canonical_id(text: &str) -> Result<String> {
     })
 }
 
+/// How a client shows a `bytes32` id before the user signs (ua-mtx-merge spec §6, MD-9).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum IdDisplay {
+    /// The top 96 bits are zero (CTR-UA-03): the EIP-55 address the contract reads.
+    Native { address: String },
+    /// Any other id: `urn:scaas:ua:v1:<kind name>:<hex32>` (NET-ALL-21), never an address.
+    Derived { urn: String },
+}
+impl IdDisplay {
+    /// The address or the URN.
+    pub fn text(&self) -> &str {
+        match self {
+            IdDisplay::Native { address } => address,
+            IdDisplay::Derived { urn } => urn,
+        }
+    }
+}
+
+/// `id` is `0x` + 64 hex digits; `kind` is a derived id's kind from its registry record (0 = none known: refused). A native-space
+/// id ignores `kind`. Pinned by smartcontracts/vectors/ua/id_display.json.
+pub fn id_display(id: &str, kind: u16) -> Result<IdDisplay> {
+    let h = id.strip_prefix("0x").filter(|h| h.len() == 64 && h.bytes().all(|c| c.is_ascii_hexdigit())).ok_or(UAError::IdFormat)?;
+    let h = h.to_ascii_lowercase();
+    if h.as_bytes()[..24].iter().all(|c| *c == b'0') {
+        return Ok(IdDisplay::Native { address: checksum_address(&h[24..]) });
+    }
+    let k = kind_info(kind)?;
+    if k.native {
+        return Err(UAError::KindNotDerived(kind));
+    }
+    Ok(IdDisplay::Derived { urn: format!("urn:scaas:ua:v1:{}:{h}", k.name) })
+}
+
+/// EIP-55 of 40 lower-case hex digits: a letter is upper case where its nibble of `keccak256(digits)` is 8 or more.
+fn checksum_address(lower: &str) -> String {
+    let h = keccak256(lower.as_bytes());
+    let up = |i: usize| (h[i / 2] >> (4 * (1 - i % 2))) & 0xf >= 8;
+    let body: String = lower.chars().enumerate().map(|(i, c)| if up(i) { c.to_ascii_uppercase() } else { c }).collect();
+    format!("0x{body}")
+}
+
 /// `u16 threshold ‖ u16 count ‖ count × (u16 kind ‖ bytes32 id ‖ u16 weight)`.
 pub fn encode_msig(threshold: u16, members: &[(u16, [u8; 32], u16)]) -> Vec<u8> {
     let mut out = Vec::with_capacity(4 + 36 * members.len());
@@ -500,3 +541,7 @@ pub fn encode_msig(threshold: u16, members: &[(u16, [u8; 32], u16)]) -> Vec<u8> 
     }
     out
 }
+
+/// ua-mtx-merge T34: the regulated kinds' router ops, `recordId`, the relaxation `commit`, `R` (regulated-kinds spec §3, §5).
+pub mod regulated;
+pub mod pay;

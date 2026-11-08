@@ -336,7 +336,7 @@ contract UARegistryPqTest is UARegistryBase {
     }
 
     function _assertUnproven(UARegistry r, bytes32 ua, IUARegistry.UAAttrs memory a, bytes32 h) internal view {
-        (address ptr, bytes32 ph, bool proven) = r.pqzKeyOf(ua);
+        (, address ptr, bytes32 ph, bool proven) = r.pqzKeyOf(ua);
         assertEq(ptr.code, bytes.concat(hex"00", a.pqzKey));
         assertEq(ph, a.pqzPopHash);
         assertFalse(proven);

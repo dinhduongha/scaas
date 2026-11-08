@@ -215,3 +215,85 @@ pub fn set_pqz_key_version_args_json(t: &str) -> JsonResult<String> {
     let sig = sig_json(&sig_in(&v["sig"])?);
     Ok(json!({ "ua": hx(&ua), "version": version, "pqzKey": hx(&unhex(&v["pqzKey"])?), "pqzPopHash": hx(&hash), "sig": sig }).to_string())
 }
+
+// ------------------------------------------------------------------ pay-meta-tax T41: the pay structs (`crate::pay`)
+
+/// A uint of the JSON, a number or a decimal string, as its ABI word (`Argument` above 256 bits or not a number).
+fn uint_in(v: &Value) -> JsonResult<[u8; 32]> {
+    let s = match v {
+        Value::Number(n) => n.as_u64().ok_or(Argument)?.to_string(),
+        Value::String(s) if !s.is_empty() && s.len() <= 78 && s.bytes().all(|c| c.is_ascii_digit()) => s.clone(),
+        _ => return Err(Argument),
+    };
+    let mut w = [0u8; 32];
+    for d in s.bytes() {
+        let mut carry = (d - b'0') as u32;
+        for b in w.iter_mut().rev() {
+            let x = *b as u32 * 10 + carry;
+            *b = x as u8;
+            carry = x >> 8;
+        }
+        if carry != 0 {
+            return Err(Argument);
+        }
+    }
+    Ok(w)
+}
+fn addr_in(v: &Value) -> JsonResult<[u8; 20]> {
+    unhex(v)?.try_into().map_err(|_| Argument)
+}
+fn small_in<T: TryFrom<u64>>(v: &Value) -> JsonResult<T> {
+    let n = match v {
+        Value::Number(n) => n.as_u64(),
+        Value::String(s) => s.parse().ok(),
+        _ => None,
+    };
+    n.and_then(|n| T::try_from(n).ok()).ok_or(Argument)
+}
+fn transfer_in(m: &Value) -> JsonResult<crate::pay::UAMetaTransfer> {
+    Ok(crate::pay::UAMetaTransfer {
+        from: ua_in(&m["from"])?,
+        to: ua_in(&m["to"])?,
+        value: uint_in(&m["value"])?,
+        entry_ref: ua_in(&m["entryRef"])?,
+        batch: uint_in(&m["batch"])?,
+        nonce: uint_in(&m["nonce"])?,
+        valid_until: uint_in(&m["validUntil"])?,
+        mode: small_in(&m["mode"])?,
+        relayer: addr_in(&m["relayer"])?,
+        fee: uint_in(&m["fee"])?,
+        fee_recipient: addr_in(&m["feeRecipient"])?,
+    })
+}
+
+/// `{struct, domain: {name, chainId, verifyingContract, salt}, message}` → `{structHash, digest}`: what a payer signs for
+/// `UAMetaTransfer` (`mtxPay`), `UAPayWithTax` (`{payment, taxMode, tax}`, kinds 8-13) or `UARelayFee` (`{from, target,
+/// callDataHash, payee, value, batch, nonce, validUntil, relayer}`); uints as numbers or decimal strings, an unbound
+/// `relayer` / `feeRecipient` hashed as 0. `Argument` for anything else, a tax mode not 1 or 2, or `tax > value`.
+pub fn pay_digest_json(t: &str) -> JsonResult<String> {
+    use crate::pay::{pay_with_tax_hash, relay_fee_hash, token_domain_separator, transfer_hash, typed_digest, RelayFee};
+    let v = parse(t)?;
+    let (d, m) = (&v["domain"], &v["message"]);
+    let sh = match v["struct"].as_str() {
+        Some("UAMetaTransfer") => transfer_hash(&transfer_in(m)?),
+        Some("UAPayWithTax") => pay_with_tax_hash(&transfer_in(&m["payment"])?, small_in(&m["taxMode"])?, &uint_in(&m["tax"])?)
+            .map_err(|_| Argument)?,
+        Some("UARelayFee") => relay_fee_hash(&RelayFee { from: ua_in(&m["from"])?, target: addr_in(&m["target"])?,
+            call_data_hash: ua_in(&m["callDataHash"])?, payee: ua_in(&m["payee"])?, value: uint_in(&m["value"])?,
+            batch: uint_in(&m["batch"])?, nonce: uint_in(&m["nonce"])?, valid_until: uint_in(&m["validUntil"])?,
+            relayer: addr_in(&m["relayer"])? }),
+        _ => return Err(Argument),
+    };
+    let ds = token_domain_separator(d["name"].as_str().ok_or(Argument)?, small_in(&d["chainId"])?,
+        &addr_in(&d["verifyingContract"])?, &ua_in(&d["salt"])?);
+    Ok(json!({ "structHash": hx(&sh), "digest": hx(&typed_digest(&ds, &sh)) }).to_string())
+}
+
+/// `{salt, payNo, schema, body}` → `{payId}`: `metaPayId` under `scaas.pay.meta.v2`, after the shape and `payNo` checks
+/// (`Argument` when refused).
+pub fn meta_pay_id_json(t: &str) -> JsonResult<String> {
+    let v = parse(t)?;
+    let m = crate::pay::PayMeta { salt: ua_in(&v["salt"])?, pay_no: v["payNo"].as_str().unwrap_or("").to_string(),
+        schema: small_in(&v["schema"])?, body: unhex(&v["body"])? };
+    Ok(json!({ "payId": hx(&crate::pay::meta_pay_id_v2(&m).map_err(|_| Argument)?) }).to_string())
+}

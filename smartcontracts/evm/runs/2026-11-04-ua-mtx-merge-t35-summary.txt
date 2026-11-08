@@ -1,0 +1,47 @@
+# ua-mtx-merge T35 gate summary (full output in git-ignored .log files, not committed)
+# T35: node rows, guard, errors, indexer and venue for the regulated kinds 8-13 (regulated-kinds spec §7; NODE-DEX-11,
+# NODE-LANE-09 Change, CTR-AS-16 Change with the owner's ruling of 2026-11-06: the DEX / DexPuller ELIGIBLE_CONTRACT rows are
+# the registry admin's operator step; F-16).
+# Base: 70986c61 (T34 tip). T35 commits: the build 7f0251fc, this one (harness, mutants, summary). No legacy copy (MD-4): no
+# node body was superseded, only branches and rows added.
+step | commit | rc | counts
+t35-red | worktree (tests, stubs; abi refusal set and registry code check neutered) | 101 | 19 T35 tests: 9 passed, 10 failed (abi 2, chain 1, venue 4, indexer 1, submit 2); passed at once: the six per-kind row tests, router_control_rows (rows built in T32: their evidence is the mutants), regulated_interface_id, config pair
+t35-green | build commit's tree | 0 | the same 19: 19 passed
+t35-node-full | build commit's tree | 0 | CAPPED_MEM=6G cargo test (alone): lib 648 passed; fuzz 4; mesh_vectors 1 (+1 ignored); every e2e file ignored as usual. Touched modules: abi 4, chain 5, config 20, dex::venue 28, guard 24, indexer 10, submit 38, typed 23
+t35-clippy | build commit's tree | 0 | cargo clippy --all-targets -- -D warnings clean
+t35-e2e | build commit's tree | 0 | cargo test --test e2e -- --ignored --test-threads=1 regulated_: 2 passed (regulated_freeze_relayed_by_router, regulated_transfer_refused_frozen) on local anvil 31914, 31915; no anvil left
+t35-docs | build commit | 0 | docs_check check 0 errors, 5 warnings, 16 notes (as T34); paths 0; test_docs_check ok
+t35-mutants | build commit | 101 each | 26 of 26 killed on the first run, none a compile error (plan's: a kind 8-13 row missing on the contract side and the node side, Frozen decoded as dead in the lib and the e2e, the market not halted on Paused; 21 own) (runs/2026-11-04-ua-mtx-merge-t35-mutants.txt); tree restored after each
+#
+# Pins, old -> new: submit::tests::job_api_explicit_json_roundtrip rows walked 97 -> 105 (T34's eight router rows in
+# typed_ops.json; T34 ran typed:: and guard:: only, so this lib pin was red at the T34 tip). No gas pin, typehash, selector,
+# layout, size, vector or address moved; no contract changed, so no forge run.
+#
+# Not run: forge (no contract or vector changed); the four PQZ sets; pqz-core gate; e2e files other than e2e.rs's two new tests.
+#
+# Conflicts with the plan / spec, and choices the text leaves open (none resolved silently):
+#   Spec §7 names the eighth router row UAModeratedTransfer; the node rows and router_control_rows follow CTR-GOV-20
+#   (UAOperatorTransfer with `account`, owner 2026-11-06), as T32 and T34 did.
+#   Reason codes: asset-suite §2.3 / spec §7 number the pre-check "1-3 receiver, 4 frozen, 5 paused, 6 balance", while
+#   canReceive (spec §3.1) returns 4 for denied. The venue names each refusal (NOT_ELIGIBLE with canReceive's 1-4, FROZEN,
+#   PAUSED; balance stays the book's own `fundable` check) instead of one number. For the owner.
+#   "Refusal, never dead": the node has no refused state; a liftable regulated revert at simulation goes back `queued`
+#   with REGULATED_REFUSED: <error> after the consumption check, and ends `dead` only by expiry or the attempt cap
+#   (NODE-LANE-14), recorded as a NODE-LANE-09 Change. A reverted receipt keeps today's `reverted`.
+#   Grief score (NODE-LANE-15) is not built: "never grief-scored" is built as (a) the submit path never reports these as
+#   failures and (b) the venue never blames a maker for TokenPaused (no `invalid`, no drop). asset-suite §2.7's parent-block
+#   re-simulation exemption waits for the grief score.
+#   NODE-DEX-11 is built on every market with a regulated leg (spec §7 does not limit it to managed markets); the managed
+#   config, fee-split recipients' canReceive, an explicit pre-settle re-check, drops on Attested(0) / AttesterSet(false) and
+#   gossip stay SPECIFIED (dex-venue.md status line).
+#   Regulated legs are found by ERC-165 (type(IRegulatedToken).interfaceId, M-10) at venue start, not versionOf(token).kind
+#   (the venue holds no factory); the node's XOR id 0xf35dd87a is pinned by cast and answered by a kind-8 token in e2e.
+#   compliance_registry: one per chain, with compliance_registry_codehash (both or neither). The venue checks the code at
+#   load; a regulated leg with a list on whose regulatedConfig().complianceRegistry differs is refused REGISTRY_MISMATCH (a
+#   token of another issuer policy is not served); none configured: REGISTRY_NOT_CONFIGURED.
+#   The venue's Paused / Unpaused / AccountFrozen events are kept out of dex_fill_ingest (the client's ingest is not known
+#   to take them); the orders an AccountFrozen drops go to the client as `invalid` through dex_book_commit.
+#   The indexer's regulated rows go to chain_event_ingest with `from` / `to` in the address form (UA_POOL and <k>_ua),
+#   other ids as bytes32 hex; alerts are warn lines and `alert: true` rows, no metric yet.
+#   VENUE_NOT_ELIGIBLE: the DEX is checked at intake (it receives both legs); the puller only alerted at load (it pulls
+#   outside tokens, never a regulated SCaaS leg).

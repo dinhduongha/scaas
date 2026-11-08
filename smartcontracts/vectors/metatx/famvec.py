@@ -18,7 +18,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec, ed25519, utils
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', '..'))
-PAYMETA = os.path.join(REPO, 'smartcontracts', 'vectors', 'metatx', 'paymeta.json')
+PAYMETA = os.path.join(REPO, 'smartcontracts', 'vectors', 'metatx', 'legacy', 'ua-mtx-merge', 'paymeta.json')
 KINDS = os.path.join(REPO, 'smartcontracts', 'vectors', 'ua', 'kinds.json')
 WEBAUTHN_SOFT = os.path.join(REPO, 'smartcontracts', 'evm', 'test', 'vectors', 'webauthn_soft.json')
 

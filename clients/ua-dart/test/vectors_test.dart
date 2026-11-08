@@ -208,6 +208,23 @@ void main() {
     }
   });
 
+  // ua-mtx-merge spec §6, MD-9: every row of id_display.json, and a row for every kind of the table.
+  test('id_display.json rows', () {
+    final rows = ((_load('id_display.json') as Map)['rows'] as List).cast<Map>();
+    for (final r in rows) {
+      final d = r['display'] as Map?;
+      if (d != null) {
+        expect(idDisplay(r['id'], _kind(r)), d['address'] ?? d['urn'], reason: r['name']);
+      } else {
+        expect(_err(() => idDisplay(r['id'], _kind(r))).code, r['error'], reason: r['name']);
+      }
+    }
+    for (final t in kinds) {
+      bool want(Map r) => t.native ? r['error'] == 'UAKindNotDerived' : (r['display'] as Map?)?['urn'] != null;
+      expect(rows.any((r) => _kind(r) == t.number && want(r)), isTrue, reason: 'no row for ${t.name}');
+    }
+  });
+
   test('messages', () {
     for (final r in (k['messages'] as List).cast<Map>()) {
       // each row carries its purpose `version` (A4-c1)

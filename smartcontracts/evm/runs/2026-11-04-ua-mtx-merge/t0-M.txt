@@ -1,0 +1,56 @@
+T0DEPLOY | GovernanceLib | runtime 13181 | init 13233 | regular 883069 | state 20350530 | asked 22295278 | 60M fits | 70M fits | reg105<2^24 yes
+T0DEPLOY | GovernanceRouter | runtime 11744 | init 12783 | regular 853942 | state 18151920 | asked 19956155 | 60M fits | 70M fits | reg105<2^24 yes
+T0DEPLOY | MtxPipelineLib | runtime 10024 | init 10076 | regular 677099 | state 15520320 | asked 17007289 | 60M fits | 70M fits | reg105<2^24 yes
+T0DEPLOY | MtxRelayFee | runtime 2488 | init 3205 | regular 231870 | state 5021460 | asked 5515996 | 60M fits | 70M fits | reg105<2^24 yes
+T0DEPLOY | NormalPqzToken | runtime 46393 | init 50095 | regular 3279815 | state 71262810 | asked 78269756 | 60M NO | 70M NO | reg105<2^24 yes
+T0DEPLOY | NormalToken | runtime 32098 | init 35137 | regular 2308217 | state 49391460 | asked 54284660 | 60M fits | 70M fits | reg105<2^24 yes
+T0DEPLOY | NormalToken via deployImplementation | runtime 32098 | init 34369 | regular 2266607 | state 49783140 | asked 54652234 | 60M fits | 70M fits | reg105<2^24 yes
+T0DEPLOY | NormalToken via probe, same env | runtime 32098 | init 35137 | regular 2308217 | state 49391460 | asked 54284660 | 60M fits | 70M fits | reg105<2^24 yes
+T0DEPLOY | NormalZetherToken | runtime 40552 | init 45104 | regular 2955255 | state 62326080 | asked 68545401 | 60M NO | 70M fits | reg105<2^24 yes
+T0DEPLOY | PqzWrappedLib | runtime 4947 | init 4999 | regular 348379 | state 7752510 | asked 8505933 | 60M fits | 70M fits | reg105<2^24 yes
+T0DEPLOY | SCaaSDex | runtime 33345 | init 35699 | regular 2343586 | state 51299370 | asked 56325103 | 60M fits | 70M fits | reg105<2^24 yes
+T0DEPLOY | TradeLib | runtime 4842 | init 4894 | regular 340057 | state 7591860 | asked 8328512 | 60M fits | 70M fits | reg105<2^24 yes
+T0DEPLOY | WrappedLib | runtime 16761 | init 16813 | regular 1116086 | state 25827930 | asked 28291216 | 60M fits | 70M fits | reg105<2^24 yes
+T0DEPLOY | WrappedPqzToken | runtime 56232 | init 60069 | regular 3928933 | state 86316480 | asked 94757683 | 60M NO | 70M NO | reg105<2^24 yes
+T0DEPLOY | WrappedToken | runtime 42678 | init 45788 | regular 2998946 | state 65578860 | asked 72006696 | 60M NO | 70M NO | reg105<2^24 yes
+T0DEPLOY | WrappedZetherToken | runtime 51040 | init 55727 | regular 3645984 | state 78372720 | asked 86119639 | 60M NO | 70M NO | reg105<2^24 yes
+T0DEPLOY | ZetherLib | runtime 25065 | init 25117 | regular 1654938 | state 38533050 | asked 42197387 | 60M fits | 70M fits | reg105<2^24 yes
+T0DEPLOY | ZetherWrappedLib | runtime 11244 | init 11296 | regular 756158 | state 17386920 | asked 19050231 | 60M fits | 70M fits | reg105<2^24 yes
+T0GAS | merged | NormalPqzToken generic execute cancelNonce | calldata 740 | 183526
+T0GAS | merged | NormalPqzToken relayed transfer EOA to EOA | calldata 580 | 88721
+T0GAS | merged | NormalPqzToken relayed transfer EOA to UA | calldata 580 | 109454
+T0GAS | merged | NormalPqzToken signed cancel | calldata 612 | 177342
+T0GAS | merged | NormalPqzToken transfer | calldata 68 | 46884
+T0GAS | merged | NormalToken reg0 generic execute cancelNonce | calldata 740 | 181666
+T0GAS | merged | NormalToken reg0 receiver-pays | calldata 1092 | 328277
+T0GAS | merged | NormalToken reg0 relayed transfer EOA to EOA | calldata 580 | 88723
+T0GAS | merged | NormalToken reg0 signed cancel | calldata 612 | 177305
+T0GAS | merged | NormalToken reg0 transfer | calldata 68 | 46876
+T0GAS | merged | NormalToken reg derived generic execute burn | calldata 3972 | 270775
+T0GAS | merged | NormalToken reg generic execute cancelNonce | calldata 740 | 181662
+T0GAS | merged | NormalToken reg relayed transfer EOA to EOA | calldata 580 | 88707
+T0GAS | merged | NormalToken reg relayed transfer EOA to UA | calldata 580 | 109439
+T0GAS | merged | NormalToken reg signed cancel | calldata 612 | 177277
+T0GAS | merged | NormalToken reg transfer | calldata 68 | 46872
+T0GAS | merged | NormalZetherToken generic execute cancelNonce | calldata 740 | 183620
+T0GAS | merged | NormalZetherToken relayed transfer EOA to EOA | calldata 580 | 88721
+T0GAS | merged | NormalZetherToken signed cancel | calldata 612 | 177321
+T0GAS | merged | NormalZetherToken transfer | calldata 68 | 46906
+T0GAS | merged | WrappedPqzToken generic execute cancelNonce | calldata 740 | 184394
+T0GAS | merged | WrappedPqzToken relayed transfer EOA to EOA | calldata 580 | 88741
+T0GAS | merged | WrappedPqzToken relayed transfer EOA to UA | calldata 580 | 109474
+T0GAS | merged | WrappedPqzToken signed cancel | calldata 612 | 177254
+T0GAS | merged | WrappedPqzToken transfer | calldata 68 | 46862
+T0GAS | merged | WrappedToken reg0 generic execute cancelNonce | calldata 740 | 182253
+T0GAS | merged | WrappedToken reg0 relayed transfer EOA to EOA | calldata 580 | 88779
+T0GAS | merged | WrappedToken reg0 signed cancel | calldata 612 | 177312
+T0GAS | merged | WrappedToken reg0 transfer | calldata 68 | 46899
+T0GAS | merged | WrappedToken reg generic execute cancelNonce | calldata 740 | 182213
+T0GAS | merged | WrappedToken reg relayed transfer EOA to EOA | calldata 580 | 88751
+T0GAS | merged | WrappedToken reg relayed transfer EOA to UA | calldata 580 | 109472
+T0GAS | merged | WrappedToken reg signed cancel | calldata 612 | 177296
+T0GAS | merged | WrappedToken reg transfer | calldata 68 | 46895
+T0GAS | merged | WrappedZetherToken generic execute cancelNonce | calldata 740 | 184344
+T0GAS | merged | WrappedZetherToken relayed transfer EOA to EOA | calldata 580 | 88700
+T0GAS | merged | WrappedZetherToken signed cancel | calldata 612 | 177278
+T0GAS | merged | WrappedZetherToken transfer | calldata 68 | 46928

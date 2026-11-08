@@ -197,18 +197,48 @@ fn structures() {
     }
 }
 
-/// governance T14: `governance_bit` against the file on disk, every row (a stale compiled-in copy fails here), and none past bit 21.
+/// governance T14: `governance_bit` against the file on disk, every row (a stale compiled-in copy fails here), and none past bit 23
+/// (ua-mtx-merge T34: bit 22 `OPERATOR_TRANSFER`, CTR-GOV-20; T39 / T41: bit 23 `TAX`).
 #[test]
 fn governance_bits_rows() {
     let path = format!("{}/../../smartcontracts/vectors/governance/governance_bits.json", env!("CARGO_MANIFEST_DIR"));
     let v: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
     let rows = v["bits"].as_array().unwrap();
-    assert_eq!(rows.len(), 22);
+    assert_eq!(rows.len(), 24);
     for bit in 0..=255u8 {
         match (rows.get(bit as usize), governance_bit(bit)) {
             (Some(row), Some(ours)) => assert_eq!(&serde_json::from_str::<Value>(ours).unwrap(), row, "bit {bit}"),
             (None, None) => {}
             (want, got) => panic!("bit {bit}: file {want:?}, governance_bit {got:?}"),
+        }
+    }
+}
+
+/// ua-mtx-merge spec §6, MD-9: every row of id_display.json, and a row for every kind of the table.
+#[test]
+fn id_display_rows() {
+    let d = load("id_display.json");
+    let rows = arr(&d, "rows");
+    for r in rows {
+        let got = id_display(r["id"].as_str().unwrap(), kind(&r["kind"]));
+        match r.get("display") {
+            Some(want) => {
+                let (k, field, text) = match got.unwrap() {
+                    IdDisplay::Native { address } => ("native", "address", address),
+                    IdDisplay::Derived { urn } => ("derived", "urn", urn),
+                };
+                assert_eq!(want["kind"], k, "{}", r["name"]);
+                assert_eq!(want[field], text, "{}", r["name"]);
+            }
+            None => assert_eq!(got.unwrap_err().code(), r["error"], "{}", r["name"]),
+        }
+    }
+    for k in KINDS {
+        let has = |f: &dyn Fn(&Value) -> bool| rows.iter().any(|r| kind(&r["kind"]) == k.kind && f(r));
+        if k.native {
+            assert!(has(&|r| r["error"] == "UAKindNotDerived"), "no row for {}", k.name);
+        } else {
+            assert!(has(&|r| r["display"]["urn"].is_string()), "no row for {}", k.name);
         }
     }
 }

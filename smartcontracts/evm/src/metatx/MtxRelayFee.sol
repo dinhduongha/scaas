@@ -7,7 +7,6 @@ import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/Reentrancy
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {SigCheck} from "../common/SigCheck.sol";
 import {IERC20MetaTx} from "./IERC20MetaTx.sol";
-import {IUALedger} from "./IUALedger.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
 
 /// @title The unprivileged caller of `MtxRelayFee`'s targets (CTR-MTX-27, spec §7.1).
@@ -35,15 +34,16 @@ contract MtxRelayExecutor {
 /// @notice Stateless, no owner, no constructor argument; deployed by CREATE2 (`DeployBase`), so it and its executor
 ///         have the same addresses on every EVM chain. It grants no authority (CTR-MTX-16): every target checks its own
 ///         signer, the router calls targets only through its executor, and it only binds a payment the payer signed for
-///         the router (`RelayFee.relayer = router`) to one exact call that anyone could submit directly. Public balances
+///         the router (`UARelayFee.relayer = router`) to one exact call that anyone could submit directly. Public balances
 ///         only: it calls the tokens' relay-fee paths, never a confidential one. It does not check `token`: the payer
 ///         signed in the token's own domain, so a fake token moves nothing real (a bound payee reads the expected
-///         token's `PaymentSettled`).
+///         token's `UAPaymentSettled`). ua-mtx-merge T2 (R28): one `relay` on ids, today's `uaRelay` under this name;
+///         the address `relay` and `RelayFee` are in legacy/ua-mtx-merge/, so this contract has a new CREATE2 address.
 contract MtxRelayFee is ReentrancyGuardTransient {
     using SafeERC20 for IERC20;
 
-    /// @notice `payer` and `payee` are ids: an address zero-padded, or a derived UA id (`uaRelay`). `payee` is the one
-    ///         paid: `pad(msg.sender)` in open mode, else the signed `payee` (padded on `relay`).
+    /// @notice `payer` and `payee` are ids: an address zero-padded, or a derived UA id. `payee` is the one paid:
+    ///         `pad(msg.sender)` in open mode, else the signed `payee`.
     event RelayFeePaid(bytes32 indexed ref, address indexed target, address indexed token, bytes32 payer, bytes32 payee,
                        uint256 amount);
 
@@ -59,26 +59,18 @@ contract MtxRelayFee is ReentrancyGuardTransient {
         EXECUTOR = address(new MtxRelayExecutor());
     }
 
-    /// @notice CTR-MTX-27 steps 1-6: the shape, `target` called by the executor, then `token.mtxRelayFee(…, sig)` with
-    ///         this router as the struct's `relayer`, then in open mode (`payee == router`) `value` forwarded to
-    ///         `msg.sender`. Any failure reverts it all.
-    function relay(address target, bytes calldata callData, address token, address from, address payee, uint256 value,
-                   uint256 validUntil, bytes calldata sig) external nonReentrant
-    {
-        _shape(target, MetaTxLib.pad(payee));
-        MtxRelayExecutor(EXECUTOR).exec(target, callData);
-        IERC20MetaTx(token).mtxRelayFee(from, target, keccak256(callData), payee, value, validUntil, sig);
-        emit RelayFeePaid(relayRef(target, callData), target, token, MetaTxLib.pad(from),
-            _payee(token, MetaTxLib.pad(payee), value), value);
-    }
-
-    /// @notice `relay` for a UA payer (`uaRelayFee`); open mode is `payee == pad(router)`.
-    function uaRelay(address target, bytes calldata callData, address token, bytes32 from, bytes32 payee, uint256 value,
-                     uint256 validUntil, IUARegistry.UASig calldata auth) external nonReentrant
+    /// @notice CTR-MTX-27 steps 1-6: the shape, `target` called by the executor, then `token.mtxRelayFee(…, auth)`
+    ///         with this router as the struct's `relayer`, then in open mode (`payee == pad(router)`) `value` forwarded
+    ///         to `msg.sender`. Any failure reverts it all. `from` and `payee` are ids: a native payer signs `UARelayFee`
+    ///         with its own key, a derived one through the token's registry. `batch` / `nonce` are the payer's lane (pay-meta-
+    ///         tax spec §4, O4): one signature pays once; a call is paid twice only by two signatures and a target that
+    ///         runs it twice.
+    function relay(address target, bytes calldata callData, address token, bytes32 from, bytes32 payee, uint256 value,
+                   uint256 batch, uint256 nonce, uint256 validUntil, IUARegistry.UASig calldata auth) external nonReentrant
     {
         _shape(target, payee);
         MtxRelayExecutor(EXECUTOR).exec(target, callData);
-        IUALedger(token).uaRelayFee(from, target, keccak256(callData), payee, value, validUntil, auth);
+        IERC20MetaTx(token).mtxRelayFee(from, target, keccak256(callData), payee, value, batch, nonce, validUntil, auth);
         emit RelayFeePaid(relayRef(target, callData), target, token, from, _payee(token, payee, value), value);
     }
 
@@ -88,8 +80,8 @@ contract MtxRelayFee is ReentrancyGuardTransient {
     }
 
     /// @dev CTR-MTX-27 step 2: the payee not the executor (`to` as an id; the token's `mtxRelayFee` does not know it), the
-    ///      rest of the old shape being the signed `RelayFee` itself (the token builds `ref`, lane `payLane(ref)`, nonce 0,
-    ///      fee `NONE` and takes this router as `relayer`); and the target is a contract: code, not an EIP-7702 designator
+    ///      rest of the old shape being the signed `UARelayFee` itself (the token builds `ref` and the payment on the
+    ///      signed lane, fee `NONE`, and takes this router as `relayer`); and the target is a contract: code, not an EIP-7702 designator
     ///      (conformance item 9).
     function _shape(address target, bytes32 to) private view {
         if (to == MetaTxLib.pad(EXECUTOR)) revert RelayFeeShape();

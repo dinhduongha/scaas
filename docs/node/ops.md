@@ -352,6 +352,16 @@ file), keeps its pins in its own state file, latches `scaas_watch_code_hash_chan
 Backing needs the node's registry and final head; code hashes need nothing from the node, so they stay out of it. Admin
 view: `GET /v1/admin/chains/{key}/watch` (backing ratios per leg, last watched events).
 
+<a id="regulated-legs"></a>**Regulated legs** (BUILT, ua-mtx-merge T35; [NODE-DEX-11](dex-venue.md#NODE-DEX-11),
+[CTR-AS-16](../contracts/asset-suite.md#CTR-AS-16)). A chain whose DEX lists a regulated token (kinds 8–13) with `ALLOWLIST`
+or `DENYLIST` on sets `compliance_registry` and `compliance_registry_codehash` (the deployments JSON's keys of the same names);
+the venue checks the code hash when it loads and does not start on another code. **Operator step, not the deploy's (owner
+2026-11-06):** after `createDex`, the registry admin (a contract or an `msig`) signs `attest([venue, venue.puller()], [8, 8],
+[2^64−1, 2^64−1])` (`ELIGIBLE_CONTRACT`); the node signs nothing and holds no role. Until the rows exist the venue logs
+`alert = "VENUE_NOT_ELIGIBLE"` per leg at load and refuses orders on the leg by that name. The indexer's regulated alerts
+(`OrderRecorded`, `RelaxProposed`, `AccountFrozen`, `Paused`) are `warn` lines with `alert = <event>` and `alert: true` rows
+of the feed ([indexer-feeds.md](indexer-feeds.md)); no metric yet.
+
 ## 6. Integrity
 
 <a id="integrity"></a><a id="NODE-OPS-12"></a>**NODE-OPS-12** — **Integrity rechecks**: (a) at indexer start, before

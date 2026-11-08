@@ -1,0 +1,30 @@
+# ua-mtx-merge, owner ruling 2026-11-06 gate summary (full output in git-ignored .log files, not committed)
+# ComplianceRegistry: a slot the admin (attester id 0) wrote is overwritten or revoked only by the admin; another attester
+# gets AdminWrittenSlot(account). Admin-held = stored attesterId == 0 && flags != 0 (an empty slot also reads id 0); an
+# admin row of flags 0 is a revoke and stays open to attesters. Closes T29's open item (any attester could overwrite the
+# admin's ELIGIBLE_CONTRACT row of a venue).
+# Base: 4ba3decb (T30 tip).
+step | commit | rc | counts
+adminslot-red | worktree (test + error in the interface, no check) | 1 | test/as/Registry.t.sol: 12 passed 2 failed: test_adminWrittenSlotOnlyAdmin (next call did not revert as expected), test_registryRuntimeHashPinned (the interface's NatSpec moves the CBOR metadata: 0x4905...7edc -> 0xdec1...19a3)
+adminslot-green | worktree | 0 | test/as/Registry.t.sol: 13 passed, 1 failed = the runtime-hash pin alone (0x8e2d...3f0c), then moved
+adminslot-as | worktree | 0 | test/as/**: 23 suites, 123 passed 0 failed (first run: Receiver test_canReceiveReasons refused AdminWrittenSlot, see below)
+adminslot-forge-full | worktree | 0 | forge test: 251 suites, 2767 passed 0 failed 14 skipped
+adminslot-sizes | worktree | 0 | ComplianceRegistry 2,462 -> 2,538 B (init 2,652 -> 2,728); kind 13 62,285 B unchanged (runs/2026-11-04-ua-mtx-merge-regulated-sizes.txt)
+adminslot-deploy-gas | worktree | 0 | GovDeploy test_releaseGasPerKind -vv: ComplianceRegistry regular 196,502 -> 202,743, state 4,048,380 -> 4,164,660, (r x 64/63 + s) x 1.05 4.46 -> 4.59 M (plain CREATE, no frame)
+adminslot-sizegate | worktree | 0 | 0 errors, 96 contracts, above 65536 B: none
+adminslot-mutants | worktree | 1 each | 7 of 7 killed, none a compile error (runs/2026-11-04-ua-mtx-merge-adminslot-mutants.txt); the registry source copied back after each
+adminslot-docs | worktree | 0 | docs_check check 0 errors, 5 warnings, 16 notes; paths 0
+#
+# Pins, old -> new: the registry runtime hash (Registry.t.sol REGISTRY_CODEHASH; the releases carry it through implArgs =
+# keccak256(type(ComplianceRegistry).runtimeCode), so no other literal moved)
+# 0x4905274752bb319bf684aeb7cac64b066308634b1b3166c99b6346f26b787edc ->
+# 0x8e2d42b6304131a9159832ae910e4e39f609cd9fdbffbd6c91a090cec2f43f0c. size-baseline.json: the registry is not a row (it fits
+# every limit; T29 named it in `_comment` only), so `_comment` records 2,462 -> 2,538 B. No gas pin, typehash, selector or
+# layout moved.
+#
+# Conflicts and choices (none resolved silently):
+#   test/as/Receiver.t.sol test_canReceiveReasons had an attester overwrite the admin's ELIGIBLE_CONTRACT row (the old rule):
+#   the ruling refuses that, so the test now has the admin revoke its row first (flags 0, the open case) and the rest of the
+#   rows run as before. A behaviour change the owner ordered, not a test edited to go green.
+#   The batch reverts whole on an admin row (no partial write); tested.
+#   The size-baseline "row" named in the brief does not exist: the registry was recorded in `_comment` only.

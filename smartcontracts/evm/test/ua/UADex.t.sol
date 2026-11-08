@@ -106,19 +106,25 @@ abstract contract UADexBase is UALedgerBase {
     function _uaLeg(address sell, ITradeToken.UATradeOrder memory o, uint256 fill)
         internal view returns (ISCaaSDex.DexLeg memory)
     {
-        bytes32 h = ITradeToken(sell).uaTradeOrderDigest(o);
+        bytes32 h = ITradeToken(sell).tradeOrderDigest(o);
         bytes memory auth = UAKinds.inNativeSpace(o.from)
             ? _ecdsa(_pk(address(uint160(uint256(o.from)))), h)
             : _auth(lreg, lreg.kindOf(o.from), _key(lreg.kindOf(o.from)), UAKinds.PURPOSE_TRADE, h);
         return DexLegs.uaLeg(sell, o, UACall.auth(o.from, auth), fill);
     }
 
-    /// A shape-0 leg (a SCaaS token's `TradeOrder`, or an outside token's `DexOrder`).
+    /// A native signer's leg written address-shaped: an outside token's `DexOrder` (shape 0), or on a SCaaS token its
+    /// `UATradeOrder` (shape 1, the address zero-padded; ua-mtx-merge T6, R12: no SCaaS leg is a `TradeOrder`).
     function _natLeg(address sell, ITradeToken.TradeOrder memory o, uint256 fill)
         internal view returns (ISCaaSDex.DexLeg memory)
     {
-        bytes32 h = sell == address(usdc) ? dex.dexOrderDigest(sell, o) : ITradeToken(sell).tradeOrderDigest(o);
-        return DexLegs.leg(sell, o, _ecdsa(_pk(o.from), h), fill);
+        return DexLegs.leg(sell, o, _natSig(sell, o), fill);
+    }
+
+    /// The signer's own signature of that leg's digest.
+    function _natSig(address sell, ITradeToken.TradeOrder memory o) internal view returns (bytes memory) {
+        bytes32 h = sell == address(usdc) ? dex.dexOrderDigest(sell, o) : ITradeToken(sell).tradeOrderDigest(DexLegs.ua(o));
+        return _ecdsa(_pk(o.from), h);
     }
 
     function _s(ISCaaSDex.DexLeg memory taker, ISCaaSDex.DexLeg memory maker)
@@ -156,11 +162,12 @@ abstract contract UADexBase is UALedgerBase {
     }
 }
 
-/// dex.md CTR-DEX-26 (UA-5b): tagged legs in one book — UA and native orders match each other; a UA leg sells a SCaaS
-/// ledger token through `uaTrade`; derived parties are paid and refunded by `transferToUA`; self-trade over ids;
-/// `UAVerifyGas` reverts the whole call; `uaTrade` is refused in interactions; conservation unchanged.
+/// dex.md CTR-DEX-26 (UA-5b): tagged legs in one book — UA and native orders match each other; a SCaaS leg is a
+/// `UATradeOrder` (shape 1, ua-mtx-merge T6, R12: a native signer's `_natLeg` too) sold through the token's merged
+/// `mtxTrade`; derived parties are paid and refunded by `transferToUA`; self-trade over ids; `UAVerifyGas` reverts the
+/// whole call; `mtxTrade` is refused in interactions; conservation unchanged.
 contract UADexTest is UADexBase {
-    /// uaP (shape 1) sells 1000 A for >= 1900 B (0.3 %); bob (shape 0) sells 2000 B for 1000 A (0.1 %).
+    /// uaP sells 1000 A for >= 1900 B (0.3 %); bob sells 2000 B for 1000 A (0.1 %); both shape 1 (T6).
     function test_uaTaker_nativeMaker() public {
         ITradeToken.UATradeOrder memory t = _ua(uaP, address(B), 1000, 1900, 3_000);
         ITradeToken.TradeOrder memory m = _nat(bob, address(A), 2000, 1000, 1_000);
@@ -182,11 +189,20 @@ contract UADexTest is UADexBase {
         assertEq(B.balanceOf(address(dex)), 0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         (bytes32 h, uint256[7] memory v) = _uaLegSettled(logs, uaP);
-        assertEq(h, A.uaTradeOrderDigest(t));
+        assertEq(h, A.tradeOrderDigest(t));
         assertEq(abi.encode(v), abi.encode([uint256(uaP), 1000, 1994, 6, 0, 1, 5]));
+        // ua-mtx-merge T6 (R18), meaning: bob's SCaaS leg emits `UALegSettled` (his address zero-padded); no address
+        // `LegSettled` (was: 1, bob's shape-0 leg)
         uint256 native;
-        for (uint256 k; k < logs.length; ++k) if (logs[k].topics[0] == ISCaaSDex.LegSettled.selector) ++native;
-        assertEq(native, 1);
+        uint256 ua;
+        for (uint256 k; k < logs.length; ++k) {
+            if (logs[k].topics[0] == ISCaaSDex.LegSettled.selector) ++native;
+            if (logs[k].topics[0] == ISCaaSDex.UALegSettled.selector) ++ua;
+        }
+        assertEq(native, 0);
+        assertEq(ua, 2);
+        (, v) = _uaLegSettled(logs, _pad(bob));
+        assertEq(abi.encode(v), abi.encode([uint256(_pad(bob)), 2000, 999, 1, 0, 0, 1]));
     }
 
     /// alice (shape 0) takes uaB's resting order (shape 1, its proceeds to uaP).
@@ -213,7 +229,7 @@ contract UADexTest is UADexBase {
         ml.sig = hex"00";
         assertTrue(_settle(_s(_uaLeg(address(A), t, 500), ml)));
         assertEq(B.balanceOfUA(uaP), 2000);
-        assertEq(B.pulled(B.uaTradeOrderDigest(m)), 2000);
+        assertEq(B.pulled(B.tradeOrderDigest(m)), 2000);
     }
 
     /// A native id signs a `UATradeOrder` to name a UA destination; it sells its ERC-20 balance.
@@ -256,14 +272,19 @@ contract UADexTest is UADexBase {
 
     function test_legKindAndShapeErrors() public {
         ITradeToken.TradeOrder memory m = _nat(bob, address(A), 2000, 1000, 0);
-        // a shape-1 leg in a ledger-off SCaaS token, and in an outside token
-        ITradeToken.UATradeOrder memory tc = _ua(_pad(bob), address(A), 1000, 1000, 0);
+        // ua-mtx-merge T6 (C, R9), meaning: a derived seller's shape-1 leg in a ledger-off SCaaS token (was: a padded
+        // native's, which now runs by its own key), and any shape-1 leg in an outside token
+        ITradeToken.UATradeOrder memory tc = _ua(uaB, address(A), 1000, 1000, 0);
         _expectOne(_s(_uaLeg(address(C), tc, 1000), _natLeg(address(A), _nat(alice, address(C), 1000, 1000, 0), 1000)),
             abi.encodeWithSelector(ISCaaSDex.UALegNotLedger.selector, address(C)));
         ITradeToken.UATradeOrder memory tu = _ua(_pad(dave), address(A), 1000, 1000, 0);
         ISCaaSDex.DexLeg memory lu = DexLegs.uaLeg(address(usdc), tu, UACall.auth(tu.from, hex"00"), 1000); // usdc has no digest
         _expectOne(_s(lu, _natLeg(address(A), _nat(alice, address(usdc), 1000, 1000, 0), 1000)),
             abi.encodeWithSelector(ISCaaSDex.UALegNotLedger.selector, address(usdc)));
+        // ua-mtx-merge T6 (R12): a shape-0 leg selling a SCaaS token
+        ITradeToken.TradeOrder memory t0 = _nat(alice, address(B), 1000, 2000, 0);
+        _expectOne(_s(DexLegs.leg0(address(A), t0, _natSig(address(A), t0), 1000), _natLeg(address(B), m, 2000)),
+            abi.encodeWithSelector(ISCaaSDex.LegShapeUnknown.selector, uint8(0)));
         // an unknown tag
         ISCaaSDex.Settlement[] memory ss =
             _s(_uaLeg(address(A), _ua(uaP, address(B), 1000, 2000, 0), 1000), _natLeg(address(B), m, 2000));
@@ -315,20 +336,17 @@ contract UADexTest is UADexBase {
         assertTrue(_settle(ss));
     }
 
-    /// Logged (cold, one state snapshot per pair): the same native parties as shape-0 legs and as padded shape-1 legs
-    /// (ECDSA either way), and a derived `p256` taker (stand-in verifier) — what the tag and the UA ledger cost.
+    /// Logged (cold, one state snapshot per pair): native parties as padded shape-1 legs (ECDSA), and a derived `p256`
+    /// taker (stand-in verifier) — what the UA ledger costs. ua-mtx-merge T6 (R12), meaning: the shape-0 x 0 row of a
+    /// SCaaS pair is gone (no SCaaS leg is a `TradeOrder`); two rows.
     function test_gas_legShapes() public {
-        ITradeToken.TradeOrder memory t0 = _nat(alice, address(B), 1000, 2000, 3_000);
-        ITradeToken.TradeOrder memory m0 = _nat(bob, address(A), 2000, 1000, 3_000);
-        ISCaaSDex.Settlement[] memory s00 = _s(_natLeg(address(A), t0, 1000), _natLeg(address(B), m0, 2000));
         ISCaaSDex.Settlement[] memory s11 = _s(_uaLeg(address(A), _ua(_pad(alice), address(B), 1000, 2000, 3_000), 1000),
             _uaLeg(address(B), _ua(_pad(bob), address(A), 2000, 1000, 3_000), 2000));
         ISCaaSDex.Settlement[] memory sP1 = _s(_uaLeg(address(A), _ua(uaP, address(B), 1000, 2000, 3_000), 1000),
             _uaLeg(address(B), _ua(_pad(bob), address(A), 2000, 1000, 3_000), 2000));
-        string[3] memory names = ["native x native, shape 0 x 0", "native x native, shape 1 x 1 (padded ids)",
-            "p256 UA (stand-in) x native, shape 1 x 1"];
-        ISCaaSDex.Settlement[][3] memory all = [s00, s11, sP1];
-        for (uint256 i; i < 3; ++i) {
+        string[2] memory names = ["native x native, shape 1 x 1 (padded ids)", "p256 UA (stand-in) x native, shape 1 x 1"];
+        ISCaaSDex.Settlement[][2] memory all = [s11, sP1];
+        for (uint256 i; i < 2; ++i) {
             uint256 snap = vm.snapshotState();
             vm.prank(RELAYER);
             uint256 g = gasleft();
@@ -348,12 +366,12 @@ contract UADexTest is UADexBase {
         p.legs = new ISCaaSDex.ExchangeLeg[](1);
         ISCaaSDex.DexLeg memory l = _uaLeg(address(A), o, 1000);
         p.legs[0] = DexLegs.exchange(l, 1000, 1900);
-        // `uaTrade` is never an interaction (the DEX is `o.dex` of every order)
+        // `mtxTrade` is never an interaction (the DEX is `o.dex` of every order)
         ISCaaSDex.Interaction[] memory bad = new ISCaaSDex.Interaction[](1);
         bad[0] = ISCaaSDex.Interaction(address(A),
-            abi.encodeCall(ITradeToken.uaTrade, (o, l.auth, ITradeToken.TradeFill(1, 2, 0, RELAYER))));
+            abi.encodeCall(ITradeToken.mtxTrade, (o, l.auth, ITradeToken.TradeFill(1, 2, 0, RELAYER))));
         vm.prank(RELAYER);
-        vm.expectRevert(abi.encodeWithSelector(ISCaaSDex.ForbiddenSelector.selector, address(A), ITradeToken.uaTrade.selector));
+        vm.expectRevert(abi.encodeWithSelector(ISCaaSDex.ForbiddenSelector.selector, address(A), ITradeToken.mtxTrade.selector));
         dex.mtxExchange(p, bad);
         // 1000 A → 2000 B through the router: floor 1900, fee ⌈5.7⌉ = 6, surplus 100
         ISCaaSDex.Interaction[] memory xs = new ISCaaSDex.Interaction[](2);

@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {MtxDigest} from "../helpers/MtxDigest.sol";
+import {UACall} from "../ua/UACall.sol";
 import {stdJson} from "forge-std/StdJson.sol";
 import {PqzFixture} from "./helpers/PqzFixture.sol";
 import {PQZ_UID} from "./helpers/PqzRegistryBase.sol";
 import {PqzPackedRef} from "./helpers/PqzPackedRef.sol";
-import {VM, TYPED_OPS, n, a, h, eJson, ecdsa, checkRow, onChain, domainOf, rowEnvelope, rowEnvelope2, msgField, domainField}
+import {VM, TYPED_OPS, TYPED_OPS_LEGACY, n, a, h, eJson, ecdsa, checkRow, onChain, domainOf, rowEnvelope, rowEnvelope2, msgField, domainField}
     from "../metatx/NamedEntry.t.sol";
 import {typedDigest, hexJson} from "../zether/ZetherTyped.t.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
@@ -23,23 +25,25 @@ import {PqzCt} from "../../src/pqz/PqzCt.sol";
 import {PqzLayer} from "../../src/pqz/PqzLayer.sol";
 import {PqzSet} from "../../src/pqz/PqzSet.sol";
 import {WrappedPqzToken} from "../../src/pqz/WrappedPqzToken.sol";
+import {IPqzMergedT5} from "../merge/PqzPairs.t.sol";
 import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
 
 string constant T_TRANSFER = '"PqzTransferArgs":[{"name":"p","type":"uint64"},{"name":"validUntilBlock","type":"uint256"},{"name":"shieldIn","type":"uint256"},'
-    '{"name":"fromUA","type":"bytes32"},{"name":"toUA","type":"bytes32"},{"name":"beneficiaryUA","type":"bytes32"},{"name":"salt","type":"bytes16"},'
+    '{"name":"fromUA","type":"bytes32"},{"name":"keyVersion","type":"uint64"},{"name":"toUA","type":"bytes32"},{"name":"beneficiaryUA","type":"bytes32"},{"name":"salt","type":"bytes16"},'
     '{"name":"u","type":"bytes"},{"name":"vTo","type":"bytes"},{"name":"vFrom","type":"bytes"},{"name":"vAuditor","type":"bytes"},{"name":"sealedMemo","type":"bytes"}]';
 string constant T_LEG = '"PqzLeg":[{"name":"ua","type":"bytes32"},{"name":"v","type":"bytes"},{"name":"vAuditor","type":"bytes"}]';
 string constant T_MULTI = '"PqzMultiArgs":[{"name":"p","type":"uint64"},{"name":"validUntilBlock","type":"uint256"},{"name":"shieldIn","type":"uint256"},'
-    '{"name":"fromUA","type":"bytes32"},{"name":"beneficiaryUA","type":"bytes32"},{"name":"decoyFee","type":"uint256"},{"name":"salt","type":"bytes16"},'
+    '{"name":"fromUA","type":"bytes32"},{"name":"keyVersion","type":"uint64"},{"name":"beneficiaryUA","type":"bytes32"},{"name":"decoyFee","type":"uint256"},{"name":"salt","type":"bytes16"},'
     '{"name":"u","type":"bytes[]"},{"name":"legs","type":"PqzLeg[]"},{"name":"vFrom","type":"bytes"},{"name":"sealedMemo","type":"bytes"}]';
 string constant T_BURN = '"PqzBurnArgs":[{"name":"p","type":"uint64"},{"name":"validUntilBlock","type":"uint256"},{"name":"shieldIn","type":"uint256"},'
-    '{"name":"fromUA","type":"bytes32"},{"name":"beneficiaryUA","type":"bytes32"},{"name":"u","type":"bytes"},{"name":"vFrom","type":"bytes"}]';
+    '{"name":"fromUA","type":"bytes32"},{"name":"keyVersion","type":"uint64"},{"name":"beneficiaryUA","type":"bytes32"},{"name":"u","type":"bytes"},{"name":"vFrom","type":"bytes"}]';
 string constant T_UNWRAP = '"Unwrap":[{"name":"underlying","type":"address"},{"name":"recipient","type":"bytes32"},{"name":"amount","type":"uint256"},{"name":"minOut","type":"uint256"}]';
 
 function transferJson(IPqzToken.PqzTransferArgs memory t) pure returns (string memory) {
     return string.concat(
         string.concat('{"p":', n(t.p), ',"validUntilBlock":', n(t.validUntilBlock), ',"shieldIn":', n(t.shieldIn), ',"fromUA":', h(t.fromUA),
-            ',"toUA":', h(t.toUA), ',"beneficiaryUA":', h(t.beneficiaryUA), ',"salt":', hexJson(abi.encodePacked(t.salt))),
+            ',"keyVersion":', n(t.keyVersion), ',"toUA":', h(t.toUA), ',"beneficiaryUA":', h(t.beneficiaryUA), ',"salt":',
+            hexJson(abi.encodePacked(t.salt))),
         string.concat(',"u":', hexJson(t.u), ',"vTo":', hexJson(t.vTo), ',"vFrom":', hexJson(t.vFrom), ',"vAuditor":', hexJson(t.vAuditor),
             ',"sealedMemo":', hexJson(t.sealedMemo), '}'));
 }
@@ -54,13 +58,14 @@ function multiJson(IPqzToken.PqzMultiArgs memory t) pure returns (string memory)
     }
     return string.concat(
         string.concat('{"p":', n(t.p), ',"validUntilBlock":', n(t.validUntilBlock), ',"shieldIn":', n(t.shieldIn), ',"fromUA":', h(t.fromUA),
-            ',"beneficiaryUA":', h(t.beneficiaryUA), ',"decoyFee":', n(t.decoyFee), ',"salt":', hexJson(abi.encodePacked(t.salt))),
+            ',"keyVersion":', n(t.keyVersion), ',"beneficiaryUA":', h(t.beneficiaryUA), ',"decoyFee":', n(t.decoyFee), ',"salt":',
+            hexJson(abi.encodePacked(t.salt))),
         string.concat(',"u":[', us, '],"legs":[', legs, '],"vFrom":', hexJson(t.vFrom), ',"sealedMemo":', hexJson(t.sealedMemo), '}'));
 }
 
 function burnJson(IPqzToken.PqzBurnArgs memory b) pure returns (string memory) {
     return string.concat('{"p":', n(b.p), ',"validUntilBlock":', n(b.validUntilBlock), ',"shieldIn":', n(b.shieldIn), ',"fromUA":', h(b.fromUA),
-        ',"beneficiaryUA":', h(b.beneficiaryUA), ',"u":', hexJson(b.u), ',"vFrom":', hexJson(b.vFrom), '}');
+        ',"keyVersion":', n(b.keyVersion), ',"beneficiaryUA":', h(b.beneficiaryUA), ',"u":', hexJson(b.u), ',"vFrom":', hexJson(b.vFrom), '}');
 }
 
 /// typed-signing C4 (TS-D14, TS-D17, TS-D19): the explicit parameters are the packed bytes the token assembled before, in the
@@ -101,12 +106,8 @@ abstract contract PqzNamedBase is PqzFixture {
         u.validUntil = block.timestamp + 300;
     }
 
-    function _bindingOf(PqzLayer t, MetaTxLib.Envelope memory e) internal view returns (bytes32) {
-        return t.envelopeBinding(MetaTxLib.MetaTransaction(e.from, "", e.batch, e.nonce, e.validUntil, e.mode, e.relayer, e.fee, e.feeRecipient));
-    }
-
     function _uaBindingOf(PqzLayer t, MetaTxLib.UAEnvelope memory u) internal view returns (bytes32) {
-        return t.uaEnvelopeBinding(MetaTxLib.UAMetaTransaction(u.from, "", u.batch, u.nonce, u.validUntil, u.mode, u.relayer, u.fee, u.feeRecipient));
+        return t.envelopeBinding(MetaTxLib.UAMetaTransaction(u.from, "", u.batch, u.nonce, u.validUntil, u.mode, u.relayer, u.fee, u.feeRecipient));
     }
 
     function _msg(string memory op, uint256 nonce, bool ua, uint256 validUntil) internal view returns (string memory) {
@@ -141,15 +142,15 @@ abstract contract PqzNamedBase is PqzFixture {
     }
 
     function _mPl(PqzLayer t, bytes32 from, bytes32[] memory rec, bool aud, bytes memory memo, uint256 seed) internal view returns (bytes memory) {
-        return _mpayload(t.pqzAccount(from).pendingCount, 0, from, bytes32(0), rec, _blob(seed, _outLen(rec.length, aud)), memo);
+        return _mpayload(t.pqzAccount(from, 0).pendingCount, 0, from, bytes32(0), rec, _blob(seed, _outLen(rec.length, aud)), memo);
     }
 
     function _sPl(PqzLayer t, bytes32 from, bool aud, bytes memory memo, uint256 seed) internal view returns (bytes memory) {
-        return _payload(t.pqzAccount(from).pendingCount, 0, from, bob, bytes32(0), _out(seed, aud), memo);
+        return _payload(t.pqzAccount(from, 0).pendingCount, 0, from, bob, bytes32(0), _out(seed, aud), memo);
     }
 
     function _bPl(PqzLayer t, bytes32 from, uint256 seed) internal view returns (bytes memory) {
-        return bytes.concat(abi.encode(uint256(t.pqzAccount(from).pendingCount), block.number + 5, uint256(0), from, bytes32(0)), _blob(seed, PqzCt.CT));
+        return bytes.concat(abi.encode(uint256(t.pqzAccount(from, 0).pendingCount), block.number + 5, uint256(0), from, bytes32(0)), _blob(seed, PqzCt.CT));
     }
 
     function _mem(uint256 m) internal view returns (bytes memory) {
@@ -384,8 +385,8 @@ contract PqzExplicitStatementTest is PqzNamedBase {
         bytes memory blob = ref_.blobSingle(pl, false);
         bytes32 ref = tok.mtxConfidentialTransferSingle(_ts(pl), hex"01", _pqAuth(), "");
         assertEq(tok.pqzEntryBlob(ref), blob, "op 1 BUNDLE auditor");
-        assertEq(tok.pqzPendingCt(bob, tok.pqzAccount(bob).pendingCount - 1), _cut(_ct(pl, T_OUT), 0, PqzCt.CT), "the credit is u || v_t");
-        assertEq(tok.pqzAcc(alice), bytes.concat(_cut(pl, T_OUT, PqzCt.PK), _cut(pl, T_OUT + PqzCt.CT, PqzCt.V)), "acc is u || v_f");
+        assertEq(tok.pqzPendingCt(bob, 0, tok.pqzAccount(bob, 0).pendingCount - 1), _cut(_ct(pl, T_OUT), 0, PqzCt.CT), "the credit is u || v_t");
+        assertEq(tok.pqzAcc(alice, 0), bytes.concat(_cut(pl, T_OUT, PqzCt.PK), _cut(pl, T_OUT + PqzCt.CT, PqzCt.V)), "acc is u || v_f");
 
         pl = _sPl(tok, alice, false, _memo(), 22);
         blob = ref_.blobSingle(pl, true);
@@ -406,7 +407,7 @@ contract PqzExplicitStatementTest is PqzNamedBase {
 
         pl = _bPl(tok, alice, 40);
         tok.mtxUnshield(_bs(pl), 0, bytes32(0), hex"01", _pqAuth(), "");
-        assertEq(tok.pqzAcc(alice), _cut(pl, B_OUT, PqzCt.CT), "a burn's u' || v_f");
+        assertEq(tok.pqzAcc(alice, 0), _cut(pl, B_OUT, PqzCt.CT), "a burn's u' || v_f");
     }
 
     function _ct(bytes memory pl, uint256 off) internal pure returns (bytes memory) {
@@ -443,64 +444,67 @@ contract PqzNamedTest is PqzNamedBase {
         MetaTxLib.Envelope memory e = _env(0);
         MetaTxLib.UAEnvelope memory u = _uaEnv(0);
         bytes memory sig = _singleSig(ua, base, 0, e.validUntil, t, proof, hint);
-        bytes memory st = tok.transferSingleStatement(t, ua ? _uaBindingOf(tok, u) : _bindingOf(tok, e));
+        if (!ua) {
+            _refusedAt(relayer);
+            return _callSingle(compact, u, t, proof, hint, sig);
+        }
+        bytes memory st = tok.transferSingleStatement(t, _uaBindingOf(tok, u));
         vm.expectCall(PQZ, abi.encodePacked(uint8(1), uint32(st.length), st, proof));
         vm.prank(relayer);
-        bytes32 ref;
-        if (ua) ref = compact ? tok.uaConfidentialTransferSingleCompact(u, t, proof, _pqAuth(), hint, _uaSig(sig))
-            : tok.uaConfidentialTransferSingle(u, t, proof, _pqAuth(), hint, _uaSig(sig));
-        else ref = compact ? tok.mtxConfidentialTransferSingleCompact(e, t, proof, _pqAuth(), hint, sig)
-            : tok.mtxConfidentialTransferSingle(e, t, proof, _pqAuth(), hint, sig);
+        bytes32 ref = compact ? tok.mtxConfidentialTransferSingleCompact(u, t, proof, _pqAuth(), hint, _uaSig(sig))
+            : tok.mtxConfidentialTransferSingle(u, t, proof, _pqAuth(), hint, _uaSig(sig));
         assertEq(ref, _entryRef(tok, 0), "the entry's reference");
-        assertEq(tok.pqzAccount(alice).sendCounter, 1);
-        assertEq(ua ? tok.uaNonce(u.from, LANE) : tok.mtxNonce(signer, LANE), 1);
+        assertEq(tok.pqzAccount(alice, 0).sendCounter, 1);
+        assertEq(tok.mtxNonce(u.from, LANE), 1);
         // the replay
         vm.prank(relayer);
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
-        _callSingle(compact, ua, e, u, t, proof, hint, sig);
-        _bindsSingle(compact, ua, t, proof, hint);
+        _callSingle(compact, u, t, proof, hint, sig);
+        _bindsSingle(compact, t, proof, hint);
     }
 
-    function _callSingle(bool compact, bool ua, MetaTxLib.Envelope memory e, MetaTxLib.UAEnvelope memory u, IPqzToken.PqzTransferArgs memory t,
-        bytes memory proof, bytes memory hint, bytes memory sig) internal
+    function _callSingle(bool compact, MetaTxLib.UAEnvelope memory u, IPqzToken.PqzTransferArgs memory t, bytes memory proof,
+        bytes memory hint, bytes memory sig) internal
     {
-        if (ua) {
-            if (compact) tok.uaConfidentialTransferSingleCompact(u, t, proof, _pqAuth(), hint, _uaSig(sig));
-            else tok.uaConfidentialTransferSingle(u, t, proof, _pqAuth(), hint, _uaSig(sig));
-        } else {
-            if (compact) tok.mtxConfidentialTransferSingleCompact(e, t, proof, _pqAuth(), hint, sig);
-            else tok.mtxConfidentialTransferSingle(e, t, proof, _pqAuth(), hint, sig);
-        }
+        if (compact) tok.mtxConfidentialTransferSingleCompact(u, t, proof, _pqAuth(), hint, _uaSig(sig));
+        else tok.mtxConfidentialTransferSingle(u, t, proof, _pqAuth(), hint, _uaSig(sig));
+    }
+
+    /// ua-mtx-merge T5, meaning (R36): the next call presents a wallet's signature over the retired address struct (`from`
+    /// an address) on the merged entry: it authorizes nothing (`MetaTxBadSignature`); the address entry is in
+    /// legacy/ua-mtx-merge/.
+    function _refusedAt(address r) internal {
+        vm.prank(r);
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
     }
 
     /// Signed at the lane's next nonce over `t`: one field changed fails the signature and nothing else, the nonce unused;
     /// the unchanged call then passes, so the refusals were the field's.
-    function _bindsSingle(bool compact, bool ua, IPqzToken.PqzTransferArgs memory t, bytes memory proof, bytes memory hint) internal {
-        MetaTxLib.Envelope memory e = _env(1);
+    function _bindsSingle(bool compact, IPqzToken.PqzTransferArgs memory t, bytes memory proof, bytes memory hint) internal {
         MetaTxLib.UAEnvelope memory u = _uaEnv(1);
-        bytes memory sig = _singleSig(ua, compact ? "PqzTransferSingleCompact" : "PqzTransferSingle", 1, e.validUntil, t, proof, hint);
+        bytes memory sig = _singleSig(true, compact ? "PqzTransferSingleCompact" : "PqzTransferSingle", 1, u.validUntil, t, proof, hint);
         bytes16 s0 = t.salt;
         t.salt = bytes16(uint128(s0) ^ 1);
         vm.prank(relayer);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
-        _callSingle(compact, ua, e, u, t, proof, hint, sig);
+        _callSingle(compact, u, t, proof, hint, sig);
         t.salt = s0;
         vm.prank(relayer);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
-        _callSingle(compact, ua, e, u, t, proof, bytes.concat(hint, hex"01"), sig);
+        _callSingle(compact, u, t, proof, bytes.concat(hint, hex"01"), sig);
         t.vTo[7] ^= 0x01;
         vm.prank(relayer);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
-        _callSingle(compact, ua, e, u, t, proof, hint, sig);
+        _callSingle(compact, u, t, proof, hint, sig);
         t.vTo[7] ^= 0x01;
         vm.prank(relayer);
-        _callSingle(compact, ua, e, u, t, proof, hint, sig);
-        assertEq(ua ? tok.uaNonce(u.from, LANE) : tok.mtxNonce(signer, LANE), 2, "only the unchanged call used the nonce");
+        _callSingle(compact, u, t, proof, hint, sig);
+        assertEq(tok.mtxNonce(u.from, LANE), 2, "only the unchanged call used the nonce");
     }
 
-    function test_pqzNamedTransferSingle() public { _runSingle(false, false); }
+    function test_pqzNamedTransferSingle_addressStructRefused() public { _runSingle(false, false); }
     function test_pqzNamedTransferSingleUA() public { _runSingle(false, true); }
-    function test_pqzNamedTransferSingleCompact() public { _runSingle(true, false); }
+    function test_pqzNamedTransferSingleCompact_addressStructRefused() public { _runSingle(true, false); }
     function test_pqzNamedTransferSingleCompactUA() public { _runSingle(true, true); }
 
     // ------------------------------------------------------------------ op 7
@@ -519,55 +523,53 @@ contract PqzNamedTest is PqzNamedBase {
         MetaTxLib.Envelope memory e = _env(0);
         MetaTxLib.UAEnvelope memory u = _uaEnv(0);
         bytes memory sig = _multiSig(ua, compact ? "PqzTransferCompact" : "PqzTransfer", 0, e.validUntil, t, proof, "");
-        bytes memory st = tok.transferStatement(t, ua ? _uaBindingOf(tok, u) : _bindingOf(tok, e));
+        if (!ua) {
+            _refusedAt(relayer);
+            return _callMulti(compact, u, t, proof, "", sig);
+        }
+        bytes memory st = tok.transferStatement(t, _uaBindingOf(tok, u));
         vm.expectCall(PQZ, abi.encodePacked(uint8(7), uint32(st.length), st, proof));
         vm.prank(relayer);
-        bytes32 ref;
-        if (ua) ref = compact ? tok.uaConfidentialTransferCompact(u, t, proof, _pqAuth(), "", _uaSig(sig))
-            : tok.uaConfidentialTransfer(u, t, proof, _pqAuth(), "", _uaSig(sig));
-        else ref = compact ? tok.mtxConfidentialTransferCompact(e, t, proof, _pqAuth(), "", sig)
-            : tok.mtxConfidentialTransfer(e, t, proof, _pqAuth(), "", sig);
+        bytes32 ref = compact ? tok.mtxConfidentialTransferCompact(u, t, proof, _pqAuth(), "", _uaSig(sig))
+            : tok.mtxConfidentialTransfer(u, t, proof, _pqAuth(), "", _uaSig(sig));
         assertEq(ref, _entryRef(tok, 0));
-        for (uint256 j; j < 4; ++j) assertEq(tok.pqzAccount(rec[j]).pendingCount, 1, "a credit per leg");
-        assertEq(ua ? tok.uaNonce(u.from, LANE) : tok.mtxNonce(signer, LANE), 1);
-        _bindsMulti(compact, ua, t, proof);
+        for (uint256 j; j < 4; ++j) assertEq(tok.pqzAccount(rec[j], 0).pendingCount, 1, "a credit per leg");
+        assertEq(tok.mtxNonce(u.from, LANE), 1);
+        _bindsMulti(compact, t, proof);
     }
 
-    function _callMulti(bool compact, bool ua, IPqzToken.PqzMultiArgs memory t, bytes memory proof, bytes memory hint, bytes memory sig) internal {
-        if (ua) {
-            if (compact) tok.uaConfidentialTransferCompact(_uaEnv(1), t, proof, _pqAuth(), hint, _uaSig(sig));
-            else tok.uaConfidentialTransfer(_uaEnv(1), t, proof, _pqAuth(), hint, _uaSig(sig));
-        } else {
-            if (compact) tok.mtxConfidentialTransferCompact(_env(1), t, proof, _pqAuth(), hint, sig);
-            else tok.mtxConfidentialTransfer(_env(1), t, proof, _pqAuth(), hint, sig);
-        }
+    function _callMulti(bool compact, MetaTxLib.UAEnvelope memory u, IPqzToken.PqzMultiArgs memory t, bytes memory proof, bytes memory hint,
+        bytes memory sig) internal
+    {
+        if (compact) tok.mtxConfidentialTransferCompact(u, t, proof, _pqAuth(), hint, _uaSig(sig));
+        else tok.mtxConfidentialTransfer(u, t, proof, _pqAuth(), hint, _uaSig(sig));
     }
 
     /// As `_bindsSingle`: the salt, the hint, a leg's `v`.
-    function _bindsMulti(bool compact, bool ua, IPqzToken.PqzMultiArgs memory t, bytes memory proof) internal {
-        bytes memory sig = _multiSig(ua, compact ? "PqzTransferCompact" : "PqzTransfer", 1, block.timestamp + 300, t, proof, "");
+    function _bindsMulti(bool compact, IPqzToken.PqzMultiArgs memory t, bytes memory proof) internal {
+        bytes memory sig = _multiSig(true, compact ? "PqzTransferCompact" : "PqzTransfer", 1, block.timestamp + 300, t, proof, "");
         bytes16 s0 = t.salt;
         t.salt = bytes16(uint128(s0) ^ 1);
         vm.prank(relayer);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
-        _callMulti(compact, ua, t, proof, "", sig);
+        _callMulti(compact, _uaEnv(1), t, proof, "", sig);
         t.salt = s0;
         vm.prank(relayer);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
-        _callMulti(compact, ua, t, proof, hex"01", sig);
+        _callMulti(compact, _uaEnv(1), t, proof, hex"01", sig);
         t.legs[2].v[7] ^= 0x01;
         vm.prank(relayer);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
-        _callMulti(compact, ua, t, proof, "", sig);
+        _callMulti(compact, _uaEnv(1), t, proof, "", sig);
         t.legs[2].v[7] ^= 0x01;
         vm.prank(relayer);
-        _callMulti(compact, ua, t, proof, "", sig);
-        assertEq(ua ? tok.uaNonce(MetaTxLib.pad(signer), LANE) : tok.mtxNonce(signer, LANE), 2, "only the unchanged call used the nonce");
+        _callMulti(compact, _uaEnv(1), t, proof, "", sig);
+        assertEq(tok.mtxNonce(MetaTxLib.pad(signer), LANE), 2, "only the unchanged call used the nonce");
     }
 
-    function test_pqzNamedTransfer() public { _runMulti(false, false); }
+    function test_pqzNamedTransfer_addressStructRefused() public { _runMulti(false, false); }
     function test_pqzNamedTransferUA() public { _runMulti(false, true); }
-    function test_pqzNamedTransferCompact() public { _runMulti(true, false); }
+    function test_pqzNamedTransferCompact_addressStructRefused() public { _runMulti(true, false); }
     function test_pqzNamedTransferCompactUA() public { _runMulti(true, true); }
 
     // ------------------------------------------------------------------ burn
@@ -587,15 +589,19 @@ contract PqzNamedTest is PqzNamedBase {
         MetaTxLib.Envelope memory e = _env(0);
         MetaTxLib.UAEnvelope memory u = _uaEnv(0);
         bytes memory sig = _unshieldSig(ua, e.validUntil, b, p, proof);
-        bytes memory st = tok.burnStatement(b, p.amount, p.recipient, ua ? _uaBindingOf(tok, u) : _bindingOf(tok, e));
+        if (!ua) {
+            _refusedAt(relayer);
+            tok.mtxUnshield(u, b, p, proof, _pqAuth(), "", _uaSig(sig));
+            return;
+        }
+        bytes memory st = tok.burnStatement(b, p.amount, p.recipient, _uaBindingOf(tok, u));
         vm.expectCall(PQZ, abi.encodePacked(uint8(2), uint32(st.length), st, proof));
         vm.prank(relayer);
-        if (ua) tok.uaUnshield(u, b, p, proof, _pqAuth(), "", _uaSig(sig));
-        else tok.mtxUnshield(e, b, p, proof, _pqAuth(), "", sig);
+        tok.mtxUnshield(u, b, p, proof, _pqAuth(), "", _uaSig(sig));
         assertEq(tok.balanceOf(address(0xD00D)), 5 * SCALE, "the amount reached the recipient");
     }
 
-    function test_pqzNamedUnshield() public { _runUnshield(false); }
+    function test_pqzNamedUnshield_addressStructRefused() public { _runUnshield(false); }
     function test_pqzNamedUnshieldUA() public { _runUnshield(true); }
 
     // ------------------------------------------------------------------ unshield-unwrap
@@ -617,15 +623,19 @@ contract PqzNamedTest is PqzNamedBase {
         MetaTxLib.Envelope memory e = _env(0);
         MetaTxLib.UAEnvelope memory u = _uaEnv(0);
         bytes memory sig = _unwrapSig(ua, e.validUntil, b, x, proof);
-        bytes memory st = w.unshieldUnwrapStatement(b, x, ua ? _uaBindingOf(w, u) : _bindingOf(w, e));
+        if (!ua) {
+            _refusedAt(relayer);
+            w.mtxUnshieldUnwrap(u, b, x, proof, _pqAuth(), "", _uaSig(sig));
+            return;
+        }
+        bytes memory st = w.unshieldUnwrapStatement(b, x, _uaBindingOf(w, u));
         vm.expectCall(PQZ, abi.encodePacked(uint8(2), uint32(st.length), st, proof));
         vm.prank(relayer);
-        if (ua) w.uaUnshieldUnwrap(u, b, x, proof, _pqAuth(), "", _uaSig(sig));
-        else w.mtxUnshieldUnwrap(e, b, x, proof, _pqAuth(), "", sig);
+        w.mtxUnshieldUnwrap(u, b, x, proof, _pqAuth(), "", _uaSig(sig));
         assertEq(usd.balanceOf(address(0xD00D)), 40 * SCALE, "the leg paid");
     }
 
-    function test_pqzNamedUnshieldUnwrap() public { _runUnwrap(false); }
+    function test_pqzNamedUnshieldUnwrap_addressStructRefused() public { _runUnwrap(false); }
     function test_pqzNamedUnshieldUnwrapUA() public { _runUnwrap(true); }
 
     // ------------------------------------------------------------------ the static ops
@@ -640,65 +650,108 @@ contract PqzNamedTest is PqzNamedBase {
             _msg(string.concat('"underlying":', a(address(usd)), ',"amountIn":', n(10 * SCALE), ',"toUA":', h(alice)), 0, false, e.validUntil)));
         vm.prank(relayer);
         w.mtxWrapShield(e, address(usd), 10 * SCALE, alice, sig);
-        assertEq((w.pqzPending(alice, 0) >> 96) & type(uint64).max, 10);
+        assertEq((w.pqzPending(alice, 0, 0) >> 96) & type(uint64).max, 10);
     }
 
+    /// Group 3g T52: `UARollOver` / `UAPrepareAcc` carry `uint64 keyVersion` after `ua` (version 0 here).
     function _statics(bool ua, string memory base, string memory field, bytes32 x, uint256 v) internal view returns (bytes memory) {
         return ecdsa(PK, typedDigest(address(tok), _name(ua, base),
-            string.concat(_from(ua), ',{"name":"ua","type":"bytes32"},{"name":"', field, '","type":"uint256"}'), '',
-            _msg(string.concat('"ua":', h(x), ',"', field, '":', n(v)), 0, ua, block.timestamp + 300)));
+            string.concat(_from(ua), ',{"name":"ua","type":"bytes32"},{"name":"keyVersion","type":"uint64"},{"name":"', field,
+                '","type":"uint256"}'), '',
+            _msg(string.concat('"ua":', h(x), ',"keyVersion":', n(0), ',"', field, '":', n(v)), 0, ua, block.timestamp + 300)));
     }
 
     function _prepareRow(bool ua) internal {
         bytes memory sig = _statics(ua, "PrepareAcc", "half", bob, 0);
-        vm.prank(relayer);
-        if (ua) tok.uaPrepareAcc(_uaEnv(0), bob, 0, _uaSig(sig));
-        else tok.mtxPrepareAcc(_env(0), bob, 0, sig);
-        assertEq(tok.pqzAccount(bob).flags, 2);
+        if (ua) vm.prank(relayer);
+        else _refusedAt(relayer);
+        tok.mtxPrepareAcc(_uaEnv(0), bob, 0, 0, _uaSig(sig));
+        assertEq(tok.pqzAccount(bob, 0).flags, ua ? 2 : 0);
     }
 
-    function test_pqzNamedPrepareAcc() public { _prepareRow(false); }
+    function test_pqzNamedPrepareAcc_addressStructRefused() public { _prepareRow(false); }
     function test_pqzNamedPrepareAccUA() public { _prepareRow(true); }
 
     function _rollRow(bool ua) internal {
         _prepare(tok, alice);
         vm.roll(block.number + ROLL_AGE);
         bytes memory sig = _statics(ua, "RollOver", "n", alice, 1);
-        vm.prank(relayer);
-        if (ua) tok.uaRollOver(_uaEnv(0), alice, 1, _uaSig(sig));
-        else tok.mtxRollOver(_env(0), alice, 1, sig);
-        assertEq(tok.pqzAccount(alice).rolled, 1);
+        if (ua) vm.prank(relayer);
+        else _refusedAt(relayer);
+        tok.mtxRollOver(_uaEnv(0), alice, 0, 1, _uaSig(sig));
+        assertEq(tok.pqzAccount(alice, 0).rolled, ua ? 1 : 0);
     }
 
-    function test_pqzNamedRollOver() public { _rollRow(false); }
+    function test_pqzNamedRollOver_addressStructRefused() public { _rollRow(false); }
     function test_pqzNamedRollOverUA() public { _rollRow(true); }
 
-    /// A named entry is no allowlisted op (TS-D14): its selector inside a validly signed `mtxExecute` or `uaExecute` is refused at
-    /// the gate of each path, `MtxSelectorNotAllowed` and `MetaTxUnknownOp`.
-    function _refused(PqzLayer t, string memory j, string memory op) internal {
-        bytes4 sel = bytes4(VM.parseJsonBytes(j, domainField(op, "pqz", "selector")));
+    /// A named entry is no allowlisted op (TS-D14): its selector inside a validly signed `executeMetaTransaction` or
+    /// `mtxExecute` is refused at the gate of each path, `MtxSelectorNotAllowed`. ua-mtx-merge T5, meaning (R36): the
+    /// selectors are the merged entries' (the `ua*` and address forms have none); `WrapShield` keeps its address row.
+    function _refused(PqzLayer t, bytes4 sel) internal {
         bytes memory data = bytes.concat(sel, new bytes(64));
         MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction(signer, data, LANE, 0, block.timestamp + 300, 0, address(0), 0, address(0));
-        bytes memory sig = ecdsa(PK, t.mtxDigest(m));
+        bytes memory sig = ecdsa(PK, MtxDigest.metaTx(address(t), m));
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, sel));
-        t.mtxExecute(m, sig);
+        t.executeMetaTransaction(m, sig);
         MetaTxLib.UAMetaTransaction memory u = MetaTxLib.UAMetaTransaction(MetaTxLib.pad(signer), data, LANE, 0, block.timestamp + 300, 0, address(0), 0, address(0));
-        sig = ecdsa(PK, t.uaDigest(u));
-        vm.expectRevert(abi.encodeWithSelector(IUALedger.MetaTxUnknownOp.selector, sel));
-        t.uaExecute(u, sig);
+        sig = ecdsa(PK, t.mtxDigest(u));
+        // ua-mtx-merge T1 (B), meaning: the native signer reads `_mtxRule` on the merged entry (`MetaTxUnknownOp` before)
+        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, sel));
+        t.mtxExecute(u, UACall.auth(u.from, sig));
+    }
+
+    /// `data` relayed through `mtxExecute` by the native signer at fee 0.
+    function _execute(PqzLayer t, bytes memory data) internal {
+        MetaTxLib.UAMetaTransaction memory u = MetaTxLib.UAMetaTransaction(MetaTxLib.pad(signer), data, LANE + data.length + uint8(data[3]), 0, block.timestamp + 300, 0, address(0), 0, address(0));
+        bytes memory sig = ecdsa(PK, t.mtxDigest(u));
+        t.mtxExecute(u, UACall.auth(u.from, sig));
+    }
+
+    /// Group 3g T52 (KV-10, Codex): the PQZ rollover and prepare take `keyVersion`, so their static shape is 100 bytes; the
+    /// 100-byte forms are allowlisted on the generic relayed path, a 68-byte one is `MtxDataShape`, the two-argument
+    /// selectors (Zether's rollover, the old prepare) are no PQZ op (`MtxSelectorNotAllowed`).
+    function test_static_100ok() public {
+        _prepare(tok, alice);
+        vm.roll(block.number + ROLL_AGE);
+        bytes memory data = abi.encodeCall(IPqzToken.mtxRollOver, (alice, uint64(0), 1));
+        assertEq(data.length, 100);
+        _execute(tok, data);
+        assertEq(tok.pqzAccount(alice, 0).rolled, 1);
+        data = abi.encodeCall(IPqzToken.mtxPrepareAcc, (bob, uint64(0), 0));
+        assertEq(data.length, 100);
+        _execute(tok, data);
+        assertEq(tok.pqzAccount(bob, 0).flags, 2);
+    }
+
+    function test_static_68refused() public {
+        bytes4[2] memory sels = [IPqzToken.mtxRollOver.selector, IPqzToken.mtxPrepareAcc.selector];
+        for (uint256 i; i < 2; ++i) {
+            vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxDataShape.selector, sels[i]));
+            this.executeExt(tok, bytes.concat(sels[i], abi.encode(alice, uint256(1))));
+        }
+        bytes4[2] memory old = [bytes4(keccak256("mtxRollOver(bytes32,uint256)")), bytes4(keccak256("mtxPrepareAcc(bytes32,uint256)"))];
+        for (uint256 i; i < 2; ++i) {
+            vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, old[i]));
+            this.executeExt(tok, bytes.concat(old[i], abi.encode(alice, uint256(1))));
+        }
+    }
+
+    function executeExt(PqzLayer t, bytes memory data) external {
+        _execute(t, data);
     }
 
     function test_pqzNamedEntryNotAllowlisted() public {
-        string memory j = vm.readFile(TYPED_OPS);
-        string[9] memory ops = ["PqzTransferSingle", "PqzTransferSingleCompact", "PqzTransfer", "PqzTransferCompact", "PqzUnshield", "Shield", "RollOver",
-            "PrepareAcc", "WrapShield"];
-        for (uint256 i; i < ops.length; ++i) {
-            _refused(w, j, ops[i]);
-            if (i != 8) _refused(tok, j, ops[i]);
-            if (i != 8) _refused(w, j, string.concat("UA", ops[i]));
+        bytes4[8] memory sels = [IPqzMergedT5.mtxConfidentialTransferSingle.selector,
+            IPqzMergedT5.mtxConfidentialTransferSingleCompact.selector, IPqzMergedT5.mtxConfidentialTransfer.selector,
+            IPqzMergedT5.mtxConfidentialTransferCompact.selector, IPqzMergedT5.mtxUnshield.selector, IPqzMergedT5.mtxShield.selector,
+            IPqzMergedT5.mtxRollOver.selector, IPqzMergedT5.mtxPrepareAcc.selector];
+        for (uint256 i; i < sels.length; ++i) {
+            _refused(w, sels[i]);
+            _refused(tok, sels[i]);
         }
-        _refused(w, j, "PqzUnshieldUnwrap");
-        _refused(w, j, "UAPqzUnshieldUnwrap");
+        _refused(w, IPqzMergedT5.mtxUnshieldUnwrap.selector);
+        _refused(w, bytes4(VM.parseJsonBytes(vm.readFile(TYPED_OPS), domainField("WrapShield", "pqz", "selector"))));
     }
 
     // ------------------------------------------------------------------ an outer fee
@@ -713,14 +766,18 @@ contract PqzNamedTest is PqzNamedBase {
             eJson(LANE, 0, e.validUntil, e.mode, e.fee));
         bytes memory sig = ecdsa(PK, typedDigest(address(tok), _name(ua, "PqzTransferSingle"), _argFields(ua, "PqzTransferArgs", ""), string.concat(',', T_TRANSFER), m));
         uint256 before = tok.balanceOf(signer);
+        if (!ua) {
+            _refusedAt(relayer);
+            return _callSingle(false, u, t, proof, "", sig);
+        }
         vm.prank(relayer);
-        _callSingle(false, ua, e, u, t, proof, "", sig);
-        assertEq(tok.pqzAccount(alice).sendCounter, 1, "the op ran");
+        _callSingle(false, u, t, proof, "", sig);
+        assertEq(tok.pqzAccount(alice, 0).sendCounter, 1, "the op ran");
         assertEq(tok.balanceOf(relayer), 7, "the relayer's fee");
         assertEq(tok.balanceOf(signer), before - 7, "paid by the signer");
     }
 
-    function test_pqzNamedFeePaid() public { _runFee(false); }
+    function test_pqzNamedFeePaid_addressStructRefused() public { _runFee(false); }
     function test_pqzNamedFeePaidUA() public { _runFee(true); }
 }
 
@@ -770,7 +827,7 @@ contract PqzPartLengthsTest is PqzNamedBase {
             (x, t.vAuditor) = (t.vAuditor, new bytes(_badAud()[i]));
             _t(t, t.vAuditor.length, false);
             t.vAuditor = x;
-            // no memo on BUNDLE, 41 bytes on commit-reveal
+            // no memo on BUNDLE, 42 bytes on commit-reveal (41 refused, CTR-PQZ-23)
             t.sealedMemo = new bytes(_nonEmpty(57)[i]);
             _t(t, t.sealedMemo.length, false);
             if (t.sealedMemo.length != PqzCore.SEALED) _t(t, t.sealedMemo.length, true);
@@ -778,7 +835,18 @@ contract PqzPartLengthsTest is PqzNamedBase {
         }
         _t(t, 0, true); // commit-reveal without the memo
         tok.mtxConfidentialTransferSingle(t, hex"01", _pqAuth(), "");
-        assertEq(tok.pqzAccount(alice).sendCounter, 1, "the unchanged struct passes");
+        assertEq(tok.pqzAccount(alice, 0).sendCounter, 1, "the unchanged struct passes");
+    }
+
+    /// CTR-PQZ-23 (owner 2026-11-06): op 1's commit-reveal memo is op 7's encoding with M = 1, `salt ‖ sealed` with
+    /// `sealed = flags ‖ u8(M) ‖ be8(a) ‖ toUA` XOR the keystream, 2 + 40·1 bytes; the old 41-byte form is refused.
+    function test_op1MemoIsOp7EncodingWithOneLeg() public {
+        IPqzToken.PqzTransferArgs memory t = _ts(_sPl(tok, alice, true, "", 70));
+        t.sealedMemo = new bytes(41);
+        _t(t, 41, true);
+        t.sealedMemo = new bytes(2 + 40 * 1);
+        tok.mtxConfidentialTransferSingleCompact(t, hex"01", _pqAuth(), "");
+        assertEq(tok.pqzAccount(alice, 0).sendCounter, 1, "the 42-byte sealed memo passes");
     }
 
     function _m(IPqzToken.PqzMultiArgs memory t, uint256 len, bool compact) internal {
@@ -822,7 +890,7 @@ contract PqzPartLengthsTest is PqzNamedBase {
         t.u = us;
         _m(t, 0, true); // commit-reveal without the memo
         tok.mtxConfidentialTransfer(t, hex"01", _pqAuth(), "");
-        assertEq(tok.pqzAccount(alice).sendCounter, 1, "the unchanged struct passes");
+        assertEq(tok.pqzAccount(alice, 0).sendCounter, 1, "the unchanged struct passes");
     }
 
     function test_partLengths_burn() public {
@@ -839,7 +907,7 @@ contract PqzPartLengthsTest is PqzNamedBase {
             b.vFrom = x;
         }
         tok.mtxUnshield(b, 0, 0, hex"01", _pqAuth(), "");
-        assertEq(tok.pqzAccount(alice).sendCounter, 1, "the unchanged struct passes");
+        assertEq(tok.pqzAccount(alice, 0).sendCounter, 1, "the unchanged struct passes");
     }
 
     /// `cd` with the struct at its head word `slot` and word `field` of the struct replaced by `word`.
@@ -861,15 +929,19 @@ contract PqzPartLengthsTest is PqzNamedBase {
         bytes32 tooBig = bytes32(uint256(1) << 64);
         bytes32 dirty = bytes32(uint256(bytes32(salt)) | 1);
         bytes memory cd = abi.encodeCall(IPqzToken.mtxConfidentialTransferSingle, (_ts(_sPl(tok, alice, true, "", 73)), hex"01", _pqAuth(), ""));
+        // group 3g T52: `keyVersion` (a `uint64`, word 4) after `fromUA`; `salt` moved from word 6 to 7
         _refusedRaw(_patched(cd, 0, 0, tooBig));
-        _refusedRaw(_patched(cd, 0, 6, dirty));
+        _refusedRaw(_patched(cd, 0, 4, tooBig));
+        _refusedRaw(_patched(cd, 0, 7, dirty));
         bytes memory cm = abi.encodeCall(IPqzToken.mtxConfidentialTransfer, (_ms(_mPl(tok, alice, _legsN(2), true, "", 74)), hex"01", _pqAuth(), ""));
         _refusedRaw(_patched(cm, 0, 0, tooBig));
-        _refusedRaw(_patched(cm, 0, 6, dirty));
+        _refusedRaw(_patched(cm, 0, 4, tooBig));
+        _refusedRaw(_patched(cm, 0, 7, dirty));
         bytes memory cb = abi.encodeCall(IPqzToken.mtxUnshield, (_bs(_bPl(tok, alice, 75)), 0, 0, hex"01", _pqAuth(), ""));
         _refusedRaw(_patched(cb, 0, 0, tooBig));
+        _refusedRaw(_patched(cb, 0, 4, tooBig));
         // the same calldata with the words in type passes: `_patched` hit the field
-        bytes memory good = _patched(cd, 0, 6, bytes32(salt));
+        bytes memory good = _patched(cd, 0, 7, bytes32(salt));
         (bool ok,) = address(tok).call(good);
         assertTrue(ok, "the unpatched call");
     }
@@ -961,6 +1033,7 @@ contract PqzTypedRowsTest is PqzNamedBase {
         b.validUntilBlock = j.readUint(string.concat(q, ".validUntilBlock"));
         b.shieldIn = j.readUint(string.concat(q, ".shieldIn"));
         b.fromUA = j.readBytes32(string.concat(q, ".fromUA"));
+        b.keyVersion = uint64(j.readUint(string.concat(q, ".keyVersion")));
         b.beneficiaryUA = j.readBytes32(string.concat(q, ".beneficiaryUA"));
         b.u = j.readBytes(string.concat(q, ".u"));
         b.vFrom = j.readBytes(string.concat(q, ".vFrom"));
@@ -991,6 +1064,10 @@ contract PqzTypedRowsTest is PqzNamedBase {
         checkRow(j, op, "pqz");
         bytes memory cd = j.readBytes(domainField(op, "pqz", "calldata"));
         assertEq(built, cd, string.concat(op, ": calldata"));
+        _reachAs(op, c, cd, want);
+    }
+
+    function _reachAs(string memory op, address c, bytes memory cd, bytes4 want) internal {
         bytes memory rowSig = _sig(op);
         bytes memory sig = onChain(j, op, c);
         for (uint256 i = cd.length - 65; i > 0; --i) {
@@ -1007,59 +1084,98 @@ contract PqzTypedRowsTest is PqzNamedBase {
         assertEq(bytes4(ret), want, string.concat(op, ": the op's own check, the signature passed"));
     }
 
-    function _both(string memory op, bytes memory built, bytes4 want) internal {
-        _reach(op, address(tok), built, want);
-        _reach(op, address(w), built, want);
+    /// ua-mtx-merge T11 (R36, MD-7): a `UA…` row names its merged `mtx` entry and runs verbatim (T5 ran the rows' `ua*`
+    /// calldata under the `mtx` name, until the rows were regenerated).
+    function _reachRenamed(string memory op, address c, bytes memory built, bytes4 want) internal {
+        checkRow(j, op, "pqz");
+        bytes memory name = bytes(_head(op));
+        assertEq(abi.encodePacked(name[0], name[1], name[2]), bytes("mtx"), op);
+        assertEq(built, j.readBytes(domainField(op, "pqz", "calldata")), string.concat(op, ": the merged calldata"));
+        _reachAs(op, c, built, want);
     }
 
-    function test_typedOpsVectors_PqzTransferSingle() public {
+    function _bothRenamed(string memory op, bytes memory built, bytes4 want) internal {
+        _reachRenamed(op, address(tok), bytes.concat(built), want);
+        _reachRenamed(op, address(w), built, want);
+    }
+
+    /// ua-mtx-merge T5: the row of a retired address entry (R36): its own calldata finds no function on `c` (MD-7: T11
+    /// retires the row).
+    function _rowHasNoEntry(string memory op, address c, bytes memory built) internal {
+        checkRow(j, op, "pqz");
+        bytes memory cd = j.readBytes(domainField(op, "pqz", "calldata"));
+        assertEq(built, cd, string.concat(op, ": the old calldata"));
+        vm.prank(j.readAddress(_p(op, "relayer")));
+        (bool ok, bytes memory ret) = c.call(cd);
+        assertFalse(ok, string.concat(op, ": a retired entry runs"));
+        assertEq(ret.length, 0, string.concat(op, ": no function"));
+    }
+
+    function _noneOnBoth(string memory op, bytes memory built) internal {
+        _rowHasNoEntry(op, address(tok), built);
+        _rowHasNoEntry(op, address(w), built);
+    }
+
+    /// Group 3g T52, meaning (as pay-meta-tax T37 did for its rows): the retired rows of the legacy copy carry no `keyVersion` in
+    /// their argument structs, so their own calldata finds no function on this ABI.
+    function _rowWithoutKeyVersion(string memory op, bool both) internal {
+        bytes memory cd = j.readBytes(domainField(op, "pqz", "calldata"));
+        if (both) _rowHasNoEntry(op, address(tok), cd);
+        _rowHasNoEntry(op, address(w), cd);
+    }
+
+    function test_typedOpsVectors_PqzTransferSingleRowsHaveNoEntry() public {
+        j = vm.readFile(TYPED_OPS_LEGACY); // ua-mtx-merge T11 (MD-7): the row retired
         for (uint256 k; k < 2; ++k) {
             string memory op = k == 0 ? "PqzTransferSingle" : "PqzTransferSingleCompact";
-            _both(op, abi.encodeWithSignature(_head(op), rowEnvelope(j, op), _single(op), _proofOf(op), _pa(op), _hint(op), _sig(op)), IPqzToken.BadPayload.selector);
+            _rowWithoutKeyVersion(op, true);
         }
     }
 
     function test_typedOpsVectors_UAPqzTransferSingle() public {
         for (uint256 k; k < 2; ++k) {
             string memory op = k == 0 ? "UAPqzTransferSingle" : "UAPqzTransferSingleCompact";
-            _both(op, abi.encodeWithSignature(_head(op), _uaE(op), _single(op), _proofOf(op), _pa(op), _hint(op), _auth(op)), IPqzToken.BadPayload.selector);
+            _bothRenamed(op, abi.encodeWithSignature(_head(op), _uaE(op), _single(op), _proofOf(op), _pa(op), _hint(op), _auth(op)), IPqzToken.BadPayload.selector);
         }
     }
 
-    function test_typedOpsVectors_PqzTransfer() public {
+    function test_typedOpsVectors_PqzTransferRowsHaveNoEntry() public {
+        j = vm.readFile(TYPED_OPS_LEGACY); // ua-mtx-merge T11 (MD-7): the row retired
         for (uint256 k; k < 2; ++k) {
             string memory op = k == 0 ? "PqzTransfer" : "PqzTransferCompact";
-            _both(op, abi.encodeWithSignature(_head(op), rowEnvelope(j, op), _multiOf(op), _proofOf(op), _pa(op), _hint(op), _sig(op)), IPqzToken.BadPayload.selector);
+            _rowWithoutKeyVersion(op, true);
         }
     }
 
     function test_typedOpsVectors_UAPqzTransfer() public {
         for (uint256 k; k < 2; ++k) {
             string memory op = k == 0 ? "UAPqzTransfer" : "UAPqzTransferCompact";
-            _both(op, abi.encodeWithSignature(_head(op), _uaE(op), _multiOf(op), _proofOf(op), _pa(op), _hint(op), _auth(op)), IPqzToken.BadPayload.selector);
+            _bothRenamed(op, abi.encodeWithSignature(_head(op), _uaE(op), _multiOf(op), _proofOf(op), _pa(op), _hint(op), _auth(op)), IPqzToken.BadPayload.selector);
         }
     }
 
-    function test_typedOpsVectors_PqzUnshield() public {
+    function test_typedOpsVectors_PqzUnshieldRowHasNoEntry() public {
+        j = vm.readFile(TYPED_OPS_LEGACY); // ua-mtx-merge T11 (MD-7): the row retired
         string memory op = "PqzUnshield";
-        _both(op, abi.encodeWithSignature(_head(op), rowEnvelope(j, op), _burn(op), _payout(op), _proofOf(op), _pa(op), _hint(op), _sig(op)), IUALedger.UANotRegistered.selector);
+        _rowWithoutKeyVersion(op, true);
     }
 
     function test_typedOpsVectors_UAPqzUnshield() public {
         string memory op = "UAPqzUnshield";
-        _both(op, abi.encodeWithSignature(_head(op), _uaE(op), _burn(op), _payout(op), _proofOf(op), _pa(op), _hint(op), _auth(op)), IUALedger.UANotRegistered.selector);
+        _bothRenamed(op, abi.encodeWithSignature(_head(op), _uaE(op), _burn(op), _payout(op), _proofOf(op), _pa(op), _hint(op), _auth(op)), IUALedger.UANotRegistered.selector);
     }
 
     /// governance T9 (spec §5.4): the leg's quote runs before the burn, so the row's underlying, no leg of `w`, is the op's
     /// first own check (`UnknownUnderlying`; `BadPayload` before).
-    function test_typedOpsVectors_PqzUnshieldUnwrap() public {
+    function test_typedOpsVectors_PqzUnshieldUnwrapRowHasNoEntry() public {
+        j = vm.readFile(TYPED_OPS_LEGACY); // ua-mtx-merge T11 (MD-7): the row retired
         string memory op = "PqzUnshieldUnwrap";
-        _reach(op, address(w), abi.encodeWithSignature(_head(op), rowEnvelope(j, op), _burn(op), _unwrap(op), _proofOf(op), _pa(op), _hint(op), _sig(op)), IWrappedToken.UnknownUnderlying.selector);
+        _rowWithoutKeyVersion(op, false);
     }
 
     function test_typedOpsVectors_UAPqzUnshieldUnwrap() public {
         string memory op = "UAPqzUnshieldUnwrap";
-        _reach(op, address(w), abi.encodeWithSignature(_head(op), _uaE(op), _burn(op), _unwrap(op), _proofOf(op), _pa(op), _hint(op), _auth(op)), IWrappedToken.UnknownUnderlying.selector);
+        _reachRenamed(op, address(w), abi.encodeWithSignature(_head(op), _uaE(op), _burn(op), _unwrap(op), _proofOf(op), _pa(op), _hint(op), _auth(op)), IWrappedToken.UnknownUnderlying.selector);
     }
 
     function test_typedOpsVectors_WrapShield() public {
@@ -1068,23 +1184,27 @@ contract PqzTypedRowsTest is PqzNamedBase {
             j.readBytes32(_p(op, "toUA")), _sig(op)), bytes4(keccak256("UnknownUnderlying(address)")));
     }
 
-    function test_typedOpsVectors_RollOver() public {
+    function test_typedOpsVectors_RollOverRowHasNoEntry() public {
+        j = vm.readFile(TYPED_OPS_LEGACY); // ua-mtx-merge T11 (MD-7): the row retired
         string memory op = "RollOver";
-        _both(op, abi.encodeWithSignature(_head(op), rowEnvelope(j, op), j.readBytes32(_p(op, "ua")), j.readUint(_p(op, "n")), _sig(op)), IPqzToken.RollOverRange.selector);
+        _noneOnBoth(op, abi.encodeWithSignature(_head(op), rowEnvelope(j, op), j.readBytes32(_p(op, "ua")), j.readUint(_p(op, "n")), _sig(op)));
     }
 
-    function test_typedOpsVectors_UARollOver() public {
-        string memory op = "UARollOver";
-        _both(op, abi.encodeWithSignature(_head(op), _uaE(op), j.readBytes32(_p(op, "ua")), j.readUint(_p(op, "n")), _auth(op)), IPqzToken.RollOverRange.selector);
+    /// Group 3g (KV-10): the PQZ rollover's own row, `UAPqzRollOver` (primary type `UARollOver`, with `keyVersion`); Zether keeps
+    /// `UARollOver` (`ZetherTyped.t.sol`).
+    function test_typedOpsVectors_UAPqzRollOver() public {
+        string memory op = "UAPqzRollOver";
+        _bothRenamed(op, abi.encodeWithSignature(_head(op), _uaE(op), j.readBytes32(_p(op, "ua")), uint64(j.readUint(_p(op, "keyVersion"))), j.readUint(_p(op, "n")), _auth(op)), IPqzToken.RollOverRange.selector);
     }
 
-    function test_typedOpsVectors_PrepareAcc() public {
+    function test_typedOpsVectors_PrepareAccRowHasNoEntry() public {
+        j = vm.readFile(TYPED_OPS_LEGACY); // ua-mtx-merge T11 (MD-7): the row retired
         string memory op = "PrepareAcc";
-        _both(op, abi.encodeWithSignature(_head(op), rowEnvelope(j, op), j.readBytes32(_p(op, "ua")), j.readUint(_p(op, "half")), _sig(op)), IPqzToken.BadPayload.selector);
+        _noneOnBoth(op, abi.encodeWithSignature(_head(op), rowEnvelope(j, op), j.readBytes32(_p(op, "ua")), j.readUint(_p(op, "half")), _sig(op)));
     }
 
     function test_typedOpsVectors_UAPrepareAcc() public {
         string memory op = "UAPrepareAcc";
-        _both(op, abi.encodeWithSignature(_head(op), _uaE(op), j.readBytes32(_p(op, "ua")), j.readUint(_p(op, "half")), _auth(op)), IPqzToken.BadPayload.selector);
+        _bothRenamed(op, abi.encodeWithSignature(_head(op), _uaE(op), j.readBytes32(_p(op, "ua")), uint64(j.readUint(_p(op, "keyVersion"))), j.readUint(_p(op, "half")), _auth(op)), IPqzToken.BadPayload.selector);
     }
 }

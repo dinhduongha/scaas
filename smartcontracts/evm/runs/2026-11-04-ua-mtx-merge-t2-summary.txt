@@ -1,0 +1,23 @@
+# ua-mtx-merge T2 gate summary (full output in git-ignored .log files, not committed)
+# T2: the transfer group, payments, receiver-pays and the relay fee on the UA structs (plan T2).
+# The round's gate runner (T21) is not built yet: each command ran directly through scripts/capped.
+# Base: 6cdf0758 (T1 and the Q6 docs). T2 commits: a75d9b94 (legacy copies), 574896a0 (the build).
+step | commit | rc | counts
+t2-red-merge | 6cdf0758 + test/merge/TransferGroup.t.sol | 1 | 0 passed 16 failed (forge, FOUNDRY_TEST=test/merge, TransferGroup.t: the T2 tests on the T1 tree)
+t2-katwrite | 574896a0 (worktree) | 0 | TokenKatTest 2, DexKatTest 2 passed with WRITE_KAT=true (metatx_kat.json, metatransfer_kat.json on the UA structs; dex_order_kat.json, MD-8: only the token address, domains, digests, signatures and calldata moved)
+t2-forge-first | 574896a0 (worktree, before the repairs below) | 1 | 2500 passed 12 failed 14 skipped, 215 suites (8 MetaTxGasV2 pins, 2 TransferGroup test bugs, 2 UALedger address-side ops not allowlisted)
+t2-pin-interface-ids | 574896a0 (worktree) | 1 then 0 | test_typedPathInterfaceIdsArePinned red at 0x00000000, then the measured ids (equal to the ids XOR-ed from the selectors)
+t2-size-gate | 574896a0 | 1 then 0 | first: WrappedPqzToken in _above64KiB but 62,468 B, two .init rows that fit; baseline moved: 0 errors, 89 contracts; size_gate --self-test ok
+t2-baseline-readers | 574896a0 | 0 | UADeploy 14, GovDeploy 5 passed after their repairs (ZetherDeploy, PqzWrapped, HederaV2, Factory passed unchanged)
+t2-forge-isolate | 574896a0 | 0 | 22 passed 0 failed (forge --isolate UAGas, UARegistryGroups)
+t2-forge-full | 574896a0 | 0 | 2513 passed 0 failed 14 skipped, 215 suites (forge, default set n2304-kmax4096); test/merge 52 (Invariants 16, MergedEntry 19, TransferGroup 17)
+t2-clientkeys-evm | 574896a0 | 0 | 23 passed 0 failed (node --test test/evm.test.js; the address KATs read from test/vectors/legacy/ua-mtx-merge/)
+t2-docs-check | 574896a0 | 0 | 0 errors, 5 warnings, 16 notes (docs_check check); paths 0; facts 8852, 0 misses; test_docs_check ok
+t2-mutants | 574896a0 | 1 each | 7 of 7 killed against test/merge (runs/2026-11-04-ua-mtx-merge-t2-mutants.txt): the plan's six, the fee-before-call one on both its seats
+t2-govgas | 6cdf0758 -> 574896a0 | 0 | GovGas rows (-vv, logged; each row from a fresh setUp), EOA relayed `mtxTransfer` (the merged form: UAMetaTransfer + UASig, +160 B calldata): NormalToken 87,252 -> 88,684 (+1,432), WrappedToken 87,284 -> 88,652 (+1,368), WrappedPqzToken 87,305 -> 88,673 (+1,368), WrappedZetherToken 87,366 -> 88,657 (+1,291); plain `transfer` -89 / -44 / -66 / +44; createToken +65; mint +22
+t2-metatxgasv2 | 6cdf0758 -> 574896a0 | 0 | the pinned rows (AMS_*, bound + 300): A 87,940 -> 89,251, B 185,848 -> 187,159, C 103,743 -> 105,147, D 103,658 -> 105,074, E 104,049 -> 105,465, F 185,848 -> 187,171, G 182,502 -> 183,761, P 189,813 -> 191,090
+t2-sizes | 6cdf0758 -> 574896a0 | 0 | NormalToken 39,921 -> 35,289; WrappedToken 51,436 -> 46,804 (init 53,714 -> 49,082); NormalZetherToken 49,911 -> 45,444 (init 53,503 -> 49,036); WrappedZetherToken 61,802 -> 57,215 (init 65,404 -> 60,814); NormalPqzToken 55,556 -> 51,229 (init 58,202 -> 53,875); WrappedPqzToken 71,322 -> 62,468 (init 73,980 -> 65,124; leaves _above64KiB); MtxRelayFee 3,229 -> 2,488; MtxPipelineLib 10,491 -> 10,144; wallets unchanged (test_walletsByteIdentical)
+#
+# Not run in T2: the other three PQZ sets (T5 runs them); the scaas-node suite (its two KAT readers changed path only;
+# T14 / T16 own them); the GovGas base rows ran on a temporary checkout of 6cdf0758's src and test, restored after.
+# t2-forge-full compiled the tree of 574896a0 but for one later comment line in test/metatx/MtxRelayFee.t.sol.

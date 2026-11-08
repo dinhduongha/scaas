@@ -54,11 +54,12 @@ contract DexBatchTest is UADexBase {
         o.nonce = nonce;
     }
 
-    /// A shape-0 exchange leg: a SCaaS token's `TradeOrder` or an outside token's `DexOrder`, ECDSA by its signer.
+    /// An exchange leg, ECDSA by its signer: an outside token's `DexOrder` (shape 0) or a SCaaS token's `UATradeOrder`
+    /// (shape 1, ua-mtx-merge T6).
     function _leg(address sell, ITradeToken.TradeOrder memory o, uint256 sellFill, uint256 floor)
         internal view returns (ISCaaSDex.ExchangeLeg memory)
     {
-        return DexLegs.xLeg(sell, o, _natLeg(sell, o, sellFill).sig, sellFill, floor);
+        return DexLegs.xLeg(sell, o, _natSig(sell, o), sellFill, floor);
     }
 
     function _plan(bytes32 ref, ISCaaSDex.ExchangeLeg memory l) internal pure returns (ISCaaSDex.ExchangePlan memory p) {
@@ -186,8 +187,8 @@ contract DexBatchTest is UADexBase {
         assertEq(refs[0], bytes32("p2"));
         assertEq(reasons[0], abi.encodeWithSelector(ISCaaSDex.InsufficientOutput.selector, address(B)));
         assertEq(B.balanceOf(alice), 2 * (1800 - 6 + 100));
-        assertEq(A.pulled(A.tradeOrderDigest(_order(2))), 0);
-        assertEq(A.pulled(A.tradeOrderDigest(_order(3))), 1000);
+        assertEq(A.pulled(A.tradeOrderDigest(DexLegs.ua(_order(2)))), 0);
+        assertEq(A.pulled(A.tradeOrderDigest(DexLegs.ua(_order(3)))), 1000);
         assertEq(A.balanceOf(address(dex)), 0);
         assertEq(B.balanceOf(address(dex)), 0);
     }
@@ -265,7 +266,7 @@ contract DexBatchTest is UADexBase {
     function test_batch_laterPlanSeesEarlierPulled() public {
         ITradeToken.TradeOrder memory o = _nat(alice, address(B), 2000, 3600, 3_000);
         ISCaaSDex.ExchangeLeg memory l = _leg(address(A), o, 1000, 1800);
-        bytes32 h = A.tradeOrderDigest(o);
+        bytes32 h = A.tradeOrderDigest(DexLegs.ua(o));
         vm.expectEmit(address(dex));
         emit ISCaaSDex.ExchangeFailed("p3", abi.encodeWithSelector(ITradeToken.OrderClosed.selector, h));
         bool[] memory ok = _batch(_ps(_plan("p1", l), _plan("p2", l), _plan("p3", l)), _xs(_r(1900), _r(1900), _r(1900)));

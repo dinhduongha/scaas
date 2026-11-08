@@ -27,7 +27,7 @@ contract DelayApp is GovernanceBase {
     constructor(address owner_, uint64 delay) GovernanceBase(address(0)) {
         GovernanceLib.Roles memory none;
         uint256 b = uint256(1) << APPROVE;
-        GovernanceLib.init(b, 0, nid(owner_), delay, address(0), none, b, b, 0);
+        GovernanceLib.init(b, 0, nid(owner_), delay, address(0), none, b, b, 0, address(0));
     }
 
     function _guardIn() internal pure override returns (bool) { return false; }
@@ -119,6 +119,12 @@ contract GovDelayTest is Test {
         (eta,,,) = _pending(account);
     }
 
+    /// ua-mtx-merge T24 (regulated-kinds spec §3.6, RK-2): the pending commits to the action, the key and, for `SET`, the
+    /// terms: `keccak256(abi.encode(action, bit, account, argsHash))`; before, `termsHash` was the terms' hash, 0 for a grant.
+    function _commit(uint8 action, address account, bytes32 argsHash) internal pure returns (bytes32) {
+        return keccak256(abi.encode(action, MINT, nid(account), argsHash));
+    }
+
     function _same(IGovernance.Grant memory g, IGovernance.GrantTerms memory x) internal pure returns (bool) {
         return g.min == x.min && g.max == x.max && g.total == x.total && g.perWindow == x.perWindow && g.window == x.window
             && g.validUntil == x.validUntil && g.maxUses == x.maxUses && g.delegable == x.delegable && g.scope == x.scope;
@@ -133,7 +139,7 @@ contract GovDelayTest is Test {
         (uint64 eta,, bytes32 h, bool live) = _pending(holder);
         assertTrue(live, word);
         assertEq(eta, block.timestamp + D, word);
-        assertEq(h, keccak256(abi.encode(x)), word);
+        assertEq(h, _commit(2, holder, keccak256(abi.encode(x))), word);
         vm.prank(OWNER);
         t.cancelGrant(MINT, nid(holder));
     }
@@ -523,18 +529,18 @@ contract GovDelayTest is Test {
         (uint64 eta, bytes32 proposer, bytes32 h, bool live) = _pending(MANAGER);
         assertEq(eta, block.timestamp + D);
         assertEq(proposer, nid(OWNER));
-        assertEq(h, keccak256(abi.encode(x)));
+        assertEq(h, _commit(2, MANAGER, keccak256(abi.encode(x))));
         assertTrue(live);
         _grant(OFFICER);
         (,, h,) = _pending(OFFICER);
-        assertEq(h, bytes32(0), "grantRole: terms 0");
+        assertEq(h, _commit(1, OFFICER, 0), "grantRole: action 1, args 0");
         vm.warp(eta + D);
         assertTrue(_live(MANAGER));
         vm.warp(eta + D + 1);
         (uint64 eta2, bytes32 p2, bytes32 h2, bool live2) = _pending(MANAGER);
         assertEq(eta2, eta, "a dead pending is still reported");
         assertEq(p2, nid(OWNER));
-        assertEq(h2, keccak256(abi.encode(x)));
+        assertEq(h2, _commit(2, MANAGER, keccak256(abi.encode(x))));
         assertFalse(live2);
     }
 

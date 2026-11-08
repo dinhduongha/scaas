@@ -476,7 +476,7 @@ pub extern "C" fn scaas_ua_kind_tag_string(kind: u16, out: *mut c_char, out_len:
 }
 
 /// Governance bit `bit`'s row of `governance_bits.json` (spec 2026-11-02-governance §1.2) as JSON, `{bit, name, type, sentences}`
-/// (NUL-terminated; `*out_len` counts the NUL). Bits 0-21; any other bit is `SCAAS_UA_ERR_ARGUMENT` (22-127 free, 128-255 the
+/// (NUL-terminated; `*out_len` counts the NUL). Bits 0-23; any other bit is `SCAAS_UA_ERR_ARGUMENT` (24-127 free, 128-255 the
 /// application's `bitLabel`).
 #[no_mangle]
 pub extern "C" fn scaas_ua_governance_bit(bit: u8, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
@@ -1002,6 +1002,17 @@ pub extern "C" fn scaas_ua_canonical_id(text: *const c_char, out: *mut c_char, o
     })
 }
 
+/// How a client shows a `bytes32` id before the user signs (NUL-terminated): the EIP-55 address of a native-space id, else the
+/// URN `urn:scaas:ua:v1:<kind name>:<hex32>` under `kind`, the id's registry kind (0 = none known: `SCAAS_UA_ERR_KIND_UNKNOWN`).
+/// `id` is `0x` + 64 hex digits; non-UTF-8 text is `SCAAS_UA_ERR_ID_FORMAT`.
+#[no_mangle]
+pub extern "C" fn scaas_ua_id_display(id: *const c_char, kind: u16, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
+    run(|| {
+        let t = std::str::from_utf8(cstr(id)?).map_err(|_| ua::UAError::IdFormat)?;
+        write_str(out, out_len, ua::id_display(t, kind)?.text())
+    })
+}
+
 fn json_call(f: fn(&str) -> ua::json::JsonResult<String>, input: *const c_char, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
     run(|| {
         let t = std::str::from_utf8(cstr(input)?).map_err(|_| argument("JSON"))?;
@@ -1034,6 +1045,20 @@ pub extern "C" fn scaas_ua_set_kem_key_args(input: *const c_char, out: *mut c_ch
 #[no_mangle]
 pub extern "C" fn scaas_ua_set_pqz_key_args(input: *const c_char, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
     json_call(ua::json::set_pqz_key_args_json, input, out, out_len)
+}
+
+/// What a payer signs (pay-meta-tax T41), JSON in and out: `{struct, domain: {name, chainId, verifyingContract, salt}, message}`,
+/// `struct` `UAMetaTransfer`, `UAPayWithTax` (`{payment, taxMode, tax}`) or `UARelayFee`; out `{structHash, digest}`.
+#[no_mangle]
+pub extern "C" fn scaas_ua_pay_digest(input: *const c_char, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
+    json_call(ua::json::pay_digest_json, input, out, out_len)
+}
+
+/// `metaPayId` under `scaas.pay.meta.v2` (pay-meta-tax T41): in `{salt, payNo, schema, body}`, out `{payId}`; a refused shape or
+/// `payNo` is `UAArgument`.
+#[no_mangle]
+pub extern "C" fn scaas_ua_meta_pay_id(input: *const c_char, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
+    json_call(ua::json::meta_pay_id_json, input, out, out_len)
 }
 
 /// The `msig` key data for `n` members (`members` may be NULL when `n == 0`): 4 + 36 * n bytes.

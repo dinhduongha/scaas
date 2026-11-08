@@ -49,8 +49,9 @@ cancels and re-queues. The worked ERP example is in [integration.md](../integrat
 
 In scope:
 
-1. **Direction**: clients call the node; the node never calls a client (no webhooks, no callbacks). Latency is bounded
-   by client polling ([indexer-feeds.md#feeds](indexer-feeds.md#feeds)).
+1. **Direction**: clients call the node; the node sends a client nothing but the optional content-free doorbell ping of
+   [NODE-IDX-09](indexer-feeds.md#NODE-IDX-09) (no data webhooks, no callbacks). Latency is bounded by client polling or the
+   ping ([indexer-feeds.md#feeds](indexer-feeds.md#feeds)).
 2. **Store** — one store, always on, on SQLite, PostgreSQL or MySQL ([store.md](store.md)): jobs, job events, chain
    index ranges, configuration, key metadata, audit log, DEX book, mesh and gossip tables.
 3. **Multi-tenancy without companies**: namespaces and per-namespace machine credentials
@@ -71,7 +72,7 @@ Non-goals:
 
 | Out | Why / where it goes |
 |---|---|
-| Node calling a client for anything (webhooks, callbacks) | [ARCH-POS-05](../decisions.md#ARCH-POS-05). Latency: the client re-triggers its own polling. |
+| Node sending a client data (data webhooks, callbacks) | [ARCH-POS-05](../decisions.md#ARCH-POS-05). The one exception is the content-free doorbell ping ([NODE-IDX-09](indexer-feeds.md#NODE-IDX-09)); the data is read from the feeds. |
 | Two nodes owning jobs of one (client, chain), or HA on a shared database | [NODE-JOB-06](job-api.md#NODE-JOB-06), [NODE-STO-06](store.md#NODE-STO-06). Failover = restore the store on another host ([limitations](#limitations)). |
 | Uploading lane keys, RPC URLs, database URLs, the master key or OIDC issuers through the admin API | [NODE-STO-03](store.md#NODE-STO-03): secrets and dial targets stay in `node.toml`/keystores. The one exception is `mesh_peer.url`. |
 | Opaque-token introspection (RFC 7662), DPoP, mTLS-bound tokens | [NODE-ADM-02](admin-auth.md#NODE-ADM-02): JWT access tokens only; follow-up. |

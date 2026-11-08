@@ -124,14 +124,21 @@ interface IUARegistry is IERC5267 {
         bytes32 indexed ua, uint16 indexed kind, bytes keyData, UAAttrs attrs, bytes32 popHash, bytes pqzPop,
         uint8 checkedPop, uint8 checkedPqzPop, uint8 checkedKem
     );
-    /// The PQZ proof stored (`register` with a `pqzPop`, or `storePqzPop`); `checkedPqzPop` = `CHECKED_CHAIN` iff the
-    /// verifier checked it. `pqzPop`: the bytes `storePqzPop` wrote (spec P2: a later write's event carries its bytes);
-    /// empty when `register` wrote them (its `UARegistered`, emitted next, carries them).
-    event UAPqzPopStored(bytes32 indexed ua, uint8 checkedPqzPop, bytes pqzPop);
-    /// A PQZ key added by `setPqzKey` (`pqzKeyHash = keyHashOf(0x0142, pqzKey)`), with the call's bytes (spec P2: the
-    /// record is copyable from the log; `sig` as stored, `pqzKeySigOf`: the `signature`, or an msig's
-    /// `abi.encode(members)`); unproven (`CHECKED_NONE`) until its proof is stored (`UAPqzPopStored`).
-    event UAPqzKeyAdded(bytes32 indexed ua, bytes32 pqzKeyHash, bytes32 pqzPopHash, bytes pqzKey, bytes sig);
+    /// The PQZ proof of key version `version` stored (`register` with a `pqzPop`: version 0, or `storePqzPop`);
+    /// `checkedPqzPop` = `CHECKED_CHAIN` iff the verifier checked it. `pqzPop`: the bytes `storePqzPop` wrote (spec P2: a
+    /// later write's event carries its bytes); empty when `register` wrote them (its `UARegistered`, emitted next, carries them).
+    event UAPqzPopStored(bytes32 indexed ua, uint64 indexed version, uint8 checkedPqzPop, bytes pqzPop);
+    /// PQZ key version `version` added by `setPqzKey` (`pqzKeyHash = keyHashOf(0x0142, pqzKey)`), with the call's bytes
+    /// (spec P2: the record is copyable from the log; `sig` as stored, `pqzKeySigOf`: the `signature`, or an msig's
+    /// `abi.encode(members)`); unproven (`CHECKED_NONE`) until its proof is stored (`UAPqzPopStored`). `register` never
+    /// emits it: its version 0 is in `UARegistered` (group 3g, F-10).
+    event UAPqzKeyAdded(
+        bytes32 indexed ua, uint64 indexed version, bytes32 pqzKeyHash, bytes32 pqzPopHash, bytes pqzKey, bytes sig
+    );
+    /// Group 3g (KV-3): version `version` became the UA's current PQZ key here (the highest eligible version: proven where
+    /// slot 0x0142 has a verifier, else this build's set length with its proof bytes stored); version 0 included, also
+    /// inside `register` with a `pqzPop`. Credits go to it from this log position on.
+    event UAPqzKeyCurrent(bytes32 indexed ua, uint64 indexed version);
     /// A KEM record stored by `setKemKey` (`keyHash = keccak256(kemPk)` of the assembled key), with the call's key and
     /// its stored signature bytes (`kemKeyAt`'s `sig`) (spec P2, ruling A6-m m3: the record is copyable from the log);
     /// checked on chain (`CHECKED_CHAIN`) on EVM. The initial record comes in `UARegistered` (a hash-committed one is
@@ -171,9 +178,12 @@ interface IUARegistry is IERC5267 {
     /// hash of `keccak256("")` or empty proof bytes in `storePqzPop` (ruling A6-m), or proof bytes that do not hash to the
     /// (stored) `pqzPopHash`.
     error UAPqzPopHash(bytes32 ua);
-    /// `setPqzKey` on a record that already has a PQZ key, unless that key can never be proven on this chain (ruling
-    /// R-cross-set: slot 0x0142 has a verifier and the stored key, unproven, is of another parameter set's length).
+    /// `setPqzKey` of version 0 on a record that has a version 0 (here, or in gen 1 on a gen-2 host): every PQZ key record
+    /// is write-once (group 3g, R2 retires ruling R-cross-set's replacement); another set's key gets a new version.
     error UAPqzKeySet(bytes32 ua);
+    /// Group 3g (KV-1): `setPqzKey` of a version v ≥ 1 without version 0, or other than `latest + 1` (a gap, a stored
+    /// version); on a gen-2 host `latest` is the larger of both generations'.
+    error UAPqzKeyVersion(bytes32 ua, uint64 version);
 
     function generation() external view returns (uint8); // 1 or 2
     function predecessor() external view returns (address);
@@ -209,8 +219,16 @@ interface IUARegistry is IERC5267 {
     function kemRecordDigest(bytes32 ua, uint64 version, KemKey calldata kem) external pure returns (bytes32);
     /// typed(`UAPqzKey{ua, pqzKeyHash}`): what a later PQZ key's R_REG proves over.
     function pqzKeyDigest(bytes32 ua, bytes32 pqzKeyHash) external pure returns (bytes32);
-    /// typed(`UAPqzKeyRecord{UAPqzKey{ua, pqzKeyHash}, pqzPopHash}`): what `setPqzKey`'s `sig` signs.
+    /// typed(`UAPqzKeyRecord{UAPqzKey{ua, pqzKeyHash}, pqzPopHash}`): what `setPqzKey`'s `sig` signs (version 0).
     function pqzKeyRecordDigest(bytes32 ua, bytes32 pqzKeyHash, bytes32 pqzPopHash) external pure returns (bytes32);
+    /// Group 3g: typed(`UAPqzKeyVersion{ua, version, pqzKeyHash}`): what version v ≥ 1's R_REG proves over.
+    function pqzKeyVersionDigest(bytes32 ua, uint64 version, bytes32 pqzKeyHash) external pure returns (bytes32);
+    /// Group 3g: typed(`UAPqzKeyVersionRecord{UAPqzKeyVersion{ua, version, pqzKeyHash}, pqzPopHash}`): what `setPqzKey`'s
+    /// `sig` signs for version v ≥ 1.
+    function pqzKeyVersionRecordDigest(bytes32 ua, uint64 version, bytes32 pqzKeyHash, bytes32 pqzPopHash)
+        external
+        pure
+        returns (bytes32);
     function uaMessage(uint16 kind, bytes32 purposeTag, bytes32 digest) external pure returns (bytes32);
     /// EIP-712 digest of UAAuth(ua, purposeTag, digest) under this registry's domain: what native signers sign.
     function uaAuthDigest(bytes32 ua, bytes32 purposeTag, bytes32 digest) external view returns (bytes32);
@@ -252,35 +270,39 @@ interface IUARegistry is IERC5267 {
     function registerFrost(uint16 kind, FrostKey calldata key, UAAttrs calldata attrs, bytes calldata pop,
         bytes calldata pqzPop) external returns (bytes32 ua);
 
-    /// Anyone (UA8-D8, P8): the `R_REG` proof of the UA's PQZ key, given later (or again) — `UAPqzPopHash` unless
-    /// `keccak256(pqzPop)` is the stored `pqzPopHash` (so also for a UA without a PQZ key); a no-op (no event) once proof
-    /// bytes are stored. Else the bytes are stored and, where slot `0x0142` has a verifier, checked over the key's `R_REG`
-    /// message — `uaMessage(0x0142, PURPOSE_POP_V2, portableRecordDigest(ua, kindOf(ua), ...))` for a key from `register`,
-    /// `uaMessage(0x0142, PURPOSE_PQZ_KEY, pqzKeyDigest(ua, pqzKeyHash))` for one from `setPqzKey` — (`UAPoP` on failure),
-    /// then the key's owner (`UAKeyInUse`), `keyOwner`, the `0x0142` list, `proven`; `UAPqzPopStored` with the bytes.
+    /// Anyone (UA8-D8, P8): the `R_REG` proof of the UA's PQZ key version `version`, given later (or again) —
+    /// `UAPqzPopHash` unless `keccak256(pqzPop)` is that version's stored `pqzPopHash` (so also for a version not stored); a
+    /// no-op (no event) once its proof bytes are stored. Else the bytes are stored and, where slot `0x0142` has a verifier,
+    /// checked over the version's `R_REG` message — version 0: `uaMessage(0x0142, PURPOSE_POP_V2, portableRecordDigest(ua,
+    /// kindOf(ua), ...))` for a key from `register`, `uaMessage(0x0142, PURPOSE_PQZ_KEY, pqzKeyDigest(ua, pqzKeyHash))` for
+    /// one from `setPqzKey`; v ≥ 1: `uaMessage(0x0142, PURPOSE_PQZ_KEY, pqzKeyVersionDigest(ua, version, pqzKeyHash))` —
+    /// (`UAPoP` on failure), then the key's owner (`UAKeyInUse`: any UA, this one included), `keyOwner`, the `0x0142` list
+    /// (once per UA), `proven`; `UAPqzPopStored` with the bytes; `UAPqzKeyCurrent` when the version becomes current (the
+    /// highest eligible version: proven, or without the verifier this build's set length with its bytes stored).
     /// Empty `pqzPop`: `UAPqzPopHash` (ruling A6-m). `UAUnauthorized` for an id this registry does not hold (gen 2: a
     /// gen-1 record goes to gen 1, UA8-D11), except (ruling A6-I1) on a gen 2 that enables 0x0142 in front of a gen 1
     /// that does not: the PQZ attachment lives in the oldest generation with the verifier, so this gen 2 proves gen 1's
-    /// key (pointer and hash read from gen 1) and keeps the proof, `proven`, owner and list entry itself.
-    function storePqzPop(bytes32 ua, bytes calldata pqzPop) external;
-    /// Anyone; adds the PQZ key to a record registered without one (ruling A1-I1: set once per chain, portable), or
-    /// replaces a stored key this chain can never prove (ruling R-cross-set: slot 0x0142 has a verifier and the key,
-    /// unproven, is not of this build's parameter set's length — e.g. a registration copied from a chain of another set);
-    /// a key of this chain's set stays write-once, and without the verifier nothing is replaced. A replaced `register` key
-    /// stays in `registrationOf`. `sig` in the `pop` format over `uaMessage(kind, PURPOSE_PQZ_KEY, pqzKeyRecordDigest(ua, pqzKeyHash, pqzPopHash))`;
-    /// the key is stored unproven, and its `R_REG` (over `uaMessage(0x0142, PURPOSE_PQZ_KEY, pqzKeyDigest(ua, pqzKeyHash))`)
-    /// comes by `storePqzPop`. The key's bytes are stored once, at the SSTORE2 pointer `pqzKeyOf(ua).ptr` (as `recordOf`'s:
-    /// `eth_getCode(ptr)` without its leading STOP byte), and carried by `UAPqzKeyAdded`. On a gen 2 that enables 0x0142
-    /// in front of a gen 1 that does not, it takes gen-1 records too (ruling A6-I1, as `storePqzPop`); gen 1's key, if
-    /// any, counts for `UAPqzKeySet` (the same rule: gen 2, the verifier's generation, may replace gen 1's other-set key in
-    /// its own attachment; gen 1 keeps its record). `sig`: `signature` (single keys) or `members` (an msig), never
-    /// `keyData`; stored (`pqzKeySigOf`) as `signature`, or `abi.encode(members)` for an msig. Check order (ruling A4-c2): an id this registry does not hold (`UAUnauthorized`, as
-    /// `storePqzPop`), a gen 2 whose gen 1 enables 0x0142 (`UAKindDisabled(0x0142)`, as `register`) → holder
-    /// (`UAPqzHolder`, with the `msig` debit bound) → the record has a PQZ key that stays (`UAPqzKeySet`) → the key's length
-    /// (`UAKeyData(0x0142)`) / a zero or `keccak256("")` `pqzPopHash` (`UAPqzPopHash`) → signature (`UAUnauthorized`).
-    /// `UAPoP` (`R_REG`) and `UAKeyInUse` (one UA per proven key) fire only where a proof is checked: `storePqzPop`,
-    /// and `register` with a `pqzPop`. `UAPqzKeyAdded`.
-    function setPqzKey(bytes32 ua, bytes calldata pqzKey, bytes32 pqzPopHash, UASig calldata sig) external;
+    /// version (pointer and hash read from gen 1; the bytes checked here, gen 1's stored bytes never taken as proven) and
+    /// keeps the record, the proof, `proven`, owner and list entry itself; `current` is this generation's.
+    function storePqzPop(bytes32 ua, uint64 version, bytes calldata pqzPop) external;
+    /// Anyone (group 3g, CTR-UA-41 draft): PQZ key version `version` of the UA, each written once. Version 0 to a record
+    /// registered without one (ruling A1-I1, portable); a second version 0 is `UAPqzKeySet` whatever its set (R2 retires
+    /// ruling R-cross-set's replacement). A version v ≥ 1 only when version 0 is stored and `v == latest + 1`, else
+    /// `UAPqzKeyVersion`; its key bytes differ from every stored version of the UA (`pqzKeyUsed`, else `UAKeyInUse(pqzKeyHash,
+    /// ua)`, in every registry kind). `sig` in the `pop` format over `uaMessage(kind, PURPOSE_PQZ_KEY, rd)`, `rd` =
+    /// `pqzKeyRecordDigest(ua, pqzKeyHash, pqzPopHash)` for version 0, `pqzKeyVersionRecordDigest(ua, version, pqzKeyHash,
+    /// pqzPopHash)` for v ≥ 1; the key is stored unproven, never current here, and its `R_REG` comes by `storePqzPop`. The
+    /// key's bytes are stored once, at the SSTORE2 pointer `pqzKeyAt(ua, version).ptr` (`eth_getCode(ptr)` without its
+    /// leading STOP byte), and carried by `UAPqzKeyAdded`. On a gen 2 that enables 0x0142 in front of a gen 1 that does not,
+    /// it takes gen-1 records too (ruling A6-I1, as `storePqzPop`): the sequence reads both generations' `latest`, a version
+    /// stored in either is refused, and the key marker is read in both (host rule 1). `sig`: `signature` (single keys) or
+    /// `members` (an msig), never `keyData`; stored (`pqzKeySigOf`) as `signature`, or `abi.encode(members)` for an msig.
+    /// Check order: an id this registry does not hold (`UAUnauthorized`, as `storePqzPop`), a gen 2 whose gen 1 enables
+    /// 0x0142 (`UAKindDisabled(0x0142)`, as `register`) → holder (`UAPqzHolder`, with the `msig` debit bound) → the version
+    /// (`UAPqzKeySet` / `UAPqzKeyVersion`) → the key's length (`UAKeyData(0x0142)`) → the key repeated (`UAKeyInUse`) → a zero
+    /// or `keccak256("")` `pqzPopHash` (`UAPqzPopHash`) → signature (`UAUnauthorized`). `UAPoP` (`R_REG`) and `UAKeyInUse`
+    /// across UAs (one UA per proven key) fire only where a proof is checked: `storePqzPop`, and `register` with a `pqzPop`.
+    function setPqzKey(bytes32 ua, uint64 version, bytes calldata pqzKey, bytes32 pqzPopHash, UASig calldata sig) external;
     /// Anyone (P4, UA8-D5): the UA's KEM record `(version, kem)`. Versions ≥ 1: `sig` (`signature`, or `members` for an
     /// msig, native members as in `registerMsig`'s `pop`; never `keyData`) over `uaMessage(kind, PURPOSE_KEM,
     /// kemRecordDigest(ua, version, kem))`. Version 0 (owner 2026-10-31): only the key `register` committed by hash
@@ -304,12 +326,11 @@ interface IUARegistry is IERC5267 {
     /// revoke: an acceptance cannot be withdrawn.
     function acceptMembership(bytes32 ua, MemberSig calldata memberSig) external;
 
-    /// `pqzKey`: the SSTORE2 pointer of the UA's PQZ key, proven or not (UA8-D9: a directory), 0 = none (gen 2 forwards
-    /// gen-1 records).
+    /// `pqzKey`: the SSTORE2 pointer of the UA's current PQZ key version, proven or not (UA8-D9: a directory), 0 = none
+    /// (gen 2 forwards gen-1 records; a gen-2 host answers its own current).
     function recordOf(bytes32 ua) external view returns (Record memory r, address pqzKey);
     /// Exactly the `register` arguments: a PQZ key added later by `setPqzKey` is not in `attrs` (read it, its proof and
-    /// its signature with `pqzKeyOf`, `pqzPopOf`, `pqzKeySigOf`; ruling A4-c3), and a `register` key it replaced (ruling
-    /// R-cross-set) still is, with an empty `pqzPop` (this chain never stored its proof). For a key from `register`, `pqzPop` is the
+    /// its signature with `pqzKeyAt`, `pqzPopOf`, `pqzKeySigOf`; ruling A4-c3). For a key from `register` (version 0), `pqzPop` is the
     /// stored proof (given in `register` or by `storePqzPop`; it hashes to `attrs.pqzPopHash`; ruling A5-c2). An `msig`:
     /// `keyData` the assembled CTR-UA-09 bytes, `pop` = the 32 bytes of `keccak256(abi.encode(MemberSig[]))` ("" for none; owner
     /// 2026-11-03: the slots are in `UAMemberSig`; `msigOf` for the typed structure). A hash-committed KEM key stays in its committed form (`kem` = scheme only, `kemPkHash`), filled or not.
@@ -337,15 +358,27 @@ interface IUARegistry is IERC5267 {
     /// (owner 2026-11-03; its slots are in `UAMemberSig`), "" for an empty `pop`. A reader tells which by the record's kind. "" for an id not
     /// registered (gen 2 forwards gen-1 records).
     function popOf(bytes32 ua) external view returns (bytes memory);
-    function pqzPopOf(bytes32 ua) external view returns (bytes memory);
-    /// `setPqzKey`'s signature; empty when the key came with `register` (its consent is the `pop`) or there is none.
-    function pqzKeySigOf(bytes32 ua) external view returns (bytes memory);
-    /// The PQZ key pointer (SSTORE2: the key is `eth_getCode(ptr)` without its leading STOP byte), its proof hash and
-    /// whether the slot-0x0142 verifier checked the proof (UA8-D9). Gen 2: its own PQZ attachment of a gen-1 record if it
-    /// holds one (ruling A6-I1), else gen 1's answer.
-    function pqzKeyOf(bytes32 ua) external view returns (address ptr, bytes32 pqzPopHash, bool proven);
-    /// The three parts (P11.3, ruling C8), `UAKinds.CHECKED_*`: `pop` = CHAIN; `pqzPop` = CHAIN iff proven, else NONE (no
-    /// key, or not yet proven); `kem` = CHAIN once a KEM record is stored, else NONE; all NONE for an unregistered id.
+    /// Version `version`'s stored proof bytes ("" none). Gen 2 forwards a version it does not hold of a gen-1 record.
+    function pqzPopOf(bytes32 ua, uint64 version) external view returns (bytes memory);
+    /// `setPqzKey`'s signature of version `version`; empty when the key came with `register` (its consent is the `pop`) or
+    /// there is none.
+    function pqzKeySigOf(bytes32 ua, uint64 version) external view returns (bytes memory);
+    /// Group 3g (KV-3, C3): the current version (the highest eligible one; 0 when none is, then version 0 as stored, its
+    /// `proven` false), its key pointer (SSTORE2: the key is `eth_getCode(ptr)` without its leading STOP byte), its proof
+    /// hash and whether the slot-0x0142 verifier checked its proof (UA8-D9). One current per UA and registry generation: a
+    /// gen-2 host answers its own (its records first, gen 1's for a version it does not hold); any other gen 2 forwards a
+    /// gen-1 record.
+    function pqzKeyOf(bytes32 ua) external view returns (uint64 version, address ptr, bytes32 pqzPopHash, bool proven);
+    /// Any stored version's key pointer, proof hash and `proven` (zero for none). Gen 2 (host rule 2): its own record of
+    /// the version when it holds one, else gen 1's.
+    function pqzKeyAt(bytes32 ua, uint64 version) external view returns (address ptr, bytes32 pqzPopHash, bool proven);
+    /// The highest stored version (clients sign `latest + 1`; 0 also when none is stored: `pqzKeyAt(ua, 0)` tells). Gen 2:
+    /// the larger of both generations'.
+    function pqzKeyLatest(bytes32 ua) external view returns (uint64);
+    /// Some version of `ua` stores this key, proven or not (KV-1's marker). Gen 2: in either generation.
+    function pqzKeyUsed(bytes32 ua, bytes32 pqzKeyHash) external view returns (bool);
+    /// The three parts (P11.3, ruling C8), `UAKinds.CHECKED_*`: `pop` = CHAIN; `pqzPop` = CHAIN iff the current PQZ key
+    /// version is proven, else NONE (no key, or not yet proven); `kem` = CHAIN once a KEM record is stored, else NONE; all NONE for an unregistered id.
     function checkedOf(bytes32 ua) external view returns (uint8 pop, uint8 pqzPop, uint8 kem);
     /// The highest stored version: (0, none, "") without one — also a hash-committed `register` key not filled yet —,
     /// (0, kem, "") for the `register` key alone (version 0, empty `sig`: its consent is the pop, UA8-D4).

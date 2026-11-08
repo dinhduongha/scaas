@@ -1,0 +1,50 @@
+# ua-mtx-merge T29 gate summary (full output in git-ignored .log files, not committed)
+# T29: ComplianceRegistry, the bounded registry call, the code pin; ALLOWLIST, DENYLIST (regulated-kinds spec §2.4, §3.1
+# canReceive, §3.2 the receiver rows, §5; CTR-AS-07, CTR-AS-16, CTR-GOV-18; Codex 4, F-11).
+# Base: 70d0b751 (T28 tip). T29 commits: legacy note (no copy, MD-4), the build (7411a468), this one (sizes, harness, mutants,
+# summary, the strengthened test_disabledListStopsChecking).
+step | commit | rc | counts
+t29-red-1 | worktree (T29 tests, skeleton registry whose entries revert, T28 token) | 1 | test/as + GovDeploy 16 suites, 23 passed 14 failed: 11 suites setUp (the skeleton refuses setAttester), RegulatedSkeleton test_createKinds9And13, test_notBuiltYet, GovDeploy test_deployRegulatedPath (REGISTRY_CODEHASH 0)
+t29-red-2 | worktree (registry built, T28 token) | 1 | 16 suites, 83 passed 22 failed: every token row (RegulatedNotBuilt), test_registryOfOtherCodeRefused, test_registryRuntimeHashPinned, test_releaseWithoutCodehashRefused, test_deployRegulatedPath
+t29-green | worktree | 0 | test/as + GovDeploy 16 suites, 105 passed 0 failed
+t29-forge-full | build commit's tree | 0 | forge test: 243 suites, 2738 passed 0 failed 14 skipped (T28: 240 suites, 2715: + Registry 13, Receiver 5, RegistryFailure 5)
+t29-touched | build commit's tree | 0 | test/as, GovDeploy, GovLeg, LinkClosure, MsgSenderLint, Layout: 22 suites, 122 passed
+t29-sizes | build commit | 0 | NormalRegulatedToken 37,163 -> 38,257 B; WrappedRegulatedToken 47,847 -> 48,938 (init 50,167 -> 51,362); WrappedPqzRegulatedToken 61,225 -> 62,285 (init 63,922 -> 65,088); RegulatedLib 7,193 -> 7,275; ComplianceRegistry 2,462 (new); plain kinds and GovernanceRouter unchanged
+t29-stop-rule | build commit | 0 | kind 13 measured first: 62,285 < 64,512 B (2,227 B left): no lever, no _above64KiB row
+t29-deploy-gas | build commit | 0 | GovDeploy test_releaseGasPerKind -vv, asked = (regular x 64/63 + state) x 1.05 + 0.37 M: kind 8 64.99 M, kind 9 82.88 M, kind 13 105.28 M; ComplianceRegistry 4.46 M (plain CREATE, no frame) (runs/2026-11-04-ua-mtx-merge-regulated-sizes.txt)
+t29-registry-gas | build commit | 0 | canonical hasFlags cold, costliest path: 5,401 gas; REGISTRY_GAS 50,000 >= 2 x; first gas limit not starved (probe, margin 5,000): 69,077
+t29-sizegate | build commit | 0 | 0 errors, 94 contracts, above 65536 B: none
+t29-isolate | build commit | 0 | 22 passed 0 failed (forge --isolate UAGas, UARegistryGroups)
+t29-docs | build commit | 0 | docs_check check 0 errors, 5 warnings, 16 notes; paths 0
+t29-mutants | build commit | 1 each | 24 of 24 killed, none a compile error (runs/2026-11-04-ua-mtx-merge-t29-mutants.txt); one survivor on the first run (disabled-list-still-read), killed after its test gained a control; src and script restored after each
+t29-at-set-n2048-kmax1024 | build commit + strengthened test | 0 | test/{ua,pqz,as}: 77 suites, 887 passed 0 failed 1 skipped
+t29-at-set-n2304-kmax4096 | build commit + strengthened test | 0 | test/{ua,pqz,as}: 77 suites, 884 passed 0 failed 4 skipped
+t29-at-set-n2560-kmax16384 | build commit + strengthened test | 0 | test/{ua,pqz,as}: 77 suites, 883 passed 0 failed 5 skipped
+t29-at-set-n2816-kmax65536 | build commit + strengthened test | 0 | test/{ua,pqz,as}: 77 suites, 878 passed 0 failed 10 skipped; src/pqz/PqzSet.sol restored (git status src clean)
+#
+# Pins, old -> new: size-baseline.json (above); new pins REGISTRY_GAS 50,000 (RegistryFailure.t.sol) and the registry runtime
+# hash 0x4905274752bb319bf684aeb7cac64b066308634b1b3166c99b6346f26b787edc (Registry.t.sol). No gas pin, typehash, selector,
+# plain-kind slot, layout, dex_order_kat.json row or GovernanceRouter address moved; so no KAT reader (clientkeys, node) rerun.
+#
+# Not run in T29: node suite and e2e (no node source or vector changed); pqz-core gate (no core, statement or set);
+# scripts/e2e-zether.sh; e2e.py; deploy.sh (the registry deploy with COMPLIANCE_ADMIN and the DEX attestations: T33).
+#
+# Conflicts with the plan / spec, and choices the text leaves open (none resolved silently):
+#   implArgs is decoded strictly (abi.encode(bytes32), not 0; else the release's constructor reverts): every regulated release
+#   must carry the hash. A tolerant decode (empty -> 0 -> no registry allowed) was not taken: no rule names such a release.
+#   REGISTRY_CODEHASH is a public getter: spec §5 "wallets show the hash"; GovDeploy and Registry.t.sol read it.
+#   Registry details the spec leaves open, from asset-suite §2.6's comments: id 0 is the admin and attesterEnabled(0) is true;
+#   flags 0 revoke; setAttester(x, false) for a never-enabled x refuses NotAttester (no id burnt); ELIGIBLE_CONTRACT needs the
+#   admin AND validUntil == type(uint64).max (CTR-AS-16), both refused EligibleContractAdminOnly (spec names no other error).
+#   Open, not decided here: any enabled attester may overwrite any account's attestation, including the admin's
+#   ELIGIBLE_CONTRACT row on SCaaSDex (spec §5 is silent; one slot per account): a rogue or careless attester could stop a
+#   venue until the admin re-attests or disables it. For the owner.
+#   canReceive's reasons when several apply: 1 if never attested (validUntil 0), else 3 attester disabled, else 2 expired,
+#   else 1 flags missing; 4 denied only when the required side passes. ok always equals hasFlags (tested).
+#   REGISTRY_GAS stays at spec §5's 50,000 [est.] (measured need 5,401: about 9x); the margin, 5,000, is ours (spec: "margin").
+#   The plan's call-budget rows: mtxRelayFee (2 calls by construction) and moderated/operatorTransfer (T32) are not measured;
+#   the other rows are (1 direct, mint, wrap, forceTransfer; 3 relayed transfer with a fee, payWithFee, payWithFeeToUA,
+#   mtxPayReceiverFee, mtxWrapOrder with a fee; 0 burn, unwrap).
+#   The plan's file list has no RegulatedInit, RegulatedSkeleton, Catalogue, GovDeploy, size-baseline.json: each moved a
+#   placeholder row or carries the hash (above). test/helpers/Catalogue.sol gains a release overload with implArgs and regArgs().
+#   deploy.sh, node.example.toml and the deployments JSON (compliance_registry and its hash) are T33's (spec §6.1, plan T33).

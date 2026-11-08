@@ -34,11 +34,11 @@ contract NormalPqzToken is NormalToken, PqzLayer {
         if (!SigCheck.isContract(env.registry)) revert BadInit();
     }
 
-    function kind() public pure override(NormalToken, MetaTokenBase) returns (uint8) {
+    function kind() public pure virtual override(NormalToken, MetaTokenBase) returns (uint8) {
         return TokenStore.KIND_NORMAL_PQZ;
     }
 
-    function _validBits() internal pure override(NormalToken, GovernanceBase) returns (uint256) {
+    function _validBits() internal pure virtual override(NormalToken, GovernanceBase) returns (uint256) {
         return GovernanceBits.NORMAL_BITS;
     }
 
@@ -46,35 +46,35 @@ contract NormalPqzToken is NormalToken, PqzLayer {
         _requireUnused(cfg, false, true, true, false);
         _setMetadata(cfg.name, cfg.symbol, cfg.decimals);
         GovernanceLib.init(cfg.features, cfg.lockedFeatures, cfg.owner, cfg.grantDelay, cfg.rescueTo, cfg.roles, _validBits(),
-            _roleBits(), _contractOnlyBits());
+            _roleBits(), _contractOnlyBits(), _REGISTRY);
         PqzStateLib.init(cfg.conf, _REGISTRY, PQZ_VERIFIER);
         if (cfg.initialSupply != 0) _mint(cfg.initialHolder, cfg.initialSupply);
     }
 
-    function _domainName() internal pure override(ERC20MetaTx, PqzLayer) returns (string memory) {
+    function _domainName() internal pure virtual override(ERC20MetaTx, PqzLayer) returns (string memory) {
         return PqzLayer._domainName();
     }
 
     function _envelopeBinding(MetaTxLib.MetaTransaction memory m)
-        internal view override(MetaTxBase, PqzLayer) returns (bytes32)
+        internal view virtual override(MetaTxBase, PqzLayer) returns (bytes32)
     {
         return PqzLayer._envelopeBinding(m);
     }
 
     function _uaEnvelopeBinding(MetaTxLib.UAMetaTransaction memory m)
-        internal view override(UAMetaTxBase, PqzLayer) returns (bytes32)
+        internal view virtual override(UAMetaTxBase, PqzLayer) returns (bytes32)
     {
         return PqzLayer._uaEnvelopeBinding(m);
     }
 
-    function _batchable(bytes4 sel) internal view override(MetaTxBase, PqzLayer) returns (bool) {
+    function _batchable(bytes4 sel) internal view virtual override(MetaTxBase, PqzLayer) returns (bool) {
         return PqzLayer._batchable(sel);
     }
 
     /// @notice The allowlist (CTR-MTX-19, CTR-PQZ-21): `cancelNonce`, `burn(uint256)` `AMOUNT(0)`, the PQZ ops
     ///         `ABSOLUTE` (incl. the rollover and `mtxPrepareAcc`).
     function mtxSelectors()
-        public pure override(NormalToken, IMetaTx, MetaTxBase)
+        public pure virtual override(NormalToken, IMetaTx, MetaTxBase)
         returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
     {
         s = new bytes4[](10);
@@ -88,17 +88,17 @@ contract NormalPqzToken is NormalToken, PqzLayer {
         (s[5], c[5]) = (IPqzToken.mtxUnshield.selector, FEE_CLASS_ABSOLUTE);
         (s[6], c[6]) = (IPqzToken.mtxConfidentialTransferSingle.selector, FEE_CLASS_ABSOLUTE);
         (s[7], c[7]) = (IPqzToken.mtxConfidentialTransferSingleCompact.selector, FEE_CLASS_ABSOLUTE);
-        (s[8], c[8]) = (IConfidentialToken.mtxRollOver.selector, FEE_CLASS_ABSOLUTE);
+        (s[8], c[8]) = (IPqzToken.mtxRollOver.selector, FEE_CLASS_ABSOLUTE);
         (s[9], c[9]) = (IPqzToken.mtxPrepareAcc.selector, FEE_CLASS_ABSOLUTE);
     }
 
-    function _mtxRule(bytes4 sel) internal view override(NormalToken, MetaTxBase) returns (MtxRule memory) {
+    function _mtxRule(bytes4 sel) internal view virtual override(NormalToken, MetaTxBase) returns (MtxRule memory) {
         if (_isPqzOp(sel)) return _pqzRule(sel);
         return NormalToken._mtxRule(sel);
     }
 
     /// @notice `burn` and the PQZ ops (CTR-PQZ-15: the PQ-complete path).
-    function _uaAllowed(bytes4 sel) internal view override(NormalToken, UAMetaTxBase) returns (bool) {
+    function _uaAllowed(bytes4 sel) internal view virtual override(NormalToken, UAMetaTxBase) returns (bool) {
         return _isPqzOp(sel) || NormalToken._uaAllowed(sel);
     }
 }

@@ -1,0 +1,20 @@
+mutant | test that went red | rc
+compact-multi-check-dropped | test_frozenSenderRefusedBeforeProof_direct, test_frozenSenderRefusedBeforeProof_signed, test_pauseStopsShieldTransfersUnshield, test_pauseStopsSignedTransfers | 1
+envelope-subject-as-sender | test_envelopeSubjectNeverTheSender, test_frozenSenderRefusedBeforeProof_direct, test_frozenSenderRefusedBeforeProof_signed, test_unshieldUnwrapFrozenRefused | 1
+check-after-proof-bundle | test_frozenSenderRefusedBeforeProof_direct, test_frozenSenderRefusedBeforeProof_signed | 1
+r-on-decoy-leg | test_frozenAndDeniedDecoysReceive | 1
+zether-hook-in-pqz-layer | test_zetherHookNotInPqz | 1
+check-after-proof-single | test_frozenSenderRefusedBeforeProof_direct, test_frozenSenderRefusedBeforeProof_signed | 1
+check-after-proof-unshield-unwrap | test_unshieldUnwrapFrozenRefused | 1
+frozen-sender-passes | test_frozenSenderRefusedBeforeProof_direct, test_frozenSenderRefusedBeforeProof_signed, test_unshieldUnwrapFrozenRefused | 1
+ring-member-read | test_frozenAndDeniedDecoysReceive, test_frozenReceivesAndRollsOver | 1
+force-writes-zether-state | test_forceMovesPublicOnly_zetherStateUntouched | 1
+force-reads-zether-state | test_forceMovesPublicOnly_zetherStateUntouched | 1
+frozen-beneficiary-passes | test_frozenAndDeniedDecoysReceive, test_frozenBeneficiaryRefused | 1
+unshield-check-dropped | test_frozenSenderRefusedBeforeProof_direct, test_pauseStopsShieldTransfersUnshield | 1
+unshield-recipient-unchecked | test_deniedUnshieldRecipientRefused | 1
+f-on-envelope-from-not-fee-bearing | test_envelopeSubjectNeverTheSender | 1
+fee-bearing-pre-row-dropped | test_envelopeSubjectNeverTheSender | 1
+shield-payer-unchecked | test_pauseStopsShieldTransfersUnshield | 1
+deploy-zether-regulated-dropped | test_deployZetherRegulatedPath, test_regulatedReleasesPublished_10, test_regulatedReleasesPublished_11 | 1
+deploy-without-regulatedlib | test_deployZetherRegulatedPath, test_regulatedReleasesPublished_11 | 1

@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {MtxDigest} from "../helpers/MtxDigest.sol";
+import {PayMetaKit} from "../helpers/PayMetaKit.sol";
+import {IMetaTxAddress} from "../../src/metatx/IMetaTxAddress.sol";
 import {IERC5267} from "@openzeppelin/contracts/interfaces/IERC5267.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {Test, stdStorage, StdStorage} from "forge-std/Test.sol";
@@ -14,6 +17,7 @@ import {HederaMandateWallet} from "../../src/hedera/HederaMandateWallet.sol";
 import {SmartKeyAccount, SubjectKey, KeyKind, AccountSig} from "../../src/account/SmartKeyAccount.sol";
 import {SmartKeyAccountFactory} from "../../src/account/SmartKeyAccountFactory.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
+import {IUALedger} from "../../src/metatx/IUALedger.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
@@ -32,10 +36,14 @@ import {TokenStore} from "../../src/metatx/TokenStore.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {GovernanceRouter} from "../../src/governance/GovernanceRouter.sol";
+import {NormalRegulatedToken} from "../../src/regulated/NormalRegulatedToken.sol";
+import {regArgs} from "../helpers/Catalogue.sol";
+import {Holder} from "../as/helpers/RegFixture.sol";
 import {IGovernance} from "../../src/governance/IGovernance.sol";
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
 import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
-import {VM, TYPED_OPS, SALTED_DOMAIN, checkRow, onChain, domainOf, rowEnvelope, rowEnvelope2, msgField, domainField} from "./NamedEntry.t.sol";
+import {VM, TYPED_OPS, TYPED_OPS_LEGACY, SALTED_DOMAIN, checkRow, onChain, domainOf, rowEnvelope, rowEnvelope2, msgField, domainField} from
+    "./NamedEntry.t.sol";
 
 /// `built` (the entry's call from the message's fields) is the row's calldata under `kind`; that calldata runs on `c` from
 /// the row's relayer, the signature replaced by the one under `c`'s domain.
@@ -62,10 +70,46 @@ function tryRowAs(string memory j, string memory op, string memory kind, address
     (ok, ret) = c.call(cd);
 }
 
+// The ordered cancel on ids (Q2), on the tokens, the router and the mandate wallets.
+string constant UA_CANCEL_NONCE = "mtxCancelNonce((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))";
+
+/// pay-meta-tax T41: a pay row's `PayMeta` (`domains.<kind>.extra.meta`), the entry's last parameter.
+function rowMeta(string memory j, string memory op, string memory kind) pure returns (MetaTxLib.PayMeta memory m) {
+    string memory p = domainField(op, kind, "extra.meta.");
+    m.salt = VM.parseJsonBytes32(j, string.concat(p, "salt"));
+    m.payNo = VM.parseJsonString(j, string.concat(p, "payNo"));
+    m.schema = uint16(VM.parseJsonUint(j, string.concat(p, "schema")));
+    m.body = VM.parseJsonBytes(j, string.concat(p, "body"));
+}
+
 /// `to` in place of `old`, the same length, in `cd`.
 function swap(bytes memory cd, bytes memory old, bytes memory to) pure {
     uint256 at = find(cd, old);
     for (uint256 i; i < old.length; ++i) cd[at + i] = to[i];
+}
+
+/// ua-mtx-merge T11 (MD-7): a `UA…` row names its merged entry `sel` (`mtx…`); its own calldata runs on `c`, the signature
+/// under `c`'s domain. (T3-T7 ran the `ua*` calldata of the row under `sel`, until the rows were regenerated.)
+function runRowRenamed(string memory j, string memory op, string memory kind, address c, bytes memory built, bytes4 sel) {
+    checkRow(j, op, kind);
+    bytes memory cd = VM.parseJsonBytes(j, domainField(op, kind, "calldata"));
+    require(bytes4(cd) == sel, "the row names the merged mtx entry");
+    require(keccak256(built) == keccak256(cd), "the row: the merged calldata");
+    swap(cd, VM.parseJsonBytes(j, domainField(op, kind, "signature")), onChain(j, op, c));
+    VM.prank(VM.parseJsonAddress(j, msgField(op, "relayer")));
+    (bool ok, bytes memory ret) = c.call(cd);
+    if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+}
+
+/// ua-mtx-merge T3: the row of a retired address entry (R23): its own calldata finds no function on `c`. T11 (MD-7): the row
+/// is read from `TYPED_OPS_LEGACY`.
+function rowHasNoEntry(string memory j, string memory op, string memory kind, address c, bytes memory built) {
+    checkRow(j, op, kind);
+    bytes memory cd = VM.parseJsonBytes(j, domainField(op, kind, "calldata"));
+    require(keccak256(built) == keccak256(cd), "the row: the old calldata");
+    VM.prank(VM.parseJsonAddress(j, msgField(op, "relayer")));
+    (bool ok, bytes memory ret) = c.call(cd);
+    require(!ok && ret.length == 0, "a retired entry runs");
 }
 
 function find(bytes memory hay, bytes memory needle) pure returns (uint256) {
@@ -93,6 +137,12 @@ contract TypedOpsTest is UALedgerBase {
         j = vm.readFile(TYPED_OPS);
         pk = uint256(vm.parseJsonBytes32(j, ".key.private"));
         signer = vm.parseJsonAddress(j, ".key.address");
+    }
+
+    /// ua-mtx-merge T11 (MD-7): a retired row, from the rows as they stood before the merge (the same key).
+    modifier legacyRows() {
+        j = vm.readFile(TYPED_OPS_LEGACY);
+        _;
     }
 
     // ------------------------------------------------------------------ the row
@@ -181,31 +231,41 @@ contract TypedOpsTest is UALedgerBase {
         string memory op = "CancelNonce";
         MetaTxLib.Envelope memory e = rowEnvelope(j, op);
         uint256 lane = _uint(op, "lane");
-        bytes memory built = abi.encodeCall(MetaTxBase.mtxCancelNonce, (e, lane, _sigOf(op)));
-        _run(op, address(tok), built);
-        assertEq(tok.mtxNonce(e.from, lane), 1, "the signed lane");
-        assertEq(tok.mtxNonce(e.from, e.batch), 1, "the cancel's own lane");
+        bytes memory built = abi.encodeCall(IMetaTxAddress.mtxCancelNonce, (e, lane, _sigOf(op, "account")));
+        // ua-mtx-merge T1, meaning: a token has no address `mtxCancelNonce` (Q2, MD-1); the row runs on the wallets only
+        (bool ok, bytes memory ret) = address(tok).call(built);
+        assertFalse(ok, "no token entry");
+        assertEq(ret.length, 0, "no such function");
+        assertEq(tok.mtxNonce(MetaTxLib.pad(e.from), lane), 0, "the signed lane, untouched");
 
-        MandateWallet wallet = new MandateWallet(e.from, chainUidA);
-        _run(op, address(wallet), built);
-        assertEq(wallet.mtxNonce(e.from, lane), 1);
+        // ua-mtx-merge T3b (Q6), meaning: nor does a mandate wallet (its cancel is `mtxCancelNonce` on ids); the row runs
+        // on the account only (MD-7: its `on` narrows to `SmartKeyAccount`, T11)
+        MandateWallet wallet = new MandateWallet(MetaTxLib.pad(e.from), chainUidA, address(0), false);
+        (ok, ret) = address(wallet).call(built);
+        assertFalse(ok, "no wallet entry");
+        assertEq(ret.length, 0, "no such function");
 
-        // on an account `from` is not the account: an outside signer cancels its own lane there (`bytes sig`)
+        // on an account `from` is not the account: an outside signer cancels its own lane there (`bytes sig`). T11 (MD-7,
+        // Q6): the row's `on` is `SmartKeyAccount` only, its one domain `account`
         SmartKeyAccount acct = SmartKeyAccount(payable(new SmartKeyAccountFactory(chainUidA).deploy(
             SubjectKey(KeyKind.SECP256K1, _pad(e.from), 0, 0, 0), address(0xD00D))));
-        _run(op, address(acct), built);
+        assertEq(abi.encode(vm.parseJsonKeys(j, string.concat(".ops.", op, ".domains"))), abi.encode(_one("account")));
+        built = abi.encodeCall(IMetaTxAddress.mtxCancelNonce, (e, lane, _sigOf(op, "account")));
+        runRow(j, op, "account", address(acct), built);
         assertEq(acct.mtxNonce(e.from, lane), 1);
     }
 
-    function test_typedOpsVectors_Burn() public {
+    /// ua-mtx-merge T3 (R23), meaning: the address `mtxBurn` / `Burn` left the token; the row (retired by T11, MD-7) finds no
+    /// entry. The burn is `UABurn`'s row, below, under `mtxBurn`.
+    function test_typedOpsVectors_BurnRowHasNoEntry() public legacyRows {
         string memory op = "Burn";
         MetaTxLib.Envelope memory e = rowEnvelope(j, op);
         uint256 amount = _uint(op, "amount");
         tok.mint(e.from, SUPPLY);
-        _run(op, address(tok), abi.encodeCall(NormalToken.mtxBurn, (e, amount, _sigOf(op))));
-        assertEq(tok.balanceOf(e.from), SUPPLY - amount - _feeOf(op, amount));
-        assertEq(tok.balanceOf(e.feeRecipient), _feeOf(op, amount));
-        assertEq(tok.mtxNonce(e.from, e.batch), 1);
+        rowHasNoEntry(j, op, "token", address(tok), abi.encodeWithSignature(
+            "mtxBurn((address,uint256,uint256,uint256,uint32,address,uint256,address),uint256,bytes)", e, amount, _sigOf(op)));
+        assertEq(tok.balanceOf(e.from), SUPPLY);
+        assertEq(tok.mtxNonce(MetaTxLib.pad(e.from), e.batch), 0);
     }
 
     function test_typedOpsVectors_UABurn() public {
@@ -214,10 +274,11 @@ contract TypedOpsTest is UALedgerBase {
         uint256 amount = _uint(op, "amount");
         address from = address(uint160(uint256(u.from)));
         tok.mint(from, SUPPLY);
-        _run(op, address(tok), abi.encodeCall(NormalToken.uaBurn, (u, amount, _uaSigOf(op))));
+        runRowRenamed(j, op, "token", address(tok), abi.encodeCall(NormalToken.mtxBurn, (u, amount, _uaSigOf(op))),
+            NormalToken.mtxBurn.selector);
         assertEq(tok.balanceOf(from), SUPPLY - amount - _feeOf(op, amount));
         assertEq(tok.balanceOf(u.feeRecipient), _feeOf(op, amount));
-        assertEq(tok.uaNonce(u.from, u.batch), 1);
+        assertEq(tok.mtxNonce(u.from, u.batch), 1);
     }
 
     function test_typedOpsVectors_Wrap() public {
@@ -230,7 +291,7 @@ contract TypedOpsTest is UALedgerBase {
         _run(op, address(wrp), abi.encodeWithSignature(_abi(op), e, amount, _sigOf(op)));
         assertEq(wrp.balanceOf(e.from), amount - e.fee, "the ABSOLUTE fee from the minted units");
         assertEq(wrp.balanceOf(e.feeRecipient), e.fee);
-        assertEq(wrp.mtxNonce(e.from, e.batch), 1);
+        assertEq(wrp.mtxNonce(MetaTxLib.pad(e.from), e.batch), 1);
     }
 
     function test_typedOpsVectors_WrapLeg() public {
@@ -243,16 +304,17 @@ contract TypedOpsTest is UALedgerBase {
         assertEq(w.balanceOf(e.feeRecipient), e.fee);
     }
 
-    function test_typedOpsVectors_Unwrap() public {
+    /// ua-mtx-merge T3 (R23), meaning: the address `mtxUnwrap` / `Unwrap` left the token; the row finds no entry (MD-7).
+    function test_typedOpsVectors_UnwrapRowHasNoEntry() public legacyRows {
         string memory op = "Unwrap";
         MetaTxLib.Envelope memory e = rowEnvelope(j, op);
         uint256 wrapped = _uint(op, "wrapped");
         address recipient = _addr(op, "recipient");
         _fund(wrp, und, SUPPLY);
-        _run(op, address(wrp), abi.encodeCall(WrappedToken.mtxUnwrap, (e, wrapped, recipient, _uint(op, "minOut"), _sigOf(op))));
-        assertEq(und.balanceOf(recipient), wrapped);
-        assertEq(wrp.balanceOf(e.from), SUPPLY - wrapped - _feeOf(op, wrapped));
-        assertEq(wrp.balanceOf(e.feeRecipient), _feeOf(op, wrapped));
+        rowHasNoEntry(j, op, "token", address(wrp), abi.encodeWithSignature("mtxUnwrap((address,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256,bytes)",
+            e, wrapped, recipient, _uint(op, "minOut"), _sigOf(op)));
+        assertEq(und.balanceOf(recipient), 0);
+        assertEq(wrp.balanceOf(e.from), SUPPLY);
     }
 
     function test_typedOpsVectors_UAUnwrap() public {
@@ -261,39 +323,39 @@ contract TypedOpsTest is UALedgerBase {
         uint256 wrapped = _uint(op, "wrapped");
         address recipient = _addr(op, "recipient");
         _fund(wrp, und, SUPPLY);
-        _run(op, address(wrp), abi.encodeWithSignature(_abi(op), u, wrapped, recipient, _uint(op, "minOut"), _uaSigOf(op)));
+        runRowRenamed(j, op, "token", address(wrp), abi.encodeWithSignature(_abi(op), u, wrapped, recipient,
+            _uint(op, "minOut"), _uaSigOf(op)), WrappedToken.mtxUnwrap.selector);
         assertEq(und.balanceOf(recipient), wrapped);
         assertEq(wrp.balanceOf(signer), SUPPLY - wrapped - _feeOf(op, wrapped));
         assertEq(wrp.balanceOf(u.feeRecipient), _feeOf(op, wrapped));
-        assertEq(wrp.uaNonce(u.from, u.batch), 1);
+        assertEq(wrp.mtxNonce(u.from, u.batch), 1);
     }
 
-    function test_typedOpsVectors_UnwrapLeg() public {
+    /// ua-mtx-merge T3 (R23), meaning: the address `mtxUnwrapLeg` / `UnwrapLeg` left the token; no entry (MD-7).
+    function test_typedOpsVectors_UnwrapLegRowHasNoEntry() public legacyRows {
         string memory op = "UnwrapLeg";
         (WrappedToken w, MockERC20 leg) = _rowLeg(op);
-        MetaTxLib.Envelope memory e = rowEnvelope(j, op);
-        uint256 wrapped = _uint(op, "wrapped");
-        address recipient = _addr(op, "recipient");
-        vm.prank(e.from);
+        vm.prank(rowEnvelope(j, op).from);
         w.wrap(SUPPLY);
-        _run(op, address(w), abi.encodeCall(WrappedToken.mtxUnwrapLeg,
-            (e, address(leg), wrapped, recipient, _uint(op, "minOut"), _sigOf(op))));
-        assertEq(leg.balanceOf(recipient), wrapped);
-        assertEq(w.balanceOf(e.feeRecipient), _feeOf(op, wrapped), "AMOUNT(1): the basis is `wrapped`");
+        bytes memory args = abi.encode(rowEnvelope(j, op), address(leg), _uint(op, "wrapped"), _addr(op, "recipient"),
+            _uint(op, "minOut"), _sigOf(op));
+        rowHasNoEntry(j, op, "token", address(w), bytes.concat(bytes4(keccak256(
+            "mtxUnwrapLeg((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,address,uint256,bytes)")),
+            args));
+        assertEq(leg.balanceOf(_addr(op, "recipient")), 0);
     }
 
     function test_typedOpsVectors_UAUnwrapLeg() public {
         string memory op = "UAUnwrapLeg";
         (WrappedToken w, MockERC20 leg) = _rowLeg(op);
-        MetaTxLib.UAEnvelope memory u = _uaEnv(op);
-        uint256 wrapped = _uint(op, "wrapped");
-        address recipient = _addr(op, "recipient");
         vm.prank(signer);
         w.wrap(SUPPLY);
-        _run(op, address(w), abi.encodeCall(WrappedToken.uaUnwrapLeg,
-            (u, address(leg), wrapped, recipient, _uint(op, "minOut"), _uaSigOf(op))));
-        assertEq(leg.balanceOf(recipient), wrapped);
-        assertEq(w.balanceOf(u.feeRecipient), _feeOf(op, wrapped));
+        bytes memory args = abi.encode(_uaEnv(op), address(leg), _uint(op, "wrapped"), _addr(op, "recipient"),
+            _uint(op, "minOut"), _uaSigOf(op));
+        runRowRenamed(j, op, "token", address(w), bytes.concat(WrappedToken.mtxUnwrapLeg.selector, args),
+            WrappedToken.mtxUnwrapLeg.selector);
+        assertEq(leg.balanceOf(_addr(op, "recipient")), _uint(op, "wrapped"));
+        assertEq(w.balanceOf(_uaEnv(op).feeRecipient), _feeOf(op, _uint(op, "wrapped")));
     }
 
     function test_typedOpsVectors_AddReserve() public {
@@ -323,28 +385,27 @@ contract TypedOpsTest is UALedgerBase {
         assertEq(w.balanceOf(e.feeRecipient), e.fee);
     }
 
-    function test_typedOpsVectors_UnwrapToUA() public {
+    /// ua-mtx-merge T3 (R23), meaning: the address `mtxUnwrapToUA` / `UnwrapToUA` left the token; no entry (MD-7).
+    function test_typedOpsVectors_UnwrapToUARowHasNoEntry() public legacyRows {
         string memory op = "UnwrapToUA";
         (WrappedToken w, NormalToken leg) = _rowLedgerLeg(op);
-        MetaTxLib.Envelope memory e = rowEnvelope(j, op);
-        uint256 wrapped = _uint(op, "wrapped");
-        bytes32 to = _b32(op, "to");
-        _run(op, address(w), abi.encodeCall(WrappedToken.mtxUnwrapToUA,
-            (e, address(leg), wrapped, to, _uint(op, "minOut"), _sigOf(op))));
-        assertEq(leg.balanceOfUA(to), wrapped * 10);
-        assertEq(w.balanceOf(e.feeRecipient), _feeOf(op, wrapped));
+        bytes memory args = abi.encode(rowEnvelope(j, op), address(leg), _uint(op, "wrapped"), _b32(op, "to"),
+            _uint(op, "minOut"), _sigOf(op));
+        rowHasNoEntry(j, op, "token", address(w), bytes.concat(bytes4(keccak256(
+            "mtxUnwrapToUA((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes32,uint256,bytes)")),
+            args));
+        assertEq(leg.balanceOfUA(_b32(op, "to")), 0);
     }
 
     function test_typedOpsVectors_UAUnwrapToUA() public {
         string memory op = "UAUnwrapToUA";
         (WrappedToken w, NormalToken leg) = _rowLedgerLeg(op);
-        MetaTxLib.UAEnvelope memory u = _uaEnv(op);
-        uint256 wrapped = _uint(op, "wrapped");
-        bytes32 to = _b32(op, "to");
-        _run(op, address(w), abi.encodeCall(WrappedToken.uaUnwrapToUA,
-            (u, address(leg), wrapped, to, _uint(op, "minOut"), _uaSigOf(op))));
-        assertEq(leg.balanceOfUA(to), wrapped * 10);
-        assertEq(w.balanceOf(u.feeRecipient), _feeOf(op, wrapped));
+        bytes memory args = abi.encode(_uaEnv(op), address(leg), _uint(op, "wrapped"), _b32(op, "to"), _uint(op, "minOut"),
+            _uaSigOf(op));
+        runRowRenamed(j, op, "token", address(w), bytes.concat(WrappedToken.mtxUnwrapToUA.selector, args),
+            WrappedToken.mtxUnwrapToUA.selector);
+        assertEq(leg.balanceOfUA(_b32(op, "to")), _uint(op, "wrapped") * 10);
+        assertEq(w.balanceOf(_uaEnv(op).feeRecipient), _feeOf(op, _uint(op, "wrapped")));
     }
 
     // ------------------------------------------------------------------ the wallets and the account (C5)
@@ -361,87 +422,25 @@ contract TypedOpsTest is UALedgerBase {
         return AccountSig(0, new bytes32[](0), _sigOf(op, "account"));
     }
 
-    /// A wallet under a mandate on the row's `token` for `delegate_`, its epoch the row's.
-    function _rowMandate(string memory op, address delegate_, uint256 cap) internal returns (MandateWallet w) {
-        address token = _addr(op, "token");
-        w = new MandateWallet(address(0xA11), chainUidA);
-        vm.prank(w.owner());
-        w.setMandate(token, delegate_, uint128(cap), uint128(cap), 1 days, uint64(block.timestamp + 1 days));
-        stdstore.target(address(w)).sig("epoch(address)").with_key(token).checked_write(_uint(op, "epoch"));
+    /// ua-mtx-merge T3b (Q6), meaning: the six address wallet rows (`SetMandate`, `SetPayee`, `RevokeMandate`,
+    /// `PayUnderMandate`, `DelegateRevoke`, `Execute` on `wallet`) find no entry on the merged wallets, whose entries take
+    /// `UAEnvelope` + `UASig` over `UA<Op>`. T11 (MD-7): the rows are retired, read from `TYPED_OPS_LEGACY`.
+    function _walletRowHasNoEntry(string memory op, address c, bytes memory built) internal {
+        rowHasNoEntry(j, op, "wallet", c, built);
+        assertEq(MandateWallet(payable(c)).mtxNonce(MetaTxLib.pad(_addr(op, "from")), rowEnvelope(j, op).batch), 0);
     }
 
-    function test_typedOpsVectors_SetMandate() public {
-        string memory op = "SetMandate";
-        MetaTxLib.Envelope memory e = rowEnvelope(j, op);
-        address token = _addr(op, "token");
-        MandateWallet w = new MandateWallet(e.from, chainUidA);
-        bytes memory built = abi.encodeCall(MandateWallet.mtxSetMandate, (e, token, _addr(op, "delegate"),
-            uint128(_uint(op, "maxPerPayment")), uint128(_uint(op, "maxPerPeriod")), uint64(_uint(op, "periodSeconds")),
-            uint64(_uint(op, "expiry")), _sigOf(op, "wallet")));
-        runRow(j, op, "wallet", address(w), built);
-        (address d,,,,,,) = w.mandates(token);
-        assertEq(d, _addr(op, "delegate"));
-        assertEq(w.epoch(token), 1);
-        assertEq(w.mtxNonce(e.from, e.batch), 1);
+    function _newWallet(string memory op) internal returns (MandateWallet) {
+        return new MandateWallet(MetaTxLib.pad(_addr(op, "from")), chainUidA, address(0), false);
     }
 
-    function _setPayeeRow(MandateWallet w) internal {
+    string internal constant ENV_T = "(address,uint256,uint256,uint256,uint32,address,uint256,address)";
+
+    function _setPayeeCall() internal view returns (bytes memory) {
         string memory op = "SetPayee";
-        MetaTxLib.Envelope memory e = rowEnvelope(j, op);
-        address token = _addr(op, "token");
-        address payee = _addr(op, "payee");
-        runRow(j, op, "wallet", address(w), abi.encodeCall(MandateWallet.mtxSetPayee,
-            (e, token, payee, vm.parseJsonBool(j, msgField(op, "allowed")), _sigOf(op, "wallet"))));
-        assertTrue(w.payeeAllowed(token, payee));
-        assertEq(w.mtxNonce(e.from, e.batch), 1);
-    }
-
-    function test_typedOpsVectors_SetPayee() public {
-        _setPayeeRow(new MandateWallet(signer, chainUidA));
-    }
-
-    function test_typedOpsVectors_RevokeMandate() public {
-        string memory op = "RevokeMandate";
-        MetaTxLib.Envelope memory e = rowEnvelope(j, op);
-        address token = _addr(op, "token");
-        MandateWallet w = new MandateWallet(e.from, chainUidA);
-        vm.prank(e.from);
-        w.setMandate(token, address(0xD), 1, 1, 1 days, uint64(block.timestamp + 1 days));
-        runRow(j, op, "wallet", address(w), abi.encodeCall(MandateWallet.mtxRevokeMandate, (e, token, _sigOf(op, "wallet"))));
-        (address d,,,,,,) = w.mandates(token);
-        assertEq(d, address(0));
-        assertEq(w.epoch(token), 2);
-    }
-
-    function test_typedOpsVectors_PayUnderMandate() public {
-        string memory op = "PayUnderMandate";
-        MetaTxLib.Envelope memory e = rowEnvelope(j, op);
-        address token = _addr(op, "token");
-        address payee = _addr(op, "payee");
-        uint256 amount = _uint(op, "amount");
-        bytes32 ref = _b32(op, "entryRef");
-        MandateWallet w = _rowMandate(op, e.from, amount);
-        _tokenAt(token).transfer(address(w), amount);
-        vm.prank(w.owner());
-        w.setPayee(token, payee, true);
-        bytes memory built = abi.encodeWithSignature(_abiOf(op, "wallet"), e, token, payee, amount, ref, uint64(_uint(op, "epoch")),
+        return abi.encodeWithSignature(string.concat("mtxSetPayee(", ENV_T, ",address,address,bool,bytes)"),
+            rowEnvelope(j, op), _addr(op, "token"), _addr(op, "payee"), vm.parseJsonBool(j, msgField(op, "allowed")),
             _sigOf(op, "wallet"));
-        runRow(j, op, "wallet", address(w), built);
-        assertEq(NormalToken(token).balanceOf(payee), amount);
-        assertTrue(w.refUsed(ref));
-        assertEq(w.mtxNonce(e.from, e.batch), 1);
-    }
-
-    function test_typedOpsVectors_DelegateRevoke() public {
-        string memory op = "DelegateRevoke";
-        MetaTxLib.Envelope memory e = rowEnvelope(j, op);
-        address token = _addr(op, "token");
-        uint64 epoch_ = uint64(_uint(op, "epoch"));
-        MandateWallet w = _rowMandate(op, e.from, 1);
-        runRow(j, op, "wallet", address(w), abi.encodeCall(MandateWallet.mtxDelegateRevoke, (e, token, epoch_, _sigOf(op, "wallet"))));
-        (address d,,,,,,) = w.mandates(token);
-        assertEq(d, address(0));
-        assertEq(w.epoch(token), epoch_ + 1);
     }
 
     function _executeRow(address c, string memory kind, bytes memory built) internal {
@@ -457,16 +456,225 @@ contract TypedOpsTest is UALedgerBase {
             _uint("Execute", "value"), vm.parseJsonBytes(j, msgField("Execute", "data")), _sigOf("Execute", "wallet"));
     }
 
-    function test_typedOpsVectors_ExecuteWallet() public {
-        MandateWallet w = new MandateWallet(signer, chainUidA);
-        _executeRow(address(w), "wallet", _walletExecuteCall());
-        assertEq(w.mtxNonce(signer, 7), 1);
+    /// The six retired address rows, on `MandateWallet` and on `HederaMandateWallet` (T3b's six `…RowHasNoWalletEntry` tests
+    /// and the Hedera one, in one; the merged entries run in the `UA<Op>` row tests below).
+    function test_typedOpsVectors_walletAddressRowsHaveNoEntry() public legacyRows {
+        string memory op = "SetMandate";
+        _walletRowHasNoEntry(op, address(_newWallet(op)), abi.encodeWithSignature(
+            string.concat("mtxSetMandate", "(", ENV_T, ",address,address,uint128,uint128,uint64,uint64,bytes)"),
+            rowEnvelope(j, op), _addr(op, "token"), _addr(op, "delegate"), uint128(_uint(op, "maxPerPayment")),
+            uint128(_uint(op, "maxPerPeriod")), uint64(_uint(op, "periodSeconds")), uint64(_uint(op, "expiry")),
+            _sigOf(op, "wallet")));
+        _walletRowHasNoEntry("SetPayee", address(_newWallet("SetPayee")), _setPayeeCall());
+        op = "RevokeMandate";
+        _walletRowHasNoEntry(op, address(_newWallet(op)), abi.encodeWithSignature(
+            string.concat("mtxRevokeMandate(", ENV_T, ",address,bytes)"), rowEnvelope(j, op), _addr(op, "token"),
+            _sigOf(op, "wallet")));
+        op = "PayUnderMandate";
+        _walletRowHasNoEntry(op, address(_newWallet(op)), abi.encodeWithSignature(_abiOf(op, "wallet"), rowEnvelope(j, op),
+            _addr(op, "token"), _addr(op, "payee"), _uint(op, "amount"), _b32(op, "entryRef"), uint64(_uint(op, "epoch")),
+            _sigOf(op, "wallet")));
+        op = "DelegateRevoke";
+        _walletRowHasNoEntry(op, address(_newWallet(op)), abi.encodeWithSignature(
+            string.concat("mtxDelegateRevoke(", ENV_T, ",address,uint64,bytes)"), rowEnvelope(j, op), _addr(op, "token"),
+            uint64(_uint(op, "epoch")), _sigOf(op, "wallet")));
+        _walletRowHasNoEntry("Execute", address(_newWallet("Execute")), _walletExecuteCall());
+        bytes32 id = MetaTxLib.pad(_addr("SetPayee", "from"));
+        _walletRowHasNoEntry("SetPayee", address(new HederaMandateWallet(id, chainUidA, address(0))), _setPayeeCall());
+        id = MetaTxLib.pad(_addr("Execute", "from"));
+        _walletRowHasNoEntry("Execute", address(new HederaMandateWallet(id, chainUidA, address(0))), _walletExecuteCall());
     }
 
-    /// The Hedera wallet takes the rows' ECDSA signatures on the EVM path (a 64-byte one: `NamedHederaMandateTest`).
-    function test_typedOpsVectors_HederaWallet() public {
-        _setPayeeRow(new HederaMandateWallet(signer, chainUidA));
-        _executeRow(address(new HederaMandateWallet(signer, chainUidA)), "wallet", _walletExecuteCall());
+    // ---- ua-mtx-merge T11 (Q6, MD-11): the six `UA<Op>` rows on the merged wallet entries, ids `bytes32`, `UASig`
+
+    function _walletEnv(string memory op) internal view returns (MetaTxLib.UAEnvelope memory u) {
+        MetaTxLib.Envelope memory e = rowEnvelope2(j, op);
+        u = MetaTxLib.UAEnvelope(_b32(op, "from"), e.batch, e.nonce, e.validUntil, e.mode, e.relayer, e.fee, e.feeRecipient);
+    }
+
+    function _walletSig(string memory op) internal view returns (IUARegistry.UASig memory s) {
+        s.signature = _sigOf(op, "wallet");
+    }
+
+    /// A wallet of `0xA11` whose mandate on the row's token names `delegate_`, at the row's epoch.
+    function _rowMandate(string memory op, bytes32 delegate_, uint256 cap) internal returns (MandateWallet w) {
+        address token = _addr(op, "token");
+        w = new MandateWallet(MetaTxLib.pad(address(0xA11)), chainUidA, address(0), false);
+        vm.prank(address(0xA11));
+        w.setMandate(token, delegate_, uint128(cap), uint128(cap), 1 days, uint64(block.timestamp + 1 days));
+        stdstore.target(address(w)).sig("epoch(address)").with_key(token).checked_write(_uint(op, "epoch"));
+    }
+
+    function _walletRow(string memory op, MandateWallet w, bytes memory built) internal {
+        assertEq(abi.encode(vm.parseJsonKeys(j, string.concat(".ops.", op, ".domains"))), abi.encode(_one("wallet")), op);
+        runRow(j, op, "wallet", address(w), built);
+        assertEq(w.mtxNonce(_b32(op, "from"), rowEnvelope2(j, op).batch), 1, op);
+    }
+
+    function _one(string memory k) internal pure returns (string[] memory a) {
+        a = new string[](1);
+        a[0] = k;
+    }
+
+    function test_typedOpsVectors_UASetMandate() public {
+        string memory op = "UASetMandate";
+        MandateWallet w = new MandateWallet(_b32(op, "from"), chainUidA, address(0), false);
+        _walletRow(op, w, _setMandateCall(op));
+        (bytes32 d,,,,,,) = w.mandates(_addr(op, "token"));
+        assertEq(d, _b32(op, "delegate"));
+        assertEq(d, MetaTxLib.pad(address(0xd2)), "the delegate an id: the address of the T3b row zero-padded");
+        assertEq(w.epoch(_addr(op, "token")), 1);
+    }
+
+    function _setMandateCall(string memory op) internal view returns (bytes memory) {
+        return abi.encodeCall(MandateWallet.mtxSetMandate, (_walletEnv(op), _addr(op, "token"), _b32(op, "delegate"),
+            uint128(_uint(op, "maxPerPayment")), uint128(_uint(op, "maxPerPeriod")), uint64(_uint(op, "periodSeconds")),
+            uint64(_uint(op, "expiry")), _walletSig(op)));
+    }
+
+    function _uaSetPayeeRow(MandateWallet w) internal {
+        string memory op = "UASetPayee";
+        address token = _addr(op, "token");
+        bytes32 payee = _b32(op, "payee");
+        _walletRow(op, w, abi.encodeCall(MandateWallet.mtxSetPayee, (_walletEnv(op), token, payee,
+            vm.parseJsonBool(j, msgField(op, "allowed")), _walletSig(op))));
+        assertTrue(w.payeeAllowed(token, payee));
+    }
+
+    function test_typedOpsVectors_UASetPayee() public {
+        _uaSetPayeeRow(new MandateWallet(_b32("UASetPayee", "from"), chainUidA, address(0), false));
+    }
+
+    function test_typedOpsVectors_UARevokeMandate() public {
+        string memory op = "UARevokeMandate";
+        MetaTxLib.UAEnvelope memory u = _walletEnv(op);
+        address token = _addr(op, "token");
+        MandateWallet w = new MandateWallet(u.from, chainUidA, address(0), false);
+        vm.prank(address(uint160(uint256(u.from))));
+        w.setMandate(token, bytes32(uint256(0xD)), 1, 1, 1 days, uint64(block.timestamp + 1 days));
+        _walletRow(op, w, abi.encodeCall(MandateWallet.mtxRevokeMandate, (u, token, _walletSig(op))));
+        (bytes32 d,,,,,,) = w.mandates(token);
+        assertEq(d, bytes32(0));
+        assertEq(w.epoch(token), 2);
+    }
+
+    /// The delegate is the row's key; the payee the row's derived-looking id, registered here, paid by `payWithFeeToUA`.
+    /// pay-meta-tax T41: the row carries its `PayMeta` (`extra.meta`), the entry's last parameter; `entryRef` its commitment.
+    function test_typedOpsVectors_UAPayUnderMandate() public {
+        string memory op = "UAPayUnderMandate";
+        address token = _addr(op, "token");
+        bytes32 payee = _b32(op, "payee");
+        assertFalse(UAKinds.inNativeSpace(payee), "the row's payee is a derived id");
+        MetaTxLib.PayMeta memory m = rowMeta(j, op, "wallet");
+        assertEq(PayMetaKit.id(m), _b32(op, "entryRef"), "the row's entryRef commits to its PayMeta");
+        MandateWallet w = _rowMandate(op, _b32(op, "from"), _uint(op, "amount"));
+        _tokenAt(token).transfer(address(w), _uint(op, "amount"));
+        vm.mockCall(REG_L, abi.encodeCall(IUARegistry.kindOf, (payee)), abi.encode(UAKinds.P256));
+        vm.prank(address(0xA11));
+        w.setPayee(token, payee, true);
+        _walletRow(op, w, _payUnderMandateCall(op, m));
+        assertEq(NormalToken(token).balanceOfUA(payee), _uint(op, "amount"));
+        assertTrue(w.refUsed(_b32(op, "entryRef")));
+    }
+
+    function _payUnderMandateCall(string memory op, MetaTxLib.PayMeta memory m) internal view returns (bytes memory) {
+        return abi.encodeCall(MandateWallet.mtxPayUnderMandate, (_walletEnv(op), _addr(op, "token"), _b32(op, "payee"),
+            _uint(op, "amount"), _b32(op, "entryRef"), uint64(_uint(op, "epoch")), _walletSig(op), m));
+    }
+
+    function test_typedOpsVectors_UADelegateRevoke() public {
+        string memory op = "UADelegateRevoke";
+        MetaTxLib.UAEnvelope memory u = _walletEnv(op);
+        address token = _addr(op, "token");
+        uint64 epoch_ = uint64(_uint(op, "epoch"));
+        MandateWallet w = _rowMandate(op, u.from, 1);
+        _walletRow(op, w, abi.encodeCall(MandateWallet.mtxDelegateRevoke, (u, token, epoch_, _walletSig(op))));
+        (bytes32 d,,,,,,) = w.mandates(token);
+        assertEq(d, bytes32(0));
+        assertEq(w.epoch(token), epoch_ + 1);
+    }
+
+    function _uaExecuteRow(MandateWallet w) internal {
+        string memory op = "UAExecute";
+        address target = _addr(op, "target");
+        uint256 value = _uint(op, "value");
+        vm.deal(address(w), value);
+        _walletRow(op, w, abi.encodeWithSignature(_abiOf(op, "wallet"), _walletEnv(op), target, value,
+            vm.parseJsonBytes(j, msgField(op, "data")), _walletSig(op)));
+        assertEq(target.balance, value);
+    }
+
+    function test_typedOpsVectors_UAExecute() public {
+        _uaExecuteRow(new MandateWallet(_b32("UAExecute", "from"), chainUidA, address(0), false));
+    }
+
+    /// The Hedera wallet takes the same rows (an EOA's 65-byte ECDSA; `IS_HEDERA` changes only the 64-byte HIP-632 branch).
+    function test_typedOpsVectors_HederaWalletUARows() public {
+        _uaSetPayeeRow(MandateWallet(payable(address(new HederaMandateWallet(_b32("UASetPayee", "from"), chainUidA, address(0))))));
+        _uaExecuteRow(MandateWallet(payable(address(new HederaMandateWallet(_b32("UAExecute", "from"), chainUidA, address(0))))));
+    }
+
+    /// The ordered cancel (Q2) on a mandate wallet: the row's `UACancelNonce` in the wallet's domain.
+    function test_typedOpsVectors_UACancelNonceWallet() public {
+        string memory op = "UACancelNonce";
+        MetaTxLib.UAEnvelope memory u = _walletEnv(op);
+        uint256 lane = _uint(op, "lane");
+        MandateWallet w = new MandateWallet(u.from, chainUidA, address(0), false);
+        runRow(j, op, "wallet", address(w), abi.encodeWithSignature(UA_CANCEL_NONCE, u, lane, _walletSig(op)));
+        assertEq(w.mtxNonce(u.from, lane), 1);
+        assertEq(w.mtxNonce(u.from, u.batch), 1);
+    }
+
+    /// The ordered cancel on a token: an EOA cancels its own lane, nonce-ordered (Q2), no registry call.
+    function test_typedOpsVectors_UACancelNonce() public {
+        string memory op = "UACancelNonce";
+        MetaTxLib.UAEnvelope memory u = _uaEnv(op);
+        uint256 lane = _uint(op, "lane");
+        vm.expectCall(REG_L, "", 0);
+        runRowRenamed(j, op, "token", address(tok), abi.encodeWithSignature(UA_CANCEL_NONCE, u, lane, _uaSigOf(op)),
+            bytes4(keccak256(bytes(UA_CANCEL_NONCE))));
+        assertEq(tok.mtxNonce(u.from, lane), 1);
+        assertEq(tok.mtxNonce(u.from, u.batch), 1);
+        // replayed: the envelope's nonce is spent
+        IUARegistry.UASig memory s;
+        s.signature = onChain(j, op, address(tok));
+        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
+        vm.prank(u.relayer);
+        tok.mtxCancelNonce(u, lane, s);
+    }
+
+    /// The row key's signature of `UABurn` under `tok`'s domain, `relayer` / `feeRecipient` hashed as given.
+    function _burnSig(string memory op, MetaTxLib.UAEnvelope memory u, uint256 amount, address relayer, address feeTo)
+        internal view returns (bytes memory)
+    {
+        bytes32 sh = keccak256(abi.encode(vm.parseJsonBytes32(j, string.concat(".ops.", op, ".typehash")), u.from, amount, u.batch,
+            u.nonce, u.validUntil, u.mode, relayer, u.fee, feeTo));
+        return _ecdsa(pk, keccak256(abi.encodePacked(hex"1901", domainOf(address(tok)), sh)));
+    }
+
+    /// spec §6 (Codex medium 3): `relayer` / `feeRecipient` hash as 0 unless their mode bit is set (`MetaTxLib.canon`). A
+    /// client that hands the wallet a non-zero unbound value gets a signature over another digest, which the contract refuses
+    /// (nothing moves, the lane unspent); the canonical 0 under the same envelope runs, the fee to the calldata's recipient.
+    function test_typedOpsVectors_unboundNonZeroSignedIsRefused() public {
+        string memory op = "UABurn";
+        MetaTxLib.UAEnvelope memory u = _uaEnv(op);
+        u.mode = MetaTxLib.MODE_FEE_PERCENT; // the row's fee, nothing bound
+        assertTrue(u.relayer != address(0) && u.feeRecipient != address(0));
+        uint256 amount = _uint(op, "amount");
+        address from = address(uint160(uint256(u.from)));
+        tok.mint(from, SUPPLY);
+        IUARegistry.UASig memory s;
+        s.signature = _burnSig(op, u, amount, u.relayer, u.feeRecipient);
+        vm.prank(u.relayer);
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
+        tok.mtxBurn(u, amount, s);
+        assertEq(tok.mtxNonce(u.from, u.batch), 0);
+        s.signature = _burnSig(op, u, amount, address(0), address(0));
+        vm.prank(u.relayer);
+        tok.mtxBurn(u, amount, s);
+        assertEq(tok.mtxNonce(u.from, u.batch), 1);
+        assertEq(tok.balanceOf(u.feeRecipient), _feeOf(op, amount));
+        assertEq(tok.balanceOf(from), SUPPLY - amount - _feeOf(op, amount));
     }
 
     /// The account of the row's key at the row's `from`: an account signs as itself (CTR-ACC-10), and the row's signature is
@@ -573,12 +781,13 @@ contract TypedOpsTest is UALedgerBase {
         return MetaTxLib.UAEnvelope(from, e.batch, e.nonce, e.validUntil, e.mode, e.relayer, e.fee, e.feeRecipient);
     }
 
-    string internal constant UNWRAP_HEAD = "Unwrap(address from,uint256 wrapped,address recipient,uint256 minOut,";
+    /// ua-mtx-merge T3 (R23): the merged `mtxUnwrap` signs `UAUnwrap` (a native id zero-padded, its own key).
+    string internal constant UNWRAP_HEAD = "UAUnwrap(bytes32 from,uint256 wrapped,address recipient,uint256 minOut,";
 
     function _unwrapSig(uint256 key, WrappedToken w, MetaTxLib.Envelope memory e, uint256 wrapped)
-        internal view returns (bytes memory)
+        internal view returns (IUARegistry.UASig memory s)
     {
-        return _ecdsa(key, _digest(address(w), UNWRAP_HEAD, _pad(e.from), abi.encode(wrapped, bob, uint256(0)), e));
+        s.signature = _ecdsa(key, _digest(address(w), UNWRAP_HEAD, _pad(e.from), abi.encode(wrapped, bob, uint256(0)), e));
     }
 
     function test_removedAliasesGone() public {
@@ -598,13 +807,20 @@ contract TypedOpsTest is UALedgerBase {
         assertEq(ret.length, 0, "no such function");
     }
 
-    /// `mtxCancelNonce` joined `IMetaTx`: 0xf6695913 ^ its selector (owner 2026-11-01).
+    /// ua-mtx-merge T1 (MD-1): `IMetaTx` is the core (`executeMetaTransaction`, `mtxSelectors`, `chainUid`,
+    /// `supportedModes`, `cancelNonce`); the five address entries moved to `IMetaTxAddress` (the wallets). Old id
+    /// 0x2f1aa7fe = 0xae99c265 ^ 0x8183659b, the id of the five that left; 0xf6695913 is the id before `mtxCancelNonce`
+    /// joined (owner 2026-11-01).
     function test_iMetaTxIdPinned() public view {
-        assertEq(type(IMetaTx).interfaceId, bytes4(0x2f1aa7fe));
-        assertEq(type(IMetaTx).interfaceId ^ IMetaTx.mtxCancelNonce.selector, bytes4(0xf6695913));
-        assertTrue(tok.supportsInterface(0x2f1aa7fe));
-        assertTrue(wrp.supportsInterface(0x2f1aa7fe));
-        assertFalse(tok.supportsInterface(0xf6695913));
+        assertEq(type(IMetaTx).interfaceId, bytes4(0xae99c265));
+        assertEq(type(IMetaTxAddress).interfaceId, bytes4(0x8183659b));
+        assertEq(type(IMetaTx).interfaceId ^ type(IMetaTxAddress).interfaceId, bytes4(0x2f1aa7fe));
+        assertEq(type(IMetaTx).interfaceId ^ type(IMetaTxAddress).interfaceId ^ IMetaTxAddress.mtxCancelNonce.selector,
+            bytes4(0xf6695913));
+        assertTrue(tok.supportsInterface(0xae99c265));
+        assertTrue(wrp.supportsInterface(0xae99c265));
+        assertFalse(tok.supportsInterface(0x2f1aa7fe));
+        assertFalse(tok.supportsInterface(0x8183659b));
     }
 
     function _generic(address from, uint256 nonce) internal view returns (MetaTxLib.MetaTransaction memory m) {
@@ -618,48 +834,50 @@ contract TypedOpsTest is UALedgerBase {
     }
 
     /// The generic entries (owner 2026-10-31) and `executeMetaTransaction` (owner 2026-11-01) run, and share the lane.
+    /// ua-mtx-merge T1, meaning: the address `mtxExecute` / `mtxBatch` left tokens (MD-1); the address struct runs through
+    /// `executeMetaTransaction` (R3), the generic entries are the merged `mtxExecute` / `mtxBatch` on ids.
     function test_genericEntriesKept() public {
         uint256 supply = tok.totalSupply();
         MetaTxLib.MetaTransaction memory m = _generic(alice, 0);
-        tok.mtxExecute(m, _ecdsa(ALICE_PK, tok.mtxDigest(m)));
+        tok.executeMetaTransaction(m, _ecdsa(ALICE_PK, MtxDigest.metaTx(address(tok), m)));
         m = _generic(alice, 1);
-        assertTrue(tok.executeMetaTransaction(m, _ecdsa(ALICE_PK, tok.mtxDigest(m))));
-        MetaTxLib.MetaTransaction[] memory ms = new MetaTxLib.MetaTransaction[](1);
+        assertTrue(tok.executeMetaTransaction(m, _ecdsa(ALICE_PK, MtxDigest.metaTx(address(tok), m))));
         bytes[] memory sigs = new bytes[](1);
-        ms[0] = _generic(alice, 2);
-        sigs[0] = _ecdsa(ALICE_PK, tok.mtxDigest(ms[0]));
-        assertTrue(tok.mtxBatch(ms, sigs));
+        MetaTxLib.UAMetaTransaction memory u = _genericUA(_pad(alice), 2);
+        tok.mtxExecute(u, UACall.auth(u.from, _authM(address(tok), u)));
 
-        MetaTxLib.UAMetaTransaction memory u = _genericUA(_pad(alice), 3);
-        tok.uaExecute(u, _authM(address(tok), u));
+        u = _genericUA(_pad(alice), 3);
+        tok.mtxExecute(u, UACall.auth(u.from, _authM(address(tok), u)));
         MetaTxLib.UAMetaTransaction[] memory us = new MetaTxLib.UAMetaTransaction[](1);
         us[0] = _genericUA(_pad(alice), 4);
         sigs[0] = _authM(address(tok), us[0]);
-        assertTrue(tok.uaBatch(us, sigs));
+        assertTrue(tok.mtxBatch(us, UACall.auths(us, sigs)));
 
         assertEq(tok.totalSupply(), supply - 5);
-        assertEq(tok.mtxNonce(alice, 3), 5);
+        assertEq(tok.mtxNonce(MetaTxLib.pad(alice), 3), 5);
     }
 
+    /// ua-mtx-merge T3, meaning: on the `UABurn` row under the merged `mtxBurn` (R23); there is no second (`ua*`) entry.
     function test_namedEntryReplayRefused() public {
-        string memory op = "Burn";
-        MetaTxLib.Envelope memory e = rowEnvelope(j, op);
+        string memory op = "UABurn";
+        MetaTxLib.UAEnvelope memory u = _uaEnv(op);
+        MetaTxLib.Envelope memory e = rowEnvelope2(j, op);
+        e.from = address(uint160(uint256(u.from)));
         tok.mint(e.from, SUPPLY);
-        _run(op, address(tok), abi.encodeCall(NormalToken.mtxBurn, (e, _uint(op, "amount"), _sigOf(op))));
-        bytes memory sig = onChain(j, op, address(tok));
+        runRowRenamed(j, op, "token", address(tok), abi.encodeCall(NormalToken.mtxBurn, (u, _uint(op, "amount"), _uaSigOf(op))),
+            NormalToken.mtxBurn.selector);
+        IUARegistry.UASig memory sig;
+        sig.signature = onChain(j, op, address(tok));
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
         vm.prank(e.relayer);
-        tok.mtxBurn(e, _uint(op, "amount"), sig);
+        tok.mtxBurn(u, _uint(op, "amount"), sig);
 
-        // the lane is the generic path's: the UA twin and the generic entry find nonce 0 gone too
-        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
-        vm.prank(e.relayer);
-        tok.uaBurn(_uaE(e, _pad(e.from)), _uint(op, "amount"), _uaSigOf(op));
+        // the lane is the generic path's: the generic entry finds nonce 0 gone too
         MetaTxLib.MetaTransaction memory m = _generic(e.from, 0);
         m.batch = e.batch;
-        bytes memory generic = _ecdsa(pk, tok.mtxDigest(m));
+        bytes memory generic = _ecdsa(pk, MtxDigest.metaTx(address(tok), m));
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
-        tok.mtxExecute(m, generic);
+        tok.executeMetaTransaction(m, generic);
     }
 
     function test_namedEntryOtherOpDigestRefused() public {
@@ -669,17 +887,11 @@ contract TypedOpsTest is UALedgerBase {
         wrp.wrap(1_000);
         vm.stopPrank();
         MetaTxLib.Envelope memory e = _env(alice, 0, 0, 0, address(0));
-        bytes memory sig = _unwrapSig(ALICE_PK, wrp, e, 100);
+        IUARegistry.UASig memory sig = _unwrapSig(ALICE_PK, wrp, e, 100);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
-        wrp.mtxUnwrapLeg(e, address(und), 100, bob, 0, sig);
-        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
-        wrp.uaUnwrap(_uaE(e, _pad(alice)), 100, bob, 0, _sigStruct(sig));
-        wrp.mtxUnwrap(e, 100, bob, 0, sig);
+        wrp.mtxUnwrapLeg(_uaE(e, _pad(alice)), address(und), 100, bob, 0, sig);
+        wrp.mtxUnwrap(_uaE(e, _pad(alice)), 100, bob, 0, sig);
         assertEq(und.balanceOf(bob), 100);
-    }
-
-    function _sigStruct(bytes memory sig) internal pure returns (IUARegistry.UASig memory s) {
-        s.signature = sig;
     }
 
     function test_namedEntryFeeClass() public {
@@ -691,7 +903,7 @@ contract TypedOpsTest is UALedgerBase {
 
         // AMOUNT(0): PERCENT on `wrapped`, 1 % at most (CTR-MTX-20)
         MetaTxLib.Envelope memory e = _env(alice, 0, PCT | RF, 10_000, FEE_TO);
-        wrp.mtxUnwrap(e, 100_000, bob, 0, _unwrapSig(ALICE_PK, wrp, e, 100_000));
+        wrp.mtxUnwrap(_uaE(e, _pad(alice)), 100_000, bob, 0, _unwrapSig(ALICE_PK, wrp, e, 100_000));
         assertEq(wrp.balanceOf(FEE_TO), 1_000);
 
         // ABSOLUTE: PERCENT refused, FIXED the signed amount
@@ -715,14 +927,14 @@ contract TypedOpsTest is UALedgerBase {
         MetaTxLib.Envelope memory e = _env(address(0), 0, 0, 0, address(0));
         bytes32 d = _digest(address(tok), "UABurn(bytes32 from,uint256 amount,", uaP, abi.encode(uint256(100)), e);
         IUARegistry.UASig memory s = UACall.auth(uaP, _authFor(uaP, d));
-        tok.uaBurn(_uaE(e, uaP), 100, s);
+        tok.mtxBurn(_uaE(e, uaP), 100, s);
         assertEq(tok.balanceOfUA(uaP), 900);
-        assertEq(tok.uaNonce(uaP, e.batch), 1);
+        assertEq(tok.mtxNonce(uaP, e.batch), 1);
 
         // the same signature on the next nonce: another digest
         e.nonce = 1;
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, uaP));
-        tok.uaBurn(_uaE(e, uaP), 100, s);
+        tok.mtxBurn(_uaE(e, uaP), 100, s);
     }
 
     function _uaSigFor(bytes32 ua, address c, string memory head, bytes memory args, MetaTxLib.Envelope memory e)
@@ -737,18 +949,18 @@ contract TypedOpsTest is UALedgerBase {
         wrp.transferToUA(uaP, 1_000);
         MetaTxLib.Envelope memory e = _env(address(0), 0, 0, 0, address(0));
         bytes memory args = abi.encode(uint256(100), bob, uint256(100));
-        wrp.uaUnwrap(_uaE(e, uaP), 100, bob, 100,
+        wrp.mtxUnwrap(_uaE(e, uaP), 100, bob, 100,
             _uaSigFor(uaP, address(wrp), "UAUnwrap(bytes32 from,uint256 wrapped,address recipient,uint256 minOut,", args, e));
         assertEq(und.balanceOf(bob), 100);
         assertEq(wrp.balanceOfUA(uaP), 900);
 
         e.nonce = 1;
         args = abi.encode(address(und), uint256(200), bob, uint256(200));
-        wrp.uaUnwrapLeg(_uaE(e, uaP), address(und), 200, bob, 200, _uaSigFor(uaP, address(wrp),
+        wrp.mtxUnwrapLeg(_uaE(e, uaP), address(und), 200, bob, 200, _uaSigFor(uaP, address(wrp),
             "UAUnwrapLeg(bytes32 from,address underlying,uint256 wrapped,address recipient,uint256 minOut,", args, e));
         assertEq(und.balanceOf(bob), 300);
         assertEq(wrp.balanceOfUA(uaP), 700);
-        assertEq(wrp.uaNonce(uaP, e.batch), 2);
+        assertEq(wrp.mtxNonce(uaP, e.batch), 2);
     }
 
     function test_namedUADerivedUnwrapToUA() public {
@@ -758,7 +970,7 @@ contract TypedOpsTest is UALedgerBase {
         wrpL.transferToUA(uaP, 1_000);
         MetaTxLib.Envelope memory e = _env(address(0), 0, 0, 0, address(0));
         bytes memory args = abi.encode(address(tok), uint256(100), uaB, uint256(100));
-        wrpL.uaUnwrapToUA(_uaE(e, uaP), address(tok), 100, uaB, 100, _uaSigFor(uaP, address(wrpL),
+        wrpL.mtxUnwrapToUA(_uaE(e, uaP), address(tok), 100, uaB, 100, _uaSigFor(uaP, address(wrpL),
             "UAUnwrapToUA(bytes32 from,address underlying,uint256 wrapped,bytes32 to,uint256 minOut,", args, e));
         assertEq(tok.balanceOfUA(uaB), 100);
         assertEq(wrpL.balanceOfUA(uaP), 900);
@@ -786,10 +998,10 @@ contract TypedOpsTest is UALedgerBase {
         s.members = new IUARegistry.MemberSig[](1);
         s.members[0] = all[0];
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
-        tok.uaBurn(_uaE(e, ua), 100, s);
+        tok.mtxBurn(_uaE(e, ua), 100, s);
 
         s.members = all;
-        tok.uaBurn(_uaE(e, ua), 100, s);
+        tok.mtxBurn(_uaE(e, ua), 100, s);
         assertEq(tok.balanceOfUA(ua), 900);
     }
 
@@ -812,13 +1024,13 @@ contract TypedOpsTest is UALedgerBase {
         s.members[ia] = IUARegistry.MemberSig(ia, new IUARegistry.InnerSig[](0), _nativeSig(lreg, ALICE_PK, UAKinds.PURPOSE_MEMBER, md));
         s.members[ib] = IUARegistry.MemberSig(ib, new IUARegistry.InnerSig[](0), _nativeSig(lreg, BOB_PK, UAKinds.PURPOSE_MEMBER, md));
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
-        tok.uaBurn(_uaE(e, ua), 100, s);
+        tok.mtxBurn(_uaE(e, ua), 100, s);
         lreg.acceptMembership(ua, _acceptEoaSig(d, ALICE_PK));
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
-        tok.uaBurn(_uaE(e, ua), 100, s);
+        tok.mtxBurn(_uaE(e, ua), 100, s);
         assertEq(tok.balanceOfUA(ua), 1_000);
         lreg.acceptMembership(ua, _acceptEoaSig(d, BOB_PK));
-        tok.uaBurn(_uaE(e, ua), 100, s);
+        tok.mtxBurn(_uaE(e, ua), 100, s);
         assertEq(tok.balanceOfUA(ua), 900);
     }
 
@@ -833,23 +1045,29 @@ contract TypedOpsTest is UALedgerBase {
         assertEq(acct.mtxNonce(address(acct), e.batch), 1);
     }
 
-    /// `lane == batch`: the entry takes nonce 0, the cancel the next, so the lane skips one.
+    /// `lane == batch`: the entry takes nonce 0, the cancel the next, so the lane skips one. (ua-mtx-merge T1, meaning:
+    /// the token's cancel is the ordered `mtxCancelNonce(UAEnvelope, lane, UASig)` over `UACancelNonce`, Q2; it emits
+    /// `UANonceCancelled` for the id, R18.)
     function test_namedCancelNonceOwnLane() public {
         MetaTxLib.Envelope memory e = _env(alice, 0, 0, 0, address(0));
-        bytes32 d = _digest(address(tok), "CancelNonce(address from,uint256 lane,", _pad(alice), abi.encode(e.batch), e);
+        bytes32 d = _digest(address(tok), "UACancelNonce(bytes32 from,uint256 lane,", _pad(alice), abi.encode(e.batch), e);
         vm.expectEmit(address(tok));
-        emit IMetaTx.MetaNonceCancelled(alice, e.batch, 2);
-        tok.mtxCancelNonce(e, e.batch, _ecdsa(ALICE_PK, d));
-        assertEq(tok.mtxNonce(alice, e.batch), 2);
+        emit IUALedger.UANonceCancelled(_pad(alice), e.batch, 2);
+        IUARegistry.UASig memory a;
+        a.signature = _ecdsa(ALICE_PK, d);
+        tok.mtxCancelNonce(_uaE(e, _pad(alice)), e.batch, a);
+        assertEq(tok.mtxNonce(MetaTxLib.pad(alice), e.batch), 2);
     }
 
     /// Every bound field is in the digest; an unbound relayer or recipient is hashed as 0 and may be anything.
+    /// ua-mtx-merge T3, meaning: on the `UABurn` row and struct under the merged `mtxBurn` (R23).
     function test_namedEntryEnvelopeTamper() public {
-        string memory op = "Burn";
-        MetaTxLib.Envelope memory e = rowEnvelope(j, op);
+        string memory op = "UABurn";
+        MetaTxLib.UAEnvelope memory e = _uaEnv(op);
         uint256 amount = _uint(op, "amount");
-        tok.mint(e.from, SUPPLY);
-        bytes memory sig = onChain(j, op, address(tok));
+        tok.mint(address(uint160(uint256(e.from))), SUPPLY);
+        IUARegistry.UASig memory sig;
+        sig.signature = onChain(j, op, address(tok));
         address signed = e.relayer;
 
         e.feeRecipient = address(0xBAD);
@@ -857,13 +1075,13 @@ contract TypedOpsTest is UALedgerBase {
         vm.prank(signed);
         tok.mtxBurn(e, amount, sig);
 
-        e = rowEnvelope(j, op);
+        e = _uaEnv(op);
         e.fee += 1;
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         vm.prank(signed);
         tok.mtxBurn(e, amount, sig);
 
-        e = rowEnvelope(j, op);
+        e = _uaEnv(op);
         e.relayer = address(0xBAD);
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxUnauthorizedRelayer.selector, address(0xBAD), signed));
         vm.prank(signed);
@@ -874,21 +1092,25 @@ contract TypedOpsTest is UALedgerBase {
 
         // the signer bound neither: any relayer, any recipient value, the same signature
         MetaTxLib.Envelope memory open = _env(alice, 0, 0, 0, address(0));
-        bytes32 d = _digest(address(tok), "Burn(address from,uint256 amount,", _pad(alice), abi.encode(uint256(1)), open);
+        bytes32 d = _digest(address(tok), "UABurn(bytes32 from,uint256 amount,", _pad(alice), abi.encode(uint256(1)), open);
         (open.relayer, open.feeRecipient) = (address(0xBAD), address(0xBAD));
-        tok.mtxBurn(open, 1, _ecdsa(ALICE_PK, d));
-        assertEq(tok.mtxNonce(alice, open.batch), 1);
+        sig.signature = _ecdsa(ALICE_PK, d);
+        tok.mtxBurn(_uaE(open, _pad(alice)), 1, sig);
+        assertEq(tok.mtxNonce(MetaTxLib.pad(alice), open.batch), 1);
     }
 
-    /// The token is in the domain: a `Burn` signed for one token does not run on another.
+    /// The token is in the domain: a `UABurn` signed for one token does not run on another (ua-mtx-merge T3: the
+    /// merged struct, R23).
     function test_namedEntryOtherToken() public {
-        string memory op = "Burn";
-        MetaTxLib.Envelope memory e = rowEnvelope(j, op);
+        string memory op = "UABurn";
+        MetaTxLib.UAEnvelope memory e = _uaEnv(op);
         uint256 amount = _uint(op, "amount");
         NormalToken other = NormalToken(Clones.clone(address(new NormalToken(1,
             plainEnv(address(this), address(0), chainUidA, REG_L, false), ""))));
-        other.initialize(address(this), 1, abi.encode(normalInit("Other", "OTH", 6, SUPPLY, e.from, address(this))));
-        bytes memory sig = onChain(j, op, address(tok));
+        other.initialize(address(this), 1, abi.encode(normalInit("Other", "OTH", 6, SUPPLY,
+            address(uint160(uint256(e.from))), address(this))));
+        IUARegistry.UASig memory sig;
+        sig.signature = onChain(j, op, address(tok));
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         vm.prank(e.relayer);
         other.mtxBurn(e, amount, sig);
@@ -898,7 +1120,7 @@ contract TypedOpsTest is UALedgerBase {
         MetaTxLib.Envelope memory e = _env(alice, 0, 0, 0, address(0));
         IUARegistry.UASig memory none;
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
-        tok.uaBurn(_uaE(e, _pad(alice)), 1, none);
+        tok.mtxBurn(_uaE(e, _pad(alice)), 1, none);
     }
 
     function test_relayFeeRouterRunsNamedEntry() public {
@@ -910,16 +1132,25 @@ contract TypedOpsTest is UALedgerBase {
         MtxRelayFee router = new MtxRelayFee();
         MetaTxLib.Envelope memory e = _env(alice, 0, RR, 0, address(0));
         e.relayer = router.EXECUTOR();
-        bytes memory cd = abi.encodeCall(WrappedToken.mtxUnwrap, (e, 100, bob, 0, _unwrapSig(ALICE_PK, wrp, e, 100)));
+        bytes memory cd = abi.encodeCall(WrappedToken.mtxUnwrap, (_uaE(e, _pad(alice)), 100, bob, 0, _unwrapSig(ALICE_PK, wrp, e, 100)));
         uint256 until = block.timestamp + 300;
-        bytes memory s = _ecdsa(ALICE_PK, keccak256(abi.encodePacked(hex"1901", domainOf(address(tok)), keccak256(abi.encode(
-            keccak256("RelayFee(address from,address target,bytes32 callDataHash,address payee,uint256 value,uint256 validUntil,address relayer)"),
-            alice, address(wrp), keccak256(cd), RELAYER, 25, until, address(router))))));
+        // ua-mtx-merge T2 (R28): the one `relay`, on ids, over `UARelayFee`; alice signs with her own key
+        IUARegistry.UASig memory s;
+        s.signature = _ecdsa(ALICE_PK, _relayFeeDigest(address(tok), address(wrp), keccak256(cd), until, address(router)));
         vm.prank(RELAYER);
-        router.relay(address(wrp), cd, address(tok), alice, RELAYER, 25, until, s);
+        router.relay(address(wrp), cd, address(tok), MetaTxLib.pad(alice), MetaTxLib.pad(RELAYER), 25, 2, 0, until, s);
         assertEq(und.balanceOf(bob), 100);
         assertEq(tok.balanceOf(RELAYER), 25);
-        assertEq(wrp.mtxNonce(alice, e.batch), 1);
+        assertEq(wrp.mtxNonce(MetaTxLib.pad(alice), e.batch), 1);
+    }
+
+    /// alice's `UARelayFee` of 25 to `RELAYER` on lane 2, nonce 0 (pay-meta-tax T38; a helper: the test's stack).
+    function _relayFeeDigest(address token, address target, bytes32 cdh, uint256 until, address router)
+        internal view returns (bytes32)
+    {
+        return keccak256(abi.encodePacked(hex"1901", domainOf(token), keccak256(abi.encode(
+            keccak256("UARelayFee(bytes32 from,address target,bytes32 callDataHash,bytes32 payee,uint256 value,uint256 batch,uint256 nonce,uint256 validUntil,address relayer)"),
+            MetaTxLib.pad(alice), target, cdh, MetaTxLib.pad(RELAYER), uint256(25), uint256(2), uint256(0), until, router))));
     }
 }
 
@@ -932,30 +1163,38 @@ abstract contract ConfidentialRows is Test {
     function _normalKind() internal virtual returns (NormalToken);
     function _wrappedKind(address leg) internal virtual returns (WrappedToken);
 
-    function test_typedOpsVectors_CancelNonceRow() public {
-        j = vm.readFile(TYPED_OPS);
+    /// ua-mtx-merge T1, meaning: the address `CancelNonce` row ran on a token; a token has no address `mtxCancelNonce`
+    /// any more (Q2, MD-1: the wallets keep it), so the row, re-signed on the token, finds no entry (an empty revert,
+    /// no signature check) and the lane stays. MD-7: T11 narrows the row's `on` to the wallets.
+    function test_typedOpsVectors_CancelNonceRowHasNoTokenEntry() public {
+        j = vm.readFile(TYPED_OPS_LEGACY); // T11 (MD-7): the row's token domains retired
         string memory k = _kind();
         NormalToken t = _normalKind();
         assertTrue(t.supportsInterface(type(IMetaTx).interfaceId));
         MetaTxLib.Envelope memory e = rowEnvelope(j, "CancelNonce");
         uint256 lane = vm.parseJsonUint(j, msgField("CancelNonce", "lane"));
-        runRow(j, "CancelNonce", k, address(t), abi.encodeCall(IMetaTx.mtxCancelNonce,
+        _noTokenEntry(k, address(t), abi.encodeCall(IMetaTxAddress.mtxCancelNonce,
             (e, lane, vm.parseJsonBytes(j, domainField("CancelNonce", k, "signature")))));
-        assertEq(t.mtxNonce(e.from, lane), 1);
+        assertEq(t.mtxNonce(MetaTxLib.pad(e.from), lane), 0);
     }
 
-    function test_typedOpsVectors_BurnRow() public {
-        j = vm.readFile(TYPED_OPS);
+    function _noTokenEntry(string memory k, address t, bytes memory built) internal {
+        (bool ok, bytes memory ret) = tryRow(j, "CancelNonce", k, t, built);
+        assertFalse(ok);
+        assertEq(ret.length, 0, "no such function");
+    }
+
+    /// ua-mtx-merge T3 (R23), meaning: the address `mtxBurn` left every kind; the row finds no entry (MD-7: retired by T11).
+    function test_typedOpsVectors_BurnRowHasNoEntry() public {
+        j = vm.readFile(TYPED_OPS_LEGACY);
         string memory k = _kind();
         NormalToken t = _normalKind();
         MetaTxLib.Envelope memory e = rowEnvelope(j, "Burn");
         uint256 amount = vm.parseJsonUint(j, msgField("Burn", "amount"));
         t.mint(e.from, FUNDS);
-        runRow(j, "Burn", k, address(t), abi.encodeCall(NormalToken.mtxBurn,
-            (e, amount, vm.parseJsonBytes(j, domainField("Burn", k, "signature")))));
-        uint256 fee = amount * e.fee / 1_000_000;
-        assertEq(t.balanceOf(e.from), FUNDS - amount - fee);
-        assertEq(t.balanceOf(e.feeRecipient), fee);
+        rowHasNoEntry(j, "Burn", k, address(t), abi.encodeWithSignature("mtxBurn((address,uint256,uint256,uint256,uint32,address,uint256,address),uint256,bytes)",
+            e, amount, vm.parseJsonBytes(j, domainField("Burn", k, "signature"))));
+        assertEq(t.balanceOf(e.from), FUNDS);
     }
 
     function test_typedOpsVectors_UABurnRow() public {
@@ -969,8 +1208,8 @@ abstract contract ConfidentialRows is Test {
         IUARegistry.UASig memory s;
         s.signature = vm.parseJsonBytes(j, domainField("UABurn", k, "signature"));
         t.mint(address(uint160(uint256(e.from))), FUNDS);
-        runRow(j, "UABurn", k, address(t), abi.encodeCall(NormalToken.uaBurn, (e, amount, s)));
-        assertEq(t.uaNonce(e.from, e.batch), 1);
+        runRowRenamed(j, "UABurn", k, address(t), abi.encodeCall(NormalToken.mtxBurn, (e, amount, s)), NormalToken.mtxBurn.selector);
+        assertEq(t.mtxNonce(e.from, e.batch), 1);
         assertEq(t.balanceOf(e.feeRecipient), amount * e.fee / 1_000_000);
     }
 
@@ -1048,8 +1287,8 @@ contract ConfidentialRowsZetherTest is ConfidentialRows, ZetherFixture {
 /// governance T12 (spec §3.2; CTR-GOV-15 Change): every `GovernanceRouter` row of `typed_ops.json` runs verbatim on a real
 /// router deployed at the row's `verifyingContract` (context A: chain id 31337, `chain_uid` A), so the row's own signature
 /// is the router's: no re-signing. Each op's `target` is a real `NormalToken`, `WrappedToken` or `SCaaSDex` cloned at the
-/// row's `target`, `GOV_ROUTER` the router, and the op's effect is read there. Both forms of an op from one snapshot: they
-/// share the subject (the key's native id) and its lane.
+/// row's `target`, `GOV_ROUTER` the router, and the op's effect is read there. ua-mtx-merge T7: the `UA<Op>` row runs on the
+/// merged `mtx<Op>` (the key's native id signs `UA<Op>` with its own key); the address `<Op>` row finds no entry.
 contract TypedOpsRouterTest is UALedgerBase {
     string internal constant K = "gov_router";
     uint8 internal constant MINT = GovernanceBits.MINTABLE;
@@ -1064,13 +1303,16 @@ contract TypedOpsRouterTest is UALedgerBase {
     /// The test is the factory of every clone and registered no token: a market's legs are outside.
     function isToken(address) external pure returns (bool) { return false; }
 
+    /// The factory's notice period the regulated clones read for a tax-rate increase (pay-meta-tax spec §6.2): none here.
+    function noticePeriod() external pure returns (uint64) { return 0; }
+
     function setUp() public override {
         super.setUp();
         j = vm.readFile(TYPED_OPS);
         signer = vm.parseJsonAddress(j, ".key.address");
         me = vm.parseJsonBytes32(j, ".key.ua");
         assertEq(me, bytes32(uint256(uint160(signer))), "the key's UA is its native id");
-        router = vm.parseJsonAddress(j, domainField("GrantRole", K, "domain.verifyingContract"));
+        router = vm.parseJsonAddress(j, domainField("UAGrantRole", K, "domain.verifyingContract"));
         deployCodeTo("GovernanceRouter.sol:GovernanceRouter", abi.encode(chainUidA, REG_L, address(0), false), router);
         IFactoryToken.Env memory e = plainEnv(address(this), address(0), chainUidA, REG_L, false);
         e.govRouter = router;
@@ -1101,14 +1343,19 @@ contract TypedOpsRouterTest is UALedgerBase {
         return uint8(_uint(op, "bit"));
     }
 
-    /// The row's calldata, as clientkeys built it, from the row's relayer; its lane's nonce spent.
+    /// The row's calldata, as clientkeys built it, from the row's relayer; its lane's nonce spent. ua-mtx-merge T11 (R14,
+    /// MD-7): a `UA<Op>` row names the merged `mtx<Op>` and runs verbatim, its own signature (T7 swapped the `ua<Op>`
+    /// selector of the rows of the time for the `mtx<Op>` one).
     function _row(string memory op) internal {
         checkRow(j, op, K);
         bytes memory cd = vm.parseJsonBytes(j, domainField(op, K, "calldata"));
+        bytes memory ab = bytes(vm.parseJsonString(j, domainField(op, K, "abi")));
+        require(ab[0] == "m" && ab[1] == "t" && ab[2] == "x", "the row names the merged mtx<Op>");
+        require(bytes4(cd) == bytes4(keccak256(ab)), "the row: its own selector");
         vm.prank(_addr(op, "relayer"));
         (bool ok, bytes memory ret) = router.call(cd);
         if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
-        assertEq(GovernanceRouter(router).uaNonce(me, _uint(op, "batch")), 1, op);
+        assertEq(GovernanceRouter(router).mtxNonce(me, _uint(op, "batch")), 1, op);
     }
 
     function _clone(address impl, address at) internal {
@@ -1148,16 +1395,26 @@ contract TypedOpsRouterTest is UALedgerBase {
         d.initialize(address(this), 1, abi.encode(ISCaaSDex.DexConfig(me, 0, address(0x7EA5), false, 0, address(0))));
     }
 
-    function _forms(string memory op) internal pure returns (string[2] memory) {
-        return [op, string.concat("UA", op)];
+    /// ua-mtx-merge T7, meaning: one form per op, the `UA<Op>` row on the merged entry (was both the address `<Op>` row and
+    /// the `UA<Op>` row); the address rows find no entry (`test_routerRow_addressRowsHaveNoEntry`; MD-7: T11 retires them).
+    function _forms(string memory op) internal pure returns (string[1] memory) {
+        return [string.concat("UA", op)];
+    }
+
+    function test_routerRow_addressRowsHaveNoEntry() public {
+        j = vm.readFile(TYPED_OPS_LEGACY); // T11 (MD-7): the 19 address rows retired
+        string[19] memory ops = ["GrantRole", "RevokeRole", "SetGrant", "CancelGrant", "DisableFeature", "TransferOwnership",
+            "AcceptOwnership", "RenounceOwnership", "RenounceRole", "Mint", "MintToUA", "DisableWrap", "ProposeRate",
+            "CancelRate", "ExecuteRate", "SetMarket", "SetExchangeTarget", "SetListedOnly", "SetFeeSplit"];
+        for (uint256 i; i < ops.length; ++i) _noEntry(ops[i], me, _uint(ops[i], "batch"));
     }
 
     // ------------------------------------------------------------------ the owner and a holder
 
     function test_routerRow_GrantRole() public {
-        string[2] memory f = _forms("GrantRole");
+        string[1] memory f = _forms("GrantRole");
         uint256 s = vm.snapshotState();
-        for (uint256 i; i < 2; ++i) {
+        for (uint256 i; i < f.length; ++i) {
             vm.revertToState(s);
             NormalToken t = _normalAt(f[i], me, 0, 0);
             _row(f[i]);
@@ -1166,9 +1423,9 @@ contract TypedOpsRouterTest is UALedgerBase {
     }
 
     function test_routerRow_RevokeRole() public {
-        string[2] memory f = _forms("RevokeRole");
+        string[1] memory f = _forms("RevokeRole");
         uint256 s = vm.snapshotState();
-        for (uint256 i; i < 2; ++i) {
+        for (uint256 i; i < f.length; ++i) {
             vm.revertToState(s);
             NormalToken t = _normalAt(f[i], me, 0, 0);
             vm.prank(signer);
@@ -1181,9 +1438,9 @@ contract TypedOpsRouterTest is UALedgerBase {
 
     /// The nested `terms` arrive whole: every field of the stored grant is the row's.
     function test_routerRow_SetGrant() public {
-        string[2] memory f = _forms("SetGrant");
+        string[1] memory f = _forms("SetGrant");
         uint256 s = vm.snapshotState();
-        for (uint256 i; i < 2; ++i) {
+        for (uint256 i; i < f.length; ++i) {
             vm.revertToState(s);
             NormalToken t = _normalAt(f[i], me, 0, 0);
             _row(f[i]);
@@ -1197,9 +1454,9 @@ contract TypedOpsRouterTest is UALedgerBase {
     }
 
     function test_routerRow_CancelGrant() public {
-        string[2] memory f = _forms("CancelGrant");
+        string[1] memory f = _forms("CancelGrant");
         uint256 s = vm.snapshotState();
-        for (uint256 i; i < 2; ++i) {
+        for (uint256 i; i < f.length; ++i) {
             vm.revertToState(s);
             NormalToken t = _normalAt(f[i], me, 0, 1 hours);
             vm.prank(signer);
@@ -1213,9 +1470,9 @@ contract TypedOpsRouterTest is UALedgerBase {
     }
 
     function test_routerRow_DisableFeature() public {
-        string[2] memory f = _forms("DisableFeature");
+        string[1] memory f = _forms("DisableFeature");
         uint256 s = vm.snapshotState();
-        for (uint256 i; i < 2; ++i) {
+        for (uint256 i; i < f.length; ++i) {
             vm.revertToState(s);
             NormalToken t = _normalAt(f[i], me, 0, 0);
             _row(f[i]);
@@ -1224,9 +1481,9 @@ contract TypedOpsRouterTest is UALedgerBase {
     }
 
     function test_routerRow_TransferOwnership() public {
-        string[2] memory f = _forms("TransferOwnership");
+        string[1] memory f = _forms("TransferOwnership");
         uint256 s = vm.snapshotState();
-        for (uint256 i; i < 2; ++i) {
+        for (uint256 i; i < f.length; ++i) {
             vm.revertToState(s);
             NormalToken t = _normalAt(f[i], me, 0, 0);
             _row(f[i]);
@@ -1235,9 +1492,9 @@ contract TypedOpsRouterTest is UALedgerBase {
     }
 
     function test_routerRow_AcceptOwnership() public {
-        string[2] memory f = _forms("AcceptOwnership");
+        string[1] memory f = _forms("AcceptOwnership");
         uint256 s = vm.snapshotState();
-        for (uint256 i; i < 2; ++i) {
+        for (uint256 i; i < f.length; ++i) {
             vm.revertToState(s);
             NormalToken t = _normalAt(f[i], bytes32(uint256(uint160(address(this)))), 0, 0);
             t.transferOwnership(me);
@@ -1247,9 +1504,9 @@ contract TypedOpsRouterTest is UALedgerBase {
     }
 
     function test_routerRow_RenounceOwnership() public {
-        string[2] memory f = _forms("RenounceOwnership");
+        string[1] memory f = _forms("RenounceOwnership");
         uint256 s = vm.snapshotState();
-        for (uint256 i; i < 2; ++i) {
+        for (uint256 i; i < f.length; ++i) {
             vm.revertToState(s);
             NormalToken t = _normalAt(f[i], me, 0, 0);
             _row(f[i]);
@@ -1258,9 +1515,9 @@ contract TypedOpsRouterTest is UALedgerBase {
     }
 
     function test_routerRow_RenounceRole() public {
-        string[2] memory f = _forms("RenounceRole");
+        string[1] memory f = _forms("RenounceRole");
         uint256 s = vm.snapshotState();
-        for (uint256 i; i < 2; ++i) {
+        for (uint256 i; i < f.length; ++i) {
             vm.revertToState(s);
             NormalToken t = _normalAt(f[i], me, me, 0);
             _row(f[i]);
@@ -1271,9 +1528,9 @@ contract TypedOpsRouterTest is UALedgerBase {
     // ------------------------------------------------------------------ the powers on the token kinds
 
     function test_routerRow_Mint() public {
-        string[2] memory f = _forms("Mint");
+        string[1] memory f = _forms("Mint");
         uint256 s = vm.snapshotState();
-        for (uint256 i; i < 2; ++i) {
+        for (uint256 i; i < f.length; ++i) {
             vm.revertToState(s);
             NormalToken t = _normalAt(f[i], me, me, 0);
             _row(f[i]);
@@ -1282,9 +1539,9 @@ contract TypedOpsRouterTest is UALedgerBase {
     }
 
     function test_routerRow_MintToUA() public {
-        string[2] memory f = _forms("MintToUA");
+        string[1] memory f = _forms("MintToUA");
         uint256 s = vm.snapshotState();
-        for (uint256 i; i < 2; ++i) {
+        for (uint256 i; i < f.length; ++i) {
             vm.revertToState(s);
             NormalToken t = _normalAt(f[i], me, me, 0);
             vm.mockCall(REG_L, abi.encodeCall(IUARegistry.kindOf, (_b32(f[i], "to"))), abi.encode(UAKinds.P256));
@@ -1294,9 +1551,9 @@ contract TypedOpsRouterTest is UALedgerBase {
     }
 
     function test_routerRow_DisableWrap() public {
-        string[2] memory f = _forms("DisableWrap");
+        string[1] memory f = _forms("DisableWrap");
         uint256 s = vm.snapshotState();
-        for (uint256 i; i < 2; ++i) {
+        for (uint256 i; i < f.length; ++i) {
             vm.revertToState(s);
             WrappedToken w = _wrappedAt(f[i], _addr(f[i], "leg"));
             _row(f[i]);
@@ -1306,9 +1563,9 @@ contract TypedOpsRouterTest is UALedgerBase {
     }
 
     function test_routerRow_ProposeRate() public {
-        string[2] memory f = _forms("ProposeRate");
+        string[1] memory f = _forms("ProposeRate");
         uint256 s = vm.snapshotState();
-        for (uint256 i; i < 2; ++i) {
+        for (uint256 i; i < f.length; ++i) {
             vm.revertToState(s);
             WrappedToken w = _wrappedAt(f[i], _addr(f[i], "leg"));
             _row(f[i]);
@@ -1319,9 +1576,9 @@ contract TypedOpsRouterTest is UALedgerBase {
     }
 
     function test_routerRow_CancelRate() public {
-        string[2] memory f = _forms("CancelRate");
+        string[1] memory f = _forms("CancelRate");
         uint256 s = vm.snapshotState();
-        for (uint256 i; i < 2; ++i) {
+        for (uint256 i; i < f.length; ++i) {
             vm.revertToState(s);
             address leg = address(new MockERC20("Leg", "LEG", 6));
             WrappedToken w = _wrappedAt(f[i], leg);
@@ -1335,9 +1592,9 @@ contract TypedOpsRouterTest is UALedgerBase {
 
     /// Proposed `rateDelay` before the rows' deadline, executed at it.
     function test_routerRow_ExecuteRate() public {
-        string[2] memory f = _forms("ExecuteRate");
+        string[1] memory f = _forms("ExecuteRate");
         uint256 s = vm.snapshotState();
-        for (uint256 i; i < 2; ++i) {
+        for (uint256 i; i < f.length; ++i) {
             vm.revertToState(s);
             address leg = address(new MockERC20("Leg", "LEG", 6));
             WrappedToken w = _wrappedAt(f[i], leg);
@@ -1354,9 +1611,9 @@ contract TypedOpsRouterTest is UALedgerBase {
     // ------------------------------------------------------------------ the powers on the DEX
 
     function test_routerRow_SetMarket() public {
-        string[2] memory f = _forms("SetMarket");
+        string[1] memory f = _forms("SetMarket");
         uint256 s = vm.snapshotState();
-        for (uint256 i; i < 2; ++i) {
+        for (uint256 i; i < f.length; ++i) {
             vm.revertToState(s);
             SCaaSDex d = _dexAt(f[i]);
             _row(f[i]);
@@ -1365,9 +1622,9 @@ contract TypedOpsRouterTest is UALedgerBase {
     }
 
     function test_routerRow_SetExchangeTarget() public {
-        string[2] memory f = _forms("SetExchangeTarget");
+        string[1] memory f = _forms("SetExchangeTarget");
         uint256 s = vm.snapshotState();
-        for (uint256 i; i < 2; ++i) {
+        for (uint256 i; i < f.length; ++i) {
             vm.revertToState(s);
             SCaaSDex d = _dexAt(f[i]);
             _row(f[i]);
@@ -1376,9 +1633,9 @@ contract TypedOpsRouterTest is UALedgerBase {
     }
 
     function test_routerRow_SetListedOnly() public {
-        string[2] memory f = _forms("SetListedOnly");
+        string[1] memory f = _forms("SetListedOnly");
         uint256 s = vm.snapshotState();
-        for (uint256 i; i < 2; ++i) {
+        for (uint256 i; i < f.length; ++i) {
             vm.revertToState(s);
             SCaaSDex d = _dexAt(f[i]);
             _row(f[i]);
@@ -1387,9 +1644,9 @@ contract TypedOpsRouterTest is UALedgerBase {
     }
 
     function test_routerRow_SetFeeSplit() public {
-        string[2] memory f = _forms("SetFeeSplit");
+        string[1] memory f = _forms("SetFeeSplit");
         uint256 s = vm.snapshotState();
-        for (uint256 i; i < 2; ++i) {
+        for (uint256 i; i < f.length; ++i) {
             vm.revertToState(s);
             SCaaSDex d = _dexAt(f[i]);
             _row(f[i]);
@@ -1400,25 +1657,208 @@ contract TypedOpsRouterTest is UALedgerBase {
 
     // ------------------------------------------------------------------ the lane's cancels on the router's domain
 
-    function test_routerRow_CancelNonce() public {
-        string memory op = "CancelNonce";
-        _row(op);
-        assertEq(GovernanceRouter(router).mtxNonce(signer, _uint(op, "lane")), 1, "the signed lane");
+    /// ua-mtx-merge T1, meaning: the two cancel rows of the router's domain, the address `CancelNonce` and the unordered
+    /// `UACancelNonce(bytes32 ua,uint256 batch,uint256 validUntil)`, find no entry on the router any more (Q2, MD-1): the
+    /// row's calldata reverts with no data and the lanes stay. T11 (MD-7): both read from `TYPED_OPS_LEGACY`.
+    function test_routerRow_CancelNonceHasNoEntry() public {
+        j = vm.readFile(TYPED_OPS_LEGACY);
+        _noEntry("CancelNonce", MetaTxLib.pad(signer), _uint("CancelNonce", "lane"));
     }
 
-    /// `ua` of the row is a derived id: the registry is asked with the router's digest, which is the row's.
+    function test_routerRow_UACancelNonceOldFormHasNoEntry() public {
+        j = vm.readFile(TYPED_OPS_LEGACY);
+        _noEntry("UACancelNonce", _b32("UACancelNonce", "ua"), _uint("UACancelNonce", "batch"));
+    }
+
+    /// T11 (Q2, MD-7): the ordered cancel's row, `UACancelNonce(bytes32 from,uint256 lane,E)` in the router's domain, on the
+    /// router's `mtxCancelNonce`: the key's native id bumps its own lane, nonce-ordered.
     function test_routerRow_UACancelNonce() public {
-        string memory op = "UACancelNonce";
-        bytes32 ua = _b32(op, "ua");
-        (uint256 batch, uint256 until) = (_uint(op, "batch"), _uint(op, "validUntil"));
-        bytes32 d = GovernanceRouter(router).uaCancelDigest(ua, batch, until);
-        assertEq(d, vm.parseJsonBytes32(j, domainField(op, K, "digest")));
+        _row("UACancelNonce");
+        assertEq(GovernanceRouter(router).mtxNonce(me, _uint("UACancelNonce", "lane")), 1);
+    }
+
+    function _noEntry(string memory op, bytes32 who, uint256 lane) internal {
         checkRow(j, op, K);
-        IUARegistry.UASig memory sig;
-        sig.signature = vm.parseJsonBytes(j, domainField(op, K, "signature"));
-        vm.mockCall(REG_L, abi.encodeCall(IUARegistry.requireAuthorized, (ua, UAKinds.PURPOSE_METATX_CANCEL, d, sig)), "");
         (bool ok, bytes memory ret) = router.call(vm.parseJsonBytes(j, domainField(op, K, "calldata")));
-        if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
-        assertEq(GovernanceRouter(router).uaNonce(ua, batch), 1);
+        assertFalse(ok, op);
+        assertEq(ret.length, 0, string.concat(op, ": no such function"));
+        assertEq(GovernanceRouter(router).mtxNonce(who, lane), 0, op);
+    }
+
+    // ------------------------------------------------------------------ ua-mtx-merge T34: the eight regulated controls
+
+    /// The regulated rows (regulated-kinds spec §3.1, plan T34; CTR-GOV-20) run verbatim on a kind-8 token cloned at the row's
+    /// `target`, `GOV_ROUTER` the router, at the time the rows were built for (`UAPause.until` within 7 days of it). The key's
+    /// native id holds the bit the op uses: 5, 6, 7 (issuer) and 10 (compliance) are contract-only (RK-1), so the key's
+    /// address has code at `initialize` only, as `_wrappedAt` does for bit 3; bit 22 takes any holder, granted by the owner
+    /// (this test). `FORCE` and `RECORD` never on one id: the other role is a `Holder`. One record runs through the rows:
+    /// `UARecordOrder` records it, `UAFreeze` backs a freeze with it, `UAForceTransfer` moves under it, `UARevokeOrder` ends it.
+    uint256 internal constant REG_NOW = 1_800_000_000;
+    address internal regImpl;
+    address internal regOther;
+
+    function _regAt(string memory op, bool keyIsIssuer) internal returns (NormalRegulatedToken t) {
+        vm.warp(REG_NOW);
+        if (regImpl == address(0)) {
+            IFactoryToken.Env memory e = plainEnv(address(this), address(0), chainUidA, REG_L, false);
+            e.govRouter = router;
+            regImpl = address(new NormalRegulatedToken(1, e, regArgs()));
+            regOther = address(new Holder());
+        }
+        t = NormalRegulatedToken(_addr(op, "target"));
+        _clone(regImpl, address(t));
+        IFactoryToken.TokenConfig memory c;
+        (c.name, c.symbol, c.decimals, c.owner) = ("R", "R", 6, MetaTxLib.pad(address(this)));
+        c.features = 1 | (uint256(1) << GovernanceBits.FREEZE) | (uint256(1) << GovernanceBits.FORCE)
+            | (uint256(1) << GovernanceBits.PAUSE) | (uint256(1) << GovernanceBits.RECORD)
+            | (uint256(1) << GovernanceBits.OPERATOR_TRANSFER) | (uint256(1) << GovernanceBits.TAX);
+        c.reg.taxRecipient = MetaTxLib.pad(address(0x7A1)); // pay-meta-tax T41: bit 23, the issuer seat holds it
+        (c.roles.issuer, c.roles.compliance) = keyIsIssuer ? (me, MetaTxLib.pad(regOther)) : (MetaTxLib.pad(regOther), me);
+        (c.initialSupply, c.initialHolder) = (1000, address(uint160(uint256(_b32("UARecordOrder", "subject")))));
+        c.reg.termsHash = keccak256("terms");
+        vm.etch(signer, hex"00");
+        t.initialize(address(this), 1, abi.encode(c));
+        vm.etch(signer, "");
+        t.grantRole(GovernanceBits.OPERATOR_TRANSFER, me);
+    }
+
+    /// `UARecordOrder`'s order, recorded directly by `who`; its `recordId`.
+    function _regRecord(NormalRegulatedToken t, address who) internal returns (bytes32) {
+        string memory op = "UARecordOrder";
+        bytes memory args = bytes.concat(abi.encode(_b32(op, "orderId"), _b32(op, "documentHash"), _b32(op, "subject")),
+            abi.encode(_b32(op, "beneficiary"), _uint(op, "maxAmount"), _uint(op, "freezeUntil")));
+        vm.prank(who);
+        (bool ok,) = address(t).call(bytes.concat(t.recordOrder.selector, args));
+        assertTrue(ok, "recordOrder");
+        return keccak256(abi.encode(_b32(op, "orderId"), _b32(op, "subject"), _b32(op, "beneficiary")));
+    }
+
+    function test_routerRow_UARecordOrder() public {
+        string memory op = "UARecordOrder";
+        NormalRegulatedToken t = _regAt(op, false);
+        _row(op);
+        bytes32 rid = keccak256(abi.encode(_b32(op, "orderId"), _b32(op, "subject"), _b32(op, "beneficiary")));
+        assertEq(t.order(rid).subject, _b32(op, "subject"));
+        assertEq(t.order(rid).beneficiary, _b32(op, "beneficiary"));
+        assertEq(t.order(rid).maxAmount, _uint(op, "maxAmount"));
+        assertEq(t.order(rid).freezeUntil, _uint(op, "freezeUntil"));
+    }
+
+    function test_routerRow_UAFreeze() public {
+        string memory op = "UAFreeze";
+        NormalRegulatedToken t = _regAt(op, true);
+        bytes32 rid = _regRecord(t, regOther);
+        assertEq(rid, _b32(op, "recordId"), "the row names UARecordOrder's record");
+        _row(op);
+        assertTrue(t.isFrozen(_b32(op, "account")));
+        assertEq(t.freezeOf(_b32(op, "account")).recordId, rid);
+    }
+
+    function test_routerRow_UAUnfreeze() public {
+        string memory op = "UAUnfreeze";
+        NormalRegulatedToken t = _regAt(op, true);
+        vm.prank(signer);
+        t.freeze(_b32(op, "account"), _b32(op, "ref"), 0);
+        assertTrue(t.isFrozen(_b32(op, "account")));
+        _row(op);
+        assertFalse(t.isFrozen(_b32(op, "account")));
+    }
+
+    function test_routerRow_UAForceTransfer() public {
+        string memory op = "UAForceTransfer";
+        NormalRegulatedToken t = _regAt(op, true);
+        bytes32 rid = _regRecord(t, regOther);
+        assertEq(rid, _b32(op, "recordId"));
+        vm.prank(signer);
+        t.freeze(_b32("UARecordOrder", "subject"), _b32("UAFreeze", "ref"), rid);
+        _row(op);
+        assertEq(t.balanceOf(address(uint160(uint256(_b32("UARecordOrder", "beneficiary"))))), _uint(op, "amount"));
+        assertEq(t.order(rid).executed, _uint(op, "amount"));
+    }
+
+    function test_routerRow_UAPause() public {
+        string memory op = "UAPause";
+        NormalRegulatedToken t = _regAt(op, true);
+        _row(op);
+        assertEq(t.regulatedConfig().pausedUntil, _uint(op, "until"));
+    }
+
+    function test_routerRow_UAUnpause() public {
+        string memory op = "UAUnpause";
+        NormalRegulatedToken t = _regAt(op, true);
+        vm.prank(signer);
+        t.pause(_b32(op, "ref"), uint64(REG_NOW + 1 days));
+        _row(op);
+        assertEq(t.regulatedConfig().pausedUntil, REG_NOW);
+    }
+
+    function test_routerRow_UARevokeOrder() public {
+        string memory op = "UARevokeOrder";
+        NormalRegulatedToken t = _regAt(op, false);
+        bytes32 rid = _regRecord(t, signer);
+        assertEq(rid, _b32(op, "recordId"));
+        _row(op);
+        assertTrue(t.order(rid).revoked);
+    }
+
+    /// Owner 2026-11-06 (CTR-GOV-20): the moved account is `account`, the signer the envelope's `from`.
+    function test_routerRow_UAOperatorTransfer() public {
+        string memory op = "UAOperatorTransfer";
+        NormalRegulatedToken t = _regAt(op, true);
+        address from = address(uint160(uint256(_b32(op, "account"))));
+        address to = address(uint160(uint256(_b32(op, "to"))));
+        assertTrue(_b32(op, "account") != me, "the moved account is not the signer");
+        _row(op);
+        assertEq(t.balanceOf(to), _uint(op, "amount"));
+        assertEq(t.balanceOf(from), 1000 - _uint(op, "amount"));
+    }
+
+    /// pay-meta-tax T39 / T41: the router's two tax ops, bit 23 on the key (the issuer seat), the factory's notice 0.
+    function test_routerRow_UASetTaxRate() public {
+        string memory op = "UASetTaxRate";
+        NormalRegulatedToken t = _regAt(op, true);
+        _row(op);
+        assertEq(t.taxConfig().effectivePpm, _uint(op, "ratePpm"));
+    }
+
+    function test_routerRow_UASetTaxRecipient() public {
+        string memory op = "UASetTaxRecipient";
+        NormalRegulatedToken t = _regAt(op, true);
+        _row(op);
+        assertEq(t.taxConfig().taxRecipient, _b32(op, "taxRecipient"));
+    }
+
+    /// spec §6 on the router (`MetaTxLib.canon`): the rows bind the relayer (mode 1), the fee recipient is unbound. A wallet
+    /// that signs a non-zero fee recipient signs another digest, which the router refuses (the lane unspent); the canonical
+    /// 0 under the same envelope runs, whatever fee recipient the calldata carries.
+    function test_routerRow_regulatedUnboundFeeRecipientSignedIsRefused() public {
+        string memory op = "UAPause";
+        NormalRegulatedToken t = _regAt(op, true);
+        MetaTxLib.Envelope memory a = rowEnvelope2(j, op);
+        MetaTxLib.UAEnvelope memory e = MetaTxLib.UAEnvelope(me, a.batch, a.nonce, a.validUntil, a.mode, a.relayer, a.fee,
+            address(0xBA));
+        assertEq(e.mode & 2, 0, "fee recipient unbound");
+        (bytes32 ref, uint64 until) = (_b32(op, "ref"), uint64(_uint(op, "until")));
+        IUARegistry.UASig memory s;
+        s.signature = _pauseSig(e, address(t), ref, until, address(0xBA));
+        vm.prank(e.relayer);
+        (bool ok,) = router.call(abi.encodeCall(GovernanceRouter.mtxPause, (e, address(t), ref, until, s)));
+        assertFalse(ok, "a non-zero unbound fee recipient signed");
+        assertEq(GovernanceRouter(router).mtxNonce(me, e.batch), 0);
+        s.signature = _pauseSig(e, address(t), ref, until, address(0));
+        vm.prank(e.relayer);
+        GovernanceRouter(router).mtxPause(e, address(t), ref, until, s);
+        assertEq(t.regulatedConfig().pausedUntil, until);
+        assertEq(GovernanceRouter(router).mtxNonce(me, e.batch), 1);
+    }
+
+    function _pauseSig(MetaTxLib.UAEnvelope memory e, address target, bytes32 ref, uint64 until, address feeTo)
+        internal view returns (bytes memory)
+    {
+        bytes32 sh = keccak256(bytes.concat(abi.encode(vm.parseJsonBytes32(j, ".ops.UAPause.typehash"), e.from, target, ref, until),
+            abi.encode(e.batch, e.nonce, e.validUntil, e.mode, e.relayer, e.fee, feeTo)));
+        (uint8 v, bytes32 r, bytes32 ss) = vm.sign(uint256(vm.parseJsonBytes32(j, ".key.private")),
+            keccak256(abi.encodePacked(hex"1901", domainOf(router), sh)));
+        return abi.encodePacked(r, ss, v);
     }
 }

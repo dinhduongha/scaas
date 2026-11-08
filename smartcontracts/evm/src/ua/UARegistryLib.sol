@@ -230,7 +230,7 @@ library UARegistryLib {
             }
             s.accepted[ua] = bits;
         }
-        (uint8 q, uint8 k) = (UAStore.checked(s.pqzKey[ua].proven), UAStore.checked(s.kem[ua][0].length != 0));
+        (uint8 q, uint8 k) = (UAStore.checked(s.pqzKey[ua][0].proven), UAStore.checked(s.kem[ua][0].length != 0));
         emit IUARegistry.UARegistered(ua, kind, d, attrs, keccak256(pop), pqzPop, UAKinds.CHECKED_CHAIN, q, k);
     }
 
@@ -398,67 +398,104 @@ library UARegistryLib {
         return classical < threshold;
     }
 
-    /// Step 7, the PQZ key (UA8-D8): the key (SSTORE2) and its proof hash; with `pqzPop`, the proof bytes, and where
-    /// slot 0x0142 has a verifier `R_REG` over `uaMessage(0x0142, PURPOSE_POP_V2, portable)` (`portable` = typed
-    /// `UAPortableRecord`) (it refuses a key of
-    /// another set's length or with a coefficient `≥ q`; `UAPoP`), capped with the hold, then the proven key's owner
-    /// (`UAKeyInUse`, either generation), `keyOwner(h)`, the `0x0142` list.
+    /// Step 7, the PQZ key (UA8-D8) as version 0 (group 3g): the key (SSTORE2), its proof hash, the per-UA key marker; with
+    /// `pqzPop`, the proof bytes, and where slot 0x0142 has a verifier `R_REG` over `uaMessage(0x0142, PURPOSE_POP_V2,
+    /// portable)` (`portable` = typed `UAPortableRecord`) (it refuses a key of another set's length or with a coefficient
+    /// `≥ q`; `UAPoP`), capped with the hold, then the proven key's owner (`UAKeyInUse`, either generation), `keyOwner(h)`,
+    /// the `0x0142` list; `UAPqzKeyCurrent(ua, 0)` when eligible. No `UAPqzKeyAdded` (F-10: `UARegistered` carries it).
     function _pqzAttach(bytes32 ua, IUARegistry.UAAttrs calldata attrs, bytes calldata pqzPop, bytes32 h, bytes32 portable)
         private
     {
         UAStore.Layout storage s = UAStore.layout();
         if (h == 0) return;
-        s.pqzKey[ua].ptr = SSTORE2.write(attrs.pqzKey);
-        s.pqzPopHash[ua] = attrs.pqzPopHash;
+        s.pqzKey[ua][0].ptr = SSTORE2.write(attrs.pqzKey);
+        s.pqzPopHash[ua][0] = attrs.pqzPopHash;
+        s.pqzKeyUsed[ua][h] = true;
         if (pqzPop.length == 0) return;
-        _pqzProof(ua, attrs.pqzKey, pqzPop, h, UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_POP_V2, portable), pqzPop[0:0]);
+        _pqzProof(ua, 0, attrs.pqzKey, pqzPop, h, UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_POP_V2, portable),
+            pqzPop[0:0]);
     }
 
-    /// The proof bytes stored; proven where slot 0x0142 has a verifier and it accepts `pqzPop` over `message`.
-    function _pqzProof(bytes32 ua, bytes memory pqzKey, bytes calldata pqzPop, bytes32 h, bytes32 message,
-        bytes calldata logged) private returns (bool proven)
+    /// Version `v`'s proof bytes stored; where slot 0x0142 has a verifier and it accepts `pqzPop` over `message`, proven
+    /// (`_pqzOwn`). Eligible (KV-3): proven, or without the verifier this build's set length (C2, F-1: its bytes are stored
+    /// here); an eligible version may become current (`_pqzCurrent`).
+    function _pqzProof(bytes32 ua, uint64 v, bytes memory pqzKey, bytes calldata pqzPop, bytes32 h, bytes32 message,
+        bytes calldata logged) private
     {
-        UAStore.Layout storage s = UAStore.layout();
-        s.pqzPop[ua] = SSTORE2.writeChunks(pqzPop);
+        UAStore.layout().pqzPop[ua][v] = SSTORE2.writeChunks(pqzPop);
         uint256 cfg = _cfgPqz();
-        if (uint160(cfg) != 0) {
+        bool proven = uint160(cfg) != 0;
+        if (proven) {
             bytes memory data = abi.encodeWithSelector(IUAPopVerifier.verifyPop.selector, pqzKey, message, pqzPop);
             if (!UAStore.capped(address(uint160(cfg)), cfg >> 160, data, 1, true)) revert IUARegistry.UAPoP();
-            bytes32 owner = _keyOwner(h);
-            if (owner != 0) revert IUARegistry.UAKeyInUse(h, owner);
-            s.keyOwner[h] = ua;
-            _list(UAKinds.PQZ_MLWE, ua);
-            s.pqzKey[ua].proven = proven = true;
+            _pqzOwn(ua, v, h);
         }
-        emit IUARegistry.UAPqzPopStored(ua, UAStore.checked(proven), logged);
+        emit IUARegistry.UAPqzPopStored(ua, v, UAStore.checked(proven), logged);
+        if (proven || pqzKey.length == PqzSet.PK) _pqzCurrent(ua, v);
     }
 
-    // ----- the PQZ proof later (UA8-D8, P8) and the PQZ key later (ruling A1-I1) -----
-
-    function storePqzPop(bytes32 ua, bytes calldata pqzPop) external {
+    /// A proven version: its owner (`UAKeyInUse` for a hash any UA owns, this one included: KV-2), `keyOwner`, the `0x0142`
+    /// list once per UA (decoys are drawn per UA, never per version), `proven`.
+    function _pqzOwn(bytes32 ua, uint64 v, bytes32 h) private {
         UAStore.Layout storage s = UAStore.layout();
+        bytes32 owner = _keyOwner(h);
+        if (owner != 0) revert IUARegistry.UAKeyInUse(h, owner);
+        s.keyOwner[h] = ua;
+        UAStore.PqzVersions storage vs = s.pqzVersions[ua];
+        if (!vs.listed) {
+            _list(UAKinds.PQZ_MLWE, ua);
+            vs.listed = true;
+        }
+        s.pqzKey[ua][v].proven = true;
+    }
+
+    /// An eligible version at or above `current` becomes current (KV-3: `current` never goes down; equal only for version
+    /// 0, whose proof is stored once), `UAPqzKeyCurrent`.
+    function _pqzCurrent(bytes32 ua, uint64 v) private {
+        UAStore.PqzVersions storage vs = UAStore.layout().pqzVersions[ua];
+        if (v < vs.current) return;
+        vs.current = v;
+        emit IUARegistry.UAPqzKeyCurrent(ua, v);
+    }
+
+    // ----- the PQZ proof later (UA8-D8, P8) and the PQZ key versions later (ruling A1-I1; group 3g) -----
+
+    function storePqzPop(bytes32 ua, uint64 version, bytes calldata pqzPop) external {
         bool host = _host(ua);
         if (pqzPop.length == 0) revert IUARegistry.UAPqzPopHash(ua); // an empty proof is no proof (ruling A6-m)
-        UAStore.PqzKey memory k = s.pqzKey[ua];
-        bytes32 ph = s.pqzPopHash[ua];
-        if (host && k.ptr == address(0)) {
-            // gen 1's key (from its `register` or `setPqzKey`), proven in this generation (ruling A6-I1)
-            address g1 = _pred();
-            (k.ptr, ph,) = IUARegistry(g1).pqzKeyOf(ua);
-            k.added = IUARegistry(g1).pqzKeySigOf(ua).length != 0;
-        }
-        if (keccak256(pqzPop) != ph) revert IUARegistry.UAPqzPopHash(ua); // no PQZ key: the hash is 0
-        if (s.pqzPop[ua].length != 0) return; // stored: proven, or never provable here (no verifier)
+        UAStore.PqzKey memory k = _pqzRecord(ua, version, host, keccak256(pqzPop));
+        if (UAStore.layout().pqzPop[ua][version].length != 0) return; // stored: proven, or never provable here (no verifier)
         bytes memory key = SSTORE2.read(k.ptr);
         bytes32 h = UAKinds.keyHashOf(UAKinds.PQZ_MLWE, key);
-        bytes32 message = k.added
-            ? UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_PQZ_KEY, UAKinds.pqzKeyDigest(ua, h))
-            : _registerKeyMessage(ua, h, host);
-        if (host) {
-            s.pqzKey[ua] = k;
-            s.pqzPopHash[ua] = ph;
+        bytes32 message = version != 0
+            ? UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_PQZ_KEY, UAKinds.pqzKeyVersionDigest(ua, version, h))
+            : k.added
+                ? UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_PQZ_KEY, UAKinds.pqzKeyDigest(ua, h))
+                : _registerKeyMessage(ua, h, host);
+        _pqzProof(ua, version, key, pqzPop, h, message, pqzPop);
+    }
+
+    /// Version `version`'s record for `storePqzPop`, its proof hash `popHash` checked (`UAPqzPopHash`; no such version: the
+    /// hash is 0). On a host without its own record, gen 1's (from its `register` or `setPqzKey`), proven in this generation
+    /// (ruling A6-I1, host rule 3) and copied here: from then on the host answers this version from its own record,
+    /// whatever gen 1 writes later (host rule 2).
+    function _pqzRecord(bytes32 ua, uint64 version, bool host, bytes32 popHash) private returns (UAStore.PqzKey memory k) {
+        UAStore.Layout storage s = UAStore.layout();
+        k = s.pqzKey[ua][version];
+        bytes32 ph = s.pqzPopHash[ua][version];
+        bool copy = host && k.ptr == address(0);
+        if (copy) {
+            IUARegistry g1 = IUARegistry(_pred());
+            (k.ptr, ph,) = g1.pqzKeyAt(ua, version);
+            k.added = version != 0 || g1.pqzKeySigOf(ua, 0).length != 0;
         }
-        _pqzProof(ua, key, pqzPop, h, message, pqzPop);
+        if (popHash != ph) revert IUARegistry.UAPqzPopHash(ua);
+        if (copy) {
+            s.pqzKey[ua][version] = k;
+            s.pqzPopHash[ua][version] = ph;
+            UAStore.PqzVersions storage vs = s.pqzVersions[ua];
+            if (version > vs.latest) vs.latest = version;
+        }
     }
 
     /// The R_REG message of a `register` key: `uaMessage(0x0142, PURPOSE_POP_V2, typed(UAPortableRecord))` with the
@@ -496,7 +533,9 @@ library UARegistryLib {
         revert IUARegistry.UAUnauthorized(ua);
     }
 
-    function setPqzKey(bytes32 ua, bytes calldata pqzKey, bytes32 pqzPopHash, IUARegistry.UASig calldata sig) external {
+    function setPqzKey(bytes32 ua, uint64 version, bytes calldata pqzKey, bytes32 pqzPopHash,
+        IUARegistry.UASig calldata sig) external
+    {
         UAStore.Layout storage s = UAStore.layout();
         bool host = _host(ua);
         uint16 kind;
@@ -509,16 +548,42 @@ library UARegistryLib {
             (d,) = UAStore.registration(ua, r.keyPtr);
         }
         _pqzHolder(kind, d, ua, host);
-        _pqzKeyFree(ua, host);
+        _pqzNext(ua, version, host);
         bytes32 h = _pqzKeyHash(pqzKey);
+        // KV-1 (Codex #1): no two versions of one UA hold the same key, before any proof exists; a host reads gen 1's too
+        if (s.pqzKeyUsed[ua][h] || (host && IUARegistry(_pred()).pqzKeyUsed(ua, h))) revert IUARegistry.UAKeyInUse(h, ua);
         if (pqzPopHash == 0 || pqzPopHash == EMPTY_PROOF_HASH) revert IUARegistry.UAPqzPopHash(ua);
-        bytes32 rd = UAKinds.pqzKeyRecordDigest(ua, h, pqzPopHash);
+        bytes32 rd = version == 0
+            ? UAKinds.pqzKeyRecordDigest(ua, h, pqzPopHash)
+            : UAKinds.pqzKeyVersionRecordDigest(ua, version, h, pqzPopHash);
         if (!_portableOk(kind, d, ua, UAKinds.PURPOSE_PQZ_KEY, rd, sig)) revert IUARegistry.UAUnauthorized(ua);
         bytes memory stored = _portableBytes(sig);
-        s.pqzKey[ua] = UAStore.PqzKey(SSTORE2.write(pqzKey), false, true);
-        s.pqzPopHash[ua] = pqzPopHash;
-        s.pqzKeySig[ua] = SSTORE2.writeChunks(stored);
-        emit IUARegistry.UAPqzKeyAdded(ua, h, pqzPopHash, pqzKey, stored);
+        s.pqzKey[ua][version] = UAStore.PqzKey(SSTORE2.write(pqzKey), false, true);
+        s.pqzPopHash[ua][version] = pqzPopHash;
+        s.pqzKeySig[ua][version] = SSTORE2.writeChunks(stored);
+        s.pqzKeyUsed[ua][h] = true;
+        s.pqzVersions[ua].latest = version;
+        emit IUARegistry.UAPqzKeyAdded(ua, version, h, pqzPopHash, pqzKey, stored);
+    }
+
+    /// KV-1 (R2, O6): version 0 is write-once (`UAPqzKeySet` once the UA has one, here or, on a host, in gen 1); a version
+    /// v ≥ 1 needs version 0 and `v == latest + 1` (`UAPqzKeyVersion`), `latest` the larger of both generations' on a host.
+    function _pqzNext(bytes32 ua, uint64 version, bool host) private view {
+        UAStore.Layout storage s = UAStore.layout();
+        bool has0 = s.pqzKey[ua][0].ptr != address(0);
+        uint64 latest = s.pqzVersions[ua].latest;
+        if (host) {
+            IUARegistry g1 = IUARegistry(_pred());
+            (address p0,,) = g1.pqzKeyAt(ua, 0);
+            has0 = has0 || p0 != address(0);
+            uint64 l1 = g1.pqzKeyLatest(ua);
+            if (l1 > latest) latest = l1;
+        }
+        if (version == 0) {
+            if (has0) revert IUARegistry.UAPqzKeySet(ua);
+        } else if (!has0 || version != latest + 1) {
+            revert IUARegistry.UAPqzKeyVersion(ua, version);
+        }
     }
 
     /// A portable record's `UASig` (`setPqzKey`, `setKemKey` ≥ 1): never `keyData`; `signature` or `members` (`_sigOk`).
@@ -531,20 +596,6 @@ library UARegistryLib {
     /// The stored bytes of a portable `UASig`: `signature`, or an msig's `abi.encode(members)` (the pre-R1 form).
     function _portableBytes(IUARegistry.UASig calldata sig) private pure returns (bytes memory) {
         return sig.members.length != 0 ? abi.encode(sig.members) : sig.signature;
-    }
-
-    /// `setPqzKey`'s `UAPqzKeySet` (ruling R-cross-set): the UA has a PQZ key here (gen 2 host: in either generation), and
-    /// it stays (write-once) unless this chain can never prove it: slot 0x0142 has a verifier and the key, unproven, is
-    /// not of this build's set length (`PqzSet.PK`, the verifier's own length check). Without the verifier nothing is
-    /// replaced (nothing can be proven here either way). A replaced `register` key is kept for `registrationOf`.
-    function _pqzKeyFree(bytes32 ua, bool host) private {
-        UAStore.Layout storage s = UAStore.layout();
-        UAStore.PqzKey memory old = s.pqzKey[ua];
-        address pk = old.ptr;
-        if (host && pk == address(0)) (pk,,) = IUARegistry(_pred()).pqzKeyOf(ua); // gen 1's key counts
-        if (pk == address(0)) return;
-        if (old.proven || uint160(_cfgPqz()) == 0 || pk.code.length - 1 == PqzSet.PK) revert IUARegistry.UAPqzKeySet(ua);
-        if (!host && !old.added) (s.regPqzKey[ua], s.regPqzPopHash[ua]) = (pk, s.pqzPopHash[ua]);
     }
 
     // ----- KEM records (P4, P5, P7; UA8-D3–D5, D11, D12) -----

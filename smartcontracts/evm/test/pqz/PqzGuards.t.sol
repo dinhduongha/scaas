@@ -85,7 +85,7 @@ contract PqzGuardsTest is PqzFixture {
         bytes32[] memory rec = new bytes32[](1);
         rec[0] = bob;
         _mockOp(7, 1);
-        pl = _mpayload(h.pqzAccount(alice).pendingCount, 0, alice, 0, rec, _blob(2, _outLen(1, true)), "");
+        pl = _mpayload(h.pqzAccount(alice, 0).pendingCount, 0, alice, 0, rec, _blob(2, _outLen(1, true)), "");
         vm.expectRevert(err); // op 7 leg
         h.mtxConfidentialTransfer(_ms(pl), hex"c0de", _pqAuth(), "");
         // the fee beneficiary is exempt: a public credit, no pending entry
@@ -106,7 +106,7 @@ contract PqzGuardsTest is PqzFixture {
             _mirrorTrivial(h, bob, 1);
             _transfer(h, alice, bob, bytes32(0), 10 + i, true);
         }
-        assertEq(h.pqzAccount(bob).pendingCount, 10, "five shields and five credits");
+        assertEq(h.pqzAccount(bob, 0).pendingCount, 10, "five shields and five credits");
     }
 
     // ------------------------------------------------------------------ C2-3: a zero auditor
@@ -125,14 +125,16 @@ contract PqzGuardsTest is PqzFixture {
     // ------------------------------------------------------------------ C2-4: value-in checks use _keyPtr
 
     function test_valueIn_keyOfAnotherLengthRefused() public {
-        (, bytes32 ph, bool proven) = reg.pqzKeyOf(bob);
-        vm.mockCall(address(reg), abi.encodeWithSelector(IUARegistry.pqzKeyOf.selector, bob), abi.encode(address(ct), ph, proven));
+        (uint64 v,, bytes32 ph, bool proven) = reg.pqzKeyOf(bob);
+        vm.mockCall(address(reg), abi.encodeWithSelector(IUARegistry.pqzKeyOf.selector, bob), abi.encode(v, address(ct), ph, proven));
+        // group 3g T52 (KV-10): the prepare reads the version it names, `pqzKeyAt(bob, 0)`
+        vm.mockCall(address(reg), abi.encodeCall(IUARegistry.pqzKeyAt, (bob, uint64(0))), abi.encode(address(ct), ph, proven));
         bytes memory err = abi.encodeWithSelector(IPqzToken.AccountNotRegistered.selector, bob);
         _public(tok, address(this), SCALE);
         vm.expectRevert(err);
         tok.mtxShield(bob, 1);
         vm.expectRevert(err);
-        tok.mtxPrepareAcc(bob, 0);
+        tok.mtxPrepareAcc(bob, 0, 0);
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
         c.conf.auditorKey = abi.encode(bob);
         vm.expectRevert(err);
@@ -143,7 +145,7 @@ contract PqzGuardsTest is PqzFixture {
 
     function test_relay_shieldInPulledBeforeTheLibrary() public {
         _fund(tok, alice, 10);
-        bytes memory pl = _payload(tok.pqzAccount(alice).pendingCount, 1000, alice, bob, bytes32(0), _out(1, true), "");
+        bytes memory pl = _payload(tok.pqzAccount(alice, 0).pendingCount, 1000, alice, bob, bytes32(0), _out(1, true), "");
         vm.expectCall(PQZ, abi.encodePacked(uint8(1)), 0);
         vm.expectCall(address(reg), abi.encodeWithSelector(IUARegistry.requireAuthorized.selector), 0);
         vm.expectRevert(); // ERC20InsufficientBalance of the signer: nothing to move
@@ -153,7 +155,7 @@ contract PqzGuardsTest is PqzFixture {
     function test_relay_shieldInAboveTheCapIsStillAmountOutOfRange() public {
         _fund(tok, alice, 10);
         uint256 room = tok.maxShielded() - tok.totalShielded();
-        bytes memory pl = _payload(tok.pqzAccount(alice).pendingCount, type(uint256).max, alice, bob, bytes32(0),
+        bytes memory pl = _payload(tok.pqzAccount(alice, 0).pendingCount, type(uint256).max, alice, bob, bytes32(0),
             _out(1, true), "");
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.AmountOutOfRange.selector, type(uint256).max, room));
         tok.mtxConfidentialTransferSingle(_ts(pl), hex"c0de", _pqAuth(), "");
@@ -191,12 +193,12 @@ contract PqzGuardsTest is PqzFixture {
     function test_verifyTransferAmount_failedCallRevertsShapeErrorsAreFalse() public {
         _fund(tok, alice, 10);
         (bytes32 ref,) = _transfer(tok, alice, bob, bytes32(0), 5, true);
-        assertTrue(tok.verifyTransferAmount(ref, 0, 123, 0, hex"0a0b"));
-        assertFalse(tok.verifyTransferAmount(ref, 1, 123, 0, hex"0a0b"), "no leg 1");
-        assertFalse(tok.verifyTransferAmount(keccak256("x"), 0, 123, 0, hex"0a0b"), "unknown entry");
+        assertTrue(tok.verifyTransferAmount(ref, 0, 123, 0, 0, hex"0a0b"));
+        assertFalse(tok.verifyTransferAmount(ref, 1, 123, 0, 0, hex"0a0b"), "no leg 1");
+        assertFalse(tok.verifyTransferAmount(keccak256("x"), 0, 123, 0, 0, hex"0a0b"), "unknown entry");
         vm.mockCallRevert(PQZ, abi.encodePacked(uint8(4)), "");
         vm.expectRevert(UAKinds.UAVerifyGas.selector);
-        tok.verifyTransferAmount(ref, 0, 123, 0, hex"0a0b");
+        tok.verifyTransferAmount(ref, 0, 123, 0, 0, hex"0a0b");
     }
 
     // ------------------------------------------------------------------ C2-7: the views are in IPqzToken
@@ -204,10 +206,10 @@ contract PqzGuardsTest is PqzFixture {
     function test_interface_declaresTheViews() public {
         _fund(tok, alice, 10);
         IPqzToken t = IPqzToken(address(tok));
-        assertEq(t.pqzAccount(alice).pendingCount, 1);
-        assertEq(t.pqzAcc(alice).length, tok.pqzAcc(alice).length);
-        assertEq(t.pqzPending(alice, 0), tok.pqzPending(alice, 0));
-        assertEq(t.pqzPendingCt(alice, 0).length, tok.pqzPendingCt(alice, 0).length);
+        assertEq(t.pqzAccount(alice, 0).pendingCount, 1);
+        assertEq(t.pqzAcc(alice, 0).length, tok.pqzAcc(alice, 0).length);
+        assertEq(t.pqzPending(alice, 0, 0), tok.pqzPending(alice, 0, 0));
+        assertEq(t.pqzPendingCt(alice, 0, 0).length, tok.pqzPendingCt(alice, 0, 0).length);
         (bytes32 ref,) = _transfer(tok, alice, bob, bytes32(0), 5, true);
         assertEq(t.pqzEntryBlob(ref), tok.pqzEntryBlob(ref));
     }

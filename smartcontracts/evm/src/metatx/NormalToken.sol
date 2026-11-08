@@ -16,9 +16,6 @@ import {IUARegistry} from "../ua/IUARegistry.sol";
 ///         rate limit, if an issuer needs one, lives in its minter contract. Built by `OpenFactory.createToken`
 ///         (CTR-TOK-25): `initialSupply` is minted to `initialHolder`; `legs`, `rate`, `conf` must be empty.
 contract NormalToken is MetaTokenBase {
-    bytes32 internal constant BURN_TYPEHASH = keccak256(
-        "Burn(address from,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
-    );
     bytes32 internal constant UA_BURN_TYPEHASH = keccak256(
         "UABurn(bytes32 from,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
     );
@@ -38,9 +35,9 @@ contract NormalToken is MetaTokenBase {
     function _init(TokenConfig memory cfg) internal virtual override {
         _requireUnused(cfg, false, true, true, true);
         _setMetadata(cfg.name, cfg.symbol, cfg.decimals);
-        // 5-9 pass the kind's mask and reach `init`'s `FeatureNotBuilt` (GD-19); `validBits()` holds none of them
+        // 5-9 are not in the kind's mask: `init` refuses each with `FeatureInvalidForKind` (regulated-kinds spec Q3)
         GovernanceLib.init(cfg.features, cfg.lockedFeatures, cfg.owner, cfg.grantDelay, cfg.rescueTo, cfg.roles,
-            _validBits() | GovernanceBits.REGULATED, _roleBits(), _contractOnlyBits());
+            _validBits(), _roleBits(), _contractOnlyBits(), _REGISTRY);
         if (cfg.initialSupply != 0) _mint(cfg.initialHolder, cfg.initialSupply);
     }
 
@@ -62,14 +59,9 @@ contract NormalToken is MetaTokenBase {
         _burn(_msgSender(), amount);
     }
 
-    /// @notice The signed `burn(amount)` (TS-D14), `AMOUNT(0)` as on the generic path.
-    function mtxBurn(MetaTxLib.Envelope calldata e, uint256 amount, bytes calldata sig)
-        external nonReentrant returns (bytes memory)
-    {
-        return _named(BURN_TYPEHASH, this.burn.selector, e, abi.encode(amount), sig);
-    }
-
-    function uaBurn(MetaTxLib.UAEnvelope calldata e, uint256 amount, IUARegistry.UASig calldata auth)
+    /// @notice The signed `burn(amount)` (TS-D14, ua-mtx-merge R23: today's `uaBurn` under this name), `AMOUNT(0)` as on
+    ///         the generic path: a native id by its own key with no registry, a derived UA through the registry.
+    function mtxBurn(MetaTxLib.UAEnvelope calldata e, uint256 amount, IUARegistry.UASig calldata auth)
         external nonReentrant returns (bytes memory)
     {
         return _namedUA(UA_BURN_TYPEHASH, this.burn.selector, e, abi.encode(amount), auth);

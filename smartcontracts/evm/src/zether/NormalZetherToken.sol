@@ -31,11 +31,11 @@ contract NormalZetherToken is NormalToken, ZetherLayer {
         ZetherLayer(env)
     {}
 
-    function kind() public pure override(NormalToken, MetaTokenBase) returns (uint8) {
+    function kind() public pure virtual override(NormalToken, MetaTokenBase) returns (uint8) {
         return TokenStore.KIND_NORMAL_ZETHER;
     }
 
-    function _validBits() internal pure override(NormalToken, GovernanceBase) returns (uint256) {
+    function _validBits() internal pure virtual override(NormalToken, GovernanceBase) returns (uint256) {
         return GovernanceBits.NORMAL_BITS;
     }
 
@@ -45,26 +45,27 @@ contract NormalZetherToken is NormalToken, ZetherLayer {
     /// @dev The init path in `ZetherLib` (CTR-ZTH-94, size lever 1 as on `WrappedZetherToken`): no `TokenConfig` coder
     ///      stays here. In `NormalToken`'s order: the unused fields and the metadata, `GovernanceLib.init`, the Zether config,
     ///      the initial mint.
-    function _initRaw(bytes calldata initArgs) internal override {
+    function _initRaw(bytes calldata initArgs) internal virtual override {
         (uint256 features_, uint256 locked, bytes32 owner_, uint64 delay, address rescueTo_, GovernanceLib.Roles memory roles) =
-            ZetherLib.initNormal(initArgs);
-        GovernanceLib.init(features_, locked, owner_, delay, rescueTo_, roles, _validBits(), _roleBits(), _contractOnlyBits());
+            ZetherLib.initNormal(initArgs, kind());
+        GovernanceLib.init(features_, locked, owner_, delay, rescueTo_, roles, _validBits(), _roleBits(), _contractOnlyBits(),
+            _REGISTRY);
         (address holder, uint256 supply) = ZetherLib.initNormalConf(initArgs, TRANSFER_VERIFIER);
         if (supply != 0) _mint(holder, supply);
     }
 
-    function _domainName() internal pure override(ERC20MetaTx, ZetherLayer) returns (string memory) {
+    function _domainName() internal pure virtual override(ERC20MetaTx, ZetherLayer) returns (string memory) {
         return ZetherLayer._domainName();
     }
 
     function _envelopeBinding(MetaTxLib.MetaTransaction memory m)
-        internal view override(MetaTxBase, ZetherLayer) returns (bytes32)
+        internal view virtual override(MetaTxBase, ZetherLayer) returns (bytes32)
     {
         return ZetherLayer._envelopeBinding(m);
     }
 
     function _uaEnvelopeBinding(MetaTxLib.UAMetaTransaction memory m)
-        internal view override(UAMetaTxBase, ZetherLayer) returns (bytes32)
+        internal view virtual override(UAMetaTxBase, ZetherLayer) returns (bytes32)
     {
         return ZetherLayer._uaEnvelopeBinding(m);
     }
@@ -72,13 +73,13 @@ contract NormalZetherToken is NormalToken, ZetherLayer {
     /// @notice The allowlist (CTR-MTX-19, CTR-ZTH-34): `cancelNonce` (base), `burn(uint256)` `AMOUNT(0)`, then the
     ///         Zether ops, each `ABSOLUTE`; the table is `ZetherLib.normalSelectors` (CTR-ZTH-94).
     function mtxSelectors()
-        public pure override(NormalToken, IMetaTx, MetaTxBase)
+        public pure virtual override(NormalToken, IMetaTx, MetaTxBase)
         returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
     {
         return ZetherLib.normalSelectors();
     }
 
-    function _mtxRule(bytes4 sel) internal view override(NormalToken, MetaTxBase) returns (MtxRule memory) {
+    function _mtxRule(bytes4 sel) internal view virtual override(NormalToken, MetaTxBase) returns (MtxRule memory) {
         if (_isZetherOp(sel)) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 0);
         return NormalToken._mtxRule(sel);
     }
@@ -86,7 +87,7 @@ contract NormalZetherToken is NormalToken, ZetherLayer {
     /// @notice `NormalToken`'s UA allowlist (`burn`) and the Zether ops (CTR-ZTH-51, UA-5c): `mtxShield` (no proof,
     ///         no binding; the Zether UA shields its own public units, UA-6 U8) and the proof-carrying ones, whose
     ///         statement carries the UA envelope binding; the outer fee from the signer's UA balance.
-    function _uaAllowed(bytes4 sel) internal view override(NormalToken, UAMetaTxBase) returns (bool) {
+    function _uaAllowed(bytes4 sel) internal view virtual override(NormalToken, UAMetaTxBase) returns (bool) {
         return _isZetherOp(sel) || NormalToken._uaAllowed(sel);
     }
 }

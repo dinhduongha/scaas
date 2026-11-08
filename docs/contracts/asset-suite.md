@@ -101,7 +101,7 @@ later; each is locked or disableable. Bit 21 `MODERATE` joins this disclosure an
 Otherwise holders would have to read code to learn a token can be seized.
 
 <a id="roles"></a>
-<a id="CTR-AS-03"></a>**CTR-AS-03** — **Holders per bit** (owner; [CTR-GOV-01](../decisions.md#ctr-gov-01--governancebase-on-every-token-kind-and-the-dex)). `issuer` names the holders of bits 5–7, `compliance` the holders of bit 10 `RECORD`, each **a contract** (a multisig with an external seat is recommended, default 3-of-5, which the contract cannot prove), granted at creation and later by the token's owner under `grantDelay`. `issuer` executes (freeze, unfreeze, forced transfer, pause, unpause); `compliance` records and revokes orders; one holder is refused both `FORCE` and `RECORD`. Neither is transferable; a holder may `renounceRole` and the owner may revoke it, and losing a role **relaxes**: when no live root of a bit is left, that bit stops being active, whatever dead leaves stay listed and an expired root counting until it is revoked: `FREEZE` and `PAUSE` end at once, `FORCE` stops, and `FORCE` stops too when no live root of `RECORD` is left. [CTR-GOV-09](../decisions.md#ctr-gov-09--delayed-relaxing-and-record-later-with-the-asset-suite) replaces "at once" with `grantDelay` when `_delayedRelaxBits()` is built, on every path that relaxes. Bits 5–7 and 10 are contract-only: a holder is a native id whose address has code. SPECIFIED: no regulated implementation is built. Wallets compare the holders (`hasRole`, a role may have several, [CTR-TOK-22](token-wrappers.md#CTR-TOK-22)) to show whether the roles are separated. Without the relaxation a renounced or dead issuer would leave
+<a id="CTR-AS-03"></a>**CTR-AS-03** — **Holders per bit** (owner; [CTR-GOV-01](../decisions.md#ctr-gov-01--governancebase-on-every-token-kind-and-the-dex)). `issuer` names the holders of bits 5–7, `compliance` the holders of bit 10 `RECORD`, each **a contract** (a multisig with an external seat is recommended, default 3-of-5, which the contract cannot prove), granted at creation and later by the token's owner under `grantDelay`. `issuer` executes (freeze, unfreeze, forced transfer, pause, unpause); `compliance` records and revokes orders; one holder is refused both `FORCE` and `RECORD`. Neither is transferable; a holder may `renounceRole` and the owner may revoke it, and losing a role **relaxes**: when no live root of a bit is left, that bit stops being active, whatever dead leaves stay listed and an expired root counting until it is revoked: `FREEZE` and `PAUSE` end at once, `FORCE` stops, and `FORCE` stops too when no live root of `RECORD` is left. [CTR-GOV-09](../decisions.md#ctr-gov-09--delayed-relaxing-and-record-later-with-the-asset-suite) replaces "at once" with `grantDelay` when `_delayedRelaxBits()` is built, on every path that relaxes. Bits 5–7, 10 and 21 are contract-only: a holder is a native id whose address has code or a threshold (`msig`) UA, on every family (owner 2026-11-05, [decisions](../decisions.md#ctr-as-03--issuer-and-compliance-roles-renouncing-relaxes)). SPECIFIED: no regulated implementation is built. Wallets compare the holders (`hasRole`, a role may have several, [CTR-TOK-22](token-wrappers.md#CTR-TOK-22)) to show whether the roles are separated. Without the relaxation a renounced or dead issuer would leave
 frozen balances frozen forever.
 
 <a id="forced-transfer"></a>
@@ -354,20 +354,26 @@ interface IComplianceRegistry {
     event AttesterSet(address indexed attester, uint32 indexed attesterId, bool enabled);
     event Attested(address indexed account, uint64 flags, uint64 validUntil, uint32 indexed attesterId);
     error NotAdmin(); error NotAttester(); error AdminNotContract(address a); error LengthMismatch();
-    error EligibleContractAdminOnly();
+    error EligibleContractAdminOnly(); error AdminWrittenSlot(bytes32 account);
 
     function admin() external view returns (address);                 // immutable, a contract (multisig recommended)
     function setAttester(address attester, bool enabled) external;     // admin; ids assigned once, never reused
     function attesterId(address attester) external view returns (uint32);
     function attesterEnabled(uint32 id) external view returns (bool);
     function attest(address[] calldata accounts, uint64[] calldata flags, uint64[] calldata validUntil) external;
-        // enabled attester, or admin (id 0); flags 0 = revoke; ELIGIBLE_CONTRACT only by admin
+        // enabled attester, or admin (id 0); flags 0 = revoke; ELIGIBLE_CONTRACT only by admin;
+        // a slot with attesterId == 0 && flags != 0 only the admin overwrites or revokes (AdminWrittenSlot)
     function attestationOf(address account) external view returns (uint64 flags, uint64 validUntil, uint32 attesterId);
     function hasFlags(bytes32 account, uint64 required, uint64 denied) external view returns (bool);
         // (required == 0 || (active && ((flags & required) == required || flags & ELIGIBLE_CONTRACT != 0)))
         //   && !(active && flags & denied != 0), with active = attesterEnabled(id) && validUntil ≥ now
 }
 ```
+
+Change (owner 2026-11-06): a slot the admin (id 0) wrote can be overwritten or revoked only by the admin; another
+attester gets `AdminWrittenSlot(account)`. An empty slot also reads `attesterId == 0`, so a slot is admin-held when
+`attesterId == 0 && flags != 0`; an admin row of flags 0 is a revoke and stays open to attesters, since nothing is left to
+protect. Attesters still overwrite their own and each other's rows. Status: BUILT (branch `ua-mtx-merge`).
 
 Flag bits (meaning set by the issuer's policy, market-neutral): `KYC_DONE = 1`, `ACCREDITED = 2`,
 `SANCTIONS_CLEAR = 4`, `ELIGIBLE_CONTRACT = 8` ([CTR-AS-16](#CTR-AS-16)); bits 16–63 issuer-defined. One registry may

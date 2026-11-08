@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.20;
 
+import {DexLegs} from "../helpers/DexLegs.sol";
 import {V2Fixture, UID_} from "./helpers/V2Fixture.sol";
 import {Mock1271Wallet} from "../helpers/WalletMocks.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
@@ -11,8 +12,11 @@ import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {TradeLib} from "../../src/trade/TradeLib.sol";
 import {OrderJson} from "../helpers/OrderJson.sol";
 
-/// The sell token's side of a `TradeOrder` (CTR-DEX-15, -14, -04, -05, -02). This test contract plays the DEX: it is
-/// a contract and it is `o.dex`.
+/// The sell token's side of an order (CTR-DEX-15, -14, -04, -05, -02). This test contract plays the DEX: it is
+/// a contract and it is `o.dex`. ua-mtx-merge T6 (R12, R38): the token takes one order form, `UATradeOrder`; these
+/// suites write the native signer's order address-shaped (`_order`) and hand the token its `UATradeOrder`
+/// (`DexLegs.ua`: the address zero-padded, the signature over that digest as a native `UASig`); the token's events are
+/// the `UA…` ones. The address `TradeOrder` side is in legacy/ua-mtx-merge/ (this file as it stood there too).
 contract TradeTest is V2Fixture {
     uint256 constant ALICE_PK = 0xA11CE;
     address alice = vm.addr(ALICE_PK);
@@ -37,7 +41,7 @@ contract TradeTest is V2Fixture {
     }
 
     function _sign(NormalToken tok, ITradeToken.TradeOrder memory o) internal view returns (bytes memory) {
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, tok.tradeOrderDigest(o));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, tok.tradeOrderDigest(DexLegs.ua(o)));
         return abi.encodePacked(r, s, v);
     }
 
@@ -46,22 +50,22 @@ contract TradeTest is V2Fixture {
     }
 
     function _trade(ITradeToken.TradeOrder memory o, ITradeToken.TradeFill memory f) internal {
-        t.mtxTrade(o, _sign(t, o), f);
+        t.mtxTrade(DexLegs.ua(o), DexLegs.sigOf(_sign(t, o)), f);
     }
 
     function _expect(bytes4 sel, ITradeToken.TradeOrder memory o, ITradeToken.TradeFill memory f) internal {
         bytes memory sig = _sign(t, o);
-        vm.expectRevert(abi.encodeWithSelector(sel, t.tradeOrderDigest(o)));
-        t.mtxTrade(o, sig, f);
+        vm.expectRevert(abi.encodeWithSelector(sel, t.tradeOrderDigest(DexLegs.ua(o))));
+        t.mtxTrade(DexLegs.ua(o), DexLegs.sigOf(sig), f);
     }
 
     // ------------------------------------------------------------------ Path A
 
     function test_pathA_partialFillsToTheDex_thenTheRemainderCloses() public {
         ITradeToken.TradeOrder memory o = _order(1000, 2000);
-        bytes32 h = t.tradeOrderDigest(o);
+        bytes32 h = t.tradeOrderDigest(DexLegs.ua(o));
         vm.expectEmit(address(t));
-        emit ITradeToken.TradeFilled(h, alice, 600, 1200, 0);
+        emit ITradeToken.UATradeFilled(h, DexLegs.pad(alice), 600, 1200, 0);
         _trade(o, _fill(600, 1200, 0));
         assertEq(t.balanceOf(address(this)), 600);
         assertEq(t.pulled(h), 600);
@@ -100,7 +104,7 @@ contract TradeTest is V2Fixture {
         uint256 cap = (uint256(1) << 250) / 100 + 1; // 2^250 is not a multiple of 100: ceil = floor + 1
         _expect(ITradeToken.FeeAboveSigned.selector, o, _fill(1000, 1 << 250, cap + 1));
         _trade(o, _fill(1000, 1 << 250, cap));
-        assertEq(t.pulled(t.tradeOrderDigest(o)), 1000);
+        assertEq(t.pulled(t.tradeOrderDigest(DexLegs.ua(o))), 1000);
     }
 
     /// `mulGt` is exactly `a·b > c·d` wherever the products fit, and ordered past 2^256.
@@ -132,13 +136,13 @@ contract TradeTest is V2Fixture {
     function test_minFill_belowHalfSettles() public {
         ITradeToken.TradeOrder memory o = _order(1000, 2000); // minFill 0: no floor
         _trade(o, _fill(100, 200, 0));
-        assertEq(t.pulled(t.tradeOrderDigest(o)), 100);
+        assertEq(t.pulled(t.tradeOrderDigest(DexLegs.ua(o))), 100);
     }
 
     function test_minFill_zeroAcceptsAnyFill() public {
         ITradeToken.TradeOrder memory o = _order(1000, 2000);
         _trade(o, _fill(1, 2, 0));
-        assertEq(t.pulled(t.tradeOrderDigest(o)), 1);
+        assertEq(t.pulled(t.tradeOrderDigest(DexLegs.ua(o))), 1);
         _expect(ITradeToken.ZeroFill.selector, o, _fill(0, 0, 0));
     }
 
@@ -147,7 +151,7 @@ contract TradeTest is V2Fixture {
         o.minFill = 300;
         _trade(o, _fill(800, 1600, 0));
         _trade(o, _fill(200, 400, 0)); // the remainder, below minFill
-        assertEq(t.pulled(t.tradeOrderDigest(o)), 1000);
+        assertEq(t.pulled(t.tradeOrderDigest(DexLegs.ua(o))), 1000);
         _expect(ITradeToken.OrderClosed.selector, o, _fill(1, 2, 0));
     }
 
@@ -162,7 +166,7 @@ contract TradeTest is V2Fixture {
         ITradeToken.TradeOrder memory o = _order(1000, 2000);
         o.flags = 1; // IOC
         _trade(o, _fill(600, 1200, 0));
-        assertEq(t.pulled(t.tradeOrderDigest(o)), 1000);
+        assertEq(t.pulled(t.tradeOrderDigest(DexLegs.ua(o))), 1000);
         _expect(ITradeToken.OrderClosed.selector, o, _fill(400, 800, 0));
     }
 
@@ -174,9 +178,9 @@ contract TradeTest is V2Fixture {
         _expect(ITradeToken.EscrowFillShape.selector, o, _fill(999, 0, 0));
         _expect(ITradeToken.EscrowFillShape.selector, o, _fill(1000, 2000, 0));
         _expect(ITradeToken.EscrowFillShape.selector, o, _fill(1000, 0, 1)); // no DEX fee on an escrow
-        bytes32 h = t.tradeOrderDigest(o);
+        bytes32 h = t.tradeOrderDigest(DexLegs.ua(o));
         vm.expectEmit(address(t));
-        emit ITradeToken.TradeFilled(h, alice, 1000, 0, 0);
+        emit ITradeToken.UATradeFilled(h, DexLegs.pad(alice), 1000, 0, 0);
         _trade(o, _fill(1000, 0, 0));
         assertEq(t.pulled(h), 1000);
         assertEq(t.balanceOf(address(this)), 1000);
@@ -195,20 +199,20 @@ contract TradeTest is V2Fixture {
         bytes memory sig = _sign(t, o);
         vm.prank(other);
         vm.expectRevert(abi.encodeWithSelector(ITradeToken.NotDex.selector, other));
-        t.mtxTrade(o, sig, _fill(600, 1200, 0));
+        t.mtxTrade(DexLegs.ua(o), DexLegs.sigOf(sig), _fill(600, 1200, 0));
         o.dex = other; // an EOA
         sig = _sign(t, o);
         vm.prank(other);
         vm.expectRevert(abi.encodeWithSelector(ITradeToken.DexNotContract.selector, other));
-        t.mtxTrade(o, sig, _fill(600, 1200, 0));
+        t.mtxTrade(DexLegs.ua(o), DexLegs.sigOf(sig), _fill(600, 1200, 0));
     }
 
     function test_selfOrder_relayer_expiry_shape() public {
         ITradeToken.TradeOrder memory o = _order(1000, 2000);
         o.relayer = address(0x5E1);
         bytes memory sig = _sign(t, o);
-        vm.expectRevert(abi.encodeWithSelector(ITradeToken.WrongRelayer.selector, t.tradeOrderDigest(o), relayer));
-        t.mtxTrade(o, sig, _fill(600, 1200, 0));
+        vm.expectRevert(abi.encodeWithSelector(ITradeToken.WrongRelayer.selector, t.tradeOrderDigest(DexLegs.ua(o)), relayer));
+        t.mtxTrade(DexLegs.ua(o), DexLegs.sigOf(sig), _fill(600, 1200, 0));
         o = _order(1000, 2000);
         o.validUntil = block.timestamp - 1;
         _expect(ITradeToken.OrderExpired.selector, o, _fill(600, 1200, 0));
@@ -228,7 +232,7 @@ contract TradeTest is V2Fixture {
         ITradeToken.TradeOrder memory o = _order(1000, 2000);
         bytes memory sigOnT2 = _sign(t2, o); // signed in t2's domain
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
-        t.mtxTrade(o, sigOnT2, _fill(600, 1200, 0));
+        t.mtxTrade(DexLegs.ua(o), DexLegs.sigOf(sigOnT2), _fill(600, 1200, 0));
     }
 
     function test_erc1271Signer() public {
@@ -237,8 +241,8 @@ contract TradeTest is V2Fixture {
         t.transfer(address(w), 1000);
         ITradeToken.TradeOrder memory o = _order(1000, 2000);
         o.from = address(w);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, t.tradeOrderDigest(o));
-        t.mtxTrade(o, abi.encodePacked(r, s, v), _fill(600, 1200, 0));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, t.tradeOrderDigest(DexLegs.ua(o)));
+        t.mtxTrade(DexLegs.ua(o), DexLegs.sigOf(abi.encodePacked(r, s, v)), _fill(600, 1200, 0));
         assertEq(t.balanceOf(address(this)), 600);
     }
 
@@ -246,38 +250,38 @@ contract TradeTest is V2Fixture {
 
     function test_cancel_closesForever_replayIsANoOp() public {
         ITradeToken.TradeOrder memory o = _order(1000, 2000);
-        bytes32 h = t.tradeOrderDigest(o);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, t.cancelOrderDigest(o));
+        bytes32 h = t.tradeOrderDigest(DexLegs.ua(o));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, t.cancelOrderDigest(DexLegs.ua(o)));
         bytes memory c = abi.encodePacked(r, s, v);
         vm.expectEmit(address(t));
-        emit ITradeToken.OrderCancelled(h, alice);
+        emit ITradeToken.UAOrderCancelled(h, DexLegs.pad(alice));
         vm.prank(other); // anyone submits
-        t.mtxCancelOrder(o, c);
+        t.mtxCancelOrder(DexLegs.ua(o), DexLegs.sigOf(c));
         assertEq(t.pulled(h), 1000);
         vm.recordLogs();
-        t.mtxCancelOrder(o, c);
+        t.mtxCancelOrder(DexLegs.ua(o), DexLegs.sigOf(c));
         assertEq(vm.getRecordedLogs().length, 0);
         _expect(ITradeToken.OrderClosed.selector, o, _fill(600, 1200, 0));
-        (v, r, s) = vm.sign(0xBAD, t.cancelOrderDigest(o));
+        (v, r, s) = vm.sign(0xBAD, t.cancelOrderDigest(DexLegs.ua(o)));
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
-        t.mtxCancelOrder(o, abi.encodePacked(r, s, v));
+        t.mtxCancelOrder(DexLegs.ua(o), DexLegs.sigOf(abi.encodePacked(r, s, v)));
     }
 
     function test_invalidateNonces_strictlyIncreasing_capped() public {
         ITradeToken.TradeOrder memory o = _order(1000, 2000);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, t.invalidateNoncesDigest(alice, 1, 2));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, t.invalidateNoncesDigest(DexLegs.pad(alice), 1, 2));
         vm.expectEmit(address(t));
-        emit ITradeToken.NoncesInvalidated(alice, 1, 2);
-        t.mtxInvalidateNonces(alice, 1, 2, abi.encodePacked(r, s, v));
-        assertEq(t.minNonce(alice, 1), 2);
+        emit ITradeToken.UANoncesInvalidated(DexLegs.pad(alice), 1, 2);
+        t.mtxInvalidateNonces(DexLegs.pad(alice), 1, 2, DexLegs.sigOf(abi.encodePacked(r, s, v)));
+        assertEq(t.minNonce(DexLegs.pad(alice), 1), 2);
         _expect(ITradeToken.NonceInvalidated.selector, o, _fill(600, 1200, 0)); // nonce 1 < 2
         bytes memory again = abi.encodePacked(r, s, v);
         vm.expectRevert(abi.encodeWithSelector(ITradeToken.MinNonceNotIncreasing.selector, 2, 2));
-        t.mtxInvalidateNonces(alice, 1, 2, again);
+        t.mtxInvalidateNonces(DexLegs.pad(alice), 1, 2, DexLegs.sigOf(again));
         uint256 big = 2 ** 128 + 1;
-        (v, r, s) = vm.sign(ALICE_PK, t.invalidateNoncesDigest(alice, 1, big));
+        (v, r, s) = vm.sign(ALICE_PK, t.invalidateNoncesDigest(DexLegs.pad(alice), 1, big));
         vm.expectRevert(abi.encodeWithSelector(ITradeToken.MinNonceAboveCap.selector, big));
-        t.mtxInvalidateNonces(alice, 1, big, abi.encodePacked(r, s, v));
+        t.mtxInvalidateNonces(DexLegs.pad(alice), 1, big, DexLegs.sigOf(abi.encodePacked(r, s, v)));
         o.batch = 2; // another lane is untouched
         _trade(o, _fill(600, 1200, 0));
     }
@@ -311,32 +315,38 @@ contract TradeTest is V2Fixture {
         return keccak256(abi.encodePacked(hex"1901", _domainSep(), structHash));
     }
 
-    function _orderStruct(bytes32 typeHash, ITradeToken.TradeOrder memory o) internal pure returns (bytes32) {
-        return keccak256(abi.encode(
-            typeHash, o.from, o.receiveToken, o.amount, o.receiveAmount, o.minFill, o.fee, o.relayer, o.dex,
-            o.destination, o.flags, o.batch, o.nonce, o.validUntil));
-    }
-
-    /// The three type strings of CTR-DEX-13 / CTR-DEX-02, hashed here, are what the library and the token digests use.
+    /// The three type strings of CTR-DEX-25 / CTR-DEX-02 a token signs, hashed here, are what the library and the token
+    /// digests use. ua-mtx-merge T6 (R12), meaning: was the address `TradeOrder` / `CancelOrder` / `InvalidateNonces`
+    /// (`TradeOrder` 0xffe35090… stays pinned for the DEX's outside legs; `CancelOrder` 0x29879342… is in
+    /// legacy/ua-mtx-merge/); now the `UATradeOrder` / `CancelUAOrder` / `UAInvalidateNonces` the token takes.
     function test_typehashesArePinned() public view {
         bytes32 order = keccak256(
             "TradeOrder(address from,address receiveToken,uint256 amount,uint256 receiveAmount,uint256 minFill,"
             "uint256 fee,address relayer,address dex,address destination,uint8 flags,uint256 batch,uint256 nonce,"
             "uint256 validUntil)");
-        bytes32 cancel = keccak256(
-            "CancelOrder(TradeOrder order)TradeOrder(address from,address receiveToken,uint256 amount,uint256 receiveAmount,"
-            "uint256 minFill,uint256 fee,address relayer,address dex,address destination,uint8 flags,uint256 batch,"
-            "uint256 nonce,uint256 validUntil)");
-        bytes32 inv = keccak256("InvalidateNonces(address from,uint256 batch,uint256 minNonce)");
         assertEq(TradeLib.TRADE_ORDER_TYPEHASH, order);
-        assertEq(TradeLib.CANCEL_ORDER_TYPEHASH, cancel);
-        assertEq(TradeLib.INVALIDATE_NONCES_TYPEHASH, inv);
         assertEq(order, 0xffe350903bdef674d7c33448fa7ce9b1cd306aa838f3ce1bbdd82aca46773f5d);
-        ITradeToken.TradeOrder memory o = _order(1000, 2000);
-        assertEq(t.tradeOrderDigest(o), _typed(_orderStruct(order, o)));
-        assertEq(cancel, 0x298793429e353378c80de5c623565fb1280e22feac6b07d640da06fa42e789a5);
-        assertEq(t.cancelOrderDigest(o), _typed(keccak256(abi.encode(cancel, _orderStruct(order, o)))));
-        assertEq(t.invalidateNoncesDigest(alice, 3, 4), _typed(keccak256(abi.encode(inv, alice, uint256(3), uint256(4)))));
+        bytes32 uaOrder = keccak256(
+            "UATradeOrder(bytes32 from,address receiveToken,uint256 amount,uint256 receiveAmount,uint256 minFill,"
+            "uint256 fee,address relayer,address dex,bytes32 destination,uint8 flags,uint256 batch,uint256 nonce,"
+            "uint256 validUntil)");
+        bytes32 cancel = keccak256(
+            "CancelUAOrder(UATradeOrder order)UATradeOrder(bytes32 from,address receiveToken,uint256 amount,"
+            "uint256 receiveAmount,uint256 minFill,uint256 fee,address relayer,address dex,bytes32 destination,uint8 flags,"
+            "uint256 batch,uint256 nonce,uint256 validUntil)");
+        bytes32 inv = keccak256("UAInvalidateNonces(bytes32 from,uint256 batch,uint256 minNonce)");
+        assertEq(TradeLib.UA_TRADE_ORDER_TYPEHASH, uaOrder);
+        assertEq(TradeLib.CANCEL_UA_ORDER_TYPEHASH, cancel);
+        assertEq(TradeLib.UA_INVALIDATE_NONCES_TYPEHASH, inv);
+        assertEq(uaOrder, 0xc24d5d628be5f6a0e7a660c0c93027b2a2e9a908048d420a8c3c2a7bd5a548ec);
+        assertEq(cancel, 0x47eb46c764008ffa5b8163f980941c277975e3b3ff8c8b3daf0462dd6a1eaeba);
+        assertEq(inv, 0xc42c79a4d8ff5749bb2f0baa4620b8eeb79ad4e37eaa43d518b1f4ceb0319a60);
+        ITradeToken.UATradeOrder memory o = DexLegs.ua(_order(1000, 2000));
+        bytes32 sh = keccak256(abi.encode(uaOrder, o.from, o.receiveToken, o.amount, o.receiveAmount, o.minFill, o.fee,
+            o.relayer, o.dex, o.destination, o.flags, o.batch, o.nonce, o.validUntil));
+        assertEq(t.tradeOrderDigest(o), _typed(sh));
+        assertEq(t.cancelOrderDigest(o), _typed(keccak256(abi.encode(cancel, sh))));
+        assertEq(t.invalidateNoncesDigest(o.from, 3, 4), _typed(keccak256(abi.encode(inv, o.from, uint256(3), uint256(4)))));
     }
 
     // ------------------------------------------------------------------ the typed forms (typed-signing C6, TS-D19)
@@ -352,61 +362,61 @@ contract TradeTest is V2Fixture {
         o.receiveToken = address(this);
     }
 
-    /// The order is signed as a `WrapOrder`, the wallet's JSON its digest; the `TradeOrder` form of the same fields, the
-    /// only change, does not verify; `pulled` is keyed by the `WrapOrder` digest.
+    /// The order is signed as a `UAWrapOrder`, the wallet's JSON its digest; the `UATradeOrder` form of the same fields,
+    /// the only change, does not verify; `pulled` is keyed by the `UAWrapOrder` digest. (T6: the UA structs, R12.)
     function test_wrapOrderTyped() public {
         ITradeToken.TradeOrder memory o = _wrapShaped();
-        bytes32 wallet = OrderJson.wrap(address(t), TradeLib.core(o), false);
-        assertEq(t.tradeOrderDigest(o), wallet);
-        bytes memory asTrade = _ecdsa(OrderJson.trade(address(t), TradeLib.core(o), false));
+        bytes32 wallet = OrderJson.wrap(address(t), DexLegs.ua(o), true);
+        assertEq(t.tradeOrderDigest(DexLegs.ua(o)), wallet);
+        bytes memory asTrade = _ecdsa(OrderJson.trade(address(t), DexLegs.ua(o), true));
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
-        t.mtxTrade(o, asTrade, _fill(600, 1200, 0));
+        t.mtxTrade(DexLegs.ua(o), DexLegs.sigOf(asTrade), _fill(600, 1200, 0));
         assertEq(t.pulled(wallet), 0);
-        t.mtxTrade(o, _ecdsa(wallet), _fill(600, 1200, 0));
+        t.mtxTrade(DexLegs.ua(o), DexLegs.sigOf(_ecdsa(wallet)), _fill(600, 1200, 0));
         assertEq(t.pulled(wallet), 600);
     }
 
-    /// Any other order stays a `TradeOrder`: its wallet JSON is the digest, the `WrapOrder` form of it does not verify.
+    /// Any other order stays a `UATradeOrder`: its wallet JSON is the digest, the `UAWrapOrder` form of it does not verify.
     function test_tradeOrderStillTradeOrder() public {
         ITradeToken.TradeOrder memory o = _order(1000, 2000);
         assertTrue(o.dex != o.receiveToken);
-        bytes32 wallet = OrderJson.trade(address(t), TradeLib.core(o), false);
-        assertEq(t.tradeOrderDigest(o), wallet);
-        bytes memory asWrap = _ecdsa(OrderJson.wrap(address(t), TradeLib.core(o), false));
+        bytes32 wallet = OrderJson.trade(address(t), DexLegs.ua(o), true);
+        assertEq(t.tradeOrderDigest(DexLegs.ua(o)), wallet);
+        bytes memory asWrap = _ecdsa(OrderJson.wrap(address(t), DexLegs.ua(o), true));
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
-        t.mtxTrade(o, asWrap, _fill(600, 1200, 0));
-        t.mtxTrade(o, _ecdsa(wallet), _fill(600, 1200, 0));
+        t.mtxTrade(DexLegs.ua(o), DexLegs.sigOf(asWrap), _fill(600, 1200, 0));
+        t.mtxTrade(DexLegs.ua(o), DexLegs.sigOf(_ecdsa(wallet)), _fill(600, 1200, 0));
         assertEq(t.pulled(wallet), 600);
     }
 
-    /// `CancelOrder` nests the order: the wallet's JSON is the digest. The pre-C6 `CancelOrder(bytes32 orderHash)` over the
+    /// `CancelUAOrder` nests the order: the wallet's JSON is the digest. The pre-C6 `CancelOrder(bytes32 orderHash)` over the
     /// same order, the only change, is refused and leaves the order open; the nested one closes it.
     function test_cancelOrderNested() public {
         ITradeToken.TradeOrder memory o = _order(1000, 2000);
-        bytes32 h = t.tradeOrderDigest(o);
-        bytes32 wallet = OrderJson.cancelTrade(address(t), TradeLib.core(o), false);
-        assertEq(t.cancelOrderDigest(o), wallet);
+        bytes32 h = t.tradeOrderDigest(DexLegs.ua(o));
+        bytes32 wallet = OrderJson.cancelTrade(address(t), DexLegs.ua(o), true);
+        assertEq(t.cancelOrderDigest(DexLegs.ua(o)), wallet);
         bytes memory flat = _ecdsa(_typed(keccak256(abi.encode(keccak256("CancelOrder(bytes32 orderHash)"), h))));
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
-        t.mtxCancelOrder(o, flat);
+        t.mtxCancelOrder(DexLegs.ua(o), DexLegs.sigOf(flat));
         assertEq(t.pulled(h), 0);
         vm.prank(other); // anyone submits
-        t.mtxCancelOrder(o, _ecdsa(wallet));
+        t.mtxCancelOrder(DexLegs.ua(o), DexLegs.sigOf(_ecdsa(wallet)));
         assertEq(t.pulled(h), 1000);
     }
 
-    /// A wrap order is cancelled as `CancelWrapOrder` through the same entry; `CancelOrder` nesting its `TradeOrder` form, the
-    /// only change, is refused.
+    /// A wrap order is cancelled as `CancelUAWrapOrder` through the same entry; `CancelUAOrder` nesting its `UATradeOrder`
+    /// form, the only change, is refused.
     function test_cancelWrapOrderNested() public {
         ITradeToken.TradeOrder memory o = _wrapShaped();
-        bytes32 h = t.tradeOrderDigest(o);
-        bytes32 wallet = OrderJson.cancelWrap(address(t), TradeLib.core(o), false);
-        assertEq(t.cancelOrderDigest(o), wallet);
-        bytes memory asTrade = _ecdsa(OrderJson.cancelTrade(address(t), TradeLib.core(o), false));
+        bytes32 h = t.tradeOrderDigest(DexLegs.ua(o));
+        bytes32 wallet = OrderJson.cancelWrap(address(t), DexLegs.ua(o), true);
+        assertEq(t.cancelOrderDigest(DexLegs.ua(o)), wallet);
+        bytes memory asTrade = _ecdsa(OrderJson.cancelTrade(address(t), DexLegs.ua(o), true));
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
-        t.mtxCancelOrder(o, asTrade);
+        t.mtxCancelOrder(DexLegs.ua(o), DexLegs.sigOf(asTrade));
         assertEq(t.pulled(h), 0);
-        t.mtxCancelOrder(o, _ecdsa(wallet));
+        t.mtxCancelOrder(DexLegs.ua(o), DexLegs.sigOf(_ecdsa(wallet)));
         assertEq(t.pulled(h), 1000);
     }
 
@@ -415,32 +425,32 @@ contract TradeTest is V2Fixture {
     function test_selfOrder_fromOrDexIsTheToken() public {
         ITradeToken.TradeOrder memory o = _order(1000, 2000);
         o.from = address(t);
-        bytes32 h = t.tradeOrderDigest(o);
+        bytes32 h = t.tradeOrderDigest(DexLegs.ua(o));
         vm.expectRevert(abi.encodeWithSelector(ITradeToken.SelfOrder.selector, h));
-        t.mtxTrade(o, "", _fill(600, 1200, 0));
+        t.mtxTrade(DexLegs.ua(o), DexLegs.sigOf(""), _fill(600, 1200, 0));
         o = _order(1000, 2000);
         o.dex = address(t);
-        h = t.tradeOrderDigest(o);
+        h = t.tradeOrderDigest(DexLegs.ua(o));
         vm.prank(address(t));
         vm.expectRevert(abi.encodeWithSelector(ITradeToken.SelfOrder.selector, h));
-        t.mtxTrade(o, "", _fill(600, 1200, 0));
+        t.mtxTrade(DexLegs.ua(o), DexLegs.sigOf(""), _fill(600, 1200, 0));
     }
 
     function test_hugeAmount_partFillDoesNotOverflow() public {
         NormalToken big = _normal(alice, type(uint256).max, address(0));
         ITradeToken.TradeOrder memory o = _order(type(uint256).max, 1);
         uint256 sell = o.amount - o.amount / 2;
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, big.tradeOrderDigest(o));
-        big.mtxTrade(o, abi.encodePacked(r, s, v), _fill(sell, 1, 0));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, big.tradeOrderDigest(DexLegs.ua(o)));
+        big.mtxTrade(DexLegs.ua(o), DexLegs.sigOf(abi.encodePacked(r, s, v)), _fill(sell, 1, 0));
         assertEq(big.balanceOf(address(this)), sell);
-        assertEq(big.pulled(big.tradeOrderDigest(o)), sell);
+        assertEq(big.pulled(big.tradeOrderDigest(DexLegs.ua(o))), sell);
     }
 
     function test_edges_minNonceCap_relayerIsSubmitter_validUntilIsNow() public {
-        bytes32 d = t.invalidateNoncesDigest(alice, 1, 2 ** 128);
+        bytes32 d = t.invalidateNoncesDigest(DexLegs.pad(alice), 1, 2 ** 128);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, d);
-        t.mtxInvalidateNonces(alice, 1, 2 ** 128, abi.encodePacked(r, s, v));
-        assertEq(t.minNonce(alice, 1), 2 ** 128);
+        t.mtxInvalidateNonces(DexLegs.pad(alice), 1, 2 ** 128, DexLegs.sigOf(abi.encodePacked(r, s, v)));
+        assertEq(t.minNonce(DexLegs.pad(alice), 1), 2 ** 128);
         ITradeToken.TradeOrder memory o = _order(1000, 2000);
         o.batch = 2;
         o.relayer = relayer; // the fill's submitter is `relayer`
@@ -452,26 +462,26 @@ contract TradeTest is V2Fixture {
     function test_replayOnAnotherChain_andCancelSignedOnAnotherToken() public {
         ITradeToken.TradeOrder memory o = _order(1000, 2000);
         bytes memory sig = _sign(t, o);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, t2.cancelOrderDigest(o));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, t2.cancelOrderDigest(DexLegs.ua(o)));
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
-        t.mtxCancelOrder(o, abi.encodePacked(r, s, v));
+        t.mtxCancelOrder(DexLegs.ua(o), DexLegs.sigOf(abi.encodePacked(r, s, v)));
         vm.chainId(block.chainid + 1);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
-        t.mtxTrade(o, sig, _fill(600, 1200, 0));
+        t.mtxTrade(DexLegs.ua(o), DexLegs.sigOf(sig), _fill(600, 1200, 0));
     }
 
     function test_tradeEntriesThroughMtxExecuteAreNotAllowlisted() public {
         ITradeToken.TradeOrder memory o = _order(1000, 2000);
         bytes[3] memory data = [
-            abi.encodeCall(t.mtxTrade, (o, _sign(t, o), _fill(600, 1200, 0))),
-            abi.encodeCall(t.mtxCancelOrder, (o, _sign(t, o))),
-            abi.encodeCall(t.mtxInvalidateNonces, (alice, 1, 2, _sign(t, o)))];
+            abi.encodeCall(t.mtxTrade, (DexLegs.ua(o), DexLegs.sigOf(_sign(t, o)), _fill(600, 1200, 0))),
+            abi.encodeCall(t.mtxCancelOrder, (DexLegs.ua(o), DexLegs.sigOf(_sign(t, o)))),
+            abi.encodeCall(t.mtxInvalidateNonces, (DexLegs.pad(alice), 1, 2, DexLegs.sigOf(_sign(t, o))))];
         for (uint256 i; i < 3; ++i) {
             MetaTxLib.MetaTransaction memory m = _call(alice, data[i], i + 1, RR);
             bytes memory sig = _signCall(ALICE_PK, address(t), m);
             vm.prank(relayer);
             vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, bytes4(data[i])));
-            MetaTokenBase(address(t)).mtxExecute(m, sig);
+            MetaTokenBase(address(t)).executeMetaTransaction(m, sig);
         }
     }
 
@@ -483,7 +493,7 @@ contract TradeTest is V2Fixture {
         for (uint256 i; i < 12; i++) before_[i] = vm.load(address(t), bytes32(uint256(nsToken) + i));
         bytes32 metaBefore = vm.load(address(t), nsMeta);
         ITradeToken.TradeOrder memory o = _order(1000, 2000);
-        bytes32 h = t.tradeOrderDigest(o);
+        bytes32 h = t.tradeOrderDigest(DexLegs.ua(o));
         _trade(o, _fill(600, 1200, 0));
         assertEq(uint256(vm.load(address(t), keccak256(abi.encode(h, nsTrade)))), 600);
         for (uint256 i; i < 12; i++) {

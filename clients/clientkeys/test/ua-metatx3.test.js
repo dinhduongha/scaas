@@ -143,6 +143,7 @@ test('UAReceiverFee nests the row\'s payment: the payee checks it on ids, the pa
     assert.deepEqual([hex(ok.digest), hex(ok.paymentDigest), ok.payer], [r.receiverFeeDigest, r.paymentDigest, t.from]);
     assert.throws(() => checkReceiverFee(td, { ...want, payee: padId('0x' + '5e'.repeat(20)) }), /does not pay you/);
     assert.throws(() => checkReceiverFee(td, { ...want, maxFee: BigInt(rf.fee) - 1n }), /above your limit/);
-    assert.throws(() => checkReceiverFee({ ...td, primaryType: 'ReceiverFee' }, want), /unexpected receiver fee fields|malformed/);
+    // ua-mtx-merge T11: the address `ReceiverFee` is refused by name (was: by its digest)
+    assert.throws(() => checkReceiverFee({ ...td, primaryType: 'ReceiverFee' }, want), /not a receiver fee/);
   }
 });

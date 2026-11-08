@@ -227,25 +227,20 @@ export function g1(point) {
   return { x0: w(0), x1: w(1), y0: w(2), y1: w(3) };
 }
 
+// ua-mtx-merge (R35, R36): one signed entry per operation, `mtx<Op>(UAEnvelope, …, UASig)` over `UA<Op>`; the address
+// builders are in legacy/ua-mtx-merge/src/zether.js.
 export const {
-  zetherTransferSingleTypedData, zetherTransferSingleCalldata, uaZetherTransferSingleTypedData, uaZetherTransferSingleCalldata,
-  zetherTransferTypedData, zetherTransferCalldata, uaZetherTransferTypedData, uaZetherTransferCalldata,
-  zetherTransferCompactTypedData, zetherTransferCompactCalldata, uaZetherTransferCompactTypedData, uaZetherTransferCompactCalldata,
-  zetherUnshieldTypedData, zetherUnshieldCalldata, uaZetherUnshieldTypedData, uaZetherUnshieldCalldata,
-  zetherUnshieldUnwrapTypedData, zetherUnshieldUnwrapCalldata, uaZetherUnshieldUnwrapTypedData, uaZetherUnshieldUnwrapCalldata,
-  rollOverSignedTypedData, rollOverSignedCalldata, uaRollOverSignedTypedData, uaRollOverSignedCalldata,
-  setRollOverModeTypedData, setRollOverModeCalldata, uaSetRollOverModeTypedData, uaSetRollOverModeCalldata,
-  rollOverBatchTypedData, rollOverBatchCalldata, uaRollOverBatchTypedData, uaRollOverBatchCalldata,
+  uaZetherTransferSingleTypedData, uaZetherTransferSingleCalldata, uaZetherTransferTypedData, uaZetherTransferCalldata,
+  uaZetherTransferCompactTypedData, uaZetherTransferCompactCalldata, uaZetherUnshieldTypedData, uaZetherUnshieldCalldata,
+  uaZetherUnshieldUnwrapTypedData, uaZetherUnshieldUnwrapCalldata, uaRollOverSignedTypedData, uaRollOverSignedCalldata,
+  uaSetRollOverModeTypedData, uaSetRollOverModeCalldata, uaRollOverBatchTypedData, uaRollOverBatchCalldata,
   zetherRollOverTypedData, zetherRollOverCalldata, zetherSetRollOverModeTypedData, zetherSetRollOverModeCalldata,
 } = OP_BUILDERS;
 
 export const {
-  pqzTransferSingleTypedData, pqzTransferSingleCalldata, uaPqzTransferSingleTypedData, uaPqzTransferSingleCalldata,
-  pqzTransferSingleCompactTypedData, pqzTransferSingleCompactCalldata, uaPqzTransferSingleCompactTypedData, uaPqzTransferSingleCompactCalldata,
-  pqzTransferTypedData, pqzTransferCalldata, uaPqzTransferTypedData, uaPqzTransferCalldata,
-  pqzTransferCompactTypedData, pqzTransferCompactCalldata, uaPqzTransferCompactTypedData, uaPqzTransferCompactCalldata,
-  pqzUnshieldTypedData, pqzUnshieldCalldata, uaPqzUnshieldTypedData, uaPqzUnshieldCalldata,
-  pqzUnshieldUnwrapTypedData, pqzUnshieldUnwrapCalldata, uaPqzUnshieldUnwrapTypedData, uaPqzUnshieldUnwrapCalldata,
+  uaPqzTransferSingleTypedData, uaPqzTransferSingleCalldata, uaPqzTransferSingleCompactTypedData, uaPqzTransferSingleCompactCalldata,
+  uaPqzTransferTypedData, uaPqzTransferCalldata, uaPqzTransferCompactTypedData, uaPqzTransferCompactCalldata,
+  uaPqzUnshieldTypedData, uaPqzUnshieldCalldata, uaPqzUnshieldUnwrapTypedData, uaPqzUnshieldUnwrapCalldata,
   pqzAuthTypedData,
 } = OP_BUILDERS;
 

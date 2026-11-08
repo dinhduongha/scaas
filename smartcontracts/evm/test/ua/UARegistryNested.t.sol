@@ -132,50 +132,20 @@ contract UARegistryNestedTest is UARegistryBase {
     }
 
     // ----- the generic `bytes auth` -----
+    // `test_genericAuthIsTheTypedCall` and `test_genericAuthMalformed` tested `UAKinds.uaAuthCall`, the tokens' `bytes auth`
+    // bridge; R47 (ua-mtx-merge T1) removed it with every `bytes auth` entry, and the two tests with it:
+    // legacy/ua-mtx-merge/test/ua/UARegistryNested.t.sol. A nested `msig`'s `UASig` reaches `requireAuthorized` typed.
 
+    /// The registry calldata `UAKinds.uaAuthCall` spliced for an `msig` (`auth = abi.encode(keyData, abi.encode(MemberSig[]))`),
+    /// kept here as a test builder only: `test_splice*` feed the registry's own decoder malformed lists through it.
     function authCall(bytes32 ua, bytes calldata auth) external pure returns (bytes memory) {
-        return UAKinds.uaAuthCall(ua, UAKinds.PURPOSE_METATX, DIGEST, auth);
-    }
-
-    /// `UAKinds.uaAuthCall` splices a nested list into the call by hand: byte for byte the typed call, and the real registry answers it.
-    function test_genericAuthIsTheTypedCall() public {
-        (bytes memory di, bytes32 iu, bytes memory du, bytes32 ua) = _active();
-        IUARegistry.MemberSig[] memory s = _outerSigs(du, ua, iu, di, PK_B, DIGEST);
-        IUARegistry.UASig memory u;
-        u.members = s;
-        bytes memory auth = _msigAuth(du, s);
-        bytes memory call = this.authCall(ua, auth);
-        assertEq(call, abi.encodeCall(IUARegistry.requireAuthorized, (ua, UAKinds.PURPOSE_METATX, DIGEST, u)));
-        (bool ok,) = address(reg).staticcall(call);
-        assertTrue(ok);
-
-        s[_indexOf(du, iu)].members[0].sig = _sig(keyP, keccak256("another message"));
-        (bool bad, bytes memory ret) = address(reg).staticcall(this.authCall(ua, _msigAuth(du, s)));
-        assertFalse(bad);
-        assertEq(ret, abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
-
-        // not the id's own structure: `keyData` + `signature`, as the two words came
-        IUARegistry.UASig memory flat;
-        (flat.keyData, flat.signature) = (hex"aa", hex"bb");
-        assertEq(this.authCall(ua, abi.encode(flat.keyData, flat.signature)),
-            abi.encodeCall(IUARegistry.requireAuthorized, (ua, UAKinds.PURPOSE_METATX, DIGEST, flat)));
-    }
-
-    /// A `sig` that is not `abi.encode(MemberSig[])` at the one canonical offset is refused before the registry, with empty data, as the
-    /// ABI decoder did. `good` is the positive control.
-    function test_genericAuthMalformed() public {
-        (bytes memory di, bytes32 iu, bytes memory du, bytes32 ua) = _active();
-        bytes memory good = abi.encode(_outerSigs(du, ua, iu, di, PK_B, DIGEST));
-        this.authCall(ua, abi.encode(du, good));
-        vm.expectRevert(bytes(""));
-        this.authCall(ua, abi.encode(du, bytes("")));
-        vm.expectRevert(bytes(""));
-        this.authCall(ua, abi.encode(du, abi.encode(uint256(0x20))));
-        assembly ("memory-safe") {
-            mstore(add(good, 32), 0x40)
-        }
-        vm.expectRevert(bytes(""));
-        this.authCall(ua, abi.encode(du, good));
+        (, bytes memory sig) = abi.decode(auth, (bytes, bytes));
+        require(sig.length >= 64 && _word(sig, 0) == 0x20, "not abi.encode(MemberSig[])");
+        bytes memory list = new bytes(sig.length - 32);
+        assembly ("memory-safe") { mcopy(add(list, 32), add(sig, 64), mload(list)) }
+        // the three heads of `UASig{"", "", members}`, its two empty lengths, then `members`
+        return bytes.concat(abi.encodeWithSelector(
+            IUARegistry.requireAuthorized.selector, ua, UAKinds.PURPOSE_METATX, DIGEST, 0x80, 0x60, 0x80, 0xa0, 0, 0), list);
     }
 
     // ----- registration: two levels -----

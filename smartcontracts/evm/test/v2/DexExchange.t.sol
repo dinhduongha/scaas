@@ -203,7 +203,7 @@ contract DexExchangeTest is Test {
         internal view returns (DexLegs.ExchangeLeg memory)
     {
         bytes32 d = dex.tokenKind(sellToken) == 1
-            ? ITradeToken(sellToken).tradeOrderDigest(o) : dex.dexOrderDigest(sellToken, o);
+            ? ITradeToken(sellToken).tradeOrderDigest(DexLegs.ua(o)) : dex.dexOrderDigest(sellToken, o);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, d);
         return DexLegs.ExchangeLeg(sellToken, o, abi.encodePacked(r, s, v), sellFill, floor);
     }
@@ -280,7 +280,7 @@ contract DexExchangeTest is Test {
     /// The `ExchangeLegSettled` fields after the indexed ones, of the `i`-th such event.
     function _legEvent(Vm.Log[] memory logs, uint256 i) internal pure returns (bytes32 h, uint256[7] memory v) {
         for (uint256 k; k < logs.length; ++k) {
-            if (logs[k].topics[0] != ISCaaSDex.ExchangeLegSettled.selector) continue;
+            if (logs[k].topics[0] != ISCaaSDex.UAExchangeLegSettled.selector) continue;
             if (i != 0) {
                 --i;
                 continue;
@@ -301,8 +301,8 @@ contract DexExchangeTest is Test {
     function test_exchange_twoLegs_floorsPlusSurplus_feesOnTheFloor() public {
         DexLegs.ExchangePlan memory p = _twoLegs();
         ISCaaSDex.Interaction[] memory xs = _swap(address(a), address(b), 2000, 3800);
-        bytes32 ha = a.tradeOrderDigest(p.legs[0].o);
-        bytes32 hc = a.tradeOrderDigest(p.legs[1].o);
+        bytes32 ha = a.tradeOrderDigest(DexLegs.ua(p.legs[0].o));
+        bytes32 hc = a.tradeOrderDigest(DexLegs.ua(p.legs[1].o));
         vm.recordLogs();
         _exchange(p, xs);
         assertEq(b.balanceOf(alice), 1900 - 6 + 51);
@@ -523,9 +523,9 @@ contract DexExchangeTest is Test {
     /// `receiveFill` and the plan pays his 1000 B to Alice as surplus; conservation would balance.
     function test_exchange_forbiddenSelector_mtxTradeOfARestingOrder_andShortData() public {
         ITradeToken.TradeOrder memory ob = _order(bob, address(a), 1000, 500, 0);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(BOB_PK, b.tradeOrderDigest(ob));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(BOB_PK, b.tradeOrderDigest(DexLegs.ua(ob)));
         bytes memory steal = abi.encodeCall(ITradeToken.mtxTrade,
-            (ob, abi.encodePacked(r, s, v), ITradeToken.TradeFill(1000, 1e9, 0, relayer)));
+            (DexLegs.ua(ob), DexLegs.sigOf(abi.encodePacked(r, s, v)), ITradeToken.TradeFill(1000, 1e9, 0, relayer)));
         DexLegs.ExchangePlan memory p = _plan(_alice());
         ISCaaSDex.Interaction[] memory route = _swap(address(a), address(b), 1000, 2000);
         _expectExchange(p, _cat(_ix(address(b), steal), route), abi.encodeWithSelector(
@@ -744,7 +744,7 @@ contract DexExchangeTest is Test {
         _expectExchange(p, xs, _err(ISCaaSDex.WrongRelayer.selector, relayer));
         // a floor below the signed limit: the token refuses it (Path A)
         p = _plan(_leg(ALICE_PK, address(a), _order(alice, address(b), 1000, 1900, 0), 1000, 1899));
-        bytes32 h = a.tradeOrderDigest(p.legs[0].o);
+        bytes32 h = a.tradeOrderDigest(DexLegs.ua(p.legs[0].o));
         _expectExchange(p, _swap(address(a), address(b), 1000, 2000),
             abi.encodeWithSelector(ITradeToken.PriceLimit.selector, h));
     }
@@ -788,10 +788,11 @@ contract DexExchangeTest is Test {
         MockExecutor e = _executor();
         bytes memory data = abi.encode(int256(0));
         ITradeToken.TradeOrder memory ob = _order(bob, address(a), 1000, 500, 0);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(BOB_PK, b.tradeOrderDigest(ob));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(BOB_PK, b.tradeOrderDigest(DexLegs.ua(ob)));
         bytes[3] memory calls = [
             abi.encodeCall(ISCaaSDex.mtxSettle, (DexLegs.wire(new DexLegs.Settlement[](0)))),
-            abi.encodeCall(ITradeToken.mtxTrade, (ob, abi.encodePacked(r, s, v), ITradeToken.TradeFill(1000, 1e9, 0, relayer))),
+            abi.encodeCall(ITradeToken.mtxTrade,
+                (DexLegs.ua(ob), DexLegs.sigOf(abi.encodePacked(r, s, v)), ITradeToken.TradeFill(1000, 1e9, 0, relayer))),
             abi.encodeCall(DexPuller.pull, (address(usdc), dave, 1))
         ];
         address[3] memory targets = [address(dex), address(b), puller];
@@ -885,7 +886,7 @@ contract DexExchangeTest is Test {
         _exchange(p, _swap(address(a), address(b), 1000, 2000));
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 k; k < logs.length; ++k) {
-            if (logs[k].topics[0] != ISCaaSDex.ExchangeLegSettled.selector) continue;
+            if (logs[k].topics[0] != ISCaaSDex.UAExchangeLegSettled.selector) continue;
             assertEq(logs[k].topics[1], bytes32("x"));
             assertEq(logs[k].topics[3], bytes32(uint256(uint160(alice))));
             return;

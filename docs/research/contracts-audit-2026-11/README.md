@@ -7,7 +7,9 @@ at UltraCode effort, agy and Fable. The name stays "Contracts audit"; the audit'
 independent of the project. Soroban follows after `zether-soroban`; NEAR, Algorand and the other families get add-on audits when
 their UA rounds finish. The node and the clients stay part 3.
 
-**Status:** plan, target not frozen.
+**Status:** plan, target not frozen. **Scope widened (owner 2026-11-05):** the regulated kinds (work order 3b), the `PqChat`
+contract and its registry change (3c) and `ua-rs` as the only signer (3d) are built before the EVM freeze, so this audit
+covers them too (units A7, A8, B1 below). Lenses and models per part: [review-matrix-2026-11.md](../review-matrix-2026-11.md).
 
 ## Why
 
@@ -38,6 +40,14 @@ scope (18,954 lines), not the delta. Reviewers are read-only: no builds, tests, 
 | A4 UA | `ua/` non-verifier files, `account/`, `wallet/`, `hedera/` | `UARegistry` / `UARegistryLib` split: DELEGATECALL storage, `this`, `msg.sender`, reverts; PoP and portable records; KEM scheme; `msig` minimal rule, `G…` and relayer-checked slots; generations; no EIP-7702 path; `0x0105` / `0x0141` shared key question |
 | A5 meta-tx | `metatx/`, `factory/`, `common/{MetaTxLib,FeePolicy,SaltedEIP712,SSTORE2}.sol` | the metatx split; typed entries against `executeMetaTransaction`: can one intent run twice; `MtxRelayFee` and its executor; lever 1 chained libraries, `LinkClosure`, release pins; lever 2 `nonReentrant` across DELEGATECALL libraries; library call return data, memory, storage slots |
 | A6 DEX | `dex/`, `trade/` | matching modes; `restorePulled` and EIP-1153; refunds; executor trust; approve reset; typed orders and cancels |
+| A7 regulated kinds | the six regulated releases (kinds 8–13) and their libraries, `governance/` flags 5–9 | CTR-GOV-03 (a plain transfer stays +0: no new read on the hot path), CTR-GOV-16, CTR-GOV-17 (FREEZE / FORCE / PAUSE / ALLOW / DENY on the confidential kinds: a frozen account still receives as a decoy, FORCE on public balances only), CTR-AS-17, CTR-AS-07 (compliance keyed by `bytes32`, the hook on the UA ledger); sizes against the ceiling |
+| A8 `PqChat` + registry | `pqchat/`, `ua/` (`requirePortable`, the KEM record refused for an `msig`) | UA-7 spec P1–P31 (branch `ua7-research`): portable typed records, `epoch = parent + 1` and the home-chain child slot (the removal attack refused), admins, chunked wraps by hash, `postMessage` membership and nonce scopes, `storeMessage` unsigned and bounded, bytes in state (never only an event), no fee in a record, relay of unsigned writes only when paid; `requirePortable` over `uaMessage(kind, purpose, typedDigest)` incl. `msig` minimal form |
+
+**Outside `src/`, one unit (it is the signer every client uses, and it holds keys):**
+
+| Unit | Scope | Invariants |
+|---|---|---|
+| B1 `ua-rs` | `clients/ua-rs` (signing, KEM, seal / open, vault, the Zether and PQZ facades), `clients/ua-c` (C ABI v6), the shared vectors `smartcontracts/vectors/ua/` and their `clientkeys` generator | spec `ua-rs-sign` (with its Fable and Codex reviews in `docs/research/ua-rs-sign-*-review.md`): no release signature takes an RNG; seal / open labels, AAD and single-use keys; the Schnorr nonce map and blinding path; handles revoked on lock; containers checked against an expected sender; vault scrypt bounds and NFKC; decoders bounded by length and depth; byte-equal with `clientkeys` where the spec says so; no secret in an error or log |
 
 Across units: every optimisation that replaced code with shared code or libraries must keep behaviour; say so when it does.
 
@@ -45,7 +55,7 @@ Across units: every optimisation that replaced code with shared code or librarie
 
 | Reviewer | Units | How |
 |---|---|---|
-| **Codex** (CLI 0.163.0, read-only sandbox) | A3, A4, A5, A1, A0, A2, A6, in that order, **one at a time** | credits limited: the order puts first what Codex never saw. A unit it does not reach is listed as not covered |
+| **Codex** (CLI 0.166.0, read-only sandbox) | A3, A4, A5, A1, A0, A2, A6, then B1, A8, A7, **one at a time** | credits limited: the order puts first what Codex never saw. A unit it does not reach is listed as not covered |
 | **agy** (Gemini) | all | same prompts, in parallel with Codex |
 | **Claude workflow, UltraCode** | all | per unit: finders by lens, three independent refuters on each finding, rounds until two add nothing, a completeness critic |
 | **Fable** | all | same prompts, one read-only agent per unit, written before reading any other reviewer's report |
@@ -61,4 +71,5 @@ re-review, gates at four sets, and [the review record](../security-review-record
 
 ## Open
 
-Whether Codex's credits reach all seven units is unknown until they run out.
+Whether Codex's credits reach all ten units is unknown until they run out. The frozen target moves to `main` after the
+`ua*` / `mtx*` merge, 3b, 3c and 3d have landed (the Target section above predates that and is rewritten when the tree freezes).

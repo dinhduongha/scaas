@@ -72,14 +72,15 @@ alloy::sol! {
     function register(uint16 kind, bytes keyData, SolAttrs attrs, bytes pop, bytes pqzPop) external returns (bytes32);
     function registerMsig(SolStructure structure, SolAttrs attrs, SolMemberSig[] pop, bytes pqzPop) external returns (bytes32);
     function setKemKey(bytes32 ua, uint64 version, SolKem kem, SolSig sig) external;
-    function storePqzPop(bytes32 ua, bytes pqzPop) external;
-    function setPqzKey(bytes32 ua, bytes pqzKey, bytes32 pqzPopHash, SolSig sig) external;
+    // group 3g (KV-1): the versioned record entries and views (version 0 here: the key added after `register`)
+    function storePqzPop(bytes32 ua, uint64 version, bytes pqzPop) external;
+    function setPqzKey(bytes32 ua, uint64 version, bytes pqzKey, bytes32 pqzPopHash, SolSig sig) external;
     function registrationOf(bytes32 ua) external view returns (uint16 kind, bytes keyData, SolAttrs attrs, bytes pop, bytes pqzPop);
     function kemKeyAt(bytes32 ua, uint64 version) external view returns (SolKem kem, bytes sig);
     function kemKeyOf(bytes32 ua) external view returns (uint64 version, SolKem kem, bytes sig);
-    function pqzKeyOf(bytes32 ua) external view returns (address ptr, bytes32 pqzPopHash, bool proven);
-    function pqzKeySigOf(bytes32 ua) external view returns (bytes);
-    function pqzPopOf(bytes32 ua) external view returns (bytes);
+    function pqzKeyOf(bytes32 ua) external view returns (uint64 version, address ptr, bytes32 pqzPopHash, bool proven);
+    function pqzKeySigOf(bytes32 ua, uint64 version) external view returns (bytes);
+    function pqzPopOf(bytes32 ua, uint64 version) external view returns (bytes);
     function memberSigHashOf(bytes32 ua, uint256 index) external view returns (bytes32);
     event UAMemberSig(bytes32 indexed ua, bytes32 indexed member, uint16 index, bytes32 purpose, bytes sig);
     event UARegistered(bytes32 indexed ua, uint16 indexed kind, bytes keyData, SolAttrs attrs, bytes32 popHash, bytes pqzPop, uint8 checkedPop, uint8 checkedPqzPop, uint8 checkedKem);
@@ -691,11 +692,11 @@ impl Evm {
         let k = self.view(pqzKeyOfCall { ua: ua.into() }).await;
         let p = ProviderBuilder::new().connect_http(self.rpc.parse().unwrap());
         let code = p.get_code_at(k.ptr).await.unwrap();
-        (code[1..].to_vec(), k.pqzPopHash.0, self.view(pqzKeySigOfCall { ua: ua.into() }).await.to_vec())
+        (code[1..].to_vec(), k.pqzPopHash.0, self.view(pqzKeySigOfCall { ua: ua.into(), version: 0 }).await.to_vec())
     }
 
     async fn pqz_pop(&self, ua: &[u8; 32]) -> Vec<u8> {
-        self.view(pqzPopOfCall { ua: ua.into() }).await.to_vec()
+        self.view(pqzPopOfCall { ua: ua.into(), version: 0 }).await.to_vec()
     }
 }
 
@@ -876,7 +877,7 @@ async fn copy_registration(c: &Copy, name: &str, relayer: &Value) -> Rec {
     }
     let evm_key = c.a.send(&format!("register {name}"), vector.calldata()).await.expect("UARegistered");
     if !vector.pqz_pop.is_empty() {
-        c.a.send(&format!("storePqzPop {name}"), storePqzPopCall { ua: ua.into(), pqzPop: vector.pqz_pop.clone().into() }.abi_encode()).await;
+        c.a.send(&format!("storePqzPop {name}"), storePqzPopCall { ua: ua.into(), version: 0, pqzPop: vector.pqz_pop.clone().into() }.abi_encode()).await;
     }
     let on_a = c.a.rec(&ua).await;
     on_a.eq(&format!("{name}: EVM A against the vector"), &vector);
@@ -889,7 +890,7 @@ async fn copy_registration(c: &Copy, name: &str, relayer: &Value) -> Rec {
 
     c.lane_b.mined(&c.b, &format!("register {name}"), on_s.evm_job()).await;
     if !on_s.pqz_pop.is_empty() {
-        c.lane_b.mined(&c.b, &format!("storePqzPop {name}"), ("storePqzPop", json!({"ua": h(&ua), "pqzPop": h(&on_s.pqz_pop)}))).await;
+        c.lane_b.mined(&c.b, &format!("storePqzPop {name}"), ("storePqzPop", json!({"ua": h(&ua), "version": "0", "pqzPop": h(&on_s.pqz_pop)}))).await;
     }
     let on_b = c.b.rec(&ua).await;
     on_b.eq(&format!("{name}: EVM B against Soroban"), &on_s);
@@ -944,7 +945,7 @@ async fn copy_pqz(c: &Copy, name: &str, record: &str, rec: &Rec, proof: Vec<u8>,
     let (ua, r) = (rec.ua(), row("pqzKeyRecords", record));
     let (vkey, vhash, vsig) = (hx(&r["pqzKey"]), hx32(&r["pqzPopHash"]), hx(&r["sig"]));
     assert_eq!(scaas_ua::keccak256(&proof), vhash, "the proof of the record's hash");
-    c.a.send(&format!("setPqzKey {record}"), setPqzKeyCall { ua: ua.into(), pqzKey: vkey.clone().into(), pqzPopHash: vhash.into(), sig: sol_sig(rec.kind, &vsig) }.abi_encode()).await;
+    c.a.send(&format!("setPqzKey {record}"), setPqzKeyCall { ua: ua.into(), version: 0, pqzKey: vkey.clone().into(), pqzPopHash: vhash.into(), sig: sol_sig(rec.kind, &vsig) }.abi_encode()).await;
     let (akey, ahash, asig) = c.a.pqz(&ua).await;
     let w = format!("{record}: EVM A against the vector");
     same(&w, "key", &akey, &vkey);
@@ -964,20 +965,20 @@ async fn copy_pqz(c: &Copy, name: &str, record: &str, rec: &Rec, proof: Vec<u8>,
     same(&w, "pqz_pop_hash", &shash, &ahash);
     same(&w, "sig", &ssig, &asig);
 
-    c.lane_b.mined(&c.b, &format!("setPqzKey {record}"), ("setPqzKey", json!({"ua": h(&ua), "pqzKey": h(&skey), "pqzPopHash": h(&shash), "sig": evm_sig(rec.kind, &ssig)}))).await;
+    c.lane_b.mined(&c.b, &format!("setPqzKey {record}"), ("setPqzKey", json!({"ua": h(&ua), "version": "0", "pqzKey": h(&skey), "pqzPopHash": h(&shash), "sig": evm_sig(rec.kind, &ssig)}))).await;
     let (bkey, bhash, bsig) = c.b.pqz(&ua).await;
     let w = format!("{record}: EVM B against Soroban");
     same(&w, "key", &bkey, &skey);
     same(&w, "pqz_pop_hash", &bhash, &shash);
     same(&w, "sig", &bsig, &ssig);
 
-    c.a.send(&format!("storePqzPop {record}"), storePqzPopCall { ua: ua.into(), pqzPop: proof.clone().into() }.abi_encode()).await;
+    c.a.send(&format!("storePqzPop {record}"), storePqzPopCall { ua: ua.into(), version: 0, pqzPop: proof.clone().into() }.abi_encode()).await;
     let apop = c.a.pqz_pop(&ua).await;
     same(&format!("{record}: EVM A against the proof"), "pqz_pop", &apop, &proof);
     c.s.mined(&format!("copy store_pqz_pop {record}"), "store_pqz_pop", json!({"ua": h(&ua), "pqz_pop": h(&apop)})).await;
     let spop = by(&read(&c.s.registry, "pqz_pop_of", vec![sc_bytes(&ua)]).await);
     same(&format!("{record}: Soroban against EVM A"), "pqz_pop", &spop, &apop);
-    c.lane_b.mined(&c.b, &format!("storePqzPop {record}"), ("storePqzPop", json!({"ua": h(&ua), "pqzPop": h(&spop)}))).await;
+    c.lane_b.mined(&c.b, &format!("storePqzPop {record}"), ("storePqzPop", json!({"ua": h(&ua), "version": "0", "pqzPop": h(&spop)}))).await;
     let bpop = c.b.pqz_pop(&ua).await;
     same(&format!("{record}: EVM B against Soroban"), "pqz_pop", &bpop, &spop);
 

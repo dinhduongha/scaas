@@ -120,6 +120,22 @@ contract ZetherDeployTest is Test {
         assertEq(ZetherLayer(f.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), "z2")).minDecoyFee(), 1);
     }
 
+    /// Q4 (CTR-MTX-30, R40), ua-mtx-merge T10: on a chain that declares the public gate the two Zether releases are each
+    /// measured as their own transaction through `deployImplementation` and asked below their testnet formula.
+    function test_publicGateMeasuresBothZetherReleases() public {
+        DeployHarness h = new DeployHarness();
+        h.setGate(2);
+        h.limitBlockGas(type(uint64).max);
+        (OpenFactory f,) = h.deploy(ZUID, true, ska);
+        string[2] memory names = ["NormalZetherToken", "WrappedZetherToken"];
+        for (uint8 k = 2; k <= 3; ++k) {
+            (uint256 regular, uint256 state) = h.measured(names[k - 2]);
+            assertGt(regular, 0, names[k - 2]);
+            assertGe(state, f.implementationOf(IOpenFactory.TokenKind(k), 1).code.length * 1530, "the code deposit is in it");
+            assertLt((regular + state) * 105 / 100, h.gasNeed(names[k - 2]), "below the testnet formula");
+        }
+    }
+
     /// Without `DEPLOY_ZETHER` no chain gets the stack (a plain anvil deploys as before P3); with it the SCaaS testnet
     /// 7622 and the mainnet 22776 get it (owner ruling 2026-10-31, CTR-ZTH-02 superseded, `test_testnetAndMainnet_…`)
     /// and Hedera refuses `DEPLOY_ZETHER`.

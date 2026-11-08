@@ -1,0 +1,14 @@
+m-r1-version-left-out | test_current_lateProofKeeps, test_host_provesBytesItself, test_rreg_v1MessageForV2_refused | 1
+m-r1-popv2-for-v1 | test_current_atStorePqzPop, test_current_highestEligibleNotLatest, test_current_lateProofKeeps, test_host_provesBytesItself, test_list_once, test_otherUAsKey_refusedAtProof, test_record_crossChain_accepted, test_rreg_control_accepted, test_v0_secondKey_refused | 1
+m-r2-sequence-gte | test_sequence_gap_refused | 1
+m-r2-host-own-latest | test_host_latestMax | 1
+m-r3-current-latest | test_current_highestEligibleNotLatest | 1
+m-r3-late-proof-lowers | test_current_lateProofKeeps | 1
+m-r3-current-at-setpqzkey | test_current_highestEligibleNotLatest, test_current_noBytesNotCurrent, test_current_notAtSetPqzKey, test_current_otherSetNever, test_v1_single_stored | 1
+m-r4-marker-skipped | test_repeatedKey_refused_host, test_repeatedKey_refused_noVerifier, test_repeatedKey_refused_verifier | 1
+m-r4-marker-not-on-predecessor | test_repeatedKey_refused_host | 1
+m-r4-keyowner-v0-only | test_otherUAsKey_refusedAtProof | 1
+m-r5-list-per-version | test_list_once | 1
+m-r6-length-ignored | test_current_otherSetNever | 1
+m-r6-bytes-ignored | test_current_noBytesNotCurrent, test_current_notAtSetPqzKey | 1
+m-r7-replacement-kept | test_host_latestMax, test_v0_noVerifier_nothingReplaced, test_v0_secondKey_refused | 1

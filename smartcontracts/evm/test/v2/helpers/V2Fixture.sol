@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.20;
 
+import {MtxDigest} from "../../helpers/MtxDigest.sol";
 import {Test} from "forge-std/Test.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {MetaTokenBase} from "../../../src/metatx/MetaTokenBase.sol";
@@ -9,6 +10,7 @@ import {GovernanceBits} from "../../../src/governance/GovernanceBits.sol";
 import {TokenStore} from "../../../src/metatx/TokenStore.sol";
 import {IFactoryToken} from "../../../src/factory/IFactoryToken.sol";
 import {MetaTxLib} from "../../../src/common/MetaTxLib.sol";
+import {IUARegistry} from "../../../src/ua/IUARegistry.sol";
 import {NormalToken} from "../../../src/metatx/NormalToken.sol";
 import {WrappedToken} from "../../../src/metatx/WrappedToken.sol";
 import {plainEnv} from "../../helpers/Catalogue.sol";
@@ -30,7 +32,8 @@ contract BaseHarness is MetaTokenBase {
     function _init(TokenConfig memory cfg) internal override {
         _setMetadata(cfg.name, cfg.symbol, cfg.decimals);
         GovernanceLib.Roles memory none;
-        GovernanceLib.init(1 << GovernanceBits.PAYABLE, 0, bytes32(0), 0, address(0), none, _validBits(), _roleBits(), _contractOnlyBits());
+        GovernanceLib.init(1 << GovernanceBits.PAYABLE, 0, bytes32(0), 0, address(0), none, _validBits(), _roleBits(), _contractOnlyBits(),
+            address(0));
         _mint(cfg.initialHolder, cfg.initialSupply);
     }
 
@@ -181,24 +184,33 @@ abstract contract V2Fixture is Test {
         return WrappedToken(_clone(_wrappedImpl(), address(this), us, _multiInit(us, nums, dens, cfg, guardian)));
     }
 
-    /// A `MetaTransfer` from `from` on lane `batch`, nonce 0, valid 300 s, relayer `relayer`, no fee.
+    /// A `UAMetaTransfer` from the native id `from` (zero-padded, ua-mtx-merge T2: the token's one typed struct) on lane
+    /// `batch`, nonce 0, valid 300 s, relayer `relayer`, no fee.
     function _tr(address from, address to, uint256 value, bytes32 ref, uint256 batch, uint32 mode)
-        internal view returns (MetaTxLib.MetaTransfer memory x)
+        internal view returns (MetaTxLib.UAMetaTransfer memory x)
     {
-        x = MetaTxLib.MetaTransfer({
-            from: from, to: to, value: value, entryRef: ref, batch: batch, nonce: 0,
+        x = MetaTxLib.UAMetaTransfer({
+            from: MetaTxLib.pad(from), to: MetaTxLib.pad(to), value: value, entryRef: ref, batch: batch, nonce: 0,
             validUntil: block.timestamp + 300, mode: mode, relayer: relayer, fee: 0, feeRecipient: address(0)
         });
     }
 
-    function _signTr(uint256 pk, address t, MetaTxLib.MetaTransfer memory x) internal view returns (bytes memory) {
+    /// The native signer's `UASig` (its own ECDSA signature only, R17) over `x`.
+    function _signTr(uint256 pk, address t, MetaTxLib.UAMetaTransfer memory x)
+        internal view returns (IUARegistry.UASig memory a)
+    {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, MetaTokenBase(t).mtxTransferDigest(x));
-        return abi.encodePacked(r, s, v);
+        a.signature = abi.encodePacked(r, s, v);
+    }
+
+    /// A native id's `UASig`: its own signature only (R17).
+    function _nativeSig(bytes memory sig) internal pure returns (IUARegistry.UASig memory a) {
+        a.signature = sig;
     }
 
     /// Signs with `pk` and submits through `mtxExecuteTransfer` as `relayer`.
-    function _xfer(uint256 pk, address t, MetaTxLib.MetaTransfer memory x) internal {
-        bytes memory s = _signTr(pk, t, x);
+    function _xfer(uint256 pk, address t, MetaTxLib.UAMetaTransfer memory x) internal {
+        IUARegistry.UASig memory s = _signTr(pk, t, x);
         vm.prank(relayer);
         MetaTokenBase(t).mtxExecuteTransfer(x, s);
     }
@@ -216,14 +228,15 @@ abstract contract V2Fixture is Test {
     function _signCall(uint256 pk, address t, MetaTxLib.MetaTransaction memory m)
         internal view returns (bytes memory)
     {
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, MetaTokenBase(t).mtxDigest(m));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, MtxDigest.metaTx(t, m));
         return abi.encodePacked(r, s, v);
     }
 
-    /// Signs with `pk` and submits through `mtxExecute` as `relayer`; returns the inner call's bytes.
-    function _execCall(uint256 pk, address t, MetaTxLib.MetaTransaction memory m) internal returns (bytes memory) {
+    /// Signs with `pk` and submits through `executeMetaTransaction` as `relayer` (ua-mtx-merge T1: a token's address
+    /// generic entry; the same pipeline the address `mtxExecute` ran).
+    function _execCall(uint256 pk, address t, MetaTxLib.MetaTransaction memory m) internal returns (bool) {
         bytes memory s = _signCall(pk, t, m);
         vm.prank(relayer);
-        return MetaTokenBase(t).mtxExecute(m, s);
+        return MetaTokenBase(t).executeMetaTransaction(m, s);
     }
 }

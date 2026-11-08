@@ -520,6 +520,28 @@ eligibility at intake.** A licensed operator runs its own `SCaaSDex` instance wi
 
 On chain the token is the arbiter regardless: a pair that slipped through fails alone (`MatchFailed`).
 
+Status (ua-mtx-merge T35, regulated-kinds spec §7). **BUILT** (`dex/venue.rs`) on every market with a regulated leg (a SCaaS
+leg answering `type(IRegulatedToken).interfaceId`, read at start), managed or not: the intake pre-check, read live on each
+regulated leg — `PAUSED` (`regulatedConfig().pausedUntil`; the market halts), `FROZEN` (`isFrozen` of the seller on the token
+it sells), `VENUE_NOT_ELIGIBLE` (the DEX's own `R` on the leg), `NOT_ELIGIBLE` (the receiver, `destination` or else `from`,
+on the token it buys, with `canReceive`'s reason 1–4), `ATTESTATION_SHORTER` (an order's `validUntil` past the receiver's
+attestation, with `ALLOWLIST` on); `R` is computed with `scaas_ua::regulated::can_receive` over the registry's
+`attestationOf` and `attesterEnabled`, on the chain's `compliance_registry` only (`REGISTRY_NOT_CONFIGURED`,
+`REGISTRY_MISMATCH` otherwise; its code hash checked when the venue loads, which fails closed). Events: `AccountFrozen`
+drops the account's orders selling that token (`invalid` to the client store; its orders buying it stay), `Paused` halts
+the market until `pausedUntil`, `Unpaused` reopens it, and it reopens at `pausedUntil` with no event; a failed trade on a
+halted market waits unacked. A settlement or leg probe that reverts `TokenPaused` blames no order: the market halts until
+the revert's `until` and the taker is refused `PAUSED` (F-16). The venue never assumes its own `ELIGIBLE_CONTRACT` rows (an
+operator step of the registry admin, owner 2026-11-06, [ops.md](ops.md#regulated-legs)): at load it alerts
+`VENUE_NOT_ELIGIBLE` for the DEX and its puller by name, and intake refuses as above. Tests: `dex::venue::tests::{
+market_halts_on_paused_and_reopens, token_paused_not_grief_scored, regulated_leg_precheck_refuses_by_name,
+account_frozen_drops_the_makers_orders}`. **Still SPECIFIED:** the managed-market config (`managed`, `unbound`, `gossip`,
+`eligibility_tokens`, `UNBOUND_FORBIDDEN`, `FEE_FORBIDDEN`), the fee-split recipients' `canReceive`, the explicit
+pre-settle re-check (the settlement simulation is the check today), drops on `Attested` with flags 0 and on
+`AttesterSet(…, false)`, and the gossip rules. Open (for the owner): the reason table of asset-suite §2.3 numbers `4` frozen,
+`5` paused, `6` balance, while `canReceive` (spec §3.1) returns `4` for denied; the venue names each refusal instead of one
+number.
+
 Gossip: managed markets are **not gossiped** by default: wallets post to the venue's gateway; `route_order` for a
 managed market is refused (`MANAGED_LOCAL`). If the operator enables gossip (`gossip = 1`): home-bound replicas only,
 listed only for homes with `gossip_trusted.dex = 1` (admin pre-trust); automatic trust ([NODE-DEX-13](#NODE-DEX-13)) is

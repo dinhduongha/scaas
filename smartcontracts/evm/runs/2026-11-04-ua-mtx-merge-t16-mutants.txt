@@ -1,0 +1,10 @@
+mutant | tests that went red | rc
+intent-id-over-address-struct | mesh::accept::tests::a_derived_from_is_refused_by_name, mesh::accept::tests::a_token_address_body_is_refused_by_name, mesh::accept::tests::codes_and_outcomes_outside_the_vectors, mesh::accept::tests::intent_id_is_the_ua_digest, mesh::accept::tests::unbound_fields_carry_zero, vectors | 101
+unbound-zero-rule-dropped | mesh::accept::tests::unbound_fields_carry_zero, vectors | 101
+old-body-accepted | mesh::accept::tests::a_token_address_body_is_refused_by_name, vectors | 101
+token-address-call-accepted | mesh::accept::tests::a_token_address_body_is_refused_by_name, vectors | 101
+address-transfer-on-any-contract-accepted | mesh::accept::tests::a_token_address_body_is_refused_by_name | 101
+derived-from-accepted | mesh::accept::tests::a_derived_from_is_refused_by_name, vectors | 101
+r17-dropped | mesh::accept::tests::a_derived_from_is_refused_by_name, vectors | 101
+ua-body-under-1-2-accepted | mesh::accept::tests::a_derived_from_is_refused_by_name, vectors | 101
+submit-not-normalized | mesh::accept::tests::unbound_fields_carry_zero, vectors | 101

@@ -1,0 +1,16 @@
+# ua-mtx-merge T43 gate summary (full output in git-ignored .log files, not committed)
+# T43 (pay-meta-tax spec §13, §14): the invariant suite PayTax{Handler,Invariants}.t.sol on kind 8 with TAX and a 3-day notice,
+# J1-J5 and Σ balances == totalSupply; J6 (PlusZero), J7 (TaxConfidential's vm.accesses rows), J8 (MtxRelayFee) stay their own
+# tests. The harness gains spec §14's "+0" row and the suite's own kills. UNAUDITED.
+# Base: 78ba6f58. Commit: this one (suite, harness rows, summary, mutants table).
+step | commit | rc | counts
+t43-run | this | 0 | invariants J1-J5 + supply: 6 of 6 hold, runs 64, calls 2048, reverts 0 (fail_on_revert); a run's checks logged (J1 13, J2 7, J3 5, J5 5, tax legs 2 in the last run)
+t43-control | this - 1 | 1 | the first run's handler keys equalled the fixture's alice (0xA11CE): invariant_supply went red (1.8 M != 1 M); keys moved to 0xE01-0xE03
+t43-forge-full | this | 0 | 2964 passed 0 failed 14 skipped, 285 suites (after a per-directory build: the cold full build was OOM-killed, rc 143)
+t43-mutants | this | 1 each | 5 of 5 killed (runs/2026-11-07-ua-mtx-merge-t43-mutants.txt): a tax slot read in the base _uaMove (killed by the plus-zero gas pins of three Zether rows; no slot pin went red), PaymentMeta skipped (J1), the tax leg from the payee and the payee credited gross (fail_on_revert, every invariant), the rate rising at once (J4)
+#
+# Not here: PQZ handlers at the four sets (the suite runs on kind 8; the confidential kinds have no tax entry to drive, J7 is
+# TaxConfidential.t.sol's, run at the four sets in T40); a relay-fee handler (J8 is MtxRelayFee.t.sol's). The T37-T41 rows
+# were not re-run here (each kept its own kill in its task's mutants table).
+# Finding: the "+0" mutant (an extra sload of scaas.regulated +5 in the base `_uaMove`) is caught by gas pins only;
+# no test of plus_zero_slots.json went red on it (why the slot pin misses this read is not investigated here).

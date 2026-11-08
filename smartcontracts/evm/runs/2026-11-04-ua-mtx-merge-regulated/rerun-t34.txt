@@ -1,0 +1,28 @@
+mutant | test that went red | rc
+ck-forcetransfer-field-order | GovernanceRouter: 27 rows equal GovRouterTypehash.t.sol, target the first op word, fee mod, an unbound relayer or feeRecipient is signed as 0 and shown as unbound: every envelope row, calldata decodes to the message: selector of the full signature, every parameter in place, checkOp refuses every changed field; the server supplies only the envelope, every typehash pinned: the plan's truncated value, keccak256(typeString), table = vector, hashTypedData(td) == row.digest; the builder rebuilds the wallet's JSON; the row signs nat, the eight regulated router ops: from the signer, target, the direct entry's params; a non- | 1
+rs-forcetransfer-field-order | typed_ops_regulated_rows | 101
+ck-relayer-not-zeroed | an unbound relayer or feeRecipient is signed as 0 and shown as unbound: every envelope row, canonical zero for an unbound relayer / fee recipient: envelope and nested UAMetaTransfer, the eight regulated router ops: from the signer, target, the direct entry's params; a non- | 1
+rs-relayer-not-zeroed | typed_ops_regulated_rows | 101
+ck-commit-action-swapped | regulated_kat.json: the constants are this module's | 1
+ck-commit-action-bit-swapped | the relaxation commit of each action: keccak256(abi.encode(action, bit, account, argsHash) | 1
+rs-commit-action-tag-swapped | regulated_kat_commits | 101
+sol-commit-action-swapped | test_regulatedKatEqualsTheToken | 1
+ck-feerecipient-not-zeroed | an unbound relayer or feeRecipient is signed as 0 and shown as unbound: every envelope row, canonical zero for an unbound relayer / fee recipient: envelope and nested UAMetaTransfer, the eight regulated router ops: from the signer, target, the direct entry's params; a non- | 1
+rs-feerecipient-not-zeroed | typed_ops_regulated_rows | 101
+rs-target-not-signed | typed_ops_regulated_rows | 101
+rs-record-id-order | regulated_kat_record_ids | 101
+rs-set-terms-unbound | regulated_kat_commits | 101
+rs-eligible-passes-denied | regulated_kat_receiver_table | 101
+rs-valid-until-strict | regulated_kat_receiver_table | 101
+ck-disabled-attester-reason | the R truth table: canReceive (ok, reason) of every row; both lists, ELIGIBLE_CONTRACT on  | 1
+ck-lapsed-passes | the R truth table: canReceive (ok, reason) of every row; both lists, ELIGIBLE_CONTRACT on  | 1
+ck-episode-cap-off | the freeze transitions T1-T9: every row reproduced, its state after or its error, and F af | 1
+ck-unfreeze-keeps-record | the freeze transitions T1-T9: every row reproduced, its state after or its error, and F af | 1
+ck-revoke-ends-any-freeze | the freeze transitions T1-T9: every row reproduced, its state after or its error, and F af | 1
+ck-record-shorter-unchecked | the freeze transitions T1-T9: every row reproduced, its state after or its error, and F af | 1
+ck-pool-target-accepted | the freeze transitions T1-T9: every row reproduced, its state after or its error, and F af | 1
+gen-freeze-row-other-record | the eight regulated router ops: from the signer, target, the direct entry's params; a non- | 1
+sol-operator-typehash-from | test_routerRow_UAOperatorTransfer, test_uaOperatorTransferTypehashIsPinned | 1
+sol-t4-shorter-unchecked | test_regulatedKatEqualsTheToken | 1
+sol-unfreeze-keeps-record-id | test_regulatedKatEqualsTheToken | 1
+sol-bit22-not-regulated | test_regulatedKatEqualsTheToken, test_regulatedRowsEqualKind8, test_routerRow_UAForceTransfer, test_routerRow_UAFreeze, test_routerRow_UAOperatorTransfer, test_routerRow_UAPause, test_routerRow_UARecordOrder, test_routerRow_UARevokeOrder, test_routerRow_UAUnfreeze, test_routerRow_UAUnpause, test_routerRow_regulatedUnboundFeeRecipientSignedIsRefused | 1
