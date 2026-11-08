@@ -53,3 +53,5 @@ As they stood at 134560c1, before the node moved to the PQZ entries' trailing `P
 (no verdict fill, no verifier refusals), `guard.rs` (no shield switch, the old counts), `gateway.rs`, `adapters/evm.rs` (no verdict
 fill), `indexer.rs` (no `PqzVerified` join, no verifier alerts), `abi.rs` (no verdict ABI), `config.rs` (no `[pqz_verifier]`). Not
 built.
+Group 3h (T59, spec 2026-11-06-pqz-proof-path §3.2), under `3h/`, as they stood at e35d1d16: `typed.rs` (the three PQZ args
+structs without `ownTag`), `e2e.rs` (its op 1 args without `ownTag`). Not built.

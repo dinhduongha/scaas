@@ -362,3 +362,6 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   files as they stood at 7558a364 (the T66a block's tip), each copied by the first task of 3h that replaces it: T58
   `src/pqz/{PqzCore,PqzStateLib,PqzViewLib,PqzLayer,IPqzToken}.sol` (pending slots deleted by a debit and a rollover, no debit
   record, no `lastDebit`). Not built.
+  T59 (`ownTag` and the key-version tail): `src/pqz/WrappedPqzToken.sol` (the unwrap typehash without `ownTag`) and
+  `script/pqz/e2e.py` (the args tuples without `ownTag`, blobs without the tail), as they stood at 7558a364;
+  `test/vectors/legacy/ua-mtx-merge/3h/selector_audit.json` at e35d1d16 (the six PQZ entries' signatures before `ownTag`).
