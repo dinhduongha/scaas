@@ -1,0 +1,6 @@
+mutant | test that went red | rc
+signing on verdict 0 | refuses_verdict_zero | 101
+a key without stored pqzPop bytes given a verdict | refuses_key_without_stored_pop, cache_keyed_by_ua_and_keyhash | 101
+a cache keyed by ua only | cache_keyed_by_ua_and_keyhash | 101
+dispatch on the outer proofSystemId (the statement's word 32 unchecked) | refuses_statement_proof_system_not_the_sets | 101
+the statement-rebuild comparison skipped | refuses_tampered_statement | 101
