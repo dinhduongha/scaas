@@ -148,6 +148,9 @@ Today a clone already rebuilds the separator on every call: `SaltedEIP712` cache
 address, which a clone never equals. After B the rebuild reads `chainUid` from the clone's code (≈ 0.1 k) and hashes six words
 (≈ 0.1 k). A cache would need storage (a slot, ≈ 97,920 state gas, and a cold `SLOAD` dearer than the read it saves). **No
 cache.** Name and version stay immutables (constants per kind, the same on every chain).
+**Measured (T76, 2026-11-08):** the env read with its clone check costs more than the estimate above: `mtxTransfer` +636 to +646
+(85,472 → 86,118), `transferToUA` +1,311 to +1,400, the router's `mtxMint` +660. **Owner 2026-11-08: accepted as measured; no
+cache, not even a transient one.**
 
 ## 3. Replay protection: who sets `chainUid`, what stops a wrong value
 
