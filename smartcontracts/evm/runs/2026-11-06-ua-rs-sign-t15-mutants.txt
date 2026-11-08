@@ -40,3 +40,7 @@ killed     | M12 the memo sealed under another key | clients/ua-rs/src/facade/pq
 killed     | M15 the sender disclosure's u / v check skipped | clients/ua-rs/src/facade/pqz.rs | rc=101 | 2 failed: transfer_and_disclosures_verify, transfer_multi_memo_and_sender_disclosure | at 96bbe4e6 | rc=0, git diff --exit-code 0
 killed     | M21 command JSON past 4 MiB read | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: pqz_inputs_past_their_caps_are_refused_unparsed | at 96bbe4e6 | rc=0, git diff --exit-code 0
 # T18 re-run: 4 killed, 0 survived, 0 not loaded (0 superseded; the other mutants above stand, every string checked at HEAD)
+# T15o re-run (2026-11-08): `check` failed after d6ff9939 (M3: the PQZ seed is `hkdf_pq_version(…, version, 32)` since T15o d6ff9939); brought to the current code with the same intent
+# (8d1449c3), each run again alone on a clean tree:
+killed     | M3 TAG(kind) for utf8(tag) in the PQZ HKDF | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: pqz_key_is_the_ua_pq_rule | at 8d1449c3 | rc=0, git diff --exit-code 0
+# T15o re-run: 1 killed, 0 survived, 0 not loaded (0 superseded; the other mutants above stand, every string checked at HEAD)

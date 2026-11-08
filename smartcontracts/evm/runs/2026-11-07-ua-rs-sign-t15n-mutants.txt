@@ -33,3 +33,7 @@ killed     | M31 zether: no recency weight | clients/zether-prover/src/bin/zethe
 killed     | M32 zether: the blocks not re-checked | clients/zether-prover/src/bin/zether-read-balance.rs | rc=101 | 1 failed: decoys_against_anvil | called `Result::unwrap_err()` on an `Ok` value: Object {"block": Number(21), "blockHash": String("0xfec9582bc5401db48c89c5a0660f84b78471daf917707b820be227c50d26 | at 31b3712e
 killed     | M33 zether: --decoy-count without --exclude | clients/zether-prover/src/bin/zether-read-balance.rs | rc=101 | 1 failed: decoy_arguments | ["--curve", "bls12381", "--rpc", "http://127.0.0.1:1", "--chain-id", "1", "--chain-uid", "0xabababababababababababababababababababababababababababababababab", " | at 31b3712e
 mutants M1-M33 of 33: 33 killed, 0 survived, 0 not loaded
+# T15o re-run (2026-11-08): `check` failed after d6ff9939 (M19: `moved()` takes the UA's `sendCounter[ua]` slot since T15o d6ff9939); brought to the current code with the same intent
+# (8d1449c3), each run again alone on a clean tree:
+killed     | M19 pqz-read: no recency weight | clients/ua-rs/src/bin/pqz-read.rs | rc=101 | 1 failed: decoys_against_anvil | assertion `left == right` failed: activity | at 8d1449c3 | rc=0, git diff --exit-code 0
+# T15o re-run: 1 killed, 0 survived, 0 not loaded (0 superseded; the other mutants above stand, every string checked at HEAD)

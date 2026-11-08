@@ -35,3 +35,9 @@ killed     | M14 check_test_features: scaas-ct not guarded | scripts/check_test_
 killed     | M15 check_test_features: scaas-node not an artifact | scripts/check_test_features.py | rc=1 | 1 failed: positive control (graph, T15l rows) failed | at 66065adf | rc=0, git diff --exit-code 0
 killed     | M16 check_test_features: pqz-core/ffi/wasm not an artifact | scripts/check_test_features.py | rc=1 | 1 failed: positive control (graph, T15l rows) failed | at 66065adf | rc=0, git diff --exit-code 0
 mutants M1-M16 of 16: 16 killed, 0 survived, 0 not loaded
+# T15o re-run (2026-11-08): `check` failed after d6ff9939 (M1, M2, M6: `legKeyRecords` and the additive leg match (u once, then each key's v) since T15o d6ff9939; M2 now accepts the first listed key whatever its v); brought to the current code with the same intent
+# (8d1449c3), each run again alone on a clean tree:
+killed     | M1 op 4: a caller's amount on the allow-list | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: sender_disclosure_negatives | at 8d1449c3 | rc=0, git diff --exit-code 0
+killed     | M2 op 4: the leg's v not compared with the re-derivation (u only) | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: sender_disclosure_negatives | at 8d1449c3 | rc=0, git diff --exit-code 0
+killed     | M6 op 4: the leg owner's key taken from the sender's record | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: sender_disclosure_over_rebuilt_words | at 8d1449c3 | rc=0, git diff --exit-code 0
+# T15o re-run: 3 killed, 0 survived, 0 not loaded (0 superseded; the other mutants above stand, every string checked at HEAD)

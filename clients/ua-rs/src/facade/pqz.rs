@@ -1128,7 +1128,7 @@ impl PqzCmd {
         self.cmd
     }
     /// Test-only (feature `vectors`): what a words command rebuilt from its words, before any key use: `{T, p, sendCounter}`
-    /// of an account, `{ct, window, words}` of an entry leg, `{ct, legKey, salt, auditorOn, M, words}` of a sender's leg,
+    /// of an account, `{ct, window, words}` of an entry leg, `{ct, legKeys, salt, auditorOn, M, words}` of a sender's leg,
     /// `{auditorOn, uas}` a memo must name; the registered `key`.
     #[cfg(feature = "vectors")]
     pub fn vectors_rebuilt(&self) -> Value {

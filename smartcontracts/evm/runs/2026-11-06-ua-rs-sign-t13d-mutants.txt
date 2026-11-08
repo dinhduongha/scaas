@@ -21,3 +21,7 @@ Options:
       --skip-env               Set SKIP_ENV_VALIDATION=1 for child processes (Next.js, tsc, lint, prisma)
   -h, --help                   Print help
 mutants M1-M18 of 18, survived or not loaded: 0
+# T15o re-run (2026-11-08): `check` failed after d6ff9939 (M6: ua-py's `export_pqz_leaf_raw` calls the version export since T15o d6ff9939); brought to the current code with the same intent
+# (8d1449c3), each run again alone on a clean tree:
+killed     | M6 the PQZ leaf in an unwiped buffer | clients/ua-py/scaas_ua/wallet.py | rc=1 | 1 failed: test_secret_buffer_wiped_after_call | at 8d1449c3 | rc=0, git diff --exit-code 0
+# T15o re-run: 1 killed, 0 survived, 0 not loaded (0 superseded; the other mutants above stand, every string checked at HEAD)
