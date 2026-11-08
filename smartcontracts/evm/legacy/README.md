@@ -368,3 +368,6 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   T60 (`proofStore` `NONE` / `LOG`): `src/factory/IFactoryToken.sol` (no `ConfidentialConfig.proofStore`),
   `src/metatx/MetaTokenBase.sol`, `src/zether/ZetherLib.sol` (the other-kind field checks without it),
   `src/pqz/{PqzTransferLib,PqzBurnLib}.sol` (no `PqzDebitProof` event), as they stood at 7558a364.
+  T61 (bit 24 `PQZ_PROOF`): `src/governance/{GovernanceBits,GovernanceRouter,GovernanceRouterBase}.sol` (no bit 24, no
+  `mtxSetProofStore`), `src/pqz/NormalPqzToken.sol`, `src/regulated/{NormalPqzRegulatedToken,WrappedPqzRegulatedToken,
+  RegulatedBase}.sol` (the masks without bit 24), as they stood at 7558a364.
