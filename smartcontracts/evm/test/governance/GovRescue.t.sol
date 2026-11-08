@@ -26,6 +26,7 @@ import {HookLeg} from "../zether/ZetherWrapped.t.sol";
 import {ZetherFixture} from "../zether/helpers/ZetherFixture.sol";
 import {PqzFixture} from "../pqz/helpers/PqzFixture.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// A leg whose sender pays twice what it sends: the balance after a transfer is short of what the reserve needs.
 contract GreedyLeg is MockERC20 {
@@ -98,20 +99,20 @@ contract GovRescueTest is Test {
     }
 
     function _normalClone() internal returns (NormalToken) {
-        if (normalImpl == address(0)) normalImpl = address(new NormalToken(1, plainEnv(address(this), address(0), UID, address(0), false), ""));
-        return NormalToken(Clones.clone(normalImpl));
+        if (normalImpl == address(0)) normalImpl = address(new NormalToken(address(this), ""));
+        return NormalToken(EnvKit.clone(normalImpl, EnvKit.env(UID, address(0), address(0), false)));
     }
 
     function _wrappedClone() internal returns (WrappedToken) {
         if (wrappedImpl == address(0)) {
-            wrappedImpl = address(new WrappedToken(1, plainEnv(address(this), address(0), UID, address(0), false), ""));
+            wrappedImpl = address(new WrappedToken(address(this), ""));
         }
-        return WrappedToken(payable(Clones.clone(wrappedImpl)));
+        return WrappedToken(payable(EnvKit.clone(wrappedImpl, EnvKit.env(UID, address(0), address(0), false))));
     }
 
     function _normal(address rescueTo) internal returns (NormalToken t) {
         t = _normalClone();
-        t.initialize(address(this), 1, abi.encode(_base(rescueTo)));
+        t.initialize(nid(address(this)), 1, abi.encode(_base(rescueTo)));
     }
 
     function _wrappedCfg(address[] memory legs, address rescueTo) internal pure returns (IFactoryToken.TokenConfig memory c) {
@@ -122,7 +123,7 @@ contract GovRescueTest is Test {
 
     function _wrapped(address[] memory legs, address rescueTo) internal returns (WrappedToken w) {
         w = _wrappedClone();
-        w.initialize(address(this), 1, abi.encode(_wrappedCfg(legs, rescueTo)));
+        w.initialize(nid(address(this)), 1, abi.encode(_wrappedCfg(legs, rescueTo)));
     }
 
     function _one(address a) internal pure returns (address[] memory l) {
@@ -359,23 +360,23 @@ contract GovRescueTest is Test {
         address[3] memory bad = [address(n), MetaTxLib.UA_POOL, MetaTxLib.SHIELD_POOL];
         for (uint256 i; i < 3; ++i) {
             vm.expectRevert(IRescuable.RescueConfigInvalid.selector);
-            n.initialize(address(this), 1, abi.encode(_base(bad[i])));
+            n.initialize(nid(address(this)), 1, abi.encode(_base(bad[i])));
         }
         WrappedToken w = _wrappedClone();
         bad[0] = address(w);
         for (uint256 i; i < 3; ++i) {
             vm.expectRevert(IRescuable.RescueConfigInvalid.selector);
-            w.initialize(address(this), 1, abi.encode(_wrappedCfg(_one(address(usd)), bad[i])));
+            w.initialize(nid(address(this)), 1, abi.encode(_wrappedCfg(_one(address(usd)), bad[i])));
         }
         IFactoryToken.TokenConfig memory c = _base(TO); // the bit and the address go together
         c.features = 1;
         vm.expectRevert(IRescuable.RescueConfigInvalid.selector);
-        n.initialize(address(this), 1, abi.encode(c));
+        n.initialize(nid(address(this)), 1, abi.encode(c));
         c = _base(address(0));
         c.features = 1 | RESCUABLE;
         vm.expectRevert(IRescuable.RescueConfigInvalid.selector);
-        n.initialize(address(this), 1, abi.encode(c));
-        n.initialize(address(this), 1, abi.encode(_base(TO))); // positive control
+        n.initialize(nid(address(this)), 1, abi.encode(c));
+        n.initialize(nid(address(this)), 1, abi.encode(_base(TO))); // positive control
         assertEq(n.rescueTo(), TO);
         assertEq(n.lockedFeatures() & RESCUABLE, RESCUABLE, "always locked");
     }
@@ -399,7 +400,7 @@ contract GovRescueDexTest is Test {
     MockERC20 internal foo = new MockERC20("FOO", "FOO", 18);
 
     function setUp() public {
-        f = new OpenFactory(address(this), UID, 0);
+        f = EnvKit.factory(address(this), UID, 0);
         Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0), false);
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
     }
@@ -440,15 +441,15 @@ contract GovRescueDexTest is Test {
     /// Review 2026-11-04 M-2: `DexConfig.rescueTo` follows the tokens' rule (spec §6.2): never `UA_POOL`, `SHIELD_POOL`, the
     /// DEX or its puller (`RescueConfigInvalid`); the test plays the factory of a bare clone, so the DEX's address is known.
     function test_dexRescueToThisOrAPoolRefusedAtInit() public {
-        SCaaSDex impl = new SCaaSDex(1, plainEnv(address(this), address(0), UID, address(0), false), "");
-        SCaaSDex d = SCaaSDex(Clones.clone(address(impl)));
+        SCaaSDex impl = new SCaaSDex(address(this), "");
+        SCaaSDex d = SCaaSDex(EnvKit.clone(address(impl), EnvKit.env(UID, address(0), address(0), false)));
         address p = vm.computeCreateAddress(address(d), 1); // the puller: the clone's first CREATE
         address[4] memory bad = [MetaTxLib.UA_POOL, MetaTxLib.SHIELD_POOL, address(d), p];
         for (uint256 i; i < 4; ++i) {
             vm.expectRevert(IRescuable.RescueConfigInvalid.selector);
-            d.initialize(address(this), 1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, bad[i])));
+            d.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, bad[i])));
         }
-        d.initialize(address(this), 1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, TO))); // control
+        d.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, TO))); // control
         assertEq(d.puller(), p);
         assertEq(DexPuller(p).rescueTo(), TO);
     }

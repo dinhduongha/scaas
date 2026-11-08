@@ -27,6 +27,8 @@ import {GasBurner} from "../pqz/PqzStateGas.t.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {TYPED_OPS, TYPED_OPS_LEGACY, checkRow, onChain, domainField, msgField, domainJson, domainOf, h, n, a as a_} from "./NamedEntry.t.sol";
 import {find} from "./TypedOps.t.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
+import {nid} from "../helpers/Ids.sol";
 
 /// A token stand-in whose `mtxRelayFee` calls back into the router (the router does not check the token).
 contract ReenterToken {
@@ -84,9 +86,8 @@ contract MtxRelayFeeTest is PqzRegistryBase {
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](1);
         k[0] = UARegistry.KindConfig(UAKinds.MLDSA65, address(mlv), 100_000);
         reg = new UARegistry(PQZ_UID, address(0), false, 12_000_000, address(0), true, k);
-        tok = NormalToken(Clones.clone(address(new NormalToken(1,
-            plainEnv(address(this), address(0), PQZ_UID, address(reg), false), ""))));
-        tok.initialize(address(this), 1, abi.encode(normalInit("Points", "PTS", 6, 1_000_000, alice, address(this))));
+        tok = NormalToken(EnvKit.clone(address(new NormalToken(address(this), "")), EnvKit.env(PQZ_UID, address(reg), address(0), false)));
+        tok.initialize(nid(address(this)), 1, abi.encode(normalInit("Points", "PTS", 6, 1_000_000, alice, address(this))));
         ml = _mldsaUA(7);
         tok.mintToUA(ml, 1_000);
         target = new MtxRegistryMock("SCaaS TestRegistry", PQZ_UID);
@@ -627,9 +628,8 @@ contract MtxRelayFeeTest is PqzRegistryBase {
         assertEq(target.count(bob), 0, "the call rolled back");
         assertEq(tok.mtxNonce(MetaTxLib.pad(alice), t.batch), 0);
 
-        NormalToken tok2 = NormalToken(Clones.clone(address(new NormalToken(1,
-            plainEnv(address(this), address(0), PQZ_UID, address(reg), false), ""))));
-        tok2.initialize(address(this), 1, abi.encode(normalInit("Other", "OTH", 6, 1_000_000, alice, address(this))));
+        NormalToken tok2 = NormalToken(EnvKit.clone(address(new NormalToken(address(this), "")), EnvKit.env(PQZ_UID, address(reg), address(0), false)));
+        tok2.initialize(nid(address(this)), 1, abi.encode(normalInit("Other", "OTH", 6, 1_000_000, alice, address(this))));
         bytes memory s = _sig(t);
         vm.prank(REL);
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);

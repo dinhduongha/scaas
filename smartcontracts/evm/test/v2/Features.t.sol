@@ -20,6 +20,7 @@ import {FeeMode} from "../../src/common/FeePolicy.sol";
 import {MockHederaAccountService} from "../hedera/HederaMocks.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// Kind NORMAL on the flags and the owner model (CTR-TOK-21, CTR-TOK-22) and the Hedera branch (CTR-TOK-23).
 contract FeaturesTest is Test {
@@ -41,7 +42,7 @@ contract FeaturesTest is Test {
     function setUp() public {
         vm.chainId(7622);
         vm.warp(1_800_000_000);
-        impl = address(new NormalToken(1, plainEnv(address(this), address(0), UID, address(0), false), ""));
+        impl = address(new NormalToken(address(this), ""));
     }
 
     function _cfg(uint256 features, uint256 locked, address owner_, address minter_, uint256 supply)
@@ -53,11 +54,16 @@ contract FeaturesTest is Test {
         (c.initialSupply, c.initialHolder) = (supply, alice);
     }
 
-    function _token(address implementation, IFactoryToken.TokenConfig memory cfg)
+    function _token(address implementation, IFactoryToken.TokenConfig memory cfg) internal returns (NormalToken t) {
+        return _token(implementation, false, cfg);
+    }
+
+    /// A clone of `implementation` with the env the factory would append (`UID`, no registry, Hedera as given).
+    function _token(address implementation, bool hedera, IFactoryToken.TokenConfig memory cfg)
         internal returns (NormalToken t)
     {
-        t = NormalToken(Clones.clone(implementation));
-        t.initialize(address(this), 1, abi.encode(cfg));
+        t = NormalToken(EnvKit.clone(implementation, EnvKit.env(UID, address(0), address(0), hedera)));
+        t.initialize(nid(address(this)), 1, abi.encode(cfg));
     }
 
     function _sig(bytes32 d) internal pure returns (bytes memory) {
@@ -84,12 +90,12 @@ contract FeaturesTest is Test {
     }
 
     function test_initRefusesFlagsOfAnotherKind() public {
-        NormalToken t = NormalToken(Clones.clone(impl));
+        NormalToken t = NormalToken(EnvKit.clone(impl, EnvKit.env(UID, address(0), address(0), false)));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, uint8(3)));
-        t.initialize(address(this), 1, abi.encode(_cfg(1 << 3, 0, address(0), address(0), 0)));
+        t.initialize(nid(address(this)), 1, abi.encode(_cfg(1 << 3, 0, address(0), address(0), 0)));
         // ua-mtx-merge T24 (regulated-kinds spec Q3): a plain kind refuses 5-9 as invalid, no longer `FeatureNotBuilt`
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, uint8(7)));
-        t.initialize(address(this), 1, abi.encode(_cfg(1 << 7, 0, address(0), address(0), 0)));
+        t.initialize(nid(address(this)), 1, abi.encode(_cfg(1 << 7, 0, address(0), address(0), 0)));
     }
 
     // ------------------------------------------------------------------ MINTABLE, BURNABLE
@@ -264,10 +270,10 @@ contract FeaturesTest is Test {
         uint256 edKey = 0xA11CE5;
         address native = address(uint160(1_234_567));
         MockHederaAccountService(has).setEdKey(native, vm.addr(edKey));
-        address hImpl = address(new NormalToken(1, plainEnv(address(this), address(0), UID, address(0), true), ""));
+        address hImpl = address(new NormalToken(address(this), ""));
         IFactoryToken.TokenConfig memory cfg;
         (cfg.name, cfg.symbol, cfg.initialSupply, cfg.initialHolder) = ("P", "P", 100, native);
-        NormalToken h = _token(hImpl, cfg);
+        NormalToken h = _token(hImpl, true, cfg);
         NormalToken e = _token(impl, cfg);
         assertTrue(h.IS_HEDERA());
         MetaTxLib.UAMetaTransfer memory x = MetaTxLib.UAMetaTransfer({from: MetaTxLib.pad(native),

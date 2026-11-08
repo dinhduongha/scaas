@@ -331,12 +331,18 @@ abstract contract DeployBase is Script {
             (bool bls,) = _precompiles(); // fail before deploying anything (CTR-ZTH-52: the only chain requirement)
             require(bls, "DEPLOY_ZETHER: the chain has no EIP-2537 (BLS12-381 precompiles)");
         }
-        f = new OpenFactory{salt: salt}(registrar, uid, noticePeriod);
+        // chain-neutral releases (plan T71, T72): the registrar is the factory's only constructor argument; this chain's
+        // values are its one-time `configureChain`, after the router it names (T73: the deterministic deployer, the
+        // reference block and the dry run)
+        f = new OpenFactory{salt: salt}(registrar);
         UARegistry reg = _deployUARegistry(smartKeyAccountImpl, isHedera);
         _deployGovRouter(address(reg), smartKeyAccountImpl, isHedera); // before every release: its address is in the env
         _deployRelayFee();
         if (deployRegulated) _deployComplianceRegistry();
-        _gate(address(f));
+        if (register) {
+            f.configureChain(uid, noticePeriod, govRouter, 0, bytes32(0));
+            _gate(address(f));
+        }
         vm.serializeAddress("deploy", "token_factory", address(f));
         if (register) {
             // the link closure of NormalToken (task 6): MtxPipelineLib, which links HederaLib
@@ -346,7 +352,6 @@ abstract contract DeployBase is Script {
             f.publishEnv(IOpenFactory.TokenKind.NORMAL, 1,
                 _env(f, address(reg), smartKeyAccountImpl, isHedera, new address[](0), libs));
             address none = _release(f, IOpenFactory.TokenKind.NORMAL, "NormalToken", type(NormalToken).creationCode);
-            _gate(none);
             vm.serializeAddress("deploy", "implementation_normal", none);
             // The DEX release (CTR-DEX-24): clones come from `createDex`; DEX version 1.
             address[] memory dexLibs = new address[](2);
@@ -355,7 +360,6 @@ abstract contract DeployBase is Script {
             bytes memory dexCode = type(SCaaSDex).creationCode;
             _requireReleaseGas("SCaaSDex", address(f), abi.encodeCall(f.deployDexImplementation, (1, 1, dexCode, "")));
             address dexImpl = f.deployDexImplementation(1, 1, dexCode, "");
-            _gate(dexImpl);
             vm.serializeAddress("deploy", "dex_implementation", dexImpl);
         }
         if (deployWrapped && register) _deployWrapped(f, address(reg), smartKeyAccountImpl, isHedera);
@@ -374,7 +378,6 @@ abstract contract DeployBase is Script {
             (address(GovernanceLib), address(HederaLib), address(TradeLib), address(MtxPipelineLib), address(WrappedLib));
         f.publishEnv(IOpenFactory.TokenKind.WRAPPED, 1, _env(f, reg, smartKeyAccountImpl, isHedera, new address[](0), libs));
         address w = _release(f, IOpenFactory.TokenKind.WRAPPED, "WrappedToken", type(WrappedToken).creationCode);
-        _gate(w);
         vm.serializeAddress("deploy", "implementation_wrapped", w);
     }
 
@@ -395,7 +398,6 @@ abstract contract DeployBase is Script {
         bytes memory implArgs = abi.encode(_registryCodehash());
         address n = _release(f, IOpenFactory.TokenKind.NORMAL_REGULATED, "NormalRegulatedToken",
             type(NormalRegulatedToken).creationCode, implArgs);
-        _gate(n);
         vm.serializeAddress("deploy", "implementation_normal_regulated", n);
         libs = new address[](6);
         (libs[0], libs[1], libs[2], libs[3], libs[4], libs[5]) = (address(GovernanceLib), address(HederaLib),
@@ -404,7 +406,6 @@ abstract contract DeployBase is Script {
             _env(f, reg, smartKeyAccountImpl, isHedera, new address[](0), libs));
         address w = _release(f, IOpenFactory.TokenKind.WRAPPED_REGULATED, "WrappedRegulatedToken",
             type(WrappedRegulatedToken).creationCode, implArgs);
-        _gate(w);
         vm.serializeAddress("deploy", "implementation_wrapped_regulated", w);
         f.setKindEnabled(IOpenFactory.TokenKind.NORMAL_REGULATED, true);
         f.setKindEnabled(IOpenFactory.TokenKind.WRAPPED_REGULATED, true);
@@ -464,14 +465,15 @@ abstract contract DeployBase is Script {
         return f.deployImplementation(kind, 1, 1, code, implArgs);
     }
 
-    /// @notice A release environment of this chain's factory `f` (plan 5g-Z2), each library's current code hash, and the
-    ///         chain's `GovernanceRouter` (`govRouter`, deployed first by `_deployTokenFactory`).
-    function _env(OpenFactory f, address reg, address ska, bool hedera, address[] memory deps, address[] memory libs)
+    /// @notice A release environment of this chain's factory (plan 5g-Z2): the registry, the `SmartKeyAccount`
+    ///         implementation, Hedera, the deps, each library's current code hash. Chain-neutral releases (plan T71): the
+    ///         factory fills its own `chain_uid` and router (`configureChain`), they are not in the env.
+    function _env(OpenFactory, address reg, address ska, bool hedera, address[] memory deps, address[] memory libs)
         internal view returns (IFactoryToken.Env memory e)
     {
         bytes32[] memory h = new bytes32[](libs.length);
         for (uint256 i; i < libs.length; ++i) h[i] = libs[i].codehash;
-        e = IFactoryToken.Env(address(f), uid, reg, ska, hedera, deps, libs, h, govRouter);
+        e = IFactoryToken.Env(reg, ska, hedera, deps, new bytes32[](0), libs, h);
     }
 
     /// @notice UA registry generation 1 (accounts.md §1.8, CTR-UA-22) on every chain, with per-chain enablement (§1.9):
@@ -658,8 +660,6 @@ abstract contract DeployBase is Script {
                 type(NormalZetherToken).creationCode);
             address und = _release(f, IOpenFactory.TokenKind.WRAPPED_ZETHER, "WrappedZetherToken",
                 type(WrappedZetherToken).creationCode);
-            _gate(none);
-            _gate(und);
             vm.serializeAddress("deploy", "implementation_normal_zether_bls12381", none);
             vm.serializeAddress("deploy", "implementation_wrapped_zether_bls12381", und);
             f.setKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER, true);
@@ -686,8 +686,6 @@ abstract contract DeployBase is Script {
             type(NormalZetherRegulatedToken).creationCode, implArgs);
         address w = _release(f, IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, "WrappedZetherRegulatedToken",
             type(WrappedZetherRegulatedToken).creationCode, implArgs);
-        _gate(n);
-        _gate(w);
         vm.serializeAddress("deploy", "implementation_normal_zether_regulated_bls12381", n);
         vm.serializeAddress("deploy", "implementation_wrapped_zether_regulated_bls12381", w);
         f.setKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, true);

@@ -11,6 +11,7 @@ import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {SmartKeyAccountFactory} from "../../src/account/SmartKeyAccountFactory.sol";
 import {GovernanceRouter} from "../../src/governance/GovernanceRouter.sol";
 import {GovernanceBase} from "../../src/governance/GovernanceBase.sol";
+import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 
 /// @notice `DeployBase` deploys UA registry generation 1 on every chain (CTR-UA-22) with the per-chain kind set of
 ///         accounts.md §1.9: the precompile probe (`UAPrecompileProbe`: the kinds.json points outside the subgroup,
@@ -278,11 +279,12 @@ contract UADeployTest is Test {
     }
 
     /// Plan T11 (CTR-GOV-15 Change): the chain's `GovernanceRouter` is deployed before the releases, on the chain's registry
-    /// and `chain_uid`, and every release's `GOV_ROUTER` (`Env.govRouter`) is it: `NORMAL`, the DEX, both Zether kinds.
+    /// and `chain_uid`; chain-neutral releases (plan T72): it is the factory's one-time `govRouter` (every clone's env), and
+    /// a release carries none: `NORMAL`, the DEX, both Zether kinds.
     function test_govRouterBeforeTheReleases() public {
         vm.chainId(31337);
         DeployHarness h = new DeployHarness();
-        (, string memory json) = h.deploy(UID, true, ska);
+        (OpenFactory f, string memory json) = h.deploy(UID, true, ska);
         GovernanceRouter r = GovernanceRouter(vm.parseJsonAddress(json, ".governance_router"));
         assertGt(address(r).code.length, 0);
         assertEq(r.chainUid(), UID);
@@ -291,8 +293,9 @@ contract UADeployTest is Test {
             "implementation_wrapped_zether_bls12381"];
         for (uint256 i; i < 4; ++i) {
             address impl = vm.parseJsonAddress(json, string.concat(".", impls[i]));
-            assertEq(GovernanceBase(impl).GOV_ROUTER(), address(r), impls[i]);
+            assertEq(GovernanceBase(impl).GOV_ROUTER(), address(0), impls[i]);
         }
+        assertEq(f.govRouter(), address(r), "the factory's router");
     }
 
     function _refused(DeployHarness h, uint256 limit, uint256 need, string memory name) internal {

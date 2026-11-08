@@ -21,6 +21,7 @@ import {PqzFixture} from "../pqz/helpers/PqzFixture.sol";
 import {PQZ_UID} from "../pqz/helpers/PqzRegistryBase.sol";
 import {ZetherFixture} from "../zether/helpers/ZetherFixture.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// @notice Plain `transfer` and `mtxTransfer` per kind, for the governance prototype (D1, D2; before and after,
 ///         `docs/research/governance/prototype/`). One row per test, so each measures from a fresh `setUp`. Written against
@@ -97,7 +98,7 @@ contract GovGasNormal is GovRows {
 
     function setUp() public {
         vm.warp(1_800_000_000);
-        f = new OpenFactory(address(this), UID, 0);
+        f = EnvKit.factory(address(this), UID, 0);
         Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0), false);
         t = f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(_tokenConfig(1_000 ether)), "n");
         _prime(t);
@@ -136,7 +137,7 @@ contract GovGasDex is GovRows {
 
     function setUp() public {
         vm.warp(1_800_000_000);
-        f = new OpenFactory(address(this), UID, 0);
+        f = EnvKit.factory(address(this), UID, 0);
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
         f.createDex(1, abi.encode(_dexConfig()), "d0");
     }
@@ -180,7 +181,7 @@ contract GovGasWrapped is GovRows {
 
     function setUp() public {
         vm.warp(1_800_000_000);
-        OpenFactory f = new OpenFactory(address(this), UID, 0);
+        OpenFactory f = EnvKit.factory(address(this), UID, 0);
         Catalogue.plain(f, IOpenFactory.TokenKind.WRAPPED, 1, type(WrappedToken).creationCode, address(0), address(0), false);
         MockERC20 usd = new MockERC20("USD", "USD", 6);
         IFactoryToken.TokenConfig memory c = _tokenConfig(0);

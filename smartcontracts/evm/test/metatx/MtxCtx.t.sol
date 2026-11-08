@@ -25,6 +25,8 @@ import {MockHederaAccountService} from "../hedera/HederaMocks.sol";
 import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
 import {IRig, PlainRig, PqzRig, ZetherRig} from "./helpers/KindRigs.sol";
+import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// Submits `cd` to `t` with exactly `g` gas for the frame (not a transaction: no intrinsic gas, no calldata floor).
 contract GasProbe {
@@ -77,9 +79,9 @@ contract MtxCtxTest is PqzRegistryBase {
     }
 
     function _token(address ska, bool hedera) internal returns (NormalToken t) {
-        NormalToken impl = new NormalToken(1, plainEnv(address(this), ska, PQZ_UID, address(reg), hedera), "");
-        t = NormalToken(Clones.clone(address(impl)));
-        t.initialize(address(this), 1, abi.encode(normalInit("Points", "PTS", 6, 0, address(this), address(this))));
+        NormalToken impl = new NormalToken(address(this), "");
+        t = NormalToken(EnvKit.clone(address(impl), EnvKit.env(PQZ_UID, address(reg), ska, hedera)));
+        t.initialize(nid(address(this)), 1, abi.encode(normalInit("Points", "PTS", 6, 0, address(this), address(this))));
     }
 
     // ------------------------------------------------------------------ helpers
@@ -327,7 +329,7 @@ contract MtxCtxTest is PqzRegistryBase {
         (, address[] memory zs,) = zr.setup();
         j = vm.readFile("test/vectors/zether/s3/envelope.json");
         at = vm.parseJsonAddress(j, ".token");
-        vm.etch(at, _cloneCode(_implOf(zs[0])));
+        vm.etch(at, zs[0].code); // the rig's clone with its env
         vm.chainId(vm.parseJsonUint(j, ".chainId"));
         assertEq(vm.parseJsonBytes32(j, ".chainUid"), MetaTokenBase(zs[0]).chainUid());
         assertEq(MtxDigest.metaTx(at, _envelopeTx(j)), vm.parseJsonBytes32(j, ".digest"), "zether-prover envelope");
@@ -427,8 +429,8 @@ contract MtxCtxTest is PqzRegistryBase {
 
     function _etchNormal(address at, bytes32 uid, uint256 chainId) internal returns (address) {
         vm.chainId(chainId);
-        NormalToken impl = new NormalToken(1, plainEnv(address(this), address(0), uid, address(0), false), "");
-        vm.etch(at, _cloneCode(address(impl)));
+        NormalToken impl = new NormalToken(address(this), "");
+        vm.etch(at, EnvKit.runtime(address(impl), EnvKit.env(uid, address(0), address(0), false)));
         return at;
     }
 

@@ -28,6 +28,7 @@ import {UARegistryBase} from "./UARegistryBase.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
 import {UACall} from "./UACall.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// Classifies every token as a registered SCaaS token, so a DEX clone at a vector address can list the vector tokens.
 contract KindFactory {
@@ -83,12 +84,12 @@ contract UATradeVectorsTest is UARegistryBase {
         A = _token(vm.parseJsonAddress(vj, ".tokenA"));
         B = _token(vm.parseJsonAddress(vj, ".tokenB"));
         KindFactory kf = new KindFactory();
-        address impl = address(new SCaaSDex(1, plainEnv(address(kf), address(0), chainUidA, address(0), false), ""));
+        address impl = address(new SCaaSDex(address(kf), ""));
         address at = vm.parseJsonAddress(vj, ".dex");
-        vm.etch(at, abi.encodePacked(hex"363d3d373d3d3d363d73", impl, hex"5af43d82803e903d91602b57fd5bf3"));
+        vm.etch(at, EnvKit.runtime(impl, EnvKit.env(chainUidA, address(0), address(0), false)));
         dex = SCaaSDex(at);
         vm.prank(address(kf));
-        dex.initialize(address(this), 1, abi.encode(ISCaaSDex.DexConfig(nid(address(this)), 200_000, TREASURY, false, 0, address(0))));
+        dex.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(nid(address(this)), 200_000, TREASURY, false, 0, address(0))));
         dex.setMarket(address(A), address(B), true);
         vm.warp(1_800_000_000);
     }
@@ -100,10 +101,10 @@ contract UATradeVectorsTest is UARegistryBase {
     }
 
     function _token(address at) internal returns (NormalToken t) {
-        address impl = address(new NormalToken(1, plainEnv(address(this), address(0), chainUidA, REG_A, false), ""));
-        vm.etch(at, abi.encodePacked(hex"363d3d373d3d3d363d73", impl, hex"5af43d82803e903d91602b57fd5bf3"));
+        address impl = address(new NormalToken(address(this), ""));
+        vm.etch(at, EnvKit.runtime(impl, EnvKit.env(chainUidA, REG_A, address(0), false)));
         t = NormalToken(at);
-        t.initialize(address(this), 1, abi.encode(normalInit("T", "T", 6, 1e15, address(this), address(this))));
+        t.initialize(nid(address(this)), 1, abi.encode(normalInit("T", "T", 6, 1e15, address(this), address(this))));
     }
 
     function _realCfgs() internal returns (UARegistry.KindConfig[] memory c) {

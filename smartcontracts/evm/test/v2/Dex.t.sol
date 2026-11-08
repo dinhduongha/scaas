@@ -17,6 +17,7 @@ import {UID_, normalInit} from "./helpers/V2Fixture.sol";
 import {plainEnv, Catalogue} from "../helpers/Catalogue.sol";
 import {SigCheck} from "../../src/common/SigCheck.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// A DEX release answering `factory()` (its deployer) on another chain.
 contract OtherChainDex {
@@ -60,7 +61,7 @@ contract DexTest is Test {
     NormalToken b; // the makers sell B
 
     function setUp() public {
-        f = new OpenFactory(registrar, UID_, 0);
+        f = EnvKit.factory(registrar, UID_, 0);
         Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0),
             false);
         dexImpl = SCaaSDex(Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0)));
@@ -559,7 +560,7 @@ contract DexTest is Test {
     }
 
     function test_classification_deprecatedAndUnregisteredAreOutside() public {
-        address impl = address(new NormalToken(1, plainEnv(address(f), address(0), UID_, address(0), false), ""));
+        address impl = address(new NormalToken(address(f), ""));
         address u = f.createTokenUnregistered(IOpenFactory.TokenKind.NORMAL, impl, abi.encode(normalInit("C", "C", 0, 1e6, alice, address(0))), "c");
         vm.startPrank(admin);
         dex.setMarket(address(a), u, true);
@@ -722,13 +723,13 @@ contract DexTest is Test {
         assertEq(dex.treasury(), treasury);
         assertEq(dex.relayerSharePpm(), 200_000);
         vm.expectRevert(ISCaaSDex.NotFactory.selector);
-        dex.initialize(address(this), 1, abi.encode(ISCaaSDex.DexConfig(nid(admin), 0, treasury, false, 0, address(0))));
+        dex.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(nid(admin), 0, treasury, false, 0, address(0))));
         vm.prank(address(f));
         vm.expectRevert(ISCaaSDex.AlreadyInitialized.selector);
-        dex.initialize(address(this), 1, abi.encode(ISCaaSDex.DexConfig(nid(admin), 0, treasury, false, 0, address(0))));
+        dex.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(nid(admin), 0, treasury, false, 0, address(0))));
         vm.prank(address(f));
-        vm.expectRevert(ISCaaSDex.AlreadyInitialized.selector);
-        dexImpl.initialize(address(this), 1, abi.encode(ISCaaSDex.DexConfig(nid(admin), 0, treasury, false, 0, address(0))));
+        vm.expectRevert(IFactoryToken.EnvMissing.selector); // the release carries no env (chain-neutral spec §2.1)
+        dexImpl.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(nid(admin), 0, treasury, false, 0, address(0))));
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.DexVersionUnknown.selector, 2));
         f.createDex(2, abi.encode(ISCaaSDex.DexConfig(nid(admin), 0, treasury, false, 0, address(0))), "x");
     }
@@ -784,21 +785,22 @@ contract DexTest is Test {
     function test_createDex_emitsDexCreated() public {
         address creator = address(0xA1);
         vm.expectEmit(false, true, false, true, address(f)); // the clone address is derived, not asserted
-        emit IOpenFactory.DexCreated(address(0), creator, 1, address(dexImpl), nid(address(0xADD)));
+        emit IOpenFactory.DexCreated(address(0), nid(creator), 1, address(dexImpl), nid(address(0xADD)));
         vm.prank(creator);
         address d = f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(address(0xADD)), 0, treasury, false, 0, address(0))), "ev");
         assertEq(SCaaSDex(d).owner(), nid(address(0xADD)));
     }
 
     /// Where `deployDexImplementation(version, latest DEX env, code, "")` puts the release.
+    /// Chain-neutral releases (plan T71): the factory's address and `implArgs` appended, no env.
     function _predictDex(uint64 version, bytes memory code) internal view returns (address) {
-        uint16 v = f.latestDexEnvVersion();
         return vm.computeCreate2Address(keccak256(abi.encode("dex", version)),
-            keccak256(bytes.concat(code, abi.encode(v, f.dexEnvOf(v), bytes("")))), address(f));
+            keccak256(bytes.concat(code, abi.encode(address(f), bytes("")))), address(f));
     }
 
     /// Plan 5g-Z2: the factory deploys the DEX release from init code on the DEX env it names (registrar only; the
-    /// release answers `factory()` / `chainUid()`, both from the env); the release hashes in the event; a notice period applies.
+    /// release answers `factory()` and accepts the env, `validateEnv`: chain-neutral releases carry no `chainUid()`); the
+    /// release hashes in the event; a notice period applies.
     function test_deployDexImplementation() public {
         bytes memory code = type(SCaaSDex).creationCode;
         vm.expectRevert(IOpenFactory.NotRegistrar.selector);
@@ -807,7 +809,7 @@ contract DexTest is Test {
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.DexVersionAlreadyRegistered.selector, 1, address(dexImpl)));
         f.deployDexImplementation(1, 1, code, "");
         vm.prank(registrar);
-        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ChainUidMismatch.selector, UID_, keccak256("other chain")));
+        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.EnvRefused.selector, _predictDex(3, type(OtherChainDex).creationCode)));
         f.deployDexImplementation(3, 1, type(OtherChainDex).creationCode, "");
         vm.prank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.EnvUnknown.selector, 255, 9)); // the env is named, explicit
@@ -832,9 +834,12 @@ contract DexTest is Test {
         assertEq(eh, keccak256(abi.encode(f.dexEnvOf(2))));
         assertEq(ih, keccak256(code));
         assertEq(ch, v3.codehash);
-        assertEq(SCaaSDex(v3).SMART_KEY_ACCOUNT_IMPL(), address(0xBEEF), "the env's, an immutable");
+        // chain-neutral spec §2.1: the env's value is the clone's, from its code; the release has none
+        assertEq(SCaaSDex(v3).SMART_KEY_ACCOUNT_IMPL(), address(0), "the release carries no env");
+        address d3 = f.createDex(3, abi.encode(ISCaaSDex.DexConfig(nid(admin), 0, treasury, false, 0, address(0))), "v3");
+        assertEq(SCaaSDex(d3).SMART_KEY_ACCOUNT_IMPL(), address(0xBEEF), "the env's, in the clone's code");
         // the notice period
-        OpenFactory g = new OpenFactory(registrar, UID_, 1 days);
+        OpenFactory g = EnvKit.factory(registrar, UID_, 1 days);
         Catalogue.dex(g, 1, code, address(0));
         uint64 from = uint64(block.timestamp + 1 days);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.DexVersionNotYetUsable.selector, 1, from));

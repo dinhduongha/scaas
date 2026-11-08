@@ -39,12 +39,9 @@ contract WrappedZetherToken is WrappedToken, ZetherLayer, IZetherWrappedToken {
     );
     // The typehashes of the unshield-unwrap entries are `ZetherWrappedLib`'s (CTR-ZTH-94).
 
-    /// @dev The factory's append (`OpenFactory.deployImplementation`, plan 5g-Z2): the release's `Env` (Hedera off: `ZetherLayer`
-    ///      refuses a Hedera env); no `implArgs`.
-    constructor(uint16 envVersion, Env memory env, bytes memory implArgs)
-        WrappedToken(envVersion, env, implArgs)
-        ZetherLayer(env)
-    {}
+    /// @dev The factory's append (`OpenFactory.deployImplementation`, chain-neutral spec §2.1): its address; no
+    ///      `implArgs`. The env (Hedera off) is checked by `validateEnv` (`ZetherLib`).
+    constructor(address factory_, bytes memory implArgs) WrappedToken(factory_, implArgs) {}
 
     /// @dev The legs (`WrappedToken`), restated for the second base.
     function underlyings() public view virtual override(WrappedToken, MetaTokenBase) returns (address[] memory) {
@@ -72,7 +69,7 @@ contract WrappedZetherToken is WrappedToken, ZetherLayer, IZetherWrappedToken {
     function _init(TokenConfig memory) internal override(WrappedToken, MetaTokenBase) {}
 
     function _initRaw(bytes calldata initArgs) internal virtual override {
-        ZetherWrappedLib.init(initArgs, TRANSFER_VERIFIER, _REGISTRY, kind(), _validBits(), _roleBits(),
+        ZetherWrappedLib.init(initArgs, _transferVerifier(), _registry(), kind(), _validBits(), _roleBits(),
             _contractOnlyBits());
     }
 
@@ -87,7 +84,7 @@ contract WrappedZetherToken is WrappedToken, ZetherLayer, IZetherWrappedToken {
         (,, uint256 minted) = WrappedLib.wrap(WrappedLib.indexOf(underlying), amountIn, m, msg.value, totalSupply());
         uint256 scale = ZetherLib.$().shieldScale;
         if (minted % scale != 0) revert AmountNotScaled(minted, scale);
-        ZetherLib.shield(ZetherTypes.UA.wrap(toUA), minted / scale, _REGISTRY, m);
+        ZetherLib.shield(ZetherTypes.UA.wrap(toUA), minted / scale, _registry(), m);
         _poolMove(bytes32(0), MetaTxLib.pad(MetaTxLib.SHIELD_POOL), minted); // D19: minted to the pool
     }
 
@@ -152,6 +149,11 @@ contract WrappedZetherToken is WrappedToken, ZetherLayer, IZetherWrappedToken {
 
     // ------------------------------------------------------------------ the layer's hooks
 
+
+    /// @dev The layer's env checks, restated for the second base.
+    function _validateEnv(ChainEnv calldata env) internal view virtual override(MetaTokenBase, ZetherLayer) {
+        ZetherLayer._validateEnv(env);
+    }
     function _domainName() internal pure virtual override(ERC20MetaTx, ZetherLayer) returns (string memory) {
         return ZetherLayer._domainName();
     }

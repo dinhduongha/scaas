@@ -56,7 +56,8 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
 
     // ------------------------------------------------------------------ views
 
-    function chainUid() external view returns (bytes32) {
+    /// @notice `chain_uid` (a factory-made contract overrides it with its clone's: 0 on the implementation).
+    function chainUid() external view virtual returns (bytes32) {
         return CHAIN_UID;
     }
 

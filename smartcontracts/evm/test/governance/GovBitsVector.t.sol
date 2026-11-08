@@ -327,8 +327,7 @@ contract GovBitsVectorTest is Test {
 
     /// The regulated rows' masks are kind 8's: its `validBits()` is its base kind's plus `REG`.
     function test_regulatedRowsEqualKind8() public {
-        address impl = address(new NormalRegulatedToken(1, plainEnv(address(this), address(0), bytes32(uint256(1)), address(1), false),
-            regArgs()));
+        address impl = address(new NormalRegulatedToken(address(this), regArgs()));
         assertEq(NormalRegulatedToken(impl).validBits(), B.NORMAL_BITS | REG);
     }
 

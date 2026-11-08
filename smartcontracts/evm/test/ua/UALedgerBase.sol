@@ -14,6 +14,8 @@ import {normalInit, wrappedInit, Rate} from "../v2/helpers/V2Fixture.sol";
 import {UARegistryBase} from "./UARegistryBase.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
 import {UACall} from "./UACall.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
+import {nid} from "../helpers/Ids.sol";
 
 /// The UA ledger fixture (accounts.md CTR-UA-18/19/26): a registry at `REG_L` on context A (chain 31337, `chainUidA`)
 /// with the stand-in verifier for the eight classical kinds and the real `zether-bls12381` verifier; a `NORMAL` clone and a
@@ -71,15 +73,15 @@ abstract contract UALedgerBase is UARegistryBase {
             "");
         (alice, bob) = (vm.addr(ALICE_PK), vm.addr(BOB_PK));
         vm.warp(1_800_000_000);
-        tok = NormalToken(Clones.clone(address(new NormalToken(1, plainEnv(address(this), address(0), chainUidA, REG_L, false), ""))));
-        tok.initialize(address(this), 1, abi.encode(normalInit("Points", "PTS", 6, 1_000_000, alice, address(this))));
+        tok = NormalToken(EnvKit.clone(address(new NormalToken(address(this), "")), EnvKit.env(chainUidA, REG_L, address(0), false)));
+        tok.initialize(nid(address(this)), 1, abi.encode(normalInit("Points", "PTS", 6, 1_000_000, alice, address(this))));
         und = new MockERC20("Und", "UND", 6);
-        wrp = WrappedToken(Clones.clone(address(new WrappedToken(1, plainEnv(address(this), address(0), chainUidA, REG_L, false), ""))));
+        wrp = WrappedToken(EnvKit.clone(address(new WrappedToken(address(this), "")), EnvKit.env(chainUidA, REG_L, address(0), false)));
         address[] memory us = new address[](1);
         uint256[] memory one = new uint256[](1);
         (us[0], one[0]) = (address(und), 1);
         Rate memory fixedRate;
-        wrp.initialize(address(this), 1, abi.encode(wrappedInit(us, one, one, 6, fixedRate, address(0), address(0))));
+        wrp.initialize(nid(address(this)), 1, abi.encode(wrappedInit(us, one, one, 6, fixedRate, address(0), address(0))));
         wrpL = _wrapper(address(tok));
         wrpN = _wrapper(address(0));
     }
@@ -91,13 +93,13 @@ abstract contract UALedgerBase is UARegistryBase {
 
     /// The same at rate `num/den` (units per leg unit).
     function _wrapperAt(address leg, uint256 num, uint256 den) internal returns (WrappedToken w) {
-        w = WrappedToken(Clones.clone(address(new WrappedToken(1, plainEnv(address(this), address(0), chainUidA, REG_L, false), ""))));
+        w = WrappedToken(EnvKit.clone(address(new WrappedToken(address(this), "")), EnvKit.env(chainUidA, REG_L, address(0), false)));
         address[] memory us = new address[](1);
         uint256[] memory n = new uint256[](1);
         uint256[] memory d = new uint256[](1);
         (us[0], n[0], d[0]) = (leg, num, den);
         Rate memory fixedRate;
-        w.initialize(address(this), 1, abi.encode(wrappedInit(us, n, d, 6, fixedRate, address(0), address(0))));
+        w.initialize(nid(address(this)), 1, abi.encode(wrappedInit(us, n, d, 6, fixedRate, address(0), address(0))));
     }
 
     // ----- structs -----

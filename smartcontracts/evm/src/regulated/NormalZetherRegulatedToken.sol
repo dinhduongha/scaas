@@ -28,11 +28,16 @@ import {RegulatedBase} from "./RegulatedBase.sol";
 ///         (I8). `ALLOWLIST` (8) is outside the kind's mask (CTR-GOV-17).
 contract NormalZetherRegulatedToken is NormalZetherToken, RegulatedBase {
     /// @dev `implArgs = abi.encode(REGISTRY_CODEHASH)` (plan T29).
-    constructor(uint16 envVersion, Env memory env, bytes memory implArgs)
-        NormalZetherToken(envVersion, env, implArgs)
+    constructor(address factory_, bytes memory implArgs)
+        NormalZetherToken(factory_, implArgs)
         RegulatedBase(implArgs)
     {}
 
+
+    /// @dev The base kind's env checks, restated for the second base.
+    function _validateEnv(ChainEnv calldata env) internal view override(MetaTokenBase, NormalZetherToken) {
+        NormalZetherToken._validateEnv(env);
+    }
     function kind() public pure override(NormalZetherToken, MetaTokenBase) returns (uint8) {
         return TokenStore.KIND_NORMAL_ZETHER_REGULATED;
     }

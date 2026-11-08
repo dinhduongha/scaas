@@ -30,6 +30,7 @@ import {MetaTxLib} from "../../../src/common/MetaTxLib.sol";
 import {UACall} from "../../ua/UACall.sol";
 import {IConfidentialToken} from "../../../src/confidential/IConfidentialToken.sol";
 import {nid} from "../../helpers/Ids.sol";
+import {EnvKit} from "../../helpers/EnvKit.sol";
 
 bytes32 constant ZUID = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464;
 
@@ -99,7 +100,7 @@ abstract contract ZetherFixture is Test {
         // the curve's verifiers and disclosure, then the factory's env of the Zether kinds (plan 5g-Z2, CTR-ZTH-20)
         (ver, burnVer) = ZetherVerifiers.deploy();
         dis = new ZetherDisclosure();
-        factory = new OpenFactory(registrar, ZUID, 0);
+        factory = EnvKit.factory(registrar, ZUID, 0);
         stm = new ZetherStatements();
         reg = _uaRegistry();
         prover = new ZetherProver();

@@ -2,7 +2,11 @@
 pragma solidity ^0.8.24;
 
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
-import {IFactoryToken, requireRegOfKind} from "../factory/IFactoryToken.sol";
+import {
+    IFactoryToken, requireRegOfKind, ENV_ZETHER_TRANSFER, ENV_ZETHER_BURN, ENV_ZETHER_INNER_PRODUCT, ENV_ZETHER_DISCLOSURE
+} from "../factory/IFactoryToken.sol";
+import {ChainEnvCode} from "../factory/ChainEnvCode.sol";
+import {SigCheck} from "../common/SigCheck.sol";
 import {GovernanceLib} from "../governance/GovernanceLib.sol";
 import {TokenStore} from "../metatx/TokenStore.sol";
 import {IMetaTx} from "../metatx/IMetaTx.sol";
@@ -15,6 +19,11 @@ import {IConfidentialToken, IConfidentialWrappedToken} from "../confidential/ICo
 import {IZetherVerifier, IZetherBurnVerifier} from "./IZetherVerifier.sol";
 import {ZetherTypes} from "./ZetherTypes.sol";
 import {SSTORE2} from "../common/SSTORE2.sol";
+
+/// @dev What the Zether env check reads from a transfer / burn verifier besides `IZetherVerifierCommon`.
+interface IInnerProductBound {
+    function innerProduct() external view returns (address);
+}
 
 /// @title The confidential layer of the `*_ZETHER` kinds (CTR-ZTH-44, CTR-TOK-24), in the ERC-7201 namespace
 ///        `scaas.zether`: statements, verifier calls, account updates, roll-over, shield / unshield, disclosure entries.
@@ -43,6 +52,8 @@ library ZetherLib {
 
     /// @custom:storage-location erc7201:scaas.zether
     struct ZetherStorage {
+        /// @dev Unused since chain-neutral releases (plan T72): the transfer verifier is the clone's env dependency
+        ///      `ENV_ZETHER_TRANSFER`, read from its code (`_ver`); kept, the layout is pinned (test/v2/layout/).
         IZetherVerifier verifier;
         /// @dev Both modes share the verifier's slot (the offsets of the fields below are unchanged).
         ZetherTypes.DisclosureMode disclosureMode;
@@ -74,8 +85,8 @@ library ZetherLib {
         bytes32 chainUid;
         bytes32 tag;
         bytes32 binding;
-        /// @dev The implementation's burn verifier (CTR-ZTH-20): the unshield proofs. The transfer verifier is copied to
-        ///      storage at `init` (shield and roll-over use its group operations without an `Env`).
+        /// @dev The release's burn verifier (CTR-ZTH-20): the unshield proofs. The transfer verifier is read from the
+        ///      clone's code (`_ver`: shield and roll-over use its group operations without an `Env`).
         IZetherBurnVerifier burnVer;
         /// @dev The token's EIP-712 domain: the owner digests (TS-D19) are typed under it.
         bytes32 domainSeparator;
@@ -195,6 +206,38 @@ library ZetherLib {
 
     // ------------------------------------------------------------------ init
 
+    /// @notice The Zether kinds' checks of an instance env (CTR-ZTH-20; the constructor's before chain-neutral releases, now
+    ///         `validateEnv`, which the factory calls once per release and chain): four deps (`ENV_ZETHER_*`), never Hedera,
+    ///         a registry with code; the two verifiers and the disclosure with code, of one proof system, the inner-product
+    ///         verifier fixed inside both, and each verifier in its role (review 5g-Z2 P2-2): two addresses, the transfer
+    ///         verifier answers `ringSize()` and the burn verifier does not (a swapped or duplicated pair would accept shields
+    ///         and lock them).
+    function validateEnv(address[] calldata d, bool hedera, address registry) public view {
+        if (d.length != 4 || hedera || !SigCheck.isContract(registry)) revert IZetherToken.BadInit(); // never on Hedera
+        IZetherVerifier t = IZetherVerifier(d[ENV_ZETHER_TRANSFER]);
+        IZetherBurnVerifier b = IZetherBurnVerifier(d[ENV_ZETHER_BURN]);
+        address ip = d[ENV_ZETHER_INNER_PRODUCT];
+        if (!SigCheck.isContract(address(t)) || !SigCheck.isContract(address(b)) || !SigCheck.isContract(d[ENV_ZETHER_DISCLOSURE])
+            || t.proofSystemId() != b.proofSystemId() || ip == address(0)
+            || IInnerProductBound(address(t)).innerProduct() != ip || IInnerProductBound(address(b)).innerProduct() != ip
+            || address(t) == address(b) || !_answers(address(t), IZetherVerifier.ringSize.selector)
+            || _answers(address(b), IZetherVerifier.ringSize.selector)) {
+            revert IZetherToken.BadInit();
+        }
+    }
+
+    /// @dev `target` answers `sel()` with one word.
+    function _answers(address target, bytes4 sel) private view returns (bool) {
+        (bool ok, bytes memory r) = target.staticcall(abi.encodeWithSelector(sel));
+        return ok && r.length == 32;
+    }
+
+    /// @dev The transfer verifier: the clone's env dependency `ENV_ZETHER_TRANSFER` (its code, under the token's
+    ///      `DELEGATECALL`; chain-neutral spec §2.2: the copy into storage at `init` is dropped).
+    function _ver() internal view returns (IZetherVerifier) {
+        return IZetherVerifier(ChainEnvCode.dep(ENV_ZETHER_TRANSFER));
+    }
+
     /// @notice The kind's `_init` (every chain, CTR-ZTH-02 superseded 2026-10-31): `v` the release's transfer verifier (CTR-ZTH-20, running
     ///         on this chain: `VerifierUnsupportedOnThisChain`), scale, cap `≤ 2^54`, inner fee `< 2^64` and `< cap`,
     ///         `minDecoyFee < 2^64` with `confidentialFee + 16 · minDecoyFee` `< 2^64` and `< cap` (16 legs at most; no
@@ -227,7 +270,6 @@ library ZetherLib {
             revert IZetherToken.BadAuditorMode(c.auditorMode);
         }
         ZetherStorage storage s = $();
-        s.verifier = v;
         s.disclosureMode = ZetherTypes.DisclosureMode(c.disclosureMode);
         s.auditorMode = ZetherTypes.AuditorMode(c.auditorMode);
         s.shieldScale = c.shieldScale;
@@ -297,7 +339,7 @@ library ZetherLib {
         uint256 room = s.maxShielded - s.totalShielded;
         if (amount == 0 || amount > room) revert IZetherToken.AmountOutOfRange(amount, room);
         s.totalShielded += amount;
-        _credit(s, ua, s.verifier.g1MulBase(amount), "");
+        _credit(s, ua, _ver().g1MulBase(amount), "");
         emit IConfidentialToken.Shielded(ZetherTypes.UA.unwrap(ua), from, amount, s.acct[ua].pendingSeq);
     }
 
@@ -567,7 +609,7 @@ library ZetherLib {
 
     /// @notice The statement context of the token itself (`address(this)` under `DELEGATECALL`).
     function ctx(ZetherStorage storage s, Env memory e) internal view returns (Ctx memory c) {
-        c.ver = s.verifier;
+        c.ver = _ver();
         c.burnVer = e.burnVer;
         c.registry = e.registry;
         c.token = address(this);
@@ -839,8 +881,9 @@ library ZetherLib {
     function _credit(ZetherStorage storage s, ZetherTypes.UA ua, bytes memory cPt, bytes memory dPt) private {
         Account storage a = s.acct[ua];
         uint256 p = s.p;
-        a.pendC = s.verifier.g1Add(_pt(a.pendC, p), cPt);
-        if (dPt.length != 0) a.pendD = s.verifier.g1Add(_pt(a.pendD, p), dPt);
+        IZetherVerifier v = _ver();
+        a.pendC = v.g1Add(_pt(a.pendC, p), cPt);
+        if (dPt.length != 0) a.pendD = v.g1Add(_pt(a.pendD, p), dPt);
         a.pendingSeq += 1;
     }
 
@@ -849,8 +892,9 @@ library ZetherLib {
         Account storage a = s.acct[ua];
         if (a.pendingSeq == a.lastRolledPendingSeq) return;
         uint256 p = s.p;
-        a.accC = s.verifier.g1Add(_pt(a.accC, p), _pt(a.pendC, p));
-        a.accD = s.verifier.g1Add(_pt(a.accD, p), _pt(a.pendD, p));
+        IZetherVerifier v = _ver();
+        a.accC = v.g1Add(_pt(a.accC, p), _pt(a.pendC, p));
+        a.accD = v.g1Add(_pt(a.accD, p), _pt(a.pendD, p));
         delete a.pendC;
         delete a.pendD;
         a.accSeq += 1;

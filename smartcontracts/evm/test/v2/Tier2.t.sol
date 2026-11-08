@@ -310,13 +310,14 @@ contract Tier2Test is V2Fixture {
 
     function test_initRefusesItselfAsUnderlying() public {
         address impl = _wrappedImpl();
-        address predicted = Clones.predictDeterministicAddress(impl, bytes32("self"));
-        address c = Clones.cloneDeterministic(impl, bytes32("self"));
+        // the clone with its env (chain-neutral releases) at a known CREATE address
+        address predicted = vm.computeCreateAddress(address(this), vm.getNonce(address(this)));
+        address c = _cloneEnv(impl);
         assertEq(c, predicted);
         IFactoryToken.TokenConfig memory cfg =
             abi.decode(_singleInit(c, 6, 1, 1, _fixedRate()), (IFactoryToken.TokenConfig));
         vm.expectRevert(abi.encodeWithSelector(IWrappedToken.UnderlyingInvalid.selector, c));
-        MetaTokenBase(c).initialize(address(this), 1, abi.encode(cfg));
+        MetaTokenBase(c).initialize(nid(address(this)), 1, abi.encode(cfg));
     }
 
     function test_boundsAreInclusive() public {

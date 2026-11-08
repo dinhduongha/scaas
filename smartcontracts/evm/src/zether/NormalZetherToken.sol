@@ -24,12 +24,9 @@ import {IZetherToken} from "./IZetherToken.sol";
 ///         (the regulated flags are refused, CTR-ZTH-47). Built by `OpenFactory.createToken` with `conf` set and `legs`,
 ///         `rate` empty. Never on Hedera (`ZetherLayer` refuses a Hedera env).
 contract NormalZetherToken is NormalToken, ZetherLayer {
-    /// @dev The factory's append (`OpenFactory.deployImplementation`, plan 5g-Z2): the release's `Env` (Hedera off: `ZetherLayer`
-    ///      refuses a Hedera env); no `implArgs`.
-    constructor(uint16 envVersion, Env memory env, bytes memory implArgs)
-        NormalToken(envVersion, env, implArgs)
-        ZetherLayer(env)
-    {}
+    /// @dev The factory's append (`OpenFactory.deployImplementation`, chain-neutral spec §2.1): its address; no
+    ///      `implArgs`. The env (Hedera off) is checked by `validateEnv` (`ZetherLib`).
+    constructor(address factory_, bytes memory implArgs) NormalToken(factory_, implArgs) {}
 
     function kind() public pure virtual override(NormalToken, MetaTokenBase) returns (uint8) {
         return TokenStore.KIND_NORMAL_ZETHER;
@@ -49,11 +46,16 @@ contract NormalZetherToken is NormalToken, ZetherLayer {
         (uint256 features_, uint256 locked, bytes32 owner_, uint64 delay, address rescueTo_, GovernanceLib.Roles memory roles) =
             ZetherLib.initNormal(initArgs, kind());
         GovernanceLib.init(features_, locked, owner_, delay, rescueTo_, roles, _validBits(), _roleBits(), _contractOnlyBits(),
-            _REGISTRY);
-        (address holder, uint256 supply) = ZetherLib.initNormalConf(initArgs, TRANSFER_VERIFIER);
+            _registry());
+        (address holder, uint256 supply) = ZetherLib.initNormalConf(initArgs, _transferVerifier());
         if (supply != 0) _mint(holder, supply);
     }
 
+
+    /// @dev The layer's env checks, restated for the second base.
+    function _validateEnv(ChainEnv calldata env) internal view virtual override(MetaTokenBase, ZetherLayer) {
+        ZetherLayer._validateEnv(env);
+    }
     function _domainName() internal pure virtual override(ERC20MetaTx, ZetherLayer) returns (string memory) {
         return ZetherLayer._domainName();
     }

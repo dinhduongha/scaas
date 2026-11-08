@@ -25,11 +25,16 @@ import {RegulatedBase} from "./RegulatedBase.sol";
 ///         the kind's mask (CTR-GOV-17).
 contract NormalPqzRegulatedToken is NormalPqzToken, RegulatedBase {
     /// @dev `implArgs = abi.encode(REGISTRY_CODEHASH)` (plan T29).
-    constructor(uint16 envVersion, Env memory env, bytes memory implArgs)
-        NormalPqzToken(envVersion, env, implArgs)
+    constructor(address factory_, bytes memory implArgs)
+        NormalPqzToken(factory_, implArgs)
         RegulatedBase(implArgs)
     {}
 
+
+    /// @dev The base kind's env checks, restated for the second base.
+    function _validateEnv(ChainEnv calldata env) internal view override(MetaTokenBase, NormalPqzToken) {
+        NormalPqzToken._validateEnv(env);
+    }
     function kind() public pure override(NormalPqzToken, MetaTokenBase) returns (uint8) {
         return TokenStore.KIND_NORMAL_PQZ_REGULATED;
     }

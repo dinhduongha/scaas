@@ -26,10 +26,12 @@ import {MockERC20} from "../helpers/Mocks.sol";
 import {normalInit, wrappedInit, Rate} from "../v2/helpers/V2Fixture.sol";
 import {UALedgerBase} from "./UALedgerBase.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
+import {nid} from "../helpers/Ids.sol";
 
 /// Exposes `_uaMint` (accounts.md CTR-UA-28).
 contract UAMintHarness is NormalToken {
-    constructor(bytes32 uid, address reg) NormalToken(1, plainEnv(msg.sender, address(0), uid, reg, false), "") {}
+    constructor() NormalToken(msg.sender, "") {}
 
     function mintUA(bytes32 to, uint256 v) external {
         _uaMint(to, v);
@@ -71,8 +73,8 @@ contract UAReceiversTest is UALedgerBase {
     }
 
     function _harness(address registry_) internal returns (UAMintHarness h) {
-        h = UAMintHarness(Clones.clone(address(new UAMintHarness(chainUidA, registry_))));
-        h.initialize(address(this), 1, abi.encode(normalInit("H", "H", 6, 0, address(0), address(this))));
+        h = UAMintHarness(EnvKit.clone(address(new UAMintHarness()), EnvKit.env(chainUidA, registry_, address(0), false)));
+        h.initialize(nid(address(this)), 1, abi.encode(normalInit("H", "H", 6, 0, address(0), address(this))));
     }
 
     // ----- _uaMint -----
@@ -130,10 +132,10 @@ contract UAReceiversTest is UALedgerBase {
 
     /// A NORMAL clone on `REG_L` with `features` and no minter.
     function _normal(uint256 features) internal returns (NormalToken t) {
-        t = NormalToken(Clones.clone(address(new NormalToken(1, plainEnv(address(this), address(0), chainUidA, REG_L, false), ""))));
+        t = NormalToken(EnvKit.clone(address(new NormalToken(address(this), "")), EnvKit.env(chainUidA, REG_L, address(0), false)));
         IFactoryToken.TokenConfig memory c = normalInit("N", "N", 6, 1_000, alice, address(0));
         c.features = features;
-        t.initialize(address(this), 1, abi.encode(c));
+        t.initialize(nid(address(this)), 1, abi.encode(c));
     }
 
     // ----- wrapToUA -----
@@ -216,8 +218,8 @@ contract UAReceiversTest is UALedgerBase {
         (one[0], one[1]) = (1, 1);
         Rate memory adj = Rate(true, address(this), 2 days, 1_000);
         WrappedToken w =
-            WrappedToken(Clones.clone(address(new WrappedToken(1, plainEnv(address(this), address(0), chainUidA, REG_L, false), ""))));
-        w.initialize(address(this), 1, abi.encode(wrappedInit(us, one, one, 6, adj, address(this), address(0))));
+            WrappedToken(EnvKit.clone(address(new WrappedToken(address(this), "")), EnvKit.env(chainUidA, REG_L, address(0), false)));
+        w.initialize(nid(address(this)), 1, abi.encode(wrappedInit(us, one, one, 6, adj, address(this), address(0))));
         und.mint(alice, 1_000);
         und2.mint(alice, 1_000);
         vm.startPrank(alice);
@@ -257,12 +259,12 @@ contract UAReceiversTest is UALedgerBase {
 
     /// A one-leg 1:1 wrapper of `leg` with the ledger off (registry 0).
     function _offWrapper(address leg) internal returns (WrappedToken w) {
-        w = WrappedToken(Clones.clone(address(new WrappedToken(1, plainEnv(address(this), address(0), chainUidA, address(0), false), ""))));
+        w = WrappedToken(EnvKit.clone(address(new WrappedToken(address(this), "")), EnvKit.env(chainUidA, address(0), address(0), false)));
         address[] memory us = new address[](1);
         uint256[] memory one = new uint256[](1);
         (us[0], one[0]) = (leg, 1);
         Rate memory fixedRate;
-        w.initialize(address(this), 1, abi.encode(wrappedInit(us, one, one, 6, fixedRate, address(0), address(0))));
+        w.initialize(nid(address(this)), 1, abi.encode(wrappedInit(us, one, one, 6, fixedRate, address(0), address(0))));
     }
 
     // ----- unwrapToUA -----
@@ -302,8 +304,8 @@ contract UAReceiversTest is UALedgerBase {
         wrpN.unwrapToUA(address(0), 100, uaP, 0);
         vm.stopPrank();
         NormalToken off =
-            NormalToken(Clones.clone(address(new NormalToken(1, plainEnv(address(this), address(0), chainUidA, address(0), false), ""))));
-        off.initialize(address(this), 1, abi.encode(normalInit("Off", "OFF", 6, 0, address(0), address(this))));
+            NormalToken(EnvKit.clone(address(new NormalToken(address(this), "")), EnvKit.env(chainUidA, address(0), address(0), false)));
+        off.initialize(nid(address(this)), 1, abi.encode(normalInit("Off", "OFF", 6, 0, address(0), address(this))));
         WrappedToken w = _wrapper(address(off));
         off.mint(address(this), 100);
         off.approve(address(w), 100);
@@ -346,8 +348,8 @@ contract UAReceiversTest is UALedgerBase {
         (one[0], one[1]) = (1, 1);
         Rate memory fixedRate;
         WrappedToken w =
-            WrappedToken(Clones.clone(address(new WrappedToken(1, plainEnv(address(this), address(0), chainUidA, REG_L, false), ""))));
-        w.initialize(address(this), 1, abi.encode(wrappedInit(us, one, one, 6, fixedRate, address(0), address(0))));
+            WrappedToken(EnvKit.clone(address(new WrappedToken(address(this), "")), EnvKit.env(chainUidA, REG_L, address(0), false)));
+        w.initialize(nid(address(this)), 1, abi.encode(wrappedInit(us, one, one, 6, fixedRate, address(0), address(0))));
         und.mint(alice, 50);
         vm.startPrank(alice);
         und.approve(address(w), 50);

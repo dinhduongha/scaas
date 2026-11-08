@@ -29,15 +29,16 @@ abstract contract UAMetaTxBase is MetaTxBase {
     // keccak256(abi.encode(uint256(keccak256("scaas.ua.ledger")) - 1)) & ~bytes32(uint256(0xff))
     bytes32 private constant _UA_STORAGE = 0x9e2def943e5a7ec3982e5d00524104579a6b98ce8b31343ac0092718cc04e900;
 
-    /// @notice The UA registry of this chain (an implementation immutable; 0 = the UA path is off).
-    address internal immutable _REGISTRY;
+    /// @notice The UA registry of this chain (a constructor immutable; 0 = the UA path is off). A factory-made contract
+    ///         passes 0 and reads its clone's code instead (`_registry`, `_hedera`, `_mtxCtx`; CTR-TOK-29).
+    address private immutable _REGISTRY;
     /// @notice The EIP-1167 clone code hash of the chain's `SmartKeyAccount` implementation (0 = none): such a signer
     ///         gets 400k gas for ERC-1271, every other contract wallet 50k.
-    bytes32 internal immutable _SMART_KEY_CLONE_CODEHASH;
+    bytes32 private immutable _SMART_KEY_CLONE_CODEHASH;
 
-    /// @notice Set on implementations deployed for Hedera (CTR-TOK-23): 64-byte signatures from accounts without code
-    ///         take the HIP-632 path.
-    bool public immutable IS_HEDERA;
+    /// @notice Set on contracts deployed for Hedera (CTR-TOK-23): 64-byte signatures from accounts without code take the
+    ///         HIP-632 path.
+    bool private immutable _IS_HEDERA;
 
     constructor(string memory domainName, bytes32 chainUid_, address registry_, address smartKeyAccountImpl_, bool hedera_)
         MetaTxBase(domainName, chainUid_)
@@ -45,14 +46,23 @@ abstract contract UAMetaTxBase is MetaTxBase {
         _REGISTRY = registry_;
         _SMART_KEY_CLONE_CODEHASH = smartKeyAccountImpl_ == address(0) ? bytes32(0) : keccak256(abi.encodePacked(
             hex"363d3d373d3d3d363d73", smartKeyAccountImpl_, hex"5af43d82803e903d91602b57fd5bf3"));
-        IS_HEDERA = hedera_;
+        _IS_HEDERA = hedera_;
     }
 
     // ------------------------------------------------------------------ views
 
     function registry() public view virtual returns (address) {
-        return _REGISTRY;
+        return _registry();
     }
+
+    /// @notice CTR-TOK-23: the Hedera flag (the name of the immutable it was).
+    function IS_HEDERA() external view returns (bool) {
+        return _hedera();
+    }
+
+    function _registry() internal view virtual returns (address) { return _REGISTRY; }
+
+    function _hedera() internal view virtual returns (bool) { return _IS_HEDERA; }
 
     /// @notice The one nonce map (CTR-UA-26), keyed by id: a native address zero-padded, a derived UA as itself.
     function mtxNonce(bytes32 from, uint256 batch) public view virtual returns (uint256) {
@@ -108,9 +118,10 @@ abstract contract UAMetaTxBase is MetaTxBase {
 
     // ------------------------------------------------------------------ the pipeline on MtxPipelineLib
 
-    /// @notice This contract's immutables for `MtxPipelineLib` (metatx split R2): the only place that builds a `Ctx`.
-    function _mtxCtx() internal view returns (MtxPipelineLib.Ctx memory) {
-        return MtxPipelineLib.Ctx(_domainSeparatorV4(), _REGISTRY, _SMART_KEY_CLONE_CODEHASH, IS_HEDERA);
+    /// @notice This contract's immutables for `MtxPipelineLib` (metatx split R2): the only place that builds a `Ctx`; a
+    ///         factory-made contract reads its code's head once instead (`MetaTokenBase`).
+    function _mtxCtx() internal view virtual returns (MtxPipelineLib.Ctx memory) {
+        return MtxPipelineLib.Ctx(_domainSeparatorV4(), _REGISTRY, _SMART_KEY_CLONE_CODEHASH, _IS_HEDERA);
     }
 
     /// @dev What the library needs of `data` and of this kind's hooks: selector (zero-padded when shorter than 4),
@@ -196,7 +207,7 @@ abstract contract UAMetaTxBase is MetaTxBase {
     }
 
     function _uaOn() internal view {
-        if (_REGISTRY == address(0)) revert IUALedger.UALedgerOff();
+        if (_registry() == address(0)) revert IUALedger.UALedgerOff();
     }
 
     function _ua() internal pure returns (UALedgerStorage storage $) {

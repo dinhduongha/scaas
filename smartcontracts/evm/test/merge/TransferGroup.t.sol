@@ -22,6 +22,8 @@ import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
 import {normalInit, wrappedInit, Rate} from "../v2/helpers/V2Fixture.sol";
 import {IRig, KindRig, PlainRig, PqzRig, ZetherRig, Tk} from "../metatx/helpers/KindRigs.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
+import {nid} from "../helpers/Ids.sol";
 
 /// The merged entries of ua-mtx-merge T2 (spec §2.1, R1, R4, R20, R21, R27, R28), called by selector: this file compiles on
 /// the tree before T2 too, so each test is red there on its own (plan T2 step 3).
@@ -100,7 +102,7 @@ contract RelayProbe {
 contract HookedNormal is NormalToken {
     uint256 public hits;
 
-    constructor(IFactoryToken.Env memory env) NormalToken(1, env, "") {}
+    constructor(address f) NormalToken(f, "") {}
 
     function _update(address from, address to, uint256 value) internal override {
         ++hits;
@@ -185,12 +187,12 @@ contract TransferGroupTest is Test {
 
     function _wrappedOff() internal returns (address w) {
         MockERC20 u = new MockERC20("U", "U", 6);
-        w = Clones.clone(address(new WrappedToken(1, plainEnv(address(this), address(0), bytes32(uint256(7)), address(0), false), "")));
+        w = EnvKit.clone(address(new WrappedToken(address(this), "")), EnvKit.env(bytes32(uint256(7)), address(0), address(0), false));
         address[] memory us = new address[](1);
         uint256[] memory one = new uint256[](1);
         (us[0], one[0]) = (address(u), 1);
         Rate memory r;
-        WrappedToken(payable(w)).initialize(address(this), 1, abi.encode(wrappedInit(us, one, one, 6, r, address(0), address(0))));
+        WrappedToken(payable(w)).initialize(nid(address(this)), 1, abi.encode(wrappedInit(us, one, one, 6, r, address(0), address(0))));
         u.mint(signer, 10_000_000);
         vm.startPrank(signer);
         u.approve(w, 10_000_000);
@@ -764,8 +766,8 @@ contract TransferGroupTest is Test {
     /// A hook in `_update` alone sees a direct transfer and misses a relayed one: every signed transfer moves through
     /// `_uaMove`, which calls `ERC20._update` directly. The stated risk, pinned: CTR-GOV-17 must hook `_uaMove` too.
     function test_regulatedHookSeatIsUaMove() public {
-        address h = Clones.clone(address(new HookedNormal(plainEnv(address(this), address(0), bytes32(uint256(7)), address(0), false))));
-        HookedNormal(h).initialize(address(this), 1, abi.encode(normalInit("Hooked", "HK", 6, 1_000, signer, address(this))));
+        address h = EnvKit.clone(address(new HookedNormal(address(this))), EnvKit.env(bytes32(uint256(7)), address(0), address(0), false));
+        HookedNormal(h).initialize(nid(address(this)), 1, abi.encode(normalInit("Hooked", "HK", 6, 1_000, signer, address(this))));
         uint256 h0 = HookedNormal(h).hits();
         vm.prank(signer);
         IERC20(h).transfer(payee, 1);

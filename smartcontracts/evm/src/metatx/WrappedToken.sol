@@ -56,9 +56,9 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
         "UAUnwrapToUA(bytes32 from,address underlying,uint256 wrapped,bytes32 to,uint256 minOut,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
     );
 
-    /// @dev The factory's append (`OpenFactory.deployImplementation`, plan 5g-Z2): the release's `Env`; this kind takes
-    ///      no `implArgs`.
-    constructor(uint16, Env memory env, bytes memory) MetaTokenBase(env) {}
+    /// @dev The factory's append (`OpenFactory.deployImplementation`, chain-neutral spec §2.1): its address; this kind
+    ///      takes no `implArgs`.
+    constructor(address factory_, bytes memory) MetaTokenBase(factory_) {}
 
     function kind() public pure virtual override returns (uint8) {
         return TokenStore.KIND_WRAPPED;
@@ -76,8 +76,8 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
     /// @dev 5-9 are not in the kind's mask: `init` refuses each with `FeatureInvalidForKind` (regulated-kinds spec Q3).
     function _init(TokenConfig memory cfg) internal virtual override {
         _requireUnused(cfg, true, false, false, true);
-        WrappedLib.initToken(cfg, IS_HEDERA, TokenStore.KIND_WRAPPED, _validBits(), _roleBits(), _contractOnlyBits(),
-            _REGISTRY);
+        WrappedLib.initToken(cfg, _hedera(), TokenStore.KIND_WRAPPED, _validBits(), _roleBits(), _contractOnlyBits(),
+            _registry());
     }
 
     // ------------------------------------------------------------------ wrap / unwrap / reserve

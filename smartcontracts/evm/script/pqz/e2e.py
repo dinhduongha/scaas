@@ -458,9 +458,10 @@ UMTX_S = "(bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address)
 # the address it was, CTR-GOV-01 Change)
 CFG = ("t", ["b", "b", "w", "w", "w", "w", ("t", ["w"] * 5), "w", "w", ("a", ("t", ["w", "w", "w"])), ("t", ["w", "w"]),
              ("t", ["b", "w", "w", "w", "w", "w", "w"]), "w", "w", "w", ("t", ["w"] * 5)])
-# IFactoryToken.Env (plan 5g-Z2): factory, chainUid, registry, smartKeyAccountImpl, hedera, deps, libs, libCodeHashes, govRouter
-ENV = ("t", ["w", "w", "w", "w", "w", ("a", "w"), ("a", "w"), ("a", "w"), "w"])
-ENV_S = "(address,bytes32,address,address,bool,address[],address[],bytes32[],address)"
+# IFactoryToken.Env (plan 5g-Z2; chain-neutral releases, plan T71: the factory fills its own chainUid and router):
+# registry, smartKeyAccountImpl, hedera, deps, params, libs, libCodeHashes
+ENV = ("t", ["w", "w", "w", ("a", "w"), ("a", "w"), ("a", "w"), ("a", "w")])
+ENV_S = "(address,address,bool,address[],bytes32[],address[],bytes32[])"
 
 
 def ua_binding(tok, at, m):
@@ -1117,7 +1118,13 @@ def run(kd, kr, ke):
     # each deployed once by D.lib; the PQZ kinds' one dependency is this run's UAPqzVerifier, CTR-ZTH-20), then the release
     # from the init code without arguments on env 1, named explicitly (owner 2026-10-20; the factory appends
     # envVersion, env, implArgs)
-    fac = D.deploy("OpenFactory", encs(["w"] * 3, [sd.addr, uid, 0]))
+    # chain-neutral releases (plan T71): the registrar the only constructor argument, then this chain's values once
+    # (configureChain: chain_uid, notice period 0, the router above, a reference block of this chain, Fable P1-1)
+    fac = D.deploy("OpenFactory", encs(["w"], [sd.addr]))
+    ref = int(rpc("eth_blockNumber", []), 16) - 1
+    ref_hash = bytes.fromhex(rpc("eth_getBlockByNumber", [hex(ref), False])["hash"][2:])
+    sd.send(fac, cd("configureChain(bytes32,uint64,address,uint256,bytes32)", ["w"] * 5, uid, 0, router, ref, ref_hash),
+            "configureChain")
     # ua-mtx-merge T31 (regulated-kinds spec §6.1): the regulated PQZ kinds 12, 13 too, each on its base kind's env with
     # `RegulatedLib` in the link closure (D.linked finds it), `implArgs` = abi.encode(REGISTRY_CODEHASH), the canonical
     # `ComplianceRegistry` runtime's code hash (F-11); this run creates no regulated token (the regulated rows are the forge
@@ -1126,7 +1133,7 @@ def run(kd, kr, ke):
         require_release_gas(name)
         code, libs = D.linked(name)
         hashes = [keccak256(bytes.fromhex(rpc("eth_getCode", [a, "latest"])[2:])) for a in libs]
-        env = [fac, uid, reg, 0, 0, [pqv] if kind else [], libs, hashes, router]
+        env = [reg, 0, 0, [pqv] if kind else [], [], libs, hashes]
         sd.send(fac, cd(f"publishEnv(uint8,uint16,{ENV_S})", ["w", "w", ENV], kind, 1, env), f"publishEnv(kind {kind}, 1)")
         r = sd.send(fac, cd("deployImplementation(uint8,uint64,uint16,bytes,bytes)", ["w", "w", "w", "b", "b"],
                                kind, 1, 1, code, impl_args(kind)),

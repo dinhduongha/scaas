@@ -8,7 +8,7 @@ import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 /// PD5: exposes the DX7 sold-part check `_takerSoldCheck`, whose `PriceLimit` case the entry cannot reach (the token
 /// already checked the larger full fill against the same floor at the pull).
 contract HybridHarness is SCaaSDex {
-    constructor(IFactoryToken.Env memory env) SCaaSDex(1, env, "") {}
+    constructor(address f) SCaaSDex(f, "") {}
 
     function takerSoldCheck(bytes32 h, uint256 sold, uint256 recv, ITradeToken.UATradeOrder memory o, uint256 leftover)
         external

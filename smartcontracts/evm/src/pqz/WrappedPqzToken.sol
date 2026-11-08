@@ -40,14 +40,10 @@ contract WrappedPqzToken is WrappedToken, PqzLayer, IPqzWrappedToken {
         "UAPqzUnshieldUnwrap(bytes32 from,PqzBurnArgs args,Unwrap unwrap,bytes proof,bytes accHint,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)PqzBurnArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,bytes u,bytes vFrom)Unwrap(address underlying,bytes32 recipient,uint256 amount,uint256 minOut)"
     );
 
-    /// @dev The factory's append (`OpenFactory.deployImplementation`, plan 5g-Z2): the release's `Env`, whose
-    ///      `deps[ENV_PQZ_VERIFIER]` is the release's `UAPqzVerifier` (CTR-ZTH-20 / CTR-PQZ-10); no `implArgs`.
-    constructor(uint16 envVersion, Env memory env, bytes memory implArgs)
-        WrappedToken(envVersion, env, implArgs)
-        PqzLayer(env)
-    {
-        if (!SigCheck.isContract(env.registry)) revert BadInit();
-    }
+    /// @dev The factory's append (`OpenFactory.deployImplementation`, chain-neutral spec §2.1): its address; no
+    ///      `implArgs`. The env (`deps[ENV_PQZ_VERIFIER]` the release's `UAPqzVerifier`, CTR-ZTH-20 / CTR-PQZ-10; a
+    ///      registry) is checked by `validateEnv` (`PqzStateLib`).
+    constructor(address factory_, bytes memory implArgs) WrappedToken(factory_, implArgs) {}
 
     /// @dev The legs (`WrappedToken`), restated for the second base.
     function underlyings() public view virtual override(WrappedToken, MetaTokenBase) returns (address[] memory) {
@@ -75,7 +71,7 @@ contract WrappedPqzToken is WrappedToken, PqzLayer, IPqzWrappedToken {
     function _init(TokenConfig memory) internal override(WrappedToken, MetaTokenBase) {}
 
     function _initRaw(bytes calldata initArgs) internal virtual override {
-        PqzWrappedLib.init(initArgs, _REGISTRY, PQZ_VERIFIER, kind(), _validBits(), _roleBits(), _contractOnlyBits());
+        PqzWrappedLib.init(initArgs, _registry(), _pqzVerifier(), kind(), _validBits(), _roleBits(), _contractOnlyBits());
     }
 
     // ------------------------------------------------------------------ wrap-shield / unshield-unwrap (CTR-PQZ-22)
@@ -89,7 +85,7 @@ contract WrappedPqzToken is WrappedToken, PqzLayer, IPqzWrappedToken {
         (,, uint256 minted) = WrappedLib.wrap(WrappedLib.indexOf(underlying), amountIn, m, msg.value, totalSupply());
         uint256 scale = PqzCore.$().shieldScale;
         if (minted % scale != 0) revert AmountNotScaled(minted, scale);
-        PqzStateLib.shield(toUA, minted / scale, m, _REGISTRY);
+        PqzStateLib.shield(toUA, minted / scale, m, _registry());
         _poolMove(bytes32(0), MetaTxLib.pad(MetaTxLib.SHIELD_POOL), minted);
     }
 
@@ -171,6 +167,11 @@ contract WrappedPqzToken is WrappedToken, PqzLayer, IPqzWrappedToken {
 
     // ------------------------------------------------------------------ the layer's hooks
 
+
+    /// @dev The layer's env checks, restated for the second base.
+    function _validateEnv(ChainEnv calldata env) internal view virtual override(MetaTokenBase, PqzLayer) {
+        PqzLayer._validateEnv(env);
+    }
     function _domainName() internal pure virtual override(ERC20MetaTx, PqzLayer) returns (string memory) {
         return PqzLayer._domainName();
     }

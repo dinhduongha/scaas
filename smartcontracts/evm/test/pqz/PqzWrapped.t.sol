@@ -137,9 +137,8 @@ contract PqzWrappedTest is PqzFixture {
         Vm.Gas memory vg = vm.lastCallGas();
         uint256 txGas = vg.gasTotalUsed;
         emit log_named_uint("WrappedPqzToken deployImplementation state gas (EIP-8037)", uint256(int256(vg.gasStateUsed)));
-        uint256 init = code.length + abi.encode(uint16(1), factory.envOf(IOpenFactory.TokenKind.WRAPPED_PQZ, 1),
-            bytes("")).length;
-        emit log_named_uint("WrappedPqzToken init code bytes (with the env)", init);
+        uint256 init = code.length + abi.encode(address(factory), bytes("")).length; // chain-neutral: no env appended
+        emit log_named_uint("WrappedPqzToken init code bytes (with the factory's append)", init);
         emit log_named_uint("WrappedPqzToken runtime bytes", a.code.length);
         emit log_named_uint("WrappedPqzToken deployImplementation tx gas", txGas);
         assertGt(init, 49_152, "over EIP-3860: 64 KiB chains only");

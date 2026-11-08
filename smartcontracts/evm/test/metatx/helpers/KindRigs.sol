@@ -21,6 +21,9 @@ import {ZetherFixture} from "../../zether/helpers/ZetherFixture.sol";
 import {MockERC20} from "../../helpers/Mocks.sol";
 import {Catalogue, pqzEnv, plainEnv} from "../../helpers/Catalogue.sol";
 import {normalInit} from "../../v2/helpers/V2Fixture.sol";
+import {EnvKit} from "../../helpers/EnvKit.sol";
+import {nid} from "../../helpers/Ids.sol";
+import {instanceEnv} from "../../helpers/Catalogue.sol";
 
 // The seven token clones of the metatx split's parity rigs (`NORMAL`, `WRAPPED`, `NORMAL_LEDGEROFF`, `NORMAL_PQZ`,
 // `WRAPPED_PQZ`, `NORMAL_ZETHER`, `WRAPPED_ZETHER`), their `init` copied unchanged from `MetaTxParity.t.sol`. The parity
@@ -96,8 +99,8 @@ contract PlainRig is UALedgerBase, KindRig {
         wrp.transferToUA(uaP, 2_000_000);
         tks.push(Tk("WRAPPED", address(wrp), ALICE_PK, alice, BOB_PK, bob, FEE_TO, RELAYER, uaP, 1, address(und), dex, 0, 0));
         // NONE with no UA registry (the ledger off)
-        address off = Clones.clone(address(new NormalToken(1, plainEnv(address(this), address(0), chainUidA, address(0), false), "")));
-        NormalToken(off).initialize(address(this), 1, abi.encode(normalInit("Points", "PTS", 6, 10_000_000, alice, address(this))));
+        address off = EnvKit.clone(address(new NormalToken(address(this), "")), EnvKit.env(chainUidA, address(0), address(0), false));
+        NormalToken(off).initialize(nid(address(this)), 1, abi.encode(normalInit("Points", "PTS", 6, 10_000_000, alice, address(this))));
         tks.push(Tk("NORMAL_LEDGEROFF", off, ALICE_PK, alice, BOB_PK, bob, FEE_TO, RELAYER, 0, 2, address(0), dex, 0, 0));
     }
 }
@@ -142,9 +145,9 @@ contract PqzRig is PqzFixture, KindRig {
 
     /// The test plays the factory: a CREATE clone (its address does not depend on the implementation's code).
     function _pClone(address impl, IFactoryToken.TokenConfig memory c) internal returns (address t) {
-        t = Clones.clone(impl);
+        t = EnvKit.clone(impl, instanceEnv(pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv)), PQZ_UID, address(0)));
         vm.prank(address(factory));
-        MetaTokenBase(t).initialize(address(this), 1, abi.encode(c));
+        MetaTokenBase(t).initialize(nid(address(this)), 1, abi.encode(c));
     }
 }
 
@@ -187,8 +190,8 @@ contract ZetherRig is ZetherFixture, KindRig {
     }
 
     function _pClone(address impl, IFactoryToken.TokenConfig memory c) internal returns (address t) {
-        t = Clones.clone(impl);
+        t = EnvKit.clone(impl, instanceEnv(_zenv(), factory.chainUid(), address(0)));
         vm.prank(address(factory));
-        MetaTokenBase(t).initialize(address(this), 1, abi.encode(c));
+        MetaTokenBase(t).initialize(nid(address(this)), 1, abi.encode(c));
     }
 }

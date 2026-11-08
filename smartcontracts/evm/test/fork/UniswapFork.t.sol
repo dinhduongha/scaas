@@ -16,6 +16,7 @@ import {IUniswapV3Factory} from "../../src/dex/uniswap/IUniswapV3.sol";
 import {UID_, normalInit} from "../v2/helpers/V2Fixture.sol";
 import {Catalogue} from "../helpers/Catalogue.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// Minimal ABIs of the mainnet Uniswap contracts the fork test calls (written here, no Uniswap source).
 interface ISwapRouter02 {
@@ -111,7 +112,7 @@ contract UniswapForkTest is Test {
         // The SCaaS stack is deployed before the fork, under foundry.toml's gas limit, and kept across it: on the fork
         // every call is capped at the block's 36 M gas, below what Amsterdam's code deposit charges for the 27-39 KiB
         // implementations (NormalToken, SCaaSDex).
-        OpenFactory f = new OpenFactory(address(this), UID_, 0);
+        OpenFactory f = EnvKit.factory(address(this), UID_, 0);
         address tokImpl = Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode,
             address(0), address(0), false);
         address dexImpl = Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));

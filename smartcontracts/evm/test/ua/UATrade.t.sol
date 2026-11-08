@@ -18,6 +18,8 @@ import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {UALedgerBase} from "./UALedgerBase.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
+import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// dex.md CTR-DEX-25 (UA-5b): the sell token's side of a `UATradeOrder` — CTR-DEX-15 steps 1–8 on ids, step 4 under the
 /// UA purpose `trade`, the move through the UA ledger, one `minNonce` floor per id across both structs, and the
@@ -294,9 +296,9 @@ contract UATradeTest is UALedgerBase {
     }
 
     function test_ledgerOff_everyUATradeFunction() public {
-        NormalToken off = NormalToken(Clones.clone(address(
-            new NormalToken(1, plainEnv(address(this), address(0), chainUidA, address(0), false), ""))));
-        off.initialize(address(this), 1, abi.encode(normalInit("Off", "OFF", 6, 1_000_000, alice, address(this))));
+        NormalToken off = NormalToken(EnvKit.clone(address(new NormalToken(address(this), "")),
+            EnvKit.env(chainUidA, address(0), address(0), false)));
+        off.initialize(nid(address(this)), 1, abi.encode(normalInit("Off", "OFF", 6, 1_000_000, alice, address(this))));
         ITradeToken.UATradeOrder memory o = _o(_pad(alice), 1000, 2000);
         // ua-mtx-merge T3, meaning (C, R9; pulled forward from T6 for R39's `mtxWrapOrder`): `uaTrade` needs a registry only
         // for a derived seller; a native seller's order is checked by its own key (here an empty signature, refused), the

@@ -15,13 +15,16 @@ import {NormalToken} from "../../../src/metatx/NormalToken.sol";
 import {WrappedToken} from "../../../src/metatx/WrappedToken.sol";
 import {plainEnv} from "../../helpers/Catalogue.sol";
 import {nid} from "../../helpers/Ids.sol";
+import {EnvKit} from "../../helpers/EnvKit.sol";
 
 bytes32 constant UID_ = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464;
 
 /// Minimal kind on `MetaTokenBase` for the base tests: name, symbol, decimals, `initialSupply` to `initialHolder`;
 /// `PAYABLE` set as built (P1c), whatever `cfg.features` says.
 contract BaseHarness is MetaTokenBase {
-    constructor(address f, address s) MetaTokenBase(plainEnv(f, s, UID_, address(0), false)) {}
+    /// @dev `s` (the `SmartKeyAccount` implementation) is the clone's env since chain-neutral releases (plan T72): the
+    ///      fixture registers it with the implementation (`_envFor`).
+    constructor(address f, address) MetaTokenBase(f) {}
 
     function kind() public pure override returns (uint8) {
         return TokenStore.KIND_NORMAL;
@@ -105,6 +108,21 @@ abstract contract V2Fixture is Test {
     /// outside leg and asks it nothing.
     function isRegisteredToken(address) external pure returns (bool) { return false; }
 
+    /// Chain-neutral releases (plan T72): the env the fixture appends to a clone of `impl` (as the factory would), default
+    /// `UID_`, no registry, no `SmartKeyAccount`, not Hedera; `_envFor` sets another per implementation.
+    mapping(address => IFactoryToken.ChainEnv) internal implEnv;
+    mapping(address => bool) internal implEnvSet;
+
+    function _envFor(address impl, IFactoryToken.ChainEnv memory e) internal returns (address) {
+        implEnv[impl] = e;
+        implEnvSet[impl] = true;
+        return impl;
+    }
+
+    function _cloneEnv(address impl) internal returns (address) {
+        return EnvKit.clone(impl, implEnvSet[impl] ? implEnv[impl] : EnvKit.env(UID_, address(0), address(0), false));
+    }
+
     /// `cfgData` = `abi.encode(TokenConfig)`; `us` must equal its legs (what the factory would index).
     function _clone(address impl, address creator_, address[] memory us, bytes memory cfgData)
         internal returns (address t)
@@ -112,8 +130,8 @@ abstract contract V2Fixture is Test {
         IFactoryToken.TokenConfig memory cfg = abi.decode(cfgData, (IFactoryToken.TokenConfig));
         assertEq(cfg.legs.length, us.length, "fixture: legs vs underlyings");
         for (uint256 i; i < us.length; ++i) assertEq(cfg.legs[i].underlying, us[i], "fixture: leg order");
-        t = Clones.clone(impl);
-        MetaTokenBase(t).initialize(creator_, 1, abi.encode(cfg));
+        t = _cloneEnv(impl);
+        MetaTokenBase(t).initialize(nid(creator_), 1, abi.encode(cfg));
     }
 
     function _harness(address creator_, uint256 supply) internal returns (BaseHarness) {
@@ -130,7 +148,7 @@ abstract contract V2Fixture is Test {
 
     function _normal(address creator_, uint256 supply, address minter) internal returns (NormalToken) {
         if (normalImpl == address(0)) {
-            normalImpl = address(new NormalToken(1, plainEnv(address(this), address(0), UID_, address(0), false), ""));
+            normalImpl = address(new NormalToken(address(this), ""));
         }
         return NormalToken(_clone(normalImpl, creator_, new address[](0),
             abi.encode(normalInit("Points", "PTS", 0, supply, creator_, minter))));
@@ -161,7 +179,7 @@ abstract contract V2Fixture is Test {
 
     function _wrappedImpl() internal returns (address) {
         if (wrappedImpl == address(0)) {
-            wrappedImpl = address(new WrappedToken(1, plainEnv(address(this), address(0), UID_, address(0), false), ""));
+            wrappedImpl = address(new WrappedToken(address(this), ""));
         }
         return wrappedImpl;
     }

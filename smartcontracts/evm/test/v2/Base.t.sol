@@ -14,6 +14,8 @@ import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {IUALedger} from "../../src/metatx/IUALedger.sol";
 import {FeePolicy, FeeMode} from "../../src/common/FeePolicy.sol";
+import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// T1: `ERC20MetaTx` + `MetaTokenBase` (TW2 §3, §7) trên một tầng giả tối thiểu.
 contract BaseTest is V2Fixture {
@@ -68,14 +70,15 @@ contract BaseTest is V2Fixture {
     function test_implementationIsLockedAndCloneInitializesOnce() public {
         address impl = t.implementation();
         IFactoryToken.TokenConfig memory cfg;
+        // chain-neutral spec §2.1 (Fable P3-4): the implementation carries no env, refused before its lock
+        vm.expectRevert(IFactoryToken.EnvMissing.selector);
+        MetaTokenBase(impl).initialize(nid(address(this)), 1, abi.encode(cfg));
         vm.expectRevert(MetaTokenBase.AlreadyInitialized.selector);
-        MetaTokenBase(impl).initialize(address(this), 1, abi.encode(cfg));
-        vm.expectRevert(MetaTokenBase.AlreadyInitialized.selector);
-        t.initialize(address(this), 1, abi.encode(cfg));
+        t.initialize(nid(address(this)), 1, abi.encode(cfg));
         address c = Clones.clone(impl);
         vm.prank(address(0xBAD));
         vm.expectRevert(MetaTokenBase.NotFactory.selector);
-        MetaTokenBase(c).initialize(address(0xBAD), 1, abi.encode(cfg));
+        MetaTokenBase(c).initialize(nid(address(0xBAD)), 1, abi.encode(cfg));
     }
 
     // ------------------------------------------------------------------ pipeline
@@ -138,7 +141,8 @@ contract BaseTest is V2Fixture {
 
     function test_erc1271Gets400kOnlyAsSmartKeyAccountClone() public {
         GasBurner1271 burner = new GasBurner1271();
-        BaseHarness impl = new BaseHarness(address(this), address(burner));
+        BaseHarness impl = BaseHarness(_envFor(address(new BaseHarness(address(this), address(burner))),
+            EnvKit.env(UID_, address(0), address(burner), false)));
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.initialHolder) = ("H", "H", address(this)); // the harness mints `initialSupply` (0)
         BaseHarness tk = BaseHarness(_clone(address(impl), address(this), new address[](0), abi.encode(c)));

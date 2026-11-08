@@ -16,11 +16,14 @@ import {MockERC20} from "../helpers/Mocks.sol";
 import {UID_, normalInit} from "./helpers/V2Fixture.sol";
 import {plainEnv, Catalogue} from "../helpers/Catalogue.sol";
 import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
+import {nid} from "../helpers/Ids.sol";
+import {SaltedEIP712} from "../../src/common/SaltedEIP712.sol";
 
 /// Kind 2 stand-in: the public `NORMAL` kind under the confidential id and domain name, accepting `conf` (the factory's
 /// side only; the Zether layer, its verifiers and its chain gate are tested in `test/zether`).
 contract MockNormalZether is NormalToken {
-    constructor(uint16 v, Env memory env, bytes memory a) NormalToken(v, env, a) {}
+    constructor(address f_, bytes memory a) NormalToken(f_, a) {}
 
     function kind() public pure override returns (uint8) { return TokenStore.KIND_NORMAL_ZETHER; }
 
@@ -36,13 +39,13 @@ contract MockNormalZether is NormalToken {
 
 /// Kind 3 stand-in: the public `WRAPPED` kind under the confidential id, its flags validated for kind 3.
 contract MockWrappedZether is WrappedToken {
-    constructor(uint16 v, Env memory env, bytes memory a) WrappedToken(v, env, a) {}
+    constructor(address f_, bytes memory a) WrappedToken(f_, a) {}
 
     function kind() public pure override returns (uint8) { return TokenStore.KIND_WRAPPED_ZETHER; }
 
     function _init(TokenConfig memory cfg) internal override {
         _requireUnused(cfg, true, false, false, false);
-        WrappedLib.initToken(cfg, IS_HEDERA, TokenStore.KIND_WRAPPED_ZETHER, GovernanceBits.WRAPPED_BITS, _roleBits(),
+        WrappedLib.initToken(cfg, _hedera(), TokenStore.KIND_WRAPPED_ZETHER, GovernanceBits.WRAPPED_BITS, _roleBits(),
             _contractOnlyBits(), address(0));
     }
 }
@@ -61,7 +64,7 @@ contract FactoryZetherTest is Test {
     IOpenFactory.TokenKind constant UZ = IOpenFactory.TokenKind.WRAPPED_ZETHER;
 
     function setUp() public {
-        f = new OpenFactory(registrar, UID_, 0);
+        f = EnvKit.factory(registrar, UID_, 0);
         normalZ = MockNormalZether(Catalogue.plain(f, NZ, 1, type(MockNormalZether).creationCode, address(0), address(0), false));
         undZ = MockWrappedZether(Catalogue.plain(f, UZ, 1, type(MockWrappedZether).creationCode, address(0),
             address(0), false));
@@ -105,7 +108,7 @@ contract FactoryZetherTest is Test {
         address t = f.createToken(NZ, 1, abi.encode(_conf()), "on");
         assertTrue(f.isRegisteredToken(t));
         address w = f.createToken(UZ, 1, abi.encode(_wrapped()), "on");
-        assertEq(f.getWrapper(address(this), address(usd)), w, "the index reads underlyings() after initialize");
+        assertEq(f.getWrapper(nid(address(this)), address(usd)), w, "the index reads underlyings() after initialize");
         vm.prank(registrar);
         f.setKindEnabled(NZ, false);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.KindDisabled.selector, NZ));
@@ -126,7 +129,7 @@ contract FactoryZetherTest is Test {
 
     /// A public kind refuses every `conf` field, the two modes included.
     function test_publicKinds_refuseEveryConfField() public {
-        OpenFactory g = new OpenFactory(registrar, UID_, 0);
+        OpenFactory g = EnvKit.factory(registrar, UID_, 0);
         Catalogue.plain(g, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0),
             false);
         IFactoryToken.TokenConfig memory c = normalInit("P", "P", 0, 0, address(0), address(0));
@@ -152,11 +155,20 @@ contract FactoryZetherTest is Test {
     }
 
     /// CTR-MTX-02: the confidential kinds sign under "SCaaS ZetherToken", the public ones under "SCaaS MetaToken".
-    function test_domainNameHook() public view {
-        (, string memory n,,,, bytes32 salt,) = normalZ.eip712Domain();
+    /// Chain-neutral releases (plan T72): on the clones (a release carries no env and builds no domain).
+    function test_domainNameHook() public {
+        vm.startPrank(registrar);
+        f.setKindEnabled(NZ, true);
+        f.setKindEnabled(UZ, true);
+        vm.stopPrank();
+        address t = f.createToken(NZ, 1, abi.encode(_conf()), "dom");
+        address w = f.createToken(UZ, 1, abi.encode(_wrapped()), "dom");
+        (, string memory n,,,, bytes32 salt,) = MockNormalZether(t).eip712Domain();
         assertEq(n, "SCaaS ZetherToken");
         assertEq(salt, UID_);
-        (, n,,,,,) = undZ.eip712Domain();
+        (, n,,,,,) = MockWrappedZether(payable(w)).eip712Domain();
         assertEq(n, "SCaaS MetaToken", "a kind that does not override keeps the base name");
+        vm.expectRevert(SaltedEIP712.ChainUidZero.selector);
+        normalZ.eip712Domain();
     }
 }

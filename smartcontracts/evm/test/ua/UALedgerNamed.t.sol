@@ -18,6 +18,8 @@ import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {UALedgerBase} from "./UALedgerBase.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
+import {nid} from "../helpers/Ids.sol";
 
 /// T-V3-1: the named `ua*` functions build their struct and run its pipeline (CTR-UA-26 mirroring CTR-MTX-09) —
 /// same digest, same events, one lane consumed once — and enforce only their mode shape.
@@ -82,8 +84,8 @@ contract UALedgerNamedTest is UALedgerBase {
     function test_uaPay_needsPayable() public {
         IFactoryToken.TokenConfig memory c = normalInit("NoPay", "NP", 6, 0, address(0), address(this));
         c.features = 1 << GovernanceBits.MINTABLE;
-        NormalToken np = NormalToken(Clones.clone(address(new NormalToken(1, plainEnv(address(this), address(0), chainUidA, REG_L, false), ""))));
-        np.initialize(address(this), 1, abi.encode(c));
+        NormalToken np = NormalToken(EnvKit.clone(address(new NormalToken(address(this), "")), EnvKit.env(chainUidA, REG_L, address(0), false)));
+        np.initialize(nid(address(this)), 1, abi.encode(c));
         MetaTxLib.UAMetaTransfer memory g = _t(uaP, uaB, 1);
         g.entryRef = PayMetaKit.ref("p");
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, GovernanceBits.PAYABLE));

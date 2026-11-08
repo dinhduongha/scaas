@@ -19,6 +19,7 @@ import {Catalogue} from "../helpers/Catalogue.sol";
 import {ZetherFixture} from "../zether/helpers/ZetherFixture.sol";
 import {PqzFixture} from "../pqz/helpers/PqzFixture.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// @notice What lands now for the regulated round (spec §1.2, §4.2; CTR-GOV-03, -17, -18; GD-19): bits 5-9 refused on every
 ///         plain kind, `FeatureInvalidForKind` on all six (ua-mtx-merge T24, regulated-kinds spec Q3: `NORMAL` and `WRAPPED`
@@ -91,7 +92,7 @@ struct MockRegulatedParams {
 contract MockNormalRegulated is NormalToken {
     MockRegulatedParams public params;
 
-    constructor(uint16 v, Env memory env, bytes memory a) NormalToken(v, env, a) {}
+    constructor(address f_, bytes memory a) NormalToken(f_, a) {}
 
     function kind() public pure override returns (uint8) { return 8; }
 
@@ -109,7 +110,7 @@ contract GovRegulatedBitsTest is GovRegulatedRows {
     OpenFactory f;
 
     function setUp() public {
-        f = new OpenFactory(address(this), UID, 0);
+        f = EnvKit.factory(address(this), UID, 0);
         Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0), false);
         Catalogue.plain(f, IOpenFactory.TokenKind.WRAPPED, 1, type(WrappedToken).creationCode, address(0), address(0), false);
     }

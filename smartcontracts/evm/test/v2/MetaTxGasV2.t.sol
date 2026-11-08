@@ -16,6 +16,7 @@ import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {normalInit, wrappedInit, Rate} from "./helpers/V2Fixture.sol";
 import {plainEnv, Catalogue} from "../helpers/Catalogue.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 contract Always1271 {
     function isValidSignature(bytes32, bytes memory) external pure returns (bytes4) { return 0x1626ba7e; }
@@ -70,14 +71,18 @@ contract MetaTxGasV2Test is Test {
     // `MtxPipelineLib.preTransferUA` (R17's empty-field check, the `inNativeSpace` dispatch, the `UA…` events):
     // A 87,940 -> 89,251, B 185,848 -> 187,159, C 103,743 -> 105,147, D 103,658 -> 105,074, E 104,049 -> 105,465,
     // F 185,848 -> 187,171, G 182,502 -> 183,761, P 189,813 -> 191,090 (+1,259 to +1,416).
-    uint256 constant AMS_A = 89_251;
-    uint256 constant AMS_B = 187_159;
-    uint256 constant AMS_C = 105_147;
-    uint256 constant AMS_D = 105_074;
-    uint256 constant AMS_E = 105_465;
-    uint256 constant AMS_F = 187_171;
-    uint256 constant AMS_G = 183_761;
-    uint256 constant AMS_P = 191_090;
+    // Chain-neutral releases T72 (CTR-TOK-29): the clone reads its chain values from its code (one EXTCODECOPY of the env's
+    // head in `_mtxCtx`, the domain separator computed from the code's `chainUid`, no cache: spec §2.4) and the CREATE3
+    // clone's env tail: A 89,251 -> 90,225, B 187,159 -> 188,133, C 105,147 -> 106,133, D 105,074 -> 106,060,
+    // E 105,465 -> 106,447, F 187,171 -> 188,133, G 183,761 -> 184,723, P 191,090 -> 192,068 (+962 to +986 over the pins).
+    uint256 constant AMS_A = 90_225;
+    uint256 constant AMS_B = 188_133;
+    uint256 constant AMS_C = 106_133;
+    uint256 constant AMS_D = 106_060;
+    uint256 constant AMS_E = 106_447;
+    uint256 constant AMS_F = 188_133;
+    uint256 constant AMS_G = 184_723;
+    uint256 constant AMS_P = 192_068;
     address signer;
     address relayer = address(0xBEEF);
     address recipient = address(0xCAFE);
@@ -92,7 +97,7 @@ contract MetaTxGasV2Test is Test {
     function setUp() public {
         vm.warp(1_800_000_000);
         signer = vm.addr(PK);
-        OpenFactory f2 = new OpenFactory(address(this), UID, 0);
+        OpenFactory f2 = EnvKit.factory(address(this), UID, 0);
         Catalogue.plain(f2, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0), false);
         Catalogue.plain(f2, IOpenFactory.TokenKind.WRAPPED, 1, type(WrappedToken).creationCode, address(0), address(0), false);
         acct = new Always1271();

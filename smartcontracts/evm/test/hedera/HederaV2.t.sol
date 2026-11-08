@@ -24,6 +24,7 @@ import {MockHederaAccountService, MockHts} from "./HederaMocks.sol";
 import {Mock1271Wallet} from "../helpers/WalletMocks.sol";
 import {UAMetaTxBase} from "../../src/metatx/UAMetaTxBase.sol";
 import {plainEnv, Catalogue} from "../helpers/Catalogue.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// T5: con Hedera của ba tầng (TW2 §11, R144) — HIP-632 trên mỗi tầng, associate lúc init, kiểm phí HTS fail-closed.
 contract HederaV2Test is Test {
@@ -47,7 +48,7 @@ contract HederaV2Test is Test {
         vm.etch(HTS, type(MockHts).runtimeCode);
         alice = address(uint160(1_234_567));
         MockHederaAccountService(HAS).setEdKey(alice, vm.addr(ALICE_KEY));
-        f = new OpenFactory(registrar, UID, 0);
+        f = EnvKit.factory(registrar, UID, 0);
         Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0), true);
         Catalogue.plain(f, IOpenFactory.TokenKind.WRAPPED, 1, type(WrappedToken).creationCode, address(0), address(0), true);
         usdc = new MockERC20("USD Coin", "USDC", 6);

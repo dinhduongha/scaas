@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-import {IFactoryToken} from "../factory/IFactoryToken.sol";
+import {IFactoryToken, ENV_PQZ_VERIFIER} from "../factory/IFactoryToken.sol";
+import {SigCheck} from "../common/SigCheck.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
 import {ZetherTypes} from "../zether/ZetherTypes.sol";
 import {IPqzToken} from "./IPqzToken.sol";
@@ -16,6 +17,15 @@ import {PqzSet, PQZ_ACC_WORDS} from "./PqzSet.sol";
 ///        namespace `scaas.pqz`; the shared steps are `internal` in `PqzCore`, compiled into each.
 /// @notice **UNAUDITED.** `address(this)` is the token.
 library PqzStateLib {
+    /// @notice The PQZ kinds' checks of an instance env (CTR-ZTH-20 / CTR-PQZ-10; the constructors' before chain-neutral
+    ///         releases, now `validateEnv`, which the factory calls once per release and chain): one dep, the release's
+    ///         `UAPqzVerifier` (`ENV_PQZ_VERIFIER`) with code, never Hedera, a registry with code.
+    function validateEnv(address[] calldata d, bool hedera, address registry) public view {
+        if (d.length != 1 || hedera || !SigCheck.isContract(d[ENV_PQZ_VERIFIER]) || !SigCheck.isContract(registry)) {
+            revert IPqzToken.BadInit();
+        }
+    }
+
     /// @notice The kind's `_init` (P6g plan D9): `verifier` the release's `UAPqzVerifier` (CTR-ZTH-20: the creator never
     ///         chooses one; precompile and proof system: exactly `PqzSafety.PQZ`, PQZL or PQZH,
     ///         the self-test passing now; review W-B), `auditorKey` empty or the auditor's 32-byte `pqz-mlwe` UA, cap

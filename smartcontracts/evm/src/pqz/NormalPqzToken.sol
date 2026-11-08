@@ -25,14 +25,10 @@ import {IPqzToken} from "./IPqzToken.sol";
 ///         only; shielded value exists only through `mtxShield`, which moves public units to `SHIELD_POOL` (D19). Flags: `PAYABLE`,
 ///         `MINTABLE`, `BURNABLE`. Built by `OpenFactory.createToken` with `conf` set and `legs`, `rate` empty.
 contract NormalPqzToken is NormalToken, PqzLayer {
-    /// @dev The factory's append (`OpenFactory.deployImplementation`, plan 5g-Z2): the release's `Env`, whose
-    ///      `deps[ENV_PQZ_VERIFIER]` is the release's `UAPqzVerifier` (CTR-ZTH-20 / CTR-PQZ-10); no `implArgs`.
-    constructor(uint16 envVersion, Env memory env, bytes memory implArgs)
-        NormalToken(envVersion, env, implArgs)
-        PqzLayer(env)
-    {
-        if (!SigCheck.isContract(env.registry)) revert BadInit();
-    }
+    /// @dev The factory's append (`OpenFactory.deployImplementation`, chain-neutral spec §2.1): its address; no
+    ///      `implArgs`. The env (`deps[ENV_PQZ_VERIFIER]` the release's `UAPqzVerifier`, CTR-ZTH-20 / CTR-PQZ-10; a
+    ///      registry) is checked by `validateEnv` (`PqzStateLib`).
+    constructor(address factory_, bytes memory implArgs) NormalToken(factory_, implArgs) {}
 
     function kind() public pure virtual override(NormalToken, MetaTokenBase) returns (uint8) {
         return TokenStore.KIND_NORMAL_PQZ;
@@ -46,11 +42,16 @@ contract NormalPqzToken is NormalToken, PqzLayer {
         _requireUnused(cfg, false, true, true, false);
         _setMetadata(cfg.name, cfg.symbol, cfg.decimals);
         GovernanceLib.init(cfg.features, cfg.lockedFeatures, cfg.owner, cfg.grantDelay, cfg.rescueTo, cfg.roles, _validBits(),
-            _roleBits(), _contractOnlyBits(), _REGISTRY);
-        PqzStateLib.init(cfg.conf, _REGISTRY, PQZ_VERIFIER);
+            _roleBits(), _contractOnlyBits(), _registry());
+        PqzStateLib.init(cfg.conf, _registry(), _pqzVerifier());
         if (cfg.initialSupply != 0) _mint(cfg.initialHolder, cfg.initialSupply);
     }
 
+
+    /// @dev The layer's env checks, restated for the second base.
+    function _validateEnv(ChainEnv calldata env) internal view virtual override(MetaTokenBase, PqzLayer) {
+        PqzLayer._validateEnv(env);
+    }
     function _domainName() internal pure virtual override(ERC20MetaTx, PqzLayer) returns (string memory) {
         return PqzLayer._domainName();
     }

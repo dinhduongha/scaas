@@ -61,14 +61,15 @@ contract GovDeployTest is Test {
         address w = f.implementationOf(IOpenFactory.TokenKind.WRAPPED, 1);
         assertTrue(w.code.length != 0, "the release");
         assertEq(vm.parseJsonAddress(json, ".implementation_wrapped"), w);
-        assertEq(WrappedToken(w).chainUid(), ZUID, "gated");
+        assertEq(WrappedToken(w).chainUid(), bytes32(0), "chain-neutral: a release carries no env");
+        assertEq(f.chainUid(), ZUID, "the factory's, gated");
         assertTrue(f.kindEnabled(IOpenFactory.TokenKind.WRAPPED), "the kind is on from the factory's start");
         IFactoryToken.Env memory e = f.envOf(IOpenFactory.TokenKind.WRAPPED, 1);
         assertEq(keccak256(abi.encode(e.libs)), keccak256(abi.encode(closureLibs(IOpenFactory.TokenKind.WRAPPED))), "link closure");
         for (uint256 i; i < e.libs.length; ++i) assertEq(e.libCodeHashes[i], e.libs[i].codehash, "pinned");
         assertEq(e.registry, vm.parseJsonAddress(json, ".ua_registry"));
-        assertEq(e.govRouter, vm.parseJsonAddress(json, ".governance_router"));
-        assertEq(GovernanceBase(w).GOV_ROUTER(), e.govRouter);
+        assertEq(f.govRouter(), vm.parseJsonAddress(json, ".governance_router"), "the factory's router");
+        assertEq(GovernanceBase(w).GOV_ROUTER(), address(0), "the release's: none (every clone's env names the factory's)");
 
         DeployHarness plain = new DeployHarness();
         (OpenFactory g,) = plain.deploy(ZUID, false, ska); // (the JSON object "deploy" is one per process: not read here)
@@ -92,7 +93,7 @@ contract GovDeployTest is Test {
             address w = f.implementationOf(k, 1);
             assertEq(WrappedRegulatedToken(payable(w)).kind(), 8 + i, "the release");
             assertEq(vm.parseJsonAddress(json, keys[i]), w);
-            assertEq(WrappedRegulatedToken(payable(w)).chainUid(), ZUID, "gated");
+            assertEq(WrappedRegulatedToken(payable(w)).chainUid(), bytes32(0), "a release carries no env");
             assertTrue(f.kindEnabled(k), "enabled (T28)");
             assertEq(WrappedRegulatedToken(payable(w)).REGISTRY_CODEHASH(), keccak256(type(ComplianceRegistry).runtimeCode),
                 "the registry code pin in implArgs (T29)");
@@ -100,7 +101,7 @@ contract GovDeployTest is Test {
             assertEq(keccak256(abi.encode(e.libs)), keccak256(abi.encode(closureLibs(k))), "link closure");
             for (uint256 j; j < e.libs.length; ++j) assertEq(e.libCodeHashes[j], e.libs[j].codehash, "pinned");
             assertEq(e.registry, vm.parseJsonAddress(json, ".ua_registry"));
-            assertEq(e.govRouter, vm.parseJsonAddress(json, ".governance_router"));
+            assertEq(f.govRouter(), vm.parseJsonAddress(json, ".governance_router"));
         }
 
         DeployHarness plain = new DeployHarness();
@@ -126,7 +127,7 @@ contract GovDeployTest is Test {
             assertTrue(w.code.length != 0, "the release");
             assertEq(NormalZetherRegulatedToken(w).kind(), 10 + i, "the release's kind");
             assertEq(vm.parseJsonAddress(json, keys[i]), w);
-            assertEq(NormalZetherRegulatedToken(w).chainUid(), ZUID, "gated");
+            assertEq(NormalZetherRegulatedToken(w).chainUid(), bytes32(0), "a release carries no env");
             assertTrue(f.kindEnabled(k), "enabled");
             assertEq(NormalZetherRegulatedToken(w).REGISTRY_CODEHASH(), keccak256(type(ComplianceRegistry).runtimeCode),
                 "the registry code pin in implArgs");
@@ -145,7 +146,7 @@ contract GovDeployTest is Test {
             for (uint256 j; j < e.libs.length; ++j) assertEq(e.libCodeHashes[j], e.libs[j].codehash, "pinned");
             assertEq(keccak256(abi.encode(e.deps)), keccak256(abi.encode(b.deps)), "the base kind's verifiers and disclosure");
             assertEq(e.registry, vm.parseJsonAddress(json, ".ua_registry"));
-            assertEq(e.govRouter, vm.parseJsonAddress(json, ".governance_router"));
+            assertEq(f.govRouter(), vm.parseJsonAddress(json, ".governance_router"));
         }
         DeployHarness plain = new DeployHarness();
         (OpenFactory g,) = plain.deploy(ZUID, false, ska);
@@ -187,7 +188,7 @@ contract GovDeployTest is Test {
         } else { // e2e.py's steps: publishEnv(k, 1, base env + RegulatedLib), deployImplementation(k, 1, 1, code, pin), enable
             IFactoryToken.Env memory e = pinned(plainEnv(address(f), address(0), ZUID, vm.parseJsonAddress(json, ".ua_registry"),
                 false), k);
-            (e.deps, e.govRouter) = (new address[](1), router);
+            e.deps = new address[](1);
             e.deps[0] = router; // the PQZ constructor checks code only
             bytes memory code = b == 4 ? type(NormalPqzRegulatedToken).creationCode : type(WrappedPqzRegulatedToken).creationCode;
             vm.startPrank(address(h));
@@ -197,7 +198,7 @@ contract GovDeployTest is Test {
             vm.stopPrank();
         }
         assertEq(NormalRegulatedToken(w).kind(), uint8(k), "the release's kind");
-        assertEq(NormalRegulatedToken(w).chainUid(), ZUID, "gated");
+        assertEq(NormalRegulatedToken(w).chainUid(), bytes32(0), "a release carries no env");
         assertTrue(f.kindEnabled(k), "enabled");
         address creg = vm.parseJsonAddress(json, ".compliance_registry");
         assertEq(NormalRegulatedToken(w).REGISTRY_CODEHASH(), creg.codehash, "the pin = the deployed registry's code");
@@ -214,8 +215,8 @@ contract GovDeployTest is Test {
         }
         assertTrue(lib, "RegulatedLib in libs and libCodeHashes");
         assertEq(env.registry, vm.parseJsonAddress(json, ".ua_registry"));
-        assertEq(env.govRouter, router, "Env.govRouter = this deploy's router");
-        assertEq(GovernanceBase(w).GOV_ROUTER(), router, "the release's router");
+        assertEq(f.govRouter(), router, "the factory's router = this deploy's");
+        assertEq(GovernanceBase(w).GOV_ROUTER(), address(0), "a release carries no env");
     }
 
     /// Plan T33 (regulated-kinds spec §6.1, F-21; CTR-AS-07, CTR-AS-16): `DEPLOY_REGULATED` puts up one canonical
@@ -297,9 +298,10 @@ contract GovDeployTest is Test {
         // ua-mtx-merge T1: `size-baseline.json`'s WrappedToken row 52,297 -> 51,436 B, so the control moves with it;
         // T2: 51,436 -> 46,804 B; T3: 46,804 -> 45,140 B; T6: 45,140 -> 42,669 B; T24: 42,669 -> 42,985 B;
         // T25: 42,985 -> 43,333 B; T26: 43,333 -> 43,552 B; pay-meta-tax T37: 43,552 -> 43,667 B; T38: 43,667 -> 43,714 B;
-        // T39: 43,714 -> 43,711 B; T40: 43,711 -> 43,503 B (lever 5: `_payMeta` in `MtxPipelineLib`)
-        h.limitCode(43_502);
-        vm.expectRevert(bytes("WrappedToken runtime 43503 B > chain code limit 43502 B (CHAIN_CODE_LIMIT, CTR-GOV-19)"));
+        // T39: 43,714 -> 43,711 B; T40: 43,711 -> 43,503 B (lever 5: `_payMeta` in `MtxPipelineLib`); chain-neutral T72:
+        // 43,503 -> 44,456 B (the env read from the clone's code, `chainEnv`, `validateEnv`)
+        h.limitCode(44_455);
+        vm.expectRevert(bytes("WrappedToken runtime 44456 B > chain code limit 44455 B (CHAIN_CODE_LIMIT, CTR-GOV-19)"));
         h.deploy(ZUID, false, ska);
     }
 
@@ -315,11 +317,10 @@ contract GovDeployTest is Test {
         assertEq(address(GovernanceRouter(r).registry()), vm.parseJsonAddress(json, ".ua_registry"));
         for (uint8 k; k <= 3; ++k) {
             IOpenFactory.TokenKind kind = IOpenFactory.TokenKind(k);
-            assertEq(f.envOf(kind, 1).govRouter, r, "env");
-            assertEq(GovernanceBase(f.implementationOf(kind, 1)).GOV_ROUTER(), r, "release");
+            assertEq(GovernanceBase(f.implementationOf(kind, 1)).GOV_ROUTER(), address(0), "a release carries no env");
         }
-        assertEq(f.dexEnvOf(1).govRouter, r, "DEX env");
-        assertEq(GovernanceBase(vm.parseJsonAddress(json, ".dex_implementation")).GOV_ROUTER(), r, "DEX release");
+        assertEq(f.govRouter(), r, "the factory's router: every clone's env");
+        assertEq(GovernanceBase(vm.parseJsonAddress(json, ".dex_implementation")).GOV_ROUTER(), address(0), "DEX release");
     }
 
     /// NET-EVM-06, C5-1: the deploy gate's need, `runtime x 1,530 + 2^24` from `size-baseline.json`, fits 200 M for every
@@ -490,32 +491,19 @@ contract GovDeployTest is Test {
         // metadata hash: `MetaTxLib.PayMeta`); T38: -> 0x2BEc911FA998177Eb0a56B94Fd4Dc5e5dae7e819 (the metadata hash:
         // `IERC20MetaTx.mtxRelayFee`); T39: -> 0xe6D87D56A2aB446F60Ec89CF75D9ab33f443C8B2 (`mtxSetTaxRate`,
         // `mtxSetTaxRecipient`); T40: -> this (the metadata hash: `IRegulatedToken`'s two tax entries; `MtxPipelineLib`'s
-        // levers 5 and 6); 3g T51: 0x9F9448a2e031D1d7055c7D7b6593EA8f752c7D91 -> this (the metadata hash: `IUARegistry`)
-        assertEq(router, 0x8C7beC80b3bD61A2920083C0617555a87A5fa7E5, "GovernanceRouter");
+        // levers 5 and 6); 3g T51: 0x9F9448a2e031D1d7055c7D7b6593EA8f752c7D91 -> 0x8C7beC80b3bD61A2920083C0617555a87A5fa7E5
+        // (the metadata hash: `IUARegistry`); chain-neutral T72: -> this (the metadata hash: `SaltedEIP712`'s virtual
+        // domain, `UAMetaTxBase`'s immutables behind `_registry()` / `_hedera()`)
+        assertEq(router, 0x77826623be224e298A4Ad0edd07b520e342523A2, "GovernanceRouter");
     }
 
-    /// A kind's init code with the factory's append, `abi.encode(envVersion, env, implArgs)`: the env names the real Zether
-    /// verifiers, a contract for the PQZ verifier, the kind's link closure and the router.
-    function _release(bytes memory code, IOpenFactory.TokenKind kind, address router) internal view returns (bytes memory) {
-        IFactoryToken.Env memory e = pinned(plainEnv(address(this), ska, ZUID, address(this), false), kind);
-        e.govRouter = router;
-        uint8 b = uint8(kind) >= 8 ? uint8(kind) - 8 : uint8(kind); // a regulated kind's env is its base kind's (T27)
-        if (b >= 2) e.smartKeyAccountImpl = address(0);
-        if (b == 2 || b == 3) e.deps = zdeps;
-        if (b >= 4) {
-            e.deps = new address[](1);
-            e.deps[0] = router; // any contract: the PQZ constructor checks code only (the verifier needs the chain's precompile)
-        }
-        return abi.encodePacked(code, abi.encode(uint16(1), e, uint8(kind) >= 8 ? regArgs() : bytes(""))); // T29
+    /// A kind's init code with the factory's append: chain-neutral releases (plan T72), `abi.encode(factory, implArgs)`;
+    /// the env is the clones', not in the release's code.
+    function _release(bytes memory code, IOpenFactory.TokenKind kind, address) internal view returns (bytes memory) {
+        return abi.encodePacked(code, abi.encode(address(this), uint8(kind) >= 8 ? regArgs() : bytes(""))); // T29
     }
 
-    function _dex(address router) internal view returns (bytes memory) {
-        IFactoryToken.Env memory e = plainEnv(address(this), ska, ZUID, address(0), false);
-        e.libs = new address[](2);
-        (e.libs[0], e.libs[1]) = (address(GovernanceLib), address(TradeLib));
-        e.libCodeHashes = new bytes32[](2);
-        (e.libCodeHashes[0], e.libCodeHashes[1]) = (address(GovernanceLib).codehash, address(TradeLib).codehash);
-        e.govRouter = router;
-        return abi.encodePacked(type(SCaaSDex).creationCode, abi.encode(uint16(1), e, bytes("")));
+    function _dex(address) internal view returns (bytes memory) {
+        return abi.encodePacked(type(SCaaSDex).creationCode, abi.encode(address(this), bytes("")));
     }
 }

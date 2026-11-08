@@ -19,6 +19,7 @@ import {NormalPqzToken} from "../../src/pqz/NormalPqzToken.sol";
 import {Catalogue, pqzEnv} from "../helpers/Catalogue.sol";
 import {SigCheck} from "../../src/common/SigCheck.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// A verifier that claims any precompile and proof system and says "supported" (review W-B).
 contract FakePqzVerifier {
@@ -435,7 +436,7 @@ contract PqzNormalTest is PqzFixture {
         assertEq(factory.releaseOf(IOpenFactory.TokenKind.NORMAL_PQZ, 1).envVersion, v1, "release 1 keeps its env");
         PqzLayer t2 = PqzLayer(factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 2, abi.encode(_cfg(1 << 40)), "r2"));
         assertEq(t2.verifier(), address(fresh));
-        assertEq(NormalPqzToken(impl2).verifier(), address(fresh));
+        assertEq(NormalPqzToken(impl2).verifier(), address(0), "chain-neutral: the release carries no env (plan T72)");
         assertEq(tok.verifier(), address(old), "release 1's tokens keep theirs");
         assertEq(t2.proofSystemId(), PqzSet.PQZL_ID);
         _fund(t2, alice, 10);
@@ -444,7 +445,8 @@ contract PqzNormalTest is PqzFixture {
     }
 
     /// Review 5g-Z2 P2-3: the release env (`deps = [UAPqzVerifier]` with code, never Hedera) is checked by the
-    /// constructor, bubbled through `deployImplementation`.
+    /// release's `validateEnv` (chain-neutral releases, plan T72: the constructor's checks moved there), which
+    /// `deployImplementation` calls and bubbles.
     function test_constructorChecksTheEnv() public {
         bytes memory code = type(NormalPqzToken).creationCode;
         IFactoryToken.Env[6] memory bad;
@@ -590,7 +592,7 @@ contract PqzNormalTest is PqzFixture {
         bytes32[3] memory ids = [PQZL_ID, other, PQZL_ID];
         for (uint256 i; i < 3; ++i) {
             address fv = address(new FakePqzVerifier(pre[i], ids[i]));
-            OpenFactory g = new OpenFactory(registrar, PQZ_UID, 0);
+            OpenFactory g = EnvKit.factory(registrar, PQZ_UID, 0);
             Catalogue.release(g, IOpenFactory.TokenKind.NORMAL_PQZ, 1, pqzEnv(address(g), PQZ_UID, address(reg), fv),
                 type(NormalPqzToken).creationCode);
             vm.prank(registrar);

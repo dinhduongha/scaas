@@ -20,6 +20,7 @@ import {MockERC20, StubUARegistry} from "../../helpers/Mocks.sol";
 import {MtxDigest} from "../../helpers/MtxDigest.sol";
 import {Catalogue, plainEnv, regArgs} from "../../helpers/Catalogue.sol";
 import {nid} from "../../helpers/Ids.sol";
+import {EnvKit} from "../../helpers/EnvKit.sol";
 
 /// A contract id for the contract-only bits 5-7, 10 (`_check` reads its code only); it acts through `vm.prank`.
 contract Holder {}
@@ -64,7 +65,7 @@ abstract contract RegFixture is Test {
 
     function setUp() public virtual {
         vm.warp(1_800_000_000);
-        f = new OpenFactory(address(this), UID, 0);
+        f = EnvKit.factory(address(this), UID, 0);
         ureg = new StubUARegistry(UID);
         bool h = _hedera();
         Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(ureg), address(0), h);

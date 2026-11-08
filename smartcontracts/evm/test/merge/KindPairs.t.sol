@@ -19,6 +19,7 @@ import {nid} from "../helpers/Ids.sol";
 import {UACall} from "../ua/UACall.sol";
 import {UALedgerBase} from "../ua/UALedgerBase.sol";
 import {normalInit, wrappedInit, Rate} from "../v2/helpers/V2Fixture.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// The merged entries of ua-mtx-merge T3 (R23, R39), called by selector: this file compiles on the tree before T3 too,
 /// so each test is red there on its own (plan T3 step 3).
@@ -110,8 +111,8 @@ contract KindPairsTest is UALedgerBase {
 
     function setUp() public override {
         super.setUp();
-        off = NormalToken(Clones.clone(address(new NormalToken(1, plainEnv(address(this), address(0), chainUidA, address(0), false), ""))));
-        off.initialize(address(this), 1, abi.encode(normalInit("Off", "OFF", 6, 1_000_000, alice, address(this))));
+        off = NormalToken(EnvKit.clone(address(new NormalToken(address(this), "")), EnvKit.env(chainUidA, address(0), address(0), false)));
+        off.initialize(nid(address(this)), 1, abi.encode(normalInit("Off", "OFF", 6, 1_000_000, alice, address(this))));
         wOff = _wrapperOff(address(und));
         wOffL = _wrapperOff(address(off));
         _wrapFor(alice, 10_000);
@@ -127,12 +128,12 @@ contract KindPairsTest is UALedgerBase {
     }
 
     function _wrapperOff(address leg) internal returns (WrappedToken w) {
-        w = WrappedToken(Clones.clone(address(new WrappedToken(1, plainEnv(address(this), address(0), chainUidA, address(0), false), ""))));
+        w = WrappedToken(EnvKit.clone(address(new WrappedToken(address(this), "")), EnvKit.env(chainUidA, address(0), address(0), false)));
         address[] memory us = new address[](1);
         uint256[] memory one = new uint256[](1);
         (us[0], one[0]) = (leg, 1);
         Rate memory fixedRate;
-        w.initialize(address(this), 1, abi.encode(wrappedInit(us, one, one, 6, fixedRate, address(0), address(0))));
+        w.initialize(nid(address(this)), 1, abi.encode(wrappedInit(us, one, one, 6, fixedRate, address(0), address(0))));
     }
 
     // ------------------------------------------------------------------ helpers
@@ -306,9 +307,9 @@ contract KindPairsTest is UALedgerBase {
         c.roles.minter = nid(address(0x313));
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(tok), 1, 1);
-        WrappedToken w = WrappedToken(payable(Clones.clone(address(
-            new WrappedToken(1, plainEnv(address(this), address(0), chainUidA, REG_L, false), "")))));
-        w.initialize(address(this), 1, abi.encode(c));
+        WrappedToken w = WrappedToken(payable(EnvKit.clone(address(new WrappedToken(address(this), "")),
+            EnvKit.env(chainUidA, REG_L, address(0), false))));
+        w.initialize(nid(address(this)), 1, abi.encode(c));
         _wrapOrder(w, address(tok), _o(w, _pad(alice), CAP, 1));
         assertEq(w.totalSupply(), CAP);
         ITradeToken.UAWrapOrder memory o = _o(w, _pad(alice), 1, 2);

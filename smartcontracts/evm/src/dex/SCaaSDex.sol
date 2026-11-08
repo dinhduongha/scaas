@@ -9,6 +9,7 @@ import {ISCaaSDex, IExchangeExecutor} from "./ISCaaSDex.sol";
 import {ITradeToken} from "../trade/ITradeToken.sol";
 import {IOpenFactory} from "../factory/IOpenFactory.sol";
 import {IFactoryToken} from "../factory/IFactoryToken.sol";
+import {ChainEnvCode} from "../factory/ChainEnvCode.sol";
 import {SaltedEIP712} from "../common/SaltedEIP712.sol";
 import {SigCheck} from "../common/SigCheck.sol";
 import {TradeLib} from "../trade/TradeLib.sol";
@@ -109,11 +110,8 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient, Governan
     // keccak256(abi.encode(uint256(keccak256("scaas.dex")) - 1)) & ~bytes32(uint256(0xff))
     bytes32 private constant _STORAGE = 0xb144ea5327f344ea7e3b34dd1898f534c8ce28f9f54d0d89a1b78f8fcf7dac00;
 
+    /// @notice The factory, at the same address on every chain (chain-neutral spec §2.1): a chain-neutral immutable.
     address public immutable FACTORY;
-    /// @notice This chain's `SmartKeyAccount` implementation (0 = none), as the tokens expose it; the deploy checks they agree.
-    address public immutable SMART_KEY_ACCOUNT_IMPL;
-    /// @dev EIP-1167 runtime codehash of this chain's `SmartKeyAccount` clones (0 = none), as the token's.
-    bytes32 private immutable _SMART_KEY_CLONE_CODEHASH;
 
     /// @dev Per leg, computed before any transfer.
     struct Calc {
@@ -140,16 +138,11 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient, Governan
     }
 
     /// @dev Runs once on the implementation and locks it.
-    /// @dev The factory's append (`OpenFactory.deployDexImplementation`, plan 5g-Z2): the release's `Env` (factory,
-    ///      `chain_uid`, the `SmartKeyAccount` implementation); no `implArgs`.
-    constructor(uint16, IFactoryToken.Env memory env, bytes memory)
-        SaltedEIP712("SCaaS Dex", "1", env.chainUid)
-        GovernanceBase(env.govRouter)
-    {
-        FACTORY = env.factory;
-        SMART_KEY_ACCOUNT_IMPL = env.smartKeyAccountImpl;
-        _SMART_KEY_CLONE_CODEHASH = env.smartKeyAccountImpl == address(0) ? bytes32(0) : keccak256(abi.encodePacked(
-            hex"363d3d373d3d3d363d73", env.smartKeyAccountImpl, hex"5af43d82803e903d91602b57fd5bf3"));
+    /// @dev The factory's append (`OpenFactory.deployDexImplementation`, chain-neutral spec §2.1): its address; no
+    ///      `implArgs`. The chain values (`chain_uid`, the router, the `SmartKeyAccount` implementation) are the clone's
+    ///      env, in its code (CTR-TOK-29).
+    constructor(address factory_, bytes memory) SaltedEIP712("SCaaS Dex", "1", bytes32(0)) GovernanceBase(address(0)) {
+        FACTORY = factory_;
         _s().initialized = true;
     }
 
@@ -159,9 +152,11 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient, Governan
 
     // ------------------------------------------------------------------ init and governance (CTR-DEX-24, CTR-DEX-03, CTR-GOV-01)
 
-    /// @notice `initArgs = abi.encode(DexConfig)` (plan 5g-Z2: the factory forwards the creator's bytes).
-    function initialize(address, uint64, bytes calldata initArgs) external {
+    /// @notice `initArgs = abi.encode(DexConfig)` (plan 5g-Z2: the factory forwards the creator's bytes), on a clone
+    ///         carrying its env (`EnvMissing`).
+    function initialize(bytes32, uint64, bytes calldata initArgs) external {
         if (msg.sender != FACTORY) revert NotFactory();
+        ChainEnvCode.requirePresent();
         DexConfig memory cfg = abi.decode(initArgs, (DexConfig));
         DexStorage storage s = _s();
         if (s.initialized) revert AlreadyInitialized();
@@ -279,7 +274,32 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient, Governan
     function tokenKnown(address token) external view returns (bool) { return _s().listings[token] != 0; }
     function exchangeTarget(address target) external view returns (bool) { return _s().exchangeTarget[target]; }
     function factory() external view returns (address) { return FACTORY; }
-    function chainUid() external view returns (bytes32) { return CHAIN_UID; }
+    /// @notice 0 on the implementation (it carries no env).
+    function chainUid() external view returns (bytes32) { return _chainUidRaw(); }
+    /// @notice This chain's `SmartKeyAccount` implementation (0 = none), as the tokens expose it; the deploy checks they agree.
+    function SMART_KEY_ACCOUNT_IMPL() external view returns (address) { return ChainEnvCode.smartKeyAccountImpl(); }
+
+    /// @notice This instance's env, decoded from its code; all zero on the implementation (CTR-TOK-29).
+    function chainEnv() external view returns (IFactoryToken.ChainEnv memory) { return ChainEnvCode.decode(); }
+
+    /// @notice The DEX's checks of an env, by the factory at release deployment: none (it had no constructor check).
+    function validateEnv(IFactoryToken.ChainEnv calldata) external pure {}
+
+    function _chainUidInCode() internal pure override returns (bool) { return true; }
+
+    function _chainUidRaw() internal view override returns (bytes32) { return ChainEnvCode.chainUid(); }
+
+    /// @notice ERC-5267 under the clone's `chain_uid` (`ChainUidZero` on the implementation).
+    function eip712Domain() public view override returns (
+        bytes1, string memory, string memory, uint256, address, bytes32, uint256[] memory
+    ) {
+        return _eip712DomainUnder(_chainUid());
+    }
+
+    /// @dev No cache (chain-neutral spec §2.4): rebuilt under the clone's `chain_uid` on every call.
+    function _domainSeparatorV4() internal view override returns (bytes32) { return _separator(_chainUid()); }
+
+    function _govRouter() internal view override returns (address) { return ChainEnvCode.govRouter(); }
     function puller() external view returns (address) { return _s().puller; }
     function pulled(bytes32 orderHash) external view returns (uint256) { return TradeLib.$().pulled[orderHash]; }
     function minNonce(address from, uint256 batch) external view returns (uint256) {
@@ -329,8 +349,9 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient, Governan
 
     /// @dev CTR-DEX-08: 400 k for a `SmartKeyAccount` clone, else 50 k.
     function _cap(address signer) private view returns (uint256) {
-        bytes32 h = _SMART_KEY_CLONE_CODEHASH;
-        return h != bytes32(0) && signer.codehash == h ? SMART_KEY_1271_GAS : SigCheck.ERC1271_GAS;
+        address ska = ChainEnvCode.smartKeyAccountImpl();
+        return ska != address(0) && signer.codehash == keccak256(abi.encodePacked(hex"363d3d373d3d3d363d73", ska,
+            hex"5af43d82803e903d91602b57fd5bf3")) ? SMART_KEY_1271_GAS : SigCheck.ERC1271_GAS;
     }
 
     // ------------------------------------------------------------------ settle (CTR-DEX-16, CTR-DEX-26)

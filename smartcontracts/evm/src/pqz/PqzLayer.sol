@@ -13,6 +13,7 @@ import {PqzStateLib} from "./PqzStateLib.sol";
 import {PqzTransferLib} from "./PqzTransferLib.sol";
 import {PqzViewLib} from "./PqzViewLib.sol";
 import {ENV_PQZ_VERIFIER} from "../factory/IFactoryToken.sol";
+import {ChainEnvCode} from "../factory/ChainEnvCode.sol";
 import {SSTORE2} from "../common/SSTORE2.sol";
 import {SigCheck} from "../common/SigCheck.sol";
 import {UAKinds} from "../ua/UAKinds.sol";
@@ -62,13 +63,15 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
         "UAPqzUnshield(bytes32 from,PqzBurnArgs args,uint256 amount,bytes32 recipient,bytes proof,bytes accHint,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)PqzBurnArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,bytes u,bytes vFrom)"
     );
 
-    /// @dev The `UAPqzVerifier` of this release; `init` takes the precompile and the proof system from it.
-    address internal immutable PQZ_VERIFIER;
+    /// @dev The `UAPqzVerifier` of this release and chain: the env's `deps[ENV_PQZ_VERIFIER]`, from the clone's code
+    ///      (chain-neutral spec §2.2); `init` takes the precompile and the proof system from it.
+    function _pqzVerifier() internal view returns (address) {
+        return ChainEnvCode.dep(ENV_PQZ_VERIFIER);
+    }
 
-    /// @dev `env.deps = [UAPqzVerifier]` (`ENV_PQZ_VERIFIER`); never on Hedera.
-    constructor(Env memory env) {
-        if (env.deps.length != 1 || env.hedera || !SigCheck.isContract(env.deps[ENV_PQZ_VERIFIER])) revert BadInit();
-        PQZ_VERIFIER = env.deps[ENV_PQZ_VERIFIER];
+    /// @dev `env.deps = [UAPqzVerifier]`, never on Hedera, a registry: `PqzStateLib.validateEnv`.
+    function _validateEnv(ChainEnv calldata env) internal view virtual override {
+        PqzStateLib.validateEnv(env.deps, env.hedera, env.registry);
     }
 
     /// @notice CTR-PQZ-15: the token signs under `"SCaaS PqzToken"`.
@@ -78,7 +81,7 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
 
     // ------------------------------------------------------------------ views
 
-    function verifier() external view returns (address) { return PQZ_VERIFIER; }
+    function verifier() external view returns (address) { return _pqzVerifier(); }
     function precompile() external view returns (address) { return PqzCore.$().pqz; }
     function proofSystemId() external view returns (bytes32) { return PqzCore.$().psid; }
     function shieldScale() external view returns (uint256) { return PqzCore.$().shieldScale; }
@@ -200,7 +203,7 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
     ///         `toUA` (plan 5h D18); free, into any holder (owner 2026-10-20).
     function mtxShield(bytes32 toUA, uint256 amount) external nonReentrant {
         _regPayer();
-        PqzStateLib.shield(toUA, amount, _msgSender(), _REGISTRY);
+        PqzStateLib.shield(toUA, amount, _msgSender(), _registry());
         _toPool(amount);
     }
 
@@ -380,7 +383,7 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
 
     /// @notice Anyone, once per account and half (0, 1) before its first rollover (idempotent), per key version.
     function mtxPrepareAcc(bytes32 ua, uint64 keyVersion, uint256 half) external nonReentrant {
-        PqzStateLib.prepareAcc(ua, keyVersion, half, _REGISTRY);
+        PqzStateLib.prepareAcc(ua, keyVersion, half, _registry());
     }
 
     /// @notice The signed rollover and prepare, as `mtxShield`'s (`UARollOver`, `UAPrepareAcc` with `keyVersion`).
@@ -403,7 +406,9 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
     }
 
     function _envOf(bytes32 binding) internal view returns (PqzCore.Env memory) {
-        return PqzCore.Env(_REGISTRY, CHAIN_UID, binding, 0, 0, ZetherTypes.TransferMode.BUNDLE, _domainSeparatorV4());
+        ChainEnvCode.Head memory h = ChainEnvCode.head();
+        if (h.chainUid == bytes32(0)) revert ChainUidZero();
+        return PqzCore.Env(h.registry, h.chainUid, binding, 0, 0, ZetherTypes.TransferMode.BUNDLE, _separator(h.chainUid));
     }
 
     /// @dev `mtxConfidentialTransfer`'s form: BUNDLE on a BUNDLE token, commit-reveal (HASH) on a COMPACT one.
@@ -454,7 +459,7 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
     ///      `TAG_ENVELOPE`, `from` an address.
     function _envelopeBinding(MetaTxLib.MetaTransaction memory m) internal view virtual override returns (bytes32) {
         (address r, address f) = MetaTxLib.canon(m);
-        return keccak256(abi.encode(PqzCore.TAG_ENVELOPE, block.chainid, CHAIN_UID, address(this), m.from, m.batch,
+        return keccak256(abi.encode(PqzCore.TAG_ENVELOPE, block.chainid, _chainUid(), address(this), m.from, m.batch,
             m.nonce, m.validUntil, m.mode, r, m.fee, f));
     }
 
@@ -464,7 +469,7 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
     {
         address r = (m.mode & MetaTxLib.MODE_RESTRICT_RELAYER) != 0 ? m.relayer : address(0);
         address f = (m.mode & MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT) != 0 ? m.feeRecipient : address(0);
-        return keccak256(abi.encode(PqzCore.TAG_UA_ENVELOPE, block.chainid, CHAIN_UID, address(this), m.from, m.batch,
+        return keccak256(abi.encode(PqzCore.TAG_UA_ENVELOPE, block.chainid, _chainUid(), address(this), m.from, m.batch,
             m.nonce, m.validUntil, m.mode, r, m.fee, f));
     }
 

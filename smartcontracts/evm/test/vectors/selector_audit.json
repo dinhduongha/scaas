@@ -42,7 +42,7 @@
    "error": "NotOwner(bytes32)"
   },
   {
-   "sig": "initialize(address,uint64,bytes)",
+   "sig": "initialize(bytes32,uint64,bytes)",
    "class": "FACTORY",
    "error": "NotFactory()"
   },
@@ -244,7 +244,7 @@
    "error": "NotOwner(bytes32)"
   },
   {
-   "sig": "initialize(address,uint64,bytes)",
+   "sig": "initialize(bytes32,uint64,bytes)",
    "class": "FACTORY",
    "error": "NotFactory()"
   },
@@ -506,7 +506,7 @@
    "error": "NotOwner(bytes32)"
   },
   {
-   "sig": "initialize(address,uint64,bytes)",
+   "sig": "initialize(bytes32,uint64,bytes)",
    "class": "FACTORY",
    "error": "NotFactory()"
   },
@@ -798,7 +798,7 @@
    "error": "NotOwner(bytes32)"
   },
   {
-   "sig": "initialize(address,uint64,bytes)",
+   "sig": "initialize(bytes32,uint64,bytes)",
    "class": "FACTORY",
    "error": "NotFactory()"
   },
@@ -1170,7 +1170,7 @@
    "error": "NotOwner(bytes32)"
   },
   {
-   "sig": "initialize(address,uint64,bytes)",
+   "sig": "initialize(bytes32,uint64,bytes)",
    "class": "FACTORY",
    "error": "NotFactory()"
   },
@@ -1452,7 +1452,7 @@
    "error": "NotOwner(bytes32)"
   },
   {
-   "sig": "initialize(address,uint64,bytes)",
+   "sig": "initialize(bytes32,uint64,bytes)",
    "class": "FACTORY",
    "error": "NotFactory()"
   },
@@ -1824,7 +1824,7 @@
    "error": "NotOwner(bytes32)"
   },
   {
-   "sig": "initialize(address,uint64,bytes)",
+   "sig": "initialize(bytes32,uint64,bytes)",
    "class": "FACTORY",
    "error": "NotFactory()"
   },
@@ -2086,7 +2086,7 @@
    "error": "NotOwner(bytes32)"
   },
   {
-   "sig": "initialize(address,uint64,bytes)",
+   "sig": "initialize(bytes32,uint64,bytes)",
    "class": "FACTORY",
    "error": "NotFactory()"
   },
@@ -2408,7 +2408,7 @@
    "error": "NotOwner(bytes32)"
   },
   {
-   "sig": "initialize(address,uint64,bytes)",
+   "sig": "initialize(bytes32,uint64,bytes)",
    "class": "FACTORY",
    "error": "NotFactory()"
   },
@@ -2760,7 +2760,7 @@
    "error": "NotOwner(bytes32)"
   },
   {
-   "sig": "initialize(address,uint64,bytes)",
+   "sig": "initialize(bytes32,uint64,bytes)",
    "class": "FACTORY",
    "error": "NotFactory()"
   },
@@ -3192,7 +3192,7 @@
    "error": "NotOwner(bytes32)"
   },
   {
-   "sig": "initialize(address,uint64,bytes)",
+   "sig": "initialize(bytes32,uint64,bytes)",
    "class": "FACTORY",
    "error": "NotFactory()"
   },
@@ -3534,7 +3534,7 @@
    "error": "NotOwner(bytes32)"
   },
   {
-   "sig": "initialize(address,uint64,bytes)",
+   "sig": "initialize(bytes32,uint64,bytes)",
    "class": "FACTORY",
    "error": "NotFactory()"
   },
@@ -3931,7 +3931,7 @@
    "error": "NotOwner(bytes32)"
   },
   {
-   "sig": "initialize(address,uint64,bytes)",
+   "sig": "initialize(bytes32,uint64,bytes)",
    "class": "FACTORY",
    "error": "NotFactory()"
   },
