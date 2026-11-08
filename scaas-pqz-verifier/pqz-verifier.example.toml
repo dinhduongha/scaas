@@ -1,0 +1,21 @@
+# scaas-pqz-verifier: the reference PQZ verifier (off-chain), 3f spec §11.2. No secret in this file: the keystore's path
+# and the NAME of the environment variable that holds its password.
+
+# the HTTP listener: POST /v1/pqz-verdict, POST /v1/pqz-verdict/probe
+bind = "127.0.0.1:8547"
+# the chain's JSON-RPC (state reads, eth_call of the token's statement views); the chain id is read from it at start
+rpc_url = "http://127.0.0.1:8545"
+# the verifier's own key (a native EOA verifier UA): an encrypted JSON keystore, never a lane key, never the node's
+keystore = "/etc/scaas-pqz-verifier/verifier.json"
+keystore_password_env = "SCAAS_PQZ_VERIFIER_PASSWORD"
+# validUntil = now + valid_minutes (1..=60)
+valid_minutes = 5
+# proofs verified at once; requests in flight (>= concurrency; more: BUSY); requests per client address per minute
+concurrency = 2
+queue = 16
+rate_per_minute = 60
+
+# the PQZ release (implementation) address of each token this verifier serves -> its parameter set; this build
+# verifies one set only (pqz-ffi's feature), and a release of another set is refused at start
+[releases]
+"0x0000000000000000000000000000000000000000" = "n2304-kmax4096"
