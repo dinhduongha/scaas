@@ -341,3 +341,8 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   The deploy scripts before the release list (chain-neutral spec §6.2, plan T73), under `ua-mtx-merge/release-list/`:
   `script/{DeployBase,Deploy.s}.sol` and `script/hedera/DeployHedera.s.sol` as they stood at the T70 tip, `configureChain`
   without a reference block, no `chain-uids.json` check, no sibling order, no release list. Not built.
+  The router and the factory before the creations through the router (chain-neutral spec §4.4, S3; plan T76), under
+  `ua-mtx-merge/router-create/`: `src/governance/{GovernanceRouter,GovernanceRouterBase}.sol` without `mtxCreateToken`,
+  `mtxCreateDex`, `mtxCreateInstance`; `src/factory/{OpenFactory,IOpenFactory}.sol` with the creator always
+  `pad(msg.sender)`; `test/vectors/legacy/ua-mtx-merge/router-create/selector_audit.json` and
+  `../vectors/typed/legacy/ua-mtx-merge/router-create/typed_ops.json` without the three rows. Not built.
