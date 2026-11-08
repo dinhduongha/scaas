@@ -490,6 +490,9 @@ instance per path.
 - **Hedera:** CREATE3 depends on `CREATE` addresses from a contract's nonce (HIP-729), on `EXTCODECOPY` of the executing account,
   and on `0x4e59…956c` being present; checked on the Hedera local node in T74, and if any fails the owner is told before T72 ends
   (Q7).
+  **Result (2026-11-08, owner: the public Hedera testnet instead of a local node):** all three hold in `eth_call` simulation on
+  chain 296, and CREATE2 through `0x4e59` gives the expected address (`smartcontracts/evm/runs/2026-11-08-ua-mtx-merge-hedera-probe/`);
+  one real deployment from a funded testnet account is still to confirm it.
 - **Gas and size:** `GovGas` / `UAGas` rows old → new (§7.2); `size-baseline.json` old → new with the reason; the four PQZ sets
   (`at-set.sh`); layout pins regenerated where `creatorId` moved a factory-side struct (none in the kinds).
 - **Mutants** (one at a time, each must turn a test red): `_chainUid()` returning 0 instead of reverting (Fable P2-1); the
