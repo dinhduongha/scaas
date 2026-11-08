@@ -1,0 +1,18 @@
+p1-pqchat-not-portable | test_requirePortable_gen2, test_requirePortable_msig, test_requirePortable_msigNotMinimal, test_requirePortable_msigUnacceptedSlot, test_requirePortable_singleKeyEveryHolderKind | 1
+p2-pop-v2-allowed | test_requirePortable_purposes | 1
+p3-msig-pop-exempts-slots | test_requirePortable_msigUnacceptedSlot | 1
+p4-msig-purpose-fixed | test_requirePortable_gen2, test_requirePortable_msig, test_requirePortable_msigNotMinimal, test_requirePortable_msigUnacceptedSlot | 1
+p5-msig-signature-ignored | test_requirePortable_msig | 1
+p6-native-member-md | test_requirePortable_gen2, test_requirePortable_msig, test_requirePortable_msigUnacceptedSlot | 1
+p7-minimal-off | test_requirePortable_msigNotMinimal | 1
+p8-gen2-not-forwarded | test_requirePortable_gen2 | 1
+p9-kind-unchecked | test_requirePortable_gen2, test_requirePortable_unregisteredAndNative | 1
+k1-register-msig-kem | test_ua8_kemMsigRefused, test_ua8_nonHolderAttrsRefused | 1
+k2-setkemkey-msig | test_msigKemSigNotMinimalRefused, test_ua8_kemMsigRefused | 1
+k3-kemholder-msig | test_msigKemSigNotMinimalRefused, test_ua8_kemMsigRefused, test_ua8_nonHolderAttrsRefused | 1
+s1-popslots-not-written | test_popSlotsOfFromVectors, test_popSlotsOfLaterAcceptanceSetsNoPopBit | 1
+s2-acceptance-sets-pop-bit | test_popSlotsOfLaterAcceptanceSetsNoPopBit | 1
+s3-popslots-read-accepted | test_popSlotsOfLaterAcceptanceSetsNoPopBit | 1
+s4-hash-wrong-index | none | 0
+s5-gen2-not-forwarded | test_popSlotsOfFromVectors | 1
+s4-hash-wrong-index | test_popSlotsOfGapInPop | 1
