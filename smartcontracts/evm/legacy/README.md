@@ -365,3 +365,6 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   T59 (`ownTag` and the key-version tail): `src/pqz/WrappedPqzToken.sol` (the unwrap typehash without `ownTag`) and
   `script/pqz/e2e.py` (the args tuples without `ownTag`, blobs without the tail), as they stood at 7558a364;
   `test/vectors/legacy/ua-mtx-merge/3h/selector_audit.json` at e35d1d16 (the six PQZ entries' signatures before `ownTag`).
+  T60 (`proofStore` `NONE` / `LOG`): `src/factory/IFactoryToken.sol` (no `ConfidentialConfig.proofStore`),
+  `src/metatx/MetaTokenBase.sol`, `src/zether/ZetherLib.sol` (the other-kind field checks without it),
+  `src/pqz/{PqzTransferLib,PqzBurnLib}.sol` (no `PqzDebitProof` event), as they stood at 7558a364.
