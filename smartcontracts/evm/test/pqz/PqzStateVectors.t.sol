@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {Vm} from "forge-std/Vm.sol";
 import {noVerdict} from "./helpers/PqzVerdicts.sol";
+import {UACall} from "../ua/UACall.sol";
 import {PqzSlots} from "./PqzState.t.sol";
 import {PqzLayer} from "../../src/pqz/PqzLayer.sol";
 import {IPqzToken} from "../../src/pqz/IPqzToken.sol";
@@ -17,7 +19,10 @@ import {PqzSet} from "../../src/pqz/PqzSet.sol";
 ///         burn statement view, and per entry leg its `u ‖ v` (and the auditor copy) from the disclosure statement view, and the
 ///         op 1 / op 7 / burn `memoHash` words of the statement views. Proofs mocked (no proof is in a row). `STATE_VECTORS=1`
 ///         writes `smartcontracts/vectors/pqz/[<set>/]state.json` (the commit in `CONTRACT_COMMIT`); ua-rs reproduces every
-///         `T` and ciphertext from the words (`tests/facade_pqz_state.rs`). UNAUDITED.
+///         `T` and ciphertext from the words (`tests/facade_pqz_state.rs`). Group 3h T62 (pqz-proof-path spec §9.3, C-PP-1;
+///         `"release": "3h"`): every debit's record words with the view's answer (narrow, wide by `shieldIn`, one under `LOG`),
+///         every op blob's tail `ownTag ‖ kv ‖ u8(n)` (op 1 with and without the auditor, op 7, a leg at key version 1, a
+///         burn) and the logged P of the `LOG` debit as emitted. UNAUDITED.
 contract PqzStateVectorsTest is PqzSlots {
     bytes32 internal dave;
     bytes32 internal erin;
@@ -31,6 +36,19 @@ contract PqzStateVectorsTest is PqzSlots {
     }
 
     Ent[] internal ents;
+
+    // group 3h T62: the tails of op blobs that are no entry row (a rotated leg, the burn's acc blob), the expected `kv` of the
+    // rotated op 7 (its leg at version 1), and the one `LOG` debit's event
+    struct Tail {
+        string name;
+        address blob;
+        uint64[] kv;
+    }
+
+    Tail[] internal extra;
+    bytes32 internal fay;
+    Vm.Log internal proofLog;
+    bytes32 internal constant EV_PROOF = keccak256("PqzDebitProof(address,bytes32,uint64,bytes,bytes)");
 
     function setUp() public {
         _stack();
@@ -99,7 +117,56 @@ contract PqzStateVectorsTest is PqzSlots {
         _shield(bob, 2);
         _single("op1 HASH carol->dave", carol, dave, 15, false, true);
         _multi("op7 M=2 HASH carol->[alice,erin]", carol, _legs(alice, erin), 24, false, true);
+        _proofPath();
         _shield(carol, 9); // carol: acc = her last debit's blob, one TRIVIAL entry pending
+    }
+
+    /// Group 3h T62: carol's debits of the proof-path rows, each with its own non-zero `ownTag`: op 1 with `shieldIn` 4 (a wide
+    /// record), op 1 under `LOG` (slot 0 byte 23 written here; its event kept), op 7 to alice and fay with fay's key rotated to
+    /// version 1, and a burn of 1 (its acc blob's tail holds no version).
+    function _proofPath() internal {
+        _public(tok, address(this), 4 * SCALE);
+        IPqzToken.PqzTransferArgs memory a = _ts(_payload(tok.pqzAccount(carol, 0).pendingCount, 4, carol, alice, bytes32(0),
+            _out(16, false), ""));
+        a.ownTag = keccak256("T62 own tag wide");
+        uint64 c = tok.pqzAccount(carol, 0).sendCounter;
+        ents.push(Ent("op1 carol->alice shieldIn 4 (a wide record)", tok.mtxConfidentialTransferSingle(a, hex"c0de", _pqAuth(), "",
+            noVerdict()), carol, c));
+        _mode(PqzCore.LOG);
+        a = _ts(_payload(tok.pqzAccount(carol, 0).pendingCount, 0, carol, bob, bytes32(0), _out(17, true), ""));
+        a.ownTag = keccak256("T62 own tag log");
+        c = tok.pqzAccount(carol, 0).sendCounter;
+        vm.recordLogs();
+        ents.push(Ent("op1 carol->bob audited, under LOG", tok.mtxConfidentialTransferSingle(a, hex"c0ffee", _pqAuth(), "",
+            noVerdict()), carol, c));
+        Vm.Log[] memory ls = vm.getRecordedLogs();
+        for (uint256 i; i < ls.length; ++i) if (ls[i].emitter == address(tok) && ls[i].topics[0] == EV_PROOF) proofLog = ls[i];
+        assertEq(proofLog.topics.length, 4, "the LOG debit's PqzDebitProof");
+        _mode(PqzCore.NONE);
+        fay = _pqzUA(_pk(13), 7);
+        reg.setPqzKey(fay, 1, _pk(14), keccak256("pqzver fay 1"), UACall.sig(new bytes(ML65_SIG)));
+        reg.storePqzPop(fay, 1, "pqzver fay 1");
+        IPqzToken.PqzMultiArgs memory m = _ms(_mpl(carol, _legs(alice, fay), 25, true, false));
+        m.ownTag = keccak256("T62 own tag op7");
+        bytes32 ref = tok.mtxConfidentialTransfer(m, hex"c0de", _pqAuth(), "", noVerdict());
+        uint64[] memory kv = new uint64[](3);
+        kv[1] = 1; // alice 0, fay 1, the auditor 0
+        extra.push(Tail("op7 M=2 audited carol->[alice,fay at key version 1]", _ptr(ref), kv));
+        IPqzToken.PqzBurnArgs memory b = _bs(bytes.concat(abi.encode(uint256(tok.pqzAccount(carol, 0).pendingCount), block.number + 5,
+            uint256(0), carol, bytes32(0)), _blob(79, PqzCt.CT)));
+        b.ownTag = keccak256("T62 own tag burn");
+        tok.mtxUnshield(b, 1, bytes32(uint256(0xD00D)), hex"c0de", _pqAuth(), "", noVerdict());
+        extra.push(Tail("burn 1 carol (her acc blob)", tok.pqzAccount(carol, 0).accBlob, new uint64[](0)));
+    }
+
+    function _mode(uint8 m) internal {
+        uint256 w = uint256(vm.load(address(tok), bytes32(BASE)));
+        vm.store(address(tok), bytes32(BASE), bytes32((w & ~(uint256(0xff) << 184)) | (uint256(m) << 184)));
+        assertEq(tok.proofStore(), m);
+    }
+
+    function _ptr(bytes32 ref) internal view returns (address) {
+        return address(uint160(uint256(vm.load(address(tok), keccak256(abi.encode(ref, BASE + 9))))));
     }
 
     // ------------------------------------------------------------------ the rows
@@ -248,6 +315,58 @@ contract PqzStateVectorsTest is PqzSlots {
         _w(string.concat("{\"op\": 2, \"mode\": \"\", \"ownTag\": ", _hx32(bytes32(0)), ", \"memoHash\": ", _hx32(_word(tok.burnStatement(_bs(bl), 1, bytes32(uint256(5)), 0), 608)), "}"));
     }
 
+    /// `debitRec[ua][k]` (PqzStorage slot 19): the two words as stored and the view's answer, every debit of `ua`.
+    function _records(bytes32 ua, bool last) internal {
+        uint64 n = tok.pqzAccount(ua, 0).sendCounter;
+        for (uint64 k; k < n; ++k) {
+            uint256 s0 = uint256(keccak256(abi.encode(uint256(k), keccak256(abi.encode(ua, BASE + 19)))));
+            (bytes32 w0, bytes32 w1) = (_load(address(tok), s0), _load(address(tok), s0 + 1));
+            assertTrue(w0 != 0 && uint8(uint256(w0)) & 1 == 1, "a record, RECORD set");
+            _w(string.concat("{\"ua\": ", _hx32(ua), ", \"counter\": ", vm.toString(uint256(k)), ", \"w0\": ", _hx32(w0), ", \"w1\": ",
+                _hx32(w1), ", \"view\": ", _view(tok.pqzDebitRecord(ua, k)), "}", last && k + 1 == n ? "" : ","));
+        }
+    }
+
+    function _view(IPqzToken.DebitRecordView memory v) internal pure returns (string memory) {
+        string memory a = string.concat("{\"prevBlob\": ", _hxa(v.prevBlob), ", \"p\": ", vm.toString(uint256(v.p)), ", \"deltaP\": ",
+            vm.toString(uint256(v.deltaP)), ", \"proofStore\": ", vm.toString(uint256(v.proofStore)));
+        return string.concat(a, ", \"shieldIn\": ", vm.toString(uint256(v.shieldIn)), ", \"keyVersion\": ", vm.toString(uint256(v.keyVersion)),
+            ", \"prevCounter\": ", vm.toString(uint256(v.prevCounter)), ", \"hasPrev\": ", v.hasPrev ? "true" : "false", "}");
+    }
+
+    /// An op blob's tail `ownTag ‖ be64 kv ‖ u8(n)` (spec §3.2), read here from its code and held to what the statement used
+    /// (`kv`), with `rOf`'s length.
+    function _tail(string memory name, address ptr, uint64[] memory kv, bool last) internal {
+        bytes memory c = ptr.code;
+        uint256 n = uint8(c[c.length - 1]);
+        assertEq(n, kv.length, string.concat(name, ": n"));
+        uint256 t = c.length - 1 - (33 + 8 * n); // the tail's start in the data (c = STOP ‖ data)
+        string memory ks;
+        for (uint256 i; i < n; ++i) {
+            uint64 v = uint64(bytes8(_slice(c, 1 + t + 32 + 8 * i, 8)));
+            assertEq(v, kv[i], string.concat(name, ": kv"));
+            ks = string.concat(ks, i == 0 ? "" : ", ", vm.toString(uint256(v)));
+        }
+        _w(string.concat("{\"name\": ", _q(name), ", \"blob\": ", _hxa(ptr), ", \"code\": ", _hx(c), ", \"ownTag\": ",
+            _hx32(bytes32(_slice(c, 1 + t, 32))), ","));
+        _w(string.concat("\"kv\": [", ks, "], \"n\": ", vm.toString(n), ", \"rLen\": ", vm.toString(PqzCore.rOf(ptr).length),
+            ", \"vp\": ", vm.toString(PqzCt.VP), "}", last ? "" : ","));
+    }
+
+    /// The `kv` an entry's statement used: every receiver and the auditor at version 0, but fay at 1 (none in `ents`).
+    function _kvOf(address ptr) internal view returns (uint64[] memory kv) {
+        kv = new uint64[](uint8(ptr.code[ptr.code.length - 1]));
+    }
+
+    function _proofLogRow() internal {
+        (bytes memory h, bytes memory pr) = abi.decode(proofLog.data, (bytes, bytes));
+        _w(string.concat("{\"name\": \"op1 carol->bob audited, under LOG\", \"emitter\": ", _hxa(proofLog.emitter), ", \"topics\": [",
+            _hx32(proofLog.topics[0]), ", ", _hx32(proofLog.topics[1]), ", ", _hx32(proofLog.topics[2]), ", ", _hx32(proofLog.topics[3]),
+            "], \"data\": ", _hx(proofLog.data), ","));
+        _w(string.concat("\"blob\": ", _hxa(address(uint160(uint256(proofLog.topics[1])))), ", \"ua\": ", _hx32(proofLog.topics[2]),
+            ", \"sendCounter\": ", vm.toString(uint256(proofLog.topics[3])), ", \"header\": ", _hx(h), ", \"proof\": ", _hx(pr), "}"));
+    }
+
     function _uints(uint256[] memory v) internal pure returns (string memory r) {
         for (uint256 i; i < v.length; ++i) r = string.concat(r, i == 0 ? "" : ", ", vm.toString(v[i]));
         r = string.concat("[", r, "]");
@@ -280,7 +399,7 @@ contract PqzStateVectorsTest is PqzSlots {
         vm.writeFile(path, "");
         _w(string.concat("{\"_comment\": ", _q(string.concat("smartcontracts/evm/test/pqz/PqzStateVectors.t.sol at contract commit ",
             vm.envString("CONTRACT_COMMIT"), " (STATE_VECTORS=1); proofs mocked; UNAUDITED")), ","));
-        _w(string.concat("\"file\": \"state.json\", \"set\": ", _q(PqzSet.NAME), ", \"contractCommit\": ", _q(vm.envString("CONTRACT_COMMIT")), ", \"chainId\": ",
+        _w(string.concat("\"file\": \"state.json\", \"release\": \"3h\", \"set\": ", _q(PqzSet.NAME), ", \"contractCommit\": ", _q(vm.envString("CONTRACT_COMMIT")), ", \"chainId\": ",
             vm.toString(block.chainid), ", \"chainUid\": ", _hx32(tok.chainUid()), ", \"token\": ", _hxa(address(tok)), ", \"registry\": ",
             _hxa(address(reg)), ","));
         _w(string.concat("\"psid\": ", _hx32(_load(address(tok), BASE + 2)), ", \"auditorMode\": ",
@@ -300,6 +419,17 @@ contract PqzStateVectorsTest is PqzSlots {
         for (uint256 i; i < ents.length; ++i) _entry(ents[i], i + 1 == ents.length);
         _w("], \"memoHash\": [");
         _memoHashes();
+        _w("], \"records\": [");
+        _records(bob, false);
+        _records(carol, true);
+        _w("], \"tails\": [");
+        for (uint256 i; i < ents.length; ++i) {
+            address ptr = _ptr(ents[i].ref);
+            _tail(ents[i].name, ptr, _kvOf(ptr), false);
+        }
+        for (uint256 i; i < extra.length; ++i) _tail(extra[i].name, extra[i].blob, extra[i].kv, i + 1 == extra.length);
+        _w("], \"proofLogs\": [");
+        _proofLogRow();
         _w("]}");
     }
 }

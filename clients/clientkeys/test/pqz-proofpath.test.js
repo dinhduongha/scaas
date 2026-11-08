@@ -9,13 +9,16 @@ import { hkdf } from '@noble/hashes/hkdf.js';
 import { hmac } from '@noble/hashes/hmac.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { keccak_256 } from '@noble/hashes/sha3.js';
-import { pqzOwnTag, pqzMemoHash, TYPED_OPS } from '../src/evm.js';
+import { pqzOwnTag, pqzMemoHash, pqzDebitRecordOf, pqzBlobTailOf, pqzDebitProofOf, TYPED_OPS } from '../src/evm.js';
 import { pqzKeySeed } from '../src/pq.js';
 import { seedFromWords } from '../src/seed.js';
 import { hex, fromHex, utf8ToBytes, concatBytes } from '../src/bytes.js';
 
 const KAT = JSON.parse(readFileSync(new URL('../../../smartcontracts/vectors/ua/pq_kat.json', import.meta.url), 'utf8'));
 const V = JSON.parse(readFileSync(new URL('../../../smartcontracts/vectors/typed/typed_ops.json', import.meta.url), 'utf8'));
+// T62: the forge state vectors of the default set and n2048-kmax1024 (PqzStateVectors.t.sol, STATE_VECTORS=1)
+const STATES = ['n2304-kmax4096/state.json', 'state.json'].map((f) =>
+  JSON.parse(readFileSync(new URL(`../../../smartcontracts/vectors/pqz/${f}`, import.meta.url), 'utf8')));
 
 test('ownTag: the KAT rows, recomputed here with HKDF-SHA256 then HMAC-SHA256 (label PQZ/owntag/v1, empty salt)', () => {
   const seed = seedFromWords(KAT.mnemonic);
@@ -72,5 +75,58 @@ test('the six PQZ debit rows of release 3h: ownTag in the args struct, signed, t
     assert.equal(fromHex(r.message.args.ownTag).length, 32, n);
     assert.deepEqual([r.message.mode, r.message.fee], [0, '0'], `${n}: fee NONE at 0, no restriction bit`);
     assert.deepEqual([r.message.relayer, r.message.feeRecipient], ['0x' + '00'.repeat(20), '0x' + '00'.repeat(20)], `${n}: canonical 0`);
+  }
+});
+
+// Group 3h, plan T62 (spec §2.2, §3.2, §4.2, §9.3; C-PP-1): the record words, the op blob tails and the logged P of the forge state
+// vectors at two sets, read here from the bytes alone and equal to what the contract's own views answered (`pqzDebitRecord`, the
+// statement's key versions, the event as emitted).
+test('state.json (two sets): release 3h; every debit record decodes from its two words to pqzDebitRecord\'s view', () => {
+  for (const st of STATES) {
+    assert.equal(st.release, '3h', st.set);
+    const forms = new Set();
+    for (const r of st.records) {
+      const v = pqzDebitRecordOf(r.w0, r.w1, r.counter);
+      for (const k of ['p', 'deltaP', 'proofStore', 'shieldIn', 'keyVersion', 'prevCounter']) {
+        assert.equal(v[k], BigInt(r.view[k]), `${st.set} ${r.ua} ${r.counter}: ${k}`);
+      }
+      assert.deepEqual([v.prevBlob, v.hasPrev], [r.view.prevBlob, r.view.hasPrev], `${st.set} ${r.ua} ${r.counter}`);
+      assert.equal(v.flags & 1n, 1n, 'RECORD always set');
+      forms.add(v.flags & 2n ? 'wide' : 'narrow');
+      if (v.proofStore === 1n) forms.add('log');
+      if (!(v.flags & 2n)) assert.equal(BigInt(r.w1), 0n, `${st.set} ${r.ua} ${r.counter}: no w1 when narrow`);
+    }
+    assert.deepEqual([...forms].sort(), ['log', 'narrow', 'wide'], `${st.set}: narrow, wide and a LOG record`);
+    assert.throws(() => pqzDebitRecordOf('0x' + '00'.repeat(32), '0x00', 0), /DebitRecordUnknown/);
+  }
+});
+
+test('state.json (two sets): every op blob\'s tail ownTag ‖ kv ‖ u8(n), read from the last byte, and R before P(v_f)', () => {
+  for (const st of STATES) {
+    const ns = new Set();
+    for (const t of st.tails) {
+      const x = pqzBlobTailOf(t.code);
+      assert.deepEqual([x.ownTag, x.kv.map(String), x.n], [t.ownTag, t.kv.map(String), t.n], `${st.set} ${t.name}`);
+      assert.equal(x.dataLen - x.tailLen - t.vp, t.rLen, `${st.set} ${t.name}: R ends where P(v_f) starts`);
+      ns.add(t.n);
+    }
+    assert.ok(ns.has(0) && ns.has(1) && ns.has(2), `${st.set}: a burn (n 0), op 1 with and without the auditor`);
+    assert.ok(st.tails.some((t) => t.kv.some((v) => BigInt(v) !== 0n)), `${st.set}: a leg at a key version above 0`);
+    assert.ok(st.tails.some((t) => BigInt(t.ownTag) !== 0n), `${st.set}: a non-zero ownTag`);
+  }
+});
+
+test('state.json (two sets): the logged P, PqzDebitProof(blob, ua, sendCounter, header, proof), decodes from its log', () => {
+  for (const st of STATES) {
+    assert.ok(st.proofLogs.length > 0, st.set);
+    for (const l of st.proofLogs) {
+      const d = pqzDebitProofOf(l);
+      assert.deepEqual([d.blob, d.ua, d.sendCounter, d.header, d.proof], [l.blob, l.ua, BigInt(l.sendCounter), l.header, l.proof], st.set);
+      assert.equal(fromHex(d.header).length, 640, 'the verified header');
+      const rec = st.records.find((r) => r.ua === l.ua && r.counter === l.sendCounter);
+      assert.equal(BigInt(rec.view.proofStore), 1n, 'its record says LOG');
+    }
+    assert.throws(() => pqzDebitProofOf({ ...st.proofLogs[0], topics: ['0x' + '00'.repeat(32), ...st.proofLogs[0].topics.slice(1)] }),
+      /PqzDebitProof/);
   }
 });

@@ -1161,6 +1161,56 @@ export function pqzMemoHash(memo, ownTag) {
   return hex(keccak_256(concatBytes(asBytes(memo ?? '0x'), bytes32(ownTag))));
 }
 
+const M64 = (1n << 64n) - 1n;
+
+/** Group 3h (spec §2.2, §9.1): a debit record's two words (`debitRec[ua][counter]`, `w0 = prevBlob(160) ‖ p(64) ‖ Δp(16) ‖
+ *  proofStore(8) ‖ flags(8)`, `w1 = shieldIn(64) ‖ keyVersion(64) ‖ prevCounter(64) ‖ 0` when `flags` has WIDE, 2) as
+ *  `pqzDebitRecord(ua, counter)` answers them: a narrow record with a predecessor names `counter − 1`. */
+export function pqzDebitRecordOf(w0, w1, counter) {
+  const a = BigInt(w0);
+  if (a === 0n) refuse('DebitRecordUnknown: no record at this counter');
+  const prev = a >> 96n;
+  const r = { prevBlob: '0x' + prev.toString(16).padStart(40, '0'), p: (a >> 32n) & M64, deltaP: (a >> 16n) & 0xffffn,
+    proofStore: (a >> 8n) & 0xffn, flags: a & 0xffn, shieldIn: 0n, keyVersion: 0n, prevCounter: 0n, hasPrev: prev !== 0n };
+  if (r.flags & 2n) {
+    const b = BigInt(w1);
+    [r.shieldIn, r.keyVersion, r.prevCounter] = [b >> 192n, (b >> 128n) & M64, (b >> 64n) & M64];
+  } else if (r.hasPrev) {
+    r.prevCounter = BigInt(counter) - 1n;
+  }
+  return r;
+}
+
+/** Group 3h (spec §3.2): the tail of a PQZ op blob, read from its last byte: `… ‖ P(v_f) ‖ ownTag(32) ‖ be64 kv[0..n) ‖ u8(n)`.
+ *  `code` is the SSTORE2 pointer's code (a STOP byte, then the data); `R` is the data before `P(v_f)`. */
+export function pqzBlobTailOf(code) {
+  const d = asBytes(code).subarray(1);
+  const n = d.length ? d[d.length - 1] : 0;
+  const tailLen = 33 + 8 * n;
+  if (!d.length || n > 9 || d.length < tailLen) refuse('not a PQZ op blob of release 3h: its tail does not fit');
+  const at = d.length - tailLen;
+  const kv = [];
+  for (let i = 0; i < n; i++) kv.push(new DataView(d.buffer, d.byteOffset + at + 32 + 8 * i, 8).getBigUint64(0));
+  return { ownTag: hex(d.subarray(at, at + 32)), kv, n, tailLen, dataLen: d.length };
+}
+
+const PQZ_DEBIT_PROOF = hex(keccak_256(utf8ToBytes('PqzDebitProof(address,bytes32,uint64,bytes,bytes)')));
+
+/** Group 3h (spec §4.2, §9.2): a `PqzDebitProof(address indexed blob, bytes32 indexed ua, uint64 indexed sendCounter, bytes
+ *  header, bytes proof)` log (`topics`, `data`) as its named fields: the verified header (640 bytes) and the calldata proof. */
+export function pqzDebitProofOf({ topics, data }) {
+  if (topics?.length !== 4 || topics[0] !== PQZ_DEBIT_PROOF) refuse('not a PqzDebitProof log');
+  const d = asBytes(data);
+  const word = (at) => BigInt(hex(d.subarray(at, at + 32)));
+  const field = (head) => {
+    const at = Number(word(head));
+    const len = Number(word(at));
+    if (at + 32 + len > d.length) refuse('PqzDebitProof: a field runs past the data');
+    return hex(d.subarray(at + 32, at + 32 + len));
+  };
+  return { blob: '0x' + topics[1].slice(-40), ua: topics[2], sendCounter: BigInt(topics[3]), header: field(0), proof: field(32) };
+}
+
 /** Group 3g (KV-8, KV-9): what a wallet checks of a PQZ debit against the debited UA's current version (`pqzKeyOf(fromUA)`), before
  *  it signs. `keyVersion == current`: every debit, a self-transfer refused (`SelfTransfer`). Stale: only the migration (op 1 to
  *  itself) and a refresh (a burn of 0 with no recipient) (`StaleKeyVersion`). Above current: `KeyVersionUnknown`. Returns
