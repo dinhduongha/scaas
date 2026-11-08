@@ -20,8 +20,16 @@ for d in "$@"; do
     continue
   fi
   if [ "$d" = top ]; then
-    FOUNDRY_SPARSE_MODE=true FOUNDRY_OUT=out/3h-$n FOUNDRY_CACHE_PATH=cache/3h-$n \
-      ~/.foundry/bin/forge test -j 2 --match-path 'test/*.t.sol' ${FORGE_ARGS:-} > "$log" 2>&1
+    # the files directly in test/ from a copy in the git-ignored dist/ (their imports are ../src and forge-std only): sparse
+    # mode with --match-path 'test/*.t.sol' compiled 460 files and was OOM-killed at the 4 GB cap (3h T58, 2026-11-08)
+    rm -rf dist && mkdir dist && cp test/*.t.sol dist/
+    FOUNDRY_TEST=dist FOUNDRY_OUT=out/3h-$n FOUNDRY_CACHE_PATH=cache/3h-$n \
+      ~/.foundry/bin/forge test -j 2 ${FORGE_ARGS:-} > "$log" 2>&1
+    rc=$?
+    rm -rf dist
+    [ $rc -eq 0 ] || rc_all=1
+    echo "$d: rc $rc | $(grep '^Ran ' "$log" | tail -1)"
+    continue
   else
     FOUNDRY_TEST=$d FOUNDRY_OUT=out/3h-$n FOUNDRY_CACHE_PATH=cache/3h-$n \
       ~/.foundry/bin/forge test -j 2 ${FORGE_ARGS:-} > "$log" 2>&1

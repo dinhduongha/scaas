@@ -502,8 +502,9 @@ contract GovDeployTest is Test {
         // three PQZ verifier ops `mtxPqz{Set,Cancel,Revoke}Verifier`): 0x5A6E6681A1Ec31741438D863ffCC138C186FB933; T66a item 1: -> this
         // (the metadata hash: `IUARegistry.requirePortable`)
         // T66a item 2 (the metadata hash: IUARegistry's KEM holder docs): 0x0240966987610aC882D8501247EF3Ce2AC2c477B -> this
-        // T66a item 5 (the metadata hash: IUARegistry.popSlotsOf): 0xbf24455f26b2cB0a343fc47a546Fd68F4b5CAEAD -> this
-        assertEq(router, 0x3A893f1938bA3E34339D3d4b85CC13a5983A7149, "GovernanceRouter");
+        // T66a item 5 (the metadata hash: IUARegistry.popSlotsOf): 0xbf24455f26b2cB0a343fc47a546Fd68F4b5CAEAD -> 0x3A893f1938bA3E34339D3d4b85CC13a5983A7149
+        // 3h T58 (the metadata hash: IPqzToken's debit record view and `lastDebit`): -> this
+        assertEq(router, 0x942f489e2f453AaEd2Be4B3DFb8b5dA441Fa6BdA, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append: chain-neutral releases (plan T72), `abi.encode(factory, implArgs)`;

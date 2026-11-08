@@ -74,13 +74,14 @@ contract PqzDebitRecordTest is PqzFixture {
         tok.mtxUnshield(_burnArgs(from, kv, p, 0, seed), 0, bytes32(0), PROOF, _pqAuth(), "", noVerdict());
     }
 
-    /// Prepare both halves and roll `n` entries of `(ua, v)` after `ROLL_AGE` blocks.
+    /// Prepare both halves and roll `n` entries of `(ua, v)` after `ROLL_AGE` blocks, in rollovers of at most `ROLL_MAX` (32 at
+    /// n2816-kmax65536).
     function _rollN(bytes32 ua, uint64 v, uint256 n) internal {
         uint8 f = tok.pqzAccount(ua, v).flags;
         if (f & 2 == 0) tok.mtxPrepareAcc(ua, v, 0);
         if (f & 4 == 0) tok.mtxPrepareAcc(ua, v, 1);
         vm.roll(block.number + ROLL_AGE);
-        tok.mtxRollOver(ua, v, n);
+        for (uint256 k; k < n; k += PqzCore.ROLL_MAX) tok.mtxRollOver(ua, v, n - k < PqzCore.ROLL_MAX ? n - k : PqzCore.ROLL_MAX);
     }
 
     function _slots(bytes32 ua, uint64 v, uint256 n) internal view returns (uint256[] memory s) {

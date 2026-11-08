@@ -1,0 +1,9 @@
+M1-debit-delete-loop | test_debit_keepsPendingSlots, test_pendingCt_belowCleared | 1
+M2-rollover-delete-loop | test_rollover_keepsPendingSlots | 1
+M3-record-p-off-by-one | test_lastDebit_interleaved, test_record_burn, test_record_deltaP_afterRollover, test_record_deltaP_first, test_record_deltaP_unroll, test_record_migration, test_record_narrow, test_record_op1, test_record_op7, test_record_refresh, test_record_unknown_reverts, test_record_unwrap, test_record_wide_keyVersion, test_record_wide_prevNotPrevious, test_record_wide_shieldIn | 1
+M4-prevBlob-new-blob | test_lastDebit_interleaved, test_layout_scaasPqz, test_record_burn, test_record_deltaP_afterRollover, test_record_deltaP_first, test_record_deltaP_unroll, test_record_migration, test_record_narrow, test_record_op1, test_record_op7, test_record_prevBlob_afterRollover, test_record_refresh, test_record_unknown_reverts, test_record_unwrap, test_record_wide_keyVersion, test_record_wide_prevNotPrevious, test_record_wide_shieldIn | 1
+M5-w1-not-for-keyVersion | test_lastDebit_interleaved, test_record_wide_keyVersion | 1
+M6-record-bit-dropped | test_lastDebit_interleaved, test_record_burn, test_record_deltaP_afterRollover, test_record_deltaP_first, test_record_deltaP_unroll, test_record_migration, test_record_narrow, test_record_op1, test_record_op7, test_record_refresh, test_record_unknown_reverts, test_record_unwrap, test_record_wide_keyVersion, test_record_wide_prevNotPrevious, test_record_wide_shieldIn | 1
+M17-rollover-floor-unconditional | test_rollover_floorOnlyRises | 1
+M18-w1-not-for-shieldIn | test_record_wide_shieldIn | 1
+M21-deltaP-from-floor | test_record_deltaP_afterRollover | 1
