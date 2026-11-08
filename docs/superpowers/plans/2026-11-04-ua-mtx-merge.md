@@ -1507,6 +1507,10 @@ Items, each with a failing test first where it is code:
 4. **ARCH-POS-15:** `scaas-pqz-verifier` takes a list of RPC endpoints (failover; the majority option for its reads).
 5. `NotProposer` before the owner check on a confirm tells a stranger who the proposer is: no change, `pqzProposer` is a public
    view (controller 2026-11-08).
+6. **A k-of-n `msig` verifier (owner 2026-11-08):** the requester gathers the member signatures: the node's `/v1/pqz-verdict` fetch
+   sends the request to each member's `scaas-pqz-verifier`, collects k signatures over the one `PqzVerdict` and assembles the `msig`
+   `UASig`; each member's service signs only its own verdict and never contacts the others. Bounds, timeouts and the refusal when
+   fewer than k answer, in the node's spec; red tests first.
 
 ### PQZ verifier mode (3f, owner approved 2026-11-06; names renamed by the owner 2026-11-07): tasks T44–T50
 
