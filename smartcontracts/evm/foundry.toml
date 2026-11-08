@@ -43,6 +43,7 @@ fs_permissions = [
   { access = "read-write", path = "../vectors/governance" },
   { access = "read-write", path = "../vectors/pqz" }, # test/pqz/PqzStateVectors.t.sol (STATE_VECTORS=1)
   { access = "read-write", path = "../vectors/zether" }, # test/zether/ZetherStateVectors.t.sol (STATE_VECTORS=1)
+  { access = "read-write", path = "../vectors/factory" }, # test/v2/Create3Kat.t.sol (WRITE_CREATE3_KAT=true)
   { access = "read", path = "./size-baseline.json" },
   { access = "read", path = "./broadcast" }, # script/ZetherE2E.s.sol gasSplit (the e2e broadcast)
   { access = "read", path = "./test" }, # test/ExpectRevertLint.t.sol scans the tests
