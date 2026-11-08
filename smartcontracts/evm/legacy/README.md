@@ -334,3 +334,7 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   `test/pqz/PqzNormal.t.sol`;
   `test/vectors/legacy/ua-mtx-merge/chain-neutral/selector_audit.json` with the `initialize(address,uint64,bytes)` rows.
   Not built.
+  The generic catalogue (factory index spec §8, plan T70), under `ua-mtx-merge/generic-catalogue/`:
+  `src/factory/{OpenFactory,IOpenFactory}.sol` as they stood at 612981b9 (the T72 tip), the env maps keyed by a `uint8`
+  domain (a `TokenKind` or `DEX_DOMAIN`) and `EnvUnknown` / `EnvAlreadyPublished` taking it; no generic class, no
+  `createInstance`, no `creating()`. Not built.
