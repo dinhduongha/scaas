@@ -21,3 +21,7 @@ signature check names `pqzVerifierUA` from storage only (`PqzCore.verdictStatus`
 mutate to; the binding rows (the signer's domain, `PqzVerdictRejected`) are the tests that would catch a signer taken
 from anywhere else. The Node and Service rows are T47's (`scaas-node/runs/`) and T48's (`scaas-pqz-verifier/runs/`).
 **UNAUDITED.**
+
+`gas.sh` runs `PqzOffchainGas.t.sol` (T50's docs figures, log only, not a gate): the same direct debit from the same state on a
+PRECOMPILE token (the precompile mocked, its row left out) and on an OFFCHAIN token with an EOA verifier, and the verdict
+parameter's calldata in each mode. The file is copied into `test/pqz/` for the run and removed after it.
