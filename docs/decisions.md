@@ -7956,8 +7956,13 @@ derived kind of its own scheme** (CTR-UA-06's "a MetaMask key registers `secp256
 Only that kind: never a second scheme on the key (`bip340`, Schnorr; the registry's `UAKeyInUse` refuses it too), and still no
 generic sign-this-digest call: `ua-rs` builds `ua_msg` from the typed fields itself. Replaces the spec §8.3 clause "refused for
 any UA kind" for those two kinds only. **Not pursued (owner 2026-11-08):** a one-member `msig` over a native EOA as the way to keep
-the key only in a browser wallet: a native member has no KEM record (CTR-UA-32 seals to each member's own KEM key), so that UA
-could sign portable records but never receive a sealed message.
+the key only in a browser wallet: one `msig` per user costs more gas on every operation, and a native EVM member signs only where
+its family verifies it, while a single-key `0x0108` / `0x0102` UA is verified on every family. (Neither path holds a KEM key:
+only the PQ signature kinds do, CTR-UA-32; a sealed-message user, `PqChat` included, needs a PQ-kind UA from the seed.)
+**Also owner 2026-11-08 (as recommended):** `BackupPayload.manifest` gains `importedUas` after `entries`, written only when not
+empty, so every earlier vector row keeps its bytes; the imported key's native raw-digest call (`AllowRawDigest`, CLI-SGN-22,
+CLI-SGN-40) stays, because the native envelopes of Cosmos, Hedera and the ed25519 networks need it, and its risk (a raw-digest
+signer can sign a `ua_msg`, the S23 class) is written beside S23 in `accounts.md` with T20c's docs.
 **Source.** owner 2026-11-08 (chat): "Có thêm task cho ua-rs-sign để đăng ký kind dẫn xuất (0x0108 / 0x0102) từ khóa … đã nhập vào ví" — "có".
 
 ### CLI-SGN-30 — EOA path EOA-only; role tree m/7622
