@@ -278,3 +278,10 @@ named-tests: named-tests: 641 names, 0 problem(s)
 #   may take the two behaviours in their own round. ARCH-POS-15 is carried verbatim from ua-mtx-merge 3975f9ae until the next sync.
 # Inputs: PQ_DOWNLOADS held the 15 pinned downloads (not committed); Foundry 1.8.5 (anvil, stopped by the tests); Qt 6.12; NDK r29.
 #   Another agent's forge jobs held the capped slots: wall times are not comparable. UNAUDITED.
+
+# ua-sizes re-run after the baseline move (controller 2026-11-08, a55f3e11: only the cell
+#   wasm32-unknown-unknown/ua-c/no-default/cdylib 3153460 -> 3196892 B), the ua-sizes step alone, resumed per step:
+ua-sizes | a55f3e11 | 0 | -
+# ua-sizes: selftest ok; 0 failures, every baseline cell measured (34 rows); the moved cell measured 3196892 (= its baseline);
+#   the largest growth inside the tolerance +0.76 % (x86_64 ua-cxx staticlib). a55f3e11 changes only size-baseline.json
+#   against 583320b4, so the other 35 steps above stand. UNAUDITED.
