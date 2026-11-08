@@ -32,7 +32,7 @@ M = [
     ("raw acc accepted (checkBalance allow-list)", [(ST, '"checkBalance" => has(LOC) || has(ACCT) || field == "cacheBox",',
                                                      '"checkBalance" => has(LOC) || has(ACCT) || field == "cacheBox" || field == "acc",')], S(NEG)),
     ("decrypt's [x]D left variable-time", [(EL, "    Ok(ct.c - secret_mul(&ct.d, x)?)", "    Ok(ct.c - ct.d * *x)")], SM),
-    ("the CLI's catalogue check skipped (R5)", [(CLI, "    if info[2] != 1 || !ZETHER_KINDS.contains(&info[11]) {", "    if false {")],
+    ("the CLI's catalogue check skipped (R5)", [(CLI, "    if !catalogued(&rec) {", "    if false {")],
      RB("--", "--include-ignored", "rpc_reading_layer_against_anvil")),
     # every other key.x multiplication on a supplied point (Codex C6), one at a time
     ("the burn's balance check variable-time", [(ZE, "if acc.c - secret_mul(&acc.d, &key.x)? != generator::<C>() * Fr::<C>::from(balance) {",

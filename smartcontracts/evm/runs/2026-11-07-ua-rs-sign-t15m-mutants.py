@@ -36,8 +36,9 @@ M = [
     ("R3: the block not re-checked after the reads", [(B, '    if again["hash"].as_str() != Some(r.hash.as_str()) {', "    if again.is_null() {")], T),
     ("R3: reads at latest, not by block hash", [(B, 'json!({"blockHash": self.hash, "requireCanonical": true})', 'json!("latest")')], T),
     # R5
-    ("R5: the catalogue not read", [(B, "    if info[2] != 1 || !PQZ_KINDS.contains(&info[11]) {", "    if false {")], T),
-    ("R5: exists not checked", [(B, "    if info[2] != 1 || !PQZ_KINDS.contains(&info[11]) {", "    if !PQZ_KINDS.contains(&info[11]) {")], T),
+    # (T20b second sync: R5 reads the factory index's `_rec[token]` word 2; "exists" is its class TOKEN)
+    ("R5: the catalogue not read", [(B, "    if !catalogued(&rec) {", "    if false {")], T),
+    ("R5: exists not checked", [(B, "    class == CLASS_TOKEN && PQZ_KINDS", "    let _ = class;\n    PQZ_KINDS")], T),
     ("R5: a Zether kind accepted", [(B, "const PQZ_KINDS: [u8; 4] = [4, 5, 12, 13];", "const PQZ_KINDS: [u8; 5] = [4, 5, 12, 13, 2];")], T),
     # R6
     ("R6: the registered key not compared with the handle's",

@@ -22,3 +22,8 @@ killed     | M19 a pending credit's blob not read | clients/ua-rs/src/bin/pqz-re
 killed     | M20 entryRef of another chain id | clients/ua-rs/src/bin/pqz-read.rs | rc=101 | 1 failed: reading_layer_against_anvil | called `Result::unwrap()` on an `Err` value: "error: no entry of --from-ua at --send-counter on this token\n" | at 6c6e81d0 | git diff --exit-code 0
 killed     | M21 check_test_features: ua-rs not an artifact | scripts/check_test_features.py | rc=1 | 1 failed: positive control (graph, ua-rs row) failed | at 6c6e81d0 | git diff --exit-code 0
 mutants M1-M21 of 21: 21 killed, 0 survived, 0 not loaded
+# T20b second-sync re-run (2026-11-08, ua-mtx-merge 4f6d8605: R5 reads the factory index's `_rec[token]` word 2, "exists" is its class TOKEN): M9 and M10's strings brought to HEAD, M9-M11 run again:
+killed     | M9 R5: the catalogue not read | clients/ua-rs/src/bin/pqz-read.rs | rc=101 | 2 failed: decoys_against_anvil, reading_layer_against_anvil | called `Result::unwrap_err()` on an `Ok` value: Object {"decoys": Array [Object {"ua": String("0x0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0 | at b3033535
+killed     | M10 R5: exists not checked | clients/ua-rs/src/bin/pqz-read.rs | rc=101 | 1 failed: reading_layer_against_anvil | want R5: the token is not a PQZ token: error: ua-rs refused the words: PqzSetMismatch | at b3033535
+killed     | M11 R5: a Zether kind accepted | clients/ua-rs/src/bin/pqz-read.rs | rc=101 | 1 failed: reading_layer_against_anvil | want R5: the token is not a PQZ token: error: ua-rs refused the words: PqzSetMismatch | at b3033535
+# T20b second-sync re-run: 3 killed, 0 survived, 0 not loaded (the other mutants above stand, every string checked at HEAD)

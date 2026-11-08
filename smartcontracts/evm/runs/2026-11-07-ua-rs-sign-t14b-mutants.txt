@@ -41,3 +41,6 @@ killed     | M23 --ct back in a release build | clients/zether-prover/src/bin/ze
 # T15l re-run (Fable P3-5): the replacement strings brought to HEAD (T14b, T15k and T15l had rewritten them), those mutants run again:
 killed     | M1 raw acc accepted (checkBalance allow-list) | clients/zether-prover/src/state.rs | rc=101 | 1 failed: word_location_and_role_negatives_are_refused_before_the_key | at c363e034 | rc=0, git diff --exit-code 0
 # T15l re-run: 1 killed, 0 survived, 0 not loaded (0 superseded; the other mutants above stand, every string checked at HEAD)
+# T20b second-sync re-run (2026-11-08, ua-mtx-merge 4f6d8605: R5 reads the factory index's `_rec[token]` word 2): the replacement string brought to HEAD, the mutant run again:
+killed     | M3 the CLI's catalogue check skipped (R5) | clients/zether-prover/src/bin/zether-read-balance.rs | rc=101 | 1 failed: rpc_reading_layer_against_anvil | at b3033535
+# T20b second-sync re-run: 1 killed, 0 survived, 0 not loaded (the other mutants above stand, every string checked at HEAD)
