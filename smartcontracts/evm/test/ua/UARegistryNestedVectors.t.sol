@@ -292,6 +292,31 @@ contract UARegistryNestedVectorsTest is UARegistryBase {
         }
     }
 
+    /// CTR-UA-33 Change 2026-11-08 (plan T66a): after every nested registration, `popSlotsOf` of each `msig` row is its `popSigners` with
+    /// its `memberSigHashes` (an inner `msig` slot's hash is that of its `abi.encode(InnerSig[])`), each = `memberSigHashOf`.
+    function test_nestedVectors_popSlotsOf() public {
+        vm.pauseGasMetering(); // a 700 KB JSON string per cheatcode call
+        _registerUpTo("");
+        uint256 rows;
+        for (uint256 i; i < _count(".registrations"); ++i) {
+            string memory row = _p("registrations", i, "");
+            if (_uint16(string.concat(row, ".kind")) != UAKinds.MSIG) continue;
+            bytes32 ua = vm.parseJsonBytes32(j, string.concat(row, ".ua"));
+            (uint16[] memory idx, bytes32[] memory h) = r.popSlotsOf(ua);
+            uint256 n = _count(string.concat(row, ".memberSigHashes"));
+            assertEq(idx.length, n, row);
+            assertEq(h.length, n, row);
+            for (uint256 k; k < n; ++k) {
+                string memory e = string.concat(row, ".memberSigHashes[", vm.toString(k), "]");
+                assertEq(idx[k], vm.parseJsonUint(j, string.concat(e, ".index")), row);
+                assertEq(h[k], vm.parseJsonBytes32(j, string.concat(e, ".hash")), row);
+                assertEq(h[k], r.memberSigHashOf(ua, idx[k]), row);
+            }
+            ++rows;
+        }
+        assertEq(rows, 11, "the nested msig rows, empty pops included");
+    }
+
     function test_nestedVectors_structures() public {
         _registerUpTo("");
         uint256 n = _count(".structures");

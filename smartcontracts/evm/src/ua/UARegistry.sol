@@ -380,6 +380,20 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         return _s.memberSigHash[ua][index];
     }
 
+    function popSlotsOf(bytes32 ua) external view returns (uint16[] memory index, bytes32[] memory hash) {
+        if (_elsewhere(ua)) return IUARegistry(predecessor).popSlotsOf(ua);
+        uint256 bits = _s.popSlots[ua];
+        uint256 n;
+        for (uint256 b = bits; b != 0; b &= b - 1) ++n;
+        (index, hash) = (new uint16[](n), new bytes32[](n));
+        n = 0;
+        for (uint256 i; bits >> i != 0; ++i) {
+            if (bits >> i & 1 == 0) continue;
+            (index[n], hash[n]) = (uint16(i), _s.memberSigHash[ua][i]);
+            ++n;
+        }
+    }
+
     function smartKeyCloneHash() external view returns (bytes32) {
         return _SMART_KEY_CLONE_CODEHASH;
     }

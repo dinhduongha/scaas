@@ -73,6 +73,10 @@ library UAStore {
         /// 18. Group 3g (KV-1, Codex #1): some version of the UA stores this key (proven or not): no two versions of one UA
         /// hold the same key bytes, on any registry kind. Per UA, so nobody squats another UA's key with it.
         mapping(bytes32 ua => mapping(bytes32 pqzKeyHash => bool)) pqzKeyUsed;
+        /// 19. CTR-UA-33 Change 2026-11-08 (plan T66a): an `msig`'s `pop` slots, bit `i` = member slot `i` signed its `pop`, written once
+        /// at registration and never again (0: an empty `pop`, or any other kind). `accepted` (15) adds the later acceptances; their
+        /// difference is what accepted later (`popSlotsOf`). It lives with the record (gen 2 forwards gen 1's).
+        mapping(bytes32 ua => uint256) popSlots;
     }
 
     uint256 internal constant SMART_KEY_1271_GAS = 400_000;

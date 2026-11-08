@@ -229,6 +229,7 @@ library UARegistryLib {
                 _memberSig(ua, d, m.index, UAKinds.PURPOSE_POP_V2, m.members.length == 0 ? m.sig : abi.encode(m.members));
             }
             s.accepted[ua] = bits;
+            s.popSlots[ua] = bits; // CTR-UA-33 Change 2026-11-08: the `pop`'s own slots, never moved by `acceptMembership`
         }
         (uint8 q, uint8 k) = (UAStore.checked(s.pqzKey[ua][0].proven), UAStore.checked(s.kem[ua][0].length != 0));
         emit IUARegistry.UARegistered(ua, kind, d, attrs, keccak256(pop), pqzPop, UAKinds.CHECKED_CHAIN, q, k);

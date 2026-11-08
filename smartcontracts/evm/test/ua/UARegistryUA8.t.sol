@@ -3434,7 +3434,7 @@ contract UARegistryUA8Test is UARegistryBase {
         if (h == keccak256("register slhdsa128s")) return (1123403, 13246740);
         if (h == keccak256("register msig-classical")) return (166155, 1115370);
         if (h == keccak256("register msig-pq/n2048-kmax1024")) return (3468184, 73446120);
-        if (h == keccak256("register msig-pq-native")) return (318601, 1262250);
+        if (h == keccak256("register msig-pq-native")) return (330779, 1360170);
         if (h == keccak256("setKemKey mldsa65/v2 n2048-kmax1024")) return (357272, 7991190);
         if (h == keccak256("popOf (the blob setKemKey decodes) mldsa65/v2 n2048-kmax1024")) return (15294, 0);
         if (h == keccak256("setKemKey fndsa512/v2 n2048-kmax1024")) return (2516006, 3947400);
@@ -3566,6 +3566,75 @@ contract UARegistryUA8Test is UARegistryBase {
         solo.registrationOf(m.ua);
         _gas(string.concat("registrationOf msig-pq on gen 1 ", sn));
         _repinSkip();
+    }
+
+    // ----- CTR-UA-33 Change 2026-11-08 (owner; plan T66a): the `pop` slot bitmap and `popSlotsOf` -----
+
+    /// `popSlotsOf(ua)` of every registered row: an `msig` row's `popSigners` with its `memberSigHashes` (each = `memberSigHashOf`), empty
+    /// for an `msig` with an empty `pop` (msig-classical), for every single key and for an unregistered id; a gen 2 forwards a gen-1 record.
+    function test_popSlotsOfFromVectors() public {
+        Row[] memory rows = _rows();
+        _allowAll(rows);
+        UARegistry a = _regA(false);
+        _registerAll(a, rows);
+        UARegistry g2 = _gen2Pqz(address(0x5cebf), a);
+        uint256 msigs;
+        for (uint256 i; i < rows.length; ++i) {
+            Row memory x = rows[i];
+            if (!_here(x)) continue; // another set's row (an msig-pq/<set> row shares its id with this set's)
+            (uint16[] memory idx, bytes32[] memory h) = a.popSlotsOf(x.ua);
+            (uint16[] memory idx2, bytes32[] memory h2) = g2.popSlotsOf(x.ua);
+            assertEq(keccak256(abi.encode(idx2, h2)), keccak256(abi.encode(idx, h)), string.concat(x.name, ": gen 2 forwards"));
+            if (x.kind != UAKinds.MSIG) {
+                assertEq(idx.length + h.length, 0, x.name);
+                continue;
+            }
+            ++msigs;
+            assertEq(idx.length, x.msIndex.length, x.name);
+            assertEq(h.length, idx.length, x.name);
+            for (uint256 k; k < idx.length; ++k) {
+                assertEq(idx[k], x.msIndex[k], x.name);
+                assertEq(h[k], x.msHash[k], x.name);
+                assertEq(h[k], a.memberSigHashOf(x.ua, idx[k]), string.concat(x.name, ": = memberSigHashOf"));
+                assertTrue(a.memberAccepted(x.ua, idx[k]), x.name);
+            }
+        }
+        assertEq(msigs, 3, "msig-classical (empty pop), msig-pq/<set>, msig-pq-native");
+        (uint16[] memory none, bytes32[] memory noneH) = a.popSlotsOf(keccak256("unregistered"));
+        assertEq(none.length + noneH.length, 0, "unregistered");
+    }
+
+    /// A later `acceptMembership` never sets a `pop` bit: the 2-of-3 whose `pop` signed slots 0 and 1 accepts slot 2 later (it counts,
+    /// `memberAccepted`), and `popSlotsOf` keeps 0 and 1; msig-classical (empty `pop`) accepts every slot by the memberships rows and
+    /// `popSlotsOf` stays empty.
+    function test_popSlotsOfLaterAcceptanceSetsNoPopBit() public {
+        Row[] memory rows = _rows();
+        _allowAll(rows);
+        UARegistry a = _regA(false);
+        _members(a, rows);
+        uint256 sk = _nativeSk();
+        (, bytes32 ua) = _msig2of3(a, rows, sk); // pop by slots 0, 1; slot 2 accepted after
+        assertTrue(a.memberAccepted(ua, 2), "slot 2 accepted later");
+        (uint16[] memory idx, bytes32[] memory h) = a.popSlotsOf(ua);
+        assertEq(idx.length, 2);
+        assertEq(uint256(idx[0]) * 16 + idx[1], 1, "slots 0 and 1");
+        assertEq(h[1], a.memberSigHashOf(ua, 1));
+        assertTrue(a.memberSigHashOf(ua, 2) != 0, "the later acceptance keeps its hash, outside popSlotsOf");
+        Row memory c = _find(rows, "msig-classical");
+        _reg(a, c);
+        string memory j = vm.readFile(PJ);
+        uint256 accepted;
+        for (uint256 i; _jx(j, string.concat(".memberships[", vm.toString(i), "]")); ++i) {
+            string memory p = string.concat(".memberships[", vm.toString(i), "]");
+            if (_jw(j, string.concat(p, ".ua")) != c.ua) continue;
+            uint16 index = uint16(_ju(j, string.concat(p, ".index")));
+            a.acceptMembership(c.ua, IUARegistry.MemberSig(index, new IUARegistry.InnerSig[](0), _jb(j, string.concat(p, ".sig"))));
+            assertTrue(a.memberAccepted(c.ua, index));
+            ++accepted;
+        }
+        assertEq(accepted, 4, "every slot of msig-classical");
+        (idx, h) = a.popSlotsOf(c.ua);
+        assertEq(idx.length + h.length, 0, "an empty pop: no pop slot, whatever accepted later");
     }
 
     /// `setKemKey` (version 2) for `mldsa65`, `fndsa512`, the PQ-eligible `msig` (2 `mldsa65` members), and a PQ-eligible

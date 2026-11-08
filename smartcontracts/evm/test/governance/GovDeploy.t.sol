@@ -486,7 +486,8 @@ contract GovDeployTest is Test {
         // `batch`, `nonce`); 3g T51: 0xF1D87045dAef620300637Ed6DE7123B42f23f9aB (the metadata hash: `IUARegistry`'s versioned PQZ
         // key records); T66a item 1: -> this (the metadata hash: `IUARegistry.requirePortable`)
         // T66a item 2 (the metadata hash: IUARegistry's KEM holder docs): 0xC9C1aC557303551b16d78DBce193f02e414CAA39 -> this
-        assertEq(rf, 0x3d0DB1d457Ac07B199e8Bd65676AFF7fF127330E, "MtxRelayFee");
+        // T66a item 5 (the metadata hash: IUARegistry.popSlotsOf): 0x3d0DB1d457Ac07B199e8Bd65676AFF7fF127330E -> this
+        assertEq(rf, 0x8B56809BBf5f6595351F648a499E194292B6100C, "MtxRelayFee");
         // ua-mtx-merge T24: 0x2AEfB2af419765600eC00a7D0CfC4dE30f2d3750 -> 0xAb151Df7DC7CbbD9755028a27Ad0bc55a34b5b53 (the
         // router's metadata hash: `IGovernance`); T26: -> this (the two empty hooks `UAMetaTxBase` adds, its
         // `mtxCancelNonce` seats); T32: 0xBc8Df1a828dA586e5ccB8Db8942bbCC9c130cC34 -> this (the eight regulated control ops)
@@ -501,7 +502,8 @@ contract GovDeployTest is Test {
         // three PQZ verifier ops `mtxPqz{Set,Cancel,Revoke}Verifier`): 0x5A6E6681A1Ec31741438D863ffCC138C186FB933; T66a item 1: -> this
         // (the metadata hash: `IUARegistry.requirePortable`)
         // T66a item 2 (the metadata hash: IUARegistry's KEM holder docs): 0x0240966987610aC882D8501247EF3Ce2AC2c477B -> this
-        assertEq(router, 0xbf24455f26b2cB0a343fc47a546Fd68F4b5CAEAD, "GovernanceRouter");
+        // T66a item 5 (the metadata hash: IUARegistry.popSlotsOf): 0xbf24455f26b2cB0a343fc47a546Fd68F4b5CAEAD -> this
+        assertEq(router, 0x3A893f1938bA3E34339D3d4b85CC13a5983A7149, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append: chain-neutral releases (plan T72), `abi.encode(factory, implArgs)`;

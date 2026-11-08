@@ -347,6 +347,12 @@ interface IUARegistry is IERC5267 {
     /// accepted later from `acceptMembership`. The bytes are in that slot's `UAMemberSig`; a copy checks them against this hash. Zero for a slot
     /// not accepted and any other id. Gen 2 forwards gen-1 records.
     function memberSigHashOf(bytes32 ua, uint256 index) external view returns (bytes32);
+    /// CTR-UA-33 Change 2026-11-08 (owner; plan T66a): the slots that signed the `msig` `ua`'s `pop`, in index order, each with its
+    /// `memberSigHashOf` hash: one word per `msig` written at registration, never by `acceptMembership`, so state alone tells which slots
+    /// signed the `pop` and which accepted later (`memberAccepted`); a copy (CTR-UA-31) rebuilds the `pop` from these slots' `UAMemberSig`
+    /// bytes (or the node keeper, NODE-IDX-08). `popOf` stays `keccak256(pop)`. Empty for an empty `pop` and any other id. Gen 2 forwards
+    /// gen-1 records.
+    function popSlotsOf(bytes32 ua) external view returns (uint16[] memory index, bytes32[] memory hash);
     /// The EIP-1167 codehash of this registry's `SmartKeyAccount` clones, 0 for none: gen 2 gives a clone the 400 k cap in a gen-1 structure by it.
     function smartKeyCloneHash() external view returns (bytes32);
     /// The typed key of a `webauthn-p256` / MuSig2 / FROST UA (TS-D13); empty for any other id (gen 2 forwards gen-1
