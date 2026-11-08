@@ -17,3 +17,6 @@ M13-bit24-on-zether | test_bit24_otherKindsRefused | 1
 M14-bit24-delay-relaxed | test_bit24_notDelayed, test_bit24_validKinds_12, test_bit24_validKinds_13, test_disable24_freezesValue_log, test_disable24_freezesValue_none | 1
 M15-setProofStore-ungated | test_disable24_freezesValue_log, test_disable24_freezesValue_none, test_setProofStore_gated | 1
 M20-setProofStore-byte22 | test_bit24_anyHolder_contract, test_bit24_anyHolder_eoa, test_bit24_anyHolder_msig, test_bit24_anyHolder_singleKey, test_disable24_freezesValue_log, test_proofStore_change_appliesNextDebit, test_router_UASetProofStore, test_setProofStore_noop | 1
+N1-router-row-missing-node-side | allow_lists_equal_the_selector_audit_both_directions, guard_allows_every_named_entry_only, proof_store_router_row_equal_contract, typed_ops_kat_every_entry | 101
+N2-own-tag-defaulted-zero | guard_allows_every_named_entry_only, pqz_old_shape_refused_by_name | 101
+N3-lane-check-ignores-proofStore | proof_store_over_cap_not_dead, proof_store_over_lane_cap_refused | 101
