@@ -1493,6 +1493,21 @@ Items, each with a failing test first where it is code:
 4. **The "+0" mutant (T43):** an extra read of the regulated tax slot in the base `_uaMove` was killed only by gas pins, no
    plus-zero slot test went red: find why and make the slot test catch it.
 
+### Task T50b: what 3f left open (2026-11-08, T44–T50 report)
+
+**Place:** beside T66a or T43b (no contract source unless named). **Estimate:** not sized [estimate: 1–2].
+1. **`scaas-pqz-verifier` request bound:** the service accepts 1,244,672 B, spec 3f's formula gives 722,688 B: measure the largest
+   real request (PQZH op 7 M = 4 with the auditor, hex) and make the spec formula and the code one figure; state how JSON depth
+   is counted (nesting levels of objects and arrays, bounded) and test it.
+2. **The verifier's key-ownership record** (keys it checked off chain, KV-12 OFFCHAIN column) persists across restarts in the
+   service's own store; an unreadable store fails closed (no verdict), a lost store only costs re-checks.
+3. **`e2e.py --zero-dep` still deploys `UAPqzVerifier`** for the registration proofs: the zero-dependency release must run with no
+   PQ verifier on the chain (OFFCHAIN accepts unproven keys its verifier checks): drop the deploy there and register the keys
+   unproven; a failing run first.
+4. **ARCH-POS-15:** `scaas-pqz-verifier` takes a list of RPC endpoints (failover; the majority option for its reads).
+5. `NotProposer` before the owner check on a confirm tells a stranger who the proposer is: no change, `pqzProposer` is a public
+   view (controller 2026-11-08).
+
 ### PQZ verifier mode (3f, owner approved 2026-11-06; names renamed by the owner 2026-11-07): tasks T44–T50
 
 **Spec:** [`2026-11-06-attested-verify.md`](../specs/2026-11-06-attested-verify.md), revised after the Codex and Fable reviews
