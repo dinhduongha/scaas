@@ -70,7 +70,7 @@ fn table_groups_purposes_constants() {
         assert_eq!(group_tag_string(g).unwrap(), r["tag"]);
         assert_eq!(hx(&group_tag(g).unwrap()), r["GROUP"]);
     }
-    // 13 purposes; `pop` has two versions (v1 legacy, v2 portable), every other purpose is v1
+    // 15 purposes (pqz-verdict: group 3f); `pop` has two versions (v1 legacy, v2 portable), every other purpose is v1
     assert_eq!(arr(&k, "purposes").len(), PURPOSES.len() + 1);
     for r in arr(&k, "purposes") {
         let (p, v) = (r["purpose"].as_str().unwrap(), r["version"].as_u64().unwrap() as u32);

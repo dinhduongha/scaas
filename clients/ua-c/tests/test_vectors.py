@@ -257,7 +257,7 @@ class Vectors(unittest.TestCase):
                 self.assertEqual(hx(opt32(L.group_tag, g)), r['GROUP'])
         self.assertIsNone(opt32(L.group_tag, b'nope'))
         self.assertIsNone(opt_text(L.group_tag_string, b'nope'))
-        self.assertEqual(len(K['purposes']), 15)  # 14 purposes, `pop` has v1 and v2
+        self.assertEqual(len(K['purposes']), 16)  # 15 purposes (pqz-verdict: group 3f), `pop` has v1 and v2
         for r in K['purposes']:
             self.assertEqual(hx(out32(L.purpose_tag_v, r['purpose'].encode(), r['version'])), r['purposeTag'], r['purpose'])
             if r['version'] == 1:

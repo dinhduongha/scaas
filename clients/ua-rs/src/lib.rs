@@ -203,9 +203,11 @@ pub const GROUPS: &[&str] = &[
     "slhdsa128s", "mldsa87", "fndsa1024", "pqz-mlwe",
 ];
 
+/// Every purpose at v1 (clientkeys `PURPOSES`, `vectors/ua/kinds.json`); `pqz-verdict` (group 3f, `UAKinds.PURPOSE_PQZ_VERDICT`):
+/// what a PQZ verifier UA signs a `PqzVerdict` under (`wallet::pqz_verdict_typed_data`, feature `wallet`).
 pub const PURPOSES: &[&str] = &[
     "pop", "metatx", "metatx-cancel", "member", "zether-auth", "zether-owner", "keyop", "receiver-fee", "vp",
-    "vc-anchor", "trade", "kem", "pqz-key", "membership",
+    "vc-anchor", "trade", "kem", "pqz-key", "membership", "pqz-verdict",
 ];
 
 /// The off-chain purpose of a sealed container's sender signature, `keccak256("scaas.ua.purpose.seal.v1")` (MD-10, ua-rs-sign

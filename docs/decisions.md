@@ -8828,6 +8828,33 @@ chain-neutral releases the registry is in the token's code env, readable at one 
 (`clone_registry_is_the_kat_layout`); the `anvil` tests write real clones with their env. UNAUDITED.
 **Source.** owner 2026-11-08 (chat, through the controller); [plan](superpowers/plans/2026-11-05-ua-rs-sign.md) T20b.
 
+<a id="CLI-UAL-59"></a>
+### CLI-UAL-59 — Controller decisions of the third sync with `ua-mtx-merge` (T20b, 2026-11-08)
+- old: — · status: current · owner: no · date: 2026-11-08 · normative: decisions.md#CLI-UAL-59 · superseded-by: —
+
+**Rule.** The owner may override any. At the merge of `ua-mtx-merge` `7558a364` (3f, T44–T50, and T66a) into `ua-rs-sign`
+(`68d2c1da`, no conflicts):
+- **`pqz-verdict` is a purpose of `PURPOSES`** (PQZ verifier mode spec §5.1, `UAKinds.PURPOSE_PQZ_VERDICT`) in clientkeys,
+  `ua-rs` and the natives `ua-py`, `ua-go`, `ua-cs`, `ua-dart`; `vectors/ua/kinds.json` regenerated (16 purpose rows, one more
+  `messages` row) and every reader's count moved, forge's `UAKinds.t.sol` too. It is not a portable purpose: a native verifier
+  signs `UAAuth`, a derived one `uaMessage`. Every binding signs under it through its existing UA calls (`sign_ua`, `uasig`). The
+  Zether purpose lists do not take it (Zether is not PQZ). BUILT.
+- **The `PqzVerdict` builder** `wallet::pqz_verdict_typed_data` (clientkeys `pqzVerdictTypedData`): the PQZ token's salted
+  domain; a `token` or `chainId` other than the domain's is `Argument`. Held to `vectors/pqz/verdict.json`: every row's struct
+  hash, digest and `uaAuthDigest`, and the forge signature reproduced by `ua_sig` with the vector's key. BUILT.
+- **The router's three verifier ops** `UAPqzSetVerifier`, `UAPqzCancelVerifier`, `UAPqzRevokeVerifier` are in the op table (86
+  rows) and in zether-prover's list of rows it does not build. BUILT.
+- **Not built, nothing here reads or builds it:** the verdict after `auth` on the six signed PQZ entries (`ua-rs` builds no PQZ
+  calldata; clientkeys and the node do), `PqzSignedVerdict`, `EMPTY_PQZ_VERDICT` and the `statementHash` / `proofHash` helpers
+  (`keccak256`); a `PqzVerdict` digest call in the C, C++, Qt and Dart bindings (the reference verifier is Rust; added when a
+  verifier in another language needs it); the `scaas.pqz` labels 3f added (`pqzVerifyMode` at slot 0 byte 22, the verifier state
+  at slots 13 to 18): no reader here reads them and the labels of the facade's `STATE_LAYOUT` did not move;
+  `tests/facade_zether_state.rs` passes on `0d87fa6d`'s Zether state rows unchanged.
+- **T66a (CTR-UA-32):** this branch's tests move to 12 portable KEM records and none nested; the C and C++ headers state that an
+  `msig` never holds a KEM key (`header_states_its_rules` checks the C header). No reader here reads `popSlotsOf` or calls
+  `requirePortable` (the callers' `memberAccepted` reads stay theirs), so neither has a client part. BUILT.
+**Source.** [plan](superpowers/plans/2026-11-05-ua-rs-sign.md) T20b; `smartcontracts/evm/runs/2026-11-08-ua-rs-sign-t20b4-summary.txt`.
+
 ## 40. Integration — ERP
 
 ### INT-ERP-01 — 24 h cooling-off for new receiving wallets

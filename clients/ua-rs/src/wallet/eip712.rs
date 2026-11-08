@@ -635,6 +635,8 @@ const STRUCTS: &[(&str, &str)] = &[
     ("ZetherMulti", "uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes16 salt,bytes32 beneficiaryUA,uint256 decoyFee,G1 yFrom,G1 dOut,G1 cDeb,ZetherLeg[] legs,bytes sealedMemo"),
     ("ZetherBurn", "uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes32 beneficiaryUA,G1 yFrom"),
     ("GrantTerms", "uint128 min,uint128 max,uint128 total,uint128 perWindow,uint32 window,uint64 validUntil,uint32 maxUses,bool delegable,bytes32 scope"),
+    // group 3f (PQZ verifier mode spec §5.1): what a PQZ verifier UA signs in the token's domain ([`pqz_verdict_typed_data`])
+    ("PqzVerdict", "address token,uint256 chainId,bytes32 proofSystemId,bytes32 statementHash,bytes32 proofHash,uint32 pqzVerifierEpoch,uint64 validUntil"),
 ];
 
 const M: &str = "SCaaS MetaToken";
@@ -756,6 +758,10 @@ const OPS: &[Op] = &[
     op("UAOperatorTransfer", "address target,bytes32 account,bytes32 to,uint256 amount,bytes32 ref", &[ROUTER], None),
     op("UASetTaxRate", "address target,uint32 ratePpm", &[ROUTER], None),
     op("UASetTaxRecipient", "address target,bytes32 taxRecipient", &[ROUTER], None),
+    // the PQZ verifier UA of the PQZ kinds 4, 5, 12, 13 (group 3f, PQZ verifier mode spec §4.2, §4.3): the owner's, no bit
+    op("UAPqzSetVerifier", "address target,bytes32 next", &[ROUTER], None),
+    op("UAPqzCancelVerifier", "address target", &[ROUTER], None),
+    op("UAPqzRevokeVerifier", "address target", &[ROUTER], None),
     raw("PqzAuth", "uint8 op,bytes32 opTag,bytes32 psid,uint256 chainId,address token,address registry,bytes32 from,bytes32 to,bytes32 beneficiary,uint256 fee,uint256 amount,bytes32 recipient,uint64 sendCounter,uint64 p,uint256 validUntilBlock,bool auditorOn,uint256 shieldIn,bytes32 chainUid,bytes32 binding,uint128 salt,bytes32 memoHash,bytes32 bodyHash", &[P]),
 ];
 /// The generic path's builders (clientkeys `metaTxTypedData`, `uaMetaTxTypedData`, `uaMetaTransferTypedData`,
@@ -851,6 +857,23 @@ pub fn scaas_typed_data(
     primary_type: &str, name: Option<&str>, contract: &[u8; 20], chain_id: u64, chain_uid: &[u8; 32], message: &Value,
 ) -> Result<TypedData> {
     typed_data_of(&def_in(primary_type, name)?, name, contract, chain_id, chain_uid, message)
+}
+
+/// clientkeys `pqzVerdictTypedData` (group 3f, PQZ verifier mode spec §5.1): the `PqzVerdict` a PQZ verifier UA signs, in the PQZ
+/// token's salted domain `("SCaaS PqzToken", "1", chain_id, contract, chain_uid)`, under the purpose `pqz-verdict` (a native verifier
+/// over the registry's `uaAuthDigest`, a derived one over `uaMessage`). `message.token` and `message.chainId` repeat the domain (the
+/// token checks them equal): another value is `Argument`, as is a value its type refuses.
+pub fn pqz_verdict_typed_data(contract: &[u8; 20], chain_id: u64, chain_uid: &[u8; 32], message: &Value) -> Result<TypedData> {
+    let (primary, own) = STRUCTS.iter().find(|(n, _)| *n == "PqzVerdict").ok_or(Error::Argument)?;
+    let d = Def { primary, own: own.to_string(), domains: &[P], default_name: Some(P), envelope: false, amount: None };
+    let td = typed_data_of(&d, None, contract, chain_id, chain_uid, message)?;
+    let field = |f: &str, ty: &str| encode_atom(ty, td.message.get(f));
+    if field("token", "address")? != encode_atom("address", Some(&to_hex(contract).into()))?
+        || field("chainId", "uint256")? != encode_atom("uint256", Some(&chain_id.into()))?
+    {
+        return Err(Error::Argument);
+    }
+    Ok(td)
 }
 
 /// [`scaas_typed_data`] of one struct (a row of the op table: `checkOp` builds the op it was asked for, never another struct of the

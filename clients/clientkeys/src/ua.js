@@ -160,7 +160,7 @@ export const groupTagString = (group) => {
 export const GROUP = (group) => tagHash(groupTagString(group));
 export const MSG_TAG = tagHash('scaas.ua.msg.v1');
 export const PURPOSES = Object.freeze(['pop', 'metatx', 'metatx-cancel', 'member', 'zether-auth', 'zether-owner',
-  'keyop', 'receiver-fee', 'vp', 'vc-anchor', 'trade', 'kem', 'pqz-key', 'membership']);
+  'keyop', 'receiver-fee', 'vp', 'vc-anchor', 'trade', 'kem', 'pqz-key', 'membership', 'pqz-verdict']);
 /** `keccak256("scaas.ua.purpose.<p>.v<version>")`; every purpose has v1, `pop` also v2 (the portable PoP, UA-8 P1). */
 export const purposeTagString = (p, version = 1) => {
   if (!PURPOSES.includes(p) || !(version === 1 || (version === 2 && p === 'pop'))) fail('UAPurposeUnknown', `${p} v${version}`);
@@ -177,9 +177,9 @@ export const SEAL_TAG = tagHash('scaas.ua.purpose.seal.v1');
 /** A PQZ key attached after `register` (`setPqzKey`, ruling A1-I1): its purpose. */
 export const PQZ_KEY_TAG = purposeTag('pqz-key');
 /** What a PQZ verifier UA signs a `PqzVerdict` under (group 3f, PQZ verifier mode spec §5.1; `UAKinds.PURPOSE_PQZ_VERDICT`): a
- *  native verifier over `uaAuthDigest`, a derived one over `uaMessage`. Not in `PURPOSES` yet: that list writes the purpose
- *  rows of vectors/ua/kinds.json, which every `ua-*` binding reads; it joins them with ua-rs's purpose (ua-rs-sign). */
-export const PQZ_VERDICT_TAG = tagHash('scaas.ua.purpose.pqz-verdict.v1');
+ *  native verifier over `uaAuthDigest`, a derived one over `uaMessage`. In `PURPOSES` since ua-rs-sign's T20b sync with 3f, so
+ *  the purpose rows of vectors/ua/kinds.json, which every `ua-*` binding reads, carry it. */
+export const PQZ_VERDICT_TAG = purposeTag('pqz-verdict');
 /** A derived `msig` member's acceptance of its slot (`acceptMembership`, CTR-UA-37): its purpose. */
 export const MEMBERSHIP_TAG = purposeTag('membership');
 /** The KEM scheme byte, `kemPk[0]` (CTR-UA-32): 1 = ML-KEM-1024 + X25519 (X-Wing order), `kemPk = 0x01 ‖ ek (1,568 B) ‖

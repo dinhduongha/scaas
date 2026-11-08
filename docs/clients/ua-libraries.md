@@ -136,7 +136,7 @@ Claude), no external audit.
 | Wallet and keys | `wallet/mod.rs`, `derive.rs`, `store.rs` | `Wallet::{generate, from_mnemonic, open_vault, seal_vault, lock, unlock, manifest, memory_protection, ua_key, native_key}`; derivation as [signers-clientkeys §9](signers-clientkeys.md#9-derivation-and-role-keys) |
 | Single-key signing | `sign.rs`, `pqsign.rs`, `pairing.rs`, `signer.rs` | `UaKey::{sign_ua, sign_member}`, `NativeKey::{sign_typed, sign_transaction, sign_key_proof, sign_digest}`, the `Signer` trait |
 | `UASig` and groups | `uasig.rs`, `pairing.rs` | `ua_sig`, `msig_sig`, `membership_sig` (`msig` sets minimal at both levels, `UAPoP` otherwise); MuSig2 and FROST sessions, a secret nonce used once |
-| EIP-712, policy, transactions | `eip712.rs`, `policy.rs`, `tx.rs` | `TypedData`, `scaas_typed_data`, `Expect`; `EvmTx` types 0 to 3 (`alloy-rlp`; type 4 has no variant, chain id 0 refused) |
+| EIP-712, policy, transactions | `eip712.rs`, `policy.rs`, `tx.rs` | `TypedData`, `scaas_typed_data`, `pqz_verdict_typed_data` (the `PqzVerdict` a PQZ verifier UA signs under `pqz-verdict`, group 3f), `Expect`; `EvmTx` types 0 to 3 (`alloy-rlp`; type 4 has no variant, chain id 0 refused) |
 | WebAuthn | `webauthn.rs` | `webauthn_challenge`, `webauthn_assertion` |
 | Factory addresses | `factory.rs` | `create3_salt`, `create3_address`: a creation's chain-neutral CREATE3 address (chain-neutral spec §4, `vectors/factory/create3_kat.json`), shown before a router create op |
 | KEM, seal, containers | `kem.rs`, `seal.rs`, `aead.rs` | `UaKey::kem_key`, `kem_encaps`, `KemKeyPair`, `seal`, `open_container`, `LinkSession`, `from_link`; AEAD, HKDF, HMAC ([§9.1](signers-clientkeys.md#91-the-ua-kem-key-seal-and-containers)) |
@@ -327,7 +327,8 @@ generic hasher hashes the values supplied and never rewrites a field. `scaas_typ
 clientkeys check: `Payment`, `ReceiverFee`, `PayMeta`, `Op`, `Call`, `OwnerCall`, `Cancel`, `TradeOrder`, `WrapOrder`) **refuses** a
 non-zero unbound field (`PolicyRefused`), so what the user confirmed is what is hashed (owner 2026-11-05). `Expect::Any(AllowAnyTypedData)`, with its
 own C name `scaas_ua_sign_typed_any`, signs the standard digest of the values as supplied. An unrelated domain's struct with the
-same field names is untouched. Since the merge of `ua-mtx-merge` `aa898cf6` (T20b) the op table and the checks follow its merged-entry rows (`typed/typed_ops.json`, 80 structs; 83 since `4f6d8605`, with the router's `UACreateToken`, `UACreateDex`, `UACreateInstance`): a payment, a receiver fee, a SCaaS sell token's order, a wrap order and their cancels are the `UA` structs between 32-byte ids, `PayMeta` is v2 (`{salt, payNo, schema, body}`), the PQZ debits name `keyVersion` and the PQZ `UARollOver` is its own row (`UAPqzRollOver`). BUILT.
+same field names is untouched. Since the merge of `ua-mtx-merge` `aa898cf6` (T20b) the op table and the checks follow its merged-entry rows (`typed/typed_ops.json`, 80 structs; 83 since `4f6d8605`, with the router's `UACreateToken`, `UACreateDex`, `UACreateInstance`; 86 since
+`7558a364`, with 3f's `UAPqzSetVerifier`, `UAPqzCancelVerifier`, `UAPqzRevokeVerifier`, [CLI-UAL-59](../decisions.md#CLI-UAL-59)): a payment, a receiver fee, a SCaaS sell token's order, a wrap order and their cancels are the `UA` structs between 32-byte ids, `PayMeta` is v2 (`{salt, payNo, schema, body}`), the PQZ debits name `keyVersion` and the PQZ `UARollOver` is its own row (`UAPqzRollOver`). BUILT.
 
 <a id="CLI-UAL-14"></a>**CLI-UAL-14** — **The KEM key comes through the UA key's own store.** `UaKey::kem_key(version)` has no wallet
 argument, so a handle cannot be combined with another wallet's seed and two wallets cannot make a second `(ek, pk_X)` for one

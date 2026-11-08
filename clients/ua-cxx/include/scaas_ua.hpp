@@ -82,7 +82,9 @@ void validateKeyData(uint16_t kind, const Bytes& keyData, bool hederaNative);
 bool inNativeSpace(const Bytes& id);
 bool isNative(uint16_t kind);
 bool isZether(uint16_t kind);
-bool isPqzHolder(uint16_t kind);  // 0x0130-0x0132, 0x0134 and 0x0135 may hold a PQZ key
+// 0x0130-0x0132, 0x0134 and 0x0135 may hold a PQZ key; these single kinds are also the only KEM holders: a PQ-eligible msig may
+// hold a PQZ key (msigPqzEligible), never a KEM key (UAKemHolder, CTR-UA-32: a sender seals to each accepted member's key).
+bool isPqzHolder(uint16_t kind);
 bool msigPqzEligible(const Bytes& keyData);  // msig members outside 0x0130-0x0135 weigh less than the threshold; an msig member: UAMemberUnknown
 // The With forms take inner, the msig members' structures: {id: keyData} JSON as registrationArgs' inner ("" = none; over 65,536 bytes,
 // more than 16 entries or key data over 580 bytes is UAArgument). An msig member counts as PQ iff it is PQ-eligible itself, read from its
@@ -107,12 +109,13 @@ Bytes portableRecordDigest(const Bytes& ua, uint16_t kind, const Bytes& pqzKeyHa
 Bytes registrationDigest(const Bytes& ua, uint16_t kind, const Bytes& pqzKeyHash, const Bytes& kemRecordHash, const Bytes& pqzPopHash);
 // typed(UAKemRecord{…}) that setKemKey signs: version 1 … 2^64 − 1 (UAKemVersion), a 1,601-byte key, scheme byte first (UAKemScheme for an id other than 1, UAKemKeyLength).
 Bytes kemRecordDigest(const Bytes& ua, uint64_t version, const Bytes& kemPk);
-Bytes kemRecordMessage(uint16_t kind, const Bytes& ua, uint64_t version, const Bytes& kemPk);  // uaMessage(kind, PURPOSE_KEM, digest)
+// uaMessage(kind, PURPOSE_KEM, digest); a kind that holds no KEM key, an msig among them (CTR-UA-32), is UAKemHolder.
+Bytes kemRecordMessage(uint16_t kind, const Bytes& ua, uint64_t version, const Bytes& kemPk);
 // The portable PoP message of a registration. pqzKey with its proof pqzPop (or only its hash pqzPopHash; a relayer may hold only
 // that; an empty hash is absent, another length than 32 is UAPqzPopHash) and the initial KEM key kemPk (1,601 bytes, scheme byte
-// first; its record is always version 0, owner 2026-10-31); nullopt / empty = absent. Only
-// holders carry them (UAPqzHolder, UAKemHolder; an msig needs keyData to show it is PQ-eligible); a PQZ key always comes with its
-// proof hash and only with it (UAPqzPopHash).
+// first; its record is always version 0, owner 2026-10-31); nullopt / empty = absent. Only holders carry them: a PQZ key a single PQ
+// kind or an msig whose keyData shows it PQ-eligible (UAPqzHolder), a KEM key a single PQ kind only, never an msig (UAKemHolder,
+// CTR-UA-32); a PQZ key always comes with its proof hash and only with it (UAPqzPopHash).
 HolderPop holderPopMessage(uint16_t kind, const Bytes& ua, const Bytes& keyData, const std::optional<Bytes>& pqzKey = std::nullopt,
                            const std::optional<Bytes>& pqzPop = std::nullopt, const std::optional<Bytes>& pqzPopHash = std::nullopt,
                            const std::optional<Bytes>& kemPk = std::nullopt);
@@ -298,8 +301,9 @@ class PqzKey;
 struct MemoryProtection {
     size_t chunks, locked, noDump;
 };
-// A recipient of Wallet::backupSeal: the KEM key kemPk of record `version` of the UA of (kind, keyData), a single-key KEM holder;
-// or, with `ephemeral`, an ephemeral key (kind, keyData and version unread).
+// A recipient of Wallet::backupSeal: the KEM key kemPk of record `version` of the UA of (kind, keyData), a single-key KEM holder (an
+// msig has no KEM key: UAKemHolder, CTR-UA-32; seal to each accepted member); or, with `ephemeral`, an ephemeral key (kind,
+// keyData and version unread).
 struct Recipient {
     uint16_t kind = 0;
     Bytes keyData;

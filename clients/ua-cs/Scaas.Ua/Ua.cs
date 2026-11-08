@@ -68,7 +68,7 @@ public static partial class UA
 
     public static readonly string[] Purposes =
         ["pop", "metatx", "metatx-cancel", "member", "zether-auth", "zether-owner", "keyop", "receiver-fee", "vp",
-         "vc-anchor", "trade", "kem", "pqz-key", "membership"];
+         "vc-anchor", "trade", "kem", "pqz-key", "membership", "pqz-verdict"];
 
     public const string DomainType =
         "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)";

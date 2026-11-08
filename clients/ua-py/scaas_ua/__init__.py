@@ -83,7 +83,7 @@ _SCHEME = {s[0]: s for s in SCHEMES}
 GROUPS = ('p256', 'ed25519', 'secp256k1', 'bn254-g1', 'bls12381-g1', 'bls12381-g2', 'bn254-g2', 'mldsa44', 'mldsa65',
           'fndsa512', 'slhdsa128s', 'mldsa87', 'fndsa1024', 'pqz-mlwe')
 PURPOSES = ('pop', 'metatx', 'metatx-cancel', 'member', 'zether-auth', 'zether-owner', 'keyop', 'receiver-fee',
-            'vp', 'vc-anchor', 'trade', 'kem', 'pqz-key', 'membership')
+            'vp', 'vc-anchor', 'trade', 'kem', 'pqz-key', 'membership', 'pqz-verdict')
 
 
 # The governance bits 0-23 (spec 2026-11-02-governance 1.2): (name, type) by bit. The disclosure sentences are read by the app

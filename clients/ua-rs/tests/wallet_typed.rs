@@ -6,9 +6,10 @@
 //! ua/portable.json, ua/nested.json, ua/sign.json} (written by clientkeys). UNAUDITED.
 use scaas_ua::ua8::PORTABLE_DOMAIN_SEPARATOR;
 use scaas_ua::verify::native_ecdsa;
-use scaas_ua::wallet::{scaas_typed_data, Error, Expect, Network, TypedData, Wallet};
+use scaas_ua::wallet::{pqz_verdict_typed_data, scaas_typed_data, ua_sig, Error, Expect, Network, TypedData, Wallet};
 use scaas_ua::pay::{meta_pay_id_v2, PayMeta};
-use scaas_ua::{keccak256, pay_lane};
+use scaas_ua::ua8::is_portable_purpose;
+use scaas_ua::{keccak256, pay_lane, purpose_tag, ua_auth_digest, ua_auth_domain_separator, Domain};
 use serde_json::{json, Value};
 
 fn load(path: &str) -> Value {
@@ -54,7 +55,8 @@ const DOMAIN_NAMES: [&str; 7] = [
     "SCaaS GovernanceRouter",
 ];
 
-/// `typed/typed_ops.json`: every signed struct (83: ua-mtx-merge's merged-entry rows and T76's router creations) in every domain
+/// `typed/typed_ops.json`: every signed struct (86: ua-mtx-merge's merged-entry rows, T76's router creations and 3f's three PQZ
+/// verifier ops) in every domain
 /// it is signed in: `encodeType`, `structHash`, the domain separator and the digest from the row's typed data; the SCaaS builder
 /// of the row's primary type (`scaas_typed_data`, the op table) gives the same digest in each of its domains and, in every other
 /// SCaaS domain name, refuses or builds another struct (`UARollOver`: the Zether row and the PQZ row `UAPqzRollOver`, group 3g);
@@ -94,7 +96,7 @@ fn typed_ops_json_rows() {
             }
         }
     }
-    assert_eq!((ops, rows), (83, 117));
+    assert_eq!((ops, rows), (86, 120));
 }
 
 /// `ua/portable.json` and `ua/nested.json`: the typed data of every registration, KEM record, PQZ key record and acceptance hashes
@@ -121,7 +123,8 @@ fn portable_json_typed_rows() {
         assert_eq!(digest(&r["td"]).unwrap(), b32(&r["digest"]));
         n += 1;
     }
-    assert_eq!(n, 27 + 15 + 16 + 6 + 16 + 1 + 1 + 4 + 4 + 1); // portable 64, nested 26, chainSeparation 1
+    // portable 61, nested 25 (T66a, CTR-UA-32: no msig KEM record, so 12 portable KEM records and none nested), chainSeparation 1
+    assert_eq!(n, 27 + 12 + 16 + 6 + 16 + 1 + 4 + 4 + 1);
 }
 
 /// `sign.json` `typed.generic`: negative `int` (two's complement), `uint256[]`, `Item[2]`, `Item[]`, `string`, `bytes`, `bool`,
@@ -648,4 +651,137 @@ fn pay_meta_v2_body_rules() {
     assert_eq!(run(&body(0, "0x01".into())).err(), refused, "schema 0 with a body");
     assert_eq!(run(&with("payNo", json!("INV\u{202e}1"))).err(), refused, "a bidi override in payNo");
     assert_eq!(run(&with("salt", json!(format!("0x{}", "00".repeat(32))))).err(), refused, "salt 0");
+}
+
+/// Group 3f (PQZ verifier mode spec §5.1, §11.3): `pqz/verdict.json` (forge-written, `PqzVerdictVectors.t.sol`). Every row's
+/// `PqzVerdict` from `pqz_verdict_typed_data` in the token's domain: type string and typehash, domain separator, struct hash and
+/// digest; `proofHash` the keccak256 of the set's `proof_pqzl.json` proof bytes; the registry's `uaAuthDigest` under `pqz-verdict`;
+/// the EOA verifier's 65-byte signature recovers to its id and is what ua-rs signs with that key (`ua_sig`, RFC 6979), byte for byte.
+#[test]
+fn verdict_json_rows() {
+    let f = load("pqz/verdict.json");
+    let (d, g) = (&f["domain"], &f["registryDomain"]);
+    let (contract, chain, uid) = (b20(&d["verifyingContract"]), chain_id(&d["chainId"]), b32(&d["salt"]));
+    let purpose = purpose_tag("pqz-verdict").unwrap();
+    assert_eq!((f["purpose"].as_str(), purpose), (Some("scaas.ua.purpose.pqz-verdict.v1"), b32(&f["purposeTag"])));
+    assert!(!is_portable_purpose(&purpose), "a native verifier signs UAAuth, never the typed digest itself");
+    let reg = Domain { generation: g["version"].as_str().unwrap().parse().unwrap(), chain_id: chain_id(&g["chainId"]),
+        registry: b20(&g["verifyingContract"]), chain_uid: b32(&g["salt"]) };
+    assert_eq!((d["name"].as_str(), g["name"].as_str()), (Some("SCaaS PqzToken"), Some("SCaaS UARegistry")));
+    assert_eq!(ua_auth_domain_separator(&reg), b32(&g["separator"]));
+    let id = b32(&f["verifierUA"]);
+    let mut secret = [0u8; 32];
+    secret[24..].copy_from_slice(&f["verifierKey"].as_u64().unwrap().to_be_bytes());
+    let w = wallet();
+    let key = w.import_native_key(Network::Evm, &secret).unwrap();
+    assert_eq!(evm_address_of(&key.address().unwrap()), id[12..], "the verifier's id is its key's address");
+    let set = f["set"].as_str().unwrap();
+    let proofs = load(&format!("pqz/{}proof_pqzl.json", if set == "n2048-kmax1024" { String::new() } else { format!("{set}/") }));
+    let want: Vec<&Value> = arr(&proofs, "rows").iter().filter(|r| r["form"] != "REGISTER").collect();
+    assert_eq!(f["proofSystemId"].as_str().unwrap().trim_start_matches("0x"), proofs["proof_system_id"].as_str().unwrap());
+    assert_eq!(arr(&f, "rows").len(), want.len());
+    for (i, (r, p)) in arr(&f, "rows").iter().zip(&want).enumerate() {
+        assert_eq!(r["form"], p["form"], "row {i}");
+        assert_eq!(keccak256(&bytes(&p["proof"])), b32(&r["proofHash"]), "row {i}: proofHash of the proof's bytes");
+        assert_eq!(hex::encode(b32(&r["statementHash"])), p["stmt_keccak"].as_str().unwrap(), "row {i}");
+        let m = json!({"token": d["verifyingContract"], "chainId": d["chainId"], "proofSystemId": f["proofSystemId"],
+            "statementHash": r["statementHash"], "proofHash": r["proofHash"], "pqzVerifierEpoch": r["pqzVerifierEpoch"],
+            "validUntil": r["validUntil"]});
+        let td = pqz_verdict_typed_data(&contract, chain, &uid, &m).unwrap();
+        assert_eq!(td.encode_type(), f["typeString"].as_str().unwrap());
+        assert_eq!(keccak256(td.encode_type().as_bytes()), b32(&f["typehash"]));
+        assert_eq!(td.domain_separator().unwrap(), b32(&d["separator"]), "row {i}");
+        assert_eq!(td.struct_hash().unwrap(), b32(&r["structHash"]), "row {i}");
+        let dg = td.digest().unwrap();
+        assert_eq!(dg, b32(&r["digest"]), "row {i}");
+        let auth = ua_auth_digest(&reg, &id, &purpose, &dg);
+        assert_eq!(auth, b32(&r["uaAuthDigest"]), "row {i}");
+        assert!(native_ecdsa(&id[12..].try_into().unwrap(), &auth, &bytes(&r["signature"])), "row {i}");
+        let sig = ua_sig(&key, Some(&reg), &purpose, &dg).unwrap();
+        assert!(sig.key_data.is_empty() && sig.members.is_empty(), "row {i}");
+        assert_eq!(hex::encode(&sig.signature), hex::encode(bytes(&r["signature"])), "row {i}: ua-rs signs the row's signature");
+    }
+}
+fn evm_address_of(a: &str) -> Vec<u8> {
+    hex::decode(a.trim_start_matches("0x")).unwrap()
+}
+
+/// `pqz_verdict_typed_data` (clientkeys `pqzVerdictTypedData`): every field signed, `token` and `chainId` must repeat the domain,
+/// the ranges and the fields of the struct; the verdict is in no other SCaaS builder (`scaas_typed_data`).
+#[test]
+fn pqz_verdict_builder_rules() {
+    let (contract, chain, uid) = ([0x7a; 20], 7622, [0xc1; 32]);
+    let m = json!({"token": format!("0x{}", "7a".repeat(20)), "chainId": 7622, "proofSystemId": format!("0x{}", "5e".repeat(32)),
+        "statementHash": format!("0x{}", "51".repeat(32)), "proofHash": format!("0x{}", "9f".repeat(32)), "pqzVerifierEpoch": 3,
+        "validUntil": 1800000900u64});
+    let digest = |m: &Value| pqz_verdict_typed_data(&contract, chain, &uid, m).and_then(|t| t.digest());
+    let base = digest(&m).unwrap();
+    let td = pqz_verdict_typed_data(&contract, chain, &uid, &m).unwrap();
+    assert_eq!(td.primary_type(), "PqzVerdict");
+    assert_eq!(td.to_value()["domain"], json!({"name": "SCaaS PqzToken", "version": "1", "chainId": "7622",
+        "verifyingContract": format!("0x{}", "7a".repeat(20)), "salt": format!("0x{}", "c1".repeat(32))}));
+    let with = |k: &str, v: Value| {
+        let mut x = m.clone();
+        x[k] = v;
+        x
+    };
+    for (k, v) in [("proofSystemId", json!(format!("0x{}", "00".repeat(32)))), ("statementHash", json!(format!("0x{}", "00".repeat(32)))),
+        ("proofHash", json!(format!("0x{}", "00".repeat(32)))), ("pqzVerifierEpoch", json!(4)), ("validUntil", json!(1800000901u64))]
+    {
+        assert_ne!(digest(&with(k, v)).unwrap(), base, "{k} is signed");
+    }
+    // the token and the chain repeat the domain; the same verdict on another token is another digest
+    assert_eq!(digest(&with("token", json!(format!("0x{}", "7b".repeat(20))))).err(), Some(Error::Argument));
+    assert_eq!(digest(&with("chainId", json!(1))).err(), Some(Error::Argument));
+    assert_eq!(digest(&with("token", json!(format!("0x{}", "7A".repeat(20))))).unwrap(), base, "the address in any case");
+    assert_eq!(digest(&with("chainId", json!("7622"))).unwrap(), base, "a decimal string");
+    let other = pqz_verdict_typed_data(&[0x7b; 20], chain, &uid, &with("token", json!(format!("0x{}", "7b".repeat(20))))).unwrap();
+    assert_ne!(other.digest().unwrap(), base);
+    // the ranges and the fields
+    assert_eq!(digest(&with("pqzVerifierEpoch", json!(1u64 << 32))).err(), Some(Error::Argument));
+    assert_eq!(digest(&with("validUntil", json!("18446744073709551616"))).err(), Some(Error::Argument));
+    assert_eq!(digest(&with("ua", json!(format!("0x{}", "00".repeat(32))))).err(), Some(Error::Argument));
+    assert_eq!(scaas_typed_data("PqzVerdict", Some("SCaaS PqzToken"), &contract, chain, &uid, &m).err(), Some(Error::Argument));
+}
+
+/// The router's three PQZ verifier ops (group 3f, spec §4.2, §4.3; the `gov_router` rows of typed_ops.json): a non-zero unbound
+/// `relayer` / `feeRecipient` is hashed as 0 by the builder (the row: mode 1, the relayer bound); the mode, `target` and `next` are
+/// signed.
+#[test]
+fn pqz_verifier_router_ops_canon() {
+    let t = load("typed/typed_ops.json");
+    let junk = json!(format!("0x{}", "ba".repeat(20)));
+    let zero = json!(format!("0x{}", "00".repeat(20)));
+    for name in ["UAPqzSetVerifier", "UAPqzCancelVerifier", "UAPqzRevokeVerifier"] {
+        let r = &t["ops"][name];
+        let d = &r["domains"]["gov_router"];
+        assert_eq!(r["domains"].as_object().unwrap().len(), 1, "{name}: the router's domain only");
+        let dom = &d["domain"];
+        let build = |m: &Value| {
+            scaas_typed_data(name, Some("SCaaS GovernanceRouter"), &b20(&dom["verifyingContract"]), chain_id(&dom["chainId"]), &b32(&dom["salt"]), m)
+                .unwrap()
+                .digest()
+                .unwrap()
+        };
+        let with = |pairs: &[(&str, &Value)]| {
+            let mut x = r["message"].clone();
+            for (k, v) in pairs {
+                x[*k] = (*v).clone();
+            }
+            x
+        };
+        assert_eq!(r["message"]["mode"], 1, "{name}: fee mode NONE, the relayer bound");
+        assert_eq!(build(&with(&[("feeRecipient", &junk)])), b32(&d["digest"]), "{name}: an unbound feeRecipient signs as 0");
+        let open = build(&with(&[("mode", &json!(0)), ("relayer", &junk), ("feeRecipient", &junk)]));
+        assert_eq!(open, build(&with(&[("mode", &json!(0)), ("relayer", &zero), ("feeRecipient", &zero)])), "{name}: mode 0");
+        assert_ne!(open, b32(&d["digest"]), "{name}: the mode is signed");
+        assert_ne!(build(&with(&[("relayer", &junk)])), b32(&d["digest"]), "{name}: a bound relayer is signed");
+        assert_ne!(build(&with(&[("target", &junk)])), b32(&d["digest"]), "{name}: target is signed");
+    }
+    let r = &t["ops"]["UAPqzSetVerifier"];
+    let dom = &r["domains"]["gov_router"]["domain"];
+    let mut m = r["message"].clone();
+    m["next"] = json!(format!("0x{}", "00".repeat(32)));
+    let x = scaas_typed_data("UAPqzSetVerifier", None, &b20(&dom["verifyingContract"]), chain_id(&dom["chainId"]), &b32(&dom["salt"]), &m).unwrap();
+    assert_ne!(x.digest().unwrap(), b32(&r["domains"]["gov_router"]["digest"]), "next is signed");
 }

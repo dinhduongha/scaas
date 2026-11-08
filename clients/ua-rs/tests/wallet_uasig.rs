@@ -476,8 +476,9 @@ fn all_records(file: &Value) -> Vec<(u16, Vec<u8>)> {
 }
 
 /// `portable.json`: `msig-pq` (two mldsa65 members) at every parameter set and `msig-pq-native` (native + mldsa65, T4: the native
-/// member over the record's typed data), the KEM records v1-v3, the PQZ key records of `msig-pq-native` at every set, and the
-/// acceptances of `msig-pq-native`'s two members and of `msig-classical`'s native member: 15, byte for byte with feature `vectors`
+/// member over the record's typed data), the PQZ key records of `msig-pq-native` at every set, and the acceptances of
+/// `msig-pq-native`'s two members and of `msig-classical`'s native member: 12 (T66a, CTR-UA-32: an msig has no KEM record, the
+/// three of `msig-pq` went), byte for byte with feature `vectors`
 /// (the native leaf is RFC 6979 in every build). Skipped: the acceptances of `msig-classical`'s fixed-seed classical members
 /// (signatures.json's keys, no key here): 3.
 #[test]
@@ -486,8 +487,8 @@ fn portable_json_msig_rows() {
     let w = wallet();
     let keys = Keys::new(&w);
     let t = check_rows(&p, &msig_records(&p), &keys);
-    assert_eq!((t.verified, t.skipped), (15, 3), "registrations 5, kemRecords 3, pqzKeyRecords 4, memberships 3");
-    assert_eq!(t.exact, if cfg!(feature = "vectors") { 15 } else { PORTABLE_EXACT_DEFAULT });
+    assert_eq!((t.verified, t.skipped), (12, 3), "registrations 5, pqzKeyRecords 4, memberships 3");
+    assert_eq!(t.exact, if cfg!(feature = "vectors") { 12 } else { PORTABLE_EXACT_DEFAULT });
 }
 /// The rows whose every leaf is deterministic in a default build (ML-DSA hedged): the native acceptances.
 const PORTABLE_EXACT_DEFAULT: usize = 2;
@@ -502,11 +503,11 @@ fn nested_json_msig_rows() {
     let records = msig_records(&n);
     let t = check_rows(&n, &records, &keys);
     // registrations msig-inner-pq, -inner-native, -inner-native-2, -inner-heavy, -nested-pq, -nested-native, -nested-twice,
-    // -nested-heavy-inner, -nested-heavy-outer; kemRecords msig-nested-pq; pqzKeyRecords msig-nested-native at every set; the
+    // -nested-heavy-inner, -nested-heavy-outer; no kemRecords (T66a, CTR-UA-32); pqzKeyRecords msig-nested-native at every set; the
     // authorization two-levels (a native leaf over UAAuth in context A); memberships msig-nested-classical/0. Skipped (a fixed-seed
     // classical member, or the list-on-signing-slot form a `Slot` cannot express): afterAcceptance msig-nested-after-acceptance,
     // authorizations list-on-signing-slot, memberships msig-inner-classical/0, /1, msig-nested-classical/1.
-    assert_eq!((t.verified, t.exact, t.skipped), (17, 0, 5));
+    assert_eq!((t.verified, t.exact, t.skipped), (16, 0, 5));
     // every slot's acceptance the wallet can sign (the file's rows are mostly native or fixed-seed classical): a signing slot, and an
     // `msig` slot by the first minimal subset of its own members (bit order), verified by `check_membership_with`
     let inner = inner_of(&records);

@@ -704,6 +704,12 @@
       "purposeTag": "0xd7c6b488053a6f35540715ec029fa684c9445475cb4e38d564225334f7b3f253"
     },
     {
+      "purpose": "pqz-verdict",
+      "version": 1,
+      "tag": "scaas.ua.purpose.pqz-verdict.v1",
+      "purposeTag": "0x6e2771f5777618fa67e04937826da046b89915d6f2f052c799d38b94df7d89bc"
+    },
+    {
       "purpose": "pop",
       "version": 2,
       "tag": "scaas.ua.purpose.pop.v2",
@@ -2877,6 +2883,14 @@
       "purposeTag": "0xd7c6b488053a6f35540715ec029fa684c9445475cb4e38d564225334f7b3f253",
       "digest": "0xad66503cebdd9341697249795f4c068a98fc92a57a828eec7ff59ee24a6124a1",
       "uaMsg": "0xa46e7f0fd18a9465b57a2bc2fae18a87f54fd9ee3bc5ddfaf060821cfe12b748"
+    },
+    {
+      "kind": 256,
+      "purpose": "pqz-verdict",
+      "version": 1,
+      "purposeTag": "0x6e2771f5777618fa67e04937826da046b89915d6f2f052c799d38b94df7d89bc",
+      "digest": "0xad66503cebdd9341697249795f4c068a98fc92a57a828eec7ff59ee24a6124a1",
+      "uaMsg": "0x25beef3c4a3d2ca0d6e5b1d008e7515d8157f28316fb264976e63c40bbaf2ebe"
     }
   ],
   "canonicalIds": [

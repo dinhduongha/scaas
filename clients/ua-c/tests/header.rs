@@ -58,6 +58,7 @@ fn header_states_its_rules() {
         "the caller zeroizes",
         "SCAAS_UA_ERR_KEY_REVOKED",
         "freeing the wallet before its children is defined",
+        "an msig never holds a KEM key", // CTR-UA-32 (T66a)
     ] {
         assert!(h.contains(rule), "header rule missing: {rule}");
     }

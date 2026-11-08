@@ -46,7 +46,8 @@ pub const SCAAS_UA_ERR_BUFFER: ScaasUaStatus = 9;
 pub const SCAAS_UA_ERR_INTERNAL: ScaasUaStatus = 10;
 /// "UAPqzHolder": a PQZ key given for a kind that may not hold one (only 0x0130-0x0132, 0x0134, 0x0135 and a PQ-eligible msig may).
 pub const SCAAS_UA_ERR_PQZ_HOLDER: ScaasUaStatus = 11;
-/// "UAKemHolder": a KEM record given for a kind that may not hold one.
+/// "UAKemHolder": a KEM key or record given for a kind that may not hold one. The KEM holders are the single PQ kinds 0x0130-0x0132,
+/// 0x0134 and 0x0135; an msig never holds a KEM key, PQ-eligible or not (CTR-UA-32): a sender seals to each accepted member's key.
 pub const SCAAS_UA_ERR_KEM_HOLDER: ScaasUaStatus = 12;
 /// "UAKemVersion": a `setKemKey` record of version 0 (version 0 is the `register` key's) or past 2^64 − 1.
 pub const SCAAS_UA_ERR_KEM_VERSION: ScaasUaStatus = 13;
@@ -424,7 +425,8 @@ pub extern "C" fn scaas_ua_is_member(kind: u16, hedera_native: bool) -> bool {
     safe(false, || ua::is_member(kind, hedera_native))
 }
 
-/// Whether `kind` may hold a PQZ key attribute (mldsa44, mldsa65, fndsa512, mldsa87, fndsa1024).
+/// Whether `kind` may hold a PQZ key attribute (mldsa44, mldsa65, fndsa512, mldsa87, fndsa1024); these single kinds are also the
+/// only KEM holders. A PQ-eligible msig may hold a PQZ key (`scaas_ua_msig_pqz_eligible`), never a KEM key (CTR-UA-32).
 #[no_mangle]
 pub extern "C" fn scaas_ua_is_pqz_holder(kind: u16) -> bool {
     safe(false, || ua::is_pqz_holder(kind))
@@ -680,7 +682,8 @@ pub extern "C" fn scaas_ua_kem_record_digest(
     run(|| put(out32.cast(), ua::ua8::kem_record_digest(arr(ua32)?, version, bytes(kem_pk, kem_pk_len)?)?))
 }
 
-/// What the UA signs for a KEM record: `ua_message(kind, PURPOSE_KEM, kem_record_digest)`.
+/// What the UA signs for a KEM record: `ua_message(kind, PURPOSE_KEM, kem_record_digest)`; a kind that holds no KEM key (an msig
+/// among them, CTR-UA-32) is `SCAAS_UA_ERR_KEM_HOLDER`.
 #[no_mangle]
 pub extern "C" fn scaas_ua_kem_record_message(
     kind: u16,
@@ -725,9 +728,9 @@ fn opt_bytes<'a>(p: *const u8, len: usize) -> R<Option<&'a [u8]>> {
 /// The portable PoP message of a registration (UA-8 P1, P2) into `*out`. `key_data` (needed for an `msig`, to show it is
 /// PQ-eligible), `pqz_key` with its proof `pqz_pop` (or only the 32-byte `pqz_pop_hash`; NULL / length 0 = absent) and the
 /// initial KEM key `kem_pk` (its record is always version 0, owner 2026-10-31; NULL / length 0 = absent). Only holders carry
-/// a key or a record
-/// (`SCAAS_UA_ERR_PQZ_HOLDER`, `SCAAS_UA_ERR_KEM_HOLDER`); a PQZ key always comes with its proof hash and only with it
-/// (`SCAAS_UA_ERR_PQZ_POP_HASH`).
+/// a key or a record: a PQZ key a single PQ kind or an msig whose `key_data` shows it PQ-eligible (`SCAAS_UA_ERR_PQZ_HOLDER`), a
+/// KEM key a single PQ kind only, never an msig (`SCAAS_UA_ERR_KEM_HOLDER`, CTR-UA-32); a PQZ key always comes with its proof
+/// hash and only with it (`SCAAS_UA_ERR_PQZ_POP_HASH`).
 #[no_mangle]
 #[allow(clippy::too_many_arguments)]
 pub extern "C" fn scaas_ua_holder_pop_message(
@@ -1026,7 +1029,8 @@ fn json_call(f: fn(&str) -> ua::json::JsonResult<String>, input: *const c_char, 
 /// `kemCommit` true / false forces the KEM form, absent: the hash commit
 /// only when the full call is over 261,909 B). Out: `{args, kemFill, calldataLength, kemFillCalldataLength}`, `args.entry` =
 /// `register`, `registerMsig`, `registerWebAuthn`, `registerMuSig2` or `registerFrost`, `kemFill` the `setKemKey(ua, 0, ...)`
-/// that stores a hash-committed key (null otherwise). `SCAAS_UA_ERR_ARGUMENT` when the input is not this JSON.
+/// that stores a hash-committed key (null otherwise). `SCAAS_UA_ERR_ARGUMENT` when the input is not this JSON; a `kemPk` for a kind
+/// that holds no KEM key, an msig among them (CTR-UA-32), `SCAAS_UA_ERR_KEM_HOLDER`.
 #[no_mangle]
 pub extern "C" fn scaas_ua_registration_args(input: *const c_char, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
     json_call(ua::json::registration_args_json, input, out, out_len)
