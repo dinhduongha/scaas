@@ -167,7 +167,8 @@ export function deriveUAKey(seed, { kind, account = 0, index = 0 } = {}) {
     keyData = PUBLIC[k](secret);
   }
   // HKDF-Extract of this key's own seed: its KEM keys, nothing else (spec §6.1)
-  return uaKey(k, secret, keyData, { account, index, derivation, path }, isKemHolder(k) ? kemPrk(seed) : null);
+  let prk = isKemHolder(k) ? kemPrk(seed) : null;
+  return uaKey(k, secret, keyData, { account, index, derivation, path }, prk);
 }
 
 /** The UA of an imported native key (ua-rs-sign T20c, owner 2026-11-08, the CLI-SGN-29 Change): `secp256k1` (0x0108) for the
