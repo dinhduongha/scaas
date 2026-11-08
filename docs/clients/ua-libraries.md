@@ -326,7 +326,7 @@ generic hasher hashes the values supplied and never rewrites a field. `scaas_typ
 clientkeys check: `Payment`, `ReceiverFee`, `PayMeta`, `Op`, `Call`, `OwnerCall`, `Cancel`, `TradeOrder`, `WrapOrder`) **refuses** a
 non-zero unbound field (`PolicyRefused`), so what the user confirmed is what is hashed (owner 2026-11-05). `Expect::Any(AllowAnyTypedData)`, with its
 own C name `scaas_ua_sign_typed_any`, signs the standard digest of the values as supplied. An unrelated domain's struct with the
-same field names is untouched. BUILT.
+same field names is untouched. Since the merge of `ua-mtx-merge` `aa898cf6` (T20b) the op table and the checks follow its merged-entry rows (`typed/typed_ops.json`, 80 structs): a payment, a receiver fee, a SCaaS sell token's order, a wrap order and their cancels are the `UA` structs between 32-byte ids, `PayMeta` is v2 (`{salt, payNo, schema, body}`), the PQZ debits name `keyVersion` and the PQZ `UARollOver` is its own row (`UAPqzRollOver`). BUILT.
 
 <a id="CLI-UAL-14"></a>**CLI-UAL-14** — **The KEM key comes through the UA key's own store.** `UaKey::kem_key(version)` has no wallet
 argument, so a handle cannot be combined with another wallet's seed and two wallets cannot make a second `(ek, pk_X)` for one

@@ -272,7 +272,8 @@ const typedRefusals = [
 ];
 for (const x of typedRefusals) must(refusedBy(() => evm.hashTypedData(x.td)), x.id);
 
-// the SCaaS builders' canonical step: a non-zero unbound relayer / feeRecipient (mode 0) is hashed as zero, nested too
+// the SCaaS builders' canonical step: a non-zero unbound relayer / feeRecipient (mode 0) is hashed as zero, nested too.
+// ua-mtx-merge (CTR-MTX-30, R46): the token's address `MetaTransfer`, `Burn` and `ReceiverFee` left; their rows are the `UA` structs'.
 const meta = { from: ACCOUNT, to: PAYEE, value: '500', entryRef: REF, batch: '3', nonce: '7', validUntil: String(NOW + 300), mode: 0,
   relayer: RELAYER, fee: '0', feeRecipient: FEE_TO };
 const uaMeta = { ...meta, from: evm.padId(ACCOUNT), to: evm.padId(PAYEE) };
@@ -280,15 +281,12 @@ const domainOf = { name: 'SCaaS MetaToken', contract: TOKEN, chainId: 7622, chai
 const canonRows = [
   ['MetaTransaction', 'metaTxTypedData', { ...domainOf, name: 'SCaaS MetaToken', message: { from: ACCOUNT, data: '0x12345678', batch: '1',
     nonce: '2', validUntil: String(NOW), mode: 0, relayer: RELAYER, fee: '0', feeRecipient: FEE_TO } }],
-  ['MetaTransfer', 'metaTransferTypedData', { ...domainOf, message: meta }],
   ['UAMetaTransaction', 'uaMetaTxTypedData', { ...domainOf, message: { from: evm.padId(ACCOUNT), data: '0x12345678', batch: '1', nonce: '2',
     validUntil: String(NOW), mode: 0, relayer: RELAYER, fee: '0', feeRecipient: FEE_TO } }],
   ['UAMetaTransfer', 'uaMetaTransferTypedData', { ...domainOf, message: uaMeta }],
-  ['MetaTransfer mode 1 (relayer bound, feeRecipient not)', 'metaTransferTypedData', { ...domainOf, message: { ...meta, mode: 1 } }],
-  ['Burn (an op struct with the envelope)', 'burnTypedData', { ...domainOf, message: { from: ACCOUNT, amount: '5', batch: '1', nonce: '1',
-    validUntil: String(NOW), mode: 0, relayer: RELAYER, fee: '0', feeRecipient: FEE_TO } }],
-  ['ReceiverFee (nested MetaTransfer)', 'receiverFeeTypedData', { ...domainOf, message: { payment: meta, fee: '10', feeRecipient: FEE_TO,
-    validUntil: String(NOW) } }, true],
+  ['UAMetaTransfer mode 1 (relayer bound, feeRecipient not)', 'uaMetaTransferTypedData', { ...domainOf, message: { ...uaMeta, mode: 1 } }],
+  ['UABurn (an op struct with the envelope)', 'uaBurnTypedData', { ...domainOf, message: { from: evm.padId(ACCOUNT), amount: '5', batch: '1',
+    nonce: '1', validUntil: String(NOW), mode: 0, relayer: RELAYER, fee: '0', feeRecipient: FEE_TO } }],
   ['UAReceiverFee (nested UAMetaTransfer)', 'uaReceiverFeeTypedData', { ...domainOf, message: { payment: uaMeta, fee: '10',
     feeRecipient: FEE_TO, validUntil: String(NOW) } }, true],
 ].map(([id, builder, input, nested]) => {
@@ -308,21 +306,27 @@ const canonRows = [
 const Q = (td) => JSON.parse(JSON.stringify(td));
 const set = (td, f) => { const c = Q(td); f(c); return c; };
 const W = { chainId: 7622, chainUid: CHAIN_UID, now: NOW };
-const payment = evm.metaTransferTypedData({ ...domainOf, message: { from: ACCOUNT, to: PAYEE, value: '125000500000', entryRef: REF,
+// ua-mtx-merge (R12, R20, R39, R46): a payment, a receiver fee, a SCaaS sell token's order and a wrap order are the `UA` structs
+// between 32-byte ids (`padId` of a native address); `PayMeta` v2 (CTR-MTX-26 Change) is `{salt, payNo, schema, body}`.
+const [UA_ACCOUNT, UA_PAYEE] = [evm.padId(ACCOUNT), evm.padId(PAYEE)];
+const payment = evm.uaMetaTransferTypedData({ ...domainOf, message: { from: UA_ACCOUNT, to: UA_PAYEE, value: '125000500000', entryRef: REF,
   batch: evm.payLane(REF), nonce: '0', validUntil: String(NOW + 300), mode: 1, relayer: RELAYER } });
-const payExpect = { check: 'Payment', account: ACCOUNT, ...W, amount: '125000.5', decimals: 6, payee: PAYEE, entryRef: REF, expectedToken: TOKEN };
-const rfee = evm.receiverFeeTypedData({ ...domainOf, message: { payment: { from: ACCOUNT, to: PAYEE, value: '125000500000', entryRef: REF,
-  batch: evm.payLane(REF), nonce: '0', validUntil: String(NOW + 300), mode: 1, relayer: RELAYER, fee: '0' }, fee: '1000', feeRecipient: FEE_TO,
-  validUntil: String(NOW + 300) } });
-const rfeeExpect = { check: 'ReceiverFee', payee: PAYEE, ...W, amount: '125000.5', decimals: 6, entryRef: REF, expectedToken: TOKEN,
+const payExpect = { check: 'Payment', account: UA_ACCOUNT, ...W, amount: '125000.5', decimals: 6, payee: UA_PAYEE, entryRef: REF,
+  expectedToken: TOKEN };
+const rfee = evm.uaReceiverFeeTypedData({ ...domainOf, message: { payment: { from: UA_ACCOUNT, to: UA_PAYEE, value: '125000500000',
+  entryRef: REF, batch: evm.payLane(REF), nonce: '0', validUntil: String(NOW + 300), mode: 1, relayer: RELAYER, fee: '0' }, fee: '1000',
+  feeRecipient: FEE_TO, validUntil: String(NOW + 300) } });
+const rfeeExpect = { check: 'ReceiverFee', payee: UA_PAYEE, ...W, amount: '125000.5', decimals: 6, entryRef: REF, expectedToken: TOKEN,
   maxFee: '1000', feeRecipient: FEE_TO };
 const PM = JSON.parse(readFileSync(join(VECTORS, 'metatx/paymeta.json'), 'utf8')).find((r) => r.name === 'note_utf8');
-const payMeta = evm.buildMtxPayMeta({ token: TOKEN, chainId: 7622, chainUid: CHAIN_UID, from: ACCOUNT, to: PAYEE, amount: '1000',
-  salt: PM.salt, meta: PM.meta, validUntil: NOW + 600, mode: 1, relayer: RELAYER }).typedData;
-const payMetaExpect = { check: 'PayMeta', salt: PM.salt, meta: PM.meta, account: ACCOUNT, ...W, amount: '1000', decimals: 0, payee: PAYEE,
+const PM_META = { salt: PM.salt, payNo: PM.payNo, schema: PM.schema, body: PM.body };
+const payMeta = evm.buildPay({ name: 'SCaaS MetaToken', token: TOKEN, chainId: 7622, chainUid: CHAIN_UID, from: UA_ACCOUNT, to: UA_PAYEE,
+  amount: '1000', meta: PM_META, validUntil: NOW + 600, mode: 1, relayer: RELAYER }).typedData;
+const payMetaExpect = { check: 'PayMeta', meta: PM_META, account: UA_ACCOUNT, ...W, amount: '1000', decimals: 0, payee: UA_PAYEE,
   expectedToken: TOKEN };
-const burn = evm.burnTypedData({ ...domainOf, message: { from: ACCOUNT, amount: '5', batch: '3', nonce: '7', validUntil: String(NOW + 300), mode: 0 } });
-const burnExpect = { check: 'Op', op: 'Burn', contract: TOKEN, ...W, message: { from: ACCOUNT, amount: '5' } };
+const burn = evm.uaBurnTypedData({ ...domainOf, message: { from: UA_ACCOUNT, amount: '5', batch: '3', nonce: '7', validUntil: String(NOW + 300),
+  mode: 0 } });
+const burnExpect = { check: 'Op', op: 'UABurn', contract: TOKEN, ...W, message: { from: UA_ACCOUNT, amount: '5' } };
 const CANCEL_NONCE = '0xcfdd7aea';
 const callData = CANCEL_NONCE + '00'.repeat(31) + '07';
 const call = evm.metaTxTypedData({ name: 'SCaaS MetaToken', ...domainOf, message: { from: ACCOUNT, data: callData, batch: '1', nonce: '4',
@@ -338,29 +342,31 @@ const ownerExpect = { check: 'OwnerCall', account: ACCOUNT, ...W, newKey: NEW_KE
 const DEX = '0x5ca00000000000000000000000000000000000a6';
 const BUYS = '0x5ca00000000000000000000000000000000000b3';
 const WRAPPER = '0x5ca00000000000000000000000000000000000b2';
+const ZERO_ID = '0x' + '00'.repeat(32);
 const tradeOrder = { receiveToken: BUYS, amount: '100', receiveAmount: '200', minFill: '0', fee: '0', relayer: ZERO, dex: DEX,
-  destination: ZERO, flags: 0, batch: '0', validUntil: String(NOW + 600) };
-const trade = evm.tradeOrderTypedData({ token: TOKEN, chainId: 7622, chainUid: CHAIN_UID, order: { ...tradeOrder, from: ACCOUNT, nonce: '5' } });
-const tradeExpect = { check: 'TradeOrder', account: ACCOUNT, ...W, order: tradeOrder, sellToken: TOKEN, dexes: [DEX] };
-const cancel = evm.cancelOrderTypedData({ name: 'SCaaS MetaToken', ...domainOf, message: { order: { ...tradeOrder, from: ACCOUNT, nonce: '5' } } });
-const cancelExpect = { check: 'Cancel', account: ACCOUNT, chainId: 7622, chainUid: CHAIN_UID, contract: TOKEN,
-  order: { ...tradeOrder, from: ACCOUNT, nonce: '5' } };
-const wrapOrder = { wrappedToken: WRAPPER, amount: '100', minMinted: '100', minFill: '100', fee: '0', relayer: ZERO, destination: ZERO,
+  destination: ZERO_ID, flags: 0, batch: '0', validUntil: String(NOW + 600) };
+const trade = evm.uaTradeOrderTypedData({ token: TOKEN, chainId: 7622, chainUid: CHAIN_UID, order: { ...tradeOrder, from: UA_ACCOUNT, nonce: '5' } });
+const tradeExpect = { check: 'TradeOrder', account: UA_ACCOUNT, ...W, order: tradeOrder, sellToken: TOKEN, dexes: [DEX] };
+const cancel = evm.cancelUAOrderTypedData({ name: 'SCaaS MetaToken', ...domainOf, message: { order: { ...tradeOrder, from: UA_ACCOUNT,
+  nonce: '5' } } });
+const cancelExpect = { check: 'Cancel', account: UA_ACCOUNT, chainId: 7622, chainUid: CHAIN_UID, contract: TOKEN,
+  order: { ...tradeOrder, from: UA_ACCOUNT, nonce: '5' } };
+const wrapOrder = { wrappedToken: WRAPPER, amount: '100', minMinted: '100', minFill: '100', fee: '0', relayer: ZERO, destination: ZERO_ID,
   flags: 0, batch: '0', validUntil: String(NOW + 600) };
-const wrap = evm.wrapOrderTypedData({ ...domainOf, message: { ...wrapOrder, from: ACCOUNT, nonce: '6' } });
-const wrapExpect = { check: 'WrapOrder', account: ACCOUNT, ...W, order: wrapOrder, sellToken: TOKEN, wrappers: [WRAPPER] };
+const wrap = evm.uaWrapOrderTypedData({ ...domainOf, message: { ...wrapOrder, from: UA_ACCOUNT, nonce: '6' } });
+const wrapExpect = { check: 'WrapOrder', account: UA_ACCOUNT, ...W, order: wrapOrder, sellToken: TOKEN, wrappers: [WRAPPER] };
 const policy = [
   ['payment', payment, payExpect],
-  ['payment: another payee (a drain)', set(payment, (t) => { t.message.to = '0x' + 'ee'.repeat(20); }), payExpect],
+  ['payment: another payee (a drain)', set(payment, (t) => { t.message.to = '0x' + 'ee'.repeat(32); }), payExpect],
   ['payment: non-zero feeRecipient unbound by mode 1', set(payment, (t) => { t.message.feeRecipient = FEE_TO; }), payExpect],
-  ['payment: fee above the limit', evm.metaTransferTypedData({ ...domainOf, message: { ...payment.message, mode: 33, fee: '5' } }), payExpect],
+  ['payment: fee above the limit', evm.uaMetaTransferTypedData({ ...domainOf, message: { ...payment.message, mode: 33, fee: '5' } }), payExpect],
   ['receiver fee', rfee, rfeeExpect],
   ['receiver fee: above the payee\'s limit', rfee, { ...rfeeExpect, maxFee: '999' }],
   ['pay-meta', payMeta, payMetaExpect],
-  ['pay-meta: metadata of another salt', payMeta, { ...payMetaExpect, salt: '0x' + '42'.repeat(32) }],
-  ['op Burn', burn, burnExpect],
-  ['op Burn: another amount', burn, { ...burnExpect, message: { from: ACCOUNT, amount: '6' } }],
-  ['op Burn: non-zero relayer unbound by mode 0', set(burn, (t) => { t.message.relayer = RELAYER; }), burnExpect],
+  ['pay-meta: metadata of another salt', payMeta, { ...payMetaExpect, meta: { ...PM_META, salt: '0x' + '42'.repeat(32) } }],
+  ['op UABurn', burn, burnExpect],
+  ['op UABurn: another amount', burn, { ...burnExpect, message: { from: UA_ACCOUNT, amount: '6' } }],
+  ['op UABurn: non-zero relayer unbound by mode 0', set(burn, (t) => { t.message.relayer = RELAYER; }), burnExpect],
   ['call cancelNonce', call, callExpect],
   ['call: a selector off the allowlist', call, { ...callExpect, allowlist: [{ selector: '0x12345678', name: 'other', feeClass: 1 }] }],
   ['call: transfer is never a call', evm.metaTxTypedData({ name: 'SCaaS MetaToken', ...domainOf, message: { ...call.message,
@@ -369,7 +375,7 @@ const policy = [
   ['owner call AddKey', owner, ownerExpect],
   ['owner call: someone else\'s key', owner, { ...ownerExpect, newKey: subjectKey('0x' + '66'.repeat(20)) }],
   ['cancel order', cancel, cancelExpect],
-  ['cancel: not the account\'s order', cancel, { ...cancelExpect, account: '0x' + 'bd'.repeat(20) }],
+  ['cancel: not the account\'s order', cancel, { ...cancelExpect, account: '0x' + 'bd'.repeat(32) }],
   ['trade order', trade, tradeExpect],
   ['trade order: a DEX off the profile', trade, { ...tradeExpect, dexes: [BUYS] }],
   ['wrap order', wrap, wrapExpect],

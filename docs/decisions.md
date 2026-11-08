@@ -8121,7 +8121,7 @@ It said: Custody tier A/B, HSM or MPC; replaced by CLI-SGN-32.
 **Why.** Owner 2026-11-06, each as recommended: (1) build a k-of-n backup of the operator's PQZ `seed32`, client side, no contract change; key rotation for an `msig` holder is rejected as the remedy (it needs the old key to migrate the balance, so it does not help against an uncooperative operator); (2) a client **warning, not a refusal**, when a holder has no backup: the client still builds `register` / `setPqzKey`; (3) **the rebuilt key persists** in the rebuilder's encrypted vault and backup, as an imported key does, since `lock()` otherwise lost it, and the new operator should rotate to a new key version soon; (4) **direct members only**: an `msig` member holds no KEM key and its own members are not reached. Controller: Shamir per byte over GF(2^8), the share header in the container's plaintext, every refusal `Argument`, no new status, no vault version bump.
 **Cost if wrong.** An operator who never made the backup still strands the balance; that is why the warning exists. The old operator and every member who held `k` shares can read under the rebuilt version until it rotates.
 **Status.** BUILT in `ua-rs` and `ua-c`: T16a `4e734a7a`, T16b `a76814e7`. No other binding wraps the five C calls yet (stated in T16b's summary). UNAUDITED.
-Change (2026-11-08, controller, ua-rs-sign T20b at the merge of `ua-mtx-merge` `aa898cf6`; status: documented): the rule no longer says that rotation does not help. Group 3g's rule replaces it: a rotation adds a version (v+1, signed under the `msig`'s m-of-n), the old versions stay readable and are never deleted, and the balance under v moves only by a migration proof under v, which the members can make once the backup rebuilds v's `seed32` (spec 3g O4, O5). The backup, the warning and the share header are unchanged (the header already binds the version). 3g's own client rule takes the id CLI-SGN-48, since CLI-SGN-43 is the KEM key rule here.
+Change (2026-11-08, controller, ua-rs-sign T20b at the merge of `ua-mtx-merge` `aa898cf6`; status: documented): the rule no longer says that rotation does not help. Group 3g's rule replaces it: a rotation adds a version (v+1, signed under the `msig`'s m-of-n), the old versions stay readable and are never deleted, and the balance under v moves only by a migration proof under v, which the members can make once the backup rebuilds v's `seed32` (spec 3g O4, O5). The backup, the warning and the share header are unchanged (the header already binds the version). 3g's own client rule takes the next free CLI-SGN id after CLI-SGN-47 (spec 3g C9, plan T57), since CLI-SGN-43 is the KEM key rule here.
 **Source.** [plan](superpowers/plans/2026-11-05-ua-rs-sign.md) T16a, T16b, T20b; [spec 3g](superpowers/specs/2026-11-06-pqz-key-versions.md) O4, O5, §7.2.
 
 ## 38. Clients — SCaaS app
@@ -8320,7 +8320,7 @@ Change: the app never offers `approve` on a SCaaS token; spenders on outside tok
 
 ## 39. Clients — UA libraries
 
-Rules of the `ua-rs` wallet surface and its facades, then the records of the decisions behind them (CLI-UAL-50 to CLI-UAL-55). Everything here is UNAUDITED.
+Rules of the `ua-rs` wallet surface and its facades, then the records of the decisions behind them (CLI-UAL-50 to CLI-UAL-56). Everything here is UNAUDITED.
 
 ### CLI-UAL-01 — `ua-rs` is the only signer; a secret leaves it only through a named export
 - old: — · status: current · owner: yes · date: 2026-11-05 · normative: clients/ua-libraries.md#CLI-UAL-01 · superseded-by: —
@@ -8735,6 +8735,29 @@ Advisories: RUSTSEC-2026-0387 (`crypto-bigint` 0.5.5): T3a moved `k256` and `p25
 - **`forOp7`** (T15l): `balance` takes a named boolean with no default, the `p` and value an op 7 would use (`INLINE_MAX_PQZH` on a PQZH token). BUILT `8dc90183`.
 - **Deferred:** the OpenFactory `_info` layout pin (Fable P3-3) waits for `ua-mtx-merge`.
 **Source.** [no-oracle spec](superpowers/specs/2026-11-06-no-decryption-oracle.md) §4.5 to §4.7, §9; [plan](superpowers/plans/2026-11-05-ua-rs-sign.md) T15e, T14b, T15g, T15i, T15l; per-task summaries in `smartcontracts/evm/runs/`.
+
+<a id="CLI-UAL-56"></a>
+### CLI-UAL-56 — Controller decisions of the first sync with `ua-mtx-merge` (T20b, 2026-11-08)
+- old: — · status: current · owner: no · date: 2026-11-08 · normative: decisions.md#CLI-UAL-56 · superseded-by: —
+
+**Rule.** The owner may override any. At the merge of `ua-mtx-merge` `aa898cf6` into `ua-rs-sign` (a merge commit, plan T20b):
+- **ua-c statuses:** group 3g's `SCAAS_UA_ERR_PQZ_KEY_VERSION` is 41 and `SCAAS_UA_ERR_KEY_IN_USE` 42 everywhere (header, `lib.rs`, the
+  bindings' tests); `ua-mtx-merge`'s ABI-5 copy numbered them 21 / 22, which ABI 6 gives to `SealOpen` / `SealVersion`. BUILT.
+- **Rule ids:** this branch's CLI-SGN-43 (the KEM key) stays; 3g's planned client rule takes the next free id after CLI-SGN-47 (spec 3g C9 and §12, plan T57).
+  CLI-SGN-47 takes 3g's rotation rule (its Change line).
+- **The merged-entry typed rows** (`typed/typed_ops.json` 112 → 80 structs, T15o's deferred item 4): `ua-rs`'s op table, its signing
+  policy and the `sign.json` generator follow them. A payment, a receiver fee, a SCaaS sell token's order, a wrap order and their
+  cancels are the `UA` structs between 32-byte ids; `PayMeta` is v2 (`{salt, payNo, schema, body}`, the body read strictly as
+  clientkeys `decodeMetaBody`); the PQZ debits name `keyVersion`, `UAPrepareAcc` too; the PQZ `UARollOver` is its own row
+  (`UAPqzRollOver`): a primary type signed as two structs is built only with a domain, and `checkOp` builds the op it was asked for,
+  never another struct of its primary type. BUILT (T20b commit).
+- **Registry slots from the layout pin:** `pqz-read`'s registry slots (2, 4, 5, 17) and its `anvil` fixture read
+  `smartcontracts/evm/test/ua/UAStoreLayout.t.sol` (the probe's slot comments, the packing of the two words decoded), no longer a
+  hand copy. BUILT.
+- **Not in this sync:** the factory index's record (T67's `Rec` at slot 8 replaces `_info`) reaches `pqz-read` and
+  `zether-read-balance` with T15m2 at the next milestone (factory index + chain-neutral); `uaEnvelope`, zether-prover's new keyless
+  command, is not on the Zether facade's allow-list.
+**Source.** [plan](superpowers/plans/2026-11-05-ua-rs-sign.md) T15o, T20b; `smartcontracts/evm/runs/2026-11-08-ua-rs-sign-t20b1-summary.txt`.
 
 ## 40. Integration — ERP
 

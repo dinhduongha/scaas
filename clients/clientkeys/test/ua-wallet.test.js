@@ -259,7 +259,8 @@ test('nonce map is the 512-bit map', () => {
 });
 
 test('unbound relayer / feeRecipient hashed as zero in every mode struct', () => {
-  const want = new Set(['MetaTransaction', 'MetaTransfer', 'UAMetaTransaction', 'UAMetaTransfer', 'ReceiverFee', 'UAReceiverFee']);
+  // ua-mtx-merge (CTR-MTX-30, R46): the token's address `MetaTransfer` and `ReceiverFee` left; `UABurn` is the op struct
+  const want = new Set(['MetaTransaction', 'UAMetaTransaction', 'UAMetaTransfer', 'UABurn', 'UAReceiverFee']);
   const have = new Set();
   for (const r of S.typed.canon) {
     const td = (evm.OP_BUILDERS[r.builder] ?? evm[r.builder])(r.input);
@@ -270,7 +271,7 @@ test('unbound relayer / feeRecipient hashed as zero in every mode struct', () =>
     have.add(td.primaryType);
   }
   for (const t of want) assert.ok(have.has(t), t);
-  assert.ok(S.typed.canon.some((r) => r.nested), 'a nested MetaTransfer row');
+  assert.ok(S.typed.canon.some((r) => r.nested), 'a nested UAMetaTransfer row');
 });
 
 test('unrelated Order(mode, relayer, feeRecipient, amount) through Any equals hashTypedData of the supplied values', () => {

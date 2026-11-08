@@ -7,7 +7,8 @@
 use scaas_ua::ua8::PORTABLE_DOMAIN_SEPARATOR;
 use scaas_ua::verify::native_ecdsa;
 use scaas_ua::wallet::{scaas_typed_data, Error, Expect, Network, TypedData, Wallet};
-use scaas_ua::keccak256;
+use scaas_ua::pay::{meta_pay_id_v2, PayMeta};
+use scaas_ua::{keccak256, pay_lane};
 use serde_json::{json, Value};
 
 fn load(path: &str) -> Value {
@@ -53,10 +54,11 @@ const DOMAIN_NAMES: [&str; 7] = [
     "SCaaS GovernanceRouter",
 ];
 
-/// `typed/typed_ops.json`: every signed struct (112) in every domain it is signed in: `encodeType`, `structHash`, the domain
-/// separator and the digest from the row's typed data; the SCaaS builder of the struct (`scaas_typed_data`, the op table) gives
-/// the same digest in each of its domains and refuses every other SCaaS domain name; each row's ECDSA signature recovers to the
-/// row's key over that digest.
+/// `typed/typed_ops.json`: every signed struct (80, ua-mtx-merge's merged-entry rows) in every domain it is signed in: `encodeType`,
+/// `structHash`, the domain separator and the digest from the row's typed data; the SCaaS builder of the row's primary type
+/// (`scaas_typed_data`, the op table) gives the same digest in each of its domains and, in every other SCaaS domain name, refuses
+/// or builds another struct (`UARollOver`: the Zether row and the PQZ row `UAPqzRollOver`, group 3g); each row's ECDSA signature
+/// recovers to the row's key over that digest.
 #[test]
 fn typed_ops_json_rows() {
     let t = load("typed/typed_ops.json");
@@ -65,8 +67,9 @@ fn typed_ops_json_rows() {
     for (name, op) in t["ops"].as_object().unwrap() {
         ops += 1;
         let mut names = vec![];
+        let primary = op["primaryType"].as_str().unwrap_or(name); // a row names its primary type where it is not the row name
         for d in op["domains"].as_object().unwrap().values() {
-            let v = json!({"types": op["types"], "primaryType": name, "domain": d["domain"], "message": op["message"]});
+            let v = json!({"types": op["types"], "primaryType": primary, "domain": d["domain"], "message": op["message"]});
             let x = td(&v).unwrap_or_else(|e| panic!("{name}: {e:?}"));
             assert_eq!(x.encode_type(), op["typeString"].as_str().unwrap(), "{name}");
             assert_eq!(x.struct_hash().unwrap(), b32(&op["structHash"]), "{name}");
@@ -76,7 +79,7 @@ fn typed_ops_json_rows() {
             assert!(native_ecdsa(&key, &dg, &bytes(&d["signature"])), "{name}");
             let dom = &d["domain"];
             let n = dom["name"].as_str().unwrap();
-            let built = scaas_typed_data(name, Some(n), &b20(&dom["verifyingContract"]), chain_id(&dom["chainId"]), &b32(&dom["salt"]),
+            let built = scaas_typed_data(primary, Some(n), &b20(&dom["verifyingContract"]), chain_id(&dom["chainId"]), &b32(&dom["salt"]),
                 &op["message"])
             .unwrap_or_else(|e| panic!("{name} in {n}: {e:?}"));
             assert_eq!(built.digest().unwrap(), dg, "{name} in {n}: the builder");
@@ -85,11 +88,13 @@ fn typed_ops_json_rows() {
         }
         let dom = &op["domains"].as_object().unwrap().values().next().unwrap()["domain"];
         for other in DOMAIN_NAMES.iter().filter(|n| !names.contains(&n.to_string())) {
-            let got = scaas_typed_data(name, Some(other), &b20(&dom["verifyingContract"]), 1, &[0; 32], &op["message"]);
-            assert_eq!(got.err(), Some(Error::Argument), "{name} is not signed in {other}");
+            match scaas_typed_data(primary, Some(other), &b20(&dom["verifyingContract"]), 1, &[0; 32], &op["message"]) {
+                Ok(x) => assert_ne!(x.encode_type(), op["typeString"].as_str().unwrap(), "{name} is not signed in {other}"),
+                Err(e) => assert_eq!(e, Error::Argument, "{name} is not signed in {other}"),
+            }
         }
     }
-    assert_eq!((ops, rows), (112, 170));
+    assert_eq!((ops, rows), (80, 114));
 }
 
 /// `ua/portable.json` and `ua/nested.json`: the typed data of every registration, KEM record, PQZ key record and acceptance hashes
@@ -312,21 +317,21 @@ fn sign_json_canon_rows() {
         assert_ne!(digest(&supplied).unwrap(), b32(&r["digest"]), "{}: the faithful hash of the supplied value", r["id"]);
         n += 1;
     }
-    assert_eq!(n, 8);
+    assert_eq!(n, 6);
 }
 
-/// The builders zero a nested `MetaTransfer`'s unbound `relayer` and `feeRecipient` inside a `ReceiverFee`; the outer struct (no
+/// The builders zero a nested `UAMetaTransfer`'s unbound `relayer` and `feeRecipient` inside a `UAReceiverFee`; the outer struct (no
 /// `mode`) keeps its `feeRecipient`; with `mode = 3` the nested pair is bound and kept.
 #[test]
 fn nested_metatransfer_zeroed() {
     let pay = |mode: u32| {
-        json!({"payment": {"from": "0xacacacacacacacacacacacacacacacacacacacac", "to": "0x5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+        json!({"payment": {"from": format!("0x{}", "ac".repeat(32)), "to": format!("0x{}", "5e".repeat(32)),
             "value": "500", "mode": mode, "relayer": "0x000000000000000000000000000000000000beef",
             "feeRecipient": "0x0000000000000000000000000000000000000fee"},
             "fee": "10", "feeRecipient": "0x0000000000000000000000000000000000000fee", "validUntil": "1800000000"})
     };
     let zero = "0x0000000000000000000000000000000000000000";
-    let build = |m: &Value| scaas_typed_data("ReceiverFee", Some("SCaaS MetaToken"), &[0x5c; 20], 7622, &[1; 32], m).unwrap();
+    let build = |m: &Value| scaas_typed_data("UAReceiverFee", Some("SCaaS MetaToken"), &[0x5c; 20], 7622, &[1; 32], m).unwrap();
     let z = build(&pay(0)).to_value();
     assert_eq!((z["message"]["payment"]["relayer"].as_str(), z["message"]["payment"]["feeRecipient"].as_str()), (Some(zero), Some(zero)));
     assert_eq!(z["message"]["feeRecipient"], "0x0000000000000000000000000000000000000fee");
@@ -371,7 +376,7 @@ fn policy_row<'a>(s: &'a Value, id: &str) -> &'a Value {
 }
 
 /// The checked path never zeroes: a server typed data whose unbound `relayer` (mode bit 1 clear) or `feeRecipient` (bit 2 clear) is
-/// non-zero is refused, on an op (`Burn`) and on a payment; the same value bound by its mode bit is signed (positive controls).
+/// non-zero is refused, on an op (`UABurn`) and on a payment; the same value bound by its mode bit is signed (positive controls).
 #[test]
 fn checked_path_refuses_nonzero_unbound_relayer_and_fee_recipient() {
     let s = load("ua/sign.json");
@@ -384,7 +389,7 @@ fn checked_path_refuses_nonzero_unbound_relayer_and_fee_recipient() {
         let x = td(&v).unwrap();
         key.sign_typed(&x, expect(&r["expect"]).unwrap()).map(|sig| (x.digest().unwrap(), sig))
     };
-    let burn = policy_row(&s, "op Burn");
+    let burn = policy_row(&s, "op UABurn");
     let (d, sig) = run(burn, &|_| {}).unwrap();
     assert!(native_ecdsa(&address, &d, &sig), "positive control");
     let beef = json!("0x000000000000000000000000000000000000beef");
@@ -422,7 +427,7 @@ fn unrelated_order_through_any_is_signed_as_supplied() {
     assert_eq!(hex::encode(&sig), hex::encode(bytes(&r["signature"])));
     assert_eq!(expect(&json!({"check": "Any"})).err(), Some(Error::PolicyRefused));
     assert_eq!(expect(&json!({"check": "Any", "allowAnyTypedData": "true"})).err(), Some(Error::PolicyRefused));
-    let burn = policy_row(&s, "op Burn");
+    let burn = policy_row(&s, "op UABurn");
     assert_eq!(key.sign_typed(&x, expect(&burn["expect"]).unwrap()).err(), Some(Error::PolicyRefused));
 }
 
@@ -431,7 +436,7 @@ fn unrelated_order_through_any_is_signed_as_supplied() {
 #[test]
 fn expect_bounds_and_forms() {
     let s = load("ua/sign.json");
-    let burn = policy_row(&s, "op Burn");
+    let burn = policy_row(&s, "op UABurn");
     assert!(expect(&burn["expect"]).is_ok());
     let mut big = burn["expect"].clone();
     big["message"]["pad"] = json!("a".repeat(16 * 1024));
@@ -503,7 +508,7 @@ fn op_requires_the_whole_message() {
     let s = load("ua/sign.json");
     let w = wallet();
     let key = w.native_key(Network::Evm, 0, None).unwrap();
-    let r = policy_row(&s, "op Burn");
+    let r = policy_row(&s, "op UABurn");
     let run = |e: &dyn Fn(&mut Value)| {
         let mut x = r["expect"].clone();
         e(&mut x);
@@ -519,3 +524,128 @@ fn op_requires_the_whole_message() {
     .err(), Some(Error::PolicyRefused), "the amount omitted");
 }
 const ZERO: &str = "0x0000000000000000000000000000000000000000";
+
+/// A 256-bit big-endian word in decimal (a uint field as the checks read it).
+fn dec(w: &[u8; 32]) -> String {
+    let (mut x, mut out) = (w.to_vec(), vec![]);
+    while x.iter().any(|b| *b != 0) {
+        let mut r = 0u32;
+        for b in x.iter_mut() {
+            let v = (r << 8) | u32::from(*b);
+            (*b, r) = ((v / 10) as u8, v % 10);
+        }
+        out.push(b'0' + r as u8);
+    }
+    out.reverse();
+    if out.is_empty() { "0".into() } else { String::from_utf8(out).unwrap() }
+}
+
+/// Group 3g (KV-10, ua-mtx-merge): the PQZ `UARollOver` (row `UAPqzRollOver`, with `keyVersion`) and Zether's are two structs of
+/// one primary type: the builder takes the domain's and needs a domain to choose, and `checkOp` approves only the op it was asked
+/// for (the Zether op never the PQZ struct, nor the reverse).
+#[test]
+fn pqz_rollover_is_its_own_op() {
+    let t = load("typed/typed_ops.json");
+    let w = wallet(); // a key handle lives as long as its wallet
+    let key = w.native_key(Network::Evm, 0, None).unwrap();
+    let hx = |b: &[u8]| format!("0x{}", hex::encode(b));
+    for (row, other, dom, name) in [("UAPqzRollOver", "UARollOver", "pqz", "SCaaS PqzToken"), ("UARollOver", "UAPqzRollOver", "zether", "SCaaS ZetherToken")] {
+        let r = &t["ops"][row];
+        let d = &r["domains"][dom]["domain"];
+        let (contract, uid, chain) = (b20(&d["verifyingContract"]), b32(&d["salt"]), chain_id(&d["chainId"]));
+        let built = scaas_typed_data("UARollOver", Some(name), &contract, chain, &uid, &r["message"]).unwrap();
+        assert_eq!(built.encode_type(), r["typeString"].as_str().unwrap(), "{row}: the domain's struct");
+        assert_eq!(scaas_typed_data("UARollOver", None, &contract, chain, &uid, &r["message"]).err(), Some(Error::Argument), "{row}: no domain");
+        let x = td(&json!({"types": r["types"], "primaryType": "UARollOver", "domain": d, "message": r["message"]})).unwrap();
+        let m = &r["message"];
+        let own: serde_json::Map<String, Value> =
+            m.as_object().unwrap().iter().filter(|(k, _)| ["from", "ua", "keyVersion", "n"].contains(&k.as_str())).map(|(k, v)| (k.clone(), v.clone())).collect();
+        let now = m["validUntil"].as_str().unwrap().parse::<u64>().unwrap() - 60;
+        let op = |name: &str| {
+            expect(&json!({"check": "Op", "op": name, "contract": hx(&contract), "chainId": chain, "chainUid": hx(&uid), "message": own,
+                "maxFee": m["fee"], "feeRecipient": m["feeRecipient"], "relayer": m["relayer"], "now": now}))
+            .unwrap()
+        };
+        assert!(key.sign_typed(&x, op(row)).is_ok(), "{row}: positive control");
+        assert_eq!(key.sign_typed(&x, op(other)).err(), Some(Error::PolicyRefused), "{other} does not approve {row}");
+    }
+}
+
+/// A SCaaS sell token's order is a `UATradeOrder` (ua-mtx-merge R12): `ua` is the default without `outside`; `ua: false` without
+/// `outside` (the token's address `TradeOrder`, which left) is refused, as is `ua` with `outside`.
+#[test]
+fn trade_order_takes_the_ua_struct() {
+    let s = load("ua/sign.json");
+    let w = wallet(); // a key handle lives as long as its wallet
+    let key = w.native_key(Network::Evm, 0, None).unwrap();
+    let r = policy_row(&s, "trade order");
+    let run = |extra: Value| {
+        let mut e = r["expect"].clone();
+        e.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+        key.sign_typed(&td(&r["td"]).unwrap(), expect(&e).unwrap()).map(|_| ())
+    };
+    assert!(run(json!({})).is_ok(), "positive control: ua by default");
+    assert!(run(json!({"ua": true})).is_ok(), "ua named");
+    assert_eq!(run(json!({"ua": false})).err(), Some(Error::PolicyRefused), "the address TradeOrder");
+    assert_eq!(run(json!({"ua": true, "outside": true})).err(), Some(Error::PolicyRefused), "ua outside");
+}
+
+/// `PayMeta` v2 (CTR-MTX-26 Change; clientkeys `payMeta`, `decodeMetaBody`): the server's payment carries `metaPayId(meta)` on its
+/// lane, and each schema's body is read strictly before anything is signed: 1 a UTF-8 note, 2 `abi.encode(string, uint64)` in
+/// canonical form, 3 exactly 96 bytes, an unknown schema opaque; the salt, `schema == 0` iff no body and the `payNo` rules are
+/// `metaPayId`'s. Each case changes one thing of the row's metadata and re-points the payment at its id.
+#[test]
+fn pay_meta_v2_body_rules() {
+    let s = load("ua/sign.json");
+    let w = wallet(); // a key handle lives as long as its wallet
+    let key = w.native_key(Network::Evm, 0, None).unwrap();
+    let r = policy_row(&s, "pay-meta");
+    let base = r["expect"]["meta"].clone();
+    let run = |meta: &Value| {
+        let mut e = r["expect"].clone();
+        e["meta"] = meta.clone();
+        let m = PayMeta { salt: b32(&meta["salt"]), pay_no: meta["payNo"].as_str().unwrap().into(),
+            schema: meta["schema"].as_u64().unwrap() as u16, body: bytes(&meta["body"]) };
+        let id = meta_pay_id_v2(&m).unwrap_or([0x11; 32]); // a meta metaPayId refuses: any id
+        let mut t = r["td"].clone();
+        t["message"]["entryRef"] = json!(format!("0x{}", hex::encode(id)));
+        t["message"]["batch"] = json!(dec(&pay_lane(&id)));
+        key.sign_typed(&td(&t).unwrap(), expect(&e).unwrap()).map(|_| ())
+    };
+    let with = |k: &str, v: Value| {
+        let mut m = base.clone();
+        m[k] = v;
+        m
+    };
+    let body = |schema: u64, b: String| {
+        let mut m = with("schema", json!(schema));
+        m["body"] = json!(b);
+        m
+    };
+    let w = |n: usize| format!("{n:064x}");
+    // schema 2's body: `abi.encode(string creditorRef, uint64 dueDate)` with the head word `off`, then `tail`
+    let s2 = |off: usize, text: &[u8], tail: &str| {
+        format!("0x{}{}{}{:0<p$}{tail}", w(off), w(7), w(text.len()), hex::encode(text), p = text.len().div_ceil(32) * 64)
+    };
+    let refused = Some(Error::PolicyRefused);
+    assert!(run(&base).is_ok(), "positive control: the row's note");
+    // the request's `entryRef`, when given, must be the metadata's id
+    let entry = |id: &str| {
+        let mut e = r["expect"].clone();
+        e["entryRef"] = json!(id);
+        key.sign_typed(&td(&r["td"]).unwrap(), expect(&e).unwrap()).map(|_| ())
+    };
+    assert!(entry(r["td"]["message"]["entryRef"].as_str().unwrap()).is_ok(), "the request's id");
+    assert_eq!(entry(&format!("0x{}", "22".repeat(32))).err(), Some(Error::PolicyRefused), "another request's id");
+    assert!(run(&body(2, s2(64, b"INV-1", ""))).is_ok(), "a canonical structured reference");
+    assert_eq!(run(&body(2, s2(96, b"INV-1", ""))).err(), refused, "another offset");
+    assert_eq!(run(&body(2, s2(64, b"INV-1", &"00".repeat(32)))).err(), refused, "trailing bytes");
+    assert_eq!(run(&body(2, s2(64, &[0xff], ""))).err(), refused, "a reference not UTF-8");
+    assert_eq!(run(&body(1, "0xff".into())).err(), refused, "a note not UTF-8");
+    assert!(run(&body(3, format!("0x{}", "00".repeat(96)))).is_ok(), "a bound call, 96 bytes");
+    assert_eq!(run(&body(3, format!("0x{}", "00".repeat(64)))).err(), refused, "a bound call of 64 bytes");
+    assert!(run(&body(9, "0x01".into())).is_ok(), "an unknown schema: opaque data");
+    assert_eq!(run(&body(0, "0x01".into())).err(), refused, "schema 0 with a body");
+    assert_eq!(run(&with("payNo", json!("INV\u{202e}1"))).err(), refused, "a bidi override in payNo");
+    assert_eq!(run(&with("salt", json!(format!("0x{}", "00".repeat(32))))).err(), refused, "salt 0");
+}

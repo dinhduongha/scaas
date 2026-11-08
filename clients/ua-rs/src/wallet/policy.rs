@@ -9,12 +9,13 @@
 //! the standard digest of the values as supplied (no canonical step). The ports read the same `sign.json` `policy` rows as
 //! clientkeys. `now` is an input (no clock inside `ua-rs`; wasm32 has none). UNAUDITED.
 use super::eip712::{
-    self, def, eip712_digest, from_hex, op_types, scaas_typed_data, to_hex, u256_add, u256_dec, u256_div, u256_from, u256_mul_add,
-    u256_to_dec, Fields, TypedData, U256, ZERO_ADDRESS,
+    self, eip712_digest, from_hex, op_row, op_types, scaas_typed_data, to_hex, typed_data_of, u256_add, u256_dec, u256_div, u256_from,
+    u256_mul_add, u256_to_dec, Fields, TypedData, U256, ZERO_ADDRESS,
 };
 use super::signer::{SignRequest, Signer};
 use super::{bounded, Error, NativeKey, Result};
-use crate::{keccak256, meta_pay_id, pay_lane};
+use crate::pay::{meta_pay_id_v2, PayMeta};
+use crate::{keccak256, pay_lane};
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 
@@ -54,19 +55,22 @@ pub struct Invalidate {
 }
 
 /// What the user confirmed, per clientkeys check (its inputs by name; amounts and fees as decimal strings, `max_fee` in base units,
-/// 0 by default; ids of 20 bytes or, on a UA path, 32). [`Expect::from_json`] reads clientkeys' `expectDigest` input.
+/// 0 by default; ids of 32 bytes, a native address zero-padded (`padId`), where the struct takes ids). [`Expect::from_json`] reads
+/// clientkeys' `expectDigest` input. ua-mtx-merge (R12, R20, R39, R46): the token's address `MetaTransfer`, `ReceiverFee`,
+/// `TradeOrder`, `WrapOrder` and their cancels left; a payment, a receiver fee, a SCaaS sell token's order and a wrap order are
+/// the `UA` structs.
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Expect {
-    /// `checkPayment`: a `MetaTransfer` from `account` to `payee` of `amount` (in `decimals`) with `entry_ref`, on its lane
+    /// `checkPayment`: a `UAMetaTransfer` from `account` to `payee` of `amount` (in `decimals`) with `entry_ref`, on its lane
     /// `payLane(entry_ref)` nonce 0, in `expected_token`'s domain.
     Payment {
-        account: [u8; 20],
+        account: [u8; 32],
         chain_id: u64,
         chain_uid: [u8; 32],
         amount: String,
         decimals: u32,
-        payee: [u8; 20],
+        payee: [u8; 32],
         entry_ref: [u8; 32],
         expected_token: [u8; 20],
         max_fee: String,
@@ -75,9 +79,9 @@ pub enum Expect {
         now: u64,
         max_window: u64,
     },
-    /// `checkReceiverFee`: the payee's co-signature of `ReceiverFee` / `UAReceiverFee` over the payment it expects.
+    /// `checkReceiverFee`: the payee's co-signature of `UAReceiverFee` over the payment it expects.
     ReceiverFee {
-        payee: Vec<u8>,
+        payee: [u8; 32],
         chain_id: u64,
         chain_uid: [u8; 32],
         amount: String,
@@ -89,17 +93,17 @@ pub enum Expect {
         now: u64,
         max_window: u64,
     },
-    /// `checkPayMeta`: a payment whose `entryRef` is `metaPayId(salt, meta)` of the metadata the client holds.
+    /// `checkPayMeta`: a payment whose `entryRef` is `metaPayId(meta)` (`PayMeta` v2, CTR-MTX-26 Change) of the metadata the
+    /// client holds.
     PayMeta {
-        salt: [u8; 32],
-        meta: Vec<u8>,
+        meta: PayMeta,
         entry_ref: Option<[u8; 32]>,
-        account: [u8; 20],
+        account: [u8; 32],
         chain_id: u64,
         chain_uid: [u8; 32],
         amount: String,
         decimals: u32,
-        payee: [u8; 20],
+        payee: [u8; 32],
         expected_token: [u8; 20],
         max_fee: String,
         fee_recipient: Option<[u8; 20]>,
@@ -146,7 +150,8 @@ pub enum Expect {
         invalidate: Option<Invalidate>,
         ua: bool,
     },
-    /// `checkTradeOrder`: the order the client built, selling `sell_token`, on a DEX of `dexes`.
+    /// `checkTradeOrder`: the order the client built, selling `sell_token`, on a DEX of `dexes`: a `UATradeOrder` (`ua`, by default
+    /// unless `outside`) or an outside token's `DexOrder`.
     TradeOrder {
         account: Vec<u8>,
         chain_id: u64,
@@ -159,7 +164,7 @@ pub enum Expect {
         now: u64,
         max_window: u64,
     },
-    /// `checkWrapOrder`: the wrap by signature the client built, its wrapper on `wrappers`.
+    /// `checkWrapOrder`: the `UAWrapOrder` the client built, its wrapper on `wrappers`.
     WrapOrder {
         account: Vec<u8>,
         chain_id: u64,
@@ -167,7 +172,6 @@ pub enum Expect {
         order: Value,
         sell_token: [u8; 20],
         wrappers: Vec<[u8; 20]>,
-        ua: bool,
         now: u64,
         max_window: u64,
     },
@@ -266,12 +270,12 @@ impl Expect {
         let check = check.as_str().ok_or(Error::Argument)?;
         let e = match check {
             "Payment" => Expect::Payment {
-                account: x.addr("account")?,
+                account: x.b32("account")?,
                 chain_id: x.u64("chainId")?,
                 chain_uid: x.b32("chainUid")?,
                 amount: x.dec("amount")?,
                 decimals: x.decimals()?,
-                payee: x.addr("payee")?,
+                payee: x.b32("payee")?,
                 entry_ref: x.b32("entryRef")?,
                 expected_token: x.addr("expectedToken")?,
                 max_fee: x.opt_dec("maxFee")?,
@@ -281,7 +285,7 @@ impl Expect {
                 max_window: x.opt_u64("maxWindow", DAY)?,
             },
             "ReceiverFee" => Expect::ReceiverFee {
-                payee: x.id("payee")?,
+                payee: x.b32("payee")?,
                 chain_id: x.u64("chainId")?,
                 chain_uid: x.b32("chainUid")?,
                 amount: x.dec("amount")?,
@@ -294,15 +298,14 @@ impl Expect {
                 max_window: x.opt_u64("maxWindow", DAY)?,
             },
             "PayMeta" => Expect::PayMeta {
-                salt: x.b32("salt")?,
-                meta: In::hex(&x.req("meta")?)?,
+                meta: pay_meta(x.req("meta")?)?,
                 entry_ref: x.take("entryRef").map(|v| In::fixed(&v)).transpose()?,
-                account: x.addr("account")?,
+                account: x.b32("account")?,
                 chain_id: x.u64("chainId")?,
                 chain_uid: x.b32("chainUid")?,
                 amount: x.dec("amount")?,
                 decimals: x.decimals()?,
-                payee: x.addr("payee")?,
+                payee: x.b32("payee")?,
                 expected_token: x.addr("expectedToken")?,
                 max_fee: x.opt_dec("maxFee")?,
                 fee_recipient: x.opt_addr("feeRecipient")?,
@@ -395,18 +398,21 @@ impl Expect {
                     ua: x.flag("ua")?,
                 }
             }
-            "TradeOrder" => Expect::TradeOrder {
-                account: x.id("account")?,
-                chain_id: x.u64("chainId")?,
-                chain_uid: x.b32("chainUid")?,
-                order: x.req("order")?,
-                sell_token: x.addr("sellToken")?,
-                outside: x.flag("outside")?,
-                dexes: addrs(x.take("dexes"))?,
-                ua: x.flag("ua")?,
-                now: x.u64("now")?,
-                max_window: x.opt_u64("maxWindow", 30 * DAY)?,
-            },
+            "TradeOrder" => {
+                let outside = x.flag("outside")?;
+                Expect::TradeOrder {
+                    account: x.id("account")?,
+                    chain_id: x.u64("chainId")?,
+                    chain_uid: x.b32("chainUid")?,
+                    order: x.req("order")?,
+                    sell_token: x.addr("sellToken")?,
+                    outside,
+                    dexes: addrs(x.take("dexes"))?,
+                    ua: if x.0.contains_key("ua") { x.flag("ua")? } else { !outside },
+                    now: x.u64("now")?,
+                    max_window: x.opt_u64("maxWindow", 30 * DAY)?,
+                }
+            }
             "WrapOrder" => Expect::WrapOrder {
                 account: x.id("account")?,
                 chain_id: x.u64("chainId")?,
@@ -414,7 +420,6 @@ impl Expect {
                 order: x.req("order")?,
                 sell_token: x.addr("sellToken")?,
                 wrappers: addrs(x.take("wrappers"))?,
-                ua: x.flag("ua")?,
                 now: x.u64("now")?,
                 max_window: x.opt_u64("maxWindow", 30 * DAY)?,
             },
@@ -428,6 +433,22 @@ impl Expect {
         };
         x.done(e)
     }
+}
+
+/// clientkeys `payMeta` input `{salt, payNo, schema, body}` (`payNo` "" and `schema` 0 by default, `body` hex, empty by default; the
+/// salt is required here: a check holds the metadata it was shown). Its rules are `metaPayId`'s, at the check.
+fn pay_meta(v: Value) -> Result<PayMeta> {
+    let Value::Object(m) = v else { return Err(Error::Argument) };
+    let mut m = In(m);
+    let salt = m.b32("salt")?;
+    let pay_no = match m.take("payNo") {
+        None => String::new(),
+        Some(Value::String(s)) => s,
+        Some(_) => return Err(Error::Argument),
+    };
+    let schema = u16::try_from(m.opt_u64("schema", 0)?).map_err(|_| Error::Argument)?;
+    let body = m.take("body").map(|b| In::hex(&b)).transpose()?.unwrap_or_default();
+    m.done(PayMeta { salt, pay_no, schema, body })
 }
 
 fn addrs(v: Option<Value>) -> Result<Vec<[u8; 20]>> {
@@ -476,12 +497,16 @@ fn check(td: &TypedData, e: &Expect) -> Result<[u8; 32]> {
         } => receiver_fee(td, payee, *chain_id, chain_uid, &to_base(amount, *decimals)?, entry_ref, expected_token, max_fee, fee_recipient,
             *now, *max_window),
         Expect::PayMeta {
-            salt, meta, entry_ref, account, chain_id, chain_uid, amount, decimals, payee, expected_token, max_fee, fee_recipient,
-            relayer, now, max_window,
+            meta, entry_ref, account, chain_id, chain_uid, amount, decimals, payee, expected_token, max_fee, fee_recipient, relayer,
+            now, max_window,
         } => {
-            decode_meta(meta)?;
-            let pay_id = meta_pay_id(salt, meta);
-            if entry_ref.is_some_and(|e| e != pay_id) || !same(obj(td.message()).get("entryRef"), &pay_id) {
+            // clientkeys `payMetaParts`: the checked `PayMeta`, its commitment, the request's `entryRef`, the body read strictly
+            let pay_id = meta_pay_id_v2(meta).map_err(|_| Error::PolicyRefused)?;
+            if entry_ref.is_some_and(|e| e != pay_id) {
+                return refuse();
+            }
+            decode_meta_body(meta.schema, &meta.body)?;
+            if !same(obj(td.message()).get("entryRef"), &pay_id) {
                 return refuse();
             }
             payment(td, &Pay { account, chain_id: *chain_id, chain_uid, amount, decimals: *decimals, payee, expected_token, max_fee,
@@ -506,8 +531,8 @@ fn check(td: &TypedData, e: &Expect) -> Result<[u8; 32]> {
         Expect::TradeOrder { account, chain_id, chain_uid, order, sell_token, outside, dexes, ua, now, max_window } => {
             trade_order(td, account, *chain_id, chain_uid, order, sell_token, *outside, dexes, *ua, *now, *max_window)
         }
-        Expect::WrapOrder { account, chain_id, chain_uid, order, sell_token, wrappers, ua, now, max_window } => {
-            wrap_order(td, account, *chain_id, chain_uid, order, sell_token, wrappers, *ua, *now, *max_window)
+        Expect::WrapOrder { account, chain_id, chain_uid, order, sell_token, wrappers, now, max_window } => {
+            wrap_order(td, account, *chain_id, chain_uid, order, sell_token, wrappers, *now, *max_window)
         }
         Expect::Any(_) => td.digest(),
     }
@@ -621,12 +646,12 @@ fn small_u64(x: &U256) -> Option<u64> {
 
 /// The payment inputs `checkPayment` and `checkPayMeta` share.
 struct Pay<'a> {
-    account: &'a [u8; 20],
+    account: &'a [u8; 32],
     chain_id: u64,
     chain_uid: &'a [u8; 32],
     amount: &'a str,
     decimals: u32,
-    payee: &'a [u8; 20],
+    payee: &'a [u8; 32],
     expected_token: &'a [u8; 20],
     max_fee: &'a str,
     fee_recipient: Option<&'a [u8; 20]>,
@@ -637,7 +662,7 @@ struct Pay<'a> {
 
 /// clientkeys `checkPayment`.
 fn payment(td: &TypedData, p: &Pay, entry_ref: &[u8; 32]) -> Result<[u8; 32]> {
-    if td.primary_type() != "MetaTransfer" {
+    if td.primary_type() != "UAMetaTransfer" {
         return refuse();
     }
     let (m, d) = (obj(td.message()), td.domain());
@@ -661,17 +686,16 @@ fn payment(td: &TypedData, p: &Pay, entry_ref: &[u8; 32]) -> Result<[u8; 32]> {
     msg.insert("entryRef".into(), to_hex(entry_ref).into());
     msg.insert("batch".into(), dec(&batch));
     msg.insert("nonce".into(), 0.into());
-    build("MetaTransfer", name_of(td), p.expected_token, p.chain_id, p.chain_uid, msg)
+    build("UAMetaTransfer", name_of(td), p.expected_token, p.chain_id, p.chain_uid, msg)
 }
 
-/// clientkeys `checkReceiverFee` (both paths).
+/// clientkeys `checkReceiverFee`.
 #[allow(clippy::too_many_arguments)]
 fn receiver_fee(
     td: &TypedData, payee: &[u8], chain_id: u64, chain_uid: &[u8; 32], value: &U256, entry_ref: &[u8; 32], token: &[u8; 20], max_fee: &str,
     fee_recipient: &[u8; 20], now: u64, max_window: u64,
 ) -> Result<[u8; 32]> {
-    let ua = td.primary_type() == "UAReceiverFee";
-    if !(ua || td.primary_type() == "ReceiverFee") {
+    if td.primary_type() != "UAReceiverFee" {
         return refuse();
     }
     let (m, d) = (obj(td.message()), td.domain());
@@ -705,7 +729,7 @@ fn receiver_fee(
     msg.insert("fee".into(), dec(&fee));
     msg.insert("feeRecipient".into(), to_hex(fee_recipient).into());
     msg.insert("validUntil".into(), get(&m, "validUntil").cloned().unwrap_or(Value::Null));
-    build(if ua { "UAReceiverFee" } else { "ReceiverFee" }, name_of(td), token, chain_id, chain_uid, msg)
+    build("UAReceiverFee", name_of(td), token, chain_id, chain_uid, msg)
 }
 
 const E_FIELDS: [&str; 7] = ["batch", "nonce", "validUntil", "mode", "relayer", "fee", "feeRecipient"];
@@ -743,11 +767,12 @@ fn check_op(
     td: &TypedData, op: &str, contract: &[u8; 20], chain_id: u64, chain_uid: &[u8; 32], message: &Value, max_fee: &str,
     fee_recipient: Option<&[u8; 20]>, relayer: Option<&[u8; 20]>, now: u64, max_window: u64,
 ) -> Result<[u8; 32]> {
-    if op == "WrapOrder" || op == "UAWrapOrder" {
+    if op == "UAWrapOrder" {
         return refuse(); // `checkWrapOrder` carries its rules (CLI-SGN-36)
     }
-    let Some(o) = def(op) else { return refuse() };
-    if td.primary_type() != op {
+    // a row of the op table (clientkeys `TYPED_OPS[op]`), never a generic-path struct
+    let Some(o) = op_row(op) else { return refuse() };
+    if td.primary_type() != o.primary {
         return refuse();
     }
     let (m, d) = (obj(td.message()), td.domain());
@@ -755,7 +780,7 @@ fn check_op(
         return refuse();
     }
     let types = op_types(op).map_err(|_| Error::PolicyRefused)?;
-    require_whole(&types, op, Some(message), o.envelope, get(&m, "mode"))?;
+    require_whole(&types, o.primary, Some(message), o.envelope, get(&m, "mode"))?;
     let msg = message.as_object().ok_or(Error::PolicyRefused)?;
     let mut full = Map::new();
     if o.envelope {
@@ -773,7 +798,9 @@ fn check_op(
         }
     }
     full.extend(msg.clone());
-    build(op, name_of(td), contract, chain_id, chain_uid, full)
+    typed_data_of(&o, name_of(td), contract, chain_id, chain_uid, &Value::Object(full))
+        .and_then(|t| t.digest())
+        .map_err(|_| Error::PolicyRefused)
 }
 
 /// The selectors never signed as a call (CLI-SGN-34, CLI-SGN-36): moving funds and approvals.
@@ -815,7 +842,7 @@ fn call(
     build("MetaTransaction", name_of(td), contract, chain_id, chain_uid, msg)
 }
 
-const CANCELS: [&str; 5] = ["CancelOrder", "CancelUAOrder", "CancelWrapOrder", "CancelUAWrapOrder", "CancelDexOrder"];
+const CANCELS: [&str; 3] = ["CancelUAOrder", "CancelUAWrapOrder", "CancelDexOrder"];
 
 /// clientkeys `checkCancel`.
 #[allow(clippy::too_many_arguments)]
@@ -840,8 +867,8 @@ fn cancel(
     if !same(get(&held, "from"), account) {
         return refuse();
     }
-    // `dex == receiveToken` was signed as a `WrapOrder`: its cancel is a `CancelWrapOrder` (TS-D19)
-    if ["CancelOrder", "CancelUAOrder"].contains(&primary) && js_str(o.get("dex")) == js_str(o.get("receiveToken")) {
+    // `dex == receiveToken` was signed as a `UAWrapOrder`: its cancel is a `CancelUAWrapOrder` (TS-D19)
+    if primary == "CancelUAOrder" && js_str(o.get("dex")) == js_str(o.get("receiveToken")) {
         return refuse();
     }
     check_op(td, primary, contract, chain_id, chain_uid, &serde_json::json!({"order": order}), "0", None, None, 0, 0)
@@ -884,10 +911,10 @@ fn trade_order(
     td: &TypedData, account: &[u8], chain_id: u64, chain_uid: &[u8; 32], order: &Value, sell_token: &[u8; 20], outside: bool,
     dexes: &[[u8; 20]], ua: bool, now: u64, max_window: u64,
 ) -> Result<[u8; 32]> {
-    if ua && outside {
-        return refuse();
+    if ua == outside {
+        return refuse(); // a UA order sells a SCaaS token only; a SCaaS sell token takes a `UATradeOrder`
     }
-    let want = if outside { "DexOrder" } else if ua { "UATradeOrder" } else { "TradeOrder" };
+    let want = if outside { "DexOrder" } else { "UATradeOrder" };
     if td.primary_type() != want {
         return refuse();
     }
@@ -904,8 +931,8 @@ fn trade_order(
     }
     deadline(get(&o, "validUntil"), now, max_window)?;
     // the struct's own fields of the order (tradeOrderTypedData keeps those)
-    let types = op_types(if ua { "UATradeOrder" } else { "TradeOrder" }).map_err(|_| Error::PolicyRefused)?;
-    let fields = types.get(if ua { "UATradeOrder" } else { "TradeOrder" }).ok_or(Error::PolicyRefused)?;
+    let types = op_types(want).map_err(|_| Error::PolicyRefused)?;
+    let fields = types.get(if outside { "TradeOrder" } else { want }).ok_or(Error::PolicyRefused)?;
     let picked: Map<String, Value> = fields.iter().filter_map(|(n, _)| o.get(n).map(|v| (n.clone(), v.clone()))).collect();
     let name = name_of(td).filter(|n| !n.is_empty());
     if outside {
@@ -918,17 +945,17 @@ fn trade_order(
     build(want, name, sell_token, chain_id, chain_uid, picked)
 }
 
-/// clientkeys `checkWrapOrder` (and `checkUAWrapOrder`).
+/// clientkeys `checkWrapOrder` (and `checkUAWrapOrder`): a `UAWrapOrder`.
 #[allow(clippy::too_many_arguments)]
 fn wrap_order(
     td: &TypedData, account: &[u8], chain_id: u64, chain_uid: &[u8; 32], order: &Value, sell_token: &[u8; 20], wrappers: &[[u8; 20]],
-    ua: bool, now: u64, max_window: u64,
+    now: u64, max_window: u64,
 ) -> Result<[u8; 32]> {
-    let ty = if ua { "UAWrapOrder" } else { "WrapOrder" };
+    let ty = "UAWrapOrder";
     if td.primary_type() != ty {
         return refuse();
     }
-    let o = order_of(order, account, &obj(td.message()), ua)?;
+    let o = order_of(order, account, &obj(td.message()), true)?;
     order_terms(&o, false)?;
     if !wrappers.iter().any(|w| same(get(&o, "wrappedToken"), w)) {
         return refuse();
@@ -941,20 +968,13 @@ fn wrap_order(
     build(ty, name_of(td), sell_token, chain_id, chain_uid, o)
 }
 
-// --- CTR-MTX-26: the payment id commits to its metadata (clientkeys `decodeMeta`) ---
+// --- CTR-MTX-26: the payment id commits to its metadata (clientkeys `payMetaParts`, `decodeMetaBody`) ---
 
 fn word_at(b: &[u8], i: usize) -> Result<U256> {
     b.get(32 * i..32 * i + 32).and_then(|w| <U256>::try_from(w).ok()).map_or_else(refuse, Ok)
 }
 fn as_usize(x: &U256) -> Option<usize> {
     small_u64(x).and_then(|v| usize::try_from(v).ok())
-}
-/// The `bytes` whose head word is word `i` of `b`, read strictly.
-fn dyn_at(b: &[u8], i: usize) -> Result<&[u8]> {
-    let off = as_usize(&word_at(b, i)?).filter(|o| o.checked_add(32).is_some_and(|e| e <= b.len())).ok_or(Error::PolicyRefused)?;
-    let tail = b.get(off..).ok_or(Error::PolicyRefused)?;
-    let n = as_usize(&word_at(tail, 0)?).ok_or(Error::PolicyRefused)?;
-    tail.get(32..32usize.checked_add(n).ok_or(Error::PolicyRefused)?).map_or_else(refuse, Ok)
 }
 fn padded(b: &[u8]) -> Vec<u8> {
     let mut out = u256_from(b.len() as u64).to_vec();
@@ -965,41 +985,31 @@ fn padded(b: &[u8]) -> Vec<u8> {
 fn utf8(b: &[u8]) -> Result<()> {
     std::str::from_utf8(b).map(|_| ()).map_err(|_| Error::PolicyRefused)
 }
-/// A `meta = abi.encode(uint16 schema, bytes body)` in canonical form, schema 1 (a UTF-8 note), 2 (`abi.encode(bytes creditorRef,
-/// bytes invoiceNo, uint64 dueDate)`, UTF-8), 3 (a bound call, 96 bytes) or 4 (encrypted); anything else refused.
-fn decode_meta(m: &[u8]) -> Result<()> {
-    if m.len() < 96 {
-        return refuse();
-    }
-    let schema = small_u64(&word_at(m, 0)?).filter(|s| *s <= 0xffff).ok_or(Error::PolicyRefused)?;
-    let body = dyn_at(m, 1)?;
-    let mut canon = u256_from(schema).to_vec();
-    canon.extend_from_slice(&u256_from(64));
-    canon.extend(padded(body));
-    if canon != m {
-        return refuse();
-    }
+/// clientkeys `decodeMetaBody` (CTR-MTX-26 Change, `PayMeta` v2): the body of `schema` read strictly: 0 none; 1 a non-empty UTF-8
+/// note; 2 `abi.encode(string creditorRef, uint64 dueDate)` in canonical form, UTF-8; 3 exactly 96 bytes (a bound call); 4 the
+/// ciphertext; any other schema is opaque data (shown as such, never as facts).
+fn decode_meta_body(schema: u16, b: &[u8]) -> Result<()> {
     match schema {
-        1 => utf8(body),
+        0 if b.is_empty() => Ok(()),
+        0 => refuse(),
+        1 if !b.is_empty() => utf8(b),
+        1 => refuse(),
         2 => {
-            if body.len() < 96 {
+            if b.len() < 96 || word_at(b, 0)? != u256_from(64) {
                 return refuse();
             }
-            let (creditor, invoice, due) = (dyn_at(body, 0)?, dyn_at(body, 1)?, word_at(body, 2)?);
-            let (pc, pi) = (padded(creditor), padded(invoice));
-            let mut canon = u256_from(96).to_vec();
-            canon.extend_from_slice(&u256_from(96 + pc.len() as u64));
+            let text = as_usize(&word_at(b, 2)?).and_then(|n| b.get(96..96usize.checked_add(n)?)).ok_or(Error::PolicyRefused)?;
+            let due = word_at(b, 1)?;
+            let mut canon = u256_from(64).to_vec();
             canon.extend_from_slice(&due);
-            canon.extend(pc);
-            canon.extend(pi);
-            if due.get(..24).is_some_and(|h| h.iter().any(|b| *b != 0)) || canon != body {
+            canon.extend(padded(text));
+            if due.get(..24).is_some_and(|h| h.iter().any(|x| *x != 0)) || canon != b {
                 return refuse();
             }
-            utf8(creditor)?;
-            utf8(invoice)
+            utf8(text)
         }
-        3 if body.len() == 96 => Ok(()),
-        4 => Ok(()),
-        _ => refuse(),
+        3 if b.len() == 96 => Ok(()),
+        3 => refuse(),
+        _ => Ok(()),
     }
 }

@@ -606,28 +606,28 @@ macro_rules! wrap_order {
 }
 macro_rules! relay_fee {
     ($id:literal) => {
-        concat!($id, " from,address target,bytes32 callDataHash,", $id, " payee,uint256 value,uint256 validUntil,address relayer")
+        concat!($id, " from,address target,bytes32 callDataHash,", $id, " payee,uint256 value,uint256 batch,uint256 nonce,",
+            "uint256 validUntil,address relayer")
     };
 }
 
-/// Every struct a signed type nests, and the builder-only structs of the generic path (`MetaTransaction`, the transfers, the
-/// orders, the nonce invalidations).
+/// Every struct a signed type nests, and the builder-only structs of the generic path (`MetaTransaction`, `UAMetaTransfer`, the
+/// orders, the nonce invalidations). ua-mtx-merge (CTR-MTX-30, R12, R39, R46): the token's address `MetaTransfer`, `TradeOrder`
+/// and `WrapOrder` left; `TradeOrder` stays nested in the DEX's `DexOrder`. Group 3g (KV-8): `keyVersion` after `fromUA`.
 const STRUCTS: &[(&str, &str)] = &[
     ("TradeOrder", order!("address")),
     ("UATradeOrder", order!("bytes32")),
     ("DexOrder", "address sellToken,TradeOrder order"),
-    ("WrapOrder", wrap_order!("address")),
     ("UAWrapOrder", wrap_order!("bytes32")),
-    ("MetaTransfer", concat!("address from,address to,uint256 value,bytes32 entryRef,", envelope!())),
     ("UAMetaTransfer", concat!("bytes32 from,bytes32 to,uint256 value,bytes32 entryRef,", envelope!())),
     ("MetaTransaction", concat!("address from,bytes data,", envelope!())),
     ("UAMetaTransaction", concat!("bytes32 from,bytes data,", envelope!())),
     ("InvalidateNonces", "address from,uint256 batch,uint256 minNonce"),
     ("UAInvalidateNonces", "bytes32 from,uint256 batch,uint256 minNonce"),
-    ("PqzTransferArgs", "uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes sealedMemo"),
+    ("PqzTransferArgs", "uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes sealedMemo"),
     ("PqzLeg", "bytes32 ua,bytes v,bytes vAuditor"),
-    ("PqzMultiArgs", "uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,bytes32 beneficiaryUA,uint256 decoyFee,bytes16 salt,bytes[] u,PqzLeg[] legs,bytes vFrom,bytes sealedMemo"),
-    ("PqzBurnArgs", "uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,bytes32 beneficiaryUA,bytes u,bytes vFrom"),
+    ("PqzMultiArgs", "uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,uint256 decoyFee,bytes16 salt,bytes[] u,PqzLeg[] legs,bytes vFrom,bytes sealedMemo"),
+    ("PqzBurnArgs", "uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,bytes u,bytes vFrom"),
     ("Unwrap", "address underlying,bytes32 recipient,uint256 amount,uint256 minOut"),
     ("G1", "bytes32 x0,bytes32 x1,bytes32 y0,bytes32 y1"),
     ("ZetherSingle", "uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes16 salt,bytes32 beneficiaryUA,G1 yFrom,G1 yTo,G1 cOut,G1 dOut,G1 cDeb,G1 cAud"),
@@ -644,153 +644,185 @@ const WALLET: &str = "SCaaS MandateWallet";
 const ACCOUNT: &str = "SCaaS SmartKeyAccount";
 const DEX: &str = "SCaaS Dex";
 const ROUTER: &str = "SCaaS GovernanceRouter";
-/// The domains of clientkeys' contract groups (`TOKENS` = `NORMAL` = `WRAPPED`, `CONFIDENTIAL`, …), by name.
+/// The domains of clientkeys' contract groups, by name: `TOKENS` = `NORMAL` = `WRAPPED` = `REGULATED`, `CONFIDENTIAL` =
+/// `WRAPPED_CONFIDENTIAL`, `ZETHER`, `PQZ`.
 const TOKENS: &[&str] = &[M, Z, P];
 const CONFIDENTIAL: &[&str] = &[Z, P];
 
-/// One signed struct (clientkeys `OPS`): `fields` the op's own (`<Name>(address from,<fields>,E)`, and with `ua` its twin
-/// `UA<Name>(bytes32 from,…)`), or with `raw` the whole struct; `on` its domains; `amount` the field of an AMOUNT fee class.
+/// One signed struct (clientkeys `OPS`), by its row name `name`: the struct `primary` (the row name but for `UAPqzRollOver`, the
+/// PQZ `UARollOver`), `fields` the op's own (`<primary>(bytes32 from,<fields>,E)` for a `UA` name, else `address from`), or
+/// with `raw` the whole struct; `on` its domains; `amount` the field of an AMOUNT fee class.
 struct Op {
     name: &'static str,
+    primary: &'static str,
     fields: &'static str,
     raw: bool,
-    ua: bool,
     on: &'static [&'static str],
     amount: Option<&'static str>,
 }
-const fn op(name: &'static str, fields: &'static str, on: &'static [&'static str], ua: bool, amount: Option<&'static str>) -> Op {
-    Op { name, fields, raw: false, ua, on, amount }
+const fn op(name: &'static str, fields: &'static str, on: &'static [&'static str], amount: Option<&'static str>) -> Op {
+    Op { name, primary: name, fields, raw: false, on, amount }
 }
 const fn raw(name: &'static str, fields: &'static str, on: &'static [&'static str]) -> Op {
-    Op { name, fields, raw: true, ua: false, on, amount: None }
+    Op { name, primary: name, fields, raw: true, on, amount: None }
 }
+/// ua-mtx-merge (CTR-MTX-30): one signed entry per operation, `UA<Op>` the merged entry on ids; an address struct only where the op
+/// has no merged entry (the five wraps, every op of `SmartKeyAccount`).
 const OPS: &[Op] = &[
-    op("CancelNonce", "uint256 lane", &[M, Z, P, WALLET, ACCOUNT, ROUTER], false, None),
-    op("Burn", "uint256 amount", TOKENS, true, Some("amount")),
-    op("Wrap", "uint256 amount", TOKENS, false, None),
-    op("WrapLeg", "address underlying,uint256 amount", TOKENS, false, None),
-    op("Unwrap", "uint256 wrapped,address recipient,uint256 minOut", TOKENS, true, Some("wrapped")),
-    op("UnwrapLeg", "address underlying,uint256 wrapped,address recipient,uint256 minOut", TOKENS, true, Some("wrapped")),
-    op("AddReserve", "address underlying,uint256 amount", TOKENS, false, None),
-    op("WrapToUA", "address underlying,uint256 amount,bytes32 to", TOKENS, false, None),
-    op("UnwrapToUA", "address underlying,uint256 wrapped,bytes32 to,uint256 minOut", TOKENS, true, Some("wrapped")),
-    op("Shield", "bytes32 toUA,uint256 amount", CONFIDENTIAL, true, None),
-    op("WrapShield", "address underlying,uint256 amountIn,bytes32 toUA", CONFIDENTIAL, false, None),
-    op("RollOver", "bytes32 ua,uint256 n", CONFIDENTIAL, true, None),
-    op("PrepareAcc", "bytes32 ua,uint256 half", &[P], true, None),
-    op("SetMandate", "address token,address delegate,uint128 maxPerPayment,uint128 maxPerPeriod,uint64 periodSeconds,uint64 expiry", &[WALLET], false, None),
-    op("SetPayee", "address token,address payee,bool allowed", &[WALLET], false, None),
-    op("RevokeMandate", "address token", &[WALLET], false, None),
-    op("PayUnderMandate", "address token,address payee,uint256 amount,bytes32 entryRef,uint64 epoch", &[WALLET], false, None),
-    op("DelegateRevoke", "address token,uint64 epoch", &[WALLET], false, None),
-    op("AddKey", "uint8 kind,bytes32 x,bytes32 y,bytes32 rpIdHash,bytes32 originHash", &[ACCOUNT], false, None),
-    op("RemoveKey", "uint256 index", &[ACCOUNT], false, None),
-    op("RotateKey", "uint256 index,uint8 kind,bytes32 x,bytes32 y,bytes32 rpIdHash,bytes32 originHash", &[ACCOUNT], false, None),
-    op("SetGuardian", "address guardian", &[ACCOUNT], false, None),
-    op("CancelRecovery", "", &[ACCOUNT], false, None),
-    op("Execute", "address target,uint256 value,bytes data", &[WALLET, ACCOUNT], false, None),
-    op("PqzTransferSingle", concat!("PqzTransferArgs args,", "bytes proof,bytes accHint"), &[P], true, None),
-    op("PqzTransferSingleCompact", concat!("PqzTransferArgs args,", "bytes proof,bytes accHint"), &[P], true, None),
-    op("PqzTransfer", concat!("PqzMultiArgs args,", "bytes proof,bytes accHint"), &[P], true, None),
-    op("PqzTransferCompact", concat!("PqzMultiArgs args,", "bytes proof,bytes accHint"), &[P], true, None),
-    op("PqzUnshield", concat!("PqzBurnArgs args,uint256 amount,bytes32 recipient,", "bytes proof,bytes accHint"), &[P], true, None),
-    op("PqzUnshieldUnwrap", concat!("PqzBurnArgs args,Unwrap unwrap,", "bytes proof,bytes accHint"), &[P], true, None),
-    op("ZetherTransferSingle", "ZetherSingle args,bytes proof", &[Z], true, None),
-    op("ZetherTransfer", "ZetherMulti args,bytes proof", &[Z], true, None),
-    op("ZetherTransferCompact", "ZetherMulti args,bytes proof", &[Z], true, None),
-    op("ZetherUnshield", "ZetherBurn args,uint256 amount,bytes32 recipient,bytes proof", &[Z], true, None),
-    op("ZetherUnshieldUnwrap", "ZetherBurn args,Unwrap unwrap,bytes proof", &[Z], true, None),
-    op("RollOverSigned", "bytes32 ua,uint64 expectedPendingSeq,uint64 validUntilBlock", &[Z], true, None),
-    op("SetRollOverMode", "bytes32 ua,uint8 rollOverMode,uint64 validUntilBlock", &[Z], true, None),
-    op("RollOverBatch", "bytes32[] uas", &[Z], true, None),
-    raw("ReceiverFee", "MetaTransfer payment,uint256 fee,address feeRecipient,uint256 validUntil", TOKENS),
+    op("CancelNonce", "uint256 lane", &[ACCOUNT], None),
+    op("UACancelNonce", "uint256 lane", &[M, Z, P, WALLET, ROUTER], None),
+    op("UABurn", "uint256 amount", TOKENS, Some("amount")),
+    op("Wrap", "uint256 amount", TOKENS, None),
+    op("WrapLeg", "address underlying,uint256 amount", TOKENS, None),
+    op("UAUnwrap", "uint256 wrapped,address recipient,uint256 minOut", TOKENS, Some("wrapped")),
+    op("UAUnwrapLeg", "address underlying,uint256 wrapped,address recipient,uint256 minOut", TOKENS, Some("wrapped")),
+    op("AddReserve", "address underlying,uint256 amount", TOKENS, None),
+    op("WrapToUA", "address underlying,uint256 amount,bytes32 to", TOKENS, None),
+    op("UAUnwrapToUA", "address underlying,uint256 wrapped,bytes32 to,uint256 minOut", TOKENS, Some("wrapped")),
+    op("UAShield", "bytes32 toUA,uint256 amount", CONFIDENTIAL, None),
+    op("WrapShield", "address underlying,uint256 amountIn,bytes32 toUA", CONFIDENTIAL, None),
+    // group 3g (KV-10): Zether keeps `UARollOver(…,bytes32 ua,uint256 n,…)`; the PQZ rollover and prepare name the key version
+    op("UARollOver", "bytes32 ua,uint256 n", &[Z], None),
+    Op { name: "UAPqzRollOver", primary: "UARollOver", fields: "bytes32 ua,uint64 keyVersion,uint256 n", raw: false, on: &[P], amount: None },
+    op("UAPrepareAcc", "bytes32 ua,uint64 keyVersion,uint256 half", &[P], None),
+    op("UASetMandate", "address token,bytes32 delegate,uint128 maxPerPayment,uint128 maxPerPeriod,uint64 periodSeconds,uint64 expiry", &[WALLET], None),
+    op("UASetPayee", "address token,bytes32 payee,bool allowed", &[WALLET], None),
+    op("UARevokeMandate", "address token", &[WALLET], None),
+    op("UAPayUnderMandate", "address token,bytes32 payee,uint256 amount,bytes32 entryRef,uint64 epoch", &[WALLET], None),
+    op("UADelegateRevoke", "address token,uint64 epoch", &[WALLET], None),
+    op("UAExecute", "address target,uint256 value,bytes data", &[WALLET], None),
+    op("AddKey", "uint8 kind,bytes32 x,bytes32 y,bytes32 rpIdHash,bytes32 originHash", &[ACCOUNT], None),
+    op("RemoveKey", "uint256 index", &[ACCOUNT], None),
+    op("RotateKey", "uint256 index,uint8 kind,bytes32 x,bytes32 y,bytes32 rpIdHash,bytes32 originHash", &[ACCOUNT], None),
+    op("SetGuardian", "address guardian", &[ACCOUNT], None),
+    op("CancelRecovery", "", &[ACCOUNT], None),
+    op("Execute", "address target,uint256 value,bytes data", &[ACCOUNT], None),
+    op("UAPqzTransferSingle", "PqzTransferArgs args,bytes proof,bytes accHint", &[P], None),
+    op("UAPqzTransferSingleCompact", "PqzTransferArgs args,bytes proof,bytes accHint", &[P], None),
+    op("UAPqzTransfer", "PqzMultiArgs args,bytes proof,bytes accHint", &[P], None),
+    op("UAPqzTransferCompact", "PqzMultiArgs args,bytes proof,bytes accHint", &[P], None),
+    op("UAPqzUnshield", "PqzBurnArgs args,uint256 amount,bytes32 recipient,bytes proof,bytes accHint", &[P], None),
+    op("UAPqzUnshieldUnwrap", "PqzBurnArgs args,Unwrap unwrap,bytes proof,bytes accHint", &[P], None),
+    op("UAZetherTransferSingle", "ZetherSingle args,bytes proof", &[Z], None),
+    op("UAZetherTransfer", "ZetherMulti args,bytes proof", &[Z], None),
+    op("UAZetherTransferCompact", "ZetherMulti args,bytes proof", &[Z], None),
+    op("UAZetherUnshield", "ZetherBurn args,uint256 amount,bytes32 recipient,bytes proof", &[Z], None),
+    op("UAZetherUnshieldUnwrap", "ZetherBurn args,Unwrap unwrap,bytes proof", &[Z], None),
+    op("UARollOverSigned", "bytes32 ua,uint64 expectedPendingSeq,uint64 validUntilBlock", &[Z], None),
+    op("UASetRollOverMode", "bytes32 ua,uint8 rollOverMode,uint64 validUntilBlock", &[Z], None),
+    op("UARollOverBatch", "bytes32[] uas", &[Z], None),
     raw("UAReceiverFee", "UAMetaTransfer payment,uint256 fee,address feeRecipient,uint256 validUntil", TOKENS),
-    raw("RelayFee", relay_fee!("address"), TOKENS),
+    // pay-meta-tax spec §5.2: the regulated kinds 8-13 sign in the base kinds' domains
+    raw("UAPayWithTax", "UAMetaTransfer payment,uint8 taxMode,uint256 tax", TOKENS),
     raw("UARelayFee", relay_fee!("bytes32"), TOKENS),
-    raw("WrapOrder", wrap_order!("address"), TOKENS),
     raw("UAWrapOrder", wrap_order!("bytes32"), TOKENS),
-    raw("CancelOrder", "TradeOrder order", TOKENS),
     raw("CancelUAOrder", "UATradeOrder order", TOKENS),
-    raw("CancelWrapOrder", "WrapOrder order", TOKENS),
     raw("CancelUAWrapOrder", "UAWrapOrder order", TOKENS),
     raw("CancelDexOrder", "DexOrder order", &[DEX]),
-    raw("UACancelNonce", "bytes32 ua,uint256 batch,uint256 validUntil", &[M, Z, P, ROUTER]),
     raw("ZetherRollOver", "bytes32 ua,uint64 accSeq,uint64 expectedPendingSeq,uint64 validUntilBlock", &[Z]),
     raw("ZetherSetRollOverMode", "bytes32 ua,uint8 mode,uint64 modeNonce,uint64 validUntilBlock", &[Z]),
-    op("GrantRole", "address target,uint8 bit,bytes32 account", &[ROUTER], true, None),
-    op("RevokeRole", "address target,uint8 bit,bytes32 account", &[ROUTER], true, None),
-    op("SetGrant", "address target,uint8 bit,bytes32 holder,GrantTerms terms", &[ROUTER], true, None),
-    op("CancelGrant", "address target,uint8 bit,bytes32 account", &[ROUTER], true, None),
-    op("DisableFeature", "address target,uint8 bit", &[ROUTER], true, None),
-    op("TransferOwnership", "address target,bytes32 newOwner", &[ROUTER], true, None),
-    op("AcceptOwnership", "address target", &[ROUTER], true, None),
-    op("RenounceOwnership", "address target", &[ROUTER], true, None),
-    op("RenounceRole", "address target,uint8 bit", &[ROUTER], true, None),
-    op("Mint", "address target,address to,uint256 amount", &[ROUTER], true, None),
-    op("MintToUA", "address target,bytes32 to,uint256 amount", &[ROUTER], true, None),
-    op("DisableWrap", "address target,address leg,bytes32 reason", &[ROUTER], true, None),
-    op("ProposeRate", "address target,address leg,uint96 num,uint96 den", &[ROUTER], true, None),
-    op("CancelRate", "address target", &[ROUTER], true, None),
-    op("ExecuteRate", "address target", &[ROUTER], true, None),
-    op("SetMarket", "address target,address base,address quote,bool listed", &[ROUTER], true, None),
-    op("SetExchangeTarget", "address target,address exchangeTarget,bool listed", &[ROUTER], true, None),
-    op("SetListedOnly", "address target,bool on", &[ROUTER], true, None),
-    op("SetFeeSplit", "address target,uint32 relayerSharePpm,address treasury", &[ROUTER], true, None),
+    op("UAGrantRole", "address target,uint8 bit,bytes32 account", &[ROUTER], None),
+    op("UARevokeRole", "address target,uint8 bit,bytes32 account", &[ROUTER], None),
+    op("UASetGrant", "address target,uint8 bit,bytes32 holder,GrantTerms terms", &[ROUTER], None),
+    op("UACancelGrant", "address target,uint8 bit,bytes32 account", &[ROUTER], None),
+    op("UADisableFeature", "address target,uint8 bit", &[ROUTER], None),
+    op("UATransferOwnership", "address target,bytes32 newOwner", &[ROUTER], None),
+    op("UAAcceptOwnership", "address target", &[ROUTER], None),
+    op("UARenounceOwnership", "address target", &[ROUTER], None),
+    op("UARenounceRole", "address target,uint8 bit", &[ROUTER], None),
+    op("UAMint", "address target,address to,uint256 amount", &[ROUTER], None),
+    op("UAMintToUA", "address target,bytes32 to,uint256 amount", &[ROUTER], None),
+    op("UADisableWrap", "address target,address leg,bytes32 reason", &[ROUTER], None),
+    op("UAProposeRate", "address target,address leg,uint96 num,uint96 den", &[ROUTER], None),
+    op("UACancelRate", "address target", &[ROUTER], None),
+    op("UAExecuteRate", "address target", &[ROUTER], None),
+    op("UASetMarket", "address target,address base,address quote,bool listed", &[ROUTER], None),
+    op("UASetExchangeTarget", "address target,address exchangeTarget,bool listed", &[ROUTER], None),
+    op("UASetListedOnly", "address target,bool on", &[ROUTER], None),
+    op("UASetFeeSplit", "address target,uint32 relayerSharePpm,address treasury", &[ROUTER], None),
+    // the regulated kinds' controls (regulated-kinds spec §3.1) and bit 23 `TAX` (pay-meta-tax spec §6.2)
+    op("UAFreeze", "address target,bytes32 account,bytes32 ref,bytes32 recordId", &[ROUTER], None),
+    op("UAUnfreeze", "address target,bytes32 account,bytes32 ref", &[ROUTER], None),
+    op("UAForceTransfer", "address target,bytes32 recordId,uint256 amount", &[ROUTER], None),
+    op("UAPause", "address target,bytes32 ref,uint64 until", &[ROUTER], None),
+    op("UAUnpause", "address target,bytes32 ref", &[ROUTER], None),
+    op("UARecordOrder", "address target,bytes32 orderId,bytes32 documentHash,bytes32 subject,bytes32 beneficiary,uint256 maxAmount,uint64 freezeUntil", &[ROUTER], None),
+    op("UARevokeOrder", "address target,bytes32 recordId,bytes32 reasonRef", &[ROUTER], None),
+    op("UAOperatorTransfer", "address target,bytes32 account,bytes32 to,uint256 amount,bytes32 ref", &[ROUTER], None),
+    op("UASetTaxRate", "address target,uint32 ratePpm", &[ROUTER], None),
+    op("UASetTaxRecipient", "address target,bytes32 taxRecipient", &[ROUTER], None),
     raw("PqzAuth", "uint8 op,bytes32 opTag,bytes32 psid,uint256 chainId,address token,address registry,bytes32 from,bytes32 to,bytes32 beneficiary,uint256 fee,uint256 amount,bytes32 recipient,uint64 sendCounter,uint64 p,uint256 validUntilBlock,bool auditorOn,uint256 shieldIn,bytes32 chainUid,bytes32 binding,uint128 salt,bytes32 memoHash,bytes32 bodyHash", &[P]),
 ];
-/// The generic path's builders (clientkeys `metaTxTypedData`, `metaTransferTypedData`, `uaMetaTx…`, `uaMetaTransfer…`,
-/// `tradeOrderTypedData`, `uaTradeOrderTypedData`, `invalidateNoncesTypedData`, `uaInvalidateNoncesTypedData`): any domain
-/// name, this one when none is given (`MetaTransaction`: none, a name is required).
+/// The generic path's builders (clientkeys `metaTxTypedData`, `uaMetaTxTypedData`, `uaMetaTransferTypedData`,
+/// `uaTradeOrderTypedData`, `tradeOrderTypedData` (a `DexOrder`), `invalidateNoncesTypedData`, `uaInvalidateNoncesTypedData`):
+/// any domain name, this one when none is given (`MetaTransaction`: none, a name is required).
 const FREE: &[(&str, Option<&str>)] = &[
     ("MetaTransaction", None),
     ("UAMetaTransaction", Some(M)),
-    ("MetaTransfer", Some(M)),
     ("UAMetaTransfer", Some(M)),
-    ("TradeOrder", Some(M)),
     ("UATradeOrder", Some(M)),
     ("DexOrder", Some(DEX)),
     ("InvalidateNonces", Some(M)),
     ("UAInvalidateNonces", Some(M)),
 ];
 
-/// A SCaaS struct by its primary type: its own fields, its domains (empty: a generic-path struct, any name), its default domain
-/// name, whether it closes with the envelope `E`, and its amount field.
+/// A SCaaS struct: its primary type and own fields, its domains (empty: a generic-path struct, any name), its default domain name,
+/// whether it closes with the envelope `E`, and its amount field.
 pub(crate) struct Def {
+    pub(crate) primary: &'static str,
     own: String,
     domains: &'static [&'static str],
     default_name: Option<&'static str>,
     pub(crate) envelope: bool,
     pub(crate) amount: Option<&'static str>,
 }
+fn op_def(o: &Op) -> Def {
+    let own = if o.raw {
+        o.fields.to_string()
+    } else {
+        let from = if o.primary.starts_with("UA") { "bytes32 from" } else { "address from" };
+        [from, o.fields, E].iter().filter(|f| !f.is_empty()).copied().collect::<Vec<_>>().join(",")
+    };
+    let default_name = match o.on {
+        [one] => Some(*one),
+        _ => None,
+    };
+    Def { primary: o.primary, own, domains: o.on, default_name, envelope: !o.raw, amount: o.amount }
+}
+fn free_def(name: &str) -> Option<Def> {
+    let (primary, default_name) = FREE.iter().find(|(n, _)| *n == name)?;
+    let (_, own) = STRUCTS.iter().find(|(n, _)| n == primary)?;
+    Some(Def { primary, own: own.to_string(), domains: &[], default_name: *default_name, envelope: false, amount: None })
+}
+/// The SCaaS struct of row `name` (clientkeys `TYPED_OPS[name]`), or a generic-path struct.
 pub(crate) fn def(name: &str) -> Option<Def> {
-    let join = |id: &str, fields: &str| {
-        let from = format!("{id} from");
-        [from.as_str(), fields, E].iter().filter(|f| !f.is_empty()).copied().collect::<Vec<_>>().join(",")
-    };
-    let of = |o: &Op, own: String| {
-        let default_name = match o.on {
-            [one] => Some(*one),
-            _ => None,
-        };
-        Def { own, domains: o.on, default_name, envelope: !o.raw, amount: o.amount }
-    };
-    if let Some(o) = OPS.iter().find(|o| o.name == name) {
-        return Some(of(o, if o.raw { o.fields.to_string() } else { join("address", o.fields) }));
+    OPS.iter().find(|o| o.name == name).map(op_def).or_else(|| free_def(name))
+}
+/// A row of the op table only (clientkeys `TYPED_OPS[name]`; `checkOp` takes no generic-path struct).
+pub(crate) fn op_row(name: &str) -> Option<Def> {
+    OPS.iter().find(|o| o.name == name).map(op_def)
+}
+/// The SCaaS struct of primary type `primary` signed in the domain `name` (omitted: the only struct of that primary type).
+fn def_in(primary: &str, name: Option<&str>) -> Result<Def> {
+    let mut of = OPS.iter().filter(|o| o.primary == primary).peekable();
+    if of.peek().is_none() {
+        return free_def(primary).ok_or(Error::Argument);
     }
-    if let Some(o) = name.strip_prefix("UA").and_then(|b| OPS.iter().find(|o| o.name == b && o.ua && !o.raw)) {
-        return Some(of(o, join("bytes32", o.fields)));
+    let found: Vec<&Op> = of.filter(|o| name.is_none_or(|n| o.on.contains(&n))).collect();
+    match found.as_slice() {
+        [o] => Ok(op_def(o)),
+        _ => Err(Error::Argument),
     }
-    let (_, default_name) = FREE.iter().find(|(n, _)| *n == name)?;
-    let (_, own) = STRUCTS.iter().find(|(n, _)| *n == name)?;
-    Some(Def { own: own.to_string(), domains: &[], default_name: *default_name, envelope: false, amount: None })
 }
 
-/// The SCaaS struct `primary_type` and every struct it nests.
-pub(crate) fn op_types(primary_type: &str) -> Result<BTreeMap<String, Fields>> {
-    let d = def(primary_type).ok_or(Error::Argument)?;
+/// The SCaaS struct of row `name` (or a generic-path struct) and every struct it nests, keyed by type.
+pub(crate) fn op_types(name: &str) -> Result<BTreeMap<String, Fields>> {
+    types_of(&def(name).ok_or(Error::Argument)?)
+}
+fn types_of(d: &Def) -> Result<BTreeMap<String, Fields>> {
     let mut types = BTreeMap::new();
-    types.insert(primary_type.to_string(), parse_fields(&d.own)?);
-    let mut todo = vec![primary_type.to_string()];
+    types.insert(d.primary.to_string(), parse_fields(&d.own)?);
+    let mut todo = vec![d.primary.to_string()];
     while let Some(t) = todo.pop() {
         for (_, ty) in types.get(&t).cloned().unwrap_or_default() {
             let (b, _) = base(&ty)?;
@@ -806,26 +838,35 @@ pub(crate) fn op_types(primary_type: &str) -> Result<BTreeMap<String, Fields>> {
 
 /// clientkeys `opTypedData` and the generic builders: the SCaaS struct `primary_type` of the contract `contract` in its salted
 /// domain `(name, "1", chain_id, contract, chain_uid)`, its message `message` in the canonical form (unbound `relayer` /
-/// `feeRecipient` zeroed, nested too; spec §5.3). `name` must be one of the struct's domains (omitted: its only one); a generic-path
-/// struct takes any name. `Argument`: no SCaaS struct of that name, another domain, a value its type refuses.
+/// `feeRecipient` zeroed, nested too; spec §5.3). `name` must be one of the struct's domains (omitted: its only one); a primary type
+/// signed as two structs (`UARollOver`: Zether's, and the PQZ row `UAPqzRollOver` with `keyVersion`) is the one of the domain named,
+/// never chosen without one; a generic-path struct takes any name. `Argument`: no SCaaS struct of that name, another domain, a value
+/// its type refuses.
 pub fn scaas_typed_data(
     primary_type: &str, name: Option<&str>, contract: &[u8; 20], chain_id: u64, chain_uid: &[u8; 32], message: &Value,
 ) -> Result<TypedData> {
-    let d = def(primary_type).ok_or(Error::Argument)?;
+    typed_data_of(&def_in(primary_type, name)?, name, contract, chain_id, chain_uid, message)
+}
+
+/// [`scaas_typed_data`] of one struct (a row of the op table: `checkOp` builds the op it was asked for, never another struct of the
+/// same primary type).
+pub(crate) fn typed_data_of(
+    d: &Def, name: Option<&str>, contract: &[u8; 20], chain_id: u64, chain_uid: &[u8; 32], message: &Value,
+) -> Result<TypedData> {
     let name = match name {
         Some(n) if d.domains.is_empty() || d.domains.contains(&n) => n,
         None => d.default_name.ok_or(Error::Argument)?,
         Some(_) => return Err(Error::Argument),
     };
-    let types = op_types(primary_type)?;
+    let types = types_of(d)?;
     let mut domain = Map::new();
     domain.insert("name".into(), name.into());
     domain.insert("version".into(), "1".into());
     domain.insert("chainId".into(), chain_id.to_string().into());
     domain.insert("verifyingContract".into(), to_hex(contract).into());
     domain.insert("salt".into(), to_hex(chain_uid).into());
-    let mut td = TypedData { types, primary_type: primary_type.to_string(), domain, message: Value::Null };
+    let mut td = TypedData { types, primary_type: d.primary.to_string(), domain, message: Value::Null };
     td.validate()?;
-    td.message = td.canonical(primary_type, Some(message))?;
+    td.message = td.canonical(d.primary, Some(message))?;
     Ok(td)
 }

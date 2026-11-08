@@ -147,6 +147,20 @@ fn word_of(a: &[u8; 20]) -> Word {
     w
 }
 
+/// The registry's slot of `UAStore.Layout` field `field`, read from its layout pin (ua-mtx-merge's
+/// `smartcontracts/evm/test/ua/UAStoreLayout.t.sol`: the probe writes one field per slot, `s.<field>…; // <slot>`), never copied
+/// by hand (T20b).
+fn reg_slot(field: &str) -> u64 {
+    let pin = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../smartcontracts/evm/test/ua/UAStoreLayout.t.sol")).unwrap();
+    pin.lines()
+        .find_map(|l| {
+            let rest = l.trim().strip_prefix("s.")?.strip_prefix(field)?;
+            rest.starts_with(['[', '.', ' ']).then_some(())?;
+            rest.rsplit_once("// ")?.1.split_whitespace().next()?.parse().ok()
+        })
+        .unwrap_or_else(|| panic!("{field}: not in the registry's layout pin"))
+}
+
 struct Node {
     url: String,
     root: Word,
@@ -186,8 +200,8 @@ impl Node {
             self.set(token, &add(&base, 4 + i as u64), &w32(w));
         }
         self.set(token, &k(&ua, &add(&self.root, 12)), &w32(&r["sendCounterWord"]));
-        self.set(registry, &k(&v, &k(&ua, &be(2))), &w32(&r["keyRecord"]));
-        self.set(registry, &k(&ua, &be(17)), &w32(&r["keyVersions"]));
+        self.set(registry, &k(&v, &k(&ua, &be(reg_slot("pqzKey")))), &w32(&r["keyRecord"]));
+        self.set(registry, &k(&ua, &be(reg_slot("pqzVersions"))), &w32(&r["keyVersions"]));
         for b in r["blobs"].as_array().unwrap() {
             self.code(&a20(b["address"].as_str().unwrap()), &b["code"]);
         }
@@ -204,7 +218,7 @@ impl Node {
         self.code(&ptr, &blob["code"]);
         self.set(token, &self.root, &w32(&aud["auditorMode"]));
         self.set(token, &add(&self.root, 7), &w32(&aud["auditorUA"]));
-        self.set(registry, &k(&be(0), &k(&w32(&aud["auditorUA"]), &be(2))), &w32(&aud["keyRecord"])); // the auditor's version 0
+        self.set(registry, &k(&be(0), &k(&w32(&aud["auditorUA"]), &be(reg_slot("pqzKey")))), &w32(&aud["keyRecord"])); // the auditor's version 0
         self.code(&a20(aud["key"]["address"].as_str().unwrap()), &aud["key"]["code"]);
     }
 }
@@ -527,14 +541,14 @@ fn decoys_against_anvil() {
     let ua = |i: u8| [i; 32];
     let list = |r: &[u8; 20], from: u64, uas: std::ops::RangeInclusive<u8>, proven: u8| {
         for (j, i) in uas.clone().enumerate() {
-            n.set(r, &k(&be(from + j as u64), &k(&be(0x0142), &be(5))), &ua(i));
+            n.set(r, &k(&be(from + j as u64), &k(&be(0x0142), &be(reg_slot("uaAt")))), &ua(i));
             let ptr = a20(&format!("0x{:040x}", 0xc0de00 + u64::from(i)));
             let mut rec = word_of(&ptr);
             rec[11] = proven;
-            n.set(r, &k(&be(0), &k(&ua(i), &be(2))), &rec);
+            n.set(r, &k(&be(0), &k(&ua(i), &be(reg_slot("pqzKey")))), &rec);
             n.code(&ptr, &json!(hx(&[vec![0u8], vec![i; st::PK_BYTES]].concat())));
         }
-        n.set(r, &k(&be(0x0142), &be(4)), &be(from + uas.len() as u64));
+        n.set(r, &k(&be(0x0142), &be(reg_slot("uaCount"))), &be(from + uas.len() as u64));
     };
     // the account counters of `ua(i)`: `acct[ua][0]` word 0 `pendingCount ‖ rolled` (low end first), the UA's `sendCounter`
     let acct = |i: u8, pending: u64, rolled: u64, sent: u64| {
@@ -549,11 +563,11 @@ fn decoys_against_anvil() {
         let ptr = a20(&format!("0x{:040x}", 0xc1de00 + u64::from(i)));
         let mut rec = word_of(&ptr);
         rec[11] = 1;
-        n.set(&reg, &k(&be(1), &k(&ua(i), &be(2))), &rec);
+        n.set(&reg, &k(&be(1), &k(&ua(i), &be(reg_slot("pqzKey")))), &rec);
         n.code(&ptr, &json!(hx(&[vec![0u8], vec![0xF0 | i; len]].concat())));
         let mut vw = be(1);
         vw[16..24].copy_from_slice(&current.to_be_bytes());
-        n.set(&reg, &k(&ua(i), &be(17)), &vw);
+        n.set(&reg, &k(&ua(i), &be(reg_slot("pqzVersions"))), &vw);
     };
     list(&reg, 0, 1..=12, 1);
     list(&reg2, 0, 9..=9, 0);

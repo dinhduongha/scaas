@@ -55,8 +55,8 @@
 //! chosen decoy's key is read at its current version: `pqzKey[ua][current]` (proven) and its SSTORE2 code. Prints `{decoys: [{ua, pk}], syncBlock, listCount, block, blockHash}` (each an op 7 leg with `amount` 0), with
 //! `--recipient` also `legs`, the full leg order (the recipient and the decoys' UAs, uniformly shuffled by the OS CSPRNG): the
 //! caller builds op 7's legs in that order (a fixed position names the recipient); `--words`
-//! prints `pickDecoys`'s request instead (`{command, request, syncBlock, listCount, block, blockHash}`). Residuals: the
-//! registry's slots 2, 4, 5 and 17 are hand-copied (their pin, `test/ua/UAStoreLayout.t.sol`, is on `ua-mtx-merge`); `--registry`
+//! prints `pickDecoys`'s request instead (`{command, request, syncBlock, listCount, block, blockHash}`). The registry's slots 2,
+//! 4, 5 and 17 are held to its layout pin, `test/ua/UAStoreLayout.t.sol` (T20b). Residuals: `--registry`
 //! must be the generation that lists `0x0142` (a predecessor's list and records are not followed); the activity filter reads
 //! each candidate's account at its current version of the read block; clientkeys' preference for UAs without a recent
 //! `UAPqzKeyCurrent` is not applied (no event reads: storage only, R4).
@@ -78,7 +78,8 @@ type Word = [u8; 32];
 const INFO_SLOT: u64 = 8;
 const PQZ_KINDS: [u8; 4] = [4, 5, 12, 13];
 /// `UAStore.Layout.pqzKey` (the registry's slot 2, keyed `(ua, version)` since group 3g): `ptr(160) ‖ proven(8) ‖ added(8)`;
-/// `pqzVersions` (slot 17): `latest(64) ‖ current(64) ‖ listed(8)`.
+/// `pqzVersions` (slot 17): `latest(64) ‖ current(64) ‖ listed(8)`. These and `uaCount` / `uaAt` below are the registry's layout
+/// pin's (`smartcontracts/evm/test/ua/UAStoreLayout.t.sol`), held to it by `registry_slots_are_the_layout_pin`.
 const REG_PQZ_KEY_SLOT: u64 = 2;
 const REG_PQZ_VERSIONS_SLOT: u64 = 17;
 /// `PqzCore.INLINE_MAX`, `INLINE_MAX_PQZH` (op 7 of a PQZH token): the facade's `p` rule (CTR-PQZ-06).
@@ -669,5 +670,31 @@ mod tests {
         let mut v: Value = serde_json::from_str(r#"{"mnemonic":"abc","n":["ab"]}"#).unwrap();
         wipe(&mut v);
         assert_eq!(v, json!({"mnemonic": "", "n": [""]}));
+    }
+
+    /// The slot the registry's layout pin gives `field`: its probe writes one field per slot, `s.<field>…; // <slot>`.
+    fn pin_slot(pin: &str, field: &str) -> Option<u64> {
+        pin.lines().find_map(|l| {
+            let rest = l.trim().strip_prefix("s.")?.strip_prefix(field)?;
+            rest.starts_with(['[', '.', ' ']).then_some(())?;
+            rest.rsplit_once("// ")?.1.split_whitespace().next()?.parse().ok()
+        })
+    }
+
+    /// T20b: the registry slots this reader uses are the layout pin's (`UAStore.Layout`, ua-mtx-merge's
+    /// `test/ua/UAStoreLayout.t.sol`), and the pin's assertions fix the packing of the two words decoded (`pqzKey[ua][v]`
+    /// `ptr ‖ proven ‖ added`, `pqzVersions[ua]` `latest ‖ current ‖ listed`).
+    #[test]
+    fn registry_slots_are_the_layout_pin() {
+        let pin = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../smartcontracts/evm/test/ua/UAStoreLayout.t.sol"))
+            .unwrap();
+        for (field, slot) in [("pqzKey", REG_PQZ_KEY_SLOT), ("pqzVersions", REG_PQZ_VERSIONS_SLOT), ("uaCount", REG_COUNT_SLOT),
+            ("uaAt", REG_AT_SLOT)]
+        {
+            assert_eq!(pin_slot(&pin, field), Some(slot), "{field}");
+        }
+        assert_eq!(pin_slot(&pin, "pqzKeyUsed"), Some(18), "a longer name is another field");
+        assert!(pin.contains(r#"uint256(0x73) | 1 << 160 | 1 << 168, "2 pqzKey[ua][version]: ptr, proven, added""#));
+        assert!(pin.contains(r#"uint256(0x82) | uint256(0x83) << 64 | 1 << 128, "17 pqzVersions: latest, current, listed""#));
     }
 }
