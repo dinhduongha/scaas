@@ -12,6 +12,11 @@ const zMulti = (t) => [t.accSeq, t.sendCounter, t.validUntilBlock, t.salt, t.ben
 const zBurn = (t) => [t.accSeq, t.sendCounter, t.validUntilBlock, t.beneficiaryUA, G(t.yFrom)];
 const uw = (u) => [u.underlying, u.recipient, u.amount, u.minOut];
 const uaTuple = (s) => [s.keyData, s.signature, s.members.map((x) => [x.index, x.members.map((y) => [y.index, y.sig]), x.sig])];
+// group 3f (PQZ verifier mode spec §5.3): `PqzSignedVerdict {PqzVerdict pqzVerdict; UASig sig}`, after the signature of the six
+// PQZ entries
+const VERDICT = new Set(['PqzTransferSingle', 'PqzTransferSingleCompact', 'PqzTransfer', 'PqzTransferCompact', 'PqzUnshield', 'PqzUnshieldUnwrap']);
+const verdictTuple = ({ pqzVerdict: v, sig }) => [[v.token, v.chainId, v.proofSystemId, v.statementHash, v.proofHash, v.pqzVerifierEpoch,
+  v.validUntil], uaTuple(sig)];
 const CONF = {
   PqzTransferSingle: (m, x) => [pqzArgsSingle(m.args), m.proof, uaTuple(x.pqzAuth), m.accHint],
   PqzTransferSingleCompact: (m, x) => [pqzArgsSingle(m.args), m.proof, uaTuple(x.pqzAuth), m.accHint],
@@ -69,7 +74,8 @@ export function expectedCall(name, r, d) {
   const account = ACCOUNT.has(name) || (name === 'Execute' && d.domain.name === 'SCaaS SmartKeyAccount');
   // ua-mtx-merge (R47): every merged entry takes `UASig`, `mtxShield` too; a native id's is `{0x, signature, []}` (R17)
   const sig = account ? ['0', [], d.signature] : ua ? ['0x', d.signature, []] : d.signature;
-  return [envelope(m), ...own, sig, ...(name === 'UAPayUnderMandate' ? [metaTuple(d.extra.meta)] : [])];
+  const tail = name === 'UAPayUnderMandate' ? [metaTuple(d.extra.meta)] : ua && VERDICT.has(base) ? [verdictTuple(d.extra.pqzVerdict)] : [];
+  return [envelope(m), ...own, sig, ...tail];
 }
 
 /** Decoded values and `expectedCall` on one form: lower-case hex, decimal strings. */

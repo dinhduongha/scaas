@@ -183,8 +183,9 @@ test('the table covers every allowlisted entry of every contract, one row per op
   // pay-meta-tax T41: + `UAPayWithTax` (a raw struct) and the router's `UASetTaxRate`, `UASetTaxRecipient`: 79, 69
   // group 3g T54: the rollover one row per kind (`UARollOver` Zether, `UAPqzRollOver` PQZ with `keyVersion`): 80, 70
   // ua-mtx-merge T76: + the router's three creations (`UACreateToken`, `UACreateDex`, `UACreateInstance`): 83, 73
-  assert.equal(Object.keys(TYPED_OPS).length, 83);
-  assert.equal(Object.values(TYPED_OPS).filter((o) => o.envelope).length, 73);
+  // T46 (group 3f): + the router's three PQZ verifier ops (`UAPqzSetVerifier`, `UAPqzCancelVerifier`, `UAPqzRevokeVerifier`): 86, 76
+  assert.equal(Object.keys(TYPED_OPS).length, 86);
+  assert.equal(Object.values(TYPED_OPS).filter((o) => o.envelope).length, 76);
   for (const o of Object.values(TYPED_OPS)) {
     if (o.envelope) assert.ok(o.entry.startsWith('mtx'), o.primary);
     if (o.ua) assert.equal(o.fields[0].type, 'bytes32', o.primary);
@@ -255,8 +256,10 @@ test('a merged entry\'s calldata carries UASig{signature} for an EOA: empty keyD
     if (!TYPED_OPS[name].ua || !TYPED_OPS[name].envelope) continue;
     for (const [kind, d] of domains(r)) {
       const got = decodeList(paramTypes(d.abi), fromHex(d.calldata).subarray(4));
-      // pay-meta-tax T41: the mandate pay takes its `PayMeta` after the signature
-      assert.deepEqual(norm(got.at(name === 'UAPayUnderMandate' ? -2 : -1)), norm(['0x', d.signature, []]), `${name} ${kind}`);
+      // pay-meta-tax T41: the mandate pay takes its `PayMeta` after the signature; T46 (group 3f): the six PQZ entries their
+      // `PqzSignedVerdict`
+      const after = name === 'UAPayUnderMandate' || /^UAPqz(Transfer|Unshield)/.test(name);
+      assert.deepEqual(norm(got.at(after ? -2 : -1)), norm(['0x', d.signature, []]), `${name} ${kind}`);
       assert.equal(got[0][0], V.key.ua, `${name} ${kind}: the EOA's id, its address zero-padded`);
       n++;
     }
@@ -311,9 +314,13 @@ test('GovernanceRouter: 32 rows equal GovRouterTypehash.t.sol, target the first 
     .map(([, lits, hash]) => [[...lits.matchAll(/"([^"]*)"/g)].map((x) => x[1]).join(''), hash]);
   // T32: + the eight regulated controls (regulated-kinds spec §3.1, CTR-GOV-20); T34 writes their rows
   // pay-meta-tax T39 / T41: + `UASetTaxRate`, `UASetTaxRecipient`; ua-mtx-merge T76: + the three creations
-  assert.equal(pins.length, 33);
+  // T46 (group 3f): the three PQZ verifier ops are checked against GovernanceRouterBase.sol in pqz-verdict.test.js, and here
+  // too once this pin file carries them
   const rows = pins.filter(([s]) => !s.startsWith('GrantTerms('));
-  assert.equal(rows.length, 32);
+  const pqzPinned = rows.filter(([s]) => s.startsWith('UAPqz')).length;
+  assert.ok(pqzPinned === 0 || pqzPinned === 3, `${pqzPinned} PQZ verifier pins`);
+  assert.equal(pins.length - pqzPinned, 33);
+  assert.equal(rows.length - pqzPinned, 32);
   for (const [s, hash] of rows) {
     const name = s.slice(0, s.indexOf('('));
     const op = TYPED_OPS[name];
@@ -329,7 +336,7 @@ test('GovernanceRouter: 32 rows equal GovRouterTypehash.t.sol, target the first 
     assert.equal(r.domains.gov_router.domain.name, 'SCaaS GovernanceRouter', name);
     assert.deepEqual([r.message.mode, r.message.fee], [1, '0'], `${name}: fee mode NONE`);
   }
-  assert.equal(Object.values(TYPED_OPS).filter((o) => o.on.includes('GovernanceRouter')).length, 33);
+  assert.equal(Object.values(TYPED_OPS).filter((o) => o.on.includes('GovernanceRouter')).length, 36);
   assert.equal(V.ops.UACancelNonce.domains.gov_router.domain.name, 'SCaaS GovernanceRouter');
   assert.equal(V.ops.CancelNonce.domains.gov_router, undefined);
 });

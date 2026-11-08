@@ -173,6 +173,10 @@ export const POP_V2_TAG = purposeTag('pop', 2);
 export const KEM_TAG = purposeTag('kem');
 /** A PQZ key attached after `register` (`setPqzKey`, ruling A1-I1): its purpose. */
 export const PQZ_KEY_TAG = purposeTag('pqz-key');
+/** What a PQZ verifier UA signs a `PqzVerdict` under (group 3f, PQZ verifier mode spec §5.1; `UAKinds.PURPOSE_PQZ_VERDICT`): a
+ *  native verifier over `uaAuthDigest`, a derived one over `uaMessage`. Not in `PURPOSES` yet: that list writes the purpose
+ *  rows of vectors/ua/kinds.json, which every `ua-*` binding reads; it joins them with ua-rs's purpose (ua-rs-sign). */
+export const PQZ_VERDICT_TAG = tagHash('scaas.ua.purpose.pqz-verdict.v1');
 /** A derived `msig` member's acceptance of its slot (`acceptMembership`, CTR-UA-37): its purpose. */
 export const MEMBERSHIP_TAG = purposeTag('membership');
 /** The KEM scheme byte, `kemPk[0]` (CTR-UA-32): 1 = ML-KEM-1024 + X25519 (X-Wing order), `kemPk = 0x01 ‖ ek (1,568 B) ‖
