@@ -1350,6 +1350,30 @@ mod tests {
         }
     }
 
+    /// ua-mtx-merge fix (the clientkeys `checkOp` finding, same class): a row whose struct name is not its row name
+    /// (`UAPqzRollOver` signs `UARollOver`) still needs every field of its own struct: an omitted one is refused by name, never
+    /// read as zero; its hash is the struct's (control: the vector's job parses to the vector's digest).
+    #[test]
+    fn row_named_apart_from_its_struct_refuses_an_omitted_field() {
+        let v = vectors();
+        let envelope: Vec<&str> = E_FIELDS.split(',').filter_map(|x| x.split(' ').nth(1)).chain(["from"]).collect();
+        let named: Vec<_> = rows().iter().filter(|r| primary_of(r.name) != r.name).collect();
+        assert!(named.iter().any(|r| r.name == "UAPqzRollOver"));
+        for r in named {
+            for kind in r.contracts.iter() {
+                let good = op_of(r.name, kind, &v).unwrap();
+                Op::parse(&good, FEE).unwrap();
+                for (_, f) in r.fields.iter().filter(|(_, f)| !envelope.contains(&f.as_str())) {
+                    let mut o = good.clone();
+                    assert!(o["args"].as_object_mut().unwrap().remove(f).is_some(), "{} {kind}: args.{f}", r.name);
+                    let e = Op::parse(&o, FEE).unwrap_err().to_string();
+                    assert!(e.contains(&format!("args.{f}: missing")), "{} {kind} without {f}: {e}", r.name);
+                }
+            }
+        }
+        assert_eq!(primary_of("UAPqzRollOver"), "UARollOver");
+    }
+
     /// Group 3g (KV-8, spec §7.3): every PQZ debit's `keyVersion` is a named field after `fromUA`, rebuilt into the calldata at its
     /// word; a job without it, or with the args as hex, is refused by name.
     #[test]

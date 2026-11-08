@@ -1066,7 +1066,7 @@ export function checkOp(td, { op, contract, chainId, chainUid, message, maxFee, 
   const m = td.message || {};
   const d = td.domain || {};
   if (!same(d.verifyingContract, contract)) refuse('the operation is not on the contract you chose');
-  requireWhole(op, message, o.types, o.envelope, m.mode);
+  requireWhole(o.primary, message, o.types, o.envelope, m.mode); // the struct, not the row (`UAPqzRollOver` is `UARollOver`)
   let fee = {};
   let server = {};
   if (o.envelope) {

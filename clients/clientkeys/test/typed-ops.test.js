@@ -420,6 +420,34 @@ test('checkOp refuses every changed field; the server supplies only the envelope
   }
 });
 
+// ua-mtx-merge fix (the ua-rs-sign sync's finding): the whole-message check runs over the row's STRUCT (`UARollOver` for the
+// PQZ row `UAPqzRollOver`), as ua-rs checks it; by the row name it found no type, so an omitted field read as zero.
+test('checkOp: a row whose struct name is not its row name still refuses an omitted field', () => {
+  const NOW = 1_800_000_000;
+  const named = rows().filter(([name]) => prim(name) !== name);
+  assert.ok(named.some(([name]) => name === 'UAPqzRollOver'), 'the PQZ rollover row is one');
+  for (const [name, r] of named) {
+    for (const [kind, d] of domains(r)) {
+      const at = { contract: d.domain.verifyingContract, chainId: d.domain.chainId, chainUid: d.domain.salt };
+      const td = builders[`${bld(name)}TypedData`]({ ...domainOf(r, d), message: r.message });
+      const want = { op: name, ...at, message: r.message, maxFee: 2n ** 255n, now: NOW, maxWindow: 86400 * 365,
+        feeRecipient: r.message.feeRecipient, relayer: r.message.relayer };
+      assert.equal(hex(checkOp(td, want).digest), d.digest, `${name} ${kind}: the whole message passes`);
+      for (const k of Object.keys(r.message).filter((f) => !['batch', 'nonce', 'validUntil', 'mode', 'relayer', 'fee',
+        'feeRecipient'].includes(f))) {
+        const { [k]: _omitted, ...partial } = r.message;
+        assert.throws(() => checkOp(td, { ...want, message: partial }), /missing/, `${name} ${kind} without ${k}`);
+      }
+      // the hazard itself: a field whose value is 0, omitted by the client, must not read as that 0
+      const zero = { ...r.message, keyVersion: 0 };
+      const tz = builders[`${bld(name)}TypedData`]({ ...domainOf(r, d), message: zero });
+      checkOp(tz, { ...want, message: zero });
+      const { keyVersion: _kv, ...noVersion } = zero;
+      assert.throws(() => checkOp(tz, { ...want, message: noVersion }), /the expected keyVersion is missing/, `${name} ${kind}`);
+    }
+  }
+});
+
 test('checkOp: the deadline, the fee policy, the contract, the chain, the operation', () => {
   const NOW = 1_800_000_000;
   const TOKEN = '0x' + '7a'.repeat(20);
