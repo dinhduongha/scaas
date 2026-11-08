@@ -1,0 +1,13 @@
+ua-mtx-merge T46 (group 3f, PQZ verifier mode: vectors and clients), clientkeys gate summary. Full outputs in the git-ignored
+runs/2026-11-08-ua-mtx-merge-t46-*.log. node 26.8.1, cast 1.8.5. UNAUDITED.
+
+step | commit | rc | counts
+base: node --test test/*.test.js (capped) | b70efd83 | 0 | 277 tests, 275 pass, 0 fail, 2 skipped (no vendored bundle)
+legacy copies (MD-4) | 134560c1 | - | 3f/{src/evm.js, scripts/typed-ops-{vectors,expected}.mjs, test/typed-ops.test.js}, vectors/typed/legacy/ua-mtx-merge/3f/typed_ops.json (83 rows)
+red: test/pqz-verdict.test.js + test/typed-ops.test.js before the code | 134560c1 + tests | 1 | 40 tests, 26 pass, 12 fail, 2 skipped (no cast on PATH; verdict.json absent)
+suite: node --test test/*.test.js (capped, cast on PATH) | e452b88f | 0 | 287 tests, 285 pass, 0 fail, 2 skipped (no vendored bundle); verdict.json read (22 rows, set n2304-kmax4096)
+typed-ops-vectors.mjs twice, git diff --exit-code typed_ops.json | e452b88f | 0 | 86 rows; vs the 3f copy: 3 rows added, 6 PQZ rows move abi, selector, calldata, extra.pqzVerdict only
+other generators to a scratch dir (ua-vectors, id-display-vectors, ua-portable-vectors, ua-sig-vectors) | e452b88f | 0 | 10 files byte-identical to vectors/ua/
+typed-ops-cast-check.mjs | e452b88f | 0 | 86 structs, 120 digests and 119 calldatas equal to cast's
+selectors vs the built artifacts' methodIdentifiers (NormalPqzToken, WrappedPqzToken, GovernanceRouter) | e452b88f | 0 | 9 of 9 equal
+mutants: runs/2026-11-08-ua-mtx-merge-t46-mutants.sh (capped) | e452b88f | 0 | 9 of 9 killed (runs/2026-11-08-ua-mtx-merge-t46-mutants.txt), tree restored
