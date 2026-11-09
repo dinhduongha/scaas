@@ -249,12 +249,35 @@ contract PqChat is IPqChat {
         emit PqChatLeft(l.sessionId, l.epochId, l.member);
     }
 
-    function postMessage(PqChatMessage calldata, IUARegistry.UASig calldata) external returns (uint256) {
-        revert PqChatShape();
+    /// @notice P16, D11: a member of the complete epoch `epochId` posts; the record and `keccak256(abi.encode(sig))` in one
+    ///         blob appended to the session's list, the signature's bytes in the event.
+    function postMessage(PqChatMessage calldata m, IUARegistry.UASig calldata sig) external returns (uint256 index) {
+        (IUARegistry reg, uint256 limit,) = _env();
+        Epoch storage ep = _known(m.epochId);
+        if (ep.sessionId != m.sessionId) revert PqChatUnknown(m.epochId);
+        if (ep.landed != ep.wraps) revert PqChatIncomplete(m.epochId);
+        (, MemberKey[] memory mk,) = _lists(ep);
+        if (_memberAt(mk, m.sender) == type(uint256).max) revert PqChatNotMember(m.sender);
+        bytes32 hm = PqChatTypes.hashMessage(m);
+        _auth(reg, m.sender, hm, sig);
+        _useNonce(PqChatTypes.scopeMessage(m.epochId, m.sender, m.device), m.counter);
+        bytes memory blob = abi.encode(m, keccak256(abi.encode(sig)));
+        if (blob.length + 2 > _codeCap(limit)) revert PqChatShape(); // one blob (P16)
+        address[] storage list = _s().messages[m.sessionId];
+        index = list.length;
+        list.push(_put(blob, limit));
+        emit PqChatMessagePosted(m.sessionId, PqChatTypes.typed(hm), m.sender, index, sig);
     }
 
-    function storeMessage(uint8, bytes8, bytes calldata) external returns (uint256) {
-        revert PqChatShape();
+    /// @notice P29: no signature, membership or nonce; the payload `abi.encode(v, hint, env)` raw in one blob.
+    function storeMessage(uint8 v, bytes8 hint, bytes calldata env) external returns (uint256 index) {
+        (, uint256 limit,) = _env();
+        bytes memory payload = abi.encode(v, hint, env);
+        if (v != 1 || payload.length + 1 > _codeCap(limit)) revert PqChatShape();
+        address[] storage list = _s().stored[hint];
+        index = list.length;
+        list.push(SSTORE2.write(payload));
+        emit PqChatStored(hint, index);
     }
 
     function sessionOf(bytes32 sessionId) external view returns (PqChatSession memory s, bytes32 sigHash) {
@@ -307,24 +330,30 @@ contract PqChat is IPqChat {
         return _s().nonces[scope][nonce >> 8] & (1 << (nonce & 0xff)) != 0;
     }
 
-    function messageCount(bytes32) external view returns (uint256) {
-        revert PqChatShape();
+    function messageCount(bytes32 sessionId) external view returns (uint256) {
+        return _s().messages[sessionId].length;
     }
 
-    function messageAt(bytes32, uint256) external view returns (PqChatMessage memory, bytes32) {
-        revert PqChatShape();
+    function messageAt(bytes32 sessionId, uint256 index) external view returns (PqChatMessage memory m, bytes32 sigHash) {
+        (m, sigHash) = abi.decode(_get(_s().messages[sessionId][index]), (PqChatMessage, bytes32));
     }
 
-    function storedCount(bytes8) external view returns (uint256) {
-        revert PqChatShape();
+    function storedCount(bytes8 hint) external view returns (uint256) {
+        return _s().stored[hint].length;
     }
 
-    function storedAt(bytes8, uint256) external view returns (bytes memory) {
-        revert PqChatShape();
+    function storedAt(bytes8 hint, uint256 index) external view returns (bytes memory) {
+        return SSTORE2.read(_s().stored[hint][index]);
     }
 
-    function storedRange(bytes8, uint256, uint256) external view returns (bytes[] memory) {
-        revert PqChatShape();
+    function storedRange(bytes8 hint, uint256 offset, uint256 limit) external view returns (bytes[] memory page) {
+        address[] storage l = _s().stored[hint];
+        uint256 n = l.length;
+        if (offset >= n) return page;
+        if (limit > STORED_RANGE_MAX) limit = STORED_RANGE_MAX;
+        uint256 end = n - offset > limit ? offset + limit : n;
+        page = new bytes[](end - offset);
+        for (uint256 i; i < page.length; ++i) page[i] = SSTORE2.read(l[offset + i]);
     }
 
     // ------------------------------------------------------------------ public topics
@@ -484,7 +513,7 @@ contract PqChat is IPqChat {
     {
         uint256 n = wraps.length;
         if (first + n > members.length) revert PqChatShape();
-        uint256 per = ((limit < 0xffff ? limit : 0xffff) - 1) / WRAP_BYTES;
+        uint256 per = (_codeCap(limit) - 1) / WRAP_BYTES;
         for (uint256 j; j < n; j += per) _blob(epochId, ep, first, wraps, j, n - j < per ? n : j + per, members, hashes);
         uint32 landed = ep.landed + uint32(n);
         ep.landed = landed;
@@ -543,10 +572,15 @@ contract PqChat is IPqChat {
 
     // ------------------------------------------------------------------ internal: blobs (3C-D3)
 
+    /// @dev The largest runtime of one blob: the chain's limit, at most 65,535 B (`SSTORE2.write`'s PUSH2).
+    function _codeCap(uint256 limit) internal pure returns (uint256) {
+        return limit < 0xffff ? limit : 0xffff;
+    }
+
     /// @dev `data` as one blob led by flag 0 when it fits the limit, else a chain: each blob led by flag 1 and the next
     ///      blob's address, the last by flag 0. Returns the head.
     function _put(bytes memory data, uint256 limit) internal returns (address head) {
-        uint256 cap = (limit < 0xffff ? limit : 0xffff) - 1; // the bytes of one blob, flag included
+        uint256 cap = _codeCap(limit) - 1; // the bytes of one blob, flag included
         if (data.length < cap) return SSTORE2.write(bytes.concat(bytes1(0), data));
         uint256 piece = cap - 21;
         for (uint256 i = (data.length + piece - 1) / piece; i > 0; --i) {
