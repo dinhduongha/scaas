@@ -46,3 +46,5 @@ M-ctor-pqz-set-check-dropped | test_m_constructorChecksEveryModule | 1
 M-registry-forwarded | none (survived) | 0
 M-factory-ModuleNotPinned-dropped | test_m_dexModuleNotPinned, test_m_releaseModuleNotPinned, test_m_unregisteredModuleNotPinned | 1
 M-dex-governed-stub-without-guardIn | none (survived) | 0
+M-registry-forwarded | test_p_keptViewsMakeNoCall | 1
+M-dex-governed-stub-without-guardIn | test_dexForwardedGovernanceRefusedInsideASettlement | 1
