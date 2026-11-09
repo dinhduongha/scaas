@@ -62,9 +62,9 @@ abstract contract RegulatedBase is MetaTokenBase, IRegulatedToken {
     }
 
     /// @dev 5, 6, 7: losing them relaxes only after `grantDelay` (spec §3.6); never 23 (pay-meta-tax Q5: the owner's
-    ///      revoke of a compromised single-key holder is immediate).
+    ///      revoke of a compromised single-key holder is immediate) or 24 (PQZ proof path spec §5: disabling it freezes).
     function _delayedRelaxBits() internal pure virtual override returns (uint256) {
-        return GovernanceBits.ISSUER_BITS & ~(uint256(1) << GovernanceBits.TAX);
+        return GovernanceBits.ISSUER_BITS & ~((uint256(1) << GovernanceBits.TAX) | (uint256(1) << GovernanceBits.PQZ_PROOF));
     }
 
     /// @dev `RegulatedLib.init` (spec §2.4) before the kind's own init, so before any mint.

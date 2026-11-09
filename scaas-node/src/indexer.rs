@@ -187,12 +187,12 @@ fn pqz_key_event(log: &Log, topic0: B256, v: &mut Value) -> bool {
 }
 
 /// Group 3f (spec §11.1): the topics of [`pqz_verifier_event`]: the PQZ verifier mode's events and the op events a `PqzVerified`
-/// joins.
-pub const PQZ_VERIFIER_TOPICS: [B256; 8] = [
+/// joins; group 3h: `ProofStoreSet` (never `PqzDebitProof`).
+pub const PQZ_VERIFIER_TOPICS: [B256; 9] = [
     IPqzToken::PqzVerified::SIGNATURE_HASH, IPqzToken::PqzVerifierProposed::SIGNATURE_HASH, IPqzToken::PqzVerifierSet::SIGNATURE_HASH,
     IPqzToken::PqzVerifierCancelled::SIGNATURE_HASH, IPqzEvents::PqzVerifierRevoked::SIGNATURE_HASH,
     IPqzEvents::ConfidentialTransfer::SIGNATURE_HASH, IPqzEvents::ConfidentialTransferMulti::SIGNATURE_HASH,
-    IPqzEvents::Unshielded::SIGNATURE_HASH,
+    IPqzEvents::Unshielded::SIGNATURE_HASH, IPqzToken::ProofStoreSet::SIGNATURE_HASH,
 ];
 
 /// Group 3f: a PQZ verifier mode event or a confidential op event into `v`, ids as `bytes32` hex (never `from` / `to`, which the
@@ -215,6 +215,10 @@ fn pqz_verifier_event(log: &Log, topic0: B256, v: &mut Value) -> bool {
         let Ok(e) = log.log_decode::<P::PqzVerifierSet>() else { return false };
         let e = e.inner.data;
         (v["event"], v["previous"], v["next"], v["pqz_verifier_epoch"]) = (json!("PqzVerifierSet"), h(e.previous), h(e.next), json!(e.pqzVerifierEpoch));
+    } else if topic0 == P::ProofStoreSet::SIGNATURE_HASH {
+        // group 3h (spec §10): bit 24's change of what each later debit leaves in history; an alert (no PqzDebitProof is indexed)
+        let Ok(e) = log.log_decode::<P::ProofStoreSet>() else { return false };
+        (v["event"], v["previous"], v["next"]) = (json!("ProofStoreSet"), json!(e.inner.data.previous), json!(e.inner.data.next));
     } else if topic0 == P::PqzVerifierCancelled::SIGNATURE_HASH {
         let Ok(e) = log.log_decode::<P::PqzVerifierCancelled>() else { return false };
         (v["event"], v["next"]) = (json!("PqzVerifierCancelled"), h(e.inner.data.next));
@@ -244,7 +248,7 @@ fn pqz_verifier_event(log: &Log, topic0: B256, v: &mut Value) -> bool {
         return false;
     }
     v["tx_index"] = json!(log.transaction_index);
-    if matches!(v["event"].as_str(), Some("PqzVerifierProposed" | "PqzVerifierRevoked")) {
+    if matches!(v["event"].as_str(), Some("PqzVerifierProposed" | "PqzVerifierRevoked" | "ProofStoreSet")) {
         v["alert"] = json!(true);
     }
     true
@@ -981,6 +985,27 @@ mod tests {
         let chain = Chain::with_signer(&cfg, alloy::signers::local::PrivateKeySigner::random()).unwrap();
         assert!(!step(&chain, &odoo, None).await.unwrap());
         assert_eq!(o.lock().unwrap().ingests, 0, "cursor not advanced");
+    }
+
+    /// Group 3h (pqz-proof-path spec §10, C11): `ProofStoreSet(previous, next)` is a row and an alert (as 3e's tax recipient: a
+    /// holder of bit 24 changed what each later debit leaves in history); a `PqzDebitProof` is no row (no proof data indexed, no
+    /// archive); the filter asks for the one, not the other.
+    #[test]
+    fn indexer_proof_store_set_alert() {
+        use crate::abi::IPqzToken as P;
+        let tok = Address::repeat_byte(0x70);
+        let logs = vec![
+            log_at(tok, 1, 0, P::ProofStoreSet { previous: 0, next: 1 }.encode_log_data()),
+            log_at(tok, 2, 0, P::PqzDebitProof { blob: Address::repeat_byte(0xb0), ua: B256::repeat_byte(0xd1), sendCounter: 3,
+                header: vec![0x11; 640].into(), proof: vec![0x22; 9].into() }.encode_log_data()),
+        ];
+        let rows = pay_events(&logs, None);
+        assert!(rows.iter().all(client_ingest_accepts));
+        assert_eq!(rows.len(), 1, "{rows:?}");
+        assert_eq!((rows[0]["event"].as_str(), rows[0]["previous"].as_u64(), rows[0]["next"].as_u64(), rows[0]["alert"].as_bool()),
+            (Some("ProofStoreSet"), Some(0), Some(1), Some(true)), "{}", rows[0]);
+        assert!(PQZ_VERIFIER_TOPICS.contains(&P::ProofStoreSet::SIGNATURE_HASH));
+        assert!(!PQZ_VERIFIER_TOPICS.contains(&P::PqzDebitProof::SIGNATURE_HASH), "no PqzDebitProof data indexed");
     }
 
     /// Group 3f (spec §11.1, Codex #10): a `PqzVerified` joins the op event after it of the same token and transaction

@@ -31,20 +31,20 @@ import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
 
 string constant T_TRANSFER = '"PqzTransferArgs":[{"name":"p","type":"uint64"},{"name":"validUntilBlock","type":"uint256"},{"name":"shieldIn","type":"uint256"},'
     '{"name":"fromUA","type":"bytes32"},{"name":"keyVersion","type":"uint64"},{"name":"toUA","type":"bytes32"},{"name":"beneficiaryUA","type":"bytes32"},{"name":"salt","type":"bytes16"},'
-    '{"name":"u","type":"bytes"},{"name":"vTo","type":"bytes"},{"name":"vFrom","type":"bytes"},{"name":"vAuditor","type":"bytes"},{"name":"sealedMemo","type":"bytes"}]';
+    '{"name":"ownTag","type":"bytes32"},{"name":"u","type":"bytes"},{"name":"vTo","type":"bytes"},{"name":"vFrom","type":"bytes"},{"name":"vAuditor","type":"bytes"},{"name":"sealedMemo","type":"bytes"}]';
 string constant T_LEG = '"PqzLeg":[{"name":"ua","type":"bytes32"},{"name":"v","type":"bytes"},{"name":"vAuditor","type":"bytes"}]';
 string constant T_MULTI = '"PqzMultiArgs":[{"name":"p","type":"uint64"},{"name":"validUntilBlock","type":"uint256"},{"name":"shieldIn","type":"uint256"},'
     '{"name":"fromUA","type":"bytes32"},{"name":"keyVersion","type":"uint64"},{"name":"beneficiaryUA","type":"bytes32"},{"name":"decoyFee","type":"uint256"},{"name":"salt","type":"bytes16"},'
-    '{"name":"u","type":"bytes[]"},{"name":"legs","type":"PqzLeg[]"},{"name":"vFrom","type":"bytes"},{"name":"sealedMemo","type":"bytes"}]';
+    '{"name":"ownTag","type":"bytes32"},{"name":"u","type":"bytes[]"},{"name":"legs","type":"PqzLeg[]"},{"name":"vFrom","type":"bytes"},{"name":"sealedMemo","type":"bytes"}]';
 string constant T_BURN = '"PqzBurnArgs":[{"name":"p","type":"uint64"},{"name":"validUntilBlock","type":"uint256"},{"name":"shieldIn","type":"uint256"},'
-    '{"name":"fromUA","type":"bytes32"},{"name":"keyVersion","type":"uint64"},{"name":"beneficiaryUA","type":"bytes32"},{"name":"u","type":"bytes"},{"name":"vFrom","type":"bytes"}]';
+    '{"name":"fromUA","type":"bytes32"},{"name":"keyVersion","type":"uint64"},{"name":"beneficiaryUA","type":"bytes32"},{"name":"ownTag","type":"bytes32"},{"name":"u","type":"bytes"},{"name":"vFrom","type":"bytes"}]';
 string constant T_UNWRAP = '"Unwrap":[{"name":"underlying","type":"address"},{"name":"recipient","type":"bytes32"},{"name":"amount","type":"uint256"},{"name":"minOut","type":"uint256"}]';
 
 function transferJson(IPqzToken.PqzTransferArgs memory t) pure returns (string memory) {
     return string.concat(
         string.concat('{"p":', n(t.p), ',"validUntilBlock":', n(t.validUntilBlock), ',"shieldIn":', n(t.shieldIn), ',"fromUA":', h(t.fromUA),
             ',"keyVersion":', n(t.keyVersion), ',"toUA":', h(t.toUA), ',"beneficiaryUA":', h(t.beneficiaryUA), ',"salt":',
-            hexJson(abi.encodePacked(t.salt))),
+            hexJson(abi.encodePacked(t.salt)), ',"ownTag":', h(t.ownTag)),
         string.concat(',"u":', hexJson(t.u), ',"vTo":', hexJson(t.vTo), ',"vFrom":', hexJson(t.vFrom), ',"vAuditor":', hexJson(t.vAuditor),
             ',"sealedMemo":', hexJson(t.sealedMemo), '}'));
 }
@@ -60,13 +60,13 @@ function multiJson(IPqzToken.PqzMultiArgs memory t) pure returns (string memory)
     return string.concat(
         string.concat('{"p":', n(t.p), ',"validUntilBlock":', n(t.validUntilBlock), ',"shieldIn":', n(t.shieldIn), ',"fromUA":', h(t.fromUA),
             ',"keyVersion":', n(t.keyVersion), ',"beneficiaryUA":', h(t.beneficiaryUA), ',"decoyFee":', n(t.decoyFee), ',"salt":',
-            hexJson(abi.encodePacked(t.salt))),
+            hexJson(abi.encodePacked(t.salt)), ',"ownTag":', h(t.ownTag)),
         string.concat(',"u":[', us, '],"legs":[', legs, '],"vFrom":', hexJson(t.vFrom), ',"sealedMemo":', hexJson(t.sealedMemo), '}'));
 }
 
 function burnJson(IPqzToken.PqzBurnArgs memory b) pure returns (string memory) {
     return string.concat('{"p":', n(b.p), ',"validUntilBlock":', n(b.validUntilBlock), ',"shieldIn":', n(b.shieldIn), ',"fromUA":', h(b.fromUA),
-        ',"keyVersion":', n(b.keyVersion), ',"beneficiaryUA":', h(b.beneficiaryUA), ',"u":', hexJson(b.u), ',"vFrom":', hexJson(b.vFrom), '}');
+        ',"keyVersion":', n(b.keyVersion), ',"beneficiaryUA":', h(b.beneficiaryUA), ',"ownTag":', h(b.ownTag), ',"u":', hexJson(b.u), ',"vFrom":', hexJson(b.vFrom), '}');
 }
 
 /// typed-signing C4 (TS-D14, TS-D17, TS-D19): the explicit parameters are the packed bytes the token assembled before, in the
@@ -393,7 +393,7 @@ contract PqzExplicitStatementTest is PqzNamedBase {
         blob = ref_.blobSingle(pl, true);
         ref = tok.mtxConfidentialTransferSingleCompact(_ts(pl), hex"01", _pqAuth(), "", noVerdict());
         assertEq(tok.pqzEntryBlob(ref), blob, "op 1 HASH");
-        bytes memory r = _slice(blob, 0, blob.length - PqzCt.VP);
+        bytes memory r = _slice(blob, 0, blob.length - PqzCt.VP - PqzCore._tailLen(1)); // group 3h: R ends before v_f and the tail
         assertEq(tok.transferEntry(ref), bytes.concat(keccak256(r), _memo()), "hash || memo");
 
         for (uint256 k; k < 4; ++k) {
@@ -1036,6 +1036,7 @@ contract PqzTypedRowsTest is PqzNamedBase {
         b.fromUA = j.readBytes32(string.concat(q, ".fromUA"));
         b.keyVersion = uint64(j.readUint(string.concat(q, ".keyVersion")));
         b.beneficiaryUA = j.readBytes32(string.concat(q, ".beneficiaryUA"));
+        b.ownTag = j.readBytes32(string.concat(q, ".ownTag")); // group 3h (T59)
         b.u = j.readBytes(string.concat(q, ".u"));
         b.vFrom = j.readBytes(string.concat(q, ".vFrom"));
     }

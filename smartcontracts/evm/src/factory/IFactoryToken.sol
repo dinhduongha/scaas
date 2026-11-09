@@ -98,6 +98,11 @@ interface IFactoryToken {
         uint8 pqzVerifyMode;
         bytes32 pqzVerifierUA;
         bool pqzVerifierFixed;
+        /// `*_PQZ` kinds only (group 3h, pqz-proof-path spec §4.1, PP-4, C8; every other kind requires 0): where each debit's
+        /// proof and its 640-byte header live besides the transaction's calldata: 0 `NONE` (the default, calldata only) or 1
+        /// `LOG` (a `PqzDebitProof` event of the token); any other value `ProofStoreInvalid`. Changed later only through bit
+        /// 24 `PQZ_PROOF` (`setProofStore`), effective at the next debit.
+        uint8 proofStore;
     }
 
     /// @notice Regulated-kinds spec §2.4: the regulated kinds' (8-13) only; a plain kind (0-5) refuses any set field

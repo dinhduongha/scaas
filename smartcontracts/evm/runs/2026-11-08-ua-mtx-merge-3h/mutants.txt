@@ -1,0 +1,22 @@
+M1-debit-delete-loop | test_debit_keepsPendingSlots, test_pendingCt_belowCleared | 1
+M2-rollover-delete-loop | test_rollover_keepsPendingSlots | 1
+M3-record-p-off-by-one | test_lastDebit_interleaved, test_record_burn, test_record_deltaP_afterRollover, test_record_deltaP_first, test_record_deltaP_unroll, test_record_migration, test_record_narrow, test_record_op1, test_record_op7, test_record_refresh, test_record_unknown_reverts, test_record_unwrap, test_record_wide_keyVersion, test_record_wide_prevNotPrevious, test_record_wide_shieldIn | 1
+M4-prevBlob-new-blob | test_lastDebit_interleaved, test_layout_scaasPqz, test_record_burn, test_record_deltaP_afterRollover, test_record_deltaP_first, test_record_deltaP_unroll, test_record_migration, test_record_narrow, test_record_op1, test_record_op7, test_record_prevBlob_afterRollover, test_record_refresh, test_record_unknown_reverts, test_record_unwrap, test_record_wide_keyVersion, test_record_wide_prevNotPrevious, test_record_wide_shieldIn | 1
+M5-w1-not-for-keyVersion | test_lastDebit_interleaved, test_record_wide_keyVersion | 1
+M6-record-bit-dropped | test_lastDebit_interleaved, test_record_burn, test_record_deltaP_afterRollover, test_record_deltaP_first, test_record_deltaP_unroll, test_record_migration, test_record_narrow, test_record_op1, test_record_op7, test_record_refresh, test_record_unknown_reverts, test_record_unwrap, test_record_wide_keyVersion, test_record_wide_prevNotPrevious, test_record_wide_shieldIn | 1
+M17-rollover-floor-unconditional | test_rollover_floorOnlyRises | 1
+M18-w1-not-for-shieldIn | test_record_wide_shieldIn | 1
+M21-deltaP-from-floor | test_record_deltaP_afterRollover | 1
+M7-memoHash-without-ownTag | test_memoHash_bundle, test_memoHash_burn, test_memoHash_equalsClientkeys, test_memoHash_hash, test_ownTag_swapped_refused | 1
+M8-ownTag-before-vf | test_ownTag_inBlob_op1, test_rOf_op1 | 1
+M9-rOf-ignores-n | test_rOf_op1, test_rOf_op7, test_transferEntry_unchanged | 1
+M22-kv-key-pointer-order | test_kv_op7Rotated | 1
+M10-record-proofStore-zero | test_proofStore_log_burn, test_proofStore_log_op1, test_proofStore_log_op7, test_proofStore_noneLogNone_creditsBetween, test_proofStore_offchain | 1
+M11-log-buffer-not-proof | test_proofStore_log_burn, test_proofStore_log_op1, test_proofStore_log_op7, test_proofStore_noneLogNone_creditsBetween, test_proofStore_offchain | 1
+M13-bit24-on-zether | test_bit24_otherKindsRefused | 1
+M14-bit24-delay-relaxed | test_bit24_notDelayed, test_bit24_validKinds_12, test_bit24_validKinds_13, test_disable24_freezesValue_log, test_disable24_freezesValue_none | 1
+M15-setProofStore-ungated | test_disable24_freezesValue_log, test_disable24_freezesValue_none, test_setProofStore_gated | 1
+M20-setProofStore-byte22 | test_bit24_anyHolder_contract, test_bit24_anyHolder_eoa, test_bit24_anyHolder_msig, test_bit24_anyHolder_singleKey, test_disable24_freezesValue_log, test_proofStore_change_appliesNextDebit, test_router_UASetProofStore, test_setProofStore_noop | 1
+N1-router-row-missing-node-side | allow_lists_equal_the_selector_audit_both_directions, guard_allows_every_named_entry_only, proof_store_router_row_equal_contract, typed_ops_kat_every_entry | 101
+N2-own-tag-defaulted-zero | guard_allows_every_named_entry_only, pqz_old_shape_refused_by_name | 101
+N3-lane-check-ignores-proofStore | proof_store_over_cap_not_dead, proof_store_over_lane_cap_refused | 101

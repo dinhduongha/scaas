@@ -767,6 +767,13 @@ pub async fn fill_digest(chain: &Chain, w: &mut Work) -> Result<(), SimError> {
 /// reads that as a refusal). The estimate (regular + state, `eth_estimateGas`) must fit `max` (`max_gas_per_tx`) and
 /// the chain's block gas limit; `mtxSettle` is sized until every planned settlement settles; a contract signer's
 /// meta-tx gets at least the ERC-1271 floor.
+/// NODE-JOB-24: a refusal of [`gas`] for the lane's per-transaction cap (`max_gas_per_tx`, the block gas limit, 2^24 before
+/// Amsterdam), not for the calldata floor or a revert of the call itself.
+pub fn over_cap(reason: &str) -> bool {
+    reason.starts_with("gas ") && (reason.contains(" above max_gas_per_tx ") || reason.contains(" above the chain's block gas limit ")
+        || reason.contains(" above the 2^24 gas limit of a transaction"))
+}
+
 pub async fn gas(chain: &Chain, w: &Work, max: u64) -> Result<u64, SimError> {
     let block = chain.block_gas().await.map_err(|e| SimError::Transport(format!("block gas limit: {e:#}")))?;
     let floor = calldata_floor(w.data.len());
@@ -977,11 +984,12 @@ mod tests {
         // plan T34: (97, 3, 97) -> (105, 3, 105), the router's eight regulated controls' vector rows walked; pay-meta-tax T42:
         // -> (110, 3, 110), UAPayWithTax's three domains and the router's two tax ops
         // group 3f T46 / T47: -> (113, 3, 113), the router's three verifier ops' vector rows
-        assert_eq!((sent, relayed, refused), (113, 3, 113), "the walk reached every row with an entry; the relay fees: submit.rs");
+        // group 3h T61: -> (114, 3, 114), the router's `UASetProofStore`
+        assert_eq!((sent, relayed, refused), (114, 3, 114), "the walk reached every row with an entry; the relay fees: submit.rs");
         // plan T32: 87 -> 95, the router's eight regulated controls; pay-meta-tax T42: -> 99, mtxPay, mtxPayWithTax, the two tax ops
         // group 3g T55: -> 100, the rollover one row per kind (`UARollOver` Zether, `UAPqzRollOver` PQZ with `keyVersion`)
-        // group 3f T47: -> 103, the router's three verifier ops
-        assert_eq!(typed::rows().iter().filter(|r| !r.entry.is_empty()).count(), 103, "table rows: 85 typed with an entry, 18 plain");
+        // group 3f T47: -> 103, the router's three verifier ops; group 3h T61: -> 104, `UASetProofStore`
+        assert_eq!(typed::rows().iter().filter(|r| !r.entry.is_empty()).count(), 104, "table rows: 86 typed with an entry, 18 plain");
         // selectors with no row: refused on every kind, on a target that would otherwise pass
         let target = Address::repeat_byte(0x31);
         let g = Guard::new(&ChainCfg { dex: Some(target), governance_routers: vec![target], ..cfg.clone() }, Arc::new(RwLock::new(vec![target]))).unwrap();
@@ -1190,8 +1198,8 @@ mod tests {
         let creation = |s: &str| s.starts_with("mtxCreateToken(") || s.starts_with("mtxCreateDex(") || s.starts_with("mtxCreateInstance(");
         let router: HashSet<[u8; 4]> = audit["GovernanceRouter"].as_array().unwrap().iter().filter(|r| r["class"] == "SIGNED")
             .map(|r| r["sig"].as_str().unwrap()).filter(|s| !creation(s)).map(sel).collect();
-        // group 3f T45 / T47: 30 -> 33, the three verifier ops
-        assert_eq!(router.len(), 33, "19 ops, the eight regulated controls (plan T32), the ordered cancel, the two tax ops (pay-meta-tax T39), the three verifier ops (3f); the three creations (T76) in NOT_ROWS");
+        // group 3f T45 / T47: 30 -> 33, the three verifier ops; group 3h T61: -> 34, `mtxSetProofStore` (bit 24)
+        assert_eq!(router.len(), 34, "19 ops, the eight regulated controls (plan T32), the ordered cancel, the two tax ops (pay-meta-tax T39), the three verifier ops (3f), bit 24's op (3h); the three creations (T76) in NOT_ROWS");
         let ours: HashSet<[u8; 4]> = typed::rows().iter().filter(|r| !r.entry.is_empty() && r.contracts.contains(&"gov_router")).map(|r| r.sent).collect();
         assert_eq!(ours, router, "the router's allow-list, both directions");
         assert_eq!((rowed, exempt, governed), (ROWED, EXEMPT, GOVERNED), "every SIGNED entry was walked");
@@ -1373,7 +1381,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
         pqz_verdict_rows_equal_contract("WrappedPqzRegulatedToken", 12);
     }
 
-    /// Group 3f (spec §4.2): the router's three verifier ops are rows of `gov_router` only, over the `UA*` structs the brief names,
+    /// Group 3f (spec §4.2): the router's three verifier ops (and 3h T61's `UASetProofStore`) are rows of `gov_router` only, over the `UA*` structs the brief names,
     /// their selectors the forge artifact's and the router's `SIGNED` entries in `selector_audit.json`, their vectors in
     /// `typed_ops.json` (struct hash, digest and calldata pinned by `typed_ops_kat_every_entry`); fee mode `NONE` like every router
     /// op (`mode` an envelope field, nothing else to pay).
@@ -1387,6 +1395,9 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
                 format!("mtxPqzCancelVerifier{env}address,{UASIG_ABI})"), [0x68, 0x1a, 0xfa, 0x10]),
             ("UAPqzRevokeVerifier", "mtxPqzRevokeVerifier", "UAPqzRevokeVerifier(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)",
                 format!("mtxPqzRevokeVerifier{env}address,{UASIG_ABI})"), [0x42, 0x24, 0x2a, 0xe3]),
+            // group 3h T61 (PQZ proof path spec §5): bit 24's op, the same router row shape
+            ("UASetProofStore", "mtxSetProofStore", "UASetProofStore(bytes32 from,address target,uint8 next,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)",
+                format!("mtxSetProofStore{env}address,uint8,{UASIG_ABI})"), [0xa6, 0x3e, 0x58, 0x86]),
         ];
         let p = format!("{}/../smartcontracts/evm/test/vectors/selector_audit.json", env!("CARGO_MANIFEST_DIR"));
         let audit: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
@@ -1407,6 +1418,33 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
         }
     }
 
+    /// Group 3h T61 / T63 (spec §10): bit 24's router op both directions: `UASetProofStore` is a row of `gov_router` only, its
+    /// selector the forge artifact's and a `SIGNED` entry of the router in `selector_audit.json`; the token's own
+    /// `setProofStore(uint8)` (`BIT(24)` on the four PQZ kinds) is no row on any kind (relayed through the router only).
+    #[test]
+    fn proof_store_router_row_equal_contract() {
+        let sig = format!("mtxSetProofStore{ENV_UA},address,uint8,{UASIG_ABI})");
+        let r = typed::testkit::row_of("UASetProofStore", "gov_router");
+        assert_eq!((r.entry, r.contracts), ("mtxSetProofStore", &["gov_router"][..]));
+        assert_eq!(r.selector, [0xa6, 0x3e, 0x58, 0x86], "the forge artifact's {sig}");
+        assert_eq!(alloy::primitives::keccak256(sig.as_bytes())[..4], r.selector[..]);
+        assert_eq!(row(r.sent, "gov_router").map(|x| x.name), Some("UASetProofStore"));
+        let p = format!("{}/../smartcontracts/evm/test/vectors/selector_audit.json", env!("CARGO_MANIFEST_DIR"));
+        let audit: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
+        let class = |c: &str, s: &str| audit[c].as_array().unwrap().iter().find(|e| e["sig"] == s).map(|e| e["class"].as_str().unwrap().to_string());
+        assert_eq!(class("GovernanceRouter", &sig).as_deref(), Some("SIGNED"));
+        let direct = alloy::primitives::keccak256(b"setProofStore(uint8)");
+        for c in ["NormalPqzToken", "WrappedPqzToken", "NormalPqzRegulatedToken", "WrappedPqzRegulatedToken"] {
+            assert_eq!(class(c, "setProofStore(uint8)").as_deref(), Some("BIT(24)"), "{c}");
+        }
+        for k in ["token", "zether", "pqz", "wallet", "account", "dex", "registry", "factory", "gov_router"] {
+            assert!(row(direct[..4].try_into().unwrap(), k).is_none(), "setProofStore is a {k} row");
+            if k != "gov_router" {
+                assert!(row(r.sent, k).is_none(), "UASetProofStore is a {k} row");
+            }
+        }
+    }
+
     /// Counted from the two files outside this code (python over `selector_audit.json` and `typed_ops.json`): 229 `SIGNED` entries
     /// of the eight contracts, 127 of them rows (120 vector rows, the token's invalidation, the DEX's six plain entries and its
     /// invalidation); 91 governance entries. Plan T32: (127, 102, 91) -> (234, 202, 217): + the router's eight regulated
@@ -1417,10 +1455,12 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
     // group 3f T45 / T47: (254, 181, 229) -> (257, 181, 241), expected from the contracts: the router's three verifier ops rowed, the
     // three owner stubs (`pqzSetVerifier`, `pqzCancelVerifier`, `pqzRevokeVerifier`) governed on each of the four PQZ kinds; the
     // twelve proof entries of 5 and 13 (ten of 4 and 12) moved selector in place (rowed or exempt as before)
-    const ROWED: usize = 257;
+    // group 3h T61: (257, 181, 241) -> (258, 181, 245): the router's `mtxSetProofStore` rowed; `setProofStore` governed (bit 24) on
+    // each of the four PQZ kinds
+    const ROWED: usize = 258;
     // ua-mtx-merge T76: EXEMPT 178 -> 181, the router's three creations (NOT_ROWS)
     const EXEMPT: usize = 181;
-    const GOVERNED: usize = 241;
+    const GOVERNED: usize = 245;
 
     /// As [`bound`], `registry()` answering `registry` (`Address::ZERO`: the UA ledger off, R9).
     async fn bound_with_registry(uid: B256, registry: Address) -> ChainCfg {

@@ -798,6 +798,11 @@ fn set_attrs(set: &str) -> (UAAttrs, Vec<u8>, [u8; 32]) {
     (Rec::of_row(&r).attrs, hx(&r["pqzPop"]), hx32(&r["pqzKeyHash"]))
 }
 
+/// `a` without its KEM key: an `msig` has none (CTR-UA-32, T66a), its attributes are the PQZ key only.
+fn pqz_only(a: &UAAttrs) -> UAAttrs {
+    UAAttrs { kem: KemKey::default(), kem_pk_hash: [0; 32], ..a.clone() }
+}
+
 /// A single `mldsa65` registration with `attrs`.
 fn ml_rec(m: &Ml, attrs: &UAAttrs, pqz_key_hash: &[u8; 32], pqz_pop: Vec<u8>) -> Rec {
     let d = register_digest(MLDSA65, &m.ua, attrs, pqz_key_hash);
@@ -1212,22 +1217,28 @@ async fn e2e_ua8_network_fit() {
         let v = read(&n.registry, "pqz_key_of", vec![sc_bytes(&c.ua)]).await;
         same(&format!("set_pqz_key mldsa65 {set}"), "key", &by(&tuple(&v)[0]), &attrs.pqz_key);
 
-        // the largest `register`: 16 of 16 with PQZ + KEM, whole and split; the same record's set_kem_key, 16 slots, which
-        // loads the whole `Ua(ua)`
+        // the largest `register`: 16 of 16 with PQZ (an `msig` has no KEM key, CTR-UA-32), whole and split; the same record's
+        // set_kem_key, 16 slots: `KemHolder` at the host's simulation (`relayer = None`: the chain checks), dead, nothing signed
+        // or stored
         let group = |k: usize, len: usize, t: u16| Ms::new(t, pool[k..k + len].iter().map(|m| (m, 1)).collect());
         let (m16, n16) = (group(2 * si, 16, 16), group(2 * si + 1, 16, 16));
-        let whole = m16.rec(&m16.every(), &attrs, &pqz_hash, proof.clone());
+        let msig_attrs = pqz_only(&attrs);
+        let whole = m16.rec(&m16.every(), &msig_attrs, &pqz_hash, proof.clone());
         let (f, args) = whole.job_args(&none);
         if data_row(&n, &format!("register_msig n=16 {set} full"), f, args).await {
             n.rec(&m16.ua).await.eq(&format!("msig n=16 {set} full, read back"), &whole);
         }
-        let parted = n16.rec(&n16.every(), &attrs, &pqz_hash, proof.clone());
+        let parted = n16.rec(&n16.every(), &msig_attrs, &pqz_hash, proof.clone());
         let (f, args) = split(&parted).job_args(&none);
         n.mined(&format!("register_msig n=16 {set} split"), f, args).await;
         n.mined(&format!("store_pqz_pop msig n=16 {set}"), "store_pqz_pop", json!({"ua": h(&n16.ua), "pqz_pop": h(&proof)})).await;
         n.rec(&n16.ua).await.eq(&format!("msig n=16 {set} split, read back"), &parted);
         let d = ua8::kem_record_digest(&n16.ua, 1, &kem1.kem_pk()).unwrap();
-        n.mined(&format!("set_kem_key msig n=16 {set}, Ua(ua) loaded"), "set_kem_key", set_kem_args(&n16.ua, 1, &kem1, msig_sig(&n16.slots(&n16.every(), &pk, &d)))).await;
+        let (state, last, tx) = n.run(0, call_job(&n.registry, "set_kem_key", set_kem_args(&n16.ua, 1, &kem1, msig_sig(&n16.slots(&n16.every(), &pk, &d))))).await;
+        println!("EDGE set_kem_key msig n=16 {set}: job {state}, reason {}", last["error"]);
+        assert_eq!((state.as_str(), tx.is_none()), ("dead", true), "{last}");
+        assert!(last["error"].as_str().unwrap_or_default().contains(&format!("Error(Contract, #{KEM_HOLDER})")), "{last}");
+        assert_eq!(read(&n.registry, "kem_key_of", vec![sc_bytes(&n16.ua)]).await, ScVal::Void, "nothing stored");
 
         // the largest `Ua(ua)` a `set_pqz_key` can load: 15 light slots at `register`, one heavy member later (a minimal
         // 16-slot `pop` needs all 16 again, over the entry limit: U8S-D1)
@@ -1513,6 +1524,18 @@ async fn table_row(n: &Node, name: &str, f: &str, args: Value) -> bool {
     }
 }
 
+/// A `table_row` the host refuses with the registry's `Error(Contract, #code)`, past the node's checks, nothing landed.
+async fn host_refuses(n: &Node, name: &str, f: &str, args: Value, code: u32) {
+    let (lane, registry) = (sc(&g(&key(0))), sc(&n.registry));
+    let (call, auth) = ua8_call_job(&network(), &call_job(&n.registry, f, args)["op"], &lane, &registry, true).unwrap();
+    let e = n.raw_send(&format!("TABLE {name}"), 0, call, auth).await.expect_err(name);
+    println!("FIT TABLE {name}: REFUSED {}", e.chars().take(170).collect::<String>().replace('\n', " "));
+    assert!(e.contains(&format!("Error(Contract, #{code})")), "{name}: {e}");
+}
+
+/// `KemHolder` (CTR-UA-32): an `msig` has no KEM key, at `register` or `set_kem_key`.
+const KEM_HOLDER: u32 = 14;
+
 /// A slot kind's registered members, junk signatures of its length.
 struct Pool {
     name: &'static str,
@@ -1612,23 +1635,27 @@ async fn e2e_ua8_relayer_table() {
         assert!(ok, "register_frost {t} of 16");
     }
 
-    // `msig` slots per set per kind: `register` with attributes, then the two later writes
+    // `msig` slots per set per kind: `register` with attributes (the PQZ key only: an `msig` has no KEM key, CTR-UA-32), then
+    // `set_pqz_key`; the KEM key at `register` and `set_kem_key` are `KemHolder` on the host, at every size
     for (si, set) in SETS.iter().enumerate() {
         let (attrs, proof, _) = set_attrs(set);
+        let msig_attrs = pqz_only(&attrs);
         let slh_pqz = [6, 5, 5, 5][si];
-        let cases = [(&slh, &[5usize, 6, 7, 8][..], 7usize, &[1usize, 5, 7, 8][..], &[4usize, 5, 6, 7][..], slh_pqz, &[7usize, 8][..], 7usize),
-                     (&fnd, &[16, 17][..], 16, &[8, 16, 17][..], &[15][..], 15, &[15][..], 15)];
-        for (pool, plain, edge, whole, pqz, pqz_edge, kem, kem_edge) in cases {
+        let cases = [(&slh, &[5usize, 6, 7, 8][..], 7usize, &[1usize, 5, 7, 8][..], &[4usize, 5, 6, 7][..], slh_pqz, &[7usize, 8][..]),
+                     (&fnd, &[16, 17][..], 16, &[8, 16, 17][..], &[15][..], 15, &[15][..])];
+        for (pool, plain, edge, whole, pqz, pqz_edge, kem) in cases {
             let name = pool.name;
+            let (f, args) = pool.all_of(si, 1, 0, &attrs, vec![]).job_args(&me);
+            host_refuses(&n, &format!("register_msig 1 {name} slot + PQZ + KEM {set}"), f, args, KEM_HOLDER).await;
             for &c in plain {
-                let (f, args) = pool.all_of(si, c, 0, &attrs, vec![]).job_args(&me);
-                let ok = table_row(&n, &format!("register_msig {c} {name} slots + PQZ + KEM {set}"), f, args).await;
-                assert_eq!(ok, c <= edge, "register_msig {c} {name} + PQZ + KEM at {set}: the limit moved");
+                let (f, args) = pool.all_of(si, c, 0, &msig_attrs, vec![]).job_args(&me);
+                let ok = table_row(&n, &format!("register_msig {c} {name} slots + PQZ {set}"), f, args).await;
+                assert_eq!(ok, c <= edge, "register_msig {c} {name} + PQZ at {set}: the limit moved");
             }
             for &c in whole {
-                let (f, args) = pool.all_of(si, c, 1, &attrs, proof.clone()).job_args(&me);
-                let ok = table_row(&n, &format!("register_msig {c} {name} slots + PQZ + KEM + proof {set}"), f, args).await;
-                assert_eq!(ok, c <= edge, "register_msig {c} {name} + PQZ + KEM + proof at {set}: the limit moved");
+                let (f, args) = pool.all_of(si, c, 1, &msig_attrs, proof.clone()).job_args(&me);
+                let ok = table_row(&n, &format!("register_msig {c} {name} slots + PQZ + proof {set}"), f, args).await;
+                assert_eq!(ok, c <= edge, "register_msig {c} {name} + PQZ + proof at {set}: the limit moved");
             }
             for &c in pqz {
                 let (rec, slots) = pool.light_and_heavy(si, c, 1, edge);
@@ -1645,9 +1672,9 @@ async fn e2e_ua8_relayer_table() {
                 if c > edge {
                     accept_all(&n, &rec.ua(), &slots).await;
                 }
-                let ok = table_row(&n, &format!("set_kem_key {c} {name} slots {set}"), "set_kem_key", json!({"ua": h(&rec.ua()), "version": 1, "kem": kem_json(&kem1),
-                    "sig": sig_json(MSIG, &encode_member_sigs(&slots)), "relayer": me})).await;
-                assert_eq!(ok, c <= kem_edge, "set_kem_key {c} {name} at {set}: the limit moved");
+                // `KemHolder` comes before any slot is read: the slots accepted or not, the refusal is the same
+                host_refuses(&n, &format!("set_kem_key {c} {name} slots {set}"), "set_kem_key", json!({"ua": h(&rec.ua()), "version": 1, "kem": kem_json(&kem1),
+                    "sig": sig_json(MSIG, &encode_member_sigs(&slots)), "relayer": me}), KEM_HOLDER).await;
             }
         }
         // every member signing: the 16-member structure is the edge of a `fndsa512` slot, 17 members are refused above
@@ -1656,7 +1683,7 @@ async fn e2e_ua8_relayer_table() {
         assert!(table_row(&n, &format!("register_msig 16 fndsa512 slots, no attributes {set}"), f, args).await);
         assert!(table_row(&n, &format!("set_pqz_key 16 fndsa512 slots {set}"), "set_pqz_key", json!({"ua": h(&rec.ua()), "pqz_key": h(&attrs.pqz_key), "pqz_pop_hash": h(&attrs.pqz_pop_hash),
             "sig": sig_json(MSIG, &rec.pop), "relayer": me})).await);
-        assert!(table_row(&n, &format!("set_kem_key 16 fndsa512 slots {set}"), "set_kem_key", json!({"ua": h(&rec.ua()), "version": 1, "kem": kem_json(&kem1), "sig": sig_json(MSIG, &rec.pop), "relayer": me})).await);
+        host_refuses(&n, &format!("set_kem_key 16 fndsa512 slots {set}"), "set_kem_key", json!({"ua": h(&rec.ua()), "version": 1, "kem": kem_json(&kem1), "sig": sig_json(MSIG, &rec.pop), "relayer": me}), KEM_HOLDER).await;
     }
 
     // `Chain` parts with a relayer named: the unused entry
@@ -1667,8 +1694,8 @@ async fn e2e_ua8_relayer_table() {
     }
     let (attrs, proof, pqz_hash) = set_attrs(SETS[3]);
     let m16 = Ms::new(16, ml.iter().map(|m| (m, 1)).collect());
-    let (f, args) = m16.rec(&m16.every(), &attrs, &pqz_hash, proof).job_args(&me);
-    assert!(table_row(&n, "register_msig n=16 mldsa65 Chain + PQZ + KEM + proof n2816-kmax65536, relayer named", f, args).await, "naming a relayer no longer doubles it");
+    let (f, args) = m16.rec(&m16.every(), &pqz_only(&attrs), &pqz_hash, proof).job_args(&me);
+    assert!(table_row(&n, "register_msig n=16 mldsa65 Chain + PQZ + proof n2816-kmax65536, relayer named", f, args).await, "naming a relayer no longer doubles it");
 }
 
 /// Simulated on the real host: the node's entry for `a` under the call of `b`.

@@ -1,0 +1,10 @@
+# T58 and test/pqz/MtxSplitOverhead.t.sol (metatx-split T5 bound; owner 2026-11-08 bounds PQZL 9,000, PQZH 14,000). UNAUDITED.
+# T58 removed the rollover's deletion of pending slots, so the smallest envelope's op (`mtxRollOver(alice, 0, 1)`) itself got
+# cheaper and `smallest - pre-split smallest` went below 0 (the test's subtraction underflowed, panic 0x11). Measured (execution gas,
+# `_meas` / `_direct`, default fixture), n2304-kmax4096, ecdsa fee path:
+step | commit | rc | counts
+7558a364 (before T58) | 7558a364 | 0 | relayed S 5,800,133, direct S 5,728,613 (relayed - direct 71,520); OVERHEAD pqzl-M8-on 11,617 / 19,196 / 7,579, pqzh-M4-on 11,617 / 24,290 / 12,673; mldsa65 13,039, fndsa512 13,055 (pqzh); n2048-kmax1024: direct S 4,707,657, pqzl 8,608 / 8,740 / 8,749, pqzh 11,879 / 12,217 / 12,233
+T58 as written | T58 tree | 1 | relayed S 5,787,786, direct S 5,716,266 (relayed - direct 71,520: the pipeline unchanged to the gas); panic 0x11 (5,787,786 < pre-split 5,788,516)
+2ceda92d (pre-split, the T5 / C4 runner + one `direct S` MEAS row) | 2ceda92d | 0 | relayed S 5,788,516 (= the JSON), direct S 5,727,233; n2048-kmax1024 4,767,560 (= the JSON), 4,706,277
+symmetric form (rejected) | T58 tree | 1 | (smallest - direct S) - (pre-split smallest - pre-split direct S): every difference +1,380 (the rollover's own cost 2ceda92d -> 7558a364): pqzh 14,053 > 14,000, pqzl 8,959 / 9,069 / 9,079, i.e. the bounds the owner set on the old form would no longer compare
+the form kept | T58 tree | 0 | (smallest - direct S) - (pre-split smallest - direct S at 7558a364), `direct|S|7558a364` in test/vectors/metatx-overhead-presplit.json: = the old form at 7558a364 exactly; OVERHEAD at T58 = 7558a364's table to the gas (12,673 / 13,039 / 13,055 pqzh; 7,579 / 7,689 / 7,699 pqzl)

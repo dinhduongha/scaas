@@ -1854,7 +1854,8 @@ vectors) after T61; T63 (node) after T62; T64 (invariants, mutants) and T65 (int
 two heavy at once; T66 (docs share) drafts beside them and lands in T19. **Formats move in the task that changes them** (Codex C5):
 the generator, the fixture and every reader of a changed format are in that task. **The client side** (spec §13.3, 14–16.5
 agent-days) goes to the no-oracle spec on `ua-rs-sign`, where it waits for that branch's T15e; no task here waits for
-`ua-rs-sign`. **Estimate:** 19 agent-days. **PQZ only:** no Zether contract, statement, gas pin or vector moves. Every contracts
+`ua-rs-sign`. **Owner 2026-11-08: the client side starts on `ua-rs-sign` when 3h reaches T66** (T58–T65 committed: contracts,
+vectors, node, invariants, integration gate), after that branch merges `ua-mtx-merge` at that point (a merge commit). **Estimate:** 19 agent-days. **PQZ only:** no Zether contract, statement, gas pin or vector moves. Every contracts
 task ends with the whole `forge test` green at the default set and the size gate, and runs `script/pqz/at-set.sh <set> test
 --match-path 'test/{ua,pqz,as/confidential}/*'` at the four sets (one run per work tree, `PqzSet.sol` restored). Red first,
 positive control first, one change at a time; mutants one at a time on a clean tree, logged `mutant | test that went red | rc`;

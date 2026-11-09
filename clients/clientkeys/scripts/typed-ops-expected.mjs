@@ -1,11 +1,11 @@
 // typed-signing C1: what an entry's calldata must hold, in order, written from Appendix X.3 + the C0 findings and from the row's
 // own `types` and `message`, with no code of src/: test/typed-ops.test.js (its own decoder) and scripts/typed-ops-cast-check.mjs
-// (`cast`) compare decoded calldata with this, so a swapped parameter cannot pass as a round trip.
+// (`cast`) compare decoded calldata with this, so a swapped parameter cannot pass as a round trip. Group 3h: the PQZ args' `ownTag`.
 const G = (p) => [p.x0, p.x1, p.y0, p.y1];
-const pqzArgsSingle = (t) => [t.p, t.validUntilBlock, t.shieldIn, t.fromUA, t.keyVersion, t.toUA, t.beneficiaryUA, t.salt, t.u, t.vTo, t.vFrom, t.vAuditor, t.sealedMemo];
-const pqzArgsMulti = (t) => [t.p, t.validUntilBlock, t.shieldIn, t.fromUA, t.keyVersion, t.beneficiaryUA, t.decoyFee, t.salt, t.u,
+const pqzArgsSingle = (t) => [t.p, t.validUntilBlock, t.shieldIn, t.fromUA, t.keyVersion, t.toUA, t.beneficiaryUA, t.salt, t.ownTag, t.u, t.vTo, t.vFrom, t.vAuditor, t.sealedMemo];
+const pqzArgsMulti = (t) => [t.p, t.validUntilBlock, t.shieldIn, t.fromUA, t.keyVersion, t.beneficiaryUA, t.decoyFee, t.salt, t.ownTag, t.u,
   t.legs.map((l) => [l.ua, l.v, l.vAuditor]), t.vFrom, t.sealedMemo];
-const pqzBurn = (t) => [t.p, t.validUntilBlock, t.shieldIn, t.fromUA, t.keyVersion, t.beneficiaryUA, t.u, t.vFrom];
+const pqzBurn = (t) => [t.p, t.validUntilBlock, t.shieldIn, t.fromUA, t.keyVersion, t.beneficiaryUA, t.ownTag, t.u, t.vFrom];
 const zSingle = (t) => [t.accSeq, t.sendCounter, t.validUntilBlock, t.salt, t.beneficiaryUA, G(t.yFrom), G(t.yTo), G(t.cOut), G(t.dOut), G(t.cDeb), G(t.cAud)];
 const zMulti = (t) => [t.accSeq, t.sendCounter, t.validUntilBlock, t.salt, t.beneficiaryUA, t.decoyFee, G(t.yFrom), G(t.dOut), G(t.cDeb),
   t.legs.map((l) => [G(l.yTo), G(l.cOut), G(l.cAud), G(l.dAud)]), t.sealedMemo];

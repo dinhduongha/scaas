@@ -43,6 +43,11 @@ async fn offchain_config(chain: &Chain, token: alloy::primitives::Address) -> Re
     }
 }
 
+/// Group 3h (NODE-JOB-24): `w` is a PQZ debit (its estimate depends on the token's `proofStore()`).
+pub fn is_debit(w: &Work) -> bool {
+    debit_row(w).is_some()
+}
+
 /// The row of a PQZ debit (one taking the verdict last), `None` for any other work.
 fn debit_row(w: &Work) -> Option<&'static Row> {
     w.typed.as_ref().filter(|t| t.contract == "pqz")?;
@@ -250,15 +255,17 @@ mod tests {
     use crate::abi::IPqzToken;
     use crate::typed::{parse, struct_hash_of};
 
-    /// The views the node rebuilds a verdict from are the contract's: the forge artifact's selectors (`out/`, T45's ABI).
+    /// The views the node rebuilds a verdict from are the contract's: the forge artifact's selectors (`out/`, T45's ABI; group 3h
+    /// T59: the three args tuples with `ownTag`, the four statement views moved, 0x3a3bb45a -> 0x931415ee, 0xffdee909 -> 0x8a2161ba,
+    /// 0x23a72649 -> 0xda8c9eed, 0xf4834cb9 -> 0x8e4ccf2e).
     #[test]
     fn views_are_the_contracts() {
         assert_eq!(IPqzToken::pqzVerifyConfigCall::SELECTOR, [0xdc, 0x59, 0xc6, 0x6e]);
         assert_eq!(IPqzToken::proofSystemIdCall::SELECTOR, [0x1f, 0x3b, 0x28, 0xf2]);
         assert_eq!(IPqzToken::envelopeBindingCall::SELECTOR, [0x35, 0xad, 0x08, 0xaa]);
-        for (row, sel) in [("UAPqzTransferSingle", [0x3a, 0x3b, 0xb4, 0x5a]), ("UAPqzTransferSingleCompact", [0x3a, 0x3b, 0xb4, 0x5a]),
-            ("UAPqzTransfer", [0xff, 0xde, 0xe9, 0x09]), ("UAPqzTransferCompact", [0xff, 0xde, 0xe9, 0x09]),
-            ("UAPqzUnshield", [0x23, 0xa7, 0x26, 0x49]), ("UAPqzUnshieldUnwrap", [0xf4, 0x83, 0x4c, 0xb9])] {
+        for (row, sel) in [("UAPqzTransferSingle", [0x93, 0x14, 0x15, 0xee]), ("UAPqzTransferSingleCompact", [0x93, 0x14, 0x15, 0xee]),
+            ("UAPqzTransfer", [0x8a, 0x21, 0x61, 0xba]), ("UAPqzTransferCompact", [0x8a, 0x21, 0x61, 0xba]),
+            ("UAPqzUnshield", [0xda, 0x8c, 0x9e, 0xed]), ("UAPqzUnshieldUnwrap", [0x8e, 0x4c, 0xcf, 0x2e])] {
             let v = statement_view(row).unwrap_or_else(|| panic!("{row}: no statement view"));
             assert_eq!(keccak256(v.as_bytes())[..4], sel, "{row}: {v}");
         }

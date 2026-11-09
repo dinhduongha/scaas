@@ -40,11 +40,11 @@ contract NormalPqzRegulatedToken is NormalPqzToken, RegulatedBase {
     }
 
     function _validBits() internal pure override(NormalPqzToken, GovernanceBase) returns (uint256) {
-        return GovernanceBits.NORMAL_BITS | REG_BITS_CONFIDENTIAL;
+        return GovernanceBits.NORMAL_BITS | REG_BITS_CONFIDENTIAL | GovernanceBits.PQZ_KIND_BITS;
     }
 
-    function _roleBits() internal pure override returns (uint256) {
-        return GovernanceBits.NORMAL_ROLES | REG_ROLES;
+    function _roleBits() internal pure override(NormalPqzToken, MetaTokenBase) returns (uint256) {
+        return GovernanceBits.NORMAL_ROLES | REG_ROLES | GovernanceBits.PQZ_KIND_BITS;
     }
 
     function _contractOnlyBits() internal pure override returns (uint256) {

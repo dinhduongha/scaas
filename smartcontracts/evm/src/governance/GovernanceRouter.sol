@@ -141,6 +141,14 @@ contract GovernanceRouter is GovernanceRouterBase {
         _ua(T.UA_PQZ_REVOKE_VERIFIER, e, target, IPqzToken.pqzRevokeVerifier.selector, "", auth);
     }
 
+    /// @notice Bit 24 `PQZ_PROOF` (group 3h, PQZ proof path spec §5): any holder sets a PQZ token's `proofStore` (`NONE` /
+    ///         `LOG`, from its next debit); fee mode `NONE`, relayable at fee 0.
+    function mtxSetProofStore(MetaTxLib.UAEnvelope calldata e, address target, uint8 next, IUARegistry.UASig calldata auth)
+        external
+    {
+        _ua(T.UA_SET_PROOF_STORE, e, target, IPqzToken.setProofStore.selector, abi.encode(next), auth);
+    }
+
     // ------------------------------------------------------------------ the powers on the DEX
 
     function mtxSetMarket(MetaTxLib.UAEnvelope calldata e, address target, address base, address quote, bool listed,

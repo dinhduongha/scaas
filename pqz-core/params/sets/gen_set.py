@@ -514,6 +514,12 @@ def sol_text(name):
            "library PqzSet {", f'    string internal constant NAME = "{name}";']
     for k, v, doc in rows:
         out.append(f"    /// {doc}\n    uint256 internal constant {k} = {u(v)};")
+    # group 3h (pqz-proof-path spec §2.2, plan T58): a debit record's 16-bit `deltaP`. A first debit's `p` reaches K_MAX - 1 by
+    # the units rule (a later one's p - p_prev K_MAX - 2), so the bound is K_MAX - 1; a `uint16` literal: a set beyond it
+    # fails to compile (solc refuses the conversion) instead of wrapping
+    out.append("    /// the largest `deltaP` of a PQZ debit record, K_MAX - 1 (a first debit's p; later debits K_MAX - 2): a uint16, so a\n"
+               "    /// set whose K_MAX - 1 exceeds 65,535 fails the build\n"
+               f"    uint16 internal constant DELTA_P_MAX = {u(c['K_MAX'] - 1)};")
     i = ids(name)
     lab, h = i["pqzl"]
     out.append(f"    /// PQZL's proofSystemId: keccak256(\"{lab}\")\n    bytes32 internal constant PQZL_ID = 0x{h.hex()};")

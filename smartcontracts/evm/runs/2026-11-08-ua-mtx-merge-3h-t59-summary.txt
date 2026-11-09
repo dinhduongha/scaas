@@ -1,0 +1,16 @@
+# ua-mtx-merge T59 gate summary (group 3h, PQZ proof path spec §3: ownTag, the key-version tail, memoHash; full output in git-ignored
+# .log files). UNAUDITED. Commits: 0a65b5f3 (legacy copies), 2a1f9d5e (ownTag, the tail, memoHash, vectors and readers), 0cc72669
+# (kv in both leg orders, the T59 mutants in the harness). Forge one test directory at a time (runs/2026-11-08-ua-mtx-merge-3h/
+# forge-dirs.sh) and the four sets (four-sets.sh) in second work trees at 0cc72669; mutants there on a clean tree.
+step | commit | rc | counts
+forge-dirs default n2304-kmax4096 | 0cc72669 | 1 | pqz 581 / 2 failed (test_gas_rollMax_relayedFullTx, the T58 open question) / 4 skipped; v2 652; as 462; merge 341
+  rest of the tree | 0cc72669 | - | not run at 0cc72669 (stopped to free a capped slot for T60); run at T60's tip, which holds T59's code unchanged: it found one pin T59 moved, the GovernanceRouter CREATE2 address 0x942f489e2f453AaEd2Be4B3DFb8b5dA441Fa6BdA -> 0xA4Ab7e0673548a32B96d7164b6e81B9D6Ce29C4b (the metadata hash: IPqzToken's args with ownTag; GovDeploy.t.sol red at 0cc72669, checked there), moved in T60's commit with T60's step
+four sets test/pqz | 0cc72669 | 1 | n2048-kmax1024 583 / 2 failed / 2 skipped; n2304-kmax4096 581 / 2 / 4; n2560-kmax16384 581 / 0 / 6; n2816-kmax65536 574 / 2 / 11; every failure test_gas_rollMax_relayedFullTx
+four sets test/ua | 0cc72669 | 0 | 704 passed at each set
+four sets test/as/confidential | 0cc72669 | 0 | 299 passed at each set
+size | 2a1f9d5e | 0 | size_gate.py 0 errors, 99 contracts; old -> new in runs/2026-11-08-ua-mtx-merge-proofpath-sizes.txt
+state vectors | - | - | not regenerated at T59 (memoHash rows and blob tails moved): regenerated once at T60's commit, which moves them again (proofStore)
+
+Mutants (runs/2026-11-08-ua-mtx-merge-3h/mutants.py, spec §11.3 M7, M8, M9, M22; one at a time in the second work tree at 0cc72669,
+restored, git diff clean): 4 of 4 killed. Table: runs/2026-11-08-ua-mtx-merge-3h/mutants.txt. clientkeys mutant (pqzMemoHash without
+ownTag, by hand on a clean tree, restored): test/pqz-proofpath.test.js's memoHash test went red (git-ignored log in clients/clientkeys).

@@ -10,6 +10,7 @@ import { shake256 } from '@noble/hashes/sha3.js';
 import { seedFromWords } from '../src/seed.js';
 import { PQ_KINDS, pqKeygen, kindTag, uaMessage, signedMessage, signUA, verifyUA, purposeTag, mldsaExpandedKey, pqzKeySeed } from '../src/pq.js';
 import { hex, keccak_256, utf8ToBytes, concatBytes } from '../src/bytes.js';
+import { pqzOwnTag, pqzMemoHash } from '../src/evm.js';
 
 const M = 'bench hurt jump file august wise shallow faculty impulse spring exact slush thunder author '
   + 'capable act festival slice deposit sauce coconut afford frown better';
@@ -68,6 +69,24 @@ for (const name of Object.keys(PQ_KINDS)) {
 // group 3g (C8, CTR-PQZ-13): a single-key holder's PQZ key seed of (account 0, index 0) at versions 0, 1, 2; version 0 is the
 // `info` without a suffix (today's), v ≥ 1 appends be64(v)
 out.pqzSeeds = [0, 1, 2].map((version) => ({ account: 0, index: 0, version, seed32: hex(pqzKeySeed(seed, 0, 0, version)) }));
+// group 3h (pqz-proof-path spec §3.1, C4; the shared KAT of both specs): `ownTag` of (account 0, index 0) at versions 0 and 1,
+// label `PQZ/owntag/v1` (HKDF-SHA256 info, empty salt), then HMAC-SHA256 over chainUid ‖ token ‖ fromUA ‖ be32(sendCounter) ‖
+// ctHash, `ctHash = keccak256(P(u) ‖ P(v_f))` of the debit (given: the packed parts are a set's size, not a KAT's)
+const kat = (h) => keccak_256(utf8ToBytes(`scaas 3h owntag kat ${h}`));
+const TAG_IN = { chainUid: hex(kat('chainUid')), token: '0x5ca00000000000000000000000000000000000a3', fromUA: hex(kat('fromUA')) };
+out.ownTag = [[0, 0], [0, 7], [1, 8]].map(([version, sendCounter]) => {
+  const seed32 = hex(pqzKeySeed(seed, 0, 0, version));
+  const ctHash = hex(kat(`ct ${version} ${sendCounter}`));
+  const t = pqzOwnTag({ seed32, ...TAG_IN, sendCounter, ctHash });
+  return { label: 'PQZ/owntag/v1', version, seed32, ...TAG_IN, sendCounter, ctHash, key: t.key, message: t.message, ownTag: t.ownTag };
+});
+// group 3h (spec §3.3, C3): `memoHash = keccak256(memo ‖ ownTag)`: an op 1 commit-reveal (HASH) memo `salt(16) ‖ sealedMemo(42)`,
+// a BUNDLE transfer and a burn (memo empty); forge reads these rows against the statement views (PqzOwnTag.t.sol)
+const memo = hex(keccak_256(utf8ToBytes('scaas 3h memo')).subarray(0, 16)) + hex(concatBytes(keccak_256(utf8ToBytes('scaas 3h sealed 0')),
+  keccak_256(utf8ToBytes('scaas 3h sealed 1')).subarray(0, 10))).slice(2);
+const tag0 = out.ownTag[0].ownTag;
+out.memoHash = [['hash', memo], ['bundle', '0x'], ['burn', '0x']].map(([form, m]) => ({ form, memo: m, ownTag: tag0,
+  memoHash: pqzMemoHash(m, tag0) }));
 mkdirSync(new URL('../../../smartcontracts/vectors/ua/', import.meta.url), { recursive: true });
 writeFileSync(new URL('../../../smartcontracts/vectors/ua/pq_kat.json', import.meta.url), JSON.stringify(out, null, 2) + '\n');
 console.log('wrote smartcontracts/vectors/ua/pq_kat.json');

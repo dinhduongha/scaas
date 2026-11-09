@@ -66,6 +66,9 @@ library PqzStateLib {
         if (!off && verifier == address(0)) revert PqzSafety.SelfTestFailed(address(0));
         PqzCore.PqzStorage storage s = PqzCore.$();
         s.pqzVerifyMode = m;
+        // group 3h (PP-4): `NONE` or `LOG`, any other value refused
+        if (c.proofStore > PqzCore.LOG) revert IPqzToken.ProofStoreInvalid(c.proofStore);
+        s.proofStore = c.proofStore;
         // C2-3 / C2-4: an auditor is required whenever the mode is not NONE, and its key must be usable (`_keyPtr`, the
         // mode's check; the zero id is never registered)
         if (aud.length == 32) PqzCore._keyPtr(registry, a);
@@ -155,6 +158,19 @@ library PqzStateLib {
         emit PqzVerifierRevoked(previous, e);
     }
 
+    /// @notice Group 3h (PQZ proof path spec §5, O10): the body of bit 24's power, after the token's `use(24)` (in
+    ///         `PqzLayer`, so this library makes no DELEGATECALL into `GovernanceLib`): `next` 0 `NONE` or 1 `LOG`
+    ///         (`ProofStoreInvalid` otherwise), slot 0 byte 23, read by the next debit in either direction; the current value
+    ///         is a no-op without an event.
+    function setProofStore(uint8 next) public {
+        if (next > PqzCore.LOG) revert IPqzToken.ProofStoreInvalid(next);
+        PqzCore.PqzStorage storage s = PqzCore.$();
+        uint8 previous = s.proofStore;
+        if (previous == next) return;
+        s.proofStore = next;
+        emit IPqzToken.ProofStoreSet(previous, next);
+    }
+
     /// @notice `pqzVerifyConfig()` (spec §4.4): a dead pending reads as none.
     function verifyConfig() public view returns (IPqzToken.PqzVerifyConfig memory c) {
         PqzCore.PqzStorage storage s = PqzCore.$();
@@ -213,7 +229,8 @@ library PqzStateLib {
     ///         accUnits)` (`CapReached` at 0), `1 ≤ n ≤ ROLL_MAX`, each entry at least `ROLL_AGE` blocks old
     ///         (`RollTooYoung`), the account prepared (`AccNotPrepared`); the sum is packed (P46) and written to the
     ///         `acc` slots as `not(stream word)` (never 0, so none is zeroed; D3) with `accHash = keccak256(packed
-    ///         stream)`; the slots below `rolled − INLINE_MAX` are deleted (`floor` follows `cleared`). Group 3g (KV-10): the
+    ///         stream)`; `cleared` and `floor` follow `rolled − INLINE_MAX`, never lowered, and no slot is deleted (group 3h
+    ///         PP-1: every pending slot is kept for good). Group 3g (KV-10): the
     ///         account of key version `v`, stale versions included; `PqzRolledOver` names it. The version's key check is
     ///         `prepareAcc`'s (a rollover needs both prepared halves, `AccNotPrepared`, and a key once eligible stays so), not
     ///         repeated here: the registry read would put `ROLL_MAX` at n2560-kmax16384 over its 0.75 · 2^24 bound.
@@ -252,12 +269,10 @@ library PqzStateLib {
         return (nr, uint32(units + n), h);
     }
 
-    /// @dev The slots below `rolled − INLINE_MAX` deleted (`floor` follows `cleared`).
+    /// @dev `cleared` up to `rolled − INLINE_MAX` (`floor` follows, only up); nothing deleted (group 3h PP-1).
     function _clear(PqzCore.Account storage a, uint64 nr) private {
         uint64 end = nr > PqzCore.INLINE_MAX ? nr - uint64(PqzCore.INLINE_MAX) : 0;
-        uint64 c0 = a.cleared;
-        if (end > c0) {
-            for (uint64 i = c0; i < end; ++i) delete a.pending[i];
+        if (end > a.cleared) {
             a.cleared = end;
             if (end > a.floor) a.floor = end;
         }
@@ -290,7 +305,8 @@ library PqzStateLib {
     }
 
     /// @notice Entry `i` of `ua` as a ciphertext (D13 `pqzPendingCt`): `u_g ‖ v_j` from its blob, or
-    ///         `Trivial(digits(amount))` of a TRIVIAL entry; `Trivial(0)` for a deleted or unwritten index.
+    ///         `Trivial(digits(amount))` of a TRIVIAL entry, every `i < pendingCount` (group 3h PP-1: none is deleted);
+    ///         `Trivial(0)` for an unwritten index.
     function pendingCt(bytes32 ua, uint64 v, uint64 i) public view returns (bytes memory c) {
         uint256 e = PqzCore.$().acct[ua][v].pending[i];
         c = new bytes(PqzCt.CT);

@@ -10,6 +10,9 @@ import {ZetherTypes} from "../../../src/zether/ZetherTypes.sol";
 ///         before typed-signing C4, on the packed payload, and the digest of a statement. A test etches this contract onto a
 ///         token for one call, so it reads that token's state with `address(this)` the token, and the token's statement
 ///         from the explicit struct must equal it byte for byte (`legacy/typed-signing/PqzPacked.sol` is the same code).
+///         Group 3h (T59, pqz-proof-path spec §3): a packed payload carries no `ownTag`, the explicit struct's is 0 there, so
+///         the reference's `memoHash` is 3h's `keccak256(memo ‖ ownTag)` with the tag 0 and its blobs end with the tail
+///         `ownTag(0) ‖ kv ‖ u8(n)` at version 0 of every credited key (no test that uses it rotates one).
 contract PqzPackedRef {
     uint256 internal constant T_OUT = 208;
     uint256 internal constant M_OUT = 240;
@@ -44,6 +47,7 @@ contract PqzPackedRef {
         o.recipient = e.recipient;
         _head(o, payload);
         o.ben = bytes32(payload[128:160]);
+        o.memoHash = keccak256(abi.encodePacked(bytes32(0)));
         PqzCore._common(o, e);
         bytes memory t = PqzCore._total(o, msg.data[0:0]);
         o.stLen = PqzCore.HEADER + PqzCt.PK + 2 * PqzCt.CT;
@@ -75,7 +79,7 @@ contract PqzPackedRef {
         o.to = bytes32(payload[128:160]);
         o.ben = bytes32(payload[160:192]);
         o.salt = bytes16(payload[192:208]);
-        if (memo != 0) o.memoHash = keccak256(payload[len - MEMO:]);
+        o.memoHash = keccak256(abi.encodePacked(memo != 0 ? payload[len - MEMO:] : payload[0:0], bytes32(0)));
     }
 
     function _transferBuffer(PqzCore.Op memory o, PqzCore.Env memory e, bytes calldata out) private view returns (bytes memory buf) {
@@ -106,7 +110,7 @@ contract PqzPackedRef {
         o.ben = bytes32(payload[128:160]);
         o.salt = bytes16(payload[224:240]);
         o.to = keccak256(payload[M_OUT:M_OUT + 32 * m]);
-        if (memo != 0) o.memoHash = keccak256(payload[payload.length - memo:]);
+        o.memoHash = keccak256(abi.encodePacked(memo != 0 ? payload[payload.length - memo:] : payload[0:0], bytes32(0)));
     }
 
     function _legs(PqzCore.Op memory o, PqzCore.Env memory e, bytes calldata payload) private view {
@@ -135,7 +139,7 @@ contract PqzPackedRef {
     function blobSingle(bytes calldata payload, bool hash) external pure returns (bytes memory blob) {
         PqzCore.Op memory o = _parseTransfer(payload, hash ? ZetherTypes.TransferMode.HASH : ZetherTypes.TransferMode.BUNDLE);
         bytes calldata out = payload[T_OUT:T_OUT + o.outLen];
-        uint256 len = 16 + PqzCt.PKP + PqzCt.VP * (2 + o.auditorOn) + 32;
+        uint256 len = 16 + PqzCt.PKP + PqzCt.VP * (2 + o.auditorOn) + 32 + PqzCore._tailLen(1 + o.auditorOn);
         blob = new bytes(len + 32);
         PqzCore._put(blob, 0, abi.encodePacked(o.salt));
         PqzCt.packCd(blob, 16, out[0:PqzCt.CT]);
@@ -146,6 +150,7 @@ contract PqzPackedRef {
         }
         PqzCore._put(blob, q, abi.encode(o.to));
         PqzCt.packCd(blob, q + 32, out[PqzCt.CT:PqzCt.CT + PqzCt.V]);
+        PqzCore._putTail(blob, q + 32 + PqzCt.VP, 0, new uint64[](1 + o.auditorOn));
         assembly ("memory-safe") { mstore(blob, len) }
     }
 
@@ -155,13 +160,14 @@ contract PqzPackedRef {
         bytes calldata out = payload[M_OUT + 32 * o.legs:M_OUT + 32 * o.legs + o.outLen];
         uint256 ls = 32 + PqzCt.VP * (1 + o.auditorOn);
         uint256 start = 16 + PqzCt.PKP * o.groups;
-        uint256 len = start + ls * o.legs + PqzCt.VP;
+        uint256 len = start + ls * o.legs + PqzCt.VP + PqzCore._tailLen(o.legs + o.auditorOn);
         r = new bytes(len + 32);
         PqzCore._put(r, 0, abi.encodePacked(o.salt));
         PqzCt.packCd(r, 16, out[0:PqzCt.PK * o.groups]);
         for (uint256 j; j < o.legs; ++j) _leg(r, o, payload, out, j);
         uint256 us = PqzCt.PK * o.groups;
         PqzCt.packCd(r, start + ls * o.legs, out[us + PqzCt.V * o.legs:us + PqzCt.V * (o.legs + 1)]);
+        PqzCore._putTail(r, start + ls * o.legs + PqzCt.VP, 0, new uint64[](o.legs + o.auditorOn));
         assembly ("memory-safe") { mstore(r, len) }
     }
 

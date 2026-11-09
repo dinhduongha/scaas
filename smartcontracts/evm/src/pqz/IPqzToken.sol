@@ -17,7 +17,9 @@ event PqzVerifierRevoked(bytes32 previous, uint32 pqzVerifierEpoch);
 interface IPqzToken is IConfidentialToken {
     /// @notice The explicit parameters of op 1 (Appendix X.2): each `u`, `v` a ciphertext part of `PK` or `V` bytes in
     ///         64-bit lanes. `vAuditor` empty: auditor off. `sealedMemo` the memo after its clear salt, 41 bytes on
-    ///         commit-reveal (the memo is `salt ‖ sealedMemo`), else empty.
+    ///         commit-reveal (the memo is `salt ‖ sealedMemo`), else empty. `ownTag` (group 3h, pqz-proof-path spec §3,
+    ///         PP-3): the holder's tag of its own `(u, v_f)`, computed by its client, stored in the op blob's tail and bound
+    ///         by `memoHash = keccak256(memo ‖ ownTag)`; the contract checks no value.
     struct PqzTransferArgs {
         uint64 p;
         uint256 validUntilBlock;
@@ -27,6 +29,7 @@ interface IPqzToken is IConfidentialToken {
         bytes32 toUA;
         bytes32 beneficiaryUA;
         bytes16 salt;
+        bytes32 ownTag;
         bytes u;
         bytes vTo;
         bytes vFrom;
@@ -52,13 +55,15 @@ interface IPqzToken is IConfidentialToken {
         bytes32 beneficiaryUA;
         uint256 decoyFee;
         bytes16 salt;
+        bytes32 ownTag; // group 3h (PP-3), as `PqzTransferArgs.ownTag`
         bytes[] u;
         PqzLeg[] legs;
         bytes vFrom;
         bytes sealedMemo;
     }
 
-    /// @notice A burn, refresh or unshield-unwrap: the amount and the recipient are the entry's.
+    /// @notice A burn, refresh or unshield-unwrap: the amount and the recipient are the entry's. `ownTag` (group 3h, PP-3):
+    ///         as `PqzTransferArgs.ownTag`, over `(u', v_f)`.
     struct PqzBurnArgs {
         uint64 p;
         uint256 validUntilBlock;
@@ -66,6 +71,7 @@ interface IPqzToken is IConfidentialToken {
         bytes32 fromUA;
         uint64 keyVersion;
         bytes32 beneficiaryUA;
+        bytes32 ownTag;
         bytes u;
         bytes vFrom;
     }
@@ -117,7 +123,8 @@ interface IPqzToken is IConfidentialToken {
     ///         the UA's, one for every version): the counters, the `acc` reference (`accBlob`,
     ///         0 for `Trivial(0)`; ignored while `flags & 1`, the materialised `acc`), `flags` (1 MATERIALISED, 2 / 4 the
     ///         prepared halves), `accHash` (the keccak of the materialised `acc`'s
-    ///         packed stream, P46: `PqzCt.CTP` bytes; stale once a debit clears flag 1).
+    ///         packed stream, P46: `PqzCt.CTP` bytes; stale once a debit clears flag 1), `lastDebit` (group 3h, PP-2: the
+    ///         counter + 1 of this account's last debit, 0 = none; `accBlob` is that debit's blob).
     struct AccountState {
         uint64 pendingCount;
         uint64 rolled;
@@ -128,6 +135,24 @@ interface IPqzToken is IConfidentialToken {
         uint8 flags;
         uint64 sendCounter;
         bytes32 accHash;
+        uint64 lastDebit;
+    }
+
+    /// @notice `pqzDebitRecord` (group 3h, pqz-proof-path spec §2.2, PP-2): the debit of `(ua, counter)` as recorded:
+    ///         `prevBlob` the same `(ua, keyVersion)` account's previous debit's blob (0 for its first), `p`, `deltaP = p −
+    ///         p_prev` (`p_prev` that debit's `p`, 0 for the first), the `proofStore` in force, `shieldIn`, the debited
+    ///         `keyVersion`, `prevCounter` the counter of that previous debit (`hasPrev` false: none, `prevCounter` 0).
+    ///         `T` of the debit is `prevBlob`'s `(u, v_f)` + `pending[ua][keyVersion][p − deltaP, p)` +
+    ///         `Trivial(digits(shieldIn))` (spec §2.3).
+    struct DebitRecordView {
+        address prevBlob;
+        uint64 p;
+        uint16 deltaP;
+        uint8 proofStore;
+        uint64 shieldIn;
+        uint64 keyVersion;
+        uint64 prevCounter;
+        bool hasPrev;
     }
 
     /// @notice Proven credit `index` of `(ua, keyVersion)` (group 3g: the receiver's current version); its bytes `u ‖ v_t`
@@ -188,6 +213,15 @@ interface IPqzToken is IConfidentialToken {
     error StaleKeyVersion(bytes32 ua, uint64 keyVersion, uint64 current);
     /// @notice Group 3g (KV-8, KV-11): a key version above current (a debit), or not stored (a disclosure).
     error KeyVersionUnknown(bytes32 ua, uint64 keyVersion);
+    /// @notice Group 3h (PP-2): no debit of `ua` with this counter (`counter ≥ sendCounter`).
+    error DebitRecordUnknown(bytes32 ua, uint64 counter);
+    /// @notice Group 3h (PP-4): a `proofStore` other than 0 `NONE` and 1 `LOG`.
+    error ProofStoreInvalid(uint8 proofStore);
+    /// @notice Group 3h (spec §4.2, PP-4, C7): under `proofStore` `LOG`, each debit's verified statement header (its first 640
+    ///         bytes) and the calldata proof, `blob` the debit's op blob, `sendCounter` its counter (the record's key).
+    event PqzDebitProof(address indexed blob, bytes32 indexed ua, uint64 indexed sendCounter, bytes header, bytes proof);
+    /// @notice Group 3h (spec §5, O10): a holder of bit 24 changed the mode, effective from the next debit.
+    event ProofStoreSet(uint8 previous, uint8 next);
 
     // ---- group 3f, PQZ verifier mode (spec §3-§5; CTR-PQZ-27..29 drafts)
     /// @notice An accepted proof in `OFFCHAIN` mode: the verifier's verdict over `statementHash` and `proofHash` at its epoch.
@@ -249,9 +283,18 @@ interface IPqzToken is IConfidentialToken {
     function mtxUnshield(PqzBurnArgs calldata b, uint256 amount, bytes32 recipient, bytes calldata proof,
         IUARegistry.UASig calldata pqzAuth, bytes calldata accHint, PqzSignedVerdict calldata pqzVerdict) external;
     /// @notice The account of `(ua, keyVersion)` (pq-zero-knowledge.md §9.4): counters, the `acc` reference, `accUnits`, flags,
-    ///         the UA's `sendCounter`, `accHash`.
+    ///         the UA's `sendCounter`, `accHash`, `lastDebit` (group 3h).
     function pqzAccount(bytes32 ua, uint64 keyVersion) external view returns (AccountState memory);
-    /// @notice Pending slot `i` of `(ua, keyVersion)`: `blob(160) ‖ uOff(16) ‖ vOff(16) ‖ block(64)`; 0 once deleted.
+    /// @notice Group 3h (PP-2): the record of `ua`'s debit with counter `counter` (`DebitRecordUnknown` without one).
+    function pqzDebitRecord(bytes32 ua, uint64 counter) external view returns (DebitRecordView memory);
+    /// @notice Group 3h (PP-4): the `proofStore` the next debit runs under, 0 `NONE` or 1 `LOG` (absent before 3h: the release
+    ///         probe, C9).
+    function proofStore() external view returns (uint8);
+    /// @notice Group 3h (spec §5, O10): a holder of bit 24 `PQZ_PROOF` sets the mode the next debit runs under, `NONE` <->
+    ///         `LOG`; the current value is a no-op (no event). Through the router as `mtxSetProofStore`.
+    function setProofStore(uint8 next) external;
+    /// @notice Pending slot `i` of `(ua, keyVersion)`: `blob(160) ‖ uOff(16) ‖ vOff(16) ‖ block(64)`, for every `i <
+    ///         pendingCount` (group 3h PP-1: kept for good); 0 for an unwritten index.
     function pqzPending(bytes32 ua, uint64 keyVersion, uint64 i) external view returns (uint256);
     /// @notice The `acc` ciphertext of `(ua, keyVersion)` from state.
     function pqzAcc(bytes32 ua, uint64 keyVersion) external view returns (bytes memory);

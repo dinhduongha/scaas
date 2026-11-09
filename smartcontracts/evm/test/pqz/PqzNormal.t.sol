@@ -137,8 +137,8 @@ contract PqzNormalTest is PqzFixture {
             abi.encode(PqzCore.OP_TRANSFER, PQZL_ID, block.chainid, address(tok), address(reg), alice, bob, carol, FEE,
                 uint256(0)),
             abi.encode(uint256(0), uint256(0), uint256(1), block.number + 100, uint256(1), uint256(1000), PQZ_UID,
-                _direct(ZetherTypes.TransferMode.BUNDLE), uint256(uint128(salt)), bytes32(0))
-        );
+                _direct(ZetherTypes.TransferMode.BUNDLE), uint256(uint128(salt)), keccak256(abi.encodePacked(bytes32(0))))
+        ); // group 3h (T59, C3): word 608 `memoHash` = keccak256(ownTag) on BUNDLE (the payload's ownTag 0); the body is the vector's
         assertEq(_cut(st, 0, 640), head, "header");
         bytes memory proof = hex"0102030405";
         vm.expectCall(PQZ, abi.encodePacked(uint8(1), uint32(ST_TX), st, proof));
@@ -183,7 +183,7 @@ contract PqzNormalTest is PqzFixture {
         assertEq(a.floor, 3);
         assertEq(a.cleared, 3);
         assertEq(a.accUnits, 1);
-        assertEq(tok.pqzPending(alice, 0, 0), 0, "dead slots deleted");
+        assertTrue(tok.pqzPending(alice, 0, 0) != 0, "consumed slots kept for good (group 3h PP-1)");
         assertEq(tok.pqzAcc(alice, 0), bytes.concat(_cut(out, 0, PqzCt.PK), _cut(out, PqzCt.CT, 128)));
     }
 
@@ -343,13 +343,15 @@ contract PqzNormalTest is PqzFixture {
         bytes memory memo = _memo();
         pl = _payload(0, 0, alice, bob, bytes32(0), out, memo);
         bytes memory st = cpt.transferSingleStatement(_ts(pl), 0);
-        assertEq(bytes32(_cut(st, 608, 32)), keccak256(memo), "memoHash");
+        assertEq(bytes32(_cut(st, 608, 32)), keccak256(bytes.concat(memo, bytes32(0))), "memoHash: keccak256(memo || ownTag) (group 3h)");
         assertEq(bytes32(_cut(st, 544, 32)), _direct(ZetherTypes.TransferMode.HASH), "direct commit-reveal binding");
         bytes32 ref = cpt.mtxConfidentialTransferSingle(_ts(pl), hex"01", _pqAuth(), "", noVerdict());
         bytes memory r = _rOf(out, bob);
         assertEq(cpt.transferEntry(ref), bytes.concat(keccak256(r), memo), "hash || memo");
         assertEq(cpt.transferCiphertextHash(ref), keccak256(r));
-        assertEq(cpt.pqzEntryBlob(ref), bytes.concat(r, _packed(_cut(out, PqzCt.CT, 128))), "the op blob: R || P(v_f)");
+        // group 3h (T59, C5): then the tail, ownTag 0 ‖ kv (bob 0, the auditor 0) ‖ u8(2)
+        assertEq(cpt.pqzEntryBlob(ref), bytes.concat(r, _packed(_cut(out, PqzCt.CT, 128)), bytes32(0), bytes16(0), bytes1(0x02)),
+            "the op blob: R || P(v_f) || ownTag || kv || n");
         // disclosure of a COMPACT entry reads R from the blob: no bundle argument
         assertEq(_cut(cpt.disclosureStatement(ref, 0, 5, 1, 0), O_DU, PqzCt.CT), _cut(out, 0, PqzCt.CT), "u || v_t");
         // BUNDLE token: the commit-reveal form, same hash

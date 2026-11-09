@@ -358,3 +358,16 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   `popSlotsOf`), under `ua-mtx-merge/t66a/`: the files as they stood at 05f23be2 (3f's tip): `src/ua/{IUARegistry,UARegistry,
   UARegistryLib,UAStore,UAKinds}.sol` (no portable check view, a PQ-eligible `msig` a KEM holder, no `pop` slot word),
   `script/pqz/e2e.py` (its `msig` holder registered with a KEM key). Not built.
+  The PQZ proof path, contract side (group 3h, spec 2026-11-06-pqz-proof-path.md; plan T58-T61), under `ua-mtx-merge/3h/`: the
+  files as they stood at 7558a364 (the T66a block's tip), each copied by the first task of 3h that replaces it: T58
+  `src/pqz/{PqzCore,PqzStateLib,PqzViewLib,PqzLayer,IPqzToken}.sol` (pending slots deleted by a debit and a rollover, no debit
+  record, no `lastDebit`). Not built.
+  T59 (`ownTag` and the key-version tail): `src/pqz/WrappedPqzToken.sol` (the unwrap typehash without `ownTag`) and
+  `script/pqz/e2e.py` (the args tuples without `ownTag`, blobs without the tail), as they stood at 7558a364;
+  `test/vectors/legacy/ua-mtx-merge/3h/selector_audit.json` at e35d1d16 (the six PQZ entries' signatures before `ownTag`).
+  T60 (`proofStore` `NONE` / `LOG`): `src/factory/IFactoryToken.sol` (no `ConfidentialConfig.proofStore`),
+  `src/metatx/MetaTokenBase.sol`, `src/zether/ZetherLib.sol` (the other-kind field checks without it),
+  `src/pqz/{PqzTransferLib,PqzBurnLib}.sol` (no `PqzDebitProof` event), as they stood at 7558a364.
+  T61 (bit 24 `PQZ_PROOF`): `src/governance/{GovernanceBits,GovernanceRouter,GovernanceRouterBase}.sol` (no bit 24, no
+  `mtxSetProofStore`), `src/pqz/NormalPqzToken.sol`, `src/regulated/{NormalPqzRegulatedToken,WrappedPqzRegulatedToken,
+  RegulatedBase}.sol` (the masks without bit 24), as they stood at 7558a364.

@@ -13,6 +13,7 @@ import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {PqzLayer} from "../../src/pqz/PqzLayer.sol";
 import {PqzCt} from "../../src/pqz/PqzCt.sol";
+import {PqzCore} from "../../src/pqz/PqzCore.sol";
 import {NormalPqzToken} from "../../src/pqz/NormalPqzToken.sol";
 import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
 import {IPqzToken, IPqzWrappedToken} from "../../src/pqz/IPqzToken.sol";
@@ -403,7 +404,7 @@ contract PqzPairsTest is PqzNamedBase {
         blob = ref_.blobMulti(pl, true);
         ref = abi.decode(_settles(address(tok), _multiCd(nId, true, true), "compact"), (bytes32));
         assertEq(tok.pqzEntryBlob(ref), blob, "the commit-reveal op blob in state");
-        bytes memory r = _slice(blob, 0, blob.length - PqzCt.VP);
+        bytes memory r = _slice(blob, 0, blob.length - PqzCt.VP - PqzCore._tailLen(3)); // group 3h: R ends before v_f and the tail (M 2, the auditor)
         assertEq(tok.transferEntry(ref), bytes.concat(keccak256(r), _mem(2)), "hash(R) || memo in state");
     }
 
@@ -470,7 +471,9 @@ contract PqzPairsTest is PqzNamedBase {
         // is `mtxShield` alone (§10 row 21): IPqzToken 0x5313635f -> 0xd37edfc5, IConfidentialToken 0x69d6bb06 -> mtxShield's
         // group 3f T45: the verdict on the five direct proof entries, the three verifier ops and `pqzVerifyConfig`:
         // IPqzToken 0xd37edfc5 -> 0x4c91dc6a; IPqzWrappedToken moves with its `mtxUnshieldUnwrap`'s selector
-        assertEq(type(IPqzToken).interfaceId, bytes4(0x4c91dc6a), "IPqzToken");
+        // group 3h T58: `pqzDebitRecord`: IPqzToken 0x4c91dc6a -> 0x5037795c; T59: `ownTag` in the three args structs (the six
+        // proof-carrying selectors): -> 0xd8bbf337; T60: `proofStore()`: -> 0x191d0352; T61: `setProofStore`: -> 0x3fef18ca
+        assertEq(type(IPqzToken).interfaceId, bytes4(0x3fef18ca), "IPqzToken");
         assertEq(type(IConfidentialToken).interfaceId, IConfidentialToken.mtxShield.selector, "IConfidentialToken");
         assertEq(type(IPqzWrappedToken).interfaceId, IPqzWrappedToken.mtxUnshieldUnwrap.selector, "IPqzWrappedToken");
     }

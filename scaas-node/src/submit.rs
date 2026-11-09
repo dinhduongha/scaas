@@ -581,6 +581,9 @@ impl Submitter {
         }
         let gas = match guard::gas(&self.chain, &w, self.cfg.max_gas_per_tx).await {
             Ok(g) => g,
+            Err(SimError::Revert(reason)) if guard::over_cap(&reason) && crate::pqz::is_debit(&w) => {
+                return self.over_cap(&w, reason).await;
+            }
             Err(SimError::Revert(reason)) => return self.refused(&w, reason).await,
             Err(SimError::Transport(reason)) => return self.requeue(&w, format!("simulate: {reason}")).await,
         };
@@ -632,6 +635,18 @@ impl Submitter {
             Err(e) => warn!(nonce, "send failed, will replace: {e:#}"),
         }
         self.inflight.insert(nonce, Sent { work: Some(w), hashes: vec![hash], gas, fees, at: Instant::now(), _guard: guard, orphan: None, ceiling });
+    }
+
+    /// NODE-JOB-24 (group 3h, pqz-proof-path spec §10): a PQZ debit whose estimate (regular + state, under the token's current
+    /// `proofStore()`) is above the lane's cap. Under `LOG` a holder of bit 24 may switch the token to `NONE` and the job may land:
+    /// `PROOF_STORE_OVER_LANE_CAP`, back in the queue, never `dead` (it ends `dead` only at its `validUntil`). Under `NONE`, or on a
+    /// release without the view, nothing makes it cheaper: the plain refusal.
+    async fn over_cap(&self, w: &Work, reason: String) {
+        match self.chain.call_view(w.to, crate::abi::IPqzToken::proofStoreCall {}).await {
+            Ok(m) if m == crate::abi::PROOF_STORE_LOG => self.requeue(w, format!("PROOF_STORE_OVER_LANE_CAP: {reason}")).await,
+            Ok(_) | Err(SimError::Revert(_)) => self.refused(w, reason).await,
+            Err(SimError::Transport(e)) => self.requeue(w, format!("proofStore(): {e}; {reason}")).await,
+        }
     }
 
     /// Mô phỏng revert. Meta-tx mà nonce chủ thể đã qua ⇒ `consumed` (R80: relayer khác có thể đã đưa nó lên chain),
@@ -1048,6 +1063,8 @@ pub(crate) mod tests {
         views: Vec<Vec<u8>>,
         /// Every address whose code was asked (`eth_getCode`).
         code_asked: Vec<Address>,
+        /// Group 3h: `proofStore()` answers this (0 `NONE`, 1 `LOG`); `None`: it reverts (a release before 3h).
+        proof_store: Option<u8>,
     }
     /// Group 3f: what the fake token's views answer: its `proofSystemId()`, the relayed op's `envelopeBinding`, the statement.
     const PSID: B256 = B256::repeat_byte(0x9d);
@@ -1055,8 +1072,9 @@ pub(crate) mod tests {
     const STATEMENT: [u8; 40] = [0x5a; 40];
     /// The PQZ views of the fake token: `pqzVerifyConfig`, `proofSystemId`, `envelopeBinding`, the four statement views (the forge
     /// artifact's selectors, pinned in `pqz::tests::views_are_the_contracts`).
-    const PQZ_VIEWS: [[u8; 4]; 7] = [[0xdc, 0x59, 0xc6, 0x6e], [0x1f, 0x3b, 0x28, 0xf2], [0x35, 0xad, 0x08, 0xaa], [0x3a, 0x3b, 0xb4, 0x5a],
-        [0xff, 0xde, 0xe9, 0x09], [0x23, 0xa7, 0x26, 0x49], [0xf4, 0x83, 0x4c, 0xb9]];
+    // group 3h T59: the four statement views after `ownTag` (pqz.rs `views_are_the_contracts`)
+    const PQZ_VIEWS: [[u8; 4]; 7] = [[0xdc, 0x59, 0xc6, 0x6e], [0x1f, 0x3b, 0x28, 0xf2], [0x35, 0xad, 0x08, 0xaa], [0x93, 0x14, 0x15, 0xee],
+        [0x8a, 0x21, 0x61, 0xba], [0xda, 0x8c, 0x9e, 0xed], [0x8e, 0x4c, 0xcf, 0x2e]];
     const PQZ_KEY0: Address = Address::repeat_byte(0xe0);
     const PQZ_KEY1: Address = Address::repeat_byte(0xe1);
     type Rpc = Arc<Mutex<Evm>>;
@@ -1171,6 +1189,8 @@ pub(crate) mod tests {
                         } else {
                             Ok(json!(format!("0x{}", alloy::hex::encode(Bytes::from(STATEMENT.to_vec()).abi_encode()))))
                         }
+                    } else if sel == crate::abi::IPqzToken::proofStoreCall::SELECTOR {
+                        e.proof_store.map(|m| word(U256::from(m))).ok_or_else(|| err(3, "execution reverted", Some("0x".into())))
                     } else if sel == crate::abi::IPqzToken::auditorUACall::SELECTOR {
                         Ok(json!(format!("{:#x}", B256::repeat_byte(0xa7))))
                     } else if sel == crate::abi::IUALedger::registryCall::SELECTOR {
@@ -1751,7 +1771,8 @@ pub(crate) mod tests {
         }
         // plan T34 added the router's eight regulated control rows to typed_ops.json (97 -> 105); pay-meta-tax T41: -> 110
         // (UAPayWithTax's three domains, the router's two tax ops); group 3f T46 / T47: -> 113, the router's three verifier ops
-        assert_eq!(n, 113, "every row with an entry, but the relay fees (relay_fee_call_object)");
+        // group 3h T61: -> 114, the router's `UASetProofStore`
+        assert_eq!(n, 114, "every row with an entry, but the relay fees (relay_fee_call_object)");
     }
 
     /// `EvmAdapter::call_key`, which the Hedera adapter delegates to (`the_hedera_lane_skips_bytes_already_in_flight` is the
@@ -2315,6 +2336,65 @@ pub(crate) mod tests {
         env["from"] = json!(format!("{:#x}", B256::repeat_byte(0xab)));
         json!({"id": id, "kind": "ua_metatx", "op": {"entry": row.entry, "contract": "pqz", "token": format!("{TOKEN:#x}"),
             "envelope": env, "args": args, "auth": sig.unwrap()}})
+    }
+
+    /// Group 3h (pqz-proof-path spec §3.2, §10): a PQZ debit job names `ownTag` in its `args` (a non-zero tag here); the calldata
+    /// the node builds carries that word after `salt`, in the order of the struct.
+    #[tokio::test]
+    async fn pqz_own_tag_named() {
+        let tag = B256::repeat_byte(0x7a);
+        let mut j = pqz_job(7);
+        j["op"]["args"]["args"]["ownTag"] = json!(format!("{tag:#x}"));
+        let (w, _) = work_of_op(Some(7), &j["op"], None).unwrap();
+        let row = crate::typed::testkit::row_of("UAPqzTransferSingle", "pqz");
+        let vals = crate::typed::call_values(row, &w.data).unwrap();
+        let args = crate::typed::parse("PqzTransferArgs", &j["op"]["args"]["args"], "args").unwrap();
+        assert!(vals.contains(&args), "the args struct is in the calldata as named");
+        let enc = args.abi_encode();
+        assert!(enc.windows(32).any(|x| x == tag.as_slice()), "ownTag is a word of the struct");
+        let e = Evm { mtx_nonce: Some(0), ..Default::default() };
+        assert_eq!(states_of(&outcomes(e, vec![j], |_| {}).await.0), ["signed", "broadcast"]);
+    }
+
+    /// Group 3h (spec §10): a PQZ debit job of the shape before 3h (`args` without `ownTag`) is refused by name at intake, before
+    /// any RPC: `BAD_PAYLOAD` names the missing field (the named-field rule of every job, HEX_ARGS_REFUSED unchanged); the 3h
+    /// struct needs the tag, so the old shape never lands.
+    #[tokio::test]
+    async fn pqz_old_shape_refused_by_name() {
+        let mut j = pqz_job(7);
+        j["op"]["args"]["args"].as_object_mut().unwrap().remove("ownTag");
+        let (r, rpc) = outcomes(Evm { mtx_nonce: Some(0), ..Default::default() }, vec![j], |_| {}).await;
+        assert!(r.len() == 1 && r[0].0 == "dead" && r[0].1.contains("BAD_PAYLOAD: args.args.ownTag: missing"), "{r:?}");
+        assert!(rpc.lock().unwrap().sent.is_empty() && !rpc.lock().unwrap().calls.iter().any(|m| m == "eth_estimateGas"));
+    }
+
+    /// NODE-JOB-24 (group 3h, spec §10): a PQZ debit whose estimate under the token's `proofStore()` is above the lane's cap is
+    /// refused `PROOF_STORE_OVER_LANE_CAP` before sending, back in the queue under `LOG` (a holder of bit 24 may switch to `NONE`);
+    /// under `NONE`, or on a release without the view, it is the plain cap refusal.
+    #[tokio::test]
+    async fn proof_store_over_lane_cap_refused() {
+        let over = |m: Option<u8>| Evm { mtx_nonce: Some(0), estimate: Some(70_000_000), proof_store: m, ..Default::default() };
+        let cap = |c: &mut ChainCfg| c.max_gas_per_tx = 64_000_000;
+        let (r, rpc) = outcomes(over(Some(1)), vec![pqz_job(7)], cap).await;
+        assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("PROOF_STORE_OVER_LANE_CAP: "), "{r:?}");
+        assert!(r[0].1.contains("above max_gas_per_tx 64000000"), "{r:?}");
+        assert!(rpc.lock().unwrap().sent.is_empty(), "nothing sent");
+        for m in [Some(0), None] {
+            let (r, _) = outcomes(over(m), vec![pqz_job(7)], cap).await;
+            assert!(r.len() == 1 && r[0].0 == "dead" && r[0].1.contains("above max_gas_per_tx") && !r[0].1.contains("PROOF_STORE"), "{m:?}: {r:?}");
+        }
+    }
+
+    /// NODE-JOB-24: never `dead` while the job may land: refused under `LOG`, the same job lands once the token is back on `NONE`
+    /// and its estimate fits.
+    #[tokio::test]
+    async fn proof_store_over_cap_not_dead() {
+        let cap = |c: &mut ChainCfg| c.max_gas_per_tx = 64_000_000;
+        let e = Evm { mtx_nonce: Some(0), estimate: Some(64_000_001), proof_store: Some(1), ..Default::default() };
+        let (r, _) = outcomes(e, vec![pqz_job(7)], cap).await;
+        assert_eq!(states_of(&r), ["queued"], "{r:?}");
+        let e = Evm { mtx_nonce: Some(0), estimate: Some(63_000_000), proof_store: Some(0), ..Default::default() };
+        assert_eq!(states_of(&outcomes(e, vec![pqz_job(7)], cap).await.0), ["signed", "broadcast"]);
     }
 
     /// Group 3g (KV-7, spec §7.3): a receiver (or the auditor) whose latest stored version is above its current one, with the
@@ -2946,7 +3026,7 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
             pqzVerifierEpoch: 2, validUntil: until });
         assert_eq!(v.sig, ua_sig(&verdict_auth(0x7e)), "the job's signature, as it named it");
         // the statement view: the job's own `args` and the binding the token gave for its envelope
-        let st = e.views.iter().find(|i| i[..4] == [0x3a, 0x3b, 0xb4, 0x5a]).expect("transferSingleStatement asked");
+        let st = e.views.iter().find(|i| i[..4] == [0x93, 0x14, 0x15, 0xee]).expect("transferSingleStatement asked");
         let ty = alloy::dyn_abi::DynSolType::parse(&format!("({},bytes32)", crate::typed::abi_of("PqzTransferArgs"))).unwrap();
         let got = ty.abi_decode_params(&st[4..]).unwrap();
         let want = crate::typed::parse("PqzTransferArgs", &j["op"]["args"]["args"], "args").unwrap();

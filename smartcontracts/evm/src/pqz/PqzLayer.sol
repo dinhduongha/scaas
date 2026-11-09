@@ -18,6 +18,8 @@ import {SSTORE2} from "../common/SSTORE2.sol";
 import {SigCheck} from "../common/SigCheck.sol";
 import {UAKinds} from "../ua/UAKinds.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
+import {GovernanceUse} from "../governance/GovernanceBase.sol";
+import {GovernanceBits} from "../governance/GovernanceBits.sol";
 
 /// @title The PQZ layer of the kinds `NORMAL_PQZ` and `WRAPPED_PQZ` (CTR-PQZ-15, CTR-PQZ-22; P6g plan D1): the entry
 ///        points and views of pq-zero-knowledge.md §9.4; the state and the logic are the four libraries (`scaas.pqz`; D14).
@@ -48,19 +50,19 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
         "UAPrepareAcc(bytes32 from,bytes32 ua,uint64 keyVersion,uint256 half,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
     );
     bytes32 private constant UA_TRANSFER_SINGLE_TYPEHASH = keccak256(
-        "UAPqzTransferSingle(bytes32 from,PqzTransferArgs args,bytes proof,bytes accHint,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)PqzTransferArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes sealedMemo)"
+        "UAPqzTransferSingle(bytes32 from,PqzTransferArgs args,bytes proof,bytes accHint,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)PqzTransferArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,bytes32 ownTag,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes sealedMemo)"
     );
     bytes32 private constant UA_TRANSFER_SINGLE_COMPACT_TYPEHASH = keccak256(
-        "UAPqzTransferSingleCompact(bytes32 from,PqzTransferArgs args,bytes proof,bytes accHint,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)PqzTransferArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes sealedMemo)"
+        "UAPqzTransferSingleCompact(bytes32 from,PqzTransferArgs args,bytes proof,bytes accHint,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)PqzTransferArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,bytes32 ownTag,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes sealedMemo)"
     );
     bytes32 private constant UA_TRANSFER_TYPEHASH = keccak256(
-        "UAPqzTransfer(bytes32 from,PqzMultiArgs args,bytes proof,bytes accHint,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)PqzLeg(bytes32 ua,bytes v,bytes vAuditor)PqzMultiArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,uint256 decoyFee,bytes16 salt,bytes[] u,PqzLeg[] legs,bytes vFrom,bytes sealedMemo)"
+        "UAPqzTransfer(bytes32 from,PqzMultiArgs args,bytes proof,bytes accHint,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)PqzLeg(bytes32 ua,bytes v,bytes vAuditor)PqzMultiArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,uint256 decoyFee,bytes16 salt,bytes32 ownTag,bytes[] u,PqzLeg[] legs,bytes vFrom,bytes sealedMemo)"
     );
     bytes32 private constant UA_TRANSFER_COMPACT_TYPEHASH = keccak256(
-        "UAPqzTransferCompact(bytes32 from,PqzMultiArgs args,bytes proof,bytes accHint,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)PqzLeg(bytes32 ua,bytes v,bytes vAuditor)PqzMultiArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,uint256 decoyFee,bytes16 salt,bytes[] u,PqzLeg[] legs,bytes vFrom,bytes sealedMemo)"
+        "UAPqzTransferCompact(bytes32 from,PqzMultiArgs args,bytes proof,bytes accHint,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)PqzLeg(bytes32 ua,bytes v,bytes vAuditor)PqzMultiArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,uint256 decoyFee,bytes16 salt,bytes32 ownTag,bytes[] u,PqzLeg[] legs,bytes vFrom,bytes sealedMemo)"
     );
     bytes32 private constant UA_UNSHIELD_TYPEHASH = keccak256(
-        "UAPqzUnshield(bytes32 from,PqzBurnArgs args,uint256 amount,bytes32 recipient,bytes proof,bytes accHint,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)PqzBurnArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,bytes u,bytes vFrom)"
+        "UAPqzUnshield(bytes32 from,PqzBurnArgs args,uint256 amount,bytes32 recipient,bytes proof,bytes accHint,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)PqzBurnArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,bytes32 ownTag,bytes u,bytes vFrom)"
     );
 
     /// @dev The `UAPqzVerifier` of this release and chain: the env's `deps[ENV_PQZ_VERIFIER]`, from the clone's code
@@ -92,18 +94,25 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
     function auditorMode() external view returns (ZetherTypes.AuditorMode) { return PqzCore.$().auditorMode; }
     function disclosureMode() external view returns (ZetherTypes.DisclosureMode) { return PqzCore.$().disclosureMode; }
     function totalShielded() external view returns (uint256) { return PqzCore.$().totalShielded; }
+    function proofStore() external view returns (uint8) { return PqzCore.$().proofStore; }
 
     /// @notice The account of `(ua, keyVersion)` (D13; group 3g KV-6): counters, the `acc` reference, `accUnits`, flags, the
-    ///         UA's `sendCounter` (one for every version), `accHash`.
+    ///         UA's `sendCounter` (one for every version), `accHash`, `lastDebit` (group 3h PP-2).
     function pqzAccount(bytes32 ua, uint64 keyVersion) external view override returns (AccountState memory) {
         PqzCore.PqzStorage storage s = PqzCore.$();
         PqzCore.Account storage a = s.acct[ua][keyVersion];
         return AccountState(a.pendingCount, a.rolled, a.floor, a.cleared, a.accBlob, a.accUnits, a.flags,
-            s.sendCounter[ua], a.accHash);
+            s.sendCounter[ua], a.accHash, a.lastDebit);
+    }
+
+    /// @notice Group 3h (PP-2): the record of `ua`'s debit `counter` (`PqzViewLib.debitRecord`; spec §8 lever 1).
+    function pqzDebitRecord(bytes32 ua, uint64 counter) external view override returns (DebitRecordView memory) {
+        return PqzViewLib.debitRecord(ua, counter);
     }
 
     /// @notice Pending slot `i` of `(ua, keyVersion)` (plan 5h D2): `blob(160) ‖ uOff(16) ‖ vOff(16) ‖ block(64)`, `vOff =
-    ///         0` a TRIVIAL entry with its amount in the low 64 bits of the blob field; 0 once deleted.
+    ///         0` a TRIVIAL entry with its amount in the low 64 bits of the blob field; every `i < pendingCount` (group 3h
+    ///         PP-1: kept for good), 0 for an unwritten index.
     function pqzPending(bytes32 ua, uint64 keyVersion, uint64 i) external view override returns (uint256) {
         return PqzCore.$().acct[ua][keyVersion].pending[i];
     }
@@ -236,6 +245,13 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
     /// @notice The owner's immediate revocation of a transferable verifier (freeze only, spec §4.3).
     function pqzRevokeVerifier() external nonReentrant {
         PqzStateLib.revokeVerifier(_govSubject());
+    }
+
+    /// @notice Group 3h (spec §5): bit 24 `PQZ_PROOF`'s power, `use(24)` (no scalar; disabling the bit freezes the value:
+    ///         `FeatureNotSet`), then `PqzStateLib.setProofStore`; through the router as `mtxSetProofStore`.
+    function setProofStore(uint8 next) external nonReentrant {
+        GovernanceUse.use(GovernanceBits.PQZ_PROOF, _govSubject(), 0);
+        PqzStateLib.setProofStore(next);
     }
 
     /// @notice Spec §4.4: mode, verifier, fixed, epoch, a live pending and its `eta`, the notice period.

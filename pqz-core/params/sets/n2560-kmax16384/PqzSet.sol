@@ -27,7 +27,7 @@ library PqzSet {
     /// entries per rollover: the largest multiple of 16 whose relayed rollover stays under 0.75 * 2^24 on both relay paths, mtxExecute and uaExecute (set.toml roll_max)
     uint256 internal constant ROLL_MAX = 64;
     /// the cheapest built PQZL debit form (burn 1), full relayed regular gas on the costlier relay path, uaExecute (set.toml debit_min_gas; the UA registry's PQZ holder bound)
-    uint256 internal constant PQZ_DEBIT_MIN_GAS = 7_177_969;
+    uint256 internal constant PQZ_DEBIT_MIN_GAS = 7_675_561;
     /// pk / u bytes (k polys x 64 be8)
     uint256 internal constant PK = 20_480;
     /// v bytes (16 be8)
@@ -48,6 +48,9 @@ library PqzSet {
     uint256 internal constant BUNDLE = 20_784;
     /// disclosure bundle, auditor off
     uint256 internal constant BUNDLE0 = 20_656;
+    /// the largest `deltaP` of a PQZ debit record, K_MAX - 1 (a first debit's p; later debits K_MAX - 2): a uint16, so a
+    /// set whose K_MAX - 1 exceeds 65,535 fails the build
+    uint16 internal constant DELTA_P_MAX = 16_383;
     /// PQZL's proofSystemId: keccak256("scaas/pqz/lnp22/mlwe-d64k40-q50l4/v5")
     bytes32 internal constant PQZL_ID = 0xeacf34a3a8b6b5aff9be26e24ec03176e2699784c4ff8a1b4c8921cb09276882;
     /// PQZH (Ligero) built at this set (set.toml pqzh; pqz-stmt HAS_PQZH): true

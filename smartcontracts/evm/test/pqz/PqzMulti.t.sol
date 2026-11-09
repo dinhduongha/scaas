@@ -76,8 +76,8 @@ contract PqzMultiTest is PqzFixture {
             abi.encode(PqzCore.OP_TRANSFER_MULTI, PQZL_ID, block.chainid, address(tok), address(reg), alice,
                 keccak256(abi.encodePacked(rec)), carol, FEE, uint256(0)),
             abi.encode(uint256(4), uint256(0), uint256(0), block.number + 100, uint256(1), uint256(1000), PQZ_UID,
-                _direct(ZetherTypes.TransferMode.BUNDLE), uint256(uint128(salt)), bytes32(0))
-        );
+                _direct(ZetherTypes.TransferMode.BUNDLE), uint256(uint128(salt)), keccak256(abi.encodePacked(bytes32(0))))
+        ); // group 3h (T59, C3): word 608 `memoHash` = keccak256(ownTag) on BUNDLE, the payload's ownTag 0
         assertEq(_cut(st, 0, 640), head, "header: word 192 recipientsHash, 320 M");
         assertEq(_cut(st, 640, PqzCt.PK), _keyOf(alice), "pk_f");
         for (uint256 j; j < 4; ++j) assertEq(_cut(st, O_PK1 + PqzCt.PK * j, PqzCt.PK), _keyOf(rec[j]), "pk_j");
@@ -235,7 +235,8 @@ contract PqzMultiTest is PqzFixture {
         bytes memory memo = _mmemo(2);
         bytes memory pl = _mpayload(0, 0, alice, 0, rec, out, memo);
         bytes memory st = cpt.transferStatement(_ms(pl), 0);
-        assertEq(bytes32(_cut(st, 608, 32)), keccak256(memo), "memoHash");
+        // group 3h (T59, C3): keccak256(memo ‖ ownTag), the payload's ownTag 0
+        assertEq(bytes32(_cut(st, 608, 32)), keccak256(bytes.concat(memo, bytes32(0))), "memoHash");
         bytes32 ref = cpt.mtxConfidentialTransfer(_ms(pl), hex"01", _pqAuth(), "", noVerdict());
         bytes memory e = cpt.transferEntry(ref);
         assertEq(_cut(e, 32, e.length - 32), memo, "the memo stored");

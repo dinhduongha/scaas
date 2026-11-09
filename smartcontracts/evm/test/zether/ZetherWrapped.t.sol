@@ -120,7 +120,7 @@ contract ZetherWrappedTest is ZetherFixture {
         c.conf = IFactoryToken.ConfidentialConfig(
             auditor ? ZetherKeys.pub(X_AUD, bls) : bytes(""), SCALE, uint256(1) << 40, FEE, dMode,
             auditor ? aMode : 0, 0
-        , 0, bytes32(0), false);
+        , 0, bytes32(0), false, 0);
         return WrappedZetherToken(payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, abi.encode(c), salt)));
     }
 
@@ -221,7 +221,7 @@ contract ZetherWrappedTest is ZetherFixture {
         c.rate = IFactoryToken.RateConfig(2 days, 1000);
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
-        c.conf = IFactoryToken.ConfidentialConfig("", SCALE, 100, FEE, 0, 0, 0, 0, bytes32(0), false);
+        c.conf = IFactoryToken.ConfidentialConfig("", SCALE, 100, FEE, 0, 0, 0, 0, bytes32(0), false, 0);
         z = WrappedZetherToken(payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, abi.encode(c), "small")));
     }
 
@@ -394,7 +394,7 @@ contract ZetherWrappedTest is ZetherFixture {
         (c.name, c.symbol, c.decimals, c.features) = ("F", "F", 6, 1 << GovernanceBits.FREEZE);
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
-        c.conf = IFactoryToken.ConfidentialConfig("", SCALE, 100, FEE, 0, 0, 0, 0, bytes32(0), false);
+        c.conf = IFactoryToken.ConfidentialConfig("", SCALE, 100, FEE, 0, 0, 0, 0, bytes32(0), false, 0);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, GovernanceBits.FREEZE));
         factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, abi.encode(c), "freeze");
         c.features = 1 << GovernanceBits.MINTABLE; // a hybrid's bit (spec §5.2, governance T9): only with `maxSupply`

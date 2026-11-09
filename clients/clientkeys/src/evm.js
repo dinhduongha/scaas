@@ -2,6 +2,8 @@
 import {
   keccak_256, sha256, concatBytes, utf8ToBytes, bytesToHex, fromHex, hex, word, boolWord, addressWord, abiEncode, bytes32,
 } from './bytes.js';
+import { hkdf } from '@noble/hashes/hkdf.js';
+import { hmac } from '@noble/hashes/hmac.js';
 
 export function checksumAddress(address) {
   const low = bytesToHex(fromHex(address));
@@ -184,13 +186,14 @@ const STRUCTS = Object.fromEntries(Object.entries({
   UAWrapOrder: wrapOrderOf('bytes32'),
   // the token's typed transfer and payment (CTR-MTX-23); `entryRef = 0` is a transfer, else a payment (CTR-UA-26 on ids)
   UAMetaTransfer: transferOf('bytes32'),
-  // group 3g (KV-8): `keyVersion`, the debited key version of `fromUA`, after it in the three args structs
+  // group 3g (KV-8): `keyVersion`, the debited key version of `fromUA`, after it in the three args structs; group 3h (pqz-proof-path
+  // spec §3.2, PP-3): `ownTag` after `salt` (op 1, op 7) and after `beneficiaryUA` (the burn forms), `pqzOwnTag` below
   PqzTransferArgs: 'uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,'
-    + 'bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes sealedMemo',
+    + 'bytes32 ownTag,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes sealedMemo',
   PqzLeg: 'bytes32 ua,bytes v,bytes vAuditor',
   PqzMultiArgs: 'uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,uint256 decoyFee,bytes16 salt,'
-    + 'bytes[] u,PqzLeg[] legs,bytes vFrom,bytes sealedMemo',
-  PqzBurnArgs: 'uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,bytes u,bytes vFrom',
+    + 'bytes32 ownTag,bytes[] u,PqzLeg[] legs,bytes vFrom,bytes sealedMemo',
+  PqzBurnArgs: 'uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,bytes32 ownTag,bytes u,bytes vFrom',
   Unwrap: 'address underlying,bytes32 recipient,uint256 amount,uint256 minOut',
   G1: 'bytes32 x0,bytes32 x1,bytes32 y0,bytes32 y1',
   ZetherSingle: 'uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes16 salt,bytes32 beneficiaryUA,'
@@ -405,6 +408,8 @@ const OPS = {
   UAPqzSetVerifier: { fields: 'address target,bytes32 next', on: ROUTER },
   UAPqzCancelVerifier: { fields: 'address target', on: ROUTER },
   UAPqzRevokeVerifier: { fields: 'address target', on: ROUTER },
+  // bit 24 `PQZ_PROOF` of the PQZ kinds 4, 5, 12, 13 (group 3h, PQZ proof path spec §5): `NONE` or `LOG` from the next debit
+  UASetProofStore: { fields: 'address target,uint8 next', on: ROUTER },
   // The statement's header words verbatim (purpose `zether-auth`); signed into `pqzAuth`, no entry of its own.
   PqzAuth: { raw: 'uint8 op,bytes32 opTag,bytes32 psid,uint256 chainId,address token,address registry,bytes32 from,bytes32 to,bytes32 beneficiary,'
     + 'uint256 fee,uint256 amount,bytes32 recipient,uint64 sendCounter,uint64 p,uint256 validUntilBlock,bool auditorOn,uint256 shieldIn,'
@@ -1160,6 +1165,79 @@ export function checkOp(td, { op, contract, chainId, chainUid, message, maxFee, 
   return { digest, op, entry: o.entry, ...fee };
 }
 
+/** Group 3h (pqz-proof-path spec §3.1, PP-3, C4): a holder's tag of its own debit. `K = HKDF-SHA256(ikm = seed32, salt = "", info =
+ *  "PQZ/owntag/v1", 32)`, `seed32` the PQZ key seed of the version debited (`pqzKeySeed`); `ownTag = HMAC-SHA256(K, chainUid(32) ‖
+ *  token(20) ‖ fromUA(32) ‖ be32(sendCounter) ‖ keccak256(P(u) ‖ P(v_f)))`, `P` the stored packed form and `u` the debit's `u_0`
+ *  (op 1, op 7) or `u'` (burn, refresh, unwrap); `ctHash` may be given for `keccak256(P(u) ‖ P(v_f))`. Authorship, not inclusion:
+ *  a match says this seed wrote the bytes, never that they are the latest state. Returns `{ key, message, ownTag }` (hex). */
+export function pqzOwnTag({ seed32, chainUid, token, fromUA, sendCounter, pu, pvf, ctHash }) {
+  const n = BigInt(sendCounter);
+  if (n < 0n || n >= 1n << 32n) refuse('sendCounter: be32, below 2^32');
+  const ct = ctHash !== undefined ? asBytes(ctHash) : keccak_256(concatBytes(asBytes(pu), asBytes(pvf)));
+  if (fromHex(token).length !== 20 || ct.length !== 32) refuse('token is 20 bytes, the ciphertext hash 32');
+  const key = hkdf(sha256, asBytes(seed32), new Uint8Array(0), utf8ToBytes('PQZ/owntag/v1'), 32);
+  const be32 = new Uint8Array(4);
+  new DataView(be32.buffer).setUint32(0, Number(n));
+  const message = concatBytes(bytes32(chainUid), fromHex(token), bytes32(fromUA), be32, ct);
+  return { key: hex(key), message: hex(message), ownTag: hex(hmac(sha256, key, message)) };
+}
+
+/** Group 3h (spec §3.3, C3): a PQZ debit's `memoHash` (statement header word 608): `keccak256(memo ‖ ownTag)`, `memo = salt ‖
+ *  sealedMemo` on a commit-reveal (HASH) transfer, empty on BUNDLE, a burn, a refresh and an unwrap. */
+export function pqzMemoHash(memo, ownTag) {
+  return hex(keccak_256(concatBytes(asBytes(memo ?? '0x'), bytes32(ownTag))));
+}
+
+const M64 = (1n << 64n) - 1n;
+
+/** Group 3h (spec §2.2, §9.1): a debit record's two words (`debitRec[ua][counter]`, `w0 = prevBlob(160) ‖ p(64) ‖ Δp(16) ‖
+ *  proofStore(8) ‖ flags(8)`, `w1 = shieldIn(64) ‖ keyVersion(64) ‖ prevCounter(64) ‖ 0` when `flags` has WIDE, 2) as
+ *  `pqzDebitRecord(ua, counter)` answers them: a narrow record with a predecessor names `counter − 1`. */
+export function pqzDebitRecordOf(w0, w1, counter) {
+  const a = BigInt(w0);
+  if (a === 0n) refuse('DebitRecordUnknown: no record at this counter');
+  const prev = a >> 96n;
+  const r = { prevBlob: '0x' + prev.toString(16).padStart(40, '0'), p: (a >> 32n) & M64, deltaP: (a >> 16n) & 0xffffn,
+    proofStore: (a >> 8n) & 0xffn, flags: a & 0xffn, shieldIn: 0n, keyVersion: 0n, prevCounter: 0n, hasPrev: prev !== 0n };
+  if (r.flags & 2n) {
+    const b = BigInt(w1);
+    [r.shieldIn, r.keyVersion, r.prevCounter] = [b >> 192n, (b >> 128n) & M64, (b >> 64n) & M64];
+  } else if (r.hasPrev) {
+    r.prevCounter = BigInt(counter) - 1n;
+  }
+  return r;
+}
+
+/** Group 3h (spec §3.2): the tail of a PQZ op blob, read from its last byte: `… ‖ P(v_f) ‖ ownTag(32) ‖ be64 kv[0..n) ‖ u8(n)`.
+ *  `code` is the SSTORE2 pointer's code (a STOP byte, then the data); `R` is the data before `P(v_f)`. */
+export function pqzBlobTailOf(code) {
+  const d = asBytes(code).subarray(1);
+  const n = d.length ? d[d.length - 1] : 0;
+  const tailLen = 33 + 8 * n;
+  if (!d.length || n > 9 || d.length < tailLen) refuse('not a PQZ op blob of release 3h: its tail does not fit');
+  const at = d.length - tailLen;
+  const kv = [];
+  for (let i = 0; i < n; i++) kv.push(new DataView(d.buffer, d.byteOffset + at + 32 + 8 * i, 8).getBigUint64(0));
+  return { ownTag: hex(d.subarray(at, at + 32)), kv, n, tailLen, dataLen: d.length };
+}
+
+const PQZ_DEBIT_PROOF = hex(keccak_256(utf8ToBytes('PqzDebitProof(address,bytes32,uint64,bytes,bytes)')));
+
+/** Group 3h (spec §4.2, §9.2): a `PqzDebitProof(address indexed blob, bytes32 indexed ua, uint64 indexed sendCounter, bytes
+ *  header, bytes proof)` log (`topics`, `data`) as its named fields: the verified header (640 bytes) and the calldata proof. */
+export function pqzDebitProofOf({ topics, data }) {
+  if (topics?.length !== 4 || topics[0] !== PQZ_DEBIT_PROOF) refuse('not a PqzDebitProof log');
+  const d = asBytes(data);
+  const word = (at) => BigInt(hex(d.subarray(at, at + 32)));
+  const field = (head) => {
+    const at = Number(word(head));
+    const len = Number(word(at));
+    if (at + 32 + len > d.length) refuse('PqzDebitProof: a field runs past the data');
+    return hex(d.subarray(at + 32, at + 32 + len));
+  };
+  return { blob: '0x' + topics[1].slice(-40), ua: topics[2], sendCounter: BigInt(topics[3]), header: field(0), proof: field(32) };
+}
+
 /** Group 3g (KV-8, KV-9): what a wallet checks of a PQZ debit against the debited UA's current version (`pqzKeyOf(fromUA)`), before
  *  it signs. `keyVersion == current`: every debit, a self-transfer refused (`SelfTransfer`). Stale: only the migration (op 1 to
  *  itself) and a refresh (a burn of 0 with no recipient) (`StaleKeyVersion`). Above current: `KeyVersionUnknown`. Returns
@@ -1364,15 +1442,15 @@ export function bidMinBase(minFill, amount, receiveAmount) {
   return (uint(minFill, 'minFill') * uint(receiveAmount, 'the price') + a - 1n) / a;
 }
 
-// The governance bits 0-23 (spec 2026-11-02-governance §1.2; bit 22 CTR-GOV-20; bit 23 pay-meta-tax §6.1): name and type. The disclosure sentences are the file's,
+// The governance bits 0-24 (spec 2026-11-02-governance §1.2; bit 22 CTR-GOV-20; bit 23 pay-meta-tax §6.1; bit 24 PQZ proof path §5): name and type. The disclosure sentences are the file's,
 // smartcontracts/vectors/governance/governance_bits.json, which the app reads; test/governance-bits.test.js holds this table to it.
-// Bits 24-127 are free; bits 128-255 are the application contract's own, the word is its bitLabel(bit) (CTR-GOV-10's Change).
+// Bits 25-127 are free; bits 128-255 are the application contract's own, the word is its bitLabel(bit) (CTR-GOV-10's Change).
 export const GOVERNANCE_BITS = Object.freeze([
   ['PAYABLE', 'capability'], ['MINTABLE', 'power'], ['BURNABLE', 'capability'], ['RATE_ADJUSTABLE', 'power'],
   ['WRAP_DISABLEABLE', 'power'], ['FREEZE', 'power'], ['FORCE', 'power'], ['PAUSE', 'power'], ['ALLOWLIST', 'capability'],
   ['DENYLIST', 'capability'], ['RECORD', 'power'], ['LISTING', 'power'], ['FEE_ROUTING', 'power'], ['', 'unused'], ['', 'unused'],
   ['ARBITRATE', 'reserved'], ['CORRECT', 'reserved'], ['RESCUABLE', 'capability'], ['PUBLISH', 'power'], ['DEPRECATE', 'power'],
-  ['ENABLE_KIND', 'power'], ['MODERATE', 'power'], ['OPERATOR_TRANSFER', 'power'], ['TAX', 'power'],
+  ['ENABLE_KIND', 'power'], ['MODERATE', 'power'], ['OPERATOR_TRANSFER', 'power'], ['TAX', 'power'], ['PQZ_PROOF', 'power'],
 ].map(([name, type], bit) => Object.freeze({ bit, name, type })));
 
 // ------------------------------------------------------------------ the signing policy in front of every typed signature

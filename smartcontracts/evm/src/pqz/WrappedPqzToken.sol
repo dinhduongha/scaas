@@ -37,7 +37,7 @@ contract WrappedPqzToken is WrappedToken, PqzLayer, IPqzWrappedToken {
         "WrapShield(address from,address underlying,uint256 amountIn,bytes32 toUA,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
     );
     bytes32 private constant UA_UNSHIELD_UNWRAP_TYPEHASH = keccak256(
-        "UAPqzUnshieldUnwrap(bytes32 from,PqzBurnArgs args,Unwrap unwrap,bytes proof,bytes accHint,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)PqzBurnArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,bytes u,bytes vFrom)Unwrap(address underlying,bytes32 recipient,uint256 amount,uint256 minOut)"
+        "UAPqzUnshieldUnwrap(bytes32 from,PqzBurnArgs args,Unwrap unwrap,bytes proof,bytes accHint,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)PqzBurnArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,bytes32 ownTag,bytes u,bytes vFrom)Unwrap(address underlying,bytes32 recipient,uint256 amount,uint256 minOut)"
     );
 
     /// @dev The factory's append (`OpenFactory.deployImplementation`, chain-neutral spec §2.1): its address; no
@@ -55,12 +55,12 @@ contract WrappedPqzToken is WrappedToken, PqzLayer, IPqzWrappedToken {
     }
 
     function _validBits() internal pure virtual override(WrappedToken, GovernanceBase) returns (uint256) {
-        return GovernanceBits.WRAPPED_BITS;
+        return GovernanceBits.WRAPPED_BITS | GovernanceBits.PQZ_KIND_BITS; // bit 24 (group 3h, PQZ proof path spec §5)
     }
 
     /// @dev `WrappedToken`'s masks, restated for the second base.
     function _roleBits() internal pure virtual override(WrappedToken, MetaTokenBase) returns (uint256) {
-        return GovernanceBits.WRAPPED_ROLES;
+        return GovernanceBits.WRAPPED_ROLES | GovernanceBits.PQZ_KIND_BITS;
     }
 
     function _contractOnlyBits() internal pure virtual override(WrappedToken, MetaTokenBase) returns (uint256) {

@@ -98,6 +98,8 @@ const ROW = {
   UASetTaxRecipient: { taxRecipient: padId('0x00000000000000000000000000000000000007a0') },
   // group 3f (T46): a native EOA as the next verifier (no registration needed, spec §4.1)
   UAPqzSetVerifier: { next: padId('0x5ca00000000000000000000000000000000000f1') },
+  // group 3h (T61): LOG
+  UASetProofStore: { next: 1 },
 };
 ROW.UAWrapOrder = wrapOrder(hex(nativeUa), NO_ID);
 ROW.CancelUAOrder = { order: order(hex(nativeUa), NO_ID) };
@@ -110,6 +112,13 @@ ROW.UASetGrant.terms = { min: 2, max: 50, total: 1000, perWindow: 100, window: 8
   scope: NO_ID };
 ROW.UAProposeRate = { num: 101, den: 100 };
 ROW.UAPqzTransferSingle = { args: COMMIT_REVEAL };
+// Group 3h (pqz-proof-path spec §3.2, plan T59): the six PQZ debit rows carry `ownTag` (a filler: the contract checks no value),
+// are tagged `"release": "3h"` (C9) and leave the relayer and the fee recipient unbound at fee 0 (mode 0: fee NONE, no restriction
+// bit; every mtx* write is relayable at fee 0): the message holds 0 for both, as `MetaTxLib.canon` hashes them, and
+// test/typed-ops.test.js signs each row again with a non-zero value in both (a reproducer that forgets the canon fails there).
+const RELEASE_3H = new Set(['UAPqzTransferSingle', 'UAPqzTransferSingleCompact', 'UAPqzTransfer', 'UAPqzTransferCompact', 'UAPqzUnshield',
+  'UAPqzUnshieldUnwrap']);
+for (const n of RELEASE_3H) ROW[n] = { ...ROW[n], mode: 0, fee: 0 };
 // The regulated controls (regulated-kinds spec §3.1, ua-mtx-merge T34): values a kind-8 token at `target` takes at
 // REG_NOW (TypedOps.t.sol's regulated rows): one record runs through them, recorded by `UARecordOrder`, backing `UAFreeze`,
 // moved under by `UAForceTransfer`, ended by `UARevokeOrder`; `UAOperatorTransfer` moves the record's subject's units.
@@ -175,8 +184,8 @@ function extraOf(name, td, at) {
 const ops = {};
 for (const [name, op] of Object.entries(TYPED_OPS)) {
   // a per-kind row of one struct name (group 3g: `UAPqzRollOver`) names its EIP-712 primary type
-  const row = { ...(op.primary !== name ? { primaryType: op.primary } : {}), typeString: op.typeString, typehash: op.typehash,
-    on: op.on, types: op.types, domains: {} };
+  const row = { ...(op.primary !== name ? { primaryType: op.primary } : {}), ...(RELEASE_3H.has(name) ? { release: '3h' } : {}),
+    typeString: op.typeString, typehash: op.typehash, on: op.on, types: op.types, domains: {} };
   const message = sample(name, op);
   const relay = name === 'UARelayFee' ? { token: CONTRACT.token, chainId: contexts.A.chainId, chainUid: contexts.A.chainUid, router: ROUTER,
     executor: EXECUTOR, target: TARGET, from: hex(nativeUa), amount: 25, batch: 7, nonce: 0, validUntil: VALID_UNTIL } : null;
@@ -215,7 +224,9 @@ const out = {
     + '`AccountSig{0, [], signature}` on the account\'s own entries. An unbound `relayer` / `feeRecipient` is 0 in the message, '
     + 'as the contract hashes it. Field values not set by the generator are fillers (keccak256 of the field path), not valid '
     + 'proofs or ciphertexts. `extra`: what the entry takes unsigned (`meta`: the `PayMeta` a pay entry takes last, pay-meta-tax T41; '
-    + '`pqzVerdict`: the `PqzSignedVerdict` a PQZ entry takes last, after the signature, the empty one of a PRECOMPILE token, group 3f).',
+    + '`pqzVerdict`: the `PqzSignedVerdict` a PQZ entry takes last, after the signature, the empty one of a PRECOMPILE token, group 3f). '
+    + '`release: "3h"` (group 3h, pqz-proof-path spec §9.3, C9): a row of a format 3h moved (the six PQZ debits gain `ownTag`); those rows '
+    + 'leave the relayer and the fee recipient unbound at fee 0 (mode 0), 0 in the message and the calldata.',
   version: 1, context: 'A', key: { private: hex(be(nativeSk, 32)), address: FROM, ua: hex(nativeUa) }, ops,
 };
 mkdirSync(OUT, { recursive: true });

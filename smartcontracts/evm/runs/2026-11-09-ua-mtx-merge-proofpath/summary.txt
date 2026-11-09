@@ -1,0 +1,20 @@
+M1-debit-delete-loop | invariant_proofPath, test_handler_reachesEveryPath | 1 | unit: test/pqz/PqzDebitRecord.t.sol
+M2-rollover-delete-loop | invariant_proofPath, test_handler_reachesEveryPath | 1 | unit: test/pqz/PqzDebitRecord.t.sol
+M3-record-p-off-by-one | invariant_proofPath, test_handler_reachesEveryPath | 1 | unit: test/pqz/PqzDebitRecord.t.sol
+M4-prevBlob-new-blob | invariant_proofPath, test_handler_reachesEveryPath | 1 | unit: test/pqz/PqzDebitRecord.t.sol
+M5-w1-not-for-keyVersion | invariant_proofPath | 1 | unit: test/pqz/PqzDebitRecord.t.sol
+M6-record-bit-dropped | invariant_proofPath, test_handler_reachesEveryPath | 1 | unit: test/pqz/PqzDebitRecord.t.sol
+M17-rollover-floor-unconditional | test_handler_reachesEveryPath | 1 | unit: test/pqz/PqzDebitRecord.t.sol
+M18-w1-not-for-shieldIn | invariant_proofPath, test_handler_reachesEveryPath | 1 | unit: test/pqz/PqzDebitRecord.t.sol
+M21-deltaP-from-floor | invariant_proofPath | 1 | unit: test/pqz/PqzDebitRecord.t.sol
+M7-memoHash-without-ownTag | invariant_proofPath, test_handler_reachesEveryPath | 1 | unit: test/pqz/PqzOwnTag.t.sol
+M8-ownTag-before-vf | invariant_proofPath, test_handler_reachesEveryPath | 1 | unit: test/pqz/PqzOwnTag.t.sol
+M9-rOf-ignores-n | invariant_proofPath, test_handler_reachesEveryPath | 1 | unit: test/pqz/PqzOwnTag.t.sol
+M22-kv-key-pointer-order | invariant_proofPath | 1 | unit: test/pqz/PqzOwnTag.t.sol
+M10-record-proofStore-zero | invariant_proofPath, test_handler_reachesEveryPath | 1 | unit: test/pqz/PqzProofStore.t.sol
+M11-log-buffer-not-proof | invariant_proofPath, test_handler_reachesEveryPath | 1 | unit: test/pqz/PqzProofStore.t.sol
+M13-bit24-on-zether | none (survived) | 0 | unit: test/governance/GovProofBit.t.sol
+M14-bit24-delay-relaxed | none (survived) | 0 | unit: test/governance/GovProofBit.t.sol
+M15-setProofStore-ungated | invariant_proofPath, test_handler_reachesEveryPath | 1 | unit: test/governance/GovProofBit.t.sol
+M20-setProofStore-byte22 | invariant_proofPath, test_handler_reachesEveryPath | 1 | unit: test/governance/GovProofBit.t.sol
+M16-trivial-merge-lo-rolled | none (survived) | 0 | unit: (none: equivalent if floor <= rolled holds, P1 asserts it)

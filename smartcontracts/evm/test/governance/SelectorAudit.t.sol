@@ -431,11 +431,13 @@ contract SelectorAuditPqzTest is SelectorAuditRows, PqzFixture {
         _stack();
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
         _govern(c, address(0));
+        c.features |= uint256(1) << GovernanceBits.PQZ_PROOF; // group 3h T61: bit 24 on, no holder: the stranger's MissingRole
         np = factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), "sa");
         _releaseWrapped();
         c = _cfg(uint256(1) << 40);
         c.features = 0;
         _govern(c, address(new MockERC20("USD", "USD", 6)));
+        c.features |= uint256(1) << GovernanceBits.PQZ_PROOF;
         wp = factory.createToken(IOpenFactory.TokenKind.WRAPPED_PQZ, 1, abi.encode(c), "saw");
     }
 

@@ -1051,7 +1051,7 @@ contract PqzStateTrivialRollGasTest is PqzSlots {
     /// No `acc` slot is zero after the TRIVIAL-only rollover (D3), and the `u` half still reads as zero.
     function test_trivialRoll_noZeroSlot() public view {
         for (uint256 i; i < PqzCt.ACC_WORDS; ++i) {
-            assertTrue(vm.load(address(tok), bytes32(_acctSlot(gina) + 4 + i)) != 0, "acc slot zeroed");
+            assertTrue(vm.load(address(tok), bytes32(_acctSlot(gina) + 5 + i)) != 0, "acc slot zeroed");
         }
         bytes memory acc = tok.pqzAcc(gina, 0);
         for (uint256 o; o < PqzCt.PK; o += 32) {

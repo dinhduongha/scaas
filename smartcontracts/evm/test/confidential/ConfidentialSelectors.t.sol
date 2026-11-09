@@ -42,10 +42,11 @@ contract ConfidentialSelectorsTest is Test {
         // `pqzVerdict, pqzVerdictSig`): op 7 0xe680f327 -> 0xff93a099 (the old rows in test/vectors/legacy/ua-mtx-merge/3f/)
         string memory tail = string.concat(",bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,",
             "((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))");
-        // group 3g T52: `uint64 keyVersion` after `fromUA` in the three args structs
-        string memory single = "(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes)";
-        string memory multi = "(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes)";
-        string memory burn = "(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes,bytes)";
+        // group 3g T52: `uint64 keyVersion` after `fromUA` in the three args structs; group 3h T59: `bytes32 ownTag` after `salt`
+        // (op 1, op 7) and after `beneficiaryUA` (the burn forms)
+        string memory single = "(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes)";
+        string memory multi = "(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes32,bytes[],(bytes32,bytes,bytes)[],bytes,bytes)";
+        string memory burn = "(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes,bytes)";
         assertEq(IPqzToken.mtxConfidentialTransfer.selector, bytes4(keccak256(bytes(string.concat("mtxConfidentialTransfer(", multi, tail)))));
         assertEq(IPqzToken.mtxConfidentialTransferCompact.selector,
             bytes4(keccak256(bytes(string.concat("mtxConfidentialTransferCompact(", multi, tail)))));
