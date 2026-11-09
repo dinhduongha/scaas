@@ -2172,10 +2172,10 @@ module is security-relevant).
       `OP_SELFTEST` for the release's set. After it: each deployed code hash equals the build's; one relayed transfer, one
       relay-fee call and one PQZ op 1 as a smoke. Addresses, tx hashes and gas in a runs note (no key, no absolute path).
       The SCaaS testnet reset 2 (TODO item 4) still deploys the merged code after the merge and 3c.
-- [ ] **(Was Step 5) the full Hedera testnet deploy — DEFERRED (owner 2026-11-09: "tạm chưa quan tâm Hedera, theo 60 M"; not now,
-      the owner did not ask for a Hedera deploy in this task). T66b follows the 60 M goal only; no Hedera-specific split (the
-      spec's part 4b is not built). The public Hedera testnet refused runtime > 24,576 B in a simulation (T66b Step 2,
-      `runs/2026-11-09-ua-mtx-merge-t66b/hedera-codesize.txt`). The step as written (2026-11-08):** after Step 4, `script/hedera/DeployHedera.s.sol` in full on the
+- **Not in T66b: the Hedera testnet deploy** (owner 2026-11-09). Hedera is a public chain like BSC or Polygon: until it
+      raises its code-size limit (Glamsterdam or its own equivalent), no SCaaS release can deploy there, whatever the split
+      (the public Hedera testnet refused runtime > 24,576 B in a simulation, `runs/2026-11-09-ua-mtx-merge-t66b/hedera-codesize.txt`).
+      A public-chain deploy waits for that chain's fork (owner 2026-10-21); no Hedera-specific split. The step as written (2026-11-08), kept for when Hedera can take it: after Step 4, `script/hedera/DeployHedera.s.sol` in full on the
       public Hedera testnet (chain 296) from the testnet-only account (`SCAAS_TESTNET_MNEMONIC_FILE`, never a key in a file of the
       repo). Each transaction within Hedera's 15 M gas per transaction (Hedera charges at least 80 % of the limit: estimate + 20 %);
       HBAR from the faucet first (several hundred at 1,330 gwei-equivalent). Then the HIP-632 checks of `docs/networks/hedera.md`
