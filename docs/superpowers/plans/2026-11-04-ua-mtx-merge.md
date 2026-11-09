@@ -2172,8 +2172,11 @@ module is security-relevant).
       `OP_SELFTEST` for the release's set. After it: each deployed code hash equals the build's; one relayed transfer, one
       relay-fee call and one PQZ op 1 as a smoke. Addresses, tx hashes and gas in a runs note (no key, no absolute path).
       The SCaaS testnet reset 2 (TODO item 4) still deploys the merged code after the merge and 3c.
-- **Not in T66b: the Hedera testnet deploy** (owner 2026-11-09). Hedera is a public chain like BSC or Polygon: until it
-      raises its code-size limit (Glamsterdam or its own equivalent), no SCaaS release can deploy there, whatever the split
+- **Not in T66b: the Hedera testnet deploy** (owner 2026-11-09). Hedera is a public chain like BSC or Polygon. A contract
+      deploys on a chain when its runtime fits the chain's max code size and its deploy transaction fits the chain's gas
+      limit (Hedera: 15 M per transaction). Until such a chain raises its code size (Glamsterdam or its own equivalent), the
+      token kinds, the DEX, the registry pair and the factory do not fit there, whatever the split; a small contract that
+      needs none of them can (for example a PqChat store, 3c)
       (the public Hedera testnet refused runtime > 24,576 B in a simulation, `runs/2026-11-09-ua-mtx-merge-t66b/hedera-codesize.txt`).
       A public-chain deploy waits for that chain's fork (owner 2026-10-21); no Hedera-specific split. The step as written (2026-11-08), kept for when Hedera can take it: after Step 4, `script/hedera/DeployHedera.s.sol` in full on the
       public Hedera testnet (chain 296) from the testnet-only account (`SCAAS_TESTNET_MNEMONIC_FILE`, never a key in a file of the
