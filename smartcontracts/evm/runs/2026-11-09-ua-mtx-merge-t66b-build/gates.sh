@@ -26,7 +26,7 @@ step() {
         FOUNDRY_CACHE_PATH=cache/t66b-gas ../../scripts/capped forge test -j 2 -vv) ;;
     ua-pins) (cd $EVM && FOUNDRY_SPARSE_MODE=true FOUNDRY_OUT=out/t66b-ua FOUNDRY_CACHE_PATH=cache/t66b-ua \
         ../../scripts/capped forge test -j 2 --isolate --match-path 'test/ua/{UAGas,UARegistryGroups}.t.sol' -vv) ;;
-    size) (cd $EVM && mkdir -p out/t66b-sizes && FOUNDRY_OUT=out/t66b-sizes FOUNDRY_CACHE_PATH=cache/t66b-sizes ../../scripts/capped forge build src \
+    size) (cd $EVM && mkdir -p out/t66b-sizes && FOUNDRY_OUT=out FOUNDRY_CACHE_PATH=cache ../../scripts/capped forge build src \
         --sizes --json > out/t66b-sizes/sizes-$L.json 2> runs/2026-11-09-ua-mtx-merge-t66b-$L-size-build.log; \
         python3 ../../scripts/size_gate.py out/t66b-sizes/sizes-$L.json size-baseline.json) ;;
     ua8-gas-*) # the UA-8 gas rows (GAS| lines) at one set; GAS_REPIN=1 prints them without the pin check (the test ends FAILED)

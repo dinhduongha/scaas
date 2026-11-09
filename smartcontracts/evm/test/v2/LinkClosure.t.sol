@@ -20,7 +20,8 @@ import {PqzTransferLib} from "../../src/pqz/PqzTransferLib.sol";
 import {PqzBurnLib} from "../../src/pqz/PqzBurnLib.sol";
 import {PqzViewLib} from "../../src/pqz/PqzViewLib.sol";
 import {PqzWrappedLib} from "../../src/pqz/PqzWrappedLib.sol";
-import {UARegistryLib} from "../../src/ua/UARegistryLib.sol";
+import {UARegistryCoreLib} from "../../src/ua/UARegistryCoreLib.sol";
+import {UARegistryAuxLib} from "../../src/ua/UARegistryAuxLib.sol";
 import {RegulatedLib} from "../../src/regulated/RegulatedLib.sol";
 import {SmartKeyAccountFactory} from "../../src/account/SmartKeyAccountFactory.sol";
 import {ZUID} from "../zether/helpers/ZetherFixture.sol";
@@ -33,7 +34,7 @@ contract LinkClosureTest is Test {
     IOpenFactory.TokenKind constant NORMAL = IOpenFactory.TokenKind.NORMAL;
     string[] internal names = [
         "GovernanceLib", "HederaLib", "TradeLib", "MtxPipelineLib", "WrappedLib", "ZetherLib", "ZetherWrappedLib",
-        "PqzStateLib", "PqzTransferLib", "PqzBurnLib", "PqzViewLib", "PqzWrappedLib", "UARegistryLib", "RegulatedLib"
+        "PqzStateLib", "PqzTransferLib", "PqzBurnLib", "PqzViewLib", "PqzWrappedLib", "UARegistryCoreLib", "UARegistryAuxLib", "RegulatedLib"
     ];
 
     function _addr(string memory n) internal pure returns (address a) {
@@ -50,7 +51,8 @@ contract LinkClosureTest is Test {
         if (h == keccak256("PqzBurnLib")) return address(PqzBurnLib);
         if (h == keccak256("PqzViewLib")) return address(PqzViewLib);
         if (h == keccak256("PqzWrappedLib")) return address(PqzWrappedLib);
-        if (h == keccak256("UARegistryLib")) return address(UARegistryLib);
+        if (h == keccak256("UARegistryCoreLib")) return address(UARegistryCoreLib);
+        if (h == keccak256("UARegistryAuxLib")) return address(UARegistryAuxLib);
         if (h == keccak256("RegulatedLib")) return address(RegulatedLib);
         revert(string.concat("unknown library ", n));
     }
@@ -151,25 +153,29 @@ contract LinkClosureTest is Test {
         for (uint256 i; i < libs.length; ++i) h[i] = libs[i].codehash;
     }
 
-    /// typed-signing R2: the registry's link closure is `UARegistryLib` alone, and that library links nothing. The deployed
-    /// registry (through `DeployBase`, CREATE2) holds exactly two DELEGATECALLs, `_lib`'s and (T66b R-1) `_libRaw`'s, whose
-    /// target is that library (1 -> 2).
+    /// typed-signing R2, T66b 3.1b: the registry's link closure is `UARegistryCoreLib` and `UARegistryAuxLib` (1 -> 2), and neither
+    /// links the other or anything else (the auxiliary library compiles in the core library's `internal` helpers). The deployed registry
+    /// (through `DeployBase`, CREATE2) holds exactly two DELEGATECALLs, `_lib`'s (to either library, by the entry) and (T66b R-1)
+    /// `_libRaw`'s (1 -> 2), and both targets are in its code.
     function test_registryClosure() public {
         string[] memory c = _closure("UARegistry", new string[](0));
         address[] memory want = registryClosureLibs();
         assertEq(c.length, want.length, "number of libraries");
-        assertEq(_addr(c[0]), want[0]);
-        assertEq(_closure("UARegistryLib", new string[](0)).length, 0, "UARegistryLib links nothing");
+        for (uint256 i; i < c.length; ++i) assertEq(_addr(c[i]), want[i], c[i]);
+        assertEq(_closure("UARegistryCoreLib", new string[](0)).length, 0, "UARegistryCoreLib links nothing");
+        assertEq(_closure("UARegistryAuxLib", new string[](0)).length, 0, "UARegistryAuxLib links nothing");
 
         DeployHarness h = new DeployHarness();
         (, string memory json) = h.deploy(ZUID, false, new SmartKeyAccountFactory(ZUID).IMPLEMENTATION());
         address reg = vm.parseJsonAddress(json, ".ua_registry");
-        assertEq(vm.parseJsonAddress(json, ".ua_registry_lib"), want[0]);
+        assertEq(vm.parseJsonAddress(json, ".ua_registry_aux_lib"), want[0]);
+        assertEq(vm.parseJsonAddress(json, ".ua_registry_core_lib"), want[1]);
         (uint256 delegates, bool destruct, bool callcode) = _walk(reg.code);
         assertEq(delegates, 2, "UARegistry: DELEGATECALL count");
         assertFalse(destruct, "UARegistry: SELFDESTRUCT");
         assertFalse(callcode, "UARegistry: CALLCODE");
-        assertTrue(_holds(reg.code, want[0]), "the DELEGATECALL's target is in the code");
+        assertTrue(_holds(reg.code, want[0]), "the auxiliary library is in the code");
+        assertTrue(_holds(reg.code, want[1]), "the core library is in the code");
     }
 
     /// `code` holds the 20 bytes of `a`.

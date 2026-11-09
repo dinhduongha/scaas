@@ -257,24 +257,30 @@ contract UADeployTest is Test {
         assertEq(address(_registry(31337, false)), reg);
     }
 
-    /// NET-EVM-06: the registry and `UARegistryLib` each have the gate of a release (typed-signing R2): the deploy refuses
-    /// one below each figure and reaches the next gate at it. ua-mtx-merge T2, meaning: `NormalToken` (35,289 B) now asks
-    /// less than `UARegistryLib` (36,192 B), so the library's figure binds a plain deploy (the DEX's is lower still); at
-    /// that figure the deploy goes through. Before T2 `NormalToken`'s gate came after the library's and bound it.
+    /// NET-EVM-06: the registry and each of its libraries have the gate of a release (typed-signing R2; T66b 3.1b: two
+    /// libraries): the deploy refuses one below each figure, in the deploy's order (the registry, `UARegistryCoreLib`,
+    /// `UARegistryAuxLib`), and goes through at the largest gate of a plain deploy (the libraries', `NormalToken`'s and the
+    /// DEX's, whichever is largest).
     function test_registryDeployGate() public {
         DeployHarness h = new DeployHarness();
         string memory base = vm.readFile("./size-baseline.json");
         uint256 need = h.gasNeed("UARegistry");
-        uint256 lib = h.gasNeed("UARegistryLib");
-        uint256 token = h.gasNeed("NormalToken");
+        uint256 lib = h.gasNeed("UARegistryCoreLib");
+        uint256 key = h.gasNeed("UARegistryAuxLib");
         assertEq(need, vm.parseJsonUint(base, ".UARegistry") * 1530 + 16_777_216);
-        assertEq(lib, vm.parseJsonUint(base, ".UARegistryLib") * 1530 + 16_777_216);
+        assertEq(lib, vm.parseJsonUint(base, ".UARegistryCoreLib") * 1530 + 16_777_216);
+        assertEq(key, vm.parseJsonUint(base, ".UARegistryAuxLib") * 1530 + 16_777_216);
         assertLt(need, lib);
-        assertLt(token, lib, "NormalToken's release now needs less than UARegistryLib's");
-        assertLt(h.gasNeed("SCaaSDex"), lib);
+        assertLt(need, key);
         _refused(h, need - 1, need, "UARegistry");
-        _refused(h, need, lib, "UARegistryLib");
-        h.limitBlockGas(lib);
+        _refused(h, need, lib, "UARegistryCoreLib");
+        if (key > lib) _refused(h, lib, key, "UARegistryAuxLib");
+        uint256 top = lib > key ? lib : key;
+        uint256 token = h.gasNeed("NormalToken");
+        uint256 dex = h.gasNeed("SCaaSDex");
+        if (token > top) top = token;
+        if (dex > top) top = dex;
+        h.limitBlockGas(top);
         h.deploy(UID, false, ska);
     }
 

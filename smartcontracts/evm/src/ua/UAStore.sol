@@ -8,7 +8,7 @@ import {UAKinds} from "./UAKinds.sol";
 import {SigCheck} from "../common/SigCheck.sol";
 import {SSTORE2} from "../common/SSTORE2.sol";
 
-/// @title The registry's storage as one struct at slot 0, shared by `UARegistry` and `UARegistryLib` (which runs by
+/// @title The registry's storage as one struct at slot 0, shared by `UARegistry` and `UARegistryCoreLib` (which runs by
 ///        DELEGATECALL on it), and the helpers both need (typed-signing R2). `SaltedEIP712` has no storage (immutables
 ///        only), so `Layout` starts at slot 0 and every field keeps its slot number; pinned by `test/ua/UAStoreLayout.t.sol`
 ///        (group 3g, T51: the active pin; `UARegistrySplit.t.sol` is a legacy file).
@@ -231,7 +231,7 @@ library UAStore {
     }
 
     /// `requireAuthorized` on `target` as a verdict. Records and kinds of gen 1 are checked by gen 1 (its verifiers, its
-    /// `UAAuth` domain for native members of its structures); in `UARegistryLib` `target` is also the registry itself, for
+    /// `UAAuth` domain for native members of its structures); in `UARegistryCoreLib` `target` is also the registry itself, for
     /// a derived `msig` member. Any revert there is a failed check, except starvation: a starved caller must see
     /// UAVerifyGas, never a verdict (T-AUTH-4): the target's own `UAVerifyGas` (at a hold) is re-raised, and so is the
     /// target running out of gas before its hold (W-M): no revert data and at most the 1/64 this frame kept (`g` = gasleft

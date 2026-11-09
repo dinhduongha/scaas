@@ -12,7 +12,7 @@ rules: `docs/contracts/` (start at `docs/contracts/README.md`); reasons and old 
 | Zether kinds `NORMAL_ZETHER` / `WRAPPED_ZETHER` | `zether/` (`ZetherLayer`, `ZetherLib`, `ZetherStatements`, per curve the transfer / burn / inner-product verifiers (`ZetherTransferVerifier*`, `ZetherBurnVerifier*`, `ZetherInnerProductVerifier*`), `ZetherDisclosure`) | built; unaudited, any chain with EIP-2537 ([zether.md](../../docs/contracts/zether.md)) |
 | PQZ kinds `NORMAL_PQZ` / `WRAPPED_PQZ` | `pqz/` (`PqzLayer`, `PqzStateLib`, `PqzTransferLib`, `PqzBurnLib`, `PqzViewLib`, `PqzCore`, `PqzCt`, `UAPqzVerifier`, `PqzSafety`) | built; any chain whose `PQZ` precompile passes the self-test (`PqzSafety`); op 7 multi-recipient transfers (`mtxConfidentialTransfer*`) and op 1 single (`mtxConfidentialTransferSingle*`) over the `PQZ` precompile ([pq-zero-knowledge.md](../../docs/contracts/pq-zero-knowledge.md)) |
 | Factory | `factory/OpenFactory.sol` (`IOpenFactory`, `IFactoryToken`) | built; open creation, versioned catalogue, the Zether / PQZ gates |
-| Universal Accounts | `ua/UARegistry.sol` (views, `requireAuthorized`) with its linked `ua/UARegistryLib.sol` (the writes), `ua/UAKinds.sol`, `ua/verifiers/`, the PQ verifiers (`MlDsa`, `FnDsa`, `SlhDsa`) | built; admin-free registry, kinds `0x0100`–`0x0108`, groups, `msig`, Zether / PQZ kinds, per-kind list ([accounts.md](../../docs/contracts/accounts.md)) |
+| Universal Accounts | `ua/UARegistry.sol` (views, `requireAuthorized`) with its linked `ua/UARegistryCoreLib.sol` and `ua/UARegistryAuxLib.sol` (the writes, the reads off the hot path), `ua/UAKinds.sol`, `ua/verifiers/`, the PQ verifiers (`MlDsa`, `FnDsa`, `SlhDsa`) | built; admin-free registry, kinds `0x0100`–`0x0108`, groups, `msig`, Zether / PQZ kinds, per-kind list ([accounts.md](../../docs/contracts/accounts.md)) |
 | DEX | `dex/SCaaSDex.sol` (`DexPuller`), `trade/` | built; clone per DEX, `mtxSettle` one taker / many makers ([dex.md](../../docs/contracts/dex.md)) |
 | Accounts and wallets | `account/SmartKeyAccount.sol` (+ factory), `wallet/MandateWallet.sol` | built |
 | Hedera | `hedera/` | built; HIP-632 / long-zero helpers for the Hedera profile ([networks/hedera.md](../../docs/networks/hedera.md)) |
@@ -74,8 +74,8 @@ reached by DELEGATECALL and does not count towards a token's size; `internal` li
 ## Deploying
 
 `script/Deploy.s.sol` (with `DeployBase.sol`) deploys the factory, the token catalogue, the UA registry generation 1
-with the per-chain kinds (`UAPrecompileProbe`) and writes `deployments/<chainid>.json`, `ua_registry_lib` included: forge
-links and deploys `UARegistryLib` by CREATE2 before the registry, behind the same release gas gate. No script deploys a
+with the per-chain kinds (`UAPrecompileProbe`) and writes `deployments/<chainid>.json`, `ua_registry_core_lib` and `ua_registry_aux_lib` included: forge
+links and deploys `UARegistryCoreLib` and `UARegistryAuxLib` by CREATE2 before the registry, each behind the same release gas gate. No script deploys a
 registry generation 2. `script/ZetherE2E.s.sol` is the classical Zether e2e (`scripts/e2e-zether.sh`: an anvil, or the
 SCaaS testnet with `RPC`), direct calls and relayed named entries. The SCaaS testnet's PQZ stack is deployed and exercised
 end to end by `script/pqz/e2e.py` (logs in `runs/`, e.g. the live addresses of the latest run at the end of each log).

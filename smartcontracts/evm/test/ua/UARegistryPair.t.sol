@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-import {UARegistryLib} from "../../src/ua/UARegistryLib.sol";
+import {IUARegistry} from "../../src/ua/IUARegistry.sol";
+import {UARegistry} from "../../src/ua/UARegistry.sol";
+import {UARegistryCoreLib} from "../../src/ua/UARegistryCoreLib.sol";
+import {UARegistryAuxLib} from "../../src/ua/UARegistryAuxLib.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {UARegistryBase} from "./UARegistryBase.sol";
 
@@ -49,8 +52,9 @@ contract KindsDirect {
 }
 
 /// T66b task 3.1 (spec 2026-11-09-t66b-library-organisation.md §5): the registry pair rebalanced. R-1: the seven `pure` views whose
-/// code `UARegistryLib` holds run there (`_libPure`, nothing appended); their answers and refusals are byte-equal to the code they
-/// replace (`KindsDirect`). UNAUDITED.
+/// code `UARegistryCoreLib` holds run there (`_libPure`, nothing appended); their answers and refusals are byte-equal to the code they
+/// replace (`KindsDirect`). Task 3.1b (§11 (f), owner 2026-11-09): two write libraries by domain, `UARegistryCoreLib` (registration,
+/// the portable check) and `UARegistryAuxLib` (the key writes after registration, reads off the hot path), one DELEGATECALL per operation. UNAUDITED.
 contract UARegistryPairTest is UARegistryBase {
     KindsDirect internal direct;
 
@@ -62,7 +66,7 @@ contract UARegistryPairTest is UARegistryBase {
     // ----- R-1: each view forwards to the library entry of its own name, its calldata unchanged -----
 
     function _forwarded(bytes memory data) internal {
-        vm.expectCall(address(UARegistryLib), data, 1);
+        vm.expectCall(address(UARegistryCoreLib), data, 1);
         (bool ok,) = address(reg).staticcall(data);
         ok; // a refusal is forwarded as well
     }
@@ -80,13 +84,13 @@ contract UARegistryPairTest is UARegistryBase {
 
     /// Positive control of the `expectCall` above: a writer runs in the library today.
     function test_r1_control_writerRunsInTheLibrary() public {
-        vm.expectCall(address(UARegistryLib), abi.encodeWithSelector(UARegistryLib.storePqzPop.selector), 1);
-        try reg.storePqzPop(bytes32(uint256(7)), 0, hex"01") {} catch {}
+        vm.expectCall(address(UARegistryCoreLib), abi.encodeWithSelector(UARegistryCoreLib.register.selector), 1);
+        try reg.register(0x0103, _key(0x0103), _none(), "", "") {} catch {}
     }
 
     /// The six `pure` views smaller than their stub stay in the registry (§5): no library call.
     function test_r1_smallViewsStay() public {
-        vm.expectCall(address(UARegistryLib), "", 0);
+        vm.expectCall(address(UARegistryCoreLib), "", 0);
         reg.kindName(0x0103);
         reg.uaMessage(0x0103, bytes32(0), bytes32(0));
         reg.pqzKeyDigest(bytes32(0), bytes32(0));
@@ -139,5 +143,97 @@ contract UARegistryPairTest is UARegistryBase {
             KindsDirect.pqzKeyVersionDigest.selector, KindsDirect.pqzKeyVersionRecordDigest.selector
         ];
         _same(bytes.concat(s[which % 7], tail));
+    }
+
+    // ----- 3.1b: each writer runs in its domain's library, once, and never in the other -----
+
+    function _routed(address lib, address other, bytes4 libSel) internal {
+        vm.expectCall(lib, abi.encodeWithSelector(libSel), 1);
+        vm.expectCall(other, abi.encodeWithSelector(libSel), 0);
+    }
+
+    function _try(bytes memory data) internal {
+        (bool ok,) = address(reg).call(data);
+        ok; // a refusal inside the library is still its call
+    }
+
+    function test_b_keyWritersRunInTheAuxLibrary() public {
+        (address k, address r, bytes32 ua) = (address(UARegistryAuxLib), address(UARegistryCoreLib), bytes32(uint256(7)));
+        IUARegistry.UASig memory none;
+        IUARegistry.KemKey memory kem;
+        IUARegistry.MemberSig memory m;
+        _routed(k, r, UARegistryAuxLib.cacheExpandedKey.selector);
+        _try(abi.encodeCall(UARegistry.cacheExpandedKey, (0x0130, "", 0)));
+        _routed(k, r, UARegistryAuxLib.storePqzPop.selector);
+        _try(abi.encodeCall(UARegistry.storePqzPop, (ua, 0, hex"01")));
+        _routed(k, r, UARegistryAuxLib.setPqzKey.selector);
+        _try(abi.encodeCall(UARegistry.setPqzKey, (ua, 0, "", bytes32(0), none)));
+        _routed(k, r, UARegistryAuxLib.setKemKey.selector);
+        _try(abi.encodeCall(UARegistry.setKemKey, (ua, 0, kem, none)));
+        _routed(r, k, UARegistryCoreLib.acceptMembership.selector); // the core library's (§11 (f))
+        _try(abi.encodeCall(UARegistry.acceptMembership, (ua, m)));
+    }
+
+    /// The reads off the hot path run in their library inside the view; the hot views run in no library.
+    function test_b_readsRunInTheirLibrary() public {
+        (address k, address r, bytes32 ua) = (address(UARegistryAuxLib), address(UARegistryCoreLib), bytes32(uint256(7)));
+        _routed(r, k, UARegistryCoreLib.registrationOf.selector);
+        reg.registrationOf(ua);
+        _routed(r, k, UARegistryCoreLib.uaCount.selector);
+        reg.uaCount(0x0103);
+        bytes4[8] memory aux = [UARegistryAuxLib.popOf.selector, UARegistryAuxLib.popSlotsOf.selector,
+            UARegistryAuxLib.webAuthnKeyOf.selector, UARegistryAuxLib.pqzPopOf.selector, UARegistryAuxLib.pqzKeySigOf.selector,
+            UARegistryAuxLib.uaAt.selector, UARegistryAuxLib.uaPage.selector, UARegistryAuxLib.uaIndex.selector];
+        for (uint256 i; i < aux.length; ++i) _routed(k, r, aux[i]);
+        reg.popOf(ua);
+        reg.popSlotsOf(ua);
+        reg.webAuthnKeyOf(ua);
+        reg.pqzPopOf(ua, 0);
+        reg.pqzKeySigOf(ua, 0);
+        _try(abi.encodeCall(UARegistry.uaAt, (0x0103, 0)));
+        reg.uaPage(0x0103, 0, 4);
+        _try(abi.encodeCall(UARegistry.uaIndex, (ua)));
+    }
+
+    function test_b_hotViewsRunInNoLibrary() public {
+        bytes32 ua = bytes32(uint256(7));
+        IUARegistry.UASig memory none;
+        vm.expectCall(address(UARegistryCoreLib), "", 0);
+        vm.expectCall(address(UARegistryAuxLib), "", 0);
+        _try(abi.encodeCall(UARegistry.requireAuthorized, (ua, bytes32(0), bytes32(0), none)));
+        reg.kindOf(ua);
+        reg.recordOf(ua);
+        reg.checkedOf(ua);
+        reg.keyOf(ua);
+        reg.keyOwner(ua);
+        reg.pqzKeyOf(ua);
+        reg.kemKeyOf(ua);
+        reg.msigOf(ua);
+        reg.memberAccepted(ua, 0);
+        reg.memberSigHashOf(ua, 0);
+        reg.uaAuthDigest(ua, bytes32(0), bytes32(0));
+        reg.muSig2KeyOf(ua);
+        reg.frostKeyOf(ua);
+    }
+
+    function test_b_registrationRunsInTheFirstLibrary() public {
+        (address k, address r) = (address(UARegistryAuxLib), address(UARegistryCoreLib));
+        _routed(r, k, UARegistryCoreLib.register.selector);
+        _try(abi.encodeCall(UARegistry.register, (0x0103, _key(0x0103), _none(), "", "")));
+        IUARegistry.MsigStructure memory st;
+        _routed(r, k, UARegistryCoreLib.registerMsig.selector);
+        _try(abi.encodeCall(UARegistry.registerMsig, (st, _none(), new IUARegistry.MemberSig[](0), "")));
+        IUARegistry.UASig memory none;
+        vm.expectCall(r, abi.encodeWithSelector(UARegistryCoreLib.requirePortable.selector), 1);
+        vm.expectCall(k, "", 0);
+        _try(abi.encodeCall(UARegistry.requirePortable, (bytes32(uint256(7)), bytes32(0), bytes32(0), none)));
+    }
+
+    /// The constructor refuses a registry whose auxiliary library has no code (`_lib` would "succeed" on it, every write a no-op).
+    function test_b_constructorNeedsTheAuxLibrary() public {
+        new UARegistry(chainUidA, address(0), false, BUDGET, address(0), true, _cfgs(address(mock))); // the control
+        vm.etch(address(UARegistryAuxLib), "");
+        vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, uint16(0)));
+        new UARegistry(chainUidA, address(0), false, BUDGET, address(0), true, _cfgs(address(mock)));
     }
 }

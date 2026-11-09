@@ -35,7 +35,8 @@ import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
 import {TradeLib} from "../../src/trade/TradeLib.sol";
 import {HederaLib} from "../../src/hedera/HederaLib.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
-import {UARegistryLib} from "../../src/ua/UARegistryLib.sol";
+import {UARegistryCoreLib} from "../../src/ua/UARegistryCoreLib.sol";
+import {UARegistryAuxLib} from "../../src/ua/UARegistryAuxLib.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {regArgs} from "../../test/helpers/Catalogue.sol";
 import {DeployHarness} from "../../test/helpers/DeployHarness.sol";
@@ -115,7 +116,8 @@ contract T66bDeployGasTest is Test {
         _m("ComplianceRegistry", abi.encodePacked(type(ComplianceRegistry).creationCode, abi.encode(address(probe))));
         _m("SmartKeyAccountFactory", abi.encodePacked(type(SmartKeyAccountFactory).creationCode, abi.encode(UID)));
         // every library with external functions (each its own transaction)
-        _m("UARegistryLib", type(UARegistryLib).creationCode);
+        _m("UARegistryCoreLib", type(UARegistryCoreLib).creationCode);
+        _m("UARegistryAuxLib", type(UARegistryAuxLib).creationCode);
         _m("ZetherLib", type(ZetherLib).creationCode);
         _m("PqzTransferLib", type(PqzTransferLib).creationCode);
         _m("PqzViewLib", type(PqzViewLib).creationCode);
@@ -132,10 +134,11 @@ contract T66bDeployGasTest is Test {
         _registry();
     }
 
-    /// Task 3.1: the registry pair alone (R-1, R-2 measured per step).
+    /// Tasks 3.1 and 3.1b: the registry and its libraries alone (R-1; the two libraries by domain).
     function test_t66bPair() public {
         probe = new T66bCreate2Probe();
-        _m("UARegistryLib", type(UARegistryLib).creationCode);
+        _m("UARegistryCoreLib", type(UARegistryCoreLib).creationCode);
+        _m("UARegistryAuxLib", type(UARegistryAuxLib).creationCode);
         _registry();
     }
 

@@ -19,12 +19,25 @@ CAPPED = os.path.join(EVM, "..", "..", "scripts", "capped")
 FORGE = os.path.expanduser("~/.foundry/bin/forge")
 REG = "src/ua/UARegistry.sol"
 PAIR = "test/ua/UARegistryPair.t.sol"
+UA_W = "{test/ua/UARegistryPair.t.sol,test/ua/UARegistryUA8.t.sol,test/ua/UARegistryMembership.t.sol}"
+UA_R = "{test/ua/UARegistryPair.t.sol,test/ua/UARegistryUA8.t.sol,test/ua/UARegistryNested.t.sol}"
 
 # id: (tests, [(file, old, new, occurrences)])
 MUTANTS = {
     # §10: R-1's forward to the wrong library entry
-    "R1-wrong-library-entry": (PAIR, [(REG, "_libPure(UARegistryLib.keyHashOf.selector);",
-                                       "_libPure(UARegistryLib.uaOf.selector);", 1)]),
+    "R1-wrong-library-entry": (PAIR, [(REG, "_libPure(UARegistryCoreLib.keyHashOf.selector);",
+                                       "_libPure(UARegistryCoreLib.uaOf.selector);", 1)]),
+    # 3.1b (owner 2026-11-09): a writer routed to the wrong library; the two libraries' addresses swapped; a read routed to the
+    # wrong library; the constructor's check of the auxiliary library dropped
+    "B1-writer-wrong-library": (UA_W, [(REG, "_lib(address(UARegistryAuxLib), UARegistryAuxLib.setKemKey.selector,",
+                                        "_lib(address(UARegistryCoreLib), UARegistryAuxLib.setKemKey.selector,", 1)]),
+    "B2-library-addresses-swapped": (UA_W, [(REG, "_lib(address(UARegistryAuxLib),", "_lib(address(UARegistryCORE),", 4),
+                                            (REG, "_lib(address(UARegistryCoreLib),", "_lib(address(UARegistryAuxLib),", 6),
+                                            (REG, "_lib(address(UARegistryCORE),", "_lib(address(UARegistryCoreLib),", 4)]),
+    "B3-read-wrong-library": (UA_R, [(REG, "_libView(address(UARegistryAuxLib), UARegistryAuxLib.popOf.selector,",
+                                      "_libView(address(UARegistryCoreLib), UARegistryAuxLib.popOf.selector,", 1)]),
+    "B4-aux-library-check-dropped": (PAIR, [(REG, " || address(UARegistryAuxLib).code.length == 0) revert UAConfig(0);",
+                                             ") revert UAConfig(0);", 1)]),
 }
 
 

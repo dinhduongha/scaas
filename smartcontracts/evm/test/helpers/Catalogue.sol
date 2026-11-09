@@ -19,7 +19,8 @@ import {PqzTransferLib} from "../../src/pqz/PqzTransferLib.sol";
 import {PqzBurnLib} from "../../src/pqz/PqzBurnLib.sol";
 import {PqzViewLib} from "../../src/pqz/PqzViewLib.sol";
 import {PqzWrappedLib} from "../../src/pqz/PqzWrappedLib.sol";
-import {UARegistryLib} from "../../src/ua/UARegistryLib.sol";
+import {UARegistryCoreLib} from "../../src/ua/UARegistryCoreLib.sol";
+import {UARegistryAuxLib} from "../../src/ua/UARegistryAuxLib.sol";
 import {RegulatedLib} from "../../src/regulated/RegulatedLib.sol";
 import {ComplianceRegistry} from "../../src/regulated/ComplianceRegistry.sol";
 
@@ -94,11 +95,12 @@ function closureLibs(IOpenFactory.TokenKind kind) view returns (address[] memory
     if (pwr) l[n] = address(PqzWrappedLib);
 }
 
-/// @notice The link closure of `UARegistry` (typed-signing R2). No release env pins it: the registry has no factory, its
-///         init code embeds the address. Checked against `linkReferences` by `LinkClosure.t.sol`.
+/// @notice The link closure of `UARegistry` (typed-signing R2; T66b 3.1b: two libraries by domain, in the order of its
+///         `linkReferences`, by source path). No release env pins it: the registry has no factory, its init code embeds the
+///         addresses. Checked against `linkReferences` by `LinkClosure.t.sol`.
 function registryClosureLibs() pure returns (address[] memory l) {
-    l = new address[](1);
-    l[0] = address(UARegistryLib);
+    l = new address[](2);
+    (l[0], l[1]) = (address(UARegistryAuxLib), address(UARegistryCoreLib));
 }
 
 /// @notice `e` with `kind`'s link closure pinned (libraries and their code hashes).

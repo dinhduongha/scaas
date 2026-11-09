@@ -406,7 +406,7 @@ contract GovDeployTest is Test {
         h.setWrapped(true);
         h.limitBlockGas(type(uint64).max);
         (OpenFactory f,) = h.deploy(ZUID, false, ska);
-        string[5] memory names = ["UARegistry", "UARegistryLib", "NormalToken", "SCaaSDex", "WrappedToken"];
+        string[6] memory names = ["UARegistry", "UARegistryCoreLib", "UARegistryAuxLib", "NormalToken", "SCaaSDex", "WrappedToken"];
         uint256 most;
         for (uint256 i; i < names.length; ++i) {
             (uint256 regular, uint256 state) = h.measured(names[i]);
@@ -451,8 +451,8 @@ contract GovDeployTest is Test {
         assertFalse(h.publicGate(), "the default is the testnet gate");
         h.setGate(1);
         string memory base = vm.readFile("./size-baseline.json");
-        string[9] memory names = ["NormalToken", "WrappedToken", "NormalZetherToken", "WrappedZetherToken", "NormalPqzToken",
-            "WrappedPqzToken", "SCaaSDex", "UARegistry", "UARegistryLib"];
+        string[10] memory names = ["NormalToken", "WrappedToken", "NormalZetherToken", "WrappedZetherToken", "NormalPqzToken",
+            "WrappedPqzToken", "SCaaSDex", "UARegistry", "UARegistryCoreLib", "UARegistryAuxLib"];
         for (uint256 i; i < names.length; ++i) {
             assertEq(h.gasNeed(names[i]), vm.parseJsonUint(base, string.concat(".", names[i])) * 1530 + TX_GAS_CAP, names[i]);
         }
@@ -511,8 +511,9 @@ contract GovDeployTest is Test {
         // 3h T59 (the metadata hash: IPqzToken's args with `ownTag`; found by T60's suite): -> 0xA4Ab7e0673548a32B96d7164b6e81B9D6Ce29C4b
         // 3h T60 (the metadata hash: `proofStore`'s error, event and view; `ConfidentialConfig.proofStore`): ->
         // 0xB95B3fA6EDD80605484A95ffBa63B6e2e873C0C6; T61 (`mtxSetProofStore`, bit 24): -> 0x8D4632FcCd353fb46400D356B79A7171eE44d2d0;
-        // T83 (the metadata hash: `IMetaTokenV2`'s pay-record views, `PaymentMeta` v3): -> this
-        assertEq(router, 0x7d3C8bE73d8840bA378F83D8Ac1297080ceaCc03, "GovernanceRouter");
+        // T83 (the metadata hash: `IMetaTokenV2`'s pay-record views, `PaymentMeta` v3): -> 0x7d3C8bE73d8840bA378F83D8Ac1297080ceaCc03
+        // T66b 3.1b (the metadata hash: `UAKinds` / `UAStore` comments naming `UARegistryCoreLib`): -> this
+        assertEq(router, 0x13CBB3D5DCb0736f87F136ad13276568A80d1aa9, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append: chain-neutral releases (plan T72), `abi.encode(factory, implArgs)`;

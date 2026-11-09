@@ -4,7 +4,8 @@ pragma solidity ^0.8.24;
 import {Vm, VmSafe} from "forge-std/Vm.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
-import {UARegistryLib} from "../../src/ua/UARegistryLib.sol";
+import {UARegistryCoreLib} from "../../src/ua/UARegistryCoreLib.sol";
+import {UARegistryAuxLib} from "../../src/ua/UARegistryAuxLib.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {UARegistryBase, MockVerifier, MockWallet} from "./UARegistryBase.sol";
 import {UACall} from "./UACall.sol";
@@ -28,10 +29,10 @@ contract CacheVerifier is MockVerifier {
 }
 
 /// What `legacy/msig-nested/test/ua/UARegistrySplit.t.sol` held that still applies once `MemberSig` has no `keyData`: its differentials
-/// compared the pre-split source, which no longer compiles (spec 2026-11-02-msig-nested §10). `UARegistryLib._msig`'s own guards, which
+/// compared the pre-split source, which no longer compiles (spec 2026-11-02-msig-nested §10). `UARegistryCoreLib._msig`'s own guards, which
 /// the `requireAuthorized` tests reach only on the registry's copy; the nested-offset note; the hot path, against the figures of the
 /// last commit where the differential ran.
-contract UARegistryLibMsigTest is UARegistryBase {
+contract UARegistryCoreLibMsigTest is UARegistryBase {
     address internal constant R1 = 0x5cA00000000000000000000000000000000000a1;
     address internal constant R2 = 0x5ca00000000000000000000000000000000000A2;
     address internal constant R8 = 0x5ca00000000000000000000000000000000000a8;
@@ -118,7 +119,7 @@ contract UARegistryLibMsigTest is UARegistryBase {
         }
     }
 
-    // ----- `UARegistryLib._msig`, on a registration's `pop` -----
+    // ----- `UARegistryCoreLib._msig`, on a registration's `pop` -----
 
     /// EOA, `ML44`, `FN`, weights 1: two PQ members of a threshold of 2, so PQ-eligible, so its `pop` is `_msig`'s.
     function _pqMsig(address at) internal returns (bytes memory d, bytes32 ua, bytes memory ml, bytes memory fn) {
@@ -185,7 +186,8 @@ contract UARegistryLibMsigTest is UARegistryBase {
         VmSafe.AccountAccess[] memory d = vm.stopAndReturnStateDiff();
         for (uint256 i; i < d.length; ++i) {
             bool isCall = d[i].kind == VmSafe.AccountAccessKind.Call || d[i].kind == VmSafe.AccountAccessKind.StaticCall;
-            if (!isCall || d[i].account == at || d[i].account == address(UARegistryLib)) continue;
+            if (!isCall || d[i].account == at || d[i].account == address(UARegistryCoreLib)
+                || d[i].account == address(UARegistryAuxLib)) continue;
             calls = keccak256(abi.encode(calls, d[i].kind, d[i].account, d[i].data));
             ++n;
         }

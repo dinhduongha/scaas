@@ -9,7 +9,7 @@ import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {UACall} from "./UACall.sol";
 import {MockWallet, UARegistryBase} from "./UARegistryBase.sol";
 
-/// The gas of one `memberAccepted` from a contract, the shape of `UARegistryLib._accepted` on a gen-2 host.
+/// The gas of one `memberAccepted` from a contract, the shape of `UARegistryCoreLib._accepted` on a gen-2 host.
 contract AcceptedProbe {
     function cost(UARegistry r, bytes32 ua, uint256 i) external view returns (uint256 cold, uint256 warm) {
         uint256 g = gasleft();

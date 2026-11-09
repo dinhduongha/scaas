@@ -1,0 +1,19 @@
+popOf (the blob setKemKey decodes) fndsa512/v2 n2048-kmax1024 | 13355 / 0 | 17594 / 0
+popOf (the blob setKemKey decodes) fndsa512/v2 n2304-kmax4096 | 13355 / 0 | 17594 / 0
+popOf (the blob setKemKey decodes) fndsa512/v2 n2560-kmax16384 | 13355 / 0 | 17594 / 0
+popOf (the blob setKemKey decodes) fndsa512/v2 n2816-kmax65536 | 13355 / 0 | 17594 / 0
+popOf (the blob setKemKey decodes) mldsa65/v2 n2048-kmax1024 | 15294 / 0 | 20051 / 0
+popOf (the blob setKemKey decodes) mldsa65/v2 n2304-kmax4096 | 15294 / 0 | 20051 / 0
+popOf (the blob setKemKey decodes) mldsa65/v2 n2560-kmax16384 | 15294 / 0 | 20051 / 0
+popOf (the blob setKemKey decodes) mldsa65/v2 n2816-kmax65536 | 15294 / 0 | 20051 / 0
+popOf (the blob setKemKey decodes) msig-12-slhdsa128s (32 B: keccak256 of its 96,832 B pop) | 13137 / 0 | 17261 / 0
+popOf unregistered (view baseline) | 2856 / 0 | 10695 / 0
+registrationOf msig-pq on gen 1 n2048-kmax1024 | 86449 / 0 | 92990 / 0
+registrationOf msig-pq on gen 1 n2304-kmax4096 | 91687 / 0 | 99640 / 0
+registrationOf msig-pq on gen 1 n2560-kmax16384 | 97149 / 0 | 106557 / 0
+registrationOf msig-pq on gen 1 n2816-kmax65536 | 110540 / 0 | 121770 / 0
+registrationOf msig-pq on gen 2 (gen 1 record) n2048-kmax1024 | 121487 / 0 | 135561 / 0
+registrationOf msig-pq on gen 2 (gen 1 record) n2304-kmax4096 | 130032 / 0 | 145937 / 0
+registrationOf msig-pq on gen 2 (gen 1 record) n2560-kmax16384 | 138971 / 0 | 156768 / 0
+registrationOf msig-pq on gen 2 (gen 1 record) n2816-kmax65536 | 156204 / 0 | 176276 / 0
+79 rows, 18 above their pin

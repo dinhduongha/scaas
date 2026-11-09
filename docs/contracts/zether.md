@@ -1197,7 +1197,7 @@ built), `GovernanceLib.init` and the initial mint.
 (`scaas.zether`, `scaas.token`) as before; the guard stays on the token's entries and the libraries call nothing back. One
 difference, on malformed calldata only: an offset inside `ZetherMulti` is checked where the library reads it, against the longer
 calldata, so one aimed at an appended word reads that public word as the caller's own argument where the earlier code reverted
-(`ZetherMulti.t.sol` `test_nestedOffsetReadsAnAppendedWord`, as `UARegistryLib`). Figures: [§19](#gas-measured) and
+(`ZetherMulti.t.sol` `test_nestedOffsetReadsAnAppendedWord`, as `UARegistryCoreLib`). Figures: [§19](#gas-measured) and
 `docs/research/zether-library-split.md`.
 
 <a id="CTR-ZTH-45"></a>**CTR-ZTH-45** — **One `mtx*` interface for both confidential layers** (owner 2026-10-20, plan 5h D20, Q3 approved; before that

@@ -29,7 +29,8 @@ import {ComplianceRegistry} from "../src/regulated/ComplianceRegistry.sol";
 import {SCaaSDex} from "../src/dex/SCaaSDex.sol";
 import {UARegistry} from "../src/ua/UARegistry.sol";
 import {IUARegistry} from "../src/ua/IUARegistry.sol";
-import {UARegistryLib} from "../src/ua/UARegistryLib.sol";
+import {UARegistryCoreLib} from "../src/ua/UARegistryCoreLib.sol";
+import {UARegistryAuxLib} from "../src/ua/UARegistryAuxLib.sol";
 import {RelayFeeRouter, RelayFeeExecutor} from "../src/metatx/RelayFeeRouter.sol";
 import {UAKinds} from "../src/ua/UAKinds.sol";
 import {PqUA} from "../src/ua/PqUA.sol";
@@ -154,7 +155,7 @@ abstract contract DeployBase is Script {
     ///         (the contracts over the EIP-170 limit; any other is priced at `EIP170_LIMIT`). At ua-mtx-merge T10:
     ///         `NormalToken` 32,089 B = 65.9 M, `WrappedToken` 42,669 B = 82.1 M, `NormalZetherToken` 40,543 B = 78.8 M,
     ///         `WrappedZetherToken` 51,031 B = 94.9 M, `NormalPqzToken` 46,384 B = 87.7 M, `WrappedPqzToken` 56,223 B =
-    ///         102.8 M, `SCaaSDex` 33,399 B = 67.9 M, `UARegistry` 29,710 B = 62.2 M, `UARegistryLib` 36,192 B = 72.2 M:
+    ///         102.8 M, `SCaaSDex` 33,399 B = 67.9 M, `UARegistry` 29,710 B = 62.2 M, `UARegistryLib` (since T66b 3.1b split into `UARegistryCoreLib` and `UARegistryAuxLib`) 36,192 B = 72.2 M:
     ///         each fits a 200 M block (the figures move with the baseline; `GovDeploy.t.sol` reads it). A public chain's
     ///         (`public`): the release transaction measured (`_measuredGas`), regular + state x 1.05 within the block
     ///         gas limit and regular x 1.05 < 2^24 (`_checkMeasuredGas`).
@@ -329,13 +330,13 @@ abstract contract DeployBase is Script {
         require(u != bytes32(0), "RPC gave no block 0 hash");
     }
 
-    /// @notice The token factory (`noticePeriod`) and the UA registry (`_deployUARegistry`, with `UARegistryLib`) by CREATE2; when the deployer
+    /// @notice The token factory (`noticePeriod`) and the UA registry (`_deployUARegistry`, with its libraries `UARegistryCoreLib` and `UARegistryAuxLib`) by CREATE2; when the deployer
     ///         is the registrar (plan 5g-Z2: only the factory deploys releases), env version 1 of `NORMAL` and of the DEX
     ///         (`_env`: the factory, `chain_uid`, the registry, the `SmartKeyAccount` implementation, Hedera, the linked
     ///         libraries with their code hashes), then the `NORMAL` release (on that registry: the UA ledger, CTR-UA-18)
     ///         and the `SCaaSDex` release, each version 1; otherwise the registrar publishes and deploys them later from
     ///         the same init code. Writes `token_factory`, `implementation_normal`, `dex_implementation`, `ua_registry`,
-    ///         `ua_registry_lib`,
+    ///         `ua_registry_core_lib`, `ua_registry_aux_lib`,
     ///         `relay_fee_router`, `relay_fee_executor`, `governance_router`, `chain_uid` into the JSON object `"deploy"`; with
     ///         `DEPLOY_WRAPPED` also the `WRAPPED` release (`_deployWrapped`, GD-12), with `DEPLOY_ZETHER` the Zether stack
     ///         (`_deployZether`, not on Hedera). NORMAL and `WRAPPED` both exceed EIP-170 (the UA ledger).
@@ -674,23 +675,26 @@ abstract contract DeployBase is Script {
         assembly ("memory-safe") {
             mstore(k, n)
         }
-        // `UARegistryLib` is linked like every library: forge deploys it by CREATE2 before the script's first transaction
-        // (`create2_library_salt`), so its address, and through the code that embeds it the registry's, depend on the two
-        // sources only. Its own transaction is a release like the registry's: the same gate.
+        // `UARegistryCoreLib` and `UARegistryAuxLib` (T66b 3.1b) are linked like every library: forge deploys each by CREATE2
+        // before the script's first transaction (`create2_library_salt`), so their addresses, and through the code that embeds
+        // them the registry's, depend on the sources only. Each one's own transaction is a release like the registry's: the
+        // same gate.
         _requireRegistryGas(isHedera, budget, smartKeyAccountImpl, k);
         reg = new UARegistry{salt: salt}(uid, address(0), isHedera, budget, smartKeyAccountImpl, true, k);
         _checkGen1Kinds(reg, bls, isHedera);
         _gate(address(reg));
         vm.serializeAddress("deploy", "ua_registry", address(reg));
-        vm.serializeAddress("deploy", "ua_registry_lib", address(UARegistryLib));
+        vm.serializeAddress("deploy", "ua_registry_core_lib", address(UARegistryCoreLib));
+        vm.serializeAddress("deploy", "ua_registry_aux_lib", address(UARegistryAuxLib));
     }
 
-    /// @notice The gates of the registry's release and of `UARegistryLib`'s, each its own transaction (CREATE2 of the
-    ///         registry's init code with these arguments; the library's creation code).
+    /// @notice The gates of the registry's release and of its two libraries', each its own transaction (CREATE2 of the
+    ///         registry's init code with these arguments; each library's creation code).
     function _requireRegistryGas(bool isHedera, uint64 budget, address ska, UARegistry.KindConfig[] memory k) internal {
         _requireReleaseGas("UARegistry", address(0),
             abi.encodePacked(type(UARegistry).creationCode, abi.encode(uid, address(0), isHedera, budget, ska, true, k)));
-        _requireReleaseGas("UARegistryLib", address(0), vm.getCode("UARegistryLib.sol:UARegistryLib"));
+        _requireReleaseGas("UARegistryCoreLib", address(0), vm.getCode("UARegistryCoreLib.sol:UARegistryCoreLib"));
+        _requireReleaseGas("UARegistryAuxLib", address(0), vm.getCode("UARegistryAuxLib.sol:UARegistryAuxLib"));
     }
 
     /// @notice The gen-1 kind gate (U8S-D9, owner ruling 2026-10-31, option (a)): every gen-1 deploy carries every kind the
