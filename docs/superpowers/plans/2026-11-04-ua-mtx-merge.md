@@ -2164,7 +2164,15 @@ module is security-relevant).
       entry (CTR-GOV-19's ceiling).
 - [ ] **Step 4:** whole `forge test`, the four PQZ sets, size gate, gas pins old -> new, deploy-gas table for every contract against
       60 M, mutants of each split.
-- [ ] **Step 5: the full Hedera testnet deploy — DEFERRED (owner 2026-11-09: "tạm chưa quan tâm Hedera, theo 60 M"; not now,
+- [ ] **Step 5: the full deploy on the SCaaS testnet (owner 2026-11-09: "Deploy lên scaas testnet thì hợp lý hơn"; replaces
+      the Hedera deploy below).** After Step 4, on chain 7622 through its RPC only (no container, config or port of the live
+      stack changed; the controller confirms with the owner right before the first transaction): `DeployBase` and every
+      release of the split (kinds 0–13, their modules and libraries, the DEX, the registry pair, the factory), each
+      transaction within 60 M asked and the chain's own limits. First check that the node's PQZ precompile answers
+      `OP_SELFTEST` for the release's set. After it: each deployed code hash equals the build's; one relayed transfer, one
+      relay-fee call and one PQZ op 1 as a smoke. Addresses, tx hashes and gas in a runs note (no key, no absolute path).
+      The SCaaS testnet reset 2 (TODO item 4) still deploys the merged code after the merge and 3c.
+- [ ] **(Was Step 5) the full Hedera testnet deploy — DEFERRED (owner 2026-11-09: "tạm chưa quan tâm Hedera, theo 60 M"; not now,
       the owner did not ask for a Hedera deploy in this task). T66b follows the 60 M goal only; no Hedera-specific split (the
       spec's part 4b is not built). The public Hedera testnet refused runtime > 24,576 B in a simulation (T66b Step 2,
       `runs/2026-11-09-ua-mtx-merge-t66b/hedera-codesize.txt`). The step as written (2026-11-08):** after Step 4, `script/hedera/DeployHedera.s.sol` in full on the
