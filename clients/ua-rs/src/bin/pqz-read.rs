@@ -902,15 +902,8 @@ fn called(a: &Args, input: &[u8], compact_token: bool) -> Result<Called, String>
     let d = input.get(4..).ok_or("ABI")?;
     let (t_head, proof_head, binding) = if e.relayed {
         let env: Vec<Word> = (0..8).map(|i| aw(d, 32 * i)).collect::<Result<_, _>>()?;
-        let mode = au(d, 32 * 4)?;
-        let keep = |bit: u64, w: &Word| if mode & bit != 0 { *w } else { [0; 32] };
-        let token = addr_word(&a.token);
-        let b = keccak256(
-            &[keccak256(b"SCAAS-PQZ-UA-ENVELOPE-V1"), be(a.chain_id), a.chain_uid, token, env[0], env[1], env[2], env[3], env[4],
-                keep(1, &env[5]), env[6], keep(2, &env[7])]
-                .concat(),
-        );
-        (32 * 8, 32 * 9, b)
+        au(d, 32 * 4)?; // the mode is a uint32
+        (32 * 8, 32 * 9, envelope_binding(a.chain_id, &a.chain_uid, &a.token, &env)?)
     } else {
         (0, 32, [0; 32])
     };
@@ -926,6 +919,21 @@ fn called(a: &Args, input: &[u8], compact_token: bool) -> Result<Called, String>
     };
     let sealed_memo = ab(d, t, 32 * memo_at)?;
     Ok(Called { from: w(3)?, multi: e.multi, beneficiary, valid_until, hash: e.compact || compact_token, sealed_memo, binding, decoy_fee, m, proof })
+}
+
+/// `PqzLayer._uaEnvelopeBinding` of a relayed debit's envelope words `(from, batch, nonce, validUntil, mode, relayer, fee,
+/// feeRecipient)`: `relayer` and `feeRecipient` hashed as 0 unless `mode` binds them (bits 1, 2). T62a's rows pin it.
+fn envelope_binding(chain_id: u64, chain_uid: &Word, token: &[u8; 20], env: &[Word]) -> Result<Word, String> {
+    let [from, batch, nonce, valid, mode, relayer, fee, fee_to] = env else { return Err("an envelope of other than 8 words".into()) };
+    let keep = |bit: u8, w: &Word| if mode[31] & bit != 0 { *w } else { [0; 32] };
+    Ok(keccak256(&[keccak256(b"SCAAS-PQZ-UA-ENVELOPE-V1"), be(chain_id), *chain_uid, addr_word(token), *from, *batch, *nonce, *valid,
+        *mode, keep(1, relayer), *fee, keep(2, fee_to)].concat()))
+}
+
+/// A NONE debit's header `fee` (§4.14.4 step 4): the token's `confidentialFee` when the debit names a beneficiary, else 0, and
+/// `M · decoyFee` on op 7. T62a's rows pin it.
+fn call_fee(beneficiary: &Word, token_fee: u64, m: u64, decoy_fee: u64) -> Option<u64> {
+    (if *beneficiary == [0; 32] { 0 } else { token_fee }).checked_add(m.checked_mul(decoy_fee)?)
 }
 
 /// ABI `(bytes header, bytes proof)`, a `PqzDebitProof`'s data: the 20 header words and P.
@@ -1050,7 +1058,7 @@ fn credit(a: &Args, url: &str, block: u64, root: &Word, codes: &mut Codes<'_, '_
             let counter = field(&r.word(&a.token, &counter_slot(root, &c.from)?)?, "sendCounter[U]")?;
             let k = (counter.saturating_sub(MAX_COUNTER_SEARCH)..counter).rev().find(|n| er(*n) == entry_ref)
                 .ok_or("NONE: no sendCounter of the call's fromUA gives the Credited entryRef")?;
-            let fee = (if c.beneficiary == [0; 32] { 0 } else { fee }).checked_add(c.m.checked_mul(c.decoy_fee).ok_or("fee")?).ok_or("fee")?;
+            let fee = call_fee(&c.beneficiary, fee, c.m, c.decoy_fee).ok_or("fee")?;
             let mut call = json!({"beneficiaryUA": hx(&c.beneficiary), "fee": fee, "validUntilBlock": c.valid_until,
                 "mode": if c.hash { "HASH" } else { "BUNDLE" }, "binding": hx(&c.binding)});
             if c.hash {
@@ -1220,6 +1228,41 @@ mod tests {
             }
             let short = [be(64).to_vec(), be(64 + 32 + 640).to_vec(), be(608).to_vec(), vec![0; 608], be(1).to_vec(), vec![0; 32]].concat();
             assert!(proof_log(&short).is_err(), "a header of 608 bytes");
+        }
+    }
+
+    /// `ua-mtx-merge` T62a (owner ruling 3 of T20d): `state.json` `noneHeaders`, both sets. A relayed debit's envelope binding
+    /// (bound and unbound `relayer` / `feeRecipient`, both non-zero) is `PqzLayer._uaEnvelopeBinding`'s; every row's header `fee`
+    /// word is the reader's `call_fee` of its named fields.
+    #[test]
+    fn none_header_rows_envelope_and_fee() {
+        for f in ["state.json", "n2304-kmax4096/state.json"] {
+            let p = format!("{}/../../smartcontracts/vectors/pqz/{f}", env!("CARGO_MANIFEST_DIR"));
+            let v: Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
+            let rows = v["noneHeaders"].as_array().unwrap();
+            assert_eq!(rows.len(), 10);
+            let w = |x: &Value| -> Word { unhex(x.as_str().unwrap()).unwrap().try_into().unwrap() };
+            let n = |x: &Value| x.as_u64().unwrap_or(0);
+            let mut relayed = 0;
+            for r in rows {
+                let name = r["name"].as_str().unwrap();
+                let token: [u8; 20] = unhex(r["token"].as_str().unwrap()).unwrap().try_into().unwrap();
+                if r["path"] == "relayed" {
+                    let e = &r["envelope"];
+                    let env = [w(&e["from"]), be(n(&e["batch"])), be(n(&e["nonce"])), be(n(&e["validUntil"])), be(n(&e["mode"])),
+                        addr_word(&unhex(e["relayer"].as_str().unwrap()).unwrap().try_into().unwrap()), be(n(&e["fee"])),
+                        addr_word(&unhex(e["feeRecipient"].as_str().unwrap()).unwrap().try_into().unwrap())];
+                    let got = envelope_binding(n(&r["chainId"]), &w(&r["chainUid"]), &token, &env).unwrap();
+                    assert_eq!(hx(&got), r["envelopeBinding"].as_str().unwrap(), "{name}");
+                    relayed += 1;
+                }
+                let m = r["legs"].as_array().map_or(1, |l| l.len() as u64);
+                let fee = call_fee(&w(&r["beneficiaryUA"]), n(&r["confidentialFee"]), m, n(&r["decoyFee"])).unwrap();
+                let header = unhex(r["header"].as_str().unwrap()).unwrap();
+                assert_eq!(be(fee).as_slice(), &header[32 * 8..32 * 9], "{name}: the fee word");
+            }
+            assert_eq!(relayed, 5, "every form relayed once");
+            assert!(envelope_binding(1, &[0; 32], &[0; 20], &[[0; 32]; 7]).is_err());
         }
     }
 

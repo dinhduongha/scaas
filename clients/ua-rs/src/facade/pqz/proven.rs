@@ -1129,3 +1129,94 @@ fn burn_header(o: &Open, rec: &Record, k: u64, form: OwnForm, bc: &BurnCall, tl:
     *hd.get_mut(H_MEMO_HASH).ok_or(Error::Argument)? = crate::keccak256(&tl.own_tag);
     Ok(hd)
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::panic)]
+mod tests {
+    use super::*;
+    use pqz_ffi::stmt as st;
+
+    /// The forge rows of this build's set (`PqzStateVectors.t.sol`), if the set has them.
+    fn rows() -> Option<Value> {
+        let file = match st::SET {
+            "n2304-kmax4096" => "n2304-kmax4096/state.json",
+            "n2048-kmax1024" => "state.json",
+            _ => return None,
+        };
+        let path = format!("{}/../../smartcontracts/vectors/pqz/{file}", env!("CARGO_MANIFEST_DIR"));
+        Some(serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap())
+    }
+    fn h(v: &Value) -> Vec<u8> {
+        hex::decode(v.as_str().unwrap().trim_start_matches("0x")).unwrap()
+    }
+    fn w(v: &Value) -> Word {
+        h(v).try_into().unwrap()
+    }
+    fn n(v: &Value) -> u64 {
+        v.as_u64().unwrap_or(0)
+    }
+
+    /// `ua-mtx-merge` T62a (owner ruling 3 of T20d; Fable P3-5): `state.json` `noneHeaders` at the build's set, every NONE
+    /// debit form direct and relayed. Each row's header rebuilt by path (B)'s own call shapes from the row's named fields
+    /// (`transfer_header` for op 1 and op 7 over a blob holding the row's salt and legs, `burn_header` for burn, refresh and
+    /// unwrap), the transfer's `binding` `PqzCore._bindMode` of its `envelopeBinding`; the `fee` word as the reader gives it
+    /// (`pqz-read` `call_fee`: the token's `confidentialFee` with a beneficiary, plus `M · decoyFee`). Until this sync path (B)'s
+    /// NONE shapes were checked against the `pqz_chain` model only.
+    #[test]
+    fn none_headers_are_the_contracts() {
+        let Some(s) = rows() else { return };
+        let rows = s["noneHeaders"].as_array().unwrap();
+        let mut seen = BTreeSet::new();
+        for r in rows {
+            let name = r["name"].as_str().unwrap();
+            let form = r["form"].as_str().unwrap();
+            let o = Open {
+                id: w(&r["psid"]), chain_id: n(&r["chainId"]), registry: h(&r["registry"]).try_into().unwrap(), chain_uid: w(&r["chainUid"]),
+                token: h(&r["token"]).try_into().unwrap(), ua: w(&r["fromUA"]), v: 0, auditor_ua: [0; 32], p: 0, p_last: 0, rolled: 0,
+                count: 0, send_counter: 0, stale: false, op7: false, acc_blob: [0; 20], last: None, own: None, trivial: vec![],
+                need: BTreeMap::new(), acc: None,
+            };
+            let rec = Record { prev_blob: [0; 20], p: n(&r["p"]), delta_p: 0, proof_store: 0, shield_in: n(&r["shieldIn"]), key_version: 0,
+                prev_counter: 0, has_prev: false };
+            let tl = Tail { r_len: 0, own_tag: w(&r["ownTag"]), kv: vec![] };
+            let k = n(&r["sendCounter"]);
+            let fee = |m: u64| (if w(&r["beneficiaryUA"]) == [0; 32] { 0 } else { n(&r["confidentialFee"]) }) + m * n(&r["decoyFee"]);
+            let got = match form {
+                "op1" | "op7" => {
+                    let legs: Vec<Word> = match form {
+                        "op7" => r["legs"].as_array().unwrap().iter().map(w).collect(),
+                        _ => vec![w(&r["toUA"])],
+                    };
+                    let (m, aud) = (legs.len(), r["auditorOn"].as_bool().unwrap());
+                    let g = m.div_ceil(legs_per_group(aud));
+                    let mut e = Entry { r: vec![0; 16 + PKP * g + (32 + VP * (1 + aud as usize)) * m], g, m, aud, entry_ref: [0; 32] };
+                    e.r[..16].copy_from_slice(&h(&r["salt"]));
+                    for (j, ua) in legs.iter().enumerate() {
+                        let end = e.leg_at(j + 1);
+                        e.r[end - 32..end].copy_from_slice(ua);
+                    }
+                    let mode = if n(&r["transferMode"]) == 0 { Mode::Hash } else { Mode::Bundle };
+                    let call = Call { beneficiary_ua: w(&r["beneficiaryUA"]), fee: fee(m as u64), valid_until_block: n(&r["validUntilBlock"]),
+                        mode, sealed_memo: (mode == Mode::Hash).then(|| h(&r["sealedMemo"])), binding: w(&r["envelopeBinding"]) };
+                    assert_eq!(bind_mode(&call.binding, mode), w(&r["binding"]), "{name}: the binding");
+                    transfer_header(&o, &rec, &w(&r["fromUA"]), k, form == "op7", &call, &tl, &e).unwrap()
+                }
+                _ => {
+                    let f = match form {
+                        "burn" => OwnForm::Burn,
+                        "refresh" => OwnForm::Refresh,
+                        "unwrap" => OwnForm::Unwrap,
+                        _ => panic!("{name}: form {form}"),
+                    };
+                    let bc = BurnCall { beneficiary_ua: w(&r["beneficiaryUA"]), fee: fee(0), amount: n(&r["amount"]), recipient: w(&r["recipient"]),
+                        valid_until_block: n(&r["validUntilBlock"]), binding: w(&r["envelopeBinding"]),
+                        unwrap: (f == OwnForm::Unwrap).then(|| (h(&r["underlying"]).try_into().unwrap(), n(&r["minOut"]))) };
+                    burn_header(&o, &rec, k, f, &bc, &tl).unwrap()
+                }
+            };
+            assert_eq!(got.concat(), h(&r["header"]), "{name}");
+            seen.insert((form.to_string(), r["path"].as_str().unwrap().to_string()));
+        }
+        assert_eq!(seen.len(), 10, "every form, direct and relayed: {seen:?}");
+    }
+}

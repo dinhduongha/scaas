@@ -599,7 +599,11 @@ debit rows and `UASetProofStore`. **Owner ruling 2026-11-09:** the rows that tie
 contract built, and a relayed debit's envelope binding, at both vector sets, are a test-only follow-up of T62 on
 `ua-mtx-merge` (T62a, after T77), taken at the next sync; until then the NONE header is held to the `pqz_chain` model and the
 LOG row, **so the NONE path is BUILT against the model and contract-checked only after the T62a sync** (Fable P3-5: the model and
-the facade are both this repository's code; a shared misreading stays green until those rows arrive). The op 7 shape fit is held
+the facade are both this repository's code; a shared misreading stays green until those rows arrive). **Change (2026-11-10,
+ua-rs-sign T20e3, at the sync with `ua-mtx-merge` `cd48e32b`):** T62a's `noneHeaders` (10 rows per set: op 1, op 7, burn,
+refresh, unwrap, each direct and relayed, with bound and unbound non-zero `relayer` / `feeRecipient`) now hold path (B)'s NONE
+shapes: the facade's `transfer_header` / `burn_header` rebuild every row's header from its named fields at both sets, and
+`pqz-read`'s envelope binding and header `fee` reproduce the rows; the NONE path is contract-checked. The op 7 shape fit is held
 to `tails` rows with and without the auditor at both sets (`op7 M=2 audited …`, `op7 M=4 carol->[bob,alice,dave,erin]`; P3-6). Real proofs come from the facade's own prover on the `pqz_chain` model, verified with pqz-ffi, as T15e's tests; the
 contract side's real-proof check is `ua-mtx-merge` T65.
 
