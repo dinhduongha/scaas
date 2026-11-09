@@ -329,8 +329,9 @@ without an API change; the HKDF label `PQZ/owntag/v1` is reserved for an own-out
 **Source:** the contract interface of the proof-path spec on `ua-mtx-merge` ([`2026-11-06-pqz-proof-path.md`](2026-11-06-pqz-proof-path.md)
 §9, built there by T58–T65 and merged here at plan T20b milestone 4) and its client items (§13.3, C-PP-1 … C-PP-10); research
 [`pqz-leg-proof-option.md`](../../research/pqz-leg-proof-option.md) §3, §4, §8–§10, §15 and §15A (the owner's agreed design);
-the owner rulings of 2026-11-09 (§7, items 5–9). Plan task T20d (T20d0 is this section). [CLI-UAL-60](../../decisions.md#CLI-UAL-60).
-UNAUDITED.
+the owner rulings of 2026-11-09 (§7, items 5–12). Plan task T20d (T20d0 is this section). [CLI-UAL-60](../../decisions.md#CLI-UAL-60).
+Revised 2026-11-09 after the Fable review of the delta (approve with fixes: P1-1, P2-1 … P2-3, P3-1 … P3-6, all applied; §7
+items 10–12 the owner's rulings on its questions). UNAUDITED.
 
 #### 4.14.1 What path (B) gives, and what it does not
 
@@ -365,7 +366,7 @@ handle's states give `KeyRevoked`.
 | Command | Fields | Output |
 |---|---|---|
 | `provenOpen` | `balance`'s location and account fields (`chainUid`, `token`, `ua`, `block`, `psid`, `blobs`, `keyRecord`, `keyVersion`, `keyVersions`, `account` (the 4 slots of `acct[ua][v]`), `accWords`, `sendCounterWord`, `forOp7`), `lastRecord` (`{w0, w1}` of `debitRec[ua][lastDebit − 1]`; absent exactly when `lastDebit = 0`), `pending` (`{index, word}` for exactly `[p_last, p)`), `auditorUA` | `{session, p, sendCounter, need, unsealed}`; opens the handle's one session |
-| `provenAdd` | `session`, `credits` (each as §4.14.4) | `{accepted}`: the indexes checked by this call |
+| `provenAdd` | `session`, `credits` (each as §4.14.4) | `{accepted, refused}`: the indexes of this call that passed and that failed their check |
 | `provenCancel` | `session` | `{}` |
 | `balanceProven` | `session` | `{value, p, sendCounter, parts, unsealed, sealAdvised}`; closes the session |
 | `proveTransferProven`, `proveTransferMultiProven`, `proveBurnProven`, `proveRefreshProven` | `session` and the debit fields of `proveTransfer`, `proveTransferMulti`, `proveBurn`, `proveRefresh` (`chainId`, `registry`, `beneficiaryUA`, `fee`, `validUntilBlock`, `shieldIn`, `envelopeBinding`; `toUA`, `pkT`, `pkA`, `legs`, `amount`, `recipient`, `mode` by form) | path (A)'s output (`{stmt, proof}`, `memo` on HASH) plus `ownTag`; closes the session |
@@ -377,9 +378,15 @@ handle's states give `KeyRevoked`.
   index is accepted. `parts` names each part's index and kind (`own`, `credit`, `migration`, `trivial`), never a value.
 - **The session** is the streaming form C-PP-7 asks for: a credit's material is 93–186 KB at `n2304-kmax4096` (research §15.2),
   so one request of `CMD_MAX` (4 MiB) holds a few tens, a window up to `K_MAX − 1` credits. **One session per handle**, held in
-  the handle's memory and never exported; a second `provenOpen` replaces it; any refusal inside it closes it (fail closed: start
-  again); `lock()` and freeing the handle drop it. A session holds parsed public words and checked ciphertexts only; the key is
-  used only by `balanceProven` and the debits, once every part is checked.
+  the handle's memory and never exported; a second `provenOpen` replaces it; `lock()` and freeing the handle drop it. It keeps
+  what `PqzCore` keeps while it sums: the running sum mod `q` of the parts checked so far (and, for a debit's cross-check of
+  §4.14.3, the sum of those below `rolled`), their units and a bitmap of the accepted indexes, never the checked ciphertexts
+  themselves (Fable P3-3). **A credit that fails its check is refused alone**
+  (owner ruling 2026-11-09, §7 item 11): `provenAdd` names it in `refused`, the session and its accepted parts stay, and the
+  caller may send that index again (another source's material) or take path (A). Every `provenAdd` check is keyless (P
+  verification, re-encryption from a seed, a public amount), so a kept session leaks nothing and closing it would buy no key
+  safety; a malformed request (a field, a bound) is still `Argument` for the whole call. The key is used only by
+  `balanceProven` and the debits, once every `need` index is accepted.
 - Path (A)'s commands keep their fields; they read 3h's layout and build the 3h `memoHash` (§4.14.5).
 
 #### 4.14.3 How each part is checked (all before the key)
@@ -387,8 +394,8 @@ handle's states give `KeyRevoked`.
 | Part | Check | What it binds |
 |---|---|---|
 | own `v_f` (`lastDebit > 0`) | `accBlob`'s tail `… ‖ P(v_f) ‖ ownTag ‖ kv(8·n) ‖ u8(n)` parses through one `rOf` twin; `ownTag` equals `HMAC-SHA256(K_v, chainUid ‖ token ‖ ua ‖ be32(lastDebit − 1) ‖ keccak256(P(u) ‖ P(v_f)))`, `K_v = HKDF-SHA256(seed_v, "", "PQZ/owntag/v1", 32)` from the handle's seed, compared in constant time; `u` is `u_0` after the 16-byte salt (op 1, op 7) or `u′` at 0 (burn, refresh, unwrap), told apart by `R`'s length as `e2e.py` `acc_of`; `P(·)` the stored form as the contract hashes it (clientkeys `pqzOwnTag` and the KAT are the reference) | `K_v` (independent of `s`) |
-| credit (an op 1 or op 7 leg to `ua`) | the sender's statement rebuilt as §4.14.4 with the handle's own `pk` at the leg; `pqz_ffi::precompile(op ‖ statement ‖ proof)` answers `…01` | the handle's `pk`; the leg's bytes, which are the bytes summed |
-| migration credit (`fromUA == ua`, the sender's version below `v`) | re-encryption (3g KV-11): `r, e1, e2` from `seed_enc` of the debited version's seed (CTR-PQZ-19: chain, token, `fromUA`, the sender's counter, the blob's salt), then `u == Aᵀr + e1` and `v − pkᵀr − e2 ∈ Δ·[0, 16)^16` byte for byte, constant time, the amount read from the digits; the old version's seed comes from the handle's own store (a derived handle: `(account, index, v_old)`; an installed one: that version's key hash), else `Argument` | the seeds; no P needed |
+| credit (an op 1 or op 7 leg to `ua`) | the sender's statement rebuilt as §4.14.4 with the handle's own `pk` at the leg; `pqz_ffi::precompile(op ‖ statement ‖ proof)` answers `…01` | the handle's `pk`; the leg's bytes, which are the bytes summed; the pairing `(u_{g(j)}, v_j)` the relation defines |
+| migration credit (`fromUA == ua`, the sender's version below `v`) | re-encryption (3g KV-11): `r, e1, e2` from `seed_enc` of the debited version's seed (CTR-PQZ-19: chain, token, `fromUA`, the sender's counter, the blob's salt), then `u == Aᵀr + e1` and `v − pkᵀr − e2 ∈ Δ·[0, 16)^16` byte for byte, constant time, the amount read from the digits; the old version's seed comes from the handle's own store (a derived handle: `(account, index, v_old)`; an installed one: that version's key hash); **when the store holds no such seed, the credit is checked by its P like any credit** (owner ruling 2026-11-09, §7 item 12; Fable P3-2): it is an op 1 leg to the handle's own `pk` | the seeds, or the P |
 | TRIVIAL (`vOff == 0`) | `Trivial(digits(amount))` from the word's low 64 bits | public |
 
 - The sum `v_f + Σ parts + Trivial(shieldIn)` is built exactly as `PqzCore` builds `T` (mod `q`, `unitsOf ≤ K_MAX`); for a debit
@@ -405,43 +412,64 @@ Each element of `credits`:
 |---|---|
 | `index` | the pending index of the credit (one of the session's `need`) |
 | `fromUA`, `sendCounter` | the sender's debit `(fromUA, k)` |
-| `form` | `"transfer"` (op 1) or `"transferMulti"` (op 7): only these credit another UA |
-| `record` | `{w0, w1}` of `debitRec[fromUA][k]` (C-PP-1's parser: `RECORD` set, `WIDE` exactly when `w1` is given, `w1`'s low 64 bits 0, a narrow record's `prevCounter = k − 1` when it has a predecessor) |
+| `form` | a credit: `"transfer"` (op 1) or `"transferMulti"` (op 7), the only forms that credit another UA; a quorum's own last debit (§4.14.8, its `own` field): also `"burn"`, `"refresh"`, `"unwrap"` |
+| `record` | `{w0, w1}` of `debitRec[fromUA][k]`, both read as storage (C-PP-1's parser: `w0 ≠ 0`, `RECORD` set and no flag but `WIDE`, `proofStore` 0 or 1, `w1` zero when narrow, `w1`'s low 64 bits 0, a narrow record's `prevCounter = k − 1` when it has a predecessor) |
 | `senderPending` | `{index, word}` for exactly `[p − Δp, p)` of `pending[fromUA][record.keyVersion]` |
 | `blobs` | `{address, code}`: the op blob (the pending slot's `blob`), the record's `prevBlob`, each blob `senderPending` names; a code listed once per request |
 | `keyRecords` | `{ua, version, word}` of the registry's `pqzKey[ua][version]` (its code in `blobs`): the sender's at `record.keyVersion`, and every key the tail's `kv` names except the holder's own leg (op 7: the legs' `UA_j` from the blob; the auditor's: `auditorUA` at `kv`'s last entry) |
-| either `log` | `{topics, data}` of the debit's `PqzDebitProof` (LOG) |
-| or `call` and `proof` | the debit call's header words a reader takes from its calldata (`beneficiaryUA`, `fee` (the header's word), `validUntilBlock`, `mode`, `sealedMemo` on HASH, `envelopeBinding`) and its `proof` parameter (NONE) |
+| `proof` | P: the `proof` of the debit's `PqzDebitProof` event (LOG) or the `proof` parameter of its call (NONE) |
+| either `header` | the 20 words of the event's `header` (LOG; the verified statement's first 640 bytes) |
+| or `call` | the debit call's header words a reader takes from its calldata (NONE), one shape per form (step 4) |
 
-A migration credit (`fromUA == ua`) carries only `index`, `fromUA`, `sendCounter`, `form`, `record` (its `keyVersion` names the
-seed) and the op blob in `blobs`, and is checked by re-encryption (§4.14.3), never by a P; a credit wrongly given as one fails
-that check.
+The reading layer decodes the event (its topics `blob`, `ua`, `sendCounter` name the debit; its `data` holds `header` and
+`proof`) and hands the two as named fields: no ABI decoder of a log in the facade (Fable P3-1), and a header the reader got wrong
+only fails the verification.
+
+A migration credit (`fromUA == ua`) needs only `index`, `fromUA`, `sendCounter`, `form`, `record` (its `keyVersion` names the
+seed) and the op blob in `blobs` while the store holds the debited version's seed (re-encryption, §4.14.3); without that seed
+it is checked by its P and carries this table's other fields too, else `Argument`. A credit wrongly given as one fails the
+re-encryption.
 
 The facade, in order, each failure `Argument`:
 
 1. Parses `record` and the op blob's tail (`n ≤ 9`, `kv` `be64` in statement order, `ownTag_s`, `v_f`, `R`). The leg: op 1
-   `toUA` (the 32 bytes that end `R`) `== ua` and `kv[0] == v`; op 7 the one leg `j` with `UA_j == ua` and `kv[j] == v` (`M` and
-   the auditor copy from `n` and `R`'s length, as `e2e.py` `rebuild`); the holder's pending slot's `uOff` / `vOff` are that leg's
-   offsets in `R`.
+   `toUA` (the 32 bytes that end `R`) `== ua` and `kv[0] == v`; op 7 the one leg `j` with `UA_j == ua` and `kv[j] == v`, `M` and
+   the auditor copy from `n` and `R`'s length, **exactly one `(M, auditorOn)` fitting** (two fits, or none, is `Argument`; Fable
+   P3-6; `e2e.py` `rebuild` takes the first). The part's `(u, v)` is **the pairing the relation defines**, `u_{g(j)}` with `v_j`
+   (`g(j) = j / legsPerGroup(auditorOn)`), derived from `j`; the holder's pending slot's `uOff` / `vOff` must equal those two
+   offsets in `R` and are never the source of the pairing (Fable P2-3).
 2. `T_k` by the proof-path spec §2.3: `prevBlob`'s `(u, v_f)` (`Trivial(0)` when `prevBlob = 0`) `+ Σ senderPending +
    Trivial(digits(shieldIn))`, `unitsOf ≤ K_MAX`.
 3. The keys: `pk_f` the sender's record code; each other key by its `kv` from `keyRecords`; at the holder's leg the handle's own
    `pk`, never a source's; pairwise distinct (the contract's `KeyReused`).
-4. The 640-byte header. LOG: `topics[0]` is `PqzDebitProof`'s, `topics[1]` the op blob, `topics[2]` `fromUA`, `topics[3]` `k`, and
-   `data` decodes as `abi.encode(bytes header, bytes proof)` with nothing after it (the header and P are those two). NONE: built
-   from `call`, the record (`p`, `plainUsed = shieldIn`), `fromUA`, `k`, the token's words (`psid`, `chainId`, `token`, `registry`, `chainUid`), the blob
-   (`salt`, `toUA` or the legs' `recipientsHash`, `M`, `auditorOn`) and `memoHash = keccak256(memo ‖ ownTag_s)` (`memo = salt ‖
-   sealedMemo` on HASH, empty on BUNDLE). In both, the words the facade knows (`proofSystemId` the build's, `opTag` the form's,
-   `fromUA`, `sendCounter`, `p`, `plainUsed`, `chainUid`, `token`) must be the header's. `envelopeBinding` is a word the reading
-   layer computes by the contract's rule (`PqzCore._bindMode`: `keccak256(abi.encode(b, uint8(mode)))`, `b` the direct tag
-   `keccak256("SCAAS-PQZ-DIRECT-MODE-V1")` or the envelope's binding on a relayed call).
+4. The header's 20 words. LOG: the `header` field. NONE: built from `call`, the record (`p`, `plainUsed = shieldIn`), `fromUA`,
+   `k`, the token's words (`psid`, `chainId`, `token`, `registry`, `chainUid`), the blob (`salt`, `toUA` or the legs'
+   `recipientsHash`, `M`, `auditorOn`) and `memoHash = keccak256(memo ‖ ownTag_s)`. In both, the words the facade knows
+   (`proofSystemId` the build's, `opTag` the form's, `fromUA`, `sendCounter`, `p`, `plainUsed`, `chainUid`, `token`) must be the
+   header's. **One `call` shape per form** (Fable P2-1; `e2e.py` `header_of`'s three branches are the reference, `PqzCore`
+   `prepareBurn`, `WrappedPqzToken._envUnwrap`):
+
+   | Form | `call` fields | `envelopeBinding` word | `memoHash` |
+   |---|---|---|---|
+   | op 1, op 7 | `beneficiaryUA`, `fee`, `validUntilBlock`, `mode`, `sealedMemo` on HASH, `binding` | `keccak256(abi.encode(b, uint8(mode)))` (`PqzCore._bindMode`): `b = keccak256("SCAAS-PQZ-DIRECT-MODE-V1")` direct (`binding = 0`), `b = binding` relayed; computed by the facade | `memo = salt ‖ sealedMemo` on HASH, empty on BUNDLE |
+   | burn, refresh | `beneficiaryUA`, `fee`, `amount`, `recipient`, `validUntilBlock`, `binding` | `binding` as given: 0 direct, the envelope's relayed (no `_bindMode`); `opTag` REFRESH when `amount = 0`, else BURN | `keccak256(ownTag)` |
+   | unwrap (kind 5) | `beneficiaryUA`, `fee`, `amount`, `recipient`, `validUntilBlock`, `underlying`, `minOut`, `binding` | `unwrapBinding(underlying, minOut) = keccak256(abi.encode(keccak256("SCAAS-PQZ-UNWRAP-V1"), underlying, minOut))` direct (`binding = 0`), `keccak256(abi.encode(binding, unwrapBinding(…)))` relayed; computed by the facade | `keccak256(ownTag)` |
+
+   `binding` is 0 on a direct call, else the relayed call's envelope binding, a word the reading layer reads or computes from the
+   envelope (`envelopeBinding(UAEnvelope)`); a wrong one only fails the verification. **`fee`** is the header's word: on op 1,
+   a burn, a refresh and an unwrap the token's `confidentialFee` when `beneficiaryUA ≠ 0`, else 0; on op 7 that plus `M ·
+   decoyFee`, `decoyFee` an argument of the debit's own call. `confidentialFee` is set once at the token's initialisation
+   (`PqzStateLib`, ~95) and has no setter, so it is the token's word at any block; if a release ever adds a setter, it must emit
+   an event, so a reader finds the value at a past debit's block (a note for the contract side).
 5. The body in the form's statement layout (op 1 `pk_f ‖ pk_t ‖ [pk_a] ‖ T ‖ u ‖ v_t ‖ v_f ‖ [v_a]`; op 7 `pk_f ‖ pk_1 … pk_M ‖
    [pk_a] ‖ T ‖ u_0 … u_{G−1} ‖ v_1 … v_M ‖ v_f ‖ [v_{a,1} … v_{a,M}]`; `e2e.py` `rebuild` is the reference, test code).
 6. `pqz_ffi::precompile` over `op ‖ statement ‖ proof` (the chain's own function, panics caught) answers `…01`; the part is then
    the leg's `(u, v)` as the statement carried it.
 
-Only step 3's own `pk` and step 6's bytes bind safety; any other word a source gets wrong fails the verification (liveness,
-never the key).
+Three things bind safety: step 3's own `pk` at the holder's leg, the bytes step 6 verified, and step 1's pairing `(u_{g(j)},
+v_j)` as the relation defines it (derived from `j`, checked against the pending slot's offsets, never taken from them: a `v_j`
+summed with another group's verified `u` would decrypt to the digits plus a small linear function of `(s, e)` the sender
+chose, Fable P2-3). Any other word a source gets wrong fails the verification (liveness, never the key).
 
 #### 4.14.5 `ownTag` and `memoHash` in every debit (C-PP-4)
 
@@ -459,7 +487,7 @@ pre-3h formulas move to `clients/ua-rs/legacy/ua-rs-sign/` (owner ruling §7 ite
 |---|---|---|
 | viewing (`balanceProven`) | all | any source; R2 (the configured chain) and R7 (nothing back) still bind |
 | a debit (`prove*Proven`) | every word and code that fixes `T`'s bytes: `account`, `sendCounterWord`, `keyRecord`, `keyVersions`, `psid`, `lastRecord`, `pending`, `accWords`, the codes of `accBlob` and of each credit's op blob | one source under R1–R5 at one block (R3), as path (A); R7 |
-| a debit | what only makes a part's check pass: each credit's `record`, `senderPending`, the sender's other blobs, `keyRecords`, `log` or `call`, `proof` | any source |
+| a debit | what only makes a part's check pass: each credit's `record`, `senderPending`, the sender's other blobs, `keyRecords`, `header` or `call`, `proof` | any source |
 | either | history: `eth_getLogs` by the `blob` topic (LOG), the debit's transaction (NONE, proof-path spec §9.5; a call made through another contract needs a trace, which many RPCs do not serve: then path (A)) | any full node or mirror of that chain |
 
 This binds more than research §3.3, which narrowed a debit's trusted words to the account words: a credit's code from another
@@ -490,13 +518,21 @@ A quorum has no seed and would decrypt by MPC. That partial decryption is not bu
 (`scaas_ua_pqz_check`, beside `scaas_ua_pqz_call`; no new status). A member runs it before any partial:
 
 - **the quorum's own last debit by its P** (found by `lastDebit`; burn, refresh and migration included): its statement rebuilt
-  as §4.14.4 with `pk_f` the quorum's registered key and `T` by the proof-path spec §2.3; no tag (no seed);
+  as §4.14.4 with `pk_f` the member's own `pk` (below, never a source's) and `T` by the proof-path spec §2.3; no tag (no seed);
 - **every credit since by its P**, migration credits included (no seed, so no re-encryption), at most `K_MAX` parts.
 
-Fields: `provenOpen`'s without a handle (the quorum's `keyRecord` and its code give `pk`), `own` (the last debit's material, the
-fields of §4.14.4) and `credits`. Output `{parts, sum}`: the indexes checked and the packed sum of their ciphertexts, which the
-member's MPC step (later) opens; a batch per call, the member adding the batches' sums (public arithmetic). It decrypts nothing
-and uses no key. A quorum never uses path (A); with a P gone from history the fallback is the proof-path spec §9.6's: `k`
+Fields: `provenOpen`'s location and account fields without a handle and without any key word of the quorum, plus **`pk`, the
+quorum's key, from the member's own record of the key generation** (the member's DKG record; a named `bytes` field of the set's
+key length), `own` (the last debit's material, the fields of §4.14.4) and `credits`. The facade puts that `pk` at the quorum's
+leg of every credit and as `pk_f` of the own last debit, as the handle path puts the handle's `pk`; **the source names no key of
+the quorum** (owner ruling 2026-11-09, §7 item 10; Fable P1-1): a `keyRecord` for the quorum (or any key word of it) is
+`Argument`, so a source cannot make the check certify parts under a key it controls, which the later MPC partial would turn
+into a share leak. Output `{parts, sum}`: the indexes checked and the packed sum of their ciphertexts, which the member's MPC
+step (later) opens; a batch per call, the member adding the batches' sums (public arithmetic). It decrypts nothing and uses no
+key. Its bounds are `PqzKey::call`'s, applied by the same bounded reader although no handle is involved (Fable P3-4): `CMD_MAX`
+4 MiB and depth 8 per request, `pqz_ffi::MAX_INPUT` per statement, at most `K_MAX` parts.
+
+A quorum never uses path (A); with a P gone from history the fallback is the proof-path spec §9.6's: `k`
 members rebuild `seed32` from the k-of-n backup (T16a), one becomes the operator, seals by refresh under path (A) with a trusted
 source and rotates the key version (3g); from rebuild to rotation the operator holds the whole key.
 
@@ -513,8 +549,9 @@ source and rotates the key version (3g); from rebuild to rotation the operator h
 
 #### 4.14.10 C ABI and bindings (C-PP-8)
 
-The session commands through `scaas_ua_pqz_call` (no new status); `scaas_ua_pqz_check` the one new export (ABI 6 kept, the header
-regenerated); a session lives in the Rust handle, never in a binding. `ua-cxx`, `ua-dart-frb`, `ua-py`, `ua-go`, `ua-cs`: the new
+The session commands through `scaas_ua_pqz_call` (no new status); `scaas_ua_pqz_check` the one new export, additive (no struct
+or status changes, so ABI 6 is kept; the header regenerated), with §4.14.8's bounds; a session lives in the Rust handle, never
+in a binding. `ua-cxx`, `ua-dart-frb`, `ua-py`, `ua-go`, `ua-cs`: the new
 commands in their `COMMANDS` membership tests and `checkProven` beside their PQZ call; `ua-qt` exposes no PQZ key and gets none.
 
 #### 4.14.11 The reference reader: `pqz-read --command balanceProven` (owner ruling 2026-11-09)
@@ -522,7 +559,8 @@ commands in their `COMMANDS` membership tests and `checkProven` beside their PQZ
 `pqz-read` (T15m) gains `--command balanceProven`: the composition words as for `balance` (R1–R5 at one block, R3's re-check),
 the senders' records, windows, blobs and keys from state (pending slots and records are never deleted), each credit's
 `(fromUA, k)` from the `PqzDebitProof` topics (LOG) or from the call and the `Credited` log's `entryRef`, which `(fromUA, k)` must
-recompute (NONE), P and the header by `eth_getLogs` on the `blob` topic (LOG) or
+recompute (NONE), P and the header by `eth_getLogs` on the `blob` topic (LOG; the reader decodes the event's `data` into
+`header` and `proof`, P3-1) or
 from the debit's transaction (NONE: a direct call or a SCaaS envelope parsed by its ABI; a call through another contract is
 refused by name: it needs a trace). Before anything else it probes `proofStore()` and refuses a token of a release before 3h by
 name (R5's Change), for `balance` and `auditRead` too. Tested against a local `anvil` (plan T20d8).
@@ -534,7 +572,9 @@ Shared rows from their generators, never by hand: `pq_kat.json` `ownTag` and `me
 debit rows and `UASetProofStore`. **Owner ruling 2026-11-09:** the rows that tie a NONE debit's call fields to the header the
 contract built, and a relayed debit's envelope binding, at both vector sets, are a test-only follow-up of T62 on
 `ua-mtx-merge` (T62a, after T77), taken at the next sync; until then the NONE header is held to the `pqz_chain` model and the
-LOG row. Real proofs come from the facade's own prover on the `pqz_chain` model, verified with pqz-ffi, as T15e's tests; the
+LOG row, **so the NONE path is BUILT against the model and contract-checked only after the T62a sync** (Fable P3-5: the model and
+the facade are both this repository's code; a shared misreading stays green until those rows arrive). The op 7 shape fit is held
+to `tails` rows with and without the auditor at both sets (`op7 M=2 audited …`, `op7 M=4 carol->[bob,alice,dave,erin]`; P3-6). Real proofs come from the facade's own prover on the `pqz_chain` model, verified with pqz-ffi, as T15e's tests; the
 contract side's real-proof check is `ua-mtx-merge` T65.
 
 ## 5. Tests that must be able to fail
@@ -563,9 +603,14 @@ contract side's real-proof check is `ua-mtx-merge` T65.
   `balance` over the same state; then, each refused with the key unused: the proof-path spec §11.4's negatives (a wrong
   historical key version, a swapped leg, a wrong auditor window, a wrong `shieldIn`, a wrong predecessor or `Δp`, a version
   boundary crossed, P of another debit, the mode of another record), a forged `T`, more than `K_MAX` parts, a non-canonical
-  coefficient, a forged `ownTag`, an older own `v_f` with a valid tag; the residual control's crafted `(u, v)` refused by
-  path (B) (no P); `pq_kat.json`'s `ownTag` and `memoHash` rows; `state.json`'s `records`, `tails`, `proofLogs` at both sets;
-  `checkProven` with no handle. Mutants per task (plan T20d).
+  coefficient, a forged `ownTag`, an older own blob under the current `lastDebit` and record (its tag's counter differs); the
+  residual control's crafted `(u, v)` refused by path (B) (no P); `checkProven` with a `keyRecord` whose code differs from the
+  member's `pk` (Fable P1-1: refused, no parts); `pq_kat.json`'s `ownTag` and `memoHash` rows; `state.json`'s `records`,
+  `tails`, `proofLogs` at both sets; `checkProven` with no handle. **Residual control of path (B)** (Fable P2-2, recorded like the
+  one above): an older own debit with its own older `lastDebit`, record and blob, all genuinely the holder's, is **accepted** by
+  `balanceProven` (a tag proves authorship, not inclusion: the result is a past balance, never a key leak); a debit over it is
+  stopped only because `account`, `lastRecord` and the `accBlob` code are R1–R5 words (§4.14.6). Mutants per task (plan T20d),
+  among them "the leg paired with another group's `u`" (Fable P2-3; red on the op 7 positive control).
 
 ## 6. Doc changes
 
@@ -616,6 +661,12 @@ On `ua-mtx-merge` (tasks T19b docs, T19c layout pins; not edited from here):
    `memoHash` formulas move to `legacy/` (§4.2 R5, §4.10, §4.14.1).
 9. **Review — decided (owner 2026-11-09):** a full Fable review of §4.14 (design, security, crypto) before any code; Codex only
    on the owner's word.
+10. **The quorum's key — decided (owner 2026-11-09, on the Fable review's P1-1):** a quorum member's `pk` comes from its own DKG
+    record, as a named `pk` field of `scaas_ua_pqz_check`; the source names no key of the quorum (§4.14.8).
+11. **A failed credit — decided (owner 2026-11-09, P3-3):** `provenAdd` refuses that one credit and keeps the session; no
+    fail-closed close (every check is keyless or under `K_v`; closing buys no key safety) (§4.14.2).
+12. **A migration credit without its old seed — decided (owner 2026-11-09, P3-2):** it falls back to verifying its P like any
+    credit (§4.14.3, §4.14.4).
 
 No owner question remains open in this spec.
 
@@ -624,8 +675,10 @@ No owner question remains open in this spec.
 Plan tasks T15c2, T19c, T15e, T14b, T15g–T15k and T19b remain (T15b and T15c are being finished; T15d and T15f were dropped
 by the owner rulings): **23.5–31.5 agent-days**, critical path (T15c2 ∥ T19c) → T15e → T15g → T15i ≈ 12.5–16.5 days (details in
 the plan). Not counted: the reading layer's checks (R1 to R7) in the wallet layer and the apps, outside this repository.
-**Path (B) (2026-11-09, plan T20d):** 17.5–21.5 agent-days (the proof-path spec's C-PP items 14–16.5, this delta and its review
-fixes 1–1.5, 3h's formats in every client 1.5–2, `pqz-read --command balanceProven` 1–1.5); critical path ≈ 10.5–13.
+**Path (B) (2026-11-09, plan T20d):** 18–22 agent-days (the proof-path spec's C-PP items 14–16.5, this delta and its review
+fixes 1–1.5, 3h's formats in every client 1.5–2, `pqz-read --command balanceProven` 1–1.5; +0.5 after the Fable review: one
+NONE header shape per form, the `(M, auditorOn)` fit and the pairing in T20d4, the log decoded by the reader in T20d8 instead
+of the facade in T20d3); critical path ≈ 11–13.5.
 
 ## 9. Review response (Fable and Codex, 2026-11-06 / 07)
 

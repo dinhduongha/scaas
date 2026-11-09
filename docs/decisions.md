@@ -8875,7 +8875,8 @@ chain-neutral releases the registry is in the token's code env, readable at one 
 
 **Rule.** Beside path (A), `ua-rs` decrypts a PQZ balance of a 3h token over parts it checked itself before the key is used: each
 credit by its sender's debit proof, verified by the library (`pqz_ffi::precompile`) over a statement it rebuilds with its own key
-in the credited leg; the holder's own `v_f` by `ownTag`; a migration credit by re-encryption; a TRIVIAL entry from its amount
+in the credited leg (and the leg / group pairing the relation defines); the holder's own `v_f` by `ownTag`; a migration credit
+by re-encryption, or by its P when the store holds no seed of its version; a TRIVIAL entry from its amount
 (no-oracle spec §4.14). Viewing (`balanceProven`) takes its words from any source; a debit (`prove*Proven`) takes every word and
 code that fixes `T`'s bytes from a source under R1–R5. Every debit of either path carries `ownTag` and `memoHash =
 keccak256(memo ‖ ownTag)`. The owner's rulings of 2026-11-09, in full:
@@ -8893,7 +8894,15 @@ state, P in history, `ownTag` for own debits; a holder restored from its seed th
 (research `pqz-leg-proof-option.md` §15A, the owner's agreed design of 2026-11-06).
 **Cost if wrong.** A part accepted without a valid check is §1's key-recovery oracle; a debit over words from an untrusted
 source is a balance bit (research §3.3).
-**Status.** SPECIFIED (plan T20d; T20d0 the spec delta). UNAUDITED.
+**Change (owner 2026-11-09, on the Fable review of the delta, approve with fixes):** (6) a quorum member's `pk` comes from
+its own DKG record, as a named `pk` field of `scaas_ua_pqz_check`, and the source names no key of the quorum (a `keyRecord` for
+it is `Argument`); (7) a `provenAdd` refusal refuses that one credit and keeps the session (every check is keyless or under
+`K_v`, so closing it buys no key safety); (8) a migration credit whose old seed the store does not hold is checked by its P
+like any credit. With them the review's other fixes: one NONE header shape per debit form (burn and refresh without
+`_bindMode`, unwrap's `unwrapBinding`), `confidentialFee` constant per token, the leg / group pairing named among what binds
+safety, `header` and `proof` as named fields (the reader decodes the log), a running sum in the session, the older-own-debit
+residual control (no-oracle spec §4.14, §5).
+**Status.** SPECIFIED (plan T20d; T20d0 the spec delta, revised after the Fable review). UNAUDITED.
 **Source.** owner 2026-11-09 (chat, through the controller); [plan](superpowers/plans/2026-11-05-ua-rs-sign.md) T20d;
 [proof-path spec](superpowers/specs/2026-11-06-pqz-proof-path.md) §9, §13.3.
 
