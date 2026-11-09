@@ -57,25 +57,17 @@ contract T66bCreate2Probe {
 
 /// @notice ua-mtx-merge T66b Step 1: every deployed contract's deploy gas at the tip after 3h, by T10's public-gate formula.
 ///         Each contract is its own CREATE2 transaction through a probe (the T33 / T51 method): regular =
-///         `lastCallGas.gasTotalUsed` x 64/63 (the probe's frame), state = EIP-8037's, asked = (regular + state) x 1.05,
-///         against 57 M / 60 M / 70 M and regular x 1.05 < 2^24 (EIP-7825). Releases carry their constructor arguments as
-///         GovDeploy's `test_releaseGasPerKind`; the registry DeployBase's gen-1 list as T51 (19 kinds, verifier stand-ins,
-///         budget 12 M). The `tx` column adds what the probe frame leaves out of a real transaction: 21,000 and the
-///         calldata at 4 / 16 gas per zero / non-zero byte (the EIP-7976 floor, 64 per non-zero token-byte, is printed and
-///         does not bind when the regular part is above it). Forge gas is deterministic: a measurement of gas used, not a
-///         timing calibration. Run by `measure.sh`.
+///         `lastCallGas.gasTotalUsed` x 64/63, state = EIP-8037's, asked = (regular + state) x 1.05, against 57 M / 60 M /
+///         70 M and regular x 1.05 < 2^24 (EIP-7825). The probe call is a top-level call of the test, so under `isolate` it is
+///         its own transaction: the intrinsic gas and the calldata (with the EIP-7976 floor) are in `gasTotalUsed`.
+///         Releases carry their constructor arguments as GovDeploy's `test_releaseGasPerKind`; the registry DeployBase's
+///         gen-1 list as T51 (19 kinds, verifier stand-ins, budget 12 M). A release's factory frame is
+///         `test_t66bReleaseFrame`'s. Forge gas is deterministic: a measurement of gas used, not a timing calibration.
+///         Line: `T66B | name | runtime | init | regular | state | asked | regular x 1.05 < 2^24`.
 contract T66bDeployGasTest is Test {
     bytes32 constant UID = keccak256("scaas-testnet");
     T66bCreate2Probe probe;
     uint256 salt;
-
-    function _intrinsic(bytes memory code) internal pure returns (uint256 std, uint256 floor) {
-        uint256 z;
-        for (uint256 i; i < code.length; ++i) if (code[i] == 0) ++z;
-        uint256 nz = code.length - z;
-        std = 21_000 + 4 * z + 16 * nz;
-        floor = 21_000 + 16 * (z + 4 * nz); // EIP-7976: 16 gas per token, a non-zero byte is 4 tokens
-    }
 
     function _m(string memory name, bytes memory code) internal {
         address a = probe.deploy(code, bytes32(++salt));
@@ -85,12 +77,9 @@ contract T66bDeployGasTest is Test {
     }
 
     function _line(string memory name, uint256 runtime, bytes memory code, uint256 regular, uint256 state) internal {
-        (uint256 std, uint256 floor) = _intrinsic(code);
-        uint256 txRegular = regular + std > floor ? regular + std : floor;
         string memory s = string.concat("T66B | ", name, " | ", vm.toString(runtime), " | ", vm.toString(code.length), " | ");
         s = string.concat(s, vm.toString(regular), " | ", vm.toString(state), " | ");
-        s = string.concat(s, vm.toString((regular + state) * 105 / 100), " | ", vm.toString((txRegular + state) * 105 / 100));
-        s = string.concat(s, " | ", vm.toString(std), " | ", vm.toString(floor), " | ");
+        s = string.concat(s, vm.toString((regular + state) * 105 / 100), " | ");
         emit log(string.concat(s, regular * 105 / 100 < 1 << 24 ? "yes" : "NO"));
     }
 
