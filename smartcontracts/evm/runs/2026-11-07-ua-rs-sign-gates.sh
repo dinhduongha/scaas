@@ -17,7 +17,8 @@
 # GATES_P names another round's re-run (its own logs and summary; T15o: GATES_P=2026-11-08-ua-rs-sign-t15o; T20b's first sync with
 # ua-mtx-merge: GATES_P=2026-11-08-ua-rs-sign-t20b1, the second: 2026-11-08-ua-rs-sign-t20b2; the readers' ChainEnv check and
 # several nodes, owner 2026-11-08: 2026-11-08-ua-rs-sign-t20b3; the third sync, after 3f and T66a: 2026-11-08-ua-rs-sign-t20b4;
-# T20c, an imported key registers its own derived kind (owner 2026-11-08): 2026-11-08-ua-rs-sign-t20c), T20's stay.
+# T20c, an imported key registers its own derived kind (owner 2026-11-08): 2026-11-08-ua-rs-sign-t20c; the fourth sync, after 3h's
+# T58-T65: 2026-11-09-ua-rs-sign-t20b6), T20's stay.
 P=${GATES_P:-2026-11-08-ua-rs-sign}
 LOGEXT=log # step logs are git-ignored (*.log); only <P>-summary.txt is committed (owner 2026-11-02)
 STEPS=${STEPS-"docs clientkeys vectors-check forge-ua ua-rs-nodefault ua-rs-wallet ua-rs ua-rs-pq ua-rs-signers ua-rs-json ua-rs-vectors ua-rs-zether ua-rs-pqz ua-rs-pqz-n2048 ua-deny ua-fuzz ua-sizes ua-c ua-cxx ua-qt ua-dart-frb ua-py ua-go ua-cs ua-dart cargo-zether-prover wasm-zether-prover scaas-ct no-oracle no-oracle-n2048 no-oracle-ua-py wallet-rows test-features mutant-logs pqz-read read-balance named-tests summary"}
@@ -51,8 +52,10 @@ extra_step() { # this branch's own steps (the base runner calls it for a step it
         (cd clients/ua-rs && cap cargo test $C --features vectors --test wallet_pq --test wallet_vault -- --ignored regenerate) || return 1
         clean || return 1
       done ;;
-    # the contracts' UA suites read the shared vector files (lib/ at its pins, a real directory: scripts/evm_libs.sh install)
-    forge-ua) scripts/evm_libs.sh check && cd smartcontracts/evm && cap forge test --match-path 'test/ua/*' ;;
+    # the contracts' UA suites read the shared vector files (lib/ at its pins, a real directory: scripts/evm_libs.sh install);
+    # test/ua alone (FOUNDRY_TEST, its own out/ and cache/): a whole-tree compile was OOM-killed at the 4 GB cap (ua-mtx-merge T21)
+    forge-ua) scripts/evm_libs.sh check && cd smartcontracts/evm &&
+              cap env FOUNDRY_TEST=test/ua FOUNDRY_OUT=out/ua-rs-sign-ua FOUNDRY_CACHE_PATH=cache/ua-rs-sign-ua forge test -j 2 ;;
     # the ua-rs cells of CI (MD-5, T18); pqz_read against anvil is step pqz-read, the wallet_state.json generator wallet-rows
     ua-rs-nodefault) uars --no-default-features ;;
     ua-rs-wallet) uars --no-default-features --features wallet,mlock ;;
