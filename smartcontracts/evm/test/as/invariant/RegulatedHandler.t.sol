@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {IUALedger} from "../../../src/metatx/IUALedger.sol";
 import {NormalZetherToken} from "../../../src/zether/NormalZetherToken.sol";
 
 import {NormalPqzToken} from "../../../src/pqz/NormalPqzToken.sol";
@@ -627,7 +628,7 @@ contract RegPublicHandler is RegFixture, RegCore {
         bytes32 to = _id(j);
         amount = bound(amount, 0, 500);
         _op(K_MOVE, from, uint256(to) >> 160 == 0 ? abi.encodeCall(IERC20.transfer, (address(uint160(uint256(to))), amount))
-            : abi.encodeCall(NormalToken.transferToUA, (to, amount)));
+            : abi.encodeCall(IUALedger.transferToUA, (to, amount)));
     }
 
     /// The generic `mtxExecute` of `inner` signed by EOA `i`, relayed by `rel` (an EOA or `relayer`), fee `fee` (0: `NONE`).
@@ -858,7 +859,7 @@ abstract contract RegPqzHandler is PqzRegFixture, RegCore {
         bytes32 to = _id(j);
         amount = bound(amount, 0, 5000);
         _op(K_MOVE, from, uint256(to) >> 160 == 0 ? abi.encodeCall(IERC20.transfer, (address(uint160(uint256(to))), amount))
-            : abi.encodeCall(NormalToken.transferToUA, (to, amount)));
+            : abi.encodeCall(IUALedger.transferToUA, (to, amount)));
     }
 }
 
@@ -1026,7 +1027,7 @@ abstract contract RegZetherHandler is ZetherRegFixture, RegCore {
         bytes32 to = _id(j);
         amount = bound(amount, 0, 5000);
         _op(K_MOVE, from, uint256(to) >> 160 == 0 ? abi.encodeCall(IERC20.transfer, (address(uint160(uint256(to))), amount))
-            : abi.encodeCall(NormalToken.transferToUA, (to, amount)));
+            : abi.encodeCall(IUALedger.transferToUA, (to, amount)));
     }
 }
 

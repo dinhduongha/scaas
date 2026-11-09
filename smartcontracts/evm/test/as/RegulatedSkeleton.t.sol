@@ -23,6 +23,7 @@ import {Catalogue, plainEnv, pqzEnv, regArgs} from "../helpers/Catalogue.sol";
 import {ComplianceRegistry} from "../../src/regulated/ComplianceRegistry.sol";
 import {PqzFixture} from "../pqz/helpers/PqzFixture.sol";
 import {PQZ_UID} from "../pqz/helpers/PqzRegistryBase.sol";
+import {kindArgs} from "../../script/KindModules.sol";
 
 /// Test only: the five masks of a regulated kind, as `GovernanceLib` receives them.
 contract WrappedRegulatedMasks is WrappedRegulatedToken {
@@ -86,7 +87,7 @@ contract RegulatedSkeletonTest is PqzFixture {
     /// Spec §2.1 and bit 22 (CTR-GOV-20): base | 5-10, 21, 22 (9) or base | 5-7, 9, 10, 21, 22 (13); roles | 5, 6, 7, 10, 21,
     /// 22; contract-only | 5, 6, 7, 10, 21 (never 22); scalar 1 | 6, 21, 22; delayed relax 5, 6, 7.
     function test_masks() public {
-        (uint256 v, uint256 r, uint256 c, uint256 s, uint256 d) = new WrappedRegulatedMasks(address(factory), regArgs()).masks();
+        (uint256 v, uint256 r, uint256 c, uint256 s, uint256 d) = new WrappedRegulatedMasks(address(factory), kindArgs(9, address(factory), regArgs())).masks();
         // pay-meta-tax T39: + bit 23 `TAX` (valid, any holder, never contract-only, never delay-relaxed)
         uint256 reg = (1 << 5) | (1 << 6) | (1 << 7) | (1 << 8) | (1 << 9) | (1 << 10) | (1 << 21) | (1 << 22) | (1 << 23);
         assertEq(v, GovernanceBits.WRAPPED_BITS | reg, "9 valid");
@@ -96,7 +97,7 @@ contract RegulatedSkeletonTest is PqzFixture {
         assertEq(d, (1 << 5) | (1 << 6) | (1 << 7), "9 delayed relax");
         assertEq(r9.validBits(), v, "9 validBits()");
 
-        (v, r, c, s, d) = new WrappedPqzRegulatedMasks(address(factory), regArgs()).masks();
+        (v, r, c, s, d) = new WrappedPqzRegulatedMasks(address(factory), kindArgs(13, address(factory), regArgs())).masks();
         // group 3h T61: + bit 24 `PQZ_PROOF` on 13, not on 9 (valid, any holder, never contract-only, never delay-relaxed)
         assertEq(v, GovernanceBits.WRAPPED_BITS | (reg & ~uint256(1 << 8)) | (1 << 24), "13 valid: no ALLOWLIST, bit 24");
         assertEq(r, GovernanceBits.WRAPPED_ROLES | REG_ROLES | (1 << 24), "13 roles");

@@ -27,6 +27,9 @@ import {PqzFixture} from "../pqz/helpers/PqzFixture.sol";
 import {PQZ_UID} from "../pqz/helpers/PqzRegistryBase.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
 import {instanceEnv} from "../helpers/Catalogue.sol";
+import {WrappedZetherTokenA} from "../../src/zether/WrappedZetherTokenModules.sol";
+import {NormalZetherTokenA} from "../../src/zether/NormalZetherTokenModules.sol";
+import {WrappedPqzTokenA} from "../../src/pqz/WrappedPqzTokenModules.sol";
 
 // Plan T25 (regulated-kinds spec §2.4): `TokenConfig.reg` on the plain kinds 0-5, each refusing any non-zero field of it with
 // `ConfigFieldForOtherKind(6)` through the factory (the same config with `reg` empty is the positive control); the wrapped
@@ -111,9 +114,10 @@ abstract contract RegRows is Test {
 }
 
 /// The masks a regulated wrapped kind passes differ from `WRAPPED_*`: here `PAYABLE` is not valid, `WRAP_DISABLEABLE` is
-/// no role, `MINTABLE` is contract-only, the kind id is 11.
-contract MaskedWrappedZether is WrappedZetherToken {
-    constructor(address f_, bytes memory a) WrappedZetherToken(f_, a) {}
+/// no role, `MINTABLE` is contract-only, the kind id is 11. T66b: `initialize` runs in the kind's module A, so the stand-in
+/// is A's twin: a clone of it runs the init body under this kind id and these masks (`onlyDelegated` holds in a clone).
+contract MaskedWrappedZether is WrappedZetherTokenA {
+    constructor(address f_, bytes memory a) WrappedZetherTokenA(f_, a) {}
 
     function kind() public pure override returns (uint8) { return TokenStore.KIND_WRAPPED_ZETHER_REGULATED; }
     function _validBits() internal pure override returns (uint256) {
@@ -128,8 +132,8 @@ contract MaskedWrappedZether is WrappedZetherToken {
 }
 
 /// `MaskedWrappedZether`'s masks on `WrappedPqzToken`, kind id 13.
-contract MaskedWrappedPqz is WrappedPqzToken {
-    constructor(address f_, bytes memory a) WrappedPqzToken(f_, a) {}
+contract MaskedWrappedPqz is WrappedPqzTokenA {
+    constructor(address f_, bytes memory a) WrappedPqzTokenA(f_, a) {}
 
     function kind() public pure override returns (uint8) { return TokenStore.KIND_WRAPPED_PQZ_REGULATED; }
     function _validBits() internal pure override returns (uint256) {
@@ -144,8 +148,8 @@ contract MaskedWrappedPqz is WrappedPqzToken {
 }
 
 /// `NormalZetherToken` under kind id 10: its raw decoder (`ZetherLib.initNormal`) writes the token's kind, not a fixed one.
-contract KindNormalZether is NormalZetherToken {
-    constructor(address f_, bytes memory a) NormalZetherToken(f_, a) {}
+contract KindNormalZether is NormalZetherTokenA {
+    constructor(address f_, bytes memory a) NormalZetherTokenA(f_, a) {}
 
     function kind() public pure override returns (uint8) { return TokenStore.KIND_NORMAL_ZETHER_REGULATED; }
 }
