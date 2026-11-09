@@ -950,7 +950,8 @@ entry with fee `NONE`. The call and its contract are unchanged: no token logic i
 
 A service pull (a service contract taking the payer's tokens into its custody, SPECIFIED:
 [spec](../superpowers/specs/2026-11-09-service-pull.md)) follows the same two ways: the target is the service and its
-pull is the service's own operation, never the router's fee.
+pull is the service's own operation, never the router's fee. The two compared (who pulls, what the signature binds, where
+the funds go): [service-pull spec §2.5](../superpowers/specs/2026-11-09-service-pull.md#25-the-relay-fee-and-a-service-pull-compared).
 
 **Deployment.** One stateless contract with no owner, no stored state and no constructor argument. `DeployBase`
 deploys it through the deterministic CREATE2 deployer, as `UARegistry` and the verifiers, so it has the same address

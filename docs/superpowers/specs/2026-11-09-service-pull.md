@@ -189,6 +189,27 @@ The order is from `MtxRelayFee.sol:72-73`: the target runs first, then the fee. 
 both signatures spend the payer's one nonce space on T. On one lane, the pull takes nonce `n` and the fee `n + 1`, because the pull
 runs first. Two lanes also work. `callData` contains `auth`, so the payer signs `t` before `UARelayFee`.
 
+### 2.5 The relay fee and a service pull compared
+
+One mechanism in the token: the payer signs a one-shot pull with `MODE_RESTRICT_RELAYER`, and only the contract named as
+`relayer` can make the token execute it (`MtxPipelineLib.sol:181`). Both have the payer's lane nonce, `validUntil`, the public
+balance only, and one revert for any failure. Both are bound to the chain twice: the token's EIP-712 domain
+`(name, "1", chainId, verifyingContract = the token, salt = chain_uid)` (`SaltedEIP712.sol:26`, `MetaTokenBase.sol:125-131`),
+and the reference (`ref` hashes `block.chainid`; `entryRef` is a digest in the service's own domain, which holds `chainId` and
+the service's address, §3.2). They differ in three things (owner 2026-11-09):
+
+| | The relay fee ([CTR-MTX-27](../../contracts/metatx.md#CTR-MTX-27)) | A service pull |
+|---|---|---|
+| **Who pulls** (the signed `relayer`) | the relay-fee router (`relay` → `token.mtxRelayFee`) | the service contract (`token.mtxExecuteTransfer`) |
+| **What the signature binds** | `ref` = chain + `target` + the exact call bytes | `entryRef` = the service operation's EIP-712 digest: chain + service (its domain) + the operation (its typehash) + every parameter + the payer |
+| **Where the funds go, and what they are** | the relayer (open mode) or the signed payee: a **fee, final**, for a call that ran | the service: **custody**, refunded or paid on by the service's own logic |
+
+What follows from it: for the relay fee, the token and the router check everything and the target knows nothing of the fee;
+for a service pull, the token checks `to`, `relayer`, once and expiry, and the service must check that the funds are for this
+operation (§3.3). The router always runs the target before the fee; a service orders its pull and its logic itself. The
+relay fee's payer signs `UARelayFee` (the token builds the transfer); a service pull's payer signs the `UAMetaTransfer`
+itself. The two compose in one transaction: `relay(target = service)` lands the pull and pays the relayer (§2.4 (b)).
+
 ## 3. Rules for a service contract (proposed CTR-MTX-32) — SPECIFIED
 
 ### 3.1 Entry shape
