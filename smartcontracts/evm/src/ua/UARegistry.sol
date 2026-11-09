@@ -86,9 +86,9 @@ import {UAMldsaVerifier} from "./MlDsa.sol";
 ///         libraries by domain: `UARegistryCoreLib` the `register` forms, the `msig`, `acceptMembership`, `requirePortable`;
 ///         `UARegistryAuxLib` the key writes after registration (`setPqzKey`, `storePqzPop`, `setKemKey`, `cacheExpandedKey`).
 ///         One DELEGATECALL per operation from here; an auxiliary writer runs the core's shared helpers by one nested
-///         DELEGATECALL each (T66b 3.1c). The reads off the hot path run in the auxiliary library, inside the view (`_libView`):
-///         `registrationOf`, `uaCount`, `popOf`, `popSlotsOf`, `webAuthnKeyOf`, `pqzPopOf`, `pqzKeySigOf`, `uaAt`, `uaPage`,
-///         `uaIndex`. The hot views (`requireAuthorized`, `kindOf`, `recordOf`,
+///         DELEGATECALL each (T66b 3.1c). The reads off the hot path run there too, inside the view (`_libView`):
+///         `registrationOf`, `uaCount` in the core library; `popOf`, `popSlotsOf`, `webAuthnKeyOf`, `pqzPopOf`, `pqzKeySigOf`,
+///         `uaAt`, `uaPage`, `uaIndex` in the auxiliary library. The hot views (`requireAuthorized`, `kindOf`, `recordOf`,
 ///         `checkedOf`, the key and member readers), `uaAuthDigest` and the immutables' getters stay here; `muSig2KeyOf` and
 ///         `frostKeyOf` stay too (their typed return does not compile in a library: stack too deep). Both libraries'
 ///         addresses are in this contract's code, so they are part of the registry's CREATE2 address.
@@ -341,7 +341,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         view
         returns (uint16 kind, bytes memory keyData, UAAttrs memory attrs, bytes memory pop, bytes memory pqzPop)
     {
-        _libView(address(UARegistryAuxLib), UARegistryAuxLib.registrationOf.selector, kind);
+        _libView(address(UARegistryCoreLib), UARegistryCoreLib.registrationOf.selector, kind);
     }
 
     function popOf(bytes32 ua) external view returns (bytes memory pop) {
@@ -493,7 +493,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     }
 
     function uaCount(uint16 kind) public view returns (uint256) {
-        _libView(address(UARegistryAuxLib), UARegistryAuxLib.uaCount.selector, kind);
+        _libView(address(UARegistryCoreLib), UARegistryCoreLib.uaCount.selector, kind);
     }
 
     function uaAt(uint16 kind, uint256 i) external view returns (bytes32) {

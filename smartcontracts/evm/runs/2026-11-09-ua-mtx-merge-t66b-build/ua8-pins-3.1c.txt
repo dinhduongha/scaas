@@ -1,21 +1,6 @@
 # T66b 3.1c: UA-8 gas pins moved (UARegistryUA8.t.sol _pin, regular / state), old -> new. UNAUDITED.
-popOf (the blob setKemKey decodes) fndsa512/v2 n2048-kmax1024 | 17594 / 0 | 17639 / 0
-popOf (the blob setKemKey decodes) fndsa512/v2 n2304-kmax4096 | 17594 / 0 | 17639 / 0
-popOf (the blob setKemKey decodes) fndsa512/v2 n2560-kmax16384 | 17594 / 0 | 17639 / 0
-popOf (the blob setKemKey decodes) fndsa512/v2 n2816-kmax65536 | 17594 / 0 | 17639 / 0
-popOf (the blob setKemKey decodes) mldsa65/v2 n2048-kmax1024 | 20051 / 0 | 20096 / 0
-popOf (the blob setKemKey decodes) mldsa65/v2 n2304-kmax4096 | 20051 / 0 | 20096 / 0
-popOf (the blob setKemKey decodes) mldsa65/v2 n2560-kmax16384 | 20051 / 0 | 20096 / 0
-popOf (the blob setKemKey decodes) mldsa65/v2 n2816-kmax65536 | 20051 / 0 | 20096 / 0
-popOf (the blob setKemKey decodes) msig-12-slhdsa128s (32 B: keccak256 of its 96,832 B pop) | 17261 / 0 | 17306 / 0
-popOf unregistered (view baseline) | 10695 / 0 | 10740 / 0
-register msig-pq-native | 330779 / 1360170 | 330810 / 1360170
-registrationOf msig-pq on gen 2 (gen 1 record) n2048-kmax1024 | 135561 / 0 | 135635 / 0
-registrationOf msig-pq on gen 2 (gen 1 record) n2304-kmax4096 | 145937 / 0 | 146011 / 0
-registrationOf msig-pq on gen 2 (gen 1 record) n2560-kmax16384 | 156768 / 0 | 156842 / 0
-registrationOf msig-pq on gen 2 (gen 1 record) n2816-kmax65536 | 176276 / 0 | 176350 / 0
-setKemKey fndsa512/v2 n2048-kmax1024 | 2516110 / 3947400 | 2524122 / 3947400
-setKemKey fndsa512/v2 n2304-kmax4096 | 2516110 / 3947400 | 2524122 / 3947400
-setKemKey fndsa512/v2 n2560-kmax16384 | 2516110 / 3947400 | 2524122 / 3947400
-setKemKey fndsa512/v2 n2816-kmax65536 | 2516110 / 3947400 | 2524122 / 3947400
-19 rows
+setKemKey fndsa512/v2 n2048-kmax1024 | 2516110 / 3947400 | 2524077 / 3947400
+setKemKey fndsa512/v2 n2304-kmax4096 | 2516110 / 3947400 | 2524077 / 3947400
+setKemKey fndsa512/v2 n2560-kmax16384 | 2516110 / 3947400 | 2524077 / 3947400
+setKemKey fndsa512/v2 n2816-kmax65536 | 2516110 / 3947400 | 2524077 / 3947400
+4 rows

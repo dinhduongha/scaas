@@ -233,3 +233,23 @@ Red first: test/ua/UATrade.t.sol test_rule4_tokenTradeCallsNoTradeLib on f0c0371
 times (precheck, record, cancelHash); this commit | 0 | 23 passed. test/ua UATrade, UATradeVectors, UADex, UADexInvariant: 38
 passed on this tree before the new test. Test gas of the trade tests -7.8 k to -26.5 k (one cold library call and its re-encoded
 arguments less per fill); the gas pins (DexGas, the trade rows) move in 4.4.
+
+Task 3.1c, follow-up (owner 2026-11-09, spec §11 (f) as of 63cbbba5: moving entries from the core to the Aux library after 3.1c
+is "considered and deferred", `registrationOf` and `uaCount` among them): b2ec0d85 had moved those two reads; they are back in
+UARegistryCoreLib, byte for byte as before 3.1c. 3.1c is now the four helpers and the nested call only.
+contract | 3.1b B / asked | 3.1c B / asked (DeployGas.t.sol test_t66bPair: regular + state)
+UARegistryCoreLib | 33,891 / 56.98 M | 34,608 / 58.18 M (2,277,010 + 53,133,840): above its 33,903 B / 57 M line, under 35,694 B /
+  60 M (R4: 60 M accepted for the registry pair); reported, not a stop
+UARegistryAuxLib | 33,407 / 56.17 M | 19,596 / 33.04 M (1,299,171 + 30,165,480)
+UARegistry | 28,006 / 47.76 M | 28,045 / 47.83 M (unchanged by 3.1c; +39 B is 4.1's)
+Per-call execution gas (auxgas-3.1c.txt, rerun): setKemKey +8,096, setPqzKey +12,967, storePqzPop +28,940, cacheExpandedKey part 0
++6,015, the no-op storePqzPop and every read 0 (uaCount -22). UA-8 rows (ua8-gas-3.1c.txt, rerun, 79 rows, 19 moved): setKemKey
+fndsa512/v2 2,515,921 -> 2,524,077 (+8,156) at the four sets; register +29 (+51 webauthn-p256, +117 the two msig rows: the core's
+dispatch table), within their pins; everything else unchanged, state gas unchanged. Pins moved (ua8-pins-3.1c.txt): setKemKey
+fndsa512/v2 2,516,110 -> 2,524,077 at the four sets (4 rows; b2ec0d85's other 15 pin moves undone). size-baseline.json:
+UARegistryCoreLib 33,891 -> 34,608, UARegistryAuxLib 33,407 -> 19,596.
+Gates on the follow-up tree: UA-8 gas tests at the four sets, pins moved | 0 / 0 / 0 / 0 | 3 passed each, PqzSet.sol restored;
+forge test/ua, the 17 registry suites (UARegistryPair, UARegistry, UARegistryMembership, PqzKeyVersions, UARegistryPq,
+UARegistryNested, UAGas, UARegistryGroups, UARegistryPortable, UARegistryCoreLibMsig, UARegistryNestedGas, UARegistryNestedVectors,
+UARegistryVectors, UARegistryUA6, UARegistryZether, UARegistryPqzBound, UAKinds) | 0 | 279 passed; DeployGas test_t66bPair | 0 |
+the rows above. Mutants C1, C2a, C2b, C3 rerun: 4 of 4 killed (mutants.txt), the registry files md5-equal after the run.

@@ -11,8 +11,7 @@ import {UARegistryCoreLib} from "./UARegistryCoreLib.sol";
 /// @title `UARegistry`'s auxiliary library (T66b 3.1b, owner 2026-11-09, spec 2026-11-09-t66b-library-organisation.md §11 (f)):
 ///        the key writes after registration: the ML-DSA expanded-key cache, the PQZ key proof and versions (`storePqzPop`,
 ///        `setPqzKey`) and the KEM records (`setKemKey`); and reads off the registry's hot path (`popOf`, `popSlotsOf`,
-///        `webAuthnKeyOf`, `pqzPopOf`, `pqzKeySigOf`, `uaAt`, `uaPage`, `uaIndex`, and since 3.1c `registrationOf`, `uaCount`, run
-///        inside the registry's view). Run by
+///        `webAuthnKeyOf`, `pqzPopOf`, `pqzKeySigOf`, `uaAt`, `uaPage`, `uaIndex`, run inside the registry's view). Run by
 ///        DELEGATECALL from the registry's thin entry (`_lib`, the same three appended words as `UARegistryCoreLib`'s), so
 ///        `address(this)` is the registry and the storage is its `UAStore.Layout`; one DELEGATECALL per operation, as before.
 ///        Same check order, same stored bytes, same events and errors as when this code was in `UARegistryCoreLib`
@@ -321,39 +320,5 @@ library UARegistryAuxLib {
         if (UARegistryCoreLib._elsewhere(ua)) return IUARegistry(UARegistryCoreLib._pred()).popOf(ua);
         if (UAStore.layout().records[ua].kind == 0) return pop;
         (, pop) = abi.decode(SSTORE2.readChunks(UAStore.layout().reg[ua]), (bytes, bytes));
-    }
-
-    // ----- moved from `UARegistryCoreLib` (T66b 3.1c): the core under its 57 M line -----
-
-    function registrationOf(bytes32 ua)
-        external
-        returns (uint16 kind, bytes memory keyData, IUARegistry.UAAttrs memory attrs, bytes memory pop, bytes memory pqzPop)
-    {
-        if (UARegistryCoreLib._elsewhere(ua)) {
-            (kind, keyData, attrs, pop, pqzPop) = IUARegistry(UARegistryCoreLib._pred()).registrationOf(ua);
-            // A5-c2 / A6-I1: gen 1's `register` key (version 0) proven here, its proof stored here
-            if (attrs.pqzKey.length != 0 && pqzPop.length == 0 && !UAStore.layout().pqzKey[ua][0].added) {
-                pqzPop = SSTORE2.readChunks(UAStore.layout().pqzPop[ua][0]);
-            }
-            return (kind, keyData, attrs, pop, pqzPop);
-        }
-        IUARegistry.Record memory r = UAStore.layout().records[ua];
-        kind = r.kind;
-        if (kind == 0) return (kind, keyData, attrs, pop, pqzPop);
-        (keyData, pop) = UAStore.registration(ua, r.keyPtr);
-        UAStore.KemCommit memory c = UAStore.layout().kemCommit[ua];
-        if (c.kemPkHash != 0) (attrs.kem.scheme, attrs.kemPkHash) = (c.scheme, c.kemPkHash); // the committed form
-        else (attrs.kem,) = UAStore.kemAt(ua, 0); // the register KEM key is version 0
-        UAStore.PqzKey memory k = UAStore.layout().pqzKey[ua][0];
-        if (k.added) return (kind, keyData, attrs, pop, pqzPop); // A4-c3: an added key is no `register` argument
-        (attrs.pqzKey, attrs.pqzPopHash) = (SSTORE2.read(k.ptr), UAStore.layout().pqzPopHash[ua][0]);
-        pqzPop = SSTORE2.readChunks(UAStore.layout().pqzPop[ua][0]);
-    }
-
-    // ----- moved from `UARegistry` (T66b 3.1b): a read off the hot path, run by `_libView` -----
-
-    function uaCount(uint16 kind) external returns (uint256) {
-        if (!UARegistryCoreLib._listedHere()) return IUARegistry(UARegistryCoreLib._pred()).uaCount(kind);
-        return UAStore.layout().uaCount[kind];
     }
 }

@@ -178,9 +178,9 @@ contract UARegistryPairTest is UARegistryBase {
     /// The reads off the hot path run in their library inside the view; the hot views run in no library.
     function test_b_readsRunInTheirLibrary() public {
         (address k, address r, bytes32 ua) = (address(UARegistryAuxLib), address(UARegistryCoreLib), bytes32(uint256(7)));
-        _routed(k, r, UARegistryAuxLib.registrationOf.selector); // 3.1c: moved from the core library
+        _routed(r, k, UARegistryCoreLib.registrationOf.selector);
         reg.registrationOf(ua);
-        _routed(k, r, UARegistryAuxLib.uaCount.selector);
+        _routed(r, k, UARegistryCoreLib.uaCount.selector);
         reg.uaCount(0x0103);
         bytes4[8] memory aux = [UARegistryAuxLib.popOf.selector, UARegistryAuxLib.popSlotsOf.selector,
             UARegistryAuxLib.webAuthnKeyOf.selector, UARegistryAuxLib.pqzPopOf.selector, UARegistryAuxLib.pqzKeySigOf.selector,

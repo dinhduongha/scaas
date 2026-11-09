@@ -8,3 +8,8 @@ C1-aux-wrong-core | test_c_auxNeedsItsCore, test_c_cacheRunsTheCoreKeyCheck, tes
 C2a-core-helper-direct-call-portableOk | test_c_coreHelpersRefuseADirectCall | 1
 C2b-core-helper-direct-call-keyUa | test_c_coreHelpersRefuseADirectCall | 1
 C3-helper-result-ignored | test_c_kemWriteRunsTheCorePortableCheck, test_c_pqzWritesRunTheCoreHelpers | 1
+3.1c follow-up (registrationOf, uaCount back in the core), the four rerun:
+C1-aux-wrong-core | test_c_auxNeedsItsCore, test_c_cacheRunsTheCoreKeyCheck, test_c_kemWriteRunsTheCorePortableCheck, test_c_pqzWritesRunTheCoreHelpers | 1
+C2a-core-helper-direct-call-portableOk | test_c_coreHelpersRefuseADirectCall | 1
+C2b-core-helper-direct-call-keyUa | test_c_coreHelpersRefuseADirectCall | 1
+C3-helper-result-ignored | test_c_kemWriteRunsTheCorePortableCheck, test_c_pqzWritesRunTheCoreHelpers | 1
