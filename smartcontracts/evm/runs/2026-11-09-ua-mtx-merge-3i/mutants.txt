@@ -1,0 +1,16 @@
+M1-drop-check1-to | test_N1_toNotService, test_N9_otherService | 1
+M0-red-first-no-checks | invariant_custodyCovered, invariant_landsOnce, invariant_payerConservation, test_N11_noopToken, test_N13_relayFeeServiceRevertsNoFee, test_N14_serviceFrozen, test_N17_operationTwice, test_N18_feePins, test_N1_toNotService, test_N2_modeAndRelayer, test_N3_entryRefNotTheOperation, test_N4_fromNotPayer, test_N5_value, test_N7_cancelledAndResubmitted, test_N9_otherService, test_handler_reachesEveryPath | 1
+M2-drop-check2-mode-relayer | test_N2_modeAndRelayer, test_N9_otherService | 1
+M3-drop-check2-fee-pins | test_N18_feePins | 1
+M4-drop-check3-entryRef | test_N13_relayFeeServiceRevertsNoFee, test_N3_entryRefNotTheOperation | 1
+M5-drop-check4-payer | test_N4_fromNotPayer | 1
+M6-drop-check5-value | test_N5_value | 1
+M7-drop-replay-check | invariant_custodyCovered, invariant_landsOnce, invariant_payerConservation, test_N17_operationTwice, test_N7_cancelledAndResubmitted, test_handler_reachesEveryPath | 1
+M8-drop-freeze-check | test_N14_serviceFrozen | 1
+M9-drop-delta-check | test_N11_noopToken | 1
+M10-drop-reentrancy-guard | test_N20_reentrantToken | 1
+M11-pull-before-checks | invariant_custodyCovered, invariant_landsOnce, invariant_payerConservation, test_N1_toNotService, test_N2_modeAndRelayer, test_N4_fromNotPayer, test_N7_cancelledAndResubmitted, test_N9_otherService | 1
+M12-try-catch-pull | test_N10_otherDomain, test_N14_payerFrozenAndPaused, test_N14_serviceNotEligible, test_N15_derivedLedgerOff, test_N16_delegatedExecutor, test_N20_reentrantToken, test_N7_cancelledAndResubmitted | 1
+M13-credit-op-payer-no-check4 | test_N4_fromNotPayer | 1
+M14-check5-zero-allowed | test_N5_value | 1
+M15-used-never-written | invariant_custodyCovered, invariant_landsOnce, invariant_payerConservation, test_N17_operationTwice, test_N7_cancelledAndResubmitted, test_handler_reachesEveryPath, test_positive_nativeEoa | 1

@@ -1,0 +1,40 @@
+ua-mtx-merge group 3i (service pull; spec docs/superpowers/specs/2026-11-09-service-pull.md, owner Q1-Q5 2026-11-09). Gate summary.
+Full outputs in git-ignored .log files: smartcontracts/evm/runs/2026-11-09-ua-mtx-merge-3i-<step>.log (gates.sh here), forge per
+directory in runs/2026-11-08-ua-mtx-merge-t66a-3i-<dir>.log (the T66a forge-dirs.sh, label 3i), mutants in
+runs/2026-11-09-ua-mtx-merge-3i-mut-<id>.log. Forge 1.8.5, solc 0.8.37, every heavy run through scripts/capped at 4 GB, -j2.
+No src/ file changed: no pin, size or layout moved. UNAUDITED.
+
+T77: the reference service RefServiceEscrow (test only) and its tests. Tree: 10ac6918 + the T77 files (the T78 files were in
+the work tree too: test/metatx's count includes ServicePullVectors.t.sol).
+step | commit | rc | counts
+src/ unchanged (git diff HEAD -- src size-baseline.json test/v2/layout) | T77 | 0 | no diff
+forge test/metatx (forge-dirs.sh 3i test/metatx) | T77 | 1 | 531 passed, 1 failed (test_gas_rollMax_relayedFullTx, known red: owner kept ROLL_MAX), 1 skipped; 43 suites; new: ServicePullTest 28, ServicePullRegTest 7, ServicePullKindsTest 1, ServicePullInvariantTest 2 (64 runs, 2,048 calls, 0 reverts), ServicePullVectorsTest 1
+forge top-level (forge-dirs.sh 3i top) | T77 | 143 | not run: the sparse compile (474 files) was OOM-killed at the 4 GB cap twice (kernel: Memory cgroup out of memory, solc); replaced by the next step
+forge test/ExpectRevertLint.t.sol (scans every test's source) | T77 | 0 | 3 passed
+ServicePullKinds.t.sol at n2304-kmax4096 (at-set.sh, sparse) | T77 | 0 | 1 passed (13 tokens: kinds 0-5, 8-13, NORMAL with the ledger off)
+ServicePullKinds.t.sol at n2048-kmax1024 | T77 | 0 | 1 passed
+ServicePullKinds.t.sol at n2560-kmax16384 | T77 | 0 | 1 passed
+ServicePullKinds.t.sol at n2816-kmax65536 | T77 | 0 | 1 passed
+src/pqz/PqzSet.sol restored after each at-set run (git diff --exit-code) | T77 | 0 | no diff
+mutants (mutants.py, 16, each alone, ServicePull.t.sol + ServicePullInvariant.t.sol) | T77 | - | 16 of 16 killed, table below
+
+mutant | tests that went red | rc (from mutants.txt)
+M0-red-first-no-checks (every §3.3 check and the delta check removed: the service before its implementation) | invariant_custodyCovered, invariant_landsOnce, invariant_payerConservation, test_N11_noopToken, test_N13_relayFeeServiceRevertsNoFee, test_N14_serviceFrozen, test_N17_operationTwice, test_N18_feePins, test_N1_toNotService, test_N2_modeAndRelayer, test_N3_entryRefNotTheOperation, test_N4_fromNotPayer, test_N5_value, test_N7_cancelledAndResubmitted, test_N9_otherService, test_handler_reachesEveryPath | 1
+M1-drop-check1-to | test_N1_toNotService, test_N9_otherService | 1
+M2-drop-check2-mode-relayer | test_N2_modeAndRelayer, test_N9_otherService | 1
+M3-drop-check2-fee-pins | test_N18_feePins | 1
+M4-drop-check3-entryRef | test_N13_relayFeeServiceRevertsNoFee, test_N3_entryRefNotTheOperation | 1
+M5-drop-check4-payer | test_N4_fromNotPayer | 1
+M6-drop-check5-value | test_N5_value | 1
+M7-drop-replay-check | invariants (custodyCovered, landsOnce, payerConservation), test_N17_operationTwice, test_N7_cancelledAndResubmitted, test_handler_reachesEveryPath | 1
+M8-drop-freeze-check | test_N14_serviceFrozen | 1
+M9-drop-delta-check | test_N11_noopToken | 1
+M10-drop-reentrancy-guard | test_N20_reentrantToken | 1
+M11-pull-before-checks | invariants (3), test_N1_toNotService, test_N2_modeAndRelayer, test_N4_fromNotPayer, test_N7_cancelledAndResubmitted, test_N9_otherService | 1
+M12-try-catch-pull | test_N10_otherDomain, test_N14_payerFrozenAndPaused, test_N14_serviceNotEligible, test_N15_derivedLedgerOff, test_N16_delegatedExecutor, test_N20_reentrantToken, test_N7_cancelledAndResubmitted | 1
+M13-credit-op-payer-no-check4 | test_N4_fromNotPayer | 1
+M14-check5-zero-allowed (extra) | test_N5_value | 1
+M15-used-never-written (extra) | invariants (3), test_N17_operationTwice, test_N7_cancelledAndResubmitted, test_handler_reachesEveryPath, test_positive_nativeEoa | 1
+
+Finding against the spec (§11 N7): "submitted twice" meets step 6 first (the seen entryRef, Q4) and reverts ServicePullReplayed,
+not MetaTxBadNonce; only the lane cancelled first gives MetaTxBadNonce. test_N7_cancelledAndResubmitted asserts both.
