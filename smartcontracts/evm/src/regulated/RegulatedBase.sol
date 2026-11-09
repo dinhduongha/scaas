@@ -143,7 +143,7 @@ abstract contract RegulatedBase is MetaTokenBase {
     {
         _taxGates(t.entryRef, meta);
         bytes32 r = _taxTo(t.to, t.value, taxMode, tax);
-        bytes32 d = _uaExecuteTransfer(t, MtxPipelineLib.payWithTaxHash(t, taxMode, tax), auth, tax, r); // lever 6
+        bytes32 d = _uaExecuteTransfer(t, _pipePayWithTaxHash(t, taxMode, tax), auth, tax, r); // lever 6
         RegulatedLib.taxed(t.entryRef, t.to, r, t.from, taxMode, tax, d);
         _payRecord(meta, t.to, t.value - tax); // net of the tax withheld (plan T83)
         return true;

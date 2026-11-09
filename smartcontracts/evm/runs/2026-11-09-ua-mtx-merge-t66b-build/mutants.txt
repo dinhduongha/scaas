@@ -13,3 +13,8 @@ C1-aux-wrong-core | test_c_auxNeedsItsCore, test_c_cacheRunsTheCoreKeyCheck, tes
 C2a-core-helper-direct-call-portableOk | test_c_coreHelpersRefuseADirectCall | 1
 C2b-core-helper-direct-call-keyUa | test_c_coreHelpersRefuseADirectCall | 1
 C3-helper-result-ignored | test_c_kemWriteRunsTheCorePortableCheck, test_c_pqzWritesRunTheCoreHelpers | 1
+4.1 rule 4 for MtxPipelineLib (module P compiles the pipeline in; T the trade authorisation; A the payment views):
+P1-P-pipeline-not-compiled-in | test_rule4_pipelineCallsNoMtxPipelineLib | 1
+P2-T-authorize-not-compiled-in | test_rule4_tokenTradeCallsNoTradeLib | 1
+P3-A-payment-views-not-compiled-in | test_rule4_payCallsNoMtxPipelineLib | 1
+P4-P-authorize-hook-skips-the-check | test_uaPayReceiverFee_7702Payee, test_uaPayReceiverFee_coSignatureOverAnotherDigest_refused, test_uaPayReceiverFee_erc1271Payee, test_uaPayReceiverFee_purposeSeparation, test_uaReceiverFeeNested | 1

@@ -1,0 +1,92 @@
+# SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+"""T66b task 4.1, rule 4 for `MtxPipelineLib` (spec 2026-11-09-t66b-library-organisation.md §4.1 rule 4, §4.3): module P
+compiles the pipeline's code in. Every token-side call into `MtxPipelineLib` (`ERC20MetaTx`, `UAMetaTxBaseCore`,
+`MetaTokenBase`, `RegulatedBase`) becomes a hook `_pipe<Name>`, declared once in `UAMetaTxBaseCore`, whose default is the
+library call: the router, the wallets and the modules W, Z, Q (whose relayed named entries reach `_namedUA`) keep it, so
+they do not grow by the pipeline's code. gen_faces.py emits the overrides calling the library's internal twins in module P
+(and P2), `_pipeAuthorize` in T (the trade authorisation), the two payment views in A. The library itself (each external
+entry a thin wrapper of its internal twin) is hand source, not written here. `UAMetaTxBaseCore._requireValidSignature`
+keeps its library call: a token never reaches it (its `_execute` and `_named` run `preCall` / `preNamed`).
+One run on the tree after post2.py (recipe: transform.py, post.py, post2.py, post3.py, gen_faces.py).
+usage (from smartcontracts/evm): python3 script/t66b/post3.py   UNAUDITED tooling."""
+import re
+
+C, E, F, O = 'MtxPipelineLib.Ctx memory', 'MtxPipelineLib.Envelope memory', 'MtxPipelineLib.CallFacts memory', \
+    'MtxPipelineLib.Out memory'
+T, TM, S, PM = 'MetaTxLib.UAMetaTransfer calldata', 'MetaTxLib.UAMetaTransfer memory', 'IUARegistry.UASig calldata', \
+    'MetaTxLib.PayMeta calldata'
+# name: (params, mutability, returns); the library entry is `name` with a lower-case first letter, its twin `_` + that.
+HOOKS = {
+    'PreCall': ([f'{C} c', f'{E} e', f'{F} f', 'bytes calldata sig'], '', O),
+    'PreCallUA': ([f'{C} c', f'{E} e', f'{F} f', f'{S} auth'], '', O),
+    'PreNamed': ([f'{C} c', 'bytes32 typehash', f'{E} e', 'bytes memory args', f'{F} f', 'bytes calldata sig'], '', O),
+    'PreNamedUA': ([f'{C} c', 'bytes32 typehash', f'{E} e', 'bytes memory args', f'{F} f', f'{S} auth'], '', O),
+    'PreTransferUA': ([f'{C} c', f'{TM} t', 'bytes32 signed', 'uint256 have', f'{S} auth'], '', O),
+    'Authorize': ([f'{C} c', 'bytes32 from', 'bytes32 purpose', 'bytes32 digest', f'{S} auth'], ' view', ''),
+    'CallDigest': (['bytes32 domainSeparator', 'bytes32 typehash', f'{E} e'], ' pure', 'bytes32'),
+    'TransferDigest': (['bytes32 domainSeparator', f'{T} t'], ' pure', 'bytes32'),
+    'ReceiverFeeDigest': (['bytes32 domainSeparator', f'{T} t', 'uint256 fee', 'address feeRecipient',
+                           'uint256 validUntil'], ' pure', 'bytes32'),
+    'PayWithTaxHash': ([f'{T} t', 'uint8 taxMode', 'uint256 tax'], ' pure', 'bytes32'),
+    'MetaPayId': ([f'{PM} m'], ' pure', 'bytes32'),
+    'PayMeta': (['bytes32 entryRef', f'{PM} m'], '', ''),
+    'PayRecord': (['bytes32 payNo', 'bytes32 to', 'uint256 amount'], '', ''),
+    'PaymentCount': (['bytes32 payNo'], ' view', 'uint256'),
+    'PaymentsOf': (['bytes32 payNo', 'uint256 offset', 'uint256 limit'], ' view', 'MetaTxLib.PayRecord[] memory'),
+}
+
+
+def lib(n):
+    return n[0].lower() + n[1:]
+
+
+def hook(n, twin, virtual=True):
+    """The hook `_pipe<n>`: the default (`virtual`) calls the library entry, an override (gen_faces.py) its twin."""
+    params, m, r = HOOKS[n]
+    call = f'MtxPipelineLib.{"_" if twin else ""}{lib(n)}({", ".join(p.rsplit(" ", 1)[1] for p in params)})'
+    sig, line = '', f'    function _pipe{n}('
+    for i, p in enumerate(params):  # wrapped at parameter boundaries, 120 columns
+        part = p + (', ' if i + 1 < len(params) else ')')
+        if len(line) + len(part.rstrip()) > 120:
+            sig, line = sig + line.rstrip() + '\n', '        '
+        line += part
+    sig += line
+    return (f'{sig}\n        internal{m} {"virtual" if virtual else "override"}'
+            f'{f" returns ({r})" if r else ""}\n    {{\n        {"return " if r else ""}{call};\n    }}\n')
+
+
+def edit(p, n_by_name):
+    s = open(p).read()
+    for name, n in n_by_name.items():
+        pat = f'MtxPipelineLib.{lib(name)}('
+        assert s.count(pat) == n, (p, pat, s.count(pat))
+        s = s.replace(pat, f'_pipe{name}(')
+    return s
+
+
+if __name__ == '__main__':
+    s = edit('src/metatx/UAMetaTxBase.sol', {'CallDigest': 1, 'PreNamedUA': 2, 'PreCallUA': 1})
+    anchor = '    // ------------------------------------------------------------------ the pipeline on MtxPipelineLib\n'
+    assert s.count(anchor) == 1
+    blk = ('    // ------------------------------------------------------------------ the pipeline hooks (T66b rule 4)\n\n'
+           '    /// @dev Every token-side call into `MtxPipelineLib`, each a hook whose default is the library call (the router,\n'
+           '    ///      the wallets, the token modules W, Z, Q). A token\'s module P overrides them with the library\'s internal\n'
+           '    ///      twins, T the trade authorisation, A the payment views (spec 2026-11-09-t66b-library-organisation.md §4.1\n'
+           '    ///      rule 4; generated by script/t66b/gen_faces.py).\n'
+           + '\n'.join(hook(n, False) for n in HOOKS) + '\n')
+    s = s.replace(anchor, blk + anchor)
+    open('src/metatx/UAMetaTxBase.sol', 'w').write(s)
+    for p, d in (('src/metatx/ERC20MetaTx.sol', {'TransferDigest': 1, 'Authorize': 3, 'PreCall': 1, 'PreNamed': 1,
+                                                  'PreTransferUA': 1}),
+                 ('src/metatx/MetaTokenBase.sol', {'MetaPayId': 1, 'PayMeta': 1, 'PayRecord': 1, 'PaymentCount': 1,
+                                                    'PaymentsOf': 1, 'ReceiverFeeDigest': 1, 'Authorize': 1}),
+                 ('src/regulated/RegulatedBase.sol', {'PayWithTaxHash': 1})):
+        s = edit(p, d)
+        open(p, 'w').write(s)
+    s = open('src/metatx/MetaTokenBase.sol').read()
+    a = '        _pipePayMeta(entryRef, m); // lever 5 (pay-meta-tax spec §6.4): the body in the linked library\n'
+    assert s.count(a) == 1
+    s = s.replace(a, '        _pipePayMeta(entryRef, m); // lever 5 (pay-meta-tax spec §6.4); T66b: compiled into module P\n')
+    open('src/metatx/MetaTokenBase.sol', 'w').write(s)
+    assert not re.search(r'MtxPipelineLib\.preNamed\(', open('src/metatx/ERC20MetaTx.sol').read())
+    print('post3: done')

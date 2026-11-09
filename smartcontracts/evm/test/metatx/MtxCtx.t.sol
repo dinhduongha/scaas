@@ -145,6 +145,22 @@ contract MtxCtxTest is PqzRegistryBase {
         revert("no DELEGATECALL into MtxPipelineLib with that selector");
     }
 
+    /// T66b rule 4 (spec 2026-11-09-t66b-library-organisation.md §4.1): the index of the first DELEGATECALL into `t`'s module
+    /// P (`modules()[0]`, where the pipeline's code is compiled in) with the entry's selector `sel`, its storage `t`'s.
+    function _pCall(VmSafe.AccountAccess[] memory a, address t, bytes4 sel) internal view returns (uint256) {
+        address p = NormalToken(t).modules()[0];
+        for (uint256 i; i < a.length; ++i) {
+            if (a[i].kind == VmSafe.AccountAccessKind.DelegateCall && a[i].account == p && a[i].data.length >= 4
+                && bytes4(a[i].data) == sel) {
+                for (uint256 j; j < a[i].storageAccesses.length; ++j) {
+                    require(a[i].storageAccesses[j].account == t, "module P ran in another contract's context");
+                }
+                return i;
+            }
+        }
+        revert("no DELEGATECALL into module P with that selector");
+    }
+
     /// The `Ctx` (the first argument word block of every external library function that takes one) at access `i`.
     function _ctxAt(VmSafe.AccountAccess[] memory a, uint256 i) internal pure returns (MtxPipelineLib.Ctx memory) {
         return abi.decode(_slice(a[i].data, 4, 128), (MtxPipelineLib.Ctx));
@@ -245,7 +261,10 @@ contract MtxCtxTest is PqzRegistryBase {
     // ------------------------------------------------------------------ R2: the context
 
     /// R2: per kind on a clone (the six kinds of the parity rigs, plus `tok` with a `SmartKeyAccount` implementation and
-    /// `htok` on Hedera), the `Ctx` a relayed call hands the library equals the token's own views.
+    /// `htok` on Hedera), the `Ctx` a relayed call hands the library equals the token's own views. T66b rule 4, meaning:
+    /// module P runs the pipeline compiled in (no library call, `test_rule4_pipelineCallsNoMtxPipelineLib`), so the `Ctx`
+    /// is read where it still crosses into the library, a named entry of another module: `mtxBurn` (A) on a normal kind,
+    /// `mtxUnwrap` (W) on a wrapped one; both and P build it with the one `_mtxCtx()` of `MetaTokenBase`.
     function test_ctxEqualsTokenViews() public {
         IRig[3] memory rigs = [IRig(address(new PlainRig())), IRig(address(new PqzRig())), IRig(address(new ZetherRig()))];
         PlainRig(address(rigs[0])).init();
@@ -267,15 +286,16 @@ contract MtxCtxTest is PqzRegistryBase {
     }
 
     function _checkCtx(address t, string memory kind) internal {
-        // the typed path (an expired transfer: the library runs and refuses it) and the generic path hand one Ctx
+        // a named entry with an expired envelope: the library runs and refuses it
         IUARegistry.UASig memory none;
-        MtxPipelineLib.Ctx memory c = _ctxOf(t, abi.encodeCall(IERC20MetaTx.mtxExecuteTransfer,
-            (MetaTxLib.UAMetaTransfer(0, 0, 0, 0, 0, 0, 0, 0, address(0), 0, address(0)), none)),
-            MtxPipelineLib.preTransferUA.selector);
-        MtxPipelineLib.Ctx memory c2 = _ctxOf(t, abi.encodeCall(IMetaTx.executeMetaTransaction,
-            (MetaTxLib.MetaTransaction(address(0), "", 0, 0, 0, 0, address(0), 0, address(0)), "")),
-            MtxPipelineLib.preCall.selector);
-        assertEq(keccak256(abi.encode(c)), keccak256(abi.encode(c2)), string.concat(kind, ": one Ctx on every path"));
+        MetaTxLib.UAEnvelope memory e;
+        bool wrapped = bytes(kind).length >= 7 && keccak256(_slice(bytes(kind), 0, 7)) == keccak256("WRAPPED");
+        MtxPipelineLib.Ctx memory c = _ctxOf(t, wrapped
+            ? abi.encodeWithSignature("mtxUnwrap((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,"
+                "address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))", e, uint256(1), BOB, uint256(0), none)
+            : abi.encodeWithSignature("mtxBurn((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,"
+                "(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))", e, uint256(1), none),
+            MtxPipelineLib.preNamedUA.selector);
         NormalToken k = NormalToken(t);
         assertEq(c.domainSeparator, _separator(t), string.concat(kind, ": domainSeparator"));
         assertEq(c.registry, k.registry(), string.concat(kind, ": registry"));
@@ -481,8 +501,8 @@ contract MtxCtxTest is PqzRegistryBase {
 
     // ------------------------------------------------------------------ R8: the extra frame and the 63/64 rule
 
-    /// R8: a `SmartKeyAccount` clone signs an `mtxExecute`. Its ERC-1271 call, now issued from the library frame (two
-    /// frames below the token's entry), gets the 400,000 cap (the library's copy of the `skaCloneCodehash` rule). The
+    /// R8: a `SmartKeyAccount` clone signs an `mtxExecute`. Its ERC-1271 call, now issued from module P's frame (T66b rule
+    /// 4: the pipeline compiled into P, two frames below the token's entry), gets the 400,000 cap (the library's copy of the `skaCloneCodehash` rule). The
     /// smallest working call gas is logged (Task 8's node floor input); one gas less reverts with the SigCheck starvation
     /// error for that cap, never as a bad signature.
     function test_minGas_smartKeyAccountMtxExecute() public {
@@ -492,11 +512,11 @@ contract MtxCtxTest is PqzRegistryBase {
         MetaTxLib.MetaTransaction memory m = _mt(acct, abi.encodeCall(IMetaTx.cancelNonce, (9)), 1, RR, 0);
         bytes memory sig = abi.encode(uint256(0), new bytes32[](0), _ecdsa(SKA_PK, MtxDigest.metaTx(address(tok), m)));
         bytes memory cd = abi.encodeCall(IMetaTx.executeMetaTransaction, (m, sig));
-        // the ERC-1271 STATICCALL comes from the library's frame
+        // the ERC-1271 STATICCALL comes from module P's frame
         uint256 snap = vm.snapshotState();
         (bool ok, bytes memory ret, VmSafe.AccountAccess[] memory a) = _recorded(address(tok), cd);
         assertTrue(ok, vm.toString(ret));
-        uint256 i = _inside(a, _libCall(a, address(tok), MtxPipelineLib.preCall.selector), acct);
+        uint256 i = _inside(a, _pCall(a, address(tok), IMetaTx.executeMetaTransaction.selector), acct);
         assertTrue(a[i].kind == VmSafe.AccountAccessKind.StaticCall);
         assertEq(a[i].accessor, address(tok));
         vm.revertToState(snap);
@@ -511,7 +531,8 @@ contract MtxCtxTest is PqzRegistryBase {
         assertEq(cap, MtxPipelineLib.SMART_KEY_1271_GAS, "the SmartKeyAccount cap");
     }
 
-    /// R8: an `mldsa65` UA's `uaExecute`: the registry's verify, now issued from the library frame, keeps its hold. The
+    /// R8: an `mldsa65` UA's `uaExecute`: the registry's verify, now issued from module P's frame (T66b rule 4), keeps its
+    /// hold. The
     /// smallest working relayer's call gas is logged. Below the smallest working frame gas the call runs out of gas or
     /// reverts with the registry's starvation error (`UAVerifyGas`, the UA path's counterpart of `SigCheckGasStarved`),
     /// never with a verdict. (At the transaction level the EIP-7976 calldata floor of the 3,309-byte signature hides the
@@ -522,7 +543,7 @@ contract MtxCtxTest is PqzRegistryBase {
         uint256 snap = vm.snapshotState();
         (bool ok, bytes memory ret, VmSafe.AccountAccess[] memory a) = _recorded(address(tok), cd);
         assertTrue(ok, vm.toString(ret));
-        uint256 i = _inside(a, _libCall(a, address(tok), MtxPipelineLib.preCallUA.selector), address(reg));
+        uint256 i = _inside(a, _pCall(a, address(tok), UAMetaTxBase.mtxExecute.selector), address(reg));
         assertTrue(a[i].kind == VmSafe.AccountAccessKind.StaticCall);
         assertEq(a[i].accessor, address(tok));
         vm.revertToState(snap);
@@ -552,20 +573,21 @@ contract MtxCtxTest is PqzRegistryBase {
 
     // ------------------------------------------------------------------ R12: Hedera one frame deeper
 
-    /// R12: on an `IS_HEDERA` token the HIP-632 branch is the library's copy (token -> MtxPipelineLib -> HederaLib, both
-    /// DELEGATECALL) and the system contract still sees the token as its caller, by CALL (the mock halts in a static
+    /// R12: on an `IS_HEDERA` token the HIP-632 branch is the pipeline's copy (T66b rule 4: token -> module P -> HederaLib,
+    /// both DELEGATECALL) and the system contract still sees the token as its caller, by CALL (the mock halts in a static
     /// frame), on the generic, typed and UA paths. ua-mtx-merge T2, meaning: the typed path is one, `preTransferUA`; its
     /// two rows are now both native ids on it (lanes 2 and 3).
     function test_hedera_hip632CallerIsToken() public {
         address t = address(htok);
         MetaTxLib.MetaTransaction memory m = _mt(hed, abi.encodeCall(IMetaTx.cancelNonce, (9)), 1, RR, 0);
-        _hip632(t, abi.encodeCall(IMetaTx.executeMetaTransaction, (m, _ed(MtxDigest.metaTx(address(htok), m)))), MtxPipelineLib.preCall.selector);
+        _hip632(t, abi.encodeCall(IMetaTx.executeMetaTransaction, (m, _ed(MtxDigest.metaTx(address(htok), m)))),
+            IMetaTx.executeMetaTransaction.selector);
         MetaTxLib.UAMetaTransfer memory x = _tr(hed, BOB, 2);
         _hip632(t, abi.encodeCall(IERC20MetaTx.mtxExecuteTransfer, (x, UACall.auth(x.from, _ed(htok.mtxTransferDigest(x))))),
-            MtxPipelineLib.preTransferUA.selector);
+            IERC20MetaTx.mtxExecuteTransfer.selector);
         MetaTxLib.UAMetaTransfer memory y = _ut(MetaTxLib.pad(hed), MetaTxLib.pad(BOB), 3);
         _hip632(t, abi.encodeCall(IERC20MetaTx.mtxExecuteTransfer, (y, UACall.auth(y.from, _ed(htok.mtxTransferDigest(y))))),
-            MtxPipelineLib.preTransferUA.selector);
+            IERC20MetaTx.mtxExecuteTransfer.selector);
         assertEq(htok.balanceOf(BOB), 2_000);
         assertEq(htok.mtxNonce(MetaTxLib.pad(hed), 1) + htok.mtxNonce(MetaTxLib.pad(hed), 2) + htok.mtxNonce(MetaTxLib.pad(hed), 3), 3);
     }
@@ -573,9 +595,9 @@ contract MtxCtxTest is PqzRegistryBase {
     function _hip632(address t, bytes memory cd, bytes4 sel) internal {
         (bool ok, bytes memory ret, VmSafe.AccountAccess[] memory a) = _recorded(t, cd);
         assertTrue(ok, vm.toString(ret));
-        uint256 l = _libCall(a, t, sel);
+        uint256 l = _pCall(a, t, sel);
         uint256 h = _inside(a, l, address(HederaLib));
-        assertTrue(a[h].kind == VmSafe.AccountAccessKind.DelegateCall, "HederaLib by DELEGATECALL from the library");
+        assertTrue(a[h].kind == VmSafe.AccountAccessKind.DelegateCall, "HederaLib by DELEGATECALL from module P");
         uint256 s = _inside(a, h, HAS);
         assertTrue(a[s].kind == VmSafe.AccountAccessKind.Call, "HIP-632 by CALL");
         assertEq(a[s].accessor, t, "HIP-632 sees the token as its caller");

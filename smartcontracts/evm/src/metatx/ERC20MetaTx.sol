@@ -73,7 +73,7 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBaseCore {
     }
 
     function _mtxTransferDigestBody(MetaTxLib.UAMetaTransfer calldata t) internal view returns (bytes32) {
-        return MtxPipelineLib.transferDigest(_domainSeparatorV4(), t);
+        return _pipeTransferDigest(_domainSeparatorV4(), t);
     }
 
     // ------------------------------------------------------------------ trade orders (CTR-DEX-15, -25, -02)
@@ -112,7 +112,7 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBaseCore {
         bytes32 h = _tradeOrderDigestBody(o);
         ITradeToken.UATradeOrder memory c = o;
         TradeLib._precheck(c, f, h, msg.sender, address(this));
-        if (TradeLib.$().pulled[h] == 0) MtxPipelineLib.authorize(_mtxCtx(), o.from, UAKinds.PURPOSE_TRADE, h, auth);
+        if (TradeLib.$().pulled[h] == 0) _pipeAuthorize(_mtxCtx(), o.from, UAKinds.PURPOSE_TRADE, h, auth);
         _uaMove(o.from, TradeLib.pad(o.dex), TradeLib._record(c, f, h, true));
     }
 
@@ -124,12 +124,12 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBaseCore {
 
     /// @notice Cancel signatures never expire (CTR-DEX-02); anyone may submit one. A native id needs no registry (C).
     function _mtxCancelOrderBody(ITradeToken.UATradeOrder calldata o, IUARegistry.UASig calldata auth) internal {
-        MtxPipelineLib.authorize(_mtxCtx(), o.from, UAKinds.PURPOSE_TRADE, _cancelOrderDigestBody(o), auth);
+        _pipeAuthorize(_mtxCtx(), o.from, UAKinds.PURPOSE_TRADE, _cancelOrderDigestBody(o), auth);
         TradeLib._cancel(_tradeOrderDigestBody(o), o.amount, o.from, true);
     }
 
     function _mtxInvalidateNoncesBody(bytes32 from, uint256 batch, uint256 newMin, IUARegistry.UASig calldata auth) internal {
-        MtxPipelineLib.authorize(_mtxCtx(), from, UAKinds.PURPOSE_TRADE, _invalidateNoncesDigestBody(from, batch, newMin), auth);
+        _pipeAuthorize(_mtxCtx(), from, UAKinds.PURPOSE_TRADE, _invalidateNoncesDigestBody(from, batch, newMin), auth);
         TradeLib._invalidate(from, batch, newMin, true);
     }
 
@@ -141,7 +141,7 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBaseCore {
         internal override returns (bytes memory)
     {
         _regPre(MetaTxLib.pad(m.from), bytes4(m.data), m.mode);
-        return _settle(m, MtxPipelineLib.preCall(_mtxCtx(), _envelopeOf(m), _callFacts(m.data, false), signature));
+        return _settle(m, _pipePreCall(_mtxCtx(), _envelopeOf(m), _callFacts(m.data, false), signature));
     }
 
     /// @dev `_execute` of a named entry (TS-D14): 1-4 in `preNamed` over the entry's own struct, the rest shared.
@@ -158,7 +158,7 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBaseCore {
     {
         MetaTxLib.MetaTransaction memory m = _metaOf(e, data);
         _regPre(MetaTxLib.pad(m.from), bytes4(data), m.mode);
-        return _settle(m, MtxPipelineLib.preNamed(
+        return _settle(m, _pipePreNamed(
             _mtxCtx(), typehash, _envelopeOf(m, 0), words, _callFacts(m.data, false), sig));
     }
 
@@ -256,7 +256,7 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBaseCore {
         uint256 withheld, bytes32 withheldTo) internal returns (bytes32)
     {
         _regPre(t.from, 0, t.mode);
-        MtxPipelineLib.Out memory o = MtxPipelineLib.preTransferUA(_mtxCtx(), t, signed, balanceOfUA(t.from), auth); // 1-4
+        MtxPipelineLib.Out memory o = _pipePreTransferUA(_mtxCtx(), t, signed, balanceOfUA(t.from), auth); // 1-4
         _regFeeTo(MetaTxLib.pad(o.feeTo), o.fee);
         if (o.fee != 0) _uaMove(t.from, MetaTxLib.pad(o.feeTo), o.fee);                                // 5
         _uaSplit(t.from, t.to, t.value, withheld, withheldTo);

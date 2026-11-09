@@ -16,6 +16,8 @@ import json
 import os
 import sys
 
+from post3 import HOOKS, hook  # the pipeline hooks of rule 4
+
 E = json.load(open('script/t66b/entries.json'))
 # §4.2's splitting rule, applied where the build measured a module above 33,780 B (≈ 57 M asked; summary.txt): Q splits into
 # the PQZ ops and their verdict entries (Q) and the PQZ state, setters and views (Q2).
@@ -28,6 +30,10 @@ for _k, _gs in SPLITS.items():
                                                                                  and _e['name'] not in Q2_VERDICTS)):
             _e['group'] = 'Q2'
 CHECK = '--check' in sys.argv
+# §4.1 rule 4: the modules that compile `MtxPipelineLib`'s code in, each overriding these hooks with the library's internal
+# twins: P (and P2) the pipeline, named transfers and pay; T the trade authorisation; A the payment views. W, Z and Q keep
+# the library call (their relayed named entries reach `_namedUA`: compiling the pipeline in would grow each by 3-7 KB).
+PIPE = {'P': list(HOOKS), 'P2': list(HOOKS), 'T': ['Authorize'], 'A': ['PaymentCount', 'PaymentsOf']}
 KFILE = {'NormalToken': 'src/metatx', 'WrappedToken': 'src/metatx', 'NormalZetherToken': 'src/zether',
          'WrappedZetherToken': 'src/zether', 'NormalPqzToken': 'src/pqz', 'WrappedPqzToken': 'src/pqz',
          'NormalRegulatedToken': 'src/regulated', 'WrappedRegulatedToken': 'src/regulated',
@@ -57,9 +63,9 @@ def rel(frm, to):
     return r if r.startswith('.') else './' + r
 
 
-def imports(k, path):
+def imports(k, path, extra=()):
     files = sorted(set(E['imports'].values()) | {f'{KFILE[k]}/{k}Core.sol', 'src/metatx/ITokenModule.sol', 'src/factory/IOpenFactory.sol'}
-                   | ({'src/pqz/PqzSet.sol'} if PQZ(k) else set()))
+                   | ({'src/pqz/PqzSet.sol'} if PQZ(k) else set()) | set(extra))
     return ''.join(f'import "{rel(path, f)}";\n' for f in files)
 
 
@@ -161,7 +167,7 @@ contract {k} is {k}Core {{
 
 def modules(k):
     path = f'{KFILE[k]}/{k}Modules.sol'
-    out = [HDR + '\n' + imports(k, path)]
+    out = [HDR + '\n' + imports(k, path, ('src/metatx/MtxPipelineLib.sol',))]
     for g in groups(k):
         ents = []
         for e in E['kinds'][k]:
@@ -171,6 +177,9 @@ def modules(k):
             od = '' if e['mut'] == 'pure' else ' onlyDelegated'
             ents.append(f'    function {e["name"]}({", ".join(e["params"])}) external{mut(e)}{od}{ret(e)} {{\n'
                         f'        {"return " if e["returns"] else ""}{body};\n    }}')
+        pipe = '\n'.join(hook(n, True, False) for n in PIPE.get(g, ()))
+        if pipe:
+            pipe = '\n    // rule 4 (§4.1): `MtxPipelineLib`\'s code compiled in, its internal twins in place of the library call\n' + pipe
         out.append(f'''
 /// @title {k}{g}: the body module {g} of {k} ({GROUP_DOC[g]}; T66b, spec 2026-11-09-t66b-library-organisation.md §4.2):
 ///        reached only by DELEGATECALL from the token's stubs (M2), no guard of its own (the stub's `_forward` holds it, M3),
@@ -182,7 +191,7 @@ contract {k}{g} is {k}Core {{
     function moduleGroup() external pure returns (uint8) {{
         return {GROUP_ID[g]};
     }}
-
+{pipe}
 ''' + '\n\n'.join(ents) + '\n}\n')
     return path, ''.join(out)
 

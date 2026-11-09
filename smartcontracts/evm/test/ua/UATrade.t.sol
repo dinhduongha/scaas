@@ -15,6 +15,7 @@ import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
+import {MtxPipelineLib} from "../../src/metatx/MtxPipelineLib.sol";
 import {TradeLib} from "../../src/trade/TradeLib.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {normalInit} from "../v2/helpers/V2Fixture.sol";
@@ -139,10 +140,14 @@ contract UATradeTest is UALedgerBase {
 
     /// T66b rule 4 (spec §4.1): the token's trade body runs `TradeLib`'s code compiled into module T, no DELEGATECALL to the
     /// library; positive control: the library's own entry still answers a call (the DEX's path).
+    /// The trade authorisation too (`_pipeAuthorize`, `MtxPipelineLib`'s code compiled into T): no call to that library.
     function test_rule4_tokenTradeCallsNoTradeLib() public {
         ITradeToken.UATradeOrder memory o = _o(uaP, 1000, 2000);
         TradeLib.cancelHash(o); // control: the library is linked here and answers
+        MtxPipelineLib.Envelope memory none;
+        MtxPipelineLib.callDigest(bytes32(0), bytes32(0), none); // control
         vm.expectCall(address(TradeLib), "", 0);
+        vm.expectCall(address(MtxPipelineLib), "", 0);
         _trade(o, _f(600, 1200, 0));
         tok.cancelOrderDigest(o);
         assertEq(tok.pulled(tok.tradeOrderDigest(o)), 600);

@@ -23,6 +23,8 @@ CORE = "src/ua/UARegistryCoreLib.sol"
 PAIR = "test/ua/UARegistryPair.t.sol"
 UA_W = "{test/ua/UARegistryPair.t.sol,test/ua/UARegistryUA8.t.sol,test/ua/UARegistryMembership.t.sol}"
 UA_R = "{test/ua/UARegistryPair.t.sol,test/ua/UARegistryUA8.t.sol,test/ua/UARegistryNested.t.sol}"
+NTM = "src/metatx/NormalTokenModules.sol"
+AUTH = "        MtxPipelineLib._authorize(c, from, purpose, digest, auth);"
 
 # id: (tests, [(file, old, new, occurrences)])
 MUTANTS = {
@@ -48,6 +50,16 @@ MUTANTS = {
     "C2b-core-helper-direct-call-keyUa": (PAIR, [(CORE, "function keyUa(uint16 kind, bytes memory keyData) external returns",
                                                   "function keyUa(uint16 kind, bytes memory keyData) external view returns", 1)]),
     "C3-helper-result-ignored": (PAIR, [(AUX, "digest, sig)), (bool)\n        );", "digest, sig)), (bool)\n        ) || true;", 1)]),
+    # 4.1, rule 4 for MtxPipelineLib (spec §4.1): a module's hook back on the library call (the code not compiled in: P's
+    # typed transfer, T's trade authorisation, A's payment views); P's authorisation hook skipping the check
+    "P1-P-pipeline-not-compiled-in": ("test/ua/UALedger.t.sol", [(NTM, "return MtxPipelineLib._preTransferUA(c, t, signed, have, auth);",
+                                                             "return MtxPipelineLib.preTransferUA(c, t, signed, have, auth);", 1)]),
+    "P2-T-authorize-not-compiled-in": ("test/ua/UATrade.t.sol", [(NTM, AUTH + "\n    }\n\n    function cancelOrderDigest",
+                                                              AUTH.replace("._authorize", ".authorize") + "\n    }\n\n    function cancelOrderDigest", 1)]),
+    "P3-A-payment-views-not-compiled-in": ("test/metatx/PayRecords.t.sol", [(NTM, "return MtxPipelineLib._paymentCount(payNo);",
+                                                                          "return MtxPipelineLib.paymentCount(payNo);", 2)]),
+    "P4-P-authorize-hook-skips-the-check": ("test/ua/UAReceiverFee.t.sol", [(NTM, AUTH + "\n    }\n\n    function _pipeCallDigest",
+                                                                          "        c; from; purpose; digest; auth;\n    }\n\n    function _pipeCallDigest", 1)]),
 }
 
 

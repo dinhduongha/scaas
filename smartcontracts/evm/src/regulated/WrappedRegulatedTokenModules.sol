@@ -11,6 +11,7 @@ import "../factory/IFactoryToken.sol";
 import "../factory/IOpenFactory.sol";
 import "../governance/IGovernance.sol";
 import "../metatx/ITokenModule.sol";
+import "../metatx/MtxPipelineLib.sol";
 import "../pqz/IPqzToken.sol";
 import "./IRegulatedToken.sol";
 import "./WrappedRegulatedTokenCore.sol";
@@ -30,6 +31,104 @@ contract WrappedRegulatedTokenP is WrappedRegulatedTokenCore {
 
     function moduleGroup() external pure returns (uint8) {
         return 1;
+    }
+
+    // rule 4 (§4.1): `MtxPipelineLib`'s code compiled in, its internal twins in place of the library call
+    function _pipePreCall(MtxPipelineLib.Ctx memory c, MtxPipelineLib.Envelope memory e,
+        MtxPipelineLib.CallFacts memory f, bytes calldata sig)
+        internal override returns (MtxPipelineLib.Out memory)
+    {
+        return MtxPipelineLib._preCall(c, e, f, sig);
+    }
+
+    function _pipePreCallUA(MtxPipelineLib.Ctx memory c, MtxPipelineLib.Envelope memory e,
+        MtxPipelineLib.CallFacts memory f, IUARegistry.UASig calldata auth)
+        internal override returns (MtxPipelineLib.Out memory)
+    {
+        return MtxPipelineLib._preCallUA(c, e, f, auth);
+    }
+
+    function _pipePreNamed(MtxPipelineLib.Ctx memory c, bytes32 typehash, MtxPipelineLib.Envelope memory e,
+        bytes memory args, MtxPipelineLib.CallFacts memory f, bytes calldata sig)
+        internal override returns (MtxPipelineLib.Out memory)
+    {
+        return MtxPipelineLib._preNamed(c, typehash, e, args, f, sig);
+    }
+
+    function _pipePreNamedUA(MtxPipelineLib.Ctx memory c, bytes32 typehash, MtxPipelineLib.Envelope memory e,
+        bytes memory args, MtxPipelineLib.CallFacts memory f, IUARegistry.UASig calldata auth)
+        internal override returns (MtxPipelineLib.Out memory)
+    {
+        return MtxPipelineLib._preNamedUA(c, typehash, e, args, f, auth);
+    }
+
+    function _pipePreTransferUA(MtxPipelineLib.Ctx memory c, MetaTxLib.UAMetaTransfer memory t, bytes32 signed,
+        uint256 have, IUARegistry.UASig calldata auth)
+        internal override returns (MtxPipelineLib.Out memory)
+    {
+        return MtxPipelineLib._preTransferUA(c, t, signed, have, auth);
+    }
+
+    function _pipeAuthorize(MtxPipelineLib.Ctx memory c, bytes32 from, bytes32 purpose, bytes32 digest,
+        IUARegistry.UASig calldata auth)
+        internal view override
+    {
+        MtxPipelineLib._authorize(c, from, purpose, digest, auth);
+    }
+
+    function _pipeCallDigest(bytes32 domainSeparator, bytes32 typehash, MtxPipelineLib.Envelope memory e)
+        internal pure override returns (bytes32)
+    {
+        return MtxPipelineLib._callDigest(domainSeparator, typehash, e);
+    }
+
+    function _pipeTransferDigest(bytes32 domainSeparator, MetaTxLib.UAMetaTransfer calldata t)
+        internal pure override returns (bytes32)
+    {
+        return MtxPipelineLib._transferDigest(domainSeparator, t);
+    }
+
+    function _pipeReceiverFeeDigest(bytes32 domainSeparator, MetaTxLib.UAMetaTransfer calldata t, uint256 fee,
+        address feeRecipient, uint256 validUntil)
+        internal pure override returns (bytes32)
+    {
+        return MtxPipelineLib._receiverFeeDigest(domainSeparator, t, fee, feeRecipient, validUntil);
+    }
+
+    function _pipePayWithTaxHash(MetaTxLib.UAMetaTransfer calldata t, uint8 taxMode, uint256 tax)
+        internal pure override returns (bytes32)
+    {
+        return MtxPipelineLib._payWithTaxHash(t, taxMode, tax);
+    }
+
+    function _pipeMetaPayId(MetaTxLib.PayMeta calldata m)
+        internal pure override returns (bytes32)
+    {
+        return MtxPipelineLib._metaPayId(m);
+    }
+
+    function _pipePayMeta(bytes32 entryRef, MetaTxLib.PayMeta calldata m)
+        internal override
+    {
+        MtxPipelineLib._payMeta(entryRef, m);
+    }
+
+    function _pipePayRecord(bytes32 payNo, bytes32 to, uint256 amount)
+        internal override
+    {
+        MtxPipelineLib._payRecord(payNo, to, amount);
+    }
+
+    function _pipePaymentCount(bytes32 payNo)
+        internal view override returns (uint256)
+    {
+        return MtxPipelineLib._paymentCount(payNo);
+    }
+
+    function _pipePaymentsOf(bytes32 payNo, uint256 offset, uint256 limit)
+        internal view override returns (MetaTxLib.PayRecord[] memory)
+    {
+        return MtxPipelineLib._paymentsOf(payNo, offset, limit);
     }
 
     function cancelNonce(uint256 batch) external onlyDelegated {
@@ -148,6 +247,14 @@ contract WrappedRegulatedTokenT is WrappedRegulatedTokenCore {
         return 2;
     }
 
+    // rule 4 (§4.1): `MtxPipelineLib`'s code compiled in, its internal twins in place of the library call
+    function _pipeAuthorize(MtxPipelineLib.Ctx memory c, bytes32 from, bytes32 purpose, bytes32 digest,
+        IUARegistry.UASig calldata auth)
+        internal view override
+    {
+        MtxPipelineLib._authorize(c, from, purpose, digest, auth);
+    }
+
     function cancelOrderDigest(ITradeToken.UATradeOrder calldata o) external view onlyDelegated returns (bytes32 _p0) {
         return _cancelOrderDigestBody(o);
     }
@@ -198,6 +305,19 @@ contract WrappedRegulatedTokenA is WrappedRegulatedTokenCore {
 
     function moduleGroup() external pure returns (uint8) {
         return 3;
+    }
+
+    // rule 4 (§4.1): `MtxPipelineLib`'s code compiled in, its internal twins in place of the library call
+    function _pipePaymentCount(bytes32 payNo)
+        internal view override returns (uint256)
+    {
+        return MtxPipelineLib._paymentCount(payNo);
+    }
+
+    function _pipePaymentsOf(bytes32 payNo, uint256 offset, uint256 limit)
+        internal view override returns (MetaTxLib.PayRecord[] memory)
+    {
+        return MtxPipelineLib._paymentsOf(payNo, offset, limit);
     }
 
     function GOV_ROUTER() external view onlyDelegated returns (address _p0) {

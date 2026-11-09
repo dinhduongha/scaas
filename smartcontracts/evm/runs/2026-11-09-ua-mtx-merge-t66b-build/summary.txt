@@ -253,3 +253,36 @@ forge test/ua, the 17 registry suites (UARegistryPair, UARegistry, UARegistryMem
 UARegistryNested, UAGas, UARegistryGroups, UARegistryPortable, UARegistryCoreLibMsig, UARegistryNestedGas, UARegistryNestedVectors,
 UARegistryVectors, UARegistryUA6, UARegistryZether, UARegistryPqzBound, UAKinds) | 0 | 279 passed; DeployGas test_t66bPair | 0 |
 the rows above. Mutants C1, C2a, C2b, C3 rerun: 4 of 4 killed (mutants.txt), the registry files md5-equal after the run.
+
+Task 4.1, rule 4 for MtxPipelineLib (spec §4.1 rule 4, §4.3; script/t66b/post3.py, gen_faces.py `PIPE`): MtxPipelineLib's
+external entries become thin wrappers of internal twins (the private steps take `Ctx`, `Envelope`, `CallFacts` in memory);
+every token-side call (ERC20MetaTx, UAMetaTxBaseCore, MetaTokenBase, RegulatedBase) is a hook `_pipe<Name>` in
+UAMetaTxBaseCore whose default is the library call; module P overrides all 15 with the twins, T `_pipeAuthorize`, A the two
+payment views. W, Z, Q, the router and the wallets keep the library call (controller 2026-11-09). No P passes 33,780 B: no P2.
+Sizes, runtime B (forge build src, 23955351 -> this commit): P +3,473 to +3,541 (NormalTokenP 20,759 -> 24,300, the largest
+WrappedPqzRegulatedTokenP 27,310 -> 30,783); T +1,196 to +1,618 (largest 17,045); A -17 to +70 (largest 28,131); W, Z, Q +56 to
++113 (the hook's call frame; largest Q 32,423, kind 12); the tokens unchanged; MtxPipelineLib 12,054 -> 12,460 (the wrappers);
+GovernanceRouter 15,493 -> 15,572, MandateWallet / HederaMandateWallet 17,820 -> 17,891 (the hook's call frame); SCaaSDex unchanged.
+Measured, not built (gen_faces.py with the named pipeline also in A, W, Z, Q): +3.3 to +3.4 KB each, kind 4's Q 33,888 B (above
+33,780) and kind 12's Q 35,663 B (above the 35,570 B module line).
+Red first, on 23955351: test/ua/UALedger.t.sol test_rule4_pipelineCallsNoMtxPipelineLib | 1 | expected 0 calls to MtxPipelineLib,
+called 5 times; test/metatx/PayRecords.t.sol test_rule4_payCallsNoMtxPipelineLib | 1 | called 98 times (7 kinds); this commit | 0 |
+both green, and test_rule4_tokenTradeCallsNoTradeLib (test/ua/UATrade.t.sol) now also asserts no call to MtxPipelineLib.
+MtxCtx (meaning, T66b): the Ctx is read where it still crosses into the library (mtxBurn in A, mtxUnwrap in W); the SmartKeyAccount
+ERC-1271 cap, the mldsa65 registry verify and HIP-632 are found inside module P's frame: 6 passed; min gas logged: SmartKeyAccount
+mtxExecute 446,800, mldsa65 mtxExecute 237,600 (frame 221,600).
+NamedEntry test_c0_gasNamedVsGeneric (warm lane, mtxUnwrap / mtxExecute / executeMetaTransaction): 23955351 160,958 / 163,269 /
+161,038 -> this commit 160,749 / 154,866 / 153,462; its bound `named < generic + 2,000` -> 7,000 (the generic path runs the
+pipeline in P, a named entry of A, W, Z, Q keeps the library call).
+PayRecords gas (7 kinds): test_records_mtxPay 5,944,491 -> 5,793,410, test_records_receiverFeeNet 6,124,142 -> 5,937,844.
+Gates on this commit (forge-dirs.sh, label t66b-p1):
+step | tree | rc | counts
+forge test/metatx | this commit | 1 | 536 passed, 6 failed, 1 skipped: the 6 of 3a837c85 (self-call lint, TokenKat x2, MandateWalletMerged
+  byte pin, DeployBase relay fee router, ROLL_MAX)
+forge test/ua (without UARegistryUA8) | this commit | 1 | 602 passed, 9 failed: UADeploy 7, UAReceivers setUp, MandateWalletMerged
+  byte pin (4.1 / 4.2 leftovers)
+forge test/wallet | this commit | 1 | 180 passed, 1 failed (MandateWalletMerged byte pin); same on 23955351
+forge test/account | this commit | 1 | 96 passed, 2 failed (test_mandateWalletKat address, the byte pin); same on 23955351
+forge test/hedera | this commit | 1 | 18 passed, 2 failed (the KAT address and digest); same on 23955351
+forge test/governance | this commit | 1 | compile error in test/governance/GovRegulatedBits.t.sol (not migrated by 4.1; 4.3)
+Mutants (mutants.py, each alone; NormalTokenModules.sol md5-equal after): 4 of 4 killed (mutants.txt).

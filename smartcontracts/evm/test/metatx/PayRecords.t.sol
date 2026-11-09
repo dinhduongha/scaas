@@ -8,6 +8,7 @@ import {UACall} from "../ua/UACall.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
 import {IMetaTokenV2} from "../../src/metatx/IMetaTokenV2.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
+import {MtxPipelineLib} from "../../src/metatx/MtxPipelineLib.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {FeeMode} from "../../src/common/FeePolicy.sol";
 import {PayRigBase} from "./PayMeta.t.sol";
@@ -65,6 +66,32 @@ contract PayRecordsTest is PayRigBase {
             MetaTxLib.PayRecord[] memory r = NormalToken(t).paymentsOf(NO, 0, 10);
             assertEq(r.length, 1, kinds[i]);
             _eq(r[0], PAYEE, AMOUNT, 100 + i, kinds[i]);
+        }
+    }
+
+    /// T66b rule 4 (spec §4.1): module P runs the pay code of `MtxPipelineLib` compiled in (`metaPayId`, `payMeta`, the
+    /// typed transfer, `payRecord`, the receiver-fee digest and authorisation), module A the two payment views: no
+    /// DELEGATECALL to the library on any kind of the rigs; positive control: the library's own entry answers.
+    function test_rule4_payCallsNoMtxPipelineLib() public {
+        MtxPipelineLib.paymentCount(NO); // control: linked here, it answers
+        vm.expectCall(address(MtxPipelineLib), "", 0);
+        for (uint256 i; i < toks.length; ++i) {
+            address t = toks[i];
+            MetaTxLib.PayMeta memory m = _saved(80 + i, NO);
+            assertEq(NormalToken(t).metaPayId(m), PayMetaKit.id(m), kinds[i]);
+            _pay(t, _ut(PayMetaKit.id(m), 7, 0), m);
+            MetaTxLib.PayMeta memory m2 = _saved(90 + i, NO);
+            MetaTxLib.UAMetaTransfer memory x = MetaTxLib.UAMetaTransfer(MetaTxLib.pad(signer),
+                MetaTxLib.pad(vm.addr(PAYEE_PK)), AMOUNT, PayMetaKit.id(m2), 7, 1, block.timestamp + 300,
+                MetaTxLib.MODE_RESTRICT_RELAYER, REL, 0, address(0));
+            IUARegistry.UASig memory pa = _sigOf(t, x);
+            IUARegistry.UASig memory qa = UACall.auth(x.to,
+                _ecdsa(PAYEE_PK, NormalToken(t).receiverFeeDigest(x, 10, RF_TO, block.timestamp + 300)));
+            uint256 vu = block.timestamp + 300;
+            vm.prank(REL);
+            NormalToken(t).mtxPayReceiverFee(x, pa, 10, RF_TO, vu, qa, m2);
+            assertEq(NormalToken(t).paymentCount(NO), 2, kinds[i]);
+            assertEq(NormalToken(t).paymentsOf(NO, 1, 1)[0].amount, AMOUNT - 10, kinds[i]);
         }
     }
 
