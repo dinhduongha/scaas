@@ -1,8 +1,9 @@
 # Service pull: the signed, contract-bound pull that replaces `approve` — design
 
 **Status:** SPECIFIED, nothing built, **UNAUDITED**. Written 2026-11-09 at the owner's request. Revised the same day after the
-Fable review (approve with fixes; no P0 or P1; every P2 and P3 applied). Five owner questions are open (§13). §3.3 step 6 and
-§3.4's regulated rule are written on the recommended answers to Q4 and Q5, **pending the owner**. The EVM token needs **no change**. This was verified against the code of every EVM kind (0–13) and Hedera (§2, §6); no
+Fable review (approve with fixes; no P0 or P1; every P2 and P3 applied). **Approved by the owner 2026-11-09: Q1–Q5 as
+recommended** (§13): the generic node kind `service`, one signature, the relay-fee router as the only fee path, a seen
+`entryRef` refused, the regulated custody rule accepted. The EVM token needs **no change**. This was verified against the code of every EVM kind (0–13) and Hedera (§2, §6); no
 gas or size figure was measured. Work-order group **3i** of branch `ua-mtx-merge`: plan tasks T77–T81 (§14), after 3h, beside
 T66b, before 3c.
 
@@ -624,6 +625,9 @@ One rule, one place. Each lands in the docs share (T81, in T19), tagged SPECIFIE
 
 ## 13. Owner questions
 
+**Owner 2026-11-09: every question below as recommended** (Q1 B, Q2 A with the blind-commitment residual accepted as for
+`PayMeta`, Q3 A, Q4 refuse, Q5 accept). Status: decided (owner); built in group 3i (§14).
+
 **Q1. How does a third-party service become relayable by the node?**
 - (A) As stated by NODE-JOB-20: a node release per service kind, a row per operation. This works only for services SCaaS defines,
   such as the tender. A third party's service waits for our release, and its names enter node code.
@@ -649,7 +653,7 @@ One rule, one place. Each lands in the docs share (T81, in T19), tagged SPECIFIE
 - The cost is one storage slot per operation.
 - A payer who wants the same operation twice signs two `<Op>`s that differ in their salt.
 
-The spec is written on this answer, pending the owner.
+The owner chose it (2026-11-09).
 
 **Q5. Regulated custody: does the owner accept two consequences on kinds 8–13?**
 - (a) A payout the token refuses (an ineligible payee, a UA no longer registered SIGNING) stays owed in S, never redirected.
@@ -657,7 +661,7 @@ The spec is written on this answer, pending the owner.
   closed.
 
 **Recommendation: accept** (§3.4, N14b, the shortfall invariant), with every service on a regulated kind stating it in its
-documentation. The alternative is services on regulated kinds out of v1. The spec is written on "accept", pending the owner.
+documentation. The alternative is services on regulated kinds out of v1. The owner accepted (2026-11-09).
 
 ## 14. Tasks (plan `2026-11-04-ua-mtx-merge.md`, group 3i) — SPECIFIED
 
