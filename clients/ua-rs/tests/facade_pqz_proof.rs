@@ -779,6 +779,8 @@ fn quorum_check_before_a_partial() {
     with_key["keyRecord"] = json!(hx(&wd.c.key_record(&BOB)));
     let mut ours = cs.clone();
     ours[0].0["keyRecords"].as_array_mut().unwrap().push(json!({"ua": hx(&BOB), "version": 0, "word": hx(&wd.c.key_record(&BOB))}));
+    let mut own_ours = own.clone();
+    own_ours.0["keyRecords"].as_array_mut().unwrap().push(json!({"ua": hx(&BOB), "version": 0, "word": hx(&wd.c.key_record(&BOB))}));
     let mut own_p = own.clone();
     own_p.0["proof"] = cs[0].0["proof"].clone();
     let mut credit_p = cs.clone();
@@ -788,6 +790,7 @@ fn quorum_check_before_a_partial() {
     for (what, v) in [
         ("a keyRecord of the quorum (Fable P1-1)", with_key),
         ("a keyRecords entry of the quorum at the version checked", wd.c.check_request(&BOB, 0, &pk, Some(&own), &ours)),
+        ("that entry in the own debit's keyRecords", wd.c.check_request(&BOB, 0, &pk, Some(&own_ours), &cs)),
         ("the own debit's P of another debit", wd.c.check_request(&BOB, 0, &pk, Some(&own_p), &cs)),
         ("a credit's P of another debit", wd.c.check_request(&BOB, 0, &pk, Some(&own), &credit_p)),
         ("a credit twice", wd.c.check_request(&BOB, 0, &pk, Some(&own), &[cs[0].clone(), cs[0].clone()])),

@@ -22,9 +22,9 @@ ENV = {"CARGO_NET_OFFLINE": "true", "CARGO_BUILD_JOBS": "2"}
 T = (R, [CAPPED, "cargo", "test", "--locked", "--offline", "-j2", "--features", "vectors", "--test", "facade_pqz_proof"])
 
 M = [
-    ("a keyRecords entry of the quorum at the version checked taken",
-     [(P, "    if c.own.as_ref().is_some_and(|w| ours(&w.key_records)) || c.credits.iter().any(|x| x.key_records.as_deref().is_some_and(ours)) {",
-       "    if false && c.own.as_ref().is_some_and(|w| ours(&w.key_records)) || c.credits.iter().any(|x| x.key_records.as_deref().is_some_and(ours)) {")], T),
+    ("a keyRecords entry of the quorum at the version checked taken (own or credit)",
+     [(P, "let ours = |k: &[(Word, u64, Word)]| k.iter().any(|(u, v, _)| *u == o.ua && *v == o.v);",
+       "let ours = |k: &[(Word, u64, Word)]| k.iter().any(|(u, v, _)| *u == o.ua && *v == o.v) && false;")], T),
     ("the own burn-form debit not verified", [(P, "            verify_p(form.op(), &stmt, &w.proof)\n", "            let _ = (stmt, &w.proof);\n            Ok(())\n")], T),
     ("the own transfer's pk_f a source's key, not the member's", [(P, "transfer_proven(o, rec, &o.ua, k, multi, hd, pk, &pks, pk_a.as_deref(), &t, &d, &tl, &e, &w.proof)",
        "transfer_proven(o, rec, &o.ua, k, multi, hd, pks.first().map_or(pk, |x| &x[..]), &pks, pk_a.as_deref(), &t, &d, &tl, &e, &w.proof)")], T),
