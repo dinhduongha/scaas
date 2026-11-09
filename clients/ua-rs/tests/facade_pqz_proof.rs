@@ -612,3 +612,68 @@ fn proven_debit_negatives() {
     let r = call(&kb, "proveRefreshProven", &fields(&json!({}), &o["session"])).unwrap();
     assert!(verify(2, &h(&r["stmt"]), &h(&r["proof"])), "and its refresh");
 }
+
+// ---------------------------------------------------------------------------------------------------------------------------
+// T20d6 (C-PP-5): seal advice; a tag proves authorship, not inclusion (Fable P2-2).
+// ---------------------------------------------------------------------------------------------------------------------------
+
+/// `unsealed = pendingCount − p_last` and `sealAdvised`: two credits after nothing sealed (2, advised), a rollover seals nothing,
+/// a refresh seals them (0, not advised), a credit after it unsealed again.
+#[test]
+fn seal_advice() {
+    let mut wd = World::new(0);
+    wd.c.shield(&A, 1000);
+    wd.pay(&A, &BOB, 30, false, "BUNDLE", LOG);
+    wd.pay(&A, &BOB, 20, true, "BUNDLE", LOG);
+    let kb = wd.w.pqz_key(1, 0).unwrap();
+    let seal = |wd: &World| {
+        let o = call(&kb, "provenOpen", &wd.open(&BOB, 0)).unwrap();
+        let b = wd.proven(&kb, &BOB, 0);
+        assert_eq!(o["unsealed"], b["unsealed"]);
+        (b["unsealed"].as_u64().unwrap(), b["sealAdvised"].as_bool().unwrap())
+    };
+    assert_eq!(seal(&wd), (2, true));
+    wd.c.roll(&BOB, 1);
+    assert_eq!(seal(&wd), (2, true), "a rollover seals nothing");
+    wd.refresh(&kb, &BOB, 0, LOG);
+    assert_eq!(seal(&wd), (0, false), "a refresh seals");
+    wd.pay(&A, &BOB, 5, false, "BUNDLE", NONE);
+    assert_eq!(seal(&wd), (1, true));
+    // every entry since the last own debit, beyond the inline window too (`p − p_last` is 16 here)
+    for _ in 0..16 {
+        wd.c.shield(&BOB, 1);
+    }
+    assert_eq!(seal(&wd), (17, true), "pendingCount − p_last, not p − p_last");
+}
+
+/// Fable P2-2: an older own blob under the current `lastDebit` and record is refused (its tag binds its own counter, not
+/// `lastDebit − 1`); an older own debit with its own older `lastDebit`, record and blob, all genuinely the holder's, is accepted
+/// by `balanceProven`: a past balance, never a key leak (the proof path's residual control, no-oracle spec §5). A debit over it
+/// is stopped only because a debit's account words are R1–R5's (§4.14.6), which the facade cannot see.
+#[test]
+fn a_tag_proves_authorship_not_inclusion() {
+    let mut wd = World::new(0);
+    wd.c.shield(&A, 1000);
+    wd.pay(&A, &BOB, 300, false, "BUNDLE", LOG);
+    let kb = wd.w.pqz_key(1, 0).unwrap();
+    wd.refresh(&kb, &BOB, 0, LOG);
+    let old = wd.open(&BOB, 0);
+    let old_blob = wd.c.accts[&(BOB, 0)].acc_blob;
+    wd.pay(&A, &BOB, 50, true, "BUNDLE", LOG);
+    wd.refresh(&kb, &BOB, 0, LOG);
+    assert_eq!(wd.proven(&kb, &BOB, 0)["value"], 350, "the current state");
+    // the older blob under the current account words and record: its tag's counter is 0, lastDebit − 1 is 1
+    let mut forged = wd.open(&BOB, 0);
+    let mut s1 = h(&forged["account"][1]);
+    s1[12..32].copy_from_slice(&old_blob);
+    forged["account"][1] = json!(hx(&s1));
+    forged["blobs"] = json!(wd.c.blobs_json(&[wd.c.keys[&(BOB, 0)], old_blob]));
+    let before = key_uses();
+    assert_eq!(call(&kb, "provenOpen", &forged).err(), Some(Error::Argument), "an older own blob under the current record");
+    assert_eq!(key_uses(), before, "the key unused");
+    // the older state, all its own words: accepted, the past balance
+    let o = call(&kb, "provenOpen", &old).unwrap();
+    assert_eq!(o["need"], json!([]));
+    let b = call(&kb, "balanceProven", &json!({"session": o["session"]})).unwrap();
+    assert_eq!((&b["value"], kinds(&b)), (&json!(300), vec!["own".to_string()]), "a past balance");
+}

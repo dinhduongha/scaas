@@ -6,7 +6,23 @@
 //! seed (3g KV-11; its P when the store holds no such seed), a TRIVIAL entry from its public amount. A tag proves authorship,
 //! not inclusion: a source can omit a credit or replay an older own debit, and the result is then wrong, never a key leak
 //! (§4.14.1). One session per handle, in the handle's memory: the running sum mod `q` of the checked parts, their kinds and the
-//! accepted indexes, never a checked ciphertext. UNAUDITED.
+//! accepted indexes, never a checked ciphertext.
+//!
+//! **A tag proves authorship, not inclusion** (§4.14.7): no command takes a tag match for the latest state; the latest own debit
+//! is the record at `lastDebit − 1` of the session's source. **Sealing** (C-PP-5): `unsealed = pendingCount − p_last` counts the
+//! entries no own debit has folded into a tagged `v_f`, each of which needs its P from history (or path (A)) after a reinstall;
+//! `sealAdvised` is `unsealed > 0` (a refresh seals them; a wallet may advise one before it goes cold, never requires one; a
+//! rollover seals nothing). After a reinstall (research §15A):
+//!
+//! | After a reinstall | Commands |
+//! |---|---|
+//! | no entry since the last own debit | `provenOpen` (`need` empty), `balanceProven`: the tag alone, nothing from history |
+//! | new credits, every P in history | `provenOpen`, `provenAdd`, `balanceProven`; a `proveRefreshProven` seals |
+//! | new credits, a P lost, a source under R1–R6 | path (A): `balance`, then `proveRefresh` seals |
+//! | new credits, a P lost, no trusted source | refused; the funds stay until a trusted source exists |
+//!
+//! The library does not choose between the rows: `provenAdd` refuses a credit it cannot check, and the caller then takes path
+//! (A) under R1–R6 or stops; the choice depends on availability, never on a decryption (research §8). UNAUDITED.
 use super::*;
 use crate::facade::pqz_path::{bundle_shape, record, tail, Record, Tail};
 use pqz_ffi::stmt::{H_ID, H_OPTAG, OP_TAG_TRANSFER_MULTI};
@@ -68,6 +84,8 @@ pub(super) struct Open {
     p: u64,
     p_last: u64,
     rolled: u64,
+    /// `pendingCount`: `unsealed = pendingCount − p_last` (§4.14.7).
+    count: u64,
     send_counter: u64,
     /// Group 3g: the version is below the registry's `current` (KV-8: it only migrates or refreshes); `forOp7` (its `p`).
     stale: bool,
@@ -245,6 +263,7 @@ pub(super) fn open(f: &Fields<'_>) -> Result<(Open, Vec<u8>)> {
         p,
         p_last,
         rolled: a.rolled,
+        count: a.count,
         send_counter: a.send_counter,
         stale: is_stale,
         op7,
@@ -452,7 +471,9 @@ impl PqzKey {
         }
         let id = os16()?;
         *g = Some(Session { id, open: o.clone(), sum, below, accepted: BTreeSet::new(), parts });
-        Ok(json!({"session": to_hex(&id), "p": o.p, "sendCounter": o.send_counter, "need": o.need.keys().collect::<Vec<_>>()}))
+        let unsealed = o.count - o.p_last;
+        Ok(json!({"session": to_hex(&id), "p": o.p, "sendCounter": o.send_counter, "need": o.need.keys().collect::<Vec<_>>(),
+            "unsealed": unsealed}))
     }
 
     /// `provenAdd`: each credit checked on its own (keyless), `{accepted, refused}`; a refused one leaves the session as it was
@@ -503,7 +524,9 @@ impl PqzKey {
         let t: &[u8; CT_BYTES] = t.as_slice().try_into().map_err(|_| Error::Argument)?;
         let value = self.with_sk(|_, sk| value(pqzl::dec(&sk.0.s, t)))?;
         let parts: Vec<Value> = s.parts.iter().map(|(i, k)| json!({"index": i, "kind": k.name()})).collect();
-        let out = json!({"value": value, "p": s.open.p, "sendCounter": s.open.send_counter, "parts": parts});
+        let unsealed = s.open.count - s.open.p_last;
+        let out = json!({"value": value, "p": s.open.p, "sendCounter": s.open.send_counter, "parts": parts, "unsealed": unsealed,
+            "sealAdvised": unsealed > 0});
         *g = None;
         Ok(out)
     }
