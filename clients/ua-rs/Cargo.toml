@@ -226,6 +226,11 @@ required-features = ["pqz"]
 name = "facade_pqz_state"
 required-features = ["pqz"]
 
+# ua-rs-sign T20d4: the PQZ proof path (B) (spec no-decryption-oracle §4.14)
+[[test]]
+name = "facade_pqz_proof"
+required-features = ["pqz"]
+
 # ua-rs-sign T15i: the oracle harness (spec no-decryption-oracle §5): 8·K crafted queries, positive / negative / residual
 [[test]]
 name = "no_oracle"
