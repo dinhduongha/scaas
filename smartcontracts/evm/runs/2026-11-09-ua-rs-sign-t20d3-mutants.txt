@@ -10,3 +10,6 @@ killed     | M8 record: proofStore unbounded | clients/ua-rs/src/facade/pqz_path
 killed     | M9 record: Δp bytes swapped | clients/ua-rs/src/facade/pqz_path.rs | rc=101 | 1 failed: facade::pqz_path::tests::record_rows_are_the_contracts_view | assertion `left == right` failed: record ("0xb875eb7294c8dc6f7d326112b07371cf63b028443a15b1c125d615b974c4ee50", 0) | at b0887815
 killed     | M10 record: a narrow w1 taken | clients/ua-rs/src/facade/pqz_path.rs | rc=101 | 1 failed: facade::pqz_path::tests::record_refusals | assertion `left == right` failed: a narrow record with a w1 | at b0887815
 mutants M1-M10 of 10: 10 killed, 0 survived, 0 not loaded
+# P3-6 re-run (2026-11-09, the controller's ruling: exactly one shape fit for path (A)'s entries too, bundle_shape at 0478f4e4): one mutant added, run alone on a clean tree after the positive control (6 tests pass):
+killed     | M11 bundle_shape: the first fit taken | clients/ua-rs/src/facade/pqz_path.rs | rc=101 | 1 failed: facade::pqz_path::tests::bundle_shape_refuses_two_fits | assertion `left == right` failed: two fits | at 0478f4e4
+# P3-6 re-run: 1 killed, 0 survived, 0 not loaded (M1-M10 above stand, every string checked at HEAD)
