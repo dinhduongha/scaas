@@ -2066,6 +2066,14 @@ spec §5.5 note); the operator note's `own_tag` and `PROOF_STORE_OVER_LANE_CAP` 
 - [ ] **Step 1:** Write each change; figures quoted from T58–T65 logs; BUILT only where code and tests exist.
 - [ ] **Step 2:** `docs_check.py check`, `paths`, `resolve` on each new id: rc 0. Committed with T19.
 
+### Task T62a: the NONE-header and relayed-binding vector rows (owner 2026-11-09)
+
+**Depends on:** T77 (test-only, beside 3i in this worktree). **Estimate:** 0.5. Asked by the `ua-rs-sign` T20d checkpoint
+(question 3, owner as recommended): no row ties the fields of a NONE call to the header the contract builds, and no row covers
+the binding of a relayed debit (T65 ran direct calls only). **Files:** `test/pqz/PqzStateVectors.t.sol` and its generator; rows
+by the generator, never by hand; old rows byte-identical. **Gates:** the affected forge directory at the four sets, `vectors-check`.
+Commit `ua-mtx-merge T62a: PQZ NONE-header and relayed-binding vector rows`. `ua-rs-sign` takes them at its next sync.
+
 ### Task T82: rename the relay-fee router and its executor (owner 2026-11-09)
 
 **Depends on:** T66 (3h landed); T66b's Steps 1–2 stopped (one worktree). **Before:** 3i. **Estimate:** 0.5–1.
