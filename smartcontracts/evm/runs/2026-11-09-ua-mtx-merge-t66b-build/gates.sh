@@ -38,6 +38,10 @@ step() {
       (cd $EVM && python3 script/t66b/legacy_artifacts.py build) && \
         FORGE_ARGS="-vv --match-contract ^(Diff|Modules|Paths)" scripts/capped sh $EVM/runs/2026-11-08-ua-mtx-merge-t66a/forge-dirs.sh \
         "t66b-$L" test/t66b ;; # the imported fixtures' own suites run in their directories
+    face-abi) # each face's functions, events and errors against the pre-split face (d142b57c; option B), on out/t66b-b
+      (cd $EVM && python3 script/t66b/legacy_artifacts.py build && FOUNDRY_OUT=out/t66b-b FOUNDRY_CACHE_PATH=cache/t66b-b \
+        ../../scripts/capped forge build src > /dev/null && python3 script/t66b/legacy_artifacts.py abi \
+        ../../scratchpad/t66b-pre/smartcontracts/evm/out out/t66b-b) ;;
     size-self) python3 scripts/size_gate.py --self-test && echo self-test ok ;;
     docs) python3 scripts/docs_check.py check ;;
     *) echo "unknown step $1"; return 2 ;;

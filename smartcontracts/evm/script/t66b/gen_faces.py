@@ -93,6 +93,32 @@ def ret(e):
     return f' returns ({e["returns"]})' if e['returns'] else ''
 
 
+FACE_ABI = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'face_abi.json')))['kinds']
+
+
+def _abi_t(i):
+    t = i.get('internalType') or i['type']
+    for p in ('struct ', 'enum ', 'contract '):
+        t = t.removeprefix(p)
+    return t
+
+
+def abi_iface(k):
+    """`I<k>Abi` (controller 2026-11-09, option B): the pre-split face's events and errors that the face does not declare
+    itself (face_abi.json, from d142b57c), declarations only: the face's ABI lists them as before, its runtime is unchanged."""
+    d = FACE_ABI[k]
+    ev = [f'    event {x["name"]}(' + ', '.join(f'{_abi_t(i)}{" indexed" if i.get("indexed") else ""}'
+                                         + (f' {i["name"]}' if i['name'] else '') for i in x['inputs'])
+          + (') anonymous;' if x.get('anonymous') else ');') for x in d['event']]
+    er = [f'    error {x["name"]}(' + ', '.join(_abi_t(i) + (f' {i["name"]}' if i['name'] else '') for i in x['inputs']) + ');'
+          for x in d['error']]
+    return f'''
+/// @notice The events and errors of `{k}` before the split (d142b57c) that its core does not declare: the face's ABI lists them
+///         as before (metatx-split R4: a client decodes an error a library or a module raises), declarations only, no code.
+interface I{k}Abi {{
+''' + '\n'.join(ev + er) + '\n}\n'
+
+
 def face(k):
     gs = groups(k)
     path = f'{KFILE[k]}/{k}.sol'
@@ -122,11 +148,11 @@ def face(k):
         stubs.append(f'    function {e["name"]}({p}) external{mut(e)}{ret(e)} {{\n        {body}\n    }}')
     n = len(gs)
     chain = '\n'.join(f'        if (g == {GROUP_ID[g]}) return _M{g};' for g in gs[:-1]) + f'\n        return _M{gs[-1]};'
-    return path, HDR + '\n' + imports(k, path) + f'''
+    return path, HDR + '\n' + imports(k, path, ('src/governance/IGovernance.sol', 'src/zether/ZetherTypes.sol')) + abi_iface(k) + f'''
 /// @title {k}: the token face (T66b, spec 2026-11-09-t66b-library-organisation.md §4.1). It keeps the ERC-20 core, the UA
 ///        ledger and the identity views (`{k}Core`); every other entry forwards its calldata to the module of its group by
 ///        DELEGATECALL ({', '.join(f'{g} {GROUP_DOC[g]}' for g in gs)}). UNAUDITED.
-contract {k} is {k}Core {{
+contract {k} is {k}Core, I{k}Abi {{
 {imm}
 
     /// @param implArgs `abi.encode({args}(...))`: the modules in the order {', '.join(gs)} (`modules()`).
