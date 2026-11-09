@@ -89,8 +89,9 @@ const X4 = {
 // The named entries: one per op on `mtxSelectors()`, whose length is read from the Solidity (the Zether and wrapped PQZ kinds:
 // the table is in the library, `ZetherLib.normalSelectors` since CTR-ZTH-94, size lever 1). ua-mtx-merge T11: an address
 // row only where the op has no merged entry (the five wraps on tokens, CTR-MTX-30 §2.1; every op of `SmartKeyAccount`).
-const SOURCES = { NormalToken: 'metatx/NormalToken', WrappedToken: 'metatx/WrappedToken', NormalZetherToken: 'zether/ZetherLib',
-  WrappedZetherToken: 'zether/ZetherWrappedLib', NormalPqzToken: 'pqz/NormalPqzToken', WrappedPqzToken: 'pqz/PqzWrappedLib',
+// ua-mtx-merge T66b: the normal, wrapped and normal PQZ kinds' tables moved to their `<X>Core` (`_mtxSelectorsBody`).
+const SOURCES = { NormalToken: 'metatx/NormalTokenCore', WrappedToken: 'metatx/WrappedTokenCore', NormalZetherToken: 'zether/ZetherLib',
+  WrappedZetherToken: 'zether/ZetherWrappedLib', NormalPqzToken: 'pqz/NormalPqzTokenCore', WrappedPqzToken: 'pqz/PqzWrappedLib',
   MandateWallet: 'wallet/MandateWallet', SmartKeyAccount: 'account/SmartKeyAccount' };
 const mtxSelectorCount = (contract) => Number(/new bytes4\[\]\((\d+)\)/.exec(
   readFileSync(new URL(`../../../smartcontracts/evm/src/${SOURCES[contract]}.sol`, import.meta.url), 'utf8'))[1]);
