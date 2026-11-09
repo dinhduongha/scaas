@@ -738,17 +738,17 @@ contract DexHybridTest is UADexBase {
         vm.prank(address(dex));
         vm.expectRevert(abi.encodeWithSelector(ITradeToken.NotDex.selector, address(dex)));
         A.restorePulled(DexLegs.ua(o), 0);
-        r.restore(A, o, 0); // `o.dex` itself, nothing pulled: a zero restore is the only one allowed
+        r.restore(ITradeToken(address(A)), o, 0); // `o.dex` itself, nothing pulled: a zero restore is the only one allowed
     }
 
     function test_restorePulled_boundedByThisTxPull() public {
         (PullRestorer r, ITradeToken.TradeOrder memory o, bytes memory sig) = _restorer();
         bytes32 h = A.tradeOrderDigest(DexLegs.ua(o));
         vm.expectRevert(_err(ITradeToken.RestoreExceedsPull.selector, h));
-        r.pullThenRestore(A, o, sig, 500, 900, 501);
+        r.pullThenRestore(ITradeToken(address(A)), o, sig, 500, 900, 501);
         vm.expectEmit(address(A));
         emit ITradeToken.PullRestored(h, 500);
-        r.pullThenRestore(A, o, sig, 500, 900, 500);
+        r.pullThenRestore(ITradeToken(address(A)), o, sig, 500, 900, 500);
         assertEq(A.pulled(h), 0);
         assertEq(A.balanceOf(address(r)), 500); // the restore moves no funds: the DEX refunds them itself
         // an IOC order stays closed

@@ -394,7 +394,7 @@ contract NormalZetherProbe is NormalZetherToken, Armed {
     function _regSender(bytes32 a) internal view override { _seat(H_SENDER, a, 0, 0); }
     function _regName(bytes32 a) internal view override { _seat(H_NAME, a, 0, 0); }
     function _regReceiver(bytes32 a) internal view override { _seat(H_RECEIVER, a, 0, 0); }
-    function _regZetherSender(G1 calldata y) internal view override { _seat(H_ZSENDER, y.x0, y.y1, 0); }
+    function _regZetherSender(ZetherTypes.G1 calldata y) internal view override { _seat(H_ZSENDER, y.x0, y.y1, 0); }
 }
 
 contract WrappedZetherProbe is WrappedZetherToken, Armed {
@@ -406,7 +406,7 @@ contract WrappedZetherProbe is WrappedZetherToken, Armed {
     function _regSender(bytes32 a) internal view override { _seat(H_SENDER, a, 0, 0); }
     function _regName(bytes32 a) internal view override { _seat(H_NAME, a, 0, 0); }
     function _regReceiver(bytes32 a) internal view override { _seat(H_RECEIVER, a, 0, 0); }
-    function _regZetherSender(G1 calldata y) internal view override { _seat(H_ZSENDER, y.x0, y.y1, 0); }
+    function _regZetherSender(ZetherTypes.G1 calldata y) internal view override { _seat(H_ZSENDER, y.x0, y.y1, 0); }
 }
 
 contract NormalPqzProbe is NormalPqzToken, Armed {

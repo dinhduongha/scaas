@@ -31,7 +31,7 @@ contract MockNormalZether is NormalToken {
 
     function _domainName() internal pure override returns (string memory) { return "SCaaS ZetherToken"; }
 
-    function _init(TokenConfig memory cfg) internal override {
+    function _init(IFactoryToken.TokenConfig memory cfg) internal override {
         _requireUnused(cfg, false, true, true, false);
         _setMetadata(cfg.name, cfg.symbol, cfg.decimals);
         GovernanceLib.init(cfg.features, cfg.lockedFeatures, cfg.owner, cfg.grantDelay, cfg.rescueTo, cfg.roles, _validBits(),
@@ -45,7 +45,7 @@ contract MockWrappedZether is WrappedToken {
 
     function kind() public pure override returns (uint8) { return TokenStore.KIND_WRAPPED_ZETHER; }
 
-    function _init(TokenConfig memory cfg) internal override {
+    function _init(IFactoryToken.TokenConfig memory cfg) internal override {
         _requireUnused(cfg, true, false, false, false);
         WrappedLib.initToken(cfg, _hedera(), TokenStore.KIND_WRAPPED_ZETHER, GovernanceBits.WRAPPED_BITS, _roleBits(),
             _contractOnlyBits(), address(0));

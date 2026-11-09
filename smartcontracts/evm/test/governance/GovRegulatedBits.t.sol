@@ -80,14 +80,14 @@ abstract contract GovRegulatedRows is Test {
     }
 }
 
-/// The shape of what a regulated release decodes beside `TokenConfig` (spec §4.2, §4.4). Test only: nothing of it lands now.
+/// The shape of what a regulated release decodes beside `IFactoryToken.TokenConfig` (spec §4.2, §4.4). Test only: nothing of it lands now.
 struct MockRegulatedParams {
     address complianceRegistry;
     uint256 requiredFlags;
     uint256 deniedFlags;
 }
 
-/// A mock implementation of kind 8 `NORMAL_REGULATED`: its own encoding, `abi.encode(TokenConfig, MockRegulatedParams)`, read
+/// A mock implementation of kind 8 `NORMAL_REGULATED`: its own encoding, `abi.encode(IFactoryToken.TokenConfig, MockRegulatedParams)`, read
 /// in its own `_initRaw`. The factory passes `initArgs` opaque, so nothing in it changes.
 contract MockNormalRegulated is NormalToken {
     MockRegulatedParams public params;
@@ -97,7 +97,7 @@ contract MockNormalRegulated is NormalToken {
     function kind() public pure override returns (uint8) { return 8; }
 
     function _initRaw(bytes calldata initArgs) internal override {
-        (TokenConfig memory cfg, MockRegulatedParams memory p) = abi.decode(initArgs, (TokenConfig, MockRegulatedParams));
+        (IFactoryToken.TokenConfig memory cfg, MockRegulatedParams memory p) = abi.decode(initArgs, (IFactoryToken.TokenConfig, MockRegulatedParams));
         params = p;
         _init(cfg);
     }
