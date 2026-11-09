@@ -102,7 +102,12 @@ const epoch = { sessionId: sid, author: alice.ua, nonce: 8, epoch: 1, parentEpoc
 const leave = { sessionId: sid, epochId: eid, member: bob.ua, nonce: 9 };
 
 // ------------------------------------------------------------------ the message, in epoch 1
-const DEVICE = 0x5ca1ab1e;
+// Device ids: a 16-byte UUID, v7 or v4 at the client's choice, as bytes16 (owner 2026-11-10); nothing checks its version or
+// variant bits, so the vectors take any fixed 16 bytes:
+// keccak256("scaas/pqchat/vectors/device/<name>")[0:16].
+const DEVICES = Object.fromEntries(['alice-1', 'alice-2', 'bob-1']
+  .map((n) => [n, hex(keccak_256(utf8ToBytes(`scaas/pqchat/vectors/device/${n}`)).slice(0, 16))]));
+const DEVICE = DEVICES['alice-1'];
 const content = pc.canonicalJson({ type: 'text', body: 'Hello from the PqChat vectors.' });
 const pt = pc.pad(utf8ToBytes(content));
 const header = { sessionId: sid, epochId: eid, sender: alice.ua, device: DEVICE, counter: 2,
@@ -128,7 +133,7 @@ write('records.json', {
     + '(ua.js, kind 0x0131 mldsa65). Ids: sessionId = keccak256(abi.encode(tag session, creator, uint64 nonce)) (also epoch 0\'s '
     + 'epochId); epochId = keccak256(abi.encode(tag epoch, sessionId, author, uint64 nonce)); a leave\'s and a message\'s id = typed. '
     + 'Scopes (3C-D5): session keccak256(abi.encode(tag scope/session, creator)); epoch and leave keccak256(abi.encode(tag '
-    + 'scope/epoch, sessionId, author or member)); message keccak256(abi.encode(tag scope/message, epochId, sender, uint32 device)), '
+    + 'scope/epoch, sessionId, author or member)); message keccak256(abi.encode(tag scope/message, epochId, sender, bytes16 device)) (messages.json devices), '
     + 'its nonce = counter. The session\'s members are sorted by ua, carol\'s via is a non-zero msig seat; its wrapHashes are '
     + 'keys.json wraps "session/*" in member order, its sealedInfo messages.json sealedInfo "session"; the epoch\'s are '
     + '"epoch-1/*" and "epoch-1". Signers: ML-DSA-65 keys by pq.js pqKeygen(seed, "mldsa65", account, index), signatures by '
@@ -185,17 +190,20 @@ const padContent = (n) => Uint8Array.from({ length: n }, (_, i) => i % 251);
 const call = (name, callSecret) => {
   const x = { K: K1, sessionId: sid, epochId: eid, callId: rnd('call/id'), callEpoch: 3 };
   if (callSecret) x.callSecret = callSecret;
-  const senders = [{ sender: alice.ua, device: DEVICE }, { sender: bob.ua, device: 1 }];
+  const senders = [{ sender: alice.ua, device: DEVICE }, { sender: bob.ua, device: DEVICES['bob-1'] }];
   const k = pc.callKeys(x, senders);
   return { name, ...x, callBase: k.callBase, senders: senders.map((s, i) => ({ ...s, baseKey: k.baseKeys[i] })) };
 };
 write('messages.json', {
   _comment: `${COMMON} Messages and transports (spec §6.3–§6.5, P15, P25, P29, §4.2, P22). HKDF = HKDF-SHA-256, empty salt, 32 B; `
-    + 'device u32be. chains: ck0 = HKDF(K, "scaas/pqchat/v1/chain" ‖ sessionId ‖ epochId ‖ sender ‖ u32be device); step i: mk = '
+    + 'device = bytes16, a 16-byte UUID (RFC 9562), v7 or v4 at the client\'s choice, nothing checks its version or variant bits '
+    + '(owner 2026-11-10); its 16 raw bytes in every derivation; '
+    + 'devices: the values used here, any fixed 16 bytes, keccak256("scaas/pqchat/vectors/device/<name>")[0:16]. chains: '
+    + 'ck0 = HKDF(K, "scaas/pqchat/v1/chain" ‖ sessionId ‖ epochId ‖ sender ‖ device); step i: mk = '
     + 'HMAC-SHA-256(ck_i, 0x01), n = HMAC-SHA-256(ck_i, 0x03)[0:12], ck = ck_{i+1} = HMAC-SHA-256(ck_i, 0x02). padding (3C-D9): pt = '
     + 'u32be(len) ‖ content ‖ zeros to the smallest of 256, 1,024, 4,096, 16,384 B, then multiples of 16,384 B, holding 4 + len; '
     + 'a row\'s content is `length` bytes, byte i = i mod 251; ptKeccak256 = keccak256(pt). message: content = canonical JSON (keys '
-    + 'sorted, no whitespace), pt = pad(UTF-8 content), aad = abi.encode(sessionId, epochId, sender, uint32 device, uint64 counter, '
+    + 'sorted, no whitespace), pt = pad(UTF-8 content), aad = abi.encode(sessionId, epochId, sender, bytes16 device, uint64 counter, '
     + 'keccak256(abi.encode(bytes32[] parents))), ciphertext = AES-256-GCM-SIV(mk_counter, n_counter, pt, aad) = records.json '
     + 'message.record.ciphertext. envelope: hint = HMAC-SHA-256(K, "scaas/pqchat/v1/hint")[0:8]; kEnv = HKDF(K, "scaas/pqchat/v1/env" '
     + '‖ sessionId ‖ epochId); inner = abi.encode(PqChatMessage, UASig) of records.json message (the bytes postMessage takes); env = '
@@ -204,9 +212,11 @@ write('messages.json', {
     + 'padding). sealedInfo: nonce ‖ AES-256-GCM-SIV(kInfo = HKDF(K, "scaas/pqchat/v1/info" ‖ sessionId ‖ epochId), nonce, pt = '
     + 'pad(UTF-8 json)), json = canonical JSON of info. callKeys: callBase = HKDF(K ‖ callSecret (group; K alone for 1:1), '
     + '"scaas/pqchat/v1/call" ‖ sessionId ‖ epochId ‖ callId (32 B) ‖ u32be callEpoch); baseKey = HKDF(callBase, '
-    + '"scaas/pqchat/v1/sframe" ‖ sender ‖ u32be device). No SFrame KID rows (RFC 9605 S not stated), no libp2p or Waku rows.',
+    + '"scaas/pqchat/v1/sframe" ‖ sender ‖ device). No SFrame KID rows (RFC 9605 S not stated), no libp2p or Waku rows.',
   version: 1,
-  chains: [{ name: 'alice', ...chainRow(alice, DEVICE) }, { name: 'bob, device 1', ...chainRow(bob, 1) }],
+  devices: Object.entries(DEVICES).map(([name, device]) => ({ name, label: `scaas/pqchat/vectors/device/${name}`, device })),
+  chains: [{ name: 'alice, device alice-1', ...chainRow(alice, DEVICE) }, { name: 'alice, device alice-2', ...chainRow(alice, DEVICES['alice-2']) },
+    { name: 'bob, device bob-1', ...chainRow(bob, DEVICES['bob-1']) }],
   padding: [0, 252, 253, 1020, 1021, 4092, 16380, 16381, 20000].map((length) => {
     const p = pc.pad(padContent(length));
     return { length, paddedLength: p.length, prefix: p.subarray(0, 4), ptKeccak256: keccak_256(p) };

@@ -29,7 +29,7 @@ const SPEC = {
   PqChatSession: 'PqChatSession(bytes32 creator,uint64 nonce,bytes32 homeChain,address homeContract,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo)MemberKey(bytes32 ua,uint64 keyId,bytes32 via)',
   PqChatEpoch: 'PqChatEpoch(bytes32 sessionId,bytes32 author,uint64 nonce,uint64 epoch,bytes32 parentEpochId,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo)MemberKey(bytes32 ua,uint64 keyId,bytes32 via)',
   PqChatLeave: 'PqChatLeave(bytes32 sessionId,bytes32 epochId,bytes32 member,uint64 nonce)',
-  PqChatMessage: 'PqChatMessage(bytes32 sessionId,bytes32 epochId,bytes32 sender,uint32 device,uint64 counter,bytes32[] parents,bytes ciphertext)',
+  PqChatMessage: 'PqChatMessage(bytes32 sessionId,bytes32 epochId,bytes32 sender,bytes16 device,uint64 counter,bytes32[] parents,bytes ciphertext)',
   PqTopic: 'PqTopic(bytes32 owner,uint64 nonce,bytes32 homeChain,address homeContract,string name,bytes about,bool openReplies)',
   PqTopicUpdate: 'PqTopicUpdate(bytes32 topicId,uint64 seq,string name,bytes about,bool openReplies)',
   PqTopicWriter: 'PqTopicWriter(bytes32 topicId,bytes32 writer,bool granted,uint64 seq)',
@@ -173,8 +173,7 @@ test('intN: the sign-extended word, refused outside the range', () => {
 
 /** One change at a time: a copy of `v` with one value of type `t` changed. */
 function changed(t, v) {
-  if (t === 'bytes32') return `${v.slice(0, -2)}${v.endsWith('00') ? '01' : '00'}`;
-  if (t === 'address') return `${v.slice(0, -2)}${v.endsWith('00') ? '01' : '00'}`;
+  if (t === 'bytes32' || t === 'bytes16' || t === 'address') return `${v.slice(0, -2)}${v.endsWith('00') ? '01' : '00'}`;
   if (/^uint/.test(t)) return v + 1;
   if (t === 'int8') return v === -1 ? 1 : -1;
   if (t === 'bool') return !v;
@@ -286,7 +285,8 @@ test('sender chains, padding, the message ciphertext', () => {
   assert.equal(h(pc.encryptMessage(M.message.K, msg, M.message.pt)), msg.ciphertext);
   assert.equal(h(pc.decryptMessage(M.message.K, msg)), M.message.pt);
   assert.equal(new TextDecoder().decode(pc.unpad(pc.decryptMessage(M.message.K, msg))), M.message.content);
-  assert.throws(() => pc.decryptMessage(M.message.K, { ...msg, device: msg.device + 1 })); // the aad binds the header
+  const other = M.devices.find((d) => d.device !== msg.device).device;
+  assert.throws(() => pc.decryptMessage(M.message.K, { ...msg, device: other })); // the device is in the chain and the aad
 });
 
 test('envelope, payload, Matrix event: they open to the signed message of records.json', () => {
@@ -337,4 +337,15 @@ test('call keys: group and 1:1', () => {
   }
   assert.notEqual(M.callKeys[0].callBase, M.callKeys[1].callBase);
   assert.notEqual(h(pc.callKeys({ ...M.callKeys[0], callEpoch: 4 }, []).callBase), M.callKeys[0].callBase);
+});
+
+test('two devices of one UA: different message scopes and different chains', () => {
+  for (const d of M.devices) assert.equal(d.device, h(keccak_256(utf8ToBytes(d.label)).slice(0, 16)), d.name);
+  assert.ok(M.chains.every((c) => M.devices.some((d) => d.device === c.device)));
+  const [a1, a2] = M.chains.filter((c) => c.sender === R.message.record.sender);
+  assert.ok(a1 && a2 && a1.device !== a2.device && a1.epochId === a2.epochId);
+  assert.notEqual(h(pc.scopeMessage(a1.epochId, a1.sender, a1.device)), h(pc.scopeMessage(a2.epochId, a2.sender, a2.device)));
+  assert.equal(R.message.scope, h(pc.scopeMessage(a1.epochId, a1.sender, a1.device)));
+  assert.notEqual(a1.ck0, a2.ck0);
+  for (let i = 0; i < a1.steps.length; i++) assert.notEqual(a1.steps[i].mk, a2.steps[i].mk);
 });

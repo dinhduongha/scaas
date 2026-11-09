@@ -43,7 +43,7 @@ export const TYPE_STRINGS = Object.freeze({
   PqChatEpoch: 'PqChatEpoch(bytes32 sessionId,bytes32 author,uint64 nonce,uint64 epoch,bytes32 parentEpochId,bytes32[] admins,'
     + 'MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo)MemberKey(bytes32 ua,uint64 keyId,bytes32 via)',
   PqChatLeave: 'PqChatLeave(bytes32 sessionId,bytes32 epochId,bytes32 member,uint64 nonce)',
-  PqChatMessage: 'PqChatMessage(bytes32 sessionId,bytes32 epochId,bytes32 sender,uint32 device,uint64 counter,bytes32[] parents,'
+  PqChatMessage: 'PqChatMessage(bytes32 sessionId,bytes32 epochId,bytes32 sender,bytes16 device,uint64 counter,bytes32[] parents,'
     + 'bytes ciphertext)',
   PqTopic: 'PqTopic(bytes32 owner,uint64 nonce,bytes32 homeChain,address homeContract,string name,bytes about,bool openReplies)',
   PqTopicUpdate: 'PqTopicUpdate(bytes32 topicId,uint64 seq,string name,bytes about,bool openReplies)',
@@ -96,7 +96,7 @@ export const scopeSession = (creator) => idOf('scope/session', ['bytes32'], [cre
 /** Epochs and leaves. */
 export const scopeEpoch = (session, author) => idOf('scope/epoch', ['bytes32', 'bytes32'], [session, author]);
 /** Messages; the nonce is `counter`. */
-export const scopeMessage = (epoch, sender, device) => idOf('scope/message', ['bytes32', 'bytes32', 'uint32'], [epoch, sender, device]);
+export const scopeMessage = (epoch, sender, device) => idOf('scope/message', ['bytes32', 'bytes32', 'bytes16'], [epoch, sender, device]);
 export const scopeTopic = (owner) => idOf('scope/topic', ['bytes32'], [owner]);
 /** Entries and their edits (the original's `topicId`). */
 export const scopeEntry = (topic, author) => idOf('scope/entry', ['bytes32', 'bytes32'], [topic, author]);
@@ -211,9 +211,11 @@ export function openWrap({ wrap, sessionId: s, epochId: e, kemPk, dk, x25519Secr
 
 // ------------------------------------------------------------------ sender chains, padding, messages (§6.3–§6.5)
 
-/** §6.3: `ck_0`, then per step i `mk_i`, `n_i`, `ck_{i+1}`. */
+/** §6.3: `ck_0`, then per step i `mk_i`, `n_i`, `ck_{i+1}`. A device id is a 16-byte UUID (RFC 9562), v7 or v4 at the client's
+ *  choice, as `bytes16` (owner 2026-11-10): its 16 raw bytes here, in the call keys, the message scope and the aad; an input only,
+ *  nothing checks its version or variant bits. */
 export function chainKeys(K, session, epoch, sender, device, steps) {
-  let ck = H(bytes(K), label('scaas/pqchat/v1/chain', session, epoch, sender, u32be(device)));
+  let ck = H(bytes(K), label('scaas/pqchat/v1/chain', session, epoch, sender, device));
   const ck0 = ck;
   const out = [];
   for (let i = 0; i < steps; i++) {
@@ -248,9 +250,9 @@ export function unpad(pt) {
 export const canonicalJson = (v) => JSON.stringify(v, (_, x) => (x && typeof x === 'object' && !Array.isArray(x)
   ? Object.fromEntries(Object.keys(x).sort().map((k) => [k, x[k]])) : x));
 
-/** §6.4: `abi.encode(sessionId, epochId, sender, uint32 device, uint64 counter, keccak256(abi.encode(bytes32[] parents)))`. */
+/** §6.4: `abi.encode(sessionId, epochId, sender, bytes16 device, uint64 counter, keccak256(abi.encode(bytes32[] parents)))`. */
 export const parentsHash = (parents) => keccak_256(abiEncode(['bytes32[]'], [parents]));
-export const messageAad = (m) => abiEncode(['bytes32', 'bytes32', 'bytes32', 'uint32', 'uint64', 'bytes32'],
+export const messageAad = (m) => abiEncode(['bytes32', 'bytes32', 'bytes32', 'bytes16', 'uint64', 'bytes32'],
   [m.sessionId, m.epochId, m.sender, m.device, m.counter, parentsHash(m.parents)]);
 
 const messageKey = (K, m) => chainKeys(K, m.sessionId, m.epochId, m.sender, m.device, m.counter + 1).steps[m.counter];
@@ -295,9 +297,10 @@ export const openInfo = (K, session, epoch, sealed) =>
 // ------------------------------------------------------------------ call keys (P22, 3C-D9; no SFrame KID: S is not stated)
 
 /** `callBase = HKDF(K ‖ callSecret, "scaas/pqchat/v1/call" ‖ sessionId ‖ epochId ‖ callId ‖ u32be callEpoch)` (group), `HKDF(K, …)`
- *  (1:1, `callSecret` absent); `baseKey(sender, device) = HKDF(callBase, "scaas/pqchat/v1/sframe" ‖ sender ‖ u32be device)`. */
+ *  (1:1, `callSecret` absent); `baseKey(sender, device) = HKDF(callBase, "scaas/pqchat/v1/sframe" ‖ sender ‖ device)`, the
+ *  device's 16 bytes. */
 export function callKeys({ K, callSecret, sessionId: s, epochId: e, callId, callEpoch }, senders) {
   const ikm = callSecret ? concatBytes(bytes(K), bytes(callSecret)) : bytes(K);
   const callBase = H(ikm, label('scaas/pqchat/v1/call', s, e, callId, u32be(callEpoch)));
-  return { callBase, baseKeys: senders.map(({ sender, device }) => H(callBase, label('scaas/pqchat/v1/sframe', sender, u32be(device)))) };
+  return { callBase, baseKeys: senders.map(({ sender, device }) => H(callBase, label('scaas/pqchat/v1/sframe', sender, device))) };
 }
