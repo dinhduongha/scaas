@@ -273,7 +273,7 @@ Sizes are measured and logged after T3, T7, T9, T10 (spec §11), `forge build sr
 - [ ] **Step 1: Failing tests:** `size_gate.py --self-test` rows: 131,072 passes with a baseline row, 131,073 fails with one; a stale `_above64KiB` fails both ways. `test_createAboveSixtyFourKiBDeploys`, `test_createAboveTheCeilingReverts`, `test_releaseAboveTheChainLimitIsRefusedByName`.
 - [ ] **Step 2:** `python3 scripts/size_gate.py --self-test` and `../../scripts/capped forge test --match-path test/governance/CodeCeiling.t.sol`: FAIL.
 - [ ] **Step 3: Implement.** Move the baseline to the branch's measured figures.
-- [ ] **Step 4:** Both PASS. `forge build src --sizes --json > /tmp/sizes.json; python3 ../../scripts/size_gate.py /tmp/sizes.json size-baseline.json`: 0 errors. Whole suite: the three known failures, no other; T3 clears them.
+- [ ] **Step 4:** Both PASS. `T=$(mktemp -d); forge build src --sizes --json > "$T"/sizes.json; python3 ../../scripts/size_gate.py "$T"/sizes.json size-baseline.json`: 0 errors. Whole suite: the three known failures, no other; T3 clears them.
 - [ ] **Step 5: Mutants:** the ceiling check dropped; the list compare dropped; `_checkCodeFits` not called.
 - [ ] **Step 6:** Commit `governance T2: 131,072 B ceiling, the list above 64 KiB, the chain's code limit declared at deploy`.
 

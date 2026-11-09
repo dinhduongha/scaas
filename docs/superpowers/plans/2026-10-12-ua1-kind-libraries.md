@@ -47,8 +47,8 @@ names, fixes the call, and reports it.
   into it, symlink `lib/openzeppelin-contracts → ~/work/blockchain/openzeppelin-contracts`. clientkeys: copy (not
   symlink) `node_modules` from the main checkout (never `git add` it). Heavy commands (forge, npm, cargo, go, dotnet) only
   through `scripts/capped`, one at a time. In worktrees a hook blocks bare `git`: use `/usr/bin/git`; use `/usr/bin/grep`.
-- Gates: `forge build` then `forge test` in `smartcontracts/evm`; size gate `forge build src --sizes --json > /tmp/sizes.json;
-  python3 scripts/size_gate.py /tmp/sizes.json smartcontracts/evm/size-baseline.json`; `npm test` in `clients/clientkeys`;
+- Gates: `forge build` then `forge test` in `smartcontracts/evm`; size gate `T=$(mktemp -d); forge build src --sizes --json > "$T"/sizes.json;
+  python3 scripts/size_gate.py "$T"/sizes.json smartcontracts/evm/size-baseline.json`; `npm test` in `clients/clientkeys`;
   `cargo test` in `clients/scaas-ua`; `python3 -m unittest -v tests.test_vectors` in `clients/ua-py`; `go test ./...` in
   `clients/ua-go`; `dotnet test` in `clients/ua-cs/Scaas.Ua.Tests`; `python3 scripts/docs_check.py check` and
   `python3 scripts/docs_check.py facts check`.

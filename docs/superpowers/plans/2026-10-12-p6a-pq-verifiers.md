@@ -64,8 +64,8 @@ of the call.
   clientkeys: **copy** (not symlink) `node_modules` from the main checkout, because Task 1 installs a package into it
   (never `git add` it). Heavy commands (forge, npm) only through `scripts/capped`, one at a time. `/usr/bin/grep`; in
   worktrees a hook blocks bare `git`: use `/usr/bin/git`.
-- Gates: `forge build` then `forge test` in `smartcontracts/evm`; size gate `forge build src --sizes --json >
-  /tmp/sizes.json; python3 scripts/size_gate.py /tmp/sizes.json smartcontracts/evm/size-baseline.json`;
+- Gates: `forge build` then `forge test` in `smartcontracts/evm`; size gate `T=$(mktemp -d); forge build src --sizes --json >
+  "$T"/sizes.json; python3 scripts/size_gate.py "$T"/sizes.json smartcontracts/evm/size-baseline.json`;
   `FOUNDRY_PROFILE=private7622 forge build`; `npm test` in `clients/clientkeys`; `python3 scripts/docs_check.py check`
   and `python3 scripts/docs_check.py facts check`.
 - `Shake.reserve()` must be the first memory allocation of the external call frame (it claims `[0x80, 0xaa0)`); every

@@ -63,8 +63,8 @@ mutation probe **39/39** killed.
   clientkeys: symlink `node_modules` from the main checkout (never `git add` it). Heavy commands (cargo, forge, anvil,
   npm) only through `scripts/capped`, one at a time. `/usr/bin/grep`; in worktrees a hook blocks bare `git`: use
   `/usr/bin/git`. Rust: `CARGO_TARGET_DIR=<repo>/scaas-node/target` for the node.
-- Gates: `forge build` then `forge test` in `smartcontracts/evm`; size gate `forge build src --sizes --json >
-  /tmp/sizes.json; python3 scripts/size_gate.py /tmp/sizes.json smartcontracts/evm/size-baseline.json`; in `scaas-node`
+- Gates: `forge build` then `forge test` in `smartcontracts/evm`; size gate `T=$(mktemp -d); forge build src --sizes --json >
+  "$T"/sizes.json; python3 scripts/size_gate.py "$T"/sizes.json smartcontracts/evm/size-baseline.json`; in `scaas-node`
   `cargo test --lib`, `cargo test --test mesh_vectors --test fuzz`, `cargo clippy --all-targets -- -D warnings`,
   `cargo test --test e2e -- --ignored --test-threads=1` and `cargo test --test e2e_hedera -- --ignored` (a full
   `forge build` first so the e2e's `forge script` does not compile under its timeout); `npm test` in
@@ -7185,8 +7185,8 @@ refusals on a real chain (a `call` job `transfer` on the token, a meta-tx to an 
 - [ ] **Step 2: Gates.** `cargo test --lib` 254 passed; `cargo test --test mesh_vectors --test fuzz` 4 + 1 passed; clippy
   clean; e2e 4/4; e2e_hedera 1/1.
 - [ ] **Step 3: Mutation probe** (the money-safety checks; each mutant is applied alone, `cargo test --lib` must fail;
-  a compile error counts as not viable, never as killed). Save as `/tmp/p5-mutate.py` and run
-  `python3 /tmp/p5-mutate.py "$PWD/scaas-node"`: expected `39/39 killed`.
+  a compile error counts as not viable, never as killed). Save as `"$T"/p5-mutate.py` (`T=$(mktemp -d)`) and run
+  `python3 "$T"/p5-mutate.py "$PWD/scaas-node"`: expected `39/39 killed`.
   ```python
   #!/usr/bin/env python3
   """P5 mutation probe of the node's money-safety checks: apply each mutant, run the lib tests, restore.

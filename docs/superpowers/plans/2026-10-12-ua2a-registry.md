@@ -4707,7 +4707,7 @@ contract UARegistryTest is UARegistryBase {
 }
 ```
 
-- [ ] **Step 5: Build + size gate.** `<repo>/scripts/capped forge build src --sizes --json > /tmp/ua2a-sizes.json; python3 ../../scripts/size_gate.py /tmp/ua2a-sizes.json size-baseline.json` (the `;` matters: `forge build --sizes` exits 1 on the three existing contracts above EIP-170, which test chains allow)
+- [ ] **Step 5: Build + size gate.** `T=$(mktemp -d); <repo>/scripts/capped forge build src --sizes --json > "$T"/ua2a-sizes.json; python3 ../../scripts/size_gate.py "$T"/ua2a-sizes.json size-baseline.json` (the `;` matters: `forge build --sizes` exits 1 on the three existing contracts above EIP-170, which test chains allow)
   — `size gate: 0 error(s), … contracts` (`UARegistry` runtime 18,014 B, init 23,860 B).
 - [ ] **Step 6: Test.** `<repo>/scripts/capped forge test --match-path test/ua/UARegistry.t.sol` —
   `Suite result: ok. 28 passed; 0 failed; 0 skipped`.

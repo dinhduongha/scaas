@@ -52,8 +52,9 @@ whatever `lib/` holds (a checkout, a symlink) with the pins; run it before a bui
 **Size gate** (CTR-TOK-24), as CI runs it — `src/` only, never with the test helpers:
 
 ```bash
-forge build src --sizes --json > /tmp/sizes.json
-python3 ../../scripts/size_gate.py /tmp/sizes.json size-baseline.json
+T=$(mktemp -d)
+forge build src --sizes --json > "$T"/sizes.json
+python3 ../../scripts/size_gate.py "$T"/sizes.json size-baseline.json
 ```
 
 Limits: token implementations 20,480 B, other contracts 24,576 B (EIP-170), init code 49,152 B (EIP-3860).
