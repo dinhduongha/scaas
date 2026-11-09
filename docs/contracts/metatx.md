@@ -892,8 +892,7 @@ function metaPayId(bytes32 salt, bytes calldata meta) external pure returns (byt
 event RelayFeePaid(bytes32 indexed ref, address indexed target, address indexed token, bytes32 payer, bytes32 payee, uint256 amount);
 error RelayFeeShape();
 error RelayTargetNoCode(address target);
-function relay(address target, bytes calldata callData, address token, address from, address payee, uint256 value, uint256 validUntil, bytes calldata sig) external;
-function uaRelay(address target, bytes calldata callData, address token, bytes32 from, bytes32 payee, uint256 value, uint256 validUntil, IUARegistry.UASig calldata auth) external;
+function relay(address target, bytes calldata callData, address token, bytes32 from, bytes32 payee, uint256 value, uint256 batch, uint256 nonce, uint256 validUntil, IUARegistry.UASig calldata auth) external;
 function relayRef(address target, bytes calldata callData) public view returns (bytes32);
     // keccak256(abi.encodePacked("scaas.relayfee", block.chainid, target, keccak256(callData)))
 // MtxRelayExecutor (created by the router's constructor): error NotRouter(); exec(address target, bytes callData) router-only
@@ -949,26 +948,54 @@ on every EVM chain. Its constructor creates its executor (`CREATE`, so the execu
 and no target needs to know either address: the payer's signature names the router (`relayer = router`).
 
 ```solidity
-function relay(address target, bytes calldata callData, address token, address from, address payee, uint256 value,
-               uint256 validUntil, bytes calldata sig) external;                         // nonReentrant
-function uaRelay(address target, bytes calldata callData, address token, bytes32 from, bytes32 payee, uint256 value,
-                 uint256 validUntil, IUARegistry.UASig calldata auth) external;          // nonReentrant
-// on the token (IERC20MetaTx / IUALedger): relayer = msg.sender = the router, lane payLane(ref), nonce 0, open mode
-function mtxRelayFee(address from, address target, bytes32 callDataHash, address payee, uint256 value, uint256 validUntil, bytes calldata sig) external;
-function uaRelayFee(bytes32 from, address target, bytes32 callDataHash, bytes32 payee, uint256 value, uint256 validUntil, IUARegistry.UASig calldata auth) external;
+// the router (`MtxRelayFee`): one entry on ids (ua-mtx-merge T2, R28), the payer's lane `batch` / `nonce`
+// (pay-meta-tax spec §4, O4); the address forms `relay` / `uaRelay`, `RelayFee`, `uaRelayFee` are in legacy/ua-mtx-merge/
+function relay(address target, bytes calldata callData, address token, bytes32 from, bytes32 payee, uint256 value,
+               uint256 batch, uint256 nonce, uint256 validUntil, IUARegistry.UASig calldata auth) external; // nonReentrant
 function relayRef(address target, bytes calldata callData) external view returns (bytes32);
 event RelayFeePaid(bytes32 indexed ref, address indexed target, address indexed token, bytes32 payer, bytes32 payee,
                    uint256 amount);
 error RelayFeeShape();
 error RelayTargetNoCode(address target);
+// on the token (IERC20MetaTx): relayer = msg.sender = the router, the payer's lane (from, batch) at nonce, fee NONE
+function mtxRelayFee(bytes32 from, address target, bytes32 callDataHash, bytes32 payee, uint256 value, uint256 batch,
+                     uint256 nonce, uint256 validUntil, IUARegistry.UASig calldata auth) external;
 ```
 
-Since typed-signing C6 (TS-D19) the payment is its own typed struct, `RelayFee(address from,address target,bytes32 callDataHash,address payee,uint256 value,uint256 validUntil,address relayer)` (`UARelayFee(bytes32 from,…,bytes32 payee,…)`), signed in the token's domain and executed by the token path `mtxRelayFee` / `uaRelayFee`; the router no longer builds a `MetaTransfer`. The token builds what the old shape checks tested: `ref = keccak256("scaas.relayfee" ‖ chainid ‖ target ‖ callDataHash)` (today's `relayRef`), lane `payLane(ref)`, nonce 0 implicit, fee mode `NONE`, `relayer = msg.sender`. A caller other than the router therefore hashes itself and fails the signature (`MetaTxBadSignature`); `test_relayFeeDirectCallRefused`. A payment for another target, call or chain now fails at the signature, after the target call ran, and the revert unwinds it (before C6, `RelayFeeShape` fired first). `mtxRelayFee` / `uaRelayFee` are in `IERC20MetaTx` / `IUALedger`, so both ERC-165 ids moved, and are not `PAYABLE`-gated, as `mtxExecuteTransfer` is not.
+**The call path.** The relayer sends one transaction to the router and talks to nothing else; the router drives the rest
+in this order (steps, not branches; the last one only in open mode), and any failure reverts all of it:
 
-Steps (`relay`; `uaRelay` is the same with the UA struct and `uaRelayFee`):
+```mermaid
+sequenceDiagram
+    autonumber
+    participant R as Relayer (lane key, pays gas)
+    participant F as Router (MtxRelayFee)
+    participant X as Executor (MtxRelayExecutor)
+    participant T as Target (a SCaaS contract)
+    participant K as Token
+    R->>F: relay(target, callData, token, from, payee, value, batch, nonce, validUntil, auth)
+    F->>F: shape: payee is not the executor, target has code
+    F->>X: exec(target, callData) [msg.sender = router]
+    X->>T: call(callData) [msg.sender = executor]
+    T->>T: checks the user's own signature inside callData, runs
+    F->>K: mtxRelayFee(from, target, keccak256(callData), payee, value, batch, nonce, validUntil, auth) [msg.sender = router]
+    K->>K: checks UARelayFee (relayer = msg.sender), moves value payer → payee from the public balance, UAPaymentSettled(ref)
+    opt open mode (payee = pad(router))
+        F->>R: transfer(value) to msg.sender
+    end
+    F-->>R: event RelayFeePaid
+```
+
+Who signs what: the user signs the call itself (its own record, inside `callData`) and the payment `UARelayFee` with
+`relayer = router`; the relayer signs only the outer transaction. The target sees the executor as `msg.sender` and
+trusts only the user's signature inside `callData`.
+
+The payment is its own typed struct, `UARelayFee(bytes32 from,address target,bytes32 callDataHash,bytes32 payee,uint256 value,uint256 batch,uint256 nonce,uint256 validUntil,address relayer)` (`MetaTokenBase.sol` `UA_RELAY_FEE_TYPEHASH`), signed in the token's domain: a native payer with its own key, a derived UA through the token's registry. The token builds `UAMetaTransfer{from, to: payee, value, entryRef: ref, batch, nonce, validUntil, mode: MODE_RESTRICT_RELAYER, relayer: msg.sender}` with fee `NONE` and `ref = keccak256("scaas.relayfee" ‖ chainid ‖ target ‖ callDataHash)` (= `relayRef`). A caller other than the router therefore hashes itself as `relayer` and fails the signature (`MetaTxBadSignature`); `test_relayFeeDirectCallRefused`. A payment for another target, call or chain fails at the signature, after the target call ran, and the revert unwinds it. `mtxRelayFee` is in `IERC20MetaTx` (its ERC-165 id moved) and is not `PAYABLE`-gated, as `mtxExecuteTransfer` is not.
+
+Steps (`relay`):
 1. `ref = keccak256(abi.encodePacked("scaas.relayfee", block.chainid, target, keccak256(callData)))`.
-2. Shape, else `RelayFeeShape`: the payee is not the executor (`payee != EXECUTOR`; UA: `payee != pad(EXECUTOR)`; controller call 2026-10-27, owner may
-   override). Everything else the struct signs: `ref`, the lane, nonce 0, fee `NONE` and `relayer = router` are built by the token (above).
+2. Shape, else `RelayFeeShape`: the payee is not the executor (`payee != pad(EXECUTOR)`; controller call 2026-10-27, owner may
+   override). Everything else the struct signs: `ref`, fee `NONE` and `relayer = router` are built by the token, the lane and nonce are the payer's (above).
 
    Then `target` must be a contract (`SigCheck.isContract`: code, and not an EIP-7702 designator), else
    `RelayTargetNoCode(target)` (controller call 2026-10-27; the designator half is owner ruling D4, 2026-10-30,
@@ -978,14 +1005,14 @@ Steps (`relay`; `uaRelay` is the same with the UA struct and `uaRelayFee`):
    delegate as the executor's callee.
 3. The executor calls `target` with `callData` (no value). A failure reverts the whole transaction with the inner
    revert data.
-4. `token.mtxRelayFee(from, target, keccak256(callData), payee, value, validUntil, sig)` (UA: `uaRelayFee(…, auth)`). The token checks the payer's signature and
+4. `token.mtxRelayFee(from, target, keccak256(callData), payee, value, batch, nonce, validUntil, auth)`. The token checks the payer's signature and
    moves `value` from the payer's **public** balance (never a confidential one), then emits
-   `PaymentSettled(…, entryRef = ref)`.
-5. **Open mode** (`payee == address(this)`, the client default, owner 2026-10-26): the router transfers `value` to
+   `UAPaymentSettled(…, entryRef = ref)`.
+5. **Open mode** (`payee == pad(address(this))`, the client default, owner 2026-10-26): the router transfers `value` to
    `msg.sender`, so any relayer may take the job. **Bound payee** (any other `payee`: one relayer, a service treasury,
    a session creator): the payment goes straight there, and the router forwards nothing.
 6. Emit `RelayFeePaid`: `payer` and `payee` are ids (an address zero-padded, or the UA id), `payee` the one paid
-   (`pad(msg.sender)` in open mode, else `t.to`; controller call 2026-10-27, owner may override: `bytes32` like `payer`,
+   (`pad(msg.sender)` in open mode, else `payee`; controller call 2026-10-27, owner may override: `bytes32` like `payer`,
    so a derived UA payee is named).
 
 Why it holds:
@@ -997,8 +1024,10 @@ Why it holds:
 - **The executor.** The router never calls a target itself. If it did, `callData` could be a token's
   `mtxExecuteTransfer` of another router-bound payment, and the token would see the router as its bound relayer. The
   executor has no privilege, holds nothing, and only the router may call it.
-- **Atomic and pay-once.** Steps 3–5 are one transaction, and any failure reverts all of them. The pay lane gives each
-  `ref` at most one payment per chain.
+- **Atomic.** Steps 3–5 are one transaction, and any failure reverts all of them.
+- **One payment per signature** (pay-meta-tax spec §4, O4, F-29): a `UARelayFee` signature runs at most once (its
+  nonce on the lane `(from, batch)`). A second signature for the same call pays only if the target call runs again,
+  which a target with its own nonce or guard refuses, so the second `relay` reverts and pays nothing.
 - **Copying a record.** A record copied to another chain is either submitted free there, or paid by a new payment on
   that chain (`ref` includes the chain id).
 
@@ -1017,7 +1046,7 @@ yet signed may be added later without changing these steps.
 
 **Clients:**
 - build the call with its own signature, then `ref = relayRef(target, callData)`;
-- build the `RelayFee` `{from: payer, target, callDataHash: keccak256(callData), payee: router (open) or the payee, value: fee, validUntil, relayer: router}`
+- build the `UARelayFee` `{from: payer, target, callDataHash: keccak256(callData), payee: pad(router) (open) or the payee, value: fee, batch, nonce, validUntil, relayer: router}`
   (clientkeys `buildRelayFee`; the call as the named `call` object on the node, [NODE-JOB-20](../node/job-api.md#NODE-JOB-20));
 - show both intents (the call and its fee) in one prompt;
 - never pay or approve the executor: it holds nothing and anyone can make it call anything (the router refuses
