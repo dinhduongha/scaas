@@ -438,23 +438,72 @@ T15g, T15i, T15l):
    runs the same refusals through the C ABI. `facade_pqz_state.rs` and `facade_zether_state.rs` reproduce the contract's
    ciphertexts from the forge state rows (PQZ at two sets) and refuse every word and role negative with the key unused. Every
    binding over the facades (all but `ua-qt`, which wraps neither) decrypts the PQZ rows `smartcontracts/vectors/pqz/n2304-kmax4096/wallet_state.json` (wallet keys, written by
-   `gen_wallet_state.sh`) and the Zether forge rows through its own call path. Each guard has a killed mutant
-   (`smartcontracts/evm/runs/2026-11-0[67]-ua-rs-sign-*-mutants.txt`).
+   `gen_wallet_state.sh`) and the Zether forge rows through its own call path. Path (B)'s share: `no_oracle.rs` `proof_path_*`
+   and ua-py's `test_no_oracle_proof_path` (below). Each guard has a killed mutant
+   (`smartcontracts/evm/runs/2026-11-0[679]-ua-rs-sign-*-mutants.txt`).
 
 <a id="CLI-UAL-27"></a>**CLI-UAL-27** — **`ua-rs` contains no light client and no chain-state verifier** (owner 2026-11-06). It reads no
 chain and holds no anchors table, no Merkle-Patricia proof and no factory or registry proof; it stays I/O-free and holds no chain
-trust. The check that words are chain state is [CLI-UAL-30](#CLI-UAL-30)'s. BUILT (the library has none). A later client-side **proof path**,
-where the library verifies each credit's proof itself over raw words it already takes, is PLANNED: spec `2026-11-06-pqz-proof-path.md` §13.3 on
-branch `ua-mtx-merge`; nothing here blocks it (requests carry slot words by index, binding tests assert membership in `COMMANDS`).
+trust. The check that words are chain state is [CLI-UAL-30](#CLI-UAL-30)'s. BUILT (the library has none). The client-side **proof path**,
+where the library verifies each credit's proof itself over raw words it already takes, is BUILT for release 3h (below: path (B)); it
+checks parts, never that words are chain state, so CLI-UAL-30 still binds every debit's words.
 
 | Facade (`COMMANDS`) | Decrypts nothing | Location and raw words | `vectors` only (raw) |
 |---|---|---|---|
-| PQZ (`facade::pqz`) | `enc`, `proveRegister`, `proveKeyRecord` | `balance` (with `forOp7`), `proveTransfer`, `proveBurn`, `proveRefresh`, `proveTransferMulti` (with `mode`), `auditRead` (the auditor's handle), `proveDisclose` (`RECEIVER_X` or `AUDITOR`), `proveDiscloseSender` and `openMemo` (the sender's handle) | `dec`, `rawProveTransfer`, `rawProveBurn`, `rawProveRefresh`, `rawProveTransferMulti`, `rawProveDisclose`, `rawOpenMemo`, `rawProveDiscloseSender` |
+| PQZ (`facade::pqz`) | `enc`, `proveRegister`, `proveKeyRecord`; `checkProven` (no handle: `facade::pqz::check_proven`, C `scaas_ua_pqz_check`; not in `COMMANDS`) | `balance` (with `forOp7`), `proveTransfer`, `proveBurn`, `proveRefresh`, `proveTransferMulti` (with `mode`), `auditRead` (the auditor's handle), `proveDisclose` (`RECEIVER_X` or `AUDITOR`), `proveDiscloseSender` and `openMemo` (the sender's handle); path (B): `provenOpen`, `provenAdd`, `provenCancel`, `balanceProven`, `proveTransferProven`, `proveTransferMultiProven`, `proveBurnProven`, `proveRefreshProven` | `dec`, `rawProveTransfer`, `rawProveBurn`, `rawProveRefresh`, `rawProveTransferMulti`, `rawProveDisclose`, `rawOpenMemo`, `rawProveDiscloseSender` |
 | Zether (`facade::zether`) | `encrypt`, `pop`, `ownerAuth`, `uaSig`, `shieldCalldata`, `envelope`, `uaEnvelope`, `typedDigest`, `namedCall` | `balance`, `pendingBalance`, `checkBalance`, `proveTransfer`, `proveTransferMulti`, `proveBurn`, `openMemo`, `recoverTransfer`, `openDisclosure` | `decrypt`, `decryptPending`, `rawCheckBalance`, `rawProveTransfer`, `rawProveTransferMulti`, `rawProveBurn`, `rawOpenMemo`, `rawRecoverTransfer`, `rawOpenDisclosure` |
 
 The words each command reads are in its rustdoc (`facade::pqz::COMMANDS` and `STATE_LAYOUT`; zether-prover `state`). The C ABI
 carries them through `scaas_ua_pqz_call` and `scaas_ua_zether_call` (no new call or status). A binding test asserts that a
 command is in `COMMANDS`, never that the list equals one, so a later proof path can add commands without breaking them.
+
+***PQZ: the proof path (B), release 3h: BUILT*** (ua-rs-sign T20d, 2026-11-09; [CLI-UAL-60](../decisions.md#CLI-UAL-60); design in
+the [no-decryption-oracle spec](../superpowers/specs/2026-11-06-no-decryption-oracle.md) §4.14, the contract side in the
+[proof-path spec](../superpowers/specs/2026-11-06-pqz-proof-path.md)). Beside path (A) above, `ua-rs` decrypts a PQZ balance over
+parts it checked itself, before the key is used, so path (B)'s words may come from any source for viewing. UNAUDITED.
+
+- **How each part is checked.** A credit by its sender's debit proof P, which the library verifies (`pqz_ffi::precompile`, the
+  chain's own function) over the statement it rebuilds with **its own key** in the leg the credit names, the leg paired with
+  its own group's `u` as the relation defines; the sender's `T` from the debit's record, its predecessor blob, its pending
+  window and `Trivial(shieldIn)`; the header from the `PqzDebitProof` log (LOG) or from the call's named fields (NONE), as the
+  record's `proofStore` says. The holder's own `v_f` by `ownTag` (a MAC keyed from the seed). A migration credit by
+  re-encryption from the debited version's seed, or by its P when the handle's store holds no seed of that version. A TRIVIAL
+  entry from its public amount. A crafted `(u, v)` has no valid P and no tag, so it is refused with the key unused.
+- **Commands** (on the handle of the account's key version, `PqzKey::call`, `scaas_ua_pqz_call`; every refusal before the key
+  is `Argument`). A session: `provenOpen` (path (A)'s `balance` words, `lastRecord`, the window `[p_last, p)`, the token's
+  `auditorUA`, `chainId`, `registry`) answers `{session, p, sendCounter, need, unsealed}`; `provenAdd` (`session`, `blobs`,
+  `credits`, each with its `record`, `senderPending`, `keyRecords`, `proof` and `header` or `call`) answers `{accepted, refused}`,
+  a refused credit refused alone with the session kept; `provenCancel`; `balanceProven` answers `{value, p, sendCounter, parts,
+  unsealed, sealAdvised}` only once every `need` index is accepted (`need` is the slot range `provenOpen` fixed). One session per
+  handle, in its memory only: a second `provenOpen` replaces it, `lock()` drops it. The debits `proveTransferProven`,
+  `proveTransferMultiProven`, `proveBurnProven`, `proveRefreshProven` are path (A)'s builders over the session's `T`. An MPC
+  quorum member, which holds no handle, runs `checkProven` (`facade::pqz::check_proven`, C `scaas_ua_pqz_check`, every binding
+  but `ua-qt`): the quorum's own last debit and every credit since, each by its P, against the member's own DKG record of the
+  quorum's `pk`; it answers `{parts, sum}` and decrypts nothing (the partial decryption waits for the threshold protocol).
+- **Release 3h only** (owner ruling 4 of CLI-UAL-60): both paths parse 3h's layout; a reading layer refuses an earlier PQZ token
+  by name; the pre-3h `memoHash` formulas are kept in `clients/ua-rs/legacy/ua-rs-sign/`.
+- **`ownTag` in every debit** (both paths: op 1, op 7, burn, refresh, unwrap, a migration): the output carries `ownTag` and the
+  statement `memoHash = keccak256(memo ‖ ownTag)` (`memo` empty except on HASH: `salt ‖ sealedMemo`). The caller puts `ownTag` in the payload; a node
+  job names it as `args.ownTag`. On a LOG token the node refuses a debit job above its lane's per-transaction cap with the named
+  status `PROOF_STORE_OVER_LANE_CAP` before sending, never `dead` while it may land (the proof-path spec's §10, where the node
+  rule is proposed; built in `scaas-node/src/submit.rs`; the node docs take it when that rule gets its id).
+- **Where the words come from.** Viewing: any source (the configured chain and "nothing back" of [CLI-UAL-30](#CLI-UAL-30) still
+  bind). A debit: every word and code that fixes `T`'s bytes from one source under CLI-UAL-30's requirements 1 to 5, as path
+  (A); what only makes a part's check pass from any source. History: `eth_getLogs` by the `blob` topic (LOG) and the debit's
+  transaction (NONE; a call through another contract needs a trace, else path (A)). The reference reader is
+  `pqz-read --command balanceProven` ([CLI-UAL-40](#CLI-UAL-40)).
+- **Residuals.** A check certifies a part, not the composition: a source can omit a credit, add a part it proved itself, or
+  replay an older own debit (a tag proves authorship, not inclusion). The result is then wrong, never a key leak; an outward
+  action on it gives the source a balance bit, hence a debit's words under CLI-UAL-30's requirements 1 to 5. The argument is "encrypt, then prove
+  knowledge of the plaintext" (Naor–Yung); its proof for PQZL and PQZH needs simulation-sound extractability of their
+  Fiat–Shamir proofs, which nobody has written: an audit item, not a claim. The auditor's and the disclosure commands
+  (`auditRead`, `proveDisclose`, `proveDiscloseSender`, `openMemo`) stay on path (A); a single holder whose P is gone from history
+  takes path (A); a quorum's fallback is the proof-path spec §9.6's. Zether gets no path (B) (Zether ≠ PQZ).
+- **Tests.** `tests/facade_pqz_proof.rs` (path (B) equals path (A) over the same state; every negative refused alone with the
+  key unused; the quorum; the bounds), `tests/no_oracle.rs` `proof_path_*` (the residual control's fabricated words refused
+  wherever a value enters path (B); the proof-path spec's negatives), ua-py `Pqz.test_no_oracle_proof_path` through the C ABI,
+  `wallet_state.json`'s `proven` and `check` rows in every binding but `ua-qt`, `pqz-read`'s anvil test. Mutants:
+  `smartcontracts/evm/runs/2026-11-09-ua-rs-sign-t20d{2,4,5,6,7,8,10}-mutants.txt`.
 
 <a id="CLI-UAL-30"></a>**CLI-UAL-30** — ***Requirements on the wallet layer that reads the chain: SPECIFIED*** (normative for every layer
 that hands words to `ua-rs`, in this repository or outside it; `ua-rs` contains no light client and no chain-state verifier,

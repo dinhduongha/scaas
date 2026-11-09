@@ -324,7 +324,7 @@ command is **in** `COMMANDS`, not that `COMMANDS` equals a list; a proof verifie
 without an API change; the HKDF label `PQZ/owntag/v1` is reserved for an own-output tag; pending entries are selected by
 `[rolled, p)` only; state vectors are versioned by contract commit.
 
-### 4.14 PQZ: the proof path (B), release 3h — SPECIFIED (2026-11-09)
+### 4.14 PQZ: the proof path (B), release 3h — BUILT (2026-11-09, plan T20d4–T20d10)
 
 **Source:** the contract interface of the proof-path spec on `ua-mtx-merge` ([`2026-11-06-pqz-proof-path.md`](2026-11-06-pqz-proof-path.md)
 §9, built there by T58–T65 and merged here at plan T20b milestone 4) and its client items (§13.3, C-PP-1 … C-PP-10); research

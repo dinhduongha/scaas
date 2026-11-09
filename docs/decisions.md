@@ -8903,7 +8903,14 @@ like any credit. With them the review's other fixes: one NONE header shape per d
 `_bindMode`, unwrap's `unwrapBinding`), `confidentialFee` constant per token, the leg / group pairing named among what binds
 safety, `header` and `proof` as named fields (the reader decodes the log), a running sum in the session, the older-own-debit
 residual control (no-oracle spec §4.14, §5).
-**Status.** SPECIFIED (plan T20d; T20d0 the spec delta, revised after the Fable review). UNAUDITED.
+**Status.** BUILT (2026-11-09, branch `ua-rs-sign`, plan T20d): the spec delta T20d0 (`5c9cabfe`, revised after the Fable review
+`ff956a6a`, its re-check `e9b39a2b`); 3h's formats in every client T20d1 (`c62c3e48`); the record and tail parsers T20d3
+(`b0887815`, `0478f4e4`); `ownTag` and the 3h `memoHash` in every debit T20d2 (`84a33fb5`); `balanceProven` T20d4 (`c9faa53a`); the
+proven debits T20d5 (`f6bcf36e`); seal advice and the reinstall table T20d6 (`30c62cde`); the quorum's `checkProven` T20d7
+(`24157ab5`, `9c122136`); the bounds and `pqz-read --command balanceProven` T20d8 (`734b58de`, `8b4a0c22`, `bcea8f90`); the C ABI
+and bindings T20d9 (`7f7ae8ba`, `dc7e3efd`); the oracle harness through path (B) and the round's mutants T20d10 (`526b2577`,
+`b0d8efea`, 13 of 13 killed); the client docs T20d11 ([ua-libraries.md](clients/ua-libraries.md), path (B)). Gate summaries and
+mutant records: `smartcontracts/evm/runs/2026-11-09-ua-rs-sign-t20d*`. Not reviewed as built (plan T21). UNAUDITED.
 **Source.** owner 2026-11-09 (chat, through the controller); [plan](superpowers/plans/2026-11-05-ua-rs-sign.md) T20d;
 [proof-path spec](superpowers/specs/2026-11-06-pqz-proof-path.md) §9, §13.3.
 
