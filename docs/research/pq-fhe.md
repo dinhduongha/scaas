@@ -168,4 +168,57 @@ flowchart LR
     and fits in Solidity if a contract needs it. Shared hidden state (auctions, a confidential order book) would be
     its own FHE project (off-chain coprocessor + key network), specified when a use case exists.
 
-Status: **research only, no decision** (owner questions 2026-10-18 / 2026-10-19; nothing planned).
+## 10. Candidate homomorphic schemes against SCaaS's criteria (owner questions 2026-11-09)
+
+Asked: "what is CKKS, can it apply here?" and "which homomorphic schemes could be considered?". Nothing here was
+measured or re-checked online on 2026-11-09; the sources are those of §4–§7 unless named. Tags as in the header, plus
+**[estimate]** for an arithmetic range.
+
+**The criteria** (from the rules, not new): post-quantum; exact integers (a balance must be conserved); the ciphertext
+stays in contract state ("never lose ciphertext"), so its size is state gas (EIP-8037, 1,530 gas per byte); the
+contract checks everything itself through a proof; and never a decryption oracle (ARCH-POS-13).
+
+### 10.1 CKKS
+
+CKKS (Cheon–Kim–Kim–Song, ASIACRYPT 2017) is a Ring-LWE scheme for **approximate** arithmetic: a ciphertext packs
+N/2 real or complex slots, additions and multiplications are homomorphic, each multiplication consumes a modulus
+level (rescaling), and depth beyond the levels needs costly bootstrapping; the noise is part of the result's precision
+[source]. Libraries: OpenFHE and Microsoft SEAL (C++), Lattigo (Go), HEaaN; the Rust crates we know are TFHE (tfhe-rs)
+or BFV (fhe.rs), not CKKS [inference, not checked 2026-11-09]. Against the criteria:
+
+- **Approximate results break conservation**: a balance cannot be "close to" its value [inference].
+- **Published approximate decryptions leak the key** (Li–Micciancio 2021, §5): a direct conflict with ARCH-POS-13;
+  noise flooding mitigates at a cost [source].
+- **Size**: a ciphertext is 2 × N × log Q bits [inference]: N = 2^12 with log Q ≈ 109 is ≈ 110 KB, ≈ 170 M of state gas,
+  above any block we target; N = 2^13 ≈ 450 KB; bootstrappable N = 2^16 tens of MB [estimate]. PQZ's ciphertexts are
+  16,384–22,656 B (pk / ct per set, `pqz-core/params/sets/README.md`).
+- **The work runs off chain**: a contract cannot multiply polynomials of that size; a verifiable-computation proof and
+  a threshold decryption network would be needed (§5, §8) [inference].
+
+Verdict: not on chain. An off-chain analytics service (statistics or ML over encrypted payment data for an ERP or an
+auditor) is possible, outside SCaaS's core (no contract, no node) [inference].
+
+### 10.2 The candidates
+
+| Scheme | Post-quantum | Exact | Ciphertext | Verdict for SCaaS |
+|---|---|---|---|---|
+| Exponential ElGamal on an elliptic curve (bn254) | no | yes (small values, BSGS decryption) | ≈ 64 B | **in use: Zether** (classical) |
+| Linear lattice encryption (MLWE, Regev-style, BFV-style encoding) | **yes** | yes | 16.4–22.7 KB | **in use: PQZ** (PQZL + PQZH, CTR-PQZ-02) |
+| Paillier | no | yes | ≈ 512 B at a 2048-bit n; `modexp`-heavy | no gain over Zether: dropped |
+| Class groups (Castagnos–Laguillaumie) | no | yes, linear decryption without a discrete log | a few hundred B | used in threshold ECDSA; no need here |
+| TFHE / FHEW (tfhe-rs, Zama fhEVM) | yes | yes; comparisons and conditions on ciphertexts | tens of KB per `euint64` [estimate] | needs an off-chain coprocessor and a threshold key network (§5, §7): a key-holding party, against "the contract checks, the node holds no key" |
+| BFV / BGV (OpenFHE, SEAL) | yes | yes; multiplication, SIMD | hundreds of KB and up [estimate] | the exact schemes also have IND-CPA-D attacks under decryption failures (§5); off chain only |
+| CKKS | yes | **no** (approximate) | §10.1 | dropped on chain (§10.1) |
+| Homomorphic commitments (Pedersen; lattice BDLOP / Ajtai, as inside LaZer) | lattice ones yes | yes | small | a commitment does not decrypt: the receiver would need the amount out of band, so the rule "never lose ciphertext" still needs the ciphertext; a building block of proofs, not a replacement |
+
+### 10.3 Directions worth keeping, with estimates
+
+| Direction | For | Effort [estimate] | Notes |
+|---|---|---|---|
+| **Compress PQZ's ciphertexts** (Kyber-style rounding of the ciphertext, more digits per ciphertext) | state and calldata gas of every PQZ op | a study of 5–10 agent-days; building it changes the relation: a new `proofSystemId`, new vectors in every client, the full gate at the four sets | the closest fit: the same scheme family as today |
+| TFHE off chain, a proof of concept | a feature that needs conditions on hidden values of several parties (a sealed-bid auction, a hidden order book) | 15–25 agent-days | a sealed-bid auction also works with commit-reveal or ZK, without FHE (§9) |
+| An fhEVM-style coprocessor + key network | general computation on encrypted state | months, research-grade | would need a design that keeps ARCH-POS-13; not recommended |
+| CKKS off chain, a proof of concept | encrypted analytics for an ERP or an auditor | 10–20 agent-days | low value now; outside the core |
+| Paillier; CKKS, BFV or BGV on chain | — | — | dropped |
+
+Status: **research only, no decision** (owner questions 2026-10-18 / 2026-10-19 / 2026-11-09; nothing planned).
