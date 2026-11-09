@@ -57,6 +57,7 @@ contract LyingLeg {
     }
 
     function kind() external pure returns (uint8) { return 0; }
+    function modules() external pure returns (address[] memory) {} // T66b: no body module
     function validateEnv(IFactoryToken.ChainEnv calldata) external pure {}
     function initialize(bytes32, uint64, bytes calldata) external {}
     function underlyings() external pure returns (address[] memory) {}

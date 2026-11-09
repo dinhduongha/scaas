@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-import {dexArgs} from "../../script/KindModules.sol";
+import {dexArgs, kindArgs, deployKindModules} from "../../script/KindModules.sol";
+import {envClosure} from "../helpers/ProbeModules.sol";
 
 import {Test, Vm} from "forge-std/Test.sol";
 import {DeployHarness} from "../helpers/DeployHarness.sol";
@@ -28,7 +29,7 @@ import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
 import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
 import {TradeLib} from "../../src/trade/TradeLib.sol";
 import {RelayFeeRouter} from "../../src/metatx/RelayFeeRouter.sol";
-import {plainEnv, pinned, closureLibs, regArgs} from "../helpers/Catalogue.sol";
+import {plainEnv, pinned, withModules, closureLibs, regArgs} from "../helpers/Catalogue.sol";
 import {ComplianceRegistry} from "../../src/regulated/ComplianceRegistry.sol";
 import {IComplianceRegistry} from "../../src/regulated/IComplianceRegistry.sol";
 import {IRegulatedToken} from "../../src/regulated/IRegulatedToken.sol";
@@ -66,7 +67,7 @@ contract GovDeployTest is Test {
         assertEq(WrappedToken(w).chainUid(), bytes32(0), "chain-neutral: a release carries no env");
         assertEq(f.chainUid(), ZUID, "the factory's, gated");
         assertTrue(f.kindEnabled(IOpenFactory.TokenKind.WRAPPED), "the kind is on from the factory's start");
-        IFactoryToken.Env memory e = f.envOf(IOpenFactory.TokenKind.WRAPPED, 1);
+        IFactoryToken.Env memory e = envClosure(f.envOf(IOpenFactory.TokenKind.WRAPPED, 1), w); // T66b: modules after it
         assertEq(keccak256(abi.encode(e.libs)), keccak256(abi.encode(closureLibs(IOpenFactory.TokenKind.WRAPPED))), "link closure");
         for (uint256 i; i < e.libs.length; ++i) assertEq(e.libCodeHashes[i], e.libs[i].codehash, "pinned");
         assertEq(e.registry, vm.parseJsonAddress(json, ".ua_registry"));
@@ -99,7 +100,7 @@ contract GovDeployTest is Test {
             assertTrue(f.kindEnabled(k), "enabled (T28)");
             assertEq(WrappedRegulatedToken(payable(w)).REGISTRY_CODEHASH(), keccak256(type(ComplianceRegistry).runtimeCode),
                 "the registry code pin in implArgs (T29)");
-            IFactoryToken.Env memory e = f.envOf(k, 1);
+            IFactoryToken.Env memory e = envClosure(f.envOf(k, 1), w); // T66b: the body modules after the closure
             assertEq(keccak256(abi.encode(e.libs)), keccak256(abi.encode(closureLibs(k))), "link closure");
             for (uint256 j; j < e.libs.length; ++j) assertEq(e.libCodeHashes[j], e.libs[j].codehash, "pinned");
             assertEq(e.registry, vm.parseJsonAddress(json, ".ua_registry"));
@@ -133,8 +134,9 @@ contract GovDeployTest is Test {
             assertTrue(f.kindEnabled(k), "enabled");
             assertEq(NormalZetherRegulatedToken(w).REGISTRY_CODEHASH(), keccak256(type(ComplianceRegistry).runtimeCode),
                 "the registry code pin in implArgs");
-            IFactoryToken.Env memory e = f.envOf(k, 1);
-            IFactoryToken.Env memory b = f.envOf(IOpenFactory.TokenKind(2 + i), 1);
+            IFactoryToken.Env memory e = envClosure(f.envOf(k, 1), w); // T66b: each env's body modules after its closure
+            IFactoryToken.Env memory b = envClosure(f.envOf(IOpenFactory.TokenKind(2 + i), 1),
+                f.implementationOf(IOpenFactory.TokenKind(2 + i), 1));
             // the base kind's env libraries (DeployBase's order) and `RegulatedLib`: the closure as a set
             assertEq(e.libs.length, b.libs.length + 1, "link closure");
             for (uint256 j; j < b.libs.length; ++j) assertEq(e.libs[j], b.libs[j], "the base kind's closure");
@@ -193,9 +195,10 @@ contract GovDeployTest is Test {
             e.deps = new address[](1);
             e.deps[0] = router; // the PQZ constructor checks code only
             bytes memory code = b == 4 ? type(NormalPqzRegulatedToken).creationCode : type(WrappedPqzRegulatedToken).creationCode;
+            (address[] memory ms, bytes memory args) = deployKindModules(uint8(k), address(f), regArgs()); // T66b
             vm.startPrank(address(h));
-            f.publishEnv(k, 1, e);
-            w = f.deployImplementation(k, 1, 1, code, regArgs());
+            f.publishEnv(k, 1, withModules(e, ms));
+            w = f.deployImplementation(k, 1, 1, code, args);
             f.setKindEnabled(k, true);
             vm.stopPrank();
         }
@@ -204,7 +207,7 @@ contract GovDeployTest is Test {
         assertTrue(f.kindEnabled(k), "enabled");
         address creg = vm.parseJsonAddress(json, ".compliance_registry");
         assertEq(NormalRegulatedToken(w).REGISTRY_CODEHASH(), creg.codehash, "the pin = the deployed registry's code");
-        IFactoryToken.Env memory env = f.envOf(k, 1);
+        IFactoryToken.Env memory env = envClosure(f.envOf(k, 1), w); // T66b: the body modules after the closure
         address[] memory want = closureLibs(k);
         assertEq(env.libs.length, want.length, "link closure");
         bool lib;
@@ -520,11 +523,13 @@ contract GovDeployTest is Test {
 
     /// A kind's init code with the factory's append: chain-neutral releases (plan T72), `abi.encode(factory, implArgs)`;
     /// the env is the clones', not in the release's code.
-    function _release(bytes memory code, IOpenFactory.TokenKind kind, address) internal view returns (bytes memory) {
-        return abi.encodePacked(code, abi.encode(address(this), uint8(kind) >= 8 ? regArgs() : bytes(""))); // T29
+    function _release(bytes memory code, IOpenFactory.TokenKind kind, address) internal returns (bytes memory) {
+        // T29; T66b: the kind's body modules, deployed for this factory (their own transactions, not in these figures)
+        return abi.encodePacked(code, abi.encode(address(this),
+            kindArgs(uint8(kind), address(this), uint8(kind) >= 8 ? regArgs() : bytes(""))));
     }
 
-    function _dex(address) internal view returns (bytes memory) {
+    function _dex(address) internal returns (bytes memory) {
         return abi.encodePacked(type(SCaaSDex).creationCode, abi.encode(address(this), dexArgs(address(this))));
     }
 }

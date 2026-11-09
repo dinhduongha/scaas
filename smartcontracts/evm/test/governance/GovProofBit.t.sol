@@ -153,9 +153,9 @@ contract GovProofBitTest is PqzOffchainBase {
     // ------------------------------------------------------------------ the kinds
 
     function _validKind(uint8 k) internal {
-        (uint256 v, uint256 r, uint256 c, uint256 d) = k == 4 ? new Bit24Masks4(address(f), "").masks()
-            : k == 5 ? new Bit24Masks5(address(f), "").masks() : k == 12 ? new Bit24Masks12(address(f), regArgs()).masks()
-            : new Bit24Masks13(address(f), regArgs()).masks();
+        (uint256 v, uint256 r, uint256 c, uint256 d) = k == 4 ? new Bit24Masks4(address(f), kindArgs(4, address(f), "")).masks()
+            : k == 5 ? new Bit24Masks5(address(f), kindArgs(5, address(f), "")).masks() : k == 12 ? new Bit24Masks12(address(f), kindArgs(12, address(f), regArgs())).masks()
+            : new Bit24Masks13(address(f), kindArgs(13, address(f), regArgs())).masks();
         uint256 m = uint256(1) << BIT;
         assertTrue(v & m != 0, "valid");
         assertTrue(r & m != 0, "a role bit (a power)");

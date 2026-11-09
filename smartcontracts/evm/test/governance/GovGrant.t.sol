@@ -462,10 +462,10 @@ contract GovGrantTest is Test {
     function test_windowWithoutPerWindowRefused() public {
         IGovernance.GrantTerms memory g = _open();
         g.perWindow = 1;
-        _word(t, MINT, g, 3);
+        _word(IGovernance(address(t)), MINT, g, 3);
         g = _open();
         g.window = 1 days;
-        _word(t, MINT, g, 3);
+        _word(IGovernance(address(t)), MINT, g, 3);
         (g.perWindow, g.window) = (1, 1 days); // positive control
         _set(MANAGER, g);
         assertEq(t.grantOf(MINT, nid(MANAGER)).window, 1 days);

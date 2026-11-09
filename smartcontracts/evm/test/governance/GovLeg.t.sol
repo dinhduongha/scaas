@@ -34,6 +34,7 @@ contract FlagLeg {
     function chainUid() external view returns (bytes32) { return ChainEnvCode.chainUid(); }
     function validateEnv(IFactoryToken.ChainEnv calldata) external pure {}
     function kind() external view returns (uint8) { return _kind; }
+    function modules() external pure returns (address[] memory) {} // T66b: no body module
     function initialize(bytes32, uint64, bytes calldata a) external { features = abi.decode(a, (uint256)); }
     function underlyings() external pure returns (address[] memory) {}
     function lockedFeatures() external view returns (uint256) { return features; }
@@ -60,8 +61,10 @@ abstract contract GovLegRows is Test {
     function _flagLeg(OpenFactory f, uint256 features, bytes32 salt) internal returns (address) {
         IOpenFactory.TokenKind k8 = IOpenFactory.TokenKind.NORMAL_REGULATED;
         if (f.implementationOf(k8, 1) == address(0)) {
-            Catalogue.release(f, k8, 1, plainEnv(address(f), address(0), f.chainUid(), address(0), false),
-                type(FlagLeg).creationCode);
+            // T66b: a mock release with no body module (`Catalogue.release` would deploy kind 8's)
+            uint16 v = Catalogue.env(f, k8, plainEnv(address(f), address(0), f.chainUid(), address(0), false));
+            vm.prank(f.registrar());
+            f.deployImplementation(k8, 1, v, type(FlagLeg).creationCode, "");
             vm.prank(f.registrar());
             f.setKindEnabled(k8, true);
         }
