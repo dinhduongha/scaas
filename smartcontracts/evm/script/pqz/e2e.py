@@ -2054,9 +2054,11 @@ def calldata(txh):
 
 def proof_of(tok, ua, k, r, txh, form, want_log=None):
     """P of debit `(ua, k)` (spec §9.5): under `LOG` its one `PqzDebitProof` (header, proof); under `NONE` the proof parameter of
-    the transaction's calldata (no header). `want_log` forces the lookup the record does not name (a negative)."""
+    the transaction's calldata (no header). `want_log` forces the lookup the record does not name (a negative). The log is read
+    at the block the debit's own receipt names: an RPC without the log index caps eth_getLogs at 100 blocks (SCaaS testnet)."""
     if (r["proofStore"] == 1) if want_log is None else want_log:
-        logs = rpc("eth_getLogs", [{"address": tok, "fromBlock": "0x0", "toBlock": "latest",
+        bn = rpc("eth_getTransactionReceipt", [txh])["blockNumber"]
+        logs = rpc("eth_getLogs", [{"address": tok, "fromBlock": bn, "toBlock": bn,
                                     "topics": [EV_PROOF, None, "0x" + ua.hex(), "0x" + k.to_bytes(32, "big").hex()]}])
         if len(logs) != 1:
             raise LookupError(f"{len(logs)} PqzDebitProof logs for ({ua.hex()[:8]}…, {k})")
@@ -2272,9 +2274,10 @@ def proof_path(pq, sd, reg, create, U, aud, DEC, sk, tusd):
         try:
             _, _, ok, _, _, _ = rebuild(d["tok"], d, neg)
             check(not ok, f"negative {neg} on {d['label']}: pqz-ffi verify = 0")
-        except (LookupError, RuntimeError) as e:
-            check(True, f"negative {neg} on {d['label']}: the lookup fails ({type(e).__name__}: {str(e)[:90]})")
-        except Exception as e:  # a harness error is no negative result
+        except LookupError as e:  # only the forced log lookup of a NONE debit may fail here (it has no PqzDebitProof)
+            check(neg == "mode-of-another-record", f"negative {neg} on {d['label']}: the lookup fails ({type(e).__name__}: "
+                                                   f"{str(e)[:90]})")
+        except Exception as e:  # an RPC or harness error is no negative result
             check(False, f"negative {neg} on {d['label']}: the rebuild raised {type(e).__name__}: {str(e)[:120]}")
 
 
