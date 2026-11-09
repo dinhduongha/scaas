@@ -43,7 +43,16 @@ function encodeValue(type, value, types) {
   if (type === 'bytes32') return bytes32(value);
   if (/^bytes\d+$/.test(type)) return abiEncode([type], [value]);
   if (/^uint\d+$/.test(type)) return word(value);
+  if (/^int\d+$/.test(type)) return intWord(type, value);
   throw new Error(`EIP-712 type ${type} is not supported here`);
+}
+
+/** `intN` (EIP-712, as `abi.encode`): the sign-extended 32-byte word, refused outside the type's range. */
+export function intWord(type, value) {
+  const bits = BigInt(type.slice(3));
+  const v = BigInt(value);
+  if (v < -(1n << (bits - 1n)) || v >= 1n << (bits - 1n)) throw new Error(`${type} out of range: ${value}`);
+  return word(BigInt.asUintN(256, v));
 }
 
 export function hashStruct(types, primary, data) {
