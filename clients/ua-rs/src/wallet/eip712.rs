@@ -613,7 +613,9 @@ macro_rules! relay_fee {
 
 /// Every struct a signed type nests, and the builder-only structs of the generic path (`MetaTransaction`, `UAMetaTransfer`, the
 /// orders, the nonce invalidations). ua-mtx-merge (CTR-MTX-30, R12, R39, R46): the token's address `MetaTransfer`, `TradeOrder`
-/// and `WrapOrder` left; `TradeOrder` stays nested in the DEX's `DexOrder`. Group 3g (KV-8): `keyVersion` after `fromUA`.
+/// and `WrapOrder` left; `TradeOrder` stays nested in the DEX's `DexOrder`. Group 3g (KV-8): `keyVersion` after `fromUA`. Group 3h
+/// (proof-path spec §3.2, PP-3): `bytes32 ownTag` after `salt` (`PqzTransferArgs`, `PqzMultiArgs`) and after `beneficiaryUA`
+/// (`PqzBurnArgs`).
 const STRUCTS: &[(&str, &str)] = &[
     ("TradeOrder", order!("address")),
     ("UATradeOrder", order!("bytes32")),
@@ -624,10 +626,10 @@ const STRUCTS: &[(&str, &str)] = &[
     ("UAMetaTransaction", concat!("bytes32 from,bytes data,", envelope!())),
     ("InvalidateNonces", "address from,uint256 batch,uint256 minNonce"),
     ("UAInvalidateNonces", "bytes32 from,uint256 batch,uint256 minNonce"),
-    ("PqzTransferArgs", "uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes sealedMemo"),
+    ("PqzTransferArgs", "uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,bytes32 ownTag,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes sealedMemo"),
     ("PqzLeg", "bytes32 ua,bytes v,bytes vAuditor"),
-    ("PqzMultiArgs", "uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,uint256 decoyFee,bytes16 salt,bytes[] u,PqzLeg[] legs,bytes vFrom,bytes sealedMemo"),
-    ("PqzBurnArgs", "uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,bytes u,bytes vFrom"),
+    ("PqzMultiArgs", "uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,uint256 decoyFee,bytes16 salt,bytes32 ownTag,bytes[] u,PqzLeg[] legs,bytes vFrom,bytes sealedMemo"),
+    ("PqzBurnArgs", "uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,bytes32 ownTag,bytes u,bytes vFrom"),
     ("Unwrap", "address underlying,bytes32 recipient,uint256 amount,uint256 minOut"),
     ("G1", "bytes32 x0,bytes32 x1,bytes32 y0,bytes32 y1"),
     ("ZetherSingle", "uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes16 salt,bytes32 beneficiaryUA,G1 yFrom,G1 yTo,G1 cOut,G1 dOut,G1 cDeb,G1 cAud"),
@@ -762,6 +764,8 @@ const OPS: &[Op] = &[
     op("UAPqzSetVerifier", "address target,bytes32 next", &[ROUTER], None),
     op("UAPqzCancelVerifier", "address target", &[ROUTER], None),
     op("UAPqzRevokeVerifier", "address target", &[ROUTER], None),
+    // group 3h (proof-path spec §5, PP-5): bit 24 `PQZ_PROOF`'s router op, the token's `proofStore` from its next debit
+    op("UASetProofStore", "address target,uint8 next", &[ROUTER], None),
     raw("PqzAuth", "uint8 op,bytes32 opTag,bytes32 psid,uint256 chainId,address token,address registry,bytes32 from,bytes32 to,bytes32 beneficiary,uint256 fee,uint256 amount,bytes32 recipient,uint64 sendCounter,uint64 p,uint256 validUntilBlock,bool auditorOn,uint256 shieldIn,bytes32 chainUid,bytes32 binding,uint128 salt,bytes32 memoHash,bytes32 bodyHash", &[P]),
 ];
 /// The generic path's builders (clientkeys `metaTxTypedData`, `uaMetaTxTypedData`, `uaMetaTransferTypedData`,

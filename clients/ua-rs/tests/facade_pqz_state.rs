@@ -417,6 +417,8 @@ fn word_negatives_refused_before_the_key() {
     neg("the account short of a slot", k, &ok, &|r| { r["account"].as_array_mut().unwrap().pop(); }, Error::Argument);
     neg("an extra account slot", k, &ok, &|r| r["account"].as_array_mut().unwrap().push(json!(hx(&[0; 32]))), Error::Argument);
     neg("bits above the packed fields", k, &ok, &|r| set_word(r, &["account", "1"], |w| w[0] = 1), Error::Argument);
+    // group 3h (T58): `lastDebit` in slot 2 is a `uint64`
+    neg("bits above lastDebit", k, &ok, &|r| set_word(r, &["account", "2"], |w| w[23] = 1), Error::Argument);
     // group 3g (T15o): the UA's sendCounter word and the registry's version word
     neg("bits above sendCounter", k, &ok, &|r| set_word(r, &["sendCounterWord"], |w| w[23] = 1), Error::Argument);
     neg("no sendCounterWord", k, &ok, &|r| { r.as_object_mut().unwrap().remove("sendCounterWord"); }, Error::Argument);

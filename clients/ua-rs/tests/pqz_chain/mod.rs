@@ -3,7 +3,9 @@
 //! `_settleTransfer`, `_bundleMulti`, `_settleBurn`, `_debit`, `rollOver`; the stored form P46), and a reading layer that reads
 //! the raw words a words command takes. Group 3g (T15o): accounts per `(ua, key version)`, `sendCounter` per UA, the registry's
 //! records per version and `(latest, current)` per UA; credits go to `current`, a debit settles the version whose key is the
-//! statement's `pk_f` (the contract selects it by `keyVersion` and checks that key). The test's own code, not the facade's: the packer here, the facade's unpacker and
+//! statement's `pk_f` (the contract selects it by `keyVersion` and checks that key). Group 3h (T58, T59; ua-rs-sign T20d1): no
+//! pending slot is deleted, every debit writes its record `debitRec[from][k]` (`w0`, `w1`) and the account's `lastDebit`, every
+//! op blob ends with the tail `ownTag ‖ kv ‖ u8(n)` ([`Chain::own_tag`], the key versions of the credited keys). The test's own code, not the facade's: the packer here, the facade's unpacker and
 //! rebuild there; the forge rows (`state.json`) tie both to the contract. Proofs come from the facade and verify with pqz-ffi's
 //! precompile before a settlement. UNAUDITED.
 #![allow(dead_code)]
@@ -72,15 +74,16 @@ pub struct Acct {
     pub acc_v: u64,
     pub units: u64,
     pub flags: u8,
+    pub last_debit: u64,
     pub acc_hash: Word,
     pub pending: BTreeMap<u64, Word>,
     pub acc_words: Vec<Word>,
 }
 
 impl Acct {
-    /// The struct's slots 0..2 as solc packs them (the first field in the low bytes).
-    pub fn slots(&self) -> [Word; 3] {
-        let mut s = [[0u8; 32]; 3];
+    /// The struct's slots 0 to 3 as solc packs them (the first field in the low bytes); 3h: `lastDebit` in slot 2.
+    pub fn slots(&self) -> [Word; 4] {
+        let mut s = [[0u8; 32]; 4];
         for (i, v) in [self.cleared, self.floor, self.rolled, self.count].iter().enumerate() {
             s[0][8 * i..8 * i + 8].copy_from_slice(&v.to_be_bytes());
         }
@@ -89,7 +92,8 @@ impl Acct {
         s[1][8..10].copy_from_slice(&(self.acc_v as u16).to_be_bytes());
         s[1][10..12].copy_from_slice(&(self.acc_u as u16).to_be_bytes());
         s[1][12..].copy_from_slice(&self.acc_blob);
-        s[2] = self.acc_hash;
+        s[2][24..].copy_from_slice(&self.last_debit.to_be_bytes());
+        s[3] = self.acc_hash;
         s
     }
 }
@@ -121,6 +125,12 @@ pub struct Chain {
     /// `sendCounter[ua]`.
     pub ctrs: BTreeMap<Word, u64>,
     pub entries: BTreeMap<Word, Ent>,
+    /// `debitRec[ua][k]`: `(w0, w1)`, `w1` zero when the record is narrow (PP-2).
+    pub recs: BTreeMap<(Word, u64), (Word, Word)>,
+    /// The `ownTag` the next settled debit's blob carries (the contract checks no value, PP-3).
+    pub own_tag: Word,
+    /// The token's `proofStore` (0 NONE, 1 LOG), noted in each record.
+    pub proof_store: u8,
     pub block: u64,
     pub auditor: Option<Word>,
     n: u64,
@@ -208,16 +218,42 @@ impl Chain {
         a.pending.insert(a.count, w);
         a.count += 1;
     }
-    /// `PqzCore._debit` and `_sent` of version `v`: `acc` the reference, `rolled = floor = cleared = p`, `sendCounter[from]++`.
-    fn debit(&mut self, from: &Word, v: u64, ptr: [u8; 20], u_off: usize, v_off: usize, p: u64) {
+    /// `PqzCore._debit`, `_record` and `_sent` of version `v`: the record `debitRec[from][k]` (`k` the counter before the
+    /// increment) and `lastDebit = k + 1`, then `acc` the reference and `rolled = floor = cleared = p` (no slot deleted, 3h PP-1),
+    /// `sendCounter[from]++`.
+    #[allow(clippy::too_many_arguments)] // the contract's own arguments, one each
+    fn debit(&mut self, from: &Word, v: u64, ptr: [u8; 20], u_off: usize, v_off: usize, p: u64, shield_in: u64) {
+        let k = *self.ctrs.get(from).unwrap_or(&0);
         *self.ctrs.entry(*from).or_default() += 1;
         let a = self.accts.entry((*from, v)).or_default();
-        (a.acc_blob, a.acc_u, a.acc_v, a.units, a.flags) = (ptr, u_off as u64, v_off as u64, 1, a.flags & !1);
-        (a.rolled, a.floor) = (p, p);
-        for i in a.cleared..p {
-            a.pending.remove(&i);
+        let last = a.last_debit;
+        let p_prev = if last == 0 { 0 } else { u64::from_be_bytes(self.recs[&(*from, last - 1)].0[20..28].try_into().unwrap()) };
+        let prev = last.saturating_sub(1);
+        let wide = shield_in != 0 || v != 0 || (last != 0 && prev + 1 != k);
+        let mut w0 = [0u8; 32];
+        w0[..20].copy_from_slice(&a.acc_blob);
+        w0[20..28].copy_from_slice(&p.to_be_bytes());
+        w0[28..30].copy_from_slice(&((p - p_prev) as u16).to_be_bytes());
+        (w0[30], w0[31]) = (self.proof_store, if wide { 3 } else { 1 });
+        let mut w1 = [0u8; 32];
+        if wide {
+            w1[..8].copy_from_slice(&shield_in.to_be_bytes());
+            w1[8..16].copy_from_slice(&v.to_be_bytes());
+            w1[16..24].copy_from_slice(&prev.to_be_bytes());
         }
-        a.cleared = a.cleared.max(p);
+        self.recs.insert((*from, k), (w0, w1));
+        a.last_debit = k + 1;
+        (a.acc_blob, a.acc_u, a.acc_v, a.units, a.flags) = (ptr, u_off as u64, v_off as u64, 1, a.flags & !1);
+        (a.rolled, a.floor, a.cleared) = (p, p, p);
+    }
+    /// The 3h tail of an op blob: `ownTag ‖ be64 kv[0..n) ‖ u8(n)`.
+    fn tail(&self, kv: &[u64]) -> Vec<u8> {
+        let mut t = self.own_tag.to_vec();
+        for v in kv {
+            t.extend(v.to_be_bytes());
+        }
+        t.push(kv.len() as u8);
+        t
     }
     fn data(&self, a: &[u8; 20]) -> &[u8] {
         &self.blobs[a][1..]
@@ -342,7 +378,7 @@ impl Chain {
         w[31] = 0x0a; // the precompile's address in the low 20 bytes
         json!({"auditorMode": hx(&w), "auditorUA": hx(&self.auditor.unwrap())})
     }
-    /// Settles a verified op 1 statement (`_settleTransfer`): the op blob `salt ‖ P(u) ‖ P(v_t) ‖ [P(v_a)] ‖ toUA ‖ P(v_f)`,
+    /// Settles a verified op 1 statement (`_settleTransfer`): the op blob `salt ‖ P(u) ‖ P(v_t) ‖ [P(v_a)] ‖ toUA ‖ P(v_f) ‖ tail`,
     /// the sender's debit, the receiver's credit, the entry.
     pub fn settle1(&mut self, stmt: &[u8], memo: Option<&[u8]>) -> Word {
         let st::Stmt::Debit(d) = st::parse(1, stmt).unwrap() else { panic!() };
@@ -356,10 +392,16 @@ impl Chain {
         blob.extend(to);
         blob.extend(pack(d.v_f));
         let len = blob.len();
+        // `kv`: the receiver's key version, then the auditor's
+        let mut kv = vec![self.version_of(&to, d.pk_t.unwrap())];
+        if let Some(pk_a) = d.pk_a {
+            kv.push(self.version_of(&self.auditor.unwrap(), pk_a));
+        }
+        blob.extend(self.tail(&kv));
         self.block += 1;
         let ptr = self.put(blob);
         let v = self.version_of(&from, d.pk_f);
-        self.debit(&from, v, ptr, 16, len - VP, p);
+        self.debit(&from, v, ptr, 16, len - VP, p, st::word_u64(&hd[st::H_PLAIN_USED]).unwrap());
         self.credit(&to, ptr, 16, 16 + PKP);
         let er = entry_ref(&from, ctr);
         self.entries.insert(er, Ent { ptr, from, ctr, memo: memo.map(<[u8]>::to_vec).unwrap_or_default() });
@@ -386,10 +428,16 @@ impl Chain {
         }
         blob.extend(pack(m.v_f));
         let len = blob.len();
+        // `kv`: every leg's key version in leg order, then the auditor's
+        let mut kv: Vec<u64> = uas.iter().enumerate().map(|(j, ua)| self.version_of(ua, m.pk(j))).collect();
+        if let Some(pk_a) = m.pk_a {
+            kv.push(self.version_of(&self.auditor.unwrap(), pk_a));
+        }
+        blob.extend(self.tail(&kv));
         self.block += 1;
         let ptr = self.put(blob);
         let v = self.version_of(&from, m.pk_f);
-        self.debit(&from, v, ptr, 16, len - VP, p);
+        self.debit(&from, v, ptr, 16, len - VP, p, st::word_u64(&hd[st::H_PLAIN_USED]).unwrap());
         let (us, ls) = (16 + PKP * g, 32 + VP * (1 + aud as usize));
         for (j, ua) in uas.iter().enumerate() {
             self.credit(ua, ptr, 16 + PKP * (j / st::legs_per_group(aud)), us + ls * j);
@@ -398,15 +446,15 @@ impl Chain {
         self.entries.insert(er, Ent { ptr, from, ctr, memo: memo.map(<[u8]>::to_vec).unwrap_or_default() });
         er
     }
-    /// Settles a verified burn or refresh (`_settleBurn`): the op blob `P(u') ‖ P(v_f)`, the debit.
+    /// Settles a verified burn or refresh (`_settleBurn`): the op blob `P(u') ‖ P(v_f) ‖ tail` (`n = 0`), the debit.
     pub fn settle_burn(&mut self, stmt: &[u8]) {
         let st::Stmt::Debit(d) = st::parse(2, stmt).unwrap() else { panic!() };
         let hd = &d.header;
         let p = st::word_u64(&hd[st::H_P]).unwrap();
         self.block += 1;
-        let ptr = self.put([pack(d.u), pack(d.v_f)].concat());
+        let ptr = self.put([pack(d.u), pack(d.v_f), self.tail(&[])].concat());
         let v = self.version_of(&hd[st::H_FROM], d.pk_f);
-        self.debit(&hd[st::H_FROM], v, ptr, 0, PKP, p);
+        self.debit(&hd[st::H_FROM], v, ptr, 0, PKP, p, st::word_u64(&hd[st::H_PLAIN_USED]).unwrap());
     }
 }
 

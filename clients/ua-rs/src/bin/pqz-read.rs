@@ -31,12 +31,16 @@
 //! - **R3** one block: the chain's `finalized` block (`--finalized`) or `head − depth` (`--depth`, NET-EVM-04); every read
 //!   names it by hash (EIP-1898, `requireCanonical`); the node must answer the block asked for, and the same number must still
 //!   carry the same hash after the last read (else the read is refused: a reorg or an inconsistent node).
-//! - **R4** storage only: `eth_getStorageAt` and `eth_getCode` at that block, no view. (`keccak256(code) == codeHash` is not
-//!   checked: no `eth_getProof`; a residual, as in `zether-read-balance`.)
+//! - **R4** storage only: `eth_getStorageAt` and `eth_getCode` at that block; the one view is R5's release probe, at the same
+//!   block from the same node. (`keccak256(code) == codeHash` is not checked: no `eth_getProof`; a residual, as in
+//!   `zether-read-balance`.)
 //! - **R5** the token is catalogued by `--factory` with a PQZ kind (`OpenFactory._rec[token]`, the factory index's record at
 //!   slot 8: `contractClass` TOKEN, `kind` NORMAL_PQZ, WRAPPED_PQZ, NORMAL_PQZ_REGULATED or WRAPPED_PQZ_REGULATED), its slot
 //!   and packing held to their pin, ua-mtx-merge's `test/zether/ZetherStateVectors.t.sol` (T20b, T15m2); and its code is a clone
-//!   of a chain-neutral release, the EIP-1167 proxy with its `ChainEnv` (owner 2026-11-08; `factory::clone_env`).
+//!   of a chain-neutral release, the EIP-1167 proxy with its `ChainEnv` (owner 2026-11-08; `factory::clone_env`); and it is of
+//!   release 3h or later: `proofStore()` (`eth_call` at the read block) answers 0 or 1 (proof-path spec C9). An earlier release
+//!   is refused by name, for every command, since `ua-rs` parses 3h's layout only (owner 2026-11-09, no-oracle spec §4.2 R5's
+//!   Change, §4.14.1).
 //! - **R6** `--registry` is the registry the token's `ChainEnv` names (owner 2026-11-08); `keyRecord` is `--registry`'s `pqzKey[--ua][--key-version]` (`UAStore.Layout` slot 2, per version) and its code
 //!   must hold this handle's key; `keyVersions` its `pqzVersions[--ua]` (slot 17: `latest ‖ current ‖ listed`, which `ua-rs`
 //!   checks against `--key-version`); for `auditRead` `--ua` must be the token's `auditorUA` and its `auditorMode` not NONE
@@ -341,6 +345,16 @@ impl Reader<'_> {
     fn code(&self, address: &[u8; 20]) -> Result<Vec<u8>, String> {
         unhex(rpc(self.url, "eth_getCode", json!([hx(address), self.at()]))?.as_str().ok_or("eth_getCode: not bytes")?)
     }
+    /// R5 (owner 2026-11-09): the token answers `proofStore()` with 0 (NONE) or 1 (LOG) at this block, so it is of release 3h or
+    /// later (proof-path spec C9); a revert, an empty or any other answer is a release before 3h.
+    fn release_3h(&self, token: &[u8; 20]) -> Result<(), String> {
+        let call = json!({"to": hx(token), "data": hx(&keccak256(b"proofStore()")[..4])});
+        let answer = rpc(self.url, "eth_call", json!([call, self.at()])).ok().and_then(|v| v.as_str().map(unhex));
+        match answer {
+            Some(Ok(w)) if w.len() == 32 && w[..31] == [0; 31] && w[31] <= 1 => Ok(()),
+            _ => Err("R5: the token is of a release before 3h (proofStore() does not answer); ua-rs reads release 3h only".into()),
+        }
+    }
     /// `{address, code}` of each pointer, each once, in order of first use.
     fn blobs(&self, ptrs: &[[u8; 20]]) -> Result<Vec<Value>, String> {
         let mut seen: Vec<[u8; 20]> = Vec::new();
@@ -417,6 +431,7 @@ fn open<'u>(a: &Args, url: &'u str, block_at: Option<u64>) -> Result<(Reader<'u>
     if env.registry != a.registry {
         return Err("R6: --registry is not the token's registry".into());
     }
+    r.release_3h(&a.token)?;
     Ok((r, block))
 }
 
@@ -513,7 +528,8 @@ fn read(a: &Args, url: &str, block_at: Option<u64>, pk: Option<&[u8]>) -> Result
         "keyRecord": hx(&key_record), "ua": hx(&a.ua)});
     let blobs = if a.command == "balance" {
         let base = acct_base(&root, &a.ua, v)?;
-        let account = (0..3).map(|i| r.word(&a.token, &add(&base, i))).collect::<Result<Vec<_>, _>>()?;
+        // the 4 slots of `acct[ua][v]` (3h: `lastDebit` in slot 2; `accHash` 3, the pending map 4, `accWords` from 5)
+        let account = (0..4).map(|i| r.word(&a.token, &add(&base, i))).collect::<Result<Vec<_>, _>>()?;
         let (s0, s1) = (&account[0], &account[1]);
         let (count, rolled) = (field(s0, "acct[U][7].pendingCount")?, field(s0, "acct[U][7].rolled")?);
         let (units, flags) = (field(s1, "acct[U][7].accUnits")?, field(s1, "acct[U][7].flags")?);

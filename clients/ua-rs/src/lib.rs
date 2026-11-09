@@ -253,7 +253,7 @@ pub(crate) fn keccak(parts: &[&[u8]]) -> [u8; 32] {
 /// (`GovBitsVector.t.sol`), one row per line.
 pub const GOVERNANCE_BITS_JSON: &str = include_str!("../../../smartcontracts/vectors/governance/governance_bits.json");
 
-/// Governance bit `bit`'s row as the file's JSON object, `{bit, name, type, sentences}`: rows 0-23; `None` past them (bits 24-127
+/// Governance bit `bit`'s row as the file's JSON object, `{bit, name, type, sentences}`: rows 0-24; `None` past them (bits 25-127
 /// are free, bits 128-255 the application contract's own, labelled by its `bitLabel(bit)`).
 pub fn governance_bit(bit: u8) -> Option<&'static str> {
     let head = format!("{{\"bit\": {bit}, ");

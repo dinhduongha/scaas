@@ -245,12 +245,14 @@ pub const COMMANDS: &[&str] = &[
 /// `scaas.pqz`, pinned by T19c in `test/v2/layout/namespaces.json`, moved by group 3g T52; `tests/facade_pqz_state.rs` compares
 /// this table with the pin the forge rows carry): `(label, slot, inner, byte, width)`, `slot` in the namespace, `inner` the slot
 /// inside `acct[ua][v]`, `byte` counted from the low end of the word (solc's packing). Group 3g (KV-6): the account is keyed
-/// `(ua, key version)`, `sendCounter` is one per UA. The reading layer reads, at one block, for key version `v`:
-/// - `account`: `acct[ua][v]` slots `inner` 0..3 (`acct = keccak256(v ‖ keccak256(ua ‖ root + 8))`, then `+ inner`), in order;
+/// `(ua, key version)`, `sendCounter` is one per UA. Group 3h (T58, PP-2): `lastDebit` in the account's slot 2, so `accHash`,
+/// `pending` and `accWords` sit one slot later; tokens of release 3h only (no-oracle spec §4.14.1, owner 2026-11-09: the reading
+/// layer refuses an earlier release by name). The reading layer reads, at one block, for key version `v`:
+/// - `account`: `acct[ua][v]` slots `inner` 0 to 3 (`acct = keccak256(v ‖ keccak256(ua ‖ root + 8))`, then `+ inner`), in order;
 /// - `pending`: `{index, word}` for every index in `[rolled, p)`, `p = min(pendingCount, rolled + INLINE_MAX, rolled + K_MAX − 1 −
-///   accUnits)` (`INLINE_MAX` 16, 10 for op 7 of a PQZH token; CTR-PQZ-06), the word at `keccak256(index ‖ acct + 3)`:
+///   accUnits)` (`INLINE_MAX` 16, 10 for op 7 of a PQZH token; CTR-PQZ-06), the word at `keccak256(index ‖ acct + 4)`:
 ///   `blob(160) ‖ uOff(16) ‖ vOff(16) ‖ block(64)` (`PqzCore._credit`);
-/// - `accWords`: with `flags & 1` the `ACC_WORDS` slots from `acct + 4` as stored (`not()` of the packed stream), else none;
+/// - `accWords`: with `flags & 1` the `ACC_WORDS` slots from `acct + 5` as stored (`not()` of the packed stream), else none;
 /// - `sendCounterWord`: `sendCounter[ua]` (slot 12, `keccak256(ua ‖ root + 12)`), the UA's, advanced by a debit of any version;
 /// - `blobs`: `{address, code}` by `eth_getCode` of every SSTORE2 pointer used: the `acc` reference's (without `flags & 1`),
 ///   each pending credit's, the entry's (`entryPtr`) and the key's;
@@ -273,9 +275,10 @@ pub const STATE_LAYOUT: &[(&str, u64, u64, usize, usize)] = &[
     ("acct[U][7].accV", 8, 1, 22, 2),
     ("acct[U][7].accUnits", 8, 1, 24, 4),
     ("acct[U][7].flags", 8, 1, 28, 1),
-    ("acct[U][7].accHash", 8, 2, 0, 32),
-    ("acct[U][7].pending[3]", 8, 3, 0, 32),
-    ("acct[U][7].accWords[0]", 8, 4, 0, 32),
+    ("acct[U][7].lastDebit", 8, 2, 0, 8),
+    ("acct[U][7].accHash", 8, 3, 0, 32),
+    ("acct[U][7].pending[3]", 8, 4, 0, 32),
+    ("acct[U][7].accWords[0]", 8, 5, 0, 32),
     ("entryPtr[V]", 9, 0, 0, 20),
     ("memos[V]", 10, 0, 0, 32),
     ("sendCounter[U]", 12, 0, 0, 8),
@@ -604,9 +607,12 @@ struct Acct {
     acc_hash: Word,
 }
 
+/// The 4 slots of `acct[ua][v]` (3h): the counters, the `acc` reference, `lastDebit` (read, and checked to be a `uint64`: path (A)
+/// does not use it, the proof path does) and `accHash`.
 fn acct(w: &[Word], counter: &Word) -> Result<Acct> {
-    let [s0, s1, s2] = w else { return Err(Error::Argument) };
+    let [s0, s1, last_debit, s2] = w else { return Err(Error::Argument) };
     only_low(s1, 29)?;
+    only_low(last_debit, 8)?;
     only_low(counter, 8)?;
     Ok(Acct {
         count: lo_u64(s0, 0, 8)?,
@@ -726,7 +732,8 @@ fn entry_ref(chain_id: u64, chain_uid: &Word, token: &[u8; 20], from: &Word, cou
 }
 
 /// An old entry, located by its sender's `fromUA` and `sendCounter` (the request's `entryRef` must recompute from them):
-/// `R` of its op blob (`PqzCore.rOf`: the data less the trailing `v_f`) and the blob's shape `(G, M, auditorOn)`.
+/// `R` of its op blob (3h: the data before `P(v_f)` and the tail, [`super::pqz_path::tail`]) and the blob's shape `(G, M,
+/// auditorOn)`.
 struct Entry {
     r: Vec<u8>,
     g: usize,
@@ -744,7 +751,7 @@ fn entry(f: &Fields<'_>, blobs: &mut Blobs) -> Result<Entry> {
     let ptr = f.word("entryPtr")?;
     only_low(&ptr, 20)?;
     let d = blobs.data(&lo_addr(&ptr, 0)?)?;
-    let r = d.get(..d.len().checked_sub(VP).ok_or(Error::Argument)?).ok_or(Error::Argument)?.to_vec();
+    let r = d.get(..super::pqz_path::tail(d)?.r_len).ok_or(Error::Argument)?.to_vec();
     // `PqzCore._bundleShape`: `salt ‖ u_0 … u_{G−1} ‖ (v_j ‖ [v_{a,j}] ‖ UA_j)_{j<M}`, unique by length for M ≤ 8
     let rem = r.len().checked_sub(16 + PKP).ok_or(Error::Argument)?;
     let g = 1 + rem / PKP;

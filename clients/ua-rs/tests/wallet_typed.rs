@@ -55,8 +55,8 @@ const DOMAIN_NAMES: [&str; 7] = [
     "SCaaS GovernanceRouter",
 ];
 
-/// `typed/typed_ops.json`: every signed struct (86: ua-mtx-merge's merged-entry rows, T76's router creations and 3f's three PQZ
-/// verifier ops) in every domain
+/// `typed/typed_ops.json`: every signed struct (87: ua-mtx-merge's merged-entry rows, T76's router creations, 3f's three PQZ
+/// verifier ops and 3h's `UASetProofStore`; the six PQZ debit rows with `ownTag`, release 3h) in every domain
 /// it is signed in: `encodeType`, `structHash`, the domain separator and the digest from the row's typed data; the SCaaS builder
 /// of the row's primary type (`scaas_typed_data`, the op table) gives the same digest in each of its domains and, in every other
 /// SCaaS domain name, refuses or builds another struct (`UARollOver`: the Zether row and the PQZ row `UAPqzRollOver`, group 3g);
@@ -96,7 +96,7 @@ fn typed_ops_json_rows() {
             }
         }
     }
-    assert_eq!((ops, rows), (86, 120));
+    assert_eq!((ops, rows), (87, 121)); // 3h T61: + UASetProofStore (86, 120 before)
 }
 
 /// `ua/portable.json` and `ua/nested.json`: the typed data of every registration, KEM record, PQZ key record and acceptance hashes
@@ -784,4 +784,44 @@ fn pqz_verifier_router_ops_canon() {
     m["next"] = json!(format!("0x{}", "00".repeat(32)));
     let x = scaas_typed_data("UAPqzSetVerifier", None, &b20(&dom["verifyingContract"]), chain_id(&dom["chainId"]), &b32(&dom["salt"]), &m).unwrap();
     assert_ne!(x.digest().unwrap(), b32(&r["domains"]["gov_router"]["digest"]), "next is signed");
+}
+
+/// Group 3h (proof-path spec §3.2, §5; the six PQZ debit rows `release: "3h"` and the router's `UASetProofStore` of
+/// typed_ops.json): `ownTag` is signed in every debit's args, `next` in the router op; a non-zero unbound `relayer` /
+/// `feeRecipient` (by the row's `mode`) is hashed as 0, so the digest is the row's.
+#[test]
+fn proof_path_rows_canon() {
+    let t = load("typed/typed_ops.json");
+    let junk = json!(format!("0x{}", "ba".repeat(20)));
+    let debits = ["UAPqzTransferSingle", "UAPqzTransferSingleCompact", "UAPqzTransfer", "UAPqzTransferCompact", "UAPqzUnshield", "UAPqzUnshieldUnwrap"];
+    for name in debits.iter().chain(&["UASetProofStore"]) {
+        let r = &t["ops"][*name];
+        if *name != "UASetProofStore" {
+            assert_eq!(r["release"], "3h", "{name}");
+        }
+        let (_, d) = r["domains"].as_object().unwrap().iter().next().unwrap();
+        let dom = &d["domain"];
+        let build = |m: &Value| {
+            scaas_typed_data(name, dom["name"].as_str(), &b20(&dom["verifyingContract"]), chain_id(&dom["chainId"]), &b32(&dom["salt"]), m)
+                .unwrap()
+                .digest()
+                .unwrap()
+        };
+        let mode = r["message"]["mode"].as_u64().unwrap();
+        let mut m = r["message"].clone();
+        if mode & 1 == 0 {
+            m["relayer"] = junk.clone();
+        }
+        if mode & 2 == 0 {
+            m["feeRecipient"] = junk.clone();
+        }
+        assert_eq!(build(&m), b32(&d["digest"]), "{name}: an unbound relayer / feeRecipient signs as 0");
+        let mut m = r["message"].clone();
+        if *name == "UASetProofStore" {
+            m["next"] = json!(1 - r["message"]["next"].as_u64().unwrap());
+        } else {
+            m["args"]["ownTag"] = json!(format!("0x{}", "0d".repeat(32)));
+        }
+        assert_ne!(build(&m), b32(&d["digest"]), "{name}: ownTag / next is signed");
+    }
 }

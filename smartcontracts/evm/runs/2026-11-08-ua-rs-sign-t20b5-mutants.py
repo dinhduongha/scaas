@@ -51,7 +51,7 @@ M = [
     ("UAPqzCancelVerifier dropped", [(E, '    op("UAPqzCancelVerifier", "address target", &[ROUTER], None),\n', "")], WT),
     # zether-prover's rows it does not build
     ("zether-prover: UAPqzSetVerifier not listed", [(ZP + "tests/typed_ops.rs",
-                                                     'const NOT_ZETHER: [&str; 58] = [', 'const NOT_ZETHER: [&str; 57] = [')
+                                                     'const NOT_ZETHER: [&str; 59] = [', 'const NOT_ZETHER: [&str; 58] = [')
                                                     , (ZP + "tests/typed_ops.rs", '    "UAPqzSetVerifier", "UAPqzCancelVerifier",',
                                                        '    "UAPqzCancelVerifier",')], ZT),
     # the C header's holder rule (source and the generated header, so only the rule check can see it)

@@ -197,14 +197,14 @@ fn structures() {
     }
 }
 
-/// governance T14: `governance_bit` against the file on disk, every row (a stale compiled-in copy fails here), and none past bit 23
-/// (ua-mtx-merge T34: bit 22 `OPERATOR_TRANSFER`, CTR-GOV-20; T39 / T41: bit 23 `TAX`).
+/// governance T14: `governance_bit` against the file on disk, every row (a stale compiled-in copy fails here), and none past bit 24
+/// (ua-mtx-merge T34: bit 22 `OPERATOR_TRANSFER`, CTR-GOV-20; T39 / T41: bit 23 `TAX`; 3h T61: bit 24 `PQZ_PROOF`).
 #[test]
 fn governance_bits_rows() {
     let path = format!("{}/../../smartcontracts/vectors/governance/governance_bits.json", env!("CARGO_MANIFEST_DIR"));
     let v: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
     let rows = v["bits"].as_array().unwrap();
-    assert_eq!(rows.len(), 24);
+    assert_eq!(rows.len(), 25);
     for bit in 0..=255u8 {
         match (rows.get(bit as usize), governance_bit(bit)) {
             (Some(row), Some(ours)) => assert_eq!(&serde_json::from_str::<Value>(ours).unwrap(), row, "bit {bit}"),

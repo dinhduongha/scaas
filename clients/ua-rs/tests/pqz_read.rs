@@ -13,6 +13,7 @@ mod pqz_chain;
 
 use pqz_chain::{forge_versions, h, hx, merge, Chain};
 use pqz_ffi::stmt::{self as st, Word};
+use scaas_ua::facade::pqz::STATE_LAYOUT;
 use serde_json::{json, Value};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::process::{Command, Stdio};
@@ -202,10 +203,14 @@ impl Node {
     /// chain-neutral spec §2, the layout `create3_kat.json` pins), its env naming `registry` (owner 2026-11-08: the reader checks
     /// `--registry` against it).
     fn clone_of(&self, token: &[u8; 20], registry: &[u8; 20]) {
+        self.clone_with(token, registry, &IMPL);
+    }
+    /// [`Node::clone_of`] of the implementation `release` (group 3h: the reader probes the release by `proofStore()`).
+    fn clone_with(&self, token: &[u8; 20], registry: &[u8; 20], release: &[u8; 20]) {
         use scaas_ua::factory::{clone_runtime, ChainEnv};
         let env = ChainEnv { chain_uid: self.uid, registry: *registry, gov_router: [0x33; 20], smart_key_account_impl: [0x44; 20],
             hedera: false, deps: vec![[0x55; 20]], params: vec![] };
-        self.code(token, &json!(hx(&clone_runtime(&[0x11; 20], &env))));
+        self.code(token, &json!(hx(&clone_runtime(release, &env))));
     }
     /// A words request's account (`balance`'s shape: the forge rows with [`forge_versions`], the wallet rows, `Chain::bal`)
     /// into `token`'s storage at its key version (group 3g: `acct[ua][v]`, `sendCounter[ua]`), its key record and version word
@@ -214,14 +219,16 @@ impl Node {
         let (ua, v) = (w32(&r["ua"]), be(r["keyVersion"].as_u64().unwrap()));
         self.set(token, &add(&self.root, 2), &w32(psid));
         let base = k(&v, &k(&ua, &add(&self.root, 8)));
+        // the account's slots, its pending map and `accWords` at the pinned inner slots (3h: 0 to 3, 4, from 5)
+        let inner = |label: &str| STATE_LAYOUT.iter().find(|l| l.0 == label).unwrap().2;
         for (i, w) in r["account"].as_array().unwrap().iter().enumerate() {
             self.set(token, &add(&base, i as u64), &w32(w));
         }
         for e in r["pending"].as_array().unwrap() {
-            self.set(token, &k(&be(e["index"].as_u64().unwrap()), &add(&base, 3)), &w32(&e["word"]));
+            self.set(token, &k(&be(e["index"].as_u64().unwrap()), &add(&base, inner("acct[U][7].pending[3]"))), &w32(&e["word"]));
         }
         for (i, w) in r["accWords"].as_array().unwrap().iter().enumerate() {
-            self.set(token, &add(&base, 4 + i as u64), &w32(w));
+            self.set(token, &add(&base, inner("acct[U][7].accWords[0]") + i as u64), &w32(w));
         }
         self.set(token, &k(&ua, &add(&self.root, 12)), &w32(&r["sendCounterWord"]));
         self.set(registry, &k(&v, &k(&ua, &be(reg_slot("pqzKey")))), &w32(&r["keyRecord"]));
@@ -336,6 +343,14 @@ const CW_PQZH: &str = "0x00000000000000000000000000000000000c0de2";
 const CW_REG: &str = "0x00000000000000000000000000000000000c0de3";
 const NO_CODE: &str = "0x00000000000000000000000000000000000c0de4";
 const BARE_PROXY: &str = "0x00000000000000000000000000000000000c0de5";
+/// Group 3h (owner 2026-11-09): clones of a release before 3h, whose implementation reverts `proofStore()` or has no code.
+const PRE_3H: &str = "0x00000000000000000000000000000000000c0de6";
+const PRE_3H_EMPTY: &str = "0x00000000000000000000000000000000000c0de7";
+/// The release implementation of every clone here answers any call, `proofStore()` included, with the word 0 (`PUSH1 32 PUSH1 0
+/// RETURN`); a release before 3h's reverts (`PUSH1 0 PUSH1 0 REVERT`). Not `[0x11; 20]`: that is the wallet rows' token.
+const IMPL: [u8; 20] = [0x1e; 20];
+const IMPL_PRE_3H: [u8; 20] = [0x12; 20];
+const IMPL_EMPTY: [u8; 20] = [0x13; 20];
 
 /// `pqz-read` against a local `anvil`: R2, R3 (the block of `head − depth` by hash, a node that answers another block or whose
 /// block changes during the read), R5 (uncatalogued, not `exists`, a Zether kind), R6 (another key, not the auditor, no
@@ -367,6 +382,8 @@ fn reading_layer_against_anvil() {
     let forge = load(&format!("smartcontracts/vectors/pqz/{SET}/state.json"));
     let n = Node { url: url.clone(), root: w32(&forge["layout"]["root"]), chain_id, uid: w32(&json!(genesis)) };
     let factory = a20(FACTORY);
+    n.code(&IMPL, &json!("0x60206000f3"));
+    n.code(&IMPL_PRE_3H, &json!("0x60006000fd"));
 
     // the forge rows: five accounts and the audited op 1 entry, at the rows' token and registry
     let (ft, fr) = (a20(forge["token"].as_str().unwrap()), a20(forge["registry"].as_str().unwrap()));
@@ -438,6 +455,11 @@ fn reading_layer_against_anvil() {
         "key": {"address": hx(&aud_ptr), "code": hx(&c.blobs[&aud_ptr])}}));
     n.entry(&cw, &creg, &ent.from, ent.ctr, &json!({"address": hx(&ent.ptr), "code": hx(&c.blobs[&ent.ptr])}), &cw_aud);
 
+    // catalogued PQZ clones of a release before 3h (owner 2026-11-09): `proofStore()` reverts, or answers nothing
+    for (t, release) in [(PRE_3H, IMPL_PRE_3H), (PRE_3H_EMPTY, IMPL_EMPTY)] {
+        n.catalogue(&factory, &a20(t), 4, true);
+        n.clone_with(&a20(t), &a20(WALLET_REG), &release);
+    }
     // the zether-kind and the unlisted tokens (R5)
     n.catalogue(&factory, &a20(ZETHER_TOKEN), 2, true);
     n.catalogue(&factory, &a20(NOT_EXISTS), 4, false);
@@ -553,6 +575,11 @@ fn reading_layer_against_anvil() {
         no(bal(on(t, WALLET_REG, ua_wa), false), Some(0), "R5: the token is not a clone of a chain-neutral release");
     }
     no(bal(on(wt_s, CW_REG, ua_wa), false), Some(0), "R6: --registry is not the token's registry");
+    // group 3h (owner 2026-11-09): a token of a release before 3h, refused by name for every command
+    for t in [PRE_3H, PRE_3H_EMPTY] {
+        no(bal(on(t, WALLET_REG, ua_wa), false), Some(0), "R5: the token is of a release before 3h");
+        no(audit(on(t, WALLET_REG, &saud), &sa, "0"), Some(2), "R5: the token is of a release before 3h");
+    }
     no(audit(on(CW_TOKEN, WALLET_REG, &saud), &sa, "0"), Some(2), "R6: --registry is not the token's registry");
     no(audit(on(CW_TOKEN, CW_REG, &sb), &sa, "0"), Some(1), "R6: --ua is not the token's auditor");
     no(audit(head(on(CW_TOKEN, CW_REG, &saud)), &sa, "0"), Some(2), "R6: --ua is not the token's auditor");
@@ -682,6 +709,8 @@ fn decoys_against_anvil() {
     let genesis = rpc(&url, "eth_getBlockByNumber", json!(["0x0", false]))["hash"].as_str().unwrap().to_string();
     let root = w32(&json!("0xda865ec17214f25b93cdb133d719c79392c290a4b9089fd0bba156256c521500"));
     let n = Node { url: url.clone(), root, chain_id, uid: w32(&json!(genesis)) };
+    n.code(&IMPL, &json!("0x60206000f3"));
+    n.code(&IMPL_PRE_3H, &json!("0x60006000fd"));
     let (factory, token, reg, reg2) = (a20(FACTORY), a20("0x000000000000000000000000000000000000dec1"),
         a20("0x000000000000000000000000000000000000dec0"), a20("0x000000000000000000000000000000000000dec2"));
     n.catalogue(&factory, &token, 4, true);
@@ -690,6 +719,9 @@ fn decoys_against_anvil() {
     let token2 = a20("0x000000000000000000000000000000000000dec3");
     n.catalogue(&factory, &token2, 4, true);
     n.clone_of(&token2, &reg2);
+    // group 3h (owner 2026-11-09): a clone of a release before 3h, refused by name
+    n.catalogue(&factory, &a20(PRE_3H), 4, true);
+    n.clone_with(&a20(PRE_3H), &reg, &IMPL_PRE_3H);
     let mine = |b: u64| rpc(&url, "anvil_mine", json!([format!("0x{b:x}")]));
     let head = || u64::from_str_radix(rpc(&url, "eth_blockNumber", json!([])).as_str().unwrap().trim_start_matches("0x"), 16).unwrap();
     let ua = |i: u8| [i; 32];
@@ -816,6 +848,7 @@ fn decoys_against_anvil() {
     assert!(run(&reg, &tok, &["--count", "1", "--decoy-filter", "activity", "--window", "1"]).unwrap_err().contains("--window"));
     assert!(run(&reg, &tok, &["--count", "1", "--decoy-filter", "activity", "--window", "22"]).unwrap_err().contains("--window"));
     assert!(run(&reg, UNLISTED, &["--count", "1"]).unwrap_err().contains("R5"), "the token catalogued");
+    assert!(run(&reg, PRE_3H, &["--count", "1"]).unwrap_err().contains("R5: the token is of a release before 3h"), "release 3h");
     // R3: every block read re-checked after the last read (the read block, the sync block), through a proxy that changes the
     // sync block's hash on its re-check; the proxy alone changes nothing (positive control)
     let via = |proxy: String| {

@@ -903,12 +903,12 @@ class Abi(unittest.TestCase):
 
 class GovernanceBits(unittest.TestCase):
     def test_governance_bits_rows(self):
-        """governance T14: scaas_ua_governance_bit against governance_bits.json on disk, every row; past bit 23 UAArgument."""
+        """governance T14: scaas_ua_governance_bit against governance_bits.json on disk, every row; past bit 24 UAArgument."""
         v = json.loads((VEC.parent / 'governance' / 'governance_bits.json').read_text())
-        self.assertEqual(len(v['bits']), 24)
+        self.assertEqual(len(v['bits']), 25)
         for row in v['bits']:
             self.assertEqual(json.loads(text(L.governance_bit, row['bit'])), row, row['bit'])
-        for bit in (24, 127, 128, 255):
+        for bit in (25, 127, 128, 255):
             self.assertEqual(code_of(lambda: text(L.governance_bit, bit)), 'UAArgument', bit)
 
     def test_pay_digest_and_meta_pay_id(self):

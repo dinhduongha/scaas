@@ -288,7 +288,8 @@ fn base_request(k: &PqzKey, cmd: &str) -> Value {
 }
 
 /// A words command's minimal well-formed request for `k` (T15e): `k` is the holder `0xA1…` of a chain with one TRIVIAL entry
-/// and one op 1 entry (zero ciphertexts, the auditor copy on, a commit-reveal memo) of which `k` is sender, receiver and auditor.
+/// and one op 1 entry (zero ciphertexts, the auditor copy on, a commit-reveal memo) of which `k` is sender, receiver and auditor;
+/// the blob ends with 3h's tail `ownTag ‖ kv ‖ u8(n)` (zero tag, both keys at version 0, `n` = 2).
 fn words_request(k: &PqzKey, cmd: &str) -> Value {
     use pqz_chain::*;
     let ua = [0xA1; 32];
@@ -296,7 +297,7 @@ fn words_request(k: &PqzKey, cmd: &str) -> Value {
     c.register(ua, &k.pk());
     c.auditor = Some(ua);
     c.shield(&ua, 5);
-    let blob = [vec![0x5a; 16], vec![0u8; pqz_pack::PKP + 2 * pqz_pack::VP], ua.to_vec(), vec![0u8; pqz_pack::VP]].concat();
+    let blob = [vec![0x5a; 16], vec![0u8; pqz_pack::PKP + 2 * pqz_pack::VP], ua.to_vec(), vec![0u8; pqz_pack::VP], vec![0u8; 32 + 16], vec![2]].concat();
     let ptr = c.put(blob);
     let er = entry_ref(&ua, 0);
     c.entries.insert(er, Ent { ptr, from: ua, ctr: 0, memo: vec![] });

@@ -171,8 +171,9 @@ fn a_crafted_query_beside_real_words_is_refused() {
     let words = c.own(&A, 16);
     assert_eq!(call(&k, "balance", &c.bal(&A)).unwrap()["value"], 1234, "the words alone");
     let debit = merge(words.clone(), c.debit_fields());
-    // an old entry of the holder's (an op 1 blob, structurally valid): `proveDiscloseSender`'s words
-    let blob = [vec![0x5a; 16], vec![0u8; PKP + VP], [0xB0; 32].to_vec(), vec![0u8; VP]].concat();
+    // an old entry of the holder's (an op 1 blob, structurally valid, with 3h's tail: zero tag, the receiver at version 0, n = 1):
+    // `proveDiscloseSender`'s words
+    let blob = [vec![0x5a; 16], vec![0u8; PKP + VP], [0xB0; 32].to_vec(), vec![0u8; VP], vec![0u8; 32 + 8], vec![1]].concat();
     let ptr = c.put(blob);
     let er = entry_ref(&A, 0);
     c.entries.insert(er, Ent { ptr, from: A, ctr: 0, memo: vec![] });

@@ -478,7 +478,7 @@ pub extern "C" fn scaas_ua_kind_tag_string(kind: u16, out: *mut c_char, out_len:
 }
 
 /// Governance bit `bit`'s row of `governance_bits.json` (spec 2026-11-02-governance §1.2) as JSON, `{bit, name, type, sentences}`
-/// (NUL-terminated; `*out_len` counts the NUL). Bits 0-23; any other bit is `SCAAS_UA_ERR_ARGUMENT` (24-127 free, 128-255 the
+/// (NUL-terminated; `*out_len` counts the NUL). Bits 0-24; any other bit is `SCAAS_UA_ERR_ARGUMENT` (25-127 free, 128-255 the
 /// application's `bitLabel`).
 #[no_mangle]
 pub extern "C" fn scaas_ua_governance_bit(bit: u8, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
