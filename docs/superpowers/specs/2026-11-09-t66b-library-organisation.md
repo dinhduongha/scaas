@@ -2,7 +2,8 @@
 
 **Status:** SPECIFIED, **approved by the owner 2026-11-09 with the rulings of §11** (the DEX's governance entries forwarded now,
 ≈ 59 token modules accepted, the four-set gate with the known-red `ROLL_MAX` rows listed, R-1 then R-2 measured per step;
-Hedera not in T66b). **Fable review applied** (approve with fixes, no P0; every finding's outcome in §14). Nothing is built;
+Hedera not in T66b). **Fable review applied** (approve with fixes, no P0) **and its re-check** (fixed with notes, no P0 / P1; P2-A, P2-B and
+the notes applied); every finding's outcome in §14. Nothing is built;
 **build after group 3i** (plan order T82 → 3i → T66b build → 3c). Plan [`2026-11-04-ua-mtx-merge.md`](../plans/2026-11-04-ua-mtx-merge.md)
 task **T66b** Steps 1 and 2 (parts 1, 2 and 5 were built as T66a; 3h, T58–T65, and T82 have landed). Branch `ua-mtx-merge`,
 measured at `7d653925` (the later commits up to T82 move no size). Measurements:
@@ -145,7 +146,9 @@ Every library but `UARegistryLib` fits T-1 and T-2. They stay as they are (§4.3
 | **V7: all but the ERC-20 core (the owner's form)** | **13,031** | **16,373** | **17,939** | **21,405** | **19,998** | **24,784** | **16,198** | **19,472** | **20,831** | **24,438** | **23,010** | **27,920** |
 | floor: the whole ABI as bare stubs | 7,405 | 10,541 | 10,027 | 13,252 | 11,556 | 15,405 | 9,229 | 12,301 | 11,590 | 14,959 | 13,104 | 17,066 |
 
-V6 misses T-1 on kind 13 (36,853 > 35,386 B); V7 fits every kind, at most 47.5 M (kind 13). The spike's stubs carry the
+V6 misses T-1 on kind 13 (36,853 > 35,386 B); V7 fits every kind, at most 47.5 M (kind 13); keeping `registry`, `chainUid`,
+`IS_HEDERA` and `SMART_KEY_ACCOUNT_IMPL` in the token (re-check P2-B) adds ≈ 0.2–0.3 KB to each kind [estimate]: kind 13 ≈ 28.2 KB,
+≈ 48 M, with ≥ 7 KB of room. The spike's stubs carry the
 modifiers with an assembly return, a form §4.1 replaces (Fable P1-1): the real stubs differ by tens of bytes per guarded entry
 [estimate]. Eleven entries stay whole in every spike because another kept routine calls them (§4.4). The same spike forwards
 `SCaaSDex`'s governance entries: 34,929 → **33,202 B** [measured], ≈ 56.3 M with the frame (§4.2).
@@ -189,17 +192,21 @@ module. Per-kind release gas (token + modules, each transaction ≤ 60 M): ≈ 9
 1. **The token keeps every entry point:** signature, mutability, ABI, events and errors as today. It keeps these bodies itself:
    size-map's `erc20-core` (`transfer`, `transferFrom`, `approve`, `balanceOf`, `allowance`, `totalSupply`, `name`, `symbol`,
    `decimals`, the UA ledger's `balanceOfUA` and `transferToUA`), the identity views `kind`, `factory`, `FACTORY`,
-   `implementation` (it reads the implementation's own `_SELF`) and `modules` (§4.5), `_update` with its hooks, `_msgSender`,
-   the guard. **Every other entry's body is one forward:** the unchanged calldata by `DELEGATECALL` to one module of the kind.
+   `implementation` (it reads the implementation's own `_SELF`) and `modules` (§4.5), the one-word env views `registry`,
+   `chainUid`, `IS_HEDERA` and `SMART_KEY_ACCOUNT_IMPL` (each one `extcodecopy` word of the clone's code; read on chain by the
+   DEX per UA leg and in `_ledgerOn`, `SCaaSDex.sol:462, 472`, by `OpenFactory._create`, `:733`, and by `ZetherDisclosure.verify`,
+   `:64`; re-check P2-B), `_update` with its hooks, `_msgSender`, the guard. **Every other entry's body is one forward:** the unchanged calldata by `DELEGATECALL` to one module of the kind.
 2. **The stub form (Fable P1-1).** A forwarded entry carries **no modifier**: a modifier's epilogue (`nonReentrant`'s
    `_exit(outer)`, `MetaTxBase.sol:51-55`; `governed`'s `_guardOut(outer)`, `GovernanceBase.sol:46-50`) would never run behind an
    assembly `return`, leaving the transient `_GUARD` set, and every later call into the token in the same transaction would
    revert `Reentrancy`. Each guarded stub calls one internal `_forward(module)`: `bool outer = _enter()` (`_guardIn()` for a
    `governed` entry; on a token both are `_enter`) → `(ok, ret) = module.delegatecall(msg.data)` → on failure revert with `ret`
-   verbatim → `_exit(outer)` (`_guardOut`) → assembly `return(ret)`. A stub guards exactly when today's entry does
-   (`nonReentrant` or `governed`); an unguarded state-changing entry forwards without it. **Views** forward through the
-   registry's R2 cast (`_libView`) and keep `view`; **pure** entries through the same cast to `pure`, so the ABI's mutability does
-   not move. An assembly block is `memory-safe` only when it writes at the free pointer, never past the scratch space at 0.
+   verbatim (the revert undoes `_enter`'s transient write with the frame, so the failure path needs no exit) → `_exit(outer)`
+   (`_guardOut`) → assembly `return(ret)`. On the token face `_enter` / `_guardIn` appear only inside `_forward`. A stub guards
+   exactly when today's entry does (`nonReentrant` or `governed`); an unguarded state-changing entry forwards through a second
+   internal, `_forwardRaw(module)` (the same copy and return, no guard). **Views** forward through `_forwardRaw` under the
+   registry's R2 cast (`_libView`) and keep `view`; **pure** entries through the same cast to `pure`, so the ABI's mutability
+   does not move. An assembly block is `memory-safe` only when it writes at the free pointer, never past the scratch space at 0.
 3. **A body module** is a contract compiled from the kind's own core (bases and hooks), holding one group of bodies, reached only
    by `DELEGATECALL` from the token's stubs, its code hash pinned in the release as a library's is (§4.5).
 4. **One cold account per operation where it is one today:** a module takes in, as internal code, the library code its group
@@ -212,9 +219,9 @@ module. Per-kind release gas (token + modules, each transaction ≤ 60 M): ≈ 9
 
 | Module | domains (size-map) | entries (kind 13; the others hold the subset their kind has) | takes in | links / reaches |
 |---|---|---|---|---|
-| **P** pipeline | pipeline, named-transfer, pay | `mtxExecute`, `mtxBatch`, `mtxCancelNonce`, `executeMetaTransaction`, `cancelNonce`, `mtxExecuteTransfer`, `mtxBatchTransfer`, `mtxTransfer`, `mtxTransferWithFee`, `mtxPay`, `mtxPayReceiverFee`, `payWithFee`, `payWithFeeToUA`, `mtxRelayFee`, `metaPayId`, `payLane`, `receiverFeeDigest`, on 8–13 the tax (`mtxPayWithTax`, `payWithTax`, `setTaxRate`, `setTaxRecipient`, `taxConfig`), the digests, nonce views, `registry`, `IS_HEDERA`, `supportedModes` (28 entries on 8–13, 23 on 0–5) | `MtxPipelineLib`'s code | `HederaLib`; `RegulatedLib` on 8–13 |
+| **P** pipeline | pipeline, named-transfer, pay | `mtxExecute`, `mtxBatch`, `mtxCancelNonce`, `executeMetaTransaction`, `cancelNonce`, `mtxExecuteTransfer`, `mtxBatchTransfer`, `mtxTransfer`, `mtxTransferWithFee`, `mtxPay`, `mtxPayReceiverFee`, `payWithFee`, `payWithFeeToUA`, `mtxRelayFee`, `metaPayId`, `payLane`, `receiverFeeDigest`, on 8–13 the tax (`mtxPayWithTax`, `payWithTax`, `setTaxRate`, `setTaxRecipient`, `taxConfig`), the digests, nonce views, `supportedModes` (26 entries on 8–13, 21 on 0–5; `registry` and `IS_HEDERA` stay in the token) | `MtxPipelineLib`'s code | `HederaLib`; `RegulatedLib` on 8–13 |
 | **T** trade | trade | `mtxTrade`, `mtxCancelOrder`, `mtxInvalidateNonces`, `tradeOrderDigest`, `cancelOrderDigest`, `invalidateNoncesDigest`, `minNonce`, `pulled`, `restorePulled`, `mtxWrapOrder` (9–10) | `TradeLib`'s code and the authorisation of the trade path | — |
-| **A** admin | governance, init, tables, token-meta, kind-normal | governance entries (21–22), `initialize`, `validateEnv`, `mtxSelectors`, `supportsInterface`, `chainEnv`, `chainUid`, `creator`, `version`, `eip712Domain`, `SMART_KEY_ACCOUNT_IMPL`, `rescueTo`, `mint`, `mintToUA`, `burn` on the normal kinds (35–42) | — | `GovernanceLib`, `WrappedLib` (rescue) |
+| **A** admin | governance, init, tables, token-meta, kind-normal | governance entries (21–22), `initialize`, `validateEnv`, `mtxSelectors`, `supportsInterface`, `chainEnv`, `creator`, `version`, `eip712Domain`, `rescueTo`, `mint`, `mintToUA`, `burn` on the normal kinds (33–40) | — | `GovernanceLib`; `WrappedLib` (`rescue`; `initToken` on 1, 9); `initialize` → `_initRaw`: `RegulatedLib.init` (8–13), `ZetherLib.initNormal` / `initNormalConf` (2, 10), `ZetherWrappedLib.init` (3, 11), `PqzStateLib.init` (4, 12), `PqzWrappedLib.init` (5, 13); `validateEnv` → `ZetherLib.validateEnv` (2, 3, 10, 11), `PqzStateLib.validateEnv` (4, 5, 12, 13) (`ZetherLayer.sol:60`, `PqzLayer.sol:75`) |
 | **W** wrapped / regulated (1, 3, 5, 8–13) | wrapped, regulated | `wrap` ×2, `wrapToUA`, `mtxWrap*`, `unwrap*`, `mtxUnwrap*`, rates, reserve (`addReserve`), legs, `mint` / `mintToUA` of the wrapped kinds; the regulated powers (freeze, pause, force and operator transfers, orders, `regulatedConfig`, the regulated `rescue` and `disableFeature`) (15–49) | — | `WrappedLib`, `RegulatedLib`, `ZetherWrappedLib` / `PqzWrappedLib` where the kind has them |
 | **Z** Zether (2, 3, 10, 11) | zether | the Zether entries, `mtxWrapShield` and the unshield-unwraps on 3 and 11 (35–43) | — | `ZetherLib`, `ZetherWrappedLib` |
 | **Q** PQZ (4, 5, 12, 13) | pqz | the PQZ entries, 3f's and 3h's included, `mtxWrapShield` and `mtxUnshieldUnwrap` on 5 and 13 (47–57) | — | `PqzTransferLib`, `PqzBurnLib`, `PqzStateLib`, `PqzViewLib`, `PqzWrappedLib` |
@@ -227,8 +234,10 @@ T-2 when built splits along its domains (Q: the PQZ ops and their verdict entrie
 signed pipeline and named transfers / pay and the relay fee), or, where that is not enough, its core's inherited `ERC20` entries
 move to a storage-only base (≈ 1.9–2.3 KB per module, §4.4); a module that splits never forwards to its sibling (M7). Which
 entry goes to which module is fixed per kind by `size_map.entry_domain` (`size-map.out` §4, §5) and recorded in a table the build
-writes into the contracts doc. The DEX follows the same rules (its stubs guard through `_guardIn` / `_guardOut`, its env's
-`libs` pin D, D's constructor and checks mirror §4.5).
+writes into the contracts doc. The DEX follows the same rules: its stubs guard through `_guardIn` / `_guardOut` (on the DEX a
+`view` check of the transient guard and an empty exit, `SCaaSDex.sol:183-188`), its env's `libs` pin D, D's constructor is the
+DEX's `(factory_, bytes)` (`FACTORY` its only immutable). The DEX has no `kind()`: its constructor checks D's `moduleGroup()` and
+`factory()` (beside the factory's own DEX checks of `factory()` and `validateEnv`, `OpenFactory.sol:292-294`).
 
 ### 4.3 Which library holds what
 
@@ -239,11 +248,14 @@ writes into the contracts doc. The DEX follows the same rules (its stubs guard t
 | `TradeLib` | unchanged | the DEX's path; T compiles its `internal` core in |
 | `UARegistryLib` | rebalanced (§5) | part 3 |
 
+The PQZ libraries are compiled at one PQZ set like the PQZ modules; a library built at another set is pinned by the env's code
+hash only, as today (the same class as re-check P2-A; out of T66b).
+
 ### 4.4 Source structure
 
 - **Per kind, one abstract core:** the kind's bases (today's `MetaTokenBase` → … → layers) and its hook overrides (`_mtxRule`,
   `_uaAllowed`, `_batchable`, `_envelopeBinding`, `_update`, the regulated hooks), the identity views (`kind`, `factory`,
-  `FACTORY`, `REGISTRY_CODEHASH` on 8–13) and no other entry. Storage is declared only in the bases (OZ `ERC20` slots 0–4 and the
+  `FACTORY`, `REGISTRY_CODEHASH` on 8–13, `pqzSet` on 4, 5, 12, 13) and no other entry. Storage is declared only in the bases (OZ `ERC20` slots 0–4 and the
   ERC-7201 namespaces `scaas.*`), so the token and every module of the kind share one layout by construction (§8). OZ `ERC20`
   brings its public entries into every module too (inside the upper bounds of §3.4): in a module they run only on its own empty,
   locked storage; a storage-only `ERC20` base is the splitting rule's last lever.
@@ -257,22 +269,28 @@ writes into the contracts doc. The DEX follows the same rules (its stubs guard t
 
 ### 4.5 Wiring, immutables, pins and the release
 
-- **Module addresses** are implementation immutables, passed in `implArgs` (a fixed list per kind; the regulated kinds keep their
-  `REGISTRY_CODEHASH` beside it). **Modules take the kind's own constructor arguments** (`(factory_, implArgs)` on 8–13,
-  `(factory_)` on 0–5; Fable P1-2), so every immutable a moved body reads holds the implementation's value.
+- **Module addresses** are implementation immutables, passed in `implArgs` as **one named struct per kind, `abi.encode(<Kind>ImplArgs)`,
+  decoded once** (the explicit-parameters rule; never a concatenation): `ImplArgs { address[] modules; }` on 0–5 and
+  `RegulatedImplArgs { bytes32 registryCodehash; address[] modules; }` on 8–13 (today 8–13 decode `abi.encode(bytes32)`,
+  `RegulatedBase.sol:54`). **A module takes its kind's constructor arguments but no module list** (Fable P1-2, re-check note):
+  `(factory_)` on 0–5; `(factory_, abi.encode(bytes32 registryCodehash))` on 8–13, so every immutable a moved body reads holds
+  the implementation's value and a module never holds a sibling's address (M7).
 - **Immutables a moved body reads, and how each is tied to the implementation (Fable P1-2):**
 
   | Immutable | declared in | read by moved bodies | in a module | tie |
   |---|---|---|---|---|
   | `FACTORY` | `MetaTokenBase` | `initialize` (`NotFactory`) | the kind's constructor argument | the implementation checks `factory()` of each module; `factory()` / `FACTORY` stay kept views |
   | `REGISTRY_CODEHASH` | `RegulatedBase` (8–13) | `initialize` → `_initRaw` → `RegulatedLib.init` (`RegistryCodeMismatch`) | from `implArgs` | the implementation checks each module's `REGISTRY_CODEHASH()` |
-  | `_name`, `_version`, `_hashedName`, `_hashedVersion`, `_cached*` | `SaltedEIP712` | `eip712Domain()`, every digest in P and T | the kind's `_domainName()`, a constant of its core; `_cachedThis` never matches the clone, so the separator is built per call as today | by construction; the parity row of §10 |
+  | `_name`, `_version`, `_hashedName`, `_hashedVersion`, `_cached*` | `SaltedEIP712` | `eip712Domain()`, every digest in P and T | the kind's `_domainName()`, a constant of its core; the kind's override `_domainSeparatorV4()` (`MetaTokenBase.sol:115`) rebuilds the separator under the clone's `chain_uid` on every call, so the cache is dead code on a factory-made contract, as today | by construction; the parity row of §10 |
   | `CHAIN_UID`, `_GOV_ROUTER`, `_REGISTRY`, `_SMART_KEY_CLONE_CODEHASH`, `_IS_HEDERA` | `SaltedEIP712`, `GovernanceBase`, `UAMetaTxBase` | domain, governance, `_mtxCtx` | 0, as on every factory-made implementation (the values come from the clone's code) | by construction; the parity row |
   | `_SELF` | `MetaTokenBase` | `implementation()` (kept in the token) | the module's own, used only by `onlyDelegated` (M2, M8) | — |
-- **The implementation's constructor checks each module (Fable P2-1):** code present (`ModuleMissing(i)`); `kind()` equals its
-  own; `moduleGroup()` equals the group its slot expects; `factory()` equals `FACTORY`; on 8–13 `REGISTRY_CODEHASH()` equals its
-  own (else `ModuleMismatch(i)`). Three or four staticcalls at construction, no byte on the hot path; a swapped or foreign module
-  fails at the release, not at the first user call. The identity views read no storage, so they answer a direct call (M2).
+- **The implementation's constructor checks each module (Fable P2-1, re-check P2-A):** code present (`ModuleMissing(i)`);
+  `kind()` equals its own; `moduleGroup()` equals the group its slot expects; `factory()` equals `FACTORY`; on 8–13
+  `REGISTRY_CODEHASH()` equals its own; on the PQZ kinds 4, 5, 12, 13, `pqzSet()` (`pure`, `PqzSet.SELFTEST`, the set's
+  self-test hash, rewritten by `at-set.sh`) equals its own, on every module of the kind (Q holds the ops, P the rollover bounds,
+  A `validateEnv` and `initialize`), else `ModuleMismatch(i)`. Three to five staticcalls at construction, no byte on the hot path;
+  a swapped, foreign or other-set module fails at the release, not at the first user call. The identity views read no storage,
+  so they answer a direct call (M2).
 - **Pins:** each kind's `Env.libs` / `libCodeHashes` lists its modules beside its libraries; `deployImplementation` checks every
   code hash before the release exists (`LibraryCodeHashMismatch`, as today), and `_checkImplementation` requires each address of
   the token's `modules()` in the env's `libs` (`ModuleNotPinned`). The trust is a library's today: the registrar publishes the
@@ -293,16 +311,16 @@ writes into the contracts doc. The DEX follows the same rules (its stubs guard t
 
 | # | Rule |
 |---|---|
-| M1 | A module's constructor takes its kind's constructor arguments (`(factory_)`, or `(factory_, implArgs)` on 8–13) and runs its kind's constructor: it locks the module's own storage (`initialized`) and sets the same immutables (§4.5) |
-| M2 | Every entry of a module face is `onlyDelegated` (`address(this) != _SELF`, the module's own immutable; ≈ 20 B and ≈ 30 gas per entry, counted in §3.4): a direct call reverts `NotDelegated()`. The identity views (`kind`, `moduleGroup`, `factory`, `FACTORY`, `REGISTRY_CODEHASH`) and the inherited `ERC20` entries read no value-bearing state and are not module-face entries |
+| M1 | A module's constructor takes its kind's constructor arguments without the module list (`(factory_)` on 0–5; `(factory_, abi.encode(bytes32 registryCodehash))` on 8–13, the hash alone) and runs its kind's constructor: it locks the module's own storage (`initialized`) and sets the same immutables (§4.5) |
+| M2 | Every entry of a module face is `onlyDelegated` (`address(this) != _SELF`, the module's own immutable; ≈ 20 B and ≈ 30 gas per entry, counted in §3.4): a direct call reverts `NotDelegated()`. The identity views (`kind`, `moduleGroup`, `factory`, `FACTORY`, `REGISTRY_CODEHASH`, `pqzSet`) and the inherited `ERC20` entries read no value-bearing state and are not module-face entries |
 | M3 | No `nonReentrant` and no `governed` on a module entry; the stub's `_forward` holds the guard for the frame; module entries call `GovernanceLib` with `_govSubject()` directly (Fable P2-5) |
 | M4 | A module entry has the token entry's mutability exactly (`payable` for `wrap` ×2, `wrapToUA`, `addReserve` in W, `mtxWrapShield` in Z or Q): under `DELEGATECALL` `msg.value` is the caller's, and a non-payable entry would revert on it |
 | M5 | Opcodes: no `SELFDESTRUCT`, no `CALLCODE`; `DELEGATECALL` only to the release's libraries; `CALL` / `STATICCALL` as the bodies do today (self-call, registry, verifiers, underlyings) |
 | M6 | No state variable of its own; its layout equals its kind's (§8) |
 | M7 | One hop: a module never forwards to another module (it holds no sibling's address); a body that needs another group's body reaches it only by the self-call it makes today (`address(this).call`, `this.disclosureStatement`) |
 | M8 | `_SELF` never decides "is this the implementation" in a module body; `implementation()` stays a kept view of the token |
-| S1 | A guarded stub is `_forward(module)` (§4.1 rule 2): enter, `DELEGATECALL` of `msg.data`, revert data verbatim on failure, exit, return data verbatim; never a modifier with an assembly return |
-| S2 | View and pure stubs forward through the R2 cast and keep their mutability; they take no guard |
+| S1 | A guarded stub is `_forward(module)` (§4.1 rule 2): enter, `DELEGATECALL` of `msg.data`, revert data verbatim on failure (the revert undoes the enter), exit, return data verbatim; never a modifier with an assembly return |
+| S2 | An unguarded state-changing stub is `_forwardRaw(module)`; view and pure stubs are `_forwardRaw` under the R2 cast and keep their mutability; none takes a guard |
 
 ## 5. Part 3: the registry pair — SPECIFIED
 
@@ -314,22 +332,23 @@ readers ≈ 1.5 KB, `SSTORE2.readChunks`, ECDSA, the record decoders) [measured,
 
 **Chosen (owner 2026-11-09: R-1 then R-2, measured per step; one library stays, the owner's 2026-11-01 ruling):**
 
-1. **R-1, one copy of the pure helpers:** the registry's 13 `pure` views whose code the library already holds become forwards
-   into `UARegistryLib` through a `_libPure(sel)` cast, which appends none of `_lib`'s three configuration words: `keyHashOf`,
-   `uaOf`, `uaMessage`, `kindName`, `portableDomainSeparator`, `registrationDigest`, `pqzKeyDigest`, `pqzKeyRecordDigest`,
-   `pqzKeyVersionDigest`, `pqzKeyVersionRecordDigest`, `portableRecordDigest`, `kemRecordDigest`, `kemRecordHash` (≈ 2,250 B
-   exclusive in the registry [measured]). No contract calls them on chain (they serve `eth_call`). **`uaAuthDigest` stays** (Fable
-   P2-2): it is `view` on the registry's EIP-712 immutables, which the library cannot read, and `_native` calls it on every native
-   authorization (`UARegistry.sol:291-293`, `:776-778`). The hot views (`requireAuthorized`, `requirePortable`, `kindOf`,
-   `recordOf`, `checkedOf`, the key and member readers) stay too. [estimate] the registry gains 13 stubs (selector, cast,
-   dispatcher row ≈ 45–80 B each ≈ 0.6–1.0 KB) and nets ≈ −1.3 to −1.6 KB; the library +0.3 to +0.6 KB; the pair then clears
-   both lines together by ≈ 0.5–1.0 KB.
+1. **R-1, one copy of the pure helpers:** the registry's `pure` views whose code the library already holds become forwards into
+   `UARegistryLib` through a `_libPure(sel)` cast, which appends none of `_lib`'s three configuration words, **only where an
+   entry's exclusive bytes exceed its stub** (≈ 45–80 B: selector, cast, dispatcher row; re-check note): `keyHashOf` (1,172 B
+   exclusive), `pqzKeyVersionRecordDigest` (237), `registrationDigest` (191), `pqzKeyVersionDigest` (164), `pqzKeyRecordDigest`
+   (119), `portableRecordDigest` (85), `uaOf` (83) [measured]. The other six `pure` views stay (`pqzKeyDigest` 44, `kemRecordHash`
+   42, `portableDomainSeparator` 38, `uaMessage` 31, `kindName` 30, `kemRecordDigest` 14: each smaller than its stub). No contract
+   calls them on chain (they serve `eth_call`). **`uaAuthDigest` stays** (Fable P2-2): it is `view` on the registry's EIP-712
+   immutables, which the library cannot read, and `_native` calls it on every native authorization (`UARegistry.sol:291-293`,
+   `:776-778`). The hot views (`requireAuthorized`, `requirePortable`, `kindOf`, `recordOf`, `checkedOf`, the key and member
+   readers) stay too. [estimate] the registry nets ≈ −1.5 to −1.7 KB (2,051 B less seven stubs); the library +0.2 to +0.4 KB; the
+   pair then clears both lines together by ≈ 0.8–1.2 KB.
 2. **R-2, rebalance:** whole library writers move into the registry, largest exclusive code first, until both are under their
    lines with the room shared: `storePqzPop` (1,955 B exclusive), then `setKemKey` (1,090), `acceptMembership` (981),
    `cacheExpandedKey` (811) as the measurement asks; each reads its kind's configuration from `_cfg` in place of the appended
    words. [estimate, lower bound: a writer's exclusive bytes leave out the helpers it shares with another writer, and the
-   registry pays for those it lacks] after the first two, the registry ≈ 34.6–34.8 KB (≈ 59.0–59.4 M), the library ≈ 35.4–35.6 KB
-   (≈ 59.5–59.8 M).
+   registry pays for those it lacks] after the first two, the registry ≈ 34.5–34.7 KB (≈ 58.7–59.0 M), the library ≈ 35.2–35.4 KB
+   (≈ 59.2–59.5 M).
 3. **Stop:** both ≤ 60 M (R4 accepts 60 M: neither is expected at 57 M). If both cannot reach 60 M without changing a verification
    rule, the build stops and asks the owner (a second registry library, or the forward form on more registry entries).
 
@@ -361,6 +380,7 @@ modifier costs today; `_forward`'s Solidity copy of the return data adds its mem
 | `mtxTrade`, first fill | `TradeLib` and `MtxPipelineLib`, both cold | one forward to T (cold) | ≈ −2.6 k |
 | generic signed op (`mtxExecute`) | pipeline library cold, op in the token | stub → P (cold) → self-call → the op's stub → its module | +0.7 k (op in P, warm) to +3.4 k (op in A or W, cold) |
 | governance, admin, wrap / unwrap, regulated powers (direct or through the router); the DEX's governance | the op's library, cold, or in the contract | + the module (cold) | +3.4 to +3.6 k |
+| a DEX leg's `registry()`, `OpenFactory._create`'s `chainUid()`, `ZetherDisclosure`'s `chainUid()` | in the token | kept in the token (re-check P2-B) | 0 |
 | PQZ op 1 (≈ 70 KB, 26.7 M on the copy) | two copies today (self-call, library call) | + one forward direct, + two relayed (≈ 27 k each) | +27 k / +55 k: +0.1 % / +0.2 % |
 | PQZ op 7, M = 4 (≈ 121 KB, 52.8 M) | as above | ≈ +52 k per hop | +0.1 % / +0.2 % |
 | largest PQZ op (≈ 340 KB; ≥ 21.8 M by its calldata floor alone) | as above | +0.29 M per hop | ≤ +1.3 % direct / ≤ +2.6 % relayed |
@@ -397,7 +417,7 @@ on single functions.
 | The one guard | in the stub's `_forward` only (S1, M3), `nonReentrant` and `governed` alike; its exit runs before the return, so the transaction can call the token again | two calls into one token in one transaction after a forwarded entry; mutants: a guard left in a module, `governed` left on a module entry, a stub with a modifier and an assembly return |
 | `LinkClosure` pins | modules join the release's closure through `modules()` (§4.5), with code-hash pins, the opcode rule M5 for modules; the libraries' rule (no `DELEGATECALL`) unchanged | `LinkClosure.t.sol` on the new closure; `e2e.py --self-test`; the opcode scan of every module |
 | Immutables | each one a moved body reads is set from the kind's constructor arguments and tied by the implementation's checks (§4.5's inventory) | `RegistryCodeMismatch` through A on a regulated clone; a module built with another `REGISTRY_CODEHASH` refused; the parity row |
-| A wrong module | `ModuleMissing`, `ModuleMismatch` (kind, group, factory, registry hash) at construction; `LibraryCodeHashMismatch`, `ModuleNotPinned` at release | each, and a swap of two pinned modules within a release |
+| A wrong module | `ModuleMissing`, `ModuleMismatch` (kind, group, factory, registry hash, PQZ set) at construction; `LibraryCodeHashMismatch`, `ModuleNotPinned` at release | each, a swap of two pinned modules within a release, a PQZ module built at another set |
 | A direct call to a module | refused (`onlyDelegated`, M2); its storage is locked by its constructor anyway | a direct call of every module-face entry |
 | Gas forwarding | each frame keeps 1/64 (§6) | the gas-floor tests at their boundary, from inside P, old → new |
 | Typehash pins | no struct, typehash or digest changes; `*TypehashIsPinned` unchanged | run as is |
@@ -431,17 +451,18 @@ on single functions.
   after a forwarded entry** (a contract calling it twice, the router's op then `mtxRelayFee`); `mtxBatch` items across modules; a
   payable entry with value; a module called directly (every module-face entry, `NotDelegated`); `initialize` of a regulated clone
   against a registry of other code (`RegistryCodeMismatch` through A); an implementation constructed with a module without code
-  (`ModuleMissing`), with another kind's module, another group in a slot, another factory, another registry hash
-  (`ModuleMismatch`); a release whose module hash differs (`LibraryCodeHashMismatch`), whose `modules()` names an address outside
+  (`ModuleMissing`), with another kind's module, another group in a slot, another factory, another registry hash, a PQZ
+  module built at another set (`ModuleMismatch`); a release whose module hash differs (`LibraryCodeHashMismatch`), whose `modules()` names an address outside
   the env (`ModuleNotPinned`), or whose two pinned modules are swapped; `chainEnv()` read through a module (the clone's code);
   `implementation()` on the token, a clone and a module; the gas-floor boundaries (`UAVerifyGas`, the 400 k ERC-1271 cap) from
-  inside P; the DEX's governance entries through D.
+  inside P; the DEX's governance entries through D, and a DEX constructed with a D of another group or factory; the DEX's per-leg
+  `registry()` read on a kept token view (`DexGas` unchanged by the token split).
 - **Layout and closure:** a layout row per module equal to its kind's; `LinkClosure` on the closure of §4.5; the opcode scan.
 - **Mutants, one at a time:** a guard left in a module; `governed` left on a module entry; a stub with a modifier and an assembly
   return; `onlyDelegated` dropped; a stub to the wrong module; a payable stub on a non-payable module entry; `implementation()`
   forwarded (returns the module); a state variable added to a module; a module `DELEGATECALL` outside its closure; a stub that
   re-encodes; a stub that drops the return data; a stub that swallows the revert data; the constructor's module checks dropped
-  (each of code, kind, group, factory, registry hash); the factory's `ModuleNotPinned` check dropped; R-1's forward to the wrong
+  (each of code, kind, group, factory, registry hash, PQZ set); `registry()` forwarded instead of kept; the factory's `ModuleNotPinned` check dropped; R-1's forward to the wrong
   library entry.
 - **Gates:** `forge test` per test directory (never a whole-tree compile: plan T21's runner), the four PQZ sets by
   `script/pqz/at-set.sh` (one run at a time, `PqzSet.sol` restored), the size gate, gas pins old → new, the deploy-gas table of
@@ -467,7 +488,7 @@ in (rule 4, the gas-neutral form); the registry's 57 M (R4); per-kind modules (a
 
 | # | Task | Agent-days |
 |---|---|---:|
-| 3.1 | Part 3: R-1 forwards (`_libPure`), R-2 moves, measured one at a time; registry tests, `UAGas` / `UARegistryGroups` pins old → new, the deploy gas of both against 60 M | 2–2.5 |
+| 3.1 | Part 3: R-1's seven forwards (`_libPure`), R-2 moves, measured one at a time; registry tests, `UAGas` / `UARegistryGroups` pins old → new, the deploy gas of both against 60 M | 2–2.5 |
 | 4.1 | Source: legacy copy first; bodies to internal functions in their base files (rule 5), the per-kind cores and faces, the eleven G2 splits, `MtxPipelineLib` / `TradeLib` internals, the `_forward` stubs (S1, S2), 58–59 module contracts and the DEX's D, the modules' constructors and the implementation's module checks (§4.5), `modules()`; and the line item T82 left: the comment `src/metatx/IERC20MetaTx.sol:31` names `MtxRelayFee.relayRef` (now `RelayFeeRouter.relayRef`), changed here because it moves every token's metadata hash | 7–8.5 |
 | 4.2 | Deploy: `implArgs` module lists, `Env.libs` pins, `DeployBase`, `deploy.sh`, `e2e.py` (its self-test closure from `modules()`), `releases.json`, one public gate per transaction; the factory's `ModuleNotPinned` | 2–3 |
 | 4.3 | Tests and mutants of §10 | 5–6 |
@@ -487,7 +508,7 @@ in (rule 4, the gas-neutral form); the registry's 57 M (R4); per-kind modules (a
 | A stub leaves the guard set | S1; the two-calls test and its mutant |
 | `DELEGATECALL` into an empty, foreign or swapped module | `ModuleMissing`, `ModuleMismatch`, `ModuleNotPinned`, the release's code-hash pins |
 | A forgotten `payable` or an extra guard | M3, M4; their mutants |
-| The registry pair stays tight (≈ 0.25–0.5 KB of room each) | R4 accepts 60 M; a later registry change measures against the line first |
+| The registry pair stays tight (≈ 0.3–0.6 KB of room each) | R4 accepts 60 M; a later registry change measures against the line first |
 | Release cost per chain grows (≈ 96–280 M per kind against 57–124 M today, each transaction ≤ 60 M) | accepted by the owner 2026-11-07; per-family modules later as a cost lever |
 | The relayer's gas limit grows by the 63/64 share | §6; the node's operator note |
 | Gas pins move on every kind | old → new in each commit; §6's estimates replaced by forge figures |
@@ -510,3 +531,17 @@ Review of `8855be41` by Claude Fable 5.1, 2026-11-09 (read-only against `src/`);
 | P3-3 | R-2's exclusive bytes undercount what moves | **Applied:** the figures labelled [estimate, lower bound]; each move measured before the next (§5) |
 | Hedera | Mark deferred | **Applied (owner 2026-11-09, stronger):** Hedera removed from T66b; one line in §1 |
 | Owner questions 1–4 | DEX, module count, `ROLL_MAX` gates, R-1 scope | **Answered by the owner 2026-11-09 as recommended** (§11) |
+
+**Re-check of `61171e92`** (Claude Fable 5.1, 2026-11-09: fixed with notes, no P0 / P1; both P1s correctly fixed), each note
+checked against the code here:
+
+| # | Note | Outcome |
+|---|---|---|
+| P2-A | A module built at another PQZ set passes every constructor check (`PqzSet.sol`'s constants, `at-set.sh`) | **Applied:** `pqzSet()` (`PqzSet.SELFTEST`) on every module of kinds 4, 5, 12, 13, compared by the implementation's constructor; its test and mutant; the PQZ libraries noted as the same class, pinned by the env only (§4.3, §4.5, §10) |
+| P2-B | `registry`, `chainUid`, `IS_HEDERA` moved out of the token though read on chain (`SCaaSDex.sol:462, 472`, `OpenFactory.sol:733`, `ZetherDisclosure.sol:64`) | **Applied:** kept in the token with `SMART_KEY_ACCOUNT_IMPL` (≈ 0.2–0.3 KB per kind); §6's row; `DexGas` unaffected; the mutant (§4.1, §3.3, §6, §10) |
+| P3 | `_forwardRaw` unnamed; the failure path's exit | **Applied:** `_forwardRaw` named (S2); "a revert undoes `_enter`" (§4.1 rule 2, S1) |
+| P3 | the `_cached*` reason | **Applied:** the kind's override rebuilds under the clone's `chain_uid`; the cache is dead code (§4.5) |
+| P3 | R-1 forwards entries smaller than their stub | **Applied:** the threshold; seven forwards, six stay; ≈ 1.5–1.7 KB net (§5) |
+| P3 | D's checks unnamed; the DEX has no `kind()` | **Applied:** `moduleGroup()`, `factory()`; the factory's DEX checks cited (§4.2) |
+| P3 | A's links incomplete | **Applied:** the `init` and `validateEnv` library calls per kind (§4.2) |
+| P3 | `implArgs` shape; what a module on 8–13 gets | **Applied:** `abi.encode(<Kind>ImplArgs)` with named fields, decoded once; a module gets the registry hash alone, never the module list (§4.5, M1) |
