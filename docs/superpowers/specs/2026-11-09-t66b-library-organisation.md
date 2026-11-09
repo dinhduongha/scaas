@@ -479,6 +479,7 @@ on single functions.
 | b | P on kinds 11–13 and Q on 5, 12, 13 are likely to split | **Accepted: ≈ 59 token modules after the splits** (58–59 by §3.4), each ≤ 60 M (a cost item, per the 2026-11-07 acceptance of per-kind modules) |
 | c | The four-set gate while `test_gas_rollMax_relayedFullTx` is red at three sets | **Passes with those three rows listed and their figures reported; no bound moved** (`ROLL_MAX` 96 / 80 / 64 / 32 kept, the move decided later) |
 | d | R-1's scope once `uaAuthDigest` is out and the stubs are counted | **R-1 then R-2 as specified, measured per step** (§5) |
+| e | Room for later governance (owner 2026-11-09: as recommended, with the figures written out) | **No separate governance module now.** A later governance version grows `GovernanceLib` first: a library, 14,513 B at `5e5fbce2`, margin line 33,903 B of runtime (≈ 57 M asked), hard line 35,694 B (≈ 60 M asked). When a kind's admin module A passes 33,780 B of runtime (≈ 57 M asked; hard line 35,570 B ≈ 60 M asked), A splits along its domains into A (init, tables, token-meta, mint / burn) and G (the governance entries); the DEX's D the same. The byte figures are §1's fitted estimates; the asked gas decides. Recorded in 4.6's docs (the body-module rule) |
 | — | Hedera | **Not in T66b:** no Hedera question, no Hedera-specific split, no Hedera deploy step; T66b follows 60 M only (§1's last paragraph) |
 
 Not questions (decided by rules already given): `onlyDelegated` on module-face entries (fail closed); P taking the pipeline code
