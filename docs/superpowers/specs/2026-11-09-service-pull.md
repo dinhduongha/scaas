@@ -40,7 +40,8 @@ escrow, staking, bonds, subscriptions. The path may differ from `MtxRelayFee`, w
   - CTR-MTX-32 (CTR-MTX-31 is reserved by pay-meta-tax PT-1).
   - NODE-JOB-25 (22–24 are reserved by the 3f, 3g and 3h specs).
   - NET-ALL-85.
-  - CLI-SGN-44 (43 is reserved by the 3g spec).
+  - CLI-SGN-88: the client ids live on `ua-rs-sign` (CLI-SGN-88 there is the seal rule, 47 took 3g's client id, 87 is
+    the last one used at `f2319d63`); re-check at the build, when the T80 task lands on that branch.
 - **C7.** The names `ServicePullShape`, `ServicePullNotReceived` and `servicePullEntries`.
 
 ## 1. Problem and scope — SPECIFIED
@@ -430,7 +431,7 @@ On the asynchronous families, that last part is an explicit refund. Proposed NET
 
 ## 10. Clients and vectors — SPECIFIED
 
-**`ua-rs`** is the only signer. Its service-pull builder, proposed CLI-SGN-44, takes `<Op>`'s typed data, the pull token, the
+**`ua-rs`** is the only signer. Its service-pull builder, proposed CLI-SGN-88, takes `<Op>`'s typed data, the pull token, the
 payer, the amount, the lane, the nonce and `validUntil`. It refuses unless all of these hold:
 - the typed data hashes under its own EIP-712 encoder, within the field limits of §3.1;
 - `op.payer == from`;
@@ -524,7 +525,7 @@ One rule, one place. Each lands in the docs share (T81, in T19), tagged SPECIFIE
 | CTR-TND-01 Change | `tender.md` | An instance of CTR-MTX-32: `UAMetaTransfer` + `UASig` (merge R46), and `depositRef` becomes the EIP-712 digest of the tender's `Deposit` operation in its domain. Nothing moves: the tender is not built. The §11 corrections of §9. |
 | **NODE-JOB-25** (new) | `docs/node/job-api.md`, call table | The `service` kind and its rows (§8), with a Change on NODE-JOB-01 / -20 if Q1 = B; `store.md` adds `'service'` to the `chain_contract.kind` CHECK |
 | **NET-ALL-85** (new) | `docs/networks/README.md` | §9's table |
-| **CLI-SGN-44** (new) | `docs/clients/signers-clientkeys.md` | §10's signer checks and display |
+| **CLI-SGN-88** (new) | `docs/clients/signers-clientkeys.md` | §10's signer checks and display |
 
 ## 13. Owner questions
 
