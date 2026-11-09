@@ -1,0 +1,33 @@
+# 2026-11-09-ua-rs-sign-t20d9 at commit 7f7ae8ba
+step | commit | rc | counts
+docs | 7f7ae8ba | 0 | -
+ua-c | 7f7ae8ba | 0 | 9 passed 0 failed 0 ignored (cargo) 93 ran (unittest) 
+ua-py | 7f7ae8ba | 0 | 90 ran (unittest) 
+ua-go | 7f7ae8ba | 0 | 57 passed (go) 
+ua-cs | 7f7ae8ba | 1 | -
+ua-cxx | 7f7ae8ba | 0 | 41 passed (ctest) 
+ua-qt | 7f7ae8ba | 0 | 1 passed (ctest) 40 passed (qt) 
+ua-dart-frb | 7f7ae8ba | 0 | 3 passed 0 failed 0 ignored (cargo) 
+ua-rs-pqz | 7f7ae8ba | 0 | 81 passed 0 failed 3 ignored (cargo) 
+wallet-rows | 7f7ae8ba | 0 | 2 passed 0 failed 0 ignored (cargo) 
+pqz-read | 7f7ae8ba | 0 | 10 passed 0 failed 0 ignored (cargo) 
+ua-sizes | 7f7ae8ba | 1 | -
+test-features | 7f7ae8ba | 1 | -
+mutant-logs | 7f7ae8ba | 0 | -
+
+# result lines
+ua-c: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+ua-c: test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+ua-dart-frb: test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+ua-rs-pqz: test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.62s
+ua-rs-pqz: test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+ua-rs-pqz: test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.49s
+ua-rs-pqz: test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 66.71s
+ua-rs-pqz: test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 36.33s
+ua-rs-pqz: test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.22s
+ua-rs-pqz: test result: ok. 2 passed; 0 failed; 3 ignored; 0 measured; 0 filtered out; finished in 0.03s
+ua-rs-pqz: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s
+wallet-rows: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 3.60s
+wallet-rows: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 3.59s
+pqz-read: test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+pqz-read: test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 26.95s

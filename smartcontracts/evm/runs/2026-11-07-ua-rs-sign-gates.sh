@@ -917,7 +917,6 @@ ua-rs-pqz|cargo|credits_from_interleaved_sender_versions
 pqz-read|cargo|balance_proven_against_anvil
 pqz-read|cargo|tests::proof_log_rows_decode
 pqz-read|cargo|tests::transfer_entries_are_the_typed_rows
-ua-rs|cargo|proven_rows_through_the_facade
 ua-rs-pqz|cargo|proven_rows_through_the_facade
 NAMES
 )

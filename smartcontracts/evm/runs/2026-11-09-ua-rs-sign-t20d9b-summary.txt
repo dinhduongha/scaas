@@ -1,0 +1,7 @@
+# 2026-11-09-ua-rs-sign-t20d9b at commit dc7e3efd
+step | commit | rc | counts
+test-features | d60d34e8 | 0 | -
+ua-cs | dc7e3efd | 0 | 57 passed (dotnet) 
+ua-sizes | d60d34e8 | 0 | -
+
+# result lines
