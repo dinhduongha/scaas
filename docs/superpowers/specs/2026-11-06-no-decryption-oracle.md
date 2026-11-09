@@ -343,7 +343,9 @@ shapes of §4.14.4 step 4 built there); the bounds (§4.14.9) and `pqz-read --co
 reader reads LOG credits by the `blob` topic and NONE credits by the `Credited` log and its transaction, direct or relayed to the
 token; its anvil fixture is a release whose code logs a calldata tail, so a NONE transaction carries the entry's call and its
 `Credited` log); the C ABI and bindings (§4.14.10) by T20d9 (`scaas_ua_pqz_check`; each binding runs `wallet_state.json`'s
-`proven` and `check` rows). UNAUDITED.
+`proven` and `check` rows); the §5 harness through path (B) by T20d10 (`tests/no_oracle.rs` `proof_path_*`, ua-py
+`Pqz.test_no_oracle_proof_path`: the fabricated words of the residual control refused wherever a value enters the proof path,
+and the proof-path spec's negatives). UNAUDITED.
 
 #### 4.14.1 What path (B) gives, and what it does not
 

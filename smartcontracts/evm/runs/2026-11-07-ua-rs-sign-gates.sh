@@ -22,7 +22,8 @@
 # record and tail parsers: 2026-11-09-ua-rs-sign-t20d3; T20d2, ownTag and the 3h memoHash in every debit: 2026-11-09-ua-rs-sign-t20d2;
 # T20d4, path (B)'s balanceProven: 2026-11-09-ua-rs-sign-t20d4; T20d5, its debits: 2026-11-09-ua-rs-sign-t20d5; T20d6,
 # seal advice: 2026-11-09-ua-rs-sign-t20d6, which runs T20d5's steps too; T20d7, the quorum's check: 2026-11-09-ua-rs-sign-t20d7, which T20d8's run covers; T20d8, the bounds and the reader:
-# 2026-11-09-ua-rs-sign-t20d8; T20d9, the C ABI and bindings: 2026-11-09-ua-rs-sign-t20d9),
+# 2026-11-09-ua-rs-sign-t20d8; T20d9, the C ABI and bindings: 2026-11-09-ua-rs-sign-t20d9; T20d10, the oracle harness through
+# the proof path: 2026-11-09-ua-rs-sign-t20d10),
 # T20's stay. (T20d2 renamed two names below to the 3h rule: multi_bundle_memo_hash_is_zero and burn_and_refresh_memo_hash_is_zero
 # are now ..._is_the_tags, keccak256(ownTag); the op 7 formula tests run on the words command, facade_pqz_state.rs.)
 P=${GATES_P:-2026-11-08-ua-rs-sign}
@@ -126,7 +127,8 @@ print("baseline cells not measured:", miss or "none"); sys.exit(1 if miss else 0
                 cap cargo test $C --features vectors --test no_oracle --test pqz_wallet_rows) ;;
     no-oracle-n2048) (cd clients/ua-rs && cap cargo test $C $N2048 --test no_oracle && cap cargo test $C $N2048,vectors --test no_oracle) ;;
     # the same harness through the C ABI (the release library, which every binding but ua-cxx / ua-dart-frb / ua-qt loads)
-    no-oracle-ua-py) release_ua_c && (cd clients/ua-py && python3 -m unittest -v tests.test_wallet.Pqz.test_no_oracle) ;;
+    no-oracle-ua-py) release_ua_c && (cd clients/ua-py &&
+                     python3 -m unittest -v tests.test_wallet.Pqz.test_no_oracle tests.test_wallet.Pqz.test_no_oracle_proof_path) ;;
     # the rows' generator twice: the same bytes as committed
     wallet-rows) local f=smartcontracts/vectors/pqz/n2304-kmax4096/wallet_state.json a b
                  smartcontracts/vectors/pqz/gen_wallet_state.sh && a=$(sha256sum < $f) &&
@@ -161,7 +163,7 @@ print("baseline cells not measured:", miss or "none"); sys.exit(1 if miss else 0
                           2026-11-08-ua-rs-sign-t20b2 2026-11-08-ua-rs-sign-t20b3 2026-11-08-ua-rs-sign-t20b4 \
                           2026-11-08-ua-rs-sign-t20b5 2026-11-08-ua-rs-sign-t20c 2026-11-09-ua-rs-sign-t20d1 2026-11-09-ua-rs-sign-t20d3 2026-11-09-ua-rs-sign-t20d2 \
                           2026-11-09-ua-rs-sign-t20d4 2026-11-09-ua-rs-sign-t20d5 2026-11-09-ua-rs-sign-t20d6 \
-                          2026-11-09-ua-rs-sign-t20d7 2026-11-09-ua-rs-sign-t20d8 \
+                          2026-11-09-ua-rs-sign-t20d7 2026-11-09-ua-rs-sign-t20d8 2026-11-09-ua-rs-sign-t20d10 \
                           ${MUTANT_LOGS_EXTRA:-}; do
                    l=$(tail -n 1 smartcontracts/evm/runs/$t-mutants.txt); echo "$t: $l"
                    grep -Eq '(survived or not loaded: 0|0 survived, 0 not loaded)$|0 survived, 0 not loaded \(' <<< "$l" || bad=1
@@ -918,6 +920,13 @@ pqz-read|cargo|balance_proven_against_anvil
 pqz-read|cargo|tests::proof_log_rows_decode
 pqz-read|cargo|tests::transfer_entries_are_the_typed_rows
 ua-rs-pqz|cargo|proven_rows_through_the_facade
+no-oracle|cargo|proven_rows_through_the_facade
+no-oracle|cargo|proof_path_refuses_the_fabricated_words_attack
+no-oracle|cargo|proof_path_negatives
+no-oracle-n2048|cargo|proof_path_refuses_the_fabricated_words_attack
+no-oracle-n2048|cargo|proof_path_negatives
+ua-py|unittest|test_no_oracle_proof_path
+no-oracle-ua-py|unittest|test_no_oracle_proof_path
 NAMES
 )
 . "$(dirname "$0")/2026-10-27-metatx-split-gates.sh"

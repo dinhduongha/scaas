@@ -984,6 +984,116 @@ class Pqz(Case):
                     n += 1
         self.assertEqual(n, 8 * polys)
 
+    def test_no_oracle_proof_path(self):
+        """T20d10 (C-PP-9; no-oracle spec §4.14): ua-rs tests/no_oracle.rs's proof-path harness through the C ABI, over
+        wallet_state.json's path (B) rows. The crafted ciphertexts of test_no_oracle (2·K: path (B) takes no window) laid out as
+        fabricated words, all else the rows' true state: as B's credit (its leg in A's real op blob, with the debit's real P), as
+        the quorum's credit (pqz_check, no handle), as A v0's own v_f under its real tag; each refused, and balanceProven refuses
+        the session that lacks the credit. Then the proof-path spec's negatives, each refused alone: a forged T (the sender's
+        window word), a key of another historical version, P of another debit, a non-canonical coefficient (c + q), a swapped leg
+        (B's slot naming the sender's own v_f), more than K_MAX parts (the account's units), a forged ownTag. Control: the true
+        rows give their value."""
+        st = json.loads((ROOT / 'pqz-core' / 'params' / 'sets' / 'n2304-kmax4096' / 'set.json').read_text())
+        q, delta, polys, bits, kmax = st['q'], st['delta'], st['k'], st['pack_bits'], st['k_max']
+        pkp, vp = 64 * polys * bits // 8, 16 * bits // 8
+
+        def pack(lanes):
+            acc = 0
+            for c in lanes:
+                acc = acc << bits | c
+            return acc.to_bytes(len(lanes) * bits // 8, 'big')
+
+        def unpack(b):
+            acc, n = int.from_bytes(b, 'big'), len(b) * 8 // bits
+            return [acc >> bits * (n - 1 - i) & (1 << bits) - 1 for i in range(n)]
+
+        def with_code(req, addr, c):
+            r = json.loads(json.dumps(req))
+            for b in r['blobs']:
+                if b['address'] == addr:
+                    b['code'] = hx(bytes(c))
+            return r
+
+        def word(w, at, new):
+            b = bytearray(bytes.fromhex(w[2:]))
+            b[at:at + len(new)] = new
+            return hx(bytes(b))
+
+        ws = json.loads((STATE / 'pqz' / 'n2304-kmax4096' / 'wallet_state.json').read_text())
+        a0, a1, b = ws['proven']
+        quorum = ws['check'][0]['request']
+        w = self.new_wallet('pq_kat')
+        ka0 = self.keep(w.pqz_key(a0['account'], a0['index'], a0['version']))
+        kb = self.keep(w.pqz_key(b['account'], b['index'], b['version']))
+        o = json.loads(kb.call('provenOpen', b['open']))
+        self.assertEqual(o['need'], [0])
+
+        def add(req):
+            return json.loads(kb.call('provenAdd', dict(req, session=o['session'])))
+
+        refused = {'accepted': [], 'refused': [0]}
+        # B's slot: A's op 1 blob, B's leg at (uOff, vOff); A v0's accBlob at (accU, accV) of its account word
+        e = bytes.fromhex(b['open']['pending'][0]['word'][2:])
+        ptr, uo, vo = hx(e[:20]), int.from_bytes(e[20:22], 'big'), int.from_bytes(e[22:24], 'big')
+        code0 = bytes.fromhex(next(x for x in b['add']['blobs'] if x['address'] == ptr)['code'][2:])
+        s1 = bytes.fromhex(a0['open']['account'][1][2:])
+        acc, acc_v, acc_u = hx(s1[12:]), int.from_bytes(s1[8:10], 'big'), int.from_bytes(s1[10:12], 'big')
+        own0 = bytes.fromhex(next(x for x in a0['open']['blobs'] if x['address'] == acc)['code'][2:])
+        self.assertTrue(isinstance(json.loads(ka0.call('provenOpen', a0['open']))['session'], str), 'the own control')
+        n = 0
+        for j in range(polys):
+            u = [0] * (64 * polys)
+            u[64 * j] = 1
+            for off in (0, -1):
+                v = [((delta + 1) // 2 + off) % q] * 16
+                c = bytearray(code0)
+                c[1 + uo:1 + uo + pkp], c[1 + vo:1 + vo + vp] = pack(u), pack(v)
+                self.assertEqual(add(with_code(b['add'], ptr, c)), refused, ('credit', j, off))
+                self.assertEqual(code(lambda: kb.call('balanceProven', {'session': o['session']})), 'UAArgument')
+                self.assertEqual(code(lambda: W.pqz_check(with_code(quorum, ptr, c))), 'UAArgument', ('quorum', j, off))
+                c = bytearray(own0)
+                c[1 + acc_u:1 + acc_u + pkp], c[1 + acc_v:1 + acc_v + vp] = pack(u), pack(v)
+                self.assertEqual(code(lambda: ka0.call('provenOpen', with_code(a0['open'], acc, c))), 'UAArgument', ('own', j, off))
+                n += 3
+        self.assertEqual(n, 6 * polys)
+        # the negatives of B's credit, each alone in the same session
+        cr = b['add']['credits'][0]
+
+        def credit(**f):
+            x = json.loads(json.dumps(b['add']))
+            x['credits'][0].update(f)
+            return x
+
+        other_key = credit(keyRecords=[dict(cr['keyRecords'][0], word=a1['open']['keyRecord'])])
+        other_key['blobs'].append(a1['open']['blobs'][0])
+        lanes = unpack(code0[1 + vo:1 + vo + vp])
+        i = next(i for i, x in enumerate(lanes) if x + q < 1 << bits)
+        lanes[i] += q
+        nc = bytearray(code0)
+        nc[1 + vo:1 + vo + vp] = pack(lanes)
+        e19 = bytes.fromhex(cr['senderPending'][0]['word'][2:])[19]
+        forged_t = [dict(cr['senderPending'][0], word=word(cr['senderPending'][0]['word'], 19, bytes([e19 ^ 1])))]
+        for what, req in (('a forged T', credit(senderPending=forged_t)), ('a key of another historical version', other_key),
+                          ('P of another debit', credit(proof=a1['add']['credits'][0]['proof'])),
+                          ('a non-canonical coefficient', with_code(b['add'], ptr, nc))):
+            self.assertEqual(add(req), refused, what)
+        self.assertEqual(add(b['add']), {'accepted': [0], 'refused': []}, 'the session kept')
+        self.assertEqual(json.loads(kb.call('balanceProven', {'session': o['session']}))['value'], b['value'])
+        # a swapped leg: B's slot names the sender's own v_f of the same blob (after salt, u, v_t, toUA)
+        swapped = json.loads(json.dumps(b['open']))
+        swapped['pending'][0]['word'] = word(swapped['pending'][0]['word'], 22, (16 + pkp + vp + 32).to_bytes(2, 'big'))
+        s = json.loads(kb.call('provenOpen', swapped))
+        self.assertEqual(json.loads(kb.call('provenAdd', dict(b['add'], session=s['session'])))['refused'], [0], 'a swapped leg')
+        # more than K_MAX parts: the account's units at K_MAX
+        wide = json.loads(json.dumps(b['open']))
+        wide['account'][1] = word(wide['account'][1], 4, kmax.to_bytes(4, 'big'))
+        self.assertEqual(code(lambda: kb.call('provenOpen', wide)), 'UAArgument', 'more than K_MAX parts')
+        # a forged ownTag: one bit of A v0's accBlob tag
+        c = bytearray(own0)
+        c[len(c) - 1 - 32 - 8 * c[-1]] ^= 1
+        self.assertEqual(code(lambda: ka0.call('provenOpen', with_code(a0['open'], acc, c))), 'UAArgument', 'a forged ownTag')
+        self.assertTrue(isinstance(json.loads(ka0.call('provenOpen', a0['open']))['session'], str), 'the true tag')
+
     def test_pqz_handle_after_lock_is_KEY_REVOKED(self):
         w = self.new_wallet('pq_kat')
         k = self.keep(w.pqz_key())
