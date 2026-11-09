@@ -152,7 +152,8 @@ contract LinkClosureTest is Test {
     }
 
     /// typed-signing R2: the registry's link closure is `UARegistryLib` alone, and that library links nothing. The deployed
-    /// registry (through `DeployBase`, CREATE2) holds exactly one DELEGATECALL, `_lib`'s, whose target is that library.
+    /// registry (through `DeployBase`, CREATE2) holds exactly two DELEGATECALLs, `_lib`'s and (T66b R-1) `_libRaw`'s, whose
+    /// target is that library (1 -> 2).
     function test_registryClosure() public {
         string[] memory c = _closure("UARegistry", new string[](0));
         address[] memory want = registryClosureLibs();
@@ -165,7 +166,7 @@ contract LinkClosureTest is Test {
         address reg = vm.parseJsonAddress(json, ".ua_registry");
         assertEq(vm.parseJsonAddress(json, ".ua_registry_lib"), want[0]);
         (uint256 delegates, bool destruct, bool callcode) = _walk(reg.code);
-        assertEq(delegates, 1, "UARegistry: DELEGATECALL count");
+        assertEq(delegates, 2, "UARegistry: DELEGATECALL count");
         assertFalse(destruct, "UARegistry: SELFDESTRUCT");
         assertFalse(callcode, "UARegistry: CALLCODE");
         assertTrue(_holds(reg.code, want[0]), "the DELEGATECALL's target is in the code");

@@ -85,6 +85,9 @@ import {UAMldsaVerifier} from "./MlDsa.sol";
 ///         views and `requireAuthorized` stay here. The library's address is in this contract's code, so it is part of the
 ///         registry's CREATE2 address.
 ///
+///         T66b R-1 (spec 2026-11-09-t66b-library-organisation.md §5): the `pure` views whose code the library holds
+///         (`uaOf`, `keyHashOf` and five digests) run there too (`_libPure`), one copy of their code in the pair.
+///
 ///         UA-7 O1 (plan T66a): `requirePortable`, the portable check view a `PqChat` record takes, runs `UARegistryLib`'s
 ///         portable path by DELEGATECALL inside the view (`_libView`; the library entry writes nothing).
 ///
@@ -223,12 +226,12 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         return CHAIN_UID;
     }
 
-    function uaOf(uint16 kind, bytes calldata keyData) external pure returns (bytes32) {
-        return UAKinds.uaOf(kind, keyData);
+    function uaOf(uint16 kind, bytes calldata keyData) external pure returns (bytes32 ua) {
+        _libPure(UARegistryLib.uaOf.selector);
     }
 
-    function keyHashOf(uint16 kind, bytes calldata keyData) external pure returns (bytes32) {
-        return UAKinds.keyHashOf(kind, keyData);
+    function keyHashOf(uint16 kind, bytes calldata keyData) external pure returns (bytes32 h) {
+        _libPure(UARegistryLib.keyHashOf.selector);
     }
 
     /// TS-D5: the name of a kind id of the table (enabled or not); an unknown id reverts `UAKindUnknown(kind)`.
@@ -243,9 +246,9 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     function portableRecordDigest(bytes32 ua, uint16 kind, bytes32 pqzKeyHash, bytes32 kemRecordHash_)
         external
         pure
-        returns (bytes32)
+        returns (bytes32 d)
     {
-        return UAKinds.portableRecordDigest(ua, kind, pqzKeyHash, kemRecordHash_);
+        _libPure(UARegistryLib.portableRecordDigest.selector);
     }
 
     function kemRecordHash(bytes32 ua, uint64 version, KemKey calldata kem) external pure returns (bytes32) {
@@ -255,9 +258,9 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     function registrationDigest(bytes32 ua, uint16 kind, bytes32 pqzKeyHash, bytes32 kemRecordHash_, bytes32 pqzPopHash)
         external
         pure
-        returns (bytes32)
+        returns (bytes32 d)
     {
-        return UAKinds.registrationDigest(ua, kind, pqzKeyHash, kemRecordHash_, pqzPopHash);
+        _libPure(UARegistryLib.registrationDigest.selector);
     }
 
     function kemRecordDigest(bytes32 ua, uint64 version, KemKey calldata kem) external pure returns (bytes32) {
@@ -268,20 +271,20 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         return UAKinds.pqzKeyDigest(ua, pqzKeyHash);
     }
 
-    function pqzKeyRecordDigest(bytes32 ua, bytes32 pqzKeyHash, bytes32 pqzPopHash) external pure returns (bytes32) {
-        return UAKinds.pqzKeyRecordDigest(ua, pqzKeyHash, pqzPopHash);
+    function pqzKeyRecordDigest(bytes32 ua, bytes32 pqzKeyHash, bytes32 pqzPopHash) external pure returns (bytes32 d) {
+        _libPure(UARegistryLib.pqzKeyRecordDigest.selector);
     }
 
-    function pqzKeyVersionDigest(bytes32 ua, uint64 version, bytes32 pqzKeyHash) external pure returns (bytes32) {
-        return UAKinds.pqzKeyVersionDigest(ua, version, pqzKeyHash);
+    function pqzKeyVersionDigest(bytes32 ua, uint64 version, bytes32 pqzKeyHash) external pure returns (bytes32 d) {
+        _libPure(UARegistryLib.pqzKeyVersionDigest.selector);
     }
 
     function pqzKeyVersionRecordDigest(bytes32 ua, uint64 version, bytes32 pqzKeyHash, bytes32 pqzPopHash)
         external
         pure
-        returns (bytes32)
+        returns (bytes32 d)
     {
-        return UAKinds.pqzKeyVersionRecordDigest(ua, version, pqzKeyHash, pqzPopHash);
+        _libPure(UARegistryLib.pqzKeyVersionRecordDigest.selector);
     }
 
     function uaMessage(uint16 kind, bytes32 purposeTag, bytes32 digest) external pure returns (bytes32) {
@@ -657,6 +660,32 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
             v := f
         }
         v(sel, kind);
+    }
+
+    /// T66b R-1 (spec 2026-11-09-t66b-library-organisation.md §5): a `pure` view whose code `UARegistryLib` holds runs there, one
+    /// copy of it in the pair: this call's calldata under the library entry `sel` (the same ABI), none of `_lib`'s three words
+    /// appended (a pure body reads no configuration); its return or revert data is this call's, byte for byte. Only where the
+    /// view's own bytes exceed this stub (≈ 45–80 B); `uaAuthDigest` stays (it reads this contract's EIP-712 immutables).
+    function _libRaw(bytes4 sel) private {
+        address lib = address(UARegistryLib);
+        assembly {
+            mstore(0, sel)
+            calldatacopy(4, 4, sub(calldatasize(), 4))
+            let ok := delegatecall(gas(), lib, 0, calldatasize(), 0, 0)
+            returndatacopy(0, 0, returndatasize())
+            if ok { return(0, returndatasize()) }
+            revert(0, returndatasize())
+        }
+    }
+
+    /// `_libRaw` inside a `pure` view (R-1): the library entry is `pure`; the function pointer is cast, as `_libView`'s.
+    function _libPure(bytes4 sel) private pure {
+        function(bytes4) f = _libRaw;
+        function(bytes4) pure v;
+        assembly {
+            v := f
+        }
+        v(sel);
     }
 
     // ----- requireAuthorized -----

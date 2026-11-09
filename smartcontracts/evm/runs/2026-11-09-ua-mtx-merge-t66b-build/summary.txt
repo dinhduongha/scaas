@@ -1,0 +1,88 @@
+ua-mtx-merge T66b build (spec docs/superpowers/specs/2026-11-09-t66b-library-organisation.md §12; plan T66b Steps 3-5). Gate summary.
+Full outputs in git-ignored .log files: smartcontracts/evm/runs/2026-11-09-ua-mtx-merge-t66b-<label>-<step>.log (gates.sh here),
+forge per directory in runs/2026-11-08-ua-mtx-merge-t66a-t66b-<label>-test-<dir>.log (the T66a forge-dirs.sh). Forge 1.8.5, solc
+0.8.37, default set n2304-kmax4096; every heavy run through scripts/capped at 4 GB, -j2. Base 5e5fbce2 (T83). UNAUDITED.
+
+Step 1 refresh at 5e5fbce2 (the spec measured 7d653925, before T83; scratch detached worktree, real lib/ copies; the study tools of
+runs/2026-11-07-ua-mtx-merge-size-study/): forge build src --sizes --json, size_gate.py (0 errors, 99 contracts, above 65,536 B:
+WrappedPqzRegulatedToken 74,449), solc rerun "contracts 189 differ 0", size_map.py (size-map-5e5fbce2.out), gen_floor.py for the
+twelve kinds, run_fwd.sh V7 V8 MA MB MC MD1 MD2 MD3, mod_est.py (modules-5e5fbce2.out), token-forms-5e5fbce2.txt.
+T83 moved every kind +833 to +938 B (mostly dispatch and coders) and MtxPipelineLib 11,069 -> 12,054; the registry pair, the DEX
+and the factory did not move. Token V7 13,213 (kind 0) to 28,095 B (kind 13). Module bounds by §3.4's formula (lower = module -
+residue V8 + 20 B per entry + the take-in; upper = module + 20 B per entry + the take-in; P's take-in 3-7 KB with T83's +985 B, T's
+3.5-4.5 KB), KB, entries in brackets, bold = upper >= 31.7 KB:
+| kind | P | T | A | W | Z | Q |
+| 0 | 17.8-25.8 (23) | 10.1-15.1 (9) | 17.7-21.8 (44) | | | |
+| 1 | 18.4-26.7 (23) | 11.2-16.4 (10) | 14.1-18.3 (37) | 16.0-20.2 (35) | | |
+| 2 | 18.1-28.4 (23) | 9.4-16.7 (9) | 15.9-22.2 (44) | | 13.9-20.3 (36) | |
+| 3 | 18.8-29.3 (23) | 10.4-18.0 (10) | 10.4-17.0 (37) | 15.4-22.0 (31) | 19.1-25.6 (44) | |
+| 4 | 17.2-29.2 (23) | 8.4-17.4 (9) | 18.0-26.0 (44) | | | 19.4-27.3 (48) |
+| 5 | 18.0-30.9 (23) | 9.4-19.3 (10) | 9.8-18.7 (37) | 14.5-23.4 (31) | | **25.0-33.8** (58) |
+| 8 | 20.5-29.8 (28) | 10.2-16.6 (9) | 18.1-23.5 (43) | 5.7-11.1 (15) | | |
+| 9 | 21.2-30.7 (28) | 11.3-17.8 (10) | 14.5-20.0 (37) | 20.0-25.6 (49) | | |
+| 10 | **20.8-32.4** (28) | 9.5-18.1 (9) | 16.3-23.9 (43) | 5.6-13.2 (15) | 14.6-22.2 (36) | |
+| 11 | **21.6-33.4** (28) | 10.5-19.4 (10) | 10.8-18.7 (37) | 20.2-28.0 (48) | 19.0-26.9 (41) | |
+| 12 | **19.9-33.3** (28) | 8.5-18.9 (9) | 18.3-27.7 (43) | 4.6-14.0 (15) | | 19.8-29.2 (48) |
+| 13 | **20.8-35.2** (28) | 9.5-20.8 (10) | 10.2-20.5 (37) | 19.3-29.7 (48) | | **24.7-35.0** (55) |
+Every module still fits the 60 M module line (35,570 B) at its upper bound: largest kind 13's P 35.2 KB, then its Q 35.0 KB. Against
+the 57 M line (33,780 B): kind 13's P and Q miss at the top and Q on kind 5 misses by 0.1 KB, as the spec expected (§4.2's splits);
+P on kinds 10, 11, 12 sits within 2.1 KB (P on 10 is new against the spec's table, by T83's pay records).
+
+Task 3.1, the registry pair (spec §5; owner ruling d: R-1 then R-2, measured per step):
+step | tree | UARegistry B / asked | UARegistryLib B / asked | pair B
+before (5e5fbce2) | 5e5fbce2 | 33,151 / 56.38 M (spec §1) | 38,070 / 63.98 M (spec §1) | 71,221
+R-1 (seven pure views to the library, `_libPure`) | this commit | 31,497 / 53.61 M | 39,028 / 65.58 M | 70,525
+R-2 step 1 on R-1 (storePqzPop into the registry, r2-step1-storePqzPop.patch; not committed) | R-1 + patch | 35,275 / 59.94 M | 37,034 / 62.24 M | 72,309
+(asked = (regular + state) x 1.05 from DeployGas.t.sol test_t66bPair, regular x 1.05 < 2^24 in every row.) R-1 nets the pair -696 B
+(the spec estimated -0.8 to -1.2 KB of room: the library grew +958 B for the seven entries, not +0.2 to +0.4 KB). R-2's first move,
+the writer with the largest exclusive code (storePqzPop, 1,955 B), costs the registry +3,778 B and frees the library 1,994 B: the
+writer takes with it what it shares with `register`'s path in the library (`_pqzProof`, `_pqzOwn`, `_pqzCurrent`, `_list`, `_host`,
+SSTORE2.writeChunks, the verifier call), +1,784 B for the pair. The registry is then at 59.94 M, the library still 2.24 M (about
+1.3 KB) over: every further move adds to the registry. The other candidates (setKemKey, acceptMembership, cacheExpandedKey) share
+more with `register`'s path (the portable signature check `_sigOk` / `_msig` / `_memberOk`, `UAKinds.validateKeyData`). Spec §5
+item 3: both cannot reach 60 M with one library and no verification rule changed, so the build stops here and asks the owner (a
+second registry library, or the forward form on more registry entries). R-1 is kept (the specified first step, the pair smaller).
+
+Red first (the new tests against the old code):
+step | commit | rc | counts
+forge test/ua/UARegistryPair.t.sol on 5e5fbce2's src | a1353950 + test | 1 | 6 passed, 1 failed: test_r1_viewsRunInTheLibrary (expected call to UARegistryLib, called 0 times); the control test_r1_control_writerRunsInTheLibrary passed
+
+Gates on R-1:
+step | commit | rc | counts
+forge test/ua (forge-dirs.sh t66b-r1) | R-1 tree | 1 | 710 passed, 2 failed: test_T_GAS_register_ua8PerKind, test_T_GAS_setKemKey (UA-8 regular-gas pins, +14 to +71 gas: the library's dispatch holds seven more entries); 52 suites, UARegistryPair 7 new
+UA-8 gas rows at the four sets (GAS_REPIN=1, at-set.sh, sparse) | R-1 tree | 1 (expected: a repin run ends FAILED) | 79 rows, 17 above their pin (ua8-pins-r1.txt, old -> new; state gas unchanged on every row)
+UA-8 gas tests at n2048-kmax1024 / n2304-kmax4096 / n2560-kmax16384 / n2816-kmax65536, pins moved | this commit | 0 / 0 / 0 / 0 | 3 passed each; src/pqz/PqzSet.sol restored (git diff --exit-code) after each
+forge test/v2 | R-1 tree | 1 | 652 passed, 1 failed: test_registryClosure (the registry's DELEGATECALL count 2 != 1: `_libRaw`'s, to the same library)
+forge test/v2/LinkClosure.t.sol, the count moved 1 -> 2 | this commit | 0 | 4 passed
+forge test/governance | R-1 tree | 1 | 420 passed, 4 failed: test_plusZero_uaExecuteTransfer_{normal,wrapped,normalZether,wrappedZether} (exact gas pins, -4 to -44: the registry's requireAuthorized code moved)
+PlusZero.t.sol PLUS_ZERO_WRITE=1, then the check | this commit | 0 / 0 | plus_zero_gas.json 4 of 26 rows (below); plus_zero_slots.json unchanged
+forge test/governance | this commit | 0 | 424 passed; 47 suites
+forge test/metatx | this commit | 1 | 540 passed, 1 failed (test_gas_rollMax_relayedFullTx, the known red: owner kept ROLL_MAX), 1 skipped; 44 suites (as at T83)
+forge test/as | this commit | 0 | 463 passed; 76 suites
+forge test/merge | this commit | 0 | 341 passed; 29 suites
+forge test/wallet | this commit | 0 | 181 passed; 12 suites
+forge test/account | this commit | 0 | 98 passed; 5 suites
+forge test/hedera | this commit | 0 | 20 passed; 2 suites
+forge test/zether | this commit | 0 | 441 passed, 4 skipped; 37 suites
+forge test/ExpectRevertLint.t.sol | this commit | 0 | 3 passed
+size gate (forge build src --sizes --json; size_gate.py), size-baseline.json moved | this commit | 0 | 0 errors, 99 contracts; above 65,536 B: WrappedPqzRegulatedToken 74,449 (unchanged list)
+size_gate.py --self-test | this commit | 0 | ok
+pair deploy gas (DeployGas.t.sol test_t66bPair) | this commit | 0 | the R-1 row above
+docs_check.py check | this commit | 0 | 0 errors, 5 warnings (line budgets, unchanged)
+(test/ua's other 710 passed on the R-1 tree before the pins moved; the pin edits are numbers only, rerun as the UA-8 rows above.)
+
+Mutants (mutants.py, each alone on src/, its tests; the file restored byte-equal after each):
+mutant | tests that went red | rc
+R1-wrong-library-entry (keyHashOf forwarded to the library's uaOf) | test_r1_diff_vectors, test_r1_viewsRunInTheLibrary | 1
+1 of 1 killed.
+
+Pins old -> new: size-baseline.json UARegistry 33,151 -> 31,497, UARegistryLib 38,070 -> 39,028 (the `_comment` records it); UA-8
+regular-gas pins (UARegistryUA8.t.sol `_pin`, state gas unchanged): register bip340 161,415 -> 161,429, bls-bn254-minsig 353,608 ->
+353,626, bls12381-minsig 338,834 -> 338,848, ed25519 324,121 -> 324,135, mldsa44 4,348,695 -> 4,348,713, msig-classical 166,155 ->
+166,225, p256 164,621 -> 164,635, schnorr-bls12381 202,954 -> 202,968, schnorr-bn254 175,819 -> 175,833, secp256k1 160,434 ->
+160,448, slhdsa128s 1,123,403 -> 1,123,421, webauthn-p256 182,102 -> 182,139, zether-bls12381 215,671 -> 215,689; setKemKey
+fndsa512/v2 at n2048-kmax1024, n2560-kmax16384, n2816-kmax65536 2,516,039 -> 2,516,110 and at n2304-kmax4096 2,516,060 ->
+2,516,110; plus_zero_gas.json uaExecuteTransfer_normal 100,784 -> 100,740, uaExecuteTransfer_wrapped 100,807 -> 100,763,
+uaExecuteTransfer_normalZether 142,393 -> 142,389, uaExecuteTransfer_wrappedZether 142,472 -> 142,468; LinkClosure the registry's
+DELEGATECALL count 1 -> 2. UAGas and UARegistryGroups (test/ua, --isolate by foundry.toml) unchanged: green. Layout, typehash and
+CREATE2 pins unchanged.

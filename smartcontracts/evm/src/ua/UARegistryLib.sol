@@ -24,7 +24,8 @@ import {UAMldsaVerifier} from "./MlDsa.sol";
 ///         A derived `msig` member's signature goes through `requireAuthorized` on `address(this)` under `member`: the
 ///         same `_derived`, its kind was checked against its record at registration (`_membersWorst`); the verifier call
 ///         stays in the one place, and this library needs no member's verifier address.
-///         Called directly every entry reverts: solc's library call protection covers each one, none is `view` or `pure`.
+///         Called directly every writer reverts: solc's library call protection covers each one, none is `view`; the seven
+///         `pure` views of T66b R-1 answer a direct call with their pure result.
 ///         `acceptMembership` (CTR-UA-37) runs here too; its member check is `_memberOk`, as a stored record's.
 ///         UNAUDITED.
 library UARegistryLib {
@@ -49,6 +50,51 @@ library UARegistryLib {
     uint256 internal constant MSIG_ACCEPTED_GAS = 2_500;
     /// `keccak256("")`: the hash of an empty proof, refused as a `pqzPopHash` (ruling A6-m).
     bytes32 internal constant EMPTY_PROOF_HASH = keccak256("");
+
+    // ----- the registry's `pure` views (T66b R-1, spec 2026-11-09-t66b-library-organisation.md §5) -----
+
+    /// One copy of their code in the registry pair: `UARegistry` runs these by DELEGATECALL (`_libPure`, nothing appended), the
+    /// same ABI and answers as when they were compiled into the registry. `pure`, so solc's call protection does not cover them:
+    /// a direct call answers the same pure result, and reads and writes nothing.
+    function uaOf(uint16 kind, bytes calldata keyData) external pure returns (bytes32) {
+        return UAKinds.uaOf(kind, keyData);
+    }
+
+    function keyHashOf(uint16 kind, bytes calldata keyData) external pure returns (bytes32) {
+        return UAKinds.keyHashOf(kind, keyData);
+    }
+
+    function portableRecordDigest(bytes32 ua, uint16 kind, bytes32 pqzKeyHash, bytes32 kemRecordHash_)
+        external
+        pure
+        returns (bytes32)
+    {
+        return UAKinds.portableRecordDigest(ua, kind, pqzKeyHash, kemRecordHash_);
+    }
+
+    function registrationDigest(bytes32 ua, uint16 kind, bytes32 pqzKeyHash, bytes32 kemRecordHash_, bytes32 pqzPopHash)
+        external
+        pure
+        returns (bytes32)
+    {
+        return UAKinds.registrationDigest(ua, kind, pqzKeyHash, kemRecordHash_, pqzPopHash);
+    }
+
+    function pqzKeyRecordDigest(bytes32 ua, bytes32 pqzKeyHash, bytes32 pqzPopHash) external pure returns (bytes32) {
+        return UAKinds.pqzKeyRecordDigest(ua, pqzKeyHash, pqzPopHash);
+    }
+
+    function pqzKeyVersionDigest(bytes32 ua, uint64 version, bytes32 pqzKeyHash) external pure returns (bytes32) {
+        return UAKinds.pqzKeyVersionDigest(ua, version, pqzKeyHash);
+    }
+
+    function pqzKeyVersionRecordDigest(bytes32 ua, uint64 version, bytes32 pqzKeyHash, bytes32 pqzPopHash)
+        external
+        pure
+        returns (bytes32)
+    {
+        return UAKinds.pqzKeyVersionRecordDigest(ua, version, pqzKeyHash, pqzPopHash);
+    }
 
     // ----- the appended words -----
 

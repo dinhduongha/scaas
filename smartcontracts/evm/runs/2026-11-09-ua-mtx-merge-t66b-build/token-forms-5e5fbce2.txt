@@ -1,0 +1,15 @@
+# T66b build, Step 1 refresh at 5e5fbce2 (after T83): each kind today, V7 (all but the ERC-20 core forwarded; fwd_spike.py) and the floor (gen_floor.py), runtime B. UNAUDITED research tooling.
+| kind | today | V7 | floor |
+|---|---:|---:|---:|
+| NormalToken | 34757 | 13213 | 7587 |
+| WrappedToken | 45522 | 16567 | 10735 |
+| NormalZetherToken | 43055 | 18121 | 10209 |
+| WrappedZetherToken | 53552 | 21595 | 13442 |
+| NormalPqzToken | 52657 | 20165 | 11723 |
+| WrappedPqzToken | 62022 | 24959 | 15580 |
+| NormalRegulatedToken | 42486 | 16410 | 9441 |
+| WrappedRegulatedToken | 53221 | 19666 | 12495 |
+| NormalZetherRegulatedToken | 50885 | 21013 | 11772 |
+| WrappedZetherRegulatedToken | 61599 | 24628 | 15149 |
+| NormalPqzRegulatedToken | 60234 | 23177 | 13271 |
+| WrappedPqzRegulatedToken | 74449 | 28095 | 17241 |
