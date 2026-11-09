@@ -18,7 +18,9 @@ import {UAKinds} from "../ua/UAKinds.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
 import {DexPuller} from "./DexPuller.sol";
 import {TokenCall} from "./TokenCall.sol";
-import {GovernanceBase, GovernanceBaseCore, GovernanceUse} from "../governance/GovernanceBase.sol";
+import {GovernanceUse} from "../governance/GovernanceBase.sol";
+import {SCaaSDexGovernance} from "./SCaaSDexAdmin.sol";
+import {ImplArgs, ITokenModule} from "../metatx/ITokenModule.sol";
 import {IGovernance} from "../governance/IGovernance.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {GovernanceBits} from "../governance/GovernanceBits.sol";
@@ -54,7 +56,10 @@ import {MetaTxLib} from "../common/MetaTxLib.sol";
 ///         starved verify (`UAVerifyGas`) reverts the whole `mtxSettle`. Hybrid (`mtxHybrid` /
 ///         `mtxHybridVia`, spec §4): one listed-market taker against 0..n makers at their own price and the rest of
 ///         its sell routed outside, in one atomic plan; the taker alone gets the output above `outsideFloor`.
-contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient, GovernanceBase {
+///         T66b (spec 2026-11-09-t66b-library-organisation.md §4.2, owner 2026-11-09 ruling (a)): the 22 governance entries
+///         forward by DELEGATECALL to the admin module D (`SCaaSDexD`, `modules()`); the governance hooks are
+///         `SCaaSDexGovernance`'s, shared with D.
+contract SCaaSDex is ISCaaSDex, SaltedEIP712, SCaaSDexGovernance, IGovernance {
     uint256 internal constant PPM = 1_000_000;
     uint8 internal constant ESCROW = 2;
     uint8 internal constant KIND_SCAAS = 1;
@@ -113,6 +118,13 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient, Governan
     /// @notice The factory, at the same address on every chain (chain-neutral spec §2.1): a chain-neutral immutable.
     address public immutable FACTORY;
 
+    /// @notice T66b §4.5: the admin module (`implArgs`) has no code; or it is of another group or factory.
+    error ModuleMissing(uint256 i);
+    error ModuleMismatch(uint256 i);
+
+    /// @dev The admin module D (`SCaaSDexD`), from `implArgs`.
+    address private immutable _MD;
+
     /// @dev Per leg, computed before any transfer.
     struct Calc {
         bytes32 h;
@@ -138,12 +150,19 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient, Governan
     }
 
     /// @dev Runs once on the implementation and locks it.
-    /// @dev The factory's append (`OpenFactory.deployDexImplementation`, chain-neutral spec §2.1): its address; no
-    ///      `implArgs`. The chain values (`chain_uid`, the router, the `SmartKeyAccount` implementation) are the clone's
-    ///      env, in its code (CTR-TOK-29).
-    constructor(address factory_, bytes memory) SaltedEIP712Core("SCaaS Dex", "1", bytes32(0)) GovernanceBaseCore(address(0)) {
+    /// @dev The factory's append (`OpenFactory.deployDexImplementation`, chain-neutral spec §2.1): its address and
+    ///      `implArgs = abi.encode(ImplArgs([D]))` (T66b §4.5), D checked here: code (`ModuleMissing`), its group and
+    ///      this factory (`ModuleMismatch`). The chain values (`chain_uid`, the router, the `SmartKeyAccount`
+    ///      implementation) are the clone's env, in its code (CTR-TOK-29).
+    constructor(address factory_, bytes memory implArgs) SaltedEIP712Core("SCaaS Dex", "1", bytes32(0)) {
         FACTORY = factory_;
         _s().initialized = true;
+        address[] memory ms = abi.decode(implArgs, (ImplArgs)).modules;
+        if (ms.length != 1) revert ModuleMissing(ms.length);
+        address d = ms[0];
+        if (d.code.length == 0) revert ModuleMissing(0);
+        if (ITokenModule(d).moduleGroup() != GROUP_D || ITokenModule(d).factory() != factory_) revert ModuleMismatch(0);
+        _MD = d;
     }
 
     function _s() private pure returns (DexStorage storage s) {
@@ -178,26 +197,6 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient, Governan
         s.puller = p;
         _setFeeSplit(s, cfg.relayerSharePpm, cfg.treasury);
     }
-
-    /// @dev A governance entry never runs inside a settlement: no outside call of a running plan reaches it.
-    function _guardIn() internal view override returns (bool) {
-        if (_reentrancyGuardEntered()) revert ReentrancyGuardReentrantCall();
-        return false;
-    }
-
-    function _guardOut(bool) internal pure override {}
-
-    /// @dev An owner or holder that is an EIP-7702 designator is refused (owner ruling 2026-10-30, D2).
-    function _caller() internal view override returns (address) {
-        SigCheck.requireNotDelegated(msg.sender);
-        return msg.sender;
-    }
-
-    function _validBits() internal pure override returns (uint256) { return GovernanceBits.DEX_BITS; }
-    function _roleBits() internal pure override returns (uint256) { return GovernanceBits.DEX_BITS; }
-    function _contractOnlyBits() internal pure override returns (uint256) { return 0; }
-    function _scalarBits() internal pure override returns (uint256) { return 0; }
-    function _scopeBits() internal pure override returns (uint256) { return 0; }
 
     /// @notice B-31: `IGovernance` and `IERC165`, as on a token.
     function supportsInterface(bytes4 id) external pure returns (bool) {
@@ -299,7 +298,6 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient, Governan
     /// @dev No cache (chain-neutral spec §2.4): rebuilt under the clone's `chain_uid` on every call.
     function _domainSeparatorV4() internal view override returns (bytes32) { return _separator(_chainUid()); }
 
-    function _govRouter() internal view override returns (address) { return ChainEnvCode.govRouter(); }
     function puller() external view returns (address) { return _s().puller; }
     function pulled(bytes32 orderHash) external view returns (uint256) { return TradeLib.$().pulled[orderHash]; }
     function minNonce(address from, uint256 batch) external view returns (uint256) {
@@ -933,5 +931,88 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient, Governan
         if (UAKinds.inNativeSpace(to)) return _send(token, TradeLib.addr(to), amount);
         if (!_ledgerOn(token)) revert UAReceiveNotLedger(token);
         IUALedger(token).transferToUA(to, amount);
+    }
+
+    // ------------------------------------------------------------------ governance: forwarded to D (T66b §4.2, S1, S2)
+
+    /// @notice The admin module (§4.5; `OpenFactory` refuses a release whose module is not pinned in the env).
+    function modules() external view returns (address[] memory m) {
+        m = new address[](1);
+        m[0] = _MD;
+    }
+
+    function GOV_ROUTER() external view returns (address r) { _forwardView(); }
+    function features() external view override returns (uint256 r) { _forwardView(); }
+    function lockedFeatures() external view override returns (uint256 r) { _forwardView(); }
+    function owner() external view override returns (bytes32 r) { _forwardView(); }
+    function pendingOwner() external view override returns (bytes32 r) { _forwardView(); }
+    function hasRole(uint8, bytes32) external view override returns (bool r) { _forwardView(); }
+    function validBits() external pure override returns (uint256 r) { _forwardPure(); }
+    function holderCount(uint8) external view override returns (uint256 r) { _forwardView(); }
+    function grantDelay() external view override returns (uint64 r) { _forwardView(); }
+    function lastProposedAt() external view override returns (uint64 r) { _forwardView(); }
+
+    function pendingGrant(uint8, bytes32) external view override returns (uint64 a, bytes32 b, bytes32 c, bool d) {
+        _forwardView();
+    }
+
+    function grantOf(uint8, bytes32) external view override returns (Grant memory g) { _forwardView(); }
+
+    function bitLabel(uint8) external view override returns (BitType t, bytes4 s, string memory l) {
+        _forwardView();
+    }
+    function grantRole(uint8, bytes32) external override { _forward(); }
+    function setGrant(uint8, bytes32, GrantTerms calldata) external override { _forward(); }
+    function cancelGrant(uint8, bytes32) external override { _forward(); }
+    function revokeRole(uint8, bytes32) external override { _forward(); }
+    function renounceRole(uint8) external override { _forward(); }
+    function disableFeature(uint8) external override { _forward(); }
+    function transferOwnership(bytes32) external override { _forward(); }
+    function acceptOwnership() external override { _forward(); }
+    function renounceOwnership() external override { _forward(); }
+
+    /// @dev S1: today's `governed` entry: `_guardIn` (on the DEX the transient guard's check), DELEGATECALL of this call's
+    ///      calldata to D, its revert data verbatim on failure, `_guardOut`, its return data verbatim (never a modifier
+    ///      with an assembly return, Fable P1-1).
+    function _forward() private {
+        bool outer = _guardIn();
+        (bool ok, bytes memory ret) = _MD.delegatecall(msg.data);
+        if (!ok) {
+            assembly ("memory-safe") {
+                revert(add(ret, 32), mload(ret))
+            }
+        }
+        _guardOut(outer);
+        assembly ("memory-safe") {
+            return(add(ret, 32), mload(ret))
+        }
+    }
+
+    /// @dev S2: a view entry, the same copy and return without a guard, `view` by the registry's R2 cast.
+    function _forwardRaw(address d) private {
+        (bool ok, bytes memory ret) = d.delegatecall(msg.data);
+        assembly ("memory-safe") {
+            if iszero(ok) { revert(add(ret, 32), mload(ret)) }
+            return(add(ret, 32), mload(ret))
+        }
+    }
+
+    function _forwardView() private view {
+        function(address) f = _forwardRaw;
+        function(address) view v;
+        assembly ("memory-safe") {
+            v := f
+        }
+        v(_MD);
+    }
+
+    /// @dev S2: `validBits`, `pure` as before: the immutable's read and the forward under the same cast.
+    function _forwardPure() private pure {
+        function() view f = _forwardView;
+        function() pure p;
+        assembly ("memory-safe") {
+            p := f
+        }
+        p();
     }
 }

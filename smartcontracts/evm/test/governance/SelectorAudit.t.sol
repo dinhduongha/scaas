@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-import {kindArgs} from "../../script/KindModules.sol";
+import {kindArgs, dexArgs} from "../../script/KindModules.sol";
 
 import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {UACall} from "../ua/UACall.sol";
@@ -337,7 +337,7 @@ contract SelectorAuditPlainTest is SelectorAuditRows, UALedgerBase {
         _govern(w, address(new MockERC20("Leg", "LEG", 6)));
         wt = WrappedToken(payable(EnvKit.clone(address(new WrappedToken(address(this), kindArgs(1, address(this), ""))), e)));
         wt.initialize(nid(address(this)), 1, abi.encode(w));
-        dex = SCaaSDex(EnvKit.clone(address(new SCaaSDex(address(this), "")), e));
+        dex = SCaaSDex(EnvKit.clone(address(new SCaaSDex(address(this), dexArgs(address(this)))), e));
         dex.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(OWNER_ID, 0, address(0x7EA5), false, 0, address(0))));
         _regulate(c);
         nr = NormalRegulatedToken(EnvKit.clone(address(new NormalRegulatedToken(address(this), kindArgs(8, address(this), regArgs()))), e));

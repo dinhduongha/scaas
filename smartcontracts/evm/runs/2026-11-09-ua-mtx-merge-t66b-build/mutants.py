@@ -25,6 +25,7 @@ UA_W = "{test/ua/UARegistryPair.t.sol,test/ua/UARegistryUA8.t.sol,test/ua/UARegi
 UA_R = "{test/ua/UARegistryPair.t.sol,test/ua/UARegistryUA8.t.sol,test/ua/UARegistryNested.t.sol}"
 NTM = "src/metatx/NormalTokenModules.sol"
 AUTH = "        MtxPipelineLib._authorize(c, from, purpose, digest, auth);"
+DEX, DEXD, DEXT = "src/dex/SCaaSDex.sol", "src/dex/SCaaSDexAdmin.sol", "test/ua/UADexAdmin.t.sol"
 
 # id: (tests, [(file, old, new, occurrences)])
 MUTANTS = {
@@ -60,6 +61,10 @@ MUTANTS = {
                                                                           "return MtxPipelineLib.paymentCount(payNo);", 2)]),
     "P4-P-authorize-hook-skips-the-check": ("test/ua/UAReceiverFee.t.sol", [(NTM, AUTH + "\n    }\n\n    function _pipeCallDigest",
                                                                           "        c; from; purpose; digest; auth;\n    }\n\n    function _pipeCallDigest", 1)]),
+    # 4.1, the DEX's admin module D (spec §4.2, §4.5): the DEX's check of D's group, of D's factory; D's `onlyDelegated`
+    "D1-dex-group-check-dropped": (DEXT, [(DEX, "ITokenModule(d).moduleGroup() != GROUP_D || ", "", 1)]),
+    "D2-dex-factory-check-dropped": (DEXT, [(DEX, " || ITokenModule(d).factory() != factory_", "", 1)]),
+    "D3-d-onlyDelegated-dropped": (DEXT, [(DEXD, "if (address(this) == _SELF) revert NotDelegated();", "", 1)]),
 }
 
 

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {dexArgs} from "../../script/KindModules.sol";
+
 import {Test, Vm} from "forge-std/Test.sol";
 import {DeployHarness} from "../helpers/DeployHarness.sol";
 import {Create2Probe} from "../zether/ZetherDeploy.t.sol";
@@ -523,6 +525,6 @@ contract GovDeployTest is Test {
     }
 
     function _dex(address) internal view returns (bytes memory) {
-        return abi.encodePacked(type(SCaaSDex).creationCode, abi.encode(address(this), bytes("")));
+        return abi.encodePacked(type(SCaaSDex).creationCode, abi.encode(address(this), dexArgs(address(this))));
     }
 }

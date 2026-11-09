@@ -117,8 +117,11 @@ contract MsgSenderLintTest is Test {
         assertEq(_count("src/pqz/WrappedPqzTokenCore.sol", "msg.sender", false), 0, "WrappedPqzToken");
         assertEq(_count("src/pqz/PqzWrappedLib.sol", "msg.sender", false), 0, "PqzWrappedLib");
         assertEq(_count("src/zether/ZetherWrappedLib.sol", "msg.sender", false), 0, "ZetherWrappedLib");
-        assertEq(_count("src/dex/SCaaSDex.sol", "msg.sender", false), 14,
-            "SCaaSDex: the factory check, _msgSender x2 (with its designator refusal), the self-call guard x2, the submitter x9");
+        // T66b §4.2: the DEX's `_caller` (its designator refusal and its return) moved to `SCaaSDexGovernance`, shared with D
+        assertEq(_count("src/dex/SCaaSDex.sol", "msg.sender", false), 12,
+            "SCaaSDex: the factory check, the self-call guard x2, the submitter x9");
+        assertEq(_count("src/dex/SCaaSDexAdmin.sol", "msg.sender", false), 2,
+            "SCaaSDexGovernance: _caller x2 (with its designator refusal)");
         // ua-mtx-merge T2: 4 -> 3, the address `mtxRelayFee` (its struct's relayer) left for legacy/ua-mtx-merge/
         assertEq(_count("src/metatx/MetaTokenBase.sol", "msg.sender", false), 3,
             "MetaTokenBase: factory check in initialize; the relayer of mtxRelayFee (the payment's word and `_relayHash`), bound to the direct caller");

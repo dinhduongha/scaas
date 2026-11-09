@@ -23,7 +23,8 @@ import {UARegistryCoreLib} from "../../src/ua/UARegistryCoreLib.sol";
 import {UARegistryAuxLib} from "../../src/ua/UARegistryAuxLib.sol";
 import {RegulatedLib} from "../../src/regulated/RegulatedLib.sol";
 import {ComplianceRegistry} from "../../src/regulated/ComplianceRegistry.sol";
-import {deployKindModules} from "../../script/KindModules.sol";
+import {deployKindModules, deployDexModules} from "../../script/KindModules.sol";
+import {ImplArgs} from "../../src/metatx/ITokenModule.sol";
 
 /// @notice A regulated release's `implArgs` (regulated-kinds spec §5, F-11; plan T29): the canonical `ComplianceRegistry`
 ///         runtime's code hash, `REGISTRY_CODEHASH`.
@@ -163,20 +164,37 @@ library Catalogue {
         return release(f, kind, version, plainEnv(address(f), ska, f.chainUid(), registry, hedera), code);
     }
 
-    /// @dev DEX release `version` from `code` on a DEX env with `ska` (published once per distinct env).
+    /// @dev DEX release `version` from `code` on a DEX env with `ska` (published once per distinct env). T66b §4.2: the
+    ///      admin module D is deployed for `f` first, pinned in the env beside the libraries, and named in `implArgs`.
     function dex(OpenFactory f, uint64 version, bytes memory code, address ska) internal returns (address) {
+        (address[] memory ms, bytes memory implArgs) = _dexModules(f);
         IFactoryToken.Env memory e = plainEnv(address(f), ska, f.chainUid(), address(0), false);
         e.libs = new address[](2);
         (e.libs[0], e.libs[1]) = (address(GovernanceLib), address(TradeLib));
         e.libCodeHashes = new bytes32[](2);
         (e.libCodeHashes[0], e.libCodeHashes[1]) = (address(GovernanceLib).codehash, address(TradeLib).codehash);
+        e = withModules(e, ms);
         uint16 v = f.latestDexEnvVersion();
         if (v == 0 || keccak256(abi.encode(f.dexEnvOf(v))) != keccak256(abi.encode(e))) {
             vm.prank(f.registrar());
             f.publishDexEnv(++v, e);
         }
         vm.prank(f.registrar());
-        return f.deployDexImplementation(version, v, code, "");
+        return f.deployDexImplementation(version, v, code, implArgs);
+    }
+
+    /// @dev The D of the latest DEX env when it serves `f` (so one env serves every release of a test), else a new one.
+    function _dexModules(OpenFactory f) private returns (address[] memory ms, bytes memory implArgs) {
+        uint16 v = f.latestDexEnvVersion();
+        if (v != 0) {
+            address[] memory l = f.dexEnvOf(v).libs;
+            if (l.length == 3 && l[2].code.length != 0) {
+                ms = new address[](1);
+                ms[0] = l[2];
+                return (ms, abi.encode(ImplArgs(ms)));
+            }
+        }
+        return deployDexModules(address(f));
     }
 
     /// @dev Where `deployImplementation(kind, version, any env, code, "")` puts the release: chain-neutral, the env is not

@@ -286,3 +286,18 @@ forge test/account | this commit | 1 | 96 passed, 2 failed (test_mandateWalletKa
 forge test/hedera | this commit | 1 | 18 passed, 2 failed (the KAT address and digest); same on 23955351
 forge test/governance | this commit | 1 | compile error in test/governance/GovRegulatedBits.t.sol (not migrated by 4.1; 4.3)
 Mutants (mutants.py, each alone; NormalTokenModules.sol md5-equal after): 4 of 4 killed (mutants.txt).
+
+Task 4.1, the DEX's admin module D (spec §4.2, §4.5, owner 2026-11-09 ruling (a)): src/dex/SCaaSDexAdmin.sol holds
+SCaaSDexGovernance (the DEX's governance hooks: `_guardIn` / `_guardOut`, `_caller`, the bit masks, `_govRouter`; one definition,
+inherited by the DEX and by D) and SCaaSDexD (the 22 governance entries calling GovernanceBaseCore's bodies, `onlyDelegated` but
+the `pure` `validBits`, `moduleGroup()` 10, `factory()`, constructor `(factory_, bytes)`). SCaaSDex keeps every other entry and
+forwards the 22 (S1 `_forward` with `_guardIn` / `_guardOut` for the 9 governed, S2 casts for the 12 views and `validBits`);
+constructor `(factory_, abi.encode(ImplArgs([D])))` checks D (ModuleMissing: count, code; ModuleMismatch: group, factory);
+`modules()` added. Test helpers: KindModules.sol `deployDexModules` / `dexArgs` (gen_faces.py), Catalogue.dex pins D in the env.
+Sizes, runtime B: SCaaSDex 35,210 -> 32,991 (-2,219; spec estimate 33,202; T-2's release line 33,594 B met); SCaaSDexD 6,459 (new;
+estimate 5-9 KB); nothing else moved.
+Red first: test/ua/UADexAdmin.t.sol does not compile on 3e00abf3 (no SCaaSDexD, no `modules()` on the DEX); here 3 passed
+(the governance views and a write run in D, D refuses direct calls, the constructor's checks). test/ua UADex, UADexInvariant,
+UATradeVectors, UATrade: 39 passed. test/metatx: 536 passed, 6 failed (the same 6); MsgSenderLint's SCaaSDex row 14 -> 12 and a
+SCaaSDexAdmin row 2 (`_caller` moved with the hooks).
+Mutants: 3 of 3 killed (the DEX's group check dropped, its factory check dropped, D's onlyDelegated dropped).

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-import {kindArgs} from "../../script/KindModules.sol";
+import {kindArgs, dexArgs} from "../../script/KindModules.sol";
 
 import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {UAMetaTxBase} from "../../src/metatx/UAMetaTxBase.sol";
@@ -406,7 +406,7 @@ contract OrderRowsTokenTest is OrderRows, UALedgerBase {
     function test_typedOpsVectors_CancelDexOrderRow() public {
         j = vm.readFile(TYPED_OPS);
         string memory op = "CancelDexOrder";
-        SCaaSDex dex = SCaaSDex(EnvKit.clone(address(new SCaaSDex(address(this), "")), EnvKit.env(chainUidA, address(0), address(0), false)));
+        SCaaSDex dex = SCaaSDex(EnvKit.clone(address(new SCaaSDex(address(this), dexArgs(address(this)))), EnvKit.env(chainUidA, address(0), address(0), false)));
         dex.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(nid(address(this)), 200_000, address(0x7EA5), false, 0, address(0))));
         string memory p = ".ops.CancelDexOrder.message.order.";
         address sell = vm.parseJsonAddress(j, string.concat(p, "sellToken"));

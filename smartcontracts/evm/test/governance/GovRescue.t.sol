@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-import {kindArgs} from "../../script/KindModules.sol";
+import {kindArgs, dexArgs} from "../../script/KindModules.sol";
 
 import {Test} from "forge-std/Test.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
@@ -443,7 +443,7 @@ contract GovRescueDexTest is Test {
     /// Review 2026-11-04 M-2: `DexConfig.rescueTo` follows the tokens' rule (spec §6.2): never `UA_POOL`, `SHIELD_POOL`, the
     /// DEX or its puller (`RescueConfigInvalid`); the test plays the factory of a bare clone, so the DEX's address is known.
     function test_dexRescueToThisOrAPoolRefusedAtInit() public {
-        SCaaSDex impl = new SCaaSDex(address(this), "");
+        SCaaSDex impl = new SCaaSDex(address(this), dexArgs(address(this)));
         SCaaSDex d = SCaaSDex(EnvKit.clone(address(impl), EnvKit.env(UID, address(0), address(0), false)));
         address p = vm.computeCreateAddress(address(d), 1); // the puller: the clone's first CREATE
         address[4] memory bad = [MetaTxLib.UA_POOL, MetaTxLib.SHIELD_POOL, address(d), p];

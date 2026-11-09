@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-import {kindArgs} from "../../script/KindModules.sol";
+import {kindArgs, dexArgs} from "../../script/KindModules.sol";
 
 import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
@@ -256,7 +256,7 @@ abstract contract GovRouterFixture is UARegistryBase {
     }
 
     function _dex(bytes32 owner_) internal returns (SCaaSDex d) {
-        if (dexImpl == address(0)) dexImpl = address(new SCaaSDex(address(this), ""));
+        if (dexImpl == address(0)) dexImpl = address(new SCaaSDex(address(this), dexArgs(address(this))));
         d = SCaaSDex(EnvKit.clone(dexImpl, _cenv()));
         d.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(owner_, 0, TREASURY, false, 0, address(0))));
     }

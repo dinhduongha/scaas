@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-import {kindArgs} from "../../script/KindModules.sol";
+import {kindArgs, dexArgs} from "../../script/KindModules.sol";
 
 import {Test} from "forge-std/Test.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
@@ -88,7 +88,7 @@ contract GovIdentityTest is Test {
     }
 
     function _dex(bytes32 owner_) internal returns (SCaaSDex d) {
-        d = SCaaSDex(EnvKit.clone(address(new SCaaSDex(address(this), "")), _cenv()));
+        d = SCaaSDex(EnvKit.clone(address(new SCaaSDex(address(this), dexArgs(address(this)))), _cenv()));
         d.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(owner_, 0, address(0xAA), false, 0, address(0))));
     }
 

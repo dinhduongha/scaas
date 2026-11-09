@@ -39,10 +39,10 @@ KFILE = {'NormalToken': 'src/metatx', 'WrappedToken': 'src/metatx', 'NormalZethe
          'NormalRegulatedToken': 'src/regulated', 'WrappedRegulatedToken': 'src/regulated',
          'NormalZetherRegulatedToken': 'src/regulated', 'WrappedZetherRegulatedToken': 'src/regulated',
          'NormalPqzRegulatedToken': 'src/regulated', 'WrappedPqzRegulatedToken': 'src/regulated'}
-GROUP_ID = {'P': 1, 'T': 2, 'A': 3, 'W': 4, 'Z': 5, 'Q': 6, 'P2': 7, 'Q2': 8, 'G': 9}
+GROUP_ID = {'P': 1, 'T': 2, 'A': 3, 'W': 4, 'Z': 5, 'Q': 6, 'P2': 7, 'Q2': 8, 'G': 9, 'D': 10}  # D: the DEX's (src/dex/SCaaSDexAdmin.sol)
 GROUP_DOC = {'P': 'the signed pipeline, named transfers and pay', 'T': 'trade', 'A': 'admin: governance, init, tables, token meta',
              'W': 'wrapped and regulated', 'Z': 'Zether', 'Q': 'PQZ', 'P2': 'pay and the relay fee',
-             'Q2': 'the PQZ state, setters and views', 'G': 'governance'}
+             'Q2': 'the PQZ state, setters and views', 'G': 'governance', 'D': 'the DEX\'s governance'}
 TOKEN_KIND = {'NormalToken': 'NORMAL', 'WrappedToken': 'WRAPPED', 'NormalZetherToken': 'NORMAL_ZETHER',
               'WrappedZetherToken': 'WRAPPED_ZETHER', 'NormalPqzToken': 'NORMAL_PQZ', 'WrappedPqzToken': 'WRAPPED_PQZ',
               'NormalRegulatedToken': 'NORMAL_REGULATED', 'WrappedRegulatedToken': 'WRAPPED_REGULATED',
@@ -238,6 +238,19 @@ function deployKindModules(uint8 kind, address factory, bytes memory coreArgs)
 /// @notice `deployKindModules`' `implArgs` alone (a test's `new <Kind>(factory, kindArgs(kind, factory, coreArgs))`).
 function kindArgs(uint8 kind, address factory, bytes memory coreArgs) returns (bytes memory implArgs) {
     (, implArgs) = deployKindModules(kind, factory, coreArgs);
+}
+
+/// @notice Deploys the DEX's admin module D for `factory` (T66b §4.2) and returns it with the DEX release's `implArgs`.
+function deployDexModules(address factory) returns (address[] memory modules, bytes memory implArgs) {
+    Vm vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
+    modules = new address[](1);
+    modules[0] = vm.deployCode("SCaaSDexAdmin.sol:SCaaSDexD", abi.encode(factory, bytes("")));
+    implArgs = abi.encode(ImplArgs(modules));
+}
+
+/// @notice `deployDexModules`' `implArgs` alone (a test's `new SCaaSDex(factory, dexArgs(factory))`).
+function dexArgs(address factory) returns (bytes memory implArgs) {
+    (, implArgs) = deployDexModules(factory);
 }
 '''
 

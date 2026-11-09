@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-import {kindArgs} from "../../script/KindModules.sol";
+import {kindArgs, dexArgs} from "../../script/KindModules.sol";
 
 import {IGovernanceRouter} from "../../src/governance/IGovernanceRouter.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
@@ -1359,7 +1359,7 @@ contract TypedOpsRouterTest is UALedgerBase {
         deployCodeTo("GovernanceRouter.sol:GovernanceRouter", abi.encode(chainUidA, REG_L, address(0), false), router);
         normalImpl = address(new NormalToken(address(this), kindArgs(0, address(this), "")));
         wrappedImpl = address(new WrappedToken(address(this), kindArgs(1, address(this), "")));
-        dexImpl = address(new SCaaSDex(address(this), ""));
+        dexImpl = address(new SCaaSDex(address(this), dexArgs(address(this))));
     }
 
     // ------------------------------------------------------------------ the row, the targets
