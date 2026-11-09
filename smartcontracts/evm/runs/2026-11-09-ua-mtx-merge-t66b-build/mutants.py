@@ -119,7 +119,7 @@ MUTANTS.update({
         "        if (ITokenModule(m).REGISTRY_CODEHASH() != REGISTRY_CODEHASH) revert ModuleMismatch(i);\n", "", 1)]),
     "M-ctor-pqz-set-check-dropped": ("test/t66b/Modules.t.sol", [("src/pqz/NormalPqzToken.sol",
         "        if (ITokenModule(m).pqzSet() != PqzSet.SELFTEST) revert ModuleMismatch(i);\n", "", 1)]),
-    "M-registry-forwarded": ("test/v2/DexGas.t.sol", [("src/metatx/ERC20MetaTx.sol",
+    "M-registry-forwarded": ("test/t66b/Paths.t.sol", [("src/metatx/ERC20MetaTx.sol",
         "    function registry() public view  returns (address) {\n",
         "    function registry() public view  returns (address) {\n        ITokenModules(address(this)).modules();\n", 1),
         ("src/metatx/ERC20MetaTx.sol", "pragma solidity ^0.8.24;\n", "pragma solidity ^0.8.24;\n\nimport {ITokenModules} from \"./ITokenModule.sol\";\n", 1)]),

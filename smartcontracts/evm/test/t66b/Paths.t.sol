@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {VmSafe} from "forge-std/Vm.sol";
 import {V2Fixture} from "../v2/helpers/V2Fixture.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
@@ -54,6 +55,36 @@ contract PathsTest is V2Fixture {
         w.wrap{value: 2 ether}(2 ether); // the single-leg form
         assertEq(w.balanceOf(holder), 3 ether);
         assertEq(address(w).balance, 3 ether);
+    }
+
+    /// §4.1 rule 1, P2-B: the kept entries run in the token itself: each answers with the call and the clone's one
+    /// DELEGATECALL to its implementation, nothing more (a forward to a module, or any hop, would show as one more access), the one-word env views
+    /// (`registry`, `chainUid`, `IS_HEDERA`, `SMART_KEY_ACCOUNT_IMPL`) the DEX and the factory read on chain among them.
+    function test_p_keptViewsMakeNoCall() public {
+        bytes[16] memory calls = [abi.encodeWithSignature("registry()"), abi.encodeWithSignature("chainUid()"),
+            abi.encodeWithSignature("IS_HEDERA()"), abi.encodeWithSignature("SMART_KEY_ACCOUNT_IMPL()"),
+            abi.encodeWithSignature("kind()"), abi.encodeWithSignature("factory()"), abi.encodeWithSignature("FACTORY()"),
+            abi.encodeWithSignature("implementation()"), abi.encodeWithSignature("modules()"),
+            abi.encodeWithSignature("name()"), abi.encodeWithSignature("symbol()"), abi.encodeWithSignature("decimals()"),
+            abi.encodeWithSignature("totalSupply()"), abi.encodeWithSignature("balanceOf(address)", holder),
+            abi.encodeWithSignature("allowance(address,address)", holder, address(this)),
+            abi.encodeWithSignature("balanceOfUA(bytes32)", bytes32(0))];
+        for (uint256 i; i < calls.length; ++i) {
+            vm.startStateDiffRecording();
+            (bool ok,) = address(n).staticcall(calls[i]);
+            VmSafe.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
+            assertTrue(ok, vm.toString(calls[i]));
+            uint256 calls_;
+            for (uint256 j; j < acc.length; ++j) {
+                if (acc[j].kind == VmSafe.AccountAccessKind.Call || acc[j].kind == VmSafe.AccountAccessKind.StaticCall
+                    || acc[j].kind == VmSafe.AccountAccessKind.DelegateCall || acc[j].kind == VmSafe.AccountAccessKind.CallCode) {
+                    ++calls_;
+                    assertTrue(acc[j].account == address(n) || acc[j].account == normalImpl,
+                        string.concat(vm.toString(calls[i]), ": a call out"));
+                }
+            }
+            assertEq(calls_, 2, string.concat(vm.toString(calls[i]), ": the call and the proxy's DELEGATECALL only"));
+        }
     }
 
     function test_p_implementationEverywhere() public view {

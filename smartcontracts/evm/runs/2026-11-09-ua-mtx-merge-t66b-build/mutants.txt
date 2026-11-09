@@ -25,3 +25,24 @@ D3-d-onlyDelegated-dropped | test_d_directCallRefused | 1
 3.1d (the five *Digest views in the Aux library):
 R1-wrong-library-entry | test_d_digestsRunInTheAuxLibrary | 1
 R1d-digest-routed-to-core | test_d_digestsRunInTheAuxLibrary | 1
+M-guard-in-module | test_diff_normal, test_p_relayedOpIntoModuleA, test_p_twoCallsAfterAForwardedEntry | 1
+M-governed-in-module | test_diff_normalRegulated | 1
+M-stub-modifier-asm-return | test_p_twoCallsAfterAForwardedEntry | 1
+M-onlyDelegated-dropped | test_m_directCallRefused | 1
+M-stub-wrong-module | test_diff_normal, test_p_relayedOpIntoModuleA, test_p_twoCallsAfterAForwardedEntry | 1
+M-payable-stub-nonpayable-entry | test_p_payableEntryTakesValue | 1
+M-implementation-forwarded | test_p_implementationEverywhere | 1
+M-state-variable-in-module | test_m_layoutEqualsTheKind | 1
+M-delegatecall-outside-closure | test_moduleOpcodes | 1
+M-stub-reencodes | test_diff_normal | 1
+M-stub-drops-return | test_diff_normal, test_diff_wrapped, test_p_relayedOpIntoModuleA | 1
+M-stub-swallows-revert | test_diff_normal, test_diff_wrapped | 1
+M-ctor-code-check-dropped | test_m_constructorChecksEveryModule | 1
+M-ctor-kind-check-dropped | test_m_constructorChecksEveryModule | 1
+M-ctor-group-check-dropped | test_m_constructorChecksEveryModule | 1
+M-ctor-factory-check-dropped | test_m_constructorChecksEveryModule | 1
+M-ctor-registry-hash-check-dropped | test_m_constructorChecksEveryModule | 1
+M-ctor-pqz-set-check-dropped | test_m_constructorChecksEveryModule | 1
+M-registry-forwarded | none (survived) | 0
+M-factory-ModuleNotPinned-dropped | test_m_dexModuleNotPinned, test_m_releaseModuleNotPinned, test_m_unregisteredModuleNotPinned | 1
+M-dex-governed-stub-without-guardIn | none (survived) | 0
