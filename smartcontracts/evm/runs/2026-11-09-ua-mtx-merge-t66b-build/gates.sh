@@ -30,7 +30,7 @@ step() {
         --sizes --json > out/t66b-sizes/sizes-$L.json 2> runs/2026-11-09-ua-mtx-merge-t66b-$L-size-build.log; \
         python3 ../../scripts/size_gate.py out/t66b-sizes/sizes-$L.json size-baseline.json) ;;
     ua8-gas-*) # the UA-8 gas rows (GAS| lines) at one set; GAS_REPIN=1 prints them without the pin check (the test ends FAILED)
-      GAS_REPIN=${GAS_REPIN:-0} FOUNDRY_SPARSE_MODE=true scripts/capped $EVM/script/pqz/at-set.sh "${1#ua8-gas-}" test -j 2 \
+      GAS_REPIN=${GAS_REPIN:-0} FOUNDRY_TEST=test/ua scripts/capped $EVM/script/pqz/at-set.sh "${1#ua8-gas-}" test -j 2 \
         --match-path test/ua/UARegistryUA8.t.sol --match-test 'test_T_GAS_' -vv; r=$?
       git diff --exit-code -- $EVM/src/pqz/PqzSet.sol || r=3
       return $r ;;

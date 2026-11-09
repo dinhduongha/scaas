@@ -165,3 +165,61 @@ registrationOf msig-pq on gen 1 86,449 -> 92,990 / 91,687 -> 99,640 / 97,149 -> 
 LinkClosure the registry's closure 1 -> 2 libraries (DELEGATECALL count 2 unchanged); GovernanceRouter CREATE2
 0x7d3C8bE73d8840bA378F83D8Ac1297080ceaCc03 -> 0x13CBB3D5DCb0736f87F136ad13276568A80d1aa9 (the metadata hash: UAKinds /
 UAStore comments). UAGas, UARegistryGroups, plus_zero_gas.json, layout and typehash pins unchanged.
+
+Task 3.1c, the auxiliary library calls the core's shared helpers (owner 2026-11-09, spec §11 (f), built now): UARegistryCoreLib gains
+four external helpers, each its internal twin and nothing else: `portableOk` (`_portableOk`: the portable signature check, `_sigOk`,
+`_msig`, `_memberOk`), `pqzHolder` (`_pqzHolder`: the holder rule and the msig debit bound), `pqzProof` (`_pqzProof` with the proof
+logged: SSTORE2 of the proof, the 0x0142 verifier call, owner, list, current), `keyUa` (`UAKinds.validateKeyData` + `uaOf`). None is
+`view` or `pure`, so solc's library call protection refuses a direct call. UARegistryAuxLib runs them by one nested DELEGATECALL each
+(`_core`): the helper's calldata followed by the three words the registry appended to the Aux entry (its last 96 bytes), so the core
+reads the same `_cfgKind` / `_cfgPqz` / `_cloneHash`; a core without code reverts `UAConfig(0)` (a DELEGATECALL to it would succeed
+with nothing checked); revert data verbatim; one level only (the core never calls back). The Aux library links the core (deploy order
+core -> Aux; forge, DeployBase and e2e.py link the closure recursively). Measured next move (the core under its 57 M line again):
+`registrationOf` and `uaCount` from the core to the Aux library (one `_libView` target each in the registry).
+contract | 3.1b B / asked | 3.1c B / asked (DeployGas.t.sol test_t66bPair: regular + state)
+UARegistryCoreLib | 33,891 / 56.98 M | 32,583 / 54.79 M (2,143,857 + 50,035,590)
+UARegistryAuxLib | 33,407 / 56.17 M | 20,828 / 35.10 M (1,380,311 + 32,050,440)
+UARegistry | 28,006 / 47.76 M | 28,045 / 47.83 M (2,458,014 + 43,092,450; +39 B is task 4.1's SaltedEIP712 split, not 3.1c)
+Steps (forge build of the trio): the four helpers alone: core 34,608 B (705 B over its 33,903 B line, under 35,694 B), Aux 19,596 B;
+then registrationOf + uaCount to the Aux library: core 32,583 B, Aux 20,828 B. The pair 67,298 -> 53,411 B; every one under 57 M;
+regular x 1.05 < 2^24 on every row.
+Per-call gas, execution only (auxgas/AuxGas.t.sol through GasProbe, cold accounts, mock verifiers on the PQ kinds and 0x0142;
+auxgas-3.1c.txt): setKemKey mldsa44 v1 3,091,750 -> 3,099,891 (+8,141), setPqzKey mldsa44 v0 26,296,469 -> 26,309,418 (+12,949: two
+nested calls), storePqzPop mldsa44 v0 981,733 -> 1,010,684 (+28,951: the 16,384 B key and the proof copied into the nested call),
+cacheExpandedKey mldsa44 part 0 40,308,365 -> 40,314,263 (+5,898); the reads -22 to +61 (dispatch), registrationOf -4. The spec's
+estimate was +3 to +6 k; storePqzPop pays the copy of its key and proof. UA-8 rows (charged gas: regular is max(execution, the
+EIP-7976 calldata floor); ua8-gas-3.1c.txt, 79 rows, 37 moved): setKemKey fndsa512/v2 2,515,921 -> 2,524,122 (+8,201) at the four
+sets; setKemKey mldsa65/v2 and every storePqzPop row unchanged (the calldata floor dominates both before and after); register
++28 to +160 and popOf +45, registrationOf -4 / +74 (the libraries' dispatch tables); state gas unchanged on every row.
+
+Red first: test/ua/UARegistryPair.t.sol (the 3.1c tests) on 3a837c85's registry sources | 3a837c85 + test | 1 | compile error: Member
+"registrationOf" not found in UARegistryAuxLib (the helpers and the moved reads did not exist)
+
+Gates on the 3.1c tree:
+step | tree | rc | counts
+forge test/ua (forge-dirs.sh t66b-c) | 3.1c | 1 | the run ended without its summary after 51 of 52 suites (UARegistryUA8 not reached: rerun alone below); failed only
+  where task 4.1/4.2 left them (UADeploy 7: DeployBase deploys no modules yet, DeployFailed; UAReceivers setUp: its harness builds
+  `NormalToken(msg.sender, "")` without implArgs; MandateWalletMerged test_smartKeyAccountByteIdentical: 4.1's byte pin, STATE.md);
+  UARegistryPair 17 passed (6 new), UAGas 8, UARegistryGroups 14 and every other registry suite passed
+forge test/ua/UARegistryUA8.t.sol alone (-j 1) | 3.1c, pins before | 1 | 85 passed, 3 failed: the gas pins of register msig-pq-native,
+  popOf mldsa65/v2, registrationOf gen 2 (the rows below)
+UA-8 gas rows at the four sets (GAS_REPIN=1; at-set.sh with FOUNDRY_TEST=test/ua: sparse mode compiled other directories, which
+  4.1 has not migrated) | 3.1c | 1 each (expected) | 79 rows, 19 above their pin (ua8-pins: register msig-pq-native 330,779 ->
+  330,810; popOf +45 on its 10 rows; registrationOf gen 2 +74 on 4 rows; setKemKey fndsa512/v2 2,516,110 -> 2,524,122 on 4 rows)
+forge test/v2/LinkClosure.t.sol | 3.1c | 1 | test_libraryOpcodes passed (UARegistryAuxLib: 1 DELEGATECALL); the three tests that
+  deploy through DeployBase fail DeployFailed() (task 4.2); test_registryClosure's link part (Aux -> core) runs before its deploy
+DeployGas.t.sol test_t66bPair | 3.1c | 0 | the rows above
+
+Mutants of 3.1c (mutants.py, each alone, FOUNDRY_TEST=test/ua; the registry files restored byte-equal, md5 checked after the run):
+C1-aux-wrong-core (`_core` to `address(this)`) | test_c_auxNeedsItsCore, test_c_cacheRunsTheCoreKeyCheck, test_c_kemWriteRunsTheCorePortableCheck, test_c_pqzWritesRunTheCoreHelpers | 1
+C2a-core-helper-direct-call-portableOk (`view`: no call protection) | test_c_coreHelpersRefuseADirectCall | 1
+C2b-core-helper-direct-call-keyUa (`view`) | test_c_coreHelpersRefuseADirectCall | 1
+C3-helper-result-ignored (`portableOk`'s answer `|| true`) | test_c_kemWriteRunsTheCorePortableCheck, test_c_pqzWritesRunTheCoreHelpers | 1
+4 of 4 killed.
+UA-8 gas tests at the four sets, pins moved (ua8-pins-3.1c.txt, 19 rows) | this commit | 0 / 0 / 0 / 0 | 3 passed each; src/pqz/PqzSet.sol restored after each
+Pins old -> new (3.1c): size-baseline.json UARegistryCoreLib 33,891 -> 32,583, UARegistryAuxLib 33,407 -> 20,828 (UARegistry's row
+moves with 4.1's rows in 4.4); UA-8 regular-gas pins, 19 rows (state gas unchanged): register msig-pq-native 330,779 -> 330,810, popOf
+fndsa512/v2 17,594 -> 17,639 and mldsa65/v2 20,051 -> 20,096 (four sets each), popOf msig-12-slhdsa128s 17,261 -> 17,306, popOf
+unregistered 10,695 -> 10,740, registrationOf gen 2 135,561 -> 135,635 / 145,937 -> 146,011 / 156,768 -> 156,842 / 176,276 -> 176,350,
+setKemKey fndsa512/v2 2,516,110 -> 2,524,122 (four sets); LinkClosure: UARegistryAuxLib links UARegistryCoreLib (0 -> 1 library,
+DELEGATECALL count 0 -> 1). UAGas, UARegistryGroups, layout and typehash pins unchanged.

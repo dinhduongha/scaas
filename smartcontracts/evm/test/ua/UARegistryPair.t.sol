@@ -7,6 +7,7 @@ import {UARegistryCoreLib} from "../../src/ua/UARegistryCoreLib.sol";
 import {UARegistryAuxLib} from "../../src/ua/UARegistryAuxLib.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {UARegistryBase} from "./UARegistryBase.sol";
+import {UAMldsaVerifier} from "../../src/ua/MlDsa.sol";
 
 /// The seven `pure` views as they were in the registry (T66b spec §5, R-1): the same ABI, `UAKinds` compiled in.
 contract KindsDirect {
@@ -177,9 +178,9 @@ contract UARegistryPairTest is UARegistryBase {
     /// The reads off the hot path run in their library inside the view; the hot views run in no library.
     function test_b_readsRunInTheirLibrary() public {
         (address k, address r, bytes32 ua) = (address(UARegistryAuxLib), address(UARegistryCoreLib), bytes32(uint256(7)));
-        _routed(r, k, UARegistryCoreLib.registrationOf.selector);
+        _routed(k, r, UARegistryAuxLib.registrationOf.selector); // 3.1c: moved from the core library
         reg.registrationOf(ua);
-        _routed(r, k, UARegistryCoreLib.uaCount.selector);
+        _routed(k, r, UARegistryAuxLib.uaCount.selector);
         reg.uaCount(0x0103);
         bytes4[8] memory aux = [UARegistryAuxLib.popOf.selector, UARegistryAuxLib.popSlotsOf.selector,
             UARegistryAuxLib.webAuthnKeyOf.selector, UARegistryAuxLib.pqzPopOf.selector, UARegistryAuxLib.pqzKeySigOf.selector,
@@ -235,5 +236,115 @@ contract UARegistryPairTest is UARegistryBase {
         vm.etch(address(UARegistryAuxLib), "");
         vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, uint16(0)));
         new UARegistry(chainUidA, address(0), false, BUDGET, address(0), true, _cfgs(address(mock)));
+    }
+
+    // ----- 3.1c (owner 2026-11-09, spec §11 (f)): the auxiliary library runs the core's shared helpers by a nested DELEGATECALL -----
+
+    address internal constant REG_C = 0x5Ca0000000000000000000000000000000000c31;
+
+    /// A registry with the mock verifier on the PQ kinds and 0x0142, and an `mldsa44` UA registered on it.
+    function _pqReg() internal returns (UARegistry r, bytes32 ua, bytes memory pk) {
+        uint16[8] memory ks = [uint16(0x0101), 0x0130, 0x0131, 0x0132, 0x0133, 0x0134, 0x0135, 0x0142];
+        UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](8);
+        for (uint256 i; i < 8; ++i) c[i] = UARegistry.KindConfig(ks[i], address(mock), i == 0 ? 400_000 : 4_250_000);
+        r = _deploy(REG_C, chainUidA, address(0), false, BUDGET, address(0), true, c);
+        pk = new bytes(1312);
+        for (uint256 i; i < pk.length; ++i) pk[i] = bytes1(uint8(i * 7 + 1));
+        ua = _register(r, UAKinds.MLDSA44, pk);
+    }
+
+    function _kemOf(uint8 salt) internal pure returns (IUARegistry.KemKey memory) {
+        return IUARegistry.KemKey(UAKinds.KEM_SCHEME_MLKEM1024_X25519, new bytes(1568), bytes32(uint256(salt)));
+    }
+
+    function _kemSig(bytes memory pk, bytes32 ua, uint64 v, IUARegistry.KemKey memory k)
+        internal
+        pure
+        returns (IUARegistry.UASig memory s)
+    {
+        s.signature = _sig(pk, UAKinds.uaMessage(UAKinds.MLDSA44, UAKinds.PURPOSE_KEM,
+            UAKinds.kemRecordDigest(ua, v, UAKinds.kemPk(k))));
+    }
+
+    /// `setKemKey` (version >= 1) checks its signature by the core's `portableOk`, once; a bad signature is refused
+    /// (`UAUnauthorized`: the helper's answer is used), a good one stored.
+    function test_c_kemWriteRunsTheCorePortableCheck() public {
+        (UARegistry r, bytes32 ua, bytes memory pk) = _pqReg();
+        IUARegistry.KemKey memory k = _kemOf(1);
+        IUARegistry.UASig memory bad = _kemSig(pk, ua, 2, k); // signed for another version
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
+        r.setKemKey(ua, 1, k, bad);
+        vm.expectCall(address(UARegistryCoreLib), abi.encodeWithSelector(UARegistryCoreLib.portableOk.selector), 1);
+        r.setKemKey(ua, 1, k, _kemSig(pk, ua, 1, k));
+        (IUARegistry.KemKey memory got,) = r.kemKeyAt(ua, 1);
+        assertEq(got.x25519, k.x25519, "stored");
+    }
+
+    /// `setPqzKey` runs the core's `pqzHolder` and `portableOk`, `storePqzPop` its `pqzProof`, each once: the key is set,
+    /// then proven (owned, current); a bad PQZ key signature is refused.
+    function test_c_pqzWritesRunTheCoreHelpers() public {
+        (UARegistry r, bytes32 ua, bytes memory pk) = _pqReg();
+        bytes memory key = new bytes(16_384);
+        for (uint256 i; i < key.length; i += 32) key[i] = bytes1(uint8(i >> 5) | 1);
+        bytes32 h = UAKinds.keyHashOf(UAKinds.PQZ_MLWE, key);
+        bytes memory pqzPop = _sig(key, UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_PQZ_KEY, UAKinds.pqzKeyDigest(ua, h)));
+        bytes32 popHash = keccak256(pqzPop);
+        IUARegistry.UASig memory s;
+        s.signature = _sig(pk, UAKinds.uaMessage(UAKinds.MLDSA44, UAKinds.PURPOSE_PQZ_KEY,
+            UAKinds.pqzKeyRecordDigest(ua, h, popHash)));
+        IUARegistry.UASig memory bad;
+        bad.signature = _sig(pk, bytes32(0));
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
+        r.setPqzKey(ua, 0, key, popHash, bad);
+        vm.expectCall(address(UARegistryCoreLib), abi.encodeWithSelector(UARegistryCoreLib.pqzHolder.selector), 1);
+        vm.expectCall(address(UARegistryCoreLib), abi.encodeWithSelector(UARegistryCoreLib.portableOk.selector), 1);
+        r.setPqzKey(ua, 0, key, popHash, s);
+        vm.expectCall(address(UARegistryCoreLib), abi.encodeWithSelector(UARegistryCoreLib.pqzProof.selector), 1);
+        r.storePqzPop(ua, 0, pqzPop);
+        assertEq(r.keyOwner(h), ua, "proven: owned");
+        assertEq(r.pqzPopOf(ua, 0), pqzPop, "proof stored");
+    }
+
+    /// `cacheExpandedKey` validates the key and derives its id in the core (`keyUa`): its refusal passes verbatim.
+    function test_c_cacheRunsTheCoreKeyCheck() public {
+        UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](2);
+        c[0] = UARegistry.KindConfig(0x0101, address(mock), 400_000);
+        c[1] = UARegistry.KindConfig(UAKinds.MLDSA44, address(new UAMldsaVerifier(UAKinds.MLDSA44, address(0), "", "")), 4_250_000);
+        UARegistry r = _deploy(REG_C, chainUidA, address(0), false, BUDGET, address(0), true, c);
+        vm.expectCall(address(UARegistryCoreLib), abi.encodeWithSelector(UARegistryCoreLib.keyUa.selector), 1);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyData.selector, UAKinds.MLDSA44));
+        r.cacheExpandedKey(UAKinds.MLDSA44, new bytes(5), 0);
+    }
+
+    /// The core's helpers answer only a DELEGATECALL (solc's library call protection: none is `view` or `pure`). Positive
+    /// control: a `pure` R-1 view of the same library answers a direct call; each input below returns, unprotected, without a
+    /// revert (`portableOk` false on key data, `keyUa` the id).
+    function test_c_coreHelpersRefuseADirectCall() public {
+        address core = address(UARegistryCoreLib);
+        (bool ok,) = core.call(abi.encodeWithSelector(UARegistryCoreLib.uaOf.selector, uint16(0x0103), _key(0x0103)));
+        assertTrue(ok, "control: a pure view answers");
+        IUARegistry.UASig memory s;
+        s.keyData = hex"01";
+        (ok,) = core.call(abi.encodeWithSelector(UARegistryCoreLib.portableOk.selector, uint16(0x0103), bytes(""), bytes32(0),
+            bytes32(0), bytes32(0), s));
+        assertFalse(ok, "portableOk");
+        (ok,) = core.call(abi.encodeWithSelector(UARegistryCoreLib.keyUa.selector, uint16(0x0103), _key(0x0103)));
+        assertFalse(ok, "keyUa");
+        (ok,) = core.call(abi.encodeWithSelector(UARegistryCoreLib.pqzHolder.selector, uint16(0x0103), bytes(""), bytes32(0), false));
+        assertFalse(ok, "pqzHolder");
+        (ok,) = core.call(abi.encodeWithSelector(UARegistryCoreLib.pqzProof.selector, bytes32(0), uint64(0), bytes(""), bytes(""),
+            bytes32(0), bytes32(0)));
+        assertFalse(ok, "pqzProof");
+    }
+
+    /// An auxiliary library whose core has no code refuses (`UAConfig(0)`): a DELEGATECALL to it would succeed with nothing
+    /// checked. The control: the same write passes with the core in place (`test_c_kemWriteRunsTheCorePortableCheck`).
+    function test_c_auxNeedsItsCore() public {
+        (UARegistry r, bytes32 ua, bytes memory pk) = _pqReg();
+        IUARegistry.KemKey memory k = _kemOf(1);
+        IUARegistry.UASig memory s = _kemSig(pk, ua, 1, k);
+        vm.etch(address(UARegistryCoreLib), "");
+        vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, uint16(0)));
+        r.setKemKey(ua, 1, k, s);
     }
 }

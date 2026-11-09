@@ -18,6 +18,8 @@ EVM = os.path.dirname(os.path.dirname(HERE))
 CAPPED = os.path.join(EVM, "..", "..", "scripts", "capped")
 FORGE = os.path.expanduser("~/.foundry/bin/forge")
 REG = "src/ua/UARegistry.sol"
+AUX = "src/ua/UARegistryAuxLib.sol"
+CORE = "src/ua/UARegistryCoreLib.sol"
 PAIR = "test/ua/UARegistryPair.t.sol"
 UA_W = "{test/ua/UARegistryPair.t.sol,test/ua/UARegistryUA8.t.sol,test/ua/UARegistryMembership.t.sol}"
 UA_R = "{test/ua/UARegistryPair.t.sol,test/ua/UARegistryUA8.t.sol,test/ua/UARegistryNested.t.sol}"
@@ -38,6 +40,14 @@ MUTANTS = {
                                       "_libView(address(UARegistryCoreLib), UARegistryAuxLib.popOf.selector,", 1)]),
     "B4-aux-library-check-dropped": (PAIR, [(REG, " || address(UARegistryAuxLib).code.length == 0) revert UAConfig(0);",
                                              ") revert UAConfig(0);", 1)]),
+    # 3.1c (owner 2026-11-09, spec §11 (f)): the auxiliary library linked to a wrong core; a core helper reachable by a direct
+    # call (its call protection gone: `view`); a helper's result ignored
+    "C1-aux-wrong-core": (PAIR, [(AUX, "address core = address(UARegistryCoreLib);", "address core = address(this);", 1)]),
+    "C2a-core-helper-direct-call-portableOk": (PAIR, [(CORE, "IUARegistry.UASig calldata sig) external returns (bool)",
+                                                       "IUARegistry.UASig calldata sig) external view returns (bool)", 1)]),
+    "C2b-core-helper-direct-call-keyUa": (PAIR, [(CORE, "function keyUa(uint16 kind, bytes memory keyData) external returns",
+                                                  "function keyUa(uint16 kind, bytes memory keyData) external view returns", 1)]),
+    "C3-helper-result-ignored": (PAIR, [(AUX, "digest, sig)), (bool)\n        );", "digest, sig)), (bool)\n        ) || true;", 1)]),
 }
 
 
@@ -54,8 +64,10 @@ def run(mid):
     try:
         for f in files:
             open(os.path.join(EVM, f), "w").write(mut[f])
-        env = {**os.environ, "FOUNDRY_SPARSE_MODE": "true", "FOUNDRY_OUT": "out/mutants-t66b",
-               "FOUNDRY_CACHE_PATH": "cache/mutants-t66b"}
+        # T66b 4.1 on: one test directory per compile (FOUNDRY_TEST), as the gate's runner; sparse mode compiled other directories
+        tdir = re.match(r"\{?(test/[a-z0-9]+)/", tests).group(1)
+        env = {**os.environ, "FOUNDRY_TEST": tdir, "FOUNDRY_OUT": "out/mutants-t66b-" + tdir.replace("/", "-"),
+               "FOUNDRY_CACHE_PATH": "cache/mutants-t66b-" + tdir.replace("/", "-")}
         with open(logp, "w") as log:
             rc = subprocess.call([CAPPED, FORGE, "test", "-j", "2", "--match-path", tests], cwd=EVM, env=env, stdout=log,
                                  stderr=subprocess.STDOUT)

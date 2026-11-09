@@ -153,8 +153,8 @@ contract LinkClosureTest is Test {
         for (uint256 i; i < libs.length; ++i) h[i] = libs[i].codehash;
     }
 
-    /// typed-signing R2, T66b 3.1b: the registry's link closure is `UARegistryCoreLib` and `UARegistryAuxLib` (1 -> 2), and neither
-    /// links the other or anything else (the auxiliary library compiles in the core library's `internal` helpers). The deployed registry
+    /// typed-signing R2, T66b 3.1b: the registry's link closure is `UARegistryCoreLib` and `UARegistryAuxLib` (1 -> 2); T66b 3.1c:
+    /// the auxiliary library links the core (its shared helpers, by a nested DELEGATECALL), the core links nothing. The deployed registry
     /// (through `DeployBase`, CREATE2) holds exactly two DELEGATECALLs, `_lib`'s (to either library, by the entry) and (T66b R-1)
     /// `_libRaw`'s (1 -> 2), and both targets are in its code.
     function test_registryClosure() public {
@@ -163,7 +163,10 @@ contract LinkClosureTest is Test {
         assertEq(c.length, want.length, "number of libraries");
         for (uint256 i; i < c.length; ++i) assertEq(_addr(c[i]), want[i], c[i]);
         assertEq(_closure("UARegistryCoreLib", new string[](0)).length, 0, "UARegistryCoreLib links nothing");
-        assertEq(_closure("UARegistryAuxLib", new string[](0)).length, 0, "UARegistryAuxLib links nothing");
+        string[] memory aux = _closure("UARegistryAuxLib", new string[](0));
+        assertEq(aux.length, 1, "UARegistryAuxLib links one library");
+        assertEq(_addr(aux[0]), address(UARegistryCoreLib), "UARegistryAuxLib links the core");
+        assertTrue(_holds(address(UARegistryAuxLib).code, address(UARegistryCoreLib)), "the core is in the auxiliary code");
 
         DeployHarness h = new DeployHarness();
         (, string memory json) = h.deploy(ZUID, false, new SmartKeyAccountFactory(ZUID).IMPLEMENTATION());
@@ -193,7 +196,8 @@ contract LinkClosureTest is Test {
     /// only in `MtxPipelineLib` (exactly 2, -> `HederaLib`), in `WrappedLib` (exactly 1, -> `GovernanceLib`, its own link
     /// reference), in `ZetherWrappedLib` (exactly 2, -> `WrappedLib`, `ZetherLib`, its init: size lever 1, owner 2026-11-01),
     /// in `PqzWrappedLib` (exactly 2, -> `WrappedLib`, `PqzStateLib`, the same) and in `RegulatedLib` (exactly 1, ->
-    /// `GovernanceLib.useLimited`, plan T28).
+    /// `GovernanceLib.useLimited`, plan T28) and in `UARegistryAuxLib` (exactly 1, -> `UARegistryCoreLib`'s shared helpers,
+    /// T66b 3.1c, owner 2026-11-09).
     function test_libraryOpcodes() public view {
         for (uint256 n; n < names.length; ++n) {
             string memory name = names[n];
@@ -206,7 +210,7 @@ contract LinkClosureTest is Test {
             // RegulatedLib: plan T28's bodies inline `GovernanceUse.use`, whose one call to `GovernanceLib.useLimited` is
             // its only DELEGATECALL (0 -> 1; its link reference, already in every regulated kind's closure)
             uint256 want = h == keccak256("MtxPipelineLib") || h == keccak256("ZetherWrappedLib") || h == keccak256("PqzWrappedLib")
-                || h == keccak256("WrappedLib") ? 2 : h == keccak256("RegulatedLib") ? 1 : 0;
+                || h == keccak256("WrappedLib") ? 2 : h == keccak256("RegulatedLib") || h == keccak256("UARegistryAuxLib") ? 1 : 0;
             assertEq(delegates, want, string.concat(name, ": DELEGATECALL count"));
         }
     }

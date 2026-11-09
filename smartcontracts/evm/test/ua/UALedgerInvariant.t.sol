@@ -52,7 +52,8 @@ contract UALedgerHandler is Test {
         NormalToken tok_, WrappedToken wrp_, WrappedToken wrpL_, WrappedToken wrpN_, MockERC20 und_,
         UARegistry reg_, address minter_, bytes32[2] memory uas_, bytes[2] memory keys_, uint16[2] memory kinds_
     ) {
-        (tok, wrp, wrpL, wrpN, und, reg, minter) = (tok_, wrp_, wrpL_, wrpN_, und_, reg_, minter_);
+        (tok, wrp, wrpL, wrpN, und, reg, minter) = (tok_, NormalToken(address(wrp_)), NormalToken(address(wrpL_)),
+            NormalToken(address(wrpN_)), und_, reg_, minter_);
         (uas, keys, kinds) = (uas_, keys_, kinds_);
         replay[address(tok_)][vm.addr(pks[0])] = int256(tok_.balanceOf(vm.addr(pks[0])));
         vm.recordLogs();
@@ -499,18 +500,18 @@ contract UALedgerInvariantTest is UALedgerBase {
     }
 
     function invariant_T_V3_2_wrapped() public view {
-        _check(wrp);
+        _check(NormalToken(address(wrp)));
         assertEq(wrp.totalSupply(), und.balanceOf(address(wrp)), "1:1 backing");
     }
 
     function invariant_T_V3_2_ledgerLeg() public view {
-        _check(wrpL);
+        _check(NormalToken(address(wrpL)));
         (,, uint256 reserve,,) = wrpL.legOf(address(tok));
         assertEq(tok.balanceOf(address(wrpL)), reserve, "leg balance == reserve (no donation)");
     }
 
     function invariant_T_V3_2_nativeLeg() public view {
-        _check(wrpN);
+        _check(NormalToken(address(wrpN)));
         assertEq(wrpN.totalSupply(), address(wrpN).balance, "1:1 backing");
     }
 

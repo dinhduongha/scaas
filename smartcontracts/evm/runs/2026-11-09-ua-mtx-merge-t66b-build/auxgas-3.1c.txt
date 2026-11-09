@@ -1,0 +1,16 @@
+# T66b 3.1c: execution gas of each UARegistryAuxLib entry (auxgas/AuxGas.t.sol, GasProbe, isolate), 3.1b tree -> 3.1c tree. UNAUDITED.
+setKemKey mldsa44 v1 | 3,091,750 -> 3,099,891 | +8,141
+setPqzKey mldsa44 v0 (16,384 B key) | 26,296,469 -> 26,309,418 | +12,949
+storePqzPop mldsa44 v0 (proven by the mock) | 981,733 -> 1,010,684 | +28,951
+storePqzPop again (no-op) | 17,814 -> 17,859 | +45
+registrationOf mldsa44 | 37,047 -> 37,043 | -4
+uaCount | 11,124 -> 11,185 | +61
+uaAt | 13,510 -> 13,488 | -22
+uaPage | 14,426 -> 14,404 | -22
+uaIndex | 10,185 -> 10,185 | +0
+popOf mldsa44 | 20,340 -> 20,385 | +45
+popSlotsOf (no msig) | 12,727 -> 12,705 | -22
+webAuthnKeyOf (other kind) | 10,405 -> 10,383 | -22
+pqzPopOf v0 | 19,557 -> 19,535 | -22
+pqzKeySigOf v0 | 17,475 -> 17,520 | +45
+cacheExpandedKey mldsa44 part 0 | 40,308,365 -> 40,314,263 | +5,898

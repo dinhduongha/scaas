@@ -12,8 +12,9 @@ import {UAMldsaVerifier} from "./MlDsa.sol";
 
 /// @title `UARegistry`'s core library (typed-signing R2, owner 2026-11-01; T66b 3.1b, owner 2026-11-09, spec
 ///        2026-11-09-t66b-library-organisation.md §11 (f)): the `register` forms, the `msig`, `acceptMembership`,
-///        `requirePortable`, the pure digests and the reads `registrationOf`, `uaCount`; the key writes after registration are
-///        `UARegistryAuxLib`'s, which compiles in this library's `internal` helpers (one source). Run by DELEGATECALL from a
+///        `requirePortable`, the pure digests; the key writes after registration and the reads off the hot path are
+///        `UARegistryAuxLib`'s, which runs this library's shared helpers by a nested DELEGATECALL (T66b 3.1c: `portableOk`,
+///        `pqzHolder`, `pqzProof`, `keyUa`) and compiles in only its small `internal` ones. Run by DELEGATECALL from a
 ///        thin entry per function, so `address(this)` is the registry and the storage is its `UAStore.Layout`. Same check order, same stored bytes, same events and errors as when this
 ///        code was in the registry (`legacy/typed-signing/UARegistryPreSplit.sol`; `test/ua/UARegistrySplit.t.sol`).
 /// @notice What a library cannot read, the registry's immutables, reaches it two ways (no new selector):
@@ -500,6 +501,34 @@ library UARegistryCoreLib {
         return sig.keyData.length == 0 && _sigOk(_cfgKind(), kind, d, ua, purpose, digest, sig.signature, sig.members);
     }
 
+    // ----- the helpers `UARegistryAuxLib` calls (T66b 3.1c, owner 2026-11-09, spec 2026-11-09-t66b-library-organisation.md §11 (f)) -----
+
+    /// One copy of the shared code in the pair: `UARegistryAuxLib` runs these by a nested DELEGATECALL (its `_core`), this
+    /// call's arguments followed by the three words the registry appended to the Aux entry, so `address(this)`, the storage
+    /// and `_cfgKind` / `_cfgPqz` / `_cloneHash` are the registry's, as when the Aux library compiled this code in. Each is its
+    /// `internal` twin and nothing else. None is `view` or `pure`: solc's library call protection covers each, a direct call
+    /// reverts.
+    function portableOk(uint16 kind, bytes memory d, bytes32 ua, bytes32 purpose, bytes32 digest,
+        IUARegistry.UASig calldata sig) external returns (bool)
+    {
+        return _portableOk(kind, d, ua, purpose, digest, sig);
+    }
+
+    function pqzHolder(uint16 kind, bytes memory d, bytes32 ua, bool gen1) external {
+        _pqzHolder(kind, d, ua, gen1);
+    }
+
+    /// `_pqzProof` with the proof bytes logged (`storePqzPop`).
+    function pqzProof(bytes32 ua, uint64 v, bytes memory pqzKey, bytes calldata pqzPop, bytes32 h, bytes32 message) external {
+        _pqzProof(ua, v, pqzKey, pqzPop, h, message, pqzPop);
+    }
+
+    /// `kind`'s validated key data (`UAKinds.validateKeyData`, not Hedera-native) and its id (`cacheExpandedKey`).
+    function keyUa(uint16 kind, bytes memory keyData) external returns (bytes32) {
+        UAKinds.validateKeyData(kind, keyData, false);
+        return UAKinds.uaOf(kind, keyData);
+    }
+
     // ----- the portable check (UA-7 O1, owner 2026-11-04; plan T66a) -----
 
     /// `IUARegistry.requirePortable` on a record held here (the registry forwards a gen-1 record to gen 1 first): a single key by
@@ -797,39 +826,5 @@ library UARegistryCoreLib {
             }
             a[j] = v;
         }
-    }
-
-    // ----- moved from `UARegistry` (T66b 3.1b): a read off the hot path, run by `_libView` -----
-
-    function registrationOf(bytes32 ua)
-        external
-        returns (uint16 kind, bytes memory keyData, IUARegistry.UAAttrs memory attrs, bytes memory pop, bytes memory pqzPop)
-    {
-        if (_elsewhere(ua)) {
-            (kind, keyData, attrs, pop, pqzPop) = IUARegistry(_pred()).registrationOf(ua);
-            // A5-c2 / A6-I1: gen 1's `register` key (version 0) proven here, its proof stored here
-            if (attrs.pqzKey.length != 0 && pqzPop.length == 0 && !UAStore.layout().pqzKey[ua][0].added) {
-                pqzPop = SSTORE2.readChunks(UAStore.layout().pqzPop[ua][0]);
-            }
-            return (kind, keyData, attrs, pop, pqzPop);
-        }
-        IUARegistry.Record memory r = UAStore.layout().records[ua];
-        kind = r.kind;
-        if (kind == 0) return (kind, keyData, attrs, pop, pqzPop);
-        (keyData, pop) = UAStore.registration(ua, r.keyPtr);
-        UAStore.KemCommit memory c = UAStore.layout().kemCommit[ua];
-        if (c.kemPkHash != 0) (attrs.kem.scheme, attrs.kemPkHash) = (c.scheme, c.kemPkHash); // the committed form
-        else (attrs.kem,) = UAStore.kemAt(ua, 0); // the register KEM key is version 0
-        UAStore.PqzKey memory k = UAStore.layout().pqzKey[ua][0];
-        if (k.added) return (kind, keyData, attrs, pop, pqzPop); // A4-c3: an added key is no `register` argument
-        (attrs.pqzKey, attrs.pqzPopHash) = (SSTORE2.read(k.ptr), UAStore.layout().pqzPopHash[ua][0]);
-        pqzPop = SSTORE2.readChunks(UAStore.layout().pqzPop[ua][0]);
-    }
-
-    // ----- moved from `UARegistry` (T66b 3.1b): a read off the hot path, run by `_libView` -----
-
-    function uaCount(uint16 kind) external returns (uint256) {
-        if (!_listedHere()) return IUARegistry(_pred()).uaCount(kind);
-        return UAStore.layout().uaCount[kind];
     }
 }
