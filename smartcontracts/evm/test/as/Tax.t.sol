@@ -474,6 +474,39 @@ contract TaxTest is RegFixture {
         assertEq(IERC20(t8t).balanceOf(taxTo), 100);
     }
 
+    // ---- plan T83: the pay records of the two tax forms (owner 2026-11-09)
+
+    /// `mtxPayWithTax` and `payWithTax` with `save`: the record is what the payee received, `value - tax`; `save` off writes
+    /// nothing.
+    function test_payWithTax_recordsNet() public {
+        _set10pct(t8t);
+        bytes32 no = bytes32(uint256(0x019a6e3c5f007a3b8c4d5e6f708192a3));
+        MetaTxLib.PayMeta memory m = PayMetaKit.saved("rec1", no);
+        MetaTxLib.UAMetaTransfer memory x = _tx(t8t, "rec1", V);
+        x.entryRef = PayMetaKit.id(m);
+        IUARegistry.UASig memory s = _taxSig(t8t, x, 1, 100);
+        vm.roll(300);
+        vm.prank(relayer);
+        IRegulatedToken(t8t).mtxPayWithTax(x, 1, 100, s, m);
+        MetaTxLib.PayMeta memory d = PayMetaKit.saved("rec2", no);
+        vm.roll(301);
+        vm.prank(alice);
+        IRegulatedToken(t8t).payWithTax(nid(bob), V, 2, 30, PayMetaKit.id(d), d);
+        MetaTxLib.PayRecord[] memory r = MetaTokenBase(t8t).paymentsOf(no, 0, 5);
+        assertEq(r.length, 2);
+        assertEq(r[0].to, nid(bob));
+        assertEq(r[0].amount, V - 100);
+        assertEq(r[0].blockNumber, 300);
+        assertEq(r[1].to, nid(bob));
+        assertEq(r[1].amount, V - 30);
+        assertEq(r[1].blockNumber, 301);
+        assertEq(IERC20(t8t).balanceOf(bob), 2 * V - 130);
+        _payTax(t8t, "rec3", V, 1, 100, ""); // `PayMetaKit.meta`: `save` off
+        _direct(t8t, nid(bob), V, 2, 1, "rec4", "");
+        assertEq(MetaTokenBase(t8t).paymentCount(no), 2);
+        assertEq(MetaTokenBase(t8t).paymentCount(0), 0);
+    }
+
     function _direct(address t, bytes32 to, uint256 v, uint8 mode, uint256 tax, bytes32 seed, bytes memory err) internal {
         vm.prank(alice);
         if (err.length != 0) vm.expectRevert(err);
@@ -630,7 +663,8 @@ contract TaxTest is RegFixture {
 
     function _rowMeta(string memory j, string memory p) internal pure returns (MetaTxLib.PayMeta memory m) {
         m.salt = vm.parseJsonBytes32(j, string.concat(p, "salt"));
-        m.payNo = vm.parseJsonString(j, string.concat(p, "payNo"));
+        m.payNo = vm.parseJsonBytes32(j, string.concat(p, "payNo"));
+        m.save = vm.parseJsonBool(j, string.concat(p, "save"));
         m.schema = uint16(vm.parseJsonUint(j, string.concat(p, "schema")));
         m.body = vm.parseJsonBytes(j, string.concat(p, "body"));
     }

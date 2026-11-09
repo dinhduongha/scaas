@@ -508,7 +508,9 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
 
     // pay-meta-tax T42 (`pay_with_meta_on_anvil`): a pay job is the named entry `mtxPay(t, auth, meta)`, `meta` named per
     // schema (the node builds the body), on a free lane; the indexer gives `PaymentMeta`'s fields to its PaymentSettled
-    let named = json!({"salt": format!("{:#x}", B256::repeat_byte(0x51)), "payNo": "INV-77", "schema": 1, "body": {"note": "hello"}});
+    // plan T83: `payNo` a right-aligned UUIDv7, `save` on: the token stores the record (`paymentsOf`)
+    let named = json!({"salt": format!("{:#x}", B256::repeat_byte(0x51)), "payNo": "0x00000000000000000000000000000000019a6e3c5f007a3b8c4d5e6f708192a3", "save": true, "schema": 1,
+        "body": {"note": "hello"}});
     let pid = scaas_node::metatx::meta_pay_id(&scaas_node::typed::pay_meta_of(&scaas_node::typed::parse("PayMeta", &named, "meta").unwrap()).unwrap());
     let pm = payment(payer.address(), shop, 1_000, pid, U256::from(41), MODE_RESTRICT_RELAYER, relayer.address(), 0, Address::ZERO);
     let pay = signed_op(&payer, json!({"entry": "mtxPay", "contract": "token", "token": format!("{token:#x}"),
@@ -530,7 +532,8 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
     assert!(ingested.iter().all(|e| e["event"] != "PaymentMeta"), "never a row");
     let paid = ingested.iter().find(|e| e["event"] == "PaymentSettled" && e["entry_ref"] == format!("{pid:#x}")).expect("pay-meta settled");
     assert_eq!((paid["amount"].as_str(), paid["pay_no"].as_str(), paid["meta_body"].as_str()),
-        (Some("1000"), Some("INV-77"), Some(format!("0x{}", alloy::hex::encode(b"hello")).as_str())));
+        (Some("1000"), Some("0x00000000000000000000000000000000019a6e3c5f007a3b8c4d5e6f708192a3"), Some(format!("0x{}", alloy::hex::encode(b"hello")).as_str())));
+    assert_eq!(paid["meta_save"], true);
 
     // T17 (CTR-MTX-27) on the real router: a fee-less `cancelNonce(77)` of the payer, its fee of 10 in open mode; the
     // node relays `relay` (call-table row RelayFeeRouter.relay, the `UARelayFee` of the payer's padded id), the fee reaches the
@@ -1369,7 +1372,7 @@ async fn ua_pay_meta_and_relay_fee_jobs_on_anvil() {
 
     // (1) a UA's pay (pay-meta-tax T42): the named entry mtxPay with its PayMeta, the node's digest is the token's
     let shop = Address::repeat_byte(0x5e);
-    let named = json!({"salt": format!("{:#x}", B256::repeat_byte(0x52)), "payNo": "invoice 77"});
+    let named = json!({"salt": format!("{:#x}", B256::repeat_byte(0x52)), "payNo": format!("{:#x}", B256::with_last_byte(77))});
     let pid = meta_pay_id(&scaas_node::typed::pay_meta_of(&scaas_node::typed::parse("PayMeta", &named, "meta").unwrap()).unwrap());
     let t = UAMetaTransfer { from: ua, to: shop.into_word(), value: U256::from(1_000u64), entryRef: pid, batch: pay_lane(&pid),
         nonce: U256::ZERO, validUntil: U256::from(now() + 300), mode: MODE_RESTRICT_RELAYER, relayer: relayer.address(),
@@ -1431,7 +1434,8 @@ async fn ua_pay_meta_and_relay_fee_jobs_on_anvil() {
     let paid = ingested.iter().find(|e| e["event"] == "PaymentSettled" && e["entry_ref"] == format!("{pid:#x}")).expect("UA pay-meta settled");
     assert_eq!((paid["from"].as_str(), paid["from_ua"].as_str(), paid["to"].as_str(), paid["amount"].as_str()),
         (Some(pool.as_str()), Some(uid.as_str()), Some(format!("{shop:#x}").as_str()), Some("1000")));
-    assert_eq!(paid["pay_no"], "invoice 77");
+    assert_eq!(paid["pay_no"], format!("{:#x}", B256::with_last_byte(77)));
+    assert_eq!(paid["meta_save"], false);
     let fee = ingested.iter().find(|e| e["event"] == "PaymentSettled" && e["entry_ref"] == format!("{r:#x}")).expect("UA relay fee settled");
     assert_eq!((fee["from_ua"].as_str(), fee["relay_target"].as_str(), fee["relay_payee"].as_str()),
         (Some(uid.as_str()), Some(format!("{token:#x}").as_str()), Some(format!("{:#x}", relayer.address()).as_str())));
@@ -1850,7 +1854,7 @@ async fn mandate_payment_relayed_by_an_eoa_delegate() {
     let epoch = view(&rpc, wallet, epochCall { token }).await;
     assert_eq!(epoch, 1);
     // the delegate's payment on the lane of its entryRef, nonce 0; pay-meta-tax T42: its `PayMeta` last, `entryRef` the commitment
-    let named = json!({"salt": format!("{:#x}", keccak256(b"invoice 9")), "payNo": "invoice 9"});
+    let named = json!({"salt": format!("{:#x}", keccak256(b"invoice 9")), "payNo": format!("{:#x}", keccak256(b"invoice 9")), "save": true});
     let entry_ref = scaas_node::metatx::meta_pay_id(&scaas_node::typed::pay_meta_of(&scaas_node::typed::parse("PayMeta", &named, "meta").unwrap()).unwrap());
     let pay = |entry: &str| signed_op(&delegate, w(entry, json!({"token": t, "payee": format!("{:#x}", shop.into_word()), "amount": "300000",
         "entryRef": format!("{entry_ref:#x}"), "epoch": epoch.to_string(), "meta": named.clone()}), delegate.address(),

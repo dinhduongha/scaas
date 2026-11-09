@@ -189,7 +189,8 @@ contract MandateWalletKatTest is MtxKatBase {
         // pay-meta-tax T41: the `PayMeta` the entry takes last (unsigned; `entryRef` its commitment), for the readers
         MetaTxLib.PayMeta memory m = PayMetaKit.meta(keccak256("scaas.kat.entryRef"));
         vm.serializeBytes32("pay", "meta_salt", m.salt);
-        vm.serializeString("pay", "meta_pay_no", m.payNo);
+        vm.serializeBytes32("pay", "meta_pay_no", m.payNo); // plan T83: a `bytes32`, `save` committed
+        vm.serializeBool("pay", "meta_save", m.save);
         vm.serializeUint("pay", "meta_schema", m.schema);
         vm.serializeBytes("pay", "meta_body", m.body);
         return (_entry("pay", UA_PAY_UNDER_MANDATE, e, args, digest, a.signature, cd), digest);

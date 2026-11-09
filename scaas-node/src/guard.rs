@@ -664,9 +664,10 @@ impl Guard {
         }
         let Some(rule) = rule_of(contract) else { return Err(refused(format!("unknown contract kind {contract:?}"))) };
         self.check_payee(w.typed.as_ref().and_then(|t| t.payee))?;
-        // pay-meta-tax spec §7.1: `payNo + body` of a pay entry's `PayMeta`, before any read or simulation
+        // pay-meta-tax spec §7.1: the `body` of a pay entry's `PayMeta` (plan T83: `payNo` a fixed word), before any read or
+        // simulation
         if let Some(n) = w.typed.as_ref().map(|t| t.pay_meta_len).filter(|n| *n > self.max_pay_meta_bytes) {
-            return Err(Refusal::Policy(format!("PAY_META_TOO_LONG: payNo + body is {n} B, above max_pay_meta_bytes {}",
+            return Err(Refusal::Policy(format!("PAY_META_TOO_LONG: body is {n} B, above max_pay_meta_bytes {}",
                 self.max_pay_meta_bytes)));
         }
         if rule == Rule::Token {
@@ -1516,7 +1517,7 @@ mod tests {
         };
         // pay-meta-tax T40: + `mtxPayWithTax`, the regulated kinds' own signed entry (a node row on each kind's class)
         const PAY_WITH_TAX: &str = "mtxPayWithTax((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,\
-address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,string,uint16,bytes))";
+address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))";
         let mut want = signed(&b);
         want.insert(PAY_WITH_TAX.to_string());
         assert_eq!(signed(&k), want, "{kind}: SIGNED entries are {base}'s and mtxPayWithTax, both directions");
@@ -1528,7 +1529,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
             "pause(bytes32,uint64)", "unpause(bytes32)", "recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64)",
             "revokeOrder(bytes32,bytes32)", "operatorTransfer(bytes32,bytes32,uint256,bytes32)",
             // pay-meta-tax T39 / T40: bit 23's two powers, the direct payWithTax (the caller's own balance), mtxPayWithTax
-            "setTaxRate(uint32)", "setTaxRecipient(bytes32)", "payWithTax(bytes32,uint256,uint8,uint256,bytes32,(bytes32,string,uint16,bytes))",
+            "setTaxRate(uint32)", "setTaxRecipient(bytes32)", "payWithTax(bytes32,uint256,uint8,uint256,bytes32,(bytes32,bytes32,bool,uint16,bytes))",
             PAY_WITH_TAX];
         assert_eq!(added.keys().map(|s| s.as_str()).collect::<std::collections::BTreeSet<_>>(), controls.into_iter().collect(), "{kind}");
         for (s, c) in added.iter().filter(|(s, _)| s.as_str() != PAY_WITH_TAX) {

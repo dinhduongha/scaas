@@ -38,11 +38,12 @@ sol! {
         uint32 mode; address relayer; uint256 fee; address feeRecipient;
     }
 
-    /// `MetaTxLib.PayMeta` (pay-meta-tax spec §3.1): the last parameter of every pay entry, unsigned; its commitment
-    /// `metaPayId` is the signed `entryRef`.
+    /// `MetaTxLib.PayMeta` (pay-meta-tax spec §3.1, plan T83): the last parameter of every pay entry, unsigned; its
+    /// commitment `metaPayId` is the signed `entryRef`. `payNo` 32 bytes (0 = none; recommended a right-aligned UUIDv7),
+    /// `save` the payer's choice to store the payment's record on chain (`paymentsOf`).
     #[derive(Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
     struct PayMeta {
-        bytes32 salt; string payNo; uint16 schema; bytes body;
+        bytes32 salt; bytes32 payNo; bool save; uint16 schema; bytes body;
     }
 
     /// `ITradeToken.TradeOrder` (CTR-DEX-13): signed in the sell token's domain (a `DexOrder` for an outside token).
@@ -180,9 +181,10 @@ sol! {
         function mtxTransferDigest(MetaTransfer t) external view returns (bytes32);
         function mtxExecute(MetaTransaction m, bytes signature) external returns (bytes);
         function mtxExecuteTransfer(MetaTransfer t, bytes signature) external returns (bool);
-        /// pay-meta-tax spec §3.2 (`IMetaTokenV2`): emitted by every pay entry before the payment's events; the old
-        /// `PaymentMeta(bytes32, bytes)` and the address `mtxPayMeta` are in `legacy/ua-mtx-merge/3e/abi.rs`.
-        event PaymentMeta(bytes32 indexed payId, string payNo, uint16 schema, bytes body);
+        /// pay-meta-tax spec §3.2 (`IMetaTokenV2`, plan T83): emitted by every pay entry before the payment's events,
+        /// `payNo` indexed; the v2 form (`string payNo`) is in `legacy/ua-mtx-merge/t83/abi.rs`, the old
+        /// `PaymentMeta(bytes32, bytes)` and the address `mtxPayMeta` in `legacy/ua-mtx-merge/3e/abi.rs`.
+        event PaymentMeta(bytes32 indexed payId, bytes32 indexed payNo, bool save, uint16 schema, bytes body);
         function mtxSelectors() external view returns (bytes4[] selectors, uint8[] feeClass, uint8[] amountArg);
         function chainUid() external view returns (bytes32);
         function supportedModes() external view returns (uint32);
@@ -244,8 +246,9 @@ sol! {
         error MinNonceAboveCap(uint256 requested);
         /// `IMetaTokenV2`'s `PayMeta` refusals (pay-meta-tax spec §3.2)
         error PayMetaShape();
-        error PayNoTooLong(uint256 length);
         error PayMetaMismatch(bytes32 entryRef, bytes32 payId);
+        /// plan T83: a saved pay of `amount >= 2^192` (`PayRecord.amount` is a `uint192`)
+        error PayRecordAmount(uint256 amount);
     }
 
     /// `IUALedger` (CTR-UA-18/19/26): the UA ledger of every SCaaS token, off while `registry()` is 0 (a derived side then reverts
@@ -670,15 +673,17 @@ mod tests {
         assert!(decode_revert(&e).starts_with("TaxMismatch"), "{}", decode_revert(&e));
         let e = IToken::PayMetaMismatch { entryRef: alloy::primitives::B256::ZERO, payId: alloy::primitives::B256::ZERO }.abi_encode();
         assert!(decode_revert(&e).starts_with("PayMetaMismatch"), "{}", decode_revert(&e));
-        assert!(decode_revert(&IToken::PayNoTooLong { length: U256::from(257) }.abi_encode()).starts_with("PayNoTooLong"));
+        let e = IToken::PayRecordAmount { amount: U256::from(1) << 192 }.abi_encode();
+        assert!(decode_revert(&e).starts_with("PayRecordAmount"), "{}", decode_revert(&e));
         assert!(decode_revert(&IRegulatedToken::TaxRecipientIsPayee {}.abi_encode()).starts_with("TaxRecipientIsPayee"));
     }
 
     /// `type(IRegulatedToken).interfaceId`: the XOR of its eighteen selectors (pay-meta-tax T39 / T40: + setTaxRate,
-    /// setTaxRecipient, taxConfig, mtxPayWithTax, payWithTax; 0xf35dd87a -> 0xaf5683ea, the forge artifact's methodIdentifiers).
+    /// setTaxRecipient, taxConfig, mtxPayWithTax, payWithTax; 0xf35dd87a -> 0xaf5683ea, the forge artifact's methodIdentifiers;
+    /// plan T83, `PayMeta` v3 in the two tax entries' tuples: 0xaf5683ea -> 0x01a22b62).
     #[test]
     fn regulated_interface_id_is_the_xor_of_its_functions() {
-        assert_eq!(regulated_interface_id(), [0xaf, 0x56, 0x83, 0xea]);
+        assert_eq!(regulated_interface_id(), [0x01, 0xa2, 0x2b, 0x62]);
     }
 
     /// Group 3g (spec §7.3): the PQZ key-version reverts decode by name and classify; another revert is none of them.

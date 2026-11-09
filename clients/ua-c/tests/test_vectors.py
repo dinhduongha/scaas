@@ -912,7 +912,8 @@ class GovernanceBits(unittest.TestCase):
     def test_pay_digest_and_meta_pay_id(self):
         """pay-meta-tax T41: paymeta.json v2 rows (257 bytes refused) and paytax.json's UAPayWithTax digest row."""
         meta = VEC.parent / 'metatx'
-        for r in json.loads((meta / 'paymeta.json').read_text()):
+        # plan T83: the v2 rows (`payNo` text) in legacy/ua-mtx-merge/t83/ until ua-rs takes PayMeta v3 (ua-rs-sign sync)
+        for r in json.loads((meta / 'legacy' / 'ua-mtx-merge' / 't83' / 'paymeta.json').read_text()):
             i = json.dumps({k: r[k] for k in ('salt', 'payNo', 'schema', 'body')}).encode()
             if r['accepted']:
                 self.assertEqual(json.loads(text(L.meta_pay_id, i))['payId'], r['payId'], r['name'])

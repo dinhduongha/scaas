@@ -273,7 +273,7 @@ contract AllowlistTest is Test {
             _refused(t, abi.encodeWithSignature("transferFrom(address,address,uint256)", alice, address(1), 1));
             _refused(t, abi.encodeWithSignature("approve(address,uint256)", address(this), 1));
             _refused(t, abi.encodeWithSignature(
-                "payWithFee(address,uint256,uint8,uint256,address,bytes32,(bytes32,string,uint16,bytes))",
+                "payWithFee(address,uint256,uint8,uint256,address,bytes32,(bytes32,bytes32,bool,uint16,bytes))",
                 address(1), 1, 0, 0, address(0), bytes32(0), PayMetaKit.meta(0)));
             _refused(t, abi.encodeWithSignature("initialize(address,address[],uint64,bytes)",
                 alice, new address[](0), 1, ""));

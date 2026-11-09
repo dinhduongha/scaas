@@ -59,10 +59,15 @@ abstract contract PayRigBase is Test {
         return abi.encodePacked(r, s, v);
     }
 
-    /// A schema 1 `PayMeta` (a note) with a `payNo`, its salt from `i`.
+    /// A UUIDv7 (`019a6e3c-5f00-7a3b-8c4d-5e6f708192a3` + `i`), right-aligned: the recommended `payNo` (plan T83).
+    function _uuid(uint256 i) internal pure returns (bytes32) {
+        return bytes32(uint256(0x019a6e3c5f007a3b8c4d5e6f708192a3) + i);
+    }
+
+    /// A schema 1 `PayMeta` (a note) with a `payNo` (`save` off), its salt from `i`.
     function _meta(uint256 i) internal pure returns (MetaTxLib.PayMeta memory m) {
         m.salt = keccak256(abi.encode("paymeta.test.salt", i));
-        m.payNo = string.concat("INV-", vm.toString(i));
+        m.payNo = _uuid(i);
         m.schema = 1;
         m.body = bytes(string.concat("note ", vm.toString(i)));
     }
@@ -95,12 +100,14 @@ abstract contract PayRigBase is Test {
     }
 }
 
-/// @notice Pay-meta-tax spec §3 (T37; CTR-MTX-26 Change, PT-2): `PayMeta { salt, payNo, schema, body }` is the required
-///         last parameter of every pay entry; a non-zero salt; schema 0 iff the body is empty; `payNo` at most 256 bytes;
-///         `entryRef == metaPayId(meta)` under `scaas.pay.meta.v2`; `PaymentMeta(payId, payNo, schema, body)` always
-///         emitted, before the payment's events. Run on a clone of every kind of the parity rigs. `test_payMetaVectors`
-///         writes (`PAYMETA_WRITE=1`) or checks `../vectors/metatx/paymeta.json`, the vectors `clientkeys`, `ua-rs` and the
-///         node read (the old formula's file, for the families still on it, is in `../vectors/metatx/legacy/ua-mtx-merge/`).
+/// @notice Pay-meta-tax spec §3 (T37; CTR-MTX-26 Change, PT-2) as plan T83 changes it (owner 2026-11-09): `PayMeta { salt,
+///         payNo, save, schema, body }` is the required last parameter of every pay entry; a non-zero salt; schema 0 iff the
+///         body is empty; `payNo` a `bytes32`, never parsed (0 = none, recommended a right-aligned UUIDv7); no `save` without
+///         a `payNo`; `entryRef == metaPayId(meta)` under `scaas.pay.meta.v3`; `PaymentMeta(payId, payNo, save, schema,
+///         body)` always emitted, before the payment's events. Run on a clone of every kind of the parity rigs.
+///         `test_payMetaVectors` writes (`PAYMETA_WRITE=1`) or checks `../vectors/metatx/paymeta.json`, the vectors
+///         `clientkeys`, `ua-rs` and the node read (the v2 rows, `payNo` a string, in `../vectors/metatx/legacy/ua-mtx-merge/
+///         t83/`; the old formula's file, for the families still on it, in `../vectors/metatx/legacy/ua-mtx-merge/`).
 contract PayMetaTest is PayRigBase {
     string internal constant FILE = "../vectors/metatx/paymeta.json";
 
@@ -142,39 +149,56 @@ contract PayMetaTest is PayRigBase {
         _controlThenRefused(m, bad, abi.encodeWithSelector(IMetaTokenV2.PayMetaShape.selector));
     }
 
-    function _payNo(uint256 n) internal pure returns (string memory) {
-        bytes memory b = new bytes(n);
-        for (uint256 i; i < n; ++i) b[i] = bytes1(uint8(0x41 + i % 26));
-        return string(b);
-    }
-
-    function test_payMeta_payNo256Passes() public {
+    /// Plan T83: any 32-byte `payNo` is accepted and never parsed (here every byte set, no UUID), indexed in `PaymentMeta`.
+    function test_payMeta_anyPayNoIndexed() public {
         MetaTxLib.PayMeta memory m = _meta(4);
-        m.payNo = _payNo(256);
+        m.payNo = keccak256("scaas.paymeta.test.any32");
         for (uint256 i; i < toks.length; ++i) {
             vm.recordLogs();
             _pay(toks[i], _ut(PayMetaKit.id(m), 7, 0), m);
             Vm.Log[] memory logs = vm.getRecordedLogs();
             uint256 pm = _find(logs, toks[i], IMetaTokenV2.PaymentMeta.selector, 0);
-            (string memory payNo,,) = abi.decode(logs[pm].data, (string, uint16, bytes));
-            assertEq(bytes(payNo).length, 256, kinds[i]);
+            assertEq(logs[pm].topics[2], m.payNo, kinds[i]);
+            assertEq(logs[pm].data, abi.encode(false, m.schema, m.body), kinds[i]);
         }
     }
 
-    function test_payMeta_payNo257Refused() public {
+    /// Plan T83: `save` with `payNo == 0` is a shape error (the control saves under a `payNo`).
+    function test_payMeta_saveWithoutPayNoRefused() public {
         MetaTxLib.PayMeta memory m = _meta(5);
-        m.payNo = _payNo(256);
+        m.save = true;
         MetaTxLib.PayMeta memory bad = _meta(5);
-        bad.payNo = _payNo(257);
-        _controlThenRefused(m, bad, abi.encodeWithSelector(IMetaTokenV2.PayNoTooLong.selector, 257));
+        (bad.payNo, bad.save) = (0, true);
+        _controlThenRefused(m, bad, abi.encodeWithSelector(IMetaTokenV2.PayMetaShape.selector));
     }
 
-    /// The commitment over `payNo` "A", the call with "B" (same salt, schema, body).
+    /// Plan T83: `save` is inside the commitment: an `entryRef` over `save = false` refuses the call with `save = true`, and
+    /// the other way round.
+    function test_payMeta_saveInCommitment() public {
+        for (uint256 k; k < 2; ++k) {
+            MetaTxLib.PayMeta memory signed = _meta(8 + k);
+            signed.save = k == 1;
+            MetaTxLib.PayMeta memory sent = _meta(8 + k);
+            sent.save = k == 0;
+            for (uint256 i; i < toks.length; ++i) {
+                address t = toks[i];
+                MetaTxLib.UAMetaTransfer memory x = _ut(PayMetaKit.id(signed), 7, k);
+                IUARegistry.UASig memory s = _sigOf(t, x);
+                vm.prank(REL);
+                vm.expectRevert(abi.encodeWithSelector(IMetaTokenV2.PayMetaMismatch.selector, x.entryRef,
+                    PayMetaKit.id(sent)));
+                MetaTokenBase(t).mtxPay(x, s, sent);
+                _pay(t, x, signed); // control
+            }
+        }
+    }
+
+    /// The commitment over `payNo` "A", the call with "B" (same salt, save, schema, body).
     function test_payMeta_otherPayNoMismatch() public {
         MetaTxLib.PayMeta memory a = _meta(6);
-        a.payNo = "A";
+        a.payNo = bytes32("A");
         MetaTxLib.PayMeta memory b = _meta(6);
-        b.payNo = "B";
+        b.payNo = bytes32("B");
         for (uint256 i; i < toks.length; ++i) {
             address t = toks[i];
             MetaTxLib.UAMetaTransfer memory x = _ut(PayMetaKit.id(a), 7, 0);
@@ -186,23 +210,29 @@ contract PayMetaTest is PayRigBase {
         }
     }
 
-    /// An `entryRef` under the old tag `scaas.pay.meta` over the same bytes is refused by name (C1, Codex #8).
+    /// An `entryRef` under an old tag over the same bytes is refused by name: `scaas.pay.meta` (C1, Codex #8) and
+    /// `scaas.pay.meta.v2` (plan T83: the type changed, so the tag did), each over the v3 encoding.
     function test_payMeta_oldTagRefused() public {
         MetaTxLib.PayMeta memory m = _meta(7);
-        bytes32 old = keccak256(abi.encodePacked("scaas.pay.meta", m.salt, keccak256(abi.encode(m.payNo, m.schema, m.body))));
-        assertTrue(old != PayMetaKit.id(m));
-        for (uint256 i; i < toks.length; ++i) {
-            address t = toks[i];
-            MetaTxLib.UAMetaTransfer memory x = _ut(old, 7, 0);
-            IUARegistry.UASig memory s = _sigOf(t, x);
-            vm.prank(REL);
-            vm.expectRevert(abi.encodeWithSelector(IMetaTokenV2.PayMetaMismatch.selector, old, PayMetaKit.id(m)));
-            MetaTokenBase(t).mtxPay(x, s, m);
-            assertEq(MetaTokenBase(t).metaPayId(m), PayMetaKit.id(m), kinds[i]);
+        m.save = true;
+        bytes32 inner = keccak256(abi.encode(m.payNo, m.save, m.schema, m.body));
+        bytes32[2] memory old = [keccak256(abi.encodePacked("scaas.pay.meta", m.salt, inner)),
+            keccak256(abi.encodePacked("scaas.pay.meta.v2", m.salt, inner))];
+        for (uint256 j; j < 2; ++j) {
+            assertTrue(old[j] != PayMetaKit.id(m));
+            for (uint256 i; i < toks.length; ++i) {
+                address t = toks[i];
+                MetaTxLib.UAMetaTransfer memory x = _ut(old[j], 7, 0);
+                IUARegistry.UASig memory s = _sigOf(t, x);
+                vm.prank(REL);
+                vm.expectRevert(abi.encodeWithSelector(IMetaTokenV2.PayMetaMismatch.selector, old[j], PayMetaKit.id(m)));
+                MetaTokenBase(t).mtxPay(x, s, m);
+                assertEq(MetaTokenBase(t).metaPayId(m), PayMetaKit.id(m), kinds[i]);
+            }
         }
     }
 
-    /// `PaymentMeta(payId, payNo, schema, body)` with its fields, before `UAPaymentSettled` and the executed event.
+    /// `PaymentMeta(payId, payNo, save, schema, body)` with its fields, before `UAPaymentSettled` and the executed event.
     function test_payMeta_emittedBeforeSettled() public {
         for (uint256 i; i < toks.length; ++i) {
             address t = toks[i];
@@ -214,7 +244,8 @@ contract PayMetaTest is PayRigBase {
             Vm.Log[] memory logs = vm.getRecordedLogs();
             uint256 pm = _find(logs, t, IMetaTokenV2.PaymentMeta.selector, 0);
             assertEq(logs[pm].topics[1], x.entryRef, kinds[i]);
-            assertEq(logs[pm].data, abi.encode(m.payNo, m.schema, m.body), kinds[i]);
+            assertEq(logs[pm].topics[2], m.payNo, kinds[i]);
+            assertEq(logs[pm].data, abi.encode(m.save, m.schema, m.body), kinds[i]);
             uint256 ps = _find(logs, t, IUALedger.UAPaymentSettled.selector, 0);
             uint256 ex = _find(logs, t, IUALedger.UAMetaTransactionExecuted.selector, 0);
             assertLt(pm, ps, string.concat(kinds[i], ": PaymentMeta before UAPaymentSettled"));
@@ -262,36 +293,35 @@ contract PayMetaTest is PayRigBase {
 
     // ------------------------------------------------------------------ the shared vectors
 
-    /// Rows `{name, salt, payNo, schema, body, payId, accepted}` (spec §7.3): salt only; `payNo` only; `payNo` of 256
-    /// bytes (accepted) and of 257 (refused `PayNoTooLong`); a multi-byte UTF-8 `payNo` ending at the bound; each schema
-    /// 1-4 (schema 2 is `abi.encode(string creditorRef, uint64 dueDate)`, no `invoiceNo`); a row with `oldTagPayId`, the
-    /// old tag's hash over the same bytes (C1). The schema 4 body is illustrative filler.
-    function _rows() internal pure returns (string[] memory names, string[] memory payNos, uint16[] memory schemas,
-        bytes[] memory bodies)
-    {
+    /// The UUIDv7 of the vector rows (`019a6e3c-5f00-7a3b-8c4d-5e6f708192a3`), right-aligned.
+    bytes32 internal constant ROW_UUID = bytes32(uint256(0x019a6e3c5f007a3b8c4d5e6f708192a3));
+    string internal constant ROW_UUID_TEXT = "019a6e3c-5f00-7a3b-8c4d-5e6f708192a3";
+
+    /// Rows `{name, salt, payNo, save, schema, body, payId, accepted}` (spec §7.3, plan T83): salt only; a right-aligned
+    /// UUIDv7 `payNo` (with `payNoUuid`, its text) without and with `save` (`saveOffPayId`: the same fields with `save` off
+    /// differ); a 32-byte `payNo` that is no UUID, saved; `save` without a `payNo` (refused `PayMetaShape`); each schema
+    /// 1-4 (schema 2 is `abi.encode(string creditorRef, uint64 dueDate)`, no `invoiceNo`); a row with `v2TagPayId`, the v2
+    /// tag's hash over the same bytes (C1). The schema 4 body is illustrative filler.
+    function _rows() internal pure returns (string[] memory names, MetaTxLib.PayMeta[] memory ms) {
         uint256 n = 9;
         names = new string[](n);
-        payNos = new string[](n);
-        schemas = new uint16[](n);
-        bodies = new bytes[](n);
-        (names[0], payNos[0], schemas[0], bodies[0]) = ("salt_only", "", 0, "");
-        (names[1], payNos[1], schemas[1], bodies[1]) = ("payno_only", "INV-2026-0042", 0, "");
-        (names[2], payNos[2], schemas[2], bodies[2]) = ("payno_256", _payNo(256), 0, "");
-        (names[3], payNos[3], schemas[3], bodies[3]) = ("payno_257_refused", _payNo(257), 0, "");
-        (names[4], payNos[4], schemas[4], bodies[4]) = ("payno_utf8_256", _euro(), 0, "");
-        (names[5], payNos[5], schemas[5], bodies[5]) =
-            ("note_utf8", "", 1, bytes(unicode"Hóa đơn 2026-0042 — cảm ơn"));
-        (names[6], payNos[6], schemas[6], bodies[6]) =
-            ("structured_reference", "INV-2026-0042", 2, abi.encode("RF18539007547034", uint64(1_830_297_600)));
-        (names[7], payNos[7], schemas[7], bodies[7]) = ("bound_call", "", 3, abi.encode(uint256(7622),
-            bytes32(uint256(uint160(address(0xC0FFEE)))), keccak256("scaas.paymeta.vector.call")));
-        (names[8], payNos[8], schemas[8], bodies[8]) = ("encrypted_illustrative", "", 4, _filler(96, 0x04));
+        ms = new MetaTxLib.PayMeta[](n);
+        bytes32 any32 = keccak256("scaas.paymeta.v3.vector.any32");
+        (names[0], ms[0]) = ("salt_only", _m(0, false, 0, ""));
+        (names[1], ms[1]) = ("payno_uuidv7", _m(ROW_UUID, false, 0, ""));
+        (names[2], ms[2]) = ("payno_uuidv7_save", _m(ROW_UUID, true, 0, ""));
+        (names[3], ms[3]) = ("payno_any32_save", _m(any32, true, 0, ""));
+        (names[4], ms[4]) = ("save_without_payno_refused", _m(0, true, 0, ""));
+        (names[5], ms[5]) = ("note_utf8", _m(0, false, 1, bytes(unicode"Hóa đơn 2026-0042 — cảm ơn")));
+        (names[6], ms[6]) = ("structured_reference", _m(ROW_UUID, true, 2, abi.encode("RF18539007547034", uint64(1_830_297_600))));
+        (names[7], ms[7]) = ("bound_call", _m(0, false, 3, abi.encode(uint256(7622),
+            bytes32(uint256(uint160(address(0xC0FFEE)))), keccak256("scaas.paymeta.vector.call"))));
+        (names[8], ms[8]) = ("encrypted_illustrative", _m(ROW_UUID, false, 4, _filler(96, 0x04)));
+        for (uint256 i; i < n; ++i) ms[i].salt = keccak256(abi.encode("scaas.paymeta.v3.vector", names[i]));
     }
 
-    /// "A" and 85 times "€" (3 bytes each): 256 bytes, the last character multi-byte.
-    function _euro() internal pure returns (string memory s) {
-        s = "A";
-        for (uint256 i; i < 85; ++i) s = string.concat(s, unicode"€");
+    function _m(bytes32 payNo, bool save, uint16 schema, bytes memory body) internal pure returns (MetaTxLib.PayMeta memory m) {
+        (m.payNo, m.save, m.schema, m.body) = (payNo, save, schema, body);
     }
 
     function _filler(uint256 n, uint8 seed) internal pure returns (bytes memory b) {
@@ -299,27 +329,33 @@ contract PayMetaTest is PayRigBase {
         for (uint256 i; i < n; ++i) b[i] = bytes1(uint8(uint256(keccak256(abi.encode(seed, i / 32))) >> (8 * (i % 32))));
     }
 
+    function _accepted(MetaTxLib.PayMeta memory m) internal pure returns (bool) {
+        return !(m.save && m.payNo == 0);
+    }
+
     function _rowJson(string memory name, MetaTxLib.PayMeta memory m) internal pure returns (string memory) {
-        string memory head = string.concat('  {"name":"', name, '","salt":"', vm.toString(m.salt), '","payNo":"', m.payNo,
-            '","schema":', vm.toString(m.schema), ',"body":"', vm.toString(m.body));
-        string memory tail = string.concat('","payId":"', vm.toString(PayMetaKit.id(m)), '","accepted":',
-            bytes(m.payNo).length <= 256 ? "true" : "false");
-        if (keccak256(bytes(name)) == keccak256("payno_only")) {
-            tail = string.concat(tail, ',"oldTagPayId":"', vm.toString(keccak256(abi.encodePacked("scaas.pay.meta",
-                m.salt, keccak256(abi.encode(m.payNo, m.schema, m.body))))), '"');
+        string memory head = string.concat('  {"name":"', name, '","salt":"', vm.toString(m.salt), '","payNo":"',
+            vm.toString(m.payNo), '","save":', m.save ? "true" : "false", ',"schema":', vm.toString(m.schema));
+        string memory tail = string.concat(',"body":"', vm.toString(m.body), '","payId":"', vm.toString(PayMetaKit.id(m)),
+            '","accepted":', _accepted(m) ? "true" : "false");
+        if (m.payNo == ROW_UUID) tail = string.concat(tail, ',"payNoUuid":"', ROW_UUID_TEXT, '"');
+        if (keccak256(bytes(name)) == keccak256("payno_uuidv7")) {
+            tail = string.concat(tail, ',"v2TagPayId":"', vm.toString(keccak256(abi.encodePacked("scaas.pay.meta.v2",
+                m.salt, keccak256(abi.encode(m.payNo, m.save, m.schema, m.body))))), '"');
+        }
+        if (keccak256(bytes(name)) == keccak256("payno_uuidv7_save")) {
+            MetaTxLib.PayMeta memory off = _m(m.payNo, false, m.schema, m.body);
+            off.salt = m.salt;
+            tail = string.concat(tail, ',"saveOffPayId":"', vm.toString(PayMetaKit.id(off)), '"');
         }
         return string.concat(head, tail, "}");
     }
 
     function test_payMetaVectors() public {
         if (vm.envOr("PAYMETA_WRITE", false)) {
-            (string[] memory names, string[] memory payNos, uint16[] memory schemas, bytes[] memory bodies) = _rows();
+            (string[] memory names, MetaTxLib.PayMeta[] memory ms) = _rows();
             string memory j = "[\n";
-            for (uint256 i; i < names.length; ++i) {
-                MetaTxLib.PayMeta memory m = MetaTxLib.PayMeta(keccak256(abi.encode("scaas.paymeta.v2.vector", names[i])),
-                    payNos[i], schemas[i], bodies[i]);
-                j = string.concat(j, i == 0 ? "" : ",\n", _rowJson(names[i], m));
-            }
+            for (uint256 i; i < names.length; ++i) j = string.concat(j, i == 0 ? "" : ",\n", _rowJson(names[i], ms[i]));
             vm.writeFile(FILE, string.concat(j, "\n]\n"));
         }
         string memory f = vm.readFile(FILE);
@@ -330,27 +366,39 @@ contract PayMetaTest is PayRigBase {
         for (uint256 i; i < rows; ++i) {
             string memory p = string.concat("[", vm.toString(i), "]");
             MetaTxLib.PayMeta memory m = MetaTxLib.PayMeta(vm.parseJsonBytes32(f, string.concat(p, ".salt")),
-                vm.parseJsonString(f, string.concat(p, ".payNo")), uint16(vm.parseJsonUint(f, string.concat(p, ".schema"))),
-                vm.parseJsonBytes(f, string.concat(p, ".body")));
+                vm.parseJsonBytes32(f, string.concat(p, ".payNo")), vm.parseJsonBool(f, string.concat(p, ".save")),
+                uint16(vm.parseJsonUint(f, string.concat(p, ".schema"))), vm.parseJsonBytes(f, string.concat(p, ".body")));
             bytes32 payId = vm.parseJsonBytes32(f, string.concat(p, ".payId"));
             assertEq(payId, PayMetaKit.id(m), "payId formula");
+            assertEq(vm.parseJsonBool(f, string.concat(p, ".accepted")), _accepted(m), "accepted");
             for (uint256 k; k < toks.length; ++k) assertEq(MetaTokenBase(toks[k]).metaPayId(m), payId, kinds[k]);
-            // each row submitted: an accepted row lands with its `PaymentMeta`, the refused one by name
+            // each row submitted: an accepted row lands with its `PaymentMeta` (and its record when saved), the refused one
+            // by name
             MetaTxLib.UAMetaTransfer memory x = _ut(payId, 11, i);
             IUARegistry.UASig memory s = _sigOf(t, x);
-            if (!vm.parseJsonBool(f, string.concat(p, ".accepted"))) {
-                vm.expectRevert(abi.encodeWithSelector(IMetaTokenV2.PayNoTooLong.selector, bytes(m.payNo).length));
+            uint256 before = MetaTokenBase(t).paymentCount(m.payNo);
+            if (!_accepted(m)) {
+                vm.expectRevert(abi.encodeWithSelector(IMetaTokenV2.PayMetaShape.selector));
                 vm.prank(REL);
                 MetaTokenBase(t).mtxPay(x, s, m);
-                x.nonce = i; // the lane's next nonce stays `i`: the refused row consumed nothing
                 vm.prank(REL);
-                MetaTokenBase(t).mtxExecuteTransfer(x, s);
+                MetaTokenBase(t).mtxExecuteTransfer(x, s); // the refused row consumed nothing: nonce `i` still free
             } else {
                 vm.prank(REL);
                 MetaTokenBase(t).mtxPay(x, s, m);
             }
-            if (vm.keyExistsJson(f, string.concat(p, ".oldTagPayId"))) {
-                assertTrue(vm.parseJsonBytes32(f, string.concat(p, ".oldTagPayId")) != payId, "C1: the tags disagree");
+            assertEq(MetaTokenBase(t).paymentCount(m.payNo), before + (m.save && _accepted(m) ? 1 : 0), "record");
+            if (vm.keyExistsJson(f, string.concat(p, ".payNoUuid"))) {
+                assertEq(m.payNo, ROW_UUID, "the UUIDv7 right-aligned");
+                assertEq(vm.parseJsonString(f, string.concat(p, ".payNoUuid")), ROW_UUID_TEXT, "its text");
+            }
+            if (vm.keyExistsJson(f, string.concat(p, ".v2TagPayId"))) {
+                assertTrue(vm.parseJsonBytes32(f, string.concat(p, ".v2TagPayId")) != payId, "C1: the tags disagree");
+            }
+            if (vm.keyExistsJson(f, string.concat(p, ".saveOffPayId"))) {
+                m.save = false;
+                assertEq(vm.parseJsonBytes32(f, string.concat(p, ".saveOffPayId")), PayMetaKit.id(m), "save off");
+                assertTrue(PayMetaKit.id(m) != payId, "save is committed");
             }
         }
     }

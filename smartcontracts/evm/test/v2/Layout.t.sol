@@ -8,6 +8,7 @@ import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
 import {TokenStore} from "../../src/metatx/TokenStore.sol";
 import {WrappedLib} from "../../src/metatx/WrappedLib.sol";
 import {MtxPipelineLib} from "../../src/metatx/MtxPipelineLib.sol";
+import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {UAMetaTxBase} from "../../src/metatx/UAMetaTxBase.sol";
 import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
 import {RegulatedLib} from "../../src/regulated/RegulatedLib.sol";
@@ -63,6 +64,9 @@ contract NamespaceProbe is UAMetaTxBase {
         _ua().balance[bytes32(uint256(0xa1))] = 0xa2;
         _ua().cancelUsed[bytes32(uint256(0xa3))] = true;
         MtxPipelineLib._mtxStorage().nonce[bytes32(uint256(0xb1))][2] = 0xb2;
+        // plan T83: `scaas.pay.records`, two records of `V` (amount 24 bytes, blockNumber 8: both bounds at their top)
+        MtxPipelineLib._payRecords().records[V].push(MetaTxLib.PayRecord(U, type(uint192).max - 1, 0x0b));
+        MtxPipelineLib._payRecords().records[V].push(MetaTxLib.PayRecord(V, 0x0c, type(uint64).max - 1));
         // plan T28: `scaas.regulated` (regulated-kinds spec §2.3)
         RegulatedLib.RegulatedStorage storage r = RegulatedLib.$();
         (r.complianceRegistry, r.controls, r.pausedUntil) = (B, 0xc1, 0xc2);
@@ -217,6 +221,7 @@ contract LayoutTest is V2Fixture {
         f = new F[](1);
         f[0] = F("nonce[0xb1][2]", 0xb1, 2, 0xb2, 32);
         _ns(address(p), "metatx", "scaas.metatx", f);
+        _payRecordsPinned(address(p));
         f = new F[](17);
         f[0] = F("complianceRegistry", 0, 0, b, 20);
         f[1] = F("controls", 0, 0, 0xc1, 1);
@@ -313,6 +318,38 @@ contract LayoutTest is V2Fixture {
         f[23] = F("memos[U]", u, 0, 20, 32);
         f[24] = F("minDecoyFee", 0, 0, 0xf7, 32);
         _ns(address(p), "zether", "scaas.zether", f);
+    }
+
+    /// Plan T83: `scaas.pay.records` (`payRecords` in the pin): the root is ERC-7201 of its id and `PAY_RECORDS_SLOT`;
+    /// `records[V]`'s length at `keccak256(V ‖ root + slot)`; record `index` from `keccak256(that slot) + 2·index + inner`,
+    /// the value at `bytes` of the word, `widths` bytes wide.
+    function _payRecordsPinned(address p) internal view {
+        string memory pin = vm.readFile("./test/v2/layout/namespaces.json");
+        assertEq(pin.readString(".payRecords.id"), "scaas.pay.records");
+        bytes32 root = keccak256(abi.encode(uint256(keccak256("scaas.pay.records")) - 1)) & ~bytes32(uint256(0xff));
+        assertEq(pin.readBytes32(".payRecords.root"), root, "payRecords root");
+        assertEq(MtxPipelineLib.PAY_RECORDS_SLOT, root, "PAY_RECORDS_SLOT");
+        string[] memory labels = pin.readStringArray(".payRecords.labels");
+        uint256[7] memory want = [uint256(2), uint256(NamespaceProbeIds.U), type(uint192).max - 1, 0x0b,
+            uint256(NamespaceProbeIds.V), 0x0c, type(uint64).max - 1];
+        uint256[7] memory width = [uint256(32), 32, 24, 8, 32, 24, 8];
+        assertEq(labels.length, 7, "payRecords rows");
+        for (uint256 i; i < 7; ++i) {
+            assertEq(pin.readUintArray(".payRecords.widths")[i], width[i], labels[i]);
+            assertEq(_payRecordAt(p, pin, uint256(root), i, width[i]), want[i], labels[i]);
+        }
+    }
+
+    /// Row `i` of `payRecords`: the word at its slot (`length`: the length slot; `array`: the record's), shifted to `bytes`.
+    function _payRecordAt(address p, string memory pin, uint256 root, uint256 i, uint256 width)
+        internal view returns (uint256)
+    {
+        uint256 len = uint256(keccak256(abi.encode(NamespaceProbeIds.V, root + pin.readUintArray(".payRecords.slots")[i])));
+        uint256 s = keccak256(bytes(pin.readStringArray(".payRecords.encodings")[i])) == keccak256("length") ? len
+            : uint256(keccak256(abi.encode(len))) + 2 * pin.readUintArray(".payRecords.index")[i]
+                + pin.readUintArray(".payRecords.inner")[i];
+        uint256 mask = width == 32 ? type(uint256).max : (uint256(1) << (8 * width)) - 1;
+        return (uint256(vm.load(p, bytes32(s))) >> (8 * pin.readUintArray(".payRecords.bytes")[i])) & mask;
     }
 
     function _more(F[] memory f, F memory x) internal pure returns (F[] memory g) {

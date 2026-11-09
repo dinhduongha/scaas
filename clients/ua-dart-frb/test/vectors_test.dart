@@ -820,7 +820,8 @@ void main() {
 
   // pay-meta-tax T41: paymeta.json v2 rows (257 bytes refused) and paytax.json's UAPayWithTax digest row
   test('pay rows', () {
-    final pm = jsonDecode(File('$vectors/../metatx/paymeta.json').readAsStringSync()) as List;
+    // plan T83: the v2 rows (`payNo` text) in legacy/ua-mtx-merge/t83/ until ua-rs takes PayMeta v3 (ua-rs-sign sync)
+    final pm = jsonDecode(File('$vectors/../metatx/legacy/ua-mtx-merge/t83/paymeta.json').readAsStringSync()) as List;
     for (final r in pm) {
       final i = jsonEncode({'salt': r['salt'], 'payNo': r['payNo'], 'schema': r['schema'], 'body': r['body']});
       if (r['accepted'] as bool) {

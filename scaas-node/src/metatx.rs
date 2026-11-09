@@ -18,26 +18,21 @@ pub const MODE_RESTRICT_FEE_RECIPIENT: u32 = 0x02;
 pub const MODE_FEE_MASK: u32 = 0xF0;
 pub const MODE_KNOWN_MASK: u32 = 0xF3;
 
-/// pay-meta-tax spec §3.1 (CTR-MTX-26 Change): `metaPayId(m) = keccak256("scaas.pay.meta.v2" ‖ salt ‖ keccak256(abi.encode(
-/// string payNo, uint16 schema, bytes body)))`. The old `(salt, meta)` form is in `legacy/ua-mtx-merge/3e/metatx.rs`; the
-/// non-EVM adapters keep their own until their family round (spec §8).
+/// pay-meta-tax spec §3.1 (CTR-MTX-26 Change), plan T83 (owner 2026-11-09): `metaPayId(m) = keccak256("scaas.pay.meta.v3" ‖
+/// salt ‖ keccak256(abi.encode(bytes32 payNo, bool save, uint16 schema, bytes body)))`. The v2 form (`string payNo`) is in
+/// `legacy/ua-mtx-merge/t83/metatx.rs`, the old `(salt, meta)` form in `legacy/ua-mtx-merge/3e/metatx.rs`; the non-EVM
+/// adapters keep their own until their family round (spec §8).
 pub fn meta_pay_id(m: &crate::abi::PayMeta) -> B256 {
     use alloy::sol_types::SolValue;
-    let inner = (m.payNo.clone(), m.schema, m.body.clone()).abi_encode_params();
-    keccak256([&b"scaas.pay.meta.v2"[..], m.salt.as_slice(), keccak256(inner).as_slice()].concat())
+    let inner = (m.payNo, m.save, m.schema, m.body.clone()).abi_encode_params();
+    keccak256([&b"scaas.pay.meta.v3"[..], m.salt.as_slice(), keccak256(inner).as_slice()].concat())
 }
 
-/// `payNo`'s bound (spec §3.1, owner 2026-11-06).
-pub const PAY_NO_MAX: usize = 256;
-
-/// The contract's `_payMeta` shape (spec §3.2), by name before any encoding or simulation: a non-zero salt, `schema == 0` iff
-/// the body is empty (`PAY_META_SHAPE`), `payNo` at most 256 bytes (`PAY_NO_TOO_LONG`).
+/// The contract's `_payMeta` shape (spec §3.2, plan T83), by name before any encoding or simulation: a non-zero salt, `schema
+/// == 0` iff the body is empty, no `save` without a `payNo` (`PAY_META_SHAPE`). `payNo` is any 32 bytes, never parsed.
 pub fn check_pay_meta(m: &crate::abi::PayMeta) -> Result<()> {
-    if m.salt.is_zero() || (m.schema == 0) != m.body.is_empty() {
-        bail!("PAY_META_SHAPE: a non-zero salt, schema 0 iff the body is empty");
-    }
-    if m.payNo.len() > PAY_NO_MAX {
-        bail!("PAY_NO_TOO_LONG: payNo is {} B, above {PAY_NO_MAX}", m.payNo.len());
+    if m.salt.is_zero() || (m.schema == 0) != m.body.is_empty() || (m.save && m.payNo.is_zero()) {
+        bail!("PAY_META_SHAPE: a non-zero salt, schema 0 iff the body is empty, save only with a payNo");
     }
     Ok(())
 }
@@ -717,15 +712,16 @@ mod tests {
         assert_eq!(free.digest(&d), before, "the digest is unchanged");
     }
 
-    /// pay-meta-tax T42: `mtxPay(t, auth, meta)` decodes to its `UAMetaTransfer`; `metaPayId` v2 of the paymeta.json rows; the
-    /// shape and `payNo` bound refused by name.
+    /// pay-meta-tax T42, plan T83: `mtxPay(t, auth, meta)` decodes to its `UAMetaTransfer`; `metaPayId` v3 of the paymeta.json
+    /// rows; the shape (`save` without a `payNo` too) refused by name; `save` and the v2 tag differ.
     #[test]
-    fn mtx_pay_decodes_and_meta_pay_id_v2_rows() {
+    fn mtx_pay_decodes_and_meta_pay_id_v3_rows() {
         let t = UAMetaTransfer { from: B256::repeat_byte(0xaa), to: B256::repeat_byte(0x5e), value: U256::from(10), entryRef: B256::ZERO,
             batch: U256::from(7), nonce: U256::ZERO, validUntil: U256::from(1_800_000_300u64), mode: MODE_RESTRICT_RELAYER,
             relayer: Address::repeat_byte(2), fee: U256::ZERO, feeRecipient: Address::ZERO };
         let auth = UASig { keyData: Bytes::new(), signature: Bytes::from_static(&[7; 65]), members: vec![] };
-        let meta = crate::abi::PayMeta { salt: B256::repeat_byte(0x51), payNo: "INV-1".into(), schema: 0, body: Bytes::new() };
+        let meta = crate::abi::PayMeta { salt: B256::repeat_byte(0x51), payNo: B256::repeat_byte(1), save: true, schema: 0,
+            body: Bytes::new() };
         let cd = IMtxIds::mtxPayCall { t: t.clone(), auth: auth.clone(), meta: meta.clone() }.abi_encode();
         assert_eq!(UaMtx::from_calldata(&cd), Some((UaMtx::Transfer(t), auth)));
         let rows: Vec<serde_json::Value> =
@@ -733,15 +729,22 @@ mod tests {
         assert_eq!(rows.len(), 9);
         for r in &rows {
             let h = |k: &str| alloy::hex::decode(r[k].as_str().unwrap().trim_start_matches("0x")).unwrap();
-            let m = crate::abi::PayMeta { salt: B256::from_slice(&h("salt")), payNo: r["payNo"].as_str().unwrap().into(),
-                schema: r["schema"].as_u64().unwrap() as u16, body: h("body").into() };
+            let m = crate::abi::PayMeta { salt: B256::from_slice(&h("salt")), payNo: B256::from_slice(&h("payNo")),
+                save: r["save"].as_bool().unwrap(), schema: r["schema"].as_u64().unwrap() as u16, body: h("body").into() };
             if r["accepted"].as_bool().unwrap() {
                 check_pay_meta(&m).unwrap();
                 assert_eq!(meta_pay_id(&m), B256::from_slice(&h("payId")), "{}", r["name"]);
             } else {
-                assert!(check_pay_meta(&m).unwrap_err().to_string().starts_with("PAY_NO_TOO_LONG"), "{}", r["name"]);
+                assert!(check_pay_meta(&m).unwrap_err().to_string().starts_with("PAY_META_SHAPE"), "{}", r["name"]);
+            }
+            if let Some(off) = r["saveOffPayId"].as_str() {
+                assert_eq!(format!("{:#x}", meta_pay_id(&crate::abi::PayMeta { save: false, ..m.clone() })), off, "save is committed");
+            }
+            if let Some(v2) = r["v2TagPayId"].as_str() {
+                assert_ne!(format!("{:#x}", meta_pay_id(&m)), v2, "the v3 tag");
             }
         }
+        assert!(check_pay_meta(&crate::abi::PayMeta { payNo: B256::ZERO, ..meta.clone() }).unwrap_err().to_string().starts_with("PAY_META_SHAPE"));
         assert!(check_pay_meta(&crate::abi::PayMeta { salt: B256::ZERO, ..meta.clone() }).unwrap_err().to_string().starts_with("PAY_META_SHAPE"));
         assert!(check_pay_meta(&crate::abi::PayMeta { body: Bytes::from_static(b"x"), ..meta }).unwrap_err().to_string().starts_with("PAY_META_SHAPE"));
     }

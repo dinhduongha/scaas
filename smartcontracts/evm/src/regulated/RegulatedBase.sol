@@ -146,6 +146,7 @@ abstract contract RegulatedBase is MetaTokenBase, IRegulatedToken {
         bytes32 r = _taxTo(t.to, t.value, taxMode, tax);
         bytes32 d = _uaExecuteTransfer(t, MtxPipelineLib.payWithTaxHash(t, taxMode, tax), auth, tax, r); // lever 6
         RegulatedLib.taxed(t.entryRef, t.to, r, t.from, taxMode, tax, d);
+        _payRecord(meta, t.to, t.value - tax); // net of the tax withheld (plan T83)
         return true;
     }
 
@@ -160,6 +161,7 @@ abstract contract RegulatedBase is MetaTokenBase, IRegulatedToken {
         bytes32 payer = MetaTxLib.pad(_msgSender());
         _uaSplit(payer, to, amount, tax, r);
         RegulatedLib.directTaxed(entryRef, to, r, payer, amount, taxMode, tax); // lever 8: the two events
+        _payRecord(meta, to, amount - tax); // net of the tax withheld (plan T83)
         return true;
     }
 

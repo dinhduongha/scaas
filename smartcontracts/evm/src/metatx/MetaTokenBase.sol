@@ -269,18 +269,37 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
         GovernanceLib.requireFeature(GovernanceBits.PAYABLE);
         _payMeta(t.entryRef, meta);
         _uaExecuteTransfer(t, 0, auth, 0, 0);
+        _payRecord(meta, t.to, t.value); // the fee is on top: `to` received `value`
         return true;
     }
 
-    /// @notice CTR-MTX-26 (spec §3.1): the commitment of a `PayMeta`, under the versioned tag `scaas.pay.meta.v2`.
+    /// @notice CTR-MTX-26 (spec §3.1): the commitment of a `PayMeta`, under the versioned tag `scaas.pay.meta.v3`.
     function metaPayId(MetaTxLib.PayMeta calldata meta) public pure returns (bytes32) {
         return MtxPipelineLib.metaPayId(meta);
     }
 
-    /// @dev Spec §3.2, in order: a non-zero salt, `schema == 0` iff the body is empty, `payNo` at most 256 bytes,
+    /// @dev Spec §3.2, in order: a non-zero salt, `schema == 0` iff the body is empty, no `save` without a `payNo`,
     ///      `entryRef == metaPayId(m)`; then `PaymentMeta`. Every pay entry calls it after its gates, before any signature.
     function _payMeta(bytes32 entryRef, MetaTxLib.PayMeta calldata m) internal {
         MtxPipelineLib.payMeta(entryRef, m); // lever 5 (pay-meta-tax spec §6.4): the body in the linked library
+    }
+
+    /// @dev Plan T83 (owner 2026-11-09): with `m.save`, `payNo`'s record of what `to` received; every public pay entry calls
+    ///      it last, after its transfer (the body in the linked library, `scaas.pay.records`).
+    function _payRecord(MetaTxLib.PayMeta calldata m, bytes32 to, uint256 received) internal {
+        if (m.save) MtxPipelineLib.payRecord(m.payNo, to, received);
+    }
+
+    /// @notice Plan T83: the stored payments of `payNo` (`PayMeta.save`); a confidential pay is never recorded.
+    function paymentCount(bytes32 payNo) external view returns (uint256) {
+        return MtxPipelineLib.paymentCount(payNo);
+    }
+
+    /// @notice Records `[offset, offset + limit)` of `payNo`, cut at the end; the reader filters `to` and adds up itself.
+    function paymentsOf(bytes32 payNo, uint256 offset, uint256 limit)
+        external view returns (MetaTxLib.PayRecord[] memory)
+    {
+        return MtxPipelineLib.paymentsOf(payNo, offset, limit);
     }
 
     // ------------------------------------------------------------------ receiver-pays (CTR-MTX-05, CTR-MTX-06)
@@ -304,6 +323,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
         GovernanceLib.requireFeature(GovernanceBits.PAYABLE);
         _payMeta(t.entryRef, meta); // `entryRef` ≠ 0 with it; any lane (spec §2.5, O3)
         _receiverFee(t, payerAuth, fee, feeRecipient, rfValidUntil, payeeAuth);
+        _payRecord(meta, t.to, t.value - fee); // the payee paid `fee` out of `value` (`fee <= value` checked)
         return true;
     }
 
@@ -393,6 +413,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
         }
         _transfer(payer, to, amount);
         emit PaymentSettled(payer, to, amount, feeAmount, feeRecipient, entryRef);
+        _payRecord(meta, MetaTxLib.pad(to), amount); // the fee is on top
         return true;
     }
 
@@ -412,6 +433,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
         if (feeAmount != 0) _transfer(_msgSender(), feeRecipient, feeAmount);
         _uaMove(payer, to, amount);
         emit UAPaymentSettled(payer, to, amount, feeAmount, feeRecipient, entryRef);
+        _payRecord(meta, to, amount);
         return true;
     }
 }

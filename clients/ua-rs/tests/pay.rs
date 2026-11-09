@@ -57,7 +57,7 @@ fn transfer(m: &Value) -> UAMetaTransfer {
 
 #[test]
 fn paymeta_v2_rows() {
-    let rows = load("metatx/paymeta.json");
+    let rows = load("metatx/legacy/ua-mtx-merge/t83/paymeta.json");
     assert_eq!(rows.as_array().unwrap().len(), 9);
     for r in rows.as_array().unwrap() {
         let m = PayMeta { salt: b32(&r["salt"]), pay_no: r["payNo"].as_str().unwrap().into(),
@@ -149,7 +149,7 @@ fn typed_ops_relay_fee_row() {
 #[test]
 fn json_surface() {
     use scaas_ua::json::{meta_pay_id_json, pay_digest_json};
-    let p = load("metatx/paymeta.json");
+    let p = load("metatx/legacy/ua-mtx-merge/t83/paymeta.json");
     let r = &p[1];
     let got: Value = serde_json::from_str(&meta_pay_id_json(&r.to_string()).unwrap()).unwrap();
     assert_eq!(got["payId"], r["payId"]);

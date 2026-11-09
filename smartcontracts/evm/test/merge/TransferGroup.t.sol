@@ -752,12 +752,14 @@ contract TransferGroupTest is Test {
     /// ids XOR-ed from the T1 interfaces' selectors): IERC20MetaTx 0x24cb820a -> 0x05c4a9ef, IMetaTokenV2 0x72c81896 ->
     /// 0xfa5f874a, IERC20Payment 0xcc624078 (unchanged), IUALedger 0x1060e254 -> 0xac15edc6. pay-meta-tax T37 (`PayMeta`
     /// last on every pay entry, `mtxPay` in its struct form, `mtxPayMeta` and `metaPayId(bytes32,bytes)` to legacy):
-    /// IMetaTokenV2 0xfa5f874a -> 0xcd9d6940, IERC20Payment 0xcc624078 -> 0xced674ba.
+    /// IMetaTokenV2 0xfa5f874a -> 0xcd9d6940, IERC20Payment 0xcc624078 -> 0xced674ba. Plan T83 (`PayMeta` v3 in every pay
+    /// entry's tuple; `paymentCount`, `paymentsOf`): IMetaTokenV2 0xcd9d6940 -> 0x62cce053, IERC20Payment 0xced674ba ->
+    /// 0x6a4938cb.
     function test_typedPathInterfaceIdsArePinned() public pure {
         // pay-meta-tax T38 (`mtxRelayFee` with `batch`, `nonce`): IERC20MetaTx 0x05c4a9ef -> 0x7513beba
         assertEq(type(IERC20MetaTx).interfaceId, bytes4(0x7513beba), "IERC20MetaTx");
-        assertEq(type(IMetaTokenV2).interfaceId, bytes4(0xcd9d6940), "IMetaTokenV2");
-        assertEq(type(IERC20Payment).interfaceId, bytes4(0xced674ba), "IERC20Payment");
+        assertEq(type(IMetaTokenV2).interfaceId, bytes4(0x62cce053), "IMetaTokenV2");
+        assertEq(type(IERC20Payment).interfaceId, bytes4(0x6a4938cb), "IERC20Payment");
         assertEq(type(IUALedger).interfaceId, bytes4(0xac15edc6), "IUALedger");
     }
 

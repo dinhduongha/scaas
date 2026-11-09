@@ -503,6 +503,20 @@ contract UAReceiversTest is UALedgerBase {
 
     // ----- payWithFeeToUA -----
 
+    /// Plan T83: `payWithFeeToUA` with `save` records the derived payee and `amount` (the fee on top), this block.
+    function test_payWithFeeToUA_record() public {
+        bytes32 no = bytes32(uint256(0x019a6e3c5f007a3b8c4d5e6f708192a3));
+        MetaTxLib.PayMeta memory m = PayMetaKit.saved("scaas.t83.toUA", no);
+        vm.roll(77);
+        vm.prank(alice);
+        tok.payWithFeeToUA(uaP, 1_000, FeeMode.FIXED, 10, FEE_TO, PayMetaKit.id(m), m);
+        MetaTxLib.PayRecord[] memory r = tok.paymentsOf(no, 0, 1);
+        assertEq(r.length, 1);
+        assertEq(r[0].to, uaP);
+        assertEq(r[0].amount, 1_000);
+        assertEq(r[0].blockNumber, 77);
+    }
+
     function test_payWithFeeToUA() public {
         vm.expectEmit(address(tok));
         emit IERC20.Transfer(alice, FEE_TO, 10);

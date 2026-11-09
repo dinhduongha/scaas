@@ -81,7 +81,8 @@ string constant UA_CANCEL_NONCE = "mtxCancelNonce((bytes32,uint256,uint256,uint2
 function rowMeta(string memory j, string memory op, string memory kind) pure returns (MetaTxLib.PayMeta memory m) {
     string memory p = domainField(op, kind, "extra.meta.");
     m.salt = VM.parseJsonBytes32(j, string.concat(p, "salt"));
-    m.payNo = VM.parseJsonString(j, string.concat(p, "payNo"));
+    m.payNo = VM.parseJsonBytes32(j, string.concat(p, "payNo"));
+    m.save = VM.parseJsonBool(j, string.concat(p, "save"));
     m.schema = uint16(VM.parseJsonUint(j, string.concat(p, "schema")));
     m.body = VM.parseJsonBytes(j, string.concat(p, "body"));
 }

@@ -235,8 +235,9 @@ contract UAMetaTx3PqTest is UARegistryBase {
 
     /// The row's `PayMeta` (pay-meta-tax T41), its commitment checked against the payment's `entryRef`.
     function _rowMeta(string memory pj, string memory p, bytes32 entryRef) internal pure returns (MetaTxLib.PayMeta memory m) {
-        m = MetaTxLib.PayMeta(vm.parseJsonBytes32(pj, string.concat(p, "salt")), vm.parseJsonString(pj, string.concat(p, "payNo")),
-            uint16(vm.parseJsonUint(pj, string.concat(p, "schema"))), vm.parseJsonBytes(pj, string.concat(p, "body")));
+        m = MetaTxLib.PayMeta(vm.parseJsonBytes32(pj, string.concat(p, "salt")), vm.parseJsonBytes32(pj, string.concat(p, "payNo")),
+            vm.parseJsonBool(pj, string.concat(p, "save")), uint16(vm.parseJsonUint(pj, string.concat(p, "schema"))),
+            vm.parseJsonBytes(pj, string.concat(p, "body")));
         assertEq(PayMetaKit.id(m), entryRef, "the row's entryRef commits to its PayMeta");
     }
 

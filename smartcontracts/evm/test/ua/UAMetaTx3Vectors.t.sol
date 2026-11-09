@@ -245,7 +245,8 @@ contract UAMetaTx3VectorsTest is UARegistryBase {
 
     function _metaAt(string memory p) internal view returns (MetaTxLib.PayMeta memory m) {
         m.salt = vm.parseJsonBytes32(vj, string.concat(p, "salt"));
-        m.payNo = vm.parseJsonString(vj, string.concat(p, "payNo"));
+        m.payNo = vm.parseJsonBytes32(vj, string.concat(p, "payNo"));
+        m.save = vm.parseJsonBool(vj, string.concat(p, "save"));
         m.schema = uint16(vm.parseJsonUint(vj, string.concat(p, "schema")));
         m.body = vm.parseJsonBytes(vj, string.concat(p, "body"));
     }

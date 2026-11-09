@@ -300,9 +300,10 @@ contract GovDeployTest is Test {
         // T25: 42,985 -> 43,333 B; T26: 43,333 -> 43,552 B; pay-meta-tax T37: 43,552 -> 43,667 B; T38: 43,667 -> 43,714 B;
         // T39: 43,714 -> 43,711 B; T40: 43,711 -> 43,503 B (lever 5: `_payMeta` in `MtxPipelineLib`); chain-neutral T72:
         // 43,503 -> 44,456 B (the env read from the clone's code, `chainEnv`, `validateEnv`); 3f T44: 44,456 -> 44,610 B (the
-        // three PQZ verifier fields refused by `_requireUnused`); 3h T60: 44,610 -> 44,635 B (`proofStore` refused there too)
-        h.limitCode(44_634);
-        vm.expectRevert(bytes("WrappedToken runtime 44635 B > chain code limit 44634 B (CHAIN_CODE_LIMIT, CTR-GOV-19)"));
+        // three PQZ verifier fields refused by `_requireUnused`); 3h T60: 44,610 -> 44,635 B (`proofStore` refused there too);
+        // T83: 44,635 -> 45,522 B (the pay records' views and `_payRecord`, the v3 `PayMeta` tuple)
+        h.limitCode(45_521);
+        vm.expectRevert(bytes("WrappedToken runtime 45522 B > chain code limit 45521 B (CHAIN_CODE_LIMIT, CTR-GOV-19)"));
         h.deploy(ZUID, false, ska);
     }
 
@@ -488,8 +489,9 @@ contract GovDeployTest is Test {
         // T66a item 2 (the metadata hash: IUARegistry's KEM holder docs): 0xC9C1aC557303551b16d78DBce193f02e414CAA39 -> this
         // T66a item 5 (the metadata hash: IUARegistry.popSlotsOf): 0x3d0DB1d457Ac07B199e8Bd65676AFF7fF127330E ->
         // 0x8B56809BBf5f6595351F648a499E194292B6100C; T82 (the metadata hash: the contract's new name and file, owner
-        // 2026-11-09): -> this
-        assertEq(rf, 0x6e5ADaD0b26E45d76250564dC569D2C05a082762, "RelayFeeRouter");
+        // 2026-11-09): -> 0x6e5ADaD0b26E45d76250564dC569D2C05a082762; T83 (the metadata hash: `MetaTxLib.PayMeta` v3 and
+        // `PayRecord`, owner 2026-11-09): -> this
+        assertEq(rf, 0x70ba50D63EC511e4a39bf34d8EE01F3e85D3cEaC, "RelayFeeRouter");
         // ua-mtx-merge T24: 0x2AEfB2af419765600eC00a7D0CfC4dE30f2d3750 -> 0xAb151Df7DC7CbbD9755028a27Ad0bc55a34b5b53 (the
         // router's metadata hash: `IGovernance`); T26: -> this (the two empty hooks `UAMetaTxBase` adds, its
         // `mtxCancelNonce` seats); T32: 0xBc8Df1a828dA586e5ccB8Db8942bbCC9c130cC34 -> this (the eight regulated control ops)
@@ -508,8 +510,9 @@ contract GovDeployTest is Test {
         // 3h T58 (the metadata hash: IPqzToken's debit record view and `lastDebit`): -> 0x942f489e2f453AaEd2Be4B3DFb8b5dA441Fa6BdA
         // 3h T59 (the metadata hash: IPqzToken's args with `ownTag`; found by T60's suite): -> 0xA4Ab7e0673548a32B96d7164b6e81B9D6Ce29C4b
         // 3h T60 (the metadata hash: `proofStore`'s error, event and view; `ConfidentialConfig.proofStore`): ->
-        // 0xB95B3fA6EDD80605484A95ffBa63B6e2e873C0C6; T61 (`mtxSetProofStore`, bit 24): -> this
-        assertEq(router, 0x8D4632FcCd353fb46400D356B79A7171eE44d2d0, "GovernanceRouter");
+        // 0xB95B3fA6EDD80605484A95ffBa63B6e2e873C0C6; T61 (`mtxSetProofStore`, bit 24): -> 0x8D4632FcCd353fb46400D356B79A7171eE44d2d0;
+        // T83 (the metadata hash: `IMetaTokenV2`'s pay-record views, `PaymentMeta` v3): -> this
+        assertEq(router, 0x7d3C8bE73d8840bA378F83D8Ac1297080ceaCc03, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append: chain-neutral releases (plan T72), `abi.encode(factory, implArgs)`;

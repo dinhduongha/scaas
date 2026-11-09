@@ -45,8 +45,8 @@ const tradeTuple = (o) => [o.from, o.receiveToken, o.amount, o.receiveAmount, o.
 const wrapTuple = (o) => [o.from, o.wrappedToken, o.amount, o.minMinted, o.minFill, o.fee, o.relayer, o.destination, o.flags,
   o.batch, o.nonce, o.validUntil];
 const asTrade = (o) => ({ ...o, receiveToken: o.wrappedToken, receiveAmount: o.minMinted, dex: o.wrappedToken });
-// pay-meta-tax T41: a pay entry's last parameter, `PayMeta {salt, payNo, schema, body}`, unsigned
-const metaTuple = (x) => [x.salt, x.payNo, x.schema, x.body];
+// pay-meta-tax T41, plan T83: a pay entry's last parameter, `PayMeta {salt, payNo, save, schema, body}`, unsigned
+const metaTuple = (x) => [x.salt, x.payNo, x.save, x.schema, x.body];
 const transferTuple = (t) => [t.from, t.to, t.value, t.entryRef, t.batch, t.nonce, t.validUntil, t.mode, t.relayer, t.fee, t.feeRecipient];
 const OTHER = {
   UAReceiverFee: (m, s, d) => [transferTuple(m.payment), ['0x', d.extra.payerSig, []], m.fee, m.feeRecipient, m.validUntil, ['0x', s, []],

@@ -186,7 +186,7 @@ const STRUCTS = Object.fromEntries(Object.entries({
   UASig: 'bytes keyData,bytes signature,MemberSig[] members', AccountSig: 'uint256 keyIndex,bytes32[] proof,bytes signature',
   Payout: 'uint256 amount,bytes32 recipient',
   // pay-meta-tax spec §3.1: the last parameter of every pay entry, unsigned (its commitment is the signed `entryRef`)
-  PayMeta: 'bytes32 salt,string payNo,uint16 schema,bytes body',
+  PayMeta: 'bytes32 salt,bytes32 payNo,bool save,uint16 schema,bytes body',
   // a holder's terms, nested in the router's `SetGrant` / `UASetGrant` (governance spec §3.2: `hashStruct` signed, the struct the argument)
   GrantTerms: 'uint128 min,uint128 max,uint128 total,uint128 perWindow,uint32 window,uint64 validUntil,uint32 maxUses,bool delegable,bytes32 scope',
   // group 3f (PQZ verifier mode spec §5.1, §5.3): what a PQZ verifier UA signs in the token's domain (purpose `pqz-verdict`), and
@@ -608,9 +608,13 @@ const sel = (sig) => hex(keccak_256(utf8ToBytes(sig)).subarray(0, 4));
 const NEVER_CALLED = new Set(['transfer(address,uint256)', 'transferFrom(address,address,uint256)',
   'approve(address,uint256)', 'payWithFee(address,uint256,uint8,uint256,address,bytes32)', 'pay(bytes32)',
   'payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32)',
+  // the v2 `PayMeta` forms (`payNo` a string), gone with plan T83: still never inside a `MetaTransaction`
   'payWithFee(address,uint256,uint8,uint256,address,bytes32,(bytes32,string,uint16,bytes))',
   'payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32,(bytes32,string,uint16,bytes))',
-  'payWithTax(bytes32,uint256,uint8,uint256,bytes32,(bytes32,string,uint16,bytes))'].map(sel));
+  'payWithTax(bytes32,uint256,uint8,uint256,bytes32,(bytes32,string,uint16,bytes))',
+  'payWithFee(address,uint256,uint8,uint256,address,bytes32,(bytes32,bytes32,bool,uint16,bytes))',
+  'payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32,(bytes32,bytes32,bool,uint16,bytes))',
+  'payWithTax(bytes32,uint256,uint8,uint256,bytes32,(bytes32,bytes32,bool,uint16,bytes))'].map(sel));
 export const ADD_KEY_SELECTOR = keccak_256(utf8ToBytes(`addKey(${KEY_TUPLE})`)).subarray(0, 4);
 const KEY_PROOF_PREFIX = utf8ToBytes('scaas-subject-key-proof-v1');
 
@@ -829,7 +833,7 @@ export function checkReceiverFee(td, { payee, chainId, chainUid, amount, decimal
   return { digest, paymentDigest, payer: p.from, fee, feeRecipient };
 }
 
-// ------------------------------------------------------------------ CTR-MTX-26 (pay-meta-tax spec §3): `PayMeta` v2
+// ------------------------------------------------------------------ CTR-MTX-26 (pay-meta-tax spec §3, plan T83): `PayMeta` v3
 
 const asBytes = (v) => (v instanceof Uint8Array ? v : fromHex(v));
 const at = (b, i) => BigInt(hex(b.subarray(32 * i, 32 * i + 32)));
@@ -840,21 +844,26 @@ export function metaPayIdV1(salt, meta) {
   return hex(keccak_256(concatBytes(utf8ToBytes('scaas.pay.meta'), bytes32(salt), keccak_256(asBytes(meta)))));
 }
 
-export const PAY_NO_MAX = 256;
-// C0 and C1 controls, DEL; the bidirectional marks, embeddings, overrides and isolates (display spoofing, spec §3.1)
-const PAY_NO_CONTROL = /[\u0000-\u001f\u007f-\u009f]/;
-const PAY_NO_BIDI = /[؜‎‏‪-‮⁦-⁩]/;
+const UUID = /^([0-9a-f]{8})-([0-9a-f]{4})-([0-9a-f]{4})-([0-9a-f]{4})-([0-9a-f]{12})$/;
 
-/** A `payNo` a wallet signs (spec §3.1, O15): text, valid UTF-8 (no lone surrogate), at most 256 bytes, no control
- *  character, no bidirectional mark or override. Returns its UTF-8 bytes. */
-export function checkPayNo(payNo) {
-  if (typeof payNo !== 'string') refuse('the payment number is text');
-  if (/[\ud800-\udfff]/.test(payNo.replace(/[\ud800-\udbff][\udc00-\udfff]/g, ''))) refuse('the payment number is not UTF-8');
-  const b = utf8ToBytes(payNo);
-  if (b.length > PAY_NO_MAX) refuse(`the payment number is ${b.length} bytes, above ${PAY_NO_MAX}`);
-  if (PAY_NO_CONTROL.test(payNo)) refuse('the payment number holds a control character');
-  if (PAY_NO_BIDI.test(payNo)) refuse('the payment number holds a bidirectional override');
-  return b;
+/** The recommended `payNo` (plan T83, owner 2026-11-09): a UUIDv7 right-aligned in 32 bytes, its 128 bits in the low 16 bytes
+ *  and the high 16 bytes zero (as an address is padded). Unique without coordination; time-ordered, so an indexer's or ERP's
+ *  index stays compact; no business sequence number on chain. One `payNo` per payment request when the payee must match each
+ *  request. `uuid` the canonical text (`019a6e3c-5f00-7a3b-8c4d-5e6f708192a3`, any case); refused unless version 7, variant
+ *  10. The contract takes any 32-byte value and never parses it; this is the wallet's form. */
+export function payNoFromUuid(uuid) {
+  const m = UUID.exec(String(uuid).toLowerCase());
+  if (!m || m[3][0] !== '7' || !'89ab'.includes(m[4][0])) refuse('the payment number is not a UUIDv7');
+  return '0x' + '00'.repeat(16) + m.slice(1).join('');
+}
+
+/** For display: the UUID text of a right-aligned `payNo` (its high 16 bytes zero, version 7, variant 10), else `null` (0, or
+ *  another 32-byte id: show it as hex). */
+export function payNoToUuid(payNo) {
+  const h = hex(bytes32(payNo)).slice(2);
+  if (!/^0{32}/.test(h) || h[44] !== '7' || !'89ab'.includes(h[48])) return null;
+  const u = h.slice(32);
+  return `${u.slice(0, 8)}-${u.slice(8, 12)}-${u.slice(12, 16)}-${u.slice(16, 20)}-${u.slice(20)}`;
 }
 
 function utf8(b) {
@@ -920,32 +929,37 @@ const randomSalt = () => {
   return hex(s);
 };
 
-/** A `PayMeta {salt, payNo, schema, body}` (spec §3.1), checked as the contract and the wallet rules ask: a non-zero salt
- *  (from the CSPRNG when absent), `schema == 0` iff the body is empty, the `payNo` rules of `checkPayNo`. The body is the
- *  hex given, or built from `fields` (`encodeMetaBody`). Returns `{salt, payNo, schema, body}` (hex). */
-export function payMeta({ salt, payNo = '', schema = 0, body, fields: f } = {}) {
+/** A `PayMeta {salt, payNo, save, schema, body}` (spec §3.1, plan T83), checked as the contract asks: a non-zero salt (from
+ *  the CSPRNG when absent), `schema == 0` iff the body is empty, `save` only with a `payNo`. `payNo` 32 bytes (hex or bytes;
+ *  0 = none), recommended a right-aligned UUIDv7 (`payNoFromUuid`); `save` the payer's choice to store the payment's record
+ *  under `payNo` on chain (`paymentsOf`), usually set by the payee's request. The body is the hex given, or built from
+ *  `fields` (`encodeMetaBody`). Returns `{salt, payNo, save, schema, body}` (hex). */
+export function payMeta({ salt, payNo = ZERO32, save = false, schema = 0, body, fields: f } = {}) {
   const s = hex(bytes32(salt ?? randomSalt()));
   if (BigInt(s) === 0n) refuse('the salt is 0');
   if (!Number.isInteger(schema) || schema < 0 || schema > 0xffff) refuse('the schema is a uint16');
-  checkPayNo(payNo);
+  let n;
+  try { n = hex(bytes32(payNo)); } catch { refuse('the payment number is 32 bytes (payNoFromUuid for a UUIDv7)'); }
+  if (typeof save !== 'boolean') refuse('save is true or false');
+  if (save && BigInt(n) === 0n) refuse('save needs a payment number');
   const b = body !== undefined ? asBytes(body) : encodeMetaBody(schema, f);
   if ((schema === 0) !== (b.length === 0)) refuse('schema 0 iff the body is empty');
-  return { salt: s, payNo, schema, body: hex(b) };
+  return { salt: s, payNo: n, save, schema, body: hex(b) };
 }
 
-/** `metaPayId(m) = keccak256("scaas.pay.meta.v2" ‖ salt ‖ keccak256(abi.encode(string payNo, uint16 schema, bytes body)))`
- *  (CTR-MTX-26 Change; on chain `metaPayId(PayMeta)`). */
+/** `metaPayId(m) = keccak256("scaas.pay.meta.v3" ‖ salt ‖ keccak256(abi.encode(bytes32 payNo, bool save, uint16 schema,
+ *  bytes body)))` (CTR-MTX-26, plan T83; on chain `metaPayId(PayMeta)`). */
 export function metaPayId(meta) {
   const m = payMeta(meta);
-  return hex(keccak_256(concatBytes(utf8ToBytes('scaas.pay.meta.v2'), fromHex(m.salt),
-    keccak_256(abiEncode(['string', 'uint16', 'bytes'], [m.payNo, m.schema, fromHex(m.body)])))));
+  return hex(keccak_256(concatBytes(utf8ToBytes('scaas.pay.meta.v3'), fromHex(m.salt),
+    keccak_256(abiEncode(['bytes32', 'bool', 'uint16', 'bytes'], [m.payNo, m.save, m.schema, fromHex(m.body)])))));
 }
 
 /** The warning of spec §3.3 (F-24): a clear `payNo` or a schema 1 or 2 body is public forever. Shown once per payee per
  *  `session` (a `Set` the wallet keeps for the session); `null` when there is nothing to warn of or it was shown. */
 export function payMetaWarning(meta, payee, session) {
   const m = payMeta(meta);
-  if (m.payNo === '' && m.schema !== 1 && m.schema !== 2) return null;
+  if (BigInt(m.payNo) === 0n && m.schema !== 1 && m.schema !== 2) return null;
   const k = String(payee).toLowerCase();
   if (session.has(k)) return null;
   session.add(k);
@@ -957,7 +971,8 @@ function payMetaParts(meta, entryRef) {
   const m = payMeta(required(meta, 'the payment metadata'));
   const payId = metaPayId(m);
   if (entryRef != null && !same(entryRef, payId)) refuse('the payment id does not commit to its metadata');
-  return { meta: m, payId, shown: { payNo: m.payNo, schema: m.schema, ...decodeMetaBody(m.schema, m.body) } };
+  return { meta: m, payId, shown: { payNo: m.payNo, payNoUuid: payNoToUuid(m.payNo), save: m.save, schema: m.schema,
+    ...decodeMetaBody(m.schema, m.body) } };
 }
 
 /** The payer's payment (pay-meta-tax spec §2.1): the `UAMetaTransfer` of `mtxPay(t, UASig auth, PayMeta meta)` between

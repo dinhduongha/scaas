@@ -283,7 +283,7 @@ contract MandateWalletMergedTest is MergeBase {
         assertEq(tok.balanceOf(NPP), 10);
         uint256 before = tok.balanceOfUA(uaP);
         vm.expectCall(address(tok), abi.encodeWithSignature(
-            "payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32,(bytes32,string,uint16,bytes))", uaP, 400, 0, 0,
+            "payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32,(bytes32,bytes32,bool,uint16,bytes))", uaP, 400, 0, 0,
             address(0), PayMetaKit.ref("ua"), PayMetaKit.meta("ua")));
         _ok(address(w), _payCd(w, _pad(bob), address(tok), uaP, 400, "ua"), "derived payee");
         assertEq(tok.balanceOfUA(uaP), before + 400);

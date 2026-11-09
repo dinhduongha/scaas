@@ -313,7 +313,7 @@ fn ua_work(job: &Job, fee_recipient: Option<Address>) -> Result<Work> {
     let typed = Some(typed);
     if job.salt.is_some() || job.meta.is_some() || job.meta_offchain.is_some() {
         anyhow::bail!("HEX_ARGS_REFUSED: salt / meta: a pay goes as its named entry {{op: {{entry: \"mtxPay\", args: {{…, meta: \
-            {{salt, payNo, schema, body: named fields}}}}}}}}, never a hex meta");
+            {{salt, payNo, save, schema, body: named fields}}}}}}}}, never a hex meta");
     }
     let data = m.calldata(auth);
     let meta = Some(MetaRef::of_ua(token, &m, None));
@@ -2190,7 +2190,7 @@ pub(crate) mod tests {
     }
 
     fn structured() -> Value {
-        json!({"salt": format!("{:#x}", B256::repeat_byte(0x51)), "payNo": "INV-2026-0042", "schema": 2,
+        json!({"salt": format!("{:#x}", B256::repeat_byte(0x51)), "payNo": "0x00000000000000000000000000000000019a6e3c5f007a3b8c4d5e6f708192a3", "save": true, "schema": 2,
             "body": {"creditorRef": "RF18539007547034", "dueDate": "1830297600"}})
     }
 
@@ -2201,7 +2201,7 @@ pub(crate) mod tests {
     async fn pay_job_named_meta_builds_body() {
         let v: Value = serde_json::from_str(include_str!("../../smartcontracts/vectors/metatx/paymeta.json")).unwrap();
         let row = v.as_array().unwrap().iter().find(|r| r["name"] == "structured_reference").unwrap();
-        let named = json!({"salt": row["salt"], "payNo": row["payNo"], "schema": 2,
+        let named = json!({"salt": row["salt"], "payNo": row["payNo"], "save": row["save"], "schema": 2,
             "body": {"creditorRef": "RF18539007547034", "dueDate": "1830297600"}});
         assert_eq!(format!("{:#x}", op_meta_id(&named)), row["payId"].as_str().unwrap(), "the forge row's commitment");
         let ok = || Evm { mtx_nonce: Some(0), ..Default::default() };
@@ -2210,15 +2210,15 @@ pub(crate) mod tests {
         let sent = rpc.lock().unwrap().sent[0].2.clone();
         let c = crate::abi::IMtxIds::mtxPayCall::abi_decode(&sent).unwrap();
         assert_eq!(format!("0x{}", alloy::hex::encode(&c.meta.body)), row["body"].as_str().unwrap());
-        assert_eq!((c.meta.payNo.as_str(), c.meta.schema), ("INV-2026-0042", 2));
+        assert_eq!((format!("{:#x}", c.meta.payNo).as_str(), c.meta.save, c.meta.schema), ("0x00000000000000000000000000000000019a6e3c5f007a3b8c4d5e6f708192a3", true, 2));
         assert_eq!(c.t.entryRef, op_meta_id(&named));
         let (r, _) = outcomes(Evm { mtx_nonce: Some(3), ..Default::default() }, vec![pay_job(7, named, |t| t.nonce = U256::from(3))],
             |_| {}).await;
         assert_eq!(states_of(&r), ["signed", "broadcast"], "a free lane: nonce 3, no payLane check: {r:?}");
     }
 
-    /// `pay_job_hex_meta_refused`, `pay_job_payno_257_refused`, `PAY_META_MISMATCH`, `ENTRY_RETIRED`: refused by name before any
-    /// RPC; the old `salt` + hex `meta` struct job too.
+    /// `pay_job_hex_meta_refused`, plan T83 (a text `payNo`, a short one, a non-bool `save`, `save` without a `payNo`),
+    /// `PAY_META_MISMATCH`, `ENTRY_RETIRED`: refused by name before any RPC; the old `salt` + hex `meta` struct job too.
     #[tokio::test]
     async fn pay_job_refusals_by_name() {
         let ok = || Evm { mtx_nonce: Some(0), ..Default::default() };
@@ -2230,11 +2230,18 @@ pub(crate) mod tests {
         let (r, rpc) = outcomes(ok(), vec![bad], |_| {}).await;
         refused(&r, "HEX_ARGS_REFUSED");
         assert!(rpc.lock().unwrap().sent.is_empty());
-        let mut long = structured();
-        long["payNo"] = json!("A".repeat(257));
-        let mut bad = pay_job(7, structured(), |_| {});
-        bad["op"]["args"]["meta"] = long;
-        refused(&outcomes(ok(), vec![bad], |_| {}).await.0, "PAY_NO_TOO_LONG");
+        for (k, v, what) in [("payNo", json!("INV-2026-0042"), "meta.payNo: not 0x-hex"),
+            ("payNo", json!(format!("0x{}", "01".repeat(31))), "meta.payNo: not bytes32"),
+            ("save", json!("true"), "meta.save: not a bool"),
+            ("payNo", json!(format!("{:#x}", B256::ZERO)), "PAY_META_SHAPE")] {
+            let mut m = structured();
+            m[k] = v;
+            let mut bad = pay_job(7, structured(), |_| {});
+            bad["op"]["args"]["meta"] = m;
+            let (r, rpc) = outcomes(ok(), vec![bad], |_| {}).await;
+            refused(&r, what);
+            assert!(rpc.lock().unwrap().sent.is_empty(), "{what}");
+        }
         refused(&outcomes(ok(), vec![pay_job(7, structured(), |t| t.entryRef = B256::repeat_byte(0x42))], |_| {}).await.0,
             "PAY_META_MISMATCH");
         let mut retired = pay_job(7, structured(), |_| {});
@@ -2475,11 +2482,13 @@ pub(crate) mod tests {
         }
     }
 
-    /// `max_pay_meta_bytes` (default 2,048, spec §7.1) caps `payNo + body` of a pay job; the config raises it.
+    /// `max_pay_meta_bytes` (default 2,048, spec §7.1) caps the `body` of a pay job (plan T83: `payNo` a fixed word, not
+    /// counted); the config raises it.
     #[tokio::test]
     async fn pay_meta_cap_refused() {
         let ok = || Evm { mtx_nonce: Some(0), ..Default::default() };
-        let note = |n: usize| json!({"salt": format!("{:#x}", B256::repeat_byte(3)), "payNo": "", "schema": 1, "body": {"note": "x".repeat(n)}});
+        let note = |n: usize| json!({"salt": format!("{:#x}", B256::repeat_byte(3)), "payNo": format!("{:#x}", B256::repeat_byte(9)),
+            "save": true, "schema": 1, "body": {"note": "x".repeat(n)}});
         let (r, _) = outcomes(ok(), vec![pay_job(7, note(2048), |_| {})], |_| {}).await;
         assert_eq!(states_of(&r), ["signed", "broadcast"], "{r:?}");
         let (r, rpc) = outcomes(ok(), vec![pay_job(7, note(2049), |_| {})], |_| {}).await;
@@ -2522,7 +2531,7 @@ pub(crate) mod tests {
     async fn relay_fee_row_requires_router_and_registered_token() {
         let sig = |s: &str| -> [u8; 4] { alloy::primitives::keccak256(s)[..4].try_into().unwrap() };
         assert_eq!(crate::abi::IMtxIds::mtxPayCall::SELECTOR, sig("mtxPay((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,\
-address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,string,uint16,bytes))"));
+address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))"));
         let mut cfg = test_cfg("http://127.0.0.1:9");
         relay_params(&mut cfg, &[]);
         let rf = guard::RelayFee::from_cfg(&cfg).unwrap().unwrap();

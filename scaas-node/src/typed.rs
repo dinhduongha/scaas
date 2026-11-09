@@ -580,24 +580,27 @@ pub fn parse(ty: &str, j: &Value, path: &str) -> Result<Val> {
     })
 }
 
-const PAY_META_ABI: &str = "(bytes32,string,uint16,bytes)";
+const PAY_META_ABI: &str = "(bytes32,bytes32,bool,uint16,bytes)";
 
-/// A job's `meta` (pay-meta-tax spec §7.1): `{salt, payNo, schema, body}`, `body` **named per schema** (0 absent, 1 `{note}`,
-/// 2 `{creditorRef, dueDate}`, 3 `{chainId, target, callHash}`, 4 `{ciphertext}` hex, the one crypto object); the node builds
-/// the bytes (spec §3.1). A hex `body` is refused `HEX_ARGS_REFUSED`; the shape and the `payNo` bound by name (`check_pay_meta`).
+/// A job's `meta` (pay-meta-tax spec §7.1, plan T83): `{salt, payNo, save, schema, body}`; `payNo` a `0x` + 64-hex `bytes32`
+/// (absent = 0, none; recommended a right-aligned UUIDv7; a text `payNo` is refused `BAD_PAYLOAD`), `save` a JSON bool
+/// (absent = false), `body` **named per schema** (0 absent, 1 `{note}`, 2 `{creditorRef, dueDate}`, 3 `{chainId, target,
+/// callHash}`, 4 `{ciphertext}` hex, the one crypto object); the node builds the bytes (spec §3.1). A hex `body` is refused
+/// `HEX_ARGS_REFUSED`; the shape by name (`check_pay_meta`).
 fn pay_meta(j: &Value, path: &str) -> Result<Val> {
     let o = j.as_object().ok_or_else(|| anyhow!("BAD_PAYLOAD: {path}: not an object"))?;
-    if let Some(k) = o.keys().find(|k| !matches!(k.as_str(), "salt" | "payNo" | "schema" | "body")) {
+    if let Some(k) = o.keys().find(|k| !matches!(k.as_str(), "salt" | "payNo" | "save" | "schema" | "body")) {
         bail!("BAD_PAYLOAD: {path}.{k}: unknown field");
     }
     let salt = parse("bytes32", o.get("salt").ok_or_else(|| anyhow!("BAD_PAYLOAD: {path}.salt: missing"))?, &format!("{path}.salt"))?;
     let pay_no = match o.get("payNo") {
-        None => String::new(),
-        Some(v) => v.as_str().ok_or_else(|| anyhow!("BAD_PAYLOAD: {path}.payNo: not a string"))?.to_string(),
+        None => B256::ZERO,
+        Some(v) => B256::from_slice(parse("bytes32", v, &format!("{path}.payNo"))?.as_fixed_bytes().expect("bytes32").0),
     };
-    if pay_no.len() > crate::metatx::PAY_NO_MAX {
-        bail!("PAY_NO_TOO_LONG: {path}.payNo is {} B, above {}", pay_no.len(), crate::metatx::PAY_NO_MAX);
-    }
+    let save = match o.get("save") {
+        None => false,
+        Some(v) => v.as_bool().ok_or_else(|| anyhow!("BAD_PAYLOAD: {path}.save: not a bool"))?,
+    };
     let schema = match o.get("schema") {
         None => 0u16,
         Some(v) => v.as_u64().and_then(|n| u16::try_from(n).ok()).ok_or_else(|| anyhow!("BAD_PAYLOAD: {path}.schema: not a uint16"))?,
@@ -648,16 +651,17 @@ fn pay_meta(j: &Value, path: &str) -> Result<Val> {
         n => bail!("BAD_PAYLOAD: {path}.schema {n}: not one of 0-4"),
     };
     let m = crate::abi::PayMeta { salt: salt.as_fixed_bytes().map(|x| B256::from_slice(x.0)).unwrap_or_default(), payNo: pay_no,
-        schema, body: bytes.into() };
+        save, schema, body: bytes.into() };
     crate::metatx::check_pay_meta(&m)?;
-    Ok(Val::Tuple(vec![salt, Val::String(m.payNo), Val::Uint(U256::from(m.schema), 16), Val::Bytes(m.body.to_vec())]))
+    Ok(Val::Tuple(vec![salt, fixed(m.payNo.as_slice()), Val::Bool(m.save), Val::Uint(U256::from(m.schema), 16),
+        Val::Bytes(m.body.to_vec())]))
 }
 
 /// The parsed `PayMeta` value as `abi::PayMeta`.
 pub fn pay_meta_of(v: &Val) -> Option<crate::abi::PayMeta> {
     let t = v.as_tuple()?;
-    Some(crate::abi::PayMeta { salt: B256::from_slice(t[0].as_fixed_bytes()?.0), payNo: t[1].as_str()?.to_string(),
-        schema: t[2].as_uint()?.0.saturating_to(), body: t[3].as_bytes()?.to_vec().into() })
+    Some(crate::abi::PayMeta { salt: B256::from_slice(t[0].as_fixed_bytes()?.0), payNo: B256::from_slice(t[1].as_fixed_bytes()?.0),
+        save: t[2].as_bool()?, schema: t[3].as_uint()?.0.saturating_to(), body: t[4].as_bytes()?.to_vec().into() })
 }
 
 /// The inverse of [`pay_meta`]: the body decoded to its named fields (an undecodable body as `null`).
@@ -676,7 +680,7 @@ fn pay_meta_json(v: &Val) -> Option<Value> {
             "callHash": format!("0x{}", alloy::hex::encode(w(2)?))}),
         _ => json!({"ciphertext": format!("0x{}", alloy::hex::encode(&m.body))}),
     };
-    let mut o = json!({"salt": format!("{:#x}", m.salt), "payNo": m.payNo, "schema": m.schema});
+    let mut o = json!({"salt": format!("{:#x}", m.salt), "payNo": format!("{:#x}", m.payNo), "save": m.save, "schema": m.schema});
     if !body.is_null() {
         o["body"] = body;
     }
@@ -909,7 +913,8 @@ pub struct Typed {
     /// A derived `from` or `to` (the subject, a `to`, a payment's payer or payee): the token's UA ledger must be on (R44, step
     /// 7a); an all-native op runs at `registry() == 0` (R9).
     pub derived_side: bool,
-    /// A pay entry's `payNo + body` bytes (pay-meta-tax spec §7.1, `max_pay_meta_bytes`); 0 for any other op.
+    /// A pay entry's `body` bytes (pay-meta-tax spec §7.1, `max_pay_meta_bytes`; plan T83: `payNo` is a fixed word, like
+    /// `salt`); 0 for any other op.
     pub pay_meta_len: usize,
     /// Group 3g (KV-7): a PQZ debit's receivers (op 1's `toUA`, every op 7 leg's `ua`), the parties whose pending version the
     /// intake refuses (`PQZ_KEY_ROTATION_PENDING`) and whose `UAPqzKeyCurrent` makes a `ProofRejected` `PQZ_KEY_ROTATED`.
@@ -1166,7 +1171,7 @@ impl Op {
             true => a.vals["underlying"].as_address().expect("address"),
             false => token,
         };
-        let pay_meta_len = a.vals.get("meta").and_then(pay_meta_of).map_or(0, |m| m.payNo.len() + m.body.len());
+        let pay_meta_len = a.vals.get("meta").and_then(pay_meta_of).map_or(0, |m| m.body.len());
         let (pqz_parties, pqz_auditor) = pqz_parties(row, &a.vals);
         let typed = Typed { contract, domain_of, struct_hash: a.struct_hash, lane_hash, signer, payee, digest: None, derived_signer, derived_side,
             pay_meta_len, pqz_parties, pqz_auditor, pqz_verdict };
@@ -1374,10 +1379,10 @@ pub mod testkit {
         (row.enveloped.then_some(Value::Object(env)), Value::Object(args), sig)
     }
 
-    /// A `PayMeta` `{salt, payNo, schema, body: hex}` (the vectors' form) as a job's named one.
+    /// A `PayMeta` `{salt, payNo, save, schema, body: hex}` (the vectors' form) as a job's named one.
     pub fn named_meta(m: &Value) -> Value {
         let h = |k: &str| alloy::hex::decode(m[k].as_str().unwrap().trim_start_matches("0x")).unwrap();
-        let v = Val::Tuple(vec![fixed(&h("salt")), Val::String(m["payNo"].as_str().unwrap_or("").into()),
+        let v = Val::Tuple(vec![fixed(&h("salt")), fixed(&h("payNo")), Val::Bool(m["save"].as_bool().unwrap()),
             Val::Uint(U256::from(m["schema"].as_u64().unwrap()), 16), Val::Bytes(h("body"))]);
         pay_meta_json(&v).unwrap()
     }
@@ -2088,7 +2093,8 @@ mod tests {
             "args": {"token": format!("{token:#x}", token = Address::from_slice(&word(p, 0)[12..])), "payee": format!("0x{}", alloy::hex::encode(word(p, 1))),
                 "amount": U256::from_be_slice(&word(p, 2)).to_string(), "entryRef": format!("0x{}", alloy::hex::encode(word(p, 3))),
                 "epoch": U256::from_be_slice(&word(p, 4)).to_string(),
-                "meta": named_meta(&json!({"salt": p["meta_salt"], "payNo": p["meta_pay_no"], "schema": p["meta_schema"], "body": p["meta_body"]}))},
+                "meta": named_meta(&json!({"salt": p["meta_salt"], "payNo": p["meta_pay_no"], "save": p["meta_save"], "schema": p["meta_schema"],
+                    "body": p["meta_body"]}))},
             "auth": {"keyData": "0x", "signature": s("signature"), "members": []}});
         let built = Op::parse(&op, FEE).unwrap();
         assert_eq!(format!("0x{}", alloy::hex::encode(&built.data)), s("calldata"), "forge's calldata");

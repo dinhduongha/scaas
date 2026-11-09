@@ -19,8 +19,8 @@ import {UAKinds} from "../ua/UAKinds.sol";
 ///         address path's signature rule and the UA authorization rule. The token passes its immutables in `Ctx`. `data` itself stays
 ///         in the token (owner 2026-10-21): `preCall` takes `keccak256(data)`, `preNamed` and `preNamedUA` take `args`,
 ///         the op's parameters as struct words, which they hash into the entry's struct. No state variable, no immutable,
-///         no constructor; the one slot written is the nonce of `scaas.metatx`, whose constant and struct are defined
-///         here only.
+///         no constructor; the slots written are the nonce of `scaas.metatx` and the pay records of `scaas.pay.records`
+///         (plan T83), whose constants and structs are defined here only.
 /// @dev The check bodies are the internal functions; the external ones compose them for the tokens, and `MetaTxBase`
 ///      calls the same internal functions inlined (no link), so the wallets keep their own composition (§3.7).
 library MtxPipelineLib {
@@ -387,18 +387,60 @@ library MtxPipelineLib {
 
     // ------------------------------------------------------------------ the pay entries' metadata (pay-meta-tax spec §3)
 
-    /// @notice CTR-MTX-26 (spec §3.1): the commitment of a `PayMeta`, under the versioned tag `scaas.pay.meta.v2`.
-    function metaPayId(MetaTxLib.PayMeta calldata m) public pure returns (bytes32) {
-        return keccak256(abi.encodePacked("scaas.pay.meta.v2", m.salt, keccak256(abi.encode(m.payNo, m.schema, m.body))));
+    /// @custom:storage-location erc7201:scaas.pay.records
+    /// @dev Plan T83 (owner 2026-11-09): the stored payments of each `payNo`, per token, appended by a public pay entry
+    ///      whose `PayMeta.save` is set; never removed, never summed.
+    struct PayRecordStorage {
+        mapping(bytes32 payNo => MetaTxLib.PayRecord[]) records;
     }
 
-    /// @notice Spec §3.2, in order: a non-zero salt, `schema == 0` iff the body is empty, `payNo` at most 256 bytes,
+    // keccak256(abi.encode(uint256(keccak256("scaas.pay.records")) - 1)) & ~bytes32(uint256(0xff))
+    bytes32 internal constant PAY_RECORDS_SLOT = 0x51f719d8931af2fa9a126c65fc0e6dd2bb24ee24e9808e19427ae58097f31a00;
+
+    /// @notice CTR-MTX-26 (spec §3.1, plan T83): the commitment of a `PayMeta`, under the versioned tag `scaas.pay.meta.v3`
+    ///         (`payNo` a `bytes32`, `save` committed).
+    function metaPayId(MetaTxLib.PayMeta calldata m) public pure returns (bytes32) {
+        return keccak256(abi.encodePacked("scaas.pay.meta.v3", m.salt,
+            keccak256(abi.encode(m.payNo, m.save, m.schema, m.body))));
+    }
+
+    /// @notice Spec §3.2, in order: a non-zero salt, `schema == 0` iff the body is empty, no `save` without a `payNo`,
     ///         `entryRef == metaPayId(m)`; then `PaymentMeta` (under `DELEGATECALL`: the token's log). Writes nothing.
     function payMeta(bytes32 entryRef, MetaTxLib.PayMeta calldata m) public {
-        if (m.salt == 0 || (m.schema == 0) != (m.body.length == 0)) revert IMetaTokenV2.PayMetaShape();
-        if (bytes(m.payNo).length > 256) revert IMetaTokenV2.PayNoTooLong(bytes(m.payNo).length);
+        if (m.salt == 0 || (m.schema == 0) != (m.body.length == 0) || (m.save && m.payNo == 0)) {
+            revert IMetaTokenV2.PayMetaShape();
+        }
         bytes32 id = metaPayId(m);
         if (entryRef != id) revert IMetaTokenV2.PayMetaMismatch(entryRef, id);
-        emit IMetaTokenV2.PaymentMeta(id, m.payNo, m.schema, m.body);
+        emit IMetaTokenV2.PaymentMeta(id, m.payNo, m.save, m.schema, m.body);
+    }
+
+    /// @notice Plan T83: appends `(to, amount, block.number)` to `payNo`'s records, after the transfer (the pay entry calls
+    ///         it last, only with `save`); `amount` is what `to` received; `amount >= 2^192` reverts `PayRecordAmount`
+    ///         (fail closed).
+    function payRecord(bytes32 payNo, bytes32 to, uint256 amount) public {
+        if (amount > type(uint192).max) revert IMetaTokenV2.PayRecordAmount(amount);
+        _payRecords().records[payNo].push(MetaTxLib.PayRecord(to, uint192(amount), uint64(block.number)));
+    }
+
+    /// @notice The number of `payNo`'s records.
+    function paymentCount(bytes32 payNo) public view returns (uint256) {
+        return _payRecords().records[payNo].length;
+    }
+
+    /// @notice Records `[offset, offset + limit)` of `payNo`, cut at the end; empty from the end on.
+    function paymentsOf(bytes32 payNo, uint256 offset, uint256 limit)
+        public view returns (MetaTxLib.PayRecord[] memory page)
+    {
+        MetaTxLib.PayRecord[] storage r = _payRecords().records[payNo];
+        uint256 n = r.length;
+        if (offset >= n) return page;
+        uint256 end = n - offset > limit ? offset + limit : n;
+        page = new MetaTxLib.PayRecord[](end - offset);
+        for (uint256 i; i < page.length; ++i) page[i] = r[offset + i];
+    }
+
+    function _payRecords() internal pure returns (PayRecordStorage storage $) {
+        assembly ("memory-safe") { $.slot := PAY_RECORDS_SLOT }
     }
 }
