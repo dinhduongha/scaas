@@ -81,7 +81,7 @@ identity and transport with PqChat [I].
 **LiveKit and SFrame [F]:** LiveKit's built-in E2EE is AES-GCM with a 12-byte IV signalled in the clear and a
 codec-dependent unencrypted prefix (`src/e2ee/constants.ts` in client-sdk-js, whose comments refer to Jitsi's JVB), **not the
 RFC 9605 SFrame** header the spec names (P22). Its key provider can be fed external keys
-([docs](https://docs.livekit.io/home/client/tracks/encryption/)). So P22 as written means our own frame transform
+([docs](https://docs.livekit.io/%68ome/client/tracks/encryption/)). So P22 as written means our own frame transform
 (WebRTC Encoded Transform on the web, libwebrtc's frame transformer natively) in every approach [I]; using LiveKit's
 format instead would be a spec change for the owner.
 
