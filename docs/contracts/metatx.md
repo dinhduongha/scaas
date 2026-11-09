@@ -940,7 +940,13 @@ The token fee for a fee-less call ([CTR-MTX-27](#CTR-MTX-27)) per family: Soroba
 Two payers: the relayer pays the native gas, and the payer pays the relayer, or another payee, in a token, for one call
 that has no fee of its own: a PqChat record, a `UARegistry` write, a `MandateWallet` action, or any SCaaS contract's
 entry with fee `NONE`. The call and its contract are unchanged: no token logic in them, records stay chain-independent
-(UA-7 / UA-8). The payment is optional: the same call can always be submitted without it.
+(UA-7 / UA-8).
+
+**Two ways to submit the same call** (owner 2026-11-09):
+- **No fee:** the relayer sends the call straight to the target. The router is not involved; the target checks the
+  payer's signature inside the call as always.
+- **A token fee:** the relayer sends `relay` to the router. Every `relay` carries a token payment (`UARelayFee`, signed by
+  the payer): the router exists only for that, and there is no `relay` without one.
 
 **Deployment.** One stateless contract with no owner, no stored state and no constructor argument. `DeployBase`
 deploys it through the deterministic CREATE2 deployer, as `UARegistry` and the verifiers, so it has the same address
