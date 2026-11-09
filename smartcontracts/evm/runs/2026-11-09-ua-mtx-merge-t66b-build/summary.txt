@@ -557,9 +557,21 @@ test/vectors | 0 | no tests (compiles) | -
 test/ua without UARegistryUA8 | 0 | 644 passed | -
 test/ua UARegistryUA8 alone (-j 1) | 0 | 88 passed | -
 test/t66b (gates.sh t66b: the pre-split d142b57c build, then the suites) | 0 | 11 suites, 32 passed | -
-Not rerun: the five files directly in test/ (sparse mode compiles every test directory; last run 29 passed at the migration
-checkpoint, before 4.3's B, (i), (j) and 4.4: a gap, reported).
+top: the five files directly in test/, copied into a temporary test directory (sparse mode would compile every test
+directory), FOUNDRY_TEST=that copy | 0 | 29 passed (5 suites); the copy removed after the run.
 e2e.py --proof-path-only --split, n2304-kmax4096 (the copy wiped and started again) | 0 | 299 checks ok, 0 failures, 1,235 s;
   record runs/2026-11-10-ua-mtx-merge-t66b-e2e-n2304-split.txt; 122 transactions, none above 60 M gas used: the largest a relayed
   op 7 M = 4 under LOG 52,816,021, the library UARegistryCoreLib 52,299,751, the module NormalPqzRegulatedTokenQ 50,497,243.
   This is the form Step 5 runs on the SCaaS testnet.
+
+Step 5, the full deploy on the SCaaS testnet (7622, RPC only): runs/2026-11-10-ua-mtx-merge-t66b-step5-7622.txt (the four conditions,
+addresses, tx hashes, gas, code checks, smoke). step | rc | counts
+forge script simulation (dry run, same key / salt / flags) | 0 | 104 transactions; release list 49 rows
+deploy.sh evm (DeployBase: kinds 0-3, 8-11, the DEX and D, the registry trio, factory, routers, ComplianceRegistry, Zether stack) | 0 |
+  104 transactions, all status 1, 2,165,830,059 gas, largest 52,317,793 (UARegistryCoreLib); deployments JSON = the dry run's
+code hashes | 0 | the 48 contract rows of the release list equal on chain; 27 addresses of the deploy JSON equal their build artifact
+  (immutables, link slots and library self-addresses masked), 2 demo-token clones
+smoke 1, 2 (Smoke.s.sol): relayed mtxTransfer; RelayFeeRouter.relay with a relay fee of 1 | 0 | 182,095 and 243,835 gas
+e2e.py --proof-path-only --split (kinds 0, 4, 5, 12, 13 and smoke 3, PQZ op 1) | 1 | 289 ok, 5 failures, all in the off-chain
+  reference rebuild of the LOG debits (the RPC caps eth_getLogs at 100 blocks without the log index); 122 transactions, all status
+  1, none above 60 M; op 1 rebuilt and verified (d1, d2, d7); code of the 49 contracts it deployed equal to the build
