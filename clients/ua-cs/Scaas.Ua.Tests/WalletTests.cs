@@ -859,7 +859,7 @@ public class WalletTests : IDisposable
             var b = JsonNode.Parse(q.Call("balanceProven", new JsonObject { ["session"] = o["session"]!.GetValue<string>() }.ToJsonString()))!;
             Assert.True(b["value"]!.GetValue<ulong>() == r.GetProperty("value").GetUInt64(), S(r, "name"));
             var kinds = new JsonArray(b["parts"]!.AsArray().Select(p => (JsonNode?)JsonValue.Create(p!["kind"]!.GetValue<string>())).ToArray());
-            Assert.Equal(r.GetProperty("kinds").GetRawText().Replace(" ", ""), kinds.ToJsonString());
+            Assert.True(JsonNode.DeepEquals(JsonNode.Parse(r.GetProperty("kinds").GetRawText()), kinds), S(r, "name"));
         }
         foreach (var r in Rows(ws, "check"))
         {
