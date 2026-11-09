@@ -39,7 +39,7 @@ deploy on dockernet-v1 (genesis KRbyULR3zbPotxJ3fjooKscrTwuRI/TnvMSPPxZjvlI=) fr
   create dex: app 1019 (961 B approval, extra_pages 0)
   fund app 1019 (E36TMDCHVSYAAI5HHNPGGHYFUJYK4MW2SKRORFZQBB46ITJYQ7L72GBWUU): 100000 µALGO (its minimum balance)
 deploy gate: 6 apps match artifacts.json (approval and clear sha512_256); links, executor and funding checked
-wrote /tmp/scaas-algorand-e2e/deployments/KRbyULR3zbPotxJ3fjooKscrTwuRI_TnvMSPPxZjvlI=.json
+wrote <tmp>/scaas-algorand-e2e/deployments/KRbyULR3zbPotxJ3fjooKscrTwuRI_TnvMSPPxZjvlI=.json
 
 ROUNDS 38 rounds in 20 s up to round 39 (dev mode: one block per group, the ticker one per second)
 test algorand_events_ingested ... ok
@@ -107,7 +107,7 @@ partial deploy: deploy on dockernet-v1 (genesis KRbyULR3zbPotxJ3fjooKscrTwuRI/Tn
   create relayfee: app 1315 (857 B approval, extra_pages 0)
   relayfee app 1315: salt 0 (the lowest for this id), executor B6NXK5ZNSXBI7W27CNHFWYDUJKCSXFLLULXKKPVOAEMBCRDEFI5FLBHCPY off-curve
   fund app 1315 (RMBOADQ7SQIGBJMU2VRF7FYO2YHN4HXQIFW33MXZR6GKYDHXEK3PZMLRLY): 100000 µALGO (its minimum balance)
-create token:TKA: algod refused it: TransactionPool.Remember: transaction 3DOH3KPJLOPJME2ZKUD7MJRUBMXTGZZ4BIY3A7YR4QONTZEXUMNQ: account O4R6OTT3WRA6LCLCZ2GE6OS4CGB466JUHXBD4GXLDUPK4VECYDSL43Y52E balance 695000 below min 1035500 (0 assets) (the deployment so far is kept in /tmp/scaas-algorand-e2e/deploy2/KRbyULR3zbPotxJ3fjooKscrTwuRI_TnvMSPPxZjvlI=.O4R6OTT3WRA6LCLCZ2GE6OS4CGB466JUHXBD4GXLDUPK4VECYDSL43Y52E.resume.json: rerun to resume)
+create token:TKA: algod refused it: TransactionPool.Remember: transaction 3DOH3KPJLOPJME2ZKUD7MJRUBMXTGZZ4BIY3A7YR4QONTZEXUMNQ: account O4R6OTT3WRA6LCLCZ2GE6OS4CGB466JUHXBD4GXLDUPK4VECYDSL43Y52E balance 695000 below min 1035500 (0 assets) (the deployment so far is kept in <tmp>/scaas-algorand-e2e/deploy2/KRbyULR3zbPotxJ3fjooKscrTwuRI_TnvMSPPxZjvlI=.O4R6OTT3WRA6LCLCZ2GE6OS4CGB466JUHXBD4GXLDUPK4VECYDSL43Y52E.resume.json: rerun to resume)
 
 partial deploy: 0 orphan router(s) []
 pending create, another admin: token:TKA: its recorded create 3DOH3KPJLOPJME2ZKUD7MJRUBMXTGZZ4BIY3A7YR4QONTZEXUMNQ (not landed yet, or landed) has {'name': 'Token A', 'symbol': 'TKA', 'decimals': 6, 'admin': 'O4R6OTT3WRA6LCLCZ2GE6OS4CGB466JUHXBD4GXLDUPK4VECYDSL43Y52E', 'account_app': 1208}, not this run's {'name': 'Token A', 'symbol': 'TKA', 'decimals': 6, 'admin': '3DCHXKKTAQWB2PRAPY3IIMQ23F4J4Y2M57UCRV4ZBXRATQNAIYR7CPOPG4', 'account_app': 1208}: not resent, not adopted (change ALGORAND_TOKENS / ALGORAND_ADMIN back so that create finishes)
@@ -122,7 +122,7 @@ deploy on dockernet-v1 (genesis KRbyULR3zbPotxJ3fjooKscrTwuRI/TnvMSPPxZjvlI=) fr
   create dex: app 1325 (961 B approval, extra_pages 0)
   fund app 1325 (HTCV3JJ5E6MTI5WSB6OGYVO5ZVE5LRZ5P6LMMEGU5PYK2HZICGC7GR2ZYQ): 100000 µALGO (its minimum balance)
 deploy gate: 5 apps match artifacts.json (approval and clear sha512_256); links, executor and funding checked
-wrote /tmp/scaas-algorand-e2e/deploy2/KRbyULR3zbPotxJ3fjooKscrTwuRI_TnvMSPPxZjvlI=.json
+wrote <tmp>/scaas-algorand-e2e/deploy2/KRbyULR3zbPotxJ3fjooKscrTwuRI_TnvMSPPxZjvlI=.json
 
 test deploy_resumes_after_an_interruption ... ok
 

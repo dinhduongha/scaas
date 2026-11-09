@@ -65,7 +65,7 @@ deploy on test-chain-40CsP (genesis 9am2xXngsV67GtnXezRUZaHzPyh3nXV9m9qR9L7K8Rh1
   relayfee.test.near: delete its last access key: ok, 0.629 Tgas
   relayexec.test.near: delete its last access key: ok, 0.629 Tgas
 deploy gate: 5 accounts keyless (view_access_key_list empty)
-wrote /tmp/scaas-near-e2e/deployments/9am2xXngsV67GtnXezRUZaHzPyh3nXV9m9qR9L7K8Rh1.json
+wrote <tmp>/scaas-near-e2e/deployments/9am2xXngsV67GtnXezRUZaHzPyh3nXV9m9qR9L7K8Rh1.json
 
 test deploy_gate_fails_with_a_key_left has been running for over 60 seconds
 test deploy_resumes_after_an_interruption has been running for over 60 seconds
@@ -164,7 +164,7 @@ deploy on test-chain-40CsP (genesis 9am2xXngsV67GtnXezRUZaHzPyh3nXV9m9qR9L7K8Rh1
   relayfee.dep2.test.near: delete its last access key: ok, 0.629 Tgas
   relayexec.dep2.test.near: delete its last access key: ok, 0.629 Tgas
 deploy gate: 4 accounts keyless (view_access_key_list empty)
-wrote /tmp/scaas-near-e2e/deploy2/9am2xXngsV67GtnXezRUZaHzPyh3nXV9m9qR9L7K8Rh1.json
+wrote <tmp>/scaas-near-e2e/deploy2/9am2xXngsV67GtnXezRUZaHzPyh3nXV9m9qR9L7K8Rh1.json
 
 test deploy_resumes_after_an_interruption ... ok
 test near_events_include_native_ft_transfer ... ok

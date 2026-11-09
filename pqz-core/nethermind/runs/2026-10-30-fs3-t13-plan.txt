@@ -68,9 +68,9 @@ docker inspect -f '{{.State.Status}} exit {{.State.ExitCode}} since {{.State.Fin
 # C1. Backup of the stack (chainspec, config, compose, password, keystore, chain data; data is root-owned: alpine)
 docker run --rm --memory 256m -v $L:/l alpine:3 sh -c "set -e; B=/l/backup-pqz5-$TS; mkdir \$B
   cp -a /l/genesis.json /l/config.json /l/docker-compose.yml /l/password.txt /l/keystore /l/data/nethermind_data \$B/
-  (cd /l/data/nethermind_data && find . -type f | sort | xargs sha256sum) > /tmp/a
-  (cd \$B/nethermind_data && find . -type f | sort | xargs sha256sum) > /tmp/b
-  cmp /tmp/a /tmp/b && echo \"data backup identical: \$(wc -l < /tmp/a) files\"; du -s /l/data/nethermind_data \$B"
+  (cd /l/data/nethermind_data && find . -type f | sort | xargs sha256sum) > <tmp>/a
+  (cd \$B/nethermind_data && find . -type f | sort | xargs sha256sum) > <tmp>/b
+  cmp <tmp>/a <tmp>/b && echo \"data backup identical: \$(wc -l < <tmp>/a) files\"; du -s /l/data/nethermind_data \$B"
 
 # C2. Chainspec: ONLY from $L/genesis.json (7702 off; never a scratchpad genesis copy)
 grep -c 7702 $L/genesis.json                              # must print 0

@@ -527,8 +527,8 @@
 #5 279.6 Processing triggers for libc-bin (2.39-0ubuntu8.9) ...
 #5 DONE 304.3s
 
-#6 [3/8] RUN curl -fsSLo /tmp/node.tar.xz "https://nodejs.org/dist/v26.8.1/node-v26.8.1-linux-x64.tar.xz"  && echo "3e301118d7df53d563b7e96c1617545f26e2f76f9724be668d6cab65c15dda5d  /tmp/node.tar.xz" | sha256sum -c -  && tar -xJf /tmp/node.tar.xz -C /usr/local --strip-components=1 --exclude='*/include' --exclude='*/share'  && rm /tmp/node.tar.xz
-#6 4.334 /tmp/node.tar.xz: OK
+#6 [3/8] RUN curl -fsSLo <tmp>/node.tar.xz "https://nodejs.org/dist/v26.8.1/node-v26.8.1-linux-x64.tar.xz"  && echo "3e301118d7df53d563b7e96c1617545f26e2f76f9724be668d6cab65c15dda5d  <tmp>/node.tar.xz" | sha256sum -c -  && tar -xJf <tmp>/node.tar.xz -C /usr/local --strip-components=1 --exclude='*/include' --exclude='*/share'  && rm <tmp>/node.tar.xz
+#6 4.334 <tmp>/node.tar.xz: OK
 #6 DONE 6.4s
 
 #7 [4/8] RUN git clone -q https://github.com/lazer-crypto/lazer /opt/lazer && git -C /opt/lazer checkout -q "3330e487228f633eceb322807b13a596b516770f"

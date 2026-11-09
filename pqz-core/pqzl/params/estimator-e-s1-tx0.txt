@@ -1,8 +1,8 @@
 
-== /tmp/w/tx0_params.sage
+== <tmp>/w/tx0_params.sage
 LaZer codegen as is: kmsis 23, kmlwe 33, m2 68, B 2^35.96, D 11, gamma 704254: MSIS beta 457, MLWE uSVP beta 470, proof ~44286 B
   pqz_delta 1.00366, kmlwe_min 33: kmsis 23, kmlwe 33, m2 68, B 2^35.96, D 11, gamma 704254: MSIS beta 457, MLWE beta 470, proof ~44286 B
-=> /tmp/w/tx0_params.sage: pqz_delta = 1.00366, kmlwe_min = 33 (kmsis = 23, m2 = 68, D = 11, gamma = 704254, codegen proof size ~44286 B)
+=> <tmp>/w/tx0_params.sage: pqz_delta = 1.00366, kmlwe_min = 33 (kmsis = 23, m2 = 68, D = 11, gamma = 704254, codegen proof size ~44286 B)
 lattice  :: rop: ≈2^133.4, red: ≈2^133.4, δ: 1.003628, β: 457, d: 3438, tag: euclidean
   MSIS(23,213,2^35.96) classical: 133.4 (lattice, beta 457)
 usvp                 :: rop: ≈2^137.2, red: ≈2^137.2, δ: 1.003557, β: 470, d: 4031, tag: usvp

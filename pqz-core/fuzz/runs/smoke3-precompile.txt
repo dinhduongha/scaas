@@ -63,7 +63,7 @@ INFO: Running with entropic power schedule (0xFF, 100).
 INFO: Seed: 669941999
 INFO: Loaded 1 modules   (25591 inline 8-bit counters): 25591 [0x64980b107648, 0x64980b10da3f), 
 INFO: Loaded 1 PC tables (25591 PCs): 25591 [0x64980b10da40,0x64980b1719b0), 
-MERGE-INNER: using the control file '/tmp/libFuzzerTemp.Merge1384091.txt'
+MERGE-INNER: using the control file '<tmp>/libFuzzerTemp.Merge1384091.txt'
 MERGE-INNER: 884 total files; 0 processed earlier; will process 884 files now
 #1	pulse  cov: 122 ft: 122 exec/s: 0 rss: 242Mb
 #2	pulse  cov: 122 ft: 122 exec/s: 0 rss: 242Mb
@@ -111,7 +111,7 @@ INFO: Running with entropic power schedule (0xFF, 100).
 INFO: Seed: 1374973500
 INFO: Loaded 1 modules   (25591 inline 8-bit counters): 25591 [0x57910b1b6648, 0x57910b1bca3f), 
 INFO: Loaded 1 PC tables (25591 PCs): 25591 [0x57910b1bca40,0x57910b2209b0), 
-MERGE-INNER: using the control file '/tmp/libFuzzerTemp.Merge1384091.txt'
+MERGE-INNER: using the control file '<tmp>/libFuzzerTemp.Merge1384091.txt'
 MERGE-INNER: '<repo>/pqz-core/build/fuzz/work/precompile/b9881dfc28970147ad55024620ea154c845493cb' caused a failure at the previous merge step
 MERGE-INNER: 884 total files; 373 processed earlier; will process 511 files now
 #1	pulse  cov: 464 ft: 464 exec/s: 0 rss: 243Mb
