@@ -283,6 +283,8 @@ fn base_request(k: &PqzKey, cmd: &str) -> Value {
         "rawProveDisclose" => json!({"stmt": stmt}),
         "rawOpenMemo" => json!({"chainUid": hx(&[1; 32]), "token": hx(&[2; 20]), "fromUA": hx(&[3; 32]), "sendCounter": 1, "memo": hx(&[0; 58])}),
         "pickDecoys" => json!({"candidates": [hx(&[1; 32]), hx(&[2; 32])], "exclude": [hx(&[1; 32])], "count": 1}),
+        "provenAdd" => json!({"session": hx(&[0; 16]), "blobs": [], "credits": []}),
+        "provenCancel" | "balanceProven" => json!({"session": hx(&[0; 16])}),
         _ => words_request(k, cmd),
     }
 }
@@ -316,6 +318,7 @@ fn words_request(k: &PqzKey, cmd: &str) -> Value {
         "proveDiscloseSender" => {
             merge(c.entry(&er, &ua), json!({"leg": 0, "registry": hx(&REG), "legKeyRecords": [hx(&c.key_record(&ua))]}))
         }
+        "provenOpen" => c.proven_open(&ua, 0),
         _ => panic!("{cmd}: no base request"),
     }
 }
@@ -331,11 +334,12 @@ const RAW: [&str; 8] =
 fn release_has_no_raw_decrypt() {
     unlock();
     let release = ["enc", "proveRegister", "proveKeyRecord", "proveDiscloseSender", "balance", "proveTransfer", "proveBurn", "proveRefresh",
-        "proveTransferMulti", "auditRead", "proveDisclose", "openMemo", "pickDecoys"];
+        "proveTransferMulti", "auditRead", "proveDisclose", "openMemo", "pickDecoys", "provenOpen", "provenAdd", "provenCancel", "balanceProven"];
     let want: Vec<&str> = if cfg!(feature = "vectors") {
         ["enc", "dec", "proveRegister", "proveKeyRecord", "rawProveTransfer", "rawProveBurn", "rawProveRefresh", "rawProveTransferMulti",
             "proveDiscloseSender", "rawProveDisclose", "rawOpenMemo", "balance", "proveTransfer", "proveBurn", "proveRefresh",
-            "proveTransferMulti", "auditRead", "proveDisclose", "openMemo", "rawProveDiscloseSender", "pickDecoys"].to_vec()
+            "proveTransferMulti", "auditRead", "proveDisclose", "openMemo", "rawProveDiscloseSender", "pickDecoys", "provenOpen", "provenAdd",
+            "provenCancel", "balanceProven"].to_vec()
     } else {
         release.to_vec()
     };

@@ -331,7 +331,10 @@ without an API change; the HKDF label `PQZ/owntag/v1` is reserved for an own-out
 [`pqz-leg-proof-option.md`](../../research/pqz-leg-proof-option.md) §3, §4, §8–§10, §15 and §15A (the owner's agreed design);
 the owner rulings of 2026-11-09 (§7, items 5–12). Plan task T20d (T20d0 is this section). [CLI-UAL-60](../../decisions.md#CLI-UAL-60).
 Revised 2026-11-09 after the Fable review of the delta (approve with fixes: P1-1, P2-1 … P2-3, P3-1 … P3-6, all applied; §7
-items 10–12 the owner's rulings on its questions). UNAUDITED.
+items 10–12 the owner's rulings on its questions). Built by plan T20d4 (2026-11-09: `provenOpen`, `provenAdd`, `provenCancel`,
+`balanceProven`; three details fixed while building, each recorded where it applies: `provenAdd`'s `blobs` per request rather
+than per credit (§4.14.9's "a code listed once per request"), `provenOpen`'s `chainId` and `registry` (a NONE header's token
+words), and a credit's mode taken from its record). UNAUDITED.
 
 #### 4.14.1 What path (B) gives, and what it does not
 
@@ -365,8 +368,8 @@ handle's states give `KeyRevoked`.
 
 | Command | Fields | Output |
 |---|---|---|
-| `provenOpen` | `balance`'s location and account fields (`chainUid`, `token`, `ua`, `block`, `psid`, `blobs`, `keyRecord`, `keyVersion`, `keyVersions`, `account` (the 4 slots of `acct[ua][v]`), `accWords`, `sendCounterWord`, `forOp7`), `lastRecord` (`{w0, w1}` of `debitRec[ua][lastDebit − 1]`; absent exactly when `lastDebit = 0`), `pending` (`{index, word}` for exactly `[p_last, p)`), `auditorUA` | `{session, p, sendCounter, need, unsealed}`; opens the handle's one session |
-| `provenAdd` | `session`, `credits` (each as §4.14.4) | `{accepted, refused}`: the indexes of this call that passed and that failed their check |
+| `provenOpen` | `balance`'s location and account fields (`chainUid`, `token`, `ua`, `block`, `psid`, `blobs` (the key's and `accBlob`'s codes), `keyRecord`, `keyVersion`, `keyVersions`, `account` (the 4 slots of `acct[ua][v]`), `accWords`, `sendCounterWord`, `forOp7`), `lastRecord` (`{w0, w1}` of `debitRec[ua][lastDebit − 1]`; absent exactly when `lastDebit = 0`), `pending` (`{index, word}` for exactly `[p_last, p)`), `auditorUA`, `chainId` and `registry` (the token's words a NONE header needs, step 4) | `{session, p, sendCounter, need, unsealed}`; opens the handle's one session |
+| `provenAdd` | `session`, `blobs` (`{address, code}`: every code the credits name, each address once per request, §4.14.9), `credits` (each as §4.14.4) | `{accepted, refused}`: the indexes of this call that passed and that failed their check |
 | `provenCancel` | `session` | `{}` |
 | `balanceProven` | `session` | `{value, p, sendCounter, parts, unsealed, sealAdvised}`; closes the session |
 | `proveTransferProven`, `proveTransferMultiProven`, `proveBurnProven`, `proveRefreshProven` | `session` and the debit fields of `proveTransfer`, `proveTransferMulti`, `proveBurn`, `proveRefresh` (`chainId`, `registry`, `beneficiaryUA`, `fee`, `validUntilBlock`, `shieldIn`, `envelopeBinding`; `toUA`, `pkT`, `pkA`, `legs`, `amount`, `recipient`, `mode` by form) | path (A)'s output (`{stmt, proof}`, `memo` on HASH) plus `ownTag`; closes the session |
@@ -374,7 +377,7 @@ handle's states give `KeyRevoked`.
 
 - `p` is the facade's choice as in §4.4 (CTR-PQZ-06, `forOp7`); `p_last` is `lastRecord`'s `p` (0 when never debited). A
   session's parts are the own `v_f` (in `accBlob`, the blob of the account's last debit, proof-path spec C2) and every entry of
-  `[p_last, p)`; `need` lists the indexes there that are not TRIVIAL. **`need` is that slot range, fixed by `provenOpen`, never
+  `[p_last, p)`; `need` lists the indexes there that are not TRIVIAL (the own part's `index` in `parts` is `null`). **`need` is that slot range, fixed by `provenOpen`, never
   the set accepted so far** (the contract's `T` sums every pending slot of the window): `balanceProven` and the debits refuse
   until every `need` index is accepted, so a refused index the caller never sends again keeps the key unused for good (Fable
   re-check P3-C). `parts` names each part's index and kind (`own`, `credit`, `migration`, `trivial`), never a value.
@@ -417,7 +420,7 @@ Each element of `credits`:
 | `form` | a credit: `"transfer"` (op 1) or `"transferMulti"` (op 7), the only forms that credit another UA; a quorum's own last debit (§4.14.8, its `own` field): also `"burn"`, `"refresh"`, `"unwrap"` |
 | `record` | `{w0, w1}` of `debitRec[fromUA][k]`, both read as storage (C-PP-1's parser: `w0 ≠ 0`, `RECORD` set and no flag but `WIDE`, `proofStore` 0 or 1, `w1` zero when narrow, `w1`'s low 64 bits 0, a narrow record's `prevCounter = k − 1` when it has a predecessor) |
 | `senderPending` | `{index, word}` for exactly `[p − Δp, p)` of `pending[fromUA][record.keyVersion]` |
-| `blobs` | `{address, code}`: the op blob (the pending slot's `blob`), the record's `prevBlob`, each blob `senderPending` names; a code listed once per request |
+| (`blobs`) | in the request, not the credit (§4.14.2): the op blob (the pending slot's `blob`), the record's `prevBlob`, each blob `senderPending` names, the codes of `keyRecords`; a code listed once per request |
 | `keyRecords` | `{ua, version, word}` of the registry's `pqzKey[ua][version]` (its code in `blobs`): the sender's at `record.keyVersion`, and every key the tail's `kv` names except the holder's own leg (op 7: the legs' `UA_j` from the blob; the auditor's: `auditorUA` at `kv`'s last entry) |
 | `proof` | P: the `proof` of the debit's `PqzDebitProof` event (LOG) or the `proof` parameter of its call (NONE) |
 | either `header` | the 20 words of the event's `header` (LOG; the verified statement's first 640 bytes) |
@@ -449,7 +452,8 @@ The facade, in order, each failure `Argument`:
    `k`, the token's words (`psid`, `chainId`, `token`, `registry`, `chainUid`), the blob (`salt`, `toUA` or the legs'
    `recipientsHash`, `M`, `auditorOn`) and `memoHash = keccak256(memo ‖ ownTag_s)`. In both, the words the facade knows
    (`proofSystemId` the build's, `opTag` the form's, `fromUA`, `sendCounter`, `p`, `plainUsed`, `chainUid`, `token`) must be the
-   header's. **One `call` shape per form** (Fable P2-1; `e2e.py` `header_of`'s three branches are the reference, `PqzCore`
+   header's. The record's `proofStore` names the form: LOG takes `header`, NONE `call`; the other is refused (a credit's mode
+   is its record's, the proof-path spec §11.4's "mode of another record"). **One `call` shape per form** (Fable P2-1; `e2e.py` `header_of`'s three branches are the reference, `PqzCore`
    `prepareBurn`, `WrappedPqzToken._envUnwrap`):
 
    | Form | `call` fields | `envelopeBinding` word | `memoHash` |

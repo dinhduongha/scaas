@@ -22,7 +22,7 @@ fn be64(b: &[u8], at: usize) -> Result<u64> {
 
 /// `pqzDebitRecord(ua, k)`'s view (`DebitRecordView`) of `debitRec[ua][k]`: `w0 = prevBlob(160) ‖ p(64) ‖ Δp(16) ‖ proofStore(8) ‖
 /// flags(8)`, `w1 = shieldIn(64) ‖ keyVersion(64) ‖ prevCounter(64) ‖ 0(64)`.
-#[cfg_attr(not(test), allow(dead_code))] // read by T20d4's `balanceProven`
+#[cfg_attr(not(test), allow(dead_code))] // `prevCounter`: the version chain's walk (T20d7, T20d8)
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Record {
     pub(crate) prev_blob: [u8; 20],
@@ -39,7 +39,6 @@ pub(crate) struct Record {
 /// record (the contract's `DebitRecordUnknown`); `RECORD` set and no other flag than `WIDE`; `proofStore` 0 (NONE) or 1 (LOG); a
 /// narrow record has `w1 = 0`, no `shieldIn`, version 0 and, with a predecessor, `prevCounter = counter − 1`; `w1`'s low 64 bits
 /// are 0. A wide record's `w1` may be zero too (a gap in the counters alone makes it wide).
-#[cfg_attr(not(test), allow(dead_code))] // read by T20d4's `balanceProven`
 pub(crate) fn record(w0: &Word, w1: &Word, counter: u64) -> Result<Record> {
     let [.., delta_hi, delta_lo, proof_store, flags] = *w0;
     if *w0 == [0; 32] || flags & RECORD == 0 || flags & !(RECORD | WIDE) != 0 || proof_store > 1 || be64(w1, 24)? != 0 {
@@ -65,9 +64,7 @@ pub(crate) fn record(w0: &Word, w1: &Word, counter: u64) -> Result<Record> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Tail {
     pub(crate) r_len: usize,
-    #[cfg_attr(not(test), allow(dead_code))] // read by T20d4's `balanceProven`
     pub(crate) own_tag: Word,
-    #[cfg_attr(not(test), allow(dead_code))] // read by T20d4's `balanceProven`
     pub(crate) kv: Vec<u64>,
 }
 

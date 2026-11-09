@@ -19,7 +19,8 @@
 # several nodes, owner 2026-11-08: 2026-11-08-ua-rs-sign-t20b3; the third sync, after 3f and T66a: 2026-11-08-ua-rs-sign-t20b4;
 # T20c, an imported key registers its own derived kind (owner 2026-11-08): 2026-11-08-ua-rs-sign-t20c; the fourth sync, after 3h's
 # T58-T65: 2026-11-09-ua-rs-sign-t20b6; T20d1, 3h's formats in every client: 2026-11-09-ua-rs-sign-t20d1; T20d3, the proof path's
-# record and tail parsers: 2026-11-09-ua-rs-sign-t20d3; T20d2, ownTag and the 3h memoHash in every debit: 2026-11-09-ua-rs-sign-t20d2),
+# record and tail parsers: 2026-11-09-ua-rs-sign-t20d3; T20d2, ownTag and the 3h memoHash in every debit: 2026-11-09-ua-rs-sign-t20d2;
+# T20d4, path (B)'s balanceProven: 2026-11-09-ua-rs-sign-t20d4),
 # T20's stay. (T20d2 renamed two names below to the 3h rule: multi_bundle_memo_hash_is_zero and burn_and_refresh_memo_hash_is_zero
 # are now ..._is_the_tags, keccak256(ownTag); the op 7 formula tests run on the words command, facade_pqz_state.rs.)
 P=${GATES_P:-2026-11-08-ua-rs-sign}
@@ -70,9 +71,9 @@ extra_step() { # this branch's own steps (the base runner calls it for a step it
     ua-rs-zether) uars --no-default-features --features wallet,zether,mlock -- --lib --test facade_zether ;;
     # PQZ without Zether at the committed set (the zether-only cell's counterpart; no_oracle needs both facades)
     ua-rs-pqz) uars --no-default-features --features wallet,pqz,pqz-set-n2304-kmax4096,mlock -- --lib --bin pqz-read --test pqz_read \
-                 --test facade_pqz_state --test facade_pqz --test pqz_backup --test pqz_wallet_rows ;;
-    ua-rs-pqz-n2048) (uars $N2048 -- --lib --bin pqz-read --test pqz_read --test facade_pqz_state --test facade_pqz --test pqz_backup \
-                        --test no_oracle) && uars $N2048,vectors -- --test facade_pqz_state --test facade_pqz --test pqz_backup --test no_oracle ;;
+                 --test facade_pqz_state --test facade_pqz --test facade_pqz_proof --test pqz_backup --test pqz_wallet_rows ;;
+    ua-rs-pqz-n2048) (uars $N2048 -- --lib --bin pqz-read --test pqz_read --test facade_pqz_state --test facade_pqz --test facade_pqz_proof --test pqz_backup \
+                        --test no_oracle) && uars $N2048,vectors -- --test facade_pqz_state --test facade_pqz --test facade_pqz_proof --test pqz_backup --test no_oracle ;;
     # every lockfile over ua-rs resolves as committed; cargo deny by ua-rs/deny.toml; cargo audit with deny.toml's ignores (CI ua-deps)
     ua-deny) local m d ig
       for m in clients/ua-rs clients/ua-c clients/ua-cxx clients/ua-qt clients/ua-dart-frb/rust clients/ua-rs/fuzz clients/zether-prover scaas-node; do
@@ -157,6 +158,7 @@ print("baseline cells not measured:", miss or "none"); sys.exit(1 if miss else 0
                           2026-11-07-ua-rs-sign-t15n2 2026-11-08-ua-rs-sign-t15o 2026-11-08-ua-rs-sign-t20b1 \
                           2026-11-08-ua-rs-sign-t20b2 2026-11-08-ua-rs-sign-t20b3 2026-11-08-ua-rs-sign-t20b4 \
                           2026-11-08-ua-rs-sign-t20b5 2026-11-08-ua-rs-sign-t20c 2026-11-09-ua-rs-sign-t20d1 2026-11-09-ua-rs-sign-t20d3 2026-11-09-ua-rs-sign-t20d2 \
+                          2026-11-09-ua-rs-sign-t20d4 \
                           ${MUTANT_LOGS_EXTRA:-}; do
                    l=$(tail -n 1 smartcontracts/evm/runs/$t-mutants.txt); echo "$t: $l"
                    grep -Eq '(survived or not loaded: 0|0 survived, 0 not loaded)$|0 survived, 0 not loaded \(' <<< "$l" || bad=1
@@ -861,6 +863,24 @@ ua-rs|cargo|own_tag_and_memo_hash_kat
 ua-rs|cargo|own_tag_of_every_debit
 ua-rs-vectors|cargo|own_tag_and_memo_hash_kat
 ua-rs-vectors|cargo|multi_raw_memo_per_mode
+ua-rs|cargo|balance_proven_equals_path_a
+ua-rs-vectors|cargo|balance_proven_equals_path_a
+ua-rs-pqz|cargo|balance_proven_equals_path_a
+ua-rs|cargo|pqzh_token
+ua-rs-vectors|cargo|pqzh_token
+ua-rs-pqz|cargo|pqzh_token
+ua-rs|cargo|rotation_migration_by_reencryption_or_p
+ua-rs-vectors|cargo|rotation_migration_by_reencryption_or_p
+ua-rs-pqz|cargo|rotation_migration_by_reencryption_or_p
+ua-rs|cargo|credit_negatives_refused_alone
+ua-rs-vectors|cargo|credit_negatives_refused_alone
+ua-rs-pqz|cargo|credit_negatives_refused_alone
+ua-rs|cargo|op7_leg_paired_with_its_own_group
+ua-rs-vectors|cargo|op7_leg_paired_with_its_own_group
+ua-rs-pqz|cargo|op7_leg_paired_with_its_own_group
+ua-rs|cargo|session_rules_and_open_negatives
+ua-rs-vectors|cargo|session_rules_and_open_negatives
+ua-rs-pqz|cargo|session_rules_and_open_negatives
 NAMES
 )
 . "$(dirname "$0")/2026-10-27-metatx-split-gates.sh"

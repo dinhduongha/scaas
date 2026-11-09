@@ -34,7 +34,7 @@
 //!   a burn and a refresh), as the 3h `PqzCore` statements; the pre-3h words are in `legacy/ua-rs-sign/`, never built
 //!   (ua-rs-sign T20d2). `proveDiscloseSender` (op 4 of the
 //!   sender's own entry: `r, e1, e2_j` re-derived, the amount read from the entry, T15l), `proveDisclose` (op 5, receiver or
-//!   auditor), `openMemo`. Statements are `pqz-stmt`'s builders, witnesses pqz-ffi's layouts (`fixture::wit_*`), proofs
+//!   auditor), `openMemo`; path (B) `provenOpen`, `provenAdd`, `provenCancel`, `balanceProven` (submodule `proven`). Statements are `pqz-stmt`'s builders, witnesses pqz-ffi's layouts (`fixture::wit_*`), proofs
 //!   `pqz_ffi::prove` with `rnd32` from the OS RNG (hedged, CTR-PQZ-19). The debit's balance is `Dec(T)` with the handle's key.
 //! - **Encryption randomness** (CTR-PQZ-19): a transfer (op 1, op 7) draws a fresh 16-byte `salt` and encrypts from
 //!   `seed_enc = HKDF-SHA256(seed32, "SCAAS-PQZ-ENC-V2", chainUid ‖ token(20) ‖ fromUA ‖ be32(sendCounter) ‖ salt)`, so the
@@ -70,6 +70,9 @@ use subtle::{Choice, ConstantTimeEq, ConstantTimeLess};
 #[cfg(feature = "vectors")]
 use pqz_ffi::stmt::{check_ct, parse};
 use zeroize::{Zeroize, Zeroizing};
+
+/// Path (B), the proof path (no-oracle spec §4.14; T20d4).
+mod proven;
 
 // one parameter set per build (owner 2026-10-21): pqz-stmt refuses two, and silently takes n2048-kmax1024 for none
 const _: () = assert!(
@@ -214,6 +217,16 @@ pub fn enc(pks: &[Vec<u8>], values: &[u64]) -> Result<(Vec<u8>, Vec<Vec<u8>>)> {
 /// - `openMemo {chainId, entryRef, fromUA, sendCounter, entryPtr, memo}` on the sender's handle → `{auditorOn, legs}`;
 /// - `pickDecoys {candidates, exclude, count, weights?, recipient?}` → `{decoys}`, with `recipient` `{decoys, legs}` (`legs` the
 ///   shuffled leg order to use) (T15n, CTR-UA-29: [`super::decoys`]; op 7's decoy legs; the handle's key is not used).
+///
+/// Path (B), the proof path of release 3h (no-oracle spec §4.14, T20d4: `proven`), one session per handle:
+/// - `provenOpen {…balance, chainId, registry, auditorUA, lastRecord?}` (`lastRecord` `{w0, w1}` of `debitRec[ua][lastDebit −
+///   1]`, absent exactly when `lastDebit = 0`; `pending` exactly `[p_last, p)`; `blobs` the key's and `accBlob`'s codes) →
+///   `{session, p, sendCounter, need}`: the own `v_f` checked by its `ownTag` (`K_v` from the seed, never `s`);
+/// - `provenAdd {session, blobs, credits}` (each credit `{index, fromUA, sendCounter, form, record, senderPending?,
+///   keyRecords?, proof?, header? | call?}`, the codes once per request) → `{accepted, refused}`: each credit checked on its own,
+///   keyless (P over the rebuilt statement with the handle's `pk` at its leg, a migration credit by re-encryption, else by P);
+/// - `provenCancel {session}` → `{}`; `balanceProven {session}` → `{value, p, sendCounter, parts}` once every `need` index is
+///   accepted (the key's one use).
 pub const COMMANDS: &[&str] = &[
     "enc",
     #[cfg(feature = "vectors")]
@@ -244,6 +257,10 @@ pub const COMMANDS: &[&str] = &[
     #[cfg(feature = "vectors")]
     "rawProveDiscloseSender",
     "pickDecoys",
+    "provenOpen",
+    "provenAdd",
+    "provenCancel",
+    "balanceProven",
 ];
 
 /// The storage layout the words commands parse (`ua-mtx-merge`, `PqzCore.Account` / `PqzStorage` in the ERC-7201 namespace
@@ -343,6 +360,9 @@ fn allowed(cmd: &str, field: &str) -> bool {
         "proveDisclose" => has(LOC) || has(ENTRY) || has(&["ua", "registry", "leg", "kind", "auditorMode", "auditorUA"]),
         "openMemo" => has(LOC) || has(ENTRY) || field == "memo",
         "pickDecoys" => has(&["candidates", "exclude", "count", "weights", "recipient"]),
+        "provenOpen" => has(LOC) || has(ACCT) || has(&["forOp7", "lastRecord", "auditorUA", "chainId", "registry"]),
+        "provenAdd" => has(&["session", "blobs", "credits"]),
+        "provenCancel" | "balanceProven" => field == "session",
         _ => false,
     }
 }
@@ -611,10 +631,11 @@ struct Acct {
     flags: u8,
     send_counter: u64,
     acc_hash: Word,
+    last_debit: u64,
 }
 
-/// The 4 slots of `acct[ua][v]` (3h): the counters, the `acc` reference, `lastDebit` (read, and checked to be a `uint64`: path (A)
-/// does not use it, the proof path does) and `accHash`.
+/// The 4 slots of `acct[ua][v]` (3h): the counters, the `acc` reference, `lastDebit` (a `uint64`: path (A) does not use it, the
+/// proof path does) and `accHash`.
 fn acct(w: &[Word], counter: &Word) -> Result<Acct> {
     let [s0, s1, last_debit, s2] = w else { return Err(Error::Argument) };
     only_low(s1, 29)?;
@@ -632,6 +653,7 @@ fn acct(w: &[Word], counter: &Word) -> Result<Acct> {
         flags: lo_u64(s1, 28, 1)? as u8,
         send_counter: lo_u64(counter, 0, 8)?,
         acc_hash: *s2,
+        last_debit: lo_u64(last_debit, 0, 8)?,
     })
 }
 
@@ -851,6 +873,11 @@ enum Req {
     PickDecoys(super::decoys::Request),
     /// `expect`: the entry's `(auditorOn, UA_j)` the opened memo must name (`None` only for the raw form).
     OpenMemo { chain_uid: Word, token: [u8; 20], from_ua: Word, send_counter: u64, memo: Vec<u8>, expect: Option<(bool, Vec<Word>)> },
+    /// Path (B) (no-oracle spec §4.14.2): the session's commands.
+    ProvenOpen(Box<proven::Open>),
+    ProvenAdd { session: [u8; 16], blobs: proven::Codes, credits: Vec<proven::Credit> },
+    ProvenCancel([u8; 16]),
+    BalanceProven([u8; 16]),
 }
 
 /// A words debit's header: the caller's fields, `p` and `sendCounter` from the account.
@@ -880,6 +907,16 @@ fn req(cmd: &str, f: &Fields<'_>) -> Result<(Req, Option<Vec<u8>>)> {
     };
     Ok(match cmd {
         "pickDecoys" => (Req::PickDecoys(super::decoys::Request::from_map(f.0)?), None),
+        "provenOpen" => {
+            let (o, key) = proven::open(f)?;
+            (Req::ProvenOpen(Box::new(o)), Some(key))
+        }
+        "provenAdd" => {
+            let (blobs, credits) = proven::credits(f)?;
+            (Req::ProvenAdd { session: f.arr("session")?, blobs, credits }, None)
+        }
+        "provenCancel" => (Req::ProvenCancel(f.arr("session")?), None),
+        "balanceProven" => (Req::BalanceProven(f.arr("session")?), None),
         "enc" => {
             let pks = f.list("pks")?.iter().map(|p| pk(hex(p)?)).collect::<Result<_>>()?;
             let values = f.list("values")?.iter().map(|v| v.as_u64().ok_or(Error::Argument));
@@ -1410,6 +1447,9 @@ pub struct PqzKey {
     index: u32,
     pk: Vec<u8>,
     secret: Handle,
+    /// Path (B)'s one session (no-oracle spec §4.14.2): public sums only, never exported; dropped by a second `provenOpen`, a
+    /// cancel, a closing command, the handle's drop or, at the next command, the wallet's lock.
+    session: std::sync::Mutex<Option<proven::Session>>,
 }
 
 impl zeroize::ZeroizeOnDrop for PqzKey {}
@@ -1431,7 +1471,7 @@ pub(crate) fn derive(store: &Arc<SecretStore>, account: u32, index: u32, version
         let pk = keygen(&seed32)?.0.pk.to_vec();
         Ok((seed32, pk))
     })?;
-    Ok(PqzKey { account, index, pk, secret })
+    Ok(PqzKey { account, index, pk, secret, session: Default::default() })
 }
 
 /// A key rebuilt from an `msig`'s k-of-n backup (T16a): `seed32` into `store` by its key hash, only if `pqzl::keygen(seed32)`
@@ -1442,14 +1482,14 @@ pub(crate) fn install(store: &Arc<SecretStore>, seed32: &[u8; 32], pqz_key_hash:
         return Err(Error::Argument);
     }
     let (secret, pk) = store.key(KeyId::PqzHeld(*pqz_key_hash), |_| Ok((Zeroizing::new(seed32.to_vec()), pk)))?;
-    Ok(PqzKey { account: u32::MAX, index: u32::MAX, pk, secret })
+    Ok(PqzKey { account: u32::MAX, index: u32::MAX, pk, secret, session: Default::default() })
 }
 
 /// The key [`install`] put in `store` under `pqz_key_hash` (`Argument` if it holds none).
 pub(crate) fn held(store: &Arc<SecretStore>, pqz_key_hash: &[u8; 32]) -> Result<PqzKey> {
     super::release_or_unlocked()?;
     let (secret, pk) = store.key(KeyId::PqzHeld(*pqz_key_hash), |_| Err(Error::Argument))?;
-    Ok(PqzKey { account: u32::MAX, index: u32::MAX, pk, secret })
+    Ok(PqzKey { account: u32::MAX, index: u32::MAX, pk, secret, session: Default::default() })
 }
 
 impl PqzKey {
@@ -1494,6 +1534,10 @@ impl PqzKey {
         let out = match &c.req {
             // no key (CTR-UA-29: the reading layer's candidates, the OS CSPRNG)
             Req::PickDecoys(r) => return r.pick(),
+            Req::ProvenOpen(o) => self.proven_open(o)?,
+            Req::ProvenAdd { session, blobs, credits } => self.proven_add(session, blobs, credits)?,
+            Req::ProvenCancel(sid) => self.proven_cancel(sid)?,
+            Req::BalanceProven(sid) => self.balance_proven(sid)?,
             Req::Enc { pks, values } => {
                 let (u, vs) = enc(pks, values)?;
                 json!({"u": to_hex(&u), "vs": vs.iter().map(|v| to_hex(v)).collect::<Vec<_>>()})
@@ -1927,7 +1971,7 @@ impl PqzKey {
     /// A handle over `seed32` in a store of its own (the vector files key by KeyGen seed).
     pub fn vectors_from_seed32(seed32: &[u8; 32]) -> Result<PqzKey> {
         let pk = keygen(seed32)?.0.pk.to_vec();
-        Ok(PqzKey { account: 0, index: 0, pk, secret: SecretStore::single(seed32)? })
+        Ok(PqzKey { account: 0, index: 0, pk, secret: SecretStore::single(seed32)?, session: Default::default() })
     }
     /// [`PqzKey::call`] at the given randomness.
     pub fn vectors_call(&self, cmd: &str, request_json: &[u8], d: &Draw) -> Result<String> {

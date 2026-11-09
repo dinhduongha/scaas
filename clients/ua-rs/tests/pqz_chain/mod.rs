@@ -115,6 +115,9 @@ pub struct Ent {
     pub memo: Vec<u8>,
 }
 
+/// A settled debit as history keeps it: its op, statement, proof and NONE call fields.
+pub type Proven = (u8, Vec<u8>, Vec<u8>, Value);
+
 #[derive(Default)]
 pub struct Chain {
     pub blobs: BTreeMap<[u8; 20], Vec<u8>>,
@@ -133,6 +136,9 @@ pub struct Chain {
     pub proof_store: u8,
     pub block: u64,
     pub auditor: Option<Word>,
+    /// Path (B)'s history (no-oracle spec §4.14.4, T20d4): each settled debit's op (1, 2, 7), statement, proof and NONE call
+    /// fields, by `(fromUA, k)`; the reading layer's `eth_getLogs` (LOG) or the debit's transaction (NONE).
+    pub proofs: BTreeMap<(Word, u64), Proven>,
     n: u64,
 }
 
@@ -473,4 +479,113 @@ fn memo_uas(stmt: &[u8], m: usize) -> Vec<Word> {
     let uas = l.iter().find(|(h, _)| *h == rh).expect("note_legs first").1.clone();
     assert_eq!(uas.len(), m);
     uas
+}
+
+/// A record's fields as the model wrote them: `(prevBlob, p, Δp, proofStore, shieldIn, keyVersion)`.
+pub fn rec_fields(r: &(Word, Word)) -> ([u8; 20], u64, u64, u8, u64, u64) {
+    let (w0, w1) = r;
+    let wide = w0[31] & 2 != 0;
+    let be = |w: &Word, a: usize| u64::from_be_bytes(w[a..a + 8].try_into().unwrap());
+    (w0[..20].try_into().unwrap(), be(w0, 20), u16::from_be_bytes([w0[28], w0[29]]) as u64, w0[30],
+        if wide { be(w1, 0) } else { 0 }, if wide { be(w1, 8) } else { 0 })
+}
+
+impl Chain {
+    /// Notes a settled debit's statement and proof (`call`: its NONE call fields) for path (B)'s readers.
+    pub fn note_proof(&mut self, op: u8, stmt: &[u8], proof: &[u8], call: Value) {
+        let w = |i: usize| -> Word { stmt[32 * i..32 * i + 32].try_into().unwrap() };
+        let k = st::word_u64(&w(st::H_SEND_COUNTER)).unwrap();
+        self.proofs.insert((w(st::H_FROM), k), (op, stmt.to_vec(), proof.to_vec(), call));
+    }
+    /// The `p` of `(ua, v)`'s last debit (`p_last`, 0 when never debited).
+    pub fn p_last(&self, ua: &Word, v: u64) -> u64 {
+        let a = &self.accts[&(*ua, v)];
+        if a.last_debit == 0 { 0 } else { rec_fields(&self.recs[&(*ua, a.last_debit - 1)]).1 }
+    }
+    /// `provenOpen`'s words for `(ua, v)` (no-oracle spec §4.14.2): the account, `lastRecord`, the window `[p_last, p)`, the key's
+    /// and `accBlob`'s codes, `accWords` under `MAT`, the token's `chainId`, `registry` and `auditorUA`.
+    pub fn proven_open(&self, ua: &Word, v: u64) -> Value {
+        let empty = Acct::default();
+        let a = self.accts.get(&(*ua, v)).unwrap_or(&empty);
+        let p = a.count.min(a.rolled + 16u64.min(K_MAX as u64 - 1 - a.units));
+        let p_last = if a.last_debit == 0 { 0 } else { self.p_last(ua, v) };
+        let mut blobs = vec![self.keys[&(*ua, v)]];
+        if a.last_debit > 0 {
+            blobs.push(a.acc_blob);
+        }
+        let pending: Vec<Value> = (p_last..p).map(|i| json!({"index": i, "word": hx(&a.pending[&i])})).collect();
+        let acc_words: Vec<String> = if a.flags & 1 != 0 { a.acc_words.iter().map(|w| hx(w)).collect() } else { vec![] };
+        let mut o = json!({"chainUid": hx(&UID), "token": hx(&TOKEN), "ua": hx(ua), "block": self.block, "psid": hx(&st::PQZL_ID),
+            "account": a.slots().iter().map(|w| hx(w)).collect::<Vec<_>>(), "pending": pending, "accWords": acc_words,
+            "sendCounterWord": hx(&st::u64_word(self.ctrs.get(ua).copied().unwrap_or(0))), "keyVersion": v,
+            "keyVersions": hx(&self.versions_word(ua)), "blobs": self.blobs_json(&blobs), "keyRecord": hx(&self.key_record_at(ua, v)),
+            "forOp7": false, "chainId": CHAIN_ID, "registry": hx(&REG), "auditorUA": hx(&self.auditor.unwrap_or([0; 32]))});
+        if a.last_debit > 0 {
+            let (w0, w1) = self.recs[&(*ua, a.last_debit - 1)];
+            o["lastRecord"] = json!({"w0": hx(&w0), "w1": hx(&w1)});
+        }
+        o
+    }
+    /// The op blob's leg owners and the debit's op: op 1 `[toUA]`, op 7 the legs' UAs (recorded by [`note_legs`]).
+    fn legs_of(&self, from: &Word, k: u64) -> (u8, Vec<Word>, bool) {
+        let (op, stmt, _, _) = &self.proofs[&(*from, k)];
+        match st::parse(*op, stmt).unwrap() {
+            st::Stmt::Debit(d) => (*op, vec![d.header[st::H_TO]], d.pk_a.is_some()),
+            st::Stmt::Multi(m) => (*op, memo_uas(stmt, m.m), m.pk_a.is_some()),
+            _ => panic!(),
+        }
+    }
+    /// A `provenAdd` credit for pending index `i` of `(ua, v)` (§4.14.4) and the blob addresses it names: the slot's entry, its
+    /// record, the sender's window `[p − Δp, p)` of `pending[fromUA][keyVersion]`, the keys by the tail's `kv` (the holder's own
+    /// leg left out), P with the header (LOG) or the call (NONE), by the record's `proofStore`.
+    pub fn proven_credit(&self, ua: &Word, v: u64, i: u64) -> (Value, Vec<[u8; 20]>) {
+        let w = self.accts[&(*ua, v)].pending[&i];
+        let ptr: [u8; 20] = w[..20].try_into().unwrap();
+        let e = self.entries.values().find(|e| e.ptr == ptr).expect("the slot's entry").clone();
+        let r = self.recs[&(e.from, e.ctr)];
+        let (prev, p, dp, ps, _, kv_s) = rec_fields(&r);
+        let mut blobs = vec![ptr, self.keys[&(e.from, kv_s)]];
+        if prev != [0; 20] {
+            blobs.push(prev);
+        }
+        let sp = &self.accts[&(e.from, kv_s)].pending;
+        let window: Vec<Value> = (p - dp..p)
+            .map(|x| {
+                let pw = sp[&x];
+                if pw[22..24] != [0, 0] {
+                    blobs.push(pw[..20].try_into().unwrap());
+                }
+                json!({"index": x, "word": hx(&pw)})
+            })
+            .collect();
+        let d = &self.blobs[&ptr][1..];
+        let n = *d.last().unwrap() as usize;
+        let kv: Vec<u64> = (0..n).map(|j| u64::from_be_bytes(d[d.len() - 1 - 8 * (n - j)..][..8].try_into().unwrap())).collect();
+        let (op, uas, aud) = self.legs_of(&e.from, e.ctr);
+        let mut keys = vec![(e.from, kv_s)];
+        for (j, u) in uas.iter().enumerate() {
+            if !(u == ua && kv[j] == v) {
+                keys.push((*u, kv[j]));
+            }
+        }
+        if aud {
+            keys.push((self.auditor.unwrap(), kv[uas.len()]));
+        }
+        blobs.extend(keys.iter().map(|k| self.keys[k]));
+        let krs: Vec<Value> = keys.iter().map(|(u, x)| json!({"ua": hx(u), "version": x, "word": hx(&self.key_record_at(u, *x))})).collect();
+        let (_, stmt, proof, call) = &self.proofs[&(e.from, e.ctr)];
+        let mut c = json!({"index": i, "fromUA": hx(&e.from), "sendCounter": e.ctr, "form": if op == 7 { "transferMulti" } else { "transfer" },
+            "record": {"w0": hx(&r.0), "w1": hx(&r.1)}, "senderPending": window, "keyRecords": krs, "proof": hx(proof)});
+        if ps == 1 {
+            c["header"] = json!((0..20).map(|x| hx(&stmt[32 * x..32 * x + 32])).collect::<Vec<_>>());
+        } else {
+            c["call"] = call.clone();
+        }
+        (c, blobs)
+    }
+    /// `provenAdd`'s request for the credits `cs` (each `(value, blobs)`), every code once.
+    pub fn add_request(&self, session: &Value, cs: &[(Value, Vec<[u8; 20]>)]) -> Value {
+        let blobs: Vec<[u8; 20]> = cs.iter().flat_map(|c| c.1.clone()).collect();
+        json!({"session": session, "blobs": self.blobs_json(&blobs), "credits": cs.iter().map(|c| c.0.clone()).collect::<Vec<_>>()})
+    }
 }
