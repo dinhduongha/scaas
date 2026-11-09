@@ -8360,7 +8360,7 @@ Change: the app never offers `approve` on a SCaaS token; spenders on outside tok
 
 ## 39. Clients — UA libraries
 
-Rules of the `ua-rs` wallet surface and its facades, then the records of the decisions behind them (CLI-UAL-50 to CLI-UAL-58). Everything here is UNAUDITED.
+Rules of the `ua-rs` wallet surface and its facades, then the records of the decisions behind them (CLI-UAL-50 to CLI-UAL-60). Everything here is UNAUDITED.
 
 ### CLI-UAL-01 — `ua-rs` is the only signer; a secret leaves it only through a named export
 - old: — · status: current · owner: yes · date: 2026-11-05 · normative: clients/ua-libraries.md#CLI-UAL-01 · superseded-by: —
@@ -8868,6 +8868,34 @@ chain-neutral releases the registry is in the token's code env, readable at one 
   `msig` never holds a KEM key (`header_states_its_rules` checks the C header). No reader here reads `popSlotsOf` or calls
   `requirePortable` (the callers' `memberAccepted` reads stay theirs), so neither has a client part. BUILT.
 **Source.** [plan](superpowers/plans/2026-11-05-ua-rs-sign.md) T20b; `smartcontracts/evm/runs/2026-11-08-ua-rs-sign-t20b4-summary.txt`.
+
+<a id="CLI-UAL-60"></a>
+### CLI-UAL-60 — The PQZ proof path (B) on the client, release 3h (owner 2026-11-09)
+- old: — · status: current · owner: yes · date: 2026-11-09 · normative: decisions.md#CLI-UAL-60 · superseded-by: —
+
+**Rule.** Beside path (A), `ua-rs` decrypts a PQZ balance of a 3h token over parts it checked itself before the key is used: each
+credit by its sender's debit proof, verified by the library (`pqz_ffi::precompile`) over a statement it rebuilds with its own key
+in the credited leg; the holder's own `v_f` by `ownTag`; a migration credit by re-encryption; a TRIVIAL entry from its amount
+(no-oracle spec §4.14). Viewing (`balanceProven`) takes its words from any source; a debit (`prove*Proven`) takes every word and
+code that fixes `T`'s bytes from a source under R1–R5. Every debit of either path carries `ownTag` and `memoHash =
+keccak256(memo ‖ ownTag)`. The owner's rulings of 2026-11-09, in full:
+1. **C-PP-6:** an MPC quorum member gets a keyless check now (`checkProven`, the C function `scaas_ua_pqz_check` without a
+   handle): the quorum's own last debit and every credit since by their P; the MPC partial decryption waits for the threshold
+   protocol; with a P gone from history the fallback is the proof-path spec §9.6's (seed rebuild, an operator, rotation).
+2. **The reference reader:** `pqz-read --command balanceProven` reads path (B)'s words and history (+1–1.5 agent-days).
+3. **Vector rows:** the rows for a NONE debit's header and a relayed debit's envelope binding are a test-only follow-up of T62
+   on `ua-mtx-merge` (T62a, after T77), taken at the next sync.
+4. **Releases:** release 3h only; the readers refuse an earlier PQZ token by a named error; the pre-3h `memoHash` formulas
+   (no-oracle spec §4.10, T15k) move to `clients/ua-rs/legacy/ua-rs-sign/`.
+5. **Review:** a full Fable review of the spec delta (design, security, crypto) before any code; Codex only on the owner's word.
+**Why.** The proof-path spec (`ua-mtx-merge` 3h, T58–T65) made row (B) of the no-oracle spec §3 buildable: the sender's `T` from
+state, P in history, `ownTag` for own debits; a holder restored from its seed then decrypts key-safely without a trusted reader
+(research `pqz-leg-proof-option.md` §15A, the owner's agreed design of 2026-11-06).
+**Cost if wrong.** A part accepted without a valid check is §1's key-recovery oracle; a debit over words from an untrusted
+source is a balance bit (research §3.3).
+**Status.** SPECIFIED (plan T20d; T20d0 the spec delta). UNAUDITED.
+**Source.** owner 2026-11-09 (chat, through the controller); [plan](superpowers/plans/2026-11-05-ua-rs-sign.md) T20d;
+[proof-path spec](superpowers/specs/2026-11-06-pqz-proof-path.md) §9, §13.3.
 
 ## 40. Integration — ERP
 
