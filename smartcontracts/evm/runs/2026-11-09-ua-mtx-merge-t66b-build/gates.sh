@@ -34,6 +34,10 @@ step() {
         --match-path test/ua/UARegistryUA8.t.sol --match-test 'test_T_GAS_' -vv; r=$?
       git diff --exit-code -- $EVM/src/pqz/PqzSet.sol || r=3
       return $r ;;
+    t66b) # T66b §10: the pre-split releases (d142b57c, built once into scratchpad/t66b-pre) for the differential, then test/t66b
+      (cd $EVM && python3 script/t66b/legacy_artifacts.py build) && \
+        FORGE_ARGS="-vv --match-contract ^(Diff|Modules|Paths)" scripts/capped sh $EVM/runs/2026-11-08-ua-mtx-merge-t66a/forge-dirs.sh \
+        "t66b-$L" test/t66b ;; # the imported fixtures' own suites run in their directories
     size-self) python3 scripts/size_gate.py --self-test && echo self-test ok ;;
     docs) python3 scripts/docs_check.py check ;;
     *) echo "unknown step $1"; return 2 ;;
