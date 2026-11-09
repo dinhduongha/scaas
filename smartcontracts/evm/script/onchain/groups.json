@@ -1,0 +1,95 @@
+{
+  "_comment": "T66b Step 5b: the deployed contracts by group (coverage.py). A contract: label, artifact (out/<file>/<name>.json, read for its methodIdentifiers) or t66b (a token kind: its entries from script/t66b/entries.json), optional needs (an environment this run does not have) and via (a library: its entries run inside these callers). A group is added by name; pqchat is the slot for the PqChat matrix (plan UA-7), empty until src/pqchat is built.",
+  "groups": {
+    "tokens": [
+      {"label": "NormalToken", "kind": 0, "t66b": "NormalToken"},
+      {"label": "WrappedToken", "kind": 1, "t66b": "WrappedToken"},
+      {"label": "NormalZetherToken", "kind": 2, "t66b": "NormalZetherToken"},
+      {"label": "WrappedZetherToken", "kind": 3, "t66b": "WrappedZetherToken"},
+      {"label": "NormalPqzToken", "kind": 4, "t66b": "NormalPqzToken"},
+      {"label": "WrappedPqzToken", "kind": 5, "t66b": "WrappedPqzToken"},
+      {"label": "NormalRegulatedToken", "kind": 8, "t66b": "NormalRegulatedToken"},
+      {"label": "WrappedRegulatedToken", "kind": 9, "t66b": "WrappedRegulatedToken"},
+      {"label": "NormalZetherRegulatedToken", "kind": 10, "t66b": "NormalZetherRegulatedToken"},
+      {"label": "WrappedZetherRegulatedToken", "kind": 11, "t66b": "WrappedZetherRegulatedToken"},
+      {"label": "NormalPqzRegulatedToken", "kind": 12, "t66b": "NormalPqzRegulatedToken"},
+      {"label": "WrappedPqzRegulatedToken", "kind": 13, "t66b": "WrappedPqzRegulatedToken"}
+    ],
+    "dex": [
+      {"label": "SCaaSDex", "artifact": "SCaaSDex.sol/SCaaSDex"},
+      {"label": "SCaaSDexD", "artifact": "SCaaSDexAdmin.sol/SCaaSDexD", "via": ["SCaaSDex"]}
+    ],
+    "relay": [
+      {"label": "RelayFeeRouter", "artifact": "RelayFeeRouter.sol/RelayFeeRouter"},
+      {"label": "RelayFeeExecutor", "artifact": "RelayFeeRouter.sol/RelayFeeExecutor"}
+    ],
+    "governance": [
+      {"label": "GovernanceRouter", "artifact": "GovernanceRouter.sol/GovernanceRouter"}
+    ],
+    "registry": [
+      {"label": "UARegistry", "artifact": "UARegistry.sol/UARegistry"},
+      {"label": "UARegistryCoreLib", "artifact": "UARegistryCoreLib.sol/UARegistryCoreLib", "via": ["UARegistry"]},
+      {"label": "UARegistryAuxLib", "artifact": "UARegistryAuxLib.sol/UARegistryAuxLib", "via": ["UARegistry"]}
+    ],
+    "factory": [
+      {"label": "OpenFactory", "artifact": "OpenFactory.sol/OpenFactory"}
+    ],
+    "accounts": [
+      {"label": "SmartKeyAccountFactory", "artifact": "SmartKeyAccountFactory.sol/SmartKeyAccountFactory"},
+      {"label": "SmartKeyAccount", "artifact": "SmartKeyAccount.sol/SmartKeyAccount"}
+    ],
+    "wallets": [
+      {"label": "MandateWallet", "artifact": "MandateWallet.sol/MandateWallet"},
+      {"label": "HederaMandateWallet", "artifact": "HederaMandateWallet.sol/HederaMandateWallet", "needs": "Hedera"}
+    ],
+    "compliance": [
+      {"label": "ComplianceRegistry", "artifact": "ComplianceRegistry.sol/ComplianceRegistry"}
+    ],
+    "reference": [
+      {"label": "RefServiceEscrow", "artifact": "RefServiceEscrow.sol/RefServiceEscrow"}
+    ],
+    "verifiers": [
+      {"label": "Secp256k1Verifier", "artifact": "Secp256k1Verifier.sol/Secp256k1Verifier"},
+      {"label": "Ed25519Verifier", "artifact": "Ed25519Verifier.sol/Ed25519Verifier"},
+      {"label": "Bip340Verifier", "artifact": "Bip340Verifier.sol/Bip340Verifier"},
+      {"label": "P256Verifier", "artifact": "P256Verifier.sol/P256Verifier"},
+      {"label": "WebAuthnP256Verifier", "artifact": "WebAuthnP256Verifier.sol/WebAuthnP256Verifier"},
+      {"label": "SchnorrBn254Verifier", "artifact": "PairingVerifiers.sol/SchnorrBn254Verifier"},
+      {"label": "SchnorrBls12381Verifier", "artifact": "PairingVerifiers.sol/SchnorrBls12381Verifier"},
+      {"label": "BlsMinSigBls12381Verifier", "artifact": "PairingVerifiers.sol/BlsMinSigBls12381Verifier"},
+      {"label": "BlsMinSigBn254Verifier", "artifact": "PairingVerifiers.sol/BlsMinSigBn254Verifier"},
+      {"label": "ZetherSchnorrBls12381Verifier", "artifact": "PairingVerifiers.sol/ZetherSchnorrBls12381Verifier"},
+      {"label": "Musig2Secp256k1Verifier", "artifact": "Musig2Secp256k1Verifier.sol/Musig2Secp256k1Verifier"},
+      {"label": "UAFrostSecp256k1Verifier", "artifact": "UAFrostSecp256k1Verifier.sol/UAFrostSecp256k1Verifier"},
+      {"label": "Musig2Bn254Verifier", "artifact": "Musig2Bn254Verifier.sol/Musig2Bn254Verifier"},
+      {"label": "FrostBn254Verifier", "artifact": "FrostBn254Verifier.sol/FrostBn254Verifier"},
+      {"label": "UAMldsaVerifier", "artifact": "MlDsa.sol/UAMldsaVerifier"},
+      {"label": "UAFndsaVerifier", "artifact": "FnDsa.sol/UAFndsaVerifier"},
+      {"label": "UASlhdsaVerifier", "artifact": "SlhDsa.sol/UASlhdsaVerifier"},
+      {"label": "UAPqzVerifier", "artifact": "UAPqzVerifier.sol/UAPqzVerifier"}
+    ],
+    "zether": [
+      {"label": "ZetherStatements", "artifact": "ZetherStatements.sol/ZetherStatements"},
+      {"label": "ZetherDisclosure", "artifact": "ZetherDisclosure.sol/ZetherDisclosure"},
+      {"label": "ZetherTransferVerifierBls12381", "artifact": "ZetherVerifier.sol/ZetherTransferVerifierBls12381"},
+      {"label": "ZetherBurnVerifierBls12381", "artifact": "ZetherVerifier.sol/ZetherBurnVerifierBls12381"},
+      {"label": "ZetherInnerProductVerifierBls12381", "artifact": "ZetherVerifier.sol/ZetherInnerProductVerifierBls12381"}
+    ],
+    "libraries": [
+      {"label": "GovernanceLib", "artifact": "GovernanceLib.sol/GovernanceLib", "via": ["GovernanceRouter", "tokens"]},
+      {"label": "HederaLib", "artifact": "HederaLib.sol/HederaLib", "via": ["tokens"], "needs": "Hedera"},
+      {"label": "ZetherLib", "artifact": "ZetherLib.sol/ZetherLib", "via": ["NormalZetherToken", "WrappedZetherToken", "NormalZetherRegulatedToken", "WrappedZetherRegulatedToken"]},
+      {"label": "ZetherWrappedLib", "artifact": "ZetherWrappedLib.sol/ZetherWrappedLib", "via": ["WrappedZetherToken", "WrappedZetherRegulatedToken"]},
+      {"label": "WrappedLib", "artifact": "WrappedLib.sol/WrappedLib", "via": ["WrappedToken", "WrappedZetherToken", "WrappedPqzToken", "WrappedRegulatedToken", "WrappedZetherRegulatedToken", "WrappedPqzRegulatedToken"]},
+      {"label": "RegulatedLib", "artifact": "RegulatedLib.sol/RegulatedLib", "via": ["NormalRegulatedToken", "WrappedRegulatedToken", "NormalZetherRegulatedToken", "WrappedZetherRegulatedToken", "NormalPqzRegulatedToken", "WrappedPqzRegulatedToken"]},
+      {"label": "MtxPipelineLib", "artifact": "MtxPipelineLib.sol/MtxPipelineLib", "via": ["tokens"]},
+      {"label": "TradeLib", "artifact": "TradeLib.sol/TradeLib", "via": ["tokens", "SCaaSDex"]},
+      {"label": "PqzStateLib", "artifact": "PqzStateLib.sol/PqzStateLib", "via": ["NormalPqzToken", "WrappedPqzToken", "NormalPqzRegulatedToken", "WrappedPqzRegulatedToken"]},
+      {"label": "PqzViewLib", "artifact": "PqzViewLib.sol/PqzViewLib", "via": ["NormalPqzToken", "WrappedPqzToken", "NormalPqzRegulatedToken", "WrappedPqzRegulatedToken"]},
+      {"label": "PqzWrappedLib", "artifact": "PqzWrappedLib.sol/PqzWrappedLib", "via": ["WrappedPqzToken", "WrappedPqzRegulatedToken"]},
+      {"label": "PqzBurnLib", "artifact": "PqzBurnLib.sol/PqzBurnLib", "via": ["NormalPqzToken", "WrappedPqzToken", "NormalPqzRegulatedToken", "WrappedPqzRegulatedToken"]},
+      {"label": "PqzTransferLib", "artifact": "PqzTransferLib.sol/PqzTransferLib", "via": ["NormalPqzToken", "WrappedPqzToken", "NormalPqzRegulatedToken", "WrappedPqzRegulatedToken"]}
+    ],
+    "pqchat": []
+  }
+}
