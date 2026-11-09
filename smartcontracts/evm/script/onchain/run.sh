@@ -6,7 +6,10 @@
 #                                                                           127.0.0.1:$PORT for this run only, stopped after
 #   ../../scripts/capped script/onchain/run.sh 7622 <Group> [forge args]    the SCaaS testnet RPC itself (RPC_7622)
 # Each group builds into its own out/onchain-<group> and cache/onchain-<group> (groups run side by side). Every
-# transaction asks the estimate x GAS_MULT / 100 (default 110; anvil's estimate of a CREATE can be ~20 % low). Output: <runs>/<group>-<net>.log (git-ignored) and the records.
+# transaction asks forge's estimate x ONCHAIN_GAS_MULTIPLIER / 100 (default 130, forge's own): the estimate is the
+# simulated gasUsed after the storage refund, so a call that frees storage needs headroom above it (at 110 the
+# GovernanceRouter's mtxCancelGrant ran out of gas on chain); 130 also covers anvil's low estimate of a CREATE.
+# Output: <runs>/<group>-<net>.log (git-ignored) and the records.
 set -eu
 net=$1
 g=$2
@@ -34,7 +37,7 @@ B=broadcast/$g.s.sol/$(cast chain-id --rpc-url "$RPC")/run-latest.json
 rm -f "$B"
 rc=0
 ONCHAIN_NET=$net forge script "script/onchain/$g.s.sol" --rpc-url "$RPC" --broadcast --slow \
-  --out "out/onchain-$lg" --cache-path "cache/onchain-$lg" --gas-estimate-multiplier "${GAS_MULT:-110}" "$@" \
+  --out "out/onchain-$lg" --cache-path "cache/onchain-$lg" --gas-estimate-multiplier "${ONCHAIN_GAS_MULTIPLIER:-130}" "$@" \
   > "$OUTD/$lg-$net.log" 2>&1 || rc=$?
 tail -40 "$OUTD/$lg-$net.log"
 if [ -f "$B" ]; then
