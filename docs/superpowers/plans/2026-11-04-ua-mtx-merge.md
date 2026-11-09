@@ -230,6 +230,7 @@ rustc 1.90); Node `node --test` (`clients/clientkeys`); `zether-prover`; `ua-rs`
 | PQZ proof path (3h) | T58 → T59 → T60 → T61; T62 after T61; T63 after T62; T64 and T65 after T61, beside T62–T63; T66 beside, lands in T19 | after T66a (owner 2026-11-08; was after T50), before 3c (owner approved 2026-11-07); contracts sequential in this worktree; T58 measures kind 13 first; each format moves in the task that changes it; no task waits for `ua-rs-sign` |
 | Relay-fee router rename (T82) | T82 | **after T66 (3h), first (owner 2026-11-09)**: `MtxRelayFee` → `RelayFeeRouter`, `MtxRelayExecutor` → `RelayFeeExecutor`; before 3i so its code uses the new names |
 | Service pull (3i) | T77 → T78; T79 ∥ T80; T81 last, lands in T19 | **after T82, before T66b's build (owner 2026-11-09)**: spec `2026-11-09-service-pull.md` (owner approved Q1–Q5 2026-11-09); no production contract changes, so T66b's sizes stand; its tests are T66b's regression net for the token's `mtxExecuteTransfer` path; T80 on `ua-rs-sign` at its next sync |
+| Pay number and pay records (T83) | T83 | **after T62a, before T66b's build (owner 2026-11-09)**: `payNo` → `bytes32`, the on-chain pay records; touches the pay bodies before T66b moves them into module P |
 | Registry generation, library review, size (T66b) | T66b | after T66, before 3c (owner 2026-11-07; parts 1, 2 and 5 moved to T66a, owner 2026-11-08): the `UARegistryLib` <-> `UARegistry` rebalance, then the review of every library and the size reduction to fit 60 M per deployed contract; sequential in this worktree |
 | Docs | T19 | drafts beside T14–T18, T24–T36, T37–T43, T51–T57, T67–T76, T44–T50 and T58–T66; lands after T66 and 3c (BUILT only with code and tests) |
 | Close | T21 → T22 → T23 | |
@@ -2073,6 +2074,48 @@ spec §5.5 note); the operator note's `own_tag` and `PROOF_STORE_OVER_LANE_CAP` 
 the binding of a relayed debit (T65 ran direct calls only). **Files:** `test/pqz/PqzStateVectors.t.sol` and its generator; rows
 by the generator, never by hand; old rows byte-identical. **Gates:** the affected forge directory at the four sets, `vectors-check`.
 Commit `ua-mtx-merge T62a: PQZ NONE-header and relayed-binding vector rows`. `ua-rs-sign` takes them at its next sync.
+
+### Task T83: `payNo` as `bytes32` and the on-chain pay records (owner 2026-11-09)
+
+**Depends on:** T62a. **Before:** T66b's build (the pay bodies move into module P there). **Estimate:** 3–4.
+
+**Owner rulings 2026-11-09** (each as recommended; supersedes the `string` form of the pay-meta-tax spec's O15):
+1. `PayMeta.payNo` is `bytes32` (was `string`, at most 256 bytes): `0` = none; the canonical form is a UUIDv7 **right-aligned**
+   (its 128 bits in the low 16 bytes, the high 16 bytes zero, as `MetaTxLib.pad` places an address); any other 32-byte id is
+   accepted; the contract never parses it. `PayNoTooLong` and the clients' UTF-8 / control / bidi rules for `payNo` go.
+2. The event is `PaymentMeta(bytes32 indexed payId, bytes32 indexed payNo, uint16 schema, bytes body)`.
+3. The commitment's tag is `scaas.pay.meta.v3` (the type changed): `metaPayId = keccak256(abi.encodePacked("scaas.pay.meta.v3",
+   salt, keccak256(abi.encode(payNo, schema, body))))`.
+4. A human-readable document number stays off chain (the ERP) or goes in `body` (schema 2 or 4).
+5. **On-chain pay records (option 2):** logs are not kept for ever (EIP-4444), so an ERP must be able to ask the chain by
+   `payNo` alone with `eth_call`. Per token, in its own ERC-7201 namespace `scaas.pay.records`:
+   `mapping(bytes32 payNo => PayRecord[])`, `struct PayRecord { bytes32 to; uint192 amount; uint64 blockNo; }` (two slots):
+   `to` the payee id, `amount` what the payee received (net of a fee or a tax withheld from it), `blockNo` the block. Written by
+   every public pay entry that carries `PayMeta` with `payNo != 0`, after the transfer; `amount >= 2^192` reverts (fail closed).
+   Keyed by `payNo` only, because an ERP may roll its receiving addresses: one document may be paid to several of them. No sum
+   on chain (the ERP filters `to` by its own addresses and adds). Views `paymentCount(bytes32 payNo)` and
+   `paymentsOf(bytes32 payNo, uint256 offset, uint256 limit) returns (PayRecord[])`. Anyone may append (a 1-wei payment
+   with any `payNo`): the reader filters by `to`; the spammer pays the gas; reads are paged. Confidential pays (PQZ, Zether)
+   are not recorded. The logs stay for the detail (`payId`, `from`). No node API is needed for it.
+6. Cost accepted: the first payment of a `payNo` about +300 k gas (three new slots: the length and one record), each later one
+   about +200 k (≈ $0.69 / $0.46 at 1 gwei and ETH $2,300; ≈ $0.003 / $0.002 on a layer 2 at 0.005 gwei); `mtxPay` is ≈ 185 k today.
+7. Every family follows with the same rule in its own round.
+
+**Files:** legacy copies first (MD-4); `src/common/MetaTxLib.sol` (`PayMeta`, the pay structs' typehashes), `src/metatx/
+MtxPipelineLib.sol` (`metaPayId`, `_payMeta`), `src/metatx/MetaTokenBase.sol` and every pay entry (`mtxPay`, the fee, tax and
+receiver-fee forms, the direct `payWithFee` forms), the records namespace and views, `IMetaTokenV2`; the layout pin
+(`test/v2/layout/`), typehash pins, gas pins old → new; `scaas-node` (`typed.rs`, `guard.rs`, `indexer.rs`, `submit.rs`: the
+`pay_no` field as 32 bytes); `clients/clientkeys` (the builder, UUIDv7 → `bytes32`, display); `smartcontracts/vectors/` (the
+`paymeta` rows regenerated by their generator; a records row); docs drafts for T19 (CTR-MTX-26, the O15 Change line, a
+`decisions.md` entry, the operator note: `pay_no` changes type).
+- [ ] Red first: the commitment row at the v3 tag, a record written per pay entry form with the net amount, `payNo = 0` writes
+      nothing, two payments of one `payNo` to two `to`, paging, `amount >= 2^192` reverts, a confidential pay writes nothing.
+- [ ] **Mutants:** the record written before the transfer; the gross amount recorded; `payNo = 0` recorded; the length not
+      advanced; a page past the end not empty; the v2 tag kept.
+- [ ] **Gates:** forge per directory (`test/metatx`, `test/v2`, `test/governance`, `test/as`, `test/merge`), the four PQZ sets
+      for the PQZ kinds, the size gate, the node tests named here and clippy, clientkeys, `vectors-check`, `docs_check.py check`.
+      Commit `ua-mtx-merge T83: payNo as bytes32 and the on-chain pay records (owner 2026-11-09)`. `ua-rs-sign` takes the new
+      `PayMeta` at its next sync.
 
 ### Task T82: rename the relay-fee router and its executor (owner 2026-11-09)
 
