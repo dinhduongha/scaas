@@ -95,6 +95,40 @@ contract ModulesTest is Test {
         }
     }
 
+    function _art(string memory file, string memory name) internal view returns (string memory) {
+        return vm.readFile(string.concat(vm.envOr("FOUNDRY_OUT", string("out")), "/", file, "/", name, ".json"));
+    }
+
+    /// §8, M6: every module's storage layout (solc `storageLayout`: label, slot, offset, type) equals its kind's face's
+    /// entry for entry and has none past it (the faces of kinds 0-5 are pinned by test/v2/Layout.t.sol).
+    function test_m_layoutEqualsTheKind() public view {
+        uint256 rows;
+        for (uint256 x; x < kinds.length; ++x) {
+            uint8 k = kinds[x];
+            string memory face = _art(string.concat(faces[k], ".sol"), faces[k]);
+            string[] memory names = kindModuleNames(k);
+            for (uint256 i; i < names.length; ++i) {
+                string[] memory p = vm.split(names[i], ":");
+                string memory m = _art(p[0], p[1]);
+                uint256 n;
+                for (;; ++n) {
+                    string memory e = string.concat(".storageLayout.storage[", vm.toString(n), "]");
+                    if (!vm.keyExistsJson(face, e)) break;
+                    string[4] memory f = ["label", "slot", "offset", "type"];
+                    for (uint256 j; j < 4; ++j) {
+                        string memory q = string.concat(e, ".", f[j]);
+                        assertEq(vm.parseJsonString(m, q), vm.parseJsonString(face, q), string.concat(p[1], q));
+                    }
+                }
+                assertGt(n, 0, faces[k]);
+                assertFalse(vm.keyExistsJson(m, string.concat(".storageLayout.storage[", vm.toString(n), "]")),
+                    string.concat(p[1], ": a variable past its kind's layout"));
+                ++rows;
+            }
+        }
+        assertEq(rows, 55, "every module of the twelve kinds");
+    }
+
     /// @dev `m`'s runtime with its set's self-test hash changed, at a new address: a module answering another PQZ set and
     ///      nothing else different (P2-A's case, a module built at another set).
     function _otherSet(address m) internal returns (address a) {
