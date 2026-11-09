@@ -22,11 +22,14 @@
 #                            JSON compliance_registry, compliance_registry_codehash (every regulated release's REGISTRY_CODEHASH).
 #                            The admin then attests each DEX venue (createDex) and its puller() ELIGIBLE_CONTRACT, validUntil
 #                            2^64-1, before an ALLOWLIST token trades there: its own call, this script holds no admin key.
-#                            Always --gas-estimate-multiplier 105: forge's default x1.30 on
-#                            the BLS inner-product verifier (~14 M, DEPLOY_ZETHER) exceeds the 2^24 per-transaction cap
-#                            (EIP-7825); the largest implementation, WrappedPqzToken (13,319,335 gas measured), is
-#                            deployed by script/pqz/e2e.py, not here. DEPLOY_ZETHER=1 (any chain but Hedera) adds the Zether
-#                            stack. --slow always (one tx per block: anvil automine can strand a large tx).
+#                            Two forge runs (NET-EVM-11): Deploy.s.sol simulated on the RPC's fork, nothing sent, then
+#                            script/DeploySend.s.sol sends its plan (forge's dry-run file, the linked libraries first)
+#                            in order, each transaction with an explicit gas limit, (regular + state) x 1.05 measured on
+#                            the fork, capped at the RPC's block gas limit; one that needs more than that limit refuses
+#                            the plan by name (TxGasOverBlockLimit) before anything is sent. No forge estimate, no
+#                            multiplier. The PQZ kinds 4, 5, 12, 13 are deployed by script/pqz/e2e.py, not here.
+#                            DEPLOY_ZETHER=1 (any chain but Hedera) adds the Zether stack. --slow always (one tx per
+#                            block: anvil automine can strand a large tx).
 #                            T66b: each token release and the DEX come with their body modules (P, T, A, W, Z, Q; the
 #                            DEX's D), each its own CREATE2 transaction through the deterministic deployer with DEPLOY_SALT
 #                            (the same address on every chain) and its own gate, pinned in the release's env after the
@@ -68,11 +71,15 @@ SC="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FAMILY="${1:?usage: $0 <family> <network> [args…]}"; NET="${2:?network}"; shift 2
 case "$FAMILY" in
   evm)     cd "$SC/evm"; Z=(--disable-code-size-limit) # forge 1.8.5: EIP-3860 on the script contract itself (Deploy.s.sol initcode > 48 KiB); the chain enforces 64 KiB
-           Z+=(--gas-estimate-multiplier 105) # the BLS inner-product verifier (~14 M) must stay under the 2^24 tx cap
+           C="$(cast chain-id --rpc-url "$NET")"; S="$(cast wallet address --private-key "$PRIVATE_KEY")"
            # forge writes the JSON in the simulation, before the broadcast: keep the previous one until it succeeds
-           J="deployments/$(cast chain-id --rpc-url "$NET").json"; [ -f "$J" ] && cp "$J" "$J.prev"
-           if forge script script/Deploy.s.sol --rpc-url "$NET" --broadcast --slow "${Z[@]}" \
-               --sender "$(cast wallet address --private-key "$PRIVATE_KEY")" "$@"; then rm -f "$J.prev"
+           J="deployments/$C.json"; [ -f "$J" ] && cp "$J" "$J.prev"
+           # NET-EVM-11: Deploy.s.sol simulated on the RPC's fork, nothing sent (the JSON, the release list, the plan in
+           # forge's dry-run file), then DeploySend.s.sol sends that plan, each transaction with an explicit gas limit
+           rm -f "broadcast/Deploy.s.sol/$C/dry-run/run-latest.json" # never a stale plan
+           if forge script script/Deploy.s.sol --rpc-url "$NET" "${Z[@]}" --sender "$S" "$@" &&
+              forge script script/DeploySend.s.sol --sig 'run(string)' "broadcast/Deploy.s.sol/$C/dry-run/run-latest.json" \
+                --rpc-url "$NET" --broadcast --slow "${Z[@]}" --sender "$S" "$@"; then rm -f "$J.prev"
            else [ -f "$J.prev" ] && mv "$J.prev" "$J" || rm -f "$J"; exit 1; fi ;;
   hedera)  cd "$SC/evm" && exec forge script script/hedera/DeployHedera.s.sol --rpc-url "$NET" --broadcast --slow --disable-code-size-limit \
              --sender "$(cast wallet address --private-key "$PRIVATE_KEY")" "$@" ;;

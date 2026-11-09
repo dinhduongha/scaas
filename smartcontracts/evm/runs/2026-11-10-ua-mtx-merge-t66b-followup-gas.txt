@@ -1,0 +1,124 @@
+# ua-mtx-merge T66b follow-up, fix 2 (NET-EVM-11): every deploy transaction carries an explicit gas limit within the block.
+# Before: deploy.sh evm let forge set each limit (its estimate x --gas-estimate-multiplier 105); on 7622 (Step 5, cd48e32b)
+# UARegistryCoreLib went out with 61,800,392 and used 52,317,793 (DeployBase asked 56,633,057): a 60 M block refuses it.
+# Now: Deploy.s.sol simulated on the RPC's fork, nothing sent; script/DeploySend.s.sol replays that plan (forge's dry-run
+# file, the linked libraries first) on its own fork, measures each transaction as DeployBase._measuredGas does (regular =
+# lastCallGas x 64/63, state = EIP-8037's), sets the limit (regular + state) x 1.05 capped at the RPC's block gas limit,
+# refuses the whole plan by name (TxGasOverBlockLimit) if one needs more, and only then sends every call with {gas: limit},
+# which forge treats as a fixed gas limit (isFixedGasLimit true: no estimate, no multiplier). Forge's own run of each call
+# at its limit is the check that the limit covers the need under EIP-8037; anvil 1.8.5 does not price EIP-8037 (its gasUsed
+# below), so the anvil run proves the block fit, not the need. UNAUDITED.
+# Positive control: runs/2026-11-10-ua-mtx-merge-t66b-followup-gas.sh, a local anvil (--hardfork amsterdam --gas-limit
+# 60000000 --code-size-limit 131072, chain 31993), Step 5's flags (FOUNDRY_PROFILE=scaas-testnet, RELEASE_GAS_GATE=public,
+# DEPLOY_WRAPPED, DEPLOY_REGULATED, DEPLOY_ZETHER, NOTICE_PERIOD=0, DEMO_SUPPLY 10^12, COMPLIANCE_ADMIN = the CREATE2 deployer),
+# the anvil dev account 0. Full output in the git-ignored .log files (-red, -green, -green2).
+step | deploy.sh | rc | result
+red | before the fix (cd48e32b) | 1 | forge's plan 104 transactions, largest gas limit 61,800,392 (tx 5, UARegistryCoreLib), sum 2,480,764,543; 5 transactions mined (the five libraries before it), then "intrinsic gas too high -- tx.gas_limit > env.block.gas_limit" on tx 5 after 4 attempts
+green | the fix (scratch runner, same steps) | 0 | 104 transactions, 104 receipts, every one status 1 and isFixedGasLimit true; largest limit 56,629,029 (tx 5), none over 60 M; inputs and targets equal to the plan's
+green2 | the fix, this runner | 0 | the same: 104 / 104, status 1, isFixedGasLimit true, largest limit 56,629,029, sum of limits 2,344,287,548, anvil gasUsed sum 316,959,585
+# The plan of the green runs, as sent (green2):
+# | contract / call | regular (x 64/63) | state | explicit limit | sent gas | anvil gasUsed (no EIP-8037)
+0 | GovernanceLib | 964,274 | 22,388,490 | 24,520,402 | 24,520,402 | 3,197,615
+1 | HederaLib | 70,566 | 1,357,110 | 1,499,059 | 1,499,059 | 219,892
+2 | ZetherLib | 1,775,542 | 41,479,830 | 45,418,140 | 45,418,140 | 5,902,571
+3 | WrappedLib | 1,132,145 | 26,338,950 | 28,844,649 | 28,844,649 | 3,757,413
+4 | ZetherWrappedLib | 805,245 | 18,646,110 | 20,423,922 | 20,423,922 | 2,667,700
+5 | UARegistryCoreLib | 2,210,759 | 51,721,650 | 56,629,029 | 56,629,029 | 7,352,825
+6 | UARegistryAuxLib | 1,333,499 | 31,077,360 | 34,031,401 | 34,031,401 | 4,428,924
+7 | RegulatedLib | 698,034 | 16,123,140 | 17,662,232 | 17,662,232 | 2,310,204
+8 | MtxPipelineLib | 830,797 | 19,247,400 | 21,082,106 | 21,082,106 | 2,753,176
+9 | TradeLib | 340,512 | 7,709,670 | 8,452,691 | 8,452,691 | 1,119,187
+10 | SmartKeyAccountFactory | 1,529,197 | 34,659,090 | 37,997,701 | 37,997,701 | 4,966,555
+11 | OpenFactory | 1,933,856 | 44,995,770 | 49,276,107 | 49,276,107 | 6,408,299
+12 | WebAuthnP256Verifier | 414,435 | 8,900,010 | 9,780,167 | 9,780,167 | 1,308,039
+13 | P256Verifier | 253,521 | 5,113,260 | 5,635,120 | 5,635,120 | 771,828
+14 | Ed25519Verifier | 1,159,647 | 27,022,860 | 29,591,632 | 29,591,632 | 3,852,838
+15 | Bip340Verifier | 114,907 | 2,437,290 | 2,679,806 | 2,679,806 | 372,702
+16 | Secp256k1Verifier | 76,808 | 1,540,710 | 1,698,393 | 1,698,393 | 245,994
+17 | SchnorrBn254Verifier | 249,945 | 5,579,910 | 6,121,347 | 6,121,347 | 817,485
+18 | SchnorrBls12381Verifier | 249,945 | 5,579,910 | 6,121,347 | 6,121,347 | 817,485
+19 | BlsMinSigBls12381Verifier | 331,410 | 7,495,470 | 8,218,224 | 8,218,224 | 1,087,876
+20 | BlsMinSigBn254Verifier | 207,294 | 4,574,700 | 5,021,093 | 5,021,093 | 675,034
+21 | Musig2Secp256k1Verifier | 263,793 | 5,940,990 | 6,515,022 | 6,515,022 | 868,186
+22 | UAFrostSecp256k1Verifier | 316,391 | 7,178,760 | 7,869,908 | 7,869,908 | 1,044,103
+23 | Musig2Bn254Verifier | 364,243 | 8,269,650 | 9,065,587 | 9,065,587 | 1,198,324
+24 | FrostBn254Verifier | 317,821 | 7,212,420 | 7,906,753 | 7,906,753 | 1,049,105
+25 | ZetherSchnorrBls12381Verifier | 250,595 | 5,595,210 | 6,138,095 | 6,138,095 | 819,551
+26 | UAMldsaVerifier | 912,652 | 17,757,180 | 19,603,323 | 19,603,323 | 2,568,798
+27 | UAMldsaVerifier | 912,652 | 17,757,180 | 19,603,323 | 19,603,323 | 2,568,890
+28 | UAFndsaVerifier | 487,708 | 10,859,940 | 11,915,030 | 11,915,030 | 1,564,962
+29 | UASlhdsaVerifier | 166,269 | 3,645,990 | 4,002,871 | 4,002,871 | 544,147
+30 | UAFndsaVerifier | 487,708 | 10,859,940 | 11,915,030 | 11,915,030 | 1,564,992
+31 | UARegistry | 2,460,420 | 43,276,050 | 48,023,293 | 48,023,293 | 6,361,158
+32 | GovernanceRouter | 1,098,012 | 24,008,760 | 26,362,110 | 26,362,110 | 3,439,497
+33 | RelayFeeRouter | 229,855 | 5,119,380 | 5,616,696 | 5,616,696 | 759,153
+34 | ComplianceRegistry | 196,762 | 4,164,660 | 4,579,493 | 4,579,493 | 629,197
+35 | OpenFactory configureChain | 48,497 | 195,840 | 256,553 | 256,553 | 73,154
+36 | NormalTokenP | 1,707,536 | 37,460,520 | 41,126,458 | 41,126,458 | 5,366,925
+37 | NormalTokenT | 1,050,615 | 22,097,790 | 24,305,825 | 24,305,825 | 3,192,874
+38 | NormalTokenA | 1,697,133 | 36,992,340 | 40,623,946 | 40,623,946 | 5,294,720
+39 | OpenFactory publishEnv | 271,940 | 1,762,560 | 2,136,225 | 2,136,225 | 452,691
+40 | OpenFactory deployImplementation | 1,118,167 | 21,686,220 | 23,944,606 | 23,944,606 | 3,287,759
+41 | SCaaSDexD | 474,575 | 10,065,870 | 11,067,467 | 11,067,467 | 1,453,430
+42 | OpenFactory publishDexEnv | 177,391 | 1,077,120 | 1,317,236 | 1,317,236 | 290,120
+43 | OpenFactory deployDexImplementation | 2,293,654 | 51,149,430 | 56,115,238 | 56,115,238 | 7,419,701
+44 | WrappedTokenP | 1,735,363 | 38,115,360 | 41,843,259 | 41,843,259 | 5,459,726
+45 | WrappedTokenT | 1,140,532 | 24,203,070 | 26,610,782 | 26,610,782 | 3,490,871
+46 | WrappedTokenA | 1,409,763 | 30,313,890 | 33,309,835 | 33,309,835 | 4,350,832
+47 | WrappedTokenW | 1,557,024 | 33,747,210 | 37,069,445 | 37,069,445 | 4,836,744
+48 | OpenFactory publishEnv | 324,964 | 2,154,240 | 2,603,164 | 2,603,164 | 544,887
+49 | OpenFactory deployImplementation | 1,394,874 | 27,919,440 | 30,780,029 | 30,780,029 | 4,194,756
+50 | NormalRegulatedTokenP | 2,021,302 | 44,564,310 | 48,914,892 | 48,914,892 | 6,373,739
+51 | NormalRegulatedTokenT | 1,141,768 | 24,037,830 | 26,438,577 | 26,438,577 | 3,469,561
+52 | NormalRegulatedTokenA | 1,816,892 | 39,605,580 | 43,493,595 | 43,493,595 | 5,667,117
+53 | NormalRegulatedTokenW | 899,909 | 18,301,860 | 20,161,857 | 20,161,857 | 2,656,641
+54 | OpenFactory publishEnv | 324,988 | 2,154,240 | 2,603,189 | 2,603,189 | 544,911
+55 | OpenFactory deployImplementation | 1,394,874 | 27,423,720 | 30,259,523 | 30,259,523 | 4,133,170
+56 | WrappedRegulatedTokenP | 2,049,584 | 45,229,860 | 49,643,416 | 49,643,416 | 6,468,040
+57 | WrappedRegulatedTokenT | 1,237,731 | 26,285,400 | 28,899,287 | 28,899,287 | 3,787,708
+58 | WrappedRegulatedTokenA | 1,530,693 | 32,943,960 | 36,198,385 | 36,198,385 | 4,725,330
+59 | WrappedRegulatedTokenW | 1,971,370 | 43,153,650 | 47,381,271 | 47,381,271 | 6,168,388
+60 | OpenFactory publishEnv | 351,459 | 2,350,080 | 2,836,615 | 2,836,615 | 590,968
+61 | OpenFactory deployImplementation | 1,644,535 | 33,184,170 | 36,570,140 | 36,570,140 | 4,958,771
+62 | OpenFactory setKindEnabled | 30,378 | 0 | 31,896 | 31,896 | 28,704
+63 | OpenFactory setKindEnabled | 30,378 | 0 | 31,896 | 31,896 | 28,704
+64 | ZetherStatements | 613,774 | 14,176,980 | 15,530,291 | 15,530,291 | 2,035,043
+65 | ZetherDisclosure | 351,175 | 7,997,310 | 8,765,909 | 8,765,909 | 1,160,024
+66 | ZetherInnerProductVerifierBls12381 | 7,450,409 | 40,110,480 | 49,938,933 | 49,938,933 | 12,570,319
+67 | ZetherTransferVerifierBls12381 | 905,695 | 20,050,650 | 22,004,162 | 22,004,162 | 2,880,999
+68 | ZetherBurnVerifierBls12381 | 447,463 | 9,268,740 | 10,202,013 | 10,202,013 | 1,353,856
+69 | NormalZetherTokenP | 1,773,202 | 38,972,160 | 42,782,630 | 42,782,630 | 5,581,524
+70 | NormalZetherTokenT | 1,051,656 | 22,088,610 | 24,297,279 | 24,297,279 | 3,191,862
+71 | NormalZetherTokenA | 1,664,040 | 36,179,910 | 39,736,147 | 39,736,147 | 5,180,080
+72 | NormalZetherTokenZ | 1,564,241 | 33,861,960 | 37,197,511 | 37,197,511 | 4,852,767
+73 | OpenFactory publishEnv | 387,328 | 2,643,840 | 3,182,726 | 3,182,726 | 656,176
+74 | OpenFactory deployImplementation | 1,349,103 | 26,817,840 | 29,575,290 | 29,575,290 | 4,067,959
+75 | WrappedZetherTokenP | 1,808,765 | 39,809,070 | 43,698,726 | 43,698,726 | 5,700,143
+76 | WrappedZetherTokenT | 1,141,963 | 24,203,070 | 26,612,284 | 26,612,284 | 3,491,275
+77 | WrappedZetherTokenA | 1,223,753 | 25,902,900 | 28,482,985 | 28,482,985 | 3,726,441
+78 | WrappedZetherTokenW | 1,545,191 | 33,477,930 | 36,774,277 | 36,774,277 | 4,800,000
+79 | WrappedZetherTokenZ | 1,961,098 | 43,115,400 | 47,330,322 | 47,330,322 | 6,161,981
+80 | OpenFactory publishEnv | 466,798 | 3,231,360 | 3,883,065 | 3,883,065 | 794,405
+81 | OpenFactory deployImplementation | 1,650,777 | 33,598,800 | 37,012,055 | 37,012,055 | 5,065,328
+82 | OpenFactory setKindEnabled | 30,378 | 0 | 31,896 | 31,896 | 28,704
+83 | OpenFactory setKindEnabled | 30,378 | 0 | 31,896 | 31,896 | 28,704
+84 | NormalZetherRegulatedTokenP | 2,089,114 | 46,120,320 | 50,619,905 | 50,619,905 | 6,594,784
+85 | NormalZetherRegulatedTokenT | 1,143,458 | 24,037,830 | 26,440,352 | 26,440,352 | 3,470,109
+86 | NormalZetherRegulatedTokenA | 1,785,295 | 38,822,220 | 42,637,890 | 42,637,890 | 5,556,699
+87 | NormalZetherRegulatedTokenW | 901,599 | 18,301,860 | 20,163,631 | 20,163,631 | 2,657,189
+88 | NormalZetherRegulatedTokenZ | 1,698,824 | 36,817,920 | 40,442,581 | 40,442,581 | 5,273,839
+89 | OpenFactory publishEnv | 440,316 | 3,035,520 | 3,649,627 | 3,649,627 | 748,337
+90 | OpenFactory deployImplementation | 1,611,247 | 32,220,270 | 35,523,092 | 35,523,092 | 4,868,763
+91 | WrappedZetherRegulatedTokenP | 2,124,678 | 46,957,230 | 51,536,003 | 51,536,003 | 6,713,370
+92 | WrappedZetherRegulatedTokenT | 1,239,421 | 26,285,400 | 28,901,062 | 28,901,062 | 3,788,245
+93 | WrappedZetherRegulatedTokenA | 1,345,982 | 28,557,450 | 31,398,603 | 31,398,603 | 4,104,515
+94 | WrappedZetherRegulatedTokenW | 2,036,971 | 44,668,350 | 49,040,587 | 49,040,587 | 6,383,693
+95 | WrappedZetherRegulatedTokenZ | 2,025,203 | 44,444,970 | 48,793,681 | 48,793,681 | 6,353,423
+96 | OpenFactory publishEnv | 493,317 | 3,427,200 | 4,116,542 | 4,116,542 | 840,509
+97 | OpenFactory deployImplementation | 1,902,518 | 38,915,550 | 42,858,971 | 42,858,971 | 5,838,175
+98 | OpenFactory setKindEnabled | 30,378 | 0 | 31,896 | 31,896 | 28,704
+99 | OpenFactory setKindEnabled | 30,378 | 0 | 31,896 | 31,896 | 28,704
+100 | OpenFactory createToken | 293,192 | 1,866,600 | 2,267,781 | 2,267,781 | 491,275
+101 | OpenFactory createToken | 293,240 | 1,670,760 | 2,062,200 | 2,062,200 | 457,123
+102 | ? transfer | 47,386 | 97,920 | 152,571 | 152,571 | 54,946
+103 | ? transfer | 47,386 | 97,920 | 152,571 | 152,571 | 54,946

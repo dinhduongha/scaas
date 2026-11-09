@@ -260,8 +260,8 @@ abstract contract DeployBase is Script {
         return (g.gasTotalUsed * 64 / 63, uint256(int256(g.gasStateUsed)));
     }
 
-    /// @notice The public-chain gate (Q4, R40): a release fits when `(regular + state) x 1.05` (the gas the deploy asks,
-    ///         `--gas-estimate-multiplier 105`; EIP-8037: a transaction is included only if regular + state fits, never by
+    /// @notice The public-chain gate (Q4, R40): a release fits when `(regular + state) x 1.05` (the gas limit the deploy sends,
+    ///         `DeploySend.s.sol`, NET-EVM-11; EIP-8037: a transaction is included only if regular + state fits, never by
     ///         a block's `gas_used`) is within the chain's block gas limit, and `regular x 1.05 < 2^24` (EIP-7825).
     function _checkMeasuredGas(string memory name, uint256 regular, uint256 state, uint256 limit) internal pure {
         uint256 asked = (regular + state) * 105 / 100;
@@ -788,8 +788,8 @@ abstract contract DeployBase is Script {
     ///         `zether_disclosure`, `zether_{inner_product_,,burn_}verifier_bls12381`,
     ///         `implementation_{normal,wrapped}_zether_bls12381`. **UNAUDITED.** The
     ///         implementations exceed EIP-170 and the BLS inner-product verifier takes ~14 M gas: anvil
-    ///         `--code-size-limit 65536`, forge script `--code-size-limit 65536 --gas-estimate-multiplier 105` (deploy.sh
-    ///         passes both; docs/networks/evm.md). Each release is checked against `CHAIN_CODE_LIMIT` first (`_checkCodeFits`).
+    ///         `--code-size-limit 65536`, forge script `--disable-code-size-limit` (deploy.sh passes it; each transaction's
+    ///         gas limit is explicit, NET-EVM-11; docs/networks/evm.md). Each release is checked against `CHAIN_CODE_LIMIT` first (`_checkCodeFits`).
     function _deployZether(OpenFactory f, bool register, address smartKeyAccountImpl, address reg) internal {
         ZetherStatements stm = new ZetherStatements{salt: salt}();
         address dis = address(new ZetherDisclosure{salt: salt}());
