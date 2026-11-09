@@ -374,8 +374,10 @@ handle's states give `KeyRevoked`.
 
 - `p` is the facade's choice as in §4.4 (CTR-PQZ-06, `forOp7`); `p_last` is `lastRecord`'s `p` (0 when never debited). A
   session's parts are the own `v_f` (in `accBlob`, the blob of the account's last debit, proof-path spec C2) and every entry of
-  `[p_last, p)`; `need` lists the indexes there that are not TRIVIAL. `balanceProven` and the debits refuse until every `need`
-  index is accepted. `parts` names each part's index and kind (`own`, `credit`, `migration`, `trivial`), never a value.
+  `[p_last, p)`; `need` lists the indexes there that are not TRIVIAL. **`need` is that slot range, fixed by `provenOpen`, never
+  the set accepted so far** (the contract's `T` sums every pending slot of the window): `balanceProven` and the debits refuse
+  until every `need` index is accepted, so a refused index the caller never sends again keeps the key unused for good (Fable
+  re-check P3-C). `parts` names each part's index and kind (`own`, `credit`, `migration`, `trivial`), never a value.
 - **The session** is the streaming form C-PP-7 asks for: a credit's material is 93–186 KB at `n2304-kmax4096` (research §15.2),
   so one request of `CMD_MAX` (4 MiB) holds a few tens, a window up to `K_MAX − 1` credits. **One session per handle**, held in
   the handle's memory and never exported; a second `provenOpen` replaces it; `lock()` and freeing the handle drop it. It keeps
@@ -435,9 +437,10 @@ The facade, in order, each failure `Argument`:
 1. Parses `record` and the op blob's tail (`n ≤ 9`, `kv` `be64` in statement order, `ownTag_s`, `v_f`, `R`). The leg: op 1
    `toUA` (the 32 bytes that end `R`) `== ua` and `kv[0] == v`; op 7 the one leg `j` with `UA_j == ua` and `kv[j] == v`, `M` and
    the auditor copy from `n` and `R`'s length, **exactly one `(M, auditorOn)` fitting** (two fits, or none, is `Argument`; Fable
-   P3-6; `e2e.py` `rebuild` takes the first). The part's `(u, v)` is **the pairing the relation defines**, `u_{g(j)}` with `v_j`
-   (`g(j) = j / legsPerGroup(auditorOn)`), derived from `j`; the holder's pending slot's `uOff` / `vOff` must equal those two
-   offsets in `R` and are never the source of the pairing (Fable P2-3).
+   P3-6; `e2e.py` `rebuild` takes the first). The part's `(u, v)` is **the pairing the relation defines**, `u_{g(j)}` with `v_j`,
+   `j` 0-based (`0 ≤ j < M`) and `g(j) = ⌊j / legsPerGroup(auditorOn)⌋`, `legsPerGroup` the divisor of `PqzCore._groupOf(j, a)`:
+   `PqzSet.S_AUD` with the auditor, 4 without (pqz-stmt `legs_per_group`; Fable re-check P3-B), derived from `j`; the holder's
+   pending slot's `uOff` / `vOff` must equal those two offsets in `R` and are never the source of the pairing (Fable P2-3).
 2. `T_k` by the proof-path spec §2.3: `prevBlob`'s `(u, v_f)` (`Trivial(0)` when `prevBlob = 0`) `+ Σ senderPending +
    Trivial(digits(shieldIn))`, `unitsOf ≤ K_MAX`.
 3. The keys: `pk_f` the sender's record code; each other key by its `kv` from `keyRecords`; at the holder's leg the handle's own
@@ -462,7 +465,8 @@ The facade, in order, each failure `Argument`:
    (`PqzStateLib`, ~95) and has no setter, so it is the token's word at any block; if a release ever adds a setter, it must emit
    an event, so a reader finds the value at a past debit's block (a note for the contract side).
 5. The body in the form's statement layout (op 1 `pk_f ‖ pk_t ‖ [pk_a] ‖ T ‖ u ‖ v_t ‖ v_f ‖ [v_a]`; op 7 `pk_f ‖ pk_1 … pk_M ‖
-   [pk_a] ‖ T ‖ u_0 … u_{G−1} ‖ v_1 … v_M ‖ v_f ‖ [v_{a,1} … v_{a,M}]`; `e2e.py` `rebuild` is the reference, test code).
+   [pk_a] ‖ T ‖ u_0 … u_{G−1} ‖ v_0 … v_{M−1} ‖ v_f ‖ [v_{a,0} … v_{a,M−1}]`, as pqz-stmt `multi_len`; `e2e.py` `rebuild` is the
+   reference, test code).
 6. `pqz_ffi::precompile` over `op ‖ statement ‖ proof` (the chain's own function, panics caught) answers `…01`; the part is then
    the leg's `(u, v)` as the statement carried it.
 
@@ -524,10 +528,13 @@ A quorum has no seed and would decrypt by MPC. That partial decryption is not bu
 Fields: `provenOpen`'s location and account fields without a handle and without any key word of the quorum, plus **`pk`, the
 quorum's key, from the member's own record of the key generation** (the member's DKG record; a named `bytes` field of the set's
 key length), `own` (the last debit's material, the fields of §4.14.4) and `credits`. The facade puts that `pk` at the quorum's
-leg of every credit and as `pk_f` of the own last debit, as the handle path puts the handle's `pk`; **the source names no key of
-the quorum** (owner ruling 2026-11-09, §7 item 10; Fable P1-1): a `keyRecord` for the quorum (or any key word of it) is
+leg of every credit and as `pk_f` of the own last debit, as the handle path puts the handle's `pk`; **the source names no key the
+check certifies against** (owner ruling 2026-11-09, §7 item 10; Fable P1-1): a key word of the quorum at the version being
+checked (`pqzKey[ua][v]`, or any field that would stand for `pk` at the quorum's leg or as its own debit's `pk_f`) is
 `Argument`, so a source cannot make the check certify parts under a key it controls, which the later MPC partial would turn
-into a share leak. Output `{parts, sum}`: the indexes checked and the packed sum of their ciphertexts, which the member's MPC
+into a share leak. An older version's key of the same UA is a sender key like any other (Fable re-check P3-A): the `pk_f` of
+the quorum's own migration credit from `(ua, v_old)`, `pqzKey[ua][v_old]`, comes from the source as `keyRecords`; it binds
+nothing summed (the summed leg is `(ua, v)` under the member's `pk`), and a wrong one fails the P. Output `{parts, sum}`: the indexes checked and the packed sum of their ciphertexts, which the member's MPC
 step (later) opens; a batch per call, the member adding the batches' sums (public arithmetic). It decrypts nothing and uses no
 key. Its bounds are `PqzKey::call`'s, applied by the same bounded reader although no handle is involved (Fable P3-4): `CMD_MAX`
 4 MiB and depth 8 per request, `pqz_ffi::MAX_INPUT` per statement, at most `K_MAX` parts.
@@ -606,7 +613,10 @@ contract side's real-proof check is `ua-mtx-merge` T65.
   coefficient, a forged `ownTag`, an older own blob under the current `lastDebit` and record (its tag's counter differs); the
   residual control's crafted `(u, v)` refused by path (B) (no P); `checkProven` with a `keyRecord` whose code differs from the
   member's `pk` (Fable P1-1: refused, no parts); `pq_kat.json`'s `ownTag` and `memoHash` rows; `state.json`'s `records`,
-  `tails`, `proofLogs` at both sets; `checkProven` with no handle. **Residual control of path (B)** (Fable P2-2, recorded like the
+  `tails`, `proofLogs` at both sets; `checkProven` with no handle; `checkProven` across the quorum's own migration credit, its
+  `pk_f` the quorum's older version from `keyRecords` (positive control, Fable re-check P3-A), and a `keyRecord` of the quorum at
+  the checked version refused (the negative); a session with an index refused and never sent again never reaches the key
+  (`balanceProven` and every `prove*Proven` refuse; Fable re-check P3-C). **Residual control of path (B)** (Fable P2-2, recorded like the
   one above): an older own debit with its own older `lastDebit`, record and blob, all genuinely the holder's, is **accepted** by
   `balanceProven` (a tag proves authorship, not inclusion: the result is a past balance, never a key leak); a debit over it is
   stopped only because `account`, `lastRecord` and the `accBlob` code are R1–R5 words (§4.14.6). Mutants per task (plan T20d),
@@ -662,7 +672,9 @@ On `ua-mtx-merge` (tasks T19b docs, T19c layout pins; not edited from here):
 9. **Review — decided (owner 2026-11-09):** a full Fable review of §4.14 (design, security, crypto) before any code; Codex only
    on the owner's word.
 10. **The quorum's key — decided (owner 2026-11-09, on the Fable review's P1-1):** a quorum member's `pk` comes from its own DKG
-    record, as a named `pk` field of `scaas_ua_pqz_check`; the source names no key of the quorum (§4.14.8).
+    record, as a named `pk` field of `scaas_ua_pqz_check`; the source names no key the check certifies against, the quorum's key
+    at the version checked (§4.14.8; the Fable re-check's P3-A: an older version's key, a migration credit's `pk_f`, is a sender
+    key).
 11. **A failed credit — decided (owner 2026-11-09, P3-3):** `provenAdd` refuses that one credit and keeps the session; no
     fail-closed close (every check is keyless or under `K_v`; closing buys no key safety) (§4.14.2).
 12. **A migration credit without its old seed — decided (owner 2026-11-09, P3-2):** it falls back to verifying its P like any

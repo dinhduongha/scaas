@@ -8895,8 +8895,9 @@ state, P in history, `ownTag` for own debits; a holder restored from its seed th
 **Cost if wrong.** A part accepted without a valid check is §1's key-recovery oracle; a debit over words from an untrusted
 source is a balance bit (research §3.3).
 **Change (owner 2026-11-09, on the Fable review of the delta, approve with fixes):** (6) a quorum member's `pk` comes from
-its own DKG record, as a named `pk` field of `scaas_ua_pqz_check`, and the source names no key of the quorum (a `keyRecord` for
-it is `Argument`); (7) a `provenAdd` refusal refuses that one credit and keeps the session (every check is keyless or under
+its own DKG record, as a named `pk` field of `scaas_ua_pqz_check`, and the source names no key the check certifies against (a
+key word of the quorum at the version checked is `Argument`; an older version's key, a migration credit's `pk_f`, is a sender
+key, the Fable re-check's P3-A); (7) a `provenAdd` refusal refuses that one credit and keeps the session (every check is keyless or under
 `K_v`, so closing it buys no key safety); (8) a migration credit whose old seed the store does not hold is checked by its P
 like any credit. With them the review's other fixes: one NONE header shape per debit form (burn and refresh without
 `_bindMode`, unwrap's `unwrapBinding`), `confidentialFee` constant per token, the leg / group pairing named among what binds
