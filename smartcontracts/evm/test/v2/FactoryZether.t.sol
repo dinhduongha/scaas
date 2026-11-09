@@ -12,22 +12,44 @@ import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
 import {TokenStore} from "../../src/metatx/TokenStore.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
+import {NormalTokenP, NormalTokenT, NormalTokenA} from "../../src/metatx/NormalTokenModules.sol";
+import {WrappedTokenP, WrappedTokenT, WrappedTokenA, WrappedTokenW} from "../../src/metatx/WrappedTokenModules.sol";
+import {ImplArgs} from "../../src/metatx/ITokenModule.sol";
 import {WrappedLib} from "../../src/metatx/WrappedLib.sol";
 import {IGovernance} from "../../src/governance/IGovernance.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {UID_, normalInit} from "./helpers/V2Fixture.sol";
-import {plainEnv, Catalogue} from "../helpers/Catalogue.sol";
+import {plainEnv, pinned, withModules, Catalogue} from "../helpers/Catalogue.sol";
 import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
 import {nid} from "../helpers/Ids.sol";
 import {SaltedEIP712} from "../../src/common/SaltedEIP712.sol";
 
 /// Kind 2 stand-in: the public `NORMAL` kind under the confidential id and domain name, accepting `conf` (the factory's
-/// side only; the Zether layer, its verifiers and its chain gate are tested in `test/zether`).
+/// side only; the Zether layer, its verifiers and its chain gate are tested in `test/zether`). T66b: the bodies run in the
+/// modules, kind 0's (the face checks them against kind 0), so the hooks are overridden there.
 contract MockNormalZether is NormalToken {
     constructor(address f_, bytes memory a) NormalToken(f_, a) {}
 
     function kind() public pure override returns (uint8) { return TokenStore.KIND_NORMAL_ZETHER; }
+
+    function _domainName() internal pure override returns (string memory) { return "SCaaS ZetherToken"; }
+}
+
+contract MockNormalZetherP is NormalTokenP {
+    constructor(address f_, bytes memory a) NormalTokenP(f_, a) {}
+
+    function _domainName() internal pure override returns (string memory) { return "SCaaS ZetherToken"; }
+}
+
+contract MockNormalZetherT is NormalTokenT {
+    constructor(address f_, bytes memory a) NormalTokenT(f_, a) {}
+
+    function _domainName() internal pure override returns (string memory) { return "SCaaS ZetherToken"; }
+}
+
+contract MockNormalZetherA is NormalTokenA {
+    constructor(address f_, bytes memory a) NormalTokenA(f_, a) {}
 
     function _domainName() internal pure override returns (string memory) { return "SCaaS ZetherToken"; }
 
@@ -44,6 +66,10 @@ contract MockWrappedZether is WrappedToken {
     constructor(address f_, bytes memory a) WrappedToken(f_, a) {}
 
     function kind() public pure override returns (uint8) { return TokenStore.KIND_WRAPPED_ZETHER; }
+}
+
+contract MockWrappedZetherA is WrappedTokenA {
+    constructor(address f_, bytes memory a) WrappedTokenA(f_, a) {}
 
     function _init(IFactoryToken.TokenConfig memory cfg) internal override {
         _requireUnused(cfg, true, false, false, false);
@@ -67,9 +93,24 @@ contract FactoryZetherTest is Test {
 
     function setUp() public {
         f = EnvKit.factory(registrar, UID_, 0);
-        normalZ = MockNormalZether(Catalogue.plain(f, NZ, 1, type(MockNormalZether).creationCode, address(0), address(0), false));
-        undZ = MockWrappedZether(Catalogue.plain(f, UZ, 1, type(MockWrappedZether).creationCode, address(0),
-            address(0), false));
+        address[] memory ms = new address[](3);
+        ms[0] = address(new MockNormalZetherP(address(f), ""));
+        ms[1] = address(new MockNormalZetherT(address(f), ""));
+        ms[2] = address(new MockNormalZetherA(address(f), ""));
+        normalZ = MockNormalZether(_release(NZ, type(MockNormalZether).creationCode, ms));
+        ms = new address[](4);
+        ms[0] = address(new WrappedTokenP(address(f), ""));
+        ms[1] = address(new WrappedTokenT(address(f), ""));
+        ms[2] = address(new MockWrappedZetherA(address(f), ""));
+        ms[3] = address(new WrappedTokenW(address(f), ""));
+        undZ = MockWrappedZether(payable(_release(UZ, type(MockWrappedZether).creationCode, ms)));
+    }
+
+    /// Release 1 of `k` from `code` on its mock modules `ms`, pinned in a plain env beside the kind's link closure (T66b).
+    function _release(IOpenFactory.TokenKind k, bytes memory code, address[] memory ms) internal returns (address) {
+        uint16 v = Catalogue.env(f, k, withModules(pinned(plainEnv(address(f), address(0), UID_, address(0), false), k), ms));
+        vm.prank(registrar);
+        return f.deployImplementation(k, 1, v, code, abi.encode(ImplArgs(ms)));
     }
 
     function _conf() internal pure returns (IFactoryToken.TokenConfig memory c) {

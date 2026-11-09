@@ -755,7 +755,7 @@ contract DexHybridTest is UADexBase {
         o.flags = 1;
         sig = _ecdsa(ALICE_PK, A.tradeOrderDigest(DexLegs.ua(o)));
         vm.expectRevert(_err(ITradeToken.OrderClosed.selector, A.tradeOrderDigest(DexLegs.ua(o))));
-        r.pullThenRestore(A, o, sig, 500, 900, 1);
+        r.pullThenRestore(ITradeToken(address(A)), o, sig, 500, 900, 1);
     }
 
     /// Each top-level call of a test is its own transaction (`isolate`): the counter does not carry over; a cancel in
@@ -763,13 +763,13 @@ contract DexHybridTest is UADexBase {
     function test_restorePulled_noCarryAcrossTx() public {
         (PullRestorer r, ITradeToken.TradeOrder memory o, bytes memory sig) = _restorer();
         bytes32 h = A.tradeOrderDigest(DexLegs.ua(o));
-        r.pull(A, o, sig, 500, 900);
+        r.pull(ITradeToken(address(A)), o, sig, 500, 900);
         vm.expectRevert(_err(ITradeToken.RestoreExceedsPull.selector, h));
-        r.restore(A, o, 1);
+        r.restore(ITradeToken(address(A)), o, 1);
         assertEq(A.pulled(h), 500);
         bytes memory cancelSig = _ecdsa(ALICE_PK, A.cancelOrderDigest(DexLegs.ua(o)));
         vm.expectRevert(_err(ITradeToken.RestoreExceedsPull.selector, h));
-        r.pullCancelRestore(A, o, sig, 100, 180, cancelSig, 1);
+        r.pullCancelRestore(ITradeToken(address(A)), o, sig, 100, 180, cancelSig, 1);
     }
 
     /// A cancel that changes nothing (the order already closed by its full fill) still clears the counter (T4 review
@@ -779,7 +779,7 @@ contract DexHybridTest is UADexBase {
         bytes32 h = A.tradeOrderDigest(DexLegs.ua(o));
         bytes memory cancelSig = _ecdsa(ALICE_PK, A.cancelOrderDigest(DexLegs.ua(o)));
         vm.expectRevert(_err(ITradeToken.RestoreExceedsPull.selector, h));
-        r.pullCancelRestore(A, o, sig, 1000, 1800, cancelSig, 1);
+        r.pullCancelRestore(ITradeToken(address(A)), o, sig, 1000, 1800, cancelSig, 1);
     }
 
     /// A UA taker (shape 1) through the DEX: refunded into its ledger, its `pulled` restored; and the `UATradeOrder`
@@ -803,8 +803,8 @@ contract DexHybridTest is UADexBase {
         IUARegistry.UASig memory auth = _uaLeg(address(A), v, 0).auth;
         bytes32 hv = A.tradeOrderDigest(v);
         vm.expectRevert(_err(ITradeToken.RestoreExceedsPull.selector, hv));
-        r.uaPullThenRestore(A, v, auth, 500, 900, 501);
-        r.uaPullThenRestore(A, v, auth, 500, 900, 200);
+        r.uaPullThenRestore(ITradeToken(address(A)), v, auth, 500, 900, 501);
+        r.uaPullThenRestore(ITradeToken(address(A)), v, auth, 500, 900, 200);
         assertEq(A.pulled(hv), 300);
     }
 
