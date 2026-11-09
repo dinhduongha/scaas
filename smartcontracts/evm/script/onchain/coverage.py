@@ -5,18 +5,25 @@
   coverage.py gen [--groups G] [--out O]          every external entry of every contract of groups.json (name, selector,
                                                   state-changing or view), from the build (out/) and, for a token kind,
                                                   script/t66b/entries.json (its module letter too) -> O/coverage.json
-  coverage.py forge <net> <book> <run.json>...    a forge broadcast (broadcast/<script>/<chain>/run-latest.json) as
+  coverage.py forge <net> <book> <run.json>       a forge broadcast (broadcast/<Group>.s.sol/<chain>/run-latest.json) as
                                                   records: one per transaction (to, selector, hash, gasUsed, status)
-                                                  -> O/records-<net>.jsonl (appended)
-  coverage.py trace <net> <rpc>                   on a node with debug_traceTransaction (the local copy): every frame of
+                                                  -> O/records-<net>-<group>.jsonl (replaced)
+  coverage.py trace <net> <group> <rpc>           on a node with debug_traceTransaction (the local copy): every frame of
                                                   every recorded transaction of <net>, so the entries reached inside a
                                                   call (a module, a library, a relayed call) are counted as reached
+  coverage.py neg <net> <group> <rpc>             the group's negatives (listed by the script), each by eth_call on the
+                                                  node: refused with the expected named error or not
+  coverage.py views <net> <rpc>                   every view with static parameters of every booked contract, by eth_call
+                                                  with zero arguments (records-<net>-views.jsonl)
+  coverage.py note [--net N]... [--reasons R]     the runs note's body (table, entries not called with their reason,
+                                                  negatives, heaviest, every transaction)
   coverage.py table [--net N]...                  coverage.json updated from the records; the per-contract table
 
-A book (deployments/onchain-<chain>.json, written by the scripts) maps an address to a contract label of groups.json. A
+A book (deployments/onchain-<net>-<group>.json, git-ignored, written by each group script) maps an address to a contract label of groups.json. A
 record is one JSON line: {net, to, sel, tx, gas, status, what, frames?}; any harness may append its own (the Python ones
 do). A group is pluggable by name: add it to groups.json, gen again; records of earlier runs keep their entries."""
 import argparse
+import glob
 import json
 import os
 import sys
@@ -78,8 +85,10 @@ def _book(p):
 
 
 def forge(a):
-    book = _book(a.book)
-    with open(os.path.join(a.out, f"records-{a.net}.jsonl"), "a") as f:
+    book = _book(a.book) if os.path.exists(a.book) else {}
+    # one file per net and script: a rerun of a script replaces its records; groups run side by side
+    rp = os.path.join(a.out, f"records-{a.net}-{_script(a.runs[0])}.jsonl")
+    with open(rp, "w") as f:
         for p in a.runs:
             r = json.load(open(p))
             rc = {x["transactionHash"]: x for x in r["receipts"]}
@@ -92,8 +101,13 @@ def forge(a):
                                     "sel": data[2:10] if tx.get("to") else "create", "tx": t["hash"],
                                     "gas": int(x.get("gasUsed", "0x0"), 16), "status": int(x.get("status", "0x0"), 16),
                                     "what": t.get("function") or t.get("contractName") or "",
-                                    "script": os.path.basename(os.path.dirname(os.path.dirname(p)))}) + "\n")
-    print("records appended")
+                                    "script": _script(p)}) + "\n")
+    print(f"records: {rp}")
+
+
+def _script(p):
+    """`broadcast/<Group>.s.sol/<chain>/run-latest.json` -> `<group>`."""
+    return os.path.basename(os.path.dirname(os.path.dirname(p))).split(".")[0].lower()
 
 
 def _rpc(url, m, p):
@@ -106,7 +120,7 @@ def _rpc(url, m, p):
 
 
 def trace(a):
-    p = os.path.join(a.out, f"records-{a.net}.jsonl")
+    p = os.path.join(a.out, f"records-{a.net}-{a.group}.jsonl")
     rows = [json.loads(x) for x in open(p)]
     for r in rows:
         if "frames" in r or not r["tx"]:
@@ -125,34 +139,105 @@ def trace(a):
     print(f"{len(rows)} records traced")
 
 
+def neg(a):
+    """The group's negatives (deployments/onchain-<net>-<group>-neg.txt: from to data selector what), each by eth_call
+    on the node at the latest block: status 2 = refused with the expected error, 0 = anything else (ran, or another
+    error). Appended to the group's records with tx "" (a call, not a transaction)."""
+    p = os.path.join(EVM, f"deployments/onchain-{a.net}-{a.group}-neg.txt")
+    if not os.path.exists(p):
+        return
+    book = _book(os.path.join(EVM, f"deployments/onchain-{a.net}-{a.group}.json"))
+    rp = os.path.join(a.out, f"records-{a.net}-{a.group}.jsonl")
+    n = bad = 0
+    with open(rp, "a") as f:
+        for line in open(p):
+            frm, to, data, want, what = line.rstrip("\n").split(" ", 4)
+            try:
+                _rpc(a.rpc, "eth_call", [{"from": frm, "to": to, "data": data, "gas": hex(50_000_000)}, "latest"])
+                got = "ran"
+            except RuntimeError as e:
+                err = e.args[0] if isinstance(e.args[0], dict) else {}
+                d = err.get("data") or ""
+                d = d.get("data", "") if isinstance(d, dict) else d
+                got = d[:10] if isinstance(d, str) and d.startswith("0x") else str(err.get("message", ""))[:80]
+            ok = got.lower() == want.lower()
+            n, bad = n + 1, bad + (not ok)
+            f.write(json.dumps({"net": a.net, "to": to.lower(), "label": book.get(to.lower(), ""), "sel": data[2:10],
+                                "tx": "", "gas": 0, "status": 2 if ok else 0, "what": f"negative: {what}",
+                                "expected": want, "got": got, "script": a.group}) + "\n")
+            print(f"{'ok ' if ok else 'BAD'} negative {what}: expected {want}, got {got}")
+    print(f"negatives: {n}, {bad} not refused as expected")
+    if bad:
+        sys.exit(1)
+
+
+def _static_words(sig):
+    """The head words of a signature whose parameters are all static (tuples flattened), else None."""
+    import re
+    args = sig[sig.index("(") + 1:-1]
+    if "[" in args or "string" in args or re.search(r"\bbytes\b(?!\d)", args):
+        return None
+    return len([t for t in re.split(r"[(),]", args) if t])
+
+
+def views(a):
+    """Every view / pure entry with static parameters of every booked contract of <net>, by eth_call on the node with
+    zero arguments (the deployed state answers): records-<net>-views.jsonl, status 1 = answered, 0 = reverted (a view
+    that needs real arguments; not counted as reached)."""
+    cov = json.load(open(os.path.join(a.out, "coverage.json")))
+    lab = {lb: c for cs in cov["groups"].values() for lb, c in cs.items()}
+    book = {}
+    for b in sorted(glob.glob(os.path.join(EVM, f"deployments/onchain-{a.net}-*.json"))):
+        if not b.endswith("-neg.txt"):
+            book.update(_book(b))
+    n = ok = 0
+    with open(os.path.join(a.out, f"records-{a.net}-views.jsonl"), "w") as f:
+        for addr, lb in sorted(book.items()):
+            for e in lab.get(lb, {}).get("entries", []):
+                w = _static_words(e["sig"]) if e["mut"] in ("view", "pure") else None
+                if w is None:
+                    continue
+                n += 1
+                try:
+                    _rpc(a.rpc, "eth_call", [{"to": addr, "data": "0x" + e["sel"] + "00" * 32 * w}, "latest"])
+                    st = 1
+                except RuntimeError:
+                    st = 0
+                ok += st
+                f.write(json.dumps({"net": a.net, "to": addr, "label": lb, "sel": e["sel"], "tx": "", "gas": 0,
+                                    "status": st, "what": f"view {e['sig']}", "script": "views"}) + "\n")
+    print(f"views: {n} called, {ok} answered")
+
+
 def table(a):
     cov = json.load(open(os.path.join(a.out, "coverage.json")))
     books = {}
     for n in a.net:
-        b = os.path.join(EVM, f"deployments/onchain-{n}.json")
-        books[n] = _book(b) if os.path.exists(b) else {}
+        books[n] = {}
+        for b in sorted(glob.glob(os.path.join(EVM, f"deployments/onchain-{n}-*.json"))):
+            books[n].update(_book(b))
     lab = {lb: c for cs in cov["groups"].values() for lb, c in cs.items()}
     for c in lab.values():
         for e in c["entries"]:
             e["runs"] = {}
     for n in a.net:
-        p = os.path.join(a.out, f"records-{n}.jsonl")
-        if not os.path.exists(p):
-            continue
-        for r in map(json.loads, open(p)):
+        for r in (json.loads(x) for p in sorted(glob.glob(os.path.join(a.out, f"records-{n}-*.jsonl"))) for x in open(p)):
+            if r["status"] == 2:
+                continue  # a negative refused as expected: listed in the note, not counted as a call
             hits = [(r.get("label") or books[n].get(r["to"], ""), r["sel"], "outer", r["status"])]
             hits += [(books[n].get(t, ""), s, "inner", ok) for t, s, _, ok in r.get("frames", [])]
             for lb, s, how, ok in hits:
                 for e in lab.get(lb, {}).get("entries", []):
                     if e["sel"] == s:
-                        v = e["runs"].setdefault(n, {"outer": 0, "inner": 0, "ok": 0, "tx": []})
-                        v[how] += 1
-                        v["ok"] += ok
+                        v = e["runs"].setdefault(n, {"called": 0, "reached": 0, "failed": 0, "tx": []})
+                        v["called"] += how == "outer" and ok == 1
+                        v["reached"] += ok == 1
+                        v["failed"] += how == "outer" and ok != 1
                         if how == "outer" and len(v["tx"]) < 3:
                             v["tx"].append([r["tx"], r["gas"], r["status"], r.get("what", "")])
     json.dump(cov, open(os.path.join(a.out, "coverage.json"), "w"), indent=1)
     hdr = "group | contract | entries | state-changing | " + " | ".join(
-        f"{n} sc called / reached / views called" for n in a.net)
+        f"{n}: state-changing called / reached / views reached" for n in a.net)
     print(hdr)
     for g, cs in cov["groups"].items():
         for lb, c in cs.items():
@@ -160,12 +245,62 @@ def table(a):
             sc = [e for e in es if e["mut"] not in ("view", "pure")]
             cols = []
             for n in a.net:
-                called = sum(1 for e in sc if e["runs"].get(n, {}).get("outer"))
-                reached = sum(1 for e in sc if e["runs"].get(n, {}).get("ok"))
-                views = sum(1 for e in es if e not in sc and e["runs"].get(n))
+                called = sum(1 for e in sc if e["runs"].get(n, {}).get("called"))
+                reached = sum(1 for e in sc if e["runs"].get(n, {}).get("reached"))
+                views = sum(1 for e in es if e not in sc and e["runs"].get(n, {}).get("reached"))
                 cols.append(f"{called} / {reached} / {views}")
             print(f"{g} | {lb} | {len(es)} | {len(sc)} | " + " | ".join(cols)
                   + (f" | needs {c['needs']}" if c.get("needs") else "") + (f" | via {', '.join(c['via'])}" if c.get("via") else ""))
+
+
+def note(a):
+    """The runs note's body: the table, then per net the entries not called (each with its reason from --reasons:
+    {label: {sig glob: reason}}, `*` as the label for every contract), the negatives, the heaviest transactions, and
+    every transaction (status, gasUsed, hash, what)."""
+    import contextlib
+    import fnmatch
+    import io
+    rs = json.load(open(a.reasons)) if a.reasons and os.path.exists(a.reasons) else {}
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        table(a)
+    cov = json.load(open(os.path.join(a.out, "coverage.json")))
+    out = ["## Coverage per contract (state-changing called = a transaction of this net called the entry and succeeded;",
+           "## reached = it also ran inside another call, by the trace (local only); views reached = answered an eth_call)",
+           buf.getvalue().rstrip()]
+    for n in a.net:
+        recs = [json.loads(x) for p in sorted(glob.glob(os.path.join(a.out, f"records-{n}-*.jsonl"))) for x in open(p)]
+        if not recs:
+            continue
+        out.append(f"\n## {n}: state-changing entries not called by a transaction, with the reason")
+        miss = 0
+        for g, cs in cov["groups"].items():
+            for lb, c in cs.items():
+                for e in c["entries"]:
+                    if e["mut"] in ("view", "pure") or e["runs"].get(n, {}).get("called"):
+                        continue
+                    why = c.get("needs") and f"needs {c['needs']}"
+                    if not why and e["runs"].get(n, {}).get("reached"):
+                        why = "reached inside another call (trace)" if c.get("via") is None else "a library / module entry, reached by its callers"
+                    for key in (lb, "*"):
+                        for pat, r in rs.get(key, {}).items():
+                            if not why and fnmatch.fnmatchcase(e["sig"], pat):
+                                why = r
+                    if not why and c.get("via"):
+                        why = "a library / module entry: runs only through " + ", ".join(c["via"])
+                    miss += not why
+                    out.append(f"{g} | {lb} | {e['sig']} | {why or 'NO REASON RECORDED'}")
+        out.append(f"({miss} without a reason)")
+        neg = [r for r in recs if r["what"].startswith("negative")]
+        out.append(f"\n## {n}: negatives ({len(neg)}; refused as expected = status 2)")
+        out += [f"{'ok ' if r['status'] == 2 else 'BAD'} | {r.get('label', '')} | {r['what']} | expected {r.get('expected', '')}"
+                f" got {r.get('got', '')}" for r in neg]
+        txs = [r for r in recs if r["tx"]]
+        out.append(f"\n## {n}: transactions {len(txs)}, status 1: {sum(r['status'] == 1 for r in txs)}; the heaviest ten")
+        out += [f"{r['gas']:,} | {r['tx']} | {r.get('label', '')} | {r['what']}" for r in sorted(txs, key=lambda r: -r["gas"])[:10]]
+        out.append(f"\n## {n}: every transaction (script | status | gasUsed | hash | contract | what)")
+        out += [f"{r['script']} | {r['status']} | {r['gas']:,} | {r['tx']} | {r.get('label', '')} | {r['what'][:90]}" for r in txs]
+    print("\n".join(out))
 
 
 def main():
@@ -180,13 +315,24 @@ def main():
     p.add_argument("runs", nargs="+")
     p = sp.add_parser("trace")
     p.add_argument("net")
+    p.add_argument("group")
+    p.add_argument("rpc")
+    p = sp.add_parser("neg")
+    p.add_argument("net")
+    p.add_argument("group")
+    p.add_argument("rpc")
+    p = sp.add_parser("views")
+    p.add_argument("net")
     p.add_argument("rpc")
     p = sp.add_parser("table")
     p.add_argument("--net", action="append", default=[])
+    p = sp.add_parser("note")
+    p.add_argument("--net", action="append", default=[])
+    p.add_argument("--reasons", default=os.path.join(HERE, "notrun.json"))
     a = ap.parse_args()
-    if a.cmd == "table" and not a.net:
+    if a.cmd in ("table", "note") and not a.net:
         a.net = ["local", "7622"]
-    {"gen": gen, "forge": forge, "trace": trace, "table": table}[a.cmd](a)
+    {"gen": gen, "forge": forge, "trace": trace, "neg": neg, "views": views, "table": table, "note": note}[a.cmd](a)
 
 
 if __name__ == "__main__":
