@@ -371,3 +371,9 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   T61 (bit 24 `PQZ_PROOF`): `src/governance/{GovernanceBits,GovernanceRouter,GovernanceRouterBase}.sol` (no bit 24, no
   `mtxSetProofStore`), `src/pqz/NormalPqzToken.sol`, `src/regulated/{NormalPqzRegulatedToken,WrappedPqzRegulatedToken,
   RegulatedBase}.sol` (the masks without bit 24), as they stood at 7558a364.
+  T83 (owner 2026-11-09, `payNo` as `bytes32`, `PayMeta.save`, the on-chain pay records), under `ua-mtx-merge/t83/`, as they
+  stood at 32d73310: `src/common/MetaTxLib.sol` (`PayMeta {salt, string payNo, schema, body}`), `src/metatx/{IMetaTokenV2,
+  MtxPipelineLib,MetaTokenBase}.sol` (`metaPayId` under `scaas.pay.meta.v2`, `PayNoTooLong`, `PaymentMeta(payId, string payNo,
+  schema, body)`, no records), `src/regulated/RegulatedBase.sol` (the tax entries without a record),
+  `test/metatx/PayMeta.t.sol` and `test/helpers/PayMetaKit.sol` (the v2 rows and formula), `test/vectors/legacy/ua-mtx-merge/
+  t83/mandate_kat.json` (the pay calldata with the v2 tuple). Not built.
