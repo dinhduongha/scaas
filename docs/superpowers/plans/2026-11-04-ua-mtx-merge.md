@@ -2090,8 +2090,8 @@ Commit `ua-mtx-merge T62a: PQZ NONE-header and relayed-binding vector rows`. `ua
 4. A human-readable document number stays off chain (the ERP) or goes in `body` (schema 2 or 4).
 5. **On-chain pay records (option 2):** logs are not kept for ever (EIP-4444), so an ERP must be able to ask the chain by
    `payNo` alone with `eth_call`. Per token, in its own ERC-7201 namespace `scaas.pay.records`:
-   `mapping(bytes32 payNo => PayRecord[])`, `struct PayRecord { bytes32 to; uint192 amount; uint64 blockNo; }` (two slots):
-   `to` the payee id, `amount` what the payee received (net of a fee or a tax withheld from it), `blockNo` the block. Written by
+   `mapping(bytes32 payNo => PayRecord[])`, `struct PayRecord { bytes32 to; uint192 amount; uint64 blockNumber; }` (two slots):
+   `to` the payee id, `amount` what the payee received (net of a fee or a tax withheld from it), `blockNumber` the block (owner 2026-11-09: the name `payNo` is kept, `blockNo` → `blockNumber`). Written by
    every public pay entry that carries `PayMeta` with `save == true`, after the transfer (**`bool save`**, owner 2026-11-09:
    option A, the payer's choice per payment, usually set by the payee's payment request; signed and inside the `payId`
    commitment; `save` with `payNo == 0` is refused as a shape error; `save == false` costs what a pay costs today, `payNo`
