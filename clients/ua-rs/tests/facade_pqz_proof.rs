@@ -855,3 +855,102 @@ fn quorum_across_its_own_migration() {
     let r = check(&wd.c.check_request(&BOB, 0, &b0.pk(), Some(&own), &[])).unwrap();
     assert_eq!(r["sum"], packed_sum(&[own_ct(&wd.c, &BOB, 0)]), "the migration as the own debit at version 0");
 }
+
+// ---------------------------------------------------------------------------------------------------------------------------
+// T20d8 (C-PP-7): the proof path's bounds.
+// ---------------------------------------------------------------------------------------------------------------------------
+
+fn verifies() -> usize {
+    #[cfg(feature = "vectors")]
+    return scaas_ua::facade::pqz::vectors_verifies();
+    #[cfg(not(feature = "vectors"))]
+    0
+}
+
+/// Every bound refused before any proof is checked (feature `vectors`: the verification counter unchanged): more than `K_MAX`
+/// credits in one call, a sender window of more than `K_MAX` entries, more than 10 key records, a header of 19 words, a request
+/// past `CMD_MAX` (4 MiB) or deeper than 8, `checkProven`'s credits past `K_MAX`; the true credit then costs one verification.
+#[test]
+fn bounds_refused_before_any_proof_is_checked() {
+    let mut wd = World::new(0);
+    wd.c.shield(&A, 1000);
+    wd.pay(&A, &BOB, 300, false, "BUNDLE", LOG);
+    let kb = wd.key(&BOB);
+    let o = call(kb, "provenOpen", &wd.open(&BOB, 0)).unwrap();
+    let cs = wd.credits(&BOB, 0, &o["need"]);
+    let add = |c: &[Cred]| wd.c.add_request(&o["session"], c);
+    let bare = json!({"index": 0, "fromUA": hx(&A), "sendCounter": 0, "form": "transfer", "record": cs[0].0["record"]});
+    let many = json!({"session": o["session"], "blobs": [], "credits": vec![bare; st::K_MAX + 1]});
+    let mut wide = cs[0].clone();
+    let w0 = wide.0["senderPending"][0].clone();
+    wide.0["senderPending"] = json!(vec![w0; st::K_MAX + 1]);
+    let mut keys = cs[0].clone();
+    let k0 = keys.0["keyRecords"][0].clone();
+    keys.0["keyRecords"] = json!(vec![k0; 11]);
+    let mut short = cs[0].clone();
+    short.0["header"].as_array_mut().unwrap().pop();
+    let mut big = add(&cs);
+    big["blobs"].as_array_mut().unwrap().push(json!({"address": hx(&[0x99; 20]), "code": hx(&vec![0u8; 2 << 20])}));
+    let mut deep = json!(0);
+    for _ in 0..8 {
+        deep = json!([deep]);
+    }
+    let mut nested = add(&cs);
+    nested["credits"][0]["call"] = deep;
+    let quorum = merge(wd.c.check_request(&BOB, 0, &kb.pk(), None, &[]), json!({"credits": many["credits"].clone()}));
+    let before = verifies();
+    for (what, req) in [
+        ("more than K_MAX credits", many),
+        ("a sender window past K_MAX", add(&[wide])),
+        ("more than 10 key records", add(&[keys])),
+        ("a header of 19 words", add(&[short])),
+        ("past CMD_MAX", big),
+        ("deeper than 8", nested),
+    ] {
+        assert_eq!(call(kb, "provenAdd", &req).err(), Some(Error::Argument), "{what}");
+    }
+    assert_eq!(check(&quorum).err(), Some(Error::Argument), "checkProven: more than K_MAX credits");
+    assert_eq!(verifies(), before, "refused before any proof is checked");
+    assert_eq!(call(kb, "provenAdd", &add(&cs)).unwrap()["accepted"], json!([o["need"][0]]));
+    assert_eq!(verifies() - before, if cfg!(feature = "vectors") { 1 } else { 0 }, "one credit, one verification");
+}
+
+/// A large workload: a window of `K_MAX − 2` parts (TRIVIAL entries with one credit among them, the earlier ones rolled
+/// into a materialised `acc`), the most one `T` holds with `Trivial(shieldIn)`: path (B)'s value is path (A)'s.
+#[test]
+fn a_window_of_k_max_parts() {
+    let mut wd = World::new(0);
+    wd.c.shield(&A, 1000);
+    let n = st::K_MAX as u64;
+    for _ in 0..n - 4 {
+        wd.c.shield(&BOB, 1);
+    }
+    wd.pay(&A, &BOB, 5, false, "BUNDLE", LOG);
+    wd.c.shield(&BOB, 2);
+    wd.c.roll(&BOB, n - 18);
+    let b = wd.proven(wd.key(&BOB), &BOB, 0);
+    assert_eq!((&b["p"], b["value"].as_u64()), (&json!(n - 2), Some(wd.balance(&BOB))));
+    assert_eq!(b["value"], n - 4 + 5 + 2);
+    assert_eq!(b["parts"].as_array().unwrap().len() as u64, n - 2);
+}
+
+/// Interleaved versions: Bob's window holds credits from X's version 0, then (X rotated) its version 1 (a first debit there:
+/// no predecessor, the window of version 1), with A's between them; each sender's statement is rebuilt at its own version.
+#[test]
+fn credits_from_interleaved_sender_versions() {
+    let mut wd = World::new(0);
+    for (ua, v) in [(A, 1000), (X, 200)] {
+        wd.c.shield(&ua, v);
+    }
+    wd.pay(&X, &BOB, 30, false, "BUNDLE", LOG);
+    wd.pay(&A, &BOB, 10, true, "BUNDLE", NONE);
+    let x1 = wd.w.pqz_key_version(4, 0, 1).unwrap();
+    wd.c.add_version(X, &x1.pk(), true);
+    wd.c.shield(&X, 70);
+    let (d, cl) = wd.debit(&X, 1, "BUNDLE", LOG, json!({"toUA": hx(&BOB), "pkT": wd.pk(&BOB), "amount": 20, "mode": "BUNDLE"}));
+    let p = call(&x1, "proveTransfer", &d).unwrap();
+    wd.settle(1, &p, cl, LOG, &[]);
+    wd.pay(&A, &BOB, 1, false, "HASH", LOG);
+    let b = wd.proven(wd.key(&BOB), &BOB, 0);
+    assert_eq!((b["value"].as_u64(), b["value"].as_u64()), (Some(61), Some(wd.balance(&BOB))));
+}

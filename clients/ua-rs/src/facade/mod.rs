@@ -9,7 +9,7 @@ pub mod pqz_backup;
 #[cfg(feature = "pqz")]
 pub mod pqz_pack;
 #[cfg(feature = "pqz")]
-pub(crate) mod pqz_path;
+pub mod pqz_path;
 #[cfg(feature = "zether")]
 pub mod zether;
 

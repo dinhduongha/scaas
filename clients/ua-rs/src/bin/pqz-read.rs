@@ -5,6 +5,7 @@
 //!   pqz-read --rpc <url> [--rpc <url> … [--rpc-agree]] --chain-id <n> --chain-uid <genesis hash> --factory <address>
 //!            --registry <address> --token <address> --ua <bytes32> (--depth <n> | --finalized)
 //!            [--command balance] --key-version <v> --for-op7 <true|false>               (the holder's own balance of version v)
+//!            --command balanceProven --key-version <v> --for-op7 <true|false>          (the same by the proof path, path (B))
 //!            --command auditRead --key-version <v> --from-ua <bytes32> --send-counter <n> --leg <j>
 //!                                                                     (an audited leg, the token's auditor at its version v)
 //!            [--words]                                                                  (print the request read; no key)
@@ -52,6 +53,17 @@
 //! tests) under the ERC-7201 root of `scaas.pqz`; the words read are exactly those [`STATE_LAYOUT`] lists for the command.
 //! Prints `ua-rs`'s answer with `block` and `blockHash` (`--words`: `{command, request, block, blockHash}`).
 //!
+//! **`balanceProven`** (no-oracle spec §4.14.11; ua-rs-sign T20d8): path (B)'s words (`provenOpen`: the account, `lastRecord` =
+//! `debitRec[--ua][lastDebit − 1]` at slot 19, the window `[p_last, p)`, the key's and `accBlob`'s codes, `auditorUA`), and for
+//! each credit of the window its history and its sender's state: the debit `(fromUA, k)` from the one `PqzDebitProof` log of the
+//! slot's blob (LOG: its `blob` topic; its data decoded here into `header` and P, Fable P3-1) or from the `Credited` log of
+//! `(--ua, index)` and its transaction (NONE: a direct or relayed call of a PQZ transfer entry to the token, decoded by its ABI,
+//! the relayed one's envelope binding recomputed; `k` the sender counter whose `entryRef` the log names; a call through another
+//! contract is refused by name, it needs a trace); its record, the sender's window and the keys by the tail's `kv`, every code
+//! once. History (`eth_getLogs`, `eth_getTransactionByHash`) comes from the same named nodes at the read block (R4's one
+//! extension: a viewing's words may come from any source, §4.14.6). Then `provenOpen`, one `provenAdd`, `balanceProven`: a credit
+//! refused is reported (take path (A) under R1–R6, or stop).
+//!
 //! **`decoys`** (CTR-UA-29, owner 2026-11-07; ua-rs-sign T15n): the decoys of an op 7 by `--ua` on `--token`. The candidates are
 //! the registry's PQZ-capable list (`uaAt(0x0142, i)`, `i < uaCount(0x0142)`), read from storage (`UAStore.Layout` slots 4
 //! and 5); the list's length is read at the sync point (`--sync-block`, at most the read block; default the read block), so a
@@ -80,7 +92,7 @@ use std::process::{Command, ExitCode, Stdio};
 use pqz_ffi::pqzl::PK_BYTES;
 use pqz_ffi::stmt::{K_MAX, PQZH_ID};
 use scaas_ua::facade::pqz::STATE_LAYOUT;
-use scaas_ua::facade::pqz_pack::ACC_WORDS;
+use scaas_ua::facade::pqz_pack::{ACC_WORDS, PKP, VP};
 use scaas_ua::keccak256;
 use serde_json::{json, Value};
 use zeroize::{Zeroize, Zeroizing};
@@ -210,9 +222,11 @@ fn parse() -> Result<Args, String> {
         "decoys" => return Err("decoys needs --count, --decoy-filter with --window or neither, and no --for-op7, --key-version or entry fields".into()),
         "balance" if a.for_op7.is_some() && a.key_version.is_some() && entry == 0 => {}
         "balance" => return Err("balance needs --key-version <v>, --for-op7 <true|false> and no entry fields".into()),
+        "balanceProven" if a.for_op7.is_some() && a.key_version.is_some() && entry == 0 => {}
+        "balanceProven" => return Err("balanceProven needs --key-version <v>, --for-op7 <true|false> and no entry fields".into()),
         "auditRead" if a.for_op7.is_none() && a.key_version.is_some() && entry == 3 => {}
         "auditRead" => return Err("auditRead needs --key-version, --from-ua, --send-counter and --leg (no --for-op7)".into()),
-        c => return Err(format!("--command {c}: balance or auditRead, or decoys")),
+        c => return Err(format!("--command {c}: balance or auditRead, balanceProven, or decoys")),
     }
     Ok(a)
 }
@@ -373,6 +387,8 @@ impl Reader<'_> {
 #[derive(PartialEq)]
 struct Words {
     request: Value,
+    /// `balanceProven`: `provenAdd`'s `{blobs, credits}` (else null).
+    adds: Value,
     block: u64,
     hash: String,
     key_code: Vec<u8>,
@@ -526,7 +542,70 @@ fn read(a: &Args, url: &str, block_at: Option<u64>, pk: Option<&[u8]>) -> Result
     let key_ptr = low_addr(&key_record, 0);
     let mut request = json!({"chainUid": hx(&a.chain_uid), "token": hx(&a.token), "block": block, "psid": hx(&psid),
         "keyRecord": hx(&key_record), "ua": hx(&a.ua)});
-    let blobs = if a.command == "balance" {
+    let mut adds = Value::Null;
+    let blobs = if a.command == "balanceProven" {
+        let base = acct_base(&root, &a.ua, v)?;
+        let account = (0..4).map(|i| r.word(&a.token, &add(&base, i))).collect::<Result<Vec<_>, _>>()?;
+        let (s0, s1) = (&account[0], &account[1]);
+        let (count, rolled) = (field(s0, "acct[U][7].pendingCount")?, field(s0, "acct[U][7].rolled")?);
+        let (units, flags) = (field(s1, "acct[U][7].accUnits")?, field(s1, "acct[U][7].flags")?);
+        let acc_blob = low_addr(s1, at("acct[U][7].accBlob")?.2);
+        let last = field(&account[2], "acct[U][7].lastDebit")?;
+        let mut ptrs = vec![key_ptr];
+        // the last own debit's record (`p_last`) and `accBlob` (its `v_f`, checked by its tag)
+        let p_last = if last > 0 {
+            ptrs.push(acc_blob);
+            let rb = keccak256(&[be(last - 1), keccak256(&[a.ua, add(&root, at("debitRec[U][7].w0")?.0)].concat())].concat());
+            let (w0, w1) = (r.word(&a.token, &rb)?, r.word(&a.token, &add(&rb, at("debitRec[U][7].w1")?.1))?);
+            request["lastRecord"] = json!({"w0": hx(&w0), "w1": hx(&w1)});
+            scaas_ua::facade::pqz_path::record(&w0, &w1, last - 1).map_err(|_| "the account's last record")?.p
+        } else {
+            0
+        };
+        let mut acc_words = Vec::new();
+        if flags & 1 != 0 {
+            let first = add(&base, at("acct[U][7].accWords[0]")?.1);
+            for i in 0..ACC_WORDS as u64 {
+                acc_words.push(json!(hx(&r.word(&a.token, &add(&first, i))?)));
+            }
+        }
+        let room = (K_MAX as u64).checked_sub(units + 1).ok_or("the account's accUnits are past K_MAX")?;
+        let inline = if a.for_op7 == Some(true) && psid == PQZH_ID { INLINE_MAX_PQZH } else { INLINE_MAX };
+        let p = count.min(rolled.saturating_add(inline.min(room)));
+        if p_last > p {
+            return Err("the account's last record is past its window".into());
+        }
+        let (auditor, mode, fee) = (tok("auditorUA")?, tok("disclosureMode")?, tok("confidentialFee")?);
+        if fee[..24] != [0; 24] {
+            return Err("confidentialFee past 64 bits".into());
+        }
+        let fee = u64::from_be_bytes(fee[24..].try_into().map_err(|_| "fee")?);
+        let compact = field(&mode, "disclosureMode")? == 1;
+        let map = add(&base, at("acct[U][7].pending[3]")?.1);
+        let (mut pending, mut credits, mut cptrs) = (Vec::new(), Vec::new(), Vec::new());
+        let mut codes = Codes { r: &r, got: std::collections::BTreeMap::new() };
+        for i in p_last..p {
+            let e = r.word(&a.token, &keccak256(&[be(i), map].concat()))?;
+            if e[22..24] != [0, 0] {
+                let (c, x) = credit(a, url, block, &root, &mut codes, i, &e, &auditor, fee, compact)?;
+                credits.push(c);
+                cptrs.extend(x);
+            }
+            pending.push(json!({"index": i, "word": hx(&e)}));
+        }
+        adds = json!({"blobs": codes.json(&cptrs), "credits": credits});
+        request["account"] = json!(account.iter().map(|w| hx(w)).collect::<Vec<_>>());
+        request["pending"] = json!(pending);
+        request["accWords"] = json!(acc_words);
+        request["sendCounterWord"] = json!(hx(&r.word(&a.token, &counter_slot(&root, &a.ua)?)?));
+        request["keyVersion"] = json!(v);
+        request["keyVersions"] = json!(hx(&r.word(&a.registry, &versions_slot(&a.ua))?));
+        request["forOp7"] = json!(a.for_op7 == Some(true));
+        request["auditorUA"] = json!(hx(&auditor));
+        request["chainId"] = json!(a.chain_id);
+        request["registry"] = json!(hx(&a.registry));
+        r.blobs(&ptrs)?
+    } else if a.command == "balance" {
         let base = acct_base(&root, &a.ua, v)?;
         // the 4 slots of `acct[ua][v]` (3h: `lastDebit` in slot 2; `accHash` 3, the pending map 4, `accWords` from 5)
         let account = (0..4).map(|i| r.word(&a.token, &add(&base, i))).collect::<Result<Vec<_>, _>>()?;
@@ -601,7 +680,7 @@ fn read(a: &Args, url: &str, block_at: Option<u64>, pk: Option<&[u8]>) -> Result
     if pk.is_some_and(|pk| key_code.split_first() != Some((&0, pk))) {
         return Err("R6: the registry's PQZ key of --ua is not this key".into());
     }
-    Ok(Words { request, block, hash: r.hash, key_code })
+    Ok(Words { request, adds, block, hash: r.hash, key_code })
 }
 
 /// The wallet and the key's `account`, `index` of the stdin JSON `{mnemonic, passphrase?, account, index}`.
@@ -776,6 +855,257 @@ fn decoys(a: &Args) -> Result<Value, String> {
 }
 
 
+// ------------------------------------------------------------------------------------------------------------------------------
+// `--command balanceProven` (no-oracle spec §4.14.11; ua-rs-sign T20d8): path (B)'s words and each credit's history
+// ------------------------------------------------------------------------------------------------------------------------------
+
+/// `IPqzToken`'s events a credit is found by: `PqzDebitProof` (LOG: its topics name the debit by its op blob, its data the
+/// verified header and P) and `Credited` (NONE: the holder's pending index, its data `keyVersion` and `entryRef`).
+const EV_PROOF: &str = "PqzDebitProof(address,bytes32,uint64,bytes,bytes)";
+const EV_CREDITED: &str = "Credited(bytes32,uint64,uint64,bytes32)";
+/// The ABI types of the PQZ transfer entries (`IPqzToken`, `PqzLayer`; `typed_ops.json`'s signatures, group 3h).
+const PA: &str = "(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes)";
+const MA: &str = "(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes32,bytes[],(bytes32,bytes,bytes)[],bytes,bytes)";
+const UA_ENV: &str = "(bytes32,uint256,uint256,uint256,uint32,address,uint256,address)";
+const UA_SIG: &str = "(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])";
+const VERDICT: &str = "((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))";
+/// The longest search of a NONE credit's `sendCounter` by its `entryRef` (one hash per earlier counter of the sender).
+const MAX_COUNTER_SEARCH: u64 = 1 << 20;
+
+/// A PQZ transfer entry: op 7 or op 1, `Compact` (HASH on every token), relayed (the `UAEnvelope` first).
+#[derive(Clone, Copy)]
+struct Entry {
+    multi: bool,
+    compact: bool,
+    relayed: bool,
+}
+
+/// The selector of each transfer entry, direct and relayed (a call through any other function is not read here).
+fn entries() -> Vec<([u8; 4], Entry)> {
+    let mut out = Vec::new();
+    for (multi, name, args) in [(false, "mtxConfidentialTransferSingle", PA), (true, "mtxConfidentialTransfer", MA)] {
+        for compact in [false, true] {
+            let n = if compact { format!("{name}Compact") } else { name.to_string() };
+            for relayed in [false, true] {
+                let sig = if relayed {
+                    format!("{n}({UA_ENV},{args},bytes,{UA_SIG},bytes,{UA_SIG},{VERDICT})")
+                } else {
+                    format!("{n}({args},bytes,{UA_SIG},bytes,{VERDICT})")
+                };
+                let h = keccak256(sig.as_bytes());
+                out.push(([h[0], h[1], h[2], h[3]], Entry { multi, compact, relayed }));
+            }
+        }
+    }
+    out
+}
+
+/// ABI: the word at byte `at`.
+fn aw(d: &[u8], at: usize) -> Result<Word, String> {
+    d.get(at..at + 32).and_then(|w| w.try_into().ok()).ok_or_else(|| "ABI: short".into())
+}
+/// ABI: a word that must be a `uint64` (an offset, a length, a counter).
+fn au(d: &[u8], at: usize) -> Result<u64, String> {
+    let w = aw(d, at)?;
+    if w[..24] != [0; 24] {
+        return Err("ABI: a value past 64 bits".into());
+    }
+    Ok(u64::from_be_bytes(w[24..].try_into().map_err(|_| "ABI")?))
+}
+fn ao(d: &[u8], at: usize) -> Result<usize, String> {
+    usize::try_from(au(d, at)?).map_err(|_| "ABI: an offset".into())
+}
+/// ABI: the `bytes` whose offset (from `base`) is the word at `base + head`.
+fn ab(d: &[u8], base: usize, head: usize) -> Result<Vec<u8>, String> {
+    let off = base.checked_add(ao(d, base + head)?).ok_or("ABI: an offset")?;
+    let n = ao(d, off)?;
+    d.get(off + 32..off.checked_add(32 + n).ok_or("ABI: a length")?).map(<[u8]>::to_vec).ok_or_else(|| "ABI: short bytes".into())
+}
+
+/// A NONE credit's debit as its call carries it: `fromUA`, the call fields of §4.14.4 step 4 (`fee` without the token's part)
+/// and P.
+struct Called {
+    from: Word,
+    multi: bool,
+    beneficiary: Word,
+    valid_until: u64,
+    hash: bool,
+    sealed_memo: Vec<u8>,
+    binding: Word,
+    decoy_fee: u64,
+    m: u64,
+    proof: Vec<u8>,
+}
+
+/// A transfer entry's calldata (`input`, the transaction's): direct (`binding` 0) or relayed (the `UAEnvelope`'s binding,
+/// `PqzLayer._uaEnvelopeBinding`: tag `SCAAS-PQZ-UA-ENVELOPE-V1`, `chainId`, `chainUid`, the token, every envelope field but
+/// `data`, `relayer` and `feeRecipient` zero unless the mode restricts them). `compact_token`: the token's `disclosureMode` is
+/// COMPACT (its default entries commit-reveal).
+fn called(a: &Args, input: &[u8], compact_token: bool) -> Result<Called, String> {
+    let sel: [u8; 4] = input.get(..4).and_then(|s| s.try_into().ok()).ok_or("NONE: no selector")?;
+    let e = entries().into_iter().find(|x| x.0 == sel).ok_or("NONE: the debit's call is not a PQZ transfer entry of this token")?.1;
+    let d = input.get(4..).ok_or("ABI")?;
+    let (t_head, proof_head, binding) = if e.relayed {
+        let env: Vec<Word> = (0..8).map(|i| aw(d, 32 * i)).collect::<Result<_, _>>()?;
+        let mode = au(d, 32 * 4)?;
+        let keep = |bit: u64, w: &Word| if mode & bit != 0 { *w } else { [0; 32] };
+        let b = keccak256(
+            &[keccak256(b"SCAAS-PQZ-UA-ENVELOPE-V1"), be(a.chain_id), a.chain_uid, addr_word(&a.token), env[0], env[1], env[2], env[3], env[4],
+                keep(1, &env[5]), env[6], keep(2, &env[7])]
+                .concat(),
+        );
+        (32 * 8, 32 * 9, b)
+    } else {
+        (0, 32, [0; 32])
+    };
+    let t = ao(d, t_head)?;
+    let proof = ab(d, 0, proof_head)?;
+    let w = |i: usize| aw(d, t + 32 * i);
+    let valid_until = au(d, t + 32)?;
+    let (beneficiary, decoy_fee, memo_at, m) = if e.multi {
+        let legs = t.checked_add(ao(d, t + 32 * 10)?).ok_or("ABI: an offset")?;
+        (w(5)?, au(d, t + 32 * 6)?, 12, au(d, legs)?)
+    } else {
+        (w(6)?, 0, 13, 1)
+    };
+    let sealed_memo = ab(d, t, 32 * memo_at)?;
+    Ok(Called { from: w(3)?, multi: e.multi, beneficiary, valid_until, hash: e.compact || compact_token, sealed_memo, binding, decoy_fee, m, proof })
+}
+
+/// ABI `(bytes header, bytes proof)`, a `PqzDebitProof`'s data: the 20 header words and P.
+fn proof_log(data: &[u8]) -> Result<(Vec<Word>, Vec<u8>), String> {
+    let header = ab(data, 0, 0)?;
+    if header.len() != 640 {
+        return Err("LOG: a header of other than 640 bytes".into());
+    }
+    Ok((header.chunks_exact(32).map(|c| c.try_into().map_err(|_| "LOG".to_string())).collect::<Result<_, _>>()?, ab(data, 0, 32)?))
+}
+
+/// One SSTORE2 code per address and read (a shared op 7 blob fetched once: C-PP-7).
+struct Codes<'r, 'u> {
+    r: &'r Reader<'u>,
+    got: std::collections::BTreeMap<[u8; 20], Vec<u8>>,
+}
+
+impl Codes<'_, '_> {
+    fn get(&mut self, a: &[u8; 20]) -> Result<&[u8], String> {
+        if !self.got.contains_key(a) {
+            let c = self.r.code(a)?;
+            self.got.insert(*a, c);
+        }
+        self.got.get(a).map(Vec::as_slice).ok_or_else(|| "code".into())
+    }
+    fn json(&self, ptrs: &[[u8; 20]]) -> Vec<Value> {
+        let mut seen = Vec::new();
+        ptrs.iter()
+            .filter(|p| if seen.contains(*p) { false } else { seen.push(**p); true })
+            .filter_map(|p| self.got.get(p).map(|c| json!({"address": hx(p), "code": hx(c)})))
+            .collect()
+    }
+}
+
+/// The token's words of `balanceProven`'s credits (§4.14.11), read at the block `r` names: for pending index `i` of `--ua`'s
+/// window (its slot word `e`), the debit `(fromUA, k)` (LOG: the one `PqzDebitProof` of the slot's blob, by its `blob` topic;
+/// NONE: the `Credited` log of `(--ua, i)`, its transaction's call, a direct call or a relayed one to the token, `k` the counter
+/// whose `entryRef` the log names), then from state its record, the sender's window, the keys by the tail's `kv` (the holder's own
+/// leg left out) and their codes.
+#[allow(clippy::too_many_arguments)]
+fn credit(a: &Args, url: &str, block: u64, root: &Word, codes: &mut Codes<'_, '_>, i: u64, e: &Word, auditor: &Word, fee: u64, compact: bool)
+    -> Result<(Value, Vec<[u8; 20]>), String> {
+    let r = codes.r;
+    let v = a.key_version.ok_or("--key-version")?;
+    let ptr = low_addr(e, 12);
+    let to = format!("0x{block:x}");
+    let logs = rpc(url, "eth_getLogs", json!([{"address": hx(&a.token), "fromBlock": "0x0", "toBlock": to,
+        "topics": [hx(&keccak256(EV_PROOF.as_bytes())), hx(&addr_word(&ptr))]}]))?;
+    let logs = logs.as_array().ok_or("eth_getLogs: not a list")?;
+    let (from, k, multi, how): (Word, u64, bool, Value) = match logs.as_slice() {
+        [l] => {
+            let t = l["topics"].as_array().ok_or("LOG: topics")?;
+            let word = |j: usize| -> Result<Word, String> { fixed("LOG topic", t.get(j).and_then(Value::as_str).ok_or("LOG: topics")?) };
+            let (header, proof) = proof_log(&unhex(l["data"].as_str().ok_or("LOG: data")?)?)?;
+            let multi = header.first() == Some(&pqz_ffi::stmt::OP_TAG_TRANSFER_MULTI);
+            let k = u64::from_be_bytes(word(3)?[24..].try_into().map_err(|_| "LOG")?);
+            (word(2)?, k, multi, json!({"proof": hx(&proof), "header": header.iter().map(|w| hx(w)).collect::<Vec<_>>()}))
+        }
+        [] => {
+            let cl = rpc(url, "eth_getLogs", json!([{"address": hx(&a.token), "fromBlock": "0x0", "toBlock": to,
+                "topics": [hx(&keccak256(EV_CREDITED.as_bytes())), hx(&a.ua), hx(&be(i))]}]))?;
+            let [l] = cl.as_array().ok_or("eth_getLogs: not a list")?.as_slice() else {
+                return Err(format!("NONE: no single Credited log of pending index {i}"));
+            };
+            let data = unhex(l["data"].as_str().ok_or("NONE: data")?)?;
+            let entry_ref = aw(&data, 32)?;
+            let tx = rpc(url, "eth_getTransactionByHash", json!([l["transactionHash"]]))?;
+            if tx["to"].as_str().map(|t| t.to_ascii_lowercase()) != Some(hx(&a.token)) {
+                return Err(format!("NONE: pending index {i} was credited by a call through another contract (it needs a trace; take path (A))"));
+            }
+            let c = called(a, &unhex(tx["input"].as_str().ok_or("NONE: input")?)?, compact)?;
+            let tag = keccak256(b"SCAAS-PQZ-ENTRY-V1");
+            let er = |n: u64| keccak256(&[tag, be(a.chain_id), a.chain_uid, addr_word(&a.token), c.from, be(n)].concat());
+            let counter = field(&r.word(&a.token, &counter_slot(root, &c.from)?)?, "sendCounter[U]")?;
+            let k = (counter.saturating_sub(MAX_COUNTER_SEARCH)..counter).rev().find(|n| er(*n) == entry_ref)
+                .ok_or("NONE: no sendCounter of the call's fromUA gives the Credited entryRef")?;
+            let fee = (if c.beneficiary == [0; 32] { 0 } else { fee }).checked_add(c.m.checked_mul(c.decoy_fee).ok_or("fee")?).ok_or("fee")?;
+            let mut call = json!({"beneficiaryUA": hx(&c.beneficiary), "fee": fee, "validUntilBlock": c.valid_until,
+                "mode": if c.hash { "HASH" } else { "BUNDLE" }, "binding": hx(&c.binding)});
+            if c.hash {
+                call["sealedMemo"] = json!(hx(&c.sealed_memo));
+            }
+            (c.from, k, c.multi, json!({"proof": hx(&c.proof), "call": call}))
+        }
+        _ => return Err(format!("LOG: several PqzDebitProof logs of pending index {i}'s blob")),
+    };
+    // the record and the sender's window, from state
+    let rec_base = keccak256(&[be(k), keccak256(&[from, add(root, at("debitRec[U][7].w0")?.0)].concat())].concat());
+    let (w0, w1) = (r.word(&a.token, &rec_base)?, r.word(&a.token, &add(&rec_base, at("debitRec[U][7].w1")?.1))?);
+    let rec = scaas_ua::facade::pqz_path::record(&w0, &w1, k).map_err(|_| format!("the record of the debit of pending index {i}"))?;
+    let sender = acct_base(root, &from, rec.key_version)?;
+    let map = add(&sender, at("acct[U][7].pending[3]")?.1);
+    let mut ptrs = vec![ptr];
+    if rec.has_prev {
+        ptrs.push(rec.prev_blob);
+    }
+    let mut window = Vec::new();
+    for x in rec.p.checked_sub(rec.delta_p).ok_or("the record's Δp")?..rec.p {
+        let w = r.word(&a.token, &keccak256(&[be(x), map].concat()))?;
+        if w[22..24] != [0, 0] {
+            ptrs.push(low_addr(&w, 12));
+        }
+        window.push(json!({"index": x, "word": hx(&w)}));
+    }
+    // the keys: the sender's at its version, every other leg's and the auditor's by `kv`
+    let d = codes.get(&ptr)?.get(1..).ok_or("an empty op blob")?.to_vec();
+    let tail = scaas_ua::facade::pqz_path::tail(&d).map_err(|_| "an op blob's tail")?;
+    let (g, m, aud) = scaas_ua::facade::pqz_path::bundle_shape(tail.r_len, PKP, VP).map_err(|_| "an op blob's shape")?;
+    let mut keys = vec![(from, rec.key_version)];
+    for j in 0..m {
+        let end = 16 + PKP * g + (32 + VP * (1 + aud as usize)) * (j + 1);
+        let ua: Word = d.get(end - 32..end).and_then(|x| x.try_into().ok()).ok_or("a leg's UA")?;
+        let kv = *tail.kv.get(j).ok_or("a leg's kv")?;
+        if !(ua == a.ua && kv == v) {
+            keys.push((ua, kv));
+        }
+    }
+    if aud {
+        keys.push((*auditor, *tail.kv.get(m).ok_or("the auditor's kv")?));
+    }
+    let mut records = Vec::new();
+    for (ua, x) in &keys {
+        let w = r.word(&a.registry, &pqz_key_slot(ua, *x))?;
+        ptrs.push(low_addr(&w, 0));
+        records.push(json!({"ua": hx(ua), "version": x, "word": hx(&w)}));
+    }
+    for p in &ptrs {
+        codes.get(p)?;
+    }
+    let mut c = json!({"index": i, "fromUA": hx(&from), "sendCounter": k, "form": if multi { "transferMulti" } else { "transfer" },
+        "record": {"w0": hx(&w0), "w1": hx(&w1)}, "senderPending": window, "keyRecords": records});
+    for (key, val) in how.as_object().ok_or("credit")? {
+        c[key] = val.clone();
+    }
+    Ok((c, ptrs))
+}
 
 fn run(a: &Args) -> Result<Value, String> {
     if a.command == "decoys" {
@@ -783,7 +1113,11 @@ fn run(a: &Args) -> Result<Value, String> {
     }
     if a.words {
         let r = read_words(a, None)?;
-        return Ok(json!({"command": a.command, "request": r.request, "block": r.block, "blockHash": r.hash}));
+        let mut out = json!({"command": a.command, "request": r.request, "block": r.block, "blockHash": r.hash});
+        if !r.adds.is_null() {
+            out["credits"] = r.adds;
+        }
+        return Ok(out);
     }
     if std::io::stdin().is_terminal() {
         return Err("pipe the key JSON on stdin (pqz-read … < key.json); a terminal would echo it".into());
@@ -797,8 +1131,23 @@ fn run(a: &Args) -> Result<Value, String> {
     let k = wallet.pqz_key_version(account, index, a.key_version.ok_or("--key-version")?).map_err(|e| format!("the key: {e:?}"))?;
     let r = read_words(a, Some(k.pk().as_slice()))?;
     // R7: no request after this line
-    let out = k.call(&a.command, r.request.to_string().as_bytes()).map_err(|e| format!("ua-rs refused the words: {e:?}"))?;
-    let mut v: Value = serde_json::from_str(&out).map_err(|_| "ua-rs: not JSON")?;
+    let call = |cmd: &str, req: &Value| -> Result<Value, String> {
+        let out = k.call(cmd, req.to_string().as_bytes()).map_err(|e| format!("ua-rs refused the words ({cmd}): {e:?}"))?;
+        serde_json::from_str(&out).map_err(|_| "ua-rs: not JSON".to_string())
+    };
+    let mut v = if a.command == "balanceProven" {
+        let o = call("provenOpen", &r.request)?;
+        let mut adds = r.adds.clone();
+        adds["session"] = o["session"].clone();
+        let got = call("provenAdd", &adds)?;
+        if got["refused"] != json!([]) {
+            let _ = call("provenCancel", &json!({"session": o["session"]}));
+            return Err(format!("ua-rs refused the credits {} (their P did not check): take path (A) under R1–R6, or stop", got["refused"]));
+        }
+        call("balanceProven", &json!({"session": o["session"]}))?
+    } else {
+        call(&a.command, &r.request)?
+    };
     v["block"] = json!(r.block);
     v["blockHash"] = json!(r.hash);
     Ok(v)
@@ -844,6 +1193,51 @@ mod tests {
         let mut v: Value = serde_json::from_str(r#"{"mnemonic":"abc","n":["ab"]}"#).unwrap();
         wipe(&mut v);
         assert_eq!(v, json!({"mnemonic": "", "n": [""]}));
+    }
+
+    /// T20d8 (Fable P3-1): `PqzDebitProof`'s data decoded here into `header` and P, against the contract's own log
+    /// (`state.json` `proofLogs`, both sets): the topics are the event's, the blob's, the UA's and the counter's; a header of
+    /// another length is refused.
+    #[test]
+    fn proof_log_rows_decode() {
+        for f in ["state.json", "n2304-kmax4096/state.json"] {
+            let p = format!("{}/../../smartcontracts/vectors/pqz/{f}", env!("CARGO_MANIFEST_DIR"));
+            let v: Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
+            let rows = v["proofLogs"].as_array().unwrap();
+            assert!(!rows.is_empty());
+            for r in rows {
+                let (header, proof) = proof_log(&unhex(r["data"].as_str().unwrap()).unwrap()).unwrap();
+                assert_eq!(hx(&header.concat()), r["header"].as_str().unwrap(), "{}", r["name"]);
+                assert_eq!(hx(&proof), r["proof"].as_str().unwrap());
+                let t: Vec<&str> = r["topics"].as_array().unwrap().iter().map(|x| x.as_str().unwrap()).collect();
+                let blob: [u8; 20] = unhex(r["blob"].as_str().unwrap()).unwrap().try_into().unwrap();
+                assert_eq!(t, [hx(&keccak256(EV_PROOF.as_bytes())), hx(&addr_word(&blob)), r["ua"].as_str().unwrap().to_string(),
+                    hx(&be(r["sendCounter"].as_u64().unwrap()))]);
+            }
+            let short = [be(64).to_vec(), be(64 + 32 + 640).to_vec(), be(608).to_vec(), vec![0; 608], be(1).to_vec(), vec![0; 32]].concat();
+            assert!(proof_log(&short).is_err(), "a header of 608 bytes");
+        }
+    }
+
+    /// T20d8: the transfer entries' signatures are the contract's, through the typed rows' (`typed_ops.json`: the four relayed
+    /// entries' `abi` and `selector`); the direct ones are the same types without the envelope and `auth`.
+    #[test]
+    fn transfer_entries_are_the_typed_rows() {
+        let p = concat!(env!("CARGO_MANIFEST_DIR"), "/../../smartcontracts/vectors/typed/typed_ops.json");
+        let v: Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
+        let sels = entries();
+        assert_eq!(sels.len(), 8);
+        for (op, multi, compact) in [("UAPqzTransferSingle", false, false), ("UAPqzTransferSingleCompact", false, true),
+            ("UAPqzTransfer", true, false), ("UAPqzTransferCompact", true, true)]
+        {
+            let d = v["ops"][op]["domains"].as_object().unwrap().values().next().unwrap();
+            let name = d["abi"].as_str().unwrap().split('(').next().unwrap().to_string();
+            let args = if multi { MA } else { PA };
+            assert_eq!(d["abi"], json!(format!("{name}({UA_ENV},{args},bytes,{UA_SIG},bytes,{UA_SIG},{VERDICT})")), "{op}");
+            let sel = unhex(d["selector"].as_str().unwrap()).unwrap();
+            let e = sels.iter().find(|x| x.0[..] == sel[..]).unwrap_or_else(|| panic!("{op}: selector")).1;
+            assert!(e.relayed && e.multi == multi && e.compact == compact, "{op}");
+        }
     }
 
     /// The slot the registry's layout pin gives `field`: its probe writes one field per slot, `s.<field>…; // <slot>`.

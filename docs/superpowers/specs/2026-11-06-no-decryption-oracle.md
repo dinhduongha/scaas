@@ -339,7 +339,10 @@ session's `T`; `provenOpen`'s `forOp7` must be the debit's: op 7's `p` on a PQZH
 by T20d6; `checkProven` (§4.14.8) by T20d7 (`facade::pqz::check_proven`, no handle; `own` is `{form, senderPending,
 keyRecords, proof, header | call}`, its `(fromUA, k)` the quorum's `(ua, lastDebit − 1)` and its record `lastRecord`; any
 failure is `Argument`, no parts; TRIVIAL entries are public amounts and not in `sum`; the burn, refresh and unwrap `call`
-shapes of §4.14.4 step 4 built there). UNAUDITED.
+shapes of §4.14.4 step 4 built there); the bounds (§4.14.9) and `pqz-read --command balanceProven` (§4.14.11) by T20d8 (the
+reader reads LOG credits by the `blob` topic and NONE credits by the `Credited` log and its transaction, direct or relayed to the
+token; its anvil fixture is a release whose code logs a calldata tail, so a NONE transaction carries the entry's call and its
+`Credited` log). UNAUDITED.
 
 #### 4.14.1 What path (B) gives, and what it does not
 

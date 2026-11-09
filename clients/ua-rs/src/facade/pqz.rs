@@ -284,6 +284,8 @@ pub const COMMANDS: &[&str] = &[
 ///   `blob(160) ‖ uOff(16) ‖ vOff(16) ‖ block(64)` (`PqzCore._credit`);
 /// - `accWords`: with `flags & 1` the `ACC_WORDS` slots from `acct + 5` as stored (`not()` of the packed stream), else none;
 /// - `sendCounterWord`: `sendCounter[ua]` (slot 12, `keccak256(ua ‖ root + 12)`), the UA's, advanced by a debit of any version;
+/// - path (B): `lastRecord` and a credit's `record`, `debitRec[ua][k]` (slot 19, `keccak256(k ‖ keccak256(ua ‖ root + 19))`, `w0`
+///   then `w1` at `+ 1`); `confidentialFee` (slot 5), a NONE header's fee;
 /// - `blobs`: `{address, code}` by `eth_getCode` of every SSTORE2 pointer used: the `acc` reference's (without `flags & 1`),
 ///   each pending credit's, the entry's (`entryPtr`) and the key's;
 /// - `keyRecord`: the registry's `pqzKey[ua][v]` word (`UAStore.Layout` slot 2, per version: `keccak256(v ‖ keccak256(ua ‖ 2))`,
@@ -312,6 +314,10 @@ pub const STATE_LAYOUT: &[(&str, u64, u64, usize, usize)] = &[
     ("entryPtr[V]", 9, 0, 0, 20),
     ("memos[V]", 10, 0, 0, 32),
     ("sendCounter[U]", 12, 0, 0, 8),
+    // the proof path (T20d4, T20d8): a NONE header's fee, a debit's record `debitRec[ua][k]` (`w0`, `w1`)
+    ("confidentialFee", 5, 0, 0, 32),
+    ("debitRec[U][7].w0", 19, 0, 0, 32),
+    ("debitRec[U][7].w1", 19, 1, 0, 32),
 ];
 
 /// `PqzCore.INLINE_MAX`, `INLINE_MAX_PQZH` (op 7 of a PQZH token), the `MAT` flag (`acc` in `accWords`).
@@ -1356,6 +1362,14 @@ thread_local! {
     static PROVER_CALLS: core::cell::Cell<usize> = const { core::cell::Cell::new(0) };
     static KEY_USES: core::cell::Cell<usize> = const { core::cell::Cell::new(0) };
     static SENDER_TRIALS: core::cell::Cell<usize> = const { core::cell::Cell::new(0) };
+    static VERIFIES: core::cell::Cell<usize> = const { core::cell::Cell::new(0) };
+}
+
+/// Test-only (feature `vectors`): how many statements path (B) handed to `pqz_ffi::precompile` on this thread (T20d8: a request
+/// over a bound is refused before any proof is checked).
+#[cfg(feature = "vectors")]
+pub fn vectors_verifies() -> usize {
+    VERIFIES.with(|n| n.get())
 }
 
 /// Test-only (feature `vectors`): how many leg keys `proveDiscloseSender` tried on this thread (one re-encryption each; group

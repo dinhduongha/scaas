@@ -712,6 +712,8 @@ fn known(o: &Open, hd: &[Word; 20], op_tag: &Word, from: &Word, k: u64, rec: &Re
 
 /// `pqz_ffi::precompile` (the chain's own function, panics caught) over `op ‖ statement ‖ proof` answers `…01`.
 fn verify_p(op: u8, stmt: &[u8], proof: &[u8]) -> Result<()> {
+    #[cfg(feature = "vectors")]
+    VERIFIES.with(|n| n.set(n.get() + 1));
     if pqz_ffi::precompile(&pqz_ffi::stmt::input(op, stmt, proof)) != Ok(pqz_ffi::VALID) {
         return Err(Error::Argument);
     }

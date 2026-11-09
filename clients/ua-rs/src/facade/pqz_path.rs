@@ -2,7 +2,7 @@
 //! The PQZ proof path's word parsers (no-oracle spec §4.14; proof-path spec §2.2 and §3.2 on `ua-mtx-merge`; plan T20d1, T20d3,
 //! C-PP-1): an op blob's 3h tail and a debit record from its two storage words. Public data only, nothing decrypted; every
 //! refusal is `Argument`. Path (A)'s entry parse reads [`tail`]'s `R`; `balanceProven` and the proven debits (T20d4, T20d5) read
-//! the rest. The `PqzDebitProof` event is decoded by the reading layer, not here (Fable P3-1 on the T20d0 delta). UNAUDITED.
+//! the rest; public for the reading layer (`pqz-read --command balanceProven`, T20d8), which finds a credit's legs with them. The `PqzDebitProof` event is decoded by the reading layer, not here (Fable P3-1 on the T20d0 delta). UNAUDITED.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing, clippy::disallowed_methods)]
 use super::pqz_pack::VP;
 use crate::wallet::{Error, Result};
@@ -22,24 +22,23 @@ fn be64(b: &[u8], at: usize) -> Result<u64> {
 
 /// `pqzDebitRecord(ua, k)`'s view (`DebitRecordView`) of `debitRec[ua][k]`: `w0 = prevBlob(160) ‖ p(64) ‖ Δp(16) ‖ proofStore(8) ‖
 /// flags(8)`, `w1 = shieldIn(64) ‖ keyVersion(64) ‖ prevCounter(64) ‖ 0(64)`.
-#[cfg_attr(not(test), allow(dead_code))] // `prevCounter`: the version chain's walk (T20d7, T20d8)
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Record {
-    pub(crate) prev_blob: [u8; 20],
-    pub(crate) p: u64,
-    pub(crate) delta_p: u64,
-    pub(crate) proof_store: u8,
-    pub(crate) shield_in: u64,
-    pub(crate) key_version: u64,
-    pub(crate) prev_counter: u64,
-    pub(crate) has_prev: bool,
+pub struct Record {
+    pub prev_blob: [u8; 20],
+    pub p: u64,
+    pub delta_p: u64,
+    pub proof_store: u8,
+    pub shield_in: u64,
+    pub key_version: u64,
+    pub prev_counter: u64,
+    pub has_prev: bool,
 }
 
 /// [`Record`] of debit `counter` from its two words, both read as storage (`w1` is zero when the record is narrow): `w0 = 0` is no
 /// record (the contract's `DebitRecordUnknown`); `RECORD` set and no other flag than `WIDE`; `proofStore` 0 (NONE) or 1 (LOG); a
 /// narrow record has `w1 = 0`, no `shieldIn`, version 0 and, with a predecessor, `prevCounter = counter − 1`; `w1`'s low 64 bits
 /// are 0. A wide record's `w1` may be zero too (a gap in the counters alone makes it wide).
-pub(crate) fn record(w0: &Word, w1: &Word, counter: u64) -> Result<Record> {
+pub fn record(w0: &Word, w1: &Word, counter: u64) -> Result<Record> {
     let [.., delta_hi, delta_lo, proof_store, flags] = *w0;
     if *w0 == [0; 32] || flags & RECORD == 0 || flags & !(RECORD | WIDE) != 0 || proof_store > 1 || be64(w1, 24)? != 0 {
         return Err(Error::Argument);
@@ -62,14 +61,14 @@ pub(crate) fn record(w0: &Word, w1: &Word, counter: u64) -> Result<Record> {
 /// An op blob's 3h tail (proof-path spec §3.2, `PqzCore.rOf`), read from the data's last byte: `… ‖ P(v_f) ‖ ownTag(32) ‖
 /// kv(8·n) ‖ u8(n)`, `n ≤ 9`; `r_len` is the length of `R`, the data before `P(v_f)`.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Tail {
-    pub(crate) r_len: usize,
-    pub(crate) own_tag: Word,
-    pub(crate) kv: Vec<u64>,
+pub struct Tail {
+    pub r_len: usize,
+    pub own_tag: Word,
+    pub kv: Vec<u64>,
 }
 
 /// [`Tail`] of an op blob's data (its SSTORE2 code less the leading byte); `Argument` when it does not fit.
-pub(crate) fn tail(d: &[u8]) -> Result<Tail> {
+pub fn tail(d: &[u8]) -> Result<Tail> {
     let n = *d.last().ok_or(Error::Argument)? as usize;
     if n > KV_MAX {
         return Err(Error::Argument);
@@ -85,7 +84,7 @@ pub(crate) fn tail(d: &[u8]) -> Result<Tail> {
 /// UA_j)_{j<M}`, op 1 as `M = 1`) from `R`'s length, `pkp` and `vp` the set's packed `u` and `v` lengths: **exactly one** `(M,
 /// auditorOn)` with `1 ≤ M ≤ 8` must fit, two fits or none is `Argument` (no-oracle spec §4.14.4 step 1, Fable P3-6 on the T20d0
 /// delta: the same rule for path (A)'s entries and path (B)'s credits).
-pub(crate) fn bundle_shape(r_len: usize, pkp: usize, vp: usize) -> Result<(usize, usize, bool)> {
+pub fn bundle_shape(r_len: usize, pkp: usize, vp: usize) -> Result<(usize, usize, bool)> {
     let rem = r_len.checked_sub(16 + pkp).ok_or(Error::Argument)?;
     let g = 1 + rem.checked_div(pkp).ok_or(Error::Argument)?;
     let rem = rem.checked_rem(pkp).ok_or(Error::Argument)?;

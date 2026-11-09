@@ -881,3 +881,251 @@ fn decoys_against_anvil() {
     };
     assert_eq!(d["decoys"].as_array().unwrap().len(), 4, "one pick, the keys a majority returned: {d}");
 }
+
+// ------------------------------------------------------------------------------------------------------------------------------
+// T20d8: `--command balanceProven` (no-oracle spec §4.14.11) against a local anvil
+// ------------------------------------------------------------------------------------------------------------------------------
+
+/// The fixture release's code: any call shorter than 160 bytes answers the word 0 (R5's `proofStore()` probe); a longer one ends
+/// with a word `L` and, before it, `L` bytes `t0 ‖ t1 ‖ t2 ‖ t3 ‖ data` that the token logs (`LOG4`, delegatecalled by the
+/// clone, so the token is the emitter). A NONE debit's transaction is its entry's calldata with that tail appended (an ABI
+/// decoder reads by offsets and ignores it), so it carries the call and emits the `Credited` log; a LOG debit's emits its
+/// `PqzDebitProof`. (`Credited` gains a fourth topic, 0: a fixture artefact; the reader filters by three.)
+const EMITTER: &str = "0x60a03610602c5760203603358060203603038181600037506060516040516020516000516080850360\
+80a4005b60206000f3";
+
+/// A minimal ABI encoder (the test's own, for the fixture's calldata).
+enum T {
+    W(Word),
+    B(Vec<u8>),
+    Tup(Vec<T>),
+    Arr(Vec<T>),
+}
+fn dynamic(t: &T) -> bool {
+    match t {
+        T::W(_) => false,
+        T::B(_) | T::Arr(_) => true,
+        T::Tup(v) => v.iter().any(dynamic),
+    }
+}
+fn enc(ts: &[T]) -> Vec<u8> {
+    let head_len: usize = ts.iter().map(|t| if dynamic(t) { 32 } else { enc_one(t).len() }).sum();
+    let (mut head, mut tail) = (Vec::new(), Vec::new());
+    for t in ts {
+        if dynamic(t) {
+            head.extend(be((head_len + tail.len()) as u64));
+            tail.extend(enc_one(t));
+        } else {
+            head.extend(enc_one(t));
+        }
+    }
+    [head, tail].concat()
+}
+fn enc_one(t: &T) -> Vec<u8> {
+    match t {
+        T::W(w) => w.to_vec(),
+        T::B(b) => {
+            let mut v = be(b.len() as u64).to_vec();
+            v.extend(b);
+            v.resize(32 + b.len().div_ceil(32) * 32, 0);
+            v
+        }
+        T::Tup(v) => enc(v),
+        T::Arr(v) => [be(v.len() as u64).to_vec(), enc(v)].concat(),
+    }
+}
+const PA: &str = "(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes)";
+const UA_ENV: &str = "(bytes32,uint256,uint256,uint256,uint32,address,uint256,address)";
+const UA_SIG: &str = "(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])";
+const VERDICT: &str = "((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))";
+fn sig() -> T {
+    T::Tup(vec![T::B(vec![]), T::B(vec![]), T::Arr(vec![])])
+}
+fn verdict() -> T {
+    T::Tup(vec![T::Tup((0..7).map(|_| T::W([0; 32])).collect()), sig()])
+}
+
+/// A fixture debit: the sender key's index, its UA, the debit's extra fields, its op, its envelope (relayed) or none, LOG.
+type Step = (usize, Word, Value, u8, Option<[Word; 8]>, bool);
+
+/// `tail` (`t0 ‖ t1 ‖ t2 ‖ t3 ‖ data`) as the fixture's log, after `prefix`.
+fn logged(prefix: &[u8], topics: [Word; 4], data: &[u8]) -> Vec<u8> {
+    let tail = [topics.concat(), data.to_vec()].concat();
+    [prefix.to_vec(), tail.clone(), be(tail.len() as u64).to_vec()].concat()
+}
+
+/// `balanceProven` through the reader over a token whose credits came by LOG and by NONE (a direct op 1 with a memo, a relayed
+/// op 1 by its envelope, an op 7 with the auditor): the value equals `balance`'s over the same state; the reader's words name
+/// each credit's history; a node that hides the `PqzDebitProof` logs, and a credit's transaction sent to another contract, are
+/// refused by name.
+#[cfg(not(feature = "vectors"))]
+#[test]
+#[ignore]
+fn balance_proven_against_anvil() {
+    if st::SET != SET {
+        return;
+    }
+    let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let url = format!("http://127.0.0.1:{port}");
+    let bin = std::env::var("ANVIL").unwrap_or_else(|_| "anvil".into());
+    let _anvil = Anvil(Command::new(bin).args(["--port", &port.to_string(), "--silent"]).stdout(Stdio::null()).spawn().unwrap());
+    assert!((0..100).any(|_| {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        rpc(&url, "eth_chainId", json!([])).is_string()
+    }), "anvil did not start");
+    let chain_id = u64::from_str_radix(rpc(&url, "eth_chainId", json!([])).as_str().unwrap().trim_start_matches("0x"), 16).unwrap();
+    let genesis = rpc(&url, "eth_getBlockByNumber", json!(["0x0", false]))["hash"].as_str().unwrap().to_string();
+    let forge = load(&format!("smartcontracts/vectors/pqz/{SET}/state.json"));
+    let n = Node { url: url.clone(), root: w32(&forge["layout"]["root"]), chain_id, uid: w32(&json!(genesis)) };
+    let (factory, token, reg) = (a20(FACTORY), a20(CW_TOKEN), a20(CW_REG));
+    n.code(&IMPL, &json!(EMITTER));
+    n.catalogue(&factory, &token, 5, true);
+    n.clone_of(&token, &reg);
+    let from = rpc(&url, "eth_accounts", json!([]))[0].clone();
+    let send = |data: &[u8]| {
+        let h = rpc(&url, "eth_sendTransaction", json!([{"from": from, "to": hx(&token), "data": hx(data), "gas": "0x1c9c380"}]));
+        assert!(h.is_string(), "the fixture's transaction");
+    };
+
+    // the model with pq_kat keys, every statement at this chain's words (chainId, chainUid, token)
+    let w = {
+        let m = &kat(0);
+        scaas_ua::wallet::Wallet::from_mnemonic(m["mnemonic"].as_str().unwrap(), m["passphrase"].as_str().unwrap()).unwrap()
+    };
+    let (ua_a, ua_b, ua_aud, ua_x): (Word, Word, Word, Word) = ([0xA1; 32], [0xB0; 32], [0xAD; 32], [0xC3; 32]);
+    let keys: Vec<_> = (0..4).map(|i| w.pqz_key(0, i).unwrap()).collect();
+    let mut c = Chain::new();
+    for (ua, key) in [ua_a, ua_b, ua_aud, ua_x].iter().zip(&keys) {
+        c.register(*ua, &key.pk());
+    }
+    c.auditor = Some(ua_aud);
+    c.shield(&ua_a, 1000);
+    c.shield(&ua_x, 200);
+    let here = |v: Value| merge(v, json!({"chainId": chain_id, "chainUid": genesis, "token": hx(&token), "registry": hx(&reg)}));
+    let bind = |b: &Word, mode: u64| {
+        let b = if *b == [0; 32] { scaas_ua::keccak256(b"SCAAS-PQZ-DIRECT-MODE-V1") } else { *b };
+        scaas_ua::keccak256(&[b, be(mode)].concat())
+    };
+    let pk = |i: usize| hx(&keys[i].pk());
+    // (sender key, the debit request's extra fields, op, the envelope or none, LOG)
+    let env = [ua_a, be(0), be(1), be(9_999), be(0), [0; 32], be(0), [0; 32]];
+    let env_binding = scaas_ua::keccak256(&[scaas_ua::keccak256(b"SCAAS-PQZ-UA-ENVELOPE-V1"), be(chain_id), n.uid, word_of(&token), env[0],
+        env[1], env[2], env[3], env[4], env[5], env[6], env[7]].concat());
+    let steps: Vec<Step> = vec![
+        (0, ua_a, json!({"toUA": hx(&ua_b), "pkT": pk(1), "pkA": pk(2), "amount": 300, "mode": "BUNDLE"}), 1, None, true),
+        (3, ua_x, json!({"toUA": hx(&ua_b), "pkT": pk(1), "amount": 50, "mode": "HASH"}), 1, None, false),
+        (0, ua_a, json!({"toUA": hx(&ua_b), "pkT": pk(1), "amount": 20, "mode": "BUNDLE"}), 1, Some(env), false),
+        (3, ua_x, json!({"legs": [{"pk": pk(1), "ua": hx(&ua_b), "amount": 7}, {"pk": pk(0), "ua": hx(&ua_a), "amount": 1}], "pkA": pk(2),
+            "mode": "BUNDLE"}), 7, None, true),
+    ];
+    for (i, ua, extra, op, envelope, log) in steps {
+        let mode = (extra["mode"] == "BUNDLE") as u64;
+        let binding = if envelope.is_some() { env_binding } else { [0; 32] };
+        let mut d = here(merge(merge(c.own(&ua, 16), c.debit_fields()), extra.clone()));
+        d["envelopeBinding"] = json!(hx(&bind(&binding, mode)));
+        let cmd = if op == 7 { "proveTransferMulti" } else { "proveTransfer" };
+        let p: Value = serde_json::from_str(&keys[i].call(cmd, d.to_string().as_bytes()).unwrap()).unwrap();
+        let (stmt, proof) = (h(&p["stmt"]), h(&p["proof"]));
+        assert_eq!(pqz_ffi::precompile(&st::input(op, &stmt, &proof)), Ok(pqz_ffi::VALID), "the debit verifies");
+        c.proof_store = log as u8;
+        c.own_tag = w32(&p["ownTag"]);
+        let k_ctr = st::word_u64(&stmt[32 * st::H_SEND_COUNTER..][..32].try_into().unwrap()).unwrap();
+        let index = c.accts.get(&(ua_b, 0)).map_or(0, |a| a.count);
+        let er = if op == 7 {
+            pqz_chain::note_legs(&[ua_b, ua_a]);
+            c.settle7(&stmt, p.get("memo").map(h).as_deref())
+        } else {
+            c.settle1(&stmt, p.get("memo").map(h).as_deref())
+        };
+        let blob = c.entries[&er].ptr;
+        if log {
+            let data = enc(&[T::B(stmt[..640].to_vec()), T::B(proof.clone())]);
+            send(&logged(&[], [scaas_ua::keccak256(b"PqzDebitProof(address,bytes32,uint64,bytes,bytes)"), word_of(&blob), ua, be(k_ctr)], &data));
+        } else {
+            // the entry's calldata: op 1 single, direct or relayed (its envelope inline first)
+            let memo = p.get("memo").map(h).map(|m| m[16..].to_vec()).unwrap_or_default();
+            let t = T::Tup(vec![T::W(be(0)), T::W(be(d["validUntilBlock"].as_u64().unwrap())), T::W(be(0)), T::W(ua), T::W(be(0)), T::W(ua_b),
+                T::W([0; 32]), T::W([0; 32]), T::W(c.own_tag), T::B(vec![]), T::B(vec![]), T::B(vec![]), T::B(vec![]), T::B(memo)]);
+            // HASH on this BUNDLE token: the Compact entry (commit-reveal on every token)
+            let name = if mode == 0 { "mtxConfidentialTransferSingleCompact" } else { "mtxConfidentialTransferSingle" };
+            let (sig_s, args) = match envelope {
+                None => (format!("{name}({PA},bytes,{UA_SIG},bytes,{VERDICT})"), vec![t, T::B(proof.clone()), sig(), T::B(vec![]), verdict()]),
+                Some(e) => (format!("{name}({UA_ENV},{PA},bytes,{UA_SIG},bytes,{UA_SIG},{VERDICT})"),
+                    vec![T::Tup(e.iter().map(|w| T::W(*w)).collect()), t, T::B(proof.clone()), sig(), T::B(vec![]), sig(), verdict()]),
+            };
+            let call = [scaas_ua::keccak256(sig_s.as_bytes())[..4].to_vec(), enc(&args)].concat();
+            let entry_ref = n.entry_ref(&token, &ua, k_ctr);
+            send(&logged(&call, [scaas_ua::keccak256(b"Credited(bytes32,uint64,uint64,bytes32)"), ua_b, be(index), [0; 32]],
+                &[be(0), entry_ref].concat()));
+        }
+    }
+    c.shield(&ua_b, 4);
+
+    // the model's state into the token's and the registry's storage, every code
+    let root = n.root;
+    n.set(&token, &add(&root, 2), &st::PQZL_ID);
+    n.set(&token, &root, &w32(&c.auditor_words(1)["auditorMode"]));
+    n.set(&token, &add(&root, 7), &ua_aud);
+    for ((ua, v), a) in &c.accts {
+        let base = k(&be(*v), &k(ua, &add(&root, 8)));
+        for (i, s) in a.slots().iter().enumerate() {
+            n.set(&token, &add(&base, i as u64), s);
+        }
+        for (i, e) in &a.pending {
+            n.set(&token, &k(&be(*i), &add(&base, 4)), e);
+        }
+        for (i, x) in a.acc_words.iter().enumerate() {
+            n.set(&token, &add(&base, 5 + i as u64), x);
+        }
+    }
+    for (ua, x) in &c.ctrs {
+        n.set(&token, &k(ua, &add(&root, 12)), &be(*x));
+    }
+    for ((ua, kk), (w0, w1)) in &c.recs {
+        let rb = k(&be(*kk), &k(ua, &add(&root, 19)));
+        n.set(&token, &rb, w0);
+        n.set(&token, &add(&rb, 1), w1);
+    }
+    for (ua, v) in c.keys.keys() {
+        n.set(&reg, &k(&be(*v), &k(ua, &be(reg_slot("pqzKey")))), &c.key_record_at(ua, *v));
+    }
+    for ua in c.vers.keys() {
+        n.set(&reg, &k(ua, &be(reg_slot("pqzVersions"))), &c.versions_word(ua));
+    }
+    for (a, code) in &c.blobs {
+        n.code(a, &json!(hx(code)));
+    }
+    rpc(&url, "anvil_mine", json!(["0x1"]));
+
+    let cid = chain_id.to_string();
+    let args = |rpc_url: &str, command: &str| {
+        s(&["--rpc", rpc_url, "--chain-id", &cid, "--chain-uid", &genesis, "--factory", FACTORY, "--registry", CW_REG, "--token", CW_TOKEN,
+            "--ua", &hx(&ua_b), "--depth", "0", "--command", command, "--key-version", "0", "--for-op7", "false"])
+    };
+    let a = cli(&args(&url, "balance"), Some(&kat(1))).unwrap();
+    assert_eq!(a["value"], json!(381), "path (A)");
+    let b = cli(&args(&url, "balanceProven"), Some(&kat(1))).unwrap();
+    assert_eq!(b["value"], a["value"], "path (B) equals path (A)");
+    let kinds: Vec<&str> = b["parts"].as_array().unwrap().iter().map(|p| p["kind"].as_str().unwrap()).collect();
+    assert_eq!(kinds, ["trivial", "credit", "credit", "credit", "credit"]);
+    let mut wa = args(&url, "balanceProven");
+    wa.push("--words".into());
+    let words = cli(&wa, None).unwrap();
+    let cs = words["credits"]["credits"].as_array().unwrap();
+    assert_eq!(cs.iter().map(|c| (c.get("header").is_some(), c.get("call").is_some())).collect::<Vec<_>>(),
+        [(true, false), (false, true), (false, true), (true, false)], "LOG, NONE direct, NONE relayed, LOG");
+    assert_eq!(cs[2]["call"]["binding"], json!(hx(&env_binding)), "the relayed call's envelope binding");
+    assert_eq!(cs[1]["call"]["mode"], "HASH");
+    // a node that hides the proof logs; a credit's transaction sent to another contract (its `to` rewritten)
+    let hits = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let ev = hx(&scaas_ua::keccak256(b"PqzDebitProof(address,bytes32,uint64,bytes,bytes)"));
+    let hide = node(url.clone(), hits.clone(), move |m, p, r, _| Some(if m == "eth_getLogs" && p[0]["topics"][0] == json!(ev) { json!([]) } else { r }));
+    assert!(cli(&args(&hide, "balanceProven"), Some(&kat(1))).unwrap_err().contains("no single Credited log"), "hidden LOG");
+    let other = node(url.clone(), hits, |m, _, mut r, _| {
+        if m == "eth_getTransactionByHash" {
+            r["to"] = json!(hx(&[0x77; 20]));
+        }
+        Some(r)
+    });
+    assert!(cli(&args(&other, "balanceProven"), Some(&kat(1))).unwrap_err().contains("needs a trace"), "a call through another contract");
+}
