@@ -1107,6 +1107,50 @@ export function buildRelayFee({ name = 'SCaaS MetaToken', token, chainId, chainU
   return { call, prompt, payment };
 }
 
+// ------------------------------------------------------------------ service pull (spec 2026-11-09-service-pull, proposed CTR-MTX-32)
+// The field types of a node-relayable operation (C3): atomic, `bytes`, `string`; no array, no nested struct. `intN` is C3's
+// too but not in this reference builder (no row needs it): refused here, never mis-encoded.
+const OP_FIELD = /^(address|bool|string|bytes|bytes([1-9]|[12][0-9]|3[0-2])|uint(8|16|24|32|40|48|56|64|72|80|88|96|104|112|120|128|136|144|152|160|168|176|184|192|200|208|216|224|232|240|248|256))$/;
+const OP_MAX_FIELDS = 16;
+
+/** A service pull (spec §3, §10): the payer signs one `UAMetaTransfer` in the pulled token's domain, `to` = `relayer` = the
+ *  service, `MODE_RESTRICT_RELAYER`, fee `NONE`, fee 0, no fee recipient, and `entryRef` = the EIP-712 digest of the
+ *  service's operation `op` (its typed data `{domain, types, primaryType, message}` in the service's own domain; shown, never
+ *  signed itself, §3.1). Refuses: an operation outside C3 (more than 16 fields, an array, a nested struct, a first field
+ *  other than `bytes32 payer`, a field missing or extra), `op.payer` other than `from`, an operation for another chain, a
+ *  zero amount. With a fee, `buildRelayFee({target: service, …})` after this (the pull at `nonce`, the fee at `nonce + 1`
+ *  on the same lane in the same token, §2.4 (b)). Returns {service, entryRef, prompt, typedData (the transfer), digest,
+ *  selector, calldata(signature)}: `<entry>(op, t, UASig auth)`, `op`'s `bytes` / `string` raw (EIP-712 hashed them). */
+export function buildServicePull({ name = 'SCaaS MetaToken', token, chainId, chainUid, entry, op, from, amount, batch, nonce,
+  validUntil }) {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(String(entry))) refuse('the entry is not a function name');
+  const d = op?.domain || {};
+  const service = d.verifyingContract;
+  if (typeof service !== 'string' || fromHex(service).length !== 20) refuse('the operation names no service');
+  if (uint(d.chainId, 'the operation\'s chain id') !== BigInt(chainId)) refuse('the operation is for another chain');
+  const fs = op.types?.[op.primaryType];
+  if (!Array.isArray(fs) || fs.length === 0 || fs.length > OP_MAX_FIELDS) refuse('the operation has no fields or more than 16');
+  if (Object.keys(op.types).some((t) => t !== op.primaryType && t !== 'EIP712Domain')) refuse('the operation nests a struct');
+  for (const f of fs) if (!OP_FIELD.test(f.type)) refuse(`the operation's field ${f.name} is not atomic, bytes or string`);
+  if (fs[0].name !== 'payer' || fs[0].type !== 'bytes32') refuse('the operation does not start with bytes32 payer');
+  const m = op.message || {};
+  if (Object.keys(m).length !== fs.length || fs.some((f) => m[f.name] === undefined)) refuse('the operation\'s fields are not its type\'s');
+  if (!same(hex(bytes32(m.payer)), hex(bytes32(from)))) refuse('the operation is not the payer\'s');
+  const value = uint(amount, 'the amount');
+  if (value === 0n) refuse('the amount is zero');
+  const entryRef = hex(digestOf(op));
+  const typedData = uaMetaTransferTypedData({ name, contract: token, chainId, chainUid, message: { from: hex(bytes32(from)),
+    to: padId(service), value, entryRef, batch: uint(required(batch, 'the lane'), 'the lane'),
+    nonce: uint(required(nonce, 'the nonce'), 'the nonce'), validUntil: uint(validUntil, 'the deadline'), mode: 1,
+    relayer: service, fee: 0, feeRecipient: ZERO_ADDRESS } });
+  const types = [`(${fs.map((f) => f.type).join(',')})`, abiType('UAMetaTransfer'), abiType('UASig')];
+  const signature = `${entry}(${types.join(',')})`;
+  const calldata = (sig) => abiCall(signature, types, [fs.map((f) => m[f.name]), abiValue('UAMetaTransfer', typedData.message),
+    abiValue('UASig', uaSigOf(sig))]);
+  return { service, entryRef, typedData, digest: digestOf(typedData), selector: sel(signature), calldata,
+    prompt: { service, serviceName: d.name, op: op.primaryType, message: m, token, amount: value, validUntil: String(validUntil) } };
+}
+
 /** CLI-SGN-27 on a named entry: check, then sign exactly what was checked. `td` must be struct `op` on `contract`, salted with
  *  the signer's own `chainId` and `chainUid` (CLI-SGN-33), with every field of `message`, the op's own fields as the client
  *  built them from the user's input (`from` too), every one of them present: nothing omitted reads as zero. Struct family

@@ -38,3 +38,13 @@ M15-used-never-written (extra) | invariants (3), test_N17_operationTwice, test_N
 
 Finding against the spec (§11 N7): "submitted twice" meets step 6 first (the seen entryRef, Q4) and reverts ServicePullReplayed,
 not MetaTxBadNonce; only the lane cancelled first gives MetaTxBadNonce. test_N7_cancelledAndResubmitted asserts both.
+
+T78: vectors by a generator (smartcontracts/vectors/metatx/gen_servicepull.py, computed apart from the contracts), the forge
+cross-check, the clientkeys builder. Tree: b9b130bb (T77) + the T78 files.
+step | commit | rc | counts
+gen_servicepull.py --check, twice (deterministic, no drift) | T78 | 0 | 3 rows (deposit_native, note_native, deposit_unbound_fee_recipient), identical bytes both runs
+forge ServicePullVectors.t.sol (sparse) | T78 | 0 | 1 passed: per row the token clone and the service etched at the row's addresses, entryRef, servicePullEntries() / eip712Domain() bytes, the transfer digest, the calldata, a direct landing (the unbound row refused ServicePullShape(2)) and the relay-fee landing (fee at n + 1)
+tamper (one nibble of row 0's entryRef, SERVICEPULL_FILE) | T78 | 0 | the cross-check went red, as it must (deposit_native: entryRef differs)
+red-first (HEAD's clientkeys evm.js before T78) | T78 | 0 | red: no buildServicePull
+clientkeys npm test | T78 | 0 | 298 tests, 296 passed, 0 failed, 2 skipped (bundle checks); new test/servicepull.test.js 4 passed
+other vector files | T78 | - | none touched
