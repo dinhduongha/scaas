@@ -43,6 +43,7 @@ import subprocess
 import sys
 import time
 import traceback
+import urllib.error
 import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -71,6 +72,8 @@ FAILS, LOG = [], []
 RPC = None
 SPLIT = False  # --split: force the register + storePqzPop path
 ZERO_DEP = False  # --zero-dep: the PQZ releases on deps = [0x0], the PQZ tokens OFFCHAIN (group 3f, spec §3 C6)
+PROOF_PATH_ONLY = False  # --proof-path-only: sections 1-3, then section 7 (group 3h T65)
+SKIP_KINDS = set()  # --skip-kind 13: a release this chain cannot deploy (kind 13 above 64 KiB until T66b on a 100 M RPC gas cap)
 PROOF_STORE = 0  # --proof-store log: the PQZ tokens created with proofStore LOG (group 3h T60, pqz-proof-path spec §4.1)
 VERDICT_LIFE = 600  # a verdict's `validUntil`: now + this many seconds (the verifier's own short life, spec §5.1)
 # DeployBase's deterministic CREATE2 deployer (forge-std CREATE2_FACTORY, NET-EVM-05) and salt (`DEPLOY_SALT` env, default
@@ -311,6 +314,10 @@ BURN_F = "p validUntilBlock shieldIn fromUA keyVersion beneficiaryUA ownTag u vF
 # group 3h T59 (pqz-proof-path spec §3.1): the holder's tag of its own debit; the contract checks no value, so this script sends
 # the zero tag (ponytail: T65 computes each debit's from the holder's seed, `ownTag` of clients/clientkeys)
 OWN_TAG = bytes(32)
+# group 3h T65, another set (spec §11.4): the contracts as built by `at-set.sh <set> build` (EVM_OUT=out/at-set-<set>), the
+# prover built at that set (PQZ_PROVE=<path>), PQZ_SET for pqz_kat
+OUT_DIR = os.environ.get("EVM_OUT", "out")
+PROVEN = []  # group 3h T65: (op, statement, proof) of every proof this run made, in order
 
 
 def tail_of(blob):
@@ -414,7 +421,17 @@ def check(ok, what):
 
 def rpc(method, params=()):
     body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": list(params)}).encode()
-    r = json.load(urllib.request.urlopen(urllib.request.Request(RPC, body, {"content-type": "application/json"}), timeout=300))
+    for attempt in range(30):  # a rate-limited RPC (an nginx in front, HTTP 429) or a refused connection (nothing sent): retry
+        try:
+            r = json.load(urllib.request.urlopen(urllib.request.Request(RPC, body, {"content-type": "application/json"}), timeout=300))
+            break
+        except urllib.error.HTTPError as e:
+            if e.code != 429 or attempt == 29:
+                raise
+        except urllib.error.URLError as e:
+            if not isinstance(e.reason, ConnectionRefusedError) or attempt == 29:
+                raise
+        time.sleep(0.2 * (attempt + 1))
     if "error" in r:
         raise RuntimeError(f"{method}: {json.dumps(r['error'])[:600]}")
     return r["result"]
@@ -582,7 +599,7 @@ def gas_of(to, data):
 
 
 def artifact(name, src=None):
-    j = json.load(open(os.path.join(EVM, "out", (src or name) + ".sol", name + ".json")))
+    j = json.load(open(os.path.join(EVM, OUT_DIR, (src or name) + ".sol", name + ".json")))
     return j["bytecode"]["object"].removeprefix("0x"), j["bytecode"].get("linkReferences", {})
 
 
@@ -593,7 +610,7 @@ RELEASES = ((0, "NormalToken"), (4, "NormalPqzToken"), (5, "WrappedPqzToken"), (
 
 def registry_codehash():
     """The canonical `ComplianceRegistry` runtime's code hash (regulated-kinds spec §5, F-11), from out/."""
-    j = json.load(open(os.path.join(EVM, "out", "ComplianceRegistry.sol", "ComplianceRegistry.json")))
+    j = json.load(open(os.path.join(EVM, OUT_DIR, "ComplianceRegistry.sol", "ComplianceRegistry.json")))
     return keccak256(bytes.fromhex(j["deployedBytecode"]["object"].removeprefix("0x")))
 
 
@@ -671,7 +688,7 @@ class Proc:
 
 class PQ:
     def __init__(self):
-        self.prover = Proc([os.path.join(ROOT, "pqz-core/ffi/target/release/examples/pqz_prove")])
+        self.prover = Proc([os.environ.get("PQZ_PROVE") or os.path.join(ROOT, "pqz-core/ffi/target/release/examples/pqz_prove")])
         self.ml = Proc(["node", os.path.join(HERE, "mldsa.mjs"), os.path.join(ROOT, "../../../clients/clientkeys")
                         if not os.path.isdir(os.path.join(ROOT, "clients/clientkeys/node_modules"))
                         else os.path.join(ROOT, "clients/clientkeys")])
@@ -682,6 +699,7 @@ class PQ:
         p = bytes.fromhex(self.prover.ask(f"prove {op} {stmt.hex()} {wit.hex()} {rnd.hex()}"))
         dt = time.time() - t
         ok = self.prover.ask(f"verify {op} {stmt.hex()} {p.hex()}").endswith("01")
+        PROVEN.append((op, stmt, p))
         check(ok, f"proof op {op}: {len(p):,} B, proved in {dt:.2f} s, pqz-ffi verify = 1 (stmt {len(stmt):,} B)")
         return p
 
@@ -924,7 +942,7 @@ def abi_methods():
     for src, name in (("UARegistry", "UARegistry"), ("OpenFactory", "OpenFactory"), ("NormalPqzToken", "NormalPqzToken"),
                       ("WrappedPqzToken", "WrappedPqzToken"), ("Mocks", "MockERC20"), ("MlDsa", "UAMldsaVerifier"),
                       ("UAPqzVerifier", "UAPqzVerifier")):
-        j = json.load(open(os.path.join(EVM, "out", src + ".sol", name + ".json")))
+        j = json.load(open(os.path.join(EVM, OUT_DIR, src + ".sol", name + ".json")))
         methods.update(j["methodIdentifiers"])
         events |= {f"{x['name']}({','.join(i['type'] for i in x['inputs'])})" for x in j["abi"] if x["type"] == "event"}
     return methods, events
@@ -1127,7 +1145,7 @@ def self_test():
 
 
 def main():
-    global RPC, SPLIT, ZERO_DEP, PROOF_STORE
+    global RPC, SPLIT, ZERO_DEP, PROOF_STORE, PROOF_PATH_ONLY
     ap = argparse.ArgumentParser()
     ap.add_argument("--rpc", default="http://127.0.0.1:8545")
     ap.add_argument("--log", default=os.path.join(EVM, "runs/2026-10-16-p6g-7622.txt"))
@@ -1138,6 +1156,9 @@ def main():
     ap.add_argument("--zero-dep", action="store_true",
                     help="PQZ releases on deps = [0x0], the PQZ tokens OFFCHAIN, the deployer EOA their verifier")
     ap.add_argument("--self-test", action="store_true", help="no chain: messages, registry args and calldata vs portable.json")
+    ap.add_argument("--proof-path-only", action="store_true", help="deploy, UAs, tokens, then the proof path (section 7) alone")
+    ap.add_argument("--skip-kind", type=int, action="append", default=[],
+                    help="a token kind whose release is not deployed here (logged as skipped; this run creates no token of it)")
     a = ap.parse_args()
     if a.self_test:
         try:
@@ -1147,6 +1168,8 @@ def main():
         log(f"self-test: {len(FAILS)} failure(s)")
         sys.exit(1 if FAILS else 0)
     RPC, SPLIT, ZERO_DEP = a.rpc, a.split, a.zero_dep
+    SKIP_KINDS.update(a.skip_kind)
+    PROOF_PATH_ONLY = a.proof_path_only
     PROOF_STORE = 1 if a.proof_store == "log" else 0
     kd, kr, ke = (int(x) for x in a.keys.split(","))
     try:
@@ -1240,6 +1263,9 @@ def run(kd, kr, ke):
     # `ComplianceRegistry` runtime's code hash (F-11); this run creates no regulated token (the regulated rows are the forge
     # suites test/as/confidential/Pqz*: a token naming a registry needs one deployed with COMPLIANCE_ADMIN, plan T33)
     for kind, name in RELEASES:
+        if kind in SKIP_KINDS:
+            log(f"SKIP  release of kind {kind} {name} (--skip-kind): no token of it in this run")
+            continue
         require_release_gas(name)
         code, libs = D.linked(name)
         hashes = [keccak256(bytes.fromhex(rpc("eth_getCode", [a, "latest"])[2:])) for a in libs]
@@ -1252,7 +1278,7 @@ def run(kd, kr, ke):
                     f"deployImplementation(kind {kind}, 1) {name}")
         lg = next(x for x in r["logs"] if x["address"].lower() == fac.lower() and len(x["topics"]) == 4)
         log(f"      {name} release at 0x{lg['topics'][3][-40:]} ({int(r['gasUsed'], 16):,} gas)")
-    for kind in [k for k, _ in RELEASES if k]:
+    for kind in [k for k, _ in RELEASES if k and k not in SKIP_KINDS]:
         sd.send(fac, cd("setKindEnabled(uint8,bool)", ["w", "w"], kind, 1), f"setKindEnabled({kind}, true)")
 
     # -------------------------------------------------------------- 2. UAs
@@ -1424,13 +1450,13 @@ def run(kd, kr, ke):
     # -------------------------------------------------------------- 3. tokens
     log("\n## 3. tokens")
 
-    def create(kind, name, sym, legs, dmode, amode, feat, supply=0, holder=0, conf=True, salt=b"p6g"):
+    def create(kind, name, sym, legs, dmode, amode, feat, supply=0, holder=0, conf=True, salt=b"p6g", issuer=0, store=None):
         aud_key = aud.ua if amode else b""
         # group 3f (AV-2): pqzVerifyMode, pqzVerifierUA, pqzVerifierFixed: PRECOMPILE (0, 0, false), or with --zero-dep
         # OFFCHAIN with the deployer EOA (a native id, its padded address) as a transferable verifier
         mode = [1, pad(sd.addr), 0] if ZERO_DEP else [0, 0, 0]
-        mode += [PROOF_STORE]  # group 3h T60: proofStore, NONE unless --proof-store log
-        c = [name, sym, 6, feat, 0, sd.addr, [sd.addr if feat & 2 else 0, 0, 0, 0, 0], supply, holder, legs, [0, 0],
+        mode += [PROOF_STORE if store is None else store]  # group 3h T60: proofStore, NONE unless --proof-store log
+        c = [name, sym, 6, feat, 0, sd.addr, [sd.addr if feat & 2 else 0, 0, 0, issuer, 0], supply, holder, legs, [0, 0],
              [aud_key, SCALE, MAXS, FEE, dmode, amode, MIN_DECOY] + mode if conf else [b""] + [0] * 10, 0, 0, 0, [0, 0, 0, 0, 0]]
         # plan 5g-Z2: initArgs = abi.encode(TokenConfig), opaque to the factory; the verifier is the release's
         data = cd("createToken(uint8,uint64,bytes,bytes32)", ["w", "w", "b", "w"], kind, 1, encs([CFG], [c]), kc(salt))
@@ -1449,6 +1475,10 @@ def run(kd, kr, ke):
     sd.send(tusd, cd("mint(address,uint256)", ["w", "w"], sd.addr, 10**12), "tUSD mint")
     t1 = create(4, "PQZ USD", "pqUSD", [], 0, 1, 1 | 2 | 4, salt=b"pq1")  # BUNDLE, FULL auditor, PAYABLE|MINTABLE|BURNABLE
     t2 = create(5, "PQZ wrapped tUSD", "pqW", [[tusd, 1, 1]], 1, 2, 1, salt=b"pq2")  # COMPACT, OPTIONAL
+    if PROOF_PATH_ONLY:  # group 3h T65: sections 1-3, then the proof path alone
+        proof_path(pq, sd, reg, create, U, aud, DEC, sk, tusd)
+        log(f"elapsed {time.time() - t0:.0f} s")
+        return
 
     # -------------------------------------------------------------- 4. the NORMAL_PQZ life cycle with real proofs
     log("\n## 4. NORMAL_PQZ (pqUSD: BUNDLE, auditor FULL): shield, transfer, rollover by count, hint, burn, refresh, disclosure")
@@ -1617,6 +1647,7 @@ def run(kd, kr, ke):
     restore(C2, "section 6b")
 
     rotation(pq, sd, reg, C1, dave, alice, sk)
+    proof_path(pq, sd, reg, create, U, aud, DEC, sk, tusd)
     log("\n## addresses")
     for k, v in {**D.libs, **D.addr}.items():
         log(f"      {k}: {v}")
@@ -1667,7 +1698,7 @@ def sent_ref(rc, tok, sigs):
     return bytes.fromhex(lg["topics"][1][2:])
 
 
-def transfer(pq, s, C, frm, to, ben, v, aud_on, what, binding=ZERO32, send=True, shield_in=0, signed=None):
+def transfer(pq, s, C, frm, to, ben, v, aud_on, what, binding=ZERO32, send=True, shield_in=0, signed=None, at=None):
     """A transfer at `p = pendingCount` (the client rule), `shieldIn` taken from the sender's public balance (D5/D18),
     proved over the token's own statement (a `(payload, binding)` view, T read from state); returns (receipt, calldata,
     bundle, (r, e1, e2)). The relayed binding is the envelope's: the view folds the mode itself (D15). `signed`: the named
@@ -1675,7 +1706,7 @@ def transfer(pq, s, C, frm, to, ben, v, aud_on, what, binding=ZERO32, send=True,
     tok = C.tok
     binding = signed.binding if signed else binding
     stt = C.state(frm)
-    p = stt["pendingCount"]
+    p = stt["pendingCount"] if at is None else at  # group 3h T65: `at` below `rolled` is an un-roll
     compact = int(call(tok, cd("disclosureMode()", [])), 16) == 1
     salt = os.urandom(16)
     sealed = os.urandom(2 + 40 * 1) if compact else b""  # op 7's encoding, M = 1 (CTR-PQZ-23); ponytail: body random (stored unread);
@@ -1749,14 +1780,14 @@ def multi_args(p, frm, ben, decoy, salt, uas, g, aud_on, out, sealed, kv=0):
     return [p, 10**9, 0, frm, kv, ben, decoy, salt + bytes(16), OWN_TAG, us, legs, out[o + vb * m:o + vb * (m + 1)], sealed]
 
 
-def transfer_multi(pq, s, C, frm, legs, ben, aud_on, what, signed=None):
+def transfer_multi(pq, s, C, frm, legs, ben, aud_on, what, signed=None, at=None):
     """An op 7 transfer (CTR-PQZ-26) at `p = pendingCount`, legs [(UA, amount)] (decoys: amount 0), proved over the
     token's own statement; header fee word `txFee + M · decoyFee` (the proof binds the decoyFee); returns (receipt,
     entryRef, bundle, enc). `signed` as in `transfer`."""
     tok = C.tok
     binding = signed.binding if signed else ZERO32
     stt = C.state(frm)
-    p = stt["pendingCount"]
+    p = stt["pendingCount"] if at is None else at  # group 3h T65: `at` below `rolled` is an un-roll
     m, g = len(legs), K.groups(len(legs), aud_on)  # R0-1: S_AUD legs per group with the auditor, 4 without
     compact = int(call(tok, cd("disclosureMode()", [])), 16) == 1
     salt = os.urandom(16)
@@ -1811,13 +1842,13 @@ def transfer_multi(pq, s, C, frm, legs, ben, aud_on, what, signed=None):
     return rc, ref, bundle, e
 
 
-def burn(pq, s, C, frm, amount, recipient, what, unwrap=None, signed=None):
+def burn(pq, s, C, frm, amount, recipient, what, unwrap=None, signed=None, at=None):
     """Burn / refresh. The recipient is a 32-byte id (UA-5c b): a native address is its zero-padded word. `signed` as in
     `transfer`."""
     tok = C.tok
     binding = signed.binding if signed else ZERO32
     stt = C.state(frm)
-    p = stt["pendingCount"]
+    p = stt["pendingCount"] if at is None else at  # group 3h T65: `at` below `rolled` is an un-roll
     rcp = W(recipient) if recipient else b"\0" * 32
     hdr = lambda out: [p, 10**9, 0, frm.ua, kv_of(frm), b"\0" * 32, OWN_TAG, out[:K.PK_BYTES], out[K.PK_BYTES:]]  # noqa: E731
     if unwrap:
@@ -1840,13 +1871,364 @@ def burn(pq, s, C, frm, amount, recipient, what, unwrap=None, signed=None):
     sv = verdict(tok, stmt, proof)
     log(f"      {what}: balance {b} → {rest}, p {p}, rolled {stt['rolled']}, hint {len(hint)} B, proof {len(proof):,} B")
     if signed:
-        signed.send("PqzUnshieldUnwrap" if unwrap else "PqzUnshield", [pl, x if unwrap else [amount, rcp], proof, auth, hint], f"{C.name} {what}", sv)
+        rc = signed.send("PqzUnshieldUnwrap" if unwrap else "PqzUnshield", [pl, x if unwrap else [amount, rcp], proof, auth, hint], f"{C.name} {what}", sv)
     elif unwrap:
-        s.send(tok, cd(API["unshieldUnwrap"], [BURN_T, UNWRAP] + AUTH_T + [SV_T], pl, x, proof, auth, hint, sv), f"{C.name} {what}")
+        rc = s.send(tok, cd(API["unshieldUnwrap"], [BURN_T, UNWRAP] + AUTH_T + [SV_T], pl, x, proof, auth, hint, sv), f"{C.name} {what}")
     else:
-        s.send(tok, cd(API["unshield"], [BURN_T, "w", "w"] + AUTH_T + [SV_T], pl, amount, rcp, proof, auth, hint, sv), f"{C.name} {what}")
+        rc = s.send(tok, cd(API["unshield"], [BURN_T, "w", "w"] + AUTH_T + [SV_T], pl, amount, rcp, proof, auth, hint, sv), f"{C.name} {what}")
     C.set_next(bal=[(frm, -amount)], acc={frm.ua: u + vs[0]}, total=-amount)
     C.commit()
+    return rc
+
+
+# ------------------------------------------------------------------ group 3h T65: the proof path, rebuilt from the interface
+
+PBITS = K.Q.bit_length()
+EV_PROOF = "0x" + kc("PqzDebitProof(address,bytes32,uint64,bytes,bytes)").hex()
+
+
+def psize(n):
+    """The packed size (P46) of an object of `n` 64-bit-lane bytes."""
+    return n // 8 * PBITS // 8
+
+
+def unpack(b, n):
+    """The inverse of `pack`: the first `psize(n)` bytes of `b` as `n` bytes of 64-bit lanes."""
+    c = n // 8
+    x = int.from_bytes(b[:psize(n)], "big")
+    m = (1 << PBITS) - 1
+    return b"".join(((x >> (PBITS * (c - 1 - i))) & m).to_bytes(8, "big") for i in range(c))
+
+
+def _dyn(t):
+    return t == "b" or (isinstance(t, tuple) and (t[0] == "a" or any(_dyn(x) for x in t[1])))
+
+
+def _size(t):
+    return 32 if t == "w" else sum(_size(x) for x in t[1])
+
+
+def adec(t, d, o=0):
+    """ABI-decode a value of type `t` (the encoder's descriptors: "w", "b", ("a", T), ("t", [...])) at `d[o:]`."""
+    if t == "w":
+        return d[o:o + 32]
+    if t == "b":
+        n = int.from_bytes(d[o:o + 32], "big")
+        return d[o + 32:o + 32 + n]
+    if t[0] == "a":
+        n, e, base = int.from_bytes(d[o:o + 32], "big"), t[1], o + 32
+        if _dyn(e):
+            return [adec(e, d, base + int.from_bytes(d[base + 32 * i:base + 32 * i + 32], "big")) for i in range(n)]
+        return [adec(e, d, base + _size(e) * i) for i in range(n)]
+    out, h = [], o
+    for x in t[1]:
+        out.append(adec(x, d, o + int.from_bytes(d[h:h + 32], "big")) if _dyn(x) else adec(x, d, h))
+        h += 32 if _dyn(x) else _size(x)
+    return out
+
+
+def arg(ts, d, i):
+    """Parameter `i` of calldata `d` (no selector) whose parameter types are `ts`: only that one is decoded."""
+    h = sum(32 if _dyn(x) else _size(x) for x in ts[:i])
+    return adec(ts[i], d, int.from_bytes(d[h:h + 32], "big") if _dyn(ts[i]) else h)
+
+
+def u_(w):
+    return int.from_bytes(w, "big")
+
+
+def debit_record(tok, ua, k):
+    """`pqzDebitRecord(ua, k)` (spec §2.2, §9.1) as a dict."""
+    w = words(call(tok, cd("pqzDebitRecord(bytes32,uint64)", ["w", "w"], ua, k)))
+    names = ["prevBlob", "p", "deltaP", "proofStore", "shieldIn", "keyVersion", "prevCounter", "hasPrev"]
+    r = dict(zip(names, (u_(x) for x in w)))
+    r["prevBlob"] = "0x" + w[0][12:].hex()
+    return r
+
+
+def data_of(addr):
+    """An SSTORE2 pointer's data: its code after the leading STOP."""
+    return bytes.fromhex(rpc("eth_getCode", [addr, "latest"])[2:])[1:]
+
+
+def key_code(ua, v):
+    """The PQZ key of `(ua, v)` from the registry (`pqzKeyAt`, spec §9.4)."""
+    return data_of("0x" + words(call(REG[0], cd("pqzKeyAt(bytes32,uint64)", ["w", "w"], ua, v)))[0][12:].hex())
+
+
+def r_len(d):
+    """`rOf`'s length of an op blob's data: before `P(v_f)` and the tail."""
+    return len(d) - (33 + 8 * d[-1]) - psize(K.V_BYTES)
+
+
+def acc_of(d):
+    """`(u, v_f)` of an op blob (PqzCore's `_uv`): a burn's `R` is `P(u')`, a transfer's `salt ‖ u ‖ …`; `v_f` follows `R`."""
+    r = r_len(d)
+    return unpack(d[0 if r == psize(K.PK_BYTES) else 16:], K.PK_BYTES) + unpack(d[r:], K.V_BYTES)
+
+
+def t_rebuild(tok, ua, r, shift=0, shield=None, version=None):
+    """`T_k` from the one record and state (spec §2.3): `prevBlob`'s `(u, v_f)` + `Σ pending[p − Δp, p)` + `Trivial(shieldIn)`.
+    The negatives move one input: `shift` the range's start, `shield` the plain term, `version` the pending entries' version."""
+    c = acc_of(data_of(r["prevBlob"])) if r["hasPrev"] else bytes(K.CT_BYTES)
+    v = r["keyVersion"] if version is None else version
+    for i in range(r["p"] - r["deltaP"] + shift, r["p"]):
+        c = K.ct_add(c, dec_bytes(call(tok, cd("pqzPendingCt(bytes32,uint64,uint64)", ["w", "w", "w"], ua, v, i))))
+    sin = r["shieldIn"] if shield is None else shield
+    return K.ct_add(c, K.trivial(K.digits(sin))) if sin else c
+
+
+# the direct entries' parameters (API) and the position of `proof` among them
+CALL_T = {"op1": [TRANSFER_T] + AUTH_T + [SV_T], "op7": [MULTI_T] + AUTH_T + [SV_T], "burn": [BURN_T, "w", "w"] + AUTH_T + [SV_T],
+          "unwrap": [BURN_T, UNWRAP] + AUTH_T + [SV_T]}
+PROOF_AT = {"op1": 1, "op7": 1, "burn": 3, "unwrap": 2}
+
+
+def calldata(txh):
+    return bytes.fromhex(rpc("eth_getTransactionByHash", [txh])["input"][10:])
+
+
+def proof_of(tok, ua, k, r, txh, form, want_log=None):
+    """P of debit `(ua, k)` (spec §9.5): under `LOG` its one `PqzDebitProof` (header, proof); under `NONE` the proof parameter of
+    the transaction's calldata (no header). `want_log` forces the lookup the record does not name (a negative)."""
+    if (r["proofStore"] == 1) if want_log is None else want_log:
+        logs = rpc("eth_getLogs", [{"address": tok, "fromBlock": "0x0", "toBlock": "latest",
+                                    "topics": [EV_PROOF, None, "0x" + ua.hex(), "0x" + k.to_bytes(32, "big").hex()]}])
+        if len(logs) != 1:
+            raise LookupError(f"{len(logs)} PqzDebitProof logs for ({ua.hex()[:8]}…, {k})")
+        h, pr = adec(("t", ["b", "b"]), bytes.fromhex(logs[0]["data"][2:]))
+        return h, pr
+    return None, arg(CALL_T[form], calldata(txh), PROOF_AT[form])
+
+
+def header_of(tok, ua, k, r, txh, form, aud, m):
+    """The 640 header bytes of debit `(ua, k)` rebuilt from its calldata (history), its record and the token (spec §9.4): the
+    parameters' words, `sendCounter` = k, the record's `p` and `shieldIn`, the token's psid, chain, registry, chainUid, fee;
+    the direct call's binding (a transfer: `keccak256(TAG_DIRECT_MODE, TransferMode)`, W-A; an unwrap: `unwrapBinding(
+    underlying, minOut)`, D12; a burn: 0); the memo empty (these tokens' memo mode 0: `memoHash = keccak256(ownTag)`)."""
+    d = calldata(txh)
+    x = arg(CALL_T[form], d, 0)
+    fee = u_(words(call(tok, cd("confidentialFee()", [])))[0])
+    if form in ("op1", "op7"):  # ZetherTypes.TransferMode: HASH (0) with a sealed memo or on a COMPACT token, else BUNDLE (1)
+        compact = u_(words(call(tok, cd("disclosureMode()", [])))[0]) == 1
+        mode = 0 if x[13 if form == "op1" else 12] or compact else 1
+        binding = kc(kc("SCAAS-PQZ-DIRECT-MODE-V1"), K.word(mode))
+    elif form == "unwrap":
+        xu = arg(CALL_T[form], d, 1)  # Unwrap(underlying, recipient, amount, minOut)
+        binding = kc(kc("SCAAS-PQZ-UNWRAP-V1"), xu[0], xu[3])
+    else:
+        binding = ZERO32
+    f = dict(proofSystemId=words(call(tok, cd("proofSystemId()", [])))[0], chainId=CTX[0], token=bytes.fromhex(tok[2:]),
+             registry=words(call(tok, cd("registry()", [])))[0][12:], fromUA=ua, sendCounter=k, p=r["p"],
+             validUntilBlock=u_(x[1]), plainUsed=r["shieldIn"], chainUid=CTX[1], envelopeBinding=binding)
+    if form == "op1":  # TRANSFER_F
+        f.update(toUA=x[5], beneficiaryUA=x[6], fee=fee if u_(x[6]) else 0, auditorOn=int(aud), salt=x[7][:16], memoHash=kc(x[8]))
+        return K.build_header("TRANSFER", f)
+    if form == "op7":  # MULTI_F
+        f.update(beneficiaryUA=x[5], fee=(fee if u_(x[5]) else 0) + m * u_(x[6]), salt=x[7][:16], memoHash=kc(x[8]),
+                 recipientsHash=K.recipients_hash([leg[0] for leg in x[10]]), M=m, auditorOn=int(aud), opTag=K.OP_TAG["TRANSFER-MULTI"])
+        return b"".join(K.word(f.get(n, 0)) for n in K.MULTI_HEADER)
+    amount, rcp = (u_(arg(CALL_T[form], d, 1)), arg(CALL_T[form], d, 2)) if form == "burn" else (u_(arg(CALL_T[form], d, 1)[2]),
+                                                                                                  arg(CALL_T[form], d, 1)[1])
+    f.update(beneficiaryUA=x[5], amount=amount, recipient=rcp, memoHash=kc(x[6]))  # BURN_F
+    return K.build_header("BURN" if amount else "REFRESH", f)
+
+
+def other_version(v):
+    return v + 1 if v == 0 else v - 1
+
+
+def rebuild(tok, d, neg=None):
+    """Debit `d` (`ua`, `k`, `tx`, `form`, `blob` data) rebuilt from the §9 interface alone and verified with pqz-ffi (the
+    precompile's word); `neg` applies one negative of spec §11.4. Returns (statement, proof, verified, record, ownTag)."""
+    ua, k, form = d["ua"], d["k"], d["form"]
+    r = debit_record(tok, ua, k)
+    hdr, proof = proof_of(tok, ua, k, r, d["tx"], form, (r["proofStore"] != 1) if neg == "mode-of-another-record" else None)
+    if neg == "P-of-another-debit":
+        proof = d["other_proof"]
+    blob = d["blob"]
+    _, tag, kv = tail_of(blob)
+    rl = r_len(blob)
+    vf = unpack(blob[rl:], K.V_BYTES)
+    pk_f = key_code(ua, r["keyVersion"])
+    if neg == "wrong-predecessor":
+        r = dict(r, prevBlob=d["other_blob"], hasPrev=1)
+    T = t_rebuild(tok, ua, r, shift=-1 if neg == "wrong-deltaP" else 0,
+                  shield=r["shieldIn"] + 1 if neg == "wrong-shieldIn" else None,
+                  version=other_version(r["keyVersion"]) if neg == "version-boundary" else None)
+    aud_ua = words(call(tok, cd("auditorUA()", [])))[0]
+    kvv = list(kv)
+    if neg == "wrong-historical-key-version":
+        kvv[0] = other_version(kvv[0])
+    pv, pp = psize(K.V_BYTES), psize(K.PK_BYTES)
+    if form == "op1":  # R = salt ‖ P(u ‖ v_t) ‖ [P(v_a)] ‖ toUA; kv = [receiver, (auditor)]
+        aud, m = len(kv) == 2, 1
+        u, vt = unpack(blob[16:], K.PK_BYTES), unpack(blob[16 + pp:], K.V_BYTES)
+        va = unpack(blob[16 + pp + pv:], K.V_BYTES) if aud else b""
+        av = other_version(kvv[1]) if aud and neg == "wrong-auditor-window" else (kvv[1] if aud else 0)
+        pk_a = key_code(aud_ua, av) if aud else b""
+        body = pk_f + key_code(blob[rl - 32:rl], kvv[0]) + pk_a + T + u + vt + vf + va
+    elif form == "op7":  # R = salt ‖ P(u_0..u_{G-1}) ‖ M × (P(v_j) ‖ [P(v_{a,j})] ‖ UA_j); kv = [legs…, (auditor)]
+        aud = m = None
+        for a in (1, 0):
+            mm = blob[-1] - a
+            if mm > 0 and 16 + pp * K.groups(mm, bool(a)) + (32 + pv * (1 + a)) * mm == rl:
+                aud, m = bool(a), mm
+                break
+        assert aud is not None, "op 7 blob: no (M, auditor) fits R"
+        g, ls = K.groups(m, aud), 32 + pv * (1 + int(aud))
+        us = [unpack(blob[16 + pp * i:], K.PK_BYTES) for i in range(g)]
+        base = 16 + pp * g
+        legs = [(blob[base + ls * j + ls - 32:base + ls * (j + 1)], unpack(blob[base + ls * j:], K.V_BYTES),
+                 unpack(blob[base + ls * j + pv:], K.V_BYTES) if aud else b"", kvv[j]) for j in range(m)]
+        if neg == "swapped-leg":
+            legs[0], legs[1] = legs[1], legs[0]
+        pk_a = key_code(aud_ua, kvv[m]) if aud else b""
+        body = (pk_f + b"".join(key_code(lg[0], lg[3]) for lg in legs) + pk_a + T + b"".join(us) + b"".join(lg[1] for lg in legs)
+                + vf + b"".join(lg[2] for lg in legs))
+    else:  # burn, refresh, unwrap: R = P(u')
+        aud, m = False, 0
+        body = pk_f + T + unpack(blob, K.PK_BYTES) + vf
+    if hdr is None:
+        hdr = header_of(tok, ua, k, r, d["tx"], form, aud, m)
+    stmt = hdr + body
+    ok = PQ_REF[0].prover.ask(f"verify {OP_OF[form]} {stmt.hex()} {proof.hex()}").endswith("01")
+    return stmt, proof, ok, r, tag, (aud, m)
+
+
+OP_OF = {"op1": 1, "op7": 7, "burn": 2, "unwrap": 2}
+PQ_REF = [None]
+
+
+def proof_path(pq, sd, reg, create, U, aud, DEC, sk, tusd):
+    """Group 3h T65 (spec §11.4): real proofs on this local chain under NONE, LOG and NONE again; then every debit's statement rebuilt
+    from the §9 interface alone (record, pending, blob with kv, keys by version, P from the log or the calldata) and verified with
+    pqz-ffi, equal to the statement proven (the positive control); then the negatives, one at a time, each must fail the verification
+    or the lookup."""
+    global OWN_TAG
+    log("\n## 7. the proof path (group 3h T65): debits under NONE, LOG, NONE; each rebuilt from the interface and verified")
+    PQ_REF[0] = pq
+    alice, bob, carol = U["alice"], U["bob"], U["carol"]
+    t3 = create(4, "PQZ proof path", "pqPP", [], 0, 2, 1 | 2 | 4 | (1 << 24), salt=b"pq3", issuer=sd.addr)  # OPTIONAL auditor, bit 24
+    C = Client(t3, "pqPP")
+    sd.send(t3, cd("mint(address,uint256)", ["w", "w"], sd.addr, 10_000 * SCALE), "pqPP mint 10,000 public")
+    for u, v in ((alice, 600), (bob, 200), (carol, 100)):
+        sd.send(t3, cd(API["shield"], ["w", "w"], u.ua, v), f"pqPP mtxShield({u.name}, {v})")
+        C.set_next(bal=[(u, v)], total=v)
+        C.commit()
+    D_ = []
+
+    def tag(label):
+        global OWN_TAG
+        OWN_TAG = kc("T65 ownTag " + label)  # ponytail: a distinct tag per debit; the contract checks no value (PP-3 is the client's)
+
+    def note(form, frm, rc, label, ref=None, tok=None, Cx=None):
+        tok = tok or t3
+        D_.append(dict(label=label, form=form, ua=frm.ua, k=(Cx or C).state(frm, 0)["sendCounter"] - 1, tx=rc["transactionHash"],
+                       tok=tok, tag=OWN_TAG, proven=PROVEN[-1],
+                       blob=dec_bytes(call(tok, cd("pqzEntryBlob(bytes32)", ["w"], ref))) if ref else None))
+
+    tag("d1")
+    rc, ref, _, _ = transfer(pq, sd, C, alice, bob, ZERO32, 50, True, "NONE: op 1 alice→bob 50, auditor on")
+    note("op1", alice, rc, "d1 op 1 auditor on, NONE", ref)
+    rollover(sd, C, bob, 1, "bob's credit")
+    tag("d2")
+    rc, ref, _, _ = transfer(pq, sd, C, bob, carol, ZERO32, 20, False, "NONE: op 1 bob→carol 20, auditor off, after a rollover")
+    note("op1", bob, rc, "d2 op 1 auditor off, NONE", ref)
+    for v in (3, 4, 5):
+        wait_block(int(rpc("eth_blockNumber"), 16) + 1)
+        sd.send(t3, cd(API["shield"], ["w", "w"], alice.ua, v), f"pqPP mtxShield(alice, {v}), a block of its own")
+        C.set_next(bal=[(alice, v)], total=v)
+        C.commit()
+    rollover(sd, C, alice, 2, "two of alice's three entries")
+    carol1 = rotate(pq, sd, reg, C, carol, sk, "pqz-carol-v1")  # a receiver, a leg, then a sender (the migration)
+    rotate(pq, sd, reg, C, aud, sk, "pqz-aud-v1")  # the auditor: every later auditor copy at version 1
+    sd.send(t3, cd("setProofStore(uint8)", ["w"], 1), "pqPP setProofStore(LOG): the deployer holds bit 24")
+    check(u_(words(call(t3, cd("proofStore()", [])))[0]) == 1, "pqPP proofStore() = LOG")
+    tag("d3")
+    st = C.state(alice)
+    rc, ref, _, _ = transfer_multi(pq, sd, C, alice, [(carol1, 10), (bob, 5), (DEC[0], 0), (DEC[1], 0)], ZERO32, True,
+                                   f"LOG: op 7 M = 4 alice→[carol/v1 10, bob 5, two decoys], auditor/v1 on, p = rolled − 1 = "
+                                   f"{st['rolled'] - 1} (an un-roll)", at=st["rolled"] - 1)
+    note("op7", alice, rc, "d3 op 7 M = 4 auditor on, rotated leg, un-roll, LOG", ref)
+    tag("d4")
+    rc = burn(pq, sd, C, alice, 20, sd.addr, "LOG: burn alice 20 → deployer")
+    note("burn", alice, rc, "d4 burn 20, LOG")
+    tag("d5")
+    rc = burn(pq, sd, C, alice, 0, None, "LOG: refresh alice")
+    note("burn", alice, rc, "d5 refresh, LOG")
+    tag("d6")
+    rc, ref, _, _ = transfer(pq, sd, C, alice, carol1, ZERO32, 7, True, "LOG: op 1 alice→carol/v1 7, auditor/v1 on")
+    note("op1", alice, rc, "d6 op 1 to a rotated receiver, rotated auditor, LOG", ref)
+    sd.send(t3, cd("setProofStore(uint8)", ["w"], 0), "pqPP setProofStore(NONE)")
+    tag("d7")
+    rc, ref, _, _ = transfer(pq, sd, C, carol, carol1, ZERO32, 30, False, "NONE: the migration, op 1 from (carol, 0) to carol/v1")
+    note("op1", carol, rc, "d7 migration of a rotated sender, NONE", ref)
+    t4 = create(5, "PQZ proof path wrapped", "pqPW", [[tusd, 1, 1]], 0, 2, 1, salt=b"pq4", store=1)  # kind 5, created under LOG
+    C4 = Client(t4, "pqPW")
+    sd.send(tusd, cd("approve(address,uint256)", ["w", "w"], t4, 10**12), "tUSD approve pqPW")
+    sd.send(t4, cd(API["wrapShield"], ["w", "w", "w"], tusd, 100 * SCALE, alice.ua), "mtxWrapShield(tUSD 100, alice) into pqPW")
+    C4.set_next(bal=[(alice, 100)], total=100)
+    C4.commit()
+    tag("d8")
+    rc = burn(pq, sd, C4, alice, 30, sd.addr, "LOG: unshield-unwrap alice 30 → deployer in tUSD (kind 5)", unwrap=(tusd, 30 * SCALE))
+    note("unwrap", alice, rc, "d8 unwrap 30, kind 5, LOG", tok=t4, Cx=C4)
+    # a burn's op blob (spec §9.4): the next same-version debit's prevBlob, else the account's accBlob
+    for i, d in enumerate(D_):
+        if d["blob"] is None:
+            nxt = next((e for e in D_[i + 1:] if e["ua"] == d["ua"] and e["tok"] == d["tok"]), None)
+            ptr = debit_record(d["tok"], d["ua"], nxt["k"])["prevBlob"] if nxt else "0x" + words(call(d["tok"], cd(
+                "pqzAccount(bytes32,uint64)", ["w", "w"], d["ua"], 0)))[ACCT.index("accBlob")][12:].hex()
+            d["blob"] = data_of(ptr)
+    log("\n   the reference rebuild (spec §9.4, §9.5), the positive control")
+    for d in D_:
+        try:
+            stmt, proof, ok, r, tg, (a, m) = rebuild(d["tok"], d)
+        except Exception as e:  # a harness error on one debit is a failed check, the others still run
+            check(False, f"{d['label']}: the rebuild raised {type(e).__name__}: {str(e)[:120]}")
+            continue
+        _, pst, ppr = d["proven"]
+        off = [K.HEADER[i] for i in range(20) if stmt[32 * i:32 * i + 32] != pst[32 * i:32 * i + 32]]
+        check(stmt == pst and proof == ppr and ok and tg == d["tag"],
+              f"{d['label']}: rebuilt = the proven statement ({len(stmt):,} B; header words off {off}; body "
+              f"{'=' if stmt[640:] == pst[640:] else '≠'}), P from {'the log' if r['proofStore'] else 'the calldata'}, record "
+              f"(p {r['p']}, Δp {r['deltaP']}, shieldIn {r['shieldIn']}, keyVersion {r['keyVersion']}, hasPrev {r['hasPrev']}), "
+              f"pqz-ffi verify = {int(ok)}, ownTag in the blob")
+        if r["proofStore"] == 1:
+            check(header_of(d["tok"], d["ua"], d["k"], r, d["tx"], d["form"], a, m) == stmt[:640],
+                  f"{d['label']}: the header rebuilt from the calldata = the logged header")
+    log("\n   the negatives (spec §11.4), one at a time: each must fail the verification or the lookup")
+    pick = {"wrong-historical-key-version": "d6", "swapped-leg": "d3", "wrong-auditor-window": "d6", "wrong-shieldIn": "d2",
+            "wrong-predecessor": "d5", "wrong-deltaP": "d4", "version-boundary": "d7", "P-of-another-debit": "d1",
+            "mode-of-another-record": "d1"}
+    for neg, lab in pick.items():
+        # P of d2 for "P of another debit"; d3's predecessor (d1's blob) in place of d5's (d4's) for "wrong predecessor"
+        d = dict(next(e for e in D_ if e["label"].startswith(lab)), other_proof=D_[1]["proven"][2],
+                 other_blob=debit_record(t3, alice.ua, D_[2]["k"])["prevBlob"])
+        try:
+            _, _, ok, _, _, _ = rebuild(d["tok"], d, neg)
+            check(not ok, f"negative {neg} on {d['label']}: pqz-ffi verify = 0")
+        except (LookupError, RuntimeError) as e:
+            check(True, f"negative {neg} on {d['label']}: the lookup fails ({type(e).__name__}: {str(e)[:90]})")
+        except Exception as e:  # a harness error is no negative result
+            check(False, f"negative {neg} on {d['label']}: the rebuild raised {type(e).__name__}: {str(e)[:120]}")
+
+
+def rotate(pq, s, reg, C, u, sk, label):
+    """Version `kv + 1` of `u`, as `rotation` does for dave: a fresh key, `setPqzKey` signed over typed `UAPqzKeyVersionRecord`,
+    `storePqzPop` with `R_REG` over typed `UAPqzKeyVersion`; the client reads the new version from then on."""
+    v = kv_of(u) + 1
+    pk1, s1, e1, _ = K.keygen(sk(label))
+    proof = pq.prove(3, K.build_register(portable("keyverreg", ua=u.ua, pqzKey=pk1, version=v), pk1), K.i8(s1) + K.i16(e1))
+    ph = kc(proof)
+    sig = pq.ml_sign(65, u.seed, kc(TAG[MLDSA65], portable("keyverrec", kind=MLDSA65, ua=u.ua, pqzKey=pk1, pqzPopHash=ph, version=v)))
+    s.send(reg, cd(SET_PQZ, SET_PQZ_T, u.ua, v, pk1, ph, [b"", sig, []]), f"setPqzKey {u.name} version {v}")
+    s.send(reg, cd("storePqzPop(bytes32,uint64,bytes)", ["w", "w", "b"], u.ua, v, proof), f"storePqzPop {u.name} version {v}")
+    check(u_(words(call(reg, cd("pqzKeyOf(bytes32)", ["w"], u.ua)))[0]) == v, f"{u.name} pqzKeyOf: version {v} current")
+    u1 = UA(**{**u.__dict__, "pk": pk1, "s": s1, "e": e1, "kv": v, "name": f"{u.name}/v{v}"})
+    u1.prior = {**getattr(u, "prior", {}), kv_of(u): u}
+    C.uas[u.ua] = u1
+    return u1
 
 
 REG = [None]
