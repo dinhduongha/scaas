@@ -271,7 +271,9 @@ contract UADeployTest is Test {
         assertEq(lib, vm.parseJsonUint(base, ".UARegistryCoreLib") * 1530 + 16_777_216);
         assertEq(key, vm.parseJsonUint(base, ".UARegistryAuxLib") * 1530 + 16_777_216);
         assertLt(need, lib);
-        assertLt(need, key);
+        // T66b 3.1c / 3.1d (owner): the Aux library (20,192 B) is below the registry (28,165 B), so its gate is implied by the
+        // registry's, checked first (was `need < key` while the library was the larger)
+        assertLt(key, need);
         _refused(h, need - 1, need, "UARegistry");
         _refused(h, need, lib, "UARegistryCoreLib");
         if (key > lib) _refused(h, lib, key, "UARegistryAuxLib");

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {kindModuleNames, kindImplArgs} from "../../script/KindModules.sol";
+import {ImplArgs} from "../../src/metatx/ITokenModule.sol";
 import {Test, Vm} from "forge-std/Test.sol";
 import {SmartKeyAccountFactory} from "../../src/account/SmartKeyAccountFactory.sol";
 import {GovernanceRouter} from "../../src/governance/GovernanceRouter.sol";
@@ -70,8 +72,8 @@ contract T66bDeployGasTest is Test {
     T66bCreate2Probe probe;
     uint256 salt;
 
-    function _m(string memory name, bytes memory code) internal {
-        address a = probe.deploy(code, bytes32(++salt));
+    function _m(string memory name, bytes memory code) internal returns (address a) {
+        a = probe.deploy(code, bytes32(++salt));
         Vm.Gas memory g = vm.lastCallGas();
         assertTrue(a != address(0), name);
         _line(name, a.code.length, code, g.gasTotalUsed * 64 / 63, uint256(int256(g.gasStateUsed)));
@@ -84,8 +86,22 @@ contract T66bDeployGasTest is Test {
         emit log(string.concat(s, regular * 105 / 100 < 1 << 24 ? "yes" : "NO"));
     }
 
-    function _rel(bytes memory code, IOpenFactory.TokenKind kind) internal view returns (bytes memory) {
-        return abi.encodePacked(code, abi.encode(address(this), uint8(kind) >= 8 ? regArgs() : bytes("")));
+    /// T66b §4.5: the kind's body modules first (each its own transaction, a row each), then the release naming them.
+    function _rel(bytes memory code, IOpenFactory.TokenKind kind) internal returns (bytes memory) {
+        bytes memory core = uint8(kind) >= 8 ? regArgs() : bytes("");
+        string[] memory n = kindModuleNames(uint8(kind));
+        address[] memory ms = new address[](n.length);
+        for (uint256 i; i < n.length; ++i) {
+            ms[i] = _m(vm.split(n[i], ":")[1], bytes.concat(vm.getCode(n[i]), abi.encode(address(this), core)));
+        }
+        return abi.encodePacked(code, abi.encode(address(this), kindImplArgs(uint8(kind), ms, core)));
+    }
+
+    /// The DEX's admin module D (its own transaction), then the DEX release naming it.
+    function _dex() internal returns (bytes memory) {
+        address[] memory ms = new address[](1);
+        ms[0] = _m("SCaaSDexD", bytes.concat(vm.getCode("SCaaSDexAdmin.sol:SCaaSDexD"), abi.encode(address(this), bytes(""))));
+        return abi.encodePacked(type(SCaaSDex).creationCode, abi.encode(address(this), abi.encode(ImplArgs(ms))));
     }
 
     function test_t66bDeployGas() public {
@@ -108,7 +124,7 @@ contract T66bDeployGasTest is Test {
             _rel(type(NormalPqzRegulatedToken).creationCode, IOpenFactory.TokenKind.NORMAL_PQZ_REGULATED));
         _m("WrappedPqzRegulatedToken",
             _rel(type(WrappedPqzRegulatedToken).creationCode, IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED));
-        _m("SCaaSDex", abi.encodePacked(type(SCaaSDex).creationCode, abi.encode(address(this), bytes(""))));
+        _m("SCaaSDex", _dex());
         // the chain's own contracts
         _m("GovernanceRouter", abi.encodePacked(type(GovernanceRouter).creationCode, abi.encode(UID, address(this), ska, false)));
         _m("OpenFactory", abi.encodePacked(type(OpenFactory).creationCode, abi.encode(address(this))));
@@ -167,10 +183,12 @@ contract T66bDeployGasTest is Test {
         DeployHarness h = new DeployHarness();
         (OpenFactory f,) = h.deploy(ZUID, false, ska);
         bytes memory code = type(NormalToken).creationCode;
-        probe.deploy(abi.encodePacked(code, abi.encode(address(f), bytes(""))), bytes32(uint256(7)));
+        // T66b: version 2 names version 1's body modules, pinned in env 1 by DeployBase
+        bytes memory args = abi.encode(ImplArgs(NormalToken(f.implementationOf(IOpenFactory.TokenKind.NORMAL, 1)).modules()));
+        probe.deploy(abi.encodePacked(code, abi.encode(address(f), args)), bytes32(uint256(7)));
         Vm.Gas memory p = vm.lastCallGas();
         vm.prank(address(h));
-        f.deployImplementation(IOpenFactory.TokenKind.NORMAL, 2, 1, code, "");
+        f.deployImplementation(IOpenFactory.TokenKind.NORMAL, 2, 1, code, args);
         Vm.Gas memory r = vm.lastCallGas();
         uint256 pr = p.gasTotalUsed * 64 / 63;
         uint256 rr = r.gasTotalUsed * 64 / 63;

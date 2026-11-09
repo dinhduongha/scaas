@@ -23,7 +23,7 @@ import {UARegistryCoreLib} from "../../src/ua/UARegistryCoreLib.sol";
 import {UARegistryAuxLib} from "../../src/ua/UARegistryAuxLib.sol";
 import {RegulatedLib} from "../../src/regulated/RegulatedLib.sol";
 import {ComplianceRegistry} from "../../src/regulated/ComplianceRegistry.sol";
-import {deployKindModules, deployDexModules} from "../../script/KindModules.sol";
+import {deployKindModules, deployDexModules, kindModuleNames, kindImplArgs} from "../../script/KindModules.sol";
 import {ImplArgs} from "../../src/metatx/ITokenModule.sol";
 
 /// @notice A regulated release's `implArgs` (regulated-kinds spec §5, F-11; plan T29): the canonical `ComplianceRegistry`
@@ -67,8 +67,9 @@ function instanceEnv(IFactoryToken.Env memory e, bytes32 uid, address govRouter)
     return IFactoryToken.ChainEnv(uid, e.registry, govRouter, e.smartKeyAccountImpl, e.hedera, e.deps, e.params);
 }
 
-/// @notice The transitive link closure of `kind`'s implementation (metatx-split §4, R5), each library with its code
-///         hash. Checked against the artifacts' `linkReferences` by `LinkClosure.t.sol`.
+/// @notice The transitive link closure of `kind`'s release (metatx-split §4, R5; T66b §4.5: the implementation's link
+///         references and each body module's, recursively; the modules themselves are pinned by `withModules`), each
+///         library with its code hash. Checked against the artifacts' `linkReferences` by `LinkClosure.t.sol`.
 function closureLibs(IOpenFactory.TokenKind kind) view returns (address[] memory l) {
     if (uint8(kind) >= 8) { // a regulated kind 8-13: its base kind's closure and `RegulatedLib` (regulated-kinds spec §6.1)
         address[] memory base = closureLibs(IOpenFactory.TokenKind(uint8(kind) - 8));
@@ -83,9 +84,10 @@ function closureLibs(IOpenFactory.TokenKind kind) view returns (address[] memory
     bool pqz = kind == IOpenFactory.TokenKind.NORMAL_PQZ || kind == IOpenFactory.TokenKind.WRAPPED_PQZ;
     bool zwr = kind == IOpenFactory.TokenKind.WRAPPED_ZETHER;
     bool pwr = kind == IOpenFactory.TokenKind.WRAPPED_PQZ;
-    l = new address[](4 + (und ? 1 : 0) + (zth ? 1 : 0) + (zwr ? 1 : 0) + (pqz ? 4 : 0) + (pwr ? 1 : 0));
-    (l[0], l[1], l[2], l[3]) = (address(GovernanceLib), address(HederaLib), address(TradeLib), address(MtxPipelineLib));
-    uint256 n = 4;
+    // T66b: the face and its body modules; `TradeLib` is no longer in it (module T compiles its code in, rule 4)
+    l = new address[](3 + (und ? 1 : 0) + (zth ? 1 : 0) + (zwr ? 1 : 0) + (pqz ? 4 : 0) + (pwr ? 1 : 0));
+    (l[0], l[1], l[2]) = (address(GovernanceLib), address(HederaLib), address(MtxPipelineLib));
+    uint256 n = 3;
     if (und) l[n++] = address(WrappedLib);
     if (zth) l[n++] = address(ZetherLib);
     if (zwr) l[n++] = address(ZetherWrappedLib);
@@ -202,7 +204,28 @@ library Catalogue {
     function predict(OpenFactory f, IOpenFactory.TokenKind kind, uint64 version, bytes memory code)
         internal pure returns (address)
     {
+        return predict(f, kind, version, code, "");
+    }
+
+    /// @dev As above with the release's `implArgs` (T66b: a token kind's body modules).
+    function predict(OpenFactory f, IOpenFactory.TokenKind kind, uint64 version, bytes memory code, bytes memory implArgs)
+        internal pure returns (address)
+    {
         return vm.computeCreate2Address(keccak256(abi.encode(kind, version)),
-            keccak256(bytes.concat(code, abi.encode(address(f), bytes("")))), address(f));
+            keccak256(bytes.concat(code, abi.encode(address(f), implArgs))), address(f));
+    }
+
+    /// @dev T66b: the body modules env `v` of `kind` pins (its last libs, as `release` appends them).
+    function modulesOn(OpenFactory f, IOpenFactory.TokenKind kind, uint16 v) internal view returns (address[] memory ms) {
+        address[] memory l = f.envOf(kind, v).libs;
+        ms = new address[](kindModuleNames(uint8(kind)).length);
+        for (uint256 i; i < ms.length; ++i) ms[i] = l[l.length - ms.length + i];
+    }
+
+    /// @dev T66b: the `implArgs` of a further release of `kind` on the modules env `v` pins (`coreArgs` "" or `regArgs()`).
+    function argsOn(OpenFactory f, IOpenFactory.TokenKind kind, uint16 v, bytes memory coreArgs)
+        internal view returns (bytes memory)
+    {
+        return kindImplArgs(uint8(kind), modulesOn(f, kind, v), coreArgs);
     }
 }

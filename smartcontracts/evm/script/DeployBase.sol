@@ -54,6 +54,8 @@ import {UAMldsaVerifier} from "../src/ua/MlDsa.sol";
 import {UAFndsaVerifier} from "../src/ua/FnDsa.sol";
 import {UASlhdsaVerifier} from "../src/ua/SlhDsa.sol";
 import {UAPrecompileProbe} from "./UAPrecompileProbe.sol";
+import {kindModuleNames, kindImplArgs} from "./KindModules.sol";
+import {ImplArgs} from "../src/metatx/ITokenModule.sol";
 import {ZetherDisclosure} from "../src/zether/ZetherDisclosure.sol";
 import {ZetherStatements} from "../src/zether/ZetherStatements.sol";
 import {
@@ -361,25 +363,29 @@ abstract contract DeployBase is Script {
         if (register) _configureChain(f, registrar);
         vm.serializeAddress("deploy", "token_factory", address(f));
         if (register && !configureOnly) {
-            // the link closure of NormalToken (task 6): MtxPipelineLib, which links HederaLib
-            address[] memory libs = new address[](4);
-            (libs[0], libs[1], libs[2], libs[3]) =
-                (address(GovernanceLib), address(HederaLib), address(TradeLib), address(MtxPipelineLib));
-            f.publishEnv(IOpenFactory.TokenKind.NORMAL, 1,
-                _env(f, address(reg), smartKeyAccountImpl, isHedera, new address[](0), libs));
+            // the link closure of NormalToken's release (task 6; T66b §4.5: its body modules' link references): MtxPipelineLib,
+            // which links HederaLib, and GovernanceLib (TradeLib's code is compiled into the module T)
+            address[] memory libs = new address[](3);
+            (libs[0], libs[1], libs[2]) = (address(GovernanceLib), address(HederaLib), address(MtxPipelineLib));
             _libRows(libs);
-            address none = _release(f, IOpenFactory.TokenKind.NORMAL, "NormalToken", type(NormalToken).creationCode);
+            address none = _kindRelease(f, IOpenFactory.TokenKind.NORMAL, "NormalToken", type(NormalToken).creationCode, "",
+                _env(f, address(reg), smartKeyAccountImpl, isHedera, new address[](0), libs));
             _gateInstance(f, none, f.envOf(IOpenFactory.TokenKind.NORMAL, 1)); // one instance's chainUid (§6.2)
             vm.serializeAddress("deploy", "implementation_normal", none);
             // The DEX release (CTR-DEX-24): clones come from `createDex`; DEX version 1.
             address[] memory dexLibs = new address[](2);
             (dexLibs[0], dexLibs[1]) = (address(GovernanceLib), address(TradeLib));
-            f.publishDexEnv(1, _env(f, address(0), smartKeyAccountImpl, isHedera, new address[](0), dexLibs));
+            // T66b §4.2: the DEX's admin module D first, pinned in the DEX env beside the libraries, named in `implArgs`
+            address[] memory dexModules = new address[](1);
+            dexModules[0] = _module("SCaaSDexAdmin.sol:SCaaSDexD", abi.encode(address(f), bytes("")), 0);
+            bytes memory dexArgs = abi.encode(ImplArgs(dexModules));
+            f.publishDexEnv(1, _withModules(_env(f, address(0), smartKeyAccountImpl, isHedera, new address[](0), dexLibs),
+                dexModules));
             bytes memory dexCode = type(SCaaSDex).creationCode;
-            _requireReleaseGas("SCaaSDex", address(f), abi.encodeCall(f.deployDexImplementation, (1, 1, dexCode, "")));
-            address dexImpl = f.deployDexImplementation(1, 1, dexCode, "");
-            _releaseRow("SCaaSDex", 2, 0, 1, dexImpl, keccak256(abi.encodePacked(dexCode, abi.encode(address(f), ""))),
-                keccak256(""));
+            _requireReleaseGas("SCaaSDex", address(f), abi.encodeCall(f.deployDexImplementation, (1, 1, dexCode, dexArgs)));
+            address dexImpl = f.deployDexImplementation(1, 1, dexCode, dexArgs);
+            _releaseRow("SCaaSDex", 2, 0, 1, dexImpl, keccak256(abi.encodePacked(dexCode, abi.encode(address(f), dexArgs))),
+                keccak256(dexArgs));
             vm.serializeAddress("deploy", "dex_implementation", dexImpl);
         }
         if (deployWrapped && register && !configureOnly) _deployWrapped(f, address(reg), smartKeyAccountImpl, isHedera);
@@ -393,11 +399,11 @@ abstract contract DeployBase is Script {
     ///         router), the release, version 1, refused first by `_requireReleaseGas`; the kind is on from the factory's start.
     ///         JSON `implementation_wrapped`. The release is above EIP-170: `CHAIN_CODE_LIMIT` must hold it.
     function _deployWrapped(OpenFactory f, address reg, address smartKeyAccountImpl, bool isHedera) internal {
-        address[] memory libs = new address[](5);
-        (libs[0], libs[1], libs[2], libs[3], libs[4]) =
-            (address(GovernanceLib), address(HederaLib), address(TradeLib), address(MtxPipelineLib), address(WrappedLib));
-        f.publishEnv(IOpenFactory.TokenKind.WRAPPED, 1, _env(f, reg, smartKeyAccountImpl, isHedera, new address[](0), libs));
-        address w = _release(f, IOpenFactory.TokenKind.WRAPPED, "WrappedToken", type(WrappedToken).creationCode);
+        address[] memory libs = new address[](4);
+        (libs[0], libs[1], libs[2], libs[3]) =
+            (address(GovernanceLib), address(HederaLib), address(MtxPipelineLib), address(WrappedLib));
+        address w = _kindRelease(f, IOpenFactory.TokenKind.WRAPPED, "WrappedToken", type(WrappedToken).creationCode, "",
+            _env(f, reg, smartKeyAccountImpl, isHedera, new address[](0), libs));
         vm.serializeAddress("deploy", "implementation_wrapped", w);
     }
 
@@ -410,22 +416,18 @@ abstract contract DeployBase is Script {
     ///         the canonical `ComplianceRegistry` runtime's code hash (spec §5, F-11; plan T29): a token naming a registry of
     ///         other code is refused at init. The registry itself: `_deployComplianceRegistry` (plan T33).
     function _deployRegulated(OpenFactory f, address reg, address smartKeyAccountImpl, bool isHedera) internal {
-        address[] memory libs = new address[](5);
-        (libs[0], libs[1], libs[2], libs[3], libs[4]) =
-            (address(GovernanceLib), address(HederaLib), address(TradeLib), address(MtxPipelineLib), address(RegulatedLib));
-        f.publishEnv(IOpenFactory.TokenKind.NORMAL_REGULATED, 1,
-            _env(f, reg, smartKeyAccountImpl, isHedera, new address[](0), libs));
-        bytes memory implArgs = abi.encode(_registryCodehash());
-        address n = _release(f, IOpenFactory.TokenKind.NORMAL_REGULATED, "NormalRegulatedToken",
-            type(NormalRegulatedToken).creationCode, implArgs);
+        address[] memory libs = new address[](4);
+        (libs[0], libs[1], libs[2], libs[3]) =
+            (address(GovernanceLib), address(HederaLib), address(MtxPipelineLib), address(RegulatedLib));
+        bytes memory coreArgs = abi.encode(_registryCodehash());
+        address n = _kindRelease(f, IOpenFactory.TokenKind.NORMAL_REGULATED, "NormalRegulatedToken",
+            type(NormalRegulatedToken).creationCode, coreArgs, _env(f, reg, smartKeyAccountImpl, isHedera, new address[](0), libs));
         vm.serializeAddress("deploy", "implementation_normal_regulated", n);
-        libs = new address[](6);
-        (libs[0], libs[1], libs[2], libs[3], libs[4], libs[5]) = (address(GovernanceLib), address(HederaLib),
-            address(TradeLib), address(MtxPipelineLib), address(WrappedLib), address(RegulatedLib));
-        f.publishEnv(IOpenFactory.TokenKind.WRAPPED_REGULATED, 1,
-            _env(f, reg, smartKeyAccountImpl, isHedera, new address[](0), libs));
-        address w = _release(f, IOpenFactory.TokenKind.WRAPPED_REGULATED, "WrappedRegulatedToken",
-            type(WrappedRegulatedToken).creationCode, implArgs);
+        libs = new address[](5);
+        (libs[0], libs[1], libs[2], libs[3], libs[4]) = (address(GovernanceLib), address(HederaLib),
+            address(MtxPipelineLib), address(WrappedLib), address(RegulatedLib));
+        address w = _kindRelease(f, IOpenFactory.TokenKind.WRAPPED_REGULATED, "WrappedRegulatedToken",
+            type(WrappedRegulatedToken).creationCode, coreArgs, _env(f, reg, smartKeyAccountImpl, isHedera, new address[](0), libs));
         vm.serializeAddress("deploy", "implementation_wrapped_regulated", w);
         f.setKindEnabled(IOpenFactory.TokenKind.NORMAL_REGULATED, true);
         f.setKindEnabled(IOpenFactory.TokenKind.WRAPPED_REGULATED, true);
@@ -470,14 +472,8 @@ abstract contract DeployBase is Script {
         vm.serializeAddress("deploy", "governance_router", govRouter);
     }
 
-    /// @notice The factory's release of `kind`, version 1 on env 1, after its gate (`_requireReleaseGas`).
-    function _release(OpenFactory f, IOpenFactory.TokenKind kind, string memory name, bytes memory code)
-        internal returns (address)
-    {
-        return _release(f, kind, name, code, "");
-    }
-
-    /// @notice As above with the release's `implArgs` (a regulated kind's `REGISTRY_CODEHASH`).
+    /// @notice The factory's release of `kind`, version 1 on env 1, with its `implArgs` (T66b: `kindImplArgs`), after its gate
+    ///         (`_requireReleaseGas`).
     function _release(OpenFactory f, IOpenFactory.TokenKind kind, string memory name, bytes memory code,
         bytes memory implArgs) internal returns (address)
     {
@@ -486,6 +482,46 @@ abstract contract DeployBase is Script {
         _releaseRow(name, 1, uint8(kind), 1, at, keccak256(abi.encodePacked(code, abi.encode(address(f), implArgs))),
             keccak256(implArgs));
         return at;
+    }
+
+    /// @notice T66b §4.5: `kind`'s body modules (`_modules`, with the kind's own constructor arguments `coreArgs`: "" on 0-5,
+    ///         `abi.encode(REGISTRY_CODEHASH)` on 8-13), env version 1 of `kind` = `e` with the modules pinned beside its
+    ///         libraries, then the release, version 1, its `implArgs` naming the modules (`kindImplArgs`).
+    function _kindRelease(OpenFactory f, IOpenFactory.TokenKind kind, string memory name, bytes memory code,
+        bytes memory coreArgs, IFactoryToken.Env memory e) internal returns (address)
+    {
+        string[] memory n = kindModuleNames(uint8(kind));
+        address[] memory ms = new address[](n.length);
+        for (uint256 i; i < n.length; ++i) ms[i] = _module(n[i], abi.encode(address(f), coreArgs), uint8(kind));
+        f.publishEnv(kind, 1, _withModules(e, ms));
+        return _release(f, kind, name, code, kindImplArgs(uint8(kind), ms, coreArgs));
+    }
+
+    /// @notice One body module (T66b §4.5): the artifact's init code with `args`, by CREATE2 through the deterministic
+    ///         deployer with `DEPLOY_SALT` (the same address on every chain: a module holds no chain value), after its own
+    ///         gate (`_requireReleaseGas`, a release of its own); code already there is reused. Its row in the release list:
+    ///         class 0 (no factory class), `kind` the token kind (0 for the DEX's D), version 1.
+    function _module(string memory artifact, bytes memory args, uint8 kind) internal returns (address at) {
+        bytes memory init = bytes.concat(vm.getCode(artifact), args);
+        string memory name = vm.split(artifact, ":")[1];
+        at = vm.computeCreate2Address(salt, keccak256(init), CREATE2_FACTORY);
+        if (at.code.length == 0) {
+            _requireReleaseGas(name, address(0), init);
+            (bool ok,) = CREATE2_FACTORY.call(bytes.concat(salt, init));
+            require(ok && at.code.length != 0, string.concat(name, ": the CREATE2 of the module failed"));
+        }
+        _releaseRow(name, 0, kind, 1, at, keccak256(init), keccak256(args));
+    }
+
+    /// @notice `e` with `ms` pinned after its libraries (`OpenFactory` refuses a release whose `modules()` it lacks).
+    function _withModules(IFactoryToken.Env memory e, address[] memory ms) internal view returns (IFactoryToken.Env memory) {
+        uint256 k = e.libs.length;
+        address[] memory l = new address[](k + ms.length);
+        bytes32[] memory h = new bytes32[](l.length);
+        for (uint256 i; i < k; ++i) (l[i], h[i]) = (e.libs[i], e.libCodeHashes[i]);
+        for (uint256 i; i < ms.length; ++i) (l[k + i], h[k + i]) = (ms[i], ms[i].codehash);
+        (e.libs, e.libCodeHashes) = (l, h);
+        return e;
     }
 
     /// @notice Chain-neutral spec §3.1, §3.3 (Fable P1-1): this chain's values, once, the registrar's transaction on the
@@ -736,10 +772,9 @@ abstract contract DeployBase is Script {
 
     /// @notice The link closure of a Zether token (task 6): `WrappedLib` and `ZetherWrappedLib` only in `WRAPPED_ZETHER`.
     function _zetherLibs(bool underlying) internal view returns (address[] memory l) {
-        l = new address[](underlying ? 7 : 5);
-        (l[0], l[1], l[2], l[3], l[4]) =
-            (address(GovernanceLib), address(HederaLib), address(TradeLib), address(MtxPipelineLib), address(ZetherLib));
-        if (underlying) (l[5], l[6]) = (address(WrappedLib), address(ZetherWrappedLib));
+        l = new address[](underlying ? 6 : 4);
+        (l[0], l[1], l[2], l[3]) = (address(GovernanceLib), address(HederaLib), address(MtxPipelineLib), address(ZetherLib));
+        if (underlying) (l[4], l[5]) = (address(WrappedLib), address(ZetherWrappedLib));
     }
 
     /// @notice Any chain but Hedera (CTR-ZTH-52; `_deployTokenFactory` requires the EIP-2537 probe first, and a chain
@@ -767,16 +802,7 @@ abstract contract DeployBase is Script {
         if (register) {
             address[] memory deps = new address[](4);
             (deps[0], deps[1], deps[2], deps[3]) = (tv, bv, address(ip), dis);
-            f.publishEnv(IOpenFactory.TokenKind.NORMAL_ZETHER, 1,
-                _env(f, reg, smartKeyAccountImpl, false, deps, _zetherLibs(false)));
-            f.publishEnv(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1,
-                _env(f, reg, smartKeyAccountImpl, false, deps, _zetherLibs(true)));
-            address none = _release(f, IOpenFactory.TokenKind.NORMAL_ZETHER, "NormalZetherToken",
-                type(NormalZetherToken).creationCode);
-            address und = _release(f, IOpenFactory.TokenKind.WRAPPED_ZETHER, "WrappedZetherToken",
-                type(WrappedZetherToken).creationCode);
-            vm.serializeAddress("deploy", "implementation_normal_zether_bls12381", none);
-            vm.serializeAddress("deploy", "implementation_wrapped_zether_bls12381", und);
+            _zetherReleases(f, reg, smartKeyAccountImpl, deps);
             f.setKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER, true);
             f.setKindEnabled(IOpenFactory.TokenKind.WRAPPED_ZETHER, true);
             _deployZetherRegulated(f, reg, smartKeyAccountImpl, deps);
@@ -786,21 +812,29 @@ abstract contract DeployBase is Script {
         vm.serializeAddress("deploy", "zether_statements", address(stm));
     }
 
+    /// @notice `_deployZether`'s two releases (`NORMAL_ZETHER`, `WRAPPED_ZETHER`) on `deps`, each with its body modules.
+    function _zetherReleases(OpenFactory f, address reg, address smartKeyAccountImpl, address[] memory deps) internal {
+        address none = _kindRelease(f, IOpenFactory.TokenKind.NORMAL_ZETHER, "NormalZetherToken",
+            type(NormalZetherToken).creationCode, "", _env(f, reg, smartKeyAccountImpl, false, deps, _zetherLibs(false)));
+        address und = _kindRelease(f, IOpenFactory.TokenKind.WRAPPED_ZETHER, "WrappedZetherToken",
+            type(WrappedZetherToken).creationCode, "", _env(f, reg, smartKeyAccountImpl, false, deps, _zetherLibs(true)));
+        vm.serializeAddress("deploy", "implementation_normal_zether_bls12381", none);
+        vm.serializeAddress("deploy", "implementation_wrapped_zether_bls12381", und);
+    }
+
     /// @notice Regulated-kinds spec §6.1 (plan T30): with the Zether stack, env version 1 of `NORMAL_ZETHER_REGULATED` (10)
     ///         and `WRAPPED_ZETHER_REGULATED` (11), each its base kind's `deps` and link closure with `RegulatedLib` added,
     ///         the releases, version 1, each refused first by `_requireReleaseGas`, `implArgs` the canonical
     ///         `ComplianceRegistry` runtime's code hash (F-11), then both kinds enabled. JSON
     ///         `implementation_{normal,wrapped}_zether_regulated_bls12381`. Never on Hedera (`ZetherLayer`).
     function _deployZetherRegulated(OpenFactory f, address reg, address smartKeyAccountImpl, address[] memory deps) internal {
-        bytes memory implArgs = abi.encode(_registryCodehash());
-        f.publishEnv(IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, 1,
+        bytes memory coreArgs = abi.encode(_registryCodehash());
+        address n = _kindRelease(f, IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, "NormalZetherRegulatedToken",
+            type(NormalZetherRegulatedToken).creationCode, coreArgs,
             _env(f, reg, smartKeyAccountImpl, false, deps, _withRegulatedLib(_zetherLibs(false))));
-        f.publishEnv(IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, 1,
+        address w = _kindRelease(f, IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, "WrappedZetherRegulatedToken",
+            type(WrappedZetherRegulatedToken).creationCode, coreArgs,
             _env(f, reg, smartKeyAccountImpl, false, deps, _withRegulatedLib(_zetherLibs(true))));
-        address n = _release(f, IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, "NormalZetherRegulatedToken",
-            type(NormalZetherRegulatedToken).creationCode, implArgs);
-        address w = _release(f, IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, "WrappedZetherRegulatedToken",
-            type(WrappedZetherRegulatedToken).creationCode, implArgs);
         vm.serializeAddress("deploy", "implementation_normal_zether_regulated_bls12381", n);
         vm.serializeAddress("deploy", "implementation_wrapped_zether_regulated_bls12381", w);
         f.setKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, true);

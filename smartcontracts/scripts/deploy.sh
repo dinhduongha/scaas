@@ -27,6 +27,10 @@
 #                            (EIP-7825); the largest implementation, WrappedPqzToken (13,319,335 gas measured), is
 #                            deployed by script/pqz/e2e.py, not here. DEPLOY_ZETHER=1 (any chain but Hedera) adds the Zether
 #                            stack. --slow always (one tx per block: anvil automine can strand a large tx).
+#                            T66b: each token release and the DEX come with their body modules (P, T, A, W, Z, Q; the
+#                            DEX's D), each its own CREATE2 transaction through the deterministic deployer with DEPLOY_SALT
+#                            (the same address on every chain) and its own gate, pinned in the release's env after the
+#                            libraries and named in its implArgs; releases.json gets a row per module (class 0, its kind).
 #                            RELEASE_GAS_GATE? (Q4 of CTR-MTX-30, NET-EVM-06; declared, never derived from a chain id):
 #                            testnet (default, the SCaaS testnet's gate: runtime x 1,530 + 2^24 within the block gas
 #                            limit) or public (a public chain: each release transaction, the UA registry and its library

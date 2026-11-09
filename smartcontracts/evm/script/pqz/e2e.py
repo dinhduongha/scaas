@@ -614,9 +614,48 @@ def registry_codehash():
     return keccak256(bytes.fromhex(j["deployedBytecode"]["object"].removeprefix("0x")))
 
 
-def impl_args(kind):
-    """A release's `implArgs`: a regulated kind's (8-13) `abi.encode(REGISTRY_CODEHASH)`, 32 bytes; else none."""
+def core_args(kind):
+    """A kind's own constructor arguments, which each of its body modules takes too (T66b M1): on 8-13
+    `abi.encode(REGISTRY_CODEHASH)`, 32 bytes; else none."""
     return registry_codehash() if kind >= 8 else b""
+
+
+def kind_modules(kind):
+    """T66b §4.5: `kind`'s body modules as (source file, contract) in its `implArgs` order, from the generated
+    script/KindModules.sol (`kindModuleNames`, the one list the tests' Catalogue and DeployBase read)."""
+    src = open(os.path.join(EVM, "script/KindModules.sol")).read()
+    m = re.search(r"if \(kind == %d\) \{(.*?)return n;" % kind, src, re.S)
+    return re.findall(r'"(\w+)\.sol:(\w+)"', m.group(1)) if m else []
+
+
+def impl_args(kind, modules):
+    """A release's `implArgs` (T66b §4.5, one named struct): `abi.encode(ImplArgs(modules))` on 0-5,
+    `abi.encode(RegulatedImplArgs(REGISTRY_CODEHASH, modules))` on 8-13."""
+    if kind >= 8:
+        return encs([("t", ["w", ("a", "w")])], [[registry_codehash(), modules]])
+    return encs([("t", [("a", "w")])], [[modules]])
+
+
+def link_names(name, src=None, seen=None):
+    """The TRANSITIVE link closure of an artifact by library name, from out/ alone (no chain)."""
+    seen = [] if seen is None else seen
+    for ls in artifact(name, src)[1].values():
+        for ln in ls:
+            if ln not in seen:
+                link_names(ln, None, seen)
+                seen.append(ln)
+    return seen
+
+
+def release_closure(kind, name):
+    """A release's closure (T66b §4.5, Fable P2-3): the implementation's link references, its body modules and each
+    module's link references, recursively; as names."""
+    out = link_names(name)
+    for src, mn in kind_modules(kind):
+        for x in link_names(mn, src) + [mn]:
+            if x not in out:
+                out.append(x)
+    return out
 
 
 class Deployer:
@@ -648,12 +687,12 @@ class Deployer:
         self.closure[name] = libs
         return bytes.fromhex(code), libs
 
-    def deploy2(self, name, args, label):
+    def deploy2(self, name, args, label, src=None):
         """As `DeployBase` deploys with `new X{salt}`: through `CREATE2_DEPLOYER` with `DEPLOY_SALT`, so the address
         depends on the init code (with its arguments) and the salt only; code already at it is reused."""
         if rpc("eth_getCode", [CREATE2_DEPLOYER, "latest"]) in ("0x", None):
             raise RuntimeError(f"no deterministic CREATE2 deployer at {CREATE2_DEPLOYER} (runbook NET-EVM-05)")
-        code, _ = self.linked(name)
+        code, _ = self.linked(name, src)
         init = code + args
         a = create2_address(CREATE2_DEPLOYER, DEPLOY_SALT, init)
         if rpc("eth_getCode", [a, "latest"]) == "0x":
@@ -945,6 +984,13 @@ def abi_methods():
         j = json.load(open(os.path.join(EVM, OUT_DIR, src + ".sol", name + ".json")))
         methods.update(j["methodIdentifiers"])
         events |= {f"{x['name']}({','.join(i['type'] for i in x['inputs'])})" for x in j["abi"] if x["type"] == "event"}
+    # T66b: a token face declares only the events of its kept bodies; a log of a forwarded entry is declared by the body
+    # module or the library that emits it, so the PQZ releases' closures (modules, libraries) count too
+    for kind, name in ((4, "NormalPqzToken"), (5, "WrappedPqzToken")):
+        for src, mn in kind_modules(kind):
+            for n, sf in [(mn, src)] + [(x, None) for x in link_names(mn, src)]:
+                j = json.load(open(os.path.join(EVM, OUT_DIR, (sf or n) + ".sol", n + ".json")))
+                events |= {f"{x['name']}({','.join(i['type'] for i in x['inputs'])})" for x in j["abi"] if x["type"] == "event"}
     return methods, events
 
 
@@ -1073,11 +1119,19 @@ def release_rows():
     pin = re.search(r"REGISTRY_CODEHASH = (0x[0-9a-f]{64});", open(os.path.join(EVM, "test/as/Registry.t.sol")).read())
     check(pin is not None and registry_codehash() == hb(pin.group(1)), "ComplianceRegistry runtime hash = Registry.t.sol's pin")
     for kind, name in RELEASES:
-        _, links = artifact(name)
-        reg = any("RegulatedLib" in ls for ls in links.values())
-        check(reg == (kind >= 8), f"{name} (kind {kind}): RegulatedLib {'linked' if reg else 'not linked'}")
-        want = registry_codehash() if kind >= 8 else b""
-        check(impl_args(kind) == want and len(want) in (0, 32), f"{name} (kind {kind}): implArgs {len(want)} B")
+        mods = kind_modules(kind)
+        closure = release_closure(kind, name)
+        reg = "RegulatedLib" in closure
+        check(len(mods) >= 3 and reg == (kind >= 8),
+              f"{name} (kind {kind}): {len(mods)} modules, closure {len(closure)} contracts, RegulatedLib "
+              f"{'in it' if reg else 'not in it'}")
+        ms = ["0x" + f"{i + 1:040x}" for i in range(len(mods))]
+        a = impl_args(kind, ms)
+        head = 2 if kind >= 8 else 1  # struct offset, [registry hash,] array offset, length, the modules
+        w = [a[i:i + 32] for i in range(0, len(a), 32)]
+        check(len(core_args(kind)) == (32 if kind >= 8 else 0) and len(w) == 3 + head + len(ms) - 1
+              and int.from_bytes(w[head + 1], "big") == len(ms) and [x.hex()[24:] for x in w[head + 2:]] == [m[2:] for m in ms]
+              and (kind < 8 or w[1] == registry_codehash()), f"{name} (kind {kind}): implArgs {len(a)} B, the module list")
 
 
 def self_test():
@@ -1269,13 +1323,22 @@ def run(kd, kr, ke):
             continue
         require_release_gas(name)
         code, libs = D.linked(name)
+        # T66b §4.5: the kind's body modules (CREATE2, the kind's own constructor arguments), each pinned in the env after
+        # the libraries of the closure (theirs included), and named in the release's `implArgs`
+        ms = []
+        for src, mn in kind_modules(kind):
+            require_release_gas(mn)
+            _, ml = D.linked(mn, src)
+            libs += [x for x in ml if x not in libs]
+            ms.append(D.deploy2(mn, encs(["w", "b"], [fac, core_args(kind)]), f"module {mn}", src=src))
+        libs += ms
         hashes = [keccak256(bytes.fromhex(rpc("eth_getCode", [a, "latest"])[2:])) for a in libs]
         # group 3f (spec §3 C6): --zero-dep publishes the PQZ kinds on deps = [0x0], where only an OFFCHAIN token can be
         # created (a PRECOMPILE one reverts SelfTestFailed(address(0)))
         env = [reg, 0, 0, ([0] if ZERO_DEP else [pqv]) if kind else [], [], libs, hashes]
         sd.send(fac, cd(f"publishEnv(uint8,uint16,{ENV_S})", ["w", "w", ENV], kind, 1, env), f"publishEnv(kind {kind}, 1)")
         r = sd.send(fac, cd("deployImplementation(uint8,uint64,uint16,bytes,bytes)", ["w", "w", "w", "b", "b"],
-                               kind, 1, 1, code, impl_args(kind)),
+                               kind, 1, 1, code, impl_args(kind, ms)),
                     f"deployImplementation(kind {kind}, 1) {name}")
         lg = next(x for x in r["logs"] if x["address"].lower() == fac.lower() and len(x["topics"]) == 4)
         log(f"      {name} release at 0x{lg['topics'][3][-40:]} ({int(r['gasUsed'], 16):,} gas)")
