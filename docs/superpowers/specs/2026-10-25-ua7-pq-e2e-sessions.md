@@ -259,6 +259,21 @@ signature's bytes (§7.2), `PqChatStored(hint, index)`. Errors are named per che
 `PqChatNotMember`, `PqChatWrapHash`, `PqChatNonceUsed`, `PqChatKemKey`, `PqChatShape`, …). Every stored record keeps its
 full bytes in state (SSTORE2 blobs; never only an event).
 
+**P47 — Recovery from state alone** (owner 2026-11-10; BUILT on `ua-mtx-merge`, plan 3c T96). A client keeps no session list
+and reads no event: a new or reinstalled device finds everything in contract state. `sessionCount(ua)` and
+`sessionsOf(ua, offset, limit)`: one entry per member at `createSession` and one per member a `rekey` adds to its parent;
+append-only (a removed or leaving member keeps its entry and clients check `leftIn` and the latest epoch's members; a
+member added again gets another entry). `epochCount(sessionId)` and `epochsOf(sessionId, offset, limit)`: epoch 0 (the
+`sessionId`) first once complete, then each epoch as it completes in this instance; in the home instance a child
+completes only by taking its parent's slot (P9), so the list is the winning chain 0..n; in a replica it is every complete
+epoch in completion order, competing children included (a replica orders nothing, P18: clients follow the home's list).
+`latestEpoch(sessionId)` is the list's last entry, with no slot of its own. Every list is paged as `storedRange` (P29): an
+offset past the end is empty, the limit clamped (`SESSIONS_RANGE_MAX` = `EPOCHS_RANGE_MAX` = 128 ids). **Spam is the
+client's decision, off chain** (owner 2026-11-10): no on-chain consent or acceptance step (D5 unchanged). **The main case
+is a 2-person chat** (owner 2026-11-10): layout and gas are optimised for a 2-member session and its figures come first in
+the gas rows (create, index, rekey, post, store); groups stay correct and tested, and no 1:1 gas is traded for a group
+feature.
+
 ## 5. Control plane: sessions, epochs, roles
 
 ```mermaid
@@ -484,6 +499,12 @@ the portable signature, epoch membership as the home chain orders it, the nonce 
 epoch replica is needed on that chain, so replicating to many chains costs one blob per chain. The signature's full bytes
 stay inside the envelope, so in state (no hash split as in P16). The client applies §6.5's 1,024-B rule as for
 `postMessage`. Nothing stored can be removed, and the UI says so.
+
+Change (owner 2026-11-10; BUILT on `ua-mtx-merge`, plan 3c T87): a paged view `storedRange(hint, offset, limit) returns
+(bytes[])` beside `storedCount` and `storedAt`: the payloads `[offset, min(offset + limit, count))`, the limit clamped to
+`STORED_RANGE_MAX` = 16 (16 blobs of at most 65,535 B: about 1 MiB returned and about 9 M gas of memory in an `eth_call`,
+under a 50 M default call gas cap), an offset past the end an empty page, never a revert (the pattern of T83's
+`paymentsOf`).
 
 ### 7.3 HCS (transport 3)
 
