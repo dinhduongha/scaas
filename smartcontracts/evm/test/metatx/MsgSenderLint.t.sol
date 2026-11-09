@@ -51,6 +51,17 @@ contract MsgSenderLintTest is Test {
         "src/regulated/WrappedPqzRegulatedTokenCore.sol", "src/regulated/NormalRegulatedTokenCore.sol",
         "src/regulated/NormalPqzRegulatedTokenCore.sol"];
 
+    /// Occurrences of `.selector` in `path` (any form: `this.f.selector`, `I<X>.f.selector`).
+    function _selectorReads(string memory path) internal view returns (uint256 n) {
+        bytes memory s = bytes(vm.readFile(path));
+        bytes memory p = ".selector";
+        for (uint256 i; i + p.length <= s.length; ++i) {
+            bool hit = true;
+            for (uint256 j; j < p.length && hit; ++j) hit = s[i + j] == p[j];
+            if (hit) ++n;
+        }
+    }
+
     /// Occurrences of `pat` (not preceded by an identifier character); `exceptSelector` skips `pat<ident>.selector`.
     function _count(string memory path, bytes memory pat, bool exceptSelector) internal view returns (uint256 n) {
         bytes memory s = bytes(vm.readFile(path));
@@ -158,16 +169,19 @@ contract MsgSenderLintTest is Test {
 
     /// CTR-MTX-18: an external self-call (`this.f(…)`) inside an allowlisted body would let a guarded callee consume
     /// the ticket for an unguarded body and defeat `_selfCall`'s fail-closed check. The only `this.` uses are
-    /// `this.<fn>.selector` reads (counted too, so the scan is not vacuous).
+    /// `this.<fn>.selector` reads; T66b 4.1 wrote them `I<X>.<fn>.selector` (the cores inherit no interface), so the
+    /// non-vacuity count reads the `.selector` reads of either form (0 `this.` reads in FILES since 4.1).
     function test_noExternalSelfCalls() public view {
         uint256 all;
+        // T66b 4.1 also writes an external self-call as `I<X>(address(this)).f(...)`: counted with `this.f(...)`
         for (uint256 i; i < FILES.length; ++i) {
-            assertEq(_count(FILES[i], "this.", true), 0, FILES[i]);
-            all += _count(FILES[i], "this.", false);
+            assertEq(_count(FILES[i], "this.", true) + _count(FILES[i], "address(this)).", false), 0, FILES[i]);
+            all += _count(FILES[i], "this.", false) + _selectorReads(FILES[i]);
         }
         assertGt(all, 0);
         // ua-mtx-merge MD-6: two files read `this.` outside a selector on purpose, outside any allowlisted body
-        assertEq(_count("src/pqz/PqzLayer.sol", "this.", true), 1, "PqzLayer: `try this.disclosureStatement` (a view)");
+        assertEq(_count("src/pqz/PqzLayer.sol", "this.", true) + _count("src/pqz/PqzLayer.sol", "address(this)).", false), 1,
+            "PqzLayer: `try IPqzDisclosureStatement(address(this)).disclosureStatement` (a view; `try this.` before T66b)");
         assertEq(_count("src/dex/SCaaSDex.sol", "this.", true), 2,
             "SCaaSDex: `abi.encodeCall(this.settleOne / this.exchangeOne, ...)`, calldata for its own `_selfCall`");
     }

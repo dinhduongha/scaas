@@ -145,7 +145,9 @@ contract PqzWrappedTest is PqzFixture {
         emit log_named_uint("WrappedPqzToken init code bytes (with the factory's append)", init);
         emit log_named_uint("WrappedPqzToken runtime bytes", a.code.length);
         emit log_named_uint("WrappedPqzToken deployImplementation tx gas", txGas);
-        assertGt(init, 49_152, "over EIP-3860: 64 KiB chains only");
+        // T66b (controller 2026-11-09: a migration, old -> new): the face's init code fell from 63,531 B (+ the factory's
+        // append; d142b57c) to 28,126 B, under EIP-3860's 49,152: the largest implementation fits every chain now
+        assertLe(init, 49_152, "T66b: within EIP-3860");
         assertLe(init, 131_072);
         assertLt(txGas * 105 * 105 / 10_000, 1 << 24, "regular gas fits EIP-7825 with --gas-estimate-multiplier 105");
         // C5-1: regular + state gas against the block gas limit NET-EVM-06 / the deploy gate require for this release
