@@ -562,7 +562,7 @@ product contract.
 | N4 | `t.from` ≠ `op.payer` | `ServicePullShape(4)` |
 | N5 | wrong `value`; `value = 0` | `ServicePullShape(5)` |
 | N6 | expired | `MetaTxExpired` |
-| N7 | submitted twice; the lane cancelled by `mtxCancelNonce` first | `MetaTxBadNonce` |
+| N7 | submitted twice: step 6 refuses the seen `entryRef` first (Q4), `ServicePullReplayed`; the lane cancelled by `mtxCancelNonce` first, on a fresh operation | `ServicePullReplayed`; `MetaTxBadNonce` (as built in T77, `b9b130bb`) |
 | N8 | a third party calls the token directly with `t`: `mtxExecuteTransfer`, `mtxBatchTransfer` / `mtxPay`, `mtxPayReceiverFee` (`PAYABLE` set) | `MetaTxUnauthorizedRelayer` / `PayMetaMismatch` |
 | N9 | a second escrow (same code, another address) submits `t` | `ServicePullShape(2)`; with its checks removed, the token's `MetaTxUnauthorizedRelayer` |
 | N10 | `t` signed in another token's or chain's domain | `MetaTxBadSignature` |
