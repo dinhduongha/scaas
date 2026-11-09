@@ -1,0 +1,17 @@
+# ua-rs-sign T20e2 mutants (2026-11-10-ua-rs-sign-t20e2-mutants.py: the service-pull builder, wallet/service_pull.rs and its EIP-712 helpers), one per run on a clean tree at 703903f1, one foreground run (M1-M15), git diff --exit-code 0 before and after; positive control: the command (--test service_pull, 4 tests) passes on the clean tree first. UNAUDITED.
+killed     | M1 the payer check dropped | clients/ua-rs/src/wallet/service_pull.rs | rc=101 | 1 failed: refusals | another payer | at 703903f1
+killed     | M2 the chain check dropped | clients/ua-rs/src/wallet/service_pull.rs | rc=101 | 1 failed: refusals | another chain | at 703903f1
+killed     | M3 the 16-field cap off by one | clients/ua-rs/src/wallet/service_pull.rs | rc=101 | 1 failed: refusals | more than 16 fields | at 703903f1
+killed     | M4 an array field accepted | clients/ua-rs/src/wallet/eip712.rs | rc=101 | 1 failed: refusals | an array field | at 703903f1
+killed     | M5 a nested struct accepted | clients/ua-rs/src/wallet/eip712.rs, clients/ua-rs/src/wallet/service_pull.rs | rc=101 | 1 failed: refusals | a nested struct | at 703903f1
+killed     | M6 entryRef over the struct hash | clients/ua-rs/src/wallet/service_pull.rs | rc=101 | 4 failed: every_row_entry_ref_digest_selector_calldata_job, refusals, relay_fee_wrap, unbound_fee_recipient_is_canonical | assertion `left == right` failed: deposit_native | at 703903f1
+killed     | M7 a string hashed in the calldata | clients/ua-rs/src/wallet/eip712.rs | rc=101 | 2 failed: every_row_entry_ref_digest_selector_calldata_job, relay_fee_wrap | assertion `left == right` failed: note_native | at 703903f1
+killed     | M8 the relayer not the service | clients/ua-rs/src/wallet/service_pull.rs | rc=101 | 3 failed: every_row_entry_ref_digest_selector_calldata_job, relay_fee_wrap, unbound_fee_recipient_is_canonical | assertion `left == right` failed: deposit_native | at 703903f1
+killed     | M9 the fee at the pull's own nonce accepted | clients/ua-rs/src/wallet/service_pull.rs | rc=101 | 1 failed: relay_fee_wrap | deposit_native: the pull's own nonce | at 703903f1
+killed     | M10 an int field accepted | clients/ua-rs/src/wallet/eip712.rs | rc=101 | 1 failed: refusals | an int field | at 703903f1
+killed     | M11 a missing field accepted | clients/ua-rs/src/wallet/service_pull.rs | rc=101 | 1 failed: refusals | a missing field | at 703903f1
+killed     | M12 the first field unchecked | clients/ua-rs/src/wallet/service_pull.rs | rc=101 | 1 failed: refusals | the first field not bytes32 payer | at 703903f1
+killed     | M13 a zero amount accepted | clients/ua-rs/src/wallet/service_pull.rs | rc=101 | 1 failed: refusals | a zero amount | at 703903f1
+killed     | M14 the router as the target accepted | clients/ua-rs/src/wallet/service_pull.rs | rc=101 | 1 failed: relay_fee_wrap | deposit_native: the router is the target | at 703903f1
+killed     | M15 the op tuple's parentheses lost | clients/ua-rs/src/wallet/service_pull.rs | rc=101 | 2 failed: every_row_entry_ref_digest_selector_calldata_job, relay_fee_wrap | assertion `left == right` failed: deposit_native | at 703903f1
+mutants M1-M15 of 15: 15 killed, 0 survived, 0 not loaded
