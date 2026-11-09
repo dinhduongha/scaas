@@ -176,7 +176,7 @@ abstract contract PqzNamedBase is PqzFixture {
         usd.mint(address(this), amount * SCALE);
         usd.approve(address(w), amount * SCALE);
         w.mtxWrapShield(address(usd), amount * SCALE, ua);
-        _mirrorTrivial(w, ua, amount);
+        _mirrorTrivial(NormalPqzToken(address(w)), ua, amount);
     }
 }
 
@@ -369,14 +369,14 @@ contract PqzExplicitStatementTest is PqzNamedBase {
     /// The burn the unwrap debits: the leg and `minOut` in the binding word, the amount and recipient in the header.
     function test_pqzExplicitStatementBytes_unshieldUnwrap() public {
         _wrapFund(alice, 100);
-        bytes memory pl = _bPl(w, alice, 14);
+        bytes memory pl = _bPl(NormalPqzToken(address(w)), alice, 14);
         IConfidentialWrappedToken.Unwrap memory x = IConfidentialWrappedToken.Unwrap(address(usd), MetaTxLib.pad(address(0xD00D)), 40, 40 * SCALE);
         bytes32 word = w.unwrapBinding(address(usd), x.minOut);
         assertEq(w.unshieldUnwrapStatement(_bs(pl), x, 0),
-            _onRef(address(w), abi.encodeCall(PqzPackedRef.burn, (_envAt(w, word, 40, x.recipient, ZetherTypes.TransferMode.BUNDLE), pl))));
+            _onRef(address(w), abi.encodeCall(PqzPackedRef.burn, (_envAt(NormalPqzToken(address(w)), word, 40, x.recipient, ZetherTypes.TransferMode.BUNDLE), pl))));
         bytes32 b = keccak256("envelope");
         assertEq(w.unshieldUnwrapStatement(_bs(pl), x, b),
-            _onRef(address(w), abi.encodeCall(PqzPackedRef.burn, (_envAt(w, keccak256(abi.encode(b, word)), 40, x.recipient, ZetherTypes.TransferMode.BUNDLE), pl))));
+            _onRef(address(w), abi.encodeCall(PqzPackedRef.burn, (_envAt(NormalPqzToken(address(w)), keccak256(abi.encode(b, word)), 40, x.recipient, ZetherTypes.TransferMode.BUNDLE), pl))));
     }
 
     /// Never lose ciphertext: what a debit leaves in state from the explicit parts is what the packed form stored: the op
@@ -618,7 +618,7 @@ contract PqzNamedTest is PqzNamedBase {
 
     function _runUnwrap(bool ua) internal {
         _wrapFund(alice, 100);
-        IPqzToken.PqzBurnArgs memory b = _bs(_bPl(w, alice, 53));
+        IPqzToken.PqzBurnArgs memory b = _bs(_bPl(NormalPqzToken(address(w)), alice, 53));
         IConfidentialWrappedToken.Unwrap memory x = IConfidentialWrappedToken.Unwrap(address(usd), MetaTxLib.pad(address(0xD00D)), 40, 40 * SCALE);
         bytes memory proof = hex"c0de";
         MetaTxLib.Envelope memory e = _env(0);
@@ -629,7 +629,7 @@ contract PqzNamedTest is PqzNamedBase {
             w.mtxUnshieldUnwrap(u, b, x, proof, _pqAuth(), "", _uaSig(sig), noVerdict());
             return;
         }
-        bytes memory st = w.unshieldUnwrapStatement(b, x, _uaBindingOf(w, u));
+        bytes memory st = w.unshieldUnwrapStatement(b, x, _uaBindingOf(NormalPqzToken(address(w)), u));
         vm.expectCall(PQZ, abi.encodePacked(uint8(2), uint32(st.length), st, proof));
         vm.prank(relayer);
         w.mtxUnshieldUnwrap(u, b, x, proof, _pqAuth(), "", _uaSig(sig), noVerdict());
@@ -748,11 +748,11 @@ contract PqzNamedTest is PqzNamedBase {
             IPqzMergedT5.mtxConfidentialTransferCompact.selector, IPqzMergedT5.mtxUnshield.selector, IPqzMergedT5.mtxShield.selector,
             IPqzMergedT5.mtxRollOver.selector, IPqzMergedT5.mtxPrepareAcc.selector];
         for (uint256 i; i < sels.length; ++i) {
-            _refused(w, sels[i]);
+            _refused(NormalPqzToken(address(w)), sels[i]);
             _refused(tok, sels[i]);
         }
-        _refused(w, IPqzMergedT5.mtxUnshieldUnwrap.selector);
-        _refused(w, bytes4(VM.parseJsonBytes(vm.readFile(TYPED_OPS), domainField("WrapShield", "pqz", "selector"))));
+        _refused(NormalPqzToken(address(w)), IPqzMergedT5.mtxUnshieldUnwrap.selector);
+        _refused(NormalPqzToken(address(w)), bytes4(VM.parseJsonBytes(vm.readFile(TYPED_OPS), domainField("WrapShield", "pqz", "selector"))));
     }
 
     // ------------------------------------------------------------------ an outer fee

@@ -213,7 +213,7 @@ contract PqzPairsTest is PqzNamedBase {
     /// The burn of 10 on `w`, leg `usd` paying 10 · SCALE to `TO`.
     function _unwrapCd(bytes32 from, bool ua) internal returns (bytes memory) {
         MetaTxLib.UAEnvelope memory u = _u(from, address(w));
-        IPqzToken.PqzBurnArgs memory b = _bs(_bPl(w, alice, 53));
+        IPqzToken.PqzBurnArgs memory b = _bs(_bPl(NormalPqzToken(address(w)), alice, 53));
         IConfidentialWrappedToken.Unwrap memory x = IConfidentialWrappedToken.Unwrap(address(usd), MetaTxLib.pad(TO), 10, 10 * SCALE);
         _accept(2, w.unshieldUnwrapStatement(b, x, _tag(address(w), u, ua)));
         string memory xj = string.concat('"unwrap":{"underlying":', a(x.underlying), ',"recipient":', h(x.recipient), ',"amount":',
@@ -541,13 +541,13 @@ contract PqzStatementLayoutTest is PqzNamedBase {
 
     function _unwrapLayout() internal {
         (bytes32 b0, bytes32 b1) = (_env(address(w), false), _env(address(w), true));
-        bytes memory pl = _bPl(w, alice, 14);
+        bytes memory pl = _bPl(NormalPqzToken(address(w)), alice, 14);
         IConfidentialWrappedToken.Unwrap memory x =
             IConfidentialWrappedToken.Unwrap(address(usd), MetaTxLib.pad(address(0xD00D)), 40, 40 * SCALE);
         bytes32 word = keccak256(abi.encode(b0, w.unwrapBinding(address(usd), x.minOut)));
         bytes memory s0 = w.unshieldUnwrapStatement(_bs(pl), x, b0);
         assertEq(s0, _onRef(address(w), abi.encodeCall(PqzPackedRef.burn,
-            (_envAt(w, word, 40, x.recipient, ZetherTypes.TransferMode.BUNDLE), pl))), "unshieldUnwrap: the reference's bytes");
+            (_envAt(NormalPqzToken(address(w)), word, 40, x.recipient, ZetherTypes.TransferMode.BUNDLE), pl))), "unshieldUnwrap: the reference's bytes");
         _onlyBindingDiffers(s0, w.unshieldUnwrapStatement(_bs(pl), x, b1), "unshieldUnwrap");
     }
 }

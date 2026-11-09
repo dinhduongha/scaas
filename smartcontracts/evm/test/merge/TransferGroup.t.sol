@@ -26,6 +26,8 @@ import {normalInit, wrappedInit, Rate} from "../v2/helpers/V2Fixture.sol";
 import {IRig, KindRig, PlainRig, PqzRig, ZetherRig, Tk} from "../metatx/helpers/KindRigs.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
 import {nid} from "../helpers/Ids.sol";
+import {NormalTokenP, NormalTokenT, NormalTokenA} from "../../src/metatx/NormalTokenModules.sol";
+import {probeArgs} from "../helpers/ProbeModules.sol";
 
 /// The merged entries of ua-mtx-merge T2 (spec §2.1, R1, R4, R20, R21, R27, R28), called by selector: this file compiles on
 /// the tree before T2 too, so each test is red there on its own (plan T2 step 3).
@@ -104,7 +106,43 @@ contract RelayProbe {
 contract HookedNormal is NormalToken {
     uint256 public hits;
 
-    constructor(address f) NormalToken(f, "") {}
+    constructor(address f) NormalToken(f, probeArgs("TransferGroup.t.sol:HookedNormal", 0, f, "")) {} // T66b: hooked modules
+
+    function _update(address from, address to, uint256 value) internal override {
+        ++hits;
+        super._update(from, to, value);
+    }
+}
+
+/// `HookedNormal`'s overrides in its kind's module P (T66b: the bodies run there; `probeArgs`, test/helpers/ProbeModules.sol).
+contract HookedNormalP is NormalTokenP {
+    constructor(address f_, bytes memory a) NormalTokenP(f_, a) {}
+
+    uint256 public hits;
+
+    function _update(address from, address to, uint256 value) internal override {
+        ++hits;
+        super._update(from, to, value);
+    }
+}
+
+/// `HookedNormal`'s overrides in its kind's module T (T66b: the bodies run there; `probeArgs`, test/helpers/ProbeModules.sol).
+contract HookedNormalT is NormalTokenT {
+    constructor(address f_, bytes memory a) NormalTokenT(f_, a) {}
+
+    uint256 public hits;
+
+    function _update(address from, address to, uint256 value) internal override {
+        ++hits;
+        super._update(from, to, value);
+    }
+}
+
+/// `HookedNormal`'s overrides in its kind's module A (T66b: the bodies run there; `probeArgs`, test/helpers/ProbeModules.sol).
+contract HookedNormalA is NormalTokenA {
+    constructor(address f_, bytes memory a) NormalTokenA(f_, a) {}
+
+    uint256 public hits;
 
     function _update(address from, address to, uint256 value) internal override {
         ++hits;
