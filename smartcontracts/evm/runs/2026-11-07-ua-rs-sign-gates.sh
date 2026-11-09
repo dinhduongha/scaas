@@ -23,7 +23,8 @@
 # T20d4, path (B)'s balanceProven: 2026-11-09-ua-rs-sign-t20d4; T20d5, its debits: 2026-11-09-ua-rs-sign-t20d5; T20d6,
 # seal advice: 2026-11-09-ua-rs-sign-t20d6, which runs T20d5's steps too; T20d7, the quorum's check: 2026-11-09-ua-rs-sign-t20d7, which T20d8's run covers; T20d8, the bounds and the reader:
 # 2026-11-09-ua-rs-sign-t20d8; T20d9, the C ABI and bindings: 2026-11-09-ua-rs-sign-t20d9; T20d10, the oracle harness through
-# the proof path: 2026-11-09-ua-rs-sign-t20d10),
+# the proof path: 2026-11-09-ua-rs-sign-t20d10; T20e, the fifth sync with ua-mtx-merge (cd48e32b: T83, 3i, T62a, T66b):
+# 2026-11-10-ua-rs-sign-t20e),
 # T20's stay. (T20d2 renamed two names below to the 3h rule: multi_bundle_memo_hash_is_zero and burn_and_refresh_memo_hash_is_zero
 # are now ..._is_the_tags, keccak256(ownTag); the op 7 formula tests run on the words command, facade_pqz_state.rs.)
 P=${GATES_P:-2026-11-08-ua-rs-sign}
@@ -164,6 +165,7 @@ print("baseline cells not measured:", miss or "none"); sys.exit(1 if miss else 0
                           2026-11-08-ua-rs-sign-t20b5 2026-11-08-ua-rs-sign-t20c 2026-11-09-ua-rs-sign-t20d1 2026-11-09-ua-rs-sign-t20d3 2026-11-09-ua-rs-sign-t20d2 \
                           2026-11-09-ua-rs-sign-t20d4 2026-11-09-ua-rs-sign-t20d5 2026-11-09-ua-rs-sign-t20d6 \
                           2026-11-09-ua-rs-sign-t20d7 2026-11-09-ua-rs-sign-t20d8 2026-11-09-ua-rs-sign-t20d10 \
+                          2026-11-10-ua-rs-sign-t20e1 2026-11-10-ua-rs-sign-t20e2 2026-11-10-ua-rs-sign-t20e3 \
                           ${MUTANT_LOGS_EXTRA:-}; do
                    l=$(tail -n 1 smartcontracts/evm/runs/$t-mutants.txt); echo "$t: $l"
                    grep -Eq '(survived or not loaded: 0|0 survived, 0 not loaded)$|0 survived, 0 not loaded \(' <<< "$l" || bad=1
@@ -822,7 +824,7 @@ ua-dart-frb|dart|pqz_key_versions
 ua-dart|dart|pqz key versions
 ua-rs|cargo|pqz_rollover_is_its_own_op
 ua-rs|cargo|trade_order_takes_the_ua_struct
-ua-rs|cargo|pay_meta_v2_body_rules
+ua-rs|cargo|pay_meta_v3_body_rules
 ua-rs|cargo|registry_slots_are_the_layout_pin
 ua-rs|cargo|create3_kat_rows
 ua-rs|cargo|ua_envelope_through_the_facade
@@ -927,6 +929,21 @@ no-oracle-n2048|cargo|proof_path_refuses_the_fabricated_words_attack
 no-oracle-n2048|cargo|proof_path_negatives
 ua-py|unittest|test_no_oracle_proof_path
 no-oracle-ua-py|unittest|test_no_oracle_proof_path
+ua-rs|cargo|paymeta_v3_rows
+ua-rs|cargo|pay_meta_shape
+ua-rs|cargo|pay_no_uuid_helpers
+ua-rs|cargo|payrecords_rows
+ua-rs|cargo|never_called_pay_entries
+ua-rs|cargo|every_row_entry_ref_digest_selector_calldata_job
+ua-rs|cargo|unbound_fee_recipient_is_canonical
+ua-rs|cargo|relay_fee_wrap
+ua-rs|cargo|refusals
+ua-rs-wallet|cargo|every_row_entry_ref_digest_selector_calldata_job
+ua-rs|cargo|none_headers_are_the_contracts
+ua-rs-pqz|cargo|none_headers_are_the_contracts
+ua-rs-pqz-n2048|cargo|none_headers_are_the_contracts
+pqz-read|cargo|tests::none_header_rows_envelope_and_fee
+ua-c|unittest|test_service_pull
 NAMES
 )
 . "$(dirname "$0")/2026-10-27-metatx-split-gates.sh"
