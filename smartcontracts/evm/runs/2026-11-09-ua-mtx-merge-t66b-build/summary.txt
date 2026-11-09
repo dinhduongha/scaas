@@ -325,3 +325,12 @@ Gates: the 17 registry suites of test/ua (--isolate) | 0 | 280 passed; UA-8 gas 
 0 | src/pqz/PqzSet.sol restored after each.
 Mutants: R1-wrong-library-entry (now an Aux forward: pqzKeyVersionDigest -> pqzKeyRecordDigest), R1d-digest-routed-to-core
 (registrationDigest's forward to the core again): 2 of 2 killed; UARegistry.sol md5-equal after.
+
+Task 4.1, the §11 (g) pay block (owner 2026-11-09: pay stays in P; prep: the pay cut clean in 4.1, the per-kind pay-module
+comparison in 4.4): gen_faces.py splits P into P (pipeline, named transfers) and P2 (the `pay` domain of entries.json: mtxPay,
+mtxPayReceiverFee, mtxRelayFee, payWithFee, payWithFeeToUA, metaPayId, payLane, receiverFeeDigest; on 8-13 the tax entries) for a
+kind listed in SPLITS with 'P'; none is (largest P 30,783 B < 33,780 B). T66B_SPLIT_PAY=1 splits every kind, for the comparison
+build only. Measured at 5a8fccda with every kind split (out/t66b-pay, not committed): P 20,077-23,539 B, P2 15,336-15,407 B on
+kinds 0-5 and 19,883-19,962 B on 8-13; the twelve P2 runtimes, immutables zeroed and metadata cut, are all different (twelve
+hashes; first difference at byte 22-23 against kinds 0 and 8, the dispatcher's jump targets: each kind's hooks, `_mtxRule`,
+`_uaAllowed`, `_update` and the regulated hooks, are compiled into its P2). A shared pay module needs those hooks as data (§7).

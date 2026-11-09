@@ -24,8 +24,16 @@ E = json.load(open('script/t66b/entries.json'))
 Q2_SETTERS = {'pqzSetVerifier', 'pqzCancelVerifier', 'pqzRevokeVerifier', 'setProofStore'}
 Q2_VERDICTS = {'verifyTransferAmount'}
 SPLITS = {'WrappedPqzToken': {'Q'}, 'WrappedPqzRegulatedToken': {'Q'}}
+# §11 (g), owner 2026-11-09: pay stays in P; a kind whose P passes 33,780 B splits P into the pipeline and named transfers (P)
+# and pay with the relay fee (P2, the `pay` domain of entries.json, one clean cut). No kind's P passes it at 4.1 (30,783 B
+# at most). T66B_SPLIT_PAY=1 splits every kind, for 4.4's per-kind pay-module comparison only (never committed output).
+if os.environ.get('T66B_SPLIT_PAY') == '1':
+    for _k in E['kinds']:
+        SPLITS.setdefault(_k, set()).add('P')
 for _k, _gs in SPLITS.items():
     for _e in E['kinds'][_k]:
+        if 'P' in _gs and _e['group'] == 'P' and _e['domain'] == 'pay':
+            _e['group'] = 'P2'
         if 'Q' in _gs and _e['group'] == 'Q' and (_e['name'] in Q2_SETTERS or (_e['mut'] in ('view', 'pure')
                                                                                  and _e['name'] not in Q2_VERDICTS)):
             _e['group'] = 'Q2'
