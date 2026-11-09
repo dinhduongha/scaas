@@ -22,3 +22,6 @@ P4-P-authorize-hook-skips-the-check | test_uaPayReceiverFee_7702Payee, test_uaPa
 D1-dex-group-check-dropped | test_d_constructorChecksD | 1
 D2-dex-factory-check-dropped | test_d_constructorChecksD | 1
 D3-d-onlyDelegated-dropped | test_d_directCallRefused | 1
+3.1d (the five *Digest views in the Aux library):
+R1-wrong-library-entry | test_d_digestsRunInTheAuxLibrary | 1
+R1d-digest-routed-to-core | test_d_digestsRunInTheAuxLibrary | 1

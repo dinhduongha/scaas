@@ -30,8 +30,12 @@ DEX, DEXD, DEXT = "src/dex/SCaaSDex.sol", "src/dex/SCaaSDexAdmin.sol", "test/ua/
 # id: (tests, [(file, old, new, occurrences)])
 MUTANTS = {
     # §10: R-1's forward to the wrong library entry
-    "R1-wrong-library-entry": (PAIR, [(REG, "_libPure(UARegistryCoreLib.keyHashOf.selector);",
-                                       "_libPure(UARegistryCoreLib.uaOf.selector);", 1)]),
+    # (3.1d: the forward names its library; the R-1 mutant now on an Aux library forward)
+    "R1-wrong-library-entry": (PAIR, [(REG, "_libPure(address(UARegistryAuxLib), UARegistryAuxLib.pqzKeyVersionDigest.selector);",
+                                       "_libPure(address(UARegistryAuxLib), UARegistryAuxLib.pqzKeyRecordDigest.selector);", 1)]),
+    # 3.1d (owner 2026-11-09, spec §11 (f)): a `*Digest` forward routed to the core again
+    "R1d-digest-routed-to-core": (PAIR, [(REG, "_libPure(address(UARegistryAuxLib), UARegistryAuxLib.registrationDigest.selector);",
+                                          "_libPure(address(UARegistryCoreLib), UARegistryAuxLib.registrationDigest.selector);", 1)]),
     # 3.1b (owner 2026-11-09): a writer routed to the wrong library; the two libraries' addresses swapped; a read routed to the
     # wrong library; the constructor's check of the auxiliary library dropped
     "B1-writer-wrong-library": (UA_W, [(REG, "_lib(address(UARegistryAuxLib), UARegistryAuxLib.setKemKey.selector,",

@@ -54,7 +54,7 @@ contract KindsDirect {
 
 /// T66b task 3.1 (spec 2026-11-09-t66b-library-organisation.md §5): the registry pair rebalanced. R-1: the seven `pure` views whose
 /// code `UARegistryCoreLib` holds run there (`_libPure`, nothing appended); their answers and refusals are byte-equal to the code they
-/// replace (`KindsDirect`). Task 3.1b (§11 (f), owner 2026-11-09): two write libraries by domain, `UARegistryCoreLib` (registration,
+/// replace (`KindsDirect`); since 3.1d the five `*Digest` views run in `UARegistryAuxLib`. Task 3.1b (§11 (f), owner 2026-11-09): two write libraries by domain, `UARegistryCoreLib` (registration,
 /// the portable check) and `UARegistryAuxLib` (the key writes after registration, reads off the hot path), one DELEGATECALL per operation. UNAUDITED.
 contract UARegistryPairTest is UARegistryBase {
     KindsDirect internal direct;
@@ -76,11 +76,26 @@ contract UARegistryPairTest is UARegistryBase {
         bytes memory key = _key(0x0103);
         _forwarded(abi.encodeCall(KindsDirect.uaOf, (0x0103, key)));
         _forwarded(abi.encodeCall(KindsDirect.keyHashOf, (0x0103, key)));
-        _forwarded(abi.encodeCall(KindsDirect.portableRecordDigest, (bytes32(uint256(1)), 0x0130, bytes32(uint256(2)), 0)));
-        _forwarded(abi.encodeCall(KindsDirect.registrationDigest, (bytes32(uint256(1)), 0x0130, bytes32(uint256(2)), 0, 0)));
-        _forwarded(abi.encodeCall(KindsDirect.pqzKeyRecordDigest, (bytes32(uint256(1)), bytes32(uint256(2)), bytes32(uint256(3)))));
-        _forwarded(abi.encodeCall(KindsDirect.pqzKeyVersionDigest, (bytes32(uint256(1)), 2, bytes32(uint256(3)))));
-        _forwarded(abi.encodeCall(KindsDirect.pqzKeyVersionRecordDigest, (bytes32(uint256(1)), 2, bytes32(uint256(3)), 0)));
+    }
+
+    /// Task 3.1d (§11 (f), owner 2026-11-09): the five `*Digest` views run in the Aux library and never in the core (their
+    /// internal twins stay in the core for `register` and `requirePortable`); `uaOf` and `keyHashOf` stay in the core.
+    function test_d_digestsRunInTheAuxLibrary() public {
+        bytes[5] memory d = [
+            abi.encodeCall(KindsDirect.portableRecordDigest, (bytes32(uint256(1)), 0x0130, bytes32(uint256(2)), 0)),
+            abi.encodeCall(KindsDirect.registrationDigest, (bytes32(uint256(1)), 0x0130, bytes32(uint256(2)), 0, 0)),
+            abi.encodeCall(KindsDirect.pqzKeyRecordDigest, (bytes32(uint256(1)), bytes32(uint256(2)), bytes32(uint256(3)))),
+            abi.encodeCall(KindsDirect.pqzKeyVersionDigest, (bytes32(uint256(1)), 2, bytes32(uint256(3)))),
+            abi.encodeCall(KindsDirect.pqzKeyVersionRecordDigest, (bytes32(uint256(1)), 2, bytes32(uint256(3)), 0))
+        ];
+        for (uint256 i; i < 5; ++i) {
+            vm.expectCall(address(UARegistryAuxLib), d[i], 1);
+            vm.expectCall(address(UARegistryCoreLib), d[i], 0);
+            (bool ok, bytes memory r) = address(reg).staticcall(d[i]);
+            (bool okD, bytes memory rD) = address(direct).staticcall(d[i]);
+            assertTrue(ok && okD);
+            assertEq(r, rD, "the replaced code's answer");
+        }
     }
 
     /// Positive control of the `expectCall` above: a writer runs in the library today.

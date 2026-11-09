@@ -235,11 +235,11 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     }
 
     function uaOf(uint16 kind, bytes calldata keyData) external pure returns (bytes32 ua) {
-        _libPure(UARegistryCoreLib.uaOf.selector);
+        _libPure(address(UARegistryCoreLib), UARegistryCoreLib.uaOf.selector);
     }
 
     function keyHashOf(uint16 kind, bytes calldata keyData) external pure returns (bytes32 h) {
-        _libPure(UARegistryCoreLib.keyHashOf.selector);
+        _libPure(address(UARegistryCoreLib), UARegistryCoreLib.keyHashOf.selector);
     }
 
     /// TS-D5: the name of a kind id of the table (enabled or not); an unknown id reverts `UAKindUnknown(kind)`.
@@ -256,7 +256,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         pure
         returns (bytes32 d)
     {
-        _libPure(UARegistryCoreLib.portableRecordDigest.selector);
+        _libPure(address(UARegistryAuxLib), UARegistryAuxLib.portableRecordDigest.selector);
     }
 
     function kemRecordHash(bytes32 ua, uint64 version, KemKey calldata kem) external pure returns (bytes32) {
@@ -268,7 +268,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         pure
         returns (bytes32 d)
     {
-        _libPure(UARegistryCoreLib.registrationDigest.selector);
+        _libPure(address(UARegistryAuxLib), UARegistryAuxLib.registrationDigest.selector);
     }
 
     function kemRecordDigest(bytes32 ua, uint64 version, KemKey calldata kem) external pure returns (bytes32) {
@@ -280,11 +280,11 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     }
 
     function pqzKeyRecordDigest(bytes32 ua, bytes32 pqzKeyHash, bytes32 pqzPopHash) external pure returns (bytes32 d) {
-        _libPure(UARegistryCoreLib.pqzKeyRecordDigest.selector);
+        _libPure(address(UARegistryAuxLib), UARegistryAuxLib.pqzKeyRecordDigest.selector);
     }
 
     function pqzKeyVersionDigest(bytes32 ua, uint64 version, bytes32 pqzKeyHash) external pure returns (bytes32 d) {
-        _libPure(UARegistryCoreLib.pqzKeyVersionDigest.selector);
+        _libPure(address(UARegistryAuxLib), UARegistryAuxLib.pqzKeyVersionDigest.selector);
     }
 
     function pqzKeyVersionRecordDigest(bytes32 ua, uint64 version, bytes32 pqzKeyHash, bytes32 pqzPopHash)
@@ -292,7 +292,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         pure
         returns (bytes32 d)
     {
-        _libPure(UARegistryCoreLib.pqzKeyVersionRecordDigest.selector);
+        _libPure(address(UARegistryAuxLib), UARegistryAuxLib.pqzKeyVersionRecordDigest.selector);
     }
 
     function uaMessage(uint16 kind, bytes32 purposeTag, bytes32 digest) external pure returns (bytes32) {
@@ -618,12 +618,12 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         v(lib, sel, kind);
     }
 
-    /// T66b R-1 (spec 2026-11-09-t66b-library-organisation.md §5): a `pure` view whose code `UARegistryCoreLib` holds runs there, one
-    /// copy of it in the pair: this call's calldata under the library entry `sel` (the same ABI), none of `_lib`'s three words
+    /// T66b R-1 (spec 2026-11-09-t66b-library-organisation.md §5): a `pure` view whose code a registry library holds runs there
+    /// (`lib`: the core for `uaOf` and `keyHashOf`, since 3.1d the Aux library for the five `*Digest` views), one copy of it in the pair: this call's
+    /// calldata under the library entry `sel` (the same ABI), none of `_lib`'s three words
     /// appended (a pure body reads no configuration); its return or revert data is this call's, byte for byte. Only where the
     /// view's own bytes exceed this stub (≈ 45–80 B); `uaAuthDigest` stays (it reads this contract's EIP-712 immutables).
-    function _libRaw(bytes4 sel) private {
-        address lib = address(UARegistryCoreLib);
+    function _libRaw(address lib, bytes4 sel) private {
         assembly {
             mstore(0, sel)
             calldatacopy(4, 4, sub(calldatasize(), 4))
@@ -635,13 +635,13 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     }
 
     /// `_libRaw` inside a `pure` view (R-1): the library entry is `pure`; the function pointer is cast, as `_libView`'s.
-    function _libPure(bytes4 sel) private pure {
-        function(bytes4) f = _libRaw;
-        function(bytes4) pure v;
+    function _libPure(address lib, bytes4 sel) private pure {
+        function(address, bytes4) f = _libRaw;
+        function(address, bytes4) pure v;
         assembly {
             v := f
         }
-        v(sel);
+        v(lib, sel);
     }
 
     // ----- requireAuthorized -----

@@ -301,3 +301,27 @@ Red first: test/ua/UADexAdmin.t.sol does not compile on 3e00abf3 (no SCaaSDexD, 
 UATradeVectors, UATrade: 39 passed. test/metatx: 536 passed, 6 failed (the same 6); MsgSenderLint's SCaaSDex row 14 -> 12 and a
 SCaaSDexAdmin row 2 (`_caller` moved with the hooks).
 Mutants: 3 of 3 killed (the DEX's group check dropped, its factory check dropped, D's onlyDelegated dropped).
+
+Task 3.1d (owner 2026-11-09, spec §11 (f) as of 592b6fd2): the five external `*Digest` views (`registrationDigest`,
+`portableRecordDigest`, `pqzKeyRecordDigest`, `pqzKeyVersionDigest`, `pqzKeyVersionRecordDigest`) leave UARegistryCoreLib for
+UARegistryAuxLib; the registry's `_libPure(lib, sel)` names the library (Aux for the five, the core for `uaOf` and `keyHashOf`);
+their internal twins (UAKinds) stay in the core for `register` and `requirePortable`; `registrationOf`, `uaCount`, `uaOf`,
+`keyHashOf` stay in the core.
+contract | 5a8fccda B / asked | 3.1d B / asked (DeployGas.t.sol test_t66bPair: regular + state)
+UARegistryCoreLib | 34,608 / 58,181,392 | 33,685 / 56,635,241 (2,216,675 + 51,721,650): under its 33,903 B / 57 M line
+UARegistryAuxLib | 19,596 / 33,037,883 | 20,192 / 34,036,864 (1,338,701 + 31,077,360)
+UARegistry | 28,045 / 47,827,987 | 28,165 / 48,029,505 (2,466,336 + 43,276,050): +120 B, `_libPure`'s library argument
+Per-call execution gas (auxgas-3.1d.txt): registrationDigest 8,184 -> 8,129, portableRecordDigest 7,985 -> 7,982,
+pqzKeyRecordDigest 7,861 -> 7,914, pqzKeyVersionDigest 7,905 -> 7,825, pqzKeyVersionRecordDigest 8,104 -> 8,090; Aux writers
++35 to +76, Aux reads -33 to +67 (the Aux dispatcher's five more entries), core reads 0.
+Red first: test/ua/UARegistryPair.t.sol test_d_digestsRunInTheAuxLibrary on 5a8fccda | 1 | expected a call to UARegistryAuxLib,
+none (the forward ran in the core); here | 0 | UARegistryPair 18 passed.
+Pins old -> new: size-baseline.json UARegistryCoreLib 34,608 -> 33,685, UARegistryAuxLib 19,596 -> 20,192, UARegistry 28,006 ->
+28,165 (+39 B 4.1's SaltedEIP712 split, +120 B 3.1d); UA-8 regular-gas pins, 14 rows (ua8-pins-3.1d.txt): popOf +67 (10 rows,
+e.g. mldsa65/v2 20,051 -> 20,118), setKemKey fndsa512/v2 2,524,077 -> 2,524,153 (four sets); state gas unchanged; LinkClosure
+unchanged (the registry links both libraries, the Aux library the core, the core nothing); UAGas, UARegistryGroups, layout,
+typehash pins unchanged.
+Gates: the 17 registry suites of test/ua (--isolate) | 0 | 280 passed; UA-8 gas tests at the four sets, pins moved | 0 / 0 / 0 /
+0 | src/pqz/PqzSet.sol restored after each.
+Mutants: R1-wrong-library-entry (now an Aux forward: pqzKeyVersionDigest -> pqzKeyRecordDigest), R1d-digest-routed-to-core
+(registrationDigest's forward to the core again): 2 of 2 killed; UARegistry.sol md5-equal after.

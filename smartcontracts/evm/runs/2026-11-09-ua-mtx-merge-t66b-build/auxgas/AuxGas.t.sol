@@ -73,6 +73,13 @@ contract AuxGasTest is UARegistryBase {
         _row("webAuthnKeyOf (other kind)", address(r), abi.encodeCall(UARegistry.webAuthnKeyOf, (ua)));
         _row("pqzPopOf v0", address(r), abi.encodeCall(UARegistry.pqzPopOf, (ua, 0)));
         _row("pqzKeySigOf v0", address(r), abi.encodeCall(UARegistry.pqzKeySigOf, (ua, 0)));
+        // 3.1d: the five `*Digest` views (`_libPure`), core -> Aux library
+        bytes32 x = keccak256("x");
+        _row("registrationDigest", address(r), abi.encodeCall(UARegistry.registrationDigest, (ua, UAKinds.MLDSA44, x, x, x)));
+        _row("portableRecordDigest", address(r), abi.encodeCall(UARegistry.portableRecordDigest, (ua, UAKinds.MLDSA44, x, x)));
+        _row("pqzKeyRecordDigest", address(r), abi.encodeCall(UARegistry.pqzKeyRecordDigest, (ua, x, x)));
+        _row("pqzKeyVersionDigest", address(r), abi.encodeCall(UARegistry.pqzKeyVersionDigest, (ua, 2, x)));
+        _row("pqzKeyVersionRecordDigest", address(r), abi.encodeCall(UARegistry.pqzKeyVersionRecordDigest, (ua, 2, x, x)));
 
         UARegistry.KindConfig[] memory c2 = new UARegistry.KindConfig[](2);
         c2[0] = UARegistry.KindConfig(0x0101, address(mock), 400_000);

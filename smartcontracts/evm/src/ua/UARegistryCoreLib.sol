@@ -68,37 +68,8 @@ library UARegistryCoreLib {
         return UAKinds.keyHashOf(kind, keyData);
     }
 
-    function portableRecordDigest(bytes32 ua, uint16 kind, bytes32 pqzKeyHash, bytes32 kemRecordHash_)
-        external
-        pure
-        returns (bytes32)
-    {
-        return UAKinds.portableRecordDigest(ua, kind, pqzKeyHash, kemRecordHash_);
-    }
-
-    function registrationDigest(bytes32 ua, uint16 kind, bytes32 pqzKeyHash, bytes32 kemRecordHash_, bytes32 pqzPopHash)
-        external
-        pure
-        returns (bytes32)
-    {
-        return UAKinds.registrationDigest(ua, kind, pqzKeyHash, kemRecordHash_, pqzPopHash);
-    }
-
-    function pqzKeyRecordDigest(bytes32 ua, bytes32 pqzKeyHash, bytes32 pqzPopHash) external pure returns (bytes32) {
-        return UAKinds.pqzKeyRecordDigest(ua, pqzKeyHash, pqzPopHash);
-    }
-
-    function pqzKeyVersionDigest(bytes32 ua, uint64 version, bytes32 pqzKeyHash) external pure returns (bytes32) {
-        return UAKinds.pqzKeyVersionDigest(ua, version, pqzKeyHash);
-    }
-
-    function pqzKeyVersionRecordDigest(bytes32 ua, uint64 version, bytes32 pqzKeyHash, bytes32 pqzPopHash)
-        external
-        pure
-        returns (bytes32)
-    {
-        return UAKinds.pqzKeyVersionRecordDigest(ua, version, pqzKeyHash, pqzPopHash);
-    }
+    // The five `*Digest` views run in `UARegistryAuxLib` (task 3.1d, spec §11 (f), owner 2026-11-09); their internal twins
+    // (`UAKinds`) stay here for `register` and `requirePortable`.
 
     // ----- the appended words -----
 

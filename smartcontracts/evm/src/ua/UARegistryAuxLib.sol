@@ -52,6 +52,43 @@ library UARegistryAuxLib {
 
     // ----- ML-DSA expanded-key cache (P6c; owner 2026-10-12) -----
 
+    // ----- the `*Digest` views (task 3.1d, spec 2026-11-09-t66b-library-organisation.md §11 (f), owner 2026-11-09) -----
+
+    /// `pure` views the registry runs here by DELEGATECALL (`_libPure`, nothing appended): the same ABI and answers as in the
+    /// core before 3.1d (their internal twins stay there for `register` and `requirePortable`). A direct call answers the same
+    /// pure result, and reads and writes nothing.
+    function portableRecordDigest(bytes32 ua, uint16 kind, bytes32 pqzKeyHash, bytes32 kemRecordHash_)
+        external
+        pure
+        returns (bytes32)
+    {
+        return UAKinds.portableRecordDigest(ua, kind, pqzKeyHash, kemRecordHash_);
+    }
+
+    function registrationDigest(bytes32 ua, uint16 kind, bytes32 pqzKeyHash, bytes32 kemRecordHash_, bytes32 pqzPopHash)
+        external
+        pure
+        returns (bytes32)
+    {
+        return UAKinds.registrationDigest(ua, kind, pqzKeyHash, kemRecordHash_, pqzPopHash);
+    }
+
+    function pqzKeyRecordDigest(bytes32 ua, bytes32 pqzKeyHash, bytes32 pqzPopHash) external pure returns (bytes32) {
+        return UAKinds.pqzKeyRecordDigest(ua, pqzKeyHash, pqzPopHash);
+    }
+
+    function pqzKeyVersionDigest(bytes32 ua, uint64 version, bytes32 pqzKeyHash) external pure returns (bytes32) {
+        return UAKinds.pqzKeyVersionDigest(ua, version, pqzKeyHash);
+    }
+
+    function pqzKeyVersionRecordDigest(bytes32 ua, uint64 version, bytes32 pqzKeyHash, bytes32 pqzPopHash)
+        external
+        pure
+        returns (bytes32)
+    {
+        return UAKinds.pqzKeyVersionRecordDigest(ua, version, pqzKeyHash, pqzPopHash);
+    }
+
     /// Stores part `part` of the expanded key of `pk` under `uaOf(kind, pk)`, computed by the kind's verifier
     /// (`expandedKeyPart`) from the authenticated `pk` — never accepted from a caller (a caller-supplied expanded key
     /// allows universal forgery). Anyone may call it, before or after `register`; a part already stored is left as it
