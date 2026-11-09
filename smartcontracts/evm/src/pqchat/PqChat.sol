@@ -170,8 +170,62 @@ contract PqChat is IPqChat {
             || s.homeContract == address(0)) revert PqChatShape();
     }
 
-    function rekey(PqChatEpoch calldata, Wrap[] calldata, IUARegistry.UASig calldata) external returns (bytes32) {
-        revert PqChatShape();
+    /// @notice P9, P10: the parent stored and complete in this instance, `epoch == parent + 1`, the home slot free; a plain
+    ///         rekey by a member of the parent, any other change by an admin of it (3C-D7); every member holds `keyId` here.
+    function rekey(PqChatEpoch calldata e, Wrap[] calldata wraps, IUARegistry.UASig calldata sig)
+        external returns (bytes32 eid)
+    {
+        (IUARegistry reg, uint256 limit,) = _env();
+        Epoch storage pe = _parentOf(e);
+        _rights(reg, pe, e);
+        _auth(reg, e.author, PqChatTypes.hashEpoch(e), sig);
+        _useNonce(PqChatTypes.scopeEpoch(e.sessionId, e.author), e.nonce);
+        eid = PqChatTypes.epochId(e.sessionId, e.author, e.nonce);
+        Epoch storage ep = _s().epochs[eid];
+        (ep.sessionId, ep.parent, ep.epoch) = (e.sessionId, e.parentEpochId, e.epoch);
+        ep.record = _put(abi.encode(e, keccak256(abi.encode(sig))), limit);
+        ep.wraps = uint32(e.members.length);
+        emit PqChatEpochAdded(e.sessionId, eid, e.parentEpochId, e.epoch, e.author);
+        _land(eid, ep, 0, wraps, e.members, e.wrapHashes, limit);
+    }
+
+    function _parentOf(PqChatEpoch calldata e) internal view returns (Epoch storage pe) {
+        pe = _known(e.parentEpochId);
+        if (pe.sessionId != e.sessionId) revert PqChatUnknown(e.parentEpochId);
+        if (pe.landed != pe.wraps) revert PqChatIncomplete(e.parentEpochId);
+        if (e.epoch != pe.epoch + 1) revert PqChatEpochNumber(pe.epoch + 1, e.epoch);
+        if (_s().epochs[e.sessionId].home) {
+            bytes32 c = _s().childOf[e.parentEpochId];
+            if (c != 0) revert PqChatEpochTaken(e.parentEpochId, c);
+        }
+    }
+
+    function _rights(IUARegistry reg, Epoch storage pe, PqChatEpoch calldata e) internal view {
+        MemberKey[] memory members = e.members;
+        bytes32[] memory admins = e.admins;
+        _checkLists(reg, admins, members, e.wrapHashes.length, 1);
+        (bytes32[] memory pa, MemberKey[] memory pm,) = _lists(pe);
+        if (_keeps(pe, pa, admins) && _keeps(pe, _uas(pm), _uas(members))) {
+            if (_memberAt(pm, e.author) == type(uint256).max) revert PqChatNotMember(e.author);
+        } else if (!_has(pa, e.author)) {
+            revert PqChatNotAdmin(e.author);
+        }
+    }
+
+    /// @dev 3C-D7: `child` (sorted) is `parent` (sorted) minus entries that left the parent epoch.
+    function _keeps(Epoch storage pe, bytes32[] memory parent, bytes32[] memory child) internal view returns (bool) {
+        uint256 j;
+        for (uint256 i; i < parent.length; ++i) {
+            if (j < child.length && child[j] == parent[i]) ++j;
+            else if (j < child.length && child[j] < parent[i]) return false; // added
+            else if (!pe.left[parent[i]]) return false; // dropped without leaving
+        }
+        return j == child.length;
+    }
+
+    function _uas(MemberKey[] memory m) internal pure returns (bytes32[] memory u) {
+        u = new bytes32[](m.length);
+        for (uint256 i; i < m.length; ++i) u[i] = m[i].ua;
     }
 
     function addWraps(bytes32 epochId, uint32 first, Wrap[] calldata wraps) external {
@@ -182,8 +236,17 @@ contract PqChat is IPqChat {
         _land(epochId, ep, first, wraps, members, hashes, limit);
     }
 
-    function leave(PqChatLeave calldata, IUARegistry.UASig calldata) external {
-        revert PqChatShape();
+    /// @notice P12: a member of `epochId` leaves it; the next epoch may drop it as a plain rekey (3C-D8).
+    function leave(PqChatLeave calldata l, IUARegistry.UASig calldata sig) external {
+        (IUARegistry reg,,) = _env();
+        Epoch storage ep = _known(l.epochId);
+        if (ep.sessionId != l.sessionId) revert PqChatUnknown(l.epochId);
+        (, MemberKey[] memory m,) = _lists(ep);
+        if (_memberAt(m, l.member) == type(uint256).max) revert PqChatNotMember(l.member);
+        _auth(reg, l.member, PqChatTypes.hashLeave(l), sig);
+        _useNonce(PqChatTypes.scopeEpoch(l.sessionId, l.member), l.nonce);
+        ep.left[l.member] = true;
+        emit PqChatLeft(l.sessionId, l.epochId, l.member);
     }
 
     function postMessage(PqChatMessage calldata, IUARegistry.UASig calldata) external returns (uint256) {
