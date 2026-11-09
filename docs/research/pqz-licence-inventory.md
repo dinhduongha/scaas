@@ -291,6 +291,45 @@ Questions only; nothing here is an answer.
 9. **Internal benchmark bundle (gap 6).** Does copying the statically linked bundle to machines the owner controls
    count as distribution under the LGPL?
 
+### 8.1 Background for questions 5 and 6 (owner questions 2026-11-09)
+
+Preparation for the lawyer, not an answer and not a legal conclusion. Tags: **[source]** a cited page, found
+2026-11-09; **[memory]** recalled, **not verified** in this round; **[inference]** this note's reasoning.
+
+**Where PQZ's encryption comes from.** LWE (Regev 2005) → Ring-LWE and the LPR encryption (Lyubashevsky, Peikert,
+Regev 2010) → Module-LWE (Langlois, Stehlé 2012 / 2015; the general form GLWE of Brakerski, Gentry, Vaikuntanathan
+2012), the base of ML-KEM (FIPS 203) and ML-DSA (FIPS 204) [memory]. PQZ's balances are a Regev / LPR-style MLWE
+encryption with a BFV-style encoding (Brakerski 2012; Fan, Vercauteren 2012), additive only (CTR-PQZ-02); the proofs
+are PQZL (the LaZer fork, LNP22 family, IBM Research) and PQZH (Ligero) [inference from the spec].
+
+**Third-party patents to check.**
+
+- **The CNRS patent of Gaborit and Aguilar-Melchor** (cited on the NIST forum as US 9,094,189) claims an RLWE / LPR-like
+  encryption. Its reach is disputed: Lyubashevsky and Stehlé argue that Kyber and Saber are outside its claims, written
+  for a commutative-ring setup ([ePrint 2021/1364](https://eprint.iacr.org/2021/1364),
+  [HAL hal-03372244](https://hal.archives-ouvertes.fr/hal-03372244)); CNRS reportedly argued that the patent also
+  covers non-commutative versions ([pqc-forum](https://groups.google.com/a/list.nist.gov/g/pqc-forum/c/2Xv0mrF9lVo/m/e0oKQhIIBwAJ));
+  a patent-buyout discussion followed ([pqc-forum](https://groups.google.com/a/list.nist.gov/g/pqc-forum/c/nbIZhtICKWU))
+  [source]. PQZ is a module scheme like Kyber, so the same argument is the one to test against PQZ's own encryption
+  [inference]. Expiry and family members: not checked.
+- **NIST's 2022 licence agreements** for Kyber with the holders of related patents [memory]: as recalled, they cover
+  implementations of the standardised ML-KEM only, so they would not cover PQZ's own MLWE encryption, which is not
+  ML-KEM [inference]. The licence text and its scope must be read (NIST IR 8413 and NIST's announcements).
+- **Key-exchange-with-reconciliation patents** (for example Ding's) [memory]: PQZ has no reconciliation step, so their
+  relevance is probably low [inference]; not checked.
+- **LaZer / LNP22** (questions 1, 2): MIT from IBM without a patent grant (`lazer/LICENSE`); whether IBM holds patents
+  on LNP22 or ABDLOP as PQZ uses them is unknown. The G-LIC letter to the LaZer maintainers is sent, with no reply as
+  of 2026-10-26 (TODO).
+
+**What the search should cover.** Patent registries (Espacenet, USPTO) for US 9,094,189's family, claims and expiry,
+read against PQZ's module setting and BFV-style encoding; the scope of NIST's licences; IBM's portfolio for LNP22 and
+ABDLOP; the markets that matter (Vietnam, the EU, the US).
+
+**Defensive publication does not clear third-party patents.** The Software Heritage archive, the Zenodo DOI and
+P6-PUB (`scratchpad/pub/venues.md`) stop others from patenting what SCaaS has disclosed; they do not remove a patent
+someone else already holds [inference]. Research and testnet use are unaffected. Before production or mainnet 22776
+with value, gate G-LIC must answer question 6 (CTR-PQZ-01).
+
 ## 9. Files
 
 - `pqz-core/NOTICE` — third-party notices (new).
