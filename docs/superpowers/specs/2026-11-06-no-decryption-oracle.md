@@ -334,7 +334,8 @@ Revised 2026-11-09 after the Fable review of the delta (approve with fixes: P1-1
 items 10–12 the owner's rulings on its questions). Built by plan T20d4 (2026-11-09: `provenOpen`, `provenAdd`, `provenCancel`,
 `balanceProven`; three details fixed while building, each recorded where it applies: `provenAdd`'s `blobs` per request rather
 than per credit (§4.14.9's "a code listed once per request"), `provenOpen`'s `chainId` and `registry` (a NONE header's token
-words), and a credit's mode taken from its record). UNAUDITED.
+words), and a credit's mode taken from its record); the proven debits by T20d5 (`prove*Proven`, path (A)'s builders over the
+session's `T`; `provenOpen`'s `forOp7` must be the debit's: op 7's `p` on a PQZH token). UNAUDITED.
 
 #### 4.14.1 What path (B) gives, and what it does not
 

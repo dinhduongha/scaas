@@ -226,7 +226,11 @@ pub fn enc(pks: &[Vec<u8>], values: &[u64]) -> Result<(Vec<u8>, Vec<Vec<u8>>)> {
 ///   keyRecords?, proof?, header? | call?}`, the codes once per request) → `{accepted, refused}`: each credit checked on its own,
 ///   keyless (P over the rebuilt statement with the handle's `pk` at its leg, a migration credit by re-encryption, else by P);
 /// - `provenCancel {session}` → `{}`; `balanceProven {session}` → `{value, p, sendCounter, parts}` once every `need` index is
-///   accepted (the key's one use).
+///   accepted (the key's one use);
+/// - `proveTransferProven`, `proveTransferMultiProven`, `proveBurnProven`, `proveRefreshProven` (T20d5) `{session, chainId,
+///   registry, beneficiaryUA?, fee, validUntilBlock, shieldIn, envelopeBinding, …}` (the form fields of path (A)'s command) →
+///   path (A)'s output: `T` the session's checked parts with `Trivial(shieldIn)`, `p` and `sendCounter` the session's (opened
+///   with `forOp7` for op 7), the materialised `acc` cross-checked against the parts below `rolled`; the session closes.
 pub const COMMANDS: &[&str] = &[
     "enc",
     #[cfg(feature = "vectors")]
@@ -261,6 +265,10 @@ pub const COMMANDS: &[&str] = &[
     "provenAdd",
     "provenCancel",
     "balanceProven",
+    "proveTransferProven",
+    "proveTransferMultiProven",
+    "proveBurnProven",
+    "proveRefreshProven",
 ];
 
 /// The storage layout the words commands parse (`ua-mtx-merge`, `PqzCore.Account` / `PqzStorage` in the ERC-7201 namespace
@@ -363,6 +371,10 @@ fn allowed(cmd: &str, field: &str) -> bool {
         "provenOpen" => has(LOC) || has(ACCT) || has(&["forOp7", "lastRecord", "auditorUA", "chainId", "registry"]),
         "provenAdd" => has(&["session", "blobs", "credits"]),
         "provenCancel" | "balanceProven" => field == "session",
+        "proveTransferProven" => field == "session" || has(DEBIT) || has(&["toUA", "pkT", "pkA", "amount", "mode"]),
+        "proveTransferMultiProven" => field == "session" || has(DEBIT) || has(&["legs", "pkA", "mode"]),
+        "proveBurnProven" => field == "session" || has(DEBIT) || has(&["amount", "recipient"]),
+        "proveRefreshProven" => field == "session" || has(DEBIT),
         _ => false,
     }
 }
@@ -878,6 +890,7 @@ enum Req {
     ProvenAdd { session: [u8; 16], blobs: proven::Codes, credits: Vec<proven::Credit> },
     ProvenCancel([u8; 16]),
     BalanceProven([u8; 16]),
+    ProvenDebit { session: [u8; 16], args: Box<proven::DebitArgs> },
 }
 
 /// A words debit's header: the caller's fields, `p` and `sendCounter` from the account.
@@ -917,6 +930,9 @@ fn req(cmd: &str, f: &Fields<'_>) -> Result<(Req, Option<Vec<u8>>)> {
         }
         "provenCancel" => (Req::ProvenCancel(f.arr("session")?), None),
         "balanceProven" => (Req::BalanceProven(f.arr("session")?), None),
+        "proveTransferProven" | "proveTransferMultiProven" | "proveBurnProven" | "proveRefreshProven" => {
+            (Req::ProvenDebit { session: f.arr("session")?, args: Box::new(proven::debit_args(cmd, f)?) }, None)
+        }
         "enc" => {
             let pks = f.list("pks")?.iter().map(|p| pk(hex(p)?)).collect::<Result<_>>()?;
             let values = f.list("values")?.iter().map(|v| v.as_u64().ok_or(Error::Argument));
@@ -1538,6 +1554,7 @@ impl PqzKey {
             Req::ProvenAdd { session, blobs, credits } => self.proven_add(session, blobs, credits)?,
             Req::ProvenCancel(sid) => self.proven_cancel(sid)?,
             Req::BalanceProven(sid) => self.balance_proven(sid)?,
+            Req::ProvenDebit { session, args } => self.proven_debit(session, args, d)?,
             Req::Enc { pks, values } => {
                 let (u, vs) = enc(pks, values)?;
                 json!({"u": to_hex(&u), "vs": vs.iter().map(|v| to_hex(v)).collect::<Vec<_>>()})

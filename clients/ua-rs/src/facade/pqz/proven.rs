@@ -69,6 +69,9 @@ pub(super) struct Open {
     p_last: u64,
     rolled: u64,
     send_counter: u64,
+    /// Group 3g: the version is below the registry's `current` (KV-8: it only migrates or refreshes); `forOp7` (its `p`).
+    stale: bool,
+    op7: bool,
     /// `(counter, ownTag, u ‖ v_f)` of the last own debit (`lastDebit > 0`): the tag as stored, the ciphertext in 64-bit lanes.
     own: Option<(u64, Word, Vec<u8>)>,
     trivial: Vec<(u64, u64)>,
@@ -108,6 +111,8 @@ pub(super) struct Session {
     id: [u8; 16],
     open: Open,
     sum: Vec<u64>,
+    /// The own `v_f` and the parts below `rolled`: a debit's cross-check with the materialised `acc` (§4.14.3).
+    below: Vec<u64>,
     accepted: BTreeSet<u64>,
     parts: Vec<(Option<u64>, Kind)>,
 }
@@ -172,7 +177,7 @@ pub(super) fn open(f: &Fields<'_>) -> Result<(Open, Vec<u8>)> {
     let id = system(&f.word("psid")?)?;
     let mut blobs = Blobs::new(f)?;
     let key = registered_key(&f.word("keyRecord")?, &mut blobs)?;
-    stale(f)?;
+    let is_stale = stale(f)?;
     let a = acct(&f.words("account")?, &f.word("sendCounterWord")?)?;
     if !(a.cleared <= a.floor && a.floor <= a.rolled && a.rolled <= a.count) {
         return Err(Error::Argument);
@@ -241,6 +246,8 @@ pub(super) fn open(f: &Fields<'_>) -> Result<(Open, Vec<u8>)> {
         p_last,
         rolled: a.rolled,
         send_counter: a.send_counter,
+        stale: is_stale,
+        op7,
         own,
         trivial,
         need,
@@ -420,7 +427,7 @@ impl PqzKey {
     /// first): `{session, p, sendCounter, need}`.
     pub(super) fn proven_open(&self, o: &Open) -> Result<Value> {
         let mut g = self.session()?;
-        let mut sum = vec![0u64; CT_BYTES / 8];
+        let (mut sum, mut below) = (vec![0u64; CT_BYTES / 8], vec![0u64; CT_BYTES / 8]);
         let mut parts = Vec::new();
         if let Some((counter, tag, ct)) = &o.own {
             let mut hd = [[0u8; 32]; 20];
@@ -433,14 +440,18 @@ impl PqzKey {
                 return Err(Error::Argument);
             }
             add_mod(&mut sum, ct);
+            add_mod(&mut below, ct);
             parts.push((None, Kind::Own));
         }
         for (i, amount) in &o.trivial {
             add_trivial_mod(&mut sum, *amount);
+            if *i < o.rolled {
+                add_trivial_mod(&mut below, *amount);
+            }
             parts.push((Some(*i), Kind::Trivial));
         }
         let id = os16()?;
-        *g = Some(Session { id, open: o.clone(), sum, accepted: BTreeSet::new(), parts });
+        *g = Some(Session { id, open: o.clone(), sum, below, accepted: BTreeSet::new(), parts });
         Ok(json!({"session": to_hex(&id), "p": o.p, "sendCounter": o.send_counter, "need": o.need.keys().collect::<Vec<_>>()}))
     }
 
@@ -458,6 +469,9 @@ impl PqzKey {
                 // an index accepted once (in this call too) is not summed twice
                 Some((ct, kind)) if s.accepted.insert(c.index) => {
                     add_mod(&mut s.sum, &ct);
+                    if c.index < s.open.rolled {
+                        add_mod(&mut s.below, &ct);
+                    }
                     s.parts.push((Some(c.index), kind));
                     accepted.push(c.index);
                 }
@@ -675,5 +689,132 @@ impl PqzKey {
         hd.get_mut(H_SALT).ok_or(Error::Argument)?.iter_mut().skip(16).zip(salt).for_each(|(x, b)| *x = *b);
         *hd.get_mut(H_MEMO_HASH).ok_or(Error::Argument)? = crate::keccak256(&[&memo[..], &l.t.own_tag[..]].concat());
         Ok(hd)
+    }
+}
+
+/// A proof-path debit's form fields (§4.14.2: those of `proveTransfer`, `proveTransferMulti`, `proveBurn`, `proveRefresh`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) enum DebitForm {
+    Transfer { to_ua: Word, pk_t: Vec<u8>, pk_a: Option<Vec<u8>>, amount: u64, mode: Mode },
+    Multi { legs: Vec<(Vec<u8>, Word, u64)>, pk_a: Option<Vec<u8>>, mode: Mode },
+    Burn { amount: u64, recipient: Word },
+    Refresh,
+}
+
+/// A proof-path debit's caller fields; `T`, `p`, `sendCounter` and the location come from the session.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct DebitArgs {
+    form: DebitForm,
+    chain_id: u64,
+    registry: [u8; 20],
+    beneficiary_ua: Word,
+    fee: u64,
+    valid_until_block: u64,
+    shield_in: u64,
+    envelope_binding: Word,
+}
+
+/// The fields of `prove*Proven` (`cmd`), typed.
+pub(super) fn debit_args(cmd: &str, f: &Fields<'_>) -> Result<DebitArgs> {
+    let form = match cmd {
+        "proveTransferProven" => DebitForm::Transfer {
+            to_ua: f.word("toUA")?,
+            pk_t: f.pk("pkT")?,
+            pk_a: f.opt_pk("pkA")?,
+            amount: f.u64("amount")?,
+            mode: f.mode()?,
+        },
+        "proveTransferMultiProven" => DebitForm::Multi { legs: f.legs()?, pk_a: f.opt_pk("pkA")?, mode: f.mode()? },
+        "proveBurnProven" => DebitForm::Burn { amount: f.u64("amount")?, recipient: f.word("recipient")? },
+        "proveRefreshProven" => DebitForm::Refresh,
+        _ => return Err(Error::Argument),
+    };
+    Ok(DebitArgs {
+        form,
+        chain_id: f.u64("chainId")?,
+        registry: f.arr("registry")?,
+        beneficiary_ua: f.opt_word("beneficiaryUA")?,
+        fee: f.u64("fee")?,
+        valid_until_block: f.u64("validUntilBlock")?,
+        shield_in: f.u64("shieldIn")?,
+        envelope_binding: f.word("envelopeBinding")?,
+    })
+}
+
+impl PqzKey {
+    /// `prove*Proven` (§4.14.2, T20d5, C-PP-3): the debit of path (A)'s builder over the session's `T` (every `need` index
+    /// accepted, plus `Trivial(shieldIn)`), its `p`, `sendCounter` and location; the materialised `acc` cross-checked against
+    /// the parts below `rolled` (without one, `rolled == p_last`); group 3g's rules and the distinct keys as path (A). Path (A)'s
+    /// output with `ownTag`; the session closes.
+    pub(super) fn proven_debit(&self, sid: &[u8; 16], a: &DebitArgs, d: &Draw) -> Result<Value> {
+        let mut g = self.session()?;
+        let out = {
+            let s = g.as_ref().filter(|s| s.id == *sid).ok_or(Error::Argument)?;
+            let o = &s.open;
+            let multi = matches!(a.form, DebitForm::Multi { .. });
+            if !o.need.keys().all(|i| s.accepted.contains(i)) || o.op7 != multi || (a.chain_id, a.registry) != (o.chain_id, o.registry) {
+                return Err(Error::Argument);
+            }
+            let cached = match &o.acc {
+                Some(acc) => acc.chunks_exact(8).map(|c| c.iter().fold(0u64, |x, y| x << 8 | u64::from(*y))).eq(s.below.iter().copied()),
+                None => o.rolled == o.p_last,
+            };
+            if !cached {
+                return Err(Error::Argument);
+            }
+            let mut t = s.sum.clone();
+            add_trivial_mod(&mut t, a.shield_in);
+            let t: Vec<u8> = t.iter().flat_map(|x| x.to_be_bytes()).collect();
+            let h = Header {
+                chain_id: o.chain_id,
+                token: o.token,
+                registry: o.registry,
+                from_ua: o.ua,
+                beneficiary_ua: a.beneficiary_ua,
+                fee: a.fee,
+                send_counter: o.send_counter,
+                p: o.p,
+                valid_until_block: a.valid_until_block,
+                plain_used: a.shield_in,
+                chain_uid: o.chain_uid,
+                envelope_binding: a.envelope_binding,
+            };
+            let id = &o.id;
+            let v = match &a.form {
+                // KV-8 / KV-9: a stale version only migrates to its own UA, the current one never pays itself
+                DebitForm::Transfer { to_ua, pk_t, pk_a, amount, mode } => {
+                    if o.stale != (*to_ua == o.ua) {
+                        return Err(Error::Argument);
+                    }
+                    distinct(&[Some(&self.pk[..]), Some(&pk_t[..]), pk_a.as_deref()].into_iter().flatten().collect::<Vec<_>>())?;
+                    self.with_sk(|seed32, sk| {
+                        self.transfer(seed32, sk, d, id, &h, to_ua, pk_t, pk_a.as_deref(), &t, *amount, &Memo::Mode(*mode))
+                    })?
+                }
+                DebitForm::Multi { legs, pk_a, mode } => {
+                    if o.stale {
+                        return Err(Error::Argument);
+                    }
+                    let keys = std::iter::once(&self.pk[..]).chain(legs.iter().map(|l| &l.0[..])).chain(pk_a.as_deref());
+                    distinct(&keys.collect::<Vec<_>>())?;
+                    self.with_sk(|seed32, sk| self.multi(seed32, sk, d, id, &h, legs, pk_a.as_deref(), &t, *mode, None))?
+                }
+                DebitForm::Burn { amount, recipient } => {
+                    if o.stale {
+                        return Err(Error::Argument); // KV-8: a stale version burns nothing (its refresh is `proveRefreshProven`)
+                    }
+                    let mut hd = h.fill(Debit::header(Form::Burn, id));
+                    *hd.get_mut(H_AMOUNT).ok_or(Error::Argument)? = u64_word(*amount);
+                    *hd.get_mut(H_RECIPIENT).ok_or(Error::Argument)? = *recipient;
+                    self.with_sk(|seed32, sk| self.debit_own(seed32, sk, d, Form::Burn, hd, &t, amount.checked_add(h.fee), None))?
+                }
+                DebitForm::Refresh => self.with_sk(|seed32, sk| {
+                    self.debit_own(seed32, sk, d, Form::Refresh, h.fill(Debit::header(Form::Refresh, id)), &t, Some(h.fee), None)
+                })?,
+            };
+            with_p(v, &h)
+        };
+        *g = None;
+        Ok(out)
     }
 }

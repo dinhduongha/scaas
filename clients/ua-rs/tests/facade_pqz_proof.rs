@@ -471,3 +471,144 @@ fn session_rules_and_open_negatives() {
     wd.w.lock();
     assert_eq!(call(&kb, "balanceProven", &json!({"session": o3["session"]})).err(), Some(Error::KeyRevoked));
 }
+
+// ---------------------------------------------------------------------------------------------------------------------------
+// T20d5 (C-PP-3): the proof-path debit commands.
+// ---------------------------------------------------------------------------------------------------------------------------
+
+/// The `T` and header words of a debit statement (op 1, 2 or 7): `(T, p, sendCounter, plainUsed)`.
+fn t_of(op: u8, stmt: &[u8]) -> (Vec<u8>, Word, Word, Word) {
+    let (t, hd) = match st::parse(op, stmt).unwrap() {
+        st::Stmt::Debit(d) => (d.t.to_vec(), d.header),
+        st::Stmt::Multi(m) => (m.t.to_vec(), m.header),
+        _ => panic!(),
+    };
+    (t, hd[st::H_P], hd[st::H_SEND_COUNTER], hd[st::H_PLAIN_USED])
+}
+
+/// Each `prove*Proven` over the session's checked parts: its statement's `T`, `p`, `sendCounter` are path (A)'s over the same
+/// state (a materialised `acc`, a TRIVIAL entry, NONE and LOG credits, `shieldIn`), it verifies, answers `ownTag` and closes the
+/// session; a refresh by path (B) settles and both paths read the same balance after it.
+#[test]
+fn proven_debits_equal_path_a() {
+    let mut wd = World::new(0);
+    for (ua, v) in [(A, 1000), (X, 200), (Z, 300)] {
+        wd.c.shield(&ua, v);
+    }
+    wd.pay(&A, &BOB, 300, true, "BUNDLE", NONE);
+    wd.c.shield(&BOB, 7);
+    wd.pay(&X, &BOB, 50, false, "HASH", LOG);
+    wd.pay_multi(&Z, &[(BOB, 20), (Y, 5)], true, "BUNDLE", LOG);
+    wd.c.roll(&BOB, 2);
+    let kb = wd.w.pqz_key(1, 0).unwrap();
+    let legs = json!([{"pk": wd.pk(&Y), "ua": hx(&Y), "amount": 3}, {"pk": wd.pk(&Z), "ua": hx(&Z), "amount": 2}]);
+    for (b_cmd, a_cmd, op, extra) in [
+        ("proveTransferProven", "proveTransfer", 1, json!({"toUA": hx(&Y), "pkT": wd.pk(&Y), "pkA": wd.pk(&AUD), "amount": 30, "mode": "HASH", "shieldIn": 5})),
+        ("proveTransferMultiProven", "proveTransferMulti", 7, json!({"legs": legs, "pkA": wd.pk(&AUD), "mode": "BUNDLE"})),
+        ("proveBurnProven", "proveBurn", 2, json!({"amount": 10, "recipient": hx(&[3; 32])})),
+        ("proveRefreshProven", "proveRefresh", 2, json!({})),
+    ] {
+        let mut open = wd.open(&BOB, 0);
+        open["forOp7"] = json!(op == 7);
+        let o = call(&kb, "provenOpen", &open).unwrap();
+        let cs = wd.credits(&BOB, 0, &o["need"]);
+        call(&kb, "provenAdd", &wd.c.add_request(&o["session"], &cs)).unwrap();
+        let fields = merge(wd.c.debit_fields(), extra.clone());
+        let pb = call(&kb, b_cmd, &merge(fields.clone(), json!({"session": o["session"]}))).unwrap();
+        let pa = call(&kb, a_cmd, &merge(merge(wd.c.own(&BOB, 16), fields), json!({}))).unwrap();
+        let (sb, sa) = (h(&pb["stmt"]), h(&pa["stmt"]));
+        assert!(verify(op, &sb, &h(&pb["proof"])), "{b_cmd} verifies");
+        assert_eq!(t_of(op, &sb), t_of(op, &sa), "{b_cmd}: path (A)'s T, p, sendCounter and plainUsed");
+        assert_eq!((pb["p"].clone(), pb["ownTag"].as_str().map(str::len)), (pa["p"].clone(), Some(66)), "{b_cmd}: p, ownTag");
+        assert_eq!(call(&kb, b_cmd, &merge(merge(wd.c.debit_fields(), extra), json!({"session": o["session"]}))).err(),
+            Some(Error::Argument), "{b_cmd}: the session closed");
+    }
+    // a refresh by path (B) settles; both paths read the balance after it
+    let o = call(&kb, "provenOpen", &wd.open(&BOB, 0)).unwrap();
+    call(&kb, "provenAdd", &wd.c.add_request(&o["session"], &wd.credits(&BOB, 0, &o["need"]))).unwrap();
+    let p = call(&kb, "proveRefreshProven", &merge(wd.c.debit_fields(), json!({"session": o["session"]}))).unwrap();
+    wd.c.own_tag = h(&p["ownTag"]).try_into().unwrap();
+    wd.c.settle_burn(&h(&p["stmt"]));
+    assert_eq!(wd.balance(&BOB), 377);
+    assert_eq!(wd.proven(&kb, &BOB, 0)["value"], 377);
+    // the own v_f in the materialised acc: a credit after the refresh, rolled over; a proven refresh's cross-check holds
+    wd.pay(&A, &BOB, 3, false, "BUNDLE", LOG);
+    wd.c.roll(&BOB, 1);
+    let o = call(&kb, "provenOpen", &wd.open(&BOB, 0)).unwrap();
+    call(&kb, "provenAdd", &wd.c.add_request(&o["session"], &wd.credits(&BOB, 0, &o["need"]))).unwrap();
+    let p = call(&kb, "proveRefreshProven", &merge(wd.c.debit_fields(), json!({"session": o["session"]}))).unwrap();
+    let pa = call(&kb, "proveRefresh", &merge(wd.c.own(&BOB, 16), wd.c.debit_fields())).unwrap();
+    assert_eq!(t_of(2, &h(&p["stmt"])), t_of(2, &h(&pa["stmt"])), "own v_f and a rolled credit: path (A)'s T");
+}
+
+/// The debit's own refusals, each before the key: a `need` index not accepted, `forOp7` not the debit's, another `chainId`,
+/// a materialised `acc` that is not the parts below `rolled` (its words and `accHash` forged together), `rolled` past `p_last`
+/// without one; group 3g: a stale version's burn, op 7 and payment to another UA refused, its migration and refresh proven.
+#[test]
+fn proven_debit_negatives() {
+    let mut wd = World::new(0);
+    wd.c.shield(&A, 1000);
+    wd.pay(&A, &BOB, 300, false, "BUNDLE", LOG);
+    wd.pay(&A, &BOB, 20, true, "BUNDLE", LOG);
+    let kb = wd.w.pqz_key(1, 0).unwrap();
+    let burn = json!({"amount": 1, "recipient": hx(&[3; 32])});
+    let df = wd.c.debit_fields();
+    let fields = |x: &Value, s: &Value| merge(merge(df.clone(), x.clone()), json!({"session": s}));
+    let refused = |what: &str, cmd: &str, req: &Value| {
+        let before = key_uses();
+        assert_eq!(call(&kb, cmd, req).err(), Some(Error::Argument), "{what}");
+        assert_eq!(key_uses(), before, "{what}: the key unused");
+    };
+    let o = call(&kb, "provenOpen", &wd.open(&BOB, 0)).unwrap();
+    refused("a need index not accepted", "proveBurnProven", &fields(&burn, &o["session"]));
+    let cs = wd.credits(&BOB, 0, &o["need"]);
+    call(&kb, "provenAdd", &wd.c.add_request(&o["session"], &cs)).unwrap();
+    let legs = json!({"legs": [{"pk": wd.pk(&Y), "ua": hx(&Y), "amount": 1}], "mode": "BUNDLE"});
+    refused("forOp7 not the debit's", "proveTransferMultiProven", &fields(&legs, &o["session"]));
+    refused("another chainId", "proveBurnProven", &merge(fields(&burn, &o["session"]), json!({"chainId": 1})));
+    assert!(call(&kb, "proveBurnProven", &fields(&burn, &o["session"])).is_ok(), "positive control");
+    // `rolled` past `p_last` without a materialised `acc`: viewing reads it, a debit refuses
+    let mut open = wd.open(&BOB, 0);
+    let mut s0 = h(&open["account"][0]);
+    s0[16..24].copy_from_slice(&1u64.to_be_bytes());
+    open["account"][0] = json!(hx(&s0));
+    let o = call(&kb, "provenOpen", &open).unwrap();
+    call(&kb, "provenAdd", &wd.c.add_request(&o["session"], &wd.credits(&BOB, 0, &o["need"]))).unwrap();
+    refused("rolled past p_last without acc", "proveBurnProven", &fields(&burn, &o["session"]));
+    // a materialised `acc` with its words and `accHash` forged together
+    wd.c.roll(&BOB, 1);
+    let mut open = wd.open(&BOB, 0);
+    let mut stream: Vec<u8> = open["accWords"].as_array().unwrap().iter().flat_map(|w| h(w).into_iter().map(|b| !b)).collect();
+    stream.truncate(scaas_ua::facade::pqz_pack::CTP);
+    stream[scaas_ua::facade::pqz_pack::PKP + 3] ^= 1;
+    let mut words = stream.clone();
+    words.resize(scaas_ua::facade::pqz_pack::ACC_WORDS * 32, 0);
+    open["accWords"] = json!(words.chunks(32).map(|w| hx(&w.iter().map(|b| !b).collect::<Vec<_>>())).collect::<Vec<_>>());
+    open["account"][3] = json!(hx(&scaas_ua::keccak256(&stream)));
+    let o = call(&kb, "provenOpen", &open).unwrap();
+    call(&kb, "provenAdd", &wd.c.add_request(&o["session"], &wd.credits(&BOB, 0, &o["need"]))).unwrap();
+    refused("acc not the parts below rolled", "proveRefreshProven", &fields(&json!({}), &o["session"]));
+    // group 3g: version 0 stale after a rotation
+    let b1 = wd.w.pqz_key_version(1, 0, 1).unwrap();
+    wd.c.add_version(BOB, &b1.pk(), true);
+    for (what, cmd, x) in [
+        ("a stale burn", "proveBurnProven", burn.clone()),
+        ("a stale op 7", "proveTransferMultiProven", legs.clone()),
+        ("a stale payment to another UA", "proveTransferProven", json!({"toUA": hx(&Y), "pkT": wd.pk(&Y), "amount": 1, "mode": "BUNDLE"})),
+    ] {
+        let mut open = wd.open(&BOB, 0);
+        open["forOp7"] = json!(cmd == "proveTransferMultiProven");
+        let o = call(&kb, "provenOpen", &open).unwrap();
+        call(&kb, "provenAdd", &wd.c.add_request(&o["session"], &wd.credits(&BOB, 0, &o["need"]))).unwrap();
+        refused(what, cmd, &fields(&x, &o["session"]));
+    }
+    let o = call(&kb, "provenOpen", &wd.open(&BOB, 0)).unwrap();
+    call(&kb, "provenAdd", &wd.c.add_request(&o["session"], &wd.credits(&BOB, 0, &o["need"]))).unwrap();
+    let m = call(&kb, "proveTransferProven", &fields(&json!({"toUA": hx(&BOB), "pkT": hx(&b1.pk()), "amount": 5, "mode": "BUNDLE"}), &o["session"]))
+        .unwrap();
+    assert!(verify(1, &h(&m["stmt"]), &h(&m["proof"])), "the stale version's migration is proven");
+    let o = call(&kb, "provenOpen", &wd.open(&BOB, 0)).unwrap();
+    call(&kb, "provenAdd", &wd.c.add_request(&o["session"], &wd.credits(&BOB, 0, &o["need"]))).unwrap();
+    let r = call(&kb, "proveRefreshProven", &fields(&json!({}), &o["session"])).unwrap();
+    assert!(verify(2, &h(&r["stmt"]), &h(&r["proof"])), "and its refresh");
+}

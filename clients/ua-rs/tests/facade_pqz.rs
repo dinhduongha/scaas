@@ -285,6 +285,16 @@ fn base_request(k: &PqzKey, cmd: &str) -> Value {
         "pickDecoys" => json!({"candidates": [hx(&[1; 32]), hx(&[2; 32])], "exclude": [hx(&[1; 32])], "count": 1}),
         "provenAdd" => json!({"session": hx(&[0; 16]), "blobs": [], "credits": []}),
         "provenCancel" | "balanceProven" => json!({"session": hx(&[0; 16])}),
+        "proveTransferProven" | "proveTransferMultiProven" | "proveBurnProven" | "proveRefreshProven" => {
+            let c = pqz_chain::Chain::new();
+            let form = match cmd {
+                "proveTransferProven" => json!({"toUA": hx(&[2; 32]), "pkT": pk, "amount": 1, "mode": "HASH"}),
+                "proveTransferMultiProven" => json!({"legs": [leg], "mode": "BUNDLE"}),
+                "proveBurnProven" => json!({"amount": 1, "recipient": hx(&[3; 32])}),
+                _ => json!({}),
+            };
+            merge(merge(c.debit_fields(), form), json!({"session": hx(&[0; 16])}))
+        }
         _ => words_request(k, cmd),
     }
 }
@@ -334,12 +344,13 @@ const RAW: [&str; 8] =
 fn release_has_no_raw_decrypt() {
     unlock();
     let release = ["enc", "proveRegister", "proveKeyRecord", "proveDiscloseSender", "balance", "proveTransfer", "proveBurn", "proveRefresh",
-        "proveTransferMulti", "auditRead", "proveDisclose", "openMemo", "pickDecoys", "provenOpen", "provenAdd", "provenCancel", "balanceProven"];
+        "proveTransferMulti", "auditRead", "proveDisclose", "openMemo", "pickDecoys", "provenOpen", "provenAdd", "provenCancel", "balanceProven", "proveTransferProven", "proveTransferMultiProven",
+        "proveBurnProven", "proveRefreshProven"];
     let want: Vec<&str> = if cfg!(feature = "vectors") {
         ["enc", "dec", "proveRegister", "proveKeyRecord", "rawProveTransfer", "rawProveBurn", "rawProveRefresh", "rawProveTransferMulti",
             "proveDiscloseSender", "rawProveDisclose", "rawOpenMemo", "balance", "proveTransfer", "proveBurn", "proveRefresh",
             "proveTransferMulti", "auditRead", "proveDisclose", "openMemo", "rawProveDiscloseSender", "pickDecoys", "provenOpen", "provenAdd",
-            "provenCancel", "balanceProven"].to_vec()
+            "provenCancel", "balanceProven", "proveTransferProven", "proveTransferMultiProven", "proveBurnProven", "proveRefreshProven"].to_vec()
     } else {
         release.to_vec()
     };

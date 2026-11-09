@@ -20,7 +20,7 @@
 # T20c, an imported key registers its own derived kind (owner 2026-11-08): 2026-11-08-ua-rs-sign-t20c; the fourth sync, after 3h's
 # T58-T65: 2026-11-09-ua-rs-sign-t20b6; T20d1, 3h's formats in every client: 2026-11-09-ua-rs-sign-t20d1; T20d3, the proof path's
 # record and tail parsers: 2026-11-09-ua-rs-sign-t20d3; T20d2, ownTag and the 3h memoHash in every debit: 2026-11-09-ua-rs-sign-t20d2;
-# T20d4, path (B)'s balanceProven: 2026-11-09-ua-rs-sign-t20d4),
+# T20d4, path (B)'s balanceProven: 2026-11-09-ua-rs-sign-t20d4; T20d5, its debits: 2026-11-09-ua-rs-sign-t20d5),
 # T20's stay. (T20d2 renamed two names below to the 3h rule: multi_bundle_memo_hash_is_zero and burn_and_refresh_memo_hash_is_zero
 # are now ..._is_the_tags, keccak256(ownTag); the op 7 formula tests run on the words command, facade_pqz_state.rs.)
 P=${GATES_P:-2026-11-08-ua-rs-sign}
@@ -158,7 +158,7 @@ print("baseline cells not measured:", miss or "none"); sys.exit(1 if miss else 0
                           2026-11-07-ua-rs-sign-t15n2 2026-11-08-ua-rs-sign-t15o 2026-11-08-ua-rs-sign-t20b1 \
                           2026-11-08-ua-rs-sign-t20b2 2026-11-08-ua-rs-sign-t20b3 2026-11-08-ua-rs-sign-t20b4 \
                           2026-11-08-ua-rs-sign-t20b5 2026-11-08-ua-rs-sign-t20c 2026-11-09-ua-rs-sign-t20d1 2026-11-09-ua-rs-sign-t20d3 2026-11-09-ua-rs-sign-t20d2 \
-                          2026-11-09-ua-rs-sign-t20d4 \
+                          2026-11-09-ua-rs-sign-t20d4 2026-11-09-ua-rs-sign-t20d5 \
                           ${MUTANT_LOGS_EXTRA:-}; do
                    l=$(tail -n 1 smartcontracts/evm/runs/$t-mutants.txt); echo "$t: $l"
                    grep -Eq '(survived or not loaded: 0|0 survived, 0 not loaded)$|0 survived, 0 not loaded \(' <<< "$l" || bad=1
@@ -881,6 +881,12 @@ ua-rs-pqz|cargo|op7_leg_paired_with_its_own_group
 ua-rs|cargo|session_rules_and_open_negatives
 ua-rs-vectors|cargo|session_rules_and_open_negatives
 ua-rs-pqz|cargo|session_rules_and_open_negatives
+ua-rs|cargo|proven_debits_equal_path_a
+ua-rs-vectors|cargo|proven_debits_equal_path_a
+ua-rs-pqz|cargo|proven_debits_equal_path_a
+ua-rs|cargo|proven_debit_negatives
+ua-rs-vectors|cargo|proven_debit_negatives
+ua-rs-pqz|cargo|proven_debit_negatives
 NAMES
 )
 . "$(dirname "$0")/2026-10-27-metatx-split-gates.sh"
