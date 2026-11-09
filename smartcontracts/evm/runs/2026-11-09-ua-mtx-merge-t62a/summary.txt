@@ -1,0 +1,54 @@
+ua-mtx-merge T62a (owner 2026-11-09; asked by the ua-rs-sign T20d checkpoint, question 3): PQZ NONE-header and relayed-binding
+vector rows. Gate summary. Full outputs in git-ignored .log files: smartcontracts/evm/runs/2026-11-09-ua-mtx-merge-t62a-<step>.log.
+Forge 1.8.5, solc 0.8.37, every heavy run through scripts/capped at 4 GB, -j2, FOUNDRY_TEST=test/pqz; the other sets through
+script/pqz/at-set.sh, one at a time. Test only: no src/ file changed. Proofs mocked. UNAUDITED.
+
+Generator: test/pqz/PqzStateVectors.t.sol, STATE_VECTORS=1, CONTRACT_COMMIT=6fb7a845b4a531a53a938f48fc97ca7d494c3fec (unchanged:
+the PQZ token's code has not moved since; T82 touched the relay-fee router and executor only, and the regenerated old rows are
+byte-identical). Files: vectors/pqz/state.json (n2048-kmax1024), vectors/pqz/n2304-kmax4096/state.json (the two sets that carry
+state vectors, as T62). New row set `noneHeaders`, last in the file, 10 rows per set:
+
+row | form | path | entry | what varies
+0 | op1 | direct | mtxConfidentialTransferSingle | BUNDLE, shieldIn 2
+1 | op1 | relayed | mtxConfidentialTransferSingleCompact(UAEnvelope, ...) | HASH, auditor on, beneficiary; mode 1, fee recipient unbound non-zero
+2 | op7 | direct | mtxConfidentialTransferCompact | M=2, HASH, auditor on
+3 | op7 | relayed | mtxConfidentialTransfer(UAEnvelope, ...) | M=4, BUNDLE, beneficiary, decoyFee 2; mode 2, batch 7, relayer unbound non-zero, fee word 5 (fee mode none)
+4 | burn | direct | mtxUnshield | amount 1, binding 0
+5 | burn | relayed | mtxUnshield(UAEnvelope, ..., Payout, ...) | amount 2, beneficiary; mode 3 (both bound)
+6 | refresh | direct | mtxUnshield (amount 0, recipient 0) | binding 0
+7 | refresh | relayed | mtxUnshield(UAEnvelope, ...) | mode 0, batch 9, relayer and fee recipient unbound non-zero
+8 | unwrap | direct | mtxUnshieldUnwrap (WRAPPED_PQZ token) | binding = unwrapBinding(underlying, minOut)
+9 | unwrap | relayed | mtxUnshieldUnwrap(UAEnvelope, ...) | minOut below the quote, beneficiary; mode 1; keccak256(abi.encode(envelopeBinding, unwrapBinding))
+
+Each row: the token's words (token, chainId, psid, registry, chainUid, confidentialFee), sendCounter before the call, the form's named
+call fields, the envelope (relayed) and envelopeBinding (0 direct: the statement views' binding argument), unwrapBinding (unwrap),
+binding (header word 17) and the 640 header bytes. At generation each call is held by vm.expectCall to the exact precompile input
+u8(op) || be32(len) || statement || proof of the view's statement, and its debit record's proofStore is NONE.
+
+Reader: test_noneHeaderRows (same file): rebuilds the debits, then per row (a) the header equals the one this commit's contract
+built, (b) envelopeBinding rebuilt from the envelope's fields (SCAAS-PQZ-UA-ENVELOPE-V1, an unbound relayer / fee recipient as 0),
+(c) unwrapBinding from (underlying, minOut), (d) the binding word by form and path, (e) the 20 header words from the named fields
+alone. A set without a state.json is skipped by name (n2560-kmax16384, n2816-kmax65536).
+
+step | commit | rc | counts
+red first: reader before the rows (n2304-kmax4096) | T62a | 1 | test_noneHeaderRows FAIL "state.json: the noneHeaders rows (T62a): 1 != 2"; test_stateVectors PASS (the 10 debits ran)
+generate n2304-kmax4096 (twice) | T62a | 0 | second run byte-identical (cmp)
+generate n2048-kmax1024 (at-set.sh, twice) | T62a | 0 | second run byte-identical (cmp); PqzSet.sol restored
+git diff --numstat on both vector files | T62a | 0 | 36 added, 0 removed each: every old row byte-identical
+reader green n2304-kmax4096 | T62a | 0 | 2 passed
+one nibble, n2304: row 0 header | T62a | 1 | FAIL ".noneHeaders[0]: the header the contract built"
+one nibble, n2304: row 1 envelopeBinding | T62a | 1 | FAIL ".noneHeaders[1]: envelopeBinding from the envelope's fields"
+one nibble, n2304: row 0 toUA | T62a | 1 | FAIL ".noneHeaders[0]: the header from the row's named fields"
+one nibble, n2304: row 9 unwrapBinding | T62a | 1 | FAIL ".noneHeaders[9]: unwrapBinding(underlying, minOut)"
+one nibble, n2048: row 3 envelopeBinding | T62a | 1 | FAIL ".noneHeaders[3]: envelopeBinding from the envelope's fields"
+reader mutant: unbound fee recipient not counted as 0 | T62a | 1 | FAIL ".noneHeaders[1]: envelopeBinding from the envelope's fields"
+(each nibble and the mutant alone, the file restored and checked with cmp after each)
+forge test/pqz n2304-kmax4096 | T62a | 1 | 596 passed, 2 failed, 4 skipped (602): test_gas_rollMax_relayedFullTx in PqzStatePinGasTest and MtxSplitOverheadTest, known red (owner kept ROLL_MAX)
+forge test/pqz n2048-kmax1024 (at-set.sh) | T62a | 1 | 598 passed, 2 failed, 2 skipped (602): the same known red; reader PASS
+forge test/pqz n2560-kmax16384 (at-set.sh) | T62a | 0 | 595 passed, 0 failed, 7 skipped (602); reader SKIP (no state.json at this set)
+forge test/pqz n2816-kmax65536 (at-set.sh) | T62a | 1 | 588 passed, 2 failed, 12 skipped (602): the same known red; reader SKIP (no state.json at this set)
+src/pqz/PqzSet.sol restored after every at-set run (git diff --exit-code) | T62a | 0 | no diff
+pqz_kat.py --check state.json (n2304-kmax4096; n2048-kmax1024) | T62a | 0 | ok; ok (accounts and entries rebuilt; the new key ignored)
+clientkeys node --test test/pqz-proofpath.test.js | T62a | 0 | 7 passed, 0 failed (reads both state.json files)
+vectors-check (runner step) | - | - | not run: the runner's step covers ua, typed, soroban and zether-prover vectors, not vectors/pqz
+docs_check.py check | T62a | 0 | 0 errors, 5 warnings (line budgets, unchanged)

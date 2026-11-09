@@ -10,6 +10,10 @@ import {IPqzToken} from "../../src/pqz/IPqzToken.sol";
 import {PqzCt} from "../../src/pqz/PqzCt.sol";
 import {PqzCore} from "../../src/pqz/PqzCore.sol";
 import {PqzSet} from "../../src/pqz/PqzSet.sol";
+import {WrappedPqzToken} from "../../src/pqz/WrappedPqzToken.sol";
+import {IConfidentialWrappedToken} from "../../src/confidential/IConfidentialToken.sol";
+import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
+import {MockERC20} from "../helpers/Mocks.sol";
 
 /// @notice ua-rs-sign T15e (spec no-decryption-oracle §4.4, §5): the PQZ state vectors of the build's set. A token in several
 ///         account states (`acc` never debited, a reference to the last debit's blob, materialised by a rollover; TRIVIAL and
@@ -22,7 +26,10 @@ import {PqzSet} from "../../src/pqz/PqzSet.sol";
 ///         `T` and ciphertext from the words (`tests/facade_pqz_state.rs`). Group 3h T62 (pqz-proof-path spec §9.3, C-PP-1;
 ///         `"release": "3h"`): every debit's record words with the view's answer (narrow, wide by `shieldIn`, one under `LOG`),
 ///         every op blob's tail `ownTag ‖ kv ‖ u8(n)` (op 1 with and without the auditor, op 7, a leg at key version 1, a
-///         burn) and the logged P of the `LOG` debit as emitted. UNAUDITED.
+///         burn) and the logged P of the `LOG` debit as emitted. T62a (owner 2026-11-09, for ua-rs-sign T20d): `noneHeaders`,
+///         one `NONE` debit per form and path (op 1, op 7, burn, refresh, unwrap; direct and relayed through its named UA
+///         entry): the call's named fields, the token's words, the envelope and `envelopeBinding`, the binding word and the
+///         640 header bytes the precompile was called with; `test_noneHeaderRows` reads them back. UNAUDITED.
 contract PqzStateVectorsTest is PqzSlots {
     bytes32 internal dave;
     bytes32 internal erin;
@@ -430,6 +437,328 @@ contract PqzStateVectorsTest is PqzSlots {
         for (uint256 i; i < extra.length; ++i) _tail(extra[i].name, extra[i].blob, extra[i].kv, i + 1 == extra.length);
         _w("], \"proofLogs\": [");
         _proofLogRow();
+        _w("], \"noneHeaders\": [");
+        _none();
+        for (uint256 i; i < noneRows.length; ++i) _w(string.concat(noneRows[i], i + 1 == noneRows.length ? "" : ","));
         _w("]}");
+    }
+
+    // ------------------------------------------------------------------ T62a: NONE headers and relayed bindings
+
+    address internal constant RELAYER = address(0xBEEF);
+    bytes internal constant PROOF = hex"c0de";
+    string[] internal noneRows;
+    bytes[] internal noneHdrs;
+    WrappedPqzToken internal wt;
+
+    /// T62a: carol's debits under `NONE` after the rows above (they keep their bytes), one per form and path. A relayed call
+    /// goes through the form's named UA entry, carol signing the envelope; the envelopes vary `mode`, `batch` and `fee`, with
+    /// non-zero unbound relayer or fee recipient (a client must count them as 0). Unwrap on a `WRAPPED_PQZ` token of its own.
+    function _none() internal {
+        assertEq(tok.proofStore(), PqzCore.NONE);
+        MetaTxLib.UAEnvelope memory d; // direct: no envelope, the views' binding 0
+        _public(tok, address(this), 2 * SCALE);
+        IPqzToken.PqzTransferArgs memory a = _ts(_payload(_pc(tok), 2, carol, alice, bytes32(0), _out(41, false), ""));
+        a.ownTag = keccak256("T62a op1 direct");
+        _n1(a, d, "op1 BUNDLE direct carol->alice, shieldIn 2");
+        a = _ts(_payload(_pc(tok), 0, carol, dave, bob, _out(42, true), _memo()));
+        a.ownTag = keccak256("T62a op1 relayed");
+        _n1(a, _uEnv(tok, 0, MetaTxLib.MODE_RESTRICT_RELAYER, RELAYER, 0, address(0xFEE1)),
+            "op1 HASH relayed audited carol->dave, beneficiary bob; relayer bound, fee recipient unbound");
+        IPqzToken.PqzMultiArgs memory m = _ms(_mpl(carol, _legs(alice, erin), 43, true, true));
+        m.ownTag = keccak256("T62a op7 direct");
+        _n7(m, d, "op7 M=2 HASH direct audited carol->[alice,erin]");
+        decoy = 2;
+        m = _ms(_mpl(carol, _legs(bob, alice, dave, erin), 44, false, false));
+        (m.beneficiaryUA, m.ownTag) = (fay, keccak256("T62a op7 relayed"));
+        decoy = 0;
+        _n7(m, _uEnv(tok, 7, MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT, address(0xBEE2), 5, address(0xFEE2)),
+            "op7 M=4 BUNDLE relayed carol->[bob,alice,dave,erin], beneficiary fay, decoyFee 2; fee recipient bound, relayer unbound, fee 5 under fee mode none");
+        bytes32 rcp = bytes32(uint256(0xD00D));
+        _nb(_burnArgs(tok, bytes32(0), 81, "T62a burn direct"), 1, rcp, d, "burn 1 direct carol to 0xd00d");
+        _nb(_burnArgs(tok, bob, 82, "T62a burn relayed"), 2, rcp, _uEnv(tok, 0, 3, RELAYER, 0, address(0xFEE3)),
+            "burn 2 relayed carol to 0xd00d, beneficiary bob; relayer and fee recipient bound");
+        _nb(_burnArgs(tok, bytes32(0), 83, "T62a refresh direct"), 0, 0, d, "refresh direct carol");
+        _nb(_burnArgs(tok, bytes32(0), 84, "T62a refresh relayed"), 0, 0, _uEnv(tok, 9, 0, address(0xBEE4), 0, address(0xFEE4)),
+            "refresh relayed carol; relayer and fee recipient unbound, both non-zero");
+        _releaseWrapped();
+        wt = _newWrapped("t62a");
+        MockERC20 usd = MockERC20(wt.underlyings()[0]);
+        usd.mint(address(this), 100 * SCALE);
+        usd.approve(address(wt), 100 * SCALE);
+        wt.mtxWrapShield(address(usd), 100 * SCALE, carol);
+        PqzLayer w = PqzLayer(address(wt));
+        _nu(_burnArgs(w, bytes32(0), 85, "T62a unwrap direct"), IConfidentialWrappedToken.Unwrap(address(usd), rcp, 10, 10 * SCALE), d,
+            "unwrap 10 direct carol to 0xd00d (a WRAPPED_PQZ token)");
+        _nu(_burnArgs(w, bob, 86, "T62a unwrap relayed"), IConfidentialWrappedToken.Unwrap(address(usd), rcp, 5, 4 * SCALE),
+            _uEnv(w, 0, MetaTxLib.MODE_RESTRICT_RELAYER, RELAYER, 0, address(0xFEE5)),
+            "unwrap 5 relayed carol to 0xd00d, minOut below the quote, beneficiary bob (a WRAPPED_PQZ token); relayer bound");
+    }
+
+    function _pc(PqzLayer t) internal view returns (uint256) {
+        return t.pqzAccount(carol, 0).pendingCount;
+    }
+
+    function _uEnv(PqzLayer t, uint256 batch, uint32 mode, address relayer, uint256 fee, address feeRecipient)
+        internal view returns (MetaTxLib.UAEnvelope memory)
+    {
+        return MetaTxLib.UAEnvelope(carol, batch, t.mtxNonce(carol, batch), block.timestamp + 300, mode, relayer, fee, feeRecipient);
+    }
+
+    /// The statement views' `binding`: 0 direct, the token's `envelopeBinding` of the envelope relayed (`data` is not bound).
+    function _eb(PqzLayer t, MetaTxLib.UAEnvelope memory u) internal view returns (bytes32) {
+        return u.from == 0 ? bytes32(0) : t.envelopeBinding(MetaTxLib.UAMetaTransaction(u.from, "", u.batch, u.nonce, u.validUntil,
+            u.mode, u.relayer, u.fee, u.feeRecipient));
+    }
+
+    function _burnArgs(PqzLayer t, bytes32 ben, uint256 seed, string memory tag) internal view returns (IPqzToken.PqzBurnArgs memory b) {
+        b = _bs(bytes.concat(abi.encode(_pc(t), block.number + 100, uint256(0), carol, ben), _blob(seed, PqzCt.CT)));
+        b.ownTag = keccak256(bytes(tag));
+    }
+
+    function _n1(IPqzToken.PqzTransferArgs memory a, MetaTxLib.UAEnvelope memory u, string memory name) internal {
+        bytes32 eb = _eb(tok, u);
+        bytes memory st = tok.transferSingleStatement(a, eb);
+        _row(tok, name, "op1", u, eb, st, _f1(a));
+        vm.expectCall(PQZ, abi.encodePacked(uint8(1), uint32(st.length), st, PROOF));
+        bool hash = a.sealedMemo.length != 0;
+        if (u.from == 0) {
+            if (hash) tok.mtxConfidentialTransferSingleCompact(a, PROOF, _pqAuth(), "", noVerdict());
+            else tok.mtxConfidentialTransferSingle(a, PROOF, _pqAuth(), "", noVerdict());
+        } else {
+            vm.prank(RELAYER);
+            if (hash) tok.mtxConfidentialTransferSingleCompact(u, a, PROOF, _pqAuth(), "", UACall.auth(carol, _mlAuth()), noVerdict());
+            else tok.mtxConfidentialTransferSingle(u, a, PROOF, _pqAuth(), "", UACall.auth(carol, _mlAuth()), noVerdict());
+        }
+        _sealed(tok);
+    }
+
+    function _n7(IPqzToken.PqzMultiArgs memory m, MetaTxLib.UAEnvelope memory u, string memory name) internal {
+        bytes32 eb = _eb(tok, u);
+        bytes memory st = tok.transferStatement(m, eb);
+        _row(tok, name, "op7", u, eb, st, _f7(m));
+        vm.expectCall(PQZ, abi.encodePacked(uint8(7), uint32(st.length), st, PROOF));
+        bool hash = m.sealedMemo.length != 0;
+        if (u.from == 0) {
+            if (hash) tok.mtxConfidentialTransferCompact(m, PROOF, _pqAuth(), "", noVerdict());
+            else tok.mtxConfidentialTransfer(m, PROOF, _pqAuth(), "", noVerdict());
+        } else {
+            vm.prank(RELAYER);
+            if (hash) tok.mtxConfidentialTransferCompact(u, m, PROOF, _pqAuth(), "", UACall.auth(carol, _mlAuth()), noVerdict());
+            else tok.mtxConfidentialTransfer(u, m, PROOF, _pqAuth(), "", UACall.auth(carol, _mlAuth()), noVerdict());
+        }
+        _sealed(tok);
+    }
+
+    function _nb(IPqzToken.PqzBurnArgs memory b, uint256 amount, bytes32 rcp, MetaTxLib.UAEnvelope memory u, string memory name) internal {
+        bytes32 eb = _eb(tok, u);
+        bytes memory st = tok.burnStatement(b, amount, rcp, eb);
+        _row(tok, name, amount == 0 ? "refresh" : "burn", u, eb, st, _burnFields(b, amount, rcp));
+        vm.expectCall(PQZ, abi.encodePacked(uint8(2), uint32(st.length), st, PROOF));
+        if (u.from == 0) {
+            tok.mtxUnshield(b, amount, rcp, PROOF, _pqAuth(), "", noVerdict());
+        } else {
+            vm.prank(RELAYER);
+            tok.mtxUnshield(u, b, IPqzToken.Payout(amount, rcp), PROOF, _pqAuth(), "", UACall.auth(carol, _mlAuth()), noVerdict());
+        }
+        _sealed(tok);
+    }
+
+    function _nu(IPqzToken.PqzBurnArgs memory b, IConfidentialWrappedToken.Unwrap memory x, MetaTxLib.UAEnvelope memory u,
+        string memory name) internal
+    {
+        PqzLayer t = PqzLayer(address(wt));
+        bytes32 eb = _eb(t, u);
+        bytes memory st = wt.unshieldUnwrapStatement(b, x, eb);
+        _row(t, name, "unwrap", u, eb, st, _fu(b, x));
+        vm.expectCall(PQZ, abi.encodePacked(uint8(2), uint32(st.length), st, PROOF));
+        if (u.from == 0) {
+            wt.mtxUnshieldUnwrap(b, x, PROOF, _pqAuth(), "", noVerdict());
+        } else {
+            vm.prank(RELAYER);
+            wt.mtxUnshieldUnwrap(u, b, x, PROOF, _pqAuth(), "", UACall.auth(carol, _mlAuth()), noVerdict());
+        }
+        _sealed(t);
+    }
+
+    function _f1(IPqzToken.PqzTransferArgs memory a) internal pure returns (string memory) {
+        string memory f = string.concat("\"fromUA\": ", _hx32(a.fromUA), ", \"toUA\": ", _hx32(a.toUA), ", \"beneficiaryUA\": ",
+            _hx32(a.beneficiaryUA), ", \"p\": ", vm.toString(uint256(a.p)), ", \"validUntilBlock\": ", vm.toString(a.validUntilBlock));
+        return string.concat(f, ", \"shieldIn\": ", vm.toString(a.shieldIn), _memoFields(a.vAuditor.length != 0, a.salt, a.sealedMemo,
+            a.ownTag));
+    }
+
+    function _f7(IPqzToken.PqzMultiArgs memory m) internal pure returns (string memory) {
+        string memory l;
+        for (uint256 j; j < m.legs.length; ++j) l = string.concat(l, j == 0 ? "" : ", ", _hx32(m.legs[j].ua));
+        string memory f = string.concat("\"fromUA\": ", _hx32(m.fromUA), ", \"legs\": [", l, "], \"beneficiaryUA\": ",
+            _hx32(m.beneficiaryUA), ", \"p\": ", vm.toString(uint256(m.p)), ", \"validUntilBlock\": ", vm.toString(m.validUntilBlock));
+        f = string.concat(f, ", \"shieldIn\": ", vm.toString(m.shieldIn), ", \"decoyFee\": ", vm.toString(m.decoyFee));
+        return string.concat(f, _memoFields(m.legs[0].vAuditor.length != 0, m.salt, m.sealedMemo, m.ownTag));
+    }
+
+    function _fu(IPqzToken.PqzBurnArgs memory b, IConfidentialWrappedToken.Unwrap memory x) internal view returns (string memory) {
+        return string.concat(_burnFields(b, x.amount, x.recipient), ", \"underlying\": ", _hxa(x.underlying), ", \"minOut\": ",
+            vm.toString(x.minOut), ", \"unwrapBinding\": ", _hx32(wt.unwrapBinding(x.underlying, x.minOut)));
+    }
+
+    function _memoFields(bool aud, bytes16 s, bytes memory memo, bytes32 tag) internal pure returns (string memory) {
+        return string.concat(", \"auditorOn\": ", aud ? "true" : "false", ", \"salt\": ", _hx(abi.encodePacked(s)), ", \"sealedMemo\": ",
+            _hx(memo), ", \"ownTag\": ", _hx32(tag), ", \"transferMode\": ", memo.length != 0 ? "0" : "1");
+    }
+
+    function _burnFields(IPqzToken.PqzBurnArgs memory b, uint256 amount, bytes32 rcp) internal pure returns (string memory) {
+        string memory s = string.concat("\"fromUA\": ", _hx32(b.fromUA), ", \"beneficiaryUA\": ", _hx32(b.beneficiaryUA), ", \"p\": ",
+            vm.toString(uint256(b.p)), ", \"validUntilBlock\": ", vm.toString(b.validUntilBlock), ", \"shieldIn\": ", vm.toString(b.shieldIn));
+        return string.concat(s, ", \"ownTag\": ", _hx32(b.ownTag), ", \"amount\": ", vm.toString(amount), ", \"recipient\": ", _hx32(rcp));
+    }
+
+    /// A row: the token's words, the sender's `sendCounter` before the call, the form's fields, the envelope (relayed), the
+    /// views' `binding` as `envelopeBinding`, header word 17 and the 640 header bytes of the statement the view built.
+    function _row(PqzLayer t, string memory name, string memory form, MetaTxLib.UAEnvelope memory u, bytes32 eb, bytes memory st,
+        string memory fields) internal
+    {
+        string memory c = string.concat("{\"name\": ", _q(name), ", \"form\": ", _q(form), ", \"path\": ", _q(u.from == 0 ? "direct" : "relayed"),
+            ", \"token\": ", _hxa(address(t)), ", \"chainId\": ", vm.toString(block.chainid), ", \"psid\": ", _hx32(t.proofSystemId()));
+        c = string.concat(c, ", \"registry\": ", _hxa(t.registry()), ", \"chainUid\": ", _hx32(t.chainUid()), ", \"confidentialFee\": ",
+            vm.toString(t.confidentialFee()), ", \"sendCounter\": ", vm.toString(uint256(t.pqzAccount(carol, 0).sendCounter)), ",\n", fields);
+        if (u.from != 0) c = string.concat(c, ",\n", _envJson(u));
+        noneRows.push(string.concat(c, ", \"envelopeBinding\": ", _hx32(eb), ", \"binding\": ", _hx32(_word(st, 544)), ",\n\"header\": ",
+            _hx(_slice(st, 0, 640)), "}"));
+        noneHdrs.push(_slice(st, 0, 640));
+    }
+
+    function _envJson(MetaTxLib.UAEnvelope memory u) internal pure returns (string memory) {
+        string memory s = string.concat("\"envelope\": {\"from\": ", _hx32(u.from), ", \"batch\": ", vm.toString(u.batch), ", \"nonce\": ",
+            vm.toString(u.nonce), ", \"validUntil\": ", vm.toString(u.validUntil), ", \"mode\": ", vm.toString(uint256(u.mode)));
+        return string.concat(s, ", \"relayer\": ", _hxa(u.relayer), ", \"fee\": ", vm.toString(u.fee), ", \"feeRecipient\": ",
+            _hxa(u.feeRecipient), "}");
+    }
+
+    /// The debit just made is recorded under `NONE` (its P is the call's calldata, spec §9.5).
+    function _sealed(PqzLayer t) internal view {
+        assertEq(t.pqzDebitRecord(carol, t.pqzAccount(carol, 0).sendCounter - 1).proofStore, PqzCore.NONE, "a NONE debit");
+    }
+
+    // ------------------------------------------------------------------ T62a: the reader
+
+    /// The 20 header words (pq-zero-knowledge.md §7.7) a client lays out from a row.
+    struct Hdr {
+        bytes32 opTag;
+        bytes32 psid;
+        uint256 chainId;
+        address token;
+        address registry;
+        bytes32 from;
+        bytes32 to;
+        bytes32 ben;
+        uint256 fee;
+        uint256 amount;
+        bytes32 recipient;
+        uint256 sendCounter;
+        uint256 p;
+        uint256 validUntil;
+        uint256 auditorOn;
+        uint256 shieldIn;
+        bytes32 chainUid;
+        bytes32 binding;
+        uint256 salt;
+        bytes32 memoHash;
+    }
+
+    /// T62a's reader: the `noneHeaders` rows of the set's `state.json`, each equal to the header this commit's contract built
+    /// for the same debit, and rebuilt from the row's named fields alone (the envelope's binding with an unbound relayer or
+    /// fee recipient as 0, the binding word by form and path, the 20 words); a set without state vectors is skipped.
+    function test_noneHeaderRows() public {
+        _build();
+        _none();
+        string memory f = string.concat(_vecDir(), "state.json");
+        if (!vm.exists(f)) vm.skip(true, string.concat(PqzSet.NAME, ": no state.json at this set"));
+        string[] memory parts = vm.split(vm.readFile(f), "\"noneHeaders\": ");
+        assertEq(parts.length, 2, "state.json: the noneHeaders rows (T62a)");
+        string memory j = string.concat("{\"noneHeaders\": ", parts[1]);
+        assertFalse(vm.keyExistsJson(j, string.concat(".noneHeaders[", vm.toString(noneHdrs.length), "]")), "no row beyond the debits");
+        for (uint256 i; i < noneHdrs.length; ++i) {
+            string memory k = string.concat(".noneHeaders[", vm.toString(i), "]");
+            bytes memory h = vm.parseJsonBytes(j, string.concat(k, ".header"));
+            assertEq(h, noneHdrs[i], string.concat(k, ": the header the contract built"));
+            assertEq(_rebuild(j, k), h, string.concat(k, ": the header from the row's named fields"));
+        }
+    }
+
+    function _rebuild(string memory j, string memory k) internal view returns (bytes memory) {
+        Hdr memory h;
+        (h.psid, h.chainId, h.token, h.registry) = (_jw(j, k, "psid"), _ju(j, k, "chainId"), _ja(j, k, "token"), _ja(j, k, "registry"));
+        (h.from, h.ben, h.sendCounter, h.p) = (_jw(j, k, "fromUA"), _jw(j, k, "beneficiaryUA"), _ju(j, k, "sendCounter"), _ju(j, k, "p"));
+        (h.validUntil, h.shieldIn, h.chainUid) = (_ju(j, k, "validUntilBlock"), _ju(j, k, "shieldIn"), _jw(j, k, "chainUid"));
+        h.fee = h.ben == 0 ? 0 : _ju(j, k, "confidentialFee");
+        bytes32 eb = _envelopeBindingOf(j, k, h);
+        bytes32 form = keccak256(bytes(vm.parseJsonString(j, string.concat(k, ".form"))));
+        if (form == keccak256("op1") || form == keccak256("op7")) _transferWords(j, k, h, eb, form == keccak256("op7"));
+        else _burnWords(j, k, h, eb, form == keccak256("unwrap"));
+        assertEq(h.binding, _jw(j, k, "binding"), string.concat(k, ": the binding word"));
+        return bytes.concat(abi.encode(h.opTag, h.psid, h.chainId, h.token, h.registry, h.from, h.to, h.ben, h.fee, h.amount),
+            abi.encode(h.recipient, h.sendCounter, h.p, h.validUntil, h.auditorOn, h.shieldIn, h.chainUid, h.binding, h.salt, h.memoHash));
+    }
+
+    /// `envelopeBinding` of a relayed row from its envelope (CTR-PQZ-21, R36: `SCAAS-PQZ-UA-ENVELOPE-V1`, every field but `data`,
+    /// an unbound relayer or fee recipient as 0); a direct row's is 0.
+    function _envelopeBindingOf(string memory j, string memory k, Hdr memory h) internal view returns (bytes32 eb) {
+        eb = _jw(j, k, "envelopeBinding");
+        string memory e = string.concat(k, ".envelope");
+        if (!vm.keyExistsJson(j, e)) {
+            assertEq(eb, 0, string.concat(k, ": a direct call, envelopeBinding 0"));
+            return eb;
+        }
+        uint256 mode = _ju(j, e, "mode");
+        address r = mode & 1 != 0 ? _ja(j, e, "relayer") : address(0);
+        address fr = mode & 2 != 0 ? _ja(j, e, "feeRecipient") : address(0);
+        bytes32 x = keccak256(bytes.concat(abi.encode(keccak256("SCAAS-PQZ-UA-ENVELOPE-V1"), h.chainId, h.chainUid, h.token,
+            _jw(j, e, "from"), _ju(j, e, "batch")), abi.encode(_ju(j, e, "nonce"), _ju(j, e, "validUntil"), mode, r, _ju(j, e, "fee"), fr)));
+        assertEq(x, eb, string.concat(k, ": envelopeBinding from the envelope's fields"));
+    }
+
+    /// Op 1 / op 7: the mode folded into the binding (`SCAAS-PQZ-DIRECT-MODE-V1` direct, the envelope's relayed; HASH 0 with a
+    /// sealed memo, BUNDLE 1), `memoHash = keccak256(memo ‖ ownTag)`, op 7's `recipientsHash`, `M` and `fee + M · decoyFee`.
+    function _transferWords(string memory j, string memory k, Hdr memory h, bytes32 eb, bool multi) internal pure {
+        uint8 mode = uint8(_ju(j, k, "transferMode"));
+        bytes memory salt = vm.parseJsonBytes(j, string.concat(k, ".salt"));
+        h.salt = uint128(bytes16(salt));
+        h.auditorOn = vm.parseJsonBool(j, string.concat(k, ".auditorOn")) ? 1 : 0;
+        bytes memory memo = mode == 0 ? bytes.concat(salt, vm.parseJsonBytes(j, string.concat(k, ".sealedMemo"))) : bytes("");
+        h.memoHash = keccak256(bytes.concat(memo, _jw(j, k, "ownTag")));
+        h.binding = keccak256(abi.encode(eb == 0 ? keccak256("SCAAS-PQZ-DIRECT-MODE-V1") : eb, mode));
+        if (!multi) {
+            (h.opTag, h.to) = (PqzCore.OP_TRANSFER, _jw(j, k, "toUA"));
+            return;
+        }
+        bytes32[] memory legs = vm.parseJsonBytes32Array(j, string.concat(k, ".legs"));
+        (h.opTag, h.to, h.recipient) = (PqzCore.OP_TRANSFER_MULTI, keccak256(abi.encodePacked(legs)), bytes32(legs.length));
+        h.fee += legs.length * _ju(j, k, "decoyFee");
+    }
+
+    /// Burn, refresh (amount 0), unwrap: `memoHash = keccak256(ownTag)`; the binding 0 / the envelope's, an unwrap's
+    /// `unwrapBinding(underlying, minOut)` direct and `keccak256(abi.encode(envelopeBinding, unwrapBinding))` relayed.
+    function _burnWords(string memory j, string memory k, Hdr memory h, bytes32 eb, bool unwrap) internal pure {
+        (h.amount, h.recipient) = (_ju(j, k, "amount"), _jw(j, k, "recipient"));
+        h.opTag = h.amount == 0 ? PqzCore.OP_REFRESH : PqzCore.OP_BURN;
+        h.memoHash = keccak256(abi.encodePacked(_jw(j, k, "ownTag")));
+        h.binding = eb;
+        if (!unwrap) return;
+        bytes32 w = keccak256(abi.encode(keccak256("SCAAS-PQZ-UNWRAP-V1"), _ja(j, k, "underlying"), _ju(j, k, "minOut")));
+        assertEq(w, _jw(j, k, "unwrapBinding"), string.concat(k, ": unwrapBinding(underlying, minOut)"));
+        h.binding = eb == 0 ? w : keccak256(abi.encode(eb, w));
+    }
+
+    function _jw(string memory j, string memory k, string memory f) internal pure returns (bytes32) {
+        return vm.parseJsonBytes32(j, string.concat(k, ".", f));
+    }
+
+    function _ju(string memory j, string memory k, string memory f) internal pure returns (uint256) {
+        return vm.parseJsonUint(j, string.concat(k, ".", f));
+    }
+
+    function _ja(string memory j, string memory k, string memory f) internal pure returns (address) {
+        return vm.parseJsonAddress(j, string.concat(k, ".", f));
     }
 }
