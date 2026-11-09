@@ -1,0 +1,16 @@
+# 2026-11-09-ua-rs-sign-t20d10 at commit 858a39d5
+step | commit | rc | counts
+docs | 858a39d5 | 0 | -
+no-oracle | 858a39d5 | 0 | 17 passed 0 failed 1 ignored (cargo) 
+no-oracle-n2048 | 858a39d5 | 0 | 13 passed 0 failed 0 ignored (cargo) 
+no-oracle-ua-py | 858a39d5 | 0 | 2 ran (unittest) 
+ua-py | 858a39d5 | 0 | 91 ran (unittest) 
+mutant-logs | 858a39d5 | 0 | -
+
+# result lines
+no-oracle: test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.98s
+no-oracle: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+no-oracle: test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 10.30s
+no-oracle: test result: ok. 2 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.15s
+no-oracle-n2048: test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.08s
+no-oracle-n2048: test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 9.87s
