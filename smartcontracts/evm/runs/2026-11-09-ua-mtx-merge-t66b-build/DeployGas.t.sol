@@ -5,6 +5,9 @@ import {kindModuleNames, kindImplArgs} from "../../script/KindModules.sol";
 import {ImplArgs} from "../../src/metatx/ITokenModule.sol";
 import {Test, Vm} from "forge-std/Test.sol";
 import {SmartKeyAccountFactory} from "../../src/account/SmartKeyAccountFactory.sol";
+import {SmartKeyAccount} from "../../src/account/SmartKeyAccount.sol";
+import {MandateWallet} from "../../src/wallet/MandateWallet.sol";
+import {HederaMandateWallet} from "../../src/hedera/HederaMandateWallet.sol";
 import {GovernanceRouter} from "../../src/governance/GovernanceRouter.sol";
 import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
@@ -131,6 +134,11 @@ contract T66bDeployGasTest is Test {
         _m("RelayFeeRouter", type(RelayFeeRouter).creationCode);
         _m("ComplianceRegistry", abi.encodePacked(type(ComplianceRegistry).creationCode, abi.encode(address(probe))));
         _m("SmartKeyAccountFactory", abi.encodePacked(type(SmartKeyAccountFactory).creationCode, abi.encode(UID)));
+        // the wallets (4.4: each its own transaction; the SmartKeyAccount implementation is also inside the factory's row)
+        _m("SmartKeyAccount", abi.encodePacked(type(SmartKeyAccount).creationCode, abi.encode(UID)));
+        _m("MandateWallet", abi.encodePacked(type(MandateWallet).creationCode, abi.encode(bytes32(uint256(1)), UID, address(0), false)));
+        _m("HederaMandateWallet",
+            abi.encodePacked(type(HederaMandateWallet).creationCode, abi.encode(bytes32(uint256(1)), UID, address(0))));
         // every library with external functions (each its own transaction)
         _m("UARegistryCoreLib", type(UARegistryCoreLib).creationCode);
         _m("UARegistryAuxLib", type(UARegistryAuxLib).creationCode);

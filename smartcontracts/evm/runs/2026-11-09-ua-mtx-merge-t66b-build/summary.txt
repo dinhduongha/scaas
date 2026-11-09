@@ -371,3 +371,153 @@ test/pqzh | 0 | 42 passed
 test/vectors | 0 | no tests (compiles)
 top (test/*.t.sol, from a copy dir: sparse mode compiles every test dir) | 0 | 29 passed
 test/t66b (gates.sh t66b, label q43, + DiffPqzRegulated) | 0 | 11 suites, 30 passed
+
+Task 4.4, the gates on the final tree (816f226d + the commit of this summary: docs, a test comment, DeployGas.t.sol's wallet rows,
+gates.sh's four-set steps; no src change). Label q44.
+The four-set gate (gates.sh pqz-<set> / research-<set>: script/pqz/at-set.sh, FOUNDRY_TEST=<dir>, -vv; src/pqz/PqzSet.sol restored
+and checked by git diff after each run). Pass criterion (spec §10, owner ruling (c)): only test_gas_rollMax_relayedFullTx red, at
+n2048-kmax1024, n2304-kmax4096, n2816-kmax65536.
+step | set | rc | counts | reds
+test/pqz | n2048-kmax1024 | 1 | 598 passed, 2 failed, 2 skipped | ROLL_MAX only (2 suites)
+test/pqz | n2304-kmax4096 | 1 | 596 passed, 2 failed, 4 skipped | ROLL_MAX only (2 suites)
+test/pqz | n2560-kmax16384 | 0 | 595 passed, 0 failed, 7 skipped | -
+test/pqz | n2816-kmax65536 | 1 | 588 passed, 2 failed, 12 skipped | ROLL_MAX only (2 suites)
+test/research | n2048-kmax1024 | 1 | 359 passed, 3 failed, 4 skipped | ROLL_MAX only (3 suites)
+test/research | n2304-kmax4096 | 1 | 356 passed, 3 failed, 7 skipped | ROLL_MAX only (3 suites)
+test/research | n2560-kmax16384 | 0 | 359 passed, 0 failed, 7 skipped | -
+test/research | n2816-kmax65536 | 1 | 347 passed, 3 failed, 16 skipped | ROLL_MAX only (3 suites)
+@UA8@
+Four-set gate: PASS (no red row but the listed ROLL_MAX rows).
+
+Task 4.5, ROLL_MAX at the four sets (figures only; ROLL_MAX stays 96 / 80 / 64 / 32, no bound moves: owner 2026-11-09). From the
+q44 test/pqz logs, PqzStatePinGasTest.test_gas_rollMax_relayedFullTx: the ROLL_MAX rollover as a full relayed transaction (fee 7)
+and the linear fit of ROLL_MAX + 16 against the cap 0.75 x 2^24 = 12,582,912 (the test is red when the fit is still under it):
+n2048-kmax1024 red | mtxExecute: ROLL_MAX 96 regular 10,697,626 (state 195,840), ROLL_MAX+16 fit 11,693,722 (under 0.75*2^24 = 12,582,912), per entry 62,256 | uaExecute: ROLL_MAX 96 regular 10,856,706 (state 195,840), ROLL_MAX+16 fit 11,852,802 (under 0.75*2^24 = 12,582,912), per entry 62,256
+n2304-kmax4096 red | mtxExecute: ROLL_MAX 80 regular 11,269,324 (state 195,840), ROLL_MAX+16 fit 12,376,172 (under 0.75*2^24 = 12,582,912), per entry 69,178 | uaExecute: ROLL_MAX 80 regular 11,428,404 (state 195,840), ROLL_MAX+16 fit 12,535,252 (under 0.75*2^24 = 12,582,912), per entry 69,178
+n2560-kmax16384 green | mtxExecute: ROLL_MAX 64 regular 11,733,066 (state 195,840), ROLL_MAX+16 fit 12,951,110 (over 0.75*2^24 = 12,582,912), per entry 76,127 | uaExecute: ROLL_MAX 64 regular 11,892,146 (state 195,840), ROLL_MAX+16 fit 13,110,178 (over 0.75*2^24 = 12,582,912), per entry 76,127
+n2816-kmax65536 red | mtxExecute: ROLL_MAX 32 regular 10,732,998 (state 195,840), ROLL_MAX+16 fit 12,062,550 (under 0.75*2^24 = 12,582,912), per entry 83,097 | uaExecute: ROLL_MAX 32 regular 10,892,078 (state 195,840), ROLL_MAX+16 fit 12,221,630 (under 0.75*2^24 = 12,582,912), per entry 83,097
+
+Task 4.4, deploy gas of every deployed contract (DeployGas.t.sol test_t66bDeployGas, LABEL=q44 gates.sh deploy-gas; each its own
+CREATE2 transaction through a probe, isolate: regular = gasTotalUsed x 64/63, state = EIP-8037's, asked = (regular + state) x 1.05).
+93 contracts, every one <= 60 M asked and regular x 1.05 < 2^24. A release through deployImplementation adds the factory frame,
+test_t66bReleaseFrame: 310,633 asked (NormalToken). Before 4.4 the table had no wallet rows; added: SmartKeyAccount,
+MandateWallet, HederaMandateWallet (each its own transaction; the SmartKeyAccount implementation is also inside
+SmartKeyAccountFactory's row).
+contract | runtime B | init B | regular | state | asked (x1.05) | regular x1.05 < 2^24
+NormalTokenP | 24,300 | 25,997 | 1,713,192 | 37,460,520 | 41,132,397 | yes
+NormalTokenT | 14,259 | 15,893 | 1,055,752 | 22,097,790 | 24,311,219 | yes
+NormalTokenA | 23,994 | 25,837 | 1,702,790 | 36,992,340 | 40,629,886 | yes
+NormalToken | 13,734 | 16,829 | 1,116,086 | 21,294,540 | 23,531,157 | yes
+WrappedTokenP | 24,728 | 26,425 | 1,740,239 | 38,115,360 | 41,848,378 | yes
+WrappedTokenT | 15,635 | 17,276 | 1,145,213 | 24,203,070 | 26,615,697 | yes
+WrappedTokenA | 19,629 | 21,417 | 1,415,680 | 30,313,890 | 33,316,048 | yes
+WrappedTokenW | 21,873 | 23,682 | 1,563,396 | 33,747,210 | 37,076,136 | yes
+WrappedToken | 17,808 | 21,086 | 1,392,794 | 27,527,760 | 30,366,581 | yes
+NormalZetherTokenP | 25,288 | 27,007 | 1,777,688 | 38,972,160 | 42,787,340 | yes
+NormalZetherTokenT | 14,253 | 15,909 | 1,057,832 | 22,088,610 | 24,303,764 | yes
+NormalZetherTokenA | 23,463 | 25,328 | 1,669,501 | 36,179,910 | 39,741,881 | yes
+NormalZetherTokenZ | 21,948 | 23,793 | 1,569,637 | 33,861,960 | 37,203,176 | yes
+NormalZetherToken | 17,088 | 20,373 | 1,347,023 | 26,426,160 | 29,161,842 | yes
+WrappedZetherTokenP | 25,835 | 27,554 | 1,815,137 | 39,809,070 | 43,705,417 | yes
+WrappedZetherTokenT | 15,635 | 17,298 | 1,147,294 | 24,203,070 | 26,617,882 | yes
+WrappedZetherTokenA | 16,746 | 18,556 | 1,228,434 | 25,902,900 | 28,487,900 | yes
+WrappedZetherTokenW | 21,697 | 23,500 | 1,550,913 | 33,477,930 | 36,780,285 | yes
+WrappedZetherTokenZ | 27,996 | 29,897 | 1,967,014 | 43,115,400 | 47,336,534 | yes
+WrappedZetherToken | 21,520 | 24,994 | 1,648,696 | 33,207,120 | 36,598,606 | yes
+NormalPqzTokenP | 25,495 | 27,211 | 1,792,251 | 39,288,870 | 43,135,177 | yes
+NormalPqzTokenT | 14,309 | 15,962 | 1,059,913 | 22,174,290 | 24,395,913 | yes
+NormalPqzTokenA | 26,411 | 28,280 | 1,860,908 | 40,690,350 | 44,678,820 | yes
+NormalPqzTokenQ | 30,641 | 32,567 | 2,139,696 | 47,162,250 | 51,767,043 | yes
+NormalPqzToken | 19,045 | 22,577 | 1,490,578 | 29,420,370 | 32,456,495 | yes
+WrappedPqzTokenP | 26,086 | 27,802 | 1,829,701 | 40,193,100 | 44,123,941 | yes
+WrappedPqzTokenT | 15,684 | 17,344 | 1,149,374 | 24,278,040 | 26,698,784 | yes
+WrappedPqzTokenA | 16,875 | 18,689 | 1,238,836 | 26,100,270 | 28,706,061 | yes
+WrappedPqzTokenW | 21,903 | 23,703 | 1,563,396 | 33,793,110 | 37,124,331 | yes
+WrappedPqzTokenQ | 28,283 | 30,048 | 1,975,336 | 43,554,510 | 47,806,338 | yes
+WrappedPqzTokenQ2 | 18,216 | 20,030 | 1,324,137 | 28,152,000 | 30,949,943 | yes
+WrappedPqzToken | 24,314 | 28,126 | 1,850,506 | 37,481,940 | 41,299,068 | yes
+NormalRegulatedTokenP | 28,943 | 30,823 | 2,027,349 | 44,564,310 | 48,921,241 | yes
+NormalRegulatedTokenT | 15,527 | 17,295 | 1,147,294 | 24,037,830 | 26,444,380 | yes
+NormalRegulatedTokenA | 25,702 | 27,679 | 1,821,379 | 39,605,580 | 43,498,306 | yes
+NormalRegulatedTokenW | 11,778 | 13,575 | 905,955 | 18,301,860 | 20,168,205 | yes
+NormalRegulatedToken | 17,484 | 21,062 | 1,392,794 | 27,032,040 | 29,846,075 | yes
+WrappedRegulatedTokenP | 29,378 | 31,258 | 2,054,395 | 45,229,860 | 49,648,467 | yes
+WrappedRegulatedTokenT | 16,996 | 18,771 | 1,242,997 | 26,285,400 | 28,904,816 | yes
+WrappedRegulatedTokenA | 21,348 | 23,277 | 1,536,349 | 32,943,960 | 36,204,324 | yes
+WrappedRegulatedTokenW | 28,021 | 30,055 | 1,977,417 | 43,153,650 | 47,387,620 | yes
+WrappedRegulatedToken | 21,249 | 24,911 | 1,642,455 | 32,792,490 | 36,156,692 | yes
+NormalZetherRegulatedTokenP | 29,960 | 31,866 | 2,093,925 | 46,120,320 | 50,624,957 | yes
+NormalZetherRegulatedTokenT | 15,527 | 17,321 | 1,149,374 | 24,037,830 | 26,446,564 | yes
+NormalZetherRegulatedTokenA | 25,190 | 27,193 | 1,790,171 | 38,822,220 | 42,643,010 | yes
+NormalZetherRegulatedTokenW | 11,778 | 13,601 | 908,036 | 18,301,860 | 20,170,390 | yes
+NormalZetherRegulatedTokenZ | 23,880 | 25,863 | 1,704,870 | 36,817,920 | 40,448,929 | yes
+NormalZetherRegulatedToken | 20,619 | 24,394 | 1,609,167 | 31,828,590 | 35,109,644 | yes
+WrappedZetherRegulatedTokenP | 30,507 | 32,413 | 2,129,294 | 46,957,230 | 51,540,850 | yes
+WrappedZetherRegulatedTokenT | 16,996 | 18,797 | 1,245,078 | 26,285,400 | 28,907,001 | yes
+WrappedZetherRegulatedTokenA | 18,481 | 20,436 | 1,351,184 | 28,557,450 | 31,404,065 | yes
+WrappedZetherRegulatedTokenW | 29,011 | 31,064 | 2,041,912 | 44,668,350 | 49,045,775 | yes
+WrappedZetherRegulatedTokenZ | 28,865 | 30,883 | 2,031,510 | 44,444,970 | 48,800,304 | yes
+WrappedZetherRegulatedToken | 24,995 | 28,868 | 1,900,438 | 38,523,870 | 42,445,523 | yes
+NormalPqzRegulatedTokenP | 30,177 | 32,080 | 2,108,489 | 46,452,330 | 50,988,859 | yes
+NormalPqzRegulatedTokenT | 15,576 | 17,367 | 1,151,455 | 24,112,800 | 26,527,467 | yes
+NormalPqzRegulatedTokenA | 28,131 | 30,138 | 1,981,578 | 43,321,950 | 47,568,704 | yes
+NormalPqzRegulatedTokenW | 11,827 | 13,647 | 910,116 | 18,376,830 | 20,251,293 | yes
+NormalPqzRegulatedTokenQ | 32,423 | 34,487 | 2,264,527 | 49,888,710 | 54,760,898 | yes
+NormalPqzRegulatedToken | 22,556 | 26,555 | 1,748,561 | 34,792,200 | 38,367,799 | yes
+WrappedPqzRegulatedTokenP | 30,783 | 32,686 | 2,148,018 | 47,379,510 | 52,003,904 | yes
+WrappedPqzRegulatedTokenT | 17,045 | 18,843 | 1,247,158 | 26,360,370 | 28,987,904 | yes
+WrappedPqzRegulatedTokenA | 18,594 | 20,553 | 1,359,506 | 28,730,340 | 31,594,338 | yes
+WrappedPqzRegulatedTokenW | 29,202 | 31,252 | 2,054,395 | 44,960,580 | 49,365,723 | yes
+WrappedPqzRegulatedTokenQ | 29,465 | 31,354 | 2,060,637 | 45,362,970 | 49,794,787 | yes
+WrappedPqzRegulatedTokenQ2 | 19,038 | 20,983 | 1,386,552 | 29,409,660 | 32,336,022 | yes
+WrappedPqzRegulatedToken | 27,713 | 31,897 | 2,096,006 | 42,682,410 | 47,017,336 | yes
+SCaaSDexD | 6,459 | 7,033 | 479,451 | 10,065,870 | 11,072,587 | yes
+SCaaSDex | 32,991 | 34,927 | 2,293,654 | 50,757,750 | 55,703,974 | yes
+GovernanceRouter | 15,572 | 16,622 | 1,103,603 | 24,008,760 | 26,367,981 | yes
+OpenFactory | 29,225 | 29,478 | 1,939,968 | 44,995,770 | 49,282,524 | yes
+RelayFeeRouter | 2,552 | 3,269 | 236,032 | 5,119,380 | 5,623,182 | yes
+ComplianceRegistry | 2,538 | 2,760 | 202,743 | 4,164,660 | 4,585,773 | yes
+SmartKeyAccountFactory | 1,264 | 23,254 | 1,534,268 | 34,659,090 | 38,003,025 | yes
+SmartKeyAccount | 21,085 | 21,802 | 1,440,646 | 32,541,570 | 35,681,326 | yes
+MandateWallet | 17,891 | 19,000 | 1,257,561 | 27,556,830 | 30,255,110 | yes
+HederaMandateWallet | 17,891 | 18,955 | 1,255,480 | 27,556,830 | 30,252,925 | yes
+UARegistryCoreLib | 33,685 | 33,737 | 2,216,675 | 51,721,650 | 56,635,241 | yes
+UARegistryAuxLib | 20,192 | 20,244 | 1,338,701 | 31,077,360 | 34,036,864 | yes
+ZetherLib | 26,991 | 27,043 | 1,781,849 | 41,479,830 | 45,424,762 | yes
+PqzTransferLib | 24,456 | 24,508 | 1,615,408 | 37,601,280 | 41,177,522 | yes
+PqzViewLib | 24,201 | 24,253 | 1,598,764 | 37,211,130 | 40,750,388 | yes
+WrappedLib | 17,095 | 17,147 | 1,136,891 | 26,338,950 | 28,849,633 | yes
+PqzBurnLib | 15,404 | 15,456 | 1,026,625 | 23,751,720 | 26,017,262 | yes
+GovernanceLib | 14,513 | 14,565 | 970,451 | 22,388,490 | 24,526,888 | yes
+PqzStateLib | 14,062 | 14,114 | 941,324 | 21,698,460 | 23,771,773 | yes
+ZetherWrappedLib | 12,067 | 12,119 | 810,252 | 18,646,110 | 20,429,180 | yes
+MtxPipelineLib | 12,460 | 12,512 | 835,218 | 19,247,400 | 21,086,748 | yes
+RegulatedLib | 10,418 | 10,470 | 704,146 | 16,123,140 | 17,668,650 | yes
+PqzWrappedLib | 5,563 | 5,615 | 387,909 | 8,694,990 | 9,537,043 | yes
+TradeLib | 4,919 | 4,971 | 346,298 | 7,709,670 | 8,458,766 | yes
+HederaLib | 767 | 819 | 75,832 | 1,357,110 | 1,504,589 | yes
+UARegistry | 28,165 | 37,577 | 2,466,336 | 43,276,050 | 48,029,505 | yes
+
+Task 4.4, the §11 (g) pay-module comparison on the final tree (owner 2026-11-09: pay stays in P; 4.4 reports whether the per-kind pay
+modules' runtime is identical apart from immutables and metadata). T66B_SPLIT_PAY=1 gen_faces.py splits every kind's P into P and P2
+(the `pay` domain of entries.json), forge build src into out/t66b-pay (git-ignored), then gen_faces.py regenerated the committed
+sources (gen_faces.py --check: 27 files, 0 differ; git status of src/ script/ test/ clean). Each P2 runtime with every immutable
+zeroed, every link placeholder zeroed and the CBOR metadata cut, hashed:
+kind | P2 runtime B | compared B | hash (first 16 hex)
+NormalToken | 15,336 | 15,269 | 5a0ff2c4cca6ca6b
+WrappedToken | 15,358 | 15,291 | 99c8d3ee36fbc583
+NormalZetherToken | 15,337 | 15,270 | e25ad2ed9b14f117
+WrappedZetherToken | 15,358 | 15,291 | 82f24b59a4dc6453
+NormalPqzToken | 15,386 | 15,319 | 5e28ef752e576993
+WrappedPqzToken | 15,407 | 15,340 | 4acabd0e2340988e
+NormalRegulatedToken | 19,883 | 19,816 | 10f451f0d5938fe3
+WrappedRegulatedToken | 19,904 | 19,837 | fbc5ed410aa316fa
+NormalZetherRegulatedToken | 19,892 | 19,825 | 31da5af95fefd611
+WrappedZetherRegulatedToken | 19,913 | 19,846 | 697bb49d53475d17
+NormalPqzRegulatedToken | 19,941 | 19,874 | a396a567ef53b5da
+WrappedPqzRegulatedToken | 19,962 | 19,895 | 3c69a722a142a93a
+Result: twelve different runtimes, as at 5a8fccda (the same twelve hashes: no pay body moved since). The first difference against
+kind 0 or kind 8 is at byte 22-23 (the dispatcher's jump targets) for every pair but NormalToken / NormalZetherToken (byte 72) and
+NormalRegulatedToken / NormalZetherRegulatedToken (byte 515): each kind's hooks (`_mtxRule`, `_uaAllowed`, `_update`, the regulated
+hooks) are compiled into its pay bodies, so a shared pay module (C or B of §11 (g)) needs those hooks as data. No P2 is built (the
+largest P 30,783 B < 33,780 B).
