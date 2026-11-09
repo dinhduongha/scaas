@@ -8187,6 +8187,18 @@ It said: Custody tier A/B, HSM or MPC; replaced by CLI-SGN-32.
 Change (2026-11-08, controller, ua-rs-sign T20b at the merge of `ua-mtx-merge` `aa898cf6`; status: documented): the rule no longer says that rotation does not help. Group 3g's rule replaces it: a rotation adds a version (v+1, signed under the `msig`'s m-of-n), the old versions stay readable and are never deleted, and the balance under v moves only by a migration proof under v, which the members can make once the backup rebuilds v's `seed32` (spec 3g O4, O5). The backup, the warning and the share header are unchanged (the header already binds the version). 3g's own client rule takes the next free CLI-SGN id after CLI-SGN-47 (spec 3g C9, plan T57), since CLI-SGN-43 is the KEM key rule here.
 **Source.** [plan](superpowers/plans/2026-11-05-ua-rs-sign.md) T16a, T16b, T20b; [spec 3g](superpowers/specs/2026-11-06-pqz-key-versions.md) O4, O5, §7.2.
 
+### CLI-SGN-48 — A service pull signs one `UAMetaTransfer` bound to the service; `entryRef` is the operation's digest, rebuilt and shown
+- old: — · status: current · owner: yes · date: 2026-11-10 · normative: clients/signers-clientkeys.md#CLI-SGN-48 · superseded-by: —
+
+**Why.** `approve` is gone (CTR-TOK-01); a service contract takes a payer's tokens by the payer's one signed transfer whose
+`relayer` is the service (the service-pull spec, owner-approved 2026-11-09, option A of §4: one signature). The signer is the
+only place the operation is checked before the payer commits to it, so it rebuilds the digest from the typed data it shows.
+**Cost if wrong.** A signer that hashes another preimage than it shows commits the payer to an operation never seen (who is
+paid out, when); a relay fee at the pull's own nonce reverts the whole relay.
+**Status.** BUILT: clientkeys `buildServicePull` (`ua-mtx-merge` T78); `ua-rs`, the C ABI, `ua-cxx`, `ua-dart-frb` (ua-rs-sign
+T20e2). The id is the next free one after CLI-SGN-47 (`docs_check.py resolve`, the spec's C6). UNAUDITED.
+**Source.** [service-pull spec](superpowers/specs/2026-11-09-service-pull.md) §3, §10, §11; [plan](superpowers/plans/2026-11-05-ua-rs-sign.md) T20e2.
+
 ## 38. Clients — SCaaS app
 
 ### CLI-APP-01 — One SPA, two halves, one build

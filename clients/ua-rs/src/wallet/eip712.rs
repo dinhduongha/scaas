@@ -94,6 +94,25 @@ fn int_bits(ty: &str) -> Option<usize> {
 fn atom(ty: &str) -> bool {
     matches!(ty, "string" | "bytes" | "address" | "bool") || bytes_n(ty).is_some() || uint_bits(ty).is_some() || int_bits(ty).is_some()
 }
+/// A service-pull operation's field type (spec 2026-11-09-service-pull C3, clientkeys `OP_FIELD`): an atom but `intN` (C3's too, not
+/// in the reference builder: refused, never mis-encoded).
+pub(crate) fn pull_atom(ty: &str) -> bool {
+    atom(ty) && int_bits(ty).is_none()
+}
+
+/// An atom's ABI form: its head word, or the raw bytes of a `bytes` / `string` (EIP-712 hashes those, the ABI passes them).
+pub(crate) enum Abi {
+    Word([u8; 32]),
+    Raw(Vec<u8>),
+}
+pub(crate) fn abi_atom(ty: &str, v: Option<&Value>) -> Result<Abi> {
+    match (ty, v) {
+        ("string", Some(Value::String(s))) => Ok(Abi::Raw(s.as_bytes().to_vec())),
+        ("string", _) => Err(Error::Argument),
+        ("bytes", _) => hex_of(v)?.map(Abi::Raw).ok_or(Error::Argument),
+        _ => encode_atom(ty, v).map(Abi::Word),
+    }
+}
 
 // --- 256-bit unsigned integers, big-endian bytes (array order is numeric order) ---
 
@@ -480,6 +499,13 @@ impl TypedData {
     }
     pub(crate) fn message(&self) -> &Value {
         &self.message
+    }
+    /// The fields of struct `name` (`EIP712Domain` apart), and how many structs the value declares.
+    pub(crate) fn fields_of(&self, name: &str) -> Option<&Fields> {
+        self.types.get(name)
+    }
+    pub(crate) fn struct_count(&self) -> usize {
+        self.types.len()
     }
 
     /// clientkeys `canonical` (the SCaaS builders only): every field present (missing: its zero), `uint` ≤ 32 bits as a JSON number,

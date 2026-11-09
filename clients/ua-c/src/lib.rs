@@ -1066,6 +1066,16 @@ pub extern "C" fn scaas_ua_meta_pay_id(input: *const c_char, out: *mut c_char, o
     json_call(ua::json::meta_pay_id_json, input, out, out_len)
 }
 
+/// A service pull (spec 2026-11-09-service-pull §10, CLI-SGN-48), JSON in and out, one call per step: in `{name?, token,
+/// chainId, chainUid, entry, op, from, amount, batch, nonce, validUntil}` (`op` the operation's typed data in the service's domain),
+/// then `auth` (the payer's `UASig` over `digest`) and `relayFee` `{name?, feeToken, router, executor, value, batch, nonce,
+/// validUntil, feeAuth?}`; out `{service, entryRef, typedData, digest, selector, prompt}`, with `auth` `calldata` and `job`, with
+/// `relayFee` its `{relayRef, callDataHash, typedData, digest}` and, with `feeAuth`, `relayCalldata`. A refusal is `UAArgument`.
+#[no_mangle]
+pub extern "C" fn scaas_ua_service_pull(input: *const c_char, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
+    json_call(ua::json::service_pull_json, input, out, out_len)
+}
+
 /// The `msig` key data for `n` members (`members` may be NULL when `n == 0`): 4 + 36 * n bytes.
 #[no_mangle]
 pub extern "C" fn scaas_ua_encode_msig(

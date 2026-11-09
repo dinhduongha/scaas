@@ -849,6 +849,29 @@ static void pay_rows() {
         CHECK(got["digest"] == r["digest"], "UAPayWithTax digest");
         CHECK(got["structHash"] == r["structHash"], "UAPayWithTax struct hash");
     }
+    // T80 (CLI-SGN-48): servicepull.json's Note row through servicePull: entryRef, digest, calldata, job, the relay-fee wrap
+    for (auto& r : read("servicepull.json")["rows"]) {
+        if (r["name"] != "note_native") continue;
+        auto& t = r["t"];
+        auto& f = r["relayFee"];
+        json i = {{"name", r["token"]["name"]}, {"token", r["token"]["address"]}, {"chainId", r["chainId"]}, {"chainUid", r["token"]["salt"]},
+                  {"entry", r["entry"]}, {"op", r["typedData"]}, {"from", t["from"]}, {"amount", t["value"]}, {"batch", t["batch"]},
+                  {"nonce", t["nonce"]}, {"validUntil", t["validUntil"]}};
+        json got = json::parse(servicePull(i.dump()));
+        CHECK(got["entryRef"] == r["entryRef"] && got["digest"] == r["transferDigest"], "service pull entryRef, digest");
+        json fee = {{"feeToken", f["feeToken"]}, {"router", f["router"]}, {"executor", f["executor"]}, {"value", f["value"]},
+                    {"batch", f["batch"]}, {"nonce", std::stoull(t["nonce"].get<std::string>()) + 1}, {"validUntil", f["validUntil"]},
+                    {"feeAuth", {{"keyData", "0x"}, {"signature", f["signature"]}, {"members", json::array()}}}};
+        json s = i;
+        s["auth"] = r["auth"];
+        s["relayFee"] = fee;
+        got = json::parse(servicePull(s.dump()));
+        CHECK(got["calldata"] == r["calldata"] && got["job"] == r["job"], "service pull calldata, job");
+        CHECK(got["relayFee"]["relayCalldata"] == f["relayCalldata"], "service pull relay calldata");
+        json other = i;
+        other["from"] = "0x" + std::string(64, '1');
+        CHECK(code_of([&] { servicePull(other.dump()); }) == "UAArgument", "service pull: another payer");
+    }
 }
 
 int main(int argc, char** argv) {

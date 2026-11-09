@@ -90,7 +90,7 @@ for name, res, args in [
     ('replayed_member_sig', st, [u8, sz, u16, u8, sz, P, P]),
     ('ua_auth_domain_separator', st, [u32, u64, u8, u8, P]),
     ('ua_auth_digest', st, [u32, u64, u8, u8, u8, u8, u8, P]), ('member_digest', st, [u8, u8, P]),
-    ('canonical_id', st, [u8, P, P]), ('id_display', st, [u8, u16, P, P]), ('encode_msig', st, [u16, P, sz, P, P]), ('registration_args', st, [u8, P, P]), ('set_kem_key_args', st, [u8, P, P]), ('set_pqz_key_args', st, [u8, P, P]), ('pay_digest', st, [u8, P, P]), ('meta_pay_id', st, [u8, P, P]),
+    ('canonical_id', st, [u8, P, P]), ('id_display', st, [u8, u16, P, P]), ('encode_msig', st, [u16, P, sz, P, P]), ('registration_args', st, [u8, P, P]), ('set_kem_key_args', st, [u8, P, P]), ('set_pqz_key_args', st, [u8, P, P]), ('pay_digest', st, [u8, P, P]), ('meta_pay_id', st, [u8, P, P]), ('service_pull', st, [u8, P, P]),
 ]:
     f = getattr(LIB, 'scaas_ua_' + name)
     f.restype, f.argtypes = res, args
@@ -931,6 +931,24 @@ class GovernanceBits(unittest.TestCase):
         got = json.loads(text(L.pay_digest, i))
         self.assertEqual(got['structHash'], r['structHash'])
         self.assertEqual(got['digest'], r['digest'])
+
+    def test_service_pull(self):
+        """T80 (CLI-SGN-48): servicepull.json's Note row (a string and a bytes field) through scaas_ua_service_pull: entryRef,
+        the transfer digest, the calldata and job once signed, the relay-fee wrap at nonce + 1; another payer refused."""
+        r = next(x for x in json.loads((VEC.parent / 'metatx' / 'servicepull.json').read_text())['rows'] if x['name'] == 'note_native')
+        t, f = r['t'], r['relayFee']
+        i = {'name': r['token']['name'], 'token': r['token']['address'], 'chainId': r['chainId'], 'chainUid': r['token']['salt'],
+             'entry': r['entry'], 'op': r['typedData'], 'from': t['from'], 'amount': t['value'], 'batch': t['batch'],
+             'nonce': t['nonce'], 'validUntil': t['validUntil']}
+        got = json.loads(text(L.service_pull, json.dumps(i).encode()))
+        self.assertEqual((got['entryRef'], got['digest'], got['selector']), (r['entryRef'], r['transferDigest'], r['selector']))
+        fee = {k: f[k] for k in ('feeToken', 'router', 'executor', 'value', 'batch', 'validUntil')}
+        fee.update(nonce=int(t['nonce']) + 1, feeAuth={'keyData': '0x', 'signature': f['signature'], 'members': []})
+        got = json.loads(text(L.service_pull, json.dumps({**i, 'auth': r['auth'], 'relayFee': fee}).encode()))
+        self.assertEqual((got['calldata'], got['job']), (r['calldata'], r['job']))
+        self.assertEqual((got['relayFee']['digest'], got['relayFee']['relayCalldata']), (f['digest'], f['relayCalldata']))
+        other = json.dumps({**i, 'from': '0x' + '11' * 32}).encode()
+        self.assertEqual(code_of(lambda: text(L.service_pull, other)), 'UAArgument')
 
 
 

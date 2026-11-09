@@ -984,6 +984,17 @@ ScaasUaStatus scaas_ua_meta_pay_id(const char *input,
                                    size_t *out_len);
 
 /**
+ * A service pull (spec 2026-11-09-service-pull §10, CLI-SGN-48), JSON in and out, one call per step: in `{name?, token,
+ * chainId, chainUid, entry, op, from, amount, batch, nonce, validUntil}` (`op` the operation's typed data in the service's domain),
+ * then `auth` (the payer's `UASig` over `digest`) and `relayFee` `{name?, feeToken, router, executor, value, batch, nonce,
+ * validUntil, feeAuth?}`; out `{service, entryRef, typedData, digest, selector, prompt}`, with `auth` `calldata` and `job`, with
+ * `relayFee` its `{relayRef, callDataHash, typedData, digest}` and, with `feeAuth`, `relayCalldata`. A refusal is `UAArgument`.
+ */
+ScaasUaStatus scaas_ua_service_pull(const char *input,
+                                    char *out,
+                                    size_t *out_len);
+
+/**
  * The `msig` key data for `n` members (`members` may be NULL when `n == 0`): 4 + 36 * n bytes.
  */
 ScaasUaStatus scaas_ua_encode_msig(uint16_t threshold,

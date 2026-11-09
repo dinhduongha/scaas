@@ -181,6 +181,7 @@ mod ffi {
         fn set_pqz_key_args(input: &str) -> Result<String>;
         fn pay_digest(input: &str) -> Result<String>;
         fn meta_pay_id(input: &str) -> Result<String>;
+        fn service_pull(input: &str) -> Result<String>;
     }
 }
 use ffi::{HolderPop, KindInfo, Member, PqzKeyRecord};
@@ -421,6 +422,9 @@ fn pay_digest(input: &str) -> R<String> {
 }
 fn meta_pay_id(input: &str) -> R<String> {
     guard(|| Ok(ua::json::meta_pay_id_json(input)?))
+}
+fn service_pull(input: &str) -> R<String> {
+    guard(|| Ok(ua::json::service_pull_json(input)?))
 }
 fn encode_msig(threshold: u16, members: &[Member]) -> R<Vec<u8>> {
     guard(|| {

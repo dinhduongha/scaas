@@ -871,6 +871,26 @@ is itself an `msig` gets no share ([CLI-SGN-45](#CLI-SGN-45)) and its members ar
 that hashes to the registered `pqzKeyHash`; the rebuilder is the new operator. **The rebuilt key persists** in the rebuilder's encrypted vault and backup under `pqz-held:<ua>:<version>:<pqzKeyHash>` (vault v1 unchanged), listed in the manifest's public `pqzHeld`, hash-checked on every reopen, reachable by `Wallet::pqz_held_key`. The new operator should rotate to a new key version soon: the old operator and every member
 who held `k` shares can read under the rebuilt version. `seed_backup_warning` is what a client calls before `register` / `setPqzKey`; it warns and the client still builds them. Every refusal is `Argument`; the format is `ua-rs`'s own, pinned by known answers. BUILT in `ua-rs` and the C ABI; no other binding wraps it yet.
 
+<a id="CLI-SGN-48"></a>**CLI-SGN-48** — **A service pull signs one `UAMetaTransfer` bound to the service, with `entryRef` the digest of the operation the
+signer rebuilt and showed.** ([service-pull spec](../superpowers/specs/2026-11-09-service-pull.md) §3, §4 A, §10; owner-approved 2026-11-09.)
+The builder takes the operation's typed data `{domain, types, primaryType, message}` in the service's own domain, the pulled
+token, the payer, the amount, the lane, the nonce and `validUntil`, and refuses unless: the typed data hashes under the
+signer's own EIP-712 encoder within C3 (at most 16 fields of atomic types, `bytes` or `string`, no array, no nested struct, no
+`int` in the reference builders, the first field `bytes32 payer`, every field present and none extra); `op.payer` is the payer;
+the domain's chain id is the chain's and its `verifyingContract` is the service; the amount is above 0. It then sets
+`t = {from, to = pad(service), value, entryRef = the operation's digest, batch, nonce, validUntil, mode = MODE_RESTRICT_RELAYER,
+relayer = the service, fee = 0, feeRecipient = 0}` in the token's salted domain (canonical, `MetaTxLib.canon`), and builds the
+entry's calldata `<entry>(op, t, auth)` (`op`'s `bytes` / `string` raw) and the node job's named fields. With a fee it builds
+the relay-fee wrap after `t` is signed: `UARelayFee` over `keccak256(calldata)` in open mode (payee `pad(router)`), never on the
+pull's own lane and nonce in the pulled token (the pull spends it first: the fee takes `nonce + 1` on the same lane, §2.4).
+**Display:** the service's domain name and address, every field of the operation, the token, the amount and `validUntil`; the
+operation itself is never signed (§3.1). A signer other than `ua-rs` commits blind to the operation (§7, the accepted residual,
+as for `PayMeta`). Status: clientkeys `buildServicePull` (the JS reference, `ua-mtx-merge` T78) BUILT; `ua-rs`
+`wallet::service_pull` and `json::service_pull_json`, the C entry `scaas_ua_service_pull`, `ua-cxx` `servicePull`, `ua-dart-frb`
+`servicePull` BUILT (ua-rs-sign T20e2), held to `smartcontracts/vectors/metatx/servicepull.json`; not yet the warning for a
+service off the chain profile's list (§10: the profile has no service list yet), `ua-qt` (its `scaas-ua` is built with `json`
+only) and the native ports (`ua-py`, `ua-go`, `ua-cs`, `ua-dart` carry no pay surface). UNAUDITED.
+
 ## 10. Connectors
 
 <a id="connectors"></a>

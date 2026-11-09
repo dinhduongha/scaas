@@ -837,5 +837,19 @@ void main() {
         'message': {'payment': payment, 'taxMode': r['taxMode'], 'tax': r['tax']}}))) as Map;
     expect(got['digest'], r['digest']);
     expect(got['structHash'], r['structHash']);
+    // T80 (CLI-SGN-48): servicepull.json's Note row through servicePull: entryRef, digest, calldata, job, the relay-fee wrap
+    final sp = (jsonDecode(File('$vectors/../metatx/servicepull.json').readAsStringSync()) as Map)['rows'] as List;
+    final n = sp.firstWhere((x) => x['name'] == 'note_native') as Map;
+    final t = n['t'] as Map, f = n['relayFee'] as Map;
+    final i = {'name': n['token']['name'], 'token': n['token']['address'], 'chainId': n['chainId'], 'chainUid': n['token']['salt'],
+        'entry': n['entry'], 'op': n['typedData'], 'from': t['from'], 'amount': t['value'], 'batch': t['batch'], 'nonce': t['nonce'],
+        'validUntil': t['validUntil']};
+    final b = jsonDecode(servicePull(input: jsonEncode(i))) as Map;
+    expect([b['entryRef'], b['digest']], [n['entryRef'], n['transferDigest']]);
+    final fee = {for (final k in ['feeToken', 'router', 'executor', 'value', 'batch', 'validUntil']) k: f[k],
+        'nonce': int.parse(t['nonce'] as String) + 1, 'feeAuth': {'keyData': '0x', 'signature': f['signature'], 'members': []}};
+    final s = jsonDecode(servicePull(input: jsonEncode({...i, 'auth': n['auth'], 'relayFee': fee}))) as Map;
+    expect([s['calldata'], s['job'], (s['relayFee'] as Map)['relayCalldata']], [n['calldata'], n['job'], f['relayCalldata']]);
+    expect(errCode(() => servicePull(input: jsonEncode({...i, 'from': '0x${'11' * 32}'}))), 'UAArgument');
   });
 }

@@ -162,6 +162,10 @@ name = "wallet_typed"
 required-features = ["wallet"]
 
 [[test]]
+name = "service_pull"
+required-features = ["wallet"]
+
+[[test]]
 name = "wallet_tx"
 required-features = ["wallet"]
 

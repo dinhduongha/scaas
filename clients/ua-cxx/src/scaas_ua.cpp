@@ -203,6 +203,9 @@ std::string payDigest(const std::string& input) {
 std::string metaPayId(const std::string& input) {
     return jsonCall([&] { return ffi::meta_pay_id(input); });
 }
+std::string servicePull(const std::string& input) {
+    return jsonCall([&] { return ffi::service_pull(input); });
+}
 Bytes encodeMsig(uint16_t th, const std::vector<Member>& ms) {
     std::vector<ffi::Member> v;
     for (auto& m : ms) v.push_back(conv(m));

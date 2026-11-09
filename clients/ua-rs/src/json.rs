@@ -305,3 +305,38 @@ pub fn meta_pay_id_json(t: &str) -> JsonResult<String> {
     let id = meta_pay_id_v3(&m).map_err(|_| Argument)?;
     Ok(json!({ "payId": hx(&id), "payNo": hx(&pay_no), "payNoUuid": pay_no_to_uuid(&pay_no), "save": save }).to_string())
 }
+
+/// A service pull (spec 2026-11-09-service-pull §10, CLI-SGN-48; [`crate::wallet::service_pull`]), JSON in and out, one call per
+/// step. In: `{name?, token, chainId, chainUid, entry, op, from, amount, batch, nonce, validUntil}` (`op` the operation's typed
+/// data in the service's domain), then `auth` (the payer's `UASig` over `digest`) and `relayFee` `{name?, feeToken, router,
+/// executor, value, batch, nonce, validUntil, feeAuth?}` as the payer signs. Out: `{service, entryRef, typedData, digest, selector,
+/// prompt}`; with `auth` `calldata` and `job`; with `relayFee` too `relayFee: {relayRef, callDataHash, typedData, digest}` and,
+/// with its `feeAuth`, `relayCalldata`. `Argument` for any refusal.
+#[cfg(feature = "wallet")]
+pub fn service_pull_json(t: &str) -> JsonResult<String> {
+    let mut v = parse(t)?;
+    let o = v.as_object_mut().ok_or(Argument)?;
+    let (auth, fee) = (o.remove("auth"), o.remove("relayFee"));
+    let p = crate::wallet::service_pull(&v).map_err(|_| Argument)?;
+    let mut out = json!({ "service": hx(&p.service), "entryRef": hx(&p.entry_ref), "typedData": p.transfer.to_value(),
+        "digest": hx(&p.digest), "selector": hx(&p.selector), "prompt": p.prompt });
+    let Some(auth) = auth else {
+        if fee.is_some() {
+            return Err(Argument);
+        }
+        return Ok(out.to_string());
+    };
+    let sig = sig_in(&auth)?;
+    out["calldata"] = json!(hx(&p.calldata(&sig).map_err(|_| Argument)?));
+    out["job"] = p.job(&sig_json(&sig));
+    if let Some(mut f) = fee {
+        let fee_auth = f.as_object_mut().ok_or(Argument)?.remove("feeAuth");
+        let w = p.relay_fee(&sig, &f).map_err(|_| Argument)?;
+        out["relayFee"] = json!({ "relayRef": hx(&w.relay_ref), "callDataHash": hx(&w.call_data_hash),
+            "typedData": w.fee.to_value(), "digest": hx(&w.digest) });
+        if let Some(fa) = fee_auth {
+            out["relayFee"]["relayCalldata"] = json!(hx(&w.calldata(&sig_in(&fa)?).map_err(|_| Argument)?));
+        }
+    }
+    Ok(out.to_string())
+}
