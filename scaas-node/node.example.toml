@@ -103,7 +103,9 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
 chain_uid = "0xf1f491abec46eb7c1784b7fc75a0174171b41831530e510c46b7178c02d63164"  # block 0 (evm/chain-uids.json):
                                                  # a lane whose RPC block 0 differs never starts (NODE-GW-07)
 # account_factory = "0x..."                      # SmartKeyAccountFactory: the only `deploy` call target (unset: refused)
-# token_factory = "0x..."                        # the token factory: never a call target
+# token_factory = "0x..."                        # the token factory (OpenFactory): never a call target; its infoOf
+                                                 # lists the PqChat instances (class 3, version != 0) that pqchat jobs
+                                                 # run on (unset: every pqchat job refused, CALL_TARGET_REFUSED)
 # ua_registry = "0x..."                          # UARegistry: the only target of register / setKemKey / storePqzPop /
                                                  # setPqzKey call jobs (unset: refused); a relayed PQ register over
                                                  # max_gas_per_tx or the block gas limit is refused UA_REGISTER_SPLIT
@@ -133,6 +135,10 @@ governance_routers = ["0xB64D2D5f27D2d5eA951409773343D856e41Fb8E0", "0xFeC9586a1
 #                                                # price a relay fee must reach the quote at (gas limit x 2 x first max fee
 #                                                # per gas); required for a UA payer (relay). Rollups: l1_fee = "op-stack"
 #                                                # adds GasPriceOracle.getL1Fee (Base, Celo)
+#                                                # relay_unsigned_pqchat = true in the same params: relay PqChat's
+#                                                # unsigned storeMessage / addWraps at the lane's own gas (the operator's
+#                                                # lane policy); default false: only as a relay fee's call, else
+#                                                # UNSIGNED_WRITE_NOT_PAID (UA-7 P17)
 # profile = "private"                            # public | private (MESH R76); a private chain never gossips
 # gossip = false                                 # open-mesh gossip for this chain (public only)
 # exclusive_ms = 7000

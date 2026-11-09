@@ -273,7 +273,7 @@ JSON; the struct names are the vector file's keys.
 | Key | Rule |
 |---|---|
 | `entry` | The contract function: `mtxUnwrap`, `uaUnshield`, … |
-| `contract` | The target's kind: `token`, `zether`, `pqz`, `wallet`, `account`, `dex`, `registry`, `factory`. Names the rule and the EIP-712 domain (`SCaaS MetaToken`, `SCaaS ZetherToken`, `SCaaS PqzToken`, `SCaaS MandateWallet`, `SCaaS SmartKeyAccount`, `SCaaS Dex`). May be left out when the entry exists on one kind |
+| `contract` | The target's kind: `token`, `zether`, `pqz`, `wallet`, `account`, `dex`, `registry`, `factory`, `gov_router`, `pqchat`. Names the rule and the EIP-712 domain (`SCaaS MetaToken`, `SCaaS ZetherToken`, `SCaaS PqzToken`, `SCaaS MandateWallet`, `SCaaS SmartKeyAccount`, `SCaaS Dex`). May be left out when the entry exists on one kind |
 | `struct` | Only when an entry has two rows on a kind (`ENTRY_AMBIGUOUS`): `CancelOrder` / `CancelWrapOrder`, `CancelUAOrder` / `CancelUAWrapOrder`, `RollOverSigned` / `ZetherRollOver`, `SetRollOverMode` / `ZetherSetRollOverMode`, `CancelDexOrder` / `mtxCancelOrders`, `PayUnderMandate` (the named form) / `mtxPayUnderMandate` (the flat builder) |
 | `token` | The call's target; a `RelayFee`'s fee token; a wrap order's wrapper |
 | `envelope` | `from` + `batch`, `nonce`, `validUntil`, `mode`, `relayer`, `fee`, `feeRecipient`, on every entry whose struct ends with them; exactly these keys |
@@ -289,7 +289,7 @@ A job in the old shape is refused `BAD_PAYLOAD: …keyData: unknown field`. Ever
 it from a named job. Soroban jobs keep `{index, key_data, sig}` until that family's round.
 
 Values: `uint` as canonical decimal strings (`uint8`, `uint16`, `uint32` may be JSON numbers), addresses `0x` + 20 bytes, `bytes32` /
-`bytes16` `0x` + exact length, `bytes` `0x`-hex, `bool` as JSON. Anything else is `BAD_PAYLOAD` naming the path. An unbound `relayer` /
+`bytes16` `0x` + exact length, `bytes` `0x`-hex, `bool` as JSON, `int8` (a `PqChat` vote) a JSON number. Anything else is `BAD_PAYLOAD` naming the path. An unbound `relayer` /
 `feeRecipient` is normalized ([NODE-LANE-10](submit-lanes.md#NODE-LANE-10)) and hashed as 0, as `MetaTxLib.canon`.
 
 | Kind | Entries |
@@ -306,6 +306,7 @@ Values: `uint` as canonical decimal strings (`uint8`, `uint16`, `uint32` may be 
 | `dex`, plain | `mtxSettle`, `mtxExchange`, `mtxExchangeVia`, `mtxExchangeBatch`, `mtxHybrid`, `mtxHybridVia`, `mtxCancelOrders`: legs as `{sellToken, shape, order, uaOrder, sig, auth, fill}` |
 | `registry`, plain | `register`, `registerMsig`, `registerWebAuthn`, `registerMuSig2`, `registerFrost`, `setKemKey`, `storePqzPop`, `setPqzKey`, `acceptMembership` (`args`: `ua`, `memberSig` `{index, keyData: "0x", sig}`, [CTR-UA-37](../contracts/accounts.md#CTR-UA-37): the member signs, the relayer submits, so a member needs no gas) |
 | `factory`, plain | `deploy` |
+| `pqchat`, plain | the twelve `PqChat` writes ([call table](#pqchat-calls)) |
 
 **Mandate lanes.** The named `mtxPayUnderMandate` runs with `batch = mandatePayLane(entryRef)`, `mtxDelegateRevoke` with
 `batch = mandateRevokeLane(token, epoch)`, both at nonce 0 (a revoke is the kill switch, it must not queue behind a pending nonce on
@@ -334,6 +335,8 @@ every other row, `ua*` entries included, is a job of a namespace with the grant.
 | `MANDATE_LANE` | above |
 | `BAD_SIGNATURE` | above |
 | `CALL_TARGET_REFUSED` / `TOKEN_NOT_SERVED` | the target does not meet the kind's rule ([call table](#call-table)); `TOKEN_NOT_SERVED` also a Soroban mandate job's `token` ([NET-SOR-29](../networks/soroban.md#NET-SOR-29)) |
+| `UNSIGNED_WRITE_NOT_PAID` | an unsigned `PqChat` write, neither a relay fee's call nor under `relay_unsigned_pqchat` ([call table](#pqchat-calls)) |
+| `HEX_ARGS_REFUSED` | a struct sent as hex where the entry names its fields: a `PqChat` job's `args`, record, list or `sig` ([call table](#pqchat-calls)), a pay's `meta.body`, a PQZ verdict |
 
 ## <a id="intake"></a>6. Intake
 
@@ -668,6 +671,38 @@ router job carries no generation: the router is deployed once per chain and UA r
 Operators: set `governance_routers` to the deploy JSON's `governance_router`, plus the router of any other release set on the chain
 (the PQZ e2e stack's `governance_router` in `deployments/7622-pqz.json`); unset, a router job is `CALL_TARGET_REFUSED`.
 
+<a id="pqchat-calls"></a>**`PqChat` instances** (BUILT on branch `ua-mtx-merge`, plan T93; UA-7 spec
+[P17](../superpowers/specs/2026-10-25-ua7-pq-e2e-sessions.md#74-the-node) and
+[P32](../superpowers/specs/2026-10-25-ua7-pq-e2e-sessions.md#21-instances-pqchat-is-a-factory-kind-d22), topics spec
+[P45](../superpowers/specs/2026-11-07-pqchat-public-topics.md#7-node-and-indexer)). `PqChat` is a factory kind (class 3, kind 0 on
+`OpenFactory`'s generic path) and the contract kind `pqchat` of the table: its twelve writes are plain rows, `createSession`, `rekey`,
+`addWraps`, `leave`, `postMessage`, `storeMessage`, `createTopic`, `updateTopic`, `setTopicWriter`, `postEntry`, `editEntry` and
+`voteEntry`, equal to `IPqChat`'s both directions (`initialize` is the factory's alone and no row). The rule of kind `pqchat`
+(`guard.rs` `Rule::FactoryClass(3)`, the generic factory-class rule of factory index §8.6): the target is a contract the chain's
+`token_factory` lists with `infoOf(target).contractClass == 3` and `version ≠ 0`, read at lease and cached (a record never changes);
+otherwise, or with no `token_factory`, `CALL_TARGET_REFUSED`. An instance answers no `chainUid()` (its records are portable), so the
+factory's listing is its binding, and no other kind's rule takes it (each needs `chainUid()` or a registered token): both directions,
+on the direct path and on the inner target of `RelayFeeRouter.relay`. A `pqchat` job carries no native value and no fee form: a payer
+pays the lane through `RelayFeeRouter` (an `mtxRelayFee` job with `call`).
+
+**Unsigned writes** (P17, owner 2026-11-05, [CTR-CHAT-01](../decisions.md#CTR-CHAT-01)). `storeMessage` and `addWraps` carry no
+signature, so anyone could make a lane pay for them. A lane relays one only as a relay fee's inner call (paid through
+`RelayFeeRouter`, under the relay-fee rules) or when the chain's `params.relay_unsigned_pqchat = true` (the operator's lane policy,
+default `false`); otherwise the job is refused `UNSIGNED_WRITE_NOT_PAID` (on the legacy pull path `dead`, nothing read or sent). The ten
+signed writes need neither. An unpaid one may find no relayer; its author can send it from its own account.
+
+Job: `{kind: "call", op: {entry, contract: "pqchat", token: <instance>, args, validUntil}}`, `args` the entry's arguments by the
+contract's names, each record (`s`, `e`, `l`, `m`, `t`, `u`, `w`, `v`) and each `Wrap` an object of its fields, `sig` the `UASig`
+object; `validUntil` is required (no record carries a deadline the node reads). `args`, a record, a list or `sig` sent as a hex string
+is `422 HEX_ARGS_REFUSED`.
+
+```json
+{"entry": "postMessage", "contract": "pqchat", "token": "0x…", "validUntil": "1790000300",
+ "args": {"m": {"sessionId": "0x…", "epochId": "0x…", "sender": "0x…", "device": 1, "counter": "7", "parents": ["0x…"],
+                "ciphertext": "0x…"},
+          "sig": {"keyData": "0x…", "signature": "0x…", "members": []}}}
+```
+
 | Selector | Target rule | Typical producer |
 |---|---|---|
 | `SmartKeyAccountFactory.deploy((uint8,bytes32,bytes32,bytes32,bytes32),address)` | the chain's account factory (`chain_contract.kind = account_factory`) | client subject-account onboarding |
@@ -680,6 +715,7 @@ Operators: set `governance_routers` to the deploy JSON's `governance_router`, pl
 | `ExchangeOffer.exchange(MetaTransaction,bytes)` | EIP-1167 clone of the registered `ExchangeOffer` implementation (like `SCaaSDex.mtxSettle`: the leg carries the holder's own signature) | client corporate actions |
 | `Safe.execTransaction` | a registered role-holder contract (`chain_contract.kind = role_holder`); the owners' signatures are inside the calldata | issuer / compliance / buyer role holders |
 | `GovernanceRouter.mtx<Op>` / `ua<Op>` (38 entries, `typed.rs` contract kind `gov_router`) | `Rule::GovRouter`: one of the chain's `governance_routers` (empty ⇒ refused), bound to this chain | owners and role holders as UAs (a PQ key, an `msig`, a native key), at fee 0 |
+| `PqChat` writes (12, `typed.rs` contract kind `pqchat`, [above](#pqchat-calls)) | `Rule::FactoryClass(3)`: `token_factory`'s `infoOf` lists it as class 3, `version ≠ 0` (unset ⇒ refused); `storeMessage` / `addWraps` only paid or under `relay_unsigned_pqchat` | PqChat clients (sessions, messages, public topics), any relayer |
 
 `pqz_call` jobs are not `call` jobs: their own selector list is in the kinds table above.
 
@@ -795,12 +831,12 @@ cancels 2 rps (burst 10).
 |---|---|---|
 | 400 | `BAD_REQUEST` | malformed JSON, batch > 50, `limit`/`wait` out of range |
 | 401 | `UNAUTHORIZED` | missing/unknown key, bad signature, stale timestamp, replayed nonce |
-| 403 | `FORBIDDEN`, `CHAIN_NOT_GRANTED`, `CALL_NOT_ALLOWED`, `CALL_TARGET_REFUSED`, `SUBJECT_DENIED` | scope, grant, [NODE-JOB-09](#NODE-JOB-09), [call table](#call-table), denylist |
+| 403 | `FORBIDDEN`, `CHAIN_NOT_GRANTED`, `CALL_NOT_ALLOWED`, `CALL_TARGET_REFUSED`, `UNSIGNED_WRITE_NOT_PAID`, `SUBJECT_DENIED` | scope, grant, [NODE-JOB-09](#NODE-JOB-09), [call table](#call-table), [unsigned `PqChat` writes](#pqchat-calls), denylist |
 | 404 | `NOT_FOUND` | job of another namespace or unknown |
 | 409 | `IDEMPOTENCY_MISMATCH`, `PREVIOUS_GENERATION_LIVE`, `SUPERSEDED` (all with `uid`), `DUPLICATE_DIGEST`, `DUPLICATE_CALL` (with `uid`), `TOO_LATE` (with `state`, `published`), `CHAIN_HALTED` | [intake](#intake), [cancel](#cancel) |
 | 410 | `CURSOR_EXPIRED` | [indexer-feeds.md#cursors](indexer-feeds.md#cursors) |
 | 413 | `TOO_LARGE` | body > 1 MiB |
-| 422 | `BAD_PAYLOAD`, `HEX_DATA_REFUSED`, `UNKNOWN_ENTRY`, `ENTRY_AMBIGUOUS`, `OP_KIND_MISMATCH`, `MANDATE_LANE`, `UNKNOWN_CHAIN`, `UNKNOWN_TOKEN`, `EXPIRED`, `VALID_TOO_LONG`, `RELAYER_NOT_OURS`, `FEATURE_UNSUPPORTED`, `UA_NOT_REGISTERED`, `BAD_SIGNATURE`, `VALUE_OUT_TOO_HIGH`, `DEPOSIT_NOT_ALLOWED` | per item; `BAD_PAYLOAD` also when a job field differs from the signed payload |
+| 422 | `BAD_PAYLOAD`, `HEX_DATA_REFUSED`, `HEX_ARGS_REFUSED`, `UNKNOWN_ENTRY`, `ENTRY_AMBIGUOUS`, `OP_KIND_MISMATCH`, `MANDATE_LANE`, `UNKNOWN_CHAIN`, `UNKNOWN_TOKEN`, `EXPIRED`, `VALID_TOO_LONG`, `RELAYER_NOT_OURS`, `FEATURE_UNSUPPORTED`, `UA_NOT_REGISTERED`, `BAD_SIGNATURE`, `VALUE_OUT_TOO_HIGH`, `DEPOSIT_NOT_ALLOWED` | per item; `BAD_PAYLOAD` also when a job field differs from the signed payload |
 | 429 | `RATE_LIMITED`, `QUOTA`, `SPONSOR_BUDGET`, `SPONSOR_RATE`, `SPONSOR_TOO_SHORT` (all three with `policy`), `SUBJECT_THROTTLED` (with `retry_after`) | per key: POST 20 rps (burst 40), GET 10 rps, tombstone-creating cancels 2 rps (burst 10); `Retry-After` |
 | 503 | `NOT_READY`, `STORE_FULL`, `NOT_OWNER` | store not open; `max_rows`; fencing lost |
 

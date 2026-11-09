@@ -640,6 +640,8 @@ fn plain_rows_match_the_forge_abi() {
                 "registry" => "IUARegistry",
                 "factory" => "SmartKeyAccountFactory",
                 "account" => "SmartKeyAccount",
+                // T93 (UA-7 P17, topics P45): the twelve `PqChat` writes
+                "pqchat" => "IPqChat",
                 other => panic!("a plain row on {other}: {}", r.entry),
             };
             let p = format!("{}/../smartcontracts/evm/out/{art}.sol/{art}.json", env!("CARGO_MANIFEST_DIR"));
@@ -651,7 +653,7 @@ fn plain_rows_match_the_forge_abi() {
             n += 1;
         }
     }
-    assert_eq!(n, 18, "18 rows, one contract each (22 before MD-11 (a): the wallet's four flat rows retired)");
+    assert_eq!(n, 30, "30 rows, one contract each (22 before MD-11 (a): the wallet's four flat rows retired; 18 -> 30, T93: PqChat's twelve)");
 }
 
 /// The `UAEnvelope` of a native signer `from` (its padded id) on lane `batch` at `nonce`, fee 0, open relayer.

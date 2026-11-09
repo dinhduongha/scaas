@@ -4,7 +4,8 @@
 //! - a job runs only as a named entry: its selector is a row of the entry table (`crate::typed`) on the contract kind it
 //!   names, and the target meets that kind's rule — a token entry on a registered token, a wallet's or account's on any
 //!   bound contract that is no token or factory, a DEX entry on a listed DEX, a registry or factory entry on the configured
-//!   one (a `transfer` of the lane's own balance is no row; there is no hex path);
+//!   one, a `PqChat` entry on an instance the token factory lists as class 3, its unsigned writes paid or under the lane
+//!   policy (a `transfer` of the lane's own balance is no row; there is no hex path);
 //! - a meta-transaction runs only on a contract bound to this chain (`chainUid()`, the salt every signature on it
 //!   commits to); a `MetaTransfer` only on a registered token (answering `chainUid()` costs nothing to deploy);
 //! - a signature that can be checked here is (the typed digest, computed locally): a native signer that recovers to
@@ -25,7 +26,7 @@ use alloy::primitives::{Address, Bytes, B256};
 use alloy::sol_types::{SolCall, SolValue};
 use tracing::warn;
 
-use crate::abi::{IMtxIds, IPqzToken, IRelayFeeRouter, ISCaaSDex, IToken, IUALedger, IUARegistry};
+use crate::abi::{IMtxIds, IOpenFactory, IPqzToken, IRelayFeeRouter, ISCaaSDex, IToken, IUALedger, IUARegistry};
 use crate::chain::{BlockGas, Chain, SimError};
 use crate::config::ChainCfg;
 use crate::metatx::{Mtx, UaMtx};
@@ -55,7 +56,14 @@ pub enum Rule {
     /// One of the chain's `GovernanceRouter`s (`governance_routers`), bound to this chain (spec 2026-11-02-governance §12.7): its
     /// typed entries only; a router is no target of any other kind's row.
     GovRouter,
+    /// An instance of a generic class of the chain's `OpenFactory` (`token_factory`, factory index spec §8.6): `infoOf(target)` lists
+    /// this `contractClass` with `version ≠ 0` (`pqchat`: class 3, UA-7 P32, topics spec P45). An instance answers no `chainUid()`
+    /// (its records are portable): the listing binds it, and no other kind's rule takes it.
+    FactoryClass(u16),
 }
+
+/// `PqChat`'s class on `OpenFactory`'s generic path (D22).
+pub const CLASS_PQCHAT: u16 = 3;
 
 /// The rule of a contract kind (`typed::Row::contracts`).
 pub fn rule_of(contract: &str) -> Option<Rule> {
@@ -66,6 +74,7 @@ pub fn rule_of(contract: &str) -> Option<Rule> {
         "registry" => Rule::UaRegistry,
         "factory" => Rule::AccountFactory,
         "gov_router" => Rule::GovRouter,
+        "pqchat" => Rule::FactoryClass(CLASS_PQCHAT),
         _ => return None,
     })
 }
@@ -200,6 +209,8 @@ pub struct Facts {
     pub ua_registry: bool,
     /// One of `governance_routers`.
     pub gov_router: bool,
+    /// `infoOf(target)`'s `(contractClass, version)` on `token_factory`, when made there (read for a factory class's rule only).
+    pub listed: Option<(u16, u64)>,
     /// `chainUid()` equals this chain's (NODE-GW-07).
     pub bound: bool,
 }
@@ -207,6 +218,10 @@ pub struct Facts {
 pub fn allowed(rule: Rule, f: &Facts) -> bool {
     if rule == Rule::Token {
         return f.bound && f.token;
+    }
+    if let Rule::FactoryClass(c) = rule {
+        // the factory's record is the binding: an instance answers no `chainUid()`
+        return matches!(f.listed, Some((k, v)) if k == c && v != 0) && !f.token && !f.token_factory && !f.gov_router;
     }
     f.bound
         && !f.token
@@ -220,6 +235,7 @@ pub fn allowed(rule: Rule, f: &Facts) -> bool {
             Rule::Dex => f.dex,
             Rule::UaRegistry => f.ua_registry,
             Rule::GovRouter => true,
+            Rule::FactoryClass(_) => false,
         }
 }
 
@@ -467,6 +483,10 @@ pub struct Guard {
     dexes: Vec<Address>,
     gov_routers: Vec<Address>,
     bound: Mutex<HashSet<Address>>,
+    /// `token_factory`'s records read ([`Guard::listed`]): a record never changes once made.
+    listed: Mutex<HashMap<Address, (u16, u64)>>,
+    /// `params.relay_unsigned_pqchat` (default false): the lane relays `PqChat`'s unsigned writes at its own gas (UA-7 P17).
+    relay_unsigned_pqchat: bool,
     /// Tokens whose UA ledger is on (`registry() ≠ 0`).
     ua_ledger: Mutex<HashSet<Address>>,
     /// `params.l1_fee = "op-stack"`: relay-fee quotes add `GasPriceOracle.getL1Fee`.
@@ -491,6 +511,13 @@ impl Guard {
             dexes: cfg.dex.into_iter().collect(),
             gov_routers: cfg.governance_routers.clone(),
             bound: Default::default(),
+            listed: Default::default(),
+            relay_unsigned_pqchat: match cfg.params.get("relay_unsigned_pqchat") {
+                None => false,
+                Some(toml::Value::Boolean(b)) => *b,
+                Some(v) => anyhow::bail!("params.relay_unsigned_pqchat must be a bool (relay PqChat's unsigned storeMessage / addWraps \
+                    at the lane's gas), not {v}"),
+            },
             ua_ledger: Default::default(),
             op_stack: match cfg.params.get("l1_fee") {
                 None => false,
@@ -656,6 +683,15 @@ impl Guard {
                 let c = relay_call(&w.data).ok_or_else(|| refused("not a relay call".into()))?;
                 return self.check_service(chain, target, &c.call, None).await;
             }
+            // UA-7 P32 / topics P45 on the inner call: a `PqChat` entry runs on an instance `token_factory` lists (no `chainUid()`);
+            // paid this way, an unsigned write needs no lane policy (P17)
+            if let Some(r) = relay_call(&w.data).and_then(|c| c.call.get(..4).and_then(|s| self::row(s.try_into().ok()?, "pqchat"))) {
+                let rule = Rule::FactoryClass(CLASS_PQCHAT);
+                if allowed(rule, &self.facts(chain, target, rule).await?) {
+                    return Ok(());
+                }
+                return Err(refused(format!("{} relayed to {target:#x}: no PqChat instance of token_factory", r.entry)));
+            }
             return self.require_bound(chain, target).await;
         }
         // one kind per address (proposed NODE-JOB-25): a service is no target of any other kind's row
@@ -663,6 +699,12 @@ impl Guard {
             return Err(refused(format!("{} ({contract}) on {:#x}: a service takes its own entries only", row.entry, w.to)));
         }
         let Some(rule) = rule_of(contract) else { return Err(refused(format!("unknown contract kind {contract:?}"))) };
+        // UA-7 P17 (owner 2026-11-05): a `PqChat` write with no `UASig` (`storeMessage`, `addWraps`) runs paid, as a relay fee's call
+        // (the branch above), or under the operator's `params.relay_unsigned_pqchat`: by default the lane pays no gas for it
+        if contract == "pqchat" && !self.relay_unsigned_pqchat && !row.fields.iter().any(|f| f.0 == "UASig") {
+            return Err(Refusal::Policy(format!("UNSIGNED_WRITE_NOT_PAID: {} carries no signature: send it as a relay fee's call \
+                (RelayFeeRouter.relay), or the operator sets params.relay_unsigned_pqchat", row.entry)));
+        }
         self.check_payee(w.typed.as_ref().and_then(|t| t.payee))?;
         // pay-meta-tax spec §7.1: the `body` of a pay entry's `PayMeta` (plan T83: `payNo` a fixed word), before any read or
         // simulation
@@ -683,16 +725,7 @@ impl Guard {
             // group 3f (spec §11.1): `refuse_shield_when_unserved`, for every consumer
             return self.pqz.check_shield(chain, w).await;
         }
-        let facts = Facts {
-            token: self.tokens.read().map(|t| t.contains(&w.to)).unwrap_or(true),
-            token_factory: self.token_factory == Some(w.to),
-            account_factory: self.account_factory == Some(w.to),
-            dex: self.dexes.contains(&w.to),
-            ua_registry: self.ua_registry == Some(w.to),
-            gov_router: self.gov_routers.contains(&w.to),
-            bound: self.bound(chain, w.to).await?,
-        };
-        if allowed(rule, &facts) {
+        if allowed(rule, &self.facts(chain, w.to, rule).await?) {
             Ok(())
         } else {
             Err(refused(format!("{} on {:#x}", row.entry, w.to)))
@@ -800,6 +833,45 @@ impl Guard {
             Err(SimError::Revert(e)) => Err(off(format!("registry(): {e}"))),
             Err(SimError::Transport(e)) => Err(Refusal::Transport(format!("registry(): {e}"))),
         }
+    }
+
+    /// What the node knows of `to` for `rule`: the config, the registered list, the factory's record (a factory class's rule only)
+    /// and `chainUid()` (every other rule).
+    async fn facts(&self, chain: &Chain, to: Address, rule: Rule) -> Result<Facts, Refusal> {
+        let class = matches!(rule, Rule::FactoryClass(_));
+        Ok(Facts {
+            token: self.tokens.read().map(|t| t.contains(&to)).unwrap_or(true),
+            token_factory: self.token_factory == Some(to),
+            account_factory: self.account_factory == Some(to),
+            dex: self.dexes.contains(&to),
+            ua_registry: self.ua_registry == Some(to),
+            gov_router: self.gov_routers.contains(&to),
+            listed: if class { self.listed(chain, to).await? } else { None },
+            // an instance answers no `chainUid()`: its rule reads the factory's record instead
+            bound: !class && self.bound(chain, to).await?,
+        })
+    }
+
+    /// `infoOf(to)` on `token_factory`: `(contractClass, version)` of a contract it made, cached (a record never changes once
+    /// made); `None` with no factory configured, for a contract it did not make (class 0, asked again next time), or a factory
+    /// that does not answer.
+    async fn listed(&self, chain: &Chain, to: Address) -> Result<Option<(u16, u64)>, Refusal> {
+        if let Some(l) = self.listed.lock().ok().and_then(|m| m.get(&to).copied()) {
+            return Ok(Some(l));
+        }
+        let Some(f) = self.token_factory else { return Ok(None) };
+        let c = match chain.call_view(f, IOpenFactory::infoOfCall { c: to }).await {
+            Ok(c) => c,
+            Err(SimError::Revert(_)) => return Ok(None),
+            Err(SimError::Transport(e)) => return Err(Refusal::Transport(format!("infoOf: {e}"))),
+        };
+        if c.contractClass == 0 {
+            return Ok(None);
+        }
+        if let Ok(mut m) = self.listed.lock() {
+            m.insert(to, (c.contractClass, c.version));
+        }
+        Ok(Some((c.contractClass, c.version)))
     }
 
     async fn require_bound(&self, chain: &Chain, to: Address) -> Result<(), Refusal> {
@@ -1101,7 +1173,8 @@ mod tests {
         // plan T32: 87 -> 95, the router's eight regulated controls; pay-meta-tax T42: -> 99, mtxPay, mtxPayWithTax, the two tax ops
         // group 3g T55: -> 100, the rollover one row per kind (`UARollOver` Zether, `UAPqzRollOver` PQZ with `keyVersion`)
         // group 3f T47: -> 103, the router's three verifier ops; group 3h T61: -> 104, `UASetProofStore`
-        assert_eq!(typed::rows().iter().filter(|r| !r.entry.is_empty()).count(), 104, "table rows: 86 typed with an entry, 18 plain");
+        // T93: 104 -> 116, `PqChat`'s twelve plain rows
+        assert_eq!(typed::rows().iter().filter(|r| !r.entry.is_empty()).count(), 116, "table rows: 86 typed with an entry, 30 plain");
         // selectors with no row: refused on every kind, on a target that would otherwise pass
         let target = Address::repeat_byte(0x31);
         let g = Guard::new(&ChainCfg { dex: Some(target), governance_routers: vec![target], ..cfg.clone() }, Arc::new(RwLock::new(vec![target]))).unwrap();
@@ -1130,7 +1203,7 @@ mod tests {
             "mtxExecuteAsOwnerRaw(bytes,uint256,uint256,bytes)",
             "grantRole(uint8,bytes32)", "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
             "transferOwnership(bytes32)", "setListedOnly(bool)"] {
-            for kind in ["token", "zether", "pqz", "wallet", "account", "dex", "registry", "factory", "gov_router"] {
+            for kind in ["token", "zether", "pqz", "wallet", "account", "dex", "registry", "factory", "gov_router", "pqchat"] {
                 let t = typed::Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, pqz_verdict: None, contract: kind, domain_of: target, struct_hash: None, lane_hash: None, signer: None, payee: None, digest: None,
                     derived_signer: false, derived_side: false };
                 let w = Work { job_id: Some(1), to: target, data: cast(s).into(), valid_until: 0, meta: None, entry: true, typed: Some(t) };
@@ -1387,6 +1460,22 @@ mod tests {
         for other in [Rule::SelfAuth, Rule::Dex, Rule::AccountFactory, Rule::UaRegistry] {
             let all = Facts { gov_router: true, dex: true, account_factory: true, ua_registry: true, ..bound };
             assert!(!allowed(other, &all), "{other:?}: a router is no target of another kind's row");
+        }
+        // T93 (topics P45): a factory class, bound by the factory's record (an instance answers no `chainUid()`)
+        let chat = Rule::FactoryClass(CLASS_PQCHAT);
+        let listed = Facts { listed: Some((3, 1)), ..Default::default() };
+        assert_eq!(rule_of("pqchat"), Some(chat));
+        assert!(allowed(chat, &listed), "listed as class 3 with a release");
+        assert!(!allowed(chat, &Facts::default()), "only a listed instance");
+        assert!(!allowed(chat, &bound), "bound is not listed");
+        assert!(!allowed(chat, &Facts { listed: Some((3, 0)), ..listed }), "version 0");
+        assert!(!allowed(chat, &Facts { listed: Some((4, 1)), ..listed }), "another class");
+        assert!(!allowed(chat, &Facts { token: true, ..listed }), "never a registered token");
+        assert!(!allowed(chat, &Facts { token_factory: true, ..listed }), "never the token factory");
+        assert!(!allowed(chat, &Facts { gov_router: true, ..listed }), "a router takes its own rows only");
+        for other in [Rule::SelfAuth, Rule::Dex, Rule::AccountFactory, Rule::UaRegistry, Rule::GovRouter] {
+            let all = Facts { gov_router: other == Rule::GovRouter, dex: true, account_factory: true, ua_registry: true, ..listed };
+            assert!(!allowed(other, &all), "{other:?}: an instance is no target of another kind's row");
         }
     }
 
@@ -2048,5 +2137,213 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
         assert!(already_invalidated(&[&SEL_TOKEN_INVALIDATE_NONCES[..], &[0u8; 128]].concat(), &reason));
         assert!(!already_invalidated(&[&[0x93, 0xcb, 0x3e, 0x81][..], &[0u8; 128]].concat(), &reason));
         assert!(!already_invalidated(&inv, "MinNonceAboveCap(MinNonceAboveCap { requested: 1 })"));
+    }
+
+    /// The `PqChat` writes as `IPqChat.sol` declares them, read from the source (and `IUARegistry.sol` for `UASig`), not copied:
+    /// every `external` function that is neither `view` nor `pure`, as its canonical signature.
+    fn pqchat_writes() -> Vec<String> {
+        let src = |f: &str| std::fs::read_to_string(format!("{}/../smartcontracts/evm/src/{f}", env!("CARGO_MANIFEST_DIR"))).unwrap()
+            .lines().map(|l| l.split("//").next().unwrap_or_default().to_string()).collect::<Vec<_>>().join(" ");
+        let (chat, reg) = (src("pqchat/IPqChat.sol"), src("ua/IUARegistry.sol"));
+        let mut structs: HashMap<String, Vec<String>> = HashMap::new();
+        for (scope, s) in [("", &chat), ("IUARegistry.", &reg)] {
+            for part in s.split(" struct ").skip(1) {
+                let (name, body) = part.split_once('{').unwrap();
+                let fields = body.split('}').next().unwrap().split(';').filter_map(|f| f.split_whitespace().next()).map(String::from);
+                structs.insert(format!("{scope}{}", name.trim()), fields.collect());
+            }
+        }
+        fn canon(ty: &str, scope: &str, structs: &HashMap<String, Vec<String>>) -> String {
+            let base = ty.trim_end_matches("[]");
+            let (scope, key) = match base.split_once('.') {
+                Some((s, _)) => (format!("{s}."), base.to_string()),
+                None => (scope.to_string(), format!("{scope}{base}")),
+            };
+            match structs.get(&key) {
+                Some(f) => format!("({}){}", f.iter().map(|t| canon(t, &scope, structs)).collect::<Vec<_>>().join(","), &ty[base.len()..]),
+                None => ty.to_string(),
+            }
+        }
+        chat.split(" function ").skip(1).filter_map(|f| {
+            let (name, rest) = f.split_once('(')?;
+            let (args, tail) = rest.split_once(')')?;
+            let tail = tail.split(';').next()?;
+            let args: Vec<String> = args.split(',').filter_map(|p| p.split_whitespace().next()).map(|t| canon(t, "", &structs)).collect();
+            (tail.contains("external") && !tail.contains(" view") && !tail.contains(" pure")).then(|| format!("{}({})", name.trim(), args.join(",")))
+        }).collect()
+    }
+
+    /// T93 (UA-7 P17, topics P45; AGENTS "Node"): the `pqchat` allow-list equals the contract's writes both directions, the contract
+    /// side derived from `IPqChat.sol` (`initialize` is the factory's alone, no row); the selectors are forge's `methodIdentifiers`;
+    /// each write is a row of `pqchat` and of no other kind; a view and `initialize` are rows of no kind.
+    #[test]
+    fn pqchat_rows_equal_the_contract_both_directions() {
+        let sel = |s: &str| -> [u8; 4] { alloy::primitives::keccak256(s)[..4].try_into().unwrap() };
+        let all = pqchat_writes();
+        let writes: Vec<&String> = all.iter().filter(|s| !s.starts_with("initialize(")).collect();
+        assert_eq!((all.len(), writes.len()), (13, 12), "{all:?}");
+        let theirs: HashSet<[u8; 4]> = writes.iter().map(|s| sel(s)).collect();
+        let ours: HashSet<[u8; 4]> = typed::rows().iter().filter(|r| r.contracts.contains(&"pqchat")).map(|r| r.sent).collect();
+        assert_eq!(ours, theirs, "the PqChat allow-list, both directions");
+        let forge: HashSet<[u8; 4]> = ["21829f04", "1222a945", "2b9ab93a", "3c289881", "ad79eb6a", "95660a78", "47bee6d5", "c8de3d2d",
+            "04857ea8", "1fd5aeac", "f3ee47ee", "5aee92d5"].iter().map(|h| alloy::hex::decode(h).unwrap().try_into().unwrap()).collect();
+        assert_eq!(ours, forge, "forge's IPqChat methodIdentifiers");
+        let kinds = ["token", "zether", "pqz", "wallet", "account", "dex", "registry", "factory", "gov_router", "pqchat"];
+        for s in &writes {
+            for k in kinds {
+                assert_eq!(row(sel(s), k).is_some(), k == "pqchat", "{s} on {k}");
+            }
+        }
+        for s in ["initialize(bytes32)", "owner()", "sessionOf(bytes32)", "storedRange(bytes8,uint256,uint256)", "topicOf(bytes32)"] {
+            for k in kinds {
+                assert!(row(sel(s), k).is_none(), "{s} on {k}");
+            }
+        }
+    }
+
+    /// T93 (UA-7 P32, topics P45): an RPC whose `factory` lists `instances` as `(address, contractClass, version)` through `infoOf`
+    /// (the reads counted), every other address unlisted; a listed address answers no `chainUid()` (a `PqChat` record is portable),
+    /// every other `eth_call` `uid`; `eth_getCode` empty.
+    async fn factory_rpc(uid: B256, factory: Address, instances: Vec<(Address, u16, u64)>) -> (ChainCfg, Arc<Mutex<usize>>) {
+        use crate::abi::IOpenFactory;
+        let reads: Arc<Mutex<usize>> = Default::default();
+        let r2 = reads.clone();
+        let app = axum::Router::new().route("/", axum::routing::post(move |axum::Json(q): axum::Json<serde_json::Value>| {
+            let (instances, r2) = (instances.clone(), r2.clone());
+            async move {
+                let p = &q["params"][0];
+                let to: Address = p["to"].as_str().unwrap_or("0x0000000000000000000000000000000000000000").parse().unwrap();
+                let input = alloy::hex::decode(p["input"].as_str().or(p["data"].as_str()).unwrap_or("0x")).unwrap_or_default();
+                let listed = |a: Address| instances.iter().find(|i| i.0 == a).map_or((0, 0), |i| (i.1, i.2));
+                let out = match q["method"].as_str().unwrap() {
+                    "eth_call" if to == factory && input.get(..4) == Some(&IOpenFactory::infoOfCall::SELECTOR[..]) => {
+                        *r2.lock().unwrap() += 1;
+                        let c = IOpenFactory::infoOfCall::abi_decode(&input).unwrap().c;
+                        let (class, version) = listed(c);
+                        Some(IOpenFactory::infoOfCall::abi_encode_returns(&IOpenFactory::Created { addr: if class == 0 { Address::ZERO } else { c },
+                            creatorId: B256::ZERO, ownerUA: B256::ZERO, contractClass: class, kind: 0, version, createdBlock: 1, createdAt: 1 }))
+                    }
+                    "eth_call" if listed(to).0 != 0 => Some(vec![]),
+                    "eth_call" => Some(uid.to_vec()),
+                    "eth_getCode" => Some(vec![]),
+                    _ => None,
+                };
+                let result = out.map_or(serde_json::Value::Null, |b| serde_json::json!(format!("0x{}", alloy::hex::encode(b))));
+                axum::Json(serde_json::json!({"jsonrpc": "2.0", "id": q["id"], "result": result}))
+            }
+        }));
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", l.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+        (ChainCfg { evm_chain_number: 31337, rpc_urls: vec![url], chain_uid: Some(uid), token_factory: Some(factory), ..Default::default() }, reads)
+    }
+
+    fn target_refused(e: Result<(), Refusal>, what: &str) {
+        assert!(matches!(&e, Err(Refusal::Policy(r)) if r.starts_with("CALL_TARGET_REFUSED")), "{what}: {e:?}");
+    }
+
+    fn with_param(cfg: &ChainCfg, k: &str, v: toml::Value) -> ChainCfg {
+        ChainCfg { params: [(k.to_string(), v)].into_iter().collect(), ..cfg.clone() }
+    }
+
+    /// T93 (UA-7 P32, topics P45, factory index §8.6): a `PqChat` job runs only on an instance `token_factory` lists as class 3 with a
+    /// release (`version ≠ 0`), read once and cached; `CALL_TARGET_REFUSED` on version 0, another class, an address the factory did not
+    /// make, with another factory or none configured; an unknown selector named `pqchat` too. The reverse: another kind's row on an
+    /// instance, even one configured as that kind's target, is refused (an instance answers no `chainUid()`), beside its control.
+    #[tokio::test]
+    async fn a_pqchat_job_runs_only_on_a_class_3_instance() {
+        let uid = B256::repeat_byte(0x31);
+        let (factory, chat, v0, c4, other) = (Address::repeat_byte(0xfa), Address::repeat_byte(0xc3), Address::repeat_byte(0xc0),
+            Address::repeat_byte(0xc4), Address::repeat_byte(0xb0));
+        let (cfg, reads) = factory_rpc(uid, factory, vec![(chat, 3, 1), (v0, 3, 0), (c4, 4, 1)]).await;
+        let chain = Chain::with_signer(&cfg, signer()).unwrap();
+        let open = |c: &ChainCfg| Guard::new(&with_param(c, "relay_unsigned_pqchat", toml::Value::Boolean(true)), Default::default()).unwrap();
+        let work = |entry: &str, to: Address| crate::submit::work_of_op(Some(1), &typed::testkit::pqchat_op(entry, to), None).unwrap().0;
+        let g = open(&cfg);
+        let entries: Vec<&str> = typed::rows().iter().filter(|r| r.contracts.contains(&"pqchat")).map(|r| r.entry).collect();
+        for e in &entries {
+            g.check(&chain, &work(e, chat)).await.unwrap_or_else(|x| panic!("{e}: {x:?}"));
+        }
+        assert_eq!((entries.len(), *reads.lock().unwrap()), (12, 1), "infoOf read once, then cached");
+        for (to, c, what) in [(v0, cfg.clone(), "version 0"), (c4, cfg.clone(), "class 4"), (other, cfg.clone(), "not made by the factory"),
+            (chat, ChainCfg { token_factory: Some(Address::repeat_byte(0xfb)), ..cfg.clone() }, "another factory"),
+            (chat, ChainCfg { token_factory: None, ..cfg.clone() }, "no token_factory")] {
+            target_refused(open(&c).check(&chain, &work("postMessage", to)).await, what);
+        }
+        let cast = |s: &str| -> Bytes { alloy::primitives::keccak256(s)[..4].to_vec().into() };
+        for s in ["initialize(bytes32)", "sessionOf(bytes32)", "storedRange(bytes8,uint256,uint256)", "transfer(address,uint256)"] {
+            let mut w = work("postMessage", chat);
+            w.data = cast(s);
+            target_refused(g.check(&chain, &w).await, s);
+        }
+        for kind in ["wallet", "account", "dex", "registry", "factory", "gov_router"] {
+            let r = typed::rows().iter().find(|r| !r.entry.is_empty() && r.contracts.contains(&kind)).unwrap();
+            let on = |to: Address| {
+                let t = typed::Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, pqz_verdict: None, contract: kind, domain_of: to,
+                    struct_hash: None, lane_hash: None, signer: None, payee: None, digest: None, derived_signer: false, derived_side: false };
+                let c = match kind {
+                    "dex" => ChainCfg { dex: Some(to), ..cfg.clone() },
+                    "registry" => ChainCfg { ua_registry: Some(to), ..cfg.clone() },
+                    "factory" => ChainCfg { account_factory: Some(to), ..cfg.clone() },
+                    "gov_router" => ChainCfg { governance_routers: vec![to], ..cfg.clone() },
+                    _ => cfg.clone(),
+                };
+                (Guard::new(&c, Default::default()).unwrap(), Work { job_id: Some(1), to, data: r.sent.to_vec().into(), valid_until: 0,
+                    meta: None, entry: true, typed: Some(t) })
+            };
+            let (g, w) = on(other);
+            g.check(&chain, &w).await.unwrap_or_else(|e| panic!("{kind} ({}) on a bound contract: {e:?}", r.entry));
+            let (g, w) = on(chat);
+            target_refused(g.check(&chain, &w).await, &format!("{kind} ({}) on the instance", r.entry));
+        }
+    }
+
+    /// T93 (UA-7 P17, owner 2026-11-05): an unsigned write (`storeMessage`, `addWraps`: no `UASig`) runs on the direct path only under
+    /// the operator's `params.relay_unsigned_pqchat` (default off: `UNSIGNED_WRITE_NOT_PAID`, before any read), and always as a relay
+    /// fee's inner call (paid through `RelayFeeRouter`); a signed write needs neither. On the relay path the target rule holds both
+    /// directions: a `PqChat` call relayed to a contract that is no instance is refused, another kind's call relayed to an instance too.
+    #[tokio::test]
+    async fn unsigned_pqchat_writes_run_paid_or_under_the_lane_policy() {
+        let uid = B256::repeat_byte(0x31);
+        let (factory, chat, other) = (Address::repeat_byte(0xfa), Address::repeat_byte(0xc3), Address::repeat_byte(0xb0));
+        let (cfg, reads) = factory_rpc(uid, factory, vec![(chat, 3, 1)]).await;
+        let chain = Chain::with_signer(&cfg, signer()).unwrap();
+        let work = |entry: &str| crate::submit::work_of_op(Some(1), &typed::testkit::pqchat_op(entry, chat), None).unwrap().0;
+        let unpaid = |e: Result<(), Refusal>, what: &str| assert!(matches!(&e, Err(Refusal::Policy(r)) if r.starts_with("UNSIGNED_WRITE_NOT_PAID")), "{what}: {e:?}");
+        let shut = Guard::new(&cfg, Default::default()).unwrap();
+        let off = Guard::new(&with_param(&cfg, "relay_unsigned_pqchat", toml::Value::Boolean(false)), Default::default()).unwrap();
+        for entry in ["storeMessage", "addWraps"] {
+            unpaid(shut.check(&chain, &work(entry)).await, entry);
+            unpaid(off.check(&chain, &work(entry)).await, entry);
+        }
+        assert_eq!(*reads.lock().unwrap(), 0, "refused before any read");
+        let open = Guard::new(&with_param(&cfg, "relay_unsigned_pqchat", toml::Value::Boolean(true)), Default::default()).unwrap();
+        for entry in ["storeMessage", "addWraps"] {
+            open.check(&chain, &work(entry)).await.unwrap_or_else(|e| panic!("{entry} under the lane policy: {e:?}"));
+        }
+        shut.check(&chain, &work("postMessage")).await.unwrap_or_else(|e| panic!("a signed write: {e:?}"));
+        for bad in [toml::Value::String("true".into()), toml::Value::Integer(1)] {
+            assert!(Guard::new(&with_param(&cfg, "relay_unsigned_pqchat", bad), Default::default()).is_err());
+        }
+        let (rf, token) = (Address::repeat_byte(0xf4), Address::repeat_byte(0x11));
+        let router = [("router".to_string(), toml::Value::String(format!("{rf:#x}")))].into_iter().collect();
+        let paid = Guard::new(&with_param(&cfg, "relay_fee", toml::Value::Table(router)), Arc::new(RwLock::new(vec![token]))).unwrap();
+        let relayed = |target: Address, call: Bytes| {
+            let data = IRelayFeeRouter::relayCall { target, callData: call, token, from: B256::repeat_byte(2), payee: rf.into_word(),
+                value: alloy::primitives::U256::from(1), batch: alloy::primitives::U256::from(7), nonce: alloy::primitives::U256::ZERO,
+                validUntil: alloy::primitives::U256::from(4_000_000_000u64),
+                auth: crate::abi::UASig { keyData: Bytes::new(), signature: Bytes::new(), members: vec![] } }.abi_encode();
+            let t = typed::Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, pqz_verdict: None, contract: "token", domain_of: token,
+                struct_hash: None, lane_hash: None, signer: None, payee: None, digest: None, derived_signer: false, derived_side: false };
+            Work { job_id: Some(1), to: rf, data: data.into(), valid_until: 0, meta: None, entry: true, typed: Some(t) }
+        };
+        for entry in ["storeMessage", "addWraps", "postMessage"] {
+            paid.check(&chain, &relayed(chat, work(entry).data)).await.unwrap_or_else(|e| panic!("{entry} as a relay fee's call: {e:?}"));
+            target_refused(paid.check(&chain, &relayed(other, work(entry).data)).await, &format!("{entry} relayed to no instance"));
+        }
+        let cancel = typed::Op::parse(&typed::testkit::op_of("UACancelNonce", "token", &typed::testkit::vectors()).unwrap(), None).unwrap().data;
+        paid.check(&chain, &relayed(other, cancel.clone())).await.unwrap_or_else(|e| panic!("a token's cancel relayed to a bound contract: {e:?}"));
+        let e = paid.check(&chain, &relayed(chat, cancel)).await;
+        assert!(matches!(&e, Err(Refusal::Policy(r)) if r.starts_with("CHAIN_UID_MISMATCH")), "another kind's call relayed to an instance: {e:?}");
     }
 }

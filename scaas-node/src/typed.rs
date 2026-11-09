@@ -36,6 +36,9 @@ const A: &[&str] = &["account"];
 const D: &[&str] = &["dex"];
 const REG: &[&str] = &["registry"];
 const FACT: &[&str] = &["factory"];
+/// `PqChat` (UA-7 P17 / P32, topics spec P45): a factory kind's twelve writes, plain rows (each record is signed in the portable
+/// domain and checked by the contract); the target is an instance of the factory's class 3 (`guard::Rule::FactoryClass`).
+const PC: &[&str] = &["pqchat"];
 
 /// The EIP-712 domain name of a contract kind (the `domains.<kind>` of `typed_ops.json`); `None` for a kind that signs nothing.
 pub fn domain_name(contract: &str) -> Option<&'static str> {
@@ -99,6 +102,21 @@ const NESTED: &[(&str, &str)] = &[
     ("HybridPlan", "bytes32 ref,DexLeg taker,DexLeg[] makers,uint256 outsideSell,uint256 outsideFloor,address[] extraTokens"),
     // `IGovernance.GrantTerms`: flat, so a decode is one level deep; its `hashStruct` is the signed word, the struct the argument
     ("GrantTerms", "uint128 min,uint128 max,uint128 total,uint128 perWindow,uint32 window,uint64 validUntil,uint32 maxUses,bool delegable,bytes32 scope"),
+    // `IPqChat`'s records (UA-7 spec §4.1, topics spec §2), by the contract's field names; `Wrap` here is a member's key wrap, not
+    // the op of that name
+    ("MemberKey", "bytes32 ua,uint64 keyId,bytes32 via"),
+    ("Wrap", "bytes32 member,uint64 keyId,bytes mlkemCt,bytes32 x25519Eph,bytes sealedKey"),
+    ("PqChatSession", "bytes32 creator,uint64 nonce,bytes32 homeChain,address homeContract,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo"),
+    ("PqChatEpoch", "bytes32 sessionId,bytes32 author,uint64 nonce,uint64 epoch,bytes32 parentEpochId,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo"),
+    ("PqChatLeave", "bytes32 sessionId,bytes32 epochId,bytes32 member,uint64 nonce"),
+    ("PqChatMessage", "bytes32 sessionId,bytes32 epochId,bytes32 sender,uint32 device,uint64 counter,bytes32[] parents,bytes ciphertext"),
+    ("PqTopic", "bytes32 owner,uint64 nonce,bytes32 homeChain,address homeContract,string name,bytes about,bool openReplies"),
+    ("PqTopicUpdate", "bytes32 topicId,uint64 seq,string name,bytes about,bool openReplies"),
+    ("PqTopicWriter", "bytes32 topicId,bytes32 writer,bool granted,uint64 seq"),
+    ("EntryRef", "bytes32 chainUid,address pqchat,bytes32 entryId,bytes32 contentHash"),
+    ("PqTopicEntry", "bytes32 topicId,bytes32 author,uint64 nonce,bytes32 parentId,EntryRef ref,string mediaType,bytes body"),
+    ("PqTopicEdit", "bytes32 entryId,bytes32 author,uint64 nonce,uint32 version,string mediaType,bytes body"),
+    ("PqTopicVote", "bytes32 entryId,bytes32 voter,int8 value,uint64 seq"),
 ];
 
 /// `(struct, entry, contract kinds, fields, plan)`. `E` = the envelope fields. The plan is the entry's arguments in order;
@@ -247,6 +265,20 @@ const PLAIN: &[(&str, &[&str], &str)] = &[
     ("mtxHybrid", D, "HybridPlan p,Interaction[] interactions"),
     ("mtxHybridVia", D, "HybridPlan p,address executor,bytes data"),
     ("mtxCancelOrders", D, "DexOrder[] orders,bytes[] sigs"),
+    // `PqChat` (T93): the ten signed writes take their record and its `UASig`; `addWraps` and `storeMessage` carry none (the
+    // guard's unsigned-write rule, P17)
+    ("createSession", PC, "PqChatSession s,Wrap[] wraps,UASig sig"),
+    ("rekey", PC, "PqChatEpoch e,Wrap[] wraps,UASig sig"),
+    ("addWraps", PC, "bytes32 epochId,uint32 first,Wrap[] wraps"),
+    ("leave", PC, "PqChatLeave l,UASig sig"),
+    ("postMessage", PC, "PqChatMessage m,UASig sig"),
+    ("storeMessage", PC, "uint8 v,bytes8 hint,bytes env"),
+    ("createTopic", PC, "PqTopic t,UASig sig"),
+    ("updateTopic", PC, "PqTopicUpdate u,UASig sig"),
+    ("setTopicWriter", PC, "PqTopicWriter w,UASig sig"),
+    ("postEntry", PC, "PqTopicEntry e,UASig sig"),
+    ("editEntry", PC, "PqTopicEdit e,UASig sig"),
+    ("voteEntry", PC, "PqTopicVote v,UASig sig"),
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -565,6 +597,13 @@ pub fn parse(ty: &str, j: &Value, path: &str) -> Result<Val> {
                     return Err(bad(&format!("not {ty}")));
                 }
                 fixed(&b)
+            } else if let Some(bits) = ty.strip_prefix("int").and_then(|n| n.parse::<u32>().ok()).filter(|b| (8..=64).contains(b)) {
+                // `int8` (a `PqChat` vote): a JSON number in range
+                let n = j.as_i64().ok_or_else(|| bad("not a number"))?;
+                if bits < 64 && n >> (bits - 1) != 0 && n >> (bits - 1) != -1 {
+                    return Err(bad(&format!("outside {ty}")));
+                }
+                Val::Int(alloy::primitives::I256::try_from(n).expect("64 bits"), bits as usize)
             } else {
                 let bits: usize = ty.strip_prefix("uint").and_then(|n| n.parse().ok()).ok_or_else(|| bad("unknown type"))?;
                 let v = match j.as_u64() {
@@ -726,6 +765,7 @@ fn json_of(ty: &str, v: &Val, number_bits: usize) -> Value {
         Val::FixedBytes(w, n) => json!(format!("0x{}", alloy::hex::encode(&w[..*n]))),
         Val::Uint(u, bits) if *bits <= number_bits => json!(u.saturating_to::<u64>()),
         Val::Uint(u, _) => json!(u.to_string()),
+        Val::Int(i, _) => i64::try_from(*i).map_or(Value::Null, |n| json!(n)),
         Val::String(t) => json!(t),
         _ => Value::Null,
     }
@@ -1046,12 +1086,22 @@ impl Op {
             return crate::service::op(o, entry, services);
         }
         let (row, contract) = find(entry, text("contract")?, text("struct")?)?;
+        // T93 (topics P45): a `PqChat` job is its records' named fields; `args`, a record, a list or `sig` as one hex string is the
+        // old hex form
+        if contract == "pqchat" {
+            let args = o.get("args");
+            let hexed = |t: &str, n: &str| (t.ends_with("[]") || nested(t).is_some()) && args.and_then(|a| a.get(n)).is_some_and(Value::is_string);
+            if args.is_some_and(Value::is_string) || row.fields.iter().any(|(t, n)| hexed(t, n)) {
+                bail!("HEX_ARGS_REFUSED: {entry}: name each record's fields in args, the node builds the calldata");
+            }
+        }
         let token = addr(text("token")?.ok_or_else(|| anyhow!("BAD_PAYLOAD: op.token missing"))?).map_err(|e| anyhow!("BAD_PAYLOAD: op.token: {e}"))?;
         let empty = json!({});
         let mut args = o.get("args").unwrap_or(&empty).clone();
         let mut envelope = o.get("envelope").cloned();
-        // spec §7.1: a pay entry's signed payment is `args.t`: the `payment` member, or `mtxPay`'s envelope and fields
-        if let Some(t) = args.as_object_mut().and_then(|a| a.remove("t")) {
+        // spec §7.1: a pay entry's signed payment is `args.t`: the `payment` member, or `mtxPay`'s envelope and fields (an entry
+        // whose own argument is `t`, `PqChat`'s `createTopic`, keeps it)
+        if let Some(t) = args.as_object_mut().filter(|_| pos(&row.fields, "t").is_none()).and_then(|a| a.remove("t")) {
             if pos(&row.fields, "payment").is_some() {
                 args["payment"] = t;
             } else if row.name == "UAMetaTransfer" {
@@ -1450,6 +1500,35 @@ pub mod testkit {
     pub fn hex(s: &Value) -> Vec<u8> {
         alloy::hex::decode(&s.as_str().unwrap()[2..]).unwrap()
     }
+
+    /// T93: a `PqChat` job of `entry` on `instance`, every argument named, each value from its type and a running counter (a
+    /// list holds one element, an `int8` is -1), so no two fields carry the same bytes.
+    pub fn pqchat_op(entry: &str, instance: Address) -> Value {
+        fn sample(ty: &str, n: &mut u8) -> Value {
+            *n += 1;
+            if let Some(el) = ty.strip_suffix("[]") {
+                return json!([sample(el, n)]);
+            }
+            if let Some(f) = nested(ty) {
+                return Value::Object(f.iter().map(|(t, k)| (k.clone(), sample(t, n))).collect());
+            }
+            let b = |len: usize| json!(format!("0x{}", alloy::hex::encode(vec![*n; len])));
+            match ty {
+                "address" => b(20),
+                "bytes" => b(3),
+                "string" => json!(format!("text {n}")),
+                "bool" => json!(true),
+                "int8" => json!(-1),
+                t if t.starts_with("bytes") => b(t[5..].parse().unwrap()),
+                t if t[4..].parse::<usize>().unwrap() <= 32 => json!(*n),
+                _ => json!(n.to_string()),
+            }
+        }
+        let row = rows().iter().find(|r| r.entry == entry && r.contracts == ["pqchat"]).unwrap_or_else(|| panic!("no pqchat {entry}"));
+        let mut n = 0;
+        json!({"entry": entry, "contract": "pqchat", "token": format!("{instance:#x}"), "validUntil": "4000000000",
+            "args": Value::Object(row.fields.iter().map(|(t, k)| (k.clone(), sample(t, &mut n))).collect())})
+    }
 }
 
 #[cfg(test)]
@@ -1509,7 +1588,8 @@ mod tests {
         // group 3g T55: -> 83, `UAPqzRollOver`
         // group 3f T47: -> 86, the router's three verifier ops; group 3h T61: -> 87, `UASetProofStore`
         assert_eq!(rows().iter().filter(|r| r.typed).count(), 87, "84 vector rows, mtxPay, the two invalidations (DEX, token)");
-        assert_eq!(rows().iter().filter(|r| !r.typed).count(), 18, "the wallet's three flat builders are gone (MD-11 (a))");
+        // T93: 18 -> 30, `PqChat`'s twelve writes
+        assert_eq!(rows().iter().filter(|r| !r.typed).count(), 30, "the wallet's three flat builders are gone (MD-11 (a))");
     }
 
     /// Group 3g (KV-10): the rollover is one row per kind (Zether's form kept; the PQZ one with `keyVersion`, its EIP-712 struct
@@ -2289,5 +2369,67 @@ mod tests {
             assert_eq!(p.data.to_vec(), raw, "{key}");
             assert_eq!((p.to, p.valid_until, p.typed.struct_hash, p.lane), (Address::repeat_byte(0xd0), 1_800_000_300, None, None));
         }
+    }
+
+    /// T93 (UA-7 P17, topics P45): the twelve `PqChat` rows are plain rows of kind `pqchat` alone, no envelope, no fee, no signature
+    /// outside `args`; every job is named fields, its calldata decodes back to the same fields and rebuilds the same bytes; a vote's
+    /// `int8` and a stored blob against the `sol!` encoder; a record, a list or `args` as hex is `HEX_ARGS_REFUSED`.
+    #[test]
+    fn pqchat_jobs_name_their_fields() {
+        use alloy::sol_types::SolValue;
+        let at = Address::repeat_byte(0xc3);
+        let ours: Vec<&Row> = rows().iter().filter(|r| r.contracts.contains(&"pqchat")).collect();
+        assert_eq!(ours.len(), 12);
+        for r in &ours {
+            assert_eq!((r.typed, r.enveloped, r.sig, r.contracts, r.sent), (false, false, None, &["pqchat"][..], r.selector), "{}", r.entry);
+            let op = pqchat_op(r.entry, at);
+            let p = Op::parse(&op, FEE).unwrap_or_else(|e| panic!("{}: {e:#}", r.entry));
+            assert_eq!((p.to, &p.data[..4], p.typed.contract, p.typed.struct_hash, p.lane, p.valid_until),
+                (at, &r.selector[..], "pqchat", None, None, 4_000_000_000), "{}", r.entry);
+            let back = call_op("pqchat", at, &p.data, "4000000000").unwrap_or_else(|e| panic!("{}: {e:#}", r.entry));
+            assert_eq!(back["args"], op["args"], "{}: the calldata's named fields", r.entry);
+            assert_eq!(Op::parse(&back, FEE).unwrap().data, p.data, "{}", r.entry);
+        }
+        alloy::sol! {
+            struct PqTopicVote { bytes32 entryId; bytes32 voter; int8 value; uint64 seq; }
+            struct Stored { uint8 v; bytes8 hint; bytes env; }
+        }
+        let h = |b: u8| format!("{:#x}", B256::repeat_byte(b));
+        let sig = json!({"keyData": "0x01", "signature": "0x02", "members": []});
+        let vote = |value: Value| json!({"entry": "voteEntry", "contract": "pqchat", "token": format!("{at:#x}"), "validUntil": "4000000000",
+            "args": {"v": {"entryId": h(0xe1), "voter": h(0xa1), "value": value, "seq": "7"}, "sig": sig}});
+        let auth = crate::abi::UASig { keyData: vec![1].into(), signature: vec![2].into(), members: vec![] };
+        let want = |value: i8| [&keccak256("voteEntry((bytes32,bytes32,int8,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))")[..4],
+            &(PqTopicVote { entryId: B256::repeat_byte(0xe1), voter: B256::repeat_byte(0xa1), value, seq: 7 }, auth.clone()).abi_encode_params()[..]].concat();
+        for x in [-1i8, 1, -128, 127, 0] {
+            assert_eq!(Op::parse(&vote(json!(x)), FEE).unwrap().data.to_vec(), want(x), "value {x}");
+        }
+        for bad in [json!(128), json!(-129), json!("-1"), json!(1.5)] {
+            let e = Op::parse(&vote(bad.clone()), FEE).unwrap_err().to_string();
+            assert!(e.starts_with("BAD_PAYLOAD: args.v.value"), "{bad}: {e}");
+        }
+        let store = json!({"entry": "storeMessage", "contract": "pqchat", "token": format!("{at:#x}"), "validUntil": "4000000000",
+            "args": {"v": 1, "hint": "0x0102030405060708", "env": "0xabcdef"}});
+        let blob = Stored { v: 1, hint: alloy::primitives::FixedBytes::<8>([1, 2, 3, 4, 5, 6, 7, 8]), env: Bytes::from(vec![0xab, 0xcd, 0xef]) };
+        assert_eq!(Op::parse(&store, FEE).unwrap().data.to_vec(), [&keccak256("storeMessage(uint8,bytes8,bytes)")[..4], &blob.abi_encode_params()[..]].concat());
+        // the old hex forms, one change from a control that parses each
+        let refused = |entry: &str, f: &dyn Fn(&mut Value)| {
+            let mut o = pqchat_op(entry, at);
+            Op::parse(&o, FEE).unwrap_or_else(|e| panic!("{entry}: the control: {e:#}"));
+            f(&mut o);
+            Op::parse(&o, FEE).unwrap_err().to_string()
+        };
+        let blob = json!(format!("0x{}", "00".repeat(256)));
+        for (entry, path) in [("voteEntry", "args"), ("voteEntry", "v"), ("voteEntry", "sig"), ("createSession", "s"), ("createSession", "wraps"),
+            ("rekey", "e"), ("addWraps", "wraps"), ("postMessage", "m"), ("postEntry", "e")] {
+            let e = refused(entry, &|o| if path == "args" { o["args"] = blob.clone() } else { o["args"][path] = blob.clone() });
+            assert!(e.starts_with("HEX_ARGS_REFUSED"), "{entry} {path}: {e}");
+        }
+        assert!(refused("postMessage", &|o| o["args"]["data"] = blob.clone()).starts_with("HEX_DATA_REFUSED"));
+        assert!(refused("postMessage", &|o| o["call"] = blob.clone()).starts_with("HEX_DATA_REFUSED"));
+        // no fee form, no envelope, the signature named in `args` only
+        assert!(refused("postMessage", &|o| o["args"]["fee"] = json!("1")).starts_with("BAD_PAYLOAD: args.fee: unknown field"));
+        assert!(refused("postMessage", &|o| o["envelope"] = json!({})).contains("takes no envelope"));
+        assert!(refused("postMessage", &|o| o["auth"] = o["args"]["sig"].clone()).contains("takes its signature in args"));
     }
 }

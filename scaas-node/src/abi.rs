@@ -541,6 +541,17 @@ sol! {
         error AdminWrittenSlot(bytes32 account);
     }
 
+    /// `IOpenFactory.infoOf` (factory index spec §8.6): the record of a contract the chain's factory made, read for the generic
+    /// factory-class rule (`guard::Rule::FactoryClass`; `PqChat` is class 3, topics spec P45).
+    #[derive(Debug)]
+    interface IOpenFactory {
+        struct Created {
+            address addr; bytes32 creatorId; bytes32 ownerUA; uint16 contractClass; uint16 kind; uint64 version;
+            uint64 createdBlock; uint64 createdAt;
+        }
+        function infoOf(address c) external view returns (Created memory);
+    }
+
     /// `IGovernance`'s events the indexer reads (M-08) and the errors of a role or a pending the node names (§3.1).
     #[derive(Debug)]
     interface IGovernance {
