@@ -25,7 +25,7 @@ M = [
     ("unsealed from rolled, not p_last", [(P, "        let unsealed = o.count - o.p_last;", "        let unsealed = o.count - o.rolled;")], T),
     ("unsealed from p, not pendingCount", [(P, "        let unsealed = s.open.count - s.open.p_last;", "        let unsealed = s.open.p - s.open.p_last;")], T),
     ("sealAdvised past one entry only", [(P, '"sealAdvised": unsealed > 0});', '"sealAdvised": unsealed > 1});')], T),
-    ("the own tag over lastDebit, not lastDebit − 1", [(P, "            (rec.p, Some((n - 1, t.own_tag, ct)))", "            (rec.p, Some((n, t.own_tag, ct)))")], T),
+    ("the own tag over lastDebit, not lastDebit − 1", [(P, "            (rec.p, Some((n - 1, t.own_tag, ct)), Some(rec))", "            (rec.p, Some((n, t.own_tag, ct)), Some(rec))")], T),
 ]
 
 if sys.argv[1:] == ["count"]:

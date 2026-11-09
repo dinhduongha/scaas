@@ -543,69 +543,9 @@ fn read(a: &Args, url: &str, block_at: Option<u64>, pk: Option<&[u8]>) -> Result
     let mut request = json!({"chainUid": hx(&a.chain_uid), "token": hx(&a.token), "block": block, "psid": hx(&psid),
         "keyRecord": hx(&key_record), "ua": hx(&a.ua)});
     let mut adds = Value::Null;
-    let blobs = if a.command == "balanceProven" {
-        let base = acct_base(&root, &a.ua, v)?;
-        let account = (0..4).map(|i| r.word(&a.token, &add(&base, i))).collect::<Result<Vec<_>, _>>()?;
-        let (s0, s1) = (&account[0], &account[1]);
-        let (count, rolled) = (field(s0, "acct[U][7].pendingCount")?, field(s0, "acct[U][7].rolled")?);
-        let (units, flags) = (field(s1, "acct[U][7].accUnits")?, field(s1, "acct[U][7].flags")?);
-        let acc_blob = low_addr(s1, at("acct[U][7].accBlob")?.2);
-        let last = field(&account[2], "acct[U][7].lastDebit")?;
-        let mut ptrs = vec![key_ptr];
-        // the last own debit's record (`p_last`) and `accBlob` (its `v_f`, checked by its tag)
-        let p_last = if last > 0 {
-            ptrs.push(acc_blob);
-            let rb = keccak256(&[be(last - 1), keccak256(&[a.ua, add(&root, at("debitRec[U][7].w0")?.0)].concat())].concat());
-            let (w0, w1) = (r.word(&a.token, &rb)?, r.word(&a.token, &add(&rb, at("debitRec[U][7].w1")?.1))?);
-            request["lastRecord"] = json!({"w0": hx(&w0), "w1": hx(&w1)});
-            scaas_ua::facade::pqz_path::record(&w0, &w1, last - 1).map_err(|_| "the account's last record")?.p
-        } else {
-            0
-        };
-        let mut acc_words = Vec::new();
-        if flags & 1 != 0 {
-            let first = add(&base, at("acct[U][7].accWords[0]")?.1);
-            for i in 0..ACC_WORDS as u64 {
-                acc_words.push(json!(hx(&r.word(&a.token, &add(&first, i))?)));
-            }
-        }
-        let room = (K_MAX as u64).checked_sub(units + 1).ok_or("the account's accUnits are past K_MAX")?;
-        let inline = if a.for_op7 == Some(true) && psid == PQZH_ID { INLINE_MAX_PQZH } else { INLINE_MAX };
-        let p = count.min(rolled.saturating_add(inline.min(room)));
-        if p_last > p {
-            return Err("the account's last record is past its window".into());
-        }
-        let (auditor, mode, fee) = (tok("auditorUA")?, tok("disclosureMode")?, tok("confidentialFee")?);
-        if fee[..24] != [0; 24] {
-            return Err("confidentialFee past 64 bits".into());
-        }
-        let fee = u64::from_be_bytes(fee[24..].try_into().map_err(|_| "fee")?);
-        let compact = field(&mode, "disclosureMode")? == 1;
-        let map = add(&base, at("acct[U][7].pending[3]")?.1);
-        let (mut pending, mut credits, mut cptrs) = (Vec::new(), Vec::new(), Vec::new());
-        let mut codes = Codes { r: &r, got: std::collections::BTreeMap::new() };
-        for i in p_last..p {
-            let e = r.word(&a.token, &keccak256(&[be(i), map].concat()))?;
-            if e[22..24] != [0, 0] {
-                let (c, x) = credit(a, url, block, &root, &mut codes, i, &e, &auditor, fee, compact)?;
-                credits.push(c);
-                cptrs.extend(x);
-            }
-            pending.push(json!({"index": i, "word": hx(&e)}));
-        }
-        adds = json!({"blobs": codes.json(&cptrs), "credits": credits});
-        request["account"] = json!(account.iter().map(|w| hx(w)).collect::<Vec<_>>());
-        request["pending"] = json!(pending);
-        request["accWords"] = json!(acc_words);
-        request["sendCounterWord"] = json!(hx(&r.word(&a.token, &counter_slot(&root, &a.ua)?)?));
-        request["keyVersion"] = json!(v);
-        request["keyVersions"] = json!(hx(&r.word(&a.registry, &versions_slot(&a.ua))?));
-        request["forOp7"] = json!(a.for_op7 == Some(true));
-        request["auditorUA"] = json!(hx(&auditor));
-        request["chainId"] = json!(a.chain_id);
-        request["registry"] = json!(hx(&a.registry));
-        r.blobs(&ptrs)?
-    } else if a.command == "balance" {
+    let blobs = if a.command == "balance" || a.command == "balanceProven" {
+        // path (B) (`balanceProven`, T20d8): the window starts at the last own debit's `p`, `accBlob` read with that debit
+        let proven = a.command == "balanceProven";
         let base = acct_base(&root, &a.ua, v)?;
         // the 4 slots of `acct[ua][v]` (3h: `lastDebit` in slot 2; `accHash` 3, the pending map 4, `accWords` from 5)
         let account = (0..4).map(|i| r.word(&a.token, &add(&base, i))).collect::<Result<Vec<_>, _>>()?;
@@ -620,22 +560,38 @@ fn read(a: &Args, url: &str, block_at: Option<u64>, pk: Option<&[u8]>) -> Result
             for i in 0..ACC_WORDS as u64 {
                 acc_words.push(json!(hx(&r.word(&a.token, &add(&first, i))?)));
             }
-        } else if acc_blob != [0; 20] {
+        } else if acc_blob != [0; 20] && !proven {
             ptrs.push(acc_blob);
         }
-        // the facade's `p` (CTR-PQZ-06): the pending window `[rolled, p)` is read by index only
+        let from = if proven { last_record(a, &r, &root, &account, acc_blob, &mut ptrs, &mut request)? } else { rolled };
+        // the facade's `p` (CTR-PQZ-06): the pending window `[rolled, p)` (path (B): `[p_last, p)`) is read by index only
         let room = (K_MAX as u64).checked_sub(units + 1).ok_or("the account's accUnits are past K_MAX")?;
         let inline = if a.for_op7 == Some(true) && psid == PQZH_ID { INLINE_MAX_PQZH } else { INLINE_MAX };
         let p = count.min(rolled.saturating_add(inline.min(room)));
+        if from > p {
+            return Err("the account's last record is past its window".into());
+        }
         let map = add(&base, at("acct[U][7].pending[3]")?.1);
         let mut pending = Vec::new();
-        for i in rolled..p {
+        let mut proof_path = if proven { Some(ProofPath::of(&r, &tok)?) } else { None };
+        for i in from..p {
             let e = r.word(&a.token, &keccak256(&[be(i), map].concat()))?;
-            // `blob(160) ‖ uOff(16) ‖ vOff(16) ‖ block(64)`: a credit (`vOff ≠ 0`) reads its blob; a TRIVIAL entry has none
-            if e[22..24] != [0, 0] {
+            // `blob(160) ‖ uOff(16) ‖ vOff(16) ‖ block(64)`: a credit (`vOff ≠ 0`) reads its blob (path (B): its history); a
+            // TRIVIAL entry has none
+            if e[22..24] != [0, 0] && !proven {
                 ptrs.push(low_addr(&e, 12));
+            } else if let (true, Some(pp)) = (e[22..24] != [0, 0], proof_path.as_mut()) {
+                let (c, x) = credit(a, url, block, &root, &mut pp.codes, i, &e, &pp.auditor, pp.fee, pp.compact)?;
+                pp.credits.push(c);
+                pp.ptrs.extend(x);
             }
             pending.push(json!({"index": i, "word": hx(&e)}));
+        }
+        if let Some(pp) = proof_path {
+            adds = json!({"blobs": pp.codes.json(&pp.ptrs), "credits": pp.credits});
+            request["auditorUA"] = json!(hx(&pp.auditor));
+            request["chainId"] = json!(a.chain_id);
+            request["registry"] = json!(hx(&a.registry));
         }
         request["account"] = json!(account.iter().map(|w| hx(w)).collect::<Vec<_>>());
         request["pending"] = json!(pending);
@@ -648,8 +604,7 @@ fn read(a: &Args, url: &str, block_at: Option<u64>, pk: Option<&[u8]>) -> Result
     } else {
         let (from, counter, leg) = (a.from_ua.ok_or("--from-ua")?, a.send_counter.ok_or("--send-counter")?, a.leg.ok_or("--leg")?);
         // `PqzCore.entryRefOf`, then `entryPtr[entryRef]`
-        let tag = keccak256(b"SCAAS-PQZ-ENTRY-V1");
-        let entry_ref = keccak256(&[tag, be(a.chain_id), a.chain_uid, addr_word(&a.token), from, be(counter)].concat());
+        let entry_ref = entry_ref_of(a, &from, counter);
         let entry_ptr = r.word(&a.token, &keccak256(&[entry_ref, add(&root, at("entryPtr[V]")?.0)].concat()))?;
         if entry_ptr == [0; 32] {
             return Err("no entry of --from-ua at --send-counter on this token".into());
@@ -949,8 +904,9 @@ fn called(a: &Args, input: &[u8], compact_token: bool) -> Result<Called, String>
         let env: Vec<Word> = (0..8).map(|i| aw(d, 32 * i)).collect::<Result<_, _>>()?;
         let mode = au(d, 32 * 4)?;
         let keep = |bit: u64, w: &Word| if mode & bit != 0 { *w } else { [0; 32] };
+        let token = addr_word(&a.token);
         let b = keccak256(
-            &[keccak256(b"SCAAS-PQZ-UA-ENVELOPE-V1"), be(a.chain_id), a.chain_uid, addr_word(&a.token), env[0], env[1], env[2], env[3], env[4],
+            &[keccak256(b"SCAAS-PQZ-UA-ENVELOPE-V1"), be(a.chain_id), a.chain_uid, token, env[0], env[1], env[2], env[3], env[4],
                 keep(1, &env[5]), env[6], keep(2, &env[7])]
                 .concat(),
         );
@@ -1004,6 +960,55 @@ impl Codes<'_, '_> {
     }
 }
 
+/// `PqzCore.entryRefOf` on the configured chain and token: `keccak256(abi.encode(TAG_ENTRY, chainId, chainUid, token, fromUA, k))`.
+fn entry_ref_of(a: &Args, from: &Word, counter: u64) -> Word {
+    keccak256(&[keccak256(b"SCAAS-PQZ-ENTRY-V1"), be(a.chain_id), a.chain_uid, addr_word(&a.token), *from, be(counter)].concat())
+}
+
+/// `balanceProven`'s state while the window is read: the token's words a credit needs, the codes fetched once, the credits.
+struct ProofPath<'r, 'u> {
+    auditor: Word,
+    fee: u64,
+    compact: bool,
+    codes: Codes<'r, 'u>,
+    credits: Vec<Value>,
+    ptrs: Vec<[u8; 20]>,
+}
+
+impl<'r, 'u> ProofPath<'r, 'u> {
+    /// The token's `auditorUA`, `confidentialFee` (a NONE header's fee; a `uint64` here) and `disclosureMode` (COMPACT: its
+    /// default entries commit-reveal).
+    fn of(r: &'r Reader<'u>, tok: &dyn Fn(&str) -> Result<Word, String>) -> Result<Self, String> {
+        let (auditor, mode, fee) = (tok("auditorUA")?, tok("disclosureMode")?, tok("confidentialFee")?);
+        if fee[..24] != [0; 24] {
+            return Err("confidentialFee past 64 bits".into());
+        }
+        Ok(ProofPath {
+            auditor,
+            fee: u64::from_be_bytes(fee[24..].try_into().map_err(|_| "fee")?),
+            compact: field(&mode, "disclosureMode")? == 1,
+            codes: Codes { r, got: std::collections::BTreeMap::new() },
+            credits: Vec::new(),
+            ptrs: Vec::new(),
+        })
+    }
+}
+
+/// `balanceProven`'s start: the last own debit's record `debitRec[--ua][lastDebit − 1]` (slot 19) into `request` as
+/// `lastRecord`, `accBlob` (its `v_f`, checked by its tag) among the codes; its `p` (`p_last`; 0 when never debited).
+fn last_record(a: &Args, r: &Reader<'_>, root: &Word, account: &[Word], acc_blob: [u8; 20], ptrs: &mut Vec<[u8; 20]>, request: &mut Value)
+    -> Result<u64, String> {
+    let last = field(account.get(2).ok_or("the account")?, "acct[U][7].lastDebit")?;
+    if last == 0 {
+        return Ok(0);
+    }
+    ptrs.push(acc_blob);
+    let rb = keccak256(&[be(last - 1), keccak256(&[a.ua, add(root, at("debitRec[U][7].w0")?.0)].concat())].concat());
+    let (w0, w1) = (r.word(&a.token, &rb)?, r.word(&a.token, &add(&rb, at("debitRec[U][7].w1")?.1))?);
+    request["lastRecord"] = json!({"w0": hx(&w0), "w1": hx(&w1)});
+    Ok(scaas_ua::facade::pqz_path::record(&w0, &w1, last - 1).map_err(|_| "the account's last record")?.p)
+}
+
 /// The token's words of `balanceProven`'s credits (§4.14.11), read at the block `r` names: for pending index `i` of `--ua`'s
 /// window (its slot word `e`), the debit `(fromUA, k)` (LOG: the one `PqzDebitProof` of the slot's blob, by its `blob` topic;
 /// NONE: the `Credited` log of `(--ua, i)`, its transaction's call, a direct call or a relayed one to the token, `k` the counter
@@ -1041,8 +1046,7 @@ fn credit(a: &Args, url: &str, block: u64, root: &Word, codes: &mut Codes<'_, '_
                 return Err(format!("NONE: pending index {i} was credited by a call through another contract (it needs a trace; take path (A))"));
             }
             let c = called(a, &unhex(tx["input"].as_str().ok_or("NONE: input")?)?, compact)?;
-            let tag = keccak256(b"SCAAS-PQZ-ENTRY-V1");
-            let er = |n: u64| keccak256(&[tag, be(a.chain_id), a.chain_uid, addr_word(&a.token), c.from, be(n)].concat());
+            let er = |n: u64| entry_ref_of(a, &c.from, n);
             let counter = field(&r.word(&a.token, &counter_slot(root, &c.from)?)?, "sendCounter[U]")?;
             let k = (counter.saturating_sub(MAX_COUNTER_SEARCH)..counter).rev().find(|n| er(*n) == entry_ref)
                 .ok_or("NONE: no sendCounter of the call's fromUA gives the Credited entryRef")?;
@@ -1132,7 +1136,7 @@ fn run(a: &Args) -> Result<Value, String> {
     let r = read_words(a, Some(k.pk().as_slice()))?;
     // R7: no request after this line
     let call = |cmd: &str, req: &Value| -> Result<Value, String> {
-        let out = k.call(cmd, req.to_string().as_bytes()).map_err(|e| format!("ua-rs refused the words ({cmd}): {e:?}"))?;
+        let out = k.call(cmd, req.to_string().as_bytes()).map_err(|e| format!("ua-rs refused the words: {e:?}"))?;
         serde_json::from_str(&out).map_err(|_| "ua-rs: not JSON".to_string())
     };
     let mut v = if a.command == "balanceProven" {
