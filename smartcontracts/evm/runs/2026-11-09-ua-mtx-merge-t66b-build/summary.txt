@@ -223,3 +223,13 @@ fndsa512/v2 17,594 -> 17,639 and mldsa65/v2 20,051 -> 20,096 (four sets each), p
 unregistered 10,695 -> 10,740, registrationOf gen 2 135,561 -> 135,635 / 145,937 -> 146,011 / 156,768 -> 156,842 / 176,276 -> 176,350,
 setKemKey fndsa512/v2 2,516,110 -> 2,524,122 (four sets); LinkClosure: UARegistryAuxLib links UARegistryCoreLib (0 -> 1 library,
 DELEGATECALL count 0 -> 1). UAGas, UARegistryGroups, layout and typehash pins unchanged.
+
+Task 4.1, rule 4 for TradeLib (spec §4.1 rule 4, §4.3; script/t66b/post2.py): TradeLib's public cancelHash, precheck, record,
+restore, cancel, invalidate become wrappers of internal twins (the DEX's library calls and ABI unchanged); the token's trade
+bodies (ERC20MetaTx) call the twins, so module T compiles TradeLib's code in (no DELEGATECALL to TradeLib on a token trade).
+Sizes (forge build src, f0c03715 -> this commit; nothing else moved): every kind's T +1,848 to +1,900 B (NormalTokenT 11,131 ->
+13,031, WrappedPqzRegulatedTokenT 13,611 -> 15,459, the largest), TradeLib 4,842 -> 4,919 (+77, the wrappers); the tokens unchanged.
+Red first: test/ua/UATrade.t.sol test_rule4_tokenTradeCallsNoTradeLib on f0c03715 | 1 | expected 0 calls to TradeLib, called 3
+times (precheck, record, cancelHash); this commit | 0 | 23 passed. test/ua UATrade, UATradeVectors, UADex, UADexInvariant: 38
+passed on this tree before the new test. Test gas of the trade tests -7.8 k to -26.5 k (one cold library call and its re-encoded
+arguments less per fill); the gas pins (DexGas, the trade rows) move in 4.4.

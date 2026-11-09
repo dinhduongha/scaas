@@ -137,6 +137,17 @@ contract UATradeTest is UALedgerBase {
         assertEq(tok.balanceOf(POOL), pool - 1000);
     }
 
+    /// T66b rule 4 (spec §4.1): the token's trade body runs `TradeLib`'s code compiled into module T, no DELEGATECALL to the
+    /// library; positive control: the library's own entry still answers a call (the DEX's path).
+    function test_rule4_tokenTradeCallsNoTradeLib() public {
+        ITradeToken.UATradeOrder memory o = _o(uaP, 1000, 2000);
+        TradeLib.cancelHash(o); // control: the library is linked here and answers
+        vm.expectCall(address(TradeLib), "", 0);
+        _trade(o, _f(600, 1200, 0));
+        tok.cancelOrderDigest(o);
+        assertEq(tok.pulled(tok.tradeOrderDigest(o)), 600);
+    }
+
     function test_nativeId_signsItself_andSellsItsErc20Balance() public {
         ITradeToken.UATradeOrder memory o = _o(_pad(alice), 1000, 2000);
         bytes32 h = tok.tradeOrderDigest(o);

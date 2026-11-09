@@ -86,7 +86,7 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBaseCore {
     }
 
     function _cancelOrderDigestBody(ITradeToken.UATradeOrder calldata o) internal view returns (bytes32) {
-        return _hashTypedDataV4(TradeLib.cancelHash(o));
+        return _hashTypedDataV4(TradeLib._cancelHash(o));
     }
 
     function _invalidateNoncesDigestBody(bytes32 from, uint256 batch, uint256 newMin) internal view returns (bytes32) {
@@ -111,26 +111,26 @@ abstract contract ERC20MetaTx is ERC20, UAMetaTxBaseCore {
     function _mtxTradeBody(ITradeToken.UATradeOrder calldata o, IUARegistry.UASig calldata auth, ITradeToken.TradeFill calldata f) internal {
         bytes32 h = _tradeOrderDigestBody(o);
         ITradeToken.UATradeOrder memory c = o;
-        TradeLib.precheck(c, f, h, msg.sender, address(this));
+        TradeLib._precheck(c, f, h, msg.sender, address(this));
         if (TradeLib.$().pulled[h] == 0) MtxPipelineLib.authorize(_mtxCtx(), o.from, UAKinds.PURPOSE_TRADE, h, auth);
-        _uaMove(o.from, TradeLib.pad(o.dex), TradeLib.record(c, f, h, true));
+        _uaMove(o.from, TradeLib.pad(o.dex), TradeLib._record(c, f, h, true));
     }
 
     /// @notice DX7: only `o.dex`, at most what it pulled for the order in this transaction (`TradeLib.restore`); a
     ///         direct read of the caller, never allowlisted.
     function _restorePulledBody(ITradeToken.UATradeOrder calldata o, uint256 amount) internal {
-        TradeLib.restore(o, _tradeOrderDigestBody(o), amount, msg.sender);
+        TradeLib._restore(o, _tradeOrderDigestBody(o), amount, msg.sender);
     }
 
     /// @notice Cancel signatures never expire (CTR-DEX-02); anyone may submit one. A native id needs no registry (C).
     function _mtxCancelOrderBody(ITradeToken.UATradeOrder calldata o, IUARegistry.UASig calldata auth) internal {
         MtxPipelineLib.authorize(_mtxCtx(), o.from, UAKinds.PURPOSE_TRADE, _cancelOrderDigestBody(o), auth);
-        TradeLib.cancel(_tradeOrderDigestBody(o), o.amount, o.from, true);
+        TradeLib._cancel(_tradeOrderDigestBody(o), o.amount, o.from, true);
     }
 
     function _mtxInvalidateNoncesBody(bytes32 from, uint256 batch, uint256 newMin, IUARegistry.UASig calldata auth) internal {
         MtxPipelineLib.authorize(_mtxCtx(), from, UAKinds.PURPOSE_TRADE, _invalidateNoncesDigestBody(from, batch, newMin), auth);
-        TradeLib.invalidate(from, batch, newMin, true);
+        TradeLib._invalidate(from, batch, newMin, true);
     }
 
     // ------------------------------------------------------------------ the generic pipeline on MtxPipelineLib
