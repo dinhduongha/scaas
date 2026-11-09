@@ -48,4 +48,5 @@ H=$(sha256sum "$B/honest.bin" | cut -c1-64)
   find "$M" -type f -size -513c -exec cp {} "$C/" \;
   echo "corpus/$T: $(ls "$C" | wc -l) inputs ($C), $(du -sb "$C" | cut -f1) B (merged set $(ls "$M" | wc -l) inputs, $(du -sb "$M" | cut -f1) B)"
 } >> "$LOG" 2>&1
+sed -i "s|'[^']*/libFuzzerTemp\.|'<tmp>/libFuzzerTemp.|" "$LOG" # libFuzzer's merge file is in $TMPDIR: no temp path in a log
 grep -E "pqz-fuzz (init|summary|FINDING)|^stat::|Done [0-9]+ runs|\[(fuzz|merge) rc|^corpus/|ERROR|SUMMARY" "$LOG"

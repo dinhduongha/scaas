@@ -8,6 +8,6 @@ LZ=$(cd "$1" && pwd)
 HERE=$(cd "$(dirname "$0")" && pwd)
 P=$(cd "$(dirname "$2")" && pwd)/$(basename "$2")
 [ "$(git -C "$LZ" rev-parse HEAD)" = 3330e487228f633eceb322807b13a596b516770f ] || { echo "LaZer must be at 3330e48" >&2; exit 1; }
-exec docker run --rm --network none -v "$LZ/third_party":/lz/third_party:ro -v "$HERE":/lz/codegen:ro \
+exec docker run --rm --tmpfs /w --network none -v "$LZ/third_party":/lz/third_party:ro -v "$HERE":/lz/codegen:ro \
   -v "$P":/lz/params.sage:ro --entrypoint /bin/sh "$IMG" -c \
-  'mkdir -p /tmp/w && cp -r /lz/codegen /tmp/w/ && ln -s /lz/third_party /tmp/w/third_party && cd /tmp/w/codegen && sage lnp-tbox-codegen.sage /lz/params.sage'
+  'cp -r /lz/codegen /w/ && ln -s /lz/third_party /w/third_party && cd /w/codegen && sage lnp-tbox-codegen.sage /lz/params.sage'

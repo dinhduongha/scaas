@@ -41,7 +41,7 @@ def sis(Bv):
 print("relation | kmsis | m1+m2 | log2stdev2 | Bsq | B1 | Bound_ | E bits | Z21max | Z21max^2/Bsq | "
       "Bound: designed -> no z21 check | delta (codegen) | beta / log2 rop (SIS.lattice, ADPS16 classical)")
 for rel in sys.argv[1:]:
-    codegen(f"/tmp/w/{rel}_params.sage")
+    codegen(f"/w/{rel}_params.sage")
     l2s2 = int(mp.log(stdev2 / mpf(1.55), 2))
     ncoef = int((m1 + Z) + (m2 - kmsis)) * 64 + 256 + approx_proof * 256
     E = 8 * (MAX_PROOF - HONEST_MIN[rel]) + 3 * ncoef

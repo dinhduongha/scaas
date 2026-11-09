@@ -3,7 +3,7 @@
 #   contract-evm:  per PQZ set (matrix n2048-kmax1024, n2304-kmax4096, n2560-kmax16384, n2816-kmax65536): script/pqz/at-set.sh <set> test;
 #                  once, in the n2304-kmax4096 cell (the committed set, so its at-set run is the default-set `forge test`):
 #                  forge test --isolate --match-path 'test/ua/{UAGas,UARegistryGroups}.t.sol' (cold gas); FOUNDRY_PROFILE=scaas-testnet forge build;
-#                  forge build src --sizes --json > /tmp/sizes.json; python3 ../../scripts/size_gate.py /tmp/sizes.json size-baseline.json
+#                  T=$(mktemp -d); forge build src --sizes --json > "$T"/sizes.json; python3 ../../scripts/size_gate.py "$T"/sizes.json size-baseline.json
 #   contract-<family>: smartcontracts/scripts/test.sh <family> (unit and in-process tests; localnet e2e stays local), toolchains as local:
 #   contract-soroban:  test.sh soroban (cargo test)
 #   contract-solana:   test.sh solana (build.sh solana = cargo build-sbf, Agave 4.3.0 / platform-tools v1.57; cargo test on LiteSVM)
@@ -136,8 +136,8 @@ jobs:
         if: matrix.set == 'n2304-kmax4096'
         run: |
           python3 ../../scripts/size_gate.py --self-test
-          forge build src --sizes --json > /tmp/sizes.json || true
-          python3 ../../scripts/size_gate.py /tmp/sizes.json size-baseline.json
+          forge build src --sizes --json > "$RUNNER_TEMP"/sizes.json || true
+          python3 ../../scripts/size_gate.py "$RUNNER_TEMP"/sizes.json size-baseline.json
       - name: forge build (scaas-testnet profile)
         if: matrix.set == 'n2304-kmax4096'
         run: FOUNDRY_PROFILE=scaas-testnet forge build
@@ -177,10 +177,10 @@ jobs:
       # build.sh solana puts ~/.local/share/solana/install/active_release/bin on PATH, where agave-install puts it locally
       - name: Agave ${{ env.AGAVE }} (official release tarball)
         run: |
-          curl -sSfL -o /tmp/agave.tar.bz2 "https://github.com/anza-xyz/agave/releases/download/$AGAVE/solana-release-x86_64-unknown-linux-gnu.tar.bz2"
-          echo "$AGAVE_SHA256  /tmp/agave.tar.bz2" | sha256sum -c -
+          curl -sSfL -o "$RUNNER_TEMP"/agave.tar.bz2 "https://github.com/anza-xyz/agave/releases/download/$AGAVE/solana-release-x86_64-unknown-linux-gnu.tar.bz2"
+          echo "$AGAVE_SHA256  $RUNNER_TEMP/agave.tar.bz2" | sha256sum -c -
           mkdir -p ~/.local/share/solana/install
-          tar -xjf /tmp/agave.tar.bz2 -C ~/.local/share/solana/install
+          tar -xjf "$RUNNER_TEMP"/agave.tar.bz2 -C ~/.local/share/solana/install
           mv ~/.local/share/solana/install/solana-release ~/.local/share/solana/install/active_release
           ~/.local/share/solana/install/active_release/bin/cargo-build-sbf --version
       # cargo build-sbf downloads its platform tools (v1.57 for Agave 4.3.0) into ~/.cache/solana on first use
@@ -241,9 +241,9 @@ jobs:
       - uses: actions/checkout@v4
       - name: aptos CLI ${{ env.APTOS }} (official release zip)
         run: |
-          curl -sSfL -o /tmp/aptos.zip "https://github.com/aptos-labs/aptos-core/releases/download/aptos-cli-v$APTOS/aptos-cli-$APTOS-Linux-x86_64.zip"
-          echo "$APTOS_SHA256  /tmp/aptos.zip" | sha256sum -c -
-          mkdir -p ~/.local/bin && unzip -o /tmp/aptos.zip aptos -d ~/.local/bin
+          curl -sSfL -o "$RUNNER_TEMP"/aptos.zip "https://github.com/aptos-labs/aptos-core/releases/download/aptos-cli-v$APTOS/aptos-cli-$APTOS-Linux-x86_64.zip"
+          echo "$APTOS_SHA256  $RUNNER_TEMP/aptos.zip" | sha256sum -c -
+          mkdir -p ~/.local/bin && unzip -o "$RUNNER_TEMP"/aptos.zip aptos -d ~/.local/bin
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           ~/.local/bin/aptos --version
       # AptosFramework at the rev pinned in Move.toml (fetched once: --skip-fetch-latest-git-deps only skips updates)
@@ -268,10 +268,10 @@ jobs:
       - name: sui CLI ${{ env.SUI }} (official release tarball)
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
-          curl -sSfL -o /tmp/sui.tgz "https://github.com/MystenLabs/sui/releases/download/$SUI/sui-$SUI-ubuntu-x86_64.tgz"
-          echo "$SUI_SHA256  /tmp/sui.tgz" | sha256sum -c -
-          mkdir -p ~/.local/bin && tar -xzf /tmp/sui.tgz -C ~/.local/bin ./sui
-          rm /tmp/sui.tgz
+          curl -sSfL -o "$RUNNER_TEMP"/sui.tgz "https://github.com/MystenLabs/sui/releases/download/$SUI/sui-$SUI-ubuntu-x86_64.tgz"
+          echo "$SUI_SHA256  $RUNNER_TEMP/sui.tgz" | sha256sum -c -
+          mkdir -p ~/.local/bin && tar -xzf "$RUNNER_TEMP"/sui.tgz -C ~/.local/bin ./sui
+          rm "$RUNNER_TEMP"/sui.tgz
       - run: |
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           ~/.local/bin/sui --version

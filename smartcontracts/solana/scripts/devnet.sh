@@ -2,11 +2,11 @@
 # S12 local Solana validator (spec §9): RPC 32020, WS 32021, faucet 32022, gossip 32023, dynamic [32024, 32050)
 # (Agave 4.3 refuses a dynamic range narrower than 26 ports — OQ4: the S12 block is 32020-32049).
 # usage: devnet.sh up [extra solana-test-validator args…] | down | status
-#   SOLANA_LEDGER (default $SP/solana-ledger or /tmp/s12-solana-ledger) — wiped on every `up` (--reset).
+#   SOLANA_LEDGER (default $SP/s12-solana-ledger or <tmp>/s12-solana-ledger, <tmp> the system temp dir) — wiped on every `up` (--reset).
 # Run it under the machine-wide `capped` wrapper together with the job that uses it, then `down`.
 set -euo pipefail
 export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
-LEDGER="${SOLANA_LEDGER:-${SP:-/tmp}/s12-solana-ledger}"
+LEDGER="${SOLANA_LEDGER:-${SP:-$(dirname "$(mktemp -u)")}/s12-solana-ledger}"
 RPC=http://127.0.0.1:32020
 PIDF="$LEDGER.pid"
 case "${1:-}" in

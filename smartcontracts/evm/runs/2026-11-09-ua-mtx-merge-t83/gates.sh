@@ -9,6 +9,7 @@
 set -u
 ROOT=$(cd "$(dirname "$0")/../../../.." && pwd)
 cd "$ROOT"
+T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 EVM=smartcontracts/evm
 export PATH="$HOME/.foundry/bin:$PATH" # at-set.sh calls `forge` by name
 PAY='test/metatx/PayRecords.t.sol,test/metatx/PayMeta.t.sol,test/metatx/PayLanes.t.sol'
@@ -29,8 +30,8 @@ step() {
     gas) (cd $EVM && FOUNDRY_SPARSE_MODE=true FOUNDRY_OUT=out/t83-gas FOUNDRY_CACHE_PATH=cache/t83-gas \
         ../../scripts/capped ~/.foundry/bin/forge test -j 2 --match-path test/v2/MetaTxGasV2.t.sol --match-test 'test_gasP_' -vv) ;;
     size) (cd $EVM && FOUNDRY_OUT=out/t83-sizes FOUNDRY_CACHE_PATH=cache/t83-sizes ../../scripts/capped ~/.foundry/bin/forge build src \
-        --sizes --json > /tmp/t83-sizes.json 2> runs/2026-11-09-ua-mtx-merge-t83-size-build.log; \
-        python3 ../../scripts/size_gate.py /tmp/t83-sizes.json size-baseline.json) ;;
+        --sizes --json > "$T"/t83-sizes.json 2> runs/2026-11-09-ua-mtx-merge-t83-size-build.log; \
+        python3 ../../scripts/size_gate.py "$T"/t83-sizes.json size-baseline.json) ;;
     vectors) # every writer twice, then no diff against the work tree's vectors (run after the files are written once)
       for i in 1 2; do
         (cd $EVM && PAYMETA_WRITE=1 FOUNDRY_SPARSE_MODE=true FOUNDRY_OUT=out/t83-vec FOUNDRY_CACHE_PATH=cache/t83-vec \
@@ -41,10 +42,10 @@ step() {
         (cd $EVM && PAYTAX_WRITE=1 FOUNDRY_SPARSE_MODE=true FOUNDRY_OUT=out/t83-vec FOUNDRY_CACHE_PATH=cache/t83-vec \
           ../../scripts/capped ~/.foundry/bin/forge test -j 2 --match-path test/as/Tax.t.sol --match-test test_payTaxVectors) || return 1
         (cd clients/clientkeys && node scripts/typed-ops-vectors.mjs && node scripts/ua-sig-vectors.mjs) || return 1
-        git diff --exit-code --stat -- smartcontracts/vectors $EVM/test/vectors > /tmp/t83-vec-$i.diff
-        git status --short -- smartcontracts/vectors $EVM/test/vectors >> /tmp/t83-vec-$i.diff
+        git diff --exit-code --stat -- smartcontracts/vectors $EVM/test/vectors > "$T"/t83-vec-$i.diff
+        git status --short -- smartcontracts/vectors $EVM/test/vectors >> "$T"/t83-vec-$i.diff
       done
-      cmp /tmp/t83-vec-1.diff /tmp/t83-vec-2.diff && cat /tmp/t83-vec-2.diff ;;
+      cmp "$T"/t83-vec-1.diff "$T"/t83-vec-2.diff && cat "$T"/t83-vec-2.diff ;;
     clientkeys) (cd clients/clientkeys && ../../scripts/capped npm test) ;;
     node-test) (cd scaas-node && CAPPED_MEM=6G ../scripts/capped cargo test) ;;
     node-clippy) (cd scaas-node && ../scripts/capped cargo clippy --all-targets -- -D warnings) ;;

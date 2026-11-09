@@ -2,7 +2,7 @@
 # near-sandbox for the scaas-node e2e (near-algorand Task 19, spec §7): RPC 32060, p2p 32061 (127.0.0.1 only).
 #   devnet.sh up [home]    init (once) + start in the background, wait for the RPC; prints the RPC url
 #   devnet.sh down [home]  stop it
-# home: $NEAR_SANDBOX_HOME, default /tmp/scaas-near-sandbox. No docker: the binary near-workspaces downloaded for the
+# home: $NEAR_SANDBOX_HOME, default <tmp>/scaas-near-sandbox (<tmp>: the system temp dir). No docker: the binary near-workspaces downloaded for the
 # contract tests (smartcontracts/near/target/*/build/near-sandbox-*/out/.near/near-sandbox-*/near-sandbox; run
 # `smartcontracts/scripts/test.sh near` once), or $NEAR_SANDBOX_BIN_PATH. Run under scripts/capped with the e2e.
 # Config: --fast blocks; max_gas_burnt_view 300 Tgas (the relayer's `*_check` views, a 13-passkey wrapper check burns
@@ -13,7 +13,7 @@
 set -euo pipefail
 NEAR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CMD="${1:?usage: $0 up|down [home]}"
-H="${2:-${NEAR_SANDBOX_HOME:-/tmp/scaas-near-sandbox}}"
+H="${2:-${NEAR_SANDBOX_HOME:-$(dirname "$(mktemp -u)")/scaas-near-sandbox}}"
 RPC=32060 NET=32061
 
 bin() {

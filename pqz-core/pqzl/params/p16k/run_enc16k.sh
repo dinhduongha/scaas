@@ -7,5 +7,5 @@ IMG=sagemath/sagemath@sha256:4f5589eb6c565949a006f8665de2876b8414410daf5ac554f44
 LE=$(cd "$1" && pwd)
 HERE=$(cd "$(dirname "$0")" && pwd)
 [ "$(git -C "$LE" rev-parse HEAD)" = 53da5982597709ba0fdf94ea37a84d822310fd84 ] || { echo "estimator must be at 53da598" >&2; exit 1; }
-exec docker run --rm --network none --memory 3g --cpus 2 -e LE_COMMIT=53da598 -v "$LE":/le:ro -v "$HERE":/p:ro \
-  --entrypoint /bin/sh "$IMG" -c "mkdir -p /tmp/w && cp /p/${SCRIPT:-enc16k.sage} /tmp/w/ && cd /le && sage /tmp/w/${SCRIPT:-enc16k.sage}"
+exec docker run --rm --tmpfs /w --network none --memory 3g --cpus 2 -e LE_COMMIT=53da598 -v "$LE":/le:ro -v "$HERE":/p:ro \
+  --entrypoint /bin/sh "$IMG" -c "cp /p/${SCRIPT:-enc16k.sage} /w/ && cd /le && sage /w/${SCRIPT:-enc16k.sage}"

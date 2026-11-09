@@ -52,11 +52,11 @@ step_e_s1() {
   tools lk && tools le && tools lz || return 1
   T=$(cd "$PQZ_TOOLS" && pwd)
   specs=$(for r in $RELS; do printf '/set/%s_params.sage ' "$r"; done)
-  "$CAP" docker run --rm --network none --memory 5g --cpus 2 -e PYTHONPATH=/le -e LE_COMMIT=53da5982597709ba0fdf94ea37a84d822310fd84 \
+  "$CAP" docker run --rm --tmpfs /w --network none --memory 5g --cpus 2 -e PYTHONPATH=/le -e LE_COMMIT=53da5982597709ba0fdf94ea37a84d822310fd84 \
     -e LK_COMMIT=0a9caf8bf0f80097724e0c6147194c52c6b90f86 -e PYTHONUNBUFFERED=1 -v "$T/le":/le:ro -v "$T/lz/third_party":/lz/third_party:ro \
     -v "$CORE/pqzl/params/n-study":/p:ro -v "$CORE/pqzl/params":/params:ro -v "$D":/set:ro --entrypoint /bin/sh "$IMG" -c \
-    "mkdir -p /tmp/w && cp -r /params/codegen /tmp/w/ && ln -s /lz/third_party /tmp/w/third_party && cp /p/*.sage /tmp/w/ &&
-     cd /tmp/w/codegen && sage /tmp/w/e_s1_n.sage $specs" > "$D/.e-s1.txt.new" 2> "$D/.e-s1.err" || return 1
+    "cp -r /params/codegen /w/ && ln -s /lz/third_party /w/third_party && cp /p/*.sage /w/ &&
+     cd /w/codegen && sage /w/e_s1_n.sage $specs" > "$D/.e-s1.txt.new" 2> "$D/.e-s1.err" || return 1
   rm -f "$D/.e-s1.err" # the estimator's stderr (kept only when the run fails)
   # the committed e-s1.txt is replaced only by a complete run that passes the check (review R2-C8)
   python3 -I - "$D" <<'EOF' && mv "$D/.e-s1.txt.new" "$D/e-s1.txt"
@@ -85,9 +85,9 @@ step_codegen() {
   rc=0
   { echo "LaZer $(git -C "$LZ" rev-parse HEAD); image $IMG; set $S"
     for r in $RELS; do
-      "$CAP" docker run --rm --network none --memory 2g --cpus 1 -v "$LZ/third_party":/lz/third_party:ro \
+      "$CAP" docker run --rm --tmpfs /w --network none --memory 2g --cpus 1 -v "$LZ/third_party":/lz/third_party:ro \
         -v "$CORE/pqzl/params/codegen":/lz/codegen:ro -v "$D/${r}_params.sage":/lz/params.sage:ro --entrypoint /bin/sh "$IMG" -c \
-        'mkdir -p /tmp/w && cp -r /lz/codegen /tmp/w/ && ln -s /lz/third_party /tmp/w/third_party && cd /tmp/w/codegen && sage lnp-tbox-codegen.sage /lz/params.sage' \
+        'cp -r /lz/codegen /w/ && ln -s /lz/third_party /w/third_party && cd /w/codegen && sage lnp-tbox-codegen.sage /lz/params.sage' \
         > "$O/pqz_${r}_params.h" 2> "$O/$r.err" || rc=1
       echo "== $r: $(wc -c < "$O/pqz_${r}_params.h") B, sha256 $(sha256sum < "$O/pqz_${r}_params.h" | cut -c1-16)"
       sed -n -e '3,5p' -e '/^\/\/ Proof size/{n;p}' "$O/pqz_${r}_params.h" | sed 's/^/   /'

@@ -9,10 +9,10 @@ LZ=$(cd "$1" && pwd)
 LE=$(cd "$2" && pwd)
 HERE=$(cd "$(dirname "$0")" && pwd)
 shift 2
-SPECS=$(for r in "$@"; do printf ' /tmp/w/%s_params.sage' "$r"; done)
+SPECS=$(for r in "$@"; do printf ' /w/%s_params.sage' "$r"; done)
 [ "$(git -C "$LZ" rev-parse HEAD)" = 3330e487228f633eceb322807b13a596b516770f ] || { echo "LaZer must be at 3330e48" >&2; exit 1; }
 [ "$(git -C "$LE" rev-parse HEAD)" = 53da5982597709ba0fdf94ea37a84d822310fd84 ] || { echo "estimator must be at 53da598" >&2; exit 1; }
-exec docker run --rm --network none --memory 3g --cpus 2 -e LE_COMMIT=53da598 -v "$LZ/third_party":/lz/third_party:ro \
+exec docker run --rm --tmpfs /w --network none --memory 3g --cpus 2 -e LE_COMMIT=53da598 -v "$LZ/third_party":/lz/third_party:ro \
   -v "$LE":/le:ro -v "$HERE/..":/p:ro --entrypoint /bin/sh "$IMG" -c \
-  "mkdir -p /tmp/w && cp -r /p/codegen /p/p16k/*.sage /tmp/w/ && ln -s /lz/third_party /tmp/w/third_party &&
-   cd /tmp/w/codegen && sage /tmp/w/e_s1_16k.sage$SPECS 2>/dev/null"
+  "cp -r /p/codegen /p/p16k/*.sage /w/ && ln -s /lz/third_party /w/third_party &&
+   cd /w/codegen && sage /w/e_s1_16k.sage$SPECS 2>/dev/null"
